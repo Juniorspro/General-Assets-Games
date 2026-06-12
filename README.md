@@ -8,8 +8,21 @@ de luz zumban, las luces parpadean y hay gente ahí fuera… quieta, mirándote.
 
 ## Cómo jugar
 
-El juego necesita un **servidor estático** (los ES modules y los `.glb` no cargan
-desde `file://`). Desde la raíz del repo:
+### ⚡ Versión de un solo archivo (lo más fácil)
+
+Descarga **`NIEBLA-DEL-MAIZ.html`** y **ábrelo con doble clic**. Funciona sin
+servidor ni internet: Three.js y todo el juego van incrustados, y las casas,
+personas y coches son low-poly estilo PS1 generados con polígonos (no usa los
+`.glb`). Para regenerarlo tras editar `src/standalone-game.js`:
+
+```bash
+node build-standalone.mjs   # -> NIEBLA-DEL-MAIZ.html
+```
+
+### Versión modular (con los modelos .glb PS1)
+
+Esta usa los modelos `.glb` reales y necesita un **servidor estático**
+(los ES modules y los `.glb` no cargan desde `file://`). Desde la raíz del repo:
 
 ```bash
 # opción 1 — Python
