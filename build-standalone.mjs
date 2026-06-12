@@ -1,24 +1,18 @@
-// Genera un único HTML autocontenido, 100% PROCEDURAL (sin GLB, sin assets),
-// para MÓVIL (horizontal, pantalla completa), de DÍA con look AAA y rayos de sol.
-// Fusiona three + el juego en un módulo inline SIN imports -> funciona como file://.
+// Genera un único HTML autocontenido (TODO EN UNO): casa de campo + autos
+// REALES del pack incrustados, de DÍA con look AAA, rayos de sol y motion blur.
+// Para MÓVIL (horizontal, pantalla completa). Módulo inline SIN imports -> file://.
 import { readFileSync, writeFileSync } from 'fs';
+import { threeParts, addonIIFE, glbConst, guardScript } from './buildlib.mjs';
 
-const V = 'vendor/three/';
-const threeRaw = readFileSync(V + 'three.module.js', 'utf8');
-
-// three core: capturar nombres exportados y construir el namespace THREE
-const expMatch = threeRaw.match(/export\s*\{([\s\S]*?)\};/);
-if (!expMatch) throw new Error('no encontré el export de three');
-const names = expMatch[1].split(',').map(s => s.trim()).filter(Boolean);
-const nsEntries = names.map(n => n.includes(' as ') ? (() => { const [l, e] = n.split(' as ').map(x => x.trim()); return `${e}: ${l}`; })() : n);
-const threeStripped = threeRaw.replace(/export\s*\{[\s\S]*?\};\s*$/, '');
-const threeNamespace = `\nconst THREE = { ${nsEntries.join(', ')} };\n`;
-
+const three = threeParts();
+const bgu = addonIIFE('addons/utils/BufferGeometryUtils.js');
+const gltf = addonIIFE('addons/loaders/GLTFLoader.js');
+const glb = glbConst({ pack: 'generic_passenger_car_pack.glb' });
 const game = readFileSync('src/standalone-game.js', 'utf8');
 
 // El juego va en su propia IIFE para no chocar con las constantes internas de three.
-let combined = threeStripped + threeNamespace + '\n(function(){\n' + game + '\n})();\n';
-combined = combined.replace(/<\/script/gi, '<\\/script');
+let combined = three.code + three.namespace + '\n' + bgu + '\n' + gltf + '\n' + glb.code + '\n(function(){\n' + game + '\n})();\n';
+combined = guardScript(combined);
 
 const html = `<!DOCTYPE html>
 <html lang="es">

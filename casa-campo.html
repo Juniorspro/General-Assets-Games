@@ -53126,16 +53126,14 @@ function buildHouse() {
   // esquinas con trim
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.25, H, 0.25), trimMat, sx * W / 2, 0.8 + H / 2, sz * D / 2);
 
-  // tejado a dos aguas
-  const rh = 3.0, slab = Math.hypot(W / 2 + 0.5, rh), ang = Math.atan2(rh, W / 2 + 0.5);
-  for (const s of [1, -1]) { const r = add(new THREE.BoxGeometry(slab, 0.22, D + 1.2), roofMat, s * (W / 4), 0.8 + H + rh / 2, 0); r.rotation.z = -s * ang; }
-  // frontones (triángulos) tapados con tablas
-  for (const sz of [1, -1]) {
-    const tri = new THREE.Mesh(new THREE.BufferGeometry(), wallMat);
-    const hw = W / 2; const verts = new Float32Array([-hw, 0, 0, hw, 0, 0, 0, rh, 0]);
-    tri.geometry.setAttribute('position', new THREE.BufferAttribute(verts, 3)); tri.geometry.computeVertexNormals();
-    tri.position.set(0, 0.8 + H, sz * D / 2); tri.castShadow = true; g.add(tri);
-  }
+  // tejado a dos aguas (sólido, sin huecos)
+  const rh = 3.0, ov = 0.5, slab = Math.hypot(W / 2 + ov, rh), ang = Math.atan2(rh, W / 2 + ov);
+  for (const s of [1, -1]) { const r = add(new THREE.BoxGeometry(slab, 0.24, D + ov * 2), roofMat, s * (W / 2 + ov) / 2, 0.8 + H + rh / 2, 0); r.rotation.z = -s * ang; }
+  add(new THREE.BoxGeometry(0.34, 0.2, D + ov * 2), roofMat, 0, 0.8 + H + rh + 0.02, 0); // cumbrera
+  // frontones SÓLIDOS (prisma triangular) — ya no se ven huecos
+  const gShape = new THREE.Shape(); gShape.moveTo(-W / 2, 0); gShape.lineTo(W / 2, 0); gShape.lineTo(0, rh); gShape.lineTo(-W / 2, 0);
+  const gGeo = new THREE.ExtrudeGeometry(gShape, { depth: 0.3, bevelEnabled: false });
+  for (const sz of [1, -1]) add(gGeo, wallMat, 0, 0.8 + H, sz * D / 2 - (sz > 0 ? 0 : 0.3));
   // chimenea de ladrillo
   add(new THREE.BoxGeometry(1.0, 3.2, 1.0), brickMat, -W / 2 + 1.4, 0.8 + H + 1.0, -1.2);
   add(new THREE.BoxGeometry(1.2, 0.3, 1.2), stoneMat, -W / 2 + 1.4, 0.8 + H + 2.7, -1.2);

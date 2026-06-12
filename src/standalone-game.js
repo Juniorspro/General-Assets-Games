@@ -345,7 +345,8 @@ function buildPrototype(seed) {
   return { bark: mergeGeometries(bark), leaf: mergeGeometries(leaf) };
 }
 function makeLeafMaterial() {
-  const mat = new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.85, metalness: 0, color: 0x6a7a4a, vertexColors: true });
+  // hojas con retroiluminación sutil (lucen al contraluz del sol) y más vivas
+  const mat = new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9, metalness: 0, color: 0x7d8f46, emissive: 0x1c2810, emissiveIntensity: 0.5, vertexColors: true });
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uWind = windUniform;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uWind;')
@@ -500,6 +501,117 @@ function wallTexture(seed) {
     for (let y = 0; y < h; y += 6) { ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(0, y, w, 1); }
   });
 }
+// ===== CASA DE CAMPO detallada (decorativa, no se accede) =====
+function hsCnv(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+function hsTex(c, rep = 1) { const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace; return t; }
+function hsNoise(x, y, s) { const n = Math.sin(x * 12.9898 + y * 78.233 + s) * 43758.5453; return n - Math.floor(n); }
+function sidingTex() {
+  const c = hsCnv(256, 256), x = c.getContext('2d'); x.fillStyle = '#b9c2bd'; x.fillRect(0, 0, 256, 256);
+  for (let row = 0; row < 16; row++) {
+    const y = row * 16, base = 188 + Math.floor(hsNoise(row, 1, 3) * 30);
+    x.fillStyle = `rgb(${base - 20},${base - 12},${base - 22})`; x.fillRect(0, y, 256, 16);
+    x.fillStyle = `rgba(${base},${base + 4},${base - 4},1)`; x.fillRect(0, y, 256, 13);
+    x.fillStyle = 'rgba(0,0,0,0.18)'; x.fillRect(0, y + 14, 256, 2);
+    for (let i = 0; i < 120; i++) { x.fillStyle = `rgba(0,0,0,${hsNoise(i, row, 7) * 0.08})`; x.fillRect((hsNoise(i, row, 2) * 256) | 0, y + (hsNoise(i, row, 5) * 14 | 0), 2, 1); }
+  }
+  return hsTex(c, 2);
+}
+function shingleTex() {
+  const c = hsCnv(256, 256), x = c.getContext('2d'); x.fillStyle = '#3a4348'; x.fillRect(0, 0, 256, 256);
+  for (let row = 0; row < 18; row++) {
+    const y = row * 14, off = (row % 2) * 14;
+    for (let col = -1; col < 10; col++) {
+      const px = col * 28 + off, g = 46 + Math.floor(hsNoise(col, row, 9) * 40);
+      x.fillStyle = `rgb(${g - 8},${g},${g + 6})`; x.fillRect(px, y, 26, 14);
+      x.fillStyle = 'rgba(0,0,0,0.35)'; x.fillRect(px, y + 12, 26, 2); x.fillRect(px - 1, y, 1, 14);
+    }
+  }
+  return hsTex(c, 3);
+}
+function stoneTex() {
+  const c = hsCnv(256, 256), x = c.getContext('2d'); x.fillStyle = '#7d7a72'; x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 90; i++) {
+    const sx = hsNoise(i, 1, 2) * 256, sy = hsNoise(i, 2, 4) * 256, w = 18 + hsNoise(i, 3, 6) * 26, h = 12 + hsNoise(i, 4, 8) * 16, g = 96 + Math.floor(hsNoise(i, 5, 3) * 50);
+    x.fillStyle = `rgb(${g},${g - 6},${g - 14})`; x.beginPath(); x.ellipse(sx, sy, w / 2, h / 2, 0, 0, 6.28); x.fill();
+    x.strokeStyle = 'rgba(0,0,0,0.3)'; x.lineWidth = 2; x.stroke();
+  }
+  return hsTex(c, 3);
+}
+function buildFarmhouse() {
+  const g = new THREE.Group();
+  const wallMat = new THREE.MeshStandardMaterial({ map: sidingTex(), roughness: 0.85, metalness: 0 });
+  const roofMat = new THREE.MeshStandardMaterial({ map: shingleTex(), roughness: 0.9, metalness: 0 });
+  const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex(), roughness: 1, metalness: 0 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0xece7da, roughness: 0.7 });
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b4a32, roughness: 0.8 });
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0x5e3b27, roughness: 0.7 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x223038, roughness: 0.06, metalness: 0.2, envMapIntensity: 1.4 });
+  const brickMat = new THREE.MeshStandardMaterial({ color: 0x8a4a3a, roughness: 0.95 });
+  const add = (geo, mat, x, y, z, ry = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
+  const W = 9, H = 5.2, D = 7;
+  add(new THREE.BoxGeometry(W + 0.6, 0.8, D + 0.6), stoneMat, 0, 0.4, 0);
+  add(new THREE.BoxGeometry(W, H, D), wallMat, 0, 0.8 + H / 2, 0);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.25, H, 0.25), trimMat, sx * W / 2, 0.8 + H / 2, sz * D / 2);
+  const rh = 3.0, ov = 0.5, slab = Math.hypot(W / 2 + ov, rh), ang = Math.atan2(rh, W / 2 + ov);
+  for (const s of [1, -1]) { const r = add(new THREE.BoxGeometry(slab, 0.24, D + ov * 2), roofMat, s * (W / 2 + ov) / 2, 0.8 + H + rh / 2, 0); r.rotation.z = -s * ang; }
+  add(new THREE.BoxGeometry(0.34, 0.2, D + ov * 2), roofMat, 0, 0.8 + H + rh + 0.02, 0);
+  const gShape = new THREE.Shape(); gShape.moveTo(-W / 2, 0); gShape.lineTo(W / 2, 0); gShape.lineTo(0, rh); gShape.lineTo(-W / 2, 0);
+  const gGeo = new THREE.ExtrudeGeometry(gShape, { depth: 0.3, bevelEnabled: false });
+  for (const sz of [1, -1]) add(gGeo, wallMat, 0, 0.8 + H, sz * D / 2 - (sz > 0 ? 0 : 0.3));
+  add(new THREE.BoxGeometry(1.0, 3.2, 1.0), brickMat, -W / 2 + 1.4, 0.8 + H + 1.0, -1.2);
+  add(new THREE.BoxGeometry(1.2, 0.3, 1.2), stoneMat, -W / 2 + 1.4, 0.8 + H + 2.7, -1.2);
+  const pz = D / 2 + 1.4;
+  add(new THREE.BoxGeometry(W, 0.25, 2.8), woodMat, 0, 0.85, D / 2 + 1.3);
+  for (const px of [-W / 2 + 0.5, -1.5, 1.5, W / 2 - 0.5]) add(new THREE.CylinderGeometry(0.13, 0.13, 2.7, 10), trimMat, px, 2.3, pz + 1.0);
+  add(new THREE.BoxGeometry(W + 0.4, 0.22, 3.4), roofMat, 0, 3.75, D / 2 + 1.4);
+  for (const side of [-1, 1]) add(new THREE.BoxGeometry(0.1, 0.7, 2.6), woodMat, side * (W / 2 - 0.4), 1.4, pz + 0.1);
+  add(new THREE.BoxGeometry(1.3, 2.5, 0.18), doorMat, 0, 0.8 + 1.25, D / 2 + 0.02);
+  add(new THREE.BoxGeometry(1.6, 2.8, 0.08), trimMat, 0, 0.8 + 1.4, D / 2 - 0.02);
+  add(new THREE.BoxGeometry(0.18, 0.18, 0.08), new THREE.MeshStandardMaterial({ color: 0xc9a24a, metalness: 1, roughness: 0.3 }), 0.45, 1.85, D / 2 + 0.13);
+  for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(1.8, 0.2, 0.4 + i * 0.3), stoneMat, 0, 0.7 - i * 0.18, D / 2 + 0.5 + i * 0.28);
+  function win(x, y, z, ry) {
+    const fw = 1.3, fh = 1.5;
+    add(new THREE.BoxGeometry(fw + 0.2, fh + 0.2, 0.12), trimMat, x, y, z, ry);
+    add(new THREE.BoxGeometry(fw, fh, 0.06), glassMat, x, y, z, ry);
+    add(new THREE.BoxGeometry(0.06, fh, 0.08), trimMat, x, y, z + 0.04, ry);
+    add(new THREE.BoxGeometry(fw, 0.06, 0.08), trimMat, x, y, z + 0.04, ry);
+    add(new THREE.BoxGeometry(fw + 0.2, 0.12, 0.2), woodMat, x, y - fh / 2 - 0.1, z + 0.04, ry);
+  }
+  win(-2.6, 2.7, D / 2 + 0.05, 0); win(2.6, 2.7, D / 2 + 0.05, 0);
+  win(-2.6, 5.0, D / 2 + 0.05, 0); win(2.6, 5.0, D / 2 + 0.05, 0);
+  for (const yy of [2.7, 5.0]) { win(W / 2 + 0.05, yy, 1.6, Math.PI / 2); win(W / 2 + 0.05, yy, -1.6, Math.PI / 2); win(-W / 2 - 0.05, yy, 1.6, Math.PI / 2); win(-W / 2 - 0.05, yy, -1.6, Math.PI / 2); }
+  g.userData.solidR = 6;
+  return g;
+}
+
+// ===== Autos REALES del pack (GLB incrustado), divididos por tipo =====
+const gltfLoader = (typeof GLTFLoader !== 'undefined') ? new GLTFLoader() : null;
+function b64buf(b64) { const bin = atob(b64), n = bin.length, u = new Uint8Array(n); for (let i = 0; i < n; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
+function parseGLB(b64) { return new Promise(res => { if (!gltfLoader) { res(null); return; } try { gltfLoader.parse(b64buf(b64), '', g => res(g), e => { console.warn(e); res(null); }); } catch (e) { console.warn(e); res(null); } }); }
+function bakeClone(mesh) { mesh.updateWorldMatrix(true, false); const c = mesh.clone(); c.matrixAutoUpdate = false; c.matrix.copy(mesh.matrixWorld); c.castShadow = true; c.receiveShadow = true; return c; }
+const CAR_TYPES = ['COMPACT', 'COUPE', 'HATCHBACK', 'MINIVAN', 'OFFROAD', 'PICKUP', 'SEDAN', 'SPORT', 'SUV', 'WAGON'];
+function makeCarPrototypes(gltf) {
+  const map = {}; if (!gltf) return map;
+  const root = gltf.scene; root.updateWorldMatrix(true, true);
+  const meshes = []; root.traverse(o => { if (o.isMesh) meshes.push(o); });
+  const typeOf = n => { const up = (n || '').toUpperCase(); return CAR_TYPES.find(t => up.startsWith(t)) || null; };
+  const groups = new Map(), leftover = [], wp = new THREE.Vector3();
+  for (const m of meshes) { const t = typeOf(m.name); m.getWorldPosition(wp); if (t) { if (!groups.has(t)) groups.set(t, { meshes: [], c: new THREE.Vector3(), n: 0 }); const e = groups.get(t); e.meshes.push(m); e.c.add(wp); e.n++; } else leftover.push({ m, p: wp.clone() }); }
+  for (const e of groups.values()) e.c.multiplyScalar(1 / e.n);
+  for (const { m, p } of leftover) { let best = null, bd = Infinity; for (const e of groups.values()) { const d = (e.c.x - p.x) ** 2 + (e.c.z - p.z) ** 2; if (d < bd) { bd = d; best = e; } } if (best) best.meshes.push(m); }
+  const box = new THREE.Box3(), size = new THREE.Vector3(), center = new THREE.Vector3();
+  for (const [k, e] of groups) {
+    const grp = new THREE.Group(); for (const m of e.meshes) grp.add(bakeClone(m));
+    grp.updateMatrixWorld(true); box.setFromObject(grp); box.getSize(size); box.getCenter(center);
+    const maxDim = Math.max(size.x, size.z) || 1, s = 4.4 / maxDim;
+    grp.scale.setScalar(s); grp.updateMatrixWorld(true);
+    box.setFromObject(grp); box.getCenter(center); box.getSize(size);
+    grp.position.set(-center.x, -box.min.y, -center.z);
+    const wrap = new THREE.Group(); wrap.add(grp); map[k] = wrap;
+  }
+  return map;
+}
+
 function makeHouse(variant = 0) {
   const r = rng(variant * 99 + 7);
   const w = 7 + r() * 4, h = 3.5 + r() * 1.5, d = 6 + r() * 3, rh = 1.8 + r() * 1.0;
@@ -600,7 +712,8 @@ function makeWreck(variant = 0) {
 // ---------------------------------------------------------------------------
 //  ENSAMBLAR EL MUNDO
 // ---------------------------------------------------------------------------
-function buildWorld(scene, world) {
+function buildWorld(scene, world, ctx = {}) {
+  const cars = ctx.cars || {};
   const obstacles = [], npcs = [], lampExtras = [];
   scene.add(buildTerrain(world)); scene.add(buildRoad(world));
 
@@ -648,16 +761,23 @@ function buildWorld(scene, world) {
   const onSide = (z, side, dist) => { const cx = world.roadInfo(0, z).centerX; return { x: cx + side * dist, z }; };
   function add(obj, x, z, ry = 0, r = 0) { obj.position.set(x, world.getHeight(x, z), z); obj.rotation.y = ry; scene.add(obj); if (r > 0) obstacles.push({ x, z, r }); return obj; }
 
-  // houses with eerie lit windows + a couple of real interior lights
+  // casas: las prominentes son la casa de campo detallada; el resto, cabañas
   const housePlaces = [[-30, 1, 24, -Math.PI / 2 + 0.2], [90, -1, 22, Math.PI / 2], [170, 1, 26, -Math.PI / 2 - 0.3], [-150, -1, 28, Math.PI / 3], [40, 1, 30, -1.2]];
   housePlaces.forEach(([z, side, dist, ry], i) => {
-    const sp = onSide(z, side, dist); const house = add(makeHouse(i), sp.x, sp.z, ry, 5);
-    if (house.userData.lit && i < 2) { const pl = new THREE.PointLight(0xffb347, 3.5, 16, 2); pl.position.set(sp.x, world.getHeight(sp.x, sp.z) + 2, sp.z); scene.add(pl); lampExtras.push(pl); }
+    const sp = onSide(z, side, dist);
+    const farm = i < 2;
+    const house = add(farm ? buildFarmhouse() : makeHouse(i), sp.x, sp.z, ry, farm ? 6 : 5);
+    if (!farm && house.userData.lit && i < 3) { const pl = new THREE.PointLight(0xffb347, 3.5, 16, 2); pl.position.set(sp.x, world.getHeight(sp.x, sp.z) + 2, sp.z); scene.add(pl); lampExtras.push(pl); }
   });
 
-  const wreck = onSide(8, 0, 0.5); add(makeWreck(0), wreck.x, wreck.z, 0.4, 2.4);
-  const truck = onSide(-34, 1, 14); add(makeWreck(1), truck.x, truck.z, 1.2, 2.6);
-  const parked = onSide(92, -1, 14); add(makeWreck(2), parked.x, parked.z, -0.6, 2.4);
+  // autos REALES del pack (con fallback al procedural si no cargaron)
+  function placeCar(type, x, z, ry, fb) { const proto = cars[type]; const c = proto ? proto.clone(true) : makeWreck(fb); return add(c, x, z, ry, 2.4); }
+  const wreck = onSide(8, 0, 0.5); placeCar('SEDAN', wreck.x, wreck.z, 0.4, 0);
+  const truck = onSide(-34, 1, 14); placeCar('PICKUP', truck.x, truck.z, 1.2, 1);
+  const parked = onSide(92, -1, 14); placeCar('SUV', parked.x, parked.z, -0.6, 2);
+  const off = onSide(150, 1, 13); placeCar('OFFROAD', off.x, off.z, 1.4, 1);
+  const wag = onSide(-110, -1, 15); placeCar('WAGON', wag.x, wag.z, 0.7, 2);
+  const sport = onSide(210, -1, 12); placeCar('SPORT', sport.x, sport.z, -1.1, 2);
 
   // background conifer-ish trees at the edges (reuse procedural trees, big)
   for (let i = 0; i < 22; i++) {
@@ -912,11 +1032,14 @@ const audio = new AudioFX();
 let game = null;
 const loadBar = document.getElementById('load-bar'), loadPct = document.getElementById('load-pct');
 
-function boot() {
-  loadBar.style.width = '30%'; loadPct.textContent = 'Levantando el cielo…';
+async function boot() {
+  loadBar.style.width = '20%'; loadPct.textContent = 'Levantando el cielo…';
   const sky = buildSky(scene, world, renderer);
-  loadBar.style.width = '55%'; loadPct.textContent = 'Sembrando los maizales…';
-  const built = buildWorld(scene, world);
+  loadBar.style.width = '40%'; loadPct.textContent = 'Cargando los autos…';
+  let cars = {};
+  if (typeof GLB !== 'undefined' && GLB.pack) { const g = await parseGLB(GLB.pack); cars = makeCarPrototypes(g); }
+  loadBar.style.width = '70%'; loadPct.textContent = 'Sembrando los maizales…';
+  const built = buildWorld(scene, world, { cars });
   loadBar.style.width = '90%';
   const player = new Player(camera, world, canvas); player.obstacles = built.obstacles;
   player.spawn(world.roadInfo(0, -4).centerX, -4, Math.PI);
