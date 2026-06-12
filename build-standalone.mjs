@@ -1,20 +1,12 @@
-// Genera un único HTML autocontenido con MODELOS GLB PS1 REALES incrustados,
-// pensado para MÓVIL (horizontal, pantalla completa) y de DÍA con look AAA.
-// Fusiona three + addons + glb + juego en un módulo inline SIN imports
-// (así funciona abriéndolo directamente como file://, doble clic).
-import { readFileSync, writeFileSync, statSync } from 'fs';
+// Genera un único HTML autocontenido, 100% PROCEDURAL (sin GLB, sin assets),
+// para MÓVIL (horizontal, pantalla completa), de DÍA con look AAA y rayos de sol.
+// Fusiona three + el juego en un módulo inline SIN imports -> funciona como file://.
+import { readFileSync, writeFileSync } from 'fs';
 
 const V = 'vendor/three/';
-const readT = p => readFileSync(p, 'utf8');
+const threeRaw = readFileSync(V + 'three.module.js', 'utf8');
 
-// --- helpers para "desmodularizar" ----------------------------------------
-const stripImports = s => s.replace(/import\s*\{[\s\S]*?\}\s*from\s*['"][^'"]*['"];?/g, '');
-const stripExportDecl = s => s.replace(/\bexport\s+(function|class|const|let|var)\b/g, '$1');
-const stripExportBlocks = s => s.replace(/export\s*\{[\s\S]*?\}\s*;?/g, '');
-const clean = s => stripExportBlocks(stripExportDecl(stripImports(s)));
-
-// --- three core: capturar nombres exportados y construir el namespace ------
-const threeRaw = readT(V + 'three.module.js');
+// three core: capturar nombres exportados y construir el namespace THREE
 const expMatch = threeRaw.match(/export\s*\{([\s\S]*?)\};/);
 if (!expMatch) throw new Error('no encontré el export de three');
 const names = expMatch[1].split(',').map(s => s.trim()).filter(Boolean);
@@ -22,50 +14,10 @@ const nsEntries = names.map(n => n.includes(' as ') ? (() => { const [l, e] = n.
 const threeStripped = threeRaw.replace(/export\s*\{[\s\S]*?\};\s*$/, '');
 const threeNamespace = `\nconst THREE = { ${nsEntries.join(', ')} };\n`;
 
-// --- addons: cada uno en su propia IIFE para aislar sus consts internas ----
-// (ven las clases de three por closure, exponen solo sus exports al scope).
-function processAddon(src) {
-  const names = new Set();
-  src.replace(/export\s*\{([\s\S]*?)\}\s*;?/g, (m, inner) => {
-    inner.split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.add(n.includes(' as ') ? n.split(' as ')[1].trim() : n));
-    return m;
-  });
-  src.replace(/\bexport\s+(?:async\s+)?(?:function|class|const|let|var)\s+([A-Za-z0-9_$]+)/g, (m, name) => { names.add(name); return m; });
-  const list = [...names];
-  return `\nconst { ${list.join(', ')} } = (function(){\n${clean(src)}\nreturn { ${list.join(', ')} };\n})();\n`;
-}
-const bufGeo = processAddon(readT(V + 'addons/utils/BufferGeometryUtils.js'));
-const skel = processAddon(readT(V + 'addons/utils/SkeletonUtils.js'));
-const gltf = processAddon(readT(V + 'addons/loaders/GLTFLoader.js'));
+const game = readFileSync('src/standalone-game.js', 'utf8');
 
-// --- modelos GLB embebidos (selección equilibrada para móvil) --------------
-const M = 'assets/models/';
-const models = {
-  ozoneHouse: 'psx_-_ozone_house.glb',
-  japanHouse: 'psx_traditional_japanease_house_1.glb',
-  truck: 'psx_-_truck.glb',
-  rustyCar: 'old_rusty_car.glb',
-  highSchool: 'ps1_psx_high_school_character.glb',
-  rigged: 'ps1_rigged_character_model.glb',
-  pines: 'pine_trees_pack__ps1_low_poly.glb',
-  clergy: 'clergy__catacombs_ps1-style_asset_pack.glb',
-};
-let glbTotal = 0;
-const glbEntries = Object.entries(models).map(([k, f]) => {
-  const b64 = readFileSync(M + f).toString('base64');
-  glbTotal += statSync(M + f).size;
-  return `  ${k}: "${b64}"`;
-});
-const glbConst = `\nconst GLB = {\n${glbEntries.join(',\n')}\n};\n`;
-
-// --- juego -----------------------------------------------------------------
-const game = readT('src/standalone-glb-game.js');
-
-// --- módulo combinado (sin imports). El juego también va en su propia IIFE
-//     para no chocar con las constantes internas de three. ------------------
-let combined = threeStripped + threeNamespace + '\n' + bufGeo + '\n' + skel + '\n' + gltf + '\n' + glbConst +
-  '\n(function(){\n' + game + '\n})();\n';
-// blindaje por si algún string contuviera el cierre de etiqueta
+// El juego va en su propia IIFE para no chocar con las constantes internas de three.
+let combined = threeStripped + threeNamespace + '\n(function(){\n' + game + '\n})();\n';
 combined = combined.replace(/<\/script/gi, '<\\/script');
 
 const html = `<!DOCTYPE html>
@@ -84,14 +36,13 @@ const html = `<!DOCTYPE html>
   #game { position: fixed; inset: 0; display: block; }
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
   #crosshair { position: absolute; top: 50%; left: 50%; width: 5px; height: 5px; background: rgba(220,220,210,0.5); border-radius: 50%; transform: translate(-50%,-50%); box-shadow: 0 0 4px rgba(0,0,0,0.9); }
-  #vignette { position: absolute; inset: 0; box-shadow: inset 0 0 200px 60px rgba(0,0,0,0.55); }
+  #vignette { position: absolute; inset: 0; box-shadow: inset 0 0 200px 60px rgba(0,0,0,0.5); }
   #status { position: absolute; left: 16px; bottom: 14px; font-size: 12px; line-height: 1.6; text-shadow: 0 0 6px #000; opacity: 0.8; }
   #status .k { color: var(--accent); }
   #battery-wrap { position: absolute; right: 16px; top: 16px; width: 130px; text-shadow: 0 0 6px #000; }
   #battery-wrap .lbl { font-size: 10px; letter-spacing: 2px; opacity: .7; margin-bottom: 4px; }
   #battery { width: 100%; height: 8px; border: 1px solid #5a5750; background: #14130f; }
   #battery > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg,#7d3a1f,#d9b04a); transition: width .3s; }
-  /* joystick + botones táctiles */
   #joy-base { position: fixed; width: 112px; height: 112px; margin: -56px 0 0 -56px; border: 2px solid rgba(255,255,255,.28); border-radius: 50%; z-index: 15; pointer-events: none; background: rgba(255,255,255,.04); }
   #joy-knob { position: fixed; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.4); z-index: 16; pointer-events: none; }
   #btn-flash { position: fixed; right: 20px; bottom: 24px; width: 64px; height: 64px; border-radius: 50%; border: 1px solid #6b4030; background: rgba(30,18,12,.55); color: #ffdca0; z-index: 18; pointer-events: all; font-size: 26px; }
@@ -149,4 +100,4 @@ ${combined}
 `;
 
 writeFileSync('NIEBLA-DEL-MAIZ.html', html);
-console.log('GLB embebidos:', (glbTotal / 1024 / 1024).toFixed(1), 'MB  |  HTML:', (html.length / 1024 / 1024).toFixed(2), 'MB');
+console.log('HTML procedural:', (html.length / 1024 / 1024).toFixed(2), 'MB');
