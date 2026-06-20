@@ -126,13 +126,15 @@
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-    "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.39.1/build/index.js"
+    "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.39.1/build/index.js",
+    "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
   }
 }
 </script>
 
 <script type="module">
 import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EffectComposer, RenderPass, EffectPass, Effect, BloomEffect, HueSaturationEffect,
@@ -399,7 +401,8 @@ function buildChunk(cx,cz){
     const tg=new THREE.Group(); tg.position.set(x,terrainHeight(x,z)-0.05,z); tg.rotation.y=rng()*6.28;
     const tr=new THREE.Mesh(tree.trunkGeometry,barkMat); tr.castShadow=tr.receiveShadow=true; tg.add(tr);
     const lv=new THREE.InstancedMesh(lp,leafMat,tree.leaves.length); for(let j=0;j<tree.leaves.length;j++){lv.setMatrixAt(j,tree.leaves[j].m);lv.setColorAt(j,tree.leaves[j].c);} lv.instanceMatrix.needsUpdate=true; tg.add(lv);
-    grp.add(tg); trees.push({tg,x,z,hp:5,hit:0,falling:0,dead:false,scale:1}); totalTrees++;
+    tree.trunkGeometry.computeBoundingBox(); grp.add(tg);
+    trees.push({tg,x,z,hp:5,hit:0,dead:false,scale:1,state:'alive',h:tree.trunkGeometry.boundingBox.max.y}); totalTrees++;
   }
   // pasto (3 tipos) + plantas (3 tipos) — cross-quad con viento, abundante
   const dm=new THREE.Object3D();const gc=new THREE.Color();const fol=[];
@@ -434,6 +437,7 @@ function buildChunk(cx,cz){
 function buildWorld(){
   for(const c of chunkList){scene.remove(c.grp);c.grp.traverse(o=>{if(o.geometry)o.geometry.dispose();});}
   for(const lg of logs){scene.remove(lg.m);} logs.length=0;
+  for(const d of debris){scene.remove(d.m);} debris.length=0; physWorld=null; physGround=null;
   chunkList.length=0;trees.length=0;totalTrees=0;
   for(let cx=W.x0;cx<=W.x1;cx++)for(let cz=W.z0;cz<=W.z1;cz++)buildChunk(cx,cz);
   document.getElementById('treeCount').textContent=totalTrees;
@@ -570,33 +574,64 @@ function spawnLogs(x,z,by){for(let i=0;i<4;i++){const m=new THREE.Mesh(logGeo,ba
 
 function doChop(){
   let best=null,bestD=1e9;const sy=Math.sin(player.yaw),cy=Math.cos(player.yaw);
-  for(const t of trees){ if(t.dead||t.falling)continue; const dx=t.x-player.pos.x,dz=t.z-player.pos.z;const d=dx*dx+dz*dz; if(d>bestD||d>12)continue;
+  for(const t of trees){ if(t.dead||t.state!=='alive')continue; const dx=t.x-player.pos.x,dz=t.z-player.pos.z;const d=dx*dx+dz*dz; if(d>bestD||d>12)continue;
     const fl=Math.hypot(dx,dz)||1; const dot=(-sy*dx-cy*dz)/fl; if(dot<0.45)continue; bestD=d;best=t; }
-  if(best){ best.hp--; best.hit=1; best.scale*=0.9;
+  if(best){ best.hp--; best.hit=1; best.scale*=0.92;
     emitSplinters(new THREE.Vector3(best.x,terrainHeight(best.x,best.z)+1.3,best.z),14); chopSound();
-    if(best.hp<=0){ best.falling=0.0001; spawnLogs(best.x,best.z,terrainHeight(best.x,best.z)); } }
+    if(best.hp<=0){ felltree(best); } }
 }
+// ===== física de tala (cannon-es) =====
+let physWorld=null,physGround=null; const oMat=new CANNON.Material('o'),gMat=new CANNON.Material('g');
+const debrisGeo=new THREE.BoxGeometry(0.16,0.16,0.56); const debris=[];
+function ensureWorld(){ if(physWorld)return; physWorld=new CANNON.World({gravity:new CANNON.Vec3(0,-18,0)}); physWorld.allowSleep=true; physWorld.broadphase=new CANNON.SAPBroadphase(physWorld);
+  physWorld.addContactMaterial(new CANNON.ContactMaterial(gMat,oMat,{friction:0.7,restitution:0.05}));
+  physGround=new CANNON.Body({type:CANNON.Body.STATIC,shape:new CANNON.Plane(),material:gMat}); physGround.quaternion.setFromEuler(-Math.PI/2,0,0); physWorld.addBody(physGround); }
+function felltree(t){ if(t.state!=='alive')return; ensureWorld(); t.state='falling'; t.felledT=0;
+  const by=terrainHeight(t.x,t.z); physGround.position.y=by; const H=t.h||5;
+  const b=new CANNON.Body({mass:32,material:oMat}); b.angularDamping=0.3; b.linearDamping=0.04;
+  b.addShape(new CANNON.Box(new CANNON.Vec3(0.5,H/2,0.5)),new CANNON.Vec3(0,H/2,0));
+  b.position.set(t.x,by,t.z); b.quaternion.copy(t.tg.quaternion);
+  const ax=t.x-player.pos.x,az=t.z-player.pos.z,fl=Math.hypot(ax,az)||1;
+  b.angularVelocity.set((az/fl)*2.0,0,-(ax/fl)*2.0);     // vuelca alejándose del jugador
+  physWorld.addBody(b); t.body=b;
+  for(let i=0;i<6;i++){const m=new THREE.Mesh(debrisGeo,barkMat);m.castShadow=true;const hh=by+1.6+Math.random()*Math.max(1,H-1.6);
+    m.position.set(t.x+(Math.random()-.5)*0.6,hh,t.z+(Math.random()-.5)*0.6);scene.add(m);
+    const db=new CANNON.Body({mass:1.2,material:oMat});db.angularDamping=0.3;db.addShape(new CANNON.Box(new CANNON.Vec3(0.08,0.08,0.28)));
+    db.position.copy(m.position); const a=Math.random()*6.28; db.velocity.set(Math.cos(a)*3,2+Math.random()*3,Math.sin(a)*3); db.angularVelocity.set((Math.random()-.5)*10,(Math.random()-.5)*10,(Math.random()-.5)*10);
+    physWorld.addBody(db); debris.push({m,b:db,life:6}); }
+  emitSplinters(new THREE.Vector3(t.x,by+1.3,t.z),18);
+}
+function spawnLogsGold(x,z,by,count){ for(let i=0;i<count;i++){const m=new THREE.Mesh(logGeo,barkMat);m.castShadow=true;
+  const a=Math.random()*6.28,rad=0.5+Math.random()*2.2; m.position.set(x+Math.cos(a)*rad,by+0.9+i*0.12,z+Math.sin(a)*rad); m.rotation.set(Math.random()*6,Math.random()*6,Math.random()*6); scene.add(m);
+  const halo=new THREE.Mesh(logGeo,new THREE.MeshBasicMaterial({color:0xffd24a,side:THREE.BackSide,transparent:true,opacity:0.9})); halo.scale.setScalar(1.22); m.add(halo);
+  logs.push({m,halo,haloT:5,v:new THREE.Vector3((Math.random()-.5)*2,1.4+Math.random()*1.4,(Math.random()-.5)*2),settled:false,picked:false}); } }
 function chopSound(){ if(!actx||!soundOn)return; const b=actx.createBuffer(1,actx.sampleRate*0.12,actx.sampleRate);const d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,3);
   const s=actx.createBufferSource();s.buffer=b;const bp=actx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=170+Math.random()*70;const g=actx.createGain();g.gain.value=0.28;s.connect(bp).connect(g).connect(actx.destination);s.start(); }
 
 function chopTick(dt){
-  // swing del hacha
   if(swing.active){ swing.t+=dt/0.42; const a=Math.sin(Math.min(swing.t,1)*Math.PI);
     fpAxe.rotation.x=FP_BASE.x-a*1.35; fpAxe.rotation.z=FP_BASE.z+a*0.35;
     if(swing.t>=0.5&&!swing.hit){swing.hit=true;doChop();}
     if(swing.t>=1){swing.active=false;fpAxe.rotation.copy(FP_BASE);} }
-  // árboles: temblor / encogerse / caer
+  if(physWorld) physWorld.step(1/60,dt,4);
+  // árboles
   for(const t of trees){ if(t.dead)continue;
-    if(t.falling){ t.falling+=dt; t.tg.rotation.z=Math.min(1.5,t.falling*1.7); t.tg.position.y-=dt*0.25; if(t.falling>1.4){t.dead=true;t.tg.visible=false;} }
-    else{ const sc=t.tg.scale.x; if(Math.abs(sc-t.scale)>0.002)t.tg.scale.setScalar(sc+(t.scale-sc)*Math.min(1,12*dt));
-      if(t.hit>0){t.hit=Math.max(0,t.hit-dt*3.2);t.tg.rotation.z=Math.sin(windU.uTime.value*42)*0.05*t.hit;}else if(t.tg.rotation.z){t.tg.rotation.z*=0.85;} } }
+    if(t.state==='alive'){ const sc=t.tg.scale.x; if(Math.abs(sc-t.scale)>0.002)t.tg.scale.setScalar(sc+(t.scale-sc)*Math.min(1,12*dt));
+      if(t.hit>0){t.hit=Math.max(0,t.hit-dt*3.2);t.tg.rotation.z=Math.sin(windU.uTime.value*42)*0.05*t.hit;}else if(t.tg.rotation.z){t.tg.rotation.z*=0.85;} }
+    else { if(t.body){t.tg.position.copy(t.body.position);t.tg.quaternion.copy(t.body.quaternion);} t.felledT+=dt;
+      if(t.state==='falling'&&t.felledT>=3){ t.state='fading'; t.fadeT=0; t.tg.traverse(o=>{if(o.material){o.material=o.material.clone();o.material.transparent=true;}}); }
+      if(t.state==='fading'){ t.fadeT+=dt; const op=Math.max(0,1-t.fadeT/0.8); t.tg.traverse(o=>{if(o.material)o.material.opacity=op;});
+        if(t.fadeT>=0.8){ const cx=t.x,cz=t.z; scene.remove(t.tg); t.tg.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material&&o.material.dispose)o.material.dispose();}); if(t.body){physWorld.removeBody(t.body);t.body=null;} spawnLogsGold(cx,cz,terrainHeight(cx,cz),3+Math.floor(Math.random()*2)); t.dead=true; } } } }
+  // debris físico
+  for(let i=debris.length-1;i>=0;i--){const d=debris[i]; d.life-=dt; d.m.position.copy(d.b.position); d.m.quaternion.copy(d.b.quaternion); if(d.life<=0){scene.remove(d.m);if(physWorld)physWorld.removeBody(d.b);debris.splice(i,1);}}
   // astillas
   for(let i=0;i<PART_MAX;i++){const s=pst[i]; if(s.life>0){s.life-=dt;s.v.y-=9.8*dt;s.p.addScaledVector(s.v,dt);s.r.x+=s.rv.x*dt;s.r.y+=s.rv.y*dt;s.r.z+=s.rv.z*dt;_po.position.copy(s.p);_po.rotation.copy(s.r);_po.scale.setScalar(1);}else{_po.position.set(0,-9999,0);_po.scale.setScalar(0.0001);}_po.updateMatrix();parts.setMatrixAt(i,_po.matrix);}
   parts.instanceMatrix.needsUpdate=true;
-  // troncos: caer, asentarse, recoger
+  // troncos: caer, asentarse, contorno dorado, recoger
   for(let i=logs.length-1;i>=0;i--){const lg=logs[i]; if(lg.picked){logs.splice(i,1);continue;}
     if(!lg.settled){ lg.v.y-=9.8*dt; lg.m.position.addScaledVector(lg.v,dt); const gy=terrainHeight(lg.m.position.x,lg.m.position.z)+0.18;
       if(lg.m.position.y<=gy){lg.m.position.y=gy;lg.settled=true;lg.m.rotation.set(Math.PI/2,Math.random()*6,0);} }
+    if(lg.haloT>0&&lg.halo){ lg.haloT-=dt; lg.halo.material.opacity=0.45+0.45*Math.sin(windU.uTime.value*6); if(lg.haloT<=0){lg.m.remove(lg.halo);lg.halo.material.dispose();lg.halo=null;} }
     const dx=lg.m.position.x-player.pos.x,dz=lg.m.position.z-player.pos.z; if(dx*dx+dz*dz<2.3){scene.remove(lg.m);lg.picked=true;woodCount++;if(woodHUD)woodHUD.textContent=woodCount;} }
 }
 
