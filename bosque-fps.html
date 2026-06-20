@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0b1410" />
+<title>Bosque PBR · Caminata en Primera Persona</title>
+<style>
+  :root { --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px); }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+  html, body { height: 100%; overflow: hidden; background: #0b1410; font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif; color: #eaf2ec; overscroll-behavior: none; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; touch-action: none; }
+
+  #loader { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: radial-gradient(120% 120% at 50% 30%, #1a2e22 0%, #0b1410 70%); transition: opacity .8s ease; }
+  #loader.hide { opacity: 0; pointer-events: none; }
+  .leaf-spin { width: 54px; height: 54px; border-radius: 50% 0 50% 50%; transform: rotate(45deg);
+               background: linear-gradient(135deg, #6fbf73, #2f7d3a); animation: spin 1.4s ease-in-out infinite; box-shadow: 0 0 30px rgba(80,200,120,.4); }
+  @keyframes spin { 0%,100% { transform: rotate(35deg) scale(1);} 50% { transform: rotate(225deg) scale(.85);} }
+  #loader p { margin-top: 22px; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
+
+  /* Joystick */
+  #joy { position: fixed; left: 26px; bottom: calc(30px + var(--safe-b)); z-index: 30; width: 132px; height: 132px; border-radius: 50%;
+         background: rgba(255,255,255,.06); border: 1.5px solid rgba(255,255,255,.16); backdrop-filter: blur(6px); touch-action: none; }
+  #joyKnob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
+             background: radial-gradient(circle at 38% 34%, #9fe0a4, #2f7d3a); box-shadow: 0 4px 16px rgba(0,0,0,.45), inset 0 2px 6px rgba(255,255,255,.3); transition: transform .05s linear; }
+
+  /* Botón correr */
+  #run { position: fixed; right: 28px; bottom: calc(44px + var(--safe-b)); z-index: 30; width: 84px; height: 84px; border-radius: 50%;
+         background: rgba(255,255,255,.06); border: 1.5px solid rgba(255,255,255,.18); color: #eaf2ec; font-size: 12px; letter-spacing: .05em;
+         backdrop-filter: blur(6px); cursor: pointer; transition: all .15s; }
+  #run.on { background: rgba(111,191,115,.3); border-color: #6fbf73; box-shadow: 0 0 18px rgba(80,200,120,.4); }
+
+  /* Crosshair */
+  #cross { position: fixed; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; z-index: 25; border-radius: 50%;
+           background: rgba(255,255,255,.55); box-shadow: 0 0 4px rgba(0,0,0,.6); pointer-events: none; }
+
+  /* Panel ajustes */
+  #ui { position: fixed; right: 12px; top: calc(12px + var(--safe-t)); z-index: 30; width: 224px; max-width: calc(100vw - 24px);
+        background: rgba(14,26,20,.62); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+        border: 1px solid rgba(255,255,255,.10); border-radius: 16px; padding: 12px 14px 14px; box-shadow: 0 12px 40px rgba(0,0,0,.45);
+        transition: transform .35s cubic-bezier(.4,0,.2,1), opacity .35s; }
+  #ui.collapsed { transform: translateX(calc(100% + 16px)); opacity: 0; }
+  #ui h1 { font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  #ui h1 .dot { width: 8px; height: 8px; border-radius: 50%; background: #6fbf73; box-shadow: 0 0 8px #6fbf73; }
+  #ui .sub { font-size: 10.5px; opacity: .55; margin-bottom: 11px; }
+  .row { margin-bottom: 11px; }
+  .row label { display: flex; justify-content: space-between; font-size: 11px; opacity: .85; margin-bottom: 5px; }
+  .row label span { opacity: .6; font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 4px; background: rgba(255,255,255,.18); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #6fbf73; box-shadow: 0 0 0 4px rgba(111,191,115,.2); }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: none; border-radius: 50%; background: #6fbf73; }
+  .seg { display: flex; gap: 5px; }
+  .seg button { flex: 1; padding: 6px 2px; font-size: 10.5px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color: #eaf2ec; cursor: pointer; transition: all .15s; }
+  .seg button.active { background: #2f7d3a; border-color: #6fbf73; }
+  .toggle { display: flex; align-items: center; justify-content: space-between; font-size: 11px; opacity: .9; }
+  .switch { position: relative; width: 38px; height: 21px; border-radius: 21px; background: rgba(255,255,255,.16); cursor: pointer; transition: background .2s; }
+  .switch.on { background: #2f7d3a; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%; background: #fff; transition: left .2s; }
+  .switch.on::after { left: 19px; }
+
+  #toggleUI { position: fixed; right: 12px; top: calc(12px + var(--safe-t)); z-index: 31; width: 42px; height: 42px; border-radius: 11px;
+              background: rgba(14,26,20,.62); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.12); color: #eaf2ec; font-size: 17px;
+              cursor: pointer; display: none; align-items: center; justify-content: center; }
+  #toggleUI.show { display: flex; }
+
+  #hud { position: fixed; left: 50%; top: calc(10px + var(--safe-t)); transform: translateX(-50%); z-index: 25; font-size: 11px; opacity: .5;
+         font-variant-numeric: tabular-nums; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  #hint { position: fixed; left: 50%; top: 50%; transform: translate(-50%, 60px); z-index: 24; font-size: 12px; text-align: center; line-height: 1.6;
+          opacity: .75; pointer-events: none; transition: opacity .6s; text-shadow: 0 1px 5px rgba(0,0,0,.8); }
+  #hint.hide { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="loader"><div class="leaf-spin"></div><p>Plantando el bosque…</p></div>
+
+<div id="cross"></div>
+<div id="joy" class="ui-block"><div id="joyKnob"></div></div>
+<button id="run" class="ui-block">CORRER</button>
+
+<button id="toggleUI" class="ui-block" aria-label="Mostrar panel">☰</button>
+<div id="ui" class="ui-block">
+  <h1><span class="dot"></span> Bosque PBR</h1>
+  <div class="sub" id="tierInfo">Detectando…</div>
+  <div class="row">
+    <label>Estación</label>
+    <div class="seg" id="season">
+      <button data-s="spring">Prim</button>
+      <button data-s="summer" class="active">Ver</button>
+      <button data-s="autumn">Otoño</button>
+      <button data-s="winter">Inv</button>
+    </div>
+  </div>
+  <div class="row">
+    <label>Hora del día <span id="sunVal">mediodía</span></label>
+    <input type="range" id="sun" min="3" max="78" value="40" step="1" />
+  </div>
+  <div class="row">
+    <label>Viento <span id="windVal">brisa</span></label>
+    <input type="range" id="wind" min="0" max="100" value="35" step="1" />
+  </div>
+  <div class="row">
+    <label>Balanceo al caminar <span id="bobVal">100%</span></label>
+    <input type="range" id="bob" min="0" max="200" value="100" step="5" />
+  </div>
+  <div class="row toggle"><span>Sonido (pasos/viento)</span><div class="switch" id="snd"></div></div>
+  <div class="row toggle"><span>Semilla nueva (bosque)</span><div class="switch" id="reseed"></div></div>
+</div>
+
+<div id="hud"><span id="fps">–</span> FPS · <span id="trees">–</span> árboles</div>
+<div id="hint">Joystick para caminar · arrastrá la pantalla para mirar<br>moverte de costado inclina la cámara 🌿</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ===== PRNG + especies (mismo modelo que lib/tree-model.js) ===== */
+function mulberry32(a){return function(){a|=0;a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};}
+const SPECIES = {
+  roble:  { shape:'broadleaf', hMin:4.0,hMax:5.4, rTrunk:0.50, taper:0.74, depth:5, leafSize:0.72, tint:[1.00,0.96,0.90], leafHue:0.00,  leafLight:1.00 },
+  abedul: { shape:'slender',   hMin:5.2,hMax:6.8, rTrunk:0.32, taper:0.78, depth:5, leafSize:0.55, tint:[1.00,0.99,0.95], leafHue:0.02,  leafLight:1.22 },
+  pino:   { shape:'conifer',   hMin:6.2,hMax:8.6, rTrunk:0.44, taper:0.70, depth:4, leafSize:0.46, tint:[0.86,0.74,0.62], leafHue:-0.01, leafLight:0.70 },
+};
+const SEASONS = {
+  spring:[[0.27,0.62,0.55],[0.22,0.70,0.60],[0.30,0.55,0.70]],
+  summer:[[0.30,0.65,0.34],[0.27,0.70,0.28],[0.33,0.60,0.42]],
+  autumn:[[0.07,0.85,0.45],[0.04,0.90,0.50],[0.11,0.80,0.40],[0.015,0.85,0.42]],
+  winter:[[0.10,0.30,0.35],[0.08,0.25,0.30]],
+};
+const UP = new THREE.Vector3(0,1,0);
+function perpendicular(v){const a=Math.abs(v.x)<0.9?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0);return new THREE.Vector3().crossVectors(v,a).normalize();}
+function leafColor(species,season,rng){
+  const sp=SPECIES[species];
+  const pal=(species==='pino')?[[0.32,0.55,0.26],[0.30,0.6,0.22],[0.34,0.5,0.3]]:SEASONS[season];
+  const p=pal[Math.floor(rng()*pal.length)];
+  return new THREE.Color().setHSL(p[0]+sp.leafHue+(rng()-0.5)*0.03,p[1],Math.min(0.95,p[2]*sp.leafLight*(0.82+rng()*0.4)));
+}
+
+/* createTree → geometría de tronco local (con color de tinte) + matrices de hoja locales */
+function createTree(opts,rng){
+  const sp=SPECIES[opts.species]; const radial=opts.radial||6; const season=opts.season||'summer';
+  const height=sp.hMin+rng()*(sp.hMax-sp.hMin);
+  const geos=[]; const leafAnchors=[]; const tint=sp.tint;
+  function segment(p0,p1,r0,r1){
+    const dir=new THREE.Vector3().subVectors(p1,p0); const len=dir.length()||0.001;
+    const g=new THREE.CylinderGeometry(Math.max(r1,0.008),Math.max(r0,0.01),len,radial,1,false);
+    const quat=new THREE.Quaternion().setFromUnitVectors(UP,dir.clone().normalize());
+    const mid=new THREE.Vector3().addVectors(p0,p1).multiplyScalar(0.5);
+    g.applyMatrix4(new THREE.Matrix4().compose(mid,quat,new THREE.Vector3(1,1,1)));
+    g.clearGroups();
+    const n=g.attributes.position.count; const col=new Float32Array(n*3);
+    for(let i=0;i<n;i++){col[i*3]=tint[0];col[i*3+1]=tint[1];col[i*3+2]=tint[2];}
+    g.setAttribute('color',new THREE.BufferAttribute(col,3)); geos.push(g);
+  }
+  function buildBranch(origin,dir,length,radius,depth){
+    const segs=Math.max(2,Math.round(length*1.4)); let pos=origin.clone(); let d=dir.clone().normalize();
+    const slender=sp.shape==='slender';
+    for(let i=0;i<segs;i++){
+      const segLen=length/segs;
+      d.addScaledVector(perpendicular(d).applyAxisAngle(d,rng()*6.28),0.07+(5-depth)*0.015);
+      d.y-=0.04*(1-radius); d.normalize();
+      const next=pos.clone().addScaledVector(d,segLen);
+      segment(pos,next,radius*(1-(i/segs)*(1-sp.taper)),radius*(1-((i+1)/segs)*(1-sp.taper)));
+      pos=next; if(depth<=1) leafAnchors.push(pos.clone());
+    }
+    const endRadius=radius*sp.taper;
+    if(depth<=0||endRadius<0.018){leafAnchors.push(pos.clone());return;}
+    const children=depth>=4?2:(2+(rng()<0.5?1:0)); const baseRoll=rng()*6.28;
+    for(let c=0;c<children;c++){
+      const axis=perpendicular(d).applyAxisAngle(d,baseRoll+c*(6.28/children)+(rng()-0.5));
+      const angle=(slender?0.3:0.45)+rng()*(slender?0.4:0.55);
+      buildBranch(pos,d.clone().applyAxisAngle(axis,angle).normalize(),length*(slender?0.66:0.62)+length*rng()*0.16,endRadius*(0.78+rng()*0.12),depth-1);
+    }
+    if(depth>=3&&rng()<(slender?0.95:0.85))
+      buildBranch(pos,d.clone().applyAxisAngle(perpendicular(d),slender?0.06:0.12).normalize(),length*(slender?0.78:0.7),endRadius*0.84,depth-1);
+  }
+  function buildConifer(totalH,baseR){
+    const segs=Math.max(8,Math.round(totalH*1.4)); let pos=new THREE.Vector3(0,0,0); let r=baseR;
+    let d=new THREE.Vector3((rng()-0.5)*0.04,1,(rng()-0.5)*0.04).normalize();
+    for(let i=0;i<segs;i++){
+      const segLen=totalH/segs; const next=pos.clone().addScaledVector(d,segLen);
+      segment(pos,next,r,r*0.95); const frac=i/segs;
+      if(frac>0.16){
+        const crownR=(1-frac)*totalH*0.30+0.3; const count=4+(rng()<0.5?1:0); const roll=rng()*6.28;
+        for(let b=0;b<count;b++){
+          let bd=new THREE.Vector3(Math.cos(roll+b*6.28/count),0,Math.sin(roll+b*6.28/count));
+          bd.y=-(0.25+0.5*frac); bd.normalize();
+          const blen=crownR*(0.7+rng()*0.5); const tip=next.clone().addScaledVector(bd,blen);
+          segment(next,tip,r*0.4,r*0.12); leafAnchors.push(tip); leafAnchors.push(next.clone().addScaledVector(bd,blen*0.6));
+        }
+      }
+      r*=0.93; pos=next;
+    }
+    leafAnchors.push(pos.clone());
+  }
+  if(sp.shape==='conifer') buildConifer(height,sp.rTrunk);
+  else buildBranch(new THREE.Vector3(0,0,0),new THREE.Vector3(0.04,1,0.02),height*0.82,sp.rTrunk,sp.depth);
+
+  const trunkGeometry=mergeGeometries(geos,false); geos.forEach(g=>g.dispose());
+  const leaves=[]; const per=Math.max(1,Math.floor((opts.leafCount||800)/Math.max(leafAnchors.length,1)));
+  const dummy=new THREE.Object3D(); const spread=sp.shape==='conifer'?0.5:0.95;
+  for(let a=0;a<leafAnchors.length;a++){
+    const base=leafAnchors[a]; const k=(a%5===0)?per+2:per;
+    for(let j=0;j<k;j++){
+      dummy.position.set(base.x+(rng()-0.5)*spread,base.y+(rng()-0.5)*spread,base.z+(rng()-0.5)*spread);
+      dummy.rotation.set(rng()*6.28,rng()*6.28,rng()*6.28);
+      const s=sp.leafSize*(0.7+rng()*0.7); dummy.scale.set(s,s*1.25,s); dummy.updateMatrix();
+      leaves.push({matrix:dummy.matrix.clone(),color:leafColor(opts.species,season,rng)});
+    }
+  }
+  return {trunkGeometry,leaves,height};
+}
+
+/* ===================== DISPOSITIVO / CALIDAD ===================== */
+function detectTier(){
+  const c=document.createElement('canvas'); const gl=c.getContext('webgl2')||c.getContext('webgl');
+  let gpu=''; if(gl){const d=gl.getExtension('WEBGL_debug_renderer_info'); if(d) gpu=(gl.getParameter(d.UNMASKED_RENDERER_WEBGL)||'').toLowerCase();}
+  const ua=navigator.userAgent.toLowerCase(); const isAndroid=/android/.test(ua); const isMobile=/mobile|android|iphone|ipad|ipod/.test(ua);
+  const mem=navigator.deviceMemory||(isMobile?4:8); const cores=navigator.hardwareConcurrency||4;
+  let tier='high';
+  if(isMobile) tier=(mem>=6&&cores>=8)?'high':(mem>=4?'medium':'low');
+  if(/adreno 6|adreno 7|adreno 8|mali-g7|mali-g8|apple|m1|m2|m3/.test(gpu)&&isMobile) tier='high';
+  if(/adreno 5|mali-g5|mali-g3/.test(gpu)) tier='medium';
+  return {tier,isAndroid,isMobile};
+}
+const DEV=detectTier();
+const PRESETS={
+  low:    {dpr:1.25, shadow:1024, radial:5, trees:11, leafBudget:5000,  post:false, smaa:false},
+  medium: {dpr:1.7,  shadow:1536, radial:6, trees:17, leafBudget:10000, post:true,  smaa:false},
+  high:   {dpr:2.0,  shadow:2048, radial:7, trees:26, leafBudget:18000, post:true,  smaa:true},
+};
+let Q=PRESETS[DEV.tier];
+document.getElementById('tierInfo').textContent=`${DEV.isMobile?(DEV.isAndroid?'Android':'Móvil'):'Escritorio'} · ${Q.trees} árboles · calidad ${({low:'baja',medium:'media',high:'alta'})[DEV.tier]}`;
+
+/* ===================== RENDERER / ESCENA ===================== */
+const app=document.getElementById('app');
+const renderer=new THREE.WebGLRenderer({antialias:!Q.post,powerPreference:'high-performance'});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,Q.dpr));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
+app.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0xbcd3df,0.022);
+const camera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,0.1,300);
+
+/* ===================== CIELO + IBL ===================== */
+const pmrem=new THREE.PMREMGenerator(renderer); pmrem.compileEquirectangularShader();
+const sky=new Sky(); sky.scale.setScalar(8000);
+const skyU=sky.material.uniforms;
+skyU.turbidity.value=6; skyU.rayleigh.value=1.6; skyU.mieCoefficient.value=0.005; skyU.mieDirectionalG.value=0.8;
+scene.add(sky);
+const sunVec=new THREE.Vector3(); let envRT=null;
+
+function setSun(elev,azim=130){
+  const phi=THREE.MathUtils.degToRad(90-elev), theta=THREE.MathUtils.degToRad(azim);
+  sunVec.setFromSphericalCoords(1,phi,theta);
+  skyU.sunPosition.value.copy(sunVec);
+  const t=THREE.MathUtils.clamp(elev/50,0,1);
+  dirLight.intensity=THREE.MathUtils.lerp(1.0,3.3,t);
+  dirLight.color.setHSL(THREE.MathUtils.lerp(0.06,0.12,t),THREE.MathUtils.lerp(0.7,0.18,t),0.55);
+  hemiLight.intensity=THREE.MathUtils.lerp(0.25,0.65,t);
+  scene.fog.color.setHSL(0.58,0.25,THREE.MathUtils.lerp(0.5,0.8,t));
+  scene.fog.density=THREE.MathUtils.lerp(0.03,0.018,t);
+}
+function updateEnvironment(){
+  const es=new THREE.Scene(); const s=new Sky(); s.scale.setScalar(100);
+  const u=s.material.uniforms;
+  u.turbidity.value=skyU.turbidity.value; u.rayleigh.value=skyU.rayleigh.value;
+  u.mieCoefficient.value=skyU.mieCoefficient.value; u.mieDirectionalG.value=skyU.mieDirectionalG.value;
+  u.sunPosition.value.copy(sunVec); es.add(s);
+  const rt=pmrem.fromScene(es,0.04); if(envRT) envRT.dispose(); envRT=rt; scene.environment=rt.texture;
+  s.geometry.dispose(); s.material.dispose();
+}
+
+/* ===================== LUCES ===================== */
+const hemiLight=new THREE.HemisphereLight(0xbfe3ff,0x4a3a26,0.6); scene.add(hemiLight);
+const dirLight=new THREE.DirectionalLight(0xfff1dd,3.0);
+dirLight.castShadow=true;
+dirLight.shadow.mapSize.set(Q.shadow,Q.shadow);
+dirLight.shadow.camera.near=1; dirLight.shadow.camera.far=90;
+dirLight.shadow.camera.left=-24; dirLight.shadow.camera.right=24;
+dirLight.shadow.camera.top=24; dirLight.shadow.camera.bottom=-24;
+dirLight.shadow.bias=-0.0004; dirLight.shadow.normalBias=0.05;
+scene.add(dirLight); scene.add(dirLight.target);
+
+/* ===================== TEXTURAS PROCEDURALES ===================== */
+function barkTextures(){
+  const S=512; const col=document.createElement('canvas'); col.width=col.height=S;
+  const bmp=document.createElement('canvas'); bmp.width=bmp.height=S;
+  const cx=col.getContext('2d'), bx=bmp.getContext('2d');
+  cx.fillStyle='#5a4230'; cx.fillRect(0,0,S,S); bx.fillStyle='#808080'; bx.fillRect(0,0,S,S);
+  for(let i=0;i<2600;i++){
+    const x=Math.random()*S,y=Math.random()*S,h=8+Math.random()*60,w=0.6+Math.random()*2.4,sh=Math.random();
+    cx.strokeStyle=`rgba(${sh<.5?'34,22,14':'120,94,64'},${0.12+Math.random()*0.25})`;
+    cx.lineWidth=w; cx.beginPath(); cx.moveTo(x,y); cx.lineTo(x+(Math.random()-.5)*4,y+h); cx.stroke();
+    const bv=sh<.5?40:200; bx.strokeStyle=`rgba(${bv},${bv},${bv},${0.3+Math.random()*0.4})`;
+    bx.lineWidth=w; bx.beginPath(); bx.moveTo(x,y); bx.lineTo(x+(Math.random()-.5)*4,y+h); bx.stroke();
+  }
+  for(let i=0;i<40;i++){const x=Math.random()*S,y=Math.random()*S,r=6+Math.random()*22;
+    const g=cx.createRadialGradient(x,y,0,x,y,r); g.addColorStop(0,'rgba(20,12,8,.5)'); g.addColorStop(1,'rgba(20,12,8,0)');
+    cx.fillStyle=g; cx.beginPath(); cx.arc(x,y,r,0,7); cx.fill();}
+  const cT=new THREE.CanvasTexture(col); cT.colorSpace=THREE.SRGBColorSpace; cT.wrapS=cT.wrapT=THREE.RepeatWrapping; cT.repeat.set(1,3); cT.anisotropy=4;
+  const bT=new THREE.CanvasTexture(bmp); bT.wrapS=bT.wrapT=THREE.RepeatWrapping; bT.repeat.set(1,3);
+  return {map:cT,bump:bT};
+}
+function leafTexture(){
+  const S=128; const cv=document.createElement('canvas'); cv.width=cv.height=S; const g=cv.getContext('2d');
+  g.translate(S/2,S/2);
+  const grad=g.createLinearGradient(0,-S/2,0,S/2); grad.addColorStop(0,'#cfcfcf'); grad.addColorStop(.5,'#ffffff'); grad.addColorStop(1,'#bdbdbd');
+  g.fillStyle=grad; g.beginPath(); g.moveTo(0,-S*0.46);
+  g.bezierCurveTo(S*0.4,-S*0.3,S*0.34,S*0.34,0,S*0.46); g.bezierCurveTo(-S*0.34,S*0.34,-S*0.4,-S*0.3,0,-S*0.46); g.fill();
+  g.strokeStyle='rgba(90,90,90,.55)'; g.lineWidth=2.2; g.beginPath(); g.moveTo(0,-S*0.42); g.lineTo(0,S*0.42); g.stroke();
+  g.lineWidth=1; g.strokeStyle='rgba(120,120,120,.45)';
+  for(let i=-4;i<=4;i++){const y=i*S*0.08; g.beginPath(); g.moveTo(0,y); g.lineTo(S*0.22,y-S*0.07); g.stroke(); g.beginPath(); g.moveTo(0,y); g.lineTo(-S*0.22,y-S*0.07); g.stroke();}
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t;
+}
+function groundTexture(){
+  const S=512; const cv=document.createElement('canvas'); cv.width=cv.height=S; const g=cv.getContext('2d');
+  g.fillStyle='#3f5a2c'; g.fillRect(0,0,S,S);
+  for(let i=0;i<9000;i++){const x=Math.random()*S,y=Math.random()*S; g.fillStyle=['#2f4a20','#4d6b30','#5c7d38','#384e22','#6b8a40'][Math.floor(Math.random()*5)];
+    g.globalAlpha=0.5+Math.random()*0.5; g.fillRect(x,y,1+Math.random()*2,1+Math.random()*3);}
+  g.globalAlpha=1; const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(28,28); t.anisotropy=4; return t;
+}
+const barkTex=barkTextures(); const leafTex=leafTexture();
+
+/* ===================== TERRENO ===================== */
+function terrainHeight(x,z){ return Math.sin(x*0.045)*Math.cos(z*0.04)*1.5 + Math.sin(x*0.12+z*0.08)*0.45; }
+const groundGeo=new THREE.PlaneGeometry(220,220,100,100);
+groundGeo.rotateX(-Math.PI/2);
+{ const p=groundGeo.attributes.position; for(let i=0;i<p.count;i++){ p.setY(i,terrainHeight(p.getX(i),p.getZ(i))); } groundGeo.computeVertexNormals(); }
+const ground=new THREE.Mesh(groundGeo,new THREE.MeshStandardMaterial({map:groundTexture(),roughness:0.97,metalness:0,color:0xcacaca}));
+ground.receiveShadow=true; scene.add(ground);
+
+/* ===================== MATERIALES ÁRBOL + VIENTO ===================== */
+const barkMat=new THREE.MeshStandardMaterial({map:barkTex.map,bumpMap:barkTex.bump,bumpScale:0.5,roughness:0.92,metalness:0,vertexColors:true,envMapIntensity:0.7});
+const leafMat=new THREE.MeshStandardMaterial({map:leafTex,alphaTest:0.45,side:THREE.DoubleSide,roughness:0.62,metalness:0,envMapIntensity:0.9});
+const windU={uTime:{value:0},uWind:{value:0.35}};
+leafMat.onBeforeCompile=(sh)=>{
+  sh.uniforms.uTime=windU.uTime; sh.uniforms.uWind=windU.uWind;
+  sh.vertexShader=sh.vertexShader
+    .replace('#include <common>','#include <common>\nuniform float uTime; uniform float uWind;')
+    .replace('#include <begin_vertex>',`#include <begin_vertex>
+      vec3 anchor=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);
+      float ph=anchor.x*0.8+anchor.z*1.1+anchor.y*0.4;
+      float hh=clamp(anchor.y/8.0,0.0,1.0);
+      float amp=uWind*(0.10+0.30*hh);
+      float s=sin(uTime*1.7+ph)+0.5*sin(uTime*3.3+ph*1.7);
+      transformed.x+=s*amp; transformed.z+=cos(uTime*1.4+ph)*amp*0.85; transformed.y+=sin(uTime*2.2+ph)*amp*0.3;`);
+};
+
+/* ===================== POBLAR EL BOSQUE ===================== */
+let forestTrunk=null, forestLeaves=null;
+const speciesList=['roble','roble','abedul','pino','pino','roble','abedul'];
+let currentSeason='summer';
+let baseSeed=Math.floor(Math.random()*1e9);
+
+function buildForest(seed,season){
+  // limpiar previo
+  if(forestTrunk){ scene.remove(forestTrunk); forestTrunk.geometry.dispose(); }
+  if(forestLeaves){ scene.remove(forestLeaves); forestLeaves.geometry.dispose(); }
+  const rng=mulberry32(seed);
+  const trunkGeos=[]; const leafEntries=[];
+  const placed=[];
+  let attempts=0;
+  while(placed.length<Q.trees && attempts<Q.trees*12){
+    attempts++;
+    const ang=rng()*6.28, rad=8+rng()*70;
+    const x=Math.cos(ang)*rad, z=Math.sin(ang)*rad;
+    if(Math.hypot(x,z)<7) continue;                       // dejar claro el centro (spawn)
+    if(placed.some(p=>Math.hypot(p.x-x,p.z-z)<4.5)) continue;
+    placed.push({x,z});
+    const species=speciesList[Math.floor(rng()*speciesList.length)];
+    const tree=createTree({species,season,radial:Q.radial,leafCount:Math.floor(Q.leafBudget/Q.trees)},rng);
+    const world=new THREE.Matrix4().compose(
+      new THREE.Vector3(x,terrainHeight(x,z)-0.05,z),
+      new THREE.Quaternion().setFromAxisAngle(UP,rng()*6.28),
+      new THREE.Vector3(1,1,1)
+    );
+    tree.trunkGeometry.applyMatrix4(world);
+    trunkGeos.push(tree.trunkGeometry);
+    const tmp=new THREE.Matrix4();
+    for(const lf of tree.leaves){ tmp.multiplyMatrices(world,lf.matrix); leafEntries.push({matrix:tmp.clone(),color:lf.color}); }
+  }
+  // tronco mergeado (1 draw call)
+  forestTrunk=new THREE.Mesh(mergeGeometries(trunkGeos,false),barkMat);
+  trunkGeos.forEach(g=>g.dispose());
+  forestTrunk.castShadow=true; forestTrunk.receiveShadow=true; scene.add(forestTrunk);
+  // hojas: una sola InstancedMesh
+  const geo=new THREE.PlaneGeometry(0.62,0.78);
+  forestLeaves=new THREE.InstancedMesh(geo,leafMat,leafEntries.length);
+  for(let i=0;i<leafEntries.length;i++){ forestLeaves.setMatrixAt(i,leafEntries[i].matrix); forestLeaves.setColorAt(i,leafEntries[i].color); }
+  forestLeaves.instanceMatrix.needsUpdate=true; if(forestLeaves.instanceColor) forestLeaves.instanceColor.needsUpdate=true;
+  scene.add(forestLeaves);
+  document.getElementById('trees').textContent=placed.length;
+}
+
+/* Piedras dispersas */
+const stoneGeo=new THREE.IcosahedronGeometry(0.3,0);
+const stones=new THREE.InstancedMesh(stoneGeo,new THREE.MeshStandardMaterial({color:0x6b6b66,roughness:0.95,metalness:0,flatShading:true}),40);
+stones.castShadow=true; stones.receiveShadow=true;
+{ const d=new THREE.Object3D(); const rng=mulberry32(7);
+  for(let i=0;i<40;i++){ const a=rng()*6.28,r=4+rng()*70,x=Math.cos(a)*r,z=Math.sin(a)*r;
+    d.position.set(x,terrainHeight(x,z)+0.05,z); d.rotation.set(rng()*6,rng()*6,rng()*6);
+    const s=0.4+rng()*1.2; d.scale.set(s,s*0.7,s); d.updateMatrix(); stones.setMatrixAt(i,d.matrix);} }
+scene.add(stones);
+
+buildForest(baseSeed,currentSeason);
+
+/* ===================== POST-PROCESO ===================== */
+let composer=null,bloomPass=null;
+function buildComposer(){
+  composer=new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene,camera));
+  bloomPass=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),0.26,0.7,0.86);
+  composer.addPass(bloomPass);
+  if(Q.smaa) composer.addPass(new SMAAPass(innerWidth*Q.dpr,innerHeight*Q.dpr));
+  composer.addPass(new OutputPass());
+  composer.setPixelRatio(Math.min(devicePixelRatio,Q.dpr)); composer.setSize(innerWidth,innerHeight);
+}
+if(Q.post) buildComposer();
+setSun(40,130); updateEnvironment();
+
+/* ============================================================
+   CONTROLES EN PRIMERA PERSONA + JOYSTICK + HEAD-BOB
+   ============================================================ */
+const EYE=1.7, WALK=3.4, RUN=6.4, ACCEL=10;
+const player={ pos:new THREE.Vector3(0,0,0), vel:new THREE.Vector3(), yaw:0, pitch:0, roll:0, bobPhase:0, strafeSm:0 };
+let bobScale=1.0, running=false;
+const forward=new THREE.Vector3(), right=new THREE.Vector3();
+
+/* --- Joystick --- */
+const joyEl=document.getElementById('joy'), knob=document.getElementById('joyKnob');
+let joyId=null; const joy={x:0,y:0};
+function updateJoy(e){
+  const r=joyEl.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2;
+  let dx=e.clientX-cx, dy=e.clientY-cy; const R=r.width/2; const len=Math.hypot(dx,dy);
+  if(len>R){ dx*=R/len; dy*=R/len; }
+  knob.style.transform=`translate(${dx}px,${dy}px)`; joy.x=dx/R; joy.y=dy/R;
+}
+joyEl.addEventListener('pointerdown',e=>{ joyId=e.pointerId; joyEl.setPointerCapture(e.pointerId); updateJoy(e); unlockAudio(); e.preventDefault(); });
+joyEl.addEventListener('pointermove',e=>{ if(e.pointerId===joyId) updateJoy(e); });
+function joyEnd(e){ if(e.pointerId===joyId){ joyId=null; joy.x=0; joy.y=0; knob.style.transform='translate(0,0)'; } }
+joyEl.addEventListener('pointerup',joyEnd); joyEl.addEventListener('pointercancel',joyEnd);
+
+/* --- Mirar (arrastre en pantalla / mouse) --- */
+let lookId=null; let lastX=0,lastY=0; const LOOK=0.0042;
+window.addEventListener('pointerdown',e=>{
+  if(e.target.closest('.ui-block')) return;            // no robar toques de UI/joystick
+  if(lookId===null && e.pointerId!==joyId){ lookId=e.pointerId; lastX=e.clientX; lastY=e.clientY; dismissHint(); unlockAudio(); }
+});
+window.addEventListener('pointermove',e=>{
+  if(e.pointerId!==lookId) return;
+  player.yaw-=(e.clientX-lastX)*LOOK; player.pitch-=(e.clientY-lastY)*LOOK;
+  player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch)); lastX=e.clientX; lastY=e.clientY;
+});
+function lookEnd(e){ if(e.pointerId===lookId) lookId=null; }
+window.addEventListener('pointerup',lookEnd); window.addEventListener('pointercancel',lookEnd);
+
+/* Pointer lock para escritorio */
+renderer.domElement.addEventListener('click',()=>{ if(!DEV.isMobile && document.pointerLockElement!==renderer.domElement) renderer.domElement.requestPointerLock(); });
+document.addEventListener('mousemove',e=>{ if(document.pointerLockElement===renderer.domElement){ player.yaw-=e.movementX*LOOK; player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch-e.movementY*LOOK)); } });
+
+/* Teclado (escritorio) */
+const keys={};
+addEventListener('keydown',e=>{ keys[e.code]=true; if(e.code==='ShiftLeft'||e.code==='ShiftRight') running=true; });
+addEventListener('keyup',e=>{ keys[e.code]=false; if(e.code==='ShiftLeft'||e.code==='ShiftRight') running=false; });
+
+/* Botón correr (mantener) */
+const runBtn=document.getElementById('run');
+runBtn.addEventListener('pointerdown',e=>{ running=true; runBtn.classList.add('on'); e.preventDefault(); });
+const stopRun=()=>{ running=false; runBtn.classList.remove('on'); };
+runBtn.addEventListener('pointerup',stopRun); runBtn.addEventListener('pointercancel',stopRun); runBtn.addEventListener('pointerleave',stopRun);
+
+/* ===================== AUDIO (pasos + viento) ===================== */
+let actx=null, windGain=null, soundOn=false, lastBobSign=0;
+function unlockAudio(){
+  if(actx||!soundOn) return;
+  actx=new (window.AudioContext||window.webkitAudioContext)();
+  // viento: ruido filtrado en loop
+  const buf=actx.createBuffer(1,actx.sampleRate*2,actx.sampleRate); const dt=buf.getChannelData(0);
+  let last=0; for(let i=0;i<dt.length;i++){ const w=Math.random()*2-1; last=(last+0.02*w)/1.02; dt[i]=last*3; }
+  const src=actx.createBufferSource(); src.buffer=buf; src.loop=true;
+  const lp=actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=480;
+  windGain=actx.createGain(); windGain.gain.value=0.0;
+  src.connect(lp).connect(windGain).connect(actx.destination); src.start();
+}
+function footstep(){
+  if(!actx||!soundOn) return;
+  const len=0.09; const buf=actx.createBuffer(1,actx.sampleRate*len,actx.sampleRate); const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++){ d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2.5); }
+  const src=actx.createBufferSource(); src.buffer=buf;
+  const bp=actx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=320+Math.random()*120; bp.Q.value=0.8;
+  const g=actx.createGain(); g.gain.value=0.18;
+  src.connect(bp).connect(g).connect(actx.destination); src.start();
+}
+
+/* ===================== UI ===================== */
+const $=(id)=>document.getElementById(id);
+const sunLabels=e=>e<10?'amanecer':e<25?'mañana':e<55?'mediodía':'tarde';
+const windLabels=w=>w<8?'calma':w<45?'brisa':w<75?'viento':'tormenta';
+$('sun').addEventListener('input',e=>{const v=+e.target.value;setSun(v,130);$('sunVal').textContent=sunLabels(v);});
+$('sun').addEventListener('change',updateEnvironment);
+$('wind').addEventListener('input',e=>{const v=+e.target.value;windU.uWind.value=v/100*1.6;$('windVal').textContent=windLabels(v); if(windGain) windGain.gain.value=0.02+v/100*0.10;});
+$('bob').addEventListener('input',e=>{bobScale=+e.target.value/100;$('bobVal').textContent=e.target.value+'%';});
+document.querySelectorAll('#season button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#season button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  currentSeason=b.dataset.s; buildForest(baseSeed,currentSeason);
+}));
+const sndSw=$('snd'); sndSw.addEventListener('click',()=>{ sndSw.classList.toggle('on'); soundOn=sndSw.classList.contains('on'); if(soundOn){ unlockAudio(); if(windGain) windGain.gain.value=0.02+(+$('wind').value)/100*0.10; } else if(windGain){ windGain.gain.value=0; } });
+const reseedSw=$('reseed'); reseedSw.addEventListener('click',()=>{ reseedSw.classList.toggle('on'); baseSeed=Math.floor(Math.random()*1e9); buildForest(baseSeed,currentSeason); setTimeout(()=>reseedSw.classList.remove('on'),250); });
+
+const ui=$('ui'), toggleBtn=$('toggleUI');
+ui.addEventListener('dblclick',()=>{ ui.classList.add('collapsed'); toggleBtn.classList.add('show'); });
+toggleBtn.addEventListener('click',()=>{ ui.classList.remove('collapsed'); toggleBtn.classList.remove('show'); });
+
+let hinted=false; function dismissHint(){ if(!hinted){ hinted=true; $('hint').classList.add('hide'); } }
+
+/* ===================== RESIZE / LOOP ===================== */
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);
+  if(composer){ composer.setSize(innerWidth,innerHeight); bloomPass?.setSize(innerWidth,innerHeight); }
+});
+let paused=false; document.addEventListener('visibilitychange',()=>{paused=document.hidden;});
+
+const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
+let fpsTimer=0,fpsFrames=0;
+
+function update(dt){
+  // input
+  let ix=joy.x, iz=joy.y;                       // joystick: x=strafe, y=adelante/atras (y+ = abajo)
+  if(keys['KeyW']) iz-=1; if(keys['KeyS']) iz+=1; if(keys['KeyA']) ix-=1; if(keys['KeyD']) ix+=1;
+  const mag=Math.min(1,Math.hypot(ix,iz));
+  if(mag>0.001){ ix/=Math.max(mag,1); iz/=Math.max(mag,1); }
+
+  // direcciones segun yaw
+  forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
+  right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
+
+  const maxSpeed=(running?RUN:WALK)*mag;
+  const desired=new THREE.Vector3();
+  desired.addScaledVector(forward,-iz*maxSpeed);     // -iz: joystick arriba = adelante
+  desired.addScaledVector(right,ix*maxSpeed);
+  player.vel.lerp(desired,Math.min(1,ACCEL*dt));
+  player.pos.addScaledVector(player.vel,dt);
+
+  // limitar al área del bosque
+  const dist=Math.hypot(player.pos.x,player.pos.z);
+  if(dist>92){ player.pos.x*=92/dist; player.pos.z*=92/dist; }
+
+  // head-bob proporcional a la velocidad
+  const speed=player.vel.length();
+  player.bobPhase+=dt*(speed*1.9+0.0001);
+  const moveAmt=Math.min(1,speed/WALK)*bobScale;
+  const bobY=Math.sin(player.bobPhase*2)*0.05*moveAmt;
+  const bobX=Math.cos(player.bobPhase)*0.035*moveAmt;
+
+  // pasos: disparar al tocar fondo del ciclo
+  const sign=Math.sign(Math.sin(player.bobPhase*2));
+  if(sign<0 && lastBobSign>=0 && speed>0.6) footstep();
+  lastBobSign=sign;
+
+  // banking: inclinar la cámara al moverse de costado + balanceo natural
+  const strafeAmt=right.dot(player.vel)/Math.max(WALK,0.001);  // -1..1 aprox
+  player.strafeSm+=(strafeAmt-player.strafeSm)*Math.min(1,8*dt);
+  const walkRoll=Math.sin(player.bobPhase)*0.018*moveAmt;
+  const targetRoll=-player.strafeSm*0.08 + walkRoll;           // ~4.5° max de banking lateral
+  player.roll+=(targetRoll-player.roll)*Math.min(1,10*dt);
+
+  // componer cámara
+  const gy=terrainHeight(player.pos.x,player.pos.z);
+  camera.position.set(
+    player.pos.x+right.x*bobX,
+    gy+EYE+bobY,
+    player.pos.z+right.z*bobX
+  );
+  euler.set(player.pitch,player.yaw,player.roll); camera.quaternion.setFromEuler(euler);
+
+  // sol/sombra siguen al jugador
+  dirLight.position.copy(player.pos).addScaledVector(sunVec,45);
+  dirLight.target.position.copy(player.pos); dirLight.target.updateMatrixWorld();
+
+  windU.uTime.value+=dt;
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(paused) return;
+  const dt=Math.min(clock.getDelta(),0.05);
+  update(dt);
+  if(Q.post&&composer) composer.render(); else renderer.render(scene,camera);
+  fpsTimer+=dt; fpsFrames++;
+  if(fpsTimer>=0.5){ $('fps').textContent=Math.round(fpsFrames/fpsTimer); fpsTimer=0; fpsFrames=0; }
+}
+
+requestAnimationFrame(()=>{
+  renderer.render(scene,camera);
+  setTimeout(()=>$('loader').classList.add('hide'),400);
+  animate();
+});
+</script>
+</body>
+</html>
