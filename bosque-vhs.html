@@ -554,11 +554,11 @@ function buildFPAxe(){
   hg.center(); hg.clearGroups(); const pp=hg.attributes.position,nn=hg.attributes.normal;
   for(let i=0;i<pp.count;i+=3){const cx=(pp.getX(i)+pp.getX(i+1)+pp.getX(i+2))/3;const nz=Math.abs((nn.getZ(i)+nn.getZ(i+1)+nn.getZ(i+2))/3);hg.addGroup(i,3,nz<0.6?(cx<-1.7?2:1):0);}
   const head=new THREE.Mesh(hg,[bodyMat,bodyMat,edgeMat]);
-  const headG=new THREE.Group(); headG.add(head); headG.scale.setScalar(0.32); headG.position.set(-0.15,1.25,0); g.add(headG);
-  const handle=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.065,2.5,18),gripMat); g.add(handle);
+  const headG=new THREE.Group(); headG.add(head); headG.scale.setScalar(0.30); headG.rotation.y=-1.15; headG.position.set(0.0,1.18,0.05); g.add(headG);
+  const handle=new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.095,2.5,20),gripMat); g.add(handle);
   return g;
 }
-const fpAxe=buildFPAxe(); fpAxe.scale.setScalar(0.2); fpAxe.position.set(0.42,-0.52,-1.0); fpAxe.rotation.set(0.12,-0.42,-0.32);
+const fpAxe=buildFPAxe(); fpAxe.scale.setScalar(0.16); fpAxe.position.set(0.4,-0.42,-0.95); fpAxe.rotation.set(-0.2,0.5,0.5);
 camera.add(fpAxe); scene.add(camera);
 const FP_BASE=fpAxe.rotation.clone();
 let swing={active:false,t:0,hit:false};
@@ -585,18 +585,18 @@ let physWorld=null,physGround=null; const oMat=new CANNON.Material('o'),gMat=new
 const debrisGeo=new THREE.BoxGeometry(0.16,0.16,0.56); const debris=[];
 function ensureWorld(){ if(physWorld)return; physWorld=new CANNON.World({gravity:new CANNON.Vec3(0,-18,0)}); physWorld.allowSleep=true; physWorld.broadphase=new CANNON.SAPBroadphase(physWorld);
   physWorld.addContactMaterial(new CANNON.ContactMaterial(gMat,oMat,{friction:0.7,restitution:0.05}));
-  physGround=new CANNON.Body({type:CANNON.Body.STATIC,shape:new CANNON.Plane(),material:gMat}); physGround.quaternion.setFromEuler(-Math.PI/2,0,0); physWorld.addBody(physGround); }
+  physGround=new CANNON.Body({type:CANNON.Body.STATIC,shape:new CANNON.Plane(),material:gMat}); physGround.collisionFilterGroup=1; physGround.collisionFilterMask=2; physGround.quaternion.setFromEuler(-Math.PI/2,0,0); physWorld.addBody(physGround); }
 function felltree(t){ if(t.state!=='alive')return; ensureWorld(); t.state='falling'; t.felledT=0;
   const by=terrainHeight(t.x,t.z); physGround.position.y=by; const H=t.h||5;
-  const b=new CANNON.Body({mass:32,material:oMat}); b.angularDamping=0.3; b.linearDamping=0.04;
+  const b=new CANNON.Body({mass:32,material:oMat}); b.angularDamping=0.1; b.linearDamping=0.02; b.collisionFilterGroup=2; b.collisionFilterMask=1;
   b.addShape(new CANNON.Box(new CANNON.Vec3(0.5,H/2,0.5)),new CANNON.Vec3(0,H/2,0));
   b.position.set(t.x,by,t.z); b.quaternion.copy(t.tg.quaternion);
   const ax=t.x-player.pos.x,az=t.z-player.pos.z,fl=Math.hypot(ax,az)||1;
-  b.angularVelocity.set((az/fl)*2.0,0,-(ax/fl)*2.0);     // vuelca alejándose del jugador
+  b.angularVelocity.set((az/fl)*2.8,0,-(ax/fl)*2.8);     // vuelca decidido alejándose del jugador
   physWorld.addBody(b); t.body=b;
   for(let i=0;i<6;i++){const m=new THREE.Mesh(debrisGeo,barkMat);m.castShadow=true;const hh=by+1.6+Math.random()*Math.max(1,H-1.6);
     m.position.set(t.x+(Math.random()-.5)*0.6,hh,t.z+(Math.random()-.5)*0.6);scene.add(m);
-    const db=new CANNON.Body({mass:1.2,material:oMat});db.angularDamping=0.3;db.addShape(new CANNON.Box(new CANNON.Vec3(0.08,0.08,0.28)));
+    const db=new CANNON.Body({mass:1.2,material:oMat});db.angularDamping=0.3;db.collisionFilterGroup=2;db.collisionFilterMask=1;db.addShape(new CANNON.Box(new CANNON.Vec3(0.08,0.08,0.28)));
     db.position.copy(m.position); const a=Math.random()*6.28; db.velocity.set(Math.cos(a)*3,2+Math.random()*3,Math.sin(a)*3); db.angularVelocity.set((Math.random()-.5)*10,(Math.random()-.5)*10,(Math.random()-.5)*10);
     physWorld.addBody(db); debris.push({m,b:db,life:6}); }
   emitSplinters(new THREE.Vector3(t.x,by+1.3,t.z),18);
