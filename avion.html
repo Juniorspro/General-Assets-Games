@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#9cc6e6" />
+<title>Avión · Cabina (BETA)</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
+  html,body { height:100%; overflow:hidden; background:#0a0f14; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; color:#eaf2f8; }
+  #app { position:fixed; inset:0; } canvas { display:block; touch-action:none; }
+  #loader { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; background:#0a0f14; transition:opacity .7s; }
+  #loader.hide { opacity:0; pointer-events:none; }
+  .sp { width:44px;height:44px;border:3px solid rgba(255,255,255,.15);border-top-color:#8fc0ff;border-radius:50%;animation:r 1s linear infinite; } @keyframes r{to{transform:rotate(360deg);}}
+  #beta { position:fixed; left:14px; top:14px; z-index:30; font-size:11px; letter-spacing:.12em; opacity:.6; }
+  #hint { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:25; font-size:11.5px; opacity:.5; }
+</style>
+</head>
+<body>
+<div id="loader"><div class="sp"></div></div>
+<div id="app"></div>
+<div id="beta">✈ CABINA · BETA · mirá alrededor</div>
+<div id="hint">arrastrá para mirar (ventana ← · laptop →)</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.39.1/build/index.js"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { EffectComposer, RenderPass, EffectPass, BloomEffect, ToneMappingEffect, ToneMappingMode, SMAAEffect } from 'postprocessing';
+
+const renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.NoToneMapping;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.05,4000);
+
+// cielo de día afuera
+const pmrem=new THREE.PMREMGenerator(renderer);
+const sky=new Sky(); sky.scale.setScalar(3000); const su=sky.material.uniforms;
+su.turbidity.value=4; su.rayleigh.value=1.2; su.mieCoefficient.value=0.004; su.mieDirectionalG.value=0.8;
+const sun=new THREE.Vector3(); sun.setFromSphericalCoords(1,THREE.MathUtils.degToRad(54),THREE.MathUtils.degToRad(150)); su.sunPosition.value.copy(sun);
+scene.add(sky);
+{ const es=new THREE.Scene(); const s=new Sky(); s.scale.setScalar(100); for(const k in su) if(s.material.uniforms[k]) s.material.uniforms[k].value=su[k].value; es.add(s); scene.environment=pmrem.fromScene(es,0.04).texture; }
+
+// nubes (planos)
+function cloudTex(){const S=512;const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');g.clearRect(0,0,S,S);
+  for(let i=0;i<40;i++){const x=Math.random()*S,y=Math.random()*S,r=40+Math.random()*90;const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,'rgba(255,255,255,'+(0.5+Math.random()*0.4)+')');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill();}
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;return t;}
+const cloud=new THREE.Mesh(new THREE.PlaneGeometry(2400,2400),new THREE.MeshBasicMaterial({map:cloudTex(),transparent:true,opacity:0.85,depthWrite:false}));
+cloud.rotation.x=Math.PI/2; cloud.position.y=-120; cloud.material.map.repeat.set(3,3); scene.add(cloud);
+
+// luces
+scene.add(new THREE.HemisphereLight(0xeaf3ff,0x6a6256,0.7));
+const sunL=new THREE.DirectionalLight(0xfff4e2,2.2); sunL.position.copy(sun).multiplyScalar(40); sunL.castShadow=true;
+sunL.shadow.mapSize.set(1024,1024); sunL.shadow.camera.near=1; sunL.shadow.camera.far=60; sunL.shadow.camera.left=-8;sunL.shadow.camera.right=8;sunL.shadow.camera.top=8;sunL.shadow.camera.bottom=-8; scene.add(sunL); scene.add(sunL.target);
+
+/* ===================== CABINA ===================== */
+const cabin=new THREE.Group(); scene.add(cabin);
+const cream=new THREE.MeshStandardMaterial({color:0xdedacf,roughness:0.92,metalness:0,side:THREE.DoubleSide});
+const creamD=new THREE.MeshStandardMaterial({color:0xc7c2b6,roughness:0.9});
+const carpet=new THREE.MeshStandardMaterial({color:0x2a2f36,roughness:0.97});
+// piso
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(3.6,20),carpet); floor.rotation.x=-Math.PI/2; floor.position.y=0; floor.receiveShadow=true; cabin.add(floor);
+// pasillo (alfombra más clara)
+const aisle=new THREE.Mesh(new THREE.PlaneGeometry(0.7,20),new THREE.MeshStandardMaterial({color:0x3a4048,roughness:0.95})); aisle.rotation.x=-Math.PI/2; aisle.position.set(0.5,0.005,0); cabin.add(aisle);
+// techo curvo
+const roof=new THREE.Mesh(new THREE.CylinderGeometry(1.95,1.95,20,28,1,true,0,Math.PI),cream);
+roof.rotation.z=Math.PI/2; roof.rotation.y=Math.PI/2; roof.position.set(0.4,2.05,0); cabin.add(roof);
+// luz de techo emisiva
+const strip=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.04,18),new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xfff2d8,emissiveIntensity:2.2})); strip.position.set(0.4,2.8,0); cabin.add(strip);
+// paredes con ventanas (ovaladas)
+function sideWall(){ const sh=new THREE.Shape(); sh.moveTo(-9.5,0); sh.lineTo(9.5,0); sh.lineTo(9.5,2.2); sh.lineTo(-9.5,2.2); sh.lineTo(-9.5,0);
+  for(let z=-8;z<=8;z+=1.5){ const h=new THREE.Path(); h.absellipse(z,1.2,0.26,0.34,0,Math.PI*2,true); sh.holes.push(h); }
+  return new THREE.ShapeGeometry(sh); }
+const wallL=new THREE.Mesh(sideWall(),cream); wallL.rotation.y=Math.PI/2; wallL.position.x=-1.75; cabin.add(wallL);
+const wallR=new THREE.Mesh(sideWall(),cream); wallR.rotation.y=-Math.PI/2; wallR.position.x=2.55; cabin.add(wallR);
+// repisas/compartimentos superiores
+for(const sx of [-1.55,2.35]){ const bin=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,19),creamD); bin.position.set(sx,1.95,0); bin.castShadow=true; cabin.add(bin); }
+
+/* ===================== ASIENTOS + GENTE ===================== */
+function makeSeat(){ const g=new THREE.Group(); const m=new THREE.MeshStandardMaterial({color:0x39485a,roughness:0.92}); const t=new THREE.MeshStandardMaterial({color:0x222a34,roughness:0.85});
+  const base=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.14,0.52),m); base.position.y=0.46; g.add(base);
+  const back=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.82,0.13),m); back.position.set(0,0.9,-0.22); back.rotation.x=-0.12; g.add(back);
+  const hr=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.22,0.13),t); hr.position.set(0,1.36,-0.27); hr.rotation.x=-0.12; g.add(hr);
+  for(const sx of[-1,1]){const arm=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.1,0.5),t); arm.position.set(sx*0.285,0.6,0.02); g.add(arm);}
+  g.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}}); return g; }
+function makePerson(cloth,skin){ const g=new THREE.Group();
+  const cM=new THREE.MeshStandardMaterial({color:cloth,roughness:0.88}); const sM=new THREE.MeshStandardMaterial({color:skin,roughness:0.7}); const hM=new THREE.MeshStandardMaterial({color:0x2a2420,roughness:0.85});
+  const cap=(r,len,m)=>new THREE.Mesh(new THREE.CapsuleGeometry(r,len,6,14),m);
+  const torso=cap(0.17,0.32,cM); torso.position.set(0,0.78,0.0); g.add(torso);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.135,20,16),sM); head.position.set(0,1.14,0.03); g.add(head);
+  const hair=new THREE.Mesh(new THREE.SphereGeometry(0.142,20,16,0,Math.PI*2,0,Math.PI*0.62),hM); hair.position.copy(head.position); g.add(hair);
+  for(const sx of[-1,1]){
+    const ua=cap(0.055,0.2,cM); ua.position.set(sx*0.22,0.82,0.02); g.add(ua);
+    const fa=cap(0.05,0.2,cM); fa.position.set(sx*0.23,0.6,0.2); fa.rotation.x=-1.05; g.add(fa);
+    const hand=new THREE.Mesh(new THREE.SphereGeometry(0.058,12,10),sM); hand.position.set(sx*0.23,0.56,0.34); g.add(hand);
+    const th=cap(0.08,0.24,cM); th.position.set(sx*0.1,0.5,0.22); th.rotation.x=Math.PI/2; g.add(th);
+    const sh=cap(0.07,0.26,cM); sh.position.set(sx*0.1,0.27,0.38); g.add(sh);
+    const foot=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.07,0.22),hM); foot.position.set(sx*0.1,0.06,0.48); g.add(foot);
+  }
+  g.traverse(o=>{if(o.isMesh)o.castShadow=true;}); return g; }
+
+// filas: x de asientos (lado izquierdo donde vamos nosotros, y lado derecho)
+const seatX=[-1.05,-0.35, 1.05,1.75];   // 2 a la izquierda, pasillo, 2 a la derecha
+const rowZ=[1.0,-0.8,-2.6,-4.4,-6.2];
+const PCLOTH=[0x8a3b3b,0x335a44,0x44557a,0x6a5a33,0x4a4a55];
+let pc=0;
+for(let r=0;r<rowZ.length;r++){ for(let c=0;c<seatX.length;c++){
+  const s=makeSeat(); s.position.set(seatX[c],0,rowZ[r]); cabin.add(s);
+  // sentar gente (no en nuestro asiento [izquierda, fila 0] ni en el asiento de la laptop)
+  const ours = (r===0 && c===0), laptopSeat = (r===0 && c===1);
+  if(!ours && !laptopSeat && Math.random()<0.6){ const p=makePerson(PCLOTH[pc%PCLOTH.length],0xd8a98a); pc++; p.position.set(seatX[c],0.46,rowZ[r]+0.05); p.rotation.y=Math.PI; cabin.add(p); } } }
+
+/* ===================== LAPTOP + PENDRIVE (asiento de al lado) ===================== */
+const lapG=new THREE.Group(); lapG.position.set(-0.35,0.55,1.02); cabin.add(lapG);   // sobre el asiento de al lado
+const lapMat=new THREE.MeshStandardMaterial({color:0x9a9ea4,metalness:0.8,roughness:0.4});
+const lapBody=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.022,0.24),lapMat); lapBody.castShadow=true; lapG.add(lapBody);
+const lapLid=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.02,0.24),new THREE.MeshStandardMaterial({color:0x7d8186,metalness:0.85,roughness:0.35})); lapLid.position.y=0.022; lapG.add(lapLid);
+const logo=new THREE.Mesh(new THREE.CircleGeometry(0.03,20),new THREE.MeshStandardMaterial({color:0xffffff,emissive:0x223344,emissiveIntensity:0.4})); logo.rotation.x=-Math.PI/2; logo.position.set(0,0.033,0); lapG.add(logo);
+// pendrive al costado, conectado
+const pen=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.022,0.085),new THREE.MeshStandardMaterial({color:0x1a1a1d,roughness:0.6})); pen.position.set(0.205,0.0,0.03); lapG.add(pen);
+const penCap=new THREE.Mesh(new THREE.BoxGeometry(0.018,0.016,0.03),new THREE.MeshStandardMaterial({color:0xcfd3d8,metalness:1,roughness:0.3})); penCap.position.set(0.172,0.0,0.03); lapG.add(penCap);
+
+/* ===================== ALA + MOTOR (afuera, ventana izquierda) ===================== */
+const outside=new THREE.Group(); scene.add(outside);
+const planeBody=new THREE.MeshStandardMaterial({color:0xdfe3e8,metalness:0.5,roughness:0.45,envMapIntensity:1.0});
+// fuselaje exterior (debajo de la ventana)
+const fus=new THREE.Mesh(new THREE.CylinderGeometry(2.4,2.4,22,28,1,false),planeBody); fus.rotation.x=Math.PI/2; fus.position.set(0.4,1.0,0); outside.add(fus);
+// ala izquierda
+const wing=new THREE.Mesh(new THREE.BoxGeometry(9,0.18,3.4),planeBody); wing.position.set(-6.5,-0.6,1.5); wing.rotation.z=-0.04; wing.rotation.y=0.18; wing.castShadow=true; outside.add(wing);
+const wingTip=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.5,0.6),planeBody); wingTip.position.set(-11,-0.2,1.0); wingTip.rotation.z=0.5; outside.add(wingTip);
+// motor (nacelle) bajo el ala
+const eng=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.62,2.2,22),new THREE.MeshStandardMaterial({color:0xcfd3d8,metalness:0.7,roughness:0.35})); eng.rotation.x=Math.PI/2; eng.position.set(-5.5,-1.25,1.6); outside.add(eng);
+const intake=new THREE.Mesh(new THREE.TorusGeometry(0.66,0.08,12,24),new THREE.MeshStandardMaterial({color:0x444a50,metalness:0.8,roughness:0.3})); intake.position.set(-5.5,-1.25,2.7); outside.add(intake);
+const fan=new THREE.Mesh(new THREE.CircleGeometry(0.6,24),new THREE.MeshStandardMaterial({color:0x16181b,metalness:0.6,roughness:0.5})); fan.position.set(-5.5,-1.25,2.66); outside.add(fan);
+
+/* ===================== POST ===================== */
+let composer,bloom;
+try{ composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});
+  composer.addPass(new RenderPass(scene,camera));
+  bloom=new BloomEffect({intensity:0.35,luminanceThreshold:0.8,luminanceSmoothing:0.2,mipmapBlur:true,radius:0.6});
+  composer.addPass(new EffectPass(camera,bloom,new ToneMappingEffect({mode:ToneMappingMode.AGX})));
+  composer.addPass(new EffectPass(camera,new SMAAEffect())); composer.setSize(innerWidth,innerHeight);
+}catch(e){ console.error(e); composer=null; renderer.toneMapping=THREE.AgXToneMapping; }
+
+/* ===================== CÁMARA 1ª PERSONA SENTADO ===================== */
+const SEAT=new THREE.Vector3(-1.05,1.15,1.0);   // ojos en nuestro asiento (izquierda, junto a la ventana)
+let yaw=Math.PI, pitch=0;                         // mirando al frente (-Z) ... PI mira hacia -Z? ajustamos
+let lookId=null,lx=0,ly=0; const LOOK=0.005;
+window.addEventListener('pointerdown',e=>{ if(lookId===null){lookId=e.pointerId;lx=e.clientX;ly=e.clientY;} });
+window.addEventListener('pointermove',e=>{ if(e.pointerId!==lookId)return; yaw-=(e.clientX-lx)*LOOK; pitch-=(e.clientY-ly)*LOOK; pitch=Math.max(-0.8,Math.min(0.7,pitch)); yaw=Math.max(Math.PI-1.7,Math.min(Math.PI+1.7,yaw)); lx=e.clientX; ly=e.clientY; });
+window.addEventListener('pointerup',e=>{ if(e.pointerId===lookId)lookId=null; });
+window.addEventListener('pointercancel',e=>{ if(e.pointerId===lookId)lookId=null; });
+
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);if(composer)composer.setSize(innerWidth,innerHeight);});
+
+const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
+function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime();
+  // respiración + leve turbulencia
+  const br=Math.sin(t*1.1)*0.012, tx=Math.sin(t*0.7)*0.004+Math.sin(t*2.3)*0.002;
+  camera.position.set(SEAT.x,SEAT.y+br,SEAT.z);
+  euler.set(pitch+tx,yaw,Math.sin(t*0.9)*0.006); camera.quaternion.setFromEuler(euler);
+  cloud.material.map.offset.x+=0.00002;
+  if(composer)composer.render(clock.getDelta()); else renderer.render(scene,camera);
+}
+requestAnimationFrame(()=>{ try{ if(composer)composer.render(0); else renderer.render(scene,camera);}catch(e){console.error(e);} setTimeout(()=>document.getElementById('loader').classList.add('hide'),300); animate(); });
+</script>
+</body>
+</html>
