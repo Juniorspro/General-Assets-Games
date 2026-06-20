@@ -75,54 +75,134 @@
   #hint { position:fixed; left:50%; top:50%; transform:translate(-50%,64px); z-index:24; font-size:12px; text-align:center; line-height:1.6;
           opacity:.8; pointer-events:none; transition:opacity .6s; text-shadow:0 1px 6px rgba(0,0,0,.9); }
   #hint.hide { opacity:0; }
-  #fadeIntro { position:fixed; inset:0; background:#000; z-index:70; pointer-events:none; opacity:1; }
-  @keyframes wakeUp { 0%{opacity:1} 14%{opacity:.55} 22%{opacity:.85} 48%{opacity:.12} 58%{opacity:.45} 100%{opacity:0} }
-  #fadeIntro.play { animation:wakeUp 3.6s ease forwards; }
+  #bag { bottom:calc(210px + var(--safe-b)); font-size:24px; }
+
+  /* ===== Overlays (menú inicio / pausa / inventario) ===== */
+  .scrim { position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center;
+           background:rgba(8,5,3,.55); backdrop-filter:blur(13px) saturate(1.1); -webkit-backdrop-filter:blur(13px) saturate(1.1);
+           opacity:0; pointer-events:none; transition:opacity .28s ease; }
+  .scrim.show { opacity:1; pointer-events:auto; }
+  .card { width:min(420px,calc(100vw - 40px)); max-height:calc(100vh - 40px); overflow-y:auto;
+          background:linear-gradient(170deg,rgba(34,22,14,.94),rgba(20,12,7,.96));
+          border:1px solid rgba(255,180,107,.18); border-radius:22px; padding:26px 24px; box-shadow:0 30px 90px rgba(0,0,0,.7); }
+  .card .brand { font-size:13px; letter-spacing:.34em; text-transform:uppercase; color:#ffb46b; opacity:.85; text-align:center; }
+  .card h2 { font-size:30px; font-weight:700; text-align:center; margin:6px 0 22px; letter-spacing:.01em; }
+  .card .lbl { font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; opacity:.55; margin:18px 0 9px; }
+  .opts { display:flex; flex-wrap:wrap; gap:8px; }
+  .opt { flex:1 1 auto; min-width:62px; padding:11px 8px; text-align:center; font-size:12.5px; border-radius:12px; cursor:pointer;
+         background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); color:#f3e7dc; transition:all .15s; }
+  .opt.active { background:#b9521f; border-color:#ffb46b; box-shadow:0 0 16px rgba(255,150,80,.4); }
+  .qdesc { font-size:11px; opacity:.5; margin-top:8px; min-height:15px; text-align:center; }
+  .bigBtn { display:block; width:100%; margin-top:24px; padding:15px; font-size:15px; font-weight:600; letter-spacing:.04em;
+            border:none; border-radius:14px; cursor:pointer; color:#fff;
+            background:linear-gradient(135deg,#e0732a,#b9521f); box-shadow:0 10px 30px rgba(185,82,31,.5); }
+  .menuBtnRow { display:flex; flex-direction:column; gap:11px; margin-top:8px; }
+  .menuItem { padding:14px; font-size:14px; font-weight:500; border-radius:13px; cursor:pointer; text-align:center;
+              background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); color:#f3e7dc; transition:all .15s; }
+  .menuItem:hover,.menuItem:active { background:rgba(255,150,80,.18); border-color:#ffb46b; }
+  .menuItem.primary { background:linear-gradient(135deg,#e0732a,#b9521f); border:none; color:#fff; }
+  .menuItem.danger:hover { background:rgba(255,80,80,.22); border-color:#ff6b6b; }
+
+  /* inventario estilo maletín */
+  #inv .card { width:min(560px,calc(100vw - 28px)); }
+  .invGrid { display:grid; grid-template-columns:repeat(6,1fr); gap:7px; margin-top:6px; }
+  .cell { aspect-ratio:1; border-radius:9px; background:rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.08);
+          display:flex; align-items:center; justify-content:center; position:relative; font-size:24px; }
+  .cell.w2 { grid-column:span 2; } .cell.w3 { grid-column:span 3; }
+  .cell .qty { position:absolute; right:5px; bottom:3px; font-size:11px; font-weight:700; color:#ffd24a; text-shadow:0 1px 3px #000; }
+  .invClose { display:block; margin:18px auto 0; padding:10px 26px; border-radius:11px; cursor:pointer; font-size:13px;
+              background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14); color:#f3e7dc; }
 </style>
 </head>
 <body>
-<div id="loader"><div class="leaf-spin"></div><p>Cargando…</p></div>
-<div id="fadeIntro"></div>
+<div id="loader"><div class="leaf-spin"></div><p data-i18n="loading">Cargando…</p></div>
 
 <div id="stage">
   <div id="app"></div>
   <div id="cross"></div>
   <div id="joy"><div id="joyKnob"></div></div>
   <button id="flash" class="actBtn">🪓</button>
-  <button id="run" class="actBtn">CORRER</button>
+  <button id="bag" class="actBtn">🎒</button>
+  <button id="run" class="actBtn" data-i18n="run">CORRER</button>
 
-  <button id="menuBtn" class="menuBtn" aria-label="Mundo">⚙</button>
-  <button id="vfxBtn" class="menuBtn" aria-label="Efectos VHS">🎞</button>
+  <button id="menuBtn" class="menuBtn" aria-label="Menú">☰</button>
 
   <div id="ui" class="panel">
-    <header><h1><span class="dot"></span> Mundo</h1><button class="closeBtn" data-close="ui">✕</button></header>
-    <div class="row"><label>Estación</label><div class="seg" id="season">
-      <button data-s="spring">Prim</button><button data-s="summer" class="active">Ver</button><button data-s="autumn">Otoño</button><button data-s="winter">Inv</button></div></div>
-    <div class="row"><label>Hora <span id="timeVal">atardecer</span></label><input type="range" id="time" min="-8" max="70" value="8" step="1"></div>
-    <div class="row"><label>Distancia de render <span id="distVal">130 m</span></label><input type="range" id="dist" min="60" max="260" value="130" step="10"></div>
-    <div class="row"><label>Distancia de sombras <span id="shadVal">22 m</span></label><input type="range" id="shad" min="0" max="44" value="22" step="2"></div>
-    <div class="row"><label>Densidad de vegetación <span id="densVal">175%</span></label><input type="range" id="dens" min="40" max="200" value="175" step="5"></div>
-    <div class="row"><label>Viento <span id="windVal">brisa</span></label><input type="range" id="wind" min="0" max="100" value="40" step="1"></div>
-    <div class="row"><label>Balanceo al caminar <span id="bobVal">100%</span></label><input type="range" id="bob" min="0" max="200" value="100" step="5"></div>
-    <div class="row toggle"><span>Sonido (pasos/viento)</span><div class="switch" id="snd"></div></div>
-    <div class="row toggle"><span>Girar 90° en vertical</span><div class="switch on" id="rotSw"></div></div>
-    <div class="row toggle" style="margin-bottom:0"><span>Ciclo día/noche (24 min)</span><div class="switch on" id="cycleSw"></div></div>
+    <header><h1><span class="dot"></span> <span data-i18n="world">Mundo</span></h1><button class="closeBtn" data-close="ui">✕</button></header>
+    <div class="row"><label data-i18n="season">Estación</label><div class="seg" id="season">
+      <button data-s="spring" data-i18n="spring">Prim</button><button data-s="summer" class="active" data-i18n="summer">Ver</button><button data-s="autumn" data-i18n="autumn">Otoño</button><button data-s="winter" data-i18n="winter">Inv</button></div></div>
+    <div class="row"><label><span data-i18n="hour">Hora</span> <span id="timeVal">atardecer</span></label><input type="range" id="time" min="-8" max="70" value="8" step="1"></div>
+    <div class="row"><label><span data-i18n="renderDist">Distancia de render</span> <span id="distVal">130 m</span></label><input type="range" id="dist" min="60" max="320" value="130" step="10"></div>
+    <div class="row"><label><span data-i18n="shadowDist">Distancia de sombras</span> <span id="shadVal">22 m</span></label><input type="range" id="shad" min="0" max="44" value="22" step="2"></div>
+    <div class="row"><label><span data-i18n="vegDensity">Densidad de vegetación</span> <span id="densVal">175%</span></label><input type="range" id="dens" min="40" max="200" value="175" step="5"></div>
+    <div class="row"><label><span data-i18n="wind">Viento</span> <span id="windVal">brisa</span></label><input type="range" id="wind" min="0" max="100" value="40" step="1"></div>
+    <div class="row"><label><span data-i18n="bob">Balanceo al caminar</span> <span id="bobVal">100%</span></label><input type="range" id="bob" min="0" max="200" value="100" step="5"></div>
+    <div class="row toggle"><span data-i18n="sound">Sonido</span><div class="switch" id="snd"></div></div>
+    <div class="row toggle"><span data-i18n="rotate90">Girar 90° en vertical</span><div class="switch on" id="rotSw"></div></div>
+    <div class="row toggle" style="margin-bottom:0"><span data-i18n="cycle">Ciclo día/noche (24 min)</span><div class="switch on" id="cycleSw"></div></div>
   </div>
 
   <div id="vfx" class="panel">
-    <header><h1><span class="dot"></span> Gráficos</h1><button class="closeBtn" data-close="vfx">✕</button></header>
-    <div class="row"><label>Resolución <span id="resVal">100%</span></label><input type="range" id="res" min="50" max="100" value="100" step="5"></div>
-    <div class="row toggle"><span>Antialiasing (SMAA)</span><div class="switch on" id="aaSw"></div></div>
-    <div class="row"><label>Exposición <span id="expoVal">0</span></label><input type="range" id="expo" min="-100" max="100" value="0" step="5"></div>
+    <header><h1><span class="dot"></span> <span data-i18n="graphics">Gráficos</span></h1><button class="closeBtn" data-close="vfx">✕</button></header>
+    <div class="row"><label><span data-i18n="resolution">Resolución</span> <span id="resVal">100%</span></label><input type="range" id="res" min="50" max="100" value="100" step="5"></div>
+    <div class="row toggle"><span data-i18n="aa">Antialiasing (SMAA)</span><div class="switch on" id="aaSw"></div></div>
+    <div class="row"><label><span data-i18n="exposure">Exposición</span> <span id="expoVal">0</span></label><input type="range" id="expo" min="-100" max="100" value="0" step="5"></div>
     <div class="row"><label>Bloom <span id="bloomVal">35%</span></label><input type="range" id="bloom" min="0" max="120" value="35" step="5"></div>
-    <div class="row"><label>Saturación <span id="satVal">0</span></label><input type="range" id="sat" min="-40" max="60" value="0" step="5"></div>
-    <div class="row" style="margin-bottom:0"><label>Temblor de cámara <span id="shakeVal">40%</span></label><input type="range" id="shake" min="0" max="150" value="40" step="5"></div>
-    <div class="grp">Materiales</div>
-    <div class="row" style="margin-bottom:0"><label>PBR / Relieve 3D <span id="reliefVal">700%</span></label><input type="range" id="relief" min="0" max="800" value="700" step="10"></div>
+    <div class="row"><label><span data-i18n="saturation">Saturación</span> <span id="satVal">0</span></label><input type="range" id="sat" min="-40" max="60" value="0" step="5"></div>
+    <div class="row" style="margin-bottom:0"><label><span data-i18n="shake">Temblor de cámara</span> <span id="shakeVal">40%</span></label><input type="range" id="shake" min="0" max="150" value="40" step="5"></div>
+    <div class="grp" data-i18n="materials">Materiales</div>
+    <div class="row" style="margin-bottom:0"><label><span data-i18n="relief">PBR / Relieve 3D</span> <span id="reliefVal">700%</span></label><input type="range" id="relief" min="0" max="800" value="700" step="10"></div>
   </div>
 
-  <div id="hud"><span id="fps">–</span> FPS · <span id="treeCount">–</span> árboles · 🪵 <span id="wood">0</span></div>
-  <div id="hint">Atardecer 🌅 · Joystick para caminar · arrastrá para mirar</div>
+  <div id="hud"><span id="fps">–</span> FPS · <span id="treeCount">–</span> <span data-i18n="trees">árboles</span> · 🪵 <span id="wood">0</span></div>
+  <div id="hint" data-i18n="hint">Joystick para caminar · arrastrá para mirar · 🪓 talar · 🎒 mochila</div>
+</div>
+
+<!-- ===== Menú de inicio ===== -->
+<div id="startMenu" class="scrim show">
+  <div class="card">
+    <div class="brand">Rezona</div>
+    <h2 data-i18n="gameTitle">Bosque Realista</h2>
+    <div class="lbl" data-i18n="language">Idioma</div>
+    <div class="opts" id="langOpts">
+      <div class="opt" data-lang="es">Español</div>
+      <div class="opt" data-lang="en">English</div>
+      <div class="opt" data-lang="pt">Português</div>
+    </div>
+    <div class="lbl" data-i18n="quality">Gráficos</div>
+    <div class="opts" id="qOpts">
+      <div class="opt" data-q="vlow"  data-i18n="qVlow">Muy bajo</div>
+      <div class="opt" data-q="low"   data-i18n="qLow">Bajo</div>
+      <div class="opt" data-q="medium" data-i18n="qMedium">Medio</div>
+      <div class="opt" data-q="high"  data-i18n="qHigh">Alto</div>
+      <div class="opt" data-q="vhigh" data-i18n="qVhigh">Muy alto</div>
+    </div>
+    <div class="qdesc" id="qDesc"></div>
+    <button class="bigBtn" id="playBtn" data-i18n="play">JUGAR</button>
+  </div>
+</div>
+
+<!-- ===== Menú de pausa ===== -->
+<div id="pause" class="scrim">
+  <div class="card">
+    <div class="brand" data-i18n="paused">Pausa</div>
+    <h2 data-i18n="gameTitle">Bosque Realista</h2>
+    <div class="menuBtnRow">
+      <div class="menuItem primary" id="btnResume" data-i18n="resume">Reanudar</div>
+      <div class="menuItem" id="btnSettings" data-i18n="settings">Ajustes</div>
+      <div class="menuItem danger" id="btnExit" data-i18n="exit">Salir</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Inventario ===== -->
+<div id="inv" class="scrim">
+  <div class="card">
+    <div class="brand" data-i18n="inventory">Inventario</div>
+    <h2 data-i18n="inventory">Inventario</h2>
+    <div class="invGrid" id="invGrid"></div>
+    <button class="invClose" id="invClose" data-i18n="close">Cerrar</button>
+  </div>
 </div>
 
 <script type="importmap">
@@ -207,6 +287,15 @@ const PRESETS={
   high:   {radial:6, shadow:2048, leafPerTree:200, grass:340, bloom:true,  world:{x0:-2,x1:1,z0:-6,z1:5}, density:13},
 };
 const Q=PRESETS[DEV.tier];
+// 5 niveles de calidad elegibles en el menú de inicio (por defecto: medio)
+const QUALITY={
+  vlow:  {radial:4, shadow:0,    leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90 },
+  low:   {radial:5, shadow:1024, leaf:90,  grassN:320, plantN:26, rockN:6,  density:8,  streamR:2, dpr:1.3, res:0.8, bloom:false, aa:true,  rdist:120},
+  medium:{radial:6, shadow:1536, leaf:140, grassN:600, plantN:50, rockN:9,  density:11, streamR:2, dpr:1.6, res:1.0, bloom:true,  aa:true,  rdist:150},
+  high:  {radial:6, shadow:2048, leaf:200, grassN:950, plantN:80, rockN:12, density:14, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:190},
+  vhigh: {radial:7, shadow:3072, leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:240},
+};
+let qual=QUALITY.medium;
 const GRASS_N={low:300,medium:620,high:1000}[DEV.tier], PLANT_N={low:26,medium:55,high:90}[DEV.tier], ROCK_N={low:5,medium:8,high:12}[DEV.tier];
 const GRASS_DIST=85;   // LOD: pasto/plantas sólo dentro de este radio (los árboles se ven hasta la distancia de render)
 document.getElementById('treeCount');
@@ -248,9 +337,9 @@ function setTime(elev,azim=120){
   sunVec.setFromSphericalCoords(1,phi,theta);skyU.sunPosition.value.copy(sunVec);
   nightFactor=THREE.MathUtils.clamp((4-elev)/12,0,1);const day=1-nightFactor;
   if(nightFactor>0.5){lightVec.setFromSphericalCoords(1,THREE.MathUtils.degToRad(38),THREE.MathUtils.degToRad(205));dirLight.color.setHSL(0.62,0.4,0.7);dirLight.intensity=0.5*nightFactor;}
-  else{lightVec.copy(sunVec);const warm=THREE.MathUtils.clamp(elev/30,0,1);dirLight.color.setHSL(THREE.MathUtils.lerp(0.045,0.1,warm),THREE.MathUtils.lerp(0.85,0.5,warm),0.55);dirLight.intensity=THREE.MathUtils.lerp(1.6,3.0,warm);}
-  hemiLight.intensity=THREE.MathUtils.lerp(0.2,0.55,day);hemiLight.color.setHSL(0.06,0.4,THREE.MathUtils.lerp(0.25,0.55,day));
-  scene.environmentIntensity=THREE.MathUtils.lerp(0.16,1.0,day);
+  else{lightVec.copy(sunVec);const warm=THREE.MathUtils.clamp(elev/30,0,1);dirLight.color.setHSL(THREE.MathUtils.lerp(0.045,0.1,warm),THREE.MathUtils.lerp(0.85,0.55,warm),0.55);dirLight.intensity=THREE.MathUtils.lerp(1.5,2.1,warm);}
+  hemiLight.intensity=THREE.MathUtils.lerp(0.2,0.42,day);hemiLight.color.setHSL(0.06,0.4,THREE.MathUtils.lerp(0.25,0.5,day));
+  scene.environmentIntensity=THREE.MathUtils.lerp(0.16,0.72,day);
   dirLight.intensity*=exposure; hemiLight.intensity*=exposure; scene.environmentIntensity*=exposure;   // exposición global
   const fogH=THREE.MathUtils.lerp(0.62,0.06,day);scene.fog.color.setHSL(fogH,0.6,THREE.MathUtils.lerp(0.08,0.55,day));
   const o=THREE.MathUtils.clamp(day,0.0,1.0);cloud1.material.opacity=0.9*o;cloud2.material.opacity=0.85*o;
@@ -343,9 +432,10 @@ const rockVariants=(()=>{const out=[];const rr=mulberry32(909);const tmp=new THR
 /* ===================== TERRENO + CARRETERA ===================== */
 const ROAD_HALF=5, CHUNK=48;
 function terrainHeight(x,z){const corridor=Math.min(1,Math.max(0,(Math.abs(x)-(ROAD_HALF+3))/16));const hills=Math.sin(x*0.018)*Math.cos(z*0.015)*4.5+Math.sin(x*0.05+z*0.04)*1.4+Math.cos(z*0.09)*0.7;return hills*corridor;}
-const W=Q.world;const Xmin=W.x0*CHUNK,Xmax=(W.x1+1)*CHUNK,Zmin=W.z0*CHUNK,Zmax=(W.z1+1)*CHUNK;
+const W={x0:-7,x1:6,z0:-16,z1:15};   // mapa ~10x más grande (con streaming por chunks)
+const Xmin=W.x0*CHUNK,Xmax=(W.x1+1)*CHUNK,Zmin=W.z0*CHUNK,Zmax=(W.z1+1)*CHUNK;
 const gsX=Xmax-Xmin+40,gsZ=Zmax-Zmin+40;
-const groundGeo=new THREE.PlaneGeometry(gsX,gsZ,Math.round(gsX/4),Math.round(gsZ/4));groundGeo.rotateX(-Math.PI/2);
+const groundGeo=new THREE.PlaneGeometry(gsX,gsZ,Math.round(gsX/8),Math.round(gsZ/8));groundGeo.rotateX(-Math.PI/2);
 groundGeo.translate((Xmin+Xmax)/2,0,(Zmin+Zmax)/2);
 {const p=groundGeo.attributes.position;for(let i=0;i<p.count;i++)p.setY(i,terrainHeight(p.getX(i),p.getZ(i)));groundGeo.computeVertexNormals();}
 const ground=new THREE.Mesh(groundGeo,new THREE.MeshStandardMaterial({map:groundTexture(),roughness:0.96,metalness:0,color:0xb9c79a}));
@@ -393,20 +483,21 @@ function applyGodTextures(){
 const worldSeed=20260620;const speciesList=['roble','roble','abedul','pino','pino','roble','abedul'];
 let currentSeason='summer', densityMul=1.0;
 const grassGeo=(()=>{const a=new THREE.PlaneGeometry(0.14,0.55);a.translate(0,0.275,0);const b=a.clone();b.rotateY(Math.PI/2);return mergeGeometries([a,b],false);})();
-const chunkList=[];const trees=[];const logs=[];let totalTrees=0;
+const chunkList=[];const trees=[];const logs=[];let totalTrees=0;const builtChunks=new Map();
 function hash2(a,b){let h=worldSeed^Math.imul(a|0,374761393)^Math.imul(b|0,668265263);h=Math.imul(h^(h>>>13),1274126177);return (h^(h>>>16))>>>0;}
 function buildChunk(cx,cz){
+  const key=cx+'_'+cz; if(builtChunks.has(key))return;
   const rng=mulberry32(hash2(cx,cz));const x0=cx*CHUNK,z0=cz*CHUNK;const grp=new THREE.Group();
-  const lamps=[];
-  const nTrees=Math.max(1,Math.round(Q.density*densityMul));
-  const lp=new THREE.PlaneGeometry(1.25,1.3);
+  const lamps=[];const chunkTrees=[];
+  const nTrees=Math.max(1,Math.round(qual.density*densityMul));
+  const lp=new THREE.PlaneGeometry(1.25,1.3);const ownGeos=[lp];   // geometrías propias del chunk (se liberan al descargarlo; las compartidas NO)
   for(let i=0;i<nTrees;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+2.5)continue;
-    const tree=createTree({species:speciesList[Math.floor(rng()*speciesList.length)],season:currentSeason,radial:Q.radial,leafCount:Q.leafPerTree},rng);
+    const tree=createTree({species:speciesList[Math.floor(rng()*speciesList.length)],season:currentSeason,radial:qual.radial,leafCount:qual.leaf},rng);
     const tg=new THREE.Group(); tg.position.set(x,terrainHeight(x,z)-0.05,z); tg.rotation.y=rng()*6.28;
     const tr=new THREE.Mesh(tree.trunkGeometry,barkMat); tr.castShadow=tr.receiveShadow=true; tg.add(tr);
     const lv=new THREE.InstancedMesh(lp,leafMat,tree.leaves.length); for(let j=0;j<tree.leaves.length;j++){lv.setMatrixAt(j,tree.leaves[j].m);lv.setColorAt(j,tree.leaves[j].c);} lv.instanceMatrix.needsUpdate=true; tg.add(lv);
-    tree.trunkGeometry.computeBoundingBox(); grp.add(tg);
-    trees.push({tg,x,z,hp:5,hit:0,dead:false,scale:1,state:'alive',h:tree.trunkGeometry.boundingBox.max.y}); totalTrees++;
+    tree.trunkGeometry.computeBoundingBox(); grp.add(tg); ownGeos.push(tree.trunkGeometry);
+    const to={tg,x,z,hp:5,hit:0,dead:false,scale:1,state:'alive',h:tree.trunkGeometry.boundingBox.max.y}; trees.push(to); chunkTrees.push(to); totalTrees++;
   }
   // pasto (3 tipos) + plantas (3 tipos) — cross-quad con viento, abundante
   const dm=new THREE.Object3D();const gc=new THREE.Color();const fol=[];
@@ -415,46 +506,66 @@ function buildChunk(cx,cz){
       dm.position.set(x,terrainHeight(x,z),z);dm.rotation.set(0,rng()*6.28,0);const s=sMin+rng()*(sMax-sMin);dm.scale.set(s,s,s);dm.updateMatrix();
       im.setMatrixAt(k,dm.matrix);gc.setHSL(0.25+(rng()-0.5)*0.04,0.30+rng()*0.2,tintL*(0.82+rng()*0.36));im.setColorAt(k,gc);k++;}
     im.count=k;im.instanceMatrix.needsUpdate=true;if(im.instanceColor)im.instanceColor.needsUpdate=true;grp.add(im);fol.push(im);};
-  const gN=Math.round(GRASS_N*densityMul);
+  const gN=Math.round(qual.grassN*densityMul);
   scatter(grassGeos[0],grassMats[0],Math.round(gN*0.34),0.7,1.5,0.9);
   scatter(grassGeos[1],grassMats[1],Math.round(gN*0.33),0.8,1.7,0.9);
   scatter(grassGeos[2],grassMats[2],Math.round(gN*0.33),0.8,1.6,0.9);
-  const pN=Math.round(PLANT_N*densityMul);
+  const pN=Math.round(qual.plantN*densityMul);
   scatter(plantGeos[0],plantMats[0],Math.round(pN*0.30),0.7,1.3,0.95);
   scatter(plantGeos[1],plantMats[1],Math.round(pN*0.28),0.8,1.5,0.95);
   scatter(plantGeos[2],plantMats[2],Math.round(pN*0.20),0.8,1.4,0.95);
   scatter(plantGeos[3],plantMats[3],Math.round(pN*0.22),0.7,1.3,0.95);
   // rocas cerradas variadas (mergeadas en 1 malla por sector → sin huecos)
-  const rocks=[];const rN=Math.round(ROCK_N*densityMul);
+  const rocks=[];const rN=Math.round(qual.rockN*densityMul);
   for(let i=0;i<rN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+1.0)continue;
     const g=rockVariants[Math.floor(rng()*rockVariants.length)].clone();const s=0.3+rng()*1.5;
     g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,terrainHeight(x,z)+s*0.25,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rng()*6.28,rng()*6.28,rng()*6.28)),new THREE.Vector3(s*(0.8+rng()*0.5),s*(0.7+rng()*0.4),s*(0.8+rng()*0.5))));rocks.push(g);}
-  if(rocks.length){const rm=new THREE.Mesh(mergeGeometries(rocks,false),rockMat);rm.castShadow=rm.receiveShadow=true;rocks.forEach(g=>g.dispose());grp.add(rm);}
+  if(rocks.length){const rgeo=mergeGeometries(rocks,false);ownGeos.push(rgeo);const rm=new THREE.Mesh(rgeo,rockMat);rm.castShadow=rm.receiveShadow=true;rocks.forEach(g=>g.dispose());grp.add(rm);}
   // farolas en sectores que tocan la carretera
   if(cx===-1||cx===0){const posts=[];const heads=[];const hd=new THREE.Object3D();
     for(let z=z0+6;z<z0+CHUNK;z+=24)for(const sx of[-(ROAD_HALF+0.8),(ROAD_HALF+0.8)]){const g=new THREE.CylinderGeometry(0.09,0.12,5,6);g.translate(sx,2.5,z);posts.push(g);heads.push(new THREE.Vector3(sx,5,z));lamps.push(new THREE.Vector3(sx*0.6,4.6,z));}
-    if(posts.length){const pm=new THREE.Mesh(mergeGeometries(posts,false),lampPostMat);pm.castShadow=true;posts.forEach(g=>g.dispose());grp.add(pm);
-      const hm=new THREE.InstancedMesh(new THREE.SphereGeometry(0.28,8,6),lampHeadMat,heads.length);heads.forEach((h,i)=>{hd.position.copy(h);hd.updateMatrix();hm.setMatrixAt(i,hd.matrix);});grp.add(hm);}}
+    if(posts.length){const pgeo=mergeGeometries(posts,false);ownGeos.push(pgeo);const pm=new THREE.Mesh(pgeo,lampPostMat);pm.castShadow=true;posts.forEach(g=>g.dispose());grp.add(pm);
+      const sgeo=new THREE.SphereGeometry(0.28,8,6);ownGeos.push(sgeo);const hm=new THREE.InstancedMesh(sgeo,lampHeadMat,heads.length);heads.forEach((h,i)=>{hd.position.copy(h);hd.updateMatrix();hm.setMatrixAt(i,hd.matrix);});grp.add(hm);}}
   const center=new THREE.Vector3(x0+CHUNK/2,5,z0+CHUNK/2);
-  scene.add(grp);chunkList.push({grp,center,sphere:new THREE.Sphere(center,42),lamps,fol});
+  const c={grp,center,sphere:new THREE.Sphere(center,42),lamps,fol,cx,cz,key,trees:chunkTrees,ownGeos};
+  scene.add(grp);chunkList.push(c);builtChunks.set(key,c);
 }
-function buildWorld(){
-  for(const c of chunkList){scene.remove(c.grp);c.grp.traverse(o=>{if(o.geometry)o.geometry.dispose();});}
+function disposeChunk(c){
+  scene.remove(c.grp);
+  c.grp.traverse(o=>{if(o.isInstancedMesh)o.dispose();});   // libera buffers de instancias
+  if(c.ownGeos)for(const g of c.ownGeos)g.dispose();          // libera SÓLO geometrías propias (no las compartidas)
+  for(const t of c.trees){const i=trees.indexOf(t);if(i>=0)trees.splice(i,1);if(t.body&&physWorld){physWorld.removeBody(t.body);t.body=null;}}
+  const ci=chunkList.indexOf(c);if(ci>=0)chunkList.splice(ci,1);
+  builtChunks.delete(c.key);
+}
+// STREAMING: sólo viven los chunks cercanos al jugador; el resto se descarga (memoria + draw calls)
+function streamChunks(budget){
+  const pcx=Math.floor(player.pos.x/CHUNK),pcz=Math.floor(player.pos.z/CHUNK),R=qual.streamR;
+  for(const c of [...builtChunks.values()]) if(Math.max(Math.abs(c.cx-pcx),Math.abs(c.cz-pcz))>R+1) disposeChunk(c);
+  let made=0;
+  for(let r=0;r<=R&&made<budget;r++)for(let dx=-r;dx<=r&&made<budget;dx++)for(let dz=-r;dz<=r&&made<budget;dz++){
+    if(Math.max(Math.abs(dx),Math.abs(dz))!==r)continue;
+    const cx=pcx+dx,cz=pcz+dz;if(cx<W.x0||cx>W.x1||cz<W.z0||cz>W.z1)continue;
+    if(builtChunks.has(cx+'_'+cz))continue; buildChunk(cx,cz); made++;
+  }
+  if(made)document.getElementById('treeCount').textContent=trees.length;
+  return made;
+}
+function rebuildWorld(){
+  for(const c of [...builtChunks.values()]) disposeChunk(c);
   for(const lg of logs){scene.remove(lg.m);} logs.length=0;
-  for(const d of debris){scene.remove(d.m);} debris.length=0; physWorld=null; physGround=null;
-  chunkList.length=0;trees.length=0;totalTrees=0;
-  for(let cx=W.x0;cx<=W.x1;cx++)for(let cz=W.z0;cz<=W.z1;cz++)buildChunk(cx,cz);
-  document.getElementById('treeCount').textContent=totalTrees;
+  for(const d of debris){scene.remove(d.m);} debris.length=0;
+  totalTrees=0; streamChunks(999); document.getElementById('treeCount').textContent=trees.length;
 }
 
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
 let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null;
 let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0;
-let cycleOn=true, cyclePhase=0, envCycleTimer=0; const A_ELEV=58, THETA0=3.02;   // ciclo día/noche 24 min (12+12)
+let cycleOn=true, cyclePhase=0, envCycleTimer=0; const A_ELEV=34, THETA0=3.02;   // ciclo día/noche 24 min (12+12); sol bajo = hora dorada, sin blanco quemado
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
   composer.addPass(new RenderPass(scene,camera));
-  bloomEffect=new BloomEffect({intensity:0.35,luminanceThreshold:0.75,luminanceSmoothing:0.2,mipmapBlur:true,radius:0.6});
+  bloomEffect=new BloomEffect({intensity:0.32,luminanceThreshold:0.85,luminanceSmoothing:0.25,mipmapBlur:true,radius:0.6});
   hueSat=new HueSaturationEffect({saturation:0,hue:0});
   const tone=new ToneMappingEffect({mode:ToneMappingMode.AGX});      // tonemap filmico realista
   composer.addPass(new EffectPass(camera,bloomEffect,hueSat,tone));   // bloom = única convolution → OK
@@ -464,7 +575,7 @@ function buildComposer(){
 try{ buildComposer(); }catch(err){ console.error('PostFX off:',err); composer=null; renderer.toneMapping=THREE.AgXToneMapping; renderer.toneMappingExposure=1.0; }
 
 /* ===================== LAYOUT / ROTACIÓN / RESOLUCIÓN ===================== */
-const DPRCAP=DEV.tier==='high'?2:(DEV.tier==='medium'?1.6:1.3);
+let DPRCAP=DEV.tier==='high'?2:(DEV.tier==='medium'?1.6:1.3);
 let forceLandscape=true, rot=false;
 function layout(){
   rot = forceLandscape && (innerHeight>innerWidth);
@@ -479,7 +590,7 @@ function layout(){
 /* ===================== JUGADOR / FPS ===================== */
 const EYE=1.7,WALK=3.4,RUN=6.6,ACCEL=10;
 const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),yaw:0,pitch:0,roll:0,bobPhase:0,strafeSm:0};
-const intro={active:true,t:0,dur:3.6}; // cinemática: despertamos tirados y la cámara se incorpora (vertical → horizontal)
+const intro={active:false}; // (la cinemática la organizamos después)
 let bobScale=1,running=false,lastBobSign=0;
 const forward=new THREE.Vector3(),right=new THREE.Vector3();
 const PB={x0:Xmin+3,x1:Xmax-3,z0:Zmin+3,z1:Zmax-3};
@@ -519,10 +630,10 @@ const cycleSw=$('cycleSw');cycleSw.addEventListener('click',()=>{cycleSw.classLi
 let renderDist=130;$('dist').addEventListener('input',e=>{renderDist=+e.target.value;$('distVal').textContent=renderDist+' m';scene.fog.density=Math.max(0.006,0.9/renderDist);});
 $('shad').addEventListener('input',e=>{const r=+e.target.value;setShadowRange(r);$('shadVal').textContent=r<1?'off':r+' m';});
 $('dens').addEventListener('input',e=>{$('densVal').textContent=e.target.value+'%';});
-$('dens').addEventListener('change',e=>{densityMul=+e.target.value/100;buildWorld();});
+$('dens').addEventListener('change',e=>{densityMul=+e.target.value/100;rebuildWorld();});
 $('wind').addEventListener('input',e=>{const v=+e.target.value;windU.uWind.value=v/100*1.7;$('windVal').textContent=windLabels(v);if(windGain)windGain.gain.value=0.02+v/100*0.1;});
 $('bob').addEventListener('input',e=>{bobScale=+e.target.value/100;$('bobVal').textContent=e.target.value+'%';});
-document.querySelectorAll('#season button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#season button').forEach(x=>x.classList.remove('active'));b.classList.add('active');currentSeason=b.dataset.s;buildWorld();}));
+document.querySelectorAll('#season button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#season button').forEach(x=>x.classList.remove('active'));b.classList.add('active');currentSeason=b.dataset.s;rebuildWorld();}));
 const sndSw=$('snd');sndSw.addEventListener('click',()=>{sndSw.classList.toggle('on');soundOn=sndSw.classList.contains('on');if(soundOn){unlockAudio();if(windGain)windGain.gain.value=0.02+(+$('wind').value)/100*0.1;}else if(windGain)windGain.gain.value=0;});
 const rotSw=$('rotSw');rotSw.addEventListener('click',()=>{rotSw.classList.toggle('on');forceLandscape=rotSw.classList.contains('on');layout();});
 
@@ -535,9 +646,8 @@ $('sat').addEventListener('input',e=>{const v=+e.target.value;$('satVal').textCo
 $('shake').addEventListener('input',e=>{const v=+e.target.value;$('shakeVal').textContent=v+'%';camShake=v/100;});
 $('relief').addEventListener('input',e=>{const v=+e.target.value;reliefScale=v/100;$('reliefVal').textContent=v+'%';barkMat.normalScale.set(reliefScale,reliefScale);if(ground.material.normalScale)ground.material.normalScale.set(reliefScale*0.6,reliefScale*0.6);});
 
-// abrir/cerrar paneles
-$('menuBtn').addEventListener('click',()=>{$('ui').classList.add('open');});
-$('vfxBtn').addEventListener('click',()=>{$('vfx').classList.add('open');});
+// abrir/cerrar paneles + menú de pausa
+$('menuBtn').addEventListener('click',()=>$('pause').classList.add('show'));
 document.querySelectorAll('.closeBtn').forEach(b=>b.addEventListener('click',()=>$(b.dataset.close).classList.remove('open')));
 let hinted=false;function dismissHint(){if(!hinted){hinted=true;$('hint').classList.add('hide');}}
 
@@ -568,7 +678,6 @@ function buildFPAxe(){
   return g;
 }
 const fpAxe=buildFPAxe(); fpAxe.scale.setScalar(0.46); fpAxe.position.set(0.33,-0.5,-0.82); fpAxe.rotation.set(0.12,Math.PI/2,0.18);
-fpAxe.visible=false;                       // oculta durante la cinemática; se levanta al terminar
 camera.add(fpAxe); scene.add(camera);
 const FP_BASE=fpAxe.rotation.clone(), FP_POS=fpAxe.position.clone();
 const equip={active:false,t:0};
@@ -656,7 +765,7 @@ function chopTick(dt){
 
 /* ===================== LOOP ===================== */
 addEventListener('resize',layout);
-let paused=false;document.addEventListener('visibilitychange',()=>{paused=document.hidden;});
+let paused=false,started=false;document.addEventListener('visibilitychange',()=>{paused=document.hidden;});
 const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0;const _v=new THREE.Vector3();
 const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 function update(dt){
@@ -680,11 +789,6 @@ function update(dt){
   const gy=terrainHeight(player.pos.x,player.pos.z);
   camera.position.set(player.pos.x+right.x*bobX,gy+EYE+bobY+br,player.pos.z+right.z*bobX);
   euler.set(player.pitch+shy,player.yaw+shx,player.roll+shr);camera.quaternion.setFromEuler(euler);
-  if(intro.active){ intro.t+=dt; const p=Math.min(1,intro.t/intro.dur); const e=p<0.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
-    camera.position.y=gy+THREE.MathUtils.lerp(0.42,EYE+bobY+br,e);                 // tirados en el suelo → de pie
-    euler.set(THREE.MathUtils.lerp(0.92,player.pitch,e),player.yaw+shx,THREE.MathUtils.lerp(-1.40,player.roll,e)); // mirando arriba y de costado → al frente y derecho
-    camera.quaternion.setFromEuler(euler);
-    if(p>=1){intro.active=false; equip.active=true; equip.t=0; fpAxe.visible=true;} }
   dirLight.position.copy(player.pos).addScaledVector(lightVec,50);dirLight.target.position.copy(player.pos);dirLight.target.updateMatrixWorld();
   cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
   cloud1.material.map.offset.x+=dt*0.004;cloud2.material.map.offset.x+=dt*0.0026;
@@ -702,33 +806,92 @@ function update(dt){
     const vis=d2<rd2&&_frustum.intersectsSphere(c.sphere);c.grp.visible=vis;
     if(vis){const fv=d2<gd2;for(let i=0;i<c.fol.length;i++)c.fol[i].visible=fv;}}
   chopTick(dt);
+  streamChunks(2);              // streaming: carga/descarga chunks alrededor del jugador
   windU.uTime.value+=dt;
 }
-function animate(){requestAnimationFrame(animate);if(paused)return;const dt=Math.min(clock.getDelta(),0.05);update(dt);
+function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),0.05);
+  if(started&&!paused&&!document.querySelector('.scrim.show'))update(dt);
   if(composer)composer.render(dt);else renderer.render(scene,camera);
   fpsTimer+=dt;fpsFrames++;if(fpsTimer>=0.5){$('fps').textContent=Math.round(fpsFrames/fpsTimer);fpsTimer=0;fpsFrames=0;}}
 
-/* ===================== INICIO ===================== */
-// Valores por defecto realistas
-const VFX_DEFAULTS={time:7,dist:200,shad:22,dens:175,wind:90,bob:70,
+/* ===================== IDIOMAS (ES / EN / PT) ===================== */
+const I18N={
+  es:{run:'CORRER',world:'Mundo',season:'Estación',spring:'Prim',summer:'Ver',autumn:'Otoño',winter:'Inv',hour:'Hora',renderDist:'Distancia de render',shadowDist:'Distancia de sombras',vegDensity:'Densidad de vegetación',wind:'Viento',bob:'Balanceo al caminar',sound:'Sonido',rotate90:'Girar 90° en vertical',cycle:'Ciclo día/noche (24 min)',graphics:'Gráficos',resolution:'Resolución',aa:'Antialiasing (SMAA)',exposure:'Exposición',saturation:'Saturación',shake:'Temblor de cámara',materials:'Materiales',relief:'PBR / Relieve 3D',trees:'árboles',hint:'Joystick para caminar · arrastrá para mirar · 🪓 talar · 🎒 mochila',gameTitle:'Bosque Realista',language:'Idioma',quality:'Gráficos',qVlow:'Muy bajo',qLow:'Bajo',qMedium:'Medio',qHigh:'Alto',qVhigh:'Muy alto',play:'JUGAR',paused:'Pausa',resume:'Reanudar',settings:'Ajustes',exit:'Salir',inventory:'Inventario',close:'Cerrar',loading:'Cargando…'},
+  en:{run:'RUN',world:'World',season:'Season',spring:'Spr',summer:'Sum',autumn:'Aut',winter:'Win',hour:'Time',renderDist:'Render distance',shadowDist:'Shadow distance',vegDensity:'Vegetation density',wind:'Wind',bob:'Walk bob',sound:'Sound',rotate90:'Rotate 90° in portrait',cycle:'Day/night cycle (24 min)',graphics:'Graphics',resolution:'Resolution',aa:'Antialiasing (SMAA)',exposure:'Exposure',saturation:'Saturation',shake:'Camera shake',materials:'Materials',relief:'PBR / 3D relief',trees:'trees',hint:'Joystick to walk · drag to look · 🪓 chop · 🎒 bag',gameTitle:'Realistic Forest',language:'Language',quality:'Graphics',qVlow:'Very low',qLow:'Low',qMedium:'Medium',qHigh:'High',qVhigh:'Very high',play:'PLAY',paused:'Paused',resume:'Resume',settings:'Settings',exit:'Exit',inventory:'Inventory',close:'Close',loading:'Loading…'},
+  pt:{run:'CORRER',world:'Mundo',season:'Estação',spring:'Pri',summer:'Ver',autumn:'Out',winter:'Inv',hour:'Hora',renderDist:'Distância de render',shadowDist:'Distância de sombras',vegDensity:'Densidade de vegetação',wind:'Vento',bob:'Balanço ao andar',sound:'Som',rotate90:'Girar 90° na vertical',cycle:'Ciclo dia/noite (24 min)',graphics:'Gráficos',resolution:'Resolução',aa:'Antialiasing (SMAA)',exposure:'Exposição',saturation:'Saturação',shake:'Tremor de câmera',materials:'Materiais',relief:'PBR / Relevo 3D',trees:'árvores',hint:'Joystick para andar · arraste para olhar · 🪓 cortar · 🎒 mochila',gameTitle:'Floresta Realista',language:'Idioma',quality:'Gráficos',qVlow:'Muito baixo',qLow:'Baixo',qMedium:'Médio',qHigh:'Alto',qVhigh:'Muito alto',play:'JOGAR',paused:'Pausa',resume:'Retomar',settings:'Ajustes',exit:'Sair',inventory:'Inventário',close:'Fechar',loading:'Carregando…'}
+};
+const QDESC={
+  es:{vlow:'Máximo rendimiento, detalle mínimo',low:'Ligero para celulares modestos',medium:'Equilibrio recomendado',high:'Más vegetación, sombras y alcance',vhigh:'Máxima fidelidad (celular potente)'},
+  en:{vlow:'Max performance, minimal detail',low:'Light for modest phones',medium:'Recommended balance',high:'More foliage, shadows and range',vhigh:'Maximum fidelity (powerful phone)'},
+  pt:{vlow:'Máximo desempenho, detalhe mínimo',low:'Leve para celulares modestos',medium:'Equilíbrio recomendado',high:'Mais vegetação, sombras e alcance',vhigh:'Fidelidade máxima (celular potente)'}
+};
+let curLang='es', curQuality='medium';
+function applyLang(l){const d=I18N[l]||I18N.es;document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(d[k]!=null)el.textContent=d[k];});document.documentElement.lang=l;}
+function updateQDesc(){$('qDesc').textContent=((QDESC[curLang]||QDESC.es)[curQuality])||'';}
+
+/* ===================== CALIDAD ===================== */
+function setQuality(t){
+  qual=QUALITY[t]||QUALITY.medium;
+  if(qual.shadow>0){dirLight.castShadow=true;if(dirLight.shadow.map){dirLight.shadow.map.dispose();dirLight.shadow.map=null;}dirLight.shadow.mapSize.set(qual.shadow,qual.shadow);}
+  else dirLight.castShadow=false;
+  DPRCAP=qual.dpr; resScale=qual.res; if($('res')){$('res').value=Math.round(qual.res*100);$('resVal').textContent=Math.round(qual.res*100)+'%';}
+  if(bloomEffect)bloomEffect.intensity=qual.bloom?0.32:0.0;
+  aaOn=qual.aa; if(smaaPass)smaaPass.enabled=aaOn; if($('aaSw'))$('aaSw').classList.toggle('on',aaOn);
+  renderDist=qual.rdist; if($('dist')){$('dist').value=renderDist;$('distVal').textContent=renderDist+' m';} scene.fog.density=Math.max(0.005,0.85/renderDist);
+  layout();
+}
+
+/* ===================== Valores por defecto realistas ===================== */
+const VFX_DEFAULTS={time:7,dist:150,shad:22,dens:140,wind:90,bob:70,
   res:100,expo:0,bloom:35,sat:25,shake:150,relief:700};
 function applyDefaults(){
   for(const id in VFX_DEFAULTS){const el=document.getElementById(id);if(!el)continue;el.value=VFX_DEFAULTS[id];el.dispatchEvent(new Event('input'));}
-  densityMul=(+document.getElementById('dens').value)/100;     // dens aplica en buildWorld (sin disparar reconstrucción)
-  cycleOn=true; $('cycleSw').classList.add('on');              // el dispatch de 'time' apaga el ciclo; lo reactivamos
+  densityMul=(+document.getElementById('dens').value)/100;
+  cycleOn=true; $('cycleSw').classList.add('on');
   updateEnvironment();
-  $('snd').classList.add('on'); soundOn=true;                  // sonido ON por defecto
+  $('snd').classList.add('on'); soundOn=true;
 }
+
+/* ===================== MENÚS (inicio / pausa / inventario) ===================== */
+document.querySelectorAll('#langOpts .opt').forEach(o=>o.addEventListener('click',()=>{document.querySelectorAll('#langOpts .opt').forEach(x=>x.classList.remove('active'));o.classList.add('active');curLang=o.dataset.lang;applyLang(curLang);updateQDesc();}));
+document.querySelectorAll('#qOpts .opt').forEach(o=>o.addEventListener('click',()=>{document.querySelectorAll('#qOpts .opt').forEach(x=>x.classList.remove('active'));o.classList.add('active');curQuality=o.dataset.q;updateQDesc();}));
+document.querySelector('#langOpts .opt[data-lang="es"]').classList.add('active');
+document.querySelector('#qOpts .opt[data-q="medium"]').classList.add('active');
+$('playBtn').addEventListener('click',startGame);
+$('btnResume').addEventListener('click',()=>$('pause').classList.remove('show'));
+$('btnSettings').addEventListener('click',()=>{$('pause').classList.remove('show');$('ui').classList.add('open');$('vfx').classList.add('open');});
+$('btnExit').addEventListener('click',()=>location.reload());
+const INV_ITEMS=[{e:'🔫'},{e:'🔪'},{e:'🪓',q:()=>1},{e:'🥚'},{e:'🧪'},{e:'💣'},{e:'🪵',q:()=>woodCount},{e:'🧴'},{e:'🌿',q:()=>3},{e:'🪙',q:()=>10},{e:'🧤'}];
+function renderInv(){const g=$('invGrid');g.innerHTML='';let used=0;
+  for(const it of INV_ITEMS){const d=document.createElement('div');d.className='cell';d.textContent=it.e;if(it.q){const s=document.createElement('span');s.className='qty';s.textContent=it.q();d.appendChild(s);}g.appendChild(d);used++;}
+  for(let i=used;i<24;i++){const d=document.createElement('div');d.className='cell';g.appendChild(d);}}
+$('bag').addEventListener('click',()=>{renderInv();$('inv').classList.add('show');});
+$('invClose').addEventListener('click',()=>$('inv').classList.remove('show'));
+
+/* ===================== ARRANQUE ===================== */
 const hideLoader=()=>document.getElementById('loader').classList.add('hide');
-setTimeout(hideLoader,9000);
-try{
-  setShadowRange(22);
-  applyDefaults();
-  buildWorld();
-  applyGodTextures();          // texturas reales en segundo plano (no bloquea)
-  layout();
-}catch(err){ console.error('Init:',err); }
-requestAnimationFrame(()=>{ try{ if(composer)composer.render(0);else renderer.render(scene,camera); }catch(e){console.error(e);} setTimeout(()=>{hideLoader();document.getElementById('fadeIntro').classList.add('play');},300); animate(); });
+function startGame(){
+  try{
+    applyDefaults();
+    setQuality(curQuality);            // la calidad elegida manda sobre los defaults de rendimiento
+    applyGodTextures();                // texturas PBR reales en segundo plano
+    layout();
+    $('startMenu').classList.remove('show');
+    document.getElementById('loader').classList.remove('hide');   // "Cargando" mientras se genera el área
+    // construcción inicial PROGRESIVA (3 chunks por frame → no congela el teléfono)
+    const R=qual.streamR;
+    const buildStep=()=>{
+      streamChunks(3); document.getElementById('treeCount').textContent=trees.length;
+      const pcx=Math.floor(player.pos.x/CHUNK),pcz=Math.floor(player.pos.z/CHUNK);let need=0;
+      for(let dx=-R;dx<=R;dx++)for(let dz=-R;dz<=R;dz++){const cx=pcx+dx,cz=pcz+dz;if(cx<W.x0||cx>W.x1||cz<W.z0||cz>W.z1)continue;if(!builtChunks.has(cx+'_'+cz))need++;}
+      if(need>0)requestAnimationFrame(buildStep);
+      else{ started=true; unlockAudio(); hideLoader(); }
+    };
+    requestAnimationFrame(buildStep);
+  }catch(err){ console.error('startGame:',err); }
+}
+try{ applyLang('es'); updateQDesc(); setTime(8,120); updateEnvironment(); layout(); }catch(err){ console.error('Init:',err); }
+requestAnimationFrame(()=>{ try{ if(composer)composer.render(0);else renderer.render(scene,camera); }catch(e){console.error(e);} setTimeout(hideLoader,300); animate(); });
 </script>
 </body>
 </html>
