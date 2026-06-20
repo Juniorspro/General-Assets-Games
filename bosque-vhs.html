@@ -32,6 +32,7 @@
             border:1.5px solid rgba(255,255,255,.18); color:#f3e7dc; font-size:12px; backdrop-filter:blur(6px); cursor:pointer; transition:all .15s; }
   #run { bottom:calc(40px + var(--safe-b)); }
   #flash { bottom:calc(130px + var(--safe-b)); font-size:23px; }
+  #vhsBtn { bottom:calc(220px + var(--safe-b)); font-size:20px; }
   .actBtn.on { background:rgba(255,150,80,.28); border-color:#ffb46b; box-shadow:0 0 18px rgba(255,150,80,.45); }
   #cross { position:fixed; left:50%; top:50%; width:5px; height:5px; margin:-2.5px; z-index:25; border-radius:50%;
            background:rgba(255,255,255,.45); box-shadow:0 0 4px rgba(0,0,0,.7); pointer-events:none; }
@@ -84,6 +85,7 @@
   <div id="cross"></div>
   <div id="joy"><div id="joyKnob"></div></div>
   <button id="flash" class="actBtn">🔦</button>
+  <button id="vhsBtn" class="actBtn">📼</button>
   <button id="run" class="actBtn">CORRER</button>
 
   <button id="menuBtn" class="menuBtn" aria-label="Mundo">⚙</button>
@@ -133,8 +135,23 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { EffectComposer, RenderPass, EffectPass, BloomEffect, HueSaturationEffect,
+import { EffectComposer, RenderPass, EffectPass, Effect, BloomEffect, HueSaturationEffect,
          ToneMappingEffect, ToneMappingMode, SMAAEffect } from 'postprocessing';
+
+/* ===== Filtro VHS opcional (un solo efecto, sin taps → no convolution) ===== */
+const VHS_FRAG=/* glsl */`
+uniform float amt;
+float h21(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+void mainUv(inout vec2 uv){ float l=floor(uv.y*220.0); uv.x+=(h21(vec2(l,floor(time*20.0)))-0.5)*0.0025*amt; }
+void mainImage(const in vec4 c,const in vec2 uv,out vec4 o){
+  vec3 col=c.rgb; float g=dot(col,vec3(0.299,0.587,0.114));
+  col=mix(col,vec3(g),0.15*amt); col=mix(col,col*vec3(1.16,0.98,0.78),0.55*amt);
+  col*=1.0-0.12*amt*(0.5+0.5*sin(uv.y*900.0));
+  col+=(h21(uv*vec2(3.0,500.0)+time)-0.5)*0.10*amt;
+  float d=distance(uv,vec2(0.5)); col*=1.0-smoothstep(0.5,0.95,d)*0.6*amt;
+  o=vec4(col,c.a);
+}`;
+class VHSEffect extends Effect{constructor(){super('VHSEffect',VHS_FRAG,{uniforms:new Map([['amt',new THREE.Uniform(1)]])});}}
 
 /* ===== PRNG + modelo de árbol ===== */
 function mulberry32(a){return function(){a|=0;a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};}
@@ -184,7 +201,8 @@ const PRESETS={
   high:   {radial:6, shadow:2048, leafPerTree:200, grass:340, bloom:true,  world:{x0:-2,x1:1,z0:-6,z1:5}, density:13},
 };
 const Q=PRESETS[DEV.tier];
-const GRASS_N={low:260,medium:560,high:900}[DEV.tier], PLANT_N={low:16,medium:34,high:54}[DEV.tier], ROCK_N={low:5,medium:8,high:12}[DEV.tier];
+const GRASS_N={low:300,medium:620,high:1000}[DEV.tier], PLANT_N={low:26,medium:55,high:90}[DEV.tier], ROCK_N={low:5,medium:8,high:12}[DEV.tier];
+const GRASS_DIST=85;   // LOD: pasto/plantas sólo dentro de este radio (los árboles se ven hasta la distancia de render)
 document.getElementById('treeCount');
 
 /* ===================== RENDERER / ESCENA ===================== */
@@ -303,8 +321,8 @@ function foliageMat(){const m=new THREE.MeshStandardMaterial({map:TRANSP,alphaTe
 // 3 pastos + 3 plantas (cross-quad). w,h aprox al aspecto del sprite.
 const grassMats=[foliageMat(),foliageMat(),foliageMat()];
 const grassGeos=[crossGeo(0.85,0.95),crossGeo(1.15,0.55),crossGeo(0.95,0.6)];      // alto / bajo / tupido
-const plantMats=[foliageMat(),foliageMat(),foliageMat()];
-const plantGeos=[crossGeo(1.0,1.0,true),crossGeo(1.9,1.15,true),crossGeo(1.1,2.6,true)]; // dracaena / arbusto / arbolito
+const plantMats=[foliageMat(),foliageMat(),foliageMat(),foliageMat()];
+const plantGeos=[crossGeo(1.0,1.0,true),crossGeo(1.9,1.15,true),crossGeo(1.1,2.6,true),crossGeo(1.3,1.0,true)]; // dracaena / arbusto / arbolito / mata de hojas
 // Rocas: variantes cerradas (icosfera desplazada con ruido → watertight, sin huecos)
 const rockMat=new THREE.MeshStandardMaterial({color:0x8d857a,roughness:0.95,metalness:0});
 const rockVariants=(()=>{const out=[];const rr=mulberry32(909);const tmp=new THREE.Vector3();
@@ -362,7 +380,7 @@ function applyGodTextures(){
   stex(P+'leaf_a.png').then(t=>{leafMat.map=t;leafMat.alphaTest=0.4;leafMat.needsUpdate=true;}).catch(()=>{});
   // pasto y plantas (cross-quad)
   ['grass_a.png','grass_b.png','grass_c.png'].forEach((f,i)=>stex(P+f).then(t=>{grassMats[i].map=t;grassMats[i].needsUpdate=true;}).catch(()=>{}));
-  ['plant_a.png','plant_b.png','plant_c.png'].forEach((f,i)=>stex(P+f).then(t=>{plantMats[i].map=t;plantMats[i].needsUpdate=true;}).catch(()=>{}));
+  ['plant_a.png','plant_b.png','plant_c.png','leaf_b.png'].forEach((f,i)=>stex(P+f).then(t=>{plantMats[i].map=t;plantMats[i].needsUpdate=true;}).catch(()=>{}));
 }
 
 /* ===================== MUNDO PRECONSTRUIDO (sin streaming) ===================== */
@@ -383,20 +401,21 @@ function buildChunk(cx,cz){
     const lv=new THREE.InstancedMesh(new THREE.PlaneGeometry(1.25,1.3),leafMat,leafE.length);for(let i=0;i<leafE.length;i++){lv.setMatrixAt(i,leafE[i].m);lv.setColorAt(i,leafE[i].c);}lv.instanceMatrix.needsUpdate=true;grp.add(lv);}
   totalTrees+=trunkGeos.length;
   // pasto (3 tipos) + plantas (3 tipos) — cross-quad con viento, abundante
-  const dm=new THREE.Object3D();const gc=new THREE.Color();
+  const dm=new THREE.Object3D();const gc=new THREE.Color();const fol=[];
   const scatter=(geo,mat,n,sMin,sMax,tintL)=>{ if(n<=0)return; const im=new THREE.InstancedMesh(geo,mat,n);let k=0;
     for(let i=0;i<n;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+1.2)continue;
       dm.position.set(x,terrainHeight(x,z),z);dm.rotation.set(0,rng()*6.28,0);const s=sMin+rng()*(sMax-sMin);dm.scale.set(s,s,s);dm.updateMatrix();
       im.setMatrixAt(k,dm.matrix);gc.setHSL(0.25+(rng()-0.5)*0.04,0.30+rng()*0.2,tintL*(0.82+rng()*0.36));im.setColorAt(k,gc);k++;}
-    im.count=k;im.instanceMatrix.needsUpdate=true;if(im.instanceColor)im.instanceColor.needsUpdate=true;im.frustumCulled=true;grp.add(im);};
+    im.count=k;im.instanceMatrix.needsUpdate=true;if(im.instanceColor)im.instanceColor.needsUpdate=true;grp.add(im);fol.push(im);};
   const gN=Math.round(GRASS_N*densityMul);
   scatter(grassGeos[0],grassMats[0],Math.round(gN*0.34),0.7,1.5,0.9);
   scatter(grassGeos[1],grassMats[1],Math.round(gN*0.33),0.8,1.7,0.9);
   scatter(grassGeos[2],grassMats[2],Math.round(gN*0.33),0.8,1.6,0.9);
   const pN=Math.round(PLANT_N*densityMul);
-  scatter(plantGeos[0],plantMats[0],Math.round(pN*0.40),0.7,1.3,0.95);
-  scatter(plantGeos[1],plantMats[1],Math.round(pN*0.35),0.8,1.5,0.95);
-  scatter(plantGeos[2],plantMats[2],Math.round(pN*0.25),0.8,1.4,0.95);
+  scatter(plantGeos[0],plantMats[0],Math.round(pN*0.30),0.7,1.3,0.95);
+  scatter(plantGeos[1],plantMats[1],Math.round(pN*0.28),0.8,1.5,0.95);
+  scatter(plantGeos[2],plantMats[2],Math.round(pN*0.20),0.8,1.4,0.95);
+  scatter(plantGeos[3],plantMats[3],Math.round(pN*0.22),0.7,1.3,0.95);
   // rocas cerradas variadas (mergeadas en 1 malla por sector → sin huecos)
   const rocks=[];const rN=Math.round(ROCK_N*densityMul);
   for(let i=0;i<rN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+1.0)continue;
@@ -408,7 +427,8 @@ function buildChunk(cx,cz){
     for(let z=z0+6;z<z0+CHUNK;z+=24)for(const sx of[-(ROAD_HALF+0.8),(ROAD_HALF+0.8)]){const g=new THREE.CylinderGeometry(0.09,0.12,5,6);g.translate(sx,2.5,z);posts.push(g);heads.push(new THREE.Vector3(sx,5,z));lamps.push(new THREE.Vector3(sx*0.6,4.6,z));}
     if(posts.length){const pm=new THREE.Mesh(mergeGeometries(posts,false),lampPostMat);pm.castShadow=true;posts.forEach(g=>g.dispose());grp.add(pm);
       const hm=new THREE.InstancedMesh(new THREE.SphereGeometry(0.28,8,6),lampHeadMat,heads.length);heads.forEach((h,i)=>{hd.position.copy(h);hd.updateMatrix();hm.setMatrixAt(i,hd.matrix);});grp.add(hm);}}
-  scene.add(grp);chunkList.push({grp,center:new THREE.Vector3(x0+CHUNK/2,0,z0+CHUNK/2),lamps});
+  const center=new THREE.Vector3(x0+CHUNK/2,5,z0+CHUNK/2);
+  scene.add(grp);chunkList.push({grp,center,sphere:new THREE.Sphere(center,42),lamps,fol});
 }
 function buildWorld(){
   for(const c of chunkList){scene.remove(c.grp);c.grp.traverse(o=>{if(o.geometry)o.geometry.dispose();});}
@@ -418,7 +438,7 @@ function buildWorld(){
 }
 
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
-let composer=null,bloomEffect=null,hueSat=null,smaaPass=null;
+let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null;
 let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0;
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
@@ -429,6 +449,7 @@ function buildComposer(){
   composer.addPass(new EffectPass(camera,bloomEffect,hueSat,tone));   // bloom = única convolution → OK
   smaaPass=new EffectPass(camera,new SMAAEffect());
   composer.addPass(smaaPass);
+  vhsPass=new EffectPass(camera,new VHSEffect());vhsPass.enabled=false;composer.addPass(vhsPass);   // filtro VHS opcional (botón 📼)
 }
 try{ buildComposer(); }catch(err){ console.error('PostFX off:',err); composer=null; renderer.toneMapping=THREE.AgXToneMapping; renderer.toneMappingExposure=1.0; }
 
@@ -471,6 +492,7 @@ const keys={};addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Shif
 const runBtn=document.getElementById('run');runBtn.addEventListener('pointerdown',e=>{running=true;runBtn.classList.add('on');e.preventDefault();});
 const stopRun=()=>{running=false;runBtn.classList.remove('on');};runBtn.addEventListener('pointerup',stopRun);runBtn.addEventListener('pointercancel',stopRun);runBtn.addEventListener('pointerleave',stopRun);
 const flashBtn=document.getElementById('flash');flashBtn.addEventListener('click',()=>{flashOn=!flashOn;flashBtn.classList.toggle('on',flashOn);});
+const vhsToggleBtn=document.getElementById('vhsBtn');vhsToggleBtn.addEventListener('click',()=>{if(!vhsPass)return;vhsPass.enabled=!vhsPass.enabled;vhsToggleBtn.classList.toggle('on',vhsPass.enabled);});
 
 /* ===================== AUDIO ===================== */
 let actx=null,windGain=null,soundOn=false;
@@ -512,6 +534,7 @@ let hinted=false;function dismissHint(){if(!hinted){hinted=true;$('hint').classL
 addEventListener('resize',layout);
 let paused=false;document.addEventListener('visibilitychange',()=>{paused=document.hidden;});
 const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0;const _v=new THREE.Vector3();
+const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 function update(dt){
   let ix=joy.x,iz=joy.y;if(keys['KeyW'])iz-=1;if(keys['KeyS'])iz+=1;if(keys['KeyA'])ix-=1;if(keys['KeyD'])ix+=1;
   const mag=Math.min(1,Math.hypot(ix,iz));if(mag>0.001){ix/=Math.max(mag,1);iz/=Math.max(mag,1);}
@@ -538,8 +561,13 @@ function update(dt){
     for(let i=0;i<lampLights.length;i++){if(cand[i]&&cand[i][1]<900){lampLights[i].position.copy(cand[i][0]);lampLights[i].intensity=14*nightFactor;}else lampLights[i].intensity=0;}}
   else for(const pl of lampLights)pl.intensity=0;
   lampHeadMat.emissiveIntensity=0.2+2.6*nightFactor;
-  // distancia de render: visibilidad por sector (sin reconstruir nada)
-  const rd2=renderDist*renderDist;for(const c of chunkList){const dx=c.center.x-player.pos.x,dz=c.center.z-player.pos.z;c.grp.visible=(dx*dx+dz*dz)<rd2;}
+  // CULLING: sólo se dibuja lo que entra en la cámara (frustum) y está dentro del render; follaje sólo cerca (LOD)
+  camera.updateMatrixWorld();camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
+  _pm.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);_frustum.setFromProjectionMatrix(_pm);
+  const rd2=renderDist*renderDist,gd2=GRASS_DIST*GRASS_DIST;
+  for(const c of chunkList){const dx=c.center.x-player.pos.x,dz=c.center.z-player.pos.z;const d2=dx*dx+dz*dz;
+    const vis=d2<rd2&&_frustum.intersectsSphere(c.sphere);c.grp.visible=vis;
+    if(vis){const fv=d2<gd2;for(let i=0;i<c.fol.length;i++)c.fol[i].visible=fv;}}
   windU.uTime.value+=dt;
 }
 function animate(){requestAnimationFrame(animate);if(paused)return;const dt=Math.min(clock.getDelta(),0.05);update(dt);
@@ -548,7 +576,7 @@ function animate(){requestAnimationFrame(animate);if(paused)return;const dt=Math
 
 /* ===================== INICIO ===================== */
 // Valores por defecto realistas
-const VFX_DEFAULTS={time:12,dist:150,shad:22,dens:130,wind:90,bob:70,
+const VFX_DEFAULTS={time:12,dist:200,shad:22,dens:130,wind:90,bob:70,
   res:100,expo:100,bloom:35,sat:0,shake:40,relief:250};
 function applyDefaults(){
   for(const id in VFX_DEFAULTS){const el=document.getElementById(id);if(!el)continue;el.value=VFX_DEFAULTS[id];el.dispatchEvent(new Event('input'));}
