@@ -122,8 +122,7 @@
     <label>Balanceo al caminar <span id="bobVal">100%</span></label>
     <input type="range" id="bob" min="0" max="200" value="100" step="5" />
   </div>
-  <div class="row toggle"><span>Sonido (pasos/viento)</span><div class="switch" id="snd"></div></div>
-  <div class="row toggle" style="margin-bottom:0"><span>Nueva semilla del mundo</span><div class="switch" id="reseed"></div></div>
+  <div class="row toggle" style="margin-bottom:0"><span>Sonido (pasos/viento)</span><div class="switch" id="snd"></div></div>
 </div>
 
 <div id="hud"><span id="fps">–</span> FPS · <span id="chunkCount">–</span> sectores · <span id="treeCount">–</span> árboles</div>
@@ -378,20 +377,21 @@ road.rotation.x=-Math.PI/2;road.position.y=0.02;road.receiveShadow=true;scene.ad
 
 /* ===================== STREAMING DE CHUNKS ===================== */
 let loadRadius=Q.radius, density=Q.density, currentSeason='summer';
-let worldSeed=(Math.random()*1e9)|0;
+const worldSeed=20260620;            // semilla FIJA → mapa predeterminado (siempre el mismo)
 const speciesList=['roble','roble','abedul','pino','pino','roble','abedul'];
-const chunks=new Map();            // key -> {trunk,leaves,lamps:[Vector3]}
+const chunks=new Map();              // sectores activos (en escena)
+const cache=new Map();               // ya construidos pero fuera de escena (LRU, sin regenerar al volver)
 const queued=new Set();const buildQueue=[];
+let CACHE_MAX=40;                     // tope de sectores cacheados → memoria acotada
 let totalTrees=0;
 function key(cx,cz){return cx+'|'+cz;}
 function hash2(a,b){let h=worldSeed^Math.imul(a|0,374761393)^Math.imul(b|0,668265263);h=Math.imul(h^(h>>>13),1274126177);return (h^(h>>>16))>>>0;}
 
-function buildChunk(cx,cz){
-  const k=key(cx,cz);if(chunks.has(k))return;
+// Genera la geometría del sector (determinista por semilla+cx+cz). NO la agrega a la escena.
+function generateChunk(cx,cz){
   const rng=mulberry32(hash2(cx,cz));
   const x0=cx*CHUNK,z0=cz*CHUNK;
-  const trunkGeos=[];const leafEntries=[];const lamps=[];
-  const tmp=new THREE.Matrix4();
+  const trunkGeos=[];const leafEntries=[];const lamps=[];const tmp=new THREE.Matrix4();
   for(let i=0;i<density;i++){
     const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;
     if(Math.abs(x)<ROAD_HALF+2.5) continue;                       // no plantar en la carretera
@@ -401,7 +401,6 @@ function buildChunk(cx,cz){
     tree.trunkGeometry.applyMatrix4(world);trunkGeos.push(tree.trunkGeometry);
     for(const lf of tree.leaves){tmp.multiplyMatrices(world,lf.matrix);leafEntries.push({m:tmp.clone(),c:lf.color});}
   }
-  // farolas en los sectores que tocan la carretera
   let lampMesh=null,headMesh=null;
   if(cx===-1||cx===0){
     const posts=[];const headDummy=new THREE.Object3D();const heads=[];
@@ -412,47 +411,57 @@ function buildChunk(cx,cz){
       }
     }
     if(posts.length){
-      lampMesh=new THREE.Mesh(mergeGeometries(posts,false),lampPostMat);lampMesh.castShadow=true;posts.forEach(g=>g.dispose());scene.add(lampMesh);
+      lampMesh=new THREE.Mesh(mergeGeometries(posts,false),lampPostMat);lampMesh.castShadow=true;posts.forEach(g=>g.dispose());
       const hg=new THREE.SphereGeometry(0.28,8,6);headMesh=new THREE.InstancedMesh(hg,lampHeadMat,heads.length);
-      heads.forEach((h,i)=>{headDummy.position.copy(h);headDummy.updateMatrix();headMesh.setMatrixAt(i,headDummy.matrix);});scene.add(headMesh);
+      heads.forEach((h,i)=>{headDummy.position.copy(h);headDummy.updateMatrix();headMesh.setMatrixAt(i,headDummy.matrix);});
     }
   }
   let trunk=null,leaves=null;
   if(trunkGeos.length){
-    trunk=new THREE.Mesh(mergeGeometries(trunkGeos,false),barkMat);trunk.castShadow=true;trunk.receiveShadow=true;trunkGeos.forEach(g=>g.dispose());scene.add(trunk);
+    trunk=new THREE.Mesh(mergeGeometries(trunkGeos,false),barkMat);trunk.castShadow=true;trunk.receiveShadow=true;trunkGeos.forEach(g=>g.dispose());
     const lgeo=new THREE.PlaneGeometry(0.62,0.78);leaves=new THREE.InstancedMesh(lgeo,leafMat,leafEntries.length);
     for(let i=0;i<leafEntries.length;i++){leaves.setMatrixAt(i,leafEntries[i].m);leaves.setColorAt(i,leafEntries[i].c);}
     leaves.instanceMatrix.needsUpdate=true;if(leaves.instanceColor)leaves.instanceColor.needsUpdate=true;
   }
-  const treeCount=trunkGeos.length;totalTrees+=treeCount;
-  chunks.set(k,{trunk,leaves,lampMesh,headMesh,lamps,treeCount});
+  return {trunk,leaves,lampMesh,headMesh,lamps,treeCount:trunkGeos.length,inScene:false};
 }
-function disposeChunk(k){
+function addToScene(ch){if(ch.inScene)return;if(ch.trunk)scene.add(ch.trunk);if(ch.leaves)scene.add(ch.leaves);if(ch.lampMesh)scene.add(ch.lampMesh);if(ch.headMesh)scene.add(ch.headMesh);ch.inScene=true;}
+function removeFromScene(ch){if(!ch.inScene)return;if(ch.trunk)scene.remove(ch.trunk);if(ch.leaves)scene.remove(ch.leaves);if(ch.lampMesh)scene.remove(ch.lampMesh);if(ch.headMesh)scene.remove(ch.headMesh);ch.inScene=false;}
+function destroyChunk(ch){removeFromScene(ch);if(ch.trunk)ch.trunk.geometry.dispose();if(ch.leaves)ch.leaves.geometry.dispose();if(ch.lampMesh)ch.lampMesh.geometry.dispose();if(ch.headMesh)ch.headMesh.geometry.dispose();}
+
+// Activa un sector: reusa el de la caché si ya existe (instantáneo, SIN regenerar), o lo genera.
+function activateChunk(cx,cz){
+  const k=key(cx,cz);if(chunks.has(k))return;
+  let ch=cache.get(k);
+  if(ch){cache.delete(k);} else {ch=generateChunk(cx,cz);}
+  addToScene(ch);chunks.set(k,ch);totalTrees+=ch.treeCount;
+}
+// Desactiva un sector: lo saca de escena y lo manda a la caché (no se regenera al volver).
+function deactivateChunk(k){
   const ch=chunks.get(k);if(!ch)return;
-  if(ch.trunk){scene.remove(ch.trunk);ch.trunk.geometry.dispose();}
-  if(ch.leaves){scene.remove(ch.leaves);ch.leaves.geometry.dispose();}
-  if(ch.lampMesh){scene.remove(ch.lampMesh);ch.lampMesh.geometry.dispose();}
-  if(ch.headMesh){scene.remove(ch.headMesh);ch.headMesh.geometry.dispose();}
-  totalTrees-=ch.treeCount||0;
-  chunks.delete(k);
+  removeFromScene(ch);chunks.delete(k);totalTrees-=ch.treeCount;
+  cache.set(k,ch);                                   // queda como el más reciente
+  while(cache.size>CACHE_MAX){const o=cache.keys().next().value;destroyChunk(cache.get(o));cache.delete(o);}
 }
 function updateChunks(){
+  CACHE_MAX=Math.max(24,(2*loadRadius+1)*(2*loadRadius+1));   // ~un anillo extra, acotado
   const pcx=Math.floor(player.pos.x/CHUNK),pcz=Math.floor(player.pos.z/CHUNK);
   const need=new Set();
   for(let dz=-loadRadius;dz<=loadRadius;dz++)for(let dx=-loadRadius;dx<=loadRadius;dx++){
     const cx=pcx+dx,cz=pcz+dz,k=key(cx,cz);need.add(k);
     if(!chunks.has(k)&&!queued.has(k)){queued.add(k);buildQueue.push([cx,cz]);}
   }
-  for(const k of [...chunks.keys()]) if(!need.has(k)) disposeChunk(k);
+  for(const k of [...chunks.keys()]) if(!need.has(k)) deactivateChunk(k);
   for(let i=buildQueue.length-1;i>=0;i--){const k=key(buildQueue[i][0],buildQueue[i][1]);if(!need.has(k)){queued.delete(k);buildQueue.splice(i,1);}}
 }
+// Reconstruye TODO (sólo al cambiar estación/densidad: invalida la geometría cacheada).
 function rebuildWorld(){
-  for(const k of [...chunks.keys()]) disposeChunk(k);
+  for(const k of [...chunks.keys()]) destroyChunk(chunks.get(k)); chunks.clear();
+  for(const ch of cache.values()) destroyChunk(ch); cache.clear();
   buildQueue.length=0;queued.clear();totalTrees=0;
   recenterGround(player.pos.x,player.pos.z);
   updateChunks();
-  // construir sincrónicamente lo cercano para que no haya huecos al aparecer
-  while(buildQueue.length){const [cx,cz]=buildQueue.shift();queued.delete(key(cx,cz));buildChunk(cx,cz);}
+  while(buildQueue.length){const [cx,cz]=buildQueue.shift();queued.delete(key(cx,cz));activateChunk(cx,cz);}
   document.getElementById('chunkCount').textContent=chunks.size;
   document.getElementById('treeCount').textContent=totalTrees;
 }
@@ -523,7 +532,6 @@ $('wind').addEventListener('input',e=>{const v=+e.target.value;windU.uWind.value
 $('bob').addEventListener('input',e=>{bobScale=+e.target.value/100;$('bobVal').textContent=e.target.value+'%';});
 document.querySelectorAll('#season button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#season button').forEach(x=>x.classList.remove('active'));b.classList.add('active');currentSeason=b.dataset.s;rebuildWorld();}));
 const sndSw=$('snd');sndSw.addEventListener('click',()=>{sndSw.classList.toggle('on');soundOn=sndSw.classList.contains('on');if(soundOn){unlockAudio();if(windGain)windGain.gain.value=0.02+(+$('wind').value)/100*0.10;}else if(windGain){windGain.gain.value=0;}});
-const reseedSw=$('reseed');reseedSw.addEventListener('click',()=>{reseedSw.classList.toggle('on');worldSeed=(Math.random()*1e9)|0;rebuildWorld();setTimeout(()=>reseedSw.classList.remove('on'),250);});
 
 const ui=$('ui'),menuBtn=$('menuBtn'),closeBtn=$('closeBtn');
 menuBtn.addEventListener('click',()=>{ui.classList.add('open');menuBtn.style.display='none';});
@@ -545,8 +553,8 @@ function update(dt){
   const maxSpeed=(running?RUN:WALK)*mag;const desired=_tmpV.set(0,0,0);
   desired.addScaledVector(forward,-iz*maxSpeed);desired.addScaledVector(right,ix*maxSpeed);
   player.vel.lerp(desired,Math.min(1,ACCEL*dt));player.pos.addScaledVector(player.vel,dt);
-  if(Math.abs(player.pos.z)>3800)player.pos.z=Math.sign(player.pos.z)*3800;
-  if(Math.abs(player.pos.x)>700)player.pos.x=Math.sign(player.pos.x)*700;
+  if(Math.abs(player.pos.z)>600)player.pos.z=Math.sign(player.pos.z)*600;   // mapa grande ~1.2 km
+  if(Math.abs(player.pos.x)>300)player.pos.x=Math.sign(player.pos.x)*300;
 
   const speed=player.vel.length();player.bobPhase+=dt*(speed*1.9+0.0001);
   const moveAmt=Math.min(1,speed/WALK)*bobScale;
@@ -583,7 +591,7 @@ function update(dt){
   const ccx=Math.floor(player.pos.x/CHUNK),ccz=Math.floor(player.pos.z/CHUNK);
   if(ccx!==lastChunkX||ccz!==lastChunkZ){lastChunkX=ccx;lastChunkZ=ccz;recenterGround(player.pos.x,player.pos.z);updateChunks();}
   buildClock+=dt;
-  if(buildQueue.length&&buildClock>0.016){buildClock=0;const [cx,cz]=buildQueue.shift();queued.delete(key(cx,cz));buildChunk(cx,cz);
+  if(buildQueue.length&&buildClock>0.016){buildClock=0;const [cx,cz]=buildQueue.shift();queued.delete(key(cx,cz));activateChunk(cx,cz);
     $('chunkCount').textContent=chunks.size;$('treeCount').textContent=totalTrees;}
 }
 
