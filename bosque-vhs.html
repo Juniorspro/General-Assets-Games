@@ -85,7 +85,6 @@
   <div id="cross"></div>
   <div id="joy"><div id="joyKnob"></div></div>
   <button id="flash" class="actBtn">🔦</button>
-  <button id="vhsBtn" class="actBtn">📼</button>
   <button id="run" class="actBtn">CORRER</button>
 
   <button id="menuBtn" class="menuBtn" aria-label="Mundo">⚙</button>
@@ -98,23 +97,24 @@
     <div class="row"><label>Hora <span id="timeVal">atardecer</span></label><input type="range" id="time" min="-8" max="70" value="8" step="1"></div>
     <div class="row"><label>Distancia de render <span id="distVal">130 m</span></label><input type="range" id="dist" min="60" max="260" value="130" step="10"></div>
     <div class="row"><label>Distancia de sombras <span id="shadVal">22 m</span></label><input type="range" id="shad" min="0" max="44" value="22" step="2"></div>
-    <div class="row"><label>Densidad de vegetación <span id="densVal">100%</span></label><input type="range" id="dens" min="40" max="160" value="100" step="10"></div>
+    <div class="row"><label>Densidad de vegetación <span id="densVal">175%</span></label><input type="range" id="dens" min="40" max="200" value="175" step="5"></div>
     <div class="row"><label>Viento <span id="windVal">brisa</span></label><input type="range" id="wind" min="0" max="100" value="40" step="1"></div>
     <div class="row"><label>Balanceo al caminar <span id="bobVal">100%</span></label><input type="range" id="bob" min="0" max="200" value="100" step="5"></div>
     <div class="row toggle"><span>Sonido (pasos/viento)</span><div class="switch" id="snd"></div></div>
-    <div class="row toggle" style="margin-bottom:0"><span>Girar 90° en vertical</span><div class="switch on" id="rotSw"></div></div>
+    <div class="row toggle"><span>Girar 90° en vertical</span><div class="switch on" id="rotSw"></div></div>
+    <div class="row toggle" style="margin-bottom:0"><span>Ciclo día/noche (24 min)</span><div class="switch on" id="cycleSw"></div></div>
   </div>
 
   <div id="vfx" class="panel">
     <header><h1><span class="dot"></span> Gráficos</h1><button class="closeBtn" data-close="vfx">✕</button></header>
     <div class="row"><label>Resolución <span id="resVal">100%</span></label><input type="range" id="res" min="50" max="100" value="100" step="5"></div>
     <div class="row toggle"><span>Antialiasing (SMAA)</span><div class="switch on" id="aaSw"></div></div>
-    <div class="row"><label>Exposición <span id="expoVal">100%</span></label><input type="range" id="expo" min="40" max="200" value="100" step="5"></div>
+    <div class="row"><label>Exposición <span id="expoVal">0</span></label><input type="range" id="expo" min="-100" max="100" value="0" step="5"></div>
     <div class="row"><label>Bloom <span id="bloomVal">35%</span></label><input type="range" id="bloom" min="0" max="120" value="35" step="5"></div>
     <div class="row"><label>Saturación <span id="satVal">0</span></label><input type="range" id="sat" min="-40" max="60" value="0" step="5"></div>
     <div class="row" style="margin-bottom:0"><label>Temblor de cámara <span id="shakeVal">40%</span></label><input type="range" id="shake" min="0" max="150" value="40" step="5"></div>
     <div class="grp">Materiales</div>
-    <div class="row" style="margin-bottom:0"><label>Relieve 3D (corteza/suelo) <span id="reliefVal">250%</span></label><input type="range" id="relief" min="0" max="500" value="250" step="10"></div>
+    <div class="row" style="margin-bottom:0"><label>PBR / Relieve 3D <span id="reliefVal">700%</span></label><input type="range" id="relief" min="0" max="800" value="700" step="10"></div>
   </div>
 
   <div id="hud"><span id="fps">–</span> FPS · <span id="treeCount">–</span> árboles</div>
@@ -440,6 +440,7 @@ function buildWorld(){
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
 let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null;
 let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0;
+let cycleOn=true, cyclePhase=0, envCycleTimer=0; const A_ELEV=58, THETA0=3.02;   // ciclo día/noche 24 min (12+12)
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
   composer.addPass(new RenderPass(scene,camera));
@@ -449,7 +450,6 @@ function buildComposer(){
   composer.addPass(new EffectPass(camera,bloomEffect,hueSat,tone));   // bloom = única convolution → OK
   smaaPass=new EffectPass(camera,new SMAAEffect());
   composer.addPass(smaaPass);
-  vhsPass=new EffectPass(camera,new VHSEffect());vhsPass.enabled=false;composer.addPass(vhsPass);   // filtro VHS opcional (botón 📼)
 }
 try{ buildComposer(); }catch(err){ console.error('PostFX off:',err); composer=null; renderer.toneMapping=THREE.AgXToneMapping; renderer.toneMappingExposure=1.0; }
 
@@ -492,7 +492,6 @@ const keys={};addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Shif
 const runBtn=document.getElementById('run');runBtn.addEventListener('pointerdown',e=>{running=true;runBtn.classList.add('on');e.preventDefault();});
 const stopRun=()=>{running=false;runBtn.classList.remove('on');};runBtn.addEventListener('pointerup',stopRun);runBtn.addEventListener('pointercancel',stopRun);runBtn.addEventListener('pointerleave',stopRun);
 const flashBtn=document.getElementById('flash');flashBtn.addEventListener('click',()=>{flashOn=!flashOn;flashBtn.classList.toggle('on',flashOn);});
-const vhsToggleBtn=document.getElementById('vhsBtn');vhsToggleBtn.addEventListener('click',()=>{if(!vhsPass)return;vhsPass.enabled=!vhsPass.enabled;vhsToggleBtn.classList.toggle('on',vhsPass.enabled);});
 
 /* ===================== AUDIO ===================== */
 let actx=null,windGain=null,soundOn=false;
@@ -503,8 +502,9 @@ function footstep(){if(!actx||!soundOn)return;const len=0.09;const buf=actx.crea
 const $=id=>document.getElementById(id);
 const timeLabel=e=>e<0?'noche':e<6?'amanecer':e<16?'atardecer':e<45?'día':'mediodía';
 const windLabels=w=>w<8?'calma':w<45?'brisa':w<75?'viento':'tormenta';
-$('time').addEventListener('input',e=>{const v=+e.target.value;setTime(v,120);$('timeVal').textContent=timeLabel(v);});
+$('time').addEventListener('input',e=>{const v=+e.target.value;cycleOn=false;cycleSw.classList.remove('on');setTime(v,120);$('timeVal').textContent=timeLabel(v);});
 $('time').addEventListener('change',updateEnvironment);
+const cycleSw=$('cycleSw');cycleSw.addEventListener('click',()=>{cycleSw.classList.toggle('on');cycleOn=cycleSw.classList.contains('on');});
 let renderDist=130;$('dist').addEventListener('input',e=>{renderDist=+e.target.value;$('distVal').textContent=renderDist+' m';scene.fog.density=Math.max(0.006,0.9/renderDist);});
 $('shad').addEventListener('input',e=>{const r=+e.target.value;setShadowRange(r);$('shadVal').textContent=r<1?'off':r+' m';});
 $('dens').addEventListener('input',e=>{$('densVal').textContent=e.target.value+'%';});
@@ -518,7 +518,7 @@ const rotSw=$('rotSw');rotSw.addEventListener('click',()=>{rotSw.classList.toggl
 // Gráficos
 $('res').addEventListener('input',e=>{resScale=+e.target.value/100;$('resVal').textContent=e.target.value+'%';layout();});
 const aaSw=$('aaSw');aaSw.addEventListener('click',()=>{aaSw.classList.toggle('on');aaOn=aaSw.classList.contains('on');if(smaaPass)smaaPass.enabled=aaOn;});
-$('expo').addEventListener('input',e=>{const v=+e.target.value;exposure=v/100;$('expoVal').textContent=v+'%';setTime(+$('time').value,120);});
+$('expo').addEventListener('input',e=>{const v=+e.target.value;exposure=Math.pow(2,v/100);$('expoVal').textContent=(v>0?'+':'')+v;setTime(+$('time').value,120);});
 $('bloom').addEventListener('input',e=>{const v=+e.target.value;$('bloomVal').textContent=v+'%';if(bloomEffect)bloomEffect.intensity=v/100;});
 $('sat').addEventListener('input',e=>{const v=+e.target.value;$('satVal').textContent=(v>0?'+':'')+v;if(hueSat)hueSat.saturation=v/100;});
 $('shake').addEventListener('input',e=>{const v=+e.target.value;$('shakeVal').textContent=v+'%';camShake=v/100;});
@@ -536,6 +536,9 @@ let paused=false;document.addEventListener('visibilitychange',()=>{paused=docume
 const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0;const _v=new THREE.Vector3();
 const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 function update(dt){
+  if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
+    setTime(elev,120); $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev);
+    envCycleTimer+=dt; if(envCycleTimer>3){ envCycleTimer=0; updateEnvironment(); } }
   let ix=joy.x,iz=joy.y;if(keys['KeyW'])iz-=1;if(keys['KeyS'])iz+=1;if(keys['KeyA'])ix-=1;if(keys['KeyD'])ix+=1;
   const mag=Math.min(1,Math.hypot(ix,iz));if(mag>0.001){ix/=Math.max(mag,1);iz/=Math.max(mag,1);}
   forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
@@ -576,11 +579,12 @@ function animate(){requestAnimationFrame(animate);if(paused)return;const dt=Math
 
 /* ===================== INICIO ===================== */
 // Valores por defecto realistas
-const VFX_DEFAULTS={time:12,dist:200,shad:22,dens:130,wind:90,bob:70,
-  res:100,expo:100,bloom:35,sat:0,shake:40,relief:250};
+const VFX_DEFAULTS={time:7,dist:200,shad:22,dens:175,wind:90,bob:70,
+  res:100,expo:0,bloom:35,sat:25,shake:150,relief:700};
 function applyDefaults(){
   for(const id in VFX_DEFAULTS){const el=document.getElementById(id);if(!el)continue;el.value=VFX_DEFAULTS[id];el.dispatchEvent(new Event('input'));}
   densityMul=(+document.getElementById('dens').value)/100;     // dens aplica en buildWorld (sin disparar reconstrucción)
+  cycleOn=true; $('cycleSw').classList.add('on');              // el dispatch de 'time' apaga el ciclo; lo reactivamos
   updateEnvironment();
   $('snd').classList.add('on'); soundOn=true;                  // sonido ON por defecto
 }
