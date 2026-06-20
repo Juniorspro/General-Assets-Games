@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>__EFFECT_TITLE__</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "IBM Plex Sans", "Helvetica Neue", sans-serif;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #050608;
+      }
+
+      #app {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .status {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 10;
+        display: none;
+        max-width: min(420px, calc(100vw - 32px));
+        padding: 12px 14px;
+        border: 1px solid rgba(167, 139, 250, 0.22);
+        border-radius: 14px;
+        background: rgba(5, 8, 12, 0.8);
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+    </style>
+    <!-- Starter dependency versions are injected by init_effect.py from assets/runtime-versions.json. -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@__THREE_VERSION__/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@__THREE_VERSION__/examples/jsm/",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@__LIL_GUI_VERSION__/+esm"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <canvas id="app"></canvas>
+    <div class="status" id="status">Initializing legacy raw shader starter...</div>
+    <script>
+      window.__REPLICATOR_STARTER_BOOTED__ = false;
+      window.__REPLICATOR_STARTER_RENDERER_READY__ = false;
+      window.__REPLICATOR_STARTER_LAST_ERROR__ = null;
+      window.__REPLICATOR_STARTER_FRAME_COUNT__ = 0;
+      window.__REPLICATOR_SYNC_RUNTIME__ = () => {
+        document.documentElement.dataset.replicatorBooted = String(window.__REPLICATOR_STARTER_BOOTED__);
+        document.documentElement.dataset.replicatorReady = String(window.__REPLICATOR_STARTER_RENDERER_READY__);
+        document.documentElement.dataset.replicatorFrameCount = String(window.__REPLICATOR_STARTER_FRAME_COUNT__);
+        document.documentElement.dataset.replicatorLastError = window.__REPLICATOR_STARTER_LAST_ERROR__ ?? "";
+      };
+      window.__REPLICATOR_SYNC_RUNTIME__();
+      window.setTimeout(() => {
+        const status = document.getElementById("status");
+        if (!status || window.__REPLICATOR_STARTER_RENDERER_READY__) return;
+        status.style.display = "block";
+        status.style.borderColor = "rgba(248, 113, 113, 0.35)";
+        if (!window.__REPLICATOR_STARTER_BOOTED__) {
+          status.textContent =
+            "Legacy starter module did not boot. Check import-map support, module loading, and localhost preview before debugging the effect itself.";
+        }
+      }, 4500);
+    </script>
+    <script type="module">
+      const effectTitle = "__EFFECT_TITLE__";
+      const canvas = document.getElementById("app");
+      const status = document.getElementById("status");
+      window.__REPLICATOR_STARTER_BOOTED__ = true;
+      window.__REPLICATOR_STARTER_LAST_ERROR__ = null;
+      window.__REPLICATOR_SYNC_RUNTIME__();
+
+      if (window.location.protocol === "file:") {
+        status.style.display = "block";
+        status.style.borderColor = "rgba(248, 113, 113, 0.35)";
+        status.textContent =
+          "Zero-build demos must be previewed over http://localhost/..., not file://. Run a local HTTP server from the repo root and reopen this path over localhost.";
+        window.__REPLICATOR_STARTER_LAST_ERROR__ = "localhost preview required";
+        window.__REPLICATOR_SYNC_RUNTIME__();
+        throw new Error("localhost preview required");
+      }
+
+      const THREE = await import("three");
+      const { OrbitControls } = await import("three/addons/controls/OrbitControls.js");
+      const { GUI } = await import("lil-gui");
+      const clock = new THREE.Clock();
+      const size = new THREE.Vector2();
+
+      const params = {
+        dpr: Math.min(window.devicePixelRatio, 2),
+        exposure: 1.0,
+        speed: 1.0,
+        paused: false,
+        autoRotate: false,
+        wobble: 0.18,
+        hueShift: 0.0,
+        background: "#050608",
+        glow: "#67e8f9",
+        fill: "#a78bfa",
+      };
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(params.background);
+
+      const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 40);
+      camera.position.set(0, 0.2, 4.6);
+
+      const controls = new OrbitControls(camera, canvas);
+      controls.enableDamping = true;
+      controls.enablePan = false;
+      controls.enableZoom = true;
+
+      const uniforms = {
+        uTime: { value: 0 },
+        uWobble: { value: params.wobble },
+        uHueShift: { value: params.hueShift },
+        uColorA: { value: new THREE.Color(params.glow) },
+        uColorB: { value: new THREE.Color(params.fill) },
+      };
+
+      const material = new THREE.ShaderMaterial({
+        uniforms,
+        vertexShader: /* glsl */ `
+          uniform float uTime;
+          uniform float uWobble;
+
+          varying vec3 vNormal;
+          varying vec3 vWorldPosition;
+
+          void main() {
+            vec3 transformed = position + normal * sin(uTime + position.y * 4.0) * uWobble;
+            vec4 world = modelMatrix * vec4(transformed, 1.0);
+            vNormal = normalize(mat3(modelMatrix) * normal);
+            vWorldPosition = world.xyz;
+            gl_Position = projectionMatrix * viewMatrix * world;
+          }
+        `,
+        fragmentShader: /* glsl */ `
+          uniform float uHueShift;
+          uniform vec3 uColorA;
+          uniform vec3 uColorB;
+
+          varying vec3 vNormal;
+          varying vec3 vWorldPosition;
+
+          vec3 hueRotate(vec3 color, float angle) {
+            float s = sin(angle);
+            float c = cos(angle);
+            mat3 m = mat3(
+              0.299 + 0.701 * c + 0.168 * s, 0.587 - 0.587 * c + 0.330 * s, 0.114 - 0.114 * c - 0.497 * s,
+              0.299 - 0.299 * c - 0.328 * s, 0.587 + 0.413 * c + 0.035 * s, 0.114 - 0.114 * c + 0.292 * s,
+              0.299 - 0.300 * c + 1.250 * s, 0.587 - 0.588 * c - 1.050 * s, 0.114 + 0.886 * c - 0.203 * s
+            );
+            return clamp(m * color, 0.0, 1.0);
+          }
+
+          void main() {
+            vec3 normal = normalize(vNormal);
+            vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+            float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 2.6);
+            float bands = 0.5 + 0.5 * sin(vWorldPosition.y * 3.2);
+            vec3 color = mix(uColorA, uColorB, bands);
+            color = hueRotate(color, uHueShift);
+            color += fresnel * 0.8;
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `,
+      });
+
+      const mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1.3, 48), material);
+      scene.add(mesh);
+
+      let renderer;
+
+      function setStatus(message, isError = false) {
+        status.textContent = message;
+        status.style.display = "block";
+        status.style.borderColor = isError ? "rgba(248, 113, 113, 0.35)" : "rgba(167, 139, 250, 0.22)";
+      }
+
+      function clearStatus() {
+        status.style.display = "none";
+        window.__REPLICATOR_STARTER_RENDERER_READY__ = true;
+        window.__REPLICATOR_SYNC_RUNTIME__();
+      }
+
+      function resize() {
+        size.set(window.innerWidth, window.innerHeight);
+        camera.aspect = size.x / Math.max(size.y, 1);
+        camera.updateProjectionMatrix();
+        if (!renderer) {
+          return;
+        }
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, params.dpr));
+        renderer.setSize(size.x, size.y, false);
+      }
+
+      function render() {
+        requestAnimationFrame(render);
+        window.__REPLICATOR_STARTER_FRAME_COUNT__ += 1;
+        window.__REPLICATOR_SYNC_RUNTIME__();
+
+        const dt = clock.getDelta();
+        if (!params.paused) {
+          uniforms.uTime.value += dt * params.speed;
+          mesh.rotation.y += dt * 0.24 * params.speed;
+          mesh.rotation.x = Math.sin(uniforms.uTime.value * 0.35) * 0.16;
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      function init() {
+        try {
+          setStatus("Initializing legacy raw shader renderer...");
+          renderer = new THREE.WebGLRenderer({
+            canvas,
+            antialias: true,
+            alpha: false,
+            powerPreference: "high-performance",
+          });
+          renderer.outputColorSpace = THREE.SRGBColorSpace;
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = params.exposure;
+
+          const gui = new GUI({ title: effectTitle, width: 320 });
+          const rendererFolder = gui.addFolder("Renderer");
+          rendererFolder.add(params, "dpr", 0.5, 2, 0.25).onChange(resize);
+          rendererFolder.add(params, "exposure", 0.2, 2.4, 0.01).onChange(() => {
+            renderer.toneMappingExposure = params.exposure;
+          });
+          rendererFolder.add(params, "paused");
+          rendererFolder.add(params, "autoRotate").onChange((value) => {
+            controls.autoRotate = value;
+          });
+          rendererFolder.open();
+
+          const styleFolder = gui.addFolder("Style");
+          styleFolder.addColor(params, "background").onChange((value) => {
+            scene.background.set(value);
+          });
+          styleFolder.addColor(params, "glow").onChange((value) => {
+            uniforms.uColorA.value.set(value);
+          });
+          styleFolder.addColor(params, "fill").onChange((value) => {
+            uniforms.uColorB.value.set(value);
+          });
+          styleFolder.add(params, "hueShift", -Math.PI, Math.PI, 0.01).onChange((value) => {
+            uniforms.uHueShift.value = value;
+          });
+
+          const animationFolder = gui.addFolder("Animation");
+          animationFolder.add(params, "speed", 0, 3, 0.01);
+          animationFolder.add(params, "wobble", 0, 0.6, 0.01).onChange((value) => {
+            uniforms.uWobble.value = value;
+          });
+
+          window.addEventListener("resize", resize);
+          resize();
+          clearStatus();
+          render();
+        } catch (error) {
+          window.__REPLICATOR_STARTER_RENDERER_READY__ = false;
+          window.__REPLICATOR_STARTER_LAST_ERROR__ = error?.message ?? String(error);
+          window.__REPLICATOR_SYNC_RUNTIME__();
+          console.error(error);
+          setStatus(
+            `Legacy raw shader starter failed to initialize. This usually means the environment could not create a WebGL context. Try a different browser or machine before debugging the effect itself. ${error.message ?? ""}`.trim(),
+            true,
+          );
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>

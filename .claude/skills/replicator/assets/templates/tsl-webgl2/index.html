@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>__EFFECT_TITLE__</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "IBM Plex Sans", "Helvetica Neue", sans-serif;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #050608;
+      }
+
+      #app {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .status {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 10;
+        display: none;
+        max-width: min(420px, calc(100vw - 32px));
+        padding: 12px 14px;
+        border: 1px solid rgba(96, 165, 250, 0.22);
+        border-radius: 14px;
+        background: rgba(5, 8, 12, 0.8);
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+    </style>
+    <!-- Starter dependency versions are injected by init_effect.py from assets/runtime-versions.json. -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@__THREE_VERSION__/build/three.module.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@__THREE_VERSION__/build/three.webgpu.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@__THREE_VERSION__/build/three.tsl.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@__THREE_VERSION__/examples/jsm/",
+          "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@__LIL_GUI_VERSION__/+esm"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <canvas id="app"></canvas>
+    <div class="status" id="status">Initializing WebGL2 fallback starter...</div>
+    <script>
+      window.__REPLICATOR_STARTER_BOOTED__ = false;
+      window.__REPLICATOR_STARTER_RENDERER_READY__ = false;
+      window.__REPLICATOR_STARTER_LAST_ERROR__ = null;
+      window.__REPLICATOR_STARTER_FRAME_COUNT__ = 0;
+      window.__REPLICATOR_SYNC_RUNTIME__ = () => {
+        document.documentElement.dataset.replicatorBooted = String(window.__REPLICATOR_STARTER_BOOTED__);
+        document.documentElement.dataset.replicatorReady = String(window.__REPLICATOR_STARTER_RENDERER_READY__);
+        document.documentElement.dataset.replicatorFrameCount = String(window.__REPLICATOR_STARTER_FRAME_COUNT__);
+        document.documentElement.dataset.replicatorLastError = window.__REPLICATOR_STARTER_LAST_ERROR__ ?? "";
+      };
+      window.__REPLICATOR_SYNC_RUNTIME__();
+      window.setTimeout(() => {
+        const status = document.getElementById("status");
+        if (!status || window.__REPLICATOR_STARTER_RENDERER_READY__) return;
+        status.style.display = "block";
+        status.style.borderColor = "rgba(248, 113, 113, 0.35)";
+        if (!window.__REPLICATOR_STARTER_BOOTED__) {
+          status.textContent =
+            "WebGL2 fallback starter module did not boot. Check import-map support, module loading, and localhost preview before debugging the effect itself.";
+          return;
+        }
+        status.textContent =
+          "WebGL2 fallback starter is still initializing. Confirm you are previewing over http://localhost/... and try a different browser or machine if the page stays here.";
+      }, 4500);
+    </script>
+    <script type="module">
+      const effectTitle = "__EFFECT_TITLE__";
+      const canvas = document.getElementById("app");
+      const status = document.getElementById("status");
+      window.__REPLICATOR_STARTER_BOOTED__ = true;
+      window.__REPLICATOR_STARTER_LAST_ERROR__ = null;
+      window.__REPLICATOR_SYNC_RUNTIME__();
+
+      if (window.location.protocol === "file:") {
+        status.style.display = "block";
+        status.style.borderColor = "rgba(248, 113, 113, 0.35)";
+        status.textContent =
+          "Zero-build demos must be previewed over http://localhost/..., not file://. Run a local HTTP server from the repo root and reopen this path over localhost.";
+        window.__REPLICATOR_STARTER_LAST_ERROR__ = "localhost preview required";
+        window.__REPLICATOR_SYNC_RUNTIME__();
+        throw new Error("localhost preview required");
+      }
+
+      const THREE = await import("three/webgpu");
+      const { color, mix, sin, uniform, uv } = await import("three/tsl");
+      const { OrbitControls } = await import("three/addons/controls/OrbitControls.js");
+      const { GUI } = await import("lil-gui");
+      const size = new THREE.Vector2();
+
+      const params = {
+        dpr: Math.min(window.devicePixelRatio, 2),
+        exposure: 1.0,
+        speed: 1.0,
+        paused: false,
+        autoRotate: false,
+        contrast: 0.58,
+        colorA: "#f59e0b",
+        colorB: "#60a5fa",
+        background: "#06070b",
+      };
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(params.background);
+
+      const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 40);
+      camera.position.set(0, 0.2, 4.8);
+
+      const controls = new OrbitControls(camera, canvas);
+      controls.enableDamping = true;
+      controls.enablePan = false;
+      controls.enableZoom = true;
+
+      const timeUniform = uniform(0);
+      const contrastUniform = uniform(params.contrast);
+      const colorAUniform = uniform(color(params.colorA));
+      const colorBUniform = uniform(color(params.colorB));
+
+      const material = new THREE.MeshPhongNodeMaterial();
+      material.colorNode = mix(
+        colorAUniform,
+        colorBUniform,
+        uv().x.add(sin(timeUniform.add(uv().y.mul(5.0))).mul(contrastUniform)).clamp(),
+      );
+
+      const mesh = new THREE.Mesh(new THREE.TorusKnotGeometry(1.05, 0.32, 220, 32), material);
+      scene.add(mesh);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+      const key = new THREE.PointLight(0xffffff, 18, 12, 2);
+      key.position.set(2.2, 2.8, 2.4);
+      scene.add(key);
+
+      let renderer;
+
+      function setStatus(message, isError = false) {
+        status.textContent = message;
+        status.style.display = "block";
+        status.style.borderColor = isError ? "rgba(248, 113, 113, 0.35)" : "rgba(96, 165, 250, 0.22)";
+      }
+
+      function clearStatus() {
+        status.style.display = "none";
+        window.__REPLICATOR_STARTER_RENDERER_READY__ = true;
+        window.__REPLICATOR_SYNC_RUNTIME__();
+      }
+
+      function withInitTimeout(promise, label, timeoutMs = 4000) {
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = window.setTimeout(() => {
+            reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        });
+
+        return Promise.race([promise, timeoutPromise]).finally(() => {
+          window.clearTimeout(timer);
+        });
+      }
+
+      function resize() {
+        size.set(window.innerWidth, window.innerHeight);
+        camera.aspect = size.x / Math.max(size.y, 1);
+        camera.updateProjectionMatrix();
+        if (!renderer) {
+          return;
+        }
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, params.dpr));
+        renderer.setSize(size.x, size.y, false);
+      }
+
+      function render(now = 0) {
+        requestAnimationFrame(render);
+        window.__REPLICATOR_STARTER_FRAME_COUNT__ += 1;
+        window.__REPLICATOR_SYNC_RUNTIME__();
+
+        if (!params.paused) {
+          const t = now * 0.001 * params.speed;
+          timeUniform.value = t;
+          mesh.rotation.x = t * 0.18;
+          mesh.rotation.y = t * 0.22;
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      async function init() {
+        try {
+          setStatus("Initializing WebGL2 fallback renderer...");
+          // Three.js keeps the TSL-capable entry point on WebGPURenderer.
+          // forceWebGL switches that unified API surface onto a WebGL2 backend.
+          renderer = new THREE.WebGPURenderer({
+            canvas,
+            antialias: true,
+            alpha: false,
+            forceWebGL: true,
+            powerPreference: "high-performance",
+          });
+          renderer.outputColorSpace = THREE.SRGBColorSpace;
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = params.exposure;
+          await withInitTimeout(renderer.init(), "WebGL2 fallback renderer init", 12000);
+
+          const gui = new GUI({ title: effectTitle, width: 320 });
+          const rendererFolder = gui.addFolder("Renderer");
+          rendererFolder.add(params, "dpr", 0.5, 2, 0.25).onChange(resize);
+          rendererFolder.add(params, "exposure", 0.2, 2.4, 0.01).onChange(() => {
+            renderer.toneMappingExposure = params.exposure;
+          });
+          rendererFolder.add(params, "paused");
+          rendererFolder.add(params, "autoRotate").onChange((value) => {
+            controls.autoRotate = value;
+          });
+          rendererFolder.open();
+
+          const styleFolder = gui.addFolder("Style");
+          styleFolder.add(params, "contrast", 0, 1, 0.01).onChange((value) => {
+            contrastUniform.value = value;
+          });
+          styleFolder.addColor(params, "colorA").onChange((value) => {
+            colorAUniform.value = new THREE.Color(value);
+          });
+          styleFolder.addColor(params, "colorB").onChange((value) => {
+            colorBUniform.value = new THREE.Color(value);
+          });
+          styleFolder.addColor(params, "background").onChange((value) => {
+            scene.background.set(value);
+          });
+
+          const animationFolder = gui.addFolder("Animation");
+          animationFolder.add(params, "speed", 0, 3, 0.01);
+
+          window.addEventListener("resize", resize);
+          resize();
+          clearStatus();
+          render();
+        } catch (error) {
+          window.__REPLICATOR_STARTER_RENDERER_READY__ = false;
+          window.__REPLICATOR_STARTER_LAST_ERROR__ = error?.message ?? String(error);
+          window.__REPLICATOR_SYNC_RUNTIME__();
+          console.error(error);
+          setStatus(
+            `WebGL2 fallback starter failed to initialize. Try reducing browser sandboxing issues, switching environments, or using the legacy raw shader template if the TSL path is blocked here. ${error.message ?? ""}`.trim(),
+            true,
+          );
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>
