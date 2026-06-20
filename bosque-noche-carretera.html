@@ -84,7 +84,7 @@
 </head>
 <body>
 <div id="app"></div>
-<div id="loader"><div class="leaf-spin"></div><p>Generando el mundo…</p></div>
+<div id="loader"><div class="leaf-spin"></div><p>Cargando…</p></div>
 
 <div id="cross"></div>
 <div id="ff">
@@ -540,16 +540,19 @@ function buildComposer(){
   grainEffect=new NoiseEffect({ premultiply:true }); grainEffect.blendMode.opacity.value=0.16;
   const vig=new VignetteEffect({ offset:0.32, darkness:0.9 });
 
-  const effects=[tone, lensEffect, vhsEffect, caEffect, scanEffect, grainEffect, vig];   // CA = única convolution → OK
+  const effects=[tone, lensEffect, vhsEffect, scanEffect, grainEffect, vig];   // mainUv + color (sin convolution)
   if(DEV.tier!=='low'){
     glitchEffect=new GlitchEffect({ delay:new THREE.Vector2(5,11), duration:new THREE.Vector2(0.18,0.5),
       strength:new THREE.Vector2(0.08,0.28), columns:0.02, chromaticAberrationOffset:caEffect.offset });
     effects.push(glitchEffect);
   }
   composer.addPass(new EffectPass(camera, ...effects));
+  composer.addPass(new EffectPass(camera, caEffect));   // CA es convolution → DEBE ir sola (incompatible con efectos mainUv)
   composer.setSize(innerWidth,innerHeight);
 }
-buildComposer();
+try { buildComposer(); }
+catch(err){ console.error('PostFX deshabilitado (fallback a render simple):', err);
+  composer=null; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0; }
 
 /* ===================== JUGADOR / FPS ===================== */
 const EYE=1.7,WALK=3.4,RUN=6.6,ACCEL=10;
@@ -688,14 +691,23 @@ function update(dt){
 }
 
 function animate(){requestAnimationFrame(animate);if(paused)return;const dt=Math.min(clock.getDelta(),0.05);update(dt);
-  composer.render(dt);updateTC();
+  if(composer) composer.render(dt); else renderer.render(scene,camera);
+  updateTC();
   fpsTimer+=dt;fpsFrames++;if(fpsTimer>=0.5){$('fps').textContent=Math.round(fpsFrames/fpsTimer);fpsTimer=0;fpsFrames=0;}}
 
 /* ===================== INICIO ===================== */
-setShadowRange(22);
-setTime(-5,125);updateEnvironment();
-rebuildWorld();
-requestAnimationFrame(()=>{renderer.render(scene,camera);setTimeout(()=>$('loader').classList.add('hide'),450);animate();});
+const loaderEl=document.getElementById('loader');
+const hideLoader=()=>loaderEl&&loaderEl.classList.add('hide');
+setTimeout(hideLoader,6000);                               // red de seguridad: nunca quedar pegado
+try{
+  setShadowRange(22);
+  setTime(-5,125); updateEnvironment();
+  rebuildWorld();                                          // mapa fijo ya construido aquí (sincrónico)
+}catch(err){ console.error('Init:',err); }
+requestAnimationFrame(()=>{
+  try{ if(composer) composer.render(0); else renderer.render(scene,camera); }catch(e){ console.error(e); }
+  setTimeout(hideLoader,250); animate();
+});
 </script>
 </body>
 </html>
