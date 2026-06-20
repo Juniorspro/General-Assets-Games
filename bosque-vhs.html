@@ -84,7 +84,7 @@
   <div id="app"></div>
   <div id="cross"></div>
   <div id="joy"><div id="joyKnob"></div></div>
-  <button id="flash" class="actBtn">🔦</button>
+  <button id="flash" class="actBtn">🪓</button>
   <button id="run" class="actBtn">CORRER</button>
 
   <button id="menuBtn" class="menuBtn" aria-label="Mundo">⚙</button>
@@ -117,7 +117,7 @@
     <div class="row" style="margin-bottom:0"><label>PBR / Relieve 3D <span id="reliefVal">700%</span></label><input type="range" id="relief" min="0" max="800" value="700" step="10"></div>
   </div>
 
-  <div id="hud"><span id="fps">–</span> FPS · <span id="treeCount">–</span> árboles</div>
+  <div id="hud"><span id="fps">–</span> FPS · <span id="treeCount">–</span> árboles · 🪵 <span id="wood">0</span></div>
   <div id="hint">Atardecer 🌅 · Joystick para caminar · arrastrá para mirar</div>
 </div>
 
@@ -387,19 +387,20 @@ function applyGodTextures(){
 const worldSeed=20260620;const speciesList=['roble','roble','abedul','pino','pino','roble','abedul'];
 let currentSeason='summer', densityMul=1.0;
 const grassGeo=(()=>{const a=new THREE.PlaneGeometry(0.14,0.55);a.translate(0,0.275,0);const b=a.clone();b.rotateY(Math.PI/2);return mergeGeometries([a,b],false);})();
-const chunkList=[];let totalTrees=0;
+const chunkList=[];const trees=[];const logs=[];let totalTrees=0;
 function hash2(a,b){let h=worldSeed^Math.imul(a|0,374761393)^Math.imul(b|0,668265263);h=Math.imul(h^(h>>>13),1274126177);return (h^(h>>>16))>>>0;}
 function buildChunk(cx,cz){
   const rng=mulberry32(hash2(cx,cz));const x0=cx*CHUNK,z0=cz*CHUNK;const grp=new THREE.Group();
-  const trunkGeos=[];const leafE=[];const lamps=[];const tmp=new THREE.Matrix4();
+  const lamps=[];
   const nTrees=Math.max(1,Math.round(Q.density*densityMul));
+  const lp=new THREE.PlaneGeometry(1.25,1.3);
   for(let i=0;i<nTrees;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+2.5)continue;
     const tree=createTree({species:speciesList[Math.floor(rng()*speciesList.length)],season:currentSeason,radial:Q.radial,leafCount:Q.leafPerTree},rng);
-    const world=new THREE.Matrix4().compose(new THREE.Vector3(x,terrainHeight(x,z)-0.05,z),new THREE.Quaternion().setFromAxisAngle(UP,rng()*6.28),new THREE.Vector3(1,1,1));
-    tree.trunkGeometry.applyMatrix4(world);trunkGeos.push(tree.trunkGeometry);for(const lf of tree.leaves){tmp.multiplyMatrices(world,lf.m);leafE.push({m:tmp.clone(),c:lf.c});}}
-  if(trunkGeos.length){const tr=new THREE.Mesh(mergeGeometries(trunkGeos,false),barkMat);tr.castShadow=tr.receiveShadow=true;trunkGeos.forEach(g=>g.dispose());grp.add(tr);
-    const lv=new THREE.InstancedMesh(new THREE.PlaneGeometry(1.25,1.3),leafMat,leafE.length);for(let i=0;i<leafE.length;i++){lv.setMatrixAt(i,leafE[i].m);lv.setColorAt(i,leafE[i].c);}lv.instanceMatrix.needsUpdate=true;grp.add(lv);}
-  totalTrees+=trunkGeos.length;
+    const tg=new THREE.Group(); tg.position.set(x,terrainHeight(x,z)-0.05,z); tg.rotation.y=rng()*6.28;
+    const tr=new THREE.Mesh(tree.trunkGeometry,barkMat); tr.castShadow=tr.receiveShadow=true; tg.add(tr);
+    const lv=new THREE.InstancedMesh(lp,leafMat,tree.leaves.length); for(let j=0;j<tree.leaves.length;j++){lv.setMatrixAt(j,tree.leaves[j].m);lv.setColorAt(j,tree.leaves[j].c);} lv.instanceMatrix.needsUpdate=true; tg.add(lv);
+    grp.add(tg); trees.push({tg,x,z,hp:5,hit:0,falling:0,dead:false,scale:1}); totalTrees++;
+  }
   // pasto (3 tipos) + plantas (3 tipos) — cross-quad con viento, abundante
   const dm=new THREE.Object3D();const gc=new THREE.Color();const fol=[];
   const scatter=(geo,mat,n,sMin,sMax,tintL)=>{ if(n<=0)return; const im=new THREE.InstancedMesh(geo,mat,n);let k=0;
@@ -432,7 +433,8 @@ function buildChunk(cx,cz){
 }
 function buildWorld(){
   for(const c of chunkList){scene.remove(c.grp);c.grp.traverse(o=>{if(o.geometry)o.geometry.dispose();});}
-  chunkList.length=0;totalTrees=0;
+  for(const lg of logs){scene.remove(lg.m);} logs.length=0;
+  chunkList.length=0;trees.length=0;totalTrees=0;
   for(let cx=W.x0;cx<=W.x1;cx++)for(let cz=W.z0;cz<=W.z1;cz++)buildChunk(cx,cz);
   document.getElementById('treeCount').textContent=totalTrees;
 }
@@ -488,10 +490,10 @@ function lookEnd(e){if(e.pointerId===lookId)lookId=null;}
 window.addEventListener('pointerup',lookEnd);window.addEventListener('pointercancel',lookEnd);
 renderer.domElement.addEventListener('click',()=>{if(!DEV.isMobile&&document.pointerLockElement!==renderer.domElement)renderer.domElement.requestPointerLock();});
 document.addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement){let mx=e.movementX,my=e.movementY;if(rot){const t=mx;mx=my;my=-t;}player.yaw-=mx*LOOK;player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch-my*LOOK));}});
-const keys={};addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='ShiftLeft'||e.code==='ShiftRight')running=true;});addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='ShiftLeft'||e.code==='ShiftRight')running=false;});
+const keys={};addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='ShiftLeft'||e.code==='ShiftRight')running=true;if(e.code==='Space')startSwing();});addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='ShiftLeft'||e.code==='ShiftRight')running=false;});
 const runBtn=document.getElementById('run');runBtn.addEventListener('pointerdown',e=>{running=true;runBtn.classList.add('on');e.preventDefault();});
 const stopRun=()=>{running=false;runBtn.classList.remove('on');};runBtn.addEventListener('pointerup',stopRun);runBtn.addEventListener('pointercancel',stopRun);runBtn.addEventListener('pointerleave',stopRun);
-const flashBtn=document.getElementById('flash');flashBtn.addEventListener('click',()=>{flashOn=!flashOn;flashBtn.classList.toggle('on',flashOn);});
+const flashBtn=document.getElementById('flash');flashBtn.addEventListener('click',()=>startSwing());
 
 /* ===================== AUDIO ===================== */
 let actx=null,windGain=null,soundOn=false;
@@ -529,6 +531,63 @@ $('menuBtn').addEventListener('click',()=>{$('ui').classList.add('open');});
 $('vfxBtn').addEventListener('click',()=>{$('vfx').classList.add('open');});
 document.querySelectorAll('.closeBtn').forEach(b=>b.addEventListener('click',()=>$(b.dataset.close).classList.remove('open')));
 let hinted=false;function dismissHint(){if(!hinted){hinted=true;$('hint').classList.add('hide');}}
+
+/* ===================== TALA: hacha en 1ª persona + astillas + troncos ===================== */
+let woodCount=0; const woodHUD=$('wood');
+function buildFPAxe(){const g=new THREE.Group();
+  const hM=new THREE.MeshStandardMaterial({color:0x161719,roughness:0.82,metalness:0});
+  const sM=new THREE.MeshStandardMaterial({color:0xb9bec6,metalness:1,roughness:0.34,envMapIntensity:1.2});
+  const eM=new THREE.MeshStandardMaterial({color:0xe8ecf2,metalness:1,roughness:0.1,envMapIntensity:1.7});
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.036,0.046,1.15,16),hM));
+  const head=new THREE.Mesh(new THREE.BoxGeometry(0.40,0.32,0.06),sM);head.position.set(-0.10,0.60,0);g.add(head);
+  const edge=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.34,0.07),eM);edge.position.set(-0.32,0.60,0);g.add(edge);
+  const pick=new THREE.Mesh(new THREE.ConeGeometry(0.05,0.22,8),sM);pick.position.set(0.13,0.80,0);pick.rotation.z=-0.5;g.add(pick);
+  return g;}
+const fpAxe=buildFPAxe(); fpAxe.scale.setScalar(0.78); fpAxe.position.set(0.34,-0.34,-0.72); fpAxe.rotation.set(0.2,0.5,0.15);
+camera.add(fpAxe); scene.add(camera);
+const FP_BASE=fpAxe.rotation.clone();
+let swing={active:false,t:0,hit:false};
+function startSwing(){ if(!swing.active){swing.active=true;swing.t=0;swing.hit=false;} }
+
+const partGeo=new THREE.BoxGeometry(0.05,0.05,0.16);const partMat=new THREE.MeshStandardMaterial({color:0x6e4c2c,roughness:0.95,metalness:0});
+const PART_MAX=180;const parts=new THREE.InstancedMesh(partGeo,partMat,PART_MAX);parts.frustumCulled=false;scene.add(parts);
+const pst=[];for(let i=0;i<PART_MAX;i++)pst.push({life:0,p:new THREE.Vector3(),v:new THREE.Vector3(),r:new THREE.Euler(),rv:new THREE.Vector3()});let pHead=0;const _po=new THREE.Object3D();
+function emitSplinters(p,n){for(let i=0;i<n;i++){const s=pst[pHead];s.life=0.6+Math.random()*0.5;s.p.copy(p);s.v.set((Math.random()-0.5)*4.5,2.5+Math.random()*3,(Math.random()-0.5)*4.5);s.r.set(Math.random()*6,Math.random()*6,Math.random()*6);s.rv.set((Math.random()-.5)*12,(Math.random()-.5)*12,(Math.random()-.5)*12);pHead=(pHead+1)%PART_MAX;}}
+
+const logGeo=new THREE.CylinderGeometry(0.17,0.19,1.05,14);
+function spawnLogs(x,z,by){for(let i=0;i<4;i++){const m=new THREE.Mesh(logGeo,barkMat);m.castShadow=true;m.position.set(x+(Math.random()-0.5)*0.7,by+0.9+i*0.12,z+(Math.random()-0.5)*0.7);m.rotation.set(Math.random()*6,Math.random()*6,Math.random()*6);scene.add(m);logs.push({m,v:new THREE.Vector3((Math.random()-0.5)*2.5,2+Math.random()*2,(Math.random()-0.5)*2.5),settled:false,picked:false});}}
+
+function doChop(){
+  let best=null,bestD=1e9;const sy=Math.sin(player.yaw),cy=Math.cos(player.yaw);
+  for(const t of trees){ if(t.dead||t.falling)continue; const dx=t.x-player.pos.x,dz=t.z-player.pos.z;const d=dx*dx+dz*dz; if(d>bestD||d>12)continue;
+    const fl=Math.hypot(dx,dz)||1; const dot=(-sy*dx-cy*dz)/fl; if(dot<0.45)continue; bestD=d;best=t; }
+  if(best){ best.hp--; best.hit=1; best.scale*=0.9;
+    emitSplinters(new THREE.Vector3(best.x,terrainHeight(best.x,best.z)+1.3,best.z),14); chopSound();
+    if(best.hp<=0){ best.falling=0.0001; spawnLogs(best.x,best.z,terrainHeight(best.x,best.z)); } }
+}
+function chopSound(){ if(!actx||!soundOn)return; const b=actx.createBuffer(1,actx.sampleRate*0.12,actx.sampleRate);const d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,3);
+  const s=actx.createBufferSource();s.buffer=b;const bp=actx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=170+Math.random()*70;const g=actx.createGain();g.gain.value=0.28;s.connect(bp).connect(g).connect(actx.destination);s.start(); }
+
+function chopTick(dt){
+  // swing del hacha
+  if(swing.active){ swing.t+=dt/0.42; const a=Math.sin(Math.min(swing.t,1)*Math.PI);
+    fpAxe.rotation.x=FP_BASE.x-a*1.35; fpAxe.rotation.z=FP_BASE.z+a*0.35;
+    if(swing.t>=0.5&&!swing.hit){swing.hit=true;doChop();}
+    if(swing.t>=1){swing.active=false;fpAxe.rotation.copy(FP_BASE);} }
+  // árboles: temblor / encogerse / caer
+  for(const t of trees){ if(t.dead)continue;
+    if(t.falling){ t.falling+=dt; t.tg.rotation.z=Math.min(1.5,t.falling*1.7); t.tg.position.y-=dt*0.25; if(t.falling>1.4){t.dead=true;t.tg.visible=false;} }
+    else{ const sc=t.tg.scale.x; if(Math.abs(sc-t.scale)>0.002)t.tg.scale.setScalar(sc+(t.scale-sc)*Math.min(1,12*dt));
+      if(t.hit>0){t.hit=Math.max(0,t.hit-dt*3.2);t.tg.rotation.z=Math.sin(windU.uTime.value*42)*0.05*t.hit;}else if(t.tg.rotation.z){t.tg.rotation.z*=0.85;} } }
+  // astillas
+  for(let i=0;i<PART_MAX;i++){const s=pst[i]; if(s.life>0){s.life-=dt;s.v.y-=9.8*dt;s.p.addScaledVector(s.v,dt);s.r.x+=s.rv.x*dt;s.r.y+=s.rv.y*dt;s.r.z+=s.rv.z*dt;_po.position.copy(s.p);_po.rotation.copy(s.r);_po.scale.setScalar(1);}else{_po.position.set(0,-9999,0);_po.scale.setScalar(0.0001);}_po.updateMatrix();parts.setMatrixAt(i,_po.matrix);}
+  parts.instanceMatrix.needsUpdate=true;
+  // troncos: caer, asentarse, recoger
+  for(let i=logs.length-1;i>=0;i--){const lg=logs[i]; if(lg.picked){logs.splice(i,1);continue;}
+    if(!lg.settled){ lg.v.y-=9.8*dt; lg.m.position.addScaledVector(lg.v,dt); const gy=terrainHeight(lg.m.position.x,lg.m.position.z)+0.18;
+      if(lg.m.position.y<=gy){lg.m.position.y=gy;lg.settled=true;lg.m.rotation.set(Math.PI/2,Math.random()*6,0);} }
+    const dx=lg.m.position.x-player.pos.x,dz=lg.m.position.z-player.pos.z; if(dx*dx+dz*dz<2.3){scene.remove(lg.m);lg.picked=true;woodCount++;if(woodHUD)woodHUD.textContent=woodCount;} }
+}
 
 /* ===================== LOOP ===================== */
 addEventListener('resize',layout);
@@ -571,6 +630,7 @@ function update(dt){
   for(const c of chunkList){const dx=c.center.x-player.pos.x,dz=c.center.z-player.pos.z;const d2=dx*dx+dz*dz;
     const vis=d2<rd2&&_frustum.intersectsSphere(c.sphere);c.grp.visible=vis;
     if(vis){const fv=d2<gd2;for(let i=0;i<c.fol.length;i++)c.fol[i].visible=fv;}}
+  chopTick(dt);
   windU.uTime.value+=dt;
 }
 function animate(){requestAnimationFrame(animate);if(paused)return;const dt=Math.min(clock.getDelta(),0.05);update(dt);

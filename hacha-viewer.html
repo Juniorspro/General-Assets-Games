@@ -102,9 +102,8 @@ function knurlTex(){const S=256;const c=document.createElement('canvas');c.width
   for(let i=-n;i<n*2;i++){g.strokeStyle='#cfcfcf';g.beginPath();g.moveTo(i*st,0);g.lineTo(i*st+S,S);g.stroke();g.beginPath();g.moveTo(i*st,0);g.lineTo(i*st-S,S);g.stroke();}
   for(let i=-n;i<n*2;i++){g.strokeStyle='#343434';g.beginPath();g.moveTo(i*st+st*0.5,0);g.lineTo(i*st+st*0.5+S,S);g.stroke();g.beginPath();g.moveTo(i*st+st*0.5,0);g.lineTo(i*st+st*0.5-S,S);g.stroke();}
   const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(5,11);return t;}
-const orangeMat=new THREE.MeshStandardMaterial({color:0xe2491b,metalness:0.25,roughness:0.42,roughnessMap:ironRough(),envMapIntensity:0.9});   // chapa pintada naranja
-const cantoMat =new THREE.MeshStandardMaterial({color:0xb53c12,metalness:0.25,roughness:0.5,envMapIntensity:0.8});                              // canto pintado
-const steelMat =new THREE.MeshStandardMaterial({color:0xc3c7cd,metalness:1.0,roughness:0.26,bumpMap:ironBump(),bumpScale:0.01,envMapIntensity:1.6}); // filo / collar acero
+const bodyMat =new THREE.MeshStandardMaterial({color:0x9aa0a6,metalness:1.0,roughness:0.46,bumpMap:ironBump(),bumpScale:0.012,roughnessMap:ironRough(),envMapIntensity:1.3}); // acero crudo
+const steelMat=new THREE.MeshStandardMaterial({color:0xe2e6ec,metalness:1.0,roughness:0.10,envMapIntensity:1.9});                                // filo bien pulido
 const handleMat=new THREE.MeshStandardMaterial({color:0x161719,metalness:0.0,roughness:0.82,bumpMap:knurlTex(),bumpScale:0.03});                 // mango goma negra
 
 /* ===== Cabeza del hacha: perfil 2D extruido + afinado del filo ===== */
@@ -136,7 +135,7 @@ function buildHead(){
     const nz=Math.abs((nor.getZ(i)+nor.getZ(i+1)+nor.getZ(i+2))/3);
     g.addGroup(i,3, nz<0.6 ? (cx<-1.7?2:1) : 0);
   }
-  const head=new THREE.Mesh(g,[orangeMat,cantoMat,steelMat]); head.castShadow=true; head.receiveShadow=true;
+  const head=new THREE.Mesh(g,[bodyMat,bodyMat,steelMat]); head.castShadow=true; head.receiveShadow=true;
   return head;
 }
 
@@ -169,22 +168,21 @@ const MAXA=Math.min(8,renderer.capabilities.getMaxAnisotropy());
 function L(url,srgb){return texLoader.loadAsync(url).then(t=>{t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXA;return t;});}
 (function loadAxePBR(){
   const P='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d5bc265/assets/textures/axe/';
-  Promise.all([L(P+'metal_nrm.jpg',false),L(P+'metal_rgh.jpg',false)]).then(([n,r])=>{
-    [n,r].forEach(t=>t.repeat.set(1.5,1.5));
-    orangeMat.normalMap=n;orangeMat.normalScale.set(0.4,0.4);orangeMat.needsUpdate=true;          // raspones en la pintura
-    cantoMat.normalMap=n;cantoMat.normalScale.set(0.4,0.4);cantoMat.needsUpdate=true;
-    steelMat.normalMap=n;steelMat.roughnessMap=r;steelMat.bumpMap=null;steelMat.normalScale.set(0.8,0.8);steelMat.needsUpdate=true;
+  Promise.all([L(P+'metal_col.jpg',true),L(P+'metal_nrm.jpg',false),L(P+'metal_rgh.jpg',false),L(P+'metal_met.jpg',false)]).then(([c,n,r,m])=>{
+    [c,n,r,m].forEach(t=>t.repeat.set(1.6,1.6));
+    bodyMat.map=c;bodyMat.normalMap=n;bodyMat.roughnessMap=r;bodyMat.metalnessMap=m;bodyMat.bumpMap=null;bodyMat.color.set(0xffffff);bodyMat.normalScale.set(1.0,1.0);bodyMat.needsUpdate=true;
+    steelMat.normalMap=n;steelMat.normalScale.set(0.5,0.5);steelMat.needsUpdate=true;              // filo pulido con micro-raspones
   }).catch(()=>{});
 })();
 
 /* ===== UI ===== */
 const $=id=>document.getElementById(id);
 const rotSw=$('rot'); rotSw.addEventListener('click',()=>{rotSw.classList.toggle('on');controls.autoRotate=rotSw.classList.contains('on');});
-$('rg').addEventListener('input',e=>{const v=+e.target.value/100;orangeMat.roughness=v;cantoMat.roughness=Math.min(0.75,v+0.08);steelMat.roughness=v*0.6;$('rgVal').textContent=(v*100|0)+'%';});
-$('en').addEventListener('input',e=>{const v=+e.target.value/100;orangeMat.envMapIntensity=v*0.7;cantoMat.envMapIntensity=v*0.6;steelMat.envMapIntensity=v*1.25;$('enVal').textContent=(v*100|0)+'%';});
+$('rg').addEventListener('input',e=>{const v=+e.target.value/100;bodyMat.roughness=v;steelMat.roughness=Math.max(0.05,v*0.4);$('rgVal').textContent=(v*100|0)+'%';});
+$('en').addEventListener('input',e=>{const v=+e.target.value/100;bodyMat.envMapIntensity=v;steelMat.envMapIntensity=v*1.4;$('enVal').textContent=(v*100|0)+'%';});
 $('li').addEventListener('input',e=>{const v=+e.target.value/100;key.intensity=2.6*v;rim.intensity=1.4*v;$('liVal').textContent=(v*100|0)+'%';});
 $('bl').addEventListener('input',e=>{const v=+e.target.value;if(bloom)bloom.intensity=v/100;$('blVal').textContent=v+'%';});
-$('ed').addEventListener('input',e=>{const v=+e.target.value/100;if(steelMat.normalScale)steelMat.normalScale.set(0.3+1.3*v,0.3+1.3*v);if(orangeMat.normalScale)orangeMat.normalScale.set(0.2+0.7*v,0.2+0.7*v);$('edVal').textContent=(v*100|0)+'%';});
+$('ed').addEventListener('input',e=>{const v=+e.target.value/100;if(bodyMat.normalScale)bodyMat.normalScale.set(0.4+1.4*v,0.4+1.4*v);$('edVal').textContent=(v*100|0)+'%';});
 
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);if(composer)composer.setSize(innerWidth,innerHeight);});
 
