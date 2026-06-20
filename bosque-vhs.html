@@ -568,10 +568,12 @@ function buildFPAxe(){
   return g;
 }
 const fpAxe=buildFPAxe(); fpAxe.scale.setScalar(0.46); fpAxe.position.set(0.33,-0.5,-0.82); fpAxe.rotation.set(0.12,Math.PI/2,0.18);
+fpAxe.visible=false;                       // oculta durante la cinemática; se levanta al terminar
 camera.add(fpAxe); scene.add(camera);
-const FP_BASE=fpAxe.rotation.clone();
+const FP_BASE=fpAxe.rotation.clone(), FP_POS=fpAxe.position.clone();
+const equip={active:false,t:0};
 let swing={active:false,t:0,hit:false};
-function startSwing(){ if(!swing.active){swing.active=true;swing.t=0;swing.hit=false;} }
+function startSwing(){ if(intro.active||equip.active)return; if(!swing.active){swing.active=true;swing.t=0;swing.hit=false;} }
 
 const partGeo=new THREE.BoxGeometry(0.05,0.05,0.16);const partMat=new THREE.MeshStandardMaterial({color:0x6e4c2c,roughness:0.95,metalness:0});
 const PART_MAX=180;const parts=new THREE.InstancedMesh(partGeo,partMat,PART_MAX);parts.frustumCulled=false;scene.add(parts);
@@ -592,16 +594,17 @@ function doChop(){
 // ===== física de tala (cannon-es) =====
 let physWorld=null,physGround=null; const oMat=new CANNON.Material('o'),gMat=new CANNON.Material('g'); const _up=new THREE.Vector3();
 const debrisGeo=new THREE.BoxGeometry(0.16,0.16,0.56); const debris=[];
-function ensureWorld(){ if(physWorld)return; physWorld=new CANNON.World({gravity:new CANNON.Vec3(0,-18,0)}); physWorld.allowSleep=true; physWorld.broadphase=new CANNON.SAPBroadphase(physWorld);
+function ensureWorld(){ if(physWorld)return; physWorld=new CANNON.World({gravity:new CANNON.Vec3(0,-9.82,0)}); physWorld.allowSleep=true; physWorld.broadphase=new CANNON.SAPBroadphase(physWorld);
   physWorld.addContactMaterial(new CANNON.ContactMaterial(gMat,oMat,{friction:0.85,restitution:0.0}));
   physGround=new CANNON.Body({type:CANNON.Body.STATIC,shape:new CANNON.Plane(),material:gMat}); physGround.collisionFilterGroup=1; physGround.collisionFilterMask=2; physGround.quaternion.setFromEuler(-Math.PI/2,0,0); physWorld.addBody(physGround); }
-function felltree(t){ if(t.state!=='alive')return; ensureWorld(); t.state='falling'; t.felledT=0;
-  const by=terrainHeight(t.x,t.z); physGround.position.y=by; const H=t.h||5;
-  const b=new CANNON.Body({mass:32,material:oMat}); b.angularDamping=0.1; b.linearDamping=0.02; b.collisionFilterGroup=2; b.collisionFilterMask=1;
-  b.addShape(new CANNON.Box(new CANNON.Vec3(0.5,H/2,0.5)),new CANNON.Vec3(0,H/2,0));
-  b.position.set(t.x,by,t.z); b.quaternion.copy(t.tg.quaternion);
+function felltree(t){ if(t.state!=='alive')return; ensureWorld(); t.state='falling'; t.felledT=0; t.bh=t.h||5; const H=t.bh;
+  const by=terrainHeight(t.x,t.z); physGround.position.y=by;
+  // cuerpo con el CENTRO de masa en el medio del tronco → vuelca natural y queda tumbado (física real)
+  const b=new CANNON.Body({mass:30,material:oMat}); b.angularDamping=0.04; b.linearDamping=0.01; b.collisionFilterGroup=2; b.collisionFilterMask=1;
+  b.addShape(new CANNON.Box(new CANNON.Vec3(0.42,H/2,0.42)));   // caja centrada en el cuerpo (sin offset)
+  b.position.set(t.x,by+H/2,t.z);
   const ax=t.x-player.pos.x,az=t.z-player.pos.z,fl=Math.hypot(ax,az)||1;
-  b.angularVelocity.set((az/fl)*2.8,0,-(ax/fl)*2.8);     // vuelca decidido alejándose del jugador
+  b.angularVelocity.set((az/fl)*1.25,0,-(ax/fl)*1.25);   // empujoncito inicial; la gravedad termina de voltearlo
   physWorld.addBody(b); t.body=b;
   for(let i=0;i<6;i++){const m=new THREE.Mesh(debrisGeo,barkMat);m.castShadow=true;const hh=by+1.6+Math.random()*Math.max(1,H-1.6);
     m.position.set(t.x+(Math.random()-.5)*0.6,hh,t.z+(Math.random()-.5)*0.6);scene.add(m);
@@ -618,6 +621,9 @@ function chopSound(){ if(!actx||!soundOn)return; const b=actx.createBuffer(1,act
   const s=actx.createBufferSource();s.buffer=b;const bp=actx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=170+Math.random()*70;const g=actx.createGain();g.gain.value=0.28;s.connect(bp).connect(g).connect(actx.destination);s.start(); }
 
 function chopTick(dt){
+  if(equip.active){ equip.t+=dt/0.55; const e=Math.min(1,equip.t); const k=1-Math.pow(1-e,3); // se levanta el hacha suave
+    fpAxe.position.y=FP_POS.y-0.55*(1-k); fpAxe.rotation.x=FP_BASE.x-(1-k)*0.7;
+    if(e>=1){equip.active=false; fpAxe.position.copy(FP_POS); fpAxe.rotation.copy(FP_BASE);} }
   if(swing.active){ swing.t+=dt/0.42; const a=Math.sin(Math.min(swing.t,1)*Math.PI);
     fpAxe.rotation.x=FP_BASE.x-a*1.35; fpAxe.rotation.z=FP_BASE.z+a*0.35;
     if(swing.t>=0.5&&!swing.hit){swing.hit=true;doChop();}
@@ -627,11 +633,10 @@ function chopTick(dt){
   for(const t of trees){ if(t.dead)continue;
     if(t.state==='alive'){ const sc=t.tg.scale.x; if(Math.abs(sc-t.scale)>0.002)t.tg.scale.setScalar(sc+(t.scale-sc)*Math.min(1,12*dt));
       if(t.hit>0){t.hit=Math.max(0,t.hit-dt*3.2);t.tg.rotation.z=Math.sin(windU.uTime.value*42)*0.05*t.hit;}else if(t.tg.rotation.z){t.tg.rotation.z*=0.85;} }
-    else { if(t.body){t.tg.position.copy(t.body.position);t.tg.quaternion.copy(t.body.quaternion);
-        // cuando ya quedó tumbado lo frenamos y congelamos: nunca "se levanta", queda en el piso
-        if(t.state==='falling'){ _up.set(0,1,0).applyQuaternion(t.body.quaternion);
-          if(_up.y<0.45){ t.body.angularDamping=0.92; t.body.linearDamping=0.9; t.body.angularVelocity.scale(0.55,t.body.angularVelocity);
-            if(t.body.velocity.length()<0.8&&t.body.angularVelocity.length()<0.9){ t.body.type=CANNON.Body.STATIC; t.body.updateMassProperties(); t.body.sleep(); } } } }
+    else { if(t.body){ t.tg.quaternion.copy(t.body.quaternion);
+        // el cuerpo está centrado; la base del tronco está a -H/2 del centro (rotado)
+        _up.set(0,-(t.bh||5)/2,0).applyQuaternion(t.body.quaternion);
+        t.tg.position.set(t.body.position.x+_up.x,t.body.position.y+_up.y,t.body.position.z+_up.z); }
       t.felledT+=dt;
       if(t.state==='falling'&&t.felledT>=3){ t.state='fading'; t.fadeT=0; t.tg.traverse(o=>{if(o.material){o.material=o.material.clone();o.material.transparent=true;}}); }
       if(t.state==='fading'){ t.fadeT+=dt; const op=Math.max(0,1-t.fadeT/0.8); t.tg.traverse(o=>{if(o.material)o.material.opacity=op;});
@@ -679,7 +684,7 @@ function update(dt){
     camera.position.y=gy+THREE.MathUtils.lerp(0.42,EYE+bobY+br,e);                 // tirados en el suelo → de pie
     euler.set(THREE.MathUtils.lerp(0.92,player.pitch,e),player.yaw+shx,THREE.MathUtils.lerp(-1.40,player.roll,e)); // mirando arriba y de costado → al frente y derecho
     camera.quaternion.setFromEuler(euler);
-    if(p>=1)intro.active=false; }
+    if(p>=1){intro.active=false; equip.active=true; equip.t=0; fpAxe.visible=true;} }
   dirLight.position.copy(player.pos).addScaledVector(lightVec,50);dirLight.target.position.copy(player.pos);dirLight.target.updateMatrixWorld();
   cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
   cloud1.material.map.offset.x+=dt*0.004;cloud2.material.map.offset.x+=dt*0.0026;
