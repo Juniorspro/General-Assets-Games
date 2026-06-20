@@ -534,16 +534,27 @@ let hinted=false;function dismissHint(){if(!hinted){hinted=true;$('hint').classL
 
 /* ===================== TALA: hacha en 1ª persona + astillas + troncos ===================== */
 let woodCount=0; const woodHUD=$('wood');
-function buildFPAxe(){const g=new THREE.Group();
-  const hM=new THREE.MeshStandardMaterial({color:0x161719,roughness:0.82,metalness:0});
-  const sM=new THREE.MeshStandardMaterial({color:0xb9bec6,metalness:1,roughness:0.34,envMapIntensity:1.2});
-  const eM=new THREE.MeshStandardMaterial({color:0xe8ecf2,metalness:1,roughness:0.1,envMapIntensity:1.7});
-  g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.036,0.046,1.15,16),hM));
-  const head=new THREE.Mesh(new THREE.BoxGeometry(0.40,0.32,0.06),sM);head.position.set(-0.10,0.60,0);g.add(head);
-  const edge=new THREE.Mesh(new THREE.BoxGeometry(0.06,0.34,0.07),eM);edge.position.set(-0.32,0.60,0);g.add(edge);
-  const pick=new THREE.Mesh(new THREE.ConeGeometry(0.05,0.22,8),sM);pick.position.set(0.13,0.80,0);pick.rotation.z=-0.5;g.add(pick);
-  return g;}
-const fpAxe=buildFPAxe(); fpAxe.scale.setScalar(0.78); fpAxe.position.set(0.34,-0.34,-0.72); fpAxe.rotation.set(0.2,0.5,0.15);
+function buildFPAxe(){
+  const g=new THREE.Group();
+  const bodyMat=new THREE.MeshStandardMaterial({color:0x9aa0a6,metalness:1,roughness:0.4,envMapIntensity:1.1});
+  const edgeMat=new THREE.MeshStandardMaterial({color:0xe6eaf0,metalness:1,roughness:0.12,envMapIntensity:1.5});
+  const gripMat=new THREE.MeshStandardMaterial({color:0x161719,metalness:0,roughness:0.85});
+  const s=new THREE.Shape();
+  s.moveTo(0.2,-1.0);s.lineTo(1.2,-1.0);s.lineTo(1.5,0.2);
+  s.quadraticCurveTo(1.95,1.55,1.5,2.45);s.quadraticCurveTo(1.15,3.15,0.25,3.45);
+  s.quadraticCurveTo(0.6,2.55,0.2,2.0);s.lineTo(-0.5,2.0);
+  s.quadraticCurveTo(-2.7,2.2,-3.4,1.0);s.quadraticCurveTo(-3.55,0.3,-2.8,-0.4);
+  s.quadraticCurveTo(-1.8,-1.0,-0.7,-1.0);s.lineTo(0.2,-1.0);
+  const hole=new THREE.Path();hole.moveTo(-1.5,1.25);hole.quadraticCurveTo(0.55,1.5,0.7,0.15);hole.quadraticCurveTo(0.45,-0.5,-0.25,-0.25);hole.quadraticCurveTo(-1.45,0.05,-1.5,1.25);s.holes.push(hole);
+  const hg=new THREE.ExtrudeGeometry(s,{depth:0.34,bevelEnabled:true,bevelThickness:0.05,bevelSize:0.05,bevelSegments:2,curveSegments:24});
+  hg.center(); hg.clearGroups(); const pp=hg.attributes.position,nn=hg.attributes.normal;
+  for(let i=0;i<pp.count;i+=3){const cx=(pp.getX(i)+pp.getX(i+1)+pp.getX(i+2))/3;const nz=Math.abs((nn.getZ(i)+nn.getZ(i+1)+nn.getZ(i+2))/3);hg.addGroup(i,3,nz<0.6?(cx<-1.7?2:1):0);}
+  const head=new THREE.Mesh(hg,[bodyMat,bodyMat,edgeMat]);
+  const headG=new THREE.Group(); headG.add(head); headG.scale.setScalar(0.32); headG.position.set(-0.15,1.25,0); g.add(headG);
+  const handle=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.065,2.5,18),gripMat); g.add(handle);
+  return g;
+}
+const fpAxe=buildFPAxe(); fpAxe.scale.setScalar(0.2); fpAxe.position.set(0.42,-0.52,-1.0); fpAxe.rotation.set(0.12,-0.42,-0.32);
 camera.add(fpAxe); scene.add(camera);
 const FP_BASE=fpAxe.rotation.clone();
 let swing={active:false,t:0,hit:false};
