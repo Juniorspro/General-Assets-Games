@@ -70,6 +70,16 @@
   #hint { position: fixed; left: 50%; top: 50%; transform: translate(-50%, 64px); z-index: 24; font-size: 12px; text-align: center; line-height: 1.6;
           opacity: .8; pointer-events: none; transition: opacity .6s; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
   #hint.hide { opacity: 0; }
+
+  /* Overlay found-footage (OSD de cámara) */
+  #ff { position: fixed; left: 16px; top: calc(14px + var(--safe-t)); z-index: 26; font-family: "Courier New", monospace;
+        font-size: 13px; letter-spacing: .06em; color: #f4f4f4; line-height: 1.5; pointer-events: none;
+        text-shadow: 0 0 4px rgba(0,0,0,.9), 0 0 9px rgba(255,255,255,.12); }
+  #ff .rec { display: flex; align-items: center; gap: 7px; font-weight: bold; }
+  #ff .rdot { width: 11px; height: 11px; border-radius: 50%; background: #ff2b2b; box-shadow: 0 0 8px #ff2b2b; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #ff .tc { opacity: .92; }
+  #ff .meta { opacity: .7; font-size: 11px; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -77,6 +87,11 @@
 <div id="loader"><div class="leaf-spin"></div><p>Generando el mundo…</p></div>
 
 <div id="cross"></div>
+<div id="ff">
+  <div class="rec"><span class="rdot"></span>REC</div>
+  <div class="tc" id="tc">00:00:00:00</div>
+  <div class="meta">SP · CAM01 · <span id="batt">██▌</span></div>
+</div>
 <div id="joy" class="ui-block"><div id="joyKnob"></div></div>
 <button id="flash" class="actBtn ui-block" aria-label="Linterna">🔦</button>
 <button id="run" class="actBtn ui-block">CORRER</button>
@@ -122,6 +137,10 @@
     <label>Balanceo al caminar <span id="bobVal">100%</span></label>
     <input type="range" id="bob" min="0" max="200" value="100" step="5" />
   </div>
+  <div class="row">
+    <label>Efecto VHS <span id="vhsVal">100%</span></label>
+    <input type="range" id="vhs" min="0" max="160" value="100" step="5" />
+  </div>
   <div class="row toggle" style="margin-bottom:0"><span>Sonido (pasos/viento)</span><div class="switch" id="snd"></div></div>
 </div>
 
@@ -131,8 +150,9 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.39.1/build/index.js"
   }
 }
 </script>
@@ -141,11 +161,37 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { EffectComposer, RenderPass, EffectPass, Effect,
+         BloomEffect, ChromaticAberrationEffect, LensDistortionEffect, ScanlineEffect,
+         NoiseEffect, VignetteEffect, GlitchEffect, ToneMappingEffect, ToneMappingMode } from 'postprocessing';
+
+/* ===== Efecto VHS propio (se fusiona en el EffectPass; sin taps → no es convolution) ===== */
+const VHS_FRAG = /* glsl */`
+uniform float intensity; uniform float tracking;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
+void mainUv(inout vec2 uv){
+  float line = floor(uv.y*240.0);
+  uv.x += (hash(vec2(line, floor(time*24.0)))-0.5) * 0.004 * tracking;     // jitter por línea
+  if(uv.y < 0.05){ uv.x += (hash(vec2(floor(time*12.0),3.0))-0.5)*0.06*tracking; } // head-switch
+}
+void mainImage(const in vec4 c, const in vec2 uv, out vec4 o){
+  vec3 col = c.rgb;
+  float n = hash(uv*vec2(3.0,420.0)+time);
+  col += step(0.994, n) * 0.5 * intensity;                                 // motas/tracking blanco
+  col -= sin(uv.y*800.0 + time*5.0) * 0.02 * intensity;                    // banda de ruido tenue
+  col *= 1.0 - 0.06*intensity;                                             // leve crush de luma
+  o = vec4(col, c.a);
+}`;
+class VHSEffect extends Effect {
+  constructor({ intensity = 1, tracking = 1 } = {}) {
+    super('VHSEffect', VHS_FRAG, { uniforms: new Map([
+      ['intensity', new THREE.Uniform(intensity)],
+      ['tracking',  new THREE.Uniform(tracking)] ]) });
+  }
+  get tracking(){ return this.uniforms.get('tracking').value; }
+  set tracking(v){ this.uniforms.get('tracking').value = v; }
+  set intensity(v){ this.uniforms.get('intensity').value = v; }
+}
 
 /* ===== PRNG + modelo de árbol (igual que lib/tree-model.js) ===== */
 function mulberry32(a){return function(){a|=0;a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};}
@@ -221,12 +267,12 @@ document.getElementById('tierInfo').textContent=`${DEV.isMobile?(DEV.isAndroid?'
 
 /* ===================== RENDERER / ESCENA ===================== */
 const app=document.getElementById('app');
-const renderer=new THREE.WebGLRenderer({antialias:!Q.post,powerPreference:'high-performance'});
+const renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
 renderer.setSize(innerWidth,innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio,Q.dpr));
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.0;
+renderer.toneMapping=THREE.NoToneMapping;            // el ToneMappingEffect de postprocessing maneja el tono/exposición
 const maxAniso=Math.min(Q.maxAniso,renderer.capabilities.getMaxAnisotropy());
 app.appendChild(renderer.domElement);
 
@@ -235,7 +281,7 @@ scene.fog=new THREE.FogExp2(0x10141c,0.02);
 const camera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,0.1,6000);
 
 /* ===================== CIELO DÍA + DOMO NOCHE + ESTRELLAS ===================== */
-const pmrem=new THREE.PMREMGenerator(renderer);pmrem.compileEquirectangularShader();
+const pmrem=new THREE.PMREMGenerator(renderer);if(pmrem.compileEquirectangularShader)pmrem.compileEquirectangularShader();
 const sky=new Sky();sky.scale.setScalar(8000);
 const skyU=sky.material.uniforms;
 skyU.turbidity.value=6;skyU.rayleigh.value=1.6;skyU.mieCoefficient.value=0.005;skyU.mieDirectionalG.value=0.8;
@@ -277,7 +323,7 @@ function setTime(elev,azim=125){
   nightDome.visible=nightFactor>0.01;stars.visible=nightFactor>0.05;
   scene.fog.color.setHSL(THREE.MathUtils.lerp(0.62,0.58,day),0.25,THREE.MathUtils.lerp(0.05,0.6,day));
   renderer.toneMappingExposure=THREE.MathUtils.lerp(1.35,1.0,day);
-  if(bloomPass) bloomPass.strength=THREE.MathUtils.lerp(0.5,0.24,day);
+  if(bloomEffect) bloomEffect.intensity=THREE.MathUtils.lerp(0.95,0.45,day);
 }
 function updateEnvironment(){
   const es=new THREE.Scene();const s=new Sky();s.scale.setScalar(100);const u=s.material.uniforms;
@@ -466,15 +512,44 @@ function rebuildWorld(){
   document.getElementById('treeCount').textContent=totalTrees;
 }
 
-/* ===================== POST-PROCESO ===================== */
-let composer=null,bloomPass=null;
+/* ===================== POST-PROCESO VHS / FOUND-FOOTAGE ===================== */
+// Un único EffectPass de color fusiona casi todo en 1 draw (clave en móvil). El bloom
+// (convolution) y la CA (convolution) van como se permite: CA es la ÚNICA convolution del
+// pase de color, el bloom es su propio pase.
+let composer=null, bloomEffect=null, vhsEffect=null, glitchEffect=null, caEffect=null, scanEffect=null, grainEffect=null, lensEffect=null;
+let vhsIntensity=1.0, trackingSpike=0;
 function buildComposer(){
-  composer=new EffectComposer(renderer);composer.addPass(new RenderPass(scene,camera));
-  bloomPass=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),0.5,0.75,0.78);composer.addPass(bloomPass);
-  if(Q.smaa)composer.addPass(new SMAAPass(innerWidth*Q.dpr,innerHeight*Q.dpr));
-  composer.addPass(new OutputPass());composer.setPixelRatio(Math.min(devicePixelRatio,Q.dpr));composer.setSize(innerWidth,innerHeight);
+  composer=new EffectComposer(renderer,{ frameBufferType:THREE.HalfFloatType });  // HDR → bloom/tono adaptativo correctos
+  composer.addPass(new RenderPass(scene,camera));
+
+  // Bloom (fluorescentes / farolas) — mipmap = barato. Pase propio (convolution).
+  if(DEV.tier!=='low'){
+    bloomEffect=new BloomEffect({ intensity:0.7, luminanceThreshold:0.62, luminanceSmoothing:0.22, mipmapBlur:true, radius:0.7 });
+    composer.addPass(new EffectPass(camera, bloomEffect));
+  }
+
+  // Exposición adaptativa (nervio óptico): se aclara al apuntar la linterna, sin perder lo oscuro.
+  const toneMode = DEV.tier==='low' ? ToneMappingMode.AGX : ToneMappingMode.REINHARD2_ADAPTIVE;
+  const tone=new ToneMappingEffect({ mode:toneMode, adaptationRate:1.1, middleGrey:0.4, whitePoint:8, minLuminance:0.16, resolution:256 });
+
+  // Look VHS analógico
+  lensEffect=new LensDistortionEffect({ distortion:new THREE.Vector2(0.06,0.06) });   // fisheye suave ~6%
+  vhsEffect=new VHSEffect({ intensity:1.0, tracking:1.0 });
+  caEffect=new ChromaticAberrationEffect({ offset:new THREE.Vector2(0.0013,0.0008), radialModulation:true, modulationOffset:0.2 });
+  scanEffect=new ScanlineEffect({ density:1.4, scrollSpeed:0.015 }); scanEffect.blendMode.opacity.value=0.28;
+  grainEffect=new NoiseEffect({ premultiply:true }); grainEffect.blendMode.opacity.value=0.16;
+  const vig=new VignetteEffect({ offset:0.32, darkness:0.9 });
+
+  const effects=[tone, lensEffect, vhsEffect, caEffect, scanEffect, grainEffect, vig];   // CA = única convolution → OK
+  if(DEV.tier!=='low'){
+    glitchEffect=new GlitchEffect({ delay:new THREE.Vector2(5,11), duration:new THREE.Vector2(0.18,0.5),
+      strength:new THREE.Vector2(0.08,0.28), columns:0.02, chromaticAberrationOffset:caEffect.offset });
+    effects.push(glitchEffect);
+  }
+  composer.addPass(new EffectPass(camera, ...effects));
+  composer.setSize(innerWidth,innerHeight);
 }
-if(Q.post)buildComposer();
+buildComposer();
 
 /* ===================== JUGADOR / FPS ===================== */
 const EYE=1.7,WALK=3.4,RUN=6.6,ACCEL=10;
@@ -530,6 +605,11 @@ $('dens').addEventListener('input',e=>{density=+e.target.value;$('densVal').text
 $('dens').addEventListener('change',rebuildWorld);
 $('wind').addEventListener('input',e=>{const v=+e.target.value;windU.uWind.value=v/100*1.6;$('windVal').textContent=windLabels(v);if(windGain)windGain.gain.value=0.02+v/100*0.10;});
 $('bob').addEventListener('input',e=>{bobScale=+e.target.value/100;$('bobVal').textContent=e.target.value+'%';});
+$('vhs').addEventListener('input',e=>{const k=+e.target.value/100;vhsIntensity=k;$('vhsVal').textContent=e.target.value+'%';
+  if(scanEffect)scanEffect.blendMode.opacity.value=0.28*k;
+  if(grainEffect)grainEffect.blendMode.opacity.value=0.16*k;
+  if(caEffect)caEffect.offset.set(0.0013*k,0.0008*k);
+  if(lensEffect)lensEffect.distortion.set(0.06*k,0.06*k);});
 document.querySelectorAll('#season button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#season button').forEach(x=>x.classList.remove('active'));b.classList.add('active');currentSeason=b.dataset.s;rebuildWorld();}));
 const sndSw=$('snd');sndSw.addEventListener('click',()=>{sndSw.classList.toggle('on');soundOn=sndSw.classList.contains('on');if(soundOn){unlockAudio();if(windGain)windGain.gain.value=0.02+(+$('wind').value)/100*0.10;}else if(windGain){windGain.gain.value=0;}});
 
@@ -540,9 +620,11 @@ closeBtn.addEventListener('click',()=>{ui.classList.remove('open');menuBtn.style
 let hinted=false;function dismissHint(){if(!hinted){hinted=true;$('hint').classList.add('hide');}}
 
 /* ===================== RESIZE / LOOP ===================== */
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);if(composer){composer.setSize(innerWidth,innerHeight);bloomPass?.setSize(innerWidth,innerHeight);}});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);composer.setSize(innerWidth,innerHeight);});
 let paused=false;document.addEventListener('visibilitychange',()=>{paused=document.hidden;});
 const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0,buildClock=0;
+const recStart=performance.now(),tcEl=document.getElementById('tc');const pad=n=>String(n|0).padStart(2,'0');
+function updateTC(){const s=(performance.now()-recStart)/1000;tcEl.textContent=`${pad(s/3600)}:${pad((s/60)%60)}:${pad(s%60)}:${pad((s*25)%25)}`;}
 const _tmpV=new THREE.Vector3();
 
 function update(dt){
@@ -564,9 +646,14 @@ function update(dt){
   const walkRoll=Math.sin(player.bobPhase)*0.018*moveAmt;const targetRoll=-player.strafeSm*0.08+walkRoll;
   player.roll+=(targetRoll-player.roll)*Math.min(1,10*dt);
 
+  // cámara handheld: respiración + micro-temblor (escala con el movimiento) → cámara en mano
+  const tt=windU.uTime.value, moveF=0.5+moveAmt;
+  const shx=(Math.sin(tt*2.3)+0.5*Math.sin(tt*5.7))*0.0016*moveF;
+  const shy=(Math.cos(tt*1.9)+0.5*Math.sin(tt*4.3))*0.0016*moveF;
+  const shr=Math.sin(tt*1.6)*0.004*moveF, breathe=Math.sin(tt*1.15)*0.012;
   const gy=terrainHeight(player.pos.x,player.pos.z);
-  camera.position.set(player.pos.x+right.x*bobX,gy+EYE+bobY,player.pos.z+right.z*bobX);
-  euler.set(player.pitch,player.yaw,player.roll);camera.quaternion.setFromEuler(euler);
+  camera.position.set(player.pos.x+right.x*bobX,gy+EYE+bobY+breathe,player.pos.z+right.z*bobX);
+  euler.set(player.pitch+shy,player.yaw+shx,player.roll+shr);camera.quaternion.setFromEuler(euler);
 
   // sol/luna + sombra siguen al jugador
   dirLight.position.copy(player.pos).addScaledVector(lightVec,50);dirLight.target.position.copy(player.pos);dirLight.target.updateMatrixWorld();
@@ -587,6 +674,11 @@ function update(dt){
 
   windU.uTime.value+=dt;
 
+  // pico de tracking VHS aleatorio (dropout de cinta) + acople con el efecto
+  trackingSpike=Math.max(0,trackingSpike-dt*1.6);
+  if(Math.random()<0.004) trackingSpike=1.0;
+  if(vhsEffect){ vhsEffect.tracking=1.0+trackingSpike*4.0; vhsEffect.intensity=vhsIntensity*(1.0+trackingSpike*0.8); }
+
   // streaming al cambiar de sector
   const ccx=Math.floor(player.pos.x/CHUNK),ccz=Math.floor(player.pos.z/CHUNK);
   if(ccx!==lastChunkX||ccz!==lastChunkZ){lastChunkX=ccx;lastChunkZ=ccz;recenterGround(player.pos.x,player.pos.z);updateChunks();}
@@ -596,7 +688,7 @@ function update(dt){
 }
 
 function animate(){requestAnimationFrame(animate);if(paused)return;const dt=Math.min(clock.getDelta(),0.05);update(dt);
-  if(Q.post&&composer)composer.render();else renderer.render(scene,camera);
+  composer.render(dt);updateTC();
   fpsTimer+=dt;fpsFrames++;if(fpsTimer>=0.5){$('fps').textContent=Math.round(fpsFrames/fpsTimer);fpsTimer=0;fpsFrames=0;}}
 
 /* ===================== INICIO ===================== */
