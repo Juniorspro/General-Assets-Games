@@ -41,10 +41,13 @@
              cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 22px rgba(0,0,0,.5); }
   #menuBtn { right:14px; } #vfxBtn { left:14px; }
   .panel { position:fixed; top:calc(14px + var(--safe-t)); z-index:42; width:236px; max-width:calc(100vw - 28px);
-           background:rgba(26,16,10,.78); backdrop-filter:blur(16px) saturate(1.2); -webkit-backdrop-filter:blur(16px) saturate(1.2);
+           background:rgba(26,16,10,.82); backdrop-filter:blur(16px) saturate(1.2); -webkit-backdrop-filter:blur(16px) saturate(1.2);
            border:1px solid rgba(255,255,255,.10); border-radius:16px; padding:14px; box-shadow:0 16px 48px rgba(0,0,0,.55);
            transform:scale(.9); opacity:0; pointer-events:none; transition:transform .25s cubic-bezier(.34,1.4,.6,1),opacity .2s;
-           max-height:calc(100vh - 40px); overflow-y:auto; }
+           max-height:calc(100vh - 40px); overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:pan-y; }
+  body.rot .panel { max-height:calc(100vw - 40px); }   /* girado: el alto visible = ancho del viewport */
+  .panel::-webkit-scrollbar { width:5px; } .panel::-webkit-scrollbar-thumb { background:rgba(255,180,107,.5); border-radius:3px; }
+  .panel .grp { font-size:10px; letter-spacing:.08em; text-transform:uppercase; opacity:.45; margin:4px 0 8px; border-top:1px solid rgba(255,255,255,.1); padding-top:9px; }
   #ui { right:14px; transform-origin:top right; } #vfx { left:14px; transform-origin:top left; }
   .panel.open { transform:scale(1); opacity:1; pointer-events:auto; }
   .panel header { display:flex; align-items:center; justify-content:space-between; margin-bottom:9px; }
@@ -112,7 +115,25 @@
     <div class="row"><label>Bloom <span id="bloomVal">70%</span></label><input type="range" id="bloom" min="0" max="180" value="70" step="5"></div>
     <div class="row"><label>Estática / fallas <span id="staticVal">baja</span></label><input type="range" id="static" min="0" max="100" value="15" step="5"></div>
     <div class="row"><label>Saturación <span id="satVal">+15%</span></label><input type="range" id="sat" min="-50" max="80" value="15" step="5"></div>
-    <div class="row" style="margin-bottom:0"><label>Calidez / naranja <span id="warmVal">55%</span></label><input type="range" id="warm" min="0" max="120" value="55" step="5"></div>
+    <div class="row"><label>Calidez / naranja <span id="warmVal">55%</span></label><input type="range" id="warm" min="0" max="120" value="55" step="5"></div>
+
+    <div class="grp">Color / imagen</div>
+    <div class="row"><label>Brillo <span id="brilVal">0</span></label><input type="range" id="bril" min="-50" max="50" value="0" step="2"></div>
+    <div class="row"><label>Contraste <span id="contVal">+5</span></label><input type="range" id="cont" min="-50" max="70" value="5" step="2"></div>
+    <div class="row"><label>Tono (hue) <span id="hueVal">0</span></label><input type="range" id="hue" min="-50" max="50" value="0" step="2"></div>
+    <div class="row"><label>Exposición <span id="expoVal">100%</span></label><input type="range" id="expo" min="50" max="180" value="100" step="5"></div>
+    <div class="row"><label>Profundidad de color <span id="bitsVal">32 bit</span></label><input type="range" id="bits" min="3" max="32" value="32" step="1"></div>
+
+    <div class="grp">Líneas / glow / borde</div>
+    <div class="row"><label>Densidad scanlines <span id="scandVal">140%</span></label><input type="range" id="scand" min="30" max="300" value="140" step="10"></div>
+    <div class="row"><label>Scroll scanlines <span id="scanspVal">12%</span></label><input type="range" id="scansp" min="0" max="100" value="12" step="2"></div>
+    <div class="row"><label>Aberración radial <span id="camodVal">20%</span></label><input type="range" id="camod" min="0" max="60" value="20" step="2"></div>
+    <div class="row"><label>Bloom umbral <span id="bthVal">60%</span></label><input type="range" id="bth" min="0" max="100" value="60" step="5"></div>
+    <div class="row"><label>Viñeta radio <span id="vigoVal">32%</span></label><input type="range" id="vigo" min="0" max="100" value="32" step="5"></div>
+
+    <div class="grp">Cinta / cámara</div>
+    <div class="row"><label>Tracking (jitter base) <span id="trackVal">100%</span></label><input type="range" id="track" min="0" max="250" value="100" step="10"></div>
+    <div class="row" style="margin-bottom:0"><label>Temblor de cámara <span id="shakeVal">100%</span></label><input type="range" id="shake" min="0" max="250" value="100" step="10"></div>
   </div>
 
   <div id="hud"><span id="fps">–</span> FPS · <span id="treeCount">–</span> árboles</div>
@@ -135,11 +156,11 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { EffectComposer, RenderPass, EffectPass, Effect, BloomEffect, ChromaticAberrationEffect,
          LensDistortionEffect, ScanlineEffect, NoiseEffect, VignetteEffect, HueSaturationEffect,
-         FXAAEffect, ToneMappingEffect, ToneMappingMode } from 'postprocessing';
+         BrightnessContrastEffect, ColorDepthEffect, FXAAEffect, ToneMappingEffect, ToneMappingMode } from 'postprocessing';
 
 /* ===== Efecto VHS propio (mainUv + color; sin taps → no convolution) ===== */
 const VHS_FRAG = /* glsl */`
-uniform float intensity; uniform float tracking; uniform float warmth;
+uniform float intensity; uniform float tracking; uniform float warmth; uniform float exposure;
 float hash(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
 void mainUv(inout vec2 uv){
   float line=floor(uv.y*240.0);
@@ -147,7 +168,7 @@ void mainUv(inout vec2 uv){
   if(uv.y<0.05){ uv.x += (hash(vec2(floor(time*12.0),3.0))-0.5)*0.06*tracking; }
 }
 void mainImage(const in vec4 c,const in vec2 uv,out vec4 o){
-  vec3 col=c.rgb;
+  vec3 col=c.rgb*exposure;
   float n=hash(uv*vec2(3.0,420.0)+time);
   col += step(0.994,n)*0.5*intensity;
   col -= sin(uv.y*800.0+time*5.0)*0.02*intensity;
@@ -156,7 +177,7 @@ void mainImage(const in vec4 c,const in vec2 uv,out vec4 o){
 }`;
 class VHSEffect extends Effect {
   constructor(){ super('VHSEffect', VHS_FRAG, { uniforms:new Map([
-    ['intensity',new THREE.Uniform(1)],['tracking',new THREE.Uniform(1)],['warmth',new THREE.Uniform(0.55)] ]) }); }
+    ['intensity',new THREE.Uniform(1)],['tracking',new THREE.Uniform(1)],['warmth',new THREE.Uniform(0.55)],['exposure',new THREE.Uniform(1)] ]) }); }
   u(n){ return this.uniforms.get(n); }
 }
 
@@ -362,20 +383,22 @@ function buildWorld(){
 }
 
 /* ===================== POST-PROCESO VHS ===================== */
-let composer=null,bloomEffect=null,vhsEffect=null,caEffect=null,scanEffect=null,grainEffect=null,lensEffect=null,vigEffect=null,hueSat=null,fxaaPass=null;
-let resScale=0.6, aaOn=true, staticProb=0.0008, trackingSpike=0;
+let composer=null,bloomEffect=null,vhsEffect=null,caEffect=null,scanEffect=null,grainEffect=null,lensEffect=null,vigEffect=null,hueSat=null,bcEffect=null,colorDepth=null,fxaaPass=null;
+let resScale=0.6, aaOn=true, staticProb=0.0008, trackingSpike=0, camShake=1.0, trackBase=1.0;
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});
   composer.addPass(new RenderPass(scene,camera));
   if(Q.bloom){bloomEffect=new BloomEffect({intensity:0.7,luminanceThreshold:0.6,luminanceSmoothing:0.22,mipmapBlur:true,radius:0.7});composer.addPass(new EffectPass(camera,bloomEffect));}
   const tone=new ToneMappingEffect({mode:DEV.tier==='low'?ToneMappingMode.AGX:ToneMappingMode.REINHARD2_ADAPTIVE,adaptationRate:1.1,middleGrey:0.5,whitePoint:8,minLuminance:0.06,resolution:256});
   hueSat=new HueSaturationEffect({saturation:0.15,hue:0});
+  bcEffect=new BrightnessContrastEffect({brightness:0.0,contrast:0.05});
+  colorDepth=new ColorDepthEffect({bits:32});
   lensEffect=new LensDistortionEffect({distortion:new THREE.Vector2(0.06,0.06)});
   vhsEffect=new VHSEffect();
   scanEffect=new ScanlineEffect({density:1.4,scrollSpeed:0.012});scanEffect.blendMode.opacity.value=0.18;
   grainEffect=new NoiseEffect({premultiply:true});grainEffect.blendMode.opacity.value=0.12;
   vigEffect=new VignetteEffect({offset:0.32,darkness:0.9});
-  composer.addPass(new EffectPass(camera,tone,hueSat,lensEffect,vhsEffect,scanEffect,grainEffect,vigEffect));
+  composer.addPass(new EffectPass(camera,tone,hueSat,bcEffect,colorDepth,lensEffect,vhsEffect,scanEffect,grainEffect,vigEffect));
   caEffect=new ChromaticAberrationEffect({offset:new THREE.Vector2(0.0013,0.0008),radialModulation:true,modulationOffset:0.2});
   composer.addPass(new EffectPass(camera,caEffect));     // convolution → pase propio
   fxaaPass=new EffectPass(camera,new FXAAEffect());       // suavizado (aún en baja resolución)
@@ -455,6 +478,18 @@ $('bloom').addEventListener('input',e=>{const k=+e.target.value/100;$('bloomVal'
 $('static').addEventListener('input',e=>{const v=+e.target.value;$('staticVal').textContent=v<10?'mínima':v<35?'baja':v<70?'media':'alta';staticProb=v/100*0.006;});
 $('sat').addEventListener('input',e=>{const v=+e.target.value;$('satVal').textContent=(v>0?'+':'')+v+'%';if(hueSat)hueSat.saturation=v/100;});
 $('warm').addEventListener('input',e=>{const v=+e.target.value;$('warmVal').textContent=v+'%';if(vhsEffect)vhsEffect.u('warmth').value=v/100;});
+$('bril').addEventListener('input',e=>{const v=+e.target.value;$('brilVal').textContent=(v>0?'+':'')+v;if(bcEffect)bcEffect.brightness=v/100;});
+$('cont').addEventListener('input',e=>{const v=+e.target.value;$('contVal').textContent=(v>0?'+':'')+v;if(bcEffect)bcEffect.contrast=v/100;});
+$('hue').addEventListener('input',e=>{const v=+e.target.value;$('hueVal').textContent=(v>0?'+':'')+v;if(hueSat)hueSat.hue=v/100;});
+$('expo').addEventListener('input',e=>{const v=+e.target.value;$('expoVal').textContent=v+'%';if(vhsEffect)vhsEffect.u('exposure').value=v/100;});
+$('bits').addEventListener('input',e=>{const v=+e.target.value;$('bitsVal').textContent=v+' bit';if(colorDepth)colorDepth.bitDepth=v;});
+$('scand').addEventListener('input',e=>{const v=+e.target.value;$('scandVal').textContent=v+'%';if(scanEffect)scanEffect.density=v/100;});
+$('scansp').addEventListener('input',e=>{const v=+e.target.value;$('scanspVal').textContent=v+'%';if(scanEffect)scanEffect.scrollSpeed=v/1000;});
+$('camod').addEventListener('input',e=>{const v=+e.target.value;$('camodVal').textContent=v+'%';if(caEffect)caEffect.uniforms.get('modulationOffset').value=v/100;});
+$('bth').addEventListener('input',e=>{const v=+e.target.value;$('bthVal').textContent=v+'%';if(bloomEffect)bloomEffect.luminanceMaterial.threshold=v/100;});
+$('vigo').addEventListener('input',e=>{const v=+e.target.value;$('vigoVal').textContent=v+'%';if(vigEffect)vigEffect.offset=v/100;});
+$('track').addEventListener('input',e=>{const v=+e.target.value;$('trackVal').textContent=v+'%';trackBase=v/100;});
+$('shake').addEventListener('input',e=>{const v=+e.target.value;$('shakeVal').textContent=v+'%';camShake=v/100;});
 
 // abrir/cerrar paneles
 $('menuBtn').addEventListener('click',()=>{$('ui').classList.add('open');});
@@ -478,8 +513,8 @@ function update(dt){
   const sign=Math.sign(Math.sin(player.bobPhase*2));if(sign<0&&lastBobSign>=0&&speed>0.6)footstep();lastBobSign=sign;
   const strafe=right.dot(player.vel)/Math.max(WALK,0.001);player.strafeSm+=(strafe-player.strafeSm)*Math.min(1,8*dt);
   player.roll+=((-player.strafeSm*0.08+Math.sin(player.bobPhase)*0.018*moveAmt)-player.roll)*Math.min(1,10*dt);
-  const tt=windU.uTime.value,mf=0.5+moveAmt;
-  const shx=(Math.sin(tt*2.3)+0.5*Math.sin(tt*5.7))*0.0016*mf,shy=(Math.cos(tt*1.9)+0.5*Math.sin(tt*4.3))*0.0016*mf,shr=Math.sin(tt*1.6)*0.004*mf,br=Math.sin(tt*1.15)*0.012;
+  const tt=windU.uTime.value,mf=(0.5+moveAmt)*camShake;
+  const shx=(Math.sin(tt*2.3)+0.5*Math.sin(tt*5.7))*0.0016*mf,shy=(Math.cos(tt*1.9)+0.5*Math.sin(tt*4.3))*0.0016*mf,shr=Math.sin(tt*1.6)*0.004*mf,br=Math.sin(tt*1.15)*0.012*camShake;
   const gy=terrainHeight(player.pos.x,player.pos.z);
   camera.position.set(player.pos.x+right.x*bobX,gy+EYE+bobY+br,player.pos.z+right.z*bobX);
   euler.set(player.pitch+shy,player.yaw+shx,player.roll+shr);camera.quaternion.setFromEuler(euler);
@@ -496,7 +531,7 @@ function update(dt){
   const rd2=renderDist*renderDist;for(const c of chunkList){const dx=c.center.x-player.pos.x,dz=c.center.z-player.pos.z;c.grp.visible=(dx*dx+dz*dz)<rd2;}
   // estática VHS controlable
   trackingSpike=Math.max(0,trackingSpike-dt*1.6);if(Math.random()<staticProb)trackingSpike=1;
-  if(vhsEffect){vhsEffect.u('tracking').value=1+trackingSpike*4;vhsEffect.u('intensity').value=1+trackingSpike*0.8;}
+  if(vhsEffect){vhsEffect.u('tracking').value=trackBase+trackingSpike*4;vhsEffect.u('intensity').value=1+trackingSpike*0.8;}
   windU.uTime.value+=dt;
 }
 function animate(){requestAnimationFrame(animate);if(paused)return;const dt=Math.min(clock.getDelta(),0.05);update(dt);
