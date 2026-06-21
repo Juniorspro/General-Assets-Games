@@ -284,26 +284,40 @@ function wall(mat,opt){const g=new THREE.Group();const W=2,Tk=0.16;
 }
 function floor(mat){const g=new THREE.Group();g.add(bx(2,0.12,2,mat,0,0.06,0));return g;}
 function roof(mat){const g=new THREE.Group();const s=bx(2,0.12,2,mat,0,0.4,0);s.rotation.x=-0.32;g.add(s);return g;}
-/* ---- armas / herramientas ---- */
-function mKnife(){const g=new THREE.Group();g.add(bx(0.06,0.28,0.06,woodMat,0,0.14,0));g.add(bx(0.04,0.4,0.12,metalMat,0,0.5,0));return g;}
-function mMachete(){const g=new THREE.Group();g.add(bx(0.06,0.3,0.06,woodDark,0,0.15,0));g.add(bx(0.05,0.7,0.16,metalMat,0,0.65,0.04));return g;}
-function mBottle(){const g=new THREE.Group();const b=cy(0.13,0.16,0.5,glassMat,14);b.position.y=0.25;g.add(b);const neck=cy(0.06,0.09,0.18,glassMat,12);neck.position.y=0.57;g.add(neck);g.add(bx(0.07,0.2,0.07,clothMat,0,0.72,0));return g;}
-function mScythe(){const g=new THREE.Group();g.add(bx(0.06,1.4,0.06,woodMat,0,0.7,0));const bl=new THREE.Mesh(new THREE.TorusGeometry(0.4,0.05,8,16,Math.PI*0.7),metalMat);bl.position.set(0.2,1.35,0);bl.rotation.set(Math.PI/2,0,0.4);g.add(bl);return g;}
-function mSpear(){const g=new THREE.Group();g.add(bx(0.05,1.6,0.05,woodMat,0,0.8,0));const tip=new THREE.Mesh(new THREE.ConeGeometry(0.09,0.32,8),stoneMat);tip.position.y=1.72;g.add(tip);return g;}
-function mPick(){const g=new THREE.Group();g.add(bx(0.06,1.2,0.06,woodMat,0,0.6,0));g.add(bx(0.7,0.1,0.12,stoneMat,0,1.2,0));const t=new THREE.Mesh(new THREE.ConeGeometry(0.08,0.22,6),stoneMat);t.rotation.z=Math.PI/2;t.position.set(0.42,1.2,0);g.add(t);return g;}
-function mBow(){const g=new THREE.Group();const arc=new THREE.Mesh(new THREE.TorusGeometry(0.6,0.04,8,20,Math.PI*1.1),woodMat);arc.position.y=0.6;arc.rotation.z=Math.PI*0.05;g.add(arc);return g;}
-function mArrow(){const g=new THREE.Group();g.add(bx(0.03,0.9,0.03,woodMat,0,0.45,0));const tip=new THREE.Mesh(new THREE.ConeGeometry(0.05,0.14,6),stoneMat);tip.position.y=0.95;g.add(tip);return g;}
-function mBook(){const g=new THREE.Group();g.add(bx(0.5,0.7,0.12,new THREE.MeshStandardMaterial({color:0x7a4a2a,roughness:0.7}),0,0.35,0));g.add(bx(0.42,0.62,0.13,new THREE.MeshStandardMaterial({color:0xeee0c0,roughness:0.9}),0,0.35,0));return g;}
-function mTorch(){const g=new THREE.Group();g.add(bx(0.06,0.9,0.06,woodMat,0,0.45,0));const f=new THREE.Mesh(new THREE.ConeGeometry(0.16,0.4,10),emberMat);f.position.y=1.0;g.add(f);return g;}
-function mHoe(){const g=new THREE.Group();g.add(bx(0.05,1.3,0.05,woodMat,0,0.65,0));g.add(bx(0.4,0.1,0.18,metalMat,0,1.28,0.12));return g;}
-function mBucket(){const g=new THREE.Group();const b=cy(0.3,0.24,0.45,woodMat,16);b.position.y=0.22;g.add(b);const h=new THREE.Mesh(new THREE.TorusGeometry(0.28,0.02,6,16,Math.PI),metalMat);h.position.y=0.45;g.add(h);return g;}
+/* ---- armas / herramientas (estilo survival del sprite sheet: mango de madera, cabeza de piedra/chapa atada con cuerda) ---- */
+const cordMat=new THREE.MeshStandardMaterial({color:0x7a5a32,roughness:0.95});
+const stoneEdge=new THREE.MeshStandardMaterial({color:0xd9d4c6,roughness:0.55,metalness:0.06}); // filo afilado (claro)
+function bladeGeo(len,w,th){const s=new THREE.Shape();s.moveTo(-w*0.5,0);s.lineTo(w*0.5,0);s.lineTo(w*0.42,len*0.65);s.quadraticCurveTo(w*0.22,len,0,len);s.quadraticCurveTo(-w*0.22,len*0.62,-w*0.5,len*0.32);s.closePath();const g=new THREE.ExtrudeGeometry(s,{depth:th,bevelEnabled:true,bevelThickness:th*0.5,bevelSize:th*0.4,bevelSegments:1,steps:1,curveSegments:10});g.translate(0,0,-th/2);return g;}
+function stoneChunk(s){const g=new THREE.IcosahedronGeometry(s,1);const p=g.attributes.position;for(let i=0;i<p.count;i++){const f=0.74+(((i*53)%34)/100);p.setXYZ(i,p.getX(i)*f,p.getY(i)*f,p.getZ(i)*f);}g.computeVertexNormals();return g;}
+function lash(y,r){const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,0.08,10),cordMat);m.position.y=y;m.castShadow=true;return m;}
+function handle(len,r){const h=cy(r,r*1.06,len,woodMat,12);h.position.y=len/2;return h;}
+function mKnife(bladeMat){bladeMat=bladeMat||stoneMat;const g=new THREE.Group();g.add(handle(0.26,0.045));g.add(lash(0.24,0.058));const bl=new THREE.Mesh(bladeGeo(0.34,0.17,0.045),bladeMat);bl.position.y=0.26;g.add(bl);return g;}
+function mKnifeSharp(){const g=mKnife(stoneMat);const e=new THREE.Mesh(bladeGeo(0.34,0.075,0.02),stoneEdge);e.position.set(0.028,0.26,0);g.add(e);return g;}
+function mMachete(){const g=new THREE.Group();g.add(handle(0.34,0.05));g.add(lash(0.32,0.062));const bl=new THREE.Mesh(bladeGeo(0.78,0.2,0.05),metalMat);bl.position.set(0.02,0.34,0);g.add(bl);return g;}
+function mBottle(){const g=new THREE.Group();const b=cy(0.14,0.17,0.46,glassMat,16);b.position.y=0.23;g.add(b);const neck=cy(0.06,0.1,0.18,glassMat,12);neck.position.y=0.54;g.add(neck);const rag=cy(0.05,0.07,0.22,clothMat,8);rag.position.y=0.66;rag.rotation.z=0.3;g.add(rag);const fl=new THREE.Mesh(new THREE.ConeGeometry(0.07,0.16,8),emberMat);fl.position.set(0.05,0.82,0);g.add(fl);return g;}
+function mScythe(){const g=new THREE.Group();const pole=cy(0.045,0.05,1.7,woodMat,12);pole.position.y=0.85;g.add(pole);g.add(lash(1.55,0.06));const bl=new THREE.Mesh(new THREE.TorusGeometry(0.42,0.045,8,22,Math.PI*0.85),metalMat);bl.position.set(0.32,1.68,0);bl.rotation.set(Math.PI/2,0,0.2);g.add(bl);return g;}
+function spear(tip){const g=new THREE.Group();const pole=cy(0.04,0.045,1.7,woodMat,12);pole.position.y=0.85;g.add(pole);
+  if(tip==='wood'){const t=new THREE.Mesh(new THREE.ConeGeometry(0.06,0.32,10),woodMat);t.position.y=1.8;g.add(t);}
+  else{g.add(lash(1.6,0.055));const t=new THREE.Mesh(stoneChunk(0.13),tip==='sharp'?stoneEdge:stoneMat);t.scale.set(0.8,1.9,0.8);t.position.y=1.82;g.add(t);}
+  return g;}
+function pick(sharp){const g=new THREE.Group();const pole=cy(0.045,0.05,1.25,woodMat,12);pole.position.y=0.62;g.add(pole);g.add(lash(1.18,0.06));const head=new THREE.Mesh(stoneChunk(0.12),sharp?stoneEdge:stoneMat);head.scale.set(2.7,0.7,0.7);head.position.y=1.25;head.rotation.z=0.12;g.add(head);return g;}
+function mPickWood(){const g=new THREE.Group();const pole=cy(0.045,0.05,1.25,woodMat,12);pole.position.y=0.62;g.add(pole);g.add(lash(1.18,0.06));g.add(bx(0.6,0.12,0.12,woodDark,0,1.25,0));const t1=new THREE.Mesh(new THREE.ConeGeometry(0.08,0.2,6),woodDark);t1.rotation.z=Math.PI/2;t1.position.set(0.4,1.25,0);g.add(t1);const t2=new THREE.Mesh(new THREE.ConeGeometry(0.08,0.2,6),woodDark);t2.rotation.z=-Math.PI/2;t2.position.set(-0.4,1.25,0);g.add(t2);return g;}
+function mBow(){const g=new THREE.Group();const arc=new THREE.Mesh(new THREE.TorusGeometry(0.6,0.035,8,26,Math.PI*1.15),woodMat);arc.position.y=0.6;arc.rotation.z=Math.PI*0.075;g.add(arc);const str=cy(0.006,0.006,1.05,cordMat,5);str.position.y=0.6;g.add(str);return g;}
+function arrows(tip){const g=new THREE.Group();for(let i=0;i<3;i++){const x=(i-1)*0.13;const sh=cy(0.018,0.018,0.92,woodMat,6);sh.position.set(x,0.46,0);g.add(sh);const t=new THREE.Mesh(new THREE.ConeGeometry(0.045,0.13,6),tip==='wood'?woodDark:(tip==='sharp'?stoneEdge:stoneMat));t.position.set(x,0.98,0);g.add(t);g.add(bx(0.006,0.13,0.09,clothMat,x,0.1,0));}return g;}
+function mBook(){const g=new THREE.Group();g.add(bx(0.5,0.7,0.12,new THREE.MeshStandardMaterial({color:0x7a4a2a,roughness:0.7}),0,0.35,0));g.add(bx(0.42,0.62,0.13,new THREE.MeshStandardMaterial({color:0xeee0c0,roughness:0.9}),0,0.35,0));g.add(bx(0.06,0.7,0.13,woodDark,-0.22,0.35,0));return g;}
+function mTorch(){const g=new THREE.Group();const h=cy(0.05,0.06,0.9,woodMat,10);h.position.y=0.45;g.add(h);const wrap=new THREE.Mesh(new THREE.SphereGeometry(0.12,12,10),clothMat);wrap.scale.y=0.85;wrap.position.y=0.92;g.add(wrap);const f=new THREE.Mesh(new THREE.ConeGeometry(0.14,0.42,10),emberMat);f.position.y=1.16;g.add(f);return g;}
+function hoe(type){const g=new THREE.Group();const pole=cy(0.045,0.05,1.3,woodMat,12);pole.position.y=0.65;g.add(pole);g.add(lash(1.24,0.058));let head;if(type==='wood'){head=bx(0.4,0.1,0.22,woodDark,0,0,0);}else{head=new THREE.Mesh(stoneChunk(0.12),stoneMat);head.scale.set(2.7,0.8,1.5);}head.position.set(0,1.3,0.14);head.rotation.x=0.34;g.add(head);return g;}
+function mBucket(metal){const g=new THREE.Group();const b=cy(0.3,0.24,0.42,metal?metalMat:woodMat,16);b.position.y=0.21;g.add(b);if(!metal)for(let i=0;i<3;i++){const band=new THREE.Mesh(new THREE.TorusGeometry(0.29-i*0.018,0.012,6,18),woodDark);band.position.y=0.07+i*0.14;band.rotation.x=Math.PI/2;g.add(band);}const h=new THREE.Mesh(new THREE.TorusGeometry(0.28,0.018,6,16,Math.PI),metalMat);h.position.y=0.45;g.add(h);return g;}
 /* ---- registro de modelos por id ---- */
 const MODELS={
   martillo:buildHammer, mesa:buildTable, silla:mSilla, cama:mCama, horno:mHorno, fogata:mFogata, bidon:mBidon, recolectorAgua:mRecolector, perchero:mPerchero, conservador:mConservador,
   paredMadera:()=>wall(woodMat), sueloMadera:()=>floor(woodMat), techoMadera:()=>roof(woodMat), paredVentana:()=>wall(woodMat,'window'), paredPuerta:()=>wall(woodMat,'door'),
   paredChapa:()=>wall(metalMat), sueloChapa:()=>floor(metalMat), paredChapaVentana:()=>wall(metalMat,'window'), paredChapaPuerta:()=>wall(metalMat,'door'),
-  cuchillo:mKnife, machete:mMachete, botellaInc:mBottle, guadana:mScythe, lanzaMadera:mSpear, picoMadera:mPick, arco:mBow, lanzaPiedra:mSpear, cuchilloPiedra:mKnife, picoPiedra:mPick,
-  flechaMadera:mArrow, flechaPiedra:mArrow, lanzaPiedraAf:mSpear, picoPiedraAf:mPick, cuchilloAf:mKnife, flechaPiedraAf:mArrow, manualHogares:mBook, antorcha:mTorch, azadaMadera:mHoe, azadaPiedra:mHoe, baldeMadera:mBucket, baldeChapa:mBucket,
+  cuchillo:()=>mKnife(stoneMat), cuchilloPiedra:()=>mKnife(stoneMat), cuchilloAf:mKnifeSharp, machete:mMachete, botellaInc:mBottle, guadana:mScythe,
+  lanzaMadera:()=>spear('wood'), lanzaPiedra:()=>spear('stone'), lanzaPiedraAf:()=>spear('sharp'),
+  picoMadera:mPickWood, picoPiedra:()=>pick(false), picoPiedraAf:()=>pick(true),
+  arco:mBow, flechaMadera:()=>arrows('wood'), flechaPiedra:()=>arrows('stone'), flechaPiedraAf:()=>arrows('sharp'),
+  manualHogares:mBook, antorcha:mTorch, azadaMadera:()=>hoe('wood'), azadaPiedra:()=>hoe('stone'), baldeMadera:()=>mBucket(false), baldeChapa:()=>mBucket(true),
 };
 
 /* ===================== Jugador (1ª persona, como el original) ===================== */
@@ -318,7 +332,11 @@ camera.add(fpRig); scene.add(camera);
 const FPH_BASE=fpRig.rotation.clone(); let fpModel=null;
 function equip(id){
   while(fpRig.children.length)fpRig.remove(fpRig.children[0]);
-  if(id&&MODELS[id]){ fpModel=MODELS[id](); fpModel.scale.setScalar(0.42); fpModel.traverse(o=>{if(o.isMesh)o.castShadow=false;}); fpRig.add(fpModel); fpRig.visible=true; }
+  if(id&&MODELS[id]){ fpModel=MODELS[id](); fpModel.traverse(o=>{if(o.isMesh)o.castShadow=false;});
+    // auto-encuadre: cualquier objeto se ajusta al mismo tamaño de viewmodel
+    const box=new THREE.Box3().setFromObject(fpModel),c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),md=Math.max(sz.x,sz.y,sz.z)||1,s=0.62/md;
+    fpModel.scale.setScalar(s); fpModel.position.set(-c.x*s,-c.y*s,-c.z*s);
+    fpRig.add(fpModel); fpRig.visible=true; }
   else fpRig.visible=false;
 }
 let swing={active:false,t:0};
