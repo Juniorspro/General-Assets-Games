@@ -55,9 +55,12 @@
           background:radial-gradient(120% 120% at 60% 40%,rgba(12,16,22,.4),rgba(6,8,12,.7)); backdrop-filter:blur(12px);
           opacity:0; pointer-events:none; transition:opacity .25s; }
   .scrim.show{ opacity:1; pointer-events:auto; }
-  .card{ width:min(460px,calc(100vw - 32px)); max-height:calc(100vh - 36px); overflow-y:auto;
+  .card{ width:min(460px,calc(100vw - 32px)); max-height:calc(100vh - 36px); overflow-y:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y; overscroll-behavior:contain;
          background:linear-gradient(165deg,rgba(26,30,38,.95),rgba(12,14,19,.97)); border:1px solid rgba(150,180,220,.16);
          border-radius:20px; padding:20px; box-shadow:0 30px 90px rgba(0,0,0,.75); position:relative; }
+  /* en vertical el juego (y los menús) van rotados 90°: el alto visible = ancho del viewport */
+  body.rot .card{ max-height:calc(100vw - 36px); width:min(460px,calc(100vh - 36px)); }
+  body.rot .case{ max-height:calc(100vw - 30px); width:min(620px,calc(100vh - 24px)); }
   .card h2{ font-size:22px; font-weight:700; text-align:center; margin-bottom:6px; }
   .xClose{ position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:9px; cursor:pointer;
            background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.16); color:#eef3f8; font-size:15px;
@@ -73,6 +76,8 @@
   .paper::before{ content:""; position:absolute; left:9px; top:-5px; width:10px; height:10px; border-radius:50%; background:#8a7038; box-shadow:0 0 0 2px rgba(0,0,0,.15); }
   .paper.active{ filter:brightness(1.12) saturate(1.1); transform:scale(1.06) rotate(0deg); box-shadow:0 6px 16px rgba(0,0,0,.5),0 0 0 2px #c98b3a inset; }
   .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; }
+  .invClose{ display:block; width:100%; margin-top:16px; padding:12px; border-radius:12px; cursor:pointer; font-size:14px; font-weight:600;
+             background:rgba(120,170,255,.16); border:1px solid rgba(127,208,255,.4); color:#eef3f8; }
   .item{ background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.015)); border:1px solid rgba(160,190,225,.14);
          border-radius:12px; padding:12px; text-align:center; cursor:pointer; transition:all .14s; }
   .item:hover{ border-color:#7fd0ff; background:rgba(120,170,255,.12); }
@@ -120,6 +125,7 @@
       <h2 id="craftTitle">Fabricación</h2>
       <div class="tabs" id="craftTabs"></div>
       <div class="grid" id="craftGrid"></div>
+      <button class="invClose" data-close="craft" data-i18n="close">Cerrar</button>
     </div>
   </div>
 
@@ -301,8 +307,16 @@ function spear(tip){const g=new THREE.Group();const pole=cy(0.04,0.045,1.7,woodM
   else{g.add(lash(1.6,0.055));const t=new THREE.Mesh(stoneChunk(0.13),tip==='sharp'?stoneEdge:stoneMat);t.scale.set(0.8,1.9,0.8);t.position.y=1.82;g.add(t);}
   return g;}
 function pick(sharp){const g=new THREE.Group();const pole=cy(0.045,0.05,1.25,woodMat,12);pole.position.y=0.62;g.add(pole);g.add(lash(1.18,0.06));const head=new THREE.Mesh(stoneChunk(0.12),sharp?stoneEdge:stoneMat);head.scale.set(2.7,0.7,0.7);head.position.y=1.25;head.rotation.z=0.12;g.add(head);return g;}
-function mPickWood(){const g=new THREE.Group();const pole=cy(0.045,0.05,1.25,woodMat,12);pole.position.y=0.62;g.add(pole);g.add(lash(1.18,0.06));g.add(bx(0.6,0.12,0.12,woodDark,0,1.25,0));const t1=new THREE.Mesh(new THREE.ConeGeometry(0.08,0.2,6),woodDark);t1.rotation.z=Math.PI/2;t1.position.set(0.4,1.25,0);g.add(t1);const t2=new THREE.Mesh(new THREE.ConeGeometry(0.08,0.2,6),woodDark);t2.rotation.z=-Math.PI/2;t2.position.set(-0.4,1.25,0);g.add(t2);return g;}
-function mBow(){const g=new THREE.Group();const arc=new THREE.Mesh(new THREE.TorusGeometry(0.6,0.035,8,26,Math.PI*1.15),woodMat);arc.position.y=0.6;arc.rotation.z=Math.PI*0.075;g.add(arc);const str=cy(0.006,0.006,1.05,cordMat,5);str.position.y=0.6;g.add(str);return g;}
+function mPickWood(){const g=new THREE.Group();const pole=cy(0.04,0.05,1.2,woodMat,12);pole.position.y=0.6;g.add(pole);g.add(lash(1.12,0.058));
+  g.add(bx(0.14,0.13,0.13,woodDark,0,1.2,0));   // ojo central
+  for(const s of[-1,1]){const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.06,0.52,8),woodDark);arm.position.set(s*0.24,1.26,0);arm.rotation.z=s*1.15;arm.castShadow=true;g.add(arm);} // dos puntas en V (estilo pico)
+  return g;}
+function mBow(){const g=new THREE.Group();
+  const curve=new THREE.QuadraticBezierCurve3(new THREE.Vector3(0,-0.62,0),new THREE.Vector3(0.5,0,0),new THREE.Vector3(0,0.62,0));
+  const limb=new THREE.Mesh(new THREE.TubeGeometry(curve,24,0.032,8),woodMat); limb.castShadow=true; g.add(limb);   // arco curvo
+  for(const y of[-0.62,0.62]){const nock=new THREE.Mesh(new THREE.SphereGeometry(0.045,8,6),woodDark);nock.position.set(0,y,0);g.add(nock);}
+  const str=cy(0.006,0.006,1.24,cordMat,5); g.add(str);   // cuerda recta entre las puntas
+  g.position.y=0.9; return g;}
 function arrows(tip){const g=new THREE.Group();for(let i=0;i<3;i++){const x=(i-1)*0.13;const sh=cy(0.018,0.018,0.92,woodMat,6);sh.position.set(x,0.46,0);g.add(sh);const t=new THREE.Mesh(new THREE.ConeGeometry(0.045,0.13,6),tip==='wood'?woodDark:(tip==='sharp'?stoneEdge:stoneMat));t.position.set(x,0.98,0);g.add(t);g.add(bx(0.006,0.13,0.09,clothMat,x,0.1,0));}return g;}
 function mBook(){const g=new THREE.Group();g.add(bx(0.5,0.7,0.12,new THREE.MeshStandardMaterial({color:0x7a4a2a,roughness:0.7}),0,0.35,0));g.add(bx(0.42,0.62,0.13,new THREE.MeshStandardMaterial({color:0xeee0c0,roughness:0.9}),0,0.35,0));g.add(bx(0.06,0.7,0.13,woodDark,-0.22,0.35,0));return g;}
 function mTorch(){const g=new THREE.Group();const h=cy(0.05,0.06,0.9,woodMat,10);h.position.y=0.45;g.add(h);const wrap=new THREE.Mesh(new THREE.SphereGeometry(0.12,12,10),clothMat);wrap.scale.y=0.85;wrap.position.y=0.92;g.add(wrap);const f=new THREE.Mesh(new THREE.ConeGeometry(0.14,0.42,10),emberMat);f.position.y=1.16;g.add(f);return g;}
@@ -377,7 +391,7 @@ $('bPlace').addEventListener('click',()=>{ if(placing) stopPlacing(); else openP
 $('bSet').addEventListener('click',()=>showScrim('settings'));
 $('bBag').addEventListener('click',()=>{renderBag();showScrim('bag');});
 $('bCraft').addEventListener('click',()=>{craftAtTable=false;renderCraft();showScrim('craft');});
-document.querySelectorAll('.xClose').forEach(b=>b.addEventListener('click',()=>{ hideScrims(); if(b.dataset.close==='placeMenu'&&!placing){} }));
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{ hideScrims(); }));
 
 /* ===================== Overlays ===================== */
 function showScrim(id){hideScrims();$(id).classList.add('show');}
@@ -416,7 +430,7 @@ const RECIPES=[
   {id:'botellaInc',tab:'weapons',cost:{botella:1,tela:1,combustible:1}},
   {id:'guadana',tab:'weapons',cost:{chapa:2,palo:2}},
   {id:'lanzaMadera',tab:'tools',cost:{palo:2,cuerda:1}},
-  {id:'martillo',tab:'tools',cost:{palo:2,piedra:2}},
+  {id:'martillo',tab:'tools',cost:{}},   // gratis en la escena de prueba
   {id:'picoMadera',tab:'tools',cost:{palo:3,cuerda:1}},
   {id:'arco',tab:'tools',cost:{palo:2,cuerda:2}},
   {id:'lanzaPiedra',tab:'tools',cost:{palo:2,piedraFilosa:1,cuerda:1}},
@@ -435,7 +449,7 @@ const RECIPES=[
   {id:'baldeChapa',tab:'tools',cost:{chapa:2}},
   {id:'cama',tab:'furniture',placeable:true,cost:{hojas:10,palo:5}},
   {id:'horno',tab:'furniture',placeable:true,cost:{piedra:20}},
-  {id:'mesa',tab:'furniture',placeable:true,cost:{tabla:6}},
+  {id:'mesa',tab:'furniture',placeable:true,cost:{}},   // gratis en la escena de prueba
   {id:'silla',tab:'furniture',placeable:true,cost:{tabla:4}},
   {id:'recolectorAgua',tab:'furniture',placeable:true,cost:{palo:10,tela:4}},
   {id:'bidon',tab:'furniture',placeable:true,cost:{chapa:4}},
@@ -455,7 +469,7 @@ const RECIPES=[
 const TABS=['weapons','tools','furniture','construction'];
 const NO_TABLE=new Set(['martillo','mesa']);    // lo único crafteable sin mesa
 let activeTab='tools';
-const inv={ manualHogares:1 };                  // item inicial
+const inv={ manualHogares:1, tronco:6, palo:14, piedra:12, piedraFilosa:6, enredadera:12, hojas:14, tela:6, chatarra:8, agua:4, sal:4, combustible:3, botella:2 }; // arranque de prueba
 let equipped=null, craftAtTable=false;
 const iconCache={};
 function getIcon(id){ if(iconCache[id]!==undefined)return iconCache[id]; const b=MODELS[id]; iconCache[id]=b?captureIcon(b(),[0.25,0.7,0.3]):null; return iconCache[id]; }
