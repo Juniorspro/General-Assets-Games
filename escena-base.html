@@ -55,7 +55,7 @@
           background:radial-gradient(120% 120% at 60% 40%,rgba(12,16,22,.4),rgba(6,8,12,.7)); backdrop-filter:blur(12px);
           opacity:0; pointer-events:none; transition:opacity .25s; }
   .scrim.show{ opacity:1; pointer-events:auto; }
-  .card{ width:min(460px,calc(100vw - 32px)); max-height:calc(100vh - 36px); overflow-y:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y; overscroll-behavior:contain;
+  .card{ width:min(460px,calc(100vw - 32px)); max-height:calc(100vh - 36px); overflow-y:auto; -webkit-overflow-scrolling:touch; touch-action:none; overscroll-behavior:contain;
          background:linear-gradient(165deg,rgba(26,30,38,.95),rgba(12,14,19,.97)); border:1px solid rgba(150,180,220,.16);
          border-radius:20px; padding:20px; box-shadow:0 30px 90px rgba(0,0,0,.75); position:relative; }
   body.rot .card{ max-height:calc(100vw - 36px); width:min(460px,calc(100vh - 36px)); }
@@ -88,6 +88,22 @@
         background:rgba(255,255,255,.05); color:#eef3f8; cursor:pointer; font-size:12px; } .seg button.active{ background:#2f6dd0; border-color:#8fe3ff; }
   .lbl{ font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; opacity:.5; margin:14px 0 8px; }
 
+  /* panel de detalle de crafteo (al costado) */
+  #craft.show{ gap:14px; flex-wrap:wrap; }
+  #detailCard{ display:none; width:min(300px,calc(100vw - 32px)); text-align:center; }
+  #detailCard.show{ display:block; }
+  body.rot #detailCard{ width:min(300px,calc(100vh - 36px)); }
+  #detailBack{ font-size:13px; opacity:.7; cursor:pointer; margin-bottom:8px; text-align:left; }
+  #detailName{ font-size:18px; font-weight:700; margin-bottom:8px; }
+  #pvCanvas{ width:200px; height:200px; max-width:100%; display:block; margin:0 auto 10px; border-radius:14px;
+             background:radial-gradient(120% 120% at 50% 35%,rgba(120,160,210,.18),rgba(10,14,20,.5)); }
+  #detailMats{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+  #detailMats .mat{ display:flex; justify-content:space-between; font-size:13px; padding:7px 11px; border-radius:9px;
+                    background:rgba(255,255,255,.05); border:1px solid rgba(160,190,225,.12); }
+  .craftGo{ width:100%; padding:12px; border-radius:12px; border:1px solid #8fe3ff; background:#2f6dd0; color:#fff;
+            font-size:15px; font-weight:700; cursor:pointer; }
+  .craftGo:disabled{ opacity:.4; border-color:rgba(255,255,255,.14); background:rgba(255,255,255,.06); cursor:not-allowed; }
+
   #loader{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
            background:#bcd6ef; transition:opacity .5s; color:#08365f; font-size:13px; letter-spacing:.1em; }
   #loader.hide{ opacity:0; pointer-events:none; }
@@ -114,11 +130,22 @@
 
   <!-- Crafteo -->
   <div id="craft" class="scrim">
-    <div class="card">
+    <div class="card" id="craftCard">
       <div class="xClose" data-close="craft">✕</div>
       <h2 id="craftTitle">Fabricación</h2>
-      <div class="tabs" id="craftTabs"></div>
-      <div class="grid" id="craftGrid"></div>
+      <div id="craftMain">
+        <div class="tabs" id="craftTabs"></div>
+        <div class="grid" id="craftGrid"></div>
+      </div>
+    </div>
+    <!-- panel de detalle (modelo 3D girando + materiales) pegado al lado -->
+    <div class="card" id="detailCard">
+      <div id="detailBack">← volver</div>
+      <div id="detailName"></div>
+      <canvas id="pvCanvas"></canvas>
+      <div class="lbl" id="detailNeedLbl">Necesitás</div>
+      <div id="detailMats"></div>
+      <button id="detailCraft" class="craftGo"></button>
     </div>
   </div>
 
@@ -179,21 +206,21 @@ const I18N={
   es:{jump:'Saltar',crouch:'Agacharse',axe:'Hacha',build:'Construir',craft:'Fabricación',inventory:'Mochila',settings:'Ajustes',language:'Idioma',rotate90:'Girar 90° en vertical',
       weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',spear:'Lanza de madera',knife:'Cuchillo de metal',
       machete:'Machete',botella:'Botella incendiaria',guadana:'Guadaña',hacha:'Hacha tomahawk',picomad:'Pico de madera',arco:'Arco',lanzapiedra:'Lanza de piedra',cuchipiedra:'Cuchillo de piedra',picopiedra:'Pico de piedra',flechamad:'Flechas de madera',flechapiedra:'Flechas de piedra',flechaafil:'Flechas afiladas',lanzaafil:'Lanza afilada',picoafil:'Pico afilado',cuchiafil:'Cuchillo afilado',antorcha:'Antorcha',azadamad:'Azada de madera',azadapiedra:'Azada de piedra',baldemad:'Balde de madera',baldechapa:'Balde de chapa',addWater:'Cargar agua',waterFull:'Balde lleno',
-      cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo de madera',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',
+      cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo recto de madera',imad:'Techo inclinado',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',tcha:'Techo recto de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',need:'Necesitás',noSupport:'Necesita una pared debajo',
       placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
       useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —'},
   en:{jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',craft:'Crafting',inventory:'Backpack',settings:'Settings',language:'Language',rotate90:'Rotate 90° in portrait',
       weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',spear:'Wooden spear',knife:'Metal knife',
       machete:'Machete',botella:'Molotov',guadana:'Scythe',hacha:'Tomahawk axe',picomad:'Wood pickaxe',arco:'Bow',lanzapiedra:'Stone spear',cuchipiedra:'Stone knife',picopiedra:'Stone pickaxe',flechamad:'Wood arrows',flechapiedra:'Stone arrows',flechaafil:'Sharp arrows',lanzaafil:'Sharp spear',picoafil:'Sharp pickaxe',cuchiafil:'Sharp knife',antorcha:'Torch',azadamad:'Wood hoe',azadapiedra:'Stone hoe',baldemad:'Wood bucket',baldechapa:'Metal bucket',addWater:'Collect water',waterFull:'Bucket full',
-      cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Wood roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',vcha:'Metal wall + window',dcha:'Metal wall + door',free:'Free',craftBtn:'Craft',crafted:'Crafted!',
+      cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Flat wood roof',imad:'Sloped roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',tcha:'Flat metal roof',vcha:'Metal wall + window',dcha:'Metal wall + door',free:'Free',craftBtn:'Craft',crafted:'Crafted!',need:'You need',noSupport:'Needs a wall below',
       placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
       equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
       useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —'},
   pt:{jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',craft:'Fabricação',inventory:'Mochila',settings:'Ajustes',language:'Idioma',rotate90:'Girar 90° na vertical',
       weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',spear:'Lança de madeira',knife:'Faca de metal',
       machete:'Facão',botella:'Coquetel molotov',guadana:'Foice',hacha:'Machado tomahawk',picomad:'Picareta de madeira',arco:'Arco',lanzapiedra:'Lança de pedra',cuchipiedra:'Faca de pedra',picopiedra:'Picareta de pedra',flechamad:'Flechas de madeira',flechapiedra:'Flechas de pedra',flechaafil:'Flechas afiadas',lanzaafil:'Lança afiada',picoafil:'Picareta afiada',cuchiafil:'Faca afiada',antorcha:'Tocha',azadamad:'Enxada de madeira',azadapiedra:'Enxada de pedra',baldemad:'Balde de madeira',baldechapa:'Balde de chapa',addWater:'Coletar água',waterFull:'Balde cheio',
-      cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado de madeira',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',
+      cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado reto de madeira',imad:'Telhado inclinado',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',tcha:'Telhado reto de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',need:'Precisa de',noSupport:'Precisa de parede embaixo',
       placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipe o martelo em 🎒 para colocar móveis.',rotate:'Girar',building:'Construindo…',
       useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —'}
@@ -262,19 +289,23 @@ const chapaMat =new THREE.MeshStandardMaterial({color:0xb9c0c6,map:tx('rust_col.
 const blackMetalMat=new THREE.MeshStandardMaterial({color:0x20242a,map:tx('mbrush_col.jpg',true,1),normalMap:tx('mbrush_nrm.jpg',false,1),roughnessMap:tx('mbrush_rgh.jpg',false,1),metalness:0.95,roughness:0.5,envMapIntensity:1.4});
 const foliageMat=new THREE.MeshStandardMaterial({map:tx('foliage.png',true,1),alphaTest:0.45,side:THREE.DoubleSide,roughness:0.9});
 function boxM(w,h,d,m,x,y,z){const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);e.position.set(x,y,z);e.castShadow=e.receiveShadow=true;return e;}
+const WALLH=3.2;
 // piezas de construcción GRANDES (tipo The Forest) con PBR
-function consPiece(type,mat){const g=new THREE.Group();const W=4,H=3.2,Tk=0.2;
+function consPiece(type,mat){const g=new THREE.Group();const W=4,H=WALLH,Tk=0.2;
   if(type==='wall') g.add(boxM(W,H,Tk,mat,0,H/2,0));
   else if(type==='floor') g.add(boxM(W,0.18,W,mat,0,0.09,0));
-  else if(type==='roof'){ const s=boxM(W+0.4,0.18,W+0.4,mat,0,H*0.55,0); s.rotation.x=-0.4; g.add(s); g.add(boxM(0.2,H*0.55,0.2,mat,-W/2+0.2,H*0.27,0)); g.add(boxM(0.2,H*0.55,0.2,mat,W/2-0.2,H*0.27,0)); }
+  else if(type==='roofflat'){ g.add(boxM(W,0.16,W,mat,0,-0.08,0));                    // techo RECTO (como suelo, va arriba)
+    for(const x of[-W/2+0.35,0,W/2-0.35]) g.add(boxM(0.18,0.2,W-0.2,woodDark,x,-0.27,0)); } // vigas de sostén (grosor que lo diferencia del suelo)
+  else if(type==='roof'){ const s=boxM(W+0.4,0.18,W+0.4,mat,0,H*0.5,0); s.rotation.x=-0.4; g.add(s); } // techo INCLINADO (sin palos)
   else if(type==='window'){ g.add(boxM(W,0.9,Tk,mat,0,H-0.45,0)); g.add(boxM(W,0.7,Tk,mat,0,0.35,0)); g.add(boxM(0.9,H,Tk,mat,-W/2+0.45,H/2,0)); g.add(boxM(0.9,H,Tk,mat,W/2-0.45,H/2,0)); }
-  else if(type==='door'){ g.add(boxM(W,0.9,Tk,mat,0,H-0.45,0));                                  // dintel
-    const jl=boxM(1.1,H-0.9,Tk,mat,-W/2+0.55,(H-0.9)/2,0); g.add(jl);                              // jamba izquierda
-    const jr=boxM(1.1,H-0.9,Tk,mat,W/2-0.55,(H-0.9)/2,0);  g.add(jr);                              // jamba derecha
-    // HOJA con BISAGRA en el borde izquierdo del hueco (gira sobre ese eje)
-    const dw=1.5,dh=H-1.0; const hinge=new THREE.Group(); hinge.position.set(-dw/2,0,0.04);
-    const leaf=boxM(dw,dh,0.08,mat,dw/2,dh/2,0); hinge.add(leaf);
-    const knob=new THREE.Mesh(new THREE.SphereGeometry(0.06,10,8),blackMetalMat); knob.position.set(dw-0.18,dh/2,0.07); hinge.add(knob);
+  else if(type==='door'){ g.add(boxM(W,0.9,Tk,mat,0,H-0.45,0));                         // dintel
+    const jl=boxM(1.1,H-0.9,Tk,mat,-W/2+0.55,(H-0.9)/2,0); g.add(jl);                   // jamba izquierda
+    const jr=boxM(1.1,H-0.9,Tk,mat,W/2-0.55,(H-0.9)/2,0);  g.add(jr);                   // jamba derecha
+    // HOJA que cubre TODO el hueco (sin huecos a los lados) con bisagra en el borde izquierdo
+    const dw=1.8,dh=H-0.9; const hinge=new THREE.Group(); hinge.position.set(-dw/2,0,0.05);
+    const leaf=boxM(dw,dh,0.1,woodDark,dw/2,dh/2,0); hinge.add(leaf);                    // madera distinta (oscura) para diferenciar
+    for(let i=1;i<4;i++) hinge.add(boxM(dw-0.1,0.05,0.12,mat,dw/2,dh*i/4,0));            // travesaños
+    const knob=new THREE.Mesh(new THREE.SphereGeometry(0.06,10,8),blackMetalMat); knob.position.set(dw-0.18,dh/2,0.08); hinge.add(knob);
     g.add(hinge); g.userData.hinge=hinge; g.userData.jambs=[jl,jr]; }
   return g;
 }
@@ -446,8 +477,8 @@ const MODELS={ hammer:buildHammer, table:buildTable,
   baldemad:()=>buildBucket(woodConsMat), baldechapa:()=>buildBucket(chapaMat),
   // MUEBLES
   cama:glbModel('cama'), horno:mHorno, silla:mSilla, bidon:mBidon, perchero:mPerchero, fogata:mFogata, conserv:mConserv, recagua:mRecagua,
-  pmad:()=>consPiece('wall',woodConsMat), smad:()=>consPiece('floor',woodConsMat), tmad:()=>consPiece('roof',woodConsMat), vmad:()=>consPiece('window',woodConsMat), dmad:()=>consPiece('door',woodConsMat),
-  pcha:()=>consPiece('wall',chapaMat), scha:()=>consPiece('floor',chapaMat), vcha:()=>consPiece('window',chapaMat), dcha:()=>consPiece('door',chapaMat) };
+  pmad:()=>consPiece('wall',woodConsMat), smad:()=>consPiece('floor',woodConsMat), tmad:()=>consPiece('roofflat',woodConsMat), imad:()=>consPiece('roof',woodConsMat), vmad:()=>consPiece('window',woodConsMat), dmad:()=>consPiece('door',woodConsMat),
+  pcha:()=>consPiece('wall',chapaMat), scha:()=>consPiece('floor',chapaMat), tcha:()=>consPiece('roofflat',chapaMat), vcha:()=>consPiece('window',chapaMat), dcha:()=>consPiece('door',chapaMat) };
 
 /* ===================== Jugador (1ª persona) ===================== */
 const EYE=1.7, EYE_CROUCH=1.05, GRAV=22, JUMP_V=7.4, SPEED_MAX=6.4, ACCEL=11;
@@ -461,20 +492,21 @@ camera.add(fpRig); scene.add(camera);
 const heldLight=new THREE.PointLight(0xfff3e2,0.8,9); heldLight.position.set(0.3,0.05,0.5); camera.add(heldLight);   // luz para el ítem en mano (no se ve apagado)
 let fpModel=null; const fpBasePos=new THREE.Vector3(), fpBaseRot=new THREE.Euler();
 // poses en mano (tamaño real relativo): empuñadura del modelo en el origen, orientada hacia la cámara
-const P_THRUST={p:[0.22,-0.34,-0.62],r:[1.12,Math.PI/2,0.05]};   // lanzas: listas para hincar
-const P_KNIFE ={p:[0.33,-0.30,-0.56],r:[-0.5,Math.PI/2,0.12]};   // cuchillos: más arriba, punta al frente
-const P_SWING ={p:[0.32,-0.44,-0.62],r:[-0.1,Math.PI/2,0.2]};    // hachas/picos/machete: golpe
-const P_BOW   ={p:[0.30,-0.30,-0.6],r:[0,Math.PI/2,0]};
-const P_HOLD  ={p:[0.34,-0.46,-0.7],r:[0.1,Math.PI/2,0.2]};
+// punta del modelo (+Y) hacia adelante: rotation.x=-π/2 mapea +Y → -Z (frente)
+const P_THRUST={p:[0.27,-0.2,-0.42],r:[-Math.PI/2-0.12,0,0]};    // lanzas: horizontales al frente, listas para hincar
+const P_KNIFE ={p:[0.30,-0.26,-0.5],r:[-0.55,Math.PI/2,0.1]};    // cuchillos: arriba, hoja al frente
+const P_SWING ={p:[0.32,-0.42,-0.6],r:[-0.1,Math.PI/2,0.2]};     // picos/machete/azada: golpe
+const P_BOW   ={p:[0.30,-0.28,-0.55],r:[0,Math.PI/2,0]};
+const P_HOLD  ={p:[0.32,-0.42,-0.62],r:[0.1,Math.PI/2,0.2]};
 const VIEW={
-  hammer:{s:0.6,...P_SWING},
-  spear:{s:0.5,...P_THRUST}, lanzapiedra:{s:0.5,...P_THRUST}, lanzaafil:{s:0.5,...P_THRUST},
-  knife:{s:1.0,...P_KNIFE}, cuchipiedra:{s:1.1,...P_KNIFE}, cuchiafil:{s:1.0,...P_KNIFE},
-  machete:{s:0.55,...P_SWING}, guadana:{s:0.42,...P_HOLD}, hacha:{s:0.9,...P_SWING},
-  arco:{s:0.6,...P_BOW}, flechamad:{s:0.7,...P_HOLD}, flechapiedra:{s:0.7,...P_HOLD}, flechaafil:{s:0.7,...P_HOLD},
-  picomad:{s:0.5,...P_SWING}, picopiedra:{s:0.5,...P_SWING}, picoafil:{s:0.5,...P_SWING},
-  antorcha:{s:0.7,...P_HOLD}, azadamad:{s:0.5,...P_SWING}, azadapiedra:{s:0.5,...P_SWING},
-  baldemad:{s:0.9,...P_HOLD}, baldechapa:{s:0.9,...P_HOLD}
+  hammer:{s:0.55,...P_SWING},
+  spear:{s:0.4,...P_THRUST}, lanzapiedra:{s:0.4,...P_THRUST}, lanzaafil:{s:0.4,...P_THRUST},
+  knife:{s:0.42,...P_KNIFE}, cuchipiedra:{s:0.5,...P_KNIFE}, cuchiafil:{s:0.42,...P_KNIFE},
+  machete:{s:0.5,...P_SWING}, guadana:{s:0.4,...P_HOLD}, hacha:{s:0.85,p:[0.32,-0.4,-0.58],r:[-0.1,-Math.PI/2,-0.2]},   // tomahawk: girado (estaba al revés)
+  arco:{s:0.55,...P_BOW}, flechamad:{s:0.6,...P_HOLD}, flechapiedra:{s:0.6,...P_HOLD}, flechaafil:{s:0.6,...P_HOLD},
+  picomad:{s:0.46,...P_SWING}, picopiedra:{s:0.46,...P_SWING}, picoafil:{s:0.46,...P_SWING},
+  antorcha:{s:0.6,...P_HOLD}, azadamad:{s:0.46,...P_SWING}, azadapiedra:{s:0.46,...P_SWING},
+  baldemad:{s:0.8,...P_HOLD}, baldechapa:{s:0.8,...P_HOLD}
 };
 function equip(id){
   while(fpRig.children.length)fpRig.remove(fpRig.children[0]);
@@ -528,8 +560,17 @@ tapBtn('bBag',()=>{renderBag();showScrim('bag');});
 tapBtn('bCraft',()=>{craftAtTable=!!nearTable;renderCraft();showScrim('craft');});
 document.querySelectorAll('.xClose').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();hideScrims();}));
 
+// scroll manual de las tarjetas (funciona también con la pantalla rotada 90°)
+let scId=null,scSX=0,scSY=0,scTop=0,scCard=null,scMoved=0;
+document.querySelectorAll('.card').forEach(card=>{
+  card.addEventListener('pointerdown',e=>{ scId=e.pointerId; scSX=e.clientX; scSY=e.clientY; scTop=card.scrollTop; scCard=card; scMoved=0; });
+  card.addEventListener('pointermove',e=>{ if(e.pointerId!==scId||scCard!==card)return; const dx=e.clientX-scSX,dy=e.clientY-scSY; scMoved=Math.max(scMoved,Math.hypot(dx,dy)); card.scrollTop=scTop+(rot? dx : -dy); });
+  card.addEventListener('pointerup',()=>{ if(scCard===card)scId=null; });
+  card.addEventListener('pointercancel',()=>{ scId=null; });
+});
+
 function showScrim(id){hideScrims();$(id).classList.add('show');}
-function hideScrims(){document.querySelectorAll('.scrim').forEach(s=>s.classList.remove('show'));}
+function hideScrims(){document.querySelectorAll('.scrim').forEach(s=>s.classList.remove('show')); closeDetail();}
 
 /* ===================== Crafteo / inventario ===================== */
 const RECIPES=[
@@ -571,10 +612,12 @@ const RECIPES=[
   {id:'pmad',tab:'construction',needTable:true,placeable:true},
   {id:'smad',tab:'construction',needTable:true,placeable:true},
   {id:'tmad',tab:'construction',needTable:true,placeable:true},
+  {id:'imad',tab:'construction',needTable:true,placeable:true},
   {id:'vmad',tab:'construction',needTable:true,placeable:true},
   {id:'dmad',tab:'construction',needTable:true,placeable:true},
   {id:'pcha',tab:'construction',needTable:true,placeable:true},
   {id:'scha',tab:'construction',needTable:true,placeable:true},
+  {id:'tcha',tab:'construction',needTable:true,placeable:true},
   {id:'vcha',tab:'construction',needTable:true,placeable:true},
   {id:'dcha',tab:'construction',needTable:true,placeable:true},
 ];
@@ -582,7 +625,7 @@ const TABS=['weapons','furniture','tools','construction'];
 let activeTab='tools';
 const inv={hammer:0,table:0,spear:0,knife:0,machete:0,botella:0,guadana:0,hacha:0,
   picomad:0,arco:0,antorcha:0,lanzapiedra:0,cuchipiedra:0,picopiedra:0,flechamad:0,flechapiedra:0,flechaafil:0,lanzaafil:0,picoafil:0,cuchiafil:0,azadamad:0,azadapiedra:0,baldemad:0,baldechapa:0,
-  cama:0,horno:0,silla:0,recagua:0,bidon:0,perchero:0,fogata:0,conserv:0,pmad:0,smad:0,tmad:0,vmad:0,dmad:0,pcha:0,scha:0,vcha:0,dcha:0};
+  cama:0,horno:0,silla:0,recagua:0,bidon:0,perchero:0,fogata:0,conserv:0,pmad:0,smad:0,tmad:0,imad:0,vmad:0,dmad:0,pcha:0,scha:0,tcha:0,vcha:0,dcha:0};
 let equipped=null;
 let craftAtTable=false;
 const icons={};
@@ -590,7 +633,7 @@ function ic(id){ if(id in icons)return icons[id]; let u=null; try{u=captureIcon(
 
 function rebuildTabs(){
   const c=$('craftTabs'); c.innerHTML='';
-  TABS.forEach(t=>{const d=document.createElement('div');d.className='paper'+(t===activeTab?' active':'');d.textContent=T(t);d.onclick=()=>{activeTab=t;renderCraft();};c.appendChild(d);});
+  TABS.forEach(t=>{const d=document.createElement('div');d.className='paper'+(t===activeTab?' active':'');d.textContent=T(t);d.onclick=()=>{if(scMoved>8)return;activeTab=t;renderCraft();};c.appendChild(d);});
 }
 function renderCraft(){
   rebuildTabs();
@@ -602,7 +645,7 @@ function renderCraft(){
     const it=document.createElement('div'); it.className='item'+(locked?' locked':'');
     it.innerHTML=`<div class="ic">${(()=>{const u=ic(r.id);return u?`<img src="${u}">`:"";})()}</div><div class="nm">${T(r.id)}</div>`+
       (locked?`<div class="sub" style="color:#ffb46b">${T('needTable')}</div>`:`<div class="sub">${T('free')} · ${T('craftBtn')}</div>`);
-    if(!locked) it.onclick=()=>{ inv[r.id]++; flash(it,T('crafted')); };
+    it.onclick=()=>{ if(scMoved>8)return; openDetail(r.id); };   // abre detalle (modelo 3D + materiales)
     g.appendChild(it);
   }
 }
@@ -614,7 +657,7 @@ function renderBag(){
     const it=document.createElement('div'); it.className='item'+(equipped===r.id?' selected':'');
     it.innerHTML=`<div class="ic">${(()=>{const u=ic(r.id);return u?`<img src="${u}">`:"";})()}</div><div class="nm">${T(r.id)} ×${inv[r.id]}</div>`+
       `<div class="sub">${eq?(equipped===r.id?T('equipped'):T('equip')):''}</div>`;
-    if(eq) it.onclick=()=>{ equipped=(equipped===r.id?null:r.id); equip(equipped); renderBag(); };
+    if(eq) it.onclick=()=>{ if(scMoved>8)return; equipped=(equipped===r.id?null:r.id); equip(equipped); renderBag(); };
     g.appendChild(it);
   }
   $('bagEmpty').style.display=any?'none':'block';
@@ -626,24 +669,78 @@ function openPlaceMenu(){
   for(const r of RECIPES.filter(r=>r.placeable)) if(inv[r.id]>0){ any=true;
     const it=document.createElement('div'); it.className='item';
     it.innerHTML=`<div class="ic">${(()=>{const u=ic(r.id);return u?`<img src="${u}">`:"";})()}</div><div class="nm">${T(r.id)} ×${inv[r.id]}</div>`;
-    it.onclick=()=>{ hideScrims(); startPlacing(r.id); };
+    it.onclick=()=>{ if(scMoved>8)return; hideScrims(); startPlacing(r.id); };
     g.appendChild(it);
   }
   $('placeEmpty').style.display=any?'none':'block';
   showScrim('placeMenu');
 }
 
+/* ===================== Detalle de crafteo (modelo 3D girando + materiales) ===================== */
+const RESN={madera:'🪵',piedra:'🪨',metal:'⚙️',cuerda:'🪢',tela:'🧵',vidrio:'🔷',chapa:'🛡️',barro:'🟫',carbon:'🔥',hueso:'🦴'};
+const REST={madera:{es:'Madera',en:'Wood',pt:'Madeira'},piedra:{es:'Piedra',en:'Stone',pt:'Pedra'},metal:{es:'Metal',en:'Metal',pt:'Metal'},cuerda:{es:'Cuerda',en:'Rope',pt:'Corda'},tela:{es:'Tela',en:'Cloth',pt:'Tecido'},vidrio:{es:'Vidrio',en:'Glass',pt:'Vidro'},chapa:{es:'Chapa',en:'Sheet metal',pt:'Chapa'},barro:{es:'Barro',en:'Clay',pt:'Barro'},carbon:{es:'Carbón',en:'Coal',pt:'Carvão'},hueso:{es:'Hueso',en:'Bone',pt:'Osso'}};
+const COSTS={
+  hammer:{madera:2,piedra:1}, table:{madera:4},
+  spear:{madera:2,cuerda:1}, knife:{metal:1,madera:1,cuerda:1}, machete:{metal:2,madera:1,cuerda:1}, botella:{vidrio:1,tela:1,carbon:1}, guadana:{metal:2,madera:2,cuerda:1}, hacha:{metal:1,madera:1,cuerda:1},
+  picomad:{madera:3,cuerda:1}, picopiedra:{madera:2,piedra:2,cuerda:1}, picoafil:{madera:2,metal:2,cuerda:1},
+  arco:{madera:2,cuerda:2}, lanzapiedra:{madera:2,piedra:1,cuerda:1}, lanzaafil:{madera:2,metal:1,cuerda:1},
+  cuchipiedra:{piedra:1,madera:1,cuerda:1}, cuchiafil:{metal:1,madera:1,cuerda:1},
+  flechamad:{madera:2}, flechapiedra:{madera:2,piedra:1}, flechaafil:{madera:2,metal:1},
+  antorcha:{madera:1,tela:1,carbon:1}, azadamad:{madera:3,cuerda:1}, azadapiedra:{madera:2,piedra:2,cuerda:1},
+  baldemad:{madera:3}, baldechapa:{chapa:2},
+  cama:{madera:5,tela:2}, horno:{barro:6,piedra:2}, silla:{madera:3}, recagua:{madera:4,tela:2,cuerda:2}, bidon:{chapa:3}, perchero:{madera:3}, fogata:{madera:3,piedra:4}, conserv:{madera:5,cuerda:2},
+  pmad:{madera:4}, smad:{madera:4}, tmad:{madera:5}, imad:{madera:5}, vmad:{madera:4,vidrio:1}, dmad:{madera:5},
+  pcha:{chapa:4}, scha:{chapa:4}, tcha:{chapa:5}, vcha:{chapa:4,vidrio:1}, dcha:{chapa:5}
+};
+let pvRenderer=null,pvScene=null,pvCam=null,pvModel=null,pvActive=false,detailId=null;
+function pvInit(){ if(pvRenderer)return true; try{
+  pvRenderer=new THREE.WebGLRenderer({canvas:$('pvCanvas'),antialias:true,alpha:true});
+  pvRenderer.setPixelRatio(Math.min(devicePixelRatio,2)); pvRenderer.setSize(200,200,false);
+  pvRenderer.outputColorSpace=THREE.SRGBColorSpace; pvRenderer.toneMapping=THREE.ACESFilmicToneMapping; pvRenderer.toneMappingExposure=1.12;
+  pvScene=new THREE.Scene(); pvScene.add(new THREE.HemisphereLight(0xf2f6ff,0x3a3f48,1.6));
+  const d=new THREE.DirectionalLight(0xffffff,2.6); d.position.set(2,3,2.5); pvScene.add(d);
+  const d2=new THREE.DirectionalLight(0xcfe0ff,1.0); d2.position.set(-2,1,-1.5); pvScene.add(d2);
+  pvCam=new THREE.PerspectiveCamera(34,1,0.01,100); return true;
+}catch(e){ return false; } }
+function openDetail(id){
+  detailId=id; $('detailName').textContent=T(id);
+  const mg=$('detailMats'); mg.innerHTML=''; const cost=COSTS[id]||{}; const ks=Object.keys(cost);
+  $('detailNeedLbl').textContent=T('need');
+  if(ks.length) for(const k of ks){ const row=document.createElement('div'); row.className='mat';
+    row.innerHTML=`<span>${RESN[k]||''} ${(REST[k]&&REST[k][lang])||k}</span><span>×${cost[k]}</span>`; mg.appendChild(row); }
+  else mg.innerHTML=`<div class="mat"><span>${T('free')}</span><span></span></div>`;
+  const r=RECIPES.find(x=>x.id===id); const locked=r&&r.needTable&&!craftAtTable;
+  const btn=$('detailCraft'); btn.textContent=locked?T('needTable'):T('craftBtn'); btn.disabled=!!locked;
+  if(pvInit()){
+    if(pvModel){ pvScene.remove(pvModel); pvModel.traverse(o=>{if(o.geometry)o.geometry.dispose();}); pvModel=null; }
+    try{ const mdl=(MODELS[id]||buildTable)(); mdl.traverse(o=>{if(o.isMesh)o.castShadow=false;});
+      const box=new THREE.Box3().setFromObject(mdl),c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),rad=Math.max(sz.x,sz.y,sz.z)||1;
+      mdl.position.sub(c); const holder=new THREE.Group(); holder.add(mdl); pvScene.add(holder); pvModel=holder;
+      pvCam.position.set(0,rad*0.35,rad*1.9); pvCam.lookAt(0,0,0);
+    }catch(e){}
+    pvActive=true;
+  }
+  $('detailCard').classList.add('show');
+}
+function closeDetail(){ pvActive=false; const dc=$('detailCard'); if(dc)dc.classList.remove('show'); }
+$('detailBack').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();closeDetail();});
+$('detailCraft').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();
+  const r=RECIPES.find(x=>x.id===detailId); if(r&&r.needTable&&!craftAtTable)return;
+  inv[detailId]=(inv[detailId]||0)+1; const b=$('detailCraft'),o=b.textContent; b.textContent=T('crafted'); b.disabled=true; setTimeout(()=>{b.textContent=o;b.disabled=false;},700); });
+
 /* ===================== Colocación (ghost) ===================== */
 let placing=null, placeYaw=0, ghost=null, building=false, buildT=0;
-const placedTables=[]; const solids=[]; const doors=[]; const recaguas=[];   // solids: AABB para colisión del jugador
-const CONSTR=new Set(['pmad','smad','tmad','vmad','dmad','pcha','scha','vcha','dcha']);
+const placedTables=[]; const solids=[]; const doors=[]; const recaguas=[]; const floors=[];   // solids: AABB colisión; floors: superficies pisables
+const CONSTR=new Set(['pmad','smad','tmad','imad','vmad','dmad','pcha','scha','tcha','vcha','dcha']);
 const DOORS=new Set(['dmad','dcha']);
+const ROOF_FLAT=new Set(['tmad','tcha']);                 // techos rectos: van ARRIBA, requieren pared debajo, son pisables
+const FLOORW=new Set(['smad','scha','tmad','tcha']);       // superficies pisables (no bloquean, registran piso)
+const NOSOLID=new Set(['smad','scha','tmad','tcha','imad']); // no generan muro de colisión
 const PLACE_MIN=1.6, PLACE_MAX=5.5;
 function ghostMat(){return new THREE.MeshStandardMaterial({color:0x2ad24a,transparent:true,opacity:0.55,emissive:0x0d5a1c,emissiveIntensity:0.5});}
+function spawnGhost(id){ ghost=(MODELS[id]||buildTable)(); ghost.traverse(o=>{if(o.isMesh)o.material=ghostMat();}); scene.add(ghost); }
 function startPlacing(id){
-  placing=id; placeYaw=0;
-  ghost=(MODELS[id]||buildTable)(); ghost.traverse(o=>{if(o.isMesh)o.material=ghostMat();});
-  scene.add(ghost);
+  placing=id; placeYaw=0; spawnGhost(id);
   $('bRot').classList.remove('hidden'); $('bPlace').classList.add('on'); refreshHints();
 }
 function stopPlacing(){ if(ghost){scene.remove(ghost);ghost.traverse(o=>{if(o.geometry)o.geometry.dispose();});ghost=null;} placing=null; building=false;
@@ -655,11 +752,14 @@ function updateGhost(){
   const camY=player.pos.y+player.eye; let dist=PLACE_MAX;
   if(_fwd.y<-0.05){ const t=camY/(-_fwd.y); dist=THREE.MathUtils.clamp(t,PLACE_MIN,PLACE_MAX); }
   _gp.set(player.pos.x-Math.sin(player.yaw)*dist, 0, player.pos.z-Math.cos(player.yaw)*dist);
-  if(CONSTR.has(placing)){ _gp.x=Math.round(_gp.x); _gp.z=Math.round(_gp.z); }   // snapping: se alinea solo al piso/grilla
+  if(CONSTR.has(placing)){ _gp.x=Math.round(_gp.x/4)*4; _gp.z=Math.round(_gp.z/4)*4; }   // snapping a grilla de 4m → piezas juntas y alineadas
   _gp.x=THREE.MathUtils.clamp(_gp.x,-GROUND_LIMIT,GROUND_LIMIT); _gp.z=THREE.MathUtils.clamp(_gp.z,-GROUND_LIMIT,GROUND_LIMIT);
-  ghost.position.copy(_gp); ghost.rotation.y=placeYaw; ghost.updateMatrixWorld();
   let valid=Math.abs(_gp.x)<GROUND_LIMIT-1&&Math.abs(_gp.z)<GROUND_LIMIT-1;
+  if(ROOF_FLAT.has(placing)){ _gp.y=WALLH;                                   // techo recto: va a la altura de las paredes
+    let sup=false; for(const s of solids){ if(s.maxx>_gp.x-2&&s.minx<_gp.x+2&&s.maxz>_gp.z-2&&s.minz<_gp.z+2){sup=true;break;} }
+    if(!sup) valid=false; }                                                  // se pone rojo si no hay pared debajo de la que sostenerse
   if(!CONSTR.has(placing)) for(const p of placedTables){ if(p.position.distanceTo(_gp)<1.0){valid=false;break;} }
+  ghost.position.copy(_gp); ghost.rotation.y=placeYaw; ghost.updateMatrixWorld();
   ghost.userData.valid=valid;
   const col=valid?0x2ad24a:0xff3b3b, em=valid?0x0d5a1c:0x5a0d0d;
   ghost.traverse(o=>{if(o.isMesh){o.material.color.setHex(col);o.material.emissive.setHex(em);}});
@@ -674,12 +774,17 @@ function finishBuild(){
     if(m.userData.hinge) doors.push({hinge:m.userData.hinge,group:m});
     for(const j of (m.userData.jambs||[])){ const bb=new THREE.Box3().setFromObject(j);
       solids.push({minx:bb.min.x-0.18,maxx:bb.max.x+0.18,minz:bb.min.z-0.18,maxz:bb.max.z+0.18}); }
-  } else if(id!=='smad'&&id!=='scha'&&id!=='tmad'){
+  } else if(!NOSOLID.has(id)){
     const bb=new THREE.Box3().setFromObject(m);
     solids.push({minx:bb.min.x-0.35,maxx:bb.max.x+0.35,minz:bb.min.z-0.35,maxz:bb.max.z+0.35});
   }
+  if(FLOORW.has(id)){ const bb=new THREE.Box3().setFromObject(m); floors.push({minx:bb.min.x,maxx:bb.max.x,minz:bb.min.z,maxz:bb.max.z,top:bb.max.y}); }
   if(id==='recagua') recaguas.push(m);
-  stopPlacing();
+  // limpiar ghost; si quedan unidades, seguir construyendo el mismo sin reseleccionar
+  if(ghost){ scene.remove(ghost); ghost.traverse(o=>{if(o.geometry)o.geometry.dispose();}); ghost=null; }
+  building=false; buildT=0;
+  if((inv[id]||0)>0){ spawnGhost(id); }
+  else { placing=null; $('bRot').classList.add('hidden'); $('bPlace').classList.remove('on'); refreshHints(); }
 }
 function resolveCollisions(){ const px=player.pos.x,pz=player.pos.z;
   for(const s of solids){ if(px>s.minx&&px<s.maxx&&pz>s.minz&&pz<s.maxz){
@@ -740,7 +845,11 @@ function update(dt){
   player.vel.lerp(des,Math.min(1,ACCEL*dt)); player.pos.addScaledVector(player.vel,dt);
   player.pos.x=THREE.MathUtils.clamp(player.pos.x,-GROUND_LIMIT,GROUND_LIMIT); player.pos.z=THREE.MathUtils.clamp(player.pos.z,-GROUND_LIMIT,GROUND_LIMIT);
   resolveCollisions();   // colisión con muebles/construcción
-  player.vy-=GRAV*dt; player.pos.y+=player.vy*dt; if(player.pos.y<=0){player.pos.y=0;player.vy=0;player.onGround=true;}
+  // piso pisable (suelos y techos rectos): subo el nivel del piso si estoy encima
+  let groundY=0; const _px=player.pos.x,_pz=player.pos.z;
+  for(const f of floors){ if(_px>f.minx&&_px<f.maxx&&_pz>f.minz&&_pz<f.maxz&&f.top>groundY&&player.pos.y>=f.top-0.6) groundY=f.top; }
+  player.vy-=GRAV*dt; player.pos.y+=player.vy*dt;
+  if(player.pos.y<=groundY){player.pos.y=groundY;player.vy=0;player.onGround=true;} else player.onGround=false;
   const targetEye=player.crouch?EYE_CROUCH:EYE; player.eye+=(targetEye-player.eye)*Math.min(1,10*dt);
   const speed=player.vel.length(); player.bobPhase+=dt*(speed*1.9+0.0001); const moveAmt=Math.min(1,speed/SPEED_MAX)*bobScale;
   const bobY=Math.sin(player.bobPhase*2)*0.05*moveAmt, bobX=Math.cos(player.bobPhase)*0.035*moveAmt;
@@ -752,7 +861,7 @@ function update(dt){
   euler.set(player.pitch+shy,player.yaw+shx,player.roll+shr); camera.quaternion.setFromEuler(euler);
   sunLight.position.set(player.pos.x+sun.position.x*0.4,sun.position.y,player.pos.z+sun.position.z*0.4); sunLight.target.position.copy(player.pos); sunLight.target.updateMatrixWorld();
   if(swing.active){ swing.t+=dt/0.42; const a=Math.sin(Math.min(swing.t,1)*Math.PI);
-    if(THRUST.has(equipped)){ fpRig.rotation.x=fpBaseRot.x+a*0.5; fpRig.position.z=fpBasePos.z-a*0.6; }   // inclina ~90° y hinca al frente
+    if(THRUST.has(equipped)){ fpRig.position.z=fpBasePos.z-a*0.7; fpRig.rotation.x=fpBaseRot.x-a*0.18; }   // hinca al frente (estocada)
     else { fpRig.rotation.x=fpBaseRot.x-a*1.2; }
     if(swing.t>=1){ swing.active=false; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
@@ -762,7 +871,8 @@ function update(dt){
   updateSign(dt);
   if(toastT>0){toastT-=dt;if(toastT<=0)refreshHints();}
 }
-function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera);
+  if(pvActive&&pvModel&&pvRenderer){ pvModel.rotation.y+=dt*0.9; pvRenderer.render(pvScene,pvCam); } }
 
 /* ===================== Iconos PNG (capturados del modelo real) ===================== */
 function captureIcon(obj,rot3){
