@@ -180,9 +180,8 @@
 
   <div id="hud"><span id="fps">–</span> FPS · <span id="treeCount">–</span> <span data-i18n="trees">árboles</span> · 🪵 <span id="wood">0</span></div>
   <div id="hint" data-i18n="hint">Joystick para caminar · arrastrá para mirar · 🪓 talar · 🎒 mochila</div>
-</div>
 
-<!-- ===== Menú de inicio ===== -->
+<!-- ===== Menú de inicio (dentro de #stage → rotan 90° con el juego) ===== -->
 <div id="startMenu" class="scrim show left">
   <div class="hero">
     <div class="brand">Rezona Games</div>
@@ -243,6 +242,7 @@
     <button class="invClose" id="invClose" data-i18n="close">Cerrar</button>
   </div>
 </div>
+</div><!-- /#stage -->
 
 <script type="importmap">
 {
@@ -614,13 +614,13 @@ function disposeChunk(c){
   const ci=chunkList.indexOf(c);if(ci>=0)chunkList.splice(ci,1);
   builtChunks.delete(c.key);
 }
-// STREAMING: sólo viven los chunks cercanos (al jugador o a la cámara cinemática); el resto se descarga (memoria + draw calls)
+// STREAMING: chunks cercanos vivos; se PRECARGAN por delante (R+1) para que nunca aparezcan justo al llegar (sin tirones)
 function streamChunks(budget,px,pz){
   if(px==null)px=player.pos.x; if(pz==null)pz=player.pos.z;
-  const pcx=Math.floor(px/CHUNK),pcz=Math.floor(pz/CHUNK),R=qual.streamR;
-  for(const c of [...builtChunks.values()]) if(Math.max(Math.abs(c.cx-pcx),Math.abs(c.cz-pcz))>R+1) disposeChunk(c);
+  const pcx=Math.floor(px/CHUNK),pcz=Math.floor(pz/CHUNK),R=qual.streamR,buildR=R+1,dropR=R+2;
+  for(const c of [...builtChunks.values()]) if(Math.max(Math.abs(c.cx-pcx),Math.abs(c.cz-pcz))>dropR) disposeChunk(c);
   let made=0;
-  for(let r=0;r<=R&&made<budget;r++)for(let dx=-r;dx<=r&&made<budget;dx++)for(let dz=-r;dz<=r&&made<budget;dz++){
+  for(let r=0;r<=buildR&&made<budget;r++)for(let dx=-r;dx<=r&&made<budget;dx++)for(let dz=-r;dz<=r&&made<budget;dz++){
     if(Math.max(Math.abs(dx),Math.abs(dz))!==r)continue;
     const cx=pcx+dx,cz=pcz+dz;if(cx<W.x0||cx>W.x1||cz<W.z0||cz>W.z1)continue;
     if(builtChunks.has(cx+'_'+cz))continue; buildChunk(cx,cz); made++;
@@ -754,7 +754,7 @@ function buildFPAxe(){
   const blade=new THREE.Mesh(bg,[steel,edgeMat]); headG.add(blade);
   return g;
 }
-const fpAxe=buildFPAxe(); fpAxe.scale.setScalar(0.46); fpAxe.position.set(0.33,-0.5,-0.82); fpAxe.rotation.set(0.12,Math.PI/2,0.18);
+const fpAxe=buildFPAxe(); fpAxe.scale.setScalar(0.46); fpAxe.position.set(0.33,-0.5,-0.82); fpAxe.rotation.set(0.12,Math.PI/2,0.18); fpAxe.visible=false;   // oculta en el menú; se muestra al jugar
 camera.add(fpAxe); scene.add(camera);
 const FP_BASE=fpAxe.rotation.clone(), FP_POS=fpAxe.position.clone();
 const equip={active:false,t:0};
@@ -885,7 +885,7 @@ function update(dt){
     if(vis){const fv=d2<gd2;for(let i=0;i<c.fol.length;i++)c.fol[i].visible=fv; // OPT: LOD de follaje bajo (pasto/plantas sólo cerca)
       const lf=d2<ld2;for(let i=0;i<c.leafMeshes.length;i++)c.leafMeshes[i].visible=lf;}} // OPT: LOD de copas (hojas sólo cerca; troncos siempre)
   chopTick(dt);
-  streamChunks(2);              // streaming: carga/descarga chunks alrededor del jugador
+  streamChunks(1);              // OPT: 1 chunk por frame, precargado por delante → sin tirones bruscos
   windU.uTime.value+=dt;
 }
 let shadowFrame=0;
@@ -1020,7 +1020,7 @@ function bootArea(done){
 function startGame(){
   try{
     $('options').classList.remove('show'); $('startMenu').classList.remove('show');
-    player.pos.set(0,0,4); player.yaw=0; player.pitch=0; cineT=0; cyclePhase=0;
+    player.pos.set(0,0,4); player.yaw=0; player.pitch=0; cineT=0; cyclePhase=0; fpAxe.visible=true;
     applyDefaults(); setQuality(curQuality); applyGodTextures(); layout();
     if(worldReady){ streamChunks(99,0,4); started=true; unlockAudio(); }
     else bootArea(()=>{ streamChunks(99,0,4); started=true; unlockAudio(); });
