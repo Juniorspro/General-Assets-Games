@@ -129,18 +129,61 @@ function buildBottle(){
   // líquido dentro
   const liq=new THREE.MeshStandardMaterial({color:0xc9852a,roughness:0.25,metalness:0,transparent:true,opacity:0.92});
   const fluid=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.36,0.72,40),liq); fluid.position.y=0.46; g.add(fluid);
-  // trapo
-  const rag=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.07,0.34,12),new THREE.MeshStandardMaterial({color:0xd8c9a8,roughness:0.95})); rag.position.y=1.82; g.add(rag);
-  // llama (animada simple)
-  const flameMat=new THREE.MeshStandardMaterial({color:0xff7a26,emissive:0xff5a1e,emissiveIntensity:2.2,roughness:0.5,transparent:true,opacity:0.95});
-  const flame=new THREE.Mesh(new THREE.ConeGeometry(0.1,0.34,12),flameMat); flame.position.y=2.1; g.add(flame);
-  const flame2=new THREE.Mesh(new THREE.ConeGeometry(0.055,0.2,10),new THREE.MeshStandardMaterial({color:0xffe08a,emissive:0xffd25a,emissiveIntensity:2.6,roughness:0.5})); flame2.position.y=2.14; g.add(flame2);
-  const light=new THREE.PointLight(0xff7a30,1.6,6,2); light.position.y=2.1; g.add(light);
-  g.userData.flame=flame; g.userData.flame2=flame2; g.userData.light=light;
   g.position.y=floorY;
   return g;
 }
 const bottle=buildBottle(); bottleGroup.add(bottle);
+
+/* ===== Fuego del gif: frames DECODIFICADOS (anima sí o sí, no depende del navegador) ===== */
+const FIREURL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4d4c23e/db5a4595bac1960e5b7cc0a35544140b.gif';
+const fireTex=new THREE.CanvasTexture(document.createElement('canvas')); fireTex.colorSpace=THREE.SRGBColorSpace;
+let fireFrames=[], fireDelays=[], fireTotal=0, fireCx=null, fireReady=false, _fimg=null;
+async function decodeFire(){
+  try{
+    if(!('ImageDecoder' in window)) throw new Error('no ImageDecoder');
+    const buf=await (await fetch(FIREURL,{mode:'cors'})).arrayBuffer();
+    const dec=new ImageDecoder({data:buf,type:'image/gif'}); await dec.tracks.ready;
+    const n=dec.tracks.selectedTrack.frameCount||1, MAXH=192;
+    for(let i=0;i<n;i++){ const r=await dec.decode({frameIndex:i}); const img=r.image;
+      const sc=Math.min(1,MAXH/img.displayHeight), w=Math.max(1,Math.round(img.displayWidth*sc)), h=Math.max(1,Math.round(img.displayHeight*sc));
+      const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
+      fireFrames.push(c); fireDelays.push((img.duration||100000)/1000); img.close(); }
+    fireTotal=fireDelays.reduce((a,b)=>a+b,0)||fireDelays.length*60;
+    const cv=fireTex.image; cv.width=fireFrames[0].width; cv.height=fireFrames[0].height; fireCx=cv.getContext('2d'); fireReady=true;
+  }catch(e){ // fallback: <img> visible (casi invisible) + drawImage
+    const img=new Image(); img.crossOrigin='anonymous'; img.src=FIREURL;
+    img.style.cssText='position:fixed;left:0;bottom:0;width:4px;height:4px;opacity:.012;pointer-events:none;'; document.body.appendChild(img); _fimg=img;
+    const cv=fireTex.image; cv.width=128; cv.height=192; fireCx=cv.getContext('2d'); fireReady=true;
+  }
+}
+decodeFire();
+function tickFire(){
+  if(!fireReady||!fireCx) return;
+  if(fireFrames.length){ let t=performance.now()%fireTotal, idx=0; for(let i=0;i<fireDelays.length;i++){ if(t<fireDelays[i]){idx=i;break;} t-=fireDelays[i]; }
+    const f=fireFrames[idx], cv=fireTex.image; if(cv.width!==f.width){cv.width=f.width;cv.height=f.height;} fireCx.clearRect(0,0,cv.width,cv.height); fireCx.drawImage(f,0,0); fireTex.needsUpdate=true; }
+  else if(_fimg&&_fimg.complete&&_fimg.naturalWidth){ const s=Math.min(128/_fimg.naturalWidth,192/_fimg.naturalHeight); fireCx.clearRect(0,0,128,192); fireCx.drawImage(_fimg,0,0,_fimg.naturalWidth*s,_fimg.naturalHeight*s); fireTex.needsUpdate=true; }
+}
+
+/* ===== Trapo: tela Verlet de 1024 vértices, chica, FIJADA dentro de la botella ===== */
+const ragMat=new THREE.MeshStandardMaterial({color:0xd8c7a2,roughness:0.9,metalness:0,side:THREE.DoubleSide});
+const RAGN=32;
+let ragCloth=null,ragPhys=null,ragRen=null,fireSpr=null,ragFireLight=null;
+function buildRag(){
+  const W=0.17,H=0.62; ragCloth=new Cloth(W,H,RAGN,RAGN);                 // 32×32 = 1024 vértices
+  const topY=1.62, sx=W/(RAGN-1), sy=H/(RAGN-1);
+  for(let y=0;y<RAGN;y++)for(let x=0;x<RAGN;x++){ const p=ragCloth.particles[y*RAGN+x];
+    const lean=(y/(RAGN-1))*0.46;                                          // arquea hacia adelante → cuelga afuera
+    p.pos.set(-W/2+x*sx, topY-y*sy, lean); p.prev.copy(p.pos);
+    p.pinned = y < RAGN*0.38;                                              // 38% de arriba FIJO (metido en la botella, no se sale ni entra)
+  }
+  ragPhys=new ClothPhysics(ragCloth);
+  ragPhys.gravity.set(0,-7,0); ragPhys.wind=2.0; ragPhys.windDir.set(0.4,0,1); ragPhys.drag=0.06; ragPhys.iterations=5;
+  ragPhys.colliders=[ {type:'capsule',p0:new THREE.Vector3(0,0.1,0),p1:new THREE.Vector3(0,1.05,0),radius:0.42} ];  // la botella: el trapo cuelga POR FUERA
+  ragRen=new ClothRenderer(ragCloth,ragMat); bottleGroup.add(ragRen.mesh);
+  fireSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:fireTex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true}));
+  fireSpr.scale.set(0.36,0.52,1); bottleGroup.add(fireSpr);
+  ragFireLight=new THREE.PointLight(0xff7a30,1.2,3.5,2); bottleGroup.add(ragFireLight);
+}
 
 /* =====================================================================
    SIMULACIÓN DE TELA — Verlet Integration (sin Cannon.js)
@@ -446,12 +489,16 @@ function animate(){
   requestAnimationFrame(animate);
   const dt=Math.min(clock.getDelta(),0.033);
 
-  // botella: llama latiendo
+  // botella: trapo de tela (Verlet) colgando + fuego del gif en la punta
   if(bottleGroup.visible){
-    const t=clock.elapsedTime, f=bottle.userData.flame, f2=bottle.userData.flame2, l=bottle.userData.light;
-    const s=1+Math.sin(t*12)*0.12+Math.sin(t*23)*0.06; f.scale.set(1,s,1); f2.scale.set(1,s*1.1,1);
-    l.intensity=1.4+Math.sin(t*15)*0.4+Math.random()*0.2;
-    bottle.rotation.y+=dt*0.25;
+    tickFire();
+    if(ragPhys){
+      let rem=dt,h=1/120; while(rem>1e-4){ const s=Math.min(h,rem); ragPhys.step(s); rem-=s; }   // sub-pasos fijos = estable
+      ragRen.sync();
+      const tip=ragCloth.particles[(RAGN-1)*RAGN + (RAGN>>1)];   // partícula inferior central
+      fireSpr.position.set(tip.pos.x,tip.pos.y+0.14,tip.pos.z);
+      ragFireLight.position.copy(fireSpr.position); ragFireLight.intensity=1.0+Math.sin(clock.elapsedTime*14)*0.4+Math.random()*0.2;
+    }
   }
 
   // tela: físicas con sub-pasos fijos (estabilidad)
@@ -472,6 +519,7 @@ function animate(){
     $('stats').textContent = clothGroup.visible ? `${cloth?cloth.particles.length:0} part · ${fps} fps` : `${fps} fps`; }
 }
 
+buildRag();          // tela del trapo (requiere las clases Cloth* ya definidas)
 setMode('bottle');
 animate();
 setTimeout(()=>$('loader').classList.add('hide'),300);
