@@ -424,7 +424,7 @@ function nm(id){const n=NAMES[id];return n?(n[LI[lang]||0]):id;}
 /* ===================== Economía de crafteo ===================== */
 const RES_BASE=['tronco','palo','piedra','piedraFilosa','enredadera','hojas','tela','chatarra','agua','sal','combustible','botella'];
 const TRANSFORMS=[{id:'tabla',out:4,cost:{tronco:1}},{id:'hilo',out:1,cost:{enredadera:5}},{id:'cuerda',out:1,cost:{hilo:3}},{id:'chapa',out:1,cost:{chatarra:2}}];
-const RECIPES=[
+const RECIPES_FULL=[
   {id:'cuchillo',tab:'weapons',cost:{palo:1,piedraFilosa:2}},
   {id:'machete',tab:'weapons',cost:{chapa:1,palo:1}},
   {id:'botellaInc',tab:'weapons',cost:{botella:1,tela:1,combustible:1}},
@@ -466,6 +466,9 @@ const RECIPES=[
   {id:'paredChapaVentana',tab:'construction',placeable:true,cost:{chapa:4}},
   {id:'paredChapaPuerta',tab:'construction',placeable:true,cost:{chapa:5}},
 ];
+// Arrancamos solo con Mesa y Martillo y vamos sumando de a poco (agregá ids acá para habilitar más).
+const ACTIVE=new Set(['martillo','mesa']);
+const RECIPES=RECIPES_FULL.filter(r=>ACTIVE.has(r.id));
 const TABS=['weapons','tools','furniture','construction'];
 const NO_TABLE=new Set(['martillo','mesa']);    // lo único crafteable sin mesa
 let activeTab='tools';
@@ -488,8 +491,10 @@ function processIconQueue(){ let n=2; while(n-->0 && iconQueue.length){ const id
 function iconCell(id){ if(iconCache[id])return `<div class="ic" data-ic="${id}"><img src="${iconCache[id]}"></div>`; requestIcon(id); return `<div class="ic" data-ic="${id}"></div>`; }
 // captura TODOS los íconos 3D una vez al cargar (mientras se ve el loader) — confiable, fuera del loop de render
 function captureAllIcons(){
-  for(const id in MODELS){ try{ iconCache[id]=captureIcon(MODELS[id](),[0.25,0.7,0.3])||fallbackIcon(id); }catch(e){ iconCache[id]=fallbackIcon(id); } }
-  for(const k of [...RES_BASE,'tabla','hilo','cuerda','chapa','manualHogares']) if(iconCache[k]===undefined) iconCache[k]=(MODELS[k]?(()=>{try{return captureIcon(MODELS[k](),[0.25,0.7,0.3])}catch(e){return null}})():null)||fallbackIcon(k);
+  // sólo capturamos íconos 3D de los crafteos ACTIVOS (no colapsa); el resto usa fallback liviano
+  const ids=new Set([...RECIPES.map(r=>r.id),'manualHogares']);
+  for(const id of ids){ if(!MODELS[id]){iconCache[id]=fallbackIcon(id);continue;} try{ iconCache[id]=captureIcon(MODELS[id](),[0.25,0.7,0.3])||fallbackIcon(id); }catch(e){ iconCache[id]=fallbackIcon(id); } }
+  for(const k of [...RES_BASE,'tabla','hilo','cuerda','chapa']) if(iconCache[k]===undefined) iconCache[k]=fallbackIcon(k);
 }
 function needsTable(r){ return !NO_TABLE.has(r.id); }
 function canAfford(cost){ for(const k in cost) if((inv[k]||0)<cost[k]) return false; return true; }
