@@ -102,21 +102,19 @@
   .slot .rar{ position:absolute; right:0; top:0; width:0; height:0; border-style:solid; border-width:0 9px 9px 0; border-color:transparent #888 transparent transparent; }
   .slot .qty{ position:absolute; left:3px; bottom:2px; font-size:10px; font-weight:700; color:#eaf0f6; text-shadow:0 1px 2px #000; }
 
-  .sciDetail{ flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; border-left:1px solid rgba(150,180,210,.12); padding-left:16px; }  /* DERECHA */
-  .sciRight{ flex:0 0 44%; position:relative; min-height:110px; display:flex; align-items:center; justify-content:center; }
+  .sciDetail{ flex:1; display:flex; flex-direction:column; gap:6px; min-height:0; border-left:1px solid rgba(150,180,210,.12); padding-left:16px; }  /* DERECHA */
+  .sciRight{ flex:0 0 38%; position:relative; min-height:96px; display:flex; align-items:center; justify-content:center; }
   .sciPlat{ position:absolute; left:50%; top:58%; width:74%; padding-bottom:74%; transform:translate(-50%,-50%); border-radius:50%;
             border:1px solid rgba(91,200,245,.4); background:radial-gradient(circle,rgba(91,200,245,.14),transparent 62%); box-shadow:0 0 36px rgba(91,200,245,.16) inset; }
   .sciPlat::after{ content:""; position:absolute; inset:20%; border-radius:50%; border:1px dashed rgba(240,162,60,.45); }
   #pvCanvas{ position:relative; z-index:2; width:92%; height:92%; }
-  .sciMid{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; touch-action:none; overscroll-behavior:contain; min-height:0; }
+  .sciMid{ flex:1; display:flex; flex-direction:column; min-height:0; }
   .sciName{ font-size:18px; font-weight:800; letter-spacing:.03em; }
   .sciType{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; margin:2px 0 8px; color:#f0a23c; }
-  .sciDesc{ font-size:11.5px; line-height:1.5; opacity:.55; margin-bottom:8px; }
-  .sciSecHd{ font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; opacity:.55; margin:10px 0 6px; padding-bottom:5px; border-bottom:1px solid rgba(150,180,210,.14); }
-  .sciRows{ display:flex; flex-direction:column; gap:5px; }
-  .rrow{ display:flex; justify-content:space-between; gap:10px; font-size:12px; }
-  .rrow span:first-child{ opacity:.72; } .rrow .rv{ color:#9fe8a6; font-weight:600; white-space:nowrap; }
-  .rrow .rv.warn{ color:#f0a23c; }
+  .sciSecHd{ font-size:10.5px; letter-spacing:.2em; text-transform:uppercase; opacity:.55; margin:6px 0 7px; padding-bottom:5px; border-bottom:1px solid rgba(150,180,210,.14); }
+  .sciChips{ display:flex; flex-wrap:wrap; gap:6px; align-content:flex-start; flex:1; overflow-y:auto; touch-action:none; }   /* TODOS los materiales a la vista, sin bajar */
+  .chip{ display:flex; align-items:center; gap:5px; font-size:12px; padding:6px 9px; border-radius:5px; background:rgba(255,255,255,.05); border:1px solid rgba(150,180,210,.16); height:fit-content; }
+  .chip b{ color:#9fe8a6; font-weight:700; }
   .sciBtn{ width:100%; margin-top:12px; padding:12px; border-radius:4px; border:1px solid #f0a23c; background:rgba(240,162,60,.15);
            color:#ffd9a0; font-size:13px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; cursor:pointer; }
   .sciBtn:active{ background:rgba(240,162,60,.3); }
@@ -168,14 +166,11 @@
       <!-- DERECHA: visor 3D + materiales + botón -->
       <div class="sciDetail">
         <div class="sciRight"><div class="sciPlat"></div><canvas id="pvCanvas"></canvas></div>
-        <div class="sciMid scrl">
+        <div class="sciMid">
           <div class="sciName" id="dName">—</div>
           <div class="sciType" id="dType"></div>
-          <div class="sciDesc" id="dDesc"></div>
           <div class="sciSecHd" id="dMatHd">Necesitás</div>
-          <div class="sciRows" id="dMats"></div>
-          <div class="sciSecHd">Info</div>
-          <div class="sciRows" id="dInfo"></div>
+          <div class="sciChips" id="dMats"></div>
           <button id="dAction" class="sciBtn">Fabricar</button>
         </div>
       </div>
@@ -247,7 +242,7 @@ const app=$('app');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.18;
+renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=0.96;
 app.appendChild(renderer.domElement);
 
 const scene=new THREE.Scene();
@@ -417,7 +412,7 @@ function tickGifs(dt){ for(const o of fireGifs){ if(!o.ready||!o.cx)continue;
   else if(o._img&&o._img.complete&&o._img.naturalWidth){ const s=Math.min(128/o._img.naturalWidth,192/o._img.naturalHeight); o.cx.clearRect(0,0,128,192); o.cx.drawImage(o._img,0,0,o._img.naturalWidth*s,o._img.naturalHeight*s); o.tex.needsUpdate=true; } } }
 // fuego como PLANOS CRUZADOS (no billboard): base abajo, llama hacia arriba
 function makeFireMesh(tex,w,h){ const g=new THREE.Group();
-  const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});
+  const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:0.66,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});  // opacity baja = menos quemado
   const p1=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat); p1.position.y=h*0.32; g.add(p1);
   const p2=p1.clone(); p2.rotation.y=Math.PI/2; g.add(p2); return g; }
 function cyl(rt,rb,h,m,s){const e=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,s||14),m);e.castShadow=true;return e;}
@@ -449,10 +444,10 @@ function mFogata(){const g=new THREE.Group(); g.userData.kind='fogata';
   const l1=cyl(0.07,0.07,0.9,woodConsMat);l1.rotation.z=1.2;l1.position.y=0.2;g.add(l1);
   const l2=cyl(0.07,0.07,0.9,woodConsMat);l2.rotation.set(1.2,0.7,0);l2.position.y=0.2;g.add(l2);
   const e=new THREE.Mesh(new THREE.ConeGeometry(0.26,0.42,10),emberMat);e.position.y=0.32;g.add(e);     // núcleo de brasas
-  // dos billboards de gif (aditivos) que siempre miran a la cámara
-  const s1=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[0].tex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true})); s1.scale.set(1.25,1.4,1); s1.position.y=0.78; g.add(s1);
-  const s2=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[1].tex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true})); s2.scale.set(0.85,1.65,1); s2.position.y=0.95; g.add(s2);
-  const fl=new THREE.PointLight(0xff6a1e,2.4,9,2); fl.position.set(0,0.8,0); g.add(fl); g.userData.fire=fl;   // luz del color del fuego
+  // dos billboards de gif (aditivos, opacidad baja = menos quemado) que siempre miran a la cámara
+  const s1=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[0].tex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:0.6})); s1.scale.set(1.25,1.4,1); s1.position.y=0.78; g.add(s1);
+  const s2=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[1].tex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:0.6})); s2.scale.set(0.85,1.65,1); s2.position.y=0.95; g.add(s2);
+  const fl=new THREE.PointLight(0xff6a1e,1.3,8,2); fl.position.set(0,0.8,0); g.add(fl); g.userData.fire=fl;   // luz del color del fuego (más suave)
   return g;}
 function mConserv(){const g=new THREE.Group();g.add(boxM(1.2,0.9,0.7,woodConsMat,0,0.45,0));g.add(boxM(1.24,0.12,0.74,woodConsMat,0,0.92,0));return g;}
 // RECOLECTOR DE AGUA: 4 postes + tela tipo embudo (punta hacia ABAJO, sobre el tacho) + esquinas atadas + tacho con agua que se llena al cargar
@@ -483,7 +478,7 @@ function buildBottle(){const g=new THREE.Group();
   const rm=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.16,0.05),clothMat); rm.position.set(0.03,0.16,0); rm.rotation.z=-0.5; rm.castShadow=true; rag.add(rm);   // saliendo por el pico
   const rt=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.18,0.05),clothMat); rt.position.set(0.13,0.3,0); rt.rotation.z=-0.95; rt.castShadow=true; rag.add(rt); // punta colgando afuera (más larga)
   const fire=makeFireMesh(fireGifs[1].tex,0.55,0.8); fire.position.set(0.13,0.2,0); rag.add(fire);   // fuego GRANDE (planos cruzados, no billboard) quemando el trapo
-  const fl=new THREE.PointLight(0xff7a30,1.0,2.6,2); fl.position.set(0.15,0.42,0); rag.add(fl);
+  const fl=new THREE.PointLight(0xff7a30,0.6,2.4,2); fl.position.set(0.15,0.42,0); rag.add(fl);
   g.add(rag); return g;}
 // guadaña: asta larga + empuñadura lateral + hoja curva (tubo de metal)
 function buildScythe(){const g=new THREE.Group();const sh=hnd(1.9,0.04,woodDark);sh.position.y=0.95;g.add(sh);const grip=cyl(0.05,0.05,0.2,woodMat,10);grip.rotation.z=Math.PI/2;grip.position.set(0.16,0.72,0);g.add(grip);
@@ -742,17 +737,12 @@ function renderGrid(){
 }
 function selectItem(id){
   const r=RECIPES.find(x=>x.id===id); if(!r) return;
-  $('dName').textContent=T(id);
+  $('dName').textContent=T(id)+((inv[id]||0)>0?'  ×'+inv[id]:'');
   $('dType').textContent='// '+T(r.tab); $('dType').style.color=RARITY[r.tab]||'#f0a23c';
-  $('dDesc').textContent=(DESCT[lang]||DESCT.es)[r.tab]||'';
   const mats=$('dMats'); mats.innerHTML=''; const cost=COSTS[id]||{}; const ks=Object.keys(cost);
   $('dMatHd').textContent=T('need');
-  if(ks.length) for(const k of ks) mats.insertAdjacentHTML('beforeend',`<div class="rrow"><span>${RESN[k]||''} ${(REST[k]&&REST[k][lang])||k}</span><span class="rv">${cost[k]}</span></div>`);
-  else mats.insertAdjacentHTML('beforeend',`<div class="rrow"><span>${T('free')}</span><span class="rv">✓</span></div>`);
-  const info=$('dInfo'); info.innerHTML='';
-  info.insertAdjacentHTML('beforeend',`<div class="rrow"><span>${T('inventory')}</span><span class="rv">${inv[id]||0}</span></div>`);
-  if(r.placeable) info.insertAdjacentHTML('beforeend',`<div class="rrow"><span>${T('placeTitle')}</span><span class="rv">✓</span></div>`);
-  if(r.needTable) info.insertAdjacentHTML('beforeend',`<div class="rrow"><span>${T('table')}</span><span class="rv ${craftAtTable?'':'warn'}">${craftAtTable?'OK':T('needTable')}</span></div>`);
+  if(ks.length) for(const k of ks) mats.insertAdjacentHTML('beforeend',`<span class="chip">${RESN[k]||''} ${(REST[k]&&REST[k][lang])||k} <b>×${cost[k]}</b></span>`);
+  else mats.insertAdjacentHTML('beforeend',`<span class="chip">${T('free')} ✓</span>`);
   setupAction(r); showModel(id);
 }
 function setupAction(r){
@@ -955,7 +945,7 @@ function update(dt){
     if(swing.t>=1){ swing.active=false; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
   tickGifs(dt);   // anima los gifs de fuego
-  for(const m of placedTables){ if(m.userData.kind==='fogata'&&m.userData.fire){ m.userData.fire.intensity=2.1+Math.sin(clock.elapsedTime*11+m.position.x)*0.5+Math.random()*0.35; } }
+  for(const m of placedTables){ if(m.userData.kind==='fogata'&&m.userData.fire){ m.userData.fire.intensity=1.15+Math.sin(clock.elapsedTime*11+m.position.x)*0.35+Math.random()*0.25; } }
   if(equipped==='botella'&&fpModel){ const rg=fpModel.getObjectByName('botellaRag'); if(rg){ const sp=Math.min(1,player.vel.length()/SPEED_MAX); rg.rotation.z=Math.sin(player.bobPhase*2)*0.22*(0.35+sp)+Math.sin(clock.elapsedTime*1.7)*0.06; } }   // el trapo se balancea al caminar
   if(placing&&!building) updateGhost();
   if(building){ buildT+=dt; const k=Math.min(1,buildT/0.5); if(ghost){ghost.scale.setScalar(0.2+0.8*k);} if(buildT>=0.5) finishBuild(); }
