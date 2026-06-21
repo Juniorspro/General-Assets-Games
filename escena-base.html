@@ -91,7 +91,9 @@
   /* panel de detalle de crafteo (al costado) */
   #craft.show{ gap:12px; flex-wrap:nowrap; }
   #detailCard{ display:none; width:min(300px,calc(100vw - 32px)); text-align:center; }
-  #detailCard.show{ display:block; }
+  #detailCard.show{ display:flex; flex-direction:column; justify-content:center; align-items:center; gap:12px; }
+  #detailCard #detailBack{ align-self:flex-start; }
+  #detailCard #detailMats{ width:100%; }
   body.rot #detailCard{ width:min(300px,calc(100vh - 36px)); }
   /* pantalla ROTADA 90°: para que se vean LADO A LADO hay que apilarlos en columna en el DOM */
   body.rot #craft.detailOpen{ flex-direction:column; align-items:center; }
@@ -301,7 +303,9 @@ function consPiece(type,mat){const g=new THREE.Group();const W=4,H=WALLH,Tk=0.2;
   else if(type==='roofflat'){ g.add(boxM(W,0.16,W,mat,0,-0.08,0));                    // techo RECTO (como suelo, va arriba)
     for(const x of[-W/2+0.35,0,W/2-0.35]) g.add(boxM(0.18,0.2,W-0.2,woodDark,x,-0.27,0)); } // vigas de sostén (grosor que lo diferencia del suelo)
   else if(type==='roof'){ const s=boxM(W+0.4,0.18,W+0.4,mat,0,H*0.5,0); s.rotation.x=-0.4; g.add(s); } // techo INCLINADO (sin palos)
-  else if(type==='window'){ g.add(boxM(W,0.9,Tk,mat,0,H-0.45,0)); g.add(boxM(W,0.7,Tk,mat,0,0.35,0)); g.add(boxM(0.9,H,Tk,mat,-W/2+0.45,H/2,0)); g.add(boxM(0.9,H,Tk,mat,W/2-0.45,H/2,0)); }
+  else if(type==='window'){ g.add(boxM(W,0.7,Tk,mat,0,0.35,0)); g.add(boxM(W,0.9,Tk,mat,0,H-0.45,0));   // antepecho + dintel (full width)
+    const midH=H-0.9-0.7, midY=0.7+midH/2;                                                                 // pilares SÓLO en el medio (sin solaparse → sin titileo)
+    g.add(boxM(0.9,midH,Tk,mat,-W/2+0.45,midY,0)); g.add(boxM(0.9,midH,Tk,mat,W/2-0.45,midY,0)); }
   else if(type==='door'){ g.add(boxM(W,0.9,Tk,mat,0,H-0.45,0));                         // dintel
     const jl=boxM(1.1,H-0.9,Tk,mat,-W/2+0.55,(H-0.9)/2,0); g.add(jl);                   // jamba izquierda
     const jr=boxM(1.1,H-0.9,Tk,mat,W/2-0.55,(H-0.9)/2,0);  g.add(jr);                   // jamba derecha
@@ -363,10 +367,10 @@ function buildKnife(){
   const guard=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.05,0.09),blackMetalMat); guard.position.y=0.37; guard.castShadow=true; g.add(guard);
   // hoja bowie (clip-point) con metal PBR
   const s=new THREE.Shape(); s.moveTo(-0.055,0); s.lineTo(0.065,0); s.lineTo(0.075,0.6); s.lineTo(0.01,0.8); s.quadraticCurveTo(-0.02,0.7,-0.06,0.52); s.lineTo(-0.055,0); s.closePath();
-  const bg=new THREE.ExtrudeGeometry(s,{depth:0.024,bevelEnabled:true,bevelThickness:0.007,bevelSize:0.007,bevelSegments:1,steps:1,curveSegments:14}); bg.translate(0,0,-0.012);
+  const bg=new THREE.ExtrudeGeometry(s,{depth:0.01,bevelEnabled:true,bevelThickness:0.004,bevelSize:0.005,bevelSegments:1,steps:1,curveSegments:14}); bg.translate(0,0,-0.005);   // hoja fina
   const blade=new THREE.Mesh(bg,metalMat); blade.position.y=0.4; blade.castShadow=true; g.add(blade);
   // canal (fuller) sutil
-  const fuller=new THREE.Mesh(new THREE.BoxGeometry(0.012,0.42,0.03),blackMetalMat); fuller.position.set(0.012,0.62,0); g.add(fuller);
+  const fuller=new THREE.Mesh(new THREE.BoxGeometry(0.01,0.42,0.014),blackMetalMat); fuller.position.set(0.012,0.62,0); g.add(fuller);
   return g;
 }
 /* ---- materiales + muebles procedurales ---- */
@@ -381,7 +385,17 @@ const clayMat=new THREE.MeshStandardMaterial({color:0x9c6a44,roughness:1,metalne
 const clayDark=new THREE.MeshStandardMaterial({color:0x6e472b,roughness:1,metalness:0});
 const glassMat=new THREE.MeshPhysicalMaterial({color:0x2f5d3a,roughness:0.08,metalness:0,transmission:0.55,transparent:true,opacity:0.55,thickness:0.25,envMapIntensity:1.4});
 const liquidMat=new THREE.MeshStandardMaterial({color:0xc9852a,roughness:0.35,transparent:true,opacity:0.85});
-const waterMat=new THREE.MeshStandardMaterial({color:0x3b86c9,roughness:0.18,metalness:0,transparent:true,opacity:0.85,envMapIntensity:1.3});
+const waterMat=new THREE.MeshStandardMaterial({color:0x2f7fc9,roughness:0.12,metalness:0,transparent:true,opacity:0.8,envMapIntensity:1.6});
+/* ---- llamas ANIMADAS (gifs del repo) para la fogata: billboards que siguen la cámara ---- */
+const GIFB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4d4c23e/';
+const _gifBox=document.createElement('div'); _gifBox.style.cssText='position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;left:-9999px;pointer-events:none;'; document.body.appendChild(_gifBox);
+function gifTex(file){ const img=new Image(); img.crossOrigin='anonymous'; img.src=GIFB+file; _gifBox.appendChild(img);
+  const cv=document.createElement('canvas'); cv.width=cv.height=128; const cx=cv.getContext('2d');
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; return {img,cv,cx,tex}; }
+const fireGifs=[gifTex('2spnJPK.gif'),gifTex('db5a4595bac1960e5b7cc0a35544140b.gif')];   // llama grande + llamas altas
+let _gifT=0;
+function tickGifs(dt){ _gifT+=dt; if(_gifT<0.06)return; _gifT=0;            // ~16 fps: dibuja el frame actual del gif al canvas
+  for(const g of fireGifs){ if(g.img.complete&&g.img.naturalWidth){ g.cx.clearRect(0,0,128,128); g.cx.drawImage(g.img,0,0,128,128); g.tex.needsUpdate=true; } } }
 function cyl(rt,rb,h,m,s){const e=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,s||14),m);e.castShadow=true;return e;}
 function hnd(len,r,m){const e=cyl(r||0.04,(r||0.04)*1.18,len,m||woodDark,14);return e;}
 function lash(y,r){const t=new THREE.Mesh(new THREE.TorusGeometry(r||0.06,(r||0.06)*0.28,6,14),woodMat);t.position.y=y;t.rotation.x=Math.PI/2;t.castShadow=true;return t;}
@@ -406,7 +420,16 @@ function mBidon(){const g=new THREE.Group();
   const knob=new THREE.Mesh(new THREE.SphereGeometry(0.05,10,8),blackMetalMat); knob.position.y=1.11; g.add(knob);
   return g;}
 function mPerchero(){const g=new THREE.Group();const base=cyl(0.35,0.4,0.08,woodConsMat,16);base.position.y=0.04;g.add(base);const post=cyl(0.06,0.06,1.7,woodConsMat,12);post.position.y=0.9;g.add(post);g.add(boxM(0.9,0.07,0.07,woodConsMat,0,1.55,0));const head=new THREE.Mesh(new THREE.SphereGeometry(0.13,12,10),woodConsMat);head.position.y=1.75;g.add(head);return g;}
-function mFogata(){const g=new THREE.Group();for(let i=0;i<8;i++){const a=i/8*6.28;g.add(boxM(0.22,0.18,0.22,stoneMat,Math.cos(a)*0.55,0.09,Math.sin(a)*0.55));}const l1=cyl(0.07,0.07,0.9,woodConsMat);l1.rotation.z=1.2;l1.position.y=0.2;g.add(l1);const l2=cyl(0.07,0.07,0.9,woodConsMat);l2.rotation.set(1.2,0.7,0);l2.position.y=0.2;g.add(l2);const e=new THREE.Mesh(new THREE.ConeGeometry(0.28,0.5,10),emberMat);e.position.y=0.42;g.add(e);return g;}
+function mFogata(){const g=new THREE.Group(); g.userData.kind='fogata';
+  for(let i=0;i<8;i++){const a=i/8*6.28;g.add(boxM(0.22,0.18,0.22,stoneMat,Math.cos(a)*0.55,0.09,Math.sin(a)*0.55));}
+  const l1=cyl(0.07,0.07,0.9,woodConsMat);l1.rotation.z=1.2;l1.position.y=0.2;g.add(l1);
+  const l2=cyl(0.07,0.07,0.9,woodConsMat);l2.rotation.set(1.2,0.7,0);l2.position.y=0.2;g.add(l2);
+  const e=new THREE.Mesh(new THREE.ConeGeometry(0.26,0.42,10),emberMat);e.position.y=0.32;g.add(e);     // núcleo de brasas
+  // dos billboards de gif (aditivos) que siempre miran a la cámara
+  const s1=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[0].tex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true})); s1.scale.set(1.25,1.4,1); s1.position.y=0.78; g.add(s1);
+  const s2=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[1].tex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true})); s2.scale.set(0.85,1.65,1); s2.position.y=0.95; g.add(s2);
+  const fl=new THREE.PointLight(0xff6a1e,2.4,9,2); fl.position.set(0,0.8,0); g.add(fl); g.userData.fire=fl;   // luz del color del fuego
+  return g;}
 function mConserv(){const g=new THREE.Group();g.add(boxM(1.2,0.9,0.7,woodConsMat,0,0.45,0));g.add(boxM(1.24,0.12,0.74,woodConsMat,0,0.92,0));return g;}
 // RECOLECTOR DE AGUA: 4 postes + tela tipo embudo (punta hacia ABAJO, sobre el tacho) + esquinas atadas + tacho con agua que se llena al cargar
 function mRecagua(){const g=new THREE.Group(); g.userData.kind='recagua';
@@ -416,27 +439,34 @@ function mRecagua(){const g=new THREE.Group(); g.userData.kind='recagua';
   const cloth=new THREE.Mesh(new THREE.ConeGeometry(0.92,0.72,4,1,true),clothMat); cloth.rotation.y=Math.PI/4; cloth.position.y=1.18; cloth.scale.set(1,-1,1); cloth.castShadow=true; g.add(cloth);
   // ataduras de las 4 esquinas a los postes
   [[-P,-P],[P,-P],[-P,P],[P,P]].forEach(([x,z])=>{const c=cyl(0.012,0.012,0.26,clothMat,6); c.position.set(x*0.96,1.42,z*0.96); c.lookAt(0,1.18,0); g.add(c);});
-  // tacho debajo de la punta
-  const buck=cyl(0.26,0.21,0.42,chapaMat,18); buck.position.y=0.21; g.add(buck);
-  const rim=new THREE.Mesh(new THREE.TorusGeometry(0.26,0.02,6,18),blackMetalMat); rim.rotation.x=Math.PI/2; rim.position.y=0.42; g.add(rim);
-  // agua (crece con el nivel)
-  const water=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.2,0.36,18),waterMat); water.position.y=0.05; water.scale.y=0.001; water.visible=false; g.add(water);
+  // tacho ABIERTO (sin tapa) debajo de la punta
+  const buck=cyl(0.27,0.21,0.42,chapaMat,20); buck.position.y=0.21; g.add(buck);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(0.27,0.018,6,20),blackMetalMat); rim.rotation.x=Math.PI/2; rim.position.y=0.42; g.add(rim);   // borde (no tapa)
+  // agua: columna que sube desde el fondo, siempre DENTRO del tacho (no traspasa)
+  const water=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.185,0.34,20),waterMat); water.position.y=0.04; water.scale.y=0.001; water.visible=false; g.add(water);
   g.userData.water=water; g.userData.level=0;
   return g;}
 /* ---- ARMAS y HERRAMIENTAS procedurales ---- */
 // machete: mango de metal negro + hoja ancha de metal
-function buildMachete(){const g=new THREE.Group();const h=hnd(0.34,0.045,blackMetalMat);h.position.y=0.17;g.add(h);g.add(boxM(0.18,0.05,0.1,blackMetalMat,0,0.35,0));const bl=extrudeBlade(0.95,0.18,0.026,metalMat);bl.position.y=0.37;g.add(bl);return g;}
+function buildMachete(){const g=new THREE.Group();const h=hnd(0.34,0.045,blackMetalMat);h.position.y=0.17;g.add(h);g.add(boxM(0.18,0.05,0.09,blackMetalMat,0,0.35,0));const bl=extrudeBlade(0.95,0.18,0.009,metalMat);bl.position.y=0.37;g.add(bl);return g;}   // hoja fina (afilada)
 // botella incendiaria (molotov): vidrio + líquido + trapo encendido
 function buildBottle(){const g=new THREE.Group();const body=cyl(0.13,0.15,0.42,glassMat,18);body.position.y=0.21;g.add(body);const neck=cyl(0.06,0.1,0.18,glassMat,14);neck.position.y=0.5;g.add(neck);const liq=cyl(0.12,0.14,0.26,liquidMat,18);liq.position.y=0.17;g.add(liq);const rag=cyl(0.035,0.05,0.22,ragMat,8);rag.position.y=0.64;g.add(rag);const fl=new THREE.Mesh(new THREE.ConeGeometry(0.07,0.2,8),emberMat);fl.position.y=0.82;g.add(fl);return g;}
 // guadaña: asta larga + empuñadura lateral + hoja curva (tubo de metal)
 function buildScythe(){const g=new THREE.Group();const sh=hnd(1.9,0.04,woodDark);sh.position.y=0.95;g.add(sh);const grip=cyl(0.05,0.05,0.2,woodMat,10);grip.rotation.z=Math.PI/2;grip.position.set(0.16,0.72,0);g.add(grip);
   const curve=new THREE.QuadraticBezierCurve3(new THREE.Vector3(0,1.9,0),new THREE.Vector3(0.55,1.98,0),new THREE.Vector3(1.1,1.62,0));
   const tube=new THREE.Mesh(new THREE.TubeGeometry(curve,18,0.035,8),metalMat);tube.castShadow=true;g.add(tube);return g;}
-// pico (madera/piedra/afilado): asta + dos puntas en V
-function buildPick(headMat){const g=new THREE.Group();const sh=hnd(1.15,0.05,woodDark);sh.position.y=0.575;g.add(sh);
-  const head=new THREE.Group();head.position.y=1.16;
-  for(const sx of[-1,1]){const tip=new THREE.Mesh(new THREE.ConeGeometry(0.06,0.5,8),headMat);tip.rotation.z=sx*Math.PI/2*0.78;tip.position.set(sx*0.26,0.04,0);tip.castShadow=true;head.add(tip);}
-  const mid=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.13,0.13),headMat);mid.castShadow=true;head.add(mid);g.add(head);g.add(lash(1.05,0.07));return g;}
+// PICO real: asta vertical + cabeza cruzada (punta curva afilada de un lado, pala/cincel del otro), eje +X → al frente en mano
+function buildPick(headMat){const g=new THREE.Group();
+  const sh=hnd(1.3,0.045,woodMat); sh.position.y=0.62; g.add(sh); g.add(lash(1.18,0.07));
+  const head=new THREE.Group(); head.position.y=1.24;
+  const socket=new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.085,0.2,14),headMat); socket.castShadow=true; head.add(socket);
+  // lado PUNTA: tubo curvo + cono afilado
+  const cv=new THREE.QuadraticBezierCurve3(new THREE.Vector3(0,0.02,0),new THREE.Vector3(0.3,0.0,0),new THREE.Vector3(0.46,-0.17,0));
+  const pick=new THREE.Mesh(new THREE.TubeGeometry(cv,16,0.042,8),headMat); pick.castShadow=true; head.add(pick);
+  const ptip=new THREE.Mesh(new THREE.ConeGeometry(0.042,0.18,10),headMat); ptip.position.set(0.46,-0.17,0); ptip.rotation.z=-2.15; ptip.castShadow=true; head.add(ptip);
+  // lado PALA/CINCEL: caja plana
+  const adze=new THREE.Mesh(new THREE.BoxGeometry(0.36,0.16,0.05),headMat); adze.position.set(-0.26,0.0,0); adze.rotation.z=0.16; adze.castShadow=true; head.add(adze);
+  g.add(head); return g;}
 // arco: arco curvo + cuerda + empuñadura
 function buildBow(){const g=new THREE.Group();const curve=new THREE.QuadraticBezierCurve3(new THREE.Vector3(0,-0.8,0),new THREE.Vector3(0.55,0,0),new THREE.Vector3(0,0.8,0));const bow=new THREE.Mesh(new THREE.TubeGeometry(curve,24,0.028,8),woodDark);bow.castShadow=true;g.add(bow);
   const str=new THREE.Mesh(new THREE.CylinderGeometry(0.006,0.006,1.6,6),new THREE.MeshStandardMaterial({color:0xe8e2cf,roughness:0.85}));g.add(str);
@@ -450,12 +480,16 @@ function buildSpearV(tipMat){const g=new THREE.Group();const shaft=cyl(0.026,0.0
 // cuchillo (piedra/afilado): mango de madera + hoja
 function buildKnifeV(bladeMat){const g=new THREE.Group();const handle=cyl(0.045,0.05,0.28,woodDark,12);handle.position.y=0.14;handle.castShadow=true;g.add(handle);g.add(lash(0.1,0.055));
   const s=new THREE.Shape();s.moveTo(-0.04,0);s.lineTo(0.05,0);s.lineTo(0.06,0.4);s.lineTo(0,0.5);s.quadraticCurveTo(-0.03,0.42,-0.05,0.34);s.closePath();
-  const bg=new THREE.ExtrudeGeometry(s,{depth:0.03,bevelEnabled:true,bevelThickness:0.006,bevelSize:0.006,bevelSegments:1,steps:1,curveSegments:8});bg.translate(0,0,-0.015);
+  const bg=new THREE.ExtrudeGeometry(s,{depth:0.012,bevelEnabled:true,bevelThickness:0.004,bevelSize:0.005,bevelSegments:1,steps:1,curveSegments:8});bg.translate(0,0,-0.006);   // hoja fina
   const bl=new THREE.Mesh(bg,bladeMat);bl.position.y=0.28;bl.castShadow=true;g.add(bl);return g;}
 // antorcha: mango + trapo envuelto + llama
 function buildTorch(){const g=new THREE.Group();const sh=hnd(0.7,0.04,woodDark);sh.position.y=0.35;g.add(sh);const wrap=cyl(0.09,0.07,0.18,ragMat,10);wrap.position.y=0.72;g.add(wrap);const fl=new THREE.Mesh(new THREE.ConeGeometry(0.11,0.34,10),emberMat);fl.position.y=0.95;g.add(fl);const fl2=new THREE.Mesh(new THREE.ConeGeometry(0.06,0.2,8),flameMat);fl2.position.y=1.0;g.add(fl2);return g;}
-// azada (madera/piedra): asta + cabeza plana perpendicular
-function buildHoe(headMat){const g=new THREE.Group();const sh=hnd(1.3,0.045,woodDark);sh.position.y=0.65;g.add(sh);const head=boxM(0.34,0.24,0.045,headMat,0,1.28,0.12);head.rotation.x=0.55;head.castShadow=true;g.add(head);g.add(lash(1.22,0.06));return g;}
+// azada: asta + cuello curvo + pala plana en +X (→ AL FRENTE en mano, no al costado)
+function buildHoe(headMat){const g=new THREE.Group();
+  const sh=hnd(1.35,0.045,woodMat); sh.position.y=0.67; g.add(sh); g.add(lash(1.27,0.06));
+  const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.034,0.26,8),headMat); neck.position.set(0.12,1.33,0); neck.rotation.z=-1.0; neck.castShadow=true; g.add(neck);
+  const blade=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.045,0.26),headMat); blade.position.set(0.27,1.21,0); blade.rotation.z=0.5; blade.castShadow=true; g.add(blade);
+  return g;}
 // balde (madera/chapa): cuerpo cónico + aro + manija
 function buildBucket(mat){const g=new THREE.Group();const body=cyl(0.26,0.2,0.42,mat,18);body.position.y=0.21;g.add(body);const rim=new THREE.Mesh(new THREE.TorusGeometry(0.26,0.02,6,18),mat);rim.rotation.x=Math.PI/2;rim.position.y=0.42;rim.castShadow=true;g.add(rim);
   const hc=new THREE.QuadraticBezierCurve3(new THREE.Vector3(-0.26,0.42,0),new THREE.Vector3(0,0.72,0),new THREE.Vector3(0.26,0.42,0));const handle=new THREE.Mesh(new THREE.TubeGeometry(hc,12,0.012,6),mat);handle.castShadow=true;g.add(handle);return g;}
@@ -740,6 +774,7 @@ const DOORS=new Set(['dmad','dcha']);
 const ROOF_FLAT=new Set(['tmad','tcha']);                 // techos rectos: van ARRIBA, requieren pared debajo, son pisables
 const FLOORW=new Set(['smad','scha','tmad','tcha']);       // superficies pisables (no bloquean, registran piso)
 const NOSOLID=new Set(['smad','scha','tmad','tcha','imad']); // no generan muro de colisión
+const FOURGRID=new Set(['smad','scha','tmad','tcha','imad']); // mosaico de 4m (el resto: paredes/ventanas/puertas → grilla 2m)
 const PLACE_MIN=1.6, PLACE_MAX=5.5;
 function ghostMat(){return new THREE.MeshStandardMaterial({color:0x2ad24a,transparent:true,opacity:0.55,emissive:0x0d5a1c,emissiveIntensity:0.5});}
 function spawnGhost(id){ ghost=(MODELS[id]||buildTable)(); ghost.traverse(o=>{if(o.isMesh)o.material=ghostMat();}); scene.add(ghost); }
@@ -756,12 +791,13 @@ function updateGhost(){
   const camY=player.pos.y+player.eye; let dist=PLACE_MAX;
   if(_fwd.y<-0.05){ const t=camY/(-_fwd.y); dist=THREE.MathUtils.clamp(t,PLACE_MIN,PLACE_MAX); }
   _gp.set(player.pos.x-Math.sin(player.yaw)*dist, 0, player.pos.z-Math.cos(player.yaw)*dist);
-  if(CONSTR.has(placing)){ _gp.x=Math.round(_gp.x/4)*4; _gp.z=Math.round(_gp.z/4)*4; }   // snapping a grilla de 4m → piezas juntas y alineadas
+  if(CONSTR.has(placing)){ const step=FOURGRID.has(placing)?4:2; _gp.x=Math.round(_gp.x/step)*step; _gp.z=Math.round(_gp.z/step)*step; }  // paredes: grilla 2m (alinean al girar + esquinas); pisos/techos: 4m (mosaico)
   _gp.x=THREE.MathUtils.clamp(_gp.x,-GROUND_LIMIT,GROUND_LIMIT); _gp.z=THREE.MathUtils.clamp(_gp.z,-GROUND_LIMIT,GROUND_LIMIT);
   let valid=Math.abs(_gp.x)<GROUND_LIMIT-1&&Math.abs(_gp.z)<GROUND_LIMIT-1;
   if(ROOF_FLAT.has(placing)){ _gp.y=WALLH;                                   // techo recto: va a la altura de las paredes
     let sup=false; for(const s of solids){ if(s.maxx>_gp.x-2&&s.minx<_gp.x+2&&s.maxz>_gp.z-2&&s.minz<_gp.z+2){sup=true;break;} }
     if(!sup) valid=false; }                                                  // se pone rojo si no hay pared debajo de la que sostenerse
+  else { let fy=0; for(const f of floors){ if(_gp.x>f.minx-0.6&&_gp.x<f.maxx+0.6&&_gp.z>f.minz-0.6&&_gp.z<f.maxz+0.6&&f.top<2&&f.top>fy)fy=f.top; } _gp.y=fy; }  // paredes/muebles se apoyan SOBRE el suelo si hay uno
   if(!CONSTR.has(placing)) for(const p of placedTables){ if(p.position.distanceTo(_gp)<1.0){valid=false;break;} }
   ghost.position.copy(_gp); ghost.rotation.y=placeYaw; ghost.updateMatrixWorld();
   ghost.userData.valid=valid;
@@ -807,7 +843,7 @@ function tickDirt(dt){ for(let i=0;i<DIRT;i++){const s=dst[i]; if(s.life>0){s.li
 let nearTable=null, nearRecagua=null, holdT=0, holding=false, signMode='table';
 const signEl=$('tableSign'),signFill=$('signFill'),_proj=new THREE.Vector3();
 function fillWater(){ const r=nearRecagua; if(!r) return; const lv=Math.min(1,(r.userData.level||0)+0.12); r.userData.level=lv;
-  const w=r.userData.water; if(w){ w.visible=lv>0.01; w.scale.y=Math.max(0.001,lv); w.position.y=0.05+0.17*lv; } signFill.style.width=(lv*100)+'%'; }
+  const w=r.userData.water; if(w){ w.visible=lv>0.01; w.scale.y=Math.max(0.001,lv); w.position.y=0.04+0.17*lv; } signFill.style.width=(lv*100)+'%'; }
 signEl.addEventListener('pointerdown',e=>{ e.preventDefault(); if(signMode==='water'){ fillWater(); } else { holding=true; holdT=0; } });
 signEl.addEventListener('pointerup',()=>{holding=false;holdT=0;if(signMode==='table')signFill.style.width='0%';});
 signEl.addEventListener('pointercancel',()=>{holding=false;holdT=0;if(signMode==='table')signFill.style.width='0%';});
@@ -869,6 +905,8 @@ function update(dt){
     else { fpRig.rotation.x=fpBaseRot.x-a*1.2; }
     if(swing.t>=1){ swing.active=false; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
+  tickGifs(dt);   // anima los gifs de fuego
+  for(const m of placedTables){ if(m.userData.kind==='fogata'&&m.userData.fire){ m.userData.fire.intensity=2.1+Math.sin(clock.elapsedTime*11+m.position.x)*0.5+Math.random()*0.35; } }
   if(placing&&!building) updateGhost();
   if(building){ buildT+=dt; const k=Math.min(1,buildT/0.5); if(ghost){ghost.scale.setScalar(0.2+0.8*k);} if(buildT>=0.5) finishBuild(); }
   tickDirt(dt);
