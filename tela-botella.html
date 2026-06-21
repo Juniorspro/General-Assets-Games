@@ -165,6 +165,14 @@ async function decodeFire(){   // decodifica TODOS los frames del gif con gifuct
   }
 }
 decodeFire();
+// fuego como PLANOS CRUZADOS (no billboard: no sigue la cámara) — base abajo, llama hacia arriba
+function makeFireMesh(tex,w,h){
+  const g=new THREE.Group();
+  const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});
+  const p1=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat); p1.position.y=h*0.32; g.add(p1);
+  const p2=p1.clone(); p2.rotation.y=Math.PI/2; g.add(p2);
+  return g;
+}
 function tickFire(){
   if(!fireReady||!fireCx) return;
   if(fireFrames.length){ let t=performance.now()%fireTotal, idx=0; for(let i=0;i<fireDelays.length;i++){ if(t<fireDelays[i]){idx=i;break;} t-=fireDelays[i]; }
@@ -179,11 +187,11 @@ let ragCloth=null,ragPhys=null,ragRen=null,fireSpr=null,ragFireLight=null;
 const ragPins=[];                       // {p, off:Vector3}  fijos que siguen a la botella
 function buildRolledRag(){
   ragCloth=new Cloth(1,1,RAGX,RAGY);     // dims se sobrescriben abajo
-  const turns=2.6, r0=0.06, gap=0.042, baseY=1.46, LEN=0.62, sy=LEN/(RAGY-1);
+  const turns=2.6, r0=0.06, gap=0.042, baseY=1.46, LEN=0.98, sy=LEN/(RAGY-1);   // más largo hacia afuera
   for(let iy=0;iy<RAGY;iy++)for(let ix=0;ix<RAGX;ix++){ const p=ragCloth.particles[iy*RAGX+ix];
     const u=ix/(RAGX-1), ang=u*turns*Math.PI*2, r=r0+u*turns*gap;   // ESPIRAL (enrollada): cada vuelta más radio
     p.pos.set(Math.cos(ang)*r, baseY+iy*sy, Math.sin(ang)*r); p.prev.copy(p.pos);
-    p.pinned = iy < RAGY*0.42;                                     // 42% de abajo FIJO dentro del pico (no se sale ni entra)
+    p.pinned = iy < RAGY*0.30;                                     // 30% de abajo FIJO en el pico → el resto sale MÁS afuera
     if(p.pinned) ragPins.push({p, off:p.pos.clone()});             // sigue a la botella al moverla
   }
   for(const c of ragCloth.constraints) c.rest=c.a.pos.distanceTo(c.b.pos);   // el estado de reposo ES el enrollado → mantiene la forma
@@ -191,9 +199,8 @@ function buildRolledRag(){
   ragPhys.gravity.set(0,-2.4,0); ragPhys.wind=1.2; ragPhys.windDir.set(0.5,0,0.5); ragPhys.drag=0.04; ragPhys.iterations=4;
   ragPhys.colliders=[];
   ragRen=new ClothRenderer(ragCloth,ragMat); bottleGroup.add(ragRen.mesh);
-  fireSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:fireTex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true}));
-  fireSpr.scale.set(0.5,0.72,1); bottleGroup.add(fireSpr);
-  ragFireLight=new THREE.PointLight(0xff7a30,1.4,4,2); bottleGroup.add(ragFireLight);
+  fireSpr=makeFireMesh(fireTex,0.7,1.15); bottleGroup.add(fireSpr);   // fuego GRANDE, planos cruzados (no billboard)
+  ragFireLight=new THREE.PointLight(0xff7a30,1.6,4.5,2); bottleGroup.add(ragFireLight);
 }
 
 /* =====================================================================
@@ -511,8 +518,8 @@ function animate(){
       ragPhys.step(dt*0.5); ragPhys.step(dt*0.5);   // 2 sub-pasos = estable y liviano
       ragRen.sync();
       const tip=ragCloth.particles[(RAGY-1)*RAGX + (RAGX>>1)];   // partícula superior central (la punta que sale)
-      fireSpr.position.set(tip.pos.x,tip.pos.y+0.22,tip.pos.z);
-      ragFireLight.position.copy(fireSpr.position); ragFireLight.intensity=1.1+Math.sin(clock.elapsedTime*14)*0.4+Math.random()*0.2;
+      fireSpr.position.set(tip.pos.x,tip.pos.y-0.12,tip.pos.z);   // el fuego envuelve la punta y la quema
+      ragFireLight.position.set(tip.pos.x,tip.pos.y+0.1,tip.pos.z); ragFireLight.intensity=1.3+Math.sin(clock.elapsedTime*14)*0.4+Math.random()*0.2;
     }
   }
 

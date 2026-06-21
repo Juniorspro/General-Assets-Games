@@ -202,7 +202,8 @@
 {
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "gifuct-js": "https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm"
   }
 }
 </script>
@@ -391,17 +392,34 @@ const clayDark=new THREE.MeshStandardMaterial({color:0x6e472b,roughness:1,metaln
 const glassMat=new THREE.MeshPhysicalMaterial({color:0x2f5d3a,roughness:0.08,metalness:0,transmission:0.55,transparent:true,opacity:0.55,thickness:0.25,envMapIntensity:1.4});
 const liquidMat=new THREE.MeshStandardMaterial({color:0xc9852a,roughness:0.35,transparent:true,opacity:0.85});
 const waterMat=new THREE.MeshStandardMaterial({color:0x2f7fc9,roughness:0.12,metalness:0,transparent:true,opacity:0.8,envMapIntensity:1.6});
-/* ---- llamas ANIMADAS (gifs del repo) para la fogata: billboards que siguen la cámara ---- */
+/* ---- llamas ANIMADAS: frames del gif DECODIFICADOS con gifuct-js (anima sí o sí) ---- */
 const GIFB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4d4c23e/';
-const _gifBox=document.createElement('div'); _gifBox.style.cssText='position:fixed;left:0;bottom:0;width:4px;height:4px;overflow:hidden;opacity:0.012;z-index:1;pointer-events:none;'; document.body.appendChild(_gifBox);  // on-screen (casi invisible) para que el navegador NO pause la animación del gif
-function gifTex(file){ const img=new Image(); img.crossOrigin='anonymous'; img.src=GIFB+file; _gifBox.appendChild(img);
-  const cv=document.createElement('canvas'); cv.width=cv.height=128; const cx=cv.getContext('2d');
-  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace; return {img,cv,cx,tex}; }
-const fireGifs=[gifTex('2spnJPK.gif'),gifTex('db5a4595bac1960e5b7cc0a35544140b.gif')];   // llama grande + llamas altas
-let _gifT=0;
-function tickGifs(dt){ _gifT+=dt; if(_gifT<0.05)return; _gifT=0;            // ~20 fps: copia el frame ACTUAL del gif al canvas (contain, sin estirar)
-  for(const g of fireGifs){ if(g.img.complete&&g.img.naturalWidth){ g.cx.clearRect(0,0,128,128);
-    const iw=g.img.naturalWidth,ih=g.img.naturalHeight,s=Math.min(128/iw,128/ih),w=iw*s,h=ih*s; g.cx.drawImage(g.img,(128-w)/2,(128-h)/2,w,h); g.tex.needsUpdate=true; } } }
+function makeGif(file){ const o={tex:new THREE.CanvasTexture(document.createElement('canvas')),frames:[],delays:[],total:0,cx:null,ready:false,_img:null};
+  o.tex.colorSpace=THREE.SRGBColorSpace;
+  (async()=>{ try{
+    const {parseGIF,decompressFrames}=await import('gifuct-js');
+    const buf=await (await fetch(GIFB+file,{mode:'cors'})).arrayBuffer();
+    const gif=parseGIF(buf), frames=decompressFrames(gif,true), W=gif.lsd.width,H=gif.lsd.height,MAXH=160,sc=Math.min(1,MAXH/H);
+    const full=document.createElement('canvas'); full.width=W; full.height=H; const fc=full.getContext('2d');
+    for(const fr of frames){ const tmp=document.createElement('canvas'); tmp.width=fr.dims.width; tmp.height=fr.dims.height;
+      tmp.getContext('2d').putImageData(new ImageData(fr.patch,fr.dims.width,fr.dims.height),0,0); fc.drawImage(tmp,fr.dims.left,fr.dims.top);
+      const c=document.createElement('canvas'); c.width=Math.round(W*sc); c.height=Math.round(H*sc); c.getContext('2d').drawImage(full,0,0,c.width,c.height);
+      o.frames.push(c); o.delays.push(fr.delay||80); if(fr.disposalType===2)fc.clearRect(fr.dims.left,fr.dims.top,fr.dims.width,fr.dims.height); }
+    o.total=o.delays.reduce((a,b)=>a+b,0)||o.delays.length*80;
+    const cv=o.tex.image; cv.width=o.frames[0].width; cv.height=o.frames[0].height; o.cx=cv.getContext('2d'); o.ready=true;
+  }catch(e){ const img=new Image(); img.crossOrigin='anonymous'; img.src=GIFB+file; img.style.cssText='position:fixed;left:0;bottom:0;width:4px;height:4px;opacity:.012;pointer-events:none;'; document.body.appendChild(img); o._img=img;
+    const cv=o.tex.image; cv.width=128; cv.height=192; o.cx=cv.getContext('2d'); o.ready=true; } })();
+  return o; }
+const fireGifs=[makeGif('2spnJPK.gif'),makeGif('db5a4595bac1960e5b7cc0a35544140b.gif')];   // llama grande + llamas altas
+function tickGifs(dt){ for(const o of fireGifs){ if(!o.ready||!o.cx)continue;
+  if(o.frames.length){ let t=performance.now()%o.total,idx=0; for(let i=0;i<o.delays.length;i++){ if(t<o.delays[i]){idx=i;break;} t-=o.delays[i]; }
+    const f=o.frames[idx],cv=o.tex.image; if(cv.width!==f.width){cv.width=f.width;cv.height=f.height;} o.cx.clearRect(0,0,cv.width,cv.height); o.cx.drawImage(f,0,0); o.tex.needsUpdate=true; }
+  else if(o._img&&o._img.complete&&o._img.naturalWidth){ const s=Math.min(128/o._img.naturalWidth,192/o._img.naturalHeight); o.cx.clearRect(0,0,128,192); o.cx.drawImage(o._img,0,0,o._img.naturalWidth*s,o._img.naturalHeight*s); o.tex.needsUpdate=true; } } }
+// fuego como PLANOS CRUZADOS (no billboard): base abajo, llama hacia arriba
+function makeFireMesh(tex,w,h){ const g=new THREE.Group();
+  const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});
+  const p1=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat); p1.position.y=h*0.32; g.add(p1);
+  const p2=p1.clone(); p2.rotation.y=Math.PI/2; g.add(p2); return g; }
 function cyl(rt,rb,h,m,s){const e=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,s||14),m);e.castShadow=true;return e;}
 function hnd(len,r,m){const e=cyl(r||0.04,(r||0.04)*1.18,len,m||woodDark,14);return e;}
 function lash(y,r){const t=new THREE.Mesh(new THREE.TorusGeometry(r||0.06,(r||0.06)*0.28,6,14),woodMat);t.position.y=y;t.rotation.x=Math.PI/2;t.castShadow=true;return t;}
@@ -463,9 +481,9 @@ function buildBottle(){const g=new THREE.Group();
   const rag=new THREE.Group(); rag.name='botellaRag'; rag.position.set(0,0.46,0);
   const ri=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.2,0.05),clothMat); ri.position.y=-0.06; ri.castShadow=true; rag.add(ri);                 // dentro de la botella
   const rm=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.16,0.05),clothMat); rm.position.set(0.03,0.16,0); rm.rotation.z=-0.5; rm.castShadow=true; rag.add(rm);   // saliendo por el pico
-  const rt=new THREE.Mesh(new THREE.BoxGeometry(0.045,0.14,0.045),clothMat); rt.position.set(0.11,0.26,0); rt.rotation.z=-0.95; rt.castShadow=true; rag.add(rt); // punta colgando afuera
-  const fire=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[1].tex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true})); fire.scale.set(0.26,0.4,1); fire.position.set(0.17,0.4,0); rag.add(fire);  // fuego (gif) en la punta
-  const fl=new THREE.PointLight(0xff7a30,0.7,2.2,2); fl.position.set(0.17,0.4,0); rag.add(fl);
+  const rt=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.18,0.05),clothMat); rt.position.set(0.13,0.3,0); rt.rotation.z=-0.95; rt.castShadow=true; rag.add(rt); // punta colgando afuera (más larga)
+  const fire=makeFireMesh(fireGifs[1].tex,0.55,0.8); fire.position.set(0.13,0.2,0); rag.add(fire);   // fuego GRANDE (planos cruzados, no billboard) quemando el trapo
+  const fl=new THREE.PointLight(0xff7a30,1.0,2.6,2); fl.position.set(0.15,0.42,0); rag.add(fl);
   g.add(rag); return g;}
 // guadaña: asta larga + empuñadura lateral + hoja curva (tubo de metal)
 function buildScythe(){const g=new THREE.Group();const sh=hnd(1.9,0.04,woodDark);sh.position.y=0.95;g.add(sh);const grip=cyl(0.05,0.05,0.2,woodMat,10);grip.rotation.z=Math.PI/2;grip.position.set(0.16,0.72,0);g.add(grip);
