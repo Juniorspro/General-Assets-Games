@@ -104,10 +104,11 @@
 
   .sciDetail{ flex:1; display:flex; flex-direction:column; gap:6px; min-height:0; border-left:1px solid rgba(150,180,210,.12); padding-left:16px; }  /* DERECHA */
   .sciRight{ flex:0 0 38%; position:relative; min-height:96px; display:flex; align-items:center; justify-content:center; }
-  .sciPlat{ position:absolute; left:50%; top:58%; width:74%; padding-bottom:74%; transform:translate(-50%,-50%); border-radius:50%;
-            border:1px solid rgba(91,200,245,.4); background:radial-gradient(circle,rgba(91,200,245,.14),transparent 62%); box-shadow:0 0 36px rgba(91,200,245,.16) inset; }
-  .sciPlat::after{ content:""; position:absolute; inset:20%; border-radius:50%; border:1px dashed rgba(240,162,60,.45); }
-  #pvCanvas{ position:relative; z-index:2; width:92%; height:92%; }
+  .sciIcon{ width:86%; aspect-ratio:1; max-height:100%; border:1px solid rgba(150,180,210,.3); border-radius:6px; position:relative;
+            background:linear-gradient(160deg,rgba(91,200,245,.08),rgba(10,14,20,.4)); display:flex; align-items:center; justify-content:center; }
+  .sciIcon::before,.sciIcon::after{ content:""; position:absolute; width:12px; height:12px; border-color:#f0a23c; border-style:solid; }
+  .sciIcon::before{ left:-1px; top:-1px; border-width:1px 0 0 1px; } .sciIcon::after{ right:-1px; bottom:-1px; border-width:0 1px 1px 0; }
+  .sciIcon img{ width:84%; height:84%; object-fit:contain; filter:drop-shadow(0 3px 8px rgba(0,0,0,.6)); }
   .sciMid{ flex:1; display:flex; flex-direction:column; min-height:0; }
   .sciName{ font-size:18px; font-weight:800; letter-spacing:.03em; }
   .sciType{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; margin:2px 0 8px; color:#f0a23c; }
@@ -165,7 +166,7 @@
       </div>
       <!-- DERECHA: visor 3D + materiales + botón -->
       <div class="sciDetail">
-        <div class="sciRight"><div class="sciPlat"></div><canvas id="pvCanvas"></canvas></div>
+        <div class="sciRight"><div class="sciIcon"><img id="dIcon" alt=""></div></div>
         <div class="sciMid">
           <div class="sciName" id="dName">—</div>
           <div class="sciType" id="dType"></div>
@@ -198,7 +199,8 @@
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-    "gifuct-js": "https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm"
+    "gifuct-js": "https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm",
+    "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/+esm"
   }
 }
 </script>
@@ -207,6 +209,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as CANNON from 'cannon-es';
 
 /* ===================== i18n ===================== */
 const I18N={
@@ -408,19 +411,19 @@ function makeGif(url){ const o={tex:new THREE.CanvasTexture(document.createEleme
     const cv=o.tex.image; cv.width=128; cv.height=192; o.cx=cv.getContext('2d'); o.ready=true; } })();
   return o; }
 const fireGifs=[makeGif(GIFB+'2spnJPK.gif'),makeGif(GIFB+'db5a4595bac1960e5b7cc0a35544140b.gif')];   // llama grande + llamas altas
-const gExpl=makeGif(EXBASE+'expl.gif'), gFcam=makeGif(EXBASE+'firecam.gif'), gFcam2=makeGif(EXBASE+'firecam2.gif'), gFground=makeGif(EXBASE+'fireground.gif');   // explosión + fuegos
+const gExpl=makeGif(EXBASE+'expl.gif'), gFcam=makeGif(EXBASE+'firecam.gif'), gFcam2=makeGif(EXBASE+'firecam2.gif');   // explosión + fuegos 3D (la textura cuadrada de piso se sacó)
 function tickGifs(dt){ for(const o of animGifs){ if(!o.ready||!o.cx)continue;
   if(o.frames.length){ let t=performance.now()%o.total,idx=0; for(let i=0;i<o.delays.length;i++){ if(t<o.delays[i]){idx=i;break;} t-=o.delays[i]; }
     const f=o.frames[idx],cv=o.tex.image; if(cv.width!==f.width){cv.width=f.width;cv.height=f.height;} o.cx.clearRect(0,0,cv.width,cv.height); o.cx.drawImage(f,0,0); o.tex.needsUpdate=true; }
   else if(o._img&&o._img.complete&&o._img.naturalWidth){ const s=Math.min(128/o._img.naturalWidth,192/o._img.naturalHeight); o.cx.clearRect(0,0,128,192); o.cx.drawImage(o._img,0,0,o._img.naturalWidth*s,o._img.naturalHeight*s); o.tex.needsUpdate=true; } } }
 // fuego como PLANOS CRUZADOS (no billboard): base abajo, llama hacia arriba
 function makeFireMesh(tex,w,h){ const g=new THREE.Group();
-  const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:0.66,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});  // opacity baja = menos quemado
+  const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:0.95,depthWrite:false,blending:THREE.NormalBlending,side:THREE.DoubleSide,toneMapped:false});  // NormalBlending = color naranja real (no se blanquea)
   const p1=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat); p1.position.y=h*0.32; g.add(p1);
   const p2=p1.clone(); p2.rotation.y=Math.PI/2; g.add(p2); return g; }
 /* ===== Molotov ARROJADIZA: vuela con físicas y EXPLOTA al caer ===== */
 const projectiles=[], fx=[];
-function billboardFx(tex,size){ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:1,depthWrite:false,blending:THREE.AdditiveBlending})); s.scale.set(size,size,1); return s; }
+function billboardFx(tex,size){ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:1,depthWrite:false,blending:THREE.NormalBlending})); s.scale.set(size,size,1); return s; }
 function throwMolotov(){
   const dir=new THREE.Vector3(-Math.sin(player.yaw)*Math.cos(player.pitch),Math.sin(player.pitch),-Math.cos(player.yaw)*Math.cos(player.pitch));
   const m=MODELS.botella(); m.traverse(o=>{if(o.isMesh)o.castShadow=false;}); m.scale.setScalar(0.5);
@@ -432,19 +435,50 @@ function tickProjectiles(dt){ for(let i=projectiles.length-1;i>=0;i--){ const p=
   let gy=0; for(const f of floors){ if(p.mesh.position.x>f.minx&&p.mesh.position.x<f.maxx&&p.mesh.position.z>f.minz&&p.mesh.position.z<f.maxz&&f.top>gy) gy=f.top; }
   if(p.mesh.position.y<=gy+0.12){ explodeAt(p.mesh.position.clone(),gy); scene.remove(p.mesh); p.mesh.traverse(o=>{if(o.geometry)o.geometry.dispose();}); projectiles.splice(i,1); } } }
 function explodeAt(pos,gy){ gy=gy||0;
-  const ex=billboardFx(gExpl.tex,3.4); ex.position.set(pos.x,gy+1.2,pos.z); scene.add(ex); fx.push({o:ex,kind:'expl',t:0,dur:0.75});                 // 1) explosión que TAPA todo
-  const gm=new THREE.Mesh(new THREE.PlaneGeometry(3.6,3.6),new THREE.MeshBasicMaterial({map:gFground.tex,transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false}));
-  gm.rotation.x=-Math.PI/2; gm.position.set(pos.x,gy+0.05,pos.z); scene.add(gm); fx.push({o:gm,kind:'fade',t:0,dur:6,delay:0.35,max:0.95});           // 2) suelo en llamas
-  for(let k=0;k<6;k++){ const a=Math.random()*6.28, r=0.2+Math.random()*1.1, tx=(k%2)?gFcam2.tex:gFcam.tex;                                          // 3) fuegos 3D progresivos (miran a la cámara)
-    const f=billboardFx(tx,0.9+Math.random()*0.7); f.material.opacity=0; f.position.set(pos.x+Math.cos(a)*r, gy+0.5+Math.random()*0.2, pos.z+Math.sin(a)*r); scene.add(f);
-    fx.push({o:f,kind:'fade',t:0,dur:4.5+Math.random()*1.5,delay:0.4+k*0.13,max:0.85}); }
-  const L=new THREE.PointLight(0xff8a3a,5,14,2); L.position.set(pos.x,gy+1.2,pos.z); scene.add(L); fx.push({o:L,kind:'light',t:0,dur:3.5});           // 4) luz
+  const ex=billboardFx(gExpl.tex,3.2); ex.position.set(pos.x,gy+1.1,pos.z); scene.add(ex); fx.push({o:ex,kind:'expl',t:0,dur:0.7});                 // 1) explosión que TAPA todo
+  // 2) fuegos 3D (miran a la cámara) que se ESPARCEN progresivamente (sin textura cuadrada de piso)
+  for(let k=0;k<9;k++){ const a=Math.random()*6.28, r=0.15+Math.random()*1.7, tx=(k%2)?gFcam2.tex:gFcam.tex, low=k%3===0;
+    const f=billboardFx(tx,(low?0.7:1.0)+Math.random()*0.6); f.material.opacity=0;
+    f.position.set(pos.x+Math.cos(a)*r, gy+(low?0.32:0.55)+Math.random()*0.2, pos.z+Math.sin(a)*r); scene.add(f);
+    fx.push({o:f,kind:'fade',t:0,dur:4+Math.random()*2,delay:0.35+k*0.1+Math.random()*0.1,max:0.9}); }
+  const L=new THREE.PointLight(0xff8a3a,4,14,2); L.position.set(pos.x,gy+1.1,pos.z); scene.add(L); fx.push({o:L,kind:'light',t:0,dur:3.2});           // 3) luz
 }
 function tickFx(dt){ for(let i=fx.length-1;i>=0;i--){ const e=fx[i]; e.t+=dt; const d=e.delay||0;
   if(e.kind==='expl'){ const k=e.t/e.dur; e.o.material.opacity=Math.max(0,1-k*k); e.o.scale.setScalar(3.4*(0.55+k*0.7)); }
   else if(e.kind==='light'){ e.o.intensity=Math.max(0,5*(1-e.t/e.dur))*(0.7+Math.random()*0.3); }
   else { const ft=e.t-d; let o=0; if(ft>0) o=Math.min(1,ft/0.5)*Math.min(1,(e.dur-e.t)/1.2); e.o.material.opacity=Math.max(0,o)*(e.max||0.85); }
   if(e.t>=e.dur){ scene.remove(e.o); if(e.o.material)e.o.material.dispose(); if(e.o.geometry)e.o.geometry.dispose(); fx.splice(i,1); } } }
+
+/* ===== Física CANNON-ES del trapo + líquido de la botella en mano (no animado) ===== */
+const cw=new CANNON.World(); cw.gravity.set(0,-9.8,0); cw.allowSleep=false;
+const FN=5, FSEG=0.052, fuseB=[];   // cadena del trapo (rope) que cuelga del pico
+for(let i=0;i<FN;i++){ const b=new CANNON.Body({mass:i===0?0:0.03,shape:new CANNON.Sphere(0.012),linearDamping:0.55,angularDamping:0.9});
+  b.position.set(0,1.6-i*FSEG,0); if(i===0)b.type=CANNON.Body.KINEMATIC; cw.addBody(b); fuseB.push(b);
+  if(i>0)cw.addConstraint(new CANNON.DistanceConstraint(fuseB[i-1],b,FSEG)); }
+const liqAnc=new CANNON.Body({mass:0,type:CANNON.Body.KINEMATIC}); liqAnc.position.set(0,1.2,0); cw.addBody(liqAnc);
+const liqB=new CANNON.Body({mass:0.4,shape:new CANNON.Sphere(0.04),linearDamping:0.5}); liqB.position.set(0,1.2,0); cw.addBody(liqB);
+const liqSpring=new CANNON.Spring(liqB,liqAnc,{restLength:0,stiffness:120,damping:6});
+const heldFuse=new THREE.Group(), fuseSegs=[];
+for(let i=0;i<FN-1;i++){ const c=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.016,1,6),clothMat); heldFuse.add(c); fuseSegs.push(c); }
+const heldFire=makeFireMesh(fireGifs[1].tex,0.3,0.46); heldFuse.add(heldFire);
+let molotovHeld=false;
+const _vN=new THREE.Vector3(),_vC=new THREE.Vector3(),_pa=new THREE.Vector3(),_pb=new THREE.Vector3(),_pt=new THREE.Vector3(),_up=new THREE.Vector3(0,1,0),_la=new THREE.Vector3(),_lb=new THREE.Vector3();
+function resetFuse(){ fpRig.updateWorldMatrix(true,false); fpRig.localToWorld(_vN.set(0,0.39,0));
+  for(let i=0;i<FN;i++){ fuseB[i].position.set(_vN.x,_vN.y-i*FSEG,_vN.z); fuseB[i].velocity.set(0,0,0); }
+  liqAnc.position.set(_vN.x,_vN.y-0.28,_vN.z); liqB.position.copy(liqAnc.position); liqB.velocity.set(0,0,0); }
+function setupHeldMolotov(){ const sf=fpModel.getObjectByName('staticFuse'); if(sf)sf.visible=false; const mf=fpModel.getObjectByName('molotovFire'); if(mf)mf.visible=false;
+  if(!heldFuse.parent) fpRig.add(heldFuse); molotovHeld=true; resetFuse(); }
+function updateHeldMolotov(dt){ if(!molotovHeld||!fpModel) return;
+  fpRig.updateWorldMatrix(true,false);
+  fpRig.localToWorld(_vN.set(0,0.39,0));  fuseB[0].position.set(_vN.x,_vN.y,_vN.z);          // ancla = pico (sigue a la botella → reacciona al caminar/saltar/agachar)
+  fpRig.localToWorld(_vC.set(0,0.11,0));  liqAnc.position.set(_vC.x,_vC.y,_vC.z);
+  liqSpring.applyForce(); cw.step(1/60,Math.min(dt,0.05),3);
+  for(let i=0;i<FN-1;i++){ _pa.set(fuseB[i].position.x,fuseB[i].position.y,fuseB[i].position.z); _pb.set(fuseB[i+1].position.x,fuseB[i+1].position.y,fuseB[i+1].position.z);
+    fpRig.worldToLocal(_pa); fpRig.worldToLocal(_pb); const seg=fuseSegs[i]; const d=_pb.clone().sub(_pa), len=d.length();
+    seg.position.copy(_pa).add(_pb).multiplyScalar(0.5); seg.scale.set(1,Math.max(0.01,len),1); seg.quaternion.setFromUnitVectors(_up,d.normalize()); }
+  _pt.set(fuseB[FN-1].position.x,fuseB[FN-1].position.y,fuseB[FN-1].position.z); fpRig.worldToLocal(_pt); heldFire.position.copy(_pt);
+  _la.copy(liqB.position); fpRig.worldToLocal(_la); _lb.copy(liqAnc.position); fpRig.worldToLocal(_lb); const lo=_la.sub(_lb);
+  const lm=fpModel.getObjectByName('molotovLiquid'); if(lm){ lm.rotation.z=THREE.MathUtils.clamp(-lo.x*7,-0.5,0.5); lm.rotation.x=THREE.MathUtils.clamp(lo.z*7,-0.5,0.5); lm.position.x=THREE.MathUtils.clamp(lo.x*0.6,-0.05,0.05); } }
 function cyl(rt,rb,h,m,s){const e=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,s||14),m);e.castShadow=true;return e;}
 function hnd(len,r,m){const e=cyl(r||0.04,(r||0.04)*1.18,len,m||woodDark,14);return e;}
 function lash(y,r){const t=new THREE.Mesh(new THREE.TorusGeometry(r||0.06,(r||0.06)*0.28,6,14),woodMat);t.position.y=y;t.rotation.x=Math.PI/2;t.castShadow=true;return t;}
@@ -475,9 +509,9 @@ function mFogata(){const g=new THREE.Group(); g.userData.kind='fogata';
   const l2=cyl(0.07,0.07,0.9,woodConsMat);l2.rotation.set(1.2,0.7,0);l2.position.y=0.2;g.add(l2);
   const e=new THREE.Mesh(new THREE.ConeGeometry(0.26,0.42,10),emberMat);e.position.y=0.32;g.add(e);     // núcleo de brasas
   // dos billboards de gif (aditivos, opacidad baja = menos quemado) que siempre miran a la cámara
-  const s1=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[0].tex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:0.6})); s1.scale.set(1.25,1.4,1); s1.position.y=0.78; g.add(s1);
-  const s2=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[1].tex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:0.6})); s2.scale.set(0.85,1.65,1); s2.position.y=0.95; g.add(s2);
-  const fl=new THREE.PointLight(0xff6a1e,1.3,8,2); fl.position.set(0,0.8,0); g.add(fl); g.userData.fire=fl;   // luz del color del fuego (más suave)
+  const s1=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[0].tex,blending:THREE.NormalBlending,depthWrite:false,transparent:true,opacity:0.95})); s1.scale.set(1.25,1.4,1); s1.position.y=0.78; g.add(s1);
+  const s2=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[1].tex,blending:THREE.NormalBlending,depthWrite:false,transparent:true,opacity:0.95})); s2.scale.set(0.85,1.65,1); s2.position.y=0.95; g.add(s2);
+  const fl=new THREE.PointLight(0xff6a1e,1.1,8,2); fl.position.set(0,0.8,0); g.add(fl); g.userData.fire=fl;   // luz del color del fuego (más suave)
   return g;}
 function mConserv(){const g=new THREE.Group();g.add(boxM(1.2,0.9,0.7,woodConsMat,0,0.45,0));g.add(boxM(1.24,0.12,0.74,woodConsMat,0,0.92,0));return g;}
 // RECOLECTOR DE AGUA: 4 postes + tela tipo embudo (punta hacia ABAJO, sobre el tacho) + esquinas atadas + tacho con agua que se llena al cargar
@@ -498,26 +532,16 @@ function mRecagua(){const g=new THREE.Group(); g.userData.kind='recagua';
 /* ---- ARMAS y HERRAMIENTAS procedurales ---- */
 // machete: mango de metal negro + hoja ancha de metal
 function buildMachete(){const g=new THREE.Group();const h=hnd(0.34,0.045,blackMetalMat);h.position.y=0.17;g.add(h);g.add(boxM(0.18,0.05,0.09,blackMetalMat,0,0.35,0));const bl=extrudeBlade(0.95,0.18,0.009,metalMat);bl.position.y=0.37;g.add(bl);return g;}   // hoja fina (afilada)
-// trapo ENROLLADO (malla espiral) metido en el pico y saliendo por arriba — PEGADO a la botella (estable)
-const MCX=22, MCY=30;
-function buildMolotovCloth(){
-  const turns=2.4,r0=0.032,gap=0.022,baseY=0.46,LEN=0.5,sy=LEN/(MCY-1);
-  const geo=new THREE.BufferGeometry(), pos=new Float32Array(MCX*MCY*3), base=new Float32Array(MCX*MCY*3);
-  for(let iy=0;iy<MCY;iy++)for(let ix=0;ix<MCX;ix++){ const i=iy*MCX+ix, u=ix/(MCX-1), ang=u*turns*Math.PI*2, r=r0+u*turns*gap;
-    const x=Math.cos(ang)*r, y=baseY+iy*sy, z=Math.sin(ang)*r; pos[i*3]=base[i*3]=x; pos[i*3+1]=base[i*3+1]=y; pos[i*3+2]=base[i*3+2]=z; }
-  const idx=[]; for(let iy=0;iy<MCY-1;iy++)for(let ix=0;ix<MCX-1;ix++){ const a=iy*MCX+ix,b=a+1,c=a+MCX,d=c+1; idx.push(a,c,b,b,c,d); }
-  geo.setAttribute('position',new THREE.BufferAttribute(pos,3)); geo.setIndex(idx); geo.computeVertexNormals();
-  const mesh=new THREE.Mesh(geo,clothMat); mesh.name='molotovCloth'; mesh.castShadow=true;
-  mesh.userData={base, pinY:Math.floor(MCY*0.42), topY:baseY+LEN}; return mesh;
-}
-// botella incendiaria (molotov): vidrio + líquido + TRAPO ENROLLADO saliendo por arriba + fuego del gif quemándolo
+// botella incendiaria (molotov): vidrio + líquido (slosh) + trapo + fuego. Versión estática (ícono/lanzamiento);
+// al estar EQUIPADA, el trapo y el líquido se simulan con cannon-es (ver setupHeldMolotov/update).
 function buildBottle(){const g=new THREE.Group();
   const body=cyl(0.13,0.15,0.42,glassMat,18);body.position.y=0.21;g.add(body);
   const neck=cyl(0.06,0.1,0.18,glassMat,14);neck.position.y=0.5;g.add(neck);
-  const liq=cyl(0.12,0.14,0.26,liquidMat,18);liq.position.y=0.17;g.add(liq);
-  g.add(buildMolotovCloth());
-  const fire=makeFireMesh(fireGifs[1].tex,0.4,0.62); fire.name='molotovFire'; fire.position.set(0,0.9,0); g.add(fire);   // fuego en la punta del trapo
-  const fl=new THREE.PointLight(0xff7a30,0.6,2.4,2); fl.position.set(0,0.95,0); g.add(fl);
+  const liq=cyl(0.12,0.14,0.26,liquidMat,18);liq.position.y=0.17;liq.name='molotovLiquid';g.add(liq);
+  // trapo estático (cae al costado) para ícono/lanzamiento
+  const cv=new THREE.QuadraticBezierCurve3(new THREE.Vector3(0,0.58,0),new THREE.Vector3(0.07,0.74,0.05),new THREE.Vector3(0.2,0.62,0.12));
+  const sf=new THREE.Mesh(new THREE.TubeGeometry(cv,12,0.026,6),clothMat); sf.name='staticFuse'; sf.castShadow=true; g.add(sf);
+  const fire=makeFireMesh(fireGifs[1].tex,0.34,0.5); fire.name='molotovFire'; fire.position.set(0.2,0.66,0.12); g.add(fire);
   return g;}
 // guadaña: asta larga + empuñadura lateral + hoja curva (tubo de metal)
 function buildScythe(){const g=new THREE.Group();const sh=hnd(1.9,0.04,woodDark);sh.position.y=0.95;g.add(sh);const grip=cyl(0.05,0.05,0.2,woodMat,10);grip.rotation.z=Math.PI/2;grip.position.set(0.16,0.72,0);g.add(grip);
@@ -608,7 +632,7 @@ const VIEW={
   hammer:{s:0.55,...P_SWING},
   spear:{s:0.4,...P_THRUST}, lanzapiedra:{s:0.4,...P_THRUST}, lanzaafil:{s:0.4,...P_THRUST},
   knife:{s:0.42,...P_KNIFE}, cuchipiedra:{s:0.5,...P_KNIFE}, cuchiafil:{s:0.42,...P_KNIFE},
-  machete:{s:0.5,...P_SWING}, guadana:{s:0.4,...P_HOLD}, botella:{s:0.66,p:[0.36,-0.66,-0.72],r:[0.12,Math.PI/2,0.18]}, hacha:{s:0.85,p:[0.32,-0.4,-0.58],r:[-0.1,-Math.PI/2,-0.2]},   // molotov: abajo a la derecha; tomahawk: girado
+  machete:{s:0.5,...P_SWING}, guadana:{s:0.4,...P_HOLD}, botella:{s:0.68,p:[0.34,-0.5,-0.7],r:[0.12,Math.PI/2,0.18]}, hacha:{s:0.85,p:[0.32,-0.4,-0.58],r:[-0.1,-Math.PI/2,-0.2]},   // molotov: más alta; tomahawk: girado
   arco:{s:0.55,...P_BOW}, flechamad:{s:0.6,...P_HOLD}, flechapiedra:{s:0.6,...P_HOLD}, flechaafil:{s:0.6,...P_HOLD},
   picomad:{s:0.46,...P_SWING}, picopiedra:{s:0.46,...P_SWING}, picoafil:{s:0.46,...P_SWING},
   antorcha:{s:0.6,...P_HOLD}, azadamad:{s:0.46,...P_SWING}, azadapiedra:{s:0.46,...P_SWING},
@@ -621,8 +645,9 @@ function equip(id){
     if(v){ fpModel.scale.setScalar(v.s); fpRig.position.set(...v.p); fpRig.rotation.set(...v.r); }
     else { const box=new THREE.Box3().setFromObject(fpModel),c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),md=Math.max(sz.x,sz.y,sz.z)||1,s=0.62/md;
       fpModel.scale.setScalar(s); fpModel.position.set(-c.x*s,-c.y*s,-c.z*s); fpRig.position.set(0.34,-0.46,-0.7); fpRig.rotation.set(0.1,Math.PI/2,0.2); }
-    fpRig.add(fpModel); fpRig.visible=true; fpBasePos.copy(fpRig.position); fpBaseRot.copy(fpRig.rotation); }
-  else fpRig.visible=false;
+    fpRig.add(fpModel); fpRig.visible=true; fpBasePos.copy(fpRig.position); fpBaseRot.copy(fpRig.rotation);
+    if(id==='botella') setupHeldMolotov(); else molotovHeld=false; }
+  else { fpRig.visible=false; molotovHeld=false; }
 }
 let swing={active:false,t:0};
 const THRUST=new Set(['spear','lanzapiedra','lanzaafil']);   // armas que hincan en vez de golpear
@@ -756,7 +781,7 @@ function renderTabs(){
     d.onclick=()=>{ if(scMoved>8)return; activeTab=t; selId=null; renderTabs(); renderGrid(); }; c.appendChild(d); });
 }
 function markSel(){ document.querySelectorAll('#mGrid .slot').forEach(c=>c.classList.toggle('sel',c.dataset.id===selId)); }
-function clearDetail(){ $('dName').textContent='—'; $('dType').textContent=''; $('dDesc').textContent=''; $('dMats').innerHTML=''; $('dInfo').innerHTML=''; $('dAction').style.display='none'; pvActive=false; }
+function clearDetail(){ $('dName').textContent='—'; $('dType').textContent=''; $('dMats').innerHTML=''; $('dAction').style.display='none'; const di=$('dIcon'); if(di)di.style.display='none'; }
 function renderGrid(){
   const g=$('mGrid'); g.innerHTML=''; const list=menuList();
   $('mEmpty').textContent = menuMode==='bag'?T('bagEmpty'):menuMode==='place'?T('placeEmpty'):T('empty');
@@ -782,7 +807,7 @@ function selectItem(id){
   $('dMatHd').textContent=T('need');
   if(ks.length) for(const k of ks) mats.insertAdjacentHTML('beforeend',`<span class="chip">${RESN[k]||''} ${(REST[k]&&REST[k][lang])||k} <b>×${cost[k]}</b></span>`);
   else mats.insertAdjacentHTML('beforeend',`<span class="chip">${T('free')} ✓</span>`);
-  setupAction(r); showModel(id);
+  setupAction(r); const u=ic(id); const di=$('dIcon'); di.src=u||''; di.style.display=u?'':'none';   // muestra el Sprite del ítem (no 3D girando)
 }
 function setupAction(r){
   const b=$('dAction'); b.style.display=''; b.disabled=false; b.onclick=null;
@@ -986,11 +1011,7 @@ function update(dt){
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
   tickGifs(dt); tickProjectiles(dt); tickFx(dt);   // gifs + molotov en vuelo + explosiones
   for(const m of placedTables){ if(m.userData.kind==='fogata'&&m.userData.fire){ m.userData.fire.intensity=1.15+Math.sin(clock.elapsedTime*11+m.position.x)*0.35+Math.random()*0.25; } }
-  if(equipped==='botella'&&fpModel){ const mc=fpModel.getObjectByName('molotovCloth');   // el trapo enrollado ondea (pegado a la botella, parte de arriba libre)
-    if(mc){ const {base,pinY}=mc.userData, p=mc.geometry.attributes.position.array, tt2=clock.elapsedTime, sp=Math.min(1,player.vel.length()/SPEED_MAX);
-      for(let iy=pinY;iy<MCY;iy++){ const f=(iy-pinY)/(MCY-pinY), sw=(0.4+sp)*0.025*f;
-        for(let ix=0;ix<MCX;ix++){ const i=iy*MCX+ix; p[i*3]=base[i*3]+Math.sin(tt2*3+iy*0.4)*sw; p[i*3+2]=base[i*3+2]+Math.cos(tt2*2.6+iy*0.35)*sw; } }
-      mc.geometry.attributes.position.needsUpdate=true; mc.geometry.computeVertexNormals(); } }
+  if(equipped==='botella') updateHeldMolotov(dt);   // trapo + líquido con cannon-es (cae al costado/atrás y reacciona al moverse)
   if(placing&&!building) updateGhost();
   if(building){ buildT+=dt; const k=Math.min(1,buildT/0.5); if(ghost){ghost.scale.setScalar(0.2+0.8*k);} if(buildT>=0.5) finishBuild(); }
   tickDirt(dt);
@@ -998,7 +1019,7 @@ function update(dt){
   if(toastT>0){toastT-=dt;if(toastT<=0)refreshHints();}
 }
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera);
-  if(pvActive&&pvModel&&pvRenderer){ pvModel.rotation.y+=dt*0.9; pvRenderer.render(pvScene,pvCam); } }
+}
 
 /* ===================== Iconos PNG (capturados del modelo real) ===================== */
 function captureIcon(obj,rot3){
