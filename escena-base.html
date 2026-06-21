@@ -471,8 +471,21 @@ const NO_TABLE=new Set(['martillo','mesa']);    // lo único crafteable sin mesa
 let activeTab='tools';
 const inv={ manualHogares:1, tronco:6, palo:14, piedra:12, piedraFilosa:6, enredadera:12, hojas:14, tela:6, chatarra:8, agua:4, sal:4, combustible:3, botella:2 }; // arranque de prueba
 let equipped=null, craftAtTable=false;
-const iconCache={};
-function getIcon(id){ if(iconCache[id]!==undefined)return iconCache[id]; const b=MODELS[id]; iconCache[id]=b?captureIcon(b(),[0.25,0.7,0.3]):null; return iconCache[id]; }
+// ===== Íconos: captura 3D ASÍNCRONA (no bloquea el menú) con fallback 2D =====
+const iconCache={}, iconPending={}, iconQueue=[];
+function tintFor(id){ if(/chapa|machete|bidon|metal/.test(id))return '#9fb0c2'; if(/piedra|pico|horno|fogata/.test(id))return '#9b9b9b';
+  if(/hoja|cama|enredadera|leaf/.test(id))return '#6f9a52'; if(/tela|cloth/.test(id))return '#cbb894'; if(/agua/.test(id))return '#5aa0d0';
+  if(/sal/.test(id))return '#e6e6ea'; if(/combustible|antorcha|botella/.test(id))return '#d98a3a'; return '#b4905a'; }
+function fallbackIcon(id){ const S=128,cv=document.createElement('canvas');cv.width=cv.height=S;const g=cv.getContext('2d');
+  g.fillStyle=tintFor(id); g.strokeStyle='rgba(0,0,0,.35)'; g.lineWidth=4;
+  const r=22; g.beginPath(); g.moveTo(28+r,24); g.arcTo(100,24,100,100,r); g.arcTo(100,104,28,104,r); g.arcTo(24,104,24,28,r); g.arcTo(24,24,100,24,r); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle='rgba(255,255,255,.92)'; g.font='bold 52px system-ui,Arial'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText((nm(id)[0]||'?').toUpperCase(),62,66); return cv.toDataURL('image/png'); }
+function requestIcon(id){ if(iconCache[id]!==undefined||iconPending[id])return; iconPending[id]=true; iconQueue.push(id); }
+function applyIcon(id,url){ iconCache[id]=url; iconPending[id]=false; document.querySelectorAll('[data-ic="'+id+'"]').forEach(d=>{ d.innerHTML='<img src="'+url+'">'; }); }
+function processIconQueue(){ let n=2; while(n-->0 && iconQueue.length){ const id=iconQueue.shift(); let url=null; const b=MODELS[id];
+  if(b){ try{ url=captureIcon(b(),[0.25,0.7,0.3]); }catch(e){ url=null; } } if(!url) url=fallbackIcon(id); applyIcon(id,url); } }
+function iconCell(id){ if(iconCache[id])return `<div class="ic" data-ic="${id}"><img src="${iconCache[id]}"></div>`; requestIcon(id); return `<div class="ic" data-ic="${id}"></div>`; }
 function needsTable(r){ return !NO_TABLE.has(r.id); }
 function canAfford(cost){ for(const k in cost) if((inv[k]||0)<cost[k]) return false; return true; }
 function pay(cost){ for(const k in cost) inv[k]=(inv[k]||0)-cost[k]; }
@@ -485,19 +498,18 @@ function craftCard(r){
   const locked=needsTable(r)&&!craftAtTable, afford=canAfford(r.cost), can=!locked&&afford;
   const it=document.createElement('div'); it.className='item'+(can?'':' locked');
   const out=r.out&&r.out>1?` ×${r.out}`:'';
-  it.innerHTML=`<div class="ic">${getIcon(r.id)?`<img src="${getIcon(r.id)}">`:''}</div><div class="nm">${nm(r.id)}${out}</div>`+
+  it.innerHTML=`${iconCell(r.id)}<div class="nm">${nm(r.id)}${out}</div>`+
     (locked?`<div class="sub" style="color:#ffb46b">${T('needTable')}</div>`:`<div class="sub">${costStr(r.cost)}</div>`);
   if(can) it.onclick=()=>{ if(!canAfford(r.cost))return; pay(r.cost); inv[r.id]=(inv[r.id]||0)+(r.out||1); flash(it,T('crafted')); renderCraft(); };
   return it;
 }
-function renderCraft(){
+function renderCraft(){ try{
   rebuildTabs();
   const g=$('craftGrid'); g.innerHTML='';
-  // barra de materiales intermedios (siempre disponible)
   const mat=document.createElement('div'); mat.style.gridColumn='1/-1'; mat.innerHTML=`<div class="lbl">${T('materials')}</div>`;
   const row=document.createElement('div'); row.className='grid'; row.style.gridColumn='1/-1';
   TRANSFORMS.forEach(r=>{ const can=canAfford(r.cost); const it=document.createElement('div'); it.className='item'+(can?'':' locked');
-    it.innerHTML=`<div class="ic">${getIcon(r.id)?`<img src="${getIcon(r.id)}">`:''}</div><div class="nm">${nm(r.id)} ×${r.out}</div><div class="sub">${costStr(r.cost)}</div>`;
+    it.innerHTML=`${iconCell(r.id)}<div class="nm">${nm(r.id)} ×${r.out}</div><div class="sub">${costStr(r.cost)}</div>`;
     if(can) it.onclick=()=>{ if(!canAfford(r.cost))return; pay(r.cost); inv[r.id]=(inv[r.id]||0)+r.out; flash(it,T('crafted')); renderCraft(); };
     row.appendChild(it); });
   g.appendChild(mat); g.appendChild(row);
@@ -505,7 +517,7 @@ function renderCraft(){
   const list=RECIPES.filter(r=>r.tab===activeTab);
   if(!list.length){ const e=document.createElement('div');e.className='emptyMsg';e.style.gridColumn='1/-1';e.textContent=T('empty');g.appendChild(e); return; }
   for(const r of list) g.appendChild(craftCard(r));
-}
+}catch(e){ console.error('renderCraft',e); toast('err: '+e.message); } }
 function flash(el,msg){const s=el.querySelector('.sub');if(!s)return;const old=s.innerHTML;s.textContent=msg;s.style.color='#8fe3ff';setTimeout(()=>{s.innerHTML=old;s.style.color='';},700);}
 
 function isEquippable(id){ const r=RECIPES.find(x=>x.id===id); return id==='manualHogares'?false:(r&&!r.placeable); }
@@ -515,12 +527,12 @@ function renderBag(){
   const res=[...RES_BASE,'tabla','hilo','cuerda','chapa'].filter(k=>(inv[k]||0)>0);
   if(res.length){ const lab=document.createElement('div');lab.style.gridColumn='1/-1';lab.innerHTML=`<div class="lbl">${T('resources')}</div>`;g.appendChild(lab);
     for(const k of res){ any=true; const it=document.createElement('div'); it.className='item';
-      it.innerHTML=`<div class="ic">${getIcon(k)?`<img src="${getIcon(k)}">`:''}</div><div class="nm">${nm(k)}</div><div class="sub">×${inv[k]}</div>`; g.appendChild(it); } }
+      it.innerHTML=`${iconCell(k)}<div class="nm">${nm(k)}</div><div class="sub">×${inv[k]}</div>`; g.appendChild(it); } }
   // objetos crafteados
   const objs=RECIPES.map(r=>r.id).concat(['manualHogares']).filter(id=>(inv[id]||0)>0);
   if(objs.length){ const lab=document.createElement('div');lab.style.gridColumn='1/-1';lab.innerHTML=`<div class="lbl">${T('items')}</div>`;g.appendChild(lab);
     for(const id of objs){ any=true; const eq=isEquippable(id); const it=document.createElement('div'); it.className='item'+(equipped===id?' selected':'');
-      it.innerHTML=`<div class="ic">${getIcon(id)?`<img src="${getIcon(id)}">`:''}</div><div class="nm">${nm(id)} ×${inv[id]}</div>`+
+      it.innerHTML=`${iconCell(id)}<div class="nm">${nm(id)} ×${inv[id]}</div>`+
         `<div class="sub">${eq?(equipped===id?T('equipped'):T('equip')):''}</div>`;
       if(eq) it.onclick=()=>{ equipped=(equipped===id?null:id); equip(equipped); renderBag(); };
       g.appendChild(it); } }
@@ -532,7 +544,7 @@ function openPlaceMenu(){
   const g=$('placeGrid'); g.innerHTML=''; let any=false;
   for(const r of RECIPES.filter(r=>r.placeable)) if((inv[r.id]||0)>0){ any=true;
     const it=document.createElement('div'); it.className='item';
-    it.innerHTML=`<div class="ic">${getIcon(r.id)?`<img src="${getIcon(r.id)}">`:''}</div><div class="nm">${nm(r.id)} ×${inv[r.id]}</div>`;
+    it.innerHTML=`${iconCell(r.id)}<div class="nm">${nm(r.id)} ×${inv[r.id]}</div>`;
     it.onclick=()=>{ hideScrims(); startPlacing(r.id); };
     g.appendChild(it);
   }
@@ -649,7 +661,8 @@ function update(dt){
   updateSign(dt);
   if(toastT>0){toastT-=dt;if(toastT<=0)refreshHints();}
 }
-function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); if(iconQueue.length)processIconQueue(); }
+addEventListener('error',e=>{ const h=$('hint'); if(h){h.textContent='⚠ '+(e.message||'error'); h.style.opacity='0.95';} });
 
 /* ===================== Iconos PNG (capturados del modelo real) ===================== */
 function captureIcon(obj,rot3){
