@@ -468,18 +468,27 @@ function mRecagua(){const g=new THREE.Group(); g.userData.kind='recagua';
 /* ---- ARMAS y HERRAMIENTAS procedurales ---- */
 // machete: mango de metal negro + hoja ancha de metal
 function buildMachete(){const g=new THREE.Group();const h=hnd(0.34,0.045,blackMetalMat);h.position.y=0.17;g.add(h);g.add(boxM(0.18,0.05,0.09,blackMetalMat,0,0.35,0));const bl=extrudeBlade(0.95,0.18,0.009,metalMat);bl.position.y=0.37;g.add(bl);return g;}   // hoja fina (afilada)
-// botella incendiaria (molotov): vidrio + líquido + TRAPO de tela (adentro y saliendo) con la punta prendida (gif de fuego)
+// trapo ENROLLADO (malla espiral) metido en el pico y saliendo por arriba — PEGADO a la botella (estable)
+const MCX=22, MCY=30;
+function buildMolotovCloth(){
+  const turns=2.4,r0=0.032,gap=0.022,baseY=0.46,LEN=0.5,sy=LEN/(MCY-1);
+  const geo=new THREE.BufferGeometry(), pos=new Float32Array(MCX*MCY*3), base=new Float32Array(MCX*MCY*3);
+  for(let iy=0;iy<MCY;iy++)for(let ix=0;ix<MCX;ix++){ const i=iy*MCX+ix, u=ix/(MCX-1), ang=u*turns*Math.PI*2, r=r0+u*turns*gap;
+    const x=Math.cos(ang)*r, y=baseY+iy*sy, z=Math.sin(ang)*r; pos[i*3]=base[i*3]=x; pos[i*3+1]=base[i*3+1]=y; pos[i*3+2]=base[i*3+2]=z; }
+  const idx=[]; for(let iy=0;iy<MCY-1;iy++)for(let ix=0;ix<MCX-1;ix++){ const a=iy*MCX+ix,b=a+1,c=a+MCX,d=c+1; idx.push(a,c,b,b,c,d); }
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3)); geo.setIndex(idx); geo.computeVertexNormals();
+  const mesh=new THREE.Mesh(geo,clothMat); mesh.name='molotovCloth'; mesh.castShadow=true;
+  mesh.userData={base, pinY:Math.floor(MCY*0.42), topY:baseY+LEN}; return mesh;
+}
+// botella incendiaria (molotov): vidrio + líquido + TRAPO ENROLLADO saliendo por arriba + fuego del gif quemándolo
 function buildBottle(){const g=new THREE.Group();
   const body=cyl(0.13,0.15,0.42,glassMat,18);body.position.y=0.21;g.add(body);
   const neck=cyl(0.06,0.1,0.18,glassMat,14);neck.position.y=0.5;g.add(neck);
   const liq=cyl(0.12,0.14,0.26,liquidMat,18);liq.position.y=0.17;g.add(liq);
-  const rag=new THREE.Group(); rag.name='botellaRag'; rag.position.set(0,0.46,0);
-  const ri=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.2,0.05),clothMat); ri.position.y=-0.06; ri.castShadow=true; rag.add(ri);                 // dentro de la botella
-  const rm=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.16,0.05),clothMat); rm.position.set(0.03,0.16,0); rm.rotation.z=-0.5; rm.castShadow=true; rag.add(rm);   // saliendo por el pico
-  const rt=new THREE.Mesh(new THREE.BoxGeometry(0.05,0.18,0.05),clothMat); rt.position.set(0.13,0.3,0); rt.rotation.z=-0.95; rt.castShadow=true; rag.add(rt); // punta colgando afuera (más larga)
-  const fire=makeFireMesh(fireGifs[1].tex,0.55,0.8); fire.position.set(0.13,0.2,0); rag.add(fire);   // fuego GRANDE (planos cruzados, no billboard) quemando el trapo
-  const fl=new THREE.PointLight(0xff7a30,0.6,2.4,2); fl.position.set(0.15,0.42,0); rag.add(fl);
-  g.add(rag); return g;}
+  g.add(buildMolotovCloth());
+  const fire=makeFireMesh(fireGifs[1].tex,0.4,0.62); fire.name='molotovFire'; fire.position.set(0,0.9,0); g.add(fire);   // fuego en la punta del trapo
+  const fl=new THREE.PointLight(0xff7a30,0.6,2.4,2); fl.position.set(0,0.95,0); g.add(fl);
+  return g;}
 // guadaña: asta larga + empuñadura lateral + hoja curva (tubo de metal)
 function buildScythe(){const g=new THREE.Group();const sh=hnd(1.9,0.04,woodDark);sh.position.y=0.95;g.add(sh);const grip=cyl(0.05,0.05,0.2,woodMat,10);grip.rotation.z=Math.PI/2;grip.position.set(0.16,0.72,0);g.add(grip);
   const curve=new THREE.QuadraticBezierCurve3(new THREE.Vector3(0,1.9,0),new THREE.Vector3(0.55,1.98,0),new THREE.Vector3(1.1,1.62,0));
@@ -569,7 +578,7 @@ const VIEW={
   hammer:{s:0.55,...P_SWING},
   spear:{s:0.4,...P_THRUST}, lanzapiedra:{s:0.4,...P_THRUST}, lanzaafil:{s:0.4,...P_THRUST},
   knife:{s:0.42,...P_KNIFE}, cuchipiedra:{s:0.5,...P_KNIFE}, cuchiafil:{s:0.42,...P_KNIFE},
-  machete:{s:0.5,...P_SWING}, guadana:{s:0.4,...P_HOLD}, botella:{s:0.85,...P_HOLD}, hacha:{s:0.85,p:[0.32,-0.4,-0.58],r:[-0.1,-Math.PI/2,-0.2]},   // tomahawk: girado (estaba al revés)
+  machete:{s:0.5,...P_SWING}, guadana:{s:0.4,...P_HOLD}, botella:{s:0.66,p:[0.36,-0.66,-0.72],r:[0.12,Math.PI/2,0.18]}, hacha:{s:0.85,p:[0.32,-0.4,-0.58],r:[-0.1,-Math.PI/2,-0.2]},   // molotov: abajo a la derecha; tomahawk: girado
   arco:{s:0.55,...P_BOW}, flechamad:{s:0.6,...P_HOLD}, flechapiedra:{s:0.6,...P_HOLD}, flechaafil:{s:0.6,...P_HOLD},
   picomad:{s:0.46,...P_SWING}, picopiedra:{s:0.46,...P_SWING}, picoafil:{s:0.46,...P_SWING},
   antorcha:{s:0.6,...P_HOLD}, azadamad:{s:0.46,...P_SWING}, azadapiedra:{s:0.46,...P_SWING},
@@ -941,12 +950,17 @@ function update(dt){
   sunLight.position.set(player.pos.x+sun.position.x*0.4,sun.position.y,player.pos.z+sun.position.z*0.4); sunLight.target.position.copy(player.pos); sunLight.target.updateMatrixWorld();
   if(swing.active){ swing.t+=dt/0.42; const a=Math.sin(Math.min(swing.t,1)*Math.PI);
     if(THRUST.has(equipped)){ fpRig.position.z=fpBasePos.z-a*0.7; fpRig.rotation.x=fpBaseRot.x-a*0.18; }   // hinca al frente (estocada)
+    else if(equipped==='botella'){ fpRig.position.z=fpBasePos.z-a*0.22; fpRig.rotation.x=fpBaseRot.x-a*0.35; }   // amago suave (no se lanza, queda en mano)
     else { fpRig.rotation.x=fpBaseRot.x-a*1.2; }
     if(swing.t>=1){ swing.active=false; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
   tickGifs(dt);   // anima los gifs de fuego
   for(const m of placedTables){ if(m.userData.kind==='fogata'&&m.userData.fire){ m.userData.fire.intensity=1.15+Math.sin(clock.elapsedTime*11+m.position.x)*0.35+Math.random()*0.25; } }
-  if(equipped==='botella'&&fpModel){ const rg=fpModel.getObjectByName('botellaRag'); if(rg){ const sp=Math.min(1,player.vel.length()/SPEED_MAX); rg.rotation.z=Math.sin(player.bobPhase*2)*0.22*(0.35+sp)+Math.sin(clock.elapsedTime*1.7)*0.06; } }   // el trapo se balancea al caminar
+  if(equipped==='botella'&&fpModel){ const mc=fpModel.getObjectByName('molotovCloth');   // el trapo enrollado ondea (pegado a la botella, parte de arriba libre)
+    if(mc){ const {base,pinY}=mc.userData, p=mc.geometry.attributes.position.array, tt2=clock.elapsedTime, sp=Math.min(1,player.vel.length()/SPEED_MAX);
+      for(let iy=pinY;iy<MCY;iy++){ const f=(iy-pinY)/(MCY-pinY), sw=(0.4+sp)*0.025*f;
+        for(let ix=0;ix<MCX;ix++){ const i=iy*MCX+ix; p[i*3]=base[i*3]+Math.sin(tt2*3+iy*0.4)*sw; p[i*3+2]=base[i*3+2]+Math.cos(tt2*2.6+iy*0.35)*sw; } }
+      mc.geometry.attributes.position.needsUpdate=true; mc.geometry.computeVertexNormals(); } }
   if(placing&&!building) updateGhost();
   if(building){ buildT+=dt; const k=Math.min(1,buildT/0.5); if(ghost){ghost.scale.setScalar(0.2+0.8*k);} if(buildT>=0.5) finishBuild(); }
   tickDirt(dt);
