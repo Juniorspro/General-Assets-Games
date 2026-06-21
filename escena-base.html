@@ -389,11 +389,13 @@ const liquidMat=new THREE.MeshStandardMaterial({color:0xc9852a,roughness:0.35,tr
 const waterMat=new THREE.MeshStandardMaterial({color:0x2f7fc9,roughness:0.12,metalness:0,transparent:true,opacity:0.8,envMapIntensity:1.6});
 /* ---- llamas ANIMADAS: frames del gif DECODIFICADOS con gifuct-js (anima sí o sí) ---- */
 const GIFB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4d4c23e/';
-function makeGif(file){ const o={tex:new THREE.CanvasTexture(document.createElement('canvas')),frames:[],delays:[],total:0,cx:null,ready:false,_img:null};
+const EXBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@7c4fc40/assets/gifs/';
+const animGifs=[];
+function makeGif(url){ const o={tex:new THREE.CanvasTexture(document.createElement('canvas')),frames:[],delays:[],total:0,cx:null,ready:false,_img:null}; animGifs.push(o);
   o.tex.colorSpace=THREE.SRGBColorSpace;
   (async()=>{ try{
     const {parseGIF,decompressFrames}=await import('gifuct-js');
-    const buf=await (await fetch(GIFB+file,{mode:'cors'})).arrayBuffer();
+    const buf=await (await fetch(url,{mode:'cors'})).arrayBuffer();
     const gif=parseGIF(buf), frames=decompressFrames(gif,true), W=gif.lsd.width,H=gif.lsd.height,MAXH=160,sc=Math.min(1,MAXH/H);
     const full=document.createElement('canvas'); full.width=W; full.height=H; const fc=full.getContext('2d');
     for(const fr of frames){ const tmp=document.createElement('canvas'); tmp.width=fr.dims.width; tmp.height=fr.dims.height;
@@ -402,11 +404,12 @@ function makeGif(file){ const o={tex:new THREE.CanvasTexture(document.createElem
       o.frames.push(c); o.delays.push(fr.delay||80); if(fr.disposalType===2)fc.clearRect(fr.dims.left,fr.dims.top,fr.dims.width,fr.dims.height); }
     o.total=o.delays.reduce((a,b)=>a+b,0)||o.delays.length*80;
     const cv=o.tex.image; cv.width=o.frames[0].width; cv.height=o.frames[0].height; o.cx=cv.getContext('2d'); o.ready=true;
-  }catch(e){ const img=new Image(); img.crossOrigin='anonymous'; img.src=GIFB+file; img.style.cssText='position:fixed;left:0;bottom:0;width:4px;height:4px;opacity:.012;pointer-events:none;'; document.body.appendChild(img); o._img=img;
+  }catch(e){ const img=new Image(); img.crossOrigin='anonymous'; img.src=url; img.style.cssText='position:fixed;left:0;bottom:0;width:4px;height:4px;opacity:.012;pointer-events:none;'; document.body.appendChild(img); o._img=img;
     const cv=o.tex.image; cv.width=128; cv.height=192; o.cx=cv.getContext('2d'); o.ready=true; } })();
   return o; }
-const fireGifs=[makeGif('2spnJPK.gif'),makeGif('db5a4595bac1960e5b7cc0a35544140b.gif')];   // llama grande + llamas altas
-function tickGifs(dt){ for(const o of fireGifs){ if(!o.ready||!o.cx)continue;
+const fireGifs=[makeGif(GIFB+'2spnJPK.gif'),makeGif(GIFB+'db5a4595bac1960e5b7cc0a35544140b.gif')];   // llama grande + llamas altas
+const gExpl=makeGif(EXBASE+'expl.gif'), gFcam=makeGif(EXBASE+'firecam.gif'), gFcam2=makeGif(EXBASE+'firecam2.gif'), gFground=makeGif(EXBASE+'fireground.gif');   // explosión + fuegos
+function tickGifs(dt){ for(const o of animGifs){ if(!o.ready||!o.cx)continue;
   if(o.frames.length){ let t=performance.now()%o.total,idx=0; for(let i=0;i<o.delays.length;i++){ if(t<o.delays[i]){idx=i;break;} t-=o.delays[i]; }
     const f=o.frames[idx],cv=o.tex.image; if(cv.width!==f.width){cv.width=f.width;cv.height=f.height;} o.cx.clearRect(0,0,cv.width,cv.height); o.cx.drawImage(f,0,0); o.tex.needsUpdate=true; }
   else if(o._img&&o._img.complete&&o._img.naturalWidth){ const s=Math.min(128/o._img.naturalWidth,192/o._img.naturalHeight); o.cx.clearRect(0,0,128,192); o.cx.drawImage(o._img,0,0,o._img.naturalWidth*s,o._img.naturalHeight*s); o.tex.needsUpdate=true; } } }
@@ -415,6 +418,33 @@ function makeFireMesh(tex,w,h){ const g=new THREE.Group();
   const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:0.66,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});  // opacity baja = menos quemado
   const p1=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat); p1.position.y=h*0.32; g.add(p1);
   const p2=p1.clone(); p2.rotation.y=Math.PI/2; g.add(p2); return g; }
+/* ===== Molotov ARROJADIZA: vuela con físicas y EXPLOTA al caer ===== */
+const projectiles=[], fx=[];
+function billboardFx(tex,size){ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:1,depthWrite:false,blending:THREE.AdditiveBlending})); s.scale.set(size,size,1); return s; }
+function throwMolotov(){
+  const dir=new THREE.Vector3(-Math.sin(player.yaw)*Math.cos(player.pitch),Math.sin(player.pitch),-Math.cos(player.yaw)*Math.cos(player.pitch));
+  const m=MODELS.botella(); m.traverse(o=>{if(o.isMesh)o.castShadow=false;}); m.scale.setScalar(0.5);
+  m.position.set(camera.position.x,camera.position.y,camera.position.z).addScaledVector(dir,0.7); scene.add(m);
+  projectiles.push({mesh:m, vel:dir.clone().multiplyScalar(15).add(new THREE.Vector3(0,3.2,0)), rot:new THREE.Vector3((Math.random()-.5)*10,0,(Math.random()-.5)*10)});
+}
+function tickProjectiles(dt){ for(let i=projectiles.length-1;i>=0;i--){ const p=projectiles[i];
+  p.vel.y-=GRAV*dt; p.mesh.position.addScaledVector(p.vel,dt); p.mesh.rotation.x+=p.rot.x*dt; p.mesh.rotation.z+=p.rot.z*dt;
+  let gy=0; for(const f of floors){ if(p.mesh.position.x>f.minx&&p.mesh.position.x<f.maxx&&p.mesh.position.z>f.minz&&p.mesh.position.z<f.maxz&&f.top>gy) gy=f.top; }
+  if(p.mesh.position.y<=gy+0.12){ explodeAt(p.mesh.position.clone(),gy); scene.remove(p.mesh); p.mesh.traverse(o=>{if(o.geometry)o.geometry.dispose();}); projectiles.splice(i,1); } } }
+function explodeAt(pos,gy){ gy=gy||0;
+  const ex=billboardFx(gExpl.tex,3.4); ex.position.set(pos.x,gy+1.2,pos.z); scene.add(ex); fx.push({o:ex,kind:'expl',t:0,dur:0.75});                 // 1) explosión que TAPA todo
+  const gm=new THREE.Mesh(new THREE.PlaneGeometry(3.6,3.6),new THREE.MeshBasicMaterial({map:gFground.tex,transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false}));
+  gm.rotation.x=-Math.PI/2; gm.position.set(pos.x,gy+0.05,pos.z); scene.add(gm); fx.push({o:gm,kind:'fade',t:0,dur:6,delay:0.35,max:0.95});           // 2) suelo en llamas
+  for(let k=0;k<6;k++){ const a=Math.random()*6.28, r=0.2+Math.random()*1.1, tx=(k%2)?gFcam2.tex:gFcam.tex;                                          // 3) fuegos 3D progresivos (miran a la cámara)
+    const f=billboardFx(tx,0.9+Math.random()*0.7); f.material.opacity=0; f.position.set(pos.x+Math.cos(a)*r, gy+0.5+Math.random()*0.2, pos.z+Math.sin(a)*r); scene.add(f);
+    fx.push({o:f,kind:'fade',t:0,dur:4.5+Math.random()*1.5,delay:0.4+k*0.13,max:0.85}); }
+  const L=new THREE.PointLight(0xff8a3a,5,14,2); L.position.set(pos.x,gy+1.2,pos.z); scene.add(L); fx.push({o:L,kind:'light',t:0,dur:3.5});           // 4) luz
+}
+function tickFx(dt){ for(let i=fx.length-1;i>=0;i--){ const e=fx[i]; e.t+=dt; const d=e.delay||0;
+  if(e.kind==='expl'){ const k=e.t/e.dur; e.o.material.opacity=Math.max(0,1-k*k); e.o.scale.setScalar(3.4*(0.55+k*0.7)); }
+  else if(e.kind==='light'){ e.o.intensity=Math.max(0,5*(1-e.t/e.dur))*(0.7+Math.random()*0.3); }
+  else { const ft=e.t-d; let o=0; if(ft>0) o=Math.min(1,ft/0.5)*Math.min(1,(e.dur-e.t)/1.2); e.o.material.opacity=Math.max(0,o)*(e.max||0.85); }
+  if(e.t>=e.dur){ scene.remove(e.o); if(e.o.material)e.o.material.dispose(); if(e.o.geometry)e.o.geometry.dispose(); fx.splice(i,1); } } }
 function cyl(rt,rb,h,m,s){const e=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,s||14),m);e.castShadow=true;return e;}
 function hnd(len,r,m){const e=cyl(r||0.04,(r||0.04)*1.18,len,m||woodDark,14);return e;}
 function lash(y,r){const t=new THREE.Mesh(new THREE.TorusGeometry(r||0.06,(r||0.06)*0.28,6,14),woodMat);t.position.y=y;t.rotation.x=Math.PI/2;t.castShadow=true;return t;}
@@ -628,7 +658,7 @@ addEventListener('pointerup',lookEnd);addEventListener('pointercancel',lookEnd);
 function tapBtn(id,fn){ const el=$(id); el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
 tapBtn('bJump',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
 tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; $('bCrouch').classList.toggle('on',player.crouch); });
-tapBtn('bAxe',()=>{ startSwing(); if(placing){ tryBuild(); } });
+tapBtn('bAxe',()=>{ if(equipped==='botella'){ throwMolotov(); startSwing(); return; } startSwing(); if(placing){ tryBuild(); } });
 tapBtn('bRot',()=>{ placeYaw=(placeYaw+Math.PI/4)%(Math.PI*2); });
 tapBtn('bPlace',()=>{ if(placing) stopPlacing(); else openMenu('place'); });
 tapBtn('bSet',()=>showScrim('settings'));
@@ -954,7 +984,7 @@ function update(dt){
     else { fpRig.rotation.x=fpBaseRot.x-a*1.2; }
     if(swing.t>=1){ swing.active=false; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
-  tickGifs(dt);   // anima los gifs de fuego
+  tickGifs(dt); tickProjectiles(dt); tickFx(dt);   // gifs + molotov en vuelo + explosiones
   for(const m of placedTables){ if(m.userData.kind==='fogata'&&m.userData.fire){ m.userData.fire.intensity=1.15+Math.sin(clock.elapsedTime*11+m.position.x)*0.35+Math.random()*0.25; } }
   if(equipped==='botella'&&fpModel){ const mc=fpModel.getObjectByName('molotovCloth');   // el trapo enrollado ondea (pegado a la botella, parte de arriba libre)
     if(mc){ const {base,pinY}=mc.userData, p=mc.geometry.attributes.position.array, tt2=clock.elapsedTime, sp=Math.min(1,player.vel.length()/SPEED_MAX);
