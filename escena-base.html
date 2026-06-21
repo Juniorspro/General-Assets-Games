@@ -3,20 +3,162 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#87bdf0" />
-<title>Escena base · Grid + cielo + sol</title>
+<meta name="theme-color" content="#bcd6ef" />
+<title>Escena · Crafteo</title>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html,body { height:100%; overflow:hidden; background:#87bdf0; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; }
-  #app { position:fixed; inset:0; }
-  #app canvas { display:block; width:100%!important; height:100%!important; touch-action:none; }
-  #tag { position:fixed; left:12px; bottom:calc(12px + env(safe-area-inset-bottom,0px)); z-index:5;
-         font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#08365f; opacity:.55; pointer-events:none; }
+  :root{ --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px); }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
+  html,body{ height:100%; overflow:hidden; background:#bcd6ef; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; color:#eef3f8; overscroll-behavior:none; }
+  #stage{ position:fixed; inset:0; }
+  body.rot #stage{ width:100vh; height:100vw; top:50%; left:50%; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center; }
+  #app{ position:absolute; inset:0; }
+  #app canvas{ display:block; width:100%!important; height:100%!important; touch-action:none; }
+  #cross{ position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px; z-index:6; border-radius:50%; background:rgba(255,255,255,.6); box-shadow:0 0 4px rgba(0,0,0,.6); pointer-events:none; }
+
+  /* Joystick */
+  #joy{ position:fixed; left:26px; bottom:calc(28px + var(--safe-b)); z-index:20; width:128px; height:128px; border-radius:50%;
+        background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.18); backdrop-filter:blur(6px); touch-action:none; }
+  #joyKnob{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%;
+            background:radial-gradient(circle at 38% 34%,#dff0ff,#5aa0ff); box-shadow:0 4px 16px rgba(0,0,0,.45); }
+
+  /* Botones de acción */
+  .actBtn{ position:fixed; z-index:20; width:66px; height:66px; border-radius:50%; background:rgba(255,255,255,.06);
+           border:1.5px solid rgba(255,255,255,.2); color:#eef3f8; font-size:24px; backdrop-filter:blur(6px); cursor:pointer;
+           display:flex; align-items:center; justify-content:center; transition:transform .1s,background .15s; }
+  .actBtn:active{ transform:scale(.92); }
+  .actBtn.on{ background:rgba(90,160,255,.3); border-color:#8fe3ff; }
+  .actBtn.hidden{ display:none; }
+  #bAxe   { right:26px; bottom:calc(30px + var(--safe-b)); }
+  #bJump  { right:104px; bottom:calc(58px + var(--safe-b)); }
+  #bCrouch{ right:34px; bottom:calc(112px + var(--safe-b)); width:58px; height:58px; font-size:20px; }
+  #bPlace { right:104px; bottom:calc(136px + var(--safe-b)); width:58px; height:58px; font-size:20px; }
+  #bRot   { right:170px; bottom:calc(136px + var(--safe-b)); width:58px; height:58px; font-size:20px; }
+
+  /* Botones superiores */
+  .topBtn{ position:fixed; top:calc(14px + var(--safe-t)); z-index:21; width:46px; height:46px; border-radius:12px;
+           background:rgba(18,22,30,.62); backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,.14); color:#eef3f8;
+           font-size:19px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  #bSet{ right:14px; } #bBag{ right:68px; } #bCraft{ right:122px; }
+
+  #hint{ position:fixed; left:50%; top:calc(12px + var(--safe-t)); transform:translateX(-50%); z-index:6; font-size:11px; opacity:.5;
+         pointer-events:none; text-shadow:0 1px 3px rgba(0,0,0,.6); }
+
+  /* Cartel 2D sobre la mesa */
+  #tableSign{ position:fixed; z-index:18; transform:translate(-50%,-100%); display:none; cursor:pointer; }
+  .signBody{ background:rgba(18,22,30,.82); border:1px solid rgba(150,200,255,.35); border-radius:10px; padding:8px 12px; font-size:12px;
+             backdrop-filter:blur(8px); white-space:nowrap; box-shadow:0 8px 24px rgba(0,0,0,.5); position:relative; }
+  .signBar{ height:3px; margin-top:6px; border-radius:3px; background:rgba(255,255,255,.18); overflow:hidden; }
+  .signBar i{ display:block; height:100%; width:0; background:linear-gradient(90deg,#7fd0ff,#b98bff); }
+
+  /* Overlays */
+  .scrim{ position:fixed; inset:0; z-index:40; display:flex; align-items:center; justify-content:center;
+          background:radial-gradient(120% 120% at 60% 40%,rgba(12,16,22,.4),rgba(6,8,12,.7)); backdrop-filter:blur(12px);
+          opacity:0; pointer-events:none; transition:opacity .25s; }
+  .scrim.show{ opacity:1; pointer-events:auto; }
+  .card{ width:min(460px,calc(100vw - 32px)); max-height:calc(100vh - 36px); overflow-y:auto;
+         background:linear-gradient(165deg,rgba(26,30,38,.95),rgba(12,14,19,.97)); border:1px solid rgba(150,180,220,.16);
+         border-radius:20px; padding:20px; box-shadow:0 30px 90px rgba(0,0,0,.75); position:relative; }
+  .card h2{ font-size:22px; font-weight:700; text-align:center; margin-bottom:6px; }
+  .xClose{ position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:9px; cursor:pointer;
+           background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.16); color:#eef3f8; font-size:15px;
+           display:flex; align-items:center; justify-content:center; }
+  .xClose:hover{ background:rgba(255,90,90,.22); border-color:#ff7b7b; }
+
+  /* Etiquetas de papel (pestañas de crafteo) */
+  .tabs{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin:14px 0 16px; }
+  .paper{ font-family:"Georgia","Times New Roman",serif; background:linear-gradient(180deg,#efe6cf,#ddd0ad); color:#3a2c14;
+          padding:9px 14px; border-radius:3px 10px 4px 9px; font-size:13px; cursor:pointer; position:relative;
+          box-shadow:0 3px 8px rgba(0,0,0,.4); transform:rotate(-1.5deg); border:1px solid #c9b88c; transition:transform .12s,filter .12s; }
+  .paper:nth-child(2n){ transform:rotate(1.6deg); } .paper:nth-child(3n){ transform:rotate(-.8deg); }
+  .paper::before{ content:""; position:absolute; left:9px; top:-5px; width:10px; height:10px; border-radius:50%; background:#8a7038; box-shadow:0 0 0 2px rgba(0,0,0,.15); }
+  .paper.active{ filter:brightness(1.12) saturate(1.1); transform:scale(1.06) rotate(0deg); box-shadow:0 6px 16px rgba(0,0,0,.5),0 0 0 2px #c98b3a inset; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; }
+  .item{ background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.015)); border:1px solid rgba(160,190,225,.14);
+         border-radius:12px; padding:12px; text-align:center; cursor:pointer; transition:all .14s; }
+  .item:hover{ border-color:#7fd0ff; background:rgba(120,170,255,.12); }
+  .item.locked{ opacity:.45; cursor:not-allowed; }
+  .item.selected{ border-color:#8fe3ff; box-shadow:0 0 0 2px rgba(120,200,255,.5) inset; }
+  .item .ic{ width:64px; height:64px; margin:0 auto 8px; display:flex; align-items:center; justify-content:center; }
+  .item .ic img{ width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
+  .item .nm{ font-size:13px; font-weight:600; }
+  .item .sub{ font-size:10.5px; opacity:.6; margin-top:3px; }
+  .item .lockTag{ font-size:9.5px; color:#ffb46b; margin-top:4px; }
+  .emptyMsg{ text-align:center; opacity:.5; font-size:13px; padding:24px 0; }
+  .seg{ display:flex; gap:6px; } .seg button{ flex:1; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,.14);
+        background:rgba(255,255,255,.05); color:#eef3f8; cursor:pointer; font-size:12px; } .seg button.active{ background:#2f6dd0; border-color:#8fe3ff; }
+  .lbl{ font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; opacity:.5; margin:14px 0 8px; }
+
+  #loader{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+           background:#bcd6ef; transition:opacity .5s; color:#08365f; font-size:13px; letter-spacing:.1em; }
+  #loader.hide{ opacity:0; pointer-events:none; }
 </style>
 </head>
 <body>
-<div id="app"></div>
-<div id="tag">Escena base · arrastrá para orbitar</div>
+<div id="loader">…</div>
+<div id="stage">
+  <div id="app"></div>
+  <div id="cross"></div>
+  <div id="joy"><div id="joyKnob"></div></div>
+
+  <button id="bSet"   class="topBtn">⚙</button>
+  <button id="bBag"   class="topBtn">🎒</button>
+  <button id="bCraft" class="topBtn">🛠️</button>
+
+  <button id="bAxe"    class="actBtn">🪓</button>
+  <button id="bJump"   class="actBtn">⤴️</button>
+  <button id="bCrouch" class="actBtn">🔽</button>
+  <button id="bPlace"  class="actBtn">✏️</button>
+  <button id="bRot"    class="actBtn hidden">🔁</button>
+
+  <div id="hint"></div>
+
+  <!-- Crafteo -->
+  <div id="craft" class="scrim">
+    <div class="card">
+      <div class="xClose" data-close="craft">✕</div>
+      <h2 id="craftTitle">Fabricación</h2>
+      <div class="tabs" id="craftTabs"></div>
+      <div class="grid" id="craftGrid"></div>
+    </div>
+  </div>
+
+  <!-- Mochila -->
+  <div id="bag" class="scrim">
+    <div class="card">
+      <div class="xClose" data-close="bag">✕</div>
+      <h2 data-i18n="inventory">Mochila</h2>
+      <div class="grid" id="bagGrid"></div>
+      <div class="emptyMsg" id="bagEmpty" data-i18n="bagEmpty">Vacía. Fabricá algo en 🛠️.</div>
+    </div>
+  </div>
+
+  <!-- Menú de colocación (muebles crafteados) -->
+  <div id="placeMenu" class="scrim">
+    <div class="card">
+      <div class="xClose" data-close="placeMenu">✕</div>
+      <h2 data-i18n="placeTitle">Colocar</h2>
+      <div class="grid" id="placeGrid"></div>
+      <div class="emptyMsg" id="placeEmpty" data-i18n="placeEmpty">No tenés muebles. Fabricá una mesa.</div>
+    </div>
+  </div>
+
+  <!-- Ajustes -->
+  <div id="settings" class="scrim">
+    <div class="card">
+      <div class="xClose" data-close="settings">✕</div>
+      <h2 data-i18n="settings">Ajustes</h2>
+      <div class="lbl" data-i18n="language">Idioma</div>
+      <div class="seg" id="langSeg">
+        <button data-lang="es">Español</button><button data-lang="en">English</button><button data-lang="pt">Português</button>
+      </div>
+      <div class="lbl" data-i18n="rotate90">Girar 90° en vertical</div>
+      <div class="seg" id="rotSeg"><button data-r="on">On</button><button data-r="off">Off</button></div>
+    </div>
+  </div>
+
+  <!-- Cartel sobre la mesa -->
+  <div id="tableSign"><div class="signBody"><span id="signTxt"></span><div class="signBar"><i id="signFill"></i></div></div></div>
+</div>
 
 <script type="importmap">
 {
@@ -29,57 +171,339 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const app=document.getElementById('app');
+/* ===================== i18n ===================== */
+const I18N={
+  es:{jump:'Saltar',crouch:'Agacharse',axe:'Hacha',build:'Construir',craft:'Fabricación',inventory:'Mochila',settings:'Ajustes',language:'Idioma',rotate90:'Girar 90° en vertical',
+      weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',
+      placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
+      equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
+      useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —'},
+  en:{jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',craft:'Crafting',inventory:'Backpack',settings:'Settings',language:'Language',rotate90:'Rotate 90° in portrait',
+      weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',free:'Free',craftBtn:'Craft',crafted:'Crafted!',
+      placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
+      equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
+      useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —'},
+  pt:{jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',craft:'Fabricação',inventory:'Mochila',settings:'Ajustes',language:'Idioma',rotate90:'Girar 90° na vertical',
+      weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',
+      placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
+      equip:'Equipar',equipped:'Equipado',selectHammer:'Equipe o martelo em 🎒 para colocar móveis.',rotate:'Girar',building:'Construindo…',
+      useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —'}
+};
+let lang='es'; const T=k=>(I18N[lang]||I18N.es)[k]||k;
+const $=id=>document.getElementById(id);
+function applyLang(){ document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n'); if(I18N[lang][k]!=null)el.textContent=I18N[lang][k];});
+  $('craftTitle').textContent=T('craft'); refreshHints(); rebuildTabs(); if($('craft').classList.contains('show'))renderCraft(); }
+
+/* ===================== Render / escena ===================== */
+const app=$('app');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
 app.appendChild(renderer.domElement);
 
-// ===== Escena + cielo azul =====
 const scene=new THREE.Scene();
-scene.background=new THREE.Color(0x87bdf0);            // cielo azul
-scene.fog=new THREE.Fog(0x9cc8ee,40,160);              // bruma suave a lo lejos
+scene.background=new THREE.Color(0x9fc6ee);
+scene.fog=new THREE.Fog(0xbcd6ef,70,260);
+const camera=new THREE.PerspectiveCamera(64,1,0.1,2000);
 
-const camera=new THREE.PerspectiveCamera(60,1,0.1,1000);
-camera.position.set(8,6,12);
+// Suelo blanco sólido + grid sutil (referencia de movimiento)
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(600,600),new THREE.MeshStandardMaterial({color:0xf2f3f5,roughness:0.95,metalness:0}));
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; ground.matrixAutoUpdate=false; ground.updateMatrix(); scene.add(ground);
+const grid=new THREE.GridHelper(600,300,0xc4cdd6,0xdfe4ea); grid.material.transparent=true; grid.material.opacity=0.35; grid.position.y=0.01; scene.add(grid);
+const GROUND_LIMIT=120;   // límite del mundo escena
 
-const controls=new OrbitControls(camera,renderer.domElement);
-controls.enableDamping=true; controls.dampingFactor=0.08;
-controls.target.set(0,1,0); controls.maxPolarAngle=Math.PI*0.495;   // no pasar por debajo del suelo
-controls.minDistance=3; controls.maxDistance=60;
+// Cielo: sol + luz
+const sun=new THREE.Mesh(new THREE.SphereGeometry(8,28,20),new THREE.MeshBasicMaterial({color:0xfff3c8,fog:false}));
+sun.position.set(-60,90,-110); scene.add(sun);
+const sunLight=new THREE.DirectionalLight(0xfff2d8,2.6); sunLight.position.copy(sun.position); sunLight.castShadow=true;
+sunLight.shadow.mapSize.set(2048,2048); sunLight.shadow.camera.near=1; sunLight.shadow.camera.far=200;
+sunLight.shadow.camera.left=-40; sunLight.shadow.camera.right=40; sunLight.shadow.camera.top=40; sunLight.shadow.camera.bottom=-40; sunLight.shadow.bias=-0.0004; sunLight.shadow.normalBias=0.04;
+scene.add(sunLight); scene.add(sunLight.target);
+scene.add(new THREE.HemisphereLight(0xdfeeff,0xcfd6dc,0.85));
 
-// ===== Grid del suelo =====
-const grid=new THREE.GridHelper(120,120,0x3a6ea5,0x8fb6db);
-grid.material.transparent=true; grid.material.opacity=0.65;
-scene.add(grid);
+/* ===================== Madera PBR (del repo) ===================== */
+const woodMat=new THREE.MeshStandardMaterial({color:0xb4905a,roughness:0.7,metalness:0.05});
+const woodDark=new THREE.MeshStandardMaterial({color:0x7d5a33,roughness:0.66,metalness:0.05});
+(function loadWood(){
+  const P='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@601965c/assets/textures/axe/';
+  const L=new THREE.TextureLoader(); L.crossOrigin='anonymous';
+  const set=(m,rep)=>{['wood_col.jpg','wood_nrm.jpg','wood_rgh.jpg'].forEach((f,i)=>{L.load(P+f,t=>{t.colorSpace=i===0?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(rep,rep);t.anisotropy=8;
+    if(i===0)m.map=t; else if(i===1)m.normalMap=t; else m.roughnessMap=t; if(i===0)m.color.set(0xffffff); m.needsUpdate=true;},undefined,()=>{});});};
+  set(woodMat,1.4); set(woodDark,1.0);
+})();
 
-// ===== Sol (esfera luminosa) + luz =====
-const sun=new THREE.Mesh(
-  new THREE.SphereGeometry(2.2,32,24),
-  new THREE.MeshBasicMaterial({color:0xfff1b0})
-);
-sun.position.set(-18,22,-26);
-scene.add(sun);
-// halo del solcito
-const halo=new THREE.Sprite(new THREE.SpriteMaterial({
-  map:(()=>{const S=128,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
-    const gr=g.createRadialGradient(S/2,S/2,0,S/2,S/2,S/2);gr.addColorStop(0,'rgba(255,244,190,.9)');gr.addColorStop(.4,'rgba(255,210,120,.4)');gr.addColorStop(1,'rgba(0,0,0,0)');
-    g.fillStyle=gr;g.fillRect(0,0,S,S);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;})(),
-  transparent:true, depthWrite:false, blending:THREE.AdditiveBlending
-}));
-halo.scale.setScalar(16); sun.add(halo);
+/* ===================== Modelos: martillo y mesa ===================== */
+function buildHammer(){            // martillo de madera (mango + cabeza)
+  const g=new THREE.Group();
+  const handle=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.06,1.15,16),woodMat); handle.position.y=0.575; handle.castShadow=true; g.add(handle);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.26,0.26),woodDark); head.position.y=1.16; head.castShadow=true;
+  const e1=new THREE.Mesh(new THREE.CylinderGeometry(0.135,0.135,0.05,18),woodDark); e1.rotation.z=Math.PI/2; e1.position.set(0.27,1.16,0); g.add(e1);
+  g.add(head);
+  const knob=new THREE.Mesh(new THREE.SphereGeometry(0.07,12,10),woodMat); knob.position.y=0; g.add(knob);
+  return g;
+}
+function buildTable(){             // mesa de madera (tabla + 4 patas)
+  const g=new THREE.Group();
+  const top=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.12,1.0),woodMat); top.position.y=0.86; top.castShadow=top.receiveShadow=true; g.add(top);
+  const apron=new THREE.Mesh(new THREE.BoxGeometry(1.36,0.14,0.86),woodDark); apron.position.y=0.74; apron.castShadow=true; g.add(apron);
+  const legGeo=new THREE.BoxGeometry(0.12,0.8,0.12);
+  for(const sx of[-0.66,0.66])for(const sz of[-0.42,0.42]){const l=new THREE.Mesh(legGeo,woodDark); l.position.set(sx,0.4,sz); l.castShadow=true; g.add(l);}
+  return g;
+}
 
-const sunLight=new THREE.DirectionalLight(0xfff2d0,2.4);
-sunLight.position.copy(sun.position);
-scene.add(sunLight);
-scene.add(new THREE.HemisphereLight(0xbfe0ff,0x4a6b3a,0.7));
+/* ===================== Jugador (1ª persona, como el original) ===================== */
+const EYE=1.7, EYE_CROUCH=1.05, GRAV=22, JUMP_V=7.4, SPEED_MAX=6.4, ACCEL=11;
+const player={pos:new THREE.Vector3(0,0,6),vel:new THREE.Vector3(),yaw:0,pitch:0,roll:0,bobPhase:0,strafeSm:0,eye:EYE,vy:0,onGround:true,crouch:false};
+const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3();
+let bobScale=1, camShake=0.5;
 
-// ===== Loop =====
-function resize(){const w=innerWidth,h=innerHeight;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false);}
-addEventListener('resize',resize); resize();
-function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);}
+// martillo en 1ª persona (cuando está equipado)
+const fpHammer=buildHammer(); fpHammer.scale.setScalar(0.42); fpHammer.position.set(0.34,-0.46,-0.7); fpHammer.rotation.set(0.1,Math.PI/2,0.2); fpHammer.visible=false;
+camera.add(fpHammer); scene.add(camera);
+const FPH_BASE=fpHammer.rotation.clone();
+let swing={active:false,t:0};
+function startSwing(){ if(!swing.active){swing.active=true;swing.t=0;} }
+
+/* ===================== Rotación 90° en vertical ===================== */
+let forceLandscape=true, rot=false;
+function layout(){
+  rot=forceLandscape&&(innerHeight>innerWidth);
+  document.body.classList.toggle('rot',rot);
+  const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight;
+  camera.aspect=vw/vh; camera.updateProjectionMatrix();
+  renderer.setSize(vw,vh,false);
+}
+addEventListener('resize',layout);
+
+/* ===================== Controles ===================== */
+const joyEl=$('joy'),knob=$('joyKnob'); let joyId=null; const joy={x:0,y:0};
+function joyUpd(e){const r=joyEl.clientWidth/2;let dx=e.offsetX-r,dy=e.offsetY-r;const len=Math.hypot(dx,dy);if(len>r){dx*=r/len;dy*=r/len;}knob.style.transform=`translate(${dx}px,${dy}px)`;joy.x=dx/r;joy.y=dy/r;}
+joyEl.addEventListener('pointerdown',e=>{joyId=e.pointerId;joyEl.setPointerCapture(e.pointerId);joyUpd(e);e.preventDefault();});
+joyEl.addEventListener('pointermove',e=>{if(e.pointerId===joyId)joyUpd(e);});
+function joyEnd(e){if(e.pointerId===joyId){joyId=null;joy.x=0;joy.y=0;knob.style.transform='translate(0,0)';}}
+joyEl.addEventListener('pointerup',joyEnd);joyEl.addEventListener('pointercancel',joyEnd);
+
+let lookId=null,lastX=0,lastY=0;const LOOK=0.0042;
+function isUI(t){return t.closest('.scrim')||t.closest('.topBtn')||t.closest('.actBtn')||t===joyEl||t===knob||t.closest('#tableSign');}
+addEventListener('pointerdown',e=>{if(isUI(e.target))return;if(lookId===null&&e.pointerId!==joyId){lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;}});
+addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;let ddx=e.clientX-lastX,ddy=e.clientY-lastY;if(rot){const t=ddx;ddx=ddy;ddy=-t;}player.yaw-=ddx*LOOK;player.pitch=Math.max(-1.4,Math.min(1.4,player.pitch-ddy*LOOK));lastX=e.clientX;lastY=e.clientY;});
+function lookEnd(e){if(e.pointerId===lookId)lookId=null;}
+addEventListener('pointerup',lookEnd);addEventListener('pointercancel',lookEnd);
+
+// botones
+$('bJump').addEventListener('click',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
+$('bCrouch').addEventListener('click',()=>{ player.crouch=!player.crouch; $('bCrouch').classList.toggle('on',player.crouch); });
+$('bAxe').addEventListener('click',()=>{ startSwing(); if(placing){ tryBuild(); } });
+$('bRot').addEventListener('click',()=>{ placeYaw=(placeYaw+Math.PI/4)%(Math.PI*2); });   // 8 direcciones (45°)
+$('bPlace').addEventListener('click',()=>{ if(placing) stopPlacing(); else openPlaceMenu(); });
+$('bSet').addEventListener('click',()=>showScrim('settings'));
+$('bBag').addEventListener('click',()=>{renderBag();showScrim('bag');});
+$('bCraft').addEventListener('click',()=>{craftAtTable=false;renderCraft();showScrim('craft');});
+document.querySelectorAll('.xClose').forEach(b=>b.addEventListener('click',()=>{ hideScrims(); if(b.dataset.close==='placeMenu'&&!placing){} }));
+
+/* ===================== Overlays ===================== */
+function showScrim(id){hideScrims();$(id).classList.add('show');}
+function hideScrims(){document.querySelectorAll('.scrim').forEach(s=>s.classList.remove('show'));}
+
+/* ===================== Estado de crafteo / inventario ===================== */
+// recetas: tab, si requiere mesa, si es colocable
+const RECIPES=[
+  {id:'hammer',tab:'tools',needTable:false,placeable:false},
+  {id:'table', tab:'tools',needTable:false,placeable:true},
+];
+const TABS=['weapons','furniture','tools','construction'];
+let activeTab='tools';
+const inv={hammer:0,table:0};            // cantidades crafteadas
+let equipped=null;                        // 'hammer' equipado
+let craftAtTable=false;                   // crafteando en una mesa (desbloquea needTable)
+const icons={};                           // PNG capturados
+
+function rebuildTabs(){
+  const c=$('craftTabs'); c.innerHTML='';
+  TABS.forEach(t=>{const d=document.createElement('div');d.className='paper'+(t===activeTab?' active':'');d.textContent=T(t);d.onclick=()=>{activeTab=t;renderCraft();};c.appendChild(d);});
+}
+function renderCraft(){
+  rebuildTabs();
+  const g=$('craftGrid'); g.innerHTML='';
+  const list=RECIPES.filter(r=>r.tab===activeTab);
+  if(!list.length){ g.innerHTML=`<div class="emptyMsg">${T('empty')}</div>`; return; }
+  for(const r of list){
+    const locked=r.needTable&&!craftAtTable;
+    const it=document.createElement('div'); it.className='item'+(locked?' locked':'');
+    it.innerHTML=`<div class="ic">${icons[r.id]?`<img src="${icons[r.id]}">`:''}</div><div class="nm">${T(r.id)}</div>`+
+      (locked?`<div class="sub" style="color:#ffb46b">${T('needTable')}</div>`:`<div class="sub">${T('free')} · ${T('craftBtn')}</div>`);
+    if(!locked) it.onclick=()=>{ inv[r.id]++; flash(it,T('crafted')); refreshButtons(); };
+    g.appendChild(it);
+  }
+}
+function flash(el,msg){const s=el.querySelector('.sub');if(!s)return;const old=s.textContent;s.textContent=msg;s.style.color='#8fe3ff';setTimeout(()=>{s.textContent=old;s.style.color='';},800);}
+
+function renderBag(){
+  const g=$('bagGrid'); g.innerHTML=''; let any=false;
+  for(const id of ['hammer','table']) if(inv[id]>0){ any=true;
+    const it=document.createElement('div'); it.className='item'+(equipped===id?' selected':'');
+    const equ=(id==='hammer');
+    it.innerHTML=`<div class="ic">${icons[id]?`<img src="${icons[id]}">`:''}</div><div class="nm">${T(id)} ×${inv[id]}</div>`+
+      `<div class="sub">${equ?(equipped===id?T('equipped'):T('equip')):''}</div>`;
+    if(equ) it.onclick=()=>{ equipped=(equipped===id?null:id); fpHammer.visible=(equipped==='hammer'); renderBag(); refreshButtons(); };
+    g.appendChild(it);
+  }
+  $('bagEmpty').style.display=any?'none':'block';
+}
+
+function openPlaceMenu(){
+  if(equipped!=='hammer'){ toast(T('selectHammer')); return; }
+  const g=$('placeGrid'); g.innerHTML=''; let any=false;
+  for(const r of RECIPES.filter(r=>r.placeable)) if(inv[r.id]>0){ any=true;
+    const it=document.createElement('div'); it.className='item';
+    it.innerHTML=`<div class="ic">${icons[r.id]?`<img src="${icons[r.id]}">`:''}</div><div class="nm">${T(r.id)} ×${inv[r.id]}</div>`;
+    it.onclick=()=>{ hideScrims(); startPlacing(r.id); };
+    g.appendChild(it);
+  }
+  $('placeEmpty').style.display=any?'none':'block';
+  showScrim('placeMenu');
+}
+
+/* ===================== Colocación (ghost) ===================== */
+let placing=null, placeYaw=0, ghost=null, building=false, buildT=0;
+const placedTables=[];
+const PLACE_MIN=1.6, PLACE_MAX=5.5;
+function ghostMat(){return new THREE.MeshStandardMaterial({color:0x2ad24a,transparent:true,opacity:0.55,emissive:0x0d5a1c,emissiveIntensity:0.5});}
+function startPlacing(id){
+  placing=id; placeYaw=0;
+  ghost=buildTable(); ghost.traverse(o=>{if(o.isMesh)o.material=ghostMat();}); ghost.userData.box=new THREE.Box3();
+  scene.add(ghost);
+  $('bRot').classList.remove('hidden'); $('bPlace').classList.add('on'); refreshHints();
+}
+function stopPlacing(){ if(ghost){scene.remove(ghost);ghost.traverse(o=>{if(o.geometry)o.geometry.dispose();});ghost=null;} placing=null; building=false;
+  $('bRot').classList.add('hidden'); $('bPlace').classList.remove('on'); refreshHints(); }
+const _fwd=new THREE.Vector3(),_gp=new THREE.Vector3();
+function updateGhost(){
+  if(!ghost) return;
+  // dirección de mirada (yaw+pitch); intersecta el suelo y=0, con distancia limitada
+  _fwd.set(-Math.sin(player.yaw)*Math.cos(player.pitch),Math.sin(player.pitch),-Math.cos(player.yaw)*Math.cos(player.pitch));
+  const camY=player.pos.y+player.eye; let dist=PLACE_MAX;
+  if(_fwd.y<-0.05){ const t=camY/(-_fwd.y); dist=THREE.MathUtils.clamp(t,PLACE_MIN,PLACE_MAX); }
+  _gp.set(player.pos.x-Math.sin(player.yaw)*dist, 0, player.pos.z-Math.cos(player.yaw)*dist);
+  _gp.x=THREE.MathUtils.clamp(_gp.x,-GROUND_LIMIT,GROUND_LIMIT); _gp.z=THREE.MathUtils.clamp(_gp.z,-GROUND_LIMIT,GROUND_LIMIT);
+  ghost.position.copy(_gp); ghost.rotation.y=placeYaw; ghost.updateMatrixWorld();
+  // validación: dentro del mapa y sin pisar otra mesa
+  let valid=Math.abs(_gp.x)<GROUND_LIMIT-1&&Math.abs(_gp.z)<GROUND_LIMIT-1;
+  for(const p of placedTables){ if(p.position.distanceTo(_gp)<1.4){valid=false;break;} }
+  ghost.userData.valid=valid;
+  const col=valid?0x2ad24a:0xff3b3b, em=valid?0x0d5a1c:0x5a0d0d;
+  ghost.traverse(o=>{if(o.isMesh){o.material.color.setHex(col);o.material.emissive.setHex(em);}});
+}
+function tryBuild(){ if(!placing||building||!ghost||!ghost.userData.valid) return; building=true; buildT=0; emitDirt(ghost.position); }
+function finishBuild(){
+  const m=buildTable(); m.position.copy(ghost.position); m.rotation.y=placeYaw; m.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
+  scene.add(m); placedTables.push(m); inv.table=Math.max(0,inv.table-1);
+  stopPlacing();
+}
+
+/* ===================== Partículas de tierra ===================== */
+const dirtGeo=new THREE.BoxGeometry(0.08,0.08,0.08); const dirtMat=new THREE.MeshStandardMaterial({color:0x6b4a2c,roughness:1});
+const DIRT=80; const dirt=new THREE.InstancedMesh(dirtGeo,dirtMat,DIRT); dirt.frustumCulled=false; scene.add(dirt);
+const dst=[]; for(let i=0;i<DIRT;i++)dst.push({life:0,p:new THREE.Vector3(),v:new THREE.Vector3()}); let dHead=0; const _do=new THREE.Object3D();
+function emitDirt(at){ for(let i=0;i<28;i++){const s=dst[dHead];s.life=0.4+Math.random()*0.35;s.p.set(at.x+(Math.random()-.5)*1.2,0.05,at.z+(Math.random()-.5)*0.9);s.v.set((Math.random()-.5)*2,1.5+Math.random()*2.5,(Math.random()-.5)*2);dHead=(dHead+1)%DIRT;} }
+function tickDirt(dt){ for(let i=0;i<DIRT;i++){const s=dst[i]; if(s.life>0){s.life-=dt;s.v.y-=9*dt;s.p.addScaledVector(s.v,dt);if(s.p.y<0.04){s.p.y=0.04;s.v.y*=-0.3;}_do.position.copy(s.p);_do.scale.setScalar(1);}else{_do.position.set(0,-999,0);_do.scale.setScalar(0.001);}_do.updateMatrix();dirt.setMatrixAt(i,_do.matrix);} dirt.instanceMatrix.needsUpdate=true; }
+
+/* ===================== Cartel sobre mesa + crafteo en mesa ===================== */
+let nearTable=null, holdT=0, holding=false;
+const signEl=$('tableSign'),signFill=$('signFill'),_proj=new THREE.Vector3();
+signEl.addEventListener('pointerdown',e=>{holding=true;holdT=0;e.preventDefault();});
+signEl.addEventListener('pointerup',()=>{holding=false;holdT=0;signFill.style.width='0%';});
+signEl.addEventListener('pointercancel',()=>{holding=false;holdT=0;signFill.style.width='0%';});
+function updateSign(dt){
+  // mesa más cercana dentro de ~3m
+  nearTable=null; let bd=9;
+  for(const m of placedTables){const d=m.position.distanceTo(player.pos);if(d<3&&d<bd){bd=d;nearTable=m;}}
+  if(!nearTable||placing){ signEl.style.display='none'; holding=false; signFill.style.width='0%'; return; }
+  _proj.copy(nearTable.position); _proj.y+=1.15; _proj.project(camera);
+  if(_proj.z>1){ signEl.style.display='none'; return; }
+  // el cartel vive dentro de #stage (que ya se rota): basta posicionarlo en el espacio del stage
+  const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight;
+  const sx=(_proj.x*0.5+0.5)*vw, sy=(-_proj.y*0.5+0.5)*vh;
+  signEl.style.display='block'; $('signTxt').textContent=T('useTable');
+  signEl.style.left=sx+'px'; signEl.style.top=sy+'px';
+  if(holding){ holdT+=dt; signFill.style.width=Math.min(100,holdT/0.5*100)+'%'; if(holdT>=0.5){ holding=false; signFill.style.width='0%'; craftAtTable=true; renderCraft(); showScrim('craft'); } }
+}
+
+/* ===================== Toast ===================== */
+let toastT=0;
+function toast(msg){ const h=$('hint'); h.textContent=msg; h.style.opacity='0.95'; toastT=2.2; }
+function refreshHints(){ if(toastT>0)return; $('hint').textContent=placing?T('hintPlace'):T('hintNormal'); $('hint').style.opacity='0.5'; }
+function refreshButtons(){ /* hooks futuros */ }
+
+/* ===================== Loop ===================== */
+const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ'); let lastBob=0;
+function update(dt){
+  let ix=joy.x,iz=joy.y;
+  const mag=Math.min(1,Math.hypot(ix,iz)); if(mag>0.001){ix/=Math.max(mag,1);iz/=Math.max(mag,1);}
+  forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
+  const sp=mag*SPEED_MAX*(player.crouch?0.5:1);   // correr automático según el estiramiento del joystick
+  const des=_v.set(0,0,0); des.addScaledVector(forward,-iz*sp); des.addScaledVector(right,ix*sp);
+  player.vel.lerp(des,Math.min(1,ACCEL*dt)); player.pos.addScaledVector(player.vel,dt);
+  player.pos.x=THREE.MathUtils.clamp(player.pos.x,-GROUND_LIMIT,GROUND_LIMIT); player.pos.z=THREE.MathUtils.clamp(player.pos.z,-GROUND_LIMIT,GROUND_LIMIT);
+  // salto / gravedad
+  player.vy-=GRAV*dt; player.pos.y+=player.vy*dt; if(player.pos.y<=0){player.pos.y=0;player.vy=0;player.onGround=true;}
+  // agacharse (altura de ojo suave)
+  const targetEye=player.crouch?EYE_CROUCH:EYE; player.eye+=(targetEye-player.eye)*Math.min(1,10*dt);
+  // head-bob + balanceo
+  const speed=player.vel.length(); player.bobPhase+=dt*(speed*1.9+0.0001); const moveAmt=Math.min(1,speed/SPEED_MAX)*bobScale;
+  const bobY=Math.sin(player.bobPhase*2)*0.05*moveAmt, bobX=Math.cos(player.bobPhase)*0.035*moveAmt;
+  const strafe=right.dot(player.vel)/SPEED_MAX; player.strafeSm+=(strafe-player.strafeSm)*Math.min(1,8*dt);
+  player.roll+=((-player.strafeSm*0.08+Math.sin(player.bobPhase)*0.018*moveAmt)-player.roll)*Math.min(1,10*dt);
+  const tt=clock.elapsedTime, mf=(0.5+moveAmt)*camShake;
+  const shx=(Math.sin(tt*2.3)+0.5*Math.sin(tt*5.7))*0.0016*mf, shy=(Math.cos(tt*1.9)+0.5*Math.sin(tt*4.3))*0.0016*mf, shr=Math.sin(tt*1.6)*0.004*mf, br=Math.sin(tt*1.15)*0.012*camShake;
+  camera.position.set(player.pos.x+right.x*bobX, player.pos.y+player.eye+bobY+br, player.pos.z+right.z*bobX);
+  euler.set(player.pitch+shy,player.yaw+shx,player.roll+shr); camera.quaternion.setFromEuler(euler);
+  sunLight.position.set(player.pos.x+sun.position.x*0.4,sun.position.y,player.pos.z+sun.position.z*0.4); sunLight.target.position.copy(player.pos); sunLight.target.updateMatrixWorld();
+  // martillo: animación de golpe
+  if(swing.active){ swing.t+=dt/0.42; const a=Math.sin(Math.min(swing.t,1)*Math.PI); fpHammer.rotation.x=FPH_BASE.x-a*1.2; if(swing.t>=1){swing.active=false;fpHammer.rotation.copy(FPH_BASE);} }
+  // colocación
+  if(placing&&!building) updateGhost();
+  if(building){ buildT+=dt; const k=Math.min(1,buildT/0.5); if(ghost){ghost.scale.setScalar(0.2+0.8*k);} if(buildT>=0.5) finishBuild(); }
+  tickDirt(dt);
+  updateSign(dt);
+  if(toastT>0){toastT-=dt;if(toastT<=0)refreshHints();}
+}
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
+
+/* ===================== Iconos PNG (capturados del modelo real) ===================== */
+function captureIcon(obj,rot3){
+  try{
+    const S=192,rt=new THREE.WebGLRenderTarget(S,S); const ts=new THREE.Scene();
+    obj.rotation.set(rot3[0],rot3[1],rot3[2]); ts.add(obj);
+    ts.add(new THREE.HemisphereLight(0xeaf2ff,0x202028,1.0)); const d=new THREE.DirectionalLight(0xffffff,2.2); d.position.set(2,3,2.5); ts.add(d);
+    const box=new THREE.Box3().setFromObject(obj),ctr=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),rad=Math.max(sz.x,sz.y,sz.z)||1;
+    const cam=new THREE.PerspectiveCamera(32,1,0.01,100); cam.position.set(ctr.x+rad*1.1,ctr.y+rad*0.8,ctr.z+rad*1.7); cam.lookAt(ctr);
+    const pRT=renderer.getRenderTarget(),pC=renderer.getClearColor(new THREE.Color()),pA=renderer.getClearAlpha();
+    renderer.setRenderTarget(rt); renderer.setClearColor(0x000000,0); renderer.clear(); renderer.render(ts,cam);
+    const buf=new Uint8Array(S*S*4); renderer.readRenderTargetPixels(rt,0,0,S,S,buf);
+    renderer.setRenderTarget(pRT); renderer.setClearColor(pC,pA);
+    const cv=document.createElement('canvas');cv.width=cv.height=S;const x=cv.getContext('2d'),im=x.createImageData(S,S);
+    for(let y=0;y<S;y++){const sy=S-1-y;for(let xx=0;xx<S;xx++){const di=(y*S+xx)*4,si=(sy*S+xx)*4;im.data[di]=buf[si];im.data[di+1]=buf[si+1];im.data[di+2]=buf[si+2];im.data[di+3]=buf[si+3];}}
+    x.putImageData(im,0,0); const url=cv.toDataURL('image/png'); rt.dispose(); obj.traverse(o=>{if(o.geometry)o.geometry.dispose();}); return url;
+  }catch(e){ return null; }
+}
+
+/* ===================== Ajustes ===================== */
+document.querySelectorAll('#langSeg button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#langSeg button').forEach(x=>x.classList.remove('active'));b.classList.add('active');lang=b.dataset.lang;applyLang();}));
+document.querySelectorAll('#rotSeg button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#rotSeg button').forEach(x=>x.classList.remove('active'));b.classList.add('active');forceLandscape=b.dataset.r==='on';layout();}));
+document.querySelector('#langSeg button[data-lang="es"]').classList.add('active');
+document.querySelector('#rotSeg button[data-r="on"]').classList.add('active');
+
+/* ===================== Init ===================== */
+try{
+  layout();
+  icons.hammer=captureIcon(buildHammer(),[0.2,0.7,0.3]);
+  icons.table =captureIcon(buildTable(),[0.35,0.6,0]);
+  applyLang(); refreshHints();
+  setTimeout(()=>$('loader').classList.add('hide'),250);
+}catch(err){ console.error('Init',err); }
 animate();
 </script>
 </body>
