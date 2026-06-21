@@ -204,13 +204,13 @@ renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESF
 app.appendChild(renderer.domElement);
 
 const scene=new THREE.Scene();
-scene.background=new THREE.Color(0x9fc6ee);
-scene.fog=new THREE.Fog(0xbcd6ef,70,260);
+scene.background=new THREE.Color(0xcfe0ee);          // cielo de desierto (claro, algo de calina)
+scene.fog=new THREE.Fog(0xe7d6b0,90,340);            // bruma cálida arenosa a lo lejos
 const camera=new THREE.PerspectiveCamera(64,1,0.1,2000);
 
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(600,600),new THREE.MeshStandardMaterial({color:0xf2f3f5,roughness:0.95,metalness:0}));
+// suelo de ARENA (textura v2)
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(600,600),new THREE.MeshStandardMaterial({color:0xd8c39a,roughness:1,metalness:0}));
 ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; ground.matrixAutoUpdate=false; ground.updateMatrix(); scene.add(ground);
-const grid=new THREE.GridHelper(600,300,0xc4cdd6,0xdfe4ea); grid.material.transparent=true; grid.material.opacity=0.35; grid.position.y=0.01; scene.add(grid);
 const GROUND_LIMIT=120;
 
 const sun=new THREE.Mesh(new THREE.SphereGeometry(8,28,20),new THREE.MeshBasicMaterial({color:0xfff3c8,fog:false}));
@@ -237,6 +237,33 @@ const metalMat=new THREE.MeshStandardMaterial({color:0xcfd4da,roughness:0.42,met
 loadPBR(metalMat,TEXP,1.0,{col:'metal_col.jpg',nrm:'metal_nrm.jpg',rgh:'metal_rgh.jpg',met:'metal_met.jpg'});
 // plástico: textura PBR pendiente de confirmar nombre en el repo → material liso provisional
 const plasticMat=new THREE.MeshStandardMaterial({color:0x232a30,roughness:0.38,metalness:0.0});
+
+/* ===================== Texturas v2 + DESIERTO de prueba ===================== */
+const V2='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@680e52b/assets/textures/v2/';
+function tx(file,srgb,rep){const t=TL.load(V2+file,undefined,undefined,()=>{});t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;if(rep)t.repeat.set(rep,rep);t.anisotropy=8;return t;}
+// arena al suelo
+ground.material.map=tx('sand_col.jpg',true,90); ground.material.normalMap=tx('sand_nrm.jpg',false,90); ground.material.roughnessMap=tx('sand_rgh.jpg',false,90); ground.material.color.set(0xffffff); ground.material.needsUpdate=true;
+const rockMat=new THREE.MeshStandardMaterial({map:tx('rock_col.jpg',true,1),normalMap:tx('rock_nrm.jpg',false,1),roughnessMap:tx('rock_rgh.jpg',false,1),roughness:1});
+const floorMat=new THREE.MeshStandardMaterial({map:tx('woodfloor_col.jpg',true,2),normalMap:tx('woodfloor_nrm.jpg',false,2),roughnessMap:tx('woodfloor_rgh.jpg',false,2),roughness:1});
+const fenceMat=new THREE.MeshStandardMaterial({map:tx('fence.png',true,1),alphaTest:0.5,side:THREE.DoubleSide,metalnessMap:tx('fence_met.jpg',false,1),metalness:1,roughnessMap:tx('fence_rgh.jpg',false,1),roughness:1,transparent:true});
+const foliageMat=new THREE.MeshStandardMaterial({map:tx('foliage.png',true,1),alphaTest:0.45,side:THREE.DoubleSide,roughness:0.9});
+const leafCardMat=new THREE.MeshStandardMaterial({map:tx('leaf.png',true,1),alphaTest:0.45,side:THREE.DoubleSide,roughness:0.9});
+function crossQuad(w,h,mat){const a=new THREE.PlaneGeometry(w,h);a.translate(0,h/2,0);const b=a.clone();b.rotateY(Math.PI/2);const g=new THREE.Group();g.add(new THREE.Mesh(a,mat));g.add(new THREE.Mesh(b,mat));return g;}
+function buildDesert(){
+  // plataforma de PISO DE MADERA (showcase)
+  const plat=new THREE.Mesh(new THREE.BoxGeometry(6,0.2,6),floorMat); plat.position.set(0,0.1,-9); plat.receiveShadow=true; plat.castShadow=true; scene.add(plat);
+  // ROCAS con textura
+  for(let i=0;i<14;i++){const s=0.5+Math.random()*1.6;const g=new THREE.IcosahedronGeometry(s,1);const p=g.attributes.position;for(let k=0;k<p.count;k++){const f=0.8+Math.random()*0.3;p.setXYZ(k,p.getX(k)*f,p.getY(k)*f,p.getZ(k)*f);}g.computeVertexNormals();const m=new THREE.Mesh(g,rockMat);const a=Math.random()*6.28,r=12+Math.random()*40;m.position.set(Math.cos(a)*r,s*0.4,Math.sin(a)*r);m.castShadow=m.receiveShadow=true;scene.add(m);}
+  // ALAMBRADO (fence cutout) + postes
+  const postMat=new THREE.MeshStandardMaterial({color:0x6b5a44,roughness:0.9});
+  for(let i=0;i<6;i++){const f=new THREE.Mesh(new THREE.PlaneGeometry(2.2,1.4),fenceMat);f.position.set(-6+i*2.2,0.7,-17);f.castShadow=true;scene.add(f);
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.6,8),postMat);post.position.set(-7.1+i*2.2,0.8,-17);post.castShadow=true;scene.add(post);}
+  // FOLLAJE / matorrales (billboards cruzados)
+  for(let i=0;i<26;i++){const a=Math.random()*6.28,r=8+Math.random()*46;const s=0.8+Math.random()*1.5;const q=crossQuad(s*1.2,s,Math.random()<0.5?foliageMat:leafCardMat);q.position.set(Math.cos(a)*r,0,Math.sin(a)*r);scene.add(q);}
+  // CACTUS (sabor desierto)
+  const cac=new THREE.MeshStandardMaterial({color:0x4f7a3a,roughness:0.82});
+  for(let i=0;i<6;i++){const a=Math.random()*6.28,r=10+Math.random()*40;const g=new THREE.Group();const body=new THREE.Mesh(new THREE.CapsuleGeometry(0.35,1.6,6,12),cac);body.position.y=1.1;g.add(body);for(const sx of[-1,1]){const arm=new THREE.Mesh(new THREE.CapsuleGeometry(0.16,0.7,5,10),cac);arm.position.set(sx*0.45,1.2,0);arm.rotation.z=sx*0.6;g.add(arm);}g.position.set(Math.cos(a)*r,0,Math.sin(a)*r);g.traverse(o=>{if(o.isMesh)o.castShadow=true;});scene.add(g);}
+}
 
 /* ===================== Modelos ===================== */
 function buildHammer(){
@@ -525,6 +552,7 @@ document.querySelector('#rotSeg button[data-r="on"]').classList.add('active');
 const ROTS={hammer:[0.2,0.7,0.3],table:[0.35,0.6,0],spear:[0.15,0.7,0.35],knife:[0.2,0.7,0.4]};
 try{
   layout();
+  buildDesert();                    // escena de prueba: desierto con las texturas v2
   renderer.render(scene,camera);   // calienta el contexto
   for(const r of RECIPES){ try{ icons[r.id]=captureIcon(MODELS[r.id](),ROTS[r.id]||[0.25,0.7,0.3]); }catch(e){} }
   applyLang(); refreshHints();
