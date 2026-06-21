@@ -71,7 +71,8 @@
 {
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "gifuct-js": "https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm"
   }
 }
 </script>
@@ -132,25 +133,32 @@ function buildBottle(){
   g.position.y=floorY;
   return g;
 }
-const bottle=buildBottle(); bottleGroup.add(bottle);
+const bottleHolder=new THREE.Group(); bottleGroup.add(bottleHolder);   // se puede MOVER (la tela reacciona)
+const bottle=buildBottle(); bottleHolder.add(bottle);
 
 /* ===== Fuego del gif: frames DECODIFICADOS (anima sí o sí, no depende del navegador) ===== */
 const FIREURL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4d4c23e/db5a4595bac1960e5b7cc0a35544140b.gif';
 const fireTex=new THREE.CanvasTexture(document.createElement('canvas')); fireTex.colorSpace=THREE.SRGBColorSpace;
 let fireFrames=[], fireDelays=[], fireTotal=0, fireCx=null, fireReady=false, _fimg=null;
-async function decodeFire(){
+async function decodeFire(){   // decodifica TODOS los frames del gif con gifuct-js → anima sí o sí
   try{
-    if(!('ImageDecoder' in window)) throw new Error('no ImageDecoder');
+    const { parseGIF, decompressFrames }=await import('gifuct-js');   // dinámico: si falla, cae al fallback (no rompe la página)
     const buf=await (await fetch(FIREURL,{mode:'cors'})).arrayBuffer();
-    const dec=new ImageDecoder({data:buf,type:'image/gif'}); await dec.tracks.ready;
-    const n=dec.tracks.selectedTrack.frameCount||1, MAXH=192;
-    for(let i=0;i<n;i++){ const r=await dec.decode({frameIndex:i}); const img=r.image;
-      const sc=Math.min(1,MAXH/img.displayHeight), w=Math.max(1,Math.round(img.displayWidth*sc)), h=Math.max(1,Math.round(img.displayHeight*sc));
-      const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(img,0,0,w,h);
-      fireFrames.push(c); fireDelays.push((img.duration||100000)/1000); img.close(); }
-    fireTotal=fireDelays.reduce((a,b)=>a+b,0)||fireDelays.length*60;
+    const gif=parseGIF(buf); const frames=decompressFrames(gif,true);
+    const W=gif.lsd.width, H=gif.lsd.height, MAXH=200, sc=Math.min(1,MAXH/H);
+    const full=document.createElement('canvas'); full.width=W; full.height=H; const fctx=full.getContext('2d');
+    for(const fr of frames){
+      const tmp=document.createElement('canvas'); tmp.width=fr.dims.width; tmp.height=fr.dims.height;
+      tmp.getContext('2d').putImageData(new ImageData(fr.patch,fr.dims.width,fr.dims.height),0,0);
+      fctx.drawImage(tmp,fr.dims.left,fr.dims.top);                                  // compone sobre el frame completo
+      const c=document.createElement('canvas'); c.width=Math.round(W*sc); c.height=Math.round(H*sc);
+      c.getContext('2d').drawImage(full,0,0,c.width,c.height);
+      fireFrames.push(c); fireDelays.push(fr.delay||80);
+      if(fr.disposalType===2) fctx.clearRect(fr.dims.left,fr.dims.top,fr.dims.width,fr.dims.height);   // restaurar fondo
+    }
+    fireTotal=fireDelays.reduce((a,b)=>a+b,0)||fireDelays.length*80;
     const cv=fireTex.image; cv.width=fireFrames[0].width; cv.height=fireFrames[0].height; fireCx=cv.getContext('2d'); fireReady=true;
-  }catch(e){ // fallback: <img> visible (casi invisible) + drawImage
+  }catch(e){ // fallback: <img> casi invisible on-screen + drawImage
     const img=new Image(); img.crossOrigin='anonymous'; img.src=FIREURL;
     img.style.cssText='position:fixed;left:0;bottom:0;width:4px;height:4px;opacity:.012;pointer-events:none;'; document.body.appendChild(img); _fimg=img;
     const cv=fireTex.image; cv.width=128; cv.height=192; fireCx=cv.getContext('2d'); fireReady=true;
@@ -164,25 +172,28 @@ function tickFire(){
   else if(_fimg&&_fimg.complete&&_fimg.naturalWidth){ const s=Math.min(128/_fimg.naturalWidth,192/_fimg.naturalHeight); fireCx.clearRect(0,0,128,192); fireCx.drawImage(_fimg,0,0,_fimg.naturalWidth*s,_fimg.naturalHeight*s); fireTex.needsUpdate=true; }
 }
 
-/* ===== Trapo: tela Verlet de 1024 vértices, chica, FIJADA dentro de la botella ===== */
-const ragMat=new THREE.MeshStandardMaterial({color:0xd8c7a2,roughness:0.9,metalness:0,side:THREE.DoubleSide});
-const RAGN=32;
+/* ===== Trapo ENROLLADO: tela Verlet (grande) metida en el pico y saliendo por ARRIBA (destapado) ===== */
+const ragMat=new THREE.MeshStandardMaterial({color:0xd8c7a2,roughness:0.92,metalness:0,side:THREE.DoubleSide});
+const RAGX=36, RAGY=46;                 // 36×46 = 1656 vértices (grande, suave)
 let ragCloth=null,ragPhys=null,ragRen=null,fireSpr=null,ragFireLight=null;
-function buildRag(){
-  const W=0.17,H=0.62; ragCloth=new Cloth(W,H,RAGN,RAGN);                 // 32×32 = 1024 vértices
-  const topY=1.62, sx=W/(RAGN-1), sy=H/(RAGN-1);
-  for(let y=0;y<RAGN;y++)for(let x=0;x<RAGN;x++){ const p=ragCloth.particles[y*RAGN+x];
-    const lean=(y/(RAGN-1))*0.46;                                          // arquea hacia adelante → cuelga afuera
-    p.pos.set(-W/2+x*sx, topY-y*sy, lean); p.prev.copy(p.pos);
-    p.pinned = y < RAGN*0.38;                                              // 38% de arriba FIJO (metido en la botella, no se sale ni entra)
+const ragPins=[];                       // {p, off:Vector3}  fijos que siguen a la botella
+function buildRolledRag(){
+  ragCloth=new Cloth(1,1,RAGX,RAGY);     // dims se sobrescriben abajo
+  const turns=2.6, r0=0.06, gap=0.042, baseY=1.46, LEN=0.62, sy=LEN/(RAGY-1);
+  for(let iy=0;iy<RAGY;iy++)for(let ix=0;ix<RAGX;ix++){ const p=ragCloth.particles[iy*RAGX+ix];
+    const u=ix/(RAGX-1), ang=u*turns*Math.PI*2, r=r0+u*turns*gap;   // ESPIRAL (enrollada): cada vuelta más radio
+    p.pos.set(Math.cos(ang)*r, baseY+iy*sy, Math.sin(ang)*r); p.prev.copy(p.pos);
+    p.pinned = iy < RAGY*0.42;                                     // 42% de abajo FIJO dentro del pico (no se sale ni entra)
+    if(p.pinned) ragPins.push({p, off:p.pos.clone()});             // sigue a la botella al moverla
   }
+  for(const c of ragCloth.constraints) c.rest=c.a.pos.distanceTo(c.b.pos);   // el estado de reposo ES el enrollado → mantiene la forma
   ragPhys=new ClothPhysics(ragCloth);
-  ragPhys.gravity.set(0,-7,0); ragPhys.wind=2.0; ragPhys.windDir.set(0.4,0,1); ragPhys.drag=0.06; ragPhys.iterations=5;
-  ragPhys.colliders=[ {type:'capsule',p0:new THREE.Vector3(0,0.1,0),p1:new THREE.Vector3(0,1.05,0),radius:0.42} ];  // la botella: el trapo cuelga POR FUERA
+  ragPhys.gravity.set(0,-2.4,0); ragPhys.wind=1.2; ragPhys.windDir.set(0.5,0,0.5); ragPhys.drag=0.04; ragPhys.iterations=4;
+  ragPhys.colliders=[];
   ragRen=new ClothRenderer(ragCloth,ragMat); bottleGroup.add(ragRen.mesh);
   fireSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:fireTex,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true}));
-  fireSpr.scale.set(0.36,0.52,1); bottleGroup.add(fireSpr);
-  ragFireLight=new THREE.PointLight(0xff7a30,1.2,3.5,2); bottleGroup.add(ragFireLight);
+  fireSpr.scale.set(0.5,0.72,1); bottleGroup.add(fireSpr);
+  ragFireLight=new THREE.PointLight(0xff7a30,1.4,4,2); bottleGroup.add(ragFireLight);
 }
 
 /* =====================================================================
@@ -419,7 +430,8 @@ function syncColliderMeshes(){
 ===================================================================== */
 const ray=new THREE.Raycaster(); const ndc=new THREE.Vector2();
 const dragPlane=new THREE.Plane(); const hit=new THREE.Vector3();
-let grabbed=null, grabbedWasPinned=false, mode='bottle';
+const hPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0); const bottleOff=new THREE.Vector3();
+let grabbed=null, grabbedWasPinned=false, mode='bottle', bottleDrag=false;
 
 function pointerNDC(e){ ndc.x=(e.clientX/innerWidth)*2-1; ndc.y=-(e.clientY/innerHeight)*2+1; }
 function nearestParticle(point){
@@ -428,25 +440,26 @@ function nearestParticle(point){
   return best;
 }
 renderer.domElement.addEventListener('pointerdown',e=>{
-  if(mode!=='cloth'||!cloth) return;
   pointerNDC(e); ray.setFromCamera(ndc,camera);
-  const inter=ray.intersectObject(clothRen.mesh,false);
-  if(inter.length){
-    grabbed=nearestParticle(inter[0].point);
-    if(grabbed){
-      grabbedWasPinned=grabbed.pinned; grabbed.pinned=true;
-      controls.enabled=false;   // no orbitar mientras arrastro la tela
-      // plano de arrastre perpendicular a la cámara, pasando por el punto
-      dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), inter[0].point);
-    }
+  if(mode==='cloth'&&cloth){
+    const inter=ray.intersectObject(clothRen.mesh,false);
+    if(inter.length){ grabbed=nearestParticle(inter[0].point);
+      if(grabbed){ grabbedWasPinned=grabbed.pinned; grabbed.pinned=true; controls.enabled=false;
+        dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), inter[0].point); } }
+  } else if(mode==='bottle'){
+    const targets=[...bottleHolder.children]; if(ragRen) targets.push(ragRen.mesh);
+    const inter=ray.intersectObjects(targets,true);
+    if(inter.length && ray.ray.intersectPlane(hPlane,hit)){ bottleDrag=true; controls.enabled=false; bottleOff.copy(bottleHolder.position).sub(hit); }
   }
 });
 renderer.domElement.addEventListener('pointermove',e=>{
-  if(!grabbed) return;
   pointerNDC(e); ray.setFromCamera(ndc,camera);
-  if(ray.ray.intersectPlane(dragPlane,hit)){ grabbed.pos.copy(hit); grabbed.prev.copy(hit); }
+  if(grabbed){ if(ray.ray.intersectPlane(dragPlane,hit)){ grabbed.pos.copy(hit); grabbed.prev.copy(hit); } }
+  else if(bottleDrag){ if(ray.ray.intersectPlane(hPlane,hit)){
+    bottleHolder.position.x=THREE.MathUtils.clamp(hit.x+bottleOff.x,-1.8,1.8);
+    bottleHolder.position.z=THREE.MathUtils.clamp(hit.z+bottleOff.z,-1.8,1.8); } }
 });
-function release(){ if(grabbed){ grabbed.pinned=grabbedWasPinned; grabbed=null; controls.enabled=true; } }
+function release(){ if(grabbed){ grabbed.pinned=grabbedWasPinned; grabbed=null; } bottleDrag=false; controls.enabled=true; }
 renderer.domElement.addEventListener('pointerup',release);
 renderer.domElement.addEventListener('pointercancel',release);
 
@@ -476,7 +489,7 @@ function setMode(m){
   bottleGroup.visible=!isCloth; clothGroup.visible=isCloth;
   $('panel').classList.toggle('show',isCloth);
   if(isCloth){ if(!cloth) buildCloth(); controls.target.set(0,1.3,0); camera.position.set(0,1.6,6); $('hint').innerHTML='Arrastrá la tela con el dedo · una mano la mueve, dos orbitan'; }
-  else { controls.target.set(0,1.0,0); camera.position.set(0,1.2,4.2); $('hint').innerHTML='Girá para inspeccionar la botella'; }
+  else { controls.target.set(0,1.25,0); camera.position.set(0,1.5,4.4); $('hint').innerHTML='Arrastrá la botella para moverla (la tela se sacude) · girá para inspeccionar'; }
   controls.update();
 }
 document.querySelectorAll('#modeSeg button').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
@@ -489,15 +502,17 @@ function animate(){
   requestAnimationFrame(animate);
   const dt=Math.min(clock.getDelta(),0.033);
 
-  // botella: trapo de tela (Verlet) colgando + fuego del gif en la punta
+  // botella: trapo ENROLLADO (Verlet) saliendo por arriba + fuego del gif, reacciona al mover la botella
   if(bottleGroup.visible){
     tickFire();
     if(ragPhys){
-      let rem=dt,h=1/120; while(rem>1e-4){ const s=Math.min(h,rem); ragPhys.step(s); rem-=s; }   // sub-pasos fijos = estable
+      if(!bottleDrag) bottleHolder.position.multiplyScalar(1-Math.min(1,8*dt));   // vuelve al centro suave
+      for(const q of ragPins){ q.p.pos.set(bottleHolder.position.x+q.off.x, bottleHolder.position.y+q.off.y, bottleHolder.position.z+q.off.z); }  // los fijos siguen a la botella → la tela se sacude
+      ragPhys.step(dt*0.5); ragPhys.step(dt*0.5);   // 2 sub-pasos = estable y liviano
       ragRen.sync();
-      const tip=ragCloth.particles[(RAGN-1)*RAGN + (RAGN>>1)];   // partícula inferior central
-      fireSpr.position.set(tip.pos.x,tip.pos.y+0.14,tip.pos.z);
-      ragFireLight.position.copy(fireSpr.position); ragFireLight.intensity=1.0+Math.sin(clock.elapsedTime*14)*0.4+Math.random()*0.2;
+      const tip=ragCloth.particles[(RAGY-1)*RAGX + (RAGX>>1)];   // partícula superior central (la punta que sale)
+      fireSpr.position.set(tip.pos.x,tip.pos.y+0.22,tip.pos.z);
+      ragFireLight.position.copy(fireSpr.position); ragFireLight.intensity=1.1+Math.sin(clock.elapsedTime*14)*0.4+Math.random()*0.2;
     }
   }
 
@@ -519,7 +534,7 @@ function animate(){
     $('stats').textContent = clothGroup.visible ? `${cloth?cloth.particles.length:0} part · ${fps} fps` : `${fps} fps`; }
 }
 
-buildRag();          // tela del trapo (requiere las clases Cloth* ya definidas)
+buildRolledRag();    // trapo enrollado (requiere las clases Cloth* ya definidas)
 setMode('bottle');
 animate();
 setTimeout(()=>$('loader').classList.add('hide'),300);
