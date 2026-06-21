@@ -185,17 +185,17 @@ const I18N={
       weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',
       placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
-      useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —',materials:'Materiales',resources:'Recursos',items:'Objetos'},
+      useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —',materials:'Materiales',resources:'Recursos',items:'Objetos',basicOnly:'Sin mesa solo podés fabricar Martillo y Mesa. Acercate a una mesa de crafteo para el resto.'},
   en:{jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',craft:'Crafting',inventory:'Backpack',settings:'Settings',language:'Language',rotate90:'Rotate 90° in portrait',
       weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',free:'Free',craftBtn:'Craft',crafted:'Crafted!',
       placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
       equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
-      useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —',materials:'Materials',resources:'Resources',items:'Items'},
+      useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —',materials:'Materials',resources:'Resources',items:'Items',basicOnly:'Without a table you can only craft Hammer and Table. Use a crafting table for the rest.'},
   pt:{jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',craft:'Fabricação',inventory:'Mochila',settings:'Ajustes',language:'Idioma',rotate90:'Girar 90° na vertical',
       weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',
       placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipe o martelo em 🎒 para colocar móveis.',rotate:'Girar',building:'Construindo…',
-      useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —',materials:'Materiais',resources:'Recursos',items:'Objetos'}
+      useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —',materials:'Materiais',resources:'Recursos',items:'Objetos',basicOnly:'Sem mesa só Martelo e Mesa. Use uma mesa de fabricação para o resto.'}
 };
 let lang='es'; const T=k=>(I18N[lang]||I18N.es)[k]||k;
 const $=id=>document.getElementById(id);
@@ -390,7 +390,7 @@ $('bRot').addEventListener('click',()=>{ placeYaw=(placeYaw+Math.PI/4)%(Math.PI*
 $('bPlace').addEventListener('click',()=>{ if(placing) stopPlacing(); else openPlaceMenu(); });
 $('bSet').addEventListener('click',()=>showScrim('settings'));
 $('bBag').addEventListener('click',()=>{renderBag();showScrim('bag');});
-$('bCraft').addEventListener('click',()=>{craftAtTable=false;renderCraft();showScrim('craft');});
+$('bCraft').addEventListener('click',()=>{craftAtTable=!!nearTable;renderCraft();showScrim('craft');});
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{ hideScrims(); }));
 
 /* ===================== Overlays ===================== */
@@ -486,6 +486,11 @@ function applyIcon(id,url){ iconCache[id]=url; iconPending[id]=false; document.q
 function processIconQueue(){ let n=2; while(n-->0 && iconQueue.length){ const id=iconQueue.shift(); let url=null; const b=MODELS[id];
   if(b){ try{ url=captureIcon(b(),[0.25,0.7,0.3]); }catch(e){ url=null; } } if(!url) url=fallbackIcon(id); applyIcon(id,url); } }
 function iconCell(id){ if(iconCache[id])return `<div class="ic" data-ic="${id}"><img src="${iconCache[id]}"></div>`; requestIcon(id); return `<div class="ic" data-ic="${id}"></div>`; }
+// captura TODOS los íconos 3D una vez al cargar (mientras se ve el loader) — confiable, fuera del loop de render
+function captureAllIcons(){
+  for(const id in MODELS){ try{ iconCache[id]=captureIcon(MODELS[id](),[0.25,0.7,0.3])||fallbackIcon(id); }catch(e){ iconCache[id]=fallbackIcon(id); } }
+  for(const k of [...RES_BASE,'tabla','hilo','cuerda','chapa','manualHogares']) if(iconCache[k]===undefined) iconCache[k]=(MODELS[k]?(()=>{try{return captureIcon(MODELS[k](),[0.25,0.7,0.3])}catch(e){return null}})():null)||fallbackIcon(k);
+}
 function needsTable(r){ return !NO_TABLE.has(r.id); }
 function canAfford(cost){ for(const k in cost) if((inv[k]||0)<cost[k]) return false; return true; }
 function pay(cost){ for(const k in cost) inv[k]=(inv[k]||0)-cost[k]; }
@@ -504,8 +509,16 @@ function craftCard(r){
   return it;
 }
 function renderCraft(){ try{
-  rebuildTabs();
   const g=$('craftGrid'); g.innerHTML='';
+  if(!craftAtTable){
+    // FUERA de una mesa: sólo Martillo y Mesa
+    $('craftTabs').style.display='none';
+    const n=document.createElement('div');n.className='emptyMsg';n.style.gridColumn='1/-1';n.textContent=T('basicOnly');g.appendChild(n);
+    for(const id of ['martillo','mesa']){ const r=RECIPES.find(x=>x.id===id); if(r)g.appendChild(craftCard(r)); }
+    return;
+  }
+  // EN una mesa: pestañas + materiales + todos los ítems de la categoría
+  $('craftTabs').style.display='flex'; rebuildTabs();
   const mat=document.createElement('div'); mat.style.gridColumn='1/-1'; mat.innerHTML=`<div class="lbl">${T('materials')}</div>`;
   const row=document.createElement('div'); row.className='grid'; row.style.gridColumn='1/-1';
   TRANSFORMS.forEach(r=>{ const can=canAfford(r.cost); const it=document.createElement('div'); it.className='item'+(can?'':' locked');
@@ -520,7 +533,7 @@ function renderCraft(){ try{
 }catch(e){ console.error('renderCraft',e); toast('err: '+e.message); } }
 function flash(el,msg){const s=el.querySelector('.sub');if(!s)return;const old=s.innerHTML;s.textContent=msg;s.style.color='#8fe3ff';setTimeout(()=>{s.innerHTML=old;s.style.color='';},700);}
 
-function isEquippable(id){ const r=RECIPES.find(x=>x.id===id); return id==='manualHogares'?false:(r&&!r.placeable); }
+function isEquippable(id){ return id!=='manualHogares' && RECIPES.some(x=>x.id===id); }  // todo lo crafteado se puede agarrar/ver en mano
 function renderBag(){
   const g=$('bagGrid'); g.innerHTML=''; let any=false;
   // recursos + materiales
@@ -661,7 +674,7 @@ function update(dt){
   updateSign(dt);
   if(toastT>0){toastT-=dt;if(toastT<=0)refreshHints();}
 }
-function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); if(iconQueue.length)processIconQueue(); }
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
 addEventListener('error',e=>{ const h=$('hint'); if(h){h.textContent='⚠ '+(e.message||'error'); h.style.opacity='0.95';} });
 
 /* ===================== Iconos PNG (capturados del modelo real) ===================== */
@@ -693,9 +706,11 @@ $('devGive').addEventListener('click',e=>{e.stopPropagation();addResources();});
 /* ===================== Init ===================== */
 try{
   layout();
+  renderer.render(scene,camera);     // calienta el contexto antes de capturar
+  captureAllIcons();                 // captura los íconos 3D de TODOS los modelos (una vez, con loader)
   applyLang(); refreshHints();
-  setTimeout(()=>$('loader').classList.add('hide'),250);
-}catch(err){ console.error('Init',err); }
+  $('loader').classList.add('hide');
+}catch(err){ console.error('Init',err); $('loader').classList.add('hide'); }
 animate();
 </script>
 </body>
