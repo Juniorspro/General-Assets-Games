@@ -55,7 +55,7 @@
           background:radial-gradient(120% 120% at 60% 40%,rgba(12,16,22,.4),rgba(6,8,12,.7)); backdrop-filter:blur(12px);
           opacity:0; pointer-events:none; transition:opacity .25s; }
   .scrim.show{ opacity:1; pointer-events:auto; }
-  .card{ width:min(460px,calc(100vw - 32px)); max-height:calc(100vh - 36px); overflow-y:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
+  .card{ width:min(460px,calc(100vw - 32px)); max-height:calc(100vh - 36px); overflow-y:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y; overscroll-behavior:contain;
          background:linear-gradient(165deg,rgba(26,30,38,.95),rgba(12,14,19,.97)); border:1px solid rgba(150,180,220,.16);
          border-radius:20px; padding:20px; box-shadow:0 30px 90px rgba(0,0,0,.75); position:relative; }
   body.rot .card{ max-height:calc(100vw - 36px); width:min(460px,calc(100vh - 36px)); }
@@ -172,21 +172,22 @@
 <script type="module">
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 /* ===================== i18n ===================== */
 const I18N={
   es:{jump:'Saltar',crouch:'Agacharse',axe:'Hacha',build:'Construir',craft:'Fabricación',inventory:'Mochila',settings:'Ajustes',language:'Idioma',rotate90:'Girar 90° en vertical',
-      weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',spear:'Lanza de madera',knife:'Cuchillo de metal',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo de madera',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',
+      weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',spear:'Lanza de madera',knife:'Cuchillo de metal',cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo de madera',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',
       placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
       useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —'},
   en:{jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',craft:'Crafting',inventory:'Backpack',settings:'Settings',language:'Language',rotate90:'Rotate 90° in portrait',
-      weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',spear:'Wooden spear',knife:'Metal knife',pmad:'Wood wall',smad:'Wood floor',tmad:'Wood roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',vcha:'Metal wall + window',dcha:'Metal wall + door',free:'Free',craftBtn:'Craft',crafted:'Crafted!',
+      weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',spear:'Wooden spear',knife:'Metal knife',cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Wood roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',vcha:'Metal wall + window',dcha:'Metal wall + door',free:'Free',craftBtn:'Craft',crafted:'Crafted!',
       placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
       equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
       useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —'},
   pt:{jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',craft:'Fabricação',inventory:'Mochila',settings:'Ajustes',language:'Idioma',rotate90:'Girar 90° na vertical',
-      weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',spear:'Lança de madeira',knife:'Faca de metal',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado de madeira',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',
+      weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',spear:'Lança de madeira',knife:'Faca de metal',cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado de madeira',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',
       placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipe o martelo em 🎒 para colocar móveis.',rotate:'Girar',building:'Construindo…',
       useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —'}
@@ -320,7 +321,30 @@ function buildKnife(){
   const fuller=new THREE.Mesh(new THREE.BoxGeometry(0.012,0.42,0.03),blackMetalMat); fuller.position.set(0.012,0.62,0); g.add(fuller);
   return g;
 }
-const MODELS={ hammer:buildHammer, table:buildTable, spear:buildSpear, knife:buildKnife,
+/* ---- materiales + muebles procedurales ---- */
+const stoneMat=new THREE.MeshStandardMaterial({color:0x9a9a9a,roughness:0.95});
+const stoneDark=new THREE.MeshStandardMaterial({color:0x6f6f6f,roughness:0.95});
+const emberMat=new THREE.MeshStandardMaterial({color:0xff7a26,emissive:0xff5a1e,emissiveIntensity:1.6,roughness:0.6});
+const clothMat=new THREE.MeshStandardMaterial({color:0xcdbfa3,roughness:0.92,side:THREE.DoubleSide});
+function cyl(rt,rb,h,m,s){const e=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,s||14),m);e.castShadow=true;return e;}
+function mHorno(){const g=new THREE.Group();g.add(boxM(1.2,1.2,1.0,stoneMat,0,0.6,0));g.add(boxM(0.6,0.55,0.12,stoneDark,0,0.5,0.5));g.add(boxM(1.3,0.18,1.1,stoneDark,0,1.25,0));return g;}
+function mSilla(){const g=new THREE.Group();g.add(boxM(0.5,0.07,0.5,woodConsMat,0,0.5,0));g.add(boxM(0.5,0.5,0.07,woodConsMat,0,0.78,-0.215));[[-0.21,-0.21],[0.21,-0.21],[-0.21,0.21],[0.21,0.21]].forEach(([x,z])=>g.add(boxM(0.07,0.5,0.07,woodConsMat,x,0.25,z)));return g;}
+function mBidon(){const g=new THREE.Group();const b=cyl(0.4,0.4,1.0,chapaMat,20);b.position.y=0.5;g.add(b);const rim=cyl(0.42,0.42,0.08,chapaMat,20);rim.position.y=0.96;g.add(rim);return g;}
+function mPerchero(){const g=new THREE.Group();const base=cyl(0.35,0.4,0.08,woodConsMat,16);base.position.y=0.04;g.add(base);const post=cyl(0.06,0.06,1.7,woodConsMat,12);post.position.y=0.9;g.add(post);g.add(boxM(0.9,0.07,0.07,woodConsMat,0,1.55,0));const head=new THREE.Mesh(new THREE.SphereGeometry(0.13,12,10),woodConsMat);head.position.y=1.75;g.add(head);return g;}
+function mFogata(){const g=new THREE.Group();for(let i=0;i<8;i++){const a=i/8*6.28;g.add(boxM(0.22,0.18,0.22,stoneMat,Math.cos(a)*0.55,0.09,Math.sin(a)*0.55));}const l1=cyl(0.07,0.07,0.9,woodConsMat);l1.rotation.z=1.2;l1.position.y=0.2;g.add(l1);const l2=cyl(0.07,0.07,0.9,woodConsMat);l2.rotation.set(1.2,0.7,0);l2.position.y=0.2;g.add(l2);const e=new THREE.Mesh(new THREE.ConeGeometry(0.28,0.5,10),emberMat);e.position.y=0.42;g.add(e);return g;}
+function mConserv(){const g=new THREE.Group();g.add(boxM(1.2,0.9,0.7,woodConsMat,0,0.45,0));g.add(boxM(1.24,0.12,0.74,woodConsMat,0,0.92,0));return g;}
+function mRecagua(){const g=new THREE.Group();[[-0.5,-0.5],[0.5,-0.5],[-0.5,0.5],[0.5,0.5]].forEach(([x,z])=>g.add(boxM(0.08,1.2,0.08,woodConsMat,x,0.6,z)));const fun=new THREE.Mesh(new THREE.ConeGeometry(0.75,0.5,4,1,true),clothMat);fun.position.y=1.05;g.add(fun);const buck=cyl(0.25,0.2,0.35,woodConsMat);buck.position.y=0.35;g.add(buck);return g;}
+/* ---- carga de GLB (auto-escala para que tengan tamaño correcto) ---- */
+const GLBP='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@f0e9b52/';
+const gltfL=new GLTFLoader(); const glbCache={};
+function fitModel(obj,targetMax){ let box=new THREE.Box3().setFromObject(obj),sz=box.getSize(new THREE.Vector3()),md=Math.max(sz.x,sz.y,sz.z)||1,s=targetMax/md; obj.scale.setScalar(s);
+  box=new THREE.Box3().setFromObject(obj); const c=box.getCenter(new THREE.Vector3()); obj.position.set(-c.x,-box.min.y,-c.z); const wrap=new THREE.Group(); wrap.add(obj); return wrap; }
+function glbModel(id,fb){ return ()=> glbCache[id]? glbCache[id].clone(true) : (fb?fb():new THREE.Group()); }
+function loadGLB(id,file,targetMax){ gltfL.load(GLBP+file,gl=>{ const m=fitModel(gl.scene,targetMax); m.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}}); glbCache[id]=m;
+  try{ icons[id]=captureIcon(MODELS[id](),ROTS[id]||[0.2,0.65,0.4]); }catch(e){} if(equipped===id)equip(id); if(document.querySelector('.scrim.show')){renderCraft();renderBag();} },undefined,()=>{}); }
+
+const MODELS={ hammer:buildHammer, table:buildTable, spear:glbModel('spear',buildSpear), knife:glbModel('knife',buildKnife),
+  cama:glbModel('cama'), horno:mHorno, silla:mSilla, bidon:mBidon, perchero:mPerchero, fogata:mFogata, conserv:mConserv, recagua:mRecagua,
   pmad:()=>consPiece('wall',woodConsMat), smad:()=>consPiece('floor',woodConsMat), tmad:()=>consPiece('roof',woodConsMat), vmad:()=>consPiece('window',woodConsMat), dmad:()=>consPiece('door',woodConsMat),
   pcha:()=>consPiece('wall',chapaMat), scha:()=>consPiece('floor',chapaMat), vcha:()=>consPiece('window',chapaMat), dcha:()=>consPiece('door',chapaMat) };
 
@@ -371,15 +395,17 @@ addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;let ddx=e.clie
 function lookEnd(e){if(e.pointerId===lookId)lookId=null;}
 addEventListener('pointerup',lookEnd);addEventListener('pointercancel',lookEnd);
 
-$('bJump').addEventListener('click',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
-$('bCrouch').addEventListener('click',()=>{ player.crouch=!player.crouch; $('bCrouch').classList.toggle('on',player.crouch); });
-$('bAxe').addEventListener('click',()=>{ startSwing(); if(placing){ tryBuild(); } });
-$('bRot').addEventListener('click',()=>{ placeYaw=(placeYaw+Math.PI/4)%(Math.PI*2); });
-$('bPlace').addEventListener('click',()=>{ if(placing) stopPlacing(); else openPlaceMenu(); });
-$('bSet').addEventListener('click',()=>showScrim('settings'));
-$('bBag').addEventListener('click',()=>{renderBag();showScrim('bag');});
-$('bCraft').addEventListener('click',()=>{craftAtTable=false;renderCraft();showScrim('craft');});
-document.querySelectorAll('.xClose').forEach(b=>b.addEventListener('click',()=>{ hideScrims(); }));
+// los botones responden con pointerdown (funcionan aunque el joystick esté en uso)
+function tapBtn(id,fn){ const el=$(id); el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
+tapBtn('bJump',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
+tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; $('bCrouch').classList.toggle('on',player.crouch); });
+tapBtn('bAxe',()=>{ startSwing(); if(placing){ tryBuild(); } });
+tapBtn('bRot',()=>{ placeYaw=(placeYaw+Math.PI/4)%(Math.PI*2); });
+tapBtn('bPlace',()=>{ if(placing) stopPlacing(); else openPlaceMenu(); });
+tapBtn('bSet',()=>showScrim('settings'));
+tapBtn('bBag',()=>{renderBag();showScrim('bag');});
+tapBtn('bCraft',()=>{craftAtTable=!!nearTable;renderCraft();showScrim('craft');});
+document.querySelectorAll('.xClose').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();hideScrims();}));
 
 function showScrim(id){hideScrims();$(id).classList.add('show');}
 function hideScrims(){document.querySelectorAll('.scrim').forEach(s=>s.classList.remove('show'));}
@@ -390,6 +416,15 @@ const RECIPES=[
   {id:'table', tab:'tools',needTable:false,placeable:true},
   {id:'spear', tab:'weapons',needTable:false,placeable:false},
   {id:'knife', tab:'weapons',needTable:false,placeable:false},
+  // MUEBLES: en mesa, colocables
+  {id:'cama',tab:'furniture',needTable:true,placeable:true},
+  {id:'horno',tab:'furniture',needTable:true,placeable:true},
+  {id:'silla',tab:'furniture',needTable:true,placeable:true},
+  {id:'recagua',tab:'furniture',needTable:true,placeable:true},
+  {id:'bidon',tab:'furniture',needTable:true,placeable:true},
+  {id:'perchero',tab:'furniture',needTable:true,placeable:true},
+  {id:'fogata',tab:'furniture',needTable:true,placeable:true},
+  {id:'conserv',tab:'furniture',needTable:true,placeable:true},
   // CONSTRUCCIÓN: sólo en mesa (needTable), colocable
   {id:'pmad',tab:'construction',needTable:true,placeable:true},
   {id:'smad',tab:'construction',needTable:true,placeable:true},
@@ -403,7 +438,7 @@ const RECIPES=[
 ];
 const TABS=['weapons','furniture','tools','construction'];
 let activeTab='tools';
-const inv={hammer:0,table:0,spear:0,knife:0,pmad:0,smad:0,tmad:0,vmad:0,dmad:0,pcha:0,scha:0,vcha:0,dcha:0};
+const inv={hammer:0,table:0,spear:0,knife:0,cama:0,horno:0,silla:0,recagua:0,bidon:0,perchero:0,fogata:0,conserv:0,pmad:0,smad:0,tmad:0,vmad:0,dmad:0,pcha:0,scha:0,vcha:0,dcha:0};
 let equipped=null;
 let craftAtTable=false;
 const icons={};
@@ -455,7 +490,8 @@ function openPlaceMenu(){
 
 /* ===================== Colocación (ghost) ===================== */
 let placing=null, placeYaw=0, ghost=null, building=false, buildT=0;
-const placedTables=[];
+const placedTables=[]; const solids=[];   // solids: AABB para colisión del jugador
+const CONSTR=new Set(['pmad','smad','tmad','vmad','dmad','pcha','scha','vcha','dcha']);
 const PLACE_MIN=1.6, PLACE_MAX=5.5;
 function ghostMat(){return new THREE.MeshStandardMaterial({color:0x2ad24a,transparent:true,opacity:0.55,emissive:0x0d5a1c,emissiveIntensity:0.5});}
 function startPlacing(id){
@@ -473,10 +509,11 @@ function updateGhost(){
   const camY=player.pos.y+player.eye; let dist=PLACE_MAX;
   if(_fwd.y<-0.05){ const t=camY/(-_fwd.y); dist=THREE.MathUtils.clamp(t,PLACE_MIN,PLACE_MAX); }
   _gp.set(player.pos.x-Math.sin(player.yaw)*dist, 0, player.pos.z-Math.cos(player.yaw)*dist);
+  if(CONSTR.has(placing)){ _gp.x=Math.round(_gp.x); _gp.z=Math.round(_gp.z); }   // snapping: se alinea solo al piso/grilla
   _gp.x=THREE.MathUtils.clamp(_gp.x,-GROUND_LIMIT,GROUND_LIMIT); _gp.z=THREE.MathUtils.clamp(_gp.z,-GROUND_LIMIT,GROUND_LIMIT);
   ghost.position.copy(_gp); ghost.rotation.y=placeYaw; ghost.updateMatrixWorld();
   let valid=Math.abs(_gp.x)<GROUND_LIMIT-1&&Math.abs(_gp.z)<GROUND_LIMIT-1;
-  for(const p of placedTables){ if(p.position.distanceTo(_gp)<1.4){valid=false;break;} }
+  if(!CONSTR.has(placing)) for(const p of placedTables){ if(p.position.distanceTo(_gp)<1.0){valid=false;break;} }
   ghost.userData.valid=valid;
   const col=valid?0x2ad24a:0xff3b3b, em=valid?0x0d5a1c:0x5a0d0d;
   ghost.traverse(o=>{if(o.isMesh){o.material.color.setHex(col);o.material.emissive.setHex(em);}});
@@ -485,7 +522,15 @@ function tryBuild(){ if(!placing||building||!ghost||!ghost.userData.valid) retur
 function finishBuild(){
   const id=placing; const m=(MODELS[id]||buildTable)(); m.position.copy(ghost.position); m.rotation.y=placeYaw; m.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
   scene.add(m); placedTables.push(m); inv[id]=Math.max(0,(inv[id]||0)-1);
+  // AABB para colisión (excepto suelos/techos, que se pueden pisar)
+  if(id!=='smad'&&id!=='scha'&&id!=='tmad'){ m.updateMatrixWorld(true); const bb=new THREE.Box3().setFromObject(m);
+    solids.push({minx:bb.min.x-0.35,maxx:bb.max.x+0.35,minz:bb.min.z-0.35,maxz:bb.max.z+0.35}); }
   stopPlacing();
+}
+function resolveCollisions(){ const px=player.pos.x,pz=player.pos.z;
+  for(const s of solids){ if(px>s.minx&&px<s.maxx&&pz>s.minz&&pz<s.maxz){
+    const dl=px-s.minx,dr=s.maxx-px,db=pz-s.minz,dtp=s.maxz-pz,mn=Math.min(dl,dr,db,dtp);
+    if(mn===dl)player.pos.x=s.minx; else if(mn===dr)player.pos.x=s.maxx; else if(mn===db)player.pos.z=s.minz; else player.pos.z=s.maxz; } }
 }
 
 /* ===================== Partículas de tierra ===================== */
@@ -529,6 +574,7 @@ function update(dt){
   const des=_v.set(0,0,0); des.addScaledVector(forward,-iz*sp); des.addScaledVector(right,ix*sp);
   player.vel.lerp(des,Math.min(1,ACCEL*dt)); player.pos.addScaledVector(player.vel,dt);
   player.pos.x=THREE.MathUtils.clamp(player.pos.x,-GROUND_LIMIT,GROUND_LIMIT); player.pos.z=THREE.MathUtils.clamp(player.pos.z,-GROUND_LIMIT,GROUND_LIMIT);
+  resolveCollisions();   // colisión con muebles/construcción
   player.vy-=GRAV*dt; player.pos.y+=player.vy*dt; if(player.pos.y<=0){player.pos.y=0;player.vy=0;player.onGround=true;}
   const targetEye=player.crouch?EYE_CROUCH:EYE; player.eye+=(targetEye-player.eye)*Math.min(1,10*dt);
   const speed=player.vel.length(); player.bobPhase+=dt*(speed*1.9+0.0001); const moveAmt=Math.min(1,speed/SPEED_MAX)*bobScale;
@@ -578,6 +624,7 @@ const ROTS={hammer:[0.2,0.7,0.3],table:[0.35,0.6,0],spear:[0.15,0.7,0.35],knife:
 try{
   layout();
   buildDesert();                    // escena de prueba: desierto con las texturas v2
+  loadGLB('spear','lanza_dormenia.glb',2.1); loadGLB('knife','cuchillo.glb',0.62); loadGLB('cama','cama.glb',2.0);   // GLB reales
   renderer.render(scene,camera);   // calienta el contexto
   for(const r of RECIPES){ try{ icons[r.id]=captureIcon(MODELS[r.id](),ROTS[r.id]||[0.25,0.7,0.3]); }catch(e){} }
   applyLang(); refreshHints();
