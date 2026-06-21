@@ -116,6 +116,7 @@
   <div id="craft" class="scrim">
     <div class="card">
       <div class="xClose" data-close="craft">✕</div>
+      <div id="devGive" style="position:absolute;top:12px;right:50px;height:30px;padding:0 9px;border-radius:9px;cursor:pointer;background:rgba(120,170,255,.16);border:1px solid rgba(127,208,255,.4);color:#eef3f8;font-size:13px;display:flex;align-items:center;justify-content:center;">🧪+</div>
       <h2 id="craftTitle">Fabricación</h2>
       <div class="tabs" id="craftTabs"></div>
       <div class="grid" id="craftGrid"></div>
@@ -178,17 +179,17 @@ const I18N={
       weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',
       placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
-      useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —'},
+      useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —',materials:'Materiales',resources:'Recursos',items:'Objetos'},
   en:{jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',craft:'Crafting',inventory:'Backpack',settings:'Settings',language:'Language',rotate90:'Rotate 90° in portrait',
       weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',free:'Free',craftBtn:'Craft',crafted:'Crafted!',
       placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
       equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
-      useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —'},
+      useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —',materials:'Materials',resources:'Resources',items:'Items'},
   pt:{jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',craft:'Fabricação',inventory:'Mochila',settings:'Ajustes',language:'Idioma',rotate90:'Girar 90° na vertical',
       weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',
       placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipe o martelo em 🎒 para colocar móveis.',rotate:'Girar',building:'Construindo…',
-      useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —'}
+      useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —',materials:'Materiais',resources:'Recursos',items:'Objetos'}
 };
 let lang='es'; const T=k=>(I18N[lang]||I18N.es)[k]||k;
 const $=id=>document.getElementById(id);
@@ -252,6 +253,58 @@ function buildTable(){             // mesa de madera (tabla + 4 patas)
   for(const sx of[-0.66,0.66])for(const sz of[-0.42,0.42]){const l=new THREE.Mesh(legGeo,woodDark); l.position.set(sx,0.4,sz); l.castShadow=true; g.add(l);}
   return g;
 }
+/* ---- materiales extra ---- */
+const stoneMat=new THREE.MeshStandardMaterial({color:0x9b9b9b,roughness:0.96});
+const stoneDark=new THREE.MeshStandardMaterial({color:0x6f6f6f,roughness:0.96});
+const metalMat=new THREE.MeshStandardMaterial({color:0xb8c0c8,roughness:0.42,metalness:0.85});
+const clothMat=new THREE.MeshStandardMaterial({color:0xcdbfa3,roughness:0.92,side:THREE.DoubleSide});
+const leafMat2=new THREE.MeshStandardMaterial({color:0x4f7a3a,roughness:0.85});
+const darkMat=new THREE.MeshStandardMaterial({color:0x242424,roughness:0.85});
+const emberMat=new THREE.MeshStandardMaterial({color:0xff7a26,emissive:0xff5a1e,emissiveIntensity:1.5,roughness:0.6});
+const glassMat=new THREE.MeshStandardMaterial({color:0x3a6a4a,transparent:true,opacity:0.7,roughness:0.2});
+/* ---- helpers ---- */
+function bx(w,h,d,m,x,y,z){const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);e.position.set(x||0,y||0,z||0);e.castShadow=e.receiveShadow=true;return e;}
+function cy(rt,rb,h,m,seg){const e=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg||14),m);e.castShadow=true;return e;}
+/* ---- muebles ---- */
+function mSilla(){const g=new THREE.Group();g.add(bx(0.5,0.07,0.5,woodMat,0,0.5,0));g.add(bx(0.5,0.5,0.07,woodMat,0,0.78,-0.215));[[-0.21,-0.21],[0.21,-0.21],[-0.21,0.21],[0.21,0.21]].forEach(([x,z])=>g.add(bx(0.07,0.5,0.07,woodDark,x,0.25,z)));return g;}
+function mCama(){const g=new THREE.Group();g.add(bx(2.0,0.28,1.0,woodDark,0,0.2,0));g.add(bx(1.9,0.18,0.92,clothMat,0,0.42,0));g.add(bx(0.5,0.16,0.85,clothMat,-0.62,0.55,0));g.add(bx(2.0,0.5,0.08,woodMat,0,0.45,-0.46));return g;}
+function mHorno(){const g=new THREE.Group();g.add(bx(1.2,1.2,1.0,stoneMat,0,0.6,0));g.add(bx(0.6,0.55,0.12,darkMat,0,0.5,0.5));g.add(bx(1.3,0.18,1.1,stoneDark,0,1.25,0));return g;}
+function mFogata(){const g=new THREE.Group();for(let i=0;i<8;i++){const a=i/8*6.28;g.add(bx(0.22,0.18,0.22,stoneMat,Math.cos(a)*0.55,0.09,Math.sin(a)*0.55));}const l1=cy(0.07,0.07,0.9,woodDark);l1.rotation.z=1.2;l1.position.y=0.2;g.add(l1);const l2=cy(0.07,0.07,0.9,woodDark);l2.rotation.set(1.2,0.7,0);l2.position.y=0.2;g.add(l2);const e=new THREE.Mesh(new THREE.ConeGeometry(0.28,0.5,10),emberMat);e.position.y=0.42;g.add(e);return g;}
+function mBidon(){const g=new THREE.Group();const b=cy(0.4,0.4,1.0,metalMat,20);b.position.y=0.5;g.add(b);const rim=cy(0.42,0.42,0.08,metalMat,20);rim.position.y=0.96;g.add(rim);return g;}
+function mRecolector(){const g=new THREE.Group();[[-0.5,-0.5],[0.5,-0.5],[-0.5,0.5],[0.5,0.5]].forEach(([x,z])=>g.add(bx(0.08,1.2,0.08,woodDark,x,0.6,z)));const funnel=new THREE.Mesh(new THREE.ConeGeometry(0.75,0.5,4,1,true),clothMat);funnel.rotation.y=Math.PI/4;funnel.position.y=1.05;g.add(funnel);const buck=cy(0.25,0.2,0.35,woodMat);buck.position.y=0.35;g.add(buck);return g;}
+function mPerchero(){const g=new THREE.Group();const base=cy(0.35,0.4,0.08,woodDark,16);base.position.y=0.04;g.add(base);const post=cy(0.06,0.06,1.7,woodMat,12);post.position.y=0.9;g.add(post);g.add(bx(0.9,0.07,0.07,woodMat,0,1.55,0));const head=new THREE.Mesh(new THREE.SphereGeometry(0.13,12,10),woodMat);head.position.y=1.75;g.add(head);return g;}
+function mConservador(){const g=new THREE.Group();g.add(bx(1.2,0.9,0.7,woodMat,0,0.45,0));g.add(bx(1.24,0.12,0.74,woodDark,0,0.92,0));return g;}
+/* ---- construcción ---- */
+function wall(mat,opt){const g=new THREE.Group();const W=2,Tk=0.16;
+  if(opt==='window'){ g.add(bx(W,0.5,Tk,mat,0,1.75,0)); g.add(bx(W,0.5,Tk,mat,0,0.25,0)); g.add(bx(0.5,1.0,Tk,mat,-0.75,1.0,0)); g.add(bx(0.5,1.0,Tk,mat,0.75,1.0,0)); }
+  else if(opt==='door'){ g.add(bx(W,0.6,Tk,mat,0,1.7,0)); g.add(bx(0.6,1.4,Tk,mat,-0.7,0.7,0)); g.add(bx(0.6,1.4,Tk,mat,0.7,0.7,0));
+    const pivot=new THREE.Group(); pivot.position.set(-0.39,0,0); const door=bx(0.78,1.4,0.07,mat===metalMat?metalMat:woodDark,0.39,0.7,0); pivot.add(door); pivot.userData.isDoor=true; g.add(pivot); g.userData.doorPivot=pivot; }
+  else { g.add(bx(W,2,Tk,mat,0,1,0)); }
+  return g;
+}
+function floor(mat){const g=new THREE.Group();g.add(bx(2,0.12,2,mat,0,0.06,0));return g;}
+function roof(mat){const g=new THREE.Group();const s=bx(2,0.12,2,mat,0,0.4,0);s.rotation.x=-0.32;g.add(s);return g;}
+/* ---- armas / herramientas ---- */
+function mKnife(){const g=new THREE.Group();g.add(bx(0.06,0.28,0.06,woodMat,0,0.14,0));g.add(bx(0.04,0.4,0.12,metalMat,0,0.5,0));return g;}
+function mMachete(){const g=new THREE.Group();g.add(bx(0.06,0.3,0.06,woodDark,0,0.15,0));g.add(bx(0.05,0.7,0.16,metalMat,0,0.65,0.04));return g;}
+function mBottle(){const g=new THREE.Group();const b=cy(0.13,0.16,0.5,glassMat,14);b.position.y=0.25;g.add(b);const neck=cy(0.06,0.09,0.18,glassMat,12);neck.position.y=0.57;g.add(neck);g.add(bx(0.07,0.2,0.07,clothMat,0,0.72,0));return g;}
+function mScythe(){const g=new THREE.Group();g.add(bx(0.06,1.4,0.06,woodMat,0,0.7,0));const bl=new THREE.Mesh(new THREE.TorusGeometry(0.4,0.05,8,16,Math.PI*0.7),metalMat);bl.position.set(0.2,1.35,0);bl.rotation.set(Math.PI/2,0,0.4);g.add(bl);return g;}
+function mSpear(){const g=new THREE.Group();g.add(bx(0.05,1.6,0.05,woodMat,0,0.8,0));const tip=new THREE.Mesh(new THREE.ConeGeometry(0.09,0.32,8),stoneMat);tip.position.y=1.72;g.add(tip);return g;}
+function mPick(){const g=new THREE.Group();g.add(bx(0.06,1.2,0.06,woodMat,0,0.6,0));g.add(bx(0.7,0.1,0.12,stoneMat,0,1.2,0));const t=new THREE.Mesh(new THREE.ConeGeometry(0.08,0.22,6),stoneMat);t.rotation.z=Math.PI/2;t.position.set(0.42,1.2,0);g.add(t);return g;}
+function mBow(){const g=new THREE.Group();const arc=new THREE.Mesh(new THREE.TorusGeometry(0.6,0.04,8,20,Math.PI*1.1),woodMat);arc.position.y=0.6;arc.rotation.z=Math.PI*0.05;g.add(arc);return g;}
+function mArrow(){const g=new THREE.Group();g.add(bx(0.03,0.9,0.03,woodMat,0,0.45,0));const tip=new THREE.Mesh(new THREE.ConeGeometry(0.05,0.14,6),stoneMat);tip.position.y=0.95;g.add(tip);return g;}
+function mBook(){const g=new THREE.Group();g.add(bx(0.5,0.7,0.12,new THREE.MeshStandardMaterial({color:0x7a4a2a,roughness:0.7}),0,0.35,0));g.add(bx(0.42,0.62,0.13,new THREE.MeshStandardMaterial({color:0xeee0c0,roughness:0.9}),0,0.35,0));return g;}
+function mTorch(){const g=new THREE.Group();g.add(bx(0.06,0.9,0.06,woodMat,0,0.45,0));const f=new THREE.Mesh(new THREE.ConeGeometry(0.16,0.4,10),emberMat);f.position.y=1.0;g.add(f);return g;}
+function mHoe(){const g=new THREE.Group();g.add(bx(0.05,1.3,0.05,woodMat,0,0.65,0));g.add(bx(0.4,0.1,0.18,metalMat,0,1.28,0.12));return g;}
+function mBucket(){const g=new THREE.Group();const b=cy(0.3,0.24,0.45,woodMat,16);b.position.y=0.22;g.add(b);const h=new THREE.Mesh(new THREE.TorusGeometry(0.28,0.02,6,16,Math.PI),metalMat);h.position.y=0.45;g.add(h);return g;}
+/* ---- registro de modelos por id ---- */
+const MODELS={
+  martillo:buildHammer, mesa:buildTable, silla:mSilla, cama:mCama, horno:mHorno, fogata:mFogata, bidon:mBidon, recolectorAgua:mRecolector, perchero:mPerchero, conservador:mConservador,
+  paredMadera:()=>wall(woodMat), sueloMadera:()=>floor(woodMat), techoMadera:()=>roof(woodMat), paredVentana:()=>wall(woodMat,'window'), paredPuerta:()=>wall(woodMat,'door'),
+  paredChapa:()=>wall(metalMat), sueloChapa:()=>floor(metalMat), paredChapaVentana:()=>wall(metalMat,'window'), paredChapaPuerta:()=>wall(metalMat,'door'),
+  cuchillo:mKnife, machete:mMachete, botellaInc:mBottle, guadana:mScythe, lanzaMadera:mSpear, picoMadera:mPick, arco:mBow, lanzaPiedra:mSpear, cuchilloPiedra:mKnife, picoPiedra:mPick,
+  flechaMadera:mArrow, flechaPiedra:mArrow, lanzaPiedraAf:mSpear, picoPiedraAf:mPick, cuchilloAf:mKnife, flechaPiedraAf:mArrow, manualHogares:mBook, antorcha:mTorch, azadaMadera:mHoe, azadaPiedra:mHoe, baldeMadera:mBucket, baldeChapa:mBucket,
+};
 
 /* ===================== Jugador (1ª persona, como el original) ===================== */
 const EYE=1.7, EYE_CROUCH=1.05, GRAV=22, JUMP_V=7.4, SPEED_MAX=6.4, ACCEL=11;
@@ -260,9 +313,14 @@ const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3
 let bobScale=1, camShake=0.5;
 
 // martillo en 1ª persona (cuando está equipado)
-const fpHammer=buildHammer(); fpHammer.scale.setScalar(0.42); fpHammer.position.set(0.34,-0.46,-0.7); fpHammer.rotation.set(0.1,Math.PI/2,0.2); fpHammer.visible=false;
-camera.add(fpHammer); scene.add(camera);
-const FPH_BASE=fpHammer.rotation.clone();
+const fpRig=new THREE.Group(); fpRig.position.set(0.34,-0.46,-0.7); fpRig.rotation.set(0.1,Math.PI/2,0.2); fpRig.visible=false;
+camera.add(fpRig); scene.add(camera);
+const FPH_BASE=fpRig.rotation.clone(); let fpModel=null;
+function equip(id){
+  while(fpRig.children.length)fpRig.remove(fpRig.children[0]);
+  if(id&&MODELS[id]){ fpModel=MODELS[id](); fpModel.scale.setScalar(0.42); fpModel.traverse(o=>{if(o.isMesh)o.castShadow=false;}); fpRig.add(fpModel); fpRig.visible=true; }
+  else fpRig.visible=false;
+}
 let swing={active:false,t:0};
 function startSwing(){ if(!swing.active){swing.active=true;swing.t=0;} }
 
@@ -307,58 +365,142 @@ document.querySelectorAll('.xClose').forEach(b=>b.addEventListener('click',()=>{
 function showScrim(id){hideScrims();$(id).classList.add('show');}
 function hideScrims(){document.querySelectorAll('.scrim').forEach(s=>s.classList.remove('show'));}
 
-/* ===================== Estado de crafteo / inventario ===================== */
-// recetas: tab, si requiere mesa, si es colocable
-const RECIPES=[
-  {id:'hammer',tab:'tools',needTable:false,placeable:false},
-  {id:'table', tab:'tools',needTable:false,placeable:true},
-];
-const TABS=['weapons','furniture','tools','construction'];
-let activeTab='tools';
-const inv={hammer:0,table:0};            // cantidades crafteadas
-let equipped=null;                        // 'hammer' equipado
-let craftAtTable=false;                   // crafteando en una mesa (desbloquea needTable)
-const icons={};                           // PNG capturados
+/* ===================== Nombres (es/en/pt) ===================== */
+const LI={es:0,en:1,pt:2};
+const NAMES={
+  tronco:['Tronco','Log','Tronco'],palo:['Palo','Stick','Graveto'],piedra:['Piedra','Stone','Pedra'],piedraFilosa:['Piedra filosa','Sharp stone','Pedra afiada'],
+  enredadera:['Enredadera','Vine','Cipó'],hojas:['Hojas','Leaves','Folhas'],tela:['Tela','Cloth','Tecido'],chatarra:['Chatarra','Scrap','Sucata'],
+  agua:['Agua','Water','Água'],sal:['Sal','Salt','Sal'],combustible:['Combustible','Fuel','Combustível'],botella:['Botella vacía','Empty bottle','Garrafa vazia'],
+  tabla:['Tabla','Plank','Tábua'],hilo:['Hilo','Thread','Linha'],cuerda:['Cuerda','Rope','Corda'],chapa:['Chapa','Sheet metal','Chapa'],
+  cuchillo:['Cuchillo','Knife','Faca'],machete:['Machete','Machete','Facão'],botellaInc:['Botella incendiaria','Firebomb','Coquetel'],guadana:['Guadaña','Scythe','Foice'],
+  lanzaMadera:['Lanza de madera','Wooden spear','Lança de madeira'],martillo:['Martillo','Hammer','Martelo'],picoMadera:['Pico de madera','Wooden pick','Picareta de madeira'],
+  arco:['Arco','Bow','Arco'],lanzaPiedra:['Lanza de piedra','Stone spear','Lança de pedra'],cuchilloPiedra:['Cuchillo de piedra','Stone knife','Faca de pedra'],
+  picoPiedra:['Pico de piedra','Stone pick','Picareta de pedra'],flechaMadera:['Flechas de madera','Wooden arrows','Flechas de madeira'],flechaPiedra:['Flechas de piedra','Stone arrows','Flechas de pedra'],
+  lanzaPiedraAf:['Lanza de piedra afilada','Sharp stone spear','Lança afiada'],picoPiedraAf:['Pico de piedra afilado','Sharp stone pick','Picareta afiada'],
+  cuchilloAf:['Cuchillo afilado','Sharp knife','Faca afiada'],flechaPiedraAf:['Flechas de piedra afiladas','Sharp arrows','Flechas afiadas'],
+  manualHogares:['Manual de hogares','Home manual','Manual de lares'],antorcha:['Antorcha','Torch','Tocha'],azadaMadera:['Azada de madera','Wooden hoe','Enxada de madeira'],
+  azadaPiedra:['Azada de piedra','Stone hoe','Enxada de pedra'],baldeMadera:['Balde de madera','Wooden bucket','Balde de madeira'],baldeChapa:['Balde de chapa','Metal bucket','Balde de chapa'],
+  cama:['Cama','Bed','Cama'],horno:['Horno','Oven','Forno'],mesa:['Mesa','Table','Mesa'],silla:['Silla','Chair','Cadeira'],recolectorAgua:['Recolector de agua','Water collector','Coletor de água'],
+  bidon:['Bidón','Barrel','Bidão'],perchero:['Perchero humanoide','Coat stand','Cabideiro'],fogata:['Fogata','Campfire','Fogueira'],conservador:['Conservador de carne','Meat curer','Conservador'],
+  paredMadera:['Pared de madera','Wood wall','Parede de madeira'],sueloMadera:['Suelo de madera','Wood floor','Piso de madeira'],techoMadera:['Techo de madera','Wood roof','Telhado de madeira'],
+  paredVentana:['Pared con ventana','Wall + window','Parede + janela'],paredPuerta:['Pared con puerta','Wall + door','Parede + porta'],
+  paredChapa:['Pared de chapa','Metal wall','Parede de chapa'],sueloChapa:['Suelo de chapa','Metal floor','Piso de chapa'],
+  paredChapaVentana:['Pared de chapa con ventana','Metal wall + window','Parede de chapa + janela'],paredChapaPuerta:['Pared de chapa con puerta','Metal wall + door','Parede de chapa + porta'],
+};
+function nm(id){const n=NAMES[id];return n?(n[LI[lang]||0]):id;}
 
-function rebuildTabs(){
-  const c=$('craftTabs'); c.innerHTML='';
-  TABS.forEach(t=>{const d=document.createElement('div');d.className='paper'+(t===activeTab?' active':'');d.textContent=T(t);d.onclick=()=>{activeTab=t;renderCraft();};c.appendChild(d);});
+/* ===================== Economía de crafteo ===================== */
+const RES_BASE=['tronco','palo','piedra','piedraFilosa','enredadera','hojas','tela','chatarra','agua','sal','combustible','botella'];
+const TRANSFORMS=[{id:'tabla',out:4,cost:{tronco:1}},{id:'hilo',out:1,cost:{enredadera:5}},{id:'cuerda',out:1,cost:{hilo:3}},{id:'chapa',out:1,cost:{chatarra:2}}];
+const RECIPES=[
+  {id:'cuchillo',tab:'weapons',cost:{palo:1,piedraFilosa:2}},
+  {id:'machete',tab:'weapons',cost:{chapa:1,palo:1}},
+  {id:'botellaInc',tab:'weapons',cost:{botella:1,tela:1,combustible:1}},
+  {id:'guadana',tab:'weapons',cost:{chapa:2,palo:2}},
+  {id:'lanzaMadera',tab:'tools',cost:{palo:2,cuerda:1}},
+  {id:'martillo',tab:'tools',cost:{palo:2,piedra:2}},
+  {id:'picoMadera',tab:'tools',cost:{palo:3,cuerda:1}},
+  {id:'arco',tab:'tools',cost:{palo:2,cuerda:2}},
+  {id:'lanzaPiedra',tab:'tools',cost:{palo:2,piedraFilosa:1,cuerda:1}},
+  {id:'cuchilloPiedra',tab:'tools',cost:{palo:1,piedraFilosa:1}},
+  {id:'picoPiedra',tab:'tools',cost:{palo:3,piedra:2,cuerda:1}},
+  {id:'flechaMadera',tab:'tools',cost:{palo:1},out:3},
+  {id:'flechaPiedra',tab:'tools',cost:{flechaMadera:1,piedraFilosa:1}},
+  {id:'lanzaPiedraAf',tab:'tools',cost:{lanzaPiedra:1,piedraFilosa:1}},
+  {id:'picoPiedraAf',tab:'tools',cost:{picoPiedra:1,piedraFilosa:1}},
+  {id:'cuchilloAf',tab:'tools',cost:{cuchillo:1,piedraFilosa:1}},
+  {id:'flechaPiedraAf',tab:'tools',cost:{flechaPiedra:1,piedraFilosa:1}},
+  {id:'antorcha',tab:'tools',cost:{palo:1,tela:1}},
+  {id:'azadaMadera',tab:'tools',cost:{palo:3}},
+  {id:'azadaPiedra',tab:'tools',cost:{palo:3,piedra:1}},
+  {id:'baldeMadera',tab:'tools',cost:{tabla:4}},
+  {id:'baldeChapa',tab:'tools',cost:{chapa:2}},
+  {id:'cama',tab:'furniture',placeable:true,cost:{hojas:10,palo:5}},
+  {id:'horno',tab:'furniture',placeable:true,cost:{piedra:20}},
+  {id:'mesa',tab:'furniture',placeable:true,cost:{tabla:6}},
+  {id:'silla',tab:'furniture',placeable:true,cost:{tabla:4}},
+  {id:'recolectorAgua',tab:'furniture',placeable:true,cost:{palo:10,tela:4}},
+  {id:'bidon',tab:'furniture',placeable:true,cost:{chapa:4}},
+  {id:'perchero',tab:'furniture',placeable:true,cost:{palo:8}},
+  {id:'fogata',tab:'furniture',placeable:true,cost:{piedra:5,palo:5}},
+  {id:'conservador',tab:'furniture',placeable:true,cost:{tabla:10,sal:5}},
+  {id:'paredMadera',tab:'construction',placeable:true,cost:{tabla:4}},
+  {id:'sueloMadera',tab:'construction',placeable:true,cost:{tabla:4}},
+  {id:'techoMadera',tab:'construction',placeable:true,cost:{tabla:4}},
+  {id:'paredVentana',tab:'construction',placeable:true,cost:{tabla:4}},
+  {id:'paredPuerta',tab:'construction',placeable:true,cost:{tabla:5}},
+  {id:'paredChapa',tab:'construction',placeable:true,cost:{chapa:4}},
+  {id:'sueloChapa',tab:'construction',placeable:true,cost:{chapa:4}},
+  {id:'paredChapaVentana',tab:'construction',placeable:true,cost:{chapa:4}},
+  {id:'paredChapaPuerta',tab:'construction',placeable:true,cost:{chapa:5}},
+];
+const TABS=['weapons','tools','furniture','construction'];
+const NO_TABLE=new Set(['martillo','mesa']);    // lo único crafteable sin mesa
+let activeTab='tools';
+const inv={ manualHogares:1 };                  // item inicial
+let equipped=null, craftAtTable=false;
+const iconCache={};
+function getIcon(id){ if(iconCache[id]!==undefined)return iconCache[id]; const b=MODELS[id]; iconCache[id]=b?captureIcon(b(),[0.25,0.7,0.3]):null; return iconCache[id]; }
+function needsTable(r){ return !NO_TABLE.has(r.id); }
+function canAfford(cost){ for(const k in cost) if((inv[k]||0)<cost[k]) return false; return true; }
+function pay(cost){ for(const k in cost) inv[k]=(inv[k]||0)-cost[k]; }
+function costStr(cost){ return Object.keys(cost).map(k=>{const ok=(inv[k]||0)>=cost[k]; return `<span style="color:${ok?'#9fd6a0':'#ff8f8f'}">${cost[k]}× ${nm(k)}</span>`;}).join(' · ')||T('free'); }
+function addResources(){ RES_BASE.forEach(r=>inv[r]=(inv[r]||0)+25); inv.tronco+=10; renderCraft(); toast('+ recursos'); }
+
+function rebuildTabs(){ const c=$('craftTabs'); c.innerHTML='';
+  TABS.forEach(t=>{const d=document.createElement('div');d.className='paper'+(t===activeTab?' active':'');d.textContent=T(t);d.onclick=()=>{activeTab=t;renderCraft();};c.appendChild(d);}); }
+function craftCard(r){
+  const locked=needsTable(r)&&!craftAtTable, afford=canAfford(r.cost), can=!locked&&afford;
+  const it=document.createElement('div'); it.className='item'+(can?'':' locked');
+  const out=r.out&&r.out>1?` ×${r.out}`:'';
+  it.innerHTML=`<div class="ic">${getIcon(r.id)?`<img src="${getIcon(r.id)}">`:''}</div><div class="nm">${nm(r.id)}${out}</div>`+
+    (locked?`<div class="sub" style="color:#ffb46b">${T('needTable')}</div>`:`<div class="sub">${costStr(r.cost)}</div>`);
+  if(can) it.onclick=()=>{ if(!canAfford(r.cost))return; pay(r.cost); inv[r.id]=(inv[r.id]||0)+(r.out||1); flash(it,T('crafted')); renderCraft(); };
+  return it;
 }
 function renderCraft(){
   rebuildTabs();
   const g=$('craftGrid'); g.innerHTML='';
+  // barra de materiales intermedios (siempre disponible)
+  const mat=document.createElement('div'); mat.style.gridColumn='1/-1'; mat.innerHTML=`<div class="lbl">${T('materials')}</div>`;
+  const row=document.createElement('div'); row.className='grid'; row.style.gridColumn='1/-1';
+  TRANSFORMS.forEach(r=>{ const can=canAfford(r.cost); const it=document.createElement('div'); it.className='item'+(can?'':' locked');
+    it.innerHTML=`<div class="ic">${getIcon(r.id)?`<img src="${getIcon(r.id)}">`:''}</div><div class="nm">${nm(r.id)} ×${r.out}</div><div class="sub">${costStr(r.cost)}</div>`;
+    if(can) it.onclick=()=>{ if(!canAfford(r.cost))return; pay(r.cost); inv[r.id]=(inv[r.id]||0)+r.out; flash(it,T('crafted')); renderCraft(); };
+    row.appendChild(it); });
+  g.appendChild(mat); g.appendChild(row);
+  const sep=document.createElement('div'); sep.style.gridColumn='1/-1'; sep.innerHTML=`<div class="lbl">${T(activeTab)}</div>`; g.appendChild(sep);
   const list=RECIPES.filter(r=>r.tab===activeTab);
-  if(!list.length){ g.innerHTML=`<div class="emptyMsg">${T('empty')}</div>`; return; }
-  for(const r of list){
-    const locked=r.needTable&&!craftAtTable;
-    const it=document.createElement('div'); it.className='item'+(locked?' locked':'');
-    it.innerHTML=`<div class="ic">${icons[r.id]?`<img src="${icons[r.id]}">`:''}</div><div class="nm">${T(r.id)}</div>`+
-      (locked?`<div class="sub" style="color:#ffb46b">${T('needTable')}</div>`:`<div class="sub">${T('free')} · ${T('craftBtn')}</div>`);
-    if(!locked) it.onclick=()=>{ inv[r.id]++; flash(it,T('crafted')); refreshButtons(); };
-    g.appendChild(it);
-  }
+  if(!list.length){ const e=document.createElement('div');e.className='emptyMsg';e.style.gridColumn='1/-1';e.textContent=T('empty');g.appendChild(e); return; }
+  for(const r of list) g.appendChild(craftCard(r));
 }
-function flash(el,msg){const s=el.querySelector('.sub');if(!s)return;const old=s.textContent;s.textContent=msg;s.style.color='#8fe3ff';setTimeout(()=>{s.textContent=old;s.style.color='';},800);}
+function flash(el,msg){const s=el.querySelector('.sub');if(!s)return;const old=s.innerHTML;s.textContent=msg;s.style.color='#8fe3ff';setTimeout(()=>{s.innerHTML=old;s.style.color='';},700);}
 
+function isEquippable(id){ const r=RECIPES.find(x=>x.id===id); return id==='manualHogares'?false:(r&&!r.placeable); }
 function renderBag(){
   const g=$('bagGrid'); g.innerHTML=''; let any=false;
-  for(const id of ['hammer','table']) if(inv[id]>0){ any=true;
-    const it=document.createElement('div'); it.className='item'+(equipped===id?' selected':'');
-    const equ=(id==='hammer');
-    it.innerHTML=`<div class="ic">${icons[id]?`<img src="${icons[id]}">`:''}</div><div class="nm">${T(id)} ×${inv[id]}</div>`+
-      `<div class="sub">${equ?(equipped===id?T('equipped'):T('equip')):''}</div>`;
-    if(equ) it.onclick=()=>{ equipped=(equipped===id?null:id); fpHammer.visible=(equipped==='hammer'); renderBag(); refreshButtons(); };
-    g.appendChild(it);
-  }
+  // recursos + materiales
+  const res=[...RES_BASE,'tabla','hilo','cuerda','chapa'].filter(k=>(inv[k]||0)>0);
+  if(res.length){ const lab=document.createElement('div');lab.style.gridColumn='1/-1';lab.innerHTML=`<div class="lbl">${T('resources')}</div>`;g.appendChild(lab);
+    for(const k of res){ any=true; const it=document.createElement('div'); it.className='item';
+      it.innerHTML=`<div class="ic">${getIcon(k)?`<img src="${getIcon(k)}">`:''}</div><div class="nm">${nm(k)}</div><div class="sub">×${inv[k]}</div>`; g.appendChild(it); } }
+  // objetos crafteados
+  const objs=RECIPES.map(r=>r.id).concat(['manualHogares']).filter(id=>(inv[id]||0)>0);
+  if(objs.length){ const lab=document.createElement('div');lab.style.gridColumn='1/-1';lab.innerHTML=`<div class="lbl">${T('items')}</div>`;g.appendChild(lab);
+    for(const id of objs){ any=true; const eq=isEquippable(id); const it=document.createElement('div'); it.className='item'+(equipped===id?' selected':'');
+      it.innerHTML=`<div class="ic">${getIcon(id)?`<img src="${getIcon(id)}">`:''}</div><div class="nm">${nm(id)} ×${inv[id]}</div>`+
+        `<div class="sub">${eq?(equipped===id?T('equipped'):T('equip')):''}</div>`;
+      if(eq) it.onclick=()=>{ equipped=(equipped===id?null:id); equip(equipped); renderBag(); };
+      g.appendChild(it); } }
   $('bagEmpty').style.display=any?'none':'block';
 }
 
 function openPlaceMenu(){
-  if(equipped!=='hammer'){ toast(T('selectHammer')); return; }
+  if(!equipped){ toast(T('selectHammer')); return; }
   const g=$('placeGrid'); g.innerHTML=''; let any=false;
-  for(const r of RECIPES.filter(r=>r.placeable)) if(inv[r.id]>0){ any=true;
+  for(const r of RECIPES.filter(r=>r.placeable)) if((inv[r.id]||0)>0){ any=true;
     const it=document.createElement('div'); it.className='item';
-    it.innerHTML=`<div class="ic">${icons[r.id]?`<img src="${icons[r.id]}">`:''}</div><div class="nm">${T(r.id)} ×${inv[r.id]}</div>`;
+    it.innerHTML=`<div class="ic">${getIcon(r.id)?`<img src="${getIcon(r.id)}">`:''}</div><div class="nm">${nm(r.id)} ×${inv[r.id]}</div>`;
     it.onclick=()=>{ hideScrims(); startPlacing(r.id); };
     g.appendChild(it);
   }
@@ -368,18 +510,19 @@ function openPlaceMenu(){
 
 /* ===================== Colocación (ghost) ===================== */
 let placing=null, placeYaw=0, ghost=null, building=false, buildT=0;
-const placedTables=[];
+const placedObjs=[], doorPivots=[];
 const PLACE_MIN=1.6, PLACE_MAX=5.5;
 function ghostMat(){return new THREE.MeshStandardMaterial({color:0x2ad24a,transparent:true,opacity:0.55,emissive:0x0d5a1c,emissiveIntensity:0.5});}
 function startPlacing(id){
+  if(!MODELS[id]){ toast(T('empty')); return; }
   placing=id; placeYaw=0;
-  ghost=buildTable(); ghost.traverse(o=>{if(o.isMesh)o.material=ghostMat();}); ghost.userData.box=new THREE.Box3();
+  ghost=MODELS[id](); ghost.traverse(o=>{if(o.isMesh)o.material=ghostMat();});
   scene.add(ghost);
   $('bRot').classList.remove('hidden'); $('bPlace').classList.add('on'); refreshHints();
 }
 function stopPlacing(){ if(ghost){scene.remove(ghost);ghost.traverse(o=>{if(o.geometry)o.geometry.dispose();});ghost=null;} placing=null; building=false;
   $('bRot').classList.add('hidden'); $('bPlace').classList.remove('on'); refreshHints(); }
-const _fwd=new THREE.Vector3(),_gp=new THREE.Vector3();
+const _fwd=new THREE.Vector3(),_gp=new THREE.Vector3(),_wp=new THREE.Vector3();
 function updateGhost(){
   if(!ghost) return;
   // dirección de mirada (yaw+pitch); intersecta el suelo y=0, con distancia limitada
@@ -391,16 +534,18 @@ function updateGhost(){
   ghost.position.copy(_gp); ghost.rotation.y=placeYaw; ghost.updateMatrixWorld();
   // validación: dentro del mapa y sin pisar otra mesa
   let valid=Math.abs(_gp.x)<GROUND_LIMIT-1&&Math.abs(_gp.z)<GROUND_LIMIT-1;
-  for(const p of placedTables){ if(p.position.distanceTo(_gp)<1.4){valid=false;break;} }
+  for(const p of placedObjs){ if(p.position.distanceTo(_gp)<1.2){valid=false;break;} }
   ghost.userData.valid=valid;
   const col=valid?0x2ad24a:0xff3b3b, em=valid?0x0d5a1c:0x5a0d0d;
   ghost.traverse(o=>{if(o.isMesh){o.material.color.setHex(col);o.material.emissive.setHex(em);}});
 }
 function tryBuild(){ if(!placing||building||!ghost||!ghost.userData.valid) return; building=true; buildT=0; emitDirt(ghost.position); }
 function finishBuild(){
-  const m=buildTable(); m.position.copy(ghost.position); m.rotation.y=placeYaw; m.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
-  scene.add(m); placedTables.push(m); inv.table=Math.max(0,inv.table-1);
-  stopPlacing();
+  const id=placing; const m=MODELS[id](); m.position.copy(ghost.position); m.rotation.y=placeYaw; m.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
+  m.userData.recipe=id; scene.add(m); placedObjs.push(m);
+  if(m.userData.doorPivot) doorPivots.push(m.userData.doorPivot);
+  inv[id]=Math.max(0,(inv[id]||0)-1);
+  const isTable=(id==='mesa'); stopPlacing();
 }
 
 /* ===================== Partículas de tierra ===================== */
@@ -419,7 +564,7 @@ signEl.addEventListener('pointercancel',()=>{holding=false;holdT=0;signFill.styl
 function updateSign(dt){
   // mesa más cercana dentro de ~3m
   nearTable=null; let bd=9;
-  for(const m of placedTables){const d=m.position.distanceTo(player.pos);if(d<3&&d<bd){bd=d;nearTable=m;}}
+  for(const m of placedObjs){ if(m.userData.recipe!=='mesa')continue; const d=m.position.distanceTo(player.pos);if(d<3&&d<bd){bd=d;nearTable=m;}}
   if(!nearTable||placing){ signEl.style.display='none'; holding=false; signFill.style.width='0%'; return; }
   _proj.copy(nearTable.position); _proj.y+=1.15; _proj.project(camera);
   if(_proj.z>1){ signEl.style.display='none'; return; }
@@ -462,11 +607,13 @@ function update(dt){
   euler.set(player.pitch+shy,player.yaw+shx,player.roll+shr); camera.quaternion.setFromEuler(euler);
   sunLight.position.set(player.pos.x+sun.position.x*0.4,sun.position.y,player.pos.z+sun.position.z*0.4); sunLight.target.position.copy(player.pos); sunLight.target.updateMatrixWorld();
   // martillo: animación de golpe
-  if(swing.active){ swing.t+=dt/0.42; const a=Math.sin(Math.min(swing.t,1)*Math.PI); fpHammer.rotation.x=FPH_BASE.x-a*1.2; if(swing.t>=1){swing.active=false;fpHammer.rotation.copy(FPH_BASE);} }
+  if(swing.active){ swing.t+=dt/0.42; const a=Math.sin(Math.min(swing.t,1)*Math.PI); fpRig.rotation.x=FPH_BASE.x-a*1.2; if(swing.t>=1){swing.active=false;fpRig.rotation.copy(FPH_BASE);} }
   // colocación
   if(placing&&!building) updateGhost();
   if(building){ buildT+=dt; const k=Math.min(1,buildT/0.5); if(ghost){ghost.scale.setScalar(0.2+0.8*k);} if(buildT>=0.5) finishBuild(); }
   tickDirt(dt);
+  // puertas: se abren al acercarse (provisorio; la puerta con física cannon.js viene en la Parte 2)
+  for(const p of doorPivots){ p.getWorldPosition(_wp); const tgt=_wp.distanceTo(player.pos)<2.2?-1.35:0; p.rotation.y+=(tgt-p.rotation.y)*Math.min(1,8*dt); }
   updateSign(dt);
   if(toastT>0){toastT-=dt;if(toastT<=0)refreshHints();}
 }
@@ -496,11 +643,11 @@ document.querySelectorAll('#rotSeg button').forEach(b=>b.addEventListener('click
 document.querySelector('#langSeg button[data-lang="es"]').classList.add('active');
 document.querySelector('#rotSeg button[data-r="on"]').classList.add('active');
 
+$('devGive').addEventListener('click',e=>{e.stopPropagation();addResources();});
+
 /* ===================== Init ===================== */
 try{
   layout();
-  icons.hammer=captureIcon(buildHammer(),[0.2,0.7,0.3]);
-  icons.table =captureIcon(buildTable(),[0.35,0.6,0]);
   applyLang(); refreshHints();
   setTimeout(()=>$('loader').classList.add('hide'),250);
 }catch(err){ console.error('Init',err); }
