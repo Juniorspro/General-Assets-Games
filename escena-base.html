@@ -411,7 +411,16 @@ function makeGif(url){ const o={tex:new THREE.CanvasTexture(document.createEleme
     const cv=o.tex.image; cv.width=128; cv.height=192; o.cx=cv.getContext('2d'); o.ready=true; } })();
   return o; }
 const fireGifs=[makeGif(GIFB+'2spnJPK.gif'),makeGif(GIFB+'db5a4595bac1960e5b7cc0a35544140b.gif')];   // llama grande + llamas altas
-const gExpl=makeGif(EXBASE+'expl.gif'), gFcam=makeGif(EXBASE+'firecam.gif'), gFcam2=makeGif(EXBASE+'firecam2.gif');   // explosión + fuegos 3D (la textura cuadrada de piso se sacó)
+const gFcam=makeGif(EXBASE+'firecam.gif'), gFcam2=makeGif(EXBASE+'firecam2.gif');   // fuegos 3D que quedan (la explosión ahora es el VIDEO)
+/* ===== VIDEO de explosión (mp4) con luma-key (borra el fondo negro) ===== */
+const EXVID='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@b9f400e/assets/video/expl.mp4';
+const explVideo=document.createElement('video'); explVideo.src=EXVID; explVideo.crossOrigin='anonymous'; explVideo.muted=true; explVideo.loop=true; explVideo.playsInline=true; explVideo.setAttribute('playsinline',''); explVideo.preload='auto';
+const explVideoTex=new THREE.VideoTexture(explVideo); explVideoTex.colorSpace=THREE.SRGBColorSpace;
+let _evStarted=false; function startExplVideo(){ if(_evStarted)return; _evStarted=true; explVideo.play().catch(()=>{}); }
+addEventListener('pointerdown',startExplVideo);
+function explVidMat(){ return new THREE.ShaderMaterial({ uniforms:{ map:{value:explVideoTex}, uOp:{value:1} }, transparent:true, depthWrite:false, side:THREE.DoubleSide,
+  vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader:'uniform sampler2D map; uniform float uOp; varying vec2 vUv; void main(){ vec4 c=texture2D(map,vUv); float l=max(c.r,max(c.g,c.b)); float a=smoothstep(0.05,0.22,l); if(a<0.02) discard; gl_FragColor=vec4(c.rgb,a*uOp); }' }); }
 function tickGifs(dt){ for(const o of animGifs){ if(!o.ready||!o.cx)continue;
   if(o.frames.length){ let t=performance.now()%o.total,idx=0; for(let i=0;i<o.delays.length;i++){ if(t<o.delays[i]){idx=i;break;} t-=o.delays[i]; }
     const f=o.frames[idx],cv=o.tex.image; if(cv.width!==f.width){cv.width=f.width;cv.height=f.height;} o.cx.clearRect(0,0,cv.width,cv.height); o.cx.drawImage(f,0,0); o.tex.needsUpdate=true; }
@@ -434,18 +443,21 @@ function tickProjectiles(dt){ for(let i=projectiles.length-1;i>=0;i--){ const p=
   p.vel.y-=GRAV*dt; p.mesh.position.addScaledVector(p.vel,dt); p.mesh.rotation.x+=p.rot.x*dt; p.mesh.rotation.z+=p.rot.z*dt;
   let gy=0; for(const f of floors){ if(p.mesh.position.x>f.minx&&p.mesh.position.x<f.maxx&&p.mesh.position.z>f.minz&&p.mesh.position.z<f.maxz&&f.top>gy) gy=f.top; }
   if(p.mesh.position.y<=gy+0.12){ explodeAt(p.mesh.position.clone(),gy); scene.remove(p.mesh); p.mesh.traverse(o=>{if(o.geometry)o.geometry.dispose();}); projectiles.splice(i,1); } } }
-function explodeAt(pos,gy){ gy=gy||0;
-  const ex=billboardFx(gExpl.tex,3.2); ex.position.set(pos.x,gy+1.1,pos.z); scene.add(ex); fx.push({o:ex,kind:'expl',t:0,dur:0.7});                 // 1) explosión que TAPA todo
-  // 2) fuegos 3D (miran a la cámara) que se ESPARCEN progresivamente (sin textura cuadrada de piso)
-  for(let k=0;k<9;k++){ const a=Math.random()*6.28, r=0.15+Math.random()*1.7, tx=(k%2)?gFcam2.tex:gFcam.tex, low=k%3===0;
+function explodeAt(pos,gy){ gy=gy||0; startExplVideo();
+  // 1) EXPLOSIÓN = varios billboards del VIDEO (miran a la cámara, fondo negro borrado)
+  for(let k=0;k<4;k++){ const sz=2.4+k*0.45+Math.random()*0.6, m=new THREE.Mesh(new THREE.PlaneGeometry(1,1),explVidMat());
+    m.scale.set(sz,sz,1); m.position.set(pos.x+(Math.random()-.5)*0.7, gy+0.9+Math.random()*0.5, pos.z+(Math.random()-.5)*0.7); scene.add(m);
+    fx.push({o:m,kind:'vexpl',t:0,dur:0.85+k*0.08,sz}); }
+  // 2) fuegos 3D que quedan, esparciéndose (miran a la cámara)
+  for(let k=0;k<7;k++){ const a=Math.random()*6.28, r=0.15+Math.random()*1.7, tx=(k%2)?gFcam2.tex:gFcam.tex, low=k%3===0;
     const f=billboardFx(tx,(low?0.7:1.0)+Math.random()*0.6); f.material.opacity=0;
     f.position.set(pos.x+Math.cos(a)*r, gy+(low?0.32:0.55)+Math.random()*0.2, pos.z+Math.sin(a)*r); scene.add(f);
-    fx.push({o:f,kind:'fade',t:0,dur:4+Math.random()*2,delay:0.35+k*0.1+Math.random()*0.1,max:0.9}); }
-  const L=new THREE.PointLight(0xff8a3a,4,14,2); L.position.set(pos.x,gy+1.1,pos.z); scene.add(L); fx.push({o:L,kind:'light',t:0,dur:3.2});           // 3) luz
+    fx.push({o:f,kind:'fade',t:0,dur:4+Math.random()*2,delay:0.45+k*0.12+Math.random()*0.1,max:0.9}); }
+  const L=new THREE.PointLight(0xff8a3a,4.5,15,2); L.position.set(pos.x,gy+1.1,pos.z); scene.add(L); fx.push({o:L,kind:'light',t:0,dur:3.2});           // 3) luz
 }
 function tickFx(dt){ for(let i=fx.length-1;i>=0;i--){ const e=fx[i]; e.t+=dt; const d=e.delay||0;
-  if(e.kind==='expl'){ const k=e.t/e.dur; e.o.material.opacity=Math.max(0,1-k*k); e.o.scale.setScalar(3.4*(0.55+k*0.7)); }
-  else if(e.kind==='light'){ e.o.intensity=Math.max(0,5*(1-e.t/e.dur))*(0.7+Math.random()*0.3); }
+  if(e.kind==='vexpl'){ const k=e.t/e.dur; e.o.material.uniforms.uOp.value=Math.max(0,1-k*k); const s=e.sz*(0.7+k*0.55); e.o.scale.set(s,s,1); e.o.quaternion.copy(camera.quaternion); }
+  else if(e.kind==='light'){ e.o.intensity=Math.max(0,4.5*(1-e.t/e.dur))*(0.7+Math.random()*0.3); }
   else { const ft=e.t-d; let o=0; if(ft>0) o=Math.min(1,ft/0.5)*Math.min(1,(e.dur-e.t)/1.2); e.o.material.opacity=Math.max(0,o)*(e.max||0.85); }
   if(e.t>=e.dur){ scene.remove(e.o); if(e.o.material)e.o.material.dispose(); if(e.o.geometry)e.o.geometry.dispose(); fx.splice(i,1); } } }
 
