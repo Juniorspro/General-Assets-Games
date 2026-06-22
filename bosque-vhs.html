@@ -775,7 +775,7 @@ function terrainHeight(x,z){const corridor=Math.min(1,Math.max(0,(Math.abs(x)-(R
 const W={x0:-7,x1:6,z0:-16,z1:15};   // mapa ~10x más grande (con streaming por chunks)
 const Xmin=W.x0*CHUNK,Xmax=(W.x1+1)*CHUNK,Zmin=W.z0*CHUNK,Zmax=(W.z1+1)*CHUNK;
 const gsX=Xmax-Xmin+40,gsZ=Zmax-Zmin+40;
-const groundGeo=new THREE.PlaneGeometry(gsX,gsZ,Math.round(gsX/8),Math.round(gsZ/8));groundGeo.rotateX(-Math.PI/2);
+const groundGeo=new THREE.PlaneGeometry(gsX,gsZ,Math.round(gsX/5),Math.round(gsZ/5));groundGeo.rotateX(-Math.PI/2);   // malla más fina → la superficie sigue al terreno (sin que la vegetación quede flotando en lomas)
 groundGeo.translate((Xmin+Xmax)/2,0,(Zmin+Zmax)/2);
 {const p=groundGeo.attributes.position;for(let i=0;i<p.count;i++)p.setY(i,terrainHeight(p.getX(i),p.getZ(i)));groundGeo.computeVertexNormals();}
 const ground=new THREE.Mesh(groundGeo,new THREE.MeshStandardMaterial({map:groundTexture(),roughness:0.96,metalness:0,color:0xb9c79a}));
@@ -852,7 +852,7 @@ const _ti_o=new THREE.Object3D(), _ti_q=new THREE.Quaternion(), _ti_e=new THREE.
 _ti_hide.setPosition(0,-9999,0);
 // recompone la matriz de instancia de un árbol vivo (shrink al talar + wiggle del golpe) y sus hojas
 function updateTreeInstance(t){
-  const ty=terrainHeight(t.x,t.z)-0.05; const sc=t.scl*(t.curScale==null?1:t.curScale);
+  const ty=terrainHeight(t.x,t.z)-0.18; const sc=t.scl*(t.curScale==null?1:t.curScale);
   _ti_q.setFromEuler(_ti_e.set(0,t.rotY,t.wig||0));
   _ti_m.compose(_ti_p.set(t.x,ty,t.z),_ti_q,_ti_s.setScalar(sc));
   t.tim.setMatrixAt(t.timIdx,_ti_m); t.tim.instanceMatrix.needsUpdate=true;
@@ -879,7 +879,7 @@ function buildChunk(cx,cz){
     const lim=new THREE.InstancedMesh(LEAF_PLANE,leafMat,list.length*Ln); lim.castShadow=false; lim.frustumCulled=false;
     // (matrices en coords de mundo + malla en el origen del chunk → el culling lo hace el GRUPO del chunk, no cada InstancedMesh)
     let lk=0;
-    for(let n=0;n<list.length;n++){const td=list[n]; const ty=terrainHeight(td.x,td.z)-0.05;
+    for(let n=0;n<list.length;n++){const td=list[n]; const ty=terrainHeight(td.x,td.z)-0.18;
       _ti_q.setFromEuler(_ti_e.set(0,td.rotY,0)); _ti_m.compose(_ti_p.set(td.x,ty,td.z),_ti_q,_ti_s.setScalar(td.scl));
       tim.setMatrixAt(n,_ti_m);
       const lStart=lk; for(let j=0;j<Ln;j++){_ti_lm.multiplyMatrices(_ti_m,V.leaves[j].m); lim.setMatrixAt(lk,_ti_lm); lim.setColorAt(lk,V.leaves[j].c); lk++;}
@@ -895,7 +895,7 @@ function buildChunk(cx,cz){
   const dm=new THREE.Object3D();const gc=new THREE.Color();const fol=[];const cveg=[];
   const scatter=(geo,mat,n,sMin,sMax,tintL)=>{ if(n<=0)return; const im=new THREE.InstancedMesh(geo,mat,n);let k=0;
     for(let i=0;i<n;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+1.2)continue;
-      dm.position.set(x,terrainHeight(x,z),z);dm.rotation.set(0,rng()*6.28,0);const s=sMin+rng()*(sMax-sMin);dm.scale.set(s,s,s);dm.updateMatrix();
+      dm.position.set(x,terrainHeight(x,z)-0.12,z);dm.rotation.set(0,rng()*6.28,0);const s=sMin+rng()*(sMax-sMin);dm.scale.set(s,s,s);dm.updateMatrix();   // base un poco enterrada → pegada al suelo
       im.setMatrixAt(k,dm.matrix);gc.setHSL(0.25+(rng()-0.5)*0.04,0.30+rng()*0.2,tintL*(0.82+rng()*0.36));im.setColorAt(k,gc);cveg.push({im,idx:k,x,z,cut:false});k++;}
     im.count=k;im.instanceMatrix.needsUpdate=true;if(im.instanceColor)im.instanceColor.needsUpdate=true;grp.add(im);fol.push(im);};
   const gN=Math.round(qual.grassN*densityMul);
@@ -1144,7 +1144,7 @@ function cutVegetation(sy,cy){ let best=null,bd=10;
   spawnShards(best.x,terrainHeight(best.x,best.z)+0.2,best.z,best.im.material.map,_vc,5); chopSound();
 }
 function tickShards(dt){ for(const s of shards){ if(s.life<=0)continue; s.life-=dt; s.v.y-=9*dt; s.m.position.addScaledVector(s.v,dt);
-  s.m.rotation.x+=s.rv.x*dt;s.m.rotation.y+=s.rv.y*dt;s.m.rotation.z+=s.rv.z*dt; if(s.m.position.y<0.06){s.m.position.y=0.06;s.v.set(0,0,0);s.rv.multiplyScalar(0.8);}
+  s.m.rotation.x+=s.rv.x*dt;s.m.rotation.y+=s.rv.y*dt;s.m.rotation.z+=s.rv.z*dt; const sfy=terrainHeight(s.m.position.x,s.m.position.z)+0.05; if(s.m.position.y<sfy){s.m.position.y=sfy;s.v.set(0,0,0);s.rv.multiplyScalar(0.8);}   // caen al SUELO real (no al nivel del mar)
   if(s.life<1)s.m.material.opacity=Math.max(0,s.life); if(s.life<=0)s.m.visible=false; } }
 // ===== física de tala (cannon-es) =====
 let physWorld=null,physGround=null; const oMat=new CANNON.Material('o'),gMat=new CANNON.Material('g'); const _up=new THREE.Vector3();
@@ -1154,7 +1154,7 @@ function ensureWorld(){ if(physWorld)return; physWorld=new CANNON.World({gravity
   physGround=new CANNON.Body({type:CANNON.Body.STATIC,shape:new CANNON.Plane(),material:gMat}); physGround.collisionFilterGroup=1; physGround.collisionFilterMask=2; physGround.quaternion.setFromEuler(-Math.PI/2,0,0); physWorld.addBody(physGround); }
 function felltree(t){ if(t.state!=='alive')return; ensureWorld();
   // construir una MALLA REAL para la caída/fundido (la instancia viva se oculta) → tala idéntica a antes
-  const V=TREE_VARIANTS[t.vi]; const ty=terrainHeight(t.x,t.z)-0.05;
+  const V=TREE_VARIANTS[t.vi]; const ty=terrainHeight(t.x,t.z)-0.18;
   const tg=new THREE.Group(); tg.position.set(t.x,ty,t.z); tg.rotation.y=t.rotY; tg.scale.setScalar(t.scl*(t.curScale||1));
   const trM=new THREE.Mesh(V.trunkGeometry,barkMat); trM.castShadow=true; trM.receiveShadow=true; tg.add(trM);
   const lvM=new THREE.InstancedMesh(LEAF_PLANE,leafMat,V.leaves.length);
@@ -1217,7 +1217,7 @@ function chopTick(dt){
   // debris físico
   for(let i=debris.length-1;i>=0;i--){const d=debris[i]; d.life-=dt; d.m.position.copy(d.b.position); d.m.quaternion.copy(d.b.quaternion); if(d.life<=0){scene.remove(d.m);if(physWorld)physWorld.removeBody(d.b);debris.splice(i,1);}}
   // astillas
-  for(let i=0;i<PART_MAX;i++){const s=pst[i]; if(s.life>0){s.life-=dt;s.v.y-=9.8*dt;s.p.addScaledVector(s.v,dt);s.r.x+=s.rv.x*dt;s.r.y+=s.rv.y*dt;s.r.z+=s.rv.z*dt;_po.position.copy(s.p);_po.rotation.copy(s.r);_po.scale.setScalar(1);}else{_po.position.set(0,-9999,0);_po.scale.setScalar(0.0001);}_po.updateMatrix();parts.setMatrixAt(i,_po.matrix);}
+  for(let i=0;i<PART_MAX;i++){const s=pst[i]; if(s.life>0){s.life-=dt;s.v.y-=9.8*dt;s.p.addScaledVector(s.v,dt);const pfy=terrainHeight(s.p.x,s.p.z)+0.04; if(s.p.y<pfy){s.p.y=pfy;s.v.y*=-0.35;s.v.x*=0.6;s.v.z*=0.6;}  /* rebotan en el suelo, no lo atraviesan */ s.r.x+=s.rv.x*dt;s.r.y+=s.rv.y*dt;s.r.z+=s.rv.z*dt;_po.position.copy(s.p);_po.rotation.copy(s.r);_po.scale.setScalar(1);}else{_po.position.set(0,-9999,0);_po.scale.setScalar(0.0001);}_po.updateMatrix();parts.setMatrixAt(i,_po.matrix);}
   parts.instanceMatrix.needsUpdate=true;
   tickShards(dt);
   // troncos: caer, asentarse, contorno dorado, recoger
