@@ -492,7 +492,7 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { EffectComposer, RenderPass, EffectPass, Effect, BloomEffect, HueSaturationEffect,
-         ToneMappingEffect, ToneMappingMode, SMAAEffect } from 'postprocessing';
+         ToneMappingEffect, ToneMappingMode, SMAAEffect, SSAOEffect, NormalPass, VignetteEffect, BlendFunction } from 'postprocessing';
 
 /* ===== Filtro VHS opcional (un solo efecto, sin taps → no convolution) ===== */
 const VHS_FRAG=/* glsl */`
@@ -561,7 +561,7 @@ const Q=PRESETS[DEV.tier];
 // 'shadow' = ¿hay sombras?(>0 activa); 'shadowRes' = resolución por defecto del shadow-map (256 en baja/media-baja, 512 en media+).
 const QUALITY={
   vlow:  {radial:4, shadow:0,    shadowRes:256, leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
-  low:   {radial:5, shadow:256,  shadowRes:256, leaf:90,  grassN:320, plantN:26, rockN:6,  density:8,  streamR:1, dpr:1.3, res:0.8, bloom:false, aa:true,  rdist:120, chunkBudget:1},
+  low:   {radial:5, shadow:0,    shadowRes:256, leaf:90,  grassN:320, plantN:26, rockN:6,  density:8,  streamR:1, dpr:1.3, res:0.8, bloom:false, aa:true,  rdist:120, chunkBudget:1},   // bajos: SIN sombras pero CON luz PBR
   medium:{radial:6, shadow:512,  shadowRes:512, leaf:120, grassN:420, plantN:50, rockN:9,  density:6,  streamR:2, dpr:1.6, res:1.0, bloom:true,  aa:true,  rdist:140, chunkBudget:1},
   high:  {radial:6, shadow:512,  shadowRes:512, leaf:200, grassN:780, plantN:80, rockN:12, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:180, chunkBudget:1},
   vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:240, chunkBudget:2},
@@ -970,16 +970,23 @@ function upgradeNearChunk(dt){
 }
 
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
-let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null;
+let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null,ssaoPass=null,normalPass=null,vignetteEffect=null;
 let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuResScale=1.0;
 let cycleOn=true, cyclePhase=0, envCycleTimer=0, lastEnvElev=999; const A_ELEV=34, THETA0=0.15;   // arranca al AMANECER (sol bajo subiendo → mañana → mediodía), ciclo día/noche 24 min
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
   composer.addPass(new RenderPass(scene,camera));
+  // SSAO súper optimizado: AO a MEDIA resolución, pocas muestras y radio corto (contacto). Sólo se ENCIENDE en medio+.
+  normalPass=new NormalPass(scene,camera); normalPass.enabled=false; composer.addPass(normalPass);
+  const ssao=new SSAOEffect(camera,normalPass.texture,{ blendFunction:BlendFunction.MULTIPLY, samples:9, rings:4, distanceScaling:true,
+    radius:0.085, intensity:1.7, luminanceInfluence:0.7, resolutionScale:0.5,
+    worldDistanceThreshold:50, worldDistanceFalloff:20, worldProximityThreshold:6, worldProximityFalloff:3 });
+  ssaoPass=new EffectPass(camera,ssao); ssaoPass.enabled=false; composer.addPass(ssaoPass);
   bloomEffect=new BloomEffect({intensity:0.32,luminanceThreshold:0.85,luminanceSmoothing:0.25,mipmapBlur:true,radius:0.6});
   hueSat=new HueSaturationEffect({saturation:0,hue:0});
   const tone=new ToneMappingEffect({mode:ToneMappingMode.AGX});      // tonemap filmico realista
-  composer.addPass(new EffectPass(camera,bloomEffect,hueSat,tone));   // bloom = única convolution → OK
+  vignetteEffect=new VignetteEffect({offset:0.42,darkness:0.4});    // viñeta LEVE (sólo en los bordes → sensación de profundidad) en TODOS los gráficos
+  composer.addPass(new EffectPass(camera,bloomEffect,hueSat,tone,vignetteEffect));
   smaaPass=new EffectPass(camera,new SMAAEffect());
   composer.addPass(smaaPass);
 }
@@ -2068,6 +2075,8 @@ function setQuality(t){
   DPRCAP=qual.dpr; resScale=qual.res; if($('res')){$('res').value=Math.round(qual.res*100);$('resVal').textContent=Math.round(qual.res*100)+'%';}
   if(bloomEffect)bloomEffect.intensity=qual.bloom?0.32:0.0;
   aaOn=qual.aa; if(smaaPass)smaaPass.enabled=aaOn; if($('aaSw'))$('aaSw').classList.toggle('on',aaOn);
+  const useSsao=(t==='medium'||t==='high'||t==='vhigh');   // SSAO en medio y superiores (en bajos no, pero la luz PBR queda)
+  if(ssaoPass)ssaoPass.enabled=useSsao; if(normalPass)normalPass.enabled=useSsao;
   renderDist=qual.rdist; if($('dist')){$('dist').value=renderDist;$('distVal').textContent=renderDist+' m';} scene.fog.density=Math.max(0.005,0.85/renderDist);
   layout();
 }
