@@ -2036,8 +2036,7 @@ ctapBtn('bRot',()=>{ placeYaw=(placeYaw+Math.PI/4)%(Math.PI*2); });
 $('flash').addEventListener('pointerdown',()=>{ if(equipped==='botella'){ throwMolotov(); startWSwing(); return; } if(equipped) startWSwing(); if(placing) tryBuild(); });
 // per-frame tick del crafteo, llamado desde update()
 function craftTick(dt){
-  digShake*=0.9;   // decae el sacudón (cavar lo re-fija cada frame; el "atrapado" del enemigo lo deja decaer)
-  tickGifs(dt); tickProjectiles(dt); tickFx(dt); tickEnemy(dt);
+  tickGifs(dt); tickProjectiles(dt); tickFx(dt);
   const fb=(fireGifs[1].cur||0.6);
   for(const m of placedItems){ if(m.userData.kind==='fogata'&&m.userData.fire){ m.userData.fire.intensity=0.5+fb*2.4; } }
   if(equipped==='botella') updateHeldMolotov(dt);
@@ -2080,29 +2079,6 @@ const NGLB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@e83e5d2/
 loadGLBItem('pala','pala.glb',1.05,{base:NGLB,upright:true}); loadGLBItem('picoafil','pico.glb',1.0,{base:NGLB,upright:true,flip:true});
 // textura de barro real (Higgsfield) sobre el barro de la chatarra; si falla, queda la procedural
 gtex(NGLB+'barro.png',true).then(t=>{ t.wrapS=t.wrapT=THREE.RepeatWrapping; barroMat.map=t; barroMat.needsUpdate=true; }).catch(()=>{});
-
-/* ===== ENEMIGO que persigue (GLB rigueado, animación RunFast) ===== */
-let enemy=null, enemyMixer=null, enemyActive=false, enemyCatchT=0; const ENEMY_SPEED=3.8, ENEMY_FACE=0;
-gltfL.load(NGLB+'enemy.glb', gl=>{ const inner=gl.scene;
-  let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=1.95/(sz.y||1); inner.scale.setScalar(s);
-  b=new THREE.Box3().setFromObject(inner); const c=b.getCenter(new THREE.Vector3()); inner.position.set(-c.x,-b.min.y,-c.z);   // pies en el origen
-  inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
-  enemy=new THREE.Group(); enemy.add(inner); enemy.visible=false; scene.add(enemy);
-  enemyMixer=new THREE.AnimationMixer(inner);
-  if(gl.animations&&gl.animations.length){ enemyMixer.clipAction(gl.animations[0]).play(); }
-}, undefined, ()=>{});
-function placeEnemyFar(){ if(!enemy)return; const a=player.yaw+Math.PI+(Math.random()-0.5); const r=42+Math.random()*10;   // aparece lejos, detrás-ish
-  enemy.position.set(player.pos.x-Math.sin(a)*r, 0, player.pos.z-Math.cos(a)*r); enemy.position.y=terrainHeight(enemy.position.x,enemy.position.z); }
-function tickEnemy(dt){ if(!enemy)return;
-  if(!enemyActive){ enemyActive=true; placeEnemyFar(); enemy.visible=true; }
-  if(enemyMixer)enemyMixer.update(dt);
-  const dx=player.pos.x-enemy.position.x, dz=player.pos.z-enemy.position.z, d=Math.hypot(dx,dz)||1;
-  if(d>1.5){ const sp=ENEMY_SPEED*dt; enemy.position.x+=dx/d*sp; enemy.position.z+=dz/d*sp; }
-  enemy.position.y=terrainHeight(enemy.position.x,enemy.position.z);
-  enemy.rotation.y=Math.atan2(dx,dz)+ENEMY_FACE;   // mira al jugador
-  enemyCatchT=Math.max(0,enemyCatchT-dt);
-  if(d<1.7&&enemyCatchT<=0){ enemyCatchT=2.0; digShake=1; if(typeof chopSound==='function')chopSound(); placeEnemyFar(); }   // te atrapa: sacudón fuerte + reaparece lejos
-}
 
 /* ===================== LOOP ===================== */
 addEventListener('resize',layout);
