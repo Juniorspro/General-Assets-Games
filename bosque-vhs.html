@@ -890,29 +890,31 @@ function disposeChunk(c){
   scene.remove(c.grp);
   c.grp.traverse(o=>{if(o.isInstancedMesh)o.dispose();});   // libera buffers de instancias
   if(c.ownGeos)for(const g of c.ownGeos)g.dispose();          // libera SÓLO geometrías propias (no las compartidas)
-  for(const t of c.trees){const i=trees.indexOf(t);if(i>=0)trees.splice(i,1);if(t.body&&physWorld){physWorld.removeBody(t.body);t.body=null;}}
+  for(const t of c.trees){const i=trees.indexOf(t);if(i>=0)trees.splice(i,1);if(t.body&&physWorld){physWorld.removeBody(t.body);t.body=null;}
+    if(t.tg){scene.remove(t.tg);t.tg.traverse(o=>{if(o.isInstancedMesh)o.dispose();if(o.material&&o.material!==barkMat&&o.material!==leafMat&&o.material.dispose)o.material.dispose();});t.tg=null;}}  // malla real de un árbol que estaba cayendo (no toca geometría compartida)
   const ci=chunkList.indexOf(c);if(ci>=0)chunkList.splice(ci,1);
   builtChunks.delete(c.key);
 }
-// PRECARGA TOTAL: el mapa ENTERO se arma de una vez en la pantalla de carga (buildAllChunks),
-// así nunca se genera nada mientras caminás → cero tirones. En runtime no se streamea/descarga nada.
-function streamChunks(){ return 0; }   // no-op (queda por compatibilidad con llamadas viejas)
-function totalChunks(){ return (W.x1-W.x0+1)*(W.z1-W.z0+1); }
-// Construye TODOS los chunks de W (los que falten). Determinista: siempre los mismos.
-function buildAllChunks(){
-  for(let cx=W.x0;cx<=W.x1;cx++)for(let cz=W.z0;cz<=W.z1;cz++) buildChunk(cx,cz);
-}
-// Enciende las sombras de TODO el mundo de una (sin upgrade progresivo → sin hitch al acercarse).
-function enableAllShadows(){
-  if(qual.shadow<=0)return;
-  for(const c of chunkList){ if(c.upgraded)continue; c.upgraded=true; for(const m of c.shadowCasters)m.castShadow=true; }
-  renderer.shadowMap.needsUpdate=true;
+// STREAMING: sólo viven los chunks cercanos; se PRECARGAN por delante (R+1) y se descargan los lejanos (R+2).
+// Con los árboles instanciados (geometría compartida) armar un chunk es barato → streaming sin tirones.
+function streamChunks(budget,px,pz){
+  if(px==null)px=player.pos.x; if(pz==null)pz=player.pos.z;
+  const pcx=Math.floor(px/CHUNK),pcz=Math.floor(pz/CHUNK),R=qual.streamR,buildR=R+1,dropR=R+2;
+  for(const c of [...builtChunks.values()]) if(Math.max(Math.abs(c.cx-pcx),Math.abs(c.cz-pcz))>dropR) disposeChunk(c);
+  let made=0;
+  for(let r=0;r<=buildR&&made<budget;r++)for(let dx=-r;dx<=r&&made<budget;dx++)for(let dz=-r;dz<=r&&made<budget;dz++){
+    if(Math.max(Math.abs(dx),Math.abs(dz))!==r)continue;
+    const cx=pcx+dx,cz=pcz+dz;if(cx<W.x0||cx>W.x1||cz<W.z0||cz>W.z1)continue;
+    if(builtChunks.has(cx+'_'+cz))continue; buildChunk(cx,cz); made++;
+  }
+  if(made)document.getElementById('treeCount').textContent=trees.length;
+  return made;
 }
 function rebuildWorld(){
   for(const c of [...builtChunks.values()]) disposeChunk(c);
   for(const lg of logs){scene.remove(lg.m);} logs.length=0;
   for(const d of debris){scene.remove(d.m);} debris.length=0;
-  totalTrees=0; buildVariants(); buildAllChunks(); enableAllShadows(); document.getElementById('treeCount').textContent=trees.length;
+  totalTrees=0; buildVariants(); streamChunks(999); document.getElementById('treeCount').textContent=trees.length;
 }
 /* ===================== LOD DE SOMBRAS (upgrade progresivo de chunks) =====================
    FALLBACK SEGURO (no toco materiales/viento): los chunks nuevos nacen SIN castShadow
@@ -1871,7 +1873,8 @@ function update(dt){
         if(d2>=ld2){lm.visible=false;}
         else{lm.visible=true; const full=lm.userData.full||lm.count; lm.count=(d2<lnear2)?full:(lm.userData.half||full);}}}}
   chopTick(dt);
-  // Mundo precargado entero: NO se construye ni se actualizan sombras en runtime (cero tirones al caminar).
+  streamChunks(qual.chunkBudget||1);   // streaming por presupuesto de chunks/frame (barato: geometría de árboles compartida)
+  upgradeNearChunk(dt);                // LOD de sombras: activa castShadow del chunk cercano, 1 por vez (sin hitch)
   windU.uTime.value+=dt;
 }
 let shadowFrame=0;
@@ -2141,17 +2144,11 @@ let worldReady=false;
 function bootArea(done){
   document.getElementById('loader').classList.remove('hide');
   if(!TREE_VARIANTS.length)buildVariants();   // pool de variantes (geometría compartida) antes de armar chunks
-  // PRECARGA TOTAL del mapa, repartida en frames (barra fluida, sin congelar el navegador).
-  let cx=W.x0, cz=W.z0; const PER_FRAME=2;   // chunks armados por frame
+  const R=qual.streamR;   // sólo armamos el área inicial alrededor del spawn; el resto se streamea al caminar
   const build=()=>{
-    let n=0;
-    while(n<PER_FRAME && cx<=W.x1){
-      buildChunk(cx,cz); n++;
-      cz++; if(cz>W.z1){ cz=W.z0; cx++; }
-    }
-    document.getElementById('treeCount').textContent=trees.length;
-    if(cx<=W.x1) requestAnimationFrame(build);
-    else { enableAllShadows(); worldReady=true; hideLoader(); if(done)done(); }
+    streamChunks(3,0,4); document.getElementById('treeCount').textContent=trees.length;
+    let need=0; for(let dx=-R;dx<=R;dx++)for(let dz=-R;dz<=R;dz++){const cx=dx,cz=dz;if(cx<W.x0||cx>W.x1||cz<W.z0||cz>W.z1)continue;if(!builtChunks.has(cx+'_'+cz))need++;}
+    if(need>0)requestAnimationFrame(build); else{ worldReady=true; hideLoader(); if(done)done(); }
   };
   requestAnimationFrame(build);
 }
@@ -2168,7 +2165,7 @@ function startGame(){
       loadResScale=1.0;                                    // dejamos el modo carga (½ res) → resolución normal
       applyDefaults(); setQuality(curQuality); applyGodTextures(); layout();
       equipped='hacha'; equipItem('hacha'); fpAxe.visible=false;   // tomahawk = hacha permanente de por vida
-      const enter=()=>{ started=true; unlockAudio(); enterPlayMode(); fadeFromBlack(); };   // mundo ya precargado entero
+      const enter=()=>{ streamChunks(99,0,4); started=true; unlockAudio(); enterPlayMode(); fadeFromBlack(); };
       if(worldReady){ enter(); }
       else bootArea(enter);
     });
@@ -2188,12 +2185,14 @@ function showDevPick(){
 function showAssetLoad(){
   loadResScale=0.5; layout();    // contexto de render al 50% durante la carga (igual no se dibuja la escena, es negro)
   $('assetLoad').classList.remove('gone'); requestAnimationFrame(()=>$('assetLoad').classList.remove('fade'));
-  bootArea();                    // ← acá se arma el MAPA ENTERO (todos los chunks) antes de jugar
-  const total=totalChunks();
+  bootArea();                    // arma sólo el área inicial; el resto se streamea al caminar
+  const R=qual.streamR; let total=0;
+  for(let dx=-R;dx<=R;dx++)for(let dz=-R;dz<=R;dz++){const cx=dx,cz=dz;if(cx<W.x0||cx>W.x1||cz<W.z0||cz>W.z1)continue; total++;}
   const fill=$('alFill');
   const tick=()=>{
     if(worldReady){ fill.style.width='100%'; setTimeout(()=>fadeOutSlow($('assetLoad'),revealStartMenu),400); return; }
-    fill.style.width=(Math.min(0.97,total?builtChunks.size/total:0)*100)+'%'; requestAnimationFrame(tick);
+    let built=0; for(let dx=-R;dx<=R;dx++)for(let dz=-R;dz<=R;dz++){const cx=dx,cz=dz;if(cx<W.x0||cx>W.x1||cz<W.z0||cz>W.z1)continue; if(builtChunks.has(cx+'_'+cz))built++;}
+    fill.style.width=(Math.min(0.96,total?built/total:0)*100)+'%'; requestAnimationFrame(tick);
   };
   tick();
 }
