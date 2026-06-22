@@ -70,7 +70,8 @@
 {
   "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
   }
 }
 </script>
@@ -80,6 +81,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
+import * as CANNON from 'cannon-es';
 
 /* ===================== Render / escena ===================== */
 const app=document.getElementById('app');
@@ -107,6 +109,12 @@ moon.shadow.camera.left=-60; moon.shadow.camera.right=60; moon.shadow.camera.top
 scene.add(moon); scene.add(moon.target);
 scene.add(new THREE.HemisphereLight(0x3a557f,0x0d1108,0.6));
 scene.add(new THREE.AmbientLight(0x46506a,0.4));
+
+// ===== Físicas (cannon-es) para el RAGDOLL =====
+const world=new CANNON.World({gravity:new CANNON.Vec3(0,-9.82,0)});
+world.broadphase=new CANNON.SAPBroadphase(world); world.allowSleep=true; world.defaultContactMaterial.friction=0.4;
+const groundBody=new CANNON.Body({mass:0,shape:new CANNON.Plane()}); groundBody.quaternion.setFromEuler(-Math.PI/2,0,0); world.addBody(groundBody);
+let ragActive=0;
 
 /* ===================== Jugador (1ª persona) ===================== */
 const EYE=1.7, EYE_CROUCH=1.05, GRAV=22, JUMP_V=7.4, SPEED_MAX=6.4, ACCEL=11;
@@ -263,22 +271,59 @@ const _ray=new THREE.Raycaster();
 function tryKill(){ _ray.setFromCamera({x:0,y:0},camera); _ray.far=3.2;
   let best=null,bd=1e9; for(const n of npcs){ if(n.dead)continue; const h=_ray.intersectObject(n.group,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=n;} }
   if(best&&bd<3.2) killNPC(best); }
-function killNPC(inst){ inst.dead=true; for(const k in inst.mixers) inst.mixers[k].stopAllAction();
+function killNPC(inst){ if(inst.dead)return; inst.dead=true; for(const k in inst.mixers) inst.mixers[k].stopAllAction();
   const dx=inst.group.position.x-player.pos.x, dz=inst.group.position.z-player.pos.z, d=Math.hypot(dx,dz)||1;
-  inst.knock=new THREE.Vector3(dx/d*2.4,0,dz/d*2.4); inst.vy=3.0;          // empuje + impulso hacia arriba
-  inst.spin=new THREE.Vector3((1.5+Math.random()*2)*(dz>0?-1:1), (Math.random()-0.5)*2, (Math.random()-0.5)*3.5);   // tumbo
-  hitShake=0.6; }
+  const imp=new THREE.Vector3(dx/d*3.2, 2.2, dz/d*3.2);   // empuje del hachazo
+  hitShake=0.6; try{ startRagdoll(inst,imp); }catch(e){ console.warn('ragdoll',e); inst.simpleFall=true; } }
+
+/* ---------- RAGDOLL con cannon-es: un cuerpo por hueso + constraints, gravedad y colisión ---------- */
+const RAG=[ ['Hips','Spine',0.12],['Spine','Head',0.13],['Head',null,0.11],
+  ['LeftArm','LeftForeArm',0.05],['LeftForeArm','LeftHand',0.045],['RightArm','RightForeArm',0.05],['RightForeArm','RightHand',0.045],
+  ['LeftUpLeg','LeftLeg',0.07],['LeftLeg','LeftFoot',0.06],['RightUpLeg','RightLeg',0.07],['RightLeg','RightFoot',0.06] ];
+const RPAIRS=[['Hips','Spine'],['Spine','Head'],['Spine','LeftArm'],['Spine','RightArm'],['LeftArm','LeftForeArm'],['RightArm','RightForeArm'],['Hips','LeftUpLeg'],['Hips','RightUpLeg'],['LeftUpLeg','LeftLeg'],['RightUpLeg','RightLeg']];
+const _yUp=new THREE.Vector3(0,1,0), _q1=new THREE.Quaternion();
+function w2bl(pb,wv){ return wv.clone().sub(new THREE.Vector3(pb.position.x,pb.position.y,pb.position.z)).applyQuaternion(new THREE.Quaternion(pb.quaternion.x,pb.quaternion.y,pb.quaternion.z,pb.quaternion.w).invert()); }
+function startRagdoll(inst,imp){ const body=inst.bodies[inst.state]; if(!body)return; body.updateWorldMatrix(true,true);
+  inst.rag={recs:[],byBone:{},cons:[]};
+  for(const [bn,cn,r] of RAG){ const bone=body.getObjectByName(bn); if(!bone)continue;
+    const p0=bone.getWorldPosition(new THREE.Vector3());
+    const child=cn?body.getObjectByName(cn):null;
+    const p1=child?child.getWorldPosition(new THREE.Vector3()):p0.clone().add(new THREE.Vector3(0,0.14,0));
+    const center=p0.clone().add(p1).multiplyScalar(0.5); let dir=p1.clone().sub(p0); let len=dir.length();
+    if(len<0.04){len=0.12;dir.set(0,1,0);} else dir.divideScalar(len);
+    const qSeg=new THREE.Quaternion().setFromUnitVectors(_yUp,dir);
+    const pb=new CANNON.Body({mass:1.2, linearDamping:0.04, angularDamping:0.25,
+      position:new CANNON.Vec3(center.x,center.y,center.z)});
+    pb.quaternion.set(qSeg.x,qSeg.y,qSeg.z,qSeg.w);
+    pb.addShape(new CANNON.Box(new CANNON.Vec3(r,Math.max(0.05,len/2),r)));
+    pb.velocity.set(imp.x+(Math.random()-.5),imp.y,imp.z+(Math.random()-.5));
+    pb.angularVelocity.set((Math.random()-.5)*5,(Math.random()-.5)*4,(Math.random()-.5)*5);
+    world.addBody(pb);
+    const bq0=bone.getWorldQuaternion(new THREE.Quaternion());
+    const M=bq0.clone().multiply(qSeg.clone().invert());                 // boneWorld = M * bodyQuat
+    const rLocal=p0.clone().sub(center).applyQuaternion(qSeg.clone().invert());
+    const rec={bn,bone,pb,M,rLocal,isRoot:bn==='Hips'}; inst.rag.recs.push(rec); inst.rag.byBone[bn]=rec; }
+  for(const [a,b] of RPAIRS){ const A=inst.rag.byBone[a],B=inst.rag.byBone[b]; if(!A||!B)continue;
+    const jw=B.bone.getWorldPosition(new THREE.Vector3());
+    const c=new CANNON.PointToPointConstraint(A.pb,new CANNON.Vec3().copy(w2bl(A.pb,jw)),B.pb,new CANNON.Vec3().copy(w2bl(B.pb,jw)));
+    c.collideConnected=false; world.addConstraint(c); inst.rag.cons.push(c); }
+  ragActive++; }
+function stepRagdoll(inst){ const rag=inst.rag; if(!rag)return;
+  for(const rec of rag.recs){ const pb=rec.pb;
+    const qB=new THREE.Quaternion(pb.quaternion.x,pb.quaternion.y,pb.quaternion.z,pb.quaternion.w);
+    const qW=rec.M.clone().multiply(qB);                                  // hueso world = M*body
+    const pW=rec.bone.parent.getWorldQuaternion(_q1).invert();
+    rec.bone.quaternion.copy(pW.multiply(qW));
+    if(rec.isRoot){ const c=new THREE.Vector3(pb.position.x,pb.position.y,pb.position.z);
+      const jw=c.add(rec.rLocal.clone().applyQuaternion(qB)); rec.bone.parent.worldToLocal(jw); rec.bone.position.copy(jw); } } }
 
 function tickNPCs(dt){ if(!assetsReady)return;
   if(attackQueued){ attackQueued=false; tryKill(); }
   let nv=null,nd=25; for(const n of npcs){ if(n.mode!=='viewer'||n.dead)continue; const dx=n.group.position.x-player.pos.x,dz=n.group.position.z-player.pos.z,dd=dx*dx+dz*dz; if(dd<nd){nd=dd;nv=n;} }
   if(nv!==nearInst){ nearInst=nv; if(panel){ panel.style.display=nv?'flex':'none'; if(nv&&pName)pName.textContent=nv.T.name; } }
   for(const inst of npcs){
-    if(inst.dead){ const g=inst.group;                                // muerte con física: gravedad + tumbo + rebote
-      inst.vy-=18*dt; g.position.y+=inst.vy*dt;
-      if(g.position.y<0){ g.position.y=0; inst.vy=Math.abs(inst.vy)>0.7?-inst.vy*0.32:0; inst.spin.multiplyScalar(0.55); if(inst.knock)inst.knock.multiplyScalar(0.5); }
-      if(inst.knock){ g.position.x+=inst.knock.x*dt; g.position.z+=inst.knock.z*dt; inst.knock.multiplyScalar(1-1.4*dt); }
-      g.rotation.x+=inst.spin.x*dt; g.rotation.y+=inst.spin.y*dt; g.rotation.z+=inst.spin.z*dt; inst.spin.multiplyScalar(1-1.2*dt);
+    if(inst.dead){ if(inst.rag) stepRagdoll(inst);                     // ragdoll cannon-es maneja la caída
+      else if(inst.simpleFall){ const g=inst.group; inst.vy=(inst.vy||0)-18*dt; g.position.y=Math.max(0,g.position.y+inst.vy*dt); g.rotation.x=Math.min(Math.PI/2,(g.rotation.x||0)+2*dt); }
       continue; }
     if(inst.mixers[inst.state]) inst.mixers[inst.state].update(dt);
     for(const f of inst.flames){ const k=0.65+Math.random()*0.55; f.light.intensity=6*k; f.spr.material.opacity=0.6+0.4*Math.random(); }   // titilar antorcha
@@ -310,6 +355,7 @@ function update(dt){
   euler.set(player.pitch,player.yaw,player.roll); camera.quaternion.setFromEuler(euler);
   if(hitShake>0.0001){ camera.rotateZ((Math.random()-0.5)*0.07*hitShake); camera.rotateX((Math.random()-0.5)*0.05*hitShake); } hitShake*=0.88;
   moon.position.set(player.pos.x-40,70,player.pos.z-30); moon.target.position.copy(player.pos); moon.target.updateMatrixWorld();
+  if(ragActive) world.step(1/60, dt, 4);   // físicas del ragdoll
   tickPlayer(dt);        // hacha en 1ª persona
   tickNPCs(dt);          // viewer + perseguidores + muertes
 }
