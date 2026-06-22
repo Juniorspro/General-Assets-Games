@@ -1417,6 +1417,8 @@ function makeGif(url){ const o={tex:new THREE.CanvasTexture(document.createEleme
   return o; }
 const fireGifs=[makeGif(GIFB+'2spnJPK.gif'),makeGif(GIFB+'db5a4595bac1960e5b7cc0a35544140b.gif')];
 const gExpl=makeGif(EXBASE+'expl.gif'), gFcam=makeGif(EXBASE+'firecam.gif'), gFcam2=makeGif(EXBASE+'firecam2.gif');
+const FIREB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@f8716a6/assets/gifs/';   // gifs de fuego nuevos (Higgsfield)
+const gTorch=makeGif(FIREB+'fire_torch.gif'), gMolotov=makeGif(FIREB+'fire_molotov.gif');
 function tickGifs(dt){ for(const o of animGifs){ if(!o.ready||!o.cx)continue;
   if(o.frames.length){ let t=performance.now()%o.total,idx=0; for(let i=0;i<o.delays.length;i++){ if(t<o.delays[i]){idx=i;break;} t-=o.delays[i]; }
     o.cur=o.bright[idx]||0.6;
@@ -1431,7 +1433,7 @@ function makeFireMesh(tex,w,h){ const g=new THREE.Group();
 /* ---- Molotov arrojadiza ---- */
 const CGRAV=22;
 const projectiles=[], cfx=[];
-function billboardFx(tex,size){ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:1,depthWrite:false,blending:THREE.NormalBlending})); s.scale.set(size,size,1); return s; }
+function billboardFx(tex,size,blend){ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:1,depthWrite:false,blending:blend||THREE.NormalBlending,toneMapped:false})); s.scale.set(size,size,1); return s; }
 function throwMolotov(){
   const dir=new THREE.Vector3(-Math.sin(player.yaw)*Math.cos(player.pitch),Math.sin(player.pitch),-Math.cos(player.yaw)*Math.cos(player.pitch));
   const m=MODELS.botella(); m.traverse(o=>{if(o.isMesh)o.castShadow=false;}); m.scale.setScalar(0.5);
@@ -1443,7 +1445,7 @@ function tickProjectiles(dt){ for(let i=projectiles.length-1;i>=0;i--){ const p=
   let gy=terrainHeight(p.mesh.position.x,p.mesh.position.z); for(const f of floors){ if(p.mesh.position.x>f.minx&&p.mesh.position.x<f.maxx&&p.mesh.position.z>f.minz&&p.mesh.position.z<f.maxz&&f.top>gy) gy=f.top; }
   if(p.mesh.position.y<=gy+0.12){ explodeAt(p.mesh.position.clone(),gy); scene.remove(p.mesh); p.mesh.traverse(o=>{if(o.geometry)o.geometry.dispose();}); projectiles.splice(i,1); } } }
 function explodeAt(pos,gy){ gy=(gy==null)?terrainHeight(pos.x,pos.z):gy;
-  const ex=billboardFx(gExpl.tex,3.2); ex.position.set(pos.x,gy+1.1,pos.z); scene.add(ex); cfx.push({o:ex,kind:'expl',t:0,dur:0.7});
+  const ex=billboardFx(gMolotov.tex,3.8,THREE.AdditiveBlending); ex.position.set(pos.x,gy+1.1,pos.z); scene.add(ex); cfx.push({o:ex,kind:'expl',t:0,dur:0.8});   // llamarada nueva
   for(let k=0;k<7;k++){ const a=Math.random()*6.28, r=0.15+Math.random()*1.7, txt=(k%2)?gFcam2.tex:gFcam.tex, low=k%3===0;
     const f=billboardFx(txt,(low?0.7:1.0)+Math.random()*0.6); f.material.opacity=0;
     f.position.set(pos.x+Math.cos(a)*r, gy+(low?0.32:0.55)+Math.random()*0.2, pos.z+Math.sin(a)*r); scene.add(f);
@@ -1611,7 +1613,7 @@ function buildTorch(){const g=new THREE.Group();const sh=hnd(0.7,0.04,woodDark);
   // varias llamas cruzadas que envuelven por completo el aro de tela (antes el "redondo" tapaba el fuego)
   const fire=new THREE.Group(); fire.name='torchFire';
   const planes=[[0.62,0.96,0],[0.52,0.84,Math.PI/2],[0.5,0.8,Math.PI/4],[0.5,0.8,-Math.PI/4]];
-  planes.forEach((p,i)=>{ const mat=new THREE.MeshBasicMaterial({map:fireGifs[i%2].tex,transparent:true,opacity:0.95,depthWrite:false,blending:THREE.NormalBlending,side:THREE.DoubleSide,toneMapped:false});
+  planes.forEach((p,i)=>{ const mat=new THREE.MeshBasicMaterial({map:gTorch.tex,transparent:true,opacity:0.96,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});
     const m=new THREE.Mesh(new THREE.PlaneGeometry(p[0],p[1]),mat); m.rotation.y=p[2]; m.position.y=p[1]*0.30; fire.add(m); });
   fire.position.y=0.66; g.add(fire);
   const fl=new THREE.PointLight(0xff7a2e,1.4,4.5,2); fl.name='torchLight'; fl.position.y=0.9; g.add(fl);
@@ -1979,7 +1981,7 @@ function craftTick(dt){
   const fb=(fireGifs[1].cur||0.6);
   for(const m of placedItems){ if(m.userData.kind==='fogata'&&m.userData.fire){ m.userData.fire.intensity=0.5+fb*2.4; } }
   if(equipped==='botella') updateHeldMolotov(dt);
-  else if(equipped==='antorcha'&&fpModel){ const tl=fpModel.getObjectByName('torchLight'); if(tl)tl.intensity=0.6+fb*2.2; }
+  else if(equipped==='antorcha'&&fpModel){ const tl=fpModel.getObjectByName('torchLight'); if(tl)tl.intensity=0.6+(gTorch.cur||0.6)*2.2; }
   // swing del arma equipada (anima el fpRig, no el hacha del bosque)
   if(wswing.active&&fpRig.visible){ wswing.t+=dt/0.42; const a=Math.sin(Math.min(wswing.t,1)*Math.PI);
     if(THRUST.has(equipped)){ fpRig.position.z=fpBasePos.z-a*0.7; fpRig.rotation.x=fpBaseRot.x-a*0.18; }
