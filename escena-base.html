@@ -187,11 +187,11 @@ function tickPlayer(dt){ if(!vm)return;
 
 /* ===================== NPCs: 5 tipos (viewer + perseguidores), antorchas, muertes ===================== */
 const NPC_TYPES=[
-  {name:'Primitivo · garrote', f:{idle:'char_idle.glb',walk:'char_walk.glb',run:'char_run.glb',attack:'char_attack.glb'}, h:1.78},
-  {name:'Cazador · lanza',     f:{idle:'npc2_idle.glb',walk:'npc2_walk.glb',run:'npc2_run.glb',attack:'npc2_attack.glb'}, h:1.82},
-  {name:'Encapuchado · hacha', f:{idle:'npc3_idle.glb',walk:'npc3_walk.glb',run:'npc3_run.glb',attack:'npc3_attack.glb'}, h:1.82},
-  {name:'Mujer · garrote',     f:{idle:'npc4_idle.glb',walk:'npc4_walk.glb',run:'npc4_run.glb',attack:'npc4_attack.glb'}, h:1.68},
-  {name:'Antorcha',            f:{idle:'npc5_idle.glb',walk:'npc5_walk.glb',run:'npc5_run.glb',attack:'npc5_attack.glb'}, h:1.7, torch:true},
+  {name:'Primitivo · garrote', f:{idle:'char_idle.glb',walk:'char_walk.glb',run:'char_run.glb',attack:'char_attack.glb'}, h:1.78, weapon:'club'},
+  {name:'Cazador · lanza',     f:{idle:'npc2_idle.glb',walk:'npc2_walk.glb',run:'npc2_run.glb',attack:'npc2_attack.glb'}, h:1.82, weapon:'spear'},
+  {name:'Encapuchado · hacha', f:{idle:'npc3_idle.glb',walk:'npc3_walk.glb',run:'npc3_run.glb',attack:'npc3_attack.glb'}, h:1.82, weapon:'stoneaxe'},
+  {name:'Mujer · garrote',     f:{idle:'npc4_idle.glb',walk:'npc4_walk.glb',run:'npc4_run.glb',attack:'npc4_attack.glb'}, h:1.68, weapon:'club'},
+  {name:'Antorcha',            f:{idle:'npc5_idle.glb',walk:'npc5_walk.glb',run:'npc5_run.glb',attack:'npc5_attack.glb'}, h:1.7, weapon:'torch', torch:true},
 ];
 const ANIMS=['idle','walk','run','attack'];
 const tpl=NPC_TYPES.map(()=>({}));
@@ -205,28 +205,48 @@ NPC_TYPES.forEach((T,ti)=> ANIMS.forEach(an=>{   // TODAS en paralelo; medimos l
     if(++nLoaded>=nTotal) onReady(); },
     undefined, e=>{ console.warn(T.f[an],e); if(++nLoaded>=nTotal) onReady(); }); }));
 
-const npcs=[]; const _tmpV=new THREE.Vector3();
+const npcs=[]; const _tmpV=new THREE.Vector3(), _ws=new THREE.Vector3();
+// armas procedurales en metros reales; orientación aproximada en la mano (ajustable)
+const WGRIP=new THREE.Euler(-Math.PI/2,0,0.35);
+function buildWeapon(kind){ const g=new THREE.Group();
+  const wood=new THREE.MeshStandardMaterial({color:0x6b4a2a,roughness:0.85}), stone=new THREE.MeshStandardMaterial({color:0x6e7378,roughness:0.95});
+  if(kind==='club'){ const h=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.05,0.66,10),wood); h.position.y=0.33; g.add(h);
+    const k=new THREE.Mesh(new THREE.SphereGeometry(0.085,12,10),wood); k.scale.y=1.4; k.position.y=0.7; g.add(k); }
+  else if(kind==='spear'){ const h=new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.026,1.7,10),wood); h.position.y=0.85; g.add(h);
+    const tip=new THREE.Mesh(new THREE.ConeGeometry(0.05,0.24,8),stone); tip.position.y=1.78; g.add(tip); }
+  else if(kind==='stoneaxe'){ const h=new THREE.Mesh(new THREE.CylinderGeometry(0.026,0.036,0.7,10),wood); h.position.y=0.35; g.add(h);
+    const head=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.16,0.07),stone); head.position.set(0.07,0.64,0); head.rotation.z=0.18; g.add(head); }
+  else if(kind==='torch'){ const h=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.034,0.62,10),wood); h.position.y=0.31; g.add(h);
+    const wrap=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.05,0.12,10),new THREE.MeshStandardMaterial({color:0x2a2118,roughness:1})); wrap.position.y=0.63; g.add(wrap); }
+  return g; }
+function flameTex(){ const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
+  const gr=x.createRadialGradient(32,38,2,32,34,30); gr.addColorStop(0,'rgba(255,248,220,1)');gr.addColorStop(.45,'rgba(255,150,40,.9)');gr.addColorStop(1,'rgba(255,80,0,0)');
+  x.fillStyle=gr;x.fillRect(0,0,64,64); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; }
+function makeFlame(){ const g=new THREE.Group(); const light=new THREE.PointLight(0xff7d2a,6,8,2); light.position.y=0.05; g.add(light);
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex(),color:0xffb24d,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false}));
+  spr.scale.set(0.34,0.5,1); g.add(spr); g.userData={light,spr}; return g; }
+function attachWeapon(body,kind,flames){ const hand=body.getObjectByName('RightHand'); if(!hand)return;
+  hand.updateWorldMatrix(true,false); const hs=hand.getWorldScale(_ws).x||1;
+  const holder=new THREE.Group(); holder.add(buildWeapon(kind));
+  holder.scale.setScalar(1/hs); holder.rotation.copy(WGRIP);                 // arma en metros reales pese a la escala del hueso
+  holder.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
+  if(kind==='torch'){ const fl=makeFlame(); fl.position.set(0,0.66,0); holder.add(fl); if(flames)flames.push(fl.userData); }
+  hand.add(holder); }
 function makeNPC(ti,x,z,mode){ const T=NPC_TYPES[ti];
-  const inst={ti,T,group:new THREE.Group(),bodies:{},mixers:{},actions:{},hand:{},state:null,mode,dead:false,vy:0,fall:0,atkCD:0};
+  const inst={ti,T,group:new THREE.Group(),bodies:{},mixers:{},actions:{},state:null,mode,dead:false,vy:0,flames:[]};
   ANIMS.forEach(an=>{ const t=tpl[ti][an]; if(!t)return;
     const scn=skClone(t.scene); scn.scale.setScalar(t.s); scn.position.copy(t.off); scn.visible=false;   // escala/offset del original
-    scn.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } }); inst.group.add(scn);
-    const mx=new THREE.AnimationMixer(scn); const ac=t.clip?mx.clipAction(t.clip):null; if(ac)ac.setLoop(THREE.LoopRepeat);
-    inst.bodies[an]=scn; inst.mixers[an]=mx; inst.actions[an]=ac; inst.hand[an]=scn.getObjectByName('RightHand'); });
+    scn.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
+    if(T.weapon) attachWeapon(scn,T.weapon,inst.flames);                                                  // arma/antorcha en la mano
+    inst.group.add(scn);
+    const mx=new THREE.AnimationMixer(scn); const ac=t.clip?mx.clipAction(t.clip):null;
+    if(ac){ ac.setLoop(THREE.LoopRepeat); if(an==='attack')ac.timeScale=1.5; }                            // ataque más rápido
+    inst.bodies[an]=scn; inst.mixers[an]=mx; inst.actions[an]=ac; });
   inst.group.position.set(x,0,z); scene.add(inst.group);
-  if(T.torch){ inst.flame=makeFlame(); scene.add(inst.flame); }
   setState(inst,'idle'); npcs.push(inst); return inst; }
 function setState(inst,an){ if(inst.dead||inst.state===an)return; const b=inst.bodies[an]; if(!b)return;
   for(const k in inst.bodies) inst.bodies[k].visible=false; b.visible=true;
   const ac=inst.actions[an]; if(ac) ac.reset().play(); inst.state=an; }
-
-// antorcha procedural (luz cálida titilante + sprite additivo) — como la del bosque
-function makeFlame(){ const g=new THREE.Group(); const light=new THREE.PointLight(0xff7d2a,7,9,2); g.add(light);
-  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex(),color:0xffb24d,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false}));
-  spr.scale.set(0.5,0.7,1); g.add(spr); g.userData={light,spr}; return g; }
-function flameTex(){ const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
-  const gr=x.createRadialGradient(32,34,2,32,34,30); gr.addColorStop(0,'rgba(255,245,210,1)');gr.addColorStop(.45,'rgba(255,150,40,.85)');gr.addColorStop(1,'rgba(255,80,0,0)');
-  x.fillStyle=gr;x.fillRect(0,0,64,64); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; }
 
 const VIEW_Z=-12, VIEW_DX=4.2;
 function onReady(){ assetsReady=true; if(eLabelEl)eLabelEl.textContent='';
@@ -245,21 +265,23 @@ function tryKill(){ _ray.setFromCamera({x:0,y:0},camera); _ray.far=3.2;
   if(best&&bd<3.2) killNPC(best); }
 function killNPC(inst){ inst.dead=true; for(const k in inst.mixers) inst.mixers[k].stopAllAction();
   const dx=inst.group.position.x-player.pos.x, dz=inst.group.position.z-player.pos.z, d=Math.hypot(dx,dz)||1;
-  inst.knock=new THREE.Vector3(dx/d*1.7,0,dz/d*1.7); inst.vy=2.4; inst.fall=0; inst.fallAxis=Math.random()<.5?1:-1; hitShake=0.6; }
+  inst.knock=new THREE.Vector3(dx/d*2.4,0,dz/d*2.4); inst.vy=3.0;          // empuje + impulso hacia arriba
+  inst.spin=new THREE.Vector3((1.5+Math.random()*2)*(dz>0?-1:1), (Math.random()-0.5)*2, (Math.random()-0.5)*3.5);   // tumbo
+  hitShake=0.6; }
 
 function tickNPCs(dt){ if(!assetsReady)return;
   if(attackQueued){ attackQueued=false; tryKill(); }
   let nv=null,nd=25; for(const n of npcs){ if(n.mode!=='viewer'||n.dead)continue; const dx=n.group.position.x-player.pos.x,dz=n.group.position.z-player.pos.z,dd=dx*dx+dz*dz; if(dd<nd){nd=dd;nv=n;} }
   if(nv!==nearInst){ nearInst=nv; if(panel){ panel.style.display=nv?'flex':'none'; if(nv&&pName)pName.textContent=nv.T.name; } }
   for(const inst of npcs){
-    if(inst.dead){ inst.fall=Math.min(1,inst.fall+dt*2.2);
-      if(inst.knock){ inst.group.position.x+=inst.knock.x*dt; inst.group.position.z+=inst.knock.z*dt; inst.knock.multiplyScalar(0.9); }
-      inst.vy-=14*dt; inst.group.position.y=Math.max(0,inst.group.position.y+inst.vy*dt);
-      inst.group.rotation.x=inst.fallAxis*(-Math.PI/2)*inst.fall;   // se acuesta (rígido, sin atravesarse)
+    if(inst.dead){ const g=inst.group;                                // muerte con física: gravedad + tumbo + rebote
+      inst.vy-=18*dt; g.position.y+=inst.vy*dt;
+      if(g.position.y<0){ g.position.y=0; inst.vy=Math.abs(inst.vy)>0.7?-inst.vy*0.32:0; inst.spin.multiplyScalar(0.55); if(inst.knock)inst.knock.multiplyScalar(0.5); }
+      if(inst.knock){ g.position.x+=inst.knock.x*dt; g.position.z+=inst.knock.z*dt; inst.knock.multiplyScalar(1-1.4*dt); }
+      g.rotation.x+=inst.spin.x*dt; g.rotation.y+=inst.spin.y*dt; g.rotation.z+=inst.spin.z*dt; inst.spin.multiplyScalar(1-1.2*dt);
       continue; }
     if(inst.mixers[inst.state]) inst.mixers[inst.state].update(dt);
-    if(inst.flame){ const hb=inst.hand[inst.state]; if(hb){ hb.updateWorldMatrix(true,false); hb.getWorldPosition(_tmpV); inst.flame.position.set(_tmpV.x,_tmpV.y+0.28,_tmpV.z);
-      const fl=0.7+Math.random()*0.5; inst.flame.userData.light.intensity=7*fl; inst.flame.userData.spr.material.opacity=0.7+0.3*Math.random(); } }
+    for(const f of inst.flames){ const k=0.65+Math.random()*0.55; f.light.intensity=6*k; f.spr.material.opacity=0.6+0.4*Math.random(); }   // titilar antorcha
     if(inst.mode==='viewer'){ const dx=player.pos.x-inst.group.position.x, dz=player.pos.z-inst.group.position.z; inst.group.rotation.y=Math.atan2(dx,dz); }
     else { const dx=player.pos.x-inst.group.position.x, dz=player.pos.z-inst.group.position.z, d=Math.hypot(dx,dz)||1;
       inst.group.rotation.y=Math.atan2(dx,dz); inst.atkCD=Math.max(0,inst.atkCD-dt);
