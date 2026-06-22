@@ -2108,29 +2108,28 @@ function showDevPick(){
 }
 // pantalla de CARGA DE ASSETS: espera a que el mundo esté listo y luego se desvanece lento → cinemática
 function showAssetLoad(){
-  loadResScale=0.5; layout();    // Item 3: contexto de render al 50% durante la carga (barato; igual no se dibuja la escena)
+  loadResScale=0.5; layout();    // contexto de render al 50% durante la carga (igual no se dibuja la escena, es negro)
   $('assetLoad').classList.remove('gone'); requestAnimationFrame(()=>$('assetLoad').classList.remove('fade'));
+  bootArea();                    // ← LA CARGA DEL MUNDO ARRANCA RECIÉN ACÁ (antes todo era negro puro sin cargar nada)
   const R=qual.streamR; let total=0;
   for(let dx=-R;dx<=R;dx++)for(let dz=-R;dz<=R;dz++){const cx=dx,cz=dz;if(cx<W.x0||cx>W.x1||cz<W.z0||cz>W.z1)continue; total++;}
   const fill=$('alFill');
   const tick=()=>{
-    if(worldReady){ fill.style.width='100%'; setTimeout(()=>fadeOutSlow($('assetLoad'),playStudios),350); return; }
+    if(worldReady){ fill.style.width='100%'; setTimeout(()=>fadeOutSlow($('assetLoad'),revealStartMenu),400); return; }
     let built=0; for(let dx=-R;dx<=R;dx++)for(let dz=-R;dz<=R;dz++){const cx=dx,cz=dz;if(cx<W.x0||cx>W.x1||cz<W.z0||cz>W.z1)continue; if(builtChunks.has(cx+'_'+cz))built++;}
     fill.style.width=(Math.min(0.96,total?built/total:0)*100)+'%'; requestAnimationFrame(tick);
   };
   tick();
 }
-// reveal del menú de inicio: espera a que el mundo esté listo
+// reveal del menú de inicio (el mundo ya está listo)
 function revealStartMenu(){
-  loadResScale=1.0; layout();   // fin de la carga: la resolución la vuelve a manejar el menú (½ borroso vía menuResScale)
-  const show=()=>{ $('startMenu').classList.add('show'); wireUiSounds(); };
-  if(worldReady) show();
-  else { $('bootLoad').classList.add('show'); const wait=()=>{ if(worldReady){ $('studios').classList.add('gone'); show(); } else requestAnimationFrame(wait); }; wait(); }
+  loadResScale=1.0; layout();   // la resolución la vuelve a manejar el menú (½ borroso vía menuResScale)
+  $('startMenu').classList.add('show'); wireUiSounds();
 }
-// cinemática de estudios (junilax → rezona) sobre negro
+// cinemática de estudios (junilax → rezona) sobre NEGRO PURO (sin cargar nada todavía) → luego va a la carga de assets
 function playStudios(){
   const img=$('studioImg'); const seq=[STUDIO_BASE+'studio_junilax.png',STUDIO_BASE+'studio_rezona.png']; let i=0;
-  const next=()=>{ if(i>=seq.length){ fadeOut($('studios'),null); revealStartMenu(); return; }
+  const next=()=>{ if(i>=seq.length){ fadeOut($('studios'),showAssetLoad); return; }
     img.src=seq[i++]; img.classList.remove('in');
     requestAnimationFrame(()=>{ img.classList.add('in'); });           // fade in ~0.6s
     setTimeout(()=>{ img.classList.remove('in'); }, 600+2000);          // hold ~2s, luego fade out
@@ -2145,7 +2144,7 @@ function showLangPick(){
     if(mouseMode)clickSound();
     const l=o.dataset.blang; curLang=l; applyLang(l); updateQDesc();
     document.querySelectorAll('#langOpts .opt').forEach(x=>x.classList.toggle('active',x.dataset.lang===l));
-    fadeOut($('langPick'),showAssetLoad);
+    fadeOut($('langPick'),playStudios);   // idioma → estudios (negro) → carga de assets → menú
   }));
   wireUiSounds();
 }
@@ -2164,7 +2163,7 @@ try{
   setTime(8,120); updateEnvironment(); layout();
   captureIcons();                            // PNG del hacha y la madera (del modelo real)
   wireUiSounds();
-  bootArea();                                // EL MUNDO CARGA EN SEGUNDO PLANO detrás del negro
+  // NO cargamos el mundo en el init: todo queda en negro puro hasta la pantalla de carga de assets (showAssetLoad llama bootArea)
 }catch(err){ console.error('Init:',err); }
 requestAnimationFrame(()=>{ try{ if(composer)composer.render(0);else renderer.render(scene,camera); }catch(e){console.error(e);} setTimeout(hideLoader,300); animate(); });
 </script>
