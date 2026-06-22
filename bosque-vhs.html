@@ -940,7 +940,7 @@ function upgradeNearChunk(dt){
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
 let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null;
 let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuResScale=1.0;
-let cycleOn=true, cyclePhase=0, envCycleTimer=0; const A_ELEV=34, THETA0=3.02;   // ciclo día/noche 24 min (12+12); sol bajo = hora dorada, sin blanco quemado
+let cycleOn=true, cyclePhase=0, envCycleTimer=0, lastEnvElev=999; const A_ELEV=34, THETA0=3.02;   // ciclo día/noche 24 min (12+12); sol bajo = hora dorada, sin blanco quemado
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
   composer.addPass(new RenderPass(scene,camera));
@@ -1832,7 +1832,9 @@ const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 function update(dt){
   if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
     setTime(elev,120); $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev);
-    envCycleTimer+=dt; if(envCycleTimer>12){ envCycleTimer=0; updateEnvironment(); } }  // PMREM caro → cada 12s (la luz cambia lento, no se nota)
+    // El PMREM (caro) sólo se re-hornea si el sol se movió bastante, y nunca más de 1 vez cada 6s → sin tirones periódicos.
+    // setTime ya ajusta luces/niebla/cielo en tiempo real, así que el mapa de entorno puede ir lento sin que se note.
+    envCycleTimer+=dt; if(envCycleTimer>6){ envCycleTimer=0; if(Math.abs(elev-lastEnvElev)>5){ lastEnvElev=elev; updateEnvironment(); } } }
   let ix=joy.x,iz=joy.y;if(keys['KeyW'])iz-=1;if(keys['KeyS'])iz+=1;if(keys['KeyA'])ix-=1;if(keys['KeyD'])ix+=1;
   if(intro.active){ix=0;iz=0;} // durante la cinemática no nos movemos
   const mag=Math.min(1,Math.hypot(ix,iz));if(mag>0.001){ix/=Math.max(mag,1);iz/=Math.max(mag,1);}
@@ -1856,11 +1858,11 @@ function update(dt){
   cloud1.material.map.offset.x+=dt*0.004;cloud2.material.map.offset.x+=dt*0.0026;
   placeCelestials(camera.position.x,camera.position.z);
   flash.position.copy(camera.position);flash.target.position.copy(camera.position).add(forward);flash.target.updateMatrixWorld();flash.intensity=flashOn?(7*(0.35+0.65*nightFactor)):0;
-  // farolas de noche
-  if(nightFactor>0.05){const cand=[];for(const c of chunkList)if(c.grp.visible)for(const L of c.lamps)cand.push([L,player.pos.distanceToSquared(L)]);cand.sort((a,b)=>a[1]-b[1]);
-    for(let i=0;i<lampLights.length;i++){if(cand[i]&&cand[i][1]<900){lampLights[i].position.copy(cand[i][0]);lampLights[i].intensity=14*nightFactor;}else lampLights[i].intensity=0;}}
-  else for(const pl of lampLights)pl.intensity=0;
-  lampHeadMat.emissiveIntensity=0.2+2.6*nightFactor;
+  // farolas de la ruta: SIEMPRE prendidas (un poco más fuertes de noche)
+  {const cand=[];for(const c of chunkList)if(c.grp.visible)for(const L of c.lamps)cand.push([L,player.pos.distanceToSquared(L)]);cand.sort((a,b)=>a[1]-b[1]);
+    const li=11*(0.55+0.45*nightFactor);
+    for(let i=0;i<lampLights.length;i++){if(cand[i]&&cand[i][1]<1600){lampLights[i].position.copy(cand[i][0]);lampLights[i].intensity=li;}else lampLights[i].intensity=0;}}
+  lampHeadMat.emissiveIntensity=1.1+1.8*nightFactor;
   // CULLING: sólo se dibuja lo que entra en la cámara (frustum) y está dentro del render; follaje sólo cerca (LOD)
   camera.updateMatrixWorld();camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
   _pm.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);_frustum.setFromProjectionMatrix(_pm);
@@ -1900,8 +1902,16 @@ function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDel
   if(composer)composer.render(dt);else renderer.render(scene,camera);
   fpsTimer+=dt;fpsFrames++;if(fpsTimer>=0.5){const fps=Math.round(fpsFrames/fpsTimer);$('fps').textContent=fps;fpsTimer=0;fpsFrames=0;adaptRes(fps);}}
 // OPT: resolución adaptativa — si el FPS baja, baja la resolución interna; si sobra, la sube (sin pasar de la calidad elegida)
-let dynRes=1;
-function adaptRes(fps){ if(!started)return; let n=dynRes; if(fps<34)n=Math.max(0.6,dynRes-0.1); else if(fps>52)n=Math.min(1,dynRes+0.1); if(Math.abs(n-dynRes)>0.001){dynRes=n;layout();} }
+let dynRes=1, resLow=0, resHi=0;
+// Resolución adaptativa ROBUSTA A SPIKES: un tirón puntual (p.ej. un horneado de entorno) NO baja la resolución,
+// porque eso dispararía un composer.setSize (realocar render targets = otro tirón → cascada). Hace falta que el FPS
+// esté MAL varias ventanas seguidas para bajar, y bien varias para subir.
+function adaptRes(fps){ if(!started)return;
+  if(fps<30){ resLow++; resHi=0; } else if(fps>55){ resHi++; resLow=0; } else { resLow=0; resHi=0; return; }
+  let n=dynRes;
+  if(resLow>=3){ n=Math.max(0.6,dynRes-0.1); resLow=0; }        // ~1.5s sostenido por debajo de 30fps
+  else if(resHi>=4){ n=Math.min(1,dynRes+0.1); resHi=0; }       // ~2s sostenido por encima de 55fps
+  if(Math.abs(n-dynRes)>0.001){dynRes=n;layout();} }
 // Cámara cinemática del menú: pasea suave por el bosque mientras el menú está abierto
 let cineT=0;const _cl=new THREE.Vector3();
 function cinematicCam(dt){
@@ -1915,8 +1925,8 @@ function cinematicCam(dt){
   placeCelestials(camera.position.x,camera.position.z);
   dirLight.position.set(camera.position.x+lightVec.x*50,camera.position.y+lightVec.y*50,camera.position.z+lightVec.z*50);dirLight.target.position.copy(camera.position);dirLight.target.updateMatrixWorld();
   cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
-  cyclePhase+=dt*4; const th=THETA0+cyclePhase*(Math.PI*2/1440); setTime(A_ELEV*Math.sin(th),120);   // ciclo acelerado en el fondo del menú
-  envCycleTimer+=dt; if(envCycleTimer>8){envCycleTimer=0;updateEnvironment();}
+  cyclePhase+=dt*4; const th=THETA0+cyclePhase*(Math.PI*2/1440); const mElev=A_ELEV*Math.sin(th); setTime(mElev,120);   // ciclo acelerado en el fondo del menú
+  envCycleTimer+=dt; if(envCycleTimer>5){envCycleTimer=0; if(Math.abs(mElev-lastEnvElev)>5){lastEnvElev=mElev; updateEnvironment();}}
   streamChunks(2,camera.position.x,camera.position.z);
 }
 
@@ -2207,13 +2217,16 @@ function revealStartMenu(){
 // cinemática de estudios (junilax → rezona) sobre NEGRO PURO (sin cargar nada todavía) → luego va a la carga de assets
 function playStudios(){
   const img=$('studioImg'); const seq=[STUDIO_BASE+'studio_junilax.png',STUDIO_BASE+'studio_rezona.png']; let i=0;
-  const next=()=>{ if(i>=seq.length){ fadeOut($('studios'),showAssetLoad); return; }
-    img.src=seq[i++]; img.classList.remove('in');
-    requestAnimationFrame(()=>{ img.classList.add('in'); });           // fade in ~0.6s
-    setTimeout(()=>{ img.classList.remove('in'); }, 600+2000);          // hold ~2s, luego fade out
-    setTimeout(next, 600+2000+600); };
+  // PRECARGA cada imagen ANTES de mostrarla → no titila (antes el fade empezaba sin estar decodificada)
+  const showOne=()=>{ if(i>=seq.length){ fadeOut($('studios'),showAssetLoad); return; }
+    const url=seq[i++]; const pre=new Image(); pre.crossOrigin='anonymous';
+    const run=()=>{ img.src=url; img.classList.remove('in');
+      requestAnimationFrame(()=>requestAnimationFrame(()=>img.classList.add('in')));   // fade in ~0.6s (ya decodificada)
+      setTimeout(()=>img.classList.remove('in'), 600+2000);                            // hold ~2s, luego fade out
+      setTimeout(showOne, 600+2000+650); };
+    pre.onload=run; pre.onerror=()=>setTimeout(showOne,250); pre.src=url; };
   $('studios').classList.remove('gone');
-  requestAnimationFrame(()=>{ $('studios').classList.remove('fade'); next(); });
+  requestAnimationFrame(()=>{ $('studios').classList.remove('fade'); showOne(); });
 }
 // selección de idioma sobre negro
 function showLangPick(){
