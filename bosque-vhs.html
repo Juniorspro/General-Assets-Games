@@ -479,6 +479,7 @@
     "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
     "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
     "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.39.1/build/index.js",
+    "n8ao": "https://cdn.jsdelivr.net/npm/n8ao@1.9.2/dist/N8AO.js",
     "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js",
     "gifuct-js": "https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm"
   }
@@ -492,7 +493,12 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { EffectComposer, RenderPass, EffectPass, Effect, BloomEffect, HueSaturationEffect,
-         ToneMappingEffect, ToneMappingMode, SMAAEffect, SSAOEffect, NormalPass, VignetteEffect, BlendFunction } from 'postprocessing';
+         ToneMappingEffect, ToneMappingMode, SMAAEffect, VignetteEffect } from 'postprocessing';
+// N8AO: oclusión ambiental basada en PROFUNDIDAD (respeta el recorte alpha de las plantas → sin el cuadrado negro)
+// y mucho más optimizada. Carga defensiva (con tope de 3s) para que un fallo de red NUNCA impida arrancar.
+let N8AOPostPass=null;
+{ const _n8=await Promise.race([ import('n8ao').catch(()=>null), new Promise(res=>setTimeout(()=>res(null),3000)) ]);
+  N8AOPostPass=(_n8&&_n8.N8AOPostPass)||null; if(!N8AOPostPass)console.warn('N8AO no disponible → sigo sin SSAO'); }
 
 /* ===== Filtro VHS opcional (un solo efecto, sin taps → no convolution) ===== */
 const VHS_FRAG=/* glsl */`
@@ -562,7 +568,7 @@ const Q=PRESETS[DEV.tier];
 const QUALITY={
   vlow:  {radial:4, shadow:0,    shadowRes:256, leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
   low:   {radial:5, shadow:0,    shadowRes:256, leaf:90,  grassN:320, plantN:26, rockN:6,  density:8,  streamR:1, dpr:1.3, res:0.8, bloom:false, aa:true,  rdist:120, chunkBudget:1},   // bajos: SIN sombras pero CON luz PBR
-  medium:{radial:6, shadow:512,  shadowRes:512, leaf:120, grassN:420, plantN:50, rockN:9,  density:6,  streamR:2, dpr:1.6, res:1.0, bloom:true,  aa:true,  rdist:140, chunkBudget:1},
+  medium:{radial:6, shadow:512,  shadowRes:512, leaf:120, grassN:420, plantN:50, rockN:9,  density:6,  streamR:2, dpr:1.6, res:0.8, bloom:true,  aa:true,  rdist:140, chunkBudget:1},
   high:  {radial:6, shadow:512,  shadowRes:512, leaf:200, grassN:780, plantN:80, rockN:12, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:180, chunkBudget:1},
   vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:240, chunkBudget:2},
 };
@@ -684,7 +690,8 @@ const hemiLight=new THREE.HemisphereLight(0xffcaa0,0x3a2a1c,0.5);scene.add(hemiL
 const dirLight=new THREE.DirectionalLight(0xffd0a0,2.4);dirLight.castShadow=true;dirLight.shadow.mapSize.set(Q.shadow,Q.shadow);
 dirLight.shadow.camera.near=1;dirLight.shadow.camera.far=120;dirLight.shadow.bias=-0.0004;dirLight.shadow.normalBias=0.05;
 scene.add(dirLight);scene.add(dirLight.target);
-function setShadowRange(r){const c=dirLight.shadow.camera;c.left=-r;c.right=r;c.top=r;c.bottom=-r;c.updateProjectionMatrix();dirLight.castShadow=r>0.5;}
+let shadowRange=28;
+function setShadowRange(r){shadowRange=r;const c=dirLight.shadow.camera;c.left=-r;c.right=r;c.top=r;c.bottom=-r;c.updateProjectionMatrix();dirLight.castShadow=r>0.5;}
 const flash=new THREE.SpotLight(0xfff0d6,0,60,0.55,0.45,1.3);flash.castShadow=false;scene.add(flash);scene.add(flash.target);let flashOn=false;
 const lampLights=[];for(let i=0;i<4;i++){const pl=new THREE.PointLight(0xffce85,0,20,2);scene.add(pl);lampLights.push(pl);}
 
@@ -720,8 +727,8 @@ const leafMat=new THREE.MeshStandardMaterial({map:leafTex,alphaTest:0.45,side:TH
 leafMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;
   sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;')
     .replace('#include <begin_vertex>',`#include <begin_vertex>
-      vec3 aN=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);float ph=aN.x*0.8+aN.z*1.1+aN.y*0.4;float hh=clamp(aN.y/8.0,0.0,1.0);float amp=uWind*(0.1+0.3*hh);
-      transformed.x+=(sin(uTime*1.7+ph)+0.5*sin(uTime*3.3+ph*1.7))*amp;transformed.z+=cos(uTime*1.4+ph)*amp*0.85;transformed.y+=sin(uTime*2.2+ph)*amp*0.3;`);};
+      vec3 aN=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);float ph=aN.x*0.8+aN.z*1.1+aN.y*0.4;float hh=clamp(aN.y/8.0,0.0,1.0);float amp=uWind*(0.05+0.16*hh);   // hojas: movimiento más sutil
+      transformed.x+=(sin(uTime*1.5+ph)+0.5*sin(uTime*3.0+ph*1.7))*amp;transformed.z+=cos(uTime*1.3+ph)*amp*0.8;transformed.y+=sin(uTime*2.0+ph)*amp*0.25;`);};
 // el TRONCO y las ramas también se mecen (suave): la base queda fija y la copa se mueve según la altura local
 barkMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;
   sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;')
@@ -970,18 +977,18 @@ function upgradeNearChunk(dt){
 }
 
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
-let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null,ssaoPass=null,normalPass=null,vignetteEffect=null;
+let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null,n8aoPass=null,vignetteEffect=null;
 let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuResScale=1.0;
 let cycleOn=true, cyclePhase=0, envCycleTimer=0, lastEnvElev=999; const A_ELEV=34, THETA0=0.15;   // arranca al AMANECER (sol bajo subiendo → mañana → mediodía), ciclo día/noche 24 min
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
   composer.addPass(new RenderPass(scene,camera));
-  // SSAO súper optimizado: AO a MEDIA resolución, pocas muestras y radio corto (contacto). Sólo se ENCIENDE en medio+.
-  normalPass=new NormalPass(scene,camera); normalPass.enabled=false; composer.addPass(normalPass);
-  const ssao=new SSAOEffect(camera,normalPass.texture,{ blendFunction:BlendFunction.MULTIPLY, samples:9, rings:4, distanceScaling:true,
-    radius:0.085, intensity:1.7, luminanceInfluence:0.7, resolutionScale:0.5,
-    worldDistanceThreshold:50, worldDistanceFalloff:20, worldProximityThreshold:6, worldProximityFalloff:3 });
-  ssaoPass=new EffectPass(camera,ssao); ssaoPass.enabled=false; composer.addPass(ssaoPass);
+  // SSAO N8AO (basado en profundidad → respeta el alpha de las plantas; sin cuadrado negro). Half-res = optimizado. Sólo medio+.
+  if(N8AOPostPass){ try{
+    n8aoPass=new N8AOPostPass(scene,camera,Math.max(2,innerWidth),Math.max(2,innerHeight));
+    const c=n8aoPass.configuration; c.aoRadius=0.7; c.distanceFalloff=1.3; c.intensity=2.4; c.aoSamples=12; c.denoiseSamples=4; c.denoiseRadius=12; c.halfRes=true; c.gammaCorrection=false; c.screenSpaceRadius=false;
+    n8aoPass.enabled=false; composer.addPass(n8aoPass);   // addPass = wiring correcto de depth/size
+  }catch(e){ console.warn('N8AO init falló:',e); n8aoPass=null; } }
   bloomEffect=new BloomEffect({intensity:0.32,luminanceThreshold:0.85,luminanceSmoothing:0.25,mipmapBlur:true,radius:0.6});
   hueSat=new HueSaturationEffect({saturation:0,hue:0});
   const tone=new ToneMappingEffect({mode:ToneMappingMode.AGX});      // tonemap filmico realista
@@ -1956,13 +1963,17 @@ function update(dt){
   camera.updateMatrixWorld();camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
   _pm.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);_frustum.setFromProjectionMatrix(_pm);
   const rd2=renderDist*renderDist,gd2=GRASS_DIST*GRASS_DIST,leafD=Math.min(renderDist,105),ld2=leafD*leafD,lnear2=(leafD*0.55)*(leafD*0.55);
+  // SOMBRAS OPTIMIZADAS: sólo los chunks CERCANOS (dentro del rango de sombra) proyectan sombra → muchísimos menos draws en el shadow-map.
+  const shadowOn=qual.shadow>0; const scd=shadowRange+30, scd2=scd*scd; let shadowDirty=false;
   for(const c of chunkList){const dx=c.center.x-player.pos.x,dz=c.center.z-player.pos.z;const d2=dx*dx+dz*dz;
     const vis=d2<rd2&&_frustum.intersectsSphere(c.sphere);c.grp.visible=vis;   // OPT: frustum + distance culling
+    const cs=shadowOn&&vis&&d2<scd2; if(c.shadowOn!==cs){ c.shadowOn=cs; for(let i=0;i<c.shadowCasters.length;i++)c.shadowCasters[i].castShadow=cs; shadowDirty=true; }
     if(vis){const fv=d2<gd2;for(let i=0;i<c.fol.length;i++)c.fol[i].visible=fv; // OPT: LOD de follaje bajo (pasto/plantas sólo cerca)
       // LOD de copas en 3 niveles: cerca = todas las hojas · media = ~55% (más barato) · lejos = sin hojas (sólo tronco)
       for(let i=0;i<c.leafMeshes.length;i++){const lm=c.leafMeshes[i];
         if(d2>=ld2){lm.visible=false;}
         else{lm.visible=true; const full=lm.userData.full||lm.count; lm.count=(d2<lnear2)?full:(lm.userData.half||full);}}}}
+  if(shadowDirty&&shadowOn)renderer.shadowMap.needsUpdate=true;
   chopTick(dt);
   // Mundo precargado entero: NO se construye/descarga ni se tocan sombras en runtime → cero tirones al caminar.
   windU.uTime.value+=dt;
@@ -2075,14 +2086,14 @@ function setQuality(t){
   DPRCAP=qual.dpr; resScale=qual.res; if($('res')){$('res').value=Math.round(qual.res*100);$('resVal').textContent=Math.round(qual.res*100)+'%';}
   if(bloomEffect)bloomEffect.intensity=qual.bloom?0.32:0.0;
   aaOn=qual.aa; if(smaaPass)smaaPass.enabled=aaOn; if($('aaSw'))$('aaSw').classList.toggle('on',aaOn);
-  const useSsao=(t==='medium'||t==='high'||t==='vhigh');   // SSAO en medio y superiores (en bajos no, pero la luz PBR queda)
-  if(ssaoPass)ssaoPass.enabled=useSsao; if(normalPass)normalPass.enabled=useSsao;
+  const useSsao=(t==='medium'||t==='high'||t==='vhigh');   // SSAO (N8AO) en medio y superiores
+  if(n8aoPass)n8aoPass.enabled=useSsao;
   renderDist=qual.rdist; if($('dist')){$('dist').value=renderDist;$('distVal').textContent=renderDist+' m';} scene.fog.density=Math.max(0.005,0.85/renderDist);
   layout();
 }
 
 /* ===================== Valores por defecto realistas ===================== */
-const VFX_DEFAULTS={time:7,dist:150,shad:22,dens:140,wind:90,bob:70,
+const VFX_DEFAULTS={time:7,dist:150,shad:22,dens:140,wind:30,bob:70,
   res:100,expo:0,bloom:35,sat:25,shake:150,relief:700};
 function applyDefaults(){
   for(const id in VFX_DEFAULTS){const el=document.getElementById(id);if(!el)continue;el.value=VFX_DEFAULTS[id];el.dispatchEvent(new Event('input'));}
