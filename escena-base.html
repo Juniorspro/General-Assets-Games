@@ -153,55 +153,55 @@ tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; document.getElementById('bC
 // cada estado es su PROPIO GLB y hacemos swap del cuerpo según el movimiento. La cámara va a la altura
 // de los ojos y se OCULTA la cabeza (escala del hueso Head ~0) para no tapar la vista: así ves tus
 // brazos, torso y piernas al mirar hacia abajo.
-const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@936a059/';
+const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@f12a2d1/';
 const E_H=1.82; let hitShake=0;
-const PARTS=[ {key:'idle',file:'pj_idle2.glb'}, {key:'walk',file:'pj_walk.glb'}, {key:'run',file:'pj_run.glb'},
-  {key:'slash',file:'pj_slash.glb',once:true,speed:1.5} ];
-const PLABEL={idle:'Quieto',walk:'Caminando',run:'Corriendo',slash:'Corte 🪓'};
-const body={}; let bodyKey=null, actKey=null;
+const PARTS=[ {key:'idle',file:'pj_idle2.glb'}, {key:'walk',file:'pj_walk.glb'}, {key:'run',file:'pj_run.glb'} ];
+const PLABEL={idle:'Quieto',walk:'Caminando',run:'Corriendo'};
+const body={}; let bodyKey=null;
 const _hw=new THREE.Vector3(); const HEAD_FWD=0.26, HEAD_UP=0.04;   // cámara = hueso Head, bien hacia adelante (ojos)
-const AXE_GRIP=new THREE.Vector3(0,0,0), AXE_ROT=new THREE.Euler(0,0,Math.PI/2), AXE_LEN=0.5;   // hacha en la mano (ajustable)
 const eLabelEl=document.getElementById('animLabel');
 const _gltf=new GLTFLoader();
-// ---- HACHA: GLB real (tomahawk/hawk) agarrada en la mano, en TODAS las animaciones ----
-let axeProto=null; const _pendingHands=[];
-function fitAxe(axe){ axe.position.set(0,0,0); axe.rotation.set(0,0,0); axe.scale.setScalar(1);
-  const bb=new THREE.Box3().setFromObject(axe), sz=bb.getSize(new THREE.Vector3()); return AXE_LEN/Math.max(sz.x,sz.y,sz.z); }
-function attachAxe(hand){ if(!axeProto){ _pendingHands.push(hand); return; }
-  hand.updateWorldMatrix(true,false); const hs=hand.getWorldScale(_hw).x||1;       // contrarresta la escala mundial de la mano
-  const axe=axeProto.clone(true); const k=fitAxe(axe)/hs;
-  axe.scale.setScalar(k); axe.position.copy(AXE_GRIP); axe.rotation.copy(AXE_ROT);
-  axe.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } }); hand.add(axe); }
-_gltf.load(EBASE+'hawk.glb', gl=>{ axeProto=gl.scene; for(const h of _pendingHands) attachAxe(h); _pendingHands.length=0; }, undefined, e=>console.warn('hawk.glb',e));
-function prepBody(gl,p){ const inner=gl.scene;
+// ---- VIEWMODEL FPS: brazo + hacha (GLB) PEGADO a la cámara, con golpe procedural (estilo bosque) ----
+let vm=null, swingT=0; const SWING_DUR=0.42;
+const VM_POS=new THREE.Vector3(0.20,-0.24,-0.42), VM_ROT=new THREE.Euler(0,-0.15,0), VM_LEN=0.66;   // colocación del viewmodel (ajustable)
+_gltf.load(EBASE+'axe_fp.glb', gl=>{ const o=gl.scene;
+  const bb=new THREE.Box3().setFromObject(o), sz=bb.getSize(new THREE.Vector3()), c=bb.getCenter(new THREE.Vector3());
+  o.position.sub(c); o.scale.setScalar(VM_LEN/Math.max(sz.x,sz.y,sz.z));                          // centrar + escalar a la pantalla
+  o.traverse(x=>{ if(x.isMesh){ x.frustumCulled=false; x.castShadow=false; } });
+  vm=new THREE.Group(); vm.add(o); vm.position.copy(VM_POS); vm.rotation.copy(VM_ROT); camera.add(vm);   // hijo de la cámara → siempre en pantalla
+}, undefined, e=>console.warn('axe_fp',e));
+function swing(){ if(swingT<=0) swingT=SWING_DUR; }   // dispara el golpe
+function prepBody(gl){ const inner=gl.scene;
   let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=E_H/(sz.y||1); inner.scale.setScalar(s);
   b=new THREE.Box3().setFromObject(inner); const c=b.getCenter(new THREE.Vector3()); inner.position.set(-c.x,-b.min.y,-c.z);   // pies en el origen
   inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; } });
-  const hand=inner.getObjectByName('RightHand')||inner.getObjectByName('LeftHand'); if(hand) attachAxe(hand);   // hacha siempre en la mano
   const root=new THREE.Group(); root.add(inner); root.visible=false; scene.add(root);
   const mixer=new THREE.AnimationMixer(inner); let action=null;
-  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(p.once?THREE.LoopOnce:THREE.LoopRepeat); action.clampWhenFinished=!!p.once; if(p.speed)action.timeScale=p.speed; }
+  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(THREE.LoopRepeat); }
   return {root,mixer,action,head:inner.getObjectByName('Head')}; }
-for(const p of PARTS){ _gltf.load(EBASE+p.file, gl=>{ body[p.key]=prepBody(gl,p); if(p.key==='idle'&&!bodyKey) setBody('idle'); }, undefined, e=>console.warn(p.file,e)); }
+for(const p of PARTS){ _gltf.load(EBASE+p.file, gl=>{ body[p.key]=prepBody(gl); if(p.key==='idle'&&!bodyKey) setBody('idle'); }, undefined, e=>console.warn(p.file,e)); }
 function setBody(key){ const b=body[key]; if(!b||bodyKey===key)return;
   if(bodyKey&&body[bodyKey]){ body[bodyKey].root.visible=false; if(body[bodyKey].action)body[bodyKey].action.stop(); }
   bodyKey=key; b.root.visible=true; if(b.action) b.action.reset().play(); }
-function doAction(key){ const b=body[key]; if(!b)return; actKey=key; setBody(key); if(b.action) b.action.reset().play(); }
 function actBtn(id,fn){ const el=document.getElementById(id); if(el) el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
-actBtn('bChop',()=>doAction('slash')); actBtn('bHammer',()=>doAction('slash'));
+actBtn('bChop',swing); actBtn('bHammer',swing);
 function tickPlayer(dt){
-  const speed=player.vel.length();
-  if(actKey){ const a=body[actKey]; if(!a||!a.action||!a.action.isRunning()) actKey=null; }   // ¿terminó la acción?
-  if(!actKey) setBody(speed<0.4?'idle':(speed<3.4?'walk':'run'));                              // locomoción
+  const speed=player.vel.length(), moving=speed>0.4;
+  setBody(speed<0.4?'idle':(speed<3.4?'walk':'run'));                                            // locomoción del cuerpo
   const b=body[bodyKey]; if(b){
     b.root.position.set(player.pos.x,player.pos.y,player.pos.z); b.root.rotation.y=player.yaw+Math.PI;   // sigue al player (incluye salto en Y)
     b.mixer.update(dt);
-    if(b.head){ b.head.updateWorldMatrix(true,false); b.head.getWorldPosition(_hw); b.head.scale.setScalar(0.0001);   // leer pos de la cabeza y ocultarla
+    if(b.head){ b.head.updateWorldMatrix(true,false); b.head.getWorldPosition(_hw); b.head.scale.setScalar(0.0001);   // cámara = cabeza, oculta
       const fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
-      camera.position.set(_hw.x+fx*HEAD_FWD, _hw.y+HEAD_UP, _hw.z+fz*HEAD_FWD);                 // la cámara ES la cabeza (sigue el bob de la animación), empujada a los ojos
-    }
-  }
-  if(eLabelEl) eLabelEl.textContent=PLABEL[actKey||bodyKey]||''; }
+      camera.position.set(_hw.x+fx*HEAD_FWD, _hw.y+HEAD_UP, _hw.z+fz*HEAD_FWD); } }
+  if(vm){ const t=performance.now()*0.001, bp=player.bobPhase;                                    // viewmodel: sway + golpe
+    let px=VM_POS.x+Math.sin(t*1.4)*0.004+(moving?Math.cos(bp)*0.018:0);
+    let py=VM_POS.y+Math.sin(t*2.0)*0.004+(moving?-Math.abs(Math.sin(bp))*0.018:0);
+    let rx=VM_ROT.x, rz=VM_ROT.z;
+    if(swingT>0){ swingT=Math.max(0,swingT-dt); const a=Math.sin((1-swingT/SWING_DUR)*Math.PI);   // arco 0→1→0
+      rx=VM_ROT.x+a*1.5; rz=VM_ROT.z-a*0.5; py-=a*0.05; }
+    vm.position.set(px,py,VM_POS.z); vm.rotation.set(rx,VM_ROT.y,rz); }
+  if(eLabelEl) eLabelEl.textContent=PLABEL[bodyKey]||''; }
 
 /* ===================== Loop ===================== */
 const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
