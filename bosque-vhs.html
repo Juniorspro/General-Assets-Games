@@ -33,7 +33,9 @@
              background:radial-gradient(circle at 38% 34%,#ffd9b0,#d4622a); box-shadow:0 4px 16px rgba(0,0,0,.5),inset 0 2px 6px rgba(255,255,255,.3); }
   .actBtn { position:fixed; right:28px; z-index:30; width:74px; height:74px; border-radius:50%; background:rgba(255,255,255,.05);
             border:1.5px solid rgba(255,255,255,.18); color:#f3e7dc; font-size:12px; backdrop-filter:blur(6px); cursor:pointer; transition:all .15s; }
-  #run { bottom:calc(40px + var(--safe-b)); }
+  #run { display:none; }   /* la velocidad ahora es analógica según el joystick → sin botón CORRER */
+  #bJump   { right:28px;  bottom:calc(40px + var(--safe-b)); font-size:24px; }
+  #bCrouch { right:112px; bottom:calc(44px + var(--safe-b)); width:58px; height:58px; font-size:21px; }
   #flash { bottom:calc(130px + var(--safe-b)); font-size:23px; }
   #vhsBtn { bottom:calc(220px + var(--safe-b)); font-size:20px; }
   .actBtn.on { background:rgba(255,150,80,.28); border-color:#ffb46b; box-shadow:0 0 18px rgba(255,150,80,.45); }
@@ -338,6 +340,8 @@
   <button id="flash" class="actBtn">🪓</button>
   <button id="bag" class="actBtn">🎒</button>
   <button id="run" class="actBtn" data-i18n="run">CORRER</button>
+  <button id="bJump" class="actBtn" aria-label="Saltar">⤴️</button>
+  <button id="bCrouch" class="actBtn" aria-label="Agacharse">🔽</button>
   <button id="bCraft" class="actBtn">🛠️</button>
   <button id="bPlace" class="actBtn">✏️</button>
   <button id="bRot" class="actBtn hidden">🔁</button>
@@ -376,7 +380,7 @@
       <button data-sr="256">256</button><button data-sr="512" class="active">512</button><button data-sr="1024">1024</button></div></div>
   </div>
 
-  <div id="hud"><span id="fps">–</span> FPS · <span id="treeCount">–</span> <span data-i18n="trees">árboles</span> · 🪵 <span id="wood">0</span></div>
+  <div id="hud"><span id="fps">–</span> FPS · <b style="color:#ffd27a;letter-spacing:1.5px">BETA</b><span id="treeCount" style="display:none"></span><span id="wood" style="display:none"></span></div>
   <div id="hint" data-i18n="hint">Joystick para caminar · arrastrá para mirar · 🪓 talar · 🎒 mochila</div>
 
 <!-- ===== Menú de inicio (dentro de #stage → rotan 90° con el juego) ===== -->
@@ -718,6 +722,16 @@ leafMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=w
     .replace('#include <begin_vertex>',`#include <begin_vertex>
       vec3 aN=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);float ph=aN.x*0.8+aN.z*1.1+aN.y*0.4;float hh=clamp(aN.y/8.0,0.0,1.0);float amp=uWind*(0.1+0.3*hh);
       transformed.x+=(sin(uTime*1.7+ph)+0.5*sin(uTime*3.3+ph*1.7))*amp;transformed.z+=cos(uTime*1.4+ph)*amp*0.85;transformed.y+=sin(uTime*2.2+ph)*amp*0.3;`);};
+// el TRONCO y las ramas también se mecen (suave): la base queda fija y la copa se mueve según la altura local
+barkMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;')
+    .replace('#include <begin_vertex>',`#include <begin_vertex>
+      #ifdef USE_INSTANCING
+      vec3 _bp=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);float _bph=_bp.x*0.5+_bp.z*0.6;
+      float _bh=max(0.0,position.y);float _ba=uWind*0.004*_bh*_bh;
+      transformed.x+=(sin(uTime*1.1+_bph)+0.4*sin(uTime*2.0+_bph*1.6))*_ba;
+      transformed.z+=cos(uTime*0.9+_bph)*_ba*0.8;
+      #endif`);};
 const grassMat=new THREE.MeshStandardMaterial({map:grassTex,alphaTest:0.4,side:THREE.DoubleSide,roughness:0.85,metalness:0,envMapIntensity:0.6});
 grassMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;
   sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;')
@@ -992,8 +1006,8 @@ function layout(){
 }
 
 /* ===================== JUGADOR / FPS ===================== */
-const EYE=1.7,WALK=3.4,RUN=6.6,ACCEL=10;
-const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),yaw:0,pitch:0,roll:0,bobPhase:0,strafeSm:0};
+const EYE=1.7,WALK=3.4,RUN=6.6,ACCEL=10,SPEED_MAX=RUN,JUMP_V=5.2,GRAV=15,EYE_CROUCH=1.05;
+const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),yaw:0,pitch:0,roll:0,bobPhase:0,strafeSm:0,eye:1.7,vy:0,jumpY:0,onGround:true,crouch:false};
 const intro={active:false}; // (la cinemática la organizamos después)
 let bobScale=1,running=false,lastBobSign=0;
 const forward=new THREE.Vector3(),right=new THREE.Vector3();
@@ -1014,9 +1028,16 @@ function lookEnd(e){if(e.pointerId===lookId)lookId=null;}
 window.addEventListener('pointerup',lookEnd);window.addEventListener('pointercancel',lookEnd);
 renderer.domElement.addEventListener('click',()=>{if(!DEV.isMobile&&document.pointerLockElement!==renderer.domElement)renderer.domElement.requestPointerLock();});
 document.addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement&&!intro.active){let mx=e.movementX,my=e.movementY;if(rot){const t=mx;mx=my;my=-t;}player.yaw-=mx*LOOK;player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch-my*LOOK));}});
-const keys={};addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='ShiftLeft'||e.code==='ShiftRight')running=true;if(e.code==='Space')startSwing();});addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='ShiftLeft'||e.code==='ShiftRight')running=false;});
+const keys={};addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='ShiftLeft'||e.code==='ShiftRight')running=true;
+  if(e.code==='Space'){ if(started&&player.onGround){player.vy=JUMP_V;player.onGround=false;} }   // saltar
+  if((e.code==='KeyC'||e.code==='ControlLeft')&&!e.repeat){ player.crouch=!player.crouch; const bc=$('bCrouch'); if(bc)bc.classList.toggle('on',player.crouch); }  // agacharse
+});addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='ShiftLeft'||e.code==='ShiftRight')running=false;});
 const runBtn=document.getElementById('run');runBtn.addEventListener('pointerdown',e=>{running=true;runBtn.classList.add('on');e.preventDefault();});
 const stopRun=()=>{running=false;runBtn.classList.remove('on');};runBtn.addEventListener('pointerup',stopRun);runBtn.addEventListener('pointercancel',stopRun);runBtn.addEventListener('pointerleave',stopRun);
+// botones SALTAR / AGACHARSE (estilo escena)
+function tapBtn(id,fn){ const el=$(id); if(!el)return; el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
+tapBtn('bJump',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
+tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; $('bCrouch').classList.toggle('on',player.crouch); });
 const flashBtn=document.getElementById('flash');flashBtn.addEventListener('click',()=>startSwing());
 
 /* ===================== AUDIO ===================== */
@@ -1605,7 +1626,11 @@ const RECIPES=[
   {id:'dcha',tab:'construction',needTable:true,placeable:true},
 ];
 const TABS=['weapons','furniture','tools','construction'];
+const BAG_TABS=['weapons','furniture','tools','construction','materials'];   // la mochila además tiene "Materiales"
 let activeTab='tools';
+// inventario de MATERIALES en bruto (ramas/madera, hilos/cuerda, piedra, etc.). 'madera' usa el contador de leña (woodCount).
+const mats={piedra:0,metal:0,cuerda:0,tela:0,vidrio:0,chapa:0,barro:0,carbon:0,hueso:0};
+function matCount(k){ return k==='madera'?(typeof woodCount!=='undefined'?woodCount:0):(mats[k]||0); }
 const inv={hammer:0,table:0,spear:0,knife:0,machete:0,botella:0,guadana:0,hacha:0,
   picomad:0,arco:0,antorcha:0,lanzapiedra:0,cuchipiedra:0,picopiedra:0,flechamad:0,flechapiedra:0,flechaafil:0,lanzaafil:0,picoafil:0,cuchiafil:0,azadamad:0,azadapiedra:0,baldemad:0,baldechapa:0,
   cama:0,horno:0,silla:0,recagua:0,bidon:0,perchero:0,fogata:0,conserv:0,pmad:0,smad:0,tmad:0,imad:0,vmad:0,dmad:0,pcha:0,scha:0,tcha:0,vcha:0,dcha:0};
@@ -1619,19 +1644,41 @@ const RARITY={weapons:'#f0a23c',tools:'#5bc8f5',furniture:'#7ad17a',construction
 let menuMode='craft', selId=null;
 function menuTitle(){ return menuMode==='bag'?cT('inventory'):menuMode==='place'?cT('placeTitle'):cT('craft'); }
 function menuList(){
-  if(menuMode==='bag') return RECIPES.filter(r=>inv[r.id]>0);
   if(menuMode==='place') return RECIPES.filter(r=>r.placeable&&inv[r.id]>0);
+  if(menuMode==='bag') return RECIPES.filter(r=>inv[r.id]>0 && r.tab===activeTab);   // mochila por categoría
   return RECIPES.filter(r=>r.tab===activeTab);
 }
 function renderTabs(){
-  const c=$('mTabs'); if(menuMode!=='craft'){ c.style.display='none'; c.innerHTML=''; return; }
+  const c=$('mTabs'); if(menuMode==='place'){ c.style.display='none'; c.innerHTML=''; return; }   // craft Y bag muestran pestañas
   c.style.display='flex'; c.innerHTML='';
-  TABS.forEach(t=>{ const d=document.createElement('div'); d.className='stab'+(t===activeTab?' on':''); d.textContent=cT(t);
+  const tabs = menuMode==='bag'?BAG_TABS:TABS;
+  if(!tabs.includes(activeTab)) activeTab=tabs[0];
+  tabs.forEach(t=>{ const d=document.createElement('div'); d.className='stab'+(t===activeTab?' on':''); d.textContent=cT(t);
     d.onclick=()=>{ if(scMoved>8)return; activeTab=t; selId=null; renderTabs(); renderGrid(); }; c.appendChild(d); });
 }
 function markSel(){ document.querySelectorAll('#mGrid .slot').forEach(c=>c.classList.toggle('sel',c.dataset.id===selId)); }
 function clearDetail(){ $('dName').textContent='—'; $('dType').textContent=''; $('dMats').innerHTML=''; $('dAction').style.display='none'; const di=$('dIcon'); if(di)di.style.display='none'; }
+const MAT_KEYS=['madera','piedra','metal','cuerda','tela','vidrio','chapa','barro','carbon','hueso'];   // ramas, hilos, etc.
+function renderMaterials(){
+  const g=$('mGrid'); g.innerHTML=''; $('mEmpty').style.display='none';
+  for(const k of MAT_KEYS){ const n=matCount(k);
+    const cell=document.createElement('div'); cell.className='slot'+(n>0?'':' locked'); cell.dataset.mat=k;
+    cell.innerHTML=`<span class="rar" style="border-right-color:#caa46a"></span>`+
+      `<span class="ph" style="font-size:26px;display:flex;align-items:center;justify-content:center;height:100%">${RESN[k]||'▫'}</span>`+
+      (n>0?`<span class="qty">${n}</span>`:'');
+    cell.onclick=()=>{ if(scMoved>8)return; selectMat(k); document.querySelectorAll('#mGrid .slot').forEach(c=>c.classList.toggle('sel',c.dataset.mat===k)); };
+    g.appendChild(cell);
+  }
+  selectMat('madera'); document.querySelectorAll('#mGrid .slot').forEach(c=>c.classList.toggle('sel',c.dataset.mat==='madera'));
+}
+function selectMat(k){
+  $('dName').textContent=((REST[k]&&REST[k][curLang])||k)+'  ×'+matCount(k);
+  $('dType').textContent='// '+cT('materials'); $('dType').style.color='#caa46a';
+  $('dMatHd').textContent=''; $('dMats').innerHTML=''; $('dAction').style.display='none';
+  const di=$('dIcon'); if(di)di.style.display='none';
+}
 function renderGrid(){
+  if(menuMode==='bag'&&activeTab==='materials'){ renderMaterials(); return; }
   const g=$('mGrid'); g.innerHTML=''; const list=menuList();
   $('mEmpty').textContent = menuMode==='bag'?cT('bagEmpty'):menuMode==='place'?cT('placeEmpty'):cT('empty');
   $('mEmpty').style.display=list.length?'none':'block';
@@ -1859,9 +1906,15 @@ function update(dt){
   if(intro.active){ix=0;iz=0;} // durante la cinemática no nos movemos
   const mag=Math.min(1,Math.hypot(ix,iz));if(mag>0.001){ix/=Math.max(mag,1);iz/=Math.max(mag,1);}
   forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
-  const spd=(running?RUN:WALK)*mag;const des=_v.set(0,0,0);des.addScaledVector(forward,-iz*spd);des.addScaledVector(right,ix*spd);
+  // velocidad ANALÓGICA: con joystick, cuanto más lo estirás (mag) más rápido (hasta correr). Con teclado, Shift = correr.
+  const usingJoy=(joy.x!==0||joy.y!==0);
+  const baseMax=usingJoy?SPEED_MAX:(running?RUN:WALK);
+  const spd=baseMax*mag*(player.crouch?0.5:1);const des=_v.set(0,0,0);des.addScaledVector(forward,-iz*spd);des.addScaledVector(right,ix*spd);
   player.vel.lerp(des,Math.min(1,ACCEL*dt));player.pos.addScaledVector(player.vel,dt);
   player.pos.x=Math.max(PB.x0,Math.min(PB.x1,player.pos.x));player.pos.z=Math.max(PB.z0,Math.min(PB.z1,player.pos.z));
+  // salto / agacharse (relativo al terreno)
+  player.vy-=GRAV*dt; player.jumpY+=player.vy*dt; if(player.jumpY<=0){player.jumpY=0;player.vy=0;player.onGround=true;}
+  const targetEye=player.crouch?EYE_CROUCH:EYE; player.eye+=(targetEye-player.eye)*Math.min(1,10*dt);
   craftTick(dt);   // crafteo/molotov/colocación/colisión con muebles (incluye resolveCollisions)
   const speed=player.vel.length();player.bobPhase+=dt*(speed*1.9+0.0001);const moveAmt=Math.min(1,speed/WALK)*bobScale;
   const bobY=Math.sin(player.bobPhase*2)*0.05*moveAmt,bobX=Math.cos(player.bobPhase)*0.035*moveAmt;
@@ -1871,7 +1924,11 @@ function update(dt){
   const tt=windU.uTime.value,mf=(0.5+moveAmt)*camShake;
   const shx=(Math.sin(tt*2.3)+0.5*Math.sin(tt*5.7))*0.0016*mf,shy=(Math.cos(tt*1.9)+0.5*Math.sin(tt*4.3))*0.0016*mf,shr=Math.sin(tt*1.6)*0.004*mf,br=Math.sin(tt*1.15)*0.012*camShake;
   const gy=terrainHeight(player.pos.x,player.pos.z);
-  camera.position.set(player.pos.x+right.x*bobX,gy+EYE+bobY+br,player.pos.z+right.z*bobX);
+  camera.position.set(player.pos.x+right.x*bobX,gy+player.eye+bobY+br+player.jumpY,player.pos.z+right.z*bobX);
+  // el ítem en mano se balancea al moverse/correr (más fuerte cuanto más rápido), salvo durante el golpe
+  if(fpRig&&fpRig.visible&&!(typeof wswing!=='undefined'&&wswing.active)){
+    fpRig.position.set(fpBasePos.x+Math.cos(player.bobPhase)*0.02*moveAmt, fpBasePos.y+Math.sin(player.bobPhase*2)*0.03*moveAmt, fpBasePos.z);
+    fpRig.rotation.set(fpBaseRot.x+Math.sin(player.bobPhase*2)*0.03*moveAmt, fpBaseRot.y+Math.cos(player.bobPhase)*0.02*moveAmt, fpBaseRot.z); }
   euler.set(player.pitch+shy,player.yaw+shx,player.roll+shr);camera.quaternion.setFromEuler(euler);
   dirLight.position.copy(player.pos).addScaledVector(lightVec,50);dirLight.target.position.copy(player.pos);dirLight.target.updateMatrixWorld();
   cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
@@ -2111,10 +2168,10 @@ function wireUiSounds(){
 }
 
 /* ===================== HUD / BLUR EN MENÚS ===================== */
-const HUD_ELS=['flash','bag','run','bCraft','bPlace','bRot','joy','hud','hint','cross','menuBtn','vfxBtn'];
+const HUD_ELS=['flash','bag','bJump','bCrouch','bCraft','bPlace','bRot','joy','hud','hint','cross','menuBtn','vfxBtn'];
 function setHudVisible(v){ for(const id of HUD_ELS){ const el=$(id); if(!el)continue; el.style.display=v?'':'none'; }
   // en modo ratón nunca mostramos joystick ni botones móviles
-  if(v&&mouseMode){ for(const id of ['joy','flash','bag','run','bCraft','bPlace','bRot']){ const el=$(id); if(el)el.style.display='none'; } }
+  if(v&&mouseMode){ for(const id of ['joy','flash','bag','bJump','bCrouch','bCraft','bPlace','bRot']){ const el=$(id); if(el)el.style.display='none'; } }
   if(v){ if(equipped&&fpRig)fpRig.visible=true; else if(started)fpAxe.visible=true; }
   else { if(fpAxe)fpAxe.visible=false; if(fpRig)fpRig.visible=false; }
 }
