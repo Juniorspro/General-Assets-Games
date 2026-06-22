@@ -158,7 +158,7 @@ const E_H=1.82; let hitShake=0;
 const PARTS=[ {key:'idle',file:'pj_idle2.glb'}, {key:'walk',file:'pj_walk.glb'}, {key:'run',file:'pj_run.glb'} ];
 const PLABEL={idle:'Quieto',walk:'Caminando',run:'Corriendo'};
 const body={}; let bodyKey=null;
-const _hw=new THREE.Vector3(); const HEAD_FWD=0.26, HEAD_UP=0.04;   // cámara = hueso Head, bien hacia adelante (ojos)
+const _hw=new THREE.Vector3(); const HEAD_FWD=0.06, HEAD_UP=0.03;   // cámara casi EN la cabeza (cuerpo visible al mirar abajo)
 const eLabelEl=document.getElementById('animLabel');
 const _gltf=new GLTFLoader();
 // ---- VIEWMODEL FPS: brazo + hacha (GLB) PEGADO a la cámara, con golpe procedural (estilo bosque) ----
@@ -167,7 +167,8 @@ const VM_POS=new THREE.Vector3(0.20,-0.24,-0.42), VM_ROT=new THREE.Euler(0,-0.15
 _gltf.load(EBASE+'axe_fp.glb', gl=>{ const o=gl.scene;
   const bb=new THREE.Box3().setFromObject(o), sz=bb.getSize(new THREE.Vector3()), c=bb.getCenter(new THREE.Vector3());
   o.position.sub(c); o.scale.setScalar(VM_LEN/Math.max(sz.x,sz.y,sz.z));                          // centrar + escalar a la pantalla
-  o.traverse(x=>{ if(x.isMesh){ x.frustumCulled=false; x.castShadow=false; } });
+  o.traverse(x=>{ if(x.isMesh){ x.frustumCulled=false; x.castShadow=false; x.renderOrder=999;
+    const mm=Array.isArray(x.material)?x.material:[x.material]; mm.forEach(m=>{ if(m){ m.depthTest=false; m.depthWrite=false; } }); } });   // viewmodel SIEMPRE encima (no clipea con el mundo)
   vm=new THREE.Group(); vm.add(o); vm.position.copy(VM_POS); vm.rotation.copy(VM_ROT); camera.add(vm);   // hijo de la cámara → siempre en pantalla
 }, undefined, e=>console.warn('axe_fp',e));
 function swing(){ if(swingT<=0) swingT=SWING_DUR; }   // dispara el golpe
@@ -178,7 +179,7 @@ function prepBody(gl){ const inner=gl.scene;
   const root=new THREE.Group(); root.add(inner); root.visible=false; scene.add(root);
   const mixer=new THREE.AnimationMixer(inner); let action=null;
   if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(THREE.LoopRepeat); }
-  return {root,mixer,action,head:inner.getObjectByName('Head')}; }
+  return {root,mixer,action,head:inner.getObjectByName('Head'),rarm:inner.getObjectByName('RightArm')}; }
 for(const p of PARTS){ _gltf.load(EBASE+p.file, gl=>{ body[p.key]=prepBody(gl); if(p.key==='idle'&&!bodyKey) setBody('idle'); }, undefined, e=>console.warn(p.file,e)); }
 function setBody(key){ const b=body[key]; if(!b||bodyKey===key)return;
   if(bodyKey&&body[bodyKey]){ body[bodyKey].root.visible=false; if(body[bodyKey].action)body[bodyKey].action.stop(); }
@@ -191,6 +192,7 @@ function tickPlayer(dt){
   const b=body[bodyKey]; if(b){
     b.root.position.set(player.pos.x,player.pos.y,player.pos.z); b.root.rotation.y=player.yaw+Math.PI;   // sigue al player (incluye salto en Y)
     b.mixer.update(dt);
+    if(b.rarm) b.rarm.scale.setScalar(0.0001);                                                  // ocultar brazo derecho del cuerpo (lo reemplaza el viewmodel)
     if(b.head){ b.head.updateWorldMatrix(true,false); b.head.getWorldPosition(_hw); b.head.scale.setScalar(0.0001);   // cámara = cabeza, oculta
       const fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
       camera.position.set(_hw.x+fx*HEAD_FWD, _hw.y+HEAD_UP, _hw.z+fz*HEAD_FWD); } }
