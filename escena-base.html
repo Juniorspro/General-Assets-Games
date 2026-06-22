@@ -10,7 +10,7 @@
 <style>
   :root{ --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px); }
   *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
-  html,body{ height:100%; overflow:hidden; background:#aebfcf; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; color:#eef3f8; overscroll-behavior:none; }
+  html,body{ height:100%; overflow:hidden; background:#0a0e16; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; color:#eef3f8; overscroll-behavior:none; }
   #stage{ position:fixed; inset:0; }
   body.rot #stage{ width:100vh; height:100vw; top:50%; left:50%; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center; }
   #app{ position:absolute; inset:0; }
@@ -33,8 +33,14 @@
               background:rgba(14,22,30,.72); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.16); border-radius:999px;
               padding:8px 18px; color:#ffd27a; font-weight:700; font-size:15px; letter-spacing:.02em; white-space:nowrap;
               box-shadow:0 6px 20px rgba(0,0,0,.45); pointer-events:none; }
+  #npcPanel{ position:fixed; left:50%; bottom:calc(16px + var(--safe-b)); transform:translateX(-50%); z-index:25; display:none; flex-direction:column; align-items:center; gap:6px;
+             background:rgba(14,22,30,.82); border:1px solid rgba(255,255,255,.16); border-radius:14px; padding:8px 12px; backdrop-filter:blur(8px); box-shadow:0 8px 24px rgba(0,0,0,.5); }
+  #npName{ color:#ffd27a; font-weight:700; font-size:13px; letter-spacing:.02em; }
+  #npcPanel .npRow{ display:flex; gap:6px; }
+  #npcPanel button{ background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2); color:#eef3f8; border-radius:10px; padding:9px 11px; font-size:12px; font-weight:600; cursor:pointer; }
+  #npcPanel button:active{ background:rgba(90,160,255,.4); transform:scale(.94); }
   #loader{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
-           background:#aebfcf; transition:opacity .5s; color:#0a3a63; font-size:13px; letter-spacing:.1em; }
+           background:#0a0e16; transition:opacity .5s; color:#9fb6ff; font-size:13px; letter-spacing:.1em; }
   #loader.hide{ opacity:0; pointer-events:none; }
 </style>
 </head>
@@ -48,7 +54,16 @@
   <button id="bCrouch" class="actBtn">🔽</button>
   <button id="bChop"   class="actBtn">🪓</button>
   <button id="bHammer" class="actBtn">🔪</button>
-  <div id="animLabel">cargando player…</div>
+  <div id="animLabel">cargando…</div>
+  <div id="npcPanel">
+    <div id="npName">—</div>
+    <div class="npRow">
+      <button data-a="idle">Idle</button>
+      <button data-a="walk">Caminar</button>
+      <button data-a="run">Correr</button>
+      <button data-a="attack">Atacar</button>
+    </div>
+  </div>
 </div>
 
 <script type="importmap">
@@ -64,6 +79,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as skClone } from 'three/addons/utils/SkeletonUtils.js';
 
 /* ===================== Render / escena ===================== */
 const app=document.getElementById('app');
@@ -74,48 +90,23 @@ renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESF
 app.appendChild(renderer.domElement);
 
 const scene=new THREE.Scene();
-scene.background=new THREE.Color(0xbccad8);
-scene.fog=new THREE.Fog(0xbccad8,60,260);
-const pmrem=new THREE.PMREMGenerator(renderer); scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+scene.background=new THREE.Color(0x0a0e16);
+scene.fog=new THREE.FogExp2(0x0a0e16,0.018);   // niebla nocturna
+const pmrem=new THREE.PMREMGenerator(renderer); scene.environment=pmrem.fromScene(new RoomEnvironment(),0.02).texture;
 const camera=new THREE.PerspectiveCamera(64,1,0.04,2000);
 
-// suelo neutro (grilla de referencia)
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshStandardMaterial({color:0x8d9aa6,roughness:1,metalness:0}));
+// suelo nocturno (tierra)
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(600,600),new THREE.MeshStandardMaterial({color:0x232a1e,roughness:1,metalness:0}));
 ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
-const grid=new THREE.GridHelper(400,200,0x55606b,0x47525d); grid.position.y=0.01; scene.add(grid);
-const LIMIT=180;
+const LIMIT=120;
 
-// luces
-const sun=new THREE.DirectionalLight(0xfff2e0,2.4); sun.position.set(-40,70,-50); sun.castShadow=true;
-sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=200;
-sun.shadow.camera.left=-40; sun.shadow.camera.right=40; sun.shadow.camera.top=40; sun.shadow.camera.bottom=-40; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
-scene.add(sun); scene.add(sun.target);
-scene.add(new THREE.HemisphereLight(0xdfeeff,0xb9c2cc,0.85));
-
-/* ===================== PISO DE MADERA + RENDER 3D DE TODOS LOS MATERIALES ===================== */
-function enableShadow(o){ o.traverse(c=>{ if(c.isMesh){c.castShadow=true;c.receiveShadow=true;} }); return o; }
-// piso de tablones de madera
-const plankA=new THREE.MeshStandardMaterial({color:0x8a5a2b,roughness:0.82,metalness:0});
-const plankB=new THREE.MeshStandardMaterial({color:0x77491f,roughness:0.82,metalness:0});
-const PW=15, PD=8, PCZ=-2.4, NPL=14, pw=PW/NPL;
-for(let i=0;i<NPL;i++){ const p=new THREE.Mesh(new THREE.BoxGeometry(pw*0.95,0.18,PD),(i%2?plankA:plankB));
-  p.position.set(-PW/2+pw*(i+0.5),0.09,PCZ); p.castShadow=p.receiveShadow=true; scene.add(p); }
-const FY=0.18;   // altura de la superficie del piso
-
-// ---- carga de texturas PBR del repo (jsDelivr) ----
-const texLoader=new THREE.TextureLoader(); texLoader.crossOrigin='anonymous';
-const TXB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@7fd8f15/assets/textures/';
-const MAXA=Math.min(8,renderer.capabilities.getMaxAnisotropy());
-function loadPBR(mat,base,rep,met){
-  const ax=Array.isArray(rep)?rep[0]:(rep||1), ay=Array.isArray(rep)?rep[1]:(rep||1);
-  const cfg=(t,srgb)=>{t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXA;t.repeat.set(ax,ay);return t;};
-  const f=()=>{};
-  texLoader.load(TXB+base+'_col.jpg',t=>{cfg(t,true);mat.map=t;mat.needsUpdate=true;},undefined,f);
-  texLoader.load(TXB+base+'_nrm.jpg',t=>{cfg(t,false);mat.normalMap=t;mat.needsUpdate=true;},undefined,f);
-  texLoader.load(TXB+base+'_rgh.jpg',t=>{cfg(t,false);mat.roughnessMap=t;mat.roughness=1;mat.needsUpdate=true;},undefined,f);
-  if(met)texLoader.load(TXB+base+'_met.jpg',t=>{cfg(t,false);mat.metalnessMap=t;mat.metalness=1;mat.needsUpdate=true;},undefined,f);
-}
-loadPBR(plankA,'v2/woodfloor',[1,3]); loadPBR(plankB,'v2/woodfloor',[1,3]);   // piso de madera real
+// ===== Iluminación nocturna (buena visibilidad) =====
+const moon=new THREE.DirectionalLight(0x9fb6ff,0.85); moon.position.set(-40,70,-30); moon.castShadow=true;
+moon.shadow.mapSize.set(2048,2048); moon.shadow.camera.near=1; moon.shadow.camera.far=220;
+moon.shadow.camera.left=-60; moon.shadow.camera.right=60; moon.shadow.camera.top=60; moon.shadow.camera.bottom=-60; moon.shadow.bias=-0.0004; moon.shadow.normalBias=0.04;
+scene.add(moon); scene.add(moon.target);
+scene.add(new THREE.HemisphereLight(0x3a557f,0x0d1108,0.6));
+scene.add(new THREE.AmbientLight(0x46506a,0.4));
 
 /* ===================== Jugador (1ª persona) ===================== */
 const EYE=1.7, EYE_CROUCH=1.05, GRAV=22, JUMP_V=7.4, SPEED_MAX=6.4, ACCEL=11;
@@ -138,7 +129,7 @@ function joyEnd(e){if(e.pointerId===joyId){joyId=null;joy.x=0;joy.y=0;knob.style
 joyEl.addEventListener('pointerup',joyEnd);joyEl.addEventListener('pointercancel',joyEnd);
 
 let lookId=null,lastX=0,lastY=0;const LOOK=0.0042;
-function isUI(t){return t.closest('.actBtn')||t===joyEl||t===knob;}
+function isUI(t){return t.closest('.actBtn')||t.closest('#npcPanel')||t===joyEl||t===knob;}
 addEventListener('pointerdown',e=>{if(isUI(e.target))return;if(lookId===null&&e.pointerId!==joyId){lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;}});
 addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;let ddx=e.clientX-lastX,ddy=e.clientY-lastY;if(rot){const t=ddx;ddx=ddy;ddy=-t;}player.yaw-=ddx*LOOK;player.pitch=Math.max(-1.4,Math.min(1.4,player.pitch-ddy*LOOK));lastX=e.clientX;lastY=e.clientY;});
 function lookEnd(e){if(e.pointerId===lookId)lookId=null;}
@@ -153,7 +144,7 @@ tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; document.getElementById('bC
 // cada estado es su PROPIO GLB y hacemos swap del cuerpo según el movimiento. La cámara va a la altura
 // de los ojos y se OCULTA la cabeza (escala del hueso Head ~0) para no tapar la vista: así ves tus
 // brazos, torso y piernas al mirar hacia abajo.
-const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@f12a2d1/';
+const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@ab92101/';
 let hitShake=0;
 const eLabelEl=document.getElementById('animLabel');
 const _gltf=new GLTFLoader();
@@ -168,7 +159,8 @@ _gltf.load(EBASE+'axe_fp.glb', gl=>{ const o=gl.scene;
   vm=new THREE.Group(); vm.add(o); vm.position.copy(VM_POS); vm.rotation.copy(VM_ROT); camera.add(vm);
   if(eLabelEl) eLabelEl.textContent='';
 }, undefined, e=>console.warn('axe_fp',e));
-function swing(){ if(swingT<=0) swingT=SWING_DUR; }   // golpe del hacha
+let attackQueued=false;
+function swing(){ if(swingT<=0){ swingT=SWING_DUR; attackQueued=true; } }   // golpe del hacha (+ intento de matar)
 function actBtn(id,fn){ const el=document.getElementById(id); if(el) el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
 actBtn('bChop',swing); actBtn('bHammer',swing);
 function tickPlayer(dt){ if(!vm)return;
@@ -178,6 +170,86 @@ function tickPlayer(dt){ if(!vm)return;
   let rx=VM_ROT.x, rz=VM_ROT.z;
   if(swingT>0){ swingT=Math.max(0,swingT-dt); const a=Math.sin((1-swingT/SWING_DUR)*Math.PI); rx+=a*1.6; rz-=a*0.5; py-=a*0.05; }   // arco del golpe
   vm.position.set(px,py,VM_POS.z); vm.rotation.set(rx,VM_ROT.y,rz); }
+
+/* ===================== NPCs: 5 tipos (viewer + perseguidores), antorchas, muertes ===================== */
+const NPC_TYPES=[
+  {name:'Primitivo · garrote', f:{idle:'char_idle.glb',walk:'char_walk.glb',run:'char_run.glb',attack:'char_attack.glb'}, h:1.85},
+  {name:'Cazador · lanza',     f:{idle:'npc2_idle.glb',walk:'npc2_walk.glb',run:'npc2_run.glb',attack:'npc2_attack.glb'}, h:1.92},
+  {name:'Encapuchado · hacha', f:{idle:'npc3_idle.glb',walk:'npc3_walk.glb',run:'npc3_run.glb',attack:'npc3_attack.glb'}, h:1.92},
+  {name:'Mujer · garrote',     f:{idle:'npc4_idle.glb',walk:'npc4_walk.glb',run:'npc4_run.glb',attack:'npc4_attack.glb'}, h:1.78},
+  {name:'Antorcha',            f:{idle:'npc5_idle.glb',walk:'npc5_walk.glb',run:'npc5_run.glb',attack:'npc5_attack.glb'}, h:1.8, torch:true},
+];
+const ANIMS=['idle','walk','run','attack'];
+const tpl=NPC_TYPES.map(()=>({}));
+const npcLoader=new GLTFLoader();
+let nLoaded=0; const nTotal=NPC_TYPES.length*ANIMS.length; let assetsReady=false;
+function normBody(scn,h){ let b=new THREE.Box3().setFromObject(scn), sz=b.getSize(new THREE.Vector3()), s=h/(sz.y||1); scn.scale.setScalar(s);
+  b=new THREE.Box3().setFromObject(scn); const c=b.getCenter(new THREE.Vector3()); scn.position.set(-c.x,-b.min.y,-c.z);
+  scn.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; const mm=Array.isArray(o.material)?o.material:[o.material]; mm.forEach(m=>{ if(m) m.side=THREE.FrontSide; }); } }); }
+NPC_TYPES.forEach((T,ti)=> ANIMS.forEach(an=>{   // TODAS en paralelo
+  npcLoader.load(EBASE+T.f[an], gl=>{ tpl[ti][an]={scene:gl.scene,clip:gl.animations[0]}; if(++nLoaded>=nTotal) onReady(); },
+    undefined, e=>{ console.warn(T.f[an],e); if(++nLoaded>=nTotal) onReady(); }); }));
+
+const npcs=[]; const _tmpV=new THREE.Vector3();
+function makeNPC(ti,x,z,mode){ const T=NPC_TYPES[ti];
+  const inst={ti,T,group:new THREE.Group(),bodies:{},mixers:{},actions:{},hand:{},state:null,mode,dead:false,vy:0,fall:0,atkCD:0};
+  ANIMS.forEach(an=>{ const t=tpl[ti][an]; if(!t)return;
+    const scn=skClone(t.scene); normBody(scn,T.h); scn.visible=false; inst.group.add(scn);
+    const mx=new THREE.AnimationMixer(scn); const ac=t.clip?mx.clipAction(t.clip):null; if(ac)ac.setLoop(THREE.LoopRepeat);
+    inst.bodies[an]=scn; inst.mixers[an]=mx; inst.actions[an]=ac; inst.hand[an]=scn.getObjectByName('RightHand'); });
+  inst.group.position.set(x,0,z); scene.add(inst.group);
+  if(T.torch){ inst.flame=makeFlame(); scene.add(inst.flame); }
+  setState(inst,'idle'); npcs.push(inst); return inst; }
+function setState(inst,an){ if(inst.dead||inst.state===an)return; const b=inst.bodies[an]; if(!b)return;
+  for(const k in inst.bodies) inst.bodies[k].visible=false; b.visible=true;
+  const ac=inst.actions[an]; if(ac) ac.reset().play(); inst.state=an; }
+
+// antorcha procedural (luz cálida titilante + sprite additivo) — como la del bosque
+function makeFlame(){ const g=new THREE.Group(); const light=new THREE.PointLight(0xff7d2a,7,9,2); g.add(light);
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex(),color:0xffb24d,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false}));
+  spr.scale.set(0.5,0.7,1); g.add(spr); g.userData={light,spr}; return g; }
+function flameTex(){ const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
+  const gr=x.createRadialGradient(32,34,2,32,34,30); gr.addColorStop(0,'rgba(255,245,210,1)');gr.addColorStop(.45,'rgba(255,150,40,.85)');gr.addColorStop(1,'rgba(255,80,0,0)');
+  x.fillStyle=gr;x.fillRect(0,0,64,64); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; }
+
+const VIEW_Z=-12, VIEW_DX=4.2;
+function onReady(){ assetsReady=true; if(eLabelEl)eLabelEl.textContent='';
+  for(let i=0;i<NPC_TYPES.length;i++){ const x=(i-(NPC_TYPES.length-1)/2)*VIEW_DX; const inst=makeNPC(i,x,VIEW_Z,'viewer'); inst.group.rotation.y=Math.PI; }   // viewer en fila
+  for(let k=0;k<3;k++){ const ti=(Math.random()*NPC_TYPES.length)|0, a=Math.random()*6.28, r=26+Math.random()*8;   // 3 perseguidores
+    makeNPC(ti, player.pos.x+Math.cos(a)*r, player.pos.z+Math.sin(a)*r, 'chase'); } }
+
+// panel: animación seleccionable al acercarse
+const panel=document.getElementById('npcPanel'), pName=document.getElementById('npName'); let nearInst=null;
+if(panel) panel.querySelectorAll('button').forEach(btn=> btn.addEventListener('pointerdown',e=>{ e.preventDefault();e.stopPropagation(); if(nearInst)setState(nearInst,btn.dataset.a); }));
+
+// matar con el hacha (rayo al centro) → ragdoll-lite
+const _ray=new THREE.Raycaster();
+function tryKill(){ _ray.setFromCamera({x:0,y:0},camera); _ray.far=3.2;
+  let best=null,bd=1e9; for(const n of npcs){ if(n.dead)continue; const h=_ray.intersectObject(n.group,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=n;} }
+  if(best&&bd<3.2) killNPC(best); }
+function killNPC(inst){ inst.dead=true; for(const k in inst.mixers) inst.mixers[k].stopAllAction();
+  const dx=inst.group.position.x-player.pos.x, dz=inst.group.position.z-player.pos.z, d=Math.hypot(dx,dz)||1;
+  inst.knock=new THREE.Vector3(dx/d*1.7,0,dz/d*1.7); inst.vy=2.4; inst.fall=0; inst.fallAxis=Math.random()<.5?1:-1; hitShake=0.6; }
+
+function tickNPCs(dt){ if(!assetsReady)return;
+  if(attackQueued){ attackQueued=false; tryKill(); }
+  let nv=null,nd=25; for(const n of npcs){ if(n.mode!=='viewer'||n.dead)continue; const dx=n.group.position.x-player.pos.x,dz=n.group.position.z-player.pos.z,dd=dx*dx+dz*dz; if(dd<nd){nd=dd;nv=n;} }
+  if(nv!==nearInst){ nearInst=nv; if(panel){ panel.style.display=nv?'flex':'none'; if(nv&&pName)pName.textContent=nv.T.name; } }
+  for(const inst of npcs){
+    if(inst.dead){ inst.fall=Math.min(1,inst.fall+dt*2.2);
+      if(inst.knock){ inst.group.position.x+=inst.knock.x*dt; inst.group.position.z+=inst.knock.z*dt; inst.knock.multiplyScalar(0.9); }
+      inst.vy-=14*dt; inst.group.position.y=Math.max(0,inst.group.position.y+inst.vy*dt);
+      inst.group.rotation.x=inst.fallAxis*(-Math.PI/2)*inst.fall;   // se acuesta (rígido, sin atravesarse)
+      continue; }
+    if(inst.mixers[inst.state]) inst.mixers[inst.state].update(dt);
+    if(inst.flame){ const hb=inst.hand[inst.state]; if(hb){ hb.updateWorldMatrix(true,false); hb.getWorldPosition(_tmpV); inst.flame.position.set(_tmpV.x,_tmpV.y+0.28,_tmpV.z);
+      const fl=0.7+Math.random()*0.5; inst.flame.userData.light.intensity=7*fl; inst.flame.userData.spr.material.opacity=0.7+0.3*Math.random(); } }
+    if(inst.mode==='viewer'){ const dx=player.pos.x-inst.group.position.x, dz=player.pos.z-inst.group.position.z; inst.group.rotation.y=Math.atan2(dx,dz); }
+    else { const dx=player.pos.x-inst.group.position.x, dz=player.pos.z-inst.group.position.z, d=Math.hypot(dx,dz)||1;
+      inst.group.rotation.y=Math.atan2(dx,dz); inst.atkCD=Math.max(0,inst.atkCD-dt);
+      if(d<2.0){ setState(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.3; hitShake=Math.max(hitShake,0.8); } }
+      else { const run=d>7, sp=(run?2.7:1.4)*dt; inst.group.position.x+=dx/d*sp; inst.group.position.z+=dz/d*sp; setState(inst,run?'run':'walk'); } }
+  } }
 
 /* ===================== Loop ===================== */
 const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
@@ -197,8 +269,9 @@ function update(dt){
   camera.position.set(player.pos.x+right.x*bobX, player.pos.y+player.eye+bobY, player.pos.z+right.z*bobX);
   euler.set(player.pitch,player.yaw,player.roll); camera.quaternion.setFromEuler(euler);
   if(hitShake>0.0001){ camera.rotateZ((Math.random()-0.5)*0.07*hitShake); camera.rotateX((Math.random()-0.5)*0.05*hitShake); } hitShake*=0.88;
-  sun.position.set(player.pos.x-40,70,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
-  tickPlayer(dt);        // cuerpo del player en 1ª persona
+  moon.position.set(player.pos.x-40,70,player.pos.z-30); moon.target.position.copy(player.pos); moon.target.updateMatrixWorld();
+  tickPlayer(dt);        // hacha en 1ª persona
+  tickNPCs(dt);          // viewer + perseguidores + muertes
 }
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
 
