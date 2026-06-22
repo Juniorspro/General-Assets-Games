@@ -2096,11 +2096,12 @@ const N_TYPES=[
   {f:{idle:'npc5_idle.glb',walk:'npc5_walk.glb',run:'npc5_run.glb',attack:'npc5_attack.glb'},h:1.7,torch:true},
 ];
 const N_ANIMS=['idle','walk','run','attack']; const ntpl=N_TYPES.map(()=>({})); const nGLTF=new GLTFLoader();
-let nLoaded=0; const nTotal=N_TYPES.length*4; let nReady=false;
-N_TYPES.forEach((T,ti)=> N_ANIMS.forEach(an=>{ nGLTF.load(N_EBASE+T.f[an], gl=>{ const scn=gl.scene;
-  const b=new THREE.Box3().setFromObject(scn),sz=b.getSize(new THREE.Vector3()),s=T.h/(sz.y||1),c=b.getCenter(new THREE.Vector3());
-  ntpl[ti][an]={scene:scn,clip:gl.animations[0],s,off:new THREE.Vector3(-c.x*s,-b.min.y*s,-c.z*s)}; if(++nLoaded>=nTotal)nReady=true; },
-  undefined, e=>{ console.warn(T.f[an],e); if(++nLoaded>=nTotal)nReady=true; }); }));
+let nLoaded=0; const nTotal=N_TYPES.length*4; let nReady=false, nKicked=false;
+function loadNPCs(){ if(nKicked)return; nKicked=true;   // se llama AL EMPEZAR la partida (no en el boot, para no competir con la carga del mundo)
+  N_TYPES.forEach((T,ti)=> N_ANIMS.forEach(an=>{ nGLTF.load(N_EBASE+T.f[an], gl=>{ const scn=gl.scene;
+    const b=new THREE.Box3().setFromObject(scn),sz=b.getSize(new THREE.Vector3()),s=T.h/(sz.y||1),c=b.getCenter(new THREE.Vector3());
+    ntpl[ti][an]={scene:scn,clip:gl.animations[0],s,off:new THREE.Vector3(-c.x*s,-b.min.y*s,-c.z*s)}; if(++nLoaded>=nTotal)nReady=true; },
+    undefined, e=>{ console.warn(T.f[an],e); if(++nLoaded>=nTotal)nReady=true; }); })); }
 const NPCS=[]; const _nv=new THREE.Vector3(),_nq=new THREE.Quaternion(),_yU=new THREE.Vector3(0,1,0);
 function nFlameTex(){ const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
   const gr=x.createRadialGradient(32,38,2,32,34,30); gr.addColorStop(0,'rgba(255,248,220,1)');gr.addColorStop(.45,'rgba(255,150,40,.9)');gr.addColorStop(1,'rgba(255,80,0,0)');
@@ -2167,7 +2168,7 @@ function tickStoryNight(dt){ if(storyT<0)return; storyT+=dt;
   if(!nightSpawned && nReady && nightFactor>0.55){ nightSpawned=true; spawnNight(); } }
 
 function update(dt){
-  if(storyT>=0){ tickStoryNight(dt); }
+  if(storyT>=0){ try{ tickStoryNight(dt); }catch(e){} }
   else if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
     setTime(elev,120);   // SIN IBL: ilumina la directa+hemisférica; el relieve lo dan los normal maps
     hudTimer-=dt; if(hudTimer<=0){ hudTimer=0.25; $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev); } }  // DOM sólo ~4x/seg (evita reflow por frame)
@@ -2230,7 +2231,7 @@ function update(dt){
         else{lm.visible=true; const full=lm.userData.full||lm.count; lm.count=(d2<lnear2)?full:(lm.userData.half||full);}}}}
   if(shadowDirty&&shadowOn)renderer.shadowMap.needsUpdate=true;
   chopTick(dt);
-  tickNPCs(dt);   // NPCs nocturnos + ragdoll
+  try{ tickNPCs(dt); }catch(e){}   // NPCs nocturnos + ragdoll (blindado)
   // Mundo precargado entero: NO se construye/descarga ni se tocan sombras en runtime → cero tirones al caminar.
   windU.uTime.value+=dt;
 }
@@ -2538,7 +2539,7 @@ function startGame(){
       loadResScale=1.0;                                    // dejamos el modo carga (½ res) → resolución normal
       applyDefaults(); setQuality(curQuality); applyGodTextures(); layout();
       equipped='hacha'; equipItem('hacha'); fpAxe.visible=false;   // tomahawk = hacha permanente de por vida
-      const enter=()=>{ started=true; unlockAudio(); enterPlayMode(); fadeFromBlack(); cycleOn=false; storyT=0; nightSpawned=false; };   // arranca el guion día→noche (~1 min y oscurece)
+      const enter=()=>{ started=true; unlockAudio(); enterPlayMode(); fadeFromBlack(); cycleOn=false; storyT=0; nightSpawned=false; try{loadNPCs();}catch(e){console.warn(e);} };   // arranca día→noche + carga NPCs
       if(worldReady){ enter(); }
       else bootArea(enter);
     });
