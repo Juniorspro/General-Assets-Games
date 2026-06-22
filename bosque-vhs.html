@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#1a0e08" />
 <title>The Lost Pendrive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Grenze+Gotisch:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root { --safe-t: env(safe-area-inset-top,0px); --safe-b: env(safe-area-inset-bottom,0px); }
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
@@ -202,10 +205,92 @@
   .cell .qty { position:absolute; right:5px; bottom:3px; font-size:12px; font-weight:800; color:#cfe6ff; text-shadow:0 1px 3px #000; }
   .invClose { display:block; margin:16px auto 0; padding:10px 30px; border-radius:11px; cursor:pointer; font-size:13px; font-weight:600;
               background:rgba(120,170,255,.14); border:1px solid rgba(127,208,255,.4); color:#eef3f8; }
+
+  /* ===================== BOOT / INTRO FLOW ===================== */
+  .woodsy { font-family:'Grenze Gotisch','Cinzel Decorative',serif; }
+  #boot,#langPick,#studios { position:fixed; inset:0; z-index:200; display:flex; flex-direction:column; align-items:center; justify-content:center;
+            background:#000; transition:opacity .6s ease; }
+  #boot.fade,#langPick.fade,#studios.fade { opacity:0; pointer-events:none; }
+  #boot.gone,#langPick.gone,#studios.gone { display:none; }
+  #fsBtn { font-family:'Grenze Gotisch','Cinzel Decorative',serif; font-size:clamp(20px,5vw,30px); font-weight:700; letter-spacing:.04em;
+           padding:18px 38px; border-radius:16px; cursor:pointer; color:#f3e7dc; background:rgba(255,255,255,.06);
+           border:1.5px solid rgba(255,180,107,.5); box-shadow:0 0 28px rgba(255,150,80,.18); transition:all .2s; }
+  #fsBtn:hover,#fsBtn:active { background:rgba(255,150,80,.2); border-color:#ffb46b; transform:translateY(-2px); }
+  #langPick .lpTitle { font-family:'Grenze Gotisch',serif; font-size:clamp(18px,4vw,26px); opacity:.7; margin-bottom:24px; letter-spacing:.1em; }
+  #langPick .lpRow { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
+  #langPick .lpOpt { font-family:'Grenze Gotisch',serif; font-size:22px; padding:14px 30px; border-radius:14px; cursor:pointer; color:#f3e7dc;
+           background:rgba(255,255,255,.05); border:1.5px solid rgba(255,255,255,.16); transition:all .18s; }
+  #langPick .lpOpt:hover,#langPick .lpOpt:active { background:rgba(255,150,80,.2); border-color:#ffb46b; }
+  #studios img { max-width:70%; max-height:60%; object-fit:contain; opacity:0; transition:opacity .6s ease; }
+  #studios img.in { opacity:1; }
+  #bootLoad { position:absolute; bottom:calc(34px + var(--safe-b)); font-family:'Grenze Gotisch',serif; font-size:13px; letter-spacing:.18em;
+              text-transform:uppercase; opacity:0; transition:opacity .4s; }
+  #bootLoad.show { opacity:.55; }
+
+  /* ===================== MENU BLUR / HALF-RES ===================== */
+  body.menuOpen #app canvas { filter:blur(14px) brightness(.7); }
+
+  /* ===================== START MENU LOGO + WOODSY ===================== */
+  #startLogo { max-width:min(360px,72vw); width:100%; height:auto; display:block; margin-bottom:6px;
+               filter:drop-shadow(0 8px 26px rgba(0,0,0,.7)) drop-shadow(0 0 18px rgba(255,150,80,.25)); }
+  #startMenu .navItem { font-family:'Grenze Gotisch','Cinzel Decorative',serif; letter-spacing:.02em; }
+
+  /* ===================== CUSTOM CURSOR (mouse mode) ===================== */
+  body.mouseMode, body.mouseMode * { cursor:none !important; }
+  #cursor { position:fixed; top:0; left:0; width:48px; height:36px; z-index:9999; pointer-events:none; display:none;
+            image-rendering:auto; filter:drop-shadow(0 2px 4px rgba(0,0,0,.6)); transform:translate(0,0); will-change:transform; }
+  body.mouseMode #cursor { display:block; }
+
+  /* ===================== KEYBOARD CONTROLS CARD ===================== */
+  #kbCard { z-index:90; }
+  .kbCard { width:min(520px,calc(100vw - 36px)); max-height:calc(100vh - 48px); display:flex; flex-direction:column;
+            background:linear-gradient(165deg,rgba(26,30,38,.94),rgba(12,14,19,.97)); border:1px solid rgba(150,180,220,.18);
+            border-radius:20px; box-shadow:0 30px 90px rgba(0,0,0,.74); animation:heroIn .4s ease both; overflow:hidden; }
+  body.rot .kbCard { max-height:calc(100vw - 48px); }
+  .kbCard h2 { font-family:'Cinzel Decorative',serif; font-size:22px; font-weight:700; text-align:center; padding:20px 20px 6px; }
+  .kbCard .kbSub { text-align:center; font-size:11px; letter-spacing:.16em; text-transform:uppercase; opacity:.5; padding-bottom:8px; }
+  .kbList { overflow-y:auto; -webkit-overflow-scrolling:touch; padding:6px 20px; flex:1; }
+  .kbRow { display:flex; align-items:center; gap:14px; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.06); }
+  .kbRow:last-child { border-bottom:none; }
+  .kbKeys { display:flex; gap:5px; flex:0 0 auto; min-width:118px; flex-wrap:wrap; }
+  .kcap { font-family:ui-monospace,Menlo,monospace; font-size:12px; min-width:26px; height:28px; padding:0 8px;
+          display:flex; align-items:center; justify-content:center; border-radius:7px; color:#eef3f8;
+          background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.04)); border:1px solid rgba(255,255,255,.18);
+          box-shadow:0 2px 0 rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.12); }
+  .kbDesc { font-size:13px; opacity:.85; line-height:1.4; }
+  .kbPlay { margin:14px 20px 20px; padding:15px; font-family:'Cinzel Decorative',serif; font-size:16px; font-weight:700; letter-spacing:.06em;
+            border-radius:14px; cursor:pointer; text-align:center; color:#fff; border:none;
+            background:linear-gradient(135deg,#2f6dd0,#5aa0ff); box-shadow:0 10px 30px rgba(60,120,220,.4); }
+  .kbPlay:hover,.kbPlay:active { filter:brightness(1.1); }
 </style>
 </head>
 <body>
 <div id="loader"><div class="leaf-spin"></div><p data-i18n="loading">Cargando…</p></div>
+
+<!-- ===== Custom cursor (mouse mode) ===== -->
+<img id="cursor" src="https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/cursor.png" alt="">
+
+<!-- ===== INTRO / BOOT FLOW ===== -->
+<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button></div>
+<div id="langPick" class="gone">
+  <div class="lpTitle" data-i18n="language">Idioma</div>
+  <div class="lpRow">
+    <div class="lpOpt" data-blang="es">Español</div>
+    <div class="lpOpt" data-blang="en">English</div>
+    <div class="lpOpt" data-blang="pt">Português</div>
+  </div>
+</div>
+<div id="studios" class="gone"><img id="studioImg" src="" alt=""><div id="bootLoad" data-i18n="loading">Cargando…</div></div>
+
+<!-- ===== Keyboard controls card (mouse mode) ===== -->
+<div id="kbCard" class="scrim">
+  <div class="kbCard">
+    <h2 data-i18n="controlsTitle">Controles</h2>
+    <div class="kbSub" data-i18n="controlsSub">Teclado y ratón</div>
+    <div class="kbList" id="kbList"></div>
+    <button class="kbPlay" id="kbPlay" data-i18n="play">Jugar</button>
+  </div>
+</div>
 
 <div id="stage">
   <div id="app"></div>
@@ -247,17 +332,19 @@
     <div class="row"><label><span data-i18n="saturation">Saturación</span> <span id="satVal">0</span></label><input type="range" id="sat" min="-40" max="60" value="0" step="5"></div>
     <div class="row" style="margin-bottom:0"><label><span data-i18n="shake">Temblor de cámara</span> <span id="shakeVal">40%</span></label><input type="range" id="shake" min="0" max="150" value="40" step="5"></div>
     <div class="grp" data-i18n="materials">Materiales</div>
-    <div class="row" style="margin-bottom:0"><label><span data-i18n="relief">PBR / Relieve 3D</span> <span id="reliefVal">700%</span></label><input type="range" id="relief" min="0" max="800" value="700" step="10"></div>
+    <div class="row"><label><span data-i18n="relief">PBR / Relieve 3D</span> <span id="reliefVal">700%</span></label><input type="range" id="relief" min="0" max="800" value="700" step="10"></div>
+    <div class="row" style="margin-bottom:0"><label data-i18n="shadowRes">Resolución de sombras</label><div class="seg" id="shadowResSeg">
+      <button data-sr="256">256</button><button data-sr="512" class="active">512</button><button data-sr="1024">1024</button></div></div>
   </div>
 
   <div id="hud"><span id="fps">–</span> FPS · <span id="treeCount">–</span> <span data-i18n="trees">árboles</span> · 🪵 <span id="wood">0</span></div>
   <div id="hint" data-i18n="hint">Joystick para caminar · arrastrá para mirar · 🪓 talar · 🎒 mochila</div>
 
 <!-- ===== Menú de inicio (dentro de #stage → rotan 90° con el juego) ===== -->
-<div id="startMenu" class="scrim show left">
+<div id="startMenu" class="scrim left">
   <div class="hero">
     <div class="brand">Rezona Games</div>
-    <h1 class="title"><span>The Lost</span><span class="accent">Pendrive</span></h1>
+    <img id="startLogo" src="https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/logo.png" alt="The Lost Pendrive">
     <div class="navList">
       <div class="navItem" id="playBtn"><span class="navDot"></span><span data-i18n="play">Jugar</span></div>
       <div class="navItem" id="optBtn"><span class="navDot"></span><span data-i18n="options">Opciones</span></div>
@@ -429,11 +516,11 @@ const PRESETS={
 const Q=PRESETS[DEV.tier];
 // 5 niveles de calidad elegibles en el menú de inicio (por defecto: medio)
 const QUALITY={
-  vlow:  {radial:4, shadow:0,    leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90 },
-  low:   {radial:5, shadow:1024, leaf:90,  grassN:320, plantN:26, rockN:6,  density:8,  streamR:2, dpr:1.3, res:0.8, bloom:false, aa:true,  rdist:120},
-  medium:{radial:6, shadow:1536, leaf:140, grassN:600, plantN:50, rockN:9,  density:11, streamR:2, dpr:1.6, res:1.0, bloom:true,  aa:true,  rdist:150},
-  high:  {radial:6, shadow:2048, leaf:200, grassN:950, plantN:80, rockN:12, density:14, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:190},
-  vhigh: {radial:7, shadow:3072, leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:240},
+  vlow:  {radial:4, shadow:0,    leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
+  low:   {radial:5, shadow:512,  leaf:90,  grassN:320, plantN:26, rockN:6,  density:8,  streamR:1, dpr:1.3, res:0.8, bloom:false, aa:true,  rdist:120, chunkBudget:1},
+  medium:{radial:6, shadow:512,  leaf:140, grassN:600, plantN:50, rockN:9,  density:11, streamR:2, dpr:1.6, res:1.0, bloom:true,  aa:true,  rdist:150, chunkBudget:1},
+  high:  {radial:6, shadow:1024, leaf:200, grassN:950, plantN:80, rockN:12, density:14, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:190, chunkBudget:2},
+  vhigh: {radial:7, shadow:1024, leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:240, chunkBudget:2},
 };
 let qual=QUALITY.medium;
 const GRASS_N={low:300,medium:620,high:1000}[DEV.tier], PLANT_N={low:26,medium:55,high:90}[DEV.tier], ROCK_N={low:5,medium:8,high:12}[DEV.tier];
@@ -667,7 +754,7 @@ function buildChunk(cx,cz){
   const key=cx+'_'+cz; if(builtChunks.has(key))return;
   const rng=mulberry32(hash2(cx,cz));const x0=cx*CHUNK,z0=cz*CHUNK;const grp=new THREE.Group();
   const lamps=[];const chunkTrees=[];const leafMeshes=[];
-  const nTrees=Math.max(1,Math.round(qual.density*densityMul));
+  const nTrees=Math.max(1,Math.round(qual.density*densityMul*0.75));  // ~25% menos árboles (vegetación intacta)
   const lp=new THREE.PlaneGeometry(1.25,1.3);const ownGeos=[lp];   // geometrías propias del chunk (se liberan al descargarlo; las compartidas NO)
   for(let i=0;i<nTrees;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+2.5)continue;
     const tree=createTree({species:speciesList[Math.floor(rng()*speciesList.length)],season:currentSeason,radial:qual.radial,leafCount:qual.leaf},rng);
@@ -739,7 +826,7 @@ function rebuildWorld(){
 
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
 let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null;
-let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0;
+let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuResScale=1.0;
 let cycleOn=true, cyclePhase=0, envCycleTimer=0; const A_ELEV=34, THETA0=3.02;   // ciclo día/noche 24 min (12+12); sol bajo = hora dorada, sin blanco quemado
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
@@ -761,7 +848,7 @@ function layout(){
   document.body.classList.toggle('rot',rot);
   const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight;
   camera.aspect=vw/vh;camera.updateProjectionMatrix();
-  renderer.setPixelRatio(Math.min(devicePixelRatio,DPRCAP)*resScale*dynRes);   // resolución nativa × calidad × resolución adaptativa
+  renderer.setPixelRatio(Math.min(devicePixelRatio,DPRCAP)*resScale*dynRes*menuResScale);   // resolución nativa × calidad × adaptativa × (½ en menús borrosos)
   renderer.setSize(vw,vh,false);
   if(composer)composer.setSize(vw,vh);
 }
@@ -826,7 +913,8 @@ $('shake').addEventListener('input',e=>{const v=+e.target.value;$('shakeVal').te
 $('relief').addEventListener('input',e=>{const v=+e.target.value;reliefScale=v/100;$('reliefVal').textContent=v+'%';barkMat.normalScale.set(reliefScale,reliefScale);if(ground.material.normalScale)ground.material.normalScale.set(reliefScale*0.6,reliefScale*0.6);});
 
 // abrir/cerrar paneles + menú de pausa
-$('menuBtn').addEventListener('click',()=>$('pause').classList.add('show'));
+let scrimClosedAt=0;   // marca de cierre de un scrim → evita que el pointerup que cerró abra la pausa
+$('menuBtn').addEventListener('click',()=>{ if(performance.now()-scrimClosedAt<350)return; $('pause').classList.add('show'); });
 document.querySelectorAll('.closeBtn').forEach(b=>b.addEventListener('click',()=>$(b.dataset.close).classList.remove('open')));
 let hinted=false;function dismissHint(){if(!hinted){hinted=true;$('hint').classList.add('hide');}}
 
@@ -861,7 +949,7 @@ camera.add(fpAxe); scene.add(camera);
 const FP_BASE=fpAxe.rotation.clone(), FP_POS=fpAxe.position.clone();
 const equip={active:false,t:0};
 let swing={active:false,t:0,hit:false};
-function startSwing(){ if(intro.active||equip.active)return; if(!swing.active){swing.active=true;swing.t=0;swing.hit=false;} }
+function startSwing(){ if(intro.active||equip.active||fpRig.visible)return; if(!swing.active){swing.active=true;swing.t=0;swing.hit=false;} }  // si hay arma equipada (tomahawk), el swing lo maneja wswing
 
 const partGeo=new THREE.BoxGeometry(0.05,0.05,0.16);const partMat=new THREE.MeshStandardMaterial({color:0x6e4c2c,roughness:0.95,metalness:0});
 const PART_MAX=180;const parts=new THREE.InstancedMesh(partGeo,partMat,PART_MAX);parts.frustumCulled=false;scene.add(parts);
@@ -1309,9 +1397,10 @@ function equipItem(id){
     if(id==='botella') setupHeldMolotov(); else molotovHeld=false; }
   else { fpRig.visible=false; molotovHeld=false; if(started)fpAxe.visible=true; }   // sin ítem → vuelve el hacha del bosque
 }
-let wswing={active:false,t:0};
+let wswing={active:false,t:0,hit:false};
 const THRUST=new Set(['spear','lanzapiedra','lanzaafil']);
-function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;} }
+const CHOPPERS=new Set(['hacha','machete','guadana']);   // armas que pueden talar árboles
+function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;wswing.hit=false;} }
 
 /* ---- crafteo / inventario ---- */
 const RECIPES=[
@@ -1322,7 +1411,6 @@ const RECIPES=[
   {id:'machete',tab:'weapons',needTable:true,placeable:false},
   {id:'botella',tab:'weapons',needTable:true,placeable:false},
   {id:'guadana',tab:'weapons',needTable:true,placeable:false},
-  {id:'hacha',  tab:'weapons',needTable:true,placeable:false},
   {id:'picomad',   tab:'tools',needTable:true,placeable:false},
   {id:'arco',      tab:'tools',needTable:true,placeable:false},
   {id:'antorcha',  tab:'tools',needTable:false,placeable:false},
@@ -1432,7 +1520,7 @@ function openMenu(mode){
   $('mFootL').textContent = mode==='craft'?(craftAtTable?'⬢ MESA CONECTADA':cT('hintNormal')) : (mode==='place'?cT('hintPlace'):'');
   selId=null; renderTabs(); renderGrid(); $('menu').classList.add('show');
 }
-function hideMenu(){ $('menu').classList.remove('show'); }
+function hideMenu(){ scrimClosedAt=performance.now(); $('menu').classList.remove('show'); }
 $('menu').querySelectorAll('.xClose').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();hideMenu();}));
 
 const RESN={madera:'🪵',piedra:'🪨',metal:'⚙️',cuerda:'🪢',tela:'🧵',vidrio:'🔷',chapa:'🛡️',barro:'🟫',carbon:'🔥',hueso:'🦴'};
@@ -1577,6 +1665,7 @@ function craftTick(dt){
     if(THRUST.has(equipped)){ fpRig.position.z=fpBasePos.z-a*0.7; fpRig.rotation.x=fpBaseRot.x-a*0.18; }
     else if(equipped==='botella'){ fpRig.position.z=fpBasePos.z-a*0.22; fpRig.rotation.x=fpBaseRot.x-a*0.35; }
     else { fpRig.rotation.x=fpBaseRot.x-a*1.2; }
+    if(wswing.t>=0.5&&!wswing.hit&&CHOPPERS.has(equipped)){ wswing.hit=true; doChop(); }  // el tomahawk/hachas talan
     if(wswing.t>=1){ wswing.active=false; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
   resolveCollisions();
@@ -1643,11 +1732,12 @@ function update(dt){
     if(vis){const fv=d2<gd2;for(let i=0;i<c.fol.length;i++)c.fol[i].visible=fv; // OPT: LOD de follaje bajo (pasto/plantas sólo cerca)
       const lf=d2<ld2;for(let i=0;i<c.leafMeshes.length;i++)c.leafMeshes[i].visible=lf;}} // OPT: LOD de copas (hojas sólo cerca; troncos siempre)
   chopTick(dt);
-  streamChunks(1);              // OPT: 1 chunk por frame, precargado por delante → sin tirones bruscos
+  streamChunks(qual.chunkBudget||1);   // OPT: presupuesto de chunks por frame según calidad → menos tirones
   windU.uTime.value+=dt;
 }
 let shadowFrame=0;
 function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),0.05);
+  applyMenuVisuals();   // blur + media-resolución + ocultar HUD cuando hay menú abierto
   const live=started&&!paused&&!document.querySelector('.scrim.show:not(#menu)');
   if(live)update(dt); else cinematicCam(dt);   // menú: cámara cinemática paseando por el bosque
   // OPT: la sombra sólo se re-renderiza cada 3 frames (en vez de cada frame)
@@ -1678,6 +1768,9 @@ function cinematicCam(dt){
 /* ===================== IDIOMAS (ES / EN / PT) ===================== */
 const I18N={
   es:{run:'CORRER',world:'Mundo',season:'Estación',spring:'Prim',summer:'Ver',autumn:'Otoño',winter:'Inv',hour:'Hora',renderDist:'Distancia de render',shadowDist:'Distancia de sombras',vegDensity:'Densidad de vegetación',wind:'Viento',bob:'Balanceo al caminar',sound:'Sonido',rotate90:'Girar 90° en vertical',cycle:'Ciclo día/noche (24 min)',graphics:'Gráficos',resolution:'Resolución',aa:'Antialiasing (SMAA)',exposure:'Exposición',saturation:'Saturación',shake:'Temblor de cámara',materials:'Materiales',relief:'PBR / Relieve 3D',trees:'árboles',hint:'Joystick para caminar · arrastrá para mirar · 🪓 talar · 🎒 mochila',gameTitle:'Bosque Realista',language:'Idioma',quality:'Gráficos',qVlow:'Muy bajo',qLow:'Bajo',qMedium:'Medio',qHigh:'Alto',qVhigh:'Muy alto',play:'Jugar',options:'Opciones',advanced:'Ajustes avanzados',back:'Volver',paused:'Pausa',resume:'Reanudar',settings:'Ajustes',exit:'Salir',inventory:'Inventario',close:'Cerrar',loading:'Cargando…',
+      fullscreen:'Pantalla completa',shadowRes:'Resolución de sombras',controlsTitle:'Controles',controlsSub:'Teclado y ratón',
+      kbMove:'Moverse',kbLook:'Mirar',kbRun:'Correr',kbJump:'Saltar',kbCrouch:'Agacharse',kbChop:'Talar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventario',kbThrow:'Lanzar molotov',kbPause:'Pausa',
+      key_Mouse:'Ratón',key_Shift:'Mayús',key_Space:'Espacio',key_Ctrl:'Ctrl',key_Click:'Clic',key_Esc:'Esc',
       craft:'Fabricación',jump:'Saltar',crouch:'Agacharse',axe:'Hacha',build:'Construir',weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',spear:'Lanza de madera',knife:'Cuchillo de metal',
       machete:'Machete',botella:'Botella incendiaria',guadana:'Guadaña',hacha:'Hacha tomahawk',picomad:'Pico de madera',arco:'Arco',lanzapiedra:'Lanza de piedra',cuchipiedra:'Cuchillo de piedra',picopiedra:'Pico de piedra',flechamad:'Flechas de madera',flechapiedra:'Flechas de piedra',flechaafil:'Flechas afiladas',lanzaafil:'Lanza afilada',picoafil:'Pico afilado',cuchiafil:'Cuchillo afilado',antorcha:'Antorcha',azadamad:'Azada de madera',azadapiedra:'Azada de piedra',baldemad:'Balde de madera',baldechapa:'Balde de chapa',addWater:'Cargar agua',waterFull:'Balde lleno',
       cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo recto de madera',imad:'Techo inclinado',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',tcha:'Techo recto de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',need:'Necesitás',noSupport:'Necesita una pared debajo',
@@ -1685,6 +1778,9 @@ const I18N={
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
       useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —'},
   en:{run:'RUN',world:'World',season:'Season',spring:'Spr',summer:'Sum',autumn:'Aut',winter:'Win',hour:'Time',renderDist:'Render distance',shadowDist:'Shadow distance',vegDensity:'Vegetation density',wind:'Wind',bob:'Walk bob',sound:'Sound',rotate90:'Rotate 90° in portrait',cycle:'Day/night cycle (24 min)',graphics:'Graphics',resolution:'Resolution',aa:'Antialiasing (SMAA)',exposure:'Exposure',saturation:'Saturation',shake:'Camera shake',materials:'Materials',relief:'PBR / 3D relief',trees:'trees',hint:'Joystick to walk · drag to look · 🪓 chop · 🎒 bag',gameTitle:'Realistic Forest',language:'Language',quality:'Graphics',qVlow:'Very low',qLow:'Low',qMedium:'Medium',qHigh:'High',qVhigh:'Very high',play:'Play',options:'Options',advanced:'Advanced settings',back:'Back',paused:'Paused',resume:'Resume',settings:'Settings',exit:'Exit',inventory:'Inventory',close:'Close',loading:'Loading…',
+      fullscreen:'Fullscreen',shadowRes:'Shadow resolution',controlsTitle:'Controls',controlsSub:'Keyboard & mouse',
+      kbMove:'Move',kbLook:'Look',kbRun:'Run',kbJump:'Jump',kbCrouch:'Crouch',kbChop:'Chop / attack',kbCraft:'Craft',kbPlace:'Place',kbInv:'Inventory',kbThrow:'Throw molotov',kbPause:'Pause',
+      key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Space',key_Ctrl:'Ctrl',key_Click:'Click',key_Esc:'Esc',
       craft:'Crafting',jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',spear:'Wooden spear',knife:'Metal knife',
       machete:'Machete',botella:'Molotov',guadana:'Scythe',hacha:'Tomahawk axe',picomad:'Wood pickaxe',arco:'Bow',lanzapiedra:'Stone spear',cuchipiedra:'Stone knife',picopiedra:'Stone pickaxe',flechamad:'Wood arrows',flechapiedra:'Stone arrows',flechaafil:'Sharp arrows',lanzaafil:'Sharp spear',picoafil:'Sharp pickaxe',cuchiafil:'Sharp knife',antorcha:'Torch',azadamad:'Wood hoe',azadapiedra:'Stone hoe',baldemad:'Wood bucket',baldechapa:'Metal bucket',addWater:'Collect water',waterFull:'Bucket full',
       cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Flat wood roof',imad:'Sloped roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',tcha:'Flat metal roof',vcha:'Metal wall + window',dcha:'Metal wall + door',free:'Free',craftBtn:'Craft',crafted:'Crafted!',need:'You need',noSupport:'Needs a wall below',
@@ -1692,6 +1788,9 @@ const I18N={
       equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
       useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —'},
   pt:{run:'CORRER',world:'Mundo',season:'Estação',spring:'Pri',summer:'Ver',autumn:'Out',winter:'Inv',hour:'Hora',renderDist:'Distância de render',shadowDist:'Distância de sombras',vegDensity:'Densidade de vegetação',wind:'Vento',bob:'Balanço ao andar',sound:'Som',rotate90:'Girar 90° na vertical',cycle:'Ciclo dia/noite (24 min)',graphics:'Gráficos',resolution:'Resolução',aa:'Antialiasing (SMAA)',exposure:'Exposição',saturation:'Saturação',shake:'Tremor de câmera',materials:'Materiais',relief:'PBR / Relevo 3D',trees:'árvores',hint:'Joystick para andar · arraste para olhar · 🪓 cortar · 🎒 mochila',gameTitle:'Floresta Realista',language:'Idioma',quality:'Gráficos',qVlow:'Muito baixo',qLow:'Baixo',qMedium:'Médio',qHigh:'Alto',qVhigh:'Muito alto',play:'Jogar',options:'Opções',advanced:'Ajustes avançados',back:'Voltar',paused:'Pausa',resume:'Retomar',settings:'Ajustes',exit:'Sair',inventory:'Inventário',close:'Fechar',loading:'Carregando…',
+      fullscreen:'Tela cheia',shadowRes:'Resolução de sombras',controlsTitle:'Controles',controlsSub:'Teclado e mouse',
+      kbMove:'Mover',kbLook:'Olhar',kbRun:'Correr',kbJump:'Pular',kbCrouch:'Agachar',kbChop:'Cortar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventário',kbThrow:'Lançar molotov',kbPause:'Pausa',
+      key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Espaço',key_Ctrl:'Ctrl',key_Click:'Clique',key_Esc:'Esc',
       craft:'Fabricação',jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',spear:'Lança de madeira',knife:'Faca de metal',
       machete:'Facão',botella:'Coquetel molotov',guadana:'Foice',hacha:'Machado tomahawk',picomad:'Picareta de madeira',arco:'Arco',lanzapiedra:'Lança de pedra',cuchipiedra:'Faca de pedra',picopiedra:'Picareta de pedra',flechamad:'Flechas de madeira',flechapiedra:'Flechas de pedra',flechaafil:'Flechas afiadas',lanzaafil:'Lança afiada',picoafil:'Picareta afiada',cuchiafil:'Faca afiada',antorcha:'Tocha',azadamad:'Enxada de madeira',azadapiedra:'Enxada de pedra',baldemad:'Balde de madeira',baldechapa:'Balde de chapa',addWater:'Coletar água',waterFull:'Balde cheio',
       cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado reto de madeira',imad:'Telhado inclinado',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',tcha:'Telhado reto de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',need:'Precisa de',noSupport:'Precisa de parede embaixo',
@@ -1761,7 +1860,10 @@ document.querySelectorAll('#langOpts .opt').forEach(o=>o.addEventListener('click
 document.querySelectorAll('#qOpts .opt').forEach(o=>o.addEventListener('click',()=>{document.querySelectorAll('#qOpts .opt').forEach(x=>x.classList.remove('active'));o.classList.add('active');curQuality=o.dataset.q;updateQDesc();if(worldReady){setQuality(curQuality);rebuildWorld();}}));
 document.querySelector('#langOpts .opt[data-lang="es"]').classList.add('active');
 document.querySelector('#qOpts .opt[data-q="medium"]').classList.add('active');
-$('playBtn').addEventListener('click',startGame);
+$('playBtn').addEventListener('click',()=>{
+  if(mouseMode){ buildKbList(); wireUiSounds(); $('startMenu').classList.remove('show'); $('kbCard').classList.add('show'); }
+  else { startGame(); }
+});
 $('optBtn').addEventListener('click',()=>{$('startMenu').classList.remove('show');$('options').classList.add('show');});
 $('optBack').addEventListener('click',()=>{$('options').classList.remove('show');if(!started)$('startMenu').classList.add('show');});
 $('advBtn').addEventListener('click',()=>{$('ui').classList.add('open');$('vfx').classList.add('open');});
@@ -1783,7 +1885,103 @@ $('bag').addEventListener('pointerdown',()=>{ bagLong=false; bagHoldTimer=setTim
 const bagUp=()=>{ if(bagHoldTimer){clearTimeout(bagHoldTimer);bagHoldTimer=null;} if(!bagLong) openMenu('bag'); };
 $('bag').addEventListener('pointerup',bagUp);
 $('bag').addEventListener('pointercancel',()=>{ if(bagHoldTimer){clearTimeout(bagHoldTimer);bagHoldTimer=null;} });
-$('invClose').addEventListener('click',()=>$('inv').classList.remove('show'));
+$('invClose').addEventListener('click',e=>{ e.stopPropagation(); scrimClosedAt=performance.now(); $('inv').classList.remove('show'); });
+
+/* ===================== MOUSE / TECLADO (PC) ===================== */
+let mouseMode=false;
+const cursorEl=$('cursor');
+function enableMouseMode(){
+  if(mouseMode)return; mouseMode=true; document.body.classList.add('mouseMode');
+  // mover el cursor custom (hotspot arriba-izquierda)
+  window.addEventListener('mousemove',e=>{ cursorEl.style.transform='translate('+e.clientX+'px,'+e.clientY+'px)'; },{passive:true});
+}
+// detectar ratón real
+function maybeMouse(e){ if(e&&e.pointerType&&e.pointerType!=='mouse')return; if((e&&e.pointerType==='mouse')||matchMedia('(pointer:fine)').matches) enableMouseMode(); }
+window.addEventListener('pointerdown',maybeMouse,{passive:true});
+window.addEventListener('mousemove',function md(e){ enableMouseMode(); window.removeEventListener('mousemove',md); },{passive:true});
+if(matchMedia('(pointer:fine)').matches) enableMouseMode();
+
+/* sonidos de UI (WebAudio, sin assets) */
+let uiCtx=null;
+function uiAudio(){ if(!uiCtx){ try{ uiCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return uiCtx; }
+function uiBeep(freq,dur,vol){ const c=uiAudio(); if(!c)return; if(c.state==='suspended')c.resume();
+  const o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.frequency.value=freq;
+  g.gain.setValueAtTime(0,c.currentTime); g.gain.linearRampToValueAtTime(vol,c.currentTime+0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+dur); o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime+dur+0.02); }
+const tickSound=()=>uiBeep(1500,0.04,0.05);
+const clickSound=()=>uiBeep(760,0.09,0.08);
+// hover/click en elementos clickeables de los menús (sólo en modo ratón)
+function wireUiSounds(){
+  document.querySelectorAll('.navItem,.menuItem,.opt,.lpOpt,#fsBtn,.kbPlay,.invClose,.seg button,.stab,.slot,.sciBtn').forEach(el=>{
+    if(el.dataset.snd)return; el.dataset.snd='1';
+    el.addEventListener('pointerenter',()=>{ if(mouseMode)tickSound(); });
+    el.addEventListener('pointerdown',()=>{ if(mouseMode)clickSound(); });
+  });
+}
+
+/* ===================== HUD / BLUR EN MENÚS ===================== */
+const HUD_ELS=['flash','bag','run','bCraft','bPlace','bRot','joy','hud','hint','cross','menuBtn','vfxBtn'];
+function setHudVisible(v){ for(const id of HUD_ELS){ const el=$(id); if(!el)continue; el.style.display=v?'':'none'; }
+  // en modo ratón nunca mostramos joystick ni botones móviles
+  if(v&&mouseMode){ for(const id of ['joy','flash','bag','run','bCraft','bPlace','bRot']){ const el=$(id); if(el)el.style.display='none'; } }
+  if(v){ if(equipped&&fpRig)fpRig.visible=true; else if(started)fpAxe.visible=true; }
+  else { if(fpAxe)fpAxe.visible=false; if(fpRig)fpRig.visible=false; }
+}
+let menuVisualsOn=null;
+function anyBlurMenuOpen(){ return $('startMenu').classList.contains('show')||$('pause').classList.contains('show')||$('options').classList.contains('show')||$('kbCard').classList.contains('show'); }
+function applyMenuVisuals(){
+  const open=anyBlurMenuOpen()||!started;
+  if(open===menuVisualsOn)return; menuVisualsOn=open;
+  document.body.classList.toggle('menuOpen',open);
+  // media-resolución mientras el menú está abierto (es borroso → no se nota)
+  menuResScale = open?0.5:1.0; layout();
+  setHudVisible(!open);
+}
+function enterPlayMode(){ menuVisualsOn=null; applyMenuVisuals(); }
+
+/* ===================== RESOLUCIÓN DE SOMBRAS (ajustes avanzados) ===================== */
+let shadowResSel=512;
+function applyShadowRes(n){ shadowResSel=n; if(qual.shadow<=0)return;
+  dirLight.shadow.mapSize.set(n,n); if(dirLight.shadow.map){dirLight.shadow.map.dispose();dirLight.shadow.map=null;} renderer.shadowMap.needsUpdate=true; }
+document.querySelectorAll('#shadowResSeg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#shadowResSeg button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); applyShadowRes(+b.dataset.sr); }));
+
+/* ===================== CONTROLES DE TECLADO (panel) ===================== */
+const KB_DEFS=[
+  {keys:['W','A','S','D'],k:'kbMove'},
+  {keys:['Mouse'],k:'kbLook'},
+  {keys:['Shift'],k:'kbRun'},
+  {keys:['Space'],k:'kbJump'},
+  {keys:['Ctrl','C'],k:'kbCrouch'},
+  {keys:['Click','F'],k:'kbChop'},
+  {keys:['B'],k:'kbCraft'},
+  {keys:['V'],k:'kbPlace'},
+  {keys:['E'],k:'kbInv'},
+  {keys:['G'],k:'kbThrow'},
+  {keys:['Esc'],k:'kbPause'},
+];
+function keyCap(k){ const d=I18N[curLang]||I18N.es; return d['key_'+k]||k; }   // letras simples (W,A,S,D…) se muestran tal cual
+function buildKbList(){ const l=$('kbList'); l.innerHTML='';
+  for(const d of KB_DEFS){ const row=document.createElement('div'); row.className='kbRow';
+    const keys=document.createElement('div'); keys.className='kbKeys';
+    keys.innerHTML=d.keys.map(k=>`<span class="kcap">${keyCap(k)}</span>`).join('');
+    const desc=document.createElement('div'); desc.className='kbDesc'; desc.textContent=cT(d.k);
+    row.appendChild(keys); row.appendChild(desc); l.appendChild(row); } }
+$('kbPlay').addEventListener('click',()=>{ if(mouseMode)clickSound(); $('kbCard').classList.remove('show'); startGame(); });
+
+/* ===================== TECLADO EN JUEGO (modo ratón) ===================== */
+addEventListener('keydown',e=>{
+  if(!started){ if(e.code==='Escape'&&$('kbCard').classList.contains('show')){ $('kbCard').classList.remove('show'); $('startMenu').classList.add('show'); } return; }
+  if(e.code==='Escape'){ $('pause').classList.toggle('show'); }
+  if(e.code==='KeyF'){ if(equipped==='botella'){ throwMolotov(); startWSwing(); } else if(equipped){ startWSwing(); } else startSwing(); }
+  if(e.code==='KeyG'){ if(equipped==='botella'){ throwMolotov(); startWSwing(); } }
+  if(e.code==='KeyB'){ openMenu('craft'); }
+  if(e.code==='KeyV'){ if(placing)stopPlacing(); else openMenu('place'); }
+  if(e.code==='KeyE'){ renderInv(); $('inv').classList.add('show'); }
+});
+// click en el mundo (pointer lock) = talar/atacar
+renderer.domElement.addEventListener('mousedown',e=>{ if(!started||!mouseMode)return; if(document.pointerLockElement!==renderer.domElement)return;
+  if(e.button===0){ if(equipped==='botella'){ throwMolotov(); startWSwing(); } else if(equipped){ startWSwing(); if(placing)tryBuild(); } else startSwing(); } });
 
 /* ===================== ARRANQUE ===================== */
 const hideLoader=()=>document.getElementById('loader').classList.add('hide');
@@ -1801,20 +1999,62 @@ function bootArea(done){
 function startGame(){
   try{
     $('options').classList.remove('show'); $('startMenu').classList.remove('show');
-    player.pos.set(0,0,4); player.yaw=0; player.pitch=0; cineT=0; cyclePhase=0; fpAxe.visible=true;
+    player.pos.set(0,0,4); player.yaw=0; player.pitch=0; cineT=0; cyclePhase=0;
     applyDefaults(); setQuality(curQuality); applyGodTextures(); layout();
-    if(worldReady){ streamChunks(99,0,4); started=true; unlockAudio(); }
-    else bootArea(()=>{ streamChunks(99,0,4); started=true; unlockAudio(); });
+    equipped='hacha'; equipItem('hacha'); fpAxe.visible=false;   // tomahawk = hacha permanente de por vida
+    const enter=()=>{ streamChunks(99,0,4); started=true; unlockAudio(); enterPlayMode(); };
+    if(worldReady){ enter(); }
+    else bootArea(enter);
   }catch(err){ console.error('startGame:',err); }
 }
+/* ===================== INTRO / BOOT FLOW ===================== */
+const STUDIO_BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/';
+function fadeOut(el,cb){ el.classList.add('fade'); setTimeout(()=>{ el.classList.add('gone'); if(cb)cb(); },650); }
+// reveal del menú de inicio: espera a que el mundo esté listo
+function revealStartMenu(){
+  const show=()=>{ $('startMenu').classList.add('show'); wireUiSounds(); };
+  if(worldReady) show();
+  else { $('bootLoad').classList.add('show'); const wait=()=>{ if(worldReady){ $('studios').classList.add('gone'); show(); } else requestAnimationFrame(wait); }; wait(); }
+}
+// cinemática de estudios (junilax → rezona) sobre negro
+function playStudios(){
+  const img=$('studioImg'); const seq=[STUDIO_BASE+'studio_junilax.png',STUDIO_BASE+'studio_rezona.png']; let i=0;
+  const next=()=>{ if(i>=seq.length){ fadeOut($('studios'),null); revealStartMenu(); return; }
+    img.src=seq[i++]; img.classList.remove('in');
+    requestAnimationFrame(()=>{ img.classList.add('in'); });           // fade in ~0.6s
+    setTimeout(()=>{ img.classList.remove('in'); }, 600+2000);          // hold ~2s, luego fade out
+    setTimeout(next, 600+2000+600); };
+  $('studios').classList.remove('gone');
+  requestAnimationFrame(()=>{ $('studios').classList.remove('fade'); next(); });
+}
+// selección de idioma sobre negro
+function showLangPick(){
+  $('langPick').classList.remove('gone'); requestAnimationFrame(()=>$('langPick').classList.remove('fade'));
+  document.querySelectorAll('#langPick .lpOpt').forEach(o=>o.addEventListener('click',()=>{
+    if(mouseMode)clickSound();
+    const l=o.dataset.blang; curLang=l; applyLang(l); updateQDesc();
+    document.querySelectorAll('#langOpts .opt').forEach(x=>x.classList.toggle('active',x.dataset.lang===l));
+    fadeOut($('langPick'),playStudios);
+  }));
+  wireUiSounds();
+}
+// pantalla negra inicial con botón de pantalla completa
+$('fsBtn').addEventListener('click',()=>{
+  if(mouseMode)clickSound();
+  try{ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen(); }catch(e){}
+  fadeOut($('boot'),showLangPick);
+});
+
 try{
   applyLang('es'); updateQDesc();
   densityMul=VFX_DEFAULTS.dens/100;          // densidad del fondo del menú
   setQuality(curQuality);                    // calidad por defecto (medio)
+  applyShadowRes(shadowResSel);              // resolución de sombras por defecto (512)
   setShadowRange(28);
   setTime(8,120); updateEnvironment(); layout();
   captureIcons();                            // PNG del hacha y la madera (del modelo real)
-  bootArea();                                // construye el bosque de fondo para el menú + flythrough
+  wireUiSounds();
+  bootArea();                                // EL MUNDO CARGA EN SEGUNDO PLANO detrás del negro
 }catch(err){ console.error('Init:',err); }
 requestAnimationFrame(()=>{ try{ if(composer)composer.render(0);else renderer.render(scene,camera); }catch(e){console.error(e);} setTimeout(hideLoader,300); animate(); });
 </script>
