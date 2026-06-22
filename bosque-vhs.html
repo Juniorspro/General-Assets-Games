@@ -984,7 +984,7 @@ function upgradeNearChunk(dt){
 
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
 let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null,n8aoPass=null,vignetteEffect=null;
-let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuResScale=1.0;
+let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuResScale=1.0, digShake=0;
 let cycleOn=true, cyclePhase=0, envCycleTimer=0, lastEnvElev=999; const A_ELEV=34, THETA0=0.15;   // arranca al AMANECER (sol bajo subiendo → mañana → mediodía), ciclo día/noche 24 min
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
@@ -1545,9 +1545,14 @@ function buildKnifeV(bladeMat){const g=new THREE.Group();const handle=cyl(0.045,
   const bg=new THREE.ExtrudeGeometry(s,{depth:0.012,bevelEnabled:true,bevelThickness:0.004,bevelSize:0.005,bevelSegments:1,steps:1,curveSegments:8});bg.translate(0,0,-0.006);
   const bl=new THREE.Mesh(bg,bladeMat);bl.position.y=0.28;bl.castShadow=true;g.add(bl);return g;}
 function buildTorch(){const g=new THREE.Group();const sh=hnd(0.7,0.04,woodDark);sh.position.y=0.35;g.add(sh);
-  const wad=new THREE.Mesh(new THREE.IcosahedronGeometry(0.11,1),fabricMat); wad.scale.set(1,1.3,1); wad.position.y=0.72; wad.castShadow=true; g.add(wad);
-  const fire=makeFireMesh(fireGifs[1].tex,0.58,0.82); fire.name='torchFire'; fire.position.y=0.74; g.add(fire);
-  const fl=new THREE.PointLight(0xff7a2e,1.4,4.5,2); fl.name='torchLight'; fl.position.y=0.86; g.add(fl);
+  const wad=new THREE.Mesh(new THREE.IcosahedronGeometry(0.1,1),fabricMat); wad.scale.set(1,1.25,1); wad.position.y=0.7; wad.castShadow=true; g.add(wad);
+  // varias llamas cruzadas que envuelven por completo el aro de tela (antes el "redondo" tapaba el fuego)
+  const fire=new THREE.Group(); fire.name='torchFire';
+  const planes=[[0.62,0.96,0],[0.52,0.84,Math.PI/2],[0.5,0.8,Math.PI/4],[0.5,0.8,-Math.PI/4]];
+  planes.forEach((p,i)=>{ const mat=new THREE.MeshBasicMaterial({map:fireGifs[i%2].tex,transparent:true,opacity:0.95,depthWrite:false,blending:THREE.NormalBlending,side:THREE.DoubleSide,toneMapped:false});
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(p[0],p[1]),mat); m.rotation.y=p[2]; m.position.y=p[1]*0.30; fire.add(m); });
+  fire.position.y=0.66; g.add(fire);
+  const fl=new THREE.PointLight(0xff7a2e,1.4,4.5,2); fl.name='torchLight'; fl.position.y=0.9; g.add(fl);
   return g;}
 function buildHoe(headMat){const g=new THREE.Group();
   const sh=hnd(1.35,0.045,woodMat); sh.position.y=0.67; g.add(sh); g.add(lash(1.27,0.06));
@@ -1618,6 +1623,7 @@ function equipItem(id){
 let wswing={active:false,t:0,hit:false};
 const THRUST=new Set(['spear','lanzapiedra','lanzaafil']);
 const CHOPPERS=new Set(['hacha','machete','guadana']);   // armas que pueden talar árboles
+const DIGGERS=new Set(['pala']);                          // herramientas que cavan (clavan hacia abajo)
 function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;wswing.hit=false;} }
 
 /* ---- crafteo / inventario ---- */
@@ -1915,10 +1921,14 @@ function craftTick(dt){
   // swing del arma equipada (anima el fpRig, no el hacha del bosque)
   if(wswing.active&&fpRig.visible){ wswing.t+=dt/0.42; const a=Math.sin(Math.min(wswing.t,1)*Math.PI);
     if(THRUST.has(equipped)){ fpRig.position.z=fpBasePos.z-a*0.7; fpRig.rotation.x=fpBaseRot.x-a*0.18; }
+    else if(DIGGERS.has(equipped)){   // la pala NO se balancea adelante: se baja y se clava en el suelo, con esfuerzo
+      fpRig.position.y=fpBasePos.y-a*0.5; fpRig.position.z=fpBasePos.z-a*0.26;
+      fpRig.rotation.x=fpBaseRot.x-a*1.0; fpRig.position.x=fpBasePos.x+Math.sin(wswing.t*44)*0.013*a;
+      digShake=a; }
     else if(equipped==='botella'){ fpRig.position.z=fpBasePos.z-a*0.22; fpRig.rotation.x=fpBaseRot.x-a*0.35; }
     else { fpRig.rotation.x=fpBaseRot.x-a*1.2; }
     if(wswing.t>=0.5&&!wswing.hit&&CHOPPERS.has(equipped)){ wswing.hit=true; doChop(); }  // el tomahawk/hachas talan
-    if(wswing.t>=1){ wswing.active=false; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
+    if(wswing.t>=1){ wswing.active=false; digShake=0; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
   resolveCollisions();
   if(placing&&!cbuilding) updateGhost();
@@ -1971,13 +1981,14 @@ function update(dt){
   player.roll+=((-player.strafeSm*0.08+Math.sin(player.bobPhase)*0.018*moveAmt)-player.roll)*Math.min(1,10*dt);
   const tt=windU.uTime.value,mf=(0.5+moveAmt)*camShake;
   const shx=(Math.sin(tt*2.3)+0.5*Math.sin(tt*5.7))*0.0016*mf,shy=(Math.cos(tt*1.9)+0.5*Math.sin(tt*4.3))*0.0016*mf,shr=Math.sin(tt*1.6)*0.004*mf,br=Math.sin(tt*1.15)*0.012*camShake;
+  const dgk=digShake*(0.5+camShake), dgx=Math.sin(tt*48)*0.007*dgk, dgy=Math.cos(tt*43)*0.007*dgk, dgr=Math.sin(tt*55)*0.012*dgk;   // temblor de esfuerzo al cavar
   const gy=terrainHeight(player.pos.x,player.pos.z);
-  camera.position.set(player.pos.x+right.x*bobX,gy+player.eye+bobY+br+player.jumpY,player.pos.z+right.z*bobX);
+  camera.position.set(player.pos.x+right.x*bobX,gy+player.eye+bobY+br+player.jumpY+dgy,player.pos.z+right.z*bobX);
   // el ítem en mano se balancea al moverse/correr (más fuerte cuanto más rápido), salvo durante el golpe
   if(fpRig&&fpRig.visible&&!(typeof wswing!=='undefined'&&wswing.active)){
     fpRig.position.set(fpBasePos.x+Math.cos(player.bobPhase)*0.02*moveAmt, fpBasePos.y+Math.sin(player.bobPhase*2)*0.03*moveAmt, fpBasePos.z);
     fpRig.rotation.set(fpBaseRot.x+Math.sin(player.bobPhase*2)*0.03*moveAmt, fpBaseRot.y+Math.cos(player.bobPhase)*0.02*moveAmt, fpBaseRot.z); }
-  euler.set(player.pitch+shy,player.yaw+shx,player.roll+shr);camera.quaternion.setFromEuler(euler);
+  euler.set(player.pitch+shy+dgy,player.yaw+shx+dgx,player.roll+shr+dgr);camera.quaternion.setFromEuler(euler);
   dirLight.position.copy(player.pos).addScaledVector(lightVec,50);dirLight.target.position.copy(player.pos);dirLight.target.updateMatrixWorld();
   cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
   cloud1.material.map.offset.x+=dt*0.004;cloud2.material.map.offset.x+=dt*0.0026;
