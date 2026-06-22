@@ -159,6 +159,7 @@ const PARTS=[ {key:'idle',file:'pj_idle.glb'}, {key:'walk',file:'pj_walk.glb'}, 
   {key:'chop',file:'pj_chop.glb',once:true}, {key:'hammer',file:'pj_hammer.glb',once:true} ];
 const PLABEL={idle:'Quieto',walk:'Caminando',run:'Corriendo',chop:'Talar 🪓',hammer:'Martillo 🔨'};
 const body={}; let bodyKey=null, actKey=null;
+const _hw=new THREE.Vector3(); const HEAD_FWD=0.16, HEAD_UP=0.06;   // cámara = hueso Head, empujada hacia los ojos
 const eLabelEl=document.getElementById('animLabel');
 const _gltf=new GLTFLoader();
 function prepBody(gl,once){ const inner=gl.scene;
@@ -183,7 +184,10 @@ function tickPlayer(dt){
   const b=body[bodyKey]; if(b){
     b.root.position.set(player.pos.x,0,player.pos.z); b.root.rotation.y=player.yaw+Math.PI;     // el cuerpo mira hacia adelante
     b.mixer.update(dt);
-    if(b.head) b.head.scale.setScalar(0.0001);                                                 // cabeza oculta (no tapa la cámara)
+    if(b.head){ b.head.updateWorldMatrix(true,false); b.head.getWorldPosition(_hw); b.head.scale.setScalar(0.0001);   // leer pos de la cabeza y ocultarla
+      const fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
+      camera.position.set(_hw.x+fx*HEAD_FWD, _hw.y+HEAD_UP, _hw.z+fz*HEAD_FWD);                 // la cámara ES la cabeza (sigue el bob de la animación), empujada a los ojos
+    }
   }
   if(eLabelEl) eLabelEl.textContent=PLABEL[actKey||bodyKey]||''; }
 
