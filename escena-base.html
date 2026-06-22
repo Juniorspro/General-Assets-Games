@@ -142,36 +142,37 @@ function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListene
 tapBtn('bJump',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
 tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; document.getElementById('bCrouch').classList.toggle('on',player.crouch); });
 
-/* ===================== PERSONAJE 3D · VITRINA (GLB rigueado, multi-animación) ===================== */
-// Personaje primitivo fijo en el centro que recorre sus animaciones en bucle:
-// idle / caminar / correr / atacar (golpe de garrote) / saltar.
-// Hecho con Higgsfield (image-to-3D + auto-rig + clips Meshy), todos sobre el MISMO esqueleto.
-const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@90edf07/';
+/* ===================== PERSONAJE 3D · VITRINA (alta calidad, multi-animación) ===================== */
+// Cada animación es un GLB propio (image-to-3D 30k tris + textura PBR, Higgsfield), porque el
+// auto-rig de Meshy genera un esqueleto algo distinto por clip. Mostramos uno por vez en el centro
+// (swap de modelos): así cada clip corre sobre SU esqueleto nativo, sin deformaciones.
+const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@bac1eb7/';
 const E_H=1.85; let hitShake=0;
-let enemy=null, eMix=null; const eActions={}, eOrder=[]; let eCur=null, eIdx=0, eTimer=0;
-const LBL={idle:'Idle (quieto)', walk:'Caminar', run:'Correr', attack:'Atacar (garrote)', jump:'Saltar'};
+const CHARS=[ {file:'char_idle.glb',label:'Idle (quieto)'}, {file:'char_walk.glb',label:'Caminar'},
+  {file:'char_run.glb',label:'Correr'}, {file:'char_attack.glb',label:'Atacar (garrote)'}, {file:'char_jump.glb',label:'Saltar'} ];
+const slots=new Array(CHARS.length).fill(null); let curIdx=-1, switchT=0;
 const eLabelEl=document.getElementById('animLabel');
-function eWindow(key){ const a=eActions[key]; const d=a?a.getClip().duration:3; return Math.max(3.4, d*2); }   // ~2 vueltas, mín 3.4 s
-function ePlay(key,fade=0.3){ const a=eActions[key]; if(!a)return; if(eCur&&eCur!==a)eCur.fadeOut(fade);
-  a.reset(); a.enabled=true; a.setEffectiveTimeScale(1); a.setEffectiveWeight(1); a.fadeIn(fade).play(); eCur=a;
-  if(eLabelEl) eLabelEl.textContent='▶ '+(LBL[key]||key); }
-new GLTFLoader().load(EBASE+'enemy-anim.glb', gl=>{ const inner=gl.scene;
+const _gltf=new GLTFLoader();
+function eWindow(s){ const d=s&&s.action?s.action.getClip().duration:3; return Math.max(3.4, d*2); }   // ~2 vueltas, mín 3.4 s
+function prep(gl){ const inner=gl.scene;
   let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=E_H/(sz.y||1); inner.scale.setScalar(s);
   b=new THREE.Box3().setFromObject(inner); const c=b.getCenter(new THREE.Vector3()); inner.position.set(-c.x,-b.min.y,-c.z);   // pies en el origen
   inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
-  enemy=new THREE.Group(); enemy.add(inner); enemy.position.set(0,0,0); scene.add(enemy);   // fijo en el CENTRO
-  eMix=new THREE.AnimationMixer(inner);
-  for(const cl of gl.animations){ const n=cl.name.toLowerCase(); let key=null;
-    if(n.includes('idle'))key='idle'; else if(n.includes('run')||n.includes('fast'))key='run';
-    else if(n.includes('walk'))key='walk'; else if(n.includes('hammer')||n.includes('attack')||n.includes('swing')||n.includes('slash'))key='attack';
-    else if(n.includes('jump'))key='jump';
-    if(key&&!eActions[key]){ const a=eMix.clipAction(cl); a.setLoop(THREE.LoopRepeat); eActions[key]=a; } }
-  for(const k of ['idle','walk','run','attack','jump']) if(eActions[k]) eOrder.push(k);   // orden de la vitrina
-  if(eOrder.length){ eIdx=0; eTimer=eWindow(eOrder[0]); ePlay(eOrder[0],0); }
-}, undefined, e=>{ console.warn('enemy-anim',e); });
-function tickEnemy(dt){ if(!enemy||!eMix)return; eMix.update(dt);
-  enemy.rotation.y=Math.atan2(player.pos.x-enemy.position.x, player.pos.z-enemy.position.z);   // siempre mira a la cámara
-  if(eOrder.length){ eTimer-=dt; if(eTimer<=0){ eIdx=(eIdx+1)%eOrder.length; const k=eOrder[eIdx]; eTimer=eWindow(k); ePlay(k); } }   // recorre las animaciones en bucle
+  const root=new THREE.Group(); root.add(inner); root.position.set(0,0,0); root.visible=false; scene.add(root);   // fijo en el CENTRO
+  const mixer=new THREE.AnimationMixer(inner); let action=null;
+  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(THREE.LoopRepeat); }
+  return {root,mixer,action}; }
+function loadChar(i){ _gltf.load(EBASE+CHARS[i].file, gl=>{ slots[i]=prep(gl); if(curIdx<0&&i===0) show(0); }, undefined, e=>console.warn(CHARS[i].file,e)); }
+loadChar(0);                                              // idle primero → aparece rápido
+let _li=1; const _lazy=setInterval(()=>{ if(_li>=CHARS.length){clearInterval(_lazy);return;} loadChar(_li++); },350);   // resto en diferido
+function show(i){ const s=slots[i]; if(!s)return;
+  if(curIdx>=0&&slots[curIdx]&&slots[curIdx]!==s){ slots[curIdx].root.visible=false; if(slots[curIdx].action)slots[curIdx].action.stop(); }
+  curIdx=i; s.root.visible=true; if(s.action) s.action.reset().play();
+  switchT=eWindow(s); if(eLabelEl) eLabelEl.textContent='▶ '+CHARS[i].label; }
+function tickEnemy(dt){ if(curIdx<0||!slots[curIdx]) return;
+  const s=slots[curIdx]; s.mixer.update(dt);
+  s.root.rotation.y=Math.atan2(player.pos.x-s.root.position.x, player.pos.z-s.root.position.z);   // mira a la cámara
+  switchT-=dt; if(switchT<=0){ let n=curIdx; for(let k=0;k<CHARS.length;k++){ n=(n+1)%CHARS.length; if(slots[n])break; } show(n); }   // siguiente animación cargada
 }
 
 /* ===================== Loop ===================== */
