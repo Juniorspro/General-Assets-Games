@@ -940,6 +940,11 @@ function buildChunk(cx,cz){
     for(let i=0;i<sN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK; if(Math.abs(x)<ROAD_HALF+1.5)continue;
       const gy=terrainHeight(x,z); const nub=makeScrapNub(); nub.position.set(x,gy,z); nub.rotation.y=rng()*6.28; grp.add(nub);
       scrapList.push({x,z,mesh:nub,taken:false}); } }
+  // nodos de MENA (se minan con el pico → piedra + mena)
+  const oreList=[]; { const oN=1+Math.floor(rng()*2);
+    for(let i=0;i<oN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK; if(Math.abs(x)<ROAD_HALF+2)continue;
+      const gy=terrainHeight(x,z); const node=makeOreNode(); node.position.set(x,gy,z); node.rotation.y=rng()*6.28; grp.add(node);
+      oreList.push({x,z,mesh:node,hp:3}); } }
   // rocas cerradas variadas (mergeadas en 1 malla por sector → sin huecos)
   const rocks=[];const rN=Math.round(qual.rockN*densityMul);
   for(let i=0;i<rN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+1.0)continue;
@@ -952,7 +957,7 @@ function buildChunk(cx,cz){
     if(posts.length){const pgeo=mergeGeometries(posts,false);ownGeos.push(pgeo);const pm=new THREE.Mesh(pgeo,lampPostMat);pm.castShadow=false;posts.forEach(g=>g.dispose());grp.add(pm);shadowCasters.push(pm);
       const sgeo=new THREE.SphereGeometry(0.28,8,6);ownGeos.push(sgeo);const hm=new THREE.InstancedMesh(sgeo,lampHeadMat,heads.length);heads.forEach((h,i)=>{hd.position.copy(h);hd.updateMatrix();hm.setMatrixAt(i,hd.matrix);});grp.add(hm);}}
   const center=new THREE.Vector3(x0+CHUNK/2,5,z0+CHUNK/2);
-  const c={grp,center,sphere:new THREE.Sphere(center,42),lamps,fol,leafMeshes,veg:cveg,fiber:fiberList,scrap:scrapList,cx,cz,key,trees:chunkTrees,ownGeos,shadowCasters,upgraded:false};
+  const c={grp,center,sphere:new THREE.Sphere(center,42),lamps,fol,leafMeshes,veg:cveg,fiber:fiberList,scrap:scrapList,ore:oreList,cx,cz,key,trees:chunkTrees,ownGeos,shadowCasters,upgraded:false};
   scene.add(grp);chunkList.push(c);builtChunks.set(key,c);
 }
 function disposeChunk(c){
@@ -1223,6 +1228,19 @@ function makeScrapNub(){ const g=new THREE.Group();
   const metal=new THREE.Mesh(new THREE.BoxGeometry(0.36,0.16,0.28),rustMat); metal.rotation.set(0.32,0,0.22); metal.position.y=0.07; g.add(metal);   // asoma un poco
   const mound=new THREE.Mesh(new THREE.RingGeometry(0.24,0.52,16),barroMat); mound.rotation.x=-Math.PI/2; mound.position.y=0.02; mound.receiveShadow=true; g.add(mound);   // tierra alrededor
   return g; }
+// nodo de MENA: roca con vetas metálicas; se mina con el pico → piedra (+ mena)
+const oreMat=new THREE.MeshStandardMaterial({color:0x6b6660,roughness:0.82,metalness:0.45,emissive:0x241c08,emissiveIntensity:0.4});
+const nuggetMat=new THREE.MeshStandardMaterial({color:0xb8923a,roughness:0.5,metalness:0.7,emissive:0x3a2a08,emissiveIntensity:0.55});
+function makeOreNode(){ const g=new THREE.Group(); const rock=stoneChunk(0.46,oreMat); rock.position.y=0.26; g.add(rock);
+  for(let i=0;i<5;i++){ const n=new THREE.Mesh(new THREE.IcosahedronGeometry(0.05+Math.random()*0.04,0),nuggetMat); const a=Math.random()*6.28,r=0.16+Math.random()*0.24; n.position.set(Math.cos(a)*r,0.18+Math.random()*0.4,Math.sin(a)*r); g.add(n); }
+  return g; }
+function doMine(){ const sy=Math.sin(player.yaw),cy=Math.cos(player.yaw); let best=null,bd=2.6;
+  for(const c of chunkList){ if(!c.grp.visible||!c.ore)continue;
+    for(const o of c.ore){ if(o.hp<=0)continue; const dx=o.x-player.pos.x,dz=o.z-player.pos.z,d=dx*dx+dz*dz; if(d>bd||d>9)continue; const fl=Math.hypot(dx,dz)||1; const dot=(-sy*dx-cy*dz)/fl; if(dot<0.3)continue; bd=d; best=o; } }
+  if(!best)return; best.hp--; emitSplinters(new THREE.Vector3(best.x,terrainHeight(best.x,best.z)+0.45,best.z),9); chopSound(); best.mesh.scale.multiplyScalar(0.86);
+  addMat('piedra',1); let mena=0; if(Math.random()<0.5){ addMat('mena',1); mena++; }
+  if(best.hp<=0){ best.mesh.visible=false; addMat('mena',1); mena++; }
+  toast('+1 '+((REST.piedra&&REST.piedra[curLang])||'piedra')+(mena?'  ·  +'+mena+' '+((REST.mena&&REST.mena[curLang])||'mena'):'')); }
 // CAVAR: la pala YA NO hace hoyos libres; sólo destapa chatarra enterrada
 function doDig(){
   const fx=-Math.sin(player.yaw),fz=-Math.cos(player.yaw);
@@ -1632,7 +1650,11 @@ const gltfL=new GLTFLoader(); const glbCache={};
 function fitModel(obj,targetMax){ let box=new THREE.Box3().setFromObject(obj),sz=box.getSize(new THREE.Vector3()),md=Math.max(sz.x,sz.y,sz.z)||1,s=targetMax/md; obj.scale.setScalar(s);
   box=new THREE.Box3().setFromObject(obj); const c=box.getCenter(new THREE.Vector3()); obj.position.set(-c.x,-box.min.y,-c.z); const wrap=new THREE.Group(); wrap.add(obj); return wrap; }
 function glbModel(id,fb){ return ()=> glbCache[id]? glbCache[id].clone(true) : (fb?fb():new THREE.Group()); }
-function loadGLBItem(id,file,targetMax){ gltfL.load(GLBP+file,gl=>{ const m=fitModel(gl.scene,targetMax); m.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}}); glbCache[id]=m;
+function loadGLBItem(id,file,targetMax,opt){ opt=opt||{}; const base=opt.base||GLBP;
+  gltfL.load(base+file,gl=>{ const root=gl.scene;
+    if(opt.upright){ root.updateMatrixWorld(true); const b=new THREE.Box3().setFromObject(root),s=b.getSize(new THREE.Vector3());   // orienta el eje más largo (mango) hacia arriba
+      if(s.x>=s.y&&s.x>=s.z) root.rotation.z=Math.PI/2; else if(s.z>=s.y&&s.z>=s.x) root.rotation.x=-Math.PI/2; root.updateMatrixWorld(true); }
+    const m=fitModel(root,targetMax); m.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}}); glbCache[id]=m;
   try{ icons[id]=captureIcon(MODELS[id](),ROTS[id]||[0.2,0.65,0.4]); }catch(e){} if(equipped===id)equipItem(id); if($('menu').classList.contains('show'))renderGrid(); },undefined,()=>{}); }
 
 function buildShovel(headMat){const g=new THREE.Group();
@@ -1642,9 +1664,9 @@ function buildShovel(headMat){const g=new THREE.Group();
   const blade=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.27,0.018),headMat); blade.position.y=0.07; blade.castShadow=true; g.add(blade);   // hoja
   const lip=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.05,0.06),headMat); lip.position.set(0,-0.06,0.022); g.add(lip);                       // punta
   return g;}
-const MODELS={ hammer:buildHammer, table:buildTable, pala:()=>buildShovel(metalMat),
+const MODELS={ hammer:buildHammer, table:buildTable, pala:glbModel('pala',()=>buildShovel(metalMat)),
   spear:buildSpear, knife:buildKnife, machete:buildMachete, botella:buildBottle, guadana:buildScythe, hacha:glbModel('hacha',buildMachete),
-  picomad:()=>buildPick(woodDark), picopiedra:()=>buildPick(stoneMat), picoafil:()=>buildPick(metalMat),
+  picomad:()=>buildPick(woodDark), picopiedra:()=>buildPick(stoneMat), picoafil:glbModel('picoafil',()=>buildPick(metalMat)),
   arco:buildBow, lanzapiedra:()=>buildSpearV(stoneMat), lanzaafil:()=>buildSpearV(metalMat),
   cuchipiedra:()=>buildKnifeV(stoneMat), cuchiafil:()=>buildKnifeV(metalMat),
   flechamad:()=>buildArrows(woodDark), flechapiedra:()=>buildArrows(stoneMat), flechaafil:()=>buildArrows(metalMat),
@@ -1688,6 +1710,7 @@ let wswing={active:false,t:0,hit:false};
 const THRUST=new Set(['spear','lanzapiedra','lanzaafil']);
 const CHOPPERS=new Set(['hacha','machete','guadana']);   // armas que pueden talar árboles
 const DIGGERS=new Set(['pala']);                          // herramientas que cavan (clavan hacia abajo)
+const MINERS=new Set(['picoafil','picopiedra','picomad']);// picos que minan nodos de mena
 function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;wswing.hit=false;} }
 
 /* ---- crafteo / inventario ---- */
@@ -1992,7 +2015,8 @@ function craftTick(dt){
     else if(equipped==='botella'){ fpRig.position.z=fpBasePos.z-a*0.22; fpRig.rotation.x=fpBaseRot.x-a*0.35; }
     else { fpRig.rotation.x=fpBaseRot.x-a*1.2; }
     if(wswing.t>=0.5&&!wswing.hit){ if(CHOPPERS.has(equipped)){ wswing.hit=true; doChop(); }  // el tomahawk/hachas talan
-      else if(DIGGERS.has(equipped)){ wswing.hit=true; doDig(); } }                            // la pala cava
+      else if(DIGGERS.has(equipped)){ wswing.hit=true; doDig(); }                              // la pala cava
+      else if(MINERS.has(equipped)){ wswing.hit=true; doMine(); } }                            // el pico mina mena
     if(wswing.t>=1){ wswing.active=false; digShake=0; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
   resolveCollisions();
@@ -2015,6 +2039,10 @@ document.querySelectorAll('#menu .scrl, #options .card').forEach(card=>{
 });
 // cargar GLB de items (cama + hacha tomahawk)
 loadGLBItem('cama','cama.glb',2.0); loadGLBItem('hacha','tomahawk_-_hacha.glb',0.7);
+const NGLB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@cbfd483/';   // assets nuevos (pala/pico/barro)
+loadGLBItem('pala','pala.glb',1.05,{base:NGLB,upright:true}); loadGLBItem('picoafil','pico.glb',1.0,{base:NGLB,upright:true});
+// textura de barro real (Higgsfield) sobre el barro de la chatarra; si falla, queda la procedural
+gtex(NGLB+'barro.png',true).then(t=>{ t.wrapS=t.wrapT=THREE.RepeatWrapping; barroMat.map=t; barroMat.needsUpdate=true; }).catch(()=>{});
 
 /* ===================== LOOP ===================== */
 addEventListener('resize',layout);
