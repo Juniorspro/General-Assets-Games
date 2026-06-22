@@ -638,8 +638,8 @@ function setTime(elev,azim=120){
   _sunCol.setHSL(THREE.MathUtils.lerp(0.045,0.11,warm),THREE.MathUtils.lerp(0.9,0.5,warm),0.55);
   _moonCol.setHSL(0.62,0.45,0.7);
   dirLight.color.copy(_sunCol).lerp(_moonCol,nightFactor);
-  dirLight.intensity=THREE.MathUtils.lerp(0.45,2.1,day)*exposure;
-  hemiLight.intensity=THREE.MathUtils.lerp(0.14,0.42,day)*exposure;
+  dirLight.intensity=THREE.MathUtils.lerp(0.55,2.3,day)*exposure;
+  hemiLight.intensity=THREE.MathUtils.lerp(0.45,1.05,day)*exposure;   // SIN IBL: la hemisférica aporta el ambiente (cielo/suelo) y los normal maps reaccionan a la direccional
   hemiLight.color.setHSL(THREE.MathUtils.lerp(0.6,0.07,day),0.4,THREE.MathUtils.lerp(0.18,0.5,day));
   scene.environmentIntensity=THREE.MathUtils.lerp(0.06,0.72,day)*exposure;
   // niebla: azul noche → naranja crepúsculo → celeste día
@@ -1908,7 +1908,7 @@ const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTi
 const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 function update(dt){
   if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
-    setTime(elev,120); applyEnvForElev(elev);   // env = swap del mapa pre-horneado (barato)
+    setTime(elev,120);   // SIN IBL: ilumina la directa+hemisférica; el relieve lo dan los normal maps
     hudTimer-=dt; if(hudTimer<=0){ hudTimer=0.25; $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev); } }  // DOM sólo ~4x/seg (evita reflow por frame)
   let ix=joy.x,iz=joy.y;if(keys['KeyW'])iz-=1;if(keys['KeyS'])iz+=1;if(keys['KeyA'])ix-=1;if(keys['KeyD'])ix+=1;
   if(intro.active){ix=0;iz=0;} // durante la cinemática no nos movemos
@@ -2014,7 +2014,7 @@ function cinematicCam(dt){
   dirLight.position.set(camera.position.x+lightVec.x*50,camera.position.y+lightVec.y*50,camera.position.z+lightVec.z*50);dirLight.target.position.copy(camera.position);dirLight.target.updateMatrixWorld();
   cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
   cyclePhase+=dt*4; const th=THETA0+cyclePhase*(Math.PI*2/1440); const mElev=A_ELEV*Math.sin(th); setTime(mElev,120);   // ciclo acelerado en el fondo del menú
-  applyEnvForElev(mElev);
+  // (SIN IBL)
   streamChunks(2,camera.position.x,camera.position.z);
 }
 
@@ -2088,7 +2088,7 @@ function applyDefaults(){
   for(const id in VFX_DEFAULTS){const el=document.getElementById(id);if(!el)continue;el.value=VFX_DEFAULTS[id];el.dispatchEvent(new Event('input'));}
   densityMul=(+document.getElementById('dens').value)/100;
   cycleOn=true; $('cycleSw').classList.add('on');
-  updateEnvironment();
+  scene.environment=null;
   $('snd').classList.add('on'); soundOn=true;
 }
 
@@ -2247,7 +2247,7 @@ let worldReady=false;
 function bootArea(done){
   document.getElementById('loader').classList.remove('hide');
   if(!TREE_VARIANTS.length)buildVariants();   // pool de variantes (geometría compartida) antes de armar chunks
-  if(!ENV_SET.length)buildEnvSet();           // pre-hornea los mapas de entorno del día (1 sola vez) → sin PMREM en runtime
+  scene.environment=null;                     // SIN IBL: iluminación liviana (directa+hemisférica); los normal maps siguen dando el relieve
   // PRECARGA TOTAL repartida en frames (barra fluida, sin congelar el navegador). Al terminar: sombras de todo + listo.
   let cx=W.x0, cz=W.z0; const PER_FRAME=3;
   const build=()=>{
@@ -2342,7 +2342,7 @@ try{
   setQuality(curQuality);                    // calidad por defecto (medio)
   applyShadowRes(shadowResSel);              // resolución de sombras por defecto (512)
   setShadowRange(28);
-  setTime(8,120); updateEnvironment(); layout();
+  setTime(8,120); scene.environment=null; layout();
   captureIcons();                            // PNG del hacha y la madera (del modelo real)
   wireUiSounds();
   // NO cargamos el mundo en el init: todo queda en negro puro hasta la pantalla de carga de assets (showAssetLoad llama bootArea)
