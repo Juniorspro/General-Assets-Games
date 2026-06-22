@@ -592,7 +592,7 @@ renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.NoTone
 app.appendChild(renderer.domElement);
 
 const scene=new THREE.Scene();
-scene.fog=new THREE.FogExp2(0xd98a4e,0.0072);
+scene.fog=new THREE.FogExp2(0xd98a4e,0.0048);
 const camera=new THREE.PerspectiveCamera(64,1,0.1,6000);
 
 /* ===================== CIELO ATARDECER + NUBES ===================== */
@@ -793,9 +793,9 @@ const rockVariants=(()=>{const out=[];const rr=mulberry32(909);const tmp=new THR
 
 /* ===================== TERRENO + CARRETERA ===================== */
 const ROAD_HALF=5, CHUNK=48;
-const BEACH_X0=120, BEACH_BLEND=46; const inBeach=x=>x>BEACH_X0+2;
+const BEACH_X0=120, BEACH_BLEND=46, DLEVEL=-0.4, DESERT_X1=BEACH_X0+6720; const inBeach=x=>x>BEACH_X0+2;   // desierto x10 al este (pura arena)
 function terrainHeight(x,z){const corridor=Math.min(1,Math.max(0,(Math.abs(x)-(ROAD_HALF+3))/16));const hills=Math.sin(x*0.018)*Math.cos(z*0.015)*4.5+Math.sin(x*0.05+z*0.04)*1.4+Math.cos(z*0.09)*0.7;let h=hills*corridor;
-  if(x>BEACH_X0){ const t=Math.min(1,(x-BEACH_X0)/BEACH_BLEND); const beach=-0.35-(x-BEACH_X0)*0.006; h=h*(1-t)+beach*t; }   // playa: aplana y baja suave hacia el este
+  if(x>BEACH_X0){ const t=Math.min(1,(x-BEACH_X0)/BEACH_BLEND); h=h*(1-t)+DLEVEL*t; }   // playa/desierto: aplana a nivel constante (puro plano de arena)
   return h;}
 const W={x0:-7,x1:6,z0:-16,z1:15};   // mapa ~10x más grande (con streaming por chunks)
 const Xmin=W.x0*CHUNK,Xmax=(W.x1+1)*CHUNK,Zmin=W.z0*CHUNK,Zmax=(W.z1+1)*CHUNK;
@@ -816,8 +816,8 @@ function sandTexture(dark){const S=256,cv=document.createElement('canvas');cv.wi
   for(let i=0;i<5000;i++){const x=Math.random()*S,y=Math.random()*S,r=Math.random()*1.7,b=Math.random();
     g.fillStyle='rgba('+((dark?116:198)+b*44|0)+','+((dark?98:176)+b*42|0)+','+((dark?62:120)+b*38|0)+','+(0.16+Math.random()*0.32)+')';g.beginPath();g.arc(x,y,r,0,7);g.fill();}
   const t=new THREE.CanvasTexture(cv);t.wrapS=t.wrapT=THREE.RepeatWrapping;return t;}
-const bx0=BEACH_X0-2, bx1=Xmax+12; const beachW=bx1-bx0, beachCx=(bx0+bx1)/2;
-const sandGeo=new THREE.PlaneGeometry(beachW,gsZ,Math.round(beachW/4),Math.round(gsZ/4));sandGeo.rotateX(-Math.PI/2);
+const bx0=BEACH_X0-2, bx1=DESERT_X1; const beachW=bx1-bx0, beachCx=(bx0+bx1)/2;
+const sandGeo=new THREE.PlaneGeometry(beachW,gsZ,Math.round(beachW/24),Math.round(gsZ/16));sandGeo.rotateX(-Math.PI/2);   // plano grande pero plano → segmentos gruesos
 sandGeo.translate(beachCx,0,(Zmin+Zmax)/2);
 {const p=sandGeo.attributes.position;for(let i=0;i<p.count;i++)p.setY(i,terrainHeight(p.getX(i),p.getZ(i))+0.04);sandGeo.computeVertexNormals();}
 const sandMat=new THREE.MeshStandardMaterial({map:sandTexture(false),roughness:1,metalness:0,color:0xffffff});
@@ -826,7 +826,7 @@ const sand=new THREE.Mesh(sandGeo,sandMat);sand.receiveShadow=true;sand.matrixAu
 const wetMat=new THREE.MeshStandardMaterial({map:sandTexture(true),roughness:0.5,metalness:0,color:0xffffff,transparent:true,opacity:0.94,polygonOffset:true,polygonOffsetFactor:-1,depthWrite:false});
 wetMat.map.repeat.set(3,3);
 {const rr=mulberry32(4242);const wetN=48;
- for(let i=0;i<wetN;i++){const bias=Math.pow(rr(),0.55);const x=BEACH_X0+16+bias*(Xmax-BEACH_X0-22);const z=Zmin+rr()*(Zmax-Zmin);
+ for(let i=0;i<wetN;i++){const bias=Math.pow(rr(),0.7);const x=BEACH_X0+16+bias*1600;const z=Zmin+rr()*(Zmax-Zmin);
    const patch=new THREE.Mesh(new THREE.CircleGeometry(3+rr()*9,16),wetMat);patch.scale.set(0.7+rr()*1.0,0.7+rr()*1.0,1);patch.rotation.x=-Math.PI/2;patch.rotation.z=rr()*6.28;
    patch.position.set(x,terrainHeight(x,z)+0.06,z);patch.matrixAutoUpdate=false;patch.updateMatrix();scene.add(patch);}}
 
@@ -1093,7 +1093,7 @@ const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),yaw:0,pitch:0
 const intro={active:false}; // (la cinemática la organizamos después)
 let bobScale=1,running=false,lastBobSign=0;
 const forward=new THREE.Vector3(),right=new THREE.Vector3();
-const PB={x0:Xmin+3,x1:Xmax-3,z0:Zmin+3,z1:Zmax-3};
+const PB={x0:Xmin+3,x1:DESERT_X1-3,z0:Zmin+3,z1:Zmax-3};   // x1 extendido al desierto
 
 const joyEl=document.getElementById('joy'),knob=document.getElementById('joyKnob');let joyId=null;const joy={x:0,y:0};
 function joyUpd(e){const r=joyEl.clientWidth/2;let dx=e.offsetX-r,dy=e.offsetY-r;const len=Math.hypot(dx,dy);if(len>r){dx*=r/len;dy*=r/len;}knob.style.transform=`translate(${dx}px,${dy}px)`;joy.x=dx/r;joy.y=dy/r;}
@@ -1134,7 +1134,7 @@ const windLabels=w=>w<8?'calma':w<45?'brisa':w<75?'viento':'tormenta';
 $('time').addEventListener('input',e=>{const v=+e.target.value;cycleOn=false;cycleSw.classList.remove('on');setTime(v,120);$('timeVal').textContent=timeLabel(v);});
 $('time').addEventListener('change',updateEnvironment);
 const cycleSw=$('cycleSw');cycleSw.addEventListener('click',()=>{cycleSw.classList.toggle('on');cycleOn=cycleSw.classList.contains('on');});
-let renderDist=130;$('dist').addEventListener('input',e=>{renderDist=+e.target.value;$('distVal').textContent=renderDist+' m';scene.fog.density=Math.max(0.006,0.9/renderDist);});
+let renderDist=130;$('dist').addEventListener('input',e=>{renderDist=+e.target.value;$('distVal').textContent=renderDist+' m';scene.fog.density=Math.max(0.004,0.62/renderDist);});
 $('shad').addEventListener('input',e=>{const r=+e.target.value;setShadowRange(r);$('shadVal').textContent=r<1?'off':r+' m';});
 $('dens').addEventListener('input',e=>{$('densVal').textContent=e.target.value+'%';});
 $('dens').addEventListener('change',e=>{densityMul=+e.target.value/100;rebuildWorld();});
@@ -2036,7 +2036,8 @@ ctapBtn('bRot',()=>{ placeYaw=(placeYaw+Math.PI/4)%(Math.PI*2); });
 $('flash').addEventListener('pointerdown',()=>{ if(equipped==='botella'){ throwMolotov(); startWSwing(); return; } if(equipped) startWSwing(); if(placing) tryBuild(); });
 // per-frame tick del crafteo, llamado desde update()
 function craftTick(dt){
-  tickGifs(dt); tickProjectiles(dt); tickFx(dt);
+  digShake*=0.9;   // decae el sacudón (cavar lo re-fija cada frame; el "atrapado" del enemigo lo deja decaer)
+  tickGifs(dt); tickProjectiles(dt); tickFx(dt); tickEnemy(dt);
   const fb=(fireGifs[1].cur||0.6);
   for(const m of placedItems){ if(m.userData.kind==='fogata'&&m.userData.fire){ m.userData.fire.intensity=0.5+fb*2.4; } }
   if(equipped==='botella') updateHeldMolotov(dt);
@@ -2075,10 +2076,33 @@ document.querySelectorAll('#menu .scrl, #options .card').forEach(card=>{
 });
 // cargar GLB de items (cama + hacha tomahawk)
 loadGLBItem('cama','cama.glb',2.0); loadGLBItem('hacha','tomahawk_-_hacha.glb',0.7);
-const NGLB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@cbfd483/';   // assets nuevos (pala/pico/barro)
+const NGLB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@e83e5d2/';   // assets nuevos (pala/pico/barro/enemigo)
 loadGLBItem('pala','pala.glb',1.05,{base:NGLB,upright:true}); loadGLBItem('picoafil','pico.glb',1.0,{base:NGLB,upright:true,flip:true});
 // textura de barro real (Higgsfield) sobre el barro de la chatarra; si falla, queda la procedural
 gtex(NGLB+'barro.png',true).then(t=>{ t.wrapS=t.wrapT=THREE.RepeatWrapping; barroMat.map=t; barroMat.needsUpdate=true; }).catch(()=>{});
+
+/* ===== ENEMIGO que persigue (GLB rigueado, animación RunFast) ===== */
+let enemy=null, enemyMixer=null, enemyActive=false, enemyCatchT=0; const ENEMY_SPEED=3.8, ENEMY_FACE=0;
+gltfL.load(NGLB+'enemy.glb', gl=>{ const inner=gl.scene;
+  let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=1.95/(sz.y||1); inner.scale.setScalar(s);
+  b=new THREE.Box3().setFromObject(inner); const c=b.getCenter(new THREE.Vector3()); inner.position.set(-c.x,-b.min.y,-c.z);   // pies en el origen
+  inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
+  enemy=new THREE.Group(); enemy.add(inner); enemy.visible=false; scene.add(enemy);
+  enemyMixer=new THREE.AnimationMixer(inner);
+  if(gl.animations&&gl.animations.length){ enemyMixer.clipAction(gl.animations[0]).play(); }
+}, undefined, ()=>{});
+function placeEnemyFar(){ if(!enemy)return; const a=player.yaw+Math.PI+(Math.random()-0.5); const r=42+Math.random()*10;   // aparece lejos, detrás-ish
+  enemy.position.set(player.pos.x-Math.sin(a)*r, 0, player.pos.z-Math.cos(a)*r); enemy.position.y=terrainHeight(enemy.position.x,enemy.position.z); }
+function tickEnemy(dt){ if(!enemy)return;
+  if(!enemyActive){ enemyActive=true; placeEnemyFar(); enemy.visible=true; }
+  if(enemyMixer)enemyMixer.update(dt);
+  const dx=player.pos.x-enemy.position.x, dz=player.pos.z-enemy.position.z, d=Math.hypot(dx,dz)||1;
+  if(d>1.5){ const sp=ENEMY_SPEED*dt; enemy.position.x+=dx/d*sp; enemy.position.z+=dz/d*sp; }
+  enemy.position.y=terrainHeight(enemy.position.x,enemy.position.z);
+  enemy.rotation.y=Math.atan2(dx,dz)+ENEMY_FACE;   // mira al jugador
+  enemyCatchT=Math.max(0,enemyCatchT-dt);
+  if(d<1.7&&enemyCatchT<=0){ enemyCatchT=2.0; digShake=1; if(typeof chopSound==='function')chopSound(); placeEnemyFar(); }   // te atrapa: sacudón fuerte + reaparece lejos
+}
 
 /* ===================== LOOP ===================== */
 addEventListener('resize',layout);
@@ -2261,7 +2285,7 @@ function setQuality(t){
   aaOn=qual.aa; if(smaaPass)smaaPass.enabled=aaOn; if($('aaSw'))$('aaSw').classList.toggle('on',aaOn);
   const useSsao=(t==='medium'||t==='high'||t==='vhigh');   // SSAO (N8AO) en medio y superiores
   if(n8aoPass)n8aoPass.enabled=useSsao;
-  renderDist=qual.rdist; if($('dist')){$('dist').value=renderDist;$('distVal').textContent=renderDist+' m';} scene.fog.density=Math.max(0.005,0.85/renderDist);
+  renderDist=qual.rdist; if($('dist')){$('dist').value=renderDist;$('distVal').textContent=renderDist+' m';} scene.fog.density=Math.max(0.0035,0.62/renderDist);
   layout();
 }
 
