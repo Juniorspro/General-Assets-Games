@@ -27,6 +27,8 @@
   .actBtn.on{ background:rgba(90,160,255,.3); border-color:#8fe3ff; }
   #bJump  { right:26px; bottom:calc(34px + var(--safe-b)); }
   #bCrouch{ right:100px; bottom:calc(58px + var(--safe-b)); width:56px; height:56px; font-size:19px; }
+  #bChop  { right:26px; bottom:calc(108px + var(--safe-b)); }
+  #bHammer{ right:100px; bottom:calc(132px + var(--safe-b)); width:56px; height:56px; font-size:19px; }
   #animLabel{ position:fixed; left:50%; top:calc(14px + var(--safe-t)); transform:translateX(-50%); z-index:10;
               background:rgba(14,22,30,.72); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.16); border-radius:999px;
               padding:8px 18px; color:#ffd27a; font-weight:700; font-size:15px; letter-spacing:.02em; white-space:nowrap;
@@ -44,7 +46,9 @@
   <div id="joy"><div id="joyKnob"></div></div>
   <button id="bJump"   class="actBtn">⤴️</button>
   <button id="bCrouch" class="actBtn">🔽</button>
-  <div id="animLabel">cargando personaje…</div>
+  <button id="bChop"   class="actBtn">🪓</button>
+  <button id="bHammer" class="actBtn">🔨</button>
+  <div id="animLabel">cargando player…</div>
 </div>
 
 <script type="importmap">
@@ -73,7 +77,7 @@ const scene=new THREE.Scene();
 scene.background=new THREE.Color(0xbccad8);
 scene.fog=new THREE.Fog(0xbccad8,60,260);
 const pmrem=new THREE.PMREMGenerator(renderer); scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
-const camera=new THREE.PerspectiveCamera(64,1,0.1,2000);
+const camera=new THREE.PerspectiveCamera(64,1,0.04,2000);
 
 // suelo neutro (grilla de referencia)
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshStandardMaterial({color:0x8d9aa6,roughness:1,metalness:0}));
@@ -144,41 +148,44 @@ function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListene
 tapBtn('bJump',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
 tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; document.getElementById('bCrouch').classList.toggle('on',player.crouch); });
 
-/* ===================== PERSONAJE 3D · VITRINA (alta calidad, multi-animación) ===================== */
-// Cada animación es un GLB propio (image-to-3D 30k tris + textura PBR, Higgsfield), porque el
-// auto-rig de Meshy genera un esqueleto algo distinto por clip. Mostramos uno por vez en el centro
-// (swap de modelos): así cada clip corre sobre SU esqueleto nativo, sin deformaciones.
+/* ===================== PLAYER en 1ª persona CON CUERPO visible (GLB animado) ===================== */
+// Player moderno (Higgsfield image-to-3D 30k + textura). Como el auto-rig de Meshy difiere por clip,
+// cada estado es su PROPIO GLB y hacemos swap del cuerpo según el movimiento. La cámara va a la altura
+// de los ojos y se OCULTA la cabeza (escala del hueso Head ~0) para no tapar la vista: así ves tus
+// brazos, torso y piernas al mirar hacia abajo.
 const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4352c51/';
-const E_H=1.85; let hitShake=0;
-const CHARS=[ {file:'char_idle.glb',label:'Idle (quieto)'}, {file:'char_walk.glb',label:'Caminar'},
-  {file:'char_run.glb',label:'Correr'}, {file:'char_attack.glb',label:'Atacar (garrote)'}, {file:'char_jump.glb',label:'Saltar'},
-  {file:'char_hide.glb',label:'Esconderse'}, {file:'char_sit.glb',label:'Sentarse'}, {file:'char_eat.glb',label:'Comer / beber'},
-  {file:'char_wave.glb',label:'Saludar'}, {file:'char_look.glb',label:'Mirar alrededor'}, {file:'char_hurt.glb',label:'Recibir golpe'},
-  {file:'char_die.glb',label:'Morir'} ];
-const slots=new Array(CHARS.length).fill(null); let curIdx=-1, switchT=0;
+const E_H=1.82; let hitShake=0;
+const PARTS=[ {key:'idle',file:'pj_idle.glb'}, {key:'walk',file:'pj_walk.glb'}, {key:'run',file:'pj_run.glb'},
+  {key:'chop',file:'pj_chop.glb',once:true}, {key:'hammer',file:'pj_hammer.glb',once:true} ];
+const PLABEL={idle:'Quieto',walk:'Caminando',run:'Corriendo',chop:'Talar 🪓',hammer:'Martillo 🔨'};
+const body={}; let bodyKey=null, actKey=null;
 const eLabelEl=document.getElementById('animLabel');
 const _gltf=new GLTFLoader();
-function eWindow(s){ const d=s&&s.action?s.action.getClip().duration:3; return Math.max(3.4, d*2); }   // ~2 vueltas, mín 3.4 s
-function prep(gl){ const inner=gl.scene;
+function prepBody(gl,once){ const inner=gl.scene;
   let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=E_H/(sz.y||1); inner.scale.setScalar(s);
   b=new THREE.Box3().setFromObject(inner); const c=b.getCenter(new THREE.Vector3()); inner.position.set(-c.x,-b.min.y,-c.z);   // pies en el origen
-  inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
-  const root=new THREE.Group(); root.add(inner); root.position.set(0,0,0); root.visible=false; scene.add(root);   // fijo en el CENTRO
+  inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; } });
+  const root=new THREE.Group(); root.add(inner); root.visible=false; scene.add(root);
   const mixer=new THREE.AnimationMixer(inner); let action=null;
-  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(THREE.LoopRepeat); }
-  return {root,mixer,action}; }
-function loadChar(i){ _gltf.load(EBASE+CHARS[i].file, gl=>{ slots[i]=prep(gl); if(curIdx<0&&i===0) show(0); }, undefined, e=>console.warn(CHARS[i].file,e)); }
-loadChar(0);                                              // idle primero → aparece rápido
-for(let i=1;i<CHARS.length;i++) loadChar(i);              // resto EN PARALELO (jsDelivr HTTP/2 multiplexa todas las descargas)
-function show(i){ const s=slots[i]; if(!s)return;
-  if(curIdx>=0&&slots[curIdx]&&slots[curIdx]!==s){ slots[curIdx].root.visible=false; if(slots[curIdx].action)slots[curIdx].action.stop(); }
-  curIdx=i; s.root.visible=true; if(s.action) s.action.reset().play();
-  switchT=eWindow(s); if(eLabelEl) eLabelEl.textContent='▶ '+CHARS[i].label; }
-function tickEnemy(dt){ if(curIdx<0||!slots[curIdx]) return;
-  const s=slots[curIdx]; s.mixer.update(dt);
-  s.root.rotation.y=Math.atan2(player.pos.x-s.root.position.x, player.pos.z-s.root.position.z);   // mira a la cámara
-  switchT-=dt; if(switchT<=0){ let n=curIdx; for(let k=0;k<CHARS.length;k++){ n=(n+1)%CHARS.length; if(slots[n])break; } show(n); }   // siguiente animación cargada
-}
+  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(once?THREE.LoopOnce:THREE.LoopRepeat); action.clampWhenFinished=!!once; }
+  return {root,mixer,action,head:inner.getObjectByName('Head')}; }
+for(const p of PARTS){ _gltf.load(EBASE+p.file, gl=>{ body[p.key]=prepBody(gl,p.once); if(p.key==='idle'&&!bodyKey) setBody('idle'); }, undefined, e=>console.warn(p.file,e)); }
+function setBody(key){ const b=body[key]; if(!b||bodyKey===key)return;
+  if(bodyKey&&body[bodyKey]){ body[bodyKey].root.visible=false; if(body[bodyKey].action)body[bodyKey].action.stop(); }
+  bodyKey=key; b.root.visible=true; if(b.action) b.action.reset().play(); }
+function doAction(key){ const b=body[key]; if(!b)return; actKey=key; setBody(key); if(b.action) b.action.reset().play(); }
+function actBtn(id,fn){ const el=document.getElementById(id); if(el) el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
+actBtn('bChop',()=>doAction('chop')); actBtn('bHammer',()=>doAction('hammer'));
+function tickPlayer(dt){
+  const speed=player.vel.length();
+  if(actKey){ const a=body[actKey]; if(!a||!a.action||!a.action.isRunning()) actKey=null; }   // ¿terminó la acción?
+  if(!actKey) setBody(speed<0.4?'idle':(speed<3.4?'walk':'run'));                              // locomoción
+  const b=body[bodyKey]; if(b){
+    b.root.position.set(player.pos.x,0,player.pos.z); b.root.rotation.y=player.yaw+Math.PI;     // el cuerpo mira hacia adelante
+    b.mixer.update(dt);
+    if(b.head) b.head.scale.setScalar(0.0001);                                                 // cabeza oculta (no tapa la cámara)
+  }
+  if(eLabelEl) eLabelEl.textContent=PLABEL[actKey||bodyKey]||''; }
 
 /* ===================== Loop ===================== */
 const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
@@ -199,7 +206,7 @@ function update(dt){
   euler.set(player.pitch,player.yaw,player.roll); camera.quaternion.setFromEuler(euler);
   if(hitShake>0.0001){ camera.rotateZ((Math.random()-0.5)*0.07*hitShake); camera.rotateX((Math.random()-0.5)*0.05*hitShake); } hitShake*=0.88;
   sun.position.set(player.pos.x-40,70,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
-  tickEnemy(dt);        // enemigo que persigue
+  tickPlayer(dt);        // cuerpo del player en 1ª persona
 }
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
 
