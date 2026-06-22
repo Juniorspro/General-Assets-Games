@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#aebfcf" />
 <title>Escena · Limpia</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
 <style>
   :root{ --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px); }
   *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
@@ -164,7 +166,7 @@ function prep(gl){ const inner=gl.scene;
   return {root,mixer,action}; }
 function loadChar(i){ _gltf.load(EBASE+CHARS[i].file, gl=>{ slots[i]=prep(gl); if(curIdx<0&&i===0) show(0); }, undefined, e=>console.warn(CHARS[i].file,e)); }
 loadChar(0);                                              // idle primero → aparece rápido
-let _li=1; const _lazy=setInterval(()=>{ if(_li>=CHARS.length){clearInterval(_lazy);return;} loadChar(_li++); },350);   // resto en diferido
+for(let i=1;i<CHARS.length;i++) loadChar(i);              // resto EN PARALELO (jsDelivr HTTP/2 multiplexa todas las descargas)
 function show(i){ const s=slots[i]; if(!s)return;
   if(curIdx>=0&&slots[curIdx]&&slots[curIdx]!==s){ slots[curIdx].root.visible=false; if(slots[curIdx].action)slots[curIdx].action.stop(); }
   curIdx=i; s.root.visible=true; if(s.action) s.action.reset().play();
