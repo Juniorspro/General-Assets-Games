@@ -16,6 +16,9 @@
   /* #stage envuelve todo el juego; se rota 90° en vertical para jugar de costado */
   #stage { position:fixed; inset:0; }
   body.rot #stage { width:100vh; height:100vw; top:50%; left:50%; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center center; }
+  /* las pantallas de arranque (fullscreen / PC-móvil / idioma / estudios / carga) también van GIRADAS 90° desde el principio */
+  body.rot #boot, body.rot #devPick, body.rot #langPick, body.rot #assetLoad, body.rot #studios, body.rot #kbCard {
+    inset:auto; width:100vh; height:100vw; top:50%; left:50%; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center center; }
   #app { position:absolute; inset:0; }
   #app canvas { display:block; width:100%!important; height:100%!important; touch-action:none; image-rendering:auto; }
 
@@ -498,6 +501,9 @@ import { EffectComposer, RenderPass, EffectPass, Effect, BloomEffect, HueSaturat
          ToneMappingEffect, ToneMappingMode, SMAAEffect, VignetteEffect } from 'postprocessing';
 // N8AO: oclusión ambiental basada en PROFUNDIDAD (respeta el recorte alpha de las plantas → sin el cuadrado negro)
 // y mucho más optimizada. Carga defensiva (con tope de 3s) para que un fallo de red NUNCA impida arrancar.
+// girar 90° YA (antes de cualquier espera) → las pantallas de arranque aparecen en horizontal desde el primer frame
+function syncRot(){ if(window.innerHeight>window.innerWidth)document.body.classList.add('rot'); else document.body.classList.remove('rot'); }
+syncRot(); addEventListener('resize',syncRot);
 let N8AOPostPass=null;
 { const _n8=await Promise.race([ import('n8ao').catch(()=>null), new Promise(res=>setTimeout(()=>res(null),3000)) ]);
   N8AOPostPass=(_n8&&_n8.N8AOPostPass)||null; if(!N8AOPostPass)console.warn('N8AO no disponible → sigo sin SSAO'); }
