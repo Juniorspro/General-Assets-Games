@@ -1176,6 +1176,36 @@ function cutVegetation(sy,cy){ let best=null,bd=10;
   if(best.im.instanceColor)best.im.getColorAt(best.idx,_vc);
   spawnShards(best.x,terrainHeight(best.x,best.z)+0.2,best.z,best.im.material.map,_vc,5); chopSound();
 }
+/* ===== CAVAR: la pala hunde el suelo y deja un cráter de barro ===== */
+function barroTexture(){const S=256,cv=document.createElement('canvas');cv.width=cv.height=S;const g=cv.getContext('2d');
+  g.fillStyle='#5a3d22';g.fillRect(0,0,S,S);
+  for(let i=0;i<3000;i++){const x=Math.random()*S,y=Math.random()*S,r=Math.random()*2.6,sh=Math.random();
+    g.fillStyle='rgba('+(38+sh*78|0)+','+(24+sh*48|0)+','+(10+sh*28|0)+','+(0.22+Math.random()*0.42)+')';g.beginPath();g.arc(x,y,r,0,7);g.fill();}
+  for(let i=0;i<70;i++){const x=Math.random()*S,y=Math.random()*S,r=1.4+Math.random()*3.2;g.fillStyle='rgba('+(110+Math.random()*40|0)+','+(100+Math.random()*36|0)+',88,'+(0.3+Math.random()*0.4)+')';g.beginPath();g.arc(x,y,r,0,7);g.fill();}   // piedritas
+  const t=new THREE.CanvasTexture(cv);t.wrapS=t.wrapT=THREE.RepeatWrapping;return t;}
+const barroTex=barroTexture();
+const barroMat=new THREE.MeshStandardMaterial({map:barroTex,roughness:1,metalness:0,color:0xffffff,side:THREE.DoubleSide});
+const holes=[];
+function makeHoleMesh(radius,depth){const grp=new THREE.Group();
+  const funnel=new THREE.Mesh(new THREE.ConeGeometry(radius,depth,16,1,true),barroMat); funnel.rotation.x=Math.PI; funnel.position.y=-depth/2; grp.add(funnel);   // embudo del hoyo
+  const bottom=new THREE.Mesh(new THREE.CircleGeometry(radius*0.2,12),barroMat); bottom.rotation.x=-Math.PI/2; bottom.position.y=-depth+0.005; grp.add(bottom);   // fondo
+  const rim=new THREE.Mesh(new THREE.RingGeometry(radius*0.88,radius*1.2,20),barroMat); rim.rotation.x=-Math.PI/2; rim.position.y=0.012; grp.add(rim);   // borde de tierra removida
+  grp.traverse(o=>{if(o.isMesh)o.receiveShadow=true;}); return grp;}
+function doDig(){
+  const fx=-Math.sin(player.yaw),fz=-Math.cos(player.yaw);
+  const dx=player.pos.x+fx*1.55, dz=player.pos.z+fz*1.55, gy=terrainHeight(dx,dz);
+  let h=null; for(const o of holes){ if((o.x-dx)*(o.x-dx)+(o.z-dz)*(o.z-dz)<1.0){h=o;break;} }
+  if(!h){ h={x:dx,z:dz,depth:0.2,radius:0.55,digs:0,mesh:makeHoleMesh(0.55,0.2)}; h.mesh.position.set(dx,gy+0.02,dz); scene.add(h.mesh); holes.push(h); }
+  else if(h.depth<1.15){ h.depth=Math.min(1.15,h.depth+0.14); h.radius=Math.min(1.0,h.radius+0.05);
+    const old=h.mesh; h.mesh=makeHoleMesh(h.radius,h.depth); h.mesh.position.copy(old.position); scene.add(h.mesh);
+    scene.remove(old); old.traverse(o=>{if(o.geometry&&o.geometry!==undefined)o.geometry.dispose();}); }
+  h.digs++;
+  spawnShards(dx,gy+0.15,dz,barroTex,_bcol,6); digSound();   // tierra saltando
+  if(h.digs%2===0){ addMat('barro',1); toast('+1 '+((REST.barro&&REST.barro[curLang])||'barro')); }   // recompensa: barro
+}
+const _bcol=new THREE.Color(0x6b4a2b);
+function digSound(){ if(!actx||!soundOn)return; const b=actx.createBuffer(1,actx.sampleRate*0.18,actx.sampleRate);const d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2);
+  const s=actx.createBufferSource();s.buffer=b;const lp=actx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=320+Math.random()*120;const g=actx.createGain();g.gain.value=0.34;s.connect(lp).connect(g).connect(actx.destination);s.start(); }
 function tickShards(dt){ for(const s of shards){ if(s.life<=0)continue; s.life-=dt; s.v.y-=9*dt; s.m.position.addScaledVector(s.v,dt);
   s.m.rotation.x+=s.rv.x*dt;s.m.rotation.y+=s.rv.y*dt;s.m.rotation.z+=s.rv.z*dt; const sfy=terrainHeight(s.m.position.x,s.m.position.z)+0.05; if(s.m.position.y<sfy){s.m.position.y=sfy;s.v.set(0,0,0);s.rv.multiplyScalar(0.8);}   // caen al SUELO real (no al nivel del mar)
   if(s.life<1)s.m.material.opacity=Math.max(0,s.life); if(s.life<=0)s.m.visible=false; } }
@@ -1927,7 +1957,8 @@ function craftTick(dt){
       digShake=a; }
     else if(equipped==='botella'){ fpRig.position.z=fpBasePos.z-a*0.22; fpRig.rotation.x=fpBaseRot.x-a*0.35; }
     else { fpRig.rotation.x=fpBaseRot.x-a*1.2; }
-    if(wswing.t>=0.5&&!wswing.hit&&CHOPPERS.has(equipped)){ wswing.hit=true; doChop(); }  // el tomahawk/hachas talan
+    if(wswing.t>=0.5&&!wswing.hit){ if(CHOPPERS.has(equipped)){ wswing.hit=true; doChop(); }  // el tomahawk/hachas talan
+      else if(DIGGERS.has(equipped)){ wswing.hit=true; doDig(); } }                            // la pala cava
     if(wswing.t>=1){ wswing.active=false; digShake=0; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
   resolveCollisions();
