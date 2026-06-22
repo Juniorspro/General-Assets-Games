@@ -1200,7 +1200,7 @@ camera.add(fpAxe); scene.add(camera);
 const FP_BASE=fpAxe.rotation.clone(), FP_POS=fpAxe.position.clone();
 const equip={active:false,t:0};
 let swing={active:false,t:0,hit:false};
-function startSwing(){ if(intro.active||equip.active||fpRig.visible)return; if(!swing.active){swing.active=true;swing.t=0;swing.hit=false; if(typeof nAtkQueued!=='undefined')nAtkQueued=true;} }  // si hay arma equipada (tomahawk), el swing lo maneja wswing
+function startSwing(){ if(intro.active||equip.active||fpRig.visible)return; if(!swing.active){swing.active=true;swing.t=0;swing.hit=false;npcAtk=true;} }  // si hay arma equipada (tomahawk), el swing lo maneja wswing
 
 const partGeo=new THREE.BoxGeometry(0.05,0.05,0.16);const partMat=new THREE.MeshStandardMaterial({color:0x6e4c2c,roughness:0.95,metalness:0});
 const PART_MAX=180;const parts=new THREE.InstancedMesh(partGeo,partMat,PART_MAX);parts.frustumCulled=false;scene.add(parts);
@@ -1748,7 +1748,7 @@ const THRUST=new Set(['spear','lanzapiedra','lanzaafil']);
 const CHOPPERS=new Set(['hacha','machete','guadana']);   // armas que pueden talar árboles
 const DIGGERS=new Set(['pala']);                          // herramientas que cavan (clavan hacia abajo)
 const MINERS=new Set(['picoafil','picopiedra','picomad']);// picos que minan nodos de mena
-function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;wswing.hit=false; if(typeof nAtkQueued!=='undefined')nAtkQueued=true;} }
+function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;wswing.hit=false;npcAtk=true;} }
 
 /* ---- crafteo / inventario ---- */
 const RECIPES=[
@@ -2086,90 +2086,78 @@ addEventListener('resize',layout);
 let paused=false,started=false;document.addEventListener('visibilitychange',()=>{paused=document.hidden;});
 const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0,hudTimer=0;const _v=new THREE.Vector3();
 const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
-/* ===================== NPCs NOCTURNOS (5 tipos) + RAGDOLL (reusa physWorld) ===================== */
-const N_EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@ab92101/';
-const N_TYPES=[
-  {f:{idle:'char_idle.glb',walk:'char_walk.glb',run:'char_run.glb',attack:'char_attack.glb'},h:1.78},
-  {f:{idle:'npc2_idle.glb',walk:'npc2_walk.glb',run:'npc2_run.glb',attack:'npc2_attack.glb'},h:1.82},
-  {f:{idle:'npc3_idle.glb',walk:'npc3_walk.glb',run:'npc3_run.glb',attack:'npc3_attack.glb'},h:1.82},
-  {f:{idle:'npc4_idle.glb',walk:'npc4_walk.glb',run:'npc4_run.glb',attack:'npc4_attack.glb'},h:1.68},
-  {f:{idle:'npc5_idle.glb',walk:'npc5_walk.glb',run:'npc5_run.glb',attack:'npc5_attack.glb'},h:1.7,torch:true},
-];
-const N_ANIMS=['idle','walk','run','attack']; const ntpl=N_TYPES.map(()=>({})); const nGLTF=new GLTFLoader();
-let nLoaded=0; const nTotal=N_TYPES.length*4; let nReady=false, nKicked=false;
-function loadNPCs(){ if(nKicked)return; nKicked=true;   // se llama AL EMPEZAR la partida (no en el boot, para no competir con la carga del mundo)
+/* ===================== NPCs nocturnos + ragdoll (TODO aislado; corre al Jugar, en try/catch) ===================== */
+let npcTickFn=null, storyT=-1, npcAtk=false, npcSetupDone=false;
+function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
+  const N_EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@ab92101/';
+  const N_TYPES=[
+    {f:{idle:'char_idle.glb',walk:'char_walk.glb',run:'char_run.glb',attack:'char_attack.glb'},h:1.78},
+    {f:{idle:'npc2_idle.glb',walk:'npc2_walk.glb',run:'npc2_run.glb',attack:'npc2_attack.glb'},h:1.82},
+    {f:{idle:'npc3_idle.glb',walk:'npc3_walk.glb',run:'npc3_run.glb',attack:'npc3_attack.glb'},h:1.82},
+    {f:{idle:'npc4_idle.glb',walk:'npc4_walk.glb',run:'npc4_run.glb',attack:'npc4_attack.glb'},h:1.68},
+    {f:{idle:'npc5_idle.glb',walk:'npc5_walk.glb',run:'npc5_run.glb',attack:'npc5_attack.glb'},h:1.7,torch:true} ];
+  const N_ANIMS=['idle','walk','run','attack']; const ntpl=N_TYPES.map(()=>({})); const nGLTF=new GLTFLoader();
+  let nLoaded=0; const nTotal=N_TYPES.length*4; let nReady=false;
   N_TYPES.forEach((T,ti)=> N_ANIMS.forEach(an=>{ nGLTF.load(N_EBASE+T.f[an], gl=>{ const scn=gl.scene;
     const b=new THREE.Box3().setFromObject(scn),sz=b.getSize(new THREE.Vector3()),s=T.h/(sz.y||1),c=b.getCenter(new THREE.Vector3());
     ntpl[ti][an]={scene:scn,clip:gl.animations[0],s,off:new THREE.Vector3(-c.x*s,-b.min.y*s,-c.z*s)}; if(++nLoaded>=nTotal)nReady=true; },
-    undefined, e=>{ console.warn(T.f[an],e); if(++nLoaded>=nTotal)nReady=true; }); })); }
-const NPCS=[]; const _nv=new THREE.Vector3(),_nq=new THREE.Quaternion(),_yU=new THREE.Vector3(0,1,0);
-function nFlameTex(){ const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
-  const gr=x.createRadialGradient(32,38,2,32,34,30); gr.addColorStop(0,'rgba(255,248,220,1)');gr.addColorStop(.45,'rgba(255,150,40,.9)');gr.addColorStop(1,'rgba(255,80,0,0)');
-  x.fillStyle=gr;x.fillRect(0,0,64,64); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; }
-function nMakeFlame(){ const g=new THREE.Group(); const light=new THREE.PointLight(0xff7d2a,6,9,2); light.position.y=0.05; g.add(light);
-  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:nFlameTex(),color:0xffb24d,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false}));
-  spr.scale.set(0.34,0.5,1); g.add(spr); g.userData={light,spr}; return g; }
-function nAttachTorch(body,flames){ const hand=body.getObjectByName('RightHand'); if(!hand)return; hand.updateWorldMatrix(true,false); const hs=hand.getWorldScale(_nv).x||1;
-  const holder=new THREE.Group(); const stick=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.036,0.62,10),new THREE.MeshStandardMaterial({color:0x6b4a2a,roughness:0.85})); stick.position.y=0.31; holder.add(stick);
-  holder.scale.setScalar(1/hs); holder.rotation.set(-Math.PI/2,0,0.35); const fl=nMakeFlame(); fl.position.set(0,0.66,0); holder.add(fl); flames.push(fl.userData); hand.add(holder); }
-function nMake(ti,x,z){ const T=N_TYPES[ti]; const inst={ti,group:new THREE.Group(),bodies:{},mixers:{},actions:{},state:null,dead:false,flames:[],atkCD:0};
-  N_ANIMS.forEach(an=>{ const t=ntpl[ti][an]; if(!t)return; const scn=skClone(t.scene); scn.scale.setScalar(t.s); scn.position.copy(t.off); scn.visible=false;
-    scn.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } }); if(T.torch)nAttachTorch(scn,inst.flames); inst.group.add(scn);
-    const mx=new THREE.AnimationMixer(scn); const ac=t.clip?mx.clipAction(t.clip):null; if(ac){ ac.setLoop(THREE.LoopRepeat); if(an==='attack')ac.timeScale=1.5; }
-    inst.bodies[an]=scn; inst.mixers[an]=mx; inst.actions[an]=ac; });
-  inst.group.position.set(x,terrainHeight(x,z),z); scene.add(inst.group); nSet(inst,'idle'); NPCS.push(inst); return inst; }
-function nSet(inst,an){ if(inst.dead||inst.state===an)return; const b=inst.bodies[an]; if(!b)return; for(const k in inst.bodies)inst.bodies[k].visible=false; b.visible=true; const ac=inst.actions[an]; if(ac)ac.reset().play(); inst.state=an; }
-// ---- ragdoll: un cuerpo por hueso, en physWorld; colisión propia (grupo 2 / máscara 3) + clamp al terreno ----
-const NRAG=[ ['Hips','Spine',0.14],['Spine','Head',0.15],['Head',null,0.12],['LeftArm','LeftForeArm',0.07],['LeftForeArm','LeftHand',0.06],['RightArm','RightForeArm',0.07],['RightForeArm','RightHand',0.06],['LeftUpLeg','LeftLeg',0.09],['LeftLeg','LeftFoot',0.075],['RightUpLeg','RightLeg',0.09],['RightLeg','RightFoot',0.075] ];
-const NPAIRS=[['Hips','Spine'],['Spine','Head'],['Spine','LeftArm'],['Spine','RightArm'],['LeftArm','LeftForeArm'],['RightArm','RightForeArm'],['Hips','LeftUpLeg'],['Hips','RightUpLeg'],['LeftUpLeg','LeftLeg'],['RightUpLeg','RightLeg']];
-function nW2bl(pb,wv){ return wv.clone().sub(new THREE.Vector3(pb.position.x,pb.position.y,pb.position.z)).applyQuaternion(new THREE.Quaternion(pb.quaternion.x,pb.quaternion.y,pb.quaternion.z,pb.quaternion.w).invert()); }
-function nStartRag(inst,imp){ ensureWorld(); const body=inst.bodies[inst.state]; if(!body)return; body.updateWorldMatrix(true,true); inst.rag={recs:[],byBone:{}};
-  for(const [bn,cn,r] of NRAG){ const bone=body.getObjectByName(bn); if(!bone)continue;
-    const p0=bone.getWorldPosition(new THREE.Vector3()); const child=cn?body.getObjectByName(cn):null;
-    const p1=child?child.getWorldPosition(new THREE.Vector3()):p0.clone().add(new THREE.Vector3(0,0.14,0));
-    const center=p0.clone().add(p1).multiplyScalar(0.5); let dir=p1.clone().sub(p0); let len=dir.length(); if(len<0.04){len=0.12;dir.set(0,1,0);}else dir.divideScalar(len);
-    const qSeg=new THREE.Quaternion().setFromUnitVectors(_yU,dir);
-    const pb=new CANNON.Body({mass:1.0,linearDamping:0.06,angularDamping:0.6,sleepSpeedLimit:0.3,sleepTimeLimit:0.6,position:new CANNON.Vec3(center.x,center.y,center.z)});
-    pb.quaternion.set(qSeg.x,qSeg.y,qSeg.z,qSeg.w); pb.addShape(new CANNON.Box(new CANNON.Vec3(r,Math.max(0.05,len/2),r)));
-    pb.collisionFilterGroup=2; pb.collisionFilterMask=3;   // colisiona con piso (1) y con otras partes (2)
-    pb.velocity.set(imp.x*(0.8+Math.random()*0.4),imp.y,imp.z*(0.8+Math.random()*0.4)); pb.angularVelocity.set((Math.random()-.5)*2.5,(Math.random()-.5)*2,(Math.random()-.5)*2.5);
-    physWorld.addBody(pb); const bq0=bone.getWorldQuaternion(new THREE.Quaternion()); const M=bq0.clone().multiply(qSeg.clone().invert());
-    const rLocal=p0.clone().sub(center).applyQuaternion(qSeg.clone().invert());
-    const rec={bn,bone,pb,M,rLocal,r,isRoot:bn==='Hips'}; inst.rag.recs.push(rec); inst.rag.byBone[bn]=rec; }
-  for(const [a,b] of NPAIRS){ const A=inst.rag.byBone[a],B=inst.rag.byBone[b]; if(!A||!B)continue; const jw=B.bone.getWorldPosition(new THREE.Vector3());
-    const c=new CANNON.PointToPointConstraint(A.pb,new CANNON.Vec3().copy(nW2bl(A.pb,jw)),B.pb,new CANNON.Vec3().copy(nW2bl(B.pb,jw))); c.collideConnected=false; physWorld.addConstraint(c); } }
-function nStepRag(inst){ const rag=inst.rag; if(!rag)return;
-  for(const rec of rag.recs){ const pb=rec.pb; const ty=terrainHeight(pb.position.x,pb.position.z)+rec.r;   // suelo = terreno
-    if(pb.position.y<ty){ pb.position.y=ty; if(pb.velocity.y<0)pb.velocity.y=0; }
-    const qB=new THREE.Quaternion(pb.quaternion.x,pb.quaternion.y,pb.quaternion.z,pb.quaternion.w); const qW=rec.M.clone().multiply(qB);
-    const pW=rec.bone.parent.getWorldQuaternion(_nq).invert(); rec.bone.quaternion.copy(pW.multiply(qW));
-    if(rec.isRoot){ const cc=new THREE.Vector3(pb.position.x,pb.position.y,pb.position.z); const jw=cc.add(rec.rLocal.clone().applyQuaternion(qB)); rec.bone.parent.worldToLocal(jw); rec.bone.position.copy(jw); } } }
-let nAtkQueued=false; const _nray=new THREE.Raycaster();
-function nTryKill(){ _nray.setFromCamera({x:0,y:0},camera); _nray.far=4.2; let best=null,bd=1e9;
-  for(const n of NPCS){ if(n.dead)continue; const h=_nray.intersectObject(n.group,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=n;} } if(best&&bd<4.2)nKillNPC(best); }
-function nKillNPC(inst){ if(inst.dead)return; inst.dead=true; for(const k in inst.mixers)inst.mixers[k].stopAllAction();
-  const dx=inst.group.position.x-player.pos.x,dz=inst.group.position.z-player.pos.z,d=Math.hypot(dx,dz)||1; const imp=new THREE.Vector3(dx/d*2.6,0.9,dz/d*2.6);
-  try{ nStartRag(inst,imp); }catch(e){ console.warn('ragdoll',e); inst.simple=true; } }
-let nightSpawned=false;
-function spawnNight(){ for(let k=0;k<3;k++){ const ti=(Math.random()*N_TYPES.length)|0,a=Math.random()*6.28,r=22+Math.random()*10; nMake(ti, player.pos.x+Math.cos(a)*r, player.pos.z+Math.sin(a)*r); } }
-function tickNPCs(dt){ if(!nReady)return; if(nAtkQueued){ nAtkQueued=false; nTryKill(); }
-  for(const inst of NPCS){ if(inst.dead){ if(inst.rag)nStepRag(inst); continue; }
-    if(inst.mixers[inst.state])inst.mixers[inst.state].update(dt);
-    for(const f of inst.flames){ const k=0.65+Math.random()*0.55; f.light.intensity=6*k; f.spr.material.opacity=0.6+0.4*Math.random(); }
-    const dx=player.pos.x-inst.group.position.x,dz=player.pos.z-inst.group.position.z,d=Math.hypot(dx,dz)||1; inst.group.rotation.y=Math.atan2(dx,dz); inst.atkCD=Math.max(0,inst.atkCD-dt);
-    if(d<2.6){ nSet(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.3; digShake=Math.max(digShake,0.6); } }
-    else { const run=d>8, sp=(run?2.6:1.4)*dt; inst.group.position.x+=dx/d*sp; inst.group.position.z+=dz/d*sp; nSet(inst,run?'run':'walk'); }
-    inst.group.position.y=terrainHeight(inst.group.position.x,inst.group.position.z); } }
-// día→noche guionado: ~1 min de día y oscurece; al ser de noche aparecen los NPC
-let storyT=-1;
-function tickStoryNight(dt){ if(storyT<0)return; storyT+=dt;
-  const elev = storyT<60 ? 26 : (storyT<82 ? 26+(storyT-60)/22*(-40) : -14);
-  setTime(elev,120);
-  if(!nightSpawned && nReady && nightFactor>0.55){ nightSpawned=true; spawnNight(); } }
-
+    undefined, e=>{ console.warn(T.f[an],e); if(++nLoaded>=nTotal)nReady=true; }); }));
+  const NPCS=[]; const _nv=new THREE.Vector3(),_nq=new THREE.Quaternion(),_yU=new THREE.Vector3(0,1,0);
+  function flameTex(){ const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
+    const gr=x.createRadialGradient(32,38,2,32,34,30); gr.addColorStop(0,'rgba(255,248,220,1)');gr.addColorStop(.45,'rgba(255,150,40,.9)');gr.addColorStop(1,'rgba(255,80,0,0)');
+    x.fillStyle=gr;x.fillRect(0,0,64,64); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; }
+  function mkFlame(){ const g=new THREE.Group(); const light=new THREE.PointLight(0xff7d2a,6,9,2); light.position.y=0.05; g.add(light);
+    const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex(),color:0xffb24d,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})); spr.scale.set(0.34,0.5,1); g.add(spr); g.userData={light,spr}; return g; }
+  function attachTorch(body,flames){ const hand=body.getObjectByName('RightHand'); if(!hand)return; hand.updateWorldMatrix(true,false); const hs=hand.getWorldScale(_nv).x||1;
+    const holder=new THREE.Group(); const stick=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.036,0.62,10),new THREE.MeshStandardMaterial({color:0x6b4a2a,roughness:0.85})); stick.position.y=0.31; holder.add(stick);
+    holder.scale.setScalar(1/hs); holder.rotation.set(-Math.PI/2,0,0.35); const fl=mkFlame(); fl.position.set(0,0.66,0); holder.add(fl); flames.push(fl.userData); hand.add(holder); }
+  function mk(ti,x,z){ const T=N_TYPES[ti]; const inst={ti,group:new THREE.Group(),bodies:{},mixers:{},actions:{},state:null,dead:false,flames:[],atkCD:0};
+    N_ANIMS.forEach(an=>{ const t=ntpl[ti][an]; if(!t)return; const scn=skClone(t.scene); scn.scale.setScalar(t.s); scn.position.copy(t.off); scn.visible=false;
+      scn.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } }); if(T.torch)attachTorch(scn,inst.flames); inst.group.add(scn);
+      const mx=new THREE.AnimationMixer(scn); const ac=t.clip?mx.clipAction(t.clip):null; if(ac){ ac.setLoop(THREE.LoopRepeat); if(an==='attack')ac.timeScale=1.5; }
+      inst.bodies[an]=scn; inst.mixers[an]=mx; inst.actions[an]=ac; });
+    inst.group.position.set(x,terrainHeight(x,z),z); scene.add(inst.group); setSt(inst,'idle'); NPCS.push(inst); return inst; }
+  function setSt(inst,an){ if(inst.dead||inst.state===an)return; const b=inst.bodies[an]; if(!b)return; for(const k in inst.bodies)inst.bodies[k].visible=false; b.visible=true; const ac=inst.actions[an]; if(ac)ac.reset().play(); inst.state=an; }
+  const NRAG=[ ['Hips','Spine',0.14],['Spine','Head',0.15],['Head',null,0.12],['LeftArm','LeftForeArm',0.07],['LeftForeArm','LeftHand',0.06],['RightArm','RightForeArm',0.07],['RightForeArm','RightHand',0.06],['LeftUpLeg','LeftLeg',0.09],['LeftLeg','LeftFoot',0.075],['RightUpLeg','RightLeg',0.09],['RightLeg','RightFoot',0.075] ];
+  const NPAIRS=[['Hips','Spine'],['Spine','Head'],['Spine','LeftArm'],['Spine','RightArm'],['LeftArm','LeftForeArm'],['RightArm','RightForeArm'],['Hips','LeftUpLeg'],['Hips','RightUpLeg'],['LeftUpLeg','LeftLeg'],['RightUpLeg','RightLeg']];
+  function w2bl(pb,wv){ return wv.clone().sub(new THREE.Vector3(pb.position.x,pb.position.y,pb.position.z)).applyQuaternion(new THREE.Quaternion(pb.quaternion.x,pb.quaternion.y,pb.quaternion.z,pb.quaternion.w).invert()); }
+  function startRag(inst,imp){ ensureWorld(); const body=inst.bodies[inst.state]; if(!body)return; body.updateWorldMatrix(true,true); inst.rag={recs:[],byBone:{}};
+    for(const [bn,cn,r] of NRAG){ const bone=body.getObjectByName(bn); if(!bone)continue;
+      const p0=bone.getWorldPosition(new THREE.Vector3()); const child=cn?body.getObjectByName(cn):null;
+      const p1=child?child.getWorldPosition(new THREE.Vector3()):p0.clone().add(new THREE.Vector3(0,0.14,0));
+      const center=p0.clone().add(p1).multiplyScalar(0.5); let dir=p1.clone().sub(p0); let len=dir.length(); if(len<0.04){len=0.12;dir.set(0,1,0);}else dir.divideScalar(len);
+      const qSeg=new THREE.Quaternion().setFromUnitVectors(_yU,dir);
+      const pb=new CANNON.Body({mass:1.0,linearDamping:0.06,angularDamping:0.6,sleepSpeedLimit:0.3,sleepTimeLimit:0.6,position:new CANNON.Vec3(center.x,center.y,center.z)});
+      pb.quaternion.set(qSeg.x,qSeg.y,qSeg.z,qSeg.w); pb.addShape(new CANNON.Box(new CANNON.Vec3(r,Math.max(0.05,len/2),r))); pb.collisionFilterGroup=2; pb.collisionFilterMask=3;
+      pb.velocity.set(imp.x*(0.8+Math.random()*0.4),imp.y,imp.z*(0.8+Math.random()*0.4)); pb.angularVelocity.set((Math.random()-.5)*2.5,(Math.random()-.5)*2,(Math.random()-.5)*2.5);
+      physWorld.addBody(pb); const bq0=bone.getWorldQuaternion(new THREE.Quaternion()); const M=bq0.clone().multiply(qSeg.clone().invert()); const rLocal=p0.clone().sub(center).applyQuaternion(qSeg.clone().invert());
+      inst.rag.recs.push({bn,bone,pb,M,rLocal,r,isRoot:bn==='Hips'}); inst.rag.byBone[bn]=inst.rag.recs[inst.rag.recs.length-1]; }
+    for(const [a,b] of NPAIRS){ const A=inst.rag.byBone[a],B=inst.rag.byBone[b]; if(!A||!B)continue; const jw=B.bone.getWorldPosition(new THREE.Vector3());
+      const c=new CANNON.PointToPointConstraint(A.pb,new CANNON.Vec3().copy(w2bl(A.pb,jw)),B.pb,new CANNON.Vec3().copy(w2bl(B.pb,jw))); c.collideConnected=false; physWorld.addConstraint(c); } }
+  function stepRag(inst){ const rag=inst.rag; if(!rag)return;
+    for(const rec of rag.recs){ const pb=rec.pb; const ty=terrainHeight(pb.position.x,pb.position.z)+rec.r; if(pb.position.y<ty){ pb.position.y=ty; if(pb.velocity.y<0)pb.velocity.y=0; }
+      const qB=new THREE.Quaternion(pb.quaternion.x,pb.quaternion.y,pb.quaternion.z,pb.quaternion.w); const qW=rec.M.clone().multiply(qB);
+      const pW=rec.bone.parent.getWorldQuaternion(_nq).invert(); rec.bone.quaternion.copy(pW.multiply(qW));
+      if(rec.isRoot){ const cc=new THREE.Vector3(pb.position.x,pb.position.y,pb.position.z); const jw=cc.add(rec.rLocal.clone().applyQuaternion(qB)); rec.bone.parent.worldToLocal(jw); rec.bone.position.copy(jw); } } }
+  const ray=new THREE.Raycaster();
+  function tryKill(){ ray.setFromCamera({x:0,y:0},camera); ray.far=4.2; let best=null,bd=1e9; for(const n of NPCS){ if(n.dead)continue; const h=ray.intersectObject(n.group,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=n;} } if(best&&bd<4.2)killN(best); }
+  function killN(inst){ if(inst.dead)return; inst.dead=true; for(const k in inst.mixers)inst.mixers[k].stopAllAction();
+    const dx=inst.group.position.x-player.pos.x,dz=inst.group.position.z-player.pos.z,d=Math.hypot(dx,dz)||1; try{ startRag(inst,new THREE.Vector3(dx/d*2.6,0.9,dz/d*2.6)); }catch(e){ console.warn(e); } }
+  let nightSpawned=false; function spawnNight(){ for(let k=0;k<3;k++){ const ti=(Math.random()*N_TYPES.length)|0,a=Math.random()*6.28,r=22+Math.random()*10; mk(ti, player.pos.x+Math.cos(a)*r, player.pos.z+Math.sin(a)*r); } }
+  npcTickFn=function(dt){
+    storyT+=dt; const elev = storyT<60?26 : (storyT<82? 26+(storyT-60)/22*(-40) : -14); setTime(elev,120);   // ~1 min de día y oscurece
+    if(!nightSpawned&&nReady&&nightFactor>0.55){ nightSpawned=true; spawnNight(); }
+    if(npcAtk){ npcAtk=false; tryKill(); }
+    for(const inst of NPCS){ if(inst.dead){ if(inst.rag)stepRag(inst); continue; }
+      if(inst.mixers[inst.state])inst.mixers[inst.state].update(dt);
+      for(const f of inst.flames){ const k=0.65+Math.random()*0.55; f.light.intensity=6*k; f.spr.material.opacity=0.6+0.4*Math.random(); }
+      const dx=player.pos.x-inst.group.position.x,dz=player.pos.z-inst.group.position.z,d=Math.hypot(dx,dz)||1; inst.group.rotation.y=Math.atan2(dx,dz); inst.atkCD=Math.max(0,inst.atkCD-dt);
+      if(d<2.6){ setSt(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.3; digShake=Math.max(digShake,0.6); } }
+      else { const run=d>8, sp=(run?2.6:1.4)*dt; inst.group.position.x+=dx/d*sp; inst.group.position.z+=dz/d*sp; setSt(inst,run?'run':'walk'); }
+      inst.group.position.y=terrainHeight(inst.group.position.x,inst.group.position.z); } };
+ }catch(e){ console.warn('setupNPCs',e); } }
 function update(dt){
-  if(storyT>=0){ try{ tickStoryNight(dt); }catch(e){} }
-  else if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
+  if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
     setTime(elev,120);   // SIN IBL: ilumina la directa+hemisférica; el relieve lo dan los normal maps
     hudTimer-=dt; if(hudTimer<=0){ hudTimer=0.25; $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev); } }  // DOM sólo ~4x/seg (evita reflow por frame)
   let ix=joy.x,iz=joy.y;if(keys['KeyW'])iz-=1;if(keys['KeyS'])iz+=1;if(keys['KeyA'])ix-=1;if(keys['KeyD'])ix+=1;
@@ -2231,7 +2219,7 @@ function update(dt){
         else{lm.visible=true; const full=lm.userData.full||lm.count; lm.count=(d2<lnear2)?full:(lm.userData.half||full);}}}}
   if(shadowDirty&&shadowOn)renderer.shadowMap.needsUpdate=true;
   chopTick(dt);
-  try{ tickNPCs(dt); }catch(e){}   // NPCs nocturnos + ragdoll (blindado)
+  if(npcTickFn){ try{ npcTickFn(dt); }catch(e){} }   // NPCs nocturnos + ragdoll (blindado)
   // Mundo precargado entero: NO se construye/descarga ni se tocan sombras en runtime → cero tirones al caminar.
   windU.uTime.value+=dt;
 }
@@ -2539,7 +2527,8 @@ function startGame(){
       loadResScale=1.0;                                    // dejamos el modo carga (½ res) → resolución normal
       applyDefaults(); setQuality(curQuality); applyGodTextures(); layout();
       equipped='hacha'; equipItem('hacha'); fpAxe.visible=false;   // tomahawk = hacha permanente de por vida
-      const enter=()=>{ started=true; unlockAudio(); enterPlayMode(); fadeFromBlack(); cycleOn=false; storyT=0; nightSpawned=false; try{loadNPCs();}catch(e){console.warn(e);} };   // arranca día→noche + carga NPCs
+      const enter=()=>{ started=true; unlockAudio(); enterPlayMode(); fadeFromBlack();
+        try{ setupNPCs(); if(npcTickFn){ cycleOn=false; storyT=0; } }catch(e){ console.warn('npc',e); } };   // NPCs + día→noche (si falla, sigue el ciclo normal)
       if(worldReady){ enter(); }
       else bootArea(enter);
     });
