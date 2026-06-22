@@ -25,6 +25,10 @@
   .actBtn.on{ background:rgba(90,160,255,.3); border-color:#8fe3ff; }
   #bJump  { right:26px; bottom:calc(34px + var(--safe-b)); }
   #bCrouch{ right:100px; bottom:calc(58px + var(--safe-b)); width:56px; height:56px; font-size:19px; }
+  #animLabel{ position:fixed; left:50%; top:calc(14px + var(--safe-t)); transform:translateX(-50%); z-index:10;
+              background:rgba(14,22,30,.72); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.16); border-radius:999px;
+              padding:8px 18px; color:#ffd27a; font-weight:700; font-size:15px; letter-spacing:.02em; white-space:nowrap;
+              box-shadow:0 6px 20px rgba(0,0,0,.45); pointer-events:none; }
   #loader{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
            background:#aebfcf; transition:opacity .5s; color:#0a3a63; font-size:13px; letter-spacing:.1em; }
   #loader.hide{ opacity:0; pointer-events:none; }
@@ -38,6 +42,7 @@
   <div id="joy"><div id="joyKnob"></div></div>
   <button id="bJump"   class="actBtn">⤴️</button>
   <button id="bCrouch" class="actBtn">🔽</button>
+  <div id="animLabel">cargando personaje…</div>
 </div>
 
 <script type="importmap">
@@ -137,38 +142,36 @@ function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListene
 tapBtn('bJump',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
 tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; document.getElementById('bCrouch').classList.toggle('on',player.crouch); });
 
-/* ===================== ENEMIGO 3D que persigue (GLB rigueado, multi-animación) ===================== */
-// Personaje primitivo: idle / caminar / correr / atacar (golpe de garrote) / saltar.
-// Hecho con Higgsfield (image-to-3D + auto-rig + clips Meshy), todos los clips sobre el MISMO esqueleto.
+/* ===================== PERSONAJE 3D · VITRINA (GLB rigueado, multi-animación) ===================== */
+// Personaje primitivo fijo en el centro que recorre sus animaciones en bucle:
+// idle / caminar / correr / atacar (golpe de garrote) / saltar.
+// Hecho con Higgsfield (image-to-3D + auto-rig + clips Meshy), todos sobre el MISMO esqueleto.
 const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@90edf07/';
-let enemy=null, eMix=null; const eActions={}; let eCur=null, eState='idle', eHitCD=0, eJumpCD=5;
-const E_WALK=1.7, E_RUN=3.7, E_ATKR=2.0, E_H=1.85; let hitShake=0;
-function ePlay(key,fade=0.22){ const a=eActions[key]; if(!a||a===eCur)return; a.reset(); a.enabled=true; a.setEffectiveWeight(1); a.fadeIn(fade).play(); if(eCur)eCur.fadeOut(fade); eCur=a; }
+const E_H=1.85; let hitShake=0;
+let enemy=null, eMix=null; const eActions={}, eOrder=[]; let eCur=null, eIdx=0, eTimer=0;
+const LBL={idle:'Idle (quieto)', walk:'Caminar', run:'Correr', attack:'Atacar (garrote)', jump:'Saltar'};
+const eLabelEl=document.getElementById('animLabel');
+function eWindow(key){ const a=eActions[key]; const d=a?a.getClip().duration:3; return Math.max(3.4, d*2); }   // ~2 vueltas, mín 3.4 s
+function ePlay(key,fade=0.3){ const a=eActions[key]; if(!a)return; if(eCur&&eCur!==a)eCur.fadeOut(fade);
+  a.reset(); a.enabled=true; a.setEffectiveTimeScale(1); a.setEffectiveWeight(1); a.fadeIn(fade).play(); eCur=a;
+  if(eLabelEl) eLabelEl.textContent='▶ '+(LBL[key]||key); }
 new GLTFLoader().load(EBASE+'enemy-anim.glb', gl=>{ const inner=gl.scene;
   let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=E_H/(sz.y||1); inner.scale.setScalar(s);
   b=new THREE.Box3().setFromObject(inner); const c=b.getCenter(new THREE.Vector3()); inner.position.set(-c.x,-b.min.y,-c.z);   // pies en el origen
   inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
-  enemy=new THREE.Group(); enemy.add(inner); enemy.position.set(0,0,-16); scene.add(enemy);
+  enemy=new THREE.Group(); enemy.add(inner); enemy.position.set(0,0,0); scene.add(enemy);   // fijo en el CENTRO
   eMix=new THREE.AnimationMixer(inner);
   for(const cl of gl.animations){ const n=cl.name.toLowerCase(); let key=null;
     if(n.includes('idle'))key='idle'; else if(n.includes('run')||n.includes('fast'))key='run';
     else if(n.includes('walk'))key='walk'; else if(n.includes('hammer')||n.includes('attack')||n.includes('swing')||n.includes('slash'))key='attack';
     else if(n.includes('jump'))key='jump';
-    if(key&&!eActions[key]) eActions[key]=eMix.clipAction(cl); }
-  for(const k of ['attack','jump']){ const a=eActions[k]; if(a){ a.setLoop(THREE.LoopOnce); a.clampWhenFinished=true; } }
-  eMix.addEventListener('finished',()=>{ eState='chase'; });   // al terminar ataque/salto vuelve a perseguir
-  ePlay(eActions.idle?'idle':(eActions.run?'run':Object.keys(eActions)[0]));
+    if(key&&!eActions[key]){ const a=eMix.clipAction(cl); a.setLoop(THREE.LoopRepeat); eActions[key]=a; } }
+  for(const k of ['idle','walk','run','attack','jump']) if(eActions[k]) eOrder.push(k);   // orden de la vitrina
+  if(eOrder.length){ eIdx=0; eTimer=eWindow(eOrder[0]); ePlay(eOrder[0],0); }
 }, undefined, e=>{ console.warn('enemy-anim',e); });
 function tickEnemy(dt){ if(!enemy||!eMix)return; eMix.update(dt);
-  const dx=player.pos.x-enemy.position.x, dz=player.pos.z-enemy.position.z, d=Math.hypot(dx,dz)||1;
-  enemy.rotation.y=Math.atan2(dx,dz);   // siempre mira al jugador
-  eHitCD=Math.max(0,eHitCD-dt); eJumpCD-=dt;
-  if(eState==='attack'||eState==='jump') return;   // bloqueado hasta el evento 'finished'
-  if(d<E_ATKR){ eState='attack'; ePlay('attack',0.1); if(eHitCD<=0){ eHitCD=1.2; hitShake=1; } return; }   // golpe + sacudón
-  const run=d>6, sp=(run?E_RUN:E_WALK)*dt;
-  enemy.position.x+=dx/d*sp; enemy.position.z+=dz/d*sp;   // persigue
-  if(eActions.jump && run && d>11 && eJumpCD<=0){ eJumpCD=6+Math.random()*4; eState='jump'; ePlay('jump',0.1); return; }   // salto ocasional de variedad
-  ePlay(run?'run':'walk');
+  enemy.rotation.y=Math.atan2(player.pos.x-enemy.position.x, player.pos.z-enemy.position.z);   // siempre mira a la cámara
+  if(eOrder.length){ eTimer-=dt; if(eTimer<=0){ eIdx=(eIdx+1)%eOrder.length; const k=eOrder[eIdx]; eTimer=eWindow(k); ePlay(k); } }   // recorre las animaciones en bucle
 }
 
 /* ===================== Loop ===================== */
