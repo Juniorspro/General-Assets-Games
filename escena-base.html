@@ -467,9 +467,7 @@ const FN=5, FSEG=0.052, fuseB=[];   // cadena del trapo (rope) que cuelga del pi
 for(let i=0;i<FN;i++){ const b=new CANNON.Body({mass:i===0?0:0.03,shape:new CANNON.Sphere(0.012),linearDamping:0.55,angularDamping:0.9});
   b.position.set(0,1.6-i*FSEG,0); if(i===0)b.type=CANNON.Body.KINEMATIC; cw.addBody(b); fuseB.push(b);
   if(i>0)cw.addConstraint(new CANNON.DistanceConstraint(fuseB[i-1],b,FSEG)); }
-const liqAnc=new CANNON.Body({mass:0,type:CANNON.Body.KINEMATIC}); liqAnc.position.set(0,1.2,0); cw.addBody(liqAnc);
-const liqB=new CANNON.Body({mass:0.4,shape:new CANNON.Sphere(0.04),linearDamping:0.5}); liqB.position.set(0,1.2,0); cw.addBody(liqB);
-const liqSpring=new CANNON.Spring(liqB,liqAnc,{restLength:0,stiffness:120,damping:6});
+const bottleCol=new CANNON.Body({mass:0,type:CANNON.Body.KINEMATIC,shape:new CANNON.Sphere(0.12)}); cw.addBody(bottleCol);   // colisión de la botella → la tela NO la atraviesa
 const heldFuse=new THREE.Group();
 // trapo como CINTA PLANA (ribbon) que sigue la cadena física — no cilindro
 const ribGeo=new THREE.BufferGeometry(), ribPos=new Float32Array(FN*2*3), ribUV=new Float32Array(FN*2*2), ribIdx=[];
@@ -479,26 +477,26 @@ ribGeo.setAttribute('position',new THREE.BufferAttribute(ribPos,3)); ribGeo.setA
 const ribMesh=new THREE.Mesh(ribGeo,new THREE.MeshStandardMaterial({color:0xdcd2bd,roughness:0.95,metalness:0,side:THREE.DoubleSide})); ribMesh.frustumCulled=false; heldFuse.add(ribMesh);
 const heldFire=makeFireMesh(fireGifs[1].tex,0.32,0.5); heldFuse.add(heldFire);
 let molotovHeld=false;
-const _vN=new THREE.Vector3(),_vC=new THREE.Vector3(),_pt=new THREE.Vector3(),_la=new THREE.Vector3(),_lb=new THREE.Vector3();
+const _vN=new THREE.Vector3(),_vC=new THREE.Vector3(),_nrm=new THREE.Vector3();
 const _lp=[]; for(let i=0;i<FN;i++)_lp.push(new THREE.Vector3()); const _tan=new THREE.Vector3(),_perp=new THREE.Vector3(),_zr=new THREE.Vector3(0,0,1);
 function resetFuse(){ fpRig.updateWorldMatrix(true,false); fpRig.localToWorld(_vN.set(0,0.39,0));
-  for(let i=0;i<FN;i++){ fuseB[i].position.set(_vN.x,_vN.y-i*FSEG,_vN.z); fuseB[i].velocity.set(0,0,0); }
-  liqAnc.position.set(_vN.x,_vN.y-0.28,_vN.z); liqB.position.copy(liqAnc.position); liqB.velocity.set(0,0,0); }
+  for(let i=0;i<FN;i++){ fuseB[i].position.set(_vN.x+i*0.024,_vN.y-i*FSEG*0.6,_vN.z); fuseB[i].velocity.set(0,0,0); } }   // sesgo al costado → drapea por fuera
 function setupHeldMolotov(){ const sf=fpModel.getObjectByName('staticFuse'); if(sf)sf.visible=false; const mf=fpModel.getObjectByName('molotovFire'); if(mf)mf.visible=false;
   if(!heldFuse.parent) fpRig.add(heldFuse); molotovHeld=true; resetFuse(); }
 function updateHeldMolotov(dt){ if(!molotovHeld||!fpModel) return;
   fpRig.updateWorldMatrix(true,false);
   fpRig.localToWorld(_vN.set(0,0.39,0));  fuseB[0].position.set(_vN.x,_vN.y,_vN.z);          // ancla = pico (sigue a la botella → reacciona al caminar/saltar/agachar)
-  fpRig.localToWorld(_vC.set(0,0.11,0));  liqAnc.position.set(_vC.x,_vC.y,_vC.z);
-  liqSpring.applyForce(); cw.step(1/60,Math.min(dt,0.05),3);
+  fpRig.localToWorld(_vC.set(0,0.16,0));  bottleCol.position.set(_vC.x,_vC.y,_vC.z);          // colisión de la botella
+  cw.step(1/60,Math.min(dt,0.05),3);
   for(let i=0;i<FN;i++){ _lp[i].set(fuseB[i].position.x,fuseB[i].position.y,fuseB[i].position.z); fpRig.worldToLocal(_lp[i]); }
   for(let i=0;i<FN;i++){ _tan.copy(_lp[Math.min(i+1,FN-1)]).sub(_lp[Math.max(i-1,0)]); if(_tan.lengthSq()<1e-6)_tan.set(0,-1,0); _tan.normalize();
-    _perp.crossVectors(_tan,_zr); if(_perp.lengthSq()<1e-5)_perp.set(1,0,0); _perp.normalize().multiplyScalar(0.045-0.012*(i/(FN-1)));   // un poco más ancho en la base
-    const a=_lp[i], o=i*6; ribPos[o]=a.x-_perp.x; ribPos[o+1]=a.y-_perp.y; ribPos[o+2]=a.z-_perp.z; ribPos[o+3]=a.x+_perp.x; ribPos[o+4]=a.y+_perp.y; ribPos[o+5]=a.z+_perp.z; }
+    _perp.crossVectors(_tan,_zr); if(_perp.lengthSq()<1e-5)_perp.set(1,0,0); _perp.normalize();
+    _nrm.crossVectors(_tan,_perp).normalize().multiplyScalar(Math.sin(i*2.3)*0.008);   // ARRUGA (medio plano pero arrugado)
+    const w=0.05-0.012*(i/(FN-1)), a=_lp[i], o=i*6;
+    ribPos[o]=a.x-_perp.x*w+_nrm.x; ribPos[o+1]=a.y-_perp.y*w+_nrm.y; ribPos[o+2]=a.z-_perp.z*w+_nrm.z;
+    ribPos[o+3]=a.x+_perp.x*w+_nrm.x; ribPos[o+4]=a.y+_perp.y*w+_nrm.y; ribPos[o+5]=a.z+_perp.z*w+_nrm.z; }
   ribGeo.attributes.position.needsUpdate=true; ribGeo.computeVertexNormals(); ribGeo.computeBoundingSphere();
-  heldFire.position.copy(_lp[FN-1]);
-  _la.copy(liqB.position); fpRig.worldToLocal(_la); _lb.copy(liqAnc.position); fpRig.worldToLocal(_lb); const lo=_la.sub(_lb);
-  const lm=fpModel.getObjectByName('molotovLiquid'); if(lm){ lm.rotation.z=THREE.MathUtils.clamp(-lo.x*7,-0.5,0.5); lm.rotation.x=THREE.MathUtils.clamp(lo.z*7,-0.5,0.5); lm.position.x=THREE.MathUtils.clamp(lo.x*0.6,-0.05,0.05); } }
+  heldFire.position.copy(_lp[FN-1]); }
 function cyl(rt,rb,h,m,s){const e=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,s||14),m);e.castShadow=true;return e;}
 function hnd(len,r,m){const e=cyl(r||0.04,(r||0.04)*1.18,len,m||woodDark,14);return e;}
 function lash(y,r){const t=new THREE.Mesh(new THREE.TorusGeometry(r||0.06,(r||0.06)*0.28,6,14),woodMat);t.position.y=y;t.rotation.x=Math.PI/2;t.castShadow=true;return t;}
@@ -557,11 +555,14 @@ function buildMachete(){const g=new THREE.Group();const h=hnd(0.34,0.045,blackMe
 function buildBottle(){const g=new THREE.Group();
   const body=cyl(0.13,0.15,0.42,glassMat,18);body.position.y=0.21;g.add(body);
   const neck=cyl(0.06,0.1,0.18,glassMat,14);neck.position.y=0.5;g.add(neck);
-  const liq=cyl(0.12,0.14,0.26,liquidMat,18);liq.position.y=0.17;liq.name='molotovLiquid';g.add(liq);
+  // nudo ENROLLADO metido en la tapa (anillos apilados)
+  const knot=new THREE.Group(); knot.name='molotovKnot'; knot.position.set(0,0.57,0);
+  for(let i=0;i<3;i++){ const t=new THREE.Mesh(new THREE.TorusGeometry(0.062-i*0.011,0.026,6,14),clothMat); t.rotation.x=Math.PI/2; t.position.y=i*0.028; t.castShadow=true; knot.add(t); }
+  g.add(knot);
   // trapo estático (cae al costado) para ícono/lanzamiento
-  const cv=new THREE.QuadraticBezierCurve3(new THREE.Vector3(0,0.58,0),new THREE.Vector3(0.07,0.74,0.05),new THREE.Vector3(0.2,0.62,0.12));
-  const sf=new THREE.Mesh(new THREE.TubeGeometry(cv,12,0.026,6),clothMat); sf.name='staticFuse'; sf.castShadow=true; g.add(sf);
-  const fire=makeFireMesh(fireGifs[1].tex,0.34,0.5); fire.name='molotovFire'; fire.position.set(0.2,0.66,0.12); g.add(fire);
+  const cv=new THREE.QuadraticBezierCurve3(new THREE.Vector3(0,0.6,0),new THREE.Vector3(0.12,0.66,0.05),new THREE.Vector3(0.26,0.56,0.12));
+  const sf=new THREE.Mesh(new THREE.TubeGeometry(cv,12,0.03,5),clothMat); sf.name='staticFuse'; sf.scale.z=0.35; sf.castShadow=true; g.add(sf);   // medio plano
+  const fire=makeFireMesh(fireGifs[1].tex,0.34,0.5); fire.name='molotovFire'; fire.position.set(0.26,0.6,0.12); g.add(fire);
   return g;}
 // guadaña: asta larga + empuñadura lateral + hoja curva (tubo de metal)
 function buildScythe(){const g=new THREE.Group();const sh=hnd(1.9,0.04,woodDark);sh.position.y=0.95;g.add(sh);const grip=cyl(0.05,0.05,0.2,woodMat,10);grip.rotation.z=Math.PI/2;grip.position.set(0.16,0.72,0);g.add(grip);
