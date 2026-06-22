@@ -790,19 +790,70 @@ let currentSeason='summer', densityMul=1.0;
 const grassGeo=(()=>{const a=new THREE.PlaneGeometry(0.14,0.55);a.translate(0,0.275,0);const b=a.clone();b.rotateY(Math.PI/2);return mergeGeometries([a,b],false);})();
 const chunkList=[];const trees=[];const logs=[];let totalTrees=0;const builtChunks=new Map();
 function hash2(a,b){let h=worldSeed^Math.imul(a|0,374761393)^Math.imul(b|0,668265263);h=Math.imul(h^(h>>>13),1274126177);return (h^(h>>>16))>>>0;}
+/* ===================== POOL DE VARIANTES (instancing) =====================
+   Antes cada árbol tenía su PROPIA geometría de tronco (miles de geometrías únicas = mucha RAM).
+   Ahora pre-generamos un POOL de variantes (tronco + hojas) y las COMPARTIMOS: cada árbol es una
+   instancia (THREE.InstancedMesh) de una variante, con rotación/escala propias. Mismo aspecto,
+   muchísima menos memoria. La tala sigue igual: al caer se cambia la instancia por una malla real. */
+const LEAF_PLANE=new THREE.PlaneGeometry(1.25,1.3);   // hoja compartida por TODO el bosque
+let TREE_VARIANTS=[];   // [{trunkGeometry, leaves:[{m,c}], h}]
+function buildVariants(){
+  for(const v of TREE_VARIANTS) if(v.trunkGeometry)v.trunkGeometry.dispose();
+  TREE_VARIANTS=[];
+  const N=40;                                  // variedad suficiente (cada árbol además rota/escala)
+  const vr=mulberry32((0x5EED^worldSeed)>>>0);
+  for(let i=0;i<N;i++){
+    const sp=speciesList[Math.floor(vr()*speciesList.length)];
+    const t=createTree({species:sp,season:currentSeason,radial:qual.radial,leafCount:qual.leaf},vr);
+    t.trunkGeometry.computeBoundingBox();
+    TREE_VARIANTS.push({trunkGeometry:t.trunkGeometry,leaves:t.leaves,h:t.trunkGeometry.boundingBox.max.y});
+  }
+}
+// helpers reutilizables para componer matrices de instancia (sin basura por frame)
+const _ti_o=new THREE.Object3D(), _ti_q=new THREE.Quaternion(), _ti_e=new THREE.Euler(),
+      _ti_s=new THREE.Vector3(), _ti_p=new THREE.Vector3(), _ti_m=new THREE.Matrix4(),
+      _ti_lm=new THREE.Matrix4(), _ti_hide=new THREE.Matrix4().makeScale(1e-4,1e-4,1e-4);
+_ti_hide.setPosition(0,-9999,0);
+// recompone la matriz de instancia de un árbol vivo (shrink al talar + wiggle del golpe) y sus hojas
+function updateTreeInstance(t){
+  const ty=terrainHeight(t.x,t.z)-0.05; const sc=t.scl*(t.curScale==null?1:t.curScale);
+  _ti_q.setFromEuler(_ti_e.set(0,t.rotY,t.wig||0));
+  _ti_m.compose(_ti_p.set(t.x,ty,t.z),_ti_q,_ti_s.setScalar(sc));
+  t.tim.setMatrixAt(t.timIdx,_ti_m); t.tim.instanceMatrix.needsUpdate=true;
+  const lv=TREE_VARIANTS[t.vi].leaves;
+  for(let j=0;j<t.lCount;j++){_ti_lm.multiplyMatrices(_ti_m,lv[j].m); t.lim.setMatrixAt(t.lStart+j,_ti_lm);}
+  t.lim.instanceMatrix.needsUpdate=true;
+}
 function buildChunk(cx,cz){
   const key=cx+'_'+cz; if(builtChunks.has(key))return;
   const rng=mulberry32(hash2(cx,cz));const x0=cx*CHUNK,z0=cz*CHUNK;const grp=new THREE.Group();
   const lamps=[];const chunkTrees=[];const leafMeshes=[];const shadowCasters=[];   // mallas a las que se les activa castShadow al "upgradear" el chunk de cerca
   const nTrees=Math.max(1,Math.round(qual.density*densityMul*0.75));  // ~25% menos árboles (vegetación intacta)
-  const lp=new THREE.PlaneGeometry(1.25,1.3);const ownGeos=[lp];   // geometrías propias del chunk (se liberan al descargarlo; las compartidas NO)
+  const ownGeos=[];   // SÓLO geometrías propias del chunk (rocas/postes); los troncos/hojas son COMPARTIDOS (no se liberan)
+  if(!TREE_VARIANTS.length)buildVariants();
+  // 1) sortear árboles y agruparlos por variante (cada variante = 1 InstancedMesh de tronco + 1 de hojas)
+  const byVar=new Map();
   for(let i=0;i<nTrees;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+2.5)continue;
-    const tree=createTree({species:speciesList[Math.floor(rng()*speciesList.length)],season:currentSeason,radial:qual.radial,leafCount:qual.leaf},rng);
-    const tg=new THREE.Group(); tg.position.set(x,terrainHeight(x,z)-0.05,z); tg.rotation.y=rng()*6.28;
-    const tr=new THREE.Mesh(tree.trunkGeometry,barkMat); tr.castShadow=false; tr.receiveShadow=true; tg.add(tr); shadowCasters.push(tr);  // sombra diferida (se activa al acercarse → sin tirón al aparecer)
-    const lv=new THREE.InstancedMesh(lp,leafMat,tree.leaves.length); for(let j=0;j<tree.leaves.length;j++){lv.setMatrixAt(j,tree.leaves[j].m);lv.setColorAt(j,tree.leaves[j].c);} lv.instanceMatrix.needsUpdate=true; lv.castShadow=false; tg.add(lv); leafMeshes.push(lv); shadowCasters.push(lv);  // las HOJAS también proyectan sombra (diferida)
-    tree.trunkGeometry.computeBoundingBox(); grp.add(tg); ownGeos.push(tree.trunkGeometry);
-    const to={tg,x,z,hp:5,hit:0,dead:false,scale:1,state:'alive',h:tree.trunkGeometry.boundingBox.max.y}; trees.push(to); chunkTrees.push(to); totalTrees++;
+    const vi=Math.floor(rng()*TREE_VARIANTS.length);const rotY=rng()*6.28;const scl=0.9+rng()*0.24;
+    if(!byVar.has(vi))byVar.set(vi,[]); byVar.get(vi).push({x,z,rotY,scl,vi});
+  }
+  // 2) construir las instancias por variante
+  for(const [vi,list] of byVar){ const V=TREE_VARIANTS[vi]; const Ln=V.leaves.length;
+    const tim=new THREE.InstancedMesh(V.trunkGeometry,barkMat,list.length); tim.castShadow=false; tim.receiveShadow=true; tim.frustumCulled=false;
+    const lim=new THREE.InstancedMesh(LEAF_PLANE,leafMat,list.length*Ln); lim.castShadow=false; lim.frustumCulled=false;
+    // (matrices en coords de mundo + malla en el origen del chunk → el culling lo hace el GRUPO del chunk, no cada InstancedMesh)
+    let lk=0;
+    for(let n=0;n<list.length;n++){const td=list[n]; const ty=terrainHeight(td.x,td.z)-0.05;
+      _ti_q.setFromEuler(_ti_e.set(0,td.rotY,0)); _ti_m.compose(_ti_p.set(td.x,ty,td.z),_ti_q,_ti_s.setScalar(td.scl));
+      tim.setMatrixAt(n,_ti_m);
+      const lStart=lk; for(let j=0;j<Ln;j++){_ti_lm.multiplyMatrices(_ti_m,V.leaves[j].m); lim.setMatrixAt(lk,_ti_lm); lim.setColorAt(lk,V.leaves[j].c); lk++;}
+      const to={tg:null,x:td.x,z:td.z,hp:5,hit:0,dead:false,scale:1,curScale:1,wig:0,state:'alive',h:V.h*td.scl,
+                vi,rotY:td.rotY,scl:td.scl,tim,timIdx:n,lim,lStart,lCount:Ln};
+      trees.push(to); chunkTrees.push(to); totalTrees++;
+    }
+    tim.instanceMatrix.needsUpdate=true; lim.instanceMatrix.needsUpdate=true; if(lim.instanceColor)lim.instanceColor.needsUpdate=true;
+    lim.userData.full=lk; lim.userData.half=Math.ceil(lk*0.55);   // LOD de hojas: cuenta completa (cerca) / reducida (media dist)
+    grp.add(tim); grp.add(lim); shadowCasters.push(tim,lim); leafMeshes.push(lim);
   }
   // pasto (3 tipos) + plantas (3 tipos) — cross-quad con viento, abundante
   const dm=new THREE.Object3D();const gc=new THREE.Color();const fol=[];const cveg=[];
@@ -861,7 +912,7 @@ function rebuildWorld(){
   for(const c of [...builtChunks.values()]) disposeChunk(c);
   for(const lg of logs){scene.remove(lg.m);} logs.length=0;
   for(const d of debris){scene.remove(d.m);} debris.length=0;
-  totalTrees=0; buildAllChunks(); enableAllShadows(); document.getElementById('treeCount').textContent=trees.length;
+  totalTrees=0; buildVariants(); buildAllChunks(); enableAllShadows(); document.getElementById('treeCount').textContent=trees.length;
 }
 /* ===================== LOD DE SOMBRAS (upgrade progresivo de chunks) =====================
    FALLBACK SEGURO (no toco materiales/viento): los chunks nuevos nacen SIN castShadow
@@ -1060,7 +1111,19 @@ const debrisGeo=new THREE.BoxGeometry(0.16,0.16,0.56); const debris=[];
 function ensureWorld(){ if(physWorld)return; physWorld=new CANNON.World({gravity:new CANNON.Vec3(0,-9.82,0)}); physWorld.allowSleep=true; physWorld.broadphase=new CANNON.SAPBroadphase(physWorld);
   physWorld.addContactMaterial(new CANNON.ContactMaterial(gMat,oMat,{friction:0.85,restitution:0.0}));
   physGround=new CANNON.Body({type:CANNON.Body.STATIC,shape:new CANNON.Plane(),material:gMat}); physGround.collisionFilterGroup=1; physGround.collisionFilterMask=2; physGround.quaternion.setFromEuler(-Math.PI/2,0,0); physWorld.addBody(physGround); }
-function felltree(t){ if(t.state!=='alive')return; ensureWorld(); t.state='falling'; t.felledT=0; t.bh=t.h||5; const H=t.bh;
+function felltree(t){ if(t.state!=='alive')return; ensureWorld();
+  // construir una MALLA REAL para la caída/fundido (la instancia viva se oculta) → tala idéntica a antes
+  const V=TREE_VARIANTS[t.vi]; const ty=terrainHeight(t.x,t.z)-0.05;
+  const tg=new THREE.Group(); tg.position.set(t.x,ty,t.z); tg.rotation.y=t.rotY; tg.scale.setScalar(t.scl*(t.curScale||1));
+  const trM=new THREE.Mesh(V.trunkGeometry,barkMat); trM.castShadow=true; trM.receiveShadow=true; tg.add(trM);
+  const lvM=new THREE.InstancedMesh(LEAF_PLANE,leafMat,V.leaves.length);
+  for(let j=0;j<V.leaves.length;j++){lvM.setMatrixAt(j,V.leaves[j].m);lvM.setColorAt(j,V.leaves[j].c);}
+  lvM.instanceMatrix.needsUpdate=true; if(lvM.instanceColor)lvM.instanceColor.needsUpdate=true; lvM.castShadow=true; tg.add(lvM);
+  scene.add(tg); t.tg=tg;
+  // ocultar la instancia viva (tronco + sus hojas)
+  t.tim.setMatrixAt(t.timIdx,_ti_hide); t.tim.instanceMatrix.needsUpdate=true;
+  for(let j=0;j<t.lCount;j++)t.lim.setMatrixAt(t.lStart+j,_ti_hide); t.lim.instanceMatrix.needsUpdate=true;
+  t.state='falling'; t.felledT=0; t.bh=t.h||5; const H=t.bh;
   const by=terrainHeight(t.x,t.z); physGround.position.y=by;
   // cuerpo con el CENTRO de masa en el medio del tronco → vuelca natural y queda tumbado (física real)
   const b=new CANNON.Body({mass:30,material:oMat}); b.angularDamping=0.04; b.linearDamping=0.01; b.collisionFilterGroup=2; b.collisionFilterMask=1;
@@ -1094,8 +1157,11 @@ function chopTick(dt){
   if(physWorld) physWorld.step(1/60,dt,4);
   // árboles
   for(const t of trees){ if(t.dead)continue;
-    if(t.state==='alive'){ const sc=t.tg.scale.x; if(Math.abs(sc-t.scale)>0.002)t.tg.scale.setScalar(sc+(t.scale-sc)*Math.min(1,12*dt));
-      if(t.hit>0){t.hit=Math.max(0,t.hit-dt*3.2);t.tg.rotation.z=Math.sin(windU.uTime.value*42)*0.05*t.hit;}else if(t.tg.rotation.z){t.tg.rotation.z*=0.85;} }
+    if(t.state==='alive'){ let dirty=false;   // shrink al talar + wiggle del golpe → se aplican a la INSTANCIA
+      if(Math.abs(t.curScale-t.scale)>0.002){t.curScale+=(t.scale-t.curScale)*Math.min(1,12*dt);dirty=true;}
+      if(t.hit>0){t.hit=Math.max(0,t.hit-dt*3.2);t.wig=Math.sin(windU.uTime.value*42)*0.05*t.hit;dirty=true;}
+      else if(t.wig){t.wig*=0.85;dirty=true;if(Math.abs(t.wig)<0.001)t.wig=0;}
+      if(dirty)updateTreeInstance(t); }
     else { if(t.body){ t.tg.quaternion.copy(t.body.quaternion);
         // el cuerpo está centrado; la base del tronco está a -H/2 del centro (rotado)
         _up.set(0,-(t.bh||5)/2,0).applyQuaternion(t.body.quaternion);
@@ -1103,7 +1169,10 @@ function chopTick(dt){
       t.felledT+=dt;
       if(t.state==='falling'&&t.felledT>=3){ t.state='fading'; t.fadeT=0; t.tg.traverse(o=>{if(o.material){o.material=o.material.clone();o.material.transparent=true;}}); }
       if(t.state==='fading'){ t.fadeT+=dt; const op=Math.max(0,1-t.fadeT/0.8); t.tg.traverse(o=>{if(o.material)o.material.opacity=op;});
-        if(t.fadeT>=0.8){ const cx=t.x,cz=t.z; scene.remove(t.tg); t.tg.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material&&o.material.dispose)o.material.dispose();}); if(t.body){physWorld.removeBody(t.body);t.body=null;} spawnLogsGold(cx,cz,terrainHeight(cx,cz),3+Math.floor(Math.random()*2)); t.dead=true; } } } }
+        if(t.fadeT>=0.8){ const cx=t.x,cz=t.z; scene.remove(t.tg);
+          // OJO: NO disponer geometría compartida (V.trunkGeometry / LEAF_PLANE). Sólo buffers de instancia y materiales CLONADOS del fundido.
+          t.tg.traverse(o=>{ if(o.isInstancedMesh)o.dispose(); if(o.material&&o.material!==barkMat&&o.material!==leafMat&&o.material.dispose)o.material.dispose(); });
+          if(t.body){physWorld.removeBody(t.body);t.body=null;} spawnLogsGold(cx,cz,terrainHeight(cx,cz),3+Math.floor(Math.random()*2)); t.dead=true; } } } }
   // debris físico
   for(let i=debris.length-1;i>=0;i--){const d=debris[i]; d.life-=dt; d.m.position.copy(d.b.position); d.m.quaternion.copy(d.b.quaternion); if(d.life<=0){scene.remove(d.m);if(physWorld)physWorld.removeBody(d.b);debris.splice(i,1);}}
   // astillas
@@ -1793,11 +1862,14 @@ function update(dt){
   // CULLING: sólo se dibuja lo que entra en la cámara (frustum) y está dentro del render; follaje sólo cerca (LOD)
   camera.updateMatrixWorld();camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
   _pm.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);_frustum.setFromProjectionMatrix(_pm);
-  const rd2=renderDist*renderDist,gd2=GRASS_DIST*GRASS_DIST,leafD=Math.min(renderDist,105),ld2=leafD*leafD;
+  const rd2=renderDist*renderDist,gd2=GRASS_DIST*GRASS_DIST,leafD=Math.min(renderDist,105),ld2=leafD*leafD,lnear2=(leafD*0.55)*(leafD*0.55);
   for(const c of chunkList){const dx=c.center.x-player.pos.x,dz=c.center.z-player.pos.z;const d2=dx*dx+dz*dz;
     const vis=d2<rd2&&_frustum.intersectsSphere(c.sphere);c.grp.visible=vis;   // OPT: frustum + distance culling
     if(vis){const fv=d2<gd2;for(let i=0;i<c.fol.length;i++)c.fol[i].visible=fv; // OPT: LOD de follaje bajo (pasto/plantas sólo cerca)
-      const lf=d2<ld2;for(let i=0;i<c.leafMeshes.length;i++)c.leafMeshes[i].visible=lf;}} // OPT: LOD de copas (hojas sólo cerca; troncos siempre)
+      // LOD de copas en 3 niveles: cerca = todas las hojas · media = ~55% (más barato) · lejos = sin hojas (sólo tronco)
+      for(let i=0;i<c.leafMeshes.length;i++){const lm=c.leafMeshes[i];
+        if(d2>=ld2){lm.visible=false;}
+        else{lm.visible=true; const full=lm.userData.full||lm.count; lm.count=(d2<lnear2)?full:(lm.userData.half||full);}}}}
   chopTick(dt);
   // Mundo precargado entero: NO se construye ni se actualizan sombras en runtime (cero tirones al caminar).
   windU.uTime.value+=dt;
@@ -2068,6 +2140,7 @@ const hideLoader=()=>document.getElementById('loader').classList.add('hide');
 let worldReady=false;
 function bootArea(done){
   document.getElementById('loader').classList.remove('hide');
+  if(!TREE_VARIANTS.length)buildVariants();   // pool de variantes (geometría compartida) antes de armar chunks
   // PRECARGA TOTAL del mapa, repartida en frames (barra fluida, sin congelar el navegador).
   let cx=W.x0, cz=W.z0; const PER_FRAME=2;   // chunks armados por frame
   const build=()=>{
