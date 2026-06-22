@@ -47,7 +47,7 @@
   <button id="bJump"   class="actBtn">⤴️</button>
   <button id="bCrouch" class="actBtn">🔽</button>
   <button id="bChop"   class="actBtn">🪓</button>
-  <button id="bHammer" class="actBtn">🔨</button>
+  <button id="bHammer" class="actBtn">🔪</button>
   <div id="animLabel">cargando player…</div>
 </div>
 
@@ -153,36 +153,55 @@ tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; document.getElementById('bC
 // cada estado es su PROPIO GLB y hacemos swap del cuerpo según el movimiento. La cámara va a la altura
 // de los ojos y se OCULTA la cabeza (escala del hueso Head ~0) para no tapar la vista: así ves tus
 // brazos, torso y piernas al mirar hacia abajo.
-const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4352c51/';
+const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@2ef5678/';
 const E_H=1.82; let hitShake=0;
-const PARTS=[ {key:'idle',file:'pj_idle.glb'}, {key:'walk',file:'pj_walk.glb'}, {key:'run',file:'pj_run.glb'},
-  {key:'chop',file:'pj_chop.glb',once:true}, {key:'hammer',file:'pj_hammer.glb',once:true} ];
-const PLABEL={idle:'Quieto',walk:'Caminando',run:'Corriendo',chop:'Talar 🪓',hammer:'Martillo 🔨'};
+const PARTS=[ {key:'idle',file:'pj_idle2.glb'}, {key:'walk',file:'pj_walk.glb'}, {key:'run',file:'pj_run.glb'},
+  {key:'chop',file:'pj_chop.glb',once:true}, {key:'slash',file:'pj_slash.glb',once:true,speed:1.5} ];
+const PLABEL={idle:'Quieto',walk:'Caminando',run:'Corriendo',chop:'Talar 🪓',slash:'Corte 🔪'};
 const body={}; let bodyKey=null, actKey=null;
-const _hw=new THREE.Vector3(); const HEAD_FWD=0.16, HEAD_UP=0.06;   // cámara = hueso Head, empujada hacia los ojos
+const _hw=new THREE.Vector3(), _hs=new THREE.Vector3(); const HEAD_FWD=0.26, HEAD_UP=0.04;   // cámara = hueso Head, bien hacia adelante (ojos)
+const AXE_GRIP=new THREE.Vector3(0,-0.4,0), AXE_ROT=new THREE.Euler(Math.PI/2,0,0), AXE_HANDLE_M=0.78;   // hacha en la mano (ajustable)
 const eLabelEl=document.getElementById('animLabel');
 const _gltf=new GLTFLoader();
-function prepBody(gl,once){ const inner=gl.scene;
+// ---- hacha procedural (portada de hacha-viewer): mango + cabeza extruida ----
+function buildAxe(){ const metal=new THREE.MeshStandardMaterial({color:0x9aa0a6,metalness:1,roughness:0.45,envMapIntensity:1.2});
+  const steel=new THREE.MeshStandardMaterial({color:0xe2e6ec,metalness:1,roughness:0.12}), dark=new THREE.MeshStandardMaterial({color:0x161719,roughness:0.82});
+  const s=new THREE.Shape(); s.moveTo(0.2,-1.0); s.lineTo(1.2,-1.0); s.lineTo(1.5,0.2);
+  s.quadraticCurveTo(1.95,1.55,1.5,2.45); s.quadraticCurveTo(1.15,3.15,0.25,3.45); s.quadraticCurveTo(0.6,2.55,0.2,2.0); s.lineTo(-0.5,2.0);
+  s.quadraticCurveTo(-2.7,2.2,-3.4,1.0); s.quadraticCurveTo(-3.55,0.3,-2.8,-0.4); s.quadraticCurveTo(-1.8,-1.0,-0.7,-1.0); s.lineTo(0.2,-1.0);
+  const hole=new THREE.Path(); hole.moveTo(-1.5,1.25); hole.quadraticCurveTo(0.55,1.5,0.7,0.15); hole.quadraticCurveTo(0.45,-0.5,-0.25,-0.25); hole.quadraticCurveTo(-1.45,0.05,-1.5,1.25); s.holes.push(hole);
+  const g=new THREE.ExtrudeGeometry(s,{depth:0.34,bevelEnabled:true,bevelThickness:0.05,bevelSize:0.05,bevelSegments:2,steps:1,curveSegments:24}); g.center(); g.computeVertexNormals();
+  const axe=new THREE.Group();
+  axe.add(new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.25,6.6,20,1),dark));            // mango (6.6 de alto)
+  const collar=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.24,0.55,20),steel); collar.position.y=3.05; axe.add(collar);
+  const head=new THREE.Mesh(g,metal); head.scale.setScalar(0.62); head.position.set(-0.35,3.95,0); axe.add(head);
+  axe.traverse(o=>{ if(o.isMesh){ o.castShadow=true; } }); return axe; }
+function attachAxe(inner){ const hand=inner.getObjectByName('RightHand')||inner.getObjectByName('LeftHand'); if(!hand)return;
+  inner.updateWorldMatrix(true,true); const hs=hand.getWorldScale(_hs).x||1;                // escala mundial de la mano
+  const axe=buildAxe(); axe.scale.setScalar((AXE_HANDLE_M/6.6)/hs);                          // mango ≈ AXE_HANDLE_M metros
+  axe.position.copy(AXE_GRIP); axe.rotation.copy(AXE_ROT); hand.add(axe); }
+function prepBody(gl,p){ const inner=gl.scene;
   let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=E_H/(sz.y||1); inner.scale.setScalar(s);
   b=new THREE.Box3().setFromObject(inner); const c=b.getCenter(new THREE.Vector3()); inner.position.set(-c.x,-b.min.y,-c.z);   // pies en el origen
   inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; } });
+  if(p.key==='chop') attachAxe(inner);                                                        // hacha agarrada en la mano al talar
   const root=new THREE.Group(); root.add(inner); root.visible=false; scene.add(root);
   const mixer=new THREE.AnimationMixer(inner); let action=null;
-  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(once?THREE.LoopOnce:THREE.LoopRepeat); action.clampWhenFinished=!!once; }
+  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(p.once?THREE.LoopOnce:THREE.LoopRepeat); action.clampWhenFinished=!!p.once; if(p.speed)action.timeScale=p.speed; }
   return {root,mixer,action,head:inner.getObjectByName('Head')}; }
-for(const p of PARTS){ _gltf.load(EBASE+p.file, gl=>{ body[p.key]=prepBody(gl,p.once); if(p.key==='idle'&&!bodyKey) setBody('idle'); }, undefined, e=>console.warn(p.file,e)); }
+for(const p of PARTS){ _gltf.load(EBASE+p.file, gl=>{ body[p.key]=prepBody(gl,p); if(p.key==='idle'&&!bodyKey) setBody('idle'); }, undefined, e=>console.warn(p.file,e)); }
 function setBody(key){ const b=body[key]; if(!b||bodyKey===key)return;
   if(bodyKey&&body[bodyKey]){ body[bodyKey].root.visible=false; if(body[bodyKey].action)body[bodyKey].action.stop(); }
   bodyKey=key; b.root.visible=true; if(b.action) b.action.reset().play(); }
 function doAction(key){ const b=body[key]; if(!b)return; actKey=key; setBody(key); if(b.action) b.action.reset().play(); }
 function actBtn(id,fn){ const el=document.getElementById(id); if(el) el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
-actBtn('bChop',()=>doAction('chop')); actBtn('bHammer',()=>doAction('hammer'));
+actBtn('bChop',()=>doAction('chop')); actBtn('bHammer',()=>doAction('slash'));
 function tickPlayer(dt){
   const speed=player.vel.length();
   if(actKey){ const a=body[actKey]; if(!a||!a.action||!a.action.isRunning()) actKey=null; }   // ¿terminó la acción?
   if(!actKey) setBody(speed<0.4?'idle':(speed<3.4?'walk':'run'));                              // locomoción
   const b=body[bodyKey]; if(b){
-    b.root.position.set(player.pos.x,0,player.pos.z); b.root.rotation.y=player.yaw+Math.PI;     // el cuerpo mira hacia adelante
+    b.root.position.set(player.pos.x,player.pos.y,player.pos.z); b.root.rotation.y=player.yaw+Math.PI;   // sigue al player (incluye salto en Y)
     b.mixer.update(dt);
     if(b.head){ b.head.updateWorldMatrix(true,false); b.head.getWorldPosition(_hw); b.head.scale.setScalar(0.0001);   // leer pos de la cabeza y ocultarla
       const fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
