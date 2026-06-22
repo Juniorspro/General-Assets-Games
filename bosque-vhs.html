@@ -162,9 +162,15 @@
   .title span { font-size:clamp(40px,8vw,76px); }
   .title .accent { background:linear-gradient(100deg,#8fe3ff,#5aa0ff 60%,#b98bff); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .title.sm span { font-size:26px; } .title.sm { margin-bottom:18px; }
-  .navList { margin-top:34px; display:flex; flex-direction:column; gap:6px; }
-  .navItem { display:flex; align-items:center; gap:14px; font-size:21px; font-weight:600; color:#dfe7ee; cursor:pointer;
-             padding:9px 4px; opacity:.72; transition:all .18s ease; }
+  .navList { margin-top:18px; display:flex; flex-direction:column; gap:2px; }
+  .navItem { display:flex; align-items:center; gap:12px; font-size:20px; font-weight:600; color:#dfe7ee; cursor:pointer;
+             padding:6px 4px; opacity:.72; transition:all .18s ease; }
+  /* ===== Menú de inicio: bloque agrupado y anclado abajo-izquierda (logo arriba, opciones juntas) ===== */
+  #startMenu.scrim { align-items:flex-end; padding-bottom:clamp(28px,9vh,72px); }
+  body.rot #startMenu.scrim { padding-bottom:clamp(20px,7vw,56px); }
+  #startMenu .hero { margin:0 0 0 clamp(28px,7vw,90px); }
+  #startMenu .navList { margin-top:14px; gap:2px; }
+  #startMenu .navItem { font-size:clamp(19px,3.4vw,24px); padding:5px 4px; }
   .navItem .navDot { width:0; height:2px; background:linear-gradient(90deg,#7fd0ff,#b98bff); border-radius:2px; transition:width .2s ease; }
   .navItem:hover,.navItem:active { opacity:1; transform:translateX(6px); color:#fff; }
   .navItem:hover .navDot,.navItem:active .navDot { width:26px; }
@@ -241,6 +247,9 @@
   #bootLoad { position:absolute; bottom:calc(34px + var(--safe-b)); font-family:'Grenze Gotisch',serif; font-size:13px; letter-spacing:.18em;
               text-transform:uppercase; opacity:0; transition:opacity .4s; }
   #bootLoad.show { opacity:.55; }
+  /* overlay negro reutilizable para fundidos (Jugar → negro → sube resolución → fundido de entrada) */
+  #fadeBlack { position:fixed; inset:0; z-index:300; background:#000; opacity:0; pointer-events:none; transition:opacity .5s ease; }
+  #fadeBlack.on { opacity:1; pointer-events:auto; }
 
   /* ===================== MENU BLUR / HALF-RES ===================== */
   body.menuOpen #app canvas { filter:blur(14px) brightness(.7); }
@@ -281,6 +290,7 @@
 </head>
 <body>
 <div id="loader"><div class="leaf-spin"></div><p data-i18n="loading">Cargando…</p></div>
+<div id="fadeBlack"></div>
 
 <!-- ===== Custom cursor (mouse mode) ===== -->
 <img id="cursor" src="https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/cursor.png" alt="">
@@ -544,12 +554,13 @@ const PRESETS={
 };
 const Q=PRESETS[DEV.tier];
 // 5 niveles de calidad elegibles en el menú de inicio (por defecto: medio)
+// 'shadow' = ¿hay sombras?(>0 activa); 'shadowRes' = resolución por defecto del shadow-map (256 en baja/media-baja, 512 en media+).
 const QUALITY={
-  vlow:  {radial:4, shadow:0,    leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
-  low:   {radial:5, shadow:512,  leaf:90,  grassN:320, plantN:26, rockN:6,  density:8,  streamR:1, dpr:1.3, res:0.8, bloom:false, aa:true,  rdist:120, chunkBudget:1},
-  medium:{radial:6, shadow:512,  leaf:140, grassN:600, plantN:50, rockN:9,  density:11, streamR:2, dpr:1.6, res:1.0, bloom:true,  aa:true,  rdist:150, chunkBudget:1},
-  high:  {radial:6, shadow:1024, leaf:200, grassN:950, plantN:80, rockN:12, density:14, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:190, chunkBudget:2},
-  vhigh: {radial:7, shadow:1024, leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:240, chunkBudget:2},
+  vlow:  {radial:4, shadow:0,    shadowRes:256, leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
+  low:   {radial:5, shadow:256,  shadowRes:256, leaf:90,  grassN:320, plantN:26, rockN:6,  density:8,  streamR:1, dpr:1.3, res:0.8, bloom:false, aa:true,  rdist:120, chunkBudget:1},
+  medium:{radial:6, shadow:512,  shadowRes:512, leaf:140, grassN:600, plantN:50, rockN:9,  density:11, streamR:2, dpr:1.6, res:1.0, bloom:true,  aa:true,  rdist:150, chunkBudget:1},
+  high:  {radial:6, shadow:512,  shadowRes:512, leaf:200, grassN:950, plantN:80, rockN:12, density:14, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:190, chunkBudget:2},
+  vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:240, chunkBudget:2},
 };
 let qual=QUALITY.medium;
 const GRASS_N={low:300,medium:620,high:1000}[DEV.tier], PLANT_N={low:26,medium:55,high:90}[DEV.tier], ROCK_N={low:5,medium:8,high:12}[DEV.tier];
@@ -782,14 +793,14 @@ function hash2(a,b){let h=worldSeed^Math.imul(a|0,374761393)^Math.imul(b|0,66826
 function buildChunk(cx,cz){
   const key=cx+'_'+cz; if(builtChunks.has(key))return;
   const rng=mulberry32(hash2(cx,cz));const x0=cx*CHUNK,z0=cz*CHUNK;const grp=new THREE.Group();
-  const lamps=[];const chunkTrees=[];const leafMeshes=[];
+  const lamps=[];const chunkTrees=[];const leafMeshes=[];const shadowCasters=[];   // mallas a las que se les activa castShadow al "upgradear" el chunk de cerca
   const nTrees=Math.max(1,Math.round(qual.density*densityMul*0.75));  // ~25% menos árboles (vegetación intacta)
   const lp=new THREE.PlaneGeometry(1.25,1.3);const ownGeos=[lp];   // geometrías propias del chunk (se liberan al descargarlo; las compartidas NO)
   for(let i=0;i<nTrees;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+2.5)continue;
     const tree=createTree({species:speciesList[Math.floor(rng()*speciesList.length)],season:currentSeason,radial:qual.radial,leafCount:qual.leaf},rng);
     const tg=new THREE.Group(); tg.position.set(x,terrainHeight(x,z)-0.05,z); tg.rotation.y=rng()*6.28;
-    const tr=new THREE.Mesh(tree.trunkGeometry,barkMat); tr.castShadow=tr.receiveShadow=true; tg.add(tr);
-    const lv=new THREE.InstancedMesh(lp,leafMat,tree.leaves.length); for(let j=0;j<tree.leaves.length;j++){lv.setMatrixAt(j,tree.leaves[j].m);lv.setColorAt(j,tree.leaves[j].c);} lv.instanceMatrix.needsUpdate=true; tg.add(lv); leafMeshes.push(lv);
+    const tr=new THREE.Mesh(tree.trunkGeometry,barkMat); tr.castShadow=false; tr.receiveShadow=true; tg.add(tr); shadowCasters.push(tr);  // sombra diferida (se activa al acercarse → sin tirón al aparecer)
+    const lv=new THREE.InstancedMesh(lp,leafMat,tree.leaves.length); for(let j=0;j<tree.leaves.length;j++){lv.setMatrixAt(j,tree.leaves[j].m);lv.setColorAt(j,tree.leaves[j].c);} lv.instanceMatrix.needsUpdate=true; lv.castShadow=false; tg.add(lv); leafMeshes.push(lv); shadowCasters.push(lv);  // las HOJAS también proyectan sombra (diferida)
     tree.trunkGeometry.computeBoundingBox(); grp.add(tg); ownGeos.push(tree.trunkGeometry);
     const to={tg,x,z,hp:5,hit:0,dead:false,scale:1,state:'alive',h:tree.trunkGeometry.boundingBox.max.y}; trees.push(to); chunkTrees.push(to); totalTrees++;
   }
@@ -814,14 +825,14 @@ function buildChunk(cx,cz){
   for(let i=0;i<rN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+1.0)continue;
     const g=rockVariants[Math.floor(rng()*rockVariants.length)].clone();const s=0.3+rng()*1.5;
     g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,terrainHeight(x,z)+s*0.25,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rng()*6.28,rng()*6.28,rng()*6.28)),new THREE.Vector3(s*(0.8+rng()*0.5),s*(0.7+rng()*0.4),s*(0.8+rng()*0.5))));rocks.push(g);}
-  if(rocks.length){const rgeo=mergeGeometries(rocks,false);ownGeos.push(rgeo);const rm=new THREE.Mesh(rgeo,rockMat);rm.castShadow=rm.receiveShadow=true;rocks.forEach(g=>g.dispose());grp.add(rm);}
+  if(rocks.length){const rgeo=mergeGeometries(rocks,false);ownGeos.push(rgeo);const rm=new THREE.Mesh(rgeo,rockMat);rm.castShadow=false;rm.receiveShadow=true;rocks.forEach(g=>g.dispose());grp.add(rm);shadowCasters.push(rm);}
   // farolas en sectores que tocan la carretera
   if(cx===-1||cx===0){const posts=[];const heads=[];const hd=new THREE.Object3D();
     for(let z=z0+6;z<z0+CHUNK;z+=24)for(const sx of[-(ROAD_HALF+0.8),(ROAD_HALF+0.8)]){const g=new THREE.CylinderGeometry(0.09,0.12,5,6);g.translate(sx,2.5,z);posts.push(g);heads.push(new THREE.Vector3(sx,5,z));lamps.push(new THREE.Vector3(sx*0.6,4.6,z));}
-    if(posts.length){const pgeo=mergeGeometries(posts,false);ownGeos.push(pgeo);const pm=new THREE.Mesh(pgeo,lampPostMat);pm.castShadow=true;posts.forEach(g=>g.dispose());grp.add(pm);
+    if(posts.length){const pgeo=mergeGeometries(posts,false);ownGeos.push(pgeo);const pm=new THREE.Mesh(pgeo,lampPostMat);pm.castShadow=false;posts.forEach(g=>g.dispose());grp.add(pm);shadowCasters.push(pm);
       const sgeo=new THREE.SphereGeometry(0.28,8,6);ownGeos.push(sgeo);const hm=new THREE.InstancedMesh(sgeo,lampHeadMat,heads.length);heads.forEach((h,i)=>{hd.position.copy(h);hd.updateMatrix();hm.setMatrixAt(i,hd.matrix);});grp.add(hm);}}
   const center=new THREE.Vector3(x0+CHUNK/2,5,z0+CHUNK/2);
-  const c={grp,center,sphere:new THREE.Sphere(center,42),lamps,fol,leafMeshes,veg:cveg,cx,cz,key,trees:chunkTrees,ownGeos};
+  const c={grp,center,sphere:new THREE.Sphere(center,42),lamps,fol,leafMeshes,veg:cveg,cx,cz,key,trees:chunkTrees,ownGeos,shadowCasters,upgraded:false};
   scene.add(grp);chunkList.push(c);builtChunks.set(key,c);
 }
 function disposeChunk(c){
@@ -852,6 +863,26 @@ function rebuildWorld(){
   for(const d of debris){scene.remove(d.m);} debris.length=0;
   totalTrees=0; streamChunks(999); document.getElementById('treeCount').textContent=trees.length;
 }
+/* ===================== LOD DE SOMBRAS (upgrade progresivo de chunks) =====================
+   FALLBACK SEGURO (no toco materiales/viento): los chunks nuevos nacen SIN castShadow
+   (aparecen baratos, sin recompilar el shadow-map en el frame de aparición → cero tirón).
+   Este pase, cada pocos frames, "upgradea" el chunk NO-upgradeado más cercano dentro de
+   UPGRADE_R activando castShadow en troncos/hojas/rocas/farolas. Spread = 1 chunk por
+   llamada → sin hitch. Tronco/follaje lejano nunca proyecta sombra (no se ve igual). */
+const UPGRADE_R = 70;                 // radio (m) para activar sombras de un chunk
+let upgradeCooldown = 0;
+function upgradeNearChunk(dt){
+  if(qual.shadow<=0)return;           // calidad sin sombras → nada que upgradear
+  upgradeCooldown-=dt; if(upgradeCooldown>0)return;
+  const ur2=UPGRADE_R*UPGRADE_R; let best=null,bd=ur2;
+  for(const c of chunkList){ if(c.upgraded)continue;
+    const dx=c.center.x-player.pos.x,dz=c.center.z-player.pos.z;const d2=dx*dx+dz*dz;
+    if(d2<bd){bd=d2;best=c;} }
+  if(!best)return;
+  best.upgraded=true; upgradeCooldown=0.12;   // 1 chunk cada ~0.12s → sin pico
+  for(const m of best.shadowCasters)m.castShadow=true;
+  if(qual.shadow>0)renderer.shadowMap.needsUpdate=true;
+}
 
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
 let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null;
@@ -872,12 +903,19 @@ try{ buildComposer(); }catch(err){ console.error('PostFX off:',err); composer=nu
 /* ===================== LAYOUT / ROTACIÓN / RESOLUCIÓN ===================== */
 let DPRCAP=DEV.tier==='high'?2:(DEV.tier==='medium'?1.6:1.3);
 let forceLandscape=true, rot=false;
+// Touch / móvil (sin puntero fino): la resolución interna se limita al 80% del tamaño CSS → menos píxeles que rellenar = más fluido.
+const IS_TOUCH = (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) || DEV.isMobile || ('ontouchstart' in window);
+const MOBILE_RES_CAP = IS_TOUCH ? 0.8 : 1.0;
+// loadResScale: durante #assetLoad rendereamos al 50% (barato); 1.0 normal. Lo controla el flujo de boot.
+let loadResScale = 1.0;
 function layout(){
   rot = forceLandscape && (innerHeight>innerWidth);
   document.body.classList.toggle('rot',rot);
   const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight;
   camera.aspect=vw/vh;camera.updateProjectionMatrix();
-  renderer.setPixelRatio(Math.min(devicePixelRatio,DPRCAP)*resScale*dynRes*menuResScale);   // resolución nativa × calidad × adaptativa × (½ en menús borrosos)
+  // En móvil clampeamos devicePixelRatio para que la resolución interna sea ≤80% del CSS (PC puede ir más alto).
+  const pr=Math.min(devicePixelRatio,DPRCAP)*MOBILE_RES_CAP*resScale*dynRes*menuResScale*loadResScale;
+  renderer.setPixelRatio(pr);   // resolución nativa × cap-móvil × calidad × adaptativa × (½ menú borroso) × (½ carga)
   renderer.setSize(vw,vh,false);
   if(composer)composer.setSize(vw,vh);
 }
@@ -1762,10 +1800,21 @@ function update(dt){
       const lf=d2<ld2;for(let i=0;i<c.leafMeshes.length;i++)c.leafMeshes[i].visible=lf;}} // OPT: LOD de copas (hojas sólo cerca; troncos siempre)
   chopTick(dt);
   streamChunks(qual.chunkBudget||1);   // OPT: presupuesto de chunks por frame según calidad → menos tirones
+  upgradeNearChunk(dt);                // LOD: activa sombras del chunk cercano más pronto, 1 por vez (sin tirón)
   windU.uTime.value+=dt;
 }
 let shadowFrame=0;
+// ¿hay un overlay de boot OPACO NEGRO encima? (#boot/#devPick/#langPick/#assetLoad/#studios)
+// Mientras lo haya NO renderizamos el 3D caro → CPU/GPU libre para construir chunks y nunca se ve el mundo a medio armar.
+const BOOT_OVERLAYS=['boot','devPick','langPick','assetLoad','studios'];
+function bootOverlayVisible(){ for(const id of BOOT_OVERLAYS){ const el=$(id); if(el&&!el.classList.contains('gone'))return true; } return false; }
 function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),0.05);
+  // Si un overlay de boot tapa todo: saltar el render 3D, sólo limpiar a negro (barato) y seguir streameando chunks en update.
+  if(bootOverlayVisible()){
+    cinematicCam(dt);                                  // sigue construyendo chunks de fondo (streamChunks) pero sin dibujar la escena
+    renderer.setRenderTarget(null); renderer.setClearColor(0x000000,1); renderer.clear();
+    return;
+  }
   applyMenuVisuals();   // blur + media-resolución + ocultar HUD cuando hay menú abierto
   const live=started&&!paused&&!document.querySelector('.scrim.show:not(#menu)');
   if(live)update(dt); else cinematicCam(dt);   // menú: cámara cinemática paseando por el bosque
@@ -1839,7 +1888,14 @@ function updateQDesc(){$('qDesc').textContent=((QDESC[curLang]||QDESC.es)[curQua
 /* ===================== CALIDAD ===================== */
 function setQuality(t){
   qual=QUALITY[t]||QUALITY.medium;
-  if(qual.shadow>0){dirLight.castShadow=true;if(dirLight.shadow.map){dirLight.shadow.map.dispose();dirLight.shadow.map=null;}dirLight.shadow.mapSize.set(qual.shadow,qual.shadow);}
+  if(qual.shadow>0){
+    dirLight.castShadow=true;
+    // resolución de sombras por defecto de la calidad (256 baja/media-baja, 512 media+, 1024 muy alta)
+    const sr=qual.shadowRes||512; shadowResSel=sr;
+    if(dirLight.shadow.map){dirLight.shadow.map.dispose();dirLight.shadow.map=null;}
+    dirLight.shadow.mapSize.set(sr,sr);
+    document.querySelectorAll('#shadowResSeg button').forEach(x=>x.classList.toggle('active',+x.dataset.sr===sr));
+  }
   else dirLight.castShadow=false;
   DPRCAP=qual.dpr; resScale=qual.res; if($('res')){$('res').value=Math.round(qual.res*100);$('resVal').textContent=Math.round(qual.res*100)+'%';}
   if(bloomEffect)bloomEffect.intensity=qual.bloom?0.32:0.0;
@@ -2021,15 +2077,23 @@ function bootArea(done){
   };
   requestAnimationFrame(build);
 }
+/* ===================== FUNDIDO A NEGRO REUTILIZABLE ===================== */
+const fadeBlackEl=$('fadeBlack');
+function fadeToBlack(cb){ fadeBlackEl.classList.add('on'); setTimeout(()=>{ if(cb)cb(); }, 520); }
+function fadeFromBlack(){ requestAnimationFrame(()=>fadeBlackEl.classList.remove('on')); }
 function startGame(){
   try{
     $('options').classList.remove('show'); $('startMenu').classList.remove('show');
-    player.pos.set(0,0,4); player.yaw=0; player.pitch=0; cineT=0; cyclePhase=0;
-    applyDefaults(); setQuality(curQuality); applyGodTextures(); layout();
-    equipped='hacha'; equipItem('hacha'); fpAxe.visible=false;   // tomahawk = hacha permanente de por vida
-    const enter=()=>{ streamChunks(99,0,4); started=true; unlockAudio(); enterPlayMode(); };
-    if(worldReady){ enter(); }
-    else bootArea(enter);
+    // Item 3: fundido a negro → subir resolución (móvil=80% vía MOBILE_RES_CAP, sin el ½ de carga) → armar chunks cercanos → fundido de entrada.
+    fadeToBlack(()=>{
+      player.pos.set(0,0,4); player.yaw=0; player.pitch=0; cineT=0; cyclePhase=0;
+      loadResScale=1.0;                                    // dejamos el modo carga (½ res) → resolución normal
+      applyDefaults(); setQuality(curQuality); applyGodTextures(); layout();
+      equipped='hacha'; equipItem('hacha'); fpAxe.visible=false;   // tomahawk = hacha permanente de por vida
+      const enter=()=>{ streamChunks(99,0,4); started=true; unlockAudio(); enterPlayMode(); fadeFromBlack(); };
+      if(worldReady){ enter(); }
+      else bootArea(enter);
+    });
   }catch(err){ console.error('startGame:',err); }
 }
 /* ===================== INTRO / BOOT FLOW ===================== */
@@ -2044,6 +2108,7 @@ function showDevPick(){
 }
 // pantalla de CARGA DE ASSETS: espera a que el mundo esté listo y luego se desvanece lento → cinemática
 function showAssetLoad(){
+  loadResScale=0.5; layout();    // Item 3: contexto de render al 50% durante la carga (barato; igual no se dibuja la escena)
   $('assetLoad').classList.remove('gone'); requestAnimationFrame(()=>$('assetLoad').classList.remove('fade'));
   const R=qual.streamR; let total=0;
   for(let dx=-R;dx<=R;dx++)for(let dz=-R;dz<=R;dz++){const cx=dx,cz=dz;if(cx<W.x0||cx>W.x1||cz<W.z0||cz>W.z1)continue; total++;}
@@ -2057,6 +2122,7 @@ function showAssetLoad(){
 }
 // reveal del menú de inicio: espera a que el mundo esté listo
 function revealStartMenu(){
+  loadResScale=1.0; layout();   // fin de la carga: la resolución la vuelve a manejar el menú (½ borroso vía menuResScale)
   const show=()=>{ $('startMenu').classList.add('show'); wireUiSounds(); };
   if(worldReady) show();
   else { $('bootLoad').classList.add('show'); const wait=()=>{ if(worldReady){ $('studios').classList.add('gone'); show(); } else requestAnimationFrame(wait); }; wait(); }
