@@ -1038,7 +1038,7 @@ const stopRun=()=>{running=false;runBtn.classList.remove('on');};runBtn.addEvent
 function tapBtn(id,fn){ const el=document.getElementById(id); if(!el)return; el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
 tapBtn('bJump',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
 tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; document.getElementById('bCrouch').classList.toggle('on',player.crouch); });
-const flashBtn=document.getElementById('flash');flashBtn.addEventListener('click',()=>startSwing());
+const flashBtn=document.getElementById('flash');flashBtn.addEventListener('click',()=>{ if(equipped==='botella'){throwMolotov();startWSwing();} else if(equipped){startWSwing();} else startSwing(); });
 
 /* ===================== AUDIO ===================== */
 let actx=null,windGain=null,soundOn=false;
@@ -1573,7 +1573,7 @@ function equipItem(id){
       fpModel.scale.setScalar(s); fpModel.position.set(-c.x*s,-c.y*s,-c.z*s); fpRig.position.set(0.34,-0.46,-0.7); fpRig.rotation.set(0.1,Math.PI/2,0.2); }
     fpRig.add(fpModel); fpRig.visible=true; fpBasePos.copy(fpRig.position); fpBaseRot.copy(fpRig.rotation);
     if(id==='botella') setupHeldMolotov(); else molotovHeld=false; }
-  else { fpRig.visible=false; molotovHeld=false; if(started)fpAxe.visible=true; }   // sin ítem → vuelve el hacha del bosque
+  else { fpRig.visible=false; molotovHeld=false; fpAxe.visible=false; }   // sin ítem equipado → MANOS VACÍAS (ya no vuelve el hacha vieja)
 }
 let wswing={active:false,t:0,hit:false};
 const THRUST=new Set(['spear','lanzapiedra','lanzaafil']);
@@ -1582,6 +1582,7 @@ function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;wswing.
 
 /* ---- crafteo / inventario ---- */
 const RECIPES=[
+  {id:'hacha', tab:'weapons',needTable:false,placeable:false,bagOnly:true},   // tomahawk: en la mochila siempre (no se craftea)
   {id:'hammer',tab:'tools',needTable:false,placeable:false},
   {id:'table', tab:'tools',needTable:false,placeable:true},
   {id:'spear', tab:'weapons',needTable:false,placeable:false},
@@ -1631,7 +1632,7 @@ let activeTab='tools';
 // inventario de MATERIALES en bruto (ramas/madera, hilos/cuerda, piedra, etc.). 'madera' usa el contador de leña (woodCount).
 const mats={piedra:0,metal:0,cuerda:0,tela:0,vidrio:0,chapa:0,barro:0,carbon:0,hueso:0};
 function matCount(k){ return k==='madera'?(typeof woodCount!=='undefined'?woodCount:0):(mats[k]||0); }
-const inv={hammer:0,table:0,spear:0,knife:0,machete:0,botella:0,guadana:0,hacha:0,
+const inv={hammer:0,table:0,spear:0,knife:0,machete:0,botella:0,guadana:0,hacha:1,
   picomad:0,arco:0,antorcha:0,lanzapiedra:0,cuchipiedra:0,picopiedra:0,flechamad:0,flechapiedra:0,flechaafil:0,lanzaafil:0,picoafil:0,cuchiafil:0,azadamad:0,azadapiedra:0,baldemad:0,baldechapa:0,
   cama:0,horno:0,silla:0,recagua:0,bidon:0,perchero:0,fogata:0,conserv:0,pmad:0,smad:0,tmad:0,imad:0,vmad:0,dmad:0,pcha:0,scha:0,tcha:0,vcha:0,dcha:0};
 let equipped=null;
@@ -1646,7 +1647,7 @@ function menuTitle(){ return menuMode==='bag'?cT('inventory'):menuMode==='place'
 function menuList(){
   if(menuMode==='place') return RECIPES.filter(r=>r.placeable&&inv[r.id]>0);
   if(menuMode==='bag') return RECIPES.filter(r=>inv[r.id]>0 && r.tab===activeTab);   // mochila por categoría
-  return RECIPES.filter(r=>r.tab===activeTab);
+  return RECIPES.filter(r=>r.tab===activeTab && !r.bagOnly);   // craft (el tomahawk no se craftea)
 }
 function renderTabs(){
   const c=$('mTabs'); if(menuMode==='place'){ c.style.display='none'; c.innerHTML=''; return; }   // craft Y bag muestran pestañas
@@ -2172,7 +2173,7 @@ const HUD_ELS=['flash','bag','bJump','bCrouch','bCraft','bPlace','bRot','joy','h
 function setHudVisible(v){ for(const id of HUD_ELS){ const el=$(id); if(!el)continue; el.style.display=v?'':'none'; }
   // en modo ratón nunca mostramos joystick ni botones móviles
   if(v&&mouseMode){ for(const id of ['joy','flash','bag','bJump','bCrouch','bCraft','bPlace','bRot']){ const el=$(id); if(el)el.style.display='none'; } }
-  if(v){ if(equipped&&fpRig)fpRig.visible=true; else if(started)fpAxe.visible=true; }
+  if(v){ if(equipped&&fpRig)fpRig.visible=true; }   // sólo el ítem equipado; nunca el hacha vieja
   else { if(fpAxe)fpAxe.visible=false; if(fpRig)fpRig.visible=false; }
 }
 let menuVisualsOn=null;
