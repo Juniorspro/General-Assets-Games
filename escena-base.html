@@ -150,15 +150,35 @@ const eLabelEl=document.getElementById('animLabel');
 const _gltf=new GLTFLoader();
 // ---- PLAYER: SIN cuerpo. Sólo el hacha hawk en 1ª persona (viewmodel) para matar NPCs ----
 let vm=null, swingT=0; const SWING_DUR=0.38;
-const VM_POS=new THREE.Vector3(0.20,-0.22,-0.40), VM_ROT=new THREE.Euler(0,-0.15,0), VM_LEN=0.62;
-_gltf.load(EBASE+'axe_fp.glb', gl=>{ const o=gl.scene;
+const VM_POS=new THREE.Vector3(0.22,-0.26,-0.46), VM_ROT=new THREE.Euler(0.25,-0.35,-0.55), VM_LEN=0.72;
+// ---- HACHA DEL BOSQUE (hacha de rescate procedural + texturas PBR de metal del repo) ----
+function buildBosqueAxe(){
+  const headMat=new THREE.MeshStandardMaterial({color:0x9aa0a6,metalness:1,roughness:0.5,envMapIntensity:1.2});
+  const steel=new THREE.MeshStandardMaterial({color:0xe2e6ec,metalness:1,roughness:0.12});
+  const dark=new THREE.MeshStandardMaterial({color:0x161719,roughness:0.82,metalness:0.1});
+  const s=new THREE.Shape(); s.moveTo(0.2,-1.0); s.lineTo(1.2,-1.0); s.lineTo(1.5,0.2);
+  s.quadraticCurveTo(1.95,1.55,1.5,2.45); s.quadraticCurveTo(1.15,3.15,0.25,3.45); s.quadraticCurveTo(0.6,2.55,0.2,2.0); s.lineTo(-0.5,2.0);
+  s.quadraticCurveTo(-2.7,2.2,-3.4,1.0); s.quadraticCurveTo(-3.55,0.3,-2.8,-0.4); s.quadraticCurveTo(-1.8,-1.0,-0.7,-1.0); s.lineTo(0.2,-1.0);
+  const hole=new THREE.Path(); hole.moveTo(-1.5,1.25); hole.quadraticCurveTo(0.55,1.5,0.7,0.15); hole.quadraticCurveTo(0.45,-0.5,-0.25,-0.25); hole.quadraticCurveTo(-1.45,0.05,-1.5,1.25); s.holes.push(hole);
+  const g=new THREE.ExtrudeGeometry(s,{depth:0.34,bevelEnabled:true,bevelThickness:0.05,bevelSize:0.05,bevelSegments:2,steps:1,curveSegments:30}); g.center(); g.computeVertexNormals();
+  const axe=new THREE.Group();
+  axe.add(new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.25,6.6,22,1),dark));                 // mango
+  const pommel=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.27,0.55,22),dark); pommel.position.y=-3.45; axe.add(pommel);
+  const collar=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.24,0.55,22),steel); collar.position.y=3.05; axe.add(collar);
+  const head=new THREE.Mesh(g,headMat); head.scale.setScalar(0.62); head.position.set(-0.35,3.95,0); axe.add(head);
+  const T='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d5bc265/assets/textures/axe/', tl=new THREE.TextureLoader();
+  const cfg=(t,srgb)=>{ t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(1.6,1.6); return t; };
+  tl.load(T+'metal_col.jpg',t=>{cfg(t,true);headMat.map=t;headMat.color.set(0xffffff);headMat.needsUpdate=true;},undefined,()=>{});
+  tl.load(T+'metal_nrm.jpg',t=>{cfg(t,false);headMat.normalMap=t;headMat.needsUpdate=true;steel.normalMap=t;steel.needsUpdate=true;},undefined,()=>{});
+  tl.load(T+'metal_rgh.jpg',t=>{cfg(t,false);headMat.roughnessMap=t;headMat.needsUpdate=true;},undefined,()=>{});
+  tl.load(T+'metal_met.jpg',t=>{cfg(t,false);headMat.metalnessMap=t;headMat.needsUpdate=true;},undefined,()=>{});
+  return axe; }
+{ const o=buildBosqueAxe();
   const bb=new THREE.Box3().setFromObject(o), sz=bb.getSize(new THREE.Vector3()), c=bb.getCenter(new THREE.Vector3());
   o.position.sub(c); o.scale.setScalar(VM_LEN/Math.max(sz.x,sz.y,sz.z));
-  o.traverse(x=>{ if(x.isMesh){ x.frustumCulled=false; x.castShadow=false; x.renderOrder=999;
-    const mm=Array.isArray(x.material)?x.material:[x.material]; mm.forEach(m=>{ if(m){ m.depthTest=false; m.depthWrite=false; } }); } });   // siempre encima
+  o.traverse(x=>{ if(x.isMesh){ x.frustumCulled=false; x.castShadow=false; x.renderOrder=999; } });   // depth normal entre sus partes; renderOrder alto
   vm=new THREE.Group(); vm.add(o); vm.position.copy(VM_POS); vm.rotation.copy(VM_ROT); camera.add(vm);
-  if(eLabelEl) eLabelEl.textContent='';
-}, undefined, e=>console.warn('axe_fp',e));
+  if(eLabelEl) eLabelEl.textContent=''; }
 let attackQueued=false;
 function swing(){ if(swingT<=0){ swingT=SWING_DUR; attackQueued=true; } }   // golpe del hacha (+ intento de matar)
 function actBtn(id,fn){ const el=document.getElementById(id); if(el) el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
@@ -173,11 +193,11 @@ function tickPlayer(dt){ if(!vm)return;
 
 /* ===================== NPCs: 5 tipos (viewer + perseguidores), antorchas, muertes ===================== */
 const NPC_TYPES=[
-  {name:'Primitivo · garrote', f:{idle:'char_idle.glb',walk:'char_walk.glb',run:'char_run.glb',attack:'char_attack.glb'}, h:1.85},
-  {name:'Cazador · lanza',     f:{idle:'npc2_idle.glb',walk:'npc2_walk.glb',run:'npc2_run.glb',attack:'npc2_attack.glb'}, h:1.92},
-  {name:'Encapuchado · hacha', f:{idle:'npc3_idle.glb',walk:'npc3_walk.glb',run:'npc3_run.glb',attack:'npc3_attack.glb'}, h:1.92},
-  {name:'Mujer · garrote',     f:{idle:'npc4_idle.glb',walk:'npc4_walk.glb',run:'npc4_run.glb',attack:'npc4_attack.glb'}, h:1.78},
-  {name:'Antorcha',            f:{idle:'npc5_idle.glb',walk:'npc5_walk.glb',run:'npc5_run.glb',attack:'npc5_attack.glb'}, h:1.8, torch:true},
+  {name:'Primitivo · garrote', f:{idle:'char_idle.glb',walk:'char_walk.glb',run:'char_run.glb',attack:'char_attack.glb'}, h:1.78},
+  {name:'Cazador · lanza',     f:{idle:'npc2_idle.glb',walk:'npc2_walk.glb',run:'npc2_run.glb',attack:'npc2_attack.glb'}, h:1.82},
+  {name:'Encapuchado · hacha', f:{idle:'npc3_idle.glb',walk:'npc3_walk.glb',run:'npc3_run.glb',attack:'npc3_attack.glb'}, h:1.82},
+  {name:'Mujer · garrote',     f:{idle:'npc4_idle.glb',walk:'npc4_walk.glb',run:'npc4_run.glb',attack:'npc4_attack.glb'}, h:1.68},
+  {name:'Antorcha',            f:{idle:'npc5_idle.glb',walk:'npc5_walk.glb',run:'npc5_run.glb',attack:'npc5_attack.glb'}, h:1.7, torch:true},
 ];
 const ANIMS=['idle','walk','run','attack'];
 const tpl=NPC_TYPES.map(()=>({}));
@@ -247,8 +267,8 @@ function tickNPCs(dt){ if(!assetsReady)return;
     if(inst.mode==='viewer'){ const dx=player.pos.x-inst.group.position.x, dz=player.pos.z-inst.group.position.z; inst.group.rotation.y=Math.atan2(dx,dz); }
     else { const dx=player.pos.x-inst.group.position.x, dz=player.pos.z-inst.group.position.z, d=Math.hypot(dx,dz)||1;
       inst.group.rotation.y=Math.atan2(dx,dz); inst.atkCD=Math.max(0,inst.atkCD-dt);
-      if(d<2.0){ setState(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.3; hitShake=Math.max(hitShake,0.8); } }
-      else { const run=d>7, sp=(run?2.7:1.4)*dt; inst.group.position.x+=dx/d*sp; inst.group.position.z+=dz/d*sp; setState(inst,run?'run':'walk'); } }
+      if(d<3.0){ setState(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.3; hitShake=Math.max(hitShake,0.7); } }   // mantienen ~3 m (no se pegan a la cara)
+      else { const run=d>8, sp=(run?2.5:1.3)*dt; inst.group.position.x+=dx/d*sp; inst.group.position.z+=dz/d*sp; setState(inst,run?'run':'walk'); } }
   } }
 
 /* ===================== Loop ===================== */
