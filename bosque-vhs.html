@@ -1304,7 +1304,8 @@ const gExpl=makeGif(EXBASE+'expl.gif'), gFcam=makeGif(EXBASE+'firecam.gif'), gFc
 function tickGifs(dt){ for(const o of animGifs){ if(!o.ready||!o.cx)continue;
   if(o.frames.length){ let t=performance.now()%o.total,idx=0; for(let i=0;i<o.delays.length;i++){ if(t<o.delays[i]){idx=i;break;} t-=o.delays[i]; }
     o.cur=o.bright[idx]||0.6;
-    const f=o.frames[idx],cv=o.tex.image; if(cv.width!==f.width){cv.width=f.width;cv.height=f.height;} o.cx.clearRect(0,0,cv.width,cv.height); o.cx.drawImage(f,0,0); o.tex.needsUpdate=true; }
+    if(o.lastIdx!==idx){ o.lastIdx=idx;   // sólo redibuja+sube la textura cuando CAMBIA el cuadro (antes lo hacía cada frame → ~10x de más)
+      const f=o.frames[idx],cv=o.tex.image; if(cv.width!==f.width){cv.width=f.width;cv.height=f.height;} o.cx.clearRect(0,0,cv.width,cv.height); o.cx.drawImage(f,0,0); o.tex.needsUpdate=true; } }
   else if(o._img&&o._img.complete&&o._img.naturalWidth){ const s=Math.min(128/o._img.naturalWidth,192/o._img.naturalHeight); o.cx.clearRect(0,0,128,192); o.cx.drawImage(o._img,0,0,o._img.naturalWidth*s,o._img.naturalHeight*s); o.tex.needsUpdate=true; } } }
 function makeFireMesh(tex,w,h){ const g=new THREE.Group();
   const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:0.95,depthWrite:false,blending:THREE.NormalBlending,side:THREE.DoubleSide,toneMapped:false});
@@ -1765,7 +1766,10 @@ const dirtGeo=new THREE.BoxGeometry(0.08,0.08,0.08); const dirtMat=new THREE.Mes
 const DIRT=80; const dirt=new THREE.InstancedMesh(dirtGeo,dirtMat,DIRT); dirt.frustumCulled=false; scene.add(dirt);
 const dst=[]; for(let i=0;i<DIRT;i++)dst.push({life:0,p:new THREE.Vector3(),v:new THREE.Vector3(),base:0}); let dHead=0; const _do=new THREE.Object3D();
 function emitDirt(at){ const by=terrainHeight(at.x,at.z); for(let i=0;i<28;i++){const s=dst[dHead];s.life=0.4+Math.random()*0.35;s.base=by;s.p.set(at.x+(Math.random()-.5)*1.2,by+0.05,at.z+(Math.random()-.5)*0.9);s.v.set((Math.random()-.5)*2,1.5+Math.random()*2.5,(Math.random()-.5)*2);dHead=(dHead+1)%DIRT;} }
-function tickDirt(dt){ for(let i=0;i<DIRT;i++){const s=dst[i]; if(s.life>0){s.life-=dt;s.v.y-=9*dt;s.p.addScaledVector(s.v,dt);if(s.p.y<s.base+0.04){s.p.y=s.base+0.04;s.v.y*=-0.3;}_do.position.copy(s.p);_do.scale.setScalar(1);}else{_do.position.set(0,-999,0);_do.scale.setScalar(0.001);}_do.updateMatrix();dirt.setMatrixAt(i,_do.matrix);} dirt.instanceMatrix.needsUpdate=true; }
+let dirtActive=false;
+function tickDirt(dt){ let any=false; for(let i=0;i<DIRT;i++)if(dst[i].life>0){any=true;break;}
+  if(!any&&!dirtActive)return;   // sin partículas activas → no recorrer ni re-subir el buffer cada frame
+  for(let i=0;i<DIRT;i++){const s=dst[i]; if(s.life>0){s.life-=dt;s.v.y-=9*dt;s.p.addScaledVector(s.v,dt);if(s.p.y<s.base+0.04){s.p.y=s.base+0.04;s.v.y*=-0.3;}_do.position.copy(s.p);_do.scale.setScalar(1);}else{_do.position.set(0,-999,0);_do.scale.setScalar(0.001);}_do.updateMatrix();dirt.setMatrixAt(i,_do.matrix);} dirt.instanceMatrix.needsUpdate=true; dirtActive=any; }
 
 /* ---- cartel sobre mesa + crafteo en mesa + agua ---- */
 let nearTable=null, nearRecagua=null, choldT=0, cholding=false, signMode='table';
@@ -1845,12 +1849,12 @@ loadGLBItem('cama','cama.glb',2.0); loadGLBItem('hacha','tomahawk_-_hacha.glb',0
 /* ===================== LOOP ===================== */
 addEventListener('resize',layout);
 let paused=false,started=false;document.addEventListener('visibilitychange',()=>{paused=document.hidden;});
-const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0;const _v=new THREE.Vector3();
+const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0,hudTimer=0;const _v=new THREE.Vector3();
 const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 function update(dt){
   if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
-    setTime(elev,120); $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev);
-    applyEnvForElev(elev); }   // sólo intercambia el mapa pre-horneado más cercano (sin horneado en runtime → sin tirón)
+    setTime(elev,120); applyEnvForElev(elev);   // env = swap del mapa pre-horneado (barato)
+    hudTimer-=dt; if(hudTimer<=0){ hudTimer=0.25; $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev); } }  // DOM sólo ~4x/seg (evita reflow por frame)
   let ix=joy.x,iz=joy.y;if(keys['KeyW'])iz-=1;if(keys['KeyS'])iz+=1;if(keys['KeyA'])ix-=1;if(keys['KeyD'])ix+=1;
   if(intro.active){ix=0;iz=0;} // durante la cinemática no nos movemos
   const mag=Math.min(1,Math.hypot(ix,iz));if(mag>0.001){ix/=Math.max(mag,1);iz/=Math.max(mag,1);}
@@ -1874,10 +1878,14 @@ function update(dt){
   cloud1.material.map.offset.x+=dt*0.004;cloud2.material.map.offset.x+=dt*0.0026;
   placeCelestials(camera.position.x,camera.position.z);
   flash.position.copy(camera.position);flash.target.position.copy(camera.position).add(forward);flash.target.updateMatrixWorld();flash.intensity=flashOn?(7*(0.35+0.65*nightFactor)):0;
-  // farolas de la ruta: SIEMPRE prendidas (un poco más fuertes de noche)
-  {const cand=[];for(const c of chunkList)if(c.grp.visible)for(const L of c.lamps)cand.push([L,player.pos.distanceToSquared(L)]);cand.sort((a,b)=>a[1]-b[1]);
-    const li=11*(0.55+0.45*nightFactor);
-    for(let i=0;i<lampLights.length;i++){if(cand[i]&&cand[i][1]<1600){lampLights[i].position.copy(cand[i][0]);lampLights[i].intensity=li;}else lampLights[i].intensity=0;}}
+  // farolas de la ruta: SIEMPRE prendidas. Selección de las 4 más cercanas SIN asignar memoria por frame
+  // (antes creaba un array + tuplas + sort cada frame → presión de GC → tirones periódicos).
+  {const li=11*(0.55+0.45*nightFactor);
+    for(let i=0;i<lampLights.length;i++){lampLights[i].intensity=0;lampLights[i]._bd=1600;}
+    for(const c of chunkList){ if(!c.grp.visible)continue; for(const L of c.lamps){
+      const d=player.pos.distanceToSquared(L); if(d>=1600)continue;
+      let worst=0; for(let i=1;i<lampLights.length;i++) if(lampLights[i]._bd>lampLights[worst]._bd) worst=i;   // slot con la peor (mayor) distancia
+      if(d<lampLights[worst]._bd){ lampLights[worst]._bd=d; lampLights[worst].position.copy(L); lampLights[worst].intensity=li; } } } }
   lampHeadMat.emissiveIntensity=1.1+1.8*nightFactor;
   // CULLING: sólo se dibuja lo que entra en la cámara (frustum) y está dentro del render; follaje sólo cerca (LOD)
   camera.updateMatrixWorld();camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
