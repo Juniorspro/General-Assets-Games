@@ -369,13 +369,15 @@
   <div id="vfx" class="panel">
     <header><h1><span class="dot"></span> <span data-i18n="graphics">Gráficos</span></h1><button class="closeBtn" data-close="vfx">✕</button></header>
     <div class="row"><label><span data-i18n="resolution">Resolución</span> <span id="resVal">100%</span></label><input type="range" id="res" min="50" max="100" value="100" step="5"></div>
+    <div class="row" style="margin-bottom:0"><label>Resolución fija</label><div class="seg" id="fixResSeg">
+      <button data-frh="0" class="active">Auto</button><button data-frh="720">720p</button><button data-frh="576">576p</button><button data-frh="480">480p</button><button data-frh="360">360p</button></div></div>
     <div class="row toggle"><span data-i18n="aa">Antialiasing (SMAA)</span><div class="switch on" id="aaSw"></div></div>
     <div class="row"><label><span data-i18n="exposure">Exposición</span> <span id="expoVal">0</span></label><input type="range" id="expo" min="-100" max="100" value="0" step="5"></div>
-    <div class="row"><label>Bloom <span id="bloomVal">35%</span></label><input type="range" id="bloom" min="0" max="120" value="35" step="5"></div>
+    <div class="row"><label>Bloom <span id="bloomVal">20%</span></label><input type="range" id="bloom" min="0" max="120" value="20" step="5"></div>
     <div class="row"><label><span data-i18n="saturation">Saturación</span> <span id="satVal">0</span></label><input type="range" id="sat" min="-40" max="60" value="0" step="5"></div>
     <div class="row" style="margin-bottom:0"><label><span data-i18n="shake">Temblor de cámara</span> <span id="shakeVal">40%</span></label><input type="range" id="shake" min="0" max="150" value="40" step="5"></div>
     <div class="grp" data-i18n="materials">Materiales</div>
-    <div class="row"><label><span data-i18n="relief">PBR / Relieve 3D</span> <span id="reliefVal">700%</span></label><input type="range" id="relief" min="0" max="800" value="700" step="10"></div>
+    <div class="row"><label><span data-i18n="relief">PBR / Relieve 3D</span> <span id="reliefVal">900%</span></label><input type="range" id="relief" min="0" max="1400" value="900" step="10"></div>
     <div class="row" style="margin-bottom:0"><label data-i18n="shadowRes">Resolución de sombras</label><div class="seg" id="shadowResSeg">
       <button data-sr="256">256</button><button data-sr="512" class="active">512</button><button data-sr="1024">1024</button></div></div>
   </div>
@@ -803,22 +805,22 @@ function applyGodTextures(){
   // corteza con PROFUNDIDAD (poplar): repeat amplio = surcos grandes + relieve fuerte
   Promise.all([gtex(V2+'barkp_col.jpg',true),gtex(V2+'barkp_nrm.jpg',false),gtex(V2+'barkp_rgh.jpg',false)]).then(([c,n,r])=>{
     [c,n,r].forEach(t=>t.repeat.set(1,2));
-    barkMat.map=c;barkMat.normalMap=n;barkMat.roughnessMap=r;barkMat.bumpMap=null;barkMat.normalScale.set(Math.max(2.5,reliefScale),Math.max(2.5,reliefScale));barkMat.roughness=1;barkMat.color.set(0xffffff);barkMat.needsUpdate=true;
+    barkMat.map=c;barkMat.normalMap=n;barkMat.roughnessMap=r;barkMat.bumpMap=null;barkMat.normalScale.set(Math.max(3.5,reliefScale),Math.max(3.5,reliefScale));barkMat.roughness=1;barkMat.color.set(0xffffff);barkMat.needsUpdate=true;
   }).catch(()=>{});
   // suelo
   const reX=Math.max(10,Math.round((Xmax-Xmin)/8)),reZ=Math.max(10,Math.round((Zmax-Zmin)/8));
   Promise.all([gtex(P+'ground_col.jpg',true),gtex(P+'ground_nrm.jpg',false),gtex(P+'ground_rgh.jpg',false)]).then(([c,n,r])=>{
     [c,n,r].forEach(t=>t.repeat.set(reX,reZ));
-    ground.material.map=c;ground.material.normalMap=n;ground.material.roughnessMap=r;ground.material.normalScale.set(reliefScale*0.6,reliefScale*0.6);ground.material.color.set(0xffffff);ground.material.roughness=1;ground.material.needsUpdate=true;
+    ground.material.map=c;ground.material.normalMap=n;ground.material.roughnessMap=r;ground.material.normalScale.set(reliefScale*0.9,reliefScale*0.9);ground.material.color.set(0xffffff);ground.material.roughness=1;ground.material.needsUpdate=true;
   }).catch(()=>{});
   // carretera PBR
   Promise.all([gtex(V2+'road_col.jpg',true),gtex(V2+'road_nrm.jpg',false),gtex(V2+'road_rgh.jpg',false)]).then(([c,n,r])=>{
     const rz=(Zmax-Zmin)/6;[c,n,r].forEach(t=>t.repeat.set(2,rz));
-    roadMat.map=c;roadMat.normalMap=n;roadMat.roughnessMap=r;roadMat.normalScale.set(1.2,1.2);roadMat.color.set(0xffffff);roadMat.roughness=1;roadMat.needsUpdate=true;
+    roadMat.map=c;roadMat.normalMap=n;roadMat.roughnessMap=r;roadMat.normalScale.set(Math.max(1.2,reliefScale*0.5),Math.max(1.2,reliefScale*0.5));roadMat.color.set(0xffffff);roadMat.roughness=1;roadMat.needsUpdate=true;
   }).catch(()=>{});
   // rocas PBR
   Promise.all([gtex(P+'rock_col.jpg',true),gtex(P+'rock_nrm.jpg',false),gtex(P+'rock_rgh.jpg',false)]).then(([c,n,r])=>{
-    rockMat.map=c;rockMat.normalMap=n;rockMat.roughnessMap=r;rockMat.normalScale.set(1.0,1.0);rockMat.color.set(0xffffff);rockMat.roughness=1;rockMat.needsUpdate=true;
+    rockMat.map=c;rockMat.normalMap=n;rockMat.roughnessMap=r;rockMat.normalScale.set(Math.max(1.0,reliefScale*0.6),Math.max(1.0,reliefScale*0.6));rockMat.color.set(0xffffff);rockMat.roughness=1;rockMat.needsUpdate=true;
   }).catch(()=>{});
   // hojas de copa (cluster)
   stex(P+'leaf_a.png').then(t=>{leafMat.map=t;leafMat.alphaTest=0.4;leafMat.needsUpdate=true;}).catch(()=>{});
@@ -989,7 +991,7 @@ function buildComposer(){
     const c=n8aoPass.configuration; c.aoRadius=0.7; c.distanceFalloff=1.3; c.intensity=2.4; c.aoSamples=12; c.denoiseSamples=4; c.denoiseRadius=12; c.halfRes=true; c.gammaCorrection=false; c.screenSpaceRadius=false;
     n8aoPass.enabled=false; composer.addPass(n8aoPass);   // addPass = wiring correcto de depth/size
   }catch(e){ console.warn('N8AO init falló:',e); n8aoPass=null; } }
-  bloomEffect=new BloomEffect({intensity:0.32,luminanceThreshold:0.85,luminanceSmoothing:0.25,mipmapBlur:true,radius:0.6});
+  bloomEffect=new BloomEffect({intensity:0.2,luminanceThreshold:0.88,luminanceSmoothing:0.25,mipmapBlur:true,radius:0.6});
   hueSat=new HueSaturationEffect({saturation:0,hue:0});
   const tone=new ToneMappingEffect({mode:ToneMappingMode.AGX});      // tonemap filmico realista
   vignetteEffect=new VignetteEffect({offset:0.42,darkness:0.4});    // viñeta LEVE (sólo en los bordes → sensación de profundidad) en TODOS los gráficos
@@ -1012,6 +1014,10 @@ function layout(){
   document.body.classList.toggle('rot',rot);
   const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight;
   camera.aspect=vw/vh;camera.updateProjectionMatrix();
+  if(fixedResH){   // RESOLUCIÓN FIJA elegida: render a esa altura, ancho según aspecto (sin deformar), y el CSS lo estira a la pantalla
+    const fh=Math.round(fixedResH*(menuResScale*loadResScale)), fw=Math.max(2,Math.round(fh*(vw/vh)));
+    renderer.setPixelRatio(1); renderer.setSize(fw,Math.max(2,fh),false); if(composer)composer.setSize(fw,Math.max(2,fh)); return;
+  }
   // En móvil clampeamos devicePixelRatio para que la resolución interna sea ≤80% del CSS (PC puede ir más alto).
   const pr=Math.min(devicePixelRatio,DPRCAP)*MOBILE_RES_CAP*resScale*dynRes*menuResScale*loadResScale;
   renderer.setPixelRatio(pr);   // resolución nativa × cap-móvil × calidad × adaptativa × (½ menú borroso) × (½ carga)
@@ -1083,7 +1089,16 @@ $('expo').addEventListener('input',e=>{const v=+e.target.value;exposure=Math.pow
 $('bloom').addEventListener('input',e=>{const v=+e.target.value;$('bloomVal').textContent=v+'%';if(bloomEffect)bloomEffect.intensity=v/100;});
 $('sat').addEventListener('input',e=>{const v=+e.target.value;$('satVal').textContent=(v>0?'+':'')+v;if(hueSat)hueSat.saturation=v/100;});
 $('shake').addEventListener('input',e=>{const v=+e.target.value;$('shakeVal').textContent=v+'%';camShake=v/100;});
-$('relief').addEventListener('input',e=>{const v=+e.target.value;reliefScale=v/100;$('reliefVal').textContent=v+'%';barkMat.normalScale.set(reliefScale,reliefScale);if(ground.material.normalScale)ground.material.normalScale.set(reliefScale*0.6,reliefScale*0.6);});
+$('relief').addEventListener('input',e=>{const v=+e.target.value;reliefScale=v/100;$('reliefVal').textContent=v+'%';
+  barkMat.normalScale.set(Math.max(3.5,reliefScale),Math.max(3.5,reliefScale));
+  if(ground.material.normalScale)ground.material.normalScale.set(reliefScale*0.9,reliefScale*0.9);
+  if(roadMat.normalScale)roadMat.normalScale.set(Math.max(1.2,reliefScale*0.5),Math.max(1.2,reliefScale*0.5));
+  if(rockMat.normalScale)rockMat.normalScale.set(Math.max(1.0,reliefScale*0.6),Math.max(1.0,reliefScale*0.6));});
+// Selector de RESOLUCIÓN FIJA (además del % "nivelador"). Renderiza a esa altura y escala a la pantalla (sin deformar).
+let fixedResH=0;
+document.querySelectorAll('#fixResSeg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#fixResSeg button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  fixedResH=+b.dataset.frh||0; layout(); }));
 
 // abrir/cerrar paneles + menú de pausa
 let scrimClosedAt=0;   // marca de cierre de un scrim → evita que el pointerup que cerró abra la pausa
@@ -2005,7 +2020,7 @@ let dynRes=1, resLow=0, resHi=0;
 // Resolución adaptativa ROBUSTA A SPIKES: un tirón puntual (p.ej. un horneado de entorno) NO baja la resolución,
 // porque eso dispararía un composer.setSize (realocar render targets = otro tirón → cascada). Hace falta que el FPS
 // esté MAL varias ventanas seguidas para bajar, y bien varias para subir.
-function adaptRes(fps){ if(!started)return;
+function adaptRes(fps){ if(!started||fixedResH)return;   // con resolución FIJA no autoajustamos
   if(fps<30){ resLow++; resHi=0; } else if(fps>55){ resHi++; resLow=0; } else { resLow=0; resHi=0; return; }
   let n=dynRes;
   if(resLow>=3){ n=Math.max(0.6,dynRes-0.1); resLow=0; }        // ~1.5s sostenido por debajo de 30fps
@@ -2084,7 +2099,7 @@ function setQuality(t){
   }
   else dirLight.castShadow=false;
   DPRCAP=qual.dpr; resScale=qual.res; if($('res')){$('res').value=Math.round(qual.res*100);$('resVal').textContent=Math.round(qual.res*100)+'%';}
-  if(bloomEffect)bloomEffect.intensity=qual.bloom?0.32:0.0;
+  if(bloomEffect)bloomEffect.intensity=qual.bloom?0.2:0.0;
   aaOn=qual.aa; if(smaaPass)smaaPass.enabled=aaOn; if($('aaSw'))$('aaSw').classList.toggle('on',aaOn);
   const useSsao=(t==='medium'||t==='high'||t==='vhigh');   // SSAO (N8AO) en medio y superiores
   if(n8aoPass)n8aoPass.enabled=useSsao;
@@ -2094,7 +2109,7 @@ function setQuality(t){
 
 /* ===================== Valores por defecto realistas ===================== */
 const VFX_DEFAULTS={time:7,dist:150,shad:22,dens:140,wind:30,bob:70,
-  res:100,expo:0,bloom:35,sat:25,shake:150,relief:700};
+  res:100,expo:0,bloom:20,sat:25,shake:150,relief:900};
 function applyDefaults(){
   for(const id in VFX_DEFAULTS){const el=document.getElementById(id);if(!el)continue;el.value=VFX_DEFAULTS[id];el.dispatchEvent(new Event('input'));}
   densityMul=(+document.getElementById('dens').value)/100;
