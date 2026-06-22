@@ -25,14 +25,6 @@
   .actBtn.on{ background:rgba(90,160,255,.3); border-color:#8fe3ff; }
   #bJump  { right:26px; bottom:calc(34px + var(--safe-b)); }
   #bCrouch{ right:100px; bottom:calc(58px + var(--safe-b)); width:56px; height:56px; font-size:19px; }
-  #matInfo{ position:fixed; left:50%; bottom:calc(18px + var(--safe-b)); transform:translateX(-50%); z-index:8; width:min(460px,82vw);
-            background:rgba(14,22,30,.74); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.12); border-radius:14px;
-            padding:12px 16px; color:#eef3f8; box-shadow:0 10px 30px rgba(0,0,0,.5); pointer-events:none; line-height:1.45; }
-  #matInfo .miName{ font-weight:700; font-size:18px; letter-spacing:.02em; margin-bottom:6px; color:#ffd27a; }
-  #matInfo .miRow{ font-size:12.5px; opacity:.92; margin-bottom:4px; } #matInfo .miRow b{ color:#bfe6ff; font-weight:600; }
-  #matInfo .miStatus{ font-size:12px; margin-top:7px; opacity:.85; border-top:1px solid rgba(255,255,255,.1); padding-top:7px; }
-  #hint{ position:fixed; left:50%; top:calc(12px + var(--safe-t)); transform:translateX(-50%); z-index:6; font-size:11px; opacity:.5;
-         pointer-events:none; text-shadow:0 1px 3px rgba(0,0,0,.6); }
   #loader{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
            background:#aebfcf; transition:opacity .5s; color:#0a3a63; font-size:13px; letter-spacing:.1em; }
   #loader.hide{ opacity:0; pointer-events:none; }
@@ -46,13 +38,6 @@
   <div id="joy"><div id="joyKnob"></div></div>
   <button id="bJump"   class="actBtn">⤴️</button>
   <button id="bCrouch" class="actBtn">🔽</button>
-  <div id="hint">Guía de materiales · mirá una fuente y tocá para recolectar</div>
-  <div id="matInfo">
-    <div class="miName" id="miName">—</div>
-    <div class="miRow"><b>De dónde sale:</b> <span id="miSrc"></span></div>
-    <div class="miRow"><b>🛠️ En la mesa sirve para:</b> <span id="miUse"></span></div>
-    <div class="miStatus" id="miStatus"></div>
-  </div>
 </div>
 
 <script type="importmap">
@@ -120,113 +105,6 @@ function loadPBR(mat,base,rep,met){
   if(met)texLoader.load(TXB+base+'_met.jpg',t=>{cfg(t,false);mat.metalnessMap=t;mat.metalness=1;mat.needsUpdate=true;},undefined,f);
 }
 loadPBR(plankA,'v2/woodfloor',[1,3]); loadPBR(plankB,'v2/woodfloor',[1,3]);   // piso de madera real
-
-// materiales PBR
-const MAT={
-  wood: new THREE.MeshStandardMaterial({color:0x7a4e28,roughness:0.85}),
-  stone:new THREE.MeshStandardMaterial({color:0x8a8d92,roughness:1}),
-  metal:new THREE.MeshStandardMaterial({color:0xc2c7cf,metalness:0.95,roughness:0.32}),
-  rope: new THREE.MeshStandardMaterial({color:0xc6a868,roughness:0.95}),
-  cloth:new THREE.MeshStandardMaterial({color:0xb43c3c,roughness:0.9,side:THREE.DoubleSide}),
-  glass:new THREE.MeshPhysicalMaterial({color:0xcde6ff,metalness:0,roughness:0.05,transmission:1,thickness:0.5,ior:1.5,transparent:true}),
-  sheet:new THREE.MeshStandardMaterial({color:0x9aa3ab,metalness:0.82,roughness:0.5,side:THREE.DoubleSide}),
-  clay: new THREE.MeshStandardMaterial({color:0xb06a43,roughness:1}),
-  coal: new THREE.MeshStandardMaterial({color:0x24272c,roughness:0.45,metalness:0.15}),
-  bone: new THREE.MeshStandardMaterial({color:0xe7e1ce,roughness:0.8}),
-};
-// texturas correspondientes del repo
-loadPBR(MAT.stone,'v2/rock',1);          // roca SELLADA + textura de roca
-loadPBR(MAT.wood,'v2/bark',[1,2]);
-loadPBR(MAT.cloth,'v2/fabric',1);
-loadPBR(MAT.metal,'axe/metal',1,true);
-loadPBR(MAT.sheet,'v2/rust',1,true);     // chapa = metal oxidado
-loadPBR(MAT.clay,'ground',1);            // barro
-// deform DETERMINISTA por posición: vértices coincidentes (geometría no indexada) se desplazan IGUAL → queda SELLADO (sin grietas)
-const _dv=new THREE.Vector3();
-function deform(geo,amt){ const p=geo.attributes.position;
-  for(let i=0;i<p.count;i++){ _dv.fromBufferAttribute(p,i);
-    const n=Math.sin(_dv.x*7.1+_dv.y*3.3)*Math.sin(_dv.y*5.7+_dv.z*4.1)*Math.sin(_dv.z*6.3+_dv.x*2.9);
-    const f=1+n*amt; p.setXYZ(i,_dv.x*f,_dv.y*f,_dv.z*f); }
-  geo.computeVertexNormals(); return geo; }
-// --- builders (cada uno devuelve un grupo apoyado en y=0) ---
-function bMadera(){const g=new THREE.Group();const r=0.12,L=0.95;
-  for(const p of [[-0.14,r,0,0],[0.14,r,0,0],[0,r*2+0.02,0,0]]){const l=new THREE.Mesh(new THREE.CylinderGeometry(r,r,L,16),MAT.wood);l.rotation.x=Math.PI/2;l.position.set(p[0],p[1],p[2]);g.add(l);}
-  return g;}
-function bPiedra(){const g=new THREE.Group();
-  const big=new THREE.Mesh(deform(new THREE.IcosahedronGeometry(0.32,3),0.22),MAT.stone);big.position.y=0.3;big.rotation.set(0.3,0.7,0.1);g.add(big);   // roca grande SELLADA
-  const sm=new THREE.Mesh(deform(new THREE.IcosahedronGeometry(0.17,2),0.26),MAT.stone);sm.position.set(0.33,0.15,0.16);sm.rotation.set(0.6,1.2,0.2);g.add(sm);
-  return g;}
-function bMetal(){const g=new THREE.Group();const sh=new THREE.Shape();sh.moveTo(-0.28,0);sh.lineTo(0.28,0);sh.lineTo(0.2,0.16);sh.lineTo(-0.2,0.16);sh.lineTo(-0.28,0);
-  function ingot(){const geo=new THREE.ExtrudeGeometry(sh,{depth:0.2,bevelEnabled:false});geo.center();return new THREE.Mesh(geo,MAT.metal);}
-  const a=ingot();a.position.set(0,0.08,0.08);const b=ingot();b.position.set(0,0.08,-0.16);const c=ingot();c.position.set(0,0.25,-0.04);c.rotation.y=0.15;g.add(a,b,c);return g;}
-function bCuerda(){const g=new THREE.Group();for(let i=0;i<4;i++){const t=new THREE.Mesh(new THREE.TorusGeometry(0.24-i*0.025,0.052,10,22),MAT.rope);t.rotation.x=Math.PI/2;t.position.y=0.06+i*0.09;g.add(t);}return g;}
-function bTela(){const g=new THREE.Group();function sheetCloth(){const geo=new THREE.PlaneGeometry(0.9,0.7,22,18);const p=geo.attributes.position;for(let i=0;i<p.count;i++)p.setZ(i,Math.sin(p.getX(i)*6)*0.045+Math.sin(p.getY(i)*5)*0.03);geo.computeVertexNormals();const m=new THREE.Mesh(geo,MAT.cloth);m.rotation.x=-Math.PI/2;return m;}
-  const a=sheetCloth();a.position.y=0.05;const b=sheetCloth();b.position.y=0.11;b.rotation.z=0.4;g.add(a,b);return g;}
-function bVidrio(){const g=new THREE.Group();const pane=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.62,0.04),MAT.glass);pane.position.y=0.31;pane.rotation.y=0.25;g.add(pane);
-  for(let i=0;i<3;i++){const s=new THREE.Mesh(deform(new THREE.TetrahedronGeometry(0.13),0.3),MAT.glass);s.position.set((i-1)*0.24,0.09,0.2);s.rotation.set(Math.random()*3,Math.random()*3,0);g.add(s);}return g;}
-function bChapa(){const g=new THREE.Group();function corr(){const geo=new THREE.PlaneGeometry(0.92,0.7,48,2);const p=geo.attributes.position;for(let i=0;i<p.count;i++)p.setZ(i,Math.sin(p.getX(i)*20)*0.035);geo.computeVertexNormals();const m=new THREE.Mesh(geo,MAT.sheet);m.rotation.x=-Math.PI/2;return m;}
-  const a=corr();a.position.y=0.05;const b=corr();b.position.set(0.06,0.1,0.04);g.add(a,b);return g;}
-function bBarro(){const g=new THREE.Group();for(let i=0;i<3;i++){const b=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.17,0.26),MAT.clay);const row=Math.floor(i/2);b.position.set((i%2?0.12:-0.12)*(row?0:1),0.085+row*0.18,row?0:(i%2?0.15:-0.15));if(row)b.position.x=0;b.rotation.y=(Math.random()-.5)*0.2;g.add(b);}return g;}
-function bCarbon(){const g=new THREE.Group();for(let i=0;i<7;i++){const s=0.09+Math.random()*0.08;const c=new THREE.Mesh(deform(new THREE.DodecahedronGeometry(s,0),0.4),MAT.coal);const a=Math.random()*6.28,rr=Math.random()*0.24;c.position.set(Math.cos(a)*rr,s*0.7+Math.random()*0.05,Math.sin(a)*rr);c.rotation.set(Math.random()*3,Math.random()*3,0);g.add(c);}return g;}
-function bHueso(){const g=new THREE.Group();function bone(){const b=new THREE.Group();const sh=new THREE.Mesh(new THREE.CylinderGeometry(0.048,0.048,0.5,12),MAT.bone);b.add(sh);for(const yy of[-0.27,0.27])for(const ox of[-0.05,0.05]){const k=new THREE.Mesh(new THREE.SphereGeometry(0.07,12,10),MAT.bone);k.position.set(ox,yy,0);b.add(k);}return b;}
-  const a=bone();a.rotation.z=0.5;a.position.y=0.11;const b=bone();b.rotation.z=-0.6;b.position.y=0.09;g.add(a,b);return g;}
-
-// árbol = FUENTE de madera (rebrota cada 10 s)
-function bArbol(){const g=new THREE.Group();
-  const tr=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.18,1.4,10),MAT.wood);tr.position.y=0.7;g.add(tr);
-  const fol=new THREE.MeshStandardMaterial({color:0x4f7a3a,roughness:0.9});
-  for(const [y,r] of [[1.5,0.62],[1.9,0.5],[2.18,0.34]]){const c=new THREE.Mesh(deform(new THREE.IcosahedronGeometry(r,2),0.18),fol);c.position.y=y;g.add(c);}
-  return g;}
-
-const MATERIALS=[['madera',bArbol],['piedra',bPiedra],['metal',bMetal],['cuerda',bCuerda],['tela',bTela],['vidrio',bVidrio],['chapa',bChapa],['barro',bBarro],['carbon',bCarbon],['hueso',bHueso]];
-const NAMES={madera:'Madera',piedra:'Piedra',metal:'Metal',cuerda:'Cuerda / Hilo',tela:'Tela',vidrio:'Vidrio',chapa:'Chapa',barro:'Barro',carbon:'Carbón',hueso:'Hueso'};
-// de dónde sale cada material y para qué sirve en la mesa
-const INFO={
-  madera:{de:'🌳 Talando ÁRBOLES (el árbol rebrota en 10 s).', usa:'Mesa, lanza, pico de madera, arco, antorcha, balde, azada y paredes/suelos/techos de madera.'},
-  piedra:{de:'⛏️ Picando ROCAS con el pico.', usa:'Pico, cuchillo, lanza y azada de piedra, hacha y flechas de piedra.'},
-  metal:{de:'🔥 Fundiendo MENA / chatarra en el horno.', usa:'Cuchillo, machete, hacha y todas las herramientas “afiladas”.'},
-  cuerda:{de:'🌾 Tejiendo FIBRA de plantas.', usa:'Une casi todo: lanza, arco, cuchillo, picos, azadas y baldes.'},
-  tela:{de:'🧵 Cosiendo HILO / fibra.', usa:'La mecha de la botella incendiaria, la antorcha y la cama.'},
-  vidrio:{de:'🏖️ Fundiendo ARENA.', usa:'El frasco de la botella incendiaria.'},
-  chapa:{de:'🛞 Recuperando CHATARRA metálica.', usa:'Paredes, suelos y techos de chapa, y el balde de chapa.'},
-  barro:{de:'🕳️ Cavando POZOS de arcilla.', usa:'El horno y el conservador de carne.'},
-  carbon:{de:'🔥 De MADERA quemada / la fogata.', usa:'Botella incendiaria, antorcha y fogata.'},
-  hueso:{de:'🦴 De ANIMALES cazados.', usa:'Herramientas y adornos.'}
-};
-function labelSprite(text){const c=document.createElement('canvas');c.width=256;c.height=64;const x=c.getContext('2d');x.font='bold 30px -apple-system,sans-serif';x.textAlign='center';x.textBaseline='middle';x.shadowColor='rgba(0,0,0,.85)';x.shadowBlur=8;x.fillStyle='#fff';x.fillText(text,128,34);
-  const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:false}));sp.scale.set(1.7,0.43,1);return sp;}
-
-const COLS=5, SX=2.9, SZ=3.0, REGROW=10;
-const stations=[]; const counts={};
-MATERIALS.forEach(([key,fn],i)=>{ const col=i%COLS, row=Math.floor(i/COLS);
-  const cx=(col-(COLS-1)/2)*SX, cz=PCZ + (row?-1:1)*SZ*0.5;
-  const node=enableShadow(fn()); node.position.set(cx,FY,cz); node.userData.matKey=key; scene.add(node);
-  const lab=labelSprite(NAMES[key]); lab.position.set(cx,FY+(key==='madera'?2.7:1.05),cz); scene.add(lab);
-  stations.push({key,node,base:new THREE.Vector3(cx,FY,cz),ready:true,t:0,sc:1});
-});
-
-// ---- recolección: mirá una fuente (cruz al centro) y tocá → recolecta y rebrota en 10 s ----
-const _ray=new THREE.Raycaster(); let tapPid=null,tapX=0,tapY=0;
-function isUItap(t){ return t.closest('.actBtn')||t===document.getElementById('joy')||t===document.getElementById('joyKnob'); }
-addEventListener('pointerdown',e=>{ if(isUItap(e.target))return; tapPid=e.pointerId; tapX=e.clientX; tapY=e.clientY; });
-addEventListener('pointerup',e=>{ if(e.pointerId!==tapPid)return; tapPid=null; if(Math.hypot(e.clientX-tapX,e.clientY-tapY)<14) tryHarvest(); });
-function tryHarvest(){ _ray.setFromCamera({x:0,y:0},camera);   // rayo desde el CENTRO (cruz) → no depende del giro 90°
-  let best=null,bd=1e9; for(const s of stations){ if(!s.ready||!s.node.visible)continue; const h=_ray.intersectObject(s.node,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=s;} }
-  if(best&&bd<8){ best.ready=false; best.t=REGROW; counts[best.key]=(counts[best.key]||0)+1; if(lastNear===best)updateInfoDyn(best); } }
-
-let lastNear=null;
-function updateStations(dt){
-  for(const s of stations){ if(!s.ready){ s.t-=dt; if(s.t<=0)s.ready=true; }
-    const tgt=s.ready?1:0; s.sc+=(tgt-s.sc)*Math.min(1,7*dt); s.node.scale.setScalar(Math.max(0.0001,s.sc)); s.node.visible=s.sc>0.02; }
-  let best=null,bd=1e9; for(const s of stations){const dx=s.base.x-player.pos.x,dz=s.base.z-player.pos.z;const d=dx*dx+dz*dz;if(d<bd){bd=d;best=s;}}
-  if(best&&best!==lastNear){ lastNear=best; showInfo(best); }
-  if(best) updateInfoDyn(best);
-}
-function showInfo(s){ const I=INFO[s.key]||{de:'',usa:''};
-  document.getElementById('miName').textContent=NAMES[s.key];
-  document.getElementById('miSrc').textContent=I.de; document.getElementById('miUse').textContent=I.usa; }
-function updateInfoDyn(s){ const have=counts[s.key]||0;
-  document.getElementById('miStatus').textContent = (s.ready?'✅ Listo · mirá y tocá para recolectar':('⏳ Rebrota en '+Math.ceil(s.t)+' s')) + '   ·   Recolectado: '+have; }
 
 /* ===================== Jugador (1ª persona) ===================== */
 const EYE=1.7, EYE_CROUCH=1.05, GRAV=22, JUMP_V=7.4, SPEED_MAX=6.4, ACCEL=11;
@@ -312,7 +190,6 @@ function update(dt){
   euler.set(player.pitch,player.yaw,player.roll); camera.quaternion.setFromEuler(euler);
   if(hitShake>0.0001){ camera.rotateZ((Math.random()-0.5)*0.07*hitShake); camera.rotateX((Math.random()-0.5)*0.05*hitShake); } hitShake*=0.88;
   sun.position.set(player.pos.x-40,70,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
-  updateStations(dt);   // rebrote de fuentes + panel de info de la más cercana
   tickEnemy(dt);        // enemigo que persigue
 }
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
