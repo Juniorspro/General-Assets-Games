@@ -1566,7 +1566,14 @@ function glbModel(id,fb){ return ()=> glbCache[id]? glbCache[id].clone(true) : (
 function loadGLBItem(id,file,targetMax){ gltfL.load(GLBP+file,gl=>{ const m=fitModel(gl.scene,targetMax); m.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}}); glbCache[id]=m;
   try{ icons[id]=captureIcon(MODELS[id](),ROTS[id]||[0.2,0.65,0.4]); }catch(e){} if(equipped===id)equipItem(id); if($('menu').classList.contains('show'))renderGrid(); },undefined,()=>{}); }
 
-const MODELS={ hammer:buildHammer, table:buildTable,
+function buildShovel(headMat){const g=new THREE.Group();
+  const sh=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.025,0.95,10),woodDark); sh.position.y=0.5; sh.castShadow=true; g.add(sh);
+  const grip=new THREE.Mesh(new THREE.TorusGeometry(0.05,0.018,8,16),woodDark); grip.position.y=0.98; grip.rotation.x=Math.PI/2; g.add(grip);
+  const collar=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.028,0.09,8),headMat); collar.position.y=0.2; g.add(collar);
+  const blade=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.27,0.018),headMat); blade.position.y=0.07; blade.castShadow=true; g.add(blade);   // hoja
+  const lip=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.05,0.06),headMat); lip.position.set(0,-0.06,0.022); g.add(lip);                       // punta
+  return g;}
+const MODELS={ hammer:buildHammer, table:buildTable, pala:()=>buildShovel(metalMat),
   spear:buildSpear, knife:buildKnife, machete:buildMachete, botella:buildBottle, guadana:buildScythe, hacha:glbModel('hacha',buildMachete),
   picomad:()=>buildPick(woodDark), picopiedra:()=>buildPick(stoneMat), picoafil:()=>buildPick(metalMat),
   arco:buildBow, lanzapiedra:()=>buildSpearV(stoneMat), lanzaafil:()=>buildSpearV(metalMat),
@@ -1588,7 +1595,7 @@ const P_SWING ={p:[0.32,-0.42,-0.6],r:[-0.1,Math.PI/2,0.2]};
 const P_BOW   ={p:[0.30,-0.28,-0.55],r:[0,Math.PI/2,0]};
 const P_HOLD  ={p:[0.32,-0.42,-0.62],r:[0.1,Math.PI/2,0.2]};
 const VIEW={
-  hammer:{s:0.55,...P_SWING},
+  hammer:{s:0.55,...P_SWING}, pala:{s:0.5,...P_SWING},
   spear:{s:0.4,...P_THRUST}, lanzapiedra:{s:0.4,...P_THRUST}, lanzaafil:{s:0.4,...P_THRUST},
   knife:{s:0.42,...P_KNIFE}, cuchipiedra:{s:0.5,...P_KNIFE}, cuchiafil:{s:0.42,...P_KNIFE},
   machete:{s:0.5,...P_SWING}, guadana:{s:0.4,...P_HOLD}, botella:{s:0.68,p:[0.34,-0.5,-0.7],r:[0.12,Math.PI/2,0.18]}, hacha:{s:0.85,p:[0.32,-0.4,-0.58],r:[-0.1,-Math.PI/2,-0.2]},
@@ -1617,6 +1624,7 @@ function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;wswing.
 const RECIPES=[
   {id:'hacha', tab:'weapons',needTable:false,placeable:false,bagOnly:true},   // tomahawk: en la mochila siempre (no se craftea)
   {id:'hammer',tab:'tools',needTable:false,placeable:false},
+  {id:'pala',  tab:'tools',needTable:true, placeable:false},
   {id:'table', tab:'tools',needTable:false,placeable:true},
   {id:'spear', tab:'weapons',needTable:false,placeable:false},
   {id:'knife', tab:'weapons',needTable:false,placeable:false},
@@ -1663,9 +1671,12 @@ const TABS=['weapons','furniture','tools','construction'];
 const BAG_TABS=['weapons','furniture','tools','construction','materials'];   // la mochila además tiene "Materiales"
 let activeTab='tools';
 // inventario de MATERIALES en bruto (ramas/madera, hilos/cuerda, piedra, etc.). 'madera' usa el contador de leña (woodCount).
-const mats={piedra:0,metal:0,cuerda:0,tela:0,vidrio:0,chapa:0,barro:0,carbon:0,hueso:0};
+const mats={piedra:0,metal:0,cuerda:0,tela:0,vidrio:0,chapa:0,barro:0,carbon:0,hueso:0,arena:0,mena:0,fibra:0,hilo:0};
 function matCount(k){ return k==='madera'?(typeof woodCount!=='undefined'?woodCount:0):(mats[k]||0); }
-const inv={hammer:0,table:0,spear:0,knife:0,machete:0,botella:0,guadana:0,hacha:1,
+function addMat(k,n){ n=n||1; if(k==='madera'){ if(typeof woodCount!=='undefined'){woodCount+=n; if(woodHUD)woodHUD.textContent=woodCount;} } else mats[k]=(mats[k]||0)+n;
+  if($('menu')&&$('menu').classList.contains('show')&&menuMode==='bag'&&activeTab==='materials')renderMaterials(); }
+function useMat(k,n){ n=n||1; if(matCount(k)<n)return false; if(k==='madera'){woodCount-=n; if(woodHUD)woodHUD.textContent=woodCount;} else mats[k]-=n; return true; }
+const inv={hammer:0,pala:0,table:0,spear:0,knife:0,machete:0,botella:0,guadana:0,hacha:1,
   picomad:0,arco:0,antorcha:0,lanzapiedra:0,cuchipiedra:0,picopiedra:0,flechamad:0,flechapiedra:0,flechaafil:0,lanzaafil:0,picoafil:0,cuchiafil:0,azadamad:0,azadapiedra:0,baldemad:0,baldechapa:0,
   cama:0,horno:0,silla:0,recagua:0,bidon:0,perchero:0,fogata:0,conserv:0,pmad:0,smad:0,tmad:0,imad:0,vmad:0,dmad:0,pcha:0,scha:0,tcha:0,vcha:0,dcha:0};
 let equipped=null;
@@ -1692,7 +1703,7 @@ function renderTabs(){
 }
 function markSel(){ document.querySelectorAll('#mGrid .slot').forEach(c=>c.classList.toggle('sel',c.dataset.id===selId)); }
 function clearDetail(){ $('dName').textContent='—'; $('dType').textContent=''; $('dMats').innerHTML=''; $('dAction').style.display='none'; const di=$('dIcon'); if(di)di.style.display='none'; }
-const MAT_KEYS=['madera','piedra','metal','cuerda','tela','vidrio','chapa','barro','carbon','hueso'];   // ramas, hilos, etc.
+const MAT_KEYS=['madera','fibra','hilo','cuerda','tela','piedra','arena','mena','metal','vidrio','chapa','barro','carbon','hueso'];   // ramas, hilos, etc.
 function renderMaterials(){
   const g=$('mGrid'); g.innerHTML=''; $('mEmpty').style.display='none';
   for(const k of MAT_KEYS){ const n=matCount(k);
@@ -1761,10 +1772,10 @@ function openMenu(mode){
 function hideMenu(){ scrimClosedAt=performance.now(); $('menu').classList.remove('show'); }
 $('menu').querySelectorAll('.xClose').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();hideMenu();}));
 
-const RESN={madera:'🪵',piedra:'🪨',metal:'⚙️',cuerda:'🪢',tela:'🧵',vidrio:'🔷',chapa:'🛡️',barro:'🟫',carbon:'🔥',hueso:'🦴'};
-const REST={madera:{es:'Madera',en:'Wood',pt:'Madeira'},piedra:{es:'Piedra',en:'Stone',pt:'Pedra'},metal:{es:'Metal',en:'Metal',pt:'Metal'},cuerda:{es:'Cuerda',en:'Rope',pt:'Corda'},tela:{es:'Tela',en:'Cloth',pt:'Tecido'},vidrio:{es:'Vidrio',en:'Glass',pt:'Vidro'},chapa:{es:'Chapa',en:'Sheet metal',pt:'Chapa'},barro:{es:'Barro',en:'Clay',pt:'Barro'},carbon:{es:'Carbón',en:'Coal',pt:'Carvão'},hueso:{es:'Hueso',en:'Bone',pt:'Osso'}};
+const RESN={madera:'🪵',piedra:'🪨',metal:'⚙️',cuerda:'🪢',tela:'🧵',vidrio:'🔷',chapa:'🛡️',barro:'🟫',carbon:'🔥',hueso:'🦴',arena:'🏖️',mena:'🥌',fibra:'🌾',hilo:'🧶'};
+const REST={madera:{es:'Madera',en:'Wood',pt:'Madeira'},piedra:{es:'Piedra',en:'Stone',pt:'Pedra'},metal:{es:'Metal',en:'Metal',pt:'Metal'},cuerda:{es:'Cuerda',en:'Rope',pt:'Corda'},tela:{es:'Tela',en:'Cloth',pt:'Tecido'},vidrio:{es:'Vidrio',en:'Glass',pt:'Vidro'},chapa:{es:'Chapa',en:'Sheet metal',pt:'Chapa'},barro:{es:'Barro',en:'Clay',pt:'Barro'},carbon:{es:'Carbón',en:'Coal',pt:'Carvão'},hueso:{es:'Hueso',en:'Bone',pt:'Osso'},arena:{es:'Arena',en:'Sand',pt:'Areia'},mena:{es:'Mena',en:'Ore',pt:'Minério'},fibra:{es:'Fibra',en:'Fiber',pt:'Fibra'},hilo:{es:'Hilo',en:'Thread',pt:'Fio'}};
 const COSTS={
-  hammer:{madera:2,piedra:1}, table:{madera:4},
+  hammer:{madera:2,piedra:1}, table:{madera:4}, pala:{madera:2,metal:2},
   spear:{madera:2,cuerda:1}, knife:{metal:1,madera:1,cuerda:1}, machete:{metal:2,madera:1,cuerda:1}, botella:{vidrio:1,tela:1,carbon:1}, guadana:{metal:2,madera:2,cuerda:1}, hacha:{metal:1,madera:1,cuerda:1},
   picomad:{madera:3,cuerda:1}, picopiedra:{madera:2,piedra:2,cuerda:1}, picoafil:{madera:2,metal:2,cuerda:1},
   arco:{madera:2,cuerda:2}, lanzapiedra:{madera:2,piedra:1,cuerda:1}, lanzaafil:{madera:2,metal:1,cuerda:1},
@@ -2057,7 +2068,7 @@ const I18N={
       fullscreen:'Pantalla completa',shadowRes:'Resolución de sombras',controlsTitle:'Controles',controlsSub:'Teclado y ratón',
       kbMove:'Moverse',kbLook:'Mirar',kbRun:'Correr',kbJump:'Saltar',kbCrouch:'Agacharse',kbChop:'Talar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventario',kbThrow:'Lanzar molotov',kbPause:'Pausa',
       key_Mouse:'Ratón',key_Shift:'Mayús',key_Space:'Espacio',key_Ctrl:'Ctrl',key_Click:'Clic',key_Esc:'Esc',
-      craft:'Fabricación',jump:'Saltar',crouch:'Agacharse',axe:'Hacha',build:'Construir',weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',spear:'Lanza de madera',knife:'Cuchillo de metal',
+      craft:'Fabricación',jump:'Saltar',crouch:'Agacharse',axe:'Hacha',build:'Construir',weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',pala:'Pala',spear:'Lanza de madera',knife:'Cuchillo de metal',
       machete:'Machete',botella:'Botella incendiaria',guadana:'Guadaña',hacha:'Hacha tomahawk',picomad:'Pico de madera',arco:'Arco',lanzapiedra:'Lanza de piedra',cuchipiedra:'Cuchillo de piedra',picopiedra:'Pico de piedra',flechamad:'Flechas de madera',flechapiedra:'Flechas de piedra',flechaafil:'Flechas afiladas',lanzaafil:'Lanza afilada',picoafil:'Pico afilado',cuchiafil:'Cuchillo afilado',antorcha:'Antorcha',azadamad:'Azada de madera',azadapiedra:'Azada de piedra',baldemad:'Balde de madera',baldechapa:'Balde de chapa',addWater:'Cargar agua',waterFull:'Balde lleno',
       cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo recto de madera',imad:'Techo inclinado',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',tcha:'Techo recto de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',need:'Necesitás',noSupport:'Necesita una pared debajo',
       placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
@@ -2067,7 +2078,7 @@ const I18N={
       fullscreen:'Fullscreen',shadowRes:'Shadow resolution',controlsTitle:'Controls',controlsSub:'Keyboard & mouse',
       kbMove:'Move',kbLook:'Look',kbRun:'Run',kbJump:'Jump',kbCrouch:'Crouch',kbChop:'Chop / attack',kbCraft:'Craft',kbPlace:'Place',kbInv:'Inventory',kbThrow:'Throw molotov',kbPause:'Pause',
       key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Space',key_Ctrl:'Ctrl',key_Click:'Click',key_Esc:'Esc',
-      craft:'Crafting',jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',spear:'Wooden spear',knife:'Metal knife',
+      craft:'Crafting',jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',pala:'Shovel',spear:'Wooden spear',knife:'Metal knife',
       machete:'Machete',botella:'Molotov',guadana:'Scythe',hacha:'Tomahawk axe',picomad:'Wood pickaxe',arco:'Bow',lanzapiedra:'Stone spear',cuchipiedra:'Stone knife',picopiedra:'Stone pickaxe',flechamad:'Wood arrows',flechapiedra:'Stone arrows',flechaafil:'Sharp arrows',lanzaafil:'Sharp spear',picoafil:'Sharp pickaxe',cuchiafil:'Sharp knife',antorcha:'Torch',azadamad:'Wood hoe',azadapiedra:'Stone hoe',baldemad:'Wood bucket',baldechapa:'Metal bucket',addWater:'Collect water',waterFull:'Bucket full',
       cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Flat wood roof',imad:'Sloped roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',tcha:'Flat metal roof',vcha:'Metal wall + window',dcha:'Metal wall + door',free:'Free',craftBtn:'Craft',crafted:'Crafted!',need:'You need',noSupport:'Needs a wall below',
       placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
@@ -2077,7 +2088,7 @@ const I18N={
       fullscreen:'Tela cheia',shadowRes:'Resolução de sombras',controlsTitle:'Controles',controlsSub:'Teclado e mouse',
       kbMove:'Mover',kbLook:'Olhar',kbRun:'Correr',kbJump:'Pular',kbCrouch:'Agachar',kbChop:'Cortar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventário',kbThrow:'Lançar molotov',kbPause:'Pausa',
       key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Espaço',key_Ctrl:'Ctrl',key_Click:'Clique',key_Esc:'Esc',
-      craft:'Fabricação',jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',spear:'Lança de madeira',knife:'Faca de metal',
+      craft:'Fabricação',jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',pala:'Pá',spear:'Lança de madeira',knife:'Faca de metal',
       machete:'Facão',botella:'Coquetel molotov',guadana:'Foice',hacha:'Machado tomahawk',picomad:'Picareta de madeira',arco:'Arco',lanzapiedra:'Lança de pedra',cuchipiedra:'Faca de pedra',picopiedra:'Picareta de pedra',flechamad:'Flechas de madeira',flechapiedra:'Flechas de pedra',flechaafil:'Flechas afiadas',lanzaafil:'Lança afiada',picoafil:'Picareta afiada',cuchiafil:'Faca afiada',antorcha:'Tocha',azadamad:'Enxada de madeira',azadapiedra:'Enxada de pedra',baldemad:'Balde de madeira',baldechapa:'Balde de chapa',addWater:'Coletar água',waterFull:'Balde cheio',
       cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado reto de madeira',imad:'Telhado inclinado',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',tcha:'Telhado reto de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',need:'Precisa de',noSupport:'Precisa de parede embaixo',
       placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
