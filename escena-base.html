@@ -197,18 +197,20 @@ const ANIMS=['idle','walk','run','attack'];
 const tpl=NPC_TYPES.map(()=>({}));
 const npcLoader=new GLTFLoader();
 let nLoaded=0; const nTotal=NPC_TYPES.length*ANIMS.length; let assetsReady=false;
-function normBody(scn,h){ let b=new THREE.Box3().setFromObject(scn), sz=b.getSize(new THREE.Vector3()), s=h/(sz.y||1); scn.scale.setScalar(s);
-  b=new THREE.Box3().setFromObject(scn); const c=b.getCenter(new THREE.Vector3()); scn.position.set(-c.x,-b.min.y,-c.z);
-  scn.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; const mm=Array.isArray(o.material)?o.material:[o.material]; mm.forEach(m=>{ if(m) m.side=THREE.FrontSide; }); } }); }
-NPC_TYPES.forEach((T,ti)=> ANIMS.forEach(an=>{   // TODAS en paralelo
-  npcLoader.load(EBASE+T.f[an], gl=>{ tpl[ti][an]={scene:gl.scene,clip:gl.animations[0]}; if(++nLoaded>=nTotal) onReady(); },
+function setSideFront(scn){ scn.traverse(o=>{ if(o.isMesh){ const mm=Array.isArray(o.material)?o.material:[o.material]; mm.forEach(m=>{ if(m) m.side=THREE.FrontSide; }); } }); }
+NPC_TYPES.forEach((T,ti)=> ANIMS.forEach(an=>{   // TODAS en paralelo; medimos la escala en el ORIGINAL (fiable)
+  npcLoader.load(EBASE+T.f[an], gl=>{ const scn=gl.scene; setSideFront(scn);
+    const b=new THREE.Box3().setFromObject(scn), sz=b.getSize(new THREE.Vector3()), s=T.h/(sz.y||1), c=b.getCenter(new THREE.Vector3());
+    tpl[ti][an]={scene:scn, clip:gl.animations[0], s, off:new THREE.Vector3(-c.x*s,-b.min.y*s,-c.z*s)};
+    if(++nLoaded>=nTotal) onReady(); },
     undefined, e=>{ console.warn(T.f[an],e); if(++nLoaded>=nTotal) onReady(); }); }));
 
 const npcs=[]; const _tmpV=new THREE.Vector3();
 function makeNPC(ti,x,z,mode){ const T=NPC_TYPES[ti];
   const inst={ti,T,group:new THREE.Group(),bodies:{},mixers:{},actions:{},hand:{},state:null,mode,dead:false,vy:0,fall:0,atkCD:0};
   ANIMS.forEach(an=>{ const t=tpl[ti][an]; if(!t)return;
-    const scn=skClone(t.scene); normBody(scn,T.h); scn.visible=false; inst.group.add(scn);
+    const scn=skClone(t.scene); scn.scale.setScalar(t.s); scn.position.copy(t.off); scn.visible=false;   // escala/offset del original
+    scn.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } }); inst.group.add(scn);
     const mx=new THREE.AnimationMixer(scn); const ac=t.clip?mx.clipAction(t.clip):null; if(ac)ac.setLoop(THREE.LoopRepeat);
     inst.bodies[an]=scn; inst.mixers[an]=mx; inst.actions[an]=ac; inst.hand[an]=scn.getObjectByName('RightHand'); });
   inst.group.position.set(x,0,z); scene.add(inst.group);
