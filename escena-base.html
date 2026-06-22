@@ -150,33 +150,27 @@ const eLabelEl=document.getElementById('animLabel');
 const _gltf=new GLTFLoader();
 // ---- PLAYER: SIN cuerpo. Sólo el hacha hawk en 1ª persona (viewmodel) para matar NPCs ----
 let vm=null, swingT=0; const SWING_DUR=0.38;
-const VM_POS=new THREE.Vector3(0.22,-0.26,-0.46), VM_ROT=new THREE.Euler(0.25,-0.35,-0.55), VM_LEN=0.72;
-// ---- HACHA DEL BOSQUE (hacha de rescate procedural + texturas PBR de metal del repo) ----
-function buildBosqueAxe(){
-  const headMat=new THREE.MeshStandardMaterial({color:0x9aa0a6,metalness:1,roughness:0.5,envMapIntensity:1.2});
-  const steel=new THREE.MeshStandardMaterial({color:0xe2e6ec,metalness:1,roughness:0.12});
-  const dark=new THREE.MeshStandardMaterial({color:0x161719,roughness:0.82,metalness:0.1});
-  const s=new THREE.Shape(); s.moveTo(0.2,-1.0); s.lineTo(1.2,-1.0); s.lineTo(1.5,0.2);
-  s.quadraticCurveTo(1.95,1.55,1.5,2.45); s.quadraticCurveTo(1.15,3.15,0.25,3.45); s.quadraticCurveTo(0.6,2.55,0.2,2.0); s.lineTo(-0.5,2.0);
-  s.quadraticCurveTo(-2.7,2.2,-3.4,1.0); s.quadraticCurveTo(-3.55,0.3,-2.8,-0.4); s.quadraticCurveTo(-1.8,-1.0,-0.7,-1.0); s.lineTo(0.2,-1.0);
-  const hole=new THREE.Path(); hole.moveTo(-1.5,1.25); hole.quadraticCurveTo(0.55,1.5,0.7,0.15); hole.quadraticCurveTo(0.45,-0.5,-0.25,-0.25); hole.quadraticCurveTo(-1.45,0.05,-1.5,1.25); s.holes.push(hole);
-  const g=new THREE.ExtrudeGeometry(s,{depth:0.34,bevelEnabled:true,bevelThickness:0.05,bevelSize:0.05,bevelSegments:2,steps:1,curveSegments:30}); g.center(); g.computeVertexNormals();
-  const axe=new THREE.Group();
-  axe.add(new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.25,6.6,22,1),dark));                 // mango
-  const pommel=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.27,0.55,22),dark); pommel.position.y=-3.45; axe.add(pommel);
-  const collar=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.24,0.55,22),steel); collar.position.y=3.05; axe.add(collar);
-  const head=new THREE.Mesh(g,headMat); head.scale.setScalar(0.62); head.position.set(-0.35,3.95,0); axe.add(head);
-  const T='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d5bc265/assets/textures/axe/', tl=new THREE.TextureLoader();
-  const cfg=(t,srgb)=>{ t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(1.6,1.6); return t; };
-  tl.load(T+'metal_col.jpg',t=>{cfg(t,true);headMat.map=t;headMat.color.set(0xffffff);headMat.needsUpdate=true;},undefined,()=>{});
-  tl.load(T+'metal_nrm.jpg',t=>{cfg(t,false);headMat.normalMap=t;headMat.needsUpdate=true;steel.normalMap=t;steel.needsUpdate=true;},undefined,()=>{});
-  tl.load(T+'metal_rgh.jpg',t=>{cfg(t,false);headMat.roughnessMap=t;headMat.needsUpdate=true;},undefined,()=>{});
-  tl.load(T+'metal_met.jpg',t=>{cfg(t,false);headMat.metalnessMap=t;headMat.needsUpdate=true;},undefined,()=>{});
-  return axe; }
-{ const o=buildBosqueAxe();
-  const bb=new THREE.Box3().setFromObject(o), sz=bb.getSize(new THREE.Vector3()), c=bb.getCenter(new THREE.Vector3());
-  o.position.sub(c); o.scale.setScalar(VM_LEN/Math.max(sz.x,sz.y,sz.z));
-  o.traverse(x=>{ if(x.isMesh){ x.frustumCulled=false; x.castShadow=false; x.renderOrder=999; } });   // depth normal entre sus partes; renderOrder alto
+const VM_POS=new THREE.Vector3(0.33,-0.5,-0.82), VM_ROT=new THREE.Euler(0.12,Math.PI/2,0.18);   // pose EXACTA del bosque
+// ---- HACHA DEL BOSQUE (buildFPAxe, idéntica a bosque-vhs): mango de madera + hoja de acero curva ----
+function buildFPAxe(){ const g=new THREE.Group();
+  const wood=new THREE.MeshStandardMaterial({color:0x5e3f22,metalness:0,roughness:0.62,envMapIntensity:0.5});
+  const steel=new THREE.MeshStandardMaterial({color:0x8b929b,metalness:1,roughness:0.34,envMapIntensity:1.25});
+  const edgeMat=new THREE.MeshStandardMaterial({color:0xe8edf3,metalness:1,roughness:0.08,envMapIntensity:1.7});
+  const Hlen=1.18;
+  const handle=new THREE.Mesh(new THREE.CylinderGeometry(0.034,0.05,Hlen,18),wood); handle.position.y=Hlen*0.5; g.add(handle);
+  const pommel=new THREE.Mesh(new THREE.SphereGeometry(0.055,16,12),wood); pommel.scale.y=0.72; g.add(pommel);
+  const headG=new THREE.Group(); headG.position.y=Hlen-0.02; g.add(headG);
+  const collar=new THREE.Mesh(new THREE.CylinderGeometry(0.066,0.072,0.2,16),steel); headG.add(collar);
+  const s=new THREE.Shape();
+  s.moveTo(-0.17,-0.055); s.lineTo(-0.02,-0.075); s.lineTo(0.30,-0.205); s.quadraticCurveTo(0.46,0,0.30,0.205);
+  s.lineTo(-0.02,0.075); s.lineTo(-0.17,0.055); s.quadraticCurveTo(-0.205,0,-0.17,-0.055);
+  const bg=new THREE.ExtrudeGeometry(s,{depth:0.075,bevelEnabled:true,bevelThickness:0.018,bevelSize:0.02,bevelSegments:2,curveSegments:22});
+  bg.center(); bg.clearGroups(); const pp=bg.attributes.position;
+  for(let i=0;i<pp.count;i+=3){ const cx=(pp.getX(i)+pp.getX(i+1)+pp.getX(i+2))/3; bg.addGroup(i,3, cx>0.28?1:0); }
+  const blade=new THREE.Mesh(bg,[steel,edgeMat]); headG.add(blade);
+  return g; }
+{ const o=buildFPAxe(); o.scale.setScalar(0.46);
+  o.traverse(x=>{ if(x.isMesh){ x.frustumCulled=false; x.castShadow=false; x.renderOrder=999; } });
   vm=new THREE.Group(); vm.add(o); vm.position.copy(VM_POS); vm.rotation.copy(VM_ROT); camera.add(vm);
   if(eLabelEl) eLabelEl.textContent=''; }
 let attackQueued=false;
@@ -188,7 +182,7 @@ function tickPlayer(dt){ if(!vm)return;
   let px=VM_POS.x+Math.sin(t*1.4)*0.004+(moving?Math.cos(bp)*0.018:0);
   let py=VM_POS.y+Math.sin(t*2.0)*0.004+(moving?-Math.abs(Math.sin(bp))*0.018:0);
   let rx=VM_ROT.x, rz=VM_ROT.z;
-  if(swingT>0){ swingT=Math.max(0,swingT-dt); const a=Math.sin((1-swingT/SWING_DUR)*Math.PI); rx+=a*1.6; rz-=a*0.5; py-=a*0.05; }   // arco del golpe
+  if(swingT>0){ swingT=Math.max(0,swingT-dt); const a=Math.sin((1-swingT/SWING_DUR)*Math.PI); rx=VM_ROT.x-a*1.35; rz=VM_ROT.z+a*0.35; py-=a*0.06; }   // hachazo (como bosque)
   vm.position.set(px,py,VM_POS.z); vm.rotation.set(rx,VM_ROT.y,rz); }
 
 /* ===================== NPCs: 5 tipos (viewer + perseguidores), antorchas, muertes ===================== */
@@ -280,6 +274,8 @@ function update(dt){
   const des=_v.set(0,0,0); des.addScaledVector(forward,-iz*sp); des.addScaledVector(right,ix*sp);
   player.vel.lerp(des,Math.min(1,ACCEL*dt)); player.pos.addScaledVector(player.vel,dt);
   player.pos.x=THREE.MathUtils.clamp(player.pos.x,-LIMIT,LIMIT); player.pos.z=THREE.MathUtils.clamp(player.pos.z,-LIMIT,LIMIT);
+  for(const n of npcs){ if(n.dead)continue; const dx=player.pos.x-n.group.position.x, dz=player.pos.z-n.group.position.z, d=Math.hypot(dx,dz);   // colisión: no entrar dentro del NPC
+    if(d<0.95&&d>1e-4){ const p=(0.95-d)/d; player.pos.x+=dx*p; player.pos.z+=dz*p; } }
   player.vy-=GRAV*dt; player.pos.y+=player.vy*dt; if(player.pos.y<=0){player.pos.y=0;player.vy=0;player.onGround=true;}
   const targetEye=player.crouch?EYE_CROUCH:EYE; player.eye+=(targetEye-player.eye)*Math.min(1,10*dt);
   const speed=player.vel.length(); player.bobPhase+=dt*(speed*1.9+0.0001); const moveAmt=Math.min(1,speed/SPEED_MAX);
