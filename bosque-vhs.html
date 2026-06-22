@@ -585,6 +585,7 @@ const sky=new Sky();sky.scale.setScalar(8000);const skyU=sky.material.uniforms;
 skyU.turbidity.value=9;skyU.rayleigh.value=2.6;skyU.mieCoefficient.value=0.03;skyU.mieDirectionalG.value=0.85;
 scene.add(sky);
 const sunVec=new THREE.Vector3(),lightVec=new THREE.Vector3();let envRT=null;let nightFactor=0;
+const _sunCol=new THREE.Color(),_moonCol=new THREE.Color();   // temps reutilizables (setTime corre cada frame → sin basura)
 
 // Nubes: 2 planos con textura procedural cálida, derivando lento, siguiendo a la cámara en XZ
 function cloudTexture(tintA,tintB){const S=512;const cv=document.createElement('canvas');cv.width=cv.height=S;const g=cv.getContext('2d');g.clearRect(0,0,S,S);
@@ -630,9 +631,9 @@ function setTime(elev,azim=120){
   // una sola luz direccional que mezcla sol→luna sin saltos
   lightVec.copy(sunVec).lerp(moonVec,nightFactor).normalize();
   const warm=THREE.MathUtils.clamp(elev/30,0,1);
-  const sunCol=new THREE.Color().setHSL(THREE.MathUtils.lerp(0.045,0.11,warm),THREE.MathUtils.lerp(0.9,0.5,warm),0.55);
-  const moonCol=new THREE.Color().setHSL(0.62,0.45,0.7);
-  dirLight.color.copy(sunCol).lerp(moonCol,nightFactor);
+  _sunCol.setHSL(THREE.MathUtils.lerp(0.045,0.11,warm),THREE.MathUtils.lerp(0.9,0.5,warm),0.55);
+  _moonCol.setHSL(0.62,0.45,0.7);
+  dirLight.color.copy(_sunCol).lerp(_moonCol,nightFactor);
   dirLight.intensity=THREE.MathUtils.lerp(0.45,2.1,day)*exposure;
   hemiLight.intensity=THREE.MathUtils.lerp(0.14,0.42,day)*exposure;
   hemiLight.color.setHSL(THREE.MathUtils.lerp(0.6,0.07,day),0.4,THREE.MathUtils.lerp(0.18,0.5,day));
@@ -652,6 +653,27 @@ function setTime(elev,azim=120){
 function updateEnvironment(){const es=new THREE.Scene();const s=new Sky();s.scale.setScalar(100);const u=s.material.uniforms;
   u.turbidity.value=skyU.turbidity.value;u.rayleigh.value=skyU.rayleigh.value;u.mieCoefficient.value=skyU.mieCoefficient.value;u.mieDirectionalG.value=skyU.mieDirectionalG.value;u.sunPosition.value.copy(sunVec);es.add(s);
   const rt=pmrem.fromScene(es,0.04);if(envRT)envRT.dispose();envRT=rt;scene.environment=rt.texture;s.geometry.dispose();s.material.dispose();}
+/* ===== PRE-HORNEADO del entorno (PMREM) =====
+   El PMREM (fromScene) es CARÍSIMO y, al hacerse en runtime cada vez que el sol se mueve, era un tirón periódico.
+   Lo horneamos UNA vez en la carga para varias elevaciones del sol y en runtime sólo INTERCAMBIAMOS el mapa
+   (puntero) → CERO horneado mientras jugás = cero tirón por este motivo. setTime ya anima luces/niebla/cielo en vivo. */
+const ENV_SET=[]; let curEnvElev=999;
+function bakeEnvFor(elev){
+  const phi=THREE.MathUtils.degToRad(90-elev), theta=THREE.MathUtils.degToRad(120);
+  const sd=new THREE.Vector3().setFromSphericalCoords(1,phi,theta);
+  const es=new THREE.Scene();const s=new Sky();s.scale.setScalar(100);const u=s.material.uniforms;
+  u.turbidity.value=skyU.turbidity.value;u.rayleigh.value=skyU.rayleigh.value;u.mieCoefficient.value=skyU.mieCoefficient.value;u.mieDirectionalG.value=skyU.mieDirectionalG.value;u.sunPosition.value.copy(sd);es.add(s);
+  const rt=pmrem.fromScene(es,0.04); s.geometry.dispose();s.material.dispose(); return rt;
+}
+function buildEnvSet(){
+  for(const e of ENV_SET) e.rt.dispose(); ENV_SET.length=0; curEnvElev=999;
+  for(const el of [-14,-7,-3,1,5,11,19,28,A_ELEV]) ENV_SET.push({elev:el, rt:bakeEnvFor(el)});
+}
+function applyEnvForElev(elev){            // runtime: sólo elige el mapa pre-horneado más cercano y lo asigna (barato)
+  if(!ENV_SET.length){ updateEnvironment(); return; }
+  let best=ENV_SET[0],bd=1e9; for(const e of ENV_SET){const d=Math.abs(e.elev-elev); if(d<bd){bd=d;best=e;}}
+  if(best.elev!==curEnvElev){ curEnvElev=best.elev; scene.environment=best.rt.texture; }
+}
 
 /* ===================== LUCES ===================== */
 const hemiLight=new THREE.HemisphereLight(0xffcaa0,0x3a2a1c,0.5);scene.add(hemiLight);
@@ -1828,9 +1850,7 @@ const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 function update(dt){
   if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
     setTime(elev,120); $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev);
-    // El PMREM (caro) sólo se re-hornea si el sol se movió bastante, y nunca más de 1 vez cada 6s → sin tirones periódicos.
-    // setTime ya ajusta luces/niebla/cielo en tiempo real, así que el mapa de entorno puede ir lento sin que se note.
-    envCycleTimer+=dt; if(envCycleTimer>6){ envCycleTimer=0; if(Math.abs(elev-lastEnvElev)>5){ lastEnvElev=elev; updateEnvironment(); } } }
+    applyEnvForElev(elev); }   // sólo intercambia el mapa pre-horneado más cercano (sin horneado en runtime → sin tirón)
   let ix=joy.x,iz=joy.y;if(keys['KeyW'])iz-=1;if(keys['KeyS'])iz+=1;if(keys['KeyA'])ix-=1;if(keys['KeyD'])ix+=1;
   if(intro.active){ix=0;iz=0;} // durante la cinemática no nos movemos
   const mag=Math.min(1,Math.hypot(ix,iz));if(mag>0.001){ix/=Math.max(mag,1);iz/=Math.max(mag,1);}
@@ -1921,7 +1941,7 @@ function cinematicCam(dt){
   dirLight.position.set(camera.position.x+lightVec.x*50,camera.position.y+lightVec.y*50,camera.position.z+lightVec.z*50);dirLight.target.position.copy(camera.position);dirLight.target.updateMatrixWorld();
   cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
   cyclePhase+=dt*4; const th=THETA0+cyclePhase*(Math.PI*2/1440); const mElev=A_ELEV*Math.sin(th); setTime(mElev,120);   // ciclo acelerado en el fondo del menú
-  envCycleTimer+=dt; if(envCycleTimer>5){envCycleTimer=0; if(Math.abs(mElev-lastEnvElev)>5){lastEnvElev=mElev; updateEnvironment();}}
+  applyEnvForElev(mElev);
   streamChunks(2,camera.position.x,camera.position.z);
 }
 
@@ -2152,6 +2172,7 @@ let worldReady=false;
 function bootArea(done){
   document.getElementById('loader').classList.remove('hide');
   if(!TREE_VARIANTS.length)buildVariants();   // pool de variantes (geometría compartida) antes de armar chunks
+  if(!ENV_SET.length)buildEnvSet();           // pre-hornea los mapas de entorno del día (1 sola vez) → sin PMREM en runtime
   // PRECARGA TOTAL repartida en frames (barra fluida, sin congelar el navegador). Al terminar: sombras de todo + listo.
   let cx=W.x0, cz=W.z0; const PER_FRAME=3;
   const build=()=>{
