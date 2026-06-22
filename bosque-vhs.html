@@ -980,10 +980,11 @@ function buildChunk(cx,cz){
       const gy=terrainHeight(x,z); const node=makeOreNode(); node.position.set(x,gy,z); node.rotation.y=rng()*6.28; grp.add(node);
       oreList.push({x,z,mesh:node,hp:3}); } }
   // rocas cerradas variadas (mergeadas en 1 malla por sector → sin huecos)
-  const rocks=[];const rN=Math.round(qual.rockN*densityMul);
+  const rocks=[]; const rockCols=[]; const rN=Math.round(qual.rockN*densityMul);
   for(let i=0;i<rN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+1.0||inBeach(x))continue;
     const g=rockVariants[Math.floor(rng()*rockVariants.length)].clone();const s=0.3+rng()*1.5;
-    g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,terrainHeight(x,z)+s*0.25,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rng()*6.28,rng()*6.28,rng()*6.28)),new THREE.Vector3(s*(0.8+rng()*0.5),s*(0.7+rng()*0.4),s*(0.8+rng()*0.5))));rocks.push(g);}
+    g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,terrainHeight(x,z)+s*0.25,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rng()*6.28,rng()*6.28,rng()*6.28)),new THREE.Vector3(s*(0.8+rng()*0.5),s*(0.7+rng()*0.4),s*(0.8+rng()*0.5))));rocks.push(g);
+    rockCols.push({x,z,r:Math.max(0.35,s*0.5)});}   // colisionador por roca
   if(rocks.length){const rgeo=mergeGeometries(rocks,false);ownGeos.push(rgeo);const rm=new THREE.Mesh(rgeo,rockMat);rm.castShadow=false;rm.receiveShadow=true;rocks.forEach(g=>g.dispose());grp.add(rm);shadowCasters.push(rm);}
   // farolas en sectores que tocan la carretera
   if(cx===-1||cx===0){const posts=[];const heads=[];const hd=new THREE.Object3D();
@@ -991,7 +992,7 @@ function buildChunk(cx,cz){
     if(posts.length){const pgeo=mergeGeometries(posts,false);ownGeos.push(pgeo);const pm=new THREE.Mesh(pgeo,lampPostMat);pm.castShadow=false;posts.forEach(g=>g.dispose());grp.add(pm);shadowCasters.push(pm);
       const sgeo=new THREE.SphereGeometry(0.28,8,6);ownGeos.push(sgeo);const hm=new THREE.InstancedMesh(sgeo,lampHeadMat,heads.length);heads.forEach((h,i)=>{hd.position.copy(h);hd.updateMatrix();hm.setMatrixAt(i,hd.matrix);});grp.add(hm);}}
   const center=new THREE.Vector3(x0+CHUNK/2,5,z0+CHUNK/2);
-  const c={grp,center,sphere:new THREE.Sphere(center,42),lamps,fol,leafMeshes,veg:cveg,fiber:fiberList,scrap:scrapList,ore:oreList,cx,cz,key,trees:chunkTrees,ownGeos,shadowCasters,upgraded:false};
+  const c={grp,center,sphere:new THREE.Sphere(center,42),lamps,fol,leafMeshes,veg:cveg,fiber:fiberList,scrap:scrapList,ore:oreList,cx,cz,key,trees:chunkTrees,ownGeos,shadowCasters,upgraded:false,rockCols};
   scene.add(grp);chunkList.push(c);builtChunks.set(key,c);
 }
 function disposeChunk(c){
@@ -1273,7 +1274,7 @@ function doMine(){ const sy=Math.sin(player.yaw),cy=Math.cos(player.yaw); let be
     for(const o of c.ore){ if(o.hp<=0)continue; const dx=o.x-player.pos.x,dz=o.z-player.pos.z,d=dx*dx+dz*dz; if(d>bd||d>9)continue; const fl=Math.hypot(dx,dz)||1; const dot=(-sy*dx-cy*dz)/fl; if(dot<0.3)continue; bd=d; best=o; } }
   if(!best)return; best.hp--; emitSplinters(new THREE.Vector3(best.x,terrainHeight(best.x,best.z)+0.45,best.z),9); chopSound(); best.mesh.scale.multiplyScalar(0.86);
   addMat('piedra',1); let mena=0; if(Math.random()<0.5){ addMat('mena',1); mena++; }
-  if(best.hp<=0){ best.mesh.visible=false; addMat('mena',1); mena++; }
+  if(best.hp<=0){ best.mesh.visible=false; addMat('mena',1); mena++; spawnRockShards(best.x,terrainHeight(best.x,best.z)+0.35,best.z,7); }   // explota en pedazos con física
   toast('+1 '+((REST.piedra&&REST.piedra[curLang])||'piedra')+(mena?'  ·  +'+mena+' '+((REST.mena&&REST.mena[curLang])||'mena'):'')); }
 // CAVAR: la pala YA NO hace hoyos libres; sólo destapa chatarra enterrada
 function doDig(){
@@ -1982,6 +1983,24 @@ function resolveCollisions(){ const px=player.pos.x,pz=player.pos.z;
     const dl=px-s.minx,dr=s.maxx-px,db=pz-s.minz,dtp=s.maxz-pz,mn=Math.min(dl,dr,db,dtp);
     if(mn===dl)player.pos.x=s.minx; else if(mn===dr)player.pos.x=s.maxx; else if(mn===db)player.pos.z=s.minz; else player.pos.z=s.maxz; } }
 }
+// COLISIÓN del mundo: árboles + rocas + mena (empuje circular)
+function collideWorld(){ for(const c of chunkList){ if(!c.grp.visible)continue;
+    const px=player.pos.x,pz=player.pos.z;
+    for(const t of c.trees){ if(t.dead||t.state!=='alive')continue; const dx=px-t.x,dz=pz-t.z,d=Math.hypot(dx,dz),R=0.42*(t.curScale||1); if(d<R&&d>1e-4){const p=(R-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
+    if(c.ore)for(const o of c.ore){ if(o.hp<=0)continue; const dx=px-o.x,dz=pz-o.z,d=Math.hypot(dx,dz),R=0.5; if(d<R&&d>1e-4){const p=(R-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
+    if(c.rockCols)for(const r of c.rockCols){ const dx=px-r.x,dz=pz-r.z,d=Math.hypot(dx,dz); if(d<r.r&&d>1e-4){const p=(r.r-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
+  } }
+// PEDAZOS DE ROCA con física (al picar): caen y desaparecen a los 2 s
+const _rockShGeo=new THREE.BoxGeometry(0.2,0.2,0.2); const rockShards=[];
+function spawnRockShards(x,y,z,n){ try{ ensureWorld(); }catch(e){ return; }
+  for(let i=0;i<n;i++){ const sc=0.5+Math.random()*0.7; const m=new THREE.Mesh(_rockShGeo,rockMat); m.scale.setScalar(sc); m.castShadow=false; scene.add(m);
+    const b=new CANNON.Body({mass:0.5,material:oMat}); b.collisionFilterGroup=2; b.collisionFilterMask=1; b.addShape(new CANNON.Box(new CANNON.Vec3(0.1*sc,0.1*sc,0.1*sc)));
+    b.position.set(x+(Math.random()-.5)*0.4,y+Math.random()*0.35,z+(Math.random()-.5)*0.4);
+    b.velocity.set((Math.random()-.5)*3.5,2+Math.random()*2.5,(Math.random()-.5)*3.5); b.angularVelocity.set((Math.random()-.5)*7,(Math.random()-.5)*7,(Math.random()-.5)*7);
+    physWorld.addBody(b); rockShards.push({m,b,life:2}); } }
+function tickRockShards(dt){ for(let i=rockShards.length-1;i>=0;i--){ const r=rockShards[i]; r.life-=dt; r.m.position.copy(r.b.position); r.m.quaternion.copy(r.b.quaternion);
+    if(r.life<0.5){ r.m.scale.multiplyScalar(0.88); }   // se achican al final
+    if(r.life<=0){ scene.remove(r.m); if(physWorld)physWorld.removeBody(r.b); rockShards.splice(i,1); } } }
 
 /* ---- partículas de tierra ---- */
 const dirtGeo=new THREE.BoxGeometry(0.08,0.08,0.08); const dirtMat=new THREE.MeshStandardMaterial({color:0x6b4a2c,roughness:1});
@@ -2056,7 +2075,7 @@ function craftTick(dt){
       else if(MINERS.has(equipped)){ wswing.hit=true; doMine(); } }                            // el pico mina mena
     if(wswing.t>=1){ wswing.active=false; digShake=0; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
   for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
-  resolveCollisions();
+  resolveCollisions(); collideWorld();
   if(placing&&!cbuilding) updateGhost();
   if(cbuilding){ buildT+=dt; const k=Math.min(1,buildT/0.5); if(ghost){ghost.scale.setScalar(0.2+0.8*k);} if(buildT>=0.5) finishBuild(); }
   tickDirt(dt);
@@ -2218,7 +2237,7 @@ function update(dt){
         if(d2>=ld2){lm.visible=false;}
         else{lm.visible=true; const full=lm.userData.full||lm.count; lm.count=(d2<lnear2)?full:(lm.userData.half||full);}}}}
   if(shadowDirty&&shadowOn)renderer.shadowMap.needsUpdate=true;
-  chopTick(dt);
+  chopTick(dt); tickRockShards(dt);
   if(npcTickFn){ try{ npcTickFn(dt); }catch(e){} }   // NPCs nocturnos + ragdoll (blindado)
   // Mundo precargado entero: NO se construye/descarga ni se tocan sombras en runtime → cero tirones al caminar.
   windU.uTime.value+=dt;
