@@ -396,7 +396,7 @@
     <div class="row"><label><span data-i18n="resolution">Resolución</span> <span id="resVal">100%</span></label><input type="range" id="res" min="50" max="100" value="100" step="5"></div>
     <div class="row"><label>Resolución fija</label><div class="seg" id="fixResSeg">
       <button data-frh="0" class="active">Auto</button><button data-frh="720">720p</button><button data-frh="576">576p</button><button data-frh="480">480p</button><button data-frh="360">360p</button></div></div>
-    <div class="row toggle"><span data-i18n="aa">Antialiasing (SMAA)</span><div class="switch on" id="aaSw"></div></div>
+    <div class="row toggle" style="display:none"><span data-i18n="aa">Antialiasing (SMAA)</span><div class="switch" id="aaSw"></div></div>
     <div class="row"><label><span data-i18n="exposure">Exposición</span> <span id="expoVal">0</span></label><input type="range" id="expo" min="-100" max="100" value="0" step="5"></div>
     <div class="row"><label>Bloom <span id="bloomVal">20%</span></label><input type="range" id="bloom" min="0" max="120" value="20" step="5"></div>
     <div class="row"><label><span data-i18n="saturation">Saturación</span> <span id="satVal">0</span></label><input type="range" id="sat" min="-40" max="60" value="0" step="5"></div>
@@ -574,9 +574,9 @@ const QUALITY={
   vlow:  {radial:4, shadow:0,    shadowRes:256, leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
   // 3 modos visibles (Bajo/Medio/Alto): TODOS a resolución 100% (res:1.0); la resolución sólo se baja en Ajustes avanzados.
   low:   {radial:5, shadow:256,  shadowRes:256, leaf:120, grassN:360, plantN:30, rockN:7,  density:8,  streamR:2, dpr:2.0, res:1.0, bloom:false, aa:false, rdist:130, chunkBudget:1},   // bajo: SIN SMAA (pase extra de pantalla completa que cuesta a res nativa), sombras pintadas 256, sin movimiento de vegetación, PBR plano, reflejos suaves
-  medium:{radial:6, shadow:512,  shadowRes:512, leaf:160, grassN:480, plantN:55, rockN:10, density:7,  streamR:2, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:150, chunkBudget:1},
-  high:  {radial:6, shadow:768,  shadowRes:768, leaf:220, grassN:820, plantN:85, rockN:13, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:190, chunkBudget:1},
-  vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:240, chunkBudget:2},
+  medium:{radial:6, shadow:512,  shadowRes:512, leaf:160, grassN:480, plantN:55, rockN:10, density:7,  streamR:2, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:150, chunkBudget:1},
+  high:  {radial:6, shadow:768,  shadowRes:768, leaf:220, grassN:820, plantN:85, rockN:13, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:190, chunkBudget:1},
+  vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:240, chunkBudget:2},
 };
 let qual=QUALITY.low;
 const GRASS_N={low:300,medium:620,high:1000}[DEV.tier], PLANT_N={low:26,medium:55,high:90}[DEV.tier], ROCK_N={low:5,medium:8,high:12}[DEV.tier];
@@ -1126,8 +1126,8 @@ function buildComposer(){
   const tone=new ToneMappingEffect({mode:ToneMappingMode.AGX});      // tonemap filmico realista
   vignetteEffect=new VignetteEffect({offset:0.42,darkness:0.4});    // viñeta LEVE (sólo en los bordes → sensación de profundidad) en TODOS los gráficos
   composer.addPass(new EffectPass(camera,bloomEffect,hueSat,tone,vignetteEffect));
-  smaaPass=new EffectPass(camera,new SMAAEffect());
-  composer.addPass(smaaPass);
+  // SIN ANTIALIASING en ningún modo: no se agrega el pase SMAA. (Este EffectPass queda último → es el que dibuja a pantalla.)
+  smaaPass=null;
 }
 try{ buildComposer(); }catch(err){ console.error('PostFX off:',err); composer=null; renderer.toneMapping=THREE.AgXToneMapping; renderer.toneMappingExposure=1.0; }
 
