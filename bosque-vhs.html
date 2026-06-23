@@ -1444,6 +1444,9 @@ function consPiece(type,mat){const g=new THREE.Group();const Wd=4,H=WALLH,Tk=0.2
     for(let i=1;i<4;i++) hinge.add(boxM(dw-0.1,0.05,0.12,mat,dw/2,dh*i/4,0));
     const knob=new THREE.Mesh(new THREE.SphereGeometry(0.06,10,8),blackMetalMat); knob.position.set(dw-0.18,dh/2,0.08); hinge.add(knob);
     g.add(hinge); g.userData.hinge=hinge; g.userData.jambs=[jl,jr]; }
+  else if(type==='stairs'){ const steps=10, run=Wd/steps, rise=WALLH/steps;
+    for(let i=0;i<steps;i++){ g.add(boxM(Wd*0.78, rise+0.04, run, mat, 0, rise*(i+0.5), Wd/2 - run*(i+0.5))); }   // sube hacia -Z
+    g.add(boxM(Wd*0.78,0.12,Wd,woodDark,0,-0.05,0)); }
   return g;
 }
 
@@ -1712,7 +1715,8 @@ const MODELS={ hammer:buildHammer, table:buildTable, pala:glbModel('pala',()=>bu
   baldemad:()=>buildBucket(woodConsMat), baldechapa:()=>buildBucket(chapaMat),
   cama:glbModel('cama',buildTable), horno:mHorno, silla:mSilla, bidon:mBidon, perchero:mPerchero, fogata:mFogata, conserv:mConserv, recagua:mRecagua,
   pmad:()=>consPiece('wall',woodConsMat), smad:()=>consPiece('floor',woodConsMat), tmad:()=>consPiece('roofflat',woodConsMat), imad:()=>consPiece('roof',woodConsMat), vmad:()=>consPiece('window',woodConsMat), dmad:()=>consPiece('door',woodConsMat),
-  pcha:()=>consPiece('wall',chapaMat), scha:()=>consPiece('floor',chapaMat), tcha:()=>consPiece('roofflat',chapaMat), vcha:()=>consPiece('window',chapaMat), dcha:()=>consPiece('door',chapaMat) };
+  pcha:()=>consPiece('wall',chapaMat), scha:()=>consPiece('floor',chapaMat), tcha:()=>consPiece('roofflat',chapaMat), vcha:()=>consPiece('window',chapaMat), dcha:()=>consPiece('door',chapaMat),
+  emad:()=>consPiece('stairs',woodConsMat) };
 
 /* ---- equip rig (FP) + poses ---- */
 const fpRig=new THREE.Group(); fpRig.position.set(0.34,-0.46,-0.7); fpRig.rotation.set(0.1,Math.PI/2,0.2); fpRig.visible=false;
@@ -1797,6 +1801,7 @@ const RECIPES=[
   {id:'tcha',tab:'construction',needTable:true,placeable:true},
   {id:'vcha',tab:'construction',needTable:true,placeable:true},
   {id:'dcha',tab:'construction',needTable:true,placeable:true},
+  {id:'emad',tab:'construction',needTable:true,placeable:true},
 ];
 const TABS=['weapons','furniture','tools','construction'];
 const BAG_TABS=['weapons','furniture','tools','construction','materials'];   // la mochila además tiene "Materiales"
@@ -1809,7 +1814,7 @@ function addMat(k,n){ n=n||1; if(k==='madera'){ if(typeof woodCount!=='undefined
 function useMat(k,n){ n=n||1; if(matCount(k)<n)return false; if(k==='madera'){woodCount-=n; if(woodHUD)woodHUD.textContent=woodCount;} else mats[k]-=n; return true; }
 const inv={hammer:0,pala:0,table:0,spear:0,knife:0,machete:0,botella:0,guadana:0,hacha:1,
   picomad:0,arco:0,antorcha:0,lanzapiedra:0,cuchipiedra:0,picopiedra:0,flechamad:0,flechapiedra:0,flechaafil:0,lanzaafil:0,picoafil:0,cuchiafil:0,azadamad:0,azadapiedra:0,baldemad:0,baldechapa:0,
-  cama:0,horno:0,silla:0,recagua:0,bidon:0,perchero:0,fogata:0,conserv:0,pmad:0,smad:0,tmad:0,imad:0,vmad:0,dmad:0,pcha:0,scha:0,tcha:0,vcha:0,dcha:0};
+  cama:0,horno:0,silla:0,recagua:0,bidon:0,perchero:0,fogata:0,conserv:0,pmad:0,smad:0,tmad:0,imad:0,vmad:0,dmad:0,pcha:0,scha:0,tcha:0,vcha:0,dcha:0,emad:0};
 let equipped=null;
 let craftAtTable=false;
 const icons={};
@@ -1916,18 +1921,18 @@ const COSTS={
   baldemad:{madera:3}, baldechapa:{chapa:2},
   cama:{madera:5,tela:2}, horno:{barro:6,piedra:2}, silla:{madera:3}, recagua:{madera:4,tela:2,cuerda:2}, bidon:{chapa:3}, perchero:{madera:3}, fogata:{madera:3,piedra:4}, conserv:{madera:5,cuerda:2},
   pmad:{madera:4}, smad:{madera:4}, tmad:{madera:5}, imad:{madera:5}, vmad:{madera:4,vidrio:1}, dmad:{madera:5},
-  pcha:{chapa:4}, scha:{chapa:4}, tcha:{chapa:5}, vcha:{chapa:4,vidrio:1}, dcha:{chapa:5}
+  pcha:{chapa:4}, scha:{chapa:4}, tcha:{chapa:5}, vcha:{chapa:4,vidrio:1}, dcha:{chapa:5}, emad:{madera:6}
 };
 
 /* ---- colocación (ghost) sobre terrainHeight ---- */
 const PLACE_LIMIT=1e6;
 let placing=null, placeYaw=0, ghost=null, cbuilding=false, buildT=0;
 const placedItems=[]; const solids=[]; const doors=[]; const recaguas=[]; const floors=[];
-const CONSTR=new Set(['pmad','smad','tmad','imad','vmad','dmad','pcha','scha','tcha','vcha','dcha']);
+const CONSTR=new Set(['pmad','smad','tmad','imad','vmad','dmad','pcha','scha','tcha','vcha','dcha','emad']);
 const DOORS=new Set(['dmad','dcha']);
 const ROOF_FLAT=new Set(['tmad','tcha']);
 const FLOORW=new Set(['smad','scha','tmad','tcha']);
-const NOSOLID=new Set(['smad','scha','tmad','tcha','imad']);
+const NOSOLID=new Set(['smad','scha','tmad','tcha','imad','emad']);
 const FOURGRID=new Set(['smad','scha','tmad','tcha','imad']);
 const PLACE_MIN=1.6, PLACE_MAX=5.5;
 function ghostMat(){return new THREE.MeshStandardMaterial({color:0x2ad24a,transparent:true,opacity:0.55,emissive:0x0d5a1c,emissiveIntensity:0.5});}
@@ -1961,17 +1966,23 @@ function updateGhost(){
 function tryBuild(){ if(!placing||cbuilding||!ghost||!ghost.userData.valid) return; cbuilding=true; buildT=0; emitDirt(ghost.position); }
 function finishBuild(){
   const id=placing; const m=(MODELS[id]||buildTable)(); m.position.copy(ghost.position); m.rotation.y=placeYaw; m.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
-  scene.add(m); placedItems.push(m); m.userData.kind=id; inv[id]=Math.max(0,(inv[id]||0)-1);
+  scene.add(m); placedItems.push(m); m.userData.kind=id; m.userData.hp=10; m.userData._solids=[]; inv[id]=Math.max(0,(inv[id]||0)-1);
   m.updateMatrixWorld(true);
   if(DOORS.has(id)){
-    if(m.userData.hinge) doors.push({hinge:m.userData.hinge,group:m});
+    if(m.userData.hinge){ const dref={hinge:m.userData.hinge,group:m}; doors.push(dref); m.userData._door=dref; }
     for(const j of (m.userData.jambs||[])){ const bb=new THREE.Box3().setFromObject(j);
-      solids.push({minx:bb.min.x-0.18,maxx:bb.max.x+0.18,minz:bb.min.z-0.18,maxz:bb.max.z+0.18}); }
+      const s={minx:bb.min.x-0.18,maxx:bb.max.x+0.18,minz:bb.min.z-0.18,maxz:bb.max.z+0.18}; solids.push(s); m.userData._solids.push(s); }
   } else if(!NOSOLID.has(id)){
     const bb=new THREE.Box3().setFromObject(m);
-    solids.push({minx:bb.min.x-0.35,maxx:bb.max.x+0.35,minz:bb.min.z-0.35,maxz:bb.max.z+0.35});
+    const s={minx:bb.min.x-0.35,maxx:bb.max.x+0.35,minz:bb.min.z-0.35,maxz:bb.max.z+0.35}; solids.push(s); m.userData._solids.push(s);
   }
-  if(FLOORW.has(id)){ const bb=new THREE.Box3().setFromObject(m); floors.push({minx:bb.min.x,maxx:bb.max.x,minz:bb.min.z,maxz:bb.max.z,top:bb.max.y}); }
+  if(FLOORW.has(id)){ const bb=new THREE.Box3().setFromObject(m); const f={minx:bb.min.x,maxx:bb.max.x,minz:bb.min.z,maxz:bb.max.z,top:bb.max.y}; floors.push(f); m.userData._floor=f;
+    // poste de soporte si el piso quedó elevado (volando) sobre el terreno
+    const terr=terrainHeight(m.position.x,m.position.z), gap=bb.min.y-terr;
+    if(gap>0.4){ const post=new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.13,gap,8), consMat(id)); post.castShadow=true; post.receiveShadow=true;
+      post.position.set(m.position.x, terr+gap/2, m.position.z); scene.add(post); m.userData._post=post; } }
+  if(id==='emad'){ const bb=new THREE.Box3().setFromObject(m); const st={minx:bb.min.x-0.1,maxx:bb.max.x+0.1,minz:bb.min.z-0.1,maxz:bb.max.z+0.1,
+      cx:m.position.x,cz:m.position.z,yaw:placeYaw,halfW:4*0.39,halfD:2,base:m.position.y}; stairsList.push(st); m.userData._stair=st; }
   if(id==='recagua') recaguas.push(m);
   if(ghost){ scene.remove(ghost); ghost.traverse(o=>{if(o.geometry)o.geometry.dispose();}); ghost=null; }
   cbuilding=false; buildT=0;
@@ -1992,8 +2003,8 @@ function collideWorld(){ for(const c of chunkList){ if(!c.grp.visible)continue;
   } }
 // PEDAZOS DE ROCA con física (al picar): caen y desaparecen a los 2 s
 const _rockShGeo=new THREE.BoxGeometry(0.2,0.2,0.2); const rockShards=[];
-function spawnRockShards(x,y,z,n){ try{ ensureWorld(); }catch(e){ return; }
-  for(let i=0;i<n;i++){ const sc=0.5+Math.random()*0.7; const m=new THREE.Mesh(_rockShGeo,rockMat); m.scale.setScalar(sc); m.castShadow=false; scene.add(m);
+function spawnRockShards(x,y,z,n,mat){ try{ ensureWorld(); }catch(e){ return; } mat=mat||rockMat;   // partículas físicas con textura PBR (rock/wood/chapa)
+  for(let i=0;i<n;i++){ const sc=0.5+Math.random()*0.7; const m=new THREE.Mesh(_rockShGeo,mat); m.scale.setScalar(sc); m.castShadow=false; scene.add(m);
     const b=new CANNON.Body({mass:0.5,material:oMat}); b.collisionFilterGroup=2; b.collisionFilterMask=1; b.addShape(new CANNON.Box(new CANNON.Vec3(0.1*sc,0.1*sc,0.1*sc)));
     b.position.set(x+(Math.random()-.5)*0.4,y+Math.random()*0.35,z+(Math.random()-.5)*0.4);
     b.velocity.set((Math.random()-.5)*3.5,2+Math.random()*2.5,(Math.random()-.5)*3.5); b.angularVelocity.set((Math.random()-.5)*7,(Math.random()-.5)*7,(Math.random()-.5)*7);
@@ -2001,6 +2012,37 @@ function spawnRockShards(x,y,z,n){ try{ ensureWorld(); }catch(e){ return; }
 function tickRockShards(dt){ for(let i=rockShards.length-1;i>=0;i--){ const r=rockShards[i]; r.life-=dt; r.m.position.copy(r.b.position); r.m.quaternion.copy(r.b.quaternion);
     if(r.life<0.5){ r.m.scale.multiplyScalar(0.88); }   // se achican al final
     if(r.life<=0){ scene.remove(r.m); if(physWorld)physWorld.removeBody(r.b); rockShards.splice(i,1); } } }
+// ---- PUERTAS que abren hacia adelante/atrás según el lado del player ----
+const _AXY=new THREE.Vector3(0,1,0), _dn=new THREE.Vector3();
+function doorTick(dt){ for(const d of doors){ const g=d.group;
+  _dn.set(0,0,1).applyAxisAngle(_AXY,g.rotation.y);
+  const dx=player.pos.x-g.position.x, dz=player.pos.z-g.position.z; const near=(dx*dx+dz*dz)<7.0;
+  const side=(dx*_dn.x+dz*_dn.z)>=0?1:-1;
+  const target=near? side*-1.5 : 0;   // se abre alejándose de vos (entrar/salir)
+  d.hinge.rotation.y += (target-d.hinge.rotation.y)*Math.min(1,8*dt); } }
+// ---- ESCALERAS + paración sobre pisos: superficie de apoyo bajo el player ----
+const stairsList=[];
+function groundUnder(x,z){ const base=terrainHeight(x,z); let g=base; const reach=(player.feetY!=null?player.feetY:base)+1.5;
+  for(const f of floors){ if(x>=f.minx-0.1&&x<=f.maxx+0.1&&z>=f.minz-0.1&&z<=f.maxz+0.1){ if(f.top>g&&f.top<=reach)g=f.top; } }
+  for(const st of stairsList){ if(x>=st.minx&&x<=st.maxx&&z>=st.minz&&z<=st.maxz){ const c=Math.cos(st.yaw),s=Math.sin(st.yaw),ddx=x-st.cx,ddz=z-st.cz; const lx=ddx*c-ddz*s, lz=ddx*s+ddz*c;
+    if(Math.abs(lx)<=st.halfW){ const prog=THREE.MathUtils.clamp((st.halfD-lz)/(2*st.halfD),0,1); const hy=st.base+prog*WALLH; if(hy>g&&hy<=reach)g=hy; } } }
+  return isFinite(g)?g:base; }
+// ---- DESTRUIR construcciones/muebles a los 10 hachazos (partículas PBR) ----
+let consAtk=false; const _cray=new THREE.Raycaster();
+function consMat(kind){ return (kind&&kind.indexOf('cha')>=0)?chapaMat:woodConsMat; }
+function destroyPlaced(m){ const i=placedItems.indexOf(m); if(i>=0)placedItems.splice(i,1);
+  if(m.userData._solids)for(const s of m.userData._solids){ const k=solids.indexOf(s); if(k>=0)solids.splice(k,1); }
+  if(m.userData._floor){ const k=floors.indexOf(m.userData._floor); if(k>=0)floors.splice(k,1); }
+  if(m.userData._stair){ const k=stairsList.indexOf(m.userData._stair); if(k>=0)stairsList.splice(k,1); }
+  if(m.userData._door){ const k=doors.indexOf(m.userData._door); if(k>=0)doors.splice(k,1); }
+  if(m.userData._post){ scene.remove(m.userData._post); if(m.userData._post.geometry)m.userData._post.geometry.dispose(); }
+  spawnRockShards(m.position.x,m.position.y+0.6,m.position.z,12,consMat(m.userData.kind));
+  scene.remove(m); m.traverse(o=>{if(o.geometry&&o.geometry.dispose&&!o.userData.shared)o.geometry.dispose();}); }
+function consHitTick(){ if(!consAtk)return; consAtk=false; if(!placedItems.length)return;
+  _cray.setFromCamera({x:0,y:0},camera); _cray.far=4.0; let best=null,bd=1e9;
+  for(const m of placedItems){ const h=_cray.intersectObject(m,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=m;} }
+  if(best&&bd<4.0){ best.userData.hp=(best.userData.hp||10)-1; chopSound(); spawnRockShards(best.position.x,best.position.y+0.6,best.position.z,4,consMat(best.userData.kind));
+    if(best.userData.hp<=0) destroyPlaced(best); } }
 
 /* ---- partículas de tierra ---- */
 const dirtGeo=new THREE.BoxGeometry(0.08,0.08,0.08); const dirtMat=new THREE.MeshStandardMaterial({color:0x6b4a2c,roughness:1});
@@ -2070,11 +2112,12 @@ function craftTick(dt){
       digShake=a; }
     else if(equipped==='botella'){ fpRig.position.z=fpBasePos.z-a*0.22; fpRig.rotation.x=fpBaseRot.x-a*0.35; }
     else { fpRig.rotation.x=fpBaseRot.x-a*1.2; }
-    if(wswing.t>=0.5&&!wswing.hit){ if(CHOPPERS.has(equipped)){ wswing.hit=true; doChop(); }  // el tomahawk/hachas talan
+    if(wswing.t>=0.5&&!wswing.hit){ if(CHOPPERS.has(equipped)){ wswing.hit=true; doChop(); consAtk=true; }  // el tomahawk/hachas talan (y destruyen construcciones)
       else if(DIGGERS.has(equipped)){ wswing.hit=true; doDig(); }                              // la pala cava
       else if(MINERS.has(equipped)){ wswing.hit=true; doMine(); } }                            // el pico mina mena
     if(wswing.t>=1){ wswing.active=false; digShake=0; fpRig.position.copy(fpBasePos); fpRig.rotation.copy(fpBaseRot); } }
-  for(const d of doors){ const dp=d.group.position, dist=Math.hypot(player.pos.x-dp.x,player.pos.z-dp.z), tgt=dist<2.6?-Math.PI*0.55:0; d.hinge.rotation.y+=(tgt-d.hinge.rotation.y)*Math.min(1,6*dt); }
+  doorTick(dt);            // puertas: abren hacia adelante/atrás según el lado del player
+  consHitTick();           // hachazos a construcciones/muebles → se destruyen a los 10 golpes
   resolveCollisions(); collideWorld();
   if(placing&&!cbuilding) updateGhost();
   if(cbuilding){ buildT+=dt; const k=Math.min(1,buildT/0.5); if(ghost){ghost.scale.setScalar(0.2+0.8*k);} if(buildT>=0.5) finishBuild(); }
@@ -2201,7 +2244,7 @@ function update(dt){
   const tt=windU.uTime.value,mf=(0.5+moveAmt)*camShake;
   const shx=(Math.sin(tt*2.3)+0.5*Math.sin(tt*5.7))*0.0016*mf,shy=(Math.cos(tt*1.9)+0.5*Math.sin(tt*4.3))*0.0016*mf,shr=Math.sin(tt*1.6)*0.004*mf,br=Math.sin(tt*1.15)*0.012*camShake;
   const dgk=digShake*(0.5+camShake), dgx=Math.sin(tt*48)*0.007*dgk, dgy=Math.cos(tt*43)*0.007*dgk, dgr=Math.sin(tt*55)*0.012*dgk;   // temblor de esfuerzo al cavar
-  const gy=terrainHeight(player.pos.x,player.pos.z);
+  const gy=groundUnder(player.pos.x,player.pos.z); player.feetY=gy;   // parado sobre pisos/escaleras además del terreno
   camera.position.set(player.pos.x+right.x*bobX,gy+player.eye+bobY+br+player.jumpY+dgy,player.pos.z+right.z*bobX);
   // el ítem en mano se balancea al moverse/correr (más fuerte cuanto más rápido), salvo durante el golpe
   if(fpRig&&fpRig.visible&&!(typeof wswing!=='undefined'&&wswing.active)){
@@ -2301,7 +2344,7 @@ const I18N={
       key_Mouse:'Ratón',key_Shift:'Mayús',key_Space:'Espacio',key_Ctrl:'Ctrl',key_Click:'Clic',key_Esc:'Esc',
       craft:'Fabricación',jump:'Saltar',crouch:'Agacharse',axe:'Hacha',build:'Construir',weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',pala:'Pala',spear:'Lanza de madera',knife:'Cuchillo de metal',
       machete:'Machete',botella:'Botella incendiaria',guadana:'Guadaña',hacha:'Hacha tomahawk',picomad:'Pico de madera',arco:'Arco',lanzapiedra:'Lanza de piedra',cuchipiedra:'Cuchillo de piedra',picopiedra:'Pico de piedra',flechamad:'Flechas de madera',flechapiedra:'Flechas de piedra',flechaafil:'Flechas afiladas',lanzaafil:'Lanza afilada',picoafil:'Pico afilado',cuchiafil:'Cuchillo afilado',antorcha:'Antorcha',azadamad:'Azada de madera',azadapiedra:'Azada de piedra',baldemad:'Balde de madera',baldechapa:'Balde de chapa',addWater:'Cargar agua',waterFull:'Balde lleno',
-      cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo recto de madera',imad:'Techo inclinado',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',tcha:'Techo recto de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',need:'Necesitás',noSupport:'Necesita una pared debajo',
+      cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo recto de madera',imad:'Techo inclinado',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',tcha:'Techo recto de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',emad:'Escalera de madera',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',need:'Necesitás',noSupport:'Necesita una pared debajo',
       placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
       useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —'},
@@ -2311,7 +2354,7 @@ const I18N={
       key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Space',key_Ctrl:'Ctrl',key_Click:'Click',key_Esc:'Esc',
       craft:'Crafting',jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',pala:'Shovel',spear:'Wooden spear',knife:'Metal knife',
       machete:'Machete',botella:'Molotov',guadana:'Scythe',hacha:'Tomahawk axe',picomad:'Wood pickaxe',arco:'Bow',lanzapiedra:'Stone spear',cuchipiedra:'Stone knife',picopiedra:'Stone pickaxe',flechamad:'Wood arrows',flechapiedra:'Stone arrows',flechaafil:'Sharp arrows',lanzaafil:'Sharp spear',picoafil:'Sharp pickaxe',cuchiafil:'Sharp knife',antorcha:'Torch',azadamad:'Wood hoe',azadapiedra:'Stone hoe',baldemad:'Wood bucket',baldechapa:'Metal bucket',addWater:'Collect water',waterFull:'Bucket full',
-      cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Flat wood roof',imad:'Sloped roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',tcha:'Flat metal roof',vcha:'Metal wall + window',dcha:'Metal wall + door',free:'Free',craftBtn:'Craft',crafted:'Crafted!',need:'You need',noSupport:'Needs a wall below',
+      cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Flat wood roof',imad:'Sloped roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',tcha:'Flat metal roof',vcha:'Metal wall + window',dcha:'Metal wall + door',emad:'Wood stairs',free:'Free',craftBtn:'Craft',crafted:'Crafted!',need:'You need',noSupport:'Needs a wall below',
       placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
       equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
       useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —'},
@@ -2321,7 +2364,7 @@ const I18N={
       key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Espaço',key_Ctrl:'Ctrl',key_Click:'Clique',key_Esc:'Esc',
       craft:'Fabricação',jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',pala:'Pá',spear:'Lança de madeira',knife:'Faca de metal',
       machete:'Facão',botella:'Coquetel molotov',guadana:'Foice',hacha:'Machado tomahawk',picomad:'Picareta de madeira',arco:'Arco',lanzapiedra:'Lança de pedra',cuchipiedra:'Faca de pedra',picopiedra:'Picareta de pedra',flechamad:'Flechas de madeira',flechapiedra:'Flechas de pedra',flechaafil:'Flechas afiadas',lanzaafil:'Lança afiada',picoafil:'Picareta afiada',cuchiafil:'Faca afiada',antorcha:'Tocha',azadamad:'Enxada de madeira',azadapiedra:'Enxada de pedra',baldemad:'Balde de madeira',baldechapa:'Balde de chapa',addWater:'Coletar água',waterFull:'Balde cheio',
-      cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado reto de madeira',imad:'Telhado inclinado',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',tcha:'Telhado reto de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',need:'Precisa de',noSupport:'Precisa de parede embaixo',
+      cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado reto de madeira',imad:'Telhado inclinado',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',tcha:'Telhado reto de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',emad:'Escada de madeira',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',need:'Precisa de',noSupport:'Precisa de parede embaixo',
       placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipe o martelo em 🎒 para colocar móveis.',rotate:'Girar',building:'Construindo…',
       useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —'}
