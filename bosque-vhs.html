@@ -686,19 +686,17 @@ function setTime(elev,azim=120){
   const sunVis=THREE.MathUtils.smoothstep(elev,-3,6); sunMat.opacity=sunVis; sunGlowMat.opacity=sunVis*0.9; sunGrp.visible=sunVis>0.01;
   const moonVis=THREE.MathUtils.smoothstep(melev,-3,6); moonMat.opacity=moonVis; moonGlowMat.opacity=moonVis*0.85; moonGrp.visible=moonVis>0.01;
   starMat.opacity=nightFactor*0.95;
-  // SOMBRAS PINTADAS (Bajo/Medio): 4 estados fijos — amanecer(costado) / mediodía / atardecer(costado) / anochecer-medianoche.
-  // La DIRECCIÓN de la luz se CONGELA al representante del estado y la sombra CAMBIA DE GOLPE al pasar de estado (sin animar la transición) → mínimo coste.
+  // SOMBRAS PINTADAS (Bajo/Medio): SÓLO 2 estados — día / noche. Cambia de golpe al amanecer/anochecer. (Alto usa sombras dinámicas.)
   if(typeof gfx!=='undefined'&&gfx.phaseShadows){
-    const rising = elev>=_phPrevElev; _phPrevElev=elev;
-    const b = (elev<-3) ? 3 : (elev>=20 ? 1 : (rising?0:2));   // noche / mediodía / amanecer(subiendo) / atardecer(bajando)
+    const b = elev>=0 ? 0 : 1;
     lightVec.copy(shadowRepDir(b)); if(b!==sunPhase){ sunPhase=b; shadowNeedsBake=true; }
   }
   else sunPhase=-1;
 }
-// Dirección de luz fija por estado (cacheada): 0=amanecer(costado E) · 1=mediodía(alto) · 2=atardecer(costado O) · 3=medianoche(luna)
-const _REP=[null,null,null,null];
+// Dirección de luz fija por estado (cacheada): 0=día (sol alto) · 1=noche (luna)
+const _REP=[null,null];
 function shadowRepDir(b){ if(_REP[b])return _REP[b];
-  const E=[8,A_ELEV,8,-14][b], AZ=[80,120,210,300][b];
+  const E=[A_ELEV,-14][b], AZ=[120,300][b];
   const sv=new THREE.Vector3().setFromSphericalCoords(1,THREE.MathUtils.degToRad(90-E),THREE.MathUtils.degToRad(AZ));
   const mv=new THREE.Vector3().setFromSphericalCoords(1,THREE.MathUtils.degToRad(90+E),THREE.MathUtils.degToRad(AZ+180));
   const day=THREE.MathUtils.smoothstep(E,-6,10);
@@ -867,7 +865,7 @@ sandMat.map.repeat.set(Math.round(beachW/6),Math.round(gsZ/6));
 const sand=new THREE.Mesh(sandGeo,sandMat);sand.receiveShadow=true;sand.matrixAutoUpdate=false;sand.updateMatrix();scene.add(sand);
 const wetMat=new THREE.MeshStandardMaterial({map:sandTexture(true),roughness:0.5,metalness:0,color:0xffffff,transparent:true,opacity:0.94,polygonOffset:true,polygonOffsetFactor:-1,depthWrite:false});
 wetMat.map.repeat.set(3,3);
-{const rr=mulberry32(4242);const wetN=7;
+{const rr=mulberry32(4242);const wetN=3;
  for(let i=0;i<wetN;i++){const x=BEACH_X0+6+rr()*120;const z=Zmin+rr()*(Zmax-Zmin);   // sólo unos pocos parches al BORDE de la playa; el resto del desierto = arena seca
    const patch=new THREE.Mesh(new THREE.CircleGeometry(2+rr()*4,16),wetMat);patch.scale.set(0.7+rr()*0.8,0.7+rr()*0.8,1);patch.rotation.x=-Math.PI/2;patch.rotation.z=rr()*6.28;
    patch.position.set(x,terrainHeight(x,z)+0.06,z);patch.matrixAutoUpdate=false;patch.updateMatrix();scene.add(patch);}}
@@ -897,9 +895,11 @@ function applyGodTextures(){
   }).catch(()=>{});
   // ARENA (playa) — PBR seca + parches mojados
   const sreX=Math.max(10,Math.round(beachW/6)),sreZ=Math.max(10,Math.round(gsZ/6));
-  Promise.all([gtex(V2+'sand_col.jpg',true),gtex(V2+'sand_nrm.jpg',false),gtex(V2+'sand_rgh.jpg',false)]).then(([c,n,r])=>{
-    [c,n,r].forEach(t=>t.repeat.set(sreX,sreZ));
-    sandMat.map=c;sandMat.normalMap=n;sandMat.roughnessMap=r;sandMat.normalScale.set(reliefScale*0.7*gfxNormalMul,reliefScale*0.7*gfxNormalMul);sandMat.roughness=1;sandMat.needsUpdate=true;
+  // ARENA SECA: el sand_col venía húmedo/grisáceo → usamos el color procedural seco (beige cálido) y sólo tomamos normal/rough para el relieve.
+  Promise.all([gtex(V2+'sand_nrm.jpg',false),gtex(V2+'sand_rgh.jpg',false)]).then(([n,r])=>{
+    [n,r].forEach(t=>t.repeat.set(sreX,sreZ));
+    sandMat.normalMap=n;sandMat.roughnessMap=r;sandMat.normalScale.set(reliefScale*0.7*gfxNormalMul,reliefScale*0.7*gfxNormalMul);
+    sandMat.color.set(0xe2cd9a);sandMat.roughness=1;sandMat.metalness=0;sandMat.envMapIntensity=0;sandMat.needsUpdate=true;   // arena seca cálida, sin brillo húmedo
   }).catch(()=>{});
   Promise.all([gtex(V2+'sand2_col.jpg',true),gtex(V2+'sand2_nrm.jpg',false),gtex(V2+'sand2_rgh.jpg',false)]).then(([c,n,r])=>{
     [c,n,r].forEach(t=>t.repeat.set(3,3));
@@ -1093,9 +1093,9 @@ let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuRe
 let gfxNormalMul=1, gfxReflectMul=1;   // modo gráfico: 0 aplana el PBR (sin relieve) · reflejos más suaves
 // ---- MODO GRÁFICO (Bajo/Medio/Alto) ----  TODOS a 100% de resolución; cambia el ESTILO de render, no la resolución
 const GFXMODES={
-  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.4, matte:true,  cull:true,  folDist:0.7, leafDist:0.7},   // sombras pintadas (día/atardecer/medianoche), sin movimiento de vegetación, PBR plano, reflejos suaves, fuego mate, culling agresivo
-  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.4, matte:true,  cull:true,  folDist:1.0, leafDist:1.0},   // = Bajo PERO con PBR (relieve) + hojas y plantas que se mueven
-  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:1.0, matte:false, cull:false, folDist:1.0, leafDist:1.0},   // todo activado + reflejos GOTY completos + sombras dinámicas
+  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.06, matte:true,  cull:true,  folDist:0.7, leafDist:0.7},   // 2 sombras pintadas (día/noche), sin movimiento de vegetación, PBR plano, SIN reflejos (sin punto naranja, optimizado), fuego mate, culling agresivo
+  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.2,  matte:true,  cull:true,  folDist:1.0, leafDist:1.0},   // = Bajo PERO con PBR (relieve) + hojas y plantas que se mueven, reflejos muy leves
+  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:1.0,  matte:false, cull:false, folDist:1.0, leafDist:1.0},   // todo activado + reflejos GOTY completos + sombras dinámicas
 };
 let gfx=GFXMODES.low;
 function applyRelief(){ const m=gfxNormalMul;   // recalcula los normalScale según el relieve elegido y el modo gráfico
@@ -1599,7 +1599,7 @@ function explodeAt(pos,gy){ gy=(gy==null)?terrainHeight(pos.x,pos.z):gy;
     const f=billboardFx(txt,(low?0.7:1.0)+Math.random()*0.7); f.material.opacity=0;
     f.position.set(pos.x+Math.cos(a)*r, gy+(low?0.32:0.55)+Math.random()*0.2, pos.z+Math.sin(a)*r); scene.add(f);
     cfx.push({o:f,kind:'fade',t:0,dur:FIRE_DUR-Math.random()*2,delay:0.35+k*0.1+Math.random()*0.1,max:0.92}); }   // arde ~12 s
-  const L=new THREE.PointLight(0xff8a3a,7,18,1.3); L.position.set(pos.x,gy+1.1,pos.z); scene.add(L); cfx.push({o:L,kind:'light',t:0,dur:FIRE_DUR});
+  const L=new THREE.PointLight(0xff8a3a,10,24,0.7); L.position.set(pos.x,gy+1.1,pos.z); scene.add(L); cfx.push({o:L,kind:'light',t:0,dur:FIRE_DUR});
   // INCENDIA árboles y plantas alrededor: se ennegrecen poco a poco y desaparecen
   const R=5.0; for(const t of trees){ if(t.dead||t.state!=='alive')continue; const dx=t.x-pos.x,dz=t.z-pos.z; if(dx*dx+dz*dz<R*R) igniteTree(t); }
   burnFoliageAround(pos.x,pos.z,R);
@@ -1620,7 +1620,7 @@ function burnFoliageAround(x,z,R){ const R2=R*R;
 }
 function tickFx(dt){ for(let i=cfx.length-1;i>=0;i--){ const e=cfx[i]; e.t+=dt; const d=e.delay||0;
   if(e.kind==='expl'){ const k=e.t/e.dur; e.o.material.opacity=Math.max(0,1-k*k); e.o.scale.setScalar(3.2*(0.55+k*0.7)); }
-  else if(e.kind==='light'){ e.o.intensity=Math.max(0,7*(1-e.t/e.dur))*(0.7+Math.random()*0.3); }
+  else if(e.kind==='light'){ e.o.intensity=Math.max(0,10*(1-e.t/e.dur))*(0.7+Math.random()*0.3); }
   else { const ft=e.t-d; let o=0; if(ft>0) o=Math.min(1,ft/0.5)*Math.min(1,(e.dur-e.t)/1.2); e.o.material.opacity=Math.max(0,o)*(e.max||0.85); }
   if(e.t>=e.dur){ scene.remove(e.o); if(e.o.material)e.o.material.dispose(); if(e.o.geometry)e.o.geometry.dispose(); cfx.splice(i,1); } } }
 
@@ -1641,7 +1641,7 @@ ribGeo.setAttribute('position',new THREE.BufferAttribute(ribPos,3)); ribGeo.setA
 const ribMat=fabricMat.clone(); ribMat.vertexColors=true;
 const ribMesh=new THREE.Mesh(ribGeo,ribMat); ribMesh.frustumCulled=false; heldFuse.add(ribMesh);
 const heldFire=makeFireMesh(fireGifs[1].tex,0.34,0.52); heldFuse.add(heldFire);
-const heldFireLight=new THREE.PointLight(0xff7a2e,2.5,11,1.3); heldFuse.add(heldFireLight);   // ilumina alrededor, no sólo la botella
+const heldFireLight=new THREE.PointLight(0xff7a2e,4,15,0.9); heldFuse.add(heldFireLight);   // ilumina alrededor, no sólo la botella
 let molotovHeld=false;
 const _vN=new THREE.Vector3(),_vC=new THREE.Vector3(),_nrm=new THREE.Vector3();
 const _lp=[]; for(let i=0;i<FN;i++)_lp.push(new THREE.Vector3()); const _tan=new THREE.Vector3(),_perp=new THREE.Vector3(),_zr=new THREE.Vector3(0,0,1);
@@ -1656,8 +1656,8 @@ function updateHeldMolotov(dt){ if(!molotovHeld||!fpModel) return;
   fpRig.localToWorld(_vC.set(0,0.15,0));  bottleCol.position.set(_vC.x,_vC.y,_vC.z);
   cw.step(1/60,Math.min(dt,0.05),5);
   // En BAJO: el fuego en mano casi no ilumina la botella; la botella sólo se ve NARANJA de noche (emisiva) y de día no se nota.
-  if(gfx.matte){ heldFireLight.intensity=0.15+(fireGifs[1].cur||0.6)*0.5; glassMat.emissive.setRGB(1.0,0.4,0.06); glassMat.emissiveIntensity=1.1*nightFactor; }
-  else { heldFireLight.intensity=0.5+(fireGifs[1].cur||0.6)*2.0; glassMat.emissiveIntensity=0; }
+  if(gfx.matte){ heldFireLight.intensity=2.5+(fireGifs[1].cur||0.6)*3; glassMat.emissive.setRGB(1.0,0.4,0.06); glassMat.emissiveIntensity=1.1*nightFactor; }
+  else { heldFireLight.intensity=3+(fireGifs[1].cur||0.6)*3.5; glassMat.emissiveIntensity=0; }
   for(let i=0;i<FN;i++){ _lp[i].set(fuseB[i].position.x,fuseB[i].position.y,fuseB[i].position.z); fpRig.worldToLocal(_lp[i]); }
   for(let i=0;i<FN;i++){ _tan.copy(_lp[Math.min(i+1,FN-1)]).sub(_lp[Math.max(i-1,0)]); if(_tan.lengthSq()<1e-6)_tan.set(0,-1,0); _tan.normalize();
     _perp.crossVectors(_tan,_zr); if(_perp.lengthSq()<1e-5)_perp.set(1,0,0); _perp.normalize();
@@ -1675,7 +1675,7 @@ function mHorno(){const g=new THREE.Group();
   const mouth=new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.26,0.32,16,1,true,0,Math.PI),clayDark); mouth.rotation.x=Math.PI/2; mouth.position.set(0,0.56,0.58); g.add(mouth);
   const glow=new THREE.Mesh(new THREE.SphereGeometry(0.2,12,10),emberMat); glow.position.set(0,0.52,0.5); g.add(glow);
   const chim=cyl(0.07,0.09,0.4,clayDark,12); chim.position.set(0,1.18,-0.05); g.add(chim);
-  const fl=new THREE.PointLight(0xff7a30,4.0,13,1.3); fl.position.set(0,0.6,0.5); g.add(fl); g.userData.kind='horno'; g.userData.fire=fl;   // el horno ilumina la habitación
+  const fl=new THREE.PointLight(0xff7a30,6,22,0.7); fl.position.set(0,0.6,0.5); g.add(fl); g.userData.kind='horno'; g.userData.fire=fl;   // el horno ilumina la habitación
   return g;}
 function mSilla(){const g=new THREE.Group();g.add(boxM(0.5,0.07,0.5,woodConsMat,0,0.5,0));g.add(boxM(0.5,0.5,0.07,woodConsMat,0,0.78,-0.215));[[-0.21,-0.21],[0.21,-0.21],[-0.21,0.21],[0.21,0.21]].forEach(([x,z])=>g.add(boxM(0.07,0.5,0.07,woodConsMat,x,0.25,z)));return g;}
 function mBidon(){const g=new THREE.Group();
@@ -1692,7 +1692,7 @@ function mFogata(){const g=new THREE.Group(); g.userData.kind='fogata';
   const l2=cyl(0.07,0.07,0.9,woodConsMat);l2.rotation.set(1.2,0.7,0);l2.position.y=0.2;g.add(l2);
   const s1=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[0].tex,blending:THREE.NormalBlending,depthWrite:false,transparent:true,opacity:0.95})); s1.scale.set(1.25,1.4,1); s1.position.y=0.78; g.add(s1);
   const s2=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[1].tex,blending:THREE.NormalBlending,depthWrite:false,transparent:true,opacity:0.95})); s2.scale.set(0.85,1.65,1); s2.position.y=0.95; g.add(s2);
-  const fl=new THREE.PointLight(0xff6a1e,4.5,14,1.2); fl.position.set(0,0.8,0); g.add(fl); g.userData.fire=fl;   // ilumina toda una habitación
+  const fl=new THREE.PointLight(0xff7a30,6,22,0.7); fl.position.set(0,0.8,0); g.add(fl); g.userData.fire=fl;   // ilumina toda una habitación de forma pareja (poca caída)
   return g;}
 function mConserv(){const g=new THREE.Group();g.add(boxM(1.2,0.9,0.7,woodConsMat,0,0.45,0));g.add(boxM(1.24,0.12,0.74,woodConsMat,0,0.92,0));return g;}
 function mRecagua(){const g=new THREE.Group(); g.userData.kind='recagua';
@@ -1785,7 +1785,7 @@ function buildTorch(){const g=new THREE.Group();const sh=hnd(0.7,0.04,woodDark);
   planes.forEach((p,i)=>{ const mat=new THREE.MeshBasicMaterial({map:gTorch.tex,transparent:true,opacity:0.96,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});
     const m=new THREE.Mesh(new THREE.PlaneGeometry(p[0],p[1]),mat); m.rotation.y=p[2]; m.position.y=p[1]*0.30; fire.add(m); });
   fire.position.y=0.66; g.add(fire);
-  const fl=new THREE.PointLight(0xff7a2e,4.0,13,1.3); fl.name='torchLight'; fl.position.y=0.9; g.add(fl);   // ilumina una habitación entera
+  const fl=new THREE.PointLight(0xff7a2e,6,18,0.8); fl.name='torchLight'; fl.position.y=0.9; g.add(fl);   // ilumina una habitación entera, pareja
   return g;}
 function buildHoe(headMat){const g=new THREE.Group();
   const sh=hnd(1.35,0.045,woodMat); sh.position.y=0.67; g.add(sh); g.add(lash(1.27,0.06));
@@ -1852,6 +1852,7 @@ const VIEW={
 let swapT=-1;   // animación de cambio de objeto (baja y vuelve a subir)
 function equipItem(id){
   swapT=0;
+  if(id!=='hammer'&&typeof placing!=='undefined'&&placing&&typeof stopPlacing==='function') stopPlacing();   // al sacar el martillo se sale del modo construir
   while(fpRig.children.length)fpRig.remove(fpRig.children[0]);
   if(id&&MODELS[id]){ fpAxe.visible=false; fpModel=MODELS[id](); fpModel.traverse(o=>{if(o.isMesh)o.castShadow=false;});
     const v=VIEW[id];
@@ -2265,9 +2266,9 @@ $('flash').addEventListener('pointerdown',()=>{ if(equipped==='botella'){ throwM
 function craftTick(dt){
   tickGifs(dt); tickProjectiles(dt); tickFx(dt);
   const fb=(fireGifs[1].cur||0.6);
-  for(const m of placedItems){ if(m.userData.fire){ const base=m.userData.kind==='horno'?3.0:1.5; m.userData.fire.intensity=base+fb*3.2; } }   // fogata y horno: flamea e ilumina la habitación
+  for(const m of placedItems){ if(m.userData.fire){ m.userData.fire.intensity=5+fb*5; } }   // fogata y horno: flamea e ilumina toda la habitación
   if(equipped==='botella') updateHeldMolotov(dt);
-  else if(equipped==='antorcha'&&fpModel){ const tl=fpModel.getObjectByName('torchLight'); if(tl)tl.intensity=2.2+(gTorch.cur||0.6)*3.4; }
+  else if(equipped==='antorcha'&&fpModel){ const tl=fpModel.getObjectByName('torchLight'); if(tl)tl.intensity=4+(gTorch.cur||0.6)*5; }
   // swing del arma equipada (anima el fpRig, no el hacha del bosque)
   if(wswing.active&&fpRig.visible){ wswing.t+=dt/0.42; const a=Math.sin(Math.min(wswing.t,1)*Math.PI);
     if(THRUST.has(equipped)){ fpRig.position.z=fpBasePos.z-a*0.7; fpRig.rotation.x=fpBaseRot.x-a*0.18; }
