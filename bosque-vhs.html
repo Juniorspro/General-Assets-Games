@@ -2236,13 +2236,15 @@ function _ease(t){ t=Math.max(0,Math.min(1,t)); return t*t*(3-2*t); }
 function makeDay(){ storyT=790; if(typeof cyclePhase!=='undefined')cyclePhase=0; setTime(4,120); if(typeof npcDayResetFn==='function'){ try{npcDayResetFn();}catch(e){} } }   // despierta al AMANECER (storyT=790 → ~12 min de día por delante)
 function sleepStep(dt){ sleepT+=dt;
   const bx=sleepBedPos.x, bz=sleepBedPos.z, by=terrainHeight(bx,bz);
+  let hdx=sleepP0.x-bx, hdz=sleepP0.z-bz; const hl=Math.hypot(hdx,hdz)||1; hdx/=hl; hdz/=hl;   // lado por el que llegaste = cabecera de la cama
+  const headX=bx+hdx*0.62, headZ=bz+hdz*0.62;
   let cx,cy,cz,pitch; const yaw=sleepYaw0;
-  if(sleepT<1.2){ const k=_ease(sleepT/1.2);                       // se acerca y se SIENTA mirando al frente
-    cx=THREE.MathUtils.lerp(sleepP0.x,bx,k); cz=THREE.MathUtils.lerp(sleepP0.z,bz,k);
-    cy=THREE.MathUtils.lerp(by+player.eye,by+0.95,k); pitch=THREE.MathUtils.lerp(sleepPitch0,0,k); }
-  else if(sleepT<2.8){ const k=_ease((sleepT-1.2)/1.6);            // se ACUESTA y mira al cielo
-    cx=bx; cz=bz; cy=THREE.MathUtils.lerp(by+0.95,by+0.55,k); pitch=THREE.MathUtils.lerp(0,1.35,k); }
-  else { cx=bx; cz=bz; cy=by+0.55; pitch=1.35;
+  if(sleepT<1.2){ const k=_ease(sleepT/1.2);                       // se acerca y se SIENTA en el borde mirando al frente
+    cx=THREE.MathUtils.lerp(sleepP0.x,headX,k); cz=THREE.MathUtils.lerp(sleepP0.z,headZ,k);
+    cy=THREE.MathUtils.lerp(by+player.eye,by+0.82,k); pitch=THREE.MathUtils.lerp(sleepPitch0,0,k); }
+  else if(sleepT<2.8){ const k=_ease((sleepT-1.2)/1.6);            // se ACUESTA de espaldas (cabeza en la cabecera) y mira recto al cielo
+    cx=headX; cz=headZ; cy=THREE.MathUtils.lerp(by+0.82,by+0.4,k); pitch=THREE.MathUtils.lerp(0,1.5,k); }
+  else { cx=headX; cz=headZ; cy=by+0.4; pitch=1.5;
     if(!sleepFade){ sleepFade=true; fadeBlackEl.classList.add('on'); }   // se desvanece en negro
     if(sleepT>3.6&&!dayDone){ dayDone=true; makeDay(); }                 // (tapado por el negro) ya es de día
     if(sleepT>=5){ fadeBlackEl.classList.remove('on'); setHudVisible(true); player.pos.set(bx,0,bz); player.pitch=0; sleepT=-1; return; } }
@@ -2342,7 +2344,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   function mk(ti,x,z){ const T=N_TYPES[ti]; const inst={ti,group:new THREE.Group(),bodies:{},mixers:{},actions:{},state:null,dead:false,flames:[],atkCD:0};
     N_ANIMS.forEach(an=>{ const t=ntpl[ti][an]; if(!t)return; const scn=skClone(t.scene); scn.scale.setScalar(t.s); scn.position.copy(t.off); scn.visible=false;
       scn.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } }); if(T.torch)attachTorch(scn,inst.flames); inst.group.add(scn);
-      const mx=new THREE.AnimationMixer(scn); const ac=t.clip?mx.clipAction(t.clip):null; if(ac){ ac.setLoop(THREE.LoopRepeat); if(an==='attack')ac.timeScale=1.5; }
+      const mx=new THREE.AnimationMixer(scn); const ac=t.clip?mx.clipAction(t.clip):null; if(ac){ ac.setLoop(THREE.LoopRepeat); if(an==='attack')ac.timeScale=2.1; }   // golpe corto y rápido
       inst.bodies[an]=scn; inst.mixers[an]=mx; inst.actions[an]=ac; });
     inst.group.position.set(x,terrainHeight(x,z),z); scene.add(inst.group); setSt(inst,'idle'); NPCS.push(inst); return inst; }
   function setSt(inst,an){ if(inst.dead||inst.state===an)return; const b=inst.bodies[an]; if(!b)return; for(const k in inst.bodies)inst.bodies[k].visible=false; b.visible=true; const ac=inst.actions[an]; if(ac)ac.reset().play(); inst.state=an; }
@@ -2389,7 +2391,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
       const CHASE=14;
       if(d<CHASE){   // te detecta de cerca → persigue CORRIENDO (más rápido que antes)
         inst.group.rotation.y=Math.atan2(dx,dz);
-        if(d<2.6){ setSt(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.3; digShake=Math.max(digShake,0.6); } }
+        if(d<2.6){ setSt(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.3; } }   // ataca, pero SIN sacudir la cámara
         else { const sp=3.4*dt; inst.group.position.x+=dx/d*sp; inst.group.position.z+=dz/d*sp; setSt(inst,'run'); }
       } else {       // lejos → NO persigue: deambula tranquilo o se queda quieto
         inst.wTimer-=dt; if(inst.wTimer<=0){ inst.wTimer=2.5+Math.random()*3.5; inst.wAng=Math.random()*6.28; inst._wmove=Math.random()<0.55; }
