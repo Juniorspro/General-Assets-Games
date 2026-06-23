@@ -1054,9 +1054,9 @@ let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuRe
 let gfxNormalMul=1, gfxReflectMul=1;   // modo gráfico: 0 aplana el PBR (sin relieve) · reflejos más suaves
 // ---- MODO GRÁFICO (Bajo/Medio/Alto) ----  TODOS a 100% de resolución; cambia el ESTILO de render, no la resolución
 const GFXMODES={
-  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.4, matte:true },   // sombras "por fases", sin movimiento de vegetación, PBR plano, reflejos suaves, fuego mate
-  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:1.0, matte:false},   // calidad completa con sombras por fases (optimizado)
-  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:1.0, matte:false},   // sombras dinámicas suaves (como antes)
+  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.4, matte:true,  cull:true,  folDist:0.7, leafDist:0.7},   // sombras "por fases", sin movimiento de vegetación, PBR plano, reflejos suaves, fuego mate, culling agresivo
+  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:1.0, matte:false, cull:true,  folDist:1.0, leafDist:1.0},   // calidad completa con sombras por fases + oclusión de follaje (optimizado)
+  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:1.0, matte:false, cull:false, folDist:1.0, leafDist:1.0},   // sombras dinámicas suaves (como antes), sin culling extra
 };
 let gfx=GFXMODES.medium;
 function applyRelief(){ const m=gfxNormalMul;   // recalcula los normalScale según el relieve elegido y el modo gráfico
@@ -1082,6 +1082,23 @@ function applyGfx(t){
   else { glassMat.roughness=0.08; glassMat.transmission=0.55; }
   // arma equipada: reflejos más suaves
   if(typeof fpRig!=='undefined'&&fpRig) fpRig.traverse(o=>{ if(o.isMesh&&o.material&&!Array.isArray(o.material)){ const mm=o.material; mm.userData=mm.userData||{}; if(mm.userData._env0==null)mm.userData._env0=(mm.envMapIntensity!=null?mm.envMapIntensity:1); mm.envMapIntensity=mm.userData._env0*gfxReflectMul; } });
+  if(!gfx.cull){ if(typeof placedItems!=='undefined')for(const m of placedItems)if(m)m.visible=true; if(typeof logs!=='undefined')for(const L of logs)if(L&&L.m)L.m.visible=true; }   // al salir del modo con culling, re-mostrar objetos sueltos
+}
+/* ===================== CULLING (frustum · oclusión · distancia · detalle) ===================== */
+// OCLUSIÓN POR RELIEVE del follaje bajo (pasto/plantas): si una loma tapa la línea de visión hasta el tope del follaje de un chunk lejano,
+// ese follaje no se dibuja. Es seguro porque el follaje es bajo (≤~3 m) y no "asoma" por encima de la loma (las copas de árboles sí asoman, por eso NO se ocluyen).
+const _OCC_NEAR2=30*30;
+function foliageOccluded(cx,cy,cz,tx,tz){
+  const dx=tx-cx,dz=tz-cz; if(dx*dx+dz*dz<1)return false;
+  const topY=terrainHeight(tx,tz)+3.0;             // tope del pasto/plantas
+  for(let i=1;i<7;i++){ const f=i/7; const losY=cy+(topY-cy)*f;   // altura de la línea de visión cámara→tope del follaje
+    if(terrainHeight(cx+dx*f,cz+dz*f) > losY+0.8) return true; }  // el terreno sobresale por encima → ocluido
+  return false;
+}
+// DISTANCIA-CULLING de objetos sueltos (el frustum ya lo hace Three con frustumCulled=true; esto además los apaga si quedan lejos).
+function cullDynamic(rd2){
+  for(let i=0;i<placedItems.length;i++){ const m=placedItems[i]; if(!m)continue; const ddx=m.position.x-player.pos.x,ddz=m.position.z-player.pos.z; m.visible=(ddx*ddx+ddz*ddz)<rd2; }
+  if(typeof logs!=='undefined') for(let i=0;i<logs.length;i++){ const L=logs[i]&&logs[i].m; if(!L)continue; const ddx=L.position.x-player.pos.x,ddz=L.position.z-player.pos.z; L.visible=(ddx*ddx+ddz*ddz)<rd2; }
 }
 let cycleOn=true, cyclePhase=0, envCycleTimer=0, lastEnvElev=999; const A_ELEV=34, THETA0=0.15;   // arranca al AMANECER (sol bajo subiendo → mañana → mediodía), ciclo día/noche 24 min
 function buildComposer(){
@@ -2312,16 +2329,27 @@ function update(dt){
   camera.updateMatrixWorld();camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
   _pm.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);_frustum.setFromProjectionMatrix(_pm);
   const rd2=renderDist*renderDist,gd2=GRASS_DIST*GRASS_DIST,leafD=Math.min(renderDist,105),ld2=leafD*leafD,lnear2=(leafD*0.55)*(leafD*0.55);
+  // ===== CULLING (modo gráfico) =====
+  // 1) FRUSTUM + DISTANCIA por chunk (siempre).  2) OCLUSIÓN del follaje bajo por relieve (Bajo/Medio): el pasto/plantas detrás de una loma no se dibujan.
+  // 3) DETAIL CULLING: en Bajo el follaje y las hojas se cortan a menor distancia.   (Las copas de árboles NO se ocluyen porque asoman por encima de las lomas.)
+  const folMul2=gfx.folDist*gfx.folDist, leafMul2=gfx.leafDist*gfx.leafDist;
+  const gd2c=gd2*folMul2, ld2c=ld2*leafMul2, lnear2c=lnear2*leafMul2;
+  const camX=camera.position.x, camY=camera.position.y, camZ=camera.position.z; const doOcc=gfx.cull;
   // SOMBRAS OPTIMIZADAS: sólo los chunks CERCANOS (dentro del rango de sombra) proyectan sombra → muchísimos menos draws en el shadow-map.
   const shadowOn=qual.shadow>0; const scd=shadowRange+30, scd2=scd*scd; let shadowDirty=false;
   for(const c of chunkList){const dx=c.center.x-player.pos.x,dz=c.center.z-player.pos.z;const d2=dx*dx+dz*dz;
     const vis=d2<rd2&&_frustum.intersectsSphere(c.sphere);c.grp.visible=vis;   // OPT: frustum + distance culling
     const cs=shadowOn&&vis&&d2<scd2; if(c.shadowOn!==cs){ c.shadowOn=cs; for(let i=0;i<c.shadowCasters.length;i++)c.shadowCasters[i].castShadow=cs; shadowDirty=true; }
-    if(vis){const fv=d2<gd2;for(let i=0;i<c.fol.length;i++)c.fol[i].visible=fv; // OPT: LOD de follaje bajo (pasto/plantas sólo cerca)
+    if(vis){
+      // follaje bajo (pasto/plantas): LOD por distancia + OCLUSIÓN por relieve (sólo si está visible y lejos, para no malgastar el test)
+      let fv=d2<gd2c;
+      if(fv&&doOcc&&d2>_OCC_NEAR2&&foliageOccluded(camX,camY,camZ,c.center.x,c.center.z)) fv=false;
+      for(let i=0;i<c.fol.length;i++)c.fol[i].visible=fv;
       // LOD de copas en 3 niveles: cerca = todas las hojas · media = ~55% (más barato) · lejos = sin hojas (sólo tronco)
       for(let i=0;i<c.leafMeshes.length;i++){const lm=c.leafMeshes[i];
-        if(d2>=ld2){lm.visible=false;}
-        else{lm.visible=true; const full=lm.userData.full||lm.count; lm.count=(d2<lnear2)?full:(lm.userData.half||full);}}}}
+        if(d2>=ld2c){lm.visible=false;}
+        else{lm.visible=true; const full=lm.userData.full||lm.count; lm.count=(d2<lnear2c)?full:(lm.userData.half||full);}}}}
+  if(doOcc) cullDynamic(rd2);   // objetos sueltos (construcciones, troncos, esquirlas) por distancia/frustum
   if(shadowDirty&&shadowOn)renderer.shadowMap.needsUpdate=true;
   chopTick(dt); tickRockShards(dt);
   if(npcTickFn){ try{ npcTickFn(dt); }catch(e){} }   // NPCs nocturnos + ragdoll (blindado)
