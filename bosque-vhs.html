@@ -292,6 +292,21 @@
             border-radius:14px; cursor:pointer; text-align:center; color:#fff; border:none;
             background:linear-gradient(135deg,#2f6dd0,#5aa0ff); box-shadow:0 10px 30px rgba(60,120,220,.4); }
   .kbPlay:hover,.kbPlay:active { filter:brightness(1.1); }
+  /* ---- barra rápida de ítems ---- */
+  #hotbar{ position:fixed; left:50%; bottom:12px; transform:translateX(-50%); z-index:85; display:none; gap:6px; padding:6px;
+    border-radius:14px; background:rgba(12,16,22,.55); backdrop-filter:blur(6px); border:1px solid rgba(150,200,255,.18); box-shadow:0 6px 22px rgba(0,0,0,.5); }
+  #hotbar.show{ display:flex; }
+  .hbSlot{ width:52px; height:52px; border-radius:10px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.14);
+    position:relative; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hbSlot.sel{ border-color:#ffb46b; box-shadow:0 0 12px rgba(255,150,80,.5); background:rgba(255,150,80,.16); }
+  .hbSlot.drop{ border-color:#7fd0ff; background:rgba(120,200,255,.18); }
+  .hbSlot img{ width:80%; height:80%; object-fit:contain; pointer-events:none; filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+  .hbSlot .hbq{ position:absolute; right:3px; bottom:1px; font-size:11px; color:#ffd9a8; text-shadow:0 1px 2px #000; pointer-events:none; }
+  .hbSlot .hbk{ position:absolute; left:4px; top:1px; font-size:9px; color:rgba(255,255,255,.4); pointer-events:none; }
+  #dragGhost{ position:fixed; z-index:120; width:52px; height:52px; pointer-events:none; opacity:.9; transform:translate(-50%,-50%); display:none; }
+  #dragGhost img{ width:100%; height:100%; object-fit:contain; }
+  #menu.bagMode .sciPanel{ bottom:80px; }
+  body.rot #hotbar{ transform:translateX(-50%) rotate(90deg); transform-origin:center bottom; }
 </style>
 </head>
 <body>
@@ -349,6 +364,9 @@
   <button id="bCraft" class="actBtn">🛠️</button>
   <button id="bPlace" class="actBtn">✏️</button>
   <button id="bRot" class="actBtn hidden">🔁</button>
+  <!-- barra rápida de ítems (estilo Minecraft, look propio) -->
+  <div id="hotbar"></div>
+  <div id="dragGhost"></div>
 
   <button id="menuBtn" class="menuBtn" aria-label="Menú">☰</button>
 
@@ -1827,7 +1845,9 @@ const VIEW={
   antorcha:{s:0.6,...P_HOLD}, azadamad:{s:0.46,...P_SWING}, azadapiedra:{s:0.46,...P_SWING},
   baldemad:{s:0.8,...P_HOLD}, baldechapa:{s:0.8,...P_HOLD}
 };
+let swapT=-1;   // animación de cambio de objeto (baja y vuelve a subir)
 function equipItem(id){
+  swapT=0;
   while(fpRig.children.length)fpRig.remove(fpRig.children[0]);
   if(id&&MODELS[id]){ fpAxe.visible=false; fpModel=MODELS[id](); fpModel.traverse(o=>{if(o.isMesh)o.castShadow=false;});
     const v=VIEW[id];
@@ -1963,6 +1983,7 @@ function renderGrid(){
       (u?`<img src="${u}">`:`<span class="ph"></span>`)+
       ((menuMode!=='craft'&&inv[r.id]>1)?`<span class="qty">${inv[r.id]}</span>`:'');
     cell.onclick=()=>{ if(scMoved>8)return; selId=r.id; markSel(); selectItem(r.id); };
+    cell.addEventListener('pointerdown',()=>{ if((r.id==='hacha')||(inv[r.id]||0)>0||menuMode==='craft') hotbarDragStart(r.id); });   // arrastrar a la barra rápida
     g.appendChild(cell);
   }
   if(list.length){ if(!selId||!list.find(r=>r.id===selId)) selId=list[0].id; markSel(); selectItem(selId); }
@@ -1982,7 +2003,7 @@ function setupAction(r){
   const b=$('dAction'); b.style.display=''; b.disabled=false; b.onclick=null;
   if(menuMode==='craft'){
     const locked=r.needTable&&!craftAtTable; b.textContent=locked?cT('needTable'):cT('craftBtn'); b.disabled=locked;
-    if(!locked) b.onclick=()=>{ if(scMoved>8)return; inv[r.id]=(inv[r.id]||0)+1; selectItem(r.id); const o=b.textContent; b.textContent=cT('crafted'); setTimeout(()=>{ if(selId===r.id&&menuMode==='craft')b.textContent=o; },700); };
+    if(!locked) b.onclick=()=>{ if(scMoved>8)return; inv[r.id]=(inv[r.id]||0)+1; selectItem(r.id); if(typeof renderHotbar==='function')renderHotbar(); const o=b.textContent; b.textContent=cT('crafted'); setTimeout(()=>{ if(selId===r.id&&menuMode==='craft')b.textContent=o; },700); };
   } else if(menuMode==='place'){
     b.textContent=cT('placeTitle'); b.onclick=()=>{ if(scMoved>8)return; hideMenu(); startPlacing(r.id); };
   } else {
@@ -1995,9 +2016,9 @@ function openMenu(mode){
   menuMode=mode; if(mode==='craft') craftAtTable=!!nearTable;
   $('mTitle').textContent=menuTitle().toUpperCase(); $('mCrumb').textContent=menuTitle().toUpperCase();
   $('mFootL').textContent = mode==='craft'?(craftAtTable?'⬢ MESA CONECTADA':cT('hintNormal')) : (mode==='place'?cT('hintPlace'):'');
-  selId=null; renderTabs(); renderGrid(); $('menu').classList.add('show');
+  selId=null; renderTabs(); renderGrid(); $('menu').classList.toggle('bagMode',mode==='bag'); $('menu').classList.add('show');
 }
-function hideMenu(){ scrimClosedAt=performance.now(); $('menu').classList.remove('show'); }
+function hideMenu(){ scrimClosedAt=performance.now(); $('menu').classList.remove('show'); $('menu').classList.remove('bagMode'); if(typeof renderHotbar==='function')renderHotbar(); }
 $('menu').querySelectorAll('.xClose').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();hideMenu();}));
 
 const RESN={madera:'🪵',piedra:'🪨',metal:'⚙️',cuerda:'🪢',tela:'🧵',vidrio:'🔷',chapa:'🛡️',barro:'🟫',carbon:'🔥',hueso:'🦴',arena:'🏖️',mena:'🥌',fibra:'🌾',hilo:'🧶'};
@@ -2078,6 +2099,7 @@ function finishBuild(){
   if(id==='recagua') recaguas.push(m);
   if(ghost){ scene.remove(ghost); ghost.traverse(o=>{if(o.geometry)o.geometry.dispose();}); ghost=null; }
   markShadowDirty();   // construcción nueva → su sombra (calculada, no dinámica) aparece en la próxima horneada
+  if(typeof renderHotbar==='function')renderHotbar();
   cbuilding=false; buildT=0;
   if((inv[id]||0)>0){ spawnGhost(id); }
   else { placing=null; $('bRot').classList.add('hidden'); $('bPlace').classList.remove('on'); refreshHints2(); }
@@ -2151,22 +2173,23 @@ function tickDirt(dt){ let any=false; for(let i=0;i<DIRT;i++)if(dst[i].life>0){a
   for(let i=0;i<DIRT;i++){const s=dst[i]; if(s.life>0){s.life-=dt;s.v.y-=9*dt;s.p.addScaledVector(s.v,dt);if(s.p.y<s.base+0.04){s.p.y=s.base+0.04;s.v.y*=-0.3;}_do.position.copy(s.p);_do.scale.setScalar(1);}else{_do.position.set(0,-999,0);_do.scale.setScalar(0.001);}_do.updateMatrix();dirt.setMatrixAt(i,_do.matrix);} dirt.instanceMatrix.needsUpdate=true; dirtActive=any; }
 
 /* ---- cartel sobre mesa + crafteo en mesa + agua ---- */
-let nearTable=null, nearRecagua=null, choldT=0, cholding=false, signMode='table';
+let nearTable=null, nearRecagua=null, nearBed=null, choldT=0, cholding=false, signMode='table';
 const signEl=$('tableSign'),signFill=$('signFill'),_proj=new THREE.Vector3();
 function fillWater(){ const r=nearRecagua; if(!r) return; const lv=Math.min(1,(r.userData.level||0)+0.12); r.userData.level=lv;
   const w=r.userData.water; if(w){ w.visible=lv>0.01; w.scale.y=Math.max(0.001,lv); w.position.y=0.04+0.17*lv; } signFill.style.width=(lv*100)+'%'; }
-signEl.addEventListener('pointerdown',e=>{ e.preventDefault(); if(signMode==='water'){ fillWater(); } else { cholding=true; choldT=0; } });
+signEl.addEventListener('pointerdown',e=>{ e.preventDefault(); if(signMode==='water'){ fillWater(); } else if(signMode==='sleep'){ startSleep(nearBed); } else { craftAtTable=true; openMenu('craft'); } });   // mesa: tap abre el menú (antes había que mantener, fallaba)
 signEl.addEventListener('pointerup',()=>{cholding=false;choldT=0;if(signMode==='table')signFill.style.width='0%';});
 signEl.addEventListener('pointercancel',()=>{cholding=false;choldT=0;if(signMode==='table')signFill.style.width='0%';});
 function updateSign(dt){
-  nearTable=null; nearRecagua=null; let bt=9, br=9;
+  nearTable=null; nearRecagua=null; nearBed=null; let bt=9, br=9, bb=9;
   for(const m of placedItems){ const d=m.position.distanceTo(player.pos);
-    if(m.userData.kind==='table'){ if(d<3&&d<bt){bt=d;nearTable=m;} }
+    if(m.userData.kind==='table'){ if(d<3.2&&d<bt){bt=d;nearTable=m;} }
+    else if(m.userData.kind==='cama'){ if(d<3.2&&d<bb){bb=d;nearBed=m;} }
     else if(m.userData.kind==='recagua'){ if(d<2.6&&d<br){br=d;nearRecagua=m;} } }
-  const target = nearTable || nearRecagua;
-  if(!target||placing){ signEl.style.display='none'; cholding=false; if(signMode==='table')signFill.style.width='0%'; return; }
-  signMode = nearTable? 'table':'water';
-  _proj.copy(target.position); _proj.y+=signMode==='table'?1.15:1.65; _proj.project(camera);
+  const target = nearTable || nearBed || nearRecagua;
+  if(!target||placing||sleepT>=0){ signEl.style.display='none'; cholding=false; return; }
+  signMode = nearTable? 'table' : nearBed? 'sleep' : 'water';
+  _proj.copy(target.position); _proj.y+=signMode==='table'?1.15:signMode==='sleep'?1.0:1.65; _proj.project(camera);
   if(_proj.z>1){ signEl.style.display='none'; return; }
   const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight;
   const sx=(_proj.x*0.5+0.5)*vw, sy=(-_proj.y*0.5+0.5)*vh;
@@ -2174,12 +2197,34 @@ function updateSign(dt){
   if(signMode==='water'){
     const lv=target.userData.level||0; $('signTxt').textContent=lv>=1?cT('waterFull'):cT('addWater');
     signFill.style.width=(lv*100)+'%';
-  } else {
-    $('signTxt').textContent=cT('useTable');
-    if(cholding){ choldT+=dt; signFill.style.width=Math.min(100,choldT/0.5*100)+'%'; if(choldT>=0.5){ cholding=false; signFill.style.width='0%'; craftAtTable=true; openMenu('craft'); } }
-  }
+  } else if(signMode==='sleep'){ $('signTxt').textContent='💤 '+cT('sleep'); signFill.style.width='0%';
+  } else { $('signTxt').textContent=cT('useTable'); signFill.style.width='0%'; }
 }
 
+/* ---- DORMIR: cinemática para pasar la noche sin peligro ---- */
+let sleepT=-1, sleepFade=false, dayDone=false, sleepYaw0=0, sleepPitch0=0;
+const sleepP0=new THREE.Vector3(), sleepBedPos=new THREE.Vector3();
+function startSleep(bed){ if(sleepT>=0||!bed) return; sleepT=0; sleepFade=false; dayDone=false;
+  sleepBedPos.copy(bed.position); sleepP0.copy(player.pos); sleepYaw0=player.yaw; sleepPitch0=player.pitch;
+  setHudVisible(false); signEl.style.display='none'; if(placing)stopPlacing(); }
+function _ease(t){ t=Math.max(0,Math.min(1,t)); return t*t*(3-2*t); }
+function makeDay(){ storyT=0; if(typeof cyclePhase!=='undefined')cyclePhase=165; setTime(26,120); if(typeof npcDayResetFn==='function'){ try{npcDayResetFn();}catch(e){} } }
+function sleepStep(dt){ sleepT+=dt;
+  const bx=sleepBedPos.x, bz=sleepBedPos.z, by=terrainHeight(bx,bz);
+  let cx,cy,cz,pitch; const yaw=sleepYaw0;
+  if(sleepT<1.2){ const k=_ease(sleepT/1.2);                       // se acerca y se SIENTA mirando al frente
+    cx=THREE.MathUtils.lerp(sleepP0.x,bx,k); cz=THREE.MathUtils.lerp(sleepP0.z,bz,k);
+    cy=THREE.MathUtils.lerp(by+player.eye,by+0.95,k); pitch=THREE.MathUtils.lerp(sleepPitch0,0,k); }
+  else if(sleepT<2.8){ const k=_ease((sleepT-1.2)/1.6);            // se ACUESTA y mira al cielo
+    cx=bx; cz=bz; cy=THREE.MathUtils.lerp(by+0.95,by+0.55,k); pitch=THREE.MathUtils.lerp(0,1.35,k); }
+  else { cx=bx; cz=bz; cy=by+0.55; pitch=1.35;
+    if(!sleepFade){ sleepFade=true; fadeBlackEl.classList.add('on'); }   // se desvanece en negro
+    if(sleepT>3.6&&!dayDone){ dayDone=true; makeDay(); }                 // (tapado por el negro) ya es de día
+    if(sleepT>=5){ fadeBlackEl.classList.remove('on'); setHudVisible(true); player.pos.set(bx,0,bz); player.pitch=0; sleepT=-1; return; } }
+  camera.position.set(cx,cy,cz);
+  _slpE.set(pitch,yaw,0,'YXZ'); camera.quaternion.setFromEuler(_slpE);
+}
+const _slpE=new THREE.Euler(0,0,0,'YXZ');
 /* ---- toast / hints del crafteo ---- */
 let toastT=0;
 function toast(msg){ const h=$('hint'); h.classList.remove('hide'); h.textContent=msg; h.style.opacity='0.95'; toastT=2.2; }
@@ -2245,9 +2290,9 @@ let paused=false,started=false;document.addEventListener('visibilitychange',()=>
 const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0,hudTimer=0;const _v=new THREE.Vector3();
 const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 /* ===================== NPCs nocturnos + ragdoll (TODO aislado; corre al Jugar, en try/catch) ===================== */
-let npcTickFn=null, storyT=-1, npcAtk=false, npcSetupDone=false;
+let npcTickFn=null, npcDayResetFn=null, storyT=-1, npcAtk=false, npcSetupDone=false;
 function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
-  const N_EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@ab92101/';
+  const N_EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9b4552b/';   // ataques npc2-5 regenerados (Kung_Fu_Punch) — idle/walk/run/char_* sin cambios
   const N_TYPES=[
     {f:{idle:'char_idle.glb',walk:'char_walk.glb',run:'char_run.glb',attack:'char_attack.glb'},h:1.78},
     {f:{idle:'npc2_idle.glb',walk:'npc2_walk.glb',run:'npc2_run.glb',attack:'npc2_attack.glb'},h:1.82},
@@ -2302,7 +2347,11 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   function killN(inst){ if(inst.dead)return; inst.dead=true; for(const k in inst.mixers)inst.mixers[k].stopAllAction();
     const dx=inst.group.position.x-player.pos.x,dz=inst.group.position.z-player.pos.z,d=Math.hypot(dx,dz)||1; try{ startRag(inst,new THREE.Vector3(dx/d*2.6,0.9,dz/d*2.6)); }catch(e){ console.warn(e); } }
   // 5 NPCs al azar por noche, apareciendo con una nube de polvo. Normalmente NO persiguen (deambulan); sólo persiguen si te acercás.
-  let nightSpawned=false; function spawnNight(){ for(let k=0;k<5;k++){ const ti=(Math.random()*N_TYPES.length)|0,a=Math.random()*6.28,r=20+Math.random()*14;
+  let nightSpawned=false;
+  npcDayResetFn=function(){ nightSpawned=false;   // al dormir: limpiar NPCs y permitir que reaparezcan la próxima noche
+    for(const inst of NPCS){ scene.remove(inst.group); if(inst.rag){ try{ for(const rec of inst.rag.recs)physWorld.removeBody(rec.pb); }catch(e){} } }
+    NPCS.length=0; };
+  function spawnNight(){ for(let k=0;k<5;k++){ const ti=(Math.random()*N_TYPES.length)|0,a=Math.random()*6.28,r=20+Math.random()*14;
     const x=player.pos.x+Math.cos(a)*r, z=player.pos.z+Math.sin(a)*r; const inst=mk(ti,x,z); inst.wTimer=0; inst.wAng=Math.random()*6.28; inst._wmove=false; try{ emitDirt({x,z}); emitDirt({x,z}); }catch(e){} } }
   npcTickFn=function(dt){
     storyT+=dt; const elev = storyT<60?26 : (storyT<82? 26+(storyT-60)/22*(-40) : -14); setTime(elev,120);   // ~1 min de día y oscurece
@@ -2324,6 +2373,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
       inst.group.position.y=terrainHeight(inst.group.position.x,inst.group.position.z); } };
  }catch(e){ console.warn('setupNPCs',e); } }
 function update(dt){
+  if(sleepT>=0){ sleepStep(dt); windU.uTime.value+=dt; return; }   // durmiendo: cinemática toma el control
   if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
     setTime(elev,120);   // SIN IBL: ilumina la directa+hemisférica; el relieve lo dan los normal maps
     hudTimer-=dt; if(hudTimer<=0){ hudTimer=0.25; $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev); } }  // DOM sólo ~4x/seg (evita reflow por frame)
@@ -2353,8 +2403,9 @@ function update(dt){
   camera.position.set(player.pos.x+right.x*bobX,gy+player.eye+bobY+br+player.jumpY+dgy,player.pos.z+right.z*bobX);
   // el ítem en mano se balancea al moverse/correr (más fuerte cuanto más rápido), salvo durante el golpe
   if(fpRig&&fpRig.visible&&!(typeof wswing!=='undefined'&&wswing.active)){
-    fpRig.position.set(fpBasePos.x+Math.cos(player.bobPhase)*0.02*moveAmt, fpBasePos.y+Math.sin(player.bobPhase*2)*0.03*moveAmt, fpBasePos.z);
-    fpRig.rotation.set(fpBaseRot.x+Math.sin(player.bobPhase*2)*0.03*moveAmt, fpBaseRot.y+Math.cos(player.bobPhase)*0.02*moveAmt, fpBaseRot.z); }
+    let dip=0; if(swapT>=0){ swapT+=dt; if(swapT>=0.34)swapT=-1; else dip=Math.sin(Math.min(1,swapT/0.34)*Math.PI)*0.55; }   // baja y sube al cambiar de objeto
+    fpRig.position.set(fpBasePos.x+Math.cos(player.bobPhase)*0.02*moveAmt, fpBasePos.y+Math.sin(player.bobPhase*2)*0.03*moveAmt-dip, fpBasePos.z);
+    fpRig.rotation.set(fpBaseRot.x+Math.sin(player.bobPhase*2)*0.03*moveAmt-dip*0.6, fpBaseRot.y+Math.cos(player.bobPhase)*0.02*moveAmt, fpBaseRot.z); }
   euler.set(player.pitch+shy+dgy,player.yaw+shx+dgx,player.roll+shr+dgr);camera.quaternion.setFromEuler(euler);
   // En modo "por fases" la sombra se ancla a una rejilla de 2 m (no nada con el jugador) y se re-hornea sólo al cruzar de celda → sombras quietas y correctas al caminar, sin coste por frame.
   let _shx=player.pos.x,_shz=player.pos.z;
@@ -2470,7 +2521,7 @@ const I18N={
       cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo recto de madera',imad:'Techo inclinado',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',tcha:'Techo recto de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',emad:'Escalera de madera',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',need:'Necesitás',noSupport:'Necesita una pared debajo',
       placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
-      useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —'},
+      useTable:'Mantené para usar la mesa',hintNormal:'Joystick: caminar/correr · arrastrá: mirar',hintPlace:'Mirá dónde colocar · 🔁 girar · 🪓 construir',empty:'— vacío —',sleep:'Dormir'},
   en:{run:'RUN',chooseDevice:'How will you play?',mobile:'Mobile',pc:'PC',loadingAssets:'Loading assets…',world:'World',season:'Season',spring:'Spr',summer:'Sum',autumn:'Aut',winter:'Win',hour:'Time',renderDist:'Render distance',shadowDist:'Shadow distance',vegDensity:'Vegetation density',wind:'Wind',bob:'Walk bob',sound:'Sound',rotate90:'Rotate 90° in portrait',cycle:'Day/night cycle (24 min)',graphics:'Graphics',resolution:'Resolution',aa:'Antialiasing (SMAA)',exposure:'Exposure',saturation:'Saturation',shake:'Camera shake',materials:'Materials',relief:'PBR / 3D relief',trees:'trees',hint:'Joystick to walk · drag to look · 🪓 chop · 🎒 bag',gameTitle:'Realistic Forest',language:'Language',quality:'Graphics',qVlow:'Very low',qLow:'Low',qMedium:'Medium',qHigh:'High',qVhigh:'Very high',play:'Play',options:'Options',advanced:'Advanced settings',back:'Back',paused:'Paused',resume:'Resume',settings:'Settings',exit:'Exit',inventory:'Inventory',close:'Close',loading:'Loading…',
       fullscreen:'Fullscreen',shadowRes:'Shadow resolution',controlsTitle:'Controls',controlsSub:'Keyboard & mouse',
       kbMove:'Move',kbLook:'Look',kbRun:'Run',kbJump:'Jump',kbCrouch:'Crouch',kbChop:'Chop / attack',kbCraft:'Craft',kbPlace:'Place',kbInv:'Inventory',kbThrow:'Throw molotov',kbPause:'Pause',
@@ -2480,7 +2531,7 @@ const I18N={
       cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Flat wood roof',imad:'Sloped roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',tcha:'Flat metal roof',vcha:'Metal wall + window',dcha:'Metal wall + door',emad:'Wood stairs',free:'Free',craftBtn:'Craft',crafted:'Crafted!',need:'You need',noSupport:'Needs a wall below',
       placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
       equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
-      useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —'},
+      useTable:'Hold to use the table',hintNormal:'Joystick: walk/run · drag: look',hintPlace:'Aim where to place · 🔁 rotate · 🪓 build',empty:'— empty —',sleep:'Sleep'},
   pt:{run:'CORRER',chooseDevice:'Como vai jogar?',mobile:'Celular',pc:'PC',loadingAssets:'Carregando assets…',world:'Mundo',season:'Estação',spring:'Pri',summer:'Ver',autumn:'Out',winter:'Inv',hour:'Hora',renderDist:'Distância de render',shadowDist:'Distância de sombras',vegDensity:'Densidade de vegetação',wind:'Vento',bob:'Balanço ao andar',sound:'Som',rotate90:'Girar 90° na vertical',cycle:'Ciclo dia/noite (24 min)',graphics:'Gráficos',resolution:'Resolução',aa:'Antialiasing (SMAA)',exposure:'Exposição',saturation:'Saturação',shake:'Tremor de câmera',materials:'Materiais',relief:'PBR / Relevo 3D',trees:'árvores',hint:'Joystick para andar · arraste para olhar · 🪓 cortar · 🎒 mochila',gameTitle:'Floresta Realista',language:'Idioma',quality:'Gráficos',qVlow:'Muito baixo',qLow:'Baixo',qMedium:'Médio',qHigh:'Alto',qVhigh:'Muito alto',play:'Jogar',options:'Opções',advanced:'Ajustes avançados',back:'Voltar',paused:'Pausa',resume:'Retomar',settings:'Ajustes',exit:'Sair',inventory:'Inventário',close:'Fechar',loading:'Carregando…',
       fullscreen:'Tela cheia',shadowRes:'Resolução de sombras',controlsTitle:'Controles',controlsSub:'Teclado e mouse',
       kbMove:'Mover',kbLook:'Olhar',kbRun:'Correr',kbJump:'Pular',kbCrouch:'Agachar',kbChop:'Cortar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventário',kbThrow:'Lançar molotov',kbPause:'Pausa',
@@ -2490,7 +2541,7 @@ const I18N={
       cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado reto de madeira',imad:'Telhado inclinado',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',tcha:'Telhado reto de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',emad:'Escada de madeira',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',need:'Precisa de',noSupport:'Precisa de parede embaixo',
       placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipe o martelo em 🎒 para colocar móveis.',rotate:'Girar',building:'Construindo…',
-      useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —'}
+      useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —',sleep:'Dormir'}
 };
 const QDESC={
   es:{vlow:'Máximo rendimiento, detalle mínimo',low:'Sombras pintadas (día/atardecer/medianoche) · plantas quietas · PBR plano · reflejos suaves (100%)',medium:'Como Bajo pero con PBR en relieve y hojas/plantas que se mueven (100%)',high:'Todo activado · reflejos GOTY · sombras dinámicas (100%)',vhigh:'Máxima fidelidad (celular potente)'},
@@ -2591,6 +2642,38 @@ $('bag').addEventListener('pointerup',bagUp);
 $('bag').addEventListener('pointercancel',()=>{ if(bagHoldTimer){clearTimeout(bagHoldTimer);bagHoldTimer=null;} });
 $('invClose').addEventListener('click',e=>{ e.stopPropagation(); scrimClosedAt=performance.now(); $('inv').classList.remove('show'); });
 
+/* ===================== BARRA RÁPIDA DE ÍTEMS (hotbar estilo Minecraft) ===================== */
+const HOTN=8; const hotbar=new Array(HOTN).fill(null); let hotSel=0;
+const hotbarEl=$('hotbar'), dragGhostEl=$('dragGhost');
+hotbar[0]='hacha';   // el hacha siempre a mano en el primer cuadrito
+function buildHotbar(){ if(!hotbarEl)return; hotbarEl.innerHTML='';
+  for(let i=0;i<HOTN;i++){ const s=document.createElement('div'); s.className='hbSlot'; s.dataset.slot=i;
+    s.addEventListener('pointerup',()=>{ if(_dragId!=null)return; selectHot(i); }); hotbarEl.appendChild(s); }
+  renderHotbar(); }
+function renderHotbar(){ if(!hotbarEl)return; for(let i=0;i<HOTN;i++){ const s=hotbarEl.children[i]; if(!s)continue; const id=hotbar[i]; const u=id?ic(id):null;
+  s.classList.toggle('sel',i===hotSel);
+  s.innerHTML=(u?`<img src="${u}">`:'')+(id&&(inv[id]||0)>1?`<span class="hbq">${inv[id]}</span>`:'')+`<span class="hbk">${i+1}</span>`; } }
+function selectHot(i){ hotSel=i; const id=hotbar[i];
+  if(!id){ equipped=null; equipItem(null); renderHotbar(); return; }
+  const have=(id==='hacha')||((inv[id]||0)>0);
+  if(!have){ equipped=null; equipItem(null); renderHotbar(); return; }
+  const r=RECIPES.find(x=>x.id===id);
+  if(r&&r.placeable){ if(equipped!=='hammer'){ equipped='hammer'; equipItem('hammer'); } startPlacing(id); }   // ítem colocable → entra en modo colocar
+  else { equipped=id; equipItem(id); }
+  renderHotbar(); }
+function assignHot(i,id){ for(let k=0;k<HOTN;k++)if(hotbar[k]===id)hotbar[k]=null; hotbar[i]=id; renderHotbar(); }   // sin duplicados
+// arrastrar un ítem desde la mochila/menú hasta un cuadrito
+let _dragId=null,_dragMoved=false;
+function hotbarDragStart(id){ _dragId=id; _dragMoved=false; const u=ic(id); dragGhostEl.innerHTML=u?`<img src="${u}">`:''; }
+document.addEventListener('pointermove',e=>{ if(_dragId==null)return; _dragMoved=true; dragGhostEl.style.display='block';
+  dragGhostEl.style.left=e.clientX+'px'; dragGhostEl.style.top=e.clientY+'px';
+  const el=document.elementFromPoint(e.clientX,e.clientY), slot=el&&el.closest&&el.closest('.hbSlot');
+  for(let i=0;i<HOTN;i++)hotbarEl.children[i]&&hotbarEl.children[i].classList.toggle('drop',!!slot&&+slot.dataset.slot===i); },{passive:true});
+document.addEventListener('pointerup',e=>{ if(_dragId==null)return; const id=_dragId; _dragId=null; dragGhostEl.style.display='none';
+  for(let i=0;i<HOTN;i++)hotbarEl.children[i]&&hotbarEl.children[i].classList.remove('drop');
+  if(_dragMoved){ const el=document.elementFromPoint(e.clientX,e.clientY), slot=el&&el.closest&&el.closest('.hbSlot'); if(slot)assignHot(+slot.dataset.slot,id); } });
+buildHotbar();
+
 /* ===================== MOUSE / TECLADO (PC) ===================== */
 let mouseMode=false;
 const cursorEl=$('cursor');
@@ -2626,6 +2709,7 @@ function setHudVisible(v){ for(const id of HUD_ELS){ const el=$(id); if(!el)cont
   if(v&&mouseMode){ for(const id of ['joy','flash','bag','bJump','bCrouch','bCraft','bPlace','bRot']){ const el=$(id); if(el)el.style.display='none'; } }
   if(v){ if(equipped&&fpRig)fpRig.visible=true; }   // sólo el ítem equipado; nunca el hacha vieja
   else { if(fpAxe)fpAxe.visible=false; if(fpRig)fpRig.visible=false; }
+  if(hotbarEl){ hotbarEl.classList.toggle('show', !!(v&&started)); if(v&&started)renderHotbar(); }   // la barra rápida se ve jugando (PC y móvil)
 }
 let menuVisualsOn=null;
 function anyBlurMenuOpen(){ return $('startMenu').classList.contains('show')||$('pause').classList.contains('show')||$('options').classList.contains('show')||$('kbCard').classList.contains('show'); }
@@ -2678,6 +2762,8 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyB'){ openMenu('craft'); }
   if(e.code==='KeyV'){ if(placing)stopPlacing(); else openMenu('place'); }
   if(e.code==='KeyE'){ renderInv(); $('inv').classList.add('show'); }
+  if(e.code==='KeyR'){ if(nearTable){craftAtTable=true;openMenu('craft');} else if(nearBed){startSleep(nearBed);} else if(nearRecagua){fillWater();} }   // interactuar (mesa/cama/agua) en PC
+  if(/^Digit[1-8]$/.test(e.code)){ selectHot(+e.code.slice(5)-1); }   // barra rápida 1-8
 });
 // click en el mundo (pointer lock) = talar/atacar
 renderer.domElement.addEventListener('mousedown',e=>{ if(!started||!mouseMode)return; if(document.pointerLockElement!==renderer.domElement)return;
