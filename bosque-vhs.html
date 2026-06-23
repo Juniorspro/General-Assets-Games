@@ -386,11 +386,9 @@
     </div>
     <div class="lbl" data-i18n="quality">Gráficos</div>
     <div class="opts" id="qOpts">
-      <div class="opt" data-q="vlow"  data-i18n="qVlow">Muy bajo</div>
       <div class="opt" data-q="low"   data-i18n="qLow">Bajo</div>
       <div class="opt" data-q="medium" data-i18n="qMedium">Medio</div>
       <div class="opt" data-q="high"  data-i18n="qHigh">Alto</div>
-      <div class="opt" data-q="vhigh" data-i18n="qVhigh">Muy alto</div>
     </div>
     <div class="qdesc" id="qDesc"></div>
 
@@ -574,9 +572,10 @@ const Q=PRESETS[DEV.tier];
 // 'shadow' = ¿hay sombras?(>0 activa); 'shadowRes' = resolución por defecto del shadow-map (256 en baja/media-baja, 512 en media+).
 const QUALITY={
   vlow:  {radial:4, shadow:0,    shadowRes:256, leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
-  low:   {radial:5, shadow:0,    shadowRes:256, leaf:90,  grassN:320, plantN:26, rockN:6,  density:8,  streamR:1, dpr:1.3, res:0.8, bloom:false, aa:true,  rdist:120, chunkBudget:1},   // bajos: SIN sombras pero CON luz PBR
-  medium:{radial:6, shadow:512,  shadowRes:512, leaf:120, grassN:420, plantN:50, rockN:9,  density:6,  streamR:2, dpr:1.6, res:0.8, bloom:true,  aa:true,  rdist:140, chunkBudget:1},
-  high:  {radial:6, shadow:512,  shadowRes:512, leaf:200, grassN:780, plantN:80, rockN:12, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:180, chunkBudget:1},
+  // 3 modos visibles (Bajo/Medio/Alto): TODOS a resolución 100% (res:1.0); la resolución sólo se baja en Ajustes avanzados.
+  low:   {radial:5, shadow:384,  shadowRes:384, leaf:120, grassN:360, plantN:30, rockN:7,  density:8,  streamR:2, dpr:2.0, res:1.0, bloom:false, aa:true,  rdist:130, chunkBudget:1},   // bajo: sombras "por fases", sin movimiento de vegetación, PBR plano, reflejos suaves
+  medium:{radial:6, shadow:512,  shadowRes:512, leaf:160, grassN:480, plantN:55, rockN:10, density:7,  streamR:2, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:150, chunkBudget:1},
+  high:  {radial:6, shadow:640,  shadowRes:640, leaf:220, grassN:820, plantN:85, rockN:13, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:190, chunkBudget:1},
   vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:240, chunkBudget:2},
 };
 let qual=QUALITY.medium;
@@ -666,6 +665,8 @@ function setTime(elev,azim=120){
   const sunVis=THREE.MathUtils.smoothstep(elev,-3,6); sunMat.opacity=sunVis; sunGlowMat.opacity=sunVis*0.9; sunGrp.visible=sunVis>0.01;
   const moonVis=THREE.MathUtils.smoothstep(melev,-3,6); moonMat.opacity=moonVis; moonGlowMat.opacity=moonVis*0.85; moonGrp.visible=moonVis>0.01;
   starMat.opacity=nightFactor*0.95;
+  // SOMBRAS POR FASES DEL SOL: la sombra horneada sólo se actualiza al cambiar de fase (cada ~6° de elevación → >10 fases), no de continuo
+  const _sp=Math.round(elev/6); if(_sp!==sunPhase){ sunPhase=_sp; shadowNeedsBake=true; }
 }
 function updateEnvironment(){const es=new THREE.Scene();const s=new Sky();s.scale.setScalar(100);const u=s.material.uniforms;
   u.turbidity.value=skyU.turbidity.value;u.rayleigh.value=skyU.rayleigh.value;u.mieCoefficient.value=skyU.mieCoefficient.value;u.mieDirectionalG.value=skyU.mieDirectionalG.value;u.sunPosition.value.copy(sunVec);es.add(s);
@@ -728,14 +729,19 @@ function roadTexture(){const W=128,L=512;const cv=document.createElement('canvas
 const barkTex=barkTextures(),leafTex=leafTexture(),grassTex=grassTexture();
 
 /* ===================== MATERIALES + VIENTO ===================== */
-const windU={uTime:{value:0},uWind:{value:0.4}};
+const windU={uTime:{value:0},uWind:{value:0.4},uLeaf:{value:1},uVeg:{value:1}};   // uLeaf: aleteo independiente de hoja (0 en Bajo → la hoja viaja con la rama) · uVeg: movimiento de pasto/plantas (0 en Bajo)
 const barkMat=new THREE.MeshStandardMaterial({map:barkTex.map,bumpMap:barkTex.bump,bumpScale:0.5,roughness:0.92,metalness:0,vertexColors:true,envMapIntensity:0.7});
 const leafMat=new THREE.MeshStandardMaterial({map:leafTex,alphaTest:0.45,side:THREE.DoubleSide,roughness:0.6,metalness:0,envMapIntensity:0.9});
-leafMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;
-  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;')
+leafMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;sh.uniforms.uLeaf=windU.uLeaf;
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;uniform float uLeaf;')
     .replace('#include <begin_vertex>',`#include <begin_vertex>
-      vec3 aN=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);float ph=aN.x*0.8+aN.z*1.1+aN.y*0.4;float hh=clamp(aN.y/8.0,0.0,1.0);float amp=uWind*(0.05+0.16*hh);   // hojas: movimiento más sutil
-      transformed.x+=(sin(uTime*1.5+ph)+0.5*sin(uTime*3.0+ph*1.7))*amp;transformed.z+=cos(uTime*1.3+ph)*amp*0.8;transformed.y+=sin(uTime*2.0+ph)*amp*0.25;`);};
+      vec3 aN=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);float ph=aN.x*0.8+aN.z*1.1+aN.y*0.4;float hh=clamp(aN.y/8.0,0.0,1.0);
+      // mecido "de rama" (siempre, barato): toda la copa viaja junta de un lado a otro
+      float bSway=uWind*(0.02+0.10*hh);
+      transformed.x+=sin(uTime*1.1+ph)*bSway;transformed.z+=cos(uTime*0.9+ph)*bSway*0.8;
+      // aleteo INDEPENDIENTE de cada hoja (caro): se apaga en Bajo (uLeaf=0) → las hojas quedan pegadas al movimiento de la rama
+      float amp=uWind*(0.05+0.16*hh)*uLeaf;
+      transformed.x+=(0.5*sin(uTime*3.0+ph*1.7))*amp;transformed.z+=cos(uTime*1.3+ph)*amp*0.5;transformed.y+=sin(uTime*2.0+ph)*amp*0.25;`);};
 // el TRONCO y las ramas también se mecen (suave): la base queda fija y la copa se mueve según la altura local
 barkMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;
   sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;')
@@ -747,11 +753,11 @@ barkMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=w
       transformed.z+=cos(uTime*0.9+_bph)*_ba*0.8;
       #endif`);};
 const grassMat=new THREE.MeshStandardMaterial({map:grassTex,alphaTest:0.4,side:THREE.DoubleSide,roughness:0.85,metalness:0,envMapIntensity:0.6});
-grassMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;
-  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;')
+grassMat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;sh.uniforms.uVeg=windU.uVeg;
+  sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;uniform float uVeg;')
     .replace('#include <begin_vertex>',`#include <begin_vertex>
       float gy=clamp(position.y/0.55,0.0,1.0);vec3 aN=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);float ph=aN.x*0.6+aN.z*0.7;
-      transformed.x+=(sin(uTime*1.6+ph)+0.4*sin(uTime*3.1+ph*1.5))*uWind*0.20*gy*gy;transformed.z+=cos(uTime*1.3+ph)*uWind*0.14*gy*gy;`);};
+      transformed.x+=(sin(uTime*1.6+ph)+0.4*sin(uTime*3.1+ph*1.5))*uWind*uVeg*0.20*gy*gy;transformed.z+=cos(uTime*1.3+ph)*uWind*uVeg*0.14*gy*gy;`);};
 const lampPostMat=new THREE.MeshStandardMaterial({color:0x2a2a30,roughness:0.6,metalness:0.7});
 const lampHeadMat=new THREE.MeshStandardMaterial({color:0x3a3320,emissive:0xffce85,emissiveIntensity:2.5,roughness:0.4});
 
@@ -761,11 +767,11 @@ const TRANSP=new THREE.DataTexture(new Uint8Array([0,0,0,0]),1,1,THREE.RGBAForma
 function crossGeo(w,h,tri){const a=new THREE.PlaneGeometry(w,h);a.translate(0,h/2,0);const b=a.clone();b.rotateY(Math.PI/2);
   const parts=[a,b];if(tri){const c=a.clone();c.rotateY(Math.PI/3);parts.push(c);}return mergeGeometries(parts,false);}
 function foliageMat(){const m=new THREE.MeshStandardMaterial({map:TRANSP,alphaTest:0.5,side:THREE.DoubleSide,roughness:0.9,metalness:0});
-  m.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;
-    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;')
+  m.onBeforeCompile=(sh)=>{sh.uniforms.uTime=windU.uTime;sh.uniforms.uWind=windU.uWind;sh.uniforms.uVeg=windU.uVeg;
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nuniform float uTime;uniform float uWind;uniform float uVeg;')
     .replace('#include <begin_vertex>',`#include <begin_vertex>
       float gy=clamp(position.y/1.4,0.0,1.0);vec3 aN=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);float ph=aN.x*0.6+aN.z*0.7;
-      transformed.x+=(sin(uTime*1.5+ph)+0.4*sin(uTime*3.0+ph*1.6))*uWind*0.15*gy*gy;transformed.z+=cos(uTime*1.2+ph)*uWind*0.11*gy*gy;`);};
+      transformed.x+=(sin(uTime*1.5+ph)+0.4*sin(uTime*3.0+ph*1.6))*uWind*uVeg*0.15*gy*gy;transformed.z+=cos(uTime*1.2+ph)*uWind*uVeg*0.11*gy*gy;`);};
   return m;}
 // 3 pastos + 3 plantas (cross-quad). w,h aprox al aspecto del sprite.
 const grassMats=[foliageMat(),foliageMat(),foliageMat()];
@@ -842,32 +848,32 @@ function applyGodTextures(){
   // corteza con PROFUNDIDAD (poplar): repeat amplio = surcos grandes + relieve fuerte
   Promise.all([gtex(V2+'barkp_col.jpg',true),gtex(V2+'barkp_nrm.jpg',false),gtex(V2+'barkp_rgh.jpg',false)]).then(([c,n,r])=>{
     [c,n,r].forEach(t=>t.repeat.set(1,2));
-    barkMat.map=c;barkMat.normalMap=n;barkMat.roughnessMap=r;barkMat.bumpMap=null;barkMat.normalScale.set(Math.max(3.5,reliefScale),Math.max(3.5,reliefScale));barkMat.roughness=1;barkMat.color.set(0xffffff);barkMat.needsUpdate=true;
+    barkMat.map=c;barkMat.normalMap=n;barkMat.roughnessMap=r;barkMat.bumpMap=null;barkMat.normalScale.set(Math.max(3.5,reliefScale)*gfxNormalMul,Math.max(3.5,reliefScale)*gfxNormalMul);barkMat.roughness=1;barkMat.color.set(0xffffff);barkMat.needsUpdate=true;
   }).catch(()=>{});
   // suelo
   const reX=Math.max(10,Math.round((Xmax-Xmin)/8)),reZ=Math.max(10,Math.round((Zmax-Zmin)/8));
   Promise.all([gtex(P+'ground_col.jpg',true),gtex(P+'ground_nrm.jpg',false),gtex(P+'ground_rgh.jpg',false)]).then(([c,n,r])=>{
     [c,n,r].forEach(t=>t.repeat.set(reX,reZ));
-    ground.material.map=c;ground.material.normalMap=n;ground.material.roughnessMap=r;ground.material.normalScale.set(reliefScale*0.9,reliefScale*0.9);ground.material.color.set(0xffffff);ground.material.roughness=1;ground.material.needsUpdate=true;
+    ground.material.map=c;ground.material.normalMap=n;ground.material.roughnessMap=r;ground.material.normalScale.set(reliefScale*0.9*gfxNormalMul,reliefScale*0.9*gfxNormalMul);ground.material.color.set(0xffffff);ground.material.roughness=1;ground.material.needsUpdate=true;
   }).catch(()=>{});
   // ARENA (playa) — PBR seca + parches mojados
   const sreX=Math.max(10,Math.round(beachW/6)),sreZ=Math.max(10,Math.round(gsZ/6));
   Promise.all([gtex(V2+'sand_col.jpg',true),gtex(V2+'sand_nrm.jpg',false),gtex(V2+'sand_rgh.jpg',false)]).then(([c,n,r])=>{
     [c,n,r].forEach(t=>t.repeat.set(sreX,sreZ));
-    sandMat.map=c;sandMat.normalMap=n;sandMat.roughnessMap=r;sandMat.normalScale.set(reliefScale*0.7,reliefScale*0.7);sandMat.roughness=1;sandMat.needsUpdate=true;
+    sandMat.map=c;sandMat.normalMap=n;sandMat.roughnessMap=r;sandMat.normalScale.set(reliefScale*0.7*gfxNormalMul,reliefScale*0.7*gfxNormalMul);sandMat.roughness=1;sandMat.needsUpdate=true;
   }).catch(()=>{});
   Promise.all([gtex(V2+'sand2_col.jpg',true),gtex(V2+'sand2_nrm.jpg',false),gtex(V2+'sand2_rgh.jpg',false)]).then(([c,n,r])=>{
     [c,n,r].forEach(t=>t.repeat.set(3,3));
-    wetMat.map=c;wetMat.normalMap=n;wetMat.roughnessMap=r;wetMat.normalScale.set(reliefScale,reliefScale);wetMat.color.set(0x9fb0b8);wetMat.roughness=0.32;wetMat.metalness=0.0;wetMat.needsUpdate=true;   // tinte azulado húmedo + brillo
+    wetMat.map=c;wetMat.normalMap=n;wetMat.roughnessMap=r;wetMat.normalScale.set(reliefScale*gfxNormalMul,reliefScale*gfxNormalMul);wetMat.color.set(0x9fb0b8);wetMat.roughness=0.32;wetMat.metalness=0.0;wetMat.needsUpdate=true;   // tinte azulado húmedo + brillo
   }).catch(()=>{});
   // carretera PBR
   Promise.all([gtex(V2+'road_col.jpg',true),gtex(V2+'road_nrm.jpg',false),gtex(V2+'road_rgh.jpg',false)]).then(([c,n,r])=>{
     const rz=(Zmax-Zmin)/6;[c,n,r].forEach(t=>t.repeat.set(2,rz));
-    roadMat.map=c;roadMat.normalMap=n;roadMat.roughnessMap=r;roadMat.normalScale.set(Math.max(1.2,reliefScale*0.5),Math.max(1.2,reliefScale*0.5));roadMat.color.set(0xffffff);roadMat.roughness=1;roadMat.needsUpdate=true;
+    roadMat.map=c;roadMat.normalMap=n;roadMat.roughnessMap=r;roadMat.normalScale.set(Math.max(1.2,reliefScale*0.5)*gfxNormalMul,Math.max(1.2,reliefScale*0.5)*gfxNormalMul);roadMat.color.set(0xffffff);roadMat.roughness=1;roadMat.needsUpdate=true;
   }).catch(()=>{});
   // rocas PBR
   Promise.all([gtex(P+'rock_col.jpg',true),gtex(P+'rock_nrm.jpg',false),gtex(P+'rock_rgh.jpg',false)]).then(([c,n,r])=>{
-    rockMat.map=c;rockMat.normalMap=n;rockMat.roughnessMap=r;rockMat.normalScale.set(Math.max(1.0,reliefScale*0.6),Math.max(1.0,reliefScale*0.6));rockMat.color.set(0xffffff);rockMat.roughness=1;rockMat.needsUpdate=true;
+    rockMat.map=c;rockMat.normalMap=n;rockMat.roughnessMap=r;rockMat.normalScale.set(Math.max(1.0,reliefScale*0.6)*gfxNormalMul,Math.max(1.0,reliefScale*0.6)*gfxNormalMul);rockMat.color.set(0xffffff);rockMat.roughness=1;rockMat.needsUpdate=true;
   }).catch(()=>{});
   // hojas de copa (cluster)
   stex(P+'leaf_a.png').then(t=>{leafMat.map=t;leafMat.alphaTest=0.4;leafMat.needsUpdate=true;}).catch(()=>{});
@@ -1045,6 +1051,38 @@ function upgradeNearChunk(dt){
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
 let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null,n8aoPass=null,vignetteEffect=null;
 let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuResScale=1.0, digShake=0;
+let gfxNormalMul=1, gfxReflectMul=1;   // modo gráfico: 0 aplana el PBR (sin relieve) · reflejos más suaves
+// ---- MODO GRÁFICO (Bajo/Medio/Alto) ----  TODOS a 100% de resolución; cambia el ESTILO de render, no la resolución
+const GFXMODES={
+  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.4, matte:true },   // sombras "por fases", sin movimiento de vegetación, PBR plano, reflejos suaves, fuego mate
+  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:1.0, matte:false},   // calidad completa con sombras por fases (optimizado)
+  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:1.0, matte:false},   // sombras dinámicas suaves (como antes)
+};
+let gfx=GFXMODES.medium;
+function applyRelief(){ const m=gfxNormalMul;   // recalcula los normalScale según el relieve elegido y el modo gráfico
+  barkMat.normalScale.set(Math.max(3.5,reliefScale)*m,Math.max(3.5,reliefScale)*m);
+  if(ground.material.normalScale)ground.material.normalScale.set(reliefScale*0.9*m,reliefScale*0.9*m);
+  if(roadMat.normalScale)roadMat.normalScale.set(Math.max(1.2,reliefScale*0.5)*m,Math.max(1.2,reliefScale*0.5)*m);
+  if(rockMat.normalScale)rockMat.normalScale.set(Math.max(1.0,reliefScale*0.6)*m,Math.max(1.0,reliefScale*0.6)*m);
+  if(typeof sandMat!=='undefined'&&sandMat.normalScale)sandMat.normalScale.set(reliefScale*0.7*m,reliefScale*0.7*m);
+  if(typeof wetMat!=='undefined'&&wetMat.normalScale)wetMat.normalScale.set(reliefScale*m,reliefScale*m); }
+let REFLECT_MATS=null;
+let sunPhase=-999, shadowNeedsBake=true, _shSnapX=1e9, _shSnapZ=1e9; const _shTgt=new THREE.Vector3();
+function markShadowDirty(){ shadowNeedsBake=true; }   // re-hornea la sombra UNA vez (talar/construir/destruir/abrir-cerrar puerta) en modo "por fases"
+function applyGfx(t){
+  gfx=GFXMODES[t]||GFXMODES.medium;
+  windU.uLeaf.value=gfx.leafFlutter; windU.uVeg.value=gfx.veg;   // hojas pegadas a la rama + vegetación quieta en Bajo
+  gfxNormalMul=gfx.normal; applyRelief();                        // PBR plano en Bajo (sin profundidad de normales)
+  gfxReflectMul=gfx.reflect;
+  if(!REFLECT_MATS){ REFLECT_MATS=[barkMat,leafMat,grassMat,rockMat,roadMat,sandMat,wetMat,metalMat,woodConsMat,chapaMat,blackMetalMat,glassMat,oreMat,nuggetMat,rustMat,lampPostMat,fabricMat,emberMat,flameMat,ground.material,...grassMats,...plantMats,fiberMat];
+    for(const m of REFLECT_MATS){ if(m){ m.userData=m.userData||{}; m.userData._env0=(m.envMapIntensity!=null?m.envMapIntensity:1); } } }
+  for(const m of REFLECT_MATS){ if(m&&m.userData&&m.userData._env0!=null) m.envMapIntensity=m.userData._env0*gfxReflectMul; }   // reflejos más suaves
+  // botella incendiaria: en Bajo no refleja el fuego (vidrio mate), sólo se ilumina naranja
+  if(gfx.matte){ glassMat.roughness=0.5; glassMat.transmission=0.15; }
+  else { glassMat.roughness=0.08; glassMat.transmission=0.55; }
+  // arma equipada: reflejos más suaves
+  if(typeof fpRig!=='undefined'&&fpRig) fpRig.traverse(o=>{ if(o.isMesh&&o.material&&!Array.isArray(o.material)){ const mm=o.material; mm.userData=mm.userData||{}; if(mm.userData._env0==null)mm.userData._env0=(mm.envMapIntensity!=null?mm.envMapIntensity:1); mm.envMapIntensity=mm.userData._env0*gfxReflectMul; } });
+}
 let cycleOn=true, cyclePhase=0, envCycleTimer=0, lastEnvElev=999; const A_ELEV=34, THETA0=0.15;   // arranca al AMANECER (sol bajo subiendo → mañana → mediodía), ciclo día/noche 24 min
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
@@ -1153,11 +1191,7 @@ $('expo').addEventListener('input',e=>{const v=+e.target.value;exposure=Math.pow
 $('bloom').addEventListener('input',e=>{const v=+e.target.value;$('bloomVal').textContent=v+'%';if(bloomEffect)bloomEffect.intensity=v/100;});
 $('sat').addEventListener('input',e=>{const v=+e.target.value;$('satVal').textContent=(v>0?'+':'')+v;if(hueSat)hueSat.saturation=v/100;});
 $('shake').addEventListener('input',e=>{const v=+e.target.value;$('shakeVal').textContent=v+'%';camShake=v/100;});
-$('relief').addEventListener('input',e=>{const v=+e.target.value;reliefScale=v/100;$('reliefVal').textContent=v+'%';
-  barkMat.normalScale.set(Math.max(3.5,reliefScale),Math.max(3.5,reliefScale));
-  if(ground.material.normalScale)ground.material.normalScale.set(reliefScale*0.9,reliefScale*0.9);
-  if(roadMat.normalScale)roadMat.normalScale.set(Math.max(1.2,reliefScale*0.5),Math.max(1.2,reliefScale*0.5));
-  if(rockMat.normalScale)rockMat.normalScale.set(Math.max(1.0,reliefScale*0.6),Math.max(1.0,reliefScale*0.6));});
+$('relief').addEventListener('input',e=>{const v=+e.target.value;reliefScale=v/100;$('reliefVal').textContent=v+'%'; applyRelief();});
 // Selector de RESOLUCIÓN FIJA (además del % "nivelador"). Renderiza a esa altura y escala a la pantalla (sin deformar).
 let fixedResH=0;
 document.querySelectorAll('#fixResSeg button').forEach(b=>b.addEventListener('click',()=>{
@@ -1301,7 +1335,7 @@ const debrisGeo=new THREE.BoxGeometry(0.16,0.16,0.56); const debris=[];
 function ensureWorld(){ if(physWorld)return; physWorld=new CANNON.World({gravity:new CANNON.Vec3(0,-9.82,0)}); physWorld.allowSleep=true; physWorld.broadphase=new CANNON.SAPBroadphase(physWorld);
   physWorld.addContactMaterial(new CANNON.ContactMaterial(gMat,oMat,{friction:0.85,restitution:0.0}));
   physGround=new CANNON.Body({type:CANNON.Body.STATIC,shape:new CANNON.Plane(),material:gMat}); physGround.collisionFilterGroup=1; physGround.collisionFilterMask=2; physGround.quaternion.setFromEuler(-Math.PI/2,0,0); physWorld.addBody(physGround); }
-function felltree(t){ if(t.state!=='alive')return; ensureWorld();
+function felltree(t){ if(t.state!=='alive')return; ensureWorld(); markShadowDirty();   // al talar, su sombra desaparece en la próxima horneada (modo por fases)
   // construir una MALLA REAL para la caída/fundido (la instancia viva se oculta) → tala idéntica a antes
   const V=TREE_VARIANTS[t.vi]; const ty=terrainHeight(t.x,t.z)-0.18;
   const tg=new THREE.Group(); tg.position.set(t.x,ty,t.z); tg.rotation.y=t.rotY; tg.scale.setScalar(t.scl*(t.curScale||1));
@@ -1362,7 +1396,7 @@ function chopTick(dt){
         if(t.fadeT>=0.8){ const cx=t.x,cz=t.z; scene.remove(t.tg);
           // OJO: NO disponer geometría compartida (V.trunkGeometry / LEAF_PLANE). Sólo buffers de instancia y materiales CLONADOS del fundido.
           t.tg.traverse(o=>{ if(o.isInstancedMesh)o.dispose(); if(o.material&&o.material!==barkMat&&o.material!==leafMat&&o.material.dispose)o.material.dispose(); });
-          if(t.body){physWorld.removeBody(t.body);t.body=null;} spawnLogsGold(cx,cz,terrainHeight(cx,cz),3+Math.floor(Math.random()*2)); t.dead=true; } } } }
+          if(t.body){physWorld.removeBody(t.body);t.body=null;} spawnLogsGold(cx,cz,terrainHeight(cx,cz),3+Math.floor(Math.random()*2)); t.dead=true; markShadowDirty(); } } } }
   // debris físico
   for(let i=debris.length-1;i>=0;i--){const d=debris[i]; d.life-=dt; d.m.position.copy(d.b.position); d.m.quaternion.copy(d.b.quaternion); if(d.life<=0){scene.remove(d.m);if(physWorld)physWorld.removeBody(d.b);debris.splice(i,1);}}
   // astillas
@@ -1745,6 +1779,7 @@ function equipItem(id){
     else { const box=new THREE.Box3().setFromObject(fpModel),c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),md=Math.max(sz.x,sz.y,sz.z)||1,s=0.62/md;
       fpModel.scale.setScalar(s); fpModel.position.set(-c.x*s,-c.y*s,-c.z*s); fpRig.position.set(0.34,-0.46,-0.7); fpRig.rotation.set(0.1,Math.PI/2,0.2); }
     fpRig.add(fpModel); fpRig.visible=true; fpBasePos.copy(fpRig.position); fpBaseRot.copy(fpRig.rotation);
+    if(gfxReflectMul!==1) fpModel.traverse(o=>{ if(o.isMesh&&o.material&&!Array.isArray(o.material)){ const mm=o.material; mm.userData=mm.userData||{}; if(mm.userData._env0==null)mm.userData._env0=(mm.envMapIntensity!=null?mm.envMapIntensity:1); mm.envMapIntensity=mm.userData._env0*gfxReflectMul; } });   // arma con reflejos suaves en Bajo
     if(id==='botella') setupHeldMolotov(); else molotovHeld=false; }
   else { fpRig.visible=false; molotovHeld=false; fpAxe.visible=false; }   // sin ítem equipado → MANOS VACÍAS (ya no vuelve el hacha vieja)
 }
@@ -1985,6 +2020,7 @@ function finishBuild(){
       cx:m.position.x,cz:m.position.z,yaw:placeYaw,halfW:4*0.39,halfD:2,base:m.position.y}; stairsList.push(st); m.userData._stair=st; }
   if(id==='recagua') recaguas.push(m);
   if(ghost){ scene.remove(ghost); ghost.traverse(o=>{if(o.geometry)o.geometry.dispose();}); ghost=null; }
+  markShadowDirty();   // construcción nueva → su sombra (calculada, no dinámica) aparece en la próxima horneada
   cbuilding=false; buildT=0;
   if((inv[id]||0)>0){ spawnGhost(id); }
   else { placing=null; $('bRot').classList.add('hidden'); $('bPlace').classList.remove('on'); refreshHints2(); }
@@ -2019,7 +2055,10 @@ function doorTick(dt){ for(const d of doors){ const g=d.group;
   const dx=player.pos.x-g.position.x, dz=player.pos.z-g.position.z; const near=(dx*dx+dz*dz)<7.0;
   const side=(dx*_dn.x+dz*_dn.z)>=0?1:-1;
   const target=near? side*-1.5 : 0;   // se abre alejándose de vos (entrar/salir)
-  d.hinge.rotation.y += (target-d.hinge.rotation.y)*Math.min(1,8*dt); } }
+  if(d._tgt!==target){ d._tgt=target; d._settled=false; }
+  d.hinge.rotation.y += (target-d.hinge.rotation.y)*Math.min(1,8*dt);
+  // sombra "por fases": sólo se hornea la sombra de la puerta YA abierta o YA cerrada (no toda la animación abriéndose)
+  if(!d._settled && Math.abs(target-d.hinge.rotation.y)<0.03){ d._settled=true; markShadowDirty(); } } }
 // ---- ESCALERAS + paración sobre pisos: superficie de apoyo bajo el player ----
 const stairsList=[];
 function groundUnder(x,z){ const base=terrainHeight(x,z); let g=base; const reach=(player.feetY!=null?player.feetY:base)+1.5;
@@ -2037,7 +2076,7 @@ function destroyPlaced(m){ const i=placedItems.indexOf(m); if(i>=0)placedItems.s
   if(m.userData._door){ const k=doors.indexOf(m.userData._door); if(k>=0)doors.splice(k,1); }
   if(m.userData._post){ scene.remove(m.userData._post); if(m.userData._post.geometry)m.userData._post.geometry.dispose(); }
   spawnRockShards(m.position.x,m.position.y+0.6,m.position.z,12,consMat(m.userData.kind));
-  scene.remove(m); m.traverse(o=>{if(o.geometry&&o.geometry.dispose&&!o.userData.shared)o.geometry.dispose();}); }
+  scene.remove(m); m.traverse(o=>{if(o.geometry&&o.geometry.dispose&&!o.userData.shared)o.geometry.dispose();}); markShadowDirty(); }   // al destruir desaparece su sombra
 function consHitTick(){ if(!consAtk)return; consAtk=false; if(!placedItems.length)return;
   _cray.setFromCamera({x:0,y:0},camera); _cray.far=4.0; let best=null,bd=1e9;
   for(const m of placedItems){ const h=_cray.intersectObject(m,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=m;} }
@@ -2251,7 +2290,11 @@ function update(dt){
     fpRig.position.set(fpBasePos.x+Math.cos(player.bobPhase)*0.02*moveAmt, fpBasePos.y+Math.sin(player.bobPhase*2)*0.03*moveAmt, fpBasePos.z);
     fpRig.rotation.set(fpBaseRot.x+Math.sin(player.bobPhase*2)*0.03*moveAmt, fpBaseRot.y+Math.cos(player.bobPhase)*0.02*moveAmt, fpBaseRot.z); }
   euler.set(player.pitch+shy+dgy,player.yaw+shx+dgx,player.roll+shr+dgr);camera.quaternion.setFromEuler(euler);
-  dirLight.position.copy(player.pos).addScaledVector(lightVec,50);dirLight.target.position.copy(player.pos);dirLight.target.updateMatrixWorld();
+  // En modo "por fases" la sombra se ancla a una rejilla de 2 m (no nada con el jugador) y se re-hornea sólo al cruzar de celda → sombras quietas y correctas al caminar, sin coste por frame.
+  let _shx=player.pos.x,_shz=player.pos.z;
+  if(gfx.phaseShadows){ _shx=Math.round(_shx/2)*2; _shz=Math.round(_shz/2)*2; if(_shx!==_shSnapX||_shz!==_shSnapZ){_shSnapX=_shx;_shSnapZ=_shz;shadowNeedsBake=true;} }
+  _shTgt.set(_shx,player.pos.y,_shz);
+  dirLight.position.copy(_shTgt).addScaledVector(lightVec,50);dirLight.target.position.copy(_shTgt);dirLight.target.updateMatrixWorld();
   cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
   cloud1.material.map.offset.x+=dt*0.004;cloud2.material.map.offset.x+=dt*0.0026;
   placeCelestials(camera.position.x,camera.position.z);
@@ -2303,8 +2346,11 @@ function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDel
   applyMenuVisuals();   // blur + media-resolución + ocultar HUD cuando hay menú abierto
   const live=started&&!paused&&!document.querySelector('.scrim.show:not(#menu)');
   if(live)update(dt); else cinematicCam(dt);   // menú: cámara cinemática paseando por el bosque
-  // OPT: la sombra sólo se re-renderiza cada 3 frames (en vez de cada frame)
-  if(qual.shadow>0){ if((shadowFrame++%3)===0) renderer.shadowMap.needsUpdate=true; }
+  // SOMBRAS: Alto = dinámicas suaves (cada 3 frames). Bajo/Medio = "por fases": se re-hornean sólo al cambiar de fase del sol o por evento (talar/construir/destruir/puerta).
+  if(qual.shadow>0){
+    if(gfx.phaseShadows){ if(shadowNeedsBake){ renderer.shadowMap.needsUpdate=true; shadowNeedsBake=false; } }
+    else if((shadowFrame++%3)===0){ renderer.shadowMap.needsUpdate=true; }
+  }
   if(composer)composer.render(dt);else renderer.render(scene,camera);
   fpsTimer+=dt;fpsFrames++;if(fpsTimer>=0.5){const fps=Math.round(fpsFrames/fpsTimer);$('fps').textContent=fps;fpsTimer=0;fpsFrames=0;adaptRes(fps);}}
 // OPT: resolución adaptativa — si el FPS baja, baja la resolución interna; si sobra, la sube (sin pasar de la calidad elegida)
@@ -2370,9 +2416,9 @@ const I18N={
       useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —'}
 };
 const QDESC={
-  es:{vlow:'Máximo rendimiento, detalle mínimo',low:'Ligero para celulares modestos',medium:'Equilibrio recomendado',high:'Más vegetación, sombras y alcance',vhigh:'Máxima fidelidad (celular potente)'},
-  en:{vlow:'Max performance, minimal detail',low:'Light for modest phones',medium:'Recommended balance',high:'More foliage, shadows and range',vhigh:'Maximum fidelity (powerful phone)'},
-  pt:{vlow:'Máximo desempenho, detalhe mínimo',low:'Leve para celulares modestos',medium:'Equilíbrio recomendado',high:'Mais vegetação, sombras e alcance',vhigh:'Fidelidade máxima (celular potente)'}
+  es:{vlow:'Máximo rendimiento, detalle mínimo',low:'Sombras por fases · sin movimiento de plantas · PBR plano · reflejos suaves (100%)',medium:'Calidad completa con sombras por fases (100%)',high:'Sombras dinámicas y máxima fidelidad (100%)',vhigh:'Máxima fidelidad (celular potente)'},
+  en:{vlow:'Max performance, minimal detail',low:'Phased shadows · no plant motion · flat PBR · soft reflections (100%)',medium:'Full quality with phased shadows (100%)',high:'Dynamic shadows and maximum fidelity (100%)',vhigh:'Maximum fidelity (powerful phone)'},
+  pt:{vlow:'Máximo desempenho, detalhe mínimo',low:'Sombras por fases · sem movimento de plantas · PBR plano · reflexos suaves (100%)',medium:'Qualidade completa com sombras por fases (100%)',high:'Sombras dinâmicas e fidelidade máxima (100%)',vhigh:'Fidelidade máxima (celular potente)'}
 };
 let curLang='es', curQuality='medium';
 function applyLang(l){const d=I18N[l]||I18N.es;document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(d[k]!=null)el.textContent=d[k];});document.documentElement.lang=l;}
@@ -2396,6 +2442,7 @@ function setQuality(t){
   const useSsao=(t==='medium'||t==='high'||t==='vhigh');   // SSAO (N8AO) en medio y superiores
   if(n8aoPass)n8aoPass.enabled=useSsao;
   renderDist=qual.rdist; if($('dist')){$('dist').value=renderDist;$('distVal').textContent=renderDist+' m';} scene.fog.density=Math.max(0.0035,0.62/renderDist);
+  applyGfx(t); markShadowDirty();   // aplica el ESTILO del modo (sombras por fases, vegetación, PBR plano, reflejos) y re-hornea la sombra una vez
   layout();
 }
 
