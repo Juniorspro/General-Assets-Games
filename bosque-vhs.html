@@ -865,7 +865,7 @@ sandMat.map.repeat.set(Math.round(beachW/6),Math.round(gsZ/6));
 const sand=new THREE.Mesh(sandGeo,sandMat);sand.receiveShadow=true;sand.matrixAutoUpdate=false;sand.updateMatrix();scene.add(sand);
 const wetMat=new THREE.MeshStandardMaterial({map:sandTexture(true),roughness:0.5,metalness:0,color:0xffffff,transparent:true,opacity:0.94,polygonOffset:true,polygonOffsetFactor:-1,depthWrite:false});
 wetMat.map.repeat.set(3,3);
-{const rr=mulberry32(4242);const wetN=3;
+{const rr=mulberry32(4242);const wetN=0;   // sin parches de arena húmeda: desierto 100% arena seca
  for(let i=0;i<wetN;i++){const x=BEACH_X0+6+rr()*120;const z=Zmin+rr()*(Zmax-Zmin);   // sólo unos pocos parches al BORDE de la playa; el resto del desierto = arena seca
    const patch=new THREE.Mesh(new THREE.CircleGeometry(2+rr()*4,16),wetMat);patch.scale.set(0.7+rr()*0.8,0.7+rr()*0.8,1);patch.rotation.x=-Math.PI/2;patch.rotation.z=rr()*6.28;
    patch.position.set(x,terrainHeight(x,z)+0.06,z);patch.matrixAutoUpdate=false;patch.updateMatrix();scene.add(patch);}}
@@ -895,11 +895,11 @@ function applyGodTextures(){
   }).catch(()=>{});
   // ARENA (playa) — PBR seca + parches mojados
   const sreX=Math.max(10,Math.round(beachW/6)),sreZ=Math.max(10,Math.round(gsZ/6));
-  // ARENA SECA: el sand_col venía húmedo/grisáceo → usamos el color procedural seco (beige cálido) y sólo tomamos normal/rough para el relieve.
-  Promise.all([gtex(V2+'sand_nrm.jpg',false),gtex(V2+'sand_rgh.jpg',false)]).then(([n,r])=>{
-    [n,r].forEach(t=>t.repeat.set(sreX,sreZ));
-    sandMat.normalMap=n;sandMat.roughnessMap=r;sandMat.normalScale.set(reliefScale*0.7*gfxNormalMul,reliefScale*0.7*gfxNormalMul);
-    sandMat.color.set(0xe2cd9a);sandMat.roughness=1;sandMat.metalness=0;sandMat.envMapIntensity=0;sandMat.needsUpdate=true;   // arena seca cálida, sin brillo húmedo
+  // ARENA SECA: textura PBR sand_col (tan cálido, seco). La humedad venía de los parches sand2 → eliminados.
+  Promise.all([gtex(V2+'sand_col.jpg',true),gtex(V2+'sand_nrm.jpg',false),gtex(V2+'sand_rgh.jpg',false)]).then(([c,n,r])=>{
+    [c,n,r].forEach(t=>t.repeat.set(sreX,sreZ));
+    sandMat.map=c;sandMat.normalMap=n;sandMat.roughnessMap=r;sandMat.normalScale.set(reliefScale*0.7*gfxNormalMul,reliefScale*0.7*gfxNormalMul);
+    sandMat.color.set(0xffffff);sandMat.roughness=1;sandMat.metalness=0;sandMat.envMapIntensity=0;sandMat.needsUpdate=true;
   }).catch(()=>{});
   Promise.all([gtex(V2+'sand2_col.jpg',true),gtex(V2+'sand2_nrm.jpg',false),gtex(V2+'sand2_rgh.jpg',false)]).then(([c,n,r])=>{
     [c,n,r].forEach(t=>t.repeat.set(3,3));
