@@ -578,7 +578,7 @@ const QUALITY={
   high:  {radial:6, shadow:640,  shadowRes:640, leaf:220, grassN:820, plantN:85, rockN:13, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:190, chunkBudget:1},
   vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:true,  rdist:240, chunkBudget:2},
 };
-let qual=QUALITY.medium;
+let qual=QUALITY.low;
 const GRASS_N={low:300,medium:620,high:1000}[DEV.tier], PLANT_N={low:26,medium:55,high:90}[DEV.tier], ROCK_N={low:5,medium:8,high:12}[DEV.tier];
 const GRASS_DIST=85;   // LOD: pasto/plantas sólo dentro de este radio (los árboles se ven hasta la distancia de render)
 document.getElementById('treeCount');
@@ -666,8 +666,19 @@ function setTime(elev,azim=120){
   const moonVis=THREE.MathUtils.smoothstep(melev,-3,6); moonMat.opacity=moonVis; moonGlowMat.opacity=moonVis*0.85; moonGrp.visible=moonVis>0.01;
   starMat.opacity=nightFactor*0.95;
   // SOMBRAS POR FASES DEL SOL: la sombra horneada sólo se actualiza al cambiar de fase (cada ~6° de elevación → >10 fases), no de continuo
-  const _sp=Math.round(elev/6); if(_sp!==sunPhase){ sunPhase=_sp; shadowNeedsBake=true; }
+  // SOMBRAS PINTADAS (Bajo/Medio): 3 estados fijos — día / atardecer / medianoche. La DIRECCIÓN de la luz que proyecta sombra se CONGELA al representante
+  // del estado (la sombra no se "despega" mientras el sol se mueve) y sólo se re-hornea al cambiar de estado → mínimo coste (3 horneadas por ciclo, no decenas).
+  if(typeof gfx!=='undefined'&&gfx.phaseShadows){ const b = elev>=18?0 : (elev>=-3?1:2); lightVec.copy(shadowRepDir(b)); if(b!==sunPhase){ sunPhase=b; shadowNeedsBake=true; } }
+  else sunPhase=-1;
 }
+// Dirección de luz fija por estado (cacheada): 0=día (sol alto), 1=atardecer (sol bajo), 2=medianoche (luna)
+const _REP=[null,null,null];
+function shadowRepDir(b){ if(_REP[b])return _REP[b];
+  const elev=[A_ELEV,8,-14][b];
+  const sv=new THREE.Vector3().setFromSphericalCoords(1,THREE.MathUtils.degToRad(90-elev),THREE.MathUtils.degToRad(120));
+  const mv=new THREE.Vector3().setFromSphericalCoords(1,THREE.MathUtils.degToRad(90+elev),THREE.MathUtils.degToRad(300));
+  const day=THREE.MathUtils.smoothstep(elev,-6,10);
+  _REP[b]=sv.lerp(mv,1-day).normalize(); return _REP[b]; }
 function updateEnvironment(){const es=new THREE.Scene();const s=new Sky();s.scale.setScalar(100);const u=s.material.uniforms;
   u.turbidity.value=skyU.turbidity.value;u.rayleigh.value=skyU.rayleigh.value;u.mieCoefficient.value=skyU.mieCoefficient.value;u.mieDirectionalG.value=skyU.mieDirectionalG.value;u.sunPosition.value.copy(sunVec);es.add(s);
   const rt=pmrem.fromScene(es,0.04);if(envRT)envRT.dispose();envRT=rt;scene.environment=rt.texture;s.geometry.dispose();s.material.dispose();}
@@ -1054,11 +1065,11 @@ let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuRe
 let gfxNormalMul=1, gfxReflectMul=1;   // modo gráfico: 0 aplana el PBR (sin relieve) · reflejos más suaves
 // ---- MODO GRÁFICO (Bajo/Medio/Alto) ----  TODOS a 100% de resolución; cambia el ESTILO de render, no la resolución
 const GFXMODES={
-  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.4, matte:true,  cull:true,  folDist:0.7, leafDist:0.7},   // sombras "por fases", sin movimiento de vegetación, PBR plano, reflejos suaves, fuego mate, culling agresivo
-  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:1.0, matte:false, cull:true,  folDist:1.0, leafDist:1.0},   // calidad completa con sombras por fases + oclusión de follaje (optimizado)
-  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:1.0, matte:false, cull:false, folDist:1.0, leafDist:1.0},   // sombras dinámicas suaves (como antes), sin culling extra
+  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.4, matte:true,  cull:true,  folDist:0.7, leafDist:0.7},   // sombras pintadas (día/atardecer/medianoche), sin movimiento de vegetación, PBR plano, reflejos suaves, fuego mate, culling agresivo
+  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.4, matte:true,  cull:true,  folDist:1.0, leafDist:1.0},   // = Bajo PERO con PBR (relieve) + hojas y plantas que se mueven
+  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:1.0, matte:false, cull:false, folDist:1.0, leafDist:1.0},   // todo activado + reflejos GOTY completos + sombras dinámicas
 };
-let gfx=GFXMODES.medium;
+let gfx=GFXMODES.low;
 function applyRelief(){ const m=gfxNormalMul;   // recalcula los normalScale según el relieve elegido y el modo gráfico
   barkMat.normalScale.set(Math.max(3.5,reliefScale)*m,Math.max(3.5,reliefScale)*m);
   if(ground.material.normalScale)ground.material.normalScale.set(reliefScale*0.9*m,reliefScale*0.9*m);
@@ -2444,11 +2455,11 @@ const I18N={
       useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —'}
 };
 const QDESC={
-  es:{vlow:'Máximo rendimiento, detalle mínimo',low:'Sombras por fases · sin movimiento de plantas · PBR plano · reflejos suaves (100%)',medium:'Calidad completa con sombras por fases (100%)',high:'Sombras dinámicas y máxima fidelidad (100%)',vhigh:'Máxima fidelidad (celular potente)'},
-  en:{vlow:'Max performance, minimal detail',low:'Phased shadows · no plant motion · flat PBR · soft reflections (100%)',medium:'Full quality with phased shadows (100%)',high:'Dynamic shadows and maximum fidelity (100%)',vhigh:'Maximum fidelity (powerful phone)'},
-  pt:{vlow:'Máximo desempenho, detalhe mínimo',low:'Sombras por fases · sem movimento de plantas · PBR plano · reflexos suaves (100%)',medium:'Qualidade completa com sombras por fases (100%)',high:'Sombras dinâmicas e fidelidade máxima (100%)',vhigh:'Fidelidade máxima (celular potente)'}
+  es:{vlow:'Máximo rendimiento, detalle mínimo',low:'Sombras pintadas (día/atardecer/medianoche) · plantas quietas · PBR plano · reflejos suaves (100%)',medium:'Como Bajo pero con PBR en relieve y hojas/plantas que se mueven (100%)',high:'Todo activado · reflejos GOTY · sombras dinámicas (100%)',vhigh:'Máxima fidelidad (celular potente)'},
+  en:{vlow:'Max performance, minimal detail',low:'Painted shadows (day/sunset/midnight) · still plants · flat PBR · soft reflections (100%)',medium:'Like Low but with relief PBR and moving leaves/plants (100%)',high:'Everything on · GOTY reflections · dynamic shadows (100%)',vhigh:'Maximum fidelity (powerful phone)'},
+  pt:{vlow:'Máximo desempenho, detalhe mínimo',low:'Sombras pintadas (dia/pôr do sol/meia-noite) · plantas paradas · PBR plano · reflexos suaves (100%)',medium:'Como Baixo mas com PBR em relevo e folhas/plantas que se movem (100%)',high:'Tudo ativado · reflexos GOTY · sombras dinâmicas (100%)',vhigh:'Fidelidade máxima (celular potente)'}
 };
-let curLang='es', curQuality='medium';
+let curLang='es', curQuality='low';   // por defecto arranca en BAJO
 function applyLang(l){const d=I18N[l]||I18N.es;document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(d[k]!=null)el.textContent=d[k];});document.documentElement.lang=l;}
 function updateQDesc(){$('qDesc').textContent=((QDESC[curLang]||QDESC.es)[curQuality])||'';}
 
@@ -2514,7 +2525,7 @@ function showScrim(id){document.querySelectorAll('.scrim').forEach(s=>{if(s.id!=
 document.querySelectorAll('#langOpts .opt').forEach(o=>o.addEventListener('click',()=>{document.querySelectorAll('#langOpts .opt').forEach(x=>x.classList.remove('active'));o.classList.add('active');curLang=o.dataset.lang;applyLang(curLang);updateQDesc();if($('menu')&&$('menu').classList.contains('show'))openMenu(menuMode);}));
 document.querySelectorAll('#qOpts .opt').forEach(o=>o.addEventListener('click',()=>{document.querySelectorAll('#qOpts .opt').forEach(x=>x.classList.remove('active'));o.classList.add('active');curQuality=o.dataset.q;updateQDesc();if(worldReady){setQuality(curQuality);rebuildWorld();}}));
 document.querySelector('#langOpts .opt[data-lang="es"]').classList.add('active');
-document.querySelector('#qOpts .opt[data-q="medium"]').classList.add('active');
+document.querySelector('#qOpts .opt[data-q="low"]').classList.add('active');
 $('playBtn').addEventListener('click',()=>{
   if(mouseMode){ buildKbList(); wireUiSounds(); $('startMenu').classList.remove('show'); $('kbCard').classList.add('show'); }
   else { startGame(); }
