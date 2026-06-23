@@ -293,20 +293,22 @@
             background:linear-gradient(135deg,#2f6dd0,#5aa0ff); box-shadow:0 10px 30px rgba(60,120,220,.4); }
   .kbPlay:hover,.kbPlay:active { filter:brightness(1.1); }
   /* ---- barra rápida de ítems ---- */
-  #hotbar{ position:fixed; left:50%; bottom:12px; transform:translateX(-50%); z-index:85; display:none; gap:6px; padding:6px;
+  #hotbar{ position:fixed; left:50%; bottom:10px; transform:translateX(-50%); z-index:85; display:none; gap:5px; padding:5px;
     border-radius:14px; background:rgba(12,16,22,.55); backdrop-filter:blur(6px); border:1px solid rgba(150,200,255,.18); box-shadow:0 6px 22px rgba(0,0,0,.5); }
   #hotbar.show{ display:flex; }
-  .hbSlot{ width:52px; height:52px; border-radius:10px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.14);
-    position:relative; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hbSlot{ width:46px; height:46px; border-radius:10px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.14);
+    position:relative; display:flex; align-items:center; justify-content:center; cursor:pointer; flex:0 0 auto; }
   .hbSlot.sel{ border-color:#ffb46b; box-shadow:0 0 12px rgba(255,150,80,.5); background:rgba(255,150,80,.16); }
   .hbSlot.drop{ border-color:#7fd0ff; background:rgba(120,200,255,.18); }
   .hbSlot img{ width:80%; height:80%; object-fit:contain; pointer-events:none; filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
   .hbSlot .hbq{ position:absolute; right:3px; bottom:1px; font-size:11px; color:#ffd9a8; text-shadow:0 1px 2px #000; pointer-events:none; }
   .hbSlot .hbk{ position:absolute; left:4px; top:1px; font-size:9px; color:rgba(255,255,255,.4); pointer-events:none; }
-  #dragGhost{ position:fixed; z-index:120; width:52px; height:52px; pointer-events:none; opacity:.9; transform:translate(-50%,-50%); display:none; }
+  #dragGhost{ position:fixed; z-index:120; width:46px; height:46px; pointer-events:none; opacity:.9; transform:translate(-50%,-50%); display:none; }
   #dragGhost img{ width:100%; height:100%; object-fit:contain; }
-  #menu.bagMode .sciPanel{ bottom:80px; }
-  body.rot #hotbar{ transform:translateX(-50%) rotate(90deg); transform-origin:center bottom; }
+  /* fila de la barra rápida DENTRO de la mochila (para arrastrar ahí) */
+  #bagHotbar{ display:none; gap:5px; justify-content:center; flex-wrap:wrap; padding:8px 8px 4px; }
+  #menu.bagMode #bagHotbar{ display:flex; }
+  #bagHotbar .hbHint{ width:100%; text-align:center; font-size:11px; color:rgba(180,200,230,.7); margin-bottom:2px; }
 </style>
 </head>
 <body>
@@ -366,7 +368,6 @@
   <button id="bRot" class="actBtn hidden">🔁</button>
   <!-- barra rápida de ítems (estilo Minecraft, look propio) -->
   <div id="hotbar"></div>
-  <div id="dragGhost"></div>
 
   <button id="menuBtn" class="menuBtn" aria-label="Menú">☰</button>
 
@@ -488,9 +489,11 @@
         </div>
       </div>
     </div>
+    <div id="bagHotbar"></div>
     <div class="sciFoot"><span id="mFootL">◐ Tocá un objeto</span><span id="mFootR"></span></div>
   </div>
 </div>
+<div id="dragGhost"></div>
 
 <script type="importmap">
 {
@@ -2017,6 +2020,7 @@ function openMenu(mode){
   $('mTitle').textContent=menuTitle().toUpperCase(); $('mCrumb').textContent=menuTitle().toUpperCase();
   $('mFootL').textContent = mode==='craft'?(craftAtTable?'⬢ MESA CONECTADA':cT('hintNormal')) : (mode==='place'?cT('hintPlace'):'');
   selId=null; renderTabs(); renderGrid(); $('menu').classList.toggle('bagMode',mode==='bag'); $('menu').classList.add('show');
+  if(mode==='bag'&&typeof renderHotbar==='function')renderHotbar();
 }
 function hideMenu(){ scrimClosedAt=performance.now(); $('menu').classList.remove('show'); $('menu').classList.remove('bagMode'); if(typeof renderHotbar==='function')renderHotbar(); }
 $('menu').querySelectorAll('.xClose').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();hideMenu();}));
@@ -2644,15 +2648,19 @@ $('invClose').addEventListener('click',e=>{ e.stopPropagation(); scrimClosedAt=p
 
 /* ===================== BARRA RÁPIDA DE ÍTEMS (hotbar estilo Minecraft) ===================== */
 const HOTN=8; const hotbar=new Array(HOTN).fill(null); let hotSel=0;
-const hotbarEl=$('hotbar'), dragGhostEl=$('dragGhost');
+const hotbarEl=$('hotbar'), bagHotbarEl=$('bagHotbar'), dragGhostEl=$('dragGhost');
 hotbar[0]='hacha';   // el hacha siempre a mano en el primer cuadrito
-function buildHotbar(){ if(!hotbarEl)return; hotbarEl.innerHTML='';
+function _buildHotInto(c,withHint){ if(!c)return; c.innerHTML='';
+  if(withHint){ const h=document.createElement('div'); h.className='hbHint'; c.appendChild(h); }
   for(let i=0;i<HOTN;i++){ const s=document.createElement('div'); s.className='hbSlot'; s.dataset.slot=i;
-    s.addEventListener('pointerup',()=>{ if(_dragId!=null)return; selectHot(i); }); hotbarEl.appendChild(s); }
-  renderHotbar(); }
-function renderHotbar(){ if(!hotbarEl)return; for(let i=0;i<HOTN;i++){ const s=hotbarEl.children[i]; if(!s)continue; const id=hotbar[i]; const u=id?ic(id):null;
-  s.classList.toggle('sel',i===hotSel);
-  s.innerHTML=(u?`<img src="${u}">`:'')+(id&&(inv[id]||0)>1?`<span class="hbq">${inv[id]}</span>`:'')+`<span class="hbk">${i+1}</span>`; } }
+    s.addEventListener('pointerup',()=>{ if(_dragId!=null)return; selectHot(i); }); c.appendChild(s); } }
+function buildHotbar(){ _buildHotInto(hotbarEl,false); _buildHotInto(bagHotbarEl,true); renderHotbar(); }
+function _renderInto(c){ if(!c)return; const slots=c.querySelectorAll('.hbSlot');
+  for(let i=0;i<HOTN;i++){ const s=slots[i]; if(!s)continue; const id=hotbar[i]; const u=id?ic(id):null;
+    s.classList.toggle('sel',i===hotSel);
+    s.innerHTML=(u?`<img src="${u}">`:'')+(id&&(inv[id]||0)>1?`<span class="hbq">${inv[id]}</span>`:'')+`<span class="hbk">${i+1}</span>`; } }
+function renderHotbar(){ _renderInto(hotbarEl); _renderInto(bagHotbarEl);
+  const hint=bagHotbarEl&&bagHotbarEl.querySelector('.hbHint'); if(hint)hint.textContent='⬇ '+(curLang==='en'?'Drag items here for quick access':curLang==='pt'?'Arraste itens aqui para acesso rápido':'Arrastrá ítems acá para acceso rápido'); }
 function selectHot(i){ hotSel=i; const id=hotbar[i];
   if(!id){ equipped=null; equipItem(null); renderHotbar(); return; }
   const have=(id==='hacha')||((inv[id]||0)>0);
@@ -2668,9 +2676,9 @@ function hotbarDragStart(id){ _dragId=id; _dragMoved=false; const u=ic(id); drag
 document.addEventListener('pointermove',e=>{ if(_dragId==null)return; _dragMoved=true; dragGhostEl.style.display='block';
   dragGhostEl.style.left=e.clientX+'px'; dragGhostEl.style.top=e.clientY+'px';
   const el=document.elementFromPoint(e.clientX,e.clientY), slot=el&&el.closest&&el.closest('.hbSlot');
-  for(let i=0;i<HOTN;i++)hotbarEl.children[i]&&hotbarEl.children[i].classList.toggle('drop',!!slot&&+slot.dataset.slot===i); },{passive:true});
+  document.querySelectorAll('.hbSlot.drop').forEach(s=>s.classList.remove('drop')); if(slot)slot.classList.add('drop'); },{passive:true});
 document.addEventListener('pointerup',e=>{ if(_dragId==null)return; const id=_dragId; _dragId=null; dragGhostEl.style.display='none';
-  for(let i=0;i<HOTN;i++)hotbarEl.children[i]&&hotbarEl.children[i].classList.remove('drop');
+  document.querySelectorAll('.hbSlot.drop').forEach(s=>s.classList.remove('drop'));
   if(_dragMoved){ const el=document.elementFromPoint(e.clientX,e.clientY), slot=el&&el.closest&&el.closest('.hbSlot'); if(slot)assignHot(+slot.dataset.slot,id); } });
 buildHotbar();
 
