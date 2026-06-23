@@ -867,9 +867,9 @@ sandMat.map.repeat.set(Math.round(beachW/6),Math.round(gsZ/6));
 const sand=new THREE.Mesh(sandGeo,sandMat);sand.receiveShadow=true;sand.matrixAutoUpdate=false;sand.updateMatrix();scene.add(sand);
 const wetMat=new THREE.MeshStandardMaterial({map:sandTexture(true),roughness:0.5,metalness:0,color:0xffffff,transparent:true,opacity:0.94,polygonOffset:true,polygonOffsetFactor:-1,depthWrite:false});
 wetMat.map.repeat.set(3,3);
-{const rr=mulberry32(4242);const wetN=48;
- for(let i=0;i<wetN;i++){const bias=Math.pow(rr(),0.7);const x=BEACH_X0+16+bias*1600;const z=Zmin+rr()*(Zmax-Zmin);
-   const patch=new THREE.Mesh(new THREE.CircleGeometry(3+rr()*9,16),wetMat);patch.scale.set(0.7+rr()*1.0,0.7+rr()*1.0,1);patch.rotation.x=-Math.PI/2;patch.rotation.z=rr()*6.28;
+{const rr=mulberry32(4242);const wetN=7;
+ for(let i=0;i<wetN;i++){const x=BEACH_X0+6+rr()*120;const z=Zmin+rr()*(Zmax-Zmin);   // sólo unos pocos parches al BORDE de la playa; el resto del desierto = arena seca
+   const patch=new THREE.Mesh(new THREE.CircleGeometry(2+rr()*4,16),wetMat);patch.scale.set(0.7+rr()*0.8,0.7+rr()*0.8,1);patch.rotation.x=-Math.PI/2;patch.rotation.z=rr()*6.28;
    patch.position.set(x,terrainHeight(x,z)+0.06,z);patch.matrixAutoUpdate=false;patch.updateMatrix();scene.add(patch);}}
 
 /* ===== Texturas PBR reales (carga asíncrona; las procedurales quedan de placeholder) ===== */
@@ -1599,7 +1599,7 @@ function explodeAt(pos,gy){ gy=(gy==null)?terrainHeight(pos.x,pos.z):gy;
     const f=billboardFx(txt,(low?0.7:1.0)+Math.random()*0.7); f.material.opacity=0;
     f.position.set(pos.x+Math.cos(a)*r, gy+(low?0.32:0.55)+Math.random()*0.2, pos.z+Math.sin(a)*r); scene.add(f);
     cfx.push({o:f,kind:'fade',t:0,dur:FIRE_DUR-Math.random()*2,delay:0.35+k*0.1+Math.random()*0.1,max:0.92}); }   // arde ~12 s
-  const L=new THREE.PointLight(0xff8a3a,4.5,15,2); L.position.set(pos.x,gy+1.1,pos.z); scene.add(L); cfx.push({o:L,kind:'light',t:0,dur:FIRE_DUR});
+  const L=new THREE.PointLight(0xff8a3a,7,18,1.3); L.position.set(pos.x,gy+1.1,pos.z); scene.add(L); cfx.push({o:L,kind:'light',t:0,dur:FIRE_DUR});
   // INCENDIA árboles y plantas alrededor: se ennegrecen poco a poco y desaparecen
   const R=5.0; for(const t of trees){ if(t.dead||t.state!=='alive')continue; const dx=t.x-pos.x,dz=t.z-pos.z; if(dx*dx+dz*dz<R*R) igniteTree(t); }
   burnFoliageAround(pos.x,pos.z,R);
@@ -1620,7 +1620,7 @@ function burnFoliageAround(x,z,R){ const R2=R*R;
 }
 function tickFx(dt){ for(let i=cfx.length-1;i>=0;i--){ const e=cfx[i]; e.t+=dt; const d=e.delay||0;
   if(e.kind==='expl'){ const k=e.t/e.dur; e.o.material.opacity=Math.max(0,1-k*k); e.o.scale.setScalar(3.2*(0.55+k*0.7)); }
-  else if(e.kind==='light'){ e.o.intensity=Math.max(0,4.5*(1-e.t/e.dur))*(0.7+Math.random()*0.3); }
+  else if(e.kind==='light'){ e.o.intensity=Math.max(0,7*(1-e.t/e.dur))*(0.7+Math.random()*0.3); }
   else { const ft=e.t-d; let o=0; if(ft>0) o=Math.min(1,ft/0.5)*Math.min(1,(e.dur-e.t)/1.2); e.o.material.opacity=Math.max(0,o)*(e.max||0.85); }
   if(e.t>=e.dur){ scene.remove(e.o); if(e.o.material)e.o.material.dispose(); if(e.o.geometry)e.o.geometry.dispose(); cfx.splice(i,1); } } }
 
@@ -1641,7 +1641,7 @@ ribGeo.setAttribute('position',new THREE.BufferAttribute(ribPos,3)); ribGeo.setA
 const ribMat=fabricMat.clone(); ribMat.vertexColors=true;
 const ribMesh=new THREE.Mesh(ribGeo,ribMat); ribMesh.frustumCulled=false; heldFuse.add(ribMesh);
 const heldFire=makeFireMesh(fireGifs[1].tex,0.34,0.52); heldFuse.add(heldFire);
-const heldFireLight=new THREE.PointLight(0xff7a2e,1.0,3.2,2); heldFuse.add(heldFireLight);
+const heldFireLight=new THREE.PointLight(0xff7a2e,2.5,11,1.3); heldFuse.add(heldFireLight);   // ilumina alrededor, no sólo la botella
 let molotovHeld=false;
 const _vN=new THREE.Vector3(),_vC=new THREE.Vector3(),_nrm=new THREE.Vector3();
 const _lp=[]; for(let i=0;i<FN;i++)_lp.push(new THREE.Vector3()); const _tan=new THREE.Vector3(),_perp=new THREE.Vector3(),_zr=new THREE.Vector3(0,0,1);
@@ -1675,6 +1675,7 @@ function mHorno(){const g=new THREE.Group();
   const mouth=new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.26,0.32,16,1,true,0,Math.PI),clayDark); mouth.rotation.x=Math.PI/2; mouth.position.set(0,0.56,0.58); g.add(mouth);
   const glow=new THREE.Mesh(new THREE.SphereGeometry(0.2,12,10),emberMat); glow.position.set(0,0.52,0.5); g.add(glow);
   const chim=cyl(0.07,0.09,0.4,clayDark,12); chim.position.set(0,1.18,-0.05); g.add(chim);
+  const fl=new THREE.PointLight(0xff7a30,4.0,13,1.3); fl.position.set(0,0.6,0.5); g.add(fl); g.userData.kind='horno'; g.userData.fire=fl;   // el horno ilumina la habitación
   return g;}
 function mSilla(){const g=new THREE.Group();g.add(boxM(0.5,0.07,0.5,woodConsMat,0,0.5,0));g.add(boxM(0.5,0.5,0.07,woodConsMat,0,0.78,-0.215));[[-0.21,-0.21],[0.21,-0.21],[-0.21,0.21],[0.21,0.21]].forEach(([x,z])=>g.add(boxM(0.07,0.5,0.07,woodConsMat,x,0.25,z)));return g;}
 function mBidon(){const g=new THREE.Group();
@@ -1691,7 +1692,7 @@ function mFogata(){const g=new THREE.Group(); g.userData.kind='fogata';
   const l2=cyl(0.07,0.07,0.9,woodConsMat);l2.rotation.set(1.2,0.7,0);l2.position.y=0.2;g.add(l2);
   const s1=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[0].tex,blending:THREE.NormalBlending,depthWrite:false,transparent:true,opacity:0.95})); s1.scale.set(1.25,1.4,1); s1.position.y=0.78; g.add(s1);
   const s2=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[1].tex,blending:THREE.NormalBlending,depthWrite:false,transparent:true,opacity:0.95})); s2.scale.set(0.85,1.65,1); s2.position.y=0.95; g.add(s2);
-  const fl=new THREE.PointLight(0xff6a1e,1.1,8,2); fl.position.set(0,0.8,0); g.add(fl); g.userData.fire=fl;
+  const fl=new THREE.PointLight(0xff6a1e,4.5,14,1.2); fl.position.set(0,0.8,0); g.add(fl); g.userData.fire=fl;   // ilumina toda una habitación
   return g;}
 function mConserv(){const g=new THREE.Group();g.add(boxM(1.2,0.9,0.7,woodConsMat,0,0.45,0));g.add(boxM(1.24,0.12,0.74,woodConsMat,0,0.92,0));return g;}
 function mRecagua(){const g=new THREE.Group(); g.userData.kind='recagua';
@@ -1784,7 +1785,7 @@ function buildTorch(){const g=new THREE.Group();const sh=hnd(0.7,0.04,woodDark);
   planes.forEach((p,i)=>{ const mat=new THREE.MeshBasicMaterial({map:gTorch.tex,transparent:true,opacity:0.96,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});
     const m=new THREE.Mesh(new THREE.PlaneGeometry(p[0],p[1]),mat); m.rotation.y=p[2]; m.position.y=p[1]*0.30; fire.add(m); });
   fire.position.y=0.66; g.add(fire);
-  const fl=new THREE.PointLight(0xff7a2e,1.4,4.5,2); fl.name='torchLight'; fl.position.y=0.9; g.add(fl);
+  const fl=new THREE.PointLight(0xff7a2e,4.0,13,1.3); fl.name='torchLight'; fl.position.y=0.9; g.add(fl);   // ilumina una habitación entera
   return g;}
 function buildHoe(headMat){const g=new THREE.Group();
   const sh=hnd(1.35,0.045,woodMat); sh.position.y=0.67; g.add(sh); g.add(lash(1.27,0.06));
@@ -1883,7 +1884,7 @@ const RECIPES=[
   {id:'guadana',tab:'weapons',needTable:true,placeable:false},
   {id:'picomad',   tab:'tools',needTable:true,placeable:false},
   {id:'arco',      tab:'tools',needTable:true,placeable:false},
-  {id:'antorcha',  tab:'tools',needTable:false,placeable:false},
+  {id:'antorcha',  tab:'tools',needTable:false,placeable:true},   // se puede sostener (equipar) Y colocar con el martillo en paredes/suelos
   {id:'lanzapiedra',tab:'tools',needTable:true,placeable:false},
   {id:'cuchipiedra',tab:'tools',needTable:true,placeable:false},
   {id:'picopiedra', tab:'tools',needTable:true,placeable:false},
@@ -2010,8 +2011,8 @@ function setupAction(r){
   } else if(menuMode==='place'){
     b.textContent=cT('placeTitle'); b.onclick=()=>{ if(scMoved>8)return; hideMenu(); startPlacing(r.id); };
   } else {
-    if(r.placeable){ const ok=equipped==='hammer'; b.textContent=cT('placeTitle'); b.disabled=!ok; if(ok) b.onclick=()=>{ if(scMoved>8)return; hideMenu(); startPlacing(r.id); }; }
-    else { b.textContent=equipped===r.id?cT('equipped'):cT('equip'); b.onclick=()=>{ if(scMoved>8)return; equipped=(equipped===r.id?null:r.id); equipItem(equipped); selectItem(r.id); }; }
+    if(r.placeable&&r.id!=='antorcha'){ const ok=equipped==='hammer'; b.textContent=cT('placeTitle'); b.disabled=!ok; if(ok) b.onclick=()=>{ if(scMoved>8)return; hideMenu(); startPlacing(r.id); }; }
+    else { b.textContent=equipped===r.id?cT('equipped'):cT('equip'); b.onclick=()=>{ if(scMoved>8)return; equipped=(equipped===r.id?null:r.id); equipItem(equipped); selectItem(r.id); }; }   // antorcha: en la mochila se EQUIPA; para colocarla usá ✏️ (con el martillo)
   }
 }
 function openMenu(mode){
@@ -2049,7 +2050,7 @@ const CONSTR=new Set(['pmad','smad','tmad','imad','vmad','dmad','pcha','scha','t
 const DOORS=new Set(['dmad','dcha']);
 const ROOF_FLAT=new Set(['tmad','tcha']);
 const FLOORW=new Set(['smad','scha','tmad','tcha']);
-const NOSOLID=new Set(['smad','scha','tmad','tcha','imad','emad']);
+const NOSOLID=new Set(['smad','scha','tmad','tcha','imad','emad','antorcha']);
 const FOURGRID=new Set(['smad','scha','tmad','tcha','imad']);
 const PLACE_MIN=1.6, PLACE_MAX=5.5;
 function ghostMat(){return new THREE.MeshStandardMaterial({color:0x2ad24a,transparent:true,opacity:0.55,emissive:0x0d5a1c,emissiveIntensity:0.5});}
@@ -2061,8 +2062,25 @@ function startPlacing(id){
 function stopPlacing(){ if(ghost){scene.remove(ghost);ghost.traverse(o=>{if(o.geometry)o.geometry.dispose();});ghost=null;} placing=null; cbuilding=false;
   $('bRot').classList.add('hidden'); $('bPlace').classList.remove('on'); refreshHints2(); }
 const _fwd=new THREE.Vector3(),_gp=new THREE.Vector3();
+const _tray=new THREE.Raycaster(); const _tdir=new THREE.Vector3(),_tn=new THREE.Vector3(),_tup=new THREE.Vector3(0,1,0),_tlean=new THREE.Vector3();
+function placeTorchGhost(){   // la antorcha se monta donde mirás: en PARED se inclina hacia afuera; en suelo queda parada
+  _tdir.set(-Math.sin(player.yaw)*Math.cos(player.pitch),Math.sin(player.pitch),-Math.cos(player.yaw)*Math.cos(player.pitch));
+  _tray.set(camera.position,_tdir); _tray.far=6;
+  const hits=_tray.intersectObjects(placedItems,true); const hit=hits.length?hits[0]:null;
+  if(hit&&hit.face){
+    _tn.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+    if(Math.abs(_tn.y)<0.5){ ghost.position.copy(hit.point).addScaledVector(_tn,0.04);   // PARED → inclina el palo hacia adelante
+      _tlean.copy(_tup).multiplyScalar(Math.cos(0.6)).addScaledVector(_tn,Math.sin(0.6)).normalize();
+      ghost.quaternion.setFromUnitVectors(_tup,_tlean); ghost.userData.onWall=true; }
+    else { ghost.position.copy(hit.point); ghost.quaternion.identity(); ghost.userData.onWall=false; }   // techo/piso → parada
+  } else { const d=4; const gx=player.pos.x-Math.sin(player.yaw)*d, gz=player.pos.z-Math.cos(player.yaw)*d;   // sin construcción → parada en el terreno
+    ghost.position.set(gx,terrainHeight(gx,gz),gz); ghost.quaternion.identity(); ghost.userData.onWall=false; }
+  ghost.updateMatrixWorld(); ghost.userData.valid=true;
+  ghost.traverse(o=>{if(o.isMesh){o.material.color.setHex(0x2ad24a);o.material.emissive.setHex(0x0d5a1c);}});
+}
 function updateGhost(){
   if(!ghost) return;
+  if(placing==='antorcha'){ placeTorchGhost(); return; }
   _fwd.set(-Math.sin(player.yaw)*Math.cos(player.pitch),Math.sin(player.pitch),-Math.cos(player.yaw)*Math.cos(player.pitch));
   const camY=camera.position.y; const gyP=terrainHeight(player.pos.x,player.pos.z); let dist=PLACE_MAX;
   if(_fwd.y<-0.05){ const t=(camY-gyP)/(-_fwd.y); dist=THREE.MathUtils.clamp(t,PLACE_MIN,PLACE_MAX); }
@@ -2082,7 +2100,9 @@ function updateGhost(){
 }
 function tryBuild(){ if(!placing||cbuilding||!ghost||!ghost.userData.valid) return; cbuilding=true; buildT=0; emitDirt(ghost.position); }
 function finishBuild(){
-  const id=placing; const m=(MODELS[id]||buildTable)(); m.position.copy(ghost.position); m.rotation.y=placeYaw; m.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
+  const id=placing; const m=(MODELS[id]||buildTable)(); m.position.copy(ghost.position);
+  if(id==='antorcha'){ m.quaternion.copy(ghost.quaternion); } else { m.rotation.y=placeYaw; }   // la antorcha conserva su inclinación (pared)
+  m.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
   scene.add(m); placedItems.push(m); m.userData.kind=id; m.userData.hp=10; m.userData._solids=[]; inv[id]=Math.max(0,(inv[id]||0)-1);
   m.updateMatrixWorld(true);
   if(DOORS.has(id)){
@@ -2212,7 +2232,7 @@ function startSleep(bed){ if(sleepT>=0||!bed) return; sleepT=0; sleepFade=false;
   sleepBedPos.copy(bed.position); sleepP0.copy(player.pos); sleepYaw0=player.yaw; sleepPitch0=player.pitch;
   setHudVisible(false); signEl.style.display='none'; if(placing)stopPlacing(); }
 function _ease(t){ t=Math.max(0,Math.min(1,t)); return t*t*(3-2*t); }
-function makeDay(){ storyT=0; if(typeof cyclePhase!=='undefined')cyclePhase=165; setTime(26,120); if(typeof npcDayResetFn==='function'){ try{npcDayResetFn();}catch(e){} } }
+function makeDay(){ storyT=790; if(typeof cyclePhase!=='undefined')cyclePhase=0; setTime(4,120); if(typeof npcDayResetFn==='function'){ try{npcDayResetFn();}catch(e){} } }   // despierta al AMANECER (storyT=790 → ~12 min de día por delante)
 function sleepStep(dt){ sleepT+=dt;
   const bx=sleepBedPos.x, bz=sleepBedPos.z, by=terrainHeight(bx,bz);
   let cx,cy,cz,pitch; const yaw=sleepYaw0;
@@ -2245,9 +2265,9 @@ $('flash').addEventListener('pointerdown',()=>{ if(equipped==='botella'){ throwM
 function craftTick(dt){
   tickGifs(dt); tickProjectiles(dt); tickFx(dt);
   const fb=(fireGifs[1].cur||0.6);
-  for(const m of placedItems){ if(m.userData.kind==='fogata'&&m.userData.fire){ m.userData.fire.intensity=0.5+fb*2.4; } }
+  for(const m of placedItems){ if(m.userData.fire){ const base=m.userData.kind==='horno'?3.0:1.5; m.userData.fire.intensity=base+fb*3.2; } }   // fogata y horno: flamea e ilumina la habitación
   if(equipped==='botella') updateHeldMolotov(dt);
-  else if(equipped==='antorcha'&&fpModel){ const tl=fpModel.getObjectByName('torchLight'); if(tl)tl.intensity=0.6+(gTorch.cur||0.6)*2.2; }
+  else if(equipped==='antorcha'&&fpModel){ const tl=fpModel.getObjectByName('torchLight'); if(tl)tl.intensity=2.2+(gTorch.cur||0.6)*3.4; }
   // swing del arma equipada (anima el fpRig, no el hacha del bosque)
   if(wswing.active&&fpRig.visible){ wswing.t+=dt/0.42; const a=Math.sin(Math.min(wswing.t,1)*Math.PI);
     if(THRUST.has(equipped)){ fpRig.position.z=fpBasePos.z-a*0.7; fpRig.rotation.x=fpBaseRot.x-a*0.18; }
@@ -2358,8 +2378,8 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   function spawnNight(){ for(let k=0;k<5;k++){ const ti=(Math.random()*N_TYPES.length)|0,a=Math.random()*6.28,r=20+Math.random()*14;
     const x=player.pos.x+Math.cos(a)*r, z=player.pos.z+Math.sin(a)*r; const inst=mk(ti,x,z); inst.wTimer=0; inst.wAng=Math.random()*6.28; inst._wmove=false; try{ emitDirt({x,z}); emitDirt({x,z}); }catch(e){} } }
   npcTickFn=function(dt){
-    storyT+=dt; const elev = storyT<60?26 : (storyT<82? 26+(storyT-60)/22*(-40) : -14); setTime(elev,120);   // ~1 min de día y oscurece
-    if(!nightSpawned&&nReady&&nightFactor>0.55){ nightSpawned=true; spawnNight(); }
+    storyT+=dt; const elev = A_ELEV*Math.sin(storyT*(2*Math.PI/1440)+2.88); setTime(elev,120);   // ciclo real: ~12 min de día y ~12 min de noche (arranca cerca del atardecer → 1ª noche en ~1 min)
+    if(nReady){ if(nightFactor>0.55&&!nightSpawned){ nightSpawned=true; spawnNight(); } else if(nightFactor<0.25&&(nightSpawned||NPCS.length)){ npcDayResetFn(); } }   // amanece → se van los NPCs, listo para la próxima noche
     if(npcAtk){ npcAtk=false; tryKill(); }
     for(const inst of NPCS){ if(inst.dead){ if(inst.rag)stepRag(inst); continue; }
       if(inst.mixers[inst.state])inst.mixers[inst.state].update(dt);
@@ -2666,7 +2686,7 @@ function selectHot(i){ hotSel=i; const id=hotbar[i];
   const have=(id==='hacha')||((inv[id]||0)>0);
   if(!have){ equipped=null; equipItem(null); renderHotbar(); return; }
   const r=RECIPES.find(x=>x.id===id);
-  if(r&&r.placeable){ if(equipped!=='hammer'){ equipped='hammer'; equipItem('hammer'); } startPlacing(id); }   // ítem colocable → entra en modo colocar
+  if(r&&r.placeable&&id!=='antorcha'){ if(equipped!=='hammer'){ equipped='hammer'; equipItem('hammer'); } startPlacing(id); }   // ítem colocable → modo colocar (la antorcha se sostiene desde la barra)
   else { equipped=id; equipItem(id); }
   renderHotbar(); }
 function assignHot(i,id){ for(let k=0;k<HOTN;k++)if(hotbar[k]===id)hotbar[k]=null; hotbar[i]=id; renderHotbar(); }   // sin duplicados
