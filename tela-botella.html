@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0c1016" />
+<title>Visor · Botella & Tela (Verlet)</title>
+<style>
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
+  html,body{ height:100%; overflow:hidden; background:#0c1016; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; color:#eef3f8; }
+  #app{ position:fixed; inset:0; }
+  #app canvas{ display:block; width:100%!important; height:100%!important; touch-action:none; }
+
+  /* Barra superior */
+  .top{ position:fixed; top:calc(12px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%); z-index:10;
+        display:flex; gap:8px; align-items:center; background:rgba(16,20,28,.7); backdrop-filter:blur(12px);
+        border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:8px 10px; }
+  .seg{ display:flex; gap:4px; }
+  .seg button{ padding:8px 16px; border-radius:10px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05);
+               color:#eef3f8; font-size:14px; font-weight:600; cursor:pointer; transition:all .15s; }
+  .seg button.active{ background:#2f6dd0; border-color:#8fe3ff; }
+
+  /* Panel de controles (tela) */
+  #panel{ position:fixed; left:12px; bottom:calc(12px + env(safe-area-inset-bottom,0px)); z-index:10; width:min(280px,calc(100vw - 24px));
+          background:rgba(16,20,28,.72); backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:14px; display:none; }
+  #panel.show{ display:block; }
+  #panel h3{ font-size:13px; letter-spacing:.05em; opacity:.85; margin-bottom:10px; }
+  .row{ display:flex; align-items:center; gap:10px; margin:9px 0; font-size:12px; }
+  .row label{ width:78px; opacity:.75; }
+  .row input[type=range]{ flex:1; accent-color:#7fd0ff; }
+  .row .val{ width:38px; text-align:right; opacity:.85; font-variant-numeric:tabular-nums; }
+  .btns{ display:flex; gap:8px; margin-top:10px; }
+  .btns button{ flex:1; padding:9px; border-radius:10px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06);
+                color:#eef3f8; font-size:12px; cursor:pointer; }
+  .btns button:active{ background:rgba(120,170,255,.2); }
+
+  #hint{ position:fixed; right:12px; bottom:calc(12px + env(safe-area-inset-bottom,0px)); z-index:9; max-width:200px; text-align:right;
+         font-size:11px; opacity:.55; line-height:1.5; text-shadow:0 1px 3px rgba(0,0,0,.7); }
+  #stats{ position:fixed; right:12px; top:calc(14px + env(safe-area-inset-top,0px)); z-index:9; font-size:11px; opacity:.6; font-variant-numeric:tabular-nums; }
+  #loader{ position:fixed; inset:0; z-index:30; display:flex; align-items:center; justify-content:center; background:#0c1016; transition:opacity .5s; font-size:13px; letter-spacing:.1em; opacity:.8; }
+  #loader.hide{ opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+<div id="loader">cargando…</div>
+<div id="app"></div>
+
+<div class="top">
+  <div class="seg" id="modeSeg">
+    <button data-mode="bottle" class="active">🍾 Botella</button>
+    <button data-mode="cloth">🏳️ Tela</button>
+  </div>
+</div>
+
+<div id="panel">
+  <h3>Tela · Verlet (físicas)</h3>
+  <div class="row"><label>Viento</label><input id="wind" type="range" min="0" max="40" value="12"><span class="val" id="windV">12</span></div>
+  <div class="row"><label>Gravedad</label><input id="grav" type="range" min="0" max="30" value="14"><span class="val" id="gravV">14</span></div>
+  <div class="row"><label>Resist. aire</label><input id="drag" type="range" min="0" max="60" value="12"><span class="val" id="dragV">.12</span></div>
+  <div class="row"><label>Rigidez</label><input id="stiff" type="range" min="1" max="8" value="4"><span class="val" id="stiffV">4</span></div>
+  <div class="btns">
+    <button id="bPins">Soltar esquinas</button>
+    <button id="bReset">Reiniciar</button>
+  </div>
+</div>
+
+<div id="hint"></div>
+<div id="stats"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "gifuct-js": "https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+/* =====================================================================
+   Render / escena
+===================================================================== */
+const app=document.getElementById('app');
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.1;
+app.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x10151d);
+const pmrem=new THREE.PMREMGenerator(renderer); scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+
+const camera=new THREE.PerspectiveCamera(55,1,0.05,200);
+camera.position.set(0,1.4,5);
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true; controls.dampingFactor=0.08; controls.target.set(0,1.0,0); controls.minDistance=1.2; controls.maxDistance=14;
+
+// luces
+const sun=new THREE.DirectionalLight(0xffffff,2.6); sun.position.set(4,7,5); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=30;
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.03;
+scene.add(sun); scene.add(new THREE.HemisphereLight(0xcfe0ff,0x20262e,0.7));
+
+// piso
+const floorY=0;
+const floor=new THREE.Mesh(new THREE.CircleGeometry(20,48),new THREE.MeshStandardMaterial({color:0x2b3340,roughness:0.95,metalness:0}));
+floor.rotation.x=-Math.PI/2; floor.position.y=floorY; floor.receiveShadow=true; scene.add(floor);
+const grid=new THREE.GridHelper(20,20,0x3a4658,0x2a3340); grid.position.y=floorY+0.002; scene.add(grid);
+
+function resize(){ const w=innerWidth,h=innerHeight; camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h,false); }
+addEventListener('resize',resize); resize();
+
+/* =====================================================================
+   BOTELLA (visor) — molotov procedural: vidrio + líquido + trapo + llama
+===================================================================== */
+const bottleGroup=new THREE.Group(); scene.add(bottleGroup);
+function buildBottle(){
+  const g=new THREE.Group();
+  const glass=new THREE.MeshPhysicalMaterial({color:0x2f5d3a,roughness:0.05,metalness:0,transmission:0.85,transparent:true,opacity:0.6,thickness:0.4,ior:1.5,envMapIntensity:1.6});
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.4,1.05,40,1),glass); body.position.y=0.52; body.castShadow=true; g.add(body);
+  const shoulder=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.34,0.32,40),glass); shoulder.position.y=1.2; g.add(shoulder);
+  const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.16,0.34,32),glass); neck.position.y=1.5; g.add(neck);
+  const lip=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.15,0.07,32),glass); lip.position.y=1.69; g.add(lip);
+  // líquido dentro
+  const liq=new THREE.MeshStandardMaterial({color:0xc9852a,roughness:0.25,metalness:0,transparent:true,opacity:0.92});
+  const fluid=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.36,0.72,40),liq); fluid.position.y=0.46; g.add(fluid);
+  g.position.y=floorY;
+  return g;
+}
+const bottleHolder=new THREE.Group(); bottleGroup.add(bottleHolder);   // se puede MOVER (la tela reacciona)
+const bottle=buildBottle(); bottleHolder.add(bottle);
+
+/* ===== Fuego del gif: frames DECODIFICADOS (anima sí o sí, no depende del navegador) ===== */
+const FIREURL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4d4c23e/db5a4595bac1960e5b7cc0a35544140b.gif';
+const fireTex=new THREE.CanvasTexture(document.createElement('canvas')); fireTex.colorSpace=THREE.SRGBColorSpace;
+let fireFrames=[], fireDelays=[], fireTotal=0, fireCx=null, fireReady=false, _fimg=null;
+async function decodeFire(){   // decodifica TODOS los frames del gif con gifuct-js → anima sí o sí
+  try{
+    const { parseGIF, decompressFrames }=await import('gifuct-js');   // dinámico: si falla, cae al fallback (no rompe la página)
+    const buf=await (await fetch(FIREURL,{mode:'cors'})).arrayBuffer();
+    const gif=parseGIF(buf); const frames=decompressFrames(gif,true);
+    const W=gif.lsd.width, H=gif.lsd.height, MAXH=200, sc=Math.min(1,MAXH/H);
+    const full=document.createElement('canvas'); full.width=W; full.height=H; const fctx=full.getContext('2d');
+    for(const fr of frames){
+      const tmp=document.createElement('canvas'); tmp.width=fr.dims.width; tmp.height=fr.dims.height;
+      tmp.getContext('2d').putImageData(new ImageData(fr.patch,fr.dims.width,fr.dims.height),0,0);
+      fctx.drawImage(tmp,fr.dims.left,fr.dims.top);                                  // compone sobre el frame completo
+      const c=document.createElement('canvas'); c.width=Math.round(W*sc); c.height=Math.round(H*sc);
+      c.getContext('2d').drawImage(full,0,0,c.width,c.height);
+      fireFrames.push(c); fireDelays.push(fr.delay||80);
+      if(fr.disposalType===2) fctx.clearRect(fr.dims.left,fr.dims.top,fr.dims.width,fr.dims.height);   // restaurar fondo
+    }
+    fireTotal=fireDelays.reduce((a,b)=>a+b,0)||fireDelays.length*80;
+    const cv=fireTex.image; cv.width=fireFrames[0].width; cv.height=fireFrames[0].height; fireCx=cv.getContext('2d'); fireReady=true;
+  }catch(e){ // fallback: <img> casi invisible on-screen + drawImage
+    const img=new Image(); img.crossOrigin='anonymous'; img.src=FIREURL;
+    img.style.cssText='position:fixed;left:0;bottom:0;width:4px;height:4px;opacity:.012;pointer-events:none;'; document.body.appendChild(img); _fimg=img;
+    const cv=fireTex.image; cv.width=128; cv.height=192; fireCx=cv.getContext('2d'); fireReady=true;
+  }
+}
+decodeFire();
+// fuego como PLANOS CRUZADOS (no billboard: no sigue la cámara) — base abajo, llama hacia arriba
+function makeFireMesh(tex,w,h){
+  const g=new THREE.Group();
+  const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:0.7,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false});
+  const p1=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat); p1.position.y=h*0.32; g.add(p1);
+  const p2=p1.clone(); p2.rotation.y=Math.PI/2; g.add(p2);
+  return g;
+}
+function tickFire(){
+  if(!fireReady||!fireCx) return;
+  if(fireFrames.length){ let t=performance.now()%fireTotal, idx=0; for(let i=0;i<fireDelays.length;i++){ if(t<fireDelays[i]){idx=i;break;} t-=fireDelays[i]; }
+    const f=fireFrames[idx], cv=fireTex.image; if(cv.width!==f.width){cv.width=f.width;cv.height=f.height;} fireCx.clearRect(0,0,cv.width,cv.height); fireCx.drawImage(f,0,0); fireTex.needsUpdate=true; }
+  else if(_fimg&&_fimg.complete&&_fimg.naturalWidth){ const s=Math.min(128/_fimg.naturalWidth,192/_fimg.naturalHeight); fireCx.clearRect(0,0,128,192); fireCx.drawImage(_fimg,0,0,_fimg.naturalWidth*s,_fimg.naturalHeight*s); fireTex.needsUpdate=true; }
+}
+
+/* ===== Trapo ENROLLADO: tela Verlet (grande) metida en el pico y saliendo por ARRIBA (destapado) ===== */
+const ragMat=new THREE.MeshStandardMaterial({color:0xd8c7a2,roughness:0.92,metalness:0,side:THREE.DoubleSide});
+const RAGX=36, RAGY=46;                 // 36×46 = 1656 vértices (grande, suave)
+let ragCloth=null,ragPhys=null,ragRen=null,fireSpr=null,ragFireLight=null;
+const ragPins=[];                       // {p, off:Vector3}  fijos que siguen a la botella
+function buildRolledRag(){
+  ragCloth=new Cloth(1,1,RAGX,RAGY);     // dims se sobrescriben abajo
+  const turns=2.6, r0=0.06, gap=0.042, baseY=1.46, LEN=0.98, sy=LEN/(RAGY-1);   // más largo hacia afuera
+  for(let iy=0;iy<RAGY;iy++)for(let ix=0;ix<RAGX;ix++){ const p=ragCloth.particles[iy*RAGX+ix];
+    const u=ix/(RAGX-1), ang=u*turns*Math.PI*2, r=r0+u*turns*gap;   // ESPIRAL (enrollada): cada vuelta más radio
+    p.pos.set(Math.cos(ang)*r, baseY+iy*sy, Math.sin(ang)*r); p.prev.copy(p.pos);
+    p.pinned = iy < RAGY*0.30;                                     // 30% de abajo FIJO en el pico → el resto sale MÁS afuera
+    if(p.pinned) ragPins.push({p, off:p.pos.clone()});             // sigue a la botella al moverla
+  }
+  for(const c of ragCloth.constraints) c.rest=c.a.pos.distanceTo(c.b.pos);   // el estado de reposo ES el enrollado → mantiene la forma
+  ragPhys=new ClothPhysics(ragCloth);
+  ragPhys.gravity.set(0,-2.4,0); ragPhys.wind=1.2; ragPhys.windDir.set(0.5,0,0.5); ragPhys.drag=0.04; ragPhys.iterations=4;
+  ragPhys.colliders=[];
+  ragRen=new ClothRenderer(ragCloth,ragMat); bottleGroup.add(ragRen.mesh);
+  fireSpr=makeFireMesh(fireTex,0.7,1.15); bottleGroup.add(fireSpr);   // fuego GRANDE, planos cruzados (no billboard)
+  ragFireLight=new THREE.PointLight(0xff7a30,1.6,4.5,2); bottleGroup.add(ragFireLight);
+}
+
+/* =====================================================================
+   SIMULACIÓN DE TELA — Verlet Integration (sin Cannon.js)
+   Arquitectura: Particle · Constraint · Cloth · ClothPhysics · ClothRenderer
+===================================================================== */
+
+// --- Particle: un vértice de la tela ---------------------------------
+// Verlet no guarda velocidad explícita: la deduce de (pos - prev).
+class Particle{
+  constructor(x,y,z){
+    this.pos =new THREE.Vector3(x,y,z);
+    this.prev=new THREE.Vector3(x,y,z);   // posición del paso anterior
+    this.acc =new THREE.Vector3();        // aceleración acumulada (fuerzas)
+    this.pinned=false;                    // si está fijado (Pin Constraint)
+  }
+  addForce(f){ this.acc.add(f); }         // f ya es fuerza/masa (masa = 1)
+  // Integración de Verlet:  x_{n+1} = x_n + (x_n - x_{n-1})*(1-drag) + a*dt²
+  integrate(dt,drag){
+    if(this.pinned){ this.acc.set(0,0,0); return; }
+    const vx=(this.pos.x-this.prev.x)*(1-drag);
+    const vy=(this.pos.y-this.prev.y)*(1-drag);
+    const vz=(this.pos.z-this.prev.z)*(1-drag);
+    this.prev.copy(this.pos);
+    this.pos.x+=vx+this.acc.x*dt*dt;
+    this.pos.y+=vy+this.acc.y*dt*dt;
+    this.pos.z+=vz+this.acc.z*dt*dt;
+    this.acc.set(0,0,0);
+  }
+}
+
+// --- Constraint: mantiene la distancia de reposo entre 2 partículas ---
+// Tipos: structural (vecinos H/V), shear (diagonales), bend (saltando 1).
+class Constraint{
+  constructor(a,b,stiffness){
+    this.a=a; this.b=b;
+    this.rest=a.pos.distanceTo(b.pos);   // longitud objetivo
+    this.stiff=stiffness;                 // 0..1 (cuánto corrige por iteración)
+  }
+  // Relajación: empuja/jala ambas partículas hasta acercarse a la distancia rest.
+  solve(){
+    const a=this.a,b=this.b;
+    let dx=b.pos.x-a.pos.x, dy=b.pos.y-a.pos.y, dz=b.pos.z-a.pos.z;
+    const d=Math.sqrt(dx*dx+dy*dy+dz*dz)||1e-6;
+    const diff=((d-this.rest)/d)*0.5*this.stiff;
+    dx*=diff; dy*=diff; dz*=diff;
+    if(!a.pinned){ a.pos.x+=dx; a.pos.y+=dy; a.pos.z+=dz; }
+    if(!b.pinned){ b.pos.x-=dx; b.pos.y-=dy; b.pos.z-=dz; }
+  }
+}
+
+// --- Cloth: grilla de partículas + sus constraints --------------------
+class Cloth{
+  constructor(width,height,nx,ny){
+    this.nx=nx; this.ny=ny;               // resolución (vértices por lado)
+    this.particles=[];
+    this.constraints=[];
+    const sx=width/(nx-1), sy=height/(ny-1);
+    const ox=-width/2, oy=2.6;             // origen (centrada arriba)
+    // crear partículas en un plano vertical (cara al viento)
+    for(let y=0;y<ny;y++) for(let x=0;x<nx;x++){
+      this.particles.push(new Particle(ox+x*sx, oy-y*sy, 0));
+    }
+    const P=(x,y)=>this.particles[y*nx+x];
+    // STRUCTURAL: vecinos horizontales y verticales
+    for(let y=0;y<ny;y++) for(let x=0;x<nx;x++){
+      if(x<nx-1) this.constraints.push(new Constraint(P(x,y),P(x+1,y),1));
+      if(y<ny-1) this.constraints.push(new Constraint(P(x,y),P(x,y+1),1));
+    }
+    // SHEAR: diagonales (evitan que la tela se "cizalle")
+    for(let y=0;y<ny-1;y++) for(let x=0;x<nx-1;x++){
+      this.constraints.push(new Constraint(P(x,y),P(x+1,y+1),0.9));
+      this.constraints.push(new Constraint(P(x+1,y),P(x,y+1),0.9));
+    }
+    // BEND: saltando un vértice (evitan plegados irreales, dan rigidez de flexión)
+    for(let y=0;y<ny;y++) for(let x=0;x<nx;x++){
+      if(x<nx-2) this.constraints.push(new Constraint(P(x,y),P(x+2,y),0.55));
+      if(y<ny-2) this.constraints.push(new Constraint(P(x,y),P(x,y+2),0.55));
+    }
+    // PINS: fijar la fila de arriba en sus extremos y el centro (bandera/colgada)
+    this.pinTop();
+  }
+  pinTop(){ const {nx}=this; this.particles[0].pinned=true; this.particles[nx-1].pinned=true; this.particles[(nx>>1)].pinned=true; }
+  unpin(){ for(const p of this.particles) p.pinned=false; }
+}
+
+// --- ClothPhysics: integra Verlet, resuelve constraints y colisiones --
+class ClothPhysics{
+  constructor(cloth){
+    this.cloth=cloth;
+    this.gravity=new THREE.Vector3(0,-14,0);
+    this.wind=12;                          // intensidad
+    this.windDir=new THREE.Vector3(0,0,1); // dirección base
+    this.drag=0.12;                        // resistencia del aire
+    this.iterations=4;                     // pasadas de relajación de constraints
+    this.colliders=[];                     // {type,...}
+    this._t=0;
+    this._g=new THREE.Vector3(); this._w=new THREE.Vector3();
+  }
+  setStiffness(mult){ for(const c of this.cloth.constraints){ /* recalculado por tipo no; escalamos global */ } this._stiffMult=mult; }
+  // Viento dinámico: varía en el tiempo (ráfagas) + algo de turbulencia por partícula.
+  step(dt){
+    this._t+=dt;
+    const ps=this.cloth.particles;
+    const gust=this.wind*(0.6+0.4*Math.sin(this._t*1.3)+0.2*Math.sin(this._t*4.1));
+    // fuerzas: gravedad + viento (con turbulencia)
+    for(let i=0;i<ps.length;i++){
+      const p=ps[i]; if(p.pinned) continue;
+      this._g.copy(this.gravity);
+      const turb=0.5+0.5*Math.sin(this._t*3+ i*0.7);
+      this._w.copy(this.windDir).multiplyScalar(gust*turb);
+      this._w.x+=Math.sin(this._t*2.1+i)*gust*0.15;
+      p.addForce(this._g); p.addForce(this._w);
+    }
+    // integración Verlet
+    for(let i=0;i<ps.length;i++) ps[i].integrate(dt,this.drag);
+    // relajación de constraints (varias iteraciones = tela más rígida/estable)
+    const sm=this._stiffMult||1;
+    for(let k=0;k<this.iterations;k++){
+      const cs=this.cloth.constraints;
+      for(let i=0;i<cs.length;i++){ const c=cs[i]; const s=c.stiff; c.stiff=Math.min(1,s*sm); c.solve(); c.stiff=s; }
+      this.collide();   // resolver colisiones tras cada iteración (evita penetración)
+    }
+  }
+  // Resolución de colisiones contra los colliders (suelo, esfera, caja, cápsula).
+  collide(){
+    const ps=this.cloth.particles, R=0.02; // grosor de la tela
+    for(let i=0;i<ps.length;i++){
+      const p=ps[i];
+      // suelo (plano)
+      if(p.pos.y<floorY+R){ p.pos.y=floorY+R; }
+      for(const c of this.colliders){
+        if(c.type==='sphere') this._sphere(p,c,R);
+        else if(c.type==='box') this._box(p,c,R);
+        else if(c.type==='capsule') this._capsule(p,c,R);
+      }
+    }
+  }
+  _sphere(p,c,R){
+    const dx=p.pos.x-c.center.x, dy=p.pos.y-c.center.y, dz=p.pos.z-c.center.z;
+    const d=Math.sqrt(dx*dx+dy*dy+dz*dz)||1e-6, rr=c.radius+R;
+    if(d<rr){ const k=rr/d; p.pos.x=c.center.x+dx*k; p.pos.y=c.center.y+dy*k; p.pos.z=c.center.z+dz*k; }
+  }
+  _box(p,c,R){ // empuja a la cara más cercana si está dentro del AABB
+    const mnx=c.center.x-c.half.x-R, mxx=c.center.x+c.half.x+R;
+    const mny=c.center.y-c.half.y-R, mxy=c.center.y+c.half.y+R;
+    const mnz=c.center.z-c.half.z-R, mxz=c.center.z+c.half.z+R;
+    if(p.pos.x>mnx&&p.pos.x<mxx&&p.pos.y>mny&&p.pos.y<mxy&&p.pos.z>mnz&&p.pos.z<mxz){
+      const dl=p.pos.x-mnx,dr=mxx-p.pos.x,db=p.pos.y-mny,dt2=mxy-p.pos.y,dk=p.pos.z-mnz,df=mxz-p.pos.z;
+      const m=Math.min(dl,dr,db,dt2,dk,df);
+      if(m===dl)p.pos.x=mnx; else if(m===dr)p.pos.x=mxx; else if(m===db)p.pos.y=mny; else if(m===dt2)p.pos.y=mxy; else if(m===dk)p.pos.z=mnz; else p.pos.z=mxz;
+    }
+  }
+  _capsule(p,c,R){ // cápsula = segmento p0-p1 con radio; empuja según el punto más cercano del eje
+    const ax=c.p1.x-c.p0.x, ay=c.p1.y-c.p0.y, az=c.p1.z-c.p0.z;
+    const wx=p.pos.x-c.p0.x, wy=p.pos.y-c.p0.y, wz=p.pos.z-c.p0.z;
+    let t=(wx*ax+wy*ay+wz*az)/((ax*ax+ay*ay+az*az)||1e-6); t=Math.max(0,Math.min(1,t));
+    const cx=c.p0.x+ax*t, cy=c.p0.y+ay*t, cz=c.p0.z+az*t;
+    const dx=p.pos.x-cx, dy=p.pos.y-cy, dz=p.pos.z-cz;
+    const d=Math.sqrt(dx*dx+dy*dy+dz*dz)||1e-6, rr=c.radius+R;
+    if(d<rr){ const k=rr/d; p.pos.x=cx+dx*k; p.pos.y=cy+dy*k; p.pos.z=cz+dz*k; }
+  }
+}
+
+// --- ClothRenderer: BufferGeometry + normales automáticas -------------
+class ClothRenderer{
+  constructor(cloth,material){
+    this.cloth=cloth; const {nx,ny}=cloth;
+    this.geom=new THREE.BufferGeometry();
+    const verts=nx*ny;
+    this.positions=new Float32Array(verts*3);
+    const uvs=new Float32Array(verts*2);
+    for(let y=0;y<ny;y++) for(let x=0;x<nx;x++){ const i=y*nx+x; uvs[i*2]=x/(nx-1); uvs[i*2+1]=1-y/(ny-1); }
+    const idx=[];
+    for(let y=0;y<ny-1;y++) for(let x=0;x<nx-1;x++){
+      const a=y*nx+x,b=a+1,c=a+nx,d=c+1;
+      idx.push(a,c,b, b,c,d);
+    }
+    this.geom.setIndex(idx);
+    this.geom.setAttribute('position',new THREE.BufferAttribute(this.positions,3));
+    this.geom.setAttribute('uv',new THREE.BufferAttribute(uvs,2));
+    this.mesh=new THREE.Mesh(this.geom,material);
+    this.mesh.castShadow=true; this.mesh.receiveShadow=true; this.mesh.frustumCulled=false;
+    this.sync();
+  }
+  // copiar posiciones de las partículas → geometría y recalcular normales
+  sync(){
+    const ps=this.cloth.particles, pos=this.positions;
+    for(let i=0;i<ps.length;i++){ pos[i*3]=ps[i].pos.x; pos[i*3+1]=ps[i].pos.y; pos[i*3+2]=ps[i].pos.z; }
+    this.geom.attributes.position.needsUpdate=true;
+    this.geom.computeVertexNormals();
+    this.geom.computeBoundingSphere();
+  }
+}
+
+/* ---- montar la simulación ---- */
+const clothGroup=new THREE.Group(); clothGroup.visible=false; scene.add(clothGroup);
+// tela de tela (~32x33 = 1056 partículas > 1024)
+const clothMaterial=new THREE.MeshStandardMaterial({color:0xd23b4a,roughness:0.78,metalness:0.0,side:THREE.DoubleSide,envMapIntensity:0.8});
+let cloth, physics, clothRen;
+function buildCloth(){
+  if(clothRen){ clothGroup.remove(clothRen.mesh); clothRen.geom.dispose(); }
+  cloth=new Cloth(3.0,3.1,32,33);
+  physics=new ClothPhysics(cloth);
+  clothRen=new ClothRenderer(cloth,clothMaterial);
+  clothGroup.add(clothRen.mesh);
+  // colisionadores de la demo: una esfera que se mueve por debajo + una caja + una cápsula fijas
+  movingSphere={type:'sphere',center:new THREE.Vector3(0,0.8,0),radius:0.6};
+  physics.colliders=[ movingSphere,
+    {type:'box',center:new THREE.Vector3(-1.6,0.4,0),half:new THREE.Vector3(0.4,0.4,0.4)},
+    {type:'capsule',p0:new THREE.Vector3(1.5,0.2,-0.4),p1:new THREE.Vector3(1.5,1.4,0.4),radius:0.32} ];
+  syncColliderMeshes();
+  applyUI();
+}
+
+// mallas visuales de los colisionadores
+let movingSphere=null;
+const sphereMesh=new THREE.Mesh(new THREE.SphereGeometry(0.6,32,24),new THREE.MeshStandardMaterial({color:0x49b0ff,roughness:0.35,metalness:0.1}));
+sphereMesh.castShadow=true; clothGroup.add(sphereMesh);
+const boxMesh=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.8,0.8),new THREE.MeshStandardMaterial({color:0x8a8f98,roughness:0.6}));
+boxMesh.castShadow=true; clothGroup.add(boxMesh);
+const capMesh=new THREE.Mesh(new THREE.CapsuleGeometry(0.32,1.2,8,16),new THREE.MeshStandardMaterial({color:0x7bd88a,roughness:0.5}));
+capMesh.castShadow=true; clothGroup.add(capMesh);
+function syncColliderMeshes(){
+  const cs=physics.colliders;
+  for(const c of cs){
+    if(c.type==='box') boxMesh.position.copy(c.center);
+    else if(c.type==='capsule'){ capMesh.position.set((c.p0.x+c.p1.x)/2,(c.p0.y+c.p1.y)/2,(c.p0.z+c.p1.z)/2); }
+  }
+}
+
+/* =====================================================================
+   Interacción: agarrar la tela con el dedo/mouse (física real)
+===================================================================== */
+const ray=new THREE.Raycaster(); const ndc=new THREE.Vector2();
+const dragPlane=new THREE.Plane(); const hit=new THREE.Vector3();
+const hPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0); const bottleOff=new THREE.Vector3();
+let grabbed=null, grabbedWasPinned=false, mode='bottle', bottleDrag=false;
+
+function pointerNDC(e){ ndc.x=(e.clientX/innerWidth)*2-1; ndc.y=-(e.clientY/innerHeight)*2+1; }
+function nearestParticle(point){
+  let best=null,bd=0.4*0.4;   // radio de agarre
+  for(const p of cloth.particles){ const d=p.pos.distanceToSquared(point); if(d<bd){bd=d;best=p;} }
+  return best;
+}
+renderer.domElement.addEventListener('pointerdown',e=>{
+  pointerNDC(e); ray.setFromCamera(ndc,camera);
+  if(mode==='cloth'&&cloth){
+    const inter=ray.intersectObject(clothRen.mesh,false);
+    if(inter.length){ grabbed=nearestParticle(inter[0].point);
+      if(grabbed){ grabbedWasPinned=grabbed.pinned; grabbed.pinned=true; controls.enabled=false;
+        dragPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), inter[0].point); } }
+  } else if(mode==='bottle'){
+    const targets=[...bottleHolder.children]; if(ragRen) targets.push(ragRen.mesh);
+    const inter=ray.intersectObjects(targets,true);
+    if(inter.length && ray.ray.intersectPlane(hPlane,hit)){ bottleDrag=true; controls.enabled=false; bottleOff.copy(bottleHolder.position).sub(hit); }
+  }
+});
+renderer.domElement.addEventListener('pointermove',e=>{
+  pointerNDC(e); ray.setFromCamera(ndc,camera);
+  if(grabbed){ if(ray.ray.intersectPlane(dragPlane,hit)){ grabbed.pos.copy(hit); grabbed.prev.copy(hit); } }
+  else if(bottleDrag){ if(ray.ray.intersectPlane(hPlane,hit)){
+    bottleHolder.position.x=THREE.MathUtils.clamp(hit.x+bottleOff.x,-1.8,1.8);
+    bottleHolder.position.z=THREE.MathUtils.clamp(hit.z+bottleOff.z,-1.8,1.8); } }
+});
+function release(){ if(grabbed){ grabbed.pinned=grabbedWasPinned; grabbed=null; } bottleDrag=false; controls.enabled=true; }
+renderer.domElement.addEventListener('pointerup',release);
+renderer.domElement.addEventListener('pointercancel',release);
+
+/* =====================================================================
+   UI
+===================================================================== */
+const $=id=>document.getElementById(id);
+function applyUI(){
+  if(!physics) return;
+  physics.wind=+$('wind').value;
+  physics.gravity.y=-(+$('grav').value);
+  physics.drag=(+$('drag').value)/100;
+  physics.setStiffness(+$('stiff').value/4);
+  $('windV').textContent=$('wind').value;
+  $('gravV').textContent=$('grav').value;
+  $('dragV').textContent=(physics.drag).toFixed(2).replace('0.','.');
+  $('stiffV').textContent=$('stiff').value;
+}
+['wind','grav','drag','stiff'].forEach(id=>$(id).addEventListener('input',applyUI));
+$('bPins').addEventListener('click',()=>{ if(cloth){ cloth.unpin(); } });
+$('bReset').addEventListener('click',()=>{ buildCloth(); });
+
+function setMode(m){
+  mode=m;
+  document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+  const isCloth=m==='cloth';
+  bottleGroup.visible=!isCloth; clothGroup.visible=isCloth;
+  $('panel').classList.toggle('show',isCloth);
+  if(isCloth){ if(!cloth) buildCloth(); controls.target.set(0,1.3,0); camera.position.set(0,1.6,6); $('hint').innerHTML='Arrastrá la tela con el dedo · una mano la mueve, dos orbitan'; }
+  else { controls.target.set(0,1.25,0); camera.position.set(0,1.5,4.4); $('hint').innerHTML='Arrastrá la botella para moverla (la tela se sacude) · girá para inspeccionar'; }
+  controls.update();
+}
+document.querySelectorAll('#modeSeg button').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+
+/* =====================================================================
+   Loop
+===================================================================== */
+const clock=new THREE.Clock(); let frames=0,acc=0,fps=0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.033);
+
+  // botella: trapo ENROLLADO (Verlet) saliendo por arriba + fuego del gif, reacciona al mover la botella
+  if(bottleGroup.visible){
+    tickFire();
+    if(ragPhys){
+      if(!bottleDrag) bottleHolder.position.multiplyScalar(1-Math.min(1,8*dt));   // vuelve al centro suave
+      for(const q of ragPins){ q.p.pos.set(bottleHolder.position.x+q.off.x, bottleHolder.position.y+q.off.y, bottleHolder.position.z+q.off.z); }  // los fijos siguen a la botella → la tela se sacude
+      ragPhys.step(dt*0.5); ragPhys.step(dt*0.5);   // 2 sub-pasos = estable y liviano
+      ragRen.sync();
+      const tip=ragCloth.particles[(RAGY-1)*RAGX + (RAGX>>1)];   // partícula superior central (la punta que sale)
+      fireSpr.position.set(tip.pos.x,tip.pos.y-0.12,tip.pos.z);   // el fuego envuelve la punta y la quema
+      ragFireLight.position.set(tip.pos.x,tip.pos.y+0.1,tip.pos.z); ragFireLight.intensity=1.3+Math.sin(clock.elapsedTime*14)*0.4+Math.random()*0.2;
+    }
+  }
+
+  // tela: físicas con sub-pasos fijos (estabilidad)
+  if(clothGroup.visible&&physics){
+    // mover la esfera de la demo por debajo de la tela
+    const t=clock.elapsedTime; movingSphere.center.set(Math.sin(t*0.8)*1.1, 0.7+Math.sin(t*1.6)*0.25, Math.cos(t*0.8)*0.6);
+    sphereMesh.position.copy(movingSphere.center);
+    // sub-pasos fijos de 1/120 s para que el viento/colisiones sean estables
+    let rem=dt; const h=1/120;
+    while(rem>1e-4){ const s=Math.min(h,rem); physics.step(s); rem-=s; }
+    clothRen.sync();
+  }
+
+  controls.update();
+  renderer.render(scene,camera);
+
+  frames++; acc+=dt; if(acc>=0.5){ fps=Math.round(frames/acc); frames=0; acc=0;
+    $('stats').textContent = clothGroup.visible ? `${cloth?cloth.particles.length:0} part · ${fps} fps` : `${fps} fps`; }
+}
+
+buildRolledRag();    // trapo enrollado (requiere las clases Cloth* ya definidas)
+setMode('bottle');
+animate();
+setTimeout(()=>$('loader').classList.add('hide'),300);
+</script>
+</body>
+</html>

@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0b1410" />
+<title>Árbol PBR · Visor Realista</title>
+<style>
+  :root { --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px); }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: #0b1410; font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif; color: #eaf2ec; overscroll-behavior: none; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; touch-action: none; }
+
+  /* Pantalla de carga */
+  #loader { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: radial-gradient(120% 120% at 50% 30%, #1a2e22 0%, #0b1410 70%); transition: opacity .7s ease; }
+  #loader.hide { opacity: 0; pointer-events: none; }
+  .leaf-spin { width: 54px; height: 54px; border-radius: 50% 0 50% 50%; transform: rotate(45deg);
+               background: linear-gradient(135deg, #6fbf73, #2f7d3a); animation: spin 1.4s ease-in-out infinite; box-shadow: 0 0 30px rgba(80,200,120,.4); }
+  @keyframes spin { 0%,100% { transform: rotate(35deg) scale(1);} 50% { transform: rotate(225deg) scale(.85);} }
+  #loader p { margin-top: 22px; font-size: 14px; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
+
+  /* Panel UI */
+  #ui { position: fixed; left: 12px; top: calc(12px + var(--safe-t)); z-index: 20; width: 248px; max-width: calc(100vw - 24px);
+        background: rgba(14,26,20,.62); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+        border: 1px solid rgba(255,255,255,.10); border-radius: 16px; padding: 14px 14px 16px; box-shadow: 0 12px 40px rgba(0,0,0,.45);
+        transition: transform .35s cubic-bezier(.4,0,.2,1), opacity .35s; }
+  #ui.collapsed { transform: translateX(calc(-100% - 16px)); opacity: 0; }
+  #ui h1 { font-size: 13px; font-weight: 600; letter-spacing: .04em; display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  #ui h1 .dot { width: 8px; height: 8px; border-radius: 50%; background: #6fbf73; box-shadow: 0 0 8px #6fbf73; }
+  #ui .sub { font-size: 11px; opacity: .55; margin-bottom: 12px; }
+  .row { margin-bottom: 12px; }
+  .row label { display: flex; justify-content: space-between; font-size: 11.5px; opacity: .85; margin-bottom: 6px; letter-spacing: .02em; }
+  .row label span { opacity: .6; font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 4px;
+                      background: rgba(255,255,255,.18); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+                      background: #6fbf73; cursor: pointer; box-shadow: 0 0 0 4px rgba(111,191,115,.2); }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: none; border-radius: 50%; background: #6fbf73; }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button { flex: 1; min-width: 0; padding: 7px 4px; font-size: 11px; border-radius: 9px; border: 1px solid rgba(255,255,255,.12);
+                background: rgba(255,255,255,.04); color: #eaf2ec; cursor: pointer; transition: all .18s; }
+  .seg button.active { background: #2f7d3a; border-color: #6fbf73; box-shadow: 0 0 14px rgba(80,200,120,.35); }
+  .toggle { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; opacity: .9; }
+  .switch { position: relative; width: 40px; height: 22px; border-radius: 22px; background: rgba(255,255,255,.16); cursor: pointer; transition: background .2s; }
+  .switch.on { background: #2f7d3a; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .2s; }
+  .switch.on::after { left: 20px; }
+
+  /* Botón flotante para mostrar/ocultar panel */
+  #toggleUI { position: fixed; left: 12px; top: calc(12px + var(--safe-t)); z-index: 21; width: 44px; height: 44px; border-radius: 12px;
+              background: rgba(14,26,20,.62); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.12); color: #eaf2ec;
+              font-size: 18px; cursor: pointer; display: none; align-items: center; justify-content: center; }
+  #toggleUI.show { display: flex; }
+
+  /* HUD inferior */
+  #hud { position: fixed; right: 12px; bottom: calc(12px + var(--safe-b)); z-index: 20; font-size: 11px; opacity: .55;
+         font-variant-numeric: tabular-nums; text-align: right; line-height: 1.5; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  #hint { position: fixed; left: 50%; bottom: calc(16px + var(--safe-b)); transform: translateX(-50%); z-index: 19; font-size: 11.5px;
+          opacity: .6; pointer-events: none; transition: opacity .5s; text-shadow: 0 1px 4px rgba(0,0,0,.7); }
+  #hint.hide { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="loader"><div class="leaf-spin"></div><p>Cultivando el árbol…</p></div>
+
+<button id="toggleUI" aria-label="Mostrar panel">☰</button>
+
+<div id="ui">
+  <h1><span class="dot"></span> Árbol PBR · Realista</h1>
+  <div class="sub" id="tierInfo">Detectando dispositivo…</div>
+
+  <div class="row">
+    <label>Estación</label>
+    <div class="seg" id="season">
+      <button data-s="spring">Prim.</button>
+      <button data-s="summer" class="active">Ver.</button>
+      <button data-s="autumn">Otoño</button>
+      <button data-s="winter">Inv.</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Hora del día <span id="sunVal">mediodía</span></label>
+    <input type="range" id="sun" min="2" max="80" value="42" step="1" />
+  </div>
+
+  <div class="row">
+    <label>Viento <span id="windVal">brisa</span></label>
+    <input type="range" id="wind" min="0" max="100" value="35" step="1" />
+  </div>
+
+  <div class="row">
+    <label>Exposición <span id="expVal">1.0</span></label>
+    <input type="range" id="exp" min="40" max="180" value="100" step="1" />
+  </div>
+
+  <div class="row toggle">
+    <span>Rotación automática</span>
+    <div class="switch on" id="autoRot"></div>
+  </div>
+  <div class="row toggle" style="margin-bottom:4px">
+    <span>Calidad alta (post-FX)</span>
+    <div class="switch" id="hq"></div>
+  </div>
+</div>
+
+<div id="hud"><span id="fps">–</span> FPS · <span id="leafCount">–</span> hojas</div>
+<div id="hint">Arrastrá para orbitar · pellizcá para zoom</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+/* ============================================================
+   1. DETECCIÓN DE DISPOSITIVO  (skill: mobile-performance)
+   ============================================================ */
+function detectTier() {
+  const c = document.createElement('canvas');
+  const gl = c.getContext('webgl2') || c.getContext('webgl');
+  let gpu = 'desconocida';
+  if (gl) {
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    if (dbg) gpu = (gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '').toLowerCase();
+  }
+  const ua = navigator.userAgent.toLowerCase();
+  const isAndroid = /android/.test(ua);
+  const isMobile = /mobile|android|iphone|ipad|ipod/.test(ua);
+  const mem = navigator.deviceMemory || (isMobile ? 4 : 8);
+  const cores = navigator.hardwareConcurrency || 4;
+  let tier = 'high';
+  if (isMobile) tier = (mem >= 6 && cores >= 8) ? 'high' : (mem >= 4 ? 'medium' : 'low');
+  if (/adreno 6|adreno 7|adreno 8|mali-g7|mali-g8|apple|m1|m2|m3/.test(gpu) && isMobile) tier = 'high';
+  if (/adreno 5|mali-g5|mali-g3/.test(gpu)) tier = 'medium';
+  return { tier, isAndroid, isMobile, gpu, mem, cores };
+}
+const DEV = detectTier();
+
+const PRESETS = {
+  low:    { dpr: 1.25, shadow: 1024, radial: 5, leaves: 1400, leafShadow: false, post: false, smaa: false },
+  medium: { dpr: 1.75, shadow: 1536, radial: 6, leaves: 3000, leafShadow: true,  post: true,  smaa: false },
+  high:   { dpr: 2.0,  shadow: 2048, radial: 8, leaves: 5200, leafShadow: true,  post: true,  smaa: true  },
+};
+let Q = PRESETS[DEV.tier];
+
+document.getElementById('tierInfo').textContent =
+  `${DEV.isMobile ? (DEV.isAndroid ? 'Android' : 'Móvil') : 'Escritorio'} · calidad ${({low:'baja',medium:'media',high:'alta'})[DEV.tier]}`;
+
+/* ============================================================
+   2. RENDERER + ESCENA + CÁMARA  (skill: threejs-scene-setup)
+   ============================================================ */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: !Q.post, powerPreference: 'high-performance', alpha: false });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, Q.dpr));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xbcd3df, 28, 75);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 2000);
+camera.position.set(9, 5.5, 11);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 4;
+controls.maxDistance = 32;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set(0, 3.4, 0);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.55;
+
+/* ============================================================
+   3. CIELO + SOL + IBL (PMREM)  (skill: threejs-environment-maps)
+   ============================================================ */
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+
+const sky = new Sky();
+sky.scale.setScalar(8000);
+const skyU = sky.material.uniforms;
+skyU.turbidity.value = 6;
+skyU.rayleigh.value = 1.6;
+skyU.mieCoefficient.value = 0.005;
+skyU.mieDirectionalG.value = 0.8;
+scene.add(sky);
+
+const sunVec = new THREE.Vector3();
+let envRT = null;
+
+function setSun(elevationDeg, azimuthDeg = 135) {
+  const phi = THREE.MathUtils.degToRad(90 - elevationDeg);
+  const theta = THREE.MathUtils.degToRad(azimuthDeg);
+  sunVec.setFromSphericalCoords(1, phi, theta);
+  skyU.sunPosition.value.copy(sunVec);
+  dirLight.position.copy(sunVec).multiplyScalar(40);
+  // El color/intensidad del sol baja y se vuelve cálido al atardecer
+  const t = THREE.MathUtils.clamp(elevationDeg / 50, 0, 1);
+  dirLight.intensity = THREE.MathUtils.lerp(1.1, 3.4, t);
+  dirLight.color.setHSL(THREE.MathUtils.lerp(0.06, 0.12, t), THREE.MathUtils.lerp(0.7, 0.18, t), 0.55);
+  hemiLight.intensity = THREE.MathUtils.lerp(0.25, 0.7, t);
+  scene.fog.color.copy(new THREE.Color().setHSL(0.58, 0.25, THREE.MathUtils.lerp(0.55, 0.82, t)));
+}
+
+function updateEnvironment() {
+  const envScene = new THREE.Scene();
+  const s = new Sky(); s.scale.setScalar(100);
+  const u = s.material.uniforms;
+  u.turbidity.value = skyU.turbidity.value;
+  u.rayleigh.value = skyU.rayleigh.value;
+  u.mieCoefficient.value = skyU.mieCoefficient.value;
+  u.mieDirectionalG.value = skyU.mieDirectionalG.value;
+  u.sunPosition.value.copy(sunVec);
+  envScene.add(s);
+  const newRT = pmrem.fromScene(envScene, 0.04);
+  if (envRT) envRT.dispose();
+  envRT = newRT;
+  scene.environment = envRT.texture;
+  s.geometry.dispose(); s.material.dispose();
+}
+
+/* ============================================================
+   4. LUCES
+   ============================================================ */
+const hemiLight = new THREE.HemisphereLight(0xbfe3ff, 0x5a4631, 0.6);
+scene.add(hemiLight);
+
+const dirLight = new THREE.DirectionalLight(0xfff1dd, 3.0);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(Q.shadow, Q.shadow);
+dirLight.shadow.camera.near = 1;
+dirLight.shadow.camera.far = 120;
+dirLight.shadow.camera.left = -14;
+dirLight.shadow.camera.right = 14;
+dirLight.shadow.camera.top = 16;
+dirLight.shadow.camera.bottom = -2;
+dirLight.shadow.bias = -0.0004;
+dirLight.shadow.normalBias = 0.04;
+scene.add(dirLight);
+scene.add(dirLight.target);
+
+/* ============================================================
+   5. TEXTURAS PROCEDURALES  (skill: threejs-pbr-materials / textures)
+   ============================================================ */
+function makeBarkTextures() {
+  const S = 512;
+  const col = document.createElement('canvas'); col.width = col.height = S;
+  const bump = document.createElement('canvas'); bump.width = bump.height = S;
+  const cx = col.getContext('2d'), bx = bump.getContext('2d');
+  cx.fillStyle = '#4a3526'; cx.fillRect(0, 0, S, S);
+  bx.fillStyle = '#808080'; bx.fillRect(0, 0, S, S);
+  // Grano vertical de corteza
+  for (let i = 0; i < 2600; i++) {
+    const x = Math.random() * S, y = Math.random() * S;
+    const h = 8 + Math.random() * 60, w = 0.6 + Math.random() * 2.4;
+    const shade = Math.random();
+    cx.strokeStyle = `rgba(${shade < .5 ? '30,20,12' : '110,86,58'},${0.12 + Math.random() * 0.25})`;
+    cx.lineWidth = w; cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x + (Math.random() - .5) * 4, y + h); cx.stroke();
+    const bv = shade < .5 ? 40 : 200;
+    bx.strokeStyle = `rgba(${bv},${bv},${bv},${0.3 + Math.random() * 0.4})`;
+    bx.lineWidth = w; bx.beginPath(); bx.moveTo(x, y); bx.lineTo(x + (Math.random() - .5) * 4, y + h); bx.stroke();
+  }
+  // Manchas / nudos
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * S, y = Math.random() * S, r = 6 + Math.random() * 22;
+    const g = cx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(20,12,8,.5)'); g.addColorStop(1, 'rgba(20,12,8,0)');
+    cx.fillStyle = g; cx.beginPath(); cx.arc(x, y, r, 0, 7); cx.fill();
+  }
+  const cTex = new THREE.CanvasTexture(col); cTex.colorSpace = THREE.SRGBColorSpace;
+  cTex.wrapS = cTex.wrapT = THREE.RepeatWrapping; cTex.repeat.set(1, 3); cTex.anisotropy = 4;
+  const bTex = new THREE.CanvasTexture(bump);
+  bTex.wrapS = bTex.wrapT = THREE.RepeatWrapping; bTex.repeat.set(1, 3);
+  return { map: cTex, bump: bTex };
+}
+
+function makeLeafTexture() {
+  const S = 128;
+  const cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  g.clearRect(0, 0, S, S);
+  // Hoja en escala de grises (el color real lo pone instanceColor)
+  g.translate(S / 2, S / 2);
+  const grad = g.createLinearGradient(0, -S / 2, 0, S / 2);
+  grad.addColorStop(0, '#cfcfcf'); grad.addColorStop(0.5, '#ffffff'); grad.addColorStop(1, '#bdbdbd');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.moveTo(0, -S * 0.46);
+  g.bezierCurveTo(S * 0.4, -S * 0.3, S * 0.34, S * 0.34, 0, S * 0.46);
+  g.bezierCurveTo(-S * 0.34, S * 0.34, -S * 0.4, -S * 0.3, 0, -S * 0.46);
+  g.fill();
+  // Nervadura central + secundarias
+  g.strokeStyle = 'rgba(90,90,90,.55)'; g.lineWidth = 2.2;
+  g.beginPath(); g.moveTo(0, -S * 0.42); g.lineTo(0, S * 0.42); g.stroke();
+  g.lineWidth = 1; g.strokeStyle = 'rgba(120,120,120,.45)';
+  for (let i = -4; i <= 4; i++) {
+    const y = i * S * 0.08;
+    g.beginPath(); g.moveTo(0, y); g.lineTo(Math.sign(i || 1) * 0 + S * 0.22, y + S * 0.07 * Math.sign(-1)); g.stroke();
+    g.beginPath(); g.moveTo(0, y); g.lineTo(-S * 0.22, y + S * 0.07 * Math.sign(-1)); g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  return tex;
+}
+
+const barkTex = makeBarkTextures();
+const leafTex = makeLeafTexture();
+
+/* ============================================================
+   6. SUELO
+   ============================================================ */
+function makeGroundTexture() {
+  const S = 512; const cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#3f5a2c'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 9000; i++) {
+    const x = Math.random() * S, y = Math.random() * S;
+    const c = ['#2f4a20', '#4d6b30', '#5c7d38', '#384e22', '#6b8a40'][Math.floor(Math.random() * 5)];
+    g.fillStyle = c; g.globalAlpha = 0.5 + Math.random() * 0.5;
+    g.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 3);
+  }
+  g.globalAlpha = 1;
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(14, 14); t.anisotropy = 4;
+  return t;
+}
+const groundMat = new THREE.MeshStandardMaterial({ map: makeGroundTexture(), roughness: 0.97, metalness: 0, color: 0xc9c9c9 });
+const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 64), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* ============================================================
+   7. GENERACIÓN PROCEDURAL DEL ÁRBOL
+   ============================================================ */
+const UP = new THREE.Vector3(0, 1, 0);
+function perpendicular(v) {
+  const a = Math.abs(v.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  return new THREE.Vector3().crossVectors(v, a).normalize();
+}
+
+const branchGeos = [];
+const leafAnchors = []; // { pos: Vector3 }
+
+function makeSegment(p0, p1, r0, r1) {
+  const dir = new THREE.Vector3().subVectors(p1, p0);
+  const len = dir.length() || 0.001;
+  const geo = new THREE.CylinderGeometry(r1, r0, len, Q.radial, 1, false);
+  const quat = new THREE.Quaternion().setFromUnitVectors(UP, dir.clone().normalize());
+  const mid = new THREE.Vector3().addVectors(p0, p1).multiplyScalar(0.5);
+  geo.applyMatrix4(new THREE.Matrix4().compose(mid, quat, new THREE.Vector3(1, 1, 1)));
+  geo.clearGroups();
+  return geo;
+}
+
+function buildBranch(origin, dir, length, radius, depth) {
+  const segs = Math.max(3, Math.round(length * 1.6));
+  let pos = origin.clone();
+  let d = dir.clone().normalize();
+  const taper = 0.72;
+  for (let i = 0; i < segs; i++) {
+    const segLen = length / segs;
+    // curvatura + gravedad (las ramas finas caen un poco)
+    const bend = perpendicular(d).applyAxisAngle(d, Math.random() * 6.28);
+    d.addScaledVector(bend, 0.08 + (5 - depth) * 0.015);
+    d.y -= 0.04 * (1 - radius);            // leve caída
+    d.normalize();
+    const next = pos.clone().addScaledVector(d, segLen);
+    const r0 = radius * (1 - (i / segs) * (1 - taper));
+    const r1 = radius * (1 - ((i + 1) / segs) * (1 - taper));
+    branchGeos.push(makeSegment(pos, next, Math.max(r0, 0.01), Math.max(r1, 0.008)));
+    pos = next;
+    if (depth <= 1 && i % 1 === 0) leafAnchors.push({ pos: pos.clone() });
+  }
+  const endRadius = radius * taper;
+  if (depth <= 0 || endRadius < 0.018) { leafAnchors.push({ pos: pos.clone() }); return; }
+
+  const children = depth >= 4 ? 2 : (2 + (Math.random() < 0.5 ? 1 : 0));
+  const baseRoll = Math.random() * 6.28;
+  for (let c = 0; c < children; c++) {
+    const axis = perpendicular(d).applyAxisAngle(d, baseRoll + c * (6.28 / children) + (Math.random() - 0.5));
+    const angle = 0.45 + Math.random() * 0.55;
+    const childDir = d.clone().applyAxisAngle(axis, angle).normalize();
+    buildBranch(pos, childDir, length * (0.62 + Math.random() * 0.16), endRadius * (0.78 + Math.random() * 0.12), depth - 1);
+  }
+  // líder central que continúa hacia arriba
+  if (depth >= 3 && Math.random() < 0.85) {
+    buildBranch(pos, d.clone().applyAxisAngle(perpendicular(d), 0.12).normalize(),
+                length * 0.7, endRadius * 0.82, depth - 1);
+  }
+}
+
+// Construir el árbol
+buildBranch(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.04, 1, 0.02), 4.2, 0.46, 5);
+
+const trunkGeo = mergeGeometries(branchGeos, false);
+branchGeos.forEach(g => g.dispose());
+const barkMat = new THREE.MeshStandardMaterial({
+  map: barkTex.map, bumpMap: barkTex.bump, bumpScale: 0.55,
+  roughness: 0.92, metalness: 0.0, color: 0xffffff, envMapIntensity: 0.7,
+});
+const trunk = new THREE.Mesh(trunkGeo, barkMat);
+trunk.castShadow = true; trunk.receiveShadow = true;
+scene.add(trunk);
+
+/* ----- Hojas instanciadas con viento en shader ----- */
+const leafMat = new THREE.MeshStandardMaterial({
+  map: leafTex, alphaTest: 0.45, side: THREE.DoubleSide,
+  roughness: 0.62, metalness: 0.0, envMapIntensity: 0.9,
+});
+const windUniforms = { uTime: { value: 0 }, uWind: { value: 0.35 } };
+leafMat.onBeforeCompile = (sh) => {
+  sh.uniforms.uTime = windUniforms.uTime;
+  sh.uniforms.uWind = windUniforms.uWind;
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', `#include <common>
+      uniform float uTime; uniform float uWind;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      vec3 anchor = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+      float ph = anchor.x * 0.8 + anchor.z * 1.1 + anchor.y * 0.4;
+      float h = clamp(anchor.y / 6.5, 0.0, 1.0);
+      float amp = uWind * (0.12 + 0.32 * h);
+      float s = sin(uTime * 1.7 + ph) + 0.5 * sin(uTime * 3.3 + ph * 1.7);
+      transformed.x += s * amp;
+      transformed.z += cos(uTime * 1.4 + ph) * amp * 0.85;
+      transformed.y += sin(uTime * 2.2 + ph) * amp * 0.35;`);
+};
+if (Q.leafShadow) {
+  leafMat.shadowSide = THREE.DoubleSide;
+}
+
+const leafGeo = new THREE.PlaneGeometry(0.62, 0.78);
+const leafCount = Q.leaves;
+const leaves = new THREE.InstancedMesh(leafGeo, leafMat, leafCount);
+leaves.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+leaves.castShadow = Q.leafShadow;
+leaves.receiveShadow = DEV.tier === 'high';
+if (Q.leafShadow) {
+  leaves.customDepthMaterial = new THREE.MeshDepthMaterial({
+    depthPacking: THREE.RGBADepthPacking, map: leafTex, alphaTest: 0.45,
+  });
+}
+
+// Distribuir hojas alrededor de los anclajes (puntas de ramas)
+const dummy = new THREE.Object3D();
+const colorObj = new THREE.Color();
+const SEASONS = {
+  spring: [[0.27, 0.62, 0.55], [0.22, 0.7, 0.6], [0.30, 0.55, 0.7]],
+  summer: [[0.30, 0.65, 0.34], [0.27, 0.7, 0.28], [0.33, 0.6, 0.42]],
+  autumn: [[0.07, 0.85, 0.45], [0.04, 0.9, 0.5], [0.11, 0.8, 0.4], [0.015, 0.85, 0.42]],
+  winter: [[0.10, 0.3, 0.35], [0.08, 0.25, 0.3]],
+};
+let currentSeason = 'summer';
+
+function placeLeaves(season) {
+  const palette = SEASONS[season];
+  const n = leafAnchors.length;
+  const per = Math.max(1, Math.floor(leafCount / Math.max(n, 1)));
+  let idx = 0;
+  for (let a = 0; a < n && idx < leafCount; a++) {
+    const base = leafAnchors[a].pos;
+    const k = (a % 5 === 0) ? per + 2 : per;
+    for (let j = 0; j < k && idx < leafCount; j++) {
+      dummy.position.set(
+        base.x + (Math.random() - 0.5) * 0.95,
+        base.y + (Math.random() - 0.5) * 0.95,
+        base.z + (Math.random() - 0.5) * 0.95
+      );
+      dummy.rotation.set(Math.random() * 6.28, Math.random() * 6.28, Math.random() * 6.28);
+      const sc = 0.7 + Math.random() * 0.7;
+      dummy.scale.set(sc, sc, sc);
+      dummy.updateMatrix();
+      leaves.setMatrixAt(idx, dummy.matrix);
+      const p = palette[Math.floor(Math.random() * palette.length)];
+      colorObj.setHSL(p[0] + (Math.random() - 0.5) * 0.03, p[1], p[2] * (0.8 + Math.random() * 0.4));
+      leaves.setColorAt(idx, colorObj);
+      idx++;
+    }
+  }
+  // ocultar el resto (invierno) moviéndolas fuera de vista
+  for (; idx < leafCount; idx++) {
+    dummy.position.set(0, -999, 0); dummy.scale.set(0.001, 0.001, 0.001);
+    dummy.updateMatrix(); leaves.setMatrixAt(idx, dummy.matrix);
+  }
+  leaves.count = season === 'winter' ? Math.floor(leafCount * 0.12) : leafCount;
+  leaves.instanceMatrix.needsUpdate = true;
+  if (leaves.instanceColor) leaves.instanceColor.needsUpdate = true;
+  document.getElementById('leafCount').textContent = leaves.count.toLocaleString('es');
+}
+placeLeaves(currentSeason);
+scene.add(leaves);
+
+/* Pequeñas piedras alrededor para componer la escena */
+const stoneGeo = new THREE.IcosahedronGeometry(0.3, 0);
+const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6b6b66, roughness: 0.95, metalness: 0, flatShading: true });
+const stones = new THREE.InstancedMesh(stoneGeo, stoneMat, 14);
+stones.castShadow = true; stones.receiveShadow = true;
+for (let i = 0; i < 14; i++) {
+  const ang = Math.random() * 6.28, rad = 2.2 + Math.random() * 7;
+  dummy.position.set(Math.cos(ang) * rad, -0.05 + Math.random() * 0.1, Math.sin(ang) * rad);
+  dummy.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+  const sc = 0.4 + Math.random() * 1.1; dummy.scale.set(sc, sc * 0.7, sc);
+  dummy.updateMatrix(); stones.setMatrixAt(i, dummy.matrix);
+}
+scene.add(stones);
+
+/* ============================================================
+   8. POST-PROCESO  (skill: threejs-aaa-graphics-builder)
+   ============================================================ */
+let composer = null, bloomPass = null;
+function buildComposer() {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.28, 0.7, 0.85);
+  composer.addPass(bloomPass);
+  if (Q.smaa) composer.addPass(new SMAAPass(innerWidth * Q.dpr, innerHeight * Q.dpr));
+  composer.addPass(new OutputPass());
+  composer.setPixelRatio(Math.min(devicePixelRatio, Q.dpr));
+  composer.setSize(innerWidth, innerHeight);
+}
+if (Q.post) buildComposer();
+
+/* Inicializar sol + entorno */
+setSun(42, 135);
+updateEnvironment();
+
+/* ============================================================
+   9. UI / CONTROLES
+   ============================================================ */
+const sunLabels = (e) => e < 10 ? 'amanecer' : e < 25 ? 'mañana' : e < 55 ? 'mediodía' : 'tarde';
+const windLabels = (w) => w < 8 ? 'calma' : w < 45 ? 'brisa' : w < 75 ? 'viento' : 'tormenta';
+
+const $ = (id) => document.getElementById(id);
+$('sun').addEventListener('input', (e) => { const v = +e.target.value; setSun(v, 135); $('sunVal').textContent = sunLabels(v); });
+$('sun').addEventListener('change', updateEnvironment);
+$('wind').addEventListener('input', (e) => { const v = +e.target.value; windUniforms.uWind.value = v / 100 * 1.6; $('windVal').textContent = windLabels(v); });
+$('exp').addEventListener('input', (e) => { const v = +e.target.value / 100; renderer.toneMappingExposure = v; $('expVal').textContent = v.toFixed(2); });
+
+document.querySelectorAll('#season button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#season button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentSeason = btn.dataset.s;
+    placeLeaves(currentSeason);
+  });
+});
+
+const autoRotSw = $('autoRot');
+autoRotSw.addEventListener('click', () => { autoRotSw.classList.toggle('on'); controls.autoRotate = autoRotSw.classList.contains('on'); });
+
+const hqSw = $('hq');
+hqSw.classList.toggle('on', Q.post);
+hqSw.addEventListener('click', () => {
+  hqSw.classList.toggle('on');
+  Q.post = hqSw.classList.contains('on');
+  if (Q.post && !composer) buildComposer();
+});
+
+// Mostrar/ocultar panel
+const ui = $('ui'), toggleBtn = $('toggleUI');
+function hidePanel() { ui.classList.add('collapsed'); toggleBtn.classList.add('show'); }
+function showPanel() { ui.classList.remove('collapsed'); toggleBtn.classList.remove('show'); }
+toggleBtn.addEventListener('click', showPanel);
+ui.addEventListener('dblclick', hidePanel);
+
+// Ocultar la pista al primer toque
+let hinted = false;
+function dismissHint() { if (!hinted) { hinted = true; $('hint').classList.add('hide'); } }
+renderer.domElement.addEventListener('pointerdown', dismissHint, { once: true });
+
+/* ============================================================
+   10. RESIZE + LOOP + BATERÍA  (skill: battery-optimization)
+   ============================================================ */
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  if (composer) { composer.setSize(innerWidth, innerHeight); bloomPass?.setSize(innerWidth, innerHeight); }
+});
+
+let paused = false;
+document.addEventListener('visibilitychange', () => { paused = document.hidden; });
+
+const clock = new THREE.Clock();
+let fpsAcc = 0, fpsFrames = 0, fpsTimer = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (paused) return;
+  const dt = Math.min(clock.getDelta(), 0.05);
+  windUniforms.uTime.value += dt;
+  controls.update();
+
+  if (Q.post && composer) composer.render();
+  else renderer.render(scene, camera);
+
+  // contador de FPS
+  fpsTimer += dt; fpsFrames++;
+  if (fpsTimer >= 0.5) {
+    $('fps').textContent = Math.round(fpsFrames / fpsTimer);
+    fpsTimer = 0; fpsFrames = 0;
+  }
+}
+
+// Ocultar loader cuando todo está listo
+requestAnimationFrame(() => {
+  renderer.render(scene, camera);
+  setTimeout(() => { $('loader').classList.add('hide'); }, 350);
+  animate();
+});
+</script>
+</body>
+</html>

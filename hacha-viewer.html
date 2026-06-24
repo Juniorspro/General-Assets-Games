@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0c10" />
+<title>Hacha · Viewer PBR</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
+  html,body { height:100%; overflow:hidden; background:#0a0c10; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; color:#e9eef5; }
+  #app { position:fixed; inset:0; } canvas { display:block; touch-action:none; }
+  #loader { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; background:#0a0c10; transition:opacity .7s; }
+  #loader.hide { opacity:0; pointer-events:none; }
+  .sp { width:46px; height:46px; border:3px solid rgba(255,255,255,.15); border-top-color:#8fb3ff; border-radius:50%; animation:r 1s linear infinite; }
+  @keyframes r { to { transform:rotate(360deg); } }
+  #ui { position:fixed; left:14px; top:14px; z-index:30; width:220px; max-width:calc(100vw - 28px);
+        background:rgba(16,20,28,.78); backdrop-filter:blur(14px); border:1px solid rgba(255,255,255,.1); border-radius:14px; padding:13px; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  #ui h1 { font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  #ui h1 .d { width:8px; height:8px; border-radius:50%; background:#8fb3ff; box-shadow:0 0 8px #8fb3ff; }
+  .row { margin-bottom:10px; } .row label { display:flex; justify-content:space-between; font-size:11px; opacity:.85; margin-bottom:5px; }
+  .row label span { opacity:.6; font-variant-numeric:tabular-nums; }
+  input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:4px; background:rgba(255,255,255,.18); outline:none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#8fb3ff; box-shadow:0 0 0 4px rgba(143,179,255,.2); }
+  .toggle { display:flex; align-items:center; justify-content:space-between; font-size:11px; }
+  .switch { position:relative; width:38px; height:21px; border-radius:21px; background:rgba(255,255,255,.16); cursor:pointer; }
+  .switch.on { background:#3a64b0; } .switch::after { content:""; position:absolute; top:2px; left:2px; width:17px; height:17px; border-radius:50%; background:#fff; transition:left .2s; } .switch.on::after { left:19px; }
+  #hint { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:25; font-size:11.5px; opacity:.5; pointer-events:none; }
+</style>
+</head>
+<body>
+<div id="loader"><div class="sp"></div></div>
+<div id="app"></div>
+<div id="ui">
+  <h1><span class="d"></span> Hacha · Viewer</h1>
+  <div class="row toggle"><span>Girar automático</span><div class="switch on" id="rot"></div></div>
+  <div class="row"><label>Rugosidad del hierro <span id="rgVal">42%</span></label><input type="range" id="rg" min="10" max="90" value="42" step="2"></div>
+  <div class="row"><label>Reflejos (env) <span id="enVal">130%</span></label><input type="range" id="en" min="40" max="250" value="130" step="10"></div>
+  <div class="row"><label>Luz <span id="liVal">100%</span></label><input type="range" id="li" min="30" max="200" value="100" step="10"></div>
+  <div class="row"><label>Bloom <span id="blVal">40%</span></label><input type="range" id="bl" min="0" max="120" value="40" step="5"></div>
+  <div class="row" style="margin-bottom:0"><label>Relieve forjado <span id="edVal">60%</span></label><input type="range" id="ed" min="0" max="100" value="60" step="5"></div>
+</div>
+<div id="hint">Arrastrá para girar · pellizcá para zoom</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+  "postprocessing": "https://cdn.jsdelivr.net/npm/postprocessing@6.39.1/build/index.js"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer, RenderPass, EffectPass, BloomEffect, ToneMappingEffect, ToneMappingMode, SMAAEffect } from 'postprocessing';
+
+const renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.NoToneMapping;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x0c0f15);
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,0.1,200);
+camera.position.set(5,3.2,12.5);
+
+// Entorno de estudio para reflejos metálicos
+const pmrem=new THREE.PMREMGenerator(renderer);
+scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true; controls.dampingFactor=0.07; controls.target.set(-0.3,2.0,0);
+controls.minDistance=6; controls.maxDistance=22; controls.autoRotate=true; controls.autoRotateSpeed=1.4;
+
+// Luces de estudio
+const key=new THREE.DirectionalLight(0xffffff,2.6); key.position.set(6,9,7); key.castShadow=true;
+key.shadow.mapSize.set(2048,2048); key.shadow.camera.near=1; key.shadow.camera.far=40;
+key.shadow.camera.left=-8;key.shadow.camera.right=8;key.shadow.camera.top=8;key.shadow.camera.bottom=-8; key.shadow.bias=-0.0004;
+scene.add(key);
+const rim=new THREE.DirectionalLight(0x9fc0ff,1.4); rim.position.set(-7,4,-6); scene.add(rim);
+const fill=new THREE.DirectionalLight(0xffd9b0,0.5); fill.position.set(2,-3,5); scene.add(fill);
+
+/* ===== Texturas procedurales: hierro forjado + madera ===== */
+function ironBump(){const S=512;const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');g.fillStyle='#808080';g.fillRect(0,0,S,S);
+  for(let i=0;i<260;i++){const x=Math.random()*S,y=Math.random()*S,r=4+Math.random()*26;const gr=g.createRadialGradient(x,y,0,x,y,r);
+    const v=Math.random()<.5?60:190;gr.addColorStop(0,`rgba(${v},${v},${v},.5)`);gr.addColorStop(1,`rgba(${v},${v},${v},0)`);g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill();}
+  for(let i=0;i<300;i++){g.strokeStyle=`rgba(${Math.random()<.5?70:200},${110},${110},.18)`;g.lineWidth=0.6+Math.random()*1.2;const x=Math.random()*S,y=Math.random()*S,a=Math.random()*6.28,l=10+Math.random()*70;g.beginPath();g.moveTo(x,y);g.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l);g.stroke();}
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,2);return t;}
+function ironRough(){const S=512;const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');g.fillStyle='#6f6f6f';g.fillRect(0,0,S,S);
+  for(let i=0;i<3500;i++){const v=80+Math.random()*90;g.fillStyle=`rgba(${v},${v},${v},.5)`;g.fillRect(Math.random()*S,Math.random()*S,1+Math.random()*3,1+Math.random()*3);}
+  for(let i=0;i<160;i++){g.strokeStyle='rgba(60,60,60,.4)';g.lineWidth=0.8+Math.random();const x=Math.random()*S,y=Math.random()*S,a=Math.random()*6.28,l=20+Math.random()*90;g.beginPath();g.moveTo(x,y);g.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l);g.stroke();}
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,2);return t;}
+function woodCol(){const S=512;const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');g.fillStyle='#6b4a2b';g.fillRect(0,0,S,S);
+  for(let i=0;i<260;i++){g.strokeStyle=`rgba(${50+Math.random()*60},${34+Math.random()*40},${18+Math.random()*24},${0.18+Math.random()*0.25})`;g.lineWidth=0.6+Math.random()*2.4;const x=Math.random()*S;g.beginPath();g.moveTo(x,0);g.bezierCurveTo(x+(Math.random()-.5)*30,S*0.33,x+(Math.random()-.5)*30,S*0.66,x+(Math.random()-.5)*20,S);g.stroke();}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(1,3);return t;}
+
+// grabado diamantado del mango (knurl)
+function knurlTex(){const S=256;const c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');g.fillStyle='#808080';g.fillRect(0,0,S,S);
+  const n=10,st=S/n;g.lineWidth=2.6;
+  for(let i=-n;i<n*2;i++){g.strokeStyle='#cfcfcf';g.beginPath();g.moveTo(i*st,0);g.lineTo(i*st+S,S);g.stroke();g.beginPath();g.moveTo(i*st,0);g.lineTo(i*st-S,S);g.stroke();}
+  for(let i=-n;i<n*2;i++){g.strokeStyle='#343434';g.beginPath();g.moveTo(i*st+st*0.5,0);g.lineTo(i*st+st*0.5+S,S);g.stroke();g.beginPath();g.moveTo(i*st+st*0.5,0);g.lineTo(i*st+st*0.5-S,S);g.stroke();}
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(5,11);return t;}
+const bodyMat =new THREE.MeshStandardMaterial({color:0x9aa0a6,metalness:1.0,roughness:0.46,bumpMap:ironBump(),bumpScale:0.012,roughnessMap:ironRough(),envMapIntensity:1.3}); // acero crudo
+const steelMat=new THREE.MeshStandardMaterial({color:0xe2e6ec,metalness:1.0,roughness:0.10,envMapIntensity:1.9});                                // filo bien pulido
+const handleMat=new THREE.MeshStandardMaterial({color:0x161719,metalness:0.0,roughness:0.82,bumpMap:knurlTex(),bumpScale:0.03});                 // mango goma negra
+
+/* ===== Cabeza del hacha: perfil 2D extruido + afinado del filo ===== */
+function buildHead(){
+  const s=new THREE.Shape();          // perfil tipo hacha de rescate: pico arriba-der, filo en arco abajo-izq
+  s.moveTo(0.2,-1.0);
+  s.lineTo(1.2,-1.0);
+  s.lineTo(1.5,0.2);
+  s.quadraticCurveTo(1.95,1.55,1.5,2.45);
+  s.quadraticCurveTo(1.15,3.15,0.25,3.45);     // punta del pico/gancho
+  s.quadraticCurveTo(0.6,2.55,0.2,2.0);
+  s.lineTo(-0.5,2.0);
+  s.quadraticCurveTo(-2.7,2.2,-3.4,1.0);
+  s.quadraticCurveTo(-3.55,0.3,-2.8,-0.4);     // arco del filo
+  s.quadraticCurveTo(-1.8,-1.0,-0.7,-1.0);
+  s.lineTo(0.2,-1.0);
+  const hole=new THREE.Path();                  // agujero triangular redondeado
+  hole.moveTo(-1.5,1.25);
+  hole.quadraticCurveTo(0.55,1.5,0.7,0.15);
+  hole.quadraticCurveTo(0.45,-0.5,-0.25,-0.25);
+  hole.quadraticCurveTo(-1.45,0.05,-1.5,1.25);
+  s.holes.push(hole);
+  const g=new THREE.ExtrudeGeometry(s,{depth:0.34,bevelEnabled:true,bevelThickness:0.05,bevelSize:0.05,bevelSegments:2,steps:1,curveSegments:44});
+  g.center(); g.computeVertexNormals();
+  // grupos de material: caras=naranja(0), paredes=canto(1), borde izquierdo (filo)=acero(2)
+  g.clearGroups(); const pos=g.attributes.position,nor=g.attributes.normal;
+  for(let i=0;i<pos.count;i+=3){
+    const cx=(pos.getX(i)+pos.getX(i+1)+pos.getX(i+2))/3;
+    const nz=Math.abs((nor.getZ(i)+nor.getZ(i+1)+nor.getZ(i+2))/3);
+    g.addGroup(i,3, nz<0.6 ? (cx<-1.7?2:1) : 0);
+  }
+  const head=new THREE.Mesh(g,[bodyMat,bodyMat,steelMat]); head.castShadow=true; head.receiveShadow=true;
+  return head;
+}
+
+const axe=new THREE.Group();
+const handle=new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.25,6.6,30,1),handleMat); handle.castShadow=true; handle.receiveShadow=true; axe.add(handle);
+const pommel=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.27,0.55,30),handleMat); pommel.position.y=-3.45; pommel.castShadow=true; axe.add(pommel);
+const cap=new THREE.Mesh(new THREE.SphereGeometry(0.32,24,16),handleMat); cap.position.y=-3.7; axe.add(cap);
+const collar=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.24,0.55,26),steelMat); collar.position.y=3.05; collar.castShadow=true; axe.add(collar);
+const head=buildHead(); head.scale.setScalar(0.62); head.position.set(-0.35,3.95,0); axe.add(head);
+axe.position.y=0.4; scene.add(axe);
+
+// Piso de estudio (sombra de contacto + leve reflejo)
+const ground=new THREE.Mesh(new THREE.CircleGeometry(16,64),new THREE.MeshStandardMaterial({color:0x0e1218,roughness:0.5,metalness:0.0}));
+ground.rotation.x=-Math.PI/2; ground.position.y=-4.05; ground.receiveShadow=true; scene.add(ground);
+
+/* ===== Post: bloom + AgX + SMAA ===== */
+let composer,bloom;
+try{
+  composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});
+  composer.addPass(new RenderPass(scene,camera));
+  bloom=new BloomEffect({intensity:0.4,luminanceThreshold:0.7,luminanceSmoothing:0.2,mipmapBlur:true,radius:0.7});
+  composer.addPass(new EffectPass(camera,bloom,new ToneMappingEffect({mode:ToneMappingMode.AGX})));
+  composer.addPass(new EffectPass(camera,new SMAAEffect()));
+  composer.setSize(innerWidth,innerHeight);
+}catch(err){ console.error('PostFX off:',err); composer=null; renderer.toneMapping=THREE.AgXToneMapping; }
+
+/* ===== Texturas PBR reales (metal corroído + roble) vía jsDelivr (funciona local) ===== */
+const texLoader=new THREE.TextureLoader();texLoader.crossOrigin='anonymous';
+const MAXA=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+function L(url,srgb){return texLoader.loadAsync(url).then(t=>{t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXA;return t;});}
+(function loadAxePBR(){
+  const P='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d5bc265/assets/textures/axe/';
+  Promise.all([L(P+'metal_col.jpg',true),L(P+'metal_nrm.jpg',false),L(P+'metal_rgh.jpg',false),L(P+'metal_met.jpg',false)]).then(([c,n,r,m])=>{
+    [c,n,r,m].forEach(t=>t.repeat.set(1.6,1.6));
+    bodyMat.map=c;bodyMat.normalMap=n;bodyMat.roughnessMap=r;bodyMat.metalnessMap=m;bodyMat.bumpMap=null;bodyMat.color.set(0xffffff);bodyMat.normalScale.set(1.0,1.0);bodyMat.needsUpdate=true;
+    steelMat.normalMap=n;steelMat.normalScale.set(0.5,0.5);steelMat.needsUpdate=true;              // filo pulido con micro-raspones
+  }).catch(()=>{});
+})();
+
+/* ===== UI ===== */
+const $=id=>document.getElementById(id);
+const rotSw=$('rot'); rotSw.addEventListener('click',()=>{rotSw.classList.toggle('on');controls.autoRotate=rotSw.classList.contains('on');});
+$('rg').addEventListener('input',e=>{const v=+e.target.value/100;bodyMat.roughness=v;steelMat.roughness=Math.max(0.05,v*0.4);$('rgVal').textContent=(v*100|0)+'%';});
+$('en').addEventListener('input',e=>{const v=+e.target.value/100;bodyMat.envMapIntensity=v;steelMat.envMapIntensity=v*1.4;$('enVal').textContent=(v*100|0)+'%';});
+$('li').addEventListener('input',e=>{const v=+e.target.value/100;key.intensity=2.6*v;rim.intensity=1.4*v;$('liVal').textContent=(v*100|0)+'%';});
+$('bl').addEventListener('input',e=>{const v=+e.target.value;if(bloom)bloom.intensity=v/100;$('blVal').textContent=v+'%';});
+$('ed').addEventListener('input',e=>{const v=+e.target.value/100;if(bodyMat.normalScale)bodyMat.normalScale.set(0.4+1.4*v,0.4+1.4*v);$('edVal').textContent=(v*100|0)+'%';});
+
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);if(composer)composer.setSize(innerWidth,innerHeight);});
+
+const clock=new THREE.Clock();
+function animate(){requestAnimationFrame(animate);controls.update();if(composer)composer.render(clock.getDelta());else renderer.render(scene,camera);}
+requestAnimationFrame(()=>{ try{ if(composer)composer.render(0);else renderer.render(scene,camera);}catch(e){console.error(e);} setTimeout(()=>$('loader').classList.add('hide'),250); animate(); });
+</script>
+</body>
+</html>
