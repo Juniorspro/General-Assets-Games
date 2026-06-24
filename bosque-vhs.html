@@ -945,10 +945,17 @@ function makeOasis(cx,cz,R){ const by=terrainHeight(cx,cz); oasisLakes.push({x:c
 /* ===== Texturas PBR reales (carga asíncrona; las procedurales quedan de placeholder) ===== */
 const texLoader=new THREE.TextureLoader();texLoader.crossOrigin='anonymous';
 const MAXA=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+// ===== OPTIMIZACIÓN: bajar resolución de texturas según la calidad (gran ahorro de VRAM/ancho de banda en móvil) =====
+function texCap(){ return (curQuality==='high'||curQuality==='vhigh')?1024:(curQuality==='medium'?512:256); }
+function _shrink(t){ try{ const im=t&&t.image; if(im){ const w=im.width||im.naturalWidth||0,h=im.height||im.naturalHeight||0,m=Math.max(w,h),cap=texCap();
+    if(m>cap&&w&&h){ const s=cap/m,cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(w*s)); cv.height=Math.max(1,Math.round(h*s)); cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height); t.image=cv; } }
+  t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; t.anisotropy=2; t.needsUpdate=true; }catch(e){} return t; }
+function _shrinkModel(root){ try{ root.traverse(o=>{ if(o.isMesh&&o.material){ const ms=Array.isArray(o.material)?o.material:[o.material];
+    for(const mm of ms){ for(const k of ['map','normalMap','roughnessMap','metalnessMap','emissiveMap','aoMap']){ if(mm&&mm[k])_shrink(mm[k]); } } } }); }catch(e){} }
 // CONTADOR DE ASSETS EN VUELO: la pantalla de carga espera a que TODO (texturas + modelos) termine antes de decir "listo".
 let pendingAssets=0; function _aInc(){pendingAssets++;} function _aDec(){if(pendingAssets>0)pendingAssets--;}
-function gtex(url,srgb){_aInc();return texLoader.loadAsync(url).then(t=>{t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXA;return t;}).finally(_aDec);}
-function stex(url){_aInc();return texLoader.loadAsync(url).then(t=>{t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;t.anisotropy=MAXA;return t;}).finally(_aDec);}
+function gtex(url,srgb){_aInc();return texLoader.loadAsync(url).then(t=>{t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;_shrink(t);return t;}).finally(_aDec);}
+function stex(url){_aInc();return texLoader.loadAsync(url).then(t=>{t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.ClampToEdgeWrapping;_shrink(t);return t;}).finally(_aDec);}
 let _godDone=false;
 function applyGodTextures(){
   if(_godDone)return; _godDone=true;   // se llama una sola vez (durante la carga de assets)
@@ -1561,7 +1568,7 @@ const cT=k=>((typeof I18N!=='undefined'&&(I18N[curLang]||I18N.es)[k])||k);
 /* ---- materiales PBR (mismos commits/URLs que escena) ---- */
 const TEXP='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@601965c/assets/textures/axe/';
 const cTL=new THREE.TextureLoader(); cTL.crossOrigin='anonymous';
-function loadPBR(mat,base,rep,maps){ for(const k in maps){ cTL.load(base+maps[k],t=>{ t.colorSpace=(k==='col')?THREE.SRGBColorSpace:THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(rep,rep); t.anisotropy=8;
+function loadPBR(mat,base,rep,maps){ for(const k in maps){ cTL.load(base+maps[k],t=>{ t.colorSpace=(k==='col')?THREE.SRGBColorSpace:THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(rep,rep); _shrink(t);
   if(k==='col'){mat.map=t;mat.color.set(0xffffff);} else if(k==='nrm')mat.normalMap=t; else if(k==='rgh'){mat.roughnessMap=t;mat.roughness=1;} else if(k==='met'){mat.metalnessMap=t;mat.metalness=1;}
   mat.needsUpdate=true; },undefined,()=>{}); } }
 const woodMat=new THREE.MeshStandardMaterial({color:0xb4905a,roughness:0.7,metalness:0.05});
@@ -1571,7 +1578,7 @@ loadPBR(woodDark,TEXP,1.0,{col:'wood_col.jpg',nrm:'wood_nrm.jpg',rgh:'wood_rgh.j
 const metalMat=new THREE.MeshStandardMaterial({color:0xcfd4da,roughness:0.42,metalness:0.95,envMapIntensity:1.2});
 loadPBR(metalMat,TEXP,1.0,{col:'metal_col.jpg',nrm:'metal_nrm.jpg',rgh:'metal_rgh.jpg',met:'metal_met.jpg'});
 const V2C='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@bf015fa/assets/textures/v2/';
-function ctx(file,srgb,rep){_aInc();const t=cTL.load(V2C+file,_aDec,undefined,_aDec);t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;if(rep)t.repeat.set(rep,rep);t.anisotropy=8;return t;}
+function ctx(file,srgb,rep){_aInc();const t=cTL.load(V2C+file,tt=>{_shrink(tt);_aDec();},undefined,_aDec);t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;if(rep)t.repeat.set(rep,rep);t.anisotropy=2;return t;}
 const woodConsMat=new THREE.MeshStandardMaterial({map:ctx('woodfloor_col.jpg',true,2),normalMap:ctx('woodfloor_nrm.jpg',false,2),roughnessMap:ctx('woodfloor_rgh.jpg',false,2),roughness:1,envMapIntensity:1.1});
 const chapaMat=new THREE.MeshStandardMaterial({color:0xb9c0c6,map:ctx('rust_col.jpg',true,1.5),normalMap:ctx('rust_nrm.jpg',false,1.5),roughnessMap:ctx('rust_rgh.jpg',false,1.5),metalnessMap:ctx('rust_met.jpg',false,1.5),metalness:1,roughness:0.75,envMapIntensity:1.6});
 const blackMetalMat=new THREE.MeshStandardMaterial({color:0x20242a,map:ctx('mbrush_col.jpg',true,1),normalMap:ctx('mbrush_nrm.jpg',false,1),roughnessMap:ctx('mbrush_rgh.jpg',false,1),metalness:0.95,roughness:0.5,envMapIntensity:1.4});
@@ -1582,7 +1589,7 @@ const emberMat=new THREE.MeshStandardMaterial({color:0xff7a26,emissive:0xff5a1e,
 const flameMat=new THREE.MeshStandardMaterial({color:0xffe08a,emissive:0xffd25a,emissiveIntensity:2.2,roughness:0.5});
 const clothMat=new THREE.MeshStandardMaterial({color:0xcdbfa3,roughness:0.92,side:THREE.DoubleSide});
 const FABB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d1d6074/assets/textures/v2/';
-function ftx(f,srgb){_aInc();const t=cTL.load(FABB+f,_aDec,undefined,_aDec);t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,2);t.anisotropy=8;return t;}
+function ftx(f,srgb){_aInc();const t=cTL.load(FABB+f,tt=>{_shrink(tt);_aDec();},undefined,_aDec);t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,2);t.anisotropy=2;return t;}
 const fabricMat=new THREE.MeshStandardMaterial({map:ftx('fabric_col.jpg',true),normalMap:ftx('fabric_nrm.jpg',false),roughnessMap:ftx('fabric_rgh.jpg',false),color:0xcabfa4,roughness:1,metalness:0,side:THREE.DoubleSide});
 const ragMat=new THREE.MeshStandardMaterial({color:0xcdbea0,roughness:0.95});
 const clayMat=new THREE.MeshStandardMaterial({color:0x9c6a44,roughness:1,metalness:0});
@@ -1889,7 +1896,7 @@ function loadGLBItem(id,file,targetMax,opt){ opt=opt||{}; const base=opt.base||G
       if(s.x>=s.y&&s.x>=s.z) root.rotation.z=Math.PI/2; else if(s.z>=s.y&&s.z>=s.x) root.rotation.x=-Math.PI/2; }
     if(opt.flip) root.rotateX(Math.PI);   // invierte cabeza/abajo (p.ej. el pico salía al revés)
     if(opt.upright||opt.flip) root.updateMatrixWorld(true);
-    const m=fitModel(root,targetMax); m.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}}); glbCache[id]=m;
+    const m=fitModel(root,targetMax); m.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}}); _shrinkModel(m); glbCache[id]=m;
   try{ icons[id]=captureIcon(MODELS[id](),ROTS[id]||[0.2,0.65,0.4]); }catch(e){} if(equipped===id)equipItem(id); if($('menu').classList.contains('show'))renderGrid(); _aDec(); },undefined,()=>{ _aDec(); }); }
 
 function buildShovel(headMat){const g=new THREE.Group();
@@ -3289,7 +3296,10 @@ function showLangPick(){
 // pantalla negra inicial con botón de pantalla completa (modo clásico, si no hay intro combinada)
 $('fsBtn').addEventListener('click',()=>{
   try{ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen(); }catch(e){}
-  fadeOut($('boot'),showDevPick);   // flujo normal del menú: PC/Móvil → idioma → estudios → carga → MENÚ
+  try{ applyLang('es'); }catch(e){}
+  if(!DEV.isMobile){ try{ enableMouseMode(); }catch(e){} }                 // auto PC/móvil (sin pantalla de elección)
+  for(const id of ['devPick','langPick','studios']){ const el=$(id); if(el)el.classList.add('gone'); }
+  fadeOut($('boot'), showAssetLoad);   // DIRECTO: negro → carga → MENÚ (sin pantallas intermedias que se buggeaban)
 });
 /* ===== INTRO COMBINADA: al tocar JUGAR → persecución (overlay) → caída → juego ===== */
 function playChaseThenFall(){
