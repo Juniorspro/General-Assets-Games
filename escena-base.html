@@ -209,7 +209,7 @@ function makeWheelRig(){
   for(const a of [-1,1]){ const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.052,0.40,10),skin); arm.position.set(a*0.15,-0.02,-0.30); arm.rotation.set(-1.0,0,a*0.55); steer.add(arm); }
   return rig;
 }
-const wheelRig=makeWheelRig(); wheelRig.position.set(0.36,0.96,0.95); fugitive.add(wheelRig); fugitive.userData.steer=wheelRig.userData.steer;
+const wheelRig=makeWheelRig(); wheelRig.position.set(0.36,0.96,0.45); fugitive.add(wheelRig); fugitive.userData.steer=wheelRig.userData.steer;
 new GLTFLoader().load('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@0b530c3/vehicle_blue_train_bentley.glb',(gltf)=>{
   const m=gltf.scene; m.scale.setScalar(1.0); m.position.set(0,0,0); m.rotation.y=Math.PI; // frente del modelo hacia +Z (sentido de marcha)
   fugitive.userData.model=m;
@@ -338,7 +338,7 @@ function director(ct,t){
     else if(c<9.8){ setFov(56); lookFrom(cop2.position.x,3.0,cop2.position.z-7.5, fx,1.1,fZ); } // 3ra persona policía
     else if(c<13.6){ setFov(88);                                                              // INTERIOR del fugitivo
       fugitive.updateMatrixWorld(true);
-      _seat.set(0.36,1.30,0.30); fugitive.localToWorld(_seat); camera.position.copy(_seat);
+      _seat.set(0.36,1.30,-0.20); fugitive.localToWorld(_seat); camera.position.copy(_seat);
       const hy=Math.sin(c*1.7)*0.55; _tgt.set(0.36+Math.sin(hy)*5,1.15,2.0+Math.cos(hy)*5); fugitive.localToWorld(_tgt); camera.lookAt(_tgt);
     } else { setFov(70); lookFrom(fx-8,3.2,fZ-7, fx,1.1,fZ); }
   }
@@ -353,7 +353,7 @@ const darkMat=new THREE.MeshBasicMaterial({color:0x000000});
 const savedMat={};
 // composer de bloom: todo lo que no sea portal se pinta de negro -> solo el portal florece
 const bloomComposer=new EffectComposer(renderer); bloomComposer.renderToScreen=false;
-const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 1.5, 0.85, 0.0);   // fuerte, sin umbral (la escena ya está en negro)
+const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 0.7, 0.7, 0.0);   // suave, sin umbral (solo el portal está iluminado en este pase)
 bloomComposer.addPass(renderScene); bloomComposer.addPass(bloom);
 // composer final: escena normal + textura de bloom sumada
 const mixPass=new ShaderPass(new THREE.ShaderMaterial({
@@ -370,10 +370,18 @@ function renderBloom(){
   bloomComposer.render(); sky.visible=true; scene.traverse(restore);
   finalComposer.render();
 }
-function setSizes(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight); bloomComposer.setSize(innerWidth,innerHeight); finalComposer.setSize(innerWidth,innerHeight); }
+function setSizes(){
+  const portrait = innerHeight > innerWidth;                 // forzar horizontal: si el equipo está vertical, giro la escena 90°
+  const w = portrait ? innerHeight : innerWidth;             // ancho real del lienzo (lado largo)
+  const h = portrait ? innerWidth  : innerHeight;
+  if(portrait){ app.style.width=w+'px'; app.style.height=h+'px'; app.style.transformOrigin='0 0';
+    app.style.transform=`translateX(${innerWidth}px) rotate(90deg)`; }
+  else { app.style.width=''; app.style.height=''; app.style.transform=''; app.style.transformOrigin=''; }
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w,h); bloomComposer.setSize(w,h); finalComposer.setSize(w,h);
+}
 addEventListener('resize',setSizes);
-renderer.setSize(innerWidth,innerHeight); bloomComposer.setSize(innerWidth,innerHeight); finalComposer.setSize(innerWidth,innerHeight);
+setSizes();
 const clock=new THREE.Clock(); let ct=0,t=0;
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); t+=dt; ct+=dt;
   if(ct>=CYCLE){ ct=0; }
