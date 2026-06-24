@@ -36,6 +36,7 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const app=document.getElementById('app');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
@@ -151,9 +152,51 @@ function makeCar(bodyColor, police){
 }
 function box(w,h,d,m,x,y,z){ const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m); e.position.set(x,y,z); return e; }
 function meshE(w,h,d,m,x,y,z){ const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m); e.position.set(x,y,z); return e; }
-const fugitive=makeCar(0xb53024,false); scene.add(fugitive);
-const cop1=makeCar(0xeef1f4,true); scene.add(cop1);
-const cop2=makeCar(0x26314a,true); scene.add(cop2);
+/* ---- AUTO PRINCIPAL = modelo del repo (vehicle_blue_train_bentley) ---- */
+const fugitive=new THREE.Group(); scene.add(fugitive);
+fugitive.userData.wheels=[]; fugitive.userData.ready=false;
+// volante + manos procedurales montados en el asiento del conductor del modelo real
+function makeWheelRig(){
+  const rig=new THREE.Group();
+  const steer=new THREE.Group(); steer.position.set(0,0,0); steer.rotation.x=-0.55;
+  const wm=new THREE.MeshStandardMaterial({color:0x16181d,roughness:0.5,metalness:0.35});
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(0.165,0.03,10,28),wm); steer.add(ring);
+  for(const a of [-1,0,1]){ const sp=new THREE.Mesh(new THREE.BoxGeometry(0.30,0.022,0.022),wm); sp.rotation.z=a*Math.PI/3; steer.add(sp); }
+  steer.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.035,12),wm));
+  rig.add(steer); rig.userData.steer=steer;
+  const skin=new THREE.MeshStandardMaterial({color:0xc98e63,roughness:0.7,metalness:0});
+  for(const a of [-1,1]){ const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.052,0.40,10),skin); arm.position.set(a*0.15,-0.02,-0.30); arm.rotation.set(-1.0,0,a*0.55); steer.add(arm); }
+  return rig;
+}
+const wheelRig=makeWheelRig(); wheelRig.position.set(0.36,0.96,0.95); fugitive.add(wheelRig); fugitive.userData.steer=wheelRig.userData.steer;
+new GLTFLoader().load('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@0b530c3/vehicle_blue_train_bentley.glb',(gltf)=>{
+  const m=gltf.scene; m.scale.setScalar(1.0); m.position.set(0,0,0); m.rotation.y=0; // frente = +Z
+  m.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; if(o.material){ o.material.envMapIntensity=1.0; } } });
+  for(const nm of ['Wheel_FL.001','Wheel_FR.001','Wheel_BL.001','Wheel_BR.001']){ const w=m.getObjectByName(nm); if(w) fugitive.userData.wheels.push(w); }
+  fugitive.add(m); fugitive.userData.ready=true;
+},undefined,(e)=>{ console.warn('GLB fugitivo falló, uso procedural',e); const fb=makeCar(0xb53024,false); fugitive.add(fb); fugitive.userData.wheels=fb.userData.wheels; fugitive.userData.ready=true; });
+
+/* ---- AUTOS POLICÍA = modelo 3D Higgsfield (con agentes adentro) ---- */
+function buildCopGroup(){
+  const g=new THREE.Group(); g.userData.wheels=[];
+  // barra de luces + point lights (parpadeo) montadas encima
+  const bar=new THREE.Group(); bar.position.set(0,1.95,0.1);
+  const red=meshE(0.55,0.18,0.45,new THREE.MeshStandardMaterial({color:0xff1020,emissive:0xff0000,emissiveIntensity:2}),-0.36,0,0);
+  const blu=meshE(0.55,0.18,0.45,new THREE.MeshStandardMaterial({color:0x2040ff,emissive:0x1030ff,emissiveIntensity:2}),0.36,0,0);
+  bar.add(red); bar.add(blu); g.add(bar); g.userData.lights={red:red.material,blu:blu.material};
+  const rL=new THREE.PointLight(0xff2020,0,18,2); rL.position.set(-0.36,2.1,0.1); g.add(rL);
+  const bL=new THREE.PointLight(0x2040ff,0,18,2); bL.position.set(0.36,2.1,0.1); g.add(bL); g.userData.pl={rL,bL};
+  return g;
+}
+const cop1=buildCopGroup(); scene.add(cop1);
+const cop2=buildCopGroup(); scene.add(cop2);
+new GLTFLoader().load('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@0bf291d/police_car.glb',(gltf)=>{
+  for(const g of [cop1,cop2]){
+    const m=gltf.scene.clone(true); m.scale.setScalar(2.32); m.rotation.y=-Math.PI/2; m.position.set(0,0.72,0); // frente = +Z, ruedas al piso
+    m.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; if(o.material){ o.material=o.material.clone(); o.material.envMapIntensity=1.0; } } });
+    g.add(m);
+  }
+},undefined,(e)=>{ console.warn('GLB policía falló, uso procedural',e); cop1.add(makeCar(0xeef1f4,true)); cop2.add(makeCar(0x26314a,true)); });
 
 /* ---- LLUVIA (rayas que caen, siguen a la cámara) ---- */
 const RAINN=2000; const rainPos=new Float32Array(RAINN*6);
@@ -188,8 +231,8 @@ function director(ct,t){
   else if(ct<11.2){ setFov(56); lookFrom(cop2.position.x,3.0,cop2.position.z-7.5, fx,1.1,fZ); } // 3ra persona policía
   else if(ct<15.2){ setFov(88);                                                              // INTERIOR del fugitivo
     fugitive.updateMatrixWorld(true);
-    _seat.set(-0.42,1.18,0.0); fugitive.localToWorld(_seat); camera.position.copy(_seat);
-    const hy=Math.sin(ct*1.7)*0.55; _tgt.set(-0.42+Math.sin(hy)*5,1.05,0.0+Math.cos(hy)*5); fugitive.localToWorld(_tgt); camera.lookAt(_tgt);
+    _seat.set(0.36,1.30,0.30); fugitive.localToWorld(_seat); camera.position.copy(_seat);
+    const hy=Math.sin(ct*1.7)*0.55; _tgt.set(0.36+Math.sin(hy)*5,1.15,2.0+Math.cos(hy)*5); fugitive.localToWorld(_tgt); camera.lookAt(_tgt);
   } else { setFov(70); }
   let a=0; if(ct<1.1) a=1-ct/1.1; else if(ct>15.4) a=(ct-15.4)/1.2; fadeEl.style.opacity=Math.max(0,Math.min(1,a)).toFixed(3);
   if(ct>13.6&&ct<15.4) capEl.classList.add('show'); else capEl.classList.remove('show');
