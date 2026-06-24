@@ -1216,7 +1216,7 @@ function buildComposer(){
   bloomEffect=new BloomEffect({intensity:0.2,luminanceThreshold:0.88,luminanceSmoothing:0.25,mipmapBlur:true,radius:0.6});
   hueSat=new HueSaturationEffect({saturation:0,hue:0});
   const tone=new ToneMappingEffect({mode:ToneMappingMode.AGX});      // tonemap filmico realista
-  vignetteEffect=new VignetteEffect({offset:0.42,darkness:0.4});    // viñeta LEVE (sólo en los bordes → sensación de profundidad) en TODOS los gráficos
+  vignetteEffect=new VignetteEffect({offset:0.32,darkness:0.62});    // viñeta cinematográfica (bordes oscurecidos) en TODOS los gráficos
   composer.addPass(new EffectPass(camera,bloomEffect,hueSat,tone,vignetteEffect));
   // SIN ANTIALIASING en ningún modo: no se agrega el pase SMAA. (Este EffectPass queda último → es el que dibuja a pantalla.)
   smaaPass=null;
@@ -1271,8 +1271,8 @@ window.addEventListener('pointerup',lookEnd);window.addEventListener('pointercan
 renderer.domElement.addEventListener('click',()=>{if(!DEV.isMobile&&document.pointerLockElement!==renderer.domElement)renderer.domElement.requestPointerLock();});
 document.addEventListener('mousemove',e=>{if(document.pointerLockElement===renderer.domElement&&!intro.active){let mx=e.movementX,my=e.movementY;if(rot){const t=mx;mx=my;my=-t;}player.yaw-=mx*LOOK;player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch-my*LOOK));}});
 const keys={};addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='ShiftLeft'||e.code==='ShiftRight')running=true;
-  if(e.code==='Space'){ if(started&&player.onGround){player.vy=JUMP_V;player.onGround=false;} }   // saltar
-  if((e.code==='KeyC'||e.code==='ControlLeft')&&!e.repeat){ player.crouch=!player.crouch; const bc=$('bCrouch'); if(bc)bc.classList.toggle('on',player.crouch); }  // agacharse
+  if(e.code==='Space'){ if(started&&!intro.active&&player.onGround){player.vy=JUMP_V;player.onGround=false;} }   // saltar
+  if((e.code==='KeyC'||e.code==='ControlLeft')&&!e.repeat&&!intro.active){ player.crouch=!player.crouch; const bc=$('bCrouch'); if(bc)bc.classList.toggle('on',player.crouch); }  // agacharse
 });addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='ShiftLeft'||e.code==='ShiftRight')running=false;});
 const runBtn=document.getElementById('run');runBtn.addEventListener('pointerdown',e=>{running=true;runBtn.classList.add('on');e.preventDefault();});
 const stopRun=()=>{running=false;runBtn.classList.remove('on');};runBtn.addEventListener('pointerup',stopRun);runBtn.addEventListener('pointercancel',stopRun);runBtn.addEventListener('pointerleave',stopRun);
@@ -2573,6 +2573,7 @@ function statsTick(dt){
 function update(dt){
   if(sleepT>=0){ sleepStep(dt); windU.uTime.value+=dt; return; }   // durmiendo: cinemática toma el control
   statsTick(dt); butcherTick(dt);
+  if(cine.persist&&!intro.active){ try{ fireTick(dt,cine.crashPos); }catch(e){} }   // el auto chocado sigue ardiendo en el juego
   if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
     setTime(elev,120);   // SIN IBL: ilumina la directa+hemisférica; el relieve lo dan los normal maps
     hudTimer-=dt; if(hudTimer<=0){ hudTimer=0.25; $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev); } }  // DOM sólo ~4x/seg (evita reflow por frame)
@@ -2607,6 +2608,7 @@ function update(dt){
     fpRig.position.set(fpBasePos.x+Math.cos(player.bobPhase)*0.02*moveAmt, fpBasePos.y+Math.sin(player.bobPhase*2)*0.03*moveAmt-dip, fpBasePos.z);
     fpRig.rotation.set(fpBaseRot.x+Math.sin(player.bobPhase*2)*0.03*moveAmt-dip*0.6, fpBaseRot.y+Math.cos(player.bobPhase)*0.02*moveAmt, fpBaseRot.z); }
   euler.set(player.pitch+shy+dgy,player.yaw+shx+dgx,player.roll+shr+dgr);camera.quaternion.setFromEuler(euler);
+  if(intro.active){ try{ introCam(dt); }catch(e){ console.warn('introCam',e); intro.active=false; setHudVisible(true); } }   // cinemática de llegada: la cámara la maneja la cinemática (culling usa esta cámara)
   // En modo "por fases" la sombra se ancla a una rejilla de 2 m (no nada con el jugador) y se re-hornea sólo al cruzar de celda → sombras quietas y correctas al caminar, sin coste por frame.
   let _shx=player.pos.x,_shz=player.pos.z;
   if(gfx.phaseShadows){ _shx=Math.round(_shx/2)*2; _shz=Math.round(_shz/2)*2; if(_shx!==_shSnapX||_shz!==_shSnapZ){_shSnapX=_shx;_shSnapZ=_shz;shadowNeedsBake=true;} }
@@ -3006,15 +3008,149 @@ function startGame(){
       loadResScale=1.0;                                    // dejamos el modo carga (½ res) → resolución normal
       applyDefaults(); setQuality(curQuality); applyGodTextures(); layout();
       equipped='hacha'; equipItem('hacha'); fpAxe.visible=false;   // tomahawk = hacha permanente de por vida
-      const enter=()=>{ started=true; unlockAudio(); enterPlayMode(); fadeFromBlack();
+      const enter=()=>{ started=true; unlockAudio(); enterPlayMode();
         try{ setupNPCs(); if(npcTickFn){ cycleOn=false; storyT=0; } }catch(e){ console.warn('npc',e); }
         try{ setupFauna(); }catch(e){ console.warn('fauna',e); }
-        try{ prewarmIcons(); }catch(e){} };   // NPCs + día→noche + fauna del desierto + pre-cache de íconos (menú fluido)
+        try{ prewarmIcons(); }catch(e){}
+        startIntroCine(); };   // ← la cinemática de llegada toma el control (sin controles, viñeta); al terminar muestra HUD/controles
       if(worldReady){ enter(); }
       else bootArea(enter);
     });
   }catch(err){ console.error('startGame:',err); }
 }
+/* ===================== CINEMÁTICA DE LLEGADA (portal del cielo → choque → salir del auto) ===================== */
+let introCarGLB=null; const _iA=new THREE.Vector3(), _iB=new THREE.Vector3();
+function preloadIntroAssets(){ if(introCarGLB||intro._loading)return; intro._loading=true; _aInc();
+  gltfL.load('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@0b530c3/vehicle_blue_train_bentley.glb',
+    g=>{ introCarGLB=g.scene; introCarGLB.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; } }); _aDec(); },
+    undefined, ()=>{ console.warn('intro car load fail'); _aDec(); }); }
+function introCarClone(){ try{ return introCarGLB? skClone(introCarGLB): new THREE.Group(); }catch(e){ return new THREE.Group(); } }
+function makePts(n,size,color,additive){ const pos=new Float32Array(n*3); for(let i=0;i<n*3;i++)pos[i]=9999;
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const m=new THREE.PointsMaterial({color,size,transparent:true,opacity:0.95,depthWrite:false,blending:additive?THREE.AdditiveBlending:THREE.NormalBlending});
+  const p=new THREE.Points(g,m); p.frustumCulled=false;
+  return {p,g,pos,n,vel:new Float32Array(n*3),life:new Float32Array(n)}; }
+const cine={};
+// fases (tiempos acumulados): A=cielo/caída/explosión · B=POV cayendo · negro · D=revelar pecio · E=salir por la ventana y pararse
+const C_A=3.6, C_B=2.8, C_BLK=0.7, C_D=3.0, C_E=3.4;
+const cA1=C_A, cB1=cA1+C_B, cC1=cB1+C_BLK, cD1=cC1+C_D, cE1=cD1+C_E;
+function buildIntroCine(){
+  if(cine.built){ if(cine.root)cine.root.visible=true; return; }
+  cine.built=true; cine.root=new THREE.Group(); cine.root.frustumCulled=false; scene.add(cine.root);
+  const gx=4.6, gz=7.8; cine.gy=terrainHeight(gx,gz);
+  cine.crashPos=new THREE.Vector3(gx,cine.gy,gz);
+  cine.portalPos=new THREE.Vector3(-2,58,-26);
+  // PORTAL del cielo (azul, mira al frente)
+  cine.portal=new THREE.Group(); cine.portal.position.copy(cine.portalPos); cine.root.add(cine.portal);
+  const rMat=new THREE.MeshBasicMaterial({color:0x3a86ff}); rMat.color.multiplyScalar(4.5);
+  cine.portal.add(new THREE.Mesh(new THREE.TorusGeometry(4.4,0.45,16,48),rMat));
+  const dMat=new THREE.MeshBasicMaterial({color:0x123fd0,transparent:true,opacity:0.85,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,depthWrite:false}); dMat.color.multiplyScalar(3);
+  cine.portalDisc=new THREE.Mesh(new THREE.CircleGeometry(4.2,48),dMat); cine.portal.add(cine.portalDisc);
+  cine.portalLight=new THREE.PointLight(0x4a8bff,0,140,2); cine.portal.add(cine.portalLight);
+  // AUTO que cae (Bentley)
+  cine.fall=introCarClone(); cine.fall.scale.setScalar(1.0); cine.root.add(cine.fall);
+  // POLICÍAS que NO alcanzan a pasar
+  cine.cops=[]; for(let i=0;i<2;i++){ const c=introCarClone(); c.scale.setScalar(1.0); cine.root.add(c); cine.cops.push(c); }
+  // AUTO chocado: dado vuelta + deformado, descansando sobre el techo
+  cine.wreck=introCarClone(); cine.wreck.position.copy(cine.crashPos);
+  cine.wreck.rotation.set(Math.PI*0.97, 0.6, 0.2); cine.wreck.scale.set(1.03,0.7,1.0);   // invertido + aplastado
+  cine.wreck.updateMatrixWorld(true); const wb=new THREE.Box3().setFromObject(cine.wreck); cine.wreck.position.y += (cine.gy - wb.min.y);   // apoyar exacto en el suelo
+  cine.root.add(cine.wreck);
+  // FUEGO del pecio
+  cine.fireL1=new THREE.PointLight(0xff6a1a,0,18,2); cine.fireL1.position.copy(cine.crashPos).add(new THREE.Vector3(0,1.3,0)); cine.root.add(cine.fireL1);
+  cine.fireL2=new THREE.PointLight(0xffc050,0,12,2); cine.fireL2.position.copy(cine.crashPos).add(new THREE.Vector3(0.8,0.7,-0.6)); cine.root.add(cine.fireL2);
+  cine.fire=makePts(240,0.6,0xff7a1e,true); cine.root.add(cine.fire.p);
+  cine.smoke=makePts(160,1.8,0x2a2622,false); cine.smoke.p.material.opacity=0.45; cine.root.add(cine.smoke.p);
+  cine.ember=makePts(90,0.16,0xffd27a,true); cine.root.add(cine.ember.p);
+  // EXPLOSIÓN (one-shot al cerrarse el portal)
+  cine.boom=makePts(320,0.55,0xffa030,true); cine.root.add(cine.boom.p);
+  cine.boomFlash=new THREE.PointLight(0xfff0c0,0,200,2); cine.boomFlash.position.copy(cine.portalPos); cine.root.add(cine.boomFlash);
+  cine.boomDone=false; cine.boomT=0;
+}
+function fireTick(dt, base){ if(!base||!cine.fire)return; const tw=windU.uTime.value;
+  const F=cine.fire; for(let i=0;i<F.n;i++){ const a=i*3; F.life[i]-=dt;
+    if(F.life[i]<=0){ F.life[i]=0.35+Math.random()*0.7; F.pos[a]=base.x+(Math.random()-0.5)*2.0; F.pos[a+1]=base.y+0.1; F.pos[a+2]=base.z+(Math.random()-0.5)*2.6;
+      F.vel[a]=(Math.random()-0.5)*0.6; F.vel[a+1]=1.6+Math.random()*2.2; F.vel[a+2]=(Math.random()-0.5)*0.6; }
+    F.pos[a]+=F.vel[a]*dt; F.pos[a+1]+=F.vel[a+1]*dt; F.pos[a+2]+=F.vel[a+2]*dt; }
+  F.g.attributes.position.needsUpdate=true;
+  const S=cine.smoke; for(let i=0;i<S.n;i++){ const a=i*3; S.life[i]-=dt;
+    if(S.life[i]<=0){ S.life[i]=1.6+Math.random()*1.6; S.pos[a]=base.x+(Math.random()-0.5)*2.2; S.pos[a+1]=base.y+1.3; S.pos[a+2]=base.z+(Math.random()-0.5)*2.6;
+      S.vel[a]=(Math.random()-0.5)*0.4; S.vel[a+1]=1.0+Math.random()*1.3; S.vel[a+2]=(Math.random()-0.5)*0.4; }
+    S.pos[a]+=S.vel[a]*dt; S.pos[a+1]+=S.vel[a+1]*dt; S.pos[a+2]+=S.vel[a+2]*dt; }
+  S.g.attributes.position.needsUpdate=true;
+  const E=cine.ember; for(let i=0;i<E.n;i++){ const a=i*3; E.life[i]-=dt;
+    if(E.life[i]<=0){ E.life[i]=0.7+Math.random()*1.3; E.pos[a]=base.x+(Math.random()-0.5)*1.6; E.pos[a+1]=base.y+0.3; E.pos[a+2]=base.z+(Math.random()-0.5)*2.2;
+      E.vel[a]=(Math.random()-0.5)*1.3; E.vel[a+1]=2.0+Math.random()*2.6; E.vel[a+2]=(Math.random()-0.5)*1.3; }
+    E.pos[a]+=E.vel[a]*dt; E.pos[a+1]+=E.vel[a+1]*dt; E.pos[a+2]+=E.vel[a+2]*dt; E.vel[a+1]-=dt*1.6; }
+  E.g.attributes.position.needsUpdate=true;
+  cine.fireL1.intensity=10*(0.6+0.4*Math.sin(tw*16)+0.15*Math.sin(tw*27));
+  cine.fireL2.intensity=6*(0.7+0.3*Math.sin(tw*21)); }
+function triggerBoom(){ if(cine.boomDone)return; cine.boomDone=true; const B=cine.boom;
+  for(let i=0;i<B.n;i++){ const a=i*3; B.pos[a]=cine.portalPos.x; B.pos[a+1]=cine.portalPos.y; B.pos[a+2]=cine.portalPos.z;
+    const dx=Math.random()-0.5,dy=Math.random()-0.5,dz=Math.random()-0.5,l=Math.hypot(dx,dy,dz)||1,sp=8+Math.random()*18;
+    B.vel[a]=dx/l*sp; B.vel[a+1]=dy/l*sp; B.vel[a+2]=dz/l*sp; B.life[i]=0.8+Math.random()*0.7; }
+  B.g.attributes.position.needsUpdate=true; cine.boomFlash.intensity=240; cine.boomT=0; }
+function boomTick(dt){ if(!cine.boomDone)return; const B=cine.boom; cine.boomT+=dt;
+  for(let i=0;i<B.n;i++){ const a=i*3; if(B.life[i]<=0)continue; B.life[i]-=dt; B.vel[a+1]-=dt*6;
+    B.pos[a]+=B.vel[a]*dt; B.pos[a+1]+=B.vel[a+1]*dt; B.pos[a+2]+=B.vel[a+2]*dt; if(B.life[i]<=0)B.pos[a+1]=9999; }
+  B.g.attributes.position.needsUpdate=true; B.p.material.opacity=Math.max(0,0.95-cine.boomT*0.55);
+  cine.boomFlash.intensity=Math.max(0,240-cine.boomT*420); }
+function startIntroCine(){
+  try{ intro.active=true; cine.t=0; cine._ended=false; buildIntroCine();
+    setHudVisible(false); if(typeof fpRig!=='undefined'&&fpRig)fpRig.visible=false; if(typeof fpAxe!=='undefined'&&fpAxe)fpAxe.visible=false;
+    player.crouch=false; fadeFromBlack();
+  }catch(e){ console.warn('startIntroCine',e); intro.active=false; setHudVisible(true); }
+}
+function endIntroCine(){ if(cine._ended)return; cine._ended=true; intro.active=false;
+  fadeBlackEl.classList.remove('on');
+  // se queda el pecio ardiendo como escenografía; quito portal/auto-cae/policías/explosión
+  if(cine.root){ for(const o of [cine.portal,cine.fall,cine.boom&&cine.boom.p,cine.boomFlash]){ if(o)cine.root.remove(o); }
+    for(const c of cine.cops) cine.root.remove(c); }
+  cine.persist=true;
+  player.pos.set(0,0,4); player.yaw=0; player.pitch=0; player.crouch=false; player.eye=EYE; player.vy=0; player.jumpY=0;
+  setHudVisible(true);
+  try{ equipped='hacha'; equipItem('hacha'); if(fpAxe)fpAxe.visible=false; }catch(e){}
+}
+function introCam(dt){
+  const t=(cine.t+=dt);
+  if(cine.portal){ cine.portalDisc.rotation.z+=dt*1.7; cine.portal.lookAt(camera.position); }   // portal SIEMPRE de frente
+  const inAB=t<cB1;
+  if(cine.portal) cine.portal.visible=t<2.8;
+  if(cine.fall) cine.fall.visible=inAB;
+  for(const c of cine.cops) c.visible=t<2.8;
+  const showWreck=t>=cC1-0.05;
+  cine.wreck.visible=showWreck; cine.fire.p.visible=showWreck; cine.smoke.p.visible=showWreck; cine.ember.p.visible=showWreck;
+  // portal abre/cierra
+  let ps=0; if(t<0.4)ps=t/0.4; else if(t<2.5)ps=1; else if(t<2.8)ps=1-(t-2.5)/0.3;
+  if(cine.portal){ cine.portal.scale.setScalar(Math.max(0.001,ps)); cine.portalLight.intensity=ps*70; }
+  if(t>=2.8) triggerBoom(); boomTick(dt);
+  // auto cayendo (del portal al suelo, hacia adelante) + tumbando
+  if(inAB){ const fp=Math.min(1,t/cB1);
+    _iA.copy(cine.portalPos).lerp(_iB.set(cine.crashPos.x,cine.gy+2.5,cine.crashPos.z+2), fp*fp);
+    cine.fall.position.copy(_iA); cine.fall.rotation.set(0.3+fp*2.4,0.5+fp*3.2,0.2+Math.sin(t*4)*0.25); }
+  // policías que no llegan a pasar
+  for(let i=0;i<cine.cops.length;i++){ const c=cine.cops[i],off=i?1:-1,cp=Math.min(1,t/2.5);
+    c.position.set(cine.portalPos.x+off*5, cine.portalPos.y+11-cp*8, cine.portalPos.z-7+cp*3.5); c.rotation.set(0.4,0.5+off*0.3,0.1); }
+  // cámaras
+  if(t<cA1){ const k=t/cA1; camera.position.set(24-k*5,44,18); camera.lookAt(cine.fall.visible?cine.fall.position:cine.portalPos); }
+  else if(t<cB1){ _iA.copy(cine.fall.position).add(_iB.set(0.5,1.5,0.4)); camera.position.copy(_iA);
+    _iA.copy(cine.fall.position).add(_iB.set(0.2,-4,2.6)); camera.lookAt(_iA); }
+  else if(t<cC1){ /* negro total: la cámara queda quieta */ }
+  else if(t<cD1){ const k=(t-cC1)/C_D, ang=0.6+k*0.8, rad=7.5-k*1.8;
+    camera.position.set(cine.crashPos.x+Math.cos(ang)*rad, cine.gy+2.5-k*0.5, cine.crashPos.z+Math.sin(ang)*rad);
+    _iA.copy(cine.crashPos); _iA.y=cine.gy+1.0; camera.lookAt(_iA); }
+  else { const k=Math.min(1,(t-cD1)/C_E);                                  // salir por la ventana agachado → pararse
+    _iA.copy(cine.crashPos).lerp(_iB.set(0,cine.gy,4),k);
+    const eye=THREE.MathUtils.lerp(0.55,EYE,Math.max(0,(k-0.45)/0.55));     // primero agachado, luego se para
+    camera.position.set(_iA.x,cine.gy+eye,_iA.z+(1-k)*1.0);
+    camera.lookAt(0,cine.gy+1.5,-2); }
+  if(showWreck) fireTick(dt,cine.crashPos);
+  // fundidos
+  if(t>=cB1-0.05 && t<cC1) fadeBlackEl.classList.add('on');      // corte a negro al tocar el suelo
+  else if(t>=cC1 && t<cC1+0.06) fadeBlackEl.classList.remove('on');
+  if(t>=cE1) endIntroCine();
+}
+
 /* ===================== INTRO / BOOT FLOW ===================== */
 const STUDIO_BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/';
 function fadeOut(el,cb){ el.classList.add('fade'); setTimeout(()=>{ el.classList.add('gone'); if(cb)cb(); },650); }
@@ -3031,6 +3167,7 @@ function showAssetLoad(){
   $('assetLoad').classList.remove('gone'); requestAnimationFrame(()=>$('assetLoad').classList.remove('fade'));
   bootArea();                    // ← acá se arma el MAPA ENTERO antes de jugar (después la distancia de render decide qué se dibuja)
   applyGodTextures();            // ← y acá se cargan TODAS las texturas (suelo/corteza/hojas/pasto/etc) DURANTE la carga, no al entrar
+  preloadIntroAssets();          // ← y el auto de la cinemática de llegada (se descarga DURANTE la carga; la barra espera por él)
   const total=totalChunks();
   const fill=$('alFill'); const t0=performance.now(); const MAXWAIT=25000;   // tope de seguridad: nunca se cuelga aunque falle una descarga
   const tick=()=>{
