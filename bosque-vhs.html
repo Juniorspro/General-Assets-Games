@@ -303,10 +303,22 @@
   .hbSlot img{ width:80%; height:80%; object-fit:contain; pointer-events:none; filter:drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
   .hbSlot .hbq{ position:absolute; right:3px; bottom:1px; font-size:11px; color:#ffd9a8; text-shadow:0 1px 2px #000; pointer-events:none; }
   .hbSlot .hbk{ position:absolute; left:4px; top:1px; font-size:9px; color:rgba(255,255,255,.4); pointer-events:none; }
+  .hbSlot .hblock{ position:absolute; right:3px; top:1px; font-size:10px; opacity:.7; pointer-events:none; }
   #dragGhost{ position:fixed; z-index:120; width:46px; height:46px; pointer-events:none; opacity:.9; transform:translate(-50%,-50%); display:none; }
   #dragGhost img{ width:100%; height:100%; object-fit:contain; }
   /* fila de la barra rápida DENTRO de la mochila (para arrastrar ahí) */
   #bagHotbar{ display:none; gap:5px; justify-content:center; flex-wrap:wrap; padding:8px 8px 4px; }
+  /* barras de vida / sed / hambre (encima del hotbar) + stamina de correr (arriba del FPS) */
+  #stats{ position:fixed; left:50%; bottom:64px; transform:translateX(-50%); z-index:84; display:none; flex-direction:column; gap:3px; pointer-events:none; }
+  #stats.show{ display:flex; }
+  .stRow{ display:flex; align-items:center; gap:5px; }
+  .stIco{ font-size:13px; width:15px; text-align:center; filter:drop-shadow(0 1px 2px #000); }
+  .stBar{ width:84px; height:5px; border-radius:3px; background:rgba(0,0,0,.5); overflow:hidden; border:1px solid rgba(255,255,255,.18); }
+  .stBar i{ display:block; height:100%; width:100%; transition:width .2s; }
+  #hpFill{ background:#e5484d; } #thFill{ background:#3fa0ff; } #hgFill{ background:#f0a23c; }
+  .stNum{ font-size:9.5px; color:#fff; text-shadow:0 1px 2px #000; min-width:44px; }
+  #runbar{ position:fixed; left:50%; top:6px; transform:translateX(-50%); z-index:39; width:120px; height:4px; border-radius:3px; background:rgba(0,0,0,.45); overflow:hidden; display:none; }
+  #runbar.show{ display:block; } #runFill{ display:block; height:100%; width:100%; background:#8fe06a; transition:width .15s; }
   #menu.bagMode #bagHotbar{ display:flex; }
   #bagHotbar .hbHint{ width:100%; text-align:center; font-size:11px; color:rgba(180,200,230,.7); margin-bottom:2px; }
 </style>
@@ -367,6 +379,12 @@
   <button id="bPlace" class="actBtn">✏️</button>
   <button id="bRot" class="actBtn hidden">🔁</button>
   <!-- barra rápida de ítems (estilo Minecraft, look propio) -->
+  <div id="stats">
+    <div class="stRow"><span class="stIco">❤️</span><div class="stBar"><i id="hpFill"></i></div><span class="stNum" id="hpNum">100/100</span></div>
+    <div class="stRow"><span class="stIco">💧</span><div class="stBar"><i id="thFill"></i></div><span class="stNum" id="thNum">100/100</span></div>
+    <div class="stRow"><span class="stIco">🍖</span><div class="stBar"><i id="hgFill"></i></div><span class="stNum" id="hgNum">100/100</span></div>
+  </div>
+  <div id="runbar"><i id="runFill"></i></div>
   <div id="hotbar"></div>
 
   <button id="menuBtn" class="menuBtn" aria-label="Menú">☰</button>
@@ -835,7 +853,9 @@ const rockVariants=(()=>{const out=[];const rr=mulberry32(909);const tmp=new THR
 const ROAD_HALF=5, CHUNK=48;
 const BEACH_X0=120, BEACH_BLEND=46, DLEVEL=-0.4, DESERT_X1=BEACH_X0+6720; const inBeach=x=>x>BEACH_X0+2;   // desierto x10 al este (pura arena)
 function terrainHeight(x,z){const corridor=Math.min(1,Math.max(0,(Math.abs(x)-(ROAD_HALF+3))/16));const hills=Math.sin(x*0.018)*Math.cos(z*0.015)*4.5+Math.sin(x*0.05+z*0.04)*1.4+Math.cos(z*0.09)*0.7;let h=hills*corridor;
-  if(x>BEACH_X0){ const t=Math.min(1,(x-BEACH_X0)/BEACH_BLEND); h=h*(1-t)+DLEVEL*t; }   // playa/desierto: aplana a nivel constante (puro plano de arena)
+  if(x>BEACH_X0){ const t=Math.min(1,(x-BEACH_X0)/BEACH_BLEND);
+    const dunes=Math.sin(x*0.011)*Math.cos(z*0.009)*3.2 + Math.sin(x*0.028+z*0.021)*1.3 + Math.cos(z*0.05)*0.6;   // DUNAS del desierto (elevaciones)
+    h=h*(1-t)+(DLEVEL+dunes)*t; }
   return h;}
 const W={x0:-7,x1:6,z0:-16,z1:15};   // mapa ~10x más grande (con streaming por chunks)
 const Xmin=W.x0*CHUNK,Xmax=(W.x1+1)*CHUNK,Zmin=W.z0*CHUNK,Zmax=(W.z1+1)*CHUNK;
@@ -884,19 +904,24 @@ const oasisWaterMat=new THREE.MeshStandardMaterial({color:0x2f6f86,transparent:t
 const oasisGroundMat=new THREE.MeshStandardMaterial({color:0x3f6e2c,roughness:1,metalness:0});
 const palmTrunkMat=new THREE.MeshStandardMaterial({color:0x7a5a32,roughness:0.92,metalness:0});
 const palmFrondMat=new THREE.MeshStandardMaterial({color:0x357a2e,roughness:0.85,metalness:0,side:THREE.DoubleSide});
+const oasisSandMat=new THREE.MeshStandardMaterial({color:0xddc49a,roughness:1,metalness:0});   // borde arenoso del lago (textura sand vieja, vía applyGodTextures)
+const desertPlantMat=foliageMat(); desertPlantMat.color.set(0xff7a1e); desertPlantMat.envMapIntensity=0;   // plantas desérticas: mismos sprites pero con NARANJA fuerte (textura se asigna en applyGodTextures)
 const _frondGeo=new THREE.PlaneGeometry(0.55,2.7); _frondGeo.translate(0,1.35,0);
 function makePalm(rr){ const g=new THREE.Group(); const h=3.2+rr()*2.4; const lean=(rr()-0.5)*0.4;
   const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.22,h,8),palmTrunkMat); trunk.position.set(lean*h*0.2,h/2,0); trunk.rotation.z=-lean*0.25; trunk.castShadow=true; g.add(trunk);
   const topX=lean*h*0.4, topY=h*0.97;
   for(let i=0;i<8;i++){ const fr=new THREE.Mesh(_frondGeo,palmFrondMat); fr.position.set(topX,topY,0); fr.rotation.y=i/8*6.283+rr()*0.3; fr.rotation.x=-0.7-rr()*0.45; fr.castShadow=true; g.add(fr); }
   return g; }
-const waters=[];
-function makeOasis(cx,cz,R){ const by=terrainHeight(cx,cz);
+const waters=[]; const oasisLakes=[];
+function makeOasis(cx,cz,R){ const by=terrainHeight(cx,cz); oasisLakes.push({x:cx,z:cz,r:R*0.42});
   const grd=new THREE.Mesh(new THREE.CircleGeometry(R,28),oasisGroundMat); grd.rotation.x=-Math.PI/2; grd.position.set(cx,by+0.04,cz); grd.receiveShadow=true; grd.matrixAutoUpdate=false; grd.updateMatrix(); scene.add(grd);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(R*0.4,R*0.62,32),oasisSandMat); ring.rotation.x=-Math.PI/2; ring.position.set(cx,by+0.055,cz); ring.matrixAutoUpdate=false; ring.updateMatrix(); scene.add(ring);   // borde arenoso del lago
   const w=new THREE.Mesh(new THREE.CircleGeometry(R*0.42,32),oasisWaterMat); w.rotation.x=-Math.PI/2; w.position.set(cx,by+0.07,cz); w.matrixAutoUpdate=false; w.updateMatrix(); scene.add(w); waters.push(w);
   const rr=mulberry32(((cx*131+cz*977)|0)>>>0); const nP=4+Math.floor(rr()*4);
-  for(let i=0;i<nP;i++){ const a=rr()*6.283, rad=R*0.55+rr()*R*0.3; const px=cx+Math.cos(a)*rad,pz=cz+Math.sin(a)*rad; const palm=makePalm(rr); palm.position.set(px,terrainHeight(px,pz),pz); palm.rotation.y=rr()*6.283; scene.add(palm); } }
+  for(let i=0;i<nP;i++){ const a=rr()*6.283, rad=R*0.55+rr()*R*0.3; const px=cx+Math.cos(a)*rad,pz=cz+Math.sin(a)*rad; const palm=makePalm(rr); palm.position.set(px,terrainHeight(px,pz),pz); palm.rotation.y=rr()*6.283; scene.add(palm); }
+  for(let i=0;i<6;i++){ const a=rr()*6.283, rad=R*0.45+rr()*R*0.4; const px=cx+Math.cos(a)*rad,pz=cz+Math.sin(a)*rad; const pl=new THREE.Mesh(plantGeos[1],desertPlantMat); pl.scale.setScalar(0.7+rr()*0.7); pl.position.set(px,terrainHeight(px,pz),pz); pl.rotation.y=rr()*6.283; pl.matrixAutoUpdate=false; pl.updateMatrix(); scene.add(pl); } }
 { const rr=mulberry32(909); for(let i=0;i<7;i++){ const ox=BEACH_X0+300+rr()*(DESERT_X1-BEACH_X0-700), oz=Zmin+200+rr()*((Zmax-Zmin)-400); makeOasis(ox,oz,9+rr()*7); } }
+{ const rr=mulberry32(717); for(let i=0;i<110;i++){ const x=BEACH_X0+220+rr()*(DESERT_X1-BEACH_X0-440), z=Zmin+rr()*(Zmax-Zmin); const pl=new THREE.Mesh(plantGeos[(rr()*plantGeos.length)|0],desertPlantMat); pl.scale.setScalar(0.55+rr()*0.7); pl.position.set(x,terrainHeight(x,z),z); pl.rotation.y=rr()*6.283; pl.matrixAutoUpdate=false; pl.updateMatrix(); scene.add(pl); } }   // plantas dispersas en el desierto (naranjas)
 
 /* ===== Texturas PBR reales (carga asíncrona; las procedurales quedan de placeholder) ===== */
 const texLoader=new THREE.TextureLoader();texLoader.crossOrigin='anonymous';
@@ -923,12 +948,15 @@ function applyGodTextures(){
   }).catch(()=>{});
   // ARENA (playa) — PBR seca + parches mojados
   const sreX=Math.max(10,Math.round(beachW/6)),sreZ=Math.max(10,Math.round(gsZ/6));
-  // ARENA SECA: el color (sand_col) es tan seco; lo "mojado" venía del roughnessMap (avg ~0.45 = brillante). Lo quitamos y forzamos roughness=1 (mate total = arena seca).
-  Promise.all([gtex(V2+'sand_col.jpg',true),gtex(V2+'sand_nrm.jpg',false)]).then(([c,n])=>{
+  // ARENA del desierto = GroundSand005 (tan seco, mate). El roughnessMap daba aspecto mojado → no se usa.
+  const V2B='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@765a1b8/assets/textures/v2/';
+  Promise.all([gtex(V2B+'groundsand005_col.jpg',true),gtex(V2B+'groundsand005_nrm.jpg',false)]).then(([c,n])=>{
     [c,n].forEach(t=>t.repeat.set(sreX,sreZ));
     sandMat.map=c;sandMat.normalMap=n;sandMat.roughnessMap=null;sandMat.normalScale.set(reliefScale*0.7*gfxNormalMul,reliefScale*0.7*gfxNormalMul);
     sandMat.color.set(0xffffff);sandMat.roughness=1;sandMat.metalness=0;sandMat.envMapIntensity=0;sandMat.needsUpdate=true;
   }).catch(()=>{});
+  // la arena ANTERIOR (sand_col) ahora sólo para el borde de los lagos del oasis
+  gtex(V2+'sand_col.jpg',true).then(c=>{ c.repeat.set(6,6); oasisSandMat.map=c; oasisSandMat.color.set(0xffffff); oasisSandMat.roughness=1; oasisSandMat.needsUpdate=true; }).catch(()=>{});
   Promise.all([gtex(V2+'sand2_col.jpg',true),gtex(V2+'sand2_nrm.jpg',false),gtex(V2+'sand2_rgh.jpg',false)]).then(([c,n,r])=>{
     [c,n,r].forEach(t=>t.repeat.set(3,3));
     wetMat.map=c;wetMat.normalMap=n;wetMat.roughnessMap=r;wetMat.normalScale.set(reliefScale*gfxNormalMul,reliefScale*gfxNormalMul);wetMat.color.set(0x9fb0b8);wetMat.roughness=0.32;wetMat.metalness=0.0;wetMat.needsUpdate=true;   // tinte azulado húmedo + brillo
@@ -946,7 +974,7 @@ function applyGodTextures(){
   stex(P+'leaf_a.png').then(t=>{leafMat.map=t;leafMat.alphaTest=0.4;leafMat.needsUpdate=true;}).catch(()=>{});
   // pasto y plantas (cross-quad)
   ['grass_a.png','grass_b.png','grass_c.png'].forEach((f,i)=>stex(P+f).then(t=>{grassMats[i].map=t;grassMats[i].needsUpdate=true;}).catch(()=>{}));
-  ['plant_a.png','plant_b.png','plant_c.png','leaf_b.png'].forEach((f,i)=>stex(P+f).then(t=>{plantMats[i].map=t;plantMats[i].needsUpdate=true;}).catch(()=>{}));
+  ['plant_a.png','plant_b.png','plant_c.png','leaf_b.png'].forEach((f,i)=>stex(P+f).then(t=>{plantMats[i].map=t;plantMats[i].needsUpdate=true; if(i===1&&typeof desertPlantMat!=='undefined'){desertPlantMat.map=t;desertPlantMat.needsUpdate=true;}}).catch(()=>{}));
 }
 
 /* ===================== MUNDO PRECONSTRUIDO (sin streaming) ===================== */
@@ -993,7 +1021,7 @@ function buildChunk(cx,cz){
   const key=cx+'_'+cz; if(builtChunks.has(key))return;
   const rng=mulberry32(hash2(cx,cz));const x0=cx*CHUNK,z0=cz*CHUNK;const grp=new THREE.Group();
   const lamps=[];const chunkTrees=[];const leafMeshes=[];const shadowCasters=[];   // mallas a las que se les activa castShadow al "upgradear" el chunk de cerca
-  const nTrees=Math.max(1,Math.round(qual.density*0.75));  // los ÁRBOLES no dependen del slider de vegetación (ése escala pasto/plantas)
+  const nTrees=Math.max(1,Math.round(qual.density*0.525));  // -30% de árboles (antes 0.75); la vegetación (pasto/plantas) NO se toca
   const ownGeos=[];   // SÓLO geometrías propias del chunk (rocas/postes); los troncos/hojas son COMPARTIDOS (no se liberan)
   if(!TREE_VARIANTS.length)buildVariants();
   // 1) sortear árboles y agruparlos por variante (cada variante = 1 InstancedMesh de tronco + 1 de hojas)
@@ -1121,8 +1149,8 @@ let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuRe
 let gfxNormalMul=1, gfxReflectMul=1;   // modo gráfico: 0 aplana el PBR (sin relieve) · reflejos más suaves
 // ---- MODO GRÁFICO (Bajo/Medio/Alto) ----  TODOS a 100% de resolución; cambia el ESTILO de render, no la resolución
 const GFXMODES={
-  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.06, matte:true,  cull:true,  folDist:0.7, leafDist:0.7},   // 2 sombras pintadas (día/noche), sin movimiento de vegetación, PBR plano, SIN reflejos (sin punto naranja, optimizado), fuego mate, culling agresivo
-  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.2,  matte:true,  cull:true,  folDist:1.0, leafDist:1.0},   // = Bajo PERO con PBR (relieve) + hojas y plantas que se mueven, reflejos muy leves
+  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.0, matte:true,  cull:true,  folDist:0.7, leafDist:0.7},   // SIN sombras (shadow:0) ni reflejos, sin movimiento de vegetación, PBR plano, fuego mate, culling agresivo
+  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.0, matte:true,  cull:true,  folDist:1.0, leafDist:1.0},   // 2 sombras pintadas (día/noche) + PBR relieve + vegetación que se mueve, SIN reflejos (como Bajo)
   high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:1.0,  matte:false, cull:false, folDist:1.0, leafDist:1.0},   // todo activado + reflejos GOTY completos + sombras dinámicas
 };
 let gfx=GFXMODES.low;
@@ -1384,7 +1412,7 @@ function makeScrapNub(){ const g=new THREE.Group();
 // nodo de MENA: roca con vetas metálicas; se mina con el pico → piedra (+ mena)
 const oreMat=new THREE.MeshStandardMaterial({color:0x6b6660,roughness:0.82,metalness:0.45,emissive:0x241c08,emissiveIntensity:0.4});
 const nuggetMat=new THREE.MeshStandardMaterial({color:0xb8923a,roughness:0.5,metalness:0.7,emissive:0x3a2a08,emissiveIntensity:0.55});
-function makeOreNode(){ const g=new THREE.Group(); const rock=stoneChunk(0.46,oreMat); rock.position.y=0.26; g.add(rock);
+function makeOreNode(){ const g=new THREE.Group(); const rock=stoneChunk(0.46,rockMat); rock.position.y=0.26; g.add(rock);   // roca minable con la textura PBR (rockMat), no otra roca
   for(let i=0;i<5;i++){ const n=new THREE.Mesh(new THREE.IcosahedronGeometry(0.05+Math.random()*0.04,0),nuggetMat); const a=Math.random()*6.28,r=0.16+Math.random()*0.24; n.position.set(Math.cos(a)*r,0.18+Math.random()*0.4,Math.sin(a)*r); g.add(n); }
   return g; }
 function doMine(){ const sy=Math.sin(player.yaw),cy=Math.cos(player.yaw); let best=null,bd=2.6;
@@ -2428,8 +2456,9 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
       if(rec.isRoot){ const cc=new THREE.Vector3(pb.position.x,pb.position.y,pb.position.z); const jw=cc.add(rec.rLocal.clone().applyQuaternion(qB)); rec.bone.parent.worldToLocal(jw); rec.bone.position.copy(jw); } } }
   const ray=new THREE.Raycaster();
   function tryKill(){ ray.setFromCamera({x:0,y:0},camera); ray.far=4.2; let best=null,bd=1e9; for(const n of NPCS){ if(n.dead)continue; const h=ray.intersectObject(n.group,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=n;} } if(best&&bd<4.2)killN(best); }
-  function killN(inst){ if(inst.dead)return; inst.dead=true; for(const k in inst.mixers)inst.mixers[k].stopAllAction();
+  function killN(inst){ if(inst.dead)return; inst.dead=true; inst.ragT=0; for(const k in inst.mixers)inst.mixers[k].stopAllAction();
     const dx=inst.group.position.x-player.pos.x,dz=inst.group.position.z-player.pos.z,d=Math.hypot(dx,dz)||1; try{ startRag(inst,new THREE.Vector3(dx/d*2.6,0.9,dz/d*2.6)); }catch(e){ console.warn(e); } }
+  function removeNPC(inst){ scene.remove(inst.group); if(inst.rag){ try{ for(const rec of inst.rag.recs)physWorld.removeBody(rec.pb); }catch(e){} inst.rag=null; } const k=NPCS.indexOf(inst); if(k>=0)NPCS.splice(k,1); }
   // 5 NPCs al azar por noche, apareciendo con una nube de polvo. Normalmente NO persiguen (deambulan); sólo persiguen si te acercás.
   let nightSpawned=false;
   npcDayResetFn=function(){ nightSpawned=false;   // al dormir: limpiar NPCs y permitir que reaparezcan la próxima noche
@@ -2441,7 +2470,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
     storyT+=dt; const elev = A_ELEV*Math.sin(storyT*(2*Math.PI/1440)+2.88); setTime(elev,120);   // ciclo real: ~12 min de día y ~12 min de noche (arranca cerca del atardecer → 1ª noche en ~1 min)
     if(nReady){ if(nightFactor>0.55&&!nightSpawned){ nightSpawned=true; spawnNight(); } else if(nightFactor<0.25&&(nightSpawned||NPCS.length)){ npcDayResetFn(); } }   // amanece → se van los NPCs, listo para la próxima noche
     if(npcAtk){ npcAtk=false; tryKill(); }
-    for(const inst of NPCS){ if(inst.dead){ if(inst.rag)stepRag(inst); continue; }
+    for(const inst of NPCS){ if(inst.dead){ inst.ragT=(inst.ragT||0)+dt; if(inst.ragT<=3&&inst.rag)stepRag(inst); continue; }   // ragdoll y desaparece a los 3 s
       if(inst.mixers[inst.state])inst.mixers[inst.state].update(dt);
       for(const f of inst.flames){ const k=0.65+Math.random()*0.55; f.light.intensity=6*k; f.spr.material.opacity=0.6+0.4*Math.random(); }
       const dx=player.pos.x-inst.group.position.x,dz=player.pos.z-inst.group.position.z,d=Math.hypot(dx,dz)||1; inst.atkCD=Math.max(0,inst.atkCD-dt);
@@ -2454,10 +2483,26 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
         inst.wTimer-=dt; if(inst.wTimer<=0){ inst.wTimer=2.5+Math.random()*3.5; inst.wAng=Math.random()*6.28; inst._wmove=Math.random()<0.55; }
         if(inst._wmove){ const sp=0.7*dt; inst.group.position.x+=Math.cos(inst.wAng)*sp; inst.group.position.z+=Math.sin(inst.wAng)*sp; inst.group.rotation.y=Math.atan2(Math.cos(inst.wAng),Math.sin(inst.wAng)); setSt(inst,'walk'); }
         else setSt(inst,'idle'); }
-      inst.group.position.y=terrainHeight(inst.group.position.x,inst.group.position.z); } };
+      inst.group.position.y=terrainHeight(inst.group.position.x,inst.group.position.z); }
+    for(let i=NPCS.length-1;i>=0;i--){ if(NPCS[i].dead&&NPCS[i].ragT>3) removeNPC(NPCS[i]); } };   // limpia los muertos a los 3 s
  }catch(e){ console.warn('setupNPCs',e); } }
+/* ===== STAMINA: vida / sed / hambre / correr ===== */
+const stats={hp:100,thirst:100,hunger:100,stam:100}; let _statHud=0;
+function statsTick(dt){
+  stats.thirst=Math.max(0,stats.thirst-dt*0.5); stats.hunger=Math.max(0,stats.hunger-dt*0.4);
+  if(typeof oasisLakes!=='undefined') for(const L of oasisLakes){ const dx=player.pos.x-L.x,dz=player.pos.z-L.z; if(dx*dx+dz*dz<(L.r+2.5)*(L.r+2.5)){ stats.thirst=Math.min(100,stats.thirst+dt*28); break; } }   // beber en el oasis
+  if(stats.thirst<=0) stats.hp=Math.max(0,stats.hp-dt*1.2);
+  else if(stats.hp<100&&stats.hunger>0) stats.hp=Math.min(100,stats.hp+dt*0.4);
+  const running=player.vel.length()>WALK*1.05;
+  if(running) stats.stam=Math.max(0,stats.stam-dt*14); else stats.stam=Math.min(100,stats.stam+dt*(stats.hunger>0?9:5));
+  _statHud-=dt; if(_statHud<=0){ _statHud=0.25;
+    const set=(f,n,v)=>{ const e=$(f); if(e)e.style.width=v+'%'; const t=$(n); if(t)t.textContent=Math.round(v)+'/100'; };
+    set('hpFill','hpNum',stats.hp); set('thFill','thNum',stats.thirst); set('hgFill','hgNum',stats.hunger);
+    const rb=$('runFill'); if(rb)rb.style.width=stats.stam+'%'; }
+}
 function update(dt){
   if(sleepT>=0){ sleepStep(dt); windU.uTime.value+=dt; return; }   // durmiendo: cinemática toma el control
+  statsTick(dt);
   if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
     setTime(elev,120);   // SIN IBL: ilumina la directa+hemisférica; el relieve lo dan los normal maps
     hudTimer-=dt; if(hudTimer<=0){ hudTimer=0.25; $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev); } }  // DOM sólo ~4x/seg (evita reflow por frame)
@@ -2467,7 +2512,8 @@ function update(dt){
   forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   // velocidad ANALÓGICA: con joystick, cuanto más lo estirás (mag) más rápido (hasta correr). Con teclado, Shift = correr.
   const usingJoy=(joy.x!==0||joy.y!==0);
-  const baseMax=usingJoy?SPEED_MAX:(running?RUN:WALK);
+  let baseMax=usingJoy?SPEED_MAX:(running?RUN:WALK);
+  if(stats.stam<=1) baseMax=Math.min(baseMax,WALK);   // sin stamina → no podés correr
   const spd=baseMax*mag*(player.crouch?0.5:1);const des=_v.set(0,0,0);des.addScaledVector(forward,-iz*spd);des.addScaledVector(right,ix*spd);
   player.vel.lerp(des,Math.min(1,ACCEL*dt));player.pos.addScaledVector(player.vel,dt);
   player.pos.x=Math.max(PB.x0,Math.min(PB.x1,player.pos.x));player.pos.z=Math.max(PB.z0,Math.min(PB.z1,player.pos.z));
@@ -2739,7 +2785,7 @@ function buildHotbar(){ _buildHotInto(hotbarEl,false); _buildHotInto(bagHotbarEl
 function _renderInto(c){ if(!c)return; const slots=c.querySelectorAll('.hbSlot');
   for(let i=0;i<HOTN;i++){ const s=slots[i]; if(!s)continue; const id=hotbar[i]; const u=id?ic(id):null;
     s.classList.toggle('sel',i===hotSel);
-    s.innerHTML=(u?`<img src="${u}">`:'')+(id&&(inv[id]||0)>1?`<span class="hbq">${inv[id]}</span>`:'')+`<span class="hbk">${i+1}</span>`; } }
+    s.innerHTML=(u?`<img src="${u}">`:'')+(id&&(inv[id]||0)>1?`<span class="hbq">${inv[id]}</span>`:'')+`<span class="hbk">${i+1}</span>`+(i===0?`<span class="hblock">🔒</span>`:''); } }   // slot 1 = hacha fija con candado
 function renderHotbar(){ _renderInto(hotbarEl); _renderInto(bagHotbarEl);
   const hint=bagHotbarEl&&bagHotbarEl.querySelector('.hbHint'); if(hint)hint.textContent='⬇ '+(curLang==='en'?'Drag items here for quick access':curLang==='pt'?'Arraste itens aqui para acesso rápido':'Arrastrá ítems acá para acceso rápido'); }
 function selectHot(i){ hotSel=i; const id=hotbar[i];
@@ -2750,7 +2796,8 @@ function selectHot(i){ hotSel=i; const id=hotbar[i];
   if(r&&r.placeable&&id!=='antorcha'){ if(equipped!=='hammer'){ equipped='hammer'; equipItem('hammer'); } startPlacing(id); }   // ítem colocable → modo colocar (la antorcha se sostiene desde la barra)
   else { equipped=id; equipItem(id); }
   renderHotbar(); }
-function assignHot(i,id){ for(let k=0;k<HOTN;k++)if(hotbar[k]===id)hotbar[k]=null; hotbar[i]=id; renderHotbar(); }   // sin duplicados
+function assignHot(i,id){ if(i===0||id==='hacha')return;   // slot 1 = hacha hawk fija (candado): no se puede cambiar ni mover
+  for(let k=1;k<HOTN;k++)if(hotbar[k]===id)hotbar[k]=null; hotbar[i]=id; renderHotbar(); }   // sin duplicados
 // arrastrar un ítem desde la mochila/menú hasta un cuadrito
 let _dragId=null,_dragMoved=false;
 function hotbarDragStart(id){ _dragId=id; _dragMoved=false; const u=ic(id); dragGhostEl.innerHTML=u?`<img src="${u}">`:''; }
@@ -2799,6 +2846,7 @@ function setHudVisible(v){ for(const id of HUD_ELS){ const el=$(id); if(!el)cont
   if(v){ if(equipped&&fpRig)fpRig.visible=true; }   // sólo el ítem equipado; nunca el hacha vieja
   else { if(fpAxe)fpAxe.visible=false; if(fpRig)fpRig.visible=false; }
   if(hotbarEl){ hotbarEl.classList.toggle('show', !!(v&&started)); if(v&&started)renderHotbar(); }   // la barra rápida se ve jugando (PC y móvil)
+  { const st=$('stats'),rb=$('runbar'); const sh=!!(v&&started); if(st)st.classList.toggle('show',sh); if(rb)rb.classList.toggle('show',sh); }   // barras de vida/sed/hambre + stamina
 }
 let menuVisualsOn=null;
 function anyBlurMenuOpen(){ return $('startMenu').classList.contains('show')||$('pause').classList.contains('show')||$('options').classList.contains('show')||$('kbCard').classList.contains('show'); }
