@@ -2427,8 +2427,9 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
     {key:'rino', file:'model_56a_-_southern_white_rhino.glb', h:1.9, idle:'Action', walk:'Action', count:2, sp:0.8, hp:6, proc:true},
     {key:'spider',file:'spider_rig.glb', h:0.6, idle:'CINEMA', walk:'CINEMA', count:4, sp:1.1, hp:3, proc:true},
   ];
-  const gl=new GLTFLoader(); const F=[]; const ray2=new THREE.Raycaster(); let spiderFactory=null, giantsSpawned=false; const FAUNA_D2=72*72;   // sólo se dibujan/animan los animales dentro de ~72 m
-  function faunaPos(){ const forest=Math.random()<0.7; const x=forest?(Xmin+30+Math.random()*(BEACH_X0-Xmin-60)):(BEACH_X0+150+Math.random()*(DESERT_X1-BEACH_X0-300)); const z=Zmin+30+Math.random()*((Zmax-Zmin)-60); return {x,z}; }
+  const gl=new GLTFLoader(); const F=[]; const ray2=new THREE.Raycaster(); let spiderFactory=null, giantsSpawned=false; const FAUNA_D2=110*110, FAUNA_RELOC2=150*150;   // visibles hasta ~110 m; si quedan lejísimos se reubican cerca tuyo
+  function faunaPos(){ const a=Math.random()*6.283, r=18+Math.random()*60; let x=player.pos.x+Math.cos(a)*r, z=player.pos.z+Math.sin(a)*r;   // aparecen ALREDEDOR del jugador (no perdidos en el mapa)
+    x=Math.max(Xmin+10,Math.min(BEACH_X0-12,x)); z=Math.max(Zmin+10,Math.min(Zmax-10,z)); return {x,z}; }
   function addInst(S,g,src,s0,scaleMul,hp,x,z){ const s=s0*scaleMul; const bb=new THREE.Box3().setFromObject(src); const baseY=bb.min.y*s;
     const pick=n=>g.animations.find(c=>c.name.indexOf(n)>=0)||g.animations[0];
     const inst=skClone(src); inst.scale.setScalar(s); inst.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
@@ -2449,7 +2450,9 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
     for(let k=F.length-1;k>=0;k--){ const o=F[k];
       const ddx=o.inst.position.x-player.pos.x, ddz=o.inst.position.z-player.pos.z; const far=(ddx*ddx+ddz*ddz)>FAUNA_D2;   // OPT: animales lejos no se dibujan ni se animan (eran 11 mallas skinned siempre activas)
       o.inst.visible=!far;
-      if(far){ if(o.dead){ o.deadT+=dt; if((o.key!=='fox'&&o.key!=='rino')&&o.deadT>=3){ scene.remove(o.inst); F.splice(k,1); } else if((o.key==='fox'||o.key==='rino')&&o.deadT>=60&&!o._butchering){ scene.remove(o.inst); F.splice(k,1); } } else { o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; } if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; } } continue; }
+      if(far){ if(o.dead){ o.deadT+=dt; if((o.key!=='fox'&&o.key!=='rino')&&o.deadT>=3){ scene.remove(o.inst); F.splice(k,1); } else if((o.key==='fox'||o.key==='rino')&&o.deadT>=60&&!o._butchering){ scene.remove(o.inst); F.splice(k,1); } }
+        else { if((ddx*ddx+ddz*ddz)>FAUNA_RELOC2){ const a=Math.random()*6.283,r=45+Math.random()*45; let nx=player.pos.x+Math.cos(a)*r, nz=player.pos.z+Math.sin(a)*r; nx=Math.max(Xmin+10,Math.min(BEACH_X0-12,nx)); nz=Math.max(Zmin+10,Math.min(Zmax-10,nz)); o.inst.position.set(nx,terrainHeight(nx,nz)-o.baseY,nz); }   // si quedó lejísimos, reaparece cerca tuyo (siempre hay animales alrededor)
+          else { o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; } if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; } } } continue; }
       o.mx.update(dt);
       if(o.dead){ o.deadT+=dt; o.inst.rotation.z=Math.min(1.45,o.inst.rotation.z+dt*3.2);   // cae de costado (ragdoll simple)
         o.inst.position.y=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY;
@@ -3757,7 +3760,7 @@ function animate(){ if(chaseStopped)return; requestAnimationFrame(animate); cons
   speedTick(dt, fast?1:0.12); sparkTick(dt);
   renderBloom();
 }
-if(window.__embedChase){ window.__startChase=function(){ clock.start(); animate(); }; }   // COMBINADO: arranca cuando lo pide el host
+if(window.__embedChase){ window.__startChase=function(){ setSizes(); requestAnimationFrame(setSizes); clock.start(); animate(); }; }   // COMBINADO: re-evalúa orientación (gira 90° si hace falta) al arrancar, ya con pantalla completa
 else animate();
 
 </script>
