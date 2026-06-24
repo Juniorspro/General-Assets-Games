@@ -75,7 +75,8 @@ const roadMat=new THREE.MeshStandardMaterial({color:0xbfc4c8,roughness:0.55,meta
 const road=new THREE.Mesh(new THREE.PlaneGeometry(ROADW,ROADLEN), roadMat);
 road.rotation.x=-Math.PI/2; road.position.set(0,0.02,0); scene.add(road);
 const lineMat=new THREE.MeshBasicMaterial({color:0xd8cda0});
-for(let i=-ROADLEN/2;i<ROADLEN/2;i+=10){ const d=new THREE.Mesh(new THREE.PlaneGeometry(0.32,4),lineMat); d.rotation.x=-Math.PI/2; d.position.set(0,0.035,i); scene.add(d); }
+{ const dgeos=[]; for(let i=-ROADLEN/2;i<ROADLEN/2;i+=10){ const g=new THREE.PlaneGeometry(0.32,4); g.rotateX(-Math.PI/2); g.translate(0,0.035,i); dgeos.push(g); }
+  scene.add(new THREE.Mesh(mergeGeometries(dgeos,false),lineMat)); }   // OPT: una sola malla en vez de 400 (clave para el pase de bloom)
 
 const GH='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d72240f/assets/textures/';
 const V2='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@bf015fa/assets/textures/v2/';
@@ -119,7 +120,7 @@ const barkMat=new THREE.MeshStandardMaterial({color:0x6b5238,map:barkTex,normalM
   function branch(parentEnd, dir, len, rad){ const seg=new THREE.CylinderGeometry(rad*0.6,rad,len,5); seg.translate(0,len/2,0);
     _q.setFromUnitVectors(_up, dir.clone().normalize()); _m.makeRotationFromQuaternion(_q); _m.setPosition(parentEnd.x,parentEnd.y,parentEnd.z); seg.applyMatrix4(_m); geos.push(seg);
     return parentEnd.clone().add(dir.clone().multiplyScalar(len)); }
-  for(let i=0;i<340;i++){ const side=(i%2)?1:-1; const x=side*(ROADW/2+3+rng()*55); const z=-ROADLEN/2+rng()*ROADLEN;
+  for(let i=0;i<150;i++){ const side=(i%2)?1:-1; const x=side*(ROADW/2+3+rng()*55); const z=-ROADLEN/2+rng()*ROADLEN;
     const base=new THREE.Vector3(x,0,z); const h=4+rng()*5;
     const top=branch(base,new THREE.Vector3((rng()-0.5)*0.2,1,(rng()-0.5)*0.2),h,0.22+rng()*0.1);
     const nb=3+(rng()*5|0); for(let b=0;b<nb;b++){ const a=rng()*6.28; const dir=new THREE.Vector3(Math.cos(a)*0.7,0.6+rng()*0.5,Math.sin(a)*0.7); const bl=1.5+rng()*2.2; const e=branch(top.clone().add(new THREE.Vector3(0,-rng()*1.2,0)),dir,bl,0.09);
@@ -136,7 +137,7 @@ const barkMat=new THREE.MeshStandardMaterial({color:0x6b5238,map:barkTex,normalM
   const q1=new THREE.PlaneGeometry(1.1,0.9); q1.translate(0,0.45,0);
   const q2=q1.clone(); q2.rotateY(Math.PI/2);
   const cross=mergeGeometries([q1,q2],false);
-  const N=2600; const grass=new THREE.InstancedMesh(cross,gMat,N); grass.castShadow=false; grass.receiveShadow=false;
+  const N=750; const grass=new THREE.InstancedMesh(cross,gMat,N); grass.castShadow=false; grass.receiveShadow=false;
   const d=new THREE.Object3D();
   for(let i=0;i<N;i++){ const side=(rng()<0.5)?1:-1; const x=side*(ROADW/2+1.5+rng()*70); const z=-ROADLEN/2+rng()*ROADLEN;
     const s=0.7+rng()*1.6; d.position.set(x,0,z); d.rotation.y=rng()*6.28; d.scale.set(s,s*(0.7+rng()*0.6),s); d.updateMatrix(); grass.setMatrixAt(i,d.matrix); }
@@ -144,7 +145,7 @@ const barkMat=new THREE.MeshStandardMaterial({color:0x6b5238,map:barkTex,normalM
   // arbustos secos: esferas bajas low-poly oliva oscuro
   const bMat=new THREE.MeshStandardMaterial({color:0x4c5230,roughness:1,metalness:0,flatShading:true});
   const bGeo=new THREE.IcosahedronGeometry(1,1);
-  const NB=260; const bush=new THREE.InstancedMesh(bGeo,bMat,NB); bush.castShadow=true;
+  const NB=120; const bush=new THREE.InstancedMesh(bGeo,bMat,NB); bush.castShadow=true;
   for(let i=0;i<NB;i++){ const side=(rng()<0.5)?1:-1; const x=side*(ROADW/2+2+rng()*65); const z=-ROADLEN/2+rng()*ROADLEN;
     const s=0.6+rng()*1.3; d.position.set(x,s*0.45,z); d.rotation.set(rng(),rng()*6.28,rng()); d.scale.set(s*1.3,s*0.7,s*1.3); d.updateMatrix(); bush.setMatrixAt(i,d.matrix); }
   bush.instanceMatrix.needsUpdate=true; scene.add(bush);
@@ -259,8 +260,8 @@ function makeRainLayer(n,len0,lenV,opacity,spread,col){
   const seg=new THREE.LineSegments(geo,new THREE.LineBasicMaterial({color:col,transparent:true,opacity:opacity})); seg.frustumCulled=false; scene.add(seg);
   return {seg,geo,n};
 }
-const rainFar=makeRainLayer(3200, 2.0, 1.5, 0.34, 110, 0xff9a4e);   // atardecer naranja: muchas finas
-const rainNear=makeRainLayer(1100, 4.5, 3.0, 0.6, 55, 0xffc079);    // cerca: pocas, largas, ámbar brillante
+const rainFar=makeRainLayer(1500, 2.0, 1.5, 0.34, 110, 0xff9a4e);   // atardecer naranja: muchas finas
+const rainNear=makeRainLayer(450, 4.5, 3.0, 0.6, 55, 0xffc079);    // cerca: pocas, largas, ámbar brillante
 function tickLayer(L,fall,dt){ const p=L.geo.attributes.position.array; const f=fall*dt;
   for(let i=0;i<L.n;i++){ const a=i*6; p[a+1]-=f; p[a+4]-=f; if(p[a+4]<-2){ p[a+1]+=52; p[a+4]+=52; } }
   L.geo.attributes.position.needsUpdate=true; L.seg.position.set(camera.position.x,0,camera.position.z); }
@@ -283,7 +284,7 @@ const disc2Mat=new THREE.MeshBasicMaterial({color:0x5aa6ff,transparent:true,opac
 const disc2=new THREE.Mesh(new THREE.RingGeometry(0.5,2.35,44), disc2Mat); disc2.position.z=0.02; portal.add(disc2);
 const portalLight=new THREE.PointLight(0x4a8bff,0,55,2); portal.add(portalLight);
 // partículas (chispas azules saliendo del portal)
-const PN=460, pPos=new Float32Array(PN*3), pVel=new Float32Array(PN*3), pLife=new Float32Array(PN);
+const PN=240, pPos=new Float32Array(PN*3), pVel=new Float32Array(PN*3), pLife=new Float32Array(PN);
 const pGeo=new THREE.BufferGeometry(); pGeo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
 const sparks=new THREE.Points(pGeo, new THREE.PointsMaterial({color:0x8ec4ff,size:0.2,transparent:true,opacity:0.9,blending:THREE.AdditiveBlending,depthWrite:false})); sparks.frustumCulled=false; portal.add(sparks);
 // SOLO el portal entra a la capa de bloom (el sol/cielo no florece)
@@ -304,7 +305,7 @@ function portalTick(dt,emit,t){
 }
 
 /* ---- CHISPAS de aterrizaje (cuando un auto rebota al caer del portal) ---- */
-const LSN=300; const lsPos=new Float32Array(LSN*3), lsVel=new Float32Array(LSN*3), lsLife=new Float32Array(LSN); let lsHead=0;
+const LSN=150; const lsPos=new Float32Array(LSN*3), lsVel=new Float32Array(LSN*3), lsLife=new Float32Array(LSN); let lsHead=0;
 for(let i=0;i<LSN;i++) lsPos[i*3+1]=9999;
 const lsGeo=new THREE.BufferGeometry(); lsGeo.setAttribute('position',new THREE.BufferAttribute(lsPos,3));
 const lsPts=new THREE.Points(lsGeo,new THREE.PointsMaterial({color:0xffb24a,size:0.17,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false})); lsPts.frustumCulled=false; lsPts.layers.enable(BLOOM_LAYER); scene.add(lsPts);
@@ -315,7 +316,7 @@ function sparkTick(dt){ const p=lsGeo.attributes.position.array; let any=false;
   if(any) lsGeo.attributes.position.needsUpdate=true; }
 
 /* ---- LÍNEAS DE VELOCIDAD (sensación de velocidad alrededor de la cámara) ---- */
-const SS_N=140; const ssPos=new Float32Array(SS_N*6);
+const SS_N=70; const ssPos=new Float32Array(SS_N*6);
 for(let i=0;i<SS_N;i++){ const a=Math.random()*6.28, r=5+Math.random()*26, x=Math.cos(a)*r, y=0.4+Math.random()*9, z=(Math.random()-0.5)*140, ln=2.5+Math.random()*5;
   ssPos[i*6]=x;ssPos[i*6+1]=y;ssPos[i*6+2]=z; ssPos[i*6+3]=x;ssPos[i*6+4]=y;ssPos[i*6+5]=z+ln; }
 const ssGeo=new THREE.BufferGeometry(); ssGeo.setAttribute('position',new THREE.BufferAttribute(ssPos,3));
@@ -392,7 +393,8 @@ function director(ct,t){
   // ---- fundidos + redirección al bosque ----
   let a=0; if(ct<0.6) a=1-ct/0.6; else if(ct>END_START+2.4) a=(ct-(END_START+2.4))/1.2; fadeEl.style.opacity=Math.max(0,Math.min(1,a)).toFixed(3);
   if(ct>=REDIRECT_AT && !redirected){ redirected=true; chaseStopped=true;
-    if(window.__introToFall){ const ca=document.getElementById('chaseApp'); if(ca)ca.classList.add('gone'); const cf=document.getElementById('chaseFade'); if(cf)cf.style.display='none'; try{ window.__introToFall(); }catch(e){} }   // COMBINADO: pasa a la animación de caída
+    if(window.__introToFall){ const ca=document.getElementById('chaseApp'); if(ca)ca.classList.add('gone'); const cf=document.getElementById('chaseFade'); if(cf)cf.style.display='none'; try{ window.__introToFall(); }catch(e){}
+      setTimeout(()=>{ try{ renderer.dispose(); if(renderer.forceContextLoss)renderer.forceContextLoss(); if(renderer.domElement&&renderer.domElement.remove)renderer.domElement.remove(); }catch(e){} },400); }   // COMBINADO: libera el contexto WebGL de la persecución (optimización)
     else { try{ location.href='bosque-vhs.html#fall'; }catch(e){} } }   // standalone: redirige
 }
 
