@@ -1120,6 +1120,9 @@ function buildChunk(cx,cz){
       const sgeo=new THREE.SphereGeometry(0.28,8,6);ownGeos.push(sgeo);const hm=new THREE.InstancedMesh(sgeo,lampHeadMat,heads.length);heads.forEach((h,i)=>{hd.position.copy(h);hd.updateMatrix();hm.setMatrixAt(i,hd.matrix);});grp.add(hm);}}
   const center=new THREE.Vector3(x0+CHUNK/2,5,z0+CHUNK/2);
   const c={grp,center,sphere:new THREE.Sphere(center,42),lamps,fol,leafMeshes,veg:cveg,fiber:fiberList,scrap:scrapList,ore:oreList,cx,cz,key,trees:chunkTrees,ownGeos,shadowCasters,upgraded:false,rockCols};
+  // BOOSTER (invisible): congela las matrices de todo lo estático del chunk → el CPU no las recalcula cada frame (menos trabajo por frame, mismo aspecto)
+  grp.updateMatrixWorld(true); grp.matrixAutoUpdate=false; grp.matrixWorldAutoUpdate=false;
+  grp.traverse(o=>{ if(o!==grp){ o.matrixAutoUpdate=false; o.matrixWorldAutoUpdate=false; } });
   scene.add(grp);chunkList.push(c);builtChunks.set(key,c);
 }
 function disposeChunk(c){
