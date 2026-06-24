@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Roble Realista — AAA · Three.js</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e13; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  .ui {
+    position: fixed; z-index: 10; color: #f3f0e8;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    text-shadow: 0 1px 3px rgba(0,0,0,.55);
+  }
+  .title { top: 22px; left: 24px; }
+  .title h1 { font-size: 20px; font-weight: 650; letter-spacing: .2px; }
+  .title p  { font-size: 12.5px; opacity: .72; margin-top: 4px; font-weight: 400; }
+
+  .panel {
+    bottom: 22px; left: 24px; display: flex; gap: 8px; flex-wrap: wrap; max-width: 92vw;
+  }
+  .panel button {
+    appearance: none; cursor: pointer; color: #f3f0e8;
+    background: rgba(20,24,30,.55); border: 1px solid rgba(255,255,255,.14);
+    backdrop-filter: blur(10px) saturate(1.1); -webkit-backdrop-filter: blur(10px) saturate(1.1);
+    border-radius: 11px; padding: 9px 14px; font-size: 13px; font-weight: 550;
+    transition: background .18s ease, border-color .18s ease, transform .08s ease;
+  }
+  .panel button:hover { background: rgba(40,46,54,.7); border-color: rgba(255,255,255,.28); }
+  .panel button:active { transform: translateY(1px); }
+  .panel button[aria-pressed="true"] {
+    background: rgba(120,170,90,.36); border-color: rgba(160,210,120,.55);
+  }
+
+  #loader {
+    position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
+    background: radial-gradient(120% 120% at 50% 30%, #1a2230 0%, #0b0e13 70%);
+    transition: opacity .6s ease; font-family: inherit;
+  }
+  #loader .spin {
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 3px solid rgba(255,255,255,.15); border-top-color: #9ec46a;
+    animation: spin .9s linear infinite;
+  }
+  #loader p { color: #cdd3da; font-family: -apple-system, system-ui, sans-serif; margin-top: 16px; font-size: 13px; letter-spacing: .3px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div class="ui title">
+    <h1>🌳 Roble Realista — AAA</h1>
+    <p>Arrastra para orbitar · rueda / pellizca para acercar</p>
+  </div>
+
+  <div class="ui panel">
+    <button id="btnRotate" aria-pressed="true">Auto-rotación</button>
+    <button id="btnWind"   aria-pressed="true">Viento</button>
+    <button id="btnSeason" aria-pressed="false">Otoño</button>
+  </div>
+
+  <div id="loader"><div style="text-align:center"><div class="spin"></div><p>Generando árbol…</p></div></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* ------------------------------------------------------------------ *
+ *  RENDERER  (skill: threejs-scene-setup + post-processing)
+ * ------------------------------------------------------------------ */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));   // cap for perf
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;       // cinematic
+renderer.toneMappingExposure = 0.62;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;          // soft shadows
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 4000);
+camera.position.set(11, 6.5, 13);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.target.set(0, 4.2, 0);
+controls.minDistance = 5;
+controls.maxDistance = 60;
+controls.maxPolarAngle = Math.PI * 0.495;   // don't dip under the ground
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.45;
+
+/* ------------------------------------------------------------------ *
+ *  PHYSICAL SKY + IMAGE-BASED LIGHTING  (skill: pbr-materials / lighting)
+ * ------------------------------------------------------------------ */
+const sky = new Sky();
+sky.scale.setScalar(45000);
+const sun = new THREE.Vector3();
+const elevation = 24, azimuth = 142;
+{
+  const phi = THREE.MathUtils.degToRad(90 - elevation);
+  const theta = THREE.MathUtils.degToRad(azimuth);
+  sun.setFromSphericalCoords(1, phi, theta);
+  const u = sky.material.uniforms;
+  u.turbidity.value = 5.0;
+  u.rayleigh.value = 1.6;
+  u.mieCoefficient.value = 0.006;
+  u.mieDirectionalG.value = 0.8;
+  u.sunPosition.value.copy(sun);
+}
+scene.add(sky);
+
+// Generate an environment map from the sky for realistic IBL reflections.
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(scene, 0, 0.1, 100000).texture;
+
+// Atmospheric depth
+scene.fog = new THREE.Fog(0xaebfcf, 38, 150);
+
+/* Lighting: sun (key) + hemisphere fill. Env map handles ambient bounce. */
+const sunLight = new THREE.DirectionalLight(0xfff1df, 3.1);
+sunLight.position.copy(sun).multiplyScalar(50);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.bias = -0.0004;
+sunLight.shadow.normalBias = 0.03;
+const sc = sunLight.shadow.camera;
+sc.near = 1; sc.far = 120; sc.left = -16; sc.right = 16; sc.top = 16; sc.bottom = -16;
+scene.add(sunLight);
+scene.add(sunLight.target);
+
+const hemi = new THREE.HemisphereLight(0x9fbef0, 0x4a3a28, 0.85);
+scene.add(hemi);
+
+/* ------------------------------------------------------------------ *
+ *  PROCEDURAL TEXTURES  (no external assets)
+ * ------------------------------------------------------------------ */
+function makeCanvas(size) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  return c;
+}
+
+// --- value-noise helper for organic detail ---
+function makeNoise(seed = 1) {
+  const p = new Uint8Array(512);
+  let s = seed;
+  const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const perm = [...Array(256).keys()];
+  for (let i = 255; i > 0; i--) { const j = (rnd() * (i + 1)) | 0; [perm[i], perm[j]] = [perm[j], perm[i]]; }
+  for (let i = 0; i < 512; i++) p[i] = perm[i & 255];
+  const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+  const lerp = (a, b, t) => a + t * (b - a);
+  const grad = (h, x, y) => ((h & 1) ? -x : x) + ((h & 2) ? -y : y);
+  return (x, y) => {
+    const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+    x -= Math.floor(x); y -= Math.floor(y);
+    const u = fade(x), v = fade(y);
+    const aa = p[p[X] + Y], ab = p[p[X] + Y + 1];
+    const ba = p[p[X + 1] + Y], bb = p[p[X + 1] + Y + 1];
+    return (lerp(lerp(grad(aa, x, y), grad(ba, x - 1, y), u),
+                 lerp(grad(ab, x, y - 1), grad(bb, x - 1, y - 1), u), v) + 1) * 0.5;
+  };
+}
+
+// --- bark color + matching normal map (vertical ridges) ---
+function makeBark() {
+  const N = 512;
+  const noise = makeNoise(7);
+  const fbm = (x, y) => {
+    let a = 0, amp = 0.5, f = 1;
+    for (let o = 0; o < 4; o++) { a += amp * noise(x * f, y * f); f *= 2; amp *= 0.5; }
+    return a;
+  };
+  const height = new Float32Array(N * N);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      // vertical ridges (bark runs along the trunk) + fbm grain + deep cracks
+      const ridge = Math.sin((x / N) * Math.PI * 22 + fbm(x * 0.02, y * 0.01) * 4) * 0.5 + 0.5;
+      let h = ridge * 0.6 + fbm(x * 0.05, y * 0.02) * 0.5;
+      const crack = fbm(x * 0.012, y * 0.05);
+      if (crack > 0.74) h -= (crack - 0.74) * 3.0;
+      height[y * N + x] = h;
+    }
+  }
+  // color
+  const colC = makeCanvas(N), cctx = colC.getContext('2d');
+  const img = cctx.createImageData(N, N);
+  for (let i = 0; i < N * N; i++) {
+    const h = THREE.MathUtils.clamp(height[i], 0, 1);
+    const base = 56 + h * 70;            // brown range
+    const tint = (fbm((i % N) * 0.03, ((i / N) | 0) * 0.03));
+    img.data[i * 4 + 0] = base * (0.62 + tint * 0.25);
+    img.data[i * 4 + 1] = base * (0.46 + tint * 0.22);
+    img.data[i * 4 + 2] = base * (0.34 + tint * 0.18);
+    img.data[i * 4 + 3] = 255;
+  }
+  cctx.putImageData(img, 0, 0);
+  // green moss tinge near crevices
+  cctx.globalCompositeOperation = 'overlay';
+  for (let k = 0; k < 1400; k++) {
+    const x = Math.random() * N, y = Math.random() * N, r = 2 + Math.random() * 9;
+    cctx.fillStyle = `rgba(70,90,40,${0.04 + Math.random() * 0.07})`;
+    cctx.beginPath(); cctx.arc(x, y, r, 0, 7); cctx.fill();
+  }
+
+  // normal map from height (Sobel)
+  const nrmC = makeCanvas(N), nctx = nrmC.getContext('2d');
+  const nimg = nctx.createImageData(N, N);
+  const H = (x, y) => height[((y + N) % N) * N + ((x + N) % N)];
+  const strength = 2.2;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const dx = (H(x - 1, y) - H(x + 1, y)) * strength;
+      const dy = (H(x, y - 1) - H(x, y + 1)) * strength;
+      const nz = 1.0;
+      const len = Math.hypot(dx, dy, nz);
+      const i = (y * N + x) * 4;
+      nimg.data[i + 0] = (dx / len * 0.5 + 0.5) * 255;
+      nimg.data[i + 1] = (dy / len * 0.5 + 0.5) * 255;
+      nimg.data[i + 2] = (nz / len * 0.5 + 0.5) * 255;
+      nimg.data[i + 3] = 255;
+    }
+  }
+  nctx.putImageData(nimg, 0, 0);
+
+  const color = new THREE.CanvasTexture(colC);
+  const normal = new THREE.CanvasTexture(nrmC);
+  for (const t of [color, normal]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2, 6); }
+  color.colorSpace = THREE.SRGBColorSpace;
+  color.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return { color, normal };
+}
+
+// --- leaf cluster card (alpha) ---
+function makeLeafTexture() {
+  const N = 256, c = makeCanvas(N), ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, N, N);
+  function leaf(cx, cy, len, wid, ang, hue) {
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(ang);
+    const g = ctx.createLinearGradient(0, -len / 2, 0, len / 2);
+    g.addColorStop(0, `hsl(${hue},55%,${28 + Math.random() * 8}%)`);
+    g.addColorStop(0.5, `hsl(${hue},58%,${40 + Math.random() * 10}%)`);
+    g.addColorStop(1, `hsl(${hue - 6},50%,${24 + Math.random() * 8}%)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, -len / 2);
+    ctx.bezierCurveTo(wid, -len / 4, wid, len / 4, 0, len / 2);
+    ctx.bezierCurveTo(-wid, len / 4, -wid, -len / 4, 0, -len / 2);
+    ctx.fill();
+    // midrib
+    ctx.strokeStyle = `hsla(${hue},45%,68%,0.5)`; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(0, -len / 2 + 3); ctx.lineTo(0, len / 2 - 3); ctx.stroke();
+    ctx.restore();
+  }
+  // a dense cluster of small leaves filling the card with gaps
+  for (let i = 0; i < 18; i++) {
+    const cx = 40 + Math.random() * (N - 80);
+    const cy = 40 + Math.random() * (N - 80);
+    const len = 60 + Math.random() * 70;
+    leaf(cx, cy, len, len * (0.32 + Math.random() * 0.12), Math.random() * Math.PI, 92 + Math.random() * 26);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+// --- grass blade (alpha) ---
+function makeGrassTexture() {
+  const W = 64, H = 128, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, H, 0, 0);
+  g.addColorStop(0, '#3c5a23'); g.addColorStop(0.6, '#6f9a3c'); g.addColorStop(1, '#9ec25a');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.5 - 7, H);
+  ctx.quadraticCurveTo(W * 0.5 - 3, H * 0.4, W * 0.5 + 2, 4);
+  ctx.quadraticCurveTo(W * 0.5 + 5, H * 0.4, W * 0.5 + 7, H);
+  ctx.closePath(); ctx.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// --- ground (grass + dirt) ---
+function makeGroundTextures() {
+  const N = 512, noise = makeNoise(21);
+  const fbm = (x, y) => { let a = 0, amp = 0.5, f = 1; for (let o = 0; o < 5; o++) { a += amp * noise(x * f, y * f); f *= 2; amp *= 0.5; } return a; };
+  const colC = makeCanvas(N), ctx = colC.getContext('2d');
+  const img = ctx.createImageData(N, N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const n = fbm(x * 0.03, y * 0.03);
+    const patch = fbm(x * 0.008, y * 0.008);
+    const grass = patch > 0.45;
+    const i = (y * N + x) * 4;
+    if (grass) {
+      img.data[i] = 60 + n * 55; img.data[i + 1] = 92 + n * 70; img.data[i + 2] = 38 + n * 30;
+    } else { // dirt
+      img.data[i] = 96 + n * 50; img.data[i + 1] = 74 + n * 36; img.data[i + 2] = 50 + n * 26;
+    }
+    img.data[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const color = new THREE.CanvasTexture(colC);
+  color.wrapS = color.wrapT = THREE.RepeatWrapping; color.repeat.set(14, 14);
+  color.colorSpace = THREE.SRGBColorSpace;
+  color.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return color;
+}
+
+const bark = makeBark();
+const leafTex = makeLeafTexture();
+const grassTex = makeGrassTexture();
+const groundTex = makeGroundTextures();
+
+/* ------------------------------------------------------------------ *
+ *  GROUND
+ * ------------------------------------------------------------------ */
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(80, 64),
+  new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.97, metalness: 0 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* ------------------------------------------------------------------ *
+ *  PROCEDURAL TREE  (merged branch geometry → one draw call)
+ * ------------------------------------------------------------------ */
+const UP = new THREE.Vector3(0, 1, 0);
+const branchGeoms = [];
+const tips = [];
+
+function addSegment(pos, dir, rBot, rTop, len) {
+  const g = new THREE.CylinderGeometry(rTop, rBot, len, 9, 1, false);
+  g.translate(0, len / 2, 0);
+  const q = new THREE.Quaternion().setFromUnitVectors(UP, dir.clone().normalize());
+  g.applyQuaternion(q);
+  g.translate(pos.x, pos.y, pos.z);
+  branchGeoms.push(g);
+  return pos.clone().addScaledVector(dir, len);
+}
+
+function grow(pos, dir, length, radius, depth) {
+  const segCount = 6, segLen = length / segCount;
+  let p = pos.clone(), d = dir.clone().normalize();
+  for (let i = 0; i < segCount; i++) {
+    const rB = radius * (1 - 0.78 * (i / segCount));
+    const rT = radius * (1 - 0.78 * ((i + 1) / segCount));
+    p = addSegment(p, d, Math.max(rB, 0.02), Math.max(rT, 0.018), segLen);
+    // phototropism (curl upward) + wander; thin tips droop under gravity
+    d.x += (Math.random() - 0.5) * 0.22;
+    d.z += (Math.random() - 0.5) * 0.22;
+    d.y += 0.06;
+    if (radius < 0.2) d.y -= 0.085;
+    d.normalize();
+  }
+  if (depth <= 0 || radius < 0.05) { tips.push(p.clone()); return; }
+  const n = 2 + (Math.random() < 0.55 ? 1 : 0);
+  for (let k = 0; k < n; k++) {
+    const axis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+    const ang = THREE.MathUtils.degToRad(22 + Math.random() * 30);
+    const nd = d.clone().applyAxisAngle(axis, ang).normalize();
+    grow(p, nd, length * (0.66 + Math.random() * 0.12), radius * (0.62 + Math.random() * 0.12), depth - 1);
+  }
+  if (depth <= 2 && Math.random() < 0.6) tips.push(p.clone());
+}
+
+// root buttresses for a believable base
+function addRoots(radius) {
+  const k = 7;
+  for (let i = 0; i < k; i++) {
+    const a = (i / k) * Math.PI * 2 + Math.random() * 0.3;
+    const dir = new THREE.Vector3(Math.cos(a), -0.55, Math.sin(a)).normalize();
+    let p = new THREE.Vector3(Math.cos(a) * radius * 0.5, 0.5, Math.sin(a) * radius * 0.5);
+    let r = radius * (0.32 + Math.random() * 0.12);
+    for (let s = 0; s < 3; s++) {
+      p = addSegment(p, dir, r, r * 0.6, 0.7);
+      r *= 0.6; dir.y -= 0.25; dir.normalize();
+    }
+  }
+}
+
+grow(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0), 4.6, 0.58, 6);
+addRoots(0.58);
+
+const trunkGeom = mergeGeometries(branchGeoms, false);
+const barkMat = new THREE.MeshStandardMaterial({
+  map: bark.color, normalMap: bark.normal,
+  normalScale: new THREE.Vector2(1.1, 1.1),
+  roughness: 0.93, metalness: 0, envMapIntensity: 0.5
+});
+const trunk = new THREE.Mesh(trunkGeom, barkMat);
+trunk.castShadow = true; trunk.receiveShadow = true;
+scene.add(trunk);
+
+/* ------------------------------------------------------------------ *
+ *  FOLIAGE  (instanced leaf cards, tied to branch tips)
+ * ------------------------------------------------------------------ */
+const windUniform = { value: 0 };
+const windStrength = { value: 1 };
+
+function makeWindMaterial(map, swayBase, swayFlutter) {
+  const m = new THREE.MeshStandardMaterial({
+    map, alphaTest: 0.45, side: THREE.DoubleSide,
+    roughness: 0.78, metalness: 0,
+    emissive: new THREE.Color(0x0c2208), emissiveIntensity: 0.35,  // fake light-through-leaf
+    envMapIntensity: 0.6
+  });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = windUniform;
+    sh.uniforms.uWind = windStrength;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uWind;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 iPos = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+        #else
+          vec3 iPos = vec3(0.0);
+        #endif
+        float w = uv.y * uWind;
+        float s1 = sin(uTime * 1.3 + iPos.x * 0.7 + iPos.z * 0.9);
+        float s2 = sin(uTime * 3.4 + iPos.y * 1.7 + iPos.x);
+        transformed.x += (s1 * ${swayBase.toFixed(3)} + s2 * ${swayFlutter.toFixed(3)}) * w;
+        transformed.z += cos(uTime * 1.15 + iPos.z * 0.8) * ${swayBase.toFixed(3)} * w;
+        transformed.y += s2 * ${(swayFlutter * 0.7).toFixed(3)} * w;
+      `);
+  };
+  return m;
+}
+
+const LEAVES_PER_TIP = 13;
+const leafCount = tips.length * LEAVES_PER_TIP;
+const leafGeo = new THREE.PlaneGeometry(0.62, 0.62);
+const leafMat = makeWindMaterial(leafTex, 0.05, 0.022);
+const leaves = new THREE.InstancedMesh(leafGeo, leafMat, leafCount);
+leaves.castShadow = true; leaves.receiveShadow = true;
+leaves.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+// alpha-tested depth → dappled shadows
+leaves.customDepthMaterial = new THREE.MeshDepthMaterial({
+  depthPacking: THREE.RGBADepthPacking, map: leafTex, alphaTest: 0.45
+});
+
+const dummy = new THREE.Object3D();
+const baseColors = new Array(leafCount);   // remember summer colors for the season toggle
+let maxY = 0; tips.forEach(t => maxY = Math.max(maxY, t.y));
+let li = 0;
+for (const tip of tips) {
+  for (let j = 0; j < LEAVES_PER_TIP; j++) {
+    dummy.position.set(
+      tip.x + (Math.random() - 0.5) * 0.7,
+      tip.y + (Math.random() - 0.5) * 0.7,
+      tip.z + (Math.random() - 0.5) * 0.7
+    );
+    dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    const s = 0.55 + Math.random() * 0.7;
+    dummy.scale.set(s, s, s);
+    dummy.updateMatrix();
+    leaves.setMatrixAt(li, dummy.matrix);
+
+    // brighter / warmer toward the canopy crown + outer edges
+    const hNorm = THREE.MathUtils.clamp(tip.y / maxY, 0, 1);
+    const c = new THREE.Color().setHSL(
+      0.24 - hNorm * 0.03 + (Math.random() - 0.5) * 0.02,   // hue: green
+      0.5 + Math.random() * 0.12,
+      0.30 + hNorm * 0.16 + Math.random() * 0.08            // lightness
+    );
+    baseColors[li] = c.clone();
+    leaves.setColorAt(li, c);
+    li++;
+  }
+}
+leaves.instanceMatrix.needsUpdate = true;
+leaves.instanceColor.needsUpdate = true;
+scene.add(leaves);
+
+/* ------------------------------------------------------------------ *
+ *  GRASS FIELD  (instanced, swaying)
+ * ------------------------------------------------------------------ */
+const GRASS = 4200;
+const grassGeo = new THREE.PlaneGeometry(0.18, 0.5);
+grassGeo.translate(0, 0.25, 0);   // pivot at the base so it sways at the tip
+const grassMat = makeWindMaterial(grassTex, 0.07, 0.0);
+grassMat.emissiveIntensity = 0.15;
+const grass = new THREE.InstancedMesh(grassGeo, grassMat, GRASS);
+grass.castShadow = false; grass.receiveShadow = true;
+for (let i = 0; i < GRASS; i++) {
+  // denser near the trunk, sparser outward; keep a clearing under the canopy edge
+  const r = 1.6 + Math.pow(Math.random(), 0.7) * 24;
+  const a = Math.random() * Math.PI * 2;
+  dummy.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+  dummy.rotation.set(0, Math.random() * Math.PI, 0);
+  const s = 0.6 + Math.random() * 0.9;
+  dummy.scale.set(s, s + Math.random() * 0.5, s);
+  dummy.updateMatrix();
+  grass.setMatrixAt(i, dummy.matrix);
+  const g = new THREE.Color().setHSL(0.26 + (Math.random() - 0.5) * 0.04, 0.5, 0.32 + Math.random() * 0.12);
+  grass.setColorAt(i, g);
+}
+grass.instanceMatrix.needsUpdate = true;
+scene.add(grass);
+
+/* ------------------------------------------------------------------ *
+ *  ROCKS + FALLEN LEAVES  (grounding details)
+ * ------------------------------------------------------------------ */
+const rockMat = new THREE.MeshStandardMaterial({ color: 0x6b6660, roughness: 0.95, metalness: 0, flatShading: true });
+for (let i = 0; i < 6; i++) {
+  const g = new THREE.DodecahedronGeometry(0.3 + Math.random() * 0.5, 0);
+  const pos = g.attributes.position;
+  for (let v = 0; v < pos.count; v++) {
+    pos.setXYZ(v, pos.getX(v) * (0.8 + Math.random() * 0.4),
+                  pos.getY(v) * (0.6 + Math.random() * 0.3),
+                  pos.getZ(v) * (0.8 + Math.random() * 0.4));
+  }
+  g.computeVertexNormals();
+  const rock = new THREE.Mesh(g, rockMat);
+  const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 14;
+  rock.position.set(Math.cos(a) * r, 0.12, Math.sin(a) * r);
+  rock.rotation.set(Math.random(), Math.random(), Math.random());
+  rock.castShadow = true; rock.receiveShadow = true;
+  scene.add(rock);
+}
+
+const FALLEN = 420;
+const fallenMat = new THREE.MeshStandardMaterial({ map: leafTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.9 });
+const fallen = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.4, 0.4), fallenMat, FALLEN);
+fallen.receiveShadow = true;
+for (let i = 0; i < FALLEN; i++) {
+  const a = Math.random() * Math.PI * 2, r = 1 + Math.pow(Math.random(), 0.6) * 12;
+  dummy.position.set(Math.cos(a) * r, 0.02, Math.sin(a) * r);
+  dummy.rotation.set(-Math.PI / 2, 0, Math.random() * Math.PI);
+  const s = 0.6 + Math.random() * 0.7; dummy.scale.set(s, s, s);
+  dummy.updateMatrix();
+  fallen.setMatrixAt(i, dummy.matrix);
+  const c = new THREE.Color().setHSL(0.08 + Math.random() * 0.08, 0.55, 0.3 + Math.random() * 0.12);
+  fallen.setColorAt(i, c);
+}
+fallen.instanceMatrix.needsUpdate = true;
+scene.add(fallen);
+
+/* ------------------------------------------------------------------ *
+ *  POST-PROCESSING  (subtle bloom + ACES output)
+ * ------------------------------------------------------------------ */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.28, 0.5, 0.92);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+/* ------------------------------------------------------------------ *
+ *  UI
+ * ------------------------------------------------------------------ */
+const btnRotate = document.getElementById('btnRotate');
+const btnWind = document.getElementById('btnWind');
+const btnSeason = document.getElementById('btnSeason');
+
+btnRotate.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  btnRotate.setAttribute('aria-pressed', controls.autoRotate);
+};
+let windOn = true;
+btnWind.onclick = () => {
+  windOn = !windOn;
+  windStrength.value = windOn ? 1 : 0;
+  btnWind.setAttribute('aria-pressed', windOn);
+};
+let autumn = false;
+btnSeason.onclick = () => {
+  autumn = !autumn;
+  btnSeason.setAttribute('aria-pressed', autumn);
+  btnSeason.textContent = autumn ? 'Verano' : 'Otoño';
+  const tmp = new THREE.Color();
+  for (let i = 0; i < leafCount; i++) {
+    if (autumn) {
+      // shift each leaf toward warm autumn tones, keeping variation
+      tmp.setHSL(0.05 + Math.random() * 0.08, 0.65, 0.32 + Math.random() * 0.14);
+    } else {
+      tmp.copy(baseColors[i]);
+    }
+    leaves.setColorAt(i, tmp);
+  }
+  leaves.instanceColor.needsUpdate = true;
+};
+
+/* ------------------------------------------------------------------ *
+ *  RESIZE + LOOP
+ * ------------------------------------------------------------------ */
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  windUniform.value = clock.getElapsedTime();
+  controls.update();
+  composer.render();
+}
+animate();
+
+// hide loader on first frame
+requestAnimationFrame(() => {
+  const l = document.getElementById('loader');
+  l.classList.add('hidden');
+  setTimeout(() => l.remove(), 700);
+});
+</script>
+</body>
+</html>
