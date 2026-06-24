@@ -319,6 +319,11 @@
   .stNum{ font-size:9.5px; color:#fff; text-shadow:0 1px 2px #000; min-width:44px; }
   #runbar{ position:fixed; left:50%; top:6px; transform:translateX(-50%); z-index:39; width:120px; height:4px; border-radius:3px; background:rgba(0,0,0,.45); overflow:hidden; display:none; }
   #runbar.show{ display:block; } #runFill{ display:block; height:100%; width:100%; background:#8fe06a; transition:width .15s; }
+  #butcherBar{ position:fixed; left:50%; top:54%; transform:translateX(-50%); z-index:86; display:none; flex-direction:column; align-items:center; gap:5px; pointer-events:none; }
+  #butcherBar.show{ display:flex; }
+  .bbLbl{ font-size:13px; color:#fff; text-shadow:0 1px 3px #000; }
+  .bbTrack{ width:160px; height:8px; border-radius:5px; background:rgba(0,0,0,.55); overflow:hidden; border:1px solid rgba(255,255,255,.25); }
+  .bbTrack i{ display:block; height:100%; width:0; background:linear-gradient(90deg,#e5484d,#f0a23c); }
   #menu.bagMode #bagHotbar{ display:flex; }
   #bagHotbar .hbHint{ width:100%; text-align:center; font-size:11px; color:rgba(180,200,230,.7); margin-bottom:2px; }
 </style>
@@ -385,6 +390,7 @@
     <div class="stRow"><span class="stIco">🍖</span><div class="stBar"><i id="hgFill"></i></div><span class="stNum" id="hgNum">100/100</span></div>
   </div>
   <div id="runbar"><i id="runFill"></i></div>
+  <div id="butcherBar"><div class="bbLbl">🔪 <span id="bbTxt">Destazando…</span></div><div class="bbTrack"><i id="butcherFill"></i></div></div>
   <div id="hotbar"></div>
 
   <button id="menuBtn" class="menuBtn" aria-label="Menú">☰</button>
@@ -1926,7 +1932,7 @@ const THRUST=new Set(['spear','lanzapiedra','lanzaafil']);
 const CHOPPERS=new Set(['hacha','machete','guadana']);   // armas que pueden talar árboles
 const DIGGERS=new Set(['pala']);                          // herramientas que cavan (clavan hacia abajo)
 const MINERS=new Set(['picoafil','picopiedra','picomad']);// picos que minan nodos de mena
-function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;wswing.hit=false;npcAtk=true;faunaAtk=true;} }
+function startWSwing(){ if(typeof butcher!=='undefined'&&butcher)return; if(!wswing.active){wswing.active=true;wswing.t=0;wswing.hit=false;npcAtk=true;faunaAtk=true;} }
 
 /* ---- crafteo / inventario ---- */
 const RECIPES=[
@@ -2405,15 +2411,51 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
       if(best&&bd<4.6){ best.hp--; if(best.hp<=0) killAnimal(best); else { try{chopSound();}catch(e){} } } }
     for(let k=F.length-1;k>=0;k--){ const o=F[k]; o.mx.update(dt);
       if(o.dead){ o.deadT+=dt; o.inst.rotation.z=Math.min(1.45,o.inst.rotation.z+dt*3.2);   // cae de costado (ragdoll simple)
-        if(o.deadT>2.4){ o.inst.traverse(m=>{ if(m.material&&m.material.opacity!==undefined){ m.material.transparent=true; m.material.opacity=Math.max(0,1-(o.deadT-2.4)/0.6); } }); }
-        if(o.deadT>=3){ scene.remove(o.inst); F.splice(k,1); } continue; }
+        o.inst.position.y=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY;
+        const carcass=(o.key==='fox'||o.key==='rino');   // zorro/rino quedan como carcasa para destazar; araña se desvanece
+        if(!carcass){ if(o.deadT>2.4){ o.inst.traverse(m=>{ if(m.material&&m.material.opacity!==undefined){ m.material.transparent=true; m.material.opacity=Math.max(0,1-(o.deadT-2.4)/0.6); } }); } if(o.deadT>=3){ scene.remove(o.inst); F.splice(k,1); } }
+        else if(o.deadT>=60 && !o._butchering){ scene.remove(o.inst); F.splice(k,1); }   // carcasa dura hasta destazarla (o caduca a 60 s)
+        continue; }
       o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; }
       if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; o.inst.rotation.y=Math.atan2(Math.cos(o.wAng),Math.sin(o.wAng)); }
       const gy=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY;
       if(o.proc){ o._ph+=dt*(o.move?9:2); const bob=Math.abs(Math.sin(o._ph))*(o.move?0.06:0.012); o.inst.position.y=gy+bob; o.inst.rotation.x=Math.sin(o._ph*0.5)*(o.move?0.04:0.01); }   // animación procedural (rino/spider)
       else { if(!o.single){ if(o.move&&o.state!=='walk'){ o.state='walk'; o.ia.fadeOut(0.2); o.wa.reset().fadeIn(0.2).play(); } else if(!o.move&&o.state!=='idle'){ o.state='idle'; o.wa.fadeOut(0.2); o.ia.reset().fadeIn(0.2).play(); } } o.inst.position.y=gy; } } };
   function killAnimal(o){ o.dead=true; o.deadT=0; try{ o.mx.stopAllAction(); }catch(e){} }
+  const _facF=new THREE.Vector3();
+  faunaButcherTarget=function(){ _facF.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); let best=null,bd=1e9;   // carcasa de zorro/rino enfrente y cerca
+    for(const o of F){ if(!o.dead||(o.key!=='fox'&&o.key!=='rino'))continue; const dx=o.inst.position.x-player.pos.x,dz=o.inst.position.z-player.pos.z,d=Math.hypot(dx,dz); if(d>2.9||d<0.05)continue;
+      const dot=(dx/d)*_facF.x+(dz/d)*_facF.z; if(dot>0.5&&d<bd){ bd=d; best=o; } } return best; };
+  faunaCarcassRemove=function(o){ if(!o)return; o._butchering=false; scene.remove(o.inst); const k=F.indexOf(o); if(k>=0)F.splice(k,1); };
  }catch(e){ console.warn('setupFauna',e); } }
+/* ===== DESTACE: agachado + mirando una carcasa → el arma sale de la mano y corta; barra (5s zorro / 13s rino); se cancela si te movés/parás/mirás a los lados ===== */
+const CUTTERS=new Set(['hacha','machete','knife','cuchipiedra','cuchiafil','guadana']);
+let faunaButcherTarget=null, faunaCarcassRemove=null, butcher=null;
+function startButcher(o){ const dur=(o.key==='rino')?13:5; let mesh=null;
+  try{ if(MODELS[equipped]){ mesh=MODELS[equipped](); mesh.traverse(x=>{if(x.isMesh)x.castShadow=false;}); mesh.scale.setScalar(0.6); scene.add(mesh); } }catch(e){}
+  if(fpRig)fpRig.visible=false;   // el arma sale de la mano
+  o._butchering=true;
+  butcher={o,mesh,t:0,dur,sx:player.pos.x,sz:player.pos.z,syaw:player.yaw};
+  const bb=$('butcherBar'); if(bb)bb.classList.add('show');
+}
+function endButcher(done){ if(!butcher)return; const o=butcher.o;
+  if(butcher.mesh){ scene.remove(butcher.mesh); butcher.mesh.traverse(x=>{if(x.geometry&&x.geometry.dispose)x.geometry.dispose();}); }
+  if(fpRig)fpRig.visible=!!equipped;   // el arma VUELVE a la mano
+  o._butchering=false;
+  if(done){ if(faunaCarcassRemove)faunaCarcassRemove(o); stats.hunger=Math.min(100,stats.hunger+(o.key==='rino'?60:30)); try{toast('🍖 + Carne');}catch(e){} }
+  const bf=$('butcherFill'); if(bf)bf.style.width='0%'; const bb=$('butcherBar'); if(bb)bb.classList.remove('show');
+  butcher=null;
+}
+function butcherTick(dt){
+  if(!butcher){ if(player.crouch&&CUTTERS.has(equipped)&&faunaButcherTarget){ const t=faunaButcherTarget(); if(t)startButcher(t); } return; }
+  const o=butcher.o; const moved=Math.hypot(player.pos.x-butcher.sx,player.pos.z-butcher.sz)>0.6;
+  const dyaw=Math.abs(((player.yaw-butcher.syaw+Math.PI)%(Math.PI*2))-Math.PI);   // miró muy a los lados
+  if(!player.crouch||moved||dyaw>0.55||!o.dead){ endButcher(false); return; }   // cancela: parado / movido / mirando a otro lado
+  butcher.t+=dt;
+  if(butcher.mesh){ const c=o.inst.position; butcher.mesh.position.set(c.x,terrainHeight(c.x,c.z)+0.45,c.z); butcher.mesh.rotation.set(-0.5+Math.sin(butcher.t*13)*0.55,butcher.t*1.5,0.2); }
+  const bf=$('butcherFill'); if(bf)bf.style.width=Math.min(100,butcher.t/butcher.dur*100)+'%';
+  if(butcher.t>=butcher.dur) endButcher(true);
+}
 function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   const N_EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@63fa07b/';   // ataques npc2-5 = golpe de palo (Heavy_Hammer_Swing); idle/walk/run/char_* sin cambios
   const N_TYPES=[
@@ -2516,7 +2558,7 @@ function statsTick(dt){
 }
 function update(dt){
   if(sleepT>=0){ sleepStep(dt); windU.uTime.value+=dt; return; }   // durmiendo: cinemática toma el control
-  statsTick(dt);
+  statsTick(dt); butcherTick(dt);
   if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
     setTime(elev,120);   // SIN IBL: ilumina la directa+hemisférica; el relieve lo dan los normal maps
     hudTimer-=dt; if(hudTimer<=0){ hudTimer=0.25; $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev); } }  // DOM sólo ~4x/seg (evita reflow por frame)
