@@ -594,7 +594,7 @@ const Q=PRESETS[DEV.tier];
 const QUALITY={
   vlow:  {radial:4, shadow:0,    shadowRes:256, leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
   // 3 modos visibles (Bajo/Medio/Alto): TODOS a resolución 100% (res:1.0); la resolución sólo se baja en Ajustes avanzados.
-  low:   {radial:5, shadow:256,  shadowRes:256, leaf:120, grassN:360, plantN:30, rockN:7,  density:8,  streamR:2, dpr:2.0, res:1.0, bloom:false, aa:false, rdist:130, chunkBudget:1},   // bajo: SIN SMAA (pase extra de pantalla completa que cuesta a res nativa), sombras pintadas 256, sin movimiento de vegetación, PBR plano, reflejos suaves
+  low:   {radial:5, shadow:0,    shadowRes:256, leaf:120, grassN:360, plantN:30, rockN:7,  density:8,  streamR:2, dpr:2.0, res:1.0, bloom:false, aa:false, rdist:130, chunkBudget:1},   // BAJO: SIN sombras (máximo rendimiento), sin movimiento de vegetación, PBR plano, sin reflejos, fuego mate, culling agresivo
   medium:{radial:6, shadow:512,  shadowRes:512, leaf:160, grassN:480, plantN:55, rockN:10, density:7,  streamR:2, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:150, chunkBudget:1},
   high:  {radial:6, shadow:768,  shadowRes:768, leaf:220, grassN:820, plantN:85, rockN:13, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:190, chunkBudget:1},
   vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:240, chunkBudget:2},
@@ -869,6 +869,34 @@ wetMat.map.repeat.set(3,3);
  for(let i=0;i<wetN;i++){const x=BEACH_X0+6+rr()*120;const z=Zmin+rr()*(Zmax-Zmin);   // sólo unos pocos parches al BORDE de la playa; el resto del desierto = arena seca
    const patch=new THREE.Mesh(new THREE.CircleGeometry(2+rr()*4,16),wetMat);patch.scale.set(0.7+rr()*0.8,0.7+rr()*0.8,1);patch.rotation.x=-Math.PI/2;patch.rotation.z=rr()*6.28;
    patch.position.set(x,terrainHeight(x,z)+0.06,z);patch.matrixAutoUpdate=false;patch.updateMatrix();scene.add(patch);}}
+
+/* ===== OASIS en el desierto: suelo verde + laguito (agua PBR económica) + palmeras ===== */
+// AGUA barata: plano translúcido glossy (refleja el cielo/sol, sin render-target) con normal de ondas que se desplaza
+function waterNormalTex(){ const S=128,cv=document.createElement('canvas');cv.width=cv.height=S;const ctx=cv.getContext('2d');const id=ctx.createImageData(S,S);
+  for(let y=0;y<S;y++)for(let x=0;x<S;x++){ const i=(y*S+x)*4;
+    const hx=Math.sin(x/S*Math.PI*2*3)+0.5*Math.sin(x/S*Math.PI*2*7+1.3);
+    const hy=Math.sin(y/S*Math.PI*2*3+0.7)+0.5*Math.sin(y/S*Math.PI*2*7);
+    let nx=-hx*0.5,ny=-hy*0.5;const l=Math.hypot(nx,ny,1);
+    id.data[i]=(nx/l*0.5+0.5)*255;id.data[i+1]=(ny/l*0.5+0.5)*255;id.data[i+2]=(1/l*0.5+0.5)*255;id.data[i+3]=255; }
+  ctx.putImageData(id,0,0);const t=new THREE.CanvasTexture(cv);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(3,3);return t; }
+const _waterNrm=waterNormalTex();
+const oasisWaterMat=new THREE.MeshStandardMaterial({color:0x2f6f86,transparent:true,opacity:0.85,roughness:0.12,metalness:0,envMapIntensity:1.0,normalMap:_waterNrm,normalScale:new THREE.Vector2(0.4,0.4),depthWrite:false});
+const oasisGroundMat=new THREE.MeshStandardMaterial({color:0x3f6e2c,roughness:1,metalness:0});
+const palmTrunkMat=new THREE.MeshStandardMaterial({color:0x7a5a32,roughness:0.92,metalness:0});
+const palmFrondMat=new THREE.MeshStandardMaterial({color:0x357a2e,roughness:0.85,metalness:0,side:THREE.DoubleSide});
+const _frondGeo=new THREE.PlaneGeometry(0.55,2.7); _frondGeo.translate(0,1.35,0);
+function makePalm(rr){ const g=new THREE.Group(); const h=3.2+rr()*2.4; const lean=(rr()-0.5)*0.4;
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.22,h,8),palmTrunkMat); trunk.position.set(lean*h*0.2,h/2,0); trunk.rotation.z=-lean*0.25; trunk.castShadow=true; g.add(trunk);
+  const topX=lean*h*0.4, topY=h*0.97;
+  for(let i=0;i<8;i++){ const fr=new THREE.Mesh(_frondGeo,palmFrondMat); fr.position.set(topX,topY,0); fr.rotation.y=i/8*6.283+rr()*0.3; fr.rotation.x=-0.7-rr()*0.45; fr.castShadow=true; g.add(fr); }
+  return g; }
+const waters=[];
+function makeOasis(cx,cz,R){ const by=terrainHeight(cx,cz);
+  const grd=new THREE.Mesh(new THREE.CircleGeometry(R,28),oasisGroundMat); grd.rotation.x=-Math.PI/2; grd.position.set(cx,by+0.04,cz); grd.receiveShadow=true; grd.matrixAutoUpdate=false; grd.updateMatrix(); scene.add(grd);
+  const w=new THREE.Mesh(new THREE.CircleGeometry(R*0.42,32),oasisWaterMat); w.rotation.x=-Math.PI/2; w.position.set(cx,by+0.07,cz); w.matrixAutoUpdate=false; w.updateMatrix(); scene.add(w); waters.push(w);
+  const rr=mulberry32(((cx*131+cz*977)|0)>>>0); const nP=4+Math.floor(rr()*4);
+  for(let i=0;i<nP;i++){ const a=rr()*6.283, rad=R*0.55+rr()*R*0.3; const px=cx+Math.cos(a)*rad,pz=cz+Math.sin(a)*rad; const palm=makePalm(rr); palm.position.set(px,terrainHeight(px,pz),pz); palm.rotation.y=rr()*6.283; scene.add(palm); } }
+{ const rr=mulberry32(909); for(let i=0;i<7;i++){ const ox=BEACH_X0+300+rr()*(DESERT_X1-BEACH_X0-700), oz=Zmin+200+rr()*((Zmax-Zmin)-400); makeOasis(ox,oz,9+rr()*7); } }
 
 /* ===== Texturas PBR reales (carga asíncrona; las procedurales quedan de placeholder) ===== */
 const texLoader=new THREE.TextureLoader();texLoader.crossOrigin='anonymous';
@@ -2267,6 +2295,7 @@ $('flash').addEventListener('pointerdown',()=>{ if(equipped==='botella'){ throwM
 // per-frame tick del crafteo, llamado desde update()
 function craftTick(dt){
   tickGifs(dt); tickProjectiles(dt); tickFx(dt);
+  if(_waterNrm){ _waterNrm.offset.x+=dt*0.025; _waterNrm.offset.y+=dt*0.018; }   // ondas del agua de los oasis
   const fb=(fireGifs[1].cur||0.6);
   for(const m of placedItems){ if(m.userData.fire){ m.userData.fire.intensity=5+fb*5; } }   // fogata y horno: flamea e ilumina toda la habitación
   if(equipped==='botella') updateHeldMolotov(dt);
@@ -2318,6 +2347,34 @@ const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTi
 const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 /* ===================== NPCs nocturnos + ragdoll (TODO aislado; corre al Jugar, en try/catch) ===================== */
 let npcTickFn=null, npcDayResetFn=null, storyT=-1, npcAtk=false, npcSetupDone=false;
+/* ===== FAUNA del desierto: fox / rinoceronte / spider (riggeados) que deambulan ===== */
+let faunaTick=null, faunaSetupDone=false;
+function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
+  const FB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@54fa28a/';
+  const SPECS=[
+    {file:'animated_fox__3d_animal_model.glb', h:0.7, idle:'NeutralStand', walk:'Walk', count:5, sp:1.3},
+    {file:'model_56a_-_southern_white_rhino.glb', h:1.9, idle:'Action', walk:'Action', count:2, sp:0.8},
+    {file:'spider_rig.glb', h:0.55, idle:'CINEMA', walk:'CINEMA', count:4, sp:1.1},
+  ];
+  const gl=new GLTFLoader(); const F=[];
+  SPECS.forEach(S=>{ gl.load(FB+S.file, g=>{ try{ const src=g.scene;
+    const bb=new THREE.Box3().setFromObject(src),sz=bb.getSize(new THREE.Vector3()),s=S.h/(sz.y||1),baseY=bb.min.y*s;
+    const pick=n=>g.animations.find(c=>c.name.indexOf(n)>=0)||g.animations[0];
+    for(let i=0;i<S.count;i++){ const inst=skClone(src); inst.scale.setScalar(s);
+      inst.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
+      const mx=new THREE.AnimationMixer(inst); const wa=mx.clipAction(pick(S.walk)); const ia=mx.clipAction(pick(S.idle));
+      const single=(wa===ia); if(single){ wa.play(); } else { ia.play(); }   // rino/spider: 1 sola animación → siempre suena
+      const x=BEACH_X0+250+Math.random()*(DESERT_X1-BEACH_X0-500), z=Zmin+200+Math.random()*((Zmax-Zmin)-400);
+      inst.position.set(x,terrainHeight(x,z)-baseY,z); scene.add(inst);
+      F.push({inst,mx,wa,ia,single,baseY,sp:S.sp,state:single?'walk':'idle',wTimer:0,wAng:Math.random()*6.283,move:false}); }
+  }catch(e){console.warn('fauna inst',e);} }, undefined, e=>console.warn(S.file,e)); });
+  faunaTick=function(dt){ for(const o of F){ o.mx.update(dt);
+    o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; }
+    if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; o.inst.rotation.y=Math.atan2(Math.cos(o.wAng),Math.sin(o.wAng)); }
+    if(!o.single){ if(o.move&&o.state!=='walk'){ o.state='walk'; o.ia.fadeOut(0.2); o.wa.reset().fadeIn(0.2).play(); }
+      else if(!o.move&&o.state!=='idle'){ o.state='idle'; o.wa.fadeOut(0.2); o.ia.reset().fadeIn(0.2).play(); } }
+    o.inst.position.y=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY; } };
+ }catch(e){ console.warn('setupFauna',e); } }
 function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   const N_EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@63fa07b/';   // ataques npc2-5 = golpe de palo (Heavy_Hammer_Swing); idle/walk/run/char_* sin cambios
   const N_TYPES=[
@@ -2480,6 +2537,7 @@ function update(dt){
   if(shadowDirty&&shadowOn)renderer.shadowMap.needsUpdate=true;
   chopTick(dt); tickRockShards(dt);
   if(npcTickFn){ try{ npcTickFn(dt); }catch(e){} }   // NPCs nocturnos + ragdoll (blindado)
+  if(faunaTick){ try{ faunaTick(dt); }catch(e){} }   // fauna del desierto (fox/rino/spider)
   // Mundo precargado entero: NO se construye/descarga ni se tocan sombras en runtime → cero tirones al caminar.
   windU.uTime.value+=dt;
 }
@@ -2571,9 +2629,9 @@ const I18N={
       useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —',sleep:'Dormir'}
 };
 const QDESC={
-  es:{vlow:'Máximo rendimiento, detalle mínimo',low:'Sombras pintadas (día/atardecer/medianoche) · plantas quietas · PBR plano · reflejos suaves (100%)',medium:'Como Bajo pero con PBR en relieve y hojas/plantas que se mueven (100%)',high:'Todo activado · reflejos GOTY · sombras dinámicas (100%)',vhigh:'Máxima fidelidad (celular potente)'},
-  en:{vlow:'Max performance, minimal detail',low:'Painted shadows (day/sunset/midnight) · still plants · flat PBR · soft reflections (100%)',medium:'Like Low but with relief PBR and moving leaves/plants (100%)',high:'Everything on · GOTY reflections · dynamic shadows (100%)',vhigh:'Maximum fidelity (powerful phone)'},
-  pt:{vlow:'Máximo desempenho, detalhe mínimo',low:'Sombras pintadas (dia/pôr do sol/meia-noite) · plantas paradas · PBR plano · reflexos suaves (100%)',medium:'Como Baixo mas com PBR em relevo e folhas/plantas que se movem (100%)',high:'Tudo ativado · reflexos GOTY · sombras dinâmicas (100%)',vhigh:'Fidelidade máxima (celular potente)'}
+  es:{vlow:'Máximo rendimiento, detalle mínimo',low:'SIN sombras · plantas quietas · PBR plano · sin reflejos (máx. rendimiento, 100%)',medium:'2 sombras (día/noche) · PBR en relieve · hojas/plantas que se mueven (100%)',high:'Todo activado · reflejos GOTY · sombras dinámicas (100%)',vhigh:'Máxima fidelidad (celular potente)'},
+  en:{vlow:'Max performance, minimal detail',low:'NO shadows · still plants · flat PBR · no reflections (max performance, 100%)',medium:'2 shadows (day/night) · relief PBR · moving leaves/plants (100%)',high:'Everything on · GOTY reflections · dynamic shadows (100%)',vhigh:'Maximum fidelity (powerful phone)'},
+  pt:{vlow:'Máximo desempenho, detalhe mínimo',low:'SEM sombras · plantas paradas · PBR plano · sem reflexos (máx. desempenho, 100%)',medium:'2 sombras (dia/noite) · PBR em relevo · folhas/plantas que se movem (100%)',high:'Tudo ativado · reflexos GOTY · sombras dinâmicas (100%)',vhigh:'Fidelidade máxima (celular potente)'}
 };
 let curLang='es', curQuality='low';   // por defecto arranca en BAJO
 function applyLang(l){const d=I18N[l]||I18N.es;document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(d[k]!=null)el.textContent=d[k];});document.documentElement.lang=l;}
@@ -2831,7 +2889,8 @@ function startGame(){
       applyDefaults(); setQuality(curQuality); applyGodTextures(); layout();
       equipped='hacha'; equipItem('hacha'); fpAxe.visible=false;   // tomahawk = hacha permanente de por vida
       const enter=()=>{ started=true; unlockAudio(); enterPlayMode(); fadeFromBlack();
-        try{ setupNPCs(); if(npcTickFn){ cycleOn=false; storyT=0; } }catch(e){ console.warn('npc',e); } };   // NPCs + día→noche (si falla, sigue el ciclo normal)
+        try{ setupNPCs(); if(npcTickFn){ cycleOn=false; storyT=0; } }catch(e){ console.warn('npc',e); }
+        try{ setupFauna(); }catch(e){ console.warn('fauna',e); } };   // NPCs + día→noche + fauna del desierto (si falla, sigue el ciclo normal)
       if(worldReady){ enter(); }
       else bootArea(enter);
     });
