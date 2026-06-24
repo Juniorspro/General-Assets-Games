@@ -256,8 +256,9 @@
               text-transform:uppercase; opacity:0; transition:opacity .4s; }
   #bootLoad.show { opacity:.55; }
   /* overlay negro reutilizable para fundidos (Jugar → negro → sube resolución → fundido de entrada) */
-  #fadeBlack { position:fixed; inset:0; z-index:300; background:#000; opacity:0; pointer-events:none; transition:opacity .5s ease; }
+  #fadeBlack { position:fixed; inset:0; z-index:520; background:#000; opacity:0; pointer-events:none; transition:opacity .5s ease; }
   #fadeBlack.on { opacity:1; pointer-events:auto; }
+  #fadeBlack.snap { transition:none; }
 
   /* ===================== MENU BLUR / HALF-RES ===================== */
   body.menuOpen #app canvas { filter:blur(14px) brightness(.7); }
@@ -630,7 +631,7 @@ const Q=PRESETS[DEV.tier];
 const QUALITY={
   vlow:  {radial:4, shadow:0,    shadowRes:256, leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
   // 3 modos visibles (Bajo/Medio/Alto): TODOS a resolución 100% (res:1.0); la resolución sólo se baja en Ajustes avanzados.
-  low:   {radial:5, shadow:0,    shadowRes:256, leaf:120, grassN:360, plantN:30, rockN:7,  density:8,  streamR:2, dpr:2.0, res:1.0, bloom:false, aa:false, rdist:130, chunkBudget:1},   // BAJO: SIN sombras (máximo rendimiento), sin movimiento de vegetación, PBR plano, sin reflejos, fuego mate, culling agresivo
+  low:   {radial:5, shadow:0,    shadowRes:256, leaf:100, grassN:300, plantN:26, rockN:6,  density:7,  streamR:2, dpr:1.5, res:0.8, bloom:false, aa:false, rdist:120, chunkBudget:1},   // BAJO: 80% de resolución, SIN sombras ni reflejos, vegetación quieta, PBR plano (texturas), culling agresivo (máx. rendimiento)
   medium:{radial:6, shadow:512,  shadowRes:512, leaf:160, grassN:480, plantN:55, rockN:10, density:7,  streamR:2, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:150, chunkBudget:1},
   high:  {radial:6, shadow:768,  shadowRes:768, leaf:220, grassN:820, plantN:85, rockN:13, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:190, chunkBudget:1},
   vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:240, chunkBudget:2},
@@ -1167,9 +1168,9 @@ let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuRe
 let gfxNormalMul=1, gfxReflectMul=1;   // modo gráfico: 0 aplana el PBR (sin relieve) · reflejos más suaves
 // ---- MODO GRÁFICO (Bajo/Medio/Alto) ----  TODOS a 100% de resolución; cambia el ESTILO de render, no la resolución
 const GFXMODES={
-  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.0, matte:true,  cull:true,  folDist:0.7, leafDist:0.7},   // SIN sombras (shadow:0) ni reflejos, sin movimiento de vegetación, PBR plano, fuego mate, culling agresivo
-  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.0, matte:true,  cull:true,  folDist:1.0, leafDist:1.0},   // 2 sombras pintadas (día/noche) + PBR relieve + vegetación que se mueve, SIN reflejos (como Bajo)
-  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:0.0,  matte:false, cull:false, folDist:1.0, leafDist:1.0},   // todo activado + sombras dinámicas (SIN reflejos: sólo van en la escena/animación)
+  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.0,  matte:true,  cull:true,  folDist:0.7, leafDist:0.7, env:false},   // SIN reflejos: sólo texturas PBR. Sin sombras, vegetación quieta, PBR plano, culling agresivo
+  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.12, matte:true,  cull:true,  folDist:1.0, leafDist:1.0, env:true},    // reflejos MÍNIMOS y de muy baja resolución (env borroso) + sombras pintadas + vegetación
+  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:0.32, matte:false, cull:false, folDist:1.0, leafDist:1.0, env:true},    // reflejos suaves + sombras dinámicas
 };
 let gfx=GFXMODES.low;
 function applyRelief(){ const m=gfxNormalMul;   // recalcula los normalScale según el relieve elegido y el modo gráfico
@@ -2787,8 +2788,17 @@ function setQuality(t){
   if(n8aoPass)n8aoPass.enabled=useSsao;
   renderDist=qual.rdist; if($('dist')){$('dist').value=renderDist;$('distVal').textContent=renderDist+' m';} scene.fog.density=Math.max(0.0035,0.62/renderDist);
   applyGfx(t); markShadowDirty();   // aplica el ESTILO del modo (sombras por fases, vegetación, PBR plano, reflejos) y re-hornea la sombra una vez
+  // REFLEJOS: bajo = ninguno (solo texturas PBR) · medio/alto = env borroso de muy baja resolución (mínimos)
+  try{ scene.environment = (gfx&&gfx.env) ? getReflEnv() : null; }catch(e){ scene.environment=null; }
   layout();
 }
+let _reflEnv=null;
+function getReflEnv(){ if(_reflEnv!==null) return _reflEnv;
+  try{ const es=new THREE.Scene(); const s=new Sky(); s.scale.setScalar(100); const u=s.material.uniforms;
+    u.turbidity.value=skyU.turbidity.value; u.rayleigh.value=skyU.rayleigh.value; u.mieCoefficient.value=skyU.mieCoefficient.value; u.mieDirectionalG.value=skyU.mieDirectionalG.value; u.sunPosition.value.copy(sunVec); es.add(s);
+    const rt=pmrem.fromScene(es,0.85); s.geometry.dispose(); s.material.dispose(); _reflEnv=rt.texture;   // sigma alto = muy borroso = "muy baja resolución"
+  }catch(e){ console.warn('reflEnv',e); _reflEnv=null; }
+  return _reflEnv; }
 
 /* ===================== Valores por defecto realistas ===================== */
 const VFX_DEFAULTS={time:7,dist:150,shad:22,dens:140,wind:30,bob:70,
@@ -3034,7 +3044,7 @@ function startGame(){
 }
 /* ===================== CINEMÁTICA DE LLEGADA (portal del cielo → choque → salir del auto) ===================== */
 let introCarGLB=null, introVid=null, introVid2=null; const _iA=new THREE.Vector3(), _iB=new THREE.Vector3();
-function loadIntroVideo(url){ try{ const v=document.createElement('video'); v.crossOrigin='anonymous'; v.muted=true; v.defaultMuted=true; v.playsInline=true; v.setAttribute('playsinline',''); v.setAttribute('webkit-playsinline',''); v.preload='auto'; v.loop=true; v.src=url;   // crossOrigin ANTES de src (si no, la textura queda tainted → negra)
+function loadIntroVideo(url){ try{ const v=document.createElement('video'); v.crossOrigin='anonymous'; v.muted=true; v.defaultMuted=true; v.volume=0; v.playsInline=true; v.setAttribute('playsinline',''); v.setAttribute('webkit-playsinline',''); v.preload='auto'; v.loop=true; v.src=url;   // crossOrigin ANTES de src (si no, la textura queda tainted → negra)
     v.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1;'; document.body.appendChild(v);   // en el DOM (oculto) → los móviles SÍ decodifican el vídeo para la textura
     _aInc(); let done=false; const dec=()=>{ if(done)return; done=true; _aDec(); };
     v.addEventListener('loadeddata',dec); v.addEventListener('canplay',dec); v.addEventListener('error',dec); setTimeout(dec,15000); v.load(); return v;
@@ -3143,7 +3153,7 @@ function boomTick(dt){ if(!cine.boomDone)return; const B=cine.boom; cine.boomT+=
 function startIntroCine(){
   try{ intro.active=true; cine.t=0; cine._ended=false; buildIntroCine();
     setHudVisible(false); if(typeof fpRig!=='undefined'&&fpRig)fpRig.visible=false; if(typeof fpAxe!=='undefined'&&fpAxe)fpAxe.visible=false;
-    player.crouch=false; fadeFromBlack();
+    player.crouch=false; fadeBlackEl.classList.remove('snap'); fadeFromBlack();   // saca el snap → la caída entra con fundido suave desde el negro
   }catch(e){ console.warn('startIntroCine',e); intro.active=false; setHudVisible(true); }
 }
 function endIntroCine(){ if(cine._ended)return; cine._ended=true; intro.active=false;
@@ -3270,13 +3280,15 @@ $('fsBtn').addEventListener('click',()=>{
 /* ===== INTRO COMBINADA: al tocar JUGAR → persecución (overlay) → caída → juego ===== */
 function playChaseThenFall(){
   $('options').classList.remove('show'); $('startMenu').classList.remove('show'); $('kbCard').classList.remove('show');
-  // desbloquea los vídeos DENTRO del gesto de tocar Jugar (autoplay móvil)
-  try{ if(introVid){ const p=introVid.play(); if(p&&p.then)p.then(()=>{try{introVid.pause();introVid.currentTime=0;}catch(e){}}).catch(()=>{}); } }catch(e){}
-  try{ if(introVid2){ const p=introVid2.play(); if(p&&p.catch)p.catch(()=>{}); } }catch(e){}
+  // desbloquea los vídeos DENTRO del gesto de tocar Jugar (autoplay móvil), pero los deja PAUSADOS y MUDOS (sin sonido al empezar)
+  for(const v of [introVid,introVid2]){ if(!v)continue; try{ v.muted=true; v.volume=0; const p=v.play(); if(p&&p.then)p.then(()=>{try{v.pause();v.currentTime=0;}catch(e){}}).catch(()=>{}); }catch(e){} }
   const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='';
   window.__startChase();   // arranca la persecución; al terminar llama window.__introToFall → vuelve a startGame (caída)
 }
-window.__introToFall=function(){ window.__chaseDone=true; const ca=$('chaseApp'); if(ca)ca.classList.add('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='none'; startGame(); };
+window.__introToFall=function(){ window.__chaseDone=true;
+  fadeBlackEl.classList.add('snap','on');   // NEGRO instantáneo (nunca se ve el fondo del juego en el corte)
+  const ca=$('chaseApp'); if(ca)ca.classList.add('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='none';
+  startGame(); };
 
 try{
   applyLang('es'); updateQDesc();
@@ -3309,8 +3321,8 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const app=document.getElementById('chaseApp');
-const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)*0.8);   // animación en CALIDAD BAJA (~80% de resolución, sin AA)
 renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=0.92;
 app.appendChild(renderer.domElement);
 
@@ -3668,7 +3680,7 @@ const darkMat=new THREE.MeshBasicMaterial({color:0x000000});
 const savedMat={};
 // composer de bloom: todo lo que no sea portal se pinta de negro -> solo el portal florece
 const bloomComposer=new EffectComposer(renderer); bloomComposer.renderToScreen=false;
-const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 0.7, 0.7, 0.0);   // suave, sin umbral (solo el portal está iluminado en este pase)
+const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth/2,innerHeight/2), 0.7, 0.7, 0.0);   // bloom a media resolución (calidad baja / optimización)
 bloomComposer.addPass(renderScene); bloomComposer.addPass(bloom);
 // composer final: escena normal + textura de bloom sumada
 const mixPass=new ShaderPass(new THREE.ShaderMaterial({
