@@ -66,8 +66,7 @@ try{ const es=new THREE.Scene(); const s2=new Sky(); s2.scale.setScalar(100); co
   u2.turbidity.value=12;u2.rayleigh.value=3.2;u2.mieCoefficient.value=0.05;u2.mieDirectionalG.value=0.9;u2.sunPosition.value.copy(sunDir); es.add(s2);
   scene.environment=pmrem.fromScene(es,0.06).texture; }catch(e){ console.warn(e); }
 
-/* ---- SUELO con textura (seco) + GRID ---- */
-const grid=new THREE.GridHelper(4000,800,0x322820,0x1c1611); grid.position.y=0.005; scene.add(grid);
+/* ---- SUELO con textura (seco) ---- */
 const groundMat=new THREE.MeshStandardMaterial({color:0x8a7250,roughness:1,metalness:0});   // tierra seca
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(4000,4000),groundMat); ground.rotation.x=-Math.PI/2; ground.position.y=-0.02; ground.receiveShadow=true; scene.add(ground);
 
@@ -392,7 +391,9 @@ function director(ct,t){
   }
   // ---- fundidos + redirección al bosque ----
   let a=0; if(ct<0.6) a=1-ct/0.6; else if(ct>END_START+2.4) a=(ct-(END_START+2.4))/1.2; fadeEl.style.opacity=Math.max(0,Math.min(1,a)).toFixed(3);
-  if(ct>=REDIRECT_AT && !redirected){ redirected=true; try{ location.href='bosque-vhs.html#fall'; }catch(e){} }
+  if(ct>=REDIRECT_AT && !redirected){ redirected=true; chaseStopped=true;
+    if(window.__introToFall){ const ca=document.getElementById('chaseApp'); if(ca)ca.classList.add('gone'); const cf=document.getElementById('chaseFade'); if(cf)cf.style.display='none'; try{ window.__introToFall(); }catch(e){} }   // COMBINADO: pasa a la animación de caída
+    else { try{ location.href='bosque-vhs.html#fall'; }catch(e){} } }   // standalone: redirige
 }
 
 /* ---- post: BLOOM SELECTIVO (solo el portal florece; el sol/cielo no) ---- */
@@ -434,14 +435,15 @@ function setSizes(){
 }
 addEventListener('resize',setSizes);
 setSizes();
-const clock=new THREE.Clock(); let ct=0,t=0;
-function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); t+=dt; ct+=dt;
+const clock=new THREE.Clock(); let ct=0,t=0; let chaseStopped=false;
+function animate(){ if(chaseStopped)return; requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); t+=dt; ct+=dt;
   director(ct,t); placeCars(ct,t,dt); portalTick(dt, (ct>0.4&&ct<3.5)||(ct>END_START&&ct<END_START+2.0), t); rainTick(dt);
   const cc=ct-INTRO_END; const fast=(ct>INTRO_END&&ct<END_START&&!(cc>=9.8&&cc<13.6));   // sin líneas de velocidad en el interior
   speedTick(dt, fast?1:0.12); sparkTick(dt);
   renderBloom();
 }
-animate();
+if(window.__embedChase){ window.__startChase=function(){ clock.start(); animate(); }; }   // COMBINADO: arranca cuando lo pide el host
+else animate();
 </script>
 </body>
 </html>
