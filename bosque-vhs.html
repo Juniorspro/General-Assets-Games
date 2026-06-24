@@ -3013,6 +3013,7 @@ const fadeBlackEl=$('fadeBlack');
 function fadeToBlack(cb){ fadeBlackEl.classList.add('on'); setTimeout(()=>{ if(cb)cb(); }, 520); }
 function fadeFromBlack(){ requestAnimationFrame(()=>fadeBlackEl.classList.remove('on')); }
 function startGame(){
+  if(window.__embedChase && window.__startChase && !window.__chaseDone){ playChaseThenFall(); return; }   // primero la persecución; al terminar vuelve acá para la caída
   try{
     $('options').classList.remove('show'); $('startMenu').classList.remove('show');
     // Item 3: fundido a negro → subir resolución (móvil=80% vía MOBILE_RES_CAP, sin el ½ de carga) → armar chunks cercanos → fundido de entrada.
@@ -3033,7 +3034,8 @@ function startGame(){
 }
 /* ===================== CINEMÁTICA DE LLEGADA (portal del cielo → choque → salir del auto) ===================== */
 let introCarGLB=null, introVid=null, introVid2=null; const _iA=new THREE.Vector3(), _iB=new THREE.Vector3();
-function loadIntroVideo(url){ try{ const v=document.createElement('video'); v.src=url; v.crossOrigin='anonymous'; v.muted=true; v.playsInline=true; v.preload='auto'; v.loop=true;
+function loadIntroVideo(url){ try{ const v=document.createElement('video'); v.crossOrigin='anonymous'; v.muted=true; v.defaultMuted=true; v.playsInline=true; v.setAttribute('playsinline',''); v.setAttribute('webkit-playsinline',''); v.preload='auto'; v.loop=true; v.src=url;   // crossOrigin ANTES de src (si no, la textura queda tainted → negra)
+    v.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1;'; document.body.appendChild(v);   // en el DOM (oculto) → los móviles SÍ decodifican el vídeo para la textura
     _aInc(); let done=false; const dec=()=>{ if(done)return; done=true; _aDec(); };
     v.addEventListener('loadeddata',dec); v.addEventListener('canplay',dec); v.addEventListener('error',dec); setTimeout(dec,15000); v.load(); return v;
   }catch(e){ console.warn('video',e); return null; } }
@@ -3222,8 +3224,7 @@ function showAssetLoad(){
   const tick=()=>{
     const elapsed=performance.now()-t0;
     const allDone=(worldReady && pendingAssets===0) || elapsed>MAXWAIT;   // "listo" SÓLO cuando chunks + texturas + modelos terminaron
-    if(allDone){ fill.style.width='100%'; const after = autoFall ? ()=>{ worldReadyForFall=true; maybeStartFall(); } : revealStartMenu;   // combinado: el mundo está listo → arranca la caída cuando la persecución termine
-      setTimeout(()=>fadeOutSlow($('assetLoad'),after),400); return; }
+    if(allDone){ fill.style.width='100%'; setTimeout(()=>fadeOutSlow($('assetLoad'),revealStartMenu),400); return; }   // mundo + vídeos listos → MENÚ de inicio
     // progreso: 0–80% por chunks, 80–99% por assets en vuelo (no llega a 100 hasta que todo cargó)
     const chunkP=total?builtChunks.size/total:0;
     let p = worldReady ? 0.8 + 0.19*(1-Math.min(1,pendingAssets/12)) : 0.8*chunkP;
@@ -3264,22 +3265,18 @@ function showLangPick(){
 // pantalla negra inicial con botón de pantalla completa (modo clásico, si no hay intro combinada)
 $('fsBtn').addEventListener('click',()=>{
   try{ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen(); }catch(e){}
-  if(window.__embedChase) startCombinedIntro();        // intro combinada: pantalla completa → persecución → caída → juego
-  else fadeOut($('boot'),showDevPick);                 // flujo clásico (sin overlay de persecución)
+  fadeOut($('boot'),showDevPick);   // flujo normal del menú: PC/Móvil → idioma → estudios → carga → MENÚ
 });
-/* ===== INTRO COMBINADA: persecución (overlay) → caída → juego, todo en este archivo ===== */
-let worldReadyForFall=false;
-function maybeStartFall(){ if(window.__chaseDone&&worldReadyForFall){ loadResScale=1.0; layout(); startGame(); } }   // arranca la caída sólo cuando la persecución terminó Y el mundo cargó
-window.__introToFall=function(){ window.__chaseDone=true; maybeStartFall(); };   // lo llama el módulo de la persecución al terminar
-function beginPreload(){ autoFall=true; if(!DEV.isMobile){ try{ enableMouseMode(); }catch(e){} }
-  for(const id of ['boot','devPick','langPick','studios']){ const el=$(id); if(el)el.classList.add('gone'); }
-  showAssetLoad(); }   // arma el mundo + texturas + assets (auto del Bentley/vídeos) mientras corre la persecución
-function startCombinedIntro(){
-  const b=$('boot'); if(b)b.classList.add('gone');                  // oculta la pantalla negra de inicio
-  try{ if(typeof unlockAudio==='function')unlockAudio(); }catch(e){}
-  beginPreload();                                                   // el mundo se arma por detrás (negro) mientras corre la persecución
-  if(window.__startChase){ const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf)cf.style.display=''; window.__startChase(); }   // muestra y arranca la persecución
-  else { window.__chaseDone=true; maybeStartFall(); } }             // sin persecución → directo a la caída
+/* ===== INTRO COMBINADA: al tocar JUGAR → persecución (overlay) → caída → juego ===== */
+function playChaseThenFall(){
+  $('options').classList.remove('show'); $('startMenu').classList.remove('show'); $('kbCard').classList.remove('show');
+  // desbloquea los vídeos DENTRO del gesto de tocar Jugar (autoplay móvil)
+  try{ if(introVid){ const p=introVid.play(); if(p&&p.then)p.then(()=>{try{introVid.pause();introVid.currentTime=0;}catch(e){}}).catch(()=>{}); } }catch(e){}
+  try{ if(introVid2){ const p=introVid2.play(); if(p&&p.catch)p.catch(()=>{}); } }catch(e){}
+  const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='';
+  window.__startChase();   // arranca la persecución; al terminar llama window.__introToFall → vuelve a startGame (caída)
+}
+window.__introToFall=function(){ window.__chaseDone=true; const ca=$('chaseApp'); if(ca)ca.classList.add('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='none'; startGame(); };
 
 try{
   applyLang('es'); updateQDesc();
@@ -3292,10 +3289,8 @@ try{
   wireUiSounds();
   // NO cargamos el mundo en el init: todo queda en negro puro hasta la pantalla de carga de assets (showAssetLoad llama bootArea)
   window.__chaseDone=false;
-  if(location.hash==='#fall'){   // saltar la persecución → directo a la caída
-    window.__chaseDone=true; const ca=$('chaseApp'); if(ca)ca.classList.add('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='none'; const b=$('boot'); if(b)b.classList.add('gone'); beginPreload();
-  }
-  // entrada única: la pantalla negra #boot con el botón de pantalla completa → startCombinedIntro (persecución → caída → juego)
+  if(location.hash==='#fall'){ window.__chaseDone=true; }   // (opcional) saltar la persecución
+  // Flujo: #boot → menú → JUGAR → persecución (overlay) → caída → juego
 }catch(err){ console.error('Init:',err); }
 requestAnimationFrame(()=>{ try{ if(composer)composer.render(0);else renderer.render(scene,camera); }catch(e){console.error(e);} setTimeout(hideLoader,300); animate(); });
 </script>
