@@ -2597,7 +2597,7 @@ function update(dt){
       if(cine.fire)cine.fire.p.visible=false; if(cine.ember)cine.ember.p.visible=false; if(cine.smoke)cine.smoke.p.visible=false; cine.fireL1.intensity=0; cine.fireL2.intensity=0;
       if(cine.wreck)cine.wreck.position.y=(cine.wreckY0!=null?cine.wreckY0:cine.gy)-k*4.5;            // se hunde
       if(cine.fireSprite){ cine.fireSprite.position.y=(cine.crashPos.y+1.6)-k*4.5; cine.fireSprite.lookAt(camera.position); cine.fireSprite.visible=k<1; }
-      if(k>=1){ if(cine.wreck)cine.wreck.visible=false; cine.persist=false; } } }catch(e){} }
+      if(k>=1){ if(cine.wreck)cine.wreck.visible=false; if(cine.fireSprite){cine.fireSprite.visible=false;} if(introFire&&introFire.kill)introFire.kill(); cine.persist=false; } } }catch(e){} }
   if(cycleOn){ cyclePhase+=dt; const th=THETA0+cyclePhase*(Math.PI*2/1440); const elev=A_ELEV*Math.sin(th);
     setTime(elev,120);   // SIN IBL: ilumina la directa+hemisférica; el relieve lo dan los normal maps
     hudTimer-=dt; if(hudTimer<=0){ hudTimer=0.25; $('time').value=Math.round(elev); $('timeVal').textContent=timeLabel(elev); } }  // DOM sólo ~4x/seg (evita reflow por frame)
@@ -3064,6 +3064,7 @@ function loadGifTex(url){ const img=new Image(); img.crossOrigin='anonymous';
   img.onerror=dec; setTimeout(dec,15000);
   img.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1;'; img.src=url; document.body.appendChild(img);   // en el DOM → el GIF anima
   o.update=()=>{ if(!o.ready)return; try{ o.cx.drawImage(o.img,0,0,o.cv.width,o.cv.height); o.tex.needsUpdate=true; }catch(e){} };
+  o.kill=()=>{ try{ o.ready=false; if(o.img){ o.img.src=''; if(o.img.remove)o.img.remove(); o.img=null; } if(o.tex){ o.tex.dispose(); } }catch(e){} };   // saca el GIF del DOM (deja de decodificar = libera CPU)
   return o; }
 function preloadIntroAssets(){ if(intro._loading)return; intro._loading=true;
   _aInc();
@@ -3174,6 +3175,7 @@ function endIntroCine(){ if(cine._ended)return; cine._ended=true; intro.active=f
   // se queda el pecio ardiendo como escenografía; quito portal/auto-cae/policías/explosión
   if(cine.root){ for(const o of [cine.portal,cine.fall,cine.boom&&cine.boom.p,cine.boomFlash,cine.boomSprite]){ if(o)cine.root.remove(o); }
     for(const c of cine.cops) cine.root.remove(c); }
+  if(introBoom&&introBoom.kill)introBoom.kill();   // saca el GIF de explosión del DOM (libera CPU)
   cine.persist=true;
   player.pos.set(0,0,4); player.yaw=0; player.pitch=0; player.crouch=false; player.eye=EYE; player.vy=0; player.jumpY=0;
   setHudVisible(true);
