@@ -1926,7 +1926,7 @@ const THRUST=new Set(['spear','lanzapiedra','lanzaafil']);
 const CHOPPERS=new Set(['hacha','machete','guadana']);   // armas que pueden talar árboles
 const DIGGERS=new Set(['pala']);                          // herramientas que cavan (clavan hacia abajo)
 const MINERS=new Set(['picoafil','picopiedra','picomad']);// picos que minan nodos de mena
-function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;wswing.hit=false;npcAtk=true;} }
+function startWSwing(){ if(!wswing.active){wswing.active=true;wswing.t=0;wswing.hit=false;npcAtk=true;faunaAtk=true;} }
 
 /* ---- crafteo / inventario ---- */
 const RECIPES=[
@@ -2374,34 +2374,45 @@ let paused=false,started=false;document.addEventListener('visibilitychange',()=>
 const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0,hudTimer=0;const _v=new THREE.Vector3();
 const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 /* ===================== NPCs nocturnos + ragdoll (TODO aislado; corre al Jugar, en try/catch) ===================== */
-let npcTickFn=null, npcDayResetFn=null, storyT=-1, npcAtk=false, npcSetupDone=false;
-/* ===== FAUNA del desierto: fox / rinoceronte / spider (riggeados) que deambulan ===== */
-let faunaTick=null, faunaSetupDone=false;
+let npcTickFn=null, npcDayResetFn=null, storyT=-1, npcAtk=false, npcSetupDone=false, gameNight=0;
+/* ===== FAUNA (bosque + desierto): fox / rinoceronte / spider, matables, con muerte y noche-5 arañas gigantes ===== */
+let faunaTick=null, faunaSetupDone=false, faunaAtk=false;
 function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
   const FB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@54fa28a/';
   const SPECS=[
-    {file:'animated_fox__3d_animal_model.glb', h:0.7, idle:'NeutralStand', walk:'Walk', count:5, sp:1.3},
-    {file:'model_56a_-_southern_white_rhino.glb', h:1.9, idle:'Action', walk:'Action', count:2, sp:0.8},
-    {file:'spider_rig.glb', h:0.55, idle:'CINEMA', walk:'CINEMA', count:4, sp:1.1},
+    {key:'fox',  file:'animated_fox__3d_animal_model.glb', h:0.7, idle:'NeutralStand', walk:'Walk', count:5, sp:1.3, hp:3, proc:false},
+    {key:'rino', file:'model_56a_-_southern_white_rhino.glb', h:1.9, idle:'Action', walk:'Action', count:2, sp:0.8, hp:6, proc:true},
+    {key:'spider',file:'spider_rig.glb', h:0.6, idle:'CINEMA', walk:'CINEMA', count:4, sp:1.1, hp:3, proc:true},
   ];
-  const gl=new GLTFLoader(); const F=[];
-  SPECS.forEach(S=>{ gl.load(FB+S.file, g=>{ try{ const src=g.scene;
-    const bb=new THREE.Box3().setFromObject(src),sz=bb.getSize(new THREE.Vector3()),s=S.h/(sz.y||1),baseY=bb.min.y*s;
+  const gl=new GLTFLoader(); const F=[]; const ray2=new THREE.Raycaster(); let spiderFactory=null, giantsSpawned=false;
+  function faunaPos(){ const forest=Math.random()<0.7; const x=forest?(Xmin+30+Math.random()*(BEACH_X0-Xmin-60)):(BEACH_X0+150+Math.random()*(DESERT_X1-BEACH_X0-300)); const z=Zmin+30+Math.random()*((Zmax-Zmin)-60); return {x,z}; }
+  function addInst(S,g,src,s0,scaleMul,hp,x,z){ const s=s0*scaleMul; const bb=new THREE.Box3().setFromObject(src); const baseY=bb.min.y*s;
     const pick=n=>g.animations.find(c=>c.name.indexOf(n)>=0)||g.animations[0];
-    for(let i=0;i<S.count;i++){ const inst=skClone(src); inst.scale.setScalar(s);
-      inst.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
-      const mx=new THREE.AnimationMixer(inst); const wa=mx.clipAction(pick(S.walk)); const ia=mx.clipAction(pick(S.idle));
-      const single=(wa===ia); if(single){ wa.play(); } else { ia.play(); }   // rino/spider: 1 sola animación → siempre suena
-      const x=BEACH_X0+250+Math.random()*(DESERT_X1-BEACH_X0-500), z=Zmin+200+Math.random()*((Zmax-Zmin)-400);
-      inst.position.set(x,terrainHeight(x,z)-baseY,z); scene.add(inst);
-      F.push({inst,mx,wa,ia,single,baseY,sp:S.sp,state:single?'walk':'idle',wTimer:0,wAng:Math.random()*6.283,move:false}); }
+    const inst=skClone(src); inst.scale.setScalar(s); inst.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
+    const mx=new THREE.AnimationMixer(inst); const wa=mx.clipAction(pick(S.walk)); const ia=mx.clipAction(pick(S.idle)); const single=(wa===ia); if(single)wa.play(); else ia.play();
+    inst.position.set(x,terrainHeight(x,z)-baseY,z); scene.add(inst);
+    F.push({key:S.key,inst,mx,wa,ia,single,proc:S.proc,baseY,sp:S.sp/scaleMul,hp,dead:false,deadT:0,state:single?'walk':'idle',wTimer:0,wAng:Math.random()*6.283,move:false,_ph:0}); }
+  SPECS.forEach(S=>{ gl.load(FB+S.file, g=>{ try{ const src=g.scene;
+    const bb=new THREE.Box3().setFromObject(src),sz=bb.getSize(new THREE.Vector3()),s0=S.h/(sz.y||1);
+    for(let i=0;i<S.count;i++){ const p=faunaPos(); addInst(S,g,src,s0,1,S.hp,p.x,p.z); }
+    if(S.key==='spider') spiderFactory=(x,z)=>addInst(S,g,src,s0,3,10,x,z);   // araña GIGANTE: x3, 10 golpes
   }catch(e){console.warn('fauna inst',e);} }, undefined, e=>console.warn(S.file,e)); });
-  faunaTick=function(dt){ for(const o of F){ o.mx.update(dt);
-    o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; }
-    if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; o.inst.rotation.y=Math.atan2(Math.cos(o.wAng),Math.sin(o.wAng)); }
-    if(!o.single){ if(o.move&&o.state!=='walk'){ o.state='walk'; o.ia.fadeOut(0.2); o.wa.reset().fadeIn(0.2).play(); }
-      else if(!o.move&&o.state!=='idle'){ o.state='idle'; o.wa.fadeOut(0.2); o.ia.reset().fadeIn(0.2).play(); } }
-    o.inst.position.y=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY; } };
+  faunaTick=function(dt){
+    if(gameNight>=5 && !giantsSpawned && nightFactor>0.5 && spiderFactory){ giantsSpawned=true;   // NOCHE 5: arañas gigantes
+      for(let k=0;k<3;k++){ const a=Math.random()*6.283,r=24+Math.random()*16; spiderFactory(player.pos.x+Math.cos(a)*r,player.pos.z+Math.sin(a)*r); } }
+    if(faunaAtk){ faunaAtk=false; ray2.setFromCamera({x:0,y:0},camera); ray2.far=4.6; let best=null,bd=1e9;
+      for(const o of F){ if(o.dead)continue; const h=ray2.intersectObject(o.inst,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=o;} }
+      if(best&&bd<4.6){ best.hp--; if(best.hp<=0) killAnimal(best); else { try{chopSound();}catch(e){} } } }
+    for(let k=F.length-1;k>=0;k--){ const o=F[k]; o.mx.update(dt);
+      if(o.dead){ o.deadT+=dt; o.inst.rotation.z=Math.min(1.45,o.inst.rotation.z+dt*3.2);   // cae de costado (ragdoll simple)
+        if(o.deadT>2.4){ o.inst.traverse(m=>{ if(m.material&&m.material.opacity!==undefined){ m.material.transparent=true; m.material.opacity=Math.max(0,1-(o.deadT-2.4)/0.6); } }); }
+        if(o.deadT>=3){ scene.remove(o.inst); F.splice(k,1); } continue; }
+      o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; }
+      if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; o.inst.rotation.y=Math.atan2(Math.cos(o.wAng),Math.sin(o.wAng)); }
+      const gy=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY;
+      if(o.proc){ o._ph+=dt*(o.move?9:2); const bob=Math.abs(Math.sin(o._ph))*(o.move?0.06:0.012); o.inst.position.y=gy+bob; o.inst.rotation.x=Math.sin(o._ph*0.5)*(o.move?0.04:0.01); }   // animación procedural (rino/spider)
+      else { if(!o.single){ if(o.move&&o.state!=='walk'){ o.state='walk'; o.ia.fadeOut(0.2); o.wa.reset().fadeIn(0.2).play(); } else if(!o.move&&o.state!=='idle'){ o.state='idle'; o.wa.fadeOut(0.2); o.ia.reset().fadeIn(0.2).play(); } } o.inst.position.y=gy; } } };
+  function killAnimal(o){ o.dead=true; o.deadT=0; try{ o.mx.stopAllAction(); }catch(e){} }
  }catch(e){ console.warn('setupFauna',e); } }
 function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   const N_EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@63fa07b/';   // ataques npc2-5 = golpe de palo (Heavy_Hammer_Swing); idle/walk/run/char_* sin cambios
@@ -2426,7 +2437,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   function attachTorch(body,flames){ const hand=body.getObjectByName('RightHand'); if(!hand)return; hand.updateWorldMatrix(true,false); const hs=hand.getWorldScale(_nv).x||1;
     const holder=new THREE.Group(); const stick=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.036,0.62,10),new THREE.MeshStandardMaterial({color:0x6b4a2a,roughness:0.85})); stick.position.y=0.31; holder.add(stick);
     holder.scale.setScalar(1/hs); holder.rotation.set(-Math.PI/2,0,0.35); const fl=mkFlame(); fl.position.set(0,0.66,0); holder.add(fl); flames.push(fl.userData); hand.add(holder); }
-  function mk(ti,x,z){ const T=N_TYPES[ti]; const inst={ti,group:new THREE.Group(),bodies:{},mixers:{},actions:{},state:null,dead:false,flames:[],atkCD:0};
+  function mk(ti,x,z){ const T=N_TYPES[ti]; const inst={ti,group:new THREE.Group(),bodies:{},mixers:{},actions:{},state:null,dead:false,flames:[],atkCD:0,hp:5};
     N_ANIMS.forEach(an=>{ const t=ntpl[ti][an]; if(!t)return; const scn=skClone(t.scene); scn.scale.setScalar(t.s); scn.position.copy(t.off); scn.visible=false;
       scn.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } }); if(T.torch)attachTorch(scn,inst.flames); inst.group.add(scn);
       const mx=new THREE.AnimationMixer(scn); const ac=t.clip?mx.clipAction(t.clip):null; if(ac){ ac.setLoop(THREE.LoopRepeat); if(an==='attack')ac.timeScale=2.1; }   // golpe corto y rápido
@@ -2455,7 +2466,8 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
       const pW=rec.bone.parent.getWorldQuaternion(_nq).invert(); rec.bone.quaternion.copy(pW.multiply(qW));
       if(rec.isRoot){ const cc=new THREE.Vector3(pb.position.x,pb.position.y,pb.position.z); const jw=cc.add(rec.rLocal.clone().applyQuaternion(qB)); rec.bone.parent.worldToLocal(jw); rec.bone.position.copy(jw); } } }
   const ray=new THREE.Raycaster();
-  function tryKill(){ ray.setFromCamera({x:0,y:0},camera); ray.far=4.2; let best=null,bd=1e9; for(const n of NPCS){ if(n.dead)continue; const h=ray.intersectObject(n.group,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=n;} } if(best&&bd<4.2)killN(best); }
+  function tryKill(){ ray.setFromCamera({x:0,y:0},camera); ray.far=4.2; let best=null,bd=1e9; for(const n of NPCS){ if(n.dead)continue; const h=ray.intersectObject(n.group,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=n;} }
+    if(best&&bd<4.2){ best.hp--; if(best.hp<=0) killN(best); else { digShake=Math.max(digShake,0.25); try{chopSound();}catch(e){} } } }   // 5 golpes para matar a un NPC
   function killN(inst){ if(inst.dead)return; inst.dead=true; inst.ragT=0; for(const k in inst.mixers)inst.mixers[k].stopAllAction();
     const dx=inst.group.position.x-player.pos.x,dz=inst.group.position.z-player.pos.z,d=Math.hypot(dx,dz)||1; try{ startRag(inst,new THREE.Vector3(dx/d*2.6,0.9,dz/d*2.6)); }catch(e){ console.warn(e); } }
   function removeNPC(inst){ scene.remove(inst.group); if(inst.rag){ try{ for(const rec of inst.rag.recs)physWorld.removeBody(rec.pb); }catch(e){} inst.rag=null; } const k=NPCS.indexOf(inst); if(k>=0)NPCS.splice(k,1); }
@@ -2464,11 +2476,13 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   npcDayResetFn=function(){ nightSpawned=false;   // al dormir: limpiar NPCs y permitir que reaparezcan la próxima noche
     for(const inst of NPCS){ scene.remove(inst.group); if(inst.rag){ try{ for(const rec of inst.rag.recs)physWorld.removeBody(rec.pb); }catch(e){} } }
     NPCS.length=0; };
-  function spawnNight(){ for(let k=0;k<5;k++){ const ti=(Math.random()*N_TYPES.length)|0,a=Math.random()*6.28,r=20+Math.random()*14;
-    const x=player.pos.x+Math.cos(a)*r, z=player.pos.z+Math.sin(a)*r; const inst=mk(ti,x,z); inst.wTimer=0; inst.wAng=Math.random()*6.28; inst._wmove=false; try{ emitDirt({x,z}); emitDirt({x,z}); }catch(e){} } }
+  function spawnNight(){ for(let k=0;k<6;k++){ const ti=(Math.random()*N_TYPES.length)|0,a=Math.random()*6.28,r=38+Math.random()*34;   // NO aparecen pegados a vos: rondan lejos (bosque)
+    let x=player.pos.x+Math.cos(a)*r, z=player.pos.z+Math.sin(a)*r;
+    if(k>=5){ x=BEACH_X0+200+Math.random()*1500; z=Zmin+Math.random()*(Zmax-Zmin); }   // sólo alguno disperso en el desierto
+    const inst=mk(ti,x,z); inst.wTimer=0; inst.wAng=Math.random()*6.28; inst._wmove=false; try{ emitDirt({x,z}); emitDirt({x,z}); }catch(e){} } }
   npcTickFn=function(dt){
     storyT+=dt; const elev = A_ELEV*Math.sin(storyT*(2*Math.PI/1440)+2.88); setTime(elev,120);   // ciclo real: ~12 min de día y ~12 min de noche (arranca cerca del atardecer → 1ª noche en ~1 min)
-    if(nReady){ if(nightFactor>0.55&&!nightSpawned){ nightSpawned=true; spawnNight(); } else if(nightFactor<0.25&&(nightSpawned||NPCS.length)){ npcDayResetFn(); } }   // amanece → se van los NPCs, listo para la próxima noche
+    if(nReady){ if(nightFactor>0.55&&!nightSpawned){ nightSpawned=true; gameNight++; spawnNight(); } else if(nightFactor<0.25&&(nightSpawned||NPCS.length)){ npcDayResetFn(); } }   // amanece → se van los NPCs; cuenta de noches (5ª = arañas gigantes)
     if(npcAtk){ npcAtk=false; tryKill(); }
     for(const inst of NPCS){ if(inst.dead){ inst.ragT=(inst.ragT||0)+dt; if(inst.ragT<=3&&inst.rag)stepRag(inst); continue; }   // ragdoll y desaparece a los 3 s
       if(inst.mixers[inst.state])inst.mixers[inst.state].update(dt);
