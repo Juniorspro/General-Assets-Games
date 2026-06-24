@@ -2585,7 +2585,7 @@ function update(dt){
   if(sleepT>=0){ sleepStep(dt); windU.uTime.value+=dt; return; }   // durmiendo: cinemática toma el control
   statsTick(dt); butcherTick(dt);
   if(cine.persist&&!intro.active){ try{ cine.persistT=(cine.persistT||0)+dt;   // a los 4 s el auto quemado se HUNDE bajo el suelo
-    if(cine.persistT<4){ fireTick(dt,cine.crashPos); if(cine.fireSprite&&introVid2){ cine.fireSprite.visible=true; cine.fireSprite.lookAt(camera.position); } }
+    if(cine.persistT<4){ fireTick(dt,cine.crashPos); if(cine.fireSprite){ cine.fireSprite.visible=true; cine.fireSprite.lookAt(camera.position); if(introFire)introFire.update(); } }
     else { const k=Math.min(1,(cine.persistT-4)/1.6);
       if(cine.fire)cine.fire.p.visible=false; if(cine.ember)cine.ember.p.visible=false; if(cine.smoke)cine.smoke.p.visible=false; cine.fireL1.intensity=0; cine.fireL2.intensity=0;
       if(cine.wreck)cine.wreck.position.y=(cine.wreckY0!=null?cine.wreckY0:cine.gy)-k*4.5;            // se hunde
@@ -3046,20 +3046,26 @@ function startGame(){
   }catch(err){ console.error('startGame:',err); }
 }
 /* ===================== CINEMÁTICA DE LLEGADA (portal del cielo → choque → salir del auto) ===================== */
-let introCarGLB=null, introVid=null, introVid2=null; const _iA=new THREE.Vector3(), _iB=new THREE.Vector3();
-function loadIntroVideo(url){ try{ const v=document.createElement('video'); v.crossOrigin='anonymous'; v.muted=true; v.defaultMuted=true; v.volume=0; v.playsInline=true; v.setAttribute('playsinline',''); v.setAttribute('webkit-playsinline',''); v.preload='auto'; v.loop=true; v.src=url;   // crossOrigin ANTES de src (si no, la textura queda tainted → negra)
-    v.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1;'; document.body.appendChild(v);   // en el DOM (oculto) → los móviles SÍ decodifican el vídeo para la textura
-    _aInc(); let done=false; const dec=()=>{ if(done)return; done=true; _aDec(); };
-    v.addEventListener('loadeddata',dec); v.addEventListener('canplay',dec); v.addEventListener('error',dec); setTimeout(dec,15000); v.load(); return v;
-  }catch(e){ console.warn('video',e); return null; } }
+let introCarGLB=null, introFire=null, introBoom=null; const _iA=new THREE.Vector3(), _iB=new THREE.Vector3();
+// GIF animado → textura: el <img> del GIF anima solo en el navegador; cada frame lo dibujo a un canvas → CanvasTexture (sin audio, sin autoplay de video)
+function loadGifTex(url){ const img=new Image(); img.crossOrigin='anonymous';
+  const cv=document.createElement('canvas'); cv.width=cv.height=256; const cx=cv.getContext('2d');
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace;
+  const o={tex,img,cv,cx,ready:false};
+  _aInc(); let done=false; const dec=()=>{ if(done)return; done=true; _aDec(); };
+  img.onload=()=>{ cv.width=img.naturalWidth||256; cv.height=img.naturalHeight||256; o.ready=true; try{cx.drawImage(img,0,0,cv.width,cv.height);tex.needsUpdate=true;}catch(e){} dec(); };
+  img.onerror=dec; setTimeout(dec,15000);
+  img.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1;'; img.src=url; document.body.appendChild(img);   // en el DOM → el GIF anima
+  o.update=()=>{ if(!o.ready)return; try{ o.cx.drawImage(o.img,0,0,o.cv.width,o.cv.height); o.tex.needsUpdate=true; }catch(e){} };
+  return o; }
 function preloadIntroAssets(){ if(intro._loading)return; intro._loading=true;
   _aInc();
   gltfL.load('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@0b530c3/vehicle_blue_train_bentley.glb',
     g=>{ introCarGLB=g.scene; introCarGLB.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; } }); _aDec(); },
     undefined, ()=>{ console.warn('intro car load fail'); _aDec(); });
-  // VÍDEOS (explosión en el cielo + fuego del auto) como sprites aditivos — se descargan DURANTE la carga
-  introVid=loadIntroVideo('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@6790723/assets/video/explosion.mp4'); if(introVid)introVid.loop=false;
-  introVid2=loadIntroVideo('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@3b0eb12/assets/video/fire.mp4');
+  // GIFs (explosión del cielo + fuego del auto) como sprites aditivos — se descargan DURANTE la carga
+  introBoom=loadGifTex('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@1305b6f/assets/gif/explosion.gif');
+  introFire=loadGifTex('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@1305b6f/assets/gif/fire.gif');
 }
 function introCarClone(){ try{ return introCarGLB? skClone(introCarGLB): new THREE.Group(); }catch(e){ return new THREE.Group(); } }
 function makePts(n,size,color,additive){ const pos=new Float32Array(n*3); for(let i=0;i<n*3;i++)pos[i]=9999;
@@ -3109,17 +3115,14 @@ function buildIntroCine(){
   cine.fire=makePts(80,0.55,0xff7a1e,true); cine.root.add(cine.fire.p);
   cine.smoke=makePts(70,1.8,0x2a2622,false); cine.smoke.p.material.opacity=0.4; cine.root.add(cine.smoke.p);
   cine.ember=makePts(50,0.16,0xffd27a,true); cine.root.add(cine.ember.p);
-  if(introVid2){ try{ const ft=new THREE.VideoTexture(introVid2); ft.colorSpace=THREE.SRGBColorSpace;
-    const fmat=new THREE.MeshBasicMaterial({map:ft,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false});
+  if(introFire&&introFire.tex){ try{ const fmat=new THREE.MeshBasicMaterial({map:introFire.tex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false});
     cine.fireSprite=new THREE.Mesh(new THREE.PlaneGeometry(7,6),fmat); cine.fireSprite.position.copy(cine.crashPos).add(new THREE.Vector3(0,1.9,0)); cine.fireSprite.frustumCulled=false; cine.fireSprite.visible=false; cine.root.add(cine.fireSprite);
-    try{ introVid2.muted=true; introVid2.play().catch(()=>{}); }catch(e){}
   }catch(e){ console.warn('fire sprite',e); } }
   // EXPLOSIÓN (one-shot al cerrarse el portal): vídeo "god" como sprite aditivo + partículas + flash
   cine.boom=makePts(320,0.55,0xffa030,true); cine.root.add(cine.boom.p);
   cine.boomFlash=new THREE.PointLight(0xfff0c0,0,200,2); cine.boomFlash.position.copy(cine.portalPos); cine.root.add(cine.boomFlash);
   cine.boomDone=false; cine.boomT=0;
-  if(introVid){ try{ const vt=new THREE.VideoTexture(introVid); vt.colorSpace=THREE.SRGBColorSpace;
-    const vmat=new THREE.MeshBasicMaterial({map:vt,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false});
+  if(introBoom&&introBoom.tex){ try{ const vmat=new THREE.MeshBasicMaterial({map:introBoom.tex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false});
     cine.boomSprite=new THREE.Mesh(new THREE.PlaneGeometry(34,34),vmat); cine.boomSprite.position.copy(cine.portalPos); cine.boomSprite.visible=false; cine.boomSprite.frustumCulled=false; cine.root.add(cine.boomSprite);
   }catch(e){ console.warn('boom sprite',e); } }
 }
@@ -3146,13 +3149,13 @@ function triggerBoom(){ if(cine.boomDone)return; cine.boomDone=true; const B=cin
     const dx=Math.random()-0.5,dy=Math.random()-0.5,dz=Math.random()-0.5,l=Math.hypot(dx,dy,dz)||1,sp=8+Math.random()*18;
     B.vel[a]=dx/l*sp; B.vel[a+1]=dy/l*sp; B.vel[a+2]=dz/l*sp; B.life[i]=0.8+Math.random()*0.7; }
   B.g.attributes.position.needsUpdate=true; cine.boomFlash.intensity=240; cine.boomT=0;
-  if(cine.boomSprite){ cine.boomSprite.visible=true; try{ introVid.currentTime=0; const pr=introVid.play(); if(pr&&pr.catch)pr.catch(()=>{}); }catch(e){} } }
+  if(cine.boomSprite){ cine.boomSprite.visible=true; } }
 function boomTick(dt){ if(!cine.boomDone)return; const B=cine.boom; cine.boomT+=dt;
   for(let i=0;i<B.n;i++){ const a=i*3; if(B.life[i]<=0)continue; B.life[i]-=dt; B.vel[a+1]-=dt*6;
     B.pos[a]+=B.vel[a]*dt; B.pos[a+1]+=B.vel[a+1]*dt; B.pos[a+2]+=B.vel[a+2]*dt; if(B.life[i]<=0)B.pos[a+1]=9999; }
   B.g.attributes.position.needsUpdate=true; B.p.material.opacity=Math.max(0,0.95-cine.boomT*0.55);
   cine.boomFlash.intensity=Math.max(0,240-cine.boomT*420);
-  if(cine.boomSprite&&cine.boomSprite.visible){ cine.boomSprite.lookAt(camera.position); cine.boomSprite.material.opacity=Math.max(0,1.0-cine.boomT*0.3); const s=1+cine.boomT*0.22; cine.boomSprite.scale.set(s,s,s); if(cine.boomT>3.4)cine.boomSprite.visible=false; } }
+  if(cine.boomSprite&&cine.boomSprite.visible){ if(introBoom)introBoom.update(); cine.boomSprite.lookAt(camera.position); cine.boomSprite.material.opacity=Math.max(0,1.0-cine.boomT*0.3); const s=1+cine.boomT*0.22; cine.boomSprite.scale.set(s,s,s); if(cine.boomT>3.4)cine.boomSprite.visible=false; } }
 function startIntroCine(){
   try{ intro.active=true; cine.t=0; cine._ended=false; buildIntroCine();
     setHudVisible(false); if(typeof fpRig!=='undefined'&&fpRig)fpRig.visible=false; if(typeof fpAxe!=='undefined'&&fpAxe)fpAxe.visible=false;
@@ -3164,7 +3167,6 @@ function endIntroCine(){ if(cine._ended)return; cine._ended=true; intro.active=f
   // se queda el pecio ardiendo como escenografía; quito portal/auto-cae/policías/explosión
   if(cine.root){ for(const o of [cine.portal,cine.fall,cine.boom&&cine.boom.p,cine.boomFlash,cine.boomSprite]){ if(o)cine.root.remove(o); }
     for(const c of cine.cops) cine.root.remove(c); }
-  if(introVid){ try{ introVid.pause(); }catch(e){} }
   cine.persist=true;
   player.pos.set(0,0,4); player.yaw=0; player.pitch=0; player.crouch=false; player.eye=EYE; player.vy=0; player.jumpY=0;
   setHudVisible(true);
@@ -3207,7 +3209,7 @@ function introCam(dt){
     const eye=THREE.MathUtils.lerp(0.55,EYE,Math.max(0,(k-0.45)/0.55));     // primero agachado, luego se para
     camera.position.set(_iA.x,cine.gy+eye,_iA.z+(1-k)*1.0);
     camera.lookAt(0,cine.gy+1.5,-2); }
-  if(showWreck){ fireTick(dt,cine.crashPos); if(cine.fireSprite){ cine.fireSprite.visible=true; cine.fireSprite.lookAt(camera.position); } }
+  if(showWreck){ fireTick(dt,cine.crashPos); if(cine.fireSprite){ cine.fireSprite.visible=true; cine.fireSprite.lookAt(camera.position); if(introFire)introFire.update(); } }
   // fundidos
   if(t>=cB1-0.05 && t<cC1) fadeBlackEl.classList.add('on');      // corte a negro al tocar el suelo
   else if(t>=cC1 && t<cC1+0.06) fadeBlackEl.classList.remove('on');
@@ -3283,8 +3285,6 @@ $('fsBtn').addEventListener('click',()=>{
 /* ===== INTRO COMBINADA: al tocar JUGAR → persecución (overlay) → caída → juego ===== */
 function playChaseThenFall(){
   $('options').classList.remove('show'); $('startMenu').classList.remove('show'); $('kbCard').classList.remove('show');
-  // desbloquea los vídeos DENTRO del gesto de tocar Jugar (autoplay móvil), pero los deja PAUSADOS y MUDOS (sin sonido al empezar)
-  for(const v of [introVid,introVid2]){ if(!v)continue; try{ v.muted=true; v.volume=0; const p=v.play(); if(p&&p.then)p.then(()=>{try{v.pause();v.currentTime=0;}catch(e){}}).catch(()=>{}); }catch(e){} }
   const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='';
   window.__startChase();   // arranca la persecución; al terminar llama window.__introToFall → vuelve a startGame (caída)
 }
