@@ -330,13 +330,11 @@
   #bagHotbar .hbHint{ width:100%; text-align:center; font-size:11px; color:rgba(180,200,230,.7); margin-bottom:2px; }
 
   /* ===== overlay de la persecución (intro combinada) ===== */
-  #chaseApp{ position:fixed; inset:0; z-index:500; background:#0a0806; }
+  #chaseApp{ position:fixed; inset:0; z-index:500; background:#000; }
   #chaseApp.gone{ display:none!important; }
   #chaseApp canvas{ display:block; width:100%!important; height:100%!important; }
   #chaseFade{ position:fixed; inset:0; z-index:510; background:#000; opacity:1; pointer-events:none; }
   #chaseApp.gone ~ #chaseFade{ display:none!important; }
-  #tapStart{ position:fixed; inset:0; z-index:600; background:#05060a; display:flex; align-items:center; justify-content:center; color:#bcd4ff; font-family:-apple-system,system-ui,sans-serif; font-size:17px; letter-spacing:.26em; text-transform:uppercase; cursor:pointer; text-shadow:0 0 18px rgba(80,140,255,.6); }
-  #tapStart.gone{ display:none!important; }
 </style>
 </head>
 <body>
@@ -384,9 +382,8 @@
 
 <div id="stage">
   <div id="app"></div>
-  <div id="chaseApp"></div>
+  <div id="chaseApp" class="gone"></div>
   <div id="chaseFade"></div>
-  <div id="tapStart">▶  Tocá para comenzar</div>
   <div id="cross"></div>
   <div id="joy"><div id="joyKnob"></div></div>
   <button id="flash" class="actBtn">🪓</button>
@@ -2678,7 +2675,7 @@ function update(dt){
 let shadowFrame=0;
 // ¿hay un overlay de boot OPACO NEGRO encima? (#boot/#devPick/#langPick/#assetLoad/#studios)
 // Mientras lo haya NO renderizamos el 3D caro → CPU/GPU libre para construir chunks y nunca se ve el mundo a medio armar.
-const BOOT_OVERLAYS=['boot','devPick','langPick','assetLoad','studios'];
+const BOOT_OVERLAYS=['boot','devPick','langPick','assetLoad','studios','chaseApp'];   // chaseApp: mientras corre la persecución (overlay) el bosque renderiza negro detrás
 function bootOverlayVisible(){ for(const id of BOOT_OVERLAYS){ const el=$(id); if(el&&!el.classList.contains('gone'))return true; } return false; }
 let bootHudHidden=false;
 function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),0.05);
@@ -3267,7 +3264,8 @@ function showLangPick(){
 // pantalla negra inicial con botón de pantalla completa (modo clásico, si no hay intro combinada)
 $('fsBtn').addEventListener('click',()=>{
   try{ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen(); }catch(e){}
-  fadeOut($('boot'),showDevPick);   // → elegir PC/Móvil → idioma → carga assets → cinemática
+  if(window.__embedChase) startCombinedIntro();        // intro combinada: pantalla completa → persecución → caída → juego
+  else fadeOut($('boot'),showDevPick);                 // flujo clásico (sin overlay de persecución)
 });
 /* ===== INTRO COMBINADA: persecución (overlay) → caída → juego, todo en este archivo ===== */
 let worldReadyForFall=false;
@@ -3276,12 +3274,12 @@ window.__introToFall=function(){ window.__chaseDone=true; maybeStartFall(); };  
 function beginPreload(){ autoFall=true; if(!DEV.isMobile){ try{ enableMouseMode(); }catch(e){} }
   for(const id of ['boot','devPick','langPick','studios']){ const el=$(id); if(el)el.classList.add('gone'); }
   showAssetLoad(); }   // arma el mundo + texturas + assets (auto del Bentley/vídeos) mientras corre la persecución
-function startCombinedIntro(){ const tp=$('tapStart'); if(tp)tp.classList.add('gone');
-  try{ document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen(); }catch(e){}
+function startCombinedIntro(){
+  const b=$('boot'); if(b)b.classList.add('gone');                  // oculta la pantalla negra de inicio
   try{ if(typeof unlockAudio==='function')unlockAudio(); }catch(e){}
-  beginPreload();
-  if(window.__startChase){ window.__startChase(); }   // arranca la persecución (overlay)
-  else { const ca=$('chaseApp'); if(ca)ca.classList.add('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='none'; window.__chaseDone=true; maybeStartFall(); } }   // sin persecución → directo a la caída
+  beginPreload();                                                   // el mundo se arma por detrás (negro) mientras corre la persecución
+  if(window.__startChase){ const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf)cf.style.display=''; window.__startChase(); }   // muestra y arranca la persecución
+  else { window.__chaseDone=true; maybeStartFall(); } }             // sin persecución → directo a la caída
 
 try{
   applyLang('es'); updateQDesc();
@@ -3294,13 +3292,10 @@ try{
   wireUiSounds();
   // NO cargamos el mundo en el init: todo queda en negro puro hasta la pantalla de carga de assets (showAssetLoad llama bootArea)
   window.__chaseDone=false;
-  const tapEl=$('tapStart');
   if(location.hash==='#fall'){   // saltar la persecución → directo a la caída
-    window.__chaseDone=true; if(tapEl)tapEl.classList.add('gone'); const ca=$('chaseApp'); if(ca)ca.classList.add('gone'); beginPreload();
-  } else if(window.__embedChase && tapEl){   // intro combinada: tocar para empezar → persecución → caída → juego
-    tapEl.addEventListener('click',startCombinedIntro,{once:true});
+    window.__chaseDone=true; const ca=$('chaseApp'); if(ca)ca.classList.add('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='none'; const b=$('boot'); if(b)b.classList.add('gone'); beginPreload();
   }
-  // (si no hay overlay de persecución ni #fall: queda el flujo clásico con #boot/fsBtn)
+  // entrada única: la pantalla negra #boot con el botón de pantalla completa → startCombinedIntro (persecución → caída → juego)
 }catch(err){ console.error('Init:',err); }
 requestAnimationFrame(()=>{ try{ if(composer)composer.render(0);else renderer.render(scene,camera); }catch(e){console.error(e);} setTimeout(hideLoader,300); animate(); });
 </script>
