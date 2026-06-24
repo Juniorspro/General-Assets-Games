@@ -1168,9 +1168,9 @@ let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuRe
 let gfxNormalMul=1, gfxReflectMul=1;   // modo gráfico: 0 aplana el PBR (sin relieve) · reflejos más suaves
 // ---- MODO GRÁFICO (Bajo/Medio/Alto) ----  TODOS a 100% de resolución; cambia el ESTILO de render, no la resolución
 const GFXMODES={
-  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.0,  matte:true,  cull:true,  folDist:0.7, leafDist:0.7, env:false},   // SIN reflejos: sólo texturas PBR. Sin sombras, vegetación quieta, PBR plano, culling agresivo
-  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.12, matte:true,  cull:true,  folDist:1.0, leafDist:1.0, env:true},    // reflejos MÍNIMOS y de muy baja resolución (env borroso) + sombras pintadas + vegetación
-  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:0.32, matte:false, cull:false, folDist:1.0, leafDist:1.0, env:true},    // reflejos suaves + sombras dinámicas
+  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.0,  matte:true,  cull:true,  folDist:0.7, leafDist:0.7, env:false},   // CERO reflejos/brillo: todo mate, solo texturas PBR (albedo+normal)
+  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.0,  matte:true,  cull:true,  folDist:1.0, leafDist:1.0, env:false},   // CERO reflejos/brillo: todo mate + vegetación + sombras pintadas
+  high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:0.28, matte:false, cull:false, folDist:1.0, leafDist:1.0, env:true},    // único modo con reflejos (suaves)
 };
 let gfx=GFXMODES.low;
 function applyRelief(){ const m=gfxNormalMul;   // recalcula los normalScale según el relieve elegido y el modo gráfico
@@ -1189,13 +1189,20 @@ function applyGfx(t){
   gfxNormalMul=gfx.normal; applyRelief();                        // PBR plano en Bajo (sin profundidad de normales)
   gfxReflectMul=gfx.reflect;
   if(!REFLECT_MATS){ REFLECT_MATS=[barkMat,leafMat,grassMat,rockMat,roadMat,sandMat,wetMat,metalMat,woodConsMat,chapaMat,blackMetalMat,glassMat,oreMat,nuggetMat,rustMat,lampPostMat,fabricMat,emberMat,flameMat,ground.material,...grassMats,...plantMats,fiberMat];
-    for(const m of REFLECT_MATS){ if(m){ m.userData=m.userData||{}; m.userData._env0=(m.envMapIntensity!=null?m.envMapIntensity:1); } } }
-  for(const m of REFLECT_MATS){ if(m&&m.userData&&m.userData._env0!=null) m.envMapIntensity=m.userData._env0*gfxReflectMul; }   // reflejos más suaves
-  // botella incendiaria: en Bajo no refleja el fuego (vidrio mate), sólo se ilumina naranja
-  if(gfx.matte){ glassMat.roughness=0.5; glassMat.transmission=0.15; }
+    for(const m of REFLECT_MATS){ if(m){ m.userData=m.userData||{}; m.userData._env0=(m.envMapIntensity!=null?m.envMapIntensity:1);
+      if(m.userData._rgh0==null)m.userData._rgh0=(m.roughness!=null?m.roughness:1); if(m.userData._met0==null)m.userData._met0=(m.metalness!=null?m.metalness:0); if(!('_rmap0'in m.userData))m.userData._rmap0=m.roughnessMap||null; } } }
+  for(const m of REFLECT_MATS){ if(!m||!m.userData)continue;
+    if(gfx.matte){ m.envMapIntensity=0; m.roughnessMap=null; m.roughness=1; m.metalness=0; }   // MATE: sin brillo especular ni reflejos (solo texturas)
+    else { m.envMapIntensity=(m.userData._env0!=null?m.userData._env0:1)*gfxReflectMul; if(m.userData._rmap0!==undefined)m.roughnessMap=m.userData._rmap0; if(m.userData._rgh0!=null)m.roughness=m.userData._rgh0; if(m.userData._met0!=null)m.metalness=m.userData._met0; }
+    m.needsUpdate=true; }
+  // agua/vidrio de oasis también mate en Bajo/Medio
+  if(typeof oasisWaterMat!=='undefined'&&oasisWaterMat){ oasisWaterMat.roughness=gfx.matte?1:0.12; oasisWaterMat.envMapIntensity=gfx.matte?0:1; oasisWaterMat.needsUpdate=true; }
+  if(typeof waterMat!=='undefined'&&waterMat){ waterMat.roughness=gfx.matte?1:0.12; waterMat.envMapIntensity=gfx.matte?0:1.6; waterMat.needsUpdate=true; }
+  // vidrio: totalmente mate en Bajo/Medio (sin brillo)
+  if(gfx.matte){ glassMat.roughness=1; glassMat.transmission=0.1; glassMat.metalness=0; }
   else { glassMat.roughness=0.08; glassMat.transmission=0.55; }
-  // arma equipada: reflejos más suaves
-  if(typeof fpRig!=='undefined'&&fpRig) fpRig.traverse(o=>{ if(o.isMesh&&o.material&&!Array.isArray(o.material)){ const mm=o.material; mm.userData=mm.userData||{}; if(mm.userData._env0==null)mm.userData._env0=(mm.envMapIntensity!=null?mm.envMapIntensity:1); mm.envMapIntensity=mm.userData._env0*gfxReflectMul; } });
+  // arma equipada: mate en Bajo/Medio
+  if(typeof fpRig!=='undefined'&&fpRig) fpRig.traverse(o=>{ if(o.isMesh&&o.material&&!Array.isArray(o.material)){ const mm=o.material; mm.userData=mm.userData||{}; if(mm.userData._env0==null)mm.userData._env0=(mm.envMapIntensity!=null?mm.envMapIntensity:1); if(mm.userData._frgh0==null)mm.userData._frgh0=(mm.roughness!=null?mm.roughness:1); if(mm.userData._fmet0==null)mm.userData._fmet0=(mm.metalness!=null?mm.metalness:0); if(gfx.matte){ mm.envMapIntensity=0; mm.roughness=1; mm.metalness=0; } else { mm.envMapIntensity=mm.userData._env0*gfxReflectMul; mm.roughness=mm.userData._frgh0; mm.metalness=mm.userData._fmet0; } mm.needsUpdate=true; } });
   if(!gfx.cull){ if(typeof placedItems!=='undefined')for(const m of placedItems)if(m)m.visible=true; if(typeof logs!=='undefined')for(const L of logs)if(L&&L.m)L.m.visible=true; }   // al salir del modo con culling, re-mostrar objetos sueltos
 }
 /* ===================== CULLING (frustum · oclusión · distancia · detalle) ===================== */
