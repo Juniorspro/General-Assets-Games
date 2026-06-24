@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NIEBLA DEL MAÍZ — Survival Horror</title>
+<style>
+  :root { --accent: #b8412f; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  body { font-family: "Courier New", monospace; color: #c9c4bb; cursor: default; }
+  #game { position: fixed; inset: 0; display: block; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  #crosshair {
+    position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
+    background: rgba(220,220,210,0.55); border-radius: 50%;
+    transform: translate(-50%,-50%);
+    box-shadow: 0 0 4px rgba(0,0,0,0.9);
+  }
+  #vignette {
+    position: absolute; inset: 0;
+    box-shadow: inset 0 0 220px 70px rgba(0,0,0,0.92);
+    pointer-events: none;
+  }
+  #status {
+    position: absolute; left: 22px; bottom: 18px;
+    font-size: 13px; line-height: 1.7; text-shadow: 0 0 6px #000;
+    opacity: 0.85;
+  }
+  #status .k { color: var(--accent); }
+  #battery-wrap {
+    position: absolute; right: 22px; bottom: 20px; width: 150px;
+    text-shadow: 0 0 6px #000;
+  }
+  #battery-wrap .lbl { font-size: 11px; letter-spacing: 2px; opacity: .7; margin-bottom: 4px; }
+  #battery {
+    width: 100%; height: 9px; border: 1px solid #5a5750; background: #14130f;
+  }
+  #battery > i { display: block; height: 100%; width: 100%;
+    background: linear-gradient(90deg,#7d3a1f,#d9b04a); transition: width .3s; }
+
+  /* ---------- Overlays ---------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 30; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; background: radial-gradient(ellipse at center,#0a0907 0%,#000 80%);
+  }
+  #loading .bar { width: 320px; height: 6px; background: #1c1a16; margin-top: 22px; border: 1px solid #34322b; }
+  #loading .bar > i { display: block; height: 100%; width: 0%; background: var(--accent); transition: width .25s; }
+  #loading .pct { margin-top: 10px; font-size: 12px; opacity: .6; }
+  h1 {
+    font-size: 46px; letter-spacing: 10px; font-weight: 700;
+    color: #d8d2c7; text-shadow: 0 0 18px #000, 0 2px 0 #2a0d07;
+  }
+  h1 .sub { display:block; font-size: 14px; letter-spacing: 6px; color: var(--accent); margin-top: 12px; }
+  #title p { max-width: 560px; margin-top: 26px; font-size: 14px; line-height: 1.9; opacity: .75; }
+  .keys { margin-top: 26px; font-size: 13px; opacity: .8; line-height: 2; }
+  .keys b { color: var(--accent); }
+  .play {
+    margin-top: 34px; pointer-events: all; cursor: pointer;
+    border: 1px solid #6b4030; background: rgba(40,20,12,.4); color: #e8e2d6;
+    padding: 14px 40px; font-family: inherit; font-size: 16px; letter-spacing: 4px;
+    transition: all .2s;
+  }
+  .play:hover { background: rgba(120,50,30,.55); box-shadow: 0 0 24px rgba(120,40,20,.5); }
+  .hidden { display: none !important; }
+  #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 40; }
+  #subtitle {
+    position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+    z-index: 20; font-size: 15px; color: #ddd6c9; text-shadow: 0 0 8px #000;
+    opacity: 0; transition: opacity 1s; max-width: 80%; text-align: center;
+    pointer-events: none; font-style: italic;
+  }
+</style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="vignette"></div>
+    <div id="crosshair"></div>
+    <div id="subtitle"></div>
+    <div id="status">
+      <div><span class="k">[WASD]</span> mover &nbsp; <span class="k">[Shift]</span> correr</div>
+      <div><span class="k">[F]</span> linterna &nbsp; <span class="k">[E]</span> interactuar &nbsp; <span class="k">[Esc]</span> liberar ratón</div>
+    </div>
+    <div id="battery-wrap">
+      <div class="lbl">LINTERNA</div>
+      <div id="battery"><i></i></div>
+    </div>
+  </div>
+
+  <div id="loading" class="overlay">
+    <h1>NIEBLA DEL MAÍZ<span class="sub">SURVIVAL HORROR</span></h1>
+    <div class="bar"><i id="load-bar"></i></div>
+    <div class="pct" id="load-pct">Cargando el mundo…</div>
+  </div>
+
+  <div id="title" class="overlay hidden">
+    <h1>NIEBLA DEL MAÍZ<span class="sub">— UN PUEBLO QUE NO DEBERÍA EXISTIR —</span></h1>
+    <p>Tu coche se averió en un camino de tierra perdido entre los maizales.
+       Las luces de los postes parpadean. Hay gente ahí fuera, quietos, mirando.
+       Encuentra una salida… si es que la hay.</p>
+    <div class="keys">
+      <b>WASD</b> moverse &nbsp;·&nbsp; <b>RATÓN</b> mirar &nbsp;·&nbsp; <b>SHIFT</b> correr<br/>
+      <b>F</b> linterna &nbsp;·&nbsp; <b>E</b> interactuar
+    </div>
+    <button class="play" id="play-btn">ENTRAR</button>
+  </div>
+
+  <div id="flash"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+    }
+  }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
