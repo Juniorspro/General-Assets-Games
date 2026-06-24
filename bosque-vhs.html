@@ -2422,7 +2422,7 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
     {key:'rino', file:'model_56a_-_southern_white_rhino.glb', h:1.9, idle:'Action', walk:'Action', count:2, sp:0.8, hp:6, proc:true},
     {key:'spider',file:'spider_rig.glb', h:0.6, idle:'CINEMA', walk:'CINEMA', count:4, sp:1.1, hp:3, proc:true},
   ];
-  const gl=new GLTFLoader(); const F=[]; const ray2=new THREE.Raycaster(); let spiderFactory=null, giantsSpawned=false;
+  const gl=new GLTFLoader(); const F=[]; const ray2=new THREE.Raycaster(); let spiderFactory=null, giantsSpawned=false; const FAUNA_D2=72*72;   // sólo se dibujan/animan los animales dentro de ~72 m
   function faunaPos(){ const forest=Math.random()<0.7; const x=forest?(Xmin+30+Math.random()*(BEACH_X0-Xmin-60)):(BEACH_X0+150+Math.random()*(DESERT_X1-BEACH_X0-300)); const z=Zmin+30+Math.random()*((Zmax-Zmin)-60); return {x,z}; }
   function addInst(S,g,src,s0,scaleMul,hp,x,z){ const s=s0*scaleMul; const bb=new THREE.Box3().setFromObject(src); const baseY=bb.min.y*s;
     const pick=n=>g.animations.find(c=>c.name.indexOf(n)>=0)||g.animations[0];
@@ -2441,7 +2441,11 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
     if(faunaAtk){ faunaAtk=false; ray2.setFromCamera({x:0,y:0},camera); ray2.far=4.6; let best=null,bd=1e9;
       for(const o of F){ if(o.dead)continue; const h=ray2.intersectObject(o.inst,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=o;} }
       if(best&&bd<4.6){ best.hp--; if(best.hp<=0) killAnimal(best); else { try{chopSound();}catch(e){} } } }
-    for(let k=F.length-1;k>=0;k--){ const o=F[k]; o.mx.update(dt);
+    for(let k=F.length-1;k>=0;k--){ const o=F[k];
+      const ddx=o.inst.position.x-player.pos.x, ddz=o.inst.position.z-player.pos.z; const far=(ddx*ddx+ddz*ddz)>FAUNA_D2;   // OPT: animales lejos no se dibujan ni se animan (eran 11 mallas skinned siempre activas)
+      o.inst.visible=!far;
+      if(far){ if(o.dead){ o.deadT+=dt; if((o.key!=='fox'&&o.key!=='rino')&&o.deadT>=3){ scene.remove(o.inst); F.splice(k,1); } else if((o.key==='fox'||o.key==='rino')&&o.deadT>=60&&!o._butchering){ scene.remove(o.inst); F.splice(k,1); } } else { o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; } if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; } } continue; }
+      o.mx.update(dt);
       if(o.dead){ o.deadT+=dt; o.inst.rotation.z=Math.min(1.45,o.inst.rotation.z+dt*3.2);   // cae de costado (ragdoll simple)
         o.inst.position.y=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY;
         const carcass=(o.key==='fox'||o.key==='rino');   // zorro/rino quedan como carcasa para destazar; araña se desvanece
@@ -2558,7 +2562,10 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
     storyT+=dt; const elev = A_ELEV*Math.sin(storyT*(2*Math.PI/1440)+2.88); setTime(elev,120);   // ciclo real: ~12 min de día y ~12 min de noche (arranca cerca del atardecer → 1ª noche en ~1 min)
     if(nReady){ if(nightFactor>0.55&&!nightSpawned){ nightSpawned=true; gameNight++; spawnNight(); } else if(nightFactor<0.25&&(nightSpawned||NPCS.length)){ npcDayResetFn(); } }   // amanece → se van los NPCs; cuenta de noches (5ª = arañas gigantes)
     if(npcAtk){ npcAtk=false; tryKill(); }
+    const NPC_D2=68*68;
     for(const inst of NPCS){ if(inst.dead){ inst.ragT=(inst.ragT||0)+dt; if(inst.ragT<=3&&inst.rag)stepRag(inst); continue; }   // ragdoll y desaparece a los 3 s
+      { const fdx=player.pos.x-inst.group.position.x, fdz=player.pos.z-inst.group.position.z; if((fdx*fdx+fdz*fdz)>NPC_D2){ inst.group.visible=false;   // lejos: no se dibuja ni se anima
+          inst.wTimer-=dt; if(inst.wTimer<=0){inst.wTimer=2.5+Math.random()*3.5;inst.wAng=Math.random()*6.28;inst._wmove=Math.random()<0.55;} if(inst._wmove){const sp=0.7*dt;inst.group.position.x+=Math.cos(inst.wAng)*sp;inst.group.position.z+=Math.sin(inst.wAng)*sp;} inst.group.position.y=terrainHeight(inst.group.position.x,inst.group.position.z); continue; } inst.group.visible=true; }
       if(inst.mixers[inst.state])inst.mixers[inst.state].update(dt);
       for(const f of inst.flames){ const k=0.65+Math.random()*0.55; f.light.intensity=6*k; f.spr.material.opacity=0.6+0.4*Math.random(); }
       const dx=player.pos.x-inst.group.position.x,dz=player.pos.z-inst.group.position.z,d=Math.hypot(dx,dz)||1; inst.atkCD=Math.max(0,inst.atkCD-dt);
