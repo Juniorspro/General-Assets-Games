@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#0a0e16" />
-<title>Escena · Persecución</title>
+<meta name="theme-color" content="#1a1410" />
+<title>Escena · Persecución (atardecer lluvioso)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 <style>
   *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
-  html,body{ height:100%; overflow:hidden; background:#05080e; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; color:#eef3f8; }
+  html,body{ height:100%; overflow:hidden; background:#0a0806; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; color:#eef3f8; }
   #app{ position:fixed; inset:0; }
   #app canvas{ display:block; width:100%!important; height:100%!important; }
-  #fade{ position:fixed; inset:0; z-index:10; background:#000; opacity:1; pointer-events:none; transition:opacity .1s linear; }
+  #fade{ position:fixed; inset:0; z-index:10; background:#000; opacity:1; pointer-events:none; }
   #cap{ position:fixed; left:0; right:0; bottom:7%; z-index:11; text-align:center; font-size:13px; letter-spacing:.32em; text-transform:uppercase;
-        color:rgba(255,255,255,.82); text-shadow:0 2px 10px rgba(0,0,0,.7); opacity:0; transition:opacity .6s; pointer-events:none; }
+        color:rgba(255,235,210,.85); text-shadow:0 2px 12px rgba(0,0,0,.8); opacity:0; transition:opacity .6s; pointer-events:none; }
   #cap.show{ opacity:1; }
   #bars{ position:fixed; inset:0; z-index:9; pointer-events:none; }
   #bars::before,#bars::after{ content:""; position:absolute; left:0; right:0; height:8%; background:#000; }
@@ -35,136 +35,172 @@
 <script type="module">
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const app=document.getElementById('app');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
+renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=0.92;
 app.appendChild(renderer.domElement);
 
 const scene=new THREE.Scene();
-scene.fog=new THREE.FogExp2(0x9fb6c8,0.0016);
+scene.fog=new THREE.FogExp2(0x6b5848,0.0085);   // atardecer lluvioso: niebla cálida-grisácea, densa
 const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 6000);
 
-/* ---- cielo + luces ---- */
+/* ---- CIELO de ATARDECER + luces cálidas tenues (nublado/lluvia) ---- */
 const sky=new Sky(); sky.scale.setScalar(8000); const su=sky.material.uniforms;
-su.turbidity.value=6; su.rayleigh.value=2.2; su.mieCoefficient.value=0.02; su.mieDirectionalG.value=0.85;
-const sunDir=new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(66), THREE.MathUtils.degToRad(150));
+su.turbidity.value=12; su.rayleigh.value=3.2; su.mieCoefficient.value=0.05; su.mieDirectionalG.value=0.9;
+const sunDir=new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(85), THREE.MathUtils.degToRad(125));   // sol MUY bajo (atardecer)
 su.sunPosition.value.copy(sunDir); scene.add(sky);
-const hemi=new THREE.HemisphereLight(0xcfe4ff,0x556070,0.8); scene.add(hemi);
-const sun=new THREE.DirectionalLight(0xfff2e0,2.6); sun.position.copy(sunDir).multiplyScalar(60); scene.add(sun);
+const hemi=new THREE.HemisphereLight(0x6a5e58,0x241c18,0.6); scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xffae5e,1.7); sun.position.copy(sunDir).multiplyScalar(60); scene.add(sun);   // luz naranja del ocaso
+const fill=new THREE.DirectionalLight(0x5566aa,0.4); fill.position.set(-30,40,-20); scene.add(fill);
 const pmrem=new THREE.PMREMGenerator(renderer);
 try{ const es=new THREE.Scene(); const s2=new Sky(); s2.scale.setScalar(100); const u2=s2.material.uniforms;
-  u2.turbidity.value=6;u2.rayleigh.value=2.2;u2.mieCoefficient.value=0.02;u2.mieDirectionalG.value=0.85;u2.sunPosition.value.copy(sunDir); es.add(s2);
-  scene.environment=pmrem.fromScene(es,0.05).texture; }catch(e){ console.warn(e); }
+  u2.turbidity.value=12;u2.rayleigh.value=3.2;u2.mieCoefficient.value=0.05;u2.mieDirectionalG.value=0.9;u2.sunPosition.value.copy(sunDir); es.add(s2);
+  scene.environment=pmrem.fromScene(es,0.06).texture; }catch(e){ console.warn(e); }
 
-/* ---- GRID de pruebas (debajo) ---- */
-const grid=new THREE.GridHelper(4000,800,0x2a3340,0x18202a); grid.position.y=0.0; scene.add(grid);
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(4000,4000),new THREE.MeshStandardMaterial({color:0x10161e,roughness:1,metalness:0}));
-ground.rotation.x=-Math.PI/2; ground.position.y=-0.02; scene.add(ground);
+/* ---- SUELO con textura (seco) + GRID ---- */
+const grid=new THREE.GridHelper(4000,800,0x322820,0x1c1611); grid.position.y=0.005; scene.add(grid);
+const groundMat=new THREE.MeshStandardMaterial({color:0x8a7250,roughness:1,metalness:0});   // tierra seca
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(4000,4000),groundMat); ground.rotation.x=-Math.PI/2; ground.position.y=-0.02; ground.receiveShadow=true; scene.add(ground);
 
-/* ---- CARRETERA PBR (textura del bosque) sobre el grid, bien LARGA ---- */
 const ROADLEN=4000, ROADW=15;
-const roadMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,metalness:0});
+const roadMat=new THREE.MeshStandardMaterial({color:0xbfc4c8,roughness:0.55,metalness:0.0});   // asfalto mojado (más glossy)
 const road=new THREE.Mesh(new THREE.PlaneGeometry(ROADW,ROADLEN), roadMat);
 road.rotation.x=-Math.PI/2; road.position.set(0,0.02,0); scene.add(road);
-const lineMat=new THREE.MeshBasicMaterial({color:0xf0e6c0});
-for(let i=-ROADLEN/2;i<ROADLEN/2;i+=10){ const dash=new THREE.Mesh(new THREE.PlaneGeometry(0.35,4),lineMat); dash.rotation.x=-Math.PI/2; dash.position.set(0,0.035,i); scene.add(dash); }
-const RTEX='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@bf015fa/assets/textures/v2/';
-const tl=new THREE.TextureLoader(); tl.crossOrigin='anonymous';
-function rtex(f,srgb){ return new Promise(res=>tl.load(RTEX+f,t=>{ t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(2,ROADLEN/8); t.anisotropy=8; res(t); }, undefined, ()=>res(null))); }
-Promise.all([rtex('road_col.jpg',true),rtex('road_nrm.jpg',false),rtex('road_rgh.jpg',false)]).then(([c,n,r])=>{
-  if(c)roadMat.map=c; if(n){roadMat.normalMap=n;roadMat.normalScale.set(1.2,1.2);} if(r)roadMat.roughnessMap=r; roadMat.needsUpdate=true; });
+const lineMat=new THREE.MeshBasicMaterial({color:0xd8cda0});
+for(let i=-ROADLEN/2;i<ROADLEN/2;i+=10){ const d=new THREE.Mesh(new THREE.PlaneGeometry(0.32,4),lineMat); d.rotation.x=-Math.PI/2; d.position.set(0,0.035,i); scene.add(d); }
 
-/* ---- AUTO procedural ---- */
-function makeWheel(){ const g=new THREE.Mesh(new THREE.CylinderGeometry(0.36,0.36,0.28,18), new THREE.MeshStandardMaterial({color:0x101013,roughness:0.8,metalness:0.1})); g.rotation.z=Math.PI/2;
-  const rim=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.3,10), new THREE.MeshStandardMaterial({color:0xcfd4da,roughness:0.4,metalness:0.8})); rim.rotation.z=Math.PI/2; g.add(rim); return g; }
+const GH='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d72240f/assets/textures/';
+const V2='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@bf015fa/assets/textures/v2/';
+const tl=new THREE.TextureLoader(); tl.crossOrigin='anonymous';
+function tex(base,f,srgb,rep){ return new Promise(res=>tl.load(base+f,t=>{ t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; if(rep)t.repeat.set(rep[0],rep[1]); t.anisotropy=8; res(t); }, undefined, ()=>res(null))); }
+// suelo seco
+Promise.all([tex(GH,'ground_col.jpg',true,[120,120]),tex(GH,'ground_nrm.jpg',false,[120,120]),tex(GH,'ground_rgh.jpg',false,[120,120])]).then(([c,n,r])=>{
+  if(c){groundMat.map=c;groundMat.color.set(0xa88a60);} if(n){groundMat.normalMap=n;groundMat.normalScale.set(1,1);} if(r)groundMat.roughnessMap=r; groundMat.needsUpdate=true; });
+// carretera PBR
+Promise.all([tex(V2,'road_col.jpg',true,[2,ROADLEN/8]),tex(V2,'road_nrm.jpg',false,[2,ROADLEN/8]),tex(V2,'road_rgh.jpg',false,[2,ROADLEN/8])]).then(([c,n,r])=>{
+  if(c){roadMat.map=c;roadMat.color.set(0x9fa6ab);} if(n){roadMat.normalMap=n;roadMat.normalScale.set(1,1);} roadMat.needsUpdate=true; });
+
+/* ---- ÁRBOLES SECOS sin hojas (geometría fusionada = barato) ---- */
+const barkMat=new THREE.MeshStandardMaterial({color:0x4d3b2a,roughness:0.95,metalness:0});
+(function buildDeadTrees(){
+  const geos=[]; const rng=mulberryLocal(20260624);
+  const _m=new THREE.Matrix4(), _q=new THREE.Quaternion(), _up=new THREE.Vector3(0,1,0), _ax=new THREE.Vector3();
+  function branch(parentEnd, dir, len, rad){ const seg=new THREE.CylinderGeometry(rad*0.6,rad,len,5); seg.translate(0,len/2,0);
+    _q.setFromUnitVectors(_up, dir.clone().normalize()); _m.makeRotationFromQuaternion(_q); _m.setPosition(parentEnd.x,parentEnd.y,parentEnd.z); seg.applyMatrix4(_m); geos.push(seg);
+    return parentEnd.clone().add(dir.clone().multiplyScalar(len)); }
+  for(let i=0;i<150;i++){ const side=(i%2)?1:-1; const x=side*(ROADW/2+4+rng()*30); const z=-ROADLEN/2+rng()*ROADLEN;
+    const base=new THREE.Vector3(x,0,z); const h=4+rng()*5;
+    const top=branch(base,new THREE.Vector3((rng()-0.5)*0.2,1,(rng()-0.5)*0.2),h,0.22+rng()*0.1);
+    const nb=3+(rng()*4|0); for(let b=0;b<nb;b++){ const a=rng()*6.28; const dir=new THREE.Vector3(Math.cos(a)*0.7,0.6+rng()*0.5,Math.sin(a)*0.7); const bl=1.5+rng()*2.2; const e=branch(top.clone().add(new THREE.Vector3(0,-rng()*1.2,0)),dir,bl,0.09);
+      if(rng()<0.6){ const a2=rng()*6.28; branch(e,new THREE.Vector3(Math.cos(a2)*0.6,0.7,Math.sin(a2)*0.6),0.8+rng()*1.0,0.05); } } }
+  const merged=mergeGeometries(geos,false); const m=new THREE.Mesh(merged,barkMat); m.castShadow=true; scene.add(m);
+})();
+function mulberryLocal(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+/* ---- AUTO procedural CON INTERIOR (cabina hueca, volante adentro) ---- */
+function makeWheel(){ const g=new THREE.Mesh(new THREE.CylinderGeometry(0.36,0.36,0.28,18), new THREE.MeshStandardMaterial({color:0x0d0d10,roughness:0.85,metalness:0.1})); g.rotation.z=Math.PI/2;
+  const rim=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.18,0.3,10), new THREE.MeshStandardMaterial({color:0xc7ccd2,roughness:0.4,metalness:0.85})); rim.rotation.z=Math.PI/2; g.add(rim); return g; }
 function makeCar(bodyColor, police){
   const car=new THREE.Group();
-  const paint=new THREE.MeshStandardMaterial({color:bodyColor,roughness:0.28,metalness:0.55,envMapIntensity:1.1});
-  const glass=new THREE.MeshStandardMaterial({color:0x10141c,roughness:0.08,metalness:0.2,envMapIntensity:1.4});
-  const body=new THREE.Mesh(new THREE.BoxGeometry(2.0,0.7,4.4),paint); body.position.y=0.62; car.add(body);
-  const bevel=new THREE.Mesh(new THREE.BoxGeometry(1.96,0.34,2.0),paint); bevel.position.set(0,1.05,-0.1); car.add(bevel);
-  const cabin=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.5,1.9),glass); cabin.position.set(0,1.12,-0.1); car.add(cabin);
-  const nose=new THREE.Mesh(new THREE.BoxGeometry(1.9,0.4,0.6),paint); nose.position.set(0,0.6,2.2); car.add(nose);
-  const hl=new THREE.MeshStandardMaterial({color:0xfff4d0,emissive:0xfff0c0,emissiveIntensity:1.4,roughness:0.3});
-  for(const sx of [-0.7,0.7]){ const f=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.22,0.1),hl); f.position.set(sx,0.62,2.5); car.add(f); }
-  const tlm=new THREE.MeshStandardMaterial({color:0xff3020,emissive:0xff2010,emissiveIntensity:1.0});
-  for(const sx of [-0.7,0.7]){ const f=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.2,0.1),tlm); f.position.set(sx,0.62,-2.2); car.add(f); }
-  const wheels=[]; const wp=[[-1.0,0.36,1.4],[1.0,0.36,1.4],[-1.0,0.36,-1.4],[1.0,0.36,-1.4]];
-  for(const p of wp){ const w=makeWheel(); w.position.set(p[0],p[1],p[2]); car.add(w); wheels.push(w); }
+  const paint=new THREE.MeshStandardMaterial({color:bodyColor,roughness:0.32,metalness:0.5,envMapIntensity:1.0});
+  const glass=new THREE.MeshStandardMaterial({color:0x121821,roughness:0.06,metalness:0.1,transparent:true,opacity:0.45,envMapIntensity:1.5,side:THREE.DoubleSide});
+  const dark=new THREE.MeshStandardMaterial({color:0x14171c,roughness:0.6,metalness:0.3});
+  // carrocería baja
+  car.add(box(2.0,0.45,4.5,paint,0,0.5,0));
+  car.add(box(2.04,0.5,2.6,paint,0,0.78,0.0));   // costados de la cabina (bajos)
+  car.add(box(1.9,0.42,0.7,paint,0,0.66,2.15));  // capó
+  car.add(box(1.9,0.42,0.7,paint,0,0.66,-2.15)); // baúl
+  // marco de cabina: 4 pilares + techo (cabina HUECA → no tapa al conductor)
+  for(const px of [-0.92,0.92]) for(const pz of [0.95,-0.85]){ car.add(box(0.1,0.62,0.1,paint,px,1.25,pz)); }
+  car.add(box(1.9,0.1,2.0,paint,0,1.58,0.05));   // techo
+  // vidrios
+  const wsh=box(1.8,0.66,0.08,glass,0,1.2,1.0); wsh.rotation.x=0.35; car.add(wsh);  // parabrisas
+  car.add(box(1.8,0.62,0.08,glass,0,1.2,-0.95));                                     // luneta
+  for(const px of [-0.94,0.94]){ car.add(box(0.08,0.55,1.7,glass,px,1.22,0.05)); }   // ventanillas
+  // INTERIOR (visible desde el conductor)
+  car.add(box(1.7,0.28,0.5,dark,0,0.95,0.78));   // tablero
+  car.add(box(0.6,0.55,0.5,dark,-0.42,0.92,-0.55)); car.add(box(0.6,0.55,0.5,dark,0.42,0.92,-0.55)); // asientos
+  // VOLANTE como parte del auto (no se atraviesa nada)
+  const steer=new THREE.Group(); steer.position.set(-0.42,1.02,0.55); steer.rotation.x=-0.5;
+  const wm=new THREE.MeshStandardMaterial({color:0x16181d,roughness:0.5,metalness:0.3});
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(0.20,0.035,10,28),wm); steer.add(ring);
+  for(const a of [-1,1]){ const sp=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.025,0.025),wm); sp.position.x=a*0.1; steer.add(sp); }
+  steer.add(new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.04,12),wm));
+  car.add(steer); car.userData.steer=steer;
+  // manos = dos cilindros agarrando el volante
+  const skin=new THREE.MeshStandardMaterial({color:0xc98e63,roughness:0.7,metalness:0});
+  for(const a of [-1,1]){ const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.058,0.42,10),skin); arm.position.set(-0.42+a*0.18,0.86,0.42); arm.rotation.set(-0.9,0,a*0.5); car.add(arm); }
+  // faros / luces traseras
+  const hlm=new THREE.MeshStandardMaterial({color:0xfff4d0,emissive:0xfff0c0,emissiveIntensity:2.2,roughness:0.3});
+  for(const sx of [-0.7,0.7]){ car.add(meshE(0.42,0.22,0.1,hlm,sx,0.6,2.5)); }
+  const tlm=new THREE.MeshStandardMaterial({color:0xff3020,emissive:0xff2010,emissiveIntensity:1.4});
+  for(const sx of [-0.7,0.7]) car.add(meshE(0.42,0.2,0.1,tlm,sx,0.6,-2.3));
+  const wheels=[]; for(const p of [[-1.0,0.36,1.5],[1.0,0.36,1.5],[-1.0,0.36,-1.5],[1.0,0.36,-1.5]]){ const w=makeWheel(); w.position.set(p[0],p[1],p[2]); car.add(w); wheels.push(w); }
   car.userData.wheels=wheels;
-  if(police){ const bar=new THREE.Group(); bar.position.set(0,1.45,-0.1);
-    const red=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.18,0.4),new THREE.MeshStandardMaterial({color:0xff1020,emissive:0xff0000,emissiveIntensity:2})); red.position.x=-0.35; bar.add(red);
-    const blu=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.18,0.4),new THREE.MeshStandardMaterial({color:0x2040ff,emissive:0x1030ff,emissiveIntensity:2})); blu.position.x=0.35; bar.add(blu);
-    car.add(bar); car.userData.lights={red,blu};
-    const rL=new THREE.PointLight(0xff2020,0,14,2); rL.position.set(-0.35,1.6,0); car.add(rL);
-    const bL=new THREE.PointLight(0x2040ff,0,14,2); bL.position.set(0.35,1.6,0); car.add(bL); car.userData.pl={rL,bL}; }
+  if(police){ const bar=new THREE.Group(); bar.position.set(0,1.66,0.05);
+    const red=meshE(0.5,0.16,0.4,new THREE.MeshStandardMaterial({color:0xff1020,emissive:0xff0000,emissiveIntensity:2}),-0.32,0,0);
+    const blu=meshE(0.5,0.16,0.4,new THREE.MeshStandardMaterial({color:0x2040ff,emissive:0x1030ff,emissiveIntensity:2}),0.32,0,0);
+    bar.add(red); bar.add(blu); car.add(bar); car.userData.lights={red:red.material,blu:blu.material};
+    const rL=new THREE.PointLight(0xff2020,0,16,2); rL.position.set(-0.32,1.8,0); car.add(rL);
+    const bL=new THREE.PointLight(0x2040ff,0,16,2); bL.position.set(0.32,1.8,0); car.add(bL); car.userData.pl={rL,bL}; }
   car.traverse(o=>{ if(o.isMesh)o.castShadow=true; });
   return car;
 }
-const fugitive=makeCar(0xc0392b,false); scene.add(fugitive);
-const cop1=makeCar(0xf4f6f8,true); scene.add(cop1);
-const cop2=makeCar(0x2a3550,true); scene.add(cop2);
+function box(w,h,d,m,x,y,z){ const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m); e.position.set(x,y,z); return e; }
+function meshE(w,h,d,m,x,y,z){ const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m); e.position.set(x,y,z); return e; }
+const fugitive=makeCar(0xb53024,false); scene.add(fugitive);
+const cop1=makeCar(0xeef1f4,true); scene.add(cop1);
+const cop2=makeCar(0x26314a,true); scene.add(cop2);
 
-/* ---- VOLANTE (interior) montado en la cámara: dos cilindros agarrándolo ---- */
-const wheelRig=new THREE.Group();
-const wheelMat=new THREE.MeshStandardMaterial({color:0x16181d,roughness:0.5,metalness:0.3});
-const sw=new THREE.Mesh(new THREE.TorusGeometry(0.26,0.045,12,32),wheelMat); wheelRig.add(sw);
-const hub=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,0.05,16),wheelMat); hub.rotation.x=Math.PI/2; wheelRig.add(hub);
-for(const a of [-1,1]){ const sp=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.03,0.03),wheelMat); sp.position.x=a*0.13; wheelRig.add(sp); }
-const armMat=new THREE.MeshStandardMaterial({color:0x6b4a32,roughness:0.7,metalness:0});
-const armL=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.06,0.5,12),armMat); armL.position.set(-0.22,-0.18,0.1); armL.rotation.z=0.7; wheelRig.add(armL);
-const armR=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.06,0.5,12),armMat); armR.position.set(0.22,-0.18,0.1); armR.rotation.z=-0.7; wheelRig.add(armR);
-wheelRig.position.set(0,-0.32,-0.62); wheelRig.visible=false; camera.add(wheelRig); scene.add(camera);
+/* ---- LLUVIA (rayas que caen, siguen a la cámara) ---- */
+const RAINN=2000; const rainPos=new Float32Array(RAINN*6);
+for(let i=0;i<RAINN;i++){ const x=(Math.random()-0.5)*90, y=Math.random()*45, z=(Math.random()-0.5)*90, ln=0.7+Math.random()*0.6;
+  rainPos[i*6]=x; rainPos[i*6+1]=y; rainPos[i*6+2]=z; rainPos[i*6+3]=x+0.25; rainPos[i*6+4]=y-ln*5; rainPos[i*6+5]=z; }
+const rainGeo=new THREE.BufferGeometry(); rainGeo.setAttribute('position',new THREE.BufferAttribute(rainPos,3));
+const rain=new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({color:0xaab6c4,transparent:true,opacity:0.38})); rain.frustumCulled=false; scene.add(rain);
+function rainTick(dt){ const p=rainGeo.attributes.position.array; const fall=58*dt;
+  for(let i=0;i<RAINN;i++){ const a=i*6; p[a+1]-=fall; p[a+4]-=fall; if(p[a+4]<0){ p[a+1]+=45; p[a+4]+=45; } }
+  rainGeo.attributes.position.needsUpdate=true; rain.position.set(camera.position.x,0,camera.position.z); }
 
-/* ---- estado de la persecución ---- */
-const SPEED=42; let carZ=-ROADLEN/2+60;
-const _tmp=new THREE.Vector3();
+/* ---- estado + coreografía ---- */
+const SPEED=42; let carZ=-ROADLEN/2+60; const _tmp=new THREE.Vector3(), _seat=new THREE.Vector3(), _tgt=new THREE.Vector3();
 function placeCars(t,dt){
-  carZ+= SPEED*dt;
-  const weave=Math.sin(t*1.1)*1.4;
-  fugitive.position.set(weave,0,carZ); fugitive.rotation.y=Math.PI + Math.cos(t*1.1)*0.12;
-  cop1.position.set(weave*0.6-1.6,0,carZ-9+Math.sin(t*1.7)*1.0); cop1.rotation.y=Math.PI+Math.cos(t*1.7)*0.1;
-  cop2.position.set(weave*0.6+1.8,0,carZ-14+Math.sin(t*1.4+1)*1.0); cop2.rotation.y=Math.PI+Math.cos(t*1.4)*0.1;
+  carZ+=SPEED*dt; const weave=Math.sin(t*1.1)*1.4;
+  fugitive.position.set(weave,0,carZ); fugitive.rotation.y=Math.cos(t*1.1)*0.10;
+  cop1.position.set(weave*0.6-1.7,0,carZ-9+Math.sin(t*1.7)); cop1.rotation.y=Math.cos(t*1.7)*0.09;
+  cop2.position.set(weave*0.6+1.9,0,carZ-14+Math.sin(t*1.4+1)); cop2.rotation.y=Math.cos(t*1.4)*0.09;
   for(const c of [fugitive,cop1,cop2]) for(const w of c.userData.wheels) w.rotation.x -= SPEED*dt*2.6;
+  if(fugitive.userData.steer) fugitive.userData.steer.rotation.z=-Math.sin(t*1.1)*0.45;
   const blink=(Math.sin(t*16)>0);
-  for(const c of [cop1,cop2]){ const L=c.userData.lights, P=c.userData.pl; if(L){ L.red.material.emissiveIntensity=blink?3:0.2; L.blu.material.emissiveIntensity=blink?0.2:3; } if(P){ P.rL.intensity=blink?8:0; P.bL.intensity=blink?0:8; } }
+  for(const c of [cop1,cop2]){ const L=c.userData.lights, P=c.userData.pl; if(L){ L.red.emissiveIntensity=blink?3:0.2; L.blu.emissiveIntensity=blink?0.2:3; } if(P){ P.rL.intensity=blink?9:0; P.bL.intensity=blink?0:9; } }
 }
-
-/* ---- coreografía de cámara (procedural, en bucle) ---- */
 const fadeEl=document.getElementById('fade'), capEl=document.getElementById('cap');
 function setFov(f){ if(Math.abs(camera.fov-f)>0.01){ camera.fov=f; camera.updateProjectionMatrix(); } }
 function lookFrom(px,py,pz, tx,ty,tz){ camera.position.set(px,py,pz); _tmp.set(tx,ty,tz); camera.lookAt(_tmp); }
 const CYCLE=17.0;
-function director(ct){
+function director(ct,t){
   const fx=fugitive.position.x, fZ=carZ;
-  if(ct<4.3){                       // 1) lateral siguiendo la persecución (FOV normal)
-    setFov(52); const k=ct/4.3; lookFrom(fx-9, 2.6, fZ-6 + k*4, fx, 1.0, fZ-4);
-  } else if(ct<7.4){                // 2) FOV EXTREMO por delante del perseguido (viene hacia la cámara)
-    setFov(112); lookFrom(fx, 0.7, fZ+7.0, fx, 0.9, fZ);
-  } else if(ct<11.2){               // 3) detrás de la policía, 3ra persona, FOV normal
-    setFov(56); lookFrom(cop2.position.x, 3.0, cop2.position.z-7.5, fx, 1.0, fZ);
-  } else if(ct<15.2){               // 4) DENTRO del fugitivo: volante + mira a los lados, FOV grande
-    setFov(86); wheelRig.visible=true;
-    const headYaw=Math.sin(ct*1.6)*0.5;
-    const cx=fugitive.position.x, cz=fZ;
-    camera.position.set(cx, 1.18, cz-0.5);
-    _tmp.set(cx+Math.sin(headYaw)*6, 1.05, cz+Math.cos(headYaw)*6); camera.lookAt(_tmp);
-    sw.rotation.z = -Math.sin(ct*1.1)*0.5;
+  if(ct<4.3){ setFov(50); const k=ct/4.3; lookFrom(fx-9,2.6,fZ-6+k*4, fx,1.1,fZ-3); }
+  else if(ct<7.4){ setFov(110); lookFrom(fx,0.8,fZ+7.5, fx,1.0,fZ); }                       // FOV extremo de frente
+  else if(ct<11.2){ setFov(56); lookFrom(cop2.position.x,3.0,cop2.position.z-7.5, fx,1.1,fZ); } // 3ra persona policía
+  else if(ct<15.2){ setFov(88);                                                              // INTERIOR del fugitivo
+    fugitive.updateMatrixWorld(true);
+    _seat.set(-0.42,1.18,0.0); fugitive.localToWorld(_seat); camera.position.copy(_seat);
+    const hy=Math.sin(ct*1.7)*0.55; _tgt.set(-0.42+Math.sin(hy)*5,1.05,0.0+Math.cos(hy)*5); fugitive.localToWorld(_tgt); camera.lookAt(_tgt);
   } else { setFov(70); }
-  if(!(ct>=11.2&&ct<15.2)) wheelRig.visible=false;
   let a=0; if(ct<1.1) a=1-ct/1.1; else if(ct>15.4) a=(ct-15.4)/1.2; fadeEl.style.opacity=Math.max(0,Math.min(1,a)).toFixed(3);
   if(ct>13.6&&ct<15.4) capEl.classList.add('show'); else capEl.classList.remove('show');
 }
 
-/* ---- loop ---- */
 addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
 renderer.setSize(innerWidth,innerHeight);
-const clock=new THREE.Clock(); let ct=0, t=0;
+const clock=new THREE.Clock(); let ct=0,t=0;
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); t+=dt; ct+=dt;
   if(ct>=CYCLE){ ct=0; carZ=-ROADLEN/2+60; }
-  placeCars(t,dt); director(ct);
+  placeCars(t,dt); director(ct,t); rainTick(dt);
   renderer.render(scene,camera);
 }
 animate();
