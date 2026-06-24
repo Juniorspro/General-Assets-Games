@@ -631,7 +631,7 @@ const Q=PRESETS[DEV.tier];
 const QUALITY={
   vlow:  {radial:4, shadow:0,    shadowRes:256, leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
   // 3 modos visibles (Bajo/Medio/Alto): TODOS a resolución 100% (res:1.0); la resolución sólo se baja en Ajustes avanzados.
-  low:   {radial:5, shadow:0,    shadowRes:256, leaf:100, grassN:300, plantN:26, rockN:6,  density:7,  streamR:2, dpr:1.5, res:0.8, bloom:false, aa:false, rdist:100, chunkBudget:1},   // BAJO: 80% de resolución, SIN sombras ni reflejos, vegetación quieta, PBR plano (texturas), culling agresivo (máx. rendimiento)
+  low:   {radial:5, shadow:512,  shadowRes:512, leaf:100, grassN:300, plantN:26, rockN:6,  density:7,  streamR:2, dpr:1.5, res:0.8, bloom:false, aa:false, rdist:100, chunkBudget:1},   // BAJO: sombras dinámicas de baja calidad (512, cada 3 frames), 80% res, SIN bloom ni reflejos, PBR plano
   medium:{radial:6, shadow:512,  shadowRes:512, leaf:160, grassN:480, plantN:55, rockN:10, density:7,  streamR:2, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:150, chunkBudget:1},
   high:  {radial:6, shadow:768,  shadowRes:768, leaf:220, grassN:820, plantN:85, rockN:13, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:190, chunkBudget:1},
   vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:240, chunkBudget:2},
@@ -1170,12 +1170,12 @@ function upgradeNearChunk(dt){
 }
 
 /* ===================== POST-PROCESO REALISTA (AgX + bloom sutil + SMAA + MSAA) ===================== */
-let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null,n8aoPass=null,vignetteEffect=null;
+let composer=null,bloomEffect=null,hueSat=null,smaaPass=null,vhsPass=null,n8aoPass=null,vignetteEffect=null,toneEffect=null,mainEffectPass=null;
 let resScale=1.0, aaOn=true, camShake=0.4, reliefScale=2.5, exposure=1.0, menuResScale=1.0, digShake=0;
 let gfxNormalMul=1, gfxReflectMul=1;   // modo gráfico: 0 aplana el PBR (sin relieve) · reflejos más suaves
 // ---- MODO GRÁFICO (Bajo/Medio/Alto) ----  TODOS a 100% de resolución; cambia el ESTILO de render, no la resolución
 const GFXMODES={
-  low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.0,  matte:true,  cull:true,  folDist:0.7, leafDist:0.7, env:false},   // CERO reflejos/brillo: todo mate, solo texturas PBR (albedo+normal)
+  low:   {phaseShadows:false, leafFlutter:0, veg:0, normal:0.0, reflect:0.0,  matte:true,  cull:true,  folDist:0.7, leafDist:0.7, env:false},   // sombras DINÁMICAS de baja calidad · CERO reflejos/brillo (mate, solo texturas PBR)
   medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.0,  matte:true,  cull:true,  folDist:1.0, leafDist:1.0, env:false},   // CERO reflejos/brillo: todo mate + vegetación + sombras pintadas
   high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:0.28, matte:false, cull:false, folDist:1.0, leafDist:1.0, env:true},    // único modo con reflejos (suaves)
 };
@@ -1229,6 +1229,10 @@ function cullDynamic(rd2){
   if(typeof logs!=='undefined') for(let i=0;i<logs.length;i++){ const L=logs[i]&&logs[i].m; if(!L)continue; const ddx=L.position.x-player.pos.x,ddz=L.position.z-player.pos.z; L.visible=(ddx*ddx+ddz*ddz)<rd2; }
 }
 let cycleOn=true, cyclePhase=0, envCycleTimer=0, lastEnvElev=999; const A_ELEV=34, THETA0=0.15;   // arranca al AMANECER (sol bajo subiendo → mañana → mediodía), ciclo día/noche 24 min
+function buildEffectPass(withBloom){ if(!composer)return;   // en Bajo SIN bloom: evita el blur mipmap por frame (puro coste de GPU aunque la intensidad sea 0)
+  if(mainEffectPass){ try{ composer.removePass(mainEffectPass); mainEffectPass.dispose&&mainEffectPass.dispose(); }catch(e){} }
+  const fx = withBloom ? [bloomEffect,hueSat,toneEffect,vignetteEffect] : [hueSat,toneEffect,vignetteEffect];
+  mainEffectPass=new EffectPass(camera,...fx); composer.addPass(mainEffectPass); }
 function buildComposer(){
   composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
   composer.addPass(new RenderPass(scene,camera));
@@ -1240,9 +1244,9 @@ function buildComposer(){
   }catch(e){ console.warn('N8AO init falló:',e); n8aoPass=null; } }
   bloomEffect=new BloomEffect({intensity:0.2,luminanceThreshold:0.88,luminanceSmoothing:0.25,mipmapBlur:true,radius:0.6});
   hueSat=new HueSaturationEffect({saturation:0,hue:0});
-  const tone=new ToneMappingEffect({mode:ToneMappingMode.AGX});      // tonemap filmico realista
+  toneEffect=new ToneMappingEffect({mode:ToneMappingMode.AGX});      // tonemap filmico realista
   vignetteEffect=new VignetteEffect({offset:0.32,darkness:0.62});    // viñeta cinematográfica (bordes oscurecidos) en TODOS los gráficos
-  composer.addPass(new EffectPass(camera,bloomEffect,hueSat,tone,vignetteEffect));
+  buildEffectPass(true);   // arranca con bloom; setQuality lo reconstruye sin bloom en Bajo
   // SIN ANTIALIASING en ningún modo: no se agrega el pase SMAA. (Este EffectPass queda último → es el que dibuja a pantalla.)
   smaaPass=null;
 }
@@ -2808,7 +2812,7 @@ function setQuality(t){
   }
   else dirLight.castShadow=false;
   DPRCAP=qual.dpr; resScale=qual.res; if($('res')){$('res').value=Math.round(qual.res*100);$('resVal').textContent=Math.round(qual.res*100)+'%';}
-  if(bloomEffect)bloomEffect.intensity=qual.bloom?0.2:0.0;
+  if(bloomEffect)bloomEffect.intensity=qual.bloom?0.2:0.0; buildEffectPass(!!qual.bloom);   // reconstruye el pase: sin bloom en Bajo (ahorra GPU)
   aaOn=qual.aa; if(smaaPass)smaaPass.enabled=aaOn; if($('aaSw'))$('aaSw').classList.toggle('on',aaOn);
   const useSsao=(t==='medium'||t==='high'||t==='vhigh');   // SSAO (N8AO) en medio y superiores
   if(n8aoPass)n8aoPass.enabled=useSsao;
