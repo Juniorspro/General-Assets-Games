@@ -1953,6 +1953,11 @@ function buildNote(){ const g=new THREE.Group();   // HOJA DE PAPEL (nota de la 
   const p=new THREE.Mesh(new THREE.PlaneGeometry(0.44,0.58),pm); p.rotation.set(-0.25,0,0.04); g.add(p);
   const lm=new THREE.MeshBasicMaterial({color:0x6b5a3a}); for(let i=0;i<5;i++){ const l=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.018),lm); l.position.set(0,0.18-i*0.075,0.002); l.rotation.set(-0.25,0,0.04); g.add(l); }
   return g; }
+function buildMeat(cooked){ const g=new THREE.Group();   // trozo de carne (cruda rojiza / asada marrón)
+  const m=new THREE.MeshStandardMaterial({color:cooked?0x6e3a1c:0xb04a4a,roughness:0.7,metalness:0});
+  const b=new THREE.Mesh(new THREE.IcosahedronGeometry(0.2,1),m); b.scale.set(1.25,0.7,0.9); b.castShadow=true; g.add(b);
+  const bone=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,0.34,8),new THREE.MeshStandardMaterial({color:0xeee2cf,roughness:0.8})); bone.rotation.z=1.2; bone.position.set(0.18,0.02,0); g.add(bone);
+  return g; }
 
 /* ---- GLB ---- */
 const GLBP='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@86aae18/';
@@ -1983,7 +1988,7 @@ const MODELS={ hammer:buildHammer, table:buildTable, pala:glbModel('pala',()=>bu
   cuchipiedra:()=>buildKnifeV(stoneMat), cuchiafil:()=>buildKnifeV(metalMat),
   flechamad:()=>buildArrows(woodDark), flechapiedra:()=>buildArrows(stoneMat), flechaafil:()=>buildArrows(metalMat),
   antorcha:buildTorch, azadamad:()=>buildHoe(woodDark), azadapiedra:()=>buildHoe(stoneMat),
-  baldemad:()=>buildBucket(woodConsMat), baldechapa:()=>buildBucket(chapaMat), baldeagua:buildFullBucket, nota:buildNote,
+  baldemad:()=>buildBucket(woodConsMat), baldechapa:()=>buildBucket(chapaMat), baldeagua:buildFullBucket, nota:buildNote, carne:()=>buildMeat(false), carneasada:()=>buildMeat(true),
   cama:glbModel('cama',buildTable), horno:mHorno, silla:mSilla, bidon:mBidon, perchero:mPerchero, fogata:mFogata, conserv:mConserv, recagua:mRecagua,
   pmad:()=>consPiece('wall',woodConsMat), smad:()=>consPiece('floor',woodConsMat), tmad:()=>consPiece('roofflat',woodConsMat), imad:()=>consPiece('roof',woodConsMat), vmad:()=>consPiece('window',woodConsMat), dmad:()=>consPiece('door',woodConsMat),
   pcha:()=>consPiece('wall',chapaMat), scha:()=>consPiece('floor',chapaMat), tcha:()=>consPiece('roofflat',chapaMat), vcha:()=>consPiece('window',chapaMat), dcha:()=>consPiece('door',chapaMat),
@@ -2006,7 +2011,7 @@ const VIEW={
   arco:{s:0.55,...P_BOW}, flechamad:{s:0.6,...P_HOLD}, flechapiedra:{s:0.6,...P_HOLD}, flechaafil:{s:0.6,...P_HOLD},
   picomad:{s:0.46,...P_SWING}, picopiedra:{s:0.46,...P_SWING}, picoafil:{s:0.46,...P_SWING},
   antorcha:{s:0.6,...P_HOLD}, azadamad:{s:0.46,...P_SWING}, azadapiedra:{s:0.46,...P_SWING},
-  baldemad:{s:0.8,...P_HOLD}, baldechapa:{s:0.8,...P_HOLD}, baldeagua:{s:0.8,...P_HOLD}, nota:{s:0.85,...P_HOLD}
+  baldemad:{s:0.8,...P_HOLD}, baldechapa:{s:0.8,...P_HOLD}, baldeagua:{s:0.8,...P_HOLD}, nota:{s:0.85,...P_HOLD}, carne:{s:0.8,...P_HOLD}, carneasada:{s:0.8,...P_HOLD}
 };
 let swapT=-1;   // animación de cambio de objeto (baja y vuelve a subir)
 function equipItem(id){
@@ -2023,7 +2028,7 @@ function equipItem(id){
     if(id==='botella') setupHeldMolotov(); else molotovHeld=false; }
   else { fpRig.visible=false; molotovHeld=false; fpAxe.visible=false; }   // sin ítem equipado → MANOS VACÍAS (ya no vuelve el hacha vieja)
   if(id!=='botella'&&typeof glassMat!=='undefined') glassMat.emissiveIntensity=0;   // al guardar la botella, deja de brillar
-  try{ const fb=$('flash'); if(fb) fb.textContent=(id==='baldeagua')?'💧':(id==='nota')?'📄':'🪓'; }catch(e){}   // balde lleno → GOTA (beber) · nota → HOJA (leer)
+  try{ const fb=$('flash'); if(fb) fb.textContent=(id==='baldeagua')?'💧':(id==='nota')?'📄':(id==='carne'||id==='carneasada')?'🍖':'🪓'; }catch(e){}   // balde→GOTA · nota→HOJA · carne→COMER
 }
 let wswing={active:false,t:0,hit:false};
 const THRUST=new Set(['spear','lanzapiedra','lanzaafil']);
@@ -2061,6 +2066,8 @@ const RECIPES=[
   {id:'baldechapa', tab:'tools',needTable:true,placeable:false},
   {id:'baldeagua',  tab:'tools',needTable:false,placeable:false,bagOnly:true},   // balde LLENO: no se craftea, se obtiene del recolector; se bebe (+25% sed)
   {id:'nota',       tab:'tools',needTable:false,placeable:false,bagOnly:true},   // nota de la historia: no se craftea; el botón de acción la lee
+  {id:'carne',      tab:'tools',needTable:false,placeable:false,bagOnly:true},   // carne cruda (de animales/NPC): se cocina en el horno
+  {id:'carneasada', tab:'tools',needTable:false,placeable:false,bagOnly:true},   // carne asada: se come (+hambre)
   {id:'cama',tab:'furniture',needTable:true,placeable:true},
   {id:'horno',tab:'furniture',needTable:true,placeable:true},
   {id:'silla',tab:'furniture',needTable:true,placeable:true},
@@ -2086,13 +2093,13 @@ const TABS=['weapons','furniture','tools','construction'];
 const BAG_TABS=['weapons','furniture','tools','construction','materials'];   // la mochila además tiene "Materiales"
 let activeTab='tools';
 // inventario de MATERIALES en bruto (ramas/madera, hilos/cuerda, piedra, etc.). 'madera' usa el contador de leña (woodCount).
-const mats={piedra:0,metal:0,cuerda:0,tela:0,vidrio:0,chapa:0,barro:0,carbon:0,hueso:0,arena:0,mena:0,fibra:0,hilo:0};
+const mats={piedra:0,metal:0,cuerda:0,tela:0,vidrio:0,chapa:0,barro:0,carbon:0,hueso:0,arena:0,mena:0,fibra:0,hilo:0,hierro:0};
 function matCount(k){ return k==='madera'?(typeof woodCount!=='undefined'?woodCount:0):(mats[k]||0); }
 function addMat(k,n){ n=n||1; if(k==='madera'){ if(typeof woodCount!=='undefined'){woodCount+=n; if(woodHUD)woodHUD.textContent=woodCount;} } else mats[k]=(mats[k]||0)+n;
   if($('menu')&&$('menu').classList.contains('show')&&menuMode==='bag'&&activeTab==='materials')renderMaterials(); }
 function useMat(k,n){ n=n||1; if(matCount(k)<n)return false; if(k==='madera'){woodCount-=n; if(woodHUD)woodHUD.textContent=woodCount;} else mats[k]-=n; return true; }
 const inv={hammer:0,pala:0,table:0,spear:0,knife:0,machete:0,botella:0,guadana:0,hacha:1,
-  picomad:0,arco:0,antorcha:0,lanzapiedra:0,cuchipiedra:0,picopiedra:0,flechamad:0,flechapiedra:0,flechaafil:0,lanzaafil:0,picoafil:0,cuchiafil:0,azadamad:0,azadapiedra:0,baldemad:0,baldechapa:0,baldeagua:0,nota:0,
+  picomad:0,arco:0,antorcha:0,lanzapiedra:0,cuchipiedra:0,picopiedra:0,flechamad:0,flechapiedra:0,flechaafil:0,lanzaafil:0,picoafil:0,cuchiafil:0,azadamad:0,azadapiedra:0,baldemad:0,baldechapa:0,baldeagua:0,nota:0,carne:0,carneasada:0,
   cama:0,horno:0,silla:0,recagua:0,bidon:0,perchero:0,fogata:0,conserv:0,pmad:0,smad:0,tmad:0,imad:0,vmad:0,dmad:0,pcha:0,scha:0,tcha:0,vcha:0,dcha:0,emad:0};
 let equipped=null;
 let craftAtTable=false;
@@ -2123,7 +2130,7 @@ function renderTabs(){
 }
 function markSel(){ document.querySelectorAll('#mGrid .slot').forEach(c=>c.classList.toggle('sel',c.dataset.id===selId)); }
 function clearDetail(){ $('dName').textContent='—'; $('dType').textContent=''; $('dMats').innerHTML=''; $('dAction').style.display='none'; const di=$('dIcon'); if(di)di.style.display='none'; }
-const MAT_KEYS=['madera','fibra','hilo','cuerda','tela','piedra','arena','mena','metal','vidrio','chapa','barro','carbon','hueso'];   // ramas, hilos, etc.
+const MAT_KEYS=['madera','hierro','fibra','hilo','cuerda','tela','piedra','arena','mena','metal','vidrio','chapa','barro','carbon','hueso'];   // ramas, hilos, etc.
 function renderMaterials(){
   const g=$('mGrid'); g.innerHTML=''; $('mEmpty').style.display='none';
   for(const k of MAT_KEYS){ const n=matCount(k);
@@ -2196,8 +2203,8 @@ function openMenu(mode){
 function hideMenu(){ scrimClosedAt=performance.now(); $('menu').classList.remove('show'); $('menu').classList.remove('bagMode'); if(typeof renderHotbar==='function')renderHotbar(); }
 $('menu').querySelectorAll('.xClose').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();hideMenu();}));
 
-const RESN={madera:'🪵',piedra:'🪨',metal:'⚙️',cuerda:'🪢',tela:'🧵',vidrio:'🔷',chapa:'🛡️',barro:'🟫',carbon:'🔥',hueso:'🦴',arena:'🏖️',mena:'🥌',fibra:'🌾',hilo:'🧶'};
-const REST={madera:{es:'Madera',en:'Wood',pt:'Madeira'},piedra:{es:'Piedra',en:'Stone',pt:'Pedra'},metal:{es:'Metal',en:'Metal',pt:'Metal'},cuerda:{es:'Cuerda',en:'Rope',pt:'Corda'},tela:{es:'Tela',en:'Cloth',pt:'Tecido'},vidrio:{es:'Vidrio',en:'Glass',pt:'Vidro'},chapa:{es:'Chapa',en:'Sheet metal',pt:'Chapa'},barro:{es:'Barro',en:'Clay',pt:'Barro'},carbon:{es:'Carbón',en:'Coal',pt:'Carvão'},hueso:{es:'Hueso',en:'Bone',pt:'Osso'},arena:{es:'Arena',en:'Sand',pt:'Areia'},mena:{es:'Mena',en:'Ore',pt:'Minério'},fibra:{es:'Fibra',en:'Fiber',pt:'Fibra'},hilo:{es:'Hilo',en:'Thread',pt:'Fio'}};
+const RESN={hierro:'🔩',madera:'🪵',piedra:'🪨',metal:'⚙️',cuerda:'🪢',tela:'🧵',vidrio:'🔷',chapa:'🛡️',barro:'🟫',carbon:'🔥',hueso:'🦴',arena:'🏖️',mena:'🥌',fibra:'🌾',hilo:'🧶'};
+const REST={hierro:{es:'Hierro',en:'Iron',pt:'Ferro'},madera:{es:'Madera',en:'Wood',pt:'Madeira'},piedra:{es:'Piedra',en:'Stone',pt:'Pedra'},metal:{es:'Metal',en:'Metal',pt:'Metal'},cuerda:{es:'Cuerda',en:'Rope',pt:'Corda'},tela:{es:'Tela',en:'Cloth',pt:'Tecido'},vidrio:{es:'Vidrio',en:'Glass',pt:'Vidro'},chapa:{es:'Chapa',en:'Sheet metal',pt:'Chapa'},barro:{es:'Barro',en:'Clay',pt:'Barro'},carbon:{es:'Carbón',en:'Coal',pt:'Carvão'},hueso:{es:'Hueso',en:'Bone',pt:'Osso'},arena:{es:'Arena',en:'Sand',pt:'Areia'},mena:{es:'Mena',en:'Ore',pt:'Minério'},fibra:{es:'Fibra',en:'Fiber',pt:'Fibra'},hilo:{es:'Hilo',en:'Thread',pt:'Fio'}};
 const COSTS={
   hammer:{madera:2,piedra:1}, table:{madera:4}, pala:{madera:2,metal:2},
   spear:{madera:2,cuerda:1}, knife:{metal:1,madera:1,cuerda:1}, machete:{metal:2,madera:1,cuerda:1}, botella:{vidrio:1,tela:1,carbon:1}, guadana:{metal:2,madera:2,cuerda:1}, hacha:{metal:1,madera:1,cuerda:1},
@@ -2390,7 +2397,7 @@ const weather={raining:false,t:0,dur:0,next:50+Math.random()*90,lightT:3,dark:0}
 function lightningFlash(){ const el=$('lightning'); if(el){ el.style.transition='none'; el.style.opacity='0.7'; requestAnimationFrame(()=>{ el.style.transition='opacity .55s ease'; el.style.opacity='0'; }); }
   if(Math.random()<0.01){ const w=placedItems.filter(structureBurnable); if(w.length) igniteStructure(w[Math.floor(Math.random()*w.length)]); } }   // 0.01: el rayo prende fuego una casa de madera
 function weatherTick(dt){
-  if(typeof STORY!=='undefined'&&STORY.started&&STORY.day===1){   // DÍA 1: llueve TODA la noche hasta el amanecer
+  if(typeof STORY!=='undefined'&&STORY.started&&STORY.day<=3){   // DÍAS 1-3: llueve TODA la noche hasta el amanecer (día 2+ contaminada, día 3 máxima)
     const night=(typeof nightFactor!=='undefined'&&nightFactor>0.5);
     if(night&&!STORY._n1done){ weather.raining=true; weather.dur=99999; weather.t=Math.max(weather.t,6); STORY._wasNight=true; }
     else if(STORY._wasNight&&!STORY._n1done&&nightFactor<0.35){ weather.raining=false; weather.dur=0; weather.t=0; weather.next=200+Math.random()*200; STORY._n1done=true; } }   // corta la lluvia un poco entrada la mañana
@@ -2407,7 +2414,7 @@ function weatherTick(dt){
 }
 
 /* ===================== MODO HISTORIA ===================== */
-const STORY={ day:1, kills:0, bedUnlocked:false, started:false, note:0, woodMax:0, _wasNight:false, _n1done:false };
+const STORY={ day:1, kills:0, bedUnlocked:false, started:false, note:0, woodMax:0, roadMax:0, contamBuckets:0, _wasNight:false, _n1done:false };
 const NOTE_TEXT={
   1:{ es:'Cuídate. La policía interdimensional te busca y este lugar es muy hostil. Junta provisiones y construí tu casa esta noche — lloverá hasta la mañana. Te necesitamos vivo y con ese Pendrive.',
       en:'Be careful. The interdimensional police are hunting you and this place is very hostile. Gather supplies and build your house tonight — it will rain until morning. We need you alive and with that flash drive.',
@@ -2417,6 +2424,12 @@ const NOTE_TEXT={
       pt:'Ei, enviamos esta carta para avisar que esta noite será horrível, cuidado, precisamos daquele Pendrive. Junte comida e água — há oásis no deserto próximo. Atenção: a água desta chuva está contaminada.' }
 };
 function storyObjectives(){
+  if(STORY.day>=2){ const road=Math.min(STORY.roadMax,80)|0;
+    return [
+      {t:cT('o_road'),  done:STORY.roadMax>=80,        prog:road+'/80m'},
+      {t:cT('o_chapa'), done:matCount('chapa')>=4,     prog:Math.min(matCount('chapa'),4)+'/4'},
+      {t:cT('o_iron'),  done:matCount('hierro')>=2,    prog:Math.min(matCount('hierro'),2)+'/2'},
+      {t:cT('o_cook'),  done:(inv.carneasada||0)>=1,   prog:(inv.carneasada||0)+'×🍖'} ]; }
   const wood=Math.min(STORY.woodMax,15), craftDone=((inv.hammer||0)>0&&(inv.table||0)>0), ore=Math.min(matCount('mena'),3), kills=Math.min(STORY.kills,10);
   return [
     {t:cT('o_wood'),  done:wood>=15,   prog:wood+'/15'},
@@ -2448,6 +2461,7 @@ function storyOnSleep(){ const finished=STORY.day; STORY.day++; STORY._wasNight=
 function storyBegin(){ if(STORY.started)return; STORY.started=true; updateStoryHud(); if(STORY.note<1)setTimeout(()=>{ try{giveNote(1);}catch(e){} },900); }
 let _storyHudT=0;
 function storyTick(dt){ if(!STORY.started)return; if(typeof woodCount!=='undefined'&&woodCount>STORY.woodMax)STORY.woodMax=woodCount;
+  const adv=Math.abs(player.pos.z-4); if(adv>STORY.roadMax)STORY.roadMax=adv;   // progreso por la calle (eje Z)
   _storyHudT-=dt; if(_storyHudT<=0){ _storyHudT=0.4; updateStoryHud(); } }
 
 /* ---- partículas de tierra ---- */
@@ -2461,7 +2475,7 @@ function tickDirt(dt){ let any=false; for(let i=0;i<DIRT;i++)if(dst[i].life>0){a
   for(let i=0;i<DIRT;i++){const s=dst[i]; if(s.life>0){s.life-=dt;s.v.y-=9*dt;s.p.addScaledVector(s.v,dt);if(s.p.y<s.base+0.04){s.p.y=s.base+0.04;s.v.y*=-0.3;}_do.position.copy(s.p);_do.scale.setScalar(1);}else{_do.position.set(0,-999,0);_do.scale.setScalar(0.001);}_do.updateMatrix();dirt.setMatrixAt(i,_do.matrix);} dirt.instanceMatrix.needsUpdate=true; dirtActive=any; }
 
 /* ---- cartel sobre mesa + crafteo en mesa + agua ---- */
-let nearTable=null, nearRecagua=null, nearBed=null, choldT=0, cholding=false, signMode='table';
+let nearTable=null, nearRecagua=null, nearBed=null, nearHorno=null, choldT=0, cholding=false, signMode='table';
 const signEl=$('tableSign'),signFill=$('signFill'),_proj=new THREE.Vector3();
 // Recolector: estados — sin balde (colocar) / con balde llenándose (lluvia) / balde lleno (recoger)
 function recaguaAct(){ const r=nearRecagua; if(!r) return;
@@ -2472,6 +2486,7 @@ function recaguaAct(){ const r=nearRecagua; if(!r) return;
     if(typeof renderHotbar==='function')renderHotbar(); return; }
   if((r.userData.level||0)>=1){   // recoger el balde lleno → al hotbar
     r.remove(r.userData.bucket); r.userData.bucket=null; r.userData.level=0;
+    if(r.userData.bucketContam){ try{STORY.contamBuckets=(STORY.contamBuckets||0)+1;}catch(e){} r.userData.bucketContam=false; }   // este balde quedó contaminado
     inv.baldeagua=(inv.baldeagua||0)+1; toast('+1 '+cT('baldeagua'));
     try{ if(typeof hotbar!=='undefined' && !hotbar.includes('baldeagua')){ const fi=hotbar.indexOf(null); if(fi>=0)hotbar[fi]='baldeagua'; } }catch(e){}   // a la barra rápida si hay hueco
     if(typeof renderHotbar==='function')renderHotbar(); }
@@ -2479,23 +2494,48 @@ function recaguaAct(){ const r=nearRecagua; if(!r) return;
 }
 function _placeBucketUnder(r,mat){ const b=buildBucket(mat,0); b.position.set(0,0,0); r.add(b); r.userData.bucket=b; r.userData.level=0; toast('🪣'); }
 // BEBER de un balde lleno equipado: +25% sed, el balde queda vacío (vuelve a la mochila)
-function drinkBucket(){ if((inv.baldeagua||0)<=0)return; stats.thirst=Math.min(100,stats.thirst+25); inv.baldeagua--; inv.baldemad=(inv.baldemad||0)+1;
-  toast('💧 +25% '+(I18N[curLang]?cT('addWater'):'agua'));
+function drinkBucket(){ if((inv.baldeagua||0)<=0)return;
+  const cont=(typeof STORY!=='undefined'&&(STORY.contamBuckets||0)>0);
+  if(cont){ stats.thirst=Math.min(100,stats.thirst+10); stats.hunger=Math.max(0,stats.hunger-5); STORY.contamBuckets--; toast('☣️ '+cT('contam')); }   // agua contaminada de la lluvia (día 2+)
+  else { stats.thirst=Math.min(100,stats.thirst+25); toast('💧 +25%'); }
+  inv.baldeagua--; inv.baldemad=(inv.baldemad||0)+1;
   if((inv.baldeagua||0)<=0){ try{ if(typeof hotbar!=='undefined'){ const hi=hotbar.indexOf('baldeagua'); if(hi>=0)hotbar[hi]=null; } }catch(e){} equipped=(inv.baldemad>0?'baldemad':null); equipItem(equipped); }
   if(typeof renderHotbar==='function')renderHotbar(); }
-signEl.addEventListener('pointerdown',e=>{ e.preventDefault(); if(signMode==='water'){ recaguaAct(); } else if(signMode==='sleep'){ startSleep(nearBed); } else { craftAtTable=true; openMenu('craft'); } });   // mesa: tap abre el menú (antes había que mantener, fallaba)
+function eatMeat(cooked){ const id=cooked?'carneasada':'carne'; if((inv[id]||0)<=0)return; const amt=cooked?40:10;
+  stats.hunger=Math.min(100,stats.hunger+amt); if(!cooked)stats.hp=Math.max(0,stats.hp-3); inv[id]--;   // cruda da poco y resta algo de vida; asada llena bien
+  toast((cooked?'🍖':'🥩')+' +'+amt+'%');
+  if((inv[id]||0)<=0){ try{ if(typeof hotbar!=='undefined'){ const hi=hotbar.indexOf(id); if(hi>=0)hotbar[hi]=null; } }catch(e){} if(equipped===id){ equipped=null; equipItem(null); } }
+  if(typeof renderHotbar==='function')renderHotbar(); }
+function giveItemHot(id){ inv[id]=(inv[id]||0)+1; try{ if(typeof hotbar!=='undefined'&&!hotbar.includes(id)){ const fi=hotbar.indexOf(null); if(fi>=0)hotbar[fi]=id; } }catch(e){} if(typeof renderHotbar==='function')renderHotbar(); }
+function hornoDo(kind){ let did=0;
+  if(kind==='cook'){ const n=inv.carne||0; for(let i=0;i<n;i++){ inv.carne--; giveItemHot('carneasada'); did++; } }
+  else if(kind==='iron'){ const n=matCount('chapa'); for(let i=0;i<n;i++){ if(useMat('chapa',1)){ addMat('hierro',1); did++; } } }
+  else if(kind==='glass'){ const n=matCount('arena'); for(let i=0;i<n;i++){ if(useMat('arena',1)){ addMat('vidrio',1); did++; } } }
+  try{ toast(did?('🔥 +'+did):cT('nothingHorno')); }catch(e){} if(typeof renderHotbar==='function')renderHotbar(); openHorno(); }
+function openHorno(){ let el=document.getElementById('hornoOv'); if(!el){ el=document.createElement('div'); el.id='hornoOv'; el.style.cssText='position:fixed;inset:0;z-index:128;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.62);'; el.addEventListener('pointerdown',e=>{ if(e.target===el)el.style.display='none'; }); document.body.appendChild(el); }
+  const mk=(label,n)=>`<button data-hb style="display:block;width:100%;margin:8px 0;padding:13px;border-radius:9px;border:1px solid ${n>0?'#e0a33c':'#3a3f47'};background:${n>0?'#e0a33c':'#23262c'};color:${n>0?'#15171a':'#777'};font-weight:800;font-size:15px;cursor:pointer">${label} <span style="opacity:.75">(${n})</span></button>`;
+  el.innerHTML=`<div style="max-width:min(440px,86vw);background:#16181c;border:1px solid #2e333c;border-radius:14px;padding:22px;transform:${rot?'rotate(90deg)':''}">
+    <div style="font-weight:800;color:#e0a33c;font-size:17px;margin-bottom:12px">🔥 ${cT('horno')}</div>
+    ${mk('🍖 '+cT('cookMeat'), inv.carne||0)}
+    ${mk('🔩 '+cT('smeltIron'), matCount('chapa'))}
+    ${mk('🔷 '+cT('smeltGlass'), matCount('arena'))}
+    <div style="margin-top:10px;font-size:12px;opacity:.55;text-align:center">${cT('tapClose')}</div></div>`;
+  el.querySelectorAll('[data-hb]').forEach((b,i)=>{ b.addEventListener('click',()=>hornoDo(['cook','iron','glass'][i])); });
+  el.style.display='flex'; }
+signEl.addEventListener('pointerdown',e=>{ e.preventDefault(); if(signMode==='water'){ recaguaAct(); } else if(signMode==='sleep'){ startSleep(nearBed); } else if(signMode==='horno'){ openHorno(); } else { craftAtTable=true; openMenu('craft'); } });   // mesa: tap abre el menú (antes había que mantener, fallaba)
 signEl.addEventListener('pointerup',()=>{cholding=false;choldT=0;if(signMode==='table')signFill.style.width='0%';});
 signEl.addEventListener('pointercancel',()=>{cholding=false;choldT=0;if(signMode==='table')signFill.style.width='0%';});
 function updateSign(dt){
-  nearTable=null; nearRecagua=null; nearBed=null; let bt=9, br=9, bb=9;
+  nearTable=null; nearRecagua=null; nearBed=null; nearHorno=null; let bt=9, br=9, bb=9, bh=9;
   for(const m of placedItems){ const d=m.position.distanceTo(player.pos);
     if(m.userData.kind==='table'){ if(d<3.2&&d<bt){bt=d;nearTable=m;} }
     else if(m.userData.kind==='cama'){ if(d<3.2&&d<bb){bb=d;nearBed=m;} }
-    else if(m.userData.kind==='recagua'){ if(d<2.6&&d<br){br=d;nearRecagua=m;} } }
-  const target = nearTable || nearBed || nearRecagua;
+    else if(m.userData.kind==='recagua'){ if(d<2.6&&d<br){br=d;nearRecagua=m;} }
+    else if(m.userData.kind==='horno'){ if(d<3.0&&d<bh){bh=d;nearHorno=m;} } }
+  const target = nearTable || nearBed || nearRecagua || nearHorno;
   if(!target||placing||sleepT>=0){ signEl.style.display='none'; cholding=false; return; }
-  signMode = nearTable? 'table' : nearBed? 'sleep' : 'water';
-  _proj.copy(target.position); _proj.y+=signMode==='table'?1.15:signMode==='sleep'?1.0:1.65; _proj.project(camera);
+  signMode = nearTable? 'table' : nearBed? 'sleep' : nearRecagua? 'water' : 'horno';
+  _proj.copy(target.position); _proj.y+=signMode==='table'?1.15:signMode==='sleep'?1.0:signMode==='horno'?1.3:1.65; _proj.project(camera);
   if(_proj.z>1){ signEl.style.display='none'; return; }
   const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight;
   const sx=(_proj.x*0.5+0.5)*vw, sy=(-_proj.y*0.5+0.5)*vh;
@@ -2506,6 +2546,7 @@ function updateSign(dt){
     else if(lv>=1){ $('signTxt').textContent='✅ '+cT('takeBucket'); signFill.style.width='100%'; }
     else { $('signTxt').textContent='⛆ '+Math.round(lv*100)+'%'; signFill.style.width=(lv*100)+'%'; }
   } else if(signMode==='sleep'){ $('signTxt').textContent='💤 '+cT('sleep'); signFill.style.width='0%';
+  } else if(signMode==='horno'){ $('signTxt').textContent='🔥 '+cT('openHorno'); signFill.style.width='0%';
   } else { $('signTxt').textContent=cT('useTable'); signFill.style.width='0%'; }
 }
 
@@ -2548,7 +2589,7 @@ ctapBtn('bCraft',()=>openMenu('craft'));
 ctapBtn('bPlace',()=>{ if(placing) stopPlacing(); else openMenu('place'); });
 ctapBtn('bRot',()=>{ placeYaw=(placeYaw+Math.PI/4)%(Math.PI*2); });
 // el botón 🪓 del bosque: si hay arma equipada o estamos colocando, también dispara crafteo/colocación
-$('flash').addEventListener('pointerdown',()=>{ if(equipped==='nota'){ readNote(); return; } if(equipped==='baldeagua'){ drinkBucket(); return; } if(equipped==='botella'){ throwMolotov(); startWSwing(); return; } if(equipped) startWSwing(); if(placing) tryBuild(); });
+$('flash').addEventListener('pointerdown',()=>{ if(equipped==='nota'){ readNote(); return; } if(equipped==='carne'||equipped==='carneasada'){ eatMeat(equipped==='carneasada'); return; } if(equipped==='baldeagua'){ drinkBucket(); return; } if(equipped==='botella'){ throwMolotov(); startWSwing(); return; } if(equipped) startWSwing(); if(placing) tryBuild(); });
 // per-frame tick del crafteo, llamado desde update()
 function craftTick(dt){
   tickGifs(dt); tickProjectiles(dt); tickFx(dt);
@@ -2556,7 +2597,8 @@ function craftTick(dt){
   const fb=(fireGifs[1].cur||0.6);
   for(const m of placedItems){ if(m.userData.fire){ m.userData.fire.intensity=5+fb*5; }   // fogata y horno: flamea e ilumina toda la habitación
     if(m.userData.kind==='recagua'&&m.userData.bucket&&(m.userData.level||0)<1&&weather.raining){   // con lluvia se llena el balde en 45s
-      m.userData.level=Math.min(1,(m.userData.level||0)+dt/45); setBucketLevel(m.userData.bucket,m.userData.level); } }
+      m.userData.level=Math.min(1,(m.userData.level||0)+dt/45); setBucketLevel(m.userData.bucket,m.userData.level);
+      if(typeof STORY!=='undefined'&&STORY.day>=2&&typeof nightFactor!=='undefined'&&nightFactor>0.4)m.userData.bucketContam=true; } }   // agua de lluvia nocturna del día 2+: contaminada
   if(equipped==='botella') updateHeldMolotov(dt);
   else if(equipped==='antorcha'&&fpModel){ const tl=fpModel.getObjectByName('torchLight'); if(tl)tl.intensity=4+(gTorch.cur||0.6)*5; }
   // swing del arma equipada (anima el fpRig, no el hacha del bosque)
@@ -2692,7 +2734,7 @@ function endButcher(done){ if(!butcher)return; const o=butcher.o;
   if(butcher.mesh){ scene.remove(butcher.mesh); butcher.mesh.traverse(x=>{if(x.geometry&&x.geometry.dispose)x.geometry.dispose();}); }
   if(fpRig)fpRig.visible=!!equipped;   // el arma VUELVE a la mano
   o._butchering=false;
-  if(done){ if(faunaCarcassRemove)faunaCarcassRemove(o); stats.hunger=Math.min(100,stats.hunger+(o.key==='rino'?60:30)); try{toast('🍖 + Carne');}catch(e){} }
+  if(done){ if(faunaCarcassRemove)faunaCarcassRemove(o); const n=(o.key==='rino'?4:2); for(let i=0;i<n;i++){ try{giveItemHot('carne');}catch(e){} } try{toast('🥩 +'+n+' '+cT('carne'));}catch(e){} }   // destazar da CARNE CRUDA (item) → cocinar en el horno
   const bf=$('butcherFill'); if(bf)bf.style.width='0%'; const bb=$('butcherBar'); if(bb)bb.classList.remove('show');
   butcher=null;
 }
@@ -2761,7 +2803,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   const ray=new THREE.Raycaster();
   function tryKill(){ ray.setFromCamera({x:0,y:0},camera); ray.far=4.2; let best=null,bd=1e9; for(const n of NPCS){ if(n.dead)continue; const h=ray.intersectObject(n.group,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=n;} }
     if(best&&bd<4.2){ best.hp--; if(best.hp<=0) killN(best); else { digShake=Math.max(digShake,0.25); try{chopSound();}catch(e){} } } }   // 5 golpes para matar a un NPC
-  function killN(inst){ if(inst.dead)return; inst.dead=true; inst.ragT=0; try{ storyOnKill(); }catch(e){} for(const k in inst.mixers)inst.mixers[k].stopAllAction();
+  function killN(inst){ if(inst.dead)return; inst.dead=true; inst.ragT=0; try{ storyOnKill(); }catch(e){} try{ giveItemHot('carne'); }catch(e){} for(const k in inst.mixers)inst.mixers[k].stopAllAction();
     const dx=inst.group.position.x-player.pos.x,dz=inst.group.position.z-player.pos.z,d=Math.hypot(dx,dz)||1; try{ startRag(inst,new THREE.Vector3(dx/d*2.6,0.9,dz/d*2.6)); }catch(e){ console.warn(e); } }
   npcBurnArea=function(x,z,r){ const r2=r*r; for(const inst of NPCS){ if(inst.dead)continue; const dx=inst.group.position.x-x,dz=inst.group.position.z-z; if(dx*dx+dz*dz<r2) killN(inst); } };   // fuego mata NPC
   function removeNPC(inst){ scene.remove(inst.group); if(inst.rag){ try{ for(const rec of inst.rag.recs)physWorld.removeBody(rec.pb); }catch(e){} inst.rag=null; } const k=NPCS.indexOf(inst); if(k>=0)NPCS.splice(k,1); }
@@ -2770,9 +2812,9 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   npcDayResetFn=function(){ nightSpawned=false;   // al dormir: limpiar NPCs y permitir que reaparezcan la próxima noche
     for(const inst of NPCS){ scene.remove(inst.group); if(inst.rag){ try{ for(const rec of inst.rag.recs)physWorld.removeBody(rec.pb); }catch(e){} } }
     NPCS.length=0; };
-  function spawnNight(){ for(let k=0;k<6;k++){ const ti=(Math.random()*N_TYPES.length)|0,a=Math.random()*6.28,r=38+Math.random()*34;   // NO aparecen pegados a vos: rondan lejos (bosque)
+  function spawnNight(){ const N=6+Math.min(10,Math.max(0,((typeof STORY!=='undefined'?STORY.day:1)-1)*3)); for(let k=0;k<N;k++){ const ti=(Math.random()*N_TYPES.length)|0,a=Math.random()*6.28,r=38+Math.random()*34;   // más NPCs cada noche que avanza la historia
     let x=player.pos.x+Math.cos(a)*r, z=player.pos.z+Math.sin(a)*r;
-    if(k>=5){ x=BEACH_X0+200+Math.random()*1500; z=Zmin+Math.random()*(Zmax-Zmin); }   // sólo alguno disperso en el desierto
+    if(k===5){ x=BEACH_X0+200+Math.random()*1500; z=Zmin+Math.random()*(Zmax-Zmin); }   // sólo uno disperso en el desierto; el resto cerca tuyo
     const inst=mk(ti,x,z); inst.wTimer=0; inst.wAng=Math.random()*6.28; inst._wmove=false; try{ emitDirt({x,z}); emitDirt({x,z}); }catch(e){} } }
   npcTickFn=function(dt){
     storyT+=dt; const elev = A_ELEV*Math.sin(storyT*(2*Math.PI/1440)+2.88); setTime(elev,120);   // ciclo real: ~12 min de día y ~12 min de noche (arranca cerca del atardecer → 1ª noche en ~1 min)
@@ -2979,7 +3021,7 @@ const I18N={
       kbMove:'Moverse',kbLook:'Mirar',kbRun:'Correr',kbJump:'Saltar',kbCrouch:'Agacharse',kbChop:'Talar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventario',kbThrow:'Lanzar molotov',kbPause:'Pausa',
       key_Mouse:'Ratón',key_Shift:'Mayús',key_Space:'Espacio',key_Ctrl:'Ctrl',key_Click:'Clic',key_Esc:'Esc',
       craft:'Fabricación',jump:'Saltar',crouch:'Agacharse',axe:'Hacha',build:'Construir',weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',pala:'Pala',spear:'Lanza de madera',knife:'Cuchillo de metal',
-      machete:'Machete',botella:'Botella incendiaria',guadana:'Guadaña',hacha:'Hacha tomahawk',picomad:'Pico de madera',arco:'Arco',lanzapiedra:'Lanza de piedra',cuchipiedra:'Cuchillo de piedra',picopiedra:'Pico de piedra',flechamad:'Flechas de madera',flechapiedra:'Flechas de piedra',flechaafil:'Flechas afiladas',lanzaafil:'Lanza afilada',picoafil:'Pico afilado',cuchiafil:'Cuchillo afilado',antorcha:'Antorcha',azadamad:'Azada de madera',azadapiedra:'Azada de piedra',baldemad:'Balde de madera',baldechapa:'Balde de chapa',baldeagua:'Balde con agua',addWater:'Cargar agua',waterFull:'Balde lleno',placeBucket:'Colocar balde',takeBucket:'Recoger balde lleno',drink:'Beber agua',noBucket:'Necesitás un balde vacío',nota:'Nota',newNote:'Nueva nota',tapClose:'Tocá para cerrar',bedLocked:'Matá 10 NPC para desbloquear',objTitle:'DÍA',o_wood:'Juntá madera (talá árboles)',o_craft:'Fabricá un martillo y una mesa',o_ore:'Conseguí mena para antorchas',o_kills:'Matá 10 NPC (desbloquea la cama)',threat1:'INVADISTE NUESTRO TERRITORIO. Te esperamos al final del camino para luchar.',dayDone:'Sobreviviste la noche',
+      machete:'Machete',botella:'Botella incendiaria',guadana:'Guadaña',hacha:'Hacha tomahawk',picomad:'Pico de madera',arco:'Arco',lanzapiedra:'Lanza de piedra',cuchipiedra:'Cuchillo de piedra',picopiedra:'Pico de piedra',flechamad:'Flechas de madera',flechapiedra:'Flechas de piedra',flechaafil:'Flechas afiladas',lanzaafil:'Lanza afilada',picoafil:'Pico afilado',cuchiafil:'Cuchillo afilado',antorcha:'Antorcha',azadamad:'Azada de madera',azadapiedra:'Azada de piedra',baldemad:'Balde de madera',baldechapa:'Balde de chapa',baldeagua:'Balde con agua',addWater:'Cargar agua',waterFull:'Balde lleno',placeBucket:'Colocar balde',takeBucket:'Recoger balde lleno',drink:'Beber agua',noBucket:'Necesitás un balde vacío',nota:'Nota',newNote:'Nueva nota',tapClose:'Tocá para cerrar',bedLocked:'Matá 10 NPC para desbloquear',objTitle:'DÍA',o_wood:'Juntá madera (talá árboles)',o_craft:'Fabricá un martillo y una mesa',o_ore:'Conseguí mena para antorchas',o_kills:'Matá 10 NPC (desbloquea la cama)',skipCine:'Saltar',o_road:'Avanzá por la calle (hacia adelante)',o_chapa:'Buscá chapa para la casa',o_iron:'Fundí chapa → hierro en el horno',o_cook:'Cociná carne en el horno',carne:'Carne cruda',carneasada:'Carne asada',openHorno:'Abrir horno',cookMeat:'Cocinar carne',smeltIron:'Fundir chapa → hierro',smeltGlass:'Fundir arena → vidrio',contam:'¡Agua contaminada! +10% sed, -5% hambre',nothingHorno:'No hay nada para fundir/cocinar',threat1:'INVADISTE NUESTRO TERRITORIO. Te esperamos al final del camino para luchar.',dayDone:'Sobreviviste la noche',
       cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo recto de madera',imad:'Techo inclinado',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',tcha:'Techo recto de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',emad:'Escalera de madera',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',need:'Necesitás',noSupport:'Necesita una pared debajo',
       placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
@@ -2989,7 +3031,7 @@ const I18N={
       kbMove:'Move',kbLook:'Look',kbRun:'Run',kbJump:'Jump',kbCrouch:'Crouch',kbChop:'Chop / attack',kbCraft:'Craft',kbPlace:'Place',kbInv:'Inventory',kbThrow:'Throw molotov',kbPause:'Pause',
       key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Space',key_Ctrl:'Ctrl',key_Click:'Click',key_Esc:'Esc',
       craft:'Crafting',jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',pala:'Shovel',spear:'Wooden spear',knife:'Metal knife',
-      machete:'Machete',botella:'Molotov',guadana:'Scythe',hacha:'Tomahawk axe',picomad:'Wood pickaxe',arco:'Bow',lanzapiedra:'Stone spear',cuchipiedra:'Stone knife',picopiedra:'Stone pickaxe',flechamad:'Wood arrows',flechapiedra:'Stone arrows',flechaafil:'Sharp arrows',lanzaafil:'Sharp spear',picoafil:'Sharp pickaxe',cuchiafil:'Sharp knife',antorcha:'Torch',azadamad:'Wood hoe',azadapiedra:'Stone hoe',baldemad:'Wood bucket',baldechapa:'Metal bucket',baldeagua:'Water bucket',addWater:'Collect water',waterFull:'Bucket full',placeBucket:'Place bucket',takeBucket:'Take full bucket',drink:'Drink water',noBucket:'You need an empty bucket',nota:'Note',newNote:'New note',tapClose:'Tap to close',bedLocked:'Kill 10 NPCs to unlock',objTitle:'DAY',o_wood:'Gather wood (chop trees)',o_craft:'Craft a hammer and a table',o_ore:'Get ore for torches',o_kills:'Kill 10 NPCs (unlocks the bed)',threat1:'YOU INVADED OUR TERRITORY. We will be waiting at the end of the road to fight.',dayDone:'You survived the night',
+      machete:'Machete',botella:'Molotov',guadana:'Scythe',hacha:'Tomahawk axe',picomad:'Wood pickaxe',arco:'Bow',lanzapiedra:'Stone spear',cuchipiedra:'Stone knife',picopiedra:'Stone pickaxe',flechamad:'Wood arrows',flechapiedra:'Stone arrows',flechaafil:'Sharp arrows',lanzaafil:'Sharp spear',picoafil:'Sharp pickaxe',cuchiafil:'Sharp knife',antorcha:'Torch',azadamad:'Wood hoe',azadapiedra:'Stone hoe',baldemad:'Wood bucket',baldechapa:'Metal bucket',baldeagua:'Water bucket',addWater:'Collect water',waterFull:'Bucket full',placeBucket:'Place bucket',takeBucket:'Take full bucket',drink:'Drink water',noBucket:'You need an empty bucket',nota:'Note',newNote:'New note',tapClose:'Tap to close',bedLocked:'Kill 10 NPCs to unlock',objTitle:'DAY',o_wood:'Gather wood (chop trees)',o_craft:'Craft a hammer and a table',o_ore:'Get ore for torches',o_kills:'Kill 10 NPCs (unlocks the bed)',skipCine:'Skip',o_road:'Advance down the road (forward)',o_chapa:'Find sheet metal for your house',o_iron:'Smelt sheet metal → iron in the oven',o_cook:'Cook meat in the oven',carne:'Raw meat',carneasada:'Cooked meat',openHorno:'Open oven',cookMeat:'Cook meat',smeltIron:'Smelt sheet → iron',smeltGlass:'Smelt sand → glass',contam:'Contaminated water! +10% thirst, -5% hunger',nothingHorno:'Nothing to smelt/cook',threat1:'YOU INVADED OUR TERRITORY. We will be waiting at the end of the road to fight.',dayDone:'You survived the night',
       cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Flat wood roof',imad:'Sloped roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',tcha:'Flat metal roof',vcha:'Metal wall + window',dcha:'Metal wall + door',emad:'Wood stairs',free:'Free',craftBtn:'Craft',crafted:'Crafted!',need:'You need',noSupport:'Needs a wall below',
       placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
       equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
@@ -2999,7 +3041,7 @@ const I18N={
       kbMove:'Mover',kbLook:'Olhar',kbRun:'Correr',kbJump:'Pular',kbCrouch:'Agachar',kbChop:'Cortar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventário',kbThrow:'Lançar molotov',kbPause:'Pausa',
       key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Espaço',key_Ctrl:'Ctrl',key_Click:'Clique',key_Esc:'Esc',
       craft:'Fabricação',jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',pala:'Pá',spear:'Lança de madeira',knife:'Faca de metal',
-      machete:'Facão',botella:'Coquetel molotov',guadana:'Foice',hacha:'Machado tomahawk',picomad:'Picareta de madeira',arco:'Arco',lanzapiedra:'Lança de pedra',cuchipiedra:'Faca de pedra',picopiedra:'Picareta de pedra',flechamad:'Flechas de madeira',flechapiedra:'Flechas de pedra',flechaafil:'Flechas afiadas',lanzaafil:'Lança afiada',picoafil:'Picareta afiada',cuchiafil:'Faca afiada',antorcha:'Tocha',azadamad:'Enxada de madeira',azadapiedra:'Enxada de pedra',baldemad:'Balde de madeira',baldechapa:'Balde de chapa',baldeagua:'Balde com água',addWater:'Coletar água',waterFull:'Balde cheio',placeBucket:'Colocar balde',takeBucket:'Pegar balde cheio',drink:'Beber água',noBucket:'Precisa de um balde vazio',nota:'Nota',newNote:'Nova nota',tapClose:'Toque para fechar',bedLocked:'Mate 10 NPCs para desbloquear',objTitle:'DIA',o_wood:'Junte madeira (corte árvores)',o_craft:'Fabrique um martelo e uma mesa',o_ore:'Consiga minério para tochas',o_kills:'Mate 10 NPCs (desbloqueia a cama)',threat1:'VOCÊ INVADIU NOSSO TERRITÓRIO. Esperamos você no fim da estrada para lutar.',dayDone:'Você sobreviveu à noite',
+      machete:'Facão',botella:'Coquetel molotov',guadana:'Foice',hacha:'Machado tomahawk',picomad:'Picareta de madeira',arco:'Arco',lanzapiedra:'Lança de pedra',cuchipiedra:'Faca de pedra',picopiedra:'Picareta de pedra',flechamad:'Flechas de madeira',flechapiedra:'Flechas de pedra',flechaafil:'Flechas afiadas',lanzaafil:'Lança afiada',picoafil:'Picareta afiada',cuchiafil:'Faca afiada',antorcha:'Tocha',azadamad:'Enxada de madeira',azadapiedra:'Enxada de pedra',baldemad:'Balde de madeira',baldechapa:'Balde de chapa',baldeagua:'Balde com água',addWater:'Coletar água',waterFull:'Balde cheio',placeBucket:'Colocar balde',takeBucket:'Pegar balde cheio',drink:'Beber água',noBucket:'Precisa de um balde vazio',nota:'Nota',newNote:'Nova nota',tapClose:'Toque para fechar',bedLocked:'Mate 10 NPCs para desbloquear',objTitle:'DIA',o_wood:'Junte madeira (corte árvores)',o_craft:'Fabrique um martelo e uma mesa',o_ore:'Consiga minério para tochas',o_kills:'Mate 10 NPCs (desbloqueia a cama)',skipCine:'Pular',o_road:'Avance pela estrada (em frente)',o_chapa:'Procure chapa para a casa',o_iron:'Funda chapa → ferro no forno',o_cook:'Cozinhe carne no forno',carne:'Carne crua',carneasada:'Carne assada',openHorno:'Abrir forno',cookMeat:'Cozinhar carne',smeltIron:'Fundir chapa → ferro',smeltGlass:'Fundir areia → vidro',contam:'Água contaminada! +10% sede, -5% fome',nothingHorno:'Nada para fundir/cozinhar',threat1:'VOCÊ INVADIU NOSSO TERRITÓRIO. Esperamos você no fim da estrada para lutar.',dayDone:'Você sobreviveu à noite',
       cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado reto de madeira',imad:'Telhado inclinado',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',tcha:'Telhado reto de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',emad:'Escada de madeira',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',need:'Precisa de',noSupport:'Precisa de parede embaixo',
       placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipe o martelo em 🎒 para colocar móveis.',rotate:'Girar',building:'Construindo…',
@@ -3404,7 +3446,7 @@ function boomTick(dt){ if(!cine.boomDone)return; const B=cine.boom; cine.boomT+=
   cine.boomFlash.intensity=Math.max(0,240-cine.boomT*420);
   if(cine.boomSprite&&cine.boomSprite.visible){ if(introBoom)introBoom.update(); cine.boomSprite.lookAt(camera.position); cine.boomSprite.material.opacity=Math.max(0,1.0-cine.boomT*0.3); const s=1+cine.boomT*0.22; cine.boomSprite.scale.set(s,s,s); if(cine.boomT>3.4)cine.boomSprite.visible=false; } }
 function startIntroCine(){
-  try{ intro.active=true; cine.t=0; cine._ended=false; buildIntroCine();
+  try{ intro.active=true; cine.t=0; cine._ended=false; buildIntroCine(); try{ showSkipBtn(true); }catch(e){}
     setHudVisible(false); if(typeof fpRig!=='undefined'&&fpRig)fpRig.visible=false; if(typeof fpAxe!=='undefined'&&fpAxe)fpAxe.visible=false;
     player.crouch=false; fadeBlackEl.classList.remove('snap'); fadeFromBlack();   // saca el snap → la caída entra con fundido suave desde el negro
   }catch(e){ console.warn('startIntroCine',e); intro.active=false; setHudVisible(true); }
@@ -3417,7 +3459,7 @@ function endIntroCine(){ if(cine._ended)return; cine._ended=true; intro.active=f
   if(introBoom&&introBoom.kill)introBoom.kill();   // saca el GIF de explosión del DOM (libera CPU)
   cine.persist=true;
   player.pos.set(0,0,4); player.yaw=0; player.pitch=0; player.crouch=false; player.eye=EYE; player.vy=0; player.jumpY=0;
-  setHudVisible(true);
+  setHudVisible(true); try{ showSkipBtn(false); }catch(e){}
   try{ equipped='hacha'; equipItem('hacha'); if(fpAxe)fpAxe.visible=false; }catch(e){}
   try{ storyBegin(); }catch(e){}   // arranca el Día 1: HUD de objetivos + Nota 1 al hotbar
 }
@@ -3540,8 +3582,16 @@ function showMegafono(on){ let el=document.getElementById('megafono');
   el.textContent='📢 '+(curLang==='en'?'On the megaphone':curLang==='pt'?'No megafone':'Por el megáfono');
   const base='position:fixed;z-index:99;padding:8px 18px;border-radius:30px;background:rgba(8,10,14,.6);color:#fff;font-weight:700;letter-spacing:.05em;font-size:16px;border:1px solid rgba(255,255,255,.16);box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;pointer-events:none;';
   el.style.cssText=base+(on?'':'display:none;')+(rot?'left:13%;top:50%;transform:translate(-50%,-50%) rotate(90deg);':'left:50%;top:13%;transform:translateX(-50%);'); }
+function showSkipBtn(on){ let b=document.getElementById('skipCine'); if(!b){ b=document.createElement('button'); b.id='skipCine';
+    b.style.cssText='position:fixed;right:16px;bottom:16px;z-index:600;padding:10px 17px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(10,12,16,.66);color:#fff;font-size:14px;font-weight:700;letter-spacing:.04em;cursor:pointer;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);';
+    b.addEventListener('click',skipIntro); b.addEventListener('pointerdown',e=>e.stopPropagation()); document.body.appendChild(b); }
+  b.textContent=cT('skipCine')+' ⏭'; b.style.display=on?'block':'none'; }
+function skipIntro(){ showSkipBtn(false);
+  try{ if(window.__embedChase && !window.__chaseDone){ window.__introToFall(); } }catch(e){}   // corta la persecución → arranca la caída
+  const endFall=()=>{ try{ if(typeof intro!=='undefined' && intro.active && typeof endIntroCine==='function') endIntroCine(); }catch(e){} };   // y salta la caída apenas esté armada
+  endFall(); setTimeout(endFall,80); setTimeout(endFall,300); setTimeout(endFall,700); }
 function playChaseThenFall(){
-  $('options').classList.remove('show'); $('startMenu').classList.remove('show'); $('kbCard').classList.remove('show');
+  $('options').classList.remove('show'); $('startMenu').classList.remove('show'); $('kbCard').classList.remove('show'); showSkipBtn(true);
   try{ if(escenaAudio){ escenaAudio.volume=0.9;   // desbloquea en el gesto y arranca 0.7s después del inicio de la cinemática
     const p=escenaAudio.play(); if(p&&p.then)p.then(()=>{ try{ escenaAudio.pause(); escenaAudio.currentTime=0; }catch(e){} setTimeout(()=>{ try{ escenaAudio.currentTime=0; escenaAudio.play(); showMegafono(true); }catch(e){} },700); }).catch(()=>{ setTimeout(()=>{ try{ escenaAudio.play(); showMegafono(true); }catch(e){} },700); }); } }catch(e){}
   const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='';
