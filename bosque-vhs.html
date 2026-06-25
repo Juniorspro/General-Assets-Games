@@ -2545,6 +2545,17 @@ function storyOnSleep(){ const finished=STORY.day; STORY.day++; STORY._wasNight=
   const nx=STORY.day; if(NOTE_TEXT[nx])setTimeout(()=>{ try{giveNote(nx);}catch(e){} }, finished===1?2600:700); }   // luego llega la carta de los aliados
 function storyBegin(){ if(STORY.started)return; STORY.started=true; updateStoryHud(); if(STORY.note<1)setTimeout(()=>{ try{giveNote(1);}catch(e){} },900); }
 let _storyHudT=0;
+/* ===== Barras de vida sobre NPCs y arañas ===== */
+const _hpTargets=[]; const _hpPool=[];
+function _makeHpBar(){ const g=new THREE.Group();
+  const bg=new THREE.Mesh(new THREE.PlaneGeometry(1.15,0.2), new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.65,depthTest:false})); g.add(bg);
+  const fgeo=new THREE.PlaneGeometry(1.0,0.12); fgeo.translate(0.5,0,0);   // ancla izquierda → scale.x = fracción
+  const fill=new THREE.Mesh(fgeo, new THREE.MeshBasicMaterial({color:0x35d65a,depthTest:false})); fill.position.set(-0.5,0,0.002); g.add(fill);
+  g.userData.fill=fill; g.renderOrder=998; g.visible=false; scene.add(g); return g; }
+function hpBarTick(){ for(let i=0;i<_hpTargets.length;i++){ const t=_hpTargets[i]; let b=_hpPool[i]||(_hpPool[i]=_makeHpBar());
+    b.visible=true; b.position.set(t.x,t.y,t.z); b.quaternion.copy(camera.quaternion);
+    const f=Math.max(0,Math.min(1,t.frac)); b.userData.fill.scale.x=Math.max(0.001,f); b.userData.fill.material.color.setHex(f>0.5?0x35d65a:f>0.25?0xe0b020:0xd64535); }
+  for(let i=_hpTargets.length;i<_hpPool.length;i++)_hpPool[i].visible=false; _hpTargets.length=0; }
 function isRedNight(){ return STORY.started && STORY.day>=3 && typeof nightFactor!=='undefined' && nightFactor>0.5; }
 function redOverlay(on){ let el=document.getElementById('redNight'); if(!el){ el=document.createElement('div'); el.id='redNight'; el.style.cssText='position:fixed;inset:0;z-index:40;pointer-events:none;background:radial-gradient(120% 100% at 50% 50%,rgba(150,0,0,0) 40%,rgba(150,0,0,0.42) 100%);mix-blend-mode:multiply;opacity:0;transition:opacity 1.2s ease;'; (document.getElementById('stage')||document.body).appendChild(el); } el.style.opacity=on?'1':'0'; }
 function molotovDrop(n){ const M=['vidrio','tela','carbon']; for(let i=0;i<(n||1);i++){ try{ addMat(M[(Math.random()*3)|0],1); }catch(e){} } }   // romper cosas da materiales de molotov
@@ -2570,8 +2581,8 @@ function finaleStart(){ if(finale.active)return; finale.active=true; STORY.start
   player.pos.set(0,0,WALL_Z+300); player.yaw=0; player.pitch=0;   // 300 m del muro, mirando hacia él
   try{ fadeBlackEl.classList.add('snap','on'); setTimeout(()=>{ fadeBlackEl.classList.remove('snap'); fadeBlackEl.classList.remove('on'); },800); }catch(e){}
   setTimeout(()=>{ try{
-    for(let i=0;i<25;i++){ const x=-58+Math.random()*116, z=WALL_Z+6+Math.random()*48; if(window.__npcSpawnAt)window.__npcSpawnAt(x,z); }
-    for(let i=0;i<10;i++){ const x=-46+Math.random()*92, z=WALL_Z+8+Math.random()*42; if(window.__spiderAt)window.__spiderAt(x,z); }
+    for(let i=0;i<25;i++){ const x=-60+i*5, z=WALL_Z+4+(i%2)*1.6; const inst=window.__npcSpawnAt&&window.__npcSpawnAt(x,z); if(inst)inst._finale=true; }   // 25 NPC FORMADOS frente al muro (idle)
+    for(let i=0;i<10;i++){ const x=-54+i*12, z=WALL_Z+6.5; if(window.__spiderAt)window.__spiderAt(x,z); }   // 10 arañas gigantes formadas
     finale.spawned=true; }catch(e){console.warn('finale spawn',e);} }, 1400);
   try{ STORY._wasRed=false; updateStoryHud(); }catch(e){}
 }
@@ -2697,7 +2708,7 @@ function startSleep(bed){ if(sleepT>=0||!bed) return;
   sleepBedPos.copy(bed.position); sleepP0.copy(player.pos); sleepYaw0=player.yaw; sleepPitch0=player.pitch;
   setHudVisible(false); signEl.style.display='none'; if(placing)stopPlacing(); }
 function _ease(t){ t=Math.max(0,Math.min(1,t)); return t*t*(3-2*t); }
-function makeDay(){ storyT=790; if(typeof cyclePhase!=='undefined')cyclePhase=0; setTime(4,120); if(typeof npcDayResetFn==='function'){ try{npcDayResetFn();}catch(e){} } try{ storyOnSleep(); }catch(e){} }   // despierta al AMANECER + avanza el día de la historia (nueva nota)
+function makeDay(){ storyT=260; if(typeof cyclePhase!=='undefined')cyclePhase=0; setTime(4,120); if(typeof npcDayResetFn==='function'){ try{npcDayResetFn();}catch(e){} } try{ storyOnSleep(); }catch(e){} }   // despierta al AMANECER (storyT=260) + avanza el día
 function sleepStep(dt){ sleepT+=dt;
   const bx=sleepBedPos.x, bz=sleepBedPos.z, by=terrainHeight(bx,bz);
   let hdx=sleepP0.x-bx, hdz=sleepP0.z-bz; const hl=Math.hypot(hdx,hdz)||1; hdx/=hl; hdz/=hl;   // lado por el que llegaste = cabecera de la cama
@@ -2812,13 +2823,13 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
       add('l.shldr_7',0.34,0); add('r.shldr_11',0.34,Math.PI); add('l.hip_26',0.34,Math.PI); add('r.hip_31',0.34,0);   // marcha diagonal
       add('l.elbow_6',0.20,0); add('r.elbow_10',0.20,Math.PI); add('l.knee_24',0.20,Math.PI); add('r.knee_29',0.20,0); }
     else if(S.key==='spider'){ legs=[]; let i=0; inst.traverse(o2=>{ if(/^[LR]_\d/.test(o2.name)&&legs.length<8){ legs.push({b:o2,base:o2.rotation.x,amp:0.34,ph:i*0.8}); i++; } }); }   // 8 patas en oleada (scuttle)
-    F.push({key:S.key,inst,mx,wa,ia,single,proc:S.proc,baseY,sp:S.sp/scaleMul,hp,dead:false,deadT:0,state:single?'walk':'idle',wTimer:0,wAng:Math.random()*6.283,move:false,_ph:0,legs,_lph:0}); }
+    F.push({key:S.key,inst,mx,wa,ia,single,proc:S.proc,baseY,sp:S.sp/scaleMul,hp,maxHp:hp,h:S.h*scaleMul,dead:false,deadT:0,state:single?'walk':'idle',wTimer:0,wAng:Math.random()*6.283,move:false,_ph:0,legs,_lph:0}); }
   SPECS.forEach(S=>{ gl.load(FB+S.file, g=>{ try{ const src=g.scene;
     const bb=new THREE.Box3().setFromObject(src),sz=bb.getSize(new THREE.Vector3()),s0=S.h/(sz.y||1);
     for(let i=0;i<S.count;i++){ const p=faunaPos(); addInst(S,g,src,s0,1,S.hp,p.x,p.z); }
     if(S.key==='spider') spiderFactory=(x,z)=>addInst(S,g,src,s0,3,10,x,z);   // araña GIGANTE: x3, 10 golpes
     window.__devGiants=function(){ if(spiderFactory){ for(let k=0;k<4;k++){ const a=Math.random()*6.28,r=16+Math.random()*12; spiderFactory(player.pos.x+Math.cos(a)*r,player.pos.z+Math.sin(a)*r); } } };   // DEV
-    window.__spiderAt=function(x,z){ if(spiderFactory)spiderFactory(x,z); };   // FINAL
+    window.__spiderAt=function(x,z){ if(spiderFactory){ spiderFactory(x,z); const o=F[F.length-1]; if(o)o._finale=true; } };   // FINAL: araña formada en el muro
     window.__faunaCount=function(){ let n=0; for(const o of F)if(!o.dead&&o.key==='spider')n++; return n; };
     window.__clearSpiders=function(){ for(let i=F.length-1;i>=0;i--){ if(F[i].key==='spider'){ scene.remove(F[i].inst); F.splice(i,1); } } };   // FINAL: limpia arañas previas
   }catch(e){console.warn('fauna inst',e);} }, undefined, e=>console.warn(S.file,e)); });
@@ -2831,12 +2842,15 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
       for(const o of F){ if(o.dead)continue; const h=ray2.intersectObject(o.inst,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=o;} }
       if(best&&bd<4.6){ best.hp-=(isRedNight()?2:1); if(best.hp<=0) killAnimal(best); else { try{chopSound();}catch(e){} } } }
     for(let k=F.length-1;k>=0;k--){ const o=F[k];
+      if(o._burn>0&&!o.dead){ o._burn-=dt; o.hp-=dt*2.2; if(o.hp<=0){ killAnimal(o); } }   // molotov: drena vida
       const ddx=o.inst.position.x-player.pos.x, ddz=o.inst.position.z-player.pos.z; const far=(ddx*ddx+ddz*ddz)>FAUNA_D2;   // OPT: animales lejos no se dibujan ni se animan (eran 11 mallas skinned siempre activas)
       o.inst.visible=!far;
       if(far){ if(o.dead){ o.deadT+=dt; if((o.key!=='fox'&&o.key!=='rino')&&o.deadT>=3){ scene.remove(o.inst); F.splice(k,1); } else if((o.key==='fox'||o.key==='rino')&&o.deadT>=60&&!o._butchering){ scene.remove(o.inst); F.splice(k,1); } }
+        else if(o._finale){ /* arañas del final: quietas en el muro, no se reubican */ }
         else { if((ddx*ddx+ddz*ddz)>FAUNA_RELOC2){ const a=Math.random()*6.283,r=45+Math.random()*45; let nx=player.pos.x+Math.cos(a)*r, nz=player.pos.z+Math.sin(a)*r; nx=Math.max(Xmin+10,Math.min(BEACH_X0-12,nx)); nz=Math.max(Zmin+10,Math.min(Zmax-10,nz)); o.inst.position.set(nx,terrainHeight(nx,nz)-o.baseY,nz); }   // si quedó lejísimos, reaparece cerca tuyo (siempre hay animales alrededor)
           else { o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; } if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; } } } continue; }
       o.mx.update(dt);
+      if(!o.dead)_hpTargets.push({x:o.inst.position.x,y:o.inst.position.y+(o.h||0.7)+0.5,z:o.inst.position.z,frac:o.hp/(o.maxHp||3)});   // barra de vida
       if(o.dead){ o.deadT+=dt; o.inst.rotation.z=Math.min(1.45,o.inst.rotation.z+dt*3.2);   // cae de costado (ragdoll simple)
         o.inst.position.y=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY;
         const carcass=(o.key==='fox'||o.key==='rino');   // zorro/rino quedan como carcasa para destazar; araña se desvanece
@@ -2846,7 +2860,8 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
       if(o.key==='spider'){   // ARAÑA GIGANTE: PERSIGUE y ataca al jugador (las 8 patas animan con CINEMA_4D_Main)
         const sdx=player.pos.x-o.inst.position.x, sdz=player.pos.z-o.inst.position.z, sd=Math.hypot(sdx,sdz)||1;
         o.inst.rotation.y=Math.atan2(sdx,sdz); o._atk=Math.max(0,(o._atk||0)-dt);
-        if(sd>1.7){ const v=o.sp*1.5*dt; o.inst.position.x+=sdx/sd*v; o.inst.position.z+=sdz/sd*v; o.move=true; }
+        if(o._finale&&sd>45){ o.move=false; }   // FINAL: espera en el muro hasta que te acercás
+        else if(sd>1.7){ const v=o.sp*1.5*dt; o.inst.position.x+=sdx/sd*v; o.inst.position.z+=sdz/sd*v; o.move=true; }
         else { o.move=false; if(o._atk<=0){ o._atk=1.1; stats.hp=Math.max(0,stats.hp-7); } }   // pegada → muerde
         if(o.wa)o.wa.timeScale=o.move?1.9:1.0;   // las patas crawl más rápido al perseguir
       } else {
@@ -2857,7 +2872,7 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
         if(o.legs){ o._lph+=dt*(o.move?9:3); const k=o.move?1:0.28; for(const L of o.legs){ L.b.rotation.x=L.base+Math.sin(o._lph+L.ph)*L.amp*k; } } }   // PATAS animadas (marcha rino / scuttle araña)
       else { if(!o.single){ if(o.move&&o.state!=='walk'){ o.state='walk'; o.ia.fadeOut(0.2); o.wa.reset().fadeIn(0.2).play(); } else if(!o.move&&o.state!=='idle'){ o.state='idle'; o.wa.fadeOut(0.2); o.ia.reset().fadeIn(0.2).play(); } } o.inst.position.y=gy; } } };
   function killAnimal(o){ o.dead=true; o.deadT=0; try{ o.mx.stopAllAction(); }catch(e){} }
-  faunaBurnArea=function(x,z,r){ const r2=r*r; for(const o of F){ if(o.dead)continue; const dx=o.inst.position.x-x,dz=o.inst.position.z-z; if(dx*dx+dz*dz<r2){ o.hp=0; killAnimal(o); } } };   // fuego mata fauna
+  faunaBurnArea=function(x,z,r){ const r2=r*r; for(const o of F){ if(o.dead)continue; const dx=o.inst.position.x-x,dz=o.inst.position.z-z; if(dx*dx+dz*dz<r2){ o._burn=Math.max(o._burn||0,4); } } };   // fuego NO mata de una: prende y va sacando vida
   const _facF=new THREE.Vector3();
   faunaButcherTarget=function(){ _facF.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); let best=null,bd=1e9;   // carcasa de zorro/rino enfrente y cerca
     for(const o of F){ if(!o.dead||(o.key!=='fox'&&o.key!=='rino'))continue; const dx=o.inst.position.x-player.pos.x,dz=o.inst.position.z-player.pos.z,d=Math.hypot(dx,dz); if(d>2.9||d<0.05)continue;
@@ -2916,7 +2931,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   function attachTorch(body,flames){ const hand=body.getObjectByName('RightHand'); if(!hand)return; hand.updateWorldMatrix(true,false); const hs=hand.getWorldScale(_nv).x||1;
     const holder=new THREE.Group(); const stick=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.036,0.62,10),new THREE.MeshStandardMaterial({color:0x6b4a2a,roughness:0.85})); stick.position.y=0.31; holder.add(stick);
     holder.scale.setScalar(1/hs); holder.rotation.set(-Math.PI/2,0,0.35); const fl=mkFlame(); fl.position.set(0,0.66,0); holder.add(fl); flames.push(fl.userData); hand.add(holder); }
-  function mk(ti,x,z){ const T=N_TYPES[ti]; const inst={ti,group:new THREE.Group(),bodies:{},mixers:{},actions:{},state:null,dead:false,flames:[],atkCD:0,hp:5};
+  function mk(ti,x,z){ const T=N_TYPES[ti]; const inst={ti,group:new THREE.Group(),bodies:{},mixers:{},actions:{},state:null,dead:false,flames:[],atkCD:0,hp:5,maxHp:5};
     N_ANIMS.forEach(an=>{ const t=ntpl[ti][an]; if(!t)return; const scn=skClone(t.scene); scn.scale.setScalar(t.s); scn.position.copy(t.off); scn.visible=false;
       scn.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } }); if(T.torch)attachTorch(scn,inst.flames); inst.group.add(scn);
       const mx=new THREE.AnimationMixer(scn); const ac=t.clip?mx.clipAction(t.clip):null; if(ac){ ac.setLoop(THREE.LoopRepeat); if(an==='attack')ac.timeScale=2.1; }   // golpe corto y rápido
@@ -2949,7 +2964,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
     if(best&&bd<4.2){ best.hp-=(isRedNight()?2:1); if(best.hp<=0) killN(best); else { digShake=Math.max(digShake,0.25); try{chopSound();}catch(e){} } } }   // noche roja: doble daño
   function killN(inst){ if(inst.dead)return; inst.dead=true; inst.ragT=0; try{ storyOnKill(); }catch(e){} try{ giveItemHot('carne'); }catch(e){} for(const k in inst.mixers)inst.mixers[k].stopAllAction();
     const dx=inst.group.position.x-player.pos.x,dz=inst.group.position.z-player.pos.z,d=Math.hypot(dx,dz)||1; try{ startRag(inst,new THREE.Vector3(dx/d*2.6,0.9,dz/d*2.6)); }catch(e){ console.warn(e); } }
-  npcBurnArea=function(x,z,r){ const r2=r*r; for(const inst of NPCS){ if(inst.dead)continue; const dx=inst.group.position.x-x,dz=inst.group.position.z-z; if(dx*dx+dz*dz<r2) killN(inst); } };   // fuego mata NPC
+  npcBurnArea=function(x,z,r){ const r2=r*r; for(const inst of NPCS){ if(inst.dead)continue; const dx=inst.group.position.x-x,dz=inst.group.position.z-z; if(dx*dx+dz*dz<r2) inst._burn=Math.max(inst._burn||0,4); } };   // fuego NO mata de una: va sacando vida
   function removeNPC(inst){ scene.remove(inst.group); if(inst.rag){ try{ for(const rec of inst.rag.recs)physWorld.removeBody(rec.pb); }catch(e){} inst.rag=null; } const k=NPCS.indexOf(inst); if(k>=0)NPCS.splice(k,1); }
   // 5 NPCs al azar por noche, apareciendo con una nube de polvo. Normalmente NO persiguen (deambulan); sólo persiguen si te acercás.
   let nightSpawned=false;
@@ -2964,13 +2979,16 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
   window.__npcSpawnAt=function(x,z){ try{ const ti=(Math.random()*N_TYPES.length)|0; const inst=mk(ti,x,z); inst.wTimer=0; inst.wAng=Math.random()*6.28; inst._wmove=false; return inst; }catch(e){} };   // FINAL
   window.__npcCount=function(){ let n=0; for(const i of NPCS)if(!i.dead)n++; return n; };
   npcTickFn=function(dt){
-    storyT+=dt; const elev = A_ELEV*Math.sin(storyT*(2*Math.PI/1440)+2.88); setTime(elev,120);   // ciclo real: ~12 min de día y ~12 min de noche (arranca cerca del atardecer → 1ª noche en ~1 min)
+    storyT+=dt; const elev = A_ELEV*Math.sin(storyT*(2*Math.PI/480)+2.88); setTime(elev,120);   // ciclo de 8 min: ~4 min de día + ~4 min de noche
     if(nReady){ if(nightFactor>0.55&&!nightSpawned){ nightSpawned=true; gameNight++; spawnNight(); } else if(nightFactor<0.25&&(nightSpawned||NPCS.length)){ npcDayResetFn(); } }   // amanece → se van los NPCs; cuenta de noches (5ª = arañas gigantes)
     if(npcAtk){ npcAtk=false; tryKill(); }
     const NPC_D2=68*68;
     for(const inst of NPCS){ if(inst.dead){ inst.ragT=(inst.ragT||0)+dt; if(inst.ragT<=3&&inst.rag)stepRag(inst); continue; }   // ragdoll y desaparece a los 3 s
+      if(inst._burn>0){ inst._burn-=dt; inst.hp-=dt*2.2; if(inst.hp<=0){ killN(inst); continue; } }   // molotov: drena vida (no mata de una)
       { const fdx=player.pos.x-inst.group.position.x, fdz=player.pos.z-inst.group.position.z; if((fdx*fdx+fdz*fdz)>NPC_D2){ inst.group.visible=false;   // lejos: no se dibuja ni se anima
-          inst.wTimer-=dt; if(inst.wTimer<=0){inst.wTimer=2.5+Math.random()*3.5;inst.wAng=Math.random()*6.28;inst._wmove=Math.random()<0.55;} if(inst._wmove){const sp=0.7*dt;inst.group.position.x+=Math.cos(inst.wAng)*sp;inst.group.position.z+=Math.sin(inst.wAng)*sp;} inst.group.position.y=terrainHeight(inst.group.position.x,inst.group.position.z); continue; } inst.group.visible=true; }
+          if(!inst._finale){ inst.wTimer-=dt; if(inst.wTimer<=0){inst.wTimer=2.5+Math.random()*3.5;inst.wAng=Math.random()*6.28;inst._wmove=Math.random()<0.55;} if(inst._wmove){const sp=0.7*dt;inst.group.position.x+=Math.cos(inst.wAng)*sp;inst.group.position.z+=Math.sin(inst.wAng)*sp;} }   // los del FINAL no deambulan (quedan formados en el muro)
+          inst.group.position.y=terrainHeight(inst.group.position.x,inst.group.position.z); continue; } inst.group.visible=true; }
+      _hpTargets.push({x:inst.group.position.x,y:inst.group.position.y+2.05,z:inst.group.position.z,frac:inst.hp/(inst.maxHp||5)});   // barra de vida
       if(inst.mixers[inst.state])inst.mixers[inst.state].update(dt);
       for(const f of inst.flames){ const k=0.65+Math.random()*0.55; f.light.intensity=6*k; f.spr.material.opacity=0.6+0.4*Math.random(); }
       const dx=player.pos.x-inst.group.position.x,dz=player.pos.z-inst.group.position.z,d=Math.hypot(dx,dz)||1; inst.atkCD=Math.max(0,inst.atkCD-dt);
@@ -2982,7 +3000,8 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
           let blk=false; for(const s of solids){ if(nx>s.minx-0.3&&nx<s.maxx+0.3&&nz>s.minz-0.3&&nz<s.maxz+0.3){ blk=true; break; } }   // las paredes lo FRENAN
           if(!blk){ inst.group.position.x=nx; inst.group.position.z=nz; setSt(inst,'run'); }
           else { setSt(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.0; damageStructureNear(inst.group.position.x,inst.group.position.z); } } }   // frenado por una pared → la rompe (madera 10 / chapa 15 golpes)
-      } else {       // lejos → NO persigue: deambula tranquilo o se queda quieto
+      } else if(inst._finale){ inst.group.rotation.y=Math.atan2(dx,dz); setSt(inst,'idle'); }   // FINAL: quietos en formación, mirándote, hasta que te acercás
+      else {       // lejos → NO persigue: deambula tranquilo o se queda quieto
         inst.wTimer-=dt; if(inst.wTimer<=0){ inst.wTimer=2.5+Math.random()*3.5; inst.wAng=Math.random()*6.28; inst._wmove=Math.random()<0.55; }
         if(inst._wmove){ const sp=0.7*dt; inst.group.position.x+=Math.cos(inst.wAng)*sp; inst.group.position.z+=Math.sin(inst.wAng)*sp; inst.group.rotation.y=Math.atan2(Math.cos(inst.wAng),Math.sin(inst.wAng)); setSt(inst,'walk'); }
         else setSt(inst,'idle'); }
@@ -3102,6 +3121,7 @@ function update(dt){
   chopTick(dt); tickRockShards(dt);
   if(npcTickFn){ try{ npcTickFn(dt); }catch(e){} }   // NPCs nocturnos + ragdoll (blindado)
   if(faunaTick){ try{ faunaTick(dt); }catch(e){} }   // fauna del desierto (fox/rino/spider)
+  try{ hpBarTick(); }catch(e){}   // barras de vida de NPCs/arañas (después de actualizar sus posiciones)
   // Mundo precargado entero: NO se construye/descarga ni se tocan sombras en runtime → cero tirones al caminar.
   try{ weatherTick(dt); }catch(e){}   // lluvia + rayos (después de setTime → puede oscurecer las luces)
   try{ burnTick(dt); }catch(e){}      // estructuras ardiendo (molotov/rayo)
@@ -3495,7 +3515,7 @@ function startGame(){
       applyDefaults(); setQuality(curQuality); applyGodTextures(); layout();
       equipped='hacha'; equipItem('hacha'); fpAxe.visible=false;   // tomahawk = hacha permanente de por vida
       const enter=()=>{ started=true; unlockAudio(); enterPlayMode();
-        try{ setupNPCs(); if(npcTickFn){ cycleOn=false; storyT=0; } }catch(e){ console.warn('npc',e); }
+        try{ setupNPCs(); if(npcTickFn){ cycleOn=false; storyT=260; } }catch(e){ console.warn('npc',e); }   // arranca al AMANECER (tiempo para juntar materiales)
         try{ setupFauna(); }catch(e){ console.warn('fauna',e); }
         try{ prewarmIcons(); }catch(e){}
         startIntroCine(); };   // ← la cinemática de llegada toma el control (sin controles, viñeta); al terminar muestra HUD/controles
