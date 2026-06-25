@@ -256,6 +256,7 @@
               text-transform:uppercase; opacity:0; transition:opacity .4s; }
   #bootLoad.show { opacity:.55; }
   /* overlay negro reutilizable para fundidos (Jugar → negro → sube resolución → fundido de entrada) */
+  #lightning { position:fixed; inset:0; z-index:95; background:#e2ecff; opacity:0; pointer-events:none; }
   #fadeBlack { position:fixed; inset:0; z-index:520; background:#000; opacity:0; pointer-events:none; transition:opacity .5s ease; }
   #fadeBlack.on { opacity:1; pointer-events:auto; }
   #fadeBlack.snap { transition:none; }
@@ -340,6 +341,7 @@
 </head>
 <body>
 <div id="loader"><div class="leaf-spin"></div><p data-i18n="loading">Cargando…</p></div>
+<div id="lightning"></div>
 <div id="fadeBlack"></div>
 
 <!-- ===== Custom cursor (mouse mode) ===== -->
@@ -1700,6 +1702,10 @@ function explodeAt(pos,gy){ gy=(gy==null)?terrainHeight(pos.x,pos.z):gy;
   // INCENDIA árboles y plantas alrededor: se ennegrecen poco a poco y desaparecen
   const R=5.0; for(const t of trees){ if(t.dead||t.state!=='alive')continue; const dx=t.x-pos.x,dz=t.z-pos.z; if(dx*dx+dz*dz<R*R) igniteTree(t); }
   burnFoliageAround(pos.x,pos.z,R);
+  // MOLOTOV: incendia estructuras de madera (casas/muebles) y MATA fauna/NPC en el radio (la chapa NO se quema)
+  try{ if(typeof igniteStructuresAround==='function')igniteStructuresAround(pos.x,pos.z,5.5); }catch(e){}
+  try{ if(faunaBurnArea)faunaBurnArea(pos.x,pos.z,5.0); }catch(e){}
+  try{ if(npcBurnArea)npcBurnArea(pos.x,pos.z,5.0); }catch(e){}
 }
 // ENNEGRECER + tumbar un árbol (incendio): cae como al talar pero con sus materiales clonados que se vuelven negros, sin dar troncos de oro.
 function igniteTree(t){ if(t.state!=='alive')return; felltree(t);
@@ -2289,6 +2295,43 @@ function consHitTick(){ if(!consAtk)return; consAtk=false; if(!placedItems.lengt
   if(best&&bd<4.0){ best.userData.hp=(best.userData.hp||10)-1; chopSound(); spawnRockShards(best.position.x,best.position.y+0.6,best.position.z,4,consMat(best.userData.kind));
     if(best.userData.hp<=0) destroyPlaced(best); } }
 
+/* ===================== FUEGO en ESTRUCTURAS (molotov / rayos) — la chapa NO arde ===================== */
+const CHAPA_KIND=new Set(['pcha','scha','tcha','vcha','dcha','horno','bidon','baldechapa']);
+function structureBurnable(m){ const k=m&&m.userData&&m.userData.kind; if(!k||m.userData._burning)return false; return !CHAPA_KIND.has(k); }   // madera/muebles arden; chapa/metal/barro no
+const burning=[]; const STRUCT_BURN=8;
+function igniteStructure(m){ if(!structureBurnable(m))return; m.userData._burning=true;
+  let sz; try{ sz=new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()); }catch(e){ sz=new THREE.Vector3(1,1,1); }
+  const h=Math.max(0.6,sz.y), n=Math.min(4,1+Math.floor((sz.x+sz.z)*0.4));
+  for(let i=0;i<n;i++){ const fm=makeFireMesh(fireGifs[1].tex, Math.min(1.3,0.5+sz.x*0.2), h*0.85); fm.position.set((Math.random()-0.5)*sz.x*0.6, h*0.3, (Math.random()-0.5)*sz.z*0.6); m.add(fm); }
+  const L=new THREE.PointLight(0xff7a30,7,16,0.8); L.position.y=h*0.6; m.add(L);
+  burning.push({m,t:0,L}); markShadowDirty(); }
+function igniteStructuresAround(x,z,r){ const r2=r*r; for(let i=placedItems.length-1;i>=0;i--){ const m=placedItems[i]; if(!m)continue; const dx=m.position.x-x,dz=m.position.z-z; if(dx*dx+dz*dz<r2) igniteStructure(m); } }
+function burnTick(dt){ for(let i=burning.length-1;i>=0;i--){ const b=burning[i]; b.t+=dt;
+    if(b.L)b.L.intensity=6+Math.sin(b.t*17)*2+Math.random()*1.5;
+    if(!b._spread&&b.t>3){ b._spread=true; igniteStructuresAround(b.m.position.x,b.m.position.z,2.8); }   // se propaga a la madera pegada (casa entera)
+    if(b.t>=STRUCT_BURN){ try{ destroyPlaced(b.m); }catch(e){} burning.splice(i,1); } } }
+
+/* ===================== CLIMA: lluvia + rayos (cada tanto llueve, se nubla y caen rayos) ===================== */
+const RN=1400, _rp=new Float32Array(RN*6);
+for(let i=0;i<RN;i++){ const x=(Math.random()-0.5)*70,y=Math.random()*40,z=(Math.random()-0.5)*70,ln=1.2+Math.random()*1.6; _rp[i*6]=x;_rp[i*6+1]=y;_rp[i*6+2]=z;_rp[i*6+3]=x+0.22;_rp[i*6+4]=y-ln;_rp[i*6+5]=z; }
+const _rgeo=new THREE.BufferGeometry(); _rgeo.setAttribute('position',new THREE.BufferAttribute(_rp,3));
+const rainMesh=new THREE.LineSegments(_rgeo,new THREE.LineBasicMaterial({color:0xaebac8,transparent:true,opacity:0})); rainMesh.frustumCulled=false; rainMesh.visible=false; scene.add(rainMesh);
+const weather={raining:false,t:0,dur:0,next:50+Math.random()*90,lightT:3,dark:0};
+function lightningFlash(){ const el=$('lightning'); if(el){ el.style.transition='none'; el.style.opacity='0.7'; requestAnimationFrame(()=>{ el.style.transition='opacity .55s ease'; el.style.opacity='0'; }); }
+  if(Math.random()<0.01){ const w=placedItems.filter(structureBurnable); if(w.length) igniteStructure(w[Math.floor(Math.random()*w.length)]); } }   // 0.01: el rayo prende fuego una casa de madera
+function weatherTick(dt){
+  if(!weather.raining){ weather.next-=dt; if(weather.next<=0){ weather.raining=true; weather.t=0; weather.dur=70+Math.random()*70; } }
+  else { weather.t+=dt; if(weather.t>=weather.dur){ weather.raining=false; weather.next=220+Math.random()*260; } }
+  let td=0; if(weather.raining){ td=Math.min(1,weather.t/4); if(weather.t>weather.dur-5)td*=Math.max(0,(weather.dur-weather.t)/5); }
+  weather.dark+=(td-weather.dark)*Math.min(1,1.5*dt);
+  if(weather.dark>0.02){ dirLight.intensity*=(1-0.55*weather.dark); hemiLight.intensity*=(1-0.4*weather.dark); }   // se nubla (setTime resetea cada frame, no se acumula)
+  rainMesh.visible=weather.dark>0.05; if(rainMesh.material.opacity!==0.5*weather.dark)rainMesh.material.opacity=0.5*weather.dark;
+  if(rainMesh.visible){ const p=_rgeo.attributes.position.array,f=58*dt;
+    for(let i=0;i<RN;i++){ const a=i*6; p[a+1]-=f; p[a+4]-=f; if(p[a+4]<-1){ p[a+1]+=40; p[a+4]+=40; } }
+    _rgeo.attributes.position.needsUpdate=true; rainMesh.position.set(camera.position.x,0,camera.position.z); }
+  if(weather.raining&&weather.dark>0.45){ weather.lightT-=dt; if(weather.lightT<=0){ weather.lightT=3+Math.random()*6; lightningFlash(); } }
+}
+
 /* ---- partículas de tierra ---- */
 const dirtGeo=new THREE.BoxGeometry(0.08,0.08,0.08); const dirtMat=new THREE.MeshStandardMaterial({color:0x6b4a2c,roughness:1});
 const DIRT=80; const dirt=new THREE.InstancedMesh(dirtGeo,dirtMat,DIRT); dirt.frustumCulled=false; scene.add(dirt);
@@ -2424,7 +2467,7 @@ const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 /* ===================== NPCs nocturnos + ragdoll (TODO aislado; corre al Jugar, en try/catch) ===================== */
 let npcTickFn=null, npcDayResetFn=null, storyT=-1, npcAtk=false, npcSetupDone=false, gameNight=0;
 /* ===== FAUNA (bosque + desierto): fox / rinoceronte / spider, matables, con muerte y noche-5 arañas gigantes ===== */
-let faunaTick=null, faunaSetupDone=false, faunaAtk=false;
+let faunaTick=null, faunaSetupDone=false, faunaAtk=false, faunaBurnArea=null, npcBurnArea=null;
 function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
   const FB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@86aae18/';
   const SPECS=[
@@ -2471,6 +2514,7 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
       if(o.proc){ o._ph+=dt*(o.move?9:2); const bob=Math.abs(Math.sin(o._ph))*(o.move?0.06:0.012); o.inst.position.y=gy+bob; o.inst.rotation.x=Math.sin(o._ph*0.5)*(o.move?0.04:0.01); }   // animación procedural (rino/spider)
       else { if(!o.single){ if(o.move&&o.state!=='walk'){ o.state='walk'; o.ia.fadeOut(0.2); o.wa.reset().fadeIn(0.2).play(); } else if(!o.move&&o.state!=='idle'){ o.state='idle'; o.wa.fadeOut(0.2); o.ia.reset().fadeIn(0.2).play(); } } o.inst.position.y=gy; } } };
   function killAnimal(o){ o.dead=true; o.deadT=0; try{ o.mx.stopAllAction(); }catch(e){} }
+  faunaBurnArea=function(x,z,r){ const r2=r*r; for(const o of F){ if(o.dead)continue; const dx=o.inst.position.x-x,dz=o.inst.position.z-z; if(dx*dx+dz*dz<r2){ o.hp=0; killAnimal(o); } } };   // fuego mata fauna
   const _facF=new THREE.Vector3();
   faunaButcherTarget=function(){ _facF.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); let best=null,bd=1e9;   // carcasa de zorro/rino enfrente y cerca
     for(const o of F){ if(!o.dead||(o.key!=='fox'&&o.key!=='rino'))continue; const dx=o.inst.position.x-player.pos.x,dz=o.inst.position.z-player.pos.z,d=Math.hypot(dx,dz); if(d>2.9||d<0.05)continue;
@@ -2561,6 +2605,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
     if(best&&bd<4.2){ best.hp--; if(best.hp<=0) killN(best); else { digShake=Math.max(digShake,0.25); try{chopSound();}catch(e){} } } }   // 5 golpes para matar a un NPC
   function killN(inst){ if(inst.dead)return; inst.dead=true; inst.ragT=0; for(const k in inst.mixers)inst.mixers[k].stopAllAction();
     const dx=inst.group.position.x-player.pos.x,dz=inst.group.position.z-player.pos.z,d=Math.hypot(dx,dz)||1; try{ startRag(inst,new THREE.Vector3(dx/d*2.6,0.9,dz/d*2.6)); }catch(e){ console.warn(e); } }
+  npcBurnArea=function(x,z,r){ const r2=r*r; for(const inst of NPCS){ if(inst.dead)continue; const dx=inst.group.position.x-x,dz=inst.group.position.z-z; if(dx*dx+dz*dz<r2) killN(inst); } };   // fuego mata NPC
   function removeNPC(inst){ scene.remove(inst.group); if(inst.rag){ try{ for(const rec of inst.rag.recs)physWorld.removeBody(rec.pb); }catch(e){} inst.rag=null; } const k=NPCS.indexOf(inst); if(k>=0)NPCS.splice(k,1); }
   // 5 NPCs al azar por noche, apareciendo con una nube de polvo. Normalmente NO persiguen (deambulan); sólo persiguen si te acercás.
   let nightSpawned=false;
@@ -2708,6 +2753,8 @@ function update(dt){
   if(npcTickFn){ try{ npcTickFn(dt); }catch(e){} }   // NPCs nocturnos + ragdoll (blindado)
   if(faunaTick){ try{ faunaTick(dt); }catch(e){} }   // fauna del desierto (fox/rino/spider)
   // Mundo precargado entero: NO se construye/descarga ni se tocan sombras en runtime → cero tirones al caminar.
+  try{ weatherTick(dt); }catch(e){}   // lluvia + rayos (después de setTime → puede oscurecer las luces)
+  try{ burnTick(dt); }catch(e){}      // estructuras ardiendo (molotov/rayo)
   windU.uTime.value+=dt;
 }
 let shadowFrame=0;
