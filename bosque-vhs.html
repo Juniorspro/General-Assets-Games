@@ -312,11 +312,11 @@
   /* fila de la barra rápida DENTRO de la mochila (para arrastrar ahí) */
   #bagHotbar{ display:none; gap:5px; justify-content:center; flex-wrap:wrap; padding:8px 8px 4px; }
   /* barras de vida / sed / hambre (encima del hotbar) + stamina de correr (arriba del FPS) */
-  #stats{ position:fixed; left:50%; bottom:64px; transform:translateX(-50%); z-index:84; display:none; flex-direction:column; gap:3px; pointer-events:none; }
+  #stats{ position:fixed; left:50%; bottom:64px; transform:translateX(-50%); z-index:84; display:none; flex-direction:row; gap:14px; pointer-events:none; }
   #stats.show{ display:flex; }
   .stRow{ display:flex; align-items:center; gap:5px; }
   .stIco{ font-size:13px; width:15px; text-align:center; filter:drop-shadow(0 1px 2px #000); }
-  .stBar{ width:84px; height:5px; border-radius:3px; background:rgba(0,0,0,.5); overflow:hidden; border:1px solid rgba(255,255,255,.18); }
+  .stBar{ width:60px; height:5px; border-radius:3px; background:rgba(0,0,0,.5); overflow:hidden; border:1px solid rgba(255,255,255,.18); }
   .stBar i{ display:block; height:100%; width:100%; transition:width .2s; }
   #hpFill{ background:#e5484d; } #thFill{ background:#3fa0ff; } #hgFill{ background:#f0a23c; }
   .stNum{ font-size:9.5px; color:#fff; text-shadow:0 1px 2px #000; min-width:44px; }
@@ -398,8 +398,8 @@
   <!-- barra rápida de ítems (estilo Minecraft, look propio) -->
   <div id="stats">
     <div class="stRow"><span class="stIco">❤️</span><div class="stBar"><i id="hpFill"></i></div><span class="stNum" id="hpNum">100/100</span></div>
-    <div class="stRow"><span class="stIco">💧</span><div class="stBar"><i id="thFill"></i></div><span class="stNum" id="thNum">100/100</span></div>
     <div class="stRow"><span class="stIco">🍖</span><div class="stBar"><i id="hgFill"></i></div><span class="stNum" id="hgNum">100/100</span></div>
+    <div class="stRow"><span class="stIco">💧</span><div class="stBar"><i id="thFill"></i></div><span class="stNum" id="thNum">100/100</span></div>
   </div>
   <div id="runbar"><i id="runFill"></i></div>
   <div id="butcherBar"><div class="bbLbl">🔪 <span id="bbTxt">Destazando…</span></div><div class="bbTrack"><i id="butcherFill"></i></div></div>
@@ -2054,7 +2054,7 @@ function renderTabs(){
   const tabs = menuMode==='bag'?BAG_TABS:TABS;
   if(!tabs.includes(activeTab)) activeTab=tabs[0];
   tabs.forEach(t=>{ const d=document.createElement('div'); d.className='stab'+(t===activeTab?' on':''); d.textContent=cT(t);
-    d.onclick=()=>{ if(scMoved>8)return; activeTab=t; selId=null; renderTabs(); renderGrid(); }; c.appendChild(d); });
+    d.onclick=()=>{ if(scMoved>22)return; activeTab=t; selId=null; renderTabs(); renderGrid(); }; c.appendChild(d); });   // umbral más alto: el tap a la pestaña ya no se confunde con scroll
 }
 function markSel(){ document.querySelectorAll('#mGrid .slot').forEach(c=>c.classList.toggle('sel',c.dataset.id===selId)); }
 function clearDetail(){ $('dName').textContent='—'; $('dType').textContent=''; $('dMats').innerHTML=''; $('dAction').style.display='none'; const di=$('dIcon'); if(di)di.style.display='none'; }
@@ -2331,7 +2331,9 @@ function updateSign(dt){
 /* ---- DORMIR: cinemática para pasar la noche sin peligro ---- */
 let sleepT=-1, sleepFade=false, dayDone=false, sleepYaw0=0, sleepPitch0=0;
 const sleepP0=new THREE.Vector3(), sleepBedPos=new THREE.Vector3();
-function startSleep(bed){ if(sleepT>=0||!bed) return; sleepT=0; sleepFade=false; dayDone=false;
+function startSleep(bed){ if(sleepT>=0||!bed) return;
+  if(nightFactor<0.45){ try{ if(typeof toast==='function')toast('Solo podés dormir de noche'); }catch(e){} return; }   // solo de noche
+  sleepT=0; sleepFade=false; dayDone=false;
   sleepBedPos.copy(bed.position); sleepP0.copy(player.pos); sleepYaw0=player.yaw; sleepPitch0=player.pitch;
   setHudVisible(false); signEl.style.display='none'; if(placing)stopPlacing(); }
 function _ease(t){ t=Math.max(0,Math.min(1,t)); return t*t*(3-2*t); }
@@ -3272,10 +3274,10 @@ function showAssetLoad(){
   applyGodTextures();            // ← y acá se cargan TODAS las texturas (suelo/corteza/hojas/pasto/etc) DURANTE la carga, no al entrar
   preloadIntroAssets();          // ← y el auto de la cinemática de llegada (se descarga DURANTE la carga; la barra espera por él)
   const total=totalChunks();
-  const fill=$('alFill'); const t0=performance.now(); const MAXWAIT=25000;   // tope de seguridad: nunca se cuelga aunque falle una descarga
+  const fill=$('alFill'); const t0=performance.now(); const MAXWAIT=35000, MINWAIT=8000;   // tope de seguridad + tiempo MÍNIMO de carga (que dure de verdad)
   const tick=()=>{
     const elapsed=performance.now()-t0;
-    const allDone=(worldReady && pendingAssets===0) || elapsed>MAXWAIT;   // "listo" SÓLO cuando chunks + texturas + modelos terminaron
+    const allDone=((worldReady && pendingAssets===0 && elapsed>MINWAIT)) || elapsed>MAXWAIT;   // no termina antes de MINWAIT aunque ya esté listo
     if(allDone){ fill.style.width='100%'; setTimeout(()=>fadeOutSlow($('assetLoad'),revealStartMenu),400); return; }   // mundo + vídeos listos → MENÚ de inicio
     // progreso: 0–80% por chunks, 80–99% por assets en vuelo (no llega a 100 hasta que todo cargó)
     const chunkP=total?builtChunks.size/total:0;
@@ -3325,7 +3327,8 @@ $('fsBtn').addEventListener('click',()=>{
 /* ===== INTRO COMBINADA: al tocar JUGAR → persecución (overlay) → caída → juego ===== */
 function playChaseThenFall(){
   $('options').classList.remove('show'); $('startMenu').classList.remove('show'); $('kbCard').classList.remove('show');
-  try{ if(escenaAudio){ escenaAudio.currentTime=0; escenaAudio.volume=0.9; const p=escenaAudio.play(); if(p&&p.catch)p.catch(()=>{}); } }catch(e){}   // audio de Escena 1 (dentro del gesto de Jugar → autoplay permitido)
+  try{ if(escenaAudio){ escenaAudio.volume=0.9;   // desbloquea en el gesto y arranca 0.7s después del inicio de la cinemática
+    const p=escenaAudio.play(); if(p&&p.then)p.then(()=>{ try{ escenaAudio.pause(); escenaAudio.currentTime=0; }catch(e){} setTimeout(()=>{ try{ escenaAudio.currentTime=0; escenaAudio.play(); }catch(e){} },700); }).catch(()=>{ setTimeout(()=>{ try{ escenaAudio.play(); }catch(e){} },700); }); } }catch(e){}
   const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='';
   window.__startChase();   // arranca la persecución; al terminar llama window.__introToFall → vuelve a startGame (caída)
 }
