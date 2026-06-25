@@ -2906,12 +2906,15 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
     const pick=n=>g.animations.find(c=>c.name.indexOf(n)>=0)||g.animations[0];
     const inst=skClone(src); inst.scale.setScalar(s); inst.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
     const mx=new THREE.AnimationMixer(inst); const wa=mx.clipAction(pick(S.walk)); const ia=mx.clipAction(pick(S.idle)); const single=(wa===ia);
-    if(!S.proc || S.key==='rino'){ if(single)wa.play(); else ia.play(); }   // rino: SÍ reproduce su clip 'Action' (anima las 4 patas con su esqueleto). Araña: patas a mano.
+    if(!S.proc){ if(single)wa.play(); else ia.play(); }   // proc (rino/araña): patas a mano, NO se reproduce ningún clip.
     inst.position.set(x,terrainHeight(x,z)-baseY,z); scene.add(inst);
     let legs=null;   // huesos de patas para animación procedural (marcha)
-    if(S.key==='rino'){ legs=[]; const add=(n,amp,ph)=>{ const b=inst.getObjectByName(n); if(b)legs.push({b,base:b.rotation.x,amp,ph}); };
-      add('l.shldr_7',0.34,0); add('r.shldr_11',0.34,Math.PI); add('l.hip_26',0.34,Math.PI); add('r.hip_31',0.34,0);   // marcha diagonal
-      add('l.elbow_6',0.20,0); add('r.elbow_10',0.20,Math.PI); add('l.knee_24',0.20,Math.PI); add('r.knee_29',0.20,0); }
+    if(S.key==='rino'){ legs=[];   // GLTFLoader.sanitizeNodeName ELIMINA los puntos: 'l.shldr_7' → 'lshldr_7'. Buscamos por fragmento normalizado.
+      const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+      const find=frag=>{ const f=norm(frag); let hit=null; inst.traverse(o2=>{ if(!hit&&o2.isBone!==false&&norm(o2.name).indexOf(f)>=0)hit=o2; }); return hit; };
+      const add=(frag,amp,ph)=>{ const b=find(frag); if(b)legs.push({b,base:b.rotation.x,amp,ph}); };
+      add('lshldr',0.5,0); add('rshldr',0.5,Math.PI); add('lhip',0.5,Math.PI); add('rhip',0.5,0);   // marcha diagonal (amplitud amplia → bien visible)
+      add('lelbow',0.32,0); add('relbow',0.32,Math.PI); add('lknee',0.32,Math.PI); add('rknee',0.32,0); }
     else if(S.key==='spider'){ legs=[]; let i=0; inst.traverse(o2=>{ if(/^[LR]_\d/.test(o2.name)&&legs.length<8){ legs.push({b:o2,base:o2.rotation.x,amp:0.34,ph:i*0.8}); i++; } }); }   // 8 patas en oleada (scuttle)
     F.push({key:S.key,inst,mx,wa,ia,single,proc:S.proc,baseY,sp:S.sp/scaleMul,hp,maxHp:hp,h:S.h*scaleMul,dead:false,deadT:0,state:single?'walk':'idle',wTimer:0,wAng:Math.random()*6.283,move:false,_ph:0,legs,_lph:0}); }
   SPECS.forEach(S=>{ gl.load(FB+S.file, g=>{ try{ const src=g.scene;
@@ -2958,9 +2961,11 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
         o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; }
         if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; o.inst.rotation.y=Math.atan2(Math.cos(o.wAng),Math.sin(o.wAng)); } }
       const gy=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY;
-      if(o.key==='rino'){ o.inst.position.y=gy; }   // el rino anima sus patas con su clip 'Action' (sin bob → no "salta")
-      else if(o.proc){ o._ph+=dt*(o.move?9:2); const bob=Math.abs(Math.sin(o._ph))*(o.move?0.06:0.012); o.inst.position.y=gy+bob; o.inst.rotation.x=Math.sin(o._ph*0.5)*(o.move?0.04:0.01);   // bob del cuerpo (araña)
-        if(o.legs){ o._lph+=dt*(o.move?9:3); const k=o.move?1:0.28; for(const L of o.legs){ L.b.rotation.x=L.base+Math.sin(o._lph+L.ph)*L.amp*k; } } }   // PATAS animadas (scuttle araña)
+      if(o.proc){ const rino=(o.key==='rino');   // rino y araña: cuerpo + patas 100% procedural
+        o._ph+=dt*(o.move?(rino?5.5:9):2);
+        const bob=Math.abs(Math.sin(o._ph))*(o.move?(rino?0.03:0.06):(rino?0.006:0.012)); o.inst.position.y=gy+bob;   // rino: bob muy chico (no "salta")
+        o.inst.rotation.x=Math.sin(o._ph*0.5)*(o.move?(rino?0.02:0.04):0.01);
+        if(o.legs){ o._lph+=dt*(o.move?(rino?5.5:9):(rino?2.4:3)); const k=o.move?1:0.3; for(const L of o.legs){ L.b.rotation.x=L.base+Math.sin(o._lph+L.ph)*L.amp*k; } } }   // PATAS animadas (marcha rino / scuttle araña)
       else { if(!o.single){ if(o.move&&o.state!=='walk'){ o.state='walk'; o.ia.fadeOut(0.2); o.wa.reset().fadeIn(0.2).play(); } else if(!o.move&&o.state!=='idle'){ o.state='idle'; o.wa.fadeOut(0.2); o.ia.reset().fadeIn(0.2).play(); } } o.inst.position.y=gy; } } };
   function killAnimal(o){ o.dead=true; o.deadT=0; try{ o.mx.stopAllAction(); }catch(e){}
     try{ if(o.key==='spider' && (typeof finale==='undefined'||!finale.active) && spiderFactory){ const a=Math.random()*6.28,r=42+Math.random()*24; spiderFactory(player.pos.x+Math.cos(a)*r,player.pos.z+Math.sin(a)*r); } }catch(e){} }   // matar una araña (noche normal) → aparece otra
