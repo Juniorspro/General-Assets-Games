@@ -3080,7 +3080,7 @@ function startGame(){
   }catch(err){ console.error('startGame:',err); }
 }
 /* ===================== CINEMÁTICA DE LLEGADA (portal del cielo → choque → salir del auto) ===================== */
-let introCarGLB=null, introFire=null, introBoom=null; const _iA=new THREE.Vector3(), _iB=new THREE.Vector3();
+let introCarGLB=null, introFire=null, introBoom=null, escenaAudio=null; const _iA=new THREE.Vector3(), _iB=new THREE.Vector3();
 // GIF animado → textura: el <img> del GIF anima solo en el navegador; cada frame lo dibujo a un canvas → CanvasTexture (sin audio, sin autoplay de video)
 function loadGifTex(url){ const img=new Image(); img.crossOrigin='anonymous';
   const cv=document.createElement('canvas'); cv.width=cv.height=256; const cx=cv.getContext('2d');
@@ -3101,6 +3101,7 @@ function preloadIntroAssets(){ if(intro._loading)return; intro._loading=true;
   // GIFs (explosión del cielo + fuego del auto) como sprites aditivos — se descargan DURANTE la carga
   introBoom=loadGifTex('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@86aae18/assets/gif/explosion.gif');
   introFire=loadGifTex('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@86aae18/assets/gif/fire.gif');
+  try{ escenaAudio=new Audio('https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@1ab6e23/assets/audio/escena1.mp3'); escenaAudio.preload='auto'; escenaAudio.crossOrigin='anonymous'; escenaAudio.load(); }catch(e){}   // audio inicial de la Escena 1 (suena en la persecución)
 }
 function introCarClone(){ try{ return introCarGLB? skClone(introCarGLB): new THREE.Group(); }catch(e){ return new THREE.Group(); } }
 function makePts(n,size,color,additive){ const pos=new Float32Array(n*3); for(let i=0;i<n*3;i++)pos[i]=9999;
@@ -3324,10 +3325,12 @@ $('fsBtn').addEventListener('click',()=>{
 /* ===== INTRO COMBINADA: al tocar JUGAR → persecución (overlay) → caída → juego ===== */
 function playChaseThenFall(){
   $('options').classList.remove('show'); $('startMenu').classList.remove('show'); $('kbCard').classList.remove('show');
+  try{ if(escenaAudio){ escenaAudio.currentTime=0; escenaAudio.volume=0.9; const p=escenaAudio.play(); if(p&&p.catch)p.catch(()=>{}); } }catch(e){}   // audio de Escena 1 (dentro del gesto de Jugar → autoplay permitido)
   const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='';
   window.__startChase();   // arranca la persecución; al terminar llama window.__introToFall → vuelve a startGame (caída)
 }
-window.__introToFall=function(){ window.__chaseDone=true;
+function fadeOutEscenaAudio(){ if(!escenaAudio)return; try{ const a=escenaAudio; let v=a.volume; const t=setInterval(()=>{ v-=0.12; if(v<=0){ a.pause(); clearInterval(t); } else a.volume=v; },70); }catch(e){} }
+window.__introToFall=function(){ window.__chaseDone=true; fadeOutEscenaAudio();   // se funde el audio al pasar a la caída
   fadeBlackEl.classList.add('snap','on');   // NEGRO instantáneo (nunca se ve el fondo del juego en el corte)
   const ca=$('chaseApp'); if(ca)ca.classList.add('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='none';
   startGame(); };
