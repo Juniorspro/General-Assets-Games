@@ -394,6 +394,13 @@
   .menuItem.danger{ background:#3a1d1d!important; border-color:#7a3a3a!important; color:#ffd9d0!important; }
   .seg button.active{ background:var(--mBg3)!important; border-color:var(--mTxt)!important; box-shadow:none!important; color:#fff!important; }
   .switch.on{ background:var(--mAcc)!important; }
+  /* Panel DEV */
+  .devGrp{ font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--mAcc); margin:14px 0 8px; border-top:1px solid var(--mLine); padding-top:9px; }
+  .devGrp:first-child{ border-top:none; margin-top:0; }
+  .devRow{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
+  .devRow button{ flex:1 1 auto; min-width:90px; padding:11px 10px; border-radius:9px; border:1px solid var(--mLine); background:var(--mBg2); color:var(--mTxt); font-size:12.5px; font-weight:700; cursor:pointer; }
+  .devRow button:active{ background:var(--mBg3); }
+  .devNote{ font-size:12px; color:var(--mAcc); min-height:16px; margin-top:6px; }
 </style>
 </head>
 <body>
@@ -497,6 +504,7 @@
         <div class="optTab on" data-op="opGen" data-i18n="tabGeneral">General</div>
         <div class="optTab" data-op="opGfx" data-i18n="graphics">Gráficos</div>
         <div class="optTab" data-op="opWorld" data-i18n="world">Mundo</div>
+        <div class="optTab" data-op="opDev" style="border-color:#e0a33c;color:#e0a33c">🛠 DEV</div>
       </div>
       <div class="optPanels">
         <div class="optPanel scrl on" id="opGen">
@@ -539,6 +547,19 @@
           <div class="row toggle"><span data-i18n="sound">Sonido</span><div class="switch" id="snd"></div></div>
           <div class="row toggle"><span data-i18n="rotate90">Girar 90° en vertical</span><div class="switch on" id="rotSw"></div></div>
           <div class="row toggle"><span data-i18n="cycle">Ciclo día/noche (24 min)</span><div class="switch on" id="cycleSw"></div></div>
+        </div>
+        <div class="optPanel scrl" id="opDev">
+          <div class="devGrp">📅 Historia — saltar de día</div>
+          <div class="devRow"><button data-dev="day1">Día 1</button><button data-dev="day2">Día 2</button><button data-dev="day3">Día 3</button><button data-dev="day4">Día 4 (final)</button></div>
+          <div class="devRow"><button data-dev="day10">Día 10 (arañas)</button><button data-dev="note">Releer nota</button></div>
+          <div class="devGrp">🎒 Recursos / kit</div>
+          <div class="devRow"><button data-dev="mats">+99 materiales</button><button data-dev="kit">Kit completo</button><button data-dev="meat">+10 carne</button><button data-dev="water">+5 agua</button></div>
+          <div class="devGrp">🌙 Mundo / spawns</div>
+          <div class="devRow"><button data-dev="night">Forzar noche</button><button data-dev="day">Forzar día</button><button data-dev="time">+5 min</button></div>
+          <div class="devRow"><button data-dev="bed">Desbloquear cama</button><button data-dev="giants">Spawn arañas</button><button data-dev="npc">Spawn NPCs</button></div>
+          <div class="devGrp">🎬 Escena</div>
+          <div class="devRow"><button data-dev="scene">Ver escena inicial (reiniciar)</button><button data-dev="fall">Ver caída</button></div>
+          <div class="devNote" id="devNote"></div>
         </div>
       </div>
     </div>
@@ -2717,6 +2738,7 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
     const bb=new THREE.Box3().setFromObject(src),sz=bb.getSize(new THREE.Vector3()),s0=S.h/(sz.y||1);
     for(let i=0;i<S.count;i++){ const p=faunaPos(); addInst(S,g,src,s0,1,S.hp,p.x,p.z); }
     if(S.key==='spider') spiderFactory=(x,z)=>addInst(S,g,src,s0,3,10,x,z);   // araña GIGANTE: x3, 10 golpes
+    window.__devGiants=function(){ if(spiderFactory){ for(let k=0;k<4;k++){ const a=Math.random()*6.28,r=16+Math.random()*12; spiderFactory(player.pos.x+Math.cos(a)*r,player.pos.z+Math.sin(a)*r); } } };   // DEV
   }catch(e){console.warn('fauna inst',e);} }, undefined, e=>console.warn(S.file,e)); });
   faunaTick=function(dt){
     if(gameNight>=10 && !giantsSpawned && nightFactor>0.5 && spiderFactory){ giantsSpawned=true;   // DÍA 10: arañas GIGANTES (recién acá aparecen)
@@ -2854,6 +2876,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
     let x=player.pos.x+Math.cos(a)*r, z=player.pos.z+Math.sin(a)*r;
     if(k===5){ x=BEACH_X0+200+Math.random()*1500; z=Zmin+Math.random()*(Zmax-Zmin); }   // sólo uno disperso en el desierto; el resto cerca tuyo
     const inst=mk(ti,x,z); inst.wTimer=0; inst.wAng=Math.random()*6.28; inst._wmove=false; try{ emitDirt({x,z}); emitDirt({x,z}); }catch(e){} } }
+  window.__devNPCs=function(){ try{ spawnNight(); }catch(e){} };   // DEV
   npcTickFn=function(dt){
     storyT+=dt; const elev = A_ELEV*Math.sin(storyT*(2*Math.PI/1440)+2.88); setTime(elev,120);   // ciclo real: ~12 min de día y ~12 min de noche (arranca cerca del atardecer → 1ª noche en ~1 min)
     if(nReady){ if(nightFactor>0.55&&!nightSpawned){ nightSpawned=true; gameNight++; spawnNight(); } else if(nightFactor<0.25&&(nightSpawned||NPCS.length)){ npcDayResetFn(); } }   // amanece → se van los NPCs; cuenta de noches (5ª = arañas gigantes)
@@ -3171,6 +3194,28 @@ $('optBack').addEventListener('click',()=>{$('options').classList.remove('show')
 document.querySelectorAll('#options .optTab').forEach(t=>t.addEventListener('click',()=>{ if(scMoved>14)return;   // barra lateral de ajustes: cambia de panel
   document.querySelectorAll('#options .optTab').forEach(x=>x.classList.toggle('on',x===t));
   document.querySelectorAll('#options .optPanel').forEach(p=>p.classList.toggle('on',p.id===t.dataset.op)); }));
+// ===== MENÚ DEV (testeo) =====
+function devAction(k){ const note=(t)=>{ const e=$('devNote'); if(e)e.textContent=t; };
+  try{
+    if(k==='day1'||k==='day2'||k==='day3'||k==='day4'||k==='day10'){ const d={day1:1,day2:2,day3:3,day4:4,day10:10}[k];
+      STORY.started=true; STORY.day=d; STORY._wasNight=false; STORY._n1done=false; STORY.bedUnlocked=true;
+      try{updateStoryHud();}catch(e){} if(NOTE_TEXT[d])giveNote(d); note('→ Día '+d); }
+    else if(k==='note'){ readNote(); }
+    else if(k==='mats'){ ['piedra','metal','cuerda','tela','vidrio','chapa','barro','carbon','hueso','arena','mena','fibra','hilo','hierro'].forEach(m=>addMat(m,99)); if(typeof woodCount!=='undefined'){woodCount+=300; if(typeof woodHUD!=='undefined'&&woodHUD)woodHUD.textContent=woodCount;} note('+99 materiales'); }
+    else if(k==='kit'){ ['hammer','table','pala','picoafil','machete','botella','antorcha','arco','baldemad','recagua','horno','cama','pmad','smad','tmad','dmad','pcha','emad'].forEach(id=>{ inv[id]=Math.max(inv[id]||0,5); }); if(typeof renderHotbar==='function')renderHotbar(); note('Kit completo dado'); }
+    else if(k==='meat'){ for(let i=0;i<10;i++)giveItemHot('carne'); note('+10 carne'); }
+    else if(k==='water'){ for(let i=0;i<5;i++)giveItemHot('baldeagua'); note('+5 baldes de agua'); }
+    else if(k==='bed'){ STORY.bedUnlocked=true; STORY.kills=Math.max(STORY.kills,10); note('Cama desbloqueada'); }
+    else if(k==='giants'){ if(window.__devGiants){window.__devGiants(); note('Arañas gigantes spawneadas');} else note('fauna no lista'); }
+    else if(k==='npc'){ if(window.__devNPCs){window.__devNPCs(); note('NPCs spawneados');} else note('npc no listo'); }
+    else if(k==='night'){ storyT=420; note('🌙 Noche'); }
+    else if(k==='day'){ storyT=1140; note('☀️ Día'); }
+    else if(k==='time'){ storyT+=300; note('+5 min'); }
+    else if(k==='scene'){ location.reload(); }
+    else if(k==='fall'){ $('options').classList.remove('show'); if(typeof startIntroCine==='function')startIntroCine(); note('Caída'); }
+  }catch(e){ note('err: '+e.message); }
+}
+document.querySelectorAll('#opDev [data-dev]').forEach(b=>b.addEventListener('click',()=>devAction(b.dataset.dev)));
 // (botón "Ajustes avanzados" eliminado: esos ajustes ahora están dentro del propio menú de Opciones)
 $('quitBtn').addEventListener('click',()=>{ if(confirm('¿Salir del juego?')) location.reload(); });
 $('btnResume').addEventListener('click',()=>$('pause').classList.remove('show'));
