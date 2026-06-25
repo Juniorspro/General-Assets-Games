@@ -2161,7 +2161,8 @@ function selectItem(id){
   $('dType').textContent='// '+cT(r.tab); $('dType').style.color=RARITY[r.tab]||'#f0a23c';
   const mats=$('dMats'); mats.innerHTML=''; const cost=COSTS[id]||{}; const ks=Object.keys(cost);
   $('dMatHd').textContent=cT('need');
-  if(ks.length) for(const k of ks) mats.insertAdjacentHTML('beforeend',`<span class="chip">${RESN[k]||''} ${(REST[k]&&REST[k][curLang])||k} <b>×${cost[k]}</b></span>`);
+  if(ks.length) for(const k of ks){ const have=matCount(k), need=cost[k], ok=have>=need;   // muestra LO QUE TENÉS / lo que necesitás, en verde si alcanza y rojo si falta
+    mats.insertAdjacentHTML('beforeend',`<span class="chip" style="border-color:${ok?'#4f8f5e':'#a85050'}!important;color:${ok?'#cfe8d4':'#f3b4b4'}">${RESN[k]||''} ${(REST[k]&&REST[k][curLang])||k} <b>${have}/${need}</b></span>`); }
   else mats.insertAdjacentHTML('beforeend',`<span class="chip">${cT('free')} ✓</span>`);
   setupAction(r); const u=ic(id); const di=$('dIcon'); di.src=u||''; di.style.display=u?'':'none';
 }
@@ -2568,9 +2569,15 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
   function addInst(S,g,src,s0,scaleMul,hp,x,z){ const s=s0*scaleMul; const bb=new THREE.Box3().setFromObject(src); const baseY=bb.min.y*s;
     const pick=n=>g.animations.find(c=>c.name.indexOf(n)>=0)||g.animations[0];
     const inst=skClone(src); inst.scale.setScalar(s); inst.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } });
-    const mx=new THREE.AnimationMixer(inst); const wa=mx.clipAction(pick(S.walk)); const ia=mx.clipAction(pick(S.idle)); const single=(wa===ia); if(single)wa.play(); else ia.play();
+    const mx=new THREE.AnimationMixer(inst); const wa=mx.clipAction(pick(S.walk)); const ia=mx.clipAction(pick(S.idle)); const single=(wa===ia);
+    if(!S.proc){ if(single)wa.play(); else ia.play(); }   // rino/araña: NO usamos el clip (es casi estático) → animamos las patas a mano desde el bind pose
     inst.position.set(x,terrainHeight(x,z)-baseY,z); scene.add(inst);
-    F.push({key:S.key,inst,mx,wa,ia,single,proc:S.proc,baseY,sp:S.sp/scaleMul,hp,dead:false,deadT:0,state:single?'walk':'idle',wTimer:0,wAng:Math.random()*6.283,move:false,_ph:0}); }
+    let legs=null;   // huesos de patas para animación procedural (marcha)
+    if(S.key==='rino'){ legs=[]; const add=(n,amp,ph)=>{ const b=inst.getObjectByName(n); if(b)legs.push({b,base:b.rotation.x,amp,ph}); };
+      add('l.shldr_7',0.34,0); add('r.shldr_11',0.34,Math.PI); add('l.hip_26',0.34,Math.PI); add('r.hip_31',0.34,0);   // marcha diagonal
+      add('l.elbow_6',0.20,0); add('r.elbow_10',0.20,Math.PI); add('l.knee_24',0.20,Math.PI); add('r.knee_29',0.20,0); }
+    else if(S.key==='spider'){ legs=[]; let i=0; inst.traverse(o2=>{ if(/^[LR]_\d/.test(o2.name)&&legs.length<8){ legs.push({b:o2,base:o2.rotation.x,amp:0.34,ph:i*0.8}); i++; } }); }   // 8 patas en oleada (scuttle)
+    F.push({key:S.key,inst,mx,wa,ia,single,proc:S.proc,baseY,sp:S.sp/scaleMul,hp,dead:false,deadT:0,state:single?'walk':'idle',wTimer:0,wAng:Math.random()*6.283,move:false,_ph:0,legs,_lph:0}); }
   SPECS.forEach(S=>{ gl.load(FB+S.file, g=>{ try{ const src=g.scene;
     const bb=new THREE.Box3().setFromObject(src),sz=bb.getSize(new THREE.Vector3()),s0=S.h/(sz.y||1);
     for(let i=0;i<S.count;i++){ const p=faunaPos(); addInst(S,g,src,s0,1,S.hp,p.x,p.z); }
@@ -2605,7 +2612,8 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
         o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; }
         if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; o.inst.rotation.y=Math.atan2(Math.cos(o.wAng),Math.sin(o.wAng)); } }
       const gy=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY;
-      if(o.proc){ o._ph+=dt*(o.move?9:2); const bob=Math.abs(Math.sin(o._ph))*(o.move?0.06:0.012); o.inst.position.y=gy+bob; o.inst.rotation.x=Math.sin(o._ph*0.5)*(o.move?0.04:0.01); }   // animación procedural (rino/spider)
+      if(o.proc){ o._ph+=dt*(o.move?9:2); const bob=Math.abs(Math.sin(o._ph))*(o.move?0.06:0.012); o.inst.position.y=gy+bob; o.inst.rotation.x=Math.sin(o._ph*0.5)*(o.move?0.04:0.01);   // bob del cuerpo
+        if(o.legs){ o._lph+=dt*(o.move?9:3); const k=o.move?1:0.28; for(const L of o.legs){ L.b.rotation.x=L.base+Math.sin(o._lph+L.ph)*L.amp*k; } } }   // PATAS animadas (marcha rino / scuttle araña)
       else { if(!o.single){ if(o.move&&o.state!=='walk'){ o.state='walk'; o.ia.fadeOut(0.2); o.wa.reset().fadeIn(0.2).play(); } else if(!o.move&&o.state!=='idle'){ o.state='idle'; o.wa.fadeOut(0.2); o.ia.reset().fadeIn(0.2).play(); } } o.inst.position.y=gy; } } };
   function killAnimal(o){ o.dead=true; o.deadT=0; try{ o.mx.stopAllAction(); }catch(e){} }
   faunaBurnArea=function(x,z,r){ const r2=r*r; for(const o of F){ if(o.dead)continue; const dx=o.inst.position.x-x,dz=o.inst.position.z-z; if(dx*dx+dz*dz<r2){ o.hp=0; killAnimal(o); } } };   // fuego mata fauna
@@ -2725,7 +2733,7 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
       const CHASE=22;
       if(d<CHASE){   // te detecta desde más lejos → persigue CORRIENDO hasta pegarte
         inst.group.rotation.y=Math.atan2(dx,dz);
-        if(d<1.5){ setSt(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.2; stats.hp=Math.max(0,stats.hp-8); } }   // ya pegado → ataca y DAÑA
+        if(d<1.5){ setSt(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.2; stats.hp=Math.max(0,stats.hp-2); } }   // ya pegado → ataca: 2 de vida por golpe
         else { const sp=3.6*dt; inst.group.position.x+=dx/d*sp; inst.group.position.z+=dz/d*sp; setSt(inst,'run'); }   // sigue cerrando distancia hasta 1.5 m
       } else {       // lejos → NO persigue: deambula tranquilo o se queda quieto
         inst.wTimer-=dt; if(inst.wTimer<=0){ inst.wTimer=2.5+Math.random()*3.5; inst.wAng=Math.random()*6.28; inst._wmove=Math.random()<0.55; }
@@ -2747,7 +2755,7 @@ function statsTick(dt){
   stats.hunger=Math.max(0,stats.hunger-dt*hungerRate);
   if(typeof oasisLakes!=='undefined') for(const L of oasisLakes){ const dx=player.pos.x-L.x,dz=player.pos.z-L.z; if(dx*dx+dz*dz<(L.r+2.5)*(L.r+2.5)){ stats.thirst=Math.min(100,stats.thirst+dt*28); break; } }   // beber en el oasis
   if(stats.thirst<=0) stats.hp=Math.max(0,stats.hp-dt*1.2);
-  else if(stats.hp<100&&stats.hunger>0) stats.hp=Math.min(100,stats.hp+dt*0.4);
+  else if(stats.hp<100&&stats.thirst>30&&stats.hunger>20) stats.hp=Math.min(100,stats.hp+dt*5);   // con >30% agua y >20% comida: recuperás 5 de vida por segundo
   // STAMINA correr: se vacía en ~45 s de correr puro, recarga en ~16 s
   if(running) stats.stam=Math.max(0,stats.stam-dt*(100/45)); else stats.stam=Math.min(100,stats.stam+dt*(100/16)*(stats.hunger>0?1:0.6));
   _statHud-=dt; if(_statHud<=0){ _statHud=0.25;
@@ -2802,7 +2810,7 @@ function update(dt){
   if(intro.active){ try{ introCam(dt); }catch(e){ console.warn('introCam',e); intro.active=false; setHudVisible(true); } }   // cinemática de llegada: la cámara la maneja la cinemática (culling usa esta cámara)
   // En modo "por fases" la sombra se ancla a una rejilla de 2 m (no nada con el jugador) y se re-hornea sólo al cruzar de celda → sombras quietas y correctas al caminar, sin coste por frame.
   let _shx=player.pos.x,_shz=player.pos.z;
-  if(gfx.phaseShadows){ _shx=Math.round(_shx/2)*2; _shz=Math.round(_shz/2)*2; if(_shx!==_shSnapX||_shz!==_shSnapZ){_shSnapX=_shx;_shSnapZ=_shz;shadowNeedsBake=true;} }
+  if(gfx.phaseShadows){ _shx=Math.round(_shx/5)*5; _shz=Math.round(_shz/5)*5; if(_shx!==_shSnapX||_shz!==_shSnapZ){_shSnapX=_shx;_shSnapZ=_shz;shadowNeedsBake=true;} }   // rejilla de 5 m: menos re-horneados de sombra al caminar (menos tirones)
   _shTgt.set(_shx,player.pos.y,_shz);
   dirLight.position.copy(_shTgt).addScaledVector(lightVec,50);dirLight.target.position.copy(_shTgt);dirLight.target.updateMatrixWorld();
   cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
