@@ -1103,17 +1103,20 @@ function buildChunk(cx,cz){
     for(let i=0;i<sN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK; if(Math.abs(x)<ROAD_HALF+1.5||inBeach(x))continue;
       const gy=terrainHeight(x,z); const nub=makeScrapNub(); nub.position.set(x,gy,z); nub.rotation.y=rng()*6.28; grp.add(nub);
       scrapList.push({x,z,mesh:nub,taken:false}); } }
-  // nodos de MENA (se minan con el pico → piedra + mena)
-  const oreList=[]; { const oN=1+Math.floor(rng()*2);
-    for(let i=0;i<oN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK; if(Math.abs(x)<ROAD_HALF+2||inBeach(x))continue;
-      const gy=terrainHeight(x,z); const node=makeOreNode(); node.position.set(x,gy,z); node.rotation.y=rng()*6.28; grp.add(node);
-      oreList.push({x,z,mesh:node,hp:6}); } }
-  // rocas cerradas variadas (mergeadas en 1 malla por sector → sin huecos)
-  const rocks=[]; const rockCols=[]; const rN=Math.round(qual.rockN*densityMul);
+  // ROCAS PBR (las de siempre): las GRANDES son destruibles con el pico (malla propia); las chicas se mergean como decoración.
+  const rocks=[]; const rockCols=[]; const oreList=[]; const rN=Math.round(qual.rockN*densityMul);
   for(let i=0;i<rN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+1.0||inBeach(x))continue;
-    const g=rockVariants[Math.floor(rng()*rockVariants.length)].clone();const s=0.3+rng()*1.5;
-    g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,terrainHeight(x,z)+s*0.25,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rng()*6.28,rng()*6.28,rng()*6.28)),new THREE.Vector3(s*(0.8+rng()*0.5),s*(0.7+rng()*0.4),s*(0.8+rng()*0.5))));rocks.push(g);
-    rockCols.push({x,z,r:Math.max(0.35,s*0.5)});}   // colisionador por roca
+    const vi=Math.floor(rng()*rockVariants.length); const s=0.3+rng()*1.5;
+    if(s>=0.95){   // ROCA GRANDE → minable (la roca PBR que siempre estuvo, ahora se rompe de verdad)
+      const geo=rockVariants[vi].clone(); const rm=new THREE.Mesh(geo,rockMat); rm.receiveShadow=true; rm.castShadow=false;
+      rm.position.set(x,terrainHeight(x,z)+s*0.25,z); rm.rotation.set(rng()*6.28,rng()*6.28,rng()*6.28);
+      rm.scale.set(s*(0.8+rng()*0.5),s*(0.7+rng()*0.4),s*(0.8+rng()*0.5));
+      grp.add(rm); shadowCasters.push(rm); ownGeos.push(geo);
+      oreList.push({x,z,mesh:rm,hp:Math.max(5,Math.round(4+s*5)),r:Math.max(0.7,s*0.6)}); }
+    else {   // roca chica → decoración mergeada
+      const g=rockVariants[vi].clone();
+      g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,terrainHeight(x,z)+s*0.25,z),new THREE.Quaternion().setFromEuler(new THREE.Euler(rng()*6.28,rng()*6.28,rng()*6.28)),new THREE.Vector3(s*(0.8+rng()*0.5),s*(0.7+rng()*0.4),s*(0.8+rng()*0.5))));rocks.push(g);
+      rockCols.push({x,z,r:Math.max(0.35,s*0.5)}); } }
   if(rocks.length){const rgeo=mergeGeometries(rocks,false);ownGeos.push(rgeo);const rm=new THREE.Mesh(rgeo,rockMat);rm.castShadow=false;rm.receiveShadow=true;rocks.forEach(g=>g.dispose());grp.add(rm);shadowCasters.push(rm);}
   // farolas en sectores que tocan la carretera
   if(cx===-1||cx===0){const posts=[];const heads=[];const hd=new THREE.Object3D();
@@ -1695,13 +1698,18 @@ function tickProjectiles(dt){ for(let i=projectiles.length-1;i>=0;i--){ const p=
   let gy=terrainHeight(p.mesh.position.x,p.mesh.position.z); for(const f of floors){ if(p.mesh.position.x>f.minx&&p.mesh.position.x<f.maxx&&p.mesh.position.z>f.minz&&p.mesh.position.z<f.maxz&&f.top>gy) gy=f.top; }
   if(p.mesh.position.y<=gy+0.12){ explodeAt(p.mesh.position.clone(),gy); scene.remove(p.mesh); p.mesh.traverse(o=>{if(o.geometry)o.geometry.dispose();}); projectiles.splice(i,1); } } }
 const FIRE_DUR=12;   // el fuego incendiario dura 12 s
+// POOL de luces de fuego: se crean al INICIO (la cuenta de luces queda CONSTANTE) → tirar molotov o que un rayo incendie
+// estructuras ya NO recompila los shaders de toda la escena = se va el TIRÓN. Si se agota el pool, el fuego se ve igual (sprites) sin glow.
+const fxLightPool=[]; for(let i=0;i<4;i++){ const pl=new THREE.PointLight(0xff8a3a,0,24,0.7); scene.add(pl); fxLightPool.push(pl); }
+function acquireFxLight(color,inten,dist){ for(const pl of fxLightPool){ if(!pl.__busy){ pl.__busy=true; pl.color.setHex(color||0xff8a3a); pl.intensity=inten||8; pl.distance=dist||22; return pl; } } return null; }
+function releaseFxLight(pl){ if(!pl||!pl.__busy)return; pl.intensity=0; pl.__busy=false; }
 function explodeAt(pos,gy){ gy=(gy==null)?terrainHeight(pos.x,pos.z):gy;
   const ex=billboardFx(gMolotov.tex,3.8,THREE.AdditiveBlending); ex.position.set(pos.x,gy+1.1,pos.z); scene.add(ex); cfx.push({o:ex,kind:'expl',t:0,dur:0.8});   // llamarada inicial
   for(let k=0;k<10;k++){ const a=Math.random()*6.28, r=0.15+Math.random()*2.2, txt=(k%2)?gFcam2.tex:gFcam.tex, low=k%3===0;
     const f=billboardFx(txt,(low?0.7:1.0)+Math.random()*0.7); f.material.opacity=0;
     f.position.set(pos.x+Math.cos(a)*r, gy+(low?0.32:0.55)+Math.random()*0.2, pos.z+Math.sin(a)*r); scene.add(f);
     cfx.push({o:f,kind:'fade',t:0,dur:FIRE_DUR-Math.random()*2,delay:0.35+k*0.1+Math.random()*0.1,max:0.92}); }   // arde ~12 s
-  const L=new THREE.PointLight(0xff8a3a,10,24,0.7); L.position.set(pos.x,gy+1.1,pos.z); scene.add(L); cfx.push({o:L,kind:'light',t:0,dur:FIRE_DUR});
+  const L=acquireFxLight(0xff8a3a,10,24); if(L){ L.position.set(pos.x,gy+1.1,pos.z); cfx.push({o:L,kind:'light',t:0,dur:FIRE_DUR}); }   // luz del pool (sin recompilar = sin tirón)
   // INCENDIA árboles y plantas alrededor: se ennegrecen poco a poco y desaparecen
   const R=5.0; for(const t of trees){ if(t.dead||t.state!=='alive')continue; const dx=t.x-pos.x,dz=t.z-pos.z; if(dx*dx+dz*dz<R*R) igniteTree(t); }
   burnFoliageAround(pos.x,pos.z,R);
@@ -1728,7 +1736,7 @@ function tickFx(dt){ for(let i=cfx.length-1;i>=0;i--){ const e=cfx[i]; e.t+=dt; 
   if(e.kind==='expl'){ const k=e.t/e.dur; e.o.material.opacity=Math.max(0,1-k*k); e.o.scale.setScalar(3.2*(0.55+k*0.7)); }
   else if(e.kind==='light'){ e.o.intensity=Math.max(0,10*(1-e.t/e.dur))*(0.7+Math.random()*0.3); }
   else { const ft=e.t-d; let o=0; if(ft>0) o=Math.min(1,ft/0.5)*Math.min(1,(e.dur-e.t)/1.2); e.o.material.opacity=Math.max(0,o)*(e.max||0.85); }
-  if(e.t>=e.dur){ scene.remove(e.o); if(e.o.material)e.o.material.dispose(); if(e.o.geometry)e.o.geometry.dispose(); cfx.splice(i,1); } } }
+  if(e.t>=e.dur){ if(e.kind==='light'){ releaseFxLight(e.o); } else { scene.remove(e.o); if(e.o.material)e.o.material.dispose(); if(e.o.geometry)e.o.geometry.dispose(); } cfx.splice(i,1); } } }
 
 /* ---- molotov en mano: trapo con cannon-es ---- */
 const cw=new CANNON.World(); cw.gravity.set(0,-9.8,0); cw.allowSleep=false;
@@ -2261,7 +2269,7 @@ function resolveCollisions(){ const px=player.pos.x,pz=player.pos.z;
 function collideWorld(){ for(const c of chunkList){ if(!c.grp.visible)continue;
     const px=player.pos.x,pz=player.pos.z;
     for(const t of c.trees){ if(t.dead||t.state!=='alive')continue; const dx=px-t.x,dz=pz-t.z,d=Math.hypot(dx,dz),R=0.42*(t.curScale||1); if(d<R&&d>1e-4){const p=(R-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
-    if(c.ore)for(const o of c.ore){ if(o.hp<=0)continue; const dx=px-o.x,dz=pz-o.z,d=Math.hypot(dx,dz),R=0.85; if(d<R&&d>1e-4){const p=(R-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
+    if(c.ore)for(const o of c.ore){ if(o.hp<=0)continue; const dx=px-o.x,dz=pz-o.z,d=Math.hypot(dx,dz),R=(o.r||0.85); if(d<R&&d>1e-4){const p=(R-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
     if(c.rockCols)for(const r of c.rockCols){ const dx=px-r.x,dz=pz-r.z,d=Math.hypot(dx,dz); if(d<r.r&&d>1e-4){const p=(r.r-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
   } }
 // PEDAZOS DE ROCA con física (al picar): caen y desaparecen a los 2 s
@@ -2318,13 +2326,13 @@ function igniteStructure(m){ if(!structureBurnable(m))return; m.userData._burnin
   let sz; try{ sz=new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()); }catch(e){ sz=new THREE.Vector3(1,1,1); }
   const h=Math.max(0.6,sz.y), n=Math.min(4,1+Math.floor((sz.x+sz.z)*0.4));
   for(let i=0;i<n;i++){ const fm=makeFireMesh(fireGifs[1].tex, Math.min(1.3,0.5+sz.x*0.2), h*0.85); fm.position.set((Math.random()-0.5)*sz.x*0.6, h*0.3, (Math.random()-0.5)*sz.z*0.6); m.add(fm); }
-  const L=new THREE.PointLight(0xff7a30,7,16,0.8); L.position.y=h*0.6; m.add(L);
+  const L=acquireFxLight(0xff7a30,7,16); if(L){ L.position.set(m.position.x, terrainHeight(m.position.x,m.position.z)+h*0.6, m.position.z); }   // luz del pool (sin tirón al incendiarse la casa)
   burning.push({m,t:0,L}); markShadowDirty(); }
 function igniteStructuresAround(x,z,r){ const r2=r*r; for(let i=placedItems.length-1;i>=0;i--){ const m=placedItems[i]; if(!m)continue; const dx=m.position.x-x,dz=m.position.z-z; if(dx*dx+dz*dz<r2) igniteStructure(m); } }
 function burnTick(dt){ for(let i=burning.length-1;i>=0;i--){ const b=burning[i]; b.t+=dt;
     if(b.L)b.L.intensity=6+Math.sin(b.t*17)*2+Math.random()*1.5;
     if(!b._spread&&b.t>3){ b._spread=true; igniteStructuresAround(b.m.position.x,b.m.position.z,2.8); }   // se propaga a la madera pegada (casa entera)
-    if(b.t>=STRUCT_BURN){ try{ destroyPlaced(b.m); }catch(e){} burning.splice(i,1); } } }
+    if(b.t>=STRUCT_BURN){ try{ destroyPlaced(b.m); }catch(e){} releaseFxLight(b.L); burning.splice(i,1); } } }
 
 /* ===================== CLIMA: lluvia + rayos (cada tanto llueve, se nubla y caen rayos) ===================== */
 const RN=1400, _rp=new Float32Array(RN*6);
@@ -2493,7 +2501,7 @@ document.querySelectorAll('#menu .scrl, #options .card').forEach(card=>{
 // scMoved quedaba alto y bloqueaba todos los taps (no se podía cambiar de pestaña). Reseteamos en cada toque.
 $('menu').addEventListener('pointerdown',()=>{ scMoved=0; },true);
 // cargar GLB de items (cama + hacha tomahawk)
-loadGLBItem('cama','cama.glb',2.0); loadGLBItem('hacha','tomahawk_-_hacha.glb',0.7);
+loadGLBItem('cama','cama.glb',2.0); loadGLBItem('hacha','hawk.glb',0.7);
 const NGLB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@86aae18/';   // assets nuevos (pala/pico/barro/enemigo)
 loadGLBItem('pala','pala.glb',1.05,{base:NGLB,upright:true}); loadGLBItem('picoafil','pico.glb',1.0,{base:NGLB,upright:true,flip:true});
 // textura de barro real (Higgsfield) sobre el barro de la chatarra; si falla, queda la procedural
@@ -2513,7 +2521,7 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
   const SPECS=[
     {key:'fox',  file:'animated_fox__3d_animal_model.glb', h:0.7, idle:'NeutralStand', walk:'Walk', count:5, sp:1.3, hp:3, proc:false},
     {key:'rino', file:'model_56a_-_southern_white_rhino.glb', h:1.9, idle:'Action', walk:'Action', count:2, sp:0.8, hp:6, proc:true},
-    {key:'spider',file:'spider_rig.glb', h:0.6, idle:'CINEMA', walk:'CINEMA', count:4, sp:1.1, hp:3, proc:true},
+    {key:'spider',file:'spider_rig.glb', h:0.6, idle:'CINEMA', walk:'CINEMA', count:0, sp:1.1, hp:3, proc:true},   // NO aparecen al inicio: sólo desde el día 10 (gigantes)
   ];
   const gl=new GLTFLoader(); const F=[]; const ray2=new THREE.Raycaster(); let spiderFactory=null, giantsSpawned=false; const FAUNA_D2=110*110, FAUNA_RELOC2=150*150;   // visibles hasta ~110 m; si quedan lejísimos se reubican cerca tuyo
   function faunaPos(){ const a=Math.random()*6.283, r=18+Math.random()*60; let x=player.pos.x+Math.cos(a)*r, z=player.pos.z+Math.sin(a)*r;   // aparecen ALREDEDOR del jugador (no perdidos en el mapa)
@@ -2530,8 +2538,8 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
     if(S.key==='spider') spiderFactory=(x,z)=>addInst(S,g,src,s0,3,10,x,z);   // araña GIGANTE: x3, 10 golpes
   }catch(e){console.warn('fauna inst',e);} }, undefined, e=>console.warn(S.file,e)); });
   faunaTick=function(dt){
-    if(gameNight>=5 && !giantsSpawned && nightFactor>0.5 && spiderFactory){ giantsSpawned=true;   // NOCHE 5: arañas gigantes
-      for(let k=0;k<3;k++){ const a=Math.random()*6.283,r=24+Math.random()*16; spiderFactory(player.pos.x+Math.cos(a)*r,player.pos.z+Math.sin(a)*r); } }
+    if(gameNight>=10 && !giantsSpawned && nightFactor>0.5 && spiderFactory){ giantsSpawned=true;   // DÍA 10: arañas GIGANTES (recién acá aparecen)
+      for(let k=0;k<4;k++){ const a=Math.random()*6.283,r=22+Math.random()*16; spiderFactory(player.pos.x+Math.cos(a)*r,player.pos.z+Math.sin(a)*r); } }
     if(faunaAtk){ faunaAtk=false; ray2.setFromCamera({x:0,y:0},camera); ray2.far=4.6; let best=null,bd=1e9;
       for(const o of F){ if(o.dead)continue; const h=ray2.intersectObject(o.inst,true); if(h.length&&h[0].distance<bd){bd=h[0].distance;best=o;} }
       if(best&&bd<4.6){ best.hp--; if(best.hp<=0) killAnimal(best); else { try{chopSound();}catch(e){} } } }
@@ -2548,8 +2556,15 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
         if(!carcass){ if(o.deadT>2.4){ o.inst.traverse(m=>{ if(m.material&&m.material.opacity!==undefined){ m.material.transparent=true; m.material.opacity=Math.max(0,1-(o.deadT-2.4)/0.6); } }); } if(o.deadT>=3){ scene.remove(o.inst); F.splice(k,1); } }
         else if(o.deadT>=60 && !o._butchering){ scene.remove(o.inst); F.splice(k,1); }   // carcasa dura hasta destazarla (o caduca a 60 s)
         continue; }
-      o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; }
-      if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; o.inst.rotation.y=Math.atan2(Math.cos(o.wAng),Math.sin(o.wAng)); }
+      if(o.key==='spider'){   // ARAÑA GIGANTE: PERSIGUE y ataca al jugador (las 8 patas animan con CINEMA_4D_Main)
+        const sdx=player.pos.x-o.inst.position.x, sdz=player.pos.z-o.inst.position.z, sd=Math.hypot(sdx,sdz)||1;
+        o.inst.rotation.y=Math.atan2(sdx,sdz); o._atk=Math.max(0,(o._atk||0)-dt);
+        if(sd>1.7){ const v=o.sp*1.5*dt; o.inst.position.x+=sdx/sd*v; o.inst.position.z+=sdz/sd*v; o.move=true; }
+        else { o.move=false; if(o._atk<=0){ o._atk=1.1; stats.hp=Math.max(0,stats.hp-7); } }   // pegada → muerde
+        if(o.wa)o.wa.timeScale=o.move?1.9:1.0;   // las patas crawl más rápido al perseguir
+      } else {
+        o.wTimer-=dt; if(o.wTimer<=0){ o.wTimer=3+Math.random()*5; o.move=Math.random()<0.6; o.wAng+=(Math.random()-0.5)*1.6; }
+        if(o.move){ const v=o.sp*dt; o.inst.position.x+=Math.cos(o.wAng)*v; o.inst.position.z+=Math.sin(o.wAng)*v; o.inst.rotation.y=Math.atan2(Math.cos(o.wAng),Math.sin(o.wAng)); } }
       const gy=terrainHeight(o.inst.position.x,o.inst.position.z)-o.baseY;
       if(o.proc){ o._ph+=dt*(o.move?9:2); const bob=Math.abs(Math.sin(o._ph))*(o.move?0.06:0.012); o.inst.position.y=gy+bob; o.inst.rotation.x=Math.sin(o._ph*0.5)*(o.move?0.04:0.01); }   // animación procedural (rino/spider)
       else { if(!o.single){ if(o.move&&o.state!=='walk'){ o.state='walk'; o.ia.fadeOut(0.2); o.wa.reset().fadeIn(0.2).play(); } else if(!o.move&&o.state!=='idle'){ o.state='idle'; o.wa.fadeOut(0.2); o.ia.reset().fadeIn(0.2).play(); } } o.inst.position.y=gy; } } };
@@ -2585,7 +2600,8 @@ function butcherTick(dt){
   const dyaw=Math.abs(((player.yaw-butcher.syaw+Math.PI)%(Math.PI*2))-Math.PI);   // miró muy a los lados
   if(!player.crouch||moved||dyaw>0.55||!o.dead){ endButcher(false); return; }   // cancela: parado / movido / mirando a otro lado
   butcher.t+=dt;
-  if(butcher.mesh){ const c=o.inst.position; butcher.mesh.position.set(c.x,terrainHeight(c.x,c.z)+0.45,c.z); butcher.mesh.rotation.set(-0.5+Math.sin(butcher.t*13)*0.55,butcher.t*1.5,0.2); }
+  if(butcher.mesh){ const c=o.inst.position; const baseY=terrainHeight(c.x,c.z)+0.5; const saw=Math.sin(butcher.t*10);   // vaivén de corte (NO gira)
+    butcher.mesh.position.set(c.x,baseY+0.12+saw*0.10,c.z); butcher.mesh.rotation.set(2.35+saw*0.30,butcher.syaw,0.12); }   // punta hacia ABAJO clavándose en la carcasa
   const bf=$('butcherFill'); if(bf)bf.style.width=Math.min(100,butcher.t/butcher.dur*100)+'%';
   if(butcher.t>=butcher.dur) endButcher(true);
 }
@@ -2667,11 +2683,11 @@ function setupNPCs(){ if(npcSetupDone)return; npcSetupDone=true; try{
       if(inst.mixers[inst.state])inst.mixers[inst.state].update(dt);
       for(const f of inst.flames){ const k=0.65+Math.random()*0.55; f.light.intensity=6*k; f.spr.material.opacity=0.6+0.4*Math.random(); }
       const dx=player.pos.x-inst.group.position.x,dz=player.pos.z-inst.group.position.z,d=Math.hypot(dx,dz)||1; inst.atkCD=Math.max(0,inst.atkCD-dt);
-      const CHASE=14;
-      if(d<CHASE){   // te detecta de cerca → persigue CORRIENDO (más rápido que antes)
+      const CHASE=22;
+      if(d<CHASE){   // te detecta desde más lejos → persigue CORRIENDO hasta pegarte
         inst.group.rotation.y=Math.atan2(dx,dz);
-        if(d<2.6){ setSt(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.3; if(d<1.5){ stats.hp=Math.max(0,stats.hp-8); } } }   // sólo te DAÑA si está MUY cerca (<1.5 m)
-        else { const sp=3.4*dt; inst.group.position.x+=dx/d*sp; inst.group.position.z+=dz/d*sp; setSt(inst,'run'); }
+        if(d<1.5){ setSt(inst,'attack'); if(inst.atkCD<=0){ inst.atkCD=1.2; stats.hp=Math.max(0,stats.hp-8); } }   // ya pegado → ataca y DAÑA
+        else { const sp=3.6*dt; inst.group.position.x+=dx/d*sp; inst.group.position.z+=dz/d*sp; setSt(inst,'run'); }   // sigue cerrando distancia hasta 1.5 m
       } else {       // lejos → NO persigue: deambula tranquilo o se queda quieto
         inst.wTimer-=dt; if(inst.wTimer<=0){ inst.wTimer=2.5+Math.random()*3.5; inst.wAng=Math.random()*6.28; inst._wmove=Math.random()<0.55; }
         if(inst._wmove){ const sp=0.7*dt; inst.group.position.x+=Math.cos(inst.wAng)*sp; inst.group.position.z+=Math.sin(inst.wAng)*sp; inst.group.rotation.y=Math.atan2(Math.cos(inst.wAng),Math.sin(inst.wAng)); setSt(inst,'walk'); }
@@ -3412,14 +3428,19 @@ $('fsBtn').addEventListener('click',()=>{
   fadeOut($('boot'), playStudios);   // negro → LOGOS de estudios → carga → MENÚ (sin las pantallas intermedias que se buggeaban)
 });
 /* ===== INTRO COMBINADA: al tocar JUGAR → persecución (overlay) → caída → juego ===== */
+function showMegafono(on){ let el=document.getElementById('megafono');
+  if(!el){ el=document.createElement('div'); el.id='megafono'; document.body.appendChild(el); }
+  el.textContent='📢 '+(curLang==='en'?'On the megaphone':curLang==='pt'?'No megafone':'Por el megáfono');
+  const base='position:fixed;z-index:99;padding:8px 18px;border-radius:30px;background:rgba(8,10,14,.6);color:#fff;font-weight:700;letter-spacing:.05em;font-size:16px;border:1px solid rgba(255,255,255,.16);box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;pointer-events:none;';
+  el.style.cssText=base+(on?'':'display:none;')+(rot?'left:13%;top:50%;transform:translate(-50%,-50%) rotate(90deg);':'left:50%;top:13%;transform:translateX(-50%);'); }
 function playChaseThenFall(){
   $('options').classList.remove('show'); $('startMenu').classList.remove('show'); $('kbCard').classList.remove('show');
   try{ if(escenaAudio){ escenaAudio.volume=0.9;   // desbloquea en el gesto y arranca 0.7s después del inicio de la cinemática
-    const p=escenaAudio.play(); if(p&&p.then)p.then(()=>{ try{ escenaAudio.pause(); escenaAudio.currentTime=0; }catch(e){} setTimeout(()=>{ try{ escenaAudio.currentTime=0; escenaAudio.play(); }catch(e){} },700); }).catch(()=>{ setTimeout(()=>{ try{ escenaAudio.play(); }catch(e){} },700); }); } }catch(e){}
+    const p=escenaAudio.play(); if(p&&p.then)p.then(()=>{ try{ escenaAudio.pause(); escenaAudio.currentTime=0; }catch(e){} setTimeout(()=>{ try{ escenaAudio.currentTime=0; escenaAudio.play(); showMegafono(true); }catch(e){} },700); }).catch(()=>{ setTimeout(()=>{ try{ escenaAudio.play(); showMegafono(true); }catch(e){} },700); }); } }catch(e){}
   const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='';
   window.__startChase();   // arranca la persecución; al terminar llama window.__introToFall → vuelve a startGame (caída)
 }
-function fadeOutEscenaAudio(){ if(!escenaAudio)return; try{ const a=escenaAudio; let v=a.volume; const t=setInterval(()=>{ v-=0.12; if(v<=0){ a.pause(); clearInterval(t); } else a.volume=v; },70); }catch(e){} }
+function fadeOutEscenaAudio(){ try{ showMegafono(false); }catch(e){} if(!escenaAudio)return; try{ const a=escenaAudio; let v=a.volume; const t=setInterval(()=>{ v-=0.12; if(v<=0){ a.pause(); clearInterval(t); } else a.volume=v; },70); }catch(e){} }
 window.__introToFall=function(){ window.__chaseDone=true; fadeOutEscenaAudio();   // se funde el audio al pasar a la caída
   fadeBlackEl.classList.add('snap','on');   // NEGRO instantáneo (nunca se ve el fondo del juego en el corte)
   const ca=$('chaseApp'); if(ca)ca.classList.add('gone'); const cf=$('chaseFade'); if(cf)cf.style.display='none';
