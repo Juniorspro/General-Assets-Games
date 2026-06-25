@@ -1107,7 +1107,7 @@ function buildChunk(cx,cz){
   const oreList=[]; { const oN=1+Math.floor(rng()*2);
     for(let i=0;i<oN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK; if(Math.abs(x)<ROAD_HALF+2||inBeach(x))continue;
       const gy=terrainHeight(x,z); const node=makeOreNode(); node.position.set(x,gy,z); node.rotation.y=rng()*6.28; grp.add(node);
-      oreList.push({x,z,mesh:node,hp:3}); } }
+      oreList.push({x,z,mesh:node,hp:6}); } }
   // rocas cerradas variadas (mergeadas en 1 malla por sector → sin huecos)
   const rocks=[]; const rockCols=[]; const rN=Math.round(qual.rockN*densityMul);
   for(let i=0;i<rN;i++){const x=x0+rng()*CHUNK,z=z0+rng()*CHUNK;if(Math.abs(x)<ROAD_HALF+1.0||inBeach(x))continue;
@@ -1455,8 +1455,11 @@ function makeScrapNub(){ const g=new THREE.Group();
 // nodo de MENA: roca con vetas metálicas; se mina con el pico → piedra (+ mena)
 const oreMat=new THREE.MeshStandardMaterial({color:0x6b6660,roughness:0.82,metalness:0.45,emissive:0x241c08,emissiveIntensity:0.4});
 const nuggetMat=new THREE.MeshStandardMaterial({color:0xb8923a,roughness:0.5,metalness:0.7,emissive:0x3a2a08,emissiveIntensity:0.55});
-function makeOreNode(){ const g=new THREE.Group(); const rock=stoneChunk(0.46,rockMat); rock.position.y=0.26; g.add(rock);   // roca minable con la textura PBR (rockMat), no otra roca
-  for(let i=0;i<5;i++){ const n=new THREE.Mesh(new THREE.IcosahedronGeometry(0.05+Math.random()*0.04,0),nuggetMat); const a=Math.random()*6.28,r=0.16+Math.random()*0.24; n.position.set(Math.cos(a)*r,0.18+Math.random()*0.4,Math.sin(a)*r); g.add(n); }
+function makeOreNode(){ const g=new THREE.Group();   // ROCA GRANDE sellada con textura PBR (rockMat) — minable de verdad, sin oro feo
+  const main=stoneChunk(0.82,rockMat); main.position.y=0.42; main.receiveShadow=true; g.add(main);
+  // 2-3 bloques satélite (misma textura PBR) para que parezca una formación rocosa real, todo cerrado
+  const sN=2+Math.floor(Math.random()*2);
+  for(let i=0;i<sN;i++){ const sr=0.34+Math.random()*0.22; const s=stoneChunk(sr,rockMat); const a=Math.random()*6.28,rr=0.5+Math.random()*0.35; s.position.set(Math.cos(a)*rr,sr*0.7,Math.sin(a)*rr); s.rotation.set(Math.random()*3,Math.random()*6.28,Math.random()*3); s.receiveShadow=true; g.add(s); }
   return g; }
 function doMine(){ const sy=Math.sin(player.yaw),cy=Math.cos(player.yaw); let best=null,bd=2.6;
   for(const c of chunkList){ if(!c.grp.visible||!c.ore)continue;
@@ -1803,10 +1806,9 @@ function mRecagua(){const g=new THREE.Group(); g.userData.kind='recagua';
   [[-P,-P],[P,-P],[-P,P],[P,P]].forEach(([x,z])=>g.add(boxM(0.07,1.55,0.07,woodConsMat,x,0.775,z)));
   const cloth=new THREE.Mesh(new THREE.ConeGeometry(0.92,0.72,4,1,true),clothMat); cloth.rotation.y=Math.PI/4; cloth.position.y=1.18; cloth.scale.set(1,-1,1); cloth.castShadow=true; g.add(cloth);
   [[-P,-P],[P,-P],[-P,P],[P,P]].forEach(([x,z])=>{const c=cyl(0.012,0.012,0.26,clothMat,6); c.position.set(x*0.96,1.42,z*0.96); c.lookAt(0,1.18,0); g.add(c);});
-  const buck=cyl(0.27,0.21,0.42,chapaMat,20); buck.position.y=0.21; g.add(buck);
-  const rim=new THREE.Mesh(new THREE.TorusGeometry(0.27,0.018,6,20),blackMetalMat); rim.rotation.x=Math.PI/2; rim.position.y=0.42; g.add(rim);
-  const water=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.185,0.34,20),waterMat); water.position.y=0.04; water.scale.y=0.001; water.visible=false; g.add(water);
-  g.userData.water=water; g.userData.level=0;
+  // SIN tacho: el recolector queda vacío; nos acercamos con un balde y lo colocamos debajo (g.userData.bucket)
+  const caño=cyl(0.03,0.03,0.4,woodConsMat,6); caño.position.y=0.98; g.add(caño);   // pico de goteo bajo el embudo
+  g.userData.bucket=null; g.userData.level=0;
   return g;}
 
 /* ---- armas / herramientas procedurales ---- */
@@ -1895,8 +1897,19 @@ function buildHoe(headMat){const g=new THREE.Group();
   const neck=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.034,0.26,8),headMat); neck.position.set(0.12,1.33,0); neck.rotation.z=-1.0; neck.castShadow=true; g.add(neck);
   const blade=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.045,0.26),headMat); blade.position.set(0.27,1.21,0); blade.rotation.z=0.5; blade.castShadow=true; g.add(blade);
   return g;}
-function buildBucket(mat){const g=new THREE.Group();const body=cyl(0.26,0.2,0.42,mat,18);body.position.y=0.21;g.add(body);const rim=new THREE.Mesh(new THREE.TorusGeometry(0.26,0.02,6,18),mat);rim.rotation.x=Math.PI/2;rim.position.y=0.42;rim.castShadow=true;g.add(rim);
-  const hc=new THREE.QuadraticBezierCurve3(new THREE.Vector3(-0.26,0.42,0),new THREE.Vector3(0,0.72,0),new THREE.Vector3(0.26,0.42,0));const handle=new THREE.Mesh(new THREE.TubeGeometry(hc,12,0.012,6),mat);handle.castShadow=true;g.add(handle);return g;}
+function buildBucket(mat,fill){const g=new THREE.Group();
+  // cuerpo SIN tapa (abierto arriba): pared exterior + interior + fondo, así sólo se ve el agua desde la boca
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.2,0.42,18,1,true),mat);body.position.y=0.21;g.add(body);
+  const base=new THREE.Mesh(new THREE.CircleGeometry(0.2,18),mat);base.rotation.x=-Math.PI/2;base.position.y=0.001;g.add(base);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(0.26,0.02,6,18),mat);rim.rotation.x=Math.PI/2;rim.position.y=0.42;rim.castShadow=true;g.add(rim);
+  const hc=new THREE.QuadraticBezierCurve3(new THREE.Vector3(-0.26,0.42,0),new THREE.Vector3(0,0.72,0),new THREE.Vector3(0.26,0.42,0));const handle=new THREE.Mesh(new THREE.TubeGeometry(hc,12,0.012,6),mat);handle.castShadow=true;g.add(handle);
+  // agua interior: cilindro que sólo asoma por la boca (las paredes opacas tapan los costados)
+  const water=new THREE.Mesh(new THREE.CylinderGeometry(0.235,0.185,0.34,18),waterMat);g.add(water);
+  g.userData.water=water; g.userData.bmat=mat;
+  setBucketLevel(g,fill||0);
+  return g;}
+function setBucketLevel(g,lv){ lv=Math.max(0,Math.min(1,lv)); const w=g.userData.water; if(!w)return; g.userData.fill=lv; w.visible=lv>0.012; w.scale.y=Math.max(0.012,lv); w.position.y=0.03+0.17*lv; }
+const buildFullBucket=()=>buildBucket(woodConsMat,1);   // balde lleno (item de hotbar)
 
 /* ---- GLB ---- */
 const GLBP='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@86aae18/';
@@ -1927,7 +1940,7 @@ const MODELS={ hammer:buildHammer, table:buildTable, pala:glbModel('pala',()=>bu
   cuchipiedra:()=>buildKnifeV(stoneMat), cuchiafil:()=>buildKnifeV(metalMat),
   flechamad:()=>buildArrows(woodDark), flechapiedra:()=>buildArrows(stoneMat), flechaafil:()=>buildArrows(metalMat),
   antorcha:buildTorch, azadamad:()=>buildHoe(woodDark), azadapiedra:()=>buildHoe(stoneMat),
-  baldemad:()=>buildBucket(woodConsMat), baldechapa:()=>buildBucket(chapaMat),
+  baldemad:()=>buildBucket(woodConsMat), baldechapa:()=>buildBucket(chapaMat), baldeagua:buildFullBucket,
   cama:glbModel('cama',buildTable), horno:mHorno, silla:mSilla, bidon:mBidon, perchero:mPerchero, fogata:mFogata, conserv:mConserv, recagua:mRecagua,
   pmad:()=>consPiece('wall',woodConsMat), smad:()=>consPiece('floor',woodConsMat), tmad:()=>consPiece('roofflat',woodConsMat), imad:()=>consPiece('roof',woodConsMat), vmad:()=>consPiece('window',woodConsMat), dmad:()=>consPiece('door',woodConsMat),
   pcha:()=>consPiece('wall',chapaMat), scha:()=>consPiece('floor',chapaMat), tcha:()=>consPiece('roofflat',chapaMat), vcha:()=>consPiece('window',chapaMat), dcha:()=>consPiece('door',chapaMat),
@@ -1950,7 +1963,7 @@ const VIEW={
   arco:{s:0.55,...P_BOW}, flechamad:{s:0.6,...P_HOLD}, flechapiedra:{s:0.6,...P_HOLD}, flechaafil:{s:0.6,...P_HOLD},
   picomad:{s:0.46,...P_SWING}, picopiedra:{s:0.46,...P_SWING}, picoafil:{s:0.46,...P_SWING},
   antorcha:{s:0.6,...P_HOLD}, azadamad:{s:0.46,...P_SWING}, azadapiedra:{s:0.46,...P_SWING},
-  baldemad:{s:0.8,...P_HOLD}, baldechapa:{s:0.8,...P_HOLD}
+  baldemad:{s:0.8,...P_HOLD}, baldechapa:{s:0.8,...P_HOLD}, baldeagua:{s:0.8,...P_HOLD}
 };
 let swapT=-1;   // animación de cambio de objeto (baja y vuelve a subir)
 function equipItem(id){
@@ -1967,6 +1980,7 @@ function equipItem(id){
     if(id==='botella') setupHeldMolotov(); else molotovHeld=false; }
   else { fpRig.visible=false; molotovHeld=false; fpAxe.visible=false; }   // sin ítem equipado → MANOS VACÍAS (ya no vuelve el hacha vieja)
   if(id!=='botella'&&typeof glassMat!=='undefined') glassMat.emissiveIntensity=0;   // al guardar la botella, deja de brillar
+  try{ const fb=$('flash'); if(fb) fb.textContent=(id==='baldeagua')?'💧':'🪓'; }catch(e){}   // balde lleno → el botón pasa a ser GOTA (beber)
 }
 let wswing={active:false,t:0,hit:false};
 const THRUST=new Set(['spear','lanzapiedra','lanzaafil']);
@@ -2002,6 +2016,7 @@ const RECIPES=[
   {id:'azadapiedra',tab:'tools',needTable:true,placeable:false},
   {id:'baldemad',   tab:'tools',needTable:true,placeable:false},
   {id:'baldechapa', tab:'tools',needTable:true,placeable:false},
+  {id:'baldeagua',  tab:'tools',needTable:false,placeable:false,bagOnly:true},   // balde LLENO: no se craftea, se obtiene del recolector; se bebe (+25% sed)
   {id:'cama',tab:'furniture',needTable:true,placeable:true},
   {id:'horno',tab:'furniture',needTable:true,placeable:true},
   {id:'silla',tab:'furniture',needTable:true,placeable:true},
@@ -2033,7 +2048,7 @@ function addMat(k,n){ n=n||1; if(k==='madera'){ if(typeof woodCount!=='undefined
   if($('menu')&&$('menu').classList.contains('show')&&menuMode==='bag'&&activeTab==='materials')renderMaterials(); }
 function useMat(k,n){ n=n||1; if(matCount(k)<n)return false; if(k==='madera'){woodCount-=n; if(woodHUD)woodHUD.textContent=woodCount;} else mats[k]-=n; return true; }
 const inv={hammer:0,pala:0,table:0,spear:0,knife:0,machete:0,botella:0,guadana:0,hacha:1,
-  picomad:0,arco:0,antorcha:0,lanzapiedra:0,cuchipiedra:0,picopiedra:0,flechamad:0,flechapiedra:0,flechaafil:0,lanzaafil:0,picoafil:0,cuchiafil:0,azadamad:0,azadapiedra:0,baldemad:0,baldechapa:0,
+  picomad:0,arco:0,antorcha:0,lanzapiedra:0,cuchipiedra:0,picopiedra:0,flechamad:0,flechapiedra:0,flechaafil:0,lanzaafil:0,picoafil:0,cuchiafil:0,azadamad:0,azadapiedra:0,baldemad:0,baldechapa:0,baldeagua:0,
   cama:0,horno:0,silla:0,recagua:0,bidon:0,perchero:0,fogata:0,conserv:0,pmad:0,smad:0,tmad:0,imad:0,vmad:0,dmad:0,pcha:0,scha:0,tcha:0,vcha:0,dcha:0,emad:0};
 let equipped=null;
 let craftAtTable=false;
@@ -2246,7 +2261,7 @@ function resolveCollisions(){ const px=player.pos.x,pz=player.pos.z;
 function collideWorld(){ for(const c of chunkList){ if(!c.grp.visible)continue;
     const px=player.pos.x,pz=player.pos.z;
     for(const t of c.trees){ if(t.dead||t.state!=='alive')continue; const dx=px-t.x,dz=pz-t.z,d=Math.hypot(dx,dz),R=0.42*(t.curScale||1); if(d<R&&d>1e-4){const p=(R-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
-    if(c.ore)for(const o of c.ore){ if(o.hp<=0)continue; const dx=px-o.x,dz=pz-o.z,d=Math.hypot(dx,dz),R=0.5; if(d<R&&d>1e-4){const p=(R-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
+    if(c.ore)for(const o of c.ore){ if(o.hp<=0)continue; const dx=px-o.x,dz=pz-o.z,d=Math.hypot(dx,dz),R=0.85; if(d<R&&d>1e-4){const p=(R-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
     if(c.rockCols)for(const r of c.rockCols){ const dx=px-r.x,dz=pz-r.z,d=Math.hypot(dx,dz); if(d<r.r&&d>1e-4){const p=(r.r-d)/d;player.pos.x+=dx*p;player.pos.z+=dz*p;} }
   } }
 // PEDAZOS DE ROCA con física (al picar): caen y desaparecen a los 2 s
@@ -2345,9 +2360,27 @@ function tickDirt(dt){ let any=false; for(let i=0;i<DIRT;i++)if(dst[i].life>0){a
 /* ---- cartel sobre mesa + crafteo en mesa + agua ---- */
 let nearTable=null, nearRecagua=null, nearBed=null, choldT=0, cholding=false, signMode='table';
 const signEl=$('tableSign'),signFill=$('signFill'),_proj=new THREE.Vector3();
-function fillWater(){ const r=nearRecagua; if(!r) return; const lv=Math.min(1,(r.userData.level||0)+0.12); r.userData.level=lv;
-  const w=r.userData.water; if(w){ w.visible=lv>0.01; w.scale.y=Math.max(0.001,lv); w.position.y=0.04+0.17*lv; } signFill.style.width=(lv*100)+'%'; }
-signEl.addEventListener('pointerdown',e=>{ e.preventDefault(); if(signMode==='water'){ fillWater(); } else if(signMode==='sleep'){ startSleep(nearBed); } else { craftAtTable=true; openMenu('craft'); } });   // mesa: tap abre el menú (antes había que mantener, fallaba)
+// Recolector: estados — sin balde (colocar) / con balde llenándose (lluvia) / balde lleno (recoger)
+function recaguaAct(){ const r=nearRecagua; if(!r) return;
+  if(!r.userData.bucket){   // colocar un balde vacío debajo
+    if((inv.baldemad||0)>0){ inv.baldemad--; _placeBucketUnder(r,woodConsMat); }
+    else if((inv.baldechapa||0)>0){ inv.baldechapa--; _placeBucketUnder(r,chapaMat); }
+    else { toast(cT('noBucket')); }
+    if(typeof renderHotbar==='function')renderHotbar(); return; }
+  if((r.userData.level||0)>=1){   // recoger el balde lleno → al hotbar
+    r.remove(r.userData.bucket); r.userData.bucket=null; r.userData.level=0;
+    inv.baldeagua=(inv.baldeagua||0)+1; toast('+1 '+cT('baldeagua'));
+    try{ if(typeof hotbar!=='undefined' && !hotbar.includes('baldeagua')){ const fi=hotbar.indexOf(null); if(fi>=0)hotbar[fi]='baldeagua'; } }catch(e){}   // a la barra rápida si hay hueco
+    if(typeof renderHotbar==='function')renderHotbar(); }
+  else { toast(cT('addWater')+'… ⛆'); }   // todavía llenándose con la lluvia
+}
+function _placeBucketUnder(r,mat){ const b=buildBucket(mat,0); b.position.set(0,0,0); r.add(b); r.userData.bucket=b; r.userData.level=0; toast('🪣'); }
+// BEBER de un balde lleno equipado: +25% sed, el balde queda vacío (vuelve a la mochila)
+function drinkBucket(){ if((inv.baldeagua||0)<=0)return; stats.thirst=Math.min(100,stats.thirst+25); inv.baldeagua--; inv.baldemad=(inv.baldemad||0)+1;
+  toast('💧 +25% '+(I18N[curLang]?cT('addWater'):'agua'));
+  if((inv.baldeagua||0)<=0){ try{ if(typeof hotbar!=='undefined'){ const hi=hotbar.indexOf('baldeagua'); if(hi>=0)hotbar[hi]=null; } }catch(e){} equipped=(inv.baldemad>0?'baldemad':null); equipItem(equipped); }
+  if(typeof renderHotbar==='function')renderHotbar(); }
+signEl.addEventListener('pointerdown',e=>{ e.preventDefault(); if(signMode==='water'){ recaguaAct(); } else if(signMode==='sleep'){ startSleep(nearBed); } else { craftAtTable=true; openMenu('craft'); } });   // mesa: tap abre el menú (antes había que mantener, fallaba)
 signEl.addEventListener('pointerup',()=>{cholding=false;choldT=0;if(signMode==='table')signFill.style.width='0%';});
 signEl.addEventListener('pointercancel',()=>{cholding=false;choldT=0;if(signMode==='table')signFill.style.width='0%';});
 function updateSign(dt){
@@ -2365,8 +2398,10 @@ function updateSign(dt){
   const sx=(_proj.x*0.5+0.5)*vw, sy=(-_proj.y*0.5+0.5)*vh;
   signEl.style.display='block'; signEl.style.left=sx+'px'; signEl.style.top=sy+'px';
   if(signMode==='water'){
-    const lv=target.userData.level||0; $('signTxt').textContent=lv>=1?cT('waterFull'):cT('addWater');
-    signFill.style.width=(lv*100)+'%';
+    const lv=target.userData.level||0;
+    if(!target.userData.bucket){ $('signTxt').textContent='🪣 '+cT('placeBucket'); signFill.style.width='0%'; }
+    else if(lv>=1){ $('signTxt').textContent='✅ '+cT('takeBucket'); signFill.style.width='100%'; }
+    else { $('signTxt').textContent='⛆ '+Math.round(lv*100)+'%'; signFill.style.width=(lv*100)+'%'; }
   } else if(signMode==='sleep'){ $('signTxt').textContent='💤 '+cT('sleep'); signFill.style.width='0%';
   } else { $('signTxt').textContent=cT('useTable'); signFill.style.width='0%'; }
 }
@@ -2410,13 +2445,15 @@ ctapBtn('bCraft',()=>openMenu('craft'));
 ctapBtn('bPlace',()=>{ if(placing) stopPlacing(); else openMenu('place'); });
 ctapBtn('bRot',()=>{ placeYaw=(placeYaw+Math.PI/4)%(Math.PI*2); });
 // el botón 🪓 del bosque: si hay arma equipada o estamos colocando, también dispara crafteo/colocación
-$('flash').addEventListener('pointerdown',()=>{ if(equipped==='botella'){ throwMolotov(); startWSwing(); return; } if(equipped) startWSwing(); if(placing) tryBuild(); });
+$('flash').addEventListener('pointerdown',()=>{ if(equipped==='baldeagua'){ drinkBucket(); return; } if(equipped==='botella'){ throwMolotov(); startWSwing(); return; } if(equipped) startWSwing(); if(placing) tryBuild(); });
 // per-frame tick del crafteo, llamado desde update()
 function craftTick(dt){
   tickGifs(dt); tickProjectiles(dt); tickFx(dt);
   if(_waterNrm){ _waterNrm.offset.x+=dt*0.025; _waterNrm.offset.y+=dt*0.018; }   // ondas del agua de los oasis
   const fb=(fireGifs[1].cur||0.6);
-  for(const m of placedItems){ if(m.userData.fire){ m.userData.fire.intensity=5+fb*5; } }   // fogata y horno: flamea e ilumina toda la habitación
+  for(const m of placedItems){ if(m.userData.fire){ m.userData.fire.intensity=5+fb*5; }   // fogata y horno: flamea e ilumina toda la habitación
+    if(m.userData.kind==='recagua'&&m.userData.bucket&&(m.userData.level||0)<1&&weather.raining){   // con lluvia se llena el balde en 45s
+      m.userData.level=Math.min(1,(m.userData.level||0)+dt/45); setBucketLevel(m.userData.bucket,m.userData.level); } }
   if(equipped==='botella') updateHeldMolotov(dt);
   else if(equipped==='antorcha'&&fpModel){ const tl=fpModel.getObjectByName('torchLight'); if(tl)tl.intensity=4+(gTorch.cur||0.6)*5; }
   // swing del arma equipada (anima el fpRig, no el hacha del bosque)
@@ -2820,7 +2857,7 @@ const I18N={
       kbMove:'Moverse',kbLook:'Mirar',kbRun:'Correr',kbJump:'Saltar',kbCrouch:'Agacharse',kbChop:'Talar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventario',kbThrow:'Lanzar molotov',kbPause:'Pausa',
       key_Mouse:'Ratón',key_Shift:'Mayús',key_Space:'Espacio',key_Ctrl:'Ctrl',key_Click:'Clic',key_Esc:'Esc',
       craft:'Fabricación',jump:'Saltar',crouch:'Agacharse',axe:'Hacha',build:'Construir',weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',pala:'Pala',spear:'Lanza de madera',knife:'Cuchillo de metal',
-      machete:'Machete',botella:'Botella incendiaria',guadana:'Guadaña',hacha:'Hacha tomahawk',picomad:'Pico de madera',arco:'Arco',lanzapiedra:'Lanza de piedra',cuchipiedra:'Cuchillo de piedra',picopiedra:'Pico de piedra',flechamad:'Flechas de madera',flechapiedra:'Flechas de piedra',flechaafil:'Flechas afiladas',lanzaafil:'Lanza afilada',picoafil:'Pico afilado',cuchiafil:'Cuchillo afilado',antorcha:'Antorcha',azadamad:'Azada de madera',azadapiedra:'Azada de piedra',baldemad:'Balde de madera',baldechapa:'Balde de chapa',addWater:'Cargar agua',waterFull:'Balde lleno',
+      machete:'Machete',botella:'Botella incendiaria',guadana:'Guadaña',hacha:'Hacha tomahawk',picomad:'Pico de madera',arco:'Arco',lanzapiedra:'Lanza de piedra',cuchipiedra:'Cuchillo de piedra',picopiedra:'Pico de piedra',flechamad:'Flechas de madera',flechapiedra:'Flechas de piedra',flechaafil:'Flechas afiladas',lanzaafil:'Lanza afilada',picoafil:'Pico afilado',cuchiafil:'Cuchillo afilado',antorcha:'Antorcha',azadamad:'Azada de madera',azadapiedra:'Azada de piedra',baldemad:'Balde de madera',baldechapa:'Balde de chapa',baldeagua:'Balde con agua',addWater:'Cargar agua',waterFull:'Balde lleno',placeBucket:'Colocar balde',takeBucket:'Recoger balde lleno',drink:'Beber agua',noBucket:'Necesitás un balde vacío',
       cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo recto de madera',imad:'Techo inclinado',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',tcha:'Techo recto de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',emad:'Escalera de madera',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',need:'Necesitás',noSupport:'Necesita una pared debajo',
       placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
@@ -2830,7 +2867,7 @@ const I18N={
       kbMove:'Move',kbLook:'Look',kbRun:'Run',kbJump:'Jump',kbCrouch:'Crouch',kbChop:'Chop / attack',kbCraft:'Craft',kbPlace:'Place',kbInv:'Inventory',kbThrow:'Throw molotov',kbPause:'Pause',
       key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Space',key_Ctrl:'Ctrl',key_Click:'Click',key_Esc:'Esc',
       craft:'Crafting',jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',pala:'Shovel',spear:'Wooden spear',knife:'Metal knife',
-      machete:'Machete',botella:'Molotov',guadana:'Scythe',hacha:'Tomahawk axe',picomad:'Wood pickaxe',arco:'Bow',lanzapiedra:'Stone spear',cuchipiedra:'Stone knife',picopiedra:'Stone pickaxe',flechamad:'Wood arrows',flechapiedra:'Stone arrows',flechaafil:'Sharp arrows',lanzaafil:'Sharp spear',picoafil:'Sharp pickaxe',cuchiafil:'Sharp knife',antorcha:'Torch',azadamad:'Wood hoe',azadapiedra:'Stone hoe',baldemad:'Wood bucket',baldechapa:'Metal bucket',addWater:'Collect water',waterFull:'Bucket full',
+      machete:'Machete',botella:'Molotov',guadana:'Scythe',hacha:'Tomahawk axe',picomad:'Wood pickaxe',arco:'Bow',lanzapiedra:'Stone spear',cuchipiedra:'Stone knife',picopiedra:'Stone pickaxe',flechamad:'Wood arrows',flechapiedra:'Stone arrows',flechaafil:'Sharp arrows',lanzaafil:'Sharp spear',picoafil:'Sharp pickaxe',cuchiafil:'Sharp knife',antorcha:'Torch',azadamad:'Wood hoe',azadapiedra:'Stone hoe',baldemad:'Wood bucket',baldechapa:'Metal bucket',baldeagua:'Water bucket',addWater:'Collect water',waterFull:'Bucket full',placeBucket:'Place bucket',takeBucket:'Take full bucket',drink:'Drink water',noBucket:'You need an empty bucket',
       cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Flat wood roof',imad:'Sloped roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',tcha:'Flat metal roof',vcha:'Metal wall + window',dcha:'Metal wall + door',emad:'Wood stairs',free:'Free',craftBtn:'Craft',crafted:'Crafted!',need:'You need',noSupport:'Needs a wall below',
       placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
       equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
@@ -2840,7 +2877,7 @@ const I18N={
       kbMove:'Mover',kbLook:'Olhar',kbRun:'Correr',kbJump:'Pular',kbCrouch:'Agachar',kbChop:'Cortar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventário',kbThrow:'Lançar molotov',kbPause:'Pausa',
       key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Espaço',key_Ctrl:'Ctrl',key_Click:'Clique',key_Esc:'Esc',
       craft:'Fabricação',jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',pala:'Pá',spear:'Lança de madeira',knife:'Faca de metal',
-      machete:'Facão',botella:'Coquetel molotov',guadana:'Foice',hacha:'Machado tomahawk',picomad:'Picareta de madeira',arco:'Arco',lanzapiedra:'Lança de pedra',cuchipiedra:'Faca de pedra',picopiedra:'Picareta de pedra',flechamad:'Flechas de madeira',flechapiedra:'Flechas de pedra',flechaafil:'Flechas afiadas',lanzaafil:'Lança afiada',picoafil:'Picareta afiada',cuchiafil:'Faca afiada',antorcha:'Tocha',azadamad:'Enxada de madeira',azadapiedra:'Enxada de pedra',baldemad:'Balde de madeira',baldechapa:'Balde de chapa',addWater:'Coletar água',waterFull:'Balde cheio',
+      machete:'Facão',botella:'Coquetel molotov',guadana:'Foice',hacha:'Machado tomahawk',picomad:'Picareta de madeira',arco:'Arco',lanzapiedra:'Lança de pedra',cuchipiedra:'Faca de pedra',picopiedra:'Picareta de pedra',flechamad:'Flechas de madeira',flechapiedra:'Flechas de pedra',flechaafil:'Flechas afiadas',lanzaafil:'Lança afiada',picoafil:'Picareta afiada',cuchiafil:'Faca afiada',antorcha:'Tocha',azadamad:'Enxada de madeira',azadapiedra:'Enxada de pedra',baldemad:'Balde de madeira',baldechapa:'Balde de chapa',baldeagua:'Balde com água',addWater:'Coletar água',waterFull:'Balde cheio',placeBucket:'Colocar balde',takeBucket:'Pegar balde cheio',drink:'Beber água',noBucket:'Precisa de um balde vazio',
       cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado reto de madeira',imad:'Telhado inclinado',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',tcha:'Telhado reto de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',emad:'Escada de madeira',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',need:'Precisa de',noSupport:'Precisa de parede embaixo',
       placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipe o martelo em 🎒 para colocar móveis.',rotate:'Girar',building:'Construindo…',
@@ -3080,7 +3117,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyB'){ openMenu('craft'); }
   if(e.code==='KeyV'){ if(placing)stopPlacing(); else openMenu('place'); }
   if(e.code==='KeyE'){ renderInv(); $('inv').classList.add('show'); }
-  if(e.code==='KeyR'){ if(nearTable){craftAtTable=true;openMenu('craft');} else if(nearBed){startSleep(nearBed);} else if(nearRecagua){fillWater();} }   // interactuar (mesa/cama/agua) en PC
+  if(e.code==='KeyR'){ if(nearTable){craftAtTable=true;openMenu('craft');} else if(nearBed){startSleep(nearBed);} else if(nearRecagua){recaguaAct();} }   // interactuar (mesa/cama/agua) en PC
   if(/^Digit[1-8]$/.test(e.code)){ selectHot(+e.code.slice(5)-1); }   // barra rápida 1-8
 });
 // click en el mundo (pointer lock) = talar/atacar
