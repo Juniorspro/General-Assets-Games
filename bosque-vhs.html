@@ -367,6 +367,33 @@
   .panel h1 .dot{ background:var(--mAcc)!important; box-shadow:none!important; }
   .card{ background:var(--mBg)!important; backdrop-filter:none!important; -webkit-backdrop-filter:none!important; border:1px solid var(--mLine)!important; }
   .card .brand{ color:var(--mAcc)!important; }
+  /* Panel de detalle (fabricar): cuadrado de vista + materiales al lado + descripción abajo (los materiales ya no quedan tapados) */
+  .sciDetail{ flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; border-left:1px solid var(--mLine)!important; padding-left:16px; }
+  .sciDRow{ display:flex; gap:12px; align-items:flex-start; }
+  .sciIcon{ flex:0 0 auto!important; width:34%!important; max-width:120px!important; aspect-ratio:1!important; min-height:0!important; border:1px solid var(--mLine)!important; border-radius:10px!important; background:var(--mBg2)!important; display:flex!important; align-items:center; justify-content:center; padding:6px; }
+  .sciIcon img{ width:100%!important; height:100%!important; object-fit:contain; }
+  .sciNeed{ flex:1; min-width:0; display:flex; flex-direction:column; gap:6px; }
+  .sciNeed .sciChips{ display:flex!important; flex-wrap:wrap; gap:6px; overflow:visible!important; flex:0 1 auto!important; }
+  .sciDesc{ font-size:12.5px; line-height:1.45; color:var(--mTxt2); }
+  .sciBtn{ margin-top:auto!important; }
+  /* Ajustes estilo barra lateral + paneles con scroll propio (se puede llegar arriba y abajo en pantalla completa) */
+  .optCard{ width:min(760px,calc(100vw - 24px))!important; max-height:calc(100vh - 24px)!important; display:flex!important; flex-direction:column!important; }
+  body.rot .optCard{ max-height:calc(100vw - 24px)!important; }
+  .optBody{ display:flex; gap:14px; flex:1 1 auto; min-height:0; margin-top:8px; }
+  .optSide{ flex:0 0 28%; max-width:150px; display:flex; flex-direction:column; gap:8px; }
+  .optTab{ padding:13px 10px; border-radius:10px; background:var(--mBg2); border:1px solid var(--mLine); color:var(--mTxt2); font-size:13px; font-weight:700; text-align:center; cursor:pointer; }
+  .optTab.on{ background:var(--mBg3); border-color:var(--mTxt); color:#fff; }
+  .optPanels{ flex:1 1 auto; min-height:0; }
+  .optPanel{ display:none; height:100%; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:pan-y; padding:2px 8px 2px 2px; }
+  .optPanel.on{ display:block; }
+  .optPanel::-webkit-scrollbar{ width:5px; } .optPanel::-webkit-scrollbar-thumb{ background:var(--mLine); border-radius:3px; }
+  .opt{ background:var(--mBg2)!important; border:1px solid var(--mLine)!important; box-shadow:none!important; color:var(--mTxt2)!important; }
+  .opt.active{ background:var(--mBg3)!important; border-color:var(--mTxt)!important; box-shadow:none!important; color:#fff!important; }
+  .menuItem{ background:var(--mBg2)!important; border:1px solid var(--mLine)!important; box-shadow:none!important; }
+  .menuItem.primary{ background:var(--mAcc)!important; border-color:var(--mAcc)!important; color:#15171a!important; box-shadow:none!important; }
+  .menuItem.danger{ background:#3a1d1d!important; border-color:#7a3a3a!important; color:#ffd9d0!important; }
+  .seg button.active{ background:var(--mBg3)!important; border-color:var(--mTxt)!important; box-shadow:none!important; color:#fff!important; }
+  .switch.on{ background:var(--mAcc)!important; }
 </style>
 </head>
 <body>
@@ -462,49 +489,59 @@
 
 <!-- ===== Opciones (idioma + gráficos + ajustes) ===== -->
 <div id="options" class="scrim">
-  <div class="card">
+  <div class="card optCard">
     <div class="brand" data-i18n="options">Opciones</div>
     <h2 data-i18n="options">Opciones</h2>
-    <div class="lbl" data-i18n="language">Idioma</div>
-    <div class="opts" id="langOpts">
-      <div class="opt" data-lang="es">Español</div>
-      <div class="opt" data-lang="en">English</div>
-      <div class="opt" data-lang="pt">Português</div>
+    <div class="optBody">
+      <div class="optSide">
+        <div class="optTab on" data-op="opGen" data-i18n="tabGeneral">General</div>
+        <div class="optTab" data-op="opGfx" data-i18n="graphics">Gráficos</div>
+        <div class="optTab" data-op="opWorld" data-i18n="world">Mundo</div>
+      </div>
+      <div class="optPanels">
+        <div class="optPanel scrl on" id="opGen">
+          <div class="lbl" data-i18n="language">Idioma</div>
+          <div class="opts" id="langOpts">
+            <div class="opt" data-lang="es">Español</div>
+            <div class="opt" data-lang="en">English</div>
+            <div class="opt" data-lang="pt">Português</div>
+          </div>
+          <div class="lbl" data-i18n="quality">Gráficos</div>
+          <div class="opts" id="qOpts">
+            <div class="opt" data-q="low"   data-i18n="qLow">Bajo</div>
+            <div class="opt" data-q="medium" data-i18n="qMedium">Medio</div>
+            <div class="opt" data-q="high"  data-i18n="qHigh">Alto</div>
+          </div>
+          <div class="qdesc" id="qDesc"></div>
+        </div>
+        <div class="optPanel scrl" id="opGfx">
+          <div class="row"><label><span data-i18n="resolution">Resolución</span> <span id="resVal">100%</span></label><input type="range" id="res" min="50" max="100" value="100" step="5"></div>
+          <div class="row"><label>Resolución fija</label><div class="seg" id="fixResSeg">
+            <button data-frh="0" class="active">Auto</button><button data-frh="720">720p</button><button data-frh="576">576p</button><button data-frh="480">480p</button><button data-frh="360">360p</button></div></div>
+          <div class="row toggle" style="display:none"><span data-i18n="aa">Antialiasing (SMAA)</span><div class="switch" id="aaSw"></div></div>
+          <div class="row"><label><span data-i18n="exposure">Exposición</span> <span id="expoVal">0</span></label><input type="range" id="expo" min="-100" max="100" value="0" step="5"></div>
+          <div class="row"><label>Bloom <span id="bloomVal">20%</span></label><input type="range" id="bloom" min="0" max="120" value="20" step="5"></div>
+          <div class="row"><label><span data-i18n="saturation">Saturación</span> <span id="satVal">0</span></label><input type="range" id="sat" min="-40" max="60" value="0" step="5"></div>
+          <div class="row"><label><span data-i18n="shake">Temblor de cámara</span> <span id="shakeVal">40%</span></label><input type="range" id="shake" min="0" max="150" value="40" step="5"></div>
+          <div class="row"><label><span data-i18n="relief">PBR / Relieve 3D</span> <span id="reliefVal">900%</span></label><input type="range" id="relief" min="0" max="1400" value="900" step="10"></div>
+          <div class="row"><label data-i18n="shadowRes">Resolución de sombras</label><div class="seg" id="shadowResSeg">
+            <button data-sr="256" class="active">256</button><button data-sr="512">512</button><button data-sr="768">768</button><button data-sr="1024">1024</button></div></div>
+        </div>
+        <div class="optPanel scrl" id="opWorld">
+          <div class="row"><label data-i18n="season">Estación</label><div class="seg" id="season">
+            <button data-s="spring" data-i18n="spring">Prim</button><button data-s="summer" class="active" data-i18n="summer">Ver</button><button data-s="autumn" data-i18n="autumn">Otoño</button><button data-s="winter" data-i18n="winter">Inv</button></div></div>
+          <div class="row"><label><span data-i18n="hour">Hora</span> <span id="timeVal">atardecer</span></label><input type="range" id="time" min="-8" max="70" value="8" step="1"></div>
+          <div class="row"><label><span data-i18n="renderDist">Distancia de render</span> <span id="distVal">130 m</span></label><input type="range" id="dist" min="60" max="320" value="130" step="10"></div>
+          <div class="row"><label><span data-i18n="shadowDist">Distancia de sombras</span> <span id="shadVal">22 m</span></label><input type="range" id="shad" min="0" max="44" value="22" step="2"></div>
+          <div class="row"><label><span data-i18n="vegDensity">Densidad de vegetación</span> <span id="densVal">175%</span></label><input type="range" id="dens" min="40" max="200" value="175" step="5"></div>
+          <div class="row"><label><span data-i18n="wind">Viento</span> <span id="windVal">brisa</span></label><input type="range" id="wind" min="0" max="100" value="40" step="1"></div>
+          <div class="row"><label><span data-i18n="bob">Balanceo al caminar</span> <span id="bobVal">100%</span></label><input type="range" id="bob" min="0" max="200" value="100" step="5"></div>
+          <div class="row toggle"><span data-i18n="sound">Sonido</span><div class="switch" id="snd"></div></div>
+          <div class="row toggle"><span data-i18n="rotate90">Girar 90° en vertical</span><div class="switch on" id="rotSw"></div></div>
+          <div class="row toggle"><span data-i18n="cycle">Ciclo día/noche (24 min)</span><div class="switch on" id="cycleSw"></div></div>
+        </div>
+      </div>
     </div>
-    <div class="lbl" data-i18n="quality">Gráficos</div>
-    <div class="opts" id="qOpts">
-      <div class="opt" data-q="low"   data-i18n="qLow">Bajo</div>
-      <div class="opt" data-q="medium" data-i18n="qMedium">Medio</div>
-      <div class="opt" data-q="high"  data-i18n="qHigh">Alto</div>
-    </div>
-    <div class="qdesc" id="qDesc"></div>
-
-    <div class="grp" data-i18n="graphics">Gráficos</div>
-    <div class="row"><label><span data-i18n="resolution">Resolución</span> <span id="resVal">100%</span></label><input type="range" id="res" min="50" max="100" value="100" step="5"></div>
-    <div class="row"><label>Resolución fija</label><div class="seg" id="fixResSeg">
-      <button data-frh="0" class="active">Auto</button><button data-frh="720">720p</button><button data-frh="576">576p</button><button data-frh="480">480p</button><button data-frh="360">360p</button></div></div>
-    <div class="row toggle" style="display:none"><span data-i18n="aa">Antialiasing (SMAA)</span><div class="switch" id="aaSw"></div></div>
-    <div class="row"><label><span data-i18n="exposure">Exposición</span> <span id="expoVal">0</span></label><input type="range" id="expo" min="-100" max="100" value="0" step="5"></div>
-    <div class="row"><label>Bloom <span id="bloomVal">20%</span></label><input type="range" id="bloom" min="0" max="120" value="20" step="5"></div>
-    <div class="row"><label><span data-i18n="saturation">Saturación</span> <span id="satVal">0</span></label><input type="range" id="sat" min="-40" max="60" value="0" step="5"></div>
-    <div class="row"><label><span data-i18n="shake">Temblor de cámara</span> <span id="shakeVal">40%</span></label><input type="range" id="shake" min="0" max="150" value="40" step="5"></div>
-    <div class="row"><label><span data-i18n="relief">PBR / Relieve 3D</span> <span id="reliefVal">900%</span></label><input type="range" id="relief" min="0" max="1400" value="900" step="10"></div>
-    <div class="row"><label data-i18n="shadowRes">Resolución de sombras</label><div class="seg" id="shadowResSeg">
-      <button data-sr="256" class="active">256</button><button data-sr="512">512</button><button data-sr="768">768</button><button data-sr="1024">1024</button></div></div>
-
-    <div class="grp" data-i18n="world">Mundo</div>
-    <div class="row"><label data-i18n="season">Estación</label><div class="seg" id="season">
-      <button data-s="spring" data-i18n="spring">Prim</button><button data-s="summer" class="active" data-i18n="summer">Ver</button><button data-s="autumn" data-i18n="autumn">Otoño</button><button data-s="winter" data-i18n="winter">Inv</button></div></div>
-    <div class="row"><label><span data-i18n="hour">Hora</span> <span id="timeVal">atardecer</span></label><input type="range" id="time" min="-8" max="70" value="8" step="1"></div>
-    <div class="row"><label><span data-i18n="renderDist">Distancia de render</span> <span id="distVal">130 m</span></label><input type="range" id="dist" min="60" max="320" value="130" step="10"></div>
-    <div class="row"><label><span data-i18n="shadowDist">Distancia de sombras</span> <span id="shadVal">22 m</span></label><input type="range" id="shad" min="0" max="44" value="22" step="2"></div>
-    <div class="row"><label><span data-i18n="vegDensity">Densidad de vegetación</span> <span id="densVal">175%</span></label><input type="range" id="dens" min="40" max="200" value="175" step="5"></div>
-    <div class="row"><label><span data-i18n="wind">Viento</span> <span id="windVal">brisa</span></label><input type="range" id="wind" min="0" max="100" value="40" step="1"></div>
-    <div class="row"><label><span data-i18n="bob">Balanceo al caminar</span> <span id="bobVal">100%</span></label><input type="range" id="bob" min="0" max="200" value="100" step="5"></div>
-    <div class="row toggle"><span data-i18n="sound">Sonido</span><div class="switch" id="snd"></div></div>
-    <div class="row toggle"><span data-i18n="rotate90">Girar 90° en vertical</span><div class="switch on" id="rotSw"></div></div>
-    <div class="row toggle"><span data-i18n="cycle">Ciclo día/noche (24 min)</span><div class="switch on" id="cycleSw"></div></div>
-
     <div class="menuBtnRow">
       <div class="menuItem primary" id="optBack" data-i18n="back">Volver</div>
     </div>
@@ -547,14 +584,14 @@
         <div class="sciGridWrap scrl"><div class="sciGrid" id="mGrid"></div><div class="sciEmpty" id="mEmpty"></div></div>
       </div>
       <div class="sciDetail">
-        <div class="sciRight"><div class="sciIcon"><img id="dIcon" alt=""></div></div>
-        <div class="sciMid">
-          <div class="sciName" id="dName">—</div>
-          <div class="sciType" id="dType"></div>
-          <div class="sciSecHd" id="dMatHd">Necesitás</div>
-          <div class="sciChips" id="dMats"></div>
-          <button id="dAction" class="sciBtn">Fabricar</button>
+        <div class="sciName" id="dName">—</div>
+        <div class="sciType" id="dType"></div>
+        <div class="sciDRow">
+          <div class="sciIcon"><img id="dIcon" alt=""></div>
+          <div class="sciNeed"><div class="sciSecHd" id="dMatHd">Necesitás</div><div class="sciChips" id="dMats"></div></div>
         </div>
+        <div class="sciDesc" id="dDesc"></div>
+        <button id="dAction" class="sciBtn">Fabricar</button>
       </div>
     </div>
     <div id="bagHotbar"></div>
@@ -2177,6 +2214,7 @@ function selectItem(id){
   if(ks.length) for(const k of ks){ const have=matCount(k), need=cost[k], ok=have>=need;   // muestra LO QUE TENÉS / lo que necesitás, en verde si alcanza y rojo si falta
     mats.insertAdjacentHTML('beforeend',`<span class="chip" style="border-color:${ok?'#4f8f5e':'#a85050'}!important;color:${ok?'#cfe8d4':'#f3b4b4'}">${RESN[k]||''} ${(REST[k]&&REST[k][curLang])||k} <b>${have}/${need}</b></span>`); }
   else mats.insertAdjacentHTML('beforeend',`<span class="chip">${cT('free')} ✓</span>`);
+  const dd=$('dDesc'); if(dd)dd.textContent=cT('d_'+r.tab)||'';
   setupAction(r); const u=ic(id); const di=$('dIcon'); di.src=u||''; di.style.display=u?'':'none';
 }
 function setupAction(r){
@@ -2626,7 +2664,7 @@ function craftTick(dt){
 // scroll manual del panel sci-fi (rotado 90° incluido)
 let scId2=null,scSX2=0,scSY2=0,scTop2=0,scCard2=null,scMoved=0,scRot2=false;
 // scroll manual rotado para el menú sci-fi Y la tarjeta de Opciones (ahora larga) → arrastre correcto en vertical/girado
-document.querySelectorAll('#menu .scrl, #options .card').forEach(card=>{
+document.querySelectorAll('#menu .scrl, #options .optPanel').forEach(card=>{
   card.addEventListener('pointerdown',e=>{ scId2=e.pointerId; scSX2=e.clientX; scSY2=e.clientY; scTop2=card.scrollTop; scCard2=card; scMoved=0; scRot2=!!(rot); });
   card.addEventListener('pointermove',e=>{ if(e.pointerId!==scId2||scCard2!==card)return; const dx=e.clientX-scSX2,dy=e.clientY-scSY2; scMoved=Math.max(scMoved,Math.hypot(dx,dy));
     // sólo scrollea cuando el arrastre va por el EJE de scroll (girado=horizontal); el eje cruzado queda para sliders
@@ -3021,7 +3059,7 @@ const I18N={
       kbMove:'Moverse',kbLook:'Mirar',kbRun:'Correr',kbJump:'Saltar',kbCrouch:'Agacharse',kbChop:'Talar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventario',kbThrow:'Lanzar molotov',kbPause:'Pausa',
       key_Mouse:'Ratón',key_Shift:'Mayús',key_Space:'Espacio',key_Ctrl:'Ctrl',key_Click:'Clic',key_Esc:'Esc',
       craft:'Fabricación',jump:'Saltar',crouch:'Agacharse',axe:'Hacha',build:'Construir',weapons:'Armas',furniture:'Muebles',tools:'Herramientas',construction:'Construcción',table:'Mesa',hammer:'Martillo',pala:'Pala',spear:'Lanza de madera',knife:'Cuchillo de metal',
-      machete:'Machete',botella:'Botella incendiaria',guadana:'Guadaña',hacha:'Hacha tomahawk',picomad:'Pico de madera',arco:'Arco',lanzapiedra:'Lanza de piedra',cuchipiedra:'Cuchillo de piedra',picopiedra:'Pico de piedra',flechamad:'Flechas de madera',flechapiedra:'Flechas de piedra',flechaafil:'Flechas afiladas',lanzaafil:'Lanza afilada',picoafil:'Pico afilado',cuchiafil:'Cuchillo afilado',antorcha:'Antorcha',azadamad:'Azada de madera',azadapiedra:'Azada de piedra',baldemad:'Balde de madera',baldechapa:'Balde de chapa',baldeagua:'Balde con agua',addWater:'Cargar agua',waterFull:'Balde lleno',placeBucket:'Colocar balde',takeBucket:'Recoger balde lleno',drink:'Beber agua',noBucket:'Necesitás un balde vacío',nota:'Nota',newNote:'Nueva nota',tapClose:'Tocá para cerrar',bedLocked:'Matá 10 NPC para desbloquear',objTitle:'DÍA',o_wood:'Juntá madera (talá árboles)',o_craft:'Fabricá un martillo y una mesa',o_ore:'Conseguí mena para antorchas',o_kills:'Matá 10 NPC (desbloquea la cama)',skipCine:'Saltar',o_road:'Avanzá por la calle (hacia adelante)',o_chapa:'Buscá chapa para la casa',o_iron:'Fundí chapa → hierro en el horno',o_cook:'Cociná carne en el horno',carne:'Carne cruda',carneasada:'Carne asada',openHorno:'Abrir horno',cookMeat:'Cocinar carne',smeltIron:'Fundir chapa → hierro',smeltGlass:'Fundir arena → vidrio',contam:'¡Agua contaminada! +10% sed, -5% hambre',nothingHorno:'No hay nada para fundir/cocinar',threat1:'INVADISTE NUESTRO TERRITORIO. Te esperamos al final del camino para luchar.',dayDone:'Sobreviviste la noche',
+      machete:'Machete',botella:'Botella incendiaria',guadana:'Guadaña',hacha:'Hacha tomahawk',picomad:'Pico de madera',arco:'Arco',lanzapiedra:'Lanza de piedra',cuchipiedra:'Cuchillo de piedra',picopiedra:'Pico de piedra',flechamad:'Flechas de madera',flechapiedra:'Flechas de piedra',flechaafil:'Flechas afiladas',lanzaafil:'Lanza afilada',picoafil:'Pico afilado',cuchiafil:'Cuchillo afilado',antorcha:'Antorcha',azadamad:'Azada de madera',azadapiedra:'Azada de piedra',baldemad:'Balde de madera',baldechapa:'Balde de chapa',baldeagua:'Balde con agua',addWater:'Cargar agua',waterFull:'Balde lleno',placeBucket:'Colocar balde',takeBucket:'Recoger balde lleno',drink:'Beber agua',noBucket:'Necesitás un balde vacío',nota:'Nota',newNote:'Nueva nota',tapClose:'Tocá para cerrar',bedLocked:'Matá 10 NPC para desbloquear',objTitle:'DÍA',o_wood:'Juntá madera (talá árboles)',o_craft:'Fabricá un martillo y una mesa',o_ore:'Conseguí mena para antorchas',o_kills:'Matá 10 NPC (desbloquea la cama)',skipCine:'Saltar',tabGeneral:'General',d_weapons:'Arma para atacar y cazar.',d_tools:'Herramienta de trabajo y recolección.',d_furniture:'Mueble para tu base.',d_construction:'Pieza para construir tu casa.',d_materials:'Recurso en bruto.',o_road:'Avanzá por la calle (hacia adelante)',o_chapa:'Buscá chapa para la casa',o_iron:'Fundí chapa → hierro en el horno',o_cook:'Cociná carne en el horno',carne:'Carne cruda',carneasada:'Carne asada',openHorno:'Abrir horno',cookMeat:'Cocinar carne',smeltIron:'Fundir chapa → hierro',smeltGlass:'Fundir arena → vidrio',contam:'¡Agua contaminada! +10% sed, -5% hambre',nothingHorno:'No hay nada para fundir/cocinar',threat1:'INVADISTE NUESTRO TERRITORIO. Te esperamos al final del camino para luchar.',dayDone:'Sobreviviste la noche',
       cama:'Cama',horno:'Horno',silla:'Silla',recagua:'Recolector de agua',bidon:'Bidón',perchero:'Perchero',fogata:'Fogata',conserv:'Conservador de carne',pmad:'Pared de madera',smad:'Suelo de madera',tmad:'Techo recto de madera',imad:'Techo inclinado',vmad:'Pared con ventana',dmad:'Pared con puerta',pcha:'Pared de chapa',scha:'Suelo de chapa',tcha:'Techo recto de chapa',vcha:'Pared de chapa c/ventana',dcha:'Pared de chapa c/puerta',emad:'Escalera de madera',free:'Gratis',craftBtn:'Fabricar',crafted:'¡Fabricado!',need:'Necesitás',noSupport:'Necesita una pared debajo',
       placeTitle:'Colocar',placeEmpty:'No tenés muebles. Fabricá una mesa.',bagEmpty:'Vacía. Fabricá algo en 🛠️.',needTable:'Requiere mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipá el martillo en 🎒 para colocar muebles.',rotate:'Girar',building:'Construyendo…',
@@ -3031,7 +3069,7 @@ const I18N={
       kbMove:'Move',kbLook:'Look',kbRun:'Run',kbJump:'Jump',kbCrouch:'Crouch',kbChop:'Chop / attack',kbCraft:'Craft',kbPlace:'Place',kbInv:'Inventory',kbThrow:'Throw molotov',kbPause:'Pause',
       key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Space',key_Ctrl:'Ctrl',key_Click:'Click',key_Esc:'Esc',
       craft:'Crafting',jump:'Jump',crouch:'Crouch',axe:'Axe',build:'Build',weapons:'Weapons',furniture:'Furniture',tools:'Tools',construction:'Construction',table:'Table',hammer:'Hammer',pala:'Shovel',spear:'Wooden spear',knife:'Metal knife',
-      machete:'Machete',botella:'Molotov',guadana:'Scythe',hacha:'Tomahawk axe',picomad:'Wood pickaxe',arco:'Bow',lanzapiedra:'Stone spear',cuchipiedra:'Stone knife',picopiedra:'Stone pickaxe',flechamad:'Wood arrows',flechapiedra:'Stone arrows',flechaafil:'Sharp arrows',lanzaafil:'Sharp spear',picoafil:'Sharp pickaxe',cuchiafil:'Sharp knife',antorcha:'Torch',azadamad:'Wood hoe',azadapiedra:'Stone hoe',baldemad:'Wood bucket',baldechapa:'Metal bucket',baldeagua:'Water bucket',addWater:'Collect water',waterFull:'Bucket full',placeBucket:'Place bucket',takeBucket:'Take full bucket',drink:'Drink water',noBucket:'You need an empty bucket',nota:'Note',newNote:'New note',tapClose:'Tap to close',bedLocked:'Kill 10 NPCs to unlock',objTitle:'DAY',o_wood:'Gather wood (chop trees)',o_craft:'Craft a hammer and a table',o_ore:'Get ore for torches',o_kills:'Kill 10 NPCs (unlocks the bed)',skipCine:'Skip',o_road:'Advance down the road (forward)',o_chapa:'Find sheet metal for your house',o_iron:'Smelt sheet metal → iron in the oven',o_cook:'Cook meat in the oven',carne:'Raw meat',carneasada:'Cooked meat',openHorno:'Open oven',cookMeat:'Cook meat',smeltIron:'Smelt sheet → iron',smeltGlass:'Smelt sand → glass',contam:'Contaminated water! +10% thirst, -5% hunger',nothingHorno:'Nothing to smelt/cook',threat1:'YOU INVADED OUR TERRITORY. We will be waiting at the end of the road to fight.',dayDone:'You survived the night',
+      machete:'Machete',botella:'Molotov',guadana:'Scythe',hacha:'Tomahawk axe',picomad:'Wood pickaxe',arco:'Bow',lanzapiedra:'Stone spear',cuchipiedra:'Stone knife',picopiedra:'Stone pickaxe',flechamad:'Wood arrows',flechapiedra:'Stone arrows',flechaafil:'Sharp arrows',lanzaafil:'Sharp spear',picoafil:'Sharp pickaxe',cuchiafil:'Sharp knife',antorcha:'Torch',azadamad:'Wood hoe',azadapiedra:'Stone hoe',baldemad:'Wood bucket',baldechapa:'Metal bucket',baldeagua:'Water bucket',addWater:'Collect water',waterFull:'Bucket full',placeBucket:'Place bucket',takeBucket:'Take full bucket',drink:'Drink water',noBucket:'You need an empty bucket',nota:'Note',newNote:'New note',tapClose:'Tap to close',bedLocked:'Kill 10 NPCs to unlock',objTitle:'DAY',o_wood:'Gather wood (chop trees)',o_craft:'Craft a hammer and a table',o_ore:'Get ore for torches',o_kills:'Kill 10 NPCs (unlocks the bed)',skipCine:'Skip',tabGeneral:'General',d_weapons:'Weapon for attacking and hunting.',d_tools:'Tool for working and gathering.',d_furniture:'Furniture for your base.',d_construction:'Building piece for your house.',d_materials:'Raw resource.',o_road:'Advance down the road (forward)',o_chapa:'Find sheet metal for your house',o_iron:'Smelt sheet metal → iron in the oven',o_cook:'Cook meat in the oven',carne:'Raw meat',carneasada:'Cooked meat',openHorno:'Open oven',cookMeat:'Cook meat',smeltIron:'Smelt sheet → iron',smeltGlass:'Smelt sand → glass',contam:'Contaminated water! +10% thirst, -5% hunger',nothingHorno:'Nothing to smelt/cook',threat1:'YOU INVADED OUR TERRITORY. We will be waiting at the end of the road to fight.',dayDone:'You survived the night',
       cama:'Bed',horno:'Oven',silla:'Chair',recagua:'Water collector',bidon:'Barrel',perchero:'Coat stand',fogata:'Campfire',conserv:'Meat curer',pmad:'Wood wall',smad:'Wood floor',tmad:'Flat wood roof',imad:'Sloped roof',vmad:'Wall + window',dmad:'Wall + door',pcha:'Metal wall',scha:'Metal floor',tcha:'Flat metal roof',vcha:'Metal wall + window',dcha:'Metal wall + door',emad:'Wood stairs',free:'Free',craftBtn:'Craft',crafted:'Crafted!',need:'You need',noSupport:'Needs a wall below',
       placeTitle:'Place',placeEmpty:'No furniture yet. Craft a table.',bagEmpty:'Empty. Craft something in 🛠️.',needTable:'Needs a table',locked:'Locked',
       equip:'Equip',equipped:'Equipped',selectHammer:'Equip the hammer in 🎒 to place furniture.',rotate:'Rotate',building:'Building…',
@@ -3041,7 +3079,7 @@ const I18N={
       kbMove:'Mover',kbLook:'Olhar',kbRun:'Correr',kbJump:'Pular',kbCrouch:'Agachar',kbChop:'Cortar / atacar',kbCraft:'Fabricar',kbPlace:'Colocar',kbInv:'Inventário',kbThrow:'Lançar molotov',kbPause:'Pausa',
       key_Mouse:'Mouse',key_Shift:'Shift',key_Space:'Espaço',key_Ctrl:'Ctrl',key_Click:'Clique',key_Esc:'Esc',
       craft:'Fabricação',jump:'Pular',crouch:'Agachar',axe:'Machado',build:'Construir',weapons:'Armas',furniture:'Móveis',tools:'Ferramentas',construction:'Construção',table:'Mesa',hammer:'Martelo',pala:'Pá',spear:'Lança de madeira',knife:'Faca de metal',
-      machete:'Facão',botella:'Coquetel molotov',guadana:'Foice',hacha:'Machado tomahawk',picomad:'Picareta de madeira',arco:'Arco',lanzapiedra:'Lança de pedra',cuchipiedra:'Faca de pedra',picopiedra:'Picareta de pedra',flechamad:'Flechas de madeira',flechapiedra:'Flechas de pedra',flechaafil:'Flechas afiadas',lanzaafil:'Lança afiada',picoafil:'Picareta afiada',cuchiafil:'Faca afiada',antorcha:'Tocha',azadamad:'Enxada de madeira',azadapiedra:'Enxada de pedra',baldemad:'Balde de madeira',baldechapa:'Balde de chapa',baldeagua:'Balde com água',addWater:'Coletar água',waterFull:'Balde cheio',placeBucket:'Colocar balde',takeBucket:'Pegar balde cheio',drink:'Beber água',noBucket:'Precisa de um balde vazio',nota:'Nota',newNote:'Nova nota',tapClose:'Toque para fechar',bedLocked:'Mate 10 NPCs para desbloquear',objTitle:'DIA',o_wood:'Junte madeira (corte árvores)',o_craft:'Fabrique um martelo e uma mesa',o_ore:'Consiga minério para tochas',o_kills:'Mate 10 NPCs (desbloqueia a cama)',skipCine:'Pular',o_road:'Avance pela estrada (em frente)',o_chapa:'Procure chapa para a casa',o_iron:'Funda chapa → ferro no forno',o_cook:'Cozinhe carne no forno',carne:'Carne crua',carneasada:'Carne assada',openHorno:'Abrir forno',cookMeat:'Cozinhar carne',smeltIron:'Fundir chapa → ferro',smeltGlass:'Fundir areia → vidro',contam:'Água contaminada! +10% sede, -5% fome',nothingHorno:'Nada para fundir/cozinhar',threat1:'VOCÊ INVADIU NOSSO TERRITÓRIO. Esperamos você no fim da estrada para lutar.',dayDone:'Você sobreviveu à noite',
+      machete:'Facão',botella:'Coquetel molotov',guadana:'Foice',hacha:'Machado tomahawk',picomad:'Picareta de madeira',arco:'Arco',lanzapiedra:'Lança de pedra',cuchipiedra:'Faca de pedra',picopiedra:'Picareta de pedra',flechamad:'Flechas de madeira',flechapiedra:'Flechas de pedra',flechaafil:'Flechas afiadas',lanzaafil:'Lança afiada',picoafil:'Picareta afiada',cuchiafil:'Faca afiada',antorcha:'Tocha',azadamad:'Enxada de madeira',azadapiedra:'Enxada de pedra',baldemad:'Balde de madeira',baldechapa:'Balde de chapa',baldeagua:'Balde com água',addWater:'Coletar água',waterFull:'Balde cheio',placeBucket:'Colocar balde',takeBucket:'Pegar balde cheio',drink:'Beber água',noBucket:'Precisa de um balde vazio',nota:'Nota',newNote:'Nova nota',tapClose:'Toque para fechar',bedLocked:'Mate 10 NPCs para desbloquear',objTitle:'DIA',o_wood:'Junte madeira (corte árvores)',o_craft:'Fabrique um martelo e uma mesa',o_ore:'Consiga minério para tochas',o_kills:'Mate 10 NPCs (desbloqueia a cama)',skipCine:'Pular',tabGeneral:'Geral',d_weapons:'Arma para atacar e caçar.',d_tools:'Ferramenta de trabalho e coleta.',d_furniture:'Móvel para sua base.',d_construction:'Peça para construir sua casa.',d_materials:'Recurso bruto.',o_road:'Avance pela estrada (em frente)',o_chapa:'Procure chapa para a casa',o_iron:'Funda chapa → ferro no forno',o_cook:'Cozinhe carne no forno',carne:'Carne crua',carneasada:'Carne assada',openHorno:'Abrir forno',cookMeat:'Cozinhar carne',smeltIron:'Fundir chapa → ferro',smeltGlass:'Fundir areia → vidro',contam:'Água contaminada! +10% sede, -5% fome',nothingHorno:'Nada para fundir/cozinhar',threat1:'VOCÊ INVADIU NOSSO TERRITÓRIO. Esperamos você no fim da estrada para lutar.',dayDone:'Você sobreviveu à noite',
       cama:'Cama',horno:'Forno',silla:'Cadeira',recagua:'Coletor de água',bidon:'Bidão',perchero:'Cabideiro',fogata:'Fogueira',conserv:'Conservador',pmad:'Parede de madeira',smad:'Piso de madeira',tmad:'Telhado reto de madeira',imad:'Telhado inclinado',vmad:'Parede + janela',dmad:'Parede + porta',pcha:'Parede de chapa',scha:'Piso de chapa',tcha:'Telhado reto de chapa',vcha:'Parede de chapa + janela',dcha:'Parede de chapa + porta',emad:'Escada de madeira',free:'Grátis',craftBtn:'Fabricar',crafted:'Fabricado!',need:'Precisa de',noSupport:'Precisa de parede embaixo',
       placeTitle:'Colocar',placeEmpty:'Sem móveis. Fabrique uma mesa.',bagEmpty:'Vazia. Fabrique algo em 🛠️.',needTable:'Precisa de mesa',locked:'Bloqueado',
       equip:'Equipar',equipped:'Equipado',selectHammer:'Equipe o martelo em 🎒 para colocar móveis.',rotate:'Girar',building:'Construindo…',
@@ -3100,23 +3138,19 @@ function applyDefaults(){
 
 /* ===================== ICONOS PNG (capturados del modelo 3D real) ===================== */
 let axeIconURL=null,woodIconURL=null;
+let _iconR=null;
 function captureIcon(obj,rot){
   try{
-    const S=256,rt=new THREE.WebGLRenderTarget(S,S);
-    const ts=new THREE.Scene(); ts.environment=scene.environment;
+    if(!_iconR){ _iconR=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true}); _iconR.setSize(256,256); _iconR.setClearColor(0x000000,0); if('outputColorSpace' in _iconR)_iconR.outputColorSpace=THREE.SRGBColorSpace; }   // RENDERER PROPIO (offscreen): capturar íconos NUNCA toca el render del juego → sin micro-cortes/flicker
+    const ts=new THREE.Scene();
     obj.rotation.set(rot[0],rot[1],rot[2]); ts.add(obj);
     ts.add(new THREE.HemisphereLight(0xcfe0ff,0x1a1c22,0.9));
     const d=new THREE.DirectionalLight(0xffffff,2.4); d.position.set(2.5,3.5,2); ts.add(d);
     const box=new THREE.Box3().setFromObject(obj),ctr=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3()),rad=Math.max(sz.x,sz.y,sz.z)||1;
     const cam=new THREE.PerspectiveCamera(34,1,0.01,200); cam.position.set(ctr.x+rad*1.1,ctr.y+rad*0.7,ctr.z+rad*1.7); cam.lookAt(ctr);
-    const pRT=renderer.getRenderTarget(),pC=renderer.getClearColor(new THREE.Color()),pA=renderer.getClearAlpha();
-    renderer.setRenderTarget(rt); renderer.setClearColor(0x000000,0); renderer.clear(); renderer.render(ts,cam);
-    const buf=new Uint8Array(S*S*4); renderer.readRenderTargetPixels(rt,0,0,S,S,buf);
-    renderer.setRenderTarget(pRT); renderer.setClearColor(pC,pA);
-    const cv=document.createElement('canvas');cv.width=cv.height=S;const x=cv.getContext('2d'),im=x.createImageData(S,S);
-    for(let y=0;y<S;y++){const sy=S-1-y;for(let xx=0;xx<S;xx++){const di=(y*S+xx)*4,si=(sy*S+xx)*4;im.data[di]=buf[si];im.data[di+1]=buf[si+1];im.data[di+2]=buf[si+2];im.data[di+3]=buf[si+3];}}
-    x.putImageData(im,0,0);const url=cv.toDataURL('image/png');
-    rt.dispose(); obj.traverse(o=>{if(o.geometry&&o.geometry!==logGeo)o.geometry.dispose();});
+    _iconR.render(ts,cam);
+    const url=_iconR.domElement.toDataURL('image/png');
+    obj.traverse(o=>{if(o.geometry&&o.geometry!==logGeo)o.geometry.dispose();});
     return url;
   }catch(e){ console.warn('icon capture',e); return null; }
 }
@@ -3134,6 +3168,9 @@ $('playBtn').addEventListener('click',()=>{
 });
 $('optBtn').addEventListener('click',()=>{$('startMenu').classList.remove('show');$('options').classList.add('show');});
 $('optBack').addEventListener('click',()=>{$('options').classList.remove('show');if(!started)$('startMenu').classList.add('show');});
+document.querySelectorAll('#options .optTab').forEach(t=>t.addEventListener('click',()=>{ if(scMoved>14)return;   // barra lateral de ajustes: cambia de panel
+  document.querySelectorAll('#options .optTab').forEach(x=>x.classList.toggle('on',x===t));
+  document.querySelectorAll('#options .optPanel').forEach(p=>p.classList.toggle('on',p.id===t.dataset.op)); }));
 // (botón "Ajustes avanzados" eliminado: esos ajustes ahora están dentro del propio menú de Opciones)
 $('quitBtn').addEventListener('click',()=>{ if(confirm('¿Salir del juego?')) location.reload(); });
 $('btnResume').addEventListener('click',()=>$('pause').classList.remove('show'));
