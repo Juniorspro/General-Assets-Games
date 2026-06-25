@@ -2253,7 +2253,13 @@ function updateGhost(){
   if(ROOF_FLAT.has(placing)){ _gp.y=gBase+WALLH;
     let sup=false; for(const s of solids){ if(s.maxx>_gp.x-2&&s.minx<_gp.x+2&&s.maxz>_gp.z-2&&s.minz<_gp.z+2){sup=true;break;} }
     if(!sup) valid=false; }
-  else { let fy=gBase; for(const f of floors){ if(_gp.x>f.minx-0.6&&_gp.x<f.maxx+0.6&&_gp.z>f.minz-0.6&&_gp.z<f.maxz+0.6&&f.top>fy)fy=f.top; } _gp.y=fy; }
+  else { // pared/ventana/puerta/piso/escalera: se ubica en el nivel donde APUNTA el puntero. Por defecto el SUELO (así tapás el hueco
+    //       de abajo aunque haya techo arriba); sólo sube a un piso/techo si mirás hacia ese nivel o más arriba.
+    const horiz=Math.hypot(_fwd.x,_fwd.z)||1e-3; const hd=Math.hypot(_gp.x-camera.position.x,_gp.z-camera.position.z);
+    const aimY=camY+(_fwd.y/horiz)*hd;
+    let best=gBase;
+    for(const f of floors){ if(_gp.x>f.minx-0.6&&_gp.x<f.maxx+0.6&&_gp.z>f.minz-0.6&&_gp.z<f.maxz+0.6&&f.top<=aimY+0.8&&f.top>best)best=f.top; }   // el piso/techo más alto que esté A O POR DEBAJO de tu mira
+    _gp.y=best; }
   if(!CONSTR.has(placing)) for(const p of placedItems){ if(p.position.distanceTo(_gp)<1.0){valid=false;break;} }
   ghost.position.copy(_gp); ghost.rotation.y=placeYaw; ghost.updateMatrixWorld();
   ghost.userData.valid=valid;
