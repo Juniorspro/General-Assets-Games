@@ -1700,7 +1700,7 @@ function tickProjectiles(dt){ for(let i=projectiles.length-1;i>=0;i--){ const p=
 const FIRE_DUR=12;   // el fuego incendiario dura 12 s
 // POOL de luces de fuego: se crean al INICIO (la cuenta de luces queda CONSTANTE) → tirar molotov o que un rayo incendie
 // estructuras ya NO recompila los shaders de toda la escena = se va el TIRÓN. Si se agota el pool, el fuego se ve igual (sprites) sin glow.
-const fxLightPool=[]; for(let i=0;i<4;i++){ const pl=new THREE.PointLight(0xff8a3a,0,24,0.7); scene.add(pl); fxLightPool.push(pl); }
+const fxLightPool=[]; for(let i=0;i<5;i++){ const pl=new THREE.PointLight(0xff8a3a,0,24,0.7); scene.add(pl); fxLightPool.push(pl); }
 function acquireFxLight(color,inten,dist){ for(const pl of fxLightPool){ if(!pl.__busy){ pl.__busy=true; pl.color.setHex(color||0xff8a3a); pl.intensity=inten||8; pl.distance=dist||22; return pl; } } return null; }
 function releaseFxLight(pl){ if(!pl||!pl.__busy)return; pl.intensity=0; pl.__busy=false; }
 function explodeAt(pos,gy){ gy=(gy==null)?terrainHeight(pos.x,pos.z):gy;
@@ -1789,7 +1789,7 @@ function mHorno(){const g=new THREE.Group();
   const mouth=new THREE.Mesh(new THREE.CylinderGeometry(0.26,0.26,0.32,16,1,true,0,Math.PI),clayDark); mouth.rotation.x=Math.PI/2; mouth.position.set(0,0.56,0.58); g.add(mouth);
   const glow=new THREE.Mesh(new THREE.SphereGeometry(0.2,12,10),emberMat); glow.position.set(0,0.52,0.5); g.add(glow);
   const chim=cyl(0.07,0.09,0.4,clayDark,12); chim.position.set(0,1.18,-0.05); g.add(chim);
-  const fl=new THREE.PointLight(0xff7a30,6,22,0.7); fl.position.set(0,0.6,0.5); g.add(fl); g.userData.kind='horno'; g.userData.fire=fl;   // el horno ilumina la habitación
+  g.userData.kind='horno'; g.userData.wantFire=true; g.userData.fireOff=[0,0.6,0.5];   // luz del POOL al colocarse (sin tirón ni exceso de luces)
   return g;}
 function mSilla(){const g=new THREE.Group();g.add(boxM(0.5,0.07,0.5,woodConsMat,0,0.5,0));g.add(boxM(0.5,0.5,0.07,woodConsMat,0,0.78,-0.215));[[-0.21,-0.21],[0.21,-0.21],[-0.21,0.21],[0.21,0.21]].forEach(([x,z])=>g.add(boxM(0.07,0.5,0.07,woodConsMat,x,0.25,z)));return g;}
 function mBidon(){const g=new THREE.Group();
@@ -1806,7 +1806,7 @@ function mFogata(){const g=new THREE.Group(); g.userData.kind='fogata';
   const l2=cyl(0.07,0.07,0.9,woodConsMat);l2.rotation.set(1.2,0.7,0);l2.position.y=0.2;g.add(l2);
   const s1=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[0].tex,blending:THREE.NormalBlending,depthWrite:false,transparent:true,opacity:0.95})); s1.scale.set(1.25,1.4,1); s1.position.y=0.78; g.add(s1);
   const s2=new THREE.Sprite(new THREE.SpriteMaterial({map:fireGifs[1].tex,blending:THREE.NormalBlending,depthWrite:false,transparent:true,opacity:0.95})); s2.scale.set(0.85,1.65,1); s2.position.y=0.95; g.add(s2);
-  const fl=new THREE.PointLight(0xff7a30,6,22,0.7); fl.position.set(0,0.8,0); g.add(fl); g.userData.fire=fl;   // ilumina toda una habitación de forma pareja (poca caída)
+  g.userData.wantFire=true; g.userData.fireOff=[0,0.8,0];   // luz del POOL al colocarse (sin tirón ni exceso de luces)
   return g;}
 function mConserv(){const g=new THREE.Group();g.add(boxM(1.2,0.9,0.7,woodConsMat,0,0.45,0));g.add(boxM(1.24,0.12,0.74,woodConsMat,0,0.92,0));return g;}
 function mRecagua(){const g=new THREE.Group(); g.userData.kind='recagua';
@@ -2254,6 +2254,8 @@ function finishBuild(){
       cx:m.position.x,cz:m.position.z,yaw:placeYaw,halfW:4*0.39,halfD:2,base:m.position.y}; stairsList.push(st); m.userData._stair=st; }
   if(id==='recagua') recaguas.push(m);
   if(ghost){ scene.remove(ghost); ghost.traverse(o=>{if(o.geometry)o.geometry.dispose();}); ghost=null; }
+  if(m.userData.wantFire){ const off=m.userData.fireOff||[0,0.7,0]; const cy=Math.cos(m.rotation.y),sy=Math.sin(m.rotation.y);   // luz de fuego del POOL (cuenta constante = sin tirón; tope de luces = sin matar FPS)
+    const L=acquireFxLight(0xff7a30,6,22); if(L){ L.position.set(m.position.x+off[0]*cy+off[2]*sy, m.position.y+off[1], m.position.z-off[0]*sy+off[2]*cy); m.userData.fire=L; } }
   markShadowDirty();   // construcción nueva → su sombra (calculada, no dinámica) aparece en la próxima horneada
   if(typeof renderHotbar==='function')renderHotbar();
   cbuilding=false; buildT=0;
@@ -2305,6 +2307,7 @@ function groundUnder(x,z){ const base=terrainHeight(x,z); let g=base; const reac
 let consAtk=false; const _cray=new THREE.Raycaster();
 function consMat(kind){ return (kind&&kind.indexOf('cha')>=0)?chapaMat:woodConsMat; }
 function destroyPlaced(m){ const i=placedItems.indexOf(m); if(i>=0)placedItems.splice(i,1);
+  if(m.userData.wantFire&&m.userData.fire)releaseFxLight(m.userData.fire);   // devuelve la luz de fuego al pool
   if(m.userData._solids)for(const s of m.userData._solids){ const k=solids.indexOf(s); if(k>=0)solids.splice(k,1); }
   if(m.userData._floor){ const k=floors.indexOf(m.userData._floor); if(k>=0)floors.splice(k,1); }
   if(m.userData._stair){ const k=stairsList.indexOf(m.userData._stair); if(k>=0)stairsList.splice(k,1); }
@@ -3156,7 +3159,10 @@ function bootArea(done){
     let n=0; while(n<PER_FRAME && cx<=W.x1){ buildChunk(cx,cz); n++; cz++; if(cz>W.z1){ cz=W.z0; cx++; } }
     document.getElementById('treeCount').textContent=trees.length;
     if(cx<=W.x1) requestAnimationFrame(build);
-    else { enableAllShadows(); worldReady=true; hideLoader(); if(done)done(); }
+    else { enableAllShadows(); worldReady=true;
+      try{ if(window.__prewarmChase)window.__prewarmChase(); }catch(e){}   // pre-compila los shaders de la persecución (no al arrancar la cinemática)
+      try{ [gMolotov,gFcam,gFcam2,gExpl,gTorch].forEach(g=>{ if(g&&g.tex)renderer.initTexture(g.tex); }); fireGifs.forEach(g=>{ if(g&&g.tex)renderer.initTexture(g.tex); }); }catch(e){}   // pre-sube las texturas de fuego al GPU → primer molotov/fogata sin tirón
+      hideLoader(); if(done)done(); }
   };
   requestAnimationFrame(build);
 }
@@ -3877,7 +3883,9 @@ function animate(){ if(chaseStopped)return; requestAnimationFrame(animate); cons
   speedTick(dt, fast?1:0.12); sparkTick(dt);
   renderBloom();
 }
-if(window.__embedChase){ window.__startChase=function(){ setSizes(); requestAnimationFrame(setSizes); clock.start(); animate(); }; }   // COMBINADO: re-evalúa orientación (gira 90° si hace falta) al arrancar, ya con pantalla completa
+if(window.__embedChase){ window.__startChase=function(){ setSizes(); requestAnimationFrame(setSizes); clock.start(); animate(); };
+  // PRE-CALENTADO: compila los shaders de la persecución durante la pantalla de carga (no al arrancar la cinemática) → sin tirón ni audio inestable al inicio
+  window.__prewarmChase=function(){ try{ renderer.compile(scene,camera); renderer.render(scene,camera); }catch(e){} }; }
 else animate();
 
 </script>
