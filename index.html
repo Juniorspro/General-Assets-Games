@@ -417,7 +417,7 @@
 <img id="cursor" src="https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/cursor.png" alt="">
 
 <!-- ===== INTRO / BOOT FLOW ===== -->
-<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 15 · ruta mate</div></div>
+<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 16 · fps real</div></div>
 <div id="devPick" class="gone">
   <div class="lpTitle" data-i18n="chooseDevice">¿Cómo vas a jugar?</div>
   <div class="dvRow">
@@ -2967,7 +2967,7 @@ gtex(NGLB+'barro.png',true).then(t=>{ t.wrapS=t.wrapT=THREE.RepeatWrapping; barr
 /* ===================== LOOP ===================== */
 addEventListener('resize',layout);
 let paused=false,started=false;document.addEventListener('visibilitychange',()=>{paused=document.hidden;});
-const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0,hudTimer=0;const _v=new THREE.Vector3();
+const clock=new THREE.Clock();const euler=new THREE.Euler(0,0,0,'YXZ');let fpsTimer=0,fpsFrames=0,hudTimer=0,_fpsT0=0;const _v=new THREE.Vector3();
 const _frustum=new THREE.Frustum(),_pm=new THREE.Matrix4();
 /* ===================== NPCs nocturnos + ragdoll (TODO aislado; corre al Jugar, en try/catch) ===================== */
 let npcTickFn=null, npcDayResetFn=null, storyT=-1, npcAtk=false, npcSetupDone=false, gameNight=0;
@@ -3344,7 +3344,9 @@ function animate(){requestAnimationFrame(animate);const dt=Math.min(clock.getDel
     else if((shadowFrame++%6)===0){ renderer.shadowMap.needsUpdate=true; }   // BOOSTER: la sombra dinámica se re-renderiza cada 6 frames (el sol se mueve lento → imperceptible) = mitad de coste del pase de sombra
   }
   if(composer)composer.render(dt);else renderer.render(scene,camera);
-  fpsTimer+=dt;fpsFrames++;if(fpsTimer>=0.5){const fps=Math.round(fpsFrames/fpsTimer);$('fps').textContent=fps;fpsTimer=0;fpsFrames=0;adaptRes(fps);}}
+  // FPS REAL: medido con reloj de pared (performance.now), NO con el dt clampeado a 50ms (que inflaba el número cuando había lag).
+  fpsFrames++; const _now=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now(); if(_fpsT0===0)_fpsT0=_now;
+  const _el=_now-_fpsT0; if(_el>=500){ const fps=Math.round(fpsFrames*1000/_el); $('fps').textContent=fps; fpsFrames=0; _fpsT0=_now; adaptRes(fps); }}
 // OPT: resolución adaptativa — si el FPS baja, baja la resolución interna; si sobra, la sube (sin pasar de la calidad elegida)
 let dynRes=1, resLow=0, resHi=0;
 // Resolución adaptativa ROBUSTA A SPIKES: un tirón puntual (p.ej. un horneado de entorno) NO baja la resolución,
