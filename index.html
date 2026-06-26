@@ -19,8 +19,8 @@
   /* las pantallas de arranque (fullscreen / PC-móvil / idioma / estudios / carga) también van GIRADAS 90° desde el principio */
   body.rot #boot, body.rot #devPick, body.rot #langPick, body.rot #assetLoad, body.rot #studios, body.rot #kbCard {
     inset:auto; width:100vh; height:100vw; top:50%; left:50%; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center center; }
-  /* La PERSECUCIÓN y el contenedor de cinemática (skip + megáfono) se giran 90° IGUAL que el #stage y todo lo demás. */
-  body.rot #chaseApp, body.rot #cineRot {
+  /* #chaseApp vive DENTRO de #stage → hereda EXACTAMENTE la rotación del juego (que llena bien). El skip/megáfono (#cineRot) rotan aparte igual que el resto. */
+  body.rot #cineRot {
     inset:auto; width:100vh; height:100vw; top:50%; left:50%; right:auto; bottom:auto; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center center; }
   #cineRot { position:fixed; inset:0; z-index:601; pointer-events:none; }
   #app { position:absolute; inset:0; }
@@ -336,7 +336,7 @@
   #bagHotbar .hbHint{ width:100%; text-align:center; font-size:11px; color:rgba(180,200,230,.7); margin-bottom:2px; }
 
   /* ===== overlay de la persecución (intro combinada) ===== */
-  #chaseApp{ position:fixed; inset:0; z-index:500; background:#000; }
+  #chaseApp{ position:absolute; inset:0; z-index:500; background:#000; }   /* dentro de #stage: hereda su rotación y lo llena */
   #chaseApp.gone{ display:none!important; }
   #chaseApp canvas{ display:block; position:absolute!important; inset:0!important; width:100%!important; height:100%!important; }
   #chaseFade{ position:fixed; inset:0; z-index:510; background:#000; opacity:1; pointer-events:none; }
@@ -416,7 +416,7 @@
 <img id="cursor" src="https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/cursor.png" alt="">
 
 <!-- ===== INTRO / BOOT FLOW ===== -->
-<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 11 · giro+fill</div></div>
+<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 12 · cine en stage</div></div>
 <div id="devPick" class="gone">
   <div class="lpTitle" data-i18n="chooseDevice">¿Cómo vas a jugar?</div>
   <div class="dvRow">
@@ -638,6 +638,10 @@ import { EffectComposer, RenderPass, EffectPass, Effect, BloomEffect, HueSaturat
 // girar 90° YA (antes de cualquier espera) → las pantallas de arranque aparecen en horizontal desde el primer frame
 function syncRot(){ if(window.innerHeight>window.innerWidth)document.body.classList.add('rot'); else document.body.classList.remove('rot'); }   // gira 90° desde el primer frame en vertical
 syncRot(); addEventListener('resize',syncRot);
+// La PERSECUCIÓN (overlay) pasa a vivir DENTRO de #stage → hereda EXACTAMENTE la rotación del juego (que llena bien),
+// en vez de rotarse por su cuenta (que dejaba franjas). #chaseApp/#chaseFade quedan absolute;inset:0 dentro del #stage rotado.
+try{ const _st=document.getElementById('stage'); const _ca=document.getElementById('chaseApp'), _cf=document.getElementById('chaseFade');
+  if(_st&&_ca)_st.appendChild(_ca); if(_st&&_cf)_st.appendChild(_cf); }catch(e){}
 let N8AOPostPass=null;
 { const _n8=await Promise.race([ import('n8ao').catch(()=>null), new Promise(res=>setTimeout(()=>res(null),3000)) ]);
   N8AOPostPass=(_n8&&_n8.N8AOPostPass)||null; if(!N8AOPostPass)console.warn('N8AO no disponible → sigo sin SSAO'); }
@@ -4422,14 +4426,12 @@ function renderBloom(){
   finalComposer.render();
 }
 function setSizes(){
-  // GIRO 90° (igual que todo): el CSS rota #chaseApp (body.rot, 100vh×100vw). El CANVAS llena el contenedor por CSS
-  // (position:absolute;inset:0;100%) y el render se dimensiona al tamaño REAL del contenedor (clientWidth/Height),
-  // con setSize(...,false) para NO pisar el estilo del canvas → gira Y llena sin franjas.
-  const portrait = innerHeight>innerWidth;
-  if(portrait) document.body.classList.add('rot'); else document.body.classList.remove('rot');
-  ['width','height','transform','transformOrigin','position','inset','left','top','right','bottom'].forEach(p=>{ app.style[p]=''; });
-  const w = app.clientWidth || Math.max(innerWidth,innerHeight);
-  const h = app.clientHeight || Math.min(innerWidth,innerHeight);
+  // #chaseApp vive DENTRO de #stage y hereda su rotación (la que llena bien). Acá sólo dimensiono el render
+  // al tamaño REAL del contenedor (clientWidth/Height = caja del #stage rotado), con setSize(...,false) para que
+  // el canvas lo llene por CSS (position:absolute;inset:0;100%).
+  const rotated = document.body.classList.contains('rot');
+  const w = app.clientWidth || (rotated?Math.max(innerWidth,innerHeight):innerWidth);
+  const h = app.clientHeight || (rotated?Math.min(innerWidth,innerHeight):innerHeight);
   camera.aspect=w/h; camera.updateProjectionMatrix();
   renderer.setSize(w,h,false); bloomComposer.setSize(w,h); finalComposer.setSize(w,h);
 }
