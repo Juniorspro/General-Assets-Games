@@ -19,6 +19,10 @@
   /* las pantallas de arranque (fullscreen / PC-móvil / idioma / estudios / carga) también van GIRADAS 90° desde el principio */
   body.rot #boot, body.rot #devPick, body.rot #langPick, body.rot #assetLoad, body.rot #studios, body.rot #kbCard {
     inset:auto; width:100vh; height:100vw; top:50%; left:50%; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center center; }
+  /* la PERSECUCIÓN (overlay) y el contenedor de la cinemática (skip + megáfono) se giran igual que el #stage → todo horizontal sin fullscreen */
+  body.rot #chaseApp, body.rot #cineRot {
+    inset:auto; width:100vh; height:100vw; top:50%; left:50%; right:auto; bottom:auto; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center center; }
+  #cineRot { position:fixed; inset:0; z-index:601; pointer-events:none; }
   #app { position:absolute; inset:0; }
   #app canvas { display:block; width:100%!important; height:100%!important; touch-action:none; image-rendering:pixelated; image-rendering:crisp-edges; }
 
@@ -3976,14 +3980,15 @@ $('fsBtn').addEventListener('click',()=>{
   fadeOut($('boot'), showLangPick);   // negro → IDIOMA → PC/Móvil → LOGOS de estudios → carga → MENÚ
 });
 /* ===== INTRO COMBINADA: al tocar JUGAR → persecución (overlay) → caída → juego ===== */
-function showMegafono(on){ let el=document.getElementById('megafono');
-  if(!el){ el=document.createElement('div'); el.id='megafono'; document.body.appendChild(el); }
+// contenedor de overlays de cinemática (skip + megáfono). Se gira con body.rot junto a todo lo demás → adentro posiciono en coords horizontales normales
+function ensureCineRot(){ let r=document.getElementById('cineRot'); if(!r){ r=document.createElement('div'); r.id='cineRot'; document.body.appendChild(r); } return r; }
+function showMegafono(on){ const r=ensureCineRot(); let el=document.getElementById('megafono');
+  if(!el){ el=document.createElement('div'); el.id='megafono'; r.appendChild(el); }
   el.textContent='📢 '+(curLang==='en'?'On the megaphone':curLang==='pt'?'No megafone':'Por el megáfono');
-  const base='position:fixed;z-index:99;padding:8px 18px;border-radius:30px;background:rgba(8,10,14,.6);color:#fff;font-weight:700;letter-spacing:.05em;font-size:16px;border:1px solid rgba(255,255,255,.16);box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;pointer-events:none;';
-  el.style.cssText=base+(on?'':'display:none;')+(rot?'left:13%;top:50%;transform:translate(-50%,-50%) rotate(90deg);':'left:50%;top:13%;transform:translateX(-50%);'); }
-function showSkipBtn(on){ let b=document.getElementById('skipCine'); if(!b){ b=document.createElement('button'); b.id='skipCine';
-    b.style.cssText='position:fixed;right:16px;bottom:16px;z-index:600;padding:10px 17px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(10,12,16,.66);color:#fff;font-size:14px;font-weight:700;letter-spacing:.04em;cursor:pointer;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);';
-    b.addEventListener('click',skipIntro); b.addEventListener('pointerdown',e=>e.stopPropagation()); document.body.appendChild(b); }
+  el.style.cssText='position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:2;padding:8px 18px;border-radius:30px;background:rgba(8,10,14,.6);color:#fff;font-weight:700;letter-spacing:.05em;font-size:16px;border:1px solid rgba(255,255,255,.16);box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;pointer-events:none;'+(on?'':'display:none;'); }
+function showSkipBtn(on){ const r=ensureCineRot(); let b=document.getElementById('skipCine'); if(!b){ b=document.createElement('button'); b.id='skipCine';
+    b.style.cssText='position:absolute;right:16px;bottom:16px;z-index:2;padding:10px 17px;border-radius:10px;border:1px solid rgba(255,255,255,.28);background:rgba(10,12,16,.66);color:#fff;font-size:14px;font-weight:700;letter-spacing:.04em;cursor:pointer;pointer-events:auto;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);';
+    b.addEventListener('click',skipIntro); b.addEventListener('pointerdown',e=>e.stopPropagation()); r.appendChild(b); }
   b.textContent=cT('skipCine')+' ⏭'; b.style.display=on?'block':'none'; }
 function skipIntro(){ showSkipBtn(false);
   try{ if(window.__embedChase && !window.__chaseDone){ window.__introToFall(); } }catch(e){}   // corta la persecución → arranca la caída
@@ -4417,12 +4422,11 @@ function renderBloom(){
   finalComposer.render();
 }
 function setSizes(){
-  const portrait = innerHeight > innerWidth;                 // forzar horizontal: si el equipo está vertical, giro la escena 90°
-  const w = portrait ? innerHeight : innerWidth;             // ancho real del lienzo (lado largo)
-  const h = portrait ? innerWidth  : innerHeight;
-  if(portrait){ app.style.width=w+'px'; app.style.height=h+'px'; app.style.transformOrigin='0 0';
-    app.style.transform=`translateX(${innerWidth}px) rotate(90deg)`; }
-  else { app.style.width=''; app.style.height=''; app.style.transform=''; app.style.transformOrigin=''; }
+  // SIEMPRE horizontal: el lienzo se dimensiona al lado largo × corto; la ROTACIÓN la hace el CSS (body.rot #chaseApp),
+  // igual que el #stage del juego → la persecución, el juego y el botón skip quedan girados de forma consistente (sin fullscreen).
+  const w = Math.max(innerWidth, innerHeight);
+  const h = Math.min(innerWidth, innerHeight);
+  app.style.width=''; app.style.height=''; app.style.transform=''; app.style.transformOrigin='';   // sin transform propio (lo pone el CSS)
   camera.aspect=w/h; camera.updateProjectionMatrix();
   renderer.setSize(w,h); bloomComposer.setSize(w,h); finalComposer.setSize(w,h);
 }
