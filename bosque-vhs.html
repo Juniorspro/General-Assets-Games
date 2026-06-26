@@ -25,6 +25,7 @@
   #cineRot { position:fixed; inset:0; z-index:601; pointer-events:none; }
   #app { position:absolute; inset:0; }
   #app canvas { display:block; width:100%!important; height:100%!important; touch-action:none; image-rendering:pixelated; image-rendering:crisp-edges; }
+  body.nativeRes #app canvas { image-rendering:auto; }   /* modo nativo: escalado suave/nítido, sin el look pixelado */
 
   #loader { position:fixed; inset:0; z-index:60; display:flex; flex-direction:column; align-items:center; justify-content:center;
             background:radial-gradient(120% 120% at 50% 38%,#3a2412 0%,#1a0e08 70%); transition:opacity .8s ease; }
@@ -416,7 +417,7 @@
 <img id="cursor" src="https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/cursor.png" alt="">
 
 <!-- ===== INTRO / BOOT FLOW ===== -->
-<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 12 · cine en stage</div></div>
+<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 13 · medium nativo</div></div>
 <div id="devPick" class="gone">
   <div class="lpTitle" data-i18n="chooseDevice">¿Cómo vas a jugar?</div>
   <div class="dvRow">
@@ -715,9 +716,9 @@ const QUALITY={
   vlow:  {radial:4, shadow:0,    shadowRes:256, leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
   // 3 modos visibles (Bajo/Medio/Alto): TODOS a resolución 100% (res:1.0); la resolución sólo se baja en Ajustes avanzados.
   low:   {radial:5, shadow:512,  shadowRes:512, leaf:100, grassN:300, plantN:26, rockN:6,  density:7,  streamR:2, dpr:1.5, res:1.0, bloom:false, aa:false, rdist:100, chunkBudget:1},   // BAJO: pixelación 25% (uniforme), sombras dinámicas baja calidad, SIN bloom ni reflejos, PBR plano
-  medium:{radial:6, shadow:512,  shadowRes:512, leaf:160, grassN:480, plantN:55, rockN:10, density:7,  streamR:2, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:150, chunkBudget:1},
-  high:  {radial:6, shadow:768,  shadowRes:768, leaf:220, grassN:820, plantN:85, rockN:13, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:190, chunkBudget:1},
-  vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:240, chunkBudget:2},
+  medium:{radial:6, shadow:512,  shadowRes:512, leaf:160, grassN:480, plantN:55, rockN:10, density:7,  streamR:2, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:150, chunkBudget:1, native:true},   // NATIVO: resolución real (sin pixelación), SIN SSAO, sombra PCF → corre nítido y fluido en gama media (A54)
+  high:  {radial:6, shadow:768,  shadowRes:768, leaf:220, grassN:820, plantN:85, rockN:13, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:190, chunkBudget:1, native:true},
+  vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:240, chunkBudget:2, native:true},
 };
 let qual=QUALITY.low;
 const GRASS_N={low:300,medium:620,high:1000}[DEV.tier], PLANT_N={low:26,medium:55,high:90}[DEV.tier], ROCK_N={low:5,medium:8,high:12}[DEV.tier];
@@ -728,7 +729,7 @@ document.getElementById('treeCount');
 const app=document.getElementById('app');
 const renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
 renderer.setPixelRatio(1);                          // resolución la controlamos nosotros (look low-res VHS)
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;   // OPT: la sombra se re-renderiza sólo cada N frames, no en todos
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;renderer.shadowMap.autoUpdate=false;   // PCF normal (no Soft): el muestreo de sombra por fragmento es mucho más barato en móvil (Mali/Adreno) y casi no se nota
 renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.NoToneMapping;
 app.appendChild(renderer.domElement);
 
@@ -1261,7 +1262,7 @@ let gfxNormalMul=1, gfxReflectMul=1;   // modo gráfico: 0 aplana el PBR (sin re
 // ---- MODO GRÁFICO (Bajo/Medio/Alto) ----  TODOS a 100% de resolución; cambia el ESTILO de render, no la resolución
 const GFXMODES={
   low:   {phaseShadows:true,  leafFlutter:0, veg:0, normal:0.0, reflect:0.0,  matte:true,  cull:true,  folDist:0.7, leafDist:0.7, env:false},   // sombras POR FASES (se hornean al moverte de celda / cambio de sol / evento) → SIN el spike cada 6 frames · CERO reflejos/brillo
-  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.0,  matte:true,  cull:true,  folDist:1.0, leafDist:1.0, env:false},   // CERO reflejos/brillo: todo mate + vegetación + sombras pintadas
+  medium:{phaseShadows:true,  leafFlutter:1, veg:1, normal:1.0, reflect:0.0,  matte:true,  cull:true,  folDist:0.82, leafDist:0.82, env:false},   // a resolución nativa, recorto un poco el dibujado de follaje lejano (queda tras la niebla) → menos overdraw, mismo look
   high:  {phaseShadows:false, leafFlutter:1, veg:1, normal:1.0, reflect:0.28, matte:false, cull:false, folDist:1.0, leafDist:1.0, env:true},    // único modo con reflejos (suaves)
 };
 let gfx=GFXMODES.low;
@@ -1355,9 +1356,13 @@ function layout(){
     const fh=Math.round(fixedResH*(menuResScale*loadResScale)), fw=Math.max(2,Math.round(fh*(vw/vh)));
     renderer.setPixelRatio(1); renderer.setSize(fw,Math.max(2,fh),false); if(composer)composer.setSize(fw,Math.max(2,fh)); return;
   }
-  // PIXELACIÓN 25%: en TODOS los modos se renderiza al 25% del CSS y se reescala con vecino-más-cercano (look pixelado + muchísimo menos relleno = más FPS).
-  const pr=Math.max(0.1, PIXELATE*resScale*dynRes*menuResScale*loadResScale);
-  renderer.setPixelRatio(pr);   // 0.25 × calidad × adaptativa × (½ menú borroso) × (½ carga)
+  // RESOLUCIÓN: modos NATIVOS (medio/alto/muy alto) → píxel real del dispositivo, nítido SIN pixelación.
+  // Modos pixelados (muy bajo/bajo) → look VHS al 70%. menú/carga bajan a la mitad (fondo borroso, no importa).
+  const nativeMode=!!(qual&&qual.native);
+  document.body.classList.toggle('nativeRes',nativeMode);
+  const base = nativeMode ? Math.min((window.devicePixelRatio||1), (qual.dpr||2))*resScale : PIXELATE*resScale;
+  const pr=Math.max(0.1, base*dynRes*menuResScale*loadResScale);
+  renderer.setPixelRatio(pr);
   renderer.setSize(vw,vh,false);
   if(composer)composer.setSize(vw,vh);
 }
@@ -3331,8 +3336,8 @@ let dynRes=1, resLow=0, resHi=0;
 // esté MAL varias ventanas seguidas para bajar, y bien varias para subir.
 function adaptRes(fps){ if(!started||fixedResH)return;   // con resolución FIJA no autoajustamos
   if(fps<30){ resLow++; resHi=0; } else if(fps>55){ resHi++; resLow=0; } else { resLow=0; resHi=0; return; }
-  let n=dynRes;
-  if(resLow>=3){ n=Math.max(0.6,dynRes-0.1); resLow=0; }        // ~1.5s sostenido por debajo de 30fps
+  let n=dynRes; const floor=(qual&&qual.native)?0.85:0.6;        // NATIVO: no bajar tanto la resolución (que no se note pixelado); igual recupera sola
+  if(resLow>=3){ n=Math.max(floor,dynRes-0.1); resLow=0; }        // ~1.5s sostenido por debajo de 30fps
   else if(resHi>=4){ n=Math.min(1,dynRes+0.1); resHi=0; }       // ~2s sostenido por encima de 55fps
   if(Math.abs(n-dynRes)>0.001){dynRes=n;layout();} }
 // Cámara cinemática del menú: pasea suave por el bosque mientras el menú está abierto
@@ -3389,9 +3394,9 @@ const I18N={
       useTable:'Segure para usar a mesa',hintNormal:'Joystick: andar/correr · arraste: olhar',hintPlace:'Mire onde colocar · 🔁 girar · 🪓 construir',empty:'— vazio —',sleep:'Dormir',noSleepDay:'Você só pode dormir à noite',tableConnected:'⬢ MESA CONECTADA',tapObject:'◐ Toque um objeto'}
 };
 const QDESC={
-  es:{vlow:'Máximo rendimiento, detalle mínimo',low:'SIN sombras · plantas quietas · PBR plano · sin reflejos (máx. rendimiento, 100%)',medium:'2 sombras (día/noche) · PBR en relieve · hojas/plantas que se mueven (100%)',high:'Todo activado · reflejos GOTY · sombras dinámicas (100%)',vhigh:'Máxima fidelidad (celular potente)'},
-  en:{vlow:'Max performance, minimal detail',low:'NO shadows · still plants · flat PBR · no reflections (max performance, 100%)',medium:'2 shadows (day/night) · relief PBR · moving leaves/plants (100%)',high:'Everything on · GOTY reflections · dynamic shadows (100%)',vhigh:'Maximum fidelity (powerful phone)'},
-  pt:{vlow:'Máximo desempenho, detalhe mínimo',low:'SEM sombras · plantas paradas · PBR plano · sem reflexos (máx. desempenho, 100%)',medium:'2 sombras (dia/noite) · PBR em relevo · folhas/plantas que se movem (100%)',high:'Tudo ativado · reflexos GOTY · sombras dinâmicas (100%)',vhigh:'Fidelidade máxima (celular potente)'}
+  es:{vlow:'Máximo rendimiento, detalle mínimo',low:'SIN sombras · plantas quietas · PBR plano · sin reflejos (máx. rendimiento, 100%)',medium:'Resolución NATIVA (nítida) · PBR en relieve · sombras · sin SSAO → fluido en gama media',high:'Todo activado · reflejos GOTY · sombras dinámicas (100%)',vhigh:'Máxima fidelidad (celular potente)'},
+  en:{vlow:'Max performance, minimal detail',low:'NO shadows · still plants · flat PBR · no reflections (max performance, 100%)',medium:'NATIVE resolution (crisp) · relief PBR · shadows · no SSAO → smooth on mid-range',high:'Everything on · GOTY reflections · dynamic shadows (100%)',vhigh:'Maximum fidelity (powerful phone)'},
+  pt:{vlow:'Máximo desempenho, detalhe mínimo',low:'SEM sombras · plantas paradas · PBR plano · sem reflexos (máx. desempenho, 100%)',medium:'Resolução NATIVA (nítida) · PBR em relevo · sombras · sem SSAO → fluido em gama média',high:'Tudo ativado · reflexos GOTY · sombras dinâmicas (100%)',vhigh:'Fidelidade máxima (celular potente)'}
 };
 let curLang='es', curQuality='low';   // por defecto arranca en BAJO
 function applyLang(l){const d=I18N[l]||I18N.es;document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(d[k]!=null)el.textContent=d[k];});document.documentElement.lang=l;}
@@ -3412,7 +3417,7 @@ function setQuality(t){
   DPRCAP=qual.dpr; resScale=qual.res; if($('res')){$('res').value=Math.round(qual.res*100);$('resVal').textContent=Math.round(qual.res*100)+'%';}
   if(bloomEffect)bloomEffect.intensity=qual.bloom?0.2:0.0; buildEffectPass(!!qual.bloom);   // reconstruye el pase: sin bloom en Bajo (ahorra GPU)
   aaOn=qual.aa; if(smaaPass)smaaPass.enabled=aaOn; if($('aaSw'))$('aaSw').classList.toggle('on',aaOn);
-  const useSsao=(t==='medium'||t==='high'||t==='vhigh');   // SSAO (N8AO) en medio y superiores
+  const useSsao=(t==='high'||t==='vhigh');   // SSAO (N8AO) SOLO en alto+: a resolución nativa es lo más caro (12 samples + denoise) y aporta poco
   if(n8aoPass)n8aoPass.enabled=useSsao;
   renderDist=qual.rdist; if($('dist')){$('dist').value=renderDist;$('distVal').textContent=renderDist+' m';} scene.fog.density=Math.max(0.0035,0.62/renderDist);
   applyGfx(t); markShadowDirty();   // aplica el ESTILO del modo (sombras por fases, vegetación, PBR plano, reflejos) y re-hornea la sombra una vez
