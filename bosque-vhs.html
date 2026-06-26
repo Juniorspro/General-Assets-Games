@@ -417,7 +417,7 @@
 <img id="cursor" src="https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/cursor.png" alt="">
 
 <!-- ===== INTRO / BOOT FLOW ===== -->
-<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 13 · medium nativo</div></div>
+<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 14 · difuso/lambert</div></div>
 <div id="devPick" class="gone">
   <div class="lpTitle" data-i18n="chooseDevice">¿Cómo vas a jugar?</div>
   <div class="dvRow">
@@ -716,7 +716,7 @@ const QUALITY={
   vlow:  {radial:4, shadow:0,    shadowRes:256, leaf:55,  grassN:130, plantN:14, rockN:4,  density:6,  streamR:1, dpr:1.0, res:0.6, bloom:false, aa:false, rdist:90,  chunkBudget:1},
   // 3 modos visibles (Bajo/Medio/Alto): TODOS a resolución 100% (res:1.0); la resolución sólo se baja en Ajustes avanzados.
   low:   {radial:5, shadow:512,  shadowRes:512, leaf:100, grassN:300, plantN:26, rockN:6,  density:7,  streamR:2, dpr:1.5, res:1.0, bloom:false, aa:false, rdist:100, chunkBudget:1},   // BAJO: pixelación 25% (uniforme), sombras dinámicas baja calidad, SIN bloom ni reflejos, PBR plano
-  medium:{radial:6, shadow:512,  shadowRes:512, leaf:160, grassN:480, plantN:55, rockN:10, density:7,  streamR:2, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:150, chunkBudget:1, native:true},   // NATIVO: resolución real (sin pixelación), SIN SSAO, sombra PCF → corre nítido y fluido en gama media (A54)
+  medium:{radial:6, shadow:512,  shadowRes:512, leaf:160, grassN:480, plantN:55, rockN:10, density:7,  streamR:2, dpr:2.0, res:1.0, bloom:false, aa:false, rdist:150, chunkBudget:1, native:true},   // NATIVO: resolución real (sin pixelación), SIN SSAO, sombra PCF → corre nítido y fluido en gama media (A54)
   high:  {radial:6, shadow:768,  shadowRes:768, leaf:220, grassN:820, plantN:85, rockN:13, density:9,  streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:190, chunkBudget:1, native:true},
   vhigh: {radial:7, shadow:1024, shadowRes:1024,leaf:280, grassN:1350,plantN:110,rockN:16, density:18, streamR:3, dpr:2.0, res:1.0, bloom:true,  aa:false, rdist:240, chunkBudget:2, native:true},
 };
@@ -1274,6 +1274,20 @@ function applyRelief(){ const m=gfxNormalMul;   // recalcula los normalScale seg
   if(typeof sandMat!=='undefined'&&sandMat.normalScale)sandMat.normalScale.set(reliefScale*0.7*m,reliefScale*0.7*m);
   if(typeof wetMat!=='undefined'&&wetMat.normalScale)wetMat.normalScale.set(reliefScale*m,reliefScale*m); }
 let REFLECT_MATS=null;
+/* ===== DIFUSO PURO (Lambert) en modo mate: NINGÚN material refleja luz (sin especular) + shader barato (clave para correr nativo) ===== */
+let _lamReady=false;
+function _initLambertTwins(){ if(_lamReady||!REFLECT_MATS)return; _lamReady=true;
+  const exclude=new Set([typeof glassMat!=='undefined'?glassMat:0, typeof emberMat!=='undefined'?emberMat:0, typeof flameMat!=='undefined'?flameMat:0]);   // vidrio y fuego se quedan (transmiten/emiten luz a propósito)
+  for(const sm of REFLECT_MATS){ if(!sm||!sm.isMeshStandardMaterial||exclude.has(sm))continue; if(sm.userData&&sm.userData._lam)continue;
+    const lm=new THREE.MeshLambertMaterial({map:sm.map||null,alphaTest:sm.alphaTest||0,transparent:!!sm.transparent,side:sm.side,vertexColors:!!sm.vertexColors,emissive:sm.emissive?sm.emissive.clone():new THREE.Color(0,0,0),emissiveIntensity:sm.emissiveIntensity!=null?sm.emissiveIntensity:1,emissiveMap:sm.emissiveMap||null});
+    if(sm.color)lm.color.copy(sm.color); if(sm.opacity!=null)lm.opacity=sm.opacity;
+    if(sm.onBeforeCompile)lm.onBeforeCompile=sm.onBeforeCompile;   // reusa el shader de viento (las chunks que toca existen igual en Lambert)
+    lm.needsUpdate=true; lm.userData={_std:sm}; sm.userData=sm.userData||{}; sm.userData._lam=lm; } }
+function applyDiffuseOnly(on){ try{ _initLambertTwins(); }catch(e){ return; }
+  if(on){ for(const sm of REFLECT_MATS){ if(sm&&sm.userData&&sm.userData._lam){ const lm=sm.userData._lam; if(lm.map!==sm.map)lm.map=sm.map; lm.alphaTest=sm.alphaTest||0; } } }   // mantiene las texturas sincronizadas (cargan async)
+  scene.traverse(o=>{ const m=o.material; if(!m||Array.isArray(m))return;
+    if(on){ if(m.isMeshStandardMaterial&&m.userData&&m.userData._lam)o.material=m.userData._lam; }
+    else { if(m.isMeshLambertMaterial&&m.userData&&m.userData._std)o.material=m.userData._std; } }); }
 let sunPhase=-999, shadowNeedsBake=true, _shSnapX=1e9, _shSnapZ=1e9, _phPrevElev=-99; const _shTgt=new THREE.Vector3();
 function markShadowDirty(){ shadowNeedsBake=true; }   // re-hornea la sombra UNA vez (talar/construir/destruir/abrir-cerrar puerta) en modo "por fases"
 function applyGfx(t){
@@ -1297,6 +1311,8 @@ function applyGfx(t){
   // arma equipada: mate en Bajo/Medio
   if(typeof fpRig!=='undefined'&&fpRig) fpRig.traverse(o=>{ if(o.isMesh&&o.material&&!Array.isArray(o.material)){ const mm=o.material; mm.userData=mm.userData||{}; if(mm.userData._env0==null)mm.userData._env0=(mm.envMapIntensity!=null?mm.envMapIntensity:1); if(mm.userData._frgh0==null)mm.userData._frgh0=(mm.roughness!=null?mm.roughness:1); if(mm.userData._fmet0==null)mm.userData._fmet0=(mm.metalness!=null?mm.metalness:0); if(gfx.matte){ mm.envMapIntensity=0; mm.roughness=1; mm.metalness=0; } else { mm.envMapIntensity=mm.userData._env0*gfxReflectMul; mm.roughness=mm.userData._frgh0; mm.metalness=mm.userData._fmet0; } mm.needsUpdate=true; } });
   if(!gfx.cull){ if(typeof placedItems!=='undefined')for(const m of placedItems)if(m)m.visible=true; if(typeof logs!=='undefined')for(const L of logs)if(L&&L.m)L.m.visible=true; }   // al salir del modo con culling, re-mostrar objetos sueltos
+  try{ applyDiffuseOnly(gfx.matte); }catch(e){}   // mate (bajo/medio) → Lambert difuso puro (sin reflejos, shader barato); alto → vuelve a PBR
+  setTimeout(()=>{ try{ applyDiffuseOnly(gfx.matte); }catch(e){} }, 1200);   // 2da pasada por si hay chunks/objetos construidos un toque después
 }
 /* ===================== CULLING (frustum · oclusión · distancia · detalle) ===================== */
 // OCLUSIÓN POR RELIEVE del follaje bajo (pasto/plantas): si una loma tapa la línea de visión hasta el tope del follaje de un chunk lejano,
@@ -1320,7 +1336,7 @@ function buildEffectPass(withBloom){ if(!composer)return;   // en Bajo SIN bloom
   const fx = withBloom ? [bloomEffect,hueSat,toneEffect,vignetteEffect] : [hueSat,toneEffect,vignetteEffect];
   mainEffectPass=new EffectPass(camera,...fx); composer.addPass(mainEffectPass); }
 function buildComposer(){
-  composer=new EffectComposer(renderer,{frameBufferType:THREE.HalfFloatType});   // AA por SMAA (más compatible en móvil)
+  composer=new EffectComposer(renderer,{frameBufferType:THREE.UnsignedByteType});   // LDR: mitad de ancho de banda que HalfFloat → clave a resolución nativa en móvil
   composer.addPass(new RenderPass(scene,camera));
   // SSAO N8AO (basado en profundidad → respeta el alpha de las plantas; sin cuadrado negro). Half-res = optimizado. Sólo medio+.
   if(N8AOPostPass){ try{
