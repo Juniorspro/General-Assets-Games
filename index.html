@@ -728,26 +728,19 @@ const scene=new THREE.Scene();
 scene.fog=new THREE.FogExp2(0xd98a4e,0.0048);
 const camera=new THREE.PerspectiveCamera(64,1,0.1,6000);
 
-/* ===================== CIELO ATARDECER + NUBES ===================== */
+/* ===================== CIELO PROCEDURAL SIMPLE (gradiente azul→noche, SIN nubes) ===================== */
 const pmrem=new THREE.PMREMGenerator(renderer);if(pmrem.compileEquirectangularShader)pmrem.compileEquirectangularShader();
-const sky=new Sky();sky.scale.setScalar(8000);const skyU=sky.material.uniforms;
+// `sky`/`skyU` se MANTIENEN sólo como fuente de uniforms para hornear el mapa de reflejos (PMREM); NO se dibuja cada frame (eso era lo "caro")
+const sky=new Sky();const skyU=sky.material.uniforms;
 skyU.turbidity.value=9;skyU.rayleigh.value=2.6;skyU.mieCoefficient.value=0.03;skyU.mieDirectionalG.value=0.85;
-scene.add(sky);
+// Cielo VISIBLE: un domo con gradiente cenit↔horizonte (2 colores) que se tiñe en setTime. Barato: sólo un mix por píxel.
+const skyDomeMat=new THREE.ShaderMaterial({ side:THREE.BackSide, depthWrite:false, fog:false,
+  uniforms:{ top:{value:new THREE.Color(0x1f5fc8)}, bottom:{value:new THREE.Color(0xbcd7f2)}, expo:{value:0.72} },
+  vertexShader:'varying vec3 vP; void main(){ vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader:'uniform vec3 top; uniform vec3 bottom; uniform float expo; varying vec3 vP; void main(){ float h=pow(clamp(normalize(vP).y*0.5+0.5,0.0,1.0),expo); gl_FragColor=vec4(mix(bottom,top,h),1.0); }' });
+const skyDome=new THREE.Mesh(new THREE.SphereGeometry(5000,24,16),skyDomeMat);skyDome.renderOrder=-3;skyDome.frustumCulled=false;scene.add(skyDome);
 const sunVec=new THREE.Vector3(),lightVec=new THREE.Vector3();let envRT=null;let nightFactor=0;
-const _sunCol=new THREE.Color(),_moonCol=new THREE.Color();   // temps reutilizables (setTime corre cada frame → sin basura)
-
-// Nubes: 2 planos con textura procedural cálida, derivando lento, siguiendo a la cámara en XZ
-function cloudTexture(tintA,tintB){const S=512;const cv=document.createElement('canvas');cv.width=cv.height=S;const g=cv.getContext('2d');g.clearRect(0,0,S,S);
-  for(let i=0;i<46;i++){const x=Math.random()*S,y=Math.random()*S,r=30+Math.random()*90;const gr=g.createRadialGradient(x,y,0,x,y,r);
-    const t=Math.random();const col=`rgba(${Math.round(THREE.MathUtils.lerp(tintA[0],tintB[0],t))},${Math.round(THREE.MathUtils.lerp(tintA[1],tintB[1],t))},${Math.round(THREE.MathUtils.lerp(tintA[2],tintB[2],t))},`;
-    gr.addColorStop(0,col+(0.5+Math.random()*0.4)+')');gr.addColorStop(1,col+'0)');g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,7);g.fill();}
-  const tx=new THREE.CanvasTexture(cv);tx.colorSpace=THREE.SRGBColorSpace;tx.wrapS=tx.wrapT=THREE.RepeatWrapping;return tx;}
-function cloudLayer(y,size,rep,tintA,tintB){const m=new THREE.Mesh(new THREE.PlaneGeometry(size,size),
-  new THREE.MeshBasicMaterial({map:cloudTexture(tintA,tintB),transparent:true,depthWrite:false,opacity:0.9,fog:true}));
-  m.rotation.x=Math.PI/2;m.position.y=y;m.material.map.repeat.set(rep,rep);m.renderOrder=-1;m.frustumCulled=false;return m;}
-const cloud1=cloudLayer(120,2600,2,[255,150,80],[255,120,110]);   // naranja
-const cloud2=cloudLayer(165,3400,2,[255,150,170],[255,180,140]);  // rosado
-scene.add(cloud1);scene.add(cloud2);
+const _sunCol=new THREE.Color(),_moonCol=new THREE.Color(),_skyTop=new THREE.Color(),_skyBot=new THREE.Color(),_skyDusk=new THREE.Color();   // temps reutilizables (setTime corre cada frame → sin basura)
 
 // ===== SOL · LUNA · ESTRELLAS (ciclo real, transición suave) =====
 function glowTex(inner,outer){const S=128,cv=document.createElement('canvas');cv.width=cv.height=S;const g=cv.getContext('2d');const gr=g.createRadialGradient(S/2,S/2,0,S/2,S/2,S/2);gr.addColorStop(0,inner);gr.addColorStop(0.42,outer);gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,S,S);const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;return t;}
@@ -790,8 +783,11 @@ function setTime(elev,azim=120){
   // niebla: azul noche → naranja crepúsculo → celeste día
   const fogH=THREE.MathUtils.lerp(0.62,0.08,day),fogL=THREE.MathUtils.lerp(0.05,0.5,day)+dusk*0.04;
   scene.fog.color.setHSL(fogH,0.55,fogL);
-  // nubes sólo de día/crepúsculo
-  const o=THREE.MathUtils.clamp(day,0,1);cloud1.material.opacity=0.9*o;cloud2.material.opacity=0.85*o;cloud1.visible=cloud2.visible=o>0.04;
+  // gradiente del cielo: cenit azul (oscuro de noche) · horizonte celeste de día → naranja en el crepúsculo → azul muy oscuro de noche
+  _skyTop.setHSL(0.62,0.55,THREE.MathUtils.lerp(0.04,0.30,day));
+  _skyBot.setHSL(THREE.MathUtils.lerp(0.62,0.58,day),0.55,THREE.MathUtils.lerp(0.05,0.76,day));
+  _skyDusk.setHSL(0.06,0.78,0.55); _skyBot.lerp(_skyDusk,dusk*0.7);   // horizonte anaranjado al amanecer/atardecer
+  skyDomeMat.uniforms.top.value.copy(_skyTop); skyDomeMat.uniforms.bottom.value.copy(_skyBot);
   // astros: el sol se enrojece al ponerse; la luna y estrellas aparecen de noche
   sunMat.color.setHSL(THREE.MathUtils.lerp(0.03,0.13,warm),THREE.MathUtils.lerp(1,0.55,warm),THREE.MathUtils.lerp(0.6,0.92,warm));
   sunGlowMat.color.copy(sunMat.color); sunGlow.scale.setScalar(THREE.MathUtils.lerp(1500,1000,warm));
@@ -2541,6 +2537,7 @@ const MANUAL={
   ['🏠 Construcción',['Paredes, pisos, techos, ventanas, puertas (se abren solas) y escaleras.','Un techo se puede colocar si hay otro techo cerca. La chapa NO se quema.','Sólo se pone en rojo si toca una pared o roca.']],
   ['💧 Agua',['Recolector: acercate con un balde vacío y colocalo debajo; con lluvia se llena en 45 s.','Recogé el balde lleno, equipalo y tocá 💧 para beber (+25% sed).','En los oasis del desierto bebés directo. La lluvia nocturna del día 2+ está contaminada.']],
   ['🍖 Comida',['La carne cruda (de animales y NPC) se cocina en el horno → carne asada (+40% hambre).','La carne cruda da poca hambre y te resta algo de vida.']],
+  ['🔪 Destazar un animal',['Matá un zorro o un rinoceronte: su cuerpo queda en el piso como carcasa (dura ~60 s).','Equipá un arma con filo (cuchillo, hacha, machete o guadaña).','Agachate (🔽) y mirá la carcasa de cerca: empieza solo y aparece una barra.','Esperá sin moverte, pararte ni mirar a los lados (zorro 5 s · rinoceronte 13 s) o se cancela.','Al terminar obtenés carne cruda (zorro 2 · rinoceronte 4) → cocinala en el horno.']],
   ['🔥 Horno',['Acercate y tocá "Abrir horno": cocinar carne, fundir chapa → hierro y arena → vidrio.']],
   ['⚔️ Combate',['Armas cuerpo a cuerpo, arco y molotov (🔥: prende y va drenando vida; quema la madera, la chapa no).','De noche aparecen NPC; al matar uno aparece otro: no se acaban.']],
   ['🕷️ Enemigos',['NPC: te rompen las paredes (madera 10 golpes, chapa 15).','Arañas gigantes: escalan, aparecen el día 3 y en el final. Cada enemigo tiene barra de vida.']],
@@ -2556,6 +2553,7 @@ const MANUAL={
   ['🏠 Building',['Walls, floors, roofs, windows, doors (open on their own) and stairs.','A roof can be placed if there is another roof nearby. Sheet metal does NOT burn.','It only turns red if it touches a wall or rock.']],
   ['💧 Water',['Collector: come with an empty bucket and place it underneath; rain fills it in 45 s.','Pick up the full bucket, equip it and tap 💧 to drink (+25% thirst).','At desert oases you drink directly. Day 2+ night rain water is contaminated.']],
   ['🍖 Food',['Raw meat (from animals and NPCs) is cooked in the oven → cooked meat (+40% hunger).','Raw meat gives little hunger and costs you some health.']],
+  ['🔪 Butcher an animal',['Kill a fox or a rhino: its body stays on the ground as a carcass (lasts ~60 s).','Equip a bladed weapon (knife, axe, machete or scythe).','Crouch (🔽) and look closely at the carcass: it starts on its own and a bar appears.','Wait without moving, standing up or looking away (fox 5 s · rhino 13 s) or it cancels.','When it finishes you get raw meat (fox 2 · rhino 4) → cook it in the oven.']],
   ['🔥 Oven',['Get close and tap "Open oven": cook meat, smelt sheet metal → iron and sand → glass.']],
   ['⚔️ Combat',['Melee weapons, bow and molotov (🔥: ignites and drains life; burns wood, not metal).','At night NPCs appear; kill one and another shows up: endless.']],
   ['🕷️ Enemies',['NPCs: they break your walls (wood 10 hits, metal 15).','Giant spiders: they climb, appear on day 3 and at the finale. Each enemy has a health bar.']],
@@ -2571,6 +2569,7 @@ const MANUAL={
   ['🏠 Construção',['Paredes, pisos, telhados, janelas, portas (abrem sozinhas) e escadas.','Um telhado pode ser colocado se houver outro telhado perto. A chapa NÃO queima.','Só fica vermelho se tocar uma parede ou rocha.']],
   ['💧 Água',['Coletor: chegue com um balde vazio e coloque embaixo; com chuva enche em 45 s.','Pegue o balde cheio, equipe e toque 💧 para beber (+25% sede).','Nos oásis do deserto você bebe direto. A chuva noturna do dia 2+ é contaminada.']],
   ['🍖 Comida',['A carne crua (de animais e NPCs) é cozida no forno → carne assada (+40% fome).','A carne crua dá pouca fome e tira um pouco de vida.']],
+  ['🔪 Desossar um animal',['Mate uma raposa ou um rinoceronte: o corpo fica no chão como carcaça (dura ~60 s).','Equipe uma arma com fio (faca, machado, facão ou foice).','Agache (🔽) e olhe de perto a carcaça: começa sozinho e aparece uma barra.','Espere sem se mover, levantar ou olhar para os lados (raposa 5 s · rinoceronte 13 s) ou cancela.','Ao terminar você ganha carne crua (raposa 2 · rinoceronte 4) → cozinhe no forno.']],
   ['🔥 Forno',['Chegue perto e toque "Abrir forno": cozinhar carne, fundir chapa → ferro e areia → vidro.']],
   ['⚔️ Combate',['Armas corpo a corpo, arco e molotov (🔥: incendeia e drena a vida; queima madeira, chapa não).','À noite aparecem NPCs; mate um e aparece outro: infinito.']],
   ['🕷️ Inimigos',['NPCs: quebram suas paredes (madeira 10 golpes, chapa 15).','Aranhas gigantes: escalam, aparecem no dia 3 e no final. Cada inimigo tem barra de vida.']],
@@ -2578,13 +2577,25 @@ const MANUAL={
   ['🌧️ Clima',['Chove à noite (dias 1 a 3) e há raios que ateiam fogo.','Dia 3: NOITE VERMELHA — não pode dormir, causa x2 dano e quebram suas paredes.']],
   ['🏁 Objetivo',['Chegue ao fim da estrada (670 m) e derrote a horda final em 4 dias ou menos.','Se não chegar e vencer até o fim do dia 4 → chuva de meteoros. As notas do hotbar contam a história.']]]
 };
-function openManual(){ let el=document.getElementById('manOv'); if(!el){ el=document.createElement('div'); el.id='manOv'; el.style.cssText='position:fixed;inset:0;z-index:142;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.7);'; el.addEventListener('pointerdown',e=>{ if(e.target===el)el.style.display='none'; }); document.body.appendChild(el); }
-  const M=MANUAL[curLang]||MANUAL.es;
-  const secs=M.map(s=>`<div style="margin-bottom:14px"><div style="font-weight:800;color:#e0a33c;margin-bottom:4px">${s[0]}</div>`+s[1].map(l=>`<div style="margin-bottom:2px">• ${l}</div>`).join('')+`</div>`).join('');
-  el.innerHTML=`<div style="max-width:min(620px,92vw);max-height:88vh;overflow-y:auto;background:#16181c;border:1px solid #2e333c;border-radius:14px;padding:24px;color:#eef0f3;font-size:13.5px;line-height:1.5;${rot?'transform:rotate(90deg);':''}">
-    <div style="font-weight:800;font-size:19px;letter-spacing:.06em;color:#fff;margin-bottom:14px">📖 ${cT('manual')}</div>${secs}
-    <div style="margin-top:4px;font-size:12px;opacity:.55;text-align:center">${cT('tapClose')}</div></div>`;
-  el.style.display='flex'; }
+let _manSec=0;
+function renderManual(){ const el=document.getElementById('manOv'); if(!el)return; const M=MANUAL[curLang]||MANUAL.es;
+  if(_manSec>=M.length)_manSec=0;
+  const list=M.map((s,i)=>`<button class="manTab${i===_manSec?' on':''}" data-i="${i}">${s[0]}</button>`).join('');
+  const sec=M[_manSec]; const body=sec[1].map(l=>`<div style="margin-bottom:7px;display:flex;gap:8px"><span style="color:#e0a33c">•</span><span>${l}</span></div>`).join('');
+  el.innerHTML=`<div style="display:flex;flex-direction:column;max-width:min(720px,94vw);width:720px;max-height:88vh;background:#16181c;border:1px solid #2e333c;border-radius:14px;overflow:hidden;color:#eef0f3;${rot?'transform:rotate(90deg);':''}">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid #2a2f37">
+      <div style="font-weight:800;font-size:18px;letter-spacing:.06em;color:#fff">📖 ${cT('manual')}</div>
+      <button id="manClose" style="background:none;border:none;color:#9aa3ad;font-size:22px;line-height:1;cursor:pointer;padding:0 4px">✕</button></div>
+    <div style="display:flex;min-height:0;flex:1">
+      <div id="manList" style="flex:0 0 40%;max-width:230px;overflow-y:auto;padding:10px;border-right:1px solid #2a2f37;-webkit-overflow-scrolling:touch">${list}</div>
+      <div style="flex:1;overflow-y:auto;padding:18px 20px;font-size:14px;line-height:1.5;-webkit-overflow-scrolling:touch">
+        <div style="font-weight:800;font-size:16px;color:#fff;margin-bottom:12px">${sec[0]}</div>${body}</div></div></div>`;
+  el.querySelector('#manClose').addEventListener('click',()=>{ el.style.display='none'; });
+  el.querySelectorAll('.manTab').forEach(b=>b.addEventListener('click',()=>{ _manSec=+b.dataset.i; renderManual(); }));
+}
+function openManual(){ let el=document.getElementById('manOv'); if(!el){ el=document.createElement('div'); el.id='manOv'; el.style.cssText='position:fixed;inset:0;z-index:142;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.7);padding:10px;box-sizing:border-box;'; el.addEventListener('pointerdown',e=>{ if(e.target===el)el.style.display='none'; }); document.body.appendChild(el);
+    if(!document.getElementById('manCSS')){ const st=document.createElement('style'); st.id='manCSS'; st.textContent='.manTab{display:block;width:100%;text-align:left;background:none;border:none;color:#c4ccd6;font-size:13.5px;font-weight:600;padding:9px 11px;border-radius:8px;cursor:pointer;margin-bottom:2px;line-height:1.25}.manTab:hover{background:#20242b}.manTab.on{background:#2a3340;color:#fff}'; document.head.appendChild(st); } }
+  _manSec=0; renderManual(); el.style.display='flex'; }
 function readNote(){ let el=document.getElementById('noteOv'); if(!el){ el=document.createElement('div'); el.id='noteOv'; el.style.cssText='position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.62);'; el.addEventListener('pointerdown',()=>{el.style.display='none';}); document.body.appendChild(el); }
   const N=NOTE_TEXT[STORY.note]||NOTE_TEXT[1]; const txt=N[curLang]||N.es;
   el.querySelector('#noteCard')||el.appendChild(document.createElement('div'));
@@ -2899,7 +2910,7 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
     {key:'rino', file:'model_56a_-_southern_white_rhino.glb', h:1.9, idle:'Action', walk:'Action', count:2, sp:0.8, hp:6, proc:true},
     {key:'spider',file:'spider_rig.glb', h:0.6, idle:'CINEMA', walk:'CINEMA', count:0, sp:1.1, hp:3, proc:true},   // NO aparecen al inicio: sólo desde el día 10 (gigantes)
   ];
-  const gl=new GLTFLoader(); const F=[]; const ray2=new THREE.Raycaster(); let spiderFactory=null, giantsSpawned=false; const FAUNA_D2=110*110, FAUNA_RELOC2=150*150;   // visibles hasta ~110 m; si quedan lejísimos se reubican cerca tuyo
+  const gl=new GLTFLoader(); const F=[]; const ray2=new THREE.Raycaster(); const _rinoDQ=new THREE.Quaternion(); let spiderFactory=null, giantsSpawned=false; const FAUNA_D2=110*110, FAUNA_RELOC2=150*150;   // visibles hasta ~110 m; si quedan lejísimos se reubican cerca tuyo
   function faunaPos(){ const a=Math.random()*6.283, r=18+Math.random()*60; let x=player.pos.x+Math.cos(a)*r, z=player.pos.z+Math.sin(a)*r;   // aparecen ALREDEDOR del jugador (no perdidos en el mapa)
     x=Math.max(Xmin+10,Math.min(BEACH_X0-12,x)); z=Math.max(Zmin+10,Math.min(Zmax-10,z)); return {x,z}; }
   function addInst(S,g,src,s0,scaleMul,hp,x,z){ const s=s0*scaleMul; const bb=new THREE.Box3().setFromObject(src); const baseY=bb.min.y*s;
@@ -2911,8 +2922,13 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
     let legs=null;   // huesos de patas para animación procedural (marcha)
     if(S.key==='rino'){ legs=[];   // GLTFLoader.sanitizeNodeName ELIMINA los puntos: 'l.shldr_7' → 'lshldr_7'. Buscamos por fragmento normalizado.
       const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-      const find=frag=>{ const f=norm(frag); let hit=null; inst.traverse(o2=>{ if(!hit&&o2.isBone!==false&&norm(o2.name).indexOf(f)>=0)hit=o2; }); return hit; };
-      const add=(frag,amp,ph)=>{ const b=find(frag); if(b)legs.push({b,base:b.rotation.x,amp,ph}); };
+      const find=frag=>{ const f=norm(frag); let hit=null; inst.traverse(o2=>{ if(!hit&&norm(o2.name).indexOf(f)>=0)hit=o2; }); return hit; };
+      inst.updateWorldMatrix(true,true);
+      const instWQ=new THREE.Quaternion(); inst.getWorldQuaternion(instWQ);
+      const lateral=new THREE.Vector3(1,0,0).applyQuaternion(instWQ);   // eje izquierda↔derecha del cuerpo (en mundo): TODA pata flexiona alrededor de este eje
+      const add=(frag,amp,ph)=>{ const b=find(frag); if(!b)return; const pq=new THREE.Quaternion(); (b.parent||b).getWorldQuaternion(pq);
+        const axis=lateral.clone().applyQuaternion(pq.invert()).normalize();   // ese eje expresado en el ESPACIO DEL PADRE del hueso → flexión adelante/atrás correcta para cada pata (sin balanceo lateral)
+        legs.push({b,qq:true,baseQ:b.quaternion.clone(),axis,amp,ph}); };
       add('lshldr',0.5,0); add('rshldr',0.5,Math.PI); add('lhip',0.5,Math.PI); add('rhip',0.5,0);   // marcha diagonal (amplitud amplia → bien visible)
       add('lelbow',0.32,0); add('relbow',0.32,Math.PI); add('lknee',0.32,Math.PI); add('rknee',0.32,0); }
     else if(S.key==='spider'){ legs=[]; let i=0; inst.traverse(o2=>{ if(/^[LR]_\d/.test(o2.name)&&legs.length<8){ legs.push({b:o2,base:o2.rotation.x,amp:0.34,ph:i*0.8}); i++; } }); }   // 8 patas en oleada (scuttle)
@@ -2965,7 +2981,9 @@ function setupFauna(){ if(faunaSetupDone)return; faunaSetupDone=true; try{
         o._ph+=dt*(o.move?(rino?5.5:9):2);
         const bob=Math.abs(Math.sin(o._ph))*(o.move?(rino?0.03:0.06):(rino?0.006:0.012)); o.inst.position.y=gy+bob;   // rino: bob muy chico (no "salta")
         o.inst.rotation.x=Math.sin(o._ph*0.5)*(o.move?(rino?0.02:0.04):0.01);
-        if(o.legs){ o._lph+=dt*(o.move?(rino?5.5:9):(rino?2.4:3)); const k=o.move?1:0.3; for(const L of o.legs){ L.b.rotation.x=L.base+Math.sin(o._lph+L.ph)*L.amp*k; } } }   // PATAS animadas (marcha rino / scuttle araña)
+        if(o.legs){ o._lph+=dt*(o.move?(rino?5.5:9):(rino?2.4:3)); const k=o.move?1:0.3; for(const L of o.legs){ const ang=Math.sin(o._lph+L.ph)*L.amp*k;
+          if(L.qq){ _rinoDQ.setFromAxisAngle(L.axis,ang); L.b.quaternion.copy(L.baseQ).premultiply(_rinoDQ); }   // rino: gira alrededor del eje lateral del cuerpo (flexión real)
+          else { L.b.rotation.x=L.base+ang; } } } }   // PATAS animadas (marcha rino / scuttle araña)
       else { if(!o.single){ if(o.move&&o.state!=='walk'){ o.state='walk'; o.ia.fadeOut(0.2); o.wa.reset().fadeIn(0.2).play(); } else if(!o.move&&o.state!=='idle'){ o.state='idle'; o.wa.fadeOut(0.2); o.ia.reset().fadeIn(0.2).play(); } } o.inst.position.y=gy; } } };
   function killAnimal(o){ o.dead=true; o.deadT=0; try{ o.mx.stopAllAction(); }catch(e){}
     try{ if(o.key==='spider' && (typeof finale==='undefined'||!finale.active) && spiderFactory){ const a=Math.random()*6.28,r=42+Math.random()*24; spiderFactory(player.pos.x+Math.cos(a)*r,player.pos.z+Math.sin(a)*r); } }catch(e){} }   // matar una araña (noche normal) → aparece otra
@@ -3179,8 +3197,7 @@ function update(dt){
   if(gfx.phaseShadows){ _shx=Math.round(_shx/5)*5; _shz=Math.round(_shz/5)*5; if(_shx!==_shSnapX||_shz!==_shSnapZ){_shSnapX=_shx;_shSnapZ=_shz;shadowNeedsBake=true;} }   // rejilla de 5 m: menos re-horneados de sombra al caminar (menos tirones)
   _shTgt.set(_shx,player.pos.y,_shz);
   dirLight.position.copy(_shTgt).addScaledVector(lightVec,50);dirLight.target.position.copy(_shTgt);dirLight.target.updateMatrixWorld();
-  cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
-  cloud1.material.map.offset.x+=dt*0.004;cloud2.material.map.offset.x+=dt*0.0026;
+  skyDome.position.set(camera.position.x,0,camera.position.z);
   placeCelestials(camera.position.x,camera.position.z);
   flash.position.copy(camera.position);flash.target.position.copy(camera.position).add(forward);flash.target.updateMatrixWorld();flash.intensity=flashOn?(7*(0.35+0.65*nightFactor)):0;
   // farolas de la ruta: SIEMPRE prendidas. Selección de las 4 más cercanas SIN asignar memoria por frame
@@ -3276,7 +3293,7 @@ function cinematicCam(dt){
   camera.lookAt(_cl);
   placeCelestials(camera.position.x,camera.position.z);
   dirLight.position.set(camera.position.x+lightVec.x*50,camera.position.y+lightVec.y*50,camera.position.z+lightVec.z*50);dirLight.target.position.copy(camera.position);dirLight.target.updateMatrixWorld();
-  cloud1.position.set(camera.position.x,cloud1.position.y,camera.position.z);cloud2.position.set(camera.position.x,cloud2.position.y,camera.position.z);
+  skyDome.position.set(camera.position.x,0,camera.position.z);
   cyclePhase+=dt*4; const th=THETA0+cyclePhase*(Math.PI*2/1440); const mElev=A_ELEV*Math.sin(th); setTime(mElev,120);   // ciclo acelerado en el fondo del menú
   // (SIN IBL)
   // OPT: aún en el menú, sólo se dibujan los chunks cercanos a la cámara (antes se dibujaba el MAPA ENTERO = miles de draw calls → menú trabado)
@@ -3737,9 +3754,9 @@ function boomTick(dt){ if(!cine.boomDone)return; const B=cine.boom; cine.boomT+=
   cine.boomFlash.intensity=Math.max(0,240-cine.boomT*420);
   if(cine.boomSprite&&cine.boomSprite.visible){ if(introBoom)introBoom.update(); cine.boomSprite.lookAt(camera.position); cine.boomSprite.material.opacity=Math.max(0,1.0-cine.boomT*0.3); const s=1+cine.boomT*0.22; cine.boomSprite.scale.set(s,s,s); if(cine.boomT>3.4)cine.boomSprite.visible=false; } }
 function startIntroCine(){
-  try{ intro.active=true; cine.t=0; cine._ended=false; buildIntroCine(); try{ showSkipBtn(true); }catch(e){}
+  try{ intro.active=true; cine.t=0; cine._ended=false; cine.warm=true; cine.boomDone=false; cine.boomT=0; buildIntroCine();
     setHudVisible(false); if(typeof fpRig!=='undefined'&&fpRig)fpRig.visible=false; if(typeof fpAxe!=='undefined'&&fpAxe)fpAxe.visible=false;
-    player.crouch=false; fadeBlackEl.classList.remove('snap'); fadeFromBlack();   // saca el snap → la caída entra con fundido suave desde el negro
+    player.crouch=false; fadeBlackEl.classList.add('snap','on');   // 3 s en NEGRO: precalienta la explosión del portal (sin verse) y después se reinicia y SÍ se ve
   }catch(e){ console.warn('startIntroCine',e); intro.active=false; setHudVisible(true); }
 }
 function endIntroCine(){ if(cine._ended)return; cine._ended=true; intro.active=false;
@@ -3755,6 +3772,19 @@ function endIntroCine(){ if(cine._ended)return; cine._ended=true; intro.active=f
   try{ storyBegin(); }catch(e){}   // arranca el Día 1: HUD de objetivos + Nota 1 al hotbar
 }
 function introCam(dt){
+  if(cine.warm){ cine.t+=dt;   // PRECALENTADO de la explosión (3 s, en negro): dispara el boom para decodificar el GIF + compilar el material de partículas (frustumCulled=false → compila aunque no se vea)
+    if(cine.t>=2.8) triggerBoom(); boomTick(dt);
+    if(cine.portal) cine.portal.lookAt(camera.position);
+    fadeBlackEl.classList.add('on');
+    if(cine.t>=3.0){   // listo → reinicia el proceso y AHORA se ve
+      cine.warm=false; cine.t=0; cine.boomDone=false; cine.boomT=0;
+      if(cine.boomSprite){ cine.boomSprite.visible=false; cine.boomSprite.material.opacity=1; cine.boomSprite.scale.set(1,1,1); }
+      if(cine.boom){ for(let i=0;i<cine.boom.n;i++){ cine.boom.pos[i*3+1]=9999; cine.boom.life[i]=0; } cine.boom.g.attributes.position.needsUpdate=true; }
+      if(cine.boomFlash)cine.boomFlash.intensity=0;
+      try{ showSkipBtn(true); }catch(e){}
+      fadeBlackEl.classList.remove('snap'); fadeFromBlack();
+    }
+    return; }
   const t=(cine.t+=dt);
   if(cine.portal){ cine.portalDisc.rotation.z+=dt*1.7; if(cine.portalDisc2)cine.portalDisc2.rotation.z-=dt*1.2; cine.portal.lookAt(camera.position); }   // portal SIEMPRE de frente
   const inAB=t<cB1;
@@ -3884,8 +3914,10 @@ function skipIntro(){ showSkipBtn(false);
 function playChaseThenFall(){
   $('options').classList.remove('show'); $('startMenu').classList.remove('show'); $('kbCard').classList.remove('show'); showSkipBtn(true);
   try{ if(escenaAudio){ escenaAudio.volume=0; const p=escenaAudio.play(); if(p&&p.then)p.then(()=>{ try{ escenaAudio.pause(); escenaAudio.currentTime=0; }catch(e){} }).catch(()=>{}); } }catch(e){}   // desbloquea el audio en el gesto pero SIN sonido todavía
-  const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf){ cf.style.display=''; cf.style.opacity='1'; }   // 6 s en NEGRO (sin sonido) para precargar y evitar lags
-  setTimeout(()=>{ if(window.__chaseDone)return; try{ if(escenaAudio){ escenaAudio.volume=0.9; escenaAudio.currentTime=0; escenaAudio.play(); } showMegafono(true); }catch(e){} try{ window.__startChase(); }catch(e){} }, 6000);   // recién ahora arranca la escena CON sonido
+  const ca=$('chaseApp'); if(ca)ca.classList.remove('gone'); const cf=$('chaseFade'); if(cf){ cf.style.display=''; cf.style.opacity='1'; }   // 6 s en NEGRO: la escena YA corre detrás (silenciosa) para precalentar y evitar tirones
+  try{ if(window.__warmChase)window.__warmChase(); else if(window.__startChase)window.__startChase(); }catch(e){}   // arranca a renderizar en silencio detrás del negro
+  setTimeout(()=>{ if(window.__chaseDone)return; try{ if(window.__restartChase)window.__restartChase(); }catch(e){}   // reinicia posición + reabre el portal
+    try{ if(escenaAudio){ escenaAudio.volume=0.9; escenaAudio.currentTime=0; escenaAudio.play(); } showMegafono(true); }catch(e){} }, 6000);   // recién ahora se ve, CON sonido
 }
 function fadeOutEscenaAudio(){ try{ showMegafono(false); }catch(e){} if(!escenaAudio)return; try{ const a=escenaAudio; let v=a.volume; const t=setInterval(()=>{ v-=0.12; if(v<=0){ a.pause(); clearInterval(t); } else a.volume=v; },70); }catch(e){} }
 window.__introToFall=function(){ window.__chaseDone=true; fadeOutEscenaAudio();   // se funde el audio al pasar a la caída
@@ -4271,6 +4303,7 @@ function director(ct,t){
     const ez=exitZ!=null?exitZ:carZ; setFov(58); camera.position.set(exitX+10,3.4,ez+13); _tmp.set(exitX,2.2,ez-6); camera.lookAt(_tmp);
   }
   // ---- fundidos + redirección al bosque ----
+  if(warming){ fadeEl.style.opacity='1'; return; }   // precalentado: TODO en negro, no se levanta el fundido ni se redirige
   let a=0; if(ct<0.6) a=1-ct/0.6; else if(ct>END_START+2.4) a=(ct-(END_START+2.4))/1.2; fadeEl.style.opacity=Math.max(0,Math.min(1,a)).toFixed(3);
   if(ct>=REDIRECT_AT && !redirected){ redirected=true; chaseStopped=true;
     if(window.__introToFall){ const ca=document.getElementById('chaseApp'); if(ca)ca.classList.add('gone'); const cf=document.getElementById('chaseFade'); if(cf)cf.style.display='none'; try{ window.__introToFall(); }catch(e){}
@@ -4317,7 +4350,7 @@ function setSizes(){
 }
 addEventListener('resize',setSizes);
 setSizes();
-const clock=new THREE.Clock(); let ct=0,t=0; let chaseStopped=false;
+const clock=new THREE.Clock(); let ct=0,t=0; let chaseStopped=false; let warming=false;   // warming: corre la escena en SILENCIO detrás del negro (precalienta shaders/GIFs) sin avanzar el guion ni levantar el negro
 function animate(){ if(chaseStopped)return; requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); t+=dt; ct+=dt;
   director(ct,t); placeCars(ct,t,dt); portalTick(dt, (ct>0.4&&ct<3.5)||(ct>END_START&&ct<END_START+2.0), t); rainTick(dt);
   const cc=ct-INTRO_END; const fast=(ct>INTRO_END&&ct<END_START&&!(cc>=9.8&&cc<13.6));   // sin líneas de velocidad en el interior
@@ -4325,6 +4358,8 @@ function animate(){ if(chaseStopped)return; requestAnimationFrame(animate); cons
   renderBloom();
 }
 if(window.__embedChase){ window.__startChase=function(){ setSizes(); requestAnimationFrame(setSizes); clock.start(); animate(); };
+  window.__warmChase=function(){ warming=true; fadeEl.style.opacity='1'; setSizes(); requestAnimationFrame(setSizes); clock.start(); animate(); };   // arranca renderizando en SILENCIO detrás del negro (precalienta)
+  window.__restartChase=function(){ ct=0; t=0; exitZ=null; exitX=0; redirected=false; portalOpen=0; warming=false; };   // a los 6 s: reinicia posición + reabre el portal, y AHORA se ve con sonido
   // PRE-CALENTADO: compila los shaders de la persecución durante la pantalla de carga (no al arrancar la cinemática) → sin tirón ni audio inestable al inicio
   window.__prewarmChase=function(){ try{ renderer.compile(scene,camera); renderer.render(scene,camera); }catch(e){} }; }
 else animate();
