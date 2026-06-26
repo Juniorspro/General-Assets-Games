@@ -416,7 +416,7 @@
 <img id="cursor" src="https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/cursor.png" alt="">
 
 <!-- ===== INTRO / BOOT FLOW ===== -->
-<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button></div>
+<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 8 · giro px</div></div>
 <div id="devPick" class="gone">
   <div class="lpTitle" data-i18n="chooseDevice">¿Cómo vas a jugar?</div>
   <div class="dvRow">
@@ -4422,13 +4422,19 @@ function renderBloom(){
   finalComposer.render();
 }
 function setSizes(){
-  // SIEMPRE horizontal: el lienzo se dimensiona al lado largo × corto; la ROTACIÓN la hace el CSS (body.rot #chaseApp),
-  // igual que el #stage del juego → la persecución, el juego y el botón skip quedan girados de forma consistente (sin fullscreen).
-  // Garantizo la clase 'rot' acá también (no dependo de que el módulo del juego ya la haya puesto) → el overlay SIEMPRE llena.
-  if(innerHeight>innerWidth) document.body.classList.add('rot'); else document.body.classList.remove('rot');
-  const w = Math.max(innerWidth, innerHeight);
-  const h = Math.min(innerWidth, innerHeight);
-  app.style.width=''; app.style.height=''; app.style.transform=''; app.style.transformOrigin='';   // sin transform propio (lo pone el CSS)
+  // ROTACIÓN PÍXEL-EXACTA del overlay: uso innerWidth/innerHeight (px CSS del viewport VISIBLE), NO vh/vw
+  // (en móvil 100vh puede no coincidir con el área visible y deja franjas). Así #chaseApp llena EXACTO la pantalla.
+  const portrait = innerHeight>innerWidth;
+  if(portrait) document.body.classList.add('rot'); else document.body.classList.remove('rot');   // que el skip/megáfono (#cineRot) también roten
+  if(portrait){
+    app.style.position='fixed'; app.style.inset='auto'; app.style.left='50%'; app.style.top='50%'; app.style.right='auto'; app.style.bottom='auto';
+    app.style.width=innerHeight+'px'; app.style.height=innerWidth+'px';
+    app.style.transformOrigin='center center'; app.style.transform='translate(-50%,-50%) rotate(90deg)';
+  } else {
+    app.style.position=''; app.style.inset=''; app.style.left=''; app.style.top=''; app.style.right=''; app.style.bottom='';
+    app.style.width=''; app.style.height=''; app.style.transform=''; app.style.transformOrigin='';
+  }
+  const w = portrait?innerHeight:innerWidth, h = portrait?innerWidth:innerHeight;
   camera.aspect=w/h; camera.updateProjectionMatrix();
   renderer.setSize(w,h); bloomComposer.setSize(w,h); finalComposer.setSize(w,h);
 }
