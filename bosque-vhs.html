@@ -338,7 +338,7 @@
   /* ===== overlay de la persecución (intro combinada) ===== */
   #chaseApp{ position:fixed; inset:0; z-index:500; background:#000; }
   #chaseApp.gone{ display:none!important; }
-  #chaseApp canvas{ display:block; width:100%!important; height:100%!important; }
+  #chaseApp canvas{ display:block; position:absolute!important; inset:0!important; width:100%!important; height:100%!important; }
   #chaseFade{ position:fixed; inset:0; z-index:510; background:#000; opacity:1; pointer-events:none; }
   #chaseApp.gone ~ #chaseFade{ display:none!important; }
 
@@ -416,7 +416,7 @@
 <img id="cursor" src="https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/cursor.png" alt="">
 
 <!-- ===== INTRO / BOOT FLOW ===== -->
-<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 8 · giro px</div></div>
+<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 9 · canvas fill</div></div>
 <div id="devPick" class="gone">
   <div class="lpTitle" data-i18n="chooseDevice">¿Cómo vas a jugar?</div>
   <div class="dvRow">
@@ -4422,21 +4422,17 @@ function renderBloom(){
   finalComposer.render();
 }
 function setSizes(){
-  // ROTACIÓN PÍXEL-EXACTA del overlay: uso innerWidth/innerHeight (px CSS del viewport VISIBLE), NO vh/vw
-  // (en móvil 100vh puede no coincidir con el área visible y deja franjas). Así #chaseApp llena EXACTO la pantalla.
+  // #chaseApp lo gira el CSS (body.rot, 100vh×100vw, IGUAL que la pantalla de estudios que SÍ llena).
+  // El problema eran las franjas porque el CANVAS no llenaba el contenedor: ahora el canvas llena por CSS
+  // (position:absolute;inset:0;100%) y el render se dimensiona al tamaño REAL del contenedor (clientWidth/Height),
+  // con setSize(...,false) para NO pisar el estilo del canvas. → llena exacto, sin franjas.
   const portrait = innerHeight>innerWidth;
-  if(portrait) document.body.classList.add('rot'); else document.body.classList.remove('rot');   // que el skip/megáfono (#cineRot) también roten
-  if(portrait){
-    app.style.position='fixed'; app.style.inset='auto'; app.style.left='50%'; app.style.top='50%'; app.style.right='auto'; app.style.bottom='auto';
-    app.style.width=innerHeight+'px'; app.style.height=innerWidth+'px';
-    app.style.transformOrigin='center center'; app.style.transform='translate(-50%,-50%) rotate(90deg)';
-  } else {
-    app.style.position=''; app.style.inset=''; app.style.left=''; app.style.top=''; app.style.right=''; app.style.bottom='';
-    app.style.width=''; app.style.height=''; app.style.transform=''; app.style.transformOrigin='';
-  }
-  const w = portrait?innerHeight:innerWidth, h = portrait?innerWidth:innerHeight;
+  if(portrait) document.body.classList.add('rot'); else document.body.classList.remove('rot');
+  ['width','height','transform','transformOrigin','position','inset','left','top','right','bottom'].forEach(p=>{ app.style[p]=''; });   // dejo que el CSS controle #chaseApp
+  const w = app.clientWidth || Math.max(innerWidth,innerHeight);    // tamaño REAL del contenedor (ya rotado por CSS)
+  const h = app.clientHeight || Math.min(innerWidth,innerHeight);
   camera.aspect=w/h; camera.updateProjectionMatrix();
-  renderer.setSize(w,h); bloomComposer.setSize(w,h); finalComposer.setSize(w,h);
+  renderer.setSize(w,h,false); bloomComposer.setSize(w,h); finalComposer.setSize(w,h);   // false: no toca el estilo del canvas (lo llena el CSS)
 }
 addEventListener('resize',setSizes);
 setSizes();
