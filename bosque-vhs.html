@@ -19,7 +19,9 @@
   /* las pantallas de arranque (fullscreen / PC-móvil / idioma / estudios / carga) también van GIRADAS 90° desde el principio */
   body.rot #boot, body.rot #devPick, body.rot #langPick, body.rot #assetLoad, body.rot #studios, body.rot #kbCard {
     inset:auto; width:100vh; height:100vw; top:50%; left:50%; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center center; }
-  /* La CINEMÁTICA (persecución + skip + megáfono) NO se gira: se ve DERECHA llenando la ventana (sin el lío del giro 90°). */
+  /* La PERSECUCIÓN y el contenedor de cinemática (skip + megáfono) se giran 90° IGUAL que el #stage y todo lo demás. */
+  body.rot #chaseApp, body.rot #cineRot {
+    inset:auto; width:100vh; height:100vw; top:50%; left:50%; right:auto; bottom:auto; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center center; }
   #cineRot { position:fixed; inset:0; z-index:601; pointer-events:none; }
   #app { position:absolute; inset:0; }
   #app canvas { display:block; width:100%!important; height:100%!important; touch-action:none; image-rendering:pixelated; image-rendering:crisp-edges; }
@@ -414,7 +416,7 @@
 <img id="cursor" src="https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9d18f84/assets/ui/cursor.png" alt="">
 
 <!-- ===== INTRO / BOOT FLOW ===== -->
-<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 10 · sin giro</div></div>
+<div id="boot"><button id="fsBtn">Pantalla completa / Fullscreen</button><div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:12px;opacity:.45;letter-spacing:.1em">build 11 · giro+fill</div></div>
 <div id="devPick" class="gone">
   <div class="lpTitle" data-i18n="chooseDevice">¿Cómo vas a jugar?</div>
   <div class="dvRow">
@@ -522,7 +524,7 @@
           </div>
           <div class="qdesc" id="qDesc"></div>
           <div class="row toggle"><span data-i18n="sound">Sonido</span><div class="switch" id="snd"></div></div>
-          <div class="row toggle"><span data-i18n="rotate90">Girar 90° en vertical</span><div class="switch" id="rotSw"></div></div>
+          <div class="row toggle"><span data-i18n="rotate90">Girar 90° en vertical</span><div class="switch on" id="rotSw"></div></div>
         </div>
         <div class="optPanel scrl" id="opGfx">
           <div class="row"><label><span data-i18n="resolution">Resolución</span> <span id="resVal">100%</span></label><input type="range" id="res" min="50" max="100" value="100" step="5"></div>
@@ -634,7 +636,7 @@ import { EffectComposer, RenderPass, EffectPass, Effect, BloomEffect, HueSaturat
 // N8AO: oclusión ambiental basada en PROFUNDIDAD (respeta el recorte alpha de las plantas → sin el cuadrado negro)
 // y mucho más optimizada. Carga defensiva (con tope de 3s) para que un fallo de red NUNCA impida arrancar.
 // girar 90° YA (antes de cualquier espera) → las pantallas de arranque aparecen en horizontal desde el primer frame
-function syncRot(){ document.body.classList.remove('rot'); }   // por defecto NO se gira; la rotación la decide layout() según el toggle "Girar 90°"
+function syncRot(){ if(window.innerHeight>window.innerWidth)document.body.classList.add('rot'); else document.body.classList.remove('rot'); }   // gira 90° desde el primer frame en vertical
 syncRot(); addEventListener('resize',syncRot);
 let N8AOPostPass=null;
 { const _n8=await Promise.race([ import('n8ao').catch(()=>null), new Promise(res=>setTimeout(()=>res(null),3000)) ]);
@@ -1333,7 +1335,7 @@ try{ buildComposer(); }catch(err){ console.error('PostFX off:',err); composer=nu
 
 /* ===================== LAYOUT / ROTACIÓN / RESOLUCIÓN ===================== */
 let DPRCAP=DEV.tier==='high'?2:(DEV.tier==='medium'?1.6:1.3);
-let forceLandscape=false, rot=false;   // por defecto NO se gira nada (cinemática y juego DERECHOS, sin el lío del giro 90°). El toggle "Girar 90°" lo reactiva.
+let forceLandscape=true, rot=false;   // gira TODO 90° en vertical (juego, menús y cinemáticas)
 // Touch / móvil (sin puntero fino): la resolución interna se limita al 80% del tamaño CSS → menos píxeles que rellenar = más fluido.
 const IS_TOUCH = (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) || DEV.isMobile || ('ontouchstart' in window);
 const MOBILE_RES_CAP = IS_TOUCH ? 0.8 : 1.0;
@@ -4420,11 +4422,16 @@ function renderBloom(){
   finalComposer.render();
 }
 function setSizes(){
-  // SIN GIRO: la persecución se ve DERECHA llenando la ventana tal cual está (vertical u horizontal).
-  // #chaseApp queda en inset:0 (CSS) y el canvas lo llena (position:absolute;inset:0;100%).
-  const w = innerWidth, h = innerHeight;
+  // GIRO 90° (igual que todo): el CSS rota #chaseApp (body.rot, 100vh×100vw). El CANVAS llena el contenedor por CSS
+  // (position:absolute;inset:0;100%) y el render se dimensiona al tamaño REAL del contenedor (clientWidth/Height),
+  // con setSize(...,false) para NO pisar el estilo del canvas → gira Y llena sin franjas.
+  const portrait = innerHeight>innerWidth;
+  if(portrait) document.body.classList.add('rot'); else document.body.classList.remove('rot');
+  ['width','height','transform','transformOrigin','position','inset','left','top','right','bottom'].forEach(p=>{ app.style[p]=''; });
+  const w = app.clientWidth || Math.max(innerWidth,innerHeight);
+  const h = app.clientHeight || Math.min(innerWidth,innerHeight);
   camera.aspect=w/h; camera.updateProjectionMatrix();
-  renderer.setSize(w,h,false); bloomComposer.setSize(w,h); finalComposer.setSize(w,h);   // false: no toca el estilo del canvas (lo llena el CSS)
+  renderer.setSize(w,h,false); bloomComposer.setSize(w,h); finalComposer.setSize(w,h);
 }
 addEventListener('resize',setSizes);
 setSizes();
