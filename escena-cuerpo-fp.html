@@ -4,9 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#aebfcf" />
-<title>Escena · Limpia</title>
+<title>Parkour FP</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-<link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
 <style>
   :root{ --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px); }
   *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
@@ -20,35 +19,30 @@
         background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.18); backdrop-filter:blur(6px); touch-action:none; }
   #joyKnob{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%;
             background:radial-gradient(circle at 38% 34%,#dff0ff,#5aa0ff); box-shadow:0 4px 16px rgba(0,0,0,.45); }
-  .actBtn{ position:fixed; z-index:20; width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,.06);
-           border:1.5px solid rgba(255,255,255,.2); color:#eef3f8; font-size:22px; backdrop-filter:blur(6px); cursor:pointer;
+  .actBtn{ position:fixed; z-index:20; width:72px; height:72px; border-radius:50%; background:rgba(255,255,255,.07);
+           border:1.5px solid rgba(255,255,255,.22); color:#eef3f8; font-size:13px; font-weight:800; letter-spacing:.04em; backdrop-filter:blur(6px); cursor:pointer;
            display:flex; align-items:center; justify-content:center; transition:transform .1s,background .15s; }
-  .actBtn:active{ transform:scale(.92); }
-  .actBtn.on{ background:rgba(90,160,255,.3); border-color:#8fe3ff; }
-  #bJump  { right:26px; bottom:calc(34px + var(--safe-b)); }
-  #bCrouch{ right:100px; bottom:calc(58px + var(--safe-b)); width:56px; height:56px; font-size:19px; }
-  #bChop  { right:26px; bottom:calc(108px + var(--safe-b)); }
-  #bHammer{ right:100px; bottom:calc(132px + var(--safe-b)); width:56px; height:56px; font-size:19px; }
-  #animLabel{ position:fixed; left:50%; top:calc(14px + var(--safe-t)); transform:translateX(-50%); z-index:10;
-              background:rgba(14,22,30,.72); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.16); border-radius:999px;
-              padding:8px 18px; color:#ffd27a; font-weight:700; font-size:15px; letter-spacing:.02em; white-space:nowrap;
-              box-shadow:0 6px 20px rgba(0,0,0,.45); pointer-events:none; }
+  .actBtn:active{ transform:scale(.92); background:rgba(90,160,255,.32); }
+  #bJump  { right:26px;  bottom:calc(40px + var(--safe-b)); }
+  #bSlide { right:110px; bottom:calc(66px + var(--safe-b)); width:62px; height:62px; }
+  #hud{ position:fixed; left:50%; top:calc(14px + var(--safe-t)); transform:translateX(-50%); z-index:10;
+        background:rgba(14,22,30,.72); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.16); border-radius:999px;
+        padding:7px 16px; color:#ffd27a; font-weight:700; font-size:14px; letter-spacing:.02em; white-space:nowrap;
+        box-shadow:0 6px 20px rgba(0,0,0,.45); pointer-events:none; }
   #loader{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
            background:#aebfcf; transition:opacity .5s; color:#0a3a63; font-size:13px; letter-spacing:.1em; }
   #loader.hide{ opacity:0; pointer-events:none; }
 </style>
 </head>
 <body>
-<div id="loader">…</div>
+<div id="loader">cargando parkour…</div>
 <div id="stage">
   <div id="app"></div>
   <div id="cross"></div>
   <div id="joy"><div id="joyKnob"></div></div>
-  <button id="bJump"   class="actBtn">⤴️</button>
-  <button id="bCrouch" class="actBtn">🔽</button>
-  <button id="bChop"   class="actBtn">🪓</button>
-  <button id="bHammer" class="actBtn">🔪</button>
-  <div id="animLabel">cargando player…</div>
+  <button id="bJump"  class="actBtn">SALTAR</button>
+  <button id="bSlide" class="actBtn">DESLIZAR</button>
+  <div id="hud">…</div>
 </div>
 
 <script type="importmap">
@@ -69,61 +63,82 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const app=document.getElementById('app');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFShadowMap;
 renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
 app.appendChild(renderer.domElement);
 
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0xbccad8);
-scene.fog=new THREE.Fog(0xbccad8,60,260);
+scene.fog=new THREE.Fog(0xbccad8,90,360);
 const pmrem=new THREE.PMREMGenerator(renderer); scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
-const camera=new THREE.PerspectiveCamera(64,1,0.04,2000);
-
-// suelo neutro (grilla de referencia)
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshStandardMaterial({color:0x8d9aa6,roughness:1,metalness:0}));
-ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
-const grid=new THREE.GridHelper(400,200,0x55606b,0x47525d); grid.position.y=0.01; scene.add(grid);
-const LIMIT=180;
-
-// luces
-const sun=new THREE.DirectionalLight(0xfff2e0,2.4); sun.position.set(-40,70,-50); sun.castShadow=true;
-sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=200;
-sun.shadow.camera.left=-40; sun.shadow.camera.right=40; sun.shadow.camera.top=40; sun.shadow.camera.bottom=-40; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
-scene.add(sun); scene.add(sun.target);
-scene.add(new THREE.HemisphereLight(0xdfeeff,0xb9c2cc,0.85));
-
-/* ===================== PISO DE MADERA + RENDER 3D DE TODOS LOS MATERIALES ===================== */
-function enableShadow(o){ o.traverse(c=>{ if(c.isMesh){c.castShadow=true;c.receiveShadow=true;} }); return o; }
-// piso de tablones de madera
-const plankA=new THREE.MeshStandardMaterial({color:0x8a5a2b,roughness:0.82,metalness:0});
-const plankB=new THREE.MeshStandardMaterial({color:0x77491f,roughness:0.82,metalness:0});
-const PW=15, PD=8, PCZ=-2.4, NPL=14, pw=PW/NPL;
-for(let i=0;i<NPL;i++){ const p=new THREE.Mesh(new THREE.BoxGeometry(pw*0.95,0.18,PD),(i%2?plankA:plankB));
-  p.position.set(-PW/2+pw*(i+0.5),0.09,PCZ); p.castShadow=p.receiveShadow=true; scene.add(p); }
-const FY=0.18;   // altura de la superficie del piso
-
-// ---- carga de texturas PBR del repo (jsDelivr) ----
-const texLoader=new THREE.TextureLoader(); texLoader.crossOrigin='anonymous';
-const TXB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@7fd8f15/assets/textures/';
-const MAXA=Math.min(8,renderer.capabilities.getMaxAnisotropy());
-function loadPBR(mat,base,rep,met){
-  const ax=Array.isArray(rep)?rep[0]:(rep||1), ay=Array.isArray(rep)?rep[1]:(rep||1);
-  const cfg=(t,srgb)=>{t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXA;t.repeat.set(ax,ay);return t;};
-  const f=()=>{};
-  texLoader.load(TXB+base+'_col.jpg',t=>{cfg(t,true);mat.map=t;mat.needsUpdate=true;},undefined,f);
-  texLoader.load(TXB+base+'_nrm.jpg',t=>{cfg(t,false);mat.normalMap=t;mat.needsUpdate=true;},undefined,f);
-  texLoader.load(TXB+base+'_rgh.jpg',t=>{cfg(t,false);mat.roughnessMap=t;mat.roughness=1;mat.needsUpdate=true;},undefined,f);
-  if(met)texLoader.load(TXB+base+'_met.jpg',t=>{cfg(t,false);mat.metalnessMap=t;mat.metalness=1;mat.needsUpdate=true;},undefined,f);
-}
-loadPBR(plankA,'v2/woodfloor',[1,3]); loadPBR(plankB,'v2/woodfloor',[1,3]);   // piso de madera real
-
-/* ===================== Jugador (1ª persona) ===================== */
-const EYE=1.7, EYE_CROUCH=1.05, GRAV=22, JUMP_V=7.4, SPEED_MAX=6.4, ACCEL=11;
-const player={pos:new THREE.Vector3(0,0,6),vel:new THREE.Vector3(),yaw:0,pitch:0,roll:0,bobPhase:0,strafeSm:0,eye:EYE,vy:0,onGround:true,crouch:false};
-const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3();
+// CLAVE: near plane grande (0.3) → la propia cabeza (pegada a la cámara) queda DENTRO del near y se recorta SIEMPRE,
+// mires arriba o abajo. Así nunca se ve la cabeza, pero sí el torso/brazos/piernas (más lejos que 0.3).
+const camera=new THREE.PerspectiveCamera(72,1,0.3,2000);
+let baseFov=72;
 scene.add(camera);
 
-/* ===================== Rotación 90° en vertical ===================== */
+const sun=new THREE.DirectionalLight(0xfff2e0,2.3); sun.position.set(-40,80,-50); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=240;
+sun.shadow.camera.left=-60; sun.shadow.camera.right=60; sun.shadow.camera.top=60; sun.shadow.camera.bottom=-60; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
+scene.add(sun); scene.add(sun.target);
+scene.add(new THREE.HemisphereLight(0xdfeeff,0x9aa6b2,0.9));
+
+/* ===================== MUNDO + COLISIÓN (AABB) — pista de pruebas de parkour ===================== */
+const colliders=[];      // {minx,maxx,miny,maxy,minz,maxz, mesh}
+const wallMeshes=[];     // para raycast de pared (wallrun / trepar)
+const _matCache={};
+function mat(color,rough){ const k=color+'_'+(rough||0.9); if(!_matCache[k])_matCache[k]=new THREE.MeshStandardMaterial({color,roughness:rough||0.9,metalness:0}); return _matCache[k]; }
+function addBox(x,y,z,w,h,d,color,rough,noWall){   // (x,y,z)=centro
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color,rough));
+  m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; scene.add(m);
+  const c={minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,minz:z-d/2,maxz:z+d/2,mesh:m};
+  colliders.push(c); if(!noWall)wallMeshes.push(m); return c;
+}
+// suelo
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(800,800),mat(0x8d9aa6,1));
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+scene.add(Object.assign(new THREE.GridHelper(800,400,0x55606b,0x47525d),{position:new THREE.Vector3(0,0.01,0)}));
+colliders.push({minx:-400,maxx:400,miny:-2,maxy:0,minz:-400,maxz:400,mesh:ground});   // suelo como AABB (tope y=0)
+
+// cartel de zona (panel de color para identificar cada prueba)
+function zoneTag(x,z,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.05,2.4),mat(color,0.6)); m.position.set(x,0.03,z); m.receiveShadow=true; scene.add(m); }
+
+// === ZONA 1: SALTOS entre plataformas con huecos (hacia -Z) ===
+zoneTag(0,-6,0x3a7d44);
+addBox(0,0.4,-14,5,0.8,4,0x6d7682);          // plataforma baja
+addBox(0,0.9,-22,5,0.8,4,0x6d7682);          // un poco más alta (salto)
+addBox(0,1.5,-31,5,0.8,4,0x6d7682);          // hueco más grande
+// === ZONA 2: TREPAR repisas (escalones que se trepan al saltar contra el borde) ===
+zoneTag(11,-6,0xc28d3a);
+addBox(11,0.6,-13,4,1.2,3,0x7a6f5c);         // repisa 1 (~1.2m → trepable)
+addBox(11,1.5,-19,4,3.0,3,0x7a6f5c);         // repisa 2 (~1.5m de salto + trepar)
+addBox(11,3.0,-26,5,6.0,4,0x6b6253);         // pared alta arriba de la repisa
+// === ZONA 3: CORRER POR PARED (dos paredes paralelas / una pared larga) ===
+zoneTag(-12,-6,0x3a5fa0);
+addBox(-16,2.5,-20,0.6,5,18,0x5b6b86);       // pared izquierda larga (correr por pared)
+addBox(-8, 2.5,-20,0.6,5,18,0x5b6b86);       // pared derecha (corredor)
+addBox(-12,0.3,-30,7,0.6,4,0x6d7682);        // plataforma de aterrizaje al final del corredor
+// === ZONA 4: DESLIZARSE bajo un obstáculo bajo ===
+zoneTag(-12,4,0x8a3a6a);
+addBox(-12,1.6,9,5,0.5,1.2,0x7a5566);        // viga baja: el hueco abajo es ~1.1m → hay que deslizarse
+addBox(-12,1.0,9,0.6,2.0,4,0x7a5566,0.9,true);// soportes (no cuentan como pared de wallrun)
+addBox(-12,1.0,9,0.6,2.0,4,0x7a5566,0.9,true);
+// === ZONA 5: RAMPA + plataforma alta con borde para trepar/saltar ===
+zoneTag(12,5,0xb0b0b0);
+addBox(12,1.2,12,5,0.4,6,0x6d7682);          // plataforma media
+addBox(12,3.0,5,5,0.4,6,0x6d7682);           // plataforma alta (saltar de la media)
+// torre central decorativa para wall-run alrededor
+addBox(0,4,18,3,8,3,0x59636f);
+
+/* ===================== Jugador (1ª persona) ===================== */
+const R=0.34, STAND=1.85, CROUCH=1.05, EYE=1.62, EYE_CR=0.9;
+const GRAV=26, JUMP_V=8.4, RUN=7.2, ACCEL=12, AIR_ACCEL=5, SLIDE_V=12, WALL_GRAV=7, WALLRUN_MAX=1.25;
+const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:0,pitch:0,roll:0,eye:EYE,h:STAND,
+  onGround:true,crouch:false,sliding:false,slideT:0,wallrun:0,wallrunT:0,wallN:new THREE.Vector3(),mantle:0,bob:0,fov:baseFov};
+const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3();
+let jumpReq=false;
+
+/* ===================== Rotación 90° ===================== */
 let forceLandscape=true, rot=false;
 function layout(){ rot=forceLandscape&&(innerHeight>innerWidth); document.body.classList.toggle('rot',rot);
   const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight; camera.aspect=vw/vh; camera.updateProjectionMatrix(); renderer.setSize(vw,vh,false); }
@@ -140,93 +155,149 @@ joyEl.addEventListener('pointerup',joyEnd);joyEl.addEventListener('pointercancel
 let lookId=null,lastX=0,lastY=0;const LOOK=0.0042;
 function isUI(t){return t.closest('.actBtn')||t===joyEl||t===knob;}
 addEventListener('pointerdown',e=>{if(isUI(e.target))return;if(lookId===null&&e.pointerId!==joyId){lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;}});
-addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;let ddx=e.clientX-lastX,ddy=e.clientY-lastY;if(rot){const t=ddx;ddx=ddy;ddy=-t;}player.yaw-=ddx*LOOK;player.pitch=Math.max(-1.4,Math.min(1.4,player.pitch-ddy*LOOK));lastX=e.clientX;lastY=e.clientY;});
+addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;let ddx=e.clientX-lastX,ddy=e.clientY-lastY;if(rot){const t=ddx;ddx=ddy;ddy=-t;}player.yaw-=ddx*LOOK;player.pitch=Math.max(-1.45,Math.min(1.45,player.pitch-ddy*LOOK));lastX=e.clientX;lastY=e.clientY;});
 function lookEnd(e){if(e.pointerId===lookId)lookId=null;}
 addEventListener('pointerup',lookEnd);addEventListener('pointercancel',lookEnd);
 
 function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
-tapBtn('bJump',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
-tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; document.getElementById('bCrouch').classList.toggle('on',player.crouch); });
+tapBtn('bJump',()=>{ jumpReq=true; });
+tapBtn('bSlide',()=>{ startSlide(); });
+function startSlide(){ if(player.sliding||!player.onGround)return; if(player.vel.length()<3)return; player.sliding=true; player.slideT=0;
+  const d=player.vel.length()>0.5?player.vel.clone().normalize():forward.clone(); player.vel.copy(d).multiplyScalar(SLIDE_V); }
 
-/* ===================== PLAYER en 1ª persona CON CUERPO visible (GLB animado) ===================== */
-// Player moderno (Higgsfield image-to-3D 30k + textura). Como el auto-rig de Meshy difiere por clip,
-// cada estado es su PROPIO GLB y hacemos swap del cuerpo según el movimiento. La cámara va a la altura
-// de los ojos y se OCULTA la cabeza (escala del hueso Head ~0) para no tapar la vista: así ves tus
-// brazos, torso y piernas al mirar hacia abajo.
-const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@f12a2d1/';
-const E_H=1.82; let hitShake=0;
-const PARTS=[ {key:'idle',file:'pj_idle2.glb'}, {key:'walk',file:'pj_walk.glb'}, {key:'run',file:'pj_run.glb'},
-  {key:'slash',file:'pj_slash.glb',once:true,speed:1.3} ];
-const PLABEL={idle:'Quieto',walk:'Caminando',run:'Corriendo',slash:'Corte 🪓'};
-const body={}; let bodyKey=null, actKey=null;
-const _hw=new THREE.Vector3(); const HEAD_FWD=0.08, HEAD_UP=0.05;   // cámara dentro de la cabeza (las caras se ocultan solas por backface culling)
-const AXE_POS=new THREE.Vector3(0,0,0), AXE_ROT=new THREE.Euler(Math.PI,0,0), AXE_LEN=0.5;   // hacha EN LA MANO del cuerpo (calibrable)
-const eLabelEl=document.getElementById('animLabel');
-const _gltf=new GLTFLoader();
-// ---- HACHA (hawk.glb) pegada al hueso de la mano del CUERPO ENTERO; se mueve y agarra con la animación ----
-let axeProto=null; const _pend=[];
-function attachAxe(hand){ if(!axeProto){ _pend.push(hand); return; }
-  hand.updateWorldMatrix(true,false); const hs=hand.getWorldScale(_hw).x||1;                  // contrarresta la escala mundial de la mano
-  const axe=axeProto.clone(true), bb=new THREE.Box3().setFromObject(axe), sz=bb.getSize(new THREE.Vector3()), c=bb.getCenter(new THREE.Vector3());
-  axe.position.sub(c);                                                                          // centrar el hacha en su pivote
-  const holder=new THREE.Group(); holder.add(axe);
-  holder.scale.setScalar((AXE_LEN/Math.max(sz.x,sz.y,sz.z))/hs); holder.position.copy(AXE_POS); holder.rotation.copy(AXE_ROT);
-  holder.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } }); hand.add(holder); }
-_gltf.load(EBASE+'hawk.glb', gl=>{ axeProto=gl.scene; for(const h of _pend) attachAxe(h); _pend.length=0; }, undefined, e=>console.warn('hawk.glb',e));
-function prepBody(gl,p){ const inner=gl.scene;
-  let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=E_H/(sz.y||1); inner.scale.setScalar(s);
+/* ===================== CUERPO FP (GLB animado, SIN arma; cabeza oculta por near-plane) ===================== */
+const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@7b2d6c3/assets/fp/';   // GLBs optimizados (quantize + textura 512, ~40% más livianos)
+const PARTS=[ {key:'idle',file:'pj_idle2.glb'}, {key:'walk',file:'pj_walk.glb'}, {key:'run',file:'pj_run.glb'} ];   // solo 3 GLB → carga más rápido (sin el de corte)
+const body={}; let bodyKey=null; const _gltf=new GLTFLoader();
+function prepBody(gl){ const inner=gl.scene;
+  let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=STAND/(sz.y||1); inner.scale.setScalar(s);
   b=new THREE.Box3().setFromObject(inner); const c=b.getCenter(new THREE.Vector3()); inner.position.set(-c.x,-b.min.y,-c.z);   // pies en el origen
-  inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false;
-    const mm=Array.isArray(o.material)?o.material:[o.material]; mm.forEach(m=>{ if(m) m.side=THREE.FrontSide; }); } });   // FrontSide: la cabeza se descarta desde adentro (cámara en la cabeza)
-  const hand=inner.getObjectByName('RightHand')||inner.getObjectByName('LeftHand'); if(hand) attachAxe(hand);   // hacha en la mano del cuerpo
+  inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; } });   // (sin arma: no se pega nada a la mano)
   const root=new THREE.Group(); root.add(inner); root.visible=false; scene.add(root);
   const mixer=new THREE.AnimationMixer(inner); let action=null;
-  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(p.once?THREE.LoopOnce:THREE.LoopRepeat); action.clampWhenFinished=!!p.once; if(p.speed)action.timeScale=p.speed; }
-  return {root,mixer,action,head:inner.getObjectByName('Head')}; }
-for(const p of PARTS){ _gltf.load(EBASE+p.file, gl=>{ body[p.key]=prepBody(gl,p); if(p.key==='idle'&&!bodyKey) setBody('idle'); }, undefined, e=>console.warn(p.file,e)); }
+  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(THREE.LoopRepeat); }
+  return {root,mixer,action}; }
+for(const p of PARTS){ _gltf.load(EBASE+p.file, gl=>{ body[p.key]=prepBody(gl); if(p.key==='idle'&&!bodyKey) setBody('idle'); }, undefined, e=>console.warn(p.file,e)); }
 function setBody(key){ const b=body[key]; if(!b||bodyKey===key)return;
   if(bodyKey&&body[bodyKey]){ body[bodyKey].root.visible=false; if(body[bodyKey].action)body[bodyKey].action.stop(); }
   bodyKey=key; b.root.visible=true; if(b.action) b.action.reset().play(); }
-function doAction(key){ const b=body[key]; if(!b)return; actKey=key; setBody(key); if(b.action) b.action.reset().play(); }
-function actBtn(id,fn){ const el=document.getElementById(id); if(el) el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
-actBtn('bChop',()=>doAction('slash')); actBtn('bHammer',()=>doAction('slash'));
-function tickPlayer(dt){
-  const speed=player.vel.length();
-  if(actKey){ const a=body[actKey]; if(!a||!a.action||!a.action.isRunning()) actKey=null; }   // ¿terminó el golpe?
-  if(!actKey) setBody(speed<0.4?'idle':(speed<3.4?'walk':'run'));                              // locomoción del cuerpo
-  const b=body[bodyKey]; if(b){
-    b.root.position.set(player.pos.x,player.pos.y,player.pos.z); b.root.rotation.y=player.yaw+Math.PI;   // sigue al player (incluye salto en Y)
-    b.mixer.update(dt);
-    if(b.head){ b.head.updateWorldMatrix(true,false); b.head.getWorldPosition(_hw);   // cámara = cabeza (sin escalarla: desde adentro no se ve por backface culling)
-      const fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
-      camera.position.set(_hw.x+fx*HEAD_FWD, _hw.y+HEAD_UP, _hw.z+fz*HEAD_FWD); } }
-  if(eLabelEl) eLabelEl.textContent=PLABEL[actKey||bodyKey]||''; }
+function tickBody(dt){ const sp=Math.hypot(player.vel.x,player.vel.z);
+  setBody(sp<0.5?'idle':(sp<3.6?'walk':'run'));
+  const b=body[bodyKey]; if(b){ b.root.position.set(player.pos.x,player.pos.y,player.pos.z); b.root.rotation.y=player.yaw+Math.PI; b.mixer.update(dt); } }
 
-/* ===================== Loop ===================== */
+/* ===================== Colisión AABB (capsula≈caja) por eje ===================== */
+function aabbHit(){ return null; }
+function pAABB(){ return {minx:player.pos.x-R,maxx:player.pos.x+R,miny:player.pos.y,maxy:player.pos.y+player.h,minz:player.pos.z-R,maxz:player.pos.z+R}; }
+function overlap(a,c){ return a.minx<c.maxx&&a.maxx>c.minx&&a.miny<c.maxy&&a.maxy>c.miny&&a.minz<c.maxz&&a.maxz>c.minz; }
+let lastWall=null;   // collider de la última pared tocada en X/Z (para wallrun/trepar)
+function moveX(d){ player.pos.x+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
+function moveZ(d){ player.pos.z+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
+function moveY(d){ player.pos.y+=d; const a=pAABB(); player.onGround=false;
+  // suelo base
+  if(player.pos.y<=0){ player.pos.y=0; if(player.vy<0)player.vy=0; player.onGround=true; }
+  for(const c of colliders){ if(c.mesh===ground)continue; if(overlap(a,c)){
+    if(d<=0){ player.pos.y=c.maxy; player.vy=0; player.onGround=true; }   // caer sobre algo
+    else { player.pos.y=c.miny-player.h; player.vy=0; }                    // pegar el techo
+    a.miny=player.pos.y; a.maxy=player.pos.y+player.h; } } }
+
+/* ===================== Detección de pared (raycast lateral) para WALL-RUN ===================== */
+const _ray=new THREE.Raycaster(); _ray.far=R+0.35;
+function wallSide(side){   // side=+1 derecha, -1 izquierda (respecto al facing)
+  const dir=_v2.set(Math.cos(player.yaw)*side, 0, -Math.sin(player.yaw)*side).normalize();
+  _ray.set(_v.set(player.pos.x,player.pos.y+1.0,player.pos.z), dir);
+  const hit=_ray.intersectObjects(wallMeshes,false)[0];
+  if(hit && Math.abs(hit.face.normal.y)<0.3){ return {n:hit.face.normal.clone().applyQuaternion(hit.object.quaternion), d:hit.distance}; }
+  return null;
+}
+
+/* ===================== Loop de juego ===================== */
 const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
+const HUD=document.getElementById('hud');
 function update(dt){
-  let ix=joy.x,iz=joy.y; const mag=Math.min(1,Math.hypot(ix,iz)); if(mag>0.001){ix/=Math.max(mag,1);iz/=Math.max(mag,1);}
   forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
-  const sp=mag*SPEED_MAX*(player.crouch?0.5:1);
-  const des=_v.set(0,0,0); des.addScaledVector(forward,-iz*sp); des.addScaledVector(right,ix*sp);
-  player.vel.lerp(des,Math.min(1,ACCEL*dt)); player.pos.addScaledVector(player.vel,dt);
-  player.pos.x=THREE.MathUtils.clamp(player.pos.x,-LIMIT,LIMIT); player.pos.z=THREE.MathUtils.clamp(player.pos.z,-LIMIT,LIMIT);
-  player.vy-=GRAV*dt; player.pos.y+=player.vy*dt; if(player.pos.y<=0){player.pos.y=0;player.vy=0;player.onGround=true;}
-  const targetEye=player.crouch?EYE_CROUCH:EYE; player.eye+=(targetEye-player.eye)*Math.min(1,10*dt);
-  const speed=player.vel.length(); player.bobPhase+=dt*(speed*1.9+0.0001); const moveAmt=Math.min(1,speed/SPEED_MAX);
-  const bobY=Math.sin(player.bobPhase*2)*0.05*moveAmt, bobX=Math.cos(player.bobPhase)*0.035*moveAmt;
-  const strafe=right.dot(player.vel)/SPEED_MAX; player.strafeSm+=(strafe-player.strafeSm)*Math.min(1,8*dt);
-  player.roll+=((-player.strafeSm*0.08+Math.sin(player.bobPhase)*0.018*moveAmt)-player.roll)*Math.min(1,10*dt);
+  let ix=joy.x,iz=joy.y; const mag=Math.min(1,Math.hypot(ix,iz)); if(mag>1){ix/=mag;iz/=mag;}
+  const wishX=right.x*ix - forward.x*iz, wishZ=right.z*ix - forward.z*iz;   // dirección deseada (mundo)
+  const wishLen=Math.hypot(wishX,wishZ);
+
+  // ---- SLIDE ----
+  if(player.sliding){ player.slideT+=dt; player.h=CROUCH;
+    player.vel.multiplyScalar(1-Math.min(1,1.6*dt));    // fricción del deslizamiento
+    if(player.slideT>0.9 || player.vel.length()<2.5 || !player.onGround) { player.sliding=false; }
+  }
+
+  // ---- WALL-RUN ---- (en el aire, pared al costado, joystick hacia adelante)
+  let estado='';
+  if(!player.onGround && player.vy<3 && wishLen>0.3){
+    let w=wallSide(1)||wallSide(-1);
+    if(w){ player.wallrun=Math.sign( (wallSide(1)?1:-1) ); player.wallrunT+=dt; player.wallN.copy(w.n); estado='wall-run';
+      if(player.wallrunT<WALLRUN_MAX){
+        player.vy=Math.max(player.vy,-0.5);                          // casi sin caer
+        // empuje a lo largo de la pared (tangente) en la dirección del facing
+        const tx=forward.x, tz=forward.z; const tl=Math.hypot(tx,tz)||1;
+        player.vel.x=tx/tl*RUN; player.vel.z=tz/tl*RUN;
+      } else { player.wallrun=0; }
+    } else { player.wallrun=0; player.wallrunT=0; }
+  } else { player.wallrun=0; if(player.onGround)player.wallrunT=0; }
+
+  // ---- JUMP / WALL-JUMP ----
+  if(jumpReq){ jumpReq=false;
+    if(player.onGround){ player.vy=JUMP_V; player.onGround=false; if(player.sliding)player.sliding=false; }
+    else if(player.wallrun){ player.vy=JUMP_V*0.92; player.vel.addScaledVector(player.wallN,7.5); player.wallrun=0; player.wallrunT=WALLRUN_MAX; }   // saltar de la pared
+  }
+
+  // ---- locomoción horizontal ----
+  if(!player.sliding && !player.wallrun){
+    const sp=RUN*(player.crouch?0.5:1);
+    const accel=player.onGround?ACCEL:AIR_ACCEL;
+    const desX=wishLen>0.01? (wishX/wishLen)*sp*Math.min(1,wishLen) : 0;
+    const desZ=wishLen>0.01? (wishZ/wishLen)*sp*Math.min(1,wishLen) : 0;
+    player.vel.x+=(desX-player.vel.x)*Math.min(1,accel*dt);
+    player.vel.z+=(desZ-player.vel.z)*Math.min(1,accel*dt);
+  }
+
+  // ---- gravedad + integración con colisión por eje ----
+  player.vy-=(player.wallrun?WALL_GRAV:GRAV)*dt;
+  lastWall=null;
+  moveX(player.vel.x*dt); moveZ(player.vel.z*dt);
+  moveY(player.vy*dt);
+
+  // ---- TREPAR repisa (mantle): pegué una pared, su tope está al alcance y arriba está libre ----
+  if(lastWall && !player.onGround && player.vy<2){
+    const top=lastWall.maxy, foot=player.pos.y;
+    if(top>foot+0.2 && top<foot+1.7){   // borde trepable
+      const a={minx:player.pos.x-R,maxx:player.pos.x+R,miny:top+0.02,maxy:top+player.h,minz:player.pos.z-R,maxz:player.pos.z+R};
+      let blocked=false; for(const c of colliders){ if(c.mesh===ground||c===lastWall)continue; if(overlap(a,c)){blocked=true;break;} }
+      if(!blocked){ player.pos.y=top; player.vy=Math.max(player.vy,2.5); player.vel.addScaledVector(forward,1.5); player.onGround=true; estado='trepar'; }
+    }
+  }
+  if(player.sliding)estado='deslizar';
+
+  // altura/ojo (de pie / agachado / deslizando)
+  if(!player.sliding && !player.crouch) player.h=STAND;
+  const targetEye=(player.sliding||player.crouch)?EYE_CR:EYE; player.eye+=(targetEye-player.eye)*Math.min(1,12*dt);
+
+  // ---- cámara FP ----
+  const sp=Math.hypot(player.vel.x,player.vel.z);
+  player.bob+=dt*(sp*1.9+0.0001); const moveAmt=Math.min(1,sp/RUN);
+  const bobY=Math.sin(player.bob*2)*0.045*moveAmt, bobX=Math.cos(player.bob)*0.03*moveAmt;
+  // roll: inclina al correr por pared + leve por strafe
+  let targetRoll=Math.sin(player.bob)*0.015*moveAmt;
+  if(player.wallrun) targetRoll += player.wallrun*0.28;
+  player.roll+=(targetRoll-player.roll)*Math.min(1,10*dt);
+  // FOV kick por velocidad / wallrun / slide
+  const targetFov=baseFov + Math.min(10,sp*0.9) + (player.wallrun?6:0) + (player.sliding?8:0);
+  player.fov+=(targetFov-player.fov)*Math.min(1,6*dt); if(Math.abs(camera.fov-player.fov)>0.05){camera.fov=player.fov;camera.updateProjectionMatrix();}
   camera.position.set(player.pos.x+right.x*bobX, player.pos.y+player.eye+bobY, player.pos.z+right.z*bobX);
   euler.set(player.pitch,player.yaw,player.roll); camera.quaternion.setFromEuler(euler);
-  if(hitShake>0.0001){ camera.rotateZ((Math.random()-0.5)*0.07*hitShake); camera.rotateX((Math.random()-0.5)*0.05*hitShake); } hitShake*=0.88;
-  sun.position.set(player.pos.x-40,70,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
-  tickPlayer(dt);        // cuerpo del player en 1ª persona
+
+  sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
+  tickBody(dt);
+  if(HUD) HUD.textContent = estado||(player.onGround?(sp<0.5?'quieto':(sp<3.6?'caminar':'correr')):'en el aire');
 }
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
 
 /* ===================== Init ===================== */
-try{ layout(); renderer.render(scene,camera); setTimeout(()=>document.getElementById('loader').classList.add('hide'),200); }
+try{ layout(); renderer.render(scene,camera); setTimeout(()=>document.getElementById('loader').classList.add('hide'),250); }
 catch(err){ console.error('Init',err); document.getElementById('loader').classList.add('hide'); }
 animate();
 </script>
