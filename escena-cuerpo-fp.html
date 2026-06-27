@@ -142,7 +142,8 @@ const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:0,pi
   rolling:false,rollT:0,rollDir:new THREE.Vector3()};
 const CLIMB_DUR=0.85;   // duración del agarre+impulso de la repisa
 const GRAB_REACH=2.0;   // a qué altura sobre los pies agarran las manos (la animación de trepada llega ~2m)
-const ROLL_DUR=0.7, ROLL_SPEED=10.5, ROLL_FALL=15;   // voltereta: duración, velocidad, y caída mínima para rodar automático
+// voltereta: el clip Run_Jump_and_Roll dura ~3.47s y la vuelta carnero está a ~1.2s → arrancamos ahí, acelerado
+const ROLL_ANIM_START=1.15, ROLL_TIMESCALE=1.7, ROLL_DUR=0.82, ROLL_SPEED=9.5, ROLL_FALL=14;
 let prevVy=0, rollReq=false;
 const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
 let jumpReq=false;
@@ -200,12 +201,12 @@ _gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
   bodyRoot=new THREE.Group(); bodyRoot.add(inner); scene.add(bodyRoot);
   bodyInner=inner; bodyScale=s;   // para espejar la animación en la pared derecha (wall-run)
   bodyMixer=new THREE.AnimationMixer(inner);
-  gl.animations.forEach(cl=>{ const a=bodyMixer.clipAction(cl); a.setLoop(THREE.LoopRepeat); a.clampWhenFinished=false; bodyActions[cl.name]=a; });
+  gl.animations.forEach(cl=>{ const a=bodyMixer.clipAction(cl); a.setLoop(THREE.LoopRepeat); a.clampWhenFinished=false; if(cl.name==='roll') a.timeScale=ROLL_TIMESCALE; bodyActions[cl.name]=a; });
   bodyHipsBind=bodyHips?bodyHips.position.clone():null;
   setAnim('idle');
 }, undefined, e=>console.warn('parkour.glb',e));
 function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
-  const nx=bodyActions[name]; nx.reset(); nx.enabled=true; nx.setEffectiveWeight(1); nx.play();
+  const nx=bodyActions[name]; nx.reset(); if(name==='roll') nx.time=ROLL_ANIM_START; nx.enabled=true; nx.setEffectiveWeight(1); nx.play();
   if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones
   curAnim=name; }
 function tickBody(dt,state){ if(!bodyRoot)return; setAnim(state||'idle');
@@ -216,6 +217,7 @@ function tickBody(dt,state){ if(!bodyRoot)return; setAnim(state||'idle');
   // anular el root motion: las animaciones trasladan el Hips por el espacio → fijamos X/Z y limitamos Y
   if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHips.position.z=bodyHipsBind.z;
     bodyHips.position.y=Math.max(bodyHipsBind.y-0.5,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }   // slide baja, wallrun no dispara la cámara
+  bodyRoot.visible = (state!=='roll');   // en la voltereta ocultamos el cuerpo: la inmersión la da la VUELTA DE CÁMARA (si no, el cuerpo tapa la vista)
   // la cabeza se oculta con el near plane (la cámara está EN la cabeza): sin cortes, sin deformación, sin agujero
 }
 
@@ -369,8 +371,8 @@ function update(dt){
   player.fov+=(targetFov-player.fov)*Math.min(1,6*dt); if(Math.abs(camera.fov-player.fov)>0.05){camera.fov=player.fov;camera.updateProjectionMatrix();}
   // ---- cámara FP: a la altura de la cabeza (bob vertical real del hueso) pero CENTRADA en el cuerpo ----
   // XZ estable (centro del cuerpo + un poco adelante) → quieto miras AL FRENTE, no al hombro; sólo la ALTURA viene del hueso de la cabeza
-  if(bodyHead){ bodyHead.getWorldPosition(_camAnchor); }                       // la cámara va EN la cabeza (sigue su posición e inclinación)
-  else { _camAnchor.set(player.pos.x, player.pos.y+player.eye, player.pos.z); } // fallback mientras carga el GLB
+  if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor); }     // la cámara va EN la cabeza (sigue su posición e inclinación)
+  else { _camAnchor.set(player.pos.x, player.pos.y+EYE, player.pos.z); }         // roll/carga: altura estable → la vuelta de cámara queda limpia (no se traga el cuerpo)
   const fwH=_v.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
   camera.position.set(_camAnchor.x + fwH.x*CAM_FWD, _camAnchor.y + CAM_UP, _camAnchor.z + fwH.z*CAM_FWD);
   // ---- LEAN: la cámara se inclina hacia adelante al correr/deslizar (se mueve con el cuerpo, no queda dura) ----
@@ -380,7 +382,10 @@ function update(dt){
   player.bob += dt*(7*moveAmt+0.001);                               // cadencia de pasos
   const targetRollB = Math.sin(player.bob)*0.03*moveAmt;             // balanceo suave al caminar/correr
   leanRoll += (targetRollB-leanRoll)*Math.min(1,8*dt);
-  euler.set(player.pitch+leanPitch, player.yaw, player.roll+leanRoll); camera.quaternion.setFromEuler(euler);
+  // VOLTERETA: la cámara da una vuelta completa hacia adelante (inmersión total del giro)
+  let rollCam=0;
+  if(player.rolling){ const t=Math.min(1,player.rollT/ROLL_DUR); rollCam = -2*Math.PI*(t*t*(3-2*t)); }
+  euler.set(player.pitch+leanPitch+rollCam, player.yaw, player.roll+leanRoll); camera.quaternion.setFromEuler(euler);
 
   sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
   if(HUD) HUD.textContent = estado||(player.onGround?(sp<0.5?'quieto':(sp<3.6?'caminar':'correr')):'en el aire');
