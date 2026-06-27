@@ -65,15 +65,18 @@ const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-per
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFShadowMap;
 renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
+renderer.localClippingEnabled=true;   // para recortar la cabeza del cuerpo (sólo en el material del cuerpo)
 app.appendChild(renderer.domElement);
 
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0xbccad8);
 scene.fog=new THREE.Fog(0xbccad8,90,360);
 const pmrem=new THREE.PMREMGenerator(renderer); scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
-// La cabeza se oculta colapsando el hueso "Head" a escala 0 (técnica FP estándar), NO con el near plane.
-// near chico (0.12) → al mirar abajo SÍ se ve el torso/brazos/piernas completos, pero nunca la cabeza.
-const camera=new THREE.PerspectiveCamera(72,1,0.12,2000);
+// La cabeza se recorta con un PLANO DE CORTE (clipping plane) aplicado SOLO al material del cuerpo:
+// corta todo lo que está por encima del cuello → la cabeza desaparece sin deformar la malla, y se ve el cuerpo.
+const camera=new THREE.PerspectiveCamera(72,1,0.1,2000);
+const headClip=new THREE.Plane(new THREE.Vector3(0,-1,0), 9999);   // normal hacia abajo → conserva lo de ABAJO del corte; constant se fija cada frame
+const HEAD_CUT=-0.1;   // altura del corte respecto al hueso de la cabeza (un poco por debajo → quita cabeza+pelo+nuca, deja hombros)
 let baseFov=72;
 scene.add(camera);
 
@@ -157,7 +160,7 @@ joyEl.addEventListener('pointerup',joyEnd);joyEl.addEventListener('pointercancel
 let lookId=null,lastX=0,lastY=0;const LOOK=0.0042;
 function isUI(t){return t.closest('.actBtn')||t===joyEl||t===knob;}
 addEventListener('pointerdown',e=>{if(isUI(e.target))return;if(lookId===null&&e.pointerId!==joyId){lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;}});
-addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;let ddx=e.clientX-lastX,ddy=e.clientY-lastY;if(rot){const t=ddx;ddx=ddy;ddy=-t;}player.yaw-=ddx*LOOK;player.pitch=Math.max(-1.45,Math.min(1.45,player.pitch-ddy*LOOK));lastX=e.clientX;lastY=e.clientY;});
+addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;let ddx=e.clientX-lastX,ddy=e.clientY-lastY;if(rot){const t=ddx;ddx=ddy;ddy=-t;}player.yaw-=ddx*LOOK;player.pitch=Math.max(-0.9,Math.min(1.3,player.pitch-ddy*LOOK));lastX=e.clientX;lastY=e.clientY;});  // tope abajo: ves el cuerpo, no la vertical fea
 function lookEnd(e){if(e.pointerId===lookId)lookId=null;}
 addEventListener('pointerup',lookEnd);addEventListener('pointercancel',lookEnd);
 
@@ -179,7 +182,7 @@ _gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
   inner.traverse(o=>{
     if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false;
       const ms=Array.isArray(o.material)?o.material:[o.material];
-      ms.forEach(m=>{ if(m){ m.side=THREE.FrontSide; } });   // SOLO caras frontales → nunca se ve el interior del cuerpo
+      ms.forEach(m=>{ if(m){ m.side=THREE.FrontSide; m.clippingPlanes=[headClip]; m.clipShadows=false; } });   // FrontSide + recorte de cabeza
     }
     if(o.isBone && /head|cabeza/i.test(o.name) && !/end|front|top/i.test(o.name)) bodyHead=o;
     if(o.isBone && /^Hips$|pelvis|cadera/i.test(o.name)) bodyHips=o;
@@ -190,17 +193,18 @@ _gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
   bodyHipsBind=bodyHips?bodyHips.position.clone():null;
   setAnim('idle');
 }, undefined, e=>console.warn('parkour.glb',e));
+const _headWP=new THREE.Vector3();
+function updateHeadClip(){ if(!bodyHead)return; bodyHead.getWorldPosition(_headWP); headClip.constant=_headWP.y+HEAD_CUT; }   // corta a la altura del cuello
 function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
   const nx=bodyActions[name]; nx.reset(); nx.enabled=true; nx.setEffectiveWeight(1); nx.play();
   if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones
   curAnim=name; }
-const _HEAD0=new THREE.Vector3(0.0001,0.0001,0.0001);
 function tickBody(dt,state){ if(!bodyRoot)return; setAnim(state||'idle');
   bodyRoot.position.set(player.pos.x,player.pos.y,player.pos.z); bodyRoot.rotation.y=player.yaw+Math.PI; bodyMixer.update(dt);
   // anular el root motion: las animaciones trasladan el Hips por el espacio → fijamos X/Z y limitamos Y
   if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHips.position.z=bodyHipsBind.z;
     bodyHips.position.y=Math.max(bodyHipsBind.y-0.5,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }   // slide baja, wallrun no dispara la cámara
-  if(bodyHead) bodyHead.scale.copy(_HEAD0);   // colapsar la cabeza a un punto (invisible) DESPUÉS de animar
+  updateHeadClip();   // recorta la cabeza a la altura del cuello (sin deformar la malla)
 }
 
 /* ===================== Colisión AABB (capsula≈caja) por eje ===================== */
