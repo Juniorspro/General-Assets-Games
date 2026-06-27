@@ -72,11 +72,9 @@ const scene=new THREE.Scene();
 scene.background=new THREE.Color(0xbccad8);
 scene.fog=new THREE.Fog(0xbccad8,90,360);
 const pmrem=new THREE.PMREMGenerator(renderer); scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
-// La cabeza se recorta con un PLANO DE CORTE (clipping plane) aplicado SOLO al material del cuerpo:
-// corta todo lo que está por encima del cuello → la cabeza desaparece sin deformar la malla, y se ve el cuerpo.
-const camera=new THREE.PerspectiveCamera(72,1,0.1,2000);
-const headClip=new THREE.Plane(new THREE.Vector3(0,-1,0), 9999);   // normal hacia abajo → conserva lo de ABAJO del corte; constant se fija cada frame
-const HEAD_CUT=-0.1;   // altura del corte respecto al hueso de la cabeza (un poco por debajo → quita cabeza+pelo+nuca, deja hombros)
+// La cámara va EN la cabeza (sigue su inclinación al correr), así la cabeza queda siempre dentro del near plane (0.2)
+// y se recorta limpia: sin deformar la malla, sin cortes abiertos, sin agujero.
+const camera=new THREE.PerspectiveCamera(72,1,0.2,2000);
 let baseFov=72;
 scene.add(camera);
 
@@ -141,7 +139,9 @@ const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:0,pi
 const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
 let jumpReq=false;
 // offsets de la cámara respecto al hueso de la cabeza: un poco ADELANTE (para ver el cuerpo) y a la altura de los ojos
-const CAM_FWD=0.14, CAM_UP=0.04;
+const CAM_FWD=0.06, CAM_UP=0.02;
+// "lean embodied": la cámara se inclina hacia adelante al correr/deslizar (procedural, según velocidad)
+let leanPitch=0, leanRoll=0;
 
 /* ===================== Rotación 90° ===================== */
 let forceLandscape=true, rot=false;
@@ -173,7 +173,7 @@ function startSlide(){ if(player.sliding||!player.onGround)return; if(player.vel
 /* ===================== CUERPO FP (UN solo GLB alta-poly + todas las animaciones; cabeza oculta colapsando el hueso Head) ===================== */
 const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9a83134/assets/fp/';
 const BODY_FILE='parkour.glb';   // malla alta-poly original + 7 clips (idle/walk/run/jump/slide/wallrun/mantle) → se cambia de ANIMACIÓN, no de malla
-let bodyRoot=null, bodyMixer=null, bodyHead=null, bodyHips=null, bodyHipsBind=null;
+let bodyRoot=null, bodyMixer=null, bodyHead=null, bodyNeck=null, bodyHips=null, bodyHipsBind=null;
 const bodyActions={}; let curAnim=null;
 const _gltf=new GLTFLoader();
 _gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
@@ -182,9 +182,10 @@ _gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
   inner.traverse(o=>{
     if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false;
       const ms=Array.isArray(o.material)?o.material:[o.material];
-      ms.forEach(m=>{ if(m){ m.side=THREE.FrontSide; m.clippingPlanes=[headClip]; m.clipShadows=false; } });   // FrontSide + recorte de cabeza
+      ms.forEach(m=>{ if(m){ m.side=THREE.FrontSide; } });   // sólo caras frontales (la cabeza la oculta el near plane)
     }
     if(o.isBone && /head|cabeza/i.test(o.name) && !/end|front|top/i.test(o.name)) bodyHead=o;
+    if(o.isBone && /^neck$|cuello/i.test(o.name)) bodyNeck=o;
     if(o.isBone && /^Hips$|pelvis|cadera/i.test(o.name)) bodyHips=o;
   });
   bodyRoot=new THREE.Group(); bodyRoot.add(inner); scene.add(bodyRoot);
@@ -193,8 +194,6 @@ _gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
   bodyHipsBind=bodyHips?bodyHips.position.clone():null;
   setAnim('idle');
 }, undefined, e=>console.warn('parkour.glb',e));
-const _headWP=new THREE.Vector3();
-function updateHeadClip(){ if(!bodyHead)return; bodyHead.getWorldPosition(_headWP); headClip.constant=_headWP.y+HEAD_CUT; }   // corta a la altura del cuello
 function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
   const nx=bodyActions[name]; nx.reset(); nx.enabled=true; nx.setEffectiveWeight(1); nx.play();
   if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones
@@ -204,7 +203,7 @@ function tickBody(dt,state){ if(!bodyRoot)return; setAnim(state||'idle');
   // anular el root motion: las animaciones trasladan el Hips por el espacio → fijamos X/Z y limitamos Y
   if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHips.position.z=bodyHipsBind.z;
     bodyHips.position.y=Math.max(bodyHipsBind.y-0.5,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }   // slide baja, wallrun no dispara la cámara
-  updateHeadClip();   // recorta la cabeza a la altura del cuello (sin deformar la malla)
+  // la cabeza se oculta con el near plane (la cámara está EN la cabeza): sin cortes, sin deformación, sin agujero
 }
 
 /* ===================== Colisión AABB (capsula≈caja) por eje ===================== */
@@ -316,11 +315,18 @@ function update(dt){
   player.fov+=(targetFov-player.fov)*Math.min(1,6*dt); if(Math.abs(camera.fov-player.fov)>0.05){camera.fov=player.fov;camera.updateProjectionMatrix();}
   // ---- cámara FP: a la altura de la cabeza (bob vertical real del hueso) pero CENTRADA en el cuerpo ----
   // XZ estable (centro del cuerpo + un poco adelante) → quieto miras AL FRENTE, no al hombro; sólo la ALTURA viene del hueso de la cabeza
-  let headY = player.pos.y + player.eye;
-  if(bodyHead){ bodyHead.getWorldPosition(_camAnchor); headY=_camAnchor.y; }
+  if(bodyHead){ bodyHead.getWorldPosition(_camAnchor); }                       // la cámara va EN la cabeza (sigue su posición e inclinación)
+  else { _camAnchor.set(player.pos.x, player.pos.y+player.eye, player.pos.z); } // fallback mientras carga el GLB
   const fwH=_v.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
-  camera.position.set(player.pos.x + fwH.x*CAM_FWD, headY + CAM_UP, player.pos.z + fwH.z*CAM_FWD);
-  euler.set(player.pitch,player.yaw,player.roll); camera.quaternion.setFromEuler(euler);
+  camera.position.set(_camAnchor.x + fwH.x*CAM_FWD, _camAnchor.y + CAM_UP, _camAnchor.z + fwH.z*CAM_FWD);
+  // ---- LEAN: la cámara se inclina hacia adelante al correr/deslizar (se mueve con el cuerpo, no queda dura) ----
+  const moveAmt=Math.min(1,sp/RUN);
+  const targetLean = -0.17*moveAmt - (player.sliding?0.12:0);        // adelante (mirar un poco abajo) según velocidad
+  leanPitch += (targetLean-leanPitch)*Math.min(1,5*dt);
+  player.bob += dt*(7*moveAmt+0.001);                               // cadencia de pasos
+  const targetRollB = Math.sin(player.bob)*0.03*moveAmt;             // balanceo suave al caminar/correr
+  leanRoll += (targetRollB-leanRoll)*Math.min(1,8*dt);
+  euler.set(player.pitch+leanPitch, player.yaw, player.roll+leanRoll); camera.quaternion.setFromEuler(euler);
 
   sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
   if(HUD) HUD.textContent = estado||(player.onGround?(sp<0.5?'quieto':(sp<3.6?'caminar':'correr')):'en el aire');
