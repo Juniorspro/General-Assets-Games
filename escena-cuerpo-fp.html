@@ -167,41 +167,41 @@ tapBtn('bSlide',()=>{ startSlide(); });
 function startSlide(){ if(player.sliding||!player.onGround)return; if(player.vel.length()<3)return; player.sliding=true; player.slideT=0;
   const d=player.vel.length()>0.5?player.vel.clone().normalize():forward.clone(); player.vel.copy(d).multiplyScalar(SLIDE_V); }
 
-/* ===================== CUERPO FP (GLBs riggeados con Higgsfield/Meshy; cabeza oculta colapsando el hueso Head) ===================== */
-const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4a0de3f/assets/fp/anim/';   // animaciones de parkour del MISMO personaje (idle/walk/run/jump/slide/wallrun/mantle/vault)
-const PARTS=[ {key:'idle',file:'idle.glb'},{key:'walk',file:'walk.glb'},{key:'run',file:'run.glb'},
-  {key:'jump',file:'jump.glb'},{key:'slide',file:'slide.glb'},{key:'wallrun',file:'wallrun.glb'},
-  {key:'mantle',file:'mantle.glb'} ];   // vault.glb queda en el repo para más adelante
-const body={}; let bodyKey=null; const _gltf=new GLTFLoader();
-function prepBody(gl){ const inner=gl.scene;
+/* ===================== CUERPO FP (UN solo GLB alta-poly + todas las animaciones; cabeza oculta colapsando el hueso Head) ===================== */
+const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9a83134/assets/fp/';
+const BODY_FILE='parkour.glb';   // malla alta-poly original + 7 clips (idle/walk/run/jump/slide/wallrun/mantle) → se cambia de ANIMACIÓN, no de malla
+let bodyRoot=null, bodyMixer=null, bodyHead=null, bodyHips=null, bodyHipsBind=null;
+const bodyActions={}; let curAnim=null;
+const _gltf=new GLTFLoader();
+_gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
   let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=STAND/(sz.y||1); inner.scale.setScalar(s);
   b=new THREE.Box3().setFromObject(inner); const c=b.getCenter(new THREE.Vector3()); inner.position.set(-c.x,-b.min.y,-c.z);   // pies en el origen
-  let head=null, hips=null;
   inner.traverse(o=>{
     if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false;
       const ms=Array.isArray(o.material)?o.material:[o.material];
       ms.forEach(m=>{ if(m){ m.side=THREE.FrontSide; } });   // SOLO caras frontales → nunca se ve el interior del cuerpo
     }
-    if(o.isBone && /head|cabeza/i.test(o.name) && !/end|front|top/i.test(o.name)) head=o;   // hueso "Head" (no head_end/headfront)
-    if(o.isBone && /^Hips$|pelvis|cadera/i.test(o.name)) hips=o;                              // raíz → para anular el root motion
+    if(o.isBone && /head|cabeza/i.test(o.name) && !/end|front|top/i.test(o.name)) bodyHead=o;
+    if(o.isBone && /^Hips$|pelvis|cadera/i.test(o.name)) bodyHips=o;
   });
-  const root=new THREE.Group(); root.add(inner); root.visible=false; scene.add(root);
-  const mixer=new THREE.AnimationMixer(inner); let action=null;
-  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(THREE.LoopRepeat); }
-  const hipsBind=hips?hips.position.clone():null;
-  return {root,mixer,action,head,hips,hipsBind}; }
-for(const p of PARTS){ _gltf.load(EBASE+p.file, gl=>{ body[p.key]=prepBody(gl); if(p.key==='idle'&&!bodyKey) setBody('idle'); }, undefined, e=>console.warn(p.file,e)); }
-function setBody(key){ const b=body[key]; if(!b||bodyKey===key)return;
-  if(bodyKey&&body[bodyKey]){ body[bodyKey].root.visible=false; if(body[bodyKey].action)body[bodyKey].action.stop(); }
-  bodyKey=key; b.root.visible=true; if(b.action) b.action.reset().play(); }
+  bodyRoot=new THREE.Group(); bodyRoot.add(inner); scene.add(bodyRoot);
+  bodyMixer=new THREE.AnimationMixer(inner);
+  gl.animations.forEach(cl=>{ const a=bodyMixer.clipAction(cl); a.setLoop(THREE.LoopRepeat); a.clampWhenFinished=false; bodyActions[cl.name]=a; });
+  bodyHipsBind=bodyHips?bodyHips.position.clone():null;
+  setAnim('idle');
+}, undefined, e=>console.warn('parkour.glb',e));
+function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
+  const nx=bodyActions[name]; nx.reset(); nx.enabled=true; nx.setEffectiveWeight(1); nx.play();
+  if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones
+  curAnim=name; }
 const _HEAD0=new THREE.Vector3(0.0001,0.0001,0.0001);
-function tickBody(dt,state){ setBody(state||'idle');
-  const b=body[bodyKey]; if(b){ b.root.position.set(player.pos.x,player.pos.y,player.pos.z); b.root.rotation.y=player.yaw+Math.PI; b.mixer.update(dt);
-    // anular el root motion: las animaciones trasladan el Hips por el espacio → fijamos X/Z y limitamos Y
-    if(b.hips&&b.hipsBind){ b.hips.position.x=b.hipsBind.x; b.hips.position.z=b.hipsBind.z;
-      b.hips.position.y=Math.max(b.hipsBind.y-0.5,Math.min(b.hipsBind.y+0.15,b.hips.position.y)); }   // slide baja, wallrun no dispara la cámara
-    if(b.head) b.head.scale.copy(_HEAD0);   // colapsar la cabeza a un punto (invisible) DESPUÉS de animar
-  } }
+function tickBody(dt,state){ if(!bodyRoot)return; setAnim(state||'idle');
+  bodyRoot.position.set(player.pos.x,player.pos.y,player.pos.z); bodyRoot.rotation.y=player.yaw+Math.PI; bodyMixer.update(dt);
+  // anular el root motion: las animaciones trasladan el Hips por el espacio → fijamos X/Z y limitamos Y
+  if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHips.position.z=bodyHipsBind.z;
+    bodyHips.position.y=Math.max(bodyHipsBind.y-0.5,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }   // slide baja, wallrun no dispara la cámara
+  if(bodyHead) bodyHead.scale.copy(_HEAD0);   // colapsar la cabeza a un punto (invisible) DESPUÉS de animar
+}
 
 /* ===================== Colisión AABB (capsula≈caja) por eje ===================== */
 function aabbHit(){ return null; }
@@ -301,7 +301,7 @@ function update(dt){
     : player.wallrun ? 'wallrun'
     : (estado==='trepar') ? 'mantle'
     : !player.onGround ? 'jump'
-    : (sp<0.5 ? 'idle' : (sp<3.6 ? 'walk' : 'run'));
+    : (sp<0.5 ? 'idle' : ((mag>0.82 || sp>=4.2) ? 'run' : 'walk'));   // joystick a fondo o velocidad alta → CORRER
   tickBody(dt, animState);
   // roll: inclina al correr por pared
   let targetRoll=0;
@@ -310,12 +310,12 @@ function update(dt){
   // FOV kick por velocidad / wallrun / slide
   const targetFov=baseFov + Math.min(10,sp*0.9) + (player.wallrun?6:0) + (player.sliding?8:0);
   player.fov+=(targetFov-player.fov)*Math.min(1,6*dt); if(Math.abs(camera.fov-player.fov)>0.05){camera.fov=player.fov;camera.updateProjectionMatrix();}
-  // ---- cámara FP: LA CÁMARA ES LA CABEZA (anclada al hueso Head), empujada un poco adelante para ver el cuerpo ----
-  const hb=body[bodyKey]&&body[bodyKey].head;
-  if(hb){ hb.getWorldPosition(_camAnchor); }                                   // posición real del hueso de la cabeza (con su bob de animación)
-  else { _camAnchor.set(player.pos.x, player.pos.y+player.eye, player.pos.z); } // fallback mientras carga el GLB
-  const fwH=_v.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));             // adelante horizontal (sin pitch)
-  camera.position.copy(_camAnchor).addScaledVector(fwH,CAM_FWD); camera.position.y+=CAM_UP;
+  // ---- cámara FP: a la altura de la cabeza (bob vertical real del hueso) pero CENTRADA en el cuerpo ----
+  // XZ estable (centro del cuerpo + un poco adelante) → quieto miras AL FRENTE, no al hombro; sólo la ALTURA viene del hueso de la cabeza
+  let headY = player.pos.y + player.eye;
+  if(bodyHead){ bodyHead.getWorldPosition(_camAnchor); headY=_camAnchor.y; }
+  const fwH=_v.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
+  camera.position.set(player.pos.x + fwH.x*CAM_FWD, headY + CAM_UP, player.pos.z + fwH.z*CAM_FWD);
   euler.set(player.pitch,player.yaw,player.roll); camera.quaternion.setFromEuler(euler);
 
   sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
