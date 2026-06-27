@@ -135,7 +135,9 @@ addBox(0,4,18,3,8,3,0x59636f);
 const R=0.34, STAND=1.85, CROUCH=1.05, EYE=1.62, EYE_CR=0.9;
 const GRAV=26, JUMP_V=8.4, RUN=7.2, ACCEL=12, AIR_ACCEL=5, SLIDE_V=12, WALL_GRAV=7, WALLRUN_MAX=1.25;
 const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:0,pitch:0,roll:0,eye:EYE,h:STAND,
-  onGround:true,crouch:false,sliding:false,slideT:0,wallrun:0,wallrunT:0,wallN:new THREE.Vector3(),mantle:0,bob:0,fov:baseFov};
+  onGround:true,crouch:false,sliding:false,slideT:0,wallrun:0,wallrunT:0,wallN:new THREE.Vector3(),mantle:0,bob:0,fov:baseFov,
+  climbing:false,climbT:0,climbFrom:new THREE.Vector3(),climbTo:new THREE.Vector3()};
+const CLIMB_DUR=0.85;   // duración del agarre+impulso de la repisa
 const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
 let jumpReq=false;
 // offsets de la cámara respecto al hueso de la cabeza: un poco ADELANTE (para ver el cuerpo) y a la altura de los ojos
@@ -171,9 +173,9 @@ function startSlide(){ if(player.sliding||!player.onGround)return; if(player.vel
   const d=player.vel.length()>0.5?player.vel.clone().normalize():forward.clone(); player.vel.copy(d).multiplyScalar(SLIDE_V); }
 
 /* ===================== CUERPO FP (UN solo GLB alta-poly + todas las animaciones; cabeza oculta colapsando el hueso Head) ===================== */
-const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@9a83134/assets/fp/';
+const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@caf6ec5/assets/fp/';
 const BODY_FILE='parkour.glb';   // malla alta-poly original + 7 clips (idle/walk/run/jump/slide/wallrun/mantle) → se cambia de ANIMACIÓN, no de malla
-let bodyRoot=null, bodyMixer=null, bodyHead=null, bodyNeck=null, bodyHips=null, bodyHipsBind=null;
+let bodyRoot=null, bodyInner=null, bodyScale=1, bodyMixer=null, bodyHead=null, bodyNeck=null, bodyHips=null, bodyHipsBind=null;
 const bodyActions={}; let curAnim=null;
 const _gltf=new GLTFLoader();
 _gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
@@ -189,6 +191,7 @@ _gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
     if(o.isBone && /^Hips$|pelvis|cadera/i.test(o.name)) bodyHips=o;
   });
   bodyRoot=new THREE.Group(); bodyRoot.add(inner); scene.add(bodyRoot);
+  bodyInner=inner; bodyScale=s;   // para espejar la animación en la pared derecha (wall-run)
   bodyMixer=new THREE.AnimationMixer(inner);
   gl.animations.forEach(cl=>{ const a=bodyMixer.clipAction(cl); a.setLoop(THREE.LoopRepeat); a.clampWhenFinished=false; bodyActions[cl.name]=a; });
   bodyHipsBind=bodyHips?bodyHips.position.clone():null;
@@ -199,7 +202,10 @@ function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
   if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones
   curAnim=name; }
 function tickBody(dt,state){ if(!bodyRoot)return; setAnim(state||'idle');
-  bodyRoot.position.set(player.pos.x,player.pos.y,player.pos.z); bodyRoot.rotation.y=player.yaw+Math.PI; bodyMixer.update(dt);
+  bodyRoot.position.set(player.pos.x,player.pos.y,player.pos.z); bodyRoot.rotation.y=player.yaw+Math.PI;
+  // el clip de wall-run está hecho para la pared IZQUIERDA; en la pared derecha (player.wallrun>0) se espeja en X
+  if(bodyInner){ const mir=(state==='wallrun'&&player.wallrun>0); bodyInner.scale.x=mir?-bodyScale:bodyScale; }
+  bodyMixer.update(dt);
   // anular el root motion: las animaciones trasladan el Hips por el espacio → fijamos X/Z y limitamos Y
   if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHips.position.z=bodyHipsBind.z;
     bodyHips.position.y=Math.max(bodyHipsBind.y-0.5,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }   // slide baja, wallrun no dispara la cámara
@@ -240,6 +246,13 @@ function update(dt){
   const wishX=right.x*ix - forward.x*iz, wishZ=right.z*ix - forward.z*iz;   // dirección deseada (mundo)
   const wishLen=Math.hypot(wishX,wishZ);
 
+  let estado='';
+  // ---- CLIMB en progreso (agarre de repisa + impulso hacia arriba) ----
+  if(player.climbing){
+    player.climbT+=dt; const t=Math.min(1,player.climbT/CLIMB_DUR); const e=t*t*(3-2*t);
+    player.pos.lerpVectors(player.climbFrom,player.climbTo,e); estado='trepar';
+    if(t>=1){ player.climbing=false; player.onGround=true; player.vy=0; player.vel.set(0,0,0); }
+  } else {
   // ---- SLIDE ----
   if(player.sliding){ player.slideT+=dt; player.h=CROUCH;
     player.vel.multiplyScalar(1-Math.min(1,1.6*dt));    // fricción del deslizamiento
@@ -247,7 +260,6 @@ function update(dt){
   }
 
   // ---- WALL-RUN ---- (en el aire, pared al costado, joystick hacia adelante)
-  let estado='';
   if(!player.onGround && player.vy<3 && wishLen>0.3){
     let w=wallSide(1)||wallSide(-1);
     if(w){ player.wallrun=Math.sign( (wallSide(1)?1:-1) ); player.wallrunT+=dt; player.wallN.copy(w.n); estado='wall-run';
@@ -282,15 +294,21 @@ function update(dt){
   moveX(player.vel.x*dt); moveZ(player.vel.z*dt);
   moveY(player.vy*dt);
 
-  // ---- TREPAR repisa (mantle): pegué una pared, su tope está al alcance y arriba está libre ----
-  if(lastWall && !player.onGround && player.vy<2){
+  // ---- AGARRE DE REPISA: salté a una superficie y no llegué → me agarro del borde y subo (climb) ----
+  if(lastWall && !player.onGround && player.vy<2 && !player.climbing){
     const top=lastWall.maxy, foot=player.pos.y;
-    if(top>foot+0.2 && top<foot+1.7){   // borde trepable
+    if(top>foot+0.3 && top<foot+2.1){   // el borde está al alcance de las manos (un poco por encima)
       const a={minx:player.pos.x-R,maxx:player.pos.x+R,miny:top+0.02,maxy:top+player.h,minz:player.pos.z-R,maxz:player.pos.z+R};
       let blocked=false; for(const c of colliders){ if(c.mesh===ground||c===lastWall)continue; if(overlap(a,c)){blocked=true;break;} }
-      if(!blocked){ player.pos.y=top; player.vy=Math.max(player.vy,2.5); player.vel.addScaledVector(forward,1.5); player.onGround=true; estado='trepar'; }
+      if(!blocked){   // iniciar el agarre+impulso
+        player.climbing=true; player.climbT=0; player.vy=0; player.vel.set(0,0,0);
+        player.climbFrom.copy(player.pos);                                                  // posición de agarre (colgado del borde)
+        player.climbTo.set(player.pos.x+forward.x*0.6, top, player.pos.z+forward.z*0.6);    // arriba y un poco adentro de la repisa
+        estado='trepar';
+      }
     }
   }
+  } // fin del else (física normal)
   if(player.sliding)estado='deslizar';
 
   // altura/ojo (de pie / agachado / deslizando)
@@ -300,9 +318,9 @@ function update(dt){
   // ---- animar el cuerpo PRIMERO (así el hueso de la cabeza ya tiene su transform de este frame) ----
   const sp=Math.hypot(player.vel.x,player.vel.z);
   // estado de animación según lo que hace el jugador (parkour)
-  const animState = player.sliding ? 'slide'
+  const animState = player.climbing ? 'climb'
+    : player.sliding ? 'slide'
     : player.wallrun ? 'wallrun'
-    : (estado==='trepar') ? 'mantle'
     : !player.onGround ? 'jump'
     : (sp<0.5 ? 'idle' : ((mag>0.82 || sp>=4.2) ? 'run' : 'walk'));   // joystick a fondo o velocidad alta → CORRER
   tickBody(dt, animState);
