@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#aebfcf" />
+<title>Escena · Limpia</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+<style>
+  :root{ --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px); }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
+  html,body{ height:100%; overflow:hidden; background:#aebfcf; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; color:#eef3f8; overscroll-behavior:none; }
+  #stage{ position:fixed; inset:0; }
+  body.rot #stage{ width:100vh; height:100vw; top:50%; left:50%; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center; }
+  #app{ position:absolute; inset:0; }
+  #app canvas{ display:block; width:100%!important; height:100%!important; touch-action:none; }
+  #cross{ position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px; z-index:6; border-radius:50%; background:rgba(255,255,255,.6); box-shadow:0 0 4px rgba(0,0,0,.6); pointer-events:none; }
+  #joy{ position:fixed; left:26px; bottom:calc(28px + var(--safe-b)); z-index:20; width:128px; height:128px; border-radius:50%;
+        background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.18); backdrop-filter:blur(6px); touch-action:none; }
+  #joyKnob{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%;
+            background:radial-gradient(circle at 38% 34%,#dff0ff,#5aa0ff); box-shadow:0 4px 16px rgba(0,0,0,.45); }
+  .actBtn{ position:fixed; z-index:20; width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,.06);
+           border:1.5px solid rgba(255,255,255,.2); color:#eef3f8; font-size:22px; backdrop-filter:blur(6px); cursor:pointer;
+           display:flex; align-items:center; justify-content:center; transition:transform .1s,background .15s; }
+  .actBtn:active{ transform:scale(.92); }
+  .actBtn.on{ background:rgba(90,160,255,.3); border-color:#8fe3ff; }
+  #bJump  { right:26px; bottom:calc(34px + var(--safe-b)); }
+  #bCrouch{ right:100px; bottom:calc(58px + var(--safe-b)); width:56px; height:56px; font-size:19px; }
+  #bChop  { right:26px; bottom:calc(108px + var(--safe-b)); }
+  #bHammer{ right:100px; bottom:calc(132px + var(--safe-b)); width:56px; height:56px; font-size:19px; }
+  #animLabel{ position:fixed; left:50%; top:calc(14px + var(--safe-t)); transform:translateX(-50%); z-index:10;
+              background:rgba(14,22,30,.72); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.16); border-radius:999px;
+              padding:8px 18px; color:#ffd27a; font-weight:700; font-size:15px; letter-spacing:.02em; white-space:nowrap;
+              box-shadow:0 6px 20px rgba(0,0,0,.45); pointer-events:none; }
+  #loader{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+           background:#aebfcf; transition:opacity .5s; color:#0a3a63; font-size:13px; letter-spacing:.1em; }
+  #loader.hide{ opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+<div id="loader">…</div>
+<div id="stage">
+  <div id="app"></div>
+  <div id="cross"></div>
+  <div id="joy"><div id="joyKnob"></div></div>
+  <button id="bJump"   class="actBtn">⤴️</button>
+  <button id="bCrouch" class="actBtn">🔽</button>
+  <button id="bChop"   class="actBtn">🪓</button>
+  <button id="bHammer" class="actBtn">🔪</button>
+  <div id="animLabel">cargando player…</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+/* ===================== Render / escena ===================== */
+const app=document.getElementById('app');
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
+app.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0xbccad8);
+scene.fog=new THREE.Fog(0xbccad8,60,260);
+const pmrem=new THREE.PMREMGenerator(renderer); scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+const camera=new THREE.PerspectiveCamera(64,1,0.04,2000);
+
+// suelo neutro (grilla de referencia)
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshStandardMaterial({color:0x8d9aa6,roughness:1,metalness:0}));
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+const grid=new THREE.GridHelper(400,200,0x55606b,0x47525d); grid.position.y=0.01; scene.add(grid);
+const LIMIT=180;
+
+// luces
+const sun=new THREE.DirectionalLight(0xfff2e0,2.4); sun.position.set(-40,70,-50); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=200;
+sun.shadow.camera.left=-40; sun.shadow.camera.right=40; sun.shadow.camera.top=40; sun.shadow.camera.bottom=-40; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
+scene.add(sun); scene.add(sun.target);
+scene.add(new THREE.HemisphereLight(0xdfeeff,0xb9c2cc,0.85));
+
+/* ===================== PISO DE MADERA + RENDER 3D DE TODOS LOS MATERIALES ===================== */
+function enableShadow(o){ o.traverse(c=>{ if(c.isMesh){c.castShadow=true;c.receiveShadow=true;} }); return o; }
+// piso de tablones de madera
+const plankA=new THREE.MeshStandardMaterial({color:0x8a5a2b,roughness:0.82,metalness:0});
+const plankB=new THREE.MeshStandardMaterial({color:0x77491f,roughness:0.82,metalness:0});
+const PW=15, PD=8, PCZ=-2.4, NPL=14, pw=PW/NPL;
+for(let i=0;i<NPL;i++){ const p=new THREE.Mesh(new THREE.BoxGeometry(pw*0.95,0.18,PD),(i%2?plankA:plankB));
+  p.position.set(-PW/2+pw*(i+0.5),0.09,PCZ); p.castShadow=p.receiveShadow=true; scene.add(p); }
+const FY=0.18;   // altura de la superficie del piso
+
+// ---- carga de texturas PBR del repo (jsDelivr) ----
+const texLoader=new THREE.TextureLoader(); texLoader.crossOrigin='anonymous';
+const TXB='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@7fd8f15/assets/textures/';
+const MAXA=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+function loadPBR(mat,base,rep,met){
+  const ax=Array.isArray(rep)?rep[0]:(rep||1), ay=Array.isArray(rep)?rep[1]:(rep||1);
+  const cfg=(t,srgb)=>{t.colorSpace=srgb?THREE.SRGBColorSpace:THREE.NoColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=MAXA;t.repeat.set(ax,ay);return t;};
+  const f=()=>{};
+  texLoader.load(TXB+base+'_col.jpg',t=>{cfg(t,true);mat.map=t;mat.needsUpdate=true;},undefined,f);
+  texLoader.load(TXB+base+'_nrm.jpg',t=>{cfg(t,false);mat.normalMap=t;mat.needsUpdate=true;},undefined,f);
+  texLoader.load(TXB+base+'_rgh.jpg',t=>{cfg(t,false);mat.roughnessMap=t;mat.roughness=1;mat.needsUpdate=true;},undefined,f);
+  if(met)texLoader.load(TXB+base+'_met.jpg',t=>{cfg(t,false);mat.metalnessMap=t;mat.metalness=1;mat.needsUpdate=true;},undefined,f);
+}
+loadPBR(plankA,'v2/woodfloor',[1,3]); loadPBR(plankB,'v2/woodfloor',[1,3]);   // piso de madera real
+
+/* ===================== Jugador (1ª persona) ===================== */
+const EYE=1.7, EYE_CROUCH=1.05, GRAV=22, JUMP_V=7.4, SPEED_MAX=6.4, ACCEL=11;
+const player={pos:new THREE.Vector3(0,0,6),vel:new THREE.Vector3(),yaw:0,pitch:0,roll:0,bobPhase:0,strafeSm:0,eye:EYE,vy:0,onGround:true,crouch:false};
+const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3();
+scene.add(camera);
+
+/* ===================== Rotación 90° en vertical ===================== */
+let forceLandscape=true, rot=false;
+function layout(){ rot=forceLandscape&&(innerHeight>innerWidth); document.body.classList.toggle('rot',rot);
+  const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight; camera.aspect=vw/vh; camera.updateProjectionMatrix(); renderer.setSize(vw,vh,false); }
+addEventListener('resize',layout);
+
+/* ===================== Controles ===================== */
+const joyEl=document.getElementById('joy'),knob=document.getElementById('joyKnob'); let joyId=null; const joy={x:0,y:0};
+function joyUpd(e){const r=joyEl.clientWidth/2;let dx=e.offsetX-r,dy=e.offsetY-r;const len=Math.hypot(dx,dy);if(len>r){dx*=r/len;dy*=r/len;}knob.style.transform=`translate(${dx}px,${dy}px)`;joy.x=dx/r;joy.y=dy/r;}
+joyEl.addEventListener('pointerdown',e=>{joyId=e.pointerId;joyEl.setPointerCapture(e.pointerId);joyUpd(e);e.preventDefault();});
+joyEl.addEventListener('pointermove',e=>{if(e.pointerId===joyId)joyUpd(e);});
+function joyEnd(e){if(e.pointerId===joyId){joyId=null;joy.x=0;joy.y=0;knob.style.transform='translate(0,0)';}}
+joyEl.addEventListener('pointerup',joyEnd);joyEl.addEventListener('pointercancel',joyEnd);
+
+let lookId=null,lastX=0,lastY=0;const LOOK=0.0042;
+function isUI(t){return t.closest('.actBtn')||t===joyEl||t===knob;}
+addEventListener('pointerdown',e=>{if(isUI(e.target))return;if(lookId===null&&e.pointerId!==joyId){lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;}});
+addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;let ddx=e.clientX-lastX,ddy=e.clientY-lastY;if(rot){const t=ddx;ddx=ddy;ddy=-t;}player.yaw-=ddx*LOOK;player.pitch=Math.max(-1.4,Math.min(1.4,player.pitch-ddy*LOOK));lastX=e.clientX;lastY=e.clientY;});
+function lookEnd(e){if(e.pointerId===lookId)lookId=null;}
+addEventListener('pointerup',lookEnd);addEventListener('pointercancel',lookEnd);
+
+function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
+tapBtn('bJump',()=>{ if(player.onGround){player.vy=JUMP_V;player.onGround=false;} });
+tapBtn('bCrouch',()=>{ player.crouch=!player.crouch; document.getElementById('bCrouch').classList.toggle('on',player.crouch); });
+
+/* ===================== PLAYER en 1ª persona CON CUERPO visible (GLB animado) ===================== */
+// Player moderno (Higgsfield image-to-3D 30k + textura). Como el auto-rig de Meshy difiere por clip,
+// cada estado es su PROPIO GLB y hacemos swap del cuerpo según el movimiento. La cámara va a la altura
+// de los ojos y se OCULTA la cabeza (escala del hueso Head ~0) para no tapar la vista: así ves tus
+// brazos, torso y piernas al mirar hacia abajo.
+const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@f12a2d1/';
+const E_H=1.82; let hitShake=0;
+const PARTS=[ {key:'idle',file:'pj_idle2.glb'}, {key:'walk',file:'pj_walk.glb'}, {key:'run',file:'pj_run.glb'},
+  {key:'slash',file:'pj_slash.glb',once:true,speed:1.3} ];
+const PLABEL={idle:'Quieto',walk:'Caminando',run:'Corriendo',slash:'Corte 🪓'};
+const body={}; let bodyKey=null, actKey=null;
+const _hw=new THREE.Vector3(); const HEAD_FWD=0.08, HEAD_UP=0.05;   // cámara dentro de la cabeza (las caras se ocultan solas por backface culling)
+const AXE_POS=new THREE.Vector3(0,0,0), AXE_ROT=new THREE.Euler(Math.PI,0,0), AXE_LEN=0.5;   // hacha EN LA MANO del cuerpo (calibrable)
+const eLabelEl=document.getElementById('animLabel');
+const _gltf=new GLTFLoader();
+// ---- HACHA (hawk.glb) pegada al hueso de la mano del CUERPO ENTERO; se mueve y agarra con la animación ----
+let axeProto=null; const _pend=[];
+function attachAxe(hand){ if(!axeProto){ _pend.push(hand); return; }
+  hand.updateWorldMatrix(true,false); const hs=hand.getWorldScale(_hw).x||1;                  // contrarresta la escala mundial de la mano
+  const axe=axeProto.clone(true), bb=new THREE.Box3().setFromObject(axe), sz=bb.getSize(new THREE.Vector3()), c=bb.getCenter(new THREE.Vector3());
+  axe.position.sub(c);                                                                          // centrar el hacha en su pivote
+  const holder=new THREE.Group(); holder.add(axe);
+  holder.scale.setScalar((AXE_LEN/Math.max(sz.x,sz.y,sz.z))/hs); holder.position.copy(AXE_POS); holder.rotation.copy(AXE_ROT);
+  holder.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; } }); hand.add(holder); }
+_gltf.load(EBASE+'hawk.glb', gl=>{ axeProto=gl.scene; for(const h of _pend) attachAxe(h); _pend.length=0; }, undefined, e=>console.warn('hawk.glb',e));
+function prepBody(gl,p){ const inner=gl.scene;
+  let b=new THREE.Box3().setFromObject(inner), sz=b.getSize(new THREE.Vector3()), s=E_H/(sz.y||1); inner.scale.setScalar(s);
+  b=new THREE.Box3().setFromObject(inner); const c=b.getCenter(new THREE.Vector3()); inner.position.set(-c.x,-b.min.y,-c.z);   // pies en el origen
+  inner.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false;
+    const mm=Array.isArray(o.material)?o.material:[o.material]; mm.forEach(m=>{ if(m) m.side=THREE.FrontSide; }); } });   // FrontSide: la cabeza se descarta desde adentro (cámara en la cabeza)
+  const hand=inner.getObjectByName('RightHand')||inner.getObjectByName('LeftHand'); if(hand) attachAxe(hand);   // hacha en la mano del cuerpo
+  const root=new THREE.Group(); root.add(inner); root.visible=false; scene.add(root);
+  const mixer=new THREE.AnimationMixer(inner); let action=null;
+  if(gl.animations[0]){ action=mixer.clipAction(gl.animations[0]); action.setLoop(p.once?THREE.LoopOnce:THREE.LoopRepeat); action.clampWhenFinished=!!p.once; if(p.speed)action.timeScale=p.speed; }
+  return {root,mixer,action,head:inner.getObjectByName('Head')}; }
+for(const p of PARTS){ _gltf.load(EBASE+p.file, gl=>{ body[p.key]=prepBody(gl,p); if(p.key==='idle'&&!bodyKey) setBody('idle'); }, undefined, e=>console.warn(p.file,e)); }
+function setBody(key){ const b=body[key]; if(!b||bodyKey===key)return;
+  if(bodyKey&&body[bodyKey]){ body[bodyKey].root.visible=false; if(body[bodyKey].action)body[bodyKey].action.stop(); }
+  bodyKey=key; b.root.visible=true; if(b.action) b.action.reset().play(); }
+function doAction(key){ const b=body[key]; if(!b)return; actKey=key; setBody(key); if(b.action) b.action.reset().play(); }
+function actBtn(id,fn){ const el=document.getElementById(id); if(el) el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
+actBtn('bChop',()=>doAction('slash')); actBtn('bHammer',()=>doAction('slash'));
+function tickPlayer(dt){
+  const speed=player.vel.length();
+  if(actKey){ const a=body[actKey]; if(!a||!a.action||!a.action.isRunning()) actKey=null; }   // ¿terminó el golpe?
+  if(!actKey) setBody(speed<0.4?'idle':(speed<3.4?'walk':'run'));                              // locomoción del cuerpo
+  const b=body[bodyKey]; if(b){
+    b.root.position.set(player.pos.x,player.pos.y,player.pos.z); b.root.rotation.y=player.yaw+Math.PI;   // sigue al player (incluye salto en Y)
+    b.mixer.update(dt);
+    if(b.head){ b.head.updateWorldMatrix(true,false); b.head.getWorldPosition(_hw);   // cámara = cabeza (sin escalarla: desde adentro no se ve por backface culling)
+      const fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
+      camera.position.set(_hw.x+fx*HEAD_FWD, _hw.y+HEAD_UP, _hw.z+fz*HEAD_FWD); } }
+  if(eLabelEl) eLabelEl.textContent=PLABEL[actKey||bodyKey]||''; }
+
+/* ===================== Loop ===================== */
+const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
+function update(dt){
+  let ix=joy.x,iz=joy.y; const mag=Math.min(1,Math.hypot(ix,iz)); if(mag>0.001){ix/=Math.max(mag,1);iz/=Math.max(mag,1);}
+  forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
+  const sp=mag*SPEED_MAX*(player.crouch?0.5:1);
+  const des=_v.set(0,0,0); des.addScaledVector(forward,-iz*sp); des.addScaledVector(right,ix*sp);
+  player.vel.lerp(des,Math.min(1,ACCEL*dt)); player.pos.addScaledVector(player.vel,dt);
+  player.pos.x=THREE.MathUtils.clamp(player.pos.x,-LIMIT,LIMIT); player.pos.z=THREE.MathUtils.clamp(player.pos.z,-LIMIT,LIMIT);
+  player.vy-=GRAV*dt; player.pos.y+=player.vy*dt; if(player.pos.y<=0){player.pos.y=0;player.vy=0;player.onGround=true;}
+  const targetEye=player.crouch?EYE_CROUCH:EYE; player.eye+=(targetEye-player.eye)*Math.min(1,10*dt);
+  const speed=player.vel.length(); player.bobPhase+=dt*(speed*1.9+0.0001); const moveAmt=Math.min(1,speed/SPEED_MAX);
+  const bobY=Math.sin(player.bobPhase*2)*0.05*moveAmt, bobX=Math.cos(player.bobPhase)*0.035*moveAmt;
+  const strafe=right.dot(player.vel)/SPEED_MAX; player.strafeSm+=(strafe-player.strafeSm)*Math.min(1,8*dt);
+  player.roll+=((-player.strafeSm*0.08+Math.sin(player.bobPhase)*0.018*moveAmt)-player.roll)*Math.min(1,10*dt);
+  camera.position.set(player.pos.x+right.x*bobX, player.pos.y+player.eye+bobY, player.pos.z+right.z*bobX);
+  euler.set(player.pitch,player.yaw,player.roll); camera.quaternion.setFromEuler(euler);
+  if(hitShake>0.0001){ camera.rotateZ((Math.random()-0.5)*0.07*hitShake); camera.rotateX((Math.random()-0.5)*0.05*hitShake); } hitShake*=0.88;
+  sun.position.set(player.pos.x-40,70,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
+  tickPlayer(dt);        // cuerpo del player en 1ª persona
+}
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
+
+/* ===================== Init ===================== */
+try{ layout(); renderer.render(scene,camera); setTimeout(()=>document.getElementById('loader').classList.add('hide'),200); }
+catch(err){ console.error('Init',err); document.getElementById('loader').classList.add('hide'); }
+animate();
+</script>
+</body>
+</html>
