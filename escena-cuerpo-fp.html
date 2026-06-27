@@ -147,15 +147,13 @@ const GRAV=26, JUMP_V=8.8, RUN=8.6, ACCEL=12, AIR_ACCEL=5, SLIDE_V=13.5, WALL_GR
 const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:Math.PI,pitch:0,roll:0,eye:EYE,h:STAND,faceYaw:Math.PI,
   onGround:true,crouch:false,sliding:false,slideT:0,wallrun:0,wallrunT:0,wallN:new THREE.Vector3(),mantle:0,bob:0,fov:baseFov,
   climbing:false,climbT:0,climbFrom:new THREE.Vector3(),climbTo:new THREE.Vector3(),
-  rolling:false,rollT:0,rollDir:new THREE.Vector3()};
+  rolling:false,rollT:0,rollDir:new THREE.Vector3(),slideRight:false};
 const CLIMB_DUR=0.85;   // duración del agarre+impulso de la repisa
 const GRAB_REACH=2.0;   // a qué altura sobre los pies agarran las manos (la animación de trepada llega ~2m)
 // voltereta: el clip Run_Jump_and_Roll dura ~3.47s y la vuelta carnero está a ~1.2s → arrancamos ahí, acelerado
 const ROLL_ANIM_START=1.15, ROLL_TIMESCALE=1.7, ROLL_DUR=0.82, ROLL_SPEED=9.5, ROLL_FALL=14;
 // estructura entrada→LOOP(medio)→FINAL(outro) para estados sostenidos (tiempos del clip, en segundos)
-const ANIM_CFG={ slide:{loopA:0.42,loopB:0.60,end:1.2,outro:true}, wallrun:{loopA:0.45,loopB:1.25,outro:false} };
-let bodyEnding=false;   // reproduciendo el final (outro) de un clip antes de cambiar
-let prevVy=0, rollReq=false, slideHeld=false;
+let prevVy=0, rollReq=false;
 const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
 let jumpReq=false;
 function lerpAngle(a,b,t){ let d=b-a; d=Math.atan2(Math.sin(d),Math.cos(d)); return a+d*t; }   // interpolación de ángulo (camino corto)
@@ -191,14 +189,11 @@ addEventListener('pointerup',lookEnd);addEventListener('pointercancel',lookEnd);
 function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
 tapBtn('bJump',()=>{ jumpReq=true; });
 tapBtn('bSlide',()=>{ startSlide(); });
-// mantener presionado DESLIZAR alarga el deslizamiento
-(function(){ const el=document.getElementById('bSlide');
-  el.addEventListener('pointerdown',()=>{ slideHeld=true; });
-  const up=()=>{ slideHeld=false; }; el.addEventListener('pointerup',up); el.addEventListener('pointercancel',up); el.addEventListener('pointerleave',up);
-})();
 tapBtn('bRoll',()=>{ rollReq=true; });
 function startSlide(){ if(player.sliding||!player.onGround)return; if(player.vel.length()<3)return; player.sliding=true; player.slideT=0;
-  const d=player.vel.length()>0.5?player.vel.clone().normalize():forward.clone(); player.vel.copy(d).multiplyScalar(SLIDE_V); }
+  const d=player.vel.length()>0.5?player.vel.clone().normalize():forward.clone(); player.vel.copy(d).multiplyScalar(SLIDE_V);
+  // ¿deslizo hacia mi DERECHA? (respecto a donde miro) → se espeja la animación (por defecto va a la izquierda)
+  player.slideRight = (Math.cos(player.yaw)*d.x - Math.sin(player.yaw)*d.z) > 0.15; }
 
 /* ===================== CUERPO FP (UN solo GLB alta-poly + todas las animaciones; cabeza oculta colapsando el hueso Head) ===================== */
 const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@708b854/assets/fp/';
@@ -229,23 +224,10 @@ function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
   const nx=bodyActions[name]; nx.reset(); if(name==='roll') nx.time=ROLL_ANIM_START; nx.enabled=true; nx.setEffectiveWeight(1); nx.play();
   if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones
   curAnim=name; }
-function tickBody(dt,gameState){ if(!bodyRoot)return; gameState=gameState||'idle';
-  // ENTRADA (una vez) → LOOP del tramo intermedio → FINAL (outro) al terminar, en vez de repetir todo el clip
-  if(curAnim!==gameState){
-    const c=ANIM_CFG[curAnim];
-    const interrupt=(gameState==='jump'||gameState==='roll'||gameState==='climb'||gameState==='wallrun');   // estados dinámicos cortan el outro
-    if(c && c.outro && !bodyEnding && !interrupt) bodyEnding=true;   // transición tranquila → primero reproducir el final del clip
-    else if(!bodyEnding || interrupt){ bodyEnding=false; setAnim(gameState); }
-  } else bodyEnding=false;
+function tickBody(dt,gameState){ if(!bodyRoot)return; setAnim(gameState||'idle');
   bodyRoot.position.set(player.pos.x,player.pos.y,player.pos.z); bodyRoot.rotation.y=player.faceYaw+Math.PI;
-  // el clip de wall-run está hecho para la pared IZQUIERDA; en la pared derecha (player.wallrun>0) se espeja en X
-  if(bodyInner){ const mir=(curAnim==='wallrun'&&player.wallrun>0); bodyInner.scale.x=mir?-bodyScale:bodyScale; }
-  // gestión del tiempo del clip: loopear el medio, o dejar correr el outro hasta el final y recién ahí cambiar
-  const ca=bodyActions[curAnim], cfg=ANIM_CFG[curAnim];
-  if(ca&&cfg){
-    if(bodyEnding){ if(ca.time>=(cfg.end||9)-0.03){ bodyEnding=false; setAnim(gameState); } }
-    else if(ca.time>cfg.loopB){ ca.time=cfg.loopA+(ca.time-cfg.loopB); }
-  }
+  // los clips slide_light / diagonal_wall_run están hechos para un lado (izquierda); se ESPEJAN cuando vas hacia la derecha
+  if(bodyInner){ const mir=(curAnim==='wallrun'&&player.wallrun>0)||(curAnim==='slide'&&player.slideRight); bodyInner.scale.x=mir?-bodyScale:bodyScale; }
   bodyMixer.update(dt);
   // anular el root motion: las animaciones trasladan el Hips por el espacio → fijamos X/Z y limitamos Y
   if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHips.position.z=bodyHipsBind.z;
@@ -396,7 +378,7 @@ function update(dt){
     : (sp<0.5 ? 'idle' : ((mag>0.82 || sp>=4.2) ? 'run' : 'walk'));   // joystick a fondo o velocidad alta → CORRER
   // las piernas/cuerpo giran SUAVE hacia donde camina el joystick (la dirección del movimiento); quieto → mira al frente
   const hsp=Math.hypot(player.vel.x,player.vel.z);
-  const tFace = (hsp>0.6 && !player.climbing) ? Math.atan2(-player.vel.x,-player.vel.z) : player.yaw;
+  const tFace = (hsp>0.6 && !player.climbing && !player.sliding) ? Math.atan2(-player.vel.x,-player.vel.z) : player.yaw;   // en slide el cuerpo mira al frente y el espejo hace la inclinación
   player.faceYaw = lerpAngle(player.faceYaw, tFace, Math.min(1,9*dt));
   tickBody(dt, animState);
   // roll: inclina al correr por pared
