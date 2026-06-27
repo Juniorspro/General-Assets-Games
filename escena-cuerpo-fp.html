@@ -89,6 +89,7 @@ scene.add(new THREE.HemisphereLight(0xdfeeff,0x9aa6b2,0.9));
 /* ===================== MUNDO + COLISIÓN (AABB) — pista de pruebas de parkour ===================== */
 const colliders=[];      // {minx,maxx,miny,maxy,minz,maxz, mesh}
 const wallMeshes=[];     // para raycast de pared (wallrun / trepar)
+const ground=null;       // ya no hay piso infinito: el mundo son techos de edificios (te caés al cielo → respawn)
 const _matCache={};
 function mat(color,rough){ const k=color+'_'+(rough||0.9); if(!_matCache[k])_matCache[k]=new THREE.MeshStandardMaterial({color,roughness:rough||0.9,metalness:0}); return _matCache[k]; }
 function addBox(x,y,z,w,h,d,color,rough,noWall){   // (x,y,z)=centro
@@ -104,106 +105,46 @@ const skyMat=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:
   fragmentShader:'varying float vh;uniform vec3 top;uniform vec3 bot;void main(){gl_FragColor=vec4(mix(bot,top,clamp(vh*0.55+0.45,0.0,1.0)),1.0);}'});
 scene.add(new THREE.Mesh(new THREE.SphereGeometry(1000,24,14),skyMat));
 
-// ===== TECHO DEL EDIFICIO (suelo finito: si te caés del borde, reapareces) =====
-const ground=addBox(13,-3,10,120,6,108,0x9aa6b3,1,true).mesh;   // losa del techo (tope y=0)
-const _grid=new THREE.GridHelper(120,60,0x70808f,0x657281); _grid.position.set(13,0.02,10); scene.add(_grid);
-// parapeto bajo en el borde (lo saltás para tirarte; evita caídas accidentales)
-(function(){ const px=13,pz=10,W=120,D=108,t=1.0;
-  addBox(px,0.25,pz-D/2,W,0.5,t,0x7c8893,1,true); addBox(px,0.25,pz+D/2,W,0.5,t,0x7c8893,1,true);
-  addBox(px-W/2,0.25,pz,t,0.5,D,0x7c8893,1,true); addBox(px+W/2,0.25,pz,t,0.5,D,0x7c8893,1,true); })();
+// ===== helpers =====
+function zoneTag(x,z,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.05,2.2),mat(color,0.6)); m.position.set(x,0.04,z); scene.add(m); }
+function plat(x,top,z,w,d,col){ return addBox(x,top-0.2,z,w,0.4,d,col||0x76828f); }
+// viga baja para deslizarse por debajo, sobre un techo a la altura 'top'
+function slideBeam(x,z,top,col){ addBox(x,top+1.25,z,4.5,0.5,1.1,col||0x7a5566);
+  addBox(x-1.8,top+0.6,z,0.5,1.6,1.1,col||0x7a5566,0.9,true); addBox(x+1.8,top+0.6,z,0.5,1.6,1.1,col||0x7a5566,0.9,true); }
+// edificio: techo caminable a la altura 'top'; baja 36u hacia el cielo
+const BCOL=[0x8a96a3,0x7e8a98,0x93a0ad,0x76828f,0x88949f]; let _bi=0;
+function bldg(x,top,z,w,d){ addBox(x,top-18,z,w,36,d,BCOL[_bi++%BCOL.length],1,true); }
 
-// ===== EDIFICIOS VECINOS (más abajo → sensación de altura; algunos casi al ras para saltar) =====
-function building(x,z,w,d,topY){ addBox(x,topY-16,z,w,32,d,0x6b7480,1,true); }
-building(-72,-22,26,26,-3.5); building(-80,42,30,24,-11); building(66,-42,28,30,-6);
-building(94,30,34,28,-13); building(42,82,30,30,-3); building(-32,-82,40,30,-9);
+// ===== EDIFICIO DE SALIDA: chico y VACÍO =====
+bldg(0,0,2,14,14);
 
-// ===== NUBES (planos suaves debajo y alrededor) =====
+// ===== SALTAR DE EDIFICIO EN EDIFICIO (cada techo a distinta altura/distancia) =====
+bldg(0,0.4,18,11,11);     // salto corto +Z
+bldg(-4,1.3,30,10,10);    // sube un poco
+bldg(8,1.0,39,11,10);     // a la derecha
+bldg(9,-0.8,52,12,11);    // caída suave
+bldg(21,0.5,51,10,10);
+bldg(33,2.3,42,11,11);    // MÁS ALTO → al saltar no llegás del todo y TREPÁS el borde
+bldg(33,0.2,28,11,11);    // caída
+bldg(45,1.0,18,14,13);    // techo final (grande)
+zoneTag(45,18,0xffd24a); addBox(45,2.0,18,2.4,1.6,2.4,0xffd24a);   // META (pedestal dorado)
+
+// ----- features de parkour entre techos -----
+addBox(15.5,2.4,46,0.6,4.4,9,0x5b6b86);   // pared CORTA para correr por pared (cruzar un hueco)
+slideBeam(41,18,1.0);                       // DESLIZAR: viga baja en el techo final
+// TORRE para tirarte y RODAR (auto-voltereta al aterrizar), al lado del spawn
+bldg(-16,6.0,4,8,8);
+plat(-9,1.6,4,2.6,2.6); plat(-13,3.4,4,2.6,2.6);   // escaloncitos para subir a la torre
+
+// ===== NUBES (planos suaves debajo y alrededor → sensación de altura) =====
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.5,depthWrite:false,fog:false});
 function cloud(x,y,z,s){ const m=new THREE.Mesh(new THREE.PlaneGeometry(s,s*0.6),cloudMat); m.rotation.x=-Math.PI/2; m.position.set(x,y,z); scene.add(m); }
-for(let i=0;i<16;i++){ const a=i*2.39; cloud(13+Math.cos(a)*(75+i*13), -24-(i%4)*8, 10+Math.sin(a)*(72+i*11), 28+i*4); }
-
-// cartel de zona (panel de color para identificar cada prueba)
-function zoneTag(x,z,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.05,2.4),mat(color,0.6)); m.position.set(x,0.03,z); m.receiveShadow=true; scene.add(m); }
-
-// === ZONA 1: SALTOS entre plataformas con huecos (hacia -Z) ===
-zoneTag(0,-6,0x3a7d44);
-addBox(0,0.4,-14,5,0.8,4,0x6d7682);          // plataforma baja
-addBox(0,0.9,-22,5,0.8,4,0x6d7682);          // un poco más alta (salto)
-addBox(0,1.5,-31,5,0.8,4,0x6d7682);          // hueco más grande
-// === ZONA 2: TREPAR repisas (escalones que se trepan al saltar contra el borde) ===
-zoneTag(11,-6,0xc28d3a);
-addBox(11,0.6,-13,4,1.2,3,0x7a6f5c);         // repisa 1 (~1.2m → trepable)
-addBox(11,1.5,-19,4,3.0,3,0x7a6f5c);         // repisa 2 (~1.5m de salto + trepar)
-addBox(11,3.0,-26,5,6.0,4,0x6b6253);         // pared alta arriba de la repisa
-// === ZONA 3: CORRER POR PARED (dos paredes paralelas / una pared larga) ===
-zoneTag(-12,-6,0x3a5fa0);
-addBox(-16,2.5,-20,0.6,5,18,0x5b6b86);       // pared izquierda larga (correr por pared)
-addBox(-8, 2.5,-20,0.6,5,18,0x5b6b86);       // pared derecha (corredor)
-addBox(-12,0.3,-30,7,0.6,4,0x6d7682);        // plataforma de aterrizaje al final del corredor
-// === ZONA 4: DESLIZARSE bajo un obstáculo bajo ===
-zoneTag(-12,4,0x8a3a6a);
-addBox(-12,1.6,9,5,0.5,1.2,0x7a5566);        // viga baja: el hueco abajo es ~1.1m → hay que deslizarse
-addBox(-12,1.0,9,0.6,2.0,4,0x7a5566,0.9,true);// soportes (no cuentan como pared de wallrun)
-addBox(-12,1.0,9,0.6,2.0,4,0x7a5566,0.9,true);
-// === ZONA 5: RAMPA + plataforma alta con borde para trepar/saltar ===
-zoneTag(12,5,0xb0b0b0);
-addBox(12,1.2,12,5,0.4,6,0x6d7682);          // plataforma media
-addBox(12,3.0,5,5,0.4,6,0x6d7682);           // plataforma alta (saltar de la media)
-
-// helper: plataforma fina (top = altura caminable)
-function plat(x,top,z,w,d,col){ return addBox(x,top-0.2,z,w,0.4,d,col||0x6d7682); }
-// helper: viga baja para deslizarse por debajo (con soportes que no cuentan como pared)
-function slideBeam(x,z,col){ addBox(x,1.55,z,5,0.5,1.2,col||0x7a5566);
-  addBox(x-2,0.9,z,0.5,1.8,1.2,col||0x7a5566,0.9,true); addBox(x+2,0.9,z,0.5,1.8,1.2,col||0x7a5566,0.9,true); }
-
-// === ZONA 6: OBBY (circuito de saltos con huecos, dificultad creciente, hacia +X) ===
-zoneTag(18,4,0x2bb0a0);
-plat(20,0.6,4,3,3,0x4aa0d0);       // inicio (caminás y saltás desde el piso)
-plat(24,0.9,2,2,2,0x4aa0d0);
-plat(28,1.2,4,2,2,0x4aa0d0);
-plat(32,1.5,1,1.6,1.6,0x3f93c4);   // más chica
-plat(36,1.2,4,2,2,0x4aa0d0);
-plat(40,1.8,2,1.6,1.6,0x3f93c4);
-plat(44,2.2,2,5,0.9,0x2f6f97);     // viga angosta (equilibrio)
-plat(49,2.5,2,2.6,2.6,0x4aa0d0);   // descanso
-plat(53,1.5,4,2,2,0x4aa0d0);       // bajada
-addBox(57,1.0,4,3,2.0,3,0xffd24a); // META (pedestal dorado, top 2.0)
-
-// === ZONA 7: WALL-RUN doble (pared a cada lado para probar AMBOS lados) hacia +Z ===
-zoneTag(0,24,0x3a5fa0);
-plat(0,0.5,24,4,3,0x6d7682);                 // plataforma de impulso
-addBox(3,2.5,31,0.6,5,11,0x5b6b86);          // pared del lado +X (corré pegado y saltá)
-addBox(-3,2.5,45,0.6,5,11,0x5b6b86);         // pared del lado -X (el otro lado)
-plat(0,0.4,53,5,3,0x6d7682);                 // aterrizaje
-
-// === ZONA 8: ESCALERA DE REPISAS (cada uno ~1.7m → agarre+trepada) hacia +Z ===
-zoneTag(-16,24,0xc28d3a);
-addBox(-16,0.9,28,4,1.8,4,0x7a6f5c);         // top 1.8
-addBox(-16,2.6,32,4,1.8,4,0x7a6f5c);         // top 3.5
-addBox(-16,4.3,28,4,1.8,4,0x6b6253);         // top 5.2 (subís trepando de uno a otro)
-
-// === ZONA 9: GAUNTLET DE DESLIZAR (varias vigas bajas en fila) hacia -X ===
-zoneTag(-26,0,0x8a3a6a);
-slideBeam(-26,-3); slideBeam(-26,-9); slideBeam(-26,-15);
-
-// === ZONA 10: TORRE DE CAÍDA (subís y te tirás → voltereta automática al aterrizar) ===
-zoneTag(48,-15,0xb0b0b0);
-plat(44,1.0,-15,3,3,0x6d7682);               // escalón
-plat(46,2.4,-15,3,3,0x6d7682);               // escalón
-addBox(49,3.0,-15,5,6,5,0x59636f);           // torre top 6 (te tirás de acá: 6m → rueda solo)
-
-// === ZONA 11: PILARES (saltar de pilar en pilar, alturas variadas) hacia -X/+Z ===
-zoneTag(-30,24,0x6a8a3a);
-plat(-30,0.8,28,1.6,1.6,0x7e9a4e); plat(-33,1.4,31,1.6,1.6,0x7e9a4e);
-plat(-30,2.0,34,1.6,1.6,0x7e9a4e); plat(-27,1.4,37,1.6,1.6,0x7e9a4e);
-plat(-30,2.6,40,1.8,1.8,0x6a8a3a);
-// torre central decorativa para wall-run alrededor
-addBox(0,4,18,3,8,3,0x59636f);
+for(let i=0;i<18;i++){ const a=i*2.39; cloud(15+Math.cos(a)*(50+i*11), -16-(i%4)*7, 28+Math.sin(a)*(50+i*10), 24+i*4); }
 
 /* ===================== Jugador (1ª persona) ===================== */
 const R=0.34, STAND=1.85, CROUCH=1.05, EYE=1.62, EYE_CR=0.9;
-const GRAV=26, JUMP_V=8.8, RUN=8.6, ACCEL=12, AIR_ACCEL=5, SLIDE_V=13.5, WALL_GRAV=7, WALLRUN_MAX=4.25;   // wall-run largo: ~3s más, hasta que toques SALTAR
-const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:0,pitch:0,roll:0,eye:EYE,h:STAND,faceYaw:0,
+const GRAV=26, JUMP_V=8.8, RUN=8.6, ACCEL=12, AIR_ACCEL=5, SLIDE_V=13.5, WALL_GRAV=7, WALLRUN_MAX=1.25;   // tiempos originales
+const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:Math.PI,pitch:0,roll:0,eye:EYE,h:STAND,faceYaw:Math.PI,
   onGround:true,crouch:false,sliding:false,slideT:0,wallrun:0,wallrunT:0,wallN:new THREE.Vector3(),mantle:0,bob:0,fov:baseFov,
   climbing:false,climbT:0,climbFrom:new THREE.Vector3(),climbTo:new THREE.Vector3(),
   rolling:false,rollT:0,rollDir:new THREE.Vector3()};
@@ -321,9 +262,8 @@ let lastWall=null;   // collider de la última pared tocada en X/Z (para wallrun
 function moveX(d){ player.pos.x+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
 function moveZ(d){ player.pos.z+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
 function moveY(d){ player.pos.y+=d; const a=pAABB(); player.onGround=false;
-  // suelo base
-  if(player.pos.y<=0){ player.pos.y=0; if(player.vy<0)player.vy=0; player.onGround=true; }
-  for(const c of colliders){ if(c.mesh===ground)continue; if(overlap(a,c)){
+  // sin piso infinito: si te caés del borde, caés al cielo y reaparecés (ver respawn)
+  for(const c of colliders){ if(overlap(a,c)){
     if(d<=0){ player.pos.y=c.maxy; player.vy=0; player.onGround=true; }   // caer sobre algo
     else { player.pos.y=c.miny-player.h; player.vy=0; }                    // pegar el techo
     a.miny=player.pos.y; a.maxy=player.pos.y+player.h; } } }
@@ -364,9 +304,8 @@ function update(dt){
   } else {
   // ---- SLIDE ----
   if(player.sliding){ player.slideT+=dt; player.h=CROUCH;
-    player.vel.multiplyScalar(1-Math.min(1,(slideHeld?0.7:1.6)*dt));   // si lo mantenés, menos fricción → dura más
-    const maxT = slideHeld ? 2.4 : 0.9;                                // mantener presionado = 1.5s extra (0.9 → 2.4)
-    if(player.slideT>maxT || player.vel.length()<1.8 || !player.onGround) { player.sliding=false; }
+    player.vel.multiplyScalar(1-Math.min(1,1.6*dt));    // fricción del deslizamiento (tiempo original)
+    if(player.slideT>0.9 || player.vel.length()<2.5 || !player.onGround) { player.sliding=false; }
   }
 
   // ---- WALL-RUN ---- (en el aire, pared al costado, joystick hacia adelante)
