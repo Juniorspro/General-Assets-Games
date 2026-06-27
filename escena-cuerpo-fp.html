@@ -211,7 +211,9 @@ const CLIMB_DUR=0.85;   // duración del agarre+impulso de la repisa
 const GRAB_REACH=2.0;   // a qué altura sobre los pies agarran las manos (la animación de trepada llega ~2m)
 // voltereta: el clip Run_Jump_and_Roll dura ~3.47s y la vuelta carnero está a ~1.2s → arrancamos ahí, acelerado
 const ROLL_ANIM_START=1.15, ROLL_TIMESCALE=1.7, ROLL_DUR=0.82, ROLL_SPEED=9.5, ROLL_FALL=14;
-const SLIDE_HOLD=0.6, WALLRUN_HOLD=0.55;   // tiempo del clip donde se CONGELA la pose en slide/wall-run sostenidos
+// estructura entrada→LOOP(medio)→FINAL(outro) para estados sostenidos (tiempos del clip, en segundos)
+const ANIM_CFG={ slide:{loopA:0.42,loopB:0.60,end:1.2,outro:true}, wallrun:{loopA:0.45,loopB:1.25,outro:false} };
+let bodyEnding=false;   // reproduciendo el final (outro) de un clip antes de cambiar
 let prevVy=0, rollReq=false, slideHeld=false;
 const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
 let jumpReq=false;
@@ -286,19 +288,28 @@ function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
   const nx=bodyActions[name]; nx.reset(); if(name==='roll') nx.time=ROLL_ANIM_START; nx.enabled=true; nx.setEffectiveWeight(1); nx.play();
   if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones
   curAnim=name; }
-function tickBody(dt,state){ if(!bodyRoot)return; setAnim(state||'idle');
+function tickBody(dt,gameState){ if(!bodyRoot)return; gameState=gameState||'idle';
+  // ENTRADA (una vez) → LOOP del tramo intermedio → FINAL (outro) al terminar, en vez de repetir todo el clip
+  if(curAnim!==gameState){
+    const c=ANIM_CFG[curAnim];
+    const interrupt=(gameState==='jump'||gameState==='roll'||gameState==='climb'||gameState==='wallrun');   // estados dinámicos cortan el outro
+    if(c && c.outro && !bodyEnding && !interrupt) bodyEnding=true;   // transición tranquila → primero reproducir el final del clip
+    else if(!bodyEnding || interrupt){ bodyEnding=false; setAnim(gameState); }
+  } else bodyEnding=false;
   bodyRoot.position.set(player.pos.x,player.pos.y,player.pos.z); bodyRoot.rotation.y=player.faceYaw+Math.PI;
   // el clip de wall-run está hecho para la pared IZQUIERDA; en la pared derecha (player.wallrun>0) se espeja en X
-  if(bodyInner){ const mir=(state==='wallrun'&&player.wallrun>0); bodyInner.scale.x=mir?-bodyScale:bodyScale; }
-  // DESLIZAR / WALL-RUN sostenidos: reproducir la entrada UNA vez y luego CONGELAR la pose (no repetir todo el clip)
-  const ca=bodyActions[curAnim];
-  if(ca){ if(curAnim==='slide' && ca.time>=SLIDE_HOLD){ ca.paused=true; ca.time=SLIDE_HOLD; }
-    else if(curAnim==='wallrun' && ca.time>=WALLRUN_HOLD){ ca.paused=true; ca.time=WALLRUN_HOLD; } }
+  if(bodyInner){ const mir=(curAnim==='wallrun'&&player.wallrun>0); bodyInner.scale.x=mir?-bodyScale:bodyScale; }
+  // gestión del tiempo del clip: loopear el medio, o dejar correr el outro hasta el final y recién ahí cambiar
+  const ca=bodyActions[curAnim], cfg=ANIM_CFG[curAnim];
+  if(ca&&cfg){
+    if(bodyEnding){ if(ca.time>=(cfg.end||9)-0.03){ bodyEnding=false; setAnim(gameState); } }
+    else if(ca.time>cfg.loopB){ ca.time=cfg.loopA+(ca.time-cfg.loopB); }
+  }
   bodyMixer.update(dt);
   // anular el root motion: las animaciones trasladan el Hips por el espacio → fijamos X/Z y limitamos Y
   if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHips.position.z=bodyHipsBind.z;
     bodyHips.position.y=Math.max(bodyHipsBind.y-0.5,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }   // slide baja, wallrun no dispara la cámara
-  bodyRoot.visible = (state!=='roll');   // en la voltereta ocultamos el cuerpo: la inmersión la da la VUELTA DE CÁMARA (si no, el cuerpo tapa la vista)
+  bodyRoot.visible = (curAnim!=='roll');   // en la voltereta ocultamos el cuerpo: la inmersión la da la VUELTA DE CÁMARA (si no, el cuerpo tapa la vista)
   // la cabeza se oculta con el near plane (la cámara está EN la cabeza): sin cortes, sin deformación, sin agujero
 }
 
