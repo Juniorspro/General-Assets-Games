@@ -71,8 +71,8 @@ renderer.localClippingEnabled=true;   // para recortar la cabeza del cuerpo (só
 app.appendChild(renderer.domElement);
 
 const scene=new THREE.Scene();
-scene.background=new THREE.Color(0xbccad8);
-scene.fog=new THREE.Fog(0xbccad8,90,360);
+scene.background=new THREE.Color(0x9fc4e8);
+scene.fog=new THREE.Fog(0xcfe3f5,150,640);   // niebla suave hacia el horizonte (estamos alto en el cielo)
 const pmrem=new THREE.PMREMGenerator(renderer); scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
 // La cámara va EN la cabeza (sigue su inclinación al correr), así la cabeza queda siempre dentro del near plane (0.2)
 // y se recorta limpia: sin deformar la malla, sin cortes abiertos, sin agujero.
@@ -97,11 +97,30 @@ function addBox(x,y,z,w,h,d,color,rough,noWall){   // (x,y,z)=centro
   const c={minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,minz:z-d/2,maxz:z+d/2,mesh:m};
   colliders.push(c); if(!noWall)wallMeshes.push(m); return c;
 }
-// suelo
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(800,800),mat(0x8d9aa6,1));
-ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
-const _grid=new THREE.GridHelper(800,400,0x55606b,0x47525d); _grid.position.y=0.01; scene.add(_grid);
-colliders.push({minx:-400,maxx:400,miny:-2,maxy:0,minz:-400,maxz:400,mesh:ground});   // suelo como AABB (tope y=0)
+// ===== CIELO (cúpula con degradé; estamos arriba en el cielo) =====
+const skyMat=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,
+  uniforms:{top:{value:new THREE.Color(0x3f78c0)},bot:{value:new THREE.Color(0xd9eaf7)}},
+  vertexShader:'varying float vh;void main(){vh=normalize(position).y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+  fragmentShader:'varying float vh;uniform vec3 top;uniform vec3 bot;void main(){gl_FragColor=vec4(mix(bot,top,clamp(vh*0.55+0.45,0.0,1.0)),1.0);}'});
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(1000,24,14),skyMat));
+
+// ===== TECHO DEL EDIFICIO (suelo finito: si te caés del borde, reapareces) =====
+const ground=addBox(13,-3,10,120,6,108,0x9aa6b3,1,true).mesh;   // losa del techo (tope y=0)
+const _grid=new THREE.GridHelper(120,60,0x70808f,0x657281); _grid.position.set(13,0.02,10); scene.add(_grid);
+// parapeto bajo en el borde (lo saltás para tirarte; evita caídas accidentales)
+(function(){ const px=13,pz=10,W=120,D=108,t=1.0;
+  addBox(px,0.25,pz-D/2,W,0.5,t,0x7c8893,1,true); addBox(px,0.25,pz+D/2,W,0.5,t,0x7c8893,1,true);
+  addBox(px-W/2,0.25,pz,t,0.5,D,0x7c8893,1,true); addBox(px+W/2,0.25,pz,t,0.5,D,0x7c8893,1,true); })();
+
+// ===== EDIFICIOS VECINOS (más abajo → sensación de altura; algunos casi al ras para saltar) =====
+function building(x,z,w,d,topY){ addBox(x,topY-16,z,w,32,d,0x6b7480,1,true); }
+building(-72,-22,26,26,-3.5); building(-80,42,30,24,-11); building(66,-42,28,30,-6);
+building(94,30,34,28,-13); building(42,82,30,30,-3); building(-32,-82,40,30,-9);
+
+// ===== NUBES (planos suaves debajo y alrededor) =====
+const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.5,depthWrite:false,fog:false});
+function cloud(x,y,z,s){ const m=new THREE.Mesh(new THREE.PlaneGeometry(s,s*0.6),cloudMat); m.rotation.x=-Math.PI/2; m.position.set(x,y,z); scene.add(m); }
+for(let i=0;i<16;i++){ const a=i*2.39; cloud(13+Math.cos(a)*(75+i*13), -24-(i%4)*8, 10+Math.sin(a)*(72+i*11), 28+i*4); }
 
 // cartel de zona (panel de color para identificar cada prueba)
 function zoneTag(x,z,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.05,2.4),mat(color,0.6)); m.position.set(x,0.03,z); m.receiveShadow=true; scene.add(m); }
@@ -183,8 +202,8 @@ addBox(0,4,18,3,8,3,0x59636f);
 
 /* ===================== Jugador (1ª persona) ===================== */
 const R=0.34, STAND=1.85, CROUCH=1.05, EYE=1.62, EYE_CR=0.9;
-const GRAV=26, JUMP_V=8.8, RUN=8.6, ACCEL=12, AIR_ACCEL=5, SLIDE_V=13.5, WALL_GRAV=7, WALLRUN_MAX=1.25;
-const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:0,pitch:0,roll:0,eye:EYE,h:STAND,
+const GRAV=26, JUMP_V=8.8, RUN=8.6, ACCEL=12, AIR_ACCEL=5, SLIDE_V=13.5, WALL_GRAV=7, WALLRUN_MAX=4.25;   // wall-run largo: ~3s más, hasta que toques SALTAR
+const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:0,pitch:0,roll:0,eye:EYE,h:STAND,faceYaw:0,
   onGround:true,crouch:false,sliding:false,slideT:0,wallrun:0,wallrunT:0,wallN:new THREE.Vector3(),mantle:0,bob:0,fov:baseFov,
   climbing:false,climbT:0,climbFrom:new THREE.Vector3(),climbTo:new THREE.Vector3(),
   rolling:false,rollT:0,rollDir:new THREE.Vector3()};
@@ -192,9 +211,13 @@ const CLIMB_DUR=0.85;   // duración del agarre+impulso de la repisa
 const GRAB_REACH=2.0;   // a qué altura sobre los pies agarran las manos (la animación de trepada llega ~2m)
 // voltereta: el clip Run_Jump_and_Roll dura ~3.47s y la vuelta carnero está a ~1.2s → arrancamos ahí, acelerado
 const ROLL_ANIM_START=1.15, ROLL_TIMESCALE=1.7, ROLL_DUR=0.82, ROLL_SPEED=9.5, ROLL_FALL=14;
-let prevVy=0, rollReq=false;
+let prevVy=0, rollReq=false, slideHeld=false;
 const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
 let jumpReq=false;
+function lerpAngle(a,b,t){ let d=b-a; d=Math.atan2(Math.sin(d),Math.cos(d)); return a+d*t; }   // interpolación de ángulo (camino corto)
+const SPAWN=new THREE.Vector3(0,0,4);
+function respawn(){ player.pos.copy(SPAWN); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+  player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0; }   // si te caés del techo, reaparece
 // offsets de la cámara respecto al hueso de la cabeza: un poco ADELANTE (para ver el cuerpo) y a la altura de los ojos
 const CAM_FWD=0.06, CAM_UP=0.12;   // cámara 0.1 más arriba
 // "lean embodied": la cámara se inclina hacia adelante al correr/deslizar (procedural, según velocidad)
@@ -224,12 +247,17 @@ addEventListener('pointerup',lookEnd);addEventListener('pointercancel',lookEnd);
 function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
 tapBtn('bJump',()=>{ jumpReq=true; });
 tapBtn('bSlide',()=>{ startSlide(); });
+// mantener presionado DESLIZAR alarga el deslizamiento
+(function(){ const el=document.getElementById('bSlide');
+  el.addEventListener('pointerdown',()=>{ slideHeld=true; });
+  const up=()=>{ slideHeld=false; }; el.addEventListener('pointerup',up); el.addEventListener('pointercancel',up); el.addEventListener('pointerleave',up);
+})();
 tapBtn('bRoll',()=>{ rollReq=true; });
 function startSlide(){ if(player.sliding||!player.onGround)return; if(player.vel.length()<3)return; player.sliding=true; player.slideT=0;
   const d=player.vel.length()>0.5?player.vel.clone().normalize():forward.clone(); player.vel.copy(d).multiplyScalar(SLIDE_V); }
 
 /* ===================== CUERPO FP (UN solo GLB alta-poly + todas las animaciones; cabeza oculta colapsando el hueso Head) ===================== */
-const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4964a7f/assets/fp/';
+const EBASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@708b854/assets/fp/';
 const BODY_FILE='parkour.glb';   // malla alta-poly original + 7 clips (idle/walk/run/jump/slide/wallrun/mantle) → se cambia de ANIMACIÓN, no de malla
 let bodyRoot=null, bodyInner=null, bodyScale=1, bodyMixer=null, bodyHead=null, bodyNeck=null, bodyHips=null, bodyHipsBind=null;
 const bodyActions={}; let curAnim=null;
@@ -258,7 +286,7 @@ function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
   if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones
   curAnim=name; }
 function tickBody(dt,state){ if(!bodyRoot)return; setAnim(state||'idle');
-  bodyRoot.position.set(player.pos.x,player.pos.y,player.pos.z); bodyRoot.rotation.y=player.yaw+Math.PI;
+  bodyRoot.position.set(player.pos.x,player.pos.y,player.pos.z); bodyRoot.rotation.y=player.faceYaw+Math.PI;
   // el clip de wall-run está hecho para la pared IZQUIERDA; en la pared derecha (player.wallrun>0) se espeja en X
   if(bodyInner){ const mir=(state==='wallrun'&&player.wallrun>0); bodyInner.scale.x=mir?-bodyScale:bodyScale; }
   bodyMixer.update(dt);
@@ -298,6 +326,7 @@ function wallSide(side){   // side=+1 derecha, -1 izquierda (respecto al facing)
 const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
 const HUD=document.getElementById('hud');
 function update(dt){
+  if(player.pos.y<-18) respawn();   // caíste del techo al cielo → reaparecer
   forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   let ix=joy.x,iz=joy.y; const mag=Math.min(1,Math.hypot(ix,iz)); if(mag>1){ix/=mag;iz/=mag;}
   const wishX=right.x*ix - forward.x*iz, wishZ=right.z*ix - forward.z*iz;   // dirección deseada (mundo)
@@ -319,8 +348,9 @@ function update(dt){
   } else {
   // ---- SLIDE ----
   if(player.sliding){ player.slideT+=dt; player.h=CROUCH;
-    player.vel.multiplyScalar(1-Math.min(1,1.6*dt));    // fricción del deslizamiento
-    if(player.slideT>0.9 || player.vel.length()<2.5 || !player.onGround) { player.sliding=false; }
+    player.vel.multiplyScalar(1-Math.min(1,(slideHeld?0.7:1.6)*dt));   // si lo mantenés, menos fricción → dura más
+    const maxT = slideHeld ? 2.4 : 0.9;                                // mantener presionado = 1.5s extra (0.9 → 2.4)
+    if(player.slideT>maxT || player.vel.length()<1.8 || !player.onGround) { player.sliding=false; }
   }
 
   // ---- WALL-RUN ---- (en el aire, pared al costado, joystick hacia adelante)
@@ -409,6 +439,10 @@ function update(dt){
     : player.wallrun ? 'wallrun'
     : !player.onGround ? 'jump'
     : (sp<0.5 ? 'idle' : ((mag>0.82 || sp>=4.2) ? 'run' : 'walk'));   // joystick a fondo o velocidad alta → CORRER
+  // las piernas/cuerpo giran SUAVE hacia donde camina el joystick (la dirección del movimiento); quieto → mira al frente
+  const hsp=Math.hypot(player.vel.x,player.vel.z);
+  const tFace = (hsp>0.6 && !player.climbing) ? Math.atan2(-player.vel.x,-player.vel.z) : player.yaw;
+  player.faceYaw = lerpAngle(player.faceYaw, tFace, Math.min(1,9*dt));
   tickBody(dt, animState);
   // roll: inclina al correr por pared
   let targetRoll=0;
