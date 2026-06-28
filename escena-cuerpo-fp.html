@@ -26,10 +26,12 @@
   #bJump  { right:26px;  bottom:calc(40px + var(--safe-b)); }
   #bSlide { right:110px; bottom:calc(66px + var(--safe-b)); width:62px; height:62px; }
   #bRoll  { right:40px;  bottom:calc(130px + var(--safe-b)); width:58px; height:58px; font-size:11px; }
-  #hud{ position:fixed; left:50%; top:calc(14px + var(--safe-t)); transform:translateX(-50%); z-index:10;
-        background:rgba(14,22,30,.72); backdrop-filter:blur(8px); border:1px solid rgba(255,255,255,.16); border-radius:999px;
-        padding:7px 16px; color:#ffd27a; font-weight:700; font-size:14px; letter-spacing:.02em; white-space:nowrap;
-        box-shadow:0 6px 20px rgba(0,0,0,.45); pointer-events:none; }
+  /* HUD moderno: arriba a la izquierda, sin fondo. Nombre del mundo + misión debajo. */
+  #hudWrap{ position:fixed; left:calc(18px + var(--safe-t)); top:calc(14px + var(--safe-t)); z-index:10; pointer-events:none;
+        font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif; text-shadow:0 1px 6px rgba(0,0,0,.55),0 0 2px rgba(0,0,0,.4); }
+  #hud{ color:#fff; font-weight:700; font-size:19px; letter-spacing:.06em; line-height:1.1; }
+  #hudMission{ color:rgba(255,255,255,.82); font-weight:500; font-size:12.5px; letter-spacing:.05em; margin-top:3px; }
+  #hudMission::before{ content:'◆ '; color:#7fd0ff; font-size:10px; }
   #loader{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
            background:#aebfcf; transition:opacity .5s; color:#0a3a63; font-size:13px; letter-spacing:.1em; }
   #loader.hide{ opacity:0; pointer-events:none; }
@@ -50,12 +52,15 @@
     box-shadow:inset 0 1px 0 rgba(255,255,255,.8); transition:transform .12s, box-shadow .2s, background .2s; }
   .mOpt.sel{ background:linear-gradient(180deg,#7fd0ff,#2f93e8); color:#fff; border-color:rgba(255,255,255,.85); box-shadow:0 6px 18px rgba(40,130,230,.5), inset 0 1px 0 rgba(255,255,255,.7); }
   .mOpt:active{ transform:scale(.95); }
-  .mRow.mWrap{ flex-wrap:wrap; } .mRow.mWrap .mOpt{ flex:1 1 44%; }
-  #menuPanel{ max-height:88vh; overflow:auto; }
+  /* niveles: carrusel horizontal (deslizá para elegir) → ocupa poco espacio */
+  #mLevels{ flex-wrap:nowrap; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; gap:10px; padding:2px 2px 8px; }
+  #mLevels .mOpt{ flex:0 0 auto; min-width:44%; scroll-snap-align:center; white-space:nowrap; }
+  #mLevels::-webkit-scrollbar{ height:4px; } #mLevels::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.35); border-radius:2px; }
+  #menuPanel{ max-height:90vh; overflow:auto; }
   #mPlay{ margin-top:22px; width:100%; padding:15px; border-radius:16px; font-size:16px; font-weight:800; letter-spacing:.05em; color:#fff; cursor:pointer;
     background:linear-gradient(180deg,#5ad27a,#2aa64f); border:1.5px solid rgba(255,255,255,.7); box-shadow:0 10px 26px rgba(30,150,70,.5), inset 0 1px 0 rgba(255,255,255,.7); transition:transform .12s; }
   #mPlay:active{ transform:scale(.96); }
-  body.menu-open #joy, body.menu-open #bJump, body.menu-open #bSlide, body.menu-open #bRoll, body.menu-open #hud, body.menu-open #cross, body.menu-open #bChat{ display:none; }
+  body.menu-open #joy, body.menu-open #bJump, body.menu-open #bSlide, body.menu-open #bRoll, body.menu-open #hudWrap, body.menu-open #cross, body.menu-open #bChat{ display:none; }
   /* ===== MULTIJUGADOR ===== */
   #mpStatus{ position:fixed; right:calc(12px + var(--safe-t)); top:calc(12px + var(--safe-t)); z-index:15; display:flex; align-items:center; gap:6px;
     background:rgba(14,22,30,.62); border:1px solid rgba(255,255,255,.16); border-radius:999px; padding:5px 10px; font-size:11px; font-weight:700; color:#cfe0ee; pointer-events:none; }
@@ -81,7 +86,7 @@
   <button id="bJump"  class="actBtn">SALTAR</button>
   <button id="bSlide" class="actBtn">DESLIZAR</button>
   <button id="bRoll"  class="actBtn">RODAR</button>
-  <div id="hud">…</div>
+  <div id="hudWrap"><div id="hud"></div><div id="hudMission"></div></div>
   <button id="bChat" class="actBtn" title="Chat">💬</button>
   <div id="mpStatus" data-s="off">multijugador</div>
   <div id="mpChatLog"></div>
@@ -139,21 +144,21 @@ const LANG={
     st_idle:'quieto',st_walk:'caminar',st_run:'correr',st_air:'en el aire',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'trepar',st_roll:'voltereta',
     m_frutiger:'🌱 Mundo Frutiger — explorá el césped',m_crystal:'🔷 Obby de Cristal — llegá a la meta',m_crystaldone:'🔷 ¡Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — ¡reinicio!',
     m_dream:'🌫️ Dream Core — un suburbio que no termina',m_back:'🟡 Backrooms — encontrá la salida',m_backdone:'🟡 ¡Saliste de las Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — llegá a la meta',m_pooldone:'💧 ¡Completaste los Poolrooms!',m_level1done:'¡NIVEL 1 COMPLETO! 🎉',
-    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)'},
+    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Cruzá el domo y saltá al espacio'},
   en:{title:'🌱 PARKOUR · FRUTIGER',sub:'choose level and graphics',lvl:'LEVEL',gfx:'GRAPHICS',low:'Low',med:'Medium',high:'High',play:'PLAY ▶',idioma:'LANGUAGE',
     parkour:'Level 1 · Parkour',frutiger:'Frutiger World',crystal:'Crystal Obby',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'JUMP',slide:'SLIDE',roll:'ROLL',
     st_idle:'idle',st_walk:'walk',st_run:'run',st_air:'in air',st_slide:'slide',st_wallrun:'wall-run',st_climb:'climb',st_roll:'roll',
     m_frutiger:'🌱 Frutiger World — explore the grass',m_crystal:'🔷 Crystal Obby — reach the goal',m_crystaldone:'🔷 Obby complete! → Dream Core',m_crystalreset:'🔷 Crystal Obby — restart!',
     m_dream:'🌫️ Dream Core — a suburb that never ends',m_back:'🟡 Backrooms — find the exit',m_backdone:'🟡 You escaped the Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — reach the goal',m_pooldone:'💧 You cleared the Poolrooms!',m_level1done:'LEVEL 1 COMPLETE! 🎉',
-    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)'},
+    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Cross the dome and jump into space'},
   pt:{title:'🌱 PARKOUR · FRUTIGER',sub:'escolha nível e gráficos',lvl:'NÍVEL',gfx:'GRÁFICOS',low:'Baixo',med:'Médio',high:'Alto',play:'JOGAR ▶',idioma:'IDIOMA',
     parkour:'Nível 1 · Parkour',frutiger:'Mundo Frutiger',crystal:'Obby de Cristal',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'PULAR',slide:'DESLIZAR',roll:'ROLAR',
     st_idle:'parado',st_walk:'andar',st_run:'correr',st_air:'no ar',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'escalar',st_roll:'cambalhota',
     m_frutiger:'🌱 Mundo Frutiger — explore a grama',m_crystal:'🔷 Obby de Cristal — chegue à meta',m_crystaldone:'🔷 Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — reinício!',
     m_dream:'🌫️ Dream Core — um subúrbio sem fim',m_back:'🟡 Backrooms — ache a saída',m_backdone:'🟡 Você saiu das Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — chegue à meta',m_pooldone:'💧 Você completou as Poolrooms!',m_level1done:'NÍVEL 1 COMPLETO! 🎉',
-    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)'}
+    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Atravesse o domo e pule ao espaço'}
 };
 let lang = (()=>{ try{ return localStorage.getItem('pf_lang')||'es'; }catch(e){ return 'es'; } })();
 function t(k){ return (LANG[lang]&&LANG[lang][k]) || LANG.es[k] || k; }
@@ -599,7 +604,7 @@ function tickMovers(dt){ worldT+=dt;
 let crystalGoal=null, crystalDone=false;
 function tickCrystalGoal(){ if(!crystalGoal)return; crystalGoal.rotation.y+=0.025; crystalGoal.rotation.x+=0.012;
   if(!crystalDone){ const dx=player.pos.x-crystalGoal.position.x, dy=player.pos.y-crystalGoal.position.y, dz=player.pos.z-crystalGoal.position.z;
-    if(dx*dx+dy*dy+dz*dz<2.6*2.6){ crystalDone=true; if(HUD)HUD.textContent=t('m_crystaldone'); enterDream(); } } }   // completar el obby → siguiente mundo
+    if(dx*dx+dy*dy+dz*dz<2.6*2.6){ crystalDone=true; enterDream(); } } }   // completar el obby → siguiente mundo
 // El obby flota EN EL CIELO sobre el césped (cerca del orbe), encerrado en un TERRARIO de cristal
 // (piso de vidrio + cúpula) → desde el césped ya se ve en las alturas; el terreno se ve por debajo.
 const CF=58, CZA=2076, CZC=CZA+52;            // CF MÁS ALTO (≈53u sobre el suelo): el obby flota bien arriba, encerrado
@@ -647,7 +652,7 @@ function enterCrystal(){ if(world==='crystal')return; world='crystal'; grassMode
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(CSTART); portalDone=true; crystalDone=false;
-  if(HUD)HUD.textContent=t('m_crystal');
+  setWorldHUD('crystal','q_crystal');
 }
 
 /* ===================== MUNDO DREAM CORE (suburbio liminal: colinas, casas procedurales, cercas blancas) ===================== */
@@ -716,7 +721,7 @@ function enterDream(){ if(world==='dream')return; world='dream'; grassMode=false
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.set(0,sy+0.4,DREAM_GZ); portalDone=true;
   buildGrassTiles(); grassTileSnap.set(1e12,1e12); relocateTiles(0,DREAM_GZ); grassMat.uniforms.uPlayer.value.set(0,DREAM_GZ);
-  if(HUD)HUD.textContent=t('m_dream');
+  setWorldHUD('dreamcore','q_dream');
 }
 
 /* ===================== BACKROOMS (caés por la puerta abierta: lugar oscuro + plataformas amarillas, obby de PRECISIÓN con giros) ===================== */
@@ -748,7 +753,7 @@ function buildBackrooms(){ if(backBuilt)return; backBuilt=true; const G=BACK_GZ;
 }
 function tickBackGoal(){ if(!backGoal||backDone)return; backGoal.rotation.y+=0.04;
   const dx=player.pos.x-backGoal.position.x, dy=player.pos.y-backGoal.position.y, dz=player.pos.z-backGoal.position.z;
-  if(dx*dx+dy*dy+dz*dz<2.4*2.4){ backDone=true; if(HUD)HUD.textContent=t('m_backdone'); enterPoolrooms(); } }   // al salir → Poolrooms
+  if(dx*dx+dy*dy+dz*dz<2.4*2.4){ backDone=true; enterPoolrooms(); } }   // al salir → Poolrooms
 function enterBackrooms(){ if(world==='back')return; world='back'; grassMode=false; dreamMode=false;
   buildBackrooms();
   grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(farMesh)farMesh.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; backGroup.visible=true;
@@ -759,7 +764,7 @@ function enterBackrooms(){ if(world==='back')return; world='back'; grassMode=fal
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=-0.15;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(backStart); portalDone=true; backDone=false;
-  if(HUD)HUD.textContent=t('m_back');
+  setWorldHUD('backrooms','q_back');
 }
 
 /* ===================== POOLROOMS (al salir de las backrooms: todo baldosa de piscina, CLARO, obby sobre el agua) ===================== */
@@ -791,7 +796,7 @@ function buildPoolrooms(){ if(poolBuilt)return; poolBuilt=true; const G=POOL_GZ;
 }
 function tickPoolGoal(){ if(!poolGoal||poolDone)return; poolGoal.rotation.y+=0.04;
   const dx=player.pos.x-poolGoal.position.x, dy=player.pos.y-poolGoal.position.y, dz=player.pos.z-poolGoal.position.z;
-  if(dx*dx+dy*dy+dz*dz<2.4*2.4){ poolDone=true; if(HUD)HUD.textContent=t('m_pooldone'); enterDream(); } }
+  if(dx*dx+dy*dy+dz*dz<2.4*2.4){ poolDone=true; enterDream(); } }
 function enterPoolrooms(){ if(world==='pool')return; world='pool'; grassMode=false; dreamMode=false;
   buildPoolrooms();
   grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(farMesh)farMesh.visible=false; poolGroup.visible=true;
@@ -802,7 +807,7 @@ function enterPoolrooms(){ if(world==='pool')return; world='pool'; grassMode=fal
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(poolStart); portalDone=true; poolDone=false;
-  if(HUD)HUD.textContent=t('m_pool');
+  setWorldHUD('poolrooms','q_pool');
 }
 // --- entrar al mundo de césped ---
 function enterGrass(withTiles=true){
@@ -822,7 +827,7 @@ function enterGrass(withTiles=true){
   scene.background=skyTex; skyMesh.visible=false; if(skyEnv) scene.environment=skyEnv;
   scene.fog.color.set(0xdfeef9); scene.fog.near=70; scene.fog.far=430;   // distancia de render reducida (niebla clara que empata con el horizonte 360)
   sun.intensity=2.6; sun.color.set(0xfffaf0); renderer.toneMappingExposure=1.1;
-  if(HUD)HUD.textContent=t('m_frutiger');
+  setWorldHUD('frutiger','q_frutiger');
 }
 
 /* ===================== Jugador (1ª persona) ===================== */
@@ -835,7 +840,7 @@ const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:Math
 const CLIMB_DUR=0.85;   // duración del agarre+impulso de la repisa
 const GRAB_REACH=2.0;   // a qué altura sobre los pies agarran las manos (la animación de trepada llega ~2m)
 // voltereta: el clip Run_Jump_and_Roll dura ~3.47s y la vuelta carnero está a ~1.2s → arrancamos ahí, acelerado
-const ROLL_ANIM_START=1.15, ROLL_TIMESCALE=1.7, ROLL_DUR=0.82, ROLL_SPEED=9.5, ROLL_FALL=14;
+const ROLL_ANIM_START=1.15, ROLL_TIMESCALE=1.7, ROLL_DUR=0.82, ROLL_SPEED=9.5, ROLL_FALL=22;   // auto-voltereta SOLO en caídas muy altas
 // estructura entrada→LOOP(medio)→FINAL(outro) para estados sostenidos (tiempos del clip, en segundos)
 let prevVy=0, rollReq=false;
 const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
@@ -845,7 +850,7 @@ function respawn(){ player.pos.copy(lastSafe); player.vel.set(0,0,0); player.vy=
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   setupQuiz(); }   // reaparece en el último checkpoint y re-randomiza las sumas
 // offsets de la cámara respecto al hueso de la cabeza: un poco ADELANTE (para ver el cuerpo) y a la altura de los ojos
-const CAM_FWD=0.06, CAM_UP=0.12;   // cámara 0.1 más arriba
+const CAM_FWD=0.04, CAM_UP=0.12;   // cámara apenas adelante (margen contra el near-plane en paredes)
 // "lean embodied": la cámara se inclina hacia adelante al correr/deslizar (procedural, según velocidad)
 let leanPitch=0, leanRoll=0;
 
@@ -954,7 +959,8 @@ function wallSide(side){   // side=+1 derecha, -1 izquierda (respecto al facing)
 
 /* ===================== Loop de juego ===================== */
 const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
-const HUD=document.getElementById('hud');
+const HUD=document.getElementById('hud'), HUDM=document.getElementById('hudMission');
+function setWorldHUD(nameKey,questKey){ if(HUD)HUD.textContent=t(nameKey); if(HUDM)HUDM.textContent=questKey?t(questKey):''; }
 function update(dt){
   if(!grassMode && !dreamMode && player.pos.y<-18) respawn();   // caíste del techo al cielo → reaparecer
   tickButtons(); tickPortal(dt); tickQuiz();
@@ -978,7 +984,7 @@ function update(dt){
     if(player.pos.y < CF-4){   // CAÍSTE al suelo del terrario → reiniciar el obby DESDE EL INICIO (no al mapa)
       player.pos.copy(CSTART); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
       player.sliding=player.rolling=player.climbing=false; player.wallrun=0;
-      if(HUD && !crystalDone) HUD.textContent=t('m_crystalreset'); }
+      }
   }
   if(player.onGround){ for(const cp of checkpoints){ if(player.pos.x>cp.minx&&player.pos.x<cp.maxx&&player.pos.z>cp.minz&&player.pos.z<cp.maxz){ lastSafe.copy(cp.pos); break; } } }   // checkpoint al pisar un edificio
   forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
@@ -1037,7 +1043,7 @@ function update(dt){
 
   // ---- VOLTERETA: botón estando en el piso y en movimiento, o automática al caer de muy alto ----
   prevVy=player.vy;
-  if(rollReq && player.onGround && !player.rolling && !player.sliding){
+  if(rollReq && !player.rolling && !player.sliding && !player.climbing){   // RODAR también en el aire / al saltar
     const hsp=Math.hypot(player.vel.x,player.vel.z);
     player.rollDir.copy(hsp>1.5? _v.set(player.vel.x,0,player.vel.z).normalize() : forward);
     player.rolling=true; player.rollT=0;
@@ -1105,7 +1111,7 @@ function update(dt){
   player.fov+=(targetFov-player.fov)*Math.min(1,6*dt); if(Math.abs(camera.fov-player.fov)>0.05){camera.fov=player.fov;camera.updateProjectionMatrix();}
   // ---- cámara FP: a la altura de la cabeza (bob vertical real del hueso) pero CENTRADA en el cuerpo ----
   // XZ estable (centro del cuerpo + un poco adelante) → quieto miras AL FRENTE, no al hombro; sólo la ALTURA viene del hueso de la cabeza
-  if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor); }     // la cámara va EN la cabeza (sigue su posición e inclinación)
+  if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor); _camAnchor.x=player.pos.x; _camAnchor.z=player.pos.z; }   // XZ = CENTRO del cuerpo (≥R de las paredes → no se atraviesan/ven a través); sólo la ALTURA viene del hueso de la cabeza
   else { _camAnchor.set(player.pos.x, player.pos.y+EYE, player.pos.z); }         // roll/carga: altura estable → la vuelta de cámara queda limpia (no se traga el cuerpo)
   const fwH=_v.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
   // al deslizarse: baja un poquito y queda un poco ADELANTE de la cabeza — suave
@@ -1139,7 +1145,6 @@ function update(dt){
     expoCur += (tgt-expoCur)*Math.min(1, (eyeAdapt?1.9:4)*dt);   // lag lento → al salir de la sombra "deslumbra"
     renderer.toneMappingExposure=expoCur;
   }
-  if(HUD && !portalDone) HUD.textContent = estado||(player.onGround?(sp<0.5?t('st_idle'):(sp<3.6?t('st_walk'):t('st_run'))):t('st_air'));
 }
 /* ===================== GRÁFICOS (presets de calidad) ===================== */
 // densidad/cobertura del césped optimizadas: low≈62k, med≈127k, high≈290k (antes 694k). r=radio de tiles (cobertura), sp=separación de briznas
@@ -1168,6 +1173,7 @@ function enterCity(){ world='city'; grassMode=false; dreamMode=false; grassGroup
   portalDone=false; lastSafe.set(0,2,4); setupQuiz();
   player.pos.set(0,0,4); player.vel.set(0,0,0); player.vy=0; player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0;
+  setWorldHUD('parkour','q_parkour');
 }
 
 /* ===================== MENÚ DE INICIO ===================== */
