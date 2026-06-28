@@ -242,10 +242,15 @@ for(let i=0;i<18;i++){ const a=i*2.39; cloud(15+Math.cos(a)*(50+i*11), -16-(i%4)
 
 /* ===================== MUNDO FRUTIGER AERO — colinas verdes + césped procedural (al cruzar el portal) ===================== */
 const grassGroup=new THREE.Group(); grassGroup.visible=false; scene.add(grassGroup);
+// --- cielo 360 (equirectangular): fondo del mundo de césped + mapa de entorno (la esfera metálica refleja las nubes reales) ---
+const SKY_URL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@36a6e75/assets/fp/sky360.jpg';
+let skyEnv=null;
+const skyTex=new THREE.TextureLoader().load(SKY_URL, t=>{ skyEnv=pmrem.fromEquirectangular(t).texture; if(grassMode) scene.environment=skyEnv; });
+skyTex.colorSpace=THREE.SRGBColorSpace; skyTex.mapping=THREE.EquirectangularReflectionMapping;
 // --- terreno con elevaciones (sigue al jugador: re-displaza al moverse de celda) ---
 const TSZ=440, TSEG=110;
 const terrGeo=new THREE.PlaneGeometry(TSZ,TSZ,TSEG,TSEG); terrGeo.rotateX(-Math.PI/2);
-const terrainMesh=new THREE.Mesh(terrGeo,new THREE.MeshStandardMaterial({color:0x52a83f,roughness:1,metalness:0}));
+const terrainMesh=new THREE.Mesh(terrGeo,new THREE.MeshStandardMaterial({color:0x5cba42,roughness:1,metalness:0}));
 terrainMesh.receiveShadow=true; grassGroup.add(terrainMesh);
 let terrSnap=new THREE.Vector2(1e9,1e9);
 function rebuildTerrain(cx,cz){ terrainMesh.position.set(cx,0,cz);
@@ -284,8 +289,8 @@ const grassMat=new THREE.ShaderMaterial({ side:THREE.DoubleSide,
   fragmentShader:`
     varying float vY;
     void main(){
-      vec3 base = vec3(0.05,0.22,0.04);
-      vec3 tip  = vec3(0.42,0.78,0.26);
+      vec3 base = vec3(0.06,0.26,0.05);
+      vec3 tip  = vec3(0.49,0.84,0.31);
       vec3 col = mix(base, tip, vY*vY*0.85 + 0.15);
       gl_FragColor = vec4(col,1.0);
     }`});
@@ -326,21 +331,54 @@ function relocateTiles(px,pz){   // recicla los tiles para que siempre rodeen al
     t.mesh.geometry.boundingSphere.center.y = terrainH(gx*TILE+TILE/2, gz*TILE+TILE/2);   // centra la esfera al relieve del tile → culling preciso
   }
 }
+// --- ESTRUCTURA GIGANTE: esfera metálica de celdas (tipo Frutiger Aero) con un ÁRBOL gigante adentro ---
+function makeLatticeTex(){ const W=1024,H=512,c=document.createElement('canvas'); c.width=W;c.height=H; const g=c.getContext('2d');
+  g.fillStyle='#d6dee8'; g.fillRect(0,0,W,H);                                  // lámina metálica clara
+  // sombrear un poco la chapa con un degradé vertical (da volumen)
+  const sh=g.createLinearGradient(0,0,0,H); sh.addColorStop(0,'rgba(255,255,255,0.25)'); sh.addColorStop(0.5,'rgba(170,185,205,0)'); sh.addColorStop(1,'rgba(120,135,160,0.35)'); g.fillStyle=sh; g.fillRect(0,0,W,H);
+  g.globalCompositeOperation='destination-out'; g.fillStyle='#000';           // opaco → borra el alpha por completo (perfora celdas)
+  const CELL=52;                                                              // celdas en grilla jitteada → nervios finos y parejos (tipo burbuja)
+  for(let gy=-1;gy<=H/CELL+1;gy++)for(let gx=-1;gx<=W/CELL+1;gx++){
+    const jx=(Math.random()-0.5)*CELL*0.32, jy=(Math.random()-0.5)*CELL*0.32;
+    const x=gx*CELL+CELL/2+jx, y=gy*CELL+CELL/2+jy, r=CELL*(0.40+Math.random()*0.07);
+    g.beginPath(); g.arc(x,y,r,0,7); g.fill();
+    g.beginPath(); g.arc(x-W,y,r,0,7); g.fill(); g.beginPath(); g.arc(x+W,y,r,0,7); g.fill(); }   // envolver la costura
+  g.globalCompositeOperation='source-over';
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t; }
+function buildOrb(x,groundY,z){
+  const grp=new THREE.Group(); grp.position.set(x,0,z);
+  const RAD=15;                                                               // esfera gigante
+  // --- ÁRBOL gigante adentro ---
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.7,1.2,16,10), new THREE.MeshStandardMaterial({color:0x6e4a2b,roughness:0.9}));
+  trunk.position.set(0,groundY+8,0); trunk.castShadow=true; grp.add(trunk);
+  const leafMat=new THREE.MeshStandardMaterial({color:0x2f7d2a,roughness:0.85});
+  const crown=[[0,18,0,7.5],[-4,15.5,2,5],[4,16,-2,5],[2,20,3,4.5],[-3,20,-2,4.5],[0,23,0,4]];
+  for(const [cx,cy,cz,r] of crown){ const b=new THREE.Mesh(new THREE.IcosahedronGeometry(r,1),leafMat); b.position.set(cx,groundY+cy,cz); b.castShadow=true; grp.add(b); }
+  // --- esfera metálica de celdas que lo envuelve ---
+  const orbMat=new THREE.MeshStandardMaterial({ map:makeLatticeTex(), color:0xeaf0f6, metalness:0.75, roughness:0.38, side:THREE.DoubleSide, alphaTest:0.5, envMapIntensity:1.4 });
+  const orb=new THREE.Mesh(new THREE.SphereGeometry(RAD,48,32), orbMat);
+  orb.position.set(0, groundY+RAD*0.8, 0); orb.castShadow=true; grp.add(orb);
+  grassGroup.add(grp); return grp;
+}
+let grassDecorBuilt=false;
+function buildGrassDecor(){ if(grassDecorBuilt)return; grassDecorBuilt=true;
+  buildOrb(7, terrainH(7,GRASS_GZ+46), GRASS_GZ+46);     // estructura adelante, en la colina (las nubes ya vienen en el cielo 360)
+}
 // --- entrar al mundo de césped ---
 function enterGrass(){ if(grassMode)return; world='grass'; grassMode=true;
   const sy=terrainH(0,GRASS_GZ);
   rebuildTerrain(0,GRASS_GZ); terrSnap.set(0,GRASS_GZ);
+  buildGrassDecor();
   buildGrassTiles(); relocateTiles(0,GRASS_GZ); grassMat.uniforms.uPlayer.value.set(0,GRASS_GZ);
   grassGroup.visible=true;
   player.pos.set(0, sy+0.05, GRASS_GZ); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.set(0, sy+0.05, GRASS_GZ);
-  // cielo + atmósfera frutiger aero: azul vivo y brillante
-  skyMat.uniforms.top.value.set(0x2b9bff); skyMat.uniforms.bot.value.set(0xeafcff);
-  scene.background.set(0x73c4ff);
-  scene.fog.color.set(0xcdf2ff); scene.fog.near=140; scene.fog.far=950;
-  sun.intensity=2.7; sun.color.set(0xfffaf0); renderer.toneMappingExposure=1.12;
+  // cielo 360 real como fondo + entorno (la cúpula degradé se oculta)
+  scene.background=skyTex; skyMesh.visible=false; if(skyEnv) scene.environment=skyEnv;
+  scene.fog.color.set(0xdfeef9); scene.fog.near=160; scene.fog.far=1100;   // niebla clara que empata con el horizonte del panorama
+  sun.intensity=2.6; sun.color.set(0xfffaf0); renderer.toneMappingExposure=1.1;
   if(HUD)HUD.textContent='🌱 Mundo Frutiger — explorá el césped';
 }
 
