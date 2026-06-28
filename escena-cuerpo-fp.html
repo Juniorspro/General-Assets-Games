@@ -317,7 +317,14 @@ skyTex.colorSpace=THREE.SRGBColorSpace; skyTex.mapping=THREE.EquirectangularRefl
 // --- terreno con elevaciones (sigue al jugador: re-displaza al moverse de celda) ---
 const TSZ=340, TSEG=84;   // terreno más chico (acorde a la menor distancia de render) → menos vértices por re-displazado
 const terrGeo=new THREE.PlaneGeometry(TSZ,TSZ,TSEG,TSEG); terrGeo.rotateX(-Math.PI/2);
-const terrainMesh=new THREE.Mesh(terrGeo,new THREE.MeshStandardMaterial({color:0x5cba42,roughness:1,metalness:0}));
+// textura de pasto para el SUELO → las zonas lejanas (sin briznas 3D) igual se ven como césped (no peladas)
+function makeGroundTex(){ const S=128,c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
+  g.fillStyle='#4f9e3a'; g.fillRect(0,0,S,S);
+  for(let i=0;i<900;i++){ const x=Math.random()*S,y=Math.random()*S,h=2+Math.random()*5,gr=Math.random();
+    g.strokeStyle=gr<0.5?`rgba(${40+gr*40|0},${110+gr*70|0},${40+gr*40|0},0.7)`:`rgba(90,175,70,0.6)`; g.lineWidth=1;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+(Math.random()-0.5)*2,y-h); g.stroke(); }
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(60,60); t.anisotropy=4; return t; }
+const terrainMesh=new THREE.Mesh(terrGeo,new THREE.MeshStandardMaterial({color:0x6fbf4c,map:makeGroundTex(),roughness:1,metalness:0}));
 terrainMesh.receiveShadow=true; grassGroup.add(terrainMesh);
 let terrSnap=new THREE.Vector2(1e9,1e9);
 function rebuildTerrain(cx,cz){ terrainMesh.position.set(cx,0,cz);
@@ -398,6 +405,38 @@ function relocateTiles(px,pz){   // recicla los tiles para que siempre rodeen al
     t.mesh.geometry.boundingSphere.center.y = terrainH(gx*TILE+TILE/2, gz*TILE+TILE/2);   // centra la esfera al relieve del tile → culling preciso
   }
 }
+// --- PASTO LEJANO: billboards (cards que miran a la cámara) ESTÁTICOS que cubren las zonas lejanas → no se ve pelado (medio/alto) ---
+function makeTuftTex(){ const S=64,c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d'); g.clearRect(0,0,S,S);
+  for(let i=0;i<9;i++){ const x=6+Math.random()*(S-12), bh=20+Math.random()*30, w=2+Math.random()*2.5, gr=Math.random();
+    g.fillStyle=`rgb(${40+gr*50|0},${120+gr*80|0},${45+gr*45|0})`; g.beginPath(); g.moveTo(x-w,S); g.lineTo(x+w,S); g.lineTo(x+(Math.random()-0.5)*4,S-bh); g.closePath(); g.fill(); }
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; }
+const FAR={on:false, sp:2.2, half:55};
+let farMesh=null;
+const farMat=new THREE.ShaderMaterial({ transparent:true, alphaTest:0.45, depthWrite:true,
+  uniforms:{ uCenter:{value:new THREE.Vector2(0,GRASS_GZ)}, uMap:{value:makeTuftTex()} },
+  vertexShader:`uniform vec2 uCenter; attribute vec2 aOffset; attribute float aRand; varying vec2 vUv;
+    float terr(vec2 p){ float lz=p.y-2000.0; return sin(p.x*0.035)*3.2+cos(lz*0.045)*3.2+sin((p.x*0.6+lz)*0.02)*5.0+cos((p.x-lz*0.7)*0.028)*2.2; }
+    void main(){ vec2 wxz=uCenter+aOffset; float gY=terr(wxz); float h=1.1+aRand*1.4, w=0.9+aRand*0.6;
+      vec4 mv=viewMatrix*vec4(wxz.x,gY,wxz.y,1.0); mv.xy += vec2(position.x*w, position.y*h);   // billboard en espacio de cámara (sigue la mirada)
+      vUv=uv; gl_Position=projectionMatrix*mv; }`,
+  fragmentShader:`uniform sampler2D uMap; varying vec2 vUv; void main(){ vec4 t=texture2D(uMap,vUv); if(t.a<0.45)discard; gl_FragColor=vec4(t.rgb,1.0); }`});
+function buildFarGrass(){ if(farMesh)return;
+  const g=new THREE.InstancedBufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array([-0.5,0,0, 0.5,0,0, 0.5,1,0, -0.5,1,0]),3));
+  g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array([0,0, 1,0, 1,1, 0,1]),2));
+  g.setIndex([0,1,2, 0,2,3]);
+  farMesh=new THREE.Mesh(g,farMat); farMesh.frustumCulled=false; farMesh.visible=false; grassGroup.add(farMesh);
+  rebuildFarInstances();
+}
+let farSnap=new THREE.Vector2(1e12,1e12);
+function rebuildFarInstances(){ if(!farMesh)return; const per=Math.floor(FAR.half*2/FAR.sp), n=per*per;
+  const off=new Float32Array(n*2), rnd=new Float32Array(n); let k=0;
+  for(let i=0;i<per;i++)for(let j=0;j<per;j++){ off[k*2]=-FAR.half+i*FAR.sp+(Math.random()-0.5)*FAR.sp; off[k*2+1]=-FAR.half+j*FAR.sp+(Math.random()-0.5)*FAR.sp; rnd[k]=Math.random(); k++; }
+  farMesh.geometry.setAttribute('aOffset',new THREE.InstancedBufferAttribute(off,2));
+  farMesh.geometry.setAttribute('aRand',new THREE.InstancedBufferAttribute(rnd,1));
+  farMesh.geometry.instanceCount=n; }
+function farFollow(px,pz){ if(!FAR.on||!farMesh)return; const sx=Math.round(px/FAR.sp)*FAR.sp, sz=Math.round(pz/FAR.sp)*FAR.sp;
+  if(sx===farSnap.x&&sz===farSnap.y)return; farSnap.set(sx,sz); farMat.uniforms.uCenter.value.set(sx,sz); }
 // --- ESTRUCTURA GIGANTE: esfera metálica de celdas (tipo Frutiger Aero) con un ÁRBOL gigante adentro ---
 function makeLatticeTex(){ const W=1024,H=512,c=document.createElement('canvas'); c.width=W;c.height=H; const g=c.getContext('2d');
   g.fillStyle='#d6dee8'; g.fillRect(0,0,W,H);                                  // lámina metálica clara
@@ -554,7 +593,7 @@ function buildCrystalObby(){ if(crystalBuilt)return; crystalBuilt=true;
 function setGrassBlades(v){ for(const t of grassTiles) t.mesh.visible=v; }
 function enterCrystal(){ if(world==='crystal')return; world='crystal'; grassMode=false;
   buildCrystalObby(); crystalGroup.visible=true;
-  setGrassBlades(false);   // congela/oculta las briznas (nada de movimiento, perf); el TERRENO y el orbe siguen visibles abajo
+  setGrassBlades(false); if(farMesh)farMesh.visible=false;   // congela/oculta las briznas (nada de movimiento, perf); el TERRENO y el orbe siguen visibles abajo
   scene.fog.color.set(0xdff0fb); scene.fog.near=120; scene.fog.far=520;   // distancia de render reducida
   renderer.toneMappingExposure=1.16;
   player.pos.copy(CSTART); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
@@ -574,7 +613,8 @@ function makeHouseTex(){ const c=document.createElement('canvas'); c.width=c.hei
   g.fillStyle='#d8cfb8'; for(let y=0;y<128;y+=16){ g.fillRect(0,y,128,1); }          // tablones
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; return t; }
 const _houseTex=makeHouseTex();
-function dreamHouse(x,z,w,d,h,rot){   // casa procedural: cuerpo beige + techo a dos aguas marrón + ventanas; con colisión
+const dreamDoorPos=new THREE.Vector3(); let dreamDoorReady=false;   // casa con la PUERTA ABIERTA → backrooms
+function dreamHouse(x,z,w,d,h,rot,open){   // casa procedural: cuerpo beige + techo a dos aguas marrón + ventanas; con colisión
   const gy=terrainH(x,z); const grp=new THREE.Group(); grp.position.set(x,gy,z); grp.rotation.y=rot||0;
   const wallMat=new THREE.MeshStandardMaterial({map:_houseTex.clone(),color:0xe9e1d0,roughness:0.95}); wallMat.map.repeat.set(w/2,h/2);
   const body=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),wallMat); body.position.y=h/2; body.castShadow=true; body.receiveShadow=true; grp.add(body);
@@ -586,7 +626,14 @@ function dreamHouse(x,z,w,d,h,rot){   // casa procedural: cuerpo beige + techo a
   // ventanas (oscuras) y puerta
   const win=new THREE.MeshStandardMaterial({color:0x37424d,roughness:0.4,metalness:0.1,emissive:0x141b22,emissiveIntensity:0.4});
   for(const wx of [-w*0.26,w*0.26]){ const m=new THREE.Mesh(new THREE.BoxGeometry(w*0.18,h*0.22,0.1),win); m.position.set(wx,h*0.62,d/2+0.02); grp.add(m); }
-  const door=new THREE.Mesh(new THREE.BoxGeometry(w*0.2,h*0.42,0.1),new THREE.MeshStandardMaterial({color:0x5a3f2a,roughness:0.8})); door.position.set(0,h*0.21,d/2+0.02); grp.add(door);
+  if(open){   // PUERTA ABIERTA: hueco oscuro (se entra acá → backrooms)
+    const dark=new THREE.Mesh(new THREE.PlaneGeometry(w*0.34,h*0.5),new THREE.MeshBasicMaterial({color:0x050505,fog:false})); dark.position.set(0,h*0.25,d/2+0.04); grp.add(dark);
+    const fr=new THREE.Mesh(new THREE.BoxGeometry(w*0.42,h*0.56,0.12),new THREE.MeshStandardMaterial({color:0x3a2a1c,roughness:0.8})); fr.position.set(0,h*0.28,d/2+0.01); grp.add(fr);
+    grp.add(dark);
+    const cd=Math.cos(rot||0), sd=Math.sin(rot||0); dreamDoorPos.set(x+sd*(d/2+0.6), gy+h*0.25, z+cd*(d/2+0.6)); dreamDoorReady=true;   // punto de entrada (frente de la casa)
+  } else {
+    const door=new THREE.Mesh(new THREE.BoxGeometry(w*0.2,h*0.42,0.1),new THREE.MeshStandardMaterial({color:0x5a3f2a,roughness:0.8})); door.position.set(0,h*0.21,d/2+0.02); grp.add(door);
+  }
   dreamGroup.add(grp);
   // collider (caja del cuerpo, en coords mundiales sin rotación → aprox AABB)
   const hw=Math.max(w,d)/2*1.05; colliders.push({minx:x-hw,maxx:x+hw,miny:gy,maxy:gy+h,minz:z-hw,maxz:z+hw,mesh:body});
@@ -604,14 +651,14 @@ function dreamPole(x,z){ const gy=terrainH(x,z), m=new THREE.MeshStandardMateria
   const p=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.14,7,6),m); p.position.set(x,gy+3.5,z); p.castShadow=true; dreamGroup.add(p);
   const cr=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.12,0.12),m); cr.position.set(x,gy+6.4,z); dreamGroup.add(cr); }
 function buildDream(){ if(dreamBuilt)return; dreamBuilt=true; const G=DREAM_GZ;
-  const houses=[[-22,G-30,7,8,5,0.3],[14,G-40,6,7,4.5,-0.2],[30,G-10,9,9,7,0.5],[-8,G-55,6,6,4.5,0.1],[40,G+30,7,8,5,-0.4],[-34,G+20,8,8,6,0.6],[6,G+45,7,7,5,3.0],[-20,G+55,6,7,4.5,2.6]];
+  const houses=[[-22,G-30,7,8,5,0.3],[30,G-10,9,9,7,0.5],[-8,G-55,6,6,4.5,0.1],[40,G+30,7,8,5,-0.4],[-34,G+20,8,8,6,0.6],[6,G+45,7,7,5,3.0],[-20,G+55,6,7,4.5,2.6],[16,G-38,7,8,5.5,0,true]];   // la última: PUERTA ABIERTA → backrooms
   for(const h of houses) dreamHouse(...h);
   dreamFence(-60,G-12,60,G-18); dreamFence(-50,G+25,20,G+40); dreamFence(20,G+38,70,G+10);
   dreamPole(-2,G-20); dreamPole(22,G+5); dreamPole(-30,G+38); dreamPole(50,G-25);
 }
 function enterDream(){ if(world==='dream')return; world='dream'; grassMode=false; dreamMode=true;
   buildDream();
-  grassGroup.visible=true; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=true;   // terreno+césped visibles; orbe/obby ocultos
+  grassGroup.visible=true; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=true; if(typeof backGroup!=='undefined')backGroup.visible=false;   // terreno+césped visibles; orbe/obby/backrooms ocultos
   setGrassBlades(true);
   scene.background=skyTex; skyMesh.visible=false; if(skyEnv)scene.environment=skyEnv;
   scene.fog.color.set(0xdfe6ef); scene.fog.near=40; scene.fog.far=320;   // bruma nostálgica/dreamcore (no ves muy lejos)
@@ -623,6 +670,49 @@ function enterDream(){ if(world==='dream')return; world='dream'; grassMode=false
   lastSafe.set(0,sy+0.4,DREAM_GZ); portalDone=true;
   buildGrassTiles(); grassTileSnap.set(1e12,1e12); relocateTiles(0,DREAM_GZ); grassMat.uniforms.uPlayer.value.set(0,DREAM_GZ);
   if(HUD)HUD.textContent='🌫️ Dream Core — un suburbio que no termina';
+}
+
+/* ===================== BACKROOMS (caés por la puerta abierta: lugar oscuro + plataformas amarillas, obby de PRECISIÓN con giros) ===================== */
+const BACK_GZ=8000; const backGroup=new THREE.Group(); backGroup.visible=false; scene.add(backGroup);
+let backBuilt=false; const backStart=new THREE.Vector3(0,24,BACK_GZ-4);
+let backGoal=null, backDone=false;
+function addYellow(x,y,z,w,h,d,wall){   // plataforma/pared amarilla emisiva (colisiona)
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color:0xd8c247,emissive:0x7a6614,emissiveIntensity:0.7,roughness:0.7,metalness:0}));
+  m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; backGroup.add(m);
+  colliders.push({minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,minz:z-d/2,maxz:z+d/2,mesh:m}); if(wall)wallMeshes.push(m); return m; }
+function buildBackrooms(){ if(backBuilt)return; backBuilt=true; const G=BACK_GZ;
+  // habitación amarillenta oscura (decorativa, sin colisión): paredes + techo + piso lejano (vacío)
+  const room=new THREE.MeshStandardMaterial({color:0xb6a23f,emissive:0x161202,emissiveIntensity:0.25,roughness:0.95,side:THREE.BackSide});
+  const box=new THREE.Mesh(new THREE.BoxGeometry(120,60,150),room); box.position.set(0,8,G+55); backGroup.add(box);   // cuarto enorme
+  // OBBY DE PRECISIÓN: plataformas amarillas chicas con saltos y GIROS de 90° (distinto a los anteriores: nada de mover/flotar)
+  const S=[ [0,20,G-4,7,7], [4,19.2,G+3,2.4,2.4],[8,18.4,G+9,2.2,2.2],[8,17.6,G+16,2.2,2.2],   // baja y gira a la derecha
+    [3,16.8,G+20,2.2,2.2],[-3,16.2,G+24,2.2,2.2],[-7,15.6,G+28,2.2,2.2],                          // gira a la izquierda
+    [-7,15.0,G+36,1.3,9],                                                                          // VIGA angosta (caminar con cuidado)
+    [-3,14.4,G+44,2.2,2.2],[3,14.0,G+48,2.0,2.0],[8,13.6,G+53,2.0,2.0],                            // saltos de precisión
+    [8,13.2,G+61,2.0,2.0],[2,12.8,G+66,2.0,2.0],[-5,12.4,G+71,2.2,2.2],
+    [0,12.0,G+79,8,8] ];                                                                           // plataforma final
+  for(const s of S) addYellow(s[0],s[1]-0.25,s[2],s[3],0.5,s[4]);
+  // dos pilares amarillos (estética backrooms)
+  addYellow(-12,14,G+40,1.4,18,1.4); addYellow(13,14,G+58,1.4,18,1.4);
+  // META: marcador amarillo brillante en la plataforma final
+  backGoal=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.7,2.4,12), new THREE.MeshStandardMaterial({color:0xfff06a,emissive:0xffe23a,emissiveIntensity:1.6,roughness:0.4}));
+  backGoal.position.set(0,13.4,G+79); backGroup.add(backGoal);
+  checkpoint(0,G-4,7,7, backStart.x,backStart.y,backStart.z);                                      // checkpoint del inicio
+}
+function tickBackGoal(){ if(!backGoal||backDone)return; backGoal.rotation.y+=0.04;
+  const dx=player.pos.x-backGoal.position.x, dy=player.pos.y-backGoal.position.y, dz=player.pos.z-backGoal.position.z;
+  if(dx*dx+dy*dy+dz*dz<2.4*2.4){ backDone=true; if(HUD)HUD.textContent='🟡 ¡Saliste de las Backrooms!'; enterDream(); } }
+function enterBackrooms(){ if(world==='back')return; world='back'; grassMode=false; dreamMode=false;
+  buildBackrooms();
+  grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(farMesh)farMesh.visible=false; backGroup.visible=true;
+  scene.background=new THREE.Color(0x0c0b06); skyMesh.visible=false; scene.environment=null;   // OSCURO (interior, sin cielo)
+  scene.fog.color.set(0x110e05); scene.fog.near=3; scene.fog.far=44;
+  sun.intensity=0.35; sun.color.set(0xffe9b0); renderer.toneMappingExposure=1.0;
+  player.pos.copy(backStart); player.vel.set(0,0,0); player.vy=0; player.onGround=false;   // CAÉS adentro
+  player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=-0.15;
+  player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
+  lastSafe.copy(backStart); portalDone=true; backDone=false;
+  if(HUD)HUD.textContent='🟡 Backrooms — encontrá la salida';
 }
 // --- entrar al mundo de césped ---
 function enterGrass(withTiles=true){
@@ -784,10 +874,14 @@ function update(dt){
     relocateTiles(player.pos.x,player.pos.z);                          // los tiles de césped siguen al jugador (frustum culling por tile)
     const sx=Math.round(player.pos.x/12)*12, sz=Math.round(player.pos.z/12)*12;   // re-displazar el terreno al cambiar de celda
     if(sx!==terrSnap.x||sz!==terrSnap.y){ rebuildTerrain(sx,sz); terrSnap.set(sx,sz); }
+    if(farMesh){ farMesh.visible = FAR.on; farFollow(player.pos.x,player.pos.z); }   // pasto lejano estático sigue al jugador
     if(grassMode && crystalDoorReady){ const dx=player.pos.x-crystalDoorPos.x, dz=player.pos.z-crystalDoorPos.z;   // PUERTA AZUL → obby
       if(dx*dx+dz*dz<2.0*2.0 && Math.abs(player.pos.y-crystalDoorPos.y)<2.6) enterCrystal(); }
-    if(dreamMode){ player.pos.x=Math.max(-DBND.x,Math.min(DBND.x,player.pos.x)); player.pos.z=Math.max(DBND.z0,Math.min(DBND.z1,player.pos.z)); }   // límites del mapa dream
+    if(dreamMode){ player.pos.x=Math.max(-DBND.x,Math.min(DBND.x,player.pos.x)); player.pos.z=Math.max(DBND.z0,Math.min(DBND.z1,player.pos.z));   // límites del mapa dream
+      if(dreamDoorReady){ const dx=player.pos.x-dreamDoorPos.x, dz=player.pos.z-dreamDoorPos.z;   // PUERTA ABIERTA → backrooms
+        if(dx*dx+dz*dz<1.9*1.9 && Math.abs(player.pos.y-dreamDoorPos.y)<3.2) enterBackrooms(); } }
   }
+  if(world==='back') tickBackGoal();   // meta de las backrooms
   if(world==='crystal'){ tickMovers(dt); tickCrystalGoal();   // plataformas móviles + meta del obby
     if(player.pos.y < CF-4){   // CAÍSTE al suelo del terrario → reiniciar el obby DESDE EL INICIO (no al mapa)
       player.pos.copy(CSTART); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
@@ -967,11 +1061,14 @@ function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
   if(wantShadow){ if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; } sun.shadow.mapSize.set(Q.shadow,Q.shadow); }
   eyeAdapt=Q.adapt;
   if(orbMeshRef && orbGlass && orbGloss) orbMeshRef.material = Q.glass? orbGlass : orbGloss;
+  // PASTO LEJANO estático: off en BAJO (queda pelado como ahora), on en medio/alto para rellenar las zonas lejanas
+  FAR.on=(q!=='low'); FAR.sp=(q==='high')?1.6:2.2; FAR.half=(q==='high')?72:55;
+  if(FAR.on){ buildFarGrass(); rebuildFarInstances(); farSnap.set(1e12,1e12); }
   layout();
 }
 
 /* ===================== Volver a la CIUDAD (parkour) desde el césped/menú ===================== */
-function enterCity(){ world='city'; grassMode=false; dreamMode=false; grassGroup.visible=false; crystalGroup.visible=false; if(typeof dreamGroup!=='undefined')dreamGroup.visible=false;
+function enterCity(){ world='city'; grassMode=false; dreamMode=false; grassGroup.visible=false; crystalGroup.visible=false; if(typeof dreamGroup!=='undefined')dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof farMesh!=='undefined'&&farMesh)farMesh.visible=false;
   scene.background=skyTex; if(skyEnv)scene.environment=skyEnv; skyMesh.visible=false;   // MISMO cielo 360 que los demás mundos
   scene.fog.color.set(0xdfeef9); scene.fog.near=130; scene.fog.far=900;
   sun.intensity=2.4; sun.color.set(0xfff6ea); renderer.toneMappingExposure=1.04;
