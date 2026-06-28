@@ -117,6 +117,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';   // clonar el personaje (con esqueleto) para los otros jugadores
 
 /* ===================== Render / escena ===================== */
 const app=document.getElementById('app');
@@ -652,6 +653,7 @@ _gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
   gl.animations.forEach(cl=>{ const a=bodyMixer.clipAction(cl); a.setLoop(THREE.LoopRepeat); a.clampWhenFinished=false; if(cl.name==='roll') a.timeScale=ROLL_TIMESCALE; bodyActions[cl.name]=a; });
   bodyHipsBind=bodyHips?bodyHips.position.clone():null;
   setAnim('idle');
+  mpBodySrc=inner; mpClips=gl.animations;   // fuente para clonar la MISMA skin/animaciones en los otros jugadores
 }, undefined, e=>console.warn('parkour.glb',e));
 function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
   const nx=bodyActions[name]; nx.reset(); if(name==='roll') nx.time=ROLL_ANIM_START; nx.enabled=true; nx.setEffectiveWeight(1); nx.play();
@@ -946,19 +948,31 @@ const mpStatusEl=document.getElementById('mpStatus');
 function mpSetStatus(s,txt){ if(mpStatusEl){ mpStatusEl.dataset.s=s; mpStatusEl.textContent=txt; } }
 function mpEsc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function mpColor(id){ let h=0; for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))>>>0; return new THREE.Color().setHSL((h%360)/360,0.62,0.55); }
-function mpMakeAvatar(name,color){
-  const g=new THREE.Group();
-  const body=new THREE.Mesh(new THREE.CapsuleGeometry(0.32,1.0,6,12), new THREE.MeshStandardMaterial({color,roughness:0.55,metalness:0.05})); body.position.y=0.85; body.castShadow=true; g.add(body);
-  const head=new THREE.Mesh(new THREE.SphereGeometry(0.27,16,12), new THREE.MeshStandardMaterial({color:0xffe0bd,roughness:0.7})); head.position.y=1.6; g.add(head);
+let mpBodySrc=null, mpClips=null;   // se setean al cargar el GLB del personaje
+function mpNameTag(name){
   const cv=document.createElement('canvas'); cv.width=256; cv.height=64; const cx=cv.getContext('2d');
-  cx.fillStyle='rgba(12,22,32,0.72)'; cx.fillRect(0,0,256,64); cx.fillStyle='#dff0ff'; cx.font='bold 30px sans-serif'; cx.textAlign='center'; cx.textBaseline='middle'; cx.fillText(name.slice(0,14),128,34);
+  cx.fillStyle='rgba(12,22,32,0.72)'; cx.fillRect(0,0,256,64); cx.fillStyle='#dff0ff'; cx.font='bold 30px sans-serif'; cx.textAlign='center'; cx.textBaseline='middle'; cx.fillText(String(name).slice(0,14),128,34);
   const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace;
-  const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,fog:false})); tag.position.y=2.15; tag.scale.set(1.7,0.42,1); g.add(tag);
-  g.traverse(o=>o.frustumCulled=false); scene.add(g); return g;
+  const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,fog:false})); tag.position.y=2.15; tag.scale.set(1.7,0.42,1); return tag;
+}
+// dale al remoto la MISMA skin (clon del personaje) y su propio mixer con los MISMOS clips
+function mpRig(r){
+  if(!mpBodySrc||!mpClips){   // provisional (cápsula) hasta que cargue el GLB
+    const cap=new THREE.Mesh(new THREE.CapsuleGeometry(0.32,1.0,6,12), new THREE.MeshStandardMaterial({color:r.color,roughness:0.55})); cap.position.y=0.85; cap.castShadow=true; r.avatar.add(cap); r.body=cap; r.rigged=false; return; }
+  const cl=SkeletonUtils.clone(mpBodySrc);
+  cl.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; const ms=Array.isArray(o.material)?o.material:[o.material]; ms.forEach(m=>{ if(m)m.side=THREE.FrontSide; }); }
+    if(o.isBone && /^Hips$|pelvis|cadera/i.test(o.name)){ r.hips=o; r.hipsBind=o.position.clone(); } });
+  r.avatar.add(cl); r.body=cl; r.sx=Math.abs(cl.scale.x);
+  r.mixer=new THREE.AnimationMixer(cl); r.actions={};
+  mpClips.forEach(c=>{ const a=r.mixer.clipAction(c); a.setLoop(THREE.LoopRepeat); a.clampWhenFinished=false; if(c.name==='roll')a.timeScale=ROLL_TIMESCALE; r.actions[c.name]=a; });
+  r.cur=null;
+  r.setAnim=(name)=>{ if(!r.actions[name]||r.cur===name)return; const nx=r.actions[name]; nx.reset(); if(name==='roll')nx.time=ROLL_ANIM_START; nx.enabled=true; nx.setEffectiveWeight(1); nx.play(); if(r.cur&&r.actions[r.cur])nx.crossFadeFrom(r.actions[r.cur],0.16,true); r.cur=name; };
+  r.rigged=true; r.setAnim('idle');
 }
 function mpRemote(id,name){ let r=MP.remotes.get(id);
-  if(!r){ r={ id,name,world:null,anim:'idle',moving:false,yaw:0, pos:new THREE.Vector3(), target:new THREE.Vector3(),
-    avatar:mpMakeAvatar(name,mpColor(id)), last:performance.now(), bob:0, init:false }; MP.remotes.set(id,r); }
+  if(!r){ const av=new THREE.Group(); av.add(mpNameTag(name)); scene.add(av);
+    r={ id,name,color:mpColor(id),world:null,anim:'idle',moving:false,mir:false,yaw:0, pos:new THREE.Vector3(), target:new THREE.Vector3(),
+      avatar:av, last:performance.now(), bob:0, init:false, rigged:false }; MP.remotes.set(id,r); mpRig(r); }
   return r; }
 function mpChatIn(name,text){ if(!text)return; const log=document.getElementById('mpChatLog'); if(!log)return;
   const el=document.createElement('div'); el.className='mpMsg'; el.innerHTML='<b>'+mpEsc(name)+':</b> '+mpEsc(text); log.appendChild(el);
@@ -978,7 +992,7 @@ function mpConnect(){
   client.on('close',()=>{ MP.on=false; mpSetStatus('off','desconectado'); });
   client.on('error',()=>{ MP.on=false; mpSetStatus('off','error'); });
   client.on('message',(topic,buf)=>{ let d; try{ d=JSON.parse(buf.toString()); }catch(e){ return; } if(!d||d.id===MP.id)return;
-    if(topic.slice(-6)==='/state'){ const r=mpRemote(d.id,d.name||'jugador'); r.name=d.name||r.name; r.world=d.world; r.anim=d.anim; r.moving=!!d.isMoving; r.yaw=d.facingAngle||0;
+    if(topic.slice(-6)==='/state'){ const r=mpRemote(d.id,d.name||'jugador'); r.name=d.name||r.name; r.world=d.world; r.anim=d.anim||'idle'; r.moving=!!d.isMoving; r.mir=!!d.mir; r.yaw=d.facingAngle||0;
       r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now(); }
     else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); }
     else if(topic.slice(-7)==='/action'){ /* eventos discretos (emotes/hits): aplicar localmente */ if(d.type==='hit_player' && d.targetId===MP.id){ /* este juego no tiene daño */ } }
@@ -986,17 +1000,23 @@ function mpConnect(){
 }
 function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.now(); if(now-MP.lastPub<100)return;
   const p=player, moving=Math.hypot(p.vel.x,p.vel.z)>0.6;
-  const cur={x:+p.pos.x.toFixed(2),y:+p.pos.y.toFixed(2),z:+p.pos.z.toFixed(2),yaw:+p.yaw.toFixed(2),anim:curAnim||'idle',world,moving};
-  const l=MP.last, ch=(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving;
+  const mir=(curAnim==='wallrun'&&p.wallrun>0)||(curAnim==='slide'&&p.slideRight);   // mismo espejo que el cuerpo local
+  const cur={x:+p.pos.x.toFixed(2),y:+p.pos.y.toFixed(2),z:+p.pos.z.toFixed(2),yaw:+p.yaw.toFixed(2),anim:curAnim||'idle',world,moving,mir};
+  const l=MP.last, ch=(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving||cur.mir!==l.mir;
   if(!ch)return; MP.lastPub=now; MP.last=cur;
-  MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving}),{qos:0}); }
+  MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving,mir:cur.mir}),{qos:0}); }
 function mpTick(dt){
   const now=performance.now();
   for(const [id,r] of MP.remotes){ if(now-r.last>5000){ scene.remove(r.avatar); MP.remotes.delete(id); continue; }   // limpieza por timeout
+    if(!r.rigged && mpBodySrc){ if(r.body)r.avatar.remove(r.body); mpRig(r); }                                       // al cargar el GLB, cambia la cápsula por la skin real
     r.pos.lerp(r.target, Math.min(1,10*dt));                                                                        // interpolación (10Hz → 60fps suave)
     const same=(r.world===world); r.avatar.visible=same;                                                            // solo se ven los del MISMO mundo
-    if(same){ r.avatar.position.set(r.pos.x, r.pos.y, r.pos.z); r.avatar.rotation.y=r.yaw+Math.PI;
-      if(r.moving){ r.bob+=dt*8; r.avatar.position.y += Math.abs(Math.sin(r.bob))*0.06; } } }
+    if(!same)continue;
+    r.avatar.position.set(r.pos.x, r.pos.y, r.pos.z); r.avatar.rotation.y=r.yaw+Math.PI;
+    if(r.rigged && r.mixer){ r.setAnim(r.anim||'idle'); r.mixer.update(dt);                                          // MISMA animación que está haciendo el otro
+      if(r.body) r.body.scale.x = r.mir? -r.sx : r.sx;                                                               // espejo (slide/wallrun a la derecha)
+      if(r.hips&&r.hipsBind){ r.hips.position.x=r.hipsBind.x; r.hips.position.z=r.hipsBind.z; r.hips.position.y=Math.max(r.hipsBind.y-0.5,Math.min(r.hipsBind.y+0.15,r.hips.position.y)); } }
+    else if(r.body){ r.bob+=dt*8*(r.moving?1:0); r.avatar.position.y += Math.abs(Math.sin(r.bob))*0.06; } }         // cápsula provisional
   mpPublishState();
 }
 
