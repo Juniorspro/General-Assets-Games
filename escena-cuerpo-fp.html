@@ -174,6 +174,17 @@ function setupQuiz(){ if(!quizPanelQ)return;
   if(corrL){ unlock(quizL); quizR.locked=true; quizR.mesh.visible=false; }
   else     { unlock(quizR); quizL.locked=true; quizL.mesh.visible=false; }
 }
+// PORTAL final (edificio 6): anillo brillante; al tocarlo, nivel completo
+let portalMesh=null, portalDone=false;
+function buildPortal(x,y,z){
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.5,0.2,12,30), new THREE.MeshStandardMaterial({color:0x6fd6ff,emissive:0x2598ff,emissiveIntensity:1.6,roughness:0.4,metalness:0.2}));
+  ring.position.set(x,y,z); scene.add(ring);
+  const disc=new THREE.Mesh(new THREE.CircleGeometry(1.4,30), new THREE.MeshBasicMaterial({color:0x9fefff,transparent:true,opacity:0.35,side:THREE.DoubleSide,fog:false}));
+  disc.position.set(x,y,z); scene.add(disc);
+  portalMesh={x,y,z,ring,disc}; }
+function tickPortal(dt){ if(!portalMesh)return; portalMesh.ring.rotation.z+=dt*0.7;
+  const dx=player.pos.x-portalMesh.x, dy=(player.pos.y+1)-portalMesh.y, dz=player.pos.z-portalMesh.z;
+  if(!portalDone && dx*dx+dy*dy+dz*dz<1.9*1.9){ portalDone=true; if(HUD)HUD.textContent='¡NIVEL 1 COMPLETO! 🎉'; } }
 
 /* ===================== NIVEL 1 — parkour de edificios (1→6 por ahora) ===================== */
 
@@ -204,19 +215,19 @@ quizL=plat(-4,1.8,104.5,4.5,5,0x9aa6b3); quizR=plat(4,1.8,104.5,4.5,5,0x9aa6b3);
 quizPanelL=textPanel(-4,4.2,100.4,2.4,1.5); quizPanelR=textPanel(4,4.2,100.4,2.4,1.5); quizPanelQ=textPanel(0,5.6,100.4,3.4,1.8);
 plat(0,1.8,109,9,3,0x9aa6b3);   // plataforma de unión (desde cualquier lado correcto) → edificio 5
 
-// ===== EDIFICIO 5 — SUBIR activando 15 botones (3 por nivel × 5 niveles) hasta el EDIFICIO 6 =====
+// ===== EDIFICIO 5 — SUBIR: cada nivel tiene UN botón, ALTERNANDO lado. Saltás 2 plataformas hacia ese lado, activás, volvés y subís. El otro lado NO tiene camino. Arriba: PORTAL =====
 bldg(0,1.8,116,14,10); checkpoint(0,116,14,10, 0,2.8,113);
-const _tiers=[]; const NT=6;
-for(let i=0;i<NT;i++){ const ty=1.8+i*1.3, tz=122+i*4.5;
-  const c=plat(0,ty,tz,8,5, i===NT-1?0xffd24a:0x4aa0d0);
-  if(i>0){ c.locked=true; c.mesh.visible=false; } _tiers.push({c,ty,tz}); }
-for(let i=0;i<NT-1;i++){ const {ty,tz}=_tiers[i]; const up=_tiers[i+1].c; let got=0; const onP=()=>{ if(++got>=3) unlock(up); };
-  plat(-7,ty,tz,5,4,0x6a8a3a); addButton(-8.2,ty,tz+1.4,onP); addButton(-8.2,ty,tz-1.4,onP);   // izquierda: 2 botones
-  plat(7,ty,tz,5,4,0x6a8a3a); addButton(8.2,ty,tz,onP);                                          // derecha: 1 botón
+const _cen=[]; const _NT=8;   // 8 centrales → 7 botones alternados
+for(let i=0;i<_NT;i++){ const ty=1.8+i*1.4, tz=122+i*4.2; const c=plat(0,ty,tz,5,4,0x4aa0d0); if(i>0){ c.locked=true; c.mesh.visible=false; } _cen.push({c,ty,tz}); }
+for(let i=0;i<_NT-1;i++){ const {ty,tz}=_cen[i]; const up=_cen[i+1].c; const s=(i%2===0)?1:-1;   // par→DERECHA, impar→IZQUIERDA
+  plat(s*6,    ty, tz, 3.6,3.6, 0x6a8a3a);     // 1ª plataforma hacia el lado
+  plat(s*10.6, ty, tz, 3.6,3.6, 0x6a8a3a);     // 2ª plataforma (el lado contrario NO tiene nada)
+  addButton(s*10.6, ty, tz, ()=>unlock(up));   // botón en la 2ª → desbloquea la subida central
 }
-// EDIFICIO 6 (cima)
-const _b6z=122+(NT-1)*4.5; zoneTag(0,_b6z,0xffd24a); addBox(0,1.8+(NT-1)*1.3+1.0,_b6z,2.2,1.4,2.2,0xffd24a);
-checkpoint(0,_b6z,8,5, 0,1.8+(NT-1)*1.3+0.5,_b6z-1);
+// EDIFICIO 6 = PORTAL en la cima
+const _pz=122+(_NT-1)*4.2, _py=1.8+(_NT-1)*1.4;
+checkpoint(0,_pz,5,4, 0,_py+0.5,_pz-1);
+buildPortal(0,_py+1.7,_pz);
 
 // ===== NUBES (planos suaves debajo y alrededor → sensación de altura) =====
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.5,depthWrite:false,fog:false});
@@ -347,7 +358,7 @@ const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
 const HUD=document.getElementById('hud');
 function update(dt){
   if(player.pos.y<-18) respawn();   // caíste del techo al cielo → reaparecer
-  tickButtons();
+  tickButtons(); tickPortal(dt);
   if(player.onGround){ for(const cp of checkpoints){ if(player.pos.x>cp.minx&&player.pos.x<cp.maxx&&player.pos.z>cp.minz&&player.pos.z<cp.maxz){ lastSafe.copy(cp.pos); break; } } }   // checkpoint al pisar un edificio
   forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   let ix=joy.x,iz=joy.y; const mag=Math.min(1,Math.hypot(ix,iz)); if(mag>1){ix/=mag;iz/=mag;}
@@ -495,7 +506,7 @@ function update(dt){
   euler.set(player.pitch+leanPitch+rollCam, player.yaw, player.roll+leanRoll); camera.quaternion.setFromEuler(euler);
 
   sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
-  if(HUD) HUD.textContent = estado||(player.onGround?(sp<0.5?'quieto':(sp<3.6?'caminar':'correr')):'en el aire');
+  if(HUD && !portalDone) HUD.textContent = estado||(player.onGround?(sp<0.5?'quieto':(sp<3.6?'caminar':'correr')):'en el aire');
 }
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
 
