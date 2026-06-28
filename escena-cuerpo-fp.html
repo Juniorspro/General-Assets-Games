@@ -101,7 +101,6 @@ function addBox(x,y,z,w,h,d,color,rough,noWall){   // (x,y,z)=centro
 // ===== MUNDO actual: 'city' (parkour) o 'grass' (frutiger aero) =====
 let world='city', grassMode=false;
 const GRASS_GZ=2000;          // el mundo de césped vive lejos en +Z para no chocar con la pista
-const GRASS_SP=0.3;           // separación de las briznas (lattice fijo del mundo) — denso
 // elevaciones del terreno (mismas ondas que se replican en el shader del césped)
 function terrainH(x,z){ const lz=z-GRASS_GZ;
   return Math.sin(x*0.035)*3.2 + Math.cos(lz*0.045)*3.2 + Math.sin((x*0.6+lz)*0.02)*5.0 + Math.cos((x-lz*0.7)*0.028)*2.2; }
@@ -253,43 +252,34 @@ function rebuildTerrain(cx,cz){ terrainMesh.position.set(cx,0,cz);
   const p=terrGeo.attributes.position;
   for(let i=0;i<p.count;i++){ p.setY(i, terrainH(p.getX(i)+cx, p.getZ(i)+cz)); }
   p.needsUpdate=true; terrGeo.computeVertexNormals(); terrGeo.computeBoundingSphere(); }
-// --- césped GPU-instanciado: lattice fijo en el mundo, el parche sigue al jugador (uCenter) ---
-const GRASS_HALF=40;                                   // radio del parche de briznas alrededor del jugador
-const bladeGeo=new THREE.InstancedBufferGeometry();
-const _bw=0.04;
-bladeGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array([
-  -_bw,0,0,  _bw,0,0,  -_bw*0.7,0.5,0,  _bw*0.7,0.5,0,  0,1,0 ]),3));
-bladeGeo.setIndex([0,1,2, 2,1,3, 2,3,4]);
-const _per=Math.floor(GRASS_HALF*2/GRASS_SP), _N=_per*_per;
-const _off=new Float32Array(_N*2), _rnd=new Float32Array(_N); let _k=0;
-for(let i=0;i<_per;i++)for(let j=0;j<_per;j++){
-  _off[_k*2]   = -GRASS_HALF + i*GRASS_SP + (Math.random()-0.5)*GRASS_SP;
-  _off[_k*2+1] = -GRASS_HALF + j*GRASS_SP + (Math.random()-0.5)*GRASS_SP;
-  _rnd[_k]=Math.random(); _k++; }
-bladeGeo.setAttribute('aOffset',new THREE.InstancedBufferAttribute(_off,2));
-bladeGeo.setAttribute('aRand',new THREE.InstancedBufferAttribute(_rnd,1));
-bladeGeo.instanceCount=_N;
+// --- césped GPU-instanciado, dividido en TILES (grupos) alrededor del jugador ---
+// cada tile es una malla propia → three.js le aplica FRUSTUM CULLING (sólo se dibuja el césped que mirás).
+// el viento sólo afecta las briznas cercanas (las lejanas quedan INMÓVILES). Densidad alta (~10x).
+const TILE=10, BLADE_SP=0.084, TILES_R=3;               // tile de 10u, brizna cada 8.4cm, radio 3 → grilla 7x7 (49 grupos)
 const grassMat=new THREE.ShaderMaterial({ side:THREE.DoubleSide,
-  uniforms:{ uTime:{value:0}, uCenter:{value:new THREE.Vector2(0,GRASS_GZ)} },
+  uniforms:{ uTime:{value:0}, uPlayer:{value:new THREE.Vector2(0,GRASS_GZ)} },
   vertexShader:`
-    uniform float uTime; uniform vec2 uCenter;
+    uniform float uTime; uniform vec2 uPlayer;
     attribute vec2 aOffset; attribute float aRand;
     varying float vY;
     float terr(vec2 p){ float lz=p.y-2000.0;
       return sin(p.x*0.035)*3.2 + cos(lz*0.045)*3.2 + sin((p.x*0.6+lz)*0.02)*5.0 + cos((p.x-lz*0.7)*0.028)*2.2; }
     void main(){
-      vec2 wxz = uCenter + aOffset;
+      vec4 root = modelMatrix * vec4(aOffset.x, 0.0, aOffset.y, 1.0);   // posición mundial de la raíz (traslación del tile)
+      vec2 wxz = root.xz;
       float gY = terr(wxz);
       float ang = aRand*6.2831;     float ca=cos(ang), sa=sin(ang);
       float hgt = 0.4 + aRand*0.55;
       float ty = position.y;        // 0..1 a lo largo de la brizna
       vec3 lp = position;  lp.y *= hgt;
-      float wind = sin(uTime*1.6 + wxz.x*0.25 + wxz.y*0.18) + 0.5*sin(uTime*2.4 + wxz.x*0.4 + wxz.y*0.3);
+      // viento sólo cerca del jugador → las briznas lejanas quedan inmóviles
+      float windAmt = 1.0 - smoothstep(16.0, 30.0, distance(wxz, uPlayer));
+      float wind = (sin(uTime*1.6 + wxz.x*0.25 + wxz.y*0.18) + 0.5*sin(uTime*2.4 + wxz.x*0.4 + wxz.y*0.3)) * windAmt;
       lp.x += wind*0.20*ty*ty;  lp.z += wind*0.12*ty*ty;
       vec3 rp = vec3(lp.x*ca - lp.z*sa, lp.y, lp.x*sa + lp.z*ca);
       vec3 wp = vec3(wxz.x + rp.x, gY + rp.y, wxz.y + rp.z);
       vY = ty;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(wp,1.0);
+      gl_Position = projectionMatrix * viewMatrix * vec4(wp,1.0);   // wp ya es mundial → sólo vista
     }`,
   fragmentShader:`
     varying float vY;
@@ -299,11 +289,48 @@ const grassMat=new THREE.ShaderMaterial({ side:THREE.DoubleSide,
       vec3 col = mix(base, tip, vY*vY*0.85 + 0.15);
       gl_FragColor = vec4(col,1.0);
     }`});
-const grassMesh=new THREE.Mesh(bladeGeo,grassMat); grassMesh.frustumCulled=false; grassGroup.add(grassMesh);
+// geometría de UN tile: briznas en coords locales [0,TILE]; la traslación a mundo la da mesh.position (modelMatrix)
+function makeTileGeo(){
+  const g=new THREE.InstancedBufferGeometry(); const bw=0.04;
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array([-bw,0,0, bw,0,0, -bw*0.7,0.5,0, bw*0.7,0.5,0, 0,1,0]),3));
+  g.setIndex([0,1,2, 2,1,3, 2,3,4]);
+  const per=Math.round(TILE/BLADE_SP), n=per*per;
+  const off=new Float32Array(n*2), rnd=new Float32Array(n); let k=0;
+  for(let i=0;i<per;i++)for(let j=0;j<per;j++){
+    off[k*2]   = i*BLADE_SP + (Math.random()-0.5)*BLADE_SP;
+    off[k*2+1] = j*BLADE_SP + (Math.random()-0.5)*BLADE_SP;
+    rnd[k]=Math.random(); k++; }
+  g.setAttribute('aOffset',new THREE.InstancedBufferAttribute(off,2));
+  g.setAttribute('aRand',new THREE.InstancedBufferAttribute(rnd,1));
+  g.instanceCount=n;
+  // esfera envolvente AJUSTADA (su centro Y se fija al relieve del tile en relocateTiles) → culling efectivo
+  g.boundingSphere=new THREE.Sphere(new THREE.Vector3(TILE/2,0,TILE/2), Math.hypot(TILE/2,TILE/2)+6);
+  return g;
+}
+const grassTiles=[];
+function buildGrassTiles(){ if(grassTiles.length)return;
+  const side=TILES_R*2+1;
+  for(let i=0;i<side*side;i++){ const m=new THREE.Mesh(makeTileGeo(),grassMat); m.frustumCulled=true; grassGroup.add(m); grassTiles.push({mesh:m,gx:1e9,gz:1e9}); }
+}
+let grassTileSnap=new THREE.Vector2(1e12,1e12);
+function relocateTiles(px,pz){   // recicla los tiles para que siempre rodeen al jugador (5x5)
+  const pcx=Math.floor(px/TILE), pcz=Math.floor(pz/TILE);
+  if(pcx===grassTileSnap.x && pcz===grassTileSnap.y) return; grassTileSnap.set(pcx,pcz);
+  const need=new Set();
+  for(let dx=-TILES_R;dx<=TILES_R;dx++)for(let dz=-TILES_R;dz<=TILES_R;dz++) need.add((pcx+dx)+','+(pcz+dz));
+  const have=new Set(grassTiles.map(t=>t.gx+','+t.gz));
+  const free=grassTiles.filter(t=>!need.has(t.gx+','+t.gz));
+  for(let dx=-TILES_R;dx<=TILES_R;dx++)for(let dz=-TILES_R;dz<=TILES_R;dz++){
+    const gx=pcx+dx, gz=pcz+dz; if(have.has(gx+','+gz)) continue;
+    const t=free.pop(); if(!t) continue; t.gx=gx; t.gz=gz; t.mesh.position.set(gx*TILE,0,gz*TILE);
+    t.mesh.geometry.boundingSphere.center.y = terrainH(gx*TILE+TILE/2, gz*TILE+TILE/2);   // centra la esfera al relieve del tile → culling preciso
+  }
+}
 // --- entrar al mundo de césped ---
 function enterGrass(){ if(grassMode)return; world='grass'; grassMode=true;
   const sy=terrainH(0,GRASS_GZ);
   rebuildTerrain(0,GRASS_GZ); terrSnap.set(0,GRASS_GZ);
+  buildGrassTiles(); relocateTiles(0,GRASS_GZ); grassMat.uniforms.uPlayer.value.set(0,GRASS_GZ);
   grassGroup.visible=true;
   player.pos.set(0, sy+0.05, GRASS_GZ); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
@@ -444,8 +471,8 @@ function update(dt){
   tickButtons(); tickPortal(dt);
   skyMesh.position.copy(player.pos);   // el cielo sigue al jugador (mismo cielo en ambos mundos)
   if(grassMode){ grassMat.uniforms.uTime.value += dt;
-    // el parche de césped sigue al jugador, encajado al lattice (las briznas quedan fijas en el mundo)
-    grassMat.uniforms.uCenter.value.set(Math.round(player.pos.x/GRASS_SP)*GRASS_SP, Math.round(player.pos.z/GRASS_SP)*GRASS_SP);
+    grassMat.uniforms.uPlayer.value.set(player.pos.x,player.pos.z);   // viento centrado en el jugador (lejos = inmóvil)
+    relocateTiles(player.pos.x,player.pos.z);                          // los tiles de césped siguen al jugador (frustum culling por tile)
     const sx=Math.round(player.pos.x/12)*12, sz=Math.round(player.pos.z/12)*12;   // re-displazar el terreno al cambiar de celda
     if(sx!==terrSnap.x||sz!==terrSnap.y){ rebuildTerrain(sx,sz); terrSnap.set(sx,sz); }
   }
