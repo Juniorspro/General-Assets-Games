@@ -136,26 +136,87 @@ function bldg(x,top,z,w,d){
   m.position.set(x,top-18,z); m.castShadow=true; m.receiveShadow=true; scene.add(m);
   colliders.push({minx:x-w/2,maxx:x+w/2,miny:top-36,maxy:top,minz:z-d/2,maxz:z+d/2,mesh:m}); }
 
-// ===== EDIFICIO DE SALIDA: chico y VACÍO =====
-bldg(0,0,2,14,14);
+/* ===================== SISTEMAS DE NIVEL (botones, plataformas bloqueadas, puertas-quiz, checkpoints) ===================== */
+// plataforma BLOQUEADA: invisible y sin colisión hasta desbloquear
+function addLocked(x,top,z,w,d,col){ const c=plat(x,top,z,w,d,col||0x4aa0d0); c.locked=true; c.mesh.visible=false; return c; }
+function unlock(c){ if(c){ c.locked=false; c.mesh.visible=true; } }
+// botón: al acercarte se activa (se pone verde) y dispara onPress
+const buttons=[];
+function addButton(x,y,z,onPress){
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(0.42,0.52,0.4,18), new THREE.MeshStandardMaterial({color:0xd23b3b,emissive:0x661414,emissiveIntensity:0.9,roughness:0.5}));
+  m.position.set(x,y+0.2,z); m.castShadow=true; scene.add(m);
+  buttons.push({m,x,y,z,on:false,onPress}); }
+function tickButtons(){ for(const b of buttons){ if(b.on)continue;
+  const dx=player.pos.x-b.x, dz=player.pos.z-b.z, dy=player.pos.y-b.y;
+  if(dx*dx+dz*dz<1.7*1.7 && dy>-0.6 && dy<2.4){ b.on=true; b.m.material.color.set(0x3bd24f); b.m.material.emissive.set(0x12521e); if(b.onPress)b.onPress(); } } }
+// cartel/numero 3D (canvas) que mira hacia -Z (hacia el jugador que avanza en +Z)
+function textPanel(x,y,z,w,h){
+  const cv=document.createElement('canvas'); cv.width=256; cv.height=160; const cx=cv.getContext('2d');
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace;
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({map:tex,transparent:true,fog:false,side:THREE.DoubleSide}));
+  m.position.set(x,y,z); m.rotation.y=Math.PI; scene.add(m);
+  return { set(txt,col){ cx.clearRect(0,0,256,160); cx.fillStyle='rgba(16,24,34,0.82)'; cx.fillRect(0,0,256,160);
+    cx.strokeStyle='rgba(255,255,255,0.25)'; cx.lineWidth=6; cx.strokeRect(3,3,250,154);
+    cx.fillStyle=col||'#ffd24a'; cx.font='bold 92px sans-serif'; cx.textAlign='center'; cx.textBaseline='middle'; cx.fillText(txt,128,84); tex.needsUpdate=true; } };
+}
+// checkpoints: al pisar la zona de un edificio, reaparecés ahí (no desde el principio)
+const checkpoints=[]; let lastSafe=new THREE.Vector3(0,2,4);
+function checkpoint(x,z,w,d,sx,sy,sz){ checkpoints.push({minx:x-w/2,maxx:x+w/2,minz:z-d/2,maxz:z+d/2,pos:new THREE.Vector3(sx,sy,sz)}); }
+// QUIZ de sumas (edificio 4): dos puertas, la respuesta correcta es piso sólido, la otra es un hueco
+let quizL=null,quizR=null,quizPanelL=null,quizPanelR=null,quizPanelQ=null;
+function setupQuiz(){ if(!quizPanelQ)return;
+  const a=2+((Math.random()*8)|0), b=2+((Math.random()*8)|0), ans=a+b;
+  let wrong=ans; while(wrong===ans){ wrong=ans+((Math.random()*7)|0)-3; if(wrong<1)wrong=ans+2; }
+  const corrL=Math.random()<0.5;
+  quizPanelQ.set(a+'+'+b+'=?','#ffffff');
+  quizPanelL.set(String(corrL?ans:wrong)); quizPanelR.set(String(corrL?wrong:ans));
+  // lado correcto = piso sólido; lado incorrecto = hueco (sin colisión, invisible)
+  if(corrL){ unlock(quizL); quizR.locked=true; quizR.mesh.visible=false; }
+  else     { unlock(quizR); quizL.locked=true; quizL.mesh.visible=false; }
+}
 
-// ===== SALTAR DE EDIFICIO EN EDIFICIO (cada techo a distinta altura/distancia) =====
-bldg(0,0.4,18,11,11);     // salto corto +Z
-bldg(-4,1.3,30,10,10);    // sube un poco
-bldg(8,1.0,39,11,10);     // a la derecha
-bldg(9,-0.8,52,12,11);    // caída suave
-bldg(21,0.5,51,10,10);
-bldg(33,2.3,42,11,11);    // MÁS ALTO → al saltar no llegás del todo y TREPÁS el borde
-bldg(33,0.2,28,11,11);    // caída
-bldg(45,1.0,18,14,13);    // techo final (grande)
-zoneTag(45,18,0xffd24a); addBox(45,2.0,18,2.4,1.6,2.4,0xffd24a);   // META (pedestal dorado)
+/* ===================== NIVEL 1 — parkour de edificios (1→6 por ahora) ===================== */
 
-// ----- features de parkour entre techos -----
-addBox(15.5,2.4,46,0.6,4.4,9,0x5b6b86);   // pared CORTA para correr por pared (cruzar un hueco)
-slideBeam(41,18,1.0);                       // DESLIZAR: viga baja en el techo final
-// TORRE para tirarte y RODAR (auto-voltereta al aterrizar), al lado del spawn
-bldg(-16,6.0,4,8,8);
-plat(-9,1.6,4,2.6,2.6); plat(-13,3.4,4,2.6,2.6);   // escaloncitos para subir a la torre
+// ===== EDIFICIO 1 (salida) + ZIG-ZAG de plataformas =====
+bldg(0,0,0,18,16); checkpoint(0,0,18,16, 0,1,4);
+plat(-2,0.3,13,4,4); plat(2,0.6,17.5,4,4); plat(-2,0.9,22,4,4); plat(2,1.2,26.5,4,4);   // zig-zag
+
+// ===== EDIFICIO 2 + DOS PAREDES (wall-run) para cruzar al 3 =====
+bldg(0,1.2,33,16,12); checkpoint(0,33,16,12, 0,2.2,31);
+addBox(3,3.2,45,0.6,5,10,0x5b6b86);    // pared derecha (corré pegado y wall-run)
+addBox(-3,3.2,45,0.6,5,10,0x5b6b86);   // pared izquierda (corredor)
+
+// ===== EDIFICIO 3 — dos caminos: botón a la DERECHA desbloquea el salto a la IZQUIERDA, pared y 3 plataformas =====
+bldg(0,1.2,57,18,14); checkpoint(0,57,18,14, 0,2.2,53);
+plat(11,1.4,58,6,7,0x6a8a3a);                                   // rama DERECHA
+const e3jump=addLocked(-11,1.8,62,4.5,4.5,0x4aa0d0);            // salto IZQUIERDA (bloqueado)
+addButton(13,1.4,58, ()=>unlock(e3jump));                       // botón → desbloquea el salto izquierdo
+addBox(-13.5,4,71,0.6,5,9,0x5b6b86);                            // PARED (wall-run hacia +Z)
+plat(-11,1.8,78,4,4); plat(-7.5,1.8,82.5,4,4); plat(-4,1.8,87,4,4);   // TRES plataformas → edificio 4
+
+// ===== EDIFICIO 4 — PUERTAS DE SUMA: deslizá por la puerta correcta; la incorrecta tiene un hueco =====
+bldg(0,1.8,98,22,16); checkpoint(0,98,22,16, 0,2.8,92);
+function door(dx){ const top=1.8;   // puerta para deslizar (postes + dintel bajo)
+  addBox(dx-2.0,top+0.9,100,0.5,1.8,0.8,0x9aa3ad,0.9,true); addBox(dx+2.0,top+0.9,100,0.5,1.8,0.8,0x9aa3ad,0.9,true);
+  addBox(dx,top+1.55,100,4.5,0.5,0.8,0x9aa3ad,0.9,true); }
+door(-4); door(4);
+quizL=plat(-4,1.8,104.5,4.5,5,0x9aa6b3); quizR=plat(4,1.8,104.5,4.5,5,0x9aa6b3);   // piso tras cada puerta (uno será hueco)
+quizPanelL=textPanel(-4,4.2,100.4,2.4,1.5); quizPanelR=textPanel(4,4.2,100.4,2.4,1.5); quizPanelQ=textPanel(0,5.6,100.4,3.4,1.8);
+plat(0,1.8,109,9,3,0x9aa6b3);   // plataforma de unión (desde cualquier lado correcto) → edificio 5
+
+// ===== EDIFICIO 5 — SUBIR activando 15 botones (3 por nivel × 5 niveles) hasta el EDIFICIO 6 =====
+bldg(0,1.8,116,14,10); checkpoint(0,116,14,10, 0,2.8,113);
+const _tiers=[]; const NT=6;
+for(let i=0;i<NT;i++){ const ty=1.8+i*1.3, tz=122+i*4.5;
+  const c=plat(0,ty,tz,8,5, i===NT-1?0xffd24a:0x4aa0d0);
+  if(i>0){ c.locked=true; c.mesh.visible=false; } _tiers.push({c,ty,tz}); }
+for(let i=0;i<NT-1;i++){ const {ty,tz}=_tiers[i]; const up=_tiers[i+1].c; let got=0; const onP=()=>{ if(++got>=3) unlock(up); };
+  plat(-7,ty,tz,5,4,0x6a8a3a); addButton(-8.2,ty,tz+1.4,onP); addButton(-8.2,ty,tz-1.4,onP);   // izquierda: 2 botones
+  plat(7,ty,tz,5,4,0x6a8a3a); addButton(8.2,ty,tz,onP);                                          // derecha: 1 botón
+}
+// EDIFICIO 6 (cima)
+const _b6z=122+(NT-1)*4.5; zoneTag(0,_b6z,0xffd24a); addBox(0,1.8+(NT-1)*1.3+1.0,_b6z,2.2,1.4,2.2,0xffd24a);
+checkpoint(0,_b6z,8,5, 0,1.8+(NT-1)*1.3+0.5,_b6z-1);
 
 // ===== NUBES (planos suaves debajo y alrededor → sensación de altura) =====
 const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.5,depthWrite:false,fog:false});
@@ -178,9 +239,9 @@ let prevVy=0, rollReq=false;
 const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
 let jumpReq=false;
 function lerpAngle(a,b,t){ let d=b-a; d=Math.atan2(Math.sin(d),Math.cos(d)); return a+d*t; }   // interpolación de ángulo (camino corto)
-const SPAWN=new THREE.Vector3(0,0,4);
-function respawn(){ player.pos.copy(SPAWN); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
-  player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0; }   // si te caés del techo, reaparece
+function respawn(){ player.pos.copy(lastSafe); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+  player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
+  setupQuiz(); }   // reaparece en el último checkpoint y re-randomiza las sumas
 // offsets de la cámara respecto al hueso de la cabeza: un poco ADELANTE (para ver el cuerpo) y a la altura de los ojos
 const CAM_FWD=0.06, CAM_UP=0.12;   // cámara 0.1 más arriba
 // "lean embodied": la cámara se inclina hacia adelante al correr/deslizar (procedural, según velocidad)
@@ -262,11 +323,11 @@ function aabbHit(){ return null; }
 function pAABB(){ return {minx:player.pos.x-R,maxx:player.pos.x+R,miny:player.pos.y,maxy:player.pos.y+player.h,minz:player.pos.z-R,maxz:player.pos.z+R}; }
 function overlap(a,c){ return a.minx<c.maxx&&a.maxx>c.minx&&a.miny<c.maxy&&a.maxy>c.miny&&a.minz<c.maxz&&a.maxz>c.minz; }
 let lastWall=null;   // collider de la última pared tocada en X/Z (para wallrun/trepar)
-function moveX(d){ player.pos.x+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
-function moveZ(d){ player.pos.z+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
+function moveX(d){ player.pos.x+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
+function moveZ(d){ player.pos.z+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
 function moveY(d){ player.pos.y+=d; const a=pAABB(); player.onGround=false;
   // sin piso infinito: si te caés del borde, caés al cielo y reaparecés (ver respawn)
-  for(const c of colliders){ if(overlap(a,c)){
+  for(const c of colliders){ if(c.locked)continue; if(overlap(a,c)){
     if(d<=0){ player.pos.y=c.maxy; player.vy=0; player.onGround=true; }   // caer sobre algo
     else { player.pos.y=c.miny-player.h; player.vy=0; }                    // pegar el techo
     a.miny=player.pos.y; a.maxy=player.pos.y+player.h; } } }
@@ -286,6 +347,8 @@ const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
 const HUD=document.getElementById('hud');
 function update(dt){
   if(player.pos.y<-18) respawn();   // caíste del techo al cielo → reaparecer
+  tickButtons();
+  if(player.onGround){ for(const cp of checkpoints){ if(player.pos.x>cp.minx&&player.pos.x<cp.maxx&&player.pos.z>cp.minz&&player.pos.z<cp.maxz){ lastSafe.copy(cp.pos); break; } } }   // checkpoint al pisar un edificio
   forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   let ix=joy.x,iz=joy.y; const mag=Math.min(1,Math.hypot(ix,iz)); if(mag>1){ix/=mag;iz/=mag;}
   const wishX=right.x*ix - forward.x*iz, wishZ=right.z*ix - forward.z*iz;   // dirección deseada (mundo)
@@ -367,7 +430,7 @@ function update(dt){
     const top=lastWall.maxy, foot=player.pos.y, rise=top-foot;
     if(rise>=1.4 && rise<=2.4){   // sólo repisas altas (al alcance de las manos); las bajas se suben saltando
       const a={minx:player.pos.x-R,maxx:player.pos.x+R,miny:top+0.02,maxy:top+player.h,minz:player.pos.z-R,maxz:player.pos.z+R};
-      let blocked=false; for(const c of colliders){ if(c.mesh===ground||c===lastWall)continue; if(overlap(a,c)){blocked=true;break;} }
+      let blocked=false; for(const c of colliders){ if(c.mesh===ground||c.locked||c===lastWall)continue; if(overlap(a,c)){blocked=true;break;} }
       if(!blocked){
         // BORDE real: punto del techo de la repisa más cercano al jugador (no un lugar fijo)
         const ex=Math.max(lastWall.minx,Math.min(lastWall.maxx,player.pos.x));
@@ -437,6 +500,7 @@ function update(dt){
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05); update(dt); renderer.render(scene,camera); }
 
 /* ===================== Init ===================== */
+setupQuiz();   // randomiza las sumas del edificio 4
 try{ layout(); renderer.render(scene,camera); setTimeout(()=>document.getElementById('loader').classList.add('hide'),250); }
 catch(err){ console.error('Init',err); document.getElementById('loader').classList.add('hide'); }
 animate();
