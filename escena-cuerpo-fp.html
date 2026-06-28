@@ -102,6 +102,7 @@
         <button class="mOpt" data-lvl="dream" data-i18n="dreamcore">Dream Core</button>
         <button class="mOpt" data-lvl="back" data-i18n="backrooms">Backrooms</button>
         <button class="mOpt" data-lvl="pool" data-i18n="poolrooms">Poolrooms</button>
+        <button class="mOpt" data-lvl="space" data-i18n="space">Base Espacial</button>
       </div>
       <div class="mLabel" data-i18n="gfx">GRÁFICOS</div>
       <div class="mRow" id="mQual">
@@ -710,7 +711,7 @@ function buildDream(){ if(dreamBuilt)return; dreamBuilt=true; const G=DREAM_GZ;
 }
 function enterDream(){ if(world==='dream')return; world='dream'; grassMode=false; dreamMode=true;
   buildDream();
-  grassGroup.visible=true; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=true; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false;   // terreno+césped visibles; orbe/obby/backrooms ocultos
+  grassGroup.visible=true; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=true; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof spaceGroup!=='undefined')spaceGroup.visible=false;   // terreno+césped visibles; orbe/obby/backrooms ocultos
   setGrassBlades(true);
   scene.background=skyTex; skyMesh.visible=false; if(skyEnv)scene.environment=skyEnv;
   scene.fog.color.set(0xdfe6ef); scene.fog.near=40; scene.fog.far=320;   // bruma nostálgica/dreamcore (no ves muy lejos)
@@ -756,7 +757,7 @@ function tickBackGoal(){ if(!backGoal||backDone)return; backGoal.rotation.y+=0.0
   if(dx*dx+dy*dy+dz*dz<2.4*2.4){ backDone=true; enterPoolrooms(); } }   // al salir → Poolrooms
 function enterBackrooms(){ if(world==='back')return; world='back'; grassMode=false; dreamMode=false;
   buildBackrooms();
-  grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(farMesh)farMesh.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; backGroup.visible=true;
+  grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(farMesh)farMesh.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof spaceGroup!=='undefined')spaceGroup.visible=false; backGroup.visible=true;
   scene.background=new THREE.Color(0x0c0b06); skyMesh.visible=false; scene.environment=null;   // OSCURO (interior, sin cielo)
   scene.fog.color.set(0x110e05); scene.fog.near=3; scene.fog.far=44;
   sun.intensity=0.35; sun.color.set(0xffe9b0); renderer.toneMappingExposure=1.0;
@@ -799,7 +800,7 @@ function tickPoolGoal(){ if(!poolGoal||poolDone)return; poolGoal.rotation.y+=0.0
   if(dx*dx+dy*dy+dz*dz<2.4*2.4){ poolDone=true; enterDream(); } }
 function enterPoolrooms(){ if(world==='pool')return; world='pool'; grassMode=false; dreamMode=false;
   buildPoolrooms();
-  grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(farMesh)farMesh.visible=false; poolGroup.visible=true;
+  grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof spaceGroup!=='undefined')spaceGroup.visible=false; if(farMesh)farMesh.visible=false; poolGroup.visible=true;
   scene.background=new THREE.Color(0xcdeefb); skyMesh.visible=false; if(skyEnv)scene.environment=skyEnv;   // CLARO (luminoso)
   scene.fog.color.set(0xdaf2fb); scene.fog.near=18; scene.fog.far=120;
   sun.intensity=2.6; sun.color.set(0xffffff); renderer.toneMappingExposure=1.12;
@@ -808,6 +809,88 @@ function enterPoolrooms(){ if(world==='pool')return; world='pool'; grassMode=fal
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(poolStart); portalDone=true; poolDone=false;
   setWorldHUD('poolrooms','q_pool');
+}
+
+/* ===================== BASE ESPACIAL (domo militar con varios obbys sobre LAVA; al salir, plataformas en el ESPACIO) ===================== */
+const SPACE_GZ=12000; const spaceGroup=new THREE.Group(); spaceGroup.visible=false; scene.add(spaceGroup);
+const SPACE_SKY_URL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@06d494e/assets/fp/space360.jpg';
+let spaceEnv=null; const spaceTex=new THREE.TextureLoader().load(SPACE_SKY_URL, tx=>{ spaceEnv=pmrem.fromEquirectangular(tx).texture; if(world==='space')scene.environment=spaceEnv; });
+spaceTex.colorSpace=THREE.SRGBColorSpace; spaceTex.mapping=THREE.EquirectangularReflectionMapping;
+let spaceBuilt=false, spaceOutside=false; const spaceStart=new THREE.Vector3(0,2.4,SPACE_GZ-2);
+const CLIMB_UP=4.2;   // velocidad de auto-escalada por las enredaderas
+let gridZone=null, gridNums=[], gridNext=0, spaceDoorPos=new THREE.Vector3(), spaceDoorReady=false, spaceGoal=null, spaceDone=false;
+function makeVineTex(){ const S=128,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d'); g.fillStyle='#3a4636';g.fillRect(0,0,S,S);
+  for(let i=0;i<26;i++){ const x=Math.random()*S; g.strokeStyle=`rgb(${30+Math.random()*30|0},${90+Math.random()*70|0},${40+Math.random()*30|0})`; g.lineWidth=1+Math.random()*2; g.beginPath(); let y=0,xx=x; g.moveTo(xx,y); for(;y<S;y+=8){ xx+=(Math.random()-0.5)*10; g.lineTo(xx,y);} g.stroke(); }
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,5);return t; }
+function makeGridTex(){ const S=256,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d'); g.fillStyle='#1b2128';g.fillRect(0,0,S,S);
+  g.fillStyle='#0e1318'; for(let i=16;i<S;i+=64)for(let j=16;j<S;j+=64)g.fillRect(i,j,32,32);
+  g.strokeStyle='#ff2a2a';g.lineWidth=8; for(let i=0;i<=S;i+=64){g.beginPath();g.moveTo(i,0);g.lineTo(i,S);g.stroke();g.beginPath();g.moveTo(0,i);g.lineTo(S,i);g.stroke();}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;return t; }
+function makeLavaTex(){ const S=128,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d'); g.fillStyle='#d23a08';g.fillRect(0,0,S,S);
+  for(let i=0;i<400;i++){const x=Math.random()*S,y=Math.random()*S,r=2+Math.random()*8;g.fillStyle=Math.random()<0.5?'#ff7a1a':'#8a1e04';g.beginPath();g.arc(x,y,r,0,7);g.fill();}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(8,8);return t; }
+function addSpaceBox(x,y,z,w,h,d,color,wall,vine){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), vine? new THREE.MeshStandardMaterial({map:makeVineTex(),color:0x6f8a5a,roughness:0.9}) : new THREE.MeshStandardMaterial({color:color||0x8a93a0,roughness:0.6,metalness:0.3}));
+  m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; spaceGroup.add(m);
+  const col={minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,minz:z-d/2,maxz:z+d/2,mesh:m,vine:!!vine}; colliders.push(col); if(wall||vine)wallMeshes.push(m); return col; }
+function spaceNum(n,x,y,z){ const cv=document.createElement('canvas');cv.width=cv.height=128;const cx=cv.getContext('2d'); cx.fillStyle='rgba(10,16,22,0.85)';cx.beginPath();cx.arc(64,64,58,0,7);cx.fill(); cx.fillStyle='#7fe0ff';cx.font='bold 90px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(String(n),64,68);
+  const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:true})); sp.position.set(x,y,z);sp.scale.set(1.4,1.4,1); spaceGroup.add(sp); return {n,sp,x,z,got:false}; }
+function buildSpace(){ if(spaceBuilt)return; spaceBuilt=true; const G=SPACE_GZ;
+  // DOMO de cristal militar (se ve el espacio a través)
+  const dome=new THREE.Mesh(new THREE.SphereGeometry(56,40,24,0,Math.PI*2,0,Math.PI*0.62), new THREE.MeshPhysicalMaterial({color:0xbfe0ff,transparent:true,opacity:0.12,roughness:0.05,metalness:0,clearcoat:1,side:THREE.DoubleSide,depthWrite:false}));
+  dome.position.set(0,-2,G+38); spaceGroup.add(dome);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(56,0.6,8,40),new THREE.MeshStandardMaterial({color:0x6a7682,metalness:0.6,roughness:0.4})); ring.rotation.x=Math.PI/2; ring.position.set(0,-2,G+38); spaceGroup.add(ring);
+  // LAVA procedural (caer = reinicio)
+  const lava=new THREE.Mesh(new THREE.PlaneGeometry(120,150),new THREE.MeshStandardMaterial({map:makeLavaTex(),color:0xff5a14,emissive:0xff3a00,emissiveIntensity:1.1,roughness:0.8})); lava.rotation.x=-Math.PI/2; lava.position.set(0,-3,G+38); spaceGroup.add(lava);
+  // inicio
+  addSpaceBox(0,1.7,G-2,8,0.5,6,0x9aa3ad); checkpoint(0,G-2,8,6, spaceStart.x,spaceStart.y,spaceStart.z);
+  // 1) CUBOS con ENREDADERAS: saltás, te subís solo y saltás al cubo de al costado
+  addSpaceBox(9,7,G+9,5,16,5,0,false,true);    // cubo vine 1
+  addSpaceBox(-6,9,G+20,5,20,5,0,false,true);  // cubo vine 2 (al costado)
+  addSpaceBox(8,8,G+31,5,18,5,0,false,true);   // cubo vine 3
+  addSpaceBox(0,2,G+40,7,0.5,6,0x9aa3ad);      // plataforma tras los cubos
+  // 2) PISO-GRID: líneas rojas = muerte; pasá por los cuadros limpios juntando números EN ORDEN
+  const gm=new THREE.MeshStandardMaterial({map:makeGridTex(),color:0xffffff,emissive:0x140404,emissiveIntensity:0.5,roughness:0.7}); gm.map.repeat.set(5,4);
+  const gridFloor=new THREE.Mesh(new THREE.BoxGeometry(20,0.5,16),gm); gridFloor.position.set(0,1.95,G+54); gridFloor.receiveShadow=true; spaceGroup.add(gridFloor);
+  colliders.push({minx:-10,maxx:10,miny:1.7,maxy:2.2,minz:G+46,maxz:G+62,mesh:gridFloor});
+  gridZone={x0:-10,z0:G+46,C:4,half:0.55,y:2.2};   // celda 4u, línea (mortal) de ±0.55 del borde
+  gridNums=[ spaceNum(1,-8,3,G+48), spaceNum(2,-4,3,G+52), spaceNum(3,0,3,G+56), spaceNum(4,4,3,G+52), spaceNum(5,8,3,G+60) ]; gridNext=0;
+  // PUERTA al exterior (al final del domo)
+  addSpaceBox(0,2,G+66,7,0.5,6,0x9aa3ad);
+  const door=new THREE.Mesh(new THREE.PlaneGeometry(2.4,3.4),new THREE.MeshBasicMaterial({color:0x0a0a14,fog:false,side:THREE.DoubleSide})); door.position.set(0,3.5,G+69); spaceGroup.add(door);
+  const frame=new THREE.Mesh(new THREE.TorusGeometry(1.7,0.18,8,20),new THREE.MeshStandardMaterial({color:0x9fd0ff,emissive:0x2a6cff,emissiveIntensity:1.2})); frame.position.set(0,3.5,G+69); spaceGroup.add(frame);
+  spaceDoorPos.set(0,3.0,G+69); spaceDoorReady=true;
+  // 3) FUERA DEL DOMO: plataformas LEJANAS (saltos altos, gravedad baja) en el ESPACIO → meta
+  let oy=4; for(let i=0;i<7;i++){ oy+= (i?6:0); addSpaceBox((i%2?1:-1)*7, oy, G+82+i*12, 4,0.5,4, 0x6f7a88); }
+  spaceGoal=new THREE.Mesh(new THREE.OctahedronGeometry(1.4,0),new THREE.MeshStandardMaterial({color:0x9fffe0,emissive:0x39ffd0,emissiveIntensity:1.6,roughness:0.2})); spaceGoal.position.set(7,oy+2,G+82+6*12); spaceGroup.add(spaceGoal);
+  checkpoint(0,G+66,7,6, 0,2.4,G+66);   // checkpoint en la puerta (para los saltos del exterior)
+}
+function tickSpace(dt){
+  // LAVA / vacío → reiniciar el obby del domo
+  if(!spaceOutside && player.pos.y < -1){ player.pos.copy(spaceStart); player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.autoClimb=null; gridNext=0; for(const g of gridNums){ g.got=false; g.sp.visible=true; } return; }
+  if(spaceOutside && player.pos.y < -30){ player.pos.set(0,2.4,SPACE_GZ+66); player.vel.set(0,0,0); player.vy=0; player.onGround=true; }   // caer fuera → vuelve a la puerta
+  // GRID mortal + números en orden
+  if(gridZone && player.onGround && player.pos.x>gridZone.x0 && player.pos.x<gridZone.x0+20 && player.pos.z>gridZone.z0 && player.pos.z<gridZone.z0+16 && Math.abs(player.pos.y-gridZone.y)<0.6){
+    const fx=Math.abs(((player.pos.x-gridZone.x0)%gridZone.C)-gridZone.C/2), fz=Math.abs(((player.pos.z-gridZone.z0)%gridZone.C)-gridZone.C/2);
+    if(fx>gridZone.C/2-gridZone.half || fz>gridZone.C/2-gridZone.half){ player.pos.copy(spaceStart); player.vel.set(0,0,0); player.vy=0; gridNext=0; for(const g of gridNums){g.got=false;g.sp.visible=true;} return; }   // pisaste línea ROJA → muerte
+  }
+  for(const g of gridNums){ if(g.got)continue; const dx=player.pos.x-g.x, dz=player.pos.z-g.z; if(dx*dx+dz*dz<1.6*1.6){ if(gridNums[gridNext]===g){ g.got=true; g.sp.visible=false; gridNext++; } } }
+  // PUERTA al espacio
+  if(!spaceOutside && spaceDoorReady){ const dx=player.pos.x-spaceDoorPos.x, dz=player.pos.z-spaceDoorPos.z; if(dx*dx+dz*dz<1.8*1.8 && Math.abs(player.pos.y-spaceDoorPos.y)<2.6){ spaceOutside=true; scene.fog.far=2000; setWorldHUD('space','q_space'); } }
+  // META (afuera)
+  if(spaceGoal && !spaceDone){ spaceGoal.rotation.y+=0.04; const dx=player.pos.x-spaceGoal.position.x, dy=player.pos.y-spaceGoal.position.y, dz=player.pos.z-spaceGoal.position.z; if(dx*dx+dy*dy+dz*dz<2.4*2.4){ spaceDone=true; if(HUD)HUD.textContent='🚀'; enterDream(); } }
+}
+function enterSpace(){ if(world==='space')return; world='space'; grassMode=false; dreamMode=false; spaceOutside=false;
+  buildSpace();
+  grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof spaceGroup!=='undefined')spaceGroup.visible=false; if(farMesh)farMesh.visible=false; spaceGroup.visible=true;
+  scene.background=spaceTex; skyMesh.visible=false; scene.environment=spaceEnv||skyEnv;   // cielo espacial (se ve por el domo)
+  scene.fog.color.set(0x05060e); scene.fog.near=40; scene.fog.far=260;
+  sun.intensity=1.5; sun.color.set(0xbcd0ff); renderer.toneMappingExposure=1.06;
+  gridNext=0; if(gridNums)for(const g of gridNums){g.got=false;g.sp.visible=true;} spaceDone=false; player.autoClimb=null;
+  player.pos.copy(spaceStart); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+  player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
+  player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
+  lastSafe.copy(spaceStart); portalDone=true;
+  setWorldHUD('space','q_space');
 }
 // --- entrar al mundo de césped ---
 function enterGrass(withTiles=true){
@@ -978,6 +1061,7 @@ function update(dt){
         if(dx*dx+dz*dz<1.9*1.9 && Math.abs(player.pos.y-dreamDoorPos.y)<3.2) enterBackrooms(); } }
   }
   if(world==='back') tickBackGoal();   // meta de las backrooms
+  if(world==='space') tickSpace(dt);   // base espacial: lava/grid/puerta/meta
   if(world==='pool'){ tickPoolGoal();   // meta de las poolrooms + caer al agua = reinicio
     if(player.pos.y < POOL_W-1.2){ player.pos.copy(poolStart); player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.noRoll=true; } }
   if(world==='crystal'){ tickMovers(dt); tickCrystalGoal();   // plataformas móviles + meta del obby
@@ -998,6 +1082,11 @@ function update(dt){
     player.climbT+=dt; const ct=Math.min(1,player.climbT/CLIMB_DUR); const e=ct*ct*(3-2*ct);
     player.pos.lerpVectors(player.climbFrom,player.climbTo,e); estado=t('st_climb');
     if(ct>=1){ player.climbing=false; player.onGround=true; player.vy=0; player.vel.set(0,0,0); }
+  } else if(player.autoClimb){
+    // ---- ENREDADERAS: subís SOLO por la cara del cubo; saltá para impulsarte al cubo del costado ----
+    const cube=player.autoClimb; player.vy=0; player.vel.set(0,0,0); player.pos.y+=CLIMB_UP*dt; estado=t('st_climb');
+    if(jumpReq){ jumpReq=false; player.autoClimb=null; player.vy=JUMP_V*1.02; player.vel.set(forward.x*10.5,0,forward.z*10.5); }   // saltar = impulsarse hacia donde mirás
+    else if(player.pos.y>=cube.maxy){ player.pos.y=cube.maxy; player.autoClimb=null; player.onGround=true; }   // llegaste arriba
   } else if(player.rolling){
     // ---- VOLTERETA (rodar): avanza en la dirección de la voltereta y sigue colisionando ----
     player.rollT+=dt; const k=Math.max(0,1-player.rollT/ROLL_DUR); const spd=ROLL_SPEED*(0.45+0.55*k);
@@ -1027,7 +1116,7 @@ function update(dt){
 
   // ---- JUMP / WALL-JUMP ----
   if(jumpReq){ jumpReq=false;
-    if(player.onGround){ player.vy=JUMP_V; player.onGround=false; if(player.sliding)player.sliding=false; }
+    if(player.onGround){ player.vy=spaceOutside?JUMP_V*1.5:JUMP_V; player.onGround=false; if(player.sliding)player.sliding=false; }   // afuera (espacio): salto ALTO
     else if(player.wallrun){ player.vy=JUMP_V*0.92; player.vel.addScaledVector(player.wallN,7.5); player.wallrun=0; player.wallrunT=WALLRUN_MAX; }   // saltar de la pared
   }
 
@@ -1051,10 +1140,11 @@ function update(dt){
   rollReq=false;
 
   // ---- gravedad + integración con colisión por eje ----
-  player.vy-=(player.wallrun?WALL_GRAV:GRAV)*dt;
+  player.vy-=(player.wallrun?WALL_GRAV:(spaceOutside?GRAV*0.42:GRAV))*dt;   // gravedad baja afuera (saltos largos en el espacio)
   lastWall=null;
   moveX(player.vel.x*dt); moveZ(player.vel.z*dt);
   moveY(player.vy*dt);
+  if(world==='space' && lastWall && lastWall.vine && !player.onGround && player.vy<3 && !player.autoClimb){ player.autoClimb=lastWall; }   // tocaste una ENREDADERA → te subís solo
 
   // aterrizaje fuerte (caída de muy alto) → rodar automáticamente para "amortiguar" (salvo al caer dentro de un mundo: noRoll)
   if(player.onGround && prevVy < -ROLL_FALL && !player.rolling && !player.noRoll){
@@ -1166,7 +1256,7 @@ function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
 }
 
 /* ===================== Volver a la CIUDAD (parkour) desde el césped/menú ===================== */
-function enterCity(){ world='city'; grassMode=false; dreamMode=false; grassGroup.visible=false; crystalGroup.visible=false; if(typeof dreamGroup!=='undefined')dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof farMesh!=='undefined'&&farMesh)farMesh.visible=false;
+function enterCity(){ world='city'; grassMode=false; dreamMode=false; grassGroup.visible=false; crystalGroup.visible=false; if(typeof dreamGroup!=='undefined')dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof spaceGroup!=='undefined')spaceGroup.visible=false; if(typeof farMesh!=='undefined'&&farMesh)farMesh.visible=false;
   scene.background=skyTex; if(skyEnv)scene.environment=skyEnv; skyMesh.visible=false;   // MISMO cielo 360 que los demás mundos
   scene.fog.color.set(0xdfeef9); scene.fog.near=130; scene.fog.far=900;
   sun.intensity=2.4; sun.color.set(0xfff6ea); renderer.toneMappingExposure=1.04;
@@ -1191,6 +1281,7 @@ document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)ret
   else if(menuLevel==='dream'){ enterDream(); }
   else if(menuLevel==='back'){ enterBackrooms(); }
   else if(menuLevel==='pool'){ enterPoolrooms(); }
+  else if(menuLevel==='space'){ enterSpace(); }
   else { enterCity(); }   // parkour
   clock.getDelta();   // descartar el dt acumulado del menú
 });
