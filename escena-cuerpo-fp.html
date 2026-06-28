@@ -147,7 +147,7 @@ const GRAV=26, JUMP_V=8.8, RUN=8.6, ACCEL=12, AIR_ACCEL=5, SLIDE_V=13.5, WALL_GR
 const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:Math.PI,pitch:0,roll:0,eye:EYE,h:STAND,faceYaw:Math.PI,
   onGround:true,crouch:false,sliding:false,slideT:0,wallrun:0,wallrunT:0,wallN:new THREE.Vector3(),mantle:0,bob:0,fov:baseFov,
   climbing:false,climbT:0,climbFrom:new THREE.Vector3(),climbTo:new THREE.Vector3(),
-  rolling:false,rollT:0,rollDir:new THREE.Vector3(),slideRight:false,camLow:0};
+  rolling:false,rollT:0,rollDir:new THREE.Vector3(),slideRight:false,camLow:0,camBack:0};
 const CLIMB_DUR=0.85;   // duración del agarre+impulso de la repisa
 const GRAB_REACH=2.0;   // a qué altura sobre los pies agarran las manos (la animación de trepada llega ~2m)
 // voltereta: el clip Run_Jump_and_Roll dura ~3.47s y la vuelta carnero está a ~1.2s → arrancamos ahí, acelerado
@@ -391,10 +391,13 @@ function update(dt){
   if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor); }     // la cámara va EN la cabeza (sigue su posición e inclinación)
   else { _camAnchor.set(player.pos.x, player.pos.y+EYE, player.pos.z); }         // roll/carga: altura estable → la vuelta de cámara queda limpia (no se traga el cuerpo)
   const fwH=_v.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
-  // al deslizarse la cámara BAJA (te agachás) — suave
-  const targetLow = player.sliding ? 0.42 : 0;
+  // al deslizarse la cámara baja un poco y se va hacia ATRÁS — suave
+  const targetLow = player.sliding ? 0.3 : 0;
+  const targetBack = player.sliding ? 0.65 : 0;
   player.camLow += (targetLow - player.camLow)*Math.min(1,12*dt);
-  camera.position.set(_camAnchor.x + fwH.x*CAM_FWD, _camAnchor.y + CAM_UP - player.camLow, _camAnchor.z + fwH.z*CAM_FWD);
+  player.camBack += (targetBack - player.camBack)*Math.min(1,12*dt);
+  const fwd = CAM_FWD - player.camBack;
+  camera.position.set(_camAnchor.x + fwH.x*fwd, _camAnchor.y + CAM_UP - player.camLow, _camAnchor.z + fwH.z*fwd);
   // ---- LEAN: la cámara se inclina hacia adelante al correr/deslizar (se mueve con el cuerpo, no queda dura) ----
   const moveAmt=Math.min(1,sp/RUN);
   const targetLean = -0.17*moveAmt - (player.sliding?0.12:0);        // adelante (mirar un poco abajo) según velocidad
