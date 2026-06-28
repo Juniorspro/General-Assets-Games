@@ -112,8 +112,29 @@ function plat(x,top,z,w,d,col){ return addBox(x,top-0.2,z,w,0.4,d,col||0x76828f)
 function slideBeam(x,z,top,col){ addBox(x,top+1.25,z,4.5,0.5,1.1,col||0x7a5566);
   addBox(x-1.8,top+0.6,z,0.5,1.6,1.1,col||0x7a5566,0.9,true); addBox(x+1.8,top+0.6,z,0.5,1.6,1.1,col||0x7a5566,0.9,true); }
 // edificio: techo caminable a la altura 'top'; baja 36u hacia el cielo
-const BCOL=[0x8a96a3,0x7e8a98,0x93a0ad,0x76828f,0x88949f]; let _bi=0;
-function bldg(x,top,z,w,d){ addBox(x,top-18,z,w,36,d,BCOL[_bi++%BCOL.length],1,true); }
+// textura procedural de fachada (concreto claro + grilla de ventanas azules), como un edificio de oficinas
+function makeFacadeTex(){ const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d');
+  g.fillStyle='#b8bcc1'; g.fillRect(0,0,256,256);                       // concreto claro
+  const cols=4, rows=4, cw=256/cols, ch=256/rows, pad=7;
+  for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){
+    const wx=i*cw+pad, wy=j*ch+pad, ww=cw-pad*2, wh=ch-pad*2;
+    g.fillStyle='#2b323a'; g.fillRect(wx-2,wy-2,ww+4,wh+4);             // marco
+    const t=0.55+Math.random()*0.45, r=(38*t+24)|0, gg=(74*t+40)|0, b=(96*t+58)|0;
+    g.fillStyle=`rgb(${r},${gg},${b})`; g.fillRect(wx,wy,ww,wh);        // vidrio azul
+    g.fillStyle='rgba(255,255,255,0.07)'; g.beginPath(); g.moveTo(wx,wy+wh*0.45); g.lineTo(wx+ww*0.6,wy); g.lineTo(wx+ww,wy); g.lineTo(wx,wy+wh); g.closePath(); g.fill();   // reflejo
+    if(Math.random()<0.14){ g.fillStyle='rgba(255,224,168,0.55)'; g.fillRect(wx+ww*0.55,wy+wh*0.18,ww*0.28,wh*0.45); }     // alguna luz cálida
+  }
+  const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace; tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.anisotropy=4; return tex; }
+const _facadeBase=makeFacadeTex();
+const ROOF_MAT=new THREE.MeshStandardMaterial({color:0xeef1f4,roughness:1,metalness:0});   // piso/techo BLANCO
+const BBOT_MAT=new THREE.MeshStandardMaterial({color:0x2a2f36,roughness:1,metalness:0});
+function bldg(x,top,z,w,d){
+  const tex=_facadeBase.clone(); tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+  tex.repeat.set(Math.max(1,Math.round(w/3.6)), Math.max(4,Math.round(36/3.4)));            // ventanas de tamaño parejo
+  const side=new THREE.MeshStandardMaterial({map:tex,roughness:1,metalness:0});
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,36,d),[side,side,ROOF_MAT,BBOT_MAT,side,side]);   // costados con textura, tope blanco
+  m.position.set(x,top-18,z); m.castShadow=true; m.receiveShadow=true; scene.add(m);
+  colliders.push({minx:x-w/2,maxx:x+w/2,miny:top-36,maxy:top,minz:z-d/2,maxz:z+d/2,mesh:m}); }
 
 // ===== EDIFICIO DE SALIDA: chico y VACÍO =====
 bldg(0,0,2,14,14);
