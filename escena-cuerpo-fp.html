@@ -19,10 +19,10 @@
         background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.18); backdrop-filter:blur(6px); touch-action:none; }
   #joyKnob{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%;
             background:radial-gradient(circle at 38% 34%,#dff0ff,#5aa0ff); box-shadow:0 4px 16px rgba(0,0,0,.45); }
-  .actBtn{ position:fixed; z-index:20; width:72px; height:72px; border-radius:50%; background:rgba(255,255,255,.07);
-           border:1.5px solid rgba(255,255,255,.22); color:#eef3f8; font-size:13px; font-weight:800; letter-spacing:.04em; backdrop-filter:blur(6px); cursor:pointer;
-           display:flex; align-items:center; justify-content:center; transition:transform .1s,background .15s; }
-  .actBtn:active{ transform:scale(.92); background:rgba(90,160,255,.32); }
+  .actBtn{ position:fixed; z-index:20; width:72px; height:72px; border-radius:50%; background:rgba(22,34,50,.62);
+           border:2px solid rgba(255,255,255,.5); color:#fff; font-size:13px; font-weight:800; letter-spacing:.04em; backdrop-filter:blur(6px); cursor:pointer;
+           box-shadow:0 4px 14px rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; transition:transform .1s,background .15s; }
+  .actBtn:active{ transform:scale(.92); background:rgba(90,160,255,.7); }
   #bJump  { right:26px;  bottom:calc(40px + var(--safe-b)); }
   #bSlide { right:110px; bottom:calc(66px + var(--safe-b)); width:62px; height:62px; }
   #bRoll  { right:40px;  bottom:calc(130px + var(--safe-b)); width:58px; height:58px; font-size:11px; }
@@ -157,7 +157,7 @@ function addBox(x,y,z,w,h,d,color,rough,noWall){   // (x,y,z)=centro
   colliders.push(c); if(!noWall)wallMeshes.push(m); return c;
 }
 // ===== MUNDO actual: 'city' (parkour) o 'grass' (frutiger aero) =====
-let world='city', grassMode=false;
+let world='city', grassMode=false, dreamMode=false;
 const GRASS_GZ=2000;          // el mundo de césped vive lejos en +Z para no chocar con la pista
 const GBND={x:100, z0:GRASS_GZ-100, z1:GRASS_GZ+165};   // LÍMITES del mapa de césped (no salirse hacia la ciudad)
 // elevaciones del terreno (mismas ondas que se replican en el shader del césped)
@@ -228,16 +228,24 @@ function textPanel(x,y,z,w,h){
 const checkpoints=[]; let lastSafe=new THREE.Vector3(0,2,4);
 function checkpoint(x,z,w,d,sx,sy,sz){ checkpoints.push({minx:x-w/2,maxx:x+w/2,minz:z-d/2,maxz:z+d/2,pos:new THREE.Vector3(sx,sy,sz)}); }
 // QUIZ de sumas (edificio 4): dos puertas, la respuesta correcta es piso sólido, la otra es un hueco
-let quizL=null,quizR=null,quizPanelL=null,quizPanelR=null,quizPanelQ=null;
+let quizL=null,quizR=null,quizPanelL=null,quizPanelR=null,quizPanelQ=null,quizWrong=null,quizArmed=false;
 function setupQuiz(){ if(!quizPanelQ)return;
   const a=2+((Math.random()*8)|0), b=2+((Math.random()*8)|0), ans=a+b;
   let wrong=ans; while(wrong===ans){ wrong=ans+((Math.random()*7)|0)-3; if(wrong<1)wrong=ans+2; }
   const corrL=Math.random()<0.5;
   quizPanelQ.set(a+'+'+b+'=?','#ffffff');
   quizPanelL.set(String(corrL?ans:wrong)); quizPanelR.set(String(corrL?wrong:ans));
-  // lado correcto = piso sólido; lado incorrecto = hueco (sin colisión, invisible)
-  if(corrL){ unlock(quizL); quizR.locked=true; quizR.mesh.visible=false; }
-  else     { unlock(quizR); quizL.locked=true; quizL.mesh.visible=false; }
+  unlock(quizL); unlock(quizR);              // ambas SÓLIDAS y visibles (no se sabe cuál es el hueco; la pared tapa el otro lado)
+  quizWrong = corrL? quizR : quizL;          // la incorrecta es una TRAMPA: se abre el hueco al pisarla
+  quizArmed = true;
+}
+// al pisar la plataforma incorrecta detrás de la pared, se abre el hueco y caés (sin poder agarrarte)
+function tickQuiz(){ if(world!=='city'||!quizArmed||!quizWrong)return;
+  if(player.pos.z>110){ quizArmed=false; return; }                                   // pasaste bien (a la unión)
+  if((player.onGround||player.sliding) && player.pos.z>102.2 && player.pos.z<110){
+    const onWrong=(player.pos.x<0 && quizWrong===quizL)||(player.pos.x>0 && quizWrong===quizR);
+    if(onWrong){ quizWrong.locked=true; quizWrong.mesh.visible=false; quizArmed=false; player.climbing=false; }   // HUECO → caída sin agarre
+  }
 }
 // PORTAL final (edificio 6): anillo brillante; al tocarlo, nivel completo
 let portalMesh=null, portalDone=false;
@@ -270,15 +278,15 @@ addButton(13,1.4,58, ()=>unlock(e3jump));                       // botón → de
 addBox(-13.5,4,71,0.6,5,9,0x5b6b86);                            // PARED (wall-run hacia +Z)
 plat(-11,1.8,78,4,4); plat(-7.5,1.8,82.5,4,4); plat(-4,1.8,87,4,4);   // TRES plataformas → edificio 4
 
-// ===== EDIFICIO 4 — PUERTAS DE SUMA: deslizá por la puerta correcta; la incorrecta tiene un hueco =====
-bldg(0,1.8,98,22,16); checkpoint(0,98,22,16, 0,2.8,92);
-function door(dx){ const top=1.8;   // puerta para deslizar (postes + dintel bajo)
-  addBox(dx-2.0,top+0.9,100,0.5,1.8,0.8,0x9aa3ad,0.9,true); addBox(dx+2.0,top+0.9,100,0.5,1.8,0.8,0x9aa3ad,0.9,true);
-  addBox(dx,top+1.55,100,4.5,0.5,0.8,0x9aa3ad,0.9,true); }
-door(-4); door(4);
-quizL=plat(-4,1.8,104.5,4.5,5,0x9aa6b3); quizR=plat(4,1.8,104.5,4.5,5,0x9aa6b3);   // piso tras cada puerta (uno será hueco)
-quizPanelL=textPanel(-4,4.2,100.4,2.4,1.5); quizPanelR=textPanel(4,4.2,100.4,2.4,1.5); quizPanelQ=textPanel(0,5.6,100.4,3.4,1.8);
-plat(0,1.8,109,9,3,0x9aa6b3);   // plataforma de unión (desde cualquier lado correcto) → edificio 5
+// ===== EDIFICIO 4 — SUMA con GRAN PARED: no ves el otro lado; deslizá por la respuesta correcta. Si elegís mal, se abre un hueco y caés =====
+plat(0,1.8,96,22,12,0x8f99a6); checkpoint(0,96,22,12, 0,2.8,92);   // piso de entrada (sólido hasta z102)
+(function(){ const Z=100, C=0x9aa6b3;                              // GRAN PARED en z100 (alta, tapa el otro lado) con dos huecos bajos para deslizar (x=±4)
+  addBox(-8.1,4.8,Z,5.8,6,0.6,C,0.9,true); addBox(0,4.8,Z,5.6,6,0.6,C,0.9,true); addBox(8.1,4.8,Z,5.8,6,0.6,C,0.9,true);   // segmentos altos
+  addBox(-4,5.4,Z,2.4,4.8,0.6,C,0.9,true); addBox(4,5.4,Z,2.4,4.8,0.6,C,0.9,true);   // dinteles (dejan hueco bajo 1.8→3.0 = deslizar)
+})();
+quizL=plat(-4,1.8,105.5,6,7,0x9aa6b3); quizR=plat(4,1.8,105.5,6,7,0x9aa6b3);   // detrás de la pared, SOBRE EL VACÍO: la incorrecta se abre (trampa)
+quizPanelL=textPanel(-4,4.0,99.66,2.4,1.5); quizPanelR=textPanel(4,4.0,99.66,2.4,1.5); quizPanelQ=textPanel(0,5.2,99.66,3.6,1.9);
+plat(0,1.8,112,9,3,0x9aa6b3);   // plataforma de unión (solo se llega por la respuesta correcta) → edificio 5
 
 // ===== EDIFICIO 5 — SUBIR: cada nivel tiene UN botón, ALTERNANDO lado. Saltás 2 plataformas hacia ese lado, activás, volvés y subís. El otro lado NO tiene camino. Arriba: PORTAL =====
 bldg(0,1.8,116,14,10); checkpoint(0,116,14,10, 0,2.8,113);
@@ -469,8 +477,9 @@ function buildOrb(x,groundY,z){
   orb.position.set(0, groundY+RAD*0.8, 0); orb.castShadow=true; grp.add(orb);
   orbMeshRef=orb; shadowCasters.push(orb);
   crystalDoorPos.set(x, groundY+1.55, z-1.22); crystalDoorReady=true;   // posición mundial de la puerta
-  grassGroup.add(grp); return grp;
+  grassGroup.add(grp); orbGrp=grp; return grp;
 }
+let orbGrp=null;   // grupo del orbe/árbol (se oculta en dream)
 let grassDecorBuilt=false;
 function buildGrassDecor(){ if(grassDecorBuilt)return; grassDecorBuilt=true;
   buildOrb(7, terrainH(7,GRASS_GZ+46), GRASS_GZ+46);     // estructura adelante, en la colina (las nubes ya vienen en el cielo 360)
@@ -504,7 +513,7 @@ function tickMovers(dt){ worldT+=dt;
 let crystalGoal=null, crystalDone=false;
 function tickCrystalGoal(){ if(!crystalGoal)return; crystalGoal.rotation.y+=0.025; crystalGoal.rotation.x+=0.012;
   if(!crystalDone){ const dx=player.pos.x-crystalGoal.position.x, dy=player.pos.y-crystalGoal.position.y, dz=player.pos.z-crystalGoal.position.z;
-    if(dx*dx+dy*dy+dz*dz<2.6*2.6){ crystalDone=true; if(HUD)HUD.textContent='🔷 ¡Obby de Cristal completo! 🎉'; } } }
+    if(dx*dx+dy*dy+dz*dz<2.6*2.6){ crystalDone=true; if(HUD)HUD.textContent='🔷 ¡Obby completo! → Dream Core'; enterDream(); } } }   // completar el obby → siguiente mundo
 // El obby flota EN EL CIELO sobre el césped (cerca del orbe), encerrado en un TERRARIO de cristal
 // (piso de vidrio + cúpula) → desde el césped ya se ve en las alturas; el terreno se ve por debajo.
 const CF=58, CZA=2076, CZC=CZA+52;            // CF MÁS ALTO (≈53u sobre el suelo): el obby flota bien arriba, encerrado
@@ -553,6 +562,67 @@ function enterCrystal(){ if(world==='crystal')return; world='crystal'; grassMode
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(CSTART); portalDone=true; crystalDone=false;
   if(HUD)HUD.textContent='🔷 Obby de Cristal — llegá a la meta';
+}
+
+/* ===================== MUNDO DREAM CORE (suburbio liminal: colinas, casas procedurales, cercas blancas) ===================== */
+// reusa el terreno+césped del frutiger (terrainH) pero en otra zona; agrega casas (con colisión) y cercas. Mismo cielo 360.
+const DREAM_GZ=6000; const DBND={x:95, z0:DREAM_GZ-95, z1:DREAM_GZ+95};
+const dreamGroup=new THREE.Group(); dreamGroup.visible=false; scene.add(dreamGroup);
+let dreamBuilt=false;
+function makeHouseTex(){ const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d');
+  g.fillStyle='#e8e0cf'; g.fillRect(0,0,128,128);                                  // pared beige
+  g.fillStyle='#d8cfb8'; for(let y=0;y<128;y+=16){ g.fillRect(0,y,128,1); }          // tablones
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; return t; }
+const _houseTex=makeHouseTex();
+function dreamHouse(x,z,w,d,h,rot){   // casa procedural: cuerpo beige + techo a dos aguas marrón + ventanas; con colisión
+  const gy=terrainH(x,z); const grp=new THREE.Group(); grp.position.set(x,gy,z); grp.rotation.y=rot||0;
+  const wallMat=new THREE.MeshStandardMaterial({map:_houseTex.clone(),color:0xe9e1d0,roughness:0.95}); wallMat.map.repeat.set(w/2,h/2);
+  const body=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),wallMat); body.position.y=h/2; body.castShadow=true; body.receiveShadow=true; grp.add(body);
+  // techo a dos aguas (prisma triangular) marrón
+  const rh=Math.min(w,d)*0.55, roofMat=new THREE.MeshStandardMaterial({color:0x6b4a32,roughness:0.9});
+  const sh=new THREE.Shape(); sh.moveTo(-w/2-0.3,0); sh.lineTo(w/2+0.3,0); sh.lineTo(0,rh); sh.closePath();
+  const roof=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:d+0.6,bevelEnabled:false}),roofMat);
+  roof.rotation.y=0; roof.position.set(0,h,-(d+0.6)/2); roof.castShadow=true; grp.add(roof);
+  // ventanas (oscuras) y puerta
+  const win=new THREE.MeshStandardMaterial({color:0x37424d,roughness:0.4,metalness:0.1,emissive:0x141b22,emissiveIntensity:0.4});
+  for(const wx of [-w*0.26,w*0.26]){ const m=new THREE.Mesh(new THREE.BoxGeometry(w*0.18,h*0.22,0.1),win); m.position.set(wx,h*0.62,d/2+0.02); grp.add(m); }
+  const door=new THREE.Mesh(new THREE.BoxGeometry(w*0.2,h*0.42,0.1),new THREE.MeshStandardMaterial({color:0x5a3f2a,roughness:0.8})); door.position.set(0,h*0.21,d/2+0.02); grp.add(door);
+  dreamGroup.add(grp);
+  // collider (caja del cuerpo, en coords mundiales sin rotación → aprox AABB)
+  const hw=Math.max(w,d)/2*1.05; colliders.push({minx:x-hw,maxx:x+hw,miny:gy,maxy:gy+h,minz:z-hw,maxz:z+hw,mesh:body});
+}
+function dreamFence(x0,z0,x1,z1){   // cerca blanca de estacas siguiendo el relieve
+  const n=Math.max(2,Math.round(Math.hypot(x1-x0,z1-z0)/0.6)); const m=new THREE.MeshStandardMaterial({color:0xf3f1ea,roughness:0.85});
+  for(let i=0;i<=n;i++){ const t=i/n, x=x0+(x1-x0)*t, z=z0+(z1-z0)*t, gy=terrainH(x,z);
+    const pk=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.9,0.12),m); pk.position.set(x,gy+0.45,z); pk.castShadow=true; dreamGroup.add(pk); }
+  // travesaños
+  for(let i=0;i<n;i++){ const t0=i/n,t1=(i+1)/n, ax=x0+(x1-x0)*t0,az=z0+(z1-z0)*t0,bx=x0+(x1-x0)*t1,bz=z0+(z1-z0)*t1;
+    const gy=(terrainH(ax,az)+terrainH(bx,bz))/2, len=Math.hypot(bx-ax,bz-az);
+    const r=new THREE.Mesh(new THREE.BoxGeometry(len,0.08,0.06),m); r.position.set((ax+bx)/2,gy+0.6,(az+bz)/2); r.rotation.y=Math.atan2(-(bz-az),(bx-ax)); dreamGroup.add(r); }
+}
+function dreamPole(x,z){ const gy=terrainH(x,z), m=new THREE.MeshStandardMaterial({color:0x4a3b30,roughness:0.9});
+  const p=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.14,7,6),m); p.position.set(x,gy+3.5,z); p.castShadow=true; dreamGroup.add(p);
+  const cr=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.12,0.12),m); cr.position.set(x,gy+6.4,z); dreamGroup.add(cr); }
+function buildDream(){ if(dreamBuilt)return; dreamBuilt=true; const G=DREAM_GZ;
+  const houses=[[-22,G-30,7,8,5,0.3],[14,G-40,6,7,4.5,-0.2],[30,G-10,9,9,7,0.5],[-8,G-55,6,6,4.5,0.1],[40,G+30,7,8,5,-0.4],[-34,G+20,8,8,6,0.6],[6,G+45,7,7,5,3.0],[-20,G+55,6,7,4.5,2.6]];
+  for(const h of houses) dreamHouse(...h);
+  dreamFence(-60,G-12,60,G-18); dreamFence(-50,G+25,20,G+40); dreamFence(20,G+38,70,G+10);
+  dreamPole(-2,G-20); dreamPole(22,G+5); dreamPole(-30,G+38); dreamPole(50,G-25);
+}
+function enterDream(){ if(world==='dream')return; world='dream'; grassMode=false; dreamMode=true;
+  buildDream();
+  grassGroup.visible=true; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=true;   // terreno+césped visibles; orbe/obby ocultos
+  setGrassBlades(true);
+  scene.background=skyTex; skyMesh.visible=false; if(skyEnv)scene.environment=skyEnv;
+  scene.fog.color.set(0xdfe6ef); scene.fog.near=40; scene.fog.far=320;   // bruma nostálgica/dreamcore (no ves muy lejos)
+  sun.intensity=2.3; sun.color.set(0xfff3df); renderer.toneMappingExposure=1.12;
+  const sy=terrainH(0,DREAM_GZ);
+  player.pos.set(0,sy+0.4,DREAM_GZ); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+  player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
+  player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
+  lastSafe.set(0,sy+0.4,DREAM_GZ); portalDone=true;
+  buildGrassTiles(); grassTileSnap.set(1e12,1e12); relocateTiles(0,DREAM_GZ); grassMat.uniforms.uPlayer.value.set(0,DREAM_GZ);
+  if(HUD)HUD.textContent='🌫️ Dream Core — un suburbio que no termina';
 }
 // --- entrar al mundo de césped ---
 function enterGrass(withTiles=true){
@@ -678,7 +748,7 @@ function overlap(a,c){ return a.minx<c.maxx&&a.maxx>c.minx&&a.miny<c.maxy&&a.max
 let lastWall=null;   // collider de la última pared tocada en X/Z (para wallrun/trepar)
 function moveX(d){ if(grassMode){ player.pos.x=Math.max(-GBND.x,Math.min(GBND.x,player.pos.x+d)); return; } player.pos.x+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
 function moveZ(d){ if(grassMode){ player.pos.z=Math.max(GBND.z0,Math.min(GBND.z1,player.pos.z+d)); return; } player.pos.z+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
-function moveY(d){ if(grassMode){ player.pos.y+=d; const g=terrainH(player.pos.x,player.pos.z); player.onGround=false;
+function moveY(d){ if(grassMode||dreamMode){ player.pos.y+=d; const g=terrainH(player.pos.x,player.pos.z); player.onGround=false;
     if(player.pos.y<=g){ player.pos.y=g; player.vy=0; player.onGround=true; }                              // suelo o subida
     else if(player.vy<=0 && player.vy>-3.0 && player.pos.y-g<=0.9){ player.pos.y=g; player.vy=0; player.onGround=true; }   // PEGARSE al bajar pendientes suaves (evita el parpadeo de onGround). vy>0 (salto) y caídas rápidas quedan excluidas
     return; } player.pos.y+=d; const a=pAABB(); player.onGround=false;
@@ -706,17 +776,17 @@ function wallSide(side){   // side=+1 derecha, -1 izquierda (respecto al facing)
 const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
 const HUD=document.getElementById('hud');
 function update(dt){
-  if(!grassMode && player.pos.y<-18) respawn();   // caíste del techo al cielo → reaparecer
-  tickButtons(); tickPortal(dt);
+  if(!grassMode && !dreamMode && player.pos.y<-18) respawn();   // caíste del techo al cielo → reaparecer
+  tickButtons(); tickPortal(dt); tickQuiz();
   skyMesh.position.copy(player.pos);   // el cielo sigue al jugador (mismo cielo en ambos mundos)
-  if(grassMode){ grassMat.uniforms.uTime.value += dt;
+  if(grassMode||dreamMode){ grassMat.uniforms.uTime.value += dt;   // césped procedural (frutiger Y dream)
     grassMat.uniforms.uPlayer.value.set(player.pos.x,player.pos.z);   // viento centrado en el jugador (lejos = inmóvil)
     relocateTiles(player.pos.x,player.pos.z);                          // los tiles de césped siguen al jugador (frustum culling por tile)
     const sx=Math.round(player.pos.x/12)*12, sz=Math.round(player.pos.z/12)*12;   // re-displazar el terreno al cambiar de celda
     if(sx!==terrSnap.x||sz!==terrSnap.y){ rebuildTerrain(sx,sz); terrSnap.set(sx,sz); }
-    // PUERTA AZUL del árbol → obby de cristal
-    if(crystalDoorReady){ const dx=player.pos.x-crystalDoorPos.x, dz=player.pos.z-crystalDoorPos.z;
+    if(grassMode && crystalDoorReady){ const dx=player.pos.x-crystalDoorPos.x, dz=player.pos.z-crystalDoorPos.z;   // PUERTA AZUL → obby
       if(dx*dx+dz*dz<2.0*2.0 && Math.abs(player.pos.y-crystalDoorPos.y)<2.6) enterCrystal(); }
+    if(dreamMode){ player.pos.x=Math.max(-DBND.x,Math.min(DBND.x,player.pos.x)); player.pos.z=Math.max(DBND.z0,Math.min(DBND.z1,player.pos.z)); }   // límites del mapa dream
   }
   if(world==='crystal'){ tickMovers(dt); tickCrystalGoal();   // plataformas móviles + meta del obby
     if(player.pos.y < CF-4){   // CAÍSTE al suelo del terrario → reiniciar el obby DESDE EL INICIO (no al mapa)
@@ -901,11 +971,10 @@ function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
 }
 
 /* ===================== Volver a la CIUDAD (parkour) desde el césped/menú ===================== */
-function enterCity(){ world='city'; grassMode=false; grassGroup.visible=false; crystalGroup.visible=false;
-  scene.background=cityBg; scene.environment=roomEnv; skyMesh.visible=true;
-  skyMat.uniforms.top.value.set(0x3f78c0); skyMat.uniforms.bot.value.set(0xd9eaf7);
-  scene.fog.color.set(0xcfe3f5); scene.fog.near=150; scene.fog.far=640;
-  sun.intensity=2.3; sun.color.set(0xfff2e0); renderer.toneMappingExposure=1.0;
+function enterCity(){ world='city'; grassMode=false; dreamMode=false; grassGroup.visible=false; crystalGroup.visible=false; if(typeof dreamGroup!=='undefined')dreamGroup.visible=false;
+  scene.background=skyTex; if(skyEnv)scene.environment=skyEnv; skyMesh.visible=false;   // MISMO cielo 360 que los demás mundos
+  scene.fog.color.set(0xdfeef9); scene.fog.near=130; scene.fog.far=900;
+  sun.intensity=2.4; sun.color.set(0xfff6ea); renderer.toneMappingExposure=1.04;
   portalDone=false; lastSafe.set(0,2,4); setupQuiz();
   player.pos.set(0,0,4); player.vel.set(0,0,0); player.vy=0; player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0;
@@ -960,7 +1029,7 @@ function mpRig(r){
   if(!mpBodySrc||!mpClips){   // provisional (cápsula) hasta que cargue el GLB
     const cap=new THREE.Mesh(new THREE.CapsuleGeometry(0.32,1.0,6,12), new THREE.MeshStandardMaterial({color:r.color,roughness:0.55})); cap.position.y=0.85; cap.castShadow=true; r.avatar.add(cap); r.body=cap; r.rigged=false; return; }
   const cl=SkeletonUtils.clone(mpBodySrc);
-  cl.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; const ms=Array.isArray(o.material)?o.material:[o.material]; ms.forEach(m=>{ if(m)m.side=THREE.FrontSide; }); }
+  cl.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; const ms=Array.isArray(o.material)?o.material:[o.material]; ms.forEach(m=>{ if(m)m.side=THREE.DoubleSide; }); }   // DoubleSide: el cuerpo se ve sólido desde cualquier ángulo (no se ve raro/hueco)
     if(o.isBone && /^Hips$|pelvis|cadera/i.test(o.name)){ r.hips=o; r.hipsBind=o.position.clone(); } });
   r.avatar.add(cl); r.body=cl; r.sx=Math.abs(cl.scale.x);
   r.mixer=new THREE.AnimationMixer(cl); r.actions={};
@@ -972,7 +1041,8 @@ function mpRig(r){
 function mpRemote(id,name){ let r=MP.remotes.get(id);
   if(!r){ const av=new THREE.Group(); av.add(mpNameTag(name)); scene.add(av);
     r={ id,name,color:mpColor(id),world:null,anim:'idle',moving:false,mir:false,yaw:0, pos:new THREE.Vector3(), target:new THREE.Vector3(),
-      avatar:av, last:performance.now(), bob:0, init:false, rigged:false }; MP.remotes.set(id,r); mpRig(r); }
+      avatar:av, last:performance.now(), bob:0, init:false, rigged:false }; MP.remotes.set(id,r); mpRig(r);
+    mpChatIn('🟢', (name||'Alguien')+' se unió'); }   // aviso de que se unió
   return r; }
 function mpChatIn(name,text){ if(!text)return; const log=document.getElementById('mpChatLog'); if(!log)return;
   const el=document.createElement('div'); el.className='mpMsg'; el.innerHTML='<b>'+mpEsc(name)+':</b> '+mpEsc(text); log.appendChild(el);
@@ -1015,7 +1085,7 @@ function mpTick(dt){
     r.avatar.position.set(r.pos.x, r.pos.y, r.pos.z); r.avatar.rotation.y=r.yaw+Math.PI;
     if(r.rigged && r.mixer){ r.setAnim(r.anim||'idle'); r.mixer.update(dt);                                          // MISMA animación que está haciendo el otro
       if(r.body) r.body.scale.x = r.mir? -r.sx : r.sx;                                                               // espejo (slide/wallrun a la derecha)
-      if(r.hips&&r.hipsBind){ r.hips.position.x=r.hipsBind.x; r.hips.position.z=r.hipsBind.z; r.hips.position.y=Math.max(r.hipsBind.y-0.5,Math.min(r.hipsBind.y+0.15,r.hips.position.y)); } }
+      if(r.hips&&r.hipsBind){ r.hips.position.x=r.hipsBind.x; r.hips.position.z=r.hipsBind.z; } }                     // anula solo el root-motion horizontal; Y libre (sin apretar la cintura)
     else if(r.body){ r.bob+=dt*8*(r.moving?1:0); r.avatar.position.y += Math.abs(Math.sin(r.bob))*0.06; } }         // cápsula provisional
   mpPublishState();
 }
