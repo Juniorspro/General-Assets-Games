@@ -71,6 +71,12 @@
   #mpChatLog{ position:fixed; left:12px; top:calc(50px + var(--safe-t)); z-index:14; width:min(56vw,300px); display:flex; flex-direction:column; gap:4px; pointer-events:none; }
   .mpMsg{ background:rgba(14,22,30,.6); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:5px 9px; font-size:12px; color:#e6f0fa; transition:opacity .6s; max-width:100%; word-wrap:break-word; }
   .mpMsg b{ color:#8fd0ff; }
+  #vBoard{ position:fixed; left:calc(12px + var(--safe-t)); top:calc(96px + var(--safe-t)); z-index:14; width:min(50vw,240px); display:none; flex-direction:column; gap:3px;
+    background:rgba(10,18,30,.55); border:1px solid rgba(255,255,255,.14); border-radius:14px; padding:8px 10px; backdrop-filter:blur(7px); pointer-events:none; font-family:'Segoe UI',system-ui,sans-serif; }
+  #vBoard .vbTitle{ font-size:11.5px; font-weight:800; letter-spacing:.06em; color:#9fe0ff; text-transform:uppercase; margin-bottom:3px; }
+  #vBoard .vbRow{ display:flex; justify-content:space-between; gap:8px; font-size:12.5px; color:#dceaf6; }
+  #vBoard .vbRow b{ color:#7fe0c0; font-weight:700; }
+  #vBoard .vbRow.me span{ color:#ffe9a0; font-weight:700; }
   #bChat{ position:fixed; right:26px; bottom:calc(210px + var(--safe-b)); z-index:20; width:52px; height:52px; border-radius:50%;
     background:rgba(255,255,255,.07); border:1.5px solid rgba(255,255,255,.22); color:#eef3f8; font-size:20px; backdrop-filter:blur(6px); cursor:pointer;
     display:flex; align-items:center; justify-content:center; }
@@ -90,6 +96,7 @@
   <button id="bChat" class="actBtn" title="Chat">💬</button>
   <div id="mpStatus" data-s="off">multijugador</div>
   <div id="mpChatLog"></div>
+  <div id="vBoard"></div>
   <div id="menu">
     <div id="menuPanel">
       <h1 data-i18n="title">🌱 PARKOUR · FRUTIGER</h1>
@@ -103,6 +110,7 @@
         <button class="mOpt" data-lvl="back" data-i18n="backrooms">Backrooms</button>
         <button class="mOpt" data-lvl="pool" data-i18n="poolrooms">Poolrooms</button>
         <button class="mOpt" data-lvl="space" data-i18n="space">Base Espacial</button>
+        <button class="mOpt" data-lvl="void" data-i18n="void_lvl">El Vacío ∞</button>
       </div>
       <div class="mLabel" data-i18n="gfx">GRÁFICOS</div>
       <div class="mRow" id="mQual">
@@ -145,21 +153,21 @@ const LANG={
     st_idle:'quieto',st_walk:'caminar',st_run:'correr',st_air:'en el aire',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'trepar',st_roll:'voltereta',
     m_frutiger:'🌱 Mundo Frutiger — explorá el césped',m_crystal:'🔷 Obby de Cristal — llegá a la meta',m_crystaldone:'🔷 ¡Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — ¡reinicio!',
     m_dream:'🌫️ Dream Core — un suburbio que no termina',m_back:'🟡 Backrooms — encontrá la salida',m_backdone:'🟡 ¡Saliste de las Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — llegá a la meta',m_pooldone:'💧 ¡Completaste los Poolrooms!',m_level1done:'¡NIVEL 1 COMPLETO! 🎉',
-    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Saltá las plataformas hasta la meta'},
+    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Saltá las plataformas hasta la meta',void:'El Vacío',q_void:'Sobreviví las fases del obby infinito',fase:'Fase',void_die:'Caíste · vuelve a cruzar el espacio',void_best:'mejor',void_reset:'¡Vacío regenerado desde cero!',void_lvl:'El Vacío ∞'},
   en:{title:'🌱 PARKOUR · FRUTIGER',sub:'choose level and graphics',lvl:'LEVEL',gfx:'GRAPHICS',low:'Low',med:'Medium',high:'High',play:'PLAY ▶',idioma:'LANGUAGE',
     parkour:'Level 1 · Parkour',frutiger:'Frutiger World',crystal:'Crystal Obby',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'JUMP',slide:'SLIDE',roll:'ROLL',
     st_idle:'idle',st_walk:'walk',st_run:'run',st_air:'in air',st_slide:'slide',st_wallrun:'wall-run',st_climb:'climb',st_roll:'roll',
     m_frutiger:'🌱 Frutiger World — explore the grass',m_crystal:'🔷 Crystal Obby — reach the goal',m_crystaldone:'🔷 Obby complete! → Dream Core',m_crystalreset:'🔷 Crystal Obby — restart!',
     m_dream:'🌫️ Dream Core — a suburb that never ends',m_back:'🟡 Backrooms — find the exit',m_backdone:'🟡 You escaped the Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — reach the goal',m_pooldone:'💧 You cleared the Poolrooms!',m_level1done:'LEVEL 1 COMPLETE! 🎉',
-    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Jump the platforms to the goal'},
+    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Jump the platforms to the goal',void:'The Void',q_void:'Survive the endless obby phases',fase:'Phase',void_die:'You fell · cross space again',void_best:'best',void_reset:'Void regenerated from scratch!',void_lvl:'The Void ∞'},
   pt:{title:'🌱 PARKOUR · FRUTIGER',sub:'escolha nível e gráficos',lvl:'NÍVEL',gfx:'GRÁFICOS',low:'Baixo',med:'Médio',high:'Alto',play:'JOGAR ▶',idioma:'IDIOMA',
     parkour:'Nível 1 · Parkour',frutiger:'Mundo Frutiger',crystal:'Obby de Cristal',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'PULAR',slide:'DESLIZAR',roll:'ROLAR',
     st_idle:'parado',st_walk:'andar',st_run:'correr',st_air:'no ar',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'escalar',st_roll:'cambalhota',
     m_frutiger:'🌱 Mundo Frutiger — explore a grama',m_crystal:'🔷 Obby de Cristal — chegue à meta',m_crystaldone:'🔷 Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — reinício!',
     m_dream:'🌫️ Dream Core — um subúrbio sem fim',m_back:'🟡 Backrooms — ache a saída',m_backdone:'🟡 Você saiu das Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — chegue à meta',m_pooldone:'💧 Você completou as Poolrooms!',m_level1done:'NÍVEL 1 COMPLETO! 🎉',
-    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Pule as plataformas até a meta'}
+    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Pule as plataformas até a meta',void:'O Vazio',q_void:'Sobreviva às fases do obby infinito',fase:'Fase',void_die:'Você caiu · cruze o espaço de novo',void_best:'melhor',void_reset:'Vazio regenerado do zero!',void_lvl:'O Vazio ∞'}
 };
 let lang = (()=>{ try{ return localStorage.getItem('pf_lang')||'es'; }catch(e){ return 'es'; } })();
 function t(k){ return (LANG[lang]&&LANG[lang][k]) || LANG.es[k] || k; }
@@ -363,9 +371,25 @@ for(let i=0;i<18;i++){ const a=i*2.39; cloud(15+Math.cos(a)*(50+i*11), -16-(i%4)
 const grassGroup=new THREE.Group(); grassGroup.visible=false; scene.add(grassGroup);
 // --- cielo 360 (equirectangular): fondo del mundo de césped + mapa de entorno (la esfera metálica refleja las nubes reales) ---
 const SKY_URL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@36a6e75/assets/fp/sky360.jpg';
+// hace que un panorama equirectangular sea SIN COSTURA: promedia los bordes izq/der y los funde hacia adentro (borra la línea/seam del cielo)
+function makeSeamlessEquirect(img){
+  const w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const g=c.getContext('2d',{willReadFrequently:true}); g.drawImage(img,0,0,w,h);
+  try{ const fw=Math.max(8,Math.round(w*0.045)); const im=g.getImageData(0,0,w,h), d=im.data;
+    for(let y=0;y<h;y++){ const row=y*w*4;
+      for(let k=0;k<3;k++){ const E=(d[row+k]+d[row+(w-1)*4+k])*0.5;   // promedio de la columna 0 y la última
+        for(let x=0;x<fw;x++){ const a=x/fw, iL=row+x*4, iR=row+(w-1-x)*4;   // a: 0 en el borde → 1 adentro
+          d[iL+k]=Math.round(E*(1-a)+d[iL+k]*a); d[iR+k]=Math.round(E*(1-a)+d[iR+k]*a); } } }
+    g.putImageData(im,0,0); }catch(e){}   // si la imagen está "tainted" (CORS) usa la original tal cual
+  return c;
+}
 let skyEnv=null;
-const skyTex=new THREE.TextureLoader().load(SKY_URL, t=>{ skyEnv=pmrem.fromEquirectangular(t).texture; if(grassMode) scene.environment=skyEnv; });
-skyTex.colorSpace=THREE.SRGBColorSpace; skyTex.mapping=THREE.EquirectangularReflectionMapping;
+const skyTex=new THREE.Texture(); skyTex.colorSpace=THREE.SRGBColorSpace; skyTex.mapping=THREE.EquirectangularReflectionMapping; skyTex.wrapS=THREE.RepeatWrapping;
+(function(){ const img=new Image(); img.crossOrigin='anonymous';
+  img.onload=()=>{ skyTex.image=makeSeamlessEquirect(img); skyTex.needsUpdate=true; try{ skyEnv=pmrem.fromEquirectangular(skyTex).texture; }catch(e){} if(grassMode||world==='void') scene.environment=skyEnv; };
+  img.onerror=()=>{ new THREE.TextureLoader().load(SKY_URL,tx=>{ skyTex.image=tx.image; skyTex.needsUpdate=true; try{ skyEnv=pmrem.fromEquirectangular(tx).texture; }catch(e){} }); };
+  img.src=SKY_URL; })();
 // --- terreno con elevaciones (sigue al jugador: re-displaza al moverse de celda) ---
 const TSZ=340, TSEG=84;   // terreno más chico (acorde a la menor distancia de render) → menos vértices por re-displazado
 const terrGeo=new THREE.PlaneGeometry(TSZ,TSZ,TSEG,TSEG); terrGeo.rotateX(-Math.PI/2);
@@ -879,7 +903,7 @@ function buildSpace(){ if(spaceBuilt)return; spaceBuilt=true; const G=SPACE_GZ;
 }
 function tickSpace(dt){
   if(player.pos.y < -8){ player.pos.copy(spaceStart); player.vel.set(0,0,0); player.vy=0; player.onGround=true; }   // caíste al vacío → reinicio
-  if(spaceGoal && !spaceDone){ spaceGoal.rotation.y+=0.04; const dx=player.pos.x-spaceGoal.position.x, dy=player.pos.y-spaceGoal.position.y, dz=player.pos.z-spaceGoal.position.z; if(dx*dx+dy*dy+dz*dz<2.8*2.8){ spaceDone=true; enterDream(); } }
+  if(spaceGoal && !spaceDone){ spaceGoal.rotation.y+=0.04; const dx=player.pos.x-spaceGoal.position.x, dy=player.pos.y-spaceGoal.position.y, dz=player.pos.z-spaceGoal.position.z; if(dx*dx+dy*dy+dz*dz<2.8*2.8){ spaceDone=true; enterVoid(); } }   // cruzar el espacio → EL VACÍO (obby infinito por fases)
 }
 function enterSpace(){ if(world==='space')return; world='space'; grassMode=false; dreamMode=false; spaceOutside=false;
   buildSpace();
@@ -893,6 +917,87 @@ function enterSpace(){ if(world==='space')return; world='space'; grassMode=false
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(spaceStart); portalDone=true;
   setWorldHUD('space','q_space');
+}
+
+/* ===================== EL VACÍO (obby INFINITO por fases, generado PROCEDURALMENTE, compartido en multijugador) ===================== */
+const VOID_GZ=14000; const voidGroup=new THREE.Group(); voidGroup.visible=false; scene.add(voidGroup);
+const VOID_BASE=2;   // y-centro de las plataformas (top ≈ 2.25)
+let voidSeed=0, voidFase=0, voidBest=0, voidDead=false;
+const voidMeshes=[], voidCols=[], voidKill=[]; const voidStart=new THREE.Vector3(0,2.3,VOID_GZ+1); let voidGoal=null; const voidGoalPos=new THREE.Vector3();
+const vBoardEl=document.getElementById('vBoard');
+// PRNG determinista (mulberry32): misma semilla + misma fase → MISMO nivel para todos los jugadores
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function vColor(rng){ return new THREE.Color().setHSL(0.54+rng()*0.13, 0.32+rng()*0.22, 0.52+rng()*0.13).getHex(); }
+function addVoidBox(x,y,z,w,h,d,color,isWall){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color:color,roughness:0.75,metalness:0.05}));
+  m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; voidGroup.add(m); voidMeshes.push(m);
+  const col={minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,minz:z-d/2,maxz:z+d/2,mesh:m}; colliders.push(col); voidCols.push(col); if(isWall)wallMeshes.push(m);
+  return col;
+}
+function addKillLine(x,z,w,d){   // franja ROJA mortal sobre el piso
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,0.16,d), new THREE.MeshStandardMaterial({color:0xff1e1e,emissive:0xff2a2a,emissiveIntensity:1.5,roughness:0.5})); m.position.set(x,VOID_BASE+0.33,z); voidGroup.add(m); voidMeshes.push(m);
+  voidKill.push({minx:x-w/2,maxx:x+w/2,minz:z-d/2,maxz:z+d/2});
+}
+function clearVoid(){
+  for(const m of voidMeshes){ voidGroup.remove(m); if(m.geometry)m.geometry.dispose(); if(m.material)m.material.dispose(); }
+  for(const c of voidCols){ const i=colliders.indexOf(c); if(i>=0)colliders.splice(i,1); if(c.mesh){ const j=wallMeshes.indexOf(c.mesh); if(j>=0)wallMeshes.splice(j,1); } }
+  voidMeshes.length=0; voidCols.length=0; voidKill.length=0; voidGoal=null;
+}
+// genera UNA fase del obby a partir de (semilla, fase). Bien hecha: distancias saltables, dificultad creciente.
+function genFase(fase){
+  clearVoid();
+  const rng=mulberry32(((voidSeed*0x9E3779B1)>>>0) ^ ((fase*0x85EBCA6B)>>>0));
+  const top=VOID_BASE+0.25, dif=Math.min(1,fase/12);
+  addVoidBox(0,VOID_BASE,VOID_GZ,6,0.5,6, 0x8fa6c0);   // plataforma de inicio
+  voidStart.set(0, top+0.05, VOID_GZ+1);
+  let z=VOID_GZ+6, x=0; const N=4+Math.min(fase,9);
+  for(let i=0;i<N;i++){
+    const type=Math.floor(rng()*5); const xo=(rng()-0.5)*3.0;   // desvío lateral (acotado → saltable)
+    if(type===0){ const d=5+rng()*3; addVoidBox(x+xo,VOID_BASE,z+d/2,5.5,0.5,d, vColor(rng)); z+=d; x+=xo; }                           // piso seguro
+    else if(type===1){ const d=6+rng()*2; addVoidBox(x+xo,VOID_BASE,z+d/2,7,0.5,d, 0x9fb2c8); addKillLine(x+xo,z+d/2,0.7,d-0.4); z+=d; x+=xo; }   // piso PARTIDO a lo largo (caminá por un lado)
+    else if(type===2){ const d=6+rng()*2; addVoidBox(x+xo,VOID_BASE,z+d/2,6,0.5,d, 0x9fb2c8); addKillLine(x+xo,z+d*0.5,5.6,0.7); z+=d; x+=xo; }    // línea roja ATRAVESADA → saltala
+    else if(type===3){ const nc=2+Math.floor(rng()*3); for(let k=0;k<nc;k++){ const cz=z+1.3+k*2.5, cx=x+xo+(rng()-0.5)*2.2, cy=VOID_BASE+(rng()-0.5)*1.0*dif; addVoidBox(cx,cy,cz,1.6,1.2,1.6, 0xb9c6d6); } z+=1.3+(nc-1)*2.5+1.3; x+=xo; }   // CUBOS chicos (stepping stones)
+    else { const d=6, side=rng()<0.5?-1:1; addVoidBox(x+xo,VOID_BASE,z+d/2,6,0.5,d, 0x97aabf); addVoidBox(x+xo+side*1.3,VOID_BASE+2.6,z+d/2,3.4,5,0.6,0x6f7f93,true); z+=d; x+=xo; }   // PARED que tapa un lado → pasá por el otro
+    z+=1.6+dif*1.1;   // hueco entre obstáculos (más ancho con la dificultad)
+  }
+  addVoidBox(x,VOID_BASE,z+3,6,0.5,6, 0x7fd0a0);   // plataforma META
+  voidGoal=new THREE.Mesh(new THREE.OctahedronGeometry(1.3,0), new THREE.MeshStandardMaterial({color:0xaaffe0,emissive:0x39ffd0,emissiveIntensity:1.7,roughness:0.2})); voidGoal.position.set(x,top+2.2,z+3); voidGroup.add(voidGoal); voidMeshes.push(voidGoal); voidGoalPos.copy(voidGoal.position);
+}
+function updateVoidHUD(){ if(HUD)HUD.textContent=t('void'); if(HUDM)HUDM.textContent=t('fase')+' '+voidFase+(voidBest>voidFase?(' · '+t('void_best')+' '+voidBest):''); }
+function updateVoidBoard(){ if(!vBoardEl)return;
+  const rows=[{name:MP.name, best:voidBest, me:true}];
+  for(const r of MP.remotes.values()){ if(r.vBest||r.vSeed) rows.push({name:r.name||'jugador', best:r.vBest||0, me:false}); }
+  rows.sort((a,b)=>b.best-a.best);
+  vBoardEl.innerHTML='<div class="vbTitle">'+t('void_lvl')+'</div>'+rows.map((r,i)=>'<div class="vbRow'+(r.me?' me':'')+'"><span>'+(i+1)+'. '+mpEsc(r.name)+'</span><b>'+t('fase')+' '+(r.best||0)+'</b></div>').join('');
+}
+// elegí la semilla compartida: si hay una sesión VIVA, adoptala; si todos murieron (o no hay), generá todo de cero
+function chooseVoidSeed(){
+  let hadSession=false;
+  for(const r of MP.remotes.values()){ if(r.vSeed){ hadSession=true; if(r.world==='void' && !r.vDead) return r.vSeed; } }
+  if(hadSession) mpChatIn('🌀', t('void_reset'));
+  return (((Math.random()*0x7fffffff)|0)>>>0) || 1;
+}
+function voidNext(){ voidFase++; if(voidFase>voidBest)voidBest=voidFase; genFase(voidFase);
+  player.pos.copy(voidStart); player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.pitch=0;
+  lastSafe.copy(voidStart); updateVoidHUD(); updateVoidBoard(); }
+function voidDie(){ voidDead=true; mpChatIn('💀', t('void_die')+' · '+t('void_best')+' '+t('fase')+' '+voidBest); enterSpace(); }   // morir → volvés a la base espacial para re-cruzar
+function tickVoid(dt){
+  if(player.pos.y < VOID_BASE-9){ voidDie(); return; }                                                   // caíste al vacío
+  if(player.onGround){ for(const k of voidKill){ if(player.pos.x>k.minx&&player.pos.x<k.maxx&&player.pos.z>k.minz&&player.pos.z<k.maxz && Math.abs(player.pos.y-(VOID_BASE+0.25))<0.7){ voidDie(); return; } } }   // pisaste línea roja
+  if(voidGoal){ voidGoal.rotation.y+=0.05; const dx=player.pos.x-voidGoalPos.x, dy=player.pos.y-voidGoalPos.y, dz=player.pos.z-voidGoalPos.z; if(dx*dx+dy*dy+dz*dz<2.7*2.7) voidNext(); }   // meta → siguiente fase
+}
+function enterVoid(){ world='void'; grassMode=false; dreamMode=false; spaceOutside=false;
+  voidSeed=chooseVoidSeed(); voidFase=1; if(voidBest<1)voidBest=1; voidDead=false;
+  genFase(voidFase);
+  grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; spaceGroup.visible=false; if(farMesh)farMesh.visible=false; voidGroup.visible=true;
+  scene.background=skyTex; skyMesh.visible=false; if(skyEnv)scene.environment=skyEnv;   // EL VACÍO LINDO: el cielo 360 (sin suelo, solo plataformas)
+  scene.fog.color.set(0xdfeef9); scene.fog.near=140; scene.fog.far=1000;
+  sun.intensity=2.5; sun.color.set(0xfffaf0); renderer.toneMappingExposure=1.12;
+  player.pos.copy(voidStart); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+  player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
+  player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0; player.autoClimb=null;
+  lastSafe.copy(voidStart); portalDone=true;
+  updateVoidHUD(); updateVoidBoard();
 }
 // --- entrar al mundo de césped ---
 function enterGrass(withTiles=true){
@@ -1047,7 +1152,8 @@ const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
 const HUD=document.getElementById('hud'), HUDM=document.getElementById('hudMission');
 function setWorldHUD(nameKey,questKey){ if(HUD)HUD.textContent=t(nameKey); if(HUDM)HUDM.textContent=questKey?t(questKey):''; }
 function update(dt){
-  if(!grassMode && !dreamMode && player.pos.y<-18) respawn();   // caíste del techo al cielo → reaparecer
+  if(!grassMode && !dreamMode && world!=='void' && player.pos.y<-18) respawn();   // caíste del techo al cielo → reaparecer (el vacío maneja su propia muerte)
+  if(vBoardEl) vBoardEl.style.display=(world==='void')?'flex':'none';   // tabla de fases solo en el vacío
   tickButtons(); tickPortal(dt); tickQuiz();
   skyMesh.position.copy(player.pos);   // el cielo sigue al jugador (mismo cielo en ambos mundos)
   if(grassMode||dreamMode){ grassMat.uniforms.uTime.value += dt;   // césped procedural (frutiger Y dream)
@@ -1063,7 +1169,8 @@ function update(dt){
         if(dx*dx+dz*dz<1.9*1.9 && Math.abs(player.pos.y-dreamDoorPos.y)<3.2) enterBackrooms(); } }
   }
   if(world==='back') tickBackGoal();   // meta de las backrooms
-  if(world==='space') tickSpace(dt);   // base espacial: lava/grid/puerta/meta
+  if(world==='space') tickSpace(dt);   // base espacial: plataformas → el vacío
+  if(world==='void') tickVoid(dt);      // EL VACÍO: obby infinito por fases (líneas rojas, caída, meta)
   if(world==='pool'){ tickPoolGoal();   // meta de las poolrooms + caer al agua = reinicio
     if(player.pos.y < POOL_W-1.2){ player.pos.copy(poolStart); player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.noRoll=true; } }
   if(world==='crystal'){ tickMovers(dt); tickCrystalGoal();   // plataformas móviles + meta del obby
@@ -1283,6 +1390,7 @@ document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)ret
   else if(menuLevel==='back'){ enterBackrooms(); }
   else if(menuLevel==='pool'){ enterPoolrooms(); }
   else if(menuLevel==='space'){ enterSpace(); }
+  else if(menuLevel==='void'){ enterVoid(); }
   else { enterCity(); }   // parkour
   clock.getDelta();   // descartar el dt acumulado del menú
 });
@@ -1356,7 +1464,9 @@ function mpConnect(){
   client.on('error',()=>{ MP.on=false; mpSetStatus('off','mp_err'); });
   client.on('message',(topic,buf)=>{ let d; try{ d=JSON.parse(buf.toString()); }catch(e){ return; } if(!d||d.id===MP.id)return;
     if(topic.slice(-6)==='/state'){ const r=mpRemote(d.id,d.name||'jugador'); r.name=d.name||r.name; r.world=d.world; r.anim=d.anim||'idle'; r.moving=!!d.isMoving; r.mir=!!d.mir; r.yaw=d.facingAngle||0;
-      r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now(); }
+      r.vSeed=d.vSeed||0; r.vFase=d.vFase||0; r.vBest=d.vBest||0; r.vDead=!!d.vDead;   // estado del vacío (semilla compartida + mejor fase)
+      r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now();
+      if(world==='void') updateVoidBoard(); }
     else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); }
     else if(topic.slice(-7)==='/action'){ /* eventos discretos (emotes/hits): aplicar localmente */ if(d.type==='hit_player' && d.targetId===MP.id){ /* este juego no tiene daño */ } }
   });
@@ -1364,10 +1474,11 @@ function mpConnect(){
 function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.now(); if(now-MP.lastPub<100)return;
   const p=player, moving=Math.hypot(p.vel.x,p.vel.z)>0.6;
   const mir=(curAnim==='wallrun'&&p.wallrun>0)||(curAnim==='slide'&&p.slideRight);   // mismo espejo que el cuerpo local
-  const cur={x:+p.pos.x.toFixed(2),y:+p.pos.y.toFixed(2),z:+p.pos.z.toFixed(2),yaw:+p.yaw.toFixed(2),anim:curAnim||'idle',world,moving,mir};
-  const l=MP.last, ch=(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving||cur.mir!==l.mir;
+  const cur={x:+p.pos.x.toFixed(2),y:+p.pos.y.toFixed(2),z:+p.pos.z.toFixed(2),yaw:+p.yaw.toFixed(2),anim:curAnim||'idle',world,moving,mir,
+    vSeed:world==='void'?voidSeed:0, vFase:voidFase, vBest:voidBest, vDead:voidDead};
+  const l=MP.last, ch=(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving||cur.mir!==l.mir||cur.vSeed!==l.vSeed||cur.vFase!==l.vFase||cur.vBest!==l.vBest||cur.vDead!==l.vDead;
   if(!ch)return; MP.lastPub=now; MP.last=cur;
-  MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving,mir:cur.mir}),{qos:0}); }
+  MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving,mir:cur.mir,vSeed:cur.vSeed,vFase:cur.vFase,vBest:cur.vBest,vDead:cur.vDead}),{qos:0}); }
 function mpTick(dt){
   const now=performance.now();
   for(const [id,r] of MP.remotes){ if(now-r.last>5000){ scene.remove(r.avatar); MP.remotes.delete(id); continue; }   // limpieza por timeout
