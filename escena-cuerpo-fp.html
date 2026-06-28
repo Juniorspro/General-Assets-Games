@@ -455,6 +455,8 @@ function buildOrb(x,groundY,z){
 let grassDecorBuilt=false;
 function buildGrassDecor(){ if(grassDecorBuilt)return; grassDecorBuilt=true;
   buildOrb(7, terrainH(7,GRASS_GZ+46), GRASS_GZ+46);     // estructura adelante, en la colina (las nubes ya vienen en el cielo 360)
+  buildCrystalObby();                                    // el TERRARIO de cristal flota en el cielo → ya se ve al entrar al césped
+  crystalGroup.visible=true;
 }
 
 /* ===================== OBBY DE CRISTAL EN EL CIELO (misma mecánica que el parkour, con variaciones) ===================== */
@@ -484,35 +486,49 @@ let crystalGoal=null, crystalDone=false;
 function tickCrystalGoal(){ if(!crystalGoal)return; crystalGoal.rotation.y+=0.025; crystalGoal.rotation.x+=0.012;
   if(!crystalDone){ const dx=player.pos.x-crystalGoal.position.x, dy=player.pos.y-crystalGoal.position.y, dz=player.pos.z-crystalGoal.position.z;
     if(dx*dx+dy*dy+dz*dz<2.6*2.6){ crystalDone=true; if(HUD)HUD.textContent='🔷 ¡Obby de Cristal completo! 🎉'; } } }
-const CZ0=3980; const CSTART=new THREE.Vector3(0,12.4,CZ0);
+// El obby flota EN EL CIELO sobre el césped (cerca del orbe), encerrado en un TERRARIO de cristal
+// (piso de vidrio + cúpula) → desde el césped ya se ve en las alturas; el terreno se ve por debajo.
+const CF=24, CZA=2076, CZC=CZA+52;            // CF=altura del piso (≈19u sobre el suelo); flota ADELANTE del orbe (sin tapar el árbol)
+const CSTART=new THREE.Vector3(0,CF+0.4,CZA);
 let crystalBuilt=false;
 function buildCrystalObby(){ if(crystalBuilt)return; crystalBuilt=true;
-  addCrystal(0,12,CZ0,9,0.6,9,0x9ff0ff); checkpoint(0,CZ0,9,9, 0,12.4,CZ0);                 // inicio
-  addCrystal(3.5,12.7,CZ0+8,3.6,0.5,3.6,0x7fe0ff);                                           // zig-zag
-  addCrystal(-3.5,13.4,CZ0+15,3.6,0.5,3.6,0x7fd0ff);
-  addCrystal(0,14.1,CZ0+22,3.6,0.5,3.6,0x9fe8ff); checkpoint(0,CZ0+22,4,4, 0,14.5,CZ0+22);
-  addMoverC(0,14.9,CZ0+30,4,0.5,4,0x8fe0ff,(t)=>({y:Math.sin(t*1.6)*1.3}));                   // plataformas que FLOTAN (bob)
-  addMoverC(4,15.5,CZ0+37.5,4,0.5,4,0xa0d8ff,(t)=>({y:Math.cos(t*1.5)*1.3}));
-  addCrystal(-3,16,CZ0+46,0.6,5,9,0x80c8ff,true); addCrystal(3,16,CZ0+46,0.6,5,9,0x80c8ff,true);  // WALL-RUN entre dos cristales
-  addCrystal(0,15.4,CZ0+55,4.6,0.5,4.6,0x9fe8ff); checkpoint(0,CZ0+55,5,5, 0,15.8,CZ0+55);
-  addMoverC(0,15.6,CZ0+62,4,0.5,4,0x9bd6ff,(t)=>({x:Math.sin(t*1.05)*4.5}));                  // plataformas que se DESLIZAN (con acarreo)
-  addMoverC(0,15.8,CZ0+70,4,0.5,4,0x9bd6ff,(t)=>({x:Math.cos(t*0.95)*4.5}));
-  addCrystal(0,15.8,CZ0+78,6,0.5,5,0xa8e8ff);                                                 // DESLIZAR por debajo de una viga
-  addCrystal(0,17.5,CZ0+78,6,0.4,1.3,0x7fc0ff);                                               // viga: parado choca (cabeza 17.9), deslizando pasa (cabeza 17.1 < 17.3)
-  addCrystal(0,15.4,CZ0+89,5,0.5,5,0x9fe8ff); checkpoint(0,CZ0+89,5,5, 0,15.8,CZ0+89);        // salto largo (rodar al caer)
-  addCrystal(0,15.0,CZ0+100,7,0.5,7,0xb0f0ff);
-  addCrystal(0,15.4,CZ0+110,9,0.6,9,0xc8f6ff); checkpoint(0,CZ0+110,9,9, 0,15.8,CZ0+110);     // META
-  const goal=new THREE.Mesh(new THREE.OctahedronGeometry(1.6,0), new THREE.MeshPhysicalMaterial({color:0x66f0ff,emissive:0x33d0ff,emissiveIntensity:1.5,metalness:0,roughness:0.05,transmission:0.6,transparent:true,opacity:0.92,clearcoat:1}));
-  goal.position.set(0,17.6,CZ0+110); crystalGroup.add(goal); crystalGoal=goal;
-  for(let i=0;i<22;i++){ const a=i*1.7; const dec=new THREE.Mesh(new THREE.OctahedronGeometry(0.6+Math.random()*1.3,0), crystalMat([0x8fe8ff,0xb0a0ff,0x9fffd0][i%3]));   // cristales decorativos flotando
-    dec.position.set(Math.cos(a)*(15+i*1.2), 7+Math.sin(a*2)*6, CZ0+(i*5.1)%112); crystalGroup.add(dec); }
+  // PISO de vidrio (terrario) — sólido, casi transparente (se ve el terreno abajo)
+  const floorMat=new THREE.MeshPhysicalMaterial({color:0xcdeeff,transparent:true,opacity:0.34,roughness:0.05,metalness:0,clearcoat:1,clearcoatRoughness:0.05,side:THREE.DoubleSide,envMapIntensity:1.6});
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(86,1.0,130),floorMat); floor.position.set(0,CF-0.5,CZC); floor.receiveShadow=true; crystalGroup.add(floor);
+  colliders.push({minx:-43,maxx:43,miny:CF-1,maxy:CF,minz:CZC-65,maxz:CZC+65,mesh:floor});
+  // CÚPULA de cristal frutiger aero (decorativa, no choca; no usa transmission por performance)
+  const dome=new THREE.Mesh(new THREE.SphereGeometry(1,40,24,0,Math.PI*2,0,Math.PI*0.5),
+    new THREE.MeshPhysicalMaterial({color:0xb6e6ff,emissive:0x6fb6e8,emissiveIntensity:0.12,transparent:true,opacity:0.22,roughness:0.04,metalness:0,clearcoat:1,clearcoatRoughness:0.04,side:THREE.DoubleSide,envMapIntensity:1.7,depthWrite:false}));
+  dome.scale.set(44,40,70); dome.position.set(0,CF,CZC); crystalGroup.add(dome);
+  // plataformas: top = CF + altura sobre el piso
+  const P=(x,a,z,w,d,col)=>addCrystal(x, CF+a-0.25, z, w,0.5,d, col||0x9fe8ff);
+  const Pm=(x,a,z,w,d,col,mo)=>addMoverC(x, CF+a-0.25, z, w,0.5,d, col||0x9bd6ff, mo);
+  P(3.5,0.8,CZA+10,3.6,3.6,0x7fe0ff);                                       // zig-zag de saltos
+  P(-3.5,1.6,CZA+18,3.6,3.6,0x7fd0ff);
+  P(0,2.4,CZA+26,3.6,3.6);
+  Pm(0,3.2,CZA+34,4,4,0x8fe0ff,(t)=>({y:Math.sin(t*1.6)*1.1}));              // plataformas que FLOTAN (bob)
+  Pm(4,3.8,CZA+42,4,4,0xa0d8ff,(t)=>({y:Math.cos(t*1.5)*1.1}));
+  addCrystal(-3,CF+2.6,CZA+50,0.6,5.2,9,0x80c8ff,true); addCrystal(3,CF+2.6,CZA+50,0.6,5.2,9,0x80c8ff,true);  // WALL-RUN
+  P(0,3.6,CZA+59,4.6,4.6);
+  Pm(0,3.8,CZA+66,4,4,0x9bd6ff,(t)=>({x:Math.sin(t*1.05)*4.2}));            // plataformas que se DESLIZAN (con acarreo)
+  Pm(0,3.9,CZA+74,4,4,0x9bd6ff,(t)=>({x:Math.cos(t*0.95)*4.2}));
+  P(0,3.9,CZA+82,6,5,0xa8e8ff);                                            // DESLIZAR por debajo de la viga
+  addCrystal(0,29.4,CZA+82,6,0.4,1.3,0x7fc0ff);                            // viga (parado choca 29.75>28.9; deslizando pasa 28.95<28.9? → cabeza crouch 28.95, bottom viga 29.2)
+  P(0,3.5,CZA+92,5,5);                                                     // salto largo (rodar al caer)
+  P(0,3.1,CZA+102,7,7,0xb0f0ff);
+  P(0,3.5,CZA+112,9,9,0xc8f6ff);                                           // META
+  const goal=new THREE.Mesh(new THREE.OctahedronGeometry(1.6,0), new THREE.MeshPhysicalMaterial({color:0x8af6ff,emissive:0x3cd6ff,emissiveIntensity:1.7,metalness:0,roughness:0.05,transparent:true,opacity:0.94,clearcoat:1,clearcoatRoughness:0.04,envMapIntensity:1.6}));   // glossy brillante (sin transmission → no fuerza el pase costoso en el césped)
+  goal.position.set(0,CF+5.3,CZA+112); crystalGroup.add(goal); crystalGoal=goal;
+  for(let i=0;i<18;i++){ const a=i*1.7; const dec=new THREE.Mesh(new THREE.OctahedronGeometry(0.5+Math.random()*1.0,0), crystalMat([0x8fe8ff,0xb0a0ff,0x9fffd0][i%3]));   // cristales decorativos
+    dec.position.set((i%2?1:-1)*(20+i*1.0), CF+2+Math.sin(a*2)*6, CZC+Math.cos(a)*40); crystalGroup.add(dec); }
 }
+function setGrassBlades(v){ for(const t of grassTiles) t.mesh.visible=v; }
 function enterCrystal(){ if(world==='crystal')return; world='crystal'; grassMode=false;
-  buildCrystalObby(); grassGroup.visible=false; crystalGroup.visible=true;
-  scene.background=skyTex; skyMesh.visible=false; if(skyEnv) scene.environment=skyEnv;
-  scene.fog.color.set(0xdff0fb); scene.fog.near=110; scene.fog.far=720;
-  sun.intensity=2.7; sun.color.set(0xffffff); renderer.toneMappingExposure=1.16;
-  player.pos.copy(CSTART); player.pos.y+=0.4; player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+  buildCrystalObby(); crystalGroup.visible=true;
+  setGrassBlades(false);   // congela/oculta las briznas (nada de movimiento, perf); el TERRENO y el orbe siguen visibles abajo
+  scene.fog.color.set(0xdff0fb); scene.fog.near=140; scene.fog.far=1100;
+  renderer.toneMappingExposure=1.16;
+  player.pos.copy(CSTART); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(CSTART); portalDone=true; crystalDone=false;
@@ -858,7 +874,7 @@ function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
 }
 
 /* ===================== Volver a la CIUDAD (parkour) desde el césped/menú ===================== */
-function enterCity(){ world='city'; grassMode=false; grassGroup.visible=false;
+function enterCity(){ world='city'; grassMode=false; grassGroup.visible=false; crystalGroup.visible=false;
   scene.background=cityBg; scene.environment=roomEnv; skyMesh.visible=true;
   skyMat.uniforms.top.value.set(0x3f78c0); skyMat.uniforms.bot.value.set(0xd9eaf7);
   scene.fog.color.set(0xcfe3f5); scene.fog.near=150; scene.fog.far=640;
