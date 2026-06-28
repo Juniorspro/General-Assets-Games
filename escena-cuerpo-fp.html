@@ -572,7 +572,10 @@ function overlap(a,c){ return a.minx<c.maxx&&a.maxx>c.minx&&a.miny<c.maxy&&a.max
 let lastWall=null;   // collider de la última pared tocada en X/Z (para wallrun/trepar)
 function moveX(d){ if(grassMode){ player.pos.x=Math.max(-GBND.x,Math.min(GBND.x,player.pos.x+d)); return; } player.pos.x+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
 function moveZ(d){ if(grassMode){ player.pos.z=Math.max(GBND.z0,Math.min(GBND.z1,player.pos.z+d)); return; } player.pos.z+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
-function moveY(d){ if(grassMode){ player.pos.y+=d; const g=terrainH(player.pos.x,player.pos.z); player.onGround=false; if(player.pos.y<=g){ player.pos.y=g; player.vy=0; player.onGround=true; } return; } player.pos.y+=d; const a=pAABB(); player.onGround=false;
+function moveY(d){ if(grassMode){ player.pos.y+=d; const g=terrainH(player.pos.x,player.pos.z); player.onGround=false;
+    if(player.pos.y<=g){ player.pos.y=g; player.vy=0; player.onGround=true; }                              // suelo o subida
+    else if(player.vy<=0 && player.vy>-3.0 && player.pos.y-g<=0.9){ player.pos.y=g; player.vy=0; player.onGround=true; }   // PEGARSE al bajar pendientes suaves (evita el parpadeo de onGround). vy>0 (salto) y caídas rápidas quedan excluidas
+    return; } player.pos.y+=d; const a=pAABB(); player.onGround=false;
   // sin piso infinito: si te caés del borde, caés al cielo y reaparecés (ver respawn)
   for(const c of colliders){ if(c.locked)continue; if(overlap(a,c)){
     if(d<=0){ player.pos.y=c.maxy; player.vy=0; player.onGround=true; }   // caer sobre algo
