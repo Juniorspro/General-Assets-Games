@@ -816,12 +816,41 @@ const SPACE_GZ=12000; const spaceGroup=new THREE.Group(); spaceGroup.visible=fal
 const SPACE_SKY_URL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@06d494e/assets/fp/space360.jpg';
 let spaceEnv=null; const spaceTex=new THREE.TextureLoader().load(SPACE_SKY_URL, tx=>{ spaceEnv=pmrem.fromEquirectangular(tx).texture; if(world==='space')scene.environment=spaceEnv; });
 spaceTex.colorSpace=THREE.SRGBColorSpace; spaceTex.mapping=THREE.EquirectangularReflectionMapping;
+// --- textura PBR de metal corroído (para los cubos) ---
+const METAL_BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d8c254b/assets/fp/';
+let metalMat=null;
+function getMetalMat(){ if(metalMat)return metalMat;
+  const ld=new THREE.TextureLoader(); const cfg=t=>{t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,3);return t;};
+  const col=ld.load(METAL_BASE+'metal_col.jpg'); col.colorSpace=THREE.SRGBColorSpace; cfg(col);
+  const nrm=cfg(ld.load(METAL_BASE+'metal_nrm.jpg'));
+  const rgh=cfg(ld.load(METAL_BASE+'metal_rough.jpg'));
+  const met=cfg(ld.load(METAL_BASE+'metal_met.jpg'));
+  metalMat=new THREE.MeshStandardMaterial({map:col,normalMap:nrm,roughnessMap:rgh,metalnessMap:met,metalness:0.7,roughness:0.85,color:0xd2d6da,envMapIntensity:1.4,emissive:0x141312,emissiveIntensity:0.35}); return metalMat; }
 let spaceBuilt=false, spaceOutside=false; const spaceStart=new THREE.Vector3(0,2.4,SPACE_GZ-2);
 const CLIMB_UP=4.2;   // velocidad de auto-escalada por las enredaderas
 let gridZone=null, gridNums=[], gridNext=0, spaceDoorPos=new THREE.Vector3(), spaceDoorReady=false, spaceGoal=null, spaceDone=false;
-function makeVineTex(){ const S=128,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d'); g.fillStyle='#3a4636';g.fillRect(0,0,S,S);
-  for(let i=0;i<26;i++){ const x=Math.random()*S; g.strokeStyle=`rgb(${30+Math.random()*30|0},${90+Math.random()*70|0},${40+Math.random()*30|0})`; g.lineWidth=1+Math.random()*2; g.beginPath(); let y=0,xx=x; g.moveTo(xx,y); for(;y<S;y+=8){ xx+=(Math.random()-0.5)*10; g.lineTo(xx,y);} g.stroke(); }
-  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,5);return t; }
+// textura de hojas de hiedra (fondo transparente) para los cards de las lianas
+let _leafTex=null;
+function makeIvyTex(){ if(_leafTex)return _leafTex; const S=128,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d'); g.clearRect(0,0,S,S);
+  function leaf(cx,cy,r,rot,col){ g.save();g.translate(cx,cy);g.rotate(rot);g.fillStyle=col;g.beginPath();g.moveTo(0,-r);g.bezierCurveTo(r*0.8,-r*0.5,r*0.8,r*0.5,0,r);g.bezierCurveTo(-r*0.8,r*0.5,-r*0.8,-r*0.5,0,-r);g.fill();
+    g.strokeStyle='rgba(20,50,20,0.6)';g.lineWidth=1.4;g.beginPath();g.moveTo(0,-r*0.9);g.lineTo(0,r*0.9);g.stroke();g.restore(); }
+  for(let i=0;i<26;i++){ const cx=12+Math.random()*(S-24),cy=12+Math.random()*(S-24),r=10+Math.random()*16,rot=Math.random()*6.28; const gr=70+Math.random()*90|0; leaf(cx,cy,r,rot,`rgb(${28+Math.random()*30|0},${gr|0},${36+Math.random()*30|0})`); }
+  _leafTex=new THREE.CanvasTexture(c);_leafTex.colorSpace=THREE.SRGBColorSpace; return _leafTex; }
+// genera lianas 3D colgando por las caras de un cubo (tubos verdes + cards de hojas)
+function addVines(group,x,y,z,w,h,d){
+  const vineMat=new THREE.MeshStandardMaterial({color:0x3c5a32,roughness:0.85,metalness:0});
+  const leafMat=new THREE.MeshStandardMaterial({map:makeIvyTex(),color:0x6fae54,transparent:true,alphaTest:0.45,roughness:0.8,side:THREE.DoubleSide});
+  const faces=[ {n:[0,0,1],ax:'x',aw:w}, {n:[0,0,-1],ax:'x',aw:w}, {n:[1,0,0],ax:'z',aw:d}, {n:[-1,0,0],ax:'z',aw:d} ];
+  let seed=(x*13+z*7+h)|0; const rnd=()=>{ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; };
+  for(const f of faces){ const nv=3+Math.floor(rnd()*2); for(let i=0;i<nv;i++){
+    const off=(rnd()-0.5)*f.aw*0.8; const len=h*(0.45+rnd()*0.5); const top=y+h/2-0.3;
+    const sx=f.n[0]!==0? f.n[0]*(w/2+0.06): off, sz=f.n[2]!==0? f.n[2]*(d/2+0.06): off;
+    const px=f.n[0]!==0? sx: x+off, pz=f.n[2]!==0? sz: z+off;
+    const pts=[]; const sway=(rnd()-0.5)*0.8;
+    for(let s=0;s<=6;s++){ const tt=s/6; pts.push(new THREE.Vector3(px+Math.sin(tt*3+sway)*0.25*(f.n[0]?0:1)+(f.n[0]?0:0), top-len*tt, pz+Math.sin(tt*3+sway)*0.25*(f.n[2]?0:1))); }
+    const curve=new THREE.CatmullRomCurve3(pts); const tube=new THREE.Mesh(new THREE.TubeGeometry(curve,8,0.045+rnd()*0.03,5,false),vineMat); group.add(tube);
+    const nl=2+Math.floor(rnd()*3); for(let l=0;l<nl;l++){ const lt=0.2+rnd()*0.75; const p=curve.getPoint(lt); const lf=new THREE.Mesh(new THREE.PlaneGeometry(0.7+rnd()*0.5,0.7+rnd()*0.5),leafMat); lf.position.copy(p); lf.position.x+=f.n[0]*0.15; lf.position.z+=f.n[2]*0.15; lf.rotation.y=rnd()*6.28; lf.rotation.z=(rnd()-0.5)*1.2; group.add(lf); }
+  }}}
 function makeGridTex(){ const S=256,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d'); g.fillStyle='#1b2128';g.fillRect(0,0,S,S);
   g.fillStyle='#0e1318'; for(let i=16;i<S;i+=64)for(let j=16;j<S;j+=64)g.fillRect(i,j,32,32);
   g.strokeStyle='#ff2a2a';g.lineWidth=8; for(let i=0;i<=S;i+=64){g.beginPath();g.moveTo(i,0);g.lineTo(i,S);g.stroke();g.beginPath();g.moveTo(0,i);g.lineTo(S,i);g.stroke();}
@@ -829,8 +858,9 @@ function makeGridTex(){ const S=256,c=document.createElement('canvas');c.width=c
 function makeLavaTex(){ const S=128,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d'); g.fillStyle='#d23a08';g.fillRect(0,0,S,S);
   for(let i=0;i<400;i++){const x=Math.random()*S,y=Math.random()*S,r=2+Math.random()*8;g.fillStyle=Math.random()<0.5?'#ff7a1a':'#8a1e04';g.beginPath();g.arc(x,y,r,0,7);g.fill();}
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(8,8);return t; }
-function addSpaceBox(x,y,z,w,h,d,color,wall,vine){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), vine? new THREE.MeshStandardMaterial({map:makeVineTex(),color:0x6f8a5a,roughness:0.9}) : new THREE.MeshStandardMaterial({color:color||0x8a93a0,roughness:0.6,metalness:0.3}));
+function addSpaceBox(x,y,z,w,h,d,color,wall,vine){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), vine? getMetalMat() : new THREE.MeshStandardMaterial({color:color||0x8a93a0,roughness:0.6,metalness:0.3}));
   m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; spaceGroup.add(m);
+  if(vine) addVines(spaceGroup,x,y,z,w,h,d);   // lianas 3D colgando por las caras del cubo de metal
   const col={minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,minz:z-d/2,maxz:z+d/2,mesh:m,vine:!!vine}; colliders.push(col); if(wall||vine)wallMeshes.push(m); return col; }
 function spaceNum(n,x,y,z){ const cv=document.createElement('canvas');cv.width=cv.height=128;const cx=cv.getContext('2d'); cx.fillStyle='rgba(10,16,22,0.85)';cx.beginPath();cx.arc(64,64,58,0,7);cx.fill(); cx.fillStyle='#7fe0ff';cx.font='bold 90px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(String(n),64,68);
   const tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace; const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:true})); sp.position.set(x,y,z);sp.scale.set(1.4,1.4,1); spaceGroup.add(sp); return {n,sp,x,z,got:false}; }
@@ -840,7 +870,8 @@ function buildSpace(){ if(spaceBuilt)return; spaceBuilt=true; const G=SPACE_GZ;
   dome.position.set(0,-2,G+38); spaceGroup.add(dome);
   const ring=new THREE.Mesh(new THREE.TorusGeometry(56,0.6,8,40),new THREE.MeshStandardMaterial({color:0x6a7682,metalness:0.6,roughness:0.4})); ring.rotation.x=Math.PI/2; ring.position.set(0,-2,G+38); spaceGroup.add(ring);
   // LAVA procedural (caer = reinicio)
-  const lava=new THREE.Mesh(new THREE.PlaneGeometry(120,150),new THREE.MeshStandardMaterial({map:makeLavaTex(),color:0xff5a14,emissive:0xff3a00,emissiveIntensity:1.1,roughness:0.8})); lava.rotation.x=-Math.PI/2; lava.position.set(0,-3,G+38); spaceGroup.add(lava);
+  const lavaM=new THREE.MeshStandardMaterial({map:makeLavaTex(),color:0xff5a14,emissive:0xff3a00,emissiveIntensity:1.1,roughness:0.8}); lavaM.map.repeat.set(6,6);
+  const lava=new THREE.Mesh(new THREE.CircleGeometry(54,56),lavaM); lava.rotation.x=-Math.PI/2; lava.position.set(0,-3,G+38); spaceGroup.add(lava);   // LAVA solo dentro del domo (círculo)
   // inicio
   addSpaceBox(0,1.7,G-2,8,0.5,6,0x9aa3ad); checkpoint(0,G-2,8,6, spaceStart.x,spaceStart.y,spaceStart.z);
   // 1) CUBOS con ENREDADERAS: saltás, te subís solo y saltás al cubo de al costado
@@ -1201,7 +1232,7 @@ function update(dt){
   player.fov+=(targetFov-player.fov)*Math.min(1,6*dt); if(Math.abs(camera.fov-player.fov)>0.05){camera.fov=player.fov;camera.updateProjectionMatrix();}
   // ---- cámara FP: a la altura de la cabeza (bob vertical real del hueso) pero CENTRADA en el cuerpo ----
   // XZ estable (centro del cuerpo + un poco adelante) → quieto miras AL FRENTE, no al hombro; sólo la ALTURA viene del hueso de la cabeza
-  if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor); _camAnchor.x=player.pos.x; _camAnchor.z=player.pos.z; }   // XZ = CENTRO del cuerpo (≥R de las paredes → no se atraviesan/ven a través); sólo la ALTURA viene del hueso de la cabeza
+  if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor); }     // la cámara va EN la cabeza (sigue su posición; la cabeza queda oculta por el near-plane)
   else { _camAnchor.set(player.pos.x, player.pos.y+EYE, player.pos.z); }         // roll/carga: altura estable → la vuelta de cámara queda limpia (no se traga el cuerpo)
   const fwH=_v.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
   // al deslizarse: baja un poquito y queda un poco ADELANTE de la cabeza — suave
