@@ -53,7 +53,21 @@
   #mPlay{ margin-top:22px; width:100%; padding:15px; border-radius:16px; font-size:16px; font-weight:800; letter-spacing:.05em; color:#fff; cursor:pointer;
     background:linear-gradient(180deg,#5ad27a,#2aa64f); border:1.5px solid rgba(255,255,255,.7); box-shadow:0 10px 26px rgba(30,150,70,.5), inset 0 1px 0 rgba(255,255,255,.7); transition:transform .12s; }
   #mPlay:active{ transform:scale(.96); }
-  body.menu-open #joy, body.menu-open #bJump, body.menu-open #bSlide, body.menu-open #bRoll, body.menu-open #hud, body.menu-open #cross{ display:none; }
+  body.menu-open #joy, body.menu-open #bJump, body.menu-open #bSlide, body.menu-open #bRoll, body.menu-open #hud, body.menu-open #cross, body.menu-open #bChat{ display:none; }
+  /* ===== MULTIJUGADOR ===== */
+  #mpStatus{ position:fixed; right:calc(12px + var(--safe-t)); top:calc(12px + var(--safe-t)); z-index:15; display:flex; align-items:center; gap:6px;
+    background:rgba(14,22,30,.62); border:1px solid rgba(255,255,255,.16); border-radius:999px; padding:5px 10px; font-size:11px; font-weight:700; color:#cfe0ee; pointer-events:none; }
+  #mpStatus::before{ content:''; width:9px; height:9px; border-radius:50%; background:#888; box-shadow:0 0 6px currentColor; }
+  #mpStatus[data-s=online]{ color:#7af0a0; } #mpStatus[data-s=online]::before{ background:#43e07a; }
+  #mpStatus[data-s=connecting]{ color:#ffd27a; } #mpStatus[data-s=connecting]::before{ background:#ffbf45; }
+  #mpStatus[data-s=off]{ color:#ff9a9a; } #mpStatus[data-s=off]::before{ background:#e05a5a; }
+  #mpChatLog{ position:fixed; left:12px; top:calc(50px + var(--safe-t)); z-index:14; width:min(56vw,300px); display:flex; flex-direction:column; gap:4px; pointer-events:none; }
+  .mpMsg{ background:rgba(14,22,30,.6); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:5px 9px; font-size:12px; color:#e6f0fa; transition:opacity .6s; max-width:100%; word-wrap:break-word; }
+  .mpMsg b{ color:#8fd0ff; }
+  #bChat{ position:fixed; right:26px; bottom:calc(210px + var(--safe-b)); z-index:20; width:52px; height:52px; border-radius:50%;
+    background:rgba(255,255,255,.07); border:1.5px solid rgba(255,255,255,.22); color:#eef3f8; font-size:20px; backdrop-filter:blur(6px); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; }
+  #bChat:active{ transform:scale(.92); background:rgba(90,160,255,.32); }
 </style>
 </head>
 <body>
@@ -66,6 +80,9 @@
   <button id="bSlide" class="actBtn">DESLIZAR</button>
   <button id="bRoll"  class="actBtn">RODAR</button>
   <div id="hud">…</div>
+  <button id="bChat" class="actBtn" title="Chat">💬</button>
+  <div id="mpStatus" data-s="off">multijugador</div>
+  <div id="mpChatLog"></div>
   <div id="menu">
     <div id="menuPanel">
       <h1>🌱 PARKOUR · FRUTIGER</h1>
@@ -86,6 +103,7 @@
   </div>
 </div>
 
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -916,7 +934,71 @@ function menuCam(dt){ menuT+=dt; const cx=7, cz=GRASS_GZ+46, gy=terrainH(cx,cz);
 
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05);
   if(menuMode) menuCam(dt); else update(dt);
+  try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player)
   renderer.render(scene,camera); }
+
+/* ===================== MULTIJUGADOR (MQTT, sin backend; relay vía broker público) ===================== */
+const NS='frutigerfp_v1_';   // prefijo único de este juego → no choca con otros
+const MP={ on:false, client:null, id:'p'+Math.random().toString(36).slice(2,9),
+  name:'Jugador-'+Math.random().toString(36).slice(2,5).toUpperCase(), room:NS+'sala1',
+  remotes:new Map(), lastPub:0, last:{} };
+const mpStatusEl=document.getElementById('mpStatus');
+function mpSetStatus(s,txt){ if(mpStatusEl){ mpStatusEl.dataset.s=s; mpStatusEl.textContent=txt; } }
+function mpEsc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function mpColor(id){ let h=0; for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))>>>0; return new THREE.Color().setHSL((h%360)/360,0.62,0.55); }
+function mpMakeAvatar(name,color){
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.CapsuleGeometry(0.32,1.0,6,12), new THREE.MeshStandardMaterial({color,roughness:0.55,metalness:0.05})); body.position.y=0.85; body.castShadow=true; g.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.27,16,12), new THREE.MeshStandardMaterial({color:0xffe0bd,roughness:0.7})); head.position.y=1.6; g.add(head);
+  const cv=document.createElement('canvas'); cv.width=256; cv.height=64; const cx=cv.getContext('2d');
+  cx.fillStyle='rgba(12,22,32,0.72)'; cx.fillRect(0,0,256,64); cx.fillStyle='#dff0ff'; cx.font='bold 30px sans-serif'; cx.textAlign='center'; cx.textBaseline='middle'; cx.fillText(name.slice(0,14),128,34);
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace;
+  const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,fog:false})); tag.position.y=2.15; tag.scale.set(1.7,0.42,1); g.add(tag);
+  g.traverse(o=>o.frustumCulled=false); scene.add(g); return g;
+}
+function mpRemote(id,name){ let r=MP.remotes.get(id);
+  if(!r){ r={ id,name,world:null,anim:'idle',moving:false,yaw:0, pos:new THREE.Vector3(), target:new THREE.Vector3(),
+    avatar:mpMakeAvatar(name,mpColor(id)), last:performance.now(), bob:0, init:false }; MP.remotes.set(id,r); }
+  return r; }
+function mpChatIn(name,text){ if(!text)return; const log=document.getElementById('mpChatLog'); if(!log)return;
+  const el=document.createElement('div'); el.className='mpMsg'; el.innerHTML='<b>'+mpEsc(name)+':</b> '+mpEsc(text); log.appendChild(el);
+  while(log.children.length>6) log.removeChild(log.firstChild);
+  setTimeout(()=>{ el.style.opacity='0'; setTimeout(()=>el.remove(),700); }, 8000); }
+function mpSendChat(){ if(!MP.on){ mpChatIn('sistema','(sin conexión)'); return; }
+  const t=prompt('Mensaje:'); if(t&&t.trim()){ const txt=t.trim().slice(0,120);
+    MP.client.publish(MP.room+'/chat',JSON.stringify({id:MP.id,name:MP.name,text:txt}),{qos:0}); mpChatIn(MP.name,txt); } }
+function mpConnect(){
+  if(typeof mqtt==='undefined'){ mpSetStatus('off','sin red'); return; }
+  mpSetStatus('connecting','conectando…');
+  let client; try{ client=mqtt.connect('wss://broker.emqx.io:8084/mqtt',{connectTimeout:8000,reconnectPeriod:5000,clean:true}); }
+  catch(e){ mpSetStatus('off','sin conexión'); return; }
+  MP.client=client;
+  client.on('connect',()=>{ MP.on=true; mpSetStatus('online','en línea'); client.subscribe([MP.room+'/state',MP.room+'/chat',MP.room+'/action'],{qos:0}); });
+  client.on('reconnect',()=>mpSetStatus('connecting','reconectando…'));
+  client.on('close',()=>{ MP.on=false; mpSetStatus('off','desconectado'); });
+  client.on('error',()=>{ MP.on=false; mpSetStatus('off','error'); });
+  client.on('message',(topic,buf)=>{ let d; try{ d=JSON.parse(buf.toString()); }catch(e){ return; } if(!d||d.id===MP.id)return;
+    if(topic.slice(-6)==='/state'){ const r=mpRemote(d.id,d.name||'jugador'); r.name=d.name||r.name; r.world=d.world; r.anim=d.anim; r.moving=!!d.isMoving; r.yaw=d.facingAngle||0;
+      r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now(); }
+    else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); }
+    else if(topic.slice(-7)==='/action'){ /* eventos discretos (emotes/hits): aplicar localmente */ if(d.type==='hit_player' && d.targetId===MP.id){ /* este juego no tiene daño */ } }
+  });
+}
+function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.now(); if(now-MP.lastPub<100)return;
+  const p=player, moving=Math.hypot(p.vel.x,p.vel.z)>0.6;
+  const cur={x:+p.pos.x.toFixed(2),y:+p.pos.y.toFixed(2),z:+p.pos.z.toFixed(2),yaw:+p.yaw.toFixed(2),anim:curAnim||'idle',world,moving};
+  const l=MP.last, ch=(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving;
+  if(!ch)return; MP.lastPub=now; MP.last=cur;
+  MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving}),{qos:0}); }
+function mpTick(dt){
+  const now=performance.now();
+  for(const [id,r] of MP.remotes){ if(now-r.last>5000){ scene.remove(r.avatar); MP.remotes.delete(id); continue; }   // limpieza por timeout
+    r.pos.lerp(r.target, Math.min(1,10*dt));                                                                        // interpolación (10Hz → 60fps suave)
+    const same=(r.world===world); r.avatar.visible=same;                                                            // solo se ven los del MISMO mundo
+    if(same){ r.avatar.position.set(r.pos.x, r.pos.y, r.pos.z); r.avatar.rotation.y=r.yaw+Math.PI;
+      if(r.moving){ r.bob+=dt*8; r.avatar.position.y += Math.abs(Math.sin(r.bob))*0.06; } } }
+  mpPublishState();
+}
 
 /* ===================== Init ===================== */
 setupQuiz();   // randomiza las sumas del edificio 4
@@ -928,6 +1010,7 @@ try{
   setTimeout(()=>document.getElementById('loader').classList.add('hide'),250);
 }
 catch(err){ console.error('Init',err); document.getElementById('loader').classList.add('hide'); }
+try{ tapBtn('bChat',()=>mpSendChat()); mpConnect(); }catch(e){ console.warn('multijugador no disponible',e); }   // overlay: solo se activa si conecta
 animate();
 </script>
 </body>
