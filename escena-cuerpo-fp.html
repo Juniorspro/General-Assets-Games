@@ -405,12 +405,18 @@ function makeLeafTex(){ const S=256,c=document.createElement('canvas'); c.width=
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; }
 let orbMeshRef=null, orbGlass=null, orbGloss=null;   // refs para cambiar material según gráficos
 const shadowCasters=[];                              // ocluyen el sol → usado por la adaptación visual (eye adaptation)
+const crystalDoorPos=new THREE.Vector3(); let crystalDoorReady=false;   // puerta azul del árbol → obby de cristal
 // ÁRBOL PBR: tronco texturizado + ramas + copa de tarjetas de hojas con alpha (look frondoso real)
 function buildTree(grp,groundY){
   const TH=15;                                       // alto del tronco
   const trunkMat=new THREE.MeshStandardMaterial({ map:makeBarkTex(), color:0x8a6038, roughness:0.92, metalness:0 });
   const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.55,1.15,TH,14), trunkMat);
   trunk.position.set(0,groundY+TH/2,0); trunk.castShadow=true; trunk.receiveShadow=true; grp.add(trunk); shadowCasters.push(trunk);
+  // PUERTA AZUL en el tronco → entra al obby de cristal (mira hacia -Z, por donde llega el jugador)
+  const doorFrame=new THREE.Mesh(new THREE.BoxGeometry(2.0,3.3,0.3), new THREE.MeshStandardMaterial({color:0x12387a,emissive:0x123f9c,emissiveIntensity:0.7,roughness:0.4,metalness:0.3}));
+  doorFrame.position.set(0,groundY+1.55,-1.05); grp.add(doorFrame);
+  const doorGlow=new THREE.Mesh(new THREE.PlaneGeometry(1.5,2.7), new THREE.MeshBasicMaterial({color:0x6fb6ff,transparent:true,opacity:0.92,fog:false,side:THREE.DoubleSide}));
+  doorGlow.position.set(0,groundY+1.55,-1.22); grp.add(doorGlow);
   // ramas
   for(let i=0;i<4;i++){ const a=i*1.7+0.4, br=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.4,6,8),trunkMat);
     br.position.set(Math.cos(a)*1.6, groundY+TH-2+i*0.4, Math.sin(a)*1.6);
@@ -443,11 +449,74 @@ function buildOrb(x,groundY,z){
   const orb=new THREE.Mesh(new THREE.SphereGeometry(RAD,56,36), orbGloss);
   orb.position.set(0, groundY+RAD*0.8, 0); orb.castShadow=true; grp.add(orb);
   orbMeshRef=orb; shadowCasters.push(orb);
+  crystalDoorPos.set(x, groundY+1.55, z-1.22); crystalDoorReady=true;   // posición mundial de la puerta
   grassGroup.add(grp); return grp;
 }
 let grassDecorBuilt=false;
 function buildGrassDecor(){ if(grassDecorBuilt)return; grassDecorBuilt=true;
   buildOrb(7, terrainH(7,GRASS_GZ+46), GRASS_GZ+46);     // estructura adelante, en la colina (las nubes ya vienen en el cielo 360)
+}
+
+/* ===================== OBBY DE CRISTAL EN EL CIELO (misma mecánica que el parkour, con variaciones) ===================== */
+// vive lejos en +Z (z≈4000) → sus colliders no chocan con la ciudad ni el césped. Física AABB como el parkour (grassMode=false).
+const crystalGroup=new THREE.Group(); crystalGroup.visible=false; scene.add(crystalGroup);
+const _cMat={};
+function crystalMat(color){ if(_cMat[color])return _cMat[color];
+  const m=new THREE.MeshPhysicalMaterial({color, metalness:0.0, roughness:0.06, transparent:true, opacity:0.8, clearcoat:1, clearcoatRoughness:0.05, envMapIntensity:1.5, side:THREE.DoubleSide, emissive:new THREE.Color(color).multiplyScalar(0.10)});
+  _cMat[color]=m; return m; }
+function addCrystal(x,y,z,w,h,d,color,isWall){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), crystalMat(color||0x7fe8ff));
+  m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; crystalGroup.add(m);
+  const c={minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,minz:z-d/2,maxz:z+d/2,mesh:m};
+  colliders.push(c); if(isWall) wallMeshes.push(m); return c; }
+const movers=[]; let worldT=0;
+function addMoverC(x,y,z,w,h,d,color,motion){ const c=addCrystal(x,y,z,w,h,d,color);
+  movers.push({c,bx:x,by:y,bz:z,hw:w/2,hh:h/2,hd:d/2,motion}); return c; }
+function tickMovers(dt){ worldT+=dt;
+  for(const m of movers){ const o=m.motion(worldT); const nx=m.bx+(o.x||0), ny=m.by+(o.y||0), nz=m.bz+(o.z||0);
+    const me=m.c.mesh, cc=m.c; const dx=nx-me.position.x, dy=ny-me.position.y, dz=nz-me.position.z;
+    if(world==='crystal' && player.onGround &&                         // acarrear al jugador si está parado encima
+       player.pos.x>cc.minx-R && player.pos.x<cc.maxx+R && player.pos.z>cc.minz-R && player.pos.z<cc.maxz+R && Math.abs(player.pos.y-cc.maxy)<0.3){
+      player.pos.x+=dx; player.pos.z+=dz; player.pos.y+=dy; }
+    me.position.set(nx,ny,nz);
+    cc.minx=nx-m.hw; cc.maxx=nx+m.hw; cc.miny=ny-m.hh; cc.maxy=ny+m.hh; cc.minz=nz-m.hd; cc.maxz=nz+m.hd; } }
+let crystalGoal=null, crystalDone=false;
+function tickCrystalGoal(){ if(!crystalGoal)return; crystalGoal.rotation.y+=0.025; crystalGoal.rotation.x+=0.012;
+  if(!crystalDone){ const dx=player.pos.x-crystalGoal.position.x, dy=player.pos.y-crystalGoal.position.y, dz=player.pos.z-crystalGoal.position.z;
+    if(dx*dx+dy*dy+dz*dz<2.6*2.6){ crystalDone=true; if(HUD)HUD.textContent='🔷 ¡Obby de Cristal completo! 🎉'; } } }
+const CZ0=3980; const CSTART=new THREE.Vector3(0,12.4,CZ0);
+let crystalBuilt=false;
+function buildCrystalObby(){ if(crystalBuilt)return; crystalBuilt=true;
+  addCrystal(0,12,CZ0,9,0.6,9,0x9ff0ff); checkpoint(0,CZ0,9,9, 0,12.4,CZ0);                 // inicio
+  addCrystal(3.5,12.7,CZ0+8,3.6,0.5,3.6,0x7fe0ff);                                           // zig-zag
+  addCrystal(-3.5,13.4,CZ0+15,3.6,0.5,3.6,0x7fd0ff);
+  addCrystal(0,14.1,CZ0+22,3.6,0.5,3.6,0x9fe8ff); checkpoint(0,CZ0+22,4,4, 0,14.5,CZ0+22);
+  addMoverC(0,14.9,CZ0+30,4,0.5,4,0x8fe0ff,(t)=>({y:Math.sin(t*1.6)*1.3}));                   // plataformas que FLOTAN (bob)
+  addMoverC(4,15.5,CZ0+37.5,4,0.5,4,0xa0d8ff,(t)=>({y:Math.cos(t*1.5)*1.3}));
+  addCrystal(-3,16,CZ0+46,0.6,5,9,0x80c8ff,true); addCrystal(3,16,CZ0+46,0.6,5,9,0x80c8ff,true);  // WALL-RUN entre dos cristales
+  addCrystal(0,15.4,CZ0+55,4.6,0.5,4.6,0x9fe8ff); checkpoint(0,CZ0+55,5,5, 0,15.8,CZ0+55);
+  addMoverC(0,15.6,CZ0+62,4,0.5,4,0x9bd6ff,(t)=>({x:Math.sin(t*1.05)*4.5}));                  // plataformas que se DESLIZAN (con acarreo)
+  addMoverC(0,15.8,CZ0+70,4,0.5,4,0x9bd6ff,(t)=>({x:Math.cos(t*0.95)*4.5}));
+  addCrystal(0,15.8,CZ0+78,6,0.5,5,0xa8e8ff);                                                 // DESLIZAR por debajo de una viga
+  addCrystal(0,17.5,CZ0+78,6,0.4,1.3,0x7fc0ff);                                               // viga: parado choca (cabeza 17.9), deslizando pasa (cabeza 17.1 < 17.3)
+  addCrystal(0,15.4,CZ0+89,5,0.5,5,0x9fe8ff); checkpoint(0,CZ0+89,5,5, 0,15.8,CZ0+89);        // salto largo (rodar al caer)
+  addCrystal(0,15.0,CZ0+100,7,0.5,7,0xb0f0ff);
+  addCrystal(0,15.4,CZ0+110,9,0.6,9,0xc8f6ff); checkpoint(0,CZ0+110,9,9, 0,15.8,CZ0+110);     // META
+  const goal=new THREE.Mesh(new THREE.OctahedronGeometry(1.6,0), new THREE.MeshPhysicalMaterial({color:0x66f0ff,emissive:0x33d0ff,emissiveIntensity:1.5,metalness:0,roughness:0.05,transmission:0.6,transparent:true,opacity:0.92,clearcoat:1}));
+  goal.position.set(0,17.6,CZ0+110); crystalGroup.add(goal); crystalGoal=goal;
+  for(let i=0;i<22;i++){ const a=i*1.7; const dec=new THREE.Mesh(new THREE.OctahedronGeometry(0.6+Math.random()*1.3,0), crystalMat([0x8fe8ff,0xb0a0ff,0x9fffd0][i%3]));   // cristales decorativos flotando
+    dec.position.set(Math.cos(a)*(15+i*1.2), 7+Math.sin(a*2)*6, CZ0+(i*5.1)%112); crystalGroup.add(dec); }
+}
+function enterCrystal(){ if(world==='crystal')return; world='crystal'; grassMode=false;
+  buildCrystalObby(); grassGroup.visible=false; crystalGroup.visible=true;
+  scene.background=skyTex; skyMesh.visible=false; if(skyEnv) scene.environment=skyEnv;
+  scene.fog.color.set(0xdff0fb); scene.fog.near=110; scene.fog.far=720;
+  sun.intensity=2.7; sun.color.set(0xffffff); renderer.toneMappingExposure=1.16;
+  player.pos.copy(CSTART); player.pos.y+=0.4; player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+  player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
+  player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
+  lastSafe.copy(CSTART); portalDone=true; crystalDone=false;
+  if(HUD)HUD.textContent='🔷 Obby de Cristal — llegá a la meta';
 }
 // --- entrar al mundo de césped ---
 function enterGrass(withTiles=true){
@@ -608,7 +677,11 @@ function update(dt){
     relocateTiles(player.pos.x,player.pos.z);                          // los tiles de césped siguen al jugador (frustum culling por tile)
     const sx=Math.round(player.pos.x/12)*12, sz=Math.round(player.pos.z/12)*12;   // re-displazar el terreno al cambiar de celda
     if(sx!==terrSnap.x||sz!==terrSnap.y){ rebuildTerrain(sx,sz); terrSnap.set(sx,sz); }
+    // PUERTA AZUL del árbol → obby de cristal
+    if(crystalDoorReady){ const dx=player.pos.x-crystalDoorPos.x, dz=player.pos.z-crystalDoorPos.z;
+      if(dx*dx+dz*dz<2.0*2.0 && Math.abs(player.pos.y-crystalDoorPos.y)<2.6) enterCrystal(); }
   }
+  if(world==='crystal'){ tickMovers(dt); tickCrystalGoal(); }   // plataformas móviles + meta del obby
   if(player.onGround){ for(const cp of checkpoints){ if(player.pos.x>cp.minx&&player.pos.x<cp.maxx&&player.pos.z>cp.minz&&player.pos.z<cp.maxz){ lastSafe.copy(cp.pos); break; } } }   // checkpoint al pisar un edificio
   forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   let ix=joy.x,iz=joy.y; const mag=Math.min(1,Math.hypot(ix,iz)); if(mag>1){ix/=mag;iz/=mag;}
