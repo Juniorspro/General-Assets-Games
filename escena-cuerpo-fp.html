@@ -115,13 +115,13 @@ scene.fog=new THREE.Fog(0xcfe3f5,150,640);   // niebla suave hacia el horizonte 
 const pmrem=new THREE.PMREMGenerator(renderer); const roomEnv=pmrem.fromScene(new RoomEnvironment(),0.04).texture; scene.environment=roomEnv;
 // La cámara va EN la cabeza (sigue su inclinación al correr), así la cabeza queda siempre dentro del near plane (0.2)
 // y se recorta limpia: sin deformar la malla, sin cortes abiertos, sin agujero.
-const camera=new THREE.PerspectiveCamera(90,1,0.2,2000);
+const camera=new THREE.PerspectiveCamera(90,1,0.2,1200);   // far reducido (la cúpula del cielo r=900) → mejor precisión y culling
 let baseFov=90;
 scene.add(camera);
 
 const sun=new THREE.DirectionalLight(0xfff2e0,2.3); sun.position.set(-40,80,-50); sun.castShadow=true;
-sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=240;
-sun.shadow.camera.left=-60; sun.shadow.camera.right=60; sun.shadow.camera.top=60; sun.shadow.camera.bottom=-60; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=110;   // distancia de sombra reducida → más barato y nítido cerca
+sun.shadow.camera.left=-42; sun.shadow.camera.right=42; sun.shadow.camera.top=42; sun.shadow.camera.bottom=-42; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
 scene.add(sun); scene.add(sun.target);
 scene.add(new THREE.HemisphereLight(0xdfeeff,0x9aa6b2,0.9));
 
@@ -288,7 +288,7 @@ let skyEnv=null;
 const skyTex=new THREE.TextureLoader().load(SKY_URL, t=>{ skyEnv=pmrem.fromEquirectangular(t).texture; if(grassMode) scene.environment=skyEnv; });
 skyTex.colorSpace=THREE.SRGBColorSpace; skyTex.mapping=THREE.EquirectangularReflectionMapping;
 // --- terreno con elevaciones (sigue al jugador: re-displaza al moverse de celda) ---
-const TSZ=440, TSEG=110;
+const TSZ=340, TSEG=84;   // terreno más chico (acorde a la menor distancia de render) → menos vértices por re-displazado
 const terrGeo=new THREE.PlaneGeometry(TSZ,TSZ,TSEG,TSEG); terrGeo.rotateX(-Math.PI/2);
 const terrainMesh=new THREE.Mesh(terrGeo,new THREE.MeshStandardMaterial({color:0x5cba42,roughness:1,metalness:0}));
 terrainMesh.receiveShadow=true; grassGroup.add(terrainMesh);
@@ -526,7 +526,7 @@ function setGrassBlades(v){ for(const t of grassTiles) t.mesh.visible=v; }
 function enterCrystal(){ if(world==='crystal')return; world='crystal'; grassMode=false;
   buildCrystalObby(); crystalGroup.visible=true;
   setGrassBlades(false);   // congela/oculta las briznas (nada de movimiento, perf); el TERRENO y el orbe siguen visibles abajo
-  scene.fog.color.set(0xdff0fb); scene.fog.near=140; scene.fog.far=1100;
+  scene.fog.color.set(0xdff0fb); scene.fog.near=120; scene.fog.far=520;   // distancia de render reducida
   renderer.toneMappingExposure=1.16;
   player.pos.copy(CSTART); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
@@ -550,7 +550,7 @@ function enterGrass(withTiles=true){
   lastSafe.set(0, sy+0.05, GRASS_GZ);
   // cielo 360 real como fondo + entorno (la cúpula degradé se oculta)
   scene.background=skyTex; skyMesh.visible=false; if(skyEnv) scene.environment=skyEnv;
-  scene.fog.color.set(0xdfeef9); scene.fog.near=160; scene.fog.far=1100;   // niebla clara que empata con el horizonte del panorama
+  scene.fog.color.set(0xdfeef9); scene.fog.near=70; scene.fog.far=430;   // distancia de render reducida (niebla clara que empata con el horizonte 360)
   sun.intensity=2.6; sun.color.set(0xfffaf0); renderer.toneMappingExposure=1.1;
   if(HUD)HUD.textContent='🌱 Mundo Frutiger — explorá el césped';
 }
@@ -859,7 +859,8 @@ function update(dt){
   if(HUD && !portalDone) HUD.textContent = estado||(player.onGround?(sp<0.5?'quieto':(sp<3.6?'caminar':'correr')):'en el aire');
 }
 /* ===================== GRÁFICOS (presets de calidad) ===================== */
-const QUAL={ low:{pr:1.0,shadow:0,glass:false,adapt:false,sp:0.17,r:2}, med:{pr:1.5,shadow:1024,glass:false,adapt:true,sp:0.11,r:3}, high:{pr:2.0,shadow:2048,glass:true,adapt:true,sp:0.084,r:3} };
+// densidad/cobertura del césped optimizadas: low≈62k, med≈127k, high≈290k (antes 694k). r=radio de tiles (cobertura), sp=separación de briznas
+const QUAL={ low:{pr:1.0,shadow:0,glass:false,adapt:false,sp:0.20,r:2}, med:{pr:1.5,shadow:1024,glass:false,adapt:true,sp:0.14,r:2}, high:{pr:2.0,shadow:2048,glass:true,adapt:true,sp:0.13,r:3} };
 let quality='med';
 function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
   BLADE_SP=Q.sp; TILES_R=Q.r;   // densidad/cobertura del césped según calidad (se aplica antes de construir los tiles)
