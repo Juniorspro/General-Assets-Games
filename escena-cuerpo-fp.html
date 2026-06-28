@@ -488,21 +488,22 @@ function tickCrystalGoal(){ if(!crystalGoal)return; crystalGoal.rotation.y+=0.02
     if(dx*dx+dy*dy+dz*dz<2.6*2.6){ crystalDone=true; if(HUD)HUD.textContent='🔷 ¡Obby de Cristal completo! 🎉'; } } }
 // El obby flota EN EL CIELO sobre el césped (cerca del orbe), encerrado en un TERRARIO de cristal
 // (piso de vidrio + cúpula) → desde el césped ya se ve en las alturas; el terreno se ve por debajo.
-const CF=24, CZA=2076, CZC=CZA+52;            // CF=altura del piso (≈19u sobre el suelo); flota ADELANTE del orbe (sin tapar el árbol)
-const CSTART=new THREE.Vector3(0,CF+0.4,CZA);
+const CF=58, CZA=2076, CZC=CZA+52;            // CF MÁS ALTO (≈53u sobre el suelo): el obby flota bien arriba, encerrado
+const CSTART=new THREE.Vector3(0,CF+1.2,CZA);  // sobre la plataforma de INICIO
 let crystalBuilt=false;
 function buildCrystalObby(){ if(crystalBuilt)return; crystalBuilt=true;
-  // PISO de vidrio (terrario) — sólido, casi transparente (se ve el terreno abajo)
-  const floorMat=new THREE.MeshPhysicalMaterial({color:0xcdeeff,transparent:true,opacity:0.34,roughness:0.05,metalness:0,clearcoat:1,clearcoatRoughness:0.05,side:THREE.DoubleSide,envMapIntensity:1.6});
-  const floor=new THREE.Mesh(new THREE.BoxGeometry(86,1.0,130),floorMat); floor.position.set(0,CF-0.5,CZC); floor.receiveShadow=true; crystalGroup.add(floor);
-  colliders.push({minx:-43,maxx:43,miny:CF-1,maxy:CF,minz:CZC-65,maxz:CZC+65,mesh:floor});
-  // CÚPULA de cristal frutiger aero (decorativa, no choca; no usa transmission por performance)
-  const dome=new THREE.Mesh(new THREE.SphereGeometry(1,40,24,0,Math.PI*2,0,Math.PI*0.5),
-    new THREE.MeshPhysicalMaterial({color:0xb6e6ff,emissive:0x6fb6e8,emissiveIntensity:0.12,transparent:true,opacity:0.22,roughness:0.04,metalness:0,clearcoat:1,clearcoatRoughness:0.04,side:THREE.DoubleSide,envMapIntensity:1.7,depthWrite:false}));
-  dome.scale.set(44,40,70); dome.position.set(0,CF,CZC); crystalGroup.add(dome);
+  // ENCERRADO: terrario de cristal (elipsoide de vidrio decorativo, no choca) — el obby va ADENTRO
+  const enc=new THREE.Mesh(new THREE.SphereGeometry(1,36,24),
+    new THREE.MeshPhysicalMaterial({color:0xb6e6ff,emissive:0x6fb6e8,emissiveIntensity:0.10,transparent:true,opacity:0.14,roughness:0.04,metalness:0,clearcoat:1,clearcoatRoughness:0.04,side:THREE.DoubleSide,envMapIntensity:1.7,depthWrite:false}));
+  enc.scale.set(40,42,74); enc.position.set(0,CF+4,CZC); crystalGroup.add(enc);
+  // SUELO de vidrio del terrario (decorativo): si caés hasta acá, reiniciás el obby desde el inicio
+  const floor=new THREE.Mesh(new THREE.CircleGeometry(40,44),
+    new THREE.MeshPhysicalMaterial({color:0xcdeeff,transparent:true,opacity:0.26,roughness:0.05,metalness:0,clearcoat:1,clearcoatRoughness:0.05,side:THREE.DoubleSide,envMapIntensity:1.5,depthWrite:false}));
+  floor.rotation.x=-Math.PI/2; floor.position.set(0,CF-5,CZC); crystalGroup.add(floor);
   // plataformas: top = CF + altura sobre el piso
   const P=(x,a,z,w,d,col)=>addCrystal(x, CF+a-0.25, z, w,0.5,d, col||0x9fe8ff);
   const Pm=(x,a,z,w,d,col,mo)=>addMoverC(x, CF+a-0.25, z, w,0.5,d, col||0x9bd6ff, mo);
+  P(0,0.8,CZA,6,6,0xb6f0ff);                                                // plataforma de INICIO
   P(3.5,0.8,CZA+10,3.6,3.6,0x7fe0ff);                                       // zig-zag de saltos
   P(-3.5,1.6,CZA+18,3.6,3.6,0x7fd0ff);
   P(0,2.4,CZA+26,3.6,3.6);
@@ -513,7 +514,7 @@ function buildCrystalObby(){ if(crystalBuilt)return; crystalBuilt=true;
   Pm(0,3.8,CZA+66,4,4,0x9bd6ff,(t)=>({x:Math.sin(t*1.05)*4.2}));            // plataformas que se DESLIZAN (con acarreo)
   Pm(0,3.9,CZA+74,4,4,0x9bd6ff,(t)=>({x:Math.cos(t*0.95)*4.2}));
   P(0,3.9,CZA+82,6,5,0xa8e8ff);                                            // DESLIZAR por debajo de la viga
-  addCrystal(0,29.4,CZA+82,6,0.4,1.3,0x7fc0ff);                            // viga (parado choca 29.75>28.9; deslizando pasa 28.95<28.9? → cabeza crouch 28.95, bottom viga 29.2)
+  addCrystal(0,CF+5.4,CZA+82,6,0.4,1.3,0x7fc0ff);                          // viga: parado choca, deslizando pasás
   P(0,3.5,CZA+92,5,5);                                                     // salto largo (rodar al caer)
   P(0,3.1,CZA+102,7,7,0xb0f0ff);
   P(0,3.5,CZA+112,9,9,0xc8f6ff);                                           // META
@@ -697,7 +698,12 @@ function update(dt){
     if(crystalDoorReady){ const dx=player.pos.x-crystalDoorPos.x, dz=player.pos.z-crystalDoorPos.z;
       if(dx*dx+dz*dz<2.0*2.0 && Math.abs(player.pos.y-crystalDoorPos.y)<2.6) enterCrystal(); }
   }
-  if(world==='crystal'){ tickMovers(dt); tickCrystalGoal(); }   // plataformas móviles + meta del obby
+  if(world==='crystal'){ tickMovers(dt); tickCrystalGoal();   // plataformas móviles + meta del obby
+    if(player.pos.y < CF-4){   // CAÍSTE al suelo del terrario → reiniciar el obby DESDE EL INICIO (no al mapa)
+      player.pos.copy(CSTART); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+      player.sliding=player.rolling=player.climbing=false; player.wallrun=0;
+      if(HUD && !crystalDone) HUD.textContent='🔷 Obby de Cristal — ¡reinicio!'; }
+  }
   if(player.onGround){ for(const cp of checkpoints){ if(player.pos.x>cp.minx&&player.pos.x<cp.maxx&&player.pos.z>cp.minz&&player.pos.z<cp.maxz){ lastSafe.copy(cp.pos); break; } } }   // checkpoint al pisar un edificio
   forward.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw)); right.set(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   let ix=joy.x,iz=joy.y; const mag=Math.min(1,Math.hypot(ix,iz)); if(mag>1){ix/=mag;iz/=mag;}
