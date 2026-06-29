@@ -1731,24 +1731,30 @@ function voicePeer(id){ let pr=VOICE.peers.get(id); if(pr)return pr; if(!VOICE.s
   const au=document.createElement('audio'); au.autoplay=true; au.playsInline=true; document.body.appendChild(au);
   pc.ontrack=e=>{ au.srcObject=e.streams[0]; const p=au.play(); if(p&&p.catch)p.catch(()=>{}); };   // se escucha al otro
   pc.onicecandidate=e=>{ if(e.candidate) voiceSend(id,'ice',e.candidate); };
-  pc.onconnectionstatechange=()=>{ const s=pc.connectionState; if(s==='failed'||s==='closed') voiceClose(id); };
+  pc.onconnectionstatechange=()=>{ const s=pc.connectionState; if(s==='connected'){ const r=MP.remotes.get(id); mpChatIn('🔊','voz conectada'+(r?(' con '+(r.name||'')):'')); } else if(s==='failed'||s==='closed'){ voiceClose(id); } };
   pr={pc,au,pending:[]}; VOICE.peers.set(id,pr); return pr;
 }
 function voiceFlush(pr){ const q=pr.pending.splice(0); for(const c of q){ try{ pr.pc.addIceCandidate(c); }catch(e){} } }
-async function voiceOffer(id){ const pr=voicePeer(id); if(!pr)return; try{ const o=await pr.pc.createOffer(); await pr.pc.setLocalDescription(o); voiceSend(id,'offer',pr.pc.localDescription); }catch(e){} }
+async function voiceOffer(id){ const pr=voicePeer(id); if(!pr)return; if(pr.pc.signalingState!=='stable')return;   // ya hay una negociación en curso → no dupliques
+  try{ const o=await pr.pc.createOffer(); await pr.pc.setLocalDescription(o); voiceSend(id,'offer',pr.pc.localDescription); }catch(e){} }
 function voiceClose(id){ const pr=VOICE.peers.get(id); if(pr){ try{pr.pc.close();}catch(e){} if(pr.au){ pr.au.srcObject=null; pr.au.remove(); } VOICE.peers.delete(id); } }
 async function voiceSignal(d){ if(!VOICE.ok)return;
-  if(d.type==='ready'){ if(VOICE.stream && MP.id<d.id) voiceOffer(d.id); }                                  // el de id menor inicia (evita choque)
+  if(d.type==='ready'){ if(!VOICE.stream)return; if(MP.id<d.id) voiceOffer(d.id); else voiceSend(d.id,'ready'); }   // el de id MENOR inicia; el mayor le devuelve 'ready' para que el menor ofrezca (sin importar quién entró primero)
   else if(d.type==='offer'){ if(!VOICE.stream)return; const pr=voicePeer(d.id); if(!pr)return; try{ await pr.pc.setRemoteDescription(d.data); voiceFlush(pr); const a=await pr.pc.createAnswer(); await pr.pc.setLocalDescription(a); voiceSend(d.id,'answer',pr.pc.localDescription); }catch(e){} }
   else if(d.type==='answer'){ const pr=VOICE.peers.get(d.id); if(pr) try{ await pr.pc.setRemoteDescription(d.data); voiceFlush(pr); }catch(e){} }
   else if(d.type==='ice'){ const pr=VOICE.peers.get(d.id); if(pr){ if(pr.pc.remoteDescription&&pr.pc.remoteDescription.type){ try{ await pr.pc.addIceCandidate(d.data); }catch(e){} } else pr.pending.push(d.data); } }
 }
 function voiceTalk(on){ voiceTalking=on; if(VOICE.stream) VOICE.stream.getAudioTracks().forEach(tk=>tk.enabled=on); }   // voiceTalking se transmite en el estado → ícono verde en los demás
-async function voicePress(){ audioStart(); const bv=document.getElementById('bVoice');
-  if(!VOICE.ok){ mpChatIn('🎤','(voz no soportada en este navegador)'); return; }
-  if(!VOICE.inited){ const ok=await voiceInit(); if(!ok){ if(bv)bv.classList.remove('on'); return; } }
-  voiceTalk(true); if(bv)bv.classList.add('on'); }                                                          // hablar mientras se mantiene apretado
-function voiceRelease(){ voiceTalk(false); const bv=document.getElementById('bVoice'); if(bv)bv.classList.remove('on'); }
+let voiceActive=false;
+async function voiceToggle(){ audioStart(); const bv=document.getElementById('bVoice');
+  if(!VOICE.ok){ mpChatIn('🎤', (typeof isSecureContext!=='undefined'&&!isSecureContext)?'(la voz necesita conexión segura/HTTPS)':'(voz no soportada en este navegador)'); return; }
+  if(!voiceActive){
+    if(bv)bv.classList.add('on');                                       // feedback inmediato
+    if(!VOICE.inited){ const ok=await voiceInit(); if(!ok){ if(bv)bv.classList.remove('on'); return; } }
+    voiceActive=true; voiceTalk(true); voiceSend(null,'ready'); mpChatIn('🎤','micrófono ACTIVADO (tocá de nuevo para apagar)');   // re-anuncia por si ya hay gente
+  } else {
+    voiceActive=false; voiceTalk(false); if(bv)bv.classList.remove('on'); mpChatIn('🎤','micrófono apagado');
+  } }
 
 /* ===================== Init ===================== */
 setupQuiz();   // randomiza las sumas del edificio 4
@@ -1784,9 +1790,7 @@ window.addEventListener('pointerdown',()=>{ audioStart(); if(menuMode) ambient('
 try{ tapBtn('bChat',()=>mpSendChat()); tapBtn('bPack',()=>togglePack());
   { const bn0=document.getElementById('bNames'); if(bn0)bn0.classList.toggle('on',showNames); }   // refleja el estado inicial (nombres ON)
   tapBtn('bNames',()=>{ showNames=!showNames; const bn=document.getElementById('bNames'); if(bn)bn.classList.toggle('on',showNames); });   // mostrar/ocultar nombres de jugadores
-  const bV=document.getElementById('bVoice');   // CHAT DE VOZ: mantené apretado para hablar (push-to-talk)
-  if(bV){ const dn=e=>{ e.preventDefault(); voicePress(); }, up=e=>{ e.preventDefault(); voiceRelease(); };
-    bV.addEventListener('pointerdown',dn); bV.addEventListener('pointerup',up); bV.addEventListener('pointerleave',up); bV.addEventListener('pointercancel',up); }
+  tapBtn('bVoice',()=>voiceToggle());   // CHAT DE VOZ: un toque ACTIVA el micrófono (queda prendido); otro toque lo apaga
   mpConnect(); }catch(e){ console.warn('multijugador no disponible',e); }   // overlay: solo se activa si conecta
 animate();
 </script>
