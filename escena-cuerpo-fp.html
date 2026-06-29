@@ -407,6 +407,24 @@ const cloudMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opac
 function cloud(x,y,z,s){ const m=new THREE.Mesh(new THREE.PlaneGeometry(s,s*0.6),cloudMat); m.rotation.x=-Math.PI/2; m.position.set(x,y,z); scene.add(m); }
 for(let i=0;i<18;i++){ const a=i*2.39; cloud(15+Math.cos(a)*(50+i*11), -16-(i%4)*7, 28+Math.sin(a)*(50+i*10), 24+i*4); }
 
+// ===== DECORACIÓN: rascacielos MÁS ALTOS alrededor del obby + CARRETERA abajo (sensación de ciudad/altura) =====
+(function decorCity(){
+  const RY=-58;   // nivel de la calle, MUY por debajo del obby
+  // textura de asfalto con línea central discontinua
+  const rc=document.createElement('canvas'); rc.width=64; rc.height=256; const rg=rc.getContext('2d');
+  rg.fillStyle='#26282c'; rg.fillRect(0,0,64,256); rg.fillStyle='#c9c19c'; for(let y=8;y<256;y+=40) rg.fillRect(30,y,4,22); rg.fillStyle='#8f8b82'; rg.fillRect(3,0,3,256); rg.fillRect(58,0,3,256);
+  const rt=new THREE.CanvasTexture(rc); rt.colorSpace=THREE.SRGBColorSpace; rt.wrapS=rt.wrapT=THREE.RepeatWrapping; rt.repeat.set(2,42);
+  const grd=new THREE.Mesh(new THREE.PlaneGeometry(440,760), new THREE.MeshStandardMaterial({color:0x34383e,roughness:1})); grd.rotation.x=-Math.PI/2; grd.position.set(0,RY,80); scene.add(grd);   // suelo de ciudad
+  const road=new THREE.Mesh(new THREE.PlaneGeometry(24,620), new THREE.MeshStandardMaterial({map:rt,roughness:0.95})); road.rotation.x=-Math.PI/2; road.position.set(0,RY+0.06,80); scene.add(road);   // carretera abajo
+  // rascacielos decorativos (sin colisión) a ambos lados, mucho más altos que el obby
+  function tower(x,z,w,d,h,col){ const tex=_facadeBase.clone(); tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(Math.max(2,Math.round(w/4)), Math.max(6,Math.round(h/5)));
+    const side=new THREE.MeshStandardMaterial({map:tex,roughness:1,color:col}), top=new THREE.MeshStandardMaterial({color:0x20242a,roughness:1});
+    const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[side,side,top,side,side,side]); m.position.set(x,RY+h/2,z); scene.add(m); }   // sin sombras (decoración lejana)
+  let seed=20240629; const rnd=()=>{ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; };
+  for(let i=0;i<30;i++){ const side=i%2?1:-1; const x=side*(38+rnd()*78); const z=-40+rnd()*250; const w=14+rnd()*18, d=14+rnd()*18; const h=80+rnd()*120;
+    const col=new THREE.Color().setHSL(0.58,0.04+rnd()*0.06,0.5+rnd()*0.22).getHex(); tower(x,z,w,d,h,col); }
+})();
+
 /* ===================== MUNDO FRUTIGER AERO — colinas verdes + césped procedural (al cruzar el portal) ===================== */
 const grassGroup=new THREE.Group(); grassGroup.visible=false; scene.add(grassGroup);
 // --- cielo 360 (equirectangular): fondo del mundo de césped + mapa de entorno (la esfera metálica refleja las nubes reales) ---
@@ -1219,7 +1237,7 @@ function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListene
 tapBtn('bJump',()=>{ jumpReq=true; });
 tapBtn('bSlide',()=>{ startSlide(); });
 tapBtn('bRoll',()=>{ rollReq=true; });
-function startSlide(){ if(player.sliding||!player.onGround)return; if(player.vel.length()<3)return; player.sliding=true; player.slideT=0; sfx(grassMode?'slide_grass':'slide');
+function startSlide(){ if(player.sliding||!player.onGround)return; if(player.vel.length()<3)return; player.sliding=true; player.slideT=0; sfx(grassMode?'slide_grass':'slide', 0.4);
   const d=player.vel.length()>0.5?player.vel.clone().normalize():forward.clone(); player.vel.copy(d).multiplyScalar(SLIDE_V);
   // ¿deslizo hacia mi DERECHA? (respecto a donde miro) → se espeja la animación (por defecto va a la izquierda)
   player.slideRight = (Math.cos(player.yaw)*d.x - Math.sin(player.yaw)*d.z) > 0.15; }
@@ -1529,7 +1547,7 @@ const AUD={ on:false, el:{}, amb:null, ambKey:null, run:null, runKey:null };
 function aGet(k){ let a=AUD.el[k]; if(!a){ a=new Audio(SFX_BASE+SND[k]); a.preload='auto'; AUD.el[k]=a; } return a; }
 function sfx(k,vol){ if(!AUD.on||!SND[k])return; try{ const a=aGet(k); a.volume=(vol==null?0.9:vol); a.currentTime=0; const p=a.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){} }   // efecto puntual
 function ambient(k){ if(!AUD.on||!SND[k]||AUD.ambKey===k)return; AUD.ambKey=k; try{ if(!AUD.amb){ AUD.amb=new Audio(); AUD.amb.loop=true; } AUD.amb.volume=0.3; AUD.amb.src=SFX_BASE+SND[k]; const p=AUD.amb.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){} }   // música del nivel (loop, cambia al cambiar de mundo)
-function runLoop(on,grass){ if(!AUD.on)return; if(on){ const k=grass?'run_grass':'run'; if(AUD.runKey!==k){ if(AUD.run)AUD.run.pause(); AUD.run=aGet(k); AUD.run.loop=true; AUD.run.volume=0.4; AUD.runKey=k; const p=AUD.run.play(); if(p&&p.catch)p.catch(()=>{}); } } else if(AUD.run){ AUD.run.pause(); AUD.run=null; AUD.runKey=null; } }   // pasos en bucle mientras corrés (pasto / fuera del pasto)
+function runLoop(on,grass){ if(!AUD.on)return; if(on){ const k=grass?'run_grass':'run'; if(AUD.runKey!==k){ if(AUD.run)AUD.run.pause(); AUD.run=aGet(k); AUD.run.loop=true; AUD.run.volume=0.22; AUD.runKey=k; const p=AUD.run.play(); if(p&&p.catch)p.catch(()=>{}); } } else if(AUD.run){ AUD.run.pause(); AUD.run=null; AUD.runKey=null; } }   // pasos en bucle mientras corrés (pasto / fuera del pasto)
 function audioStart(){ AUD.on=true; }   // se habilita con el primer gesto del usuario (móvil)
 
 /* ===================== Volver a la CIUDAD (parkour) desde el césped/menú ===================== */
@@ -1682,14 +1700,28 @@ function mpTick(dt){
 /* ===================== Init ===================== */
 setupQuiz();   // randomiza las sumas del edificio 4
 applyLang(lang);   // aplica el idioma guardado a todo el menú/HUD/botones
+const loaderEl=document.getElementById('loader');
+// PRECARGA de TODOS los assets (texturas, modelos, sonidos y música) antes de jugar
+function preloadAll(onp){
+  const urls=[ SKY_URL, SPACE_SKY_URL, EBASE+BODY_FILE, METAL_BASE+'metal_col.jpg', METAL_BASE+'metal_nrm.jpg', METAL_BASE+'metal_rough.jpg', METAL_BASE+'metal_met.jpg' ];
+  for(const k in SND) urls.push(SFX_BASE+SND[k]);   // todos los sonidos y la música
+  let done=0; const total=urls.length, step=()=>{ done++; if(onp)onp(done,total); };
+  return Promise.all(urls.map(u=> fetch(u).then(r=>r.blob()).then(step).catch(step) ));
+}
 try{
   enterGrass(false);                  // arma el mundo frutiger (terreno+estructura+cielo) como FONDO del menú, SIN briznas (carga liviana)
   renderer.setPixelRatio(0.32);       // render bajo (~144p) → difuminado por CSS detrás del menú
   document.body.classList.add('menu-open');
   layout(); renderer.render(scene,camera);
-  setTimeout(()=>document.getElementById('loader').classList.add('hide'),250);
+  if(loaderEl) loaderEl.textContent='cargando… 0%';
+  preloadAll((d,t)=>{ if(loaderEl) loaderEl.textContent='cargando… '+Math.round(d/t*100)+'%'; })
+    .then(()=>{ if(loaderEl) loaderEl.classList.add('hide'); })
+    .catch(()=>{ if(loaderEl) loaderEl.classList.add('hide'); });
+  setTimeout(()=>{ if(loaderEl && !loaderEl.classList.contains('hide')) loaderEl.classList.add('hide'); }, 15000);   // tope de seguridad por si la red es lenta
 }
-catch(err){ console.error('Init',err); document.getElementById('loader').classList.add('hide'); }
+catch(err){ console.error('Init',err); if(loaderEl) loaderEl.classList.add('hide'); }
+// música del nivel 1 en el MENÚ: arranca con el primer toque (los móviles bloquean el autoplay)
+window.addEventListener('pointerdown',()=>{ audioStart(); if(menuMode) ambient('amb1'); }, {once:true});
 try{ tapBtn('bChat',()=>mpSendChat()); tapBtn('bPack',()=>togglePack());
   tapBtn('bNames',()=>{ showNames=!showNames; const bn=document.getElementById('bNames'); if(bn)bn.classList.toggle('on',showNames); });   // mostrar/ocultar nombres de jugadores
   mpConnect(); }catch(e){ console.warn('multijugador no disponible',e); }   // overlay: solo se activa si conecta
