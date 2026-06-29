@@ -63,7 +63,7 @@
   #mPlay{ margin-top:22px; width:100%; padding:15px; border-radius:16px; font-size:16px; font-weight:800; letter-spacing:.05em; color:#fff; cursor:pointer;
     background:linear-gradient(180deg,#5ad27a,#2aa64f); border:1.5px solid rgba(255,255,255,.7); box-shadow:0 10px 26px rgba(30,150,70,.5), inset 0 1px 0 rgba(255,255,255,.7); transition:transform .12s; }
   #mPlay:active{ transform:scale(.96); }
-  body.menu-open #joy, body.menu-open #bJump, body.menu-open #bSlide, body.menu-open #bRoll, body.menu-open #hudWrap, body.menu-open #cross, body.menu-open #bChat, body.menu-open #bNames, body.menu-open #bPack, body.menu-open #kbd{ display:none !important; }
+  body.menu-open #joy, body.menu-open #bJump, body.menu-open #bSlide, body.menu-open #bRoll, body.menu-open #hudWrap, body.menu-open #cross, body.menu-open #bChat, body.menu-open #bNames, body.menu-open #bPack, body.menu-open #kbd, body.menu-open #bVoice{ display:none !important; }
   /* ===== MULTIJUGADOR ===== */
   #mpStatus{ position:fixed; right:calc(12px + var(--safe-t)); top:calc(12px + var(--safe-t)); z-index:15; display:flex; align-items:center; gap:6px;
     background:rgba(14,22,30,.62); border:1px solid rgba(255,255,255,.16); border-radius:999px; padding:5px 10px; font-size:11px; font-weight:700; color:#cfe0ee; pointer-events:none; }
@@ -90,6 +90,10 @@
   #bPack{ position:fixed; right:26px; bottom:calc(272px + var(--safe-b)); z-index:20; width:52px; height:52px; border-radius:50%; display:none;
     background:rgba(18,26,40,.62); border:1px solid rgba(255,255,255,.2); color:#fff; font-size:24px; backdrop-filter:blur(7px); cursor:pointer; }
   #bPack:active{ transform:scale(.93); }
+  #bVoice{ position:fixed; right:26px; bottom:calc(334px + var(--safe-b)); z-index:20; width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:rgba(22,34,50,.6); border:1px solid rgba(255,255,255,.2); color:#fff; font-size:23px; backdrop-filter:blur(7px); cursor:pointer; touch-action:none; user-select:none; }
+  #bVoice.on{ background:linear-gradient(180deg,#8fe6a0,#2fb86a); border-color:#cffadb; box-shadow:0 0 16px rgba(60,220,120,.7); }
+  #bVoice:active{ transform:scale(.92); }
   #vPack{ position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:30; display:none; width:min(86vw,520px); max-height:74vh; overflow-y:auto;
     background:rgba(10,16,26,.9); border:1px solid rgba(255,255,255,.16); border-radius:18px; padding:16px; backdrop-filter:blur(12px); font-family:'Segoe UI',system-ui,sans-serif; }
   #vPack.show{ display:block; }
@@ -138,6 +142,7 @@
   <button id="bRoll"  class="actBtn">RODAR</button>
   <div id="hudWrap"><div id="hud"></div><div id="hudMission"></div></div>
   <button id="bChat" class="actBtn" title="Chat">💬</button>
+  <button id="bVoice" title="Hablar (mantené apretado)">🎤</button>
   <div id="mpStatus" data-s="off">multijugador</div>
   <div id="mpChatLog"></div>
   <div id="vBoard"></div>
@@ -1627,7 +1632,7 @@ function mpRemote(id,name){ let r=MP.remotes.get(id);
   if(!r){ const av=new THREE.Group(); const tag=mpNameTag(name); tag.visible=showNames; av.add(tag); scene.add(av);
     r={ id,name,color:mpColor(id),world:null,anim:'idle',moving:false,mir:false,yaw:0, pos:new THREE.Vector3(), target:new THREE.Vector3(),
       avatar:av, tag, last:performance.now(), bob:0, init:false, rigged:false }; MP.remotes.set(id,r); mpRig(r);
-    mpChatIn('🟢', (name||'?')+' '+t('mp_join')); sfx('spawn'); }   // aviso de que se unió + sonido de spawn
+    mpChatIn('🟢', (name||'?')+' '+t('mp_join')); sfx('spawn'); if(VOICE.stream) voiceSend(id,'ready'); }   // aviso de que se unió + sonido de spawn + invitar a la voz
   return r; }
 function mpChatIn(name,text){ if(!text)return; const log=document.getElementById('mpChatLog'); if(!log)return;
   const el=document.createElement('div'); el.className='mpMsg'; el.innerHTML='<b>'+mpEsc(name)+':</b> '+mpEsc(text); log.appendChild(el);
@@ -1659,7 +1664,7 @@ function mpConnect(){
   let client; try{ client=mqtt.connect('wss://broker.emqx.io:8084/mqtt',{connectTimeout:8000,reconnectPeriod:5000,clean:true}); }
   catch(e){ mpSetStatus('off','mp_nonet'); return; }
   MP.client=client;
-  client.on('connect',()=>{ MP.on=true; mpSetStatus('online','mp_online'); client.subscribe([MP.room+'/state',MP.room+'/chat',MP.room+'/action'],{qos:0}); });
+  client.on('connect',()=>{ MP.on=true; mpSetStatus('online','mp_online'); client.subscribe([MP.room+'/state',MP.room+'/chat',MP.room+'/action',MP.room+'/rtc'],{qos:0}); if(VOICE.stream) voiceSend(null,'ready'); });
   client.on('reconnect',()=>mpSetStatus('connecting','mp_conn'));
   client.on('close',()=>{ MP.on=false; mpSetStatus('off','mp_off'); });
   client.on('error',()=>{ MP.on=false; mpSetStatus('off','mp_err'); });
@@ -1670,6 +1675,7 @@ function mpConnect(){
       if(world==='void') updateVoidBoard(); }
     else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); }
     else if(topic.slice(-7)==='/action'){ /* eventos discretos (emotes/hits): aplicar localmente */ if(d.type==='hit_player' && d.targetId===MP.id){ /* este juego no tiene daño */ } }
+    else if(topic.slice(-4)==='/rtc'){ if(!d.to||d.to===MP.id) voiceSignal(d); }   // señalización del chat de voz (WebRTC)
   });
 }
 function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.now(); if(now-MP.lastPub<100)return;
@@ -1683,7 +1689,7 @@ function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.n
 function mpTick(dt){
   const now=performance.now();
   if(mpStatusEl && mpStatusEl.dataset.s==='online') mpStatusEl.textContent=t('mp_online')+' · '+(MP.remotes.size+1)+'👥';   // nº de jugadores conectados (vos + remotos)
-  for(const [id,r] of MP.remotes){ if(now-r.last>5000){ scene.remove(r.avatar); MP.remotes.delete(id); continue; }   // limpieza por timeout
+  for(const [id,r] of MP.remotes){ if(now-r.last>5000){ scene.remove(r.avatar); MP.remotes.delete(id); voiceClose(id); continue; }   // limpieza por timeout (+ cierra la voz)
     if(!r.rigged && mpBodySrc){ if(r.body)r.avatar.remove(r.body); mpRig(r); }                                       // al cargar el GLB, cambia la cápsula por la skin real
     r.pos.lerp(r.target, Math.min(1,10*dt));                                                                        // interpolación (10Hz → 60fps suave)
     const same=(r.world===world); r.avatar.visible=same;                                                            // solo se ven los del MISMO mundo
@@ -1696,6 +1702,40 @@ function mpTick(dt){
     else if(r.body){ r.bob+=dt*8*(r.moving?1:0); r.avatar.position.y += Math.abs(Math.sin(r.bob))*0.06; } }         // cápsula provisional
   mpPublishState();
 }
+
+/* ===================== CHAT DE VOZ (WebRTC P2P, señalización por MQTT, push-to-talk) ===================== */
+const VOICE={ ok:!!(typeof RTCPeerConnection!=='undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia), stream:null, peers:new Map(), inited:false };
+const RTC_CFG={ iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}] };
+function voiceSend(to,type,data){ if(MP.on&&MP.client) MP.client.publish(MP.room+'/rtc', JSON.stringify({id:MP.id,to:to||null,type,data:data||null}),{qos:0}); }
+async function voiceInit(){ if(VOICE.inited||!VOICE.ok) return VOICE.inited; VOICE.inited=true;
+  try{ VOICE.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+    VOICE.stream.getAudioTracks().forEach(tk=>tk.enabled=false);   // arranca MUTE (push-to-talk)
+    voiceSend(null,'ready'); return true;
+  }catch(e){ VOICE.inited=false; mpChatIn('🎤','(sin permiso de micrófono)'); return false; }
+}
+function voicePeer(id){ let pr=VOICE.peers.get(id); if(pr)return pr; if(!VOICE.stream)return null;
+  const pc=new RTCPeerConnection(RTC_CFG); VOICE.stream.getTracks().forEach(tk=>pc.addTrack(tk,VOICE.stream));
+  const au=document.createElement('audio'); au.autoplay=true; au.playsInline=true; document.body.appendChild(au);
+  pc.ontrack=e=>{ au.srcObject=e.streams[0]; const p=au.play(); if(p&&p.catch)p.catch(()=>{}); };   // se escucha al otro
+  pc.onicecandidate=e=>{ if(e.candidate) voiceSend(id,'ice',e.candidate); };
+  pc.onconnectionstatechange=()=>{ const s=pc.connectionState; if(s==='failed'||s==='closed') voiceClose(id); };
+  pr={pc,au,pending:[]}; VOICE.peers.set(id,pr); return pr;
+}
+function voiceFlush(pr){ const q=pr.pending.splice(0); for(const c of q){ try{ pr.pc.addIceCandidate(c); }catch(e){} } }
+async function voiceOffer(id){ const pr=voicePeer(id); if(!pr)return; try{ const o=await pr.pc.createOffer(); await pr.pc.setLocalDescription(o); voiceSend(id,'offer',pr.pc.localDescription); }catch(e){} }
+function voiceClose(id){ const pr=VOICE.peers.get(id); if(pr){ try{pr.pc.close();}catch(e){} if(pr.au){ pr.au.srcObject=null; pr.au.remove(); } VOICE.peers.delete(id); } }
+async function voiceSignal(d){ if(!VOICE.ok)return;
+  if(d.type==='ready'){ if(VOICE.stream && MP.id<d.id) voiceOffer(d.id); }                                  // el de id menor inicia (evita choque)
+  else if(d.type==='offer'){ if(!VOICE.stream)return; const pr=voicePeer(d.id); if(!pr)return; try{ await pr.pc.setRemoteDescription(d.data); voiceFlush(pr); const a=await pr.pc.createAnswer(); await pr.pc.setLocalDescription(a); voiceSend(d.id,'answer',pr.pc.localDescription); }catch(e){} }
+  else if(d.type==='answer'){ const pr=VOICE.peers.get(d.id); if(pr) try{ await pr.pc.setRemoteDescription(d.data); voiceFlush(pr); }catch(e){} }
+  else if(d.type==='ice'){ const pr=VOICE.peers.get(d.id); if(pr){ if(pr.pc.remoteDescription&&pr.pc.remoteDescription.type){ try{ await pr.pc.addIceCandidate(d.data); }catch(e){} } else pr.pending.push(d.data); } }
+}
+function voiceTalk(on){ if(VOICE.stream) VOICE.stream.getAudioTracks().forEach(tk=>tk.enabled=on); }
+async function voicePress(){ audioStart(); const bv=document.getElementById('bVoice');
+  if(!VOICE.ok){ mpChatIn('🎤','(voz no soportada en este navegador)'); return; }
+  if(!VOICE.inited){ const ok=await voiceInit(); if(!ok){ if(bv)bv.classList.remove('on'); return; } }
+  voiceTalk(true); if(bv)bv.classList.add('on'); }                                                          // hablar mientras se mantiene apretado
+function voiceRelease(){ voiceTalk(false); const bv=document.getElementById('bVoice'); if(bv)bv.classList.remove('on'); }
 
 /* ===================== Init ===================== */
 setupQuiz();   // randomiza las sumas del edificio 4
@@ -1730,6 +1770,9 @@ catch(err){ console.error('Init',err); if(loaderEl) loaderEl.classList.add('hide
 window.addEventListener('pointerdown',()=>{ audioStart(); if(menuMode) ambient('amb1'); }, {once:true});
 try{ tapBtn('bChat',()=>mpSendChat()); tapBtn('bPack',()=>togglePack());
   tapBtn('bNames',()=>{ showNames=!showNames; const bn=document.getElementById('bNames'); if(bn)bn.classList.toggle('on',showNames); });   // mostrar/ocultar nombres de jugadores
+  const bV=document.getElementById('bVoice');   // CHAT DE VOZ: mantené apretado para hablar (push-to-talk)
+  if(bV){ const dn=e=>{ e.preventDefault(); voicePress(); }, up=e=>{ e.preventDefault(); voiceRelease(); };
+    bV.addEventListener('pointerdown',dn); bV.addEventListener('pointerup',up); bV.addEventListener('pointerleave',up); bV.addEventListener('pointercancel',up); }
   mpConnect(); }catch(e){ console.warn('multijugador no disponible',e); }   // overlay: solo se activa si conecta
 animate();
 </script>
