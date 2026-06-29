@@ -957,37 +957,45 @@ const VDIRS=[{dx:0,dz:1},{dx:1,dz:0},{dx:0,dz:-1},{dx:-1,dz:0}];   // +Z,+X,-Z,-
 function genFase(fase){
   clearVoid();
   const rng=mulberry32(((voidSeed*0x9E3779B1)>>>0) ^ ((fase*0x85EBCA6B)>>>0));
-  const R5=(a,b)=>a+rng()*(b-a), dif=Math.min(1,fase/14);
-  let di=0, cx=0, cz=VOID_GZ, cy=VOID_BASE;   // dirección y cursor (centro del borde delantero del último tramo)
+  const R5=(a,b)=>a+rng()*(b-a), dif=Math.min(1,fase/16);
+  let di=0, cx=0, cz=VOID_GZ, cy=VOID_BASE;   // dirección y cursor
   const dir=()=>VDIRS[di];
-  // coloca un PISO de largo `len` (a lo largo de dir) × ancho `wid`, y avanza el cursor
-  function floor(len,wid,color,raise){ if(raise!==undefined)cy=raise; const d=dir(); const px=cx+d.dx*(len/2), pz=cz+d.dz*(len/2);
-    const w=d.dx!==0?len:wid, dd=d.dx!==0?wid:len; addVoidBox(px,cy,pz,w,0.5,dd,color); cx+=d.dx*len; cz+=d.dz*len; return {px,pz}; }
-  function gap(g){ const d=dir(); cx+=d.dx*g; cz+=d.dz*g; }                                  // hueco (sin piso) → hay que saltar
-  function ceil(px,pz,len,wid){ const d=dir(); const w=d.dx!==0?len:wid, dd=d.dx!==0?wid:len; addVoidBox(px,cy+1.9,pz,w,0.6,dd,0x5e6b7e); }   // techo BAJO (clearance ≈1.35 → sólo deslizando)
+  // --- anti-solape: rejilla de celdas ocupadas, con MARCADO RETARDADO (los últimos tramos no bloquean la conexión inmediata; sí evita que un giro vuelva sobre geometría vieja) ---
+  const occ=new Set(), Q=2, pend=[];
+  function mark(px,pz,w,d){ const x0=Math.floor((px-w/2)/Q),x1=Math.floor((px+w/2)/Q),z0=Math.floor((pz-d/2)/Q),z1=Math.floor((pz+d/2)/Q); for(let i=x0;i<=x1;i++)for(let j=z0;j<=z1;j++)occ.add(i+','+j); }
+  function isClear(px,pz,w,d){ const x0=Math.floor((px-w/2)/Q),x1=Math.floor((px+w/2)/Q),z0=Math.floor((pz-d/2)/Q),z1=Math.floor((pz+d/2)/Q); for(let i=x0;i<=x1;i++)for(let j=z0;j<=z1;j++)if(occ.has(i+','+j))return false; return true; }
+  function rec(px,pz,w,d){ pend.push([px,pz,w,d]); if(pend.length>3){ const o=pend.shift(); mark(o[0],o[1],o[2],o[3]); } }   // marca recién a los 3 tramos
+  function aheadClear(d2,dist){ const v=VDIRS[d2]; const mx=cx+v.dx*(dist/2+2), mz=cz+v.dz*(dist/2+2); const w=v.dx!==0?dist+4:7, dd=v.dx!==0?7:dist+4; return isClear(mx,mz,w,dd); }
+  // coloca un PISO de largo `len` × ancho `wid`, lo registra y avanza el cursor
+  function floor(len,wid,color){ const d=dir(); const px=cx+d.dx*(len/2), pz=cz+d.dz*(len/2);
+    const w=d.dx!==0?len:wid, dd=d.dx!==0?wid:len; addVoidBox(px,cy,pz,w,0.5,dd,color); rec(px,pz,w,dd); cx+=d.dx*len; cz+=d.dz*len; return {px,pz}; }
+  function gap(g){ const d=dir(); cx+=d.dx*g; cz+=d.dz*g; }                                                  // hueco saltable (sin piso)
+  function climb(to){ cy=Math.max(VOID_BASE,Math.min(VOID_BASE+4,to)); }                                     // altura SIEMPRE en una banda chica (sin torres flotantes)
+  function ceil(px,pz,len,wid){ const d=dir(); const w=d.dx!==0?len:wid, dd=d.dx!==0?wid:len; addVoidBox(px,cy+1.9,pz,w,0.6,dd,0x5e6b7e); }   // techo BAJO (sólo deslizando)
   function wallBeside(len,side,height,off){ const d=dir(), perp=VDIRS[(di+1)&3]; const px0=cx+d.dx*(len/2), pz0=cz+d.dz*(len/2);
-    const px=px0+perp.dx*off*side, pz=pz0+perp.dz*off*side; const w=d.dx!==0?len:0.6, dd=d.dx!==0?0.6:len; addVoidBox(px,cy+height/2-0.2,pz,w,height,dd,0x6f7f93,true); }   // pared alta al costado (wall-run)
-  function turn(){ const left=rng()<0.5, S=5, d=dir(); const px=cx+d.dx*(S/2), pz=cz+d.dz*(S/2);
-    addVoidBox(px,cy,pz,S,0.5,S,0x86b8da); cx=px; cz=pz; di=(di+(left?3:1))&3; const nd=dir(); cx+=nd.dx*(S/2); cz+=nd.dz*(S/2); }   // gira 90° izq/der (pad cuadrado de esquina)
+    const px=px0+perp.dx*off*side, pz=pz0+perp.dz*off*side; const w=d.dx!==0?len:0.5, dd=d.dx!==0?0.5:len; addVoidBox(px,cy+height/2-0.2,pz,w,height,dd,0x70839b,true); }   // pared al costado (wall-run)
+  function tryTurn(){ const opts=rng()<0.5?[3,1]:[1,3]; for(const tt of opts){ const nd=(di+tt)&3; if(aheadClear(nd,9)){ const S=5,d=dir(); const px=cx+d.dx*(S/2),pz=cz+d.dz*(S/2); addVoidBox(px,cy,pz,S,0.5,S,0x86b8da); rec(px,pz,S,S); cx=px;cz=pz; di=nd; const v=dir(); cx+=v.dx*(S/2); cz+=v.dz*(S/2); return true; } } return false; }   // gira sólo si hay lugar libre
   // ===== INICIO =====
-  { const d=dir(); const px=cx+d.dx*2.5, pz=cz+d.dz*2.5; addVoidBox(px,cy,pz,6,0.5,6,0x8fa6c0); voidStart.set(px,cy+0.3,pz); cx+=d.dx*5; cz+=d.dz*5; }
-  // ===== TRAMOS (largo TOTAL aleatorio: corto..largo) =====
-  const steps=5+Math.floor(rng()*7)+Math.floor(dif*8);
+  { const d=dir(); const px=cx+d.dx*2.5, pz=cz+d.dz*2.5; addVoidBox(px,cy,pz,6,0.5,6,0x8fa6c0); rec(px,pz,6,6); voidStart.set(px,cy+0.3,pz); cx+=d.dx*5; cz+=d.dz*5; }
+  // ===== TRAMOS (largo total aleatorio) =====
+  const steps=6+Math.floor(rng()*6)+Math.floor(dif*7);
   for(let i=0;i<steps;i++){
+    if(!aheadClear(di,10)){ if(!tryTurn()) break; }   // si no hay lugar adelante, girá; si tampoco, terminá la fase acá
     const r=rng();
-    if(r<0.24){ floor(R5(4,9),4.5,vColor(rng)); }                                                                          // RECTO (largo aleatorio)
-    else if(r<0.36){ const len=R5(6,9); const c=floor(len,7,0x9fb2c8); const dd=dir();   // PISO PARTIDO por línea roja a lo LARGO → caminá por un lado
+    if(r<0.26){ floor(R5(4,8),4.5,vColor(rng)); }                                                                          // RECTO
+    else if(r<0.38){ const len=R5(6,9); const c=floor(len,7,0x9fb2c8); const dd=dir();                                     // PISO PARTIDO por línea roja a lo LARGO
       if(dd.dx!==0) addKillLine(c.px,c.pz,len-0.4,0.7,cy); else addKillLine(c.px,c.pz,0.7,len-0.4,cy); }
-    else if(r<0.46){ const len=R5(6,8); const c=floor(len,6,0x9fb2c8); const dd=dir();   // línea roja ATRAVESADA → saltala
+    else if(r<0.48){ const len=R5(6,8); const c=floor(len,6,0x9fb2c8); const dd=dir();                                     // línea roja ATRAVESADA → saltala
       if(dd.dx!==0) addKillLine(c.px,c.pz,0.7,5.6,cy); else addKillLine(c.px,c.pz,5.6,0.7,cy); }
-    else if(r<0.60){ const n=2+Math.floor(rng()*3); for(let k=0;k<n;k++){ cy+=R5(1.0,1.3); floor(1.8,1.8,0xb9c6d6); if(k<n-1)gap(R5(1.3,2.1)); } gap(1.6); floor(R5(3,5),4.5,vColor(rng)); }   // SUBIDA con CUBOS separados
-    else if(r<0.72){ const segs=2+Math.floor(rng()*3); for(let k=0;k<segs;k++){ floor(R5(4,7),1.3,0x9aa9bd); if(k<segs-1)gap(R5(1.2,2.0)); } floor(R5(2.5,4),4.5,vColor(rng)); }   // CAMINO de PAREDES angostas (caminar por ellas)
-    else if(r<0.84){ floor(2.5,2.6,vColor(rng)); const side=rng()<0.5?-1:1, g1=R5(3.6,4.3), g2=R5(3.6,4.3); wallBeside(g1+1.8+g2,side,5,1.5);   // WALL-RUN: pared al costado del hueco
-      gap(g1); floor(1.8,2.4,0xb9c6d6); gap(g2); floor(R5(3,5),4.5,vColor(rng)); }
-    else { floor(R5(3,4),4.5,vColor(rng)); const d=R5(4.5,6); const c=floor(d,5,0x97aabf); ceil(c.px,c.pz,d,5); }                          // TÚNEL BAJO: pasá deslizando sí o sí
-    if(rng()<0.5) turn(); else gap(R5(1.5,2.6+dif));                                                                       // gira o sigue derecho (hueco saltable)
+    else if(r<0.62){ const n=2+Math.floor(rng()*2), up=(rng()<0.6?1:-1); for(let k=0;k<n;k++){ climb(cy+up*R5(0.9,1.2)); floor(2.0,2.2,0xb9c6d6); if(k<n-1)gap(R5(1.0,1.6)); } gap(1.5); floor(R5(3,5),4.5,vColor(rng)); }   // CUBOS (subir/bajar suave, banda chica)
+    else if(r<0.74){ const segs=2+Math.floor(rng()*2); for(let k=0;k<segs;k++){ floor(R5(4,6),1.4,0x9aa9bd); if(k<segs-1)gap(R5(1.0,1.5)); } floor(R5(2.5,3.5),4.5,vColor(rng)); }   // CAMINO de paredes ANGOSTAS (caminar por ellas)
+    else if(r<0.86){ floor(2.5,2.6,vColor(rng)); const side=rng()<0.5?-1:1, g1=R5(3.3,3.9), g2=R5(3.3,3.9); wallBeside(g1+1.8+g2,side,3.4,1.4);   // WALL-RUN: pared baja al costado de los saltos
+      gap(g1); floor(1.8,2.4,0xb9c6d6); gap(g2); floor(R5(3,4.5),4.5,vColor(rng)); }
+    else { floor(R5(2.5,3.5),4.5,vColor(rng)); const len=R5(4.5,6); const c=floor(len,5,0x97aabf); ceil(c.px,c.pz,len,5); }                  // TÚNEL BAJO: pasá deslizando
+    if(rng()<0.4) tryTurn(); else gap(R5(1.4,2.4));                                                                        // gira (si hay lugar) o seguí derecho
   }
   // ===== META =====
+  if(!aheadClear(di,6)) tryTurn();
   { const d=dir(); const gx=cx+d.dx*2.5, gz=cz+d.dz*2.5; addVoidBox(gx,cy,gz,5,0.5,5,0x7fd0a0);
     voidGoal=new THREE.Mesh(new THREE.OctahedronGeometry(1.3,0), new THREE.MeshStandardMaterial({color:0xaaffe0,emissive:0x39ffd0,emissiveIntensity:1.7,roughness:0.2})); voidGoal.position.set(gx,cy+2.4,gz); voidGroup.add(voidGoal); voidMeshes.push(voidGoal); voidGoalPos.copy(voidGoal.position); }
 }
