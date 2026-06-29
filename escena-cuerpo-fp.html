@@ -313,7 +313,7 @@ function addButton(x,y,z,onPress){
   buttons.push({m,x,y,z,on:false,onPress}); }
 function tickButtons(){ for(const b of buttons){ if(b.on)continue;
   const dx=player.pos.x-b.x, dz=player.pos.z-b.z, dy=player.pos.y-b.y;
-  if(dx*dx+dz*dz<1.7*1.7 && dy>-0.6 && dy<2.4){ b.on=true; b.m.material.color.set(0x3bd24f); b.m.material.emissive.set(0x12521e); if(b.onPress)b.onPress(); } } }
+  if(dx*dx+dz*dz<1.7*1.7 && dy>-0.6 && dy<2.4){ b.on=true; b.m.material.color.set(0x3bd24f); b.m.material.emissive.set(0x12521e); sfx('btn'); if(b.onPress)b.onPress(); } } }
 // cartel/numero 3D (canvas) que mira hacia -Z (hacia el jugador que avanza en +Z)
 function textPanel(x,y,z,w,h){
   const cv=document.createElement('canvas'); cv.width=256; cv.height=160; const cx=cv.getContext('2d');
@@ -344,7 +344,7 @@ function tickQuiz(){ if(world!=='city'||!quizArmed||!quizWrong)return;
   if(player.pos.z>110){ quizArmed=false; return; }                                   // pasaste bien (a la unión)
   if((player.onGround||player.sliding) && player.pos.z>102.2 && player.pos.z<110){
     const onWrong=(player.pos.x<0 && quizWrong===quizL)||(player.pos.x>0 && quizWrong===quizR);
-    if(onWrong){ quizWrong.locked=true; quizWrong.mesh.visible=false; quizArmed=false; player.climbing=false; }   // HUECO → caída sin agarre
+    if(onWrong){ quizWrong.locked=true; quizWrong.mesh.visible=false; quizArmed=false; player.climbing=false; sfx('wrong'); }   // HUECO → caída sin agarre
   }
 }
 // PORTAL final (edificio 6): anillo brillante; al tocarlo, nivel completo
@@ -717,7 +717,7 @@ function enterCrystal(){ if(world==='crystal')return; world='crystal'; grassMode
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(CSTART); portalDone=true; crystalDone=false;
-  setWorldHUD('crystal','q_crystal');
+  setWorldHUD('crystal','q_crystal'); ambient('amb3');
 }
 
 /* ===================== MUNDO DREAM CORE (suburbio liminal: colinas, casas procedurales, cercas blancas) ===================== */
@@ -786,7 +786,7 @@ function enterDream(){ if(world==='dream')return; world='dream'; grassMode=false
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.set(0,sy+0.4,DREAM_GZ); portalDone=true;
   buildGrassTiles(); grassTileSnap.set(1e12,1e12); relocateTiles(0,DREAM_GZ); grassMat.uniforms.uPlayer.value.set(0,DREAM_GZ);
-  setWorldHUD('dreamcore','q_dream');
+  setWorldHUD('dreamcore','q_dream'); ambient('amb3');
 }
 
 /* ===================== BACKROOMS (caés por la puerta abierta: lugar oscuro + plataformas amarillas, obby de PRECISIÓN con giros) ===================== */
@@ -829,7 +829,7 @@ function enterBackrooms(){ if(world==='back')return; world='back'; grassMode=fal
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=-0.15;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(backStart); portalDone=true; backDone=false;
-  setWorldHUD('backrooms','q_back');
+  setWorldHUD('backrooms','q_back'); ambient('amb4');
 }
 
 /* ===================== POOLROOMS (al salir de las backrooms: todo baldosa de piscina, CLARO, obby sobre el agua) ===================== */
@@ -872,7 +872,7 @@ function enterPoolrooms(){ if(world==='pool')return; world='pool'; grassMode=fal
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(poolStart); portalDone=true; poolDone=false;
-  setWorldHUD('poolrooms','q_pool');
+  setWorldHUD('poolrooms','q_pool'); ambient('amb5');
 }
 
 /* ===================== BASE ESPACIAL (domo militar con varios obbys sobre LAVA; al salir, plataformas en el ESPACIO) ===================== */
@@ -956,7 +956,7 @@ function enterSpace(){ if(world==='space')return; world='space'; grassMode=false
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(spaceStart); portalDone=true;
-  setWorldHUD('space','q_space');
+  setWorldHUD('space','q_space'); ambient('amb5');
 }
 
 /* ===================== EL VACÍO (obby INFINITO por fases, generado PROCEDURALMENTE, compartido en multijugador) ===================== */
@@ -1147,7 +1147,7 @@ function enterVoid(){ world='void'; grassMode=false; dreamMode=false; spaceOutsi
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0; player.autoClimb=null;
   lastSafe.copy(voidStart); portalDone=true;
-  updateVoidHUD(); updateVoidBoard();
+  updateVoidHUD(); updateVoidBoard(); ambient('amb2');   // música del vacío
 }
 // --- entrar al mundo de césped ---
 function enterGrass(withTiles=true){
@@ -1167,7 +1167,7 @@ function enterGrass(withTiles=true){
   scene.background=skyTex; skyMesh.visible=false; if(skyEnv) scene.environment=skyEnv;
   scene.fog.color.set(0xdfeef9); scene.fog.near=70; scene.fog.far=430;   // distancia de render reducida (niebla clara que empata con el horizonte 360)
   sun.intensity=2.6; sun.color.set(0xfffaf0); renderer.toneMappingExposure=1.1;
-  setWorldHUD('frutiger','q_frutiger');
+  setWorldHUD('frutiger','q_frutiger'); ambient('amb2');
 }
 
 /* ===================== Jugador (1ª persona) ===================== */
@@ -1219,7 +1219,7 @@ function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListene
 tapBtn('bJump',()=>{ jumpReq=true; });
 tapBtn('bSlide',()=>{ startSlide(); });
 tapBtn('bRoll',()=>{ rollReq=true; });
-function startSlide(){ if(player.sliding||!player.onGround)return; if(player.vel.length()<3)return; player.sliding=true; player.slideT=0;
+function startSlide(){ if(player.sliding||!player.onGround)return; if(player.vel.length()<3)return; player.sliding=true; player.slideT=0; sfx(grassMode?'slide_grass':'slide');
   const d=player.vel.length()>0.5?player.vel.clone().normalize():forward.clone(); player.vel.copy(d).multiplyScalar(SLIDE_V);
   // ¿deslizo hacia mi DERECHA? (respecto a donde miro) → se espeja la animación (por defecto va a la izquierda)
   player.slideRight = (Math.cos(player.yaw)*d.x - Math.sin(player.yaw)*d.z) > 0.15; }
@@ -1383,7 +1383,7 @@ function update(dt){
 
   // ---- JUMP / WALL-JUMP ----
   if(jumpReq){ jumpReq=false;
-    if(player.onGround){ player.vy=world==='space'?JUMP_V*1.35:JUMP_V; player.onGround=false; if(player.sliding)player.sliding=false; }   // espacio: salto más alto (gravedad baja)
+    if(player.onGround){ player.vy=world==='space'?JUMP_V*1.35:JUMP_V; player.onGround=false; if(player.sliding)player.sliding=false; sfx(grassMode?'jump_grass':'jump'); }   // espacio: salto más alto (gravedad baja)
     else if(player.wallrun){ player.vy=JUMP_V*0.92; player.vel.addScaledVector(player.wallN,7.5); player.wallrun=0; player.wallrunT=WALLRUN_MAX; }   // saltar de la pared
   }
 
@@ -1455,6 +1455,7 @@ function update(dt){
     : player.wallrun ? 'wallrun'
     : !player.onGround ? 'jump'
     : (sp<0.5 ? 'idle' : ((mag>0.82 || sp>=4.2) ? 'run' : 'walk'));   // joystick a fondo o velocidad alta → CORRER
+  runLoop(animState==='run'||animState==='walk', grassMode);   // pasos en bucle al correr/caminar (variante pasto / fuera del pasto)
   // el cuerpo/piernas miran hacia donde MIRÁS, no hacia donde camina el joystick
   player.faceYaw = player.yaw;
   tickBody(dt, animState);
@@ -1521,6 +1522,16 @@ function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
   layout();
 }
 
+/* ===================== AUDIO (SFX + música ambiente por nivel) ===================== */
+const SFX_BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@eabd0b0/assets/fp/sfx/';
+const SND={ jump:'sfx_jump.mp3', jump_grass:'sfx_jump_grass.mp3', slide:'sfx_slide.mp3', slide_grass:'sfx_slide_grass.mp3', run:'sfx_run.mp3', run_grass:'sfx_run_grass.mp3', btn:'sfx_btn.mp3', wrong:'sfx_wrong.mp3', spawn:'sfx_spawn.mp3', menu:'sfx_menu.mp3', play:'sfx_play.mp3', amb1:'amb1.mp3', amb2:'amb2.mp3', amb3:'amb3.mp3', amb4:'amb4.mp3', amb5:'amb5.mp3' };
+const AUD={ on:false, el:{}, amb:null, ambKey:null, run:null, runKey:null };
+function aGet(k){ let a=AUD.el[k]; if(!a){ a=new Audio(SFX_BASE+SND[k]); a.preload='auto'; AUD.el[k]=a; } return a; }
+function sfx(k,vol){ if(!AUD.on||!SND[k])return; try{ const a=aGet(k); a.volume=(vol==null?0.9:vol); a.currentTime=0; const p=a.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){} }   // efecto puntual
+function ambient(k){ if(!AUD.on||!SND[k]||AUD.ambKey===k)return; AUD.ambKey=k; try{ if(!AUD.amb){ AUD.amb=new Audio(); AUD.amb.loop=true; } AUD.amb.volume=0.3; AUD.amb.src=SFX_BASE+SND[k]; const p=AUD.amb.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){} }   // música del nivel (loop, cambia al cambiar de mundo)
+function runLoop(on,grass){ if(!AUD.on)return; if(on){ const k=grass?'run_grass':'run'; if(AUD.runKey!==k){ if(AUD.run)AUD.run.pause(); AUD.run=aGet(k); AUD.run.loop=true; AUD.run.volume=0.4; AUD.runKey=k; const p=AUD.run.play(); if(p&&p.catch)p.catch(()=>{}); } } else if(AUD.run){ AUD.run.pause(); AUD.run=null; AUD.runKey=null; } }   // pasos en bucle mientras corrés (pasto / fuera del pasto)
+function audioStart(){ AUD.on=true; }   // se habilita con el primer gesto del usuario (móvil)
+
 /* ===================== Volver a la CIUDAD (parkour) desde el césped/menú ===================== */
 function enterCity(){ world='city'; grassMode=false; dreamMode=false; grassGroup.visible=false; crystalGroup.visible=false; if(typeof dreamGroup!=='undefined')dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof spaceGroup!=='undefined')spaceGroup.visible=false; if(typeof farMesh!=='undefined'&&farMesh)farMesh.visible=false;
   scene.background=skyTex; if(skyEnv)scene.environment=skyEnv; skyMesh.visible=false;   // MISMO cielo 360 que los demás mundos
@@ -1529,16 +1540,16 @@ function enterCity(){ world='city'; grassMode=false; dreamMode=false; grassGroup
   portalDone=false; lastSafe.set(0,2,4); setupQuiz();
   player.pos.set(0,0,4); player.vel.set(0,0,0); player.vy=0; player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0;
-  setWorldHUD('parkour','q_parkour');
+  setWorldHUD('parkour','q_parkour'); ambient('amb1');
 }
 
 /* ===================== MENÚ DE INICIO ===================== */
 const menuEl=document.getElementById('menu');
 let menuMode=true, menuQ='med', menuT=0;
 const mNameEl=document.getElementById('mName');   // el campo de nombre se cablea más abajo (después de definir MP)
-document.querySelectorAll('#mQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ document.querySelectorAll('#mQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; }));
-document.querySelectorAll('#mLang .mOpt').forEach(b=>b.addEventListener('click',()=>applyLang(b.dataset.lang)));   // selector de idioma
-document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)return; menuMode=false;
+document.querySelectorAll('#mQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); document.querySelectorAll('#mQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; }));
+document.querySelectorAll('#mLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); applyLang(b.dataset.lang); }));   // selector de idioma
+document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)return; menuMode=false; audioStart(); sfx('play');
   if(mNameEl){ const v=mNameEl.value.trim().slice(0,14); if(v){ MP.name=v; try{ localStorage.setItem('pf_name',v); }catch(e){} } }
   menuEl.classList.add('hide'); document.body.classList.remove('menu-open');
   applyQuality(menuQ);
@@ -1598,7 +1609,7 @@ function mpRemote(id,name){ let r=MP.remotes.get(id);
   if(!r){ const av=new THREE.Group(); const tag=mpNameTag(name); tag.visible=showNames; av.add(tag); scene.add(av);
     r={ id,name,color:mpColor(id),world:null,anim:'idle',moving:false,mir:false,yaw:0, pos:new THREE.Vector3(), target:new THREE.Vector3(),
       avatar:av, tag, last:performance.now(), bob:0, init:false, rigged:false }; MP.remotes.set(id,r); mpRig(r);
-    mpChatIn('🟢', (name||'?')+' '+t('mp_join')); }   // aviso de que se unió
+    mpChatIn('🟢', (name||'?')+' '+t('mp_join')); sfx('spawn'); }   // aviso de que se unió + sonido de spawn
   return r; }
 function mpChatIn(name,text){ if(!text)return; const log=document.getElementById('mpChatLog'); if(!log)return;
   const el=document.createElement('div'); el.className='mpMsg'; el.innerHTML='<b>'+mpEsc(name)+':</b> '+mpEsc(text); log.appendChild(el);
