@@ -141,7 +141,12 @@
   .pBtn{ width:100%; padding:13px; margin-bottom:9px; border-radius:14px; font-size:15px; font-weight:800; color:#0c4675; cursor:pointer;
     background:linear-gradient(180deg, rgba(255,255,255,.72), rgba(208,234,255,.32)); border:1.4px solid rgba(255,255,255,.7); box-shadow:inset 0 1px 0 rgba(255,255,255,.8); }
   .pBtn:active{ transform:scale(.97); } .pBtn.danger{ color:#fff; background:linear-gradient(180deg,#ff8a7a,#e0554a); border-color:#ffd9d2; }
-  #pSettingsBox{ display:none; margin-top:8px; }
+  .ovl{ position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; background:rgba(8,16,28,.66); backdrop-filter:blur(9px); }
+  .ovl.show{ display:flex; }
+  .ovlPanel{ width:min(90vw,440px); max-height:88vh; overflow-y:auto; padding:20px; border-radius:20px; text-align:center;
+    background:linear-gradient(165deg, rgba(255,255,255,.42), rgba(198,228,255,.16)); border:1.5px solid rgba(255,255,255,.6); box-shadow:0 22px 64px rgba(10,40,80,.5); }
+  .ovlPanel h2{ color:#0a3a63; font-size:21px; font-weight:800; margin-bottom:12px; }
+  .ovlPanel .sub2{ font-size:11px; font-weight:800; letter-spacing:.1em; color:#15527f; opacity:.8; margin-bottom:8px; }
   .boardBox{ background:rgba(10,20,34,.5); border:1px solid rgba(255,255,255,.16); border-radius:13px; padding:8px 10px; max-height:170px; overflow-y:auto; text-align:left; }
   .boardBox .bRow{ display:flex; justify-content:space-between; gap:8px; font-size:13px; color:#dfeefb; padding:3px 2px; }
   .boardBox .bRow b{ color:#7fe0c0; } .boardBox .bRow.me span{ color:#ffe9a0; font-weight:800; }
@@ -171,15 +176,25 @@
     <h2 data-i18n="pausa">Pausa</h2>
     <button class="pBtn" id="pResume" data-i18n="resumen">▶ Resumen</button>
     <button class="pBtn" id="pSettings" data-i18n="ajustes">⚙ Ajustes</button>
+    <button class="pBtn" id="pBoardBtn" data-i18n="clasif_btn">🏆 Clasificación</button>
     <button class="pBtn danger" id="pExit" data-i18n="salir">✖ Salir</button>
-    <div id="pSettingsBox">
-      <div class="mLabel" data-i18n="gfx">GRÁFICOS</div>
-      <div class="mRow" id="pQual"><button class="mOpt" data-q="low" data-i18n="low">Bajo</button><button class="mOpt sel" data-q="med" data-i18n="med">Medio</button><button class="mOpt" data-q="high" data-i18n="high">Alto</button></div>
-      <div class="mLabel" data-i18n="idioma">IDIOMA</div>
-      <div class="mRow" id="pLang"><button class="mOpt sel" data-lang="es">ES</button><button class="mOpt" data-lang="en">EN</button><button class="mOpt" data-lang="pt">PT</button></div>
-      <div class="mLabel" data-i18n="clasif">CLASIFICACIÓN</div>
-      <div id="pBoard" class="boardBox"></div>
-    </div>
+  </div></div>
+  <!-- pestaña AJUSTES (se abre aparte) -->
+  <div id="settingsPanel" class="ovl"><div class="ovlPanel">
+    <h2 data-i18n="ajustes2">⚙ Ajustes</h2>
+    <div class="mLabel" data-i18n="gfx">GRÁFICOS</div>
+    <div class="mRow" id="sQual"><button class="mOpt" data-q="low" data-i18n="low">Bajo</button><button class="mOpt sel" data-q="med" data-i18n="med">Medio</button><button class="mOpt" data-q="high" data-i18n="high">Alto</button></div>
+    <div class="mLabel" data-i18n="idioma">IDIOMA</div>
+    <div class="mRow" id="sLang"><button class="mOpt sel" data-lang="es">ES</button><button class="mOpt" data-lang="en">EN</button><button class="mOpt" data-lang="pt">PT</button></div>
+    <button class="pBtn" id="sBoardBtn" data-i18n="clasif_btn" style="margin-top:14px">🏆 Clasificación</button>
+    <button class="pBtn" id="sClose" data-i18n="cerrar">Cerrar</button>
+  </div></div>
+  <!-- pestaña CLASIFICACIÓN (se abre aparte) -->
+  <div id="boardPanel" class="ovl"><div class="ovlPanel">
+    <h2 data-i18n="clasif_btn">🏆 Clasificación</h2>
+    <div class="sub2" data-i18n="clasif">CLASIFICACIÓN · MEJORES FASES</div>
+    <div id="bigBoard" class="boardBox" style="max-height:46vh"></div>
+    <button class="pBtn" id="bClose" data-i18n="cerrar">Cerrar</button>
   </div></div>
   <div id="menu">
     <div id="menuPanel">
@@ -199,8 +214,7 @@
         <button class="mOpt" data-lang="en">English</button>
         <button class="mOpt" data-lang="pt">Português</button>
       </div>
-      <div class="mLabel" data-i18n="clasif">CLASIFICACIÓN · MEJORES FASES</div>
-      <div id="mBoard" class="boardBox"></div>
+      <button class="pBtn" id="mBoardBtn" data-i18n="clasif_btn" style="margin-top:16px">🏆 Clasificación</button>
       <button id="mPlay" data-i18n="play">JUGAR ▶</button>
     </div>
   </div>
@@ -230,21 +244,21 @@ const LANG={
     st_idle:'quieto',st_walk:'caminar',st_run:'correr',st_air:'en el aire',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'trepar',st_roll:'voltereta',
     m_frutiger:'🌱 Mundo Frutiger — explorá el césped',m_crystal:'🔷 Obby de Cristal — llegá a la meta',m_crystaldone:'🔷 ¡Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — ¡reinicio!',
     m_dream:'🌫️ Dream Core — un suburbio que no termina',m_back:'🟡 Backrooms — encontrá la salida',m_backdone:'🟡 ¡Saliste de las Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — llegá a la meta',m_pooldone:'💧 ¡Completaste los Poolrooms!',m_level1done:'¡NIVEL 1 COMPLETO! 🎉',
-    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Saltá las plataformas hasta la meta',void:'El Vacío',q_void:'Sobreviví las fases del obby infinito',fase:'Fase',void_die:'Caíste · vuelve a cruzar el espacio',void_best:'mejor',void_reset:'¡Vacío regenerado desde cero!',void_lvl:'El Vacío ∞',skin_unlock:'¡Skin desbloqueada!',messi_got:'¡CONSEGUISTE A MESSI!',messi_fail:'No conseguiste a Messi',skins:'Mochila de skins',skin_on:'puesta',nombre:'TU NOMBRE',send:'ENVIAR',names:'Nombres',pausa:'Pausa',resumen:'▶ Resumen',ajustes:'⚙ Ajustes',salir:'✖ Salir',clasif:'CLASIFICACIÓN · MEJORES FASES'},
+    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Saltá las plataformas hasta la meta',void:'El Vacío',q_void:'Sobreviví las fases del obby infinito',fase:'Fase',void_die:'Caíste · vuelve a cruzar el espacio',void_best:'mejor',void_reset:'¡Vacío regenerado desde cero!',void_lvl:'El Vacío ∞',skin_unlock:'¡Skin desbloqueada!',messi_got:'¡CONSEGUISTE A MESSI!',messi_fail:'No conseguiste a Messi',skins:'Mochila de skins',skin_on:'puesta',nombre:'TU NOMBRE',send:'ENVIAR',names:'Nombres',pausa:'Pausa',resumen:'▶ Resumen',ajustes:'⚙ Ajustes',salir:'✖ Salir',clasif:'CLASIFICACIÓN · MEJORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Clasificación',cerrar:'Cerrar'},
   en:{title:'🌱 PARKOUR · FRUTIGER',sub:'set your name and play',lvl:'LEVEL',gfx:'GRAPHICS',low:'Low',med:'Medium',high:'High',play:'PLAY ▶',idioma:'LANGUAGE',
     parkour:'Level 1 · Parkour',frutiger:'Frutiger World',crystal:'Crystal Obby',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'JUMP',slide:'SLIDE',roll:'ROLL',
     st_idle:'idle',st_walk:'walk',st_run:'run',st_air:'in air',st_slide:'slide',st_wallrun:'wall-run',st_climb:'climb',st_roll:'roll',
     m_frutiger:'🌱 Frutiger World — explore the grass',m_crystal:'🔷 Crystal Obby — reach the goal',m_crystaldone:'🔷 Obby complete! → Dream Core',m_crystalreset:'🔷 Crystal Obby — restart!',
     m_dream:'🌫️ Dream Core — a suburb that never ends',m_back:'🟡 Backrooms — find the exit',m_backdone:'🟡 You escaped the Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — reach the goal',m_pooldone:'💧 You cleared the Poolrooms!',m_level1done:'LEVEL 1 COMPLETE! 🎉',
-    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Jump the platforms to the goal',void:'The Void',q_void:'Survive the endless obby phases',fase:'Phase',void_die:'You fell · cross space again',void_best:'best',void_reset:'Void regenerated from scratch!',void_lvl:'The Void ∞',skin_unlock:'Skin unlocked!',messi_got:'YOU GOT MESSI!',messi_fail:"You didn't get Messi",skins:'Skin backpack',skin_on:'on',nombre:'YOUR NAME',send:'SEND',names:'Names',pausa:'Paused',resumen:'▶ Resume',ajustes:'⚙ Settings',salir:'✖ Exit',clasif:'LEADERBOARD · BEST PHASES'},
+    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Jump the platforms to the goal',void:'The Void',q_void:'Survive the endless obby phases',fase:'Phase',void_die:'You fell · cross space again',void_best:'best',void_reset:'Void regenerated from scratch!',void_lvl:'The Void ∞',skin_unlock:'Skin unlocked!',messi_got:'YOU GOT MESSI!',messi_fail:"You didn't get Messi",skins:'Skin backpack',skin_on:'on',nombre:'YOUR NAME',send:'SEND',names:'Names',pausa:'Paused',resumen:'▶ Resume',ajustes:'⚙ Settings',salir:'✖ Exit',clasif:'LEADERBOARD · BEST PHASES',ajustes2:'⚙ Settings',clasif_btn:'🏆 Leaderboard',cerrar:'Close'},
   pt:{title:'🌱 PARKOUR · FRUTIGER',sub:'ponha seu nome e jogue',lvl:'NÍVEL',gfx:'GRÁFICOS',low:'Baixo',med:'Médio',high:'Alto',play:'JOGAR ▶',idioma:'IDIOMA',
     parkour:'Nível 1 · Parkour',frutiger:'Mundo Frutiger',crystal:'Obby de Cristal',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'PULAR',slide:'DESLIZAR',roll:'ROLAR',
     st_idle:'parado',st_walk:'andar',st_run:'correr',st_air:'no ar',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'escalar',st_roll:'cambalhota',
     m_frutiger:'🌱 Mundo Frutiger — explore a grama',m_crystal:'🔷 Obby de Cristal — chegue à meta',m_crystaldone:'🔷 Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — reinício!',
     m_dream:'🌫️ Dream Core — um subúrbio sem fim',m_back:'🟡 Backrooms — ache a saída',m_backdone:'🟡 Você saiu das Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — chegue à meta',m_pooldone:'💧 Você completou as Poolrooms!',m_level1done:'NÍVEL 1 COMPLETO! 🎉',
-    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Pule as plataformas até a meta',void:'O Vazio',q_void:'Sobreviva às fases do obby infinito',fase:'Fase',void_die:'Você caiu · cruze o espaço de novo',void_best:'melhor',void_reset:'Vazio regenerado do zero!',void_lvl:'O Vazio ∞',skin_unlock:'Skin desbloqueada!',messi_got:'VOCÊ CONSEGUIU MESSI!',messi_fail:'Você não conseguiu o Messi',skins:'Mochila de skins',skin_on:'usando',nombre:'SEU NOME',send:'ENVIAR',names:'Nomes',pausa:'Pausa',resumen:'▶ Retomar',ajustes:'⚙ Ajustes',salir:'✖ Sair',clasif:'CLASSIFICAÇÃO · MELHORES FASES'}
+    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Pule as plataformas até a meta',void:'O Vazio',q_void:'Sobreviva às fases do obby infinito',fase:'Fase',void_die:'Você caiu · cruze o espaço de novo',void_best:'melhor',void_reset:'Vazio regenerado do zero!',void_lvl:'O Vazio ∞',skin_unlock:'Skin desbloqueada!',messi_got:'VOCÊ CONSEGUIU MESSI!',messi_fail:'Você não conseguiu o Messi',skins:'Mochila de skins',skin_on:'usando',nombre:'SEU NOME',send:'ENVIAR',names:'Nomes',pausa:'Pausa',resumen:'▶ Retomar',ajustes:'⚙ Ajustes',salir:'✖ Sair',clasif:'CLASSIFICAÇÃO · MELHORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Classificação',cerrar:'Fechar'}
 };
 let lang = (()=>{ try{ return localStorage.getItem('pf_lang')||'es'; }catch(e){ return 'es'; } })();
 function t(k){ return (LANG[lang]&&LANG[lang][k]) || LANG.es[k] || k; }
@@ -1606,12 +1620,17 @@ let menuMode=true, menuQ='med', menuT=0;
 const mNameEl=document.getElementById('mName');   // el campo de nombre se cablea más abajo (después de definir MP)
 document.querySelectorAll('#mQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); document.querySelectorAll('#mQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; }));
 document.querySelectorAll('#mLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); applyLang(b.dataset.lang); }));   // selector de idioma
-// --- menú de pausa en juego ---
+// --- menú de pausa + pestañas (Ajustes / Clasificación) ---
 document.getElementById('pResume').addEventListener('click',()=>{ sfx('menu'); closePause(); });
-document.getElementById('pSettings').addEventListener('click',()=>{ sfx('menu'); const on=pSetBox.style.display!=='block'; pSetBox.style.display=on?'block':'none'; if(on)renderBoard(pBoardEl); });
+document.getElementById('pSettings').addEventListener('click',()=>{ sfx('menu'); openSettings(); });
+document.getElementById('pBoardBtn').addEventListener('click',()=>{ sfx('menu'); openBoard(); });
 document.getElementById('pExit').addEventListener('click',()=>{ sfx('menu'); exitToMenu(); });
-document.querySelectorAll('#pQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); document.querySelectorAll('#pQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; applyQuality(b.dataset.q); }));   // gráficos en vivo
-document.querySelectorAll('#pLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); applyLang(b.dataset.lang); }));
+document.getElementById('sClose').addEventListener('click',()=>{ sfx('menu'); closeSettings(); });
+document.getElementById('sBoardBtn').addEventListener('click',()=>{ sfx('menu'); openBoard(); });
+document.getElementById('bClose').addEventListener('click',()=>{ sfx('menu'); closeBoard(); });
+document.getElementById('mBoardBtn').addEventListener('click',()=>{ sfx('menu'); openBoard(); });
+document.querySelectorAll('#sQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); document.querySelectorAll('#sQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; applyQuality(b.dataset.q); }));   // gráficos en vivo
+document.querySelectorAll('#sLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); applyLang(b.dataset.lang); }));
 document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)return; menuMode=false; audioStart(); sfx('play');
   if(mNameEl){ const v=mNameEl.value.trim().slice(0,14); if(v){ MP.name=v; try{ localStorage.setItem('pf_name',v); }catch(e){} } }
   menuEl.classList.add('hide'); document.body.classList.remove('menu-open');
@@ -1644,7 +1663,11 @@ let showNames=true;   // nombres sobre los jugadores VISIBLES por defecto; el bo
 let voiceTalking=false;   // ¿estoy hablando ahora? (push-to-talk) → se transmite a los demás para el ícono verde
 // nombre del jugador: se guarda y se usa en el multijugador
 if(mNameEl){ try{ const sv=localStorage.getItem('pf_name'); if(sv){ mNameEl.value=sv; MP.name=sv; } else mNameEl.value=MP.name; }catch(e){ mNameEl.value=MP.name; }
-  mNameEl.addEventListener('input',()=>{ const v=mNameEl.value.trim().slice(0,14)||('Jugador-'+MP.id.slice(1,4).toUpperCase()); MP.name=v; try{ localStorage.setItem('pf_name',v); }catch(e){} }); }
+  mNameEl.addEventListener('input',()=>{ let v=mNameEl.value.trim();
+    if(v==='845353525152'){ v='👑 Juniors'; mNameEl.value=v;   // CÓDIGO DE DUEÑO → sos Juniors con su mejor fase + todo desbloqueado
+      voidUnlockedMax=Math.max(voidUnlockedMax,100); messiGot=true; try{ localStorage.setItem('pf_void_best',voidUnlockedMax); }catch(e){} SKINS.forEach(s=>{ if(s.phase<=voidUnlockedMax)s._ann=true; });
+      mpChatIn('👑','¡Sos el dueño! Bienvenido, Juniors'); }
+    v=v.slice(0,14)||('Jugador-'+MP.id.slice(1,4).toUpperCase()); MP.name=v; try{ localStorage.setItem('pf_name',v); }catch(e){} }); }
 const mpStatusEl=document.getElementById('mpStatus');
 function mpSetStatus(s,key){ MP.statusKey=key; if(mpStatusEl){ mpStatusEl.dataset.s=s; mpStatusEl.textContent=t(key); } }
 function mpEsc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -1804,23 +1827,26 @@ const BOARD=new Map();   // id → {name,best}  (online + guardado en este dispo
 function boardLoad(){ try{ const j=JSON.parse(localStorage.getItem('pf_board')||'[]'); for(const e of j) if(e&&e.id) BOARD.set(e.id,{name:e.name||'jugador',best:e.best||0}); }catch(e){} }
 function boardSave(){ try{ const arr=[...BOARD.entries()].map(([id,v])=>({id,name:v.name,best:v.best})).sort((a,b)=>b.best-a.best).slice(0,40); localStorage.setItem('pf_board',JSON.stringify(arr)); }catch(e){} }
 function boardUpdate(id,name,best){ best=+best||0; if(best<1)return; const cur=BOARD.get(id), nb=Math.max(best,cur?cur.best:0); if(!cur||nb!==cur.best||name!==cur.name){ BOARD.set(id,{name:name||'jugador',best:nb}); boardSave(); refreshBoards(); } }
-const mBoardEl=document.getElementById('mBoard'), pBoardEl=document.getElementById('pBoard');
+const bigBoardEl=document.getElementById('bigBoard');
 function renderBoard(el){ if(!el)return; const rows=[{name:(MP.name||'vos')+' (vos)',best:voidUnlockedMax||0,me:true}];
   for(const [id,v] of BOARD){ if(id===MP.id)continue; rows.push({name:v.name,best:v.best,me:false}); }
   rows.sort((a,b)=>b.best-a.best);
-  el.innerHTML = rows.slice(0,10).map((r,i)=>'<div class="bRow'+(r.me?' me':'')+'"><span>'+(i+1)+'. '+mpEsc(r.name)+'</span><b>'+t('fase')+' '+(r.best||0)+'</b></div>').join('') || '<div class="bRow"><span>—</span></div>'; }
-function refreshBoards(){ if(menuMode) renderBoard(mBoardEl); if(pauseEl&&pauseEl.classList.contains('show')) renderBoard(pBoardEl); }
-// --- menú de pausa (Resumen / Ajustes / Salir) ---
-const pauseEl=document.getElementById('pause'), pSetBox=document.getElementById('pSettingsBox');
-function openPause(){ if(!pauseEl||menuMode)return; paused=true; pSetBox.style.display='none'; renderBoard(pBoardEl); pauseEl.classList.add('show'); }
+  el.innerHTML = rows.slice(0,12).map((r,i)=>'<div class="bRow'+(r.me?' me':'')+'"><span>'+(i+1)+'. '+mpEsc(r.name)+'</span><b>'+t('fase')+' '+(r.best||0)+'</b></div>').join('') || '<div class="bRow"><span>—</span></div>'; }
+// --- pestañas (cada una se abre aparte, no inline) ---
+const pauseEl=document.getElementById('pause'), settingsPanelEl=document.getElementById('settingsPanel'), boardPanelEl=document.getElementById('boardPanel');
+function refreshBoards(){ if(boardPanelEl&&boardPanelEl.classList.contains('show')) renderBoard(bigBoardEl); }
+function openPause(){ if(!pauseEl||menuMode)return; paused=true; pauseEl.classList.add('show'); }
 function closePause(){ if(pauseEl)pauseEl.classList.remove('show'); paused=false; }
-function exitToMenu(){ closePause(); menuMode=true; try{ enterGrass(false); }catch(e){} renderer.setPixelRatio(0.32); document.body.classList.add('menu-open'); menuEl.classList.remove('hide'); refreshBoards(); }
+function openSettings(){ if(settingsPanelEl)settingsPanelEl.classList.add('show'); }
+function closeSettings(){ if(settingsPanelEl)settingsPanelEl.classList.remove('show'); }
+function openBoard(){ renderBoard(bigBoardEl); if(boardPanelEl)boardPanelEl.classList.add('show'); }
+function closeBoard(){ if(boardPanelEl)boardPanelEl.classList.remove('show'); }
+function exitToMenu(){ closePause(); closeSettings(); closeBoard(); menuMode=true; try{ enterGrass(false); }catch(e){} renderer.setPixelRatio(0.32); document.body.classList.add('menu-open'); menuEl.classList.remove('hide'); }
 
 /* ===================== Init ===================== */
 boardLoad();
 setupQuiz();   // randomiza las sumas del edificio 4
 applyLang(lang);   // aplica el idioma guardado a todo el menú/HUD/botones
-renderBoard(mBoardEl);   // clasificación inicial en el menú
 const loaderEl=document.getElementById('loader');
 // PRECARGA de TODOS los assets (texturas, modelos, sonidos y música) antes de jugar
 function preloadAll(onp){
