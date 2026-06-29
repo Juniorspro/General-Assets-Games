@@ -1599,7 +1599,8 @@ const NS='frutigerfp_v1_';   // prefijo único de este juego → no choca con ot
 const MP={ on:false, client:null, id:'p'+Math.random().toString(36).slice(2,9),
   name:'Jugador-'+Math.random().toString(36).slice(2,5).toUpperCase(), room:NS+'sala1',
   remotes:new Map(), lastPub:0, last:{} };
-let showNames=false;   // los nombres sobre los jugadores arrancan ocultos; el botón izquierdo los muestra
+let showNames=true;   // nombres sobre los jugadores VISIBLES por defecto; el botón 👤 los oculta/muestra
+let voiceTalking=false;   // ¿estoy hablando ahora? (push-to-talk) → se transmite a los demás para el ícono verde
 // nombre del jugador: se guarda y se usa en el multijugador
 if(mNameEl){ try{ const sv=localStorage.getItem('pf_name'); if(sv){ mNameEl.value=sv; MP.name=sv; } else mNameEl.value=MP.name; }catch(e){ mNameEl.value=MP.name; }
   mNameEl.addEventListener('input',()=>{ const v=mNameEl.value.trim().slice(0,14)||('Jugador-'+MP.id.slice(1,4).toUpperCase()); MP.name=v; try{ localStorage.setItem('pf_name',v); }catch(e){} }); }
@@ -1608,11 +1609,22 @@ function mpSetStatus(s,key){ MP.statusKey=key; if(mpStatusEl){ mpStatusEl.datase
 function mpEsc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function mpColor(id){ let h=0; for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))>>>0; return new THREE.Color().setHSL((h%360)/360,0.62,0.55); }
 let mpBodySrc=null, mpClips=null;   // se setean al cargar el GLB del personaje
+// cartel sobre la cabeza: ícono de VOZ arriba (verde=hablando / X=callado) + NOMBRE abajo
 function mpNameTag(name){
-  const cv=document.createElement('canvas'); cv.width=256; cv.height=64; const cx=cv.getContext('2d');
-  cx.fillStyle='rgba(12,22,32,0.72)'; cx.fillRect(0,0,256,64); cx.fillStyle='#dff0ff'; cx.font='bold 30px sans-serif'; cx.textAlign='center'; cx.textBaseline='middle'; cx.fillText(String(name).slice(0,14),128,34);
+  const W=256,H=120; const cv=document.createElement('canvas'); cv.width=W; cv.height=H; const cx=cv.getContext('2d');
   const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace;
-  const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,fog:false})); tag.position.y=2.15; tag.scale.set(1.7,0.42,1); return tag;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,fog:false})); sp.position.y=2.34; sp.scale.set(2.0, 2.0*H/W, 1);
+  let _name=String(name).slice(0,14);
+  function draw(talking){ cx.clearRect(0,0,W,H); const ix=W/2, iy=24;
+    cx.fillStyle=talking?'#43e07a':'#9aa6b2';   // cuerpo del parlante
+    cx.beginPath(); cx.moveTo(ix-20,iy-7); cx.lineTo(ix-11,iy-7); cx.lineTo(ix-2,iy-15); cx.lineTo(ix-2,iy+15); cx.lineTo(ix-11,iy+7); cx.lineTo(ix-20,iy+7); cx.closePath(); cx.fill();
+    if(talking){ cx.strokeStyle='#43e07a'; cx.lineWidth=3.4; cx.beginPath(); cx.arc(ix-1,iy,9,-0.75,0.75); cx.stroke(); cx.beginPath(); cx.arc(ix-1,iy,16,-0.8,0.8); cx.stroke(); }   // ondas verdes
+    else { cx.strokeStyle='#ff5a5a'; cx.lineWidth=4.5; cx.beginPath(); cx.moveTo(ix+5,iy-10); cx.lineTo(ix+20,iy+10); cx.moveTo(ix+20,iy-10); cx.lineTo(ix+5,iy+10); cx.stroke(); }   // X roja (mute)
+    const rx=10,ry=52,rw=W-20,rh=52,rr=14;   // pastilla del nombre
+    cx.fillStyle='rgba(12,22,32,0.74)'; cx.beginPath(); cx.moveTo(rx+rr,ry); cx.arcTo(rx+rw,ry,rx+rw,ry+rh,rr); cx.arcTo(rx+rw,ry+rh,rx,ry+rh,rr); cx.arcTo(rx,ry+rh,rx,ry,rr); cx.arcTo(rx,ry,rx+rw,ry,rr); cx.closePath(); cx.fill();
+    cx.fillStyle='#dff0ff'; cx.font='bold 32px sans-serif'; cx.textAlign='center'; cx.textBaseline='middle'; cx.fillText(_name, W/2, ry+rh/2+1); tex.needsUpdate=true; }
+  draw(false);
+  return { sprite:sp, setTalk:draw, setName(n){ _name=String(n).slice(0,14); draw(false); } };
 }
 // dale al remoto la MISMA skin (clon del personaje) y su propio mixer con los MISMOS clips
 function mpRig(r){
@@ -1629,9 +1641,9 @@ function mpRig(r){
   r.rigged=true; r.setAnim('idle');
 }
 function mpRemote(id,name){ let r=MP.remotes.get(id);
-  if(!r){ const av=new THREE.Group(); const tag=mpNameTag(name); tag.visible=showNames; av.add(tag); scene.add(av);
+  if(!r){ const av=new THREE.Group(); const tg=mpNameTag(name); tg.sprite.visible=showNames; av.add(tg.sprite); scene.add(av);
     r={ id,name,color:mpColor(id),world:null,anim:'idle',moving:false,mir:false,yaw:0, pos:new THREE.Vector3(), target:new THREE.Vector3(),
-      avatar:av, tag, last:performance.now(), bob:0, init:false, rigged:false }; MP.remotes.set(id,r); mpRig(r);
+      avatar:av, tag:tg.sprite, tagSet:tg.setTalk, talking:false, _talkShown:false, last:performance.now(), bob:0, init:false, rigged:false }; MP.remotes.set(id,r); mpRig(r);
     mpChatIn('🟢', (name||'?')+' '+t('mp_join')); sfx('spawn'); if(VOICE.stream) voiceSend(id,'ready'); }   // aviso de que se unió + sonido de spawn + invitar a la voz
   return r; }
 function mpChatIn(name,text){ if(!text)return; const log=document.getElementById('mpChatLog'); if(!log)return;
@@ -1670,7 +1682,7 @@ function mpConnect(){
   client.on('error',()=>{ MP.on=false; mpSetStatus('off','mp_err'); });
   client.on('message',(topic,buf)=>{ let d; try{ d=JSON.parse(buf.toString()); }catch(e){ return; } if(!d||d.id===MP.id)return;
     if(topic.slice(-6)==='/state'){ const r=mpRemote(d.id,d.name||'jugador'); r.name=d.name||r.name; r.world=d.world; r.anim=d.anim||'idle'; r.moving=!!d.isMoving; r.mir=!!d.mir; r.yaw=d.facingAngle||0;
-      r.vSeed=d.vSeed||0; r.vFase=d.vFase||0; r.vBest=d.vBest||0; r.vDead=!!d.vDead;   // estado del vacío (semilla compartida + mejor fase)
+      r.vSeed=d.vSeed||0; r.vFase=d.vFase||0; r.vBest=d.vBest||0; r.vDead=!!d.vDead; r.talking=!!d.talk;   // estado del vacío + ¿está hablando? (ícono de voz)
       r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now();
       if(world==='void') updateVoidBoard(); }
     else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); }
@@ -1682,10 +1694,10 @@ function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.n
   const p=player, moving=Math.hypot(p.vel.x,p.vel.z)>0.6;
   const mir=(curAnim==='wallrun'&&p.wallrun>0)||(curAnim==='slide'&&p.slideRight);   // mismo espejo que el cuerpo local
   const cur={x:+p.pos.x.toFixed(2),y:+p.pos.y.toFixed(2),z:+p.pos.z.toFixed(2),yaw:+p.yaw.toFixed(2),anim:curAnim||'idle',world,moving,mir,
-    vSeed:world==='void'?voidSeed:0, vFase:voidFase, vBest:voidBest, vDead:voidDead};
-  const l=MP.last, ch=(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving||cur.mir!==l.mir||cur.vSeed!==l.vSeed||cur.vFase!==l.vFase||cur.vBest!==l.vBest||cur.vDead!==l.vDead;
+    vSeed:world==='void'?voidSeed:0, vFase:voidFase, vBest:voidBest, vDead:voidDead, talk:voiceTalking};
+  const l=MP.last, ch=(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving||cur.mir!==l.mir||cur.vSeed!==l.vSeed||cur.vFase!==l.vFase||cur.vBest!==l.vBest||cur.vDead!==l.vDead||cur.talk!==l.talk;
   if(!ch)return; MP.lastPub=now; MP.last=cur;
-  MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving,mir:cur.mir,vSeed:cur.vSeed,vFase:cur.vFase,vBest:cur.vBest,vDead:cur.vDead}),{qos:0}); }
+  MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving,mir:cur.mir,vSeed:cur.vSeed,vFase:cur.vFase,vBest:cur.vBest,vDead:cur.vDead,talk:cur.talk}),{qos:0}); }
 function mpTick(dt){
   const now=performance.now();
   if(mpStatusEl && mpStatusEl.dataset.s==='online') mpStatusEl.textContent=t('mp_online')+' · '+(MP.remotes.size+1)+'👥';   // nº de jugadores conectados (vos + remotos)
@@ -1693,7 +1705,8 @@ function mpTick(dt){
     if(!r.rigged && mpBodySrc){ if(r.body)r.avatar.remove(r.body); mpRig(r); }                                       // al cargar el GLB, cambia la cápsula por la skin real
     r.pos.lerp(r.target, Math.min(1,10*dt));                                                                        // interpolación (10Hz → 60fps suave)
     const same=(r.world===world); r.avatar.visible=same;                                                            // solo se ven los del MISMO mundo
-    if(r.tag) r.tag.visible=showNames;                                                                               // nombres: solo cuando el botón los activa
+    if(r.tag) r.tag.visible=showNames;                                                                               // nombre + ícono de voz sobre la cabeza
+    if(r.tagSet && r.talking!==r._talkShown){ r.tagSet(r.talking); r._talkShown=r.talking; }                         // ícono verde (hablando) / X (callado)
     if(!same)continue;
     r.avatar.position.set(r.pos.x, r.pos.y, r.pos.z); r.avatar.rotation.y=r.yaw+Math.PI;
     if(r.rigged && r.mixer){ r.setAnim(r.anim||'idle'); r.mixer.update(dt);                                          // MISMA animación que está haciendo el otro
@@ -1730,7 +1743,7 @@ async function voiceSignal(d){ if(!VOICE.ok)return;
   else if(d.type==='answer'){ const pr=VOICE.peers.get(d.id); if(pr) try{ await pr.pc.setRemoteDescription(d.data); voiceFlush(pr); }catch(e){} }
   else if(d.type==='ice'){ const pr=VOICE.peers.get(d.id); if(pr){ if(pr.pc.remoteDescription&&pr.pc.remoteDescription.type){ try{ await pr.pc.addIceCandidate(d.data); }catch(e){} } else pr.pending.push(d.data); } }
 }
-function voiceTalk(on){ if(VOICE.stream) VOICE.stream.getAudioTracks().forEach(tk=>tk.enabled=on); }
+function voiceTalk(on){ voiceTalking=on; if(VOICE.stream) VOICE.stream.getAudioTracks().forEach(tk=>tk.enabled=on); }   // voiceTalking se transmite en el estado → ícono verde en los demás
 async function voicePress(){ audioStart(); const bv=document.getElementById('bVoice');
   if(!VOICE.ok){ mpChatIn('🎤','(voz no soportada en este navegador)'); return; }
   if(!VOICE.inited){ const ok=await voiceInit(); if(!ok){ if(bv)bv.classList.remove('on'); return; } }
@@ -1769,6 +1782,7 @@ catch(err){ console.error('Init',err); if(loaderEl) loaderEl.classList.add('hide
 // música del nivel 1 en el MENÚ: arranca con el primer toque (los móviles bloquean el autoplay)
 window.addEventListener('pointerdown',()=>{ audioStart(); if(menuMode) ambient('amb1'); }, {once:true});
 try{ tapBtn('bChat',()=>mpSendChat()); tapBtn('bPack',()=>togglePack());
+  { const bn0=document.getElementById('bNames'); if(bn0)bn0.classList.toggle('on',showNames); }   // refleja el estado inicial (nombres ON)
   tapBtn('bNames',()=>{ showNames=!showNames; const bn=document.getElementById('bNames'); if(bn)bn.classList.toggle('on',showNames); });   // mostrar/ocultar nombres de jugadores
   const bV=document.getElementById('bVoice');   // CHAT DE VOZ: mantené apretado para hablar (push-to-talk)
   if(bV){ const dn=e=>{ e.preventDefault(); voicePress(); }, up=e=>{ e.preventDefault(); voiceRelease(); };
