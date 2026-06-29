@@ -36,23 +36,30 @@
            background:#aebfcf; transition:opacity .5s; color:#0a3a63; font-size:13px; letter-spacing:.1em; }
   #loader.hide{ opacity:0; pointer-events:none; }
   /* ===== MENÚ DE INICIO (estética frutiger aero, fondo = mapa frutiger 144p difuminado) ===== */
-  #menu{ position:absolute; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
-         backdrop-filter:blur(20px) saturate(1.18) brightness(1.05); -webkit-backdrop-filter:blur(20px) saturate(1.18) brightness(1.05);
-         background:radial-gradient(120% 90% at 50% 16%, rgba(180,225,255,.26), rgba(16,46,86,.46)); transition:opacity .45s; }
+  #menu{ position:absolute; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; overflow:hidden;
+         backdrop-filter:blur(14px) saturate(1.18) brightness(1.04); -webkit-backdrop-filter:blur(14px) saturate(1.18) brightness(1.04);
+         background:radial-gradient(130% 100% at 50% 20%, rgba(180,225,255,.18), rgba(16,46,86,.5)); transition:opacity .45s; }
   #menu.hide{ opacity:0; pointer-events:none; }
-  #menuPanel{ width:min(88%,430px); padding:26px 24px 22px; border-radius:28px; text-align:center;
-    background:linear-gradient(165deg, rgba(255,255,255,.46), rgba(198,228,255,.16));
-    border:1.5px solid rgba(255,255,255,.6); box-shadow:0 22px 64px rgba(10,40,80,.5), inset 0 1px 0 rgba(255,255,255,.75); }
-  #menuPanel h1{ font-size:23px; font-weight:800; color:#0a3a63; margin-bottom:3px; text-shadow:0 1px 0 rgba(255,255,255,.6); }
-  #menuPanel .sub{ font-size:12px; color:#1f5a8c; margin-bottom:8px; opacity:.85; }
-  .mLabel{ font-size:11px; font-weight:800; letter-spacing:.14em; color:#15527f; text-align:left; margin:15px 2px 7px; opacity:.82; }
-  .mRow{ display:flex; gap:8px; }
-  .mOpt{ flex:1; padding:11px 6px; border-radius:14px; font-size:13px; font-weight:700; color:#0c4675; cursor:pointer;
+  /* collage de mapas detrás del panel: varias tomas a la vez, en baja calidad y difuminadas */
+  #menuBg{ position:absolute; inset:-7%; z-index:1; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:10px;
+    filter:blur(8px) saturate(1.25) brightness(.95); opacity:.62; transform:scale(1.06); pointer-events:none;
+    animation:bgDrift 38s ease-in-out infinite alternate; }
+  .mShot{ position:relative; border-radius:20px; overflow:hidden; box-shadow:0 10px 34px rgba(0,0,0,.32), inset 0 0 40px rgba(255,255,255,.08); }
+  .mShot::after{ content:attr(data-e); position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:46px; opacity:.42; filter:saturate(1.1); }
+  @keyframes bgDrift{ from{ transform:scale(1.06) translate(0,0); } to{ transform:scale(1.13) translate(-2%,-1.4%); } }
+  #menuPanel{ position:relative; z-index:2; width:min(90%,440px); padding:30px 26px 26px; border-radius:30px; text-align:center;
+    background:linear-gradient(165deg, rgba(255,255,255,.5), rgba(198,228,255,.2));
+    border:1.5px solid rgba(255,255,255,.62); box-shadow:0 26px 70px rgba(10,40,80,.55), inset 0 1px 0 rgba(255,255,255,.78); }
+  #menuPanel h1{ font-size:23px; font-weight:800; color:#0a3a63; margin-bottom:4px; text-shadow:0 1px 0 rgba(255,255,255,.6); }
+  #menuPanel .sub{ font-size:12px; color:#1f5a8c; margin-bottom:10px; opacity:.85; }
+  .mLabel{ font-size:11px; font-weight:800; letter-spacing:.14em; color:#15527f; text-align:left; margin:19px 2px 9px; opacity:.82; }
+  .mRow{ display:flex; gap:11px; }
+  .mOpt{ flex:1; padding:13px 8px; border-radius:14px; font-size:13px; font-weight:700; color:#0c4675; cursor:pointer;
     background:linear-gradient(180deg, rgba(255,255,255,.62), rgba(208,234,255,.22)); border:1.4px solid rgba(255,255,255,.6);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.8); transition:transform .12s, box-shadow .2s, background .2s; }
   .mOpt.sel{ background:linear-gradient(180deg,#7fd0ff,#2f93e8); color:#fff; border-color:rgba(255,255,255,.85); box-shadow:0 6px 18px rgba(40,130,230,.5), inset 0 1px 0 rgba(255,255,255,.7); }
   .mOpt:active{ transform:scale(.95); }
-  #mName{ width:100%; box-sizing:border-box; padding:12px 14px; border-radius:14px; font-size:15px; font-weight:700; color:#0a3a63; outline:none;
+  #mName{ width:100%; box-sizing:border-box; padding:14px 14px; border-radius:14px; font-size:15px; font-weight:700; color:#0a3a63; outline:none;
     background:linear-gradient(180deg, rgba(255,255,255,.85), rgba(214,238,255,.55)); border:1.5px solid rgba(255,255,255,.7); box-shadow:inset 0 1px 3px rgba(40,90,140,.18); }
   #mName::placeholder{ color:#5a86ac; opacity:.7; }
   /* niveles: carrusel horizontal (deslizá para elegir) → ocupa poco espacio */
@@ -182,6 +189,8 @@
   <!-- pestaña AJUSTES (se abre aparte) -->
   <div id="settingsPanel" class="ovl"><div class="ovlPanel">
     <h2 data-i18n="ajustes2">⚙ Ajustes</h2>
+    <div class="mLabel" data-i18n="vista">VISTA</div>
+    <div class="mRow" id="sView"><button class="mOpt sel" data-view="fp" data-i18n="cam_fp">1ª persona</button><button class="mOpt" data-view="tp" data-i18n="cam_tp">3ª persona</button></div>
     <div class="mLabel" data-i18n="gfx">GRÁFICOS</div>
     <div class="mRow" id="sQual"><button class="mOpt" data-q="low" data-i18n="low">Bajo</button><button class="mOpt sel" data-q="med" data-i18n="med">Medio</button><button class="mOpt" data-q="high" data-i18n="high">Alto</button></div>
     <div class="mLabel" data-i18n="idioma">IDIOMA</div>
@@ -197,11 +206,28 @@
     <button class="pBtn" id="bClose" data-i18n="cerrar">Cerrar</button>
   </div></div>
   <div id="menu">
+    <!-- fondo: collage de varios mapas (tomas en baja calidad y difuminadas) -->
+    <div id="menuBg" aria-hidden="true">
+      <div class="mShot" data-e="🏙️" style="background:linear-gradient(180deg,#9fc6ef 0%,#7fa8d8 45%,#5a6b86 47%,#3f4a63 100%)"></div>
+      <div class="mShot" data-e="🌳" style="background:linear-gradient(180deg,#bfe2ff 0%,#8fc6f0 44%,#6db84e 47%,#3f8f3a 100%)"></div>
+      <div class="mShot" data-e="🔷" style="background:linear-gradient(180deg,#aef0ff,#5fb8e0 50%,#2a7fb0)"></div>
+      <div class="mShot" data-e="🌫️" style="background:linear-gradient(180deg,#f3d9ff,#c9a8e8 50%,#8f7fc0)"></div>
+      <div class="mShot" data-e="🟨" style="background:linear-gradient(180deg,#f2e9a8,#d8c264 55%,#b09a3a)"></div>
+      <div class="mShot" data-e="💧" style="background:linear-gradient(180deg,#bff0ec,#5fc8c0 50%,#2a8f9a)"></div>
+      <div class="mShot" data-e="🌌" style="background:radial-gradient(120% 80% at 30% 20%,#1a2450,#0a1430 70%,#06081a)"></div>
+      <div class="mShot" data-e="🕳️" style="background:linear-gradient(180deg,#1a2236,#0c1322 60%,#060a14)"></div>
+      <div class="mShot" data-e="🌅" style="background:linear-gradient(180deg,#ffd9a8,#ff9f7a 45%,#7fb84e 47%,#3f8f3a)"></div>
+    </div>
     <div id="menuPanel">
       <h1 data-i18n="title">🌱 PARKOUR · FRUTIGER</h1>
       <div class="sub" data-i18n="sub">poné tu nombre y jugá</div>
       <div class="mLabel" data-i18n="nombre">TU NOMBRE</div>
       <input id="mName" type="text" maxlength="14" placeholder="Jugador" autocomplete="off" />
+      <div class="mLabel" data-i18n="vista">VISTA</div>
+      <div class="mRow" id="mView">
+        <button class="mOpt sel" data-view="fp" data-i18n="cam_fp">1ª persona</button>
+        <button class="mOpt" data-view="tp" data-i18n="cam_tp">3ª persona</button>
+      </div>
       <div class="mLabel" data-i18n="gfx">GRÁFICOS</div>
       <div class="mRow" id="mQual">
         <button class="mOpt" data-q="low" data-i18n="low">Bajo</button>
@@ -244,21 +270,21 @@ const LANG={
     st_idle:'quieto',st_walk:'caminar',st_run:'correr',st_air:'en el aire',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'trepar',st_roll:'voltereta',
     m_frutiger:'🌱 Mundo Frutiger — explorá el césped',m_crystal:'🔷 Obby de Cristal — llegá a la meta',m_crystaldone:'🔷 ¡Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — ¡reinicio!',
     m_dream:'🌫️ Dream Core — un suburbio que no termina',m_back:'🟡 Backrooms — encontrá la salida',m_backdone:'🟡 ¡Saliste de las Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — llegá a la meta',m_pooldone:'💧 ¡Completaste los Poolrooms!',m_level1done:'¡NIVEL 1 COMPLETO! 🎉',
-    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Saltá las plataformas hasta la meta',void:'El Vacío',q_void:'Sobreviví las fases del obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entrá al árbol correcto y subí el obby',fase:'Fase',void_die:'Caíste · vuelve a cruzar el espacio',void_best:'mejor',void_reset:'¡Vacío regenerado desde cero!',void_lvl:'El Vacío ∞',skin_unlock:'¡Skin desbloqueada!',messi_got:'¡CONSEGUISTE A MESSI!',messi_fail:'No conseguiste a Messi',skins:'Mochila de skins',skin_on:'puesta',nombre:'TU NOMBRE',send:'ENVIAR',names:'Nombres',pausa:'Pausa',resumen:'▶ Resumen',ajustes:'⚙ Ajustes',salir:'✖ Salir',clasif:'CLASIFICACIÓN · MEJORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Clasificación',cerrar:'Cerrar'},
+    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Saltá las plataformas hasta la meta',void:'El Vacío',q_void:'Sobreviví las fases del obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entrá al árbol correcto y subí el obby',fase:'Fase',void_die:'Caíste · vuelve a cruzar el espacio',void_best:'mejor',void_reset:'¡Vacío regenerado desde cero!',void_lvl:'El Vacío ∞',skin_unlock:'¡Skin desbloqueada!',messi_got:'¡CONSEGUISTE A MESSI!',messi_fail:'No conseguiste a Messi',skins:'Mochila de skins',skin_on:'puesta',nombre:'TU NOMBRE',send:'ENVIAR',names:'Nombres',pausa:'Pausa',resumen:'▶ Resumen',ajustes:'⚙ Ajustes',salir:'✖ Salir',clasif:'CLASIFICACIÓN · MEJORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Clasificación',cerrar:'Cerrar',vista:'VISTA',cam_fp:'1ª persona',cam_tp:'3ª persona'},
   en:{title:'🌱 PARKOUR · FRUTIGER',sub:'set your name and play',lvl:'LEVEL',gfx:'GRAPHICS',low:'Low',med:'Medium',high:'High',play:'PLAY ▶',idioma:'LANGUAGE',
     parkour:'Level 1 · Parkour',frutiger:'Frutiger World',crystal:'Crystal Obby',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'JUMP',slide:'SLIDE',roll:'ROLL',
     st_idle:'idle',st_walk:'walk',st_run:'run',st_air:'in air',st_slide:'slide',st_wallrun:'wall-run',st_climb:'climb',st_roll:'roll',
     m_frutiger:'🌱 Frutiger World — explore the grass',m_crystal:'🔷 Crystal Obby — reach the goal',m_crystaldone:'🔷 Obby complete! → Dream Core',m_crystalreset:'🔷 Crystal Obby — restart!',
     m_dream:'🌫️ Dream Core — a suburb that never ends',m_back:'🟡 Backrooms — find the exit',m_backdone:'🟡 You escaped the Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — reach the goal',m_pooldone:'💧 You cleared the Poolrooms!',m_level1done:'LEVEL 1 COMPLETE! 🎉',
-    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Jump the platforms to the goal',void:'The Void',q_void:'Survive the endless obby phases',fsurv:'Frutiger Aero Survival',q_fsurv:'Enter the right tree and climb the obby',fase:'Phase',void_die:'You fell · cross space again',void_best:'best',void_reset:'Void regenerated from scratch!',void_lvl:'The Void ∞',skin_unlock:'Skin unlocked!',messi_got:'YOU GOT MESSI!',messi_fail:"You didn't get Messi",skins:'Skin backpack',skin_on:'on',nombre:'YOUR NAME',send:'SEND',names:'Names',pausa:'Paused',resumen:'▶ Resume',ajustes:'⚙ Settings',salir:'✖ Exit',clasif:'LEADERBOARD · BEST PHASES',ajustes2:'⚙ Settings',clasif_btn:'🏆 Leaderboard',cerrar:'Close'},
+    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Jump the platforms to the goal',void:'The Void',q_void:'Survive the endless obby phases',fsurv:'Frutiger Aero Survival',q_fsurv:'Enter the right tree and climb the obby',fase:'Phase',void_die:'You fell · cross space again',void_best:'best',void_reset:'Void regenerated from scratch!',void_lvl:'The Void ∞',skin_unlock:'Skin unlocked!',messi_got:'YOU GOT MESSI!',messi_fail:"You didn't get Messi",skins:'Skin backpack',skin_on:'on',nombre:'YOUR NAME',send:'SEND',names:'Names',pausa:'Paused',resumen:'▶ Resume',ajustes:'⚙ Settings',salir:'✖ Exit',clasif:'LEADERBOARD · BEST PHASES',ajustes2:'⚙ Settings',clasif_btn:'🏆 Leaderboard',cerrar:'Close',vista:'VIEW',cam_fp:'1st person',cam_tp:'3rd person'},
   pt:{title:'🌱 PARKOUR · FRUTIGER',sub:'ponha seu nome e jogue',lvl:'NÍVEL',gfx:'GRÁFICOS',low:'Baixo',med:'Médio',high:'Alto',play:'JOGAR ▶',idioma:'IDIOMA',
     parkour:'Nível 1 · Parkour',frutiger:'Mundo Frutiger',crystal:'Obby de Cristal',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'PULAR',slide:'DESLIZAR',roll:'ROLAR',
     st_idle:'parado',st_walk:'andar',st_run:'correr',st_air:'no ar',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'escalar',st_roll:'cambalhota',
     m_frutiger:'🌱 Mundo Frutiger — explore a grama',m_crystal:'🔷 Obby de Cristal — chegue à meta',m_crystaldone:'🔷 Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — reinício!',
     m_dream:'🌫️ Dream Core — um subúrbio sem fim',m_back:'🟡 Backrooms — ache a saída',m_backdone:'🟡 Você saiu das Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — chegue à meta',m_pooldone:'💧 Você completou as Poolrooms!',m_level1done:'NÍVEL 1 COMPLETO! 🎉',
-    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Pule as plataformas até a meta',void:'O Vazio',q_void:'Sobreviva às fases do obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entre na árvore certa e suba o obby',fase:'Fase',void_die:'Você caiu · cruze o espaço de novo',void_best:'melhor',void_reset:'Vazio regenerado do zero!',void_lvl:'O Vazio ∞',skin_unlock:'Skin desbloqueada!',messi_got:'VOCÊ CONSEGUIU MESSI!',messi_fail:'Você não conseguiu o Messi',skins:'Mochila de skins',skin_on:'usando',nombre:'SEU NOME',send:'ENVIAR',names:'Nomes',pausa:'Pausa',resumen:'▶ Retomar',ajustes:'⚙ Ajustes',salir:'✖ Sair',clasif:'CLASSIFICAÇÃO · MELHORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Classificação',cerrar:'Fechar'}
+    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Pule as plataformas até a meta',void:'O Vazio',q_void:'Sobreviva às fases do obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entre na árvore certa e suba o obby',fase:'Fase',void_die:'Você caiu · cruze o espaço de novo',void_best:'melhor',void_reset:'Vazio regenerado do zero!',void_lvl:'O Vazio ∞',skin_unlock:'Skin desbloqueada!',messi_got:'VOCÊ CONSEGUIU MESSI!',messi_fail:'Você não conseguiu o Messi',skins:'Mochila de skins',skin_on:'usando',nombre:'SEU NOME',send:'ENVIAR',names:'Nomes',pausa:'Pausa',resumen:'▶ Retomar',ajustes:'⚙ Ajustes',salir:'✖ Sair',clasif:'CLASSIFICAÇÃO · MELHORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Classificação',cerrar:'Fechar',vista:'VISTA',cam_fp:'1ª pessoa',cam_tp:'3ª pessoa'}
 };
 let lang = (()=>{ try{ return localStorage.getItem('pf_lang')||'es'; }catch(e){ return 'es'; } })();
 function t(k){ return (LANG[lang]&&LANG[lang][k]) || LANG.es[k] || k; }
@@ -271,6 +297,7 @@ function applyLang(l){ lang=l; try{ localStorage.setItem('pf_lang',l); }catch(e)
 }
 
 /* ===================== Render / escena ===================== */
+let camView='fp';   // 'fp' = primera persona · 'tp' = tercera persona (cámara detrás)
 const app=document.getElementById('app');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -1359,14 +1386,24 @@ const GRAV=26, JUMP_V=8.8, RUN=8.6, ACCEL=12, AIR_ACCEL=5, SLIDE_V=13.5, WALL_GR
 const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:Math.PI,pitch:0,roll:0,eye:EYE,h:STAND,faceYaw:Math.PI,
   onGround:true,crouch:false,sliding:false,slideT:0,wallrun:0,wallrunT:0,wallN:new THREE.Vector3(),mantle:0,bob:0,fov:baseFov,
   climbing:false,climbT:0,climbFrom:new THREE.Vector3(),climbTo:new THREE.Vector3(),
-  rolling:false,rollT:0,rollDir:new THREE.Vector3(),slideRight:false,camLow:0,camBack:0};
+  rolling:false,rollT:0,rollDir:new THREE.Vector3(),slideRight:false,camLow:0,camBack:0,camTP:0};
 const CLIMB_DUR=0.85;   // duración del agarre+impulso de la repisa
 const GRAB_REACH=2.0;   // a qué altura sobre los pies agarran las manos (la animación de trepada llega ~2m)
 // voltereta: el clip Run_Jump_and_Roll dura ~3.47s y la vuelta carnero está a ~1.2s → arrancamos ahí, acelerado
 const ROLL_ANIM_START=1.15, ROLL_TIMESCALE=1.7, ROLL_DUR=0.82, ROLL_SPEED=9.5, ROLL_FALL=22;   // auto-voltereta SOLO en caídas muy altas
 // estructura entrada→LOOP(medio)→FINAL(outro) para estados sostenidos (tiempos del clip, en segundos)
 let prevVy=0, rollReq=false;
-const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
+const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_v3=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
+const TP_DIST=3.1;   // distancia de la cámara en 3ª persona
+function camClipDist(ox,oy,oz,dx,dy,dz,maxD){ let best=maxD;   // ray-AABB contra colliders → evita que la cámara 3ª persona atraviese paredes
+  for(let i=0;i<colliders.length;i++){ const c=colliders[i]; if(!c||c.locked||c.mesh===ground||c._survground)continue;
+    let t0=0,t1=best;
+    if(dx>-1e-6&&dx<1e-6){ if(ox<c.minx||ox>c.maxx)continue; } else { let ta=(c.minx-ox)/dx,tb=(c.maxx-ox)/dx; if(ta>tb){const s=ta;ta=tb;tb=s;} if(ta>t0)t0=ta; if(tb<t1)t1=tb; if(t0>t1)continue; }
+    if(dy>-1e-6&&dy<1e-6){ if(oy<c.miny||oy>c.maxy)continue; } else { let ta=(c.miny-oy)/dy,tb=(c.maxy-oy)/dy; if(ta>tb){const s=ta;ta=tb;tb=s;} if(ta>t0)t0=ta; if(tb<t1)t1=tb; if(t0>t1)continue; }
+    if(dz>-1e-6&&dz<1e-6){ if(oz<c.minz||oz>c.maxz)continue; } else { let ta=(c.minz-oz)/dz,tb=(c.maxz-oz)/dz; if(ta>tb){const s=ta;ta=tb;tb=s;} if(ta>t0)t0=ta; if(tb<t1)t1=tb; if(t0>t1)continue; }
+    if(t0>0.05&&t0<best)best=t0;
+  }
+  return best; }
 let jumpReq=false;
 function lerpAngle(a,b,t){ let d=b-a; d=Math.atan2(Math.sin(d),Math.cos(d)); return a+d*t; }   // interpolación de ángulo (camino corto)
 function respawn(){ player.pos.copy(lastSafe); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
@@ -1676,6 +1713,15 @@ function update(dt){
   let rollCam=0;
   if(player.rolling){ const t=Math.min(1,player.rollT/ROLL_DUR); rollCam = -2*Math.PI*(t*t*(3-2*t)); }
   euler.set(player.pitch+leanPitch+rollCam, player.yaw, player.roll+leanRoll); camera.quaternion.setFromEuler(euler);
+  // ---- TERCERA PERSONA: alejá la cámara hacia atrás (mismo aim), con anti-clip contra paredes ----
+  const tpTarget=(camView==='tp' && !player.rolling)?TP_DIST:0;
+  player.camTP += (tpTarget-player.camTP)*Math.min(1,9*dt);
+  if(player.camTP>0.02){
+    _v3.set(0,0,-1).applyQuaternion(camera.quaternion);   // dirección de visión
+    const maxB=camClipDist(_camAnchor.x,_camAnchor.y+0.15,_camAnchor.z,-_v3.x,-_v3.y,-_v3.z,player.camTP+0.35);
+    const back=Math.min(player.camTP,Math.max(0.4,maxB-0.35));
+    camera.position.set(_camAnchor.x-_v3.x*back, _camAnchor.y+0.15-_v3.y*back, _camAnchor.z-_v3.z*back);
+  }
 
   sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
   // ---- EYE ADAPTATION: rayo del jugador hacia el sol; si lo tapa la esfera/árbol → sombra → más exposición ----
@@ -1738,6 +1784,8 @@ let menuMode=true, menuQ='med', menuT=0;
 const mNameEl=document.getElementById('mName');   // el campo de nombre se cablea más abajo (después de definir MP)
 document.querySelectorAll('#mQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); document.querySelectorAll('#mQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; }));
 document.querySelectorAll('#mLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); applyLang(b.dataset.lang); }));   // selector de idioma
+function setCamView(v){ camView=v; document.querySelectorAll('#mView .mOpt,#sView .mOpt').forEach(x=>x.classList.toggle('sel',x.dataset.view===v)); }   // 1ª / 3ª persona (sincroniza menú y ajustes)
+document.querySelectorAll('#mView .mOpt,#sView .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); setCamView(b.dataset.view); }));   // selector de vista
 // --- menú de pausa + pestañas (Ajustes / Clasificación) ---
 document.getElementById('pResume').addEventListener('click',()=>{ sfx('menu'); closePause(); });
 document.getElementById('pSettings').addEventListener('click',()=>{ sfx('menu'); openSettings(); });
