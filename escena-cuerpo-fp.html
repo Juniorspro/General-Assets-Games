@@ -1473,7 +1473,7 @@ function update(dt){
     : player.wallrun ? 'wallrun'
     : !player.onGround ? 'jump'
     : (sp<0.5 ? 'idle' : ((mag>0.82 || sp>=4.2) ? 'run' : 'walk'));   // joystick a fondo o velocidad alta → CORRER
-  runLoop(animState==='run'||animState==='walk', grassMode);   // pasos en bucle al correr/caminar (variante pasto / fuera del pasto)
+  runLoop(animState==='run'||animState==='walk'||animState==='wallrun', grassMode);   // pasos en bucle al correr/caminar Y al correr por las paredes (wall-run)
   // el cuerpo/piernas miran hacia donde MIRÁS, no hacia donde camina el joystick
   player.faceYaw = player.yaw;
   tickBody(dt, animState);
@@ -1705,8 +1705,14 @@ const loaderEl=document.getElementById('loader');
 function preloadAll(onp){
   const urls=[ SKY_URL, SPACE_SKY_URL, EBASE+BODY_FILE, METAL_BASE+'metal_col.jpg', METAL_BASE+'metal_nrm.jpg', METAL_BASE+'metal_rough.jpg', METAL_BASE+'metal_met.jpg' ];
   for(const k in SND) urls.push(SFX_BASE+SND[k]);   // todos los sonidos y la música
-  let done=0; const total=urls.length, step=()=>{ done++; if(onp)onp(done,total); };
-  return Promise.all(urls.map(u=> fetch(u).then(r=>r.blob()).then(step).catch(step) ));
+  const total=urls.length+3; let done=0; const step=()=>{ done++; if(onp)onp(done,total); };
+  const tasks=urls.map(u=> fetch(u).then(r=>r.blob()).then(step).catch(step) );   // baja TODOS los bytes (texturas, modelo, sonidos, música)
+  // …y además ESPERA a que estén realmente listos para jugar (no solo descargados)
+  const whenReady=chk=>new Promise(res=>{ const t0=performance.now(); const iv=setInterval(()=>{ if(chk()||performance.now()-t0>14000){ clearInterval(iv); step(); res(); } },150); });
+  tasks.push(whenReady(()=>!!bodyRoot));                       // modelo del personaje cargado + parseado
+  tasks.push(whenReady(()=>!!(skyTex&&skyTex.image)&&!!skyEnv));   // cielo + entorno listos
+  tasks.push(whenReady(()=>!!spaceEnv));                       // entorno del espacio listo
+  return Promise.all(tasks);
 }
 try{
   enterGrass(false);                  // arma el mundo frutiger (terreno+estructura+cielo) como FONDO del menú, SIN briznas (carga liviana)
