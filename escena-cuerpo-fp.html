@@ -1627,7 +1627,7 @@ function update(dt){
     : player.rolling ? 'roll'
     : player.sliding ? 'slide'
     : player.wallrun ? 'wallrun'
-    : !player.onGround ? (sp>1.5 ? 'run' : 'idle')   // EN EL AIRE: pose ERGUIDA (correr si te movés / quieto si no). El clip 'jump' era un clavado horizontal que en 3ª persona se ve acostado/chueco
+    : !player.onGround ? 'idle'   // EN EL AIRE: SIEMPRE pose erguida y quieta (idle). Ni el clavado 'jump' ni la zancada 'run' — esos se ven torcidos/acostados en 3ª persona
     : (sp<0.5 ? 'idle' : ((mag>0.82 || sp>=4.2) ? 'run' : 'walk'));   // joystick a fondo o velocidad alta → CORRER
   runLoop((player.onGround && (animState==='run'||animState==='walk')) || animState==='wallrun', grassMode);   // pasos sólo en el piso (o wall-run); nunca en el aire
   // el cuerpo/piernas miran hacia donde MIRÁS, no hacia donde camina el joystick
@@ -1666,19 +1666,17 @@ function update(dt){
   // en 3ª persona NO inclinamos la cámara (nada de balanceo/lean/roll): si no, el mundo y el cuerpo se ven CHUECOS
   const _lp=(camView==='tp')?0:leanPitch, _lr=(camView==='tp')?0:(player.roll+leanRoll);
   euler.set(player.pitch+_lp+rollCam, player.yaw, _lr); camera.quaternion.setFromEuler(euler);
-  // ---- TERCERA PERSONA: la cámara ORBITA el CENTRO del cuerpo y SIEMPRE lo mira (sin acercarse por debajo = sin deformar la cintura) ----
+  // ---- TERCERA PERSONA: cámara DETRÁS a la altura de los hombros; mirás arriba/abajo APUNTANDO (nunca se mete bajo el cuerpo → nada de cintura deformada) ----
   const tpTarget=(camView==='tp')?1:0;
   player.camTP += (tpTarget-player.camTP)*Math.min(1,9*dt);
   if(player.camTP>0.02){
-    const cx=player.pos.x, cy=player.pos.y+1.15, cz=player.pos.z;        // centro del cuerpo (pecho)
-    const pit=Math.max(-0.85,Math.min(1.15,player.pitch));               // mirá libremente arriba/abajo (casi todo el rango de 1ª persona)
-    const ch=Math.cos(pit), sh=Math.sin(pit);
-    const dx=-Math.sin(player.yaw)*ch, dy=sh, dz=-Math.cos(player.yaw)*ch;   // dirección de mirada (limitada)
+    const cx=player.pos.x, cy=player.pos.y+1.55, cz=player.pos.z;        // pivote a la altura de los hombros
+    const bx=-Math.sin(player.yaw), bz=-Math.cos(player.yaw);            // adelante horizontal (la cámara va detrás)
     const want=TP_DIST*player.camTP;
-    const maxB=camClipDist(cx,cy,cz,-dx,-dy,-dz,want+0.3);                // anti-clip contra paredes
-    const back=Math.min(want,Math.max(0.5,maxB-0.3));
-    camera.position.set(cx-dx*back, cy-dy*back, cz-dz*back);
-    camera.up.set(0,1,0); camera.lookAt(cx,cy,cz);                       // siempre encuadra el cuerpo → nunca se ve doblado/acostado
+    const maxB=camClipDist(cx,cy,cz,-bx,0,-bz,want+0.3);                 // anti-clip horizontal contra paredes
+    const back=Math.min(want,Math.max(0.4,maxB-0.3));
+    camera.position.set(cx-bx*back, cy, cz-bz*back);                     // SIEMPRE a la altura de los hombros (nunca por debajo)
+    euler.set(player.pitch+rollCam, player.yaw, 0); camera.quaternion.setFromEuler(euler);   // la mirada sube/baja con el pitch (cielo o piso), el cuerpo nunca se deforma
   }
 
   sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
