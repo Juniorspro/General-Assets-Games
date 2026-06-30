@@ -1666,14 +1666,19 @@ function update(dt){
   // en 3ª persona NO inclinamos la cámara (nada de balanceo/lean/roll): si no, el mundo y el cuerpo se ven CHUECOS
   const _lp=(camView==='tp')?0:leanPitch, _lr=(camView==='tp')?0:(player.roll+leanRoll);
   euler.set(player.pitch+_lp+rollCam, player.yaw, _lr); camera.quaternion.setFromEuler(euler);
-  // ---- TERCERA PERSONA: alejá la cámara hacia atrás (mismo aim), con anti-clip contra paredes (se mantiene también en la voltereta) ----
-  const tpTarget=(camView==='tp')?TP_DIST:0;
+  // ---- TERCERA PERSONA: la cámara ORBITA el CENTRO del cuerpo y SIEMPRE lo mira (sin acercarse por debajo = sin deformar la cintura) ----
+  const tpTarget=(camView==='tp')?1:0;
   player.camTP += (tpTarget-player.camTP)*Math.min(1,9*dt);
   if(player.camTP>0.02){
-    _v3.set(0,0,-1).applyQuaternion(camera.quaternion);   // dirección de visión
-    const maxB=camClipDist(_camAnchor.x,_camAnchor.y+0.15,_camAnchor.z,-_v3.x,-_v3.y,-_v3.z,player.camTP+0.35);
-    const back=Math.min(player.camTP,Math.max(0.4,maxB-0.35));
-    camera.position.set(_camAnchor.x-_v3.x*back, _camAnchor.y+0.15-_v3.y*back, _camAnchor.z-_v3.z*back);
+    const cx=player.pos.x, cy=player.pos.y+1.15, cz=player.pos.z;        // centro del cuerpo (pecho)
+    const pit=Math.max(-0.32,Math.min(0.6,player.pitch));                // ÁNGULO vertical LIMITADO → la cámara nunca se mete bajo el cuerpo
+    const ch=Math.cos(pit), sh=Math.sin(pit);
+    const dx=-Math.sin(player.yaw)*ch, dy=sh, dz=-Math.cos(player.yaw)*ch;   // dirección de mirada (limitada)
+    const want=TP_DIST*player.camTP;
+    const maxB=camClipDist(cx,cy,cz,-dx,-dy,-dz,want+0.3);                // anti-clip contra paredes
+    const back=Math.min(want,Math.max(0.5,maxB-0.3));
+    camera.position.set(cx-dx*back, cy-dy*back, cz-dz*back);
+    camera.up.set(0,1,0); camera.lookAt(cx,cy,cz);                       // siempre encuadra el cuerpo → nunca se ve doblado/acostado
   }
 
   sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
