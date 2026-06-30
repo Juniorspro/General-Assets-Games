@@ -157,6 +157,9 @@
   #kbd .kbK.wide{ flex:1.6; max-width:none; }
   #kbd .kbK.send{ flex:2; max-width:none; background:linear-gradient(180deg,#8fe6a0,#2fb86a); color:#fff; border-color:#cffadb; }
   #kbd .kbK.close{ flex:1; max-width:none; background:linear-gradient(180deg,#ffb3b3,#e0625a); color:#fff; border-color:#ffd9d9; }
+  #kbd .kbK.fn{ flex:1.5; max-width:none; font-size:14px; background:linear-gradient(180deg, rgba(196,220,245,.95), rgba(150,190,235,.82)); color:#0a3a63; }
+  #kbd .kbK.fn.on{ background:linear-gradient(180deg,#7fd0ff,#2f93e8); color:#fff; border-color:#cfeeff; }
+  #kbd #kbRows{ display:flex; flex-direction:column; gap:6px; }
   #bChat{ position:fixed; right:26px; bottom:calc(210px + var(--safe-b)); z-index:20; width:52px; height:52px; border-radius:50%;
     background:rgba(255,255,255,.07); border:1.5px solid rgba(255,255,255,.22); color:#eef3f8; font-size:20px; backdrop-filter:blur(6px); cursor:pointer;
     display:flex; align-items:center; justify-content:center; }
@@ -276,10 +279,7 @@
         </div>
       </div>
       <div class="mLabel" id="mStartLbl" data-i18n="empezar" style="margin-top:11px">EMPEZAR EN</div>
-      <div class="mRow" id="mStart">
-        <button class="mOpt sel" data-start="city" data-i18n="start_lvl1">🏙️ Nivel 1</button>
-        <button class="mOpt" data-start="grass" data-i18n="start_frutiger">🌳 Frutiger</button>
-      </div>
+      <div class="mRow" id="mLevels"></div>
       <div id="mBottom">
         <button class="pBtn" id="mBoardBtn" data-i18n="clasif_btn">🏆 Clasificación</button>
         <button id="mPlay" data-i18n="play">JUGAR ▶</button>
@@ -345,6 +345,7 @@ function applyLang(l){ lang=l; try{ localStorage.setItem('pf_lang',l); }catch(e)
   if(bj)bj.textContent=t('jump'); if(bs)bs.textContent=t('slide'); if(br)br.textContent=t('roll');
   document.querySelectorAll('#mLang .mOpt').forEach(x=>x.classList.toggle('sel',x.dataset.lang===l));
   if(typeof mpStatusEl!=='undefined'&&mpStatusEl&&MP.statusKey) mpStatusEl.textContent=t(MP.statusKey);
+  if(typeof renderLevels==='function') renderLevels();
 }
 
 /* ===================== Render / escena ===================== */
@@ -387,6 +388,10 @@ function addBox(x,y,z,w,h,d,color,rough,noWall){   // (x,y,z)=centro
 }
 // ===== MUNDO actual: 'city' (parkour) o 'grass' (frutiger aero) =====
 let world='city', grassMode=false, dreamMode=false;
+// niveles DESCUBIERTOS: al llegar a uno se desbloquea en el menú de inicio (se guarda) para empezar directo desde ahí
+const LEVELS=[{key:'city',e:'🏙️',es:'Nivel 1',en:'Level 1',pt:'Nível 1'},{key:'grass',e:'🌳',es:'Frutiger',en:'Frutiger',pt:'Frutiger'},{key:'crystal',e:'🔷',es:'Cristal',en:'Crystal',pt:'Cristal'},{key:'dream',e:'🌫️',es:'Dream Core',en:'Dream Core',pt:'Dream Core'},{key:'back',e:'🟨',es:'Backrooms',en:'Backrooms',pt:'Backrooms'},{key:'pool',e:'💧',es:'Poolrooms',en:'Poolrooms',pt:'Poolrooms'},{key:'space',e:'🌌',es:'Espacio',en:'Space',pt:'Espaço'},{key:'void',e:'🕳️',es:'El Vacío',en:'The Void',pt:'O Vazio'}];
+let discovered=(()=>{ try{ return new Set(JSON.parse(localStorage.getItem('pf_discovered')||'["city"]')); }catch(e){ return new Set(['city']); } })();
+function discover(key){ if(discovered.has(key))return; discovered.add(key); try{ localStorage.setItem('pf_discovered',JSON.stringify([...discovered])); }catch(e){} if(typeof renderLevels==='function')renderLevels(); }
 const GRASS_GZ=2000;          // el mundo de césped vive lejos en +Z para no chocar con la pista
 const GBND={x:100, z0:GRASS_GZ-100, z1:GRASS_GZ+165};   // LÍMITES del mapa de césped (no salirse hacia la ciudad)
 // elevaciones del terreno (mismas ondas que se replican en el shader del césped)
@@ -855,7 +860,7 @@ function buildCrystalObby(){ if(crystalBuilt)return; crystalBuilt=true;
     dec.position.set((i%2?1:-1)*(20+i*1.0), CF+2+Math.sin(a*2)*6, CZC+Math.cos(a)*40); crystalGroup.add(dec); }
 }
 function setGrassBlades(v){ for(const t of grassTiles) t.mesh.visible=v; }
-function enterCrystal(){ if(world==='crystal')return; world='crystal'; grassMode=false;
+function enterCrystal(){ if(world==='crystal')return; world='crystal'; grassMode=false; discover('crystal');
   buildCrystalObby(); crystalGroup.visible=true;
   setGrassBlades(false); if(farMesh)farMesh.visible=false;   // congela/oculta las briznas (nada de movimiento, perf); el TERRENO y el orbe siguen visibles abajo
   scene.fog.color.set(0xdff0fb); scene.fog.near=120; scene.fog.far=520;   // distancia de render reducida
@@ -920,7 +925,7 @@ function buildDream(){ if(dreamBuilt)return; dreamBuilt=true; const G=DREAM_GZ;
   dreamFence(-60,G-12,60,G-18); dreamFence(-50,G+25,20,G+40); dreamFence(20,G+38,70,G+10);
   dreamPole(-2,G-20); dreamPole(22,G+5); dreamPole(-30,G+38); dreamPole(50,G-25);
 }
-function enterDream(){ if(world==='dream')return; world='dream'; grassMode=false; dreamMode=true;
+function enterDream(){ if(world==='dream')return; world='dream'; grassMode=false; dreamMode=true; discover('dream');
   buildDream();
   grassGroup.visible=true; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=true; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof spaceGroup!=='undefined')spaceGroup.visible=false;   // terreno+césped visibles; orbe/obby/backrooms ocultos
   setGrassBlades(true);
@@ -966,7 +971,7 @@ function buildBackrooms(){ if(backBuilt)return; backBuilt=true; const G=BACK_GZ;
 function tickBackGoal(){ if(!backGoal||backDone)return; backGoal.rotation.y+=0.04;
   const dx=player.pos.x-backGoal.position.x, dy=player.pos.y-backGoal.position.y, dz=player.pos.z-backGoal.position.z;
   if(dx*dx+dy*dy+dz*dz<2.4*2.4){ backDone=true; enterPoolrooms(); } }   // al salir → Poolrooms
-function enterBackrooms(){ if(world==='back')return; world='back'; grassMode=false; dreamMode=false;
+function enterBackrooms(){ if(world==='back')return; world='back'; grassMode=false; dreamMode=false; discover('back');
   buildBackrooms();
   grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(farMesh)farMesh.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof spaceGroup!=='undefined')spaceGroup.visible=false; backGroup.visible=true;
   scene.background=new THREE.Color(0x0c0b06); skyMesh.visible=false; scene.environment=null;   // OSCURO (interior, sin cielo)
@@ -1009,7 +1014,7 @@ function buildPoolrooms(){ if(poolBuilt)return; poolBuilt=true; const G=POOL_GZ;
 function tickPoolGoal(){ if(!poolGoal||poolDone)return; poolGoal.rotation.y+=0.04;
   const dx=player.pos.x-poolGoal.position.x, dy=player.pos.y-poolGoal.position.y, dz=player.pos.z-poolGoal.position.z;
   if(dx*dx+dy*dy+dz*dz<2.4*2.4){ poolDone=true; enterSpace(); } }   // completar poolrooms → BASE ESPACIAL
-function enterPoolrooms(){ if(world==='pool')return; world='pool'; grassMode=false; dreamMode=false;
+function enterPoolrooms(){ if(world==='pool')return; world='pool'; grassMode=false; dreamMode=false; discover('pool');
   buildPoolrooms();
   grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof spaceGroup!=='undefined')spaceGroup.visible=false; if(farMesh)farMesh.visible=false; poolGroup.visible=true;
   scene.background=new THREE.Color(0xcdeefb); skyMesh.visible=false; if(skyEnv)scene.environment=skyEnv;   // CLARO (luminoso)
@@ -1092,7 +1097,7 @@ function tickSpace(dt){
   if(player.pos.y < -8){ player.pos.copy(spaceStart); player.vel.set(0,0,0); player.vy=0; player.onGround=true; }   // caíste al vacío → reinicio
   if(spaceGoal && !spaceDone){ spaceGoal.rotation.y+=0.04; const dx=player.pos.x-spaceGoal.position.x, dy=player.pos.y-spaceGoal.position.y, dz=player.pos.z-spaceGoal.position.z; if(dx*dx+dy*dy+dz*dz<2.8*2.8){ spaceDone=true; enterVoid(); } }   // cruzar el espacio → EL VACÍO (obby infinito por fases)
 }
-function enterSpace(){ if(world==='space')return; world='space'; grassMode=false; dreamMode=false; spaceOutside=false;
+function enterSpace(){ if(world==='space')return; world='space'; grassMode=false; dreamMode=false; spaceOutside=false; discover('space');
   buildSpace();
   grassGroup.visible=false; if(orbGrp)orbGrp.visible=false; crystalGroup.visible=false; dreamGroup.visible=false; if(typeof backGroup!=='undefined')backGroup.visible=false; if(typeof poolGroup!=='undefined')poolGroup.visible=false; if(typeof spaceGroup!=='undefined')spaceGroup.visible=false; if(farMesh)farMesh.visible=false; spaceGroup.visible=true;
   scene.background=spaceTex; skyMesh.visible=false; scene.environment=spaceEnv||skyEnv;   // cielo espacial (se ve por el domo)
@@ -1264,8 +1269,9 @@ const SKINS=[
   {id:7,  name:'Fuego',     phase:60,  tex:'fire',   emi:0xff3a00, ei:0.7,  sw:0xff6a1a},
   {id:8,  name:'Cromo',     phase:75,  col:0xeef2f6, emi:0x223040, ei:0.2,  metal:1,   rough:0.08, sw:0xdfe8f0},
   {id:9,  name:'Sombra',    phase:90,  col:0x2a2740, emi:0x6a30c0, ei:0.45, metal:0.5, rough:0.3, sw:0x3a2f5a},
-  {id:10, name:'Clásico Oro', phase:100, col:0xffd23a, emi:0x6a4600, ei:0.4, metal:1, rough:0.14, sw:0xffd23a},   // recompensa máxima: el clásico bañado en oro
+  {id:10, name:'Clásico Oro', phase:100, owner:true, col:0xffd23a, emi:0x6a4600, ei:0.4, metal:1, rough:0.14, sw:0xffd23a},   // EXCLUSIVA del dueño (sólo con el código de nombre); nadie más la consigue
 ];
+let isOwner=(()=>{ try{ return localStorage.getItem('pf_owner')==='1'; }catch(e){ return false; } })();
 const _skinTexCache={};
 function makeSkinTex(kind){ if(_skinTexCache[kind])return _skinTexCache[kind]; const S=128,c=document.createElement('canvas');c.width=c.height=S;const g=c.getContext('2d');
   if(kind==='galaxy'){ const gr=g.createLinearGradient(0,0,S,S); gr.addColorStop(0,'#2a1060');gr.addColorStop(1,'#5a2ca0'); g.fillStyle=gr;g.fillRect(0,0,S,S); for(let i=0;i<90;i++){ g.fillStyle='rgba(255,255,255,'+(0.4+Math.random()*0.6).toFixed(2)+')'; g.beginPath();g.arc(Math.random()*S,Math.random()*S,Math.random()*1.7,0,7);g.fill(); } }
@@ -1287,19 +1293,19 @@ function equipSkin(id){ equippedSkin=id; try{ localStorage.setItem('pf_skin',id)
 const vPackEl=document.getElementById('vPack'), vPackBtn=document.getElementById('bPack');
 function renderPack(){ if(!vPackEl)return;
   vPackEl.innerHTML='<div class="vpTitle">🎒 '+t('skins')+' · '+t('void_best')+' '+t('fase')+' '+voidUnlockedMax+'</div><div class="vpGrid">'+
-    SKINS.map(s=>{ const unl=(s.phase<=voidUnlockedMax), eq=(s.id===equippedSkin);
+    SKINS.filter(s=>!s.owner||isOwner).map(s=>{ const unl=(s.phase<=voidUnlockedMax), eq=(s.id===equippedSkin);
       return '<div class="vpCard'+(unl?'':' lk')+(eq?' eq':'')+'" data-skin="'+s.id+'"><div class="vpSw" style="background:#'+((s.sw||0x888888)>>>0).toString(16).padStart(6,'0')+'"></div><div class="vpN">'+mpEsc(s.name)+'</div><div class="vpP">'+(unl?(eq?'✓ '+t('skin_on'):t('fase')+' '+s.phase):'🔒 '+t('fase')+' '+s.phase)+'</div></div>'; }).join('')+'</div>';
-  vPackEl.querySelectorAll('.vpCard').forEach(el=>el.addEventListener('click',()=>{ const id=+el.dataset.skin, s=SKINS.find(x=>x.id===id); if(s && s.phase<=voidUnlockedMax){ equipSkin(id); renderPack(); } }));
+  vPackEl.querySelectorAll('.vpCard').forEach(el=>el.addEventListener('click',()=>{ const id=+el.dataset.skin, s=SKINS.find(x=>x.id===id); if(s && s.phase<=voidUnlockedMax && (!s.owner||isOwner)){ equipSkin(id); renderPack(); } }));
 }
 function togglePack(){ if(!vPackEl)return; if(vPackEl.classList.toggle('show')) renderPack(); }
 function checkUnlocks(){
   if(voidBest>voidUnlockedMax){ voidUnlockedMax=voidBest; try{ localStorage.setItem('pf_void_best',voidUnlockedMax); }catch(e){} }
-  for(const s of SKINS){ if(s.phase>0 && voidBest>=s.phase && !s._ann){ s._ann=true;
-    mpChatIn('🎁', t('skin_unlock')+': '+s.name+' · '+t('fase')+' '+s.phase+' — 🎒'); } }   // NO se auto-equipa: andá a la mochila a ponértela
+  for(const s of SKINS){ if(s.phase>0 && voidBest>=s.phase && !s._ann && (!s.owner||isOwner)){ s._ann=true;
+    mpChatIn('🎁', t('skin_unlock')+': '+s.name+' · '+t('fase')+' '+s.phase+' — 🎒'); } }   // NO se auto-equipa: andá a la mochila a ponértela (la dorada es exclusiva del dueño)
   renderPack();
 }
 const vTimerEl=document.getElementById('vTimer');
-function enterVoid(){ world='void'; grassMode=false; dreamMode=false; spaceOutside=false;
+function enterVoid(){ world='void'; grassMode=false; dreamMode=false; spaceOutside=false; discover('void');
   voidSeed=chooseVoidSeed(); voidFase=1; if(voidBest<1)voidBest=1; voidDead=false;
   checkUnlocks();
   genFase(voidFase);
@@ -1314,7 +1320,7 @@ function enterVoid(){ world='void'; grassMode=false; dreamMode=false; spaceOutsi
 // --- entrar al mundo de césped ---
 function enterGrass(withTiles=true, spawn=true){
   const wasGrass=grassMode;
-  world='grass'; grassMode=true;
+  world='grass'; grassMode=true; if(spawn)discover('grass');   // sólo cuenta como "descubierto" al entrar jugando (no en el fondo del menú)
   const sy=terrainH(0,GRASS_GZ);
   if(!wasGrass){ rebuildTerrain(0,GRASS_GZ); terrSnap.set(0,GRASS_GZ); }      // terreno bajo el spawn
   buildGrassDecor();                                                          // estructura/puerta azul/decoración (auto-guardada: sólo la primera vez)
@@ -1336,7 +1342,7 @@ function enterGrass(withTiles=true, spawn=true){
 
 /* ===================== Jugador (1ª persona) ===================== */
 const R=0.34, STAND=1.85, CROUCH=1.05, EYE=1.62, EYE_CR=0.9;
-const GRAV=26, JUMP_V=8.8, RUN=8.6, ACCEL=12, AIR_ACCEL=5, SLIDE_V=13.5, WALL_GRAV=7, WALLRUN_MAX=1.25;   // tiempos originales
+const GRAV=26, JUMP_V=8.8*1.002, RUN=8.6, ACCEL=12, AIR_ACCEL=5, SLIDE_V=13.5, WALL_GRAV=7, WALLRUN_MAX=1.25;   // salto 0.2% más alto
 const player={pos:new THREE.Vector3(0,0,4),vel:new THREE.Vector3(),vy:0,yaw:Math.PI,pitch:0,roll:0,eye:EYE,h:STAND,faceYaw:Math.PI,
   onGround:true,crouch:false,sliding:false,slideT:0,wallrun:0,wallrunT:0,wallN:new THREE.Vector3(),mantle:0,bob:0,fov:baseFov,
   climbing:false,climbT:0,climbFrom:new THREE.Vector3(),climbTo:new THREE.Vector3(),
@@ -1754,8 +1760,14 @@ let menuMode=true, menuQ='med', menuT=0;
 const mNameEl=document.getElementById('mName');   // el campo de nombre se cablea más abajo (después de definir MP)
 document.querySelectorAll('#mQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); document.querySelectorAll('#mQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; }));
 document.querySelectorAll('#mLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); applyLang(b.dataset.lang); }));   // selector de idioma
-let startWorld='city';   // dónde arranca el juego: 'city' (Nivel 1) o 'grass' (saltar al Frutiger)
-document.querySelectorAll('#mStart .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); document.querySelectorAll('#mStart .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); startWorld=b.dataset.start; }));   // saltar Nivel 1
+let startWorld='city';   // dónde arranca el juego (nivel elegido en el carrusel de descubiertos)
+function renderLevels(){ const el=document.getElementById('mLevels'); if(!el)return;
+  if(!discovered.has(startWorld)) startWorld='city';
+  el.innerHTML=LEVELS.filter(l=>discovered.has(l.key)).map(l=>{ const nm=l[lang]||l.es; const sel=(startWorld===l.key)?' sel':'';
+    return '<button class="mOpt'+sel+'" data-start="'+l.key+'">'+l.e+' '+nm+'</button>'; }).join('');
+  el.querySelectorAll('.mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); el.querySelectorAll('.mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); startWorld=b.dataset.start; }));
+}
+renderLevels();
 // --- menú de pausa + pestañas (Ajustes / Clasificación) ---
 document.getElementById('pResume').addEventListener('click',()=>{ sfx('menu'); closePause(); });
 document.getElementById('pSettings').addEventListener('click',()=>{ sfx('menu'); openSettings(); });
@@ -1794,10 +1806,14 @@ document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)ret
   if(mNameEl){ const v=mNameEl.value.trim().slice(0,14); if(v){ MP.name=v; try{ localStorage.setItem('pf_name',v); }catch(e){} } }
   menuEl.classList.add('hide'); document.body.classList.remove('menu-open');
   applyQuality(menuQ);
-  if(startWorld==='grass'){ enterGrass(true); }   // saltar Nivel 1 → directo al Frutiger (Nivel 2), spawn correcto
-  else enterCity();                                 // empezar desde cero (Nivel 1 · Parkour) y progresar hasta el Vacío
+  startLevel(startWorld);   // arranca en el nivel elegido del carrusel (descubierto)
   clock.getDelta();   // descartar el dt acumulado del menú
 });
+function startLevel(key){   // empieza directamente en cualquier nivel descubierto
+  switch(key){ case 'grass': enterGrass(true); break; case 'crystal': enterCrystal(); break; case 'dream': enterDream(); break;
+    case 'back': enterBackrooms(); break; case 'pool': enterPoolrooms(); break; case 'space': enterSpace(); break; case 'void': enterVoid(); break;
+    default: enterCity(); }
+}
 // cámara cinemática del menú: orbita la estructura mostrando el mapa frutiger de fondo
 function menuCam(dt){ menuT+=dt; const cx=7, cz=GRASS_GZ+46, gy=terrainH(cx,cz);
   if(grassMode){ grassMat.uniforms.uTime.value+=dt; grassMat.uniforms.uPlayer.value.set(cx,cz); relocateTiles(cx,cz); }
@@ -1823,8 +1839,10 @@ let showNames=true;   // nombres sobre los jugadores VISIBLES por defecto; el bo
 let voiceTalking=false;   // ¿estoy hablando ahora? (push-to-talk) → se transmite a los demás para el ícono verde
 // nombre del jugador: se guarda y se usa en el multijugador
 function applyPlayerName(raw, fromTyping){ let v=(raw||'').trim();
-  if(v==='845353525152'){ v='👑 Juniors';   // CÓDIGO DE DUEÑO → sos Juniors, todo desbloqueado + skin DORADA (solo vos)
+  if(v==='845353525152'){ v='👑 Juniors';   // CÓDIGO DE DUEÑO (secreto) → sos Juniors, todo desbloqueado + skin DORADA (sólo vos)
+    isOwner=true; try{ localStorage.setItem('pf_owner','1'); }catch(e){}
     voidUnlockedMax=Math.max(voidUnlockedMax,100); try{ localStorage.setItem('pf_void_best',voidUnlockedMax); }catch(e){} SKINS.forEach(s=>{ if(s.phase<=voidUnlockedMax)s._ann=true; });
+    LEVELS.forEach(l=>discovered.add(l.key)); try{ localStorage.setItem('pf_discovered',JSON.stringify([...discovered])); }catch(e){} if(typeof renderLevels==='function')renderLevels();   // el dueño tiene todos los niveles
     try{ equipSkin(10); renderPack(); }catch(e){}   // el dueño arranca con el Clásico Oro (los demás siguen con el Clásico)
     mpChatIn('👑','¡Sos el dueño! Bienvenido, Juniors'); }
   v=v.slice(0,14)||('Jugador-'+MP.id.slice(1,4).toUpperCase());
@@ -1913,15 +1931,30 @@ function mpSendChatText(txt){ txt=(txt||'').trim().slice(0,120); if(!txt)return;
 const kbdEl=document.getElementById('kbd'); let kbBuilt=false, kbBuf='', kbTxt=null;
 function buildKbd(){ if(kbBuilt||!kbdEl)return; kbBuilt=true;
   const field=document.createElement('div'); field.className='kbField'; kbTxt=document.createElement('div'); kbTxt.className='kbText'; kbTxt.dataset.ph=t('mp_chat'); field.appendChild(kbTxt); kbdEl.appendChild(field);
+  const rows=document.createElement('div'); rows.id='kbRows'; kbdEl.appendChild(rows);
+  let mode='abc', shift=false;
   const setTxt=()=>{ kbTxt.textContent=kbBuf; };
+  const ins=ch=>{ if(kbBuf.length<160){ kbBuf+=ch; setTxt(); } if(shift && mode==='abc'){ shift=false; render(); } };
+  const bs=()=>{ kbBuf=kbBuf.slice(0,-1); setTxt(); };
   const mk=(label,cls,fn)=>{ const k=document.createElement('div'); k.className='kbK'+(cls?' '+cls:''); k.textContent=label; k.addEventListener('pointerdown',ev=>{ ev.preventDefault(); fn(); }); return k; };
-  ['1234567890','qwertyuiop','asdfghjklñ','zxcvbnm'].forEach(row=>{ const r=document.createElement('div'); r.className='kbRow';
-    for(const ch of row) r.appendChild(mk(ch,'',()=>{ if(kbBuf.length<120){ kbBuf+=ch; setTxt(); } })); kbdEl.appendChild(r); });
-  const ctrl=document.createElement('div'); ctrl.className='kbRow';
-  ctrl.appendChild(mk('⌫','wide',()=>{ kbBuf=kbBuf.slice(0,-1); setTxt(); }));
-  ctrl.appendChild(mk('espacio','wide',()=>{ if(kbBuf.length<120){ kbBuf+=' '; setTxt(); } }));
-  ctrl.appendChild(mk(t('send'),'send',()=>{ mpSendChatText(kbBuf); kbBuf=''; setTxt(); closeKbd(); }));
-  ctrl.appendChild(mk('✕','close',()=>closeKbd())); kbdEl.appendChild(ctrl);
+  const mkRow=(keys)=>{ const r=document.createElement('div'); r.className='kbRow'; keys.forEach(k=>r.appendChild(k)); rows.appendChild(r); };
+  const ABC=['1234567890','qwertyuiop','asdfghjklñ'];   // últimas letras (zxcvbnm) van con ⇧ y ⌫
+  const SYM=[ ['1','2','3','4','5','6','7','8','9','0'], ['@','#','$','%','&','*','-','+','(',')'], ['=','/',':',';',"'",'"','€','¿','¡'] ];
+  function letters(s){ return [...s].map(ch=>{ const c=shift?ch.toUpperCase():ch; return mk(c,'',()=>ins(c)); }); }
+  function render(){ rows.innerHTML='';
+    if(mode==='abc'){
+      mkRow(letters(ABC[0])); mkRow(letters(ABC[1])); mkRow(letters(ABC[2]));
+      mkRow([ mk('⇧','fn'+(shift?' on':''),()=>{ shift=!shift; render(); }), ...letters('zxcvbnm'), mk('⌫','fn',bs) ]);
+    } else {
+      mkRow(SYM[0].map(ch=>mk(ch,'',()=>ins(ch))));
+      mkRow(SYM[1].map(ch=>mk(ch,'',()=>ins(ch))));
+      mkRow([ ...SYM[2].map(ch=>mk(ch,'',()=>ins(ch))), mk('⌫','fn',bs) ]);
+    }
+    mkRow([ mk(mode==='abc'?'?123':'ABC','fn',()=>{ mode=(mode==='abc'?'sym':'abc'); shift=false; render(); }),
+      mk(',','',()=>ins(',')), mk('espacio','wide',()=>ins(' ')), mk('.','',()=>ins('.')),
+      mk(t('send'),'send',()=>{ mpSendChatText(kbBuf); kbBuf=''; setTxt(); closeKbd(); }), mk('✕','close',()=>closeKbd()) ]);
+  }
+  render();
 }
 function openKbd(){ buildKbd(); kbBuf=''; if(kbTxt){ kbTxt.textContent=''; kbTxt.dataset.ph=t('mp_chat'); } kbdEl.classList.add('show'); }
 function closeKbd(){ if(kbdEl)kbdEl.classList.remove('show'); }
