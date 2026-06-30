@@ -149,25 +149,22 @@
   #btnMenu{ position:fixed; right:calc(12px + var(--safe-t)); top:calc(50px + var(--safe-t)); z-index:21; width:46px; height:46px; border-radius:13px; display:flex; align-items:center; justify-content:center;
     background:rgba(18,28,42,.6); border:1px solid rgba(255,255,255,.2); color:#fff; font-size:22px; backdrop-filter:blur(7px); cursor:pointer; }
   #btnMenu:active{ transform:scale(.92); }
-  /* ===== personalización de CONTROLES + HUD (ajustes) ===== */
-  #joy,.actBtn,#bChat,#bPack,#bVoice,#bNames{ transform:scale(var(--cs,1)); transform-origin:center; opacity:var(--cop,1); transition:opacity .2s; }
-  /* modo ZURDO: se intercambian joystick (→ derecha) y botones de acción (→ izquierda) */
-  body.lefty #joy{ left:auto; right:26px; }
-  body.lefty #bJump{ right:auto; left:26px; }
-  body.lefty #bSlide{ right:auto; left:110px; }
-  body.lefty #bRoll{ right:auto; left:40px; }
-  body.lefty #bChat{ right:auto; left:26px; }
-  body.lefty #bPack{ right:auto; left:26px; }
-  body.lefty #bVoice{ left:auto; right:54px; }
-  body.lefty #bNames{ left:auto; right:54px; }
-  /* ocultar HUD informativo (deja los controles) */
-  body.hud-off #hudWrap, body.hud-off #mpStatus, body.hud-off #vBoard, body.hud-off #vTimer, body.hud-off #mpChatLog{ display:none !important; }
+  /* ===== EDITAR HUD: arrastrar los controles a donde quieras ===== */
+  #hudEdit{ position:fixed; left:50%; top:calc(10px + var(--safe-t)); transform:translateX(-50%); z-index:64; display:none; align-items:center; gap:10px;
+    background:rgba(10,18,30,.86); border:1px solid rgba(255,255,255,.22); border-radius:16px; padding:8px 12px; color:#eaf2fb; font-family:'Segoe UI',system-ui,sans-serif; font-size:12.5px; font-weight:700; backdrop-filter:blur(8px); box-shadow:0 10px 34px rgba(10,40,80,.5); }
+  body.editing-hud #hudEdit{ display:flex; }
+  #hudEdit button{ padding:8px 14px; border-radius:12px; border:none; font-weight:800; font-size:13px; color:#fff; background:linear-gradient(180deg,#5fd27a,#2aa64f); cursor:pointer; }
+  body.editing-hud #joy, body.editing-hud .actBtn, body.editing-hud #bChat, body.editing-hud #bPack, body.editing-hud #bVoice, body.editing-hud #bNames, body.editing-hud #btnMenu{
+    outline:2px dashed rgba(127,208,255,.95); outline-offset:3px; touch-action:none; }
+  /* en modo edición se ven TODOS los controles aunque normalmente estén ocultos */
+  body.editing-hud #bPack, body.editing-hud #bVoice, body.editing-hud #bNames{ display:flex !important; }
   #pause{ position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center; background:rgba(8,16,28,.62); backdrop-filter:blur(8px); }
   #pause.show{ display:flex; }
-  #pausePanel{ width:min(90vw,420px); max-height:86vh; overflow-y:auto; padding:20px; border-radius:20px; text-align:center;
-    background:linear-gradient(165deg, rgba(255,255,255,.42), rgba(198,228,255,.16)); border:1.5px solid rgba(255,255,255,.6); box-shadow:0 22px 64px rgba(10,40,80,.5); }
-  #pausePanel h2{ color:#0a3a63; font-size:22px; font-weight:800; margin-bottom:14px; }
-  .pBtn{ width:100%; padding:13px; margin-bottom:9px; border-radius:14px; font-size:15px; font-weight:800; color:#0c4675; cursor:pointer;
+  /* menú de pausa COMPACTO (estilo menú principal) */
+  #pausePanel{ width:min(82vw,360px); max-height:90vh; overflow-y:auto; padding:16px 16px 12px; border-radius:22px; text-align:center;
+    background:linear-gradient(165deg, rgba(232,246,255,.82), rgba(186,218,250,.66)); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); border:1.5px solid rgba(255,255,255,.7); box-shadow:0 22px 60px rgba(10,40,80,.55), inset 0 1px 0 rgba(255,255,255,.85); }
+  #pausePanel h2{ color:#0a3a63; font-size:18px; font-weight:800; margin-bottom:10px; }
+  .pBtn{ width:100%; padding:11px; margin-bottom:7px; border-radius:13px; font-size:14px; font-weight:800; color:#0c4675; cursor:pointer;
     background:linear-gradient(180deg, rgba(255,255,255,.72), rgba(208,234,255,.32)); border:1.4px solid rgba(255,255,255,.7); box-shadow:inset 0 1px 0 rgba(255,255,255,.8); }
   .pBtn:active{ transform:scale(.97); } .pBtn.danger{ color:#fff; background:linear-gradient(180deg,#ff8a7a,#e0554a); border-color:#ffd9d2; }
   .ovl{ position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center; background:rgba(8,16,28,.66); backdrop-filter:blur(9px); }
@@ -201,6 +198,7 @@
   <div id="vPack"></div>
   <div id="kbd"></div>
   <button id="btnMenu" title="Menú">☰</button>
+  <div id="hudEdit"><span data-i18n="mover_hint">✥ Arrastrá los controles a donde quieras</span><button id="hudEditDone" data-i18n="listo">✓ Listo</button></div>
   <div id="pause"><div id="pausePanel">
     <h2 data-i18n="pausa">Pausa</h2>
     <button class="pBtn" id="pResume" data-i18n="resumen">▶ Resumen</button>
@@ -211,20 +209,12 @@
   <!-- pestaña AJUSTES (se abre aparte) -->
   <div id="settingsPanel" class="ovl"><div class="ovlPanel">
     <h2 data-i18n="ajustes2">⚙ Ajustes</h2>
-    <div class="mLabel" data-i18n="vista">VISTA</div>
-    <div class="mRow" id="sView"><button class="mOpt sel" data-view="fp" data-i18n="cam_fp">1ª persona</button><button class="mOpt" data-view="tp" data-i18n="cam_tp">3ª persona</button></div>
     <div class="mLabel" data-i18n="gfx">GRÁFICOS</div>
     <div class="mRow" id="sQual"><button class="mOpt" data-q="low" data-i18n="low">Bajo</button><button class="mOpt sel" data-q="med" data-i18n="med">Medio</button><button class="mOpt" data-q="high" data-i18n="high">Alto</button></div>
     <div class="mLabel" data-i18n="idioma">IDIOMA</div>
     <div class="mRow" id="sLang"><button class="mOpt sel" data-lang="es">ES</button><button class="mOpt" data-lang="en">EN</button><button class="mOpt" data-lang="pt">PT</button></div>
-    <div class="mLabel" data-i18n="controles">CONTROLES · TAMAÑO</div>
-    <div class="mRow" id="sCtlSize"><button class="mOpt" data-cs="0.8" data-i18n="ctl_sm">Chico</button><button class="mOpt sel" data-cs="1" data-i18n="ctl_md">Normal</button><button class="mOpt" data-cs="1.25" data-i18n="ctl_lg">Grande</button></div>
-    <div class="mLabel" data-i18n="control_op">CONTROLES · OPACIDAD</div>
-    <div class="mRow" id="sCtlOp"><button class="mOpt" data-op="0.45" data-i18n="op_low">Baja</button><button class="mOpt" data-op="0.75" data-i18n="op_mid">Media</button><button class="mOpt sel" data-op="1" data-i18n="op_full">Llena</button></div>
-    <div class="mLabel" data-i18n="hud_lbl">HUD · MANOS</div>
-    <div class="mRow" id="sHand"><button class="mOpt sel" data-hand="r" data-i18n="hand_r">Diestro</button><button class="mOpt" data-hand="l" data-i18n="hand_l">Zurdo</button></div>
-    <div class="mRow" id="sHud" style="margin-top:8px"><button class="mOpt sel" data-hud="on" data-i18n="hud_on">HUD visible</button><button class="mOpt" data-hud="off" data-i18n="hud_off">HUD oculto</button></div>
-    <button class="pBtn" id="sBoardBtn" data-i18n="clasif_btn" style="margin-top:14px">🏆 Clasificación</button>
+    <button class="pBtn" id="sEditHud" data-i18n="mover_hud" style="margin-top:14px">✥ Mover controles</button>
+    <button class="pBtn" id="sBoardBtn" data-i18n="clasif_btn">🏆 Clasificación</button>
     <button class="pBtn" id="sClose" data-i18n="cerrar">Cerrar</button>
   </div></div>
   <!-- pestaña CLASIFICACIÓN (se abre aparte) -->
@@ -252,13 +242,6 @@
       <div class="sub" data-i18n="sub">poné tu nombre y jugá</div>
       <input id="mName" type="text" maxlength="14" placeholder="Jugador" autocomplete="off" />
       <div id="mGroups">
-        <div class="mGrp">
-          <div class="mLabel" data-i18n="vista">VISTA</div>
-          <div class="mCol" id="mView">
-            <button class="mOpt sel" data-view="fp" data-i18n="cam_fp">1ª persona</button>
-            <button class="mOpt" data-view="tp" data-i18n="cam_tp">3ª persona</button>
-          </div>
-        </div>
         <div class="mGrp">
           <div class="mLabel" data-i18n="gfx">GRÁFICOS</div>
           <div class="mCol" id="mQual">
@@ -313,21 +296,21 @@ const LANG={
     st_idle:'quieto',st_walk:'caminar',st_run:'correr',st_air:'en el aire',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'trepar',st_roll:'voltereta',
     m_frutiger:'🌱 Mundo Frutiger — explorá el césped',m_crystal:'🔷 Obby de Cristal — llegá a la meta',m_crystaldone:'🔷 ¡Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — ¡reinicio!',
     m_dream:'🌫️ Dream Core — un suburbio que no termina',m_back:'🟡 Backrooms — encontrá la salida',m_backdone:'🟡 ¡Saliste de las Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — llegá a la meta',m_pooldone:'💧 ¡Completaste los Poolrooms!',m_level1done:'¡NIVEL 1 COMPLETO! 🎉',
-    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Saltá las plataformas hasta la meta',void:'El Vacío',q_void:'Sobreviví las fases del obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entrá al árbol correcto y subí el obby',fase:'Fase',void_die:'Caíste · vuelve a cruzar el espacio',void_best:'mejor',void_reset:'¡Vacío regenerado desde cero!',void_lvl:'El Vacío ∞',skin_unlock:'¡Skin desbloqueada!',messi_got:'¡CONSEGUISTE A MESSI!',messi_fail:'No conseguiste a Messi',skins:'Mochila de skins',skin_on:'puesta',nombre:'TU NOMBRE',send:'ENVIAR',names:'Nombres',pausa:'Pausa',resumen:'▶ Resumen',ajustes:'⚙ Ajustes',salir:'✖ Salir',clasif:'CLASIFICACIÓN · MEJORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Clasificación',cerrar:'Cerrar',vista:'VISTA',cam_fp:'1ª persona',cam_tp:'3ª persona',empezar:'EMPEZAR EN',start_lvl1:'🏙️ Nivel 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLES · TAMAÑO',control_op:'CONTROLES · OPACIDAD',ctl_sm:'Chico',ctl_md:'Normal',ctl_lg:'Grande',op_low:'Baja',op_mid:'Media',op_full:'Llena',hud_lbl:'HUD · MANOS',hand_r:'Diestro',hand_l:'Zurdo',hud_on:'HUD visible',hud_off:'HUD oculto'},
+    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Saltá las plataformas hasta la meta',void:'El Vacío',q_void:'Sobreviví las fases del obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entrá al árbol correcto y subí el obby',fase:'Fase',void_die:'Caíste · vuelve a cruzar el espacio',void_best:'mejor',void_reset:'¡Vacío regenerado desde cero!',void_lvl:'El Vacío ∞',skin_unlock:'¡Skin desbloqueada!',messi_got:'¡CONSEGUISTE A MESSI!',messi_fail:'No conseguiste a Messi',skins:'Mochila de skins',skin_on:'puesta',nombre:'TU NOMBRE',send:'ENVIAR',names:'Nombres',pausa:'Pausa',resumen:'▶ Resumen',ajustes:'⚙ Ajustes',salir:'✖ Salir',clasif:'CLASIFICACIÓN · MEJORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Clasificación',cerrar:'Cerrar',vista:'VISTA',cam_fp:'1ª persona',cam_tp:'3ª persona',empezar:'EMPEZAR EN',start_lvl1:'🏙️ Nivel 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLES · TAMAÑO',control_op:'CONTROLES · OPACIDAD',ctl_sm:'Chico',ctl_md:'Normal',ctl_lg:'Grande',op_low:'Baja',op_mid:'Media',op_full:'Llena',hud_lbl:'HUD · MANOS',hand_r:'Diestro',hand_l:'Zurdo',hud_on:'HUD visible',hud_off:'HUD oculto',mover_hud:'✥ Mover controles',mover_hint:'✥ Arrastrá los controles a donde quieras',listo:'✓ Listo'},
   en:{title:'🌱 PARKOUR · FRUTIGER',sub:'set your name and play',lvl:'LEVEL',gfx:'GRAPHICS',low:'Low',med:'Medium',high:'High',play:'PLAY ▶',idioma:'LANGUAGE',
     parkour:'Level 1 · Parkour',frutiger:'Frutiger World',crystal:'Crystal Obby',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'JUMP',slide:'SLIDE',roll:'ROLL',
     st_idle:'idle',st_walk:'walk',st_run:'run',st_air:'in air',st_slide:'slide',st_wallrun:'wall-run',st_climb:'climb',st_roll:'roll',
     m_frutiger:'🌱 Frutiger World — explore the grass',m_crystal:'🔷 Crystal Obby — reach the goal',m_crystaldone:'🔷 Obby complete! → Dream Core',m_crystalreset:'🔷 Crystal Obby — restart!',
     m_dream:'🌫️ Dream Core — a suburb that never ends',m_back:'🟡 Backrooms — find the exit',m_backdone:'🟡 You escaped the Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — reach the goal',m_pooldone:'💧 You cleared the Poolrooms!',m_level1done:'LEVEL 1 COMPLETE! 🎉',
-    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Jump the platforms to the goal',void:'The Void',q_void:'Survive the endless obby phases',fsurv:'Frutiger Aero Survival',q_fsurv:'Enter the right tree and climb the obby',fase:'Phase',void_die:'You fell · cross space again',void_best:'best',void_reset:'Void regenerated from scratch!',void_lvl:'The Void ∞',skin_unlock:'Skin unlocked!',messi_got:'YOU GOT MESSI!',messi_fail:"You didn't get Messi",skins:'Skin backpack',skin_on:'on',nombre:'YOUR NAME',send:'SEND',names:'Names',pausa:'Paused',resumen:'▶ Resume',ajustes:'⚙ Settings',salir:'✖ Exit',clasif:'LEADERBOARD · BEST PHASES',ajustes2:'⚙ Settings',clasif_btn:'🏆 Leaderboard',cerrar:'Close',vista:'VIEW',cam_fp:'1st person',cam_tp:'3rd person',empezar:'START AT',start_lvl1:'🏙️ Level 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLS · SIZE',control_op:'CONTROLS · OPACITY',ctl_sm:'Small',ctl_md:'Normal',ctl_lg:'Large',op_low:'Low',op_mid:'Mid',op_full:'Full',hud_lbl:'HUD · HANDS',hand_r:'Right',hand_l:'Left',hud_on:'HUD on',hud_off:'HUD off'},
+    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Jump the platforms to the goal',void:'The Void',q_void:'Survive the endless obby phases',fsurv:'Frutiger Aero Survival',q_fsurv:'Enter the right tree and climb the obby',fase:'Phase',void_die:'You fell · cross space again',void_best:'best',void_reset:'Void regenerated from scratch!',void_lvl:'The Void ∞',skin_unlock:'Skin unlocked!',messi_got:'YOU GOT MESSI!',messi_fail:"You didn't get Messi",skins:'Skin backpack',skin_on:'on',nombre:'YOUR NAME',send:'SEND',names:'Names',pausa:'Paused',resumen:'▶ Resume',ajustes:'⚙ Settings',salir:'✖ Exit',clasif:'LEADERBOARD · BEST PHASES',ajustes2:'⚙ Settings',clasif_btn:'🏆 Leaderboard',cerrar:'Close',vista:'VIEW',cam_fp:'1st person',cam_tp:'3rd person',empezar:'START AT',start_lvl1:'🏙️ Level 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLS · SIZE',control_op:'CONTROLS · OPACITY',ctl_sm:'Small',ctl_md:'Normal',ctl_lg:'Large',op_low:'Low',op_mid:'Mid',op_full:'Full',hud_lbl:'HUD · HANDS',hand_r:'Right',hand_l:'Left',hud_on:'HUD on',hud_off:'HUD off',mover_hud:'✥ Move controls',mover_hint:'✥ Drag the controls anywhere',listo:'✓ Done'},
   pt:{title:'🌱 PARKOUR · FRUTIGER',sub:'ponha seu nome e jogue',lvl:'NÍVEL',gfx:'GRÁFICOS',low:'Baixo',med:'Médio',high:'Alto',play:'JOGAR ▶',idioma:'IDIOMA',
     parkour:'Nível 1 · Parkour',frutiger:'Mundo Frutiger',crystal:'Obby de Cristal',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'PULAR',slide:'DESLIZAR',roll:'ROLAR',
     st_idle:'parado',st_walk:'andar',st_run:'correr',st_air:'no ar',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'escalar',st_roll:'cambalhota',
     m_frutiger:'🌱 Mundo Frutiger — explore a grama',m_crystal:'🔷 Obby de Cristal — chegue à meta',m_crystaldone:'🔷 Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — reinício!',
     m_dream:'🌫️ Dream Core — um subúrbio sem fim',m_back:'🟡 Backrooms — ache a saída',m_backdone:'🟡 Você saiu das Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — chegue à meta',m_pooldone:'💧 Você completou as Poolrooms!',m_level1done:'NÍVEL 1 COMPLETO! 🎉',
-    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Pule as plataformas até a meta',void:'O Vazio',q_void:'Sobreviva às fases do obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entre na árvore certa e suba o obby',fase:'Fase',void_die:'Você caiu · cruze o espaço de novo',void_best:'melhor',void_reset:'Vazio regenerado do zero!',void_lvl:'O Vazio ∞',skin_unlock:'Skin desbloqueada!',messi_got:'VOCÊ CONSEGUIU MESSI!',messi_fail:'Você não conseguiu o Messi',skins:'Mochila de skins',skin_on:'usando',nombre:'SEU NOME',send:'ENVIAR',names:'Nomes',pausa:'Pausa',resumen:'▶ Retomar',ajustes:'⚙ Ajustes',salir:'✖ Sair',clasif:'CLASSIFICAÇÃO · MELHORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Classificação',cerrar:'Fechar',vista:'VISTA',cam_fp:'1ª pessoa',cam_tp:'3ª pessoa',empezar:'COMEÇAR EM',start_lvl1:'🏙️ Nível 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLES · TAMANHO',control_op:'CONTROLES · OPACIDADE',ctl_sm:'Pequeno',ctl_md:'Normal',ctl_lg:'Grande',op_low:'Baixa',op_mid:'Média',op_full:'Cheia',hud_lbl:'HUD · MÃOS',hand_r:'Destro',hand_l:'Canhoto',hud_on:'HUD visível',hud_off:'HUD oculto'}
+    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Pule as plataformas até a meta',void:'O Vazio',q_void:'Sobreviva às fases do obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entre na árvore certa e suba o obby',fase:'Fase',void_die:'Você caiu · cruze o espaço de novo',void_best:'melhor',void_reset:'Vazio regenerado do zero!',void_lvl:'O Vazio ∞',skin_unlock:'Skin desbloqueada!',messi_got:'VOCÊ CONSEGUIU MESSI!',messi_fail:'Você não conseguiu o Messi',skins:'Mochila de skins',skin_on:'usando',nombre:'SEU NOME',send:'ENVIAR',names:'Nomes',pausa:'Pausa',resumen:'▶ Retomar',ajustes:'⚙ Ajustes',salir:'✖ Sair',clasif:'CLASSIFICAÇÃO · MELHORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Classificação',cerrar:'Fechar',vista:'VISTA',cam_fp:'1ª pessoa',cam_tp:'3ª pessoa',empezar:'COMEÇAR EM',start_lvl1:'🏙️ Nível 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLES · TAMANHO',control_op:'CONTROLES · OPACIDADE',ctl_sm:'Pequeno',ctl_md:'Normal',ctl_lg:'Grande',op_low:'Baixa',op_mid:'Média',op_full:'Cheia',hud_lbl:'HUD · MÃOS',hand_r:'Destro',hand_l:'Canhoto',hud_on:'HUD visível',hud_off:'HUD oculto',mover_hud:'✥ Mover controles',mover_hint:'✥ Arraste os controles pra onde quiser',listo:'✓ Pronto'}
 };
 let lang = (()=>{ try{ return localStorage.getItem('pf_lang')||'es'; }catch(e){ return 'es'; } })();
 function t(k){ return (LANG[lang]&&LANG[lang][k]) || LANG.es[k] || k; }
@@ -1369,7 +1352,7 @@ addEventListener('resize',layout);
 /* ===================== Controles ===================== */
 const joyEl=document.getElementById('joy'),knob=document.getElementById('joyKnob'); let joyId=null; const joy={x:0,y:0};
 function joyUpd(e){const r=joyEl.clientWidth/2;let dx=e.offsetX-r,dy=e.offsetY-r;const len=Math.hypot(dx,dy);if(len>r){dx*=r/len;dy*=r/len;}knob.style.transform=`translate(${dx}px,${dy}px)`;joy.x=dx/r;joy.y=dy/r;}
-joyEl.addEventListener('pointerdown',e=>{joyId=e.pointerId;joyEl.setPointerCapture(e.pointerId);joyUpd(e);e.preventDefault();});
+joyEl.addEventListener('pointerdown',e=>{if(editHUD)return;joyId=e.pointerId;joyEl.setPointerCapture(e.pointerId);joyUpd(e);e.preventDefault();});
 joyEl.addEventListener('pointermove',e=>{if(e.pointerId===joyId)joyUpd(e);});
 function joyEnd(e){if(e.pointerId===joyId){joyId=null;joy.x=0;joy.y=0;knob.style.transform='translate(0,0)';}}
 joyEl.addEventListener('pointerup',joyEnd);joyEl.addEventListener('pointercancel',joyEnd);
@@ -1379,7 +1362,7 @@ function isUI(t){return t.closest('.actBtn')||t.closest('button')||t===joyEl||t=
 // la cámara SOLO se controla desde la MITAD DERECHA de la pantalla (visual). En modo rotado, el "derecha visual" = parte baja en clientY.
 let lefty=false;   // modo zurdo: joystick a la derecha → la cámara se mira con la mitad IZQUIERDA
 function isRightSide(e){ const look = rot ? (e.clientY > innerHeight*0.5) : (e.clientX > innerWidth*0.5); return lefty ? !look : look; }
-addEventListener('pointerdown',e=>{if(isUI(e.target))return;if(!isRightSide(e))return;if(lookId===null&&e.pointerId!==joyId){lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;lookT=performance.now();}});
+addEventListener('pointerdown',e=>{if(editHUD)return;if(isUI(e.target))return;if(!isRightSide(e))return;if(lookId===null&&e.pointerId!==joyId){lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;lookT=performance.now();}});
 addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;
   let rdx=e.clientX-lastX, rdy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
   // FIX Rezona: si el dedo "salta" violentamente de golpe (cambio de pointer / glitch táctil) → ignorar ese frame en vez de mandar la cámara a volar
@@ -1389,7 +1372,7 @@ addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;
 function lookEnd(e){if(e.pointerId===lookId)lookId=null;}
 addEventListener('pointerup',lookEnd);addEventListener('pointercancel',lookEnd);
 
-function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();}); }
+function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListener('pointerdown',e=>{ if(editHUD)return; e.preventDefault();e.stopPropagation();fn();}); }
 tapBtn('bJump',()=>{ jumpReq=true; });
 tapBtn('bSlide',()=>{ startSlide(); });
 tapBtn('bRoll',()=>{ rollReq=true; });
@@ -1740,8 +1723,6 @@ let menuMode=true, menuQ='med', menuT=0;
 const mNameEl=document.getElementById('mName');   // el campo de nombre se cablea más abajo (después de definir MP)
 document.querySelectorAll('#mQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); document.querySelectorAll('#mQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; }));
 document.querySelectorAll('#mLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); applyLang(b.dataset.lang); }));   // selector de idioma
-function setCamView(v){ camView=v; document.querySelectorAll('#mView .mOpt,#sView .mOpt').forEach(x=>x.classList.toggle('sel',x.dataset.view===v)); }   // 1ª / 3ª persona (sincroniza menú y ajustes)
-document.querySelectorAll('#mView .mOpt,#sView .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); setCamView(b.dataset.view); }));   // selector de vista
 let startWorld='city';   // dónde arranca el juego: 'city' (Nivel 1) o 'grass' (saltar al Frutiger)
 document.querySelectorAll('#mStart .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); document.querySelectorAll('#mStart .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); startWorld=b.dataset.start; }));   // saltar Nivel 1
 // --- menú de pausa + pestañas (Ajustes / Clasificación) ---
@@ -1755,22 +1736,29 @@ document.getElementById('bClose').addEventListener('click',()=>{ sfx('menu'); cl
 document.getElementById('mBoardBtn').addEventListener('click',()=>{ sfx('menu'); openBoard(); });
 document.querySelectorAll('#sQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); document.querySelectorAll('#sQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; applyQuality(b.dataset.q); }));   // gráficos en vivo
 document.querySelectorAll('#sLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); applyLang(b.dataset.lang); }));
-// --- CONTROLES + HUD personalizables (se guardan) ---
-function selRow(sel,attr,val){ document.querySelectorAll(sel+' .mOpt').forEach(x=>x.classList.toggle('sel', x.dataset[attr]===String(val))); }
-function setCtlSize(v){ document.documentElement.style.setProperty('--cs',v); selRow('#sCtlSize','cs',v); try{ localStorage.setItem('pf_cs',v); }catch(e){} }
-function setCtlOp(v){ document.documentElement.style.setProperty('--cop',v); selRow('#sCtlOp','op',v); try{ localStorage.setItem('pf_cop',v); }catch(e){} }
-function setHand(h){ lefty=(h==='l'); document.body.classList.toggle('lefty',lefty); selRow('#sHand','hand',h); try{ localStorage.setItem('pf_hand',h); }catch(e){} }
-function setHud(s){ document.body.classList.toggle('hud-off',s==='off'); selRow('#sHud','hud',s); try{ localStorage.setItem('pf_hud',s); }catch(e){} }
-document.querySelectorAll('#sCtlSize .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); setCtlSize(b.dataset.cs); }));
-document.querySelectorAll('#sCtlOp .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); setCtlOp(b.dataset.op); }));
-document.querySelectorAll('#sHand .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); setHand(b.dataset.hand); }));
-document.querySelectorAll('#sHud .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); setHud(b.dataset.hud); }));
-(function loadCtlPrefs(){ try{
-  const cs=localStorage.getItem('pf_cs'); if(cs) setCtlSize(cs);
-  const op=localStorage.getItem('pf_cop'); if(op) setCtlOp(op);
-  const hand=localStorage.getItem('pf_hand'); if(hand) setHand(hand);
-  const hud=localStorage.getItem('pf_hud'); if(hud) setHud(hud);
-}catch(e){} })();
+// --- MOVER CONTROLES (un solo botón): arrastrá la HUD a donde quieras (se guarda) ---
+let editHUD=false;
+const MOVABLE=['joy','bJump','bSlide','bRoll','bChat','bVoice','bPack','bNames','btnMenu'];
+let hudPos={}; try{ hudPos=JSON.parse(localStorage.getItem('pf_hudpos')||'{}')||{}; }catch(e){ hudPos={}; }
+function applyHudPos(){ for(const id in hudPos){ const el=document.getElementById(id); if(el){ el.style.left=hudPos[id].l+'px'; el.style.top=hudPos[id].t+'px'; el.style.right='auto'; el.style.bottom='auto'; } } }
+function saveHudPos(){ try{ localStorage.setItem('pf_hudpos',JSON.stringify(hudPos)); }catch(e){} }
+let _dragEl=null,_dragSX=0,_dragSY=0,_dragOL=0,_dragOT=0;
+MOVABLE.forEach(id=>{ const el=document.getElementById(id); if(!el)return;
+  el.addEventListener('pointerdown',e=>{ if(!editHUD)return; e.preventDefault(); e.stopPropagation();
+    _dragEl=el; try{el.setPointerCapture(e.pointerId);}catch(_){}
+    _dragSX=e.clientX; _dragSY=e.clientY; _dragOL=el.offsetLeft; _dragOT=el.offsetTop; }, true);
+  el.addEventListener('pointermove',e=>{ if(!editHUD||_dragEl!==el)return; e.preventDefault();
+    let dx=e.clientX-_dragSX, dy=e.clientY-_dragSY; if(rot){ const t=dx; dx=dy; dy=-t; }   // la pantalla está rotada 90° → transformar el delta
+    const nl=Math.round(_dragOL+dx), nt=Math.round(_dragOT+dy);
+    el.style.left=nl+'px'; el.style.top=nt+'px'; el.style.right='auto'; el.style.bottom='auto';
+    hudPos[id]={l:nl,t:nt}; }, true);
+  el.addEventListener('pointerup',e=>{ if(_dragEl===el){ _dragEl=null; saveHudPos(); } }, true);
+});
+function enterEditHUD(){ editHUD=true; closePause(); closeSettings(); closeBoard(); document.body.classList.add('editing-hud'); document.body.classList.remove('menu-open'); }
+function exitEditHUD(){ editHUD=false; document.body.classList.remove('editing-hud'); saveHudPos(); }
+document.getElementById('sEditHud').addEventListener('click',()=>{ sfx('menu'); enterEditHUD(); });
+document.getElementById('hudEditDone').addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); sfx('menu'); exitEditHUD(); });
+applyHudPos();
 document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)return; menuMode=false; audioStart(); sfx('play');
   if(mNameEl){ const v=mNameEl.value.trim().slice(0,14); if(v){ MP.name=v; try{ localStorage.setItem('pf_name',v); }catch(e){} } }
   menuEl.classList.add('hide'); document.body.classList.remove('menu-open');
