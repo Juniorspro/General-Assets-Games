@@ -1376,14 +1376,20 @@ addEventListener('resize',layout);
 
 /* ===================== Controles ===================== */
 const joyEl=document.getElementById('joy'),knob=document.getElementById('joyKnob'); let joyId=null; const joy={x:0,y:0};
-function joyUpd(e){const r=joyEl.clientWidth/2;let dx=e.offsetX-r,dy=e.offsetY-r;const len=Math.hypot(dx,dy);if(len>r){dx*=r/len;dy*=r/len;}knob.style.transform=`translate(${dx}px,${dy}px)`;joy.x=dx/r;joy.y=dy/r;}
-joyEl.addEventListener('pointerdown',e=>{if(editHUD)return;joyId=e.pointerId;joyEl.setPointerCapture(e.pointerId);joyUpd(e);e.preventDefault();});
-joyEl.addEventListener('pointermove',e=>{if(e.pointerId===joyId)joyUpd(e);});
+let joyCX=0,joyCY=0,joyR=64;   // centro (viewport) y radio (local) capturados al tocar → cálculo estable, sin offsetX (que se vuelve loco con 2 dedos)
+function joyMove(e){ let sx=e.clientX-joyCX, sy=e.clientY-joyCY; let dx,dy; if(rot){ dx=sy; dy=-sx; } else { dx=sx; dy=sy; }   // la pantalla está rotada 90° en vertical → pasar el delta de viewport al marco local del joystick
+  const len=Math.hypot(dx,dy); if(len>joyR){ dx*=joyR/len; dy*=joyR/len; }
+  knob.style.transform=`translate(${dx}px,${dy}px)`; joy.x=dx/joyR; joy.y=dy/joyR; }
+joyEl.addEventListener('pointerdown',e=>{ if(editHUD)return; if(joyId!==null)return;   // SOLO un dedo controla el joystick; un 2º dedo no lo secuestra
+  joyId=e.pointerId; try{ joyEl.setPointerCapture(e.pointerId); }catch(_){}
+  const rc=joyEl.getBoundingClientRect(); joyCX=rc.left+rc.width/2; joyCY=rc.top+rc.height/2; joyR=(joyEl.clientWidth/2)||(rc.width/2);
+  joyMove(e); e.preventDefault(); });
+joyEl.addEventListener('pointermove',e=>{ if(e.pointerId!==joyId)return; joyMove(e); });   // sólo el dedo que tocó el joystick lo mueve
 function joyEnd(e){if(e.pointerId===joyId){joyId=null;joy.x=0;joy.y=0;knob.style.transform='translate(0,0)';}}
 joyEl.addEventListener('pointerup',joyEnd);joyEl.addEventListener('pointercancel',joyEnd);
 
 let lookId=null,lastX=0,lastY=0,lookT=0;const LOOK=0.0042;
-function isUI(t){return t.closest('.actBtn')||t.closest('button')||t===joyEl||t===knob;}
+function isUI(t){return !!(t&&t.closest&&(t.closest('.actBtn')||t.closest('button')))||t===joyEl||t===knob;}
 // la cámara SOLO se controla desde la MITAD DERECHA de la pantalla (visual). En modo rotado, el "derecha visual" = parte baja en clientY.
 let lefty=false;   // modo zurdo: joystick a la derecha → la cámara se mira con la mitad IZQUIERDA
 function isRightSide(e){ const look = rot ? (e.clientY > innerHeight*0.5) : (e.clientX > innerWidth*0.5); return lefty ? !look : look; }
