@@ -1381,33 +1381,36 @@ function layout(){ rot=forceLandscape&&(innerHeight>innerWidth); document.body.c
 addEventListener('resize',layout);
 
 /* ===================== Controles ===================== */
-const joyEl=document.getElementById('joy'),knob=document.getElementById('joyKnob'); let joyId=null; const joy={x:0,y:0};
-let joyCX=0,joyCY=0,joyR=64;   // centro (viewport) y radio (local) capturados al tocar → cálculo estable, sin offsetX (que se vuelve loco con 2 dedos)
-function joyMove(e){ let sx=e.clientX-joyCX, sy=e.clientY-joyCY; let dx,dy; if(rot){ dx=sy; dy=-sx; } else { dx=sx; dy=sy; }   // la pantalla está rotada 90° en vertical → pasar el delta de viewport al marco local del joystick
-  const len=Math.hypot(dx,dy); if(len>joyR){ dx*=joyR/len; dy*=joyR/len; }
-  knob.style.transform=`translate(${dx}px,${dy}px)`; joy.x=dx/joyR; joy.y=dy/joyR; }
-joyEl.addEventListener('pointerdown',e=>{ if(editHUD)return; if(joyId!==null)return;   // SOLO un dedo controla el joystick; un 2º dedo no lo secuestra
-  joyId=e.pointerId; try{ joyEl.setPointerCapture(e.pointerId); }catch(_){}
-  const rc=joyEl.getBoundingClientRect(); joyCX=rc.left+rc.width/2; joyCY=rc.top+rc.height/2; joyR=(joyEl.clientWidth/2)||(rc.width/2);
-  joyMove(e); e.preventDefault(); });
-joyEl.addEventListener('pointermove',e=>{ if(e.pointerId!==joyId)return; joyMove(e); });   // sólo el dedo que tocó el joystick lo mueve
-function joyEnd(e){if(e.pointerId===joyId){joyId=null;joy.x=0;joy.y=0;knob.style.transform='translate(0,0)';}}
-joyEl.addEventListener('pointerup',joyEnd);joyEl.addEventListener('pointercancel',joyEnd);
-
-let lookId=null,lastX=0,lastY=0,lookT=0;const LOOK=0.0042;
-function isUI(t){return !!(t&&t.closest&&(t.closest('.actBtn')||t.closest('button')))||t===joyEl||t===knob;}
-// la cámara SOLO se controla desde la MITAD DERECHA de la pantalla (visual). En modo rotado, el "derecha visual" = parte baja en clientY.
-let lefty=false;   // modo zurdo: joystick a la derecha → la cámara se mira con la mitad IZQUIERDA
+// MODELO DE 2 DEDOS (solo jugando): un dedo por lado. IZQUIERDA = joystick pero SÓLO al deslizar; DERECHA = cámara sólo al deslizar; los BOTONES se tocan (tap) en cualquier lado. En menús no aplica.
+const joyEl=document.getElementById('joy'),knob=document.getElementById('joyKnob'); const joy={x:0,y:0};
+let joyR=64, lastX=0,lastY=0; const LOOK=0.0042, SLIDE_TH=9;   // SLIDE_TH = píxeles para considerar que "deslizaste" (si no, es un tap y no pasa nada)
+let lefty=false;   // modo zurdo: joystick a la derecha → cámara con la mitad izquierda
 function isRightSide(e){ const look = rot ? (e.clientY > innerHeight*0.5) : (e.clientX > innerWidth*0.5); return lefty ? !look : look; }
-addEventListener('pointerdown',e=>{if(editHUD)return;if(isUI(e.target))return;if(!isRightSide(e))return;if(lookId===null&&e.pointerId!==joyId){lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;lookT=performance.now();}});
-addEventListener('pointermove',e=>{if(e.pointerId!==lookId)return;
-  let rdx=e.clientX-lastX, rdy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
-  // FIX Rezona: si el dedo "salta" violentamente de golpe (cambio de pointer / glitch táctil) → ignorar ese frame en vez de mandar la cámara a volar
-  if(Math.hypot(rdx,rdy) > Math.max(innerWidth,innerHeight)*0.30){ return; }   // salto absoluto imposible para un movimiento real → bloqueado
-  let ddx=rdx, ddy=rdy; if(rot){const t=ddx;ddx=ddy;ddy=-t;}
-  player.yaw-=ddx*LOOK; player.pitch=Math.max(-0.9,Math.min(1.3,player.pitch-ddy*LOOK));});  // tope abajo: ves el cuerpo, no la vertical fea
-function lookEnd(e){if(e.pointerId===lookId)lookId=null;}
-addEventListener('pointerup',lookEnd);addEventListener('pointercancel',lookEnd);
+function isBtn(t){ return !!(t&&t.closest&&(t.closest('.actBtn')||t.closest('button'))); }   // un botón real (saltar/deslizar/rodar/chat/micro/menú…) → se maneja solo
+function gameplayActive(){ if(menuMode||editHUD)return false;
+  const pz=document.getElementById('pause'); if(pz&&pz.classList.contains('show'))return false;
+  const kb=document.getElementById('kbd'); if(kb&&kb.classList.contains('show'))return false;
+  if(document.querySelector('.ovl.show'))return false; return true; }
+let touchL=null, touchR=null;   // máximo un dedo por lado = 2 dedos en total mientras jugás
+function joyReset(){ joy.x=0; joy.y=0; knob.style.transform='translate(0,0)'; }
+addEventListener('pointerdown',e=>{ if(!gameplayActive())return; if(isBtn(e.target))return;   // botón → su propio handler (tap, cualquier lado)
+  if(isRightSide(e)){ if(touchR)return; touchR={id:e.pointerId,sx:e.clientX,sy:e.clientY,on:false}; }   // 2º dedo en el mismo lado se ignora
+  else { if(touchL)return; touchL={id:e.pointerId,sx:e.clientX,sy:e.clientY,on:false}; joyR=(joyEl.clientWidth/2)||64; }
+  e.preventDefault(); }, true);
+addEventListener('pointermove',e=>{
+  if(touchL && e.pointerId===touchL.id){ const sx=e.clientX-touchL.sx, sy=e.clientY-touchL.sy;
+    if(!touchL.on){ if(Math.hypot(sx,sy)<SLIDE_TH) return; touchL.on=true; }   // el joystick recién arranca al DESLIZAR (un simple toque no mueve)
+    let dx,dy; if(rot){ dx=sy; dy=-sx; } else { dx=sx; dy=sy; }   // pantalla rotada 90° → pasar el delta al marco del joystick
+    const len=Math.hypot(dx,dy); if(len>joyR){ dx*=joyR/len; dy*=joyR/len; }
+    knob.style.transform=`translate(${dx}px,${dy}px)`; joy.x=dx/joyR; joy.y=dy/joyR; }
+  if(touchR && e.pointerId===touchR.id){ const sx=e.clientX-touchR.sx, sy=e.clientY-touchR.sy;
+    if(!touchR.on){ if(Math.hypot(sx,sy)<SLIDE_TH) return; touchR.on=true; lastX=e.clientX; lastY=e.clientY; }   // la cámara recién se mueve al DESLIZAR
+    let ddx=e.clientX-lastX, ddy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
+    if(Math.hypot(ddx,ddy) > Math.max(innerWidth,innerHeight)*0.30) return;   // anti-teletransporte (glitch Rezona)
+    if(rot){ const t=ddx; ddx=ddy; ddy=-t; }
+    player.yaw-=ddx*LOOK; player.pitch=Math.max(-0.9,Math.min(1.3,player.pitch-ddy*LOOK)); } });
+function endTouch(e){ if(touchL&&e.pointerId===touchL.id){ touchL=null; joyReset(); } if(touchR&&e.pointerId===touchR.id){ touchR=null; } }
+addEventListener('pointerup',endTouch); addEventListener('pointercancel',endTouch);
 
 function tapBtn(id,fn){ const el=document.getElementById(id); el.addEventListener('pointerdown',e=>{ if(editHUD)return; e.preventDefault();e.stopPropagation();fn();}); }
 tapBtn('bJump',()=>{ jumpReq=true; });
