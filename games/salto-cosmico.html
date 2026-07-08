@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Salto Cósmico</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #050514;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    touch-action: none;
+  }
+  canvas {
+    border-radius: 12px;
+    box-shadow: 0 0 45px rgba(120, 150, 255, 0.25);
+    max-width: 100vw; max-height: 100vh;
+  }
+  #back {
+    position: fixed; top: 12px; left: 12px;
+    color: #9af; text-decoration: none; font-size: 14px; opacity: .7; z-index: 10;
+  }
+  #back:hover { opacity: 1; }
+</style>
+</head>
+<body>
+<a id="back" href="index.html">← Menú</a>
+<canvas id="c" width="420" height="640"></canvas>
+<script>
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+
+const GRAVITY = 0.32, JUMP = -11, SUPER_JUMP = -19, MOVE = 0.55, MAXVX = 6.5;
+
+let player, plats, particles, stars, score, best, state, t, camY, keys, tiltX;
+best = +localStorage.getItem('saltoCosmicoBest') || 0;
+keys = {};
+
+function reset() {
+  player = { x: W / 2, y: H - 100, vx: 0, vy: 0, r: 15, face: 1 };
+  plats = [{ x: W / 2 - 45, y: H - 50, w: 90, type: 'normal' }];
+  particles = [];
+  score = 0;
+  camY = 0;
+  t = 0;
+  state = 'ready';
+  let y = H - 120;
+  while (y > -200) { spawnPlat(y); y -= 55 + Math.random() * 35; }
+}
+
+stars = Array.from({ length: 80 }, () => ({
+  x: Math.random() * W, y: Math.random() * H * 3,
+  s: Math.random() * 1.8 + .4, depth: Math.random() * .6 + .2
+}));
+
+function spawnPlat(y) {
+  const h = -camY + score * 2;
+  const r = Math.random();
+  let type = 'normal';
+  if (r < 0.12 + Math.min(.15, score / 4000)) type = 'movil';
+  else if (r < 0.22) type = 'muelle';
+  else if (r < 0.30 && score > 300) type = 'fragil';
+  plats.push({
+    x: Math.random() * (W - 90), y,
+    w: Math.max(58, 90 - score / 80),
+    type,
+    dir: Math.random() < .5 ? 1 : -1,
+    broken: false
+  });
+}
+
+function burst(x, y, hue, n = 12) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = Math.random() * 3.5 + 1;
+    particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, hue });
+  }
+}
+
+addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.code === 'Space' && state !== 'play') { e.preventDefault(); state === 'dead' ? reset() : state = 'play'; }
+  if (e.key.startsWith('Arrow')) e.preventDefault();
+});
+addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+// táctil: mitad izquierda / derecha
+tiltX = 0;
+cv.addEventListener('pointerdown', e => {
+  if (state !== 'play') { state === 'dead' ? reset() : state = 'play'; return; }
+  const rect = cv.getBoundingClientRect();
+  tiltX = (e.clientX - rect.left) < rect.width / 2 ? -1 : 1;
+});
+cv.addEventListener('pointermove', e => {
+  if (e.buttons) {
+    const rect = cv.getBoundingClientRect();
+    tiltX = (e.clientX - rect.left) < rect.width / 2 ? -1 : 1;
+  }
+});
+addEventListener('pointerup', () => { tiltX = 0; });
+
+function update() {
+  t++;
+  if (state !== 'play') return;
+
+  const left = keys['arrowleft'] || keys['a'] || tiltX < 0;
+  const right = keys['arrowright'] || keys['d'] || tiltX > 0;
+  if (left) { player.vx -= MOVE; player.face = -1; }
+  if (right) { player.vx += MOVE; player.face = 1; }
+  if (!left && !right) player.vx *= 0.92;
+  player.vx = Math.max(-MAXVX, Math.min(MAXVX, player.vx));
+
+  player.vy += GRAVITY;
+  player.x += player.vx;
+  player.y += player.vy;
+
+  // envolver por los lados
+  if (player.x < -player.r) player.x = W + player.r;
+  if (player.x > W + player.r) player.x = -player.r;
+
+  // plataformas
+  for (const p of plats) {
+    if (p.type === 'movil') {
+      p.x += p.dir * 1.8;
+      if (p.x < 0 || p.x + p.w > W) p.dir *= -1;
+    }
+    if (player.vy > 0 && !p.broken &&
+        player.x > p.x - 8 && player.x < p.x + p.w + 8 &&
+        player.y + player.r > p.y && player.y + player.r < p.y + 16 + player.vy) {
+      if (p.type === 'muelle') {
+        player.vy = SUPER_JUMP;
+        burst(player.x, player.y + player.r, 55, 20);
+      } else {
+        player.vy = JUMP;
+        burst(player.x, player.y + player.r, 200, 8);
+      }
+      if (p.type === 'fragil') p.broken = true;
+    }
+  }
+
+  // cámara sube con el jugador
+  const target = player.y - H * 0.4;
+  if (target < camY) {
+    camY = target;
+    score = Math.max(score, Math.floor(-camY / 10));
+  }
+
+  // generar plataformas nuevas arriba
+  const highest = Math.min(...plats.map(p => p.y));
+  if (highest > camY - 100) spawnPlat(highest - (50 + Math.random() * 40));
+  plats = plats.filter(p => p.y < camY + H + 60);
+
+  // muerte al caer
+  if (player.y > camY + H + 60) {
+    state = 'dead';
+    if (score > best) { best = score; localStorage.setItem('saltoCosmicoBest', best); }
+  }
+
+  particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life -= 0.03; });
+  particles = particles.filter(p => p.life > 0);
+}
+
+function draw() {
+  const alt = Math.min(1, score / 2000);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, `hsl(${240 + alt * 60}, 60%, ${4 + alt * 3}%)`);
+  g.addColorStop(1, `hsl(${230 + alt * 40}, 50%, ${10 - alt * 4}%)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // estrellas con parallax
+  for (const s of stars) {
+    const sy = ((s.y - camY * s.depth) % (H * 3) + H * 3) % (H * 3) - H;
+    if (sy > -5 && sy < H + 5) {
+      ctx.globalAlpha = 0.25 + s.depth * .6;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(s.x, sy, s.s, s.s);
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // plataformas
+  for (const p of plats) {
+    const y = p.y - camY;
+    if (y < -20 || y > H + 20) continue;
+    let color, glow;
+    if (p.type === 'muelle') { color = '#8f5'; glow = '#6f3'; }
+    else if (p.type === 'movil') { color = '#5cf'; glow = '#3af'; }
+    else if (p.type === 'fragil') { color = p.broken ? 'rgba(200,120,80,.25)' : '#c86'; glow = '#a64'; }
+    else { color = '#a7f'; glow = '#96f'; }
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = p.broken ? 0 : 10;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(p.x, y, p.w, 12, 6);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    if (p.type === 'muelle' && !p.broken) {
+      ctx.fillStyle = '#dfd';
+      ctx.fillRect(p.x + p.w / 2 - 8, y - 6, 16, 6);
+    }
+    if (p.type === 'fragil' && !p.broken) {
+      ctx.strokeStyle = 'rgba(0,0,0,.4)';
+      ctx.beginPath();
+      ctx.moveTo(p.x + p.w * .3, y + 2); ctx.lineTo(p.x + p.w * .5, y + 10); ctx.lineTo(p.x + p.w * .7, y + 3);
+      ctx.stroke();
+    }
+  }
+
+  // partículas
+  for (const p of particles) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = `hsl(${p.hue},100%,65%)`;
+    ctx.fillRect(p.x - 2, p.y - camY - 2, 4, 4);
+  }
+  ctx.globalAlpha = 1;
+
+  // jugador (alienígena)
+  const py = player.y - camY;
+  ctx.save();
+  ctx.translate(player.x, py);
+  ctx.shadowColor = '#7f7'; ctx.shadowBlur = 16;
+  ctx.fillStyle = '#7e6';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, player.r, player.r * 1.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  // antenas
+  ctx.strokeStyle = '#7e6'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-6, -12); ctx.lineTo(-9, -22); ctx.moveTo(6, -12); ctx.lineTo(9, -22); ctx.stroke();
+  ctx.fillStyle = '#ff5';
+  ctx.beginPath(); ctx.arc(-9, -23, 3, 0, 7); ctx.arc(9, -23, 3, 0, 7); ctx.fill();
+  // ojos
+  ctx.fillStyle = '#131';
+  ctx.beginPath();
+  ctx.ellipse(player.face * 4 - 4, -3, 4, 6, 0, 0, 7);
+  ctx.ellipse(player.face * 4 + 5, -3, 4, 6, 0, 0, 7);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(player.face * 4 - 3, -5, 1.5, 0, 7);
+  ctx.arc(player.face * 4 + 6, -5, 1.5, 0, 7);
+  ctx.fill();
+  ctx.restore();
+
+  // HUD
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  ctx.shadowColor = '#77f'; ctx.shadowBlur = 12;
+  ctx.font = 'bold 40px Segoe UI, sans-serif';
+  ctx.fillText(score, W / 2, 60);
+  ctx.shadowBlur = 0;
+  ctx.font = '14px Segoe UI, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,.6)';
+  ctx.fillText(`Récord: ${best}`, W / 2, 84);
+
+  if (state === 'ready') {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 30px Segoe UI, sans-serif';
+    ctx.fillText('SALTO CÓSMICO', W / 2, H / 2 - 70);
+    ctx.font = '16px Segoe UI, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.fillText('Flechas / A-D para moverte', W / 2, H / 2 - 30);
+    ctx.fillText('En móvil: mantén pulsado izquierda/derecha', W / 2, H / 2 - 6);
+    ctx.fillText('Verde = super salto · Café = se rompe', W / 2, H / 2 + 18);
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + Math.sin(t * .08) * .4})`;
+    ctx.fillText('Toca o ESPACIO para despegar 🚀', W / 2, H / 2 + 55);
+  }
+
+  if (state === 'dead') {
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#f77';
+    ctx.shadowColor = '#f33'; ctx.shadowBlur = 14;
+    ctx.font = 'bold 32px Segoe UI, sans-serif';
+    ctx.fillText('¡CAÍSTE AL VACÍO!', W / 2, H / 2 - 40);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px Segoe UI, sans-serif';
+    ctx.fillText(`Altura: ${score}   Récord: ${best}`, W / 2, H / 2 + 5);
+    ctx.font = '15px Segoe UI, sans-serif';
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + Math.sin(t * .1) * .4})`;
+    ctx.fillText('Toca o ESPACIO para reintentar', W / 2, H / 2 + 45);
+  }
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+reset();
+loop();
+</script>
+</body>
+</html>

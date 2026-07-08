@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Torre Infinita</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #16101f;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  canvas {
+    border-radius: 12px;
+    box-shadow: 0 0 50px rgba(200, 100, 255, 0.25);
+    max-width: 100vw; max-height: 100vh;
+  }
+  #back {
+    position: fixed; top: 12px; left: 12px;
+    color: #d9f; text-decoration: none; font-size: 14px; opacity: .7; z-index: 10;
+  }
+  #back:hover { opacity: 1; }
+</style>
+</head>
+<body>
+<a id="back" href="index.html">← Menú</a>
+<canvas id="c" width="420" height="640"></canvas>
+<script>
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+
+const BLOCK_H = 34, BASE_W = 240;
+
+let stack, current, debris, score, best, combo, state, t, camY, hueBase, flashMsg;
+best = +localStorage.getItem('torreInfinitaBest') || 0;
+
+function reset() {
+  hueBase = Math.random() * 360;
+  stack = [{ x: (W - BASE_W) / 2, w: BASE_W, y: H - 80 }];
+  score = 0;
+  combo = 0;
+  debris = [];
+  camY = 0;
+  t = 0;
+  flashMsg = null;
+  state = 'ready';
+  newBlock();
+}
+
+function newBlock() {
+  const top = stack[stack.length - 1];
+  const fromLeft = stack.length % 2 === 0;
+  current = {
+    x: fromLeft ? -top.w : W,
+    w: top.w,
+    y: top.y - BLOCK_H,
+    dir: fromLeft ? 1 : -1,
+    speed: 3 + Math.min(6, score * 0.15)
+  };
+}
+
+function hueFor(i) { return (hueBase + i * 9) % 360; }
+
+function place() {
+  if (state === 'ready') { state = 'play'; return; }
+  if (state === 'dead') { reset(); return; }
+  if (state !== 'play') return;
+
+  const top = stack[stack.length - 1];
+  const overlapL = Math.max(current.x, top.x);
+  const overlapR = Math.min(current.x + current.w, top.x + top.w);
+  const overlap = overlapR - overlapL;
+
+  if (overlap <= 0) {
+    // falló por completo
+    debris.push({ x: current.x, w: current.w, y: current.y, vy: 0, vr: (Math.random() - .5) * .2, rot: 0, hue: hueFor(stack.length) });
+    state = 'dead';
+    if (score > best) { best = score; localStorage.setItem('torreInfinitaBest', best); }
+    return;
+  }
+
+  const cut = current.w - overlap;
+  const perfect = cut < 6;
+
+  if (perfect) {
+    // encaje perfecto: se alinea y crece un poco de vuelta
+    combo++;
+    const bonus = Math.min(12, combo * 3);
+    const grownW = Math.min(BASE_W, overlap + bonus);
+    const cx = top.x + top.w / 2;
+    stack.push({ x: cx - grownW / 2, w: grownW, y: current.y });
+    flashMsg = { text: combo > 1 ? `¡PERFECTO x${combo}!` : '¡PERFECTO!', life: 40 };
+    score += 1 + combo;
+  } else {
+    combo = 0;
+    // el trozo cortado cae
+    const cutX = current.x < top.x ? current.x : overlapR;
+    debris.push({ x: cutX, w: cut, y: current.y, vy: -1, vr: (Math.random() - .5) * .25, rot: 0, hue: hueFor(stack.length) });
+    stack.push({ x: overlapL, w: overlap, y: current.y });
+    score += 1;
+  }
+
+  newBlock();
+}
+
+addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); place(); } });
+cv.addEventListener('pointerdown', place);
+
+function update() {
+  t++;
+  if (state === 'play') {
+    current.x += current.dir * current.speed;
+    if (current.x < -20) current.dir = 1;
+    if (current.x + current.w > W + 20) current.dir = -1;
+  }
+  // cámara sigue la torre
+  const targetCam = Math.max(0, (H - 200) - stack[stack.length - 1].y);
+  camY += (targetCam - camY) * 0.08;
+
+  debris.forEach(d => { d.vy += 0.5; d.y += d.vy; d.rot += d.vr; });
+  debris = debris.filter(d => d.y - camY < H + 100);
+
+  if (flashMsg && --flashMsg.life <= 0) flashMsg = null;
+}
+
+function drawBlock(b, hue, isCurrent) {
+  ctx.save();
+  ctx.shadowColor = `hsl(${hue},90%,60%)`;
+  ctx.shadowBlur = isCurrent ? 20 : 8;
+  ctx.fillStyle = `hsl(${hue},75%,${isCurrent ? 62 : 52}%)`;
+  ctx.fillRect(b.x, b.y + camY, b.w, BLOCK_H - 2);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,.28)';
+  ctx.fillRect(b.x, b.y + camY, b.w, 5);
+  ctx.fillStyle = 'rgba(0,0,0,.22)';
+  ctx.fillRect(b.x, b.y + camY + BLOCK_H - 8, b.w, 6);
+  ctx.restore();
+}
+
+function draw() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  const sky = Math.min(1, score / 60);
+  g.addColorStop(0, `hsl(${260 - sky * 60}, 45%, ${8 + sky * 8}%)`);
+  g.addColorStop(1, `hsl(${290 - sky * 40}, 40%, ${14 + sky * 6}%)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // estrellas de fondo que aparecen al subir
+  ctx.fillStyle = 'rgba(255,255,255,.5)';
+  for (let i = 0; i < 40; i++) {
+    const sx = (i * 137) % W;
+    const sy = ((i * 89) % (H * 3)) - (camY * 0.3 % (H * 3));
+    if (sy > 0 && sy < H) {
+      ctx.globalAlpha = 0.15 + (i % 5) * 0.1;
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  stack.forEach((b, i) => drawBlock(b, hueFor(i), false));
+  if (state === 'play' || state === 'ready') drawBlock(current, hueFor(stack.length), true);
+
+  debris.forEach(d => {
+    ctx.save();
+    ctx.translate(d.x + d.w / 2, d.y + camY + BLOCK_H / 2);
+    ctx.rotate(d.rot);
+    ctx.fillStyle = `hsl(${d.hue},70%,45%)`;
+    ctx.fillRect(-d.w / 2, -BLOCK_H / 2, d.w, BLOCK_H - 2);
+    ctx.restore();
+  });
+
+  // HUD
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  ctx.shadowColor = '#d6f'; ctx.shadowBlur = 12;
+  ctx.font = 'bold 46px Segoe UI, sans-serif';
+  ctx.fillText(score, W / 2, 70);
+  ctx.shadowBlur = 0;
+  ctx.font = '15px Segoe UI, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,.6)';
+  ctx.fillText(`Récord: ${best}`, W / 2, 95);
+
+  if (flashMsg) {
+    ctx.globalAlpha = Math.min(1, flashMsg.life / 15);
+    ctx.fillStyle = '#ffd435';
+    ctx.shadowColor = '#fd0'; ctx.shadowBlur = 16;
+    ctx.font = 'bold 26px Segoe UI, sans-serif';
+    ctx.fillText(flashMsg.text, W / 2, 140);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+
+  if (state === 'ready') {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 30px Segoe UI, sans-serif';
+    ctx.fillText('TORRE INFINITA', W / 2, H / 2 - 60);
+    ctx.font = '17px Segoe UI, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,.8)';
+    ctx.fillText('Toca o ESPACIO para soltar el bloque', W / 2, H / 2 - 20);
+    ctx.fillText('¡Apila lo más alto que puedas!', W / 2, H / 2 + 8);
+  }
+
+  if (state === 'dead') {
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#f7a';
+    ctx.shadowColor = '#f4a'; ctx.shadowBlur = 14;
+    ctx.font = 'bold 34px Segoe UI, sans-serif';
+    ctx.fillText('¡SE CAYÓ!', W / 2, H / 2 - 40);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = '22px Segoe UI, sans-serif';
+    ctx.fillText(`Altura: ${score}   Récord: ${best}`, W / 2, H / 2 + 5);
+    ctx.font = '16px Segoe UI, sans-serif';
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + Math.sin(t * .1) * .4})`;
+    ctx.fillText('Toca para construir otra torre', W / 2, H / 2 + 45);
+  }
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+reset();
+loop();
+</script>
+</body>
+</html>
