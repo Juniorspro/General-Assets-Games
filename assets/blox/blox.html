@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<title>BLOX</title>
+<style>
+  html,body{ margin:0; padding:0; background:#000; overflow:hidden; height:100%; touch-action:none; overscroll-behavior:none; }
+  #wrap{ position:fixed; left:0; top:0; transform-origin:top left; }
+  canvas{ display:block; }
+  .ui{ position:absolute; inset:0; pointer-events:none; font-family:system-ui,sans-serif; user-select:none; -webkit-user-select:none; z-index:5; }
+  canvas{ z-index:0; }
+  #joy{ position:absolute; left:24px; bottom:24px; width:118px; height:118px; border-radius:50%;
+    background:rgba(20,30,50,.35); border:3px solid rgba(255,255,255,.55); box-shadow:0 3px 14px rgba(0,0,0,.35); }
+  #knob{ position:absolute; left:50%; top:50%; width:54px; height:54px; border-radius:50%;
+    background:rgba(255,255,255,.85); box-shadow:0 2px 8px rgba(0,0,0,.4); transform:translate(-50%,-50%); }
+  #bJump{ position:absolute; right:26px; bottom:30px; width:92px; height:92px; border-radius:50%;
+    background:rgba(46,160,255,.55); border:3px solid rgba(255,255,255,.75); color:#fff; box-shadow:0 3px 14px rgba(0,0,0,.4);
+    display:flex; align-items:center; justify-content:center; flex-direction:column; font-weight:800; font-size:12px; pointer-events:auto; text-shadow:0 1px 3px #000; }
+  #bJump span{ font-size:28px; line-height:1; }
+  #hint{ position:absolute; top:10px; left:50%; transform:translateX(-50%); color:rgba(255,255,255,.8);
+    font:600 12px system-ui; text-shadow:0 1px 4px #000; white-space:nowrap; }
+  #bSkin{ position:absolute; left:14px; top:12px; padding:9px 14px; border-radius:20px; background:rgba(20,30,50,.55);
+    border:2px solid rgba(255,255,255,.5); color:#fff; font:800 13px system-ui; pointer-events:auto; }
+  #skinRow{ position:absolute; left:14px; top:56px; display:flex; gap:8px; flex-wrap:wrap; max-width:72%; pointer-events:auto; }
+  #skinRow.hide{ display:none; }
+  .skC{ width:46px; height:46px; border-radius:50%; border:3px solid rgba(255,255,255,.5); position:relative; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.35); }
+  .skC.sel{ border-color:#7dff8a; }
+  .skC i{ position:absolute; left:0; right:0; }
+</style>
+</head>
+<body>
+<div id="wrap">
+<div class="ui">
+  <div id="joy"><div id="knob"></div></div>
+  <div id="bJump"><span>⬆</span>SALTAR</div>
+  <div id="bSkin">👕 SKIN</div>
+  <div id="skinRow" class="hide"></div>
+  <div id="hint">🕹️ movete · saltá · arrastrá para girar la cámara · pellizcá para el zoom</div>
+</div>
+</div>
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/* ---------- pantalla ROTADA 90° en vertical (como los otros juegos) ---------- */
+const wrap=document.getElementById('wrap');
+let rot=false, VW=0, VH=0;
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+wrap.appendChild(renderer.domElement);
+renderer.domElement.style.position='absolute';
+const camera=new THREE.PerspectiveCamera(65,16/9,0.1,600);
+function layout(){ const w=innerWidth,h=innerHeight; rot=h>w;
+  VW=rot?h:w; VH=rot?w:h;
+  wrap.style.width=VW+'px'; wrap.style.height=VH+'px';
+  wrap.style.transform=rot?('rotate(90deg) translateY(-'+w+'px)'):'none';
+  renderer.setSize(VW,VH); camera.aspect=VW/VH; camera.updateProjectionMatrix(); }
+addEventListener('resize',layout); layout();
+
+/* ---------- escena: cielo + CÍRCULO MARRÓN grande ---------- */
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x87c5f2);
+scene.fog=new THREE.Fog(0x87c5f2,90,260);
+scene.add(new THREE.HemisphereLight(0xffffff,0x8a7a5a,1.05));
+const sun=new THREE.DirectionalLight(0xfff2d9,1.5); sun.position.set(30,60,20); scene.add(sun);
+const R_PLAT=30;
+const plat=new THREE.Mesh(new THREE.CylinderGeometry(R_PLAT,R_PLAT,1.2,64),
+  new THREE.MeshStandardMaterial({color:0x8a5a2b,roughness:0.95}));   // círculo MARRÓN
+plat.position.y=-0.6; scene.add(plat);
+const borde=new THREE.Mesh(new THREE.TorusGeometry(R_PLAT,0.28,10,80),
+  new THREE.MeshStandardMaterial({color:0x6e4520,roughness:0.9}));
+borde.rotation.x=Math.PI/2; borde.position.y=0.02; scene.add(borde);
+// sombra blob barata
+const SHT=(()=>{ const cv=document.createElement('canvas'); cv.width=cv.height=64; const cx=cv.getContext('2d');
+  const g=cx.createRadialGradient(32,32,4,32,32,30); g.addColorStop(0,'rgba(0,0,0,.4)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  cx.fillStyle=g; cx.fillRect(0,0,64,64); return new THREE.CanvasTexture(cv); })();
+const blob=new THREE.Mesh(new THREE.PlaneGeometry(2.2,2.2),new THREE.MeshBasicMaterial({map:SHT,transparent:true,depthWrite:false}));
+blob.rotation.x=-Math.PI/2; blob.position.y=0.03; scene.add(blob);
+
+/* ---------- PERSONAJE estilo Roblox con bloques REDONDEADOS + SKINS ---------- */
+const FACE_URL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@8f7c706/assets/blox/cara.png';   // cara clásica generada
+function faceTexture(){   // fallback dibujado; la generada la pisa al cargar
+  const cv=document.createElement('canvas'); cv.width=cv.height=256; const c=cv.getContext('2d');
+  c.fillStyle='#f8d958'; c.fillRect(0,0,256,256);
+  c.fillStyle='#1a1a1a';
+  const eye=(x)=>{ c.beginPath(); c.ellipse(x,105,14,26,0,0,Math.PI*2); c.fill(); };
+  eye(88); eye(168);
+  c.beginPath(); c.lineWidth=14; c.strokeStyle='#1a1a1a'; c.lineCap='round';
+  c.arc(128,128,52,Math.PI*0.18,Math.PI*0.82); c.stroke();
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; return t; }
+/* SKINS clásicas (colores + gorra), inspiradas en los avatares de siempre */
+const SKINS=[
+ {n:'Noob',     piel:0xf8d958, torso:0x0f74c8, pierna:0x71bd45, hat:null},
+ {n:'Clásico',  piel:0xf8d958, torso:0x9aa2ad, pierna:0x3f74b8, brazos:0xe8e8e8, hat:{t:'cap',c:0x6b4a2b,b:0xc0392b}},
+ {n:'Rojo',     piel:0xf8d958, torso:0xd42a2a, pierna:0x1a1a1a, hat:{t:'cap',c:0xd42a2a,b:0xffffff}},
+ {n:'Traje',    piel:0xe8e8e8, torso:0x23262b, pierna:0x23262b, hat:null},
+ {n:'Militar',  piel:0xd9b45a, torso:0x4e7a3a, pierna:0x35502a, hat:{t:'cap',c:0x4e7a3a,b:0x35502a}},
+ {n:'Ninja',    piel:0xf8d958, torso:0x141414, pierna:0x141414, hat:{t:'band',c:0xc0392b}},
+ {n:'Obrero',   piel:0xf8d958, torso:0xf39c12, pierna:0x2e6da4, hat:{t:'cone',c:0xe67e22}},
+ {n:'Capucha',  piel:0xf8d958, torso:0x2264c8, pierna:0x1a3a70, hat:{t:'cap',c:0x2264c8,b:0x143c86}},
+ {n:'Banana',   piel:0xffe135, torso:0xffe135, pierna:0x1a1a1a, hat:null},
+ {n:'Verde',    piel:0xf8d958, torso:0x2f9e44, pierna:0x1f6b2e, hat:{t:'band',c:0x1f6b2e}}];
+let skinSel=0; try{ const v=parseInt(localStorage.getItem('rl_blox_skin')); if(v>=0&&v<SKINS.length)skinSel=v; }catch(e){}
+const MAT={ piel:new THREE.MeshStandardMaterial({color:0xf8d958,roughness:0.75}),
+  brazos:new THREE.MeshStandardMaterial({color:0xf8d958,roughness:0.75}),
+  torso:new THREE.MeshStandardMaterial({color:0x0f74c8,roughness:0.75}),
+  pierna:new THREE.MeshStandardMaterial({color:0x71bd45,roughness:0.75}) };
+const faceM=new THREE.MeshStandardMaterial({map:faceTexture(),roughness:0.75,transparent:true});
+if(FACE_URL.indexOf('http')===0||FACE_URL.indexOf('./')===0){
+  new THREE.TextureLoader().load(FACE_URL,t=>{ t.colorSpace=THREE.SRGBColorSpace; faceM.map=t; faceM.needsUpdate=true; }); }
+const player=new THREE.Group(); scene.add(player);
+const RB=(w,h,d)=>new RoundedBoxGeometry(w,h,d,3,0.07);   // bloques con BORDES REDONDEADOS (chau cubos a full)
+function limb(mat,w,h,d,px,py,pz){   // pivote ARRIBA del miembro (para balancearlo al caminar)
+  const piv=new THREE.Group(); piv.position.set(px,py,pz);
+  const m=new THREE.Mesh(RB(w,h,d),mat); m.position.y=-h/2; piv.add(m);
+  player.add(piv); return piv; }
+const S=0.5;   // 1 stud = 0.5 m
+const torso=new THREE.Mesh(RB(2*S,2*S,1*S),MAT.torso); torso.position.y=3*S; player.add(torso);
+const head=new THREE.Mesh(RB(1.2*S,1.2*S,1.2*S),MAT.piel); head.position.y=4.65*S; player.add(head);
+const cara=new THREE.Mesh(new THREE.PlaneGeometry(1.04*S,1.04*S),faceM);   // la cara va en un plano al frente
+cara.position.set(0,4.65*S,0.607*S); player.add(cara);
+const armL=limb(MAT.brazos,1*S,2*S,1*S,-1.55*S,4*S,0);
+const armR=limb(MAT.brazos,1*S,2*S,1*S, 1.55*S,4*S,0);
+const legL=limb(MAT.pierna,1*S,2*S,1*S,-0.52*S,2*S,0);
+const legR=limb(MAT.pierna,1*S,2*S,1*S, 0.52*S,2*S,0);
+const hatG=new THREE.Group(); hatG.position.y=5.28*S; player.add(hatG);
+function applySkin(i){ skinSel=i; const K=SKINS[i];
+  MAT.piel.color.set(K.piel); MAT.brazos.color.set(K.brazos!=null?K.brazos:K.piel);
+  MAT.torso.color.set(K.torso); MAT.pierna.color.set(K.pierna);
+  while(hatG.children.length)hatG.remove(hatG.children[0]);
+  if(K.hat){ const hc=new THREE.MeshStandardMaterial({color:K.hat.c,roughness:0.8});
+    if(K.hat.t==='cap'){ const crown=new THREE.Mesh(new THREE.SphereGeometry(0.72*S,14,10,0,Math.PI*2,0,Math.PI/2),hc); hatG.add(crown);
+      const brim=new THREE.Mesh(RB(0.9*S,0.09*S,0.62*S),new THREE.MeshStandardMaterial({color:K.hat.b!=null?K.hat.b:K.hat.c,roughness:0.8}));
+      brim.position.set(0,0.03,0.62*S); hatG.add(brim); }
+    else if(K.hat.t==='cone'){ const cone=new THREE.Mesh(new THREE.ConeGeometry(0.55*S,0.9*S,16),hc); cone.position.y=0.45*S; hatG.add(cone); }
+    else if(K.hat.t==='band'){ const band=new THREE.Mesh(RB(1.3*S,0.28*S,1.3*S),hc); band.position.y=-0.3*S; hatG.add(band); } }
+  try{ localStorage.setItem('rl_blox_skin',i); }catch(e){}
+  document.querySelectorAll('#skinRow .skC').forEach((el,j)=>el.classList.toggle('sel',j===i)); }
+(function(){ const row=document.getElementById('skinRow');
+  SKINS.forEach((K,i)=>{ const d=document.createElement('div'); d.className='skC'; d.title=K.n;
+    d.innerHTML='<i style="top:0;height:34%;background:#'+K.piel.toString(16).padStart(6,'0')+'"></i>'+
+      '<i style="top:34%;height:36%;background:#'+K.torso.toString(16).padStart(6,'0')+'"></i>'+
+      '<i style="top:70%;height:30%;background:#'+K.pierna.toString(16).padStart(6,'0')+'"></i>';
+    d.addEventListener('pointerdown',e=>{ e.stopPropagation(); applySkin(i); });
+    row.appendChild(d); });
+  document.getElementById('bSkin').addEventListener('pointerdown',e=>{ e.stopPropagation(); row.classList.toggle('hide'); });
+})();
+applySkin(skinSel);
+
+/* ---------- física del personaje ---------- */
+const P={ pos:new THREE.Vector3(0,0,0), vel:new THREE.Vector3(), yaw:0, grounded:true, walkT:0 };
+const GRAV=32, SPEED=6.4, JUMP=13;
+function onPlat(x,z){ return Math.hypot(x,z)<R_PLAT-0.2; }
+
+/* ---------- controles: joystick + saltar + cámara (arrastre y PELLIZCO con límites) ---------- */
+const IN={x:0,y:0};
+const joyEl=document.getElementById('joy'), knob=document.getElementById('knob');
+let joyT=null;
+function joyMove(e){ const r=joyEl.getBoundingClientRect();
+  let dx,dy; if(rot){ dx=e.clientY-(r.top+r.height/2); dy=-(e.clientX-(r.left+r.width/2)); }
+  else { dx=e.clientX-(r.left+r.width/2); dy=e.clientY-(r.top+r.height/2); }
+  const L=Math.hypot(dx,dy)||1, k=Math.min(1,L/44);
+  IN.x=dx/L*k; IN.y=dy/L*k;
+  knob.style.transform='translate(calc(-50% + '+(IN.x*30)+'px), calc(-50% + '+(IN.y*30)+'px))'; }
+function joyEnd(){ joyT=null; IN.x=0; IN.y=0; knob.style.transform='translate(-50%,-50%)'; }
+let camYaw=0, camPitch=0.32, camDist=7, camT=null, camLX=0, camLY=0;
+const ZMIN=3, ZMAX=13;   // acercar hasta cierto punto y alejar hasta cierto punto
+const PTRS=new Map(); let pinchD=0;
+function gx(e){ return rot?e.clientY:e.clientX; }   // coord X del JUEGO (pantalla rotada)
+function gy(e){ return rot?innerWidth-e.clientX:e.clientY; }
+addEventListener('pointerdown',e=>{
+  PTRS.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(PTRS.size===2){ const p=[...PTRS.values()]; pinchD=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y); camT=null; return; }
+  const lado=gx(e)<VW*0.45;
+  if(lado&&!e.target.closest('#bJump,#bSkin,#skinRow')){ joyT=e.pointerId; joyMove(e); return; }
+  if(!e.target.closest('#bJump,#bSkin,#skinRow')){ camT=e.pointerId; camLX=gx(e); camLY=gy(e); } },{passive:false});
+addEventListener('pointermove',e=>{
+  const rec=PTRS.get(e.pointerId); if(rec){ rec.x=e.clientX; rec.y=e.clientY; }
+  if(PTRS.size===2){ const p=[...PTRS.values()]; const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);
+    if(pinchD>0){ camDist=THREE.MathUtils.clamp(camDist*(pinchD/d),ZMIN,ZMAX); }   // separás dedos = ACERCA, pellizcás = ALEJA
+    pinchD=d; return; }
+  if(e.pointerId===joyT){ joyMove(e); return; }
+  if(e.pointerId===camT){ const nx=gx(e), ny=gy(e);
+    camYaw-=(nx-camLX)*0.0075; camPitch=THREE.MathUtils.clamp(camPitch+(ny-camLY)*0.006,-0.15,1.15);
+    camLX=nx; camLY=ny; } },{passive:false});
+function up(e){ PTRS.delete(e.pointerId); if(PTRS.size<2)pinchD=0;
+  if(e.pointerId===joyT)joyEnd(); if(e.pointerId===camT)camT=null; }
+addEventListener('pointerup',up); addEventListener('pointercancel',up);
+document.getElementById('bJump').addEventListener('pointerdown',e=>{ e.stopPropagation();
+  if(P.grounded){ P.vel.y=JUMP; P.grounded=false; } });
+
+/* ---------- loop ---------- */
+let lastT=performance.now();
+const F=new THREE.Vector3(), Rv=new THREE.Vector3();
+function step(dt){
+  // mover RELATIVO a la cámara, como Roblox
+  F.set(Math.sin(camYaw),0,Math.cos(camYaw));
+  Rv.set(F.z,0,-F.x);
+  const mx=IN.x, my=-IN.y, mag=Math.min(1,Math.hypot(mx,my));
+  if(mag>0.08){
+    const dir=F.clone().multiplyScalar(my).addScaledVector(Rv,-mx).normalize();
+    P.pos.addScaledVector(dir,SPEED*mag*dt);
+    const targetYaw=Math.atan2(dir.x,dir.z);
+    let d=targetYaw-P.yaw; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
+    P.yaw+=d*Math.min(1,12*dt);
+    P.walkT+=dt*9*mag;
+  }
+  // gravedad y piso (solo el círculo es piso)
+  P.vel.y-=GRAV*dt; P.pos.y+=P.vel.y*dt;
+  if(P.pos.y<=0&&onPlat(P.pos.x,P.pos.z)&&P.vel.y<=0){ P.pos.y=0; P.vel.y=0; P.grounded=true; }
+  else if(P.pos.y>0.01) P.grounded=false;
+  if(P.pos.y<-40){ P.pos.set(0,0,0); P.vel.set(0,0,0); }   // te caíste: respawn
+  // animación de caminar / salto
+  const sw=(mag>0.08&&P.grounded)?Math.sin(P.walkT)*0.85:0;
+  const air=P.grounded?0:-2.6;
+  armL.rotation.x=sw+air*0.35; armR.rotation.x=-sw+air*0.35;
+  legL.rotation.x=(-sw*0.9)+(P.grounded?0:0.5); legR.rotation.x=(sw*0.9)+(P.grounded?0:0.3);
+  player.position.copy(P.pos); player.rotation.y=P.yaw;
+  blob.position.set(P.pos.x,0.03,P.pos.z); blob.material.opacity=Math.max(0,1-P.pos.y/10);
+  // cámara en tercera persona con órbita + zoom
+  const cy=Math.sin(camPitch)*camDist, ch=Math.cos(camPitch)*camDist;
+  camera.position.set(P.pos.x-Math.sin(camYaw)*ch, P.pos.y+1.6+cy, P.pos.z-Math.cos(camYaw)*ch);
+  camera.lookAt(P.pos.x,P.pos.y+1.7,P.pos.z);
+}
+function animate(){ requestAnimationFrame(animate);
+  const now=performance.now(); const dt=Math.min(0.033,(now-lastT)/1000); lastT=now;
+  step(dt); renderer.render(scene,camera); }
+animate();
+</script>
+</body>
+</html>
