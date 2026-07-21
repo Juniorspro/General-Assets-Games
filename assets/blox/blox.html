@@ -67,16 +67,50 @@ addEventListener('resize',layout); layout();
 /* ---------- escena: cielo + CÍRCULO MARRÓN grande ---------- */
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x87c5f2);
-scene.fog=new THREE.Fog(0x87c5f2,90,260);
+scene.fog=new THREE.Fog(0x87c5f2,120,420);
 scene.add(new THREE.HemisphereLight(0xffffff,0x8a7a5a,1.05));
 const sun=new THREE.DirectionalLight(0xfff2d9,1.5); sun.position.set(30,60,20); scene.add(sun);
-const R_PLAT=30;
-const plat=new THREE.Mesh(new THREE.CylinderGeometry(R_PLAT,R_PLAT,1.2,64),
-  new THREE.MeshStandardMaterial({color:0x8a5a2b,roughness:0.95}));   // círculo MARRÓN
-plat.position.y=-0.6; scene.add(plat);
-const borde=new THREE.Mesh(new THREE.TorusGeometry(R_PLAT,0.28,10,80),
+const R_WOOD=85;   // SALÓN circular de madera SÚPER grande
+const woodTex=(()=>{ const cv=document.createElement('canvas'); cv.width=cv.height=512; const c=cv.getContext('2d');
+  for(let i=0;i<8;i++){ const y=i*64; c.fillStyle=(i%2?'#b07f47':'#c2925c'); c.fillRect(0,y,512,64);
+    c.strokeStyle='rgba(90,55,25,.55)'; c.lineWidth=3; c.strokeRect(-2,y+0.5,516,63);
+    c.strokeStyle='rgba(120,80,40,.4)'; c.lineWidth=1;
+    for(let g=0;g<5;g++){ c.beginPath(); const gy=y+10+g*11+Math.random()*4; c.moveTo(0,gy);
+      for(let x=0;x<=512;x+=64)c.lineTo(x,gy+Math.sin(x*0.02+i*3+g)*2.5); c.stroke(); }
+    c.strokeStyle='rgba(90,55,25,.5)'; c.lineWidth=2;
+    for(let x=(i%2)*128+64;x<512;x+=256){ c.beginPath(); c.moveTo(x,y); c.lineTo(x,y+64); c.stroke(); } }
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(14,14); return t; })();
+const plat=new THREE.Mesh(new THREE.CylinderGeometry(R_WOOD,R_WOOD,1.4,96),
+  new THREE.MeshStandardMaterial({map:woodTex,roughness:0.85}));
+plat.position.y=-0.7; scene.add(plat);
+const borde=new THREE.Mesh(new THREE.TorusGeometry(R_WOOD,0.4,10,128),
   new THREE.MeshStandardMaterial({color:0x6e4520,roughness:0.9}));
 borde.rotation.x=Math.PI/2; borde.position.y=0.02; scene.add(borde);
+/* PARCELAS circulares (mini tycoons) en los extremos del salón */
+const PARC=[], N_PARC=8, R_PARC=14;
+for(let i=0;i<N_PARC;i++){ const a=i/N_PARC*Math.PI*2, px=Math.cos(a)*R_WOOD, pz=Math.sin(a)*R_WOOD;
+  const disc=new THREE.Mesh(new THREE.CylinderGeometry(R_PARC,R_PARC,1.2,48),
+    new THREE.MeshStandardMaterial({color:0x8a5a2b,roughness:0.95}));   // redondo MARRÓN como el original
+  disc.position.set(px,-0.55,pz); scene.add(disc);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(R_PARC,0.22,10,60),
+    new THREE.MeshStandardMaterial({color:0x6e4520,roughness:0.9}));
+  ring.rotation.x=Math.PI/2; ring.position.set(px,0.04,pz); scene.add(ring);
+  const cv=document.createElement('canvas'); cv.width=256; cv.height=128; const c=cv.getContext('2d');
+  c.fillStyle='rgba(20,30,50,.85)'; c.beginPath(); c.roundRect(8,8,240,112,22); c.fill();
+  c.strokeStyle='#ffd54f'; c.lineWidth=5; c.beginPath(); c.roundRect(8,8,240,112,22); c.stroke();
+  c.fillStyle='#ffd54f'; c.font='bold 54px Arial'; c.textAlign='center'; c.textBaseline='middle'; c.fillText('P'+(i+1),128,64);
+  const tx=new THREE.CanvasTexture(cv); tx.colorSpace=THREE.SRGBColorSpace;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tx,transparent:true}));
+  sp.scale.set(4.6,2.3,1); sp.position.set(px,4.4,pz); scene.add(sp);
+  PARC.push({x:px,z:pz}); }
+/* SPAWN en el centro de todo */
+const spTex=(()=>{ const cv=document.createElement('canvas'); cv.width=cv.height=256; const c=cv.getContext('2d');
+  c.fillStyle='#20325c'; c.beginPath(); c.arc(128,128,124,0,Math.PI*2); c.fill();
+  c.strokeStyle='#7fd4ff'; c.lineWidth=10; c.beginPath(); c.arc(128,128,108,0,Math.PI*2); c.stroke();
+  c.fillStyle='#fff'; c.font='bold 42px Arial'; c.textAlign='center'; c.textBaseline='middle'; c.fillText('SPAWN',128,128);
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; return t; })();
+const spawnPad=new THREE.Mesh(new THREE.CircleGeometry(4.2,48),new THREE.MeshBasicMaterial({map:spTex,transparent:true}));
+spawnPad.rotation.x=-Math.PI/2; spawnPad.position.y=0.045; scene.add(spawnPad);
 // sombra blob barata
 const SHT=(()=>{ const cv=document.createElement('canvas'); cv.width=cv.height=64; const cx=cv.getContext('2d');
   const g=cx.createRadialGradient(32,32,4,32,32,30); g.addColorStop(0,'rgba(0,0,0,.4)'); g.addColorStop(1,'rgba(0,0,0,0)');
@@ -156,8 +190,9 @@ applySkin(skinSel);
 
 /* ---------- física del personaje ---------- */
 const P={ pos:new THREE.Vector3(0,0,0), vel:new THREE.Vector3(), yaw:0, grounded:true, walkT:0 };
-const GRAV=32, SPEED=6.4, JUMP=13;
-function onPlat(x,z){ return Math.hypot(x,z)<R_PLAT-0.2; }
+const GRAV=32, SPEED=9.6, JUMP=13;   // caminar más RÁPIDO
+function onPlat(x,z){ if(Math.hypot(x,z)<R_WOOD-0.2)return true;
+  for(const q of PARC){ if(Math.hypot(x-q.x,z-q.z)<R_PARC-0.2)return true; } return false; }
 
 /* ---------- controles: joystick + saltar + cámara (arrastre y PELLIZCO con límites) ---------- */
 const IN={x:0,y:0};
@@ -172,26 +207,31 @@ function joyMove(e){ const r=joyEl.getBoundingClientRect();
 function joyEnd(){ joyT=null; IN.x=0; IN.y=0; knob.style.transform='translate(-50%,-50%)'; }
 let camYaw=0, camPitch=0.32, camDist=7, camT=null, camLX=0, camLY=0;
 const ZMIN=3, ZMAX=13;   // acercar hasta cierto punto y alejar hasta cierto punto
-const PTRS=new Map(); let pinchD=0;
+const FREE=new Map(); let pinchD=0;   // SOLO los dedos en ZONA LIBRE cuentan para el zoom
 function gx(e){ return rot?e.clientY:e.clientX; }   // coord X del JUEGO (pantalla rotada)
 function gy(e){ return rot?innerWidth-e.clientX:e.clientY; }
 addEventListener('pointerdown',e=>{
-  PTRS.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(PTRS.size===2){ const p=[...PTRS.values()]; pinchD=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y); camT=null; return; }
+  if(e.target.closest&&e.target.closest('#bJump,#bSkin,#skinRow'))return;   // dedo en un BOTÓN: nunca es zoom ni cámara
   const lado=gx(e)<VW*0.45;
-  if(lado&&!e.target.closest('#bJump,#bSkin,#skinRow')){ joyT=e.pointerId; joyMove(e); return; }
-  if(!e.target.closest('#bJump,#bSkin,#skinRow')){ camT=e.pointerId; camLX=gx(e); camLY=gy(e); } },{passive:false});
+  if(lado&&joyT===null){ joyT=e.pointerId; joyMove(e); return; }   // dedo del JOYSTICK: jamás cuenta para el pellizco
+  FREE.set(e.pointerId,{x:e.clientX,y:e.clientY});   // dedo en zona libre
+  if(FREE.size===2){ const p=[...FREE.values()]; pinchD=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y); camT=null; }
+  else if(FREE.size===1){ camT=e.pointerId; camLX=gx(e); camLY=gy(e); } },{passive:false});
 addEventListener('pointermove',e=>{
-  const rec=PTRS.get(e.pointerId); if(rec){ rec.x=e.clientX; rec.y=e.clientY; }
-  if(PTRS.size===2){ const p=[...PTRS.values()]; const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);
-    if(pinchD>0){ camDist=THREE.MathUtils.clamp(camDist*(pinchD/d),ZMIN,ZMAX); }   // separás dedos = ACERCA, pellizcás = ALEJA
-    pinchD=d; return; }
   if(e.pointerId===joyT){ joyMove(e); return; }
+  const rec=FREE.get(e.pointerId); if(!rec)return;
+  rec.x=e.clientX; rec.y=e.clientY;
+  if(FREE.size>=2){ const p=[...FREE.values()]; const d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);
+    if(pinchD>0){ camDist=THREE.MathUtils.clamp(camDist*(pinchD/d),ZMIN,ZMAX); }   // DOS dedos LIBRES = zoom (aunque otro esté en el joystick)
+    pinchD=d; return; }
   if(e.pointerId===camT){ const nx=gx(e), ny=gy(e);
     camYaw-=(nx-camLX)*0.0075; camPitch=THREE.MathUtils.clamp(camPitch+(ny-camLY)*0.006,-0.15,1.15);
     camLX=nx; camLY=ny; } },{passive:false});
-function up(e){ PTRS.delete(e.pointerId); if(PTRS.size<2)pinchD=0;
-  if(e.pointerId===joyT)joyEnd(); if(e.pointerId===camT)camT=null; }
+function up(e){ if(e.pointerId===joyT){ joyEnd(); return; }
+  FREE.delete(e.pointerId); if(FREE.size<2)pinchD=0;
+  if(e.pointerId===camT)camT=null;
+  if(FREE.size===1&&camT===null){ const id=[...FREE.keys()][0]; const r=FREE.get(id);
+    camT=id; camLX=rot?r.y:r.x; camLY=rot?innerWidth-r.x:r.y; } }
 addEventListener('pointerup',up); addEventListener('pointercancel',up);
 document.getElementById('bJump').addEventListener('pointerdown',e=>{ e.stopPropagation();
   if(P.grounded){ P.vel.y=JUMP; P.grounded=false; } });
