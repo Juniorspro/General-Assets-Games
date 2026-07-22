@@ -224,7 +224,11 @@ function loadAudio(){ if(AB._d)return; AB._d=1; const c=acx(); if(!c)return;
   const F={}; if(ok(A_MUS_MENU))F.mMenu=A_MUS_MENU; if(ok(A_MUS_RUN))F.mRun=A_MUS_RUN;
   for(const k in A_SFX){ if(ok(A_SFX[k]))F[k]=A_SFX[k]; }
   for(const k in F){ fetch(F[k]).then(r=>r.ok?r.arrayBuffer():null)
-    .then(ab=>{ if(ab)c.decodeAudioData(ab,b=>{ AB[k]=b; if(APP==='title'&&k==='mMenu')music('mMenu'); }); }).catch(()=>{}); } }
+    .then(ab=>{ if(ab)c.decodeAudioData(ab,b=>{
+      if(k[0]==='s'){   // SFX: si la muestra vino MUDA/rota, la descarto para que suene el pitido sintetizado
+        const d=b.getChannelData(0); let pk=0; for(let i=0;i<d.length;i+=64)pk=Math.max(pk,Math.abs(d[i]));
+        if(pk<0.02)return; }
+      AB[k]=b; if(APP==='title'&&k==='mMenu')music('mMenu'); }); }).catch(()=>{}); } }
 let MUS=null, musK='';
 function music(k){ if(!CFG.mus||!AB[k]){ return; } if(musK===k)return; stopMusic();
   const c=acx(); if(!c)return; const s=c.createBufferSource(); s.buffer=AB[k]; s.loop=true;
@@ -239,7 +243,7 @@ function blip(f0,f1,dur,vol,type){ if(!CFG.sfx)return; const c=acx(); if(!c)retu
 function sfxB(k,vol){ if(!CFG.sfx)return true; const c=acx(); if(!c||!AB[k])return false;
   const src=c.createBufferSource(); src.buffer=AB[k]; const g=c.createGain(); g.gain.value=vol==null?0.6:vol;
   src.connect(g); g.connect(c.destination); src.start(); return true; }
-const S={ coin:()=>sfxB('sCoin',0.45)||blip(1180,1560,0.09,0.16,'square'),
+const S={ coin:()=>{ if(sfxB('sCoin',0.7))return; blip(1250,1650,0.07,0.36,'square'); setTimeout(()=>blip(1780,2050,0.06,0.26,'square'),42); },
   gem:()=>{ if(sfxB('sGem',0.7)||sfxB('sCoin',0.7))return; blip(880,1320,0.12,0.2); setTimeout(()=>blip(1320,1760,0.14,0.2),70); },
   swipe:()=>sfxB('sSwipe',0.4)||blip(500,650,0.06,0.1),
   land:()=>sfxB('sLand',0.4),
@@ -252,7 +256,7 @@ const S={ coin:()=>sfxB('sCoin',0.45)||blip(1180,1560,0.09,0.16,'square'),
   die:()=>{ blip(300,60,0.5,0.35,'sawtooth'); },
   pow:()=>{ if(sfxB('sPow',0.6))return; blip(520,1040,0.18,0.25); setTimeout(()=>blip(780,1560,0.18,0.2),90); },
   buy:()=>{ if(sfxB('sBtn',0.6))return; blip(660,990,0.12,0.2); setTimeout(()=>blip(990,1320,0.14,0.2),90); },
-  btn:()=>sfxB('sBtn',0.5)||blip(520,700,0.06,0.1),
+  btn:()=>{ if(sfxB('sBtn',0.7))return; blip(600,880,0.05,0.26,'square'); },
   logro:()=>{ if(sfxB('sLogro',0.6))return; [660,880,1100,1460].forEach((f,i)=>setTimeout(()=>blip(f,f*1.02,0.16,0.2),i*90)); },
   rev:()=>{ if(sfxB('sRevive',0.7))return; [440,660,880].forEach((f,i)=>setTimeout(()=>blip(f,f*1.3,0.2,0.22),i*110)); } };
 
@@ -634,7 +638,7 @@ const R={ v:0, dist:0, wz:0, coins:0, lane:0, x:0, y:0, vy:0, sliding:0, dead:fa
   stumble:0, mult:1, pu:{iman:0,escudo:0,x2:0,turbo:0}, near:0,
   obsAbs:120, coinAbs:70, puAbs:190, obsI:0, coinI:0, puI:0,
   shake:0, t:0 };
-const BASE_V=11, MAX_V=26;
+const BASE_V=11, MAX_V=27, RAMP_M=1400;   // arranca a 11, acelera con los metros hasta el tope 27 (~1400 m)
 function resetRun(full){ R.v=BASE_V; R.dist=0; R.wz=0; R.coins=0; R.lane=0; R.x=0; R.y=0; R.vy=0; R.sliding=0;
   R.dead=false; if(full)R.revived=false; R.stumble=0; R.mult=1; R.pu={iman:0,escudo:0,x2:0,turbo:0};
   R.near=0; R.obsAbs=120; R.coinAbs=70; R.puAbs=190; R.obsI=0; R.coinI=0; R.puI=0; R.shake=0; R.t=0; R.hitAnimT=0; R.catchT=0;
@@ -925,7 +929,10 @@ let lastT=performance.now();
 const CAMV=new THREE.Vector3();
 function step(dt){
   R.t+=dt;
-  R.v=Math.min(MAX_V,R.v+dt*0.14); if(R.pu.turbo>0)R.v=Math.min(MAX_V+8,R.v+dt*30);
+  // velocidad PROGRESIVA por distancia recorrida, con tope duro en MAX_V
+  const tgtV=BASE_V+(MAX_V-BASE_V)*Math.min(1,R.wz/RAMP_M);
+  R.v+=(tgtV-R.v)*Math.min(1,dt*0.7);
+  if(R.pu.turbo>0)R.v=Math.min(MAX_V+8,R.v+dt*30);   // turbo: ráfaga temporal por encima del tope
   const mv=R.v*dt;
   R.wz+=mv;   // distancia ABSOLUTA de pista (sin x2): ancla del mundo compartido
   R.dist+=mv*(R.pu.x2>0?2:1);
