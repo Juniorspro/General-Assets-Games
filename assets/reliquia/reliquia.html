@@ -228,9 +228,9 @@ function loadAudio(){ if(AB._d)return; AB._d=1; const c=acx(); if(!c)return;
       if(k[0]==='s'){   // SFX: si la muestra vino MUDA/rota, la descarto para que suene el pitido sintetizado
         const d=b.getChannelData(0); let pk=0; for(let i=0;i<d.length;i+=64)pk=Math.max(pk,Math.abs(d[i]));
         if(pk<0.02)return; }
-      AB[k]=b; if(APP==='title'&&k==='mMenu')music('mMenu'); }); }).catch(()=>{}); } }
-let MUS=null, musK='';
-function music(k){ if(!CFG.mus||!AB[k]){ return; } if(musK===k)return; stopMusic();
+      AB[k]=b; if(k===wantMus)music(k); },()=>{}); }).catch(()=>{}); } }   // arranca la música apenas llega su buffer; ignora formatos no soportados
+let MUS=null, musK='', wantMus='';
+function music(k){ wantMus=k||''; if(!CFG.mus||!AB[k]){ return; } if(musK===k)return; stopMusic();
   const c=acx(); if(!c)return; const s=c.createBufferSource(); s.buffer=AB[k]; s.loop=true;
   const g=c.createGain(); g.gain.value=0.0; g.gain.linearRampToValueAtTime(0.34,c.currentTime+1.2);
   s.connect(g); g.connect(c.destination); s.start(); MUS={s,g}; musK=k; }
@@ -1206,6 +1206,16 @@ syncTogs();
 // bono diario (después de definir i18n para poder traducir el aviso)
 (function(){ const today=new Date().toDateString();
   if(SV.day!==today){ SV.day=today; if(SV.runs>0){ SV.coins+=200; toast(T('daily')); } save(); } })();
+/* ===== DESBLOQUEO DE AUDIO (móvil / webview): resume + buffer mudo en el primer gesto ===== */
+let _auOK=false;
+function audioUnlock(){ const c=acx(); if(!c)return;
+  if(!_auOK){ _auOK=true;
+    try{ const b=c.createBuffer(1,1,22050),s=c.createBufferSource(); s.buffer=b; s.connect(c.destination); s.start(0); }catch(e){}
+    loadAudio(); }
+  if(c.state==='suspended')c.resume().catch(()=>{});
+  if(CFG.mus&&!musK&&wantMus)music(wantMus); }
+['pointerdown','touchend','click','keydown'].forEach(ev=>addEventListener(ev,audioUnlock,{passive:true}));
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&ACX&&ACX.state==='suspended')ACX.resume().catch(()=>{}); });
 applyLang(); boot();
 animate();
 </script>
