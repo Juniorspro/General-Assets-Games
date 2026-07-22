@@ -253,11 +253,15 @@ const texLoader=new THREE.TextureLoader(),gltfLoader=new GLTFLoader();
 /* Carga TODO por fetch (cachea en el navegador + jsDelivr), en paralelo con pool,
    y reintenta por rondas hasta que esté completo — el juego no arranca a medias. */
 async function fetchBuf(p){
-  const r=await fetch(url(p));
-  if(!r.ok)throw new Error("HTTP "+r.status+" "+p);
-  return r.arrayBuffer();}
+  const ctl=new AbortController();
+  const to=setTimeout(()=>ctl.abort(),35000); // sin timeout un fetch colgado frena la carga entera
+  try{const r=await fetch(url(p),{signal:ctl.signal});
+    if(!r.ok)throw new Error("HTTP "+r.status+" "+p);
+    return await r.arrayBuffer();}
+  finally{clearTimeout(to);}}
+const MIME={png:"image/png",webp:"image/webp",jpg:"image/jpeg",jpeg:"image/jpeg"};
 function texFromBuf(buf,p,srgb){return new Promise((res,rej)=>{
-  const bu=URL.createObjectURL(new Blob([buf],{type:p.endsWith(".png")?"image/png":"image/jpeg"}));
+  const bu=URL.createObjectURL(new Blob([buf],{type:MIME[p.split(".").pop()]||"image/jpeg"}));
   texLoader.load(bu,t=>{URL.revokeObjectURL(bu);
     if(srgb)t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;res(t);},
     undefined,e=>{URL.revokeObjectURL(bu);rej(e);});});}
@@ -429,7 +433,7 @@ async function loadAll(){
     "sky_nieve_dia.jpg","sky_nieve_tarde.jpg","sky_nieve_noche.jpg",
     "sky_canyon_dia.jpg","sky_canyon_tarde.jpg","sky_canyon_noche.jpg",
     "sky_ciudad_dia.jpg","sky_ciudad_tarde.jpg","sky_ciudad_noche.jpg",
-    "tree_oak.png","tree_pine.png","cactus.png"])
+    "tree_oak.webp","tree_pine.webp","cactus.webp"])
     T("images/"+n,true,t=>{A.img[n.split(".")[0]]=t;});
   for(const[k,p]of[["katana","models/gen/car_katana.glb"],["bandido","models/gen/car_bandido.glb"],
     ["hachi","models/gen/car_hachi.glb"],["toro","models/gen/car_toro.glb"],
@@ -443,7 +447,7 @@ async function loadAll(){
     ["house","models/gen/house.glb"],["cabin","models/gen/cabin.glb"],["plane","models/gen/plane.glb"],
     ["rusty","models/repo/rusty_car.glb"],["pines","models/repo/pines.glb"]])
     jobs.push({p,kind:"glb",assign:g=>{A.glb[k]=g;}});
-  for(const n of["music_drift.m4a","music_menu.m4a","sfx_engine.mp3","sfx_skid_loop.mp3","sfx_crash.mp3","sfx_chime.mp3"])
+  for(const n of["sfx_engine.mp3","sfx_skid_loop.mp3","sfx_crash.mp3","sfx_chime.mp3"])
     jobs.push({p:"audio/"+n,kind:"buf",assign:b=>{SND[n.replace(/\.(mp3|m4a)$/,"")]={raw:b,buf:null};}});
   const still=await runTasks(jobs);
   if(still.length){console.warn("failed:",loadFailed);
@@ -451,6 +455,16 @@ async function loadAll(){
       +(still.length>3?` +${still.length-3}`:"");
     await new Promise(res=>{const b=btn("CONTINUAR IGUAL",()=>{b.remove();res();});
       document.getElementById("s_loading").appendChild(b);});}
+  loadMusicBg(); // las músicas (pesadas) bajan en segundo plano, no frenan el arranque
+}
+function loadMusicBg(){
+  for(const n of["music_drift.m4a","music_menu.m4a"])
+    (async()=>{for(let i=0;i<6;i++){
+      try{const b=await fetchBuf("audio/"+n);
+        SND[n.replace(/\.m4a$/,"")]={raw:b,buf:null};
+        if(actx){await decodeAll();if(!musicSrc)applySound();}
+        return;
+      }catch{await new Promise(r=>setTimeout(r,2000*(i+1)));}}})();
 }
 function normalizeModel(glb,{length=null,height=null,rotY=0}={}){
   if(!glb)return null;
@@ -1298,7 +1312,7 @@ function buildTitle(rebuildWorld=true){const s=S.title;s.innerHTML="";
   if(rebuildWorld||!world)buildWorld(save.map,save.time); // live orbit backdrop
   clearMarks();clearSmoke();
   const sc=document.createElement("div");sc.className="scrim";s.appendChild(sc);
-  const logo=document.createElement("img");logo.id="logo";logo.src=url("images/logo.png");
+  const logo=document.createElement("img");logo.id="logo";logo.src=url("images/logo.webp");
   logo.onerror=()=>{logo.remove();const t=document.createElement("div");
     t.className="title-xl";t.innerHTML='DRIFT <span class="org">YARD</span>';s.prepend(t);};
   s.appendChild(logo);
@@ -1458,7 +1472,7 @@ if(DEV)window.__dy={
 /* ================= boot ================= */
 (async()=>{
   window.__dyBooted=true;
-  document.getElementById("logo").src=url("images/logo.png");
+  document.getElementById("logo").src=url("images/logo.webp");
   S.loading.style.backgroundImage=`url('${url("images/loading.jpg")}')`;
   loadMsg.textContent=L.loading;
   resize();
