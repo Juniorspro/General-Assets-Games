@@ -92,8 +92,23 @@
 <body>
 <div id="wrap">
 <div class="ui">
+  <!-- IDIOMA (primero de todo) -->
+  <div id="langScr" class="panel"><div class="box" style="text-align:center">
+    <h2 id="langTitle">🌎 IDIOMA · LANGUAGE</h2>
+    <div class="mItem play" data-lang="en">🇬🇧 &nbsp;ENGLISH</div>
+    <div class="mItem play" data-lang="es">🇪🇸 &nbsp;ESPAÑOL</div>
+    <div class="mItem play" data-lang="pt">🇧🇷 &nbsp;PORTUGUÊS</div>
+  </div></div>
+  <!-- NOMBRE -->
+  <div id="nameScr" class="panel hide"><div class="box" style="text-align:center;min-width:min(84vw,420px)">
+    <h2 id="nameTitle">TU NOMBRE</h2>
+    <input id="nameInp" maxlength="12" autocomplete="off" placeholder="..."
+      style="width:80%;padding:12px 14px;border-radius:12px;border:2px solid rgba(255,216,94,.5);background:rgba(10,8,3,.85);color:#ffe9a8;font:900 20px system-ui;text-align:center;outline:none"/>
+    <div class="mItem play" id="nameGo">✔ &nbsp;<span id="nameGoTx">JUGAR</span></div>
+    <div id="nameLoad" style="margin-top:8px;color:#c9b98a;font:700 12px system-ui"></div>
+  </div></div>
   <!-- TÍTULO -->
-  <div id="title">
+  <div id="title" class="hide">
     <div id="tBest">🏆 --</div><div id="tCoins">🪙 0</div>
     <img id="tLogo" alt="RELIQUIA" src=""/>
     <div id="tapGo">▶ &nbsp;TOCÁ PARA CORRER</div>
@@ -166,6 +181,7 @@
   <div id="toast" style="position:absolute;top:14%;left:50%;transform:translateX(-50%);background:rgba(20,14,4,.9);border:2px solid #ffd85e;border-radius:14px;padding:10px 20px;font:800 14px system-ui;color:#ffe9a8;opacity:0;transition:opacity .3s;pointer-events:none"></div>
 </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js" onerror="window.__noMqtt=1"></script>
 <script type="importmap">
 { "imports": {
     "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -193,7 +209,7 @@ const ok=u=>u.indexOf('http')===0||u.indexOf('./')===0;
 
 /* ================= PERSISTENCIA ================= */
 const DEF={ coins:0, best:0, runs:0, skin:0, skins:[true,false,false,false,false],
-  up:{iman:1,x2:1,escudo:1}, log:{}, mis:null, misSeed:0, day:'' };
+  up:{iman:1,x2:1,escudo:1}, log:{}, mis:null, misSeed:0, day:'', name:'', lang:'', top:[] };
 let SV=DEF; try{ const v=JSON.parse(localStorage.getItem('rq_save')); if(v&&typeof v==='object')SV=Object.assign({},DEF,v); }catch(e){}
 function save(){ try{ localStorage.setItem('rq_save',JSON.stringify(SV)); }catch(e){} }
 let CFG={ mus:true, sfx:true, hi:true };
@@ -336,8 +352,10 @@ function mkSeg(i){ const g=new THREE.Group();
       const a=new THREE.Group(); a.position.set(sd*(HALF+xo),0,(Math.random()-0.5)*SEGL*0.7);
       const h=9+Math.random()*4; a.add(mkTree(0,0,true));   // árboles GRANDES (9-13m); placeholder hasta cargar GLB
       T.bosque.add(a); BANCHORS.push({g:a,h}); }
-    for(const xo of [11,17,25,34]){   // árboles LEJOS → low-poly barato GRANDE, se extienden hacia los lados
-      const ft=mkTree(sd*(HALF+xo+Math.random()*3),(Math.random()-0.5)*SEGL,true); ft.scale.setScalar(1.7+Math.random()*0.6); ft.position.y=-1.4; T.bosque.add(ft); }
+    for(const xo of [11,18,27]){   // árboles LEJOS → también modelos 3D (anclas), grandes
+      const a2=new THREE.Group(); a2.position.set(sd*(HALF+xo+Math.random()*3),0,(Math.random()-0.5)*SEGL);
+      const h2=11+Math.random()*5; a2.add(mkTree(0,0,true));
+      T.bosque.add(a2); BANCHORS.push({g:a2,h:h2}); }
     for(let k=0;k<3;k++){ const ba=new THREE.Group();   // ARBUSTOS → ancla que se rellena con el modelo 3D
       ba.position.set(sd*(HALF+0.9+Math.random()*3),0,(Math.random()-0.5)*SEGL*0.9);
       const ph=new THREE.Mesh(new THREE.SphereGeometry(0.5+Math.random()*0.3,6,5),M_LEAF); ph.scale.y=0.6; ph.position.y=0.3; ba.add(ph);
@@ -351,7 +369,8 @@ function mkSeg(i){ const g=new THREE.Group();
     const grass=new THREE.Mesh(new THREE.PlaneGeometry(24,SEGL),M_GRASS2); grass.rotation.x=-Math.PI/2; grass.position.set(sd*(HALF+2.6+30+12),-0.05,0); T.rio.add(grass);   // pasto de la otra orilla
     for(let k=0;k<2;k++){ const reed=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.06,1.1,5),M_LEAF);
       reed.position.set(sd*(HALF+0.65),0.55,(Math.random()-0.5)*SEGL*0.8); T.rio.add(reed); }
-    for(const xo of [46,54]){ const rt=mkTree(sd*(HALF+xo+Math.random()*4),(Math.random()-0.5)*SEGL,true); rt.scale.setScalar(2+Math.random()*0.8); rt.position.y=-1.6; T.rio.add(rt); }   // árboles GRANDES en la orilla lejana
+    for(const xo of [46,54]){ const ra=new THREE.Group(); ra.position.set(sd*(HALF+xo+Math.random()*4),0,(Math.random()-0.5)*SEGL);
+      const rh=12+Math.random()*5; ra.add(mkTree(0,0,true)); T.rio.add(ra); BANCHORS.push({g:ra,h:rh}); }   // árboles 3D en la orilla lejana
     const fish=new THREE.Mesh(new THREE.SphereGeometry(0.16,6,5),new THREE.MeshStandardMaterial({color:0xff8a3a,roughness:0.5}));
     fish.scale.set(1.6,0.8,0.8); fish.position.set(sd*(HALF+2.6+6+Math.random()*8),0.3,(i%NSEG-7)); T.rio.add(fish);
     FISHES.push({m:fish,ph:Math.random()*6,x:fish.position.x});
@@ -599,21 +618,34 @@ function misProg(k,amt){ let hit=false;
   if(hit){ if(SV.mis.every(m=>m.done)){ SV.misSeed=(SV.misSeed+7919)%233280; SV.mis=rollMissions(); toast('📜 ¡Nuevas misiones!'); }
     save(); } }
 
+/* ================= MUNDO DETERMINISTA (semilla compartida) ================= */
+// Todo el mundo (obstáculos, monedas, power-ups, bioma) es función pura de WSEED + la
+// DISTANCIA ABSOLUTA de la pista. Dos jugadores con la misma semilla ven EXACTAMENTE la
+// misma pista infinita: el obstáculo Nº i siempre cae en la misma distancia absoluta.
+let WSEED=(Math.random()*4294967296)>>>0;
+function RR(s,i){ let t=(WSEED^Math.imul((s^0x9e3779b9)>>>0,0x85ebca6b)^Math.imul((i^0x27d4eb2f)>>>0,0xc2b2ae35))>>>0;
+  t^=t>>>15; t=Math.imul(t,0x2c1b3c6d); t^=t>>>13; t=Math.imul(t,0x297a2d39); t^=t>>>16;
+  return (t>>>0)/4294967296; }
+const pick=(arr,r)=>arr[Math.min(arr.length-1,Math.floor(r*arr.length))];
+
 /* ================= ESTADO DEL JUEGO ================= */
 let APP='title';
-const R={ v:0, dist:0, coins:0, lane:0, x:0, y:0, vy:0, sliding:0, dead:false, revived:false,
-  stumble:0, mult:1, pu:{iman:0,escudo:0,x2:0,turbo:0}, near:0, spawnZ:-60, coinZ:-40, puZ:-140,
+const R={ v:0, dist:0, wz:0, coins:0, lane:0, x:0, y:0, vy:0, sliding:0, dead:false, revived:false,
+  stumble:0, mult:1, pu:{iman:0,escudo:0,x2:0,turbo:0}, near:0,
+  obsAbs:120, coinAbs:70, puAbs:190, obsI:0, coinI:0, puI:0,
   shake:0, t:0 };
 const BASE_V=11, MAX_V=26;
-function resetRun(full){ R.v=BASE_V; R.dist=0; R.coins=0; R.lane=0; R.x=0; R.y=0; R.vy=0; R.sliding=0;
+function resetRun(full){ R.v=BASE_V; R.dist=0; R.wz=0; R.coins=0; R.lane=0; R.x=0; R.y=0; R.vy=0; R.sliding=0;
   R.dead=false; if(full)R.revived=false; R.stumble=0; R.mult=1; R.pu={iman:0,escudo:0,x2:0,turbo:0};
-  R.near=0; R.spawnZ=-120; R.coinZ=-70; R.puZ=-190; R.shake=0; R.t=0; R.hitAnimT=0; R.catchT=0;
+  R.near=0; R.obsAbs=120; R.coinAbs=70; R.puAbs=190; R.obsI=0; R.coinI=0; R.puI=0; R.shake=0; R.t=0; R.hitAnimT=0; R.catchT=0;
   for(const o of OBS)o.visible=false; for(const c of COINS){ c.on=false; c.m.visible=false; }
   for(const p of PUPS){ p.on=false; p.g.visible=false; }
   SEGS.forEach((s2,i)=>{ s2.position.z=-i*SEGL+20; segTheme(s2,'templo'); });
   guard.position.set(0,0,14); }
 let cineT=-1;
-function startRun(){ resetRun(true); APP='cine'; cineT=0;
+function startRun(){ resetRun(true);
+  WSEED=NET.pickSeed();   // misma pista para todos: adopto la semilla del autor (o genero una nueva)
+  APP='cine'; cineT=0;
   $id('title').classList.add('hide'); $id('hud').classList.remove('hide');
   $id('deathScr').classList.add('hide'); $id('endScr').classList.add('hide');
   document.querySelector('.ui').classList.add('cine');
@@ -639,9 +671,23 @@ function die(){ if(R.pu.escudo>0||R.pu.turbo>0)return;
   guard.visible=true; guard.position.set(R.x,0,7);   // el guardián SALE de la oscuridad a atraparte
   setAnim('hit'); R.hitAnimT=1.2;
   $id('flash').classList.add('on'); setTimeout(()=>$id('flash').classList.remove('on'),60); }
+function pushTop(n,d){ if(!Array.isArray(SV.top))SV.top=[]; SV.top.push({n,d:Math.floor(d)});
+  SV.top.sort((a,b)=>b.d-a.d); SV.top=SV.top.slice(0,20); save(); }
+function mpScores(){ try{ return (typeof NET!=='undefined')?NET.scores():[]; }catch(e){ return []; } }
+function lbHTML(myD){   // TOP 10: mezcla récords locales + jugadores en línea, marca "VOS"
+  const rows=[...(SV.top||[]).map(t=>({n:t.n,d:t.d,you:false})), ...mpScores()];
+  rows.push({n:SV.name||T('you'),d:Math.floor(myD),you:true});
+  rows.sort((a,b)=>b.d-a.d);
+  const seen=new Set(), out=[]; for(const r of rows){ const k=r.n+'|'+r.d; if(seen.has(k))continue; seen.add(k); out.push(r); if(out.length>=10)break; }
+  let h='<div style="text-align:left;font:800 13px system-ui;margin-top:8px">';
+  out.forEach((r,i)=>{ const md=['🥇','🥈','🥉'][i]||('<b style="color:#c9b98a">'+(i+1)+'.</b>');
+    h+='<div style="display:flex;justify-content:space-between;padding:3px 2px;'+(r.you?'color:#7dff8a':'color:#e8dcc0')+'">'+
+      '<span>'+md+' '+(r.n||'?')+(r.you?' ('+T('you')+')':'')+'</span><span>'+r.d+' '+T('dist')+'</span></div>'; });
+  return h+'</div>'; }
 function showDeath(){ APP='death'; S.die(); stopMusic(); if(navigator.vibrate)navigator.vibrate(160);
-  const rec=R.dist>SV.best;
-  $id('deathStats').innerHTML='🏃 <b>'+Math.floor(R.dist)+' m</b> &nbsp;·&nbsp; 🪙 <b>'+R.coins+'</b>'+(rec?'<div class="newRec">🎉 ¡NUEVO RÉCORD!</div>':'');
+  const rec=R.dist>SV.best; pushTop(SV.name,R.dist);
+  $id('deathStats').innerHTML='🏃 <b>'+Math.floor(R.dist)+' m</b> &nbsp;·&nbsp; 🪙 <b>'+R.coins+'</b>'+(rec?'<div class="newRec">🎉 ¡NUEVO RÉCORD!</div>':'')+
+    '<div style="color:#ffd85e;font:900 15px system-ui;margin-top:10px">'+T('lb')+'</div>'+lbHTML(R.dist);
   const can=(!R.revived&&SV.coins+R.coins>=100);
   $id('revBtn').classList.toggle('dis',!can);
   $id('deathScr').classList.remove('hide'); }
@@ -757,22 +803,22 @@ function laneObs(lane,z){   // obstáculo VISIBLE en ese carril cerca de esa z (
     if(Math.round(o.position.x/LANE)!==lane)continue;
     if(Math.abs(o.position.z-z)<3.0)return o; }
   return null; }
+const LANES3=[-1,0,1];
 function spawnStuff(){
-  // obstáculos por delante
-  while(R.spawnZ>-240){ const z=R.spawnZ; R.spawnZ-=(9+Math.random()*7);
-    const r=Math.random();
-    if(r<0.16){ const o=freeObs('fire'); if(o){ o.visible=true; o.position.set(([-1,0,1][Math.floor(Math.random()*3)])*LANE,0,z); } }
-    else if(r<0.44){ const o=freeObs('wall'); if(o){ o.visible=true;
-      const l=[-1,0,1][Math.floor(Math.random()*3)]; o.position.set(l*LANE,0,z);
-      if(Math.random()<0.55){ const o2=freeObs('wall'); if(o2){ o2.visible=true;
-        const l2=(l+1+Math.floor(Math.random()*2))%3-1; if(l2!==l)o2.position.set(l2*LANE,0,z); else o2.visible=false; } } } }
-    else if(r<0.72){ const o=freeObs('low'); if(o){ o.visible=true; o.position.set(([-1,0,1][Math.floor(Math.random()*3)])*LANE,0,z); } }
-    else { const o=freeObs('high'); if(o){ o.visible=true; o.position.set(([-1,0,1][Math.floor(Math.random()*3)])*LANE,0,z); } } }
+  // obstáculos por delante — colocados por DISTANCIA ABSOLUTA (idénticos para todos con la misma semilla)
+  while(R.obsAbs-R.wz<240){ const D=R.obsAbs, i=R.obsI++; R.obsAbs+=(9+RR(1,i*4)*7);
+    const z=R.wz-D, r=RR(1,i*4+1), l=pick(LANES3,RR(1,i*4+2));
+    if(r<0.16){ const o=freeObs('fire'); if(o){ o.visible=true; o.position.set(l*LANE,0,z); } }
+    else if(r<0.44){ const o=freeObs('wall'); if(o){ o.visible=true; o.position.set(l*LANE,0,z);
+      if(RR(1,i*4+3)<0.55){ const o2=freeObs('wall'); if(o2){ const l2=(l+1+(RR(1,i*4+3)*2|0))%3-1;
+        if(l2!==l){ o2.visible=true; o2.position.set(l2*LANE,0,z); } else o2.visible=false; } } } }
+    else if(r<0.72){ const o=freeObs('low'); if(o){ o.visible=true; o.position.set(l*LANE,0,z); } }
+    else { const o=freeObs('high'); if(o){ o.visible=true; o.position.set(l*LANE,0,z); } } }
   // monedas en líneas — SIEMPRE agarrables (esquivan/arquean los obstáculos, nunca te obligan a chocar)
-  while(R.coinZ>-220){ const z=R.coinZ; R.coinZ-=(16+Math.random()*14);
-    let lane=[-1,0,1][Math.floor(Math.random()*3)], n=5+Math.floor(Math.random()*4);
-    for(let i=0;i<n;i++){ const c=COINS.find(q=>!q.on); if(!c)break;
-      const cz=z-i*1.5;
+  while(R.coinAbs-R.wz<220){ const D=R.coinAbs, i=R.coinI++; R.coinAbs+=(16+RR(2,i)*14);
+    let lane=pick(LANES3,RR(2,i*100+1)), n=5+(RR(2,i*100+2)*4|0), z=R.wz-D;
+    for(let j=0;j<n;j++){ const c=COINS.find(q=>!q.on); if(!c)break;
+      const cz=z-j*1.5;
       let ob=laneObs(lane,cz);
       if(ob&&ob.userData.type==='wall'){   // muro completo: mover la moneda a un carril libre
         let alt=null; for(const L of [0,1,-1,lane]){ if(!laneObs(L,cz)||laneObs(L,cz).userData.type!=='wall'){ alt=L; break; } }
@@ -782,16 +828,97 @@ function spawnStuff(){
       if(ob){ const t=ob.userData.type;
         if(t==='low'||t==='fire')y=1.85;          // salto: arco por encima, la agarrás en el aire
         else if(t==='high')y=0.7; }               // barrida: bien baja, la agarrás agachado
-      c.on=true; c.gem=(Math.random()<0.05); c.m.visible=true;
+      c.on=true; c.gem=(RR(2,i*100+10+j)<0.05); c.m.visible=true;
       c.m.material=c.gem?M_GEM:M_GOLD; c.m.scale.setScalar(c.gem?1.3:1);
       c.m.position.set(lane*LANE,y,cz); } }
   // power-ups
-  while(R.puZ>-260){ const z=R.puZ; R.puZ-=(90+Math.random()*80);
+  while(R.puAbs-R.wz<260){ const D=R.puAbs, i=R.puI++; R.puAbs+=(90+RR(3,i*3)*80);
     const p=PUPS.find(q=>!q.on); if(!p)break;
-    const kinds=['iman','escudo','x2','turbo']; p.kind=kinds[Math.floor(Math.random()*4)];
+    const kinds=['iman','escudo','x2','turbo']; p.kind=pick(kinds,RR(3,i*3+1));
     p.on=true; p.g.visible=true; p.orb.material.emissive=new THREE.Color(PUPDEF[p.kind].col);
     p.halo.material.color.set(PUPDEF[p.kind].col);
-    p.g.position.set(([-1,0,1][Math.floor(Math.random()*3)])*LANE,0,z); } }
+    p.g.position.set(pick(LANES3,RR(3,i*3+2))*LANE,0,R.wz-D); } }
+
+/* ================= MULTIJUGADOR: fantasmas + presencia (MQTT) ================= */
+// Todos entran al MISMO mundo infinito (misma semilla). Cada jugador remoto se dibuja como
+// un corredor "fantasma" ubicado por su progreso relativo (mi_wz - su_wz) → adelante/atrás.
+// El más adelantado es el AUTOR de la semilla; si muere, el siguiente pasa a serlo. Culling:
+// solo se dibujan los fantasmas dentro del rango de cámara; el resto se oculta.
+const GHOSTS={}; let GHN=0;
+const GH_COLORS=[0x59c7ff,0xff5fb0,0x7dff8a,0xffd54f,0xb06bff,0xff8a2a,0xff5f6b,0x5fffe0];
+function tagTex(txt){ const cv=document.createElement('canvas'); cv.width=256; cv.height=64;
+  const c=cv.getContext('2d'); c.font='900 34px system-ui'; c.textAlign='center'; c.textBaseline='middle';
+  c.lineWidth=7; c.strokeStyle='rgba(0,0,0,.9)'; c.strokeText(txt,128,34); c.fillStyle='#fff'; c.fillText(txt,128,34);
+  const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace; return t; }
+function mkGhost(name,col){ const g=mkFallback();   // mismo corredor low-poly, teñido + translúcido
+  g.traverse(o=>{ if(o.isMesh&&o.material){ o.material=o.material.clone(); o.material.color=new THREE.Color(col);
+    o.material.transparent=true; o.material.opacity=0.55; o.material.depthWrite=false; } });
+  const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:tagTex(name||'?'),transparent:true,depthTest:false,depthWrite:false}));
+  tag.scale.set(2.1,0.52,1); tag.position.y=2.55; g.add(tag);
+  const glow=new THREE.Mesh(new THREE.PlaneGeometry(1.5,1.5),new THREE.MeshBasicMaterial({map:P_TEX,color:col,transparent:true,opacity:0.5,depthWrite:false,blending:THREE.AdditiveBlending}));
+  glow.rotation.x=-Math.PI/2; glow.position.y=0.03; g.add(glow);
+  g.visible=false; scene.add(g); return {g,arms:g.userData.arms,ph:GHN++*1.3,tz:0}; }
+function updateGhosts(dt){
+  const live=(APP==='run');
+  for(const id in NET.peers){ const p=NET.peers[id];
+    let gh=GHOSTS[id];
+    if(!gh){ gh=GHOSTS[id]=mkGhost(p.n,GH_COLORS[(GHN)%GH_COLORS.length]); }
+    // ubicación por progreso relativo (culling por rango de cámara)
+    const z=R.wz-(p.wz||0);
+    const show=live&&p.alive&&z>-150&&z<14;
+    gh.g.visible=show; if(!show)continue;
+    gh.tz+=((p.lane||0)*LANE-gh.tz)*Math.min(1,10*dt);
+    gh.g.position.set(gh.tz,(p.y||0),z);
+    // animación aproximada según su estado
+    gh.ph+=dt*11; const A=gh.arms;
+    if(A){ if(p.a==='slide'){ gh.g.rotation.x=-1.0; A[0].rotation.x=A[2].rotation.x=0.3; }
+      else { gh.g.rotation.x=0; A[0].rotation.x=Math.sin(gh.ph)*1.0; A[2].rotation.x=-Math.sin(gh.ph)*1.0;
+        A[1].rotation.x=-Math.sin(gh.ph)*1.1; A[3].rotation.x=Math.sin(gh.ph)*1.1; } }
+  }
+  for(const id in GHOSTS){ if(!NET.peers[id]){ scene.remove(GHOSTS[id].g); delete GHOSTS[id]; } }
+}
+const NET=(function(){
+  const ROOM='reliquia/v1/lobby';
+  const ID='p'+((Math.random()*1e9)|0).toString(36)+((Math.random()*1e4)|0).toString(36);
+  let cli=null, on=false, acc=0, peers={};
+  function myState(){ return { id:ID, n:(SV.name||'?').slice(0,12), wz:Math.round(R.wz),
+    dist:Math.floor(R.dist), lane:R.lane, y:+(R.y||0).toFixed(2), a:animK,
+    alive:(APP==='run'), seed:WSEED }; }
+  function pub(){ if(!on||!cli)return; try{ cli.publish(ROOM,JSON.stringify(myState())); }catch(e){} }
+  function onMsg(raw){ let d; try{ d=JSON.parse(raw); }catch(e){ return; } if(!d||!d.id||d.id===ID)return;
+    if(d.bye){ if(GHOSTS[d.id]){ scene.remove(GHOSTS[d.id].g); delete GHOSTS[d.id]; } delete peers[d.id]; return; }
+    d.last=performance.now(); peers[d.id]=d; }
+  function connect(){ if(on||window.__noMqtt||typeof mqtt==='undefined')return;
+    try{ cli=mqtt.connect('wss://broker.emqx.io:8084/mqtt',{connectTimeout:6000,reconnectPeriod:5000,keepalive:20,clientId:ID});
+      cli.on('connect',()=>{ on=true; cli.subscribe(ROOM); pub(); });
+      cli.on('message',(t,m)=>onMsg(m.toString()));
+      cli.on('error',()=>{}); cli.on('close',()=>{ on=false; });
+    }catch(e){} }
+  function prune(){ const now=performance.now(); for(const k in peers)if(now-peers[k].last>5000)delete peers[k]; }
+  function tick(dt){ if(!on)return; acc+=dt; if(acc>=0.1){ acc=0; pub(); } prune(); }
+  // AUTOR del mapa = jugador vivo MÁS ADELANTADO (yo incluido si estoy corriendo)
+  function author(){ const now=performance.now(); let best=(APP==='run')?{id:ID,wz:R.wz,seed:WSEED}:null;
+    for(const k in peers){ const p=peers[k]; if(!p.alive||now-p.last>5000)continue; if(!best||p.wz>best.wz)best=p; }
+    return best; }
+  // al iniciar carrera: adopto la semilla del autor si hay alguien vivo adelante; si no, genero una nueva
+  function pickSeed(){ const a=author(); if(a&&a.id!==ID&&a.seed)return a.seed>>>0; return (Math.random()*4294967296)>>>0; }
+  function scores(){ const now=performance.now(), out=[];
+    for(const k in peers){ const p=peers[k]; if(now-p.last>10000)continue; out.push({n:p.n||'?',d:p.dist|0}); } return out; }
+  function count(){ const now=performance.now(); let n=0; for(const k in peers)if(now-peers[k].last<10000)n++; return n; }
+  function bye(){ if(on&&cli){ try{ cli.publish(ROOM,JSON.stringify({id:ID,bye:1})); }catch(e){} } }
+  return { get on(){return on;}, get peers(){return peers;}, connect, tick, pub, author, pickSeed,
+    scores, count, bye, ID, _inject(p){ p.last=performance.now(); peers[p.id]=p; } };
+})();
+addEventListener('beforeunload',()=>NET.bye());
+NET.connect();
+// indicador de jugadores en línea
+const eOnline=document.createElement('div');
+eOnline.style.cssText='position:absolute;top:52px;left:14px;background:rgba(8,20,12,.62);border:1px solid rgba(125,255,138,.55);border-radius:12px;padding:4px 11px;font:800 12px system-ui;color:#7dff8a;pointer-events:none;z-index:6;display:none;text-shadow:0 1px 4px #000';
+document.querySelector('.ui').appendChild(eOnline);
+let onlAcc=0;
+function updOnline(dt){ onlAcc+=dt; if(onlAcc<0.5)return; onlAcc=0;
+  const n=NET.count(), vis=(APP==='title'||APP==='run')&&n>0;
+  eOnline.style.display=vis?'':'none'; if(vis)eOnline.textContent='🌐 '+n+' '+T('players'); }
 
 /* ================= LOOP ================= */
 let lastT=performance.now();
@@ -800,10 +927,11 @@ function step(dt){
   R.t+=dt;
   R.v=Math.min(MAX_V,R.v+dt*0.14); if(R.pu.turbo>0)R.v=Math.min(MAX_V+8,R.v+dt*30);
   const mv=R.v*dt;
+  R.wz+=mv;   // distancia ABSOLUTA de pista (sin x2): ancla del mundo compartido
   R.dist+=mv*(R.pu.x2>0?2:1);
   misProg('dist',0); // dist se chequea al final con set directo
   // mover el MUNDO hacia el jugador
-  const biome=BIOMES[Math.floor(R.dist/230)%BIOMES.length];   // ESTACIÓN nueva cada 230 m
+  const biome=BIOMES[Math.floor(R.wz/230)%BIOMES.length];   // ESTACIÓN nueva cada 230 m (por wz → igual para todos)
   for(const s of SEGS){ s.position.z+=mv; if(s.position.z>SEGL+24){ s.position.z-=NSEG*SEGL; segTheme(s,biome); } }
   for(const F of FISHES){ if(!F.m.parent.visible)continue;   // peces del RÍO saltando
     F.ph+=dt*3; const yy=Math.abs(Math.sin(F.ph))*0.9; F.m.position.y=0.1+yy; F.m.rotation.z=Math.cos(F.ph)*0.9; }
@@ -819,7 +947,6 @@ function step(dt){
     if(c.m.position.z>8){ c.on=false; c.m.visible=false; } }
   for(const p of PUPS){ if(!p.on)continue; p.g.position.z+=mv; p.orb.rotation.y+=dt*3; p.orb.position.y=1.1+Math.sin(R.t*3)*0.15;
     if(p.g.position.z>8){ p.on=false; p.g.visible=false; } }
-  R.spawnZ+=mv; R.coinZ+=mv; R.puZ+=mv;   // la frontera de spawn viaja con el mundo: SIEMPRE hay más pasillo
   for(const l of LEAVES){ l.s.position.z+=mv*0.4; l.s.position.y+=l.vy*dt; l.s.position.x+=Math.sin(R.t+l.ph)*dt*0.6;
     if(l.s.position.y<0||l.s.position.z>10){ l.s.position.set((Math.random()-0.5)*12,7+Math.random()*3,-40-Math.random()*80); } }
   spawnStuff();
@@ -945,6 +1072,7 @@ function catchStep(dt){ R.catchT-=dt; R.t+=dt;
   if(R.catchT<=0){ hemi.intensity=1.0; sun.intensity=1.6; guard.visible=false; showDeath(); } }
 function animate(){ requestAnimationFrame(animate);
   const now=performance.now(); const dt=Math.min(0.033,(now-lastT)/1000); lastT=now;
+  NET.tick(dt); updateGhosts(dt); updOnline(dt);
   if(APP==='run')step(dt);
   else if(APP==='cine')cineStep(dt);
   else if(APP==='catch')catchStep(dt);
@@ -956,13 +1084,59 @@ function animate(){ requestAnimationFrame(animate);
       A[0].rotation.x=Math.sin(t2)*0.15; A[2].rotation.x=-Math.sin(t2)*0.15; }
     for(const t of TORCHES){ t.userData.fl.material.opacity=0.75+Math.random()*0.25; } }
   renderer.render(scene,camera); }
-toTitle(); resetRun(true);
-animate();
-
 /* imágenes del título */
 if(ok(A_LOGO))$id('tLogo').src=A_LOGO; else $id('tLogo').outerHTML='<h1 style="position:relative;color:#ffd85e;font:900 52px system-ui;text-shadow:0 0 30px rgba(255,190,60,.8)">RELIQUIA</h1>';
 if(ok(A_BG))$id('title').style.backgroundImage='url('+A_BG+')';
 else $id('title').style.background='radial-gradient(circle at 50% 20%, #2c4a1c 0%, #0c1408 80%)';
+
+/* ================= i18n (en/es/pt) — textos principales ================= */
+const I18N={
+ es:{name:'TU NOMBRE',play:'JUGAR',tap:'▶  TOCÁ PARA CORRER',shop:'🛒 TIENDA',mis:'📜 MISIONES',log:'🏅 LOGROS',set:'⚙️ AJUSTES',
+  loading:'Cargando… ',ready:'¡LISTO!',lb:'🏆 CLASIFICACIÓN',you:'VOS',dist:'m',revive:'💖 REVIVIR',endc:'🏁 TERMINAR',retry:'⟲ OTRA VEZ',menu:'✖ MENÚ',caught:'💀 ¡TE ATRAPÓ!',tut:'⬅️➡️ deslizá para cambiar de carril<br>⬆️ saltá · ⬇️ barrida',
+  online:'🌐 EN LÍNEA',players:'jugadores'},
+ en:{name:'YOUR NAME',play:'PLAY',tap:'▶  TAP TO RUN',shop:'🛒 SHOP',mis:'📜 QUESTS',log:'🏅 AWARDS',set:'⚙️ SETTINGS',
+  loading:'Loading… ',ready:'READY!',lb:'🏆 LEADERBOARD',you:'YOU',dist:'m',revive:'💖 REVIVE',endc:'🏁 END',retry:'⟲ AGAIN',menu:'✖ MENU',caught:'💀 CAUGHT!',tut:'⬅️➡️ swipe to change lane<br>⬆️ jump · ⬇️ slide',
+  online:'🌐 ONLINE',players:'players'},
+ pt:{name:'SEU NOME',play:'JOGAR',tap:'▶  TOQUE PARA CORRER',shop:'🛒 LOJA',mis:'📜 MISSÕES',log:'🏅 CONQUISTAS',set:'⚙️ AJUSTES',
+  loading:'Carregando… ',ready:'PRONTO!',lb:'🏆 CLASSIFICAÇÃO',you:'VOCÊ',dist:'m',revive:'💖 REVIVER',endc:'🏁 TERMINAR',retry:'⟲ DE NOVO',menu:'✖ MENU',caught:'💀 PEGOU VOCÊ!',tut:'⬅️➡️ deslize para mudar de pista<br>⬆️ pule · ⬇️ deslize',
+  online:'🌐 ONLINE',players:'jogadores'} };
+let LANG=SV.lang||'es';
+function T(k){ return (I18N[LANG]||I18N.es)[k]||k; }
+function applyLang(){ document.documentElement.lang=LANG;
+  $id('tapGo').innerHTML=T('tap'); $id('bShop').textContent=T('shop'); $id('bMis').textContent=T('mis');
+  $id('bLog').textContent=T('log'); $id('bSet').textContent=T('set'); $id('nameTitle').textContent=T('name');
+  $id('nameGoTx').textContent=T('play'); $id('dTitle').textContent=T('caught');
+  $id('revBtn').firstChild.textContent=T('revive'); $id('dEnd').textContent=T('endc');
+  $id('eRetry').textContent=T('retry'); $id('eMenu').textContent=T('menu'); $id('tut').innerHTML=T('tut'); }
+
+/* ================= PRECARGA de TODOS los assets (cachea para después) ================= */
+const PRE_URLS=[A_LOGO,A_BG,A_SKY,A_GRASS,A_HERO,A_HERO_SLIDE,A_HERO_JUMP,A_HERO_HIT,A_MON,A_BUSH,
+  ...A_TREE,A_OBS.log,A_OBS.gate,A_OBS.totem,A_MUS_MENU,A_MUS_RUN,...Object.values(A_SFX)].filter(ok);
+let preDone=0; const preTotal=PRE_URLS.length||1;
+function preloadAll(){ loadAudio();   // decodifica música+sfx (y cachea)
+  PRE_URLS.forEach(u=>{ fetch(u,{cache:'force-cache'}).then(()=>{ preDone++; }).catch(()=>{ preDone++; }); }); }
+function preFrac(){ return Math.min(1, preDone/preTotal); }
+
+/* ================= FLUJO DE INICIO: idioma → nombre → carga (fondo) → título ================= */
+function boot(){ APP='lang'; resetRun(true); preloadAll();
+  $id('title').classList.add('hide'); $id('hud').classList.add('hide');
+  $id('langScr').classList.remove('hide'); $id('nameScr').classList.add('hide'); }
+document.querySelectorAll('#langScr [data-lang]').forEach(b=>b.addEventListener('click',()=>{ acx();
+  LANG=b.dataset.lang; SV.lang=LANG; save(); applyLang();
+  $id('langScr').classList.add('hide'); $id('nameScr').classList.remove('hide');
+  $id('nameInp').value=SV.name||''; setTimeout(()=>{ try{ $id('nameInp').focus(); }catch(e){} },50); }));
+$id('nameGo').addEventListener('click',()=>{ acx();
+  let nm=($id('nameInp').value||'').trim().replace(/[<>&"']/g,'').slice(0,12);
+  if(!nm)nm='Player'+((Math.random()*900|0)+100); SV.name=nm; save();
+  $id('nameInp').style.display='none'; $id('nameGo').style.display='none';
+  const go=()=>{ const f=preFrac();
+    $id('nameLoad').textContent=f>=1?T('ready'):(T('loading')+Math.round(f*100)+'%');
+    if(f>=1){ setTimeout(()=>{ $id('nameScr').classList.add('hide');
+      $id('nameInp').style.display=''; $id('nameGo').style.display=''; toTitle(); },300); }
+    else setTimeout(go,150); };
+  go(); });
+applyLang(); boot();
+animate();
 </script>
 </body>
 </html>
