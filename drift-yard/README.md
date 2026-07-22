@@ -1,20 +1,31 @@
 # Drift Yard 🏁🛞
 
-Juego de **drift 3D en Three.js**: solo puntúas derrapando. Estilo industrial semi-realista (nada de neón).
+Juego de **drift 3D en Three.js** con **6 mapas** (5 de drift + 1 de carrera en bosque). Estilo industrial semi-realista.
 
 ## Cómo jugar
 - **Abrir `index.html` suelto** (doble clic / file:// / content://) → carga todo desde este repo vía **jsDelivr CDN**.
 - Servido junto a sus carpetas → carga relativa. Forzar: `?cdn=1` / `?local=1`. Overlay dev: `?dev=1`.
 - Controles: WASD/flechas + **ESPACIO freno de mano** (P pausa) · táctil (botones + ✋) · gamepad (stick, RT/LT, A).
+- En móvil vertical el juego **se rota solo 90°** (sin pantalla de "girá el celular").
 
-## El juego
-- **Parque de drifting gigante de cemento** (300×220 m) con vallas metálicas perimetrales, contenedores, barreras de neumáticos, torres de focos y marcas pintadas — rodeado de naves y oficinas industriales.
-- **4 coches elegibles** en showroom 3D rotatorio con stats (POTENCIA/AGARRE/GIRO/DERRAPE): KATANA (JDM equilibrado), BANDIDO (muscle potente), HACHI (panda ágil), TORO (sedán widebody).
-- **Ciclo elegible: DÍA / ATARDECER / NOCHE** (noche con focos encendidos y faro en tu coche).
-- **Puntuación por drift**: ángulo × velocidad × combo; encadena derrapes para subir el combo (×5 máx.), endereza para **bancar** los puntos, choca y pierdes lo no bancado. Sesión de 3 minutos, medallas 🥉🥈🥇 y récords por coche.
-- Física de derrape arcade (agarre lateral separado, kick de freno de mano, contravolante), **marcas de neumático persistentes**, humo, cámara chase con lag de drift.
+## Los 6 mapas
+1. **PUERTO** (drift) — el parque de cemento clásico: contenedores, isla central, gradas, grúas.
+2. **BOSQUE** (carrera, 3 vueltas) — circuito asfaltado entre miles de árboles (billboards en X fotorealistas), casas junto al camino, 10 checkpoints con arco indicador, medallas por tiempo total.
+3. **AEROPUERTO** (drift) — pista de aterrizaje gigante con avionetas, números 27/09 y barreras.
+4. **AZOTEA** (drift) — helipuerto en un rascacielos, skyline de ciudad alrededor y abajo.
+5. **NIEVE** (drift) — explanada nevada con **placas de hielo** (agarre ×0.25), pinos y cabañas.
+6. **CAÑÓN** (drift) — arena del desierto, mesas rocosas, cactus y un auto oxidado abandonado.
+
+Cada mapa con **cielo 360 propio por bioma** en los 3 horarios: **DÍA / ATARDECER / NOCHE**.
+
+## Juego
+- **4 coches elegibles** en showroom 3D con stats: KATANA / BANDIDO / HACHI / TORO — cada uno con **velocidad tope y aceleración progresiva** propias.
+- **Drift**: ángulo × velocidad × combo; endereza para **bancar**; choque pierde lo no bancado. Medallas 🥉🥈🥇 y récords por mapa.
+- **Carrera (bosque)**: 3 vueltas, mejor vuelta, medallas por tiempo (5:30 / 4:45 / 4:10). Fuera del asfalto el pasto frena.
+- Física v2: agarre lateral separado, kick de freno de mano, contravolante, scrub en derrape; menú de inicio = **vistas orbitando el mapa en vivo**.
 
 ## Assets
-- 8 GLB generados con Higgsfield (imagen→3D): 4 coches, almacén, oficina, contenedor, neumáticos.
-- PBR del repo (cemento, metal, suelo, asfalto), logo/menú/carga generados, **drift phonk** + lo-fi + skid loop generados; motor/choque/chime reutilizados.
-- `design/assets.csv` = manifiesto. Fórmula de estilo única (industrial motorsport, tarde dorada).
+- 21 GLB generados con Higgsfield (imagen→3D): 4 coches, edificios, contenedores, grúas, avioneta, casa, cabaña, etc. (texturas comprimidas: 145 MB → ~17 MB).
+- Billboards de vegetación fotorealistas (chroma key + alpha-bleed anti-halo), 15 cielos equirect 360, PBR del repo (cemento, metal, suelo, asfalto, roca).
+- Música drift phonk + lo-fi + skid loop generadas; motor/choque/chime reutilizados.
+- `design/assets.csv` = manifiesto completo.
