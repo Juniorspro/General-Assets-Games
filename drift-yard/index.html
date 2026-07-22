@@ -92,6 +92,24 @@ body.rot #app{inset:auto;top:0;left:0;width:100vh;height:100vw;
   document.write('<script type="importmap">{"imports":{"three":"'+base+'vendor/three.module.js","three/addons/":"'+base+'vendor/addons/"}}<\/script>');
 })();
 </script>
+<script>
+window.__dyBooted=false;
+(function(){
+  function show(m){var el=document.getElementById("loadmsg");if(el)el.textContent=m;}
+  addEventListener("error",function(e){if(e&&e.message)show("ERROR: "+e.message.slice(0,140));},true);
+  addEventListener("unhandledrejection",function(e){
+    var r=e&&e.reason;show("ERROR: "+String(r&&r.message||r).slice(0,140));});
+  setTimeout(function(){
+    if(window.__dyBooted)return;
+    if(typeof HTMLScriptElement!=="undefined"&&HTMLScriptElement.supports&&!HTMLScriptElement.supports("importmap")){
+      show("Este navegador no soporta importmap — probá con Chrome actualizado");return;}
+    show("Diagnosticando red…");
+    fetch(window.__BASE+"vendor/three.module.js",{method:"HEAD",cache:"no-store"}).then(function(r){
+      show(r.ok?"Red OK pero el motor no arrancó — reintentá o mandá captura":"El CDN respondió "+r.status);
+    }).catch(function(err){show("Sin acceso al CDN: "+String(err&&err.message||err).slice(0,100));});
+  },8000);
+})();
+</script>
 </head>
 <body>
 <div id="app">
@@ -304,7 +322,9 @@ function refreshTouchUI(){document.getElementById("touch").style.display=
 /* ================= renderer / rotation ================= */
 const app=document.getElementById("app");
 const canvas=document.getElementById("gl");
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:"high-performance"});
+let renderer;
+try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:"high-performance"});}
+catch(e){document.getElementById("loadmsg").textContent="Tu navegador bloqueó WebGL: "+e.message;throw e;}
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.18;
 const scene=new THREE.Scene();
 const garageScene=new THREE.Scene();
@@ -1398,6 +1418,7 @@ if(DEV)window.__dy={
 
 /* ================= boot ================= */
 (async()=>{
+  window.__dyBooted=true;
   document.getElementById("logo").src=url("images/logo.png");
   S.loading.style.backgroundImage=`url('${url("images/loading.jpg")}')`;
   loadMsg.textContent=L.loading;
