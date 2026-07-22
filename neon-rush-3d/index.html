@@ -71,11 +71,18 @@ html,body{height:100%;overflow:hidden;background:var(--bg);touch-action:none;
 .rowlist{display:flex;flex-direction:column;gap:12px;max-height:62vh;overflow-y:auto;padding:4px}
 .results-grid{font-size:clamp(15px,2.8vh,22px);line-height:1.9;font-style:italic}
 </style>
-<script type="importmap">
-{"imports":{
-  "three":"https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js",
-  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"
-}}
+<script>
+/* Dynamic importmap: standalone file:// -> everything from the repo via jsDelivr;
+   served next to its folders -> relative. ?cdn / ?local force either mode. */
+(function(){
+  var Q=new URLSearchParams(location.search);
+  var COMMIT="__COMMIT_SHA__"; // wired to the assets commit at publish time
+  var cdnOk=COMMIT.indexOf("__")!==0;
+  var useCDN=cdnOk&&!Q.has("local")&&(Q.has("cdn")||location.protocol==="file:");
+  var base=useCDN?"https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@"+COMMIT+"/neon-rush-3d/":"./";
+  window.__BASE=base;window.__CDN_OK=cdnOk;
+  document.write('<script type="importmap">{"imports":{"three":"'+base+'vendor/three.module.js","three/addons/":"'+base+'vendor/addons/"}}<\/script>');
+})();
 </script>
 </head>
 <body>
@@ -172,12 +179,10 @@ const DEV=Q.has("dev");
 if(DEV)document.getElementById("dev").style.display="block";
 
 /* ============================== asset base (jsDelivr CDN <-> local) ============================== */
-const COMMIT="__COMMIT_SHA__"; // wired to the assets commit at publish time
-const CDN=`https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@${COMMIT}/neon-rush-3d/assets/`;
-const LOCAL="./assets/";
-const cdnReady=!COMMIT.startsWith("__");
-let PRIMARY=Q.has("cdn")&&cdnReady?CDN:Q.has("local")?LOCAL:(location.protocol==="file:"&&cdnReady?CDN:LOCAL);
-const ALT=PRIMARY===CDN?LOCAL:(cdnReady?CDN:LOCAL);
+const PRIMARY=window.__BASE+"assets/";
+const ALT=(window.__BASE==="./"&&window.__CDN_OK)
+  ?PRIMARY.replace("./", "https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@__COMMIT_SHA__/neon-rush-3d/")
+  :"./assets/";
 const url=p=>PRIMARY+p, altUrl=p=>ALT+p;
 
 /* ============================== loading manager ============================== */
@@ -273,16 +278,17 @@ const canvas=document.getElementById("gl");
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:"high-performance"});
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
 const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(CFG.fovBase,innerWidth/innerHeight,.3,6000);
+const camera=new THREE.PerspectiveCamera(CFG.fovBase,innerWidth/innerHeight,.5,4500);
 let composer=null,bloomPass=null;
 function setupPost(){composer=new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene,camera));
   bloomPass=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.55,.4,.72);
   composer.addPass(bloomPass);composer.addPass(new OutputPass());}
+const BLOOM=Q.has("bloom"); // experimental post-fx, off by default (neon comes from unlit materials)
 function applyQuality(){const high=save.quality==="high";
   renderer.setPixelRatio(Math.min(devicePixelRatio||1,high?1.75:1));
   renderer.shadowMap.enabled=high;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-  if(high&&!composer)setupPost();}
+  if(high&&BLOOM&&!composer)setupPost();}
 function resize(){renderer.setSize(innerWidth,innerHeight);
   camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
   if(composer)composer.setSize(innerWidth,innerHeight);
@@ -290,8 +296,8 @@ function resize(){renderer.setSize(innerWidth,innerHeight);
 addEventListener("resize",resize);
 
 /* lighting per STYLE FORMULA blocks 3-4: indigo dusk ambient + warm sunset key + pink horizon */
-const hemi=new THREE.HemisphereLight(0x4a3a8c,0x1a1040,.85);scene.add(hemi);
-const sun=new THREE.DirectionalLight(0xffa06a,1.5);
+const hemi=new THREE.HemisphereLight(0x5a4aa0,0x241a55,1.2);scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xffa06a,1.8);
 sun.position.set(-180,120,-400);scene.add(sun);
 sun.castShadow=false; // enabled per-race on HIGH
 sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.near=10;sun.shadow.camera.far=600;
@@ -475,7 +481,7 @@ function buildWorld(trackIdx){
       const p2=P[ii].clone().addScaledVector(Lf[ii],l2);p2.y+=y2;
       posA.push(p1.x,p1.y,p1.z,p2.x,p2.y,p2.z);
       const v=(i*ds)/uAlong;uvA.push(0,v,across,v);}
-    for(let i=0;i<n;i++){const a=i*2;idx.push(a,a+1,a+2,a+1,a+3,a+2);}
+    for(let i=0;i<n;i++){const a=i*2;idx.push(a,a+2,a+1,a+1,a+2,a+3);} // CCW seen from above (+Y normals)
     const g=new THREE.BufferGeometry();
     g.setAttribute("position",new THREE.Float32BufferAttribute(posA,3));
     g.setAttribute("uv",new THREE.Float32BufferAttribute(uvA,2));
@@ -484,35 +490,38 @@ function buildWorld(trackIdx){
     const m=new THREE.Mesh(g,mat);m.receiveShadow=shadow;group.add(m);return m;}
 
   const W=CFG.roadW/2;
-  ribbon(-W,W,.0,.0,stdMat("road",{repeat:[1,1]}),{uAlong:7,uAcross:2,shadow:true});
-  // embankment shoulders down to terrain
+  const roadMat=stdMat("road",{repeat:[1,1]});
+  roadMat.color.set(0xffffff);roadMat.emissive=new THREE.Color(0x232033);roadMat.emissiveMap=roadMat.map; // dusk-lit asphalt, readable
+  ribbon(-W,W,.0,.0,roadMat,{uAlong:7,uAcross:2,shadow:true});
+  // embankment shoulders down to terrain (kept darker than the asphalt so the road pops)
   const groundId=T.env==="canyon"?"ground":"grass";
-  ribbon(-W-14,-W,-Math.min(3,1e9),0,stdMat(groundId),{uAlong:9,uAcross:2});
-  ribbon(W,W+14,0,-Math.min(3,1e9),stdMat(groundId),{uAlong:9,uAcross:2});
-  // neon edge lines + center dashes (unlit = neon)
-  const lineMat=new THREE.MeshBasicMaterial({color:0xff2e97});
-  const lineMat2=new THREE.MeshBasicMaterial({color:0xf5ecd7});
-  ribbon(-W+.25,-W+.55,.02,.02,lineMat);
-  ribbon(W-.55,W-.25,.02,.02,lineMat);
+  const embMat=stdMat(groundId);embMat.color.set(0x554f70);
+  ribbon(-W-14,-W,-Math.min(3,1e9),0,embMat,{uAlong:9,uAcross:2});
+  ribbon(W,W+14,0,-Math.min(3,1e9),embMat,{uAlong:9,uAcross:2});
+  // neon edge lines + center dashes (unlit = neon; polygon offset beats far-plane z-fighting)
+  const lineMat=new THREE.MeshBasicMaterial({color:0xff2e97,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-6});
+  const lineMat2=new THREE.MeshBasicMaterial({color:0xf5ecd7,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-6});
+  ribbon(-W+.15,-W+.75,.07,.07,lineMat);
+  ribbon(W-.75,W-.15,.07,.07,lineMat);
   {const posA=[],idx=[];let vi=0;
    for(let s=0;s<len-8;s+=12){for(const lane of[-W/3*1,W/3*1,0]){
      if(lane!==0&&T.env!=="city")continue;
-     const a=at(s,lane-.09,.02).clone(),b=at(s,lane+.09,.02).clone(),
-           c=at(s+4,lane+.09,.02).clone(),d=at(s+4,lane-.09,.02).clone();
+     const a=at(s,lane-.14,.07).clone(),b=at(s,lane+.14,.07).clone(),
+           c=at(s+4,lane+.14,.07).clone(),d=at(s+4,lane-.14,.07).clone();
      posA.push(a.x,a.y,a.z,b.x,b.y,b.z,c.x,c.y,c.z,d.x,d.y,d.z);
-     idx.push(vi,vi+1,vi+2,vi,vi+2,vi+3);vi+=4;}}
+     idx.push(vi,vi+2,vi+1,vi,vi+3,vi+2);vi+=4;}}
    const g=new THREE.BufferGeometry();
    g.setAttribute("position",new THREE.Float32BufferAttribute(posA,3));
    g.setIndex(idx);g.computeVertexNormals();
    group.add(new THREE.Mesh(g,lineMat2));}
   // guardrails
-  const railMat=stdMat("metal",{repeat:[1,1]});railMat.metalness=.6;
+  const railMat=stdMat("metal",{repeat:[1,1]});railMat.metalness=.6;railMat.side=THREE.DoubleSide;
   ribbon(-W-1.1,-W-1.1+.06,.55,1.0,railMat,{uAlong:4,uAcross:1});
   ribbon(W+1.1-.06,W+1.1,.55,1.0,railMat,{uAlong:4,uAcross:1});
 
   /* terrain */
-  const terr=new THREE.Mesh(new THREE.CircleGeometry(2600,48),
-    stdMat(groundId,{repeat:[220,220]}));
+  const terrMat=stdMat(groundId,{repeat:[220,220]});terrMat.color.set(0x474060);
+  const terr=new THREE.Mesh(new THREE.CircleGeometry(2600,48),terrMat);
   terr.rotation.x=-Math.PI/2;terr.position.y=-3.05;terr.receiveShadow=false;group.add(terr);
 
   /* sky + sun + horizon */
@@ -531,10 +540,11 @@ function buildWorld(trackIdx){
     for(let i=0;i<14;i++){const a=mrng()*Math.PI*2,r=2300+mrng()*600;
       const m=new THREE.Mesh(new THREE.ConeGeometry(220+mrng()*380,140+mrng()*260,5),mtnMat);
       m.position.set(Math.cos(a)*r,-20,Math.sin(a)*r);m.rotation.y=mrng()*3;group.add(m);}}
-  if(T.env==="coast"){const oc=new THREE.Mesh(new THREE.PlaneGeometry(5200,5200),
+  let ocean=null;
+  if(T.env==="coast"){ocean=new THREE.Mesh(new THREE.PlaneGeometry(5200,5200),
     new THREE.MeshStandardMaterial({map:oceanTex,color:0x8a86ff,roughness:.35,metalness:.4}));
-    oc.rotation.x=-Math.PI/2;oc.position.set(-900,-3.4,0);group.add(oc);
-    oc.material.map.repeat.set(60,60);world.ocean=oc;}
+    ocean.rotation.x=-Math.PI/2;ocean.position.set(-900,-3.4,0);group.add(ocean);
+    ocean.material.map.repeat.set(60,60);}
 
   /* fog per formula block 3-4 */
   scene.fog=new THREE.FogExp2(0x2a1a55,save.quality==="high"?.00115:.0016);
@@ -616,7 +626,7 @@ function buildWorld(trackIdx){
   /* billboards */
   {const brng=mulberry32(T.seed*5+3);
    const mkBill=(texKey,s)=>{const grp=new THREE.Group();
-     const side=brng()<.5?-1:1;const p=at(s,side*(W+8));const t=tangentAt(s);
+     const side=brng()<.5?-1:1;const p=at(s,side*(W+9)).clone();
      const postMat=new THREE.MeshStandardMaterial({color:0x2a2450,roughness:.6});
      for(const dx of[-3.2,3.2]){const post=new THREE.Mesh(new THREE.CylinderGeometry(.16,.2,7,6),postMat);
        post.position.set(dx,3.5,0);grp.add(post);}
@@ -625,20 +635,24 @@ function buildWorld(trackIdx){
        new THREE.MeshBasicMaterial({map:A.img[texKey]||null,color:A.img[texKey]?0xffffff:0xff2e97}));
      face.position.set(0,8.2,.18);grp.add(face);
      grp.position.copy(p);
-     grp.lookAt(p.x+ (side>0?-1:1)*-t.z*10, p.y, p.z + (side>0?-1:1)*t.x*10);
-     grp.lookAt(at(s+ (side>0?1:1)*0, 0).x, p.y, at(s,0).z); // face the road
+     const road=at(s,0).clone();road.y=p.y; // panel front (+Z) faces the road
+     grp.lookAt(road);
      group.add(grp);};
    const cnt=T.env==="city"?6:4;
    for(let i=0;i<cnt;i++)mkBill(i%2?"billboard_a":"billboard_b",((i+.5)/cnt)*len);}
 
-  /* start/finish arch + stripe */
-  if(A.glb.arch){const arch=normalize(A.glb.arch,{width:CFG.roadW+8,rotY:TUNE.arch.rotY});
-    if(arch){const p=at(0,0);arch.position.copy(p);
-      const t=tangentAt(0);arch.rotation.y=Math.atan2(t.x,t.z)+Math.PI/2;
-      group.add(arch);
-      const box=new THREE.Box3().setFromObject(arch);
-      if(box.getSize(new THREE.Vector3()).z>box.getSize(new THREE.Vector3()).x)
-        arch.rotation.y+=0;}}
+  /* start/finish arch + stripe: widest horizontal axis spans the road */
+  if(A.glb.arch){
+    const probe=new THREE.Box3().setFromObject(A.glb.arch.scene);
+    const ps=probe.getSize(new THREE.Vector3());
+    const arch=normalize(A.glb.arch,{width:null,height:null,rotY:ps.z>ps.x?Math.PI/2:0});
+    if(arch){const b=new THREE.Box3().setFromObject(arch);
+      const sz=b.getSize(new THREE.Vector3());
+      arch.scale.setScalar((CFG.roadW+7)/Math.max(sz.x,1e-4));
+      const b2=new THREE.Box3().setFromObject(arch);arch.position.y-=b2.min.y;
+      const p=at(0,0).clone();arch.position.x=p.x;arch.position.z=p.z;arch.position.y+=p.y;
+      const t=tangentAt(0);arch.rotation.y=Math.atan2(t.x,t.z);
+      group.add(arch);}}
   {const stripe=new THREE.Mesh(new THREE.PlaneGeometry(CFG.roadW,3),
      canvasCheckerMat());const p=at(1.6,0,.03);stripe.position.copy(p);
    const t=tangentAt(0);stripe.rotation.set(-Math.PI/2,0,-Math.atan2(t.x,t.z));
@@ -651,10 +665,16 @@ function buildWorld(trackIdx){
     for(let i=0;i<cnt;i++){
       const clone=SkeletonUtils.clone(A.glb.person.scene);
       const wrap=new THREE.Group();wrap.add(clone);
+      clone.updateMatrixWorld(true);
       const b=new THREE.Box3().setFromObject(clone);
-      const h=b.max.y-b.min.y;const sc=1.75/Math.max(h,1e-4);
+      const h=b.max.y-b.min.y;
+      // rigged GLBs export at real-world meters (rigging_height 1.75); the static bbox of a
+      // skinned mesh is unreliable, so only trust it inside a sane range
+      let sc=1.75/Math.max(h,1e-4);
+      if(!isFinite(sc)||sc>3||sc<.3)sc=1;
       clone.scale.setScalar(sc);
-      const b2=new THREE.Box3().setFromObject(clone);clone.position.y-=b2.min.y;
+      const b2=new THREE.Box3().setFromObject(clone);
+      if(isFinite(b2.min.y)&&Math.abs(b2.min.y)<2.5)clone.position.y-=b2.min.y;
       const side=i%2?1:-1;
       const p=at(6+(i>>1)*3.2,side*(W+3+((i*13)%3)));
       wrap.position.copy(p);
@@ -681,7 +701,7 @@ function buildWorld(trackIdx){
   /* minimap path */
   const mm=[];for(let i=0;i<n;i+=4)mm.push([P[i].x,P[i].z]);
 
-  return{group,curve,len,n,ds,at,tangentAt,kAt,orbs,mixers,mm,T};
+  return{group,curve,len,n,ds,at,tangentAt,kAt,orbs,mixers,mm,T,ocean};
 }
 function canvasCheckerMat(){return new THREE.MeshBasicMaterial({map:canvasTex(128,32,(g,w,h)=>{
   for(let y=0;y<2;y++)for(let x=0;x<8;x++){g.fillStyle=(x+y)%2?"#f5ecd7":"#1a1040";
@@ -773,7 +793,8 @@ function update(dt){
   r.steerVis+= (steerIn-r.steerVis)*Math.min(1,dt*10);
   // d is meters toward LEFT
   r.d+=-steerIn*CFG.steer*(.35+.65*vRatio)*dt;
-  r.d+=-k*r.v*r.v*CFG.centrifugal*dt*.06;
+  r.d+=-k*r.v*r.v*.011*dt;                    // gentle centrifugal push
+  if(steerIn===0)r.d-=r.d*.22*vRatio*dt;      // arcade lane-centering assist
   const W=CFG.roadW/2;
   if(Math.abs(r.d)>W+CFG.wallD-2){ // invisible wall + rails
     if(Math.abs(r.d)>W+CFG.wallD-1.9&&r.v>10){sfx("sfx_crash",.7,1.1);spawnSparks(r,14);
@@ -798,7 +819,7 @@ function update(dt){
   // pickups — check span crossed this tick
   if(!r.finished)for(const o of world.orbs){if(o.taken)continue;
     const dsp=wrapDs(o.s-prevS);
-    if(dsp>=-2&&dsp<= r.v*dt+2&&Math.abs(o.lat-(-r.d))<2.2){
+    if(dsp>=-2&&dsp<= r.v*dt+2&&Math.abs(o.lat-r.d)<2.2){
       o.taken=true;o.mesh.visible=false;
       r.nitro=Math.min(CFG.nitroMax,r.nitro+CFG.nitroGain);
       sfx("sfx_nitro",.5,1.4);toast(L.pickupNitro,.8);}}
@@ -844,7 +865,7 @@ function placeEverything(r){
   for(const c of r.cars)placeCar(c.obj,c.s,c.d,c.v,0);
   for(const c of r.traffic)placeCar(c.obj,c.s,c.d,c.v,0);
   // camera chase
-  const p=world.at(r.s,-r.d,0).clone();
+  const p=world.at(r.s,r.d,0).clone();
   const t=world.tangentAt(r.s);
   const back=p.clone().addScaledVector(t,-CFG.camBack).add(new THREE.Vector3(0,CFG.camUp,0));
   const sh=r.shake*(save.quality==="high"?1:1);
@@ -858,7 +879,7 @@ function placeEverything(r){
 }
 const _pv=new THREE.Vector3();
 function placeCar(obj,s,d,v,steer){
-  const p=world.at(s,-d,0);obj.position.copy(p);
+  const p=world.at(s,d,0);obj.position.copy(p);
   const t=world.tangentAt(s);
   obj.rotation.set(0,Math.atan2(t.x,t.z),0);
   obj.rotateY(-steer*.22);
@@ -880,12 +901,13 @@ function finishRace(r){
 const MAXP=240;
 const pGeo=new THREE.BufferGeometry();
 const pPos=new Float32Array(MAXP*3),pVel=new Float32Array(MAXP*3),pLife=new Float32Array(MAXP);
+for(let j=0;j<MAXP;j++)pPos[j*3+1]=-999;
 pGeo.setAttribute("position",new THREE.BufferAttribute(pPos,3));
 const pMat=new THREE.PointsMaterial({size:.22,map:glowTex,color:0xffd28a,transparent:true,
   depthWrite:false,blending:THREE.AdditiveBlending});
 const points=new THREE.Points(pGeo,pMat);points.frustumCulled=false;scene.add(points);
 let pHead=0;
-function spawnSparks(r,count,spread=1){const p=world.at(r.s,-r.d,0);
+function spawnSparks(r,count,spread=1){const p=world.at(r.s,r.d,0);
   for(let i=0;i<count;i++){const j=pHead=(pHead+1)%MAXP;
     pPos[j*3]=p.x;pPos[j*3+1]=p.y+.4;pPos[j*3+2]=p.z;
     pVel[j*3]=(Math.random()-.5)*8*spread;pVel[j*3+1]=2+Math.random()*5;
@@ -940,7 +962,7 @@ function drawHud(dt){if(!race)return;
   const tx=x=>20+(x-minX)*sc,tz=z=>20+(z-minZ)*sc;
   mm.forEach(([x,z],i)=>{i?mctx.lineTo(tx(x),tz(z)):mctx.moveTo(tx(x),tz(z));});
   mctx.closePath();mctx.stroke();
-  const dot=(s,d,color,rad)=>{const p=world.at(s,-d);mctx.fillStyle=color;
+  const dot=(s,d,color,rad)=>{const p=world.at(s,d);mctx.fillStyle=color;
     mctx.beginPath();mctx.arc(tx(p.x),tz(p.z),rad,0,7);mctx.fill();};
   for(const c of race.cars)dot(c.s,c.d,"#8f86c9",4);
   dot(race.s,race.d,"#ff2e97",6);
@@ -970,7 +992,7 @@ function btn(label,cb,{sub=null,disabled=false}={}){const b=document.createEleme
   b.className="btn";b.disabled=disabled;b.innerHTML=label+(sub?`<small>${sub}</small>`:"");
   b.addEventListener("click",()=>{interact();cb();});return b;}
 function buildTitle(){const s=S.title;s.innerHTML="";
-  s.style.backgroundImage=`url('${url("images/menu_bg.jpg")}'),url('${altUrl("images/menu_bg.jpg")}')`;
+  s.style.backgroundImage=`url('${url("images/menu_bg.jpg")}')`;
   const scrim=document.createElement("div");scrim.className="scrim";s.appendChild(scrim);
   const logo=document.createElement("img");logo.id="logo";logo.src=url("images/logo.png");
   logo.onerror=()=>{logo.src=altUrl("images/logo.png");};s.appendChild(logo);
@@ -1020,6 +1042,10 @@ function showResults(){const s=S.results;s.innerHTML="";
   show("results");}
 function startRace(idx){applyQuality();race=newRace(idx);show("race");
   music("music_main");crowdStart();
+  // snap the chase camera into place (no fly-in from the previous position)
+  const p0=world.at(0,0,0).clone(),t0=world.tangentAt(0);
+  camera.position.copy(p0).addScaledVector(t0,-CFG.camBack).add(new THREE.Vector3(0,CFG.camUp,0));
+  camera.lookAt(p0.clone().addScaledVector(t0,14));
   document.getElementById("count").style.display="block";}
 function togglePause(){if(screenName==="race"&&race&&!race.finished){buildPause();engineStop();}
   else if(screenName==="pause"){show("race");if(race.countdown<=0)engineStart();}}
@@ -1039,7 +1065,7 @@ function frame(now){requestAnimationFrame(frame);
   const stepMs=CFG.step*1000;
   while(acc>=stepMs){update(CFG.step);updateParticles(CFG.step);acc-=stepMs;}
   if(screenName==="race"||screenName==="pause"){drawHud(CFG.step);
-    if(composer&&save.quality==="high")composer.render();else renderer.render(scene,camera);}
+    if(composer&&BLOOM&&save.quality==="high")composer.render();else renderer.render(scene,camera);}
   drawFx();
   if(DEV){frames++;if(now-fpsAt>=500){fps=Math.round(frames*1000/(now-fpsAt));frames=0;fpsAt=now;}
     devEl.textContent=`${fps} fps\ncalls ${renderer.info.render.calls} tris ${(renderer.info.render.triangles/1000).toFixed(0)}k`;}
@@ -1050,7 +1076,7 @@ if(DEV)window.__nr={
   warp(){if(race){race.lap=CFG.laps-1;race.s=world.len-300;}},
   state:()=>({screen:screenName,lap:race&&race.lap,pos:race&&race.pos,fin:race&&race.finished,
     v:race&&Math.round(race.v),calls:renderer.info.render.calls}),
-  race:()=>race,world:()=>world};
+  race:()=>race,world:()=>world,camera,scene,renderer,THREE};
 
 /* ============================== boot ============================== */
 (async()=>{
