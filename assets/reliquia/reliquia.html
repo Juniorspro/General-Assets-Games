@@ -140,7 +140,7 @@
   <div id="deathScr" class="panel hide"><div class="box">
     <h2 id="dTitle">💀 ¡TE ATRAPÓ!</h2>
     <div id="deathStats"></div>
-    <div class="mItem play" id="revBtn">💖 REVIVIR<small>100 🪙 · sigue tu carrera</small></div>
+    <div class="mItem play" id="revBtn">💖 REVIVIR<small id="revSub">100 🪙 · sigue tu carrera</small></div>
     <div class="mItem" id="dEnd">🏁 TERMINAR</div>
   </div></div>
   <!-- RESULTADOS -->
@@ -153,9 +153,9 @@
   </div></div>
   <!-- TIENDA -->
   <div id="shopScr" class="panel hide"><div class="box" style="min-width:min(88vw,520px)">
-    <h2>🛒 TIENDA <span class="gold" id="shCoins"></span></h2>
+    <h2><span id="shTitle">🛒 TIENDA</span> <span class="gold" id="shCoins"></span></h2>
     <div id="shopSkins"></div>
-    <div style="margin-top:10px;color:#c9b98a;font:800 12px system-ui;letter-spacing:1px">MEJORAS DE POWER-UPS</div>
+    <div id="upsTitle" style="margin-top:10px;color:#c9b98a;font:800 12px system-ui;letter-spacing:1px">MEJORAS DE POWER-UPS</div>
     <div id="shopUps"></div>
     <div class="mItem" id="shClose">✔ LISTO</div>
   </div></div>
@@ -172,9 +172,9 @@
   <!-- AJUSTES -->
   <div id="setScr" class="panel hide"><div class="box" style="min-width:min(80vw,420px)">
     <h2>⚙️ AJUSTES</h2>
-    <div class="setRow">🎵 Música <div class="tog on" id="tgMus">SÍ</div></div>
-    <div class="setRow">🔊 Sonidos <div class="tog on" id="tgSfx">SÍ</div></div>
-    <div class="setRow">✨ Calidad <div class="tog on" id="tgGfx">ALTA</div></div>
+    <div class="setRow"><span id="lMus">🎵 Música</span> <div class="tog on" id="tgMus">SÍ</div></div>
+    <div class="setRow"><span id="lSfx">🔊 Sonidos</span> <div class="tog on" id="tgSfx">SÍ</div></div>
+    <div class="setRow"><span id="lGfx">✨ Calidad</span> <div class="tog on" id="tgGfx">ALTA</div></div>
     <div class="mItem" id="setReset" style="color:#ff8a8a">🗑 Borrar progreso</div>
     <div class="mItem" id="setClose">✔ LISTO</div>
   </div></div>
@@ -613,13 +613,13 @@ if(!SV.log.powT)SV.log.powT=0; if(!SV.log.misT)SV.log.misT=0;
 function toast(t){ const el=$id('toast'); el.textContent=t; el.style.opacity=1;
   clearTimeout(toast._t); toast._t=setTimeout(()=>el.style.opacity=0,2200); }
 function unlock(id){ if(SV.log[id])return; SV.log[id]=true; save(); S.logro();
-  const L=LOGROS.find(l=>l.id===id); toast('🏅 LOGRO: '+(L?L.n:id)); }
+  const L=LOGROS.find(l=>l.id===id); toast(T('logTag')+' '+(L?T('lgN_'+L.id):id)); }
 function misProg(k,amt){ let hit=false;
   for(const m of SV.mis){ if(m.done||m.k!==k)continue; m.p+=amt;
     if(m.p>=m.x){ m.p=m.x; m.done=true; hit=true; SV.coins+=m.rew; SV.log.misT++;
-      toast('📜 MISIÓN: '+m.n+' ¡+'+m.rew+' 🪙!'); S.logro();
+      toast(T('misTag')+' '+misName(m)+' +'+m.rew+' 🪙'); S.logro();
       if(SV.log.misT>=5)unlock('mis5'); } }
-  if(hit){ if(SV.mis.every(m=>m.done)){ SV.misSeed=(SV.misSeed+7919)%233280; SV.mis=rollMissions(); toast('📜 ¡Nuevas misiones!'); }
+  if(hit){ if(SV.mis.every(m=>m.done)){ SV.misSeed=(SV.misSeed+7919)%233280; SV.mis=rollMissions(); toast(T('newMis')); }
     save(); } }
 
 /* ================= MUNDO DETERMINISTA (semilla compartida) ================= */
@@ -690,7 +690,7 @@ function lbHTML(myD){   // TOP 10: mezcla récords locales + jugadores en línea
   return h+'</div>'; }
 function showDeath(){ APP='death'; S.die(); stopMusic(); if(navigator.vibrate)navigator.vibrate(160);
   const rec=R.dist>SV.best; pushTop(SV.name,R.dist);
-  $id('deathStats').innerHTML='🏃 <b>'+Math.floor(R.dist)+' m</b> &nbsp;·&nbsp; 🪙 <b>'+R.coins+'</b>'+(rec?'<div class="newRec">🎉 ¡NUEVO RÉCORD!</div>':'')+
+  $id('deathStats').innerHTML='🏃 <b>'+Math.floor(R.dist)+' m</b> &nbsp;·&nbsp; 🪙 <b>'+R.coins+'</b>'+(rec?'<div class="newRec">'+T('newRecord')+'</div>':'')+
     '<div style="color:#ffd85e;font:900 15px system-ui;margin-top:10px">'+T('lb')+'</div>'+lbHTML(R.dist);
   const can=(!R.revived&&SV.coins+R.coins>=100);
   $id('revBtn').classList.toggle('dis',!can);
@@ -703,9 +703,9 @@ function finishRun(){
   if(R.coins>=100)unlock('c100');
   save();
   $id('deathScr').classList.add('hide'); $id('hud').classList.add('hide'); APP='end';
-  $id('endStats').innerHTML='🏃 Distancia: <b>'+Math.floor(R.dist)+' m</b>'+(rec?' <span class="newRec">¡RÉCORD!</span>':'')+
-    '<br>🪙 Monedas: <b>+'+R.coins+'</b> (total '+SV.coins+')<br>🏆 Mejor: <b>'+SV.best+' m</b>';
-  let mh=''; for(const m of SV.mis)mh+='<div class="misRow'+(m.done?' done':'')+'">'+(m.done?'✅ ':'▫️ ')+m.n+
+  $id('endStats').innerHTML=T('eDist')+': <b>'+Math.floor(R.dist)+' m</b>'+(rec?' <span class="newRec">'+T('recordTag')+'</span>':'')+
+    '<br>'+T('eCoins')+': <b>+'+R.coins+'</b> ('+T('total')+' '+SV.coins+')<br>'+T('eBest')+': <b>'+SV.best+' m</b>';
+  let mh=''; for(const m of SV.mis)mh+='<div class="misRow'+(m.done?' done':'')+'">'+(m.done?'✅ ':'▫️ ')+misName(m)+
     '<div class="bar"><i style="width:'+Math.min(100,m.p/m.x*100)+'%"></i></div></div>';
   $id('endMis').innerHTML=mh;
   $id('endScr').classList.remove('hide'); }
@@ -727,17 +727,17 @@ $id('tapGo').addEventListener('click',()=>{ acx(); loadAudio(); S.btn(); startRu
 
 /* ================= TIENDA / PANELES ================= */
 function refreshShop(){
-  $id('shCoins').textContent='· 🪙 '+SV.coins;
+  $id('shCoins').textContent='· 🪙 '+SV.coins; $id('shTitle').textContent=T('shop'); $id('upsTitle').textContent=T('upsTitle');
   let h='';
   SKINS.forEach((K,i)=>{ const owned=SV.skins[i], sel=SV.skin===i;
-    h+='<div class="shopRow"><div class="ic">🧍</div><div class="inf"><b>'+K.n+'</b><small>'+(K.price?K.price+' 🪙':'gratis')+'</small></div>'+
-      '<div class="buy '+(sel?'sel':owned?'owned':(SV.coins>=K.price?'':'no'))+'" data-skin="'+i+'">'+(sel?'EN USO':owned?'USAR':'COMPRAR')+'</div></div>'; });
+    h+='<div class="shopRow"><div class="ic">🧍</div><div class="inf"><b>'+skinName(i)+'</b><small>'+(K.price?K.price+' 🪙':T('free'))+'</small></div>'+
+      '<div class="buy '+(sel?'sel':owned?'owned':(SV.coins>=K.price?'':'no'))+'" data-skin="'+i+'">'+(sel?T('inUse'):owned?T('use'):T('buy'))+'</div></div>'; });
   $id('shopSkins').innerHTML=h;
-  const UPS=[{k:'iman',ic:'🧲',n:'Imán',d:'atrae monedas'},{k:'x2',ic:'✖️2',n:'Multiplicador',d:'duplica metros'},{k:'escudo',ic:'🛡️',n:'Escudo',d:'aguanta un golpe'}];
+  const UPS=[{k:'iman',ic:'🧲'},{k:'x2',ic:'✖️2'},{k:'escudo',ic:'🛡️'}];
   let u='';
   UPS.forEach(U=>{ const lv=SV.up[U.k], max=lv>=5, cost=lv*250;
-    u+='<div class="shopRow"><div class="ic">'+U.ic+'</div><div class="inf"><b>'+U.n+' — nivel '+lv+'</b><small>'+U.d+' · dura '+(4+lv*2)+'s</small></div>'+
-      '<div class="buy '+(max?'owned':SV.coins>=cost?'':'no')+'" data-up="'+U.k+'">'+(max?'MÁX':cost+' 🪙')+'</div></div>'; });
+    u+='<div class="shopRow"><div class="ic">'+U.ic+'</div><div class="inf"><b>'+puName(U.k)+' — '+T('level')+' '+lv+'</b><small>'+T('d'+_cap(U.k))+' · '+T('lasts')+' '+(4+lv*2)+'s</small></div>'+
+      '<div class="buy '+(max?'owned':SV.coins>=cost?'':'no')+'" data-up="'+U.k+'">'+(max?T('max'):cost+' 🪙')+'</div></div>'; });
   $id('shopUps').innerHTML=u; }
 $id('shopScr').addEventListener('click',e=>{ const b=e.target.closest('.buy'); if(!b)return;
   if(b.dataset.skin!=null){ const i=+b.dataset.skin;
@@ -750,29 +750,25 @@ function openPanel(id){ acx(); loadAudio(); S.btn(); $id(id).classList.remove('h
 $id('bShop').addEventListener('click',()=>{ refreshShop(); openPanel('shopScr'); });
 $id('shClose').addEventListener('click',()=>$id('shopScr').classList.add('hide'));
 $id('bMis').addEventListener('click',()=>{ let h='';
-  for(const m of SV.mis)h+='<div class="misRow'+(m.done?' done':'')+'">'+(m.done?'✅ ':'▫️ ')+m.n+' <span class="gold">+'+m.rew+'🪙</span>'+
+  for(const m of SV.mis)h+='<div class="misRow'+(m.done?' done':'')+'">'+(m.done?'✅ ':'▫️ ')+misName(m)+' <span class="gold">+'+m.rew+'🪙</span>'+
     '<div class="bar"><i style="width:'+Math.min(100,m.p/m.x*100)+'%"></i></div></div>';
   $id('misList').innerHTML=h; openPanel('misScr'); });
 $id('misClose').addEventListener('click',()=>$id('misScr').classList.add('hide'));
 $id('bLog').addEventListener('click',()=>{ let h='';
-  for(const L of LOGROS)h+='<div class="lgRow"><div class="st">'+(SV.log[L.id]?'🏅':'🔒')+'</div><div><b>'+L.n+'</b><br><small style="color:#c9b98a">'+L.d+'</small></div></div>';
+  for(const L of LOGROS)h+='<div class="lgRow"><div class="st">'+(SV.log[L.id]?'🏅':'🔒')+'</div><div><b>'+T('lgN_'+L.id)+'</b><br><small style="color:#c9b98a">'+T('lgD_'+L.id)+'</small></div></div>';
   $id('logList').innerHTML=h; openPanel('logScr'); });
 $id('logClose').addEventListener('click',()=>$id('logScr').classList.add('hide'));
 $id('bSet').addEventListener('click',()=>openPanel('setScr'));
 $id('setClose').addEventListener('click',()=>$id('setScr').classList.add('hide'));
-function syncTogs(){ $id('tgMus').className='tog'+(CFG.mus?' on':''); $id('tgMus').textContent=CFG.mus?'SÍ':'NO';
-  $id('tgSfx').className='tog'+(CFG.sfx?' on':''); $id('tgSfx').textContent=CFG.sfx?'SÍ':'NO';
-  $id('tgGfx').className='tog'+(CFG.hi?' on':''); $id('tgGfx').textContent=CFG.hi?'ALTA':'BAJA'; }
+function syncTogs(){ $id('tgMus').className='tog'+(CFG.mus?' on':''); $id('tgMus').textContent=CFG.mus?T('yes'):T('no');
+  $id('tgSfx').className='tog'+(CFG.sfx?' on':''); $id('tgSfx').textContent=CFG.sfx?T('yes'):T('no');
+  $id('tgGfx').className='tog'+(CFG.hi?' on':''); $id('tgGfx').textContent=CFG.hi?T('hi'):T('lo'); }
 $id('tgMus').addEventListener('click',()=>{ CFG.mus=!CFG.mus; saveCfg(); syncTogs(); if(!CFG.mus)stopMusic(); else music(APP==='title'?'mMenu':'mRun'); });
 $id('tgSfx').addEventListener('click',()=>{ CFG.sfx=!CFG.sfx; saveCfg(); syncTogs(); });
 $id('tgGfx').addEventListener('click',()=>{ CFG.hi=!CFG.hi; saveCfg(); syncTogs();
   renderer.setPixelRatio(Math.min(devicePixelRatio,CFG.hi?1.8:1.1)); });
-$id('setReset').addEventListener('click',()=>{ if(!confirm('¿Borrar TODO el progreso?'))return;
+$id('setReset').addEventListener('click',()=>{ if(!confirm(T('wipeConfirm')))return;
   SV=JSON.parse(JSON.stringify(DEF)); SV.misSeed=Date.now()%233280; SV.mis=rollMissions(); save(); toTitle(); });
-syncTogs();
-// bono diario
-(function(){ const today=new Date().toDateString();
-  if(SV.day!==today){ SV.day=today; if(SV.runs>0){ SV.coins+=200; toast('🎁 ¡Bono diario: +200 🪙!'); } save(); } })();
 
 /* ================= CONTROLES (swipe) ================= */
 let swX=0,swY=0,swT=0,swId=null;
@@ -923,6 +919,23 @@ let onlAcc=0;
 function updOnline(dt){ onlAcc+=dt; if(onlAcc<0.5)return; onlAcc=0;
   const n=NET.count(), vis=(APP==='title'||APP==='run')&&n>0;
   eOnline.style.display=vis?'':'none'; if(vis)eOnline.textContent='🌐 '+n+' '+T('players'); }
+// TABLA EN VIVO (top 5) en la esquina superior derecha mientras jugás
+const eLive=document.createElement('div');
+eLive.style.cssText='position:absolute;top:40px;right:8px;min-width:120px;background:rgba(8,12,18,.5);border:1px solid rgba(255,216,94,.35);border-radius:10px;padding:5px 9px;font:800 10px system-ui;color:#e8dcc0;pointer-events:none;z-index:6;display:none;text-shadow:0 1px 3px #000';
+document.querySelector('.ui').appendChild(eLive);
+let liveAcc=0;
+function updLiveLb(dt){ if(APP!=='run'){ eLive.style.display='none'; return; }
+  liveAcc+=dt; if(liveAcc<0.35)return; liveAcc=0;
+  const rows=[...(SV.top||[]).map(t=>({n:t.n,d:t.d,you:false})), ...mpScores()];
+  rows.push({n:SV.name||T('you'),d:Math.floor(R.dist),you:true});
+  rows.sort((a,b)=>b.d-a.d);
+  const seen=new Set(), out=[];
+  for(const r of rows){ const k=(r.n||'?')+'|'+r.d; if(seen.has(k))continue; seen.add(k); out.push(r); if(out.length>=5)break; }
+  let h='<div style="color:#ffd85e;font:900 10px system-ui;margin-bottom:3px;letter-spacing:.5px">'+T('lbTop')+'</div>';
+  out.forEach((r,i)=>{ const md=['🥇','🥈','🥉'][i]||((i+1)+'. ');
+    h+='<div style="display:flex;justify-content:space-between;gap:8px;'+(r.you?'color:#7dff8a':'')+'">'+
+      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px">'+md+(r.n||'?')+'</span><span>'+r.d+'</span></div>'; });
+  eLive.innerHTML=h; eLive.style.display=''; }
 
 /* ================= LOOP ================= */
 let lastT=performance.now();
@@ -948,9 +961,10 @@ function step(dt){
   for(const o of OBS){ if(!o.visible)continue; o.position.z+=mv; if(o.position.z>10)o.visible=false;
     if(o.userData.fl)for(const f of o.userData.fl){ const k=0.85+Math.random()*0.4; f.scale.set(0.9*k,1.4*k,1); f.material.opacity=0.7+Math.random()*0.3; } }
   for(const c of COINS){ if(!c.on)continue; c.m.position.z+=mv; c.m.rotation.z+=dt*4;
-    if(R.pu.iman>0){ const d=Math.hypot(c.m.position.x-R.x,c.m.position.z);   // imán: atrae
-      if(d<7){ c.m.position.x+=(R.x-c.m.position.x)*Math.min(1,10*dt); c.m.position.z+=(0-c.m.position.z)*Math.min(1,10*dt);
-        c.m.position.y+=(1-c.m.position.y)*Math.min(1,10*dt); } }
+    if(R.pu.iman>0){ const d=Math.hypot(c.m.position.x-R.x,c.m.position.z);   // imán: atrae FUERTE hacia el jugador (x, z y la altura de la mano)
+      if(d<12){ const f=Math.min(1,18*dt);
+        c.m.position.x+=(R.x-c.m.position.x)*f; c.m.position.z+=(0-c.m.position.z)*f;
+        c.m.position.y+=((R.y+0.9)-c.m.position.y)*f; } }
     if(c.m.position.z>8){ c.on=false; c.m.visible=false; } }
   for(const p of PUPS){ if(!p.on)continue; p.g.position.z+=mv; p.orb.rotation.y+=dt*3; p.orb.position.y=1.1+Math.sin(R.t*3)*0.15;
     if(p.g.position.z>8){ p.on=false; p.g.visible=false; } }
@@ -1004,7 +1018,9 @@ function step(dt){
   if(R.near%60===0)misProg('near',1);
   // monedas
   for(const c of COINS){ if(!c.on)continue;
-    if(Math.abs(c.m.position.z)<0.9&&Math.abs(c.m.position.x-R.x)<0.8&&Math.abs(c.m.position.y-(py+0.9))<1.3){
+    const grab=(Math.abs(c.m.position.z)<0.9&&Math.abs(c.m.position.x-R.x)<0.8&&Math.abs(c.m.position.y-(py+0.9))<1.3)
+      ||(R.pu.iman>0&&Math.hypot(c.m.position.x-R.x,c.m.position.z,c.m.position.y-(py+0.9))<1.7);   // con imán: recolección 3D generosa
+    if(grab){
       c.on=false; c.m.visible=false; const val=(c.gem?5:1)*(R.pu.x2>0?2:1);
       R.coins+=val; (c.gem?S.gem:S.coin)(); misProg('coins',val);
       puff(c.m.position.x,c.m.position.y,0,c.gem?0x39d7ff:0xffc93a,4,3); } }
@@ -1013,11 +1029,11 @@ function step(dt){
     if(Math.abs(p.g.position.z)<1&&Math.abs(p.g.position.x-R.x)<1&&py<1.6){
       p.on=false; p.g.visible=false; R.pu[p.kind]=puDur(p.kind); S.pu(p.kind); misProg('pow',1);
       SV.log.powT++; if(SV.log.powT>=10)unlock('pow10');
-      toast(PUPDEF[p.kind].ic+' ¡'+p.kind.toUpperCase()+'!');
+      toast(PUPDEF[p.kind].ic+' '+puName(p.kind).toUpperCase()+'!');
       puff(p.g.position.x,1.2,0,PUPDEF[p.kind].col,10,5); } }
   // misión de distancia: set directo
   for(const m of SV.mis){ if(m.k==='dist'&&!m.done&&R.dist>m.p){ m.p=Math.floor(R.dist);
-    if(m.p>=m.x){ m.p=m.x; m.done=true; SV.coins+=m.rew; SV.log.misT++; toast('📜 MISIÓN: '+m.n+' ¡+'+m.rew+' 🪙!'); S.logro();
+    if(m.p>=m.x){ m.p=m.x; m.done=true; SV.coins+=m.rew; SV.log.misT++; toast(T('misTag')+' '+misName(m)+' +'+m.rew+' 🪙'); S.logro();
       if(SV.log.misT>=5)unlock('mis5');
       if(SV.mis.every(q=>q.done)){ SV.misSeed=(SV.misSeed+7919)%233280; SV.mis=rollMissions(); }
       save(); } } }
@@ -1079,7 +1095,7 @@ function catchStep(dt){ R.catchT-=dt; R.t+=dt;
   if(R.catchT<=0){ hemi.intensity=1.0; sun.intensity=1.6; guard.visible=false; showDeath(); } }
 function animate(){ requestAnimationFrame(animate);
   const now=performance.now(); const dt=Math.min(0.033,(now-lastT)/1000); lastT=now;
-  NET.tick(dt); updateGhosts(dt); updOnline(dt);
+  NET.tick(dt); updateGhosts(dt); updOnline(dt); updLiveLb(dt);
   if(APP==='run')step(dt);
   else if(APP==='cine')cineStep(dt);
   else if(APP==='catch')catchStep(dt);
@@ -1099,22 +1115,66 @@ else $id('title').style.background='radial-gradient(circle at 50% 20%, #2c4a1c 0
 /* ================= i18n (en/es/pt) — textos principales ================= */
 const I18N={
  es:{name:'TU NOMBRE',play:'JUGAR',tap:'▶  TOCÁ PARA CORRER',shop:'🛒 TIENDA',mis:'📜 MISIONES',log:'🏅 LOGROS',set:'⚙️ AJUSTES',
-  loading:'Cargando… ',ready:'¡LISTO!',lb:'🏆 CLASIFICACIÓN',you:'VOS',dist:'m',revive:'💖 REVIVIR',endc:'🏁 TERMINAR',retry:'⟲ OTRA VEZ',menu:'✖ MENÚ',caught:'💀 ¡TE ATRAPÓ!',tut:'⬅️➡️ deslizá para cambiar de carril<br>⬆️ saltá · ⬇️ barrida',
-  online:'🌐 EN LÍNEA',players:'jugadores'},
+  loading:'Cargando… ',ready:'¡LISTO!',lb:'🏆 CLASIFICACIÓN',lbTop:'🏆 TOP 5',you:'VOS',dist:'m',revive:'💖 REVIVIR',reviveSub:'100 🪙 · sigue tu carrera',
+  endc:'🏁 TERMINAR',retry:'⟲ OTRA VEZ',menu:'✖ MENÚ',caught:'💀 ¡TE ATRAPÓ!',tut:'⬅️➡️ deslizá para cambiar de carril<br>⬆️ saltá · ⬇️ barrida',
+  online:'🌐 EN LÍNEA',players:'jugadores',skip:'TOCÁ PARA SALTAR ▶▶',
+  free:'gratis',buy:'COMPRAR',use:'USAR',inUse:'EN USO',max:'MÁX',done:'✔ LISTO',upsTitle:'MEJORAS DE POWER-UPS',level:'nivel',lasts:'dura',
+  pauseT:'PAUSA',resume:'▶ SEGUIR',restart:'⟲ REINICIAR',
+  endT:'🏺 FIN DE LA CARRERA',eDist:'🏃 Distancia',eCoins:'🪙 Monedas',eBest:'🏆 Mejor',total:'total',recordTag:'¡RÉCORD!',newRecord:'🎉 ¡NUEVO RÉCORD!',
+  music:'🎵 Música',sound:'🔊 Sonidos',quality:'✨ Calidad',yes:'SÍ',no:'NO',hi:'ALTA',lo:'BAJA',wipe:'🗑 Borrar progreso',wipeConfirm:'¿Borrar TODO el progreso?',
+  daily:'🎁 ¡Bono diario: +200 🪙!',misTag:'📜 MISIÓN:',logTag:'🏅 LOGRO:',newMis:'📜 ¡Nuevas misiones!',
+  puIman:'Imán',puX2:'Multiplicador',puEscudo:'Escudo',puTurbo:'Turbo',dIman:'atrae monedas',dX2:'duplica metros',dEscudo:'aguanta un golpe',
+  sk0:'Explorador',sk1:'Dorado',sk2:'Sombra',sk3:'Esmeralda',sk4:'Rubí',
+  mDist:'Corré {x} m en una carrera',mCoins:'Juntá {x} monedas en una carrera',mSlide:'Hacé {x} barridas',mJump:'Saltá {x} veces',mPow:'Agarrá {x} power-ups',mNear:'Esquivá {x} obstáculos',
+  lgN_run1:'Primera expedición',lgD_run1:'Completá tu primera carrera',lgN_m500:'Maratonista',lgD_m500:'Llegá a 500 m',lgN_m1000:'Leyenda del templo',lgD_m1000:'Llegá a 1000 m',lgN_m2500:'Imparable',lgD_m2500:'Llegá a 2500 m',lgN_c100:'Buscatesoros',lgD_c100:'100 monedas en una carrera',lgN_skin:'Estrenando pinta',lgD_skin:'Comprá una skin',lgN_rev:'Segunda vida',lgD_rev:'Reviví una vez',lgN_pow10:'Coleccionista',lgD_pow10:'Agarrá 10 power-ups en total',lgN_mis5:'Cazamisiones',lgD_mis5:'Completá 5 misiones'},
  en:{name:'YOUR NAME',play:'PLAY',tap:'▶  TAP TO RUN',shop:'🛒 SHOP',mis:'📜 QUESTS',log:'🏅 AWARDS',set:'⚙️ SETTINGS',
-  loading:'Loading… ',ready:'READY!',lb:'🏆 LEADERBOARD',you:'YOU',dist:'m',revive:'💖 REVIVE',endc:'🏁 END',retry:'⟲ AGAIN',menu:'✖ MENU',caught:'💀 CAUGHT!',tut:'⬅️➡️ swipe to change lane<br>⬆️ jump · ⬇️ slide',
-  online:'🌐 ONLINE',players:'players'},
+  loading:'Loading… ',ready:'READY!',lb:'🏆 LEADERBOARD',lbTop:'🏆 TOP 5',you:'YOU',dist:'m',revive:'💖 REVIVE',reviveSub:'100 🪙 · continue your run',
+  endc:'🏁 END',retry:'⟲ AGAIN',menu:'✖ MENU',caught:'💀 CAUGHT!',tut:'⬅️➡️ swipe to change lane<br>⬆️ jump · ⬇️ slide',
+  online:'🌐 ONLINE',players:'players',skip:'TAP TO SKIP ▶▶',
+  free:'free',buy:'BUY',use:'USE',inUse:'IN USE',max:'MAX',done:'✔ DONE',upsTitle:'POWER-UP UPGRADES',level:'level',lasts:'lasts',
+  pauseT:'PAUSED',resume:'▶ RESUME',restart:'⟲ RESTART',
+  endT:'🏺 RUN OVER',eDist:'🏃 Distance',eCoins:'🪙 Coins',eBest:'🏆 Best',total:'total',recordTag:'RECORD!',newRecord:'🎉 NEW RECORD!',
+  music:'🎵 Music',sound:'🔊 Sound',quality:'✨ Quality',yes:'YES',no:'NO',hi:'HIGH',lo:'LOW',wipe:'🗑 Wipe progress',wipeConfirm:'Wipe ALL progress?',
+  daily:'🎁 Daily bonus: +200 🪙!',misTag:'📜 QUEST:',logTag:'🏅 AWARD:',newMis:'📜 New quests!',
+  puIman:'Magnet',puX2:'Multiplier',puEscudo:'Shield',puTurbo:'Turbo',dIman:'attracts coins',dX2:'doubles meters',dEscudo:'blocks one hit',
+  sk0:'Explorer',sk1:'Golden',sk2:'Shadow',sk3:'Emerald',sk4:'Ruby',
+  mDist:'Run {x} m in one run',mCoins:'Collect {x} coins in one run',mSlide:'Do {x} slides',mJump:'Jump {x} times',mPow:'Grab {x} power-ups',mNear:'Dodge {x} obstacles',
+  lgN_run1:'First expedition',lgD_run1:'Finish your first run',lgN_m500:'Marathoner',lgD_m500:'Reach 500 m',lgN_m1000:'Temple legend',lgD_m1000:'Reach 1000 m',lgN_m2500:'Unstoppable',lgD_m2500:'Reach 2500 m',lgN_c100:'Treasure hunter',lgD_c100:'100 coins in one run',lgN_skin:'New look',lgD_skin:'Buy a skin',lgN_rev:'Second life',lgD_rev:'Revive once',lgN_pow10:'Collector',lgD_pow10:'Grab 10 power-ups total',lgN_mis5:'Quest hunter',lgD_mis5:'Finish 5 quests'},
  pt:{name:'SEU NOME',play:'JOGAR',tap:'▶  TOQUE PARA CORRER',shop:'🛒 LOJA',mis:'📜 MISSÕES',log:'🏅 CONQUISTAS',set:'⚙️ AJUSTES',
-  loading:'Carregando… ',ready:'PRONTO!',lb:'🏆 CLASSIFICAÇÃO',you:'VOCÊ',dist:'m',revive:'💖 REVIVER',endc:'🏁 TERMINAR',retry:'⟲ DE NOVO',menu:'✖ MENU',caught:'💀 PEGOU VOCÊ!',tut:'⬅️➡️ deslize para mudar de pista<br>⬆️ pule · ⬇️ deslize',
-  online:'🌐 ONLINE',players:'jogadores'} };
+  loading:'Carregando… ',ready:'PRONTO!',lb:'🏆 CLASSIFICAÇÃO',lbTop:'🏆 TOP 5',you:'VOCÊ',dist:'m',revive:'💖 REVIVER',reviveSub:'100 🪙 · continue sua corrida',
+  endc:'🏁 TERMINAR',retry:'⟲ DE NOVO',menu:'✖ MENU',caught:'💀 PEGOU VOCÊ!',tut:'⬅️➡️ deslize para mudar de pista<br>⬆️ pule · ⬇️ deslize',
+  online:'🌐 ONLINE',players:'jogadores',skip:'TOQUE PARA PULAR ▶▶',
+  free:'grátis',buy:'COMPRAR',use:'USAR',inUse:'EM USO',max:'MÁX',done:'✔ PRONTO',upsTitle:'MELHORIAS DE POWER-UPS',level:'nível',lasts:'dura',
+  pauseT:'PAUSA',resume:'▶ CONTINUAR',restart:'⟲ REINICIAR',
+  endT:'🏺 FIM DA CORRIDA',eDist:'🏃 Distância',eCoins:'🪙 Moedas',eBest:'🏆 Melhor',total:'total',recordTag:'RECORDE!',newRecord:'🎉 NOVO RECORDE!',
+  music:'🎵 Música',sound:'🔊 Sons',quality:'✨ Qualidade',yes:'SIM',no:'NÃO',hi:'ALTA',lo:'BAIXA',wipe:'🗑 Apagar progresso',wipeConfirm:'Apagar TODO o progresso?',
+  daily:'🎁 Bônus diário: +200 🪙!',misTag:'📜 MISSÃO:',logTag:'🏅 CONQUISTA:',newMis:'📜 Novas missões!',
+  puIman:'Ímã',puX2:'Multiplicador',puEscudo:'Escudo',puTurbo:'Turbo',dIman:'atrai moedas',dX2:'dobra os metros',dEscudo:'aguenta um golpe',
+  sk0:'Explorador',sk1:'Dourado',sk2:'Sombra',sk3:'Esmeralda',sk4:'Rubi',
+  mDist:'Corra {x} m numa corrida',mCoins:'Junte {x} moedas numa corrida',mSlide:'Faça {x} deslizes',mJump:'Pule {x} vezes',mPow:'Pegue {x} power-ups',mNear:'Desvie de {x} obstáculos',
+  lgN_run1:'Primeira expedição',lgD_run1:'Complete sua primeira corrida',lgN_m500:'Maratonista',lgD_m500:'Chegue a 500 m',lgN_m1000:'Lenda do templo',lgD_m1000:'Chegue a 1000 m',lgN_m2500:'Imparável',lgD_m2500:'Chegue a 2500 m',lgN_c100:'Caça-tesouros',lgD_c100:'100 moedas numa corrida',lgN_skin:'Visual novo',lgD_skin:'Compre uma skin',lgN_rev:'Segunda vida',lgD_rev:'Reviva uma vez',lgN_pow10:'Colecionador',lgD_pow10:'Pegue 10 power-ups no total',lgN_mis5:'Caça-missões',lgD_mis5:'Complete 5 missões'} };
 let LANG=SV.lang||'es';
-function T(k){ return (I18N[LANG]||I18N.es)[k]||k; }
+function T(k){ return (I18N[LANG]||I18N.es)[k]||(I18N.es[k]!=null?I18N.es[k]:k); }
+const _cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+function misName(m){ return T('m'+_cap(m.k)).replace('{x}',m.x); }   // nombre de misión traducido en vivo
+function puName(k){ return T('pu'+_cap(k)); }
+function skinName(i){ return T('sk'+i); }
 function applyLang(){ document.documentElement.lang=LANG;
   $id('tapGo').innerHTML=T('tap'); $id('bShop').textContent=T('shop'); $id('bMis').textContent=T('mis');
   $id('bLog').textContent=T('log'); $id('bSet').textContent=T('set'); $id('nameTitle').textContent=T('name');
   $id('nameGoTx').textContent=T('play'); $id('dTitle').textContent=T('caught');
-  $id('revBtn').firstChild.textContent=T('revive'); $id('dEnd').textContent=T('endc');
-  $id('eRetry').textContent=T('retry'); $id('eMenu').textContent=T('menu'); $id('tut').innerHTML=T('tut'); }
+  $id('revBtn').firstChild.textContent=T('revive'); $id('revSub').textContent=T('reviveSub');
+  $id('dEnd').textContent=T('endc'); $id('eRetry').textContent=T('retry'); $id('eMenu').textContent=T('menu'); $id('tut').innerHTML=T('tut');
+  $id('skipCine').textContent=T('skip');
+  // pausa / ajustes / cerrar paneles / títulos de paneles
+  $id('pCont').textContent=T('resume'); $id('pRetry').textContent=T('restart'); $id('pMenu').textContent=T('menu');
+  $id('lMus').textContent=T('music'); $id('lSfx').textContent=T('sound'); $id('lGfx').textContent=T('quality');
+  $id('setReset').textContent=T('wipe'); $id('setClose').textContent=T('done');
+  $id('shClose').textContent=T('done'); $id('misClose').textContent=T('done'); $id('logClose').textContent=T('done');
+  $id('shTitle').textContent=T('shop');
+  const q=(s,t)=>{ const e=document.querySelector(s); if(e)e.textContent=t; };
+  q('#pauseScr h2',T('pauseT')); q('#misScr h2',T('mis')); q('#logScr h2',T('log')); q('#setScr h2',T('set')); q('#endScr h2',T('endT'));
+  if(typeof syncTogs==='function')syncTogs(); }
 
 /* ================= PRECARGA de TODOS los assets (cachea para después) ================= */
 const PRE_URLS=[A_LOGO,A_BG,A_SKY,A_GRASS,A_HERO,A_HERO_SLIDE,A_HERO_JUMP,A_HERO_HIT,A_MON,A_BUSH,
@@ -1142,6 +1202,10 @@ $id('nameGo').addEventListener('click',()=>{ acx();
       $id('nameInp').style.display=''; $id('nameGo').style.display=''; toTitle(); },300); }
     else setTimeout(go,150); };
   go(); });
+syncTogs();
+// bono diario (después de definir i18n para poder traducir el aviso)
+(function(){ const today=new Date().toDateString();
+  if(SV.day!==today){ SV.day=today; if(SV.runs>0){ SV.coins+=200; toast(T('daily')); } save(); } })();
 applyLang(); boot();
 animate();
 </script>
