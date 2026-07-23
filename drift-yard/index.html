@@ -12,7 +12,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);touch-action:none;
   -webkit-user-select:none;user-select:none;overscroll-behavior:none;
   font-family:"Arial Black","Segoe UI",Arial,sans-serif;color:var(--ink)}
 #app{position:fixed;inset:0;overflow:hidden}
-body.rot #app{inset:auto;top:0;left:0;width:calc(var(--ah)*1);height:calc(var(--aw)*1);
+body.rot #app{inset:auto;top:0;left:0;width:100vh;height:100vw; /* unidades de viewport REALES: el propio #app define --aw/--ah */
   transform:rotate(90deg) translateY(-100%);transform-origin:top left}
 #gl{position:absolute;inset:0;width:100%;height:100%;display:block}
 .screen{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;
@@ -350,7 +350,9 @@ function commands(){return{
   down:held.has("down")||held.has("pad_down")||padBrake>.08||tstate.brake,
   hand:held.has("hand")||held.has("pad_okA")||tstate.hand};}
 function refreshTouchUI(){document.getElementById("touch").style.display=
-  (touchDevice&&mode==="race")?"block":"none";}
+  (touchDevice&&mode==="race")?"block":"none";
+  document.getElementById("tgas").textContent=L.gas;
+  document.getElementById("tbrake").textContent=L.brake;}
 
 /* ================= renderer / rotation ================= */
 const app=document.getElementById("app");
@@ -573,7 +575,10 @@ function floodTowers(group,colliders,spots,T){
     g2.position.set(x,0,z);g2.lookAt(0,0,0);g2.rotateY(Math.PI);group.add(g2);
     colliders.push({type:"circle",x,z,r:.9});}}
 function tireRing(group,colliders,iw,id2){
-  const twMi=mergedForInstancing(A.glb.tirewall,{length:7});if(!twMi)return;
+  const twGlb=A.glb.tirewall;if(!twGlb)return;
+  // el GLB tiene el eje largo en X: rotarlo antes de normalizar o explota ×7
+  const twSz=new THREE.Box3().setFromObject(twGlb.scene).getSize(new THREE.Vector3());
+  const twMi=mergedForInstancing(twGlb,{length:7,rotY:twSz.x>twSz.z?Math.PI/2:0});if(!twMi)return;
   const NSEG=140,pts2=[];
   for(let i=0;i<NSEG;i++){const a=(i/NSEG)*Math.PI*2;
     const cx2=Math.cos(a),sz2=Math.sin(a);
