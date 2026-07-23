@@ -58,6 +58,8 @@ body.rot #app{inset:auto;top:0;left:0;width:100vh;height:100vw; /* unidades de v
 #score .cur .combo{color:var(--yel)}
 #timer{position:absolute;top:calc(var(--ah)*0.02);right:calc(var(--aw)*0.024);font-size:clamp(17px,calc(var(--ah)*0.034),28px);font-style:italic;text-align:right}
 #timer small{display:block;font-size:.55em;color:var(--dim);font-weight:400}
+#hpbar{position:absolute;top:calc(var(--ah)*0.075);left:50%;transform:translateX(-50%);width:min(46vw,300px);height:9px;background:rgba(0,0,0,.5);border:1.5px solid rgba(242,239,232,.4);border-radius:5px;overflow:hidden}
+#hpbar>i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#3fd463,#ffd23c 60%,#e84040);transition:width .15s}
 #speedo{position:absolute;right:calc(var(--aw)*0.024);bottom:calc(var(--ah)*0.02);text-align:right;font-style:italic}
 #speedo .kmh{font-size:clamp(28px,calc(var(--ah)*0.056),48px);text-shadow:0 3px 0 rgba(0,0,0,.7)}
 #speedo .unit{color:var(--dim);font-weight:400;font-size:11px;letter-spacing:.2em}
@@ -136,6 +138,7 @@ window.__dyBooted=false;
   <div id="timer">3:00<small></small></div>
   <div id="speedo"><div class="kmh">0</div><div class="unit">km/h</div><div class="ang"></div></div>
   <div id="cparrow">▲</div>
+  <div id="hpbar"><i></i></div>
   <button id="pausebtn">II</button>
   <div id="toast"></div>
 </div>
@@ -156,7 +159,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 4.2</div>
+  <div id="buildtag">build 4.3</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -178,7 +181,7 @@ dia:"DÍA",tarde:"ATARDECER",noche:"NOCHE",
 power:"POTENCIA",grip:"AGARRE",turn:"GIRO",kick:"DERRAPE",best:"RÉCORD",noBest:"SIN RÉCORD",
 paused:"PAUSA",resume:"SEGUIR",restart:"REINICIAR",exit:"SALIR",timeUp:"¡SE ACABÓ!",results:"RESULTADOS",
 score:"PUNTOS",bestDrift:"MEJOR DERRAPE",newRecord:"¡NUEVO RÉCORD!",retry:"OTRA VEZ",garage:"GARAJE",menu:"MENÚ",
-comboLost:"¡COMBO PERDIDO!",go:"¡DALE!",gas:"GAS",brake:"FRENO",
+comboLost:"¡COMBO PERDIDO!",go:"¡DALE!",gas:"GAS",brake:"FRENO",wrecked:"¡DESTRUIDO!",getin:"SUBIR",getout:"BAJAR",punch:"GOLPE",jump:"SALTO",
 lap:"VUELTA",finalLap:"¡ÚLTIMA VUELTA!",wrongWay:"CHECKPOINT ▲",totalTime:"TIEMPO TOTAL",bestLapS:"MEJOR VUELTA",
 modeDrift:"DRIFT · 3 MIN",modeRace:"CARRERA · 3 VUELTAS",
 controlsKeys:"Flechas o WASD · ESPACIO freno de mano · P pausa",
@@ -199,7 +202,7 @@ dia:"DAY",tarde:"SUNSET",noche:"NIGHT",
 power:"POWER",grip:"GRIP",turn:"STEERING",kick:"SLIDE",best:"BEST",noBest:"NO RECORD",
 paused:"PAUSED",resume:"RESUME",restart:"RESTART",exit:"QUIT",timeUp:"TIME'S UP!",results:"RESULTS",
 score:"SCORE",bestDrift:"BEST DRIFT",newRecord:"NEW RECORD!",retry:"RETRY",garage:"GARAGE",menu:"MENU",
-comboLost:"COMBO LOST!",go:"GO!",gas:"GAS",brake:"BRAKE",
+comboLost:"COMBO LOST!",go:"GO!",gas:"GAS",brake:"BRAKE",wrecked:"WRECKED!",getin:"ENTER",getout:"EXIT",punch:"PUNCH",jump:"JUMP",
 lap:"LAP",finalLap:"FINAL LAP!",wrongWay:"CHECKPOINT ▲",totalTime:"TOTAL TIME",bestLapS:"BEST LAP",
 modeDrift:"DRIFT · 3 MIN",modeRace:"RACE · 3 LAPS",
 controlsKeys:"Arrows or WASD · SPACE handbrake · P pause",
@@ -311,14 +314,49 @@ function music(n){stopMusic();const s=SND[n];if(!save.sound||!actx||!s||!s.buf)r
   musicSrc=actx.createBufferSource();musicSrc.buffer=s.buf;musicSrc.loop=true;
   const g=actx.createGain();g.gain.value=MIX.music;musicSrc.connect(g);g.connect(master);musicSrc.start();}
 function stopMusic(){if(musicSrc){try{musicSrc.stop();}catch{}musicSrc=null;}}
-const engineRef={src:null,gain:null},skidRef={src:null,gain:null};
+const skidRef={src:null,gain:null};
+/* ===== motor PROCEDURAL (Web Audio, sin samples): dos sawtooth detunados + sub
+   cuadrado + ruido de admisión, todo a través de un lowpass; la frecuencia base
+   la maneja el RPM. Suena a motor de verdad y pesa 0 KB. ===== */
+const eng={on:false,nodes:null,gear:0};
+function engineStart(){if(!actx||eng.on)return;
+  const g=actx.createGain();g.gain.value=0;g.connect(master);
+  const lp=actx.createBiquadFilter();lp.type="lowpass";lp.frequency.value=900;lp.Q.value=6;lp.connect(g);
+  const o1=actx.createOscillator();o1.type="sawtooth";
+  const o2=actx.createOscillator();o2.type="sawtooth";o2.detune.value=14;
+  const sub=actx.createOscillator();sub.type="square";
+  const og=actx.createGain();og.gain.value=.5;o1.connect(og);o2.connect(og);og.connect(lp);
+  const sg=actx.createGain();sg.gain.value=.35;sub.connect(sg);sg.connect(lp);
+  // ruido de admisión suave
+  const nb=actx.createBuffer(1,actx.sampleRate,actx.sampleRate);
+  const nd=nb.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=(Math.random()*2-1)*.5;
+  const nz=actx.createBufferSource();nz.buffer=nb;nz.loop=true;
+  const ng=actx.createGain();ng.gain.value=.04;const nlp=actx.createBiquadFilter();
+  nlp.type="bandpass";nlp.frequency.value=1200;nz.connect(nlp);nlp.connect(ng);ng.connect(g);
+  o1.start();o2.start();sub.start();nz.start();
+  eng.nodes={g,lp,o1,o2,sub,og};eng.on=true;eng.gear=0;}
+function engineStop(){if(!eng.on)return;const n=eng.nodes;
+  try{n.o1.stop();n.o2.stop();n.sub.stop();}catch{}
+  eng.on=false;eng.nodes=null;}
+function engineSet(r){ // r = velocidad/tope 0..1; RPM sube/baja por cambio simulado
+  if(!eng.on)return;const n=eng.nodes,t=actx.currentTime;
+  const GEARS=6, seg=1/GEARS;
+  let gi=Math.min(GEARS-1,Math.floor(r/seg));
+  const within=(r-gi*seg)/seg;          // 0..1 dentro del cambio actual
+  const rpm=.28+within*.72;             // cae al cambiar, sube al acelerar
+  const base=48+rpm*118;                // Hz de encendido
+  n.o1.frequency.setTargetAtTime(base,t,.04);
+  n.o2.frequency.setTargetAtTime(base,t,.04);
+  n.sub.frequency.setTargetAtTime(base*.5,t,.05);
+  n.lp.frequency.setTargetAtTime(500+r*2600+rpm*700,t,.05);
+  n.g.gain.setTargetAtTime(MIX.engine*(.35+.65*Math.min(1,r*1.3)),t,.06);
+  if(gi>eng.gear&&r>.12){sfx("sfx_pop",.5+Math.random()*.3,.9+Math.random()*.3);} // petardeo al subir
+  eng.gear=gi;}
 function loopStart(name,ref){const s=SND[name];if(!save.sound||!actx||!s||!s.buf||ref.src)return;
   ref.src=actx.createBufferSource();ref.src.buffer=s.buf;ref.src.loop=true;
   ref.gain=actx.createGain();ref.gain.gain.value=0;ref.src.connect(ref.gain);ref.gain.connect(master);ref.src.start();}
-function loopsStart(){loopStart("sfx_engine",engineRef);loopStart("sfx_skid_loop",skidRef);}
-function loopsStop(){for(const r of[engineRef,skidRef]){if(r.src){try{r.src.stop();}catch{}r.src=null;}}}
-function engineSet(r){if(engineRef.src){engineRef.gain.gain.value=MIX.engine*(.4+.6*r);
-  engineRef.src.playbackRate.value=.45+1.75*r;}}
+function loopsStart(){if(save.sound){engineStart();}loopStart("sfx_skid_loop",skidRef);}
+function loopsStop(){engineStop();if(skidRef.src){try{skidRef.src.stop();}catch{}skidRef.src=null;}}
 function skidSet(v){if(skidRef.src)skidRef.gain.gain.value=MIX.skid*v;}
 function applySound(){if(!save.sound){stopMusic();loopsStop();}
   else{music(mode==="race"?"music_drift":"music_menu");if(mode==="race")loopsStart();}}
@@ -468,7 +506,7 @@ async function loadAll(){
     ["vending","models/gen/vending.glb"],["stand","models/gen/grandstand.glb"],
     ["bigscreen","models/gen/bigscreen.glb"],["forklift","models/gen/forklift.glb"]])
     jobs.push({p,kind:"glb",assign:g=>{A.glb[k]=g;}});
-  for(const n of["sfx_engine.mp3","sfx_skid_loop.mp3","sfx_crash.mp3","sfx_crash_soft.mp3","sfx_punch.mp3","sfx_chime.mp3","sfx_ui.mp3","sfx_ok.mp3","sfx_count.mp3","sfx_finish.mp3"])
+  for(const n of["sfx_skid_loop.mp3","sfx_crash.mp3","sfx_crash_soft.mp3","sfx_punch.mp3","sfx_pop.mp3","sfx_chime.mp3","sfx_ui.mp3","sfx_ok.mp3","sfx_count.mp3","sfx_finish.mp3"])
     jobs.push({p:"audio/"+n,kind:"buf",assign:b=>{SND[n.replace(/\.(mp3|m4a)$/,"")]={raw:b,buf:null};}});
   const still=await runTasks(jobs);
   if(still.length){console.warn("failed:",loadFailed);
@@ -1355,14 +1393,55 @@ function newSession(){
   clearMarks();clearSmoke();
   const wheels=[];obj.traverse(o=>{if(o.name==="dyw_f"||o.name==="dyw_r")wheels.push(o);});
   const wR=carTemplates[save.car].userData.wheelR||.3;
+  // mallas deformables = la carrocería (todo lo que NO es rueda), con geometría propia por sesión
+  const body=[];
+  obj.traverse(o=>{if(o.isMesh){
+    let w=o;while(w){if(w.name==="dyw_f"||w.name==="dyw_r")return;w=w.parent;}
+    o.geometry=o.geometry.clone(); // no corromper el template compartido
+    o.material=o.material.clone();
+    if(o.geometry.attributes.position)body.push(o);}});
   const sp=world.spawn;
-  return{stats,obj,wheels,wheelR:Math.max(wR,.12),wheelSpin:0,mapMode:M.mode,laps:M.laps||0,
+  return{stats,obj,wheels,body,hp:100,dead:false,fade:0,wR:Math.max(wR,.12),wheelR:Math.max(wR,.12),wheelSpin:0,mapMode:M.mode,laps:M.laps||0,
     x:sp.x,z:sp.z,h:sp.h,vx:0,vz:0,physSteer:0,autoDrift:false,handT:0,handPrev:false,hbDrift:false,hbGap:0,
     steerVis:0,beta:0,speed:0,
     total:0,cur:0,combo:1,driftT:0,gapT:0,bestDrift:0,
     t:M.mode==="drift"?CFG.session:0,go:1.5,over:false,saved:false,record:false,
     lap:0,cp:0,lapStart:0,lapTimes:[],bestLapT:null,roadIdx:0,
     camYaw:sp.h,shake:0,chimT:0};}
+/* Deforma la carrocería: empuja los vértices cercanos al punto de impacto hacia
+   adentro, en la dirección del golpe (en espacio local del coche). Acumulativo. */
+const _dV=new THREE.Vector3(),_dN=new THREE.Vector3();
+function deformCar(s,worldDir,strength){
+  const sh=Math.sin(s.h),ch=Math.cos(s.h);
+  // dirección de golpe -> local del coche (fwd=(sinH,cosH))
+  const lx=worldDir.x*ch-worldDir.z*sh, lz=worldDir.x*sh+worldDir.z*ch;
+  for(const m of s.body){
+    const pos=m.geometry.attributes.position;const arr=pos.array;
+    if(!m.geometry.boundingBox)m.geometry.computeBoundingBox();
+    const bb=m.geometry.boundingBox,sz=bb.max.z-bb.min.z||1,sx=bb.max.x-bb.min.x||1;
+    // punto de impacto en el borde del bounding en la dirección del golpe
+    const ix=(lx>0?bb.max.x:bb.min.x)*.9, iz=(lz>0?bb.max.z:bb.min.z)*.9;
+    const iy=(bb.min.y+bb.max.y)*.5;
+    const R=Math.max(sz,sx)*.45, R2=R*R, amp=strength*R*.5;
+    for(let i=0;i<arr.length;i+=3){
+      const dx=arr[i]-ix,dy=arr[i+1]-iy,dz=arr[i+2]-iz;
+      const d2=dx*dx+dy*dy*.4+dz*dz;
+      if(d2<R2){const f=(1-d2/R2)*amp;
+        arr[i]-=lx*f;arr[i+2]-=lz*f;
+        arr[i+1]+=(Math.random()-.5)*f*.5;} // abolladura irregular
+    }
+    pos.needsUpdate=true;m.geometry.computeVertexNormals();
+    m.geometry.boundingSphere=null;
+  }
+  // se ensucia/oscurece con el daño
+  const t=1-s.hp/100;
+  for(const m of s.body)if(m.material.color){
+    m.material.roughness=Math.min(1,(m.material.roughness||.6)+t*.02);}
+}
+function killPlayer(s){if(s.dead)return;s.dead=true;s.over=true;
+  loopsStop();sfx("sfx_crash",1,.7);
+  toast(L.wrecked||"¡DESTRUIDO!","var(--red)");
+  for(let k=0;k<14;k++)spawnPuffAt(s.x+(Math.random()-.5)*2,.5+Math.random(),s.z+(Math.random()-.5)*2,1.6);}
 
 /* ================= physics v2 ================= */
 function update(dt){
@@ -1376,6 +1455,17 @@ function update(dt){
   s.shake=Math.max(0,s.shake-dt*3*s.shake);
   for(const c of world.chimneys||[])if((s.chimT-=dt)<=0){s.chimT=.5;
     spawnPuffAt(c.x+(Math.random()-.5),c.y,c.z+(Math.random()-.5),2.2);break;}
+  // muerte: el coche frena, humea y se desvanece progresivamente -> menú
+  if(s.dead){
+    s.vx*=1-Math.min(1,dt*2);s.vz*=1-Math.min(1,dt*2);
+    s.x+=s.vx*dt;s.z+=s.vz*dt;s.obj.position.set(s.x,0,s.z);
+    if(Math.random()<dt*8)spawnPuffAt(s.x+(Math.random()-.5)*2,.6,s.z+(Math.random()-.5)*2,1.4);
+    s.fade+=dt;
+    const op=Math.max(0,1-Math.max(0,s.fade-.8)/1.4);
+    for(const m of s.body){m.material.transparent=true;m.material.opacity=op;}
+    for(const w of s.wheels)w.traverse(o=>{if(o.isMesh){o.material.transparent=true;o.material.opacity=op;}});
+    if(s.fade>2.5){loopsStop();sess=null;music("music_menu");buildTitle();}
+    return;}
 
   // smoothed steering feeds the physics (heavier, less twitchy)
   s.physSteer+=(cmd.steer-s.physSteer)*Math.min(1,dt*5.2);
@@ -1438,7 +1528,7 @@ function update(dt){
   s.beta=beta;s.speed=Math.hypot(s.vx,s.vz);
 
   /* collisions */
-  let hit=false;
+  let hit=false;const pvx=s.vx,pvz=s.vz;
   const B=world.bounds;
   if(B){if(s.x<-B.W){s.x=-B.W;s.vx=Math.abs(s.vx)*.35;hit=speed>7;}
     if(s.x>B.W){s.x=B.W;s.vx=-Math.abs(s.vx)*.35;hit=hit||speed>7;}
@@ -1471,10 +1561,20 @@ function update(dt){
         s.x+=wx*push;s.z+=wz*push;
         const dot=s.vx*wx+s.vz*wz;
         if(dot<0){s.vx-=1.6*dot*wx;s.vz-=1.6*dot*wz;s.vx*=.85;s.vz*=.85;hit=hit||speed>7;}}}}
-  if(hit){const imp=Math.min(1,(speed-6)/26);
+  if(hit){
+    // fuerza del impacto = cuánta velocidad se perdió de golpe
+    const dvx=s.vx-pvx,dvz=s.vz-pvz,dv=Math.hypot(dvx,dvz);
+    const imp=Math.min(1,(speed-6)/26);
     sfx(imp>.45?"sfx_crash":"sfx_crash_soft",Math.max(.15,imp*imp*1.2),.9+Math.random()*.25);
     s.shake=Math.min(1,.3+imp);
-    if(s.mapMode==="drift"&&s.cur>0){s.cur=0;s.combo=1;s.driftT=0;toast(L.comboLost,"var(--red)");}}
+    if(s.mapMode==="drift"&&s.cur>0){s.cur=0;s.combo=1;s.driftT=0;toast(L.comboLost,"var(--red)");}
+    if(dv>2.5&&!s.dead){ // daño + deformación proporcional al golpe
+      const dmg=Math.min(55,dv*2.4);
+      s.hp=Math.max(0,s.hp-dmg);
+      const dir=dv>1e-3?{x:dvx/dv,z:dvz/dv}:{x:0,z:1};
+      deformCar(s,dir,Math.min(1,dv/22));
+      for(let k=0;k<3;k++)spawnPuffAt(s.x,.6,s.z,1.4);
+      if(s.hp<=0)killPlayer(s);}}
 
   /* scoring */
   const betaDeg=Math.abs(beta)*57.29578;
@@ -1620,7 +1720,7 @@ function clearSmoke(){if(!smokeGeo)return;
 const elTotal=document.querySelector("#score .total"),elCur=document.querySelector("#score .cur"),
   elTimer=document.getElementById("timer"),elKmh=document.querySelector("#speedo .kmh"),
   elAng=document.querySelector("#speedo .ang"),elToast=document.getElementById("toast"),
-  elArrow=document.getElementById("cparrow");
+  elArrow=document.getElementById("cparrow"),elHp=document.querySelector("#hpbar>i");
 let toastT=0;
 function toast(t,color){elToast.textContent=t;elToast.style.color=color||"var(--yel)";
   elToast.style.opacity=1;toastT=1.3;}
@@ -1648,6 +1748,7 @@ function drawHud(dt){if(!sess)return;
     elArrow.style.display="block";
     elArrow.style.transform=`translateX(-50%) rotate(${(-ang*57.3).toFixed(0)}deg)`;}
   elKmh.textContent=Math.round(sess.speed*3.6);
+  if(elHp&&sess.hp!=null)elHp.style.width=sess.hp+'%';
   const bd=Math.abs(sess.beta)*57.3;
   elAng.textContent=bd>8?Math.round(bd)+"°":"";
 }
