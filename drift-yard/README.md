@@ -2,6 +2,13 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.3 — modo a pie que anda de verdad
+- **Animaciones nuevas y buenas**: idle (parado quieto, ya no marcha en el lugar), correr real hacia adelante (RunFast), salto rápido y vertical (Regular_Jump), y **piña de una sola trompada** (Right_Jab) rápida — no más rutina de boxeo de 7 s. Las viejas eran clips equivocados (correr "BackLeft", salto de 9,9 s, boxeo de 6,9 s).
+- **Joystick recalibrado**: adelante en el joystick = el piloto camina/corre hacia donde mira la cámara (antes iba invertido). Empuje suave = caminar, a fondo = correr; gira suave hacia donde vas.
+- **Bug de escala horneada**: los clips de Meshy traían escala animada en los huesos (el piloto crecía ~18 % al quedarse quieto). Ahora se quitan las pistas de escala → tamaño constante ~1,8 m en toda animación.
+- **Sin NPCs a pie**: andás solo (pediste "solamente yo").
+- **Bajar del auto es instantáneo**: los pilotos y animaciones se precargan con el resto de los assets (chau "cargando").
+
 ## Novedades 5.2
 - **Joystick analógico a pie** 🕹️: el modo a pie ahora se controla con un joystick virtual (empujá suave = caminás, a fondo = corrés) en vez de la cruceta. Salto y piña siguen a la derecha.
 - **Vida solo a pie** ❤️: la barra de vida aparece **únicamente cuando estás fuera del auto** y muestra la salud del piloto (manejando no molesta en pantalla).

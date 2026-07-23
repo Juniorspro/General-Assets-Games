@@ -181,7 +181,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.2</div>
+  <div id="buildtag">build 5.3</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -1550,8 +1550,8 @@ async function loadPeds(){
   pedsLoading=true;
   const items=[["ped_ped1","models/gen/ped1.glb"],["ped_ped2","models/gen/ped2.glb"],
     ["ped_ped3","models/gen/ped3.glb"],["ped_ped4","models/gen/ped4.glb"],["ped_ped5","models/gen/ped5.glb"],
-    ["ped_act_run","models/gen/act_run.glb"],["ped_act_punch","models/gen/act_punch.glb"],
-    ["ped_act_jump","models/gen/act_jump.glb"],["ped_act_wave","models/gen/act_wave.glb"]];
+    ["ped_act_idle","models/gen/act_idle.glb"],["ped_act_run","models/gen/act_run.glb"],
+    ["ped_act_punch","models/gen/act_punch.glb"],["ped_act_jump","models/gen/act_jump.glb"]];
   await Promise.all(items.map(async([k,p])=>{
     for(let i=0;i<4&&!A_ped[k];i++){try{A_ped[k]=await glbFromBuf(await fetchBuf(p));}
       catch{await new Promise(r=>setTimeout(r,700*(i+1)));}}}));
@@ -1575,135 +1575,103 @@ function makePed(idx){
     if(o.material&&o.material.transparent){o.material=o.material.clone();o.material.transparent=false;o.material.alphaTest=.5;}}});
   const holder=new THREE.Group();holder.add(obj);
   const mixer=new THREE.AnimationMixer(obj);
-  const clip=n=>{const gg=A_ped["ped_"+n];return gg&&gg.animations[0];};
-  const walkClip=g.animations[0];
+  // los clips de Meshy a veces traen escala animada en los huesos (bug de escala horneada
+  // -> personaje que crece/encoge). Quitamos las pistas .scale una sola vez por clip.
+  const stripScale=cl=>{if(cl&&!cl._noScale){cl.tracks=cl.tracks.filter(t=>!/\.scale$/.test(t.name));cl._noScale=true;}return cl;};
+  const clip=n=>{const gg=A_ped["ped_"+n];return gg&&stripScale(gg.animations[0]);};
+  const walkClip=stripScale(g.animations[0]);
   const A2={};
-  const add=(name,cl)=>{if(cl){const a=mixer.clipAction(cl);A2[name]=a;}};
-  add("walk",walkClip);add("run",clip("act_run"));add("punch",clip("act_punch"));
-  add("jump",clip("act_jump"));add("wave",clip("act_wave"));
-  for(const k in A2){A2[k].clampWhenFinished=true;}
-  if(A2.punch)A2.punch.setLoop(THREE.LoopOnce,1);
-  if(A2.jump)A2.jump.setLoop(THREE.LoopOnce,1);
-  if(A2.wave)A2.wave.setLoop(THREE.LoopOnce,1);
-  return{holder,obj,mixer,actions:A2,cur:null};}
-function pedPlay(p,name,fade=.2){
+  const add=(name,cl,ts)=>{if(cl){const a=mixer.clipAction(cl);a.timeScale=ts||1;A2[name]=a;}};
+  add("idle",clip("act_idle"),1);add("walk",walkClip,1.15);add("run",clip("act_run"),1);
+  add("punch",clip("act_punch"),1.35);add("jump",clip("act_jump"),1);
+  // idle/walk/run son loops; punch/jump se reproducen una vez y quedan en el último frame
+  for(const k of["punch","jump"]){if(A2[k]){A2[k].setLoop(THREE.LoopOnce,1);A2[k].clampWhenFinished=true;}}
+  // duración real (con timeScale) para sincronizar los temporizadores de acción
+  const dur=n=>{const a=A2[n];return a?a.getClip().duration/(a.timeScale||1):.5;};
+  if(!A2.idle&&A2.walk){A2.idle=A2.walk;} // fallback si falta el idle
+  return{holder,obj,mixer,actions:A2,cur:null,dur};}
+function pedPlay(p,name,fade=.16){
+  if(!p.actions[name])name="idle";
   if(!p.actions[name]||p.cur===name)return;
-  const nx=p.actions[name];nx.reset();nx.enabled=true;nx.fadeIn(fade);nx.play();
-  if(p.cur&&p.actions[p.cur])p.actions[p.cur].fadeOut(fade);
+  const nx=p.actions[name];nx.reset();nx.enabled=true;nx.setEffectiveWeight(1);nx.fadeIn(fade);nx.play();
+  if(p.cur&&p.actions[p.cur]&&p.actions[p.cur]!==nx)p.actions[p.cur].fadeOut(fade);
   p.cur=name;}
 async function enterFoot(s){
   if(s.onFoot.active||s.dead||s.speed>4)return;
-  toast(L.loading+"…","var(--yel)");
   try{
   const ok=await loadPeds();if(!ok){toast("!",var_red());return;}
   const P=makePed(save.char);if(!P)return;
   const sh=Math.sin(s.h),ch=Math.cos(s.h);
-  const fx=s.x-ch*2.2, fz=s.z+sh*2.2; // al costado del auto
-  P.holder.position.set(fx,0,fz);world.group.add(P.holder);
-  pedPlay(P,"walk");
-  s.onFoot={active:true,ped:P,x:fx,z:fz,h:s.h+Math.PI/2,vy:0,grounded:true,hp:100,
-    punchT:0,jumpT:0,waveT:0,speed:0,npcs:s.onFoot.npcs||null};
-  if(!s.onFoot.npcs)s.onFoot.npcs=spawnNPCs(s);
+  const fx=s.x-ch*2.6, fz=s.z+sh*2.6; // al costado del auto
+  const fh=s.h+Math.PI/2;
+  P.holder.position.set(fx,0,fz);P.holder.rotation.y=fh;world.group.add(P.holder);
+  pedPlay(P,"idle");
+  s.onFoot={active:true,ped:P,x:fx,z:fz,h:fh,vy:0,grounded:true,hp:100,
+    punchT:0,jumpT:0,speed:0,npcs:[]};
+  // ubicar la cámara detrás del jugador ya mismo (sin barrido raro desde el auto)
+  camera.position.set(fx-Math.sin(fh)*5.5,3,fz-Math.cos(fh)*5.5);
+  camera.lookAt(fx,1.2,fz);
   document.getElementById("touch").style.display="none";
   refreshTouchUI();toast(L.onfoot,"var(--org)");
   }catch(e){console.error("enterFoot ERR: "+(e&&e.message||e));}}
 function enterCar(s){
   const of=s.onFoot;if(!of.active)return;
   world.group.remove(of.ped.holder);
-  for(const n of of.npcs||[])world.group.remove(n.ped.holder); // los NPCs son del modo a pie
+  for(const n of of.npcs||[])world.group.remove(n.ped.holder);
   s.onFoot={active:false,npcs:null};
   refreshTouchUI();}
-function spawnNPCs(s){
-  const npcs=[];
-  for(let i=0;i<3;i++){const P=makePed((save.char+i+1)%PEDS.length);if(!P)break;
-    const a=(i/3)*6.28+Math.random(),r=10+Math.random()*8; // repartidos y lejos del auto
-    P.holder.position.set(s.x+Math.cos(a)*r,0,s.z+Math.sin(a)*r);
-    P.holder.rotation.y=Math.random()*6.28;world.group.add(P.holder);
-    pedPlay(P,"walk");
-    npcs.push({ped:P,x:P.holder.position.x,z:P.holder.position.z,h:P.holder.rotation.y,
-      wanderT:0,down:0,vx:0,vz:0});}
-  return npcs;}
+function spawnNPCs(s){return[];} // el usuario quiere andar solo a pie (sin NPCs)
 const _fwd=new THREE.Vector3();
 function footUpdate(s,dt){
   const of=s.onFoot,P=of.ped;
   P.mixer.update(dt);
-  // input relativo a la cámara
   const fc=footCmd();
-  const camA=Math.atan2(camera.position.x-of.x,camera.position.z-of.z);
+  const mag=Math.min(1,Math.hypot(fc.x,fc.z));
+  // dirección RELATIVA A LA CÁMARA: adelante = hacia donde mira la cámara (no hacia ella)
   let mx=0,mz=0;
-  if(Math.hypot(fc.x,fc.z)>.1){
-    // adelante = alejándose de la cámara
-    const ix=-fc.z, iz=fc.x; // pantalla -> plano
-    const fwdX=Math.sin(camA),fwdZ=Math.cos(camA);
-    const rightX=Math.cos(camA),rightZ=-Math.sin(camA);
-    mx=fwdX*(-fc.z)+rightX*fc.x;
-    mz=fwdZ*(-fc.z)+rightZ*fc.x;
+  const canMove=mag>.14 && of.punchT<=0 && of.grounded;
+  if(canMove){
+    camera.getWorldDirection(_fwd);_fwd.y=0;
+    if(_fwd.lengthSq()<1e-4)_fwd.set(0,0,1);_fwd.normalize();
+    const fX=_fwd.x,fZ=_fwd.z,rX=-_fwd.z,rZ=_fwd.x; // adelante y derecha
+    mx=fX*(-fc.z)+rX*fc.x;   // joystick arriba (fc.z<0) => adelante
+    mz=fZ*(-fc.z)+rZ*fc.x;
     const ml=Math.hypot(mx,mz)||1;mx/=ml;mz/=ml;}
-  const wanting=Math.hypot(fc.x,fc.z)>.1 && !of.punchT && of.grounded;
-  const run=Math.hypot(fc.x,fc.z)>.9;
-  const spd=wanting?(run?7.2:3.6):0;
+  const run=mag>.62;
+  const spd=canMove?(run?8.4:3.4):0;
   of.x+=mx*spd*dt;of.z+=mz*spd*dt;of.speed=spd;
-  if(wanting){const tgt=Math.atan2(mx,mz);let d=tgt-of.h;
-    while(d>Math.PI)d-=6.283;while(d<-Math.PI)d+=6.283;of.h+=d*Math.min(1,dt*12);}
-  // salto
-  if(of.grounded&&!of.punchT){of.vy=0;}
-  of.vy-=18*dt;let y=P.holder.position.y+of.vy*dt;
+  if(canMove){const tgt=Math.atan2(mx,mz);let d=tgt-of.h;
+    while(d>Math.PI)d-=6.283;while(d<-Math.PI)d+=6.283;of.h+=d*Math.min(1,dt*16);}
+  // salto (físico, corto y rápido)
+  of.vy-=26*dt;let y=P.holder.position.y+of.vy*dt;
   if(y<=0){y=0;of.vy=0;of.grounded=true;}else of.grounded=false;
   P.holder.position.set(of.x,y,of.z);
   P.holder.rotation.y=of.h;
-  // límites del mapa
   const B=world.bounds;if(B){of.x=Math.max(-B.W,Math.min(B.W,of.x));of.z=Math.max(-B.D,Math.min(B.D,of.z));}
-  // temporizadores de acción
-  if(of.punchT>0){of.punchT-=dt;if(of.punchT<=0)pedPlay(P,of.speed>0?"walk":"walk");}
-  if(of.jumpT>0)of.jumpT-=dt;
-  // animación según estado
-  if(of.punchT>0){}
-  else if(!of.grounded)pedPlay(P,"jump");
-  else if(spd>4)pedPlay(P,"run");
-  else if(spd>0)pedPlay(P,"walk");
-  else pedPlay(P,"walk");
-  // NPCs
-  updateNPCs(s,dt);
-  // atropello: si el auto (parqueado) o un hazard te toca fuerte -> daño
+  if(of.punchT>0)of.punchT-=dt;
+  // máquina de estados de animación
+  if(of.punchT>0){/* dejando correr el golpe */}
+  else if(!of.grounded)pedPlay(P,"jump",.06);
+  else if(spd>5)pedPlay(P,"run",.12);
+  else if(spd>0)pedPlay(P,"walk",.12);
+  else pedPlay(P,"idle",.2);
   updateHazards(s,dt);
-  // cámara tercera persona
+  // cámara tercera persona (suave)
   const cx=of.x-Math.sin(of.h)*5.5,cz=of.z-Math.cos(of.h)*5.5;
-  camera.position.lerp(V.set(cx,3,cz),1-Math.pow(.001,dt));
+  camera.position.lerp(V.set(cx,3,cz),1-Math.pow(.0008,dt));
   if(world.sky){world.sky.position.x=camera.position.x;world.sky.position.z=camera.position.z;}
   camera.lookAt(of.x,1.2,of.z);
   camera.fov+=(CFG.fovBase-camera.fov)*.1;camera.updateProjectionMatrix();
-  // entrar al auto
-  if(Math.hypot(of.x-s.x,of.z-s.z)<3.2 && consumePress("door"))enterCar(s);
-  // muerte a pie
+  if(Math.hypot(of.x-s.x,of.z-s.z)<3.4 && consumePress("door"))enterCar(s);
   if(of.hp<=0){toast(L.wrecked,"var(--red)");enterCar(s);of.hp=100;
     sess=null;music("music_menu");buildTitle();}
 }
 function doPunch(s){
   const of=s.onFoot;if(of.punchT>0||!of.grounded)return;
-  pedPlay(of.ped,"punch",.08);of.punchT=.6;sfx("sfx_pop",.4,1.6);
-  const hx=of.x+Math.sin(of.h)*1.4,hz=of.z+Math.cos(of.h)*1.4;
-  for(const n of of.npcs||[]){if(n.down>0)continue;
-    if(Math.hypot(n.x-hx,n.z-hz)<1.6){
-      n.down=3;n.vx=Math.sin(of.h)*6;n.vz=Math.cos(of.h)*6;
-      sfx("sfx_punch",.9,1);toast("+"+"KO","var(--yel)");}}}
-function doJump(s){const of=s.onFoot;if(of.grounded){of.vy=7;of.grounded=false;
-  if(of.actions&&of.ped.actions.jump){pedPlay(of.ped,"jump",.05);}sfx("sfx_pop",.25,1.9);}}
-function updateNPCs(s,dt){
-  const of=s.onFoot;for(const n of of.npcs||[]){
-    n.ped.mixer.update(dt);
-    if(n.down>0){n.down-=dt;
-      n.x+=n.vx*dt;n.z+=n.vz*dt;n.vx*=.9;n.vz*=.9;
-      n.ped.holder.position.set(n.x,0,n.z);
-      n.ped.holder.rotation.z=Math.min(1.4,(n.ped.holder.rotation.z||0)+dt*4); // se cae
-      if(n.down<=0){n.ped.holder.rotation.z=0;
-        const a=Math.random()*6.28,r=8+Math.random()*8;
-        n.x=of.x+Math.cos(a)*r;n.z=of.z+Math.sin(a)*r;pedPlay(n.ped,"walk");}
-      continue;}
-    n.wanderT-=dt;if(n.wanderT<=0){n.wanderT=1.5+Math.random()*2;n.h=Math.random()*6.28;}
-    n.x+=Math.sin(n.h)*1.4*dt;n.z+=Math.cos(n.h)*1.4*dt;
-    const B=world.bounds;if(B){n.x=Math.max(-B.W,Math.min(B.W,n.x));n.z=Math.max(-B.D,Math.min(B.D,n.z));}
-    n.ped.holder.position.set(n.x,0,n.z);n.ped.holder.rotation.y=n.h;}
-}
+  pedPlay(of.ped,"punch",.05);of.punchT=Math.min(1,Math.max(.35,of.ped.dur("punch")));
+  sfx("sfx_punch",.9,1.05);}
+function doJump(s){const of=s.onFoot;if(of.grounded&&of.punchT<=0){of.vy=8.4;of.grounded=false;
+  pedPlay(of.ped,"jump",.05);sfx("sfx_pop",.3,1.9);}}
 function consumePress(name){const i=pressed.indexOf(name);if(i>=0){pressed.splice(i,1);return true;}return false;}
 
 /* hazards giratorios que destrozan autos */
@@ -2264,15 +2232,21 @@ if(DEV)window.__dy={
   timeUp(){if(sess){if(sess.mapMode==="drift")sess.t=.5;else{sess.lap=sess.laps;endSession();}}},
   give(n){if(sess)sess.total+=n;},
   foot(){if(sess)return enterFoot(sess);},
+  djump(){if(sess&&sess.onFoot&&sess.onFoot.active)doJump(sess);},
+  dpunch(){if(sess&&sess.onFoot&&sess.onFoot.active)doPunch(sess);},
   joy:()=>joyVec,footcmd:()=>footCmd(),
+  clips(){const out={};for(const k in A_ped){const g=A_ped[k];if(g&&g.animations)
+    out[k]=g.animations.map(a=>({n:a.name,d:+a.duration.toFixed(2),tr:a.tracks.length}));}return out;},
   footpos:()=>{const of=sess&&sess.onFoot;return of&&of.active?{x:+of.x.toFixed(2),z:+of.z.toFixed(2),speed:+of.speed.toFixed(2),hp:of.hp}:null;},
   footState(){const of=sess&&sess.onFoot;if(!of||!of.active)return null;
     const meas=p=>{const b=new THREE.Box3().setFromObject(p.holder);
       const sk=new THREE.Box3();let got=false;p.holder.updateMatrixWorld(true);
       p.holder.traverse(o=>{if(o.isSkinnedMesh){o.computeBoundingBox();
         if(o.boundingBox){sk.union(o.boundingBox.clone().applyMatrix4(o.matrixWorld));got=true;}}});
+      const box=got?sk:b;
       return{h:+(b.max.y-b.min.y).toFixed(2),skH:got?+(sk.max.y-sk.min.y).toFixed(2):null,
-        s:+p.obj.scale.x.toFixed(3),y:+p.holder.position.y.toFixed(2)};};
+        s:+p.obj.scale.x.toFixed(3),y:+p.holder.position.y.toFixed(2),
+        cx:+((box.min.x+box.max.x)/2).toFixed(2),cz:+((box.min.z+box.max.z)/2).toFixed(2)};};
     return{player:meas(of.ped),npcs:(of.npcs||[]).map(n=>meas(n.ped)),hp:of.hp,
       foottouch:getComputedStyle(document.getElementById("foottouch")).display,
       hpbar:getComputedStyle(document.getElementById("hpbar")).display};}};
@@ -2287,6 +2261,7 @@ if(DEV)window.__dy={
   await loadAll();
   applyQuality();resize();
   prepareCars();initMarks();initSmoke();
+  loadPeds(); // precargar pilotos/animaciones en segundo plano: bajarse del auto es instantáneo
   loadMsg.textContent=L.tip;
   setTimeout(()=>{buildTitle(true);},300);
   requestAnimationFrame(frame);
