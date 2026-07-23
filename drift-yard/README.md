@@ -1,6 +1,6 @@
 # Drift Yard 🏁🛞
 
-Juego de **drift 3D en Three.js** con **6 mapas** (5 de drift + 1 de carrera en bosque). Estilo industrial semi-realista.
+Juego de **drift 3D en Three.js** con **8 mapas** (6 de drift + 2 de carrera). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
 ## Cómo jugar
 - **Abrir `index.html` suelto** (doble clic / file:// / content://) → carga todo desde este repo vía **jsDelivr CDN**.
@@ -8,13 +8,15 @@ Juego de **drift 3D en Three.js** con **6 mapas** (5 de drift + 1 de carrera en 
 - Controles: WASD/flechas + **ESPACIO freno de mano** (P pausa) · táctil (botones + ✋) · gamepad (stick, RT/LT, A).
 - En móvil vertical el juego **se rota solo 90°** (sin pantalla de "girá el celular").
 
-## Los 6 mapas
+## Los 8 mapas
 1. **PUERTO** (drift) — el parque de cemento clásico: contenedores, isla central, gradas, grúas.
 2. **BOSQUE** (carrera, 3 vueltas) — circuito asfaltado entre miles de árboles (billboards en X fotorealistas), casas junto al camino, 10 checkpoints con arco indicador, medallas por tiempo total.
 3. **AEROPUERTO** (drift) — pista de aterrizaje gigante con avionetas, números 27/09 y barreras.
 4. **AZOTEA** (drift) — helipuerto en un rascacielos, skyline de ciudad alrededor y abajo.
 5. **NIEVE** (drift) — explanada nevada con **placas de hielo** (agarre ×0.25), pinos y cabañas.
-6. **CAÑÓN** (drift) — arena del desierto, mesas rocosas, cactus y un auto oxidado abandonado.
+6. **CAÑÓN** (drift) — pueblito fantasma ruta 66: diner, gasolinera, torre de agua, mesas y cactus.
+7. **ESTADIO** (drift) — arena asfaltada con tribunas llenas, pantallas gigantes y chicanas de contenedores.
+8. **TOUGE** (carrera, 2 vueltas) — paso de montaña japonés con horquillas, guardarraíles, torii y expendedoras.
 
 Cada mapa con **cielo 360 propio por bioma** en los 3 horarios: **DÍA / ATARDECER / NOCHE**.
 
