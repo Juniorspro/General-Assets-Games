@@ -449,7 +449,8 @@ async function loadAll(){
     ["jersey","models/gen/jersey.glb"],["parked_a","models/gen/car_parked_a.glb"],
     ["parked_b","models/gen/car_parked_b.glb"],["bleachers","models/gen/bleachers.glb"],
     ["house","models/gen/house.glb"],["cabin","models/gen/cabin.glb"],["plane","models/gen/plane.glb"],
-    ["rusty","models/repo/rusty_car.glb"],["pines","models/repo/pines.glb"]])
+    ["rusty","models/repo/rusty_car.glb"],["pines","models/repo/pines.glb"],
+    ["wheel","models/gen/wheel.glb"]])
     jobs.push({p,kind:"glb",assign:g=>{A.glb[k]=g;}});
   for(const n of["sfx_engine.mp3","sfx_skid_loop.mp3","sfx_crash.mp3","sfx_chime.mp3"])
     jobs.push({p:"audio/"+n,kind:"buf",assign:b=>{SND[n.replace(/\.(mp3|m4a)$/,"")]={raw:b,buf:null};}});
@@ -1025,21 +1026,46 @@ function carveWheels(tpl){
     if(Math.abs(cz)>.5*W/2&&cy<y0+2*r)
       for(const w of wheels){if(cz*w.s<0)continue;
         if((cx-w.ax)**2+(cy-(y0+r))**2<(r*.95)**2){hit=w;break;}}
-    if(hit){hit.tris.push(t);hit.cz+=cz;hit.n++;}else keep.push(t);}
+    if(hit){hit.tris.push(t);hit.cx=(hit.cx||0)+cx;hit.cy=(hit.cy||0)+cy;hit.cz+=cz;hit.n++;}else keep.push(t);}
   for(const w of wheels)if(w.n<40||w.n>total*.25)return; // dudoso: dejar el coche intacto
   const mkGeo=tris=>{const ni=new Uint32Array(tris.length*3);
     tris.forEach((t2,j)=>{ni[j*3]=idx[t2*3];ni[j*3+1]=idx[t2*3+1];ni[j*3+2]=idx[t2*3+2];});
     const ng=g.clone();ng.setIndex(new THREE.BufferAttribute(ni,1));return ng;};
   const frontX=Math.min(axA,axB); // la nariz queda hacia -x local tras autoCar
+  buildWheelProto();
   for(const w of wheels){
-    const cz=w.cz/w.n,wg=mkGeo(w.tris);
-    wg.translate(-w.ax,-(y0+r),-cz);
-    const m2=new THREE.Mesh(wg,mesh.material);m2.castShadow=true;m2.name="dyw_spin";
-    const grp=new THREE.Group();grp.position.set(w.ax,y0+r,cz);grp.add(m2);
+    // pivote = centro real promedio de los triángulos de la rueda (nada de bins cuantizados)
+    const px=w.cx/w.n,py=w.cy/w.n,pz=w.cz/w.n;
+    const grp=new THREE.Group();grp.position.set(px,py,pz);
     grp.name=w.ax===frontX?"dyw_f":"dyw_r";
-    mesh.add(grp);}
+    let m2;
+    if(wheelProto){ // rueda generada: perfectamente redonda, gira sobre su eje real
+      m2=new THREE.Mesh(wheelProto.geo,wheelProto.mat);
+      m2.scale.setScalar(2*r/wheelProto.diam);
+      if(w.s<0)grp.scale.z=-1; // cara del rin hacia afuera en ambos lados
+    }else{ // fallback: la rueda recortada de la propia malla
+      const wg=mkGeo(w.tris);wg.translate(-px,-py,-pz);
+      m2=new THREE.Mesh(wg,mesh.material);}
+    m2.castShadow=true;m2.name="dyw_spin";
+    grp.add(m2);mesh.add(grp);}
   mesh.geometry=mkGeo(keep);
   tpl.userData.wheelR=r;}
+let wheelProto=null;
+function buildWheelProto(){
+  if(wheelProto||!A.glb.wheel)return;
+  const root=A.glb.wheel.scene;root.updateMatrixWorld(true);
+  let src=null;root.traverse(o=>{if(o.isMesh&&!src)src=o;});
+  if(!src)return;
+  const g=src.geometry.clone();g.applyMatrix4(src.matrixWorld);
+  g.computeBoundingBox();
+  const bb=g.boundingBox,size=bb.getSize(new THREE.Vector3()),c=bb.getCenter(new THREE.Vector3());
+  g.translate(-c.x,-c.y,-c.z);
+  const dims=[size.x,size.y,size.z],axMin=dims.indexOf(Math.min(...dims));
+  if(axMin===0)g.rotateY(Math.PI/2);else if(axMin===1)g.rotateX(Math.PI/2); // eje del cilindro -> Z
+  g.computeBoundingBox();
+  const b2=g.boundingBox;
+  wheelProto={geo:g,mat:src.material,
+    diam:Math.max(b2.max.x-b2.min.x,b2.max.y-b2.min.y)};}
 function fallbackCar(){const g=new THREE.Group();
   const m=new THREE.Mesh(new THREE.BoxGeometry(1.9,.85,4.4),
     new THREE.MeshStandardMaterial({color:0xcc4422,roughness:.5}));
