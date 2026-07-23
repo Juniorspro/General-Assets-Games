@@ -1,6 +1,13 @@
 # Drift Yard 🏁🛞
 
-Juego de **drift 3D en Three.js** con **8 mapas** (6 de drift + 2 de carrera). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
+Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
+
+## Novedades 5.0
+- **Personalización**: 12 carrocerías, 8 juegos de ruedas y 5 pilotos — todo elegible en el garaje.
+- **Modo a pie** 🚪: tocá la puerta para bajar del auto y andar con tu piloto (caminar/correr/saltar/piña con animaciones reales riggeadas). Hay NPCs a los que podés pegar; volvé al auto acercándote y tocando la puerta.
+- **Daño y destrucción**: los choques abollan la chapa de verdad (deformación de malla acumulativa), y si te destrozás entero morís con desvanecimiento al menú. Barra de vida en pantalla.
+- **Hazards giratorios** en Estadio y Puerto que destrozan autos.
+- **Motor 100% procedural** (Web Audio) con petardeo de escape al subir de cambio; choques con volumen por impacto.
 
 ## Cómo jugar
 - **Abrir `index.html` suelto** (doble clic / file:// / content://) → carga todo desde este repo vía **jsDelivr CDN**.
