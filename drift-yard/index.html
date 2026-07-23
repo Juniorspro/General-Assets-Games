@@ -154,7 +154,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 3.6</div>
+  <div id="buildtag">build 3.7</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -226,11 +226,15 @@ let L=STR[save.lang];
 /* ================= config ================= */
 const CFG={step:1/60,session:180,carR:1.35,
   driftMinDeg:10,driftMinV:5,bankGap:1.2,fovBase:60,fovMax:70};
-const CARS=[
- {id:"katana",name:"KATANA",file:"car_katana.glb",accel:24,top:33,grip:9.2,turn:2.2,kick:1.05,len:4.5},
- {id:"bandido",name:"BANDIDO",file:"car_bandido.glb",accel:30,top:37,grip:7.8,turn:1.95,kick:1.3,len:4.9},
- {id:"hachi",name:"HACHI",file:"car_hachi.glb",accel:20,top:29,grip:10.2,turn:2.55,kick:.9,len:4.1},
- {id:"toro",name:"TORO",file:"car_toro.glb",accel:26,top:35,grip:8.5,turn:2.1,kick:1.15,len:4.7},
+const CARS=[ // wheels: posición de ejes (fracción de semilargo), radio (m), separación lateral (fracción de semiancho)
+ {id:"katana",name:"KATANA",file:"car_katana.glb",accel:24,top:33,grip:9.2,turn:2.2,kick:1.05,len:4.5,
+  wheels:{f:.52,r:-.58,rad:.31,zf:.84,flip:false}},
+ {id:"bandido",name:"BANDIDO",file:"car_bandido.glb",accel:30,top:37,grip:7.8,turn:1.95,kick:1.3,len:4.9,
+  wheels:{f:.53,r:-.62,rad:.33,zf:.85,flip:false}},
+ {id:"hachi",name:"HACHI",file:"car_hachi.glb",accel:20,top:29,grip:10.2,turn:2.55,kick:.9,len:4.1,
+  wheels:{f:.66,r:-.60,rad:.30,zf:.8,flip:false}},
+ {id:"toro",name:"TORO",file:"car_toro.glb",accel:26,top:35,grip:8.5,turn:2.1,kick:1.15,len:4.7,
+  wheels:{f:.55,r:-.62,rad:.30,zf:.85,flip:false}},
 ];
 const TIMES={
  dia:  {sun:0xfff3de,sunI:3.0,sunPos:[140,240,80],hemiI:.95,hemiSky:0xbcd8f5,hemiGnd:0x77746e,fog:0xc9d6e2,fogD:.00048,flood:false},
@@ -986,70 +990,37 @@ function disposeWorld(){if(world){scene.remove(world.group);
 const carTemplates=[];
 function prepareCars(){if(carTemplates.length)return;
   for(const c of CARS){const t=autoCar(A.glb[c.id],c.len)||fallbackCar();
-    carveWheels(t);carTemplates.push(t);}}
-/* Detecta las ruedas dentro de la malla única del coche (Meshy exporta todo junto):
-   histograma de vértices bajos -> ejes; cilindros alrededor del eje -> triángulos de rueda;
-   se recortan a mallas propias con pivote para girar y doblar. */
-function carveWheels(tpl){
-  let mesh=null;tpl.traverse(o=>{if(o.isMesh&&!mesh)mesh=o;});
-  if(!mesh||!mesh.geometry||!mesh.geometry.index)return;
-  const g=mesh.geometry;g.computeBoundingBox();
-  const bb=g.boundingBox,y0=bb.min.y,H=bb.max.y-y0,
-        L=bb.max.x-bb.min.x,W=bb.max.z-bb.min.z;
-  if(L<W)return; // esperado: eje largo local X
-  const pos=g.attributes.position,idx=g.index.array;
-  const BIN=36,hist=new Float32Array(BIN);
-  for(let i=0;i<pos.count;i++){
-    if(pos.getY(i)>y0+.42*H)continue;
-    if(Math.abs(pos.getZ(i))<.5*W/2)continue;
-    hist[Math.min(BIN-1,(pos.getX(i)-bb.min.x)/L*BIN|0)]++;}
-  let a1=0,a2=-1;
-  for(let i=1;i<BIN;i++)if(hist[i]>hist[a1])a1=i;
-  for(let i=0;i<BIN;i++)if(Math.abs(i-a1)>BIN*.3&&(a2<0||hist[i]>hist[a2]))a2=i;
-  if(a2<0)return;
-  const axA=bb.min.x+(a1+.5)/BIN*L,axB=bb.min.x+(a2+.5)/BIN*L;
-  const ys=[];
-  for(let i=0;i<pos.count;i++){const x=pos.getX(i),y=pos.getY(i);
-    if(y>y0+.5*H||Math.abs(pos.getZ(i))<.5*W/2)continue;
-    if(Math.abs(x-axA)>.08*L&&Math.abs(x-axB)>.08*L)continue;ys.push(y);}
-  if(ys.length<60)return;
-  ys.sort((p,q)=>p-q);
-  const r=Math.min(Math.max(ys[(ys.length*.4)|0]-y0,.14*H),.28*H);
-  const wheels=[[axA,1],[axA,-1],[axB,1],[axB,-1]].map(([ax,s])=>({ax,s,tris:[],cz:0,n:0}));
-  const total=idx.length/3,keep=[];
-  for(let t=0;t<total;t++){
-    const i0=idx[t*3],i1=idx[t*3+1],i2=idx[t*3+2];
-    const cx=(pos.getX(i0)+pos.getX(i1)+pos.getX(i2))/3,
-          cy=(pos.getY(i0)+pos.getY(i1)+pos.getY(i2))/3,
-          cz=(pos.getZ(i0)+pos.getZ(i1)+pos.getZ(i2))/3;
-    let hit=null;
-    if(Math.abs(cz)>.5*W/2&&cy<y0+2*r)
-      for(const w of wheels){if(cz*w.s<0)continue;
-        if((cx-w.ax)**2+(cy-(y0+r))**2<(r*.95)**2){hit=w;break;}}
-    if(hit){hit.tris.push(t);hit.cx=(hit.cx||0)+cx;hit.cy=(hit.cy||0)+cy;hit.cz+=cz;hit.n++;}else keep.push(t);}
-  for(const w of wheels)if(w.n<40||w.n>total*.25)return; // dudoso: dejar el coche intacto
-  const mkGeo=tris=>{const ni=new Uint32Array(tris.length*3);
-    tris.forEach((t2,j)=>{ni[j*3]=idx[t2*3];ni[j*3+1]=idx[t2*3+1];ni[j*3+2]=idx[t2*3+2];});
-    const ng=g.clone();ng.setIndex(new THREE.BufferAttribute(ni,1));return ng;};
-  const frontX=Math.min(axA,axB); // la nariz queda hacia -x local tras autoCar
+    mountWheels(t,c);carTemplates.push(t);}}
+/* Las carrocerías nuevas vienen SIN ruedas: se montan 4 ruedas generadas (wheel.glb)
+   en posiciones configuradas por coche (CARS[i].wheels), giran sobre su eje exacto
+   y las delanteras doblan. Espejo por lado con corrección de signos. */
+function mountWheels(tpl,c){
   buildWheelProto();
-  for(const w of wheels){
-    // pivote = centro real promedio de los triángulos de la rueda (nada de bins cuantizados)
-    const px=w.cx/w.n,py=w.cy/w.n,pz=w.cz/w.n;
-    const grp=new THREE.Group();grp.position.set(px,py,pz);
-    grp.name=w.ax===frontX?"dyw_f":"dyw_r";
-    let m2;
-    if(wheelProto){ // rueda generada: perfectamente redonda, gira sobre su eje real
-      m2=new THREE.Mesh(wheelProto.geo,wheelProto.mat);
-      m2.scale.setScalar(2*r/wheelProto.diam);
-      if(w.s<0)grp.scale.z=-1; // cara del rin hacia afuera en ambos lados
-    }else{ // fallback: la rueda recortada de la propia malla
-      const wg=mkGeo(w.tris);wg.translate(-px,-py,-pz);
-      m2=new THREE.Mesh(wg,mesh.material);}
-    m2.castShadow=true;m2.name="dyw_spin";
-    grp.add(m2);mesh.add(grp);}
-  mesh.geometry=mkGeo(keep);
-  tpl.userData.wheelR=r;}
+  const cfg=c.wheels||{f:.55,r:-.55,rad:.31,zf:.78,flip:false};
+  if(cfg.flip){ // nariz al revés en el GLB: girar 180° y re-centrar
+    const root=tpl.children[0];root.rotation.y+=Math.PI;
+    tpl.updateMatrixWorld(true);
+    const b=new THREE.Box3().setFromObject(root);
+    const ctr=b.getCenter(V);
+    root.position.x-=ctr.x;root.position.z-=ctr.z;root.position.y-=b.min.y;}
+  tpl.updateMatrixWorld(true);
+  const box=new THREE.Box3().setFromObject(tpl);
+  const halfW=(box.max.x-box.min.x)/2,halfL=(box.max.z-box.min.z)/2;
+  for(const[zf,name]of[[cfg.f,"dyw_f"],[cfg.r,"dyw_r"]])
+    for(const side of[1,-1]){
+      const grp=new THREE.Group();
+      grp.position.set(side*halfW*cfg.zf,cfg.rad,zf*halfL);
+      grp.name=name;grp.userData.ms=side; // lado espejado: invierte giro y dirección
+      let m2;
+      if(wheelProto){m2=new THREE.Mesh(wheelProto.geo,wheelProto.mat);
+        m2.scale.setScalar(2*cfg.rad/wheelProto.diam);}
+      else{const cg=new THREE.CylinderGeometry(1,1,.42,18);cg.rotateZ(Math.PI/2);
+        m2=new THREE.Mesh(cg,new THREE.MeshStandardMaterial({color:0x17181c,roughness:.85}));
+        m2.scale.setScalar(cfg.rad);}
+      if(side<0)grp.scale.x=-1;
+      m2.castShadow=true;m2.name="dyw_spin";
+      grp.add(m2);tpl.add(grp);}
+  tpl.userData.wheelR=cfg.rad;}
 let wheelProto=null;
 function buildWheelProto(){
   if(wheelProto||!A.glb.wheel)return;
@@ -1061,11 +1032,11 @@ function buildWheelProto(){
   const bb=g.boundingBox,size=bb.getSize(new THREE.Vector3()),c=bb.getCenter(new THREE.Vector3());
   g.translate(-c.x,-c.y,-c.z);
   const dims=[size.x,size.y,size.z],axMin=dims.indexOf(Math.min(...dims));
-  if(axMin===0)g.rotateY(Math.PI/2);else if(axMin===1)g.rotateX(Math.PI/2); // eje del cilindro -> Z
+  if(axMin===2)g.rotateY(Math.PI/2);else if(axMin===1)g.rotateZ(Math.PI/2); // eje del cilindro -> X (lateral)
   g.computeBoundingBox();
   const b2=g.boundingBox;
   wheelProto={geo:g,mat:src.material,
-    diam:Math.max(b2.max.x-b2.min.x,b2.max.y-b2.min.y)};}
+    diam:Math.max(b2.max.y-b2.min.y,b2.max.z-b2.min.z)};}
 function fallbackCar(){const g=new THREE.Group();
   const m=new THREE.Mesh(new THREE.BoxGeometry(1.9,.85,4.4),
     new THREE.MeshStandardMaterial({color:0xcc4422,roughness:.5}));
@@ -1106,8 +1077,7 @@ function newSession(){
     glow.scale.set(2.6,1,1);glow.position.set(0,.62,2.2);obj.add(glow);}
   clearMarks();clearSmoke();
   const wheels=[];obj.traverse(o=>{if(o.name==="dyw_f"||o.name==="dyw_r")wheels.push(o);});
-  obj.updateMatrixWorld(true);
-  const wR=wheels.length?(carTemplates[save.car].userData.wheelR||.14)*wheels[0].getWorldScale(V).x:.3;
+  const wR=carTemplates[save.car].userData.wheelR||.3;
   const sp=world.spawn;
   return{stats,obj,wheels,wheelR:Math.max(wR,.12),wheelSpin:0,mapMode:M.mode,laps:M.laps||0,
     x:sp.x,z:sp.z,h:sp.h,vx:0,vz:0,physSteer:0,
@@ -1246,11 +1216,12 @@ function update(dt){
   s.obj.position.set(s.x,0,s.z);
   s.obj.rotation.set(0,s.h,0);
   s.obj.rotateZ(-s.steerVis*.04*Math.min(1,s.speed/22));
-  /* ruedas: giro por velocidad + dirección en las delanteras */
+  /* ruedas: giro por velocidad + dirección en las delanteras (ms corrige el lado espejado) */
   s.wheelSpin-=vF/s.wheelR*dt;
   for(const w of s.wheels){
-    if(w.name==="dyw_f")w.rotation.y=s.steerVis*.42;
-    w.children[0].rotation.z=s.wheelSpin;}
+    const ms=w.userData.ms||1;
+    if(w.name==="dyw_f")w.rotation.y=s.steerVis*.42*ms;
+    w.children[0].rotation.x=s.wheelSpin*ms;}
   /* la sombra sigue al coche (mapas grandes > frustum fijo) */
   if(world.sunOff){sun.position.set(s.x+world.sunOff.x,world.sunOff.y,s.z+world.sunOff.z);
     sun.target.position.set(s.x,0,s.z);sun.target.updateMatrixWorld();}
@@ -1570,7 +1541,7 @@ if(DEV)window.__dy={
     x:sess&&+sess.x.toFixed(1),z:sess&&+sess.z.toFixed(1),
     lap:sess&&sess.lap,cp:sess&&sess.cp,map:save.map,
     calls:renderer.info.render.calls}),
-  sess:()=>sess,world:()=>world,camera,scene,
+  sess:()=>sess,world:()=>world,camera,scene,gcar:()=>garageCar,
   setMap(i){save.map=i;persist();},
   warpCp(){if(sess&&world.checkpoints){const c=world.checkpoints[sess.cp];sess.x=c.x;sess.z=c.z;}},
   timeUp(){if(sess){if(sess.mapMode==="drift")sess.t=.5;else{sess.lap=sess.laps;endSession();}}},
