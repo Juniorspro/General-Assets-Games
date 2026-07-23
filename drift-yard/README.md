@@ -2,6 +2,14 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.6 — MULTIJUGADOR + arreglos a pie + trituradora real
+- **Multijugador serverless** 👥 (MQTT sobre WebSocket, broker público, sin servidor propio): **una sala por mapa**, ves los autos de los demás jugadores en tiempo real con su nombre flotando, y **chat** con teclado propio en pantalla + burbujas sobre los autos. Contador de gente por sala en la pantalla de mapas y badge en carrera. (Re-integrado desde tu build con multiplayer.)
+- **Movimiento y cámara a pie corregidos**: la derecha ya va a la derecha (estaba espejado) y la cámara gira en el sentido correcto al arrastrar.
+- **UI a pie**: el botón de subir/bajar del auto 🚪 ahora está grande arriba de los pedales (antes escondido en la esquina), la **pausa funciona a pie** (el HUD estaba tapado por la zona de cámara), y saqué el cartel "de pie".
+- **Piñas en combo** 👊: derecha e izquierda alternadas, encadenables, con impacto corto (antes una sola y larga). **Saltás aunque estés en movimiento** (control en el aire).
+- **Trituradora de verdad**: rediseñada como **doble eje de discos dentados** que giran hacia adentro (como la referencia), y **se recorta el piso del mapa** sobre el pozo para verla (antes la tapaba el suelo).
+- **Más saturación**: tone mapping Neutral → colores más vivos sin quemar.
+
 ## Novedades 5.5 — cámara libre a pie, trampa de engranajes y saltos por física
 - **Cámara a pie con el dedo**: la cámara se orienta arrastrando la pantalla (lado derecho), ya **no persigue** al personaje. El piloto camina/corre relativo a donde apunta la cámara.
 - **Trampa: piso de cristal + trituradora de engranajes** ⚙ (Aeropuerto y Azotea): en el centro hay una compuerta de cristal sobre un pozo con **engranajes gigantes girando** (modelos 3D reales generados con Higgsfield). Acercate a la **palanca** → aparece **ACTIVAR** → abrís la compuerta → se activa la trituradora. Si caés, morís triturado (auto o a pie).
