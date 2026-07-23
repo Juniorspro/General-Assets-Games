@@ -2,6 +2,12 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.5 — cámara libre a pie, trampa de engranajes y saltos por física
+- **Cámara a pie con el dedo**: la cámara se orienta arrastrando la pantalla (lado derecho), ya **no persigue** al personaje. El piloto camina/corre relativo a donde apunta la cámara.
+- **Trampa: piso de cristal + trituradora de engranajes** ⚙ (Aeropuerto y Azotea): en el centro hay una compuerta de cristal sobre un pozo con **engranajes gigantes girando** (modelos 3D reales generados con Higgsfield). Acercate a la **palanca** → aparece **ACTIVAR** → abrís la compuerta → se activa la trituradora. Si caés, morís triturado (auto o a pie).
+- **Saltos de rampa por física real**: el impulso vertical = velocidad × pendiente (proyectil), así que **saltás más lejos cuanto más rápido vas**; gravedad y arco realistas.
+- **Hazards fuera de los contenedores**: los brazos giratorios ya no quedan clavados dentro de las cajas (reubicados a zonas abiertas).
+
 ## Novedades 5.4 — colisión total + rampas + mapas más llenos
 - **Colisión en TODO**, hasta los árboles: cada árbol del bosque (1600+) y del touge (1300+) es un tronco sólido. Motor de colisión nuevo con **grilla espacial** → miles de colliders sin bajar los FPS (solo se testean los cercanos).
 - **Colisión a pie**: el piloto ya no atraviesa props/árboles/contenedores (mismo set que el auto).

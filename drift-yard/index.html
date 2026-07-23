@@ -75,8 +75,12 @@ body.rot #app{inset:auto;top:0;left:0;width:100vh;height:100vw; /* unidades de v
   font-style:italic;color:var(--yel);text-shadow:0 3px 0 rgba(0,0,0,.8);opacity:0;transition:opacity .15s;white-space:nowrap}
 #doorbtn{position:absolute;top:calc(var(--ah)*0.02);left:calc(var(--aw)*0.09);width:42px;height:40px;pointer-events:auto;
   font:16px inherit;background:var(--panel);border:1.5px solid rgba(242,239,232,.4);border-radius:8px}
+#actbtn{position:absolute;top:calc(var(--ah)*0.14);left:50%;transform:translateX(-50%);pointer-events:auto;display:none;
+  font:900 15px inherit;letter-spacing:.06em;color:var(--ink);background:rgba(190,32,32,.85);border:2px solid #ff5544;
+  border-radius:10px;padding:.6em 1.1em;box-shadow:0 0 16px rgba(255,60,40,.5);z-index:7}
 #foottouch{position:absolute;inset:0;pointer-events:none;z-index:6;display:none}
 #foottouch .tbtn{position:absolute}
+#camlook{position:absolute;inset:0;pointer-events:auto;touch-action:none}
 #joy{position:absolute;left:calc(var(--vm)*.04);bottom:calc(var(--vm)*.05);width:calc(var(--vm)*.32);height:calc(var(--vm)*.32);
   min-width:128px;min-height:128px;border-radius:50%;background:rgba(20,22,28,.4);border:2px solid rgba(242,239,232,.25);
   pointer-events:auto;touch-action:none;display:flex;align-items:center;justify-content:center;
@@ -158,6 +162,7 @@ window.__dyBooted=false;
   <div id="hpbar"><i></i></div>
   <button id="pausebtn">II</button>
   <button id="doorbtn">🚪</button>
+  <button id="actbtn">⚙ ACTIVAR</button>
   <div id="toast"></div>
 </div>
 <div id="touch">
@@ -166,6 +171,7 @@ window.__dyBooted=false;
   <div class="tbtn" id="thand">✋</div>
 </div>
 <div id="foottouch">
+  <div id="camlook"></div>
   <div id="joy"><div id="joyk"></div></div>
   <div class="tbtn" id="ftjump">⤒</div><div class="tbtn" id="ftpunch">👊</div>
 </div>
@@ -181,7 +187,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.4</div>
+  <div id="buildtag">build 5.5</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -396,7 +402,7 @@ function applySound(){if(!save.sound){stopMusic();loopsStop();}
 
 /* ================= input ================= */
 const BIND={KeyW:"up",KeyS:"down",KeyA:"left",KeyD:"right",ArrowUp:"up",ArrowDown:"down",
-  ArrowLeft:"left",ArrowRight:"right",Space:"hand",Enter:"ok",KeyP:"pause",Escape:"pause",KeyF:"door",KeyJ:"punch",KeyK:"jump"};
+  ArrowLeft:"left",ArrowRight:"right",Space:"hand",Enter:"ok",KeyP:"pause",Escape:"pause",KeyF:"door",KeyJ:"punch",KeyK:"jump",KeyE:"activate"};
 const held=new Set();const pressed=[];
 addEventListener("keydown",e=>{const c=BIND[e.code];if(c){if(!held.has(c))pressed.push(c);held.add(c);e.preventDefault();}});
 addEventListener("keyup",e=>{const c=BIND[e.code];if(c)held.delete(c);});
@@ -422,6 +428,7 @@ for(const id of["tleft","tright","tgas","tbrake","thand","ftjump","ftpunch"]){
   el.addEventListener("pointerdown",e=>{el.setPointerCapture(e.pointerId);on(e);});
   el.addEventListener("pointerup",off);el.addEventListener("pointercancel",off);}
 document.getElementById("doorbtn").addEventListener("click",()=>{interact();pressed.push("door");});
+document.getElementById("actbtn").addEventListener("click",()=>{interact();pressed.push("activate");});
 document.getElementById("ftjump").addEventListener("pointerdown",()=>pressed.push("jump"));
 document.getElementById("ftpunch").addEventListener("pointerdown",()=>pressed.push("punch"));
 /* joystick analógico a pie */
@@ -446,6 +453,22 @@ let joyVec={x:0,z:0};
   base.addEventListener("pointermove",move);
   base.addEventListener("pointerup",end);
   base.addEventListener("pointercancel",end);
+})();
+/* cámara a pie: se orienta arrastrando la pantalla (lado derecho) — NO sigue al personaje */
+let footCamYaw=0,footCamPitch=.5;
+(function(){
+  const el=document.getElementById("camlook");if(!el)return;
+  let pid=null,lx=0,ly=0;
+  el.addEventListener("pointerdown",e=>{if(pid!==null)return;e.preventDefault();
+    pid=e.pointerId;lx=e.clientX;ly=e.clientY;el.setPointerCapture(e.pointerId);touchDevice=true;});
+  el.addEventListener("pointermove",e=>{if(e.pointerId!==pid)return;
+    const rot=document.body.classList.contains("rot");
+    const dyaw=rot?(e.clientY-ly):(e.clientX-lx);       // eje horizontal que ve el jugador
+    const dpit=rot?-(e.clientX-lx):(e.clientY-ly);
+    footCamYaw+=dyaw*.006;footCamPitch=Math.max(.12,Math.min(1.1,footCamPitch+dpit*.004));
+    lx=e.clientX;ly=e.clientY;});
+  const end=e=>{if(e.pointerId===pid)pid=null;};
+  el.addEventListener("pointerup",end);el.addEventListener("pointercancel",end);
 })();
 addEventListener("pointerdown",()=>{interact();},{capture:true});
 addEventListener("touchstart",()=>{touchDevice=true;refreshTouchUI();},{passive:true,capture:true});
@@ -578,7 +601,8 @@ async function loadAll(){
     ["skilift","models/gen/skilift.glb"],["diner","models/gen/diner.glb"],
     ["wtower","models/gen/water_tower.glb"],["torii","models/gen/torii.glb"],
     ["vending","models/gen/vending.glb"],["stand","models/gen/grandstand.glb"],
-    ["bigscreen","models/gen/bigscreen.glb"],["forklift","models/gen/forklift.glb"]])
+    ["bigscreen","models/gen/bigscreen.glb"],["forklift","models/gen/forklift.glb"],
+    ["gear","models/gen/gear.glb"]])
     jobs.push({p,kind:"glb",assign:g=>{A.glb[k]=g;}});
   for(const n of["sfx_skid_loop.mp3","sfx_crash.mp3","sfx_crash_soft.mp3","sfx_punch.mp3","sfx_pop.mp3","sfx_chime.mp3","sfx_ui.mp3","sfx_ok.mp3","sfx_count.mp3","sfx_finish.mp3"])
     jobs.push({p:"audio/"+n,kind:"buf",assign:b=>{SND[n.replace(/\.(mp3|m4a)$/,"")]={raw:b,buf:null};}});
@@ -691,6 +715,7 @@ function baseEnv(group,timeKey,{floorTex="concrete",floorColor=0xd6d9e2,floorRep
   lastSunOff=new THREE.Vector3(T.sunPos[0],T.sunPos[1],T.sunPos[2]).normalize().multiplyScalar(300);
   return{colliders,W,D,T};}
 let lastSunOff=null,lastSky=null,lastSkyY=0,dyHazards=[],dyRamps=[];
+const GRAV=20; // gravedad del auto en el aire (m/s²) — arcos de salto realistas por velocidad
 /* rampa de salto: losa inclinada + costados + labio a rayas; empuja al array de rampas */
 function addRamp(group,x,z,angDeg,w,len,rise){
   const ang=angDeg*Math.PI/180,inc=Math.atan2(rise,len),slope=Math.hypot(len,rise);
@@ -806,7 +831,85 @@ function arenaFeatures(group,colliders,rng,spec){
         instPlace(group,mi,items);}}}
   if((spec.cones||[]).length)conesAt(group,rng,spec.cones);}
 
-/* ================= markings canvases ================= */
+/* ================= trampa: piso de cristal + trituradora de engranajes ================= */
+function labelTex(txt){return canvasTex(512,176,(g,W,H)=>{g.clearRect(0,0,W,H);
+  g.fillStyle="rgba(8,10,14,.78)";g.fillRect(8,34,W-16,H-68);
+  g.strokeStyle="#ff7a1a";g.lineWidth=6;g.strokeRect(8,34,W-16,H-68);
+  g.fillStyle="#ffce3c";g.font="bold 84px system-ui,Arial,sans-serif";g.textAlign="center";g.textBaseline="middle";
+  g.fillText(txt,W/2,H/2+4);});}
+function proceduralGear(radius){
+  const g=new THREE.Group();
+  const mat=stdMat("metal");mat.color.set(0x6b6e75);mat.metalness=.85;mat.roughness=.4;
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(radius*.8,radius*.8,radius*.55,30),mat);g.add(body);
+  const hub=new THREE.Mesh(new THREE.CylinderGeometry(radius*.24,radius*.24,radius*.6,16),mat);g.add(hub);
+  const t=14,tooth=new THREE.BoxGeometry(radius*.3,radius*.55,radius*.34);
+  const ti=new THREE.InstancedMesh(tooth,mat,t);
+  for(let i=0;i<t;i++){const a=i/t*6.2832;EU.set(0,a,0);QT.setFromEuler(EU);
+    M4.compose(V.set(Math.sin(a)*radius*.88,0,Math.cos(a)*radius*.88),QT,new THREE.Vector3(1,1,1));ti.setMatrixAt(i,M4);}
+  ti.instanceMatrix.needsUpdate=true;g.add(ti);return g;} // eje de giro = Y
+function makeGear(radius){
+  const holder=new THREE.Group();const glb=A.glb.gear;
+  if(glb){const m=glb.scene.clone(true);
+    m.rotation.x=-Math.PI/2;m.updateMatrixWorld(true); // acostar: disco horizontal
+    const b=new THREE.Box3().setFromObject(m),sz=b.getSize(new THREE.Vector3());
+    const dia=Math.max(sz.x,sz.z)||1;m.scale.setScalar(radius*2/dia);
+    m.updateMatrixWorld(true);const b2=new THREE.Box3().setFromObject(m),c=b2.getCenter(new THREE.Vector3());
+    m.position.sub(c);
+    m.traverse(o=>{if(o.isMesh){o.castShadow=false;o.frustumCulled=false;
+      if(o.material&&o.material.transparent){o.material=o.material.clone();o.material.transparent=false;}}});
+    holder.add(m);
+  }else holder.add(proceduralGear(radius));
+  return holder;}
+let dyPit=null;
+function buildGearPit(group,colliders,cx,cz){
+  const HW=13,HD=13,DEPTH=15;
+  const wallMat=stdMat("metal");wallMat.color.set(0x14161a);wallMat.metalness=.6;wallMat.roughness=.55;
+  const bottom=new THREE.Mesh(new THREE.BoxGeometry(HW*2,.6,HD*2),new THREE.MeshStandardMaterial({color:0x070809,roughness:.95}));
+  bottom.position.set(cx,-DEPTH,cz);group.add(bottom);
+  for(const[dx,dz,w,d]of[[0,-HD,HW*2+1.2,.7],[0,HD,HW*2+1.2,.7],[-HW,0,.7,HD*2],[HW,0,.7,HD*2]]){
+    const wl=new THREE.Mesh(new THREE.BoxGeometry(w,DEPTH,d),wallMat);wl.position.set(cx+dx,-DEPTH/2,cz+dz);group.add(wl);}
+  const rimMat=stdMat("metal");rimMat.color.set(0x2a2d33);rimMat.metalness=.7;
+  for(const[dx,dz,w,d]of[[0,-HD-1,HW*2+3,1.6],[0,HD+1,HW*2+3,1.6],[-HW-1,0,1.6,HD*2+3],[HW+1,0,1.6,HD*2+3]]){
+    const r=new THREE.Mesh(new THREE.BoxGeometry(w,.45,d),rimMat);r.position.set(cx+dx,.22,cz+dz);group.add(r);}
+  const gears=[];
+  for(const[gx,gz,rad,spd]of[[cx-6,cz-4,7,1.0],[cx+6,cz+4,7,-1.0],[cx,cz-9,5.5,1.5],
+    [cx-3,cz+9,5.5,-1.4],[cx+9,cz-8,4.5,1.8],[cx-10,cz+6,4.5,-1.7]]){
+    const h=makeGear(rad);h.position.set(gx,-DEPTH+2.4,gz);group.add(h);gears.push({holder:h,spd});}
+  const glassMat=new THREE.MeshStandardMaterial({color:0xafe4ff,transparent:true,opacity:.30,roughness:.06,metalness:.1,
+    emissive:0x123240,emissiveIntensity:.3,side:THREE.DoubleSide});
+  const g1=new THREE.Mesh(new THREE.BoxGeometry(HW,.18,HD*2),glassMat);g1.position.set(cx-HW/2,.14,cz);
+  const g2=new THREE.Mesh(new THREE.BoxGeometry(HW,.18,HD*2),glassMat);g2.position.set(cx+HW/2,.14,cz);
+  group.add(g1);group.add(g2);
+  const lx=cx,lz=cz+HD+4;
+  const lever=new THREE.Group();lever.position.set(lx,0,lz);group.add(lever);
+  const bm=stdMat("metal");bm.color.set(0x33373f);bm.metalness=.6;
+  const post=new THREE.Mesh(new THREE.CylinderGeometry(.5,.6,1.1,10),bm);post.position.y=.55;lever.add(post);
+  const handleP=new THREE.Group();handleP.position.y=1.0;lever.add(handleP);
+  const handle=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,1.7,8),
+    new THREE.MeshStandardMaterial({color:0xff4030,metalness:.4,roughness:.4,emissive:0x400000,emissiveIntensity:.5}));
+  handle.position.y=.85;handleP.add(handle);
+  const knob=new THREE.Mesh(new THREE.SphereGeometry(.3,12,10),
+    new THREE.MeshStandardMaterial({color:0xffce3c,emissive:0x664400,emissiveIntensity:.6}));
+  knob.position.y=1.7;handleP.add(knob);handleP.rotation.x=-.5;
+  const prm=new THREE.Sprite(new THREE.SpriteMaterial({map:labelTex("ACTIVAR"),transparent:true,depthTest:false,depthWrite:false}));
+  prm.scale.set(4.6,1.6,1);prm.position.set(lx,3.4,lz);prm.visible=false;group.add(prm);
+  colliders.push({type:"circle",x:lx,z:lz,r:.9});
+  dyPit={cx,cz,HW,HD,DEPTH,open:false,slide:0,gears,g1,g2,g1x:g1.position.x,g2x:g2.position.x,
+    lever:{x:lx,z:lz},handleP,prompt:prm,near:false};
+  return dyPit;}
+function overOpenPit(x,z){const P=dyPit;if(!P||P.slide<.55)return false;
+  return x>P.cx-P.HW&&x<P.cx+P.HW&&z>P.cz-P.HD&&z<P.cz+P.HD;}
+const _actBtn=()=>document.getElementById("actbtn");
+function updateGearPit(dt,ex,ez){
+  const P=dyPit;if(!P)return;
+  const boost=P.open?1.7:.45;
+  for(const g of P.gears)g.holder.rotation.y+=g.spd*dt*boost;
+  const tgt=P.open?1:0;P.slide+=(tgt-P.slide)*Math.min(1,dt*2.6);
+  P.g1.position.x=P.g1x-P.HW*P.slide;P.g2.position.x=P.g2x+P.HW*P.slide;
+  P.handleP.rotation.x=-.5+P.open*1.05;
+  P.near=Math.hypot(ex-P.lever.x,ez-P.lever.z)<5.5;
+  P.prompt.visible=P.near;
+  const btn=_actBtn();if(btn)btn.style.display=(touchDevice&&P.near)?"block":"none";}
 function marksYard(w,d){return canvasTex(2048,2048,(g,W2,H2)=>{
   g.clearRect(0,0,W2,H2);
   const px=x=>(x/w+.5)*W2,pz=z=>(z/d+.5)*H2;
@@ -949,7 +1052,7 @@ function buildPuerto(group,timeKey){
      const f=fk.clone(true);f.position.set(x,0,z);f.rotation.y=ry;group.add(f);
      colliders.push({type:"circle",x,z,r:1.6});}}
   floodTowers(group,colliders,[[-W+8,-D+8],[W-8,-D+8],[W-8,D-8],[-W+8,D-8]],T);
-  addHazard(group,10,-10,8,1.3);
+  addHazard(group,-92,-24,8,1.3); // en zona abierta oeste (antes chocaba dentro del laberinto)
   arenaFeatures(group,colliders,rng,{
     ramps:[[-115,-10,90,8,11,2.8],[125,20,270,8,11,2.8],[-42,-72,0,8,10,2.6]],
     tires:[[-125,-40],[-125,-22],[-125,-4],[120,-42],[120,60]],
@@ -1116,6 +1219,7 @@ function buildAero(group,timeKey){
      const c=vanT2.clone(true);c.position.set(x,0,z);c.rotation.y=ry;group.add(c);
      colliders.push(obb(x,z,1.1,2.4,ry));}}
   floodTowers(group,colliders,[[-W+10,-D+10],[W-10,-D+10],[W-10,D-10],[-W+10,D-10]],T);
+  buildGearPit(group,colliders,0,0); // piso de cristal + trituradora de engranajes en el centro
   arenaFeatures(group,colliders,rng,{
     ramps:[[-80,20,90,9,13,3.3],[80,-20,270,9,13,3.3],[-10,-95,0,9,12,3],[-10,95,180,9,12,3]],
     tires:[[-120,-60],[-100,-60],[-80,-60],[120,60],[100,60],[80,60],[40,0],[-40,0]],
@@ -1162,6 +1266,7 @@ function buildAzotea(group,timeKey){
       c.position.set(Math.cos(a)*r,-58,Math.sin(a)*r);
       c.rotation.y=Math.floor(org2()*4)*Math.PI/2;group.add(c);}}
   floodTowers(group,colliders,[[-W+10,-D+10],[W-10,D-10]],T);
+  buildGearPit(group,colliders,0,-6); // azotea: piso de cristal sobre engranajes (temática perfecta)
   arenaFeatures(group,colliders,rng,{
     ramps:[[-62,0,90,8,10,2.4],[62,0,270,8,10,2.4]],
     tires:[[-42,-42],[42,42],[-42,42],[42,-42]],
@@ -1319,7 +1424,7 @@ function buildEstadio(group,timeKey){
      if(!t)continue;const c=t.clone(true);c.position.set(x,0,z);c.rotation.y=ry;group.add(c);
      colliders.push(obb(x,z,1.1,2.4,ry));}}
   floodTowers(group,colliders,[[-W+6,-D+6],[W-6,-D+6],[W-6,D-6],[-W+6,D-6]],T);
-  addHazard(group,0,0,10,1.5);addHazard(group,-40,-20,7,-2);
+  addHazard(group,0,0,10,1.5);addHazard(group,45,-35,5,-2); // 2do fuera de las chicanas de contenedores
   arenaFeatures(group,colliders,rng,{
     ramps:[[-72,15,90,7,9,2.2],[72,-15,270,7,9,2.2]],
     tires:[[42,42],[-46,-46]],
@@ -1467,11 +1572,12 @@ function queryColliders(x,z,rad){
   return _qout;}
 function buildWorld(mapIdx,timeKey){
   disposeWorld();
-  dyHazards=[];dyRamps=[];
+  dyHazards=[];dyRamps=[];dyPit=null;
   const group=new THREE.Group();scene.add(group);
   const data=MAPS[mapIdx].build(group,timeKey);
   sun.castShadow=true;
   world={group,timeKey,mapIdx,chimneys:[],sunOff:lastSunOff,sky:lastSky,skyY:lastSkyY,hazards:dyHazards,ramps:dyRamps,...data};
+  world.pit=dyPit;
   world.grid=buildColliderGrid(world.colliders||[]);
   return world;}
 function disposeWorld(){if(world){scene.remove(world.group);
@@ -1696,7 +1802,8 @@ async function enterFoot(s){
   s.onFoot={active:true,ped:P,x:fx,z:fz,h:fh,vy:0,grounded:true,hp:100,
     punchT:0,jumpT:0,speed:0,npcs:[]};
   // ubicar la cámara detrás del jugador ya mismo (sin barrido raro desde el auto)
-  camera.position.set(fx-Math.sin(fh)*5.5,3,fz-Math.cos(fh)*5.5);
+  footCamYaw=fh;footCamPitch=.5;
+  camera.position.set(fx-Math.sin(fh)*5.5,3.6,fz-Math.cos(fh)*5.5);
   camera.lookAt(fx,1.2,fz);
   document.getElementById("touch").style.display="none";
   refreshTouchUI();toast(L.onfoot,"var(--org)");
@@ -1739,9 +1846,8 @@ function footUpdate(s,dt){
   let mx=0,mz=0;
   const canMove=mag>.14 && of.punchT<=0 && of.grounded;
   if(canMove){
-    camera.getWorldDirection(_fwd);_fwd.y=0;
-    if(_fwd.lengthSq()<1e-4)_fwd.set(0,0,1);_fwd.normalize();
-    const fX=_fwd.x,fZ=_fwd.z,rX=-_fwd.z,rZ=_fwd.x; // adelante y derecha
+    // adelante = hacia donde APUNTA la cámara (que el jugador orienta con el dedo derecho)
+    const fX=Math.sin(footCamYaw),fZ=Math.cos(footCamYaw),rX=Math.cos(footCamYaw),rZ=-Math.sin(footCamYaw);
     mx=fX*(-fc.z)+rX*fc.x;   // joystick arriba (fc.z<0) => adelante
     mz=fZ*(-fc.z)+rZ*fc.x;
     const ml=Math.hypot(mx,mz)||1;mx/=ml;mz/=ml;}
@@ -1752,10 +1858,16 @@ function footUpdate(s,dt){
     while(d>Math.PI)d-=6.283;while(d<-Math.PI)d+=6.283;of.h+=d*Math.min(1,dt*16);}
   // colisión a pie: no atravesar props/árboles (mismo set que el auto)
   const B=world.bounds;if(B){of.x=Math.max(-B.W,Math.min(B.W,of.x));of.z=Math.max(-B.D,Math.min(B.D,of.z));}
-  if(of.grounded){const fixed=pushOutFoot(of.x,of.z,.5);of.x=fixed.x;of.z=fixed.z;}
-  // salto (físico, corto y rápido)
+  // trampa del pozo (a pie): girar engranajes, palanca, caída mortal
+  if(dyPit){updateGearPit(dt,of.x,of.z);
+    if(dyPit.near&&consumePress("activate")){dyPit.open=!dyPit.open;sfx("sfx_pop",.5,.7);
+      toast(dyPit.open?"⚙ TRITURADORA ON":"⚙ CERRADO",dyPit.open?"var(--red)":"var(--yel)");}}
+  const inPit=overOpenPit(of.x,of.z);
+  if(of.grounded&&!inPit){const fixed=pushOutFoot(of.x,of.z,.5);of.x=fixed.x;of.z=fixed.z;}
+  // salto / gravedad (y caída al pozo)
   of.vy-=26*dt;let y=P.holder.position.y+of.vy*dt;
-  if(y<=0){y=0;of.vy=0;of.grounded=true;}else of.grounded=false;
+  if(inPit){of.grounded=false;if(y<-(dyPit.DEPTH-2.5))of.hp=0;}
+  else if(y<=0){y=0;of.vy=0;of.grounded=true;}else of.grounded=false;
   P.holder.position.set(of.x,y,of.z);
   P.holder.rotation.y=of.h;
   if(of.punchT>0)of.punchT-=dt;
@@ -1766,9 +1878,10 @@ function footUpdate(s,dt){
   else if(spd>0)pedPlay(P,"walk",.12);
   else pedPlay(P,"idle",.2);
   updateHazards(s,dt);
-  // cámara tercera persona (suave)
-  const cx=of.x-Math.sin(of.h)*5.5,cz=of.z-Math.cos(of.h)*5.5;
-  camera.position.lerp(V.set(cx,3,cz),1-Math.pow(.0008,dt));
+  // cámara tercera persona orbital: la orienta el jugador (footCamYaw/Pitch), no el personaje
+  const cdist=5.5,camH=1.3+footCamPitch*4.6;
+  const cx=of.x-Math.sin(footCamYaw)*cdist,cz=of.z-Math.cos(footCamYaw)*cdist;
+  camera.position.lerp(V.set(cx,camH,cz),1-Math.pow(.0008,dt));
   if(world.sky){world.sky.position.x=camera.position.x;world.sky.position.z=camera.position.z;}
   camera.lookAt(of.x,1.2,of.z);
   camera.fov+=(CFG.fovBase-camera.fov)*.1;camera.updateProjectionMatrix();
@@ -1946,18 +2059,28 @@ function update(dt){
       if(s.hp<=0)killPlayer(s);}}
   if(world.hazards&&world.hazards.length)updateHazards(s,dt);
 
-  /* rampas + física vertical (saltos con aterrizaje) */
+  /* trampa: engranajes giran, palanca activa la compuerta de cristal */
+  if(dyPit){updateGearPit(dt,s.x,s.z);
+    if(dyPit.near&&consumePress("activate")){dyPit.open=!dyPit.open;sfx("sfx_pop",.55,.65);
+      toast(dyPit.open?"⚙ TRITURADORA ON":"⚙ CERRADO",dyPit.open?"var(--red)":"var(--yel)");}}
+
+  /* rampas + física vertical (saltos con aterrizaje) + caída al pozo */
   {const rmps=world.ramps;let onR=false,surf=0,slope=0;
-   if(rmps)for(const r of rmps){
+   const inPit=overOpenPit(s.x,s.z);
+   if(rmps&&!inPit)for(const r of rmps){
      const dx=s.x-r.x,dz=s.z-r.z;
      const along=dx*r.sin+dz*r.cos, across=dx*r.cos-dz*r.sin;
      if(across>-r.hw&&across<r.hw&&along>-1.2&&along<r.len){
        const h=Math.max(0,Math.min(1,along/r.len))*r.rise;
        if(h>surf){surf=h;slope=r.rise/r.len;onR=true;}}}
    if(onR){s.y=Math.max(s.y,surf);
-     if(vF>4)s.vy=Math.max(s.vy,vF*slope*1.3);
+     // lanzamiento por FÍSICA real: vy = velocidad × pendiente (tan del ángulo) → altura ∝ velocidad²
+     if(vF>3)s.vy=Math.max(s.vy,vF*slope);
      s.airborne=s.y>.15;}
-   else if(s.y>0||s.vy>0){s.airborne=true;s.vy-=30*dt;s.y+=s.vy*dt;
+   else if(inPit){s.airborne=true;s.vy-=GRAV*dt;s.y+=s.vy*dt; // caés a la trituradora
+     if(s.y<-(world.pit.DEPTH-3.5)&&!s.dead){s.y=-(world.pit.DEPTH-3.5);
+       sfx("sfx_crash",1,.55);s.hp=0;deformCar(s,{x:0,z:1},1);killPlayer(s);}}
+   else if(s.y>0||s.vy>0){s.airborne=true;s.vy-=GRAV*dt;s.y+=s.vy*dt;
      if(s.y<=0){const land=-s.vy;s.y=0;s.vy=0;s.airborne=false;
        if(land>4){s.shake=Math.min(1,.3+land/22);for(let k=0;k<2;k++)spawnPuffAt(s.x+(Math.random()-.5)*1.5,.4,s.z+(Math.random()-.5)*1.5,1.2);
          sfx(land>9?"sfx_crash":"sfx_crash_soft",Math.min(1,land/16),.85+Math.random()*.2);}}}
@@ -2167,7 +2290,7 @@ function menuNav(){
   if(mode==="race"){const keep=[];
     while(pressed.length){const c=pressed.shift();
       if(c==="pause")togglePause();
-      else if(c==="door"||c==="jump"||c==="punch")keep.push(c);}
+      else if(c==="door"||c==="jump"||c==="punch"||c==="activate")keep.push(c);}
     pressed.push(...keep);return;}
   while(pressed.length){const c=pressed.shift();
   if(mode==="garage"){
@@ -2366,7 +2489,12 @@ if(DEV)window.__dy={
   foot(){if(sess)return enterFoot(sess);},
   djump(){if(sess&&sess.onFoot&&sess.onFoot.active)doJump(sess);},
   dpunch(){if(sess&&sess.onFoot&&sess.onFoot.active)doPunch(sess);},
+  camyaw:v=>{footCamYaw=v;},getcam:()=>({yaw:+footCamYaw.toFixed(2),pitch:+footCamPitch.toFixed(2),
+    cx:+camera.position.x.toFixed(1),cz:+camera.position.z.toFixed(1)}),
   joy:()=>joyVec,footcmd:()=>footCmd(),
+  pit(){const P=dyPit;return P?{open:P.open,slide:+P.slide.toFixed(2),near:P.near,gears:P.gears.length,depth:P.DEPTH,cx:P.cx,cz:P.cz,lx:P.lever.x,lz:P.lever.z}:null;},
+  setpit(o){if(dyPit)dyPit.open=o;},
+  press(n){pressed.push(n);},
   probe(x,z,r){return{n:(world.colliders||[]).length,ramps:(world.ramps||[]).length,
     cand:(queryColliders(x,z,r||3)||[]).length,foot:pushOutFoot(x,z,r||.5)};},
   clips(){const out={};for(const k in A_ped){const g=A_ped[k];if(g&&g.animations)
