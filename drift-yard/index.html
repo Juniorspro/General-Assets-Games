@@ -156,7 +156,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 4.0</div>
+  <div id="buildtag">build 4.1</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -548,9 +548,9 @@ function baseEnv(group,timeKey,{floorTex="concrete",floorColor=0xd6d9e2,floorRep
   if(!noGround){const gm=stdMat(groundTex,{repeat:[160,160]});gm.color.set(groundColor);
     if(groundNoMap){gm.map=null;gm.needsUpdate=true;}
     const around=new THREE.Mesh(new THREE.CircleGeometry(1600,40),gm);
-    around.rotation.x=-Math.PI/2;around.position.y=-.06;group.add(around);
+    around.rotation.x=-Math.PI/2;around.position.y=-.02;group.add(around);
     if(apron){const ap=new THREE.Mesh(new THREE.PlaneGeometry(w+120,d+120),stdMat("road",{repeat:[34,28]}));
-      ap.rotation.x=-Math.PI/2;ap.position.y=-.03;group.add(ap);}}
+      ap.rotation.x=-Math.PI/2;ap.position.y=-.012;group.add(ap);}}
   if(fenceOn){
     const postGeo=new THREE.BoxGeometry(.14,1.15,.14);postGeo.translate(0,.575,0);
     const postMat=stdMat("metal");postMat.metalness=.55;
@@ -570,7 +570,7 @@ function baseEnv(group,timeKey,{floorTex="concrete",floorColor=0xd6d9e2,floorRep
   const skyMap=(skyBiome&&A.img[`sky_${skyBiome}_${timeKey}`])||A.img["sky_"+timeKey]||fallbackSky(timeKey);
   const sky=new THREE.Mesh(new THREE.SphereGeometry(1900,32,16),
     new THREE.MeshBasicMaterial({map:skyMap,side:THREE.BackSide,fog:false}));
-  sky.position.y=skyY;group.add(sky);
+  sky.position.y=skyY;group.add(sky);lastSky=sky;lastSkyY=skyY;
   hemi.color.set(T.hemiSky);hemi.groundColor.set(T.hemiGnd);hemi.intensity=T.hemiI;
   sun.color.set(T.sun);sun.intensity=T.sunI;
   sun.position.set(T.sunPos[0],T.sunPos[1],T.sunPos[2]);
@@ -578,7 +578,7 @@ function baseEnv(group,timeKey,{floorTex="concrete",floorColor=0xd6d9e2,floorRep
   scene.fog=new THREE.FogExp2(T.fog,T.fogD);
   lastSunOff=new THREE.Vector3(T.sunPos[0],T.sunPos[1],T.sunPos[2]).normalize().multiplyScalar(300);
   return{colliders,W,D,T};}
-let lastSunOff=null;
+let lastSunOff=null,lastSky=null,lastSkyY=0;
 function floodTowers(group,colliders,spots,T){
   const poleMat=stdMat("metal");poleMat.metalness=.6;
   for(const[x,z]of spots){
@@ -865,6 +865,11 @@ function buildBosque(group,timeKey){
    const barnT=normalizeModel(A.glb.barn,{height:9});
    if(barnT){const b2=barnT.clone(true);b2.position.set(-108,0,60);b2.rotation.y=1.1;group.add(b2);
      colliders.push(obb(-108,60,5,6,1.1));}}
+  // autos estacionados en el pueblo + decoración
+  {const vanT2=autoCar(A.glb.parked_b,5.2),hatchT2=autoCar(A.glb.parked_a,4.1);
+   for(const[x,z,ry,t]of[[-70,60,1.9,hatchT2],[-60,84,2.4,vanT2],[-95,28,.7,hatchT2]]){
+     if(!t)continue;const c=t.clone(true);c.position.set(x,0,z);c.rotation.y=ry;group.add(c);
+     colliders.push(obb(x,z,1.1,2.4,ry));}}
   // gasolinera junto a la ruta
   {const gasT=normalizeModel(A.glb.gas,{height:6.5});
    if(gasT){const i=Math.floor(.22*n),side=-1;
@@ -894,10 +899,10 @@ function buildBosque(group,timeKey){
     const p=P[i],lf=LF[i];
     cps.push({x:p.x,z:p.z,r:11});
     const gate=new THREE.Group();
-    for(const s of[-1,1]){const post=new THREE.Mesh(new THREE.CylinderGeometry(.1,.13,4.4,8),postMat);
+    for(const s of[-1,1]){const post=new THREE.Mesh(new THREE.CylinderGeometry(.16,.2,4.4,8),postMat);
       post.position.copy(p).addScaledVector(lf,s*(halfW+.8));post.position.y=2.2;post.castShadow=true;gate.add(post);}
     const ban=new THREE.Mesh(new THREE.BoxGeometry((halfW+.8)*2,.55,.1),
-      new THREE.MeshBasicMaterial({map:k===0?startTex:stripeTex}));
+      new THREE.MeshBasicMaterial({map:k===0?startTex:stripeTex,side:THREE.DoubleSide}));
     ban.position.copy(p);ban.position.y=4.2;
     ban.rotation.y=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;
     gate.add(ban);group.add(gate);}
@@ -932,7 +937,15 @@ function buildAero(group,timeKey){
   if(tireT)for(const[x,z]of[[60,-40],[100,30],[-140,50],[0,70],[-30,-70]]){
     const t=tireT.clone(true);t.position.set(x,0,z);t.rotation.y=rng()*6.3;group.add(t);
     colliders.push({type:"circle",x,z,r:1.9});}
-  conesAt(group,rng,[[60,-40,10,24],[-140,50,8,20]]);
+  conesAt(group,rng,[[60,-40,10,24],[-140,50,8,20],[0,-20,12,30]]);
+  {const fk=normalizeModel(A.glb.forklift,{length:3});
+   if(fk)for(const[x,z,ry]of[[-60,-D+18,.4],[100,D-20,2.1]]){
+     const f=fk.clone(true);f.position.set(x,0,z);f.rotation.y=ry;group.add(f);
+     colliders.push({type:"circle",x,z,r:1.6});}}
+  {const vanT2=autoCar(A.glb.parked_b,5.2);
+   if(vanT2)for(const[x,z,ry]of[[-30,-D+16,1.5],[150,-D+18,1.7]]){
+     const c=vanT2.clone(true);c.position.set(x,0,z);c.rotation.y=ry;group.add(c);
+     colliders.push(obb(x,z,1.1,2.4,ry));}}
   floodTowers(group,colliders,[[-W+10,-D+10],[W-10,-D+10],[W-10,D-10],[-W+10,D-10]],T);
   return{colliders,spawn:{x:-150,z:80,h:Math.PI*.5},bounds:{W:W-CFG.carR,D:D-CFG.carR}};}
 
@@ -1019,6 +1032,15 @@ function buildNieve(group,timeKey){
   if(tireT)for(const[x,z]of[[-60,-40],[50,45],[0,20],[-20,70]]){
     const t=tireT.clone(true);t.position.set(x,0,z);t.rotation.y=rng()*6.3;group.add(t);
     colliders.push({type:"circle",x,z,r:1.9});}
+  conesAt(group,rng,[[-60,-40,8,22],[50,45,8,22]]);
+  {const rustyT2=autoCar(A.glb.rusty,4.6);
+   if(rustyT2){rustyT2.traverse(o=>{if(o.name==="Plane001")o.visible=false;});
+     const c=rustyT2.clone(true);c.position.set(-W+16,0,-30);c.rotation.y=.8;group.add(c);
+     colliders.push(obb(-W+16,-30,1.1,2.4,.8));}}
+  {const tireT2=normalizeModel(A.glb.tires,{height:1.1});
+   if(tireT2)for(const[x,z]of[[70,30],[-40,-70],[30,-45]]){
+     const t=tireT2.clone(true);t.position.set(x,0,z);t.rotation.y=rng()*6.3;group.add(t);
+     colliders.push({type:"circle",x,z,r:1.9});}}
   floodTowers(group,colliders,[[-W+8,-D+8],[W-8,-D+8],[W-8,D-8],[-W+8,D-8]],T);
   return{colliders,ice,spawn:{x:-70,z:70,h:Math.PI},bounds:{W:W-CFG.carR,D:D-CFG.carR}};}
 
@@ -1068,6 +1090,10 @@ function buildCanyon(group,timeKey){
     const c=rustyT.clone(true);c.position.set(40,0,-70);c.rotation.y=2.2;group.add(c);
     colliders.push(obb(40,-70,1.1,2.4,2.2));}
   conesAt(group,rng,[[-70,-40,9,24],[55,45,9,24]]);
+  {const vanT2=autoCar(A.glb.parked_b,5.2),hatchT2=autoCar(A.glb.parked_a,4.1);
+   for(const[x,z,ry,t]of[[-W+14,20,1.6,hatchT2],[-W+16,4,1.55,vanT2]]){
+     if(!t)continue;const c=t.clone(true);c.position.set(x,0,z);c.rotation.y=ry;group.add(c);
+     colliders.push(obb(x,z,1.1,2.4,ry));}}
   floodTowers(group,colliders,[[-W+8,-D+8],[W-8,D-8]],T);
   return{colliders,spawn:{x:-70,z:66,h:Math.PI},bounds:{W:W-CFG.carR,D:D-CFG.carR}};}
 
@@ -1096,6 +1122,14 @@ function buildEstadio(group,timeKey){
        items.push([x,z,rot,0,1]);colliders.push(obb(x,z,1.35,6.4,rot));}
      instPlace(group,mi,items);}}
   conesAt(group,rng,[[-45,25,9,18],[48,-28,9,18]]);
+  {const tireT2=normalizeModel(A.glb.tires,{height:1.1});
+   if(tireT2)for(const[x,z]of[[-60,-30],[60,32],[-20,44],[30,-46]]){
+     const t=tireT2.clone(true);t.position.set(x,0,z);t.rotation.y=rng()*6.3;group.add(t);
+     colliders.push({type:"circle",x,z,r:1.9});}}
+  {const hatchT2=autoCar(A.glb.parked_a,4.1),vanT2=autoCar(A.glb.parked_b,5.2);
+   for(const[x,z,ry,t]of[[-W+12,D-14,2.6,hatchT2],[-W+20,D-12,2.8,vanT2]]){
+     if(!t)continue;const c=t.clone(true);c.position.set(x,0,z);c.rotation.y=ry;group.add(c);
+     colliders.push(obb(x,z,1.1,2.4,ry));}}
   floodTowers(group,colliders,[[-W+6,-D+6],[W-6,-D+6],[W-6,D-6],[-W+6,D-6]],T);
   return{colliders,spawn:{x:-60,z:44,h:Math.PI*.9},bounds:{W:W-CFG.carR,D:D-CFG.carR}};}
 
@@ -1181,6 +1215,21 @@ function buildTouge(group,timeKey){
        const v2=vd.clone(true);v2.position.set(p.x+off,0,p.z);
        v2.rotation.y=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;group.add(v2);
        colliders.push({type:"circle",x:p.x+off,z:p.z,r:.9});}}}
+  // casitas de montaña + segundo mirador con expendedoras
+  {const hs=normalizeModel(A.glb.house,{height:7});
+   if(hs)for(const t of[.3,.72]){
+     const i=Math.floor(t*n);
+     const p=P[i].clone().addScaledVector(LF[i],(t<.5?1:-1)*(halfW+11));
+     const h2=hs.clone(true);h2.position.copy(p);
+     h2.rotation.y=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;group.add(h2);
+     colliders.push(obb(p.x,p.z,4.5,3.5,h2.rotation.y));}}
+  {const vd2=normalizeModel(A.glb.vending,{height:2});
+   if(vd2){const i=Math.floor(.82*n);
+     const p=P[i].clone().addScaledVector(LF[i],halfW+3.2);
+     for(const off of[0,2.4]){
+       const v2=vd2.clone(true);v2.position.set(p.x+off,0,p.z);
+       v2.rotation.y=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;group.add(v2);
+       colliders.push({type:"circle",x:p.x+off,z:p.z,r:.9});}}}
   // checkpoints
   const cps=[];const NCP=9;
   const postMat2=new THREE.MeshStandardMaterial({color:0xf4f0e6,roughness:.5});
@@ -1192,10 +1241,10 @@ function buildTouge(group,timeKey){
     const p=P[i],lf=LF[i];
     cps.push({x:p.x,z:p.z,r:10});
     const gate=new THREE.Group();
-    for(const s of[-1,1]){const post=new THREE.Mesh(new THREE.CylinderGeometry(.1,.13,4.2,8),postMat2);
+    for(const s of[-1,1]){const post=new THREE.Mesh(new THREE.CylinderGeometry(.16,.2,4.2,8),postMat2);
       post.position.copy(p).addScaledVector(lf,s*(halfW+.7));post.position.y=2.1;gate.add(post);}
     const ban=new THREE.Mesh(new THREE.BoxGeometry((halfW+.7)*2,.5,.1),
-      new THREE.MeshBasicMaterial({map:stripeTex2}));
+      new THREE.MeshBasicMaterial({map:stripeTex2,side:THREE.DoubleSide}));
     ban.position.copy(p);ban.position.y=4;
     ban.rotation.y=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;
     gate.add(ban);group.add(gate);}
@@ -1207,7 +1256,7 @@ function buildWorld(mapIdx,timeKey){
   const group=new THREE.Group();scene.add(group);
   const data=MAPS[mapIdx].build(group,timeKey);
   sun.castShadow=true;
-  world={group,timeKey,mapIdx,chimneys:[],sunOff:lastSunOff,...data};
+  world={group,timeKey,mapIdx,chimneys:[],sunOff:lastSunOff,sky:lastSky,skyY:lastSkyY,...data};
   return world;}
 function disposeWorld(){if(world){scene.remove(world.group);
   world.group.traverse(o=>{if(o.geometry)o.geometry.dispose?.();});
@@ -1308,7 +1357,7 @@ function newSession(){
   const wR=carTemplates[save.car].userData.wheelR||.3;
   const sp=world.spawn;
   return{stats,obj,wheels,wheelR:Math.max(wR,.12),wheelSpin:0,mapMode:M.mode,laps:M.laps||0,
-    x:sp.x,z:sp.z,h:sp.h,vx:0,vz:0,physSteer:0,
+    x:sp.x,z:sp.z,h:sp.h,vx:0,vz:0,physSteer:0,autoDrift:false,handT:0,handPrev:false,hbDrift:false,hbGap:0,
     steerVis:0,beta:0,speed:0,
     total:0,cur:0,combo:1,driftT:0,gapT:0,bestDrift:0,
     t:M.mode==="drift"?CFG.session:0,go:1.5,over:false,saved:false,record:false,
@@ -1361,10 +1410,22 @@ function update(dt){
   let grip=st.grip*surfGrip;
   const hand=cmd.hand&&!s.over;
   if(hand&&s.speed>6)s.hbDrift=true; // el derrape puntúa solo si nació del freno de mano
+  /* tap corto a la mano con gas = modo derrape sostenido (estilo Asphalt 9) */
+  if(hand&&!s.handPrev)s.handT=0;
+  if(hand)s.handT+=dt;
+  if(!hand&&s.handPrev&&s.handT<.28&&cmd.up&&s.speed>8){
+    s.autoDrift=true;s.hbDrift=true;
+    if(Math.abs(steer)>.05)vL-=steer*st.kick*Math.max(vF,0)*.2; // patada inicial suave
+  }
+  s.handPrev=hand;
+  if(s.autoDrift){s.nsT=Math.abs(steer)<.15?(s.nsT||0)+dt:0;
+    if(cmd.down||s.speed<4.5||s.nsT>.6)s.autoDrift=false;} // soltás la dirección = lo controlaste
   if(hand)grip*=.18;
+  else if(s.autoDrift)grip*=(Math.abs(s.beta)>.6?.8:.28); // sostenido pero estable: si pasa de ~35° recupera agarre
   else if(cmd.up&&Math.abs(steer)>.5&&vF>12)grip*=.72;
   vL-=vL*Math.min(1,grip*dt);
   if(hand&&Math.abs(steer)>.05)vL-=steer*st.kick*Math.max(vF,0)*.7*dt;
+  if(s.autoDrift&&Math.abs(steer)>.1)vL-=steer*st.kick*Math.max(vF,0)*.3*dt;
   // slide scrubs a little forward speed — manage the angle to keep momentum
   vF-=Math.abs(vL)*.2*dt*Math.sign(Math.max(vF,0));
 
@@ -1415,7 +1476,9 @@ function update(dt){
 
   /* scoring */
   const betaDeg=Math.abs(beta)*57.29578;
-  if(betaDeg<CFG.driftMinDeg){s.hbGap=(s.hbGap||0)+dt;if(s.hbGap>.5)s.hbDrift=false;}
+  if(betaDeg<CFG.driftMinDeg){s.hbGap=(s.hbGap||0)+dt;
+    if(s.hbGap>.5)s.hbDrift=false;
+    if(s.hbGap>.45)s.autoDrift=false;}
   else s.hbGap=0;
   const drifting=!s.over&&s.hbDrift&&betaDeg>CFG.driftMinDeg&&s.speed>CFG.driftMinV;
   if(s.mapMode==="drift"){
@@ -1466,6 +1529,7 @@ function update(dt){
    if(d<5.5){const k=5.5/Math.max(d,.001);
      camera.position.x=s.x+ddx*k;camera.position.z=s.z+ddz*k;}
    camera.position.y=Math.max(camera.position.y,2.6);}
+  if(world.sky){world.sky.position.x=camera.position.x;world.sky.position.z=camera.position.z;}
   if(s.shake>.02){camera.position.x+=(Math.random()-.5)*.4*s.shake;
     camera.position.y+=(Math.random()-.5)*.25*s.shake;}
   camera.lookAt(s.x+Math.sin(s.h)*3,1.1,s.z+Math.cos(s.h)*3);
@@ -1477,6 +1541,7 @@ function menuOrbit(dt){orbitA+=dt*.055;
   const r=105,cx=Math.cos(orbitA)*r,cz=Math.sin(orbitA)*r;
   camera.position.lerp(V.set(cx,42,cz),Math.min(1,dt*2));
   camera.lookAt(0,0,0);
+  if(world&&world.sky){world.sky.position.x=camera.position.x;world.sky.position.z=camera.position.z;}
   camera.fov+=(52-camera.fov)*.05;camera.updateProjectionMatrix();
   if(world&&world.chimneys)for(const c of world.chimneys){
     if(Math.random()<dt*2)spawnPuffAt(c.x,c.y,c.z,2.2);}}
