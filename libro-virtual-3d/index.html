@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Para Ti ♥</title>
+<style>
+  /* ============================================================
+     LIBRITO VIRTUAL 3D 💕
+     Para personalizarlo busca la sección "CONTENIDO DEL LIBRO"
+     en el <script> de abajo: ahí cambias textos y fotos.
+     ============================================================ */
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --page-w: 360px;
+    --page-h: 480px;
+    --cover-color1: #8e2a4e;
+    --cover-color2: #5e1231;
+    --paper: #fdf6ec;
+    --ink: #5a4632;
+    --accent: #c94f7c;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: Georgia, 'Times New Roman', serif;
+    background: radial-gradient(ellipse at 50% 30%, #3b1d33 0%, #1d0e1e 60%, #120818 100%);
+    touch-action: manipulation;
+  }
+
+  /* ---------- corazones flotantes de fondo ---------- */
+  .heart {
+    position: fixed;
+    bottom: -6vh;
+    font-size: 22px;
+    opacity: 0;
+    animation: floatUp linear infinite;
+    pointer-events: none;
+    z-index: 1;
+    filter: drop-shadow(0 0 6px rgba(255,120,170,.55));
+  }
+  @keyframes floatUp {
+    0%   { transform: translateY(0) rotate(0deg) scale(.6); opacity: 0; }
+    10%  { opacity: .85; }
+    90%  { opacity: .5; }
+    100% { transform: translateY(-112vh) rotate(340deg) scale(1.15); opacity: 0; }
+  }
+
+  /* ---------- escena 3D ---------- */
+  .scene {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    perspective: 2200px;
+    z-index: 2;
+  }
+
+  .book {
+    position: relative;
+    width: var(--page-w);
+    height: var(--page-h);
+    transform-style: preserve-3d;
+    transform: rotateX(10deg);
+    transition: transform 1s cubic-bezier(.25,.8,.3,1);
+    cursor: pointer;
+  }
+  /* al abrirse, el libro se centra sobre el lomo */
+  .book.open { transform: rotateX(10deg) translateX(calc(var(--page-w) / 2)); }
+
+  /* sombra bajo el libro */
+  .book::after {
+    content: '';
+    position: absolute;
+    left: 6%;
+    bottom: -34px;
+    width: 88%;
+    height: 30px;
+    background: radial-gradient(ellipse, rgba(0,0,0,.55), transparent 70%);
+    transform: rotateX(80deg);
+    pointer-events: none;
+  }
+
+  /* ---------- hojas ---------- */
+  .page {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    transform-origin: left center;
+    transition: transform 1.15s cubic-bezier(.35,.1,.25,1);
+  }
+  .page.flipped { transform: rotateY(-180deg); }
+
+  .face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    border-radius: 4px 14px 14px 4px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 34px 30px;
+    text-align: center;
+  }
+  .face.back {
+    transform: rotateY(180deg);
+    border-radius: 14px 4px 4px 14px;
+  }
+
+  /* papel */
+  .paper {
+    background:
+      radial-gradient(circle at 20% 15%, rgba(201,79,124,.06), transparent 45%),
+      linear-gradient(105deg, rgba(0,0,0,.10) 0%, rgba(0,0,0,0) 6%, rgba(0,0,0,0) 94%, rgba(0,0,0,.06) 100%),
+      var(--paper);
+    color: var(--ink);
+    box-shadow: inset 0 0 40px rgba(160,120,70,.12);
+  }
+  .face.back.paper {
+    background:
+      radial-gradient(circle at 80% 85%, rgba(201,79,124,.06), transparent 45%),
+      linear-gradient(-105deg, rgba(0,0,0,.10) 0%, rgba(0,0,0,0) 6%, rgba(0,0,0,0) 94%, rgba(0,0,0,.06) 100%),
+      var(--paper);
+  }
+
+  /* ---------- portada y contraportada ---------- */
+  .cover-front, .cover-back-face {
+    background:
+      radial-gradient(circle at 30% 25%, rgba(255,255,255,.14), transparent 55%),
+      linear-gradient(135deg, var(--cover-color1), var(--cover-color2));
+    color: #ffe3ee;
+    box-shadow:
+      inset 0 0 0 3px rgba(255,215,235,.25),
+      inset 0 0 60px rgba(0,0,0,.35);
+  }
+  .cover-front::before, .cover-back-face::before {
+    content: '';
+    position: absolute;
+    inset: 14px;
+    border: 2px solid rgba(255,210,230,.4);
+    border-radius: 10px;
+    pointer-events: none;
+  }
+  .cover-title {
+    font-size: 30px;
+    letter-spacing: 2px;
+    line-height: 1.4;
+    text-shadow: 0 2px 10px rgba(0,0,0,.4);
+    font-style: italic;
+  }
+  .cover-sub {
+    margin-top: 18px;
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: .85;
+  }
+  .cover-heart {
+    font-size: 54px;
+    margin: 26px 0 6px;
+    animation: beat 1.6s ease-in-out infinite;
+    filter: drop-shadow(0 3px 8px rgba(0,0,0,.35));
+  }
+  @keyframes beat {
+    0%, 100% { transform: scale(1); }
+    12% { transform: scale(1.18); }
+    24% { transform: scale(1); }
+    36% { transform: scale(1.12); }
+    48% { transform: scale(1); }
+  }
+  .cover-hint {
+    position: absolute;
+    bottom: 26px;
+    font-size: 12px;
+    letter-spacing: 2px;
+    opacity: .75;
+    animation: pulseHint 2.2s ease-in-out infinite;
+  }
+  @keyframes pulseHint { 0%,100% { opacity: .35; } 50% { opacity: .9; } }
+
+  /* lomo del libro */
+  .spine {
+    position: absolute;
+    left: -14px;
+    top: 0;
+    width: 14px;
+    height: 100%;
+    background: linear-gradient(90deg, var(--cover-color2), var(--cover-color1));
+    transform-origin: right center;
+    transform: rotateY(-70deg);
+    border-radius: 6px 0 0 6px;
+    box-shadow: inset -3px 0 6px rgba(0,0,0,.4);
+  }
+
+  /* ---------- contenido de las páginas ---------- */
+  .page-number {
+    position: absolute;
+    bottom: 14px;
+    font-size: 12px;
+    color: #b39274;
+    letter-spacing: 1px;
+  }
+  .face h2 {
+    font-size: 21px;
+    color: var(--accent);
+    margin-bottom: 16px;
+    font-style: italic;
+    line-height: 1.3;
+  }
+  .face p {
+    font-size: 15.5px;
+    line-height: 1.75;
+    max-width: 100%;
+  }
+  .deco {
+    font-size: 20px;
+    margin-top: 18px;
+    color: var(--accent);
+    letter-spacing: 8px;
+  }
+  .photo {
+    width: 78%;
+    max-height: 46%;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 5px solid #fff;
+    box-shadow: 0 4px 14px rgba(90,60,40,.3);
+    transform: rotate(-2deg);
+    margin-bottom: 18px;
+    background: #eee;
+  }
+  .photo-placeholder {
+    width: 78%;
+    aspect-ratio: 4 / 3;
+    border-radius: 8px;
+    border: 5px solid #fff;
+    box-shadow: 0 4px 14px rgba(90,60,40,.3);
+    transform: rotate(-2deg);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 44px;
+    background: linear-gradient(135deg, #ffd9e6, #ffc4d6, #f7a8c4);
+  }
+  .caption {
+    font-size: 14px;
+    font-style: italic;
+    color: #8a6d52;
+  }
+
+  .final-heart {
+    font-size: 72px;
+    animation: beat 1.6s ease-in-out infinite;
+    margin-bottom: 20px;
+    filter: drop-shadow(0 4px 10px rgba(201,79,124,.45));
+  }
+
+  /* ---------- controles ---------- */
+  .controls {
+    position: fixed;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 16px;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity .8s;
+    pointer-events: none;
+  }
+  .controls.visible { opacity: 1; pointer-events: auto; }
+  .controls button {
+    background: rgba(255,255,255,.1);
+    border: 1px solid rgba(255,200,220,.4);
+    color: #ffd9e8;
+    font-size: 15px;
+    padding: 10px 22px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 1px;
+    backdrop-filter: blur(6px);
+    transition: background .25s, transform .15s;
+  }
+  .controls button:hover { background: rgba(255,140,180,.25); transform: translateY(-2px); }
+  .controls button:active { transform: translateY(0); }
+  .controls button:disabled { opacity: .3; cursor: default; transform: none; }
+
+  .top-hint {
+    position: fixed;
+    top: 20px;
+    width: 100%;
+    text-align: center;
+    color: rgba(255,215,235,.55);
+    font-size: 13px;
+    letter-spacing: 2px;
+    z-index: 10;
+    font-style: italic;
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 820px), (max-height: 640px) {
+    :root { --page-w: min(78vw, 320px); --page-h: min(66vh, 430px); }
+    .cover-title { font-size: 24px; }
+    .face { padding: 26px 22px; }
+    .face p { font-size: 14px; line-height: 1.65; }
+    .face h2 { font-size: 18px; }
+  }
+  /* en pantallas angostas el libro abierto no cabe doble: lo dejamos centrado */
+  @media (max-width: 560px) {
+    .book.open { transform: rotateX(8deg) translateX(0) scale(.98); }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-hint" id="topHint">un pequeño regalo, hecho con amor</div>
+
+<div class="scene">
+  <div class="book" id="book">
+    <div class="spine"></div>
+    <!-- las hojas se generan con JavaScript -->
+  </div>
+</div>
+
+<div class="controls" id="controls">
+  <button id="btnPrev">‹ Anterior</button>
+  <button id="btnNext">Siguiente ›</button>
+</div>
+
+<script>
+/* ==============================================================
+   ✏️ CONTENIDO DEL LIBRO — ¡EDITA AQUÍ!
+   --------------------------------------------------------------
+   Cada elemento del arreglo PAGES es UNA CARA del libro
+   (primero la derecha, luego el reverso, y así sucesivamente).
+   Tipos disponibles:
+     { type:'text',  title:'...', body:'...' }
+     { type:'photo', src:'foto.jpg', caption:'...' }   ← pon tus fotos
+       (si no tienes foto aún, usa src:'' y saldrá un corazón 💖)
+     { type:'final', title:'...', body:'...' }
+   ============================================================== */
+
+const COVER = {
+  title: 'Nuestro\nPequeño Libro',
+  subtitle: 'Para la persona más especial',
+};
+
+const PAGES = [
+  {
+    type: 'text',
+    title: 'Hola, mi amor',
+    body: 'Hice este pequeño libro para ti. Cada página guarda algo que quiero que sepas, que recuerdes y que sientas. Pasa la página… esto es solo el comienzo. 💕',
+  },
+  {
+    type: 'text',
+    title: 'Desde que llegaste',
+    body: 'Desde que llegaste a mi vida, los días tienen otro color. Tu risa es mi canción favorita y tu abrazo, mi lugar seguro en el mundo.',
+  },
+  {
+    type: 'photo',
+    src: '',
+    caption: 'Nuestro primer recuerdo juntos',
+  },
+  {
+    type: 'text',
+    title: 'Lo que amo de ti',
+    body: 'Amo tu forma de ver el mundo, tu paciencia conmigo, la manera en que me miras cuando crees que no me doy cuenta… y mil cosas más que no caben en esta página.',
+  },
+  {
+    type: 'photo',
+    src: '',
+    caption: 'Mi sonrisa favorita ✨',
+  },
+  {
+    type: 'text',
+    title: 'Una promesa',
+    body: 'Prometo estar en tus días grises y en tus días de sol. Prometo elegirte hoy, mañana y todas las veces que haga falta.',
+  },
+  {
+    type: 'final',
+    title: 'Te amo',
+    body: 'Gracias por existir y por dejarme quererte. Este librito termina aquí, pero lo nuestro apenas empieza. 💖',
+  },
+];
+
+/* ==============================================================
+   MOTOR DEL LIBRO (no necesitas tocar nada de aquí para abajo)
+   ============================================================== */
+
+const book = document.getElementById('book');
+const controls = document.getElementById('controls');
+const btnPrev = document.getElementById('btnPrev');
+const btnNext = document.getElementById('btnNext');
+const topHint = document.getElementById('topHint');
+
+function faceHTML(content, pageNum) {
+  if (!content) {
+    return '<div style="opacity:.4;font-style:italic;color:#b39274">~ fin ~</div>';
+  }
+  let html = '';
+  if (content.type === 'text') {
+    html = `<h2>${content.title}</h2><p>${content.body}</p><div class="deco">❦ ❦ ❦</div>`;
+  } else if (content.type === 'photo') {
+    const img = content.src
+      ? `<img class="photo" src="${content.src}" alt="">`
+      : `<div class="photo-placeholder">💖</div>`;
+    html = `${img}<div class="caption">${content.caption || ''}</div>`;
+  } else if (content.type === 'final') {
+    html = `<div class="final-heart">❤️</div><h2>${content.title}</h2><p>${content.body}</p>`;
+  }
+  if (pageNum) html += `<div class="page-number">— ${pageNum} —</div>`;
+  return html;
+}
+
+// Construir hojas: cada hoja tiene cara frontal (derecha) y trasera (izquierda al voltear)
+const sheets = [];
+
+// Hoja 0: portada (frente) + primera página (reverso)
+const coverSheet = document.createElement('div');
+coverSheet.className = 'page';
+coverSheet.innerHTML = `
+  <div class="face front cover-front">
+    <div class="cover-heart">❤️</div>
+    <div class="cover-title">${COVER.title.replace(/\n/g, '<br>')}</div>
+    <div class="cover-sub">${COVER.subtitle}</div>
+    <div class="cover-hint">✦ toca para abrir ✦</div>
+  </div>
+  <div class="face back paper">${faceHTML(PAGES[0], 1)}</div>
+`;
+sheets.push(coverSheet);
+
+// Hojas interiores: PAGES[1] va en el frente de la hoja 1, PAGES[2] en su reverso, etc.
+const innerCount = Math.ceil((PAGES.length - 1) / 2);
+for (let i = 0; i < innerCount; i++) {
+  const frontContent = PAGES[1 + i * 2];
+  const backContent = PAGES[2 + i * 2];
+  const isLastSheet = i === innerCount - 1;
+  const sheet = document.createElement('div');
+  sheet.className = 'page';
+  const backFace = (backContent || !isLastSheet)
+    ? `<div class="face back paper">${faceHTML(backContent, backContent ? 2 + i * 2 + 1 : 0)}</div>`
+    : `<div class="face back cover-back-face"><div class="cover-heart" style="font-size:40px">❤️</div><div class="cover-sub">con todo mi amor</div></div>`;
+  sheet.innerHTML = `
+    <div class="face front paper">${faceHTML(frontContent, 1 + i * 2 + 1)}</div>
+    ${backFace}
+  `;
+  sheets.push(sheet);
+}
+
+// Contraportada como última hoja si el número de páginas es par (sobró reverso con contenido)
+if ((PAGES.length - 1) % 2 === 0) {
+  const backCover = document.createElement('div');
+  backCover.className = 'page';
+  backCover.innerHTML = `
+    <div class="face front cover-back-face" style="border-radius:4px 14px 14px 4px">
+      <div class="cover-heart" style="font-size:40px">❤️</div>
+      <div class="cover-sub">con todo mi amor</div>
+    </div>
+    <div class="face back cover-back-face"></div>
+  `;
+  sheets.push(backCover);
+}
+
+// Insertar en orden inverso de apilamiento (z-index decreciente)
+sheets.forEach((s, i) => {
+  s.style.zIndex = sheets.length - i;
+  book.appendChild(s);
+});
+
+let current = 0; // número de hojas volteadas
+
+function update() {
+  sheets.forEach((s, i) => {
+    s.classList.toggle('flipped', i < current);
+    // reordenar z-index: volteadas crecen, no volteadas decrecen
+    s.style.zIndex = (i < current) ? i + 1 : sheets.length - i;
+  });
+  book.classList.toggle('open', current > 0);
+  controls.classList.toggle('visible', current > 0);
+  btnPrev.disabled = current === 0;
+  btnNext.disabled = current === sheets.length;
+  topHint.style.opacity = current > 0 ? '0' : '1';
+}
+
+function next() { if (current < sheets.length) { current++; update(); } }
+function prev() { if (current > 0) { current--; update(); } }
+
+btnNext.addEventListener('click', next);
+btnPrev.addEventListener('click', prev);
+
+// clic en el libro: mitad derecha avanza, mitad izquierda retrocede
+book.addEventListener('click', (e) => {
+  const rect = book.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  if (current === 0) { next(); return; }
+  if (x > rect.width * 0.4 || !book.classList.contains('open')) next();
+  else prev();
+});
+
+// teclado
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === ' ') next();
+  if (e.key === 'ArrowLeft') prev();
+});
+
+// deslizar en móvil
+let touchX = null;
+document.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', (e) => {
+  if (touchX === null) return;
+  const dx = e.changedTouches[0].clientX - touchX;
+  if (dx < -40) next();
+  else if (dx > 40) prev();
+  touchX = null;
+}, { passive: true });
+
+update();
+
+/* ---------- corazones flotantes ---------- */
+const HEART_CHARS = ['💕', '💖', '💗', '❤️', '🩷', '💘'];
+for (let i = 0; i < 18; i++) {
+  const h = document.createElement('div');
+  h.className = 'heart';
+  h.textContent = HEART_CHARS[i % HEART_CHARS.length];
+  h.style.left = Math.random() * 100 + 'vw';
+  h.style.fontSize = 14 + Math.random() * 22 + 'px';
+  h.style.animationDuration = 9 + Math.random() * 10 + 's';
+  h.style.animationDelay = -Math.random() * 18 + 's';
+  document.body.appendChild(h);
+}
+</script>
+</body>
+</html>
