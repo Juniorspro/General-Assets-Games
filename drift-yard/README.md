@@ -2,9 +2,14 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.2
+- **Joystick analógico a pie** 🕹️: el modo a pie ahora se controla con un joystick virtual (empujá suave = caminás, a fondo = corrés) en vez de la cruceta. Salto y piña siguen a la derecha.
+- **Vida solo a pie** ❤️: la barra de vida aparece **únicamente cuando estás fuera del auto** y muestra la salud del piloto (manejando no molesta en pantalla).
+- **Fix pilotos gigantes**: los personajes riggeados de Meshy guardan la malla en miniatura y la escalan con los huesos; medíamos el tamaño sin el skinning y salían de ~200 m. Ahora se mide el tamaño real posado → pilotos y NPCs a ~1.8 m.
+
 ## Novedades 5.0
 - **Personalización**: 12 carrocerías, 8 juegos de ruedas y 5 pilotos — todo elegible en el garaje.
-- **Modo a pie** 🚪: tocá la puerta para bajar del auto y andar con tu piloto (caminar/correr/saltar/piña con animaciones reales riggeadas). Hay NPCs a los que podés pegar; volvé al auto acercándote y tocando la puerta.
+- **Modo a pie** 🚪: tocá la puerta para bajar del auto y andar con tu piloto (joystick para moverte; caminar/correr/saltar/piña con animaciones reales riggeadas). Hay NPCs a los que podés pegar; volvé al auto acercándote y tocando la puerta.
 - **Daño y destrucción**: los choques abollan la chapa de verdad (deformación de malla acumulativa), y si te destrozás entero morís con desvanecimiento al menú. Barra de vida en pantalla.
 - **Hazards giratorios** en Estadio y Puerto que destrozan autos.
 - **Motor 100% procedural** (Web Audio) con petardeo de escape al subir de cambio; choques con volumen por impacto.

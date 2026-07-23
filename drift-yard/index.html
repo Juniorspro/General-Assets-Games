@@ -77,8 +77,13 @@ body.rot #app{inset:auto;top:0;left:0;width:100vh;height:100vw; /* unidades de v
   font:16px inherit;background:var(--panel);border:1.5px solid rgba(242,239,232,.4);border-radius:8px}
 #foottouch{position:absolute;inset:0;pointer-events:none;z-index:6;display:none}
 #foottouch .tbtn{position:absolute}
-#ftl{left:calc(var(--vm)*.02);bottom:calc(var(--vm)*.13)}#ftr{left:calc(var(--vm)*.19);bottom:calc(var(--vm)*.13)}
-#ftu{left:calc(var(--vm)*.105);bottom:calc(var(--vm)*.24)}#ftd{left:calc(var(--vm)*.105);bottom:calc(var(--vm)*.02)}
+#joy{position:absolute;left:calc(var(--vm)*.04);bottom:calc(var(--vm)*.05);width:calc(var(--vm)*.32);height:calc(var(--vm)*.32);
+  min-width:128px;min-height:128px;border-radius:50%;background:rgba(20,22,28,.4);border:2px solid rgba(242,239,232,.25);
+  pointer-events:auto;touch-action:none;display:flex;align-items:center;justify-content:center;
+  box-shadow:inset 0 0 30px rgba(0,0,0,.35)}
+#joy.active{border-color:rgba(255,122,26,.6)}
+#joyk{width:44%;height:44%;border-radius:50%;background:rgba(242,239,232,.85);border:2px solid rgba(255,122,26,.8);
+  box-shadow:0 3px 14px rgba(0,0,0,.5);transform:translate(0,0);transition:transform .05s linear;will-change:transform}
 #ftjump{right:calc(var(--vm)*.03);bottom:calc(var(--vm)*.06)}#ftpunch{right:calc(var(--vm)*.2);bottom:calc(var(--vm)*.06)}
 #pausebtn{position:absolute;top:calc(var(--ah)*0.02);left:calc(var(--aw)*0.024);width:40px;height:40px;pointer-events:auto;
   font:900 16px inherit;color:var(--ink);background:var(--panel);border:1.5px solid rgba(242,239,232,.35);border-radius:8px}
@@ -161,8 +166,7 @@ window.__dyBooted=false;
   <div class="tbtn" id="thand">✋</div>
 </div>
 <div id="foottouch">
-  <div class="tbtn" id="ftl">◀</div><div class="tbtn" id="ftr">▶</div>
-  <div class="tbtn" id="ftu">▲</div><div class="tbtn" id="ftd">▼</div>
+  <div id="joy"><div id="joyk"></div></div>
   <div class="tbtn" id="ftjump">⤒</div><div class="tbtn" id="ftpunch">👊</div>
 </div>
 <div id="garage_ui">
@@ -177,7 +181,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.1</div>
+  <div id="buildtag">build 5.2</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -397,10 +401,11 @@ const held=new Set();const pressed=[];
 addEventListener("keydown",e=>{const c=BIND[e.code];if(c){if(!held.has(c))pressed.push(c);held.add(c);e.preventDefault();}});
 addEventListener("keyup",e=>{const c=BIND[e.code];if(c)held.delete(c);});
 const PADB={0:"okA",1:"back",9:"pause",12:"up",13:"down",14:"left",15:"right"};
-let padPrev={},padSteer=0,padGas=0,padBrake=0;
-function pollPads(){padSteer=0;padGas=0;padBrake=0;const cur={};
+let padPrev={},padSteer=0,padGas=0,padBrake=0,padVert=0;
+function pollPads(){padSteer=0;padGas=0;padBrake=0;padVert=0;const cur={};
   for(const gp of(navigator.getGamepads?navigator.getGamepads():[])){if(!gp)continue;
     const ax=gp.axes[0]||0;if(Math.abs(ax)>.15)padSteer=ax;
+    const ay=gp.axes[1]||0;if(Math.abs(ay)>.15)padVert=ay;
     padGas=Math.max(padGas,gp.buttons[7]?gp.buttons[7].value:0);
     padBrake=Math.max(padBrake,gp.buttons[6]?gp.buttons[6].value:0);
     for(const i in PADB)cur[i]=cur[i]||(gp.buttons[i]&&gp.buttons[i].pressed);}
@@ -408,9 +413,8 @@ function pollPads(){padSteer=0;padGas=0;padBrake=0;const cur={};
     if(cur[i]&&!padPrev[i])pressed.push(nm==="okA"?"ok":nm);
     if(cur[i])held.add("pad_"+nm);else held.delete("pad_"+nm);padPrev[i]=cur[i];}}
 let touchDevice=navigator.maxTouchPoints>0;
-const tstate={left:false,right:false,gas:false,brake:false,hand:false,
-  fl:false,fr:false,fu:false,fd:false,fjump:false,fpunch:false};
-for(const id of["tleft","tright","tgas","tbrake","thand","ftl","ftr","ftu","ftd","ftjump","ftpunch"]){
+const tstate={left:false,right:false,gas:false,brake:false,hand:false};
+for(const id of["tleft","tright","tgas","tbrake","thand","ftjump","ftpunch"]){
   const el=document.getElementById(id);if(!el)continue;
   const key=id.startsWith("ft")?id.slice(1):id.slice(1);
   const on=e=>{e.preventDefault();touchDevice=true;interact();tstate[key]=true;el.classList.add("active");};
@@ -420,6 +424,29 @@ for(const id of["tleft","tright","tgas","tbrake","thand","ftl","ftr","ftu","ftd"
 document.getElementById("doorbtn").addEventListener("click",()=>{interact();pressed.push("door");});
 document.getElementById("ftjump").addEventListener("pointerdown",()=>pressed.push("jump"));
 document.getElementById("ftpunch").addEventListener("pointerdown",()=>pressed.push("punch"));
+/* joystick analógico a pie */
+let joyVec={x:0,z:0};
+(function(){
+  const base=document.getElementById("joy"),knob=document.getElementById("joyk");
+  if(!base)return;
+  let pid=null,cx=0,cy=0,rad=1;
+  const setK=(lx,ly)=>{joyVec.x=lx;joyVec.z=ly;
+    knob.style.transform=`translate(${(lx*rad*.62).toFixed(1)}px,${(ly*rad*.62).toFixed(1)}px)`;};
+  const move=e=>{if(e.pointerId!==pid)return;
+    const sx=e.clientX-cx,sy=e.clientY-cy;
+    // el #app se rota 90° en móvil vertical: pasar de pantalla a coords del juego
+    let lx=sx,ly=sy;
+    if(document.body.classList.contains("rot")){lx=sy;ly=-sx;}
+    const l=Math.hypot(lx,ly)||1,cl=Math.min(1,l/rad);
+    setK(lx/l*cl,ly/l*cl);};
+  const end=e=>{if(e.pointerId!==pid)return;pid=null;base.classList.remove("active");setK(0,0);};
+  base.addEventListener("pointerdown",e=>{e.preventDefault();touchDevice=true;interact();
+    pid=e.pointerId;base.setPointerCapture(pid);base.classList.add("active");
+    const r=base.getBoundingClientRect();cx=r.left+r.width/2;cy=r.top+r.height/2;rad=r.width*.5;move(e);});
+  base.addEventListener("pointermove",move);
+  base.addEventListener("pointerup",end);
+  base.addEventListener("pointercancel",end);
+})();
 addEventListener("pointerdown",()=>{interact();},{capture:true});
 addEventListener("touchstart",()=>{touchDevice=true;refreshTouchUI();},{passive:true,capture:true});
 function commands(){return{
@@ -429,9 +456,10 @@ function commands(){return{
   up:held.has("up")||padGas>.08||tstate.gas,
   down:held.has("down")||held.has("pad_down")||padBrake>.08||tstate.brake,
   hand:held.has("hand")||held.has("pad_okA")||tstate.hand};}
-function footCmd(){return{
-  x:((held.has("left")||tstate.tl)?-1:0)+((held.has("right")||tstate.tr)?1:0)+(Math.abs(padSteer)>.15?padSteer:0),
-  z:((held.has("up")||tstate.tu)?-1:0)+((held.has("down")||tstate.td)?1:0)};}
+function footCmd(){
+  let x=((held.has("left"))?-1:0)+((held.has("right"))?1:0)+(Math.abs(padSteer)>.15?padSteer:0)+joyVec.x;
+  let z=((held.has("up"))?-1:0)+((held.has("down"))?1:0)+(Math.abs(padVert)>.15?padVert:0)+joyVec.z;
+  return{x:Math.max(-1,Math.min(1,x)),z:Math.max(-1,Math.min(1,z))};}
 function refreshTouchUI(){
   const race=mode==="race"&&sess&&!(sess.onFoot&&sess.onFoot.active);
   const foot=mode==="race"&&sess&&sess.onFoot&&sess.onFoot.active;
@@ -1531,10 +1559,18 @@ async function loadPeds(){
 function makePed(idx){
   const g=A_ped["ped_"+PEDS[idx]];if(!g)return null;
   const obj=skeletonClone(g.scene);
-  // normalizar a ~1.8 m de alto, pies al piso
-  const box=new THREE.Box3().setFromObject(obj);const h=box.max.y-box.min.y||1;
+  obj.scale.setScalar(1);obj.position.set(0,0,0);
+  // OJO: Box3.setFromObject ignora el skinning y devuelve el tamaño de la malla en
+  // bind-pose (acá ~2cm), pero los huesos la escalan ~113x al renderizar -> gigantes.
+  // Medimos el tamaño REAL posado (computeBoundingBox del SkinnedMesh aplica los huesos).
+  const measure=()=>{const bx=new THREE.Box3();let got=false;obj.updateMatrixWorld(true);
+    obj.traverse(o=>{if(o.isSkinnedMesh){o.computeBoundingBox();
+      if(o.boundingBox&&isFinite(o.boundingBox.min.y))
+        {bx.union(o.boundingBox.clone().applyMatrix4(o.matrixWorld));got=true;}}});
+    if(!got)bx.setFromObject(obj);return bx;};
+  let box=measure();let h=box.max.y-box.min.y;if(!(h>.05&&h<1e5))h=1.8;
   const s=1.8/h;obj.scale.setScalar(s);
-  const b2=new THREE.Box3().setFromObject(obj);obj.position.y-=b2.min.y;
+  const b2=measure();obj.position.y-=b2.min.y;
   obj.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false;
     if(o.material&&o.material.transparent){o.material=o.material.clone();o.material.transparent=false;o.material.alphaTest=.5;}}});
   const holder=new THREE.Group();holder.add(obj);
@@ -1975,7 +2011,8 @@ function clearSmoke(){if(!smokeGeo)return;
 const elTotal=document.querySelector("#score .total"),elCur=document.querySelector("#score .cur"),
   elTimer=document.getElementById("timer"),elKmh=document.querySelector("#speedo .kmh"),
   elAng=document.querySelector("#speedo .ang"),elToast=document.getElementById("toast"),
-  elArrow=document.getElementById("cparrow"),elHp=document.querySelector("#hpbar>i");
+  elArrow=document.getElementById("cparrow"),elHp=document.querySelector("#hpbar>i"),
+  elHpBar=document.getElementById("hpbar");
 let toastT=0;
 function toast(t,color){elToast.textContent=t;elToast.style.color=color||"var(--yel)";
   elToast.style.opacity=1;toastT=1.3;}
@@ -2003,7 +2040,10 @@ function drawHud(dt){if(!sess)return;
     elArrow.style.display="block";
     elArrow.style.transform=`translateX(-50%) rotate(${(-ang*57.3).toFixed(0)}deg)`;}
   elKmh.textContent=Math.round(sess.speed*3.6);
-  if(elHp&&sess.hp!=null)elHp.style.width=sess.hp+'%';
+  // la vida solo aparece a pie (no manejando) y refleja la salud del piloto
+  const onFoot=!!(sess.onFoot&&sess.onFoot.active);
+  if(elHpBar)elHpBar.style.display=onFoot?"block":"none";
+  if(elHp&&onFoot)elHp.style.width=Math.max(0,Math.min(100,sess.onFoot.hp))+'%';
   const bd=Math.abs(sess.beta)*57.3;
   elAng.textContent=bd>8?Math.round(bd)+"°":"";
 }
@@ -2222,7 +2262,20 @@ if(DEV)window.__dy={
   setMap(i){save.map=i;persist();},
   warpCp(){if(sess&&world.checkpoints){const c=world.checkpoints[sess.cp];sess.x=c.x;sess.z=c.z;}},
   timeUp(){if(sess){if(sess.mapMode==="drift")sess.t=.5;else{sess.lap=sess.laps;endSession();}}},
-  give(n){if(sess)sess.total+=n;}};
+  give(n){if(sess)sess.total+=n;},
+  foot(){if(sess)return enterFoot(sess);},
+  joy:()=>joyVec,footcmd:()=>footCmd(),
+  footpos:()=>{const of=sess&&sess.onFoot;return of&&of.active?{x:+of.x.toFixed(2),z:+of.z.toFixed(2),speed:+of.speed.toFixed(2),hp:of.hp}:null;},
+  footState(){const of=sess&&sess.onFoot;if(!of||!of.active)return null;
+    const meas=p=>{const b=new THREE.Box3().setFromObject(p.holder);
+      const sk=new THREE.Box3();let got=false;p.holder.updateMatrixWorld(true);
+      p.holder.traverse(o=>{if(o.isSkinnedMesh){o.computeBoundingBox();
+        if(o.boundingBox){sk.union(o.boundingBox.clone().applyMatrix4(o.matrixWorld));got=true;}}});
+      return{h:+(b.max.y-b.min.y).toFixed(2),skH:got?+(sk.max.y-sk.min.y).toFixed(2):null,
+        s:+p.obj.scale.x.toFixed(3),y:+p.holder.position.y.toFixed(2)};};
+    return{player:meas(of.ped),npcs:(of.npcs||[]).map(n=>meas(n.ped)),hp:of.hp,
+      foottouch:getComputedStyle(document.getElementById("foottouch")).display,
+      hpbar:getComputedStyle(document.getElementById("hpbar")).display};}};
 
 /* ================= boot ================= */
 (async()=>{
