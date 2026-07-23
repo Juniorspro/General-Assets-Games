@@ -181,7 +181,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.3</div>
+  <div id="buildtag">build 5.4</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -690,7 +690,27 @@ function baseEnv(group,timeKey,{floorTex="concrete",floorColor=0xd6d9e2,floorRep
   scene.fog=new THREE.FogExp2(T.fog,T.fogD);
   lastSunOff=new THREE.Vector3(T.sunPos[0],T.sunPos[1],T.sunPos[2]).normalize().multiplyScalar(300);
   return{colliders,W,D,T};}
-let lastSunOff=null,lastSky=null,lastSkyY=0,dyHazards=[];
+let lastSunOff=null,lastSky=null,lastSkyY=0,dyHazards=[],dyRamps=[];
+/* rampa de salto: losa inclinada + costados + labio a rayas; empuja al array de rampas */
+function addRamp(group,x,z,angDeg,w,len,rise){
+  const ang=angDeg*Math.PI/180,inc=Math.atan2(rise,len),slope=Math.hypot(len,rise);
+  const g2=new THREE.Group();g2.position.set(x,0,z);g2.rotation.y=ang;
+  const mat=stdMat("metal");mat.color.set(0x33373f);mat.metalness=.55;mat.roughness=.5;
+  const deck=new THREE.Mesh(new THREE.BoxGeometry(w,.22,slope),mat);
+  deck.rotation.x=-inc;deck.position.set(0,rise/2,len/2);deck.castShadow=true;deck.receiveShadow=true;g2.add(deck);
+  // labio a rayas naranjas en la punta alta
+  const lip=new THREE.Mesh(new THREE.BoxGeometry(w,.28,.6),
+    new THREE.MeshStandardMaterial({color:0xff7a1a,roughness:.5,emissive:0x351400,emissiveIntensity:.5}));
+  lip.position.set(0,rise+.12,len);g2.add(lip);
+  // costados triangulares (relleno visual)
+  const sideMat=stdMat("metal");sideMat.color.set(0x24272d);sideMat.metalness=.5;
+  const sg=new THREE.BufferGeometry();
+  sg.setAttribute("position",new THREE.BufferAttribute(new Float32Array([0,0,0, len,0,0, len,rise,0]),3));
+  sg.setIndex([0,1,2]);sg.computeVertexNormals();
+  for(const sx of[-w/2,w/2]){const side=new THREE.Mesh(sg,sideMat);
+    side.rotation.y=-Math.PI/2;side.position.set(sx,0,0);g2.add(side);}
+  group.add(g2);
+  dyRamps.push({x,z,ang,cos:Math.cos(ang),sin:Math.sin(ang),hw:w/2,len,rise});}
 /* brazo giratorio destroza-autos: poste + viga larga que rota */
 function addHazard(group,x,z,len,spd){
   const arm=new THREE.Group();
@@ -769,6 +789,22 @@ function conesAt(group,rng,centers){
   items.forEach((it,i)=>{M4.compose(V.set(it[0],0,it[1]),QT.identity(),new THREE.Vector3(1,1,1));
     inst.setMatrixAt(i,M4);});
   inst.instanceMatrix.needsUpdate=true;group.add(inst);}
+// troncos sólidos para árboles/cactus billboard
+function treeColliders(colliders,items,r){for(const it of items)colliders.push({type:"circle",x:it[0],z:it[1],r:r||.7});}
+// features de arena: rampas de salto + pilas de gomas + contenedores/stacks + slalom de conos
+function arenaFeatures(group,colliders,rng,spec){
+  for(const r of spec.ramps||[])addRamp(group,r[0],r[1],r[2],r[3]||7,r[4]||9,r[5]||2.4);
+  if((spec.tires||[]).length&&A.glb.tires){const mi=mergedForInstancing(A.glb.tires,{height:1.0});
+    if(mi){const items=[];for(const t of spec.tires){const n=2+((rng()*3)|0);
+      for(let k=0;k<n;k++)items.push([t[0]+(rng()-.5)*.3,t[1]+(rng()-.5)*.3,rng()*6.28,k*.34,1]);
+      colliders.push({type:"circle",x:t[0],z:t[1],r:1.35});}
+      instPlace(group,mi,items);}}
+  for(const key of["containers","stacks"]){const list=spec[key];const glb=key==="stacks"?A.glb.stack:A.glb.container;
+    if((list||[]).length&&glb){const mi=mergedForInstancing(glb,{length:6.1});
+      if(mi){const items=[];for(const c of list){const a=(c[2]||0)*Math.PI/180;
+        items.push([c[0],c[1],a,0,1]);colliders.push(obb(c[0],c[1],3.2,key==="stacks"?1.7:1.35,a));}
+        instPlace(group,mi,items);}}}
+  if((spec.cones||[]).length)conesAt(group,rng,spec.cones);}
 
 /* ================= markings canvases ================= */
 function marksYard(w,d){return canvasTex(2048,2048,(g,W2,H2)=>{
@@ -914,6 +950,10 @@ function buildPuerto(group,timeKey){
      colliders.push({type:"circle",x,z,r:1.6});}}
   floodTowers(group,colliders,[[-W+8,-D+8],[W-8,-D+8],[W-8,D-8],[-W+8,D-8]],T);
   addHazard(group,10,-10,8,1.3);
+  arenaFeatures(group,colliders,rng,{
+    ramps:[[-115,-10,90,8,11,2.8],[125,20,270,8,11,2.8],[-42,-72,0,8,10,2.6]],
+    tires:[[-125,-40],[-125,-22],[-125,-4],[120,-42],[120,60]],
+    cones:[[-90,22,9,4],[102,-62,9,4]]});
   return{colliders,chimneys,spawn:{x:-72,z:74,h:Math.PI},bounds:{W:W-CFG.carR,D:D-CFG.carR}};}
 
 function buildBosque(group,timeKey){
@@ -964,7 +1004,8 @@ function buildBosque(group,timeKey){
     if(dmin<halfW+5.5)continue;
     const s=9+rng()*8;
     (rng()<.55?oaks:pines2).push([x,z,rng()*6.28,s]);
-    if(dmin<halfW+13&&treeCols<240){treeCols++;colliders.push({type:"circle",x,z,r:.6});}}
+    // TODOS los árboles chocan (la grilla espacial lo hace barato) — troncos sólidos
+    treeCols++;colliders.push({type:"circle",x,z,r:.7});}
   billboardTrees(group,"tree_oak",oaks);
   billboardTrees(group,"tree_pine",pines2);
   // abedules y arbustos densifican cerca de la ruta, árboles secos a lo lejos
@@ -1075,6 +1116,11 @@ function buildAero(group,timeKey){
      const c=vanT2.clone(true);c.position.set(x,0,z);c.rotation.y=ry;group.add(c);
      colliders.push(obb(x,z,1.1,2.4,ry));}}
   floodTowers(group,colliders,[[-W+10,-D+10],[W-10,-D+10],[W-10,D-10],[-W+10,D-10]],T);
+  arenaFeatures(group,colliders,rng,{
+    ramps:[[-80,20,90,9,13,3.3],[80,-20,270,9,13,3.3],[-10,-95,0,9,12,3],[-10,95,180,9,12,3]],
+    tires:[[-120,-60],[-100,-60],[-80,-60],[120,60],[100,60],[80,60],[40,0],[-40,0]],
+    containers:[[155,-40,0],[-155,40,0],[60,85,90],[-60,-85,90]],
+    cones:[[-60,-25,12,5],[60,25,12,5],[0,55,10,4]]});
   return{colliders,spawn:{x:-150,z:80,h:Math.PI*.5},bounds:{W:W-CFG.carR,D:D-CFG.carR}};}
 
 function buildAzotea(group,timeKey){
@@ -1116,6 +1162,10 @@ function buildAzotea(group,timeKey){
       c.position.set(Math.cos(a)*r,-58,Math.sin(a)*r);
       c.rotation.y=Math.floor(org2()*4)*Math.PI/2;group.add(c);}}
   floodTowers(group,colliders,[[-W+10,-D+10],[W-10,D-10]],T);
+  arenaFeatures(group,colliders,rng,{
+    ramps:[[-62,0,90,8,10,2.4],[62,0,270,8,10,2.4]],
+    tires:[[-42,-42],[42,42],[-42,42],[42,-42]],
+    cones:[[0,0,14,24],[-72,28,8,4]]});
   return{colliders,spawn:{x:-70,z:44,h:Math.PI},bounds:{W:W-CFG.carR,D:D-CFG.carR}};}
 
 function buildNieve(group,timeKey){
@@ -1170,6 +1220,11 @@ function buildNieve(group,timeKey){
      const t=tireT2.clone(true);t.position.set(x,0,z);t.rotation.y=rng()*6.3;group.add(t);
      colliders.push({type:"circle",x,z,r:1.9});}}
   floodTowers(group,colliders,[[-W+8,-D+8],[W-8,-D+8],[W-8,D-8],[-W+8,D-8]],T);
+  arenaFeatures(group,colliders,rng,{
+    ramps:[[-120,10,90,8,12,3],[120,-10,270,8,12,3],[-30,82,180,8,10,2.6]],
+    tires:[[-40,10],[-25,25],[-40,40],[70,-15],[110,20]],
+    stacks:[[132,-62,0],[-132,-62,0]],
+    cones:[[0,5,12,24],[-92,-18,8,4]]});
   return{colliders,ice,spawn:{x:-70,z:70,h:Math.PI},bounds:{W:W-CFG.carR,D:D-CFG.carR}};}
 
 function buildCanyon(group,timeKey){
@@ -1223,6 +1278,11 @@ function buildCanyon(group,timeKey){
      if(!t)continue;const c=t.clone(true);c.position.set(x,0,z);c.rotation.y=ry;group.add(c);
      colliders.push(obb(x,z,1.1,2.4,ry));}}
   floodTowers(group,colliders,[[-W+8,-D+8],[W-8,D-8]],T);
+  arenaFeatures(group,colliders,rng,{
+    ramps:[[-115,0,90,8,12,3],[115,10,270,8,12,3],[0,-88,0,8,11,2.8],[-45,82,180,8,10,2.6]],
+    tires:[[-42,-12],[-27,2],[-42,16],[75,25],[100,48]],
+    stacks:[[132,-58,0],[-128,-62,0]],
+    cones:[[0,5,12,24],[62,-42,9,4]]});
   return{colliders,spawn:{x:-70,z:66,h:Math.PI},bounds:{W:W-CFG.carR,D:D-CFG.carR}};}
 
 function buildEstadio(group,timeKey){
@@ -1260,6 +1320,10 @@ function buildEstadio(group,timeKey){
      colliders.push(obb(x,z,1.1,2.4,ry));}}
   floodTowers(group,colliders,[[-W+6,-D+6],[W-6,-D+6],[W-6,D-6],[-W+6,D-6]],T);
   addHazard(group,0,0,10,1.5);addHazard(group,-40,-20,7,-2);
+  arenaFeatures(group,colliders,rng,{
+    ramps:[[-72,15,90,7,9,2.2],[72,-15,270,7,9,2.2]],
+    tires:[[42,42],[-46,-46]],
+    cones:[[46,20,8,4],[-42,26,8,4]]});
   return{colliders,spawn:{x:-60,z:44,h:Math.PI*.9},bounds:{W:W-CFG.carR,D:D-CFG.carR}};}
 
 function buildTouge(group,timeKey){
@@ -1325,10 +1389,10 @@ function buildTouge(group,timeKey){
      const x=Math.cos(a)*r2,z=Math.sin(a)*r2;
      let dmin=1e9;for(let j=0;j<n;j+=2){const dx=P[j].x-x,dz=P[j].z-z;
        const d2=dx*dx+dz*dz;if(d2<dmin)dmin=d2;}
-     if(Math.sqrt(dmin)<halfW+4)continue;
+     const dd=Math.sqrt(dmin);if(dd<halfW+4)continue;
      const pick=rng();
-     if(pick<.55)pines2.push([x,z,rng()*6.28,9+rng()*8]);
-     else if(pick<.8)oaks.push([x,z,rng()*6.28,8+rng()*7]);
+     if(pick<.55){pines2.push([x,z,rng()*6.28,9+rng()*8]);colliders.push({type:"circle",x,z,r:.7});}
+     else if(pick<.8){oaks.push([x,z,rng()*6.28,8+rng()*7]);colliders.push({type:"circle",x,z,r:.7});}
      else bush.push([x,z,rng()*6.28,1.6+rng()*1.6]);}
    billboardTrees(group,"tree_pine",pines2);
    billboardTrees(group,"tree_oak",oaks);
@@ -1380,13 +1444,35 @@ function buildTouge(group,timeKey){
   return{colliders,spawn:{x:P[4].x,z:P[4].z,h:Math.atan2(TN[4].x,TN[4].z)},
     bounds:{W:1400,D:1400},road:{P,TN,LF,n,ds,halfW},checkpoints:cps};}
 
+/* ===== grilla espacial de colisiones: miles de colliders sin costo O(n) por frame ===== */
+const GRID_CELL=9;
+function colAABB(c){
+  if(c.type==="circle")return[c.x-c.r,c.z-c.r,c.x+c.r,c.z+c.r];
+  if(c.type==="capsule")return[Math.min(c.ax,c.bx)-c.r,Math.min(c.az,c.bz)-c.r,Math.max(c.ax,c.bx)+c.r,Math.max(c.az,c.bz)+c.r];
+  const r=Math.hypot(c.hw,c.hd)+.4;return[c.x-r,c.z-r,c.x+r,c.z+r];}
+function buildColliderGrid(cols){
+  const grid=new Map();
+  for(let i=0;i<cols.length;i++){const[x0,z0,x1,z1]=colAABB(cols[i]);
+    for(let cx=Math.floor(x0/GRID_CELL);cx<=Math.floor(x1/GRID_CELL);cx++)
+      for(let cz=Math.floor(z0/GRID_CELL);cz<=Math.floor(z1/GRID_CELL);cz++){
+        const k=cx*73856+cz;let a=grid.get(k);if(!a){a=[];grid.set(k,a);}a.push(i);}}
+  return grid;}
+const _qseen=new Set(),_qout=[];
+function queryColliders(x,z,rad){
+  const grid=world&&world.grid;if(!grid)return null;
+  _qseen.clear();_qout.length=0;
+  for(let cx=Math.floor((x-rad)/GRID_CELL);cx<=Math.floor((x+rad)/GRID_CELL);cx++)
+    for(let cz=Math.floor((z-rad)/GRID_CELL);cz<=Math.floor((z+rad)/GRID_CELL);cz++){
+      const a=grid.get(cx*73856+cz);if(a)for(const i of a)if(!_qseen.has(i)){_qseen.add(i);_qout.push(i);}}
+  return _qout;}
 function buildWorld(mapIdx,timeKey){
   disposeWorld();
-  dyHazards=[];
+  dyHazards=[];dyRamps=[];
   const group=new THREE.Group();scene.add(group);
   const data=MAPS[mapIdx].build(group,timeKey);
   sun.castShadow=true;
-  world={group,timeKey,mapIdx,chimneys:[],sunOff:lastSunOff,sky:lastSky,skyY:lastSkyY,hazards:dyHazards,...data};
+  world={group,timeKey,mapIdx,chimneys:[],sunOff:lastSunOff,sky:lastSky,skyY:lastSkyY,hazards:dyHazards,ramps:dyRamps,...data};
+  world.grid=buildColliderGrid(world.colliders||[]);
   return world;}
 function disposeWorld(){if(world){scene.remove(world.group);
   world.group.traverse(o=>{if(o.geometry)o.geometry.dispose?.();});
@@ -1501,6 +1587,7 @@ function newSession(){
     if(o.geometry.attributes.position)body.push(o);}});
   const sp=world.spawn;
   return{stats,obj,wheels,body,hp:100,dead:false,fade:0,onFoot:{active:false},wR:Math.max(wR,.12),wheelR:Math.max(wR,.12),wheelSpin:0,mapMode:M.mode,laps:M.laps||0,
+    y:0,vy:0,airborne:false,airPitch:0,
     x:sp.x,z:sp.z,h:sp.h,vx:0,vz:0,physSteer:0,autoDrift:false,handT:0,handPrev:false,hbDrift:false,hbGap:0,
     steerVis:0,beta:0,speed:0,
     total:0,cur:0,combo:1,driftT:0,gapT:0,bestDrift:0,
@@ -1621,6 +1708,27 @@ function enterCar(s){
   s.onFoot={active:false,npcs:null};
   refreshTouchUI();}
 function spawnNPCs(s){return[];} // el usuario quiere andar solo a pie (sin NPCs)
+// empuja un punto (jugador a pie) fuera de los colliders — mismo set que el auto
+function pushOutFoot(px,pz,rad){
+  const cand=queryColliders(px,pz,rad+2);if(!cand)return{x:px,z:pz};
+  let x=px,z=pz;
+  for(const i of cand){const c=world.colliders[i];
+    if(c.type==="ramp")continue;
+    if(c.type==="circle"){const dx=x-c.x,dz=z-c.z,d=Math.hypot(dx,dz),m=c.r+rad;
+      if(d<m&&d>1e-4){x=c.x+dx/d*m;z=c.z+dz/d*m;}}
+    else if(c.type==="capsule"){const abx=c.bx-c.ax,abz=c.bz-c.az;
+      const tt=Math.max(0,Math.min(1,((x-c.ax)*abx+(z-c.az)*abz)/(abx*abx+abz*abz)));
+      const qx=c.ax+abx*tt,qz=c.az+abz*tt,dx=x-qx,dz=z-qz,d=Math.hypot(dx,dz),m=c.r+rad;
+      if(d<m&&d>1e-4){x=qx+dx/d*m;z=qz+dz/d*m;}}
+    else{const dx=x-c.x,dz=z-c.z,lx=dx*c.cos-dz*c.sin,lz=dx*c.sin+dz*c.cos;
+      const px2=Math.max(-c.hw,Math.min(lx,c.hw)),pz2=Math.max(-c.hd,Math.min(lz,c.hd));
+      const ddx=lx-px2,ddz=lz-pz2,d=Math.hypot(ddx,ddz);
+      if(d<rad){const push=(rad-d)||rad;let nx,nz;
+        if(d>1e-4){nx=ddx/d;nz=ddz/d;}
+        else{const ex=c.hw-Math.abs(lx),ez=c.hd-Math.abs(lz);
+          if(ex<ez){nx=Math.sign(lx)||1;nz=0;}else{nx=0;nz=Math.sign(lz)||1;}}
+        x+=(nx*c.cos+nz*c.sin)*push;z+=(-nx*c.sin+nz*c.cos)*push;}}}
+  return{x,z};}
 const _fwd=new THREE.Vector3();
 function footUpdate(s,dt){
   const of=s.onFoot,P=of.ped;
@@ -1642,12 +1750,14 @@ function footUpdate(s,dt){
   of.x+=mx*spd*dt;of.z+=mz*spd*dt;of.speed=spd;
   if(canMove){const tgt=Math.atan2(mx,mz);let d=tgt-of.h;
     while(d>Math.PI)d-=6.283;while(d<-Math.PI)d+=6.283;of.h+=d*Math.min(1,dt*16);}
+  // colisión a pie: no atravesar props/árboles (mismo set que el auto)
+  const B=world.bounds;if(B){of.x=Math.max(-B.W,Math.min(B.W,of.x));of.z=Math.max(-B.D,Math.min(B.D,of.z));}
+  if(of.grounded){const fixed=pushOutFoot(of.x,of.z,.5);of.x=fixed.x;of.z=fixed.z;}
   // salto (físico, corto y rápido)
   of.vy-=26*dt;let y=P.holder.position.y+of.vy*dt;
   if(y<=0){y=0;of.vy=0;of.grounded=true;}else of.grounded=false;
   P.holder.position.set(of.x,y,of.z);
   P.holder.rotation.y=of.h;
-  const B=world.bounds;if(B){of.x=Math.max(-B.W,Math.min(B.W,of.x));of.z=Math.max(-B.D,Math.min(B.D,of.z));}
   if(of.punchT>0)of.punchT-=dt;
   // máquina de estados de animación
   if(of.punchT>0){/* dejando correr el golpe */}
@@ -1779,7 +1889,7 @@ function update(dt){
 
   const beta=Math.atan2(vL,Math.max(Math.abs(vF),.6));
   const driftFactor=Math.min(Math.abs(beta)*1.4,1);
-  s.h+=steer*st.turn*dt*Math.max(-1,Math.min(vF/8,1))*(1+driftFactor*.65);
+  s.h+=steer*st.turn*dt*Math.max(-1,Math.min(vF/8,1))*(1+driftFactor*.65)*(s.airborne?.18:1);
   s.h-=beta*.55*dt;
   s.vx=sinH*vF+cosH*vL;s.vz=cosH*vF-sinH*vL;
   s.x+=s.vx*dt;s.z+=s.vz*dt;
@@ -1792,7 +1902,8 @@ function update(dt){
     if(s.x>B.W){s.x=B.W;s.vx=-Math.abs(s.vx)*.35;hit=hit||speed>7;}
     if(s.z<-B.D){s.z=-B.D;s.vz=Math.abs(s.vz)*.35;hit=hit||speed>7;}
     if(s.z>B.D){s.z=B.D;s.vz=-Math.abs(s.vz)*.35;hit=hit||speed>7;}}
-  for(const c of world.colliders){
+  const _cand=(s.y>1.1?[]:queryColliders(s.x,s.z,CFG.carR+2))||world.colliders.map((_,i)=>i);
+  for(const _ci of _cand){const c=world.colliders[_ci];
     if(c.type==="circle"){const dx=s.x-c.x,dz=s.z-c.z,d=Math.hypot(dx,dz),m=c.r+CFG.carR;
       if(d<m&&d>1e-4){s.x=c.x+dx/d*m;s.z=c.z+dz/d*m;
         const dot=(s.vx*dx+s.vz*dz)/d;
@@ -1835,6 +1946,25 @@ function update(dt){
       if(s.hp<=0)killPlayer(s);}}
   if(world.hazards&&world.hazards.length)updateHazards(s,dt);
 
+  /* rampas + física vertical (saltos con aterrizaje) */
+  {const rmps=world.ramps;let onR=false,surf=0,slope=0;
+   if(rmps)for(const r of rmps){
+     const dx=s.x-r.x,dz=s.z-r.z;
+     const along=dx*r.sin+dz*r.cos, across=dx*r.cos-dz*r.sin;
+     if(across>-r.hw&&across<r.hw&&along>-1.2&&along<r.len){
+       const h=Math.max(0,Math.min(1,along/r.len))*r.rise;
+       if(h>surf){surf=h;slope=r.rise/r.len;onR=true;}}}
+   if(onR){s.y=Math.max(s.y,surf);
+     if(vF>4)s.vy=Math.max(s.vy,vF*slope*1.3);
+     s.airborne=s.y>.15;}
+   else if(s.y>0||s.vy>0){s.airborne=true;s.vy-=30*dt;s.y+=s.vy*dt;
+     if(s.y<=0){const land=-s.vy;s.y=0;s.vy=0;s.airborne=false;
+       if(land>4){s.shake=Math.min(1,.3+land/22);for(let k=0;k<2;k++)spawnPuffAt(s.x+(Math.random()-.5)*1.5,.4,s.z+(Math.random()-.5)*1.5,1.2);
+         sfx(land>9?"sfx_crash":"sfx_crash_soft",Math.min(1,land/16),.85+Math.random()*.2);}}}
+   else{s.airborne=false;s.y=0;s.vy=0;}
+   const pitchT=s.airborne?Math.max(-.5,Math.min(.5,-s.vy*.03)):0;
+   s.airPitch+=(pitchT-s.airPitch)*Math.min(1,dt*7);}
+
   /* scoring */
   const betaDeg=Math.abs(beta)*57.29578;
   if(betaDeg<CFG.driftMinDeg){s.hbGap=(s.hbGap||0)+dt;
@@ -1869,8 +1999,9 @@ function update(dt){
   if(drifting&&s.speed>7){spawnSmoke(s);writeMark(s);}
 
   /* car placement + chase camera */
-  s.obj.position.set(s.x,0,s.z);
+  s.obj.position.set(s.x,s.y||0,s.z);
   s.obj.rotation.set(0,s.h,0);
+  if(s.airPitch)s.obj.rotateX(s.airPitch); // morro arriba/abajo en el aire
   s.obj.rotateZ(-s.steerVis*.04*Math.min(1,s.speed/22));
   /* ruedas: giro por velocidad + dirección en las delanteras (ms corrige el lado espejado) */
   s.wheelSpin-=vF/s.wheelR*dt;
@@ -1884,16 +2015,16 @@ function update(dt){
   let dyaw=s.h-s.camYaw;while(dyaw>Math.PI)dyaw-=2*Math.PI;while(dyaw<-Math.PI)dyaw+=2*Math.PI;
   s.camYaw+=dyaw*Math.min(1,dt*4.4);
   const cx=s.x-Math.sin(s.camYaw)*7.8,cz=s.z-Math.cos(s.camYaw)*7.8;
-  camera.position.lerp(V.set(cx,3.1,cz),1-Math.pow(.0001,dt));
+  camera.position.lerp(V.set(cx,3.1+(s.y||0)*.8,cz),1-Math.pow(.0001,dt));
   {const ddx=camera.position.x-s.x,ddz=camera.position.z-s.z;
    const d=Math.hypot(ddx,ddz);
    if(d<5.5){const k=5.5/Math.max(d,.001);
      camera.position.x=s.x+ddx*k;camera.position.z=s.z+ddz*k;}
-   camera.position.y=Math.max(camera.position.y,2.6);}
+   camera.position.y=Math.max(camera.position.y,2.6+(s.y||0)*.7);}
   if(world.sky){world.sky.position.x=camera.position.x;world.sky.position.z=camera.position.z;}
   if(s.shake>.02){camera.position.x+=(Math.random()-.5)*.4*s.shake;
     camera.position.y+=(Math.random()-.5)*.25*s.shake;}
-  camera.lookAt(s.x+Math.sin(s.h)*3,1.1,s.z+Math.cos(s.h)*3);
+  camera.lookAt(s.x+Math.sin(s.h)*3,1.1+(s.y||0)*.8,s.z+Math.cos(s.h)*3);
   const fovT=CFG.fovBase+(CFG.fovMax-CFG.fovBase)*Math.min(1,s.speed/st.top);
   camera.fov+=(fovT-camera.fov)*.06;camera.updateProjectionMatrix();
 }
@@ -2224,8 +2355,9 @@ if(DEV)window.__dy={
     combo:sess&&+sess.combo.toFixed(2),t:sess&&+sess.t.toFixed(1),
     speed:sess&&+sess.speed.toFixed(1),beta:sess&&+(sess.beta*57.3).toFixed(1),
     x:sess&&+sess.x.toFixed(1),z:sess&&+sess.z.toFixed(1),
+    y:sess&&+(sess.y||0).toFixed(2),air:sess&&!!sess.airborne,
     lap:sess&&sess.lap,cp:sess&&sess.cp,map:save.map,
-    calls:renderer.info.render.calls}),
+    calls:renderer.info.render.calls,tris:renderer.info.render.triangles}),
   sess:()=>sess,world:()=>world,camera,scene,gcar:()=>garageCar,
   setMap(i){save.map=i;persist();},
   warpCp(){if(sess&&world.checkpoints){const c=world.checkpoints[sess.cp];sess.x=c.x;sess.z=c.z;}},
@@ -2235,6 +2367,8 @@ if(DEV)window.__dy={
   djump(){if(sess&&sess.onFoot&&sess.onFoot.active)doJump(sess);},
   dpunch(){if(sess&&sess.onFoot&&sess.onFoot.active)doPunch(sess);},
   joy:()=>joyVec,footcmd:()=>footCmd(),
+  probe(x,z,r){return{n:(world.colliders||[]).length,ramps:(world.ramps||[]).length,
+    cand:(queryColliders(x,z,r||3)||[]).length,foot:pushOutFoot(x,z,r||.5)};},
   clips(){const out={};for(const k in A_ped){const g=A_ped[k];if(g&&g.animations)
     out[k]=g.animations.map(a=>({n:a.name,d:+a.duration.toFixed(2),tr:a.tracks.length}));}return out;},
   footpos:()=>{const of=sess&&sess.onFoot;return of&&of.active?{x:+of.x.toFixed(2),z:+of.z.toFixed(2),speed:+of.speed.toFixed(2),hp:of.hp}:null;},

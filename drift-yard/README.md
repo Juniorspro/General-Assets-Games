@@ -2,6 +2,12 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.4 — colisión total + rampas + mapas más llenos
+- **Colisión en TODO**, hasta los árboles: cada árbol del bosque (1600+) y del touge (1300+) es un tronco sólido. Motor de colisión nuevo con **grilla espacial** → miles de colliders sin bajar los FPS (solo se testean los cercanos).
+- **Colisión a pie**: el piloto ya no atraviesa props/árboles/contenedores (mismo set que el auto).
+- **Rampas de salto** 🛫: nueva física vertical del auto (subís la rampa, saltás por el aire con el morro arriba, y caés con polvo + golpe). Repartidas por Puerto, Aeropuerto, Nieve, Cañón, Azotea y Estadio (2–4 por mapa).
+- **Mapas más llenos**: cada arena drift suma rampas, pilas de gomas, chicanas de contenedores/stacks y slalom de conos en las zonas vacías (sobre todo el Aeropuerto, que era una pista pelada).
+
 ## Novedades 5.3 — modo a pie que anda de verdad
 - **Animaciones nuevas y buenas**: idle (parado quieto, ya no marcha en el lugar), correr real hacia adelante (RunFast), salto rápido y vertical (Regular_Jump), y **piña de una sola trompada** (Right_Jab) rápida — no más rutina de boxeo de 7 s. Las viejas eran clips equivocados (correr "BackLeft", salto de 9,9 s, boxeo de 6,9 s).
 - **Joystick recalibrado**: adelante en el joystick = el piloto camina/corre hacia donde mira la cámara (antes iba invertido). Empuje suave = caminar, a fondo = correr; gira suave hacia donde vas.
