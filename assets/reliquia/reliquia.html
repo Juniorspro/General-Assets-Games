@@ -678,11 +678,11 @@ function die(){ if(R.pu.escudo>0||R.pu.turbo>0)return;
 function pushTop(n,d){ if(!Array.isArray(SV.top))SV.top=[]; SV.top.push({n,d:Math.floor(d)});
   SV.top.sort((a,b)=>b.d-a.d); SV.top=SV.top.slice(0,20); save(); }
 function mpScores(){ try{ return (typeof NET!=='undefined')?NET.scores():[]; }catch(e){ return []; } }
-function lbHTML(myD){   // TOP 10: mezcla récords locales + jugadores en línea, marca "VOS"
-  const rows=[...(SV.top||[]).map(t=>({n:t.n,d:t.d,you:false})), ...mpScores()];
+function lbHTML(myD){   // TOP 10: SOLO jugadores en línea + vos (marca "VOS"); solo, aparecés únicamente vos
+  const rows=mpScores().map(s=>({n:s.n,d:s.d,you:false}));
   rows.push({n:SV.name||T('you'),d:Math.floor(myD),you:true});
   rows.sort((a,b)=>b.d-a.d);
-  const seen=new Set(), out=[]; for(const r of rows){ const k=r.n+'|'+r.d; if(seen.has(k))continue; seen.add(k); out.push(r); if(out.length>=10)break; }
+  const out=rows.slice(0,10);
   let h='<div style="text-align:left;font:800 13px system-ui;margin-top:8px">';
   out.forEach((r,i)=>{ const md=['🥇','🥈','🥉'][i]||('<b style="color:#c9b98a">'+(i+1)+'.</b>');
     h+='<div style="display:flex;justify-content:space-between;padding:3px 2px;'+(r.you?'color:#7dff8a':'color:#e8dcc0')+'">'+
@@ -926,11 +926,11 @@ document.querySelector('.ui').appendChild(eLive);
 let liveAcc=0;
 function updLiveLb(dt){ if(APP!=='run'){ eLive.style.display='none'; return; }
   liveAcc+=dt; if(liveAcc<0.35)return; liveAcc=0;
-  const rows=[...(SV.top||[]).map(t=>({n:t.n,d:t.d,you:false})), ...mpScores()];
+  // SOLO jugadores en línea + vos (nada de récords locales): si estás solo, aparecés vos nº1 y listo
+  const rows=mpScores().map(s=>({n:s.n,d:s.d,you:false}));
   rows.push({n:SV.name||T('you'),d:Math.floor(R.dist),you:true});
   rows.sort((a,b)=>b.d-a.d);
-  const seen=new Set(), out=[];
-  for(const r of rows){ const k=(r.n||'?')+'|'+r.d; if(seen.has(k))continue; seen.add(k); out.push(r); if(out.length>=5)break; }
+  const out=rows.slice(0,5);
   let h='<div style="color:#ffd85e;font:900 10px system-ui;margin-bottom:3px;letter-spacing:.5px">'+T('lbTop')+'</div>';
   out.forEach((r,i)=>{ const md=['🥇','🥈','🥉'][i]||((i+1)+'. ');
     h+='<div style="display:flex;justify-content:space-between;gap:8px;'+(r.you?'color:#7dff8a':'')+'">'+
