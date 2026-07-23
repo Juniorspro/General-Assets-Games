@@ -8,9 +8,17 @@ Un libro virtual en 3D hecho con HTML, CSS y JavaScript puro — sin librerías 
 - **Pasar página**: clic en la mitad derecha, botón «Siguiente ›», flecha →, o desliza el dedo en el celular.
 - **Regresar**: clic en la mitad izquierda, botón «‹ Anterior», o flecha ←.
 
-## Cómo personalizarlo ✏️
+## Cómo personalizarlo ✏️ (modo edición)
 
-Abre `index.html` con cualquier editor de texto y busca la sección que dice **`CONTENIDO DEL LIBRO — ¡EDITA AQUÍ!`** dentro del `<script>`.
+`index.html` y `libro-completo.html` abren en **modo edición**:
+
+1. Abre el archivo en el navegador — verás una barra arriba que dice *Modo edición*.
+2. **Toca cualquier texto del libro** (títulos, mensajes, pies de foto, portada) y escríbelo de nuevo ahí mismo.
+3. Cuando termines, toca **💾 Guardar HTML final** — se descarga `nuestro-librito.html`: la versión regalo con tus cambios, **sin** barra de edición ni botón de guardar. Ese es el archivo que le envías a ella.
+
+Tu copia editable no se modifica al guardar, así que puedes crear tantas versiones como quieras.
+
+También puedes editar los textos a mano: en el archivo, dentro de `<script type="application/json" id="book-data">` está todo el contenido en formato JSON.
 
 ### Cambiar la portada
 
