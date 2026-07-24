@@ -246,7 +246,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.7</div>
+  <div id="buildtag">build 5.8</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -423,7 +423,18 @@ async function runTasks(tasks){
 /* ================= audio ================= */
 const AC=window.AudioContext||window.webkitAudioContext;
 let actx=null,master=null,musicSrc=null;
-const MIX={music:.15,sfx:.35,engine:.5,skid:.3};
+const MIX={music:.15,sfx:.35,engine:.3,skid:.3}; // motor más bajo (era .5)
+// sonido propio por auto: pitch/detune/sub/growl/onda distintos por carrocería
+function carSnd(i){const c=CARS[i]||CARS[0];
+  return{pitch:.7+(i%4)*.07+(c.accel-24)/70,detune:7+(i%5)*4,sub:.42+((i*7)%5)*.05,
+    growl:180+((i*53)%170),wave:(i%3===0)?"square":"sawtooth"};}
+// posición del oyente = cámara (para el audio por proximidad de otros autos)
+let _alv=null;
+function updateAudioListener(){if(!actx)return;if(!_alv)_alv=new THREE.Vector3();const l=actx.listener,p=camera.position;
+  const e=camera.getWorldDirection(_alv);
+  try{if(l.positionX){l.positionX.value=p.x;l.positionY.value=p.y;l.positionZ.value=p.z;
+      l.forwardX.value=e.x;l.forwardY.value=e.y;l.forwardZ.value=e.z;l.upX.value=0;l.upY.value=1;l.upZ.value=0;}
+    else{l.setPosition(p.x,p.y,p.z);l.setOrientation(e.x,e.y,e.z,0,1,0);}}catch(err){}}
 const SND={};
 function audioInit(){if(actx||!AC)return;actx=new AC();master=actx.createGain();master.gain.value=.8;master.connect(actx.destination);}
 async function decodeAll(){if(!actx)return;for(const k in SND){const s=SND[k];
@@ -441,17 +452,18 @@ const skidRef={src:null,gain:null};
    la maneja el RPM. Suena a motor de verdad y pesa 0 KB. ===== */
 const eng={on:false,nodes:null,gear:0};
 function engineStart(){if(!actx||eng.on)return;
+  const pr=carSnd(save.car|0);eng.prof=pr;               // timbre propio del auto elegido
   const g=actx.createGain();g.gain.value=0;g.connect(master);
   // cadena: osciladores -> "growl" resonante -> lowpass que abre con RPM -> g
   const lp=actx.createBiquadFilter();lp.type="lowpass";lp.frequency.value=800;lp.Q.value=8;lp.connect(g);
-  const growl=actx.createBiquadFilter();growl.type="peaking";growl.frequency.value=300;growl.Q.value=3.2;growl.gain.value=10;growl.connect(lp);
-  const o1=actx.createOscillator();o1.type="sawtooth";
-  const o2=actx.createOscillator();o2.type="sawtooth";o2.detune.value=11;
+  const growl=actx.createBiquadFilter();growl.type="peaking";growl.frequency.value=pr.growl;growl.Q.value=3.2;growl.gain.value=10;growl.connect(lp);
+  const o1=actx.createOscillator();o1.type=pr.wave;
+  const o2=actx.createOscillator();o2.type=pr.wave;o2.detune.value=pr.detune;
   const o3=actx.createOscillator();o3.type="sawtooth"; // 2º armónico -> más cuerpo/gruñido
   const sub=actx.createOscillator();sub.type="triangle"; // grave redondo
   const og=actx.createGain();og.gain.value=.4;o1.connect(og);o2.connect(og);og.connect(growl);
   const o3g=actx.createGain();o3g.gain.value=.15;o3.connect(o3g);o3g.connect(growl);
-  const sg=actx.createGain();sg.gain.value=.55;sub.connect(sg);sg.connect(growl);
+  const sg=actx.createGain();sg.gain.value=pr.sub;sub.connect(sg);sg.connect(growl);
   // "chug" de ralentí: LFO a media frecuencia de encendido modula el volumen (motor lumpy)
   const lfo=actx.createOscillator();lfo.type="sawtooth";lfo.frequency.value=22;
   const lfog=actx.createGain();lfog.gain.value=.2;lfo.connect(lfog);lfog.connect(g.gain);
@@ -472,7 +484,7 @@ function engineSet(r){ // r = velocidad/tope 0..1; RPM sube/baja por cambio simu
   let gi=Math.min(GEARS-1,Math.floor(r/seg));
   const within=(r-gi*seg)/seg;          // 0..1 dentro del cambio actual
   const rpm=.26+within*.74;             // cae al cambiar, sube al acelerar
-  const base=46+rpm*132;                // Hz de encendido
+  const base=(46+rpm*132)*(eng.prof?eng.prof.pitch:1); // Hz de encendido × tono del auto
   n.o1.frequency.setTargetAtTime(base,t,.04);
   n.o2.frequency.setTargetAtTime(base,t,.04);
   n.o3.frequency.setTargetAtTime(base*2,t,.04);
@@ -549,7 +561,16 @@ let joyVec={x:0,z:0};
   base.addEventListener("pointercancel",end);
 })();
 /* cámara a pie: se orienta arrastrando la pantalla (lado derecho) — NO sigue al personaje */
-let footCamYaw=0,footCamPitch=.5;
+let footCamYaw=0,footCamPitch=.5,camZoom=1;
+/* pellizco = acercar (agrandar) · abrir dedos = alejar (achicar) · rueda en desktop */
+(function(){let d0=0;
+  addEventListener("touchmove",e=>{if(e.touches&&e.touches.length===2){
+    const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY,d=Math.hypot(dx,dy);
+    if(d0)camZoom=Math.max(.55,Math.min(2,camZoom*(1+(d-d0)*.0018)));
+    d0=d;e.preventDefault();}},{passive:false});
+  addEventListener("touchend",e=>{if(!e.touches||e.touches.length<2)d0=0;});
+  addEventListener("wheel",e=>{camZoom=Math.max(.55,Math.min(2,camZoom*(1+Math.sign(e.deltaY)*.08)));},{passive:true});
+})();
 (function(){
   const el=document.getElementById("camlook");if(!el)return;
   let pid=null,lx=0,ly=0;
@@ -992,11 +1013,12 @@ function buildGearPit(group,colliders,cx,cz){
   for(const[dx,dz,w,d]of[[0,-HD-1,HW*2+3,1.6],[0,HD+1,HW*2+3,1.6],[-HW-1,0,1.6,HD*2+3],[HW+1,0,1.6,HD*2+3]]){
     const r=new THREE.Mesh(new THREE.BoxGeometry(w,.45,d),rimMat);r.position.set(cx+dx,.22,cz+dz);group.add(r);}
   // trituradora de doble eje: dos filas de discos dentados que giran hacia adentro (como la ref)
-  // dos ejes JUNTOS con discos que engranan entre sí (como la trituradora real)
-  const gears=[];const N=9,SP=2.5,off=(N-1)*SP/2;
-  for(const[zr,spd,stag]of[[cz-1.9,2.4,0],[cz+1.9,-2.4,SP/2]]){
+  // varios ejes que cubren TODO el pozo, discos que engranan entre sí (como la ref)
+  const gears=[];const N=10,SP=2.4,off=(N-1)*SP/2;
+  const rows=[[-8,2.4],[-4,-2.4],[0,2.4],[4,-2.4],[8,2.4]];
+  for(let ri=0;ri<rows.length;ri++){const zr=cz+rows[ri][0],spd=rows[ri][1],stag=(ri%2)?SP/2:0;
     const shaft=new THREE.Group();shaft.position.set(cx,-DEPTH+3.2,zr);group.add(shaft);
-    for(let i=0;i<N;i++){const d=shredderDisc(2.6);d.position.x=-off+i*SP+stag;shaft.add(d);}
+    for(let i=0;i<N;i++){const d=shredderDisc(2.5);d.position.x=-off+i*SP+stag;shaft.add(d);}
     // eje visible
     const axle=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,off*2+2,10),
       (()=>{const m=stdMat("metal");m.color.set(0x3a3d43);m.metalness=.8;m.roughness=.4;return m;})());
@@ -1964,6 +1986,7 @@ async function enterFoot(s){
   camera.position.set(fx-Math.sin(fh)*5.5,3.6,fz-Math.cos(fh)*5.5);
   camera.lookAt(fx,1.2,fz);
   document.getElementById("touch").style.display="none";
+  engineStop();if(skidRef.src){try{skidRef.src.stop();}catch(e){}skidRef.src=null;} // el auto se apaga al bajar
   refreshTouchUI();
   }catch(e){console.error("enterFoot ERR: "+(e&&e.message||e));}}
 function enterCar(s){
@@ -1971,6 +1994,7 @@ function enterCar(s){
   world.group.remove(of.ped.holder);
   for(const n of of.npcs||[])world.group.remove(n.ped.holder);
   s.onFoot={active:false,npcs:null};
+  if(save.sound&&mode==="race"&&!s.dead)loopsStart(); // se vuelve a encender el motor
   refreshTouchUI();}
 function spawnNPCs(s){return[];} // el usuario quiere andar solo a pie (sin NPCs)
 // empuja un punto (jugador a pie) fuera de los colliders — mismo set que el auto
@@ -2025,9 +2049,11 @@ function footUpdate(s,dt){
   const inPit=overOpenPit(of.x,of.z);
   if(of.grounded&&!inPit){const fixed=pushOutFoot(of.x,of.z,.5);of.x=fixed.x;of.z=fixed.z;}
   // salto / gravedad (y caída al pozo)
+  const wasAir=!of.grounded;
   of.vy-=26*dt;let y=P.holder.position.y+of.vy*dt;
   if(inPit){of.grounded=false;if(y<-(dyPit.DEPTH-2.5))of.hp=0;}
-  else if(y<=0){y=0;of.vy=0;of.grounded=true;}else of.grounded=false;
+  else if(y<=0){if(wasAir&&of.vy<-2.5)sfx("sfx_crash_soft",.3,1.6); // golpe al aterrizar
+    y=0;of.vy=0;of.grounded=true;}else of.grounded=false;
   P.holder.position.set(of.x,y,of.z);
   P.holder.rotation.y=of.h;
   if(of.punchT>0)of.punchT-=dt;
@@ -2039,7 +2065,7 @@ function footUpdate(s,dt){
   else pedPlay(P,"idle",.2);
   updateHazards(s,dt);
   // cámara tercera persona orbital: la orienta el jugador (footCamYaw/Pitch), no el personaje
-  const cdist=5.5,camH=1.3+footCamPitch*4.6;
+  const cdist=5.5*camZoom,camH=(1.3+footCamPitch*4.6)*camZoom;
   const cx=of.x-Math.sin(footCamYaw)*cdist,cz=of.z-Math.cos(footCamYaw)*cdist;
   camera.position.lerp(V.set(cx,camH,cz),1-Math.pow(.0008,dt));
   if(world.sky){world.sky.position.x=camera.position.x;world.sky.position.z=camera.position.z;}
@@ -2304,11 +2330,11 @@ function update(dt){
     const fovT=CFG.fovBase+9+(CFG.fovMax-CFG.fovBase)*Math.min(1,s.speed/st.top);
     camera.fov+=(fovT-camera.fov)*.06;camera.updateProjectionMatrix();
   }else{ // ---- TERCERA PERSONA (chase) ----
-  const cx=s.x-Math.sin(s.camYaw)*7.8,cz=s.z-Math.cos(s.camYaw)*7.8;
-  camera.position.lerp(V.set(cx,3.1+(s.y||0)*.8,cz),1-Math.pow(.0001,dt));
+  const cx=s.x-Math.sin(s.camYaw)*7.8*camZoom,cz=s.z-Math.cos(s.camYaw)*7.8*camZoom;
+  camera.position.lerp(V.set(cx,(3.1+(s.y||0)*.8)*camZoom,cz),1-Math.pow(.0001,dt));
   {const ddx=camera.position.x-s.x,ddz=camera.position.z-s.z;
    const d=Math.hypot(ddx,ddz);
-   if(d<5.5){const k=5.5/Math.max(d,.001);
+   if(d<5.5*camZoom){const k=5.5*camZoom/Math.max(d,.001);
      camera.position.x=s.x+ddx*k;camera.position.z=s.z+ddz*k;}
    camera.position.y=Math.max(camera.position.y,2.6+(s.y||0)*.7);}
   if(world.sky){world.sky.position.x=camera.position.x;world.sky.position.z=camera.position.z;}
@@ -2635,7 +2661,7 @@ function frame(now){requestAnimationFrame(frame);
   acc+=now-last;last=now;if(acc>250)acc=250;
   pollPads();menuNav();
   {const _n=performance.now();if(!frame._t)frame._t=_n;const _d=Math.min(0.1,(_n-frame._t)/1000);frame._t=_n;
-   if(typeof NET!=="undefined"){NET.tick(_d);updateGhosts(_d);tickBubbles();
+   if(typeof NET!=="undefined"){NET.tick(_d);updateGhosts(_d);tickBubbles();updateAudioListener();
      if(mode==="maps")refreshMapCounts();refreshRoomBadge();}}
   fc++;if(fc%2===0)renderer.shadowMap.needsUpdate=true;
   const stepMs=CFG.step*1000;
@@ -2783,12 +2809,31 @@ function updateGhosts(dt){
       world.group.add(obj);
       const tag=textSprite(p.n||"?",{bg:"rgba(255,122,26,.92)",fg:"#141414"});tag.position.y=2.5;obj.add(tag);
       g=ghosts[p.id]={obj,tag,x:p.x,z:p.z,h:p.h,name:p.n};}
+    const gap=Math.hypot(p.x-g.x,p.z-g.z); // ~ velocidad del otro auto
     const k=Math.min(1,dt*11);
     g.x+=(p.x-g.x)*k;g.z+=(p.z-g.z)*k;
     let dh=p.h-g.h;while(dh>Math.PI)dh-=2*Math.PI;while(dh<-Math.PI)dh+=2*Math.PI;g.h+=dh*k;
     g.obj.position.set(g.x,0,g.z);g.obj.rotation.y=g.h;
-    if(g.name!==p.n){g.name=p.n;g.obj.remove(g.tag);g.tag=textSprite(p.n||"?",{bg:"rgba(255,122,26,.92)",fg:"#141414"});g.tag.position.y=2.5;g.obj.add(g.tag);}}
-  for(const id in ghosts){if(!seen[id]){world.group.remove(ghosts[id].obj);delete ghosts[id];}}}
+    if(g.name!==p.n){g.name=p.n;g.obj.remove(g.tag);g.tag=textSprite(p.n||"?",{bg:"rgba(255,122,26,.92)",fg:"#141414"});g.tag.position.y=2.5;g.obj.add(g.tag);}
+    // motor por PROXIMIDAD (panner 3D): oís al otro auto según distancia/velocidad
+    if(actx&&save.sound){
+      if(!g.eng){const o=actx.createOscillator();o.type="sawtooth";
+        const o2=actx.createOscillator();o2.type="square";
+        const lp=actx.createBiquadFilter();lp.type="lowpass";lp.frequency.value=700;
+        const gg=actx.createGain();gg.gain.value=0;
+        const pan=actx.createPanner();pan.panningModel="HRTF";pan.distanceModel="inverse";pan.refDistance=7;pan.maxDistance=120;pan.rolloffFactor=1.6;
+        o.connect(gg);o2.connect(gg);gg.connect(lp);lp.connect(pan);pan.connect(master);
+        try{o.start();o2.start();}catch(e){}g.eng={o,o2,lp,gg,pan};}
+      const e=g.eng,t=actx.currentTime,rev=Math.min(1,gap*2.2);
+      if(e.pan.positionX){e.pan.positionX.value=g.x;e.pan.positionY.value=.5;e.pan.positionZ.value=g.z;}
+      else try{e.pan.setPosition(g.x,.5,g.z);}catch(err){}
+      e.o.frequency.setTargetAtTime(56+rev*150,t,.12);
+      e.o2.frequency.setTargetAtTime((56+rev*150)*.5,t,.12);
+      e.lp.frequency.setTargetAtTime(450+rev*2200,t,.12);
+      e.gg.gain.setTargetAtTime(MIX.engine*.6*(.3+rev*.9),t,.12);}}
+  for(const id in ghosts){if(!seen[id]){const gh=ghosts[id];
+    if(gh.eng){try{gh.eng.o.stop();gh.eng.o2.stop();}catch(e){}}
+    world.group.remove(gh.obj);delete ghosts[id];}}}
 
 /* ---- chat ---- */
 let chatOpen=false,unread=0;

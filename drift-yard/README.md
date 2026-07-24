@@ -2,6 +2,14 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.8 — audio por auto, proximidad, zoom, trituradora que cubre todo
+- **Motor por auto**: cada carrocería suena distinto (tono/onda/growl propios) y **más bajo** que antes.
+- **El auto se apaga al bajar**: el motor para cuando salís a pie y se re-enciende al subir.
+- **Audio 3D por proximidad**: escuchás a los otros autos (multijugador) según **distancia y velocidad** (PannerNode + oyente en la cámara).
+- **Zoom**: pellizco para acercar / abrir dedos para alejar (y rueda del mouse en PC).
+- **Trituradora que cubre todo el pozo**: 5 ejes de discos dentados que engranan (antes 2), bien ubicados.
+- **SFX**: golpe al aterrizar a pie; piñas/saltos con sonido.
+
 ## Novedades 5.7 — onboarding, 3 idiomas, nombre, cámara 1ª/3ª y destrucción física
 - **Arranque guía**: la primera vez te pide **idioma (Español / English / Português) → gráficos → tu nombre**, antes de cargar.
 - **Portugués** completo agregado (ES/EN/PT).
