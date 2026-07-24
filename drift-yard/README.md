@@ -2,6 +2,16 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.7 — onboarding, 3 idiomas, nombre, cámara 1ª/3ª y destrucción física
+- **Arranque guía**: la primera vez te pide **idioma (Español / English / Português) → gráficos → tu nombre**, antes de cargar.
+- **Portugués** completo agregado (ES/EN/PT).
+- **Tu nombre flota** sobre tu auto y, cuando bajás, sobre vos.
+- **Cámara 1ª / 3ª persona**: botón 👁 al lado de la pausa.
+- **Destrucción física en tiempo real**: al morir/caer, el auto se **rompe en pedazos** que vuelan, giran y rebotan con gravedad (no una animación de desvanecimiento).
+- **Trituradora** con discos **más juntos y engranados** (doble eje, como la referencia).
+- **Motor nuevo**: sonido más lleno y con gruñido (armónicos + filtro resonante + "chug" de ralentí + turbo).
+- Fixes: movimiento a pie no vibra cerca del centro del joystick (histéresis) y anti "doble fantasma".
+
 ## Novedades 5.6 — MULTIJUGADOR + arreglos a pie + trituradora real
 - **Multijugador serverless** 👥 (MQTT sobre WebSocket, broker público, sin servidor propio): **una sala por mapa**, ves los autos de los demás jugadores en tiempo real con su nombre flotando, y **chat** con teclado propio en pantalla + burbujas sobre los autos. Contador de gente por sala en la pantalla de mapas y badge en carrera. (Re-integrado desde tu build con multiplayer.)
 - **Movimiento y cámara a pie corregidos**: la derecha ya va a la derecha (estaba espejado) y la cámara gira en el sentido correcto al arrastrar.
