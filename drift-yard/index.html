@@ -289,7 +289,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.12</div>
+  <div id="buildtag">build 5.13</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -323,7 +323,7 @@ tagline:"Derrapa, banca, no choques. Ahora con 6 mapas.",
 medal3:"ORO",medal2:"PLATA",medal1:"BRONCE",medal0:"SIN MEDALLA",next:"Siguiente medalla",
 tip:"El derrape puntúa solo si lo inicias con el freno de mano ✋. Encadena para subir el combo; endereza para bancar.",
 map_puerto:"PUERTO",map_bosque:"BOSQUE RALLY",map_aeropuerto:"AEROPUERTO",map_azotea:"AZOTEA",
-map_nieve:"NIEVE",map_canyon:"CAÑÓN",map_estadio:"ESTADIO",map_touge:"TOUGE",
+map_nieve:"NIEVE",map_canyon:"CAÑÓN",map_estadio:"ESTADIO",map_touge:"TOUGE",map_gp:"GRAN PREMIO",
 desc_katana:"Equilibrado y elegante. El clásico.",desc_bandido:"Bruto. Potencia pura, cuesta domarlo.",
 desc_hachi:"Ligero y juguetón. Baila solo.",desc_toro:"Ancho y estable. Derrapes largos."},
 en:{loading:"LOADING",play:"PLAY",language:"LANGUAGE: ENGLISH",sound_on:"SOUND: ON",sound_off:"SOUND: OFF",
@@ -344,7 +344,7 @@ tagline:"Slide it, bank it, don't crash. Now with 6 maps.",
 medal3:"GOLD",medal2:"SILVER",medal1:"BRONZE",medal0:"NO MEDAL",next:"Next medal",
 tip:"Drifts only score if you start them with the handbrake ✋. Chain slides for combo; straighten to bank.",
 map_puerto:"THE PORT",map_bosque:"FOREST RALLY",map_aeropuerto:"AIRFIELD",map_azotea:"ROOFTOP",
-map_nieve:"SNOWLINE",map_canyon:"CANYON",map_estadio:"STADIUM",map_touge:"TOUGE",
+map_nieve:"SNOWLINE",map_canyon:"CANYON",map_estadio:"STADIUM",map_touge:"TOUGE",map_gp:"GRAND PRIX",
 desc_katana:"Balanced and stylish. The classic.",desc_bandido:"A brute. Raw power, hard to tame.",
 desc_hachi:"Light and playful. It dances.",desc_toro:"Wide and stable. Long, lazy slides."},
 pt:{loading:"CARREGANDO",play:"JOGAR",language:"IDIOMA: PORTUGUÊS",sound_on:"SOM: SIM",sound_off:"SOM: NÃO",
@@ -365,7 +365,7 @@ tagline:"Derrapa, banca, não bate. Agora com 6 mapas.",
 medal3:"OURO",medal2:"PRATA",medal1:"BRONZE",medal0:"SEM MEDALHA",next:"Próxima medalha",
 tip:"O drift só pontua se começar com o freio de mão ✋. Encadeie para o combo; endireite para bancar.",
 map_puerto:"O PORTO",map_bosque:"RALI NA FLORESTA",map_aeropuerto:"AEROPORTO",map_azotea:"COBERTURA",
-map_nieve:"NEVE",map_canyon:"CÂNION",map_estadio:"ESTÁDIO",map_touge:"TOUGE",
+map_nieve:"NEVE",map_canyon:"CÂNION",map_estadio:"ESTÁDIO",map_touge:"TOUGE",map_gp:"GRANDE PRÊMIO",
 desc_katana:"Equilibrado e elegante. O clássico.",desc_bandido:"Um bruto. Potência pura, difícil de domar.",
 desc_hachi:"Leve e brincalhão. Ele dança.",desc_toro:"Largo e estável. Derrapadas longas."},
 };
@@ -1260,6 +1260,7 @@ const MAPS=[
  {id:"canyon",mode:"drift",build:buildCanyon},
  {id:"estadio",mode:"drift",build:buildEstadio},
  {id:"touge",mode:"race",laps:2,build:buildTouge,targets:[300,260,225]},
+ {id:"gp",mode:"race",laps:3,build:buildGP,targets:[300,255,220]},
 ];
 const DRIFT_MEDALS=[8000,20000,45000];
 
@@ -1482,6 +1483,112 @@ function buildBosque(group,timeKey){
     gate.add(ban);group.add(gate);}
   return{colliders,spawn:{x:P[4].x,z:P[4].z,h:Math.atan2(TN[4].x,TN[4].z)},
     bounds:{W:1500,D:1500},road:{P,TN,LF,n,ds,halfW},checkpoints:cps};}
+
+/* ===== GRAN PREMIO: circuito estilo Fórmula 1, ancho y enorme, con drift rápido ===== */
+function buildGP(group,timeKey){
+  const rng=mulberry32(9091);
+  const{colliders}=baseEnv(group,timeKey,{fenceOn:false,apron:false,noGround:true,w:1,d:1,marks:null,skyBiome:"ciudad"});
+  // asfalto de run-off + pasto alrededor
+  const tarmac=new THREE.Mesh(new THREE.CircleGeometry(560,52),stdMat("road",{repeat:[60,60]}));
+  tarmac.rotation.x=-Math.PI/2;tarmac.position.y=-.06;tarmac.material.color.set(0x3a3d45);tarmac.receiveShadow=true;group.add(tarmac);
+  const grass=new THREE.Mesh(new THREE.RingGeometry(560,1500,48),stdMat("ground",{repeat:[120,120]}));
+  grass.rotation.x=-Math.PI/2;grass.position.y=-.07;grass.material.color.set(0x5f7a48);grass.receiveShadow=true;group.add(grass);
+  // trazado GP (amplio): recta principal larga + curvas rápidas + una chicana
+  const pts=[[-360,-360],[-360,240],[-300,360],[-140,384],[-20,300],[60,362],[210,384],
+    [352,300],[388,110],[300,18],[366,-170],[262,-306],[60,-372],[-170,-346],[-306,-320]]
+    .map(p=>new THREE.Vector3(p[0],0,p[1]));
+  const curve=new THREE.CatmullRomCurve3(pts,true,"centripetal",.5);curve.arcLengthDivisions=2600;
+  const len=curve.getLength(),ds=4,n=Math.ceil(len/ds);
+  const P=[],TN=[],LF=[];
+  for(let i=0;i<n;i++){P.push(curve.getPointAt(i/n));TN.push(curve.getTangentAt(i/n).normalize());}
+  for(let i=0;i<n;i++)LF.push(new THREE.Vector3(TN[i].z,0,-TN[i].x).normalize());
+  const halfW=9.5; // bien ancho -> zonas de derrape rápido
+  function ribbon(l1,l2,y,mat,uAcross,uScale){const pos=[],uv=[],idx=[];
+    for(let i=0;i<=n;i++){const ii=i%n;
+      const p1=P[ii].clone().addScaledVector(LF[ii],l1),p2=P[ii].clone().addScaledVector(LF[ii],l2);
+      pos.push(p1.x,y,p1.z,p2.x,y,p2.z);const v=(i*ds)/(uScale||7);uv.push(0,v,uAcross,v);}
+    for(let i=0;i<n;i++){const a=i*2;idx.push(a,a+2,a+1,a+1,a+2,a+3);}
+    const g=new THREE.BufferGeometry();g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));
+    g.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
+    const m=new THREE.Mesh(g,mat);m.receiveShadow=true;group.add(m);return m;}
+  const roadMat=stdMat("road",{repeat:[1,1]});roadMat.color.set(0x2b2d33);
+  ribbon(-halfW,halfW,.01,roadMat,3.2);
+  // línea central discontinua + bordes blancos
+  const lineMat=new THREE.MeshBasicMaterial({color:0xf0ede4,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-6});
+  ribbon(-halfW+.15,-halfW+.5,.05,lineMat,1);ribbon(halfW-.5,halfW-.15,.05,lineMat,1);
+  // pianos (kerbs) rojo/blanco a rayas en los bordes
+  const kerbTex=canvasTex(64,256,(g,w,h)=>{for(let i=0;i<8;i++){g.fillStyle=i%2?"#e8e4da":"#d02a2a";g.fillRect(0,i*32,w,32);}});
+  const kerbMat=new THREE.MeshStandardMaterial({map:kerbTex,roughness:.6});kerbMat.map.wrapT=THREE.RepeatWrapping;
+  ribbon(-halfW-1.1,-halfW,.04,kerbMat,1,3);ribbon(halfW,halfW+1.1,.04,kerbMat,1,3);
+  // muros de gomas + cercas de contención en el exterior
+  const tireT=A.glb.tirewall?normalizeModel(A.glb.tirewall,{height:1.1}):null;
+  const tires=[];const fencePost=[];
+  for(let i=0;i<n;i+=7){const p=P[i],lf=LF[i];
+    const o=p.clone().addScaledVector(lf,halfW+3.2); // exterior
+    tires.push([o.x,o.z,Math.atan2(TN[i].x,TN[i].z),1]);
+    colliders.push({type:"circle",x:o.x,z:o.z,r:1.4});
+    if(i%21===0)fencePost.push([o.x,o.z]);}
+  if(tireT){const mi=mergedForInstancing(A.glb.tirewall,{height:1.1});if(mi)instPlace(group,mi,tires,{shadow:false});}
+  // cerca de contención (postes + malla semitransparente) detrás de las gomas
+  {const fpMat=stdMat("metal");fpMat.color.set(0x9aa0aa);fpMat.metalness=.5;
+   const meshMat=new THREE.MeshBasicMaterial({color:0xcfd6e0,transparent:true,opacity:.16,side:THREE.DoubleSide});
+   for(let i=0;i<n;i+=4){const p=P[i],lf=LF[i];const o=p.clone().addScaledVector(lf,halfW+4.4);
+     if(i%16===0){const post=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,4,6),fpMat);post.position.set(o.x,2,o.z);group.add(post);}
+   }
+   // paneles de malla por tramos (barato: un ribbon vertical exterior)
+   const pos=[],idx=[];let vi=0;
+   for(let i=0;i<=n;i+=2){const ii=i%n,p=P[ii],lf=LF[ii];const o=p.clone().addScaledVector(lf,halfW+4.4);
+     pos.push(o.x,.2,o.z, o.x,3.8,o.z);}
+   for(let i=0;i<pos.length/6-1;i++){const a=i*2;idx.push(a,a+2,a+1,a+1,a+2,a+3);}
+   const fg=new THREE.BufferGeometry();fg.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));fg.setIndex(idx);fg.computeVertexNormals();
+   group.add(new THREE.Mesh(fg,meshMat));}
+  // START/FINISH: pórtico a cuadros sobre la recta principal + grilla pintada
+  const startI=0,sp0=P[startI],st=TN[startI],slf=LF[startI];
+  const gridTex=canvasTex(256,64,(g,w,h)=>{for(let y=0;y<2;y++)for(let x=0;x<8;x++){g.fillStyle=(x+y)%2?"#111":"#f4f0e6";g.fillRect(x*32,y*32,32,32);}});
+  {const ban=new THREE.Mesh(new THREE.BoxGeometry((halfW+1)*2,1.4,.2),new THREE.MeshBasicMaterial({map:gridTex,side:THREE.DoubleSide}));
+   ban.position.copy(sp0);ban.position.y=6.6;ban.rotation.y=Math.atan2(st.x,st.z)+Math.PI/2;group.add(ban);
+   const gantMat=stdMat("metal");gantMat.color.set(0x2a2d33);gantMat.metalness=.6;
+   for(const s of[-1,1]){const leg=new THREE.Mesh(new THREE.BoxGeometry(.7,7.4,.7),gantMat);
+     leg.position.copy(sp0).addScaledVector(slf,s*(halfW+1.2));leg.position.y=3.7;group.add(leg);
+     colliders.push(obb(leg.position.x,leg.position.z,.5,.5,0));}
+   const top=new THREE.Mesh(new THREE.BoxGeometry((halfW+1.4)*2,.8,1.2),gantMat);top.position.copy(sp0);top.position.y=7.4;top.rotation.y=ban.rotation.y;group.add(top);
+   // grilla de largada pintada
+   const startLine=ribbon(-halfW,halfW,.03,new THREE.MeshBasicMaterial({map:gridTex}),3,1.2);}
+  // tribunas + pantallas gigantes en el exterior de la recta principal
+  const standT=A.glb.stand?normalizeModel(A.glb.stand,{height:11}):null;
+  if(standT)for(const t of[.02,.05,.08,.92,.95]){const i=Math.floor(t*n);const p=P[i],lf=LF[i];
+    const o=p.clone().addScaledVector(lf,-(halfW+16));const s2=standT.clone(true);s2.position.set(o.x,0,o.z);
+    s2.rotation.y=Math.atan2(TN[i].x,TN[i].z)-Math.PI/2;group.add(s2);colliders.push(obb(o.x,o.z,11,7,s2.rotation.y));}
+  const scrT=A.glb.bigscreen?normalizeModel(A.glb.bigscreen,{height:9}):null;
+  if(scrT)for(const t of[.2,.5,.78]){const i=Math.floor(t*n);const p=P[i],lf=LF[i];
+    const o=p.clone().addScaledVector(lf,-(halfW+18));const s2=scrT.clone(true);s2.position.set(o.x,0,o.z);
+    s2.rotation.y=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;group.add(s2);colliders.push(obb(o.x,o.z,5,3,s2.rotation.y));}
+  // edificio de boxes (procedural; luego se reemplaza por el modelo Higgsfield) sobre la recta, lado interior
+  {const pitMat=stdMat("metal");pitMat.color.set(0x3c4048);pitMat.metalness=.4;pitMat.roughness=.6;
+   const glassMat=new THREE.MeshStandardMaterial({color:0x2a3a48,metalness:.3,roughness:.15,transparent:true,opacity:.6});
+   for(let k=0;k<7;k++){const t=0.9+k*0.006;const i=Math.floor(t*n)%n;const p=P[i],lf=LF[i];
+     const o=p.clone().addScaledVector(lf,halfW+10);const ry=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;
+     const bay=new THREE.Mesh(new THREE.BoxGeometry(9,5.5,8),pitMat);bay.position.set(o.x,2.75,o.z);bay.rotation.y=ry;bay.castShadow=true;group.add(bay);
+     const gl=new THREE.Mesh(new THREE.BoxGeometry(8,3,.3),glassMat);gl.position.set(o.x,2.6,o.z).addScaledVector(lf,-4.1);gl.rotation.y=ry;group.add(gl);
+     colliders.push(obb(o.x,o.z,4.6,4.2,ry));}}
+  // banderas / vallas publicitarias (jersey) en el interior de curvas
+  const jerseyMi=A.glb.jersey?mergedForInstancing(A.glb.jersey,{length:3}):null;
+  if(jerseyMi){const js=[];for(let i=0;i<n;i+=10){const p=P[i],lf=LF[i];const o=p.clone().addScaledVector(lf,halfW+1.6);
+    js.push([o.x,o.z,Math.atan2(TN[i].x,TN[i].z),1]);}instPlace(group,jerseyMi,js,{shadow:false});}
+  // checkpoints (12) con arcos
+  const cps=[],NCP=12;
+  const postMat=new THREE.MeshStandardMaterial({color:0xf4f0e6,roughness:.5});
+  const stripeTex=canvasTex(256,64,(g,w,h)=>{g.fillStyle="#ff7a1a";g.fillRect(0,0,w,h);g.fillStyle="#f4f0e6";
+    for(let x=-h;x<w;x+=44){g.beginPath();g.moveTo(x,h);g.lineTo(x+h,0);g.lineTo(x+h+18,0);g.lineTo(x+18,h);g.fill();}});
+  for(let k=0;k<NCP;k++){const i=Math.floor(k/NCP*n),p=P[i],lf=LF[i];cps.push({x:p.x,z:p.z,r:14});
+    if(k===0)continue; // el 0 usa el pórtico
+    const gate=new THREE.Group();
+    for(const s of[-1,1]){const post=new THREE.Mesh(new THREE.CylinderGeometry(.18,.22,5,8),postMat);
+      post.position.copy(p).addScaledVector(lf,s*(halfW+1));post.position.y=2.5;gate.add(post);}
+    const ban=new THREE.Mesh(new THREE.BoxGeometry((halfW+1)*2,.6,.1),new THREE.MeshBasicMaterial({map:stripeTex,side:THREE.DoubleSide}));
+    ban.position.copy(p);ban.position.y=4.8;ban.rotation.y=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;gate.add(ban);group.add(gate);}
+  return{colliders,spawn:{x:P[2].x,z:P[2].z,h:Math.atan2(TN[2].x,TN[2].z)},
+    bounds:{W:1400,D:1400},road:{P,TN,LF,n,ds,halfW},checkpoints:cps};}
 
 function buildAero(group,timeKey){
   const rng=mulberry32(555);

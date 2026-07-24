@@ -2,6 +2,13 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.13 — NUEVO MAPA: GRAN PREMIO (circuito estilo F1)
+- **Mapa nuevo #9: GRAN PREMIO** 🏁 — circuito de carrera estilo Fórmula 1, **más ancho y enorme que el bosque** (pista de 19 m de ancho para **derrape rápido**), 3 vueltas y 12 checkpoints.
+- **Pianos (kerbs) rojo/blanco**, línea central discontinua y bordes blancos como un GP real.
+- **Muros de gomas + cerca de contención** en todo el exterior, **pórtico de meta a cuadros** con grilla de largada pintada, **tribunas y pantallas gigantes** en la recta principal, **boxes** al lado interior y vallas publicitarias en las curvas.
+- Cielo de ciudad al atardecer. Medallas por tiempo total.
+- *(Próximo: props F1 generados en Higgsfield — auto de exhibición, edificio de boxes y NPCs marshal en las entradas — ya se están generando.)*
+
 ## Novedades 5.12 — power-ups, martillos gigantes, daño más justo y controles que no se pierden
 - **Power-ups en el mapa** ✨: ⚡ turbo, ◈ escudo (anula daño), ✚ reparar, 🪙 monedas, ▽ mini y △ gigante. Flotan y giran; los agarrás pasando por encima y reaparecen a los ~13 s.
 - **Martillos gigantes** 🔨: en Aeropuerto/Azotea/Estadio hay un corredor con **6 martillos desparejos** que bajan y suben; si te agarran te **mandan a volar con físicas** y te dañan. Barandas y pórtico con colisión.
