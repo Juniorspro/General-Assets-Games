@@ -161,15 +161,30 @@ window.__dyBooted=false;
   addEventListener("error",function(e){if(e&&e.message)show("ERROR: "+e.message.slice(0,140));},true);
   addEventListener("unhandledrejection",function(e){
     var r=e&&e.reason;show("ERROR: "+String(r&&r.message||r).slice(0,140));});
+  function retryBtn(){
+    if(document.getElementById("bootRetry"))return;
+    var b=document.createElement("button");b.id="bootRetry";b.textContent="↻ REINTENTAR";
+    b.style.cssText="margin:16px auto 0;display:block;padding:.8em 1.6em;font:900 18px Arial;letter-spacing:.06em;"
+      +"background:#ff7a1a;color:#141414;border:none;border-radius:12px;cursor:pointer;pointer-events:auto";
+    b.onclick=function(){try{location.reload();}catch(e){location.href=location.href;}};
+    var host=document.getElementById("loadmsg");
+    if(host&&host.parentNode)host.parentNode.appendChild(b);else document.body.appendChild(b);}
   setTimeout(function(){
     if(window.__dyBooted)return;
     if(typeof HTMLScriptElement!=="undefined"&&HTMLScriptElement.supports&&!HTMLScriptElement.supports("importmap")){
       show("Este navegador no soporta importmap — probá con Chrome actualizado");return;}
     show("Diagnosticando red…");
-    fetch(window.__BASE+"vendor/three.module.js",{method:"HEAD",cache:"no-store"}).then(function(r){
-      show(r.ok?"Red OK pero el motor no arrancó — reintentá o mandá captura":"El CDN respondió "+r.status);
-    }).catch(function(err){show("Sin acceso al CDN: "+String(err&&err.message||err).slice(0,100));});
-  },8000);
+    // el motor son 3 módulos (three + 2 addons); si UNO falla no arranca. Probamos los tres.
+    var B=window.__BASE,fs=["vendor/three.module.js","vendor/addons/loaders/GLTFLoader.js","vendor/addons/utils/SkeletonUtils.js"];
+    Promise.all(fs.map(function(f){return fetch(B+f,{method:"HEAD",cache:"no-store"}).then(function(r){return r.ok;}).catch(function(){return false;});}))
+      .then(function(oks){
+        if(window.__dyBooted)return;
+        var allOk=oks.every(Boolean);
+        show(allOk?"El CDN tardó en despertar (primera carga). Tocá REINTENTAR 👇"
+                  :"El CDN aún no tiene todos los archivos — esperá unos segundos y tocá REINTENTAR 👇");
+        retryBtn();
+      });
+  },14000);
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js" onerror="window.__noMqtt=1"></script>
@@ -274,7 +289,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.11</div>
+  <div id="buildtag">build 5.11.1</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
