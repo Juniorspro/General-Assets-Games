@@ -2,6 +2,12 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.22 — carrera: sin cámara temblorosa, sin menú, instancia aparte y pista sellada
+- **La cámara ya no tiembla al largar**: los autos se colocan en la grilla **siguiendo la línea de la pista** (nunca sobre el pasto), y se apaga el temblor de "fuera de pista" mientras estás frenado en la grilla.
+- **Nada de menú de server**: tocás **CARRERA** y **se manda la invitación al toque**. Aparece un chip chico "🏁 CARRERA n/6". Cuando **entran 6, larga sola** (o el anfitrión toca "LARGAR YA"). La invitación se reenvía cada 3 s hasta llenarse.
+- **Instancia separada de carrera**: la carrera ocurre en una **copia aparte del mapa** (otra "sala"). Los que están paseando el GP **no se cruzan** con los que están corriendo, y viceversa. Al terminar/salir volvés al mapa libre.
+- **Pista sellada**: pared de colisión **continua en los dos bordes** (y por ende atrás también, porque el circuito es cerrado). Ya no te caés por los costados ni por atrás.
+
 ## Novedades 5.21 — arco de checkpoint bien orientado (¡palos a los costados!)
 - **Bug de rotación arreglado**: los arcos de checkpoint y el pórtico de largada estaban **rotados 90°**, así que un palo quedaba **en el medio de la calle** y la bandera corría a lo largo del camino. Ahora el arco cruza la pista: **postes a la izquierda y derecha**, **bandera tendida bien alto de poste a poste**, y pasás por debajo. Aplica a GP, bosque y touge + largada.
 - Grilla de largada a cuadros un poco más corta y prolija.

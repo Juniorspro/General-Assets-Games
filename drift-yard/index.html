@@ -244,10 +244,10 @@ window.__dyBooted=false;
   padding:.55em 1.2em;font:900 clamp(13px,calc(var(--vm)*.03),18px) inherit;color:#f2efe8;
   background:rgba(24,25,30,.9);border:2px solid rgba(242,239,232,.4);border-radius:12px}
 #racelobby,#raceinvite{position:fixed;z-index:1100;font-family:"Arial Black",Arial,sans-serif}
-#racelobby{inset:0;display:none;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(8,8,12,.72),rgba(8,8,12,.5))}
+#racelobby{left:50%;bottom:calc(var(--ah)*0.05);transform:translateX(-50%);display:none;align-items:stretch;justify-content:center;pointer-events:none}
 #racelobby.on{display:flex}
-.lobcard{width:min(94vw,460px);max-height:92vh;overflow-y:auto;background:rgba(16,16,22,.92);border:2px solid rgba(255,122,26,.5);border-radius:16px;padding:clamp(14px,3vh,24px);display:flex;flex-direction:column;gap:10px}
-.lobh{color:#ff7a1a;font-size:clamp(19px,5.5vw,28px);font-style:italic;text-align:center}
+.lobcard{width:min(92vw,380px);background:rgba(16,16,22,.94);border:2px solid rgba(255,122,26,.7);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;pointer-events:auto;box-shadow:0 6px 18px rgba(0,0,0,.5)}
+.lobh{color:#ff7a1a;font-size:clamp(16px,4.4vw,22px);font-style:italic;text-align:center}
 .lobslot{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(242,239,232,.16);border-radius:10px;padding:8px 12px;font-size:clamp(13px,3.5vw,17px);color:#f2efe8}
 .lobslot b{color:#ffd23c;min-width:26px}
 .lobrow{display:flex;gap:8px}.lobrow .btn{flex:1;min-width:0}
@@ -316,7 +316,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.21</div>
+  <div id="buildtag">build 5.22</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -1662,6 +1662,12 @@ function buildGP(group,timeKey){
   if(tireMi){const tires=[];for(let i=0;i<n;i+=8){const p=P[i].clone().addScaledVector(LF[i],halfW+7.6);
     tires.push([p.x,p.z,Math.atan2(TN[i].x,TN[i].z),1]);colliders.push({type:"circle",x:p.x,z:p.z,r:1.3});}
     instPlace(group,tireMi,tires,{shadow:false});}
+  // ---- PARED DE COLISIÓN CONTINUA en ambos bordes (sella la pista: no te caés a los costados ni atrás) ----
+  {const STEP=5,lat=halfW+7.2;
+   for(let i=0;i<n;i+=STEP){const p=P[i],t=TN[i];const rot=Math.atan2(t.z,t.x); // hw a lo largo de la tangente
+     const hlen=(STEP*ds)*0.6; // se solapan para no dejar huecos
+     for(const sd of[-1,1]){const o=p.clone().addScaledVector(LF[i],sd*lat);
+       colliders.push(obb(o.x,o.z,hlen,1.6,rot));}}}
   // ---- TRIBUNAS repletas de público (planos con textura de multitud) ----
   if(crowdImg)crowdImg.wrapS=THREE.RepeatWrapping;
   function crowdStand(i,side,w){const p=P[i],lf=LF[i];
@@ -2693,7 +2699,7 @@ function update(dt){
     vF+=st.accel*boost*Math.max(0,1-Math.max(vF,0)/topB)*1.5*launch*surfAccel*dt;}
   else if(cmd.down)vF-=(vF>1?42:12)*dt;
   else vF-=vF*.4*dt;
-  if(offroad){vF-=vF*1.5*dt;s.shake=Math.min(.4,s.shake+dt);}
+  if(offroad&&!s.gridHold){vF-=vF*1.5*dt;s.shake=Math.min(.4,s.shake+dt);}
   vF=Math.max(-8,Math.min(vF,topB));
 
   let grip=st.grip*surfGrip;
@@ -3494,15 +3500,26 @@ const RACE=(function(){
   let finishOrder=[],finTimer=null,pendingHost=null;
   const me=()=>NET.ID, myName=()=>(save.name||"Driver").slice(0,14);
   const inList=id=>roster.some(r=>r.id===id);
+  // sala de carrera aislada: número derivado del host (no choca con los índices de mapa 0-8)
+  function raceRoomId(h){let x=0;const s=""+(h||me());for(let i=0;i<s.length;i++)x=(x*31+s.charCodeAt(i))>>>0;return 600+(x%300);}
+  let inviteTimer=null;
   function reset(){host=null;iAmHost=false;roster=[];phase="off";finishOrder=[];pendingHost=null;
     if(finTimer){clearTimeout(finTimer);finTimer=null;}
+    if(inviteTimer){clearInterval(inviteTimer);inviteTimer=null;}
     $("racelobby").classList.remove("on");$("raceinvite").classList.remove("on");}
-  // ---- host abre la sala ----
+  // salir de la sala volviendo al modo libre del GP (misma instancia que los que pasean)
+  function leaveRace(){reset();if(typeof NET!=="undefined"&&sess)NET.setRoom(save.map);}
+  // ---- tocar CARRERA: manda la invitación YA y espera pilotos (sin menú de server) ----
   function open(){
     if(!sess||!sess.freeroam)return;
     iAmHost=true;host=me();roster=[{id:me(),n:myName()}];phase="lobby";
     NET.pubRace({k:"Rinvite",hn:myName()});
     NET.pubRace({k:"Rroster",host:host,hn:myName(),slots:roster});
+    // reenviar la invitación cada 3s mientras se llena la sala (para que la vean los que entren)
+    if(inviteTimer)clearInterval(inviteTimer);
+    inviteTimer=setInterval(()=>{if(phase!=="lobby"){clearInterval(inviteTimer);inviteTimer=null;return;}
+      NET.pubRace({k:"Rinvite",hn:myName()});bcRoster();},3000);
+    toast(T2("Invitación enviada 🏁 — largan al llegar 6","Invite sent 🏁 — starts at 6"),"var(--org)");
     showLobby();}
   function bcRoster(){if(iAmHost)NET.pubRace({k:"Rroster",host:host,hn:myName(),slots:roster});}
   function join(h){
@@ -3511,8 +3528,9 @@ const RACE=(function(){
     $("raceinvite").classList.remove("on");
     if(save.map!==GP){save.map=GP;persist();startSession();} // ir al GP en modo libre
     showLobby();}
-  function start(){ // host larga
+  function start(){ // host larga (al llegar 6 o con "LARGAR YA")
     if(!iAmHost||phase!=="lobby")return;
+    if(inviteTimer){clearInterval(inviteTimer);inviteTimer=null;}
     const slots=roster.slice(0,6);
     NET.pubRace({k:"Rgo",host:host,slots:slots,wait:5});
     beginGrid(slots);}
@@ -3525,21 +3543,25 @@ const RACE=(function(){
     $("exitbtn").style.display="none";$("racebtn").style.display="none";
     countdown(5);}
   function placeOnGrid(slot,total){
-    const R=world.road;if(!R)return;const i0=0,P0=R.P[i0],T0=R.TN[i0],L0=R.LF[i0];
+    const R=world.road;if(!R)return;
     const row=Math.floor(slot/2),col=(slot%2)?1:-1;
-    const back=10+row*8, lat=col*3.2;
-    const bx=P0.x-T0.x*back+L0.x*lat, bz=P0.z-T0.z*back+L0.z*lat;
-    sess.x=bx;sess.z=bz;sess.h=Math.atan2(T0.x,T0.z);sess.vx=0;sess.vz=0;sess.speed=0;
+    const back=12+row*7, lat=col*3.0;
+    // seguir la línea de la pista hacia atrás (nunca en el pasto -> no tiembla la cámara)
+    const bi=((0-Math.round(back/R.ds))%R.n+R.n)%R.n;
+    const P0=R.P[bi],T0=R.TN[bi],L0=R.LF[bi];
+    const bx=P0.x+L0.x*lat, bz=P0.z+L0.z*lat;
+    sess.x=bx;sess.z=bz;sess.h=Math.atan2(T0.x,T0.z);sess.vx=0;sess.vz=0;sess.speed=0;sess.shake=0;sess.roadIdx=bi;
     sess.armed=false;sess.freeroam=false;sess.gridHold=true;sess.over=false;
     sess.lap=0;sess.cp=0;sess.t=0;
     camera.position.set(bx-Math.sin(sess.h)*8,3.4,bz-Math.cos(sess.h)*8);camera.lookAt(bx,1,bz);
-    if(typeof NET!=="undefined")NET.setRoom(GP);}
+    // instancia SEPARADA de carrera: los que corren no se cruzan con los que pasean el mapa
+    if(typeof NET!=="undefined")NET.setRoom(raceRoomId(host));}
   function countdown(sec){
     const el=$("racecount"),b=el.querySelector("b");el.style.display="flex";
     let k=sec;const tick=()=>{
       if(k>0){b.textContent=k;sfx("sfx_count",.8,1);send_later_ok(tick);k--;}
       else{b.textContent="¡GO!";sfx("sfx_ok",1,1.2);
-        sess.gridHold=false;sess.armed=true;sess.go=1.2;sess.lapStart=0;phase="racing";
+        sess.gridHold=false;sess.armed=true;sess.go=1.2;sess.lapStart=0;sess.shake=0;phase="racing";
         loopsStart();setTimeout(()=>{el.style.display="none";},700);}};
     tick();}
   function send_later_ok(fn){setTimeout(fn,1000);}
@@ -3589,7 +3611,9 @@ const RACE=(function(){
       return;}
     if(d.k==="Rjoin"&&iAmHost&&d.host===host){
       if(!inList(d.id)&&roster.length<6)roster.push({id:d.id,n:d.n||"Driver"});
-      bcRoster();return;}
+      bcRoster();if(phase==="lobby")showLobby();
+      if(roster.length>=6)start();   // sala llena -> larga sola
+      return;}
     if(d.k==="Rroster"&&(d.host===host||d.host===pendingHost)){
       host=d.host;roster=d.slots||[];if(phase==="lobby")showLobby();return;}
     if(d.k==="Rgo"&&d.host===host){if((d.slots||[]).some(r=>r.id===me()))beginGrid(d.slots);return;}
@@ -3598,19 +3622,17 @@ const RACE=(function(){
       if(iAmHost)maybePublish();return;}
     if(d.k==="Rres"&&d.host===host){showResultsScreen(d.order||[]);return;}}
   // ---- UI de la sala ----
-  function showLobby(){
-    const box=$("lobslots");box.innerHTML="";
-    $("lobh").textContent=T2("SALA DE CARRERA","RACE LOBBY")+` (${roster.length}/6)`;
-    for(let i=0;i<6;i++){const r=roster[i];const d=document.createElement("div");d.className="lobslot";
-      d.innerHTML=`<b>${i+1}</b> ${r?esc(r.n)+(r.id===me()?' <span class="org">(vos)</span>':""):'<span style="opacity:.4">—</span>'}`;box.appendChild(d);}
+  function showLobby(){ // chip compacto (NO menú de server): sólo estado + LARGAR YA / SALIR
+    const box=$("lobslots");
+    $("lobh").textContent="🏁 "+T2("CARRERA","RACE")+"  "+roster.length+"/6";
+    box.innerHTML='<div class="lobslot" style="justify-content:center">'+
+      (iAmHost?T2("Invitación enviada · esperando pilotos…","Invite sent · waiting for drivers…")
+              :T2("Esperando al anfitrión…","Waiting for host…"))+'</div>';
     const bar=$("lobbtns");bar.innerHTML="";
-    if(iAmHost){bar.appendChild(btn(T2("LARGAR ▸","START ▸"),()=>start()));
-      bar.appendChild(btn(T2("INVITAR","INVITE"),()=>{NET.pubRace({k:"Rinvite",hn:myName()});toast(T2("Invitación enviada","Invite sent"),"var(--org)");}));}
-    else{const w=document.createElement("div");w.className="lobslot";w.style.justifyContent="center";
-      w.textContent=T2("Esperando al anfitrión…","Waiting for host…");bar.appendChild(w);}
-    bar.appendChild(btn(L.exit||"SALIR",()=>{reset();}));
+    if(iAmHost)bar.appendChild(btn(T2("LARGAR YA ▸","START NOW ▸"),()=>start()));
+    bar.appendChild(btn(L.exit||"SALIR",()=>leaveRace()));
     $("racelobby").classList.add("on");}
-  return{open,join,onFinish,onMsg,reset,
+  return{open,join,onFinish,onMsg,reset,leaveRace,
     joinPending:()=>{if(pendingHost)join(pendingHost);},
     dismiss:()=>{pendingHost=null;$("raceinvite").classList.remove("on");},
     get phase(){return phase;},get active(){return phase!=="off";}};
@@ -3619,7 +3641,7 @@ NET.onRace=d=>RACE.onMsg(d);
 $("rijoin").onclick=()=>RACE.joinPending();
 $("rino").onclick=()=>RACE.dismiss();
 $("racebtn").onclick=()=>{try{interact();}catch(e){}RACE.open();};
-$("exitbtn").onclick=()=>{RACE.reset();};
+$("exitbtn").onclick=()=>{RACE.leaveRace();};
 
 /* ---- coches fantasma de los demás jugadores de la sala ---- */
 const ghosts={};
