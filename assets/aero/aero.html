@@ -189,13 +189,19 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
    vidrio, burbujas iridiscentes, peces voladores y 5 misiones.
    Assets generados con Higgsfield · three.js
    ============================================================ */
-const HASH='5cb45e8';   // commit del repo con los assets
+const HASH='f0366b5';   // commit del repo con los assets
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/aero/';
 const A={ sky:BASE+'sky.jpg', grass:BASE+'grass.jpg', logo:BASE+'logo.png', keyart:BASE+'keyart.jpg',
   heroIdle:BASE+'hero-idle.glb', heroRun:BASE+'hero-run.glb', heroJump:BASE+'hero-jump.glb',
   tree:BASE+'tree.glb', bldg:BASE+'building.glb',
   tower1:BASE+'tower1.glb', tower2:BASE+'tower2.glb', tower3:BASE+'tower3.glb',
   dome:BASE+'dome.glb', mall:BASE+'mall.glb', bush:BASE+'bush.glb',
+  // texturas generadas (nada procedural)
+  tGrass:BASE+'t-grass.jpg', tRoad:BASE+'t-road.jpg', tPlaza:BASE+'t-plaza.jpg', tWalk:BASE+'t-walk.jpg',
+  // props y edificios generados
+  office:BASE+'office.glb', spire:BASE+'spire.glb', apt:BASE+'apt.glb', kiosk:BASE+'kiosk.glb',
+  fountain:BASE+'fountain.glb', lamp:BASE+'lamp.glb', bench:BASE+'bench.glb', car:BASE+'car.glb',
+  plat:BASE+'plat.glb', gem:BASE+'gem.glb', fish:BASE+'fish.glb',
   musMenu:BASE+'mus-menu.m4a', musPlay:BASE+'mus-play.m4a',
   sfxPop:BASE+'sfx-pop.mp3', sfxGem:BASE+'sfx-gem.mp3', sfxJump:BASE+'sfx-jump.mp3',
   sfxUi:BASE+'sfx-ui.mp3', sfxWin:BASE+'sfx-win.mp3' };
@@ -350,7 +356,7 @@ function applySky(tex){ scene.background=tex;
     scene.environment=ENVMAP; pm.dispose(); }catch(e){} }
 
 /* ================= terreno ================= */
-const WORLD=420, CITY={x:130,z:0,r:90};   // la ciudad vive al este
+const WORLD=520, CITY={x:140,z:0,r:100};   // la ciudad vive al este
 function hash2(x,z){ let h=Math.sin(x*127.1+z*311.7)*43758.5453; return h-Math.floor(h); }
 function vnoise(x,z){ const xi=Math.floor(x),zi=Math.floor(z),xf=x-xi,zf=z-zi;
   const u=xf*xf*(3-2*xf), v=zf*zf*(3-2*zf);
@@ -370,7 +376,8 @@ const WATER_Y=-1.9;
 const T_SEG=110;
 const terGeo=new THREE.PlaneGeometry(WORLD,WORLD,T_SEG,T_SEG); terGeo.rotateX(-Math.PI/2);
 { const p=terGeo.attributes.position, col=[];
-  const cLow=new THREE.Color(0x4f9c34), cHi=new THREE.Color(0x9be55a), cSand=new THREE.Color(0xd9d2a2);
+  // tintes SUAVES: la textura manda el color, el vértice sólo matiza (nada de verde puro)
+  const cLow=new THREE.Color(0xa9bda1), cHi=new THREE.Color(0xeef3e2), cSand=new THREE.Color(0xefe4c6);
   for(let i=0;i<p.count;i++){ const x=p.getX(i),z=p.getZ(i); const y=terrainH(x,z); p.setY(i,y);
     const c=new THREE.Color(); const t=clamp((y+1.6)/8.4,0,1);
     c.copy(cLow).lerp(cHi,t);
@@ -379,9 +386,16 @@ const terGeo=new THREE.PlaneGeometry(WORLD,WORLD,T_SEG,T_SEG); terGeo.rotateX(-M
   terGeo.setAttribute('color',new THREE.Float32BufferAttribute(col,3)); terGeo.computeVertexNormals(); }
 const terMat=new THREE.MeshLambertMaterial({vertexColors:true});
 const terrain=new THREE.Mesh(terGeo,terMat); terrain.receiveShadow=Q.shadow>0; scene.add(terrain);
-if(ok(A.grass))new THREE.TextureLoader().load(A.grass,t=>{ t.colorSpace=THREE.SRGBColorSpace;
-  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(46,46); t.anisotropy=Q.qual==='high'?4:2;
-  terMat.map=t; terMat.needsUpdate=true; },undefined,()=>{});
+/* ---- texturas GENERADAS (Higgsfield). Cargador común, todo tileado ---- */
+const _tl=new THREE.TextureLoader();
+const TEX={};
+function loadTex(key,url,rep,onDone){ if(!ok(url))return;
+  _tl.load(url,t=>{ t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping;
+    t.repeat.set(rep,rep); t.anisotropy=Q.qual==='high'?8:(Q.qual==='med'?4:2);
+    TEX[key]=t; if(onDone)onDone(t); },undefined,()=>{}); }
+// suelo de pasto: textura nueva, suave (sin el verde puro exagerado)
+loadTex('grass',ok(A.tGrass)?A.tGrass:A.grass,64,t=>{ terMat.map=t;
+  terMat.color.set(0xffffff); terMat.vertexColors=true; terMat.needsUpdate=true; });
 /* ---- agua ---- */
 const watMat=new THREE.MeshStandardMaterial({color:0x2fa8dd,transparent:true,opacity:.72,roughness:.08,metalness:.35,
   envMap:null,side:THREE.DoubleSide});
@@ -391,7 +405,8 @@ water.rotation.x=-Math.PI/2; water.position.y=WATER_Y; scene.add(water);
 /* ================= césped animado ================= */
 const bladeGeo=new THREE.PlaneGeometry(.085,.52,1,3); bladeGeo.translate(0,.26,0);
 // ¡sin vertexColors! el color viene por instancia (instanceColor); con vertexColors la brizna sale negra
-const grassMat=new THREE.MeshLambertMaterial({color:0xffffff,side:THREE.DoubleSide});
+const grassMat=new THREE.MeshLambertMaterial({color:0xffffff,side:THREE.DoubleSide,
+  emissive:0x25340f,emissiveIntensity:1});
 grassMat.onBeforeCompile=sh=>{
   sh.uniforms.uT={value:0}; grassMat.userData.sh=sh;
   sh.vertexShader='uniform float uT;\n'+sh.vertexShader.replace('#include <begin_vertex>',
@@ -405,7 +420,7 @@ grassMat.onBeforeCompile=sh=>{
 const GN=Q.grass, grass=new THREE.InstancedMesh(bladeGeo,grassMat,GN);
 grass.instanceMatrix.setUsage(THREE.DynamicDrawUsage); grass.frustumCulled=false;
 { const c=new Float32Array(GN*3), col=new THREE.Color();
-  for(let i=0;i<GN;i++){ col.setHSL(.26+Math.random()*.07,.62+Math.random()*.2,.34+Math.random()*.22);
+  for(let i=0;i<GN;i++){ col.setHSL(.205+Math.random()*.05,.54+Math.random()*.16,.50+Math.random()*.15);
     c[i*3]=col.r; c[i*3+1]=col.g; c[i*3+2]=col.b; }
   grass.instanceColor=new THREE.InstancedBufferAttribute(c,3); }
 scene.add(grass);
@@ -426,12 +441,12 @@ function regrass(px,pz){
   grass.instanceMatrix.needsUpdate=true; regrowFlowers(px,pz); }
 /* ---- FLORES: un solo draw call, siguen al jugador como el césped ---- */
 const FN=Q.flow;
-const flowGeo=new THREE.SphereGeometry(.075,6,4);
+const flowGeo=new THREE.SphereGeometry(.055,6,4);
 const flowMat=new THREE.MeshLambertMaterial({color:0xffffff});
 const flowers=new THREE.InstancedMesh(flowGeo,flowMat,FN);
 flowers.instanceMatrix.setUsage(THREE.DynamicDrawUsage); flowers.frustumCulled=false; scene.add(flowers);
 { const c=new Float32Array(FN*3), col=new THREE.Color();
-  const PAL=[0xffffff,0xffe36e,0xff8ac4,0xa9e7ff,0xffb45e,0xd7a8ff];
+  const PAL=[0xffffff,0xfff2a8,0xffc9e0,0xd8f0ff,0xfff0d0,0xf0e0ff];
   for(let i=0;i<FN;i++){ col.set(PAL[(hash2(i,101)*PAL.length)|0]);
     c[i*3]=col.r; c[i*3+1]=col.g; c[i*3+2]=col.b; }
   flowers.instanceColor=new THREE.InstancedBufferAttribute(c,3); }
@@ -466,7 +481,7 @@ function procTree(){ const g=new THREE.Group();
 const TREE_SPOTS=[], treeGroup=new THREE.Group(); scene.add(treeGroup);
 (function placeTrees(){ let n=0, i=0;
   while(n<Q.trees&&i<4000){ i++;
-    const a=hash2(i,17)*6.28, r=26+hash2(i,19)*172;
+    const a=hash2(i,17)*6.28, r=26+hash2(i,19)*212;
     const x=Math.cos(a)*r, z=Math.sin(a)*r; const y=terrainH(x,z);
     if(y<WATER_Y+.7)continue; if(Math.hypot(x-CITY.x,z-CITY.z)<CITY.r*.85)continue;
     if(Math.hypot(x,z)<16)continue;
@@ -487,33 +502,18 @@ const glassMat=new THREE.MeshStandardMaterial({color:0x5cc8ee,roughness:.03,meta
   transparent:true,opacity:.78,envMapIntensity:1.5});
 const whiteMat=new THREE.MeshStandardMaterial({color:0xf2f9fd,roughness:.22,metalness:.14,envMapIntensity:.9});
 // piso de la plaza con paneles Y2K
-function plazaTex(){ const c=document.createElement('canvas'); c.width=c.height=512; const g=c.getContext('2d');
-  g.fillStyle='#e8f4fa'; g.fillRect(0,0,512,512);
-  g.strokeStyle='rgba(120,200,235,.55)'; g.lineWidth=3;
-  for(let i=0;i<=8;i++){ const p=i*64; g.beginPath(); g.moveTo(p,0); g.lineTo(p,512); g.stroke();
-    g.beginPath(); g.moveTo(0,p); g.lineTo(512,p); g.stroke(); }
-  g.strokeStyle='rgba(150,230,120,.5)'; g.lineWidth=6;
-  g.beginPath(); g.arc(256,256,150,0,6.3); g.stroke();
-  g.fillStyle='rgba(255,255,255,.6)';
-  for(let i=0;i<8;i++)g.fillRect(64*i+18,18,28,28);
-  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
-  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(9,9); return t; }
-const roadMat=new THREE.MeshStandardMaterial({map:plazaTex(),color:0xc8e2f0,roughness:.34,metalness:.18,envMapIntensity:.7});
-function procBuilding(w,h,d){ const g=new THREE.Group();
-  const core=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),whiteMat); core.position.y=h/2; g.add(core);
-  const gl=new THREE.Mesh(new THREE.BoxGeometry(w*.82,h*.86,d*1.006),glassMat); gl.position.y=h*.5; g.add(gl);
-  const gl2=new THREE.Mesh(new THREE.BoxGeometry(w*1.006,h*.86,d*.82),glassMat); gl2.position.y=h*.5; g.add(gl2);
-  const cap=new THREE.Mesh(new THREE.CylinderGeometry(Math.min(w,d)*.36,Math.min(w,d)*.5,1.1,14),whiteMat);
-  cap.position.y=h+.55; g.add(cap);
-  // jardineras Frutiger Aero
-  const gm=new THREE.MeshLambertMaterial({color:0x62c93c});
-  for(let i=1;i<=Math.max(1,Math.floor(h/9));i++){ const y=i*(h/(Math.floor(h/9)+1));
-    const p=new THREE.Mesh(new THREE.BoxGeometry(w*1.1,.34,d*1.1),whiteMat); p.position.y=y; g.add(p);
-    const v=new THREE.Mesh(new THREE.SphereGeometry(Math.min(w,d)*.22,7,5),gm);
-    v.position.set(w*.5,y+.3,d*.34); v.scale.y=.6; g.add(v); }
-  return g; }
+/* materiales del suelo urbano: TEXTURAS GENERADAS (Higgsfield), nada de canvas */
+const roadMat =new THREE.MeshStandardMaterial({color:0xc7d3db,roughness:.62,metalness:.05});
+const plazaMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.24,metalness:.18,envMapIntensity:.6});
+const walkMat =new THREE.MeshStandardMaterial({color:0xe8e6df,roughness:.7,metalness:.03});
+const lawnMat =new THREE.MeshLambertMaterial({color:0xffffff});
+loadTex('road', A.tRoad, 30,t=>{ roadMat.map=t;  roadMat.needsUpdate=true; });
+loadTex('plaza',A.tPlaza,34,t=>{ plazaMat.map=t; plazaMat.needsUpdate=true; });
+loadTex('walk', A.tWalk, 26,t=>{ walkMat.map=t;  walkMat.needsUpdate=true; });
+loadTex('lawn', ok(A.tGrass)?A.tGrass:A.grass, 5,t=>{ lawnMat.map=t; lawnMat.needsUpdate=true; });
 /* ---- modelos 3D de la ciudad (Higgsfield) ---- */
-const BT={ tower1:null, tower2:null, tower3:null, dome:null, mall:null, eco:null };
+const BT={ tower1:null,tower2:null,tower3:null,dome:null,mall:null,eco:null,
+  office:null,spire:null,apt:null,kiosk:null,fountain:null,lamp:null,bench:null,car:null };
 const GROUND_Y=0.30;   // el piso de la ciudad va POR ENCIMA del terreno
 // coloca un modelo 3D de edificio ajustado por ALTURA, devolviendo su huella real
 function putBldg(tpl,x,z,h,rotY){
@@ -527,106 +527,127 @@ function putBldg(tpl,x,z,h,rotY){
   cityGroup.add(m);
   BOXES.push({x,z,hw:Math.max(s2.x*.40,1.5),hd:Math.max(s2.z*.40,1.5)});
   return {m,w:s2.x,d:s2.z}; }
-function streetLamp(x,z){ const g=new THREE.Group();
-  const lm=new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xa8ecff,emissiveIntensity:1.1,roughness:.2});
-  const p=new THREE.Mesh(new THREE.CylinderGeometry(.11,.15,5.2,7),whiteMat); p.position.y=2.6; g.add(p);
-  const b=new THREE.Mesh(new THREE.SphereGeometry(.46,10,8),lm); b.position.y=5.4; g.add(b);
-  g.position.set(x,GROUND_Y,z); cityGroup.add(g); }
-function planter(x,z,useBush){ const g=new THREE.Group();
-  const pot=new THREE.Mesh(new THREE.CylinderGeometry(1.45,1.65,.62,14),whiteMat); pot.position.y=.31; g.add(pot);
-  const src=useBush&&BT.eco?BT.eco:(treeTpl||null);
-  if(src){ const t=src.clone(true); fit(t,useBush?1.9:4.9); t.position.y=.6; t.rotation.y=hash2(x,z)*6.28; g.add(t); }
-  else { const t=procTree(); fit(t,4.6); t.position.y=.6; g.add(t); }
-  if(Q.shadow>0)g.traverse(o=>{ if(o.isMesh)o.castShadow=true; });
-  g.position.set(x,GROUND_Y,z); cityGroup.add(g); }
+/* ---- props urbanos: TODOS son modelos 3D generados (con clon liviano) ---- */
+function putProp(tpl,x,z,h,rotY,collide){
+  if(!tpl)return null;
+  const m=tpl.clone(true);
+  const bb=new THREE.Box3().setFromObject(m), sz=bb.getSize(new THREE.Vector3());
+  m.scale.setScalar(h/Math.max(sz.y,.001));
+  m.rotation.y=rotY||0;
+  const bb2=new THREE.Box3().setFromObject(m), s2=bb2.getSize(new THREE.Vector3());
+  m.position.set(x,GROUND_Y-bb2.min.y,z);
+  if(Q.shadow>0)m.traverse(o=>{ if(o.isMesh)o.castShadow=true; });
+  cityGroup.add(m);
+  if(collide)BOXES.push({x,z,hw:Math.max(s2.x*.45,.8),hd:Math.max(s2.z*.45,.8)});
+  return m; }
 function buildCity(){
   cityGroup.clear(); BOXES.length=0;
-  const BLOCK=34, ROAD=11;   // manzana + ancho de avenida
-  // ---- suelo urbano ----
-  const plaza=new THREE.Mesh(new THREE.CircleGeometry(CITY.r*.99,48),roadMat);
+  const BLOCK=34, ROAD=11, NB=(Q.qual==='low'?2:3);    // manzana, avenida y radio de la grilla (7x7 manzanas)
+  const L=BLOCK*(NB*2+1);
+  // ---- suelo: PLAZA con textura generada ----
+  const plaza=new THREE.Mesh(new THREE.PlaneGeometry(L,L),plazaMat);
   plaza.rotation.x=-Math.PI/2; plaza.position.set(CITY.x,GROUND_Y,CITY.z);
   plaza.receiveShadow=Q.shadow>0; cityGroup.add(plaza);
-  // ---- avenidas en cuadrícula (asfalto claro) con líneas ----
-  const laneMat=new THREE.MeshStandardMaterial({color:0x9fbccb,roughness:.55,metalness:.06});
-  const lineMat=new THREE.MeshBasicMaterial({color:0xf2fbff});
-  const L=CITY.r*1.98;
-  // ¡las avenidas van ENTRE las manzanas (offset de media manzana), no encima de los edificios!
-  for(let i=-3;i<=2;i++){ const c=(i+.5)*BLOCK;
+  // ---- avenidas con textura de asfalto generada, ENTRE las manzanas ----
+  const dashes=[];
+  for(let i=-NB-1;i<=NB;i++){ const c=(i+.5)*BLOCK;
     for(const horiz of [true,false]){
-      const st=new THREE.Mesh(horiz?new THREE.PlaneGeometry(L,ROAD):new THREE.PlaneGeometry(ROAD,L),laneMat);
+      const st=new THREE.Mesh(horiz?new THREE.PlaneGeometry(L,ROAD):new THREE.PlaneGeometry(ROAD,L),roadMat);
       st.rotation.x=-Math.PI/2;
       st.position.set(CITY.x+(horiz?0:c),GROUND_Y+.02,CITY.z+(horiz?c:0)); cityGroup.add(st);
-      // línea central discontinua
-      for(let k=-8;k<=8;k++){ const d=new THREE.Mesh(horiz?new THREE.PlaneGeometry(5,.42):new THREE.PlaneGeometry(.42,5),lineMat);
-        d.rotation.x=-Math.PI/2;
-        d.position.set(CITY.x+(horiz?k*10:c),GROUND_Y+.04,CITY.z+(horiz?c:k*10)); cityGroup.add(d); } } }
-  // ---- manzanas: cada una recibe un modelo 3D de edificio ----
-  const towers=[BT.tower1,BT.tower2,BT.tower3].filter(Boolean);
+      for(let k=-11;k<=11;k++)dashes.push([CITY.x+(horiz?k*10:c),CITY.z+(horiz?c:k*10),horiz]); } }
+  // todas las líneas discontinuas en UN solo draw call
+  { const dg=new THREE.PlaneGeometry(5,.4); dg.rotateX(-Math.PI/2);
+    const dm=new THREE.MeshBasicMaterial({color:0xffffff});
+    const inst=new THREE.InstancedMesh(dg,dm,dashes.length); inst.frustumCulled=false;
+    const mm=new THREE.Matrix4(), qq=new THREE.Quaternion(), vv=new THREE.Vector3(), ss=new THREE.Vector3(1,1,1);
+    const up=new THREE.Vector3(0,1,0);
+    dashes.forEach(([x,z,horiz],i)=>{ qq.setFromAxisAngle(up,horiz?0:Math.PI/2);
+      vv.set(x,GROUND_Y+.045,z); mm.compose(vv,qq,ss); inst.setMatrixAt(i,mm); });
+    cityGroup.add(inst); }
+  // ---- manzanas ----
+  const towers=[BT.tower1,BT.tower2,BT.tower3,BT.spire].filter(Boolean);
+  const lows=[BT.mall,BT.office,BT.apt,BT.dome].filter(Boolean);
   const cells=[];
-  for(let gx=-2;gx<=2;gx++)for(let gz=-2;gz<=2;gz++){
+  for(let gx=-NB;gx<=NB;gx++)for(let gz=-NB;gz<=NB;gz++){
     if(gx===0&&gz===0)continue;                       // el centro es la plaza de la fuente
     const x=CITY.x+gx*BLOCK, z=CITY.z+gz*BLOCK;
-    if(Math.hypot(x-CITY.x,z-CITY.z)>CITY.r*.92)continue;
     cells.push({gx,gz,x,z,d:Math.hypot(gx,gz)}); }
+  const IN=BLOCK-ROAD-2;
   cells.forEach((c,i)=>{
-    const rot=Math.round(hash2(i,47)*4)*Math.PI/2;
-    const r=hash2(i,71);
-    // las torres altas van al centro, lo bajo a las orillas: skyline creíble
-    const central=c.d<1.6;
-    if(towers.length&&(central||r<.62)){
+    const rot=Math.round(hash2(i,47)*4)*Math.PI/2, r=hash2(i,71);
+    // vereda de la manzana (textura generada) + césped interior (textura de pasto)
+    const walk=new THREE.Mesh(new THREE.PlaneGeometry(IN+3,IN+3),walkMat);
+    walk.rotation.x=-Math.PI/2; walk.position.set(c.x,GROUND_Y+.012,c.z); cityGroup.add(walk);
+    const lawn=new THREE.Mesh(new THREE.PlaneGeometry(IN-2.5,IN-2.5),lawnMat);
+    lawn.rotation.x=-Math.PI/2; lawn.position.set(c.x,GROUND_Y+.03,c.z); cityGroup.add(lawn);
+    // el skyline: torres altas al centro, edificios bajos a las orillas
+    const central=c.d<1.7, mid=c.d<2.7;
+    if(towers.length&&(central||(mid&&r<.66))){
       const tpl=towers[(hash2(i,73)*towers.length)|0];
-      const h=(central?34:22)+hash2(i,79)*(central?22:14);
+      const h=(central?36:24)+hash2(i,79)*(central?24:14);
       const b=putBldg(tpl,c.x,c.z,h,rot);
-      // pabellón bajo al lado de la torre, si hay lugar
-      if(BT.mall&&hash2(i,83)<.5)putBldg(BT.mall,c.x+(b.w*.5+7)*(hash2(i,89)<.5?1:-1),c.z+4,7.5,rot);
-    } else if(BT.dome&&r<.78){ putBldg(BT.dome,c.x,c.z,8,rot); }
-    else if(BT.mall){ putBldg(BT.mall,c.x,c.z,9,rot); }
-    else { const w=10+hash2(i,37)*7, d=10+hash2(i,41)*7, h=20+hash2(i,43)*30;
-      const m=procBuilding(w,h,d); m.position.set(c.x,GROUND_Y,c.z); m.rotation.y=rot;
-      if(Q.shadow>0)m.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; } });
-      cityGroup.add(m); BOXES.push({x:c.x,z:c.z,hw:w*.5,hd:d*.5}); }
-    // veredas verdes de la manzana
-    const lawn=new THREE.Mesh(new THREE.PlaneGeometry(BLOCK-ROAD-2,BLOCK-ROAD-2),
-      new THREE.MeshLambertMaterial({color:0x6fc743}));
-    lawn.rotation.x=-Math.PI/2; lawn.position.set(c.x,GROUND_Y+.015,c.z); cityGroup.add(lawn); });
-  // ---- mobiliario urbano sobre las veredas, junto a cada esquina ----
-  for(let gx=-2;gx<=2;gx++)for(let gz=-2;gz<=2;gz++){
-    const x=CITY.x+(gx+.5)*BLOCK-ROAD*.85, z=CITY.z+(gz+.5)*BLOCK-ROAD*.85;
-    if(Math.hypot(x-CITY.x,z-CITY.z)>CITY.r*.9)continue;
-    let blocked=false; for(const b of BOXES)if(Math.abs(x-b.x)<b.hw+2.6&&Math.abs(z-b.z)<b.hd+2.6)blocked=true;
+      if(lows.length&&hash2(i,83)<.45)
+        putBldg(lows[(hash2(i,91)*lows.length)|0],c.x+(b.w*.5+8)*(hash2(i,89)<.5?1:-1),c.z+5,8,rot);
+    } else if(lows.length){
+      const tpl=lows[(hash2(i,97)*lows.length)|0];
+      putBldg(tpl,c.x,c.z,(tpl===BT.apt?15:(tpl===BT.office?13:9))+hash2(i,101)*4,rot); }
+    // arbolado y arbustos de la manzana (modelos generados)
+    for(let k=0;k<2;k++){ const ox=(hash2(i*7+k,103)-.5)*IN*.8, oz=(hash2(i*7+k,107)-.5)*IN*.8;
+      const px=c.x+ox, pz=c.z+oz;
+      let blocked=false; for(const b of BOXES)if(Math.abs(px-b.x)<b.hw+2&&Math.abs(pz-b.z)<b.hd+2)blocked=true;
+      if(blocked)continue;
+      if(hash2(i*7+k,109)<.5)putProp(treeTpl,px,pz,5+hash2(i+k,113)*1.8,hash2(i+k,127)*6.28,false);
+      else putProp(BT.eco,px,pz,1.7+hash2(i+k,131)*.7,hash2(i+k,137)*6.28,false); } });
+  // ---- mobiliario urbano en las esquinas (farolas, bancos, kioscos: modelos generados) ----
+  let corner=0;
+  for(let gx=-NB;gx<=NB;gx++)for(let gz=-NB;gz<=NB;gz++){
+    const x=CITY.x+(gx+.5)*BLOCK-ROAD*.82, z=CITY.z+(gz+.5)*BLOCK-ROAD*.82;
+    let blocked=false; for(const b of BOXES)if(Math.abs(x-b.x)<b.hw+2.4&&Math.abs(z-b.z)<b.hd+2.4)blocked=true;
     if(blocked)continue;
-    streetLamp(x,z);
-    planter(x+5.5,z,(gx+gz)%2===0); }
-  // fuente central
-  const fo=new THREE.Group();
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(6,.7,8,28),whiteMat); ring.rotation.x=Math.PI/2; ring.position.y=.6; fo.add(ring);
-  const wa=new THREE.Mesh(new THREE.CircleGeometry(6,30),new THREE.MeshStandardMaterial({color:0x49c8f0,roughness:.05,metalness:.4,transparent:true,opacity:.8}));
-  wa.rotation.x=-Math.PI/2; wa.position.y=.75; fo.add(wa);
-  const jet=new THREE.Mesh(new THREE.CylinderGeometry(.35,.9,7,12),new THREE.MeshStandardMaterial({color:0xd8f6ff,transparent:true,opacity:.5,roughness:0,metalness:.3}));
-  jet.position.y=4; fo.add(jet);
-  fo.position.set(CITY.x,0,CITY.z); cityGroup.add(fo);
-  BOXES.push({x:CITY.x,z:CITY.z,hw:6.4,hd:6.4}); }
+    corner++;
+    putProp(BT.lamp,x,z,5.6,hash2(gx,gz)*6.28,false);
+    if(corner%3===0)putProp(BT.bench,x+4.5,z,1.15,(hash2(gx,gz)<.5?0:Math.PI/2),false);
+    else if(corner%5===0)putProp(BT.kiosk,x+5,z+2,3.2,hash2(gz,gx)*6.28,true); }
+  // ---- autos estacionados sobre las avenidas (modelo generado) ----
+  if(BT.car)for(let k=0;k<14;k++){
+    const horiz=hash2(k,139)<.5, i2=((hash2(k,149)*(NB*2+1))|0)-NB;
+    const c=(i2+.5)*BLOCK, t=(hash2(k,151)-.5)*L*.85;
+    const x=CITY.x+(horiz?t:c+ROAD*.28), z=CITY.z+(horiz?c+ROAD*.28:t);
+    putProp(BT.car,x,z,1.55,horiz?Math.PI/2:0,true); }
+  // ---- fuente central: modelo generado ----
+  if(BT.fountain){ putBldg(BT.fountain,CITY.x,CITY.z,4.6,0); } }
 /* carga de los modelos 3D de la ciudad; cada uno que llega REconstruye la ciudad (con debounce) */
 let cityT=null;
 const cityLater=()=>{ clearTimeout(cityT); cityT=setTimeout(()=>buildCity(),120); };
-[['tower1',A.tower1],['tower2',A.tower2],['tower3',A.tower3],['dome',A.dome],['mall',A.mall],['eco',A.bush]]
-  .forEach(([k,u])=>{ if(ok(u))_gl.load(u,g=>{ BT[k]=g.scene; cityLater(); },undefined,()=>{}); });
+const fillLater=()=>{ if(typeof fillPlats==='function')fillPlats();
+  if(typeof fillFish==='function')fillFish(); if(typeof fillGems==='function')fillGems(); };
+[['tower1',A.tower1],['tower2',A.tower2],['tower3',A.tower3],['dome',A.dome],['mall',A.mall],['eco',A.bush],
+ ['office',A.office],['spire',A.spire],['apt',A.apt],['kiosk',A.kiosk],['fountain',A.fountain],
+ ['lamp',A.lamp],['bench',A.bench],['car',A.car],['plat',A.plat],['gem',A.gem],['fish',A.fish]]
+  .forEach(([k,u])=>{ if(ok(u))_gl.load(u,g=>{ BT[k]=g.scene;
+    if(k==='plat'||k==='gem'||k==='fish')fillLater(); else cityLater(); },undefined,()=>{}); });
 buildCity();
 
 /* ================= plataformas flotantes (misión 4) ================= */
 const platGroup=new THREE.Group(); scene.add(platGroup);
 const PLATS=[];
-(function(){ const px=CITY.x-CITY.r-26, pz=CITY.z+34;
+(function(){ const px=CITY.x-CITY.r-30, pz=CITY.z+40;
   for(let i=0;i<9;i++){ const a=i*1.05, r=11+i*1.4;
     const x=px+Math.cos(a)*r, z=pz+Math.sin(a)*r, y=3.4+i*4.1;
-    const m=new THREE.Mesh(new THREE.CylinderGeometry(3.4,3.0,.7,18),
-      new THREE.MeshStandardMaterial({color:0xdff6ff,roughness:.05,metalness:.4,transparent:true,opacity:.78}));
-    m.position.set(x,y,z); if(Q.shadow>0)m.receiveShadow=true; platGroup.add(m);
-    const halo=new THREE.Mesh(new THREE.TorusGeometry(3.3,.12,6,22),
-      new THREE.MeshBasicMaterial({color:0x9fefff,transparent:true,opacity:.75}));
-    halo.rotation.x=Math.PI/2; halo.position.set(x,y+.42,z); platGroup.add(halo);
-    PLATS.push({x,y,z,r:3.5,ph:i*.7,base:y,m,halo}); } })();
+    const holder=new THREE.Group(); holder.position.set(x,y,z); platGroup.add(holder);
+    PLATS.push({x,y,z,r:3.5,ph:i*.7,base:y,g:holder,filled:false}); } })();
 const PLAT_TOP=PLATS[PLATS.length-1];
+// el disco es un MODELO 3D generado; hasta que llega, la plataforma está vacía
+function fillPlats(){ if(!BT.plat)return;
+  for(const p of PLATS){ if(p.filled)continue;
+    const m=BT.plat.clone(true);
+    const bb=new THREE.Box3().setFromObject(m), sz=bb.getSize(new THREE.Vector3());
+    m.scale.setScalar(7.4/Math.max(sz.x,sz.z,.001));
+    const bb2=new THREE.Box3().setFromObject(m);
+    m.position.y=-bb2.max.y;   // la cara superior queda en y=0 del holder
+    if(Q.shadow>0)m.traverse(o=>{ if(o.isMesh)o.receiveShadow=true; });
+    p.g.add(m); p.filled=true; } }
 
 /* ================= burbujas iridiscentes ================= */
 const BN=Q.bub;
@@ -656,45 +677,49 @@ function burst(x,y,z,n){ let c=0; for(const p of PARTS){ if(p.t>0)continue;
   if(++c>=n)break; } }
 
 /* ================= peces voladores (sello Frutiger Aero) ================= */
-function procFish(col){ const g=new THREE.Group();
-  const m=new THREE.MeshStandardMaterial({color:col,roughness:.25,metalness:.15});
-  const b=new THREE.Mesh(new THREE.SphereGeometry(.5,12,9),m); b.scale.set(1.7,.85,.7); g.add(b);
-  const t=new THREE.Mesh(new THREE.ConeGeometry(.34,.7,7),m); t.rotation.z=Math.PI/2; t.position.x=-1.05; g.add(t);
-  const f=new THREE.Mesh(new THREE.ConeGeometry(.24,.5,6),m); f.rotation.x=Math.PI/2; f.position.set(.1,.42,0); g.add(f);
-  const e=new THREE.Mesh(new THREE.SphereGeometry(.09,7,6),new THREE.MeshBasicMaterial({color:0x14202a}));
-  e.position.set(.62,.16,.24); g.add(e);
-  const e2=e.clone(); e2.position.z=-.24; g.add(e2);
-  return g; }
-const FISH=[]; const fishCols=[0xffd23c,0xff8a3a,0x49d8f0,0xff5f9e,0x8fe64a];
-for(let i=0;i<Q.fish;i++){ const f=procFish(fishCols[i%fishCols.length]);
-  const s=1+Math.random()*.8; f.scale.setScalar(s); scene.add(f);
-  FISH.push({o:f,cx:(Math.random()-.5)*180,cz:(Math.random()-.5)*180,r:16+Math.random()*40,
-    y:9+Math.random()*16,sp:.16+Math.random()*.24,ph:Math.random()*6.28}); }
+const FISH=[];
+(function(){ for(let i=0;i<Q.fish;i++){
+  const holder=new THREE.Group(); scene.add(holder);
+  FISH.push({o:holder,filled:false,cx:(Math.random()-.5)*210,cz:(Math.random()-.5)*210,
+    r:16+Math.random()*44,y:9+Math.random()*17,sp:.16+Math.random()*.24,ph:Math.random()*6.28,
+    s:1+Math.random()*.9}); } })();
+function fillFish(){ if(!BT.fish)return;
+  for(const f of FISH){ if(f.filled)continue;
+    const m=BT.fish.clone(true);
+    const bb=new THREE.Box3().setFromObject(m), sz=bb.getSize(new THREE.Vector3());
+    m.scale.setScalar(f.s*1.7/Math.max(sz.x,sz.y,sz.z,.001));
+    const c=new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3());
+    m.position.sub(c);
+    f.o.add(m); f.filled=true; } }
 
 /* ================= coleccionables ================= */
-const cryGeo=new THREE.OctahedronGeometry(.62,0);
-const cryMat=new THREE.MeshStandardMaterial({color:0x7ef0ff,roughness:.03,metalness:.35,
-  emissive:0x1f9fd0,emissiveIntensity:.75,transparent:true,opacity:.92});
 const CRY=[]; const cryGroup=new THREE.Group(); scene.add(cryGroup);
 (function(){ let i=0,n=0;
-  while(n<34&&i<3000){ i++;
-    const a=hash2(i,53)*6.28, r=12+hash2(i,59)*128;
+  while(n<40&&i<4000){ i++;
+    const a=hash2(i,53)*6.28, r=12+hash2(i,59)*200;
     const x=Math.cos(a)*r, z=Math.sin(a)*r, y=terrainH(x,z);
     if(y<WATER_Y+.6)continue; if(Math.hypot(x-CITY.x,z-CITY.z)<CITY.r*.8)continue;
-    const m=new THREE.Mesh(cryGeo,cryMat); m.position.set(x,y+1.15,z); cryGroup.add(m);
-    CRY.push({m,x,y:y+1.15,z,on:true,ph:hash2(i,61)*6.28}); n++; } })();
-// 4 esferas de música (misión 5)
-const ORBS=[]; const orbMat=new THREE.MeshStandardMaterial({color:0xffe9a8,roughness:.05,metalness:.5,
-  emissive:0xffb43a,emissiveIntensity:1.15});
+    const holder=new THREE.Group(); holder.position.set(x,y+1.15,z); cryGroup.add(holder);
+    CRY.push({m:holder,x,y:y+1.15,z,on:true,ph:hash2(i,61)*6.28,filled:false}); n++; } })();
+// 4 esferas de música (misión 5): el mismo cristal generado, en dorado y más grande
+const ORBS=[];
 [[-92,-64],[86,-96],[-104,72],[46,104]].forEach(([x,z],i)=>{
   const y=Math.max(terrainH(x,z),WATER_Y+1)+2.1;
-  const g=new THREE.Group();
-  const m=new THREE.Mesh(new THREE.IcosahedronGeometry(1.15,1),orbMat); g.add(m);
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.9,.09,7,26),
-    new THREE.MeshBasicMaterial({color:0xfff0c0,transparent:true,opacity:.85}));
-  ring.rotation.x=1.1; g.add(ring);
-  g.position.set(x,y,z); scene.add(g);
-  ORBS.push({g,m,ring,x,y,z,on:true,i}); });
+  const g=new THREE.Group(); g.position.set(x,y,z); scene.add(g);
+  ORBS.push({g,x,y,z,on:true,i,filled:false}); });
+// el cristal es un MODELO 3D generado (se rellena al cargar)
+function fillGems(){ if(!BT.gem)return;
+  const prep=(scale,gold)=>{ const m=BT.gem.clone(true);
+    const bb=new THREE.Box3().setFromObject(m), sz=bb.getSize(new THREE.Vector3());
+    m.scale.setScalar(scale/Math.max(sz.x,sz.y,sz.z,.001));
+    const c=new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3()); m.position.sub(c);
+    if(gold)m.traverse(o=>{ if(o.isMesh&&o.material){ o.material=o.material.clone();
+      o.material.color=new THREE.Color(0xffd98a); o.material.emissive=new THREE.Color(0xffa83a);
+      o.material.emissiveIntensity=.9; } });
+    return m; };
+  for(const c of CRY){ if(c.filled)continue; c.m.add(prep(1.5,false)); c.filled=true; }
+  for(const o of ORBS){ if(o.filled)continue; o.g.add(prep(2.8,true)); o.filled=true; } }
+
 // marcadores de misión (ciudad)
 const MARK=[]; const markGroup=new THREE.Group(); scene.add(markGroup);
 function mkMarker(x,z,y0){ const g=new THREE.Group();
@@ -971,7 +996,7 @@ function worldStep(dt){
   for(const f of FISH){ f.ph+=dt*f.sp;
     const x=f.cx+Math.cos(f.ph)*f.r, z=f.cz+Math.sin(f.ph)*f.r;
     const y=f.y+Math.sin(f.ph*2.3)*1.5;
-    f.o.position.set(x,y,z); f.o.rotation.y=-f.ph+Math.PI/2;
+    f.o.position.set(x,y,z); f.o.rotation.y=-f.ph;
     f.o.rotation.z=Math.sin(f.ph*3)*.14; }
   // cristales
   for(const c of CRY){ if(!c.on)continue;
@@ -984,15 +1009,14 @@ function worldStep(dt){
       $('pCry').querySelector('span').textContent=RUN.cry; misSync(); misCheck(); } }
   // orbes de música
   for(const o of ORBS){ if(!o.on)continue;
-    o.g.rotation.y+=dt*.8; o.ring.rotation.z+=dt*1.4;
+    o.g.rotation.y+=dt*.8;
     o.g.position.y=o.y+Math.sin(TT*1.4+o.i)*.3;
     if(APP!=='play')continue;
     if(Math.hypot(o.x-HERO.x,o.z-HERO.z)<2.4&&Math.abs(o.g.position.y-(HERO.y+1))<3){
       o.on=false; o.g.visible=false; RUN.orbs++; S.gem(); S.win();
       burst(o.x,o.g.position.y,o.z,14); toast('🎵 '+RUN.orbs+'/4'); misSync(); misCheck(); } }
   // plataformas flotan
-  for(const p of PLATS){ const y=p.base+Math.sin(TT*.9+p.ph)*.35;
-    p.m.position.y=y; p.halo.position.y=y+.42; p.y=y; p.halo.rotation.z+=dt*.6; }
+  for(const p of PLATS){ const y=p.base+Math.sin(TT*.9+p.ph)*.35; p.g.position.y=y; p.y=y; }
   // marcadores
   let near=false;
   for(const m of MARK){ if(!m.g.visible)continue; m.ring.rotation.z+=dt*1.1;
@@ -1020,8 +1044,7 @@ function cullByDistance(){
   for(const o of cityGroup.children){ const dx=o.position.x-HERO.x, dz=o.position.z-HERO.z;
     o.visible=(dx*dx+dz*dz)<(FAR2*1.6); }
   for(const f of FISH)f.o.visible=(f.o.position.distanceToSquared(camera.position)<FAR2);
-  for(const p of PLATS){ const v=(p.m.position.distanceToSquared(camera.position)<FAR2);
-    p.m.visible=v; p.halo.visible=v; }
+  for(const p of PLATS){ p.g.visible=(p.g.position.distanceToSquared(camera.position)<FAR2); }
   for(const c of CRY){ if(!c.on)continue; const dx=c.x-HERO.x, dz=c.z-HERO.z;
     c.m.visible=(dx*dx+dz*dz)<FAR2; } }
 function frame(){ requestAnimationFrame(frame);
@@ -1033,7 +1056,7 @@ function frame(){ requestAnimationFrame(frame);
     camera.lookAt(0,3,0);
     if(grassMat.userData.sh)grassMat.userData.sh.uniforms.uT.value=TT;
     for(const f of FISH){ f.ph+=dt*f.sp; f.o.position.set(f.cx+Math.cos(f.ph)*f.r,f.y+Math.sin(f.ph*2.3)*1.5,f.cz+Math.sin(f.ph)*f.r);
-      f.o.rotation.y=-f.ph+Math.PI/2; }
+      f.o.rotation.y=-f.ph; }
     for(let i=0;i<BN;i++){ const b=BUB[i]; b.y+=b.vy*dt*.6;
       if(b.y>terrainH(b.x,b.z)+22)spawnBub(i,false);
       _m.compose(_v.set(b.x,b.y,b.z),_q.identity(),_s.set(b.r,b.r,b.r)); bubbles.setMatrixAt(i,_m); }
@@ -1104,7 +1127,8 @@ const QKEY=SV.qual;
 
 /* ================= carga ================= */
 const PRE=[A.sky,A.grass,A.logo,A.keyart,A.heroIdle,A.heroRun,A.heroJump,A.tree,
-  A.tower1,A.tower2,A.tower3,A.dome,A.mall,A.bush,
+  A.tower1,A.tower2,A.tower3,A.dome,A.mall,A.bush,A.tGrass,A.tRoad,A.tPlaza,A.tWalk,
+  A.office,A.spire,A.apt,A.kiosk,A.fountain,A.lamp,A.bench,A.car,A.plat,A.gem,A.fish,
   A.musMenu,A.musPlay,A.sfxPop,A.sfxGem,A.sfxJump,A.sfxUi,A.sfxWin].filter(ok);
 let pDone=0; const pTot=Math.max(1,PRE.length);
 function preload(){ if(!PRE.length){ setTimeout(finishLoad,500); return; }
