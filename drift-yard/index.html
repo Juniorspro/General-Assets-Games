@@ -717,8 +717,7 @@ async function loadAll(){
     ["skilift","models/gen/skilift.glb"],["diner","models/gen/diner.glb"],
     ["wtower","models/gen/water_tower.glb"],["torii","models/gen/torii.glb"],
     ["vending","models/gen/vending.glb"],["stand","models/gen/grandstand.glb"],
-    ["bigscreen","models/gen/bigscreen.glb"],["forklift","models/gen/forklift.glb"],
-    ["gear","models/gen/gear.glb"]])
+    ["bigscreen","models/gen/bigscreen.glb"],["forklift","models/gen/forklift.glb"]])
     jobs.push({p,kind:"glb",assign:g=>{A.glb[k]=g;}});
   for(const n of["sfx_skid_loop.mp3","sfx_crash.mp3","sfx_crash_soft.mp3","sfx_punch.mp3","sfx_pop.mp3","sfx_chime.mp3","sfx_ui.mp3","sfx_ok.mp3","sfx_count.mp3","sfx_finish.mp3"])
     jobs.push({p:"audio/"+n,kind:"buf",assign:b=>{SND[n.replace(/\.(mp3|m4a)$/,"")]={raw:b,buf:null};}});
@@ -1001,6 +1000,26 @@ function shredderDisc(radius){
     g.add(m);
   }else{const pg=proceduralGear(radius);pg.rotation.z=Math.PI/2;g.add(pg);}
   return g;}
+// une varias geometrías indexadas en una sola (sin BufferGeometryUtils)
+function mergeGeos(geos){let vc=0,ic=0;
+  for(const g of geos){vc+=g.attributes.position.count;ic+=g.index?g.index.count:g.attributes.position.count;}
+  const pos=new Float32Array(vc*3),nor=new Float32Array(vc*3),idx=(vc>65535?new Uint32Array(ic):new Uint16Array(ic));
+  let vo=0,io=0;
+  for(const g of geos){const p=g.attributes.position;if(!g.attributes.normal)g.computeVertexNormals();const n=g.attributes.normal;
+    for(let i=0;i<p.count;i++){const o=(vo+i)*3;pos[o]=p.getX(i);pos[o+1]=p.getY(i);pos[o+2]=p.getZ(i);
+      nor[o]=n.getX(i);nor[o+1]=n.getY(i);nor[o+2]=n.getZ(i);}
+    const gi=g.index;if(gi){for(let i=0;i<gi.count;i++)idx[io+i]=gi.getX(i)+vo;io+=gi.count;}
+    else{for(let i=0;i<p.count;i++)idx[io+i]=vo+i;io+=p.count;}
+    vo+=p.count;}
+  const m=new THREE.BufferGeometry();m.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  m.setAttribute("normal",new THREE.BufferAttribute(nor,3));m.setIndex(new THREE.BufferAttribute(idx,1));return m;}
+// engranaje low-poly con eje en X (una sola geometría, para instanciar barato)
+function cogGeoX(radius){const parts=[];
+  const body=new THREE.CylinderGeometry(radius*.78,radius*.78,radius*.5,16);body.rotateZ(Math.PI/2);parts.push(body);
+  const hub=new THREE.CylinderGeometry(radius*.22,radius*.22,radius*.56,10);hub.rotateZ(Math.PI/2);parts.push(hub);
+  for(let i=0;i<10;i++){const a=i/10*6.2832;const th=new THREE.BoxGeometry(radius*.46,radius*.52,radius*.3);
+    th.translate(0,radius*.86,0);th.rotateX(a);parts.push(th);}
+  return mergeGeos(parts);}
 let dyPit=null;
 function buildGearPit(group,colliders,cx,cz){
   const HW=13,HD=13,DEPTH=15;
@@ -1013,16 +1032,19 @@ function buildGearPit(group,colliders,cx,cz){
   for(const[dx,dz,w,d]of[[0,-HD-1,HW*2+3,1.6],[0,HD+1,HW*2+3,1.6],[-HW-1,0,1.6,HD*2+3],[HW+1,0,1.6,HD*2+3]]){
     const r=new THREE.Mesh(new THREE.BoxGeometry(w,.45,d),rimMat);r.position.set(cx+dx,.22,cz+dz);group.add(r);}
   // trituradora de doble eje: dos filas de discos dentados que giran hacia adentro (como la ref)
-  // varios ejes que cubren TODO el pozo, discos que engranan entre sí (como la ref)
+  // varios ejes que cubren TODO el pozo, discos dentados INSTANCIADOS (barato: ~13k tris, 5 draw calls)
   const gears=[];const N=10,SP=2.4,off=(N-1)*SP/2;
   const rows=[[-8,2.4],[-4,-2.4],[0,2.4],[4,-2.4],[8,2.4]];
+  const cog=cogGeoX(2.5);
+  const cogMat=stdMat("metal");cogMat.color.set(0x6b6e75);cogMat.metalness=.85;cogMat.roughness=.4;
+  const axleMat=stdMat("metal");axleMat.color.set(0x3a3d43);axleMat.metalness=.8;axleMat.roughness=.4;
+  const axleGeo=new THREE.CylinderGeometry(.5,.5,off*2+2,8);axleGeo.rotateZ(Math.PI/2);
   for(let ri=0;ri<rows.length;ri++){const zr=cz+rows[ri][0],spd=rows[ri][1],stag=(ri%2)?SP/2:0;
     const shaft=new THREE.Group();shaft.position.set(cx,-DEPTH+3.2,zr);group.add(shaft);
-    for(let i=0;i<N;i++){const d=shredderDisc(2.5);d.position.x=-off+i*SP+stag;shaft.add(d);}
-    // eje visible
-    const axle=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,off*2+2,10),
-      (()=>{const m=stdMat("metal");m.color.set(0x3a3d43);m.metalness=.8;m.roughness=.4;return m;})());
-    axle.rotation.z=Math.PI/2;shaft.add(axle);
+    const inst=new THREE.InstancedMesh(cog,cogMat,N);inst.castShadow=save.quality==="high";
+    for(let i=0;i<N;i++){M4.makeTranslation(-off+i*SP+stag,0,0);inst.setMatrixAt(i,M4);}
+    inst.instanceMatrix.needsUpdate=true;shaft.add(inst);
+    shaft.add(new THREE.Mesh(axleGeo,axleMat));
     gears.push({holder:shaft,axis:"x",spd});}
   const glassMat=new THREE.MeshStandardMaterial({color:0xafe4ff,transparent:true,opacity:.30,roughness:.06,metalness:.1,
     emissive:0x123240,emissiveIntensity:.3,side:THREE.DoubleSide});
