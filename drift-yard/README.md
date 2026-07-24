@@ -2,6 +2,12 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.15 — GRAN PREMIO verde de verdad + free-roam + carrera de 6
+- **Rediseño total del GP a lo Suzuka**: **pasto verde** (textura propia generada, con líneas de corte), **asfalto propio** (nada de textura de calle), colinas verdes, cientos de árboles, franja de ripio, **tribunas repletas de público** (textura de multitud generada), **hoardings coloridos** propios, cerca de contención y **banderas bien pegadas a los palos**. Luz más brillante.
+- **Free-roam en el GP**: entrás y manejás libre; botón **🏁 CARRERA** abre la sala.
+- **Carrera multijugador de 6**: el anfitrión abre sala → **invitación a todos los jugadores de todos los mapas** → se anotan hasta 6 → **LARGAR** los teletransporta a la **grilla ordenada** del GP, cuenta regresiva 5→¡GO!, **3 vueltas**, y **premios en monedas** al 1°/2°/3° (500/300/150). Funciona también en solitario para practicar.
+- Texturas e imágenes **nuevas y propias del mapa** generadas en Higgsfield (pasto, público, carteles).
+
 ## Novedades 5.13 — NUEVO MAPA: GRAN PREMIO (circuito estilo F1)
 - **Mapa nuevo #9: GRAN PREMIO** 🏁 — circuito de carrera estilo Fórmula 1, **más ancho y enorme que el bosque** (pista de 19 m de ancho para **derrape rápido**), 3 vueltas y 12 checkpoints.
 - **Pianos (kerbs) rojo/blanco**, línea central discontinua y bordes blancos como un GP real.
