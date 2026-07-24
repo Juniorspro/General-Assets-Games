@@ -2,6 +2,13 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.9 — economía, garaje con piloto, cambio en pausa y caché offline
+- **Comprá autos** 🪙: ganás monedas en cada corrida (más si sacás medalla o récord) y desbloqueás autos en el garaje. El auto 0 es gratis; ruedas y pilotos son gratis. Los autos bloqueados muestran 🔒 y el botón pasa a **COMPRAR** (se desactiva si te faltan monedas).
+- **Piloto parado en el garaje**: el personaje elegido aparece **de pie en Idle** al lado del auto (se elige con el cycler PILOTO y se actualiza al instante).
+- **Cambiar auto/piloto en pausa**: desde el menú de pausa podés **cambiar de auto** (solo los comprados) o **de piloto** sin reiniciar — conserva posición, velocidad y daño.
+- **Caché offline (IndexedDB)**: todos los assets se guardan localmente por versión → **recargas casi instantáneas** y funciona sin conexión una vez cargado. Al publicar una versión nueva la caché vieja se limpia sola.
+- **Trituradora optimizada**: engranajes dentados **instanciados** (low-poly) → los mapas con pozo bajaron de ~800k a ~147k triángulos (mismo look, muchos más FPS).
+
 ## Novedades 5.8 — audio por auto, proximidad, zoom, trituradora que cubre todo
 - **Motor por auto**: cada carrocería suena distinto (tono/onda/growl propios) y **más bajo** que antes.
 - **El auto se apaga al bajar**: el motor para cuando salís a pie y se re-enciende al subir.
