@@ -2,6 +2,10 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.18 — checkpoints limpios + asfalto de pista de verdad
+- **Checkpoints rediseñados**: se fue el cartelón naranja gigante mal ubicado; ahora son **pilotes naranjas iluminados** a cada lado con una barra fina arriba (limpio y claro).
+- **Textura de asfalto de pista** propia y realista (gris medio con agregado y marcas de goma) en el circuito y en el aéreo — nada de negro plano ni textura de calle. El pasto sigue verde vivo.
+
 ## Novedades 5.17 — ¡CIRCUITO AÉREO! (piso a distintas alturas) + GP sin autos F1
 - **Física de piso a distintas alturas**: nueva base del motor que permite manejar **sobre pistas elevadas**, no solo en el suelo plano.
 - **Circuito aéreo en el Aeropuerto** 🛫: un **anillo elevado gigante** (sube hasta ~22 m) con **cercas naranjas a los dos lados para no caerte** y pilotes de soporte. Entrás manejando por donde toca el piso y subís por el aire dando la vuelta.
