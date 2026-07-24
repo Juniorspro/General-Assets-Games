@@ -289,7 +289,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.13</div>
+  <div id="buildtag">build 5.14</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -823,7 +823,7 @@ async function loadAll(){
     "sky_canyon_dia.jpg","sky_canyon_tarde.jpg","sky_canyon_noche.jpg",
     "sky_ciudad_dia.jpg","sky_ciudad_tarde.jpg","sky_ciudad_noche.jpg",
     "tree_oak.webp","tree_pine.webp","cactus.webp",
-    "tree_birch.webp","bush.webp","tree_dead.webp","tree_snowpine.webp"])
+    "tree_birch.webp","bush.webp","tree_dead.webp","tree_snowpine.webp","npc_marshal.webp"])
     T("images/"+n,true,t=>{A.img[n.split(".")[0]]=t;});
   for(const[k,p]of[["katana","models/gen/car_katana.glb"],["bandido","models/gen/car_bandido.glb"],
     ["hachi","models/gen/car_hachi.glb"],["toro","models/gen/car_toro.glb"],
@@ -848,7 +848,8 @@ async function loadAll(){
     ["skilift","models/gen/skilift.glb"],["diner","models/gen/diner.glb"],
     ["wtower","models/gen/water_tower.glb"],["torii","models/gen/torii.glb"],
     ["vending","models/gen/vending.glb"],["stand","models/gen/grandstand.glb"],
-    ["bigscreen","models/gen/bigscreen.glb"],["forklift","models/gen/forklift.glb"]])
+    ["bigscreen","models/gen/bigscreen.glb"],["forklift","models/gen/forklift.glb"],
+    ["pitbld","models/gen/pit_building.glb"],["f1car","models/gen/f1car.glb"]])
     jobs.push({p,kind:"glb",assign:g=>{A.glb[k]=g;}});
   for(const n of["sfx_skid_loop.mp3","sfx_crash.mp3","sfx_crash_soft.mp3","sfx_punch.mp3","sfx_pop.mp3","sfx_chime.mp3","sfx_ui.mp3","sfx_ok.mp3","sfx_count.mp3","sfx_finish.mp3"])
     jobs.push({p:"audio/"+n,kind:"buf",assign:b=>{SND[n.replace(/\.(mp3|m4a)$/,"")]={raw:b,buf:null};}});
@@ -1563,14 +1564,31 @@ function buildGP(group,timeKey){
   if(scrT)for(const t of[.2,.5,.78]){const i=Math.floor(t*n);const p=P[i],lf=LF[i];
     const o=p.clone().addScaledVector(lf,-(halfW+18));const s2=scrT.clone(true);s2.position.set(o.x,0,o.z);
     s2.rotation.y=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;group.add(s2);colliders.push(obb(o.x,o.z,5,3,s2.rotation.y));}
-  // edificio de boxes (procedural; luego se reemplaza por el modelo Higgsfield) sobre la recta, lado interior
-  {const pitMat=stdMat("metal");pitMat.color.set(0x3c4048);pitMat.metalness=.4;pitMat.roughness=.6;
-   const glassMat=new THREE.MeshStandardMaterial({color:0x2a3a48,metalness:.3,roughness:.15,transparent:true,opacity:.6});
-   for(let k=0;k<7;k++){const t=0.9+k*0.006;const i=Math.floor(t*n)%n;const p=P[i],lf=LF[i];
-     const o=p.clone().addScaledVector(lf,halfW+10);const ry=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;
-     const bay=new THREE.Mesh(new THREE.BoxGeometry(9,5.5,8),pitMat);bay.position.set(o.x,2.75,o.z);bay.rotation.y=ry;bay.castShadow=true;group.add(bay);
-     const gl=new THREE.Mesh(new THREE.BoxGeometry(8,3,.3),glassMat);gl.position.set(o.x,2.6,o.z).addScaledVector(lf,-4.1);gl.rotation.y=ry;group.add(gl);
-     colliders.push(obb(o.x,o.z,4.6,4.2,ry));}}
+  // edificio de boxes (modelo Higgsfield) sobre la recta principal, lado interior
+  {const pitT=A.glb.pitbld?normalizeModel(A.glb.pitbld,{length:46}):null;
+   if(pitT){const i=Math.floor(.955*n)%n;const p=P[i],lf=LF[i];
+     const o=p.clone().addScaledVector(lf,halfW+16);const ry=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;
+     const b=pitT.clone(true);b.position.set(o.x,0,o.z);b.rotation.y=ry;group.add(b);
+     colliders.push(obb(o.x,o.z,23,9,ry));
+   }else{const pitMat=stdMat("metal");pitMat.color.set(0x3c4048);
+     for(let k=0;k<7;k++){const t=0.9+k*0.006;const i=Math.floor(t*n)%n;const p=P[i],lf=LF[i];
+       const o=p.clone().addScaledVector(lf,halfW+10);const ry=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;
+       const bay=new THREE.Mesh(new THREE.BoxGeometry(9,5.5,8),pitMat);bay.position.set(o.x,2.75,o.z);bay.rotation.y=ry;group.add(bay);
+       colliders.push(obb(o.x,o.z,4.6,4.2,ry));}}}
+  // autos F1 de exhibición (Higgsfield) parados en boxes y en la grilla
+  {const f1T=A.glb.f1car?autoCar(A.glb.f1car,5.2):null;
+   if(f1T)for(const t of[.9,.925,.95,.02,.04]){const i=Math.floor(t*n)%n;const p=P[i],lf=LF[i];
+     const o=p.clone().addScaledVector(lf,(t<.5?1:1)*(halfW+ (t<.5?3.5:7)));
+     const c2=f1T.clone(true);c2.position.set(o.x,0,o.z);c2.rotation.y=Math.atan2(TN[i].x,TN[i].z);group.add(c2);
+     colliders.push(obb(o.x,o.z,1.1,2.6,c2.rotation.y));}}
+  // NPCs marshal (billboard Higgsfield) en las entradas / puestos de curva
+  {const mt=A.img&&A.img.npc_marshal;
+   if(mt){const mat=new THREE.MeshBasicMaterial({map:mt,transparent:true,alphaTest:.5,side:THREE.DoubleSide});
+     for(const t of[.06,.3,.55,.8,.97]){const i=Math.floor(t*n)%n;const p=P[i],lf=LF[i];
+       const o=p.clone().addScaledVector(lf,halfW+2.2);
+       const pl=new THREE.Mesh(new THREE.PlaneGeometry(1.6,3.2),mat);pl.position.set(o.x,1.6,o.z);
+       pl.rotation.y=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;group.add(pl);
+       colliders.push({type:"circle",x:o.x,z:o.z,r:.6});}}}
   // banderas / vallas publicitarias (jersey) en el interior de curvas
   const jerseyMi=A.glb.jersey?mergedForInstancing(A.glb.jersey,{length:3}):null;
   if(jerseyMi){const js=[];for(let i=0;i<n;i+=10){const p=P[i],lf=LF[i];const o=p.clone().addScaledVector(lf,halfW+1.6);
