@@ -2,6 +2,11 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.17 — ¡CIRCUITO AÉREO! (piso a distintas alturas) + GP sin autos F1
+- **Física de piso a distintas alturas**: nueva base del motor que permite manejar **sobre pistas elevadas**, no solo en el suelo plano.
+- **Circuito aéreo en el Aeropuerto** 🛫: un **anillo elevado gigante** (sube hasta ~22 m) con **cercas naranjas a los dos lados para no caerte** y pilotes de soporte. Entrás manejando por donde toca el piso y subís por el aire dando la vuelta.
+- GP: **saqué los autos F1** (eran solo la demo del modelo), ahora es **siempre día soleado** verde, con **luces de largada** y más tribunas.
+
 ## Novedades 5.15 — GRAN PREMIO verde de verdad + free-roam + carrera de 6
 - **Rediseño total del GP a lo Suzuka**: **pasto verde** (textura propia generada, con líneas de corte), **asfalto propio** (nada de textura de calle), colinas verdes, cientos de árboles, franja de ripio, **tribunas repletas de público** (textura de multitud generada), **hoardings coloridos** propios, cerca de contención y **banderas bien pegadas a los palos**. Luz más brillante.
 - **Free-roam en el GP**: entrás y manejás libre; botón **🏁 CARRERA** abre la sala.
