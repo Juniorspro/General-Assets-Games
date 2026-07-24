@@ -316,7 +316,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.15</div>
+  <div id="buildtag">build 5.16</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -879,7 +879,7 @@ async function loadAll(){
     ["wtower","models/gen/water_tower.glb"],["torii","models/gen/torii.glb"],
     ["vending","models/gen/vending.glb"],["stand","models/gen/grandstand.glb"],
     ["bigscreen","models/gen/bigscreen.glb"],["forklift","models/gen/forklift.glb"],
-    ["pitbld","models/gen/pit_building.glb"],["f1car","models/gen/f1car.glb"]])
+    ["pitbld","models/gen/pit_building.glb"]])
     jobs.push({p,kind:"glb",assign:g=>{A.glb[k]=g;}});
   for(const n of["sfx_skid_loop.mp3","sfx_crash.mp3","sfx_crash_soft.mp3","sfx_punch.mp3","sfx_pop.mp3","sfx_chime.mp3","sfx_ui.mp3","sfx_ok.mp3","sfx_count.mp3","sfx_finish.mp3"])
     jobs.push({p:"audio/"+n,kind:"buf",assign:b=>{SND[n.replace(/\.(mp3|m4a)$/,"")]={raw:b,buf:null};}});
@@ -1518,9 +1518,10 @@ function buildBosque(group,timeKey){
 /* ===== GRAN PREMIO: circuito estilo Fórmula 1, ancho y enorme, con drift rápido ===== */
 function buildGP(group,timeKey){
   const rng=mulberry32(9091);
-  const{colliders}=baseEnv(group,timeKey,{fenceOn:false,apron:false,noGround:true,w:1,d:1,marks:null,skyBiome:"bosque"});
+  // el GP es siempre de día soleado (look verde tipo Suzuka), sin importar el horario elegido
+  const{colliders}=baseEnv(group,"dia",{fenceOn:false,apron:false,noGround:true,w:1,d:1,marks:null,skyBiome:"bosque"});
   // luz extra para el look soleado y verde
-  group.add(new THREE.HemisphereLight(0xcfe8ff,0x466f2a,0.55));
+  group.add(new THREE.HemisphereLight(0xdff0ff,0x557f38,0.7));
   // ---- materiales propios del GP (texturas generadas; con fallback de color) ----
   const grassTex=A.tex&&A.tex.gp_grass;
   const gMat=grassTex?new THREE.MeshStandardMaterial({map:grassTex,roughness:1}):new THREE.MeshStandardMaterial({color:0x4f8236,roughness:1});
@@ -1618,7 +1619,8 @@ function buildGP(group,timeKey){
     const wallMat=stdMat("concrete");wallMat.color.set(0xcfcbc0);
     const wall=new THREE.Mesh(new THREE.BoxGeometry(w+3,1.4,1),wallMat);wall.position.set(0,.7,3.2);g.add(wall);
     group.add(g);colliders.push(obb(o.x,o.z,w*.5,5,yaw));}
-  for(const[t,side,w] of [[.0,-1,58],[.032,-1,58],[.064,-1,58],[.30,-1,44],[.55,1,44],[.80,-1,44]]){
+  for(const[t,side,w] of [[.0,-1,58],[.032,-1,58],[.064,-1,58],[.22,-1,44],[.30,1,40],[.42,-1,42],
+      [.55,1,44],[.68,-1,40],[.80,-1,44],[.90,1,40]]){
     crowdStand(Math.floor(t*n)%n,side,w);}
   // pantallas gigantes
   const scrT=A.glb.bigscreen?normalizeModel(A.glb.bigscreen,{height:10}):null;
@@ -1644,17 +1646,20 @@ function buildGP(group,timeKey){
    const top=new THREE.Mesh(new THREE.BoxGeometry(legX*2+.8,1.0,1.4),gantMat);top.position.copy(sp0);top.position.y=8.1;top.rotation.y=Math.atan2(stg.x,stg.z)+Math.PI/2;group.add(top);
    const ban=new THREE.Mesh(new THREE.BoxGeometry(legX*2,1.5,.15),new THREE.MeshBasicMaterial({map:gridTex,side:THREE.DoubleSide}));
    ban.position.copy(sp0);ban.position.y=6.9;ban.rotation.y=Math.atan2(stg.x,stg.z)+Math.PI/2;group.add(ban);
-   ribbon(-halfW,halfW,.04,new THREE.MeshBasicMaterial({map:gridTex}),3,1.2);}
+   ribbon(-halfW,halfW,.04,new THREE.MeshBasicMaterial({map:gridTex}),3,1.2);
+   // luces de largada F1 (5 pares) colgando del pórtico
+   const boxMat=new THREE.MeshStandardMaterial({color:0x111214,roughness:.6});
+   const redMat=new THREE.MeshBasicMaterial({color:0xd21f1f});
+   for(let i=0;i<5;i++){const lb=new THREE.Mesh(new THREE.BoxGeometry(1.1,1.4,.5),boxMat);
+     lb.position.copy(sp0).addScaledVector(slf,(i-2)*1.6);lb.position.y=6.0;lb.rotation.y=ban.rotation.y;group.add(lb);
+     for(const yy of[6.25,5.75]){const bulb=new THREE.Mesh(new THREE.CircleGeometry(.22,10),redMat);
+       bulb.position.copy(lb.position);bulb.position.y=yy;bulb.position.addScaledVector(stg,-0.3);
+       bulb.rotation.y=ban.rotation.y;group.add(bulb);}}}
   // ---- edificio de boxes (Higgsfield) ----
   {const pitT=A.glb.pitbld?normalizeModel(A.glb.pitbld,{length:46}):null;
    if(pitT){const i=Math.floor(.955*n)%n,p=P[i],lf=LF[i];const o=p.clone().addScaledVector(lf,halfW+16);
      const ry=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;const b=pitT.clone(true);b.position.set(o.x,0,o.z);b.rotation.y=ry;group.add(b);
      colliders.push(obb(o.x,o.z,23,9,ry));}}
-  // autos F1 de exhibición en la grilla
-  {const f1T=A.glb.f1car?autoCar(A.glb.f1car,5.2):null;
-   if(f1T)for(let k=0;k<5;k++){const i=Math.floor((.0+k*0.01)*n)%n,p=P[i],lf=LF[i];
-     const o=p.clone().addScaledVector(lf,(k%2?2.8:-2.8));const c2=f1T.clone(true);c2.position.set(o.x,0,o.z);
-     c2.rotation.y=Math.atan2(TN[i].x,TN[i].z);group.add(c2);colliders.push(obb(o.x,o.z,1.1,2.6,c2.rotation.y));}}
   // NPCs marshal en puestos de curva
   {const mt=A.img&&A.img.npc_marshal;
    if(mt){const mat=new THREE.MeshBasicMaterial({map:mt,transparent:true,alphaTest:.5,side:THREE.DoubleSide});
