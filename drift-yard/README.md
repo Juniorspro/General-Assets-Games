@@ -2,6 +2,13 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.11 — garaje horizontal ordenado, voz por proximidad, nombres con contorno y onboarding con mapa
+- **Garaje rediseñado para horizontal**: monedas, nombre, stats, opciones (rueda/piloto) y botones **ya no se enciman** — barra inferior en 3 secciones (stats · opciones · acción), nombre arriba, flechas a los lados.
+- **Voz por proximidad** 🔊: la voz de cada jugador **baja según la distancia** (fuerte a ~6 m, se apaga a ~55 m), como el sonido de los autos.
+- **Nombres flotantes** = solo letras **blancas con contorno negro** (sin recuadro naranja), sobre autos, pilotos y fantasmas.
+- **Globos de chat estilo Roblox**: burbuja blanca con colita sobre la cabeza; tus propios mensajes también aparecen (sobre tu auto o sobre vos si estás a pie).
+- **Onboarding con mapa de fondo**: al elegir **idioma / gráficos / nombre** se ve el mapa vivo detrás con las tomas de cámara (ya no un fondo plano).
+
 ## Novedades 5.10 — chat de voz, controles reubicables, menús con cámara viva y árboles arreglados
 - **Chat de voz** 🎤: botón de micrófono al lado del de mensaje. Activás el mic y hablás con los demás de tu sala por **WebRTC** (malla P2P, señalización sobre el mismo MQTT). Se apaga solo al salir de la carrera.
 - **Reubicar controles**: en pausa → **🎮 CONTROLES** entrás a un modo donde **arrastrás cada botón** (gas, freno, freno de mano, joystick, saltar, piña, puerta, pausa, cámara, chat, mic) a donde quieras. Se guarda y hay **RESET**.
