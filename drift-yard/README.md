@@ -2,6 +2,11 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.23 — circuito aéreo jugable + seal del GP que no molesta
+- **La rampa aérea ya no se siente como escalera**: la altura del piso ahora se **interpola suave** entre muestras (antes saltaba de escalón en escalón). El auto queda **pegado a la rampa** (banda amplia de soporte) → **no tiembla y ya no derrapa solo**; se puede manejar y derrapar normal.
+- **Puerta gigante de entrada/salida**: el circuito aéreo tiene un **hueco a nivel del piso** con un **portón naranja a rayas** bien visible. Entrás y salís por ahí (las cercas laterales ahora sólo están en el tramo elevado).
+- **Seal del GP que no estorba**: la pared de colisión se corrió **por fuera del muro de gomas visible**, así chocás contra las **gomas que ves** (no contra una pared invisible metida en la pista). Igual no te caés por los costados/atrás.
+
 ## Novedades 5.22 — carrera: sin cámara temblorosa, sin menú, instancia aparte y pista sellada
 - **La cámara ya no tiembla al largar**: los autos se colocan en la grilla **siguiendo la línea de la pista** (nunca sobre el pasto), y se apaga el temblor de "fuera de pista" mientras estás frenado en la grilla.
 - **Nada de menú de server**: tocás **CARRERA** y **se manda la invitación al toque**. Aparece un chip chico "🏁 CARRERA n/6". Cuando **entran 6, larga sola** (o el anfitrión toca "LARGAR YA"). La invitación se reenvía cada 3 s hasta llenarse.
