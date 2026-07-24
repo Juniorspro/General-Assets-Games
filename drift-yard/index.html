@@ -316,7 +316,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.19</div>
+  <div id="buildtag">build 5.20</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -826,22 +826,30 @@ const floods=[];
 function canvasTex(w,h,draw,{srgb=true}={}){const c=document.createElement("canvas");c.width=w;c.height=h;
   draw(c.getContext("2d"),w,h);const t=new THREE.CanvasTexture(c);
   if(srgb)t.colorSpace=THREE.SRGBColorSpace;return t;}
-// asfalto de pista realista y tileable (gris medio + agregado + marcas de goma)
-function gpAsphaltTex(){return canvasTex(512,512,(g,w,h)=>{
-  g.fillStyle="#70747b";g.fillRect(0,0,w,h);
-  for(let i=0;i<30000;i++){const x=(i*97)%w,y=(i*57)%h,d=((i*2654435761)>>>0)%40,base=d<20?96:56;
-    g.fillStyle="rgba("+base+","+(base+4)+","+(base+9)+",.3)";g.fillRect(x,y,1,1);}
-  g.strokeStyle="rgba(24,24,28,.1)";g.lineWidth=7;
-  for(let i=0;i<12;i++){const y0=(i*151)%h;g.beginPath();g.moveTo(0,y0);
-    g.bezierCurveTo(w*.3,y0+34,w*.65,y0-34,w,y0+12);g.stroke();}});}
+// asfalto de pista: usa la textura real generada (gp_asphalt); fallback procedural si no cargó
+function gpAsphaltTex(){
+  if(A.tex&&A.tex.gp_asphalt){A.tex.gp_asphalt.wrapS=A.tex.gp_asphalt.wrapT=THREE.RepeatWrapping;return A.tex.gp_asphalt;}
+  return canvasTex(512,512,(g,w,h)=>{
+    g.fillStyle="#70747b";g.fillRect(0,0,w,h);
+    for(let i=0;i<30000;i++){const x=(i*97)%w,y=(i*57)%h,d=((i*2654435761)>>>0)%40,base=d<20?96:56;
+      g.fillStyle="rgba("+base+","+(base+4)+","+(base+9)+",.3)";g.fillRect(x,y,1,1);}});}
 function gpCheckerTex(){return canvasTex(256,64,(g,w,h)=>{for(let y=0;y<2;y++)for(let x=0;x<8;x++){g.fillStyle=(x+y)%2?"#111":"#f4f0e6";g.fillRect(x*32,y*32,32,32);}});}
-// arco de checkpoint LIMPIO: pilotes naranjas iluminados + barra fina (o banner a cuadros si es meta)
+function gpCheckFlagTex(){return canvasTex(128,64,(g,w,h)=>{g.fillStyle="#ff7a1a";g.fillRect(0,0,w,h);g.fillStyle="#f4f0e6";
+  for(let x=-h;x<w;x+=32){g.beginPath();g.moveTo(x,h);g.lineTo(x+h,0);g.lineTo(x+h+14,0);g.lineTo(x+14,h);g.fill();}});}
+// arco de checkpoint: 2 postes + BANDERA ancha tendida de poste a poste (bien conectada)
 function checkGate(group,px,pz,ry,span,start){
   const gate=new THREE.Group();gate.position.set(px,0,pz);gate.rotation.y=ry;
-  const glow=new THREE.MeshStandardMaterial({color:start?0xeef2f5:0xff7a1a,emissive:start?0x0a1420:0xff5200,emissiveIntensity:start?.3:.85,roughness:.45});
-  for(const s of[-1,1]){const post=new THREE.Mesh(new THREE.CylinderGeometry(.26,.3,5.4,12),glow);post.position.set(s*span,2.7,0);gate.add(post);}
-  if(start){const ban=new THREE.Mesh(new THREE.BoxGeometry(span*2,1.2,.14),new THREE.MeshBasicMaterial({map:gpCheckerTex(),side:THREE.DoubleSide}));ban.position.set(0,5.1,0);gate.add(ban);}
-  else{const bar=new THREE.Mesh(new THREE.BoxGeometry(span*2,.4,.4),new THREE.MeshStandardMaterial({color:0x1b1d21,metalness:.5,roughness:.5}));bar.position.set(0,5.3,0);gate.add(bar);}
+  const H=6.4,postMat=new THREE.MeshStandardMaterial({color:0xeef0f2,roughness:.5,metalness:.2});
+  for(const s of[-1,1]){const post=new THREE.Mesh(new THREE.CylinderGeometry(.3,.34,H,12),postMat);
+    post.position.set(s*span,H/2,0);post.castShadow=true;gate.add(post);}
+  // barra superior que une los dos postes
+  const topBar=new THREE.Mesh(new THREE.BoxGeometry(span*2+.7,.5,.5),new THREE.MeshStandardMaterial({color:0x24272d,metalness:.5,roughness:.5}));
+  topBar.position.set(0,H-.25,0);gate.add(topBar);
+  // BANDERA que cuelga de la barra, del ancho EXACTO entre los dos postes
+  const tex=start?gpCheckerTex():gpCheckFlagTex();
+  tex.wrapS=THREE.RepeatWrapping;tex.repeat.set(Math.max(4,Math.round(span*2/2.4)),1);
+  const ban=new THREE.Mesh(new THREE.BoxGeometry(span*2,1.6,.14),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
+  ban.position.set(0,H-1.15,0);gate.add(ban);
   group.add(gate);}
 const glowTex=canvasTex(128,128,(g,w,h)=>{const r=g.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2);
   r.addColorStop(0,"rgba(255,245,220,1)");r.addColorStop(.5,"rgba(255,220,160,.5)");r.addColorStop(1,"rgba(255,220,160,0)");
@@ -883,8 +891,9 @@ async function loadAll(){
     "tree_birch.webp","bush.webp","tree_dead.webp","tree_snowpine.webp","npc_marshal.webp",
     "gp_crowd.jpg","gp_hoarding.jpg"])
     T("images/"+n,true,t=>{A.img[n.split(".")[0]]=t;});
-  // textura propia del GP (pasto) con repetición
+  // texturas propias del GP (pasto + asfalto realista) con repetición
   T("images/gp_grass.jpg",true,t=>{t.wrapS=t.wrapT=THREE.RepeatWrapping;A.tex.gp_grass=t;});
+  T("images/gp_asphalt.jpg",true,t=>{t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;A.tex.gp_asphalt=t;});
   for(const[k,p]of[["katana","models/gen/car_katana.glb"],["bandido","models/gen/car_bandido.glb"],
     ["hachi","models/gen/car_hachi.glb"],["toro","models/gen/car_toro.glb"],
     ["warehouse","models/gen/warehouse.glb"],["office","models/gen/office.glb"],
@@ -1698,7 +1707,16 @@ function buildGP(group,timeKey){
    const top=new THREE.Mesh(new THREE.BoxGeometry(legX*2+.8,1.0,1.4),gantMat);top.position.copy(sp0);top.position.y=8.1;top.rotation.y=Math.atan2(stg.x,stg.z)+Math.PI/2;group.add(top);
    const ban=new THREE.Mesh(new THREE.BoxGeometry(legX*2,1.5,.15),new THREE.MeshBasicMaterial({map:gridTex,side:THREE.DoubleSide}));
    ban.position.copy(sp0);ban.position.y=6.9;ban.rotation.y=Math.atan2(stg.x,stg.z)+Math.PI/2;group.add(ban);
-   ribbon(-halfW,halfW,.04,new THREE.MeshBasicMaterial({map:gridTex}),3,1.2);
+   // grilla de largada pintada SOLO en un tramo corto tras la meta (NO toda la vuelta: tapaba el asfalto)
+   {const gpos=[],guv=[],gidx=[],GN=10;
+    for(let q=0;q<=GN;q++){const ii=(startI+q)%n;
+      const a=P[ii].clone().addScaledVector(LF[ii],-halfW),c=P[ii].clone().addScaledVector(LF[ii],halfW);
+      gpos.push(a.x,.035,a.z,c.x,.035,c.z);const v=q*ds/2.2;guv.push(0,v,3,v);}
+    for(let q=0;q<GN;q++){const a=q*2;gidx.push(a,a+2,a+1,a+1,a+2,a+3);}
+    const gg=new THREE.BufferGeometry();gg.setAttribute("position",new THREE.Float32BufferAttribute(gpos,3));
+    gg.setAttribute("uv",new THREE.Float32BufferAttribute(guv,2));gg.setIndex(gidx);gg.computeVertexNormals();
+    const gt=gridTex.clone();gt.needsUpdate=true;gt.wrapS=gt.wrapT=THREE.RepeatWrapping;
+    group.add(new THREE.Mesh(gg,new THREE.MeshBasicMaterial({map:gt})));}
    // luces de largada F1 (5 pares) colgando del pórtico
    const boxMat=new THREE.MeshStandardMaterial({color:0x111214,roughness:.6});
    const redMat=new THREE.MeshBasicMaterial({color:0xd21f1f});
@@ -1718,18 +1736,11 @@ function buildGP(group,timeKey){
      for(const t of[.12,.36,.6,.85]){const i=Math.floor(t*n)%n,p=P[i],lf=LF[i];const o=p.clone().addScaledVector(lf,halfW+2.4);
        const pl=new THREE.Mesh(new THREE.PlaneGeometry(1.6,3.2),mat);pl.position.set(o.x,1.6,o.z);
        pl.rotation.y=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2;group.add(pl);colliders.push({type:"circle",x:o.x,z:o.z,r:.6});}}}
-  // ---- checkpoints: pilotes naranjas iluminados + barra fina arriba (limpio, no cartelón) ----
+  // ---- checkpoints: arco con BANDERA tendida de poste a poste ----
   const cps=[],NCP=12;
-  const glowMat=new THREE.MeshStandardMaterial({color:0xff7a1a,emissive:0xff5200,emissiveIntensity:.85,roughness:.45});
-  const barMat=new THREE.MeshStandardMaterial({color:0x1b1d21,metalness:.5,roughness:.5});
   for(let k=0;k<NCP;k++){const i=Math.floor(k/NCP*n)%n,p=P[i];cps.push({x:p.x,z:p.z,r:14});
     if(k===0)continue; // el 0 es la meta (pórtico a cuadros)
-    const ry=Math.atan2(TN[i].x,TN[i].z)+Math.PI/2,span=halfW+0.6;
-    const gate=new THREE.Group();gate.position.set(p.x,0,p.z);gate.rotation.y=ry;
-    for(const s of[-1,1]){const post=new THREE.Mesh(new THREE.CylinderGeometry(.28,.32,5.6,12),glowMat);
-      post.position.set(s*span,2.8,0);gate.add(post);}
-    const bar=new THREE.Mesh(new THREE.BoxGeometry(span*2,.4,.4),barMat);bar.position.set(0,5.5,0);gate.add(bar);
-    group.add(gate);}
+    checkGate(group,p.x,p.z,Math.atan2(TN[i].x,TN[i].z)+Math.PI/2,halfW+0.8,false);}
   return{colliders,spawn:{x:P[2].x,z:P[2].z,h:Math.atan2(TN[2].x,TN[2].z)},
     bounds:{W:1400,D:1400},road:{P,TN,LF,n,ds,halfW},checkpoints:cps};}
 
