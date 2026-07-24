@@ -271,9 +271,9 @@ let LANG=SV.lang||'es';
 const T=k=>((I18N[LANG]||I18N.es)[k]!=null?(I18N[LANG]||I18N.es)[k]:(I18N.es[k]||k));
 
 /* ================= calidad ================= */
-const QP={ low:{ qual:'low', dpr:1.0, grass:11000,flow:900, bub:26, trees:40, fish:5, shadow:0, aa:false, fog:180, bloom:false, gRad:27 },
-           med:{ qual:'med', dpr:1.3, grass:22000,flow:1600,bub:40, trees:66, fish:7, shadow:1024, aa:false, fog:230, bloom:false, gRad:36 },
-           high:{ qual:'high',dpr:1.8, grass:38000,flow:2600,bub:60, trees:96, fish:9, shadow:2048, aa:true, fog:310, bloom:true, gRad:46 } };
+const QP={ low:{ qual:'low', dpr:1.0, grass:11000,flow:900, bub:26, trees:40, fish:5, shadow:0, aa:false, fog:300, bloom:false, gRad:27 },
+           med:{ qual:'med', dpr:1.3, grass:22000,flow:1600,bub:40, trees:66, fish:7, shadow:1024, aa:false, fog:420, bloom:false, gRad:36 },
+           high:{ qual:'high',dpr:1.8, grass:38000,flow:2600,bub:60, trees:96, fish:9, shadow:2048, aa:true, fog:560, bloom:true, gRad:46 } };
 let Q=QP[SV.qual]||QP.low;
 
 /* ================= audio ================= */
@@ -325,7 +325,7 @@ renderer.shadowMap.enabled=Q.shadow>0;
 renderer.shadowMap.type=THREE.PCFShadowMap;
 $('wrap').appendChild(renderer.domElement);
 const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(62,1,.35,900);
+const camera=new THREE.PerspectiveCamera(62,1,.35,1600);
 function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h);
   camera.aspect=w/h; camera.updateProjectionMatrix(); }
 addEventListener('resize',resize); resize();
@@ -356,7 +356,7 @@ function applySky(tex){ scene.background=tex;
     scene.environment=ENVMAP; pm.dispose(); }catch(e){} }
 
 /* ================= terreno ================= */
-const WORLD=520, CITY={x:140,z:0,r:100};   // la ciudad vive al este
+const WORLD=760, CITY={x:210,z:0,r:170};   // la ciudad vive al este
 function hash2(x,z){ let h=Math.sin(x*127.1+z*311.7)*43758.5453; return h-Math.floor(h); }
 function vnoise(x,z){ const xi=Math.floor(x),zi=Math.floor(z),xf=x-xi,zf=z-zi;
   const u=xf*xf*(3-2*xf), v=zf*zf*(3-2*zf);
@@ -462,7 +462,15 @@ function regrowFlowers(px,pz){
   flowers.instanceMatrix.needsUpdate=true; }
 
 /* ================= props: árboles y flores ================= */
-const _gl=new GLTFLoader(); { const d=new DRACOLoader(); d.setDecoderPath(DRACO); _gl.setDRACOLoader(d); }
+const _gl=new GLTFLoader();
+{ const d=new DRACOLoader(); d.setDecoderPath(DRACO);
+  try{ d.setWorkerLimit(2); }catch(e){}   // menos workers = menos contención en equipos lentos
+  try{ d.preload(); }catch(e){}
+  _gl.setDRACOLoader(d); }
+/* carga de GLB con REINTENTOS: en equipos lentos el decodificador puede fallar la 1ª vez */
+function loadGLB(url,onOk,tries){
+  if(!ok(url))return; const left=(tries==null?3:tries);
+  _gl.load(url,onOk,undefined,()=>{ if(left>1)setTimeout(()=>loadGLB(url,onOk,left-1),700); });}
 function fit(obj,h){ const bb=new THREE.Box3().setFromObject(obj), sz=bb.getSize(new THREE.Vector3());
   const k=h/Math.max(sz.y,.001); obj.scale.setScalar(k);
   const bb2=new THREE.Box3().setFromObject(obj); obj.position.y-=bb2.min.y; return obj; }
@@ -481,7 +489,7 @@ function procTree(){ const g=new THREE.Group();
 const TREE_SPOTS=[], treeGroup=new THREE.Group(); scene.add(treeGroup);
 (function placeTrees(){ let n=0, i=0;
   while(n<Q.trees&&i<4000){ i++;
-    const a=hash2(i,17)*6.28, r=26+hash2(i,19)*212;
+    const a=hash2(i,17)*6.28, r=26+hash2(i,19)*320;
     const x=Math.cos(a)*r, z=Math.sin(a)*r; const y=terrainH(x,z);
     if(y<WATER_Y+.7)continue; if(Math.hypot(x-CITY.x,z-CITY.z)<CITY.r*.85)continue;
     if(Math.hypot(x,z)<16)continue;
@@ -492,8 +500,8 @@ function buildTrees(){ for(const t of TREE_SPOTS){
     fit(m,(treeTpl?5.6:5.2)*t.s); m.position.x=t.x; m.position.z=t.z; m.position.y+=t.y;
     m.rotation.y=hash2(t.x,t.z)*6.28; if(Q.shadow>0)m.traverse(o=>{ if(o.isMesh)o.castShadow=true; });
     treeGroup.add(m); } }
-if(ok(A.tree))_gl.load(A.tree,g=>{ treeTpl=g.scene; treeGroup.clear(); buildTrees();
-  if(typeof buildCity==='function')buildCity(); },undefined,()=>{});   // la ciudad también usa árboles
+loadGLB(A.tree,g=>{ treeTpl=g.scene; treeGroup.clear(); buildTrees();
+  if(typeof cityLater==='function')cityLater(); });   // la ciudad también usa árboles
 
 /* ================= ciudad de vidrio ================= */
 const cityGroup=new THREE.Group(); scene.add(cityGroup);
@@ -515,18 +523,21 @@ loadTex('lawn', ok(A.tGrass)?A.tGrass:A.grass, 5,t=>{ lawnMat.map=t; lawnMat.nee
 const BT={ tower1:null,tower2:null,tower3:null,dome:null,mall:null,eco:null,
   office:null,spire:null,apt:null,kiosk:null,fountain:null,lamp:null,bench:null,car:null };
 const GROUND_Y=0.30;   // el piso de la ciudad va POR ENCIMA del terreno
-// coloca un modelo 3D de edificio ajustado por ALTURA, devolviendo su huella real
-function putBldg(tpl,x,z,h,rotY){
+// coloca un modelo 3D de edificio: ANCHO y ALTO por separado, así un rascacielos
+// puede ser ENORME de alto sin desbordar la manzana
+function putBldg(tpl,x,z,h,rotY,wantW){
   const m=tpl.clone(true);
   const bb=new THREE.Box3().setFromObject(m), sz=bb.getSize(new THREE.Vector3());
-  m.scale.setScalar(h/Math.max(sz.y,.001));
+  const foot=Math.max(sz.x,sz.z,.001);
+  const sxz=(wantW||h*0.28)/foot, sy=h/Math.max(sz.y,.001);
+  m.scale.set(sxz,sy,sxz);
   m.rotation.y=rotY||0;
   const bb2=new THREE.Box3().setFromObject(m), s2=bb2.getSize(new THREE.Vector3());
   m.position.set(x,GROUND_Y-bb2.min.y,z);
   if(Q.shadow>0)m.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; } });
   cityGroup.add(m);
-  BOXES.push({x,z,hw:Math.max(s2.x*.40,1.5),hd:Math.max(s2.z*.40,1.5)});
-  return {m,w:s2.x,d:s2.z}; }
+  BOXES.push({x,z,hw:Math.max(s2.x*.42,1.5),hd:Math.max(s2.z*.42,1.5)});
+  return {m,w:s2.x,d:s2.z,h:s2.y}; }
 /* ---- props urbanos: TODOS son modelos 3D generados (con clon liviano) ---- */
 function putProp(tpl,x,z,h,rotY,collide){
   if(!tpl)return null;
@@ -542,7 +553,7 @@ function putProp(tpl,x,z,h,rotY,collide){
   return m; }
 function buildCity(){
   cityGroup.clear(); BOXES.length=0;
-  const BLOCK=34, ROAD=11, NB=(Q.qual==='low'?2:3);    // manzana, avenida y radio de la grilla (7x7 manzanas)
+  const BLOCK=46, ROAD=12, NB=(Q.qual==='low'?2:3);    // manzana, avenida y radio de la grilla (7x7 manzanas)
   const L=BLOCK*(NB*2+1);
   // ---- suelo: PLAZA con textura generada ----
   const plaza=new THREE.Mesh(new THREE.PlaneGeometry(L,L),plazaMat);
@@ -581,17 +592,20 @@ function buildCity(){
     walk.rotation.x=-Math.PI/2; walk.position.set(c.x,GROUND_Y+.012,c.z); cityGroup.add(walk);
     const lawn=new THREE.Mesh(new THREE.PlaneGeometry(IN-2.5,IN-2.5),lawnMat);
     lawn.rotation.x=-Math.PI/2; lawn.position.set(c.x,GROUND_Y+.03,c.z); cityGroup.add(lawn);
-    // el skyline: torres altas al centro, edificios bajos a las orillas
+    // el skyline: RASCACIELOS enormes al centro, bajando hacia las orillas
     const central=c.d<1.7, mid=c.d<2.7;
-    if(towers.length&&(central||(mid&&r<.66))){
+    if(towers.length&&(central||(mid&&r<.7))){
       const tpl=towers[(hash2(i,73)*towers.length)|0];
-      const h=(central?36:24)+hash2(i,79)*(central?24:14);
-      const b=putBldg(tpl,c.x,c.z,h,rot);
-      if(lows.length&&hash2(i,83)<.45)
-        putBldg(lows[(hash2(i,91)*lows.length)|0],c.x+(b.w*.5+8)*(hash2(i,89)<.5?1:-1),c.z+5,8,rot);
+      // alturas de rascacielos de verdad: 95-160 m en el centro, 55-95 m en el anillo medio
+      const h=(central?95:55)+hash2(i,79)*(central?65:40);
+      const w=(central?20:17)+hash2(i,81)*7;
+      const b=putBldg(tpl,c.x,c.z,h,rot,w);
+      if(lows.length&&hash2(i,83)<.4)
+        putBldg(lows[(hash2(i,91)*lows.length)|0],c.x+(b.w*.5+11)*(hash2(i,89)<.5?1:-1),c.z+6,20,rot,24);
     } else if(lows.length){
       const tpl=lows[(hash2(i,97)*lows.length)|0];
-      putBldg(tpl,c.x,c.z,(tpl===BT.apt?15:(tpl===BT.office?13:9))+hash2(i,101)*4,rot); }
+      const h=(tpl===BT.apt?34:(tpl===BT.office?30:(tpl===BT.dome?18:22)))+hash2(i,101)*8;
+      putBldg(tpl,c.x,c.z,h,rot,tpl===BT.dome?34:30); }
     // arbolado y arbustos de la manzana (modelos generados)
     for(let k=0;k<2;k++){ const ox=(hash2(i*7+k,103)-.5)*IN*.8, oz=(hash2(i*7+k,107)-.5)*IN*.8;
       const px=c.x+ox, pz=c.z+oz;
@@ -616,17 +630,20 @@ function buildCity(){
     const x=CITY.x+(horiz?t:c+ROAD*.28), z=CITY.z+(horiz?c+ROAD*.28:t);
     putProp(BT.car,x,z,1.55,horiz?Math.PI/2:0,true); }
   // ---- fuente central: modelo generado ----
-  if(BT.fountain){ putBldg(BT.fountain,CITY.x,CITY.z,4.6,0); } }
+  if(BT.fountain){ putBldg(BT.fountain,CITY.x,CITY.z,5.2,0,14); } }
 /* carga de los modelos 3D de la ciudad; cada uno que llega REconstruye la ciudad (con debounce) */
 let cityT=null;
-const cityLater=()=>{ clearTimeout(cityT); cityT=setTimeout(()=>buildCity(),120); };
+let cityErr='',cityBuilds=0;
+const safeBuild=()=>{ try{ buildCity(); cityBuilds++; }catch(e){ cityErr=String(e&&e.message||e); } };
+const cityLater=()=>{ clearTimeout(cityT); cityT=setTimeout(safeBuild,120); };
 const fillLater=()=>{ if(typeof fillPlats==='function')fillPlats();
   if(typeof fillFish==='function')fillFish(); if(typeof fillGems==='function')fillGems(); };
 [['tower1',A.tower1],['tower2',A.tower2],['tower3',A.tower3],['dome',A.dome],['mall',A.mall],['eco',A.bush],
  ['office',A.office],['spire',A.spire],['apt',A.apt],['kiosk',A.kiosk],['fountain',A.fountain],
  ['lamp',A.lamp],['bench',A.bench],['car',A.car],['plat',A.plat],['gem',A.gem],['fish',A.fish]]
-  .forEach(([k,u])=>{ if(ok(u))_gl.load(u,g=>{ BT[k]=g.scene;
-    if(k==='plat'||k==='gem'||k==='fish')fillLater(); else cityLater(); },undefined,()=>{}); });
+  .forEach(([k,u])=>{ loadGLB(u,g=>{ BT[k]=g.scene; fillLater(); cityLater(); }); });
+// red de seguridad: si algún modelo llegó tarde, la ciudad se rearma igual
+[3000,8000,16000,28000,45000].forEach(t=>setTimeout(()=>{ fillLater(); safeBuild(); },t));
 buildCity();
 
 /* ================= plataformas flotantes (misión 4) ================= */
@@ -696,7 +713,7 @@ function fillFish(){ if(!BT.fish)return;
 const CRY=[]; const cryGroup=new THREE.Group(); scene.add(cryGroup);
 (function(){ let i=0,n=0;
   while(n<40&&i<4000){ i++;
-    const a=hash2(i,53)*6.28, r=12+hash2(i,59)*200;
+    const a=hash2(i,53)*6.28, r=12+hash2(i,59)*280;
     const x=Math.cos(a)*r, z=Math.sin(a)*r, y=terrainH(x,z);
     if(y<WATER_Y+.6)continue; if(Math.hypot(x-CITY.x,z-CITY.z)<CITY.r*.8)continue;
     const holder=new THREE.Group(); holder.position.set(x,y+1.15,z); cryGroup.add(holder);
@@ -754,8 +771,7 @@ let procH=procHero(); heroRoot.add(procH);
 function lockRoot(clip){ for(const tr of clip.tracks){ if(!tr.name.endsWith('.position'))continue;
   const v=tr.values,x0=v[0],y0=v[1],z0=v[2];
   for(let i=0;i<v.length;i+=3){ v[i]=x0; v[i+1]=y0; v[i+2]=z0; } } }
-function loadHero(url,key){ if(!ok(url))return;
-  _gl.load(url,g=>{ const m=g.scene;
+function loadHero(url,key){ loadGLB(url,g=>{ const m=g.scene;
     const bb=new THREE.Box3().setFromObject(m); const sz=bb.getSize(new THREE.Vector3());
     m.scale.setScalar(1.9/Math.max(sz.y,.01));
     const bb2=new THREE.Box3().setFromObject(m); m.position.y=-bb2.min.y;
@@ -766,7 +782,7 @@ function loadHero(url,key){ if(!ok(url))return;
       const mx=new THREE.AnimationMixer(m); const act=mx.clipAction(clip);
       act.timeScale=key==='run'?1.25:1; act.play(); HMX[key]=mx; }
     heroRoot.add(m);
-    if(!heroReady){ heroReady=true; if(procH){ heroRoot.remove(procH); } } },undefined,()=>{}); }
+    if(!heroReady){ heroReady=true; if(procH){ heroRoot.remove(procH); } } }); }
 loadHero(A.heroIdle,'idle'); loadHero(A.heroRun,'run'); loadHero(A.heroJump,'jump');
 function setAnim(k){ if(animK===k)return; if(!HM[k])return; animK=k;
   for(const q in HM)if(HM[q])HM[q].visible=(q===k); if(HMX[k])HMX[k].setTime(0); }
@@ -1165,7 +1181,12 @@ window.__A={ app:()=>APP, hero:()=>({x:HERO.x,y:HERO.y,z:HERO.z,h:HERO.h,sp:HERO
       return {x:+o.position.x.toFixed(0),z:+o.position.z.toFixed(0),h:+(bb.max.y-bb.min.y).toFixed(1),
         w:+(bb.max.x-bb.min.x).toFixed(1),v:o.visible}; }) }),
   camPos:()=>({x:+camera.position.x.toFixed(1),y:+camera.position.y.toFixed(1),z:+camera.position.z.toFixed(1),yaw:+CAM.yaw.toFixed(2)}),
-  setYaw:y=>{ CAM.yaw=y; },
+  setYaw:y=>{ CAM.yaw=y; }, setPitch:p=>{ CAM.pitch=p; }, setDist:d=>{ CAM.dist=d; },
+  aUrl:k=>A[k], okU:k=>ok(A[k]), draco:()=>DRACO,
+  rebuild:()=>{ try{ buildCity(); return 'ok kids='+cityGroup.children.length+' boxes='+BOXES.length; }catch(e){ return 'THROW: '+e.message; } },
+  diag:()=>({builds:cityBuilds,err:cityErr,kids:cityGroup.children.length,boxes:BOXES.length}),
+  btKeys:()=>Object.keys(BT).filter(k=>!!BT[k]),
+  bldgH:()=>cityGroup.children.map(o=>{ const bb=new THREE.Box3().setFromObject(o); return +(bb.max.y-bb.min.y).toFixed(0); }).sort((a,b)=>b-a).slice(0,8),
   giveCry:n=>{ RUN.cry+=n; misSync(); misCheck(); }, giveBub:n=>{ RUN.bub+=n; misSync(); misCheck(); } };
 </script>
 </body>
