@@ -2,6 +2,13 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.12 — power-ups, martillos gigantes, daño más justo y controles que no se pierden
+- **Power-ups en el mapa** ✨: ⚡ turbo, ◈ escudo (anula daño), ✚ reparar, 🪙 monedas, ▽ mini y △ gigante. Flotan y giran; los agarrás pasando por encima y reaparecen a los ~13 s.
+- **Martillos gigantes** 🔨: en Aeropuerto/Azotea/Estadio hay un corredor con **6 martillos desparejos** que bajan y suben; si te agarran te **mandan a volar con físicas** y te dañan. Barandas y pórtico con colisión.
+- **Daño más justo**: cada auto aguanta **~15 golpes** (antes moría en 2). La abolladura es **más chica y en el punto exacto** del impacto (no se destruye tanto). El escudo lo anula.
+- **Fix controles**: reubicando los controles ya **no se pierden** al arrastrarlos al borde — quedan siempre dentro de la pantalla.
+- Más SFX en golpes, martillos y power-ups.
+
 ## Novedades 5.11 — garaje horizontal ordenado, voz por proximidad, nombres con contorno y onboarding con mapa
 - **Garaje rediseñado para horizontal**: monedas, nombre, stats, opciones (rueda/piloto) y botones **ya no se enciman** — barra inferior en 3 secciones (stats · opciones · acción), nombre arriba, flechas a los lados.
 - **Voz por proximidad** 🔊: la voz de cada jugador **baja según la distancia** (fuerte a ~6 m, se apaga a ~55 m), como el sonido de los autos.

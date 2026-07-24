@@ -289,7 +289,7 @@ window.__dyBooted=false;
   <img id="logo" alt="">
   <div id="loadbar"><div></div></div>
   <div id="loadmsg">…</div>
-  <div id="buildtag">build 5.11.1</div>
+  <div id="buildtag">build 5.12</div>
 </div>
 <div class="screen hidden" id="s_title"></div>
 <div class="screen hidden" id="s_maps"></div>
@@ -719,13 +719,24 @@ addEventListener("pointerdown",e=>{if(!relocating)return;
   dragBase={x:p.x,y:p.y};dragStart={x:e.clientX,y:e.clientY};
   try{el.setPointerCapture(e.pointerId);}catch(_){}
 },{capture:true});
+// mantené el botón dentro de la pantalla (si no, se "pierde" al arrastrarlo al borde)
+function clampCtrl(el,id){const r=el.getBoundingClientRect();if(!r.width)return;const m=6;
+  let cx=0,cy=0;
+  if(r.left<m)cx=m-r.left;else if(r.right>innerWidth-m)cx=(innerWidth-m)-r.right;
+  if(r.top<m)cy=m-r.top;else if(r.bottom>innerHeight-m)cy=(innerHeight-m)-r.bottom;
+  if(cx||cy){let ax=cx,ay=cy;
+    if(document.body.classList.contains("rot")){ax=cy;ay=-cx;} // corrección de pantalla -> espacio del #app rotado
+    const p=save.ctrl[id]||{x:0,y:0};p.x=Math.round(p.x+ax);p.y=Math.round(p.y+ay);save.ctrl[id]=p;
+    el.style.transform=`translate(${p.x}px,${p.y}px)`;}}
 addEventListener("pointermove",e=>{if(!dragEl)return;e.preventDefault();e.stopPropagation();
   let dx=e.clientX-dragStart.x,dy=e.clientY-dragStart.y;
   if(document.body.classList.contains("rot")){const t=dx;dx=dy;dy=-t;} // el #app está rotado 90° en vertical
   save.ctrl[dragId]={x:Math.round(dragBase.x+dx),y:Math.round(dragBase.y+dy)};
   dragEl.style.transform=`translate(${save.ctrl[dragId].x}px,${save.ctrl[dragId].y}px)`;
+  clampCtrl(dragEl,dragId);
 },{capture:true});
-addEventListener("pointerup",e=>{if(!dragEl)return;e.preventDefault();e.stopPropagation();dragEl=null;persist();},{capture:true});
+addEventListener("pointerup",e=>{if(!dragEl)return;e.preventDefault();e.stopPropagation();
+  clampCtrl(dragEl,dragId);dragEl=null;persist();},{capture:true});
 
 /* ================= renderer / rotation ================= */
 const app=document.getElementById("app");
@@ -1868,9 +1879,20 @@ function buildWorld(mapIdx,timeKey){
   const data=MAPS[mapIdx].build(group,timeKey);
   sun.castShadow=true;
   world={group,timeKey,mapIdx,chimneys:[],sunOff:lastSunOff,sky:lastSky,skyY:lastSkyY,hazards:dyHazards,ramps:dyRamps,...data};
-  world.pit=dyPit;
+  world.pit=dyPit;world.powerups=[];
+  injectArenaFeatures(mapIdx,group,world.colliders||(world.colliders=[]));
   world.grid=buildColliderGrid(world.colliders||[]);
   return world;}
+// power-ups en todos los mapas de drift + gauntlet de martillos en los grandes
+function injectArenaFeatures(mapIdx,group,colliders){
+  const DRIFT=[0,2,3,4,5,6];if(DRIFT.indexOf(mapIdx)<0)return;
+  const B=world.bounds||{W:70,D:70},R=Math.min(B.W,B.D)*0.5;
+  const types=["speed","coins","shield","repair","mini","giant"];
+  for(let i=0;i<6;i++){const a=i/6*Math.PI*2+0.5;
+    spawnPowerup(group,+(Math.cos(a)*R).toFixed(1),+(Math.sin(a)*R).toFixed(1),types[i%types.length]);}
+  if(mapIdx===2||mapIdx===3||mapIdx===6){ // aeropuerto / azotea / estadio: martillos + brazo extra
+    buildHammerGauntlet(group,colliders,-R*0.55,R*0.5,Math.PI*0.25);
+    addHazard(group,R*0.6,-R*0.45,10,1.5); }}
 function disposeWorld(){if(world){scene.remove(world.group);
   world.group.traverse(o=>{if(o.geometry)o.geometry.dispose?.();});
   for(const f of floods)scene.remove(f);
@@ -2020,7 +2042,8 @@ function newSession(){
     total:0,cur:0,combo:1,driftT:0,gapT:0,bestDrift:0,
     t:M.mode==="drift"?CFG.session:0,go:1.5,over:false,saved:false,record:false,
     lap:0,cp:0,lapStart:0,lapTimes:[],bestLapT:null,roadIdx:0,
-    camYaw:sp.h,shake:0,chimT:0};
+    camYaw:sp.h,shake:0,chimT:0,
+    boostT:0,shieldT:0,sizeT:0,sizeTgt:1,curScale:1}; // power-ups
   buildCarMesh(s);
   return s;}
 /* Deforma la carrocería: empuja los vértices cercanos al punto de impacto hacia
@@ -2037,7 +2060,7 @@ function deformCar(s,worldDir,strength){
     // punto de impacto en el borde del bounding en la dirección del golpe
     const ix=(lx>0?bb.max.x:bb.min.x)*.9, iz=(lz>0?bb.max.z:bb.min.z)*.9;
     const iy=(bb.min.y+bb.max.y)*.5;
-    const R=Math.max(sz,sx)*.45, R2=R*R, amp=strength*R*.5;
+    const R=Math.max(sz,sx)*.3, R2=R*R, amp=strength*R*.5; // radio menor -> abolladura en el punto exacto del golpe
     for(let i=0;i<arr.length;i+=3){
       const dx=arr[i]-ix,dy=arr[i+1]-iy,dz=arr[i+2]-iz;
       const d2=dx*dx+dy*dy*.4+dz*dz;
@@ -2263,25 +2286,103 @@ function doJump(s){const of=s.onFoot;if(of.grounded&&of.punchT<=0){of.vy=8.4;of.
   pedPlay(of.ped,"jump",.05);sfx("sfx_pop",.3,1.9);}}
 function consumePress(name){const i=pressed.indexOf(name);if(i>=0){pressed.splice(i,1);return true;}return false;}
 
-/* hazards giratorios que destrozan autos */
+/* hazards: brazos giratorios + martillos gigantes que destrozan autos */
 function updateHazards(s,dt){
   if(!world.hazards)return;
   for(const hz of world.hazards){
+    if(hz.type==="hammer"){
+      hz.phase+=hz.spd*dt;
+      const a=Math.sin(hz.phase);hz.piv.rotation.x=-0.72+0.72*a; // baja (a≈1) y sube (a≈-1)
+      const striking=a>0.68;                                     // martillo abajo = peligroso
+      const px=s.onFoot.active?s.onFoot.x:s.x, pz=s.onFoot.active?s.onFoot.z:s.z;
+      const d=Math.hypot(px-hz.x,pz-hz.z);
+      if(striking&&d<2.3){
+        if(s.onFoot.active&&!s.dead){const of=s.onFoot;of.hp-=30;of.vy=9;
+          of.x+=(of.x-hz.x)/(d||1)*3;of.z+=(of.z-hz.z)/(d||1)*3;sfx("sfx_crash",1,1.1);}
+        else if(!s.dead&&!hz._hitCd){
+          const nx=(s.x-hz.x)/(d||1),nz=(s.z-hz.z)/(d||1);
+          s.vx+=nx*10;s.vz+=nz*10;s.vy=13;s.airborne=true;s.shake=1; // ¡te hace volar con físicas!
+          if(s.shieldT<=0){s.hp=Math.max(0,s.hp-16);deformCar(s,{x:0,z:1},.5);}
+          sfx("sfx_crash",1,.8);sfx("sfx_pop",.6,.7);hz._hitCd=.6;
+          if(s.hp<=0)killPlayer(s);}}
+      if(hz._hitCd>0)hz._hitCd-=dt;
+      continue;}
+    // brazo giratorio
     hz.ang+=hz.spd*dt;hz.arm.rotation.y=hz.ang;
-    // punta del brazo en mundo
     const tx=hz.x+Math.sin(hz.ang)*hz.len, tz=hz.z+Math.cos(hz.ang)*hz.len;
-    // ¿pega al auto?
     if(!s.onFoot.active&&!s.dead){
       const d=Math.hypot(s.x-tx,s.z-tz);
       if(d<2.4){const nx=(s.x-tx)/(d||1),nz=(s.z-tz)/(d||1);
-        s.vx+=nx*22;s.vz+=nz*22;s.shake=1;
-        s.hp=Math.max(0,s.hp-28);deformCar(s,{x:-nx,z:-nz},.8);
+        s.vx+=nx*20;s.vz+=nz*20;s.shake=1;
+        if(s.shieldT<=0){s.hp=Math.max(0,s.hp-12);deformCar(s,{x:-nx,z:-nz},.5);}
         sfx("sfx_crash",1,.9);if(s.hp<=0)killPlayer(s);}}
-    // ¿pega al jugador a pie?
     if(s.onFoot.active){const of=s.onFoot;const d=Math.hypot(of.x-tx,of.z-tz);
       if(d<2){of.hp-=25;of.vy=6;of.x+=(of.x-tx)/(d||1)*4;of.z+=(of.z-tz)/(d||1)*4;sfx("sfx_punch",1,.8);}}
   }
 }
+/* ===== power-ups en el mapa ===== */
+const PUPS={
+  speed :{c:0x35d0ff,fn:s=>{s.boostT=5;}},
+  shield:{c:0xffd23c,fn:s=>{s.shieldT=6;}},
+  repair:{c:0x5fe08a,fn:s=>{s.hp=100;}},
+  coins :{c:0xffcf3c,fn:s=>{save.coins+=40;persist();}},
+  mini  :{c:0x9b6bff,fn:s=>{s.sizeT=7;s.sizeTgt=.62;}},
+  giant :{c:0xff6b6b,fn:s=>{s.sizeT=7;s.sizeTgt=1.65;s.boostT=Math.max(s.boostT,3);}}};
+function pupLabel(t){return{speed:L3("¡TURBO!","SPEED!","TURBO!"),shield:L3("ESCUDO","SHIELD","ESCUDO"),
+  repair:L3("REPARADO","REPAIRED","REPARADO"),coins:"+🪙40",mini:L3("¡MINI!","MINI!","MINI!"),
+  giant:L3("¡GIGANTE!","GIANT!","GIGANTE!")}[t]||"";}
+function spawnPowerup(group,x,z,type){
+  const P=PUPS[type];const g=new THREE.Group();g.position.set(x,1.2,z);
+  const box=new THREE.Mesh(new THREE.OctahedronGeometry(.72,0),
+    new THREE.MeshStandardMaterial({color:P.c,emissive:P.c,emissiveIntensity:.55,metalness:.35,roughness:.3,transparent:true,opacity:.92}));
+  box.castShadow=false;g.add(box);
+  const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:P.c,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+  glow.scale.set(3.2,3.2,1);g.add(glow);
+  group.add(g);world.powerups.push({x,z,type,g,box,cd:0});}
+function updatePowerups(s,dt){
+  if(!world.powerups||!world.powerups.length)return;
+  const px=s.onFoot.active?s.onFoot.x:s.x, pz=s.onFoot.active?s.onFoot.z:s.z;
+  const tnow=performance.now();
+  for(const pu of world.powerups){
+    pu.box.rotation.y+=dt*1.7;pu.g.position.y=1.2+Math.sin(tnow*.003+pu.x)*.15;
+    if(pu.cd>0){pu.cd-=dt;if(pu.cd<=0)pu.g.visible=true;continue;}
+    const d=Math.hypot(px-pu.x,pz-pu.z);
+    if(d<2.3&&!s.dead){PUPS[pu.type].fn(s);sfx("sfx_pop",.7,1.5);sfx("sfx_chime",.5,1.2);
+      toast(pupLabel(pu.type),"var(--yel)");pu.cd=13;pu.g.visible=false;}}}
+// aplica/expira efectos de power-up cada frame
+function tickEffects(s,dt){
+  if(s.boostT>0)s.boostT-=dt;
+  if(s.shieldT>0)s.shieldT-=dt;
+  const tgt=(s.sizeT>0)?(s.sizeT-=dt,s.sizeTgt):1;
+  s.curScale+=(tgt-s.curScale)*Math.min(1,dt*6);
+  if(s.obj&&Math.abs(s.obj.scale.x-s.curScale)>1e-3)s.obj.scale.setScalar(s.curScale);}
+/* ===== martillos gigantes (gauntlet): pivote que baja y sube desparejo ===== */
+function makeHammer(group,x,baseY,z,rot,phase,speed){
+  const piv=new THREE.Group();piv.position.set(x,(baseY||0)+7.6,z);piv.rotation.y=rot;group.add(piv);
+  const armMat=stdMat("metal");armMat.color.set(0x4a4d55);armMat.metalness=.7;armMat.roughness=.5;
+  const headMat=stdMat("metal");headMat.color.set(0x8a2f2f);headMat.metalness=.6;headMat.roughness=.45;
+  const arm=new THREE.Mesh(new THREE.CylinderGeometry(.32,.32,6.6,10),armMat);arm.position.y=-3.3;arm.castShadow=true;piv.add(arm);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(2.6,2.2,2.6),headMat);head.position.y=-6.6;head.castShadow=true;piv.add(head);
+  world.hazards.push({type:"hammer",piv,x,z,rot,phase:phase||0,spd:speed||1.6,headY:0});}
+function buildHammerGauntlet(group,colliders,cx,cz,ang){
+  const s=Math.sin(ang),c=Math.cos(ang);
+  const PW=9,PL=28; // corredor a nivel del piso (el auto lo cruza)
+  const padMat=stdMat("metal");padMat.color.set(0x2b2f37);padMat.metalness=.5;padMat.roughness=.6;
+  const pad=new THREE.Mesh(new THREE.BoxGeometry(PW,.12,PL),padMat);
+  pad.position.set(cx,.06,cz);pad.rotation.y=ang;pad.receiveShadow=true;group.add(pad);
+  // arco/pórtico de entrada rayado
+  const railMat=stdMat("metal");railMat.color.set(0xff7a1a);railMat.metalness=.4;railMat.roughness=.5;railMat.emissive.set(0x351400);railMat.emissiveIntensity=.4;
+  // vigas superiores de donde cuelgan los martillos + parantes laterales (colisión)
+  const postMat=stdMat("metal");postMat.color.set(0x3a3d45);postMat.metalness=.6;postMat.roughness=.5;
+  for(const side of[-1,1]){
+    const post=new THREE.Mesh(new THREE.BoxGeometry(.5,8.2,PL),postMat);
+    post.position.set(cx+(PW/2+.3)*c*side, 4.1, cz-(PW/2+.3)*s*side);post.rotation.y=ang;post.castShadow=true;group.add(post);
+    colliders.push(obb(cx+(PW/2+.3)*c*side,cz-(PW/2+.3)*s*side,.5,PL/2,ang));}
+  const beam=new THREE.Mesh(new THREE.BoxGeometry(PW+1.4,.6,PL),postMat);beam.position.set(cx,8.1,cz);beam.rotation.y=ang;group.add(beam);
+  // 6 martillos gigantes desparejos a lo largo del corredor (golpean el piso)
+  for(let i=0;i<6;i++){const t=(i+.5)/6-.5;const hx=cx+s*t*PL,hz=cz+c*t*PL;
+    makeHammer(group,hx,0,hz,ang+Math.PI/2,i*1.05,1.25+((i*37)%9)/10);}
+  return{cx,cz};}
 function var_red(){return"var(--red)";}
 
 /* ================= physics v2 ================= */
@@ -2331,14 +2432,15 @@ function update(dt){
     s.roadIdx=bi;
     offroad=Math.sqrt(best)>R.halfW+ .6;}
 
-  // progressive acceleration toward each car's own top speed
+  // progressive acceleration toward each car's own top speed (con turbo del power-up)
+  const boost=s.boostT>0?1.38:1, topB=st.top*boost;
   if(s.over)vF-=vF*1.2*dt;
   else if(cmd.up){const launch=.32+.68*Math.min(1,Math.max(vF,0)/9); // salida lenta realista
-    vF+=st.accel*Math.max(0,1-Math.max(vF,0)/st.top)*1.5*launch*surfAccel*dt;}
+    vF+=st.accel*boost*Math.max(0,1-Math.max(vF,0)/topB)*1.5*launch*surfAccel*dt;}
   else if(cmd.down)vF-=(vF>1?42:12)*dt;
   else vF-=vF*.4*dt;
   if(offroad){vF-=vF*1.5*dt;s.shake=Math.min(.4,s.shake+dt);}
-  vF=Math.max(-8,Math.min(vF,st.top));
+  vF=Math.max(-8,Math.min(vF,topB));
 
   let grip=st.grip*surfGrip;
   const hand=cmd.hand&&!s.over;
@@ -2412,14 +2514,15 @@ function update(dt){
     sfx(imp>.45?"sfx_crash":"sfx_crash_soft",Math.max(.15,imp*imp*1.2),.9+Math.random()*.25);
     s.shake=Math.min(1,.3+imp);
     if(s.mapMode==="drift"&&s.cur>0){s.cur=0;s.combo=1;s.driftT=0;toast(L.comboLost,"var(--red)");}
-    if(dv>2.5&&!s.dead){ // daño + deformación proporcional al golpe
-      const dmg=Math.min(55,dv*2.4);
+    if(dv>3&&!s.dead&&s.shieldT<=0){ // daño acumulativo: el auto aguanta ~15 golpes (escudo lo anula)
+      const dmg=Math.min(13,Math.max(4,dv*1.0)); // golpe fuerte ~13 (mín 8 golpes), normal ~6-7 (~15 golpes)
       s.hp=Math.max(0,s.hp-dmg);
       const dir=dv>1e-3?{x:dvx/dv,z:dvz/dv}:{x:0,z:1};
-      deformCar(s,dir,Math.min(1,dv/22));
-      for(let k=0;k<3;k++)spawnPuffAt(s.x,.6,s.z,1.4);
+      deformCar(s,dir,Math.min(.6,dv/34)); // abolladura más chica y localizada (no se destruye tanto)
+      if(dmg>8)for(let k=0;k<3;k++)spawnPuffAt(s.x,.6,s.z,1.4);
       if(s.hp<=0)killPlayer(s);}}
   if(world.hazards&&world.hazards.length)updateHazards(s,dt);
+  updatePowerups(s,dt);tickEffects(s,dt);
 
   /* trampa: engranajes giran, palanca activa la compuerta de cristal */
   if(dyPit){updateGearPit(dt,s.x,s.z);
