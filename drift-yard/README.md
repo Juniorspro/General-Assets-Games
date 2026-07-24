@@ -2,6 +2,14 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.19 — arreglos varios (checkpoints, asfalto, aéreo, barco, choque)
+- **Checkpoints limpios en TODOS los mapas de carrera** (bosque y touge también): pilotes naranjas iluminados + barra fina, y meta a cuadros. Se fue el cartelón torcido.
+- **Asfalto de pista realista** en bosque y touge (mismo asfalto lindo del GP), no más textura de calle plana.
+- **Circuito aéreo**: la pista ahora es **doble cara** (se ve desde abajo) con **viga estructural**, **cercas más altas y sólidas**, más ancha, y la **cámara sigue en 3ª persona a la altura del auto** al subir (antes no se veía el piso).
+- **Barco del puerto**: reubicado **lejos, fuera del mapa** (ya no tapa como una pared).
+- **Sonido de choque**: reemplazado el efecto largo/ruidoso por un **golpe seco corto** (thump + click, ~0.3 s).
+- **Anti-clon**: nunca se dibuja un "fantasma" con tu propio nombre (eco de una recarga en el broker público).
+
 ## Novedades 5.18 — checkpoints limpios + asfalto de pista de verdad
 - **Checkpoints rediseñados**: se fue el cartelón naranja gigante mal ubicado; ahora son **pilotes naranjas iluminados** a cada lado con una barra fina arriba (limpio y claro).
 - **Textura de asfalto de pista** propia y realista (gris medio con agregado y marcas de goma) en el circuito y en el aéreo — nada de negro plano ni textura de calle. El pasto sigue verde vivo.
