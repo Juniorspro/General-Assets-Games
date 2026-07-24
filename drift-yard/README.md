@@ -2,6 +2,10 @@
 
 Juego de **drift 3D en Three.js** con **8 mapas**, **12 autos + 8 ruedas + 5 pilotos** elegibles, daño con **deformación real de la carrocería**, y **modo a pie** (bajás del auto, caminás/corrés/saltás/pegás). El derrape puntúa **solo si lo inicias con el freno de mano ✋**.
 
+## Novedades 5.21 — arco de checkpoint bien orientado (¡palos a los costados!)
+- **Bug de rotación arreglado**: los arcos de checkpoint y el pórtico de largada estaban **rotados 90°**, así que un palo quedaba **en el medio de la calle** y la bandera corría a lo largo del camino. Ahora el arco cruza la pista: **postes a la izquierda y derecha**, **bandera tendida bien alto de poste a poste**, y pasás por debajo. Aplica a GP, bosque y touge + largada.
+- Grilla de largada a cuadros un poco más corta y prolija.
+
 ## Novedades 5.20 — ¡EL PISO DEL GP YA TIENE TEXTURA! + bandera bien tendida
 - **Bug encontrado y arreglado**: en el Gran Premio, la "grilla de largada" a cuadros se pintaba **sobre TODA la vuelta** encima del asfalto (a 4 cm de altura), y a la distancia el damero se veía **negro** → parecía que la pista no tenía textura. Ahora la grilla a cuadros es **solo un tramo corto tras la meta** y el resto de la pista muestra el **asfalto gris realista generado** (imagen `gp_asphalt.jpg`).
 - **Bandera de checkpoint bien tendida**: la lona **se estira de poste a poste** (antes quedaba fina en el centro): 2 postes blancos + barra superior + lona ancha a cuadros/chevron colgada de la barra. Aplica a GP, bosque y touge.
