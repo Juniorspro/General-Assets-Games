@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>VR Hands — handtracking demo</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:#0b0e14;overflow:hidden;font-family:system-ui,Arial,sans-serif;color:#e8ecf4}
+  #info{position:fixed;left:0;right:0;top:0;z-index:5;padding:14px 16px;text-align:center;
+    background:linear-gradient(180deg,rgba(8,10,16,.85),rgba(8,10,16,0));pointer-events:none}
+  #info h1{font-size:clamp(16px,4.5vw,24px);letter-spacing:.02em}
+  #info p{font-size:clamp(12px,3.4vw,15px);opacity:.8;margin-top:4px;max-width:640px;margin-left:auto;margin-right:auto}
+  #hint{position:fixed;left:0;right:0;bottom:88px;z-index:5;text-align:center;font-size:clamp(12px,3.4vw,15px);opacity:.75;pointer-events:none}
+  /* el VRButton de three se auto-posiciona abajo-centro */
+</style>
+</head>
+<body>
+<div id="info">
+  <h1>✋ VR Hands</h1>
+  <p>Abrí este link en el <b>navegador del Meta Quest</b> y tocá <b>ENTER VR</b>. Usá tus <b>manos reales</b>: juntá <b>pulgar + índice</b> (pinch) para agarrar los objetos y soltalos/lanzalos.</p>
+</div>
+<div id="hint">Sin visor: es solo una vista previa. El handtracking necesita un headset (Quest, etc.).</div>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
+import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+
+// ---------- render base (todo apuntado a fluidez) ----------
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(1);                 // en VR el pixelRatio lo maneja el XR; 1 evita sobre-render
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.xr.enabled = true;
+renderer.xr.setFoveation(1);               // foveación máxima: baja resolución en los bordes = más fps
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x10151f);
+scene.fog = new THREE.Fog(0x10151f, 6, 26);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.05, 60);
+camera.position.set(0, 1.6, 0.6);
+
+// ---------- luces ----------
+scene.add(new THREE.HemisphereLight(0xbfd6ff, 0x20222b, 1.0));
+const sun = new THREE.DirectionalLight(0xfff4e2, 1.6);
+sun.position.set(3, 6, 2); sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024); sun.shadow.camera.near=.5; sun.shadow.camera.far=20;
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+scene.add(sun);
+
+// ---------- piso ----------
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(14, 48),
+  new THREE.MeshStandardMaterial({ color:0x1a2130, roughness:.95 }));
+floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+const grid = new THREE.GridHelper(28, 56, 0x3a4a63, 0x233047);
+grid.material.opacity = .5; grid.material.transparent = true; scene.add(grid);
+
+// ---------- mesa con objetos agarrables ----------
+const table = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.55, 0.6, 0.72, 32),
+  new THREE.MeshStandardMaterial({ color:0x2a3550, roughness:.7, metalness:.1 }));
+table.position.set(0, 0.36, -0.55); table.castShadow = table.receiveShadow = true; scene.add(table);
+
+const GRAV = 6.5;                          // gravedad suave, se siente lindo
+const grabbables = [];
+const palette = [0xff7a1a,0x2ad1c9,0xffd23c,0xe8496b,0x7ad14a,0x8a7bff,0xffffff];
+function addCube(x,z,c,s){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(s,s,s),
+    new THREE.MeshStandardMaterial({ color:c, roughness:.35, metalness:.15, emissive:c, emissiveIntensity:.06 }));
+  m.position.set(x, 0.74 + s/2, -0.55 + z); m.castShadow = m.receiveShadow = true;
+  m.userData = { vel:new THREE.Vector3(), held:null, radius:s*0.72, rest:true };
+  scene.add(m); grabbables.push(m); return m;
+}
+function addBall(x,z,c,r){
+  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r,2),
+    new THREE.MeshStandardMaterial({ color:c, roughness:.3, metalness:.1, emissive:c, emissiveIntensity:.08 }));
+  m.position.set(x, 0.74 + r, -0.55 + z); m.castShadow = m.receiveShadow = true;
+  m.userData = { vel:new THREE.Vector3(), held:null, radius:r, rest:true };
+  scene.add(m); grabbables.push(m); return m;
+}
+addCube(-0.28, 0.0, palette[0], 0.09);
+addCube( 0.0 , -0.1, palette[2], 0.08);
+addCube( 0.28, 0.0, palette[3], 0.10);
+addBall(-0.15, 0.12, palette[1], 0.06);
+addBall( 0.15, 0.12, palette[4], 0.055);
+addBall( 0.0 , 0.28, palette[5], 0.07);
+
+// cartel flotante de bienvenida (se ve dentro de VR)
+makeLabel('✋ Juntá pulgar + índice para agarrar', 0, 1.9, -0.9, 0.9);
+function makeLabel(text,x,y,z,w){
+  const cv=document.createElement('canvas'); cv.width=1024; cv.height=128;
+  const g=cv.getContext('2d'); g.fillStyle='rgba(12,16,24,.82)'; roundRect(g,0,0,1024,128,28); g.fill();
+  g.fillStyle='#e8ecf4'; g.font='600 60px system-ui,Arial'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText(text,512,68);
+  const tex=new THREE.CanvasTexture(cv); tex.colorSpace=THREE.SRGBColorSpace;
+  const sp=new THREE.Mesh(new THREE.PlaneGeometry(w, w*0.125),
+    new THREE.MeshBasicMaterial({ map:tex, transparent:true }));
+  sp.position.set(x,y,z); scene.add(sp);
+}
+function roundRect(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
+
+// ---------- manos (modelos 3D rigged) + controllers de respaldo ----------
+const handFactory = new XRHandModelFactory();
+const ctrlFactory = new XRControllerModelFactory();
+const hands = [];   // { hand, joints, pinching, pinchPos, prevPos, held }
+
+for (let i=0;i<2;i++){
+  // modelo 3D de la mano (perfil "mesh": malla rigged que sigue las 25 articulaciones)
+  const hand = renderer.xr.getHand(i);
+  hand.add(handFactory.createHandModel(hand, 'mesh'));
+  scene.add(hand);
+
+  // controller de respaldo (por si el visor no tiene handtracking activo)
+  const grip = renderer.xr.getControllerGrip(i);
+  grip.add(ctrlFactory.createControllerModel(grip));
+  scene.add(grip);
+  const ctrl = renderer.xr.getController(i);
+  scene.add(ctrl);
+
+  const H = { hand, grip, ctrl, pinch:false, pos:new THREE.Vector3(), prev:new THREE.Vector3(),
+              vel:new THREE.Vector3(), held:null, offset:new THREE.Vector3(), ctrlSqueeze:false };
+  ctrl.addEventListener('squeezestart', ()=>{ H.ctrlSqueeze=true; });
+  ctrl.addEventListener('squeezeend',   ()=>{ H.ctrlSqueeze=false; });
+  ctrl.addEventListener('selectstart',  ()=>{ H.ctrlSqueeze=true; });
+  ctrl.addEventListener('selectend',    ()=>{ H.ctrlSqueeze=false; });
+  hands.push(H);
+}
+
+// ---------- VR button (pide handtracking como feature opcional) ----------
+document.body.appendChild(VRButton.createButton(renderer, {
+  optionalFeatures:['hand-tracking','local-floor','bounded-floor']
+}));
+
+// al entrar en sesión: pedir el frame-rate más alto que soporte el visor (máx fluidez)
+renderer.xr.addEventListener('sessionstart', ()=>{
+  const s = renderer.xr.getSession();
+  try{
+    if (s.supportedFrameRates && s.updateTargetFrameRate){
+      const best = Math.max(...s.supportedFrameRates);
+      s.updateTargetFrameRate(best).catch(()=>{});
+    }
+  }catch(e){}
+  document.getElementById('info').style.display='none';
+  document.getElementById('hint').style.display='none';
+});
+renderer.xr.addEventListener('sessionend', ()=>{
+  document.getElementById('info').style.display='';
+  document.getElementById('hint').style.display='';
+});
+
+// ---------- pinch: distancia índice-pulgar (con histéresis, no tiembla) ----------
+const _a=new THREE.Vector3(), _b=new THREE.Vector3();
+function pinchInfo(H){
+  const j = H.hand.joints;
+  const it = j && j['index-finger-tip'];
+  const tt = j && j['thumb-tip'];
+  if (!it || !tt || it.jointRadius===undefined) {           // sin handtracking -> usar controller
+    if (H.grip && H.grip.visible){ H.grip.getWorldPosition(_a); return { ok:true, pos:_a.clone(), on:H.ctrlSqueeze, ctrl:true }; }
+    return { ok:false };
+  }
+  it.getWorldPosition(_a); tt.getWorldPosition(_b);
+  const d = _a.distanceTo(_b);
+  const mid = _a.clone().lerp(_b,0.5);
+  // histéresis: cierra <2cm, abre >3.5cm
+  const on = H.pinch ? d < 0.035 : d < 0.020;
+  return { ok:true, pos:mid, on, d, ctrl:false };
+}
+
+function nearestGrabbable(p){
+  let best=null, bd=0.12*0.12;                 // radio de agarre ~12cm
+  for (const o of grabbables){
+    if (o.userData.held) continue;
+    const dd = o.position.distanceToSquared(p);
+    if (dd < bd){ bd = dd; best = o; }
+  }
+  return best;
+}
+
+// preview sin VR: girar la cámara lento para que no sea una foto fija
+let previewT=0;
+function previewSpin(){ if(!renderer.xr.isPresenting){ previewT+=0.004;
+  camera.position.x=Math.sin(previewT)*0.8; camera.position.y=1.55; camera.position.z=0.6+Math.cos(previewT)*0.3;
+  camera.lookAt(0,1.0,-0.55);} }
+
+// ---------- loop ----------
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(()=>{
+  const dt = Math.min(0.05, clock.getDelta());
+  previewSpin();
+
+  // manos: pinch -> agarrar / mover / soltar con lanzamiento
+  for (const H of hands){
+    const pi = pinchInfo(H);
+    if (!pi.ok){ continue; }
+    H.prev.copy(H.pos); H.pos.copy(pi.pos);
+    H.vel.copy(H.pos).sub(H.prev).multiplyScalar(1/Math.max(dt,0.001)); // velocidad de la mano
+
+    if (pi.on && !H.pinch){                    // START pinch
+      const o = nearestGrabbable(H.pos);
+      if (o){ o.userData.held = H; H.held = o; o.userData.rest=false;
+        H.offset.copy(o.position).sub(H.pos); }
+    } else if (!pi.on && H.pinch && H.held){    // RELEASE -> throw
+      const o = H.held; o.userData.held=null; H.held=null;
+      o.userData.vel.copy(H.vel).clampLength(0, 8);   // lanzar con la velocidad de la mano
+      o.userData.rest=false;
+    }
+    H.pinch = pi.on;
+
+    if (H.held){                                // mover el objeto con la mano
+      H.held.position.copy(H.pos).add(H.offset);
+      H.held.rotation.y += 0.0;                 // (se podría alinear a la mano; lo dejamos estable)
+    }
+  }
+
+  // física simple de los objetos sueltos (gravedad + rebote + fricción)
+  for (const o of grabbables){
+    const u = o.userData;
+    if (u.held || u.rest) continue;
+    u.vel.y -= GRAV*dt;
+    o.position.addScaledVector(u.vel, dt);
+    const groundY = u.radius;
+    if (o.position.y <= groundY){
+      o.position.y = groundY;
+      if (Math.abs(u.vel.y) > 0.4){ u.vel.y *= -0.45; u.vel.x*=0.8; u.vel.z*=0.8; }
+      else { u.vel.set(0,0,0); u.rest=true; }
+    }
+    // límites del ruedo
+    const R=13; const d2=o.position.x*o.position.x + o.position.z*o.position.z;
+    if (d2 > R*R){ const d=Math.sqrt(d2); o.position.x*=R/d; o.position.z*=R/d; u.vel.x*=-0.4; u.vel.z*=-0.4; }
+    // girito sutil al volar
+    if (!u.rest){ o.rotation.x += u.vel.length()*dt*0.6; o.rotation.z += u.vel.length()*dt*0.4; }
+  }
+
+  renderer.render(scene, camera);
+});
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
