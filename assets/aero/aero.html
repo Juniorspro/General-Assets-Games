@@ -121,6 +121,7 @@
     <button class="btn sel" data-q="low" id="qLow"></button>
     <button class="btn" data-q="med" id="qMed"></button>
     <button class="btn" data-q="high" id="qHigh"></button>
+    <button class="btn" id="qOk" style="background:linear-gradient(180deg,rgba(120,220,255,.35),rgba(40,150,220,.3));border-color:#7fd8ff"></button>
     <div class="sub" id="qNote" style="margin-top:10px"></div>
   </div></div>
   <!-- TÍTULO -->
@@ -140,6 +141,8 @@
   <div id="hud" class="hide">
     <div class="pill" id="pCry">💎 <span>0</span></div>
     <div class="pill" id="pBub">🫧 <span>0</span></div>
+    <div class="pill" id="pComp"><i style="display:inline-block;font-style:normal">▲</i> <span>0 m</span></div>
+    <div class="pill" id="pSk" style="display:none"></div>
     <div id="mTrack"><b></b><span></span><div id="mBar"><i></i></div></div>
     <div id="mini"><canvas width="208" height="208"></canvas></div>
     <div id="btnPause">❚❚</div><div id="btnLog">📋</div>
@@ -189,7 +192,7 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
    vidrio, burbujas iridiscentes, peces voladores y 5 misiones.
    Assets generados con Higgsfield · three.js
    ============================================================ */
-const HASH='1dcaff2';   // commit del repo con los assets
+const HASH='0383cc3';   // commit del repo con los assets
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/aero/';
 const A={ sky:BASE+'sky.jpg', grass:BASE+'grass.jpg', logo:BASE+'logo.png', keyart:BASE+'keyart.jpg',
   heroIdle:BASE+'hero-idle.glb', heroRun:BASE+'hero-run.glb', heroJump:BASE+'hero-jump.glb',
@@ -198,6 +201,8 @@ const A={ sky:BASE+'sky.jpg', grass:BASE+'grass.jpg', logo:BASE+'logo.png', keya
   dome:BASE+'dome.glb', mall:BASE+'mall.glb', bush:BASE+'bush.glb',
   // texturas generadas (nada procedural)
   tGrass:BASE+'t-grass.jpg', tRoad:BASE+'t-road.jpg', tPlaza:BASE+'t-plaza.jpg', tWalk:BASE+'t-walk.jpg',
+  tWater:BASE+'t-water.jpg',
+  cloud1:BASE+'cloud1.webp', cloud2:BASE+'cloud2.webp', cloud3:BASE+'cloud3.webp', cloud4:BASE+'cloud4.webp',
   // props y edificios generados
   office:BASE+'office.glb', spire:BASE+'spire.glb', apt:BASE+'apt.glb', kiosk:BASE+'kiosk.glb',
   fountain:BASE+'fountain.glb', lamp:BASE+'lamp.glb', bench:BASE+'bench.glb', car:BASE+'car.glb',
@@ -212,7 +217,7 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 
 /* ================= guardado ================= */
-const DEF={ lang:'', qual:'low', mus:true, cry:0, bub:0, mis:0, done:[], seen:false };
+const DEF={ lang:'', qual:'low', mus:true, cry:0, bub:0, mis:0, done:[], seen:false, sk:[] };
 let SV=Object.assign({},DEF);
 try{ const v=JSON.parse(localStorage.getItem('aero_save')); if(v&&typeof v==='object')SV=Object.assign(SV,v); }catch(e){}
 const save=()=>{ try{ localStorage.setItem('aero_save',JSON.stringify(SV)); }catch(e){} };
@@ -220,8 +225,8 @@ const save=()=>{ try{ localStorage.setItem('aero_save',JSON.stringify(SV)); }cat
 /* ================= i18n ================= */
 const I18N={
  es:{ tag:'Un mundo de cristal, césped y burbujas.', play:'▶  JUGAR', log:'📋 Misiones', set:'⚙️ Ajustes',
-  qual:'Calidad gráfica', qsub:'Podés cambiarla cuando quieras', qlow:'BAJA', qmed:'MEDIA', qhigh:'ALTA',
-  qlowD:'Recomendada · fluidez máxima', qmedD:'Equilibrada', qhighD:'Todo el brillo (equipos potentes)',
+  qual:'Calidad gráfica', qsub:'Podés cambiarla cuando quieras', qlow:'ULTRA LOW · ULD', qmed:'BAJA', qhigh:'ALTA', qok:'OK',
+  qlowD:'Gama baja (J8, A10…) · lo más fluido', qmedD:'Equilibrada', qhighD:'Todo el brillo (equipos potentes)',
   qnote:'Sugerido: BAJA en celulares.', loading:'Cargando el mundo…', ready:'¡Listo!',
   hintK:'WASD / flechas para moverte · ESPACIO saltar · SHIFT correr · arrastrá para mirar',
   hintT:'Joystick para moverte · ▲ saltar · 》 correr · arrastrá la pantalla para mirar',
@@ -234,10 +239,17 @@ const I18N={
   m2:'Cazaburbujas', m2d:'Reventá 12 burbujas iridiscentes',
   m3:'Reparto urbano', m3d:'Visitá los 3 puntos de la ciudad de vidrio',
   m4:'Vista panorámica', m4d:'Subí por las plataformas flotantes hasta la cima',
-  m5:'Sinfonía Aero', m5d:'Encontrá las 4 esferas de música del mundo' },
+  m5:'Sinfonía Aero', m5d:'Encontrá las 4 esferas de música del mundo',
+  m6:'Coleccionista', m6d:'Juntá 20 cristales en total',
+  m7:'Banco de peces', m7d:'Nadá cerca de 3 peces voladores',
+  m8:'Gran final', m8d:'Reventá 30 burbujas y volvé a la ciudad',
+  skGlide:'¡Nueva habilidad: PLANEO!', skGlideD:'Mantené salto en el aire para planear con una burbuja',
+  skDbl:'¡Nueva habilidad: DOBLE SALTO!', skDblD:'Tocá salto otra vez en el aire',
+  compass:'Objetivo', allDoneB2:'Completaste las 8 misiones de Aero.<br>Seguí explorando libremente 🫧',
+ },
  en:{ tag:'A world of glass, grass and bubbles.', play:'▶  PLAY', log:'📋 Missions', set:'⚙️ Settings',
-  qual:'Graphics quality', qsub:'You can change it any time', qlow:'LOW', qmed:'MEDIUM', qhigh:'HIGH',
-  qlowD:'Recommended · smoothest', qmedD:'Balanced', qhighD:'Full shine (powerful devices)',
+  qual:'Graphics quality', qsub:'You can change it any time', qlow:'ULTRA LOW · ULD', qmed:'LOW', qhigh:'HIGH', qok:'OK',
+  qlowD:'Low-end phones · smoothest', qmedD:'Balanced', qhighD:'Full shine (powerful devices)',
   qnote:'Suggested: LOW on phones.', loading:'Loading the world…', ready:'Ready!',
   hintK:'WASD / arrows to move · SPACE jump · SHIFT run · drag to look',
   hintT:'Joystick to move · ▲ jump · 》 run · drag the screen to look',
@@ -250,10 +262,17 @@ const I18N={
   m2:'Bubble hunter', m2d:'Pop 12 iridescent bubbles',
   m3:'City delivery', m3d:'Visit the 3 spots in the glass city',
   m4:'The high view', m4d:'Climb the floating platforms to the top',
-  m5:'Aero symphony', m5d:'Find the 4 music spheres of the world' },
+  m5:'Aero symphony', m5d:'Find the 4 music spheres of the world',
+  m6:'Collector', m6d:'Gather 20 crystals in total',
+  m7:'School of fish', m7d:'Swim close to 3 flying fish',
+  m8:'Grand finale', m8d:'Pop 30 bubbles and return to the city',
+  skGlide:'New skill: GLIDE!', skGlideD:'Hold jump in the air to glide with a bubble',
+  skDbl:'New skill: DOUBLE JUMP!', skDblD:'Tap jump again in mid air',
+  compass:'Objective', allDoneB2:'You finished all 8 Aero missions.<br>Keep exploring 🫧',
+ },
  pt:{ tag:'Um mundo de vidro, grama e bolhas.', play:'▶  JOGAR', log:'📋 Missões', set:'⚙️ Ajustes',
-  qual:'Qualidade gráfica', qsub:'Você pode mudar quando quiser', qlow:'BAIXA', qmed:'MÉDIA', qhigh:'ALTA',
-  qlowD:'Recomendada · mais fluida', qmedD:'Equilibrada', qhighD:'Todo o brilho (aparelhos potentes)',
+  qual:'Qualidade gráfica', qsub:'Você pode mudar quando quiser', qlow:'ULTRA LOW · ULD', qmed:'BAIXA', qhigh:'ALTA', qok:'OK',
+  qlowD:'Aparelhos fracos · mais fluido', qmedD:'Equilibrada', qhighD:'Todo o brilho (aparelhos potentes)',
   qnote:'Sugerido: BAIXA em celulares.', loading:'Carregando o mundo…', ready:'Pronto!',
   hintK:'WASD / setas para andar · ESPAÇO pular · SHIFT correr · arraste para olhar',
   hintT:'Joystick para andar · ▲ pular · 》 correr · arraste a tela para olhar',
@@ -266,14 +285,26 @@ const I18N={
   m2:'Caça-bolhas', m2d:'Estoure 12 bolhas iridescentes',
   m3:'Entrega urbana', m3d:'Visite os 3 pontos da cidade de vidro',
   m4:'Vista panorâmica', m4d:'Suba pelas plataformas flutuantes até o topo',
-  m5:'Sinfonia Aero', m5d:'Encontre as 4 esferas de música do mundo' } };
+  m5:'Sinfonia Aero', m5d:'Encontre as 4 esferas de música do mundo',
+  m6:'Colecionador', m6d:'Junte 20 cristais no total',
+  m7:'Cardume', m7d:'Nade perto de 3 peixes voadores',
+  m8:'Grande final', m8d:'Estoure 30 bolhas e volte à cidade',
+  skGlide:'Nova habilidade: PLANAR!', skGlideD:'Segure o salto no ar para planar com uma bolha',
+  skDbl:'Nova habilidade: PULO DUPLO!', skDblD:'Toque o salto de novo no ar',
+  compass:'Objetivo', allDoneB2:'Você terminou as 8 missões de Aero.<br>Continue explorando 🫧',
+ } };
 let LANG=SV.lang||'es';
 const T=k=>((I18N[LANG]||I18N.es)[k]!=null?(I18N[LANG]||I18N.es)[k]:(I18N.es[k]||k));
 
 /* ================= calidad ================= */
-const QP={ low:{ qual:'low', dpr:1.0, grass:11000,flow:900, bub:26, trees:40, fish:5, shadow:0, aa:false, fog:300, bloom:false, gRad:27 },
-           med:{ qual:'med', dpr:1.3, grass:22000,flow:1600,bub:40, trees:66, fish:7, shadow:1024, aa:false, fog:420, bloom:false, gRad:36 },
-           high:{ qual:'high',dpr:1.8, grass:38000,flow:2600,bub:60, trees:96, fish:9, shadow:2048, aa:true, fog:560, bloom:true, gRad:46 } };
+/* Tres escalones. 'low' es ULTRA LOW (ULD): apunta a celulares de gama baja, donde lo
+   caro es el RELLENO de píxeles y los materiales PBR, no la lógica. */
+const QP={ low:{ qual:'low', dpr:.58, grass:5200, flow:340, bub:16, trees:28, fish:3, shadow:0, aa:false, fog:200, bloom:false, gRad:16,
+                 phong:true,  texMax:256,  clouds:7,  floor:.78 },
+           med:{ qual:'med', dpr:.82, grass:11000,flow:900, bub:26, trees:44, fish:5, shadow:0, aa:false, fog:300, bloom:false, gRad:26,
+                 phong:true,  texMax:512,  clouds:12, floor:.68 },
+           high:{ qual:'high',dpr:1.7, grass:30000,flow:2200,bub:50, trees:90, fish:8, shadow:2048,aa:true, fog:520, bloom:true, gRad:44,
+                 phong:false, texMax:2048, clouds:18, floor:1 } };
 let Q=QP[SV.qual]||QP.low;
 
 /* ================= audio ================= */
@@ -305,22 +336,51 @@ const S={ pop:()=>sfx('pop',.7)||blip(900,260,.14,.22,'sine'),
   jump:()=>sfx('jump',.6)||blip(420,760,.12,.16,'sine'),
   ui:()=>sfx('ui',.6)||blip(680,980,.06,.16,'sine'),
   win:()=>sfx('win',.8)||[660,880,1180,1560].forEach((f,i)=>setTimeout(()=>blip(f,f*1.03,.18,.2,'triangle'),i*95)) };
+/* ===== ambiente: viento que sube con la velocidad + murmullo de agua cerca del río.
+   Es ruido filtrado en WebAudio: cero descargas, cero memoria. ===== */
+const AMB={on:false,wind:null,windG:null,wat:null,watG:null};
+function ambStart(){ const c=acx(); if(!c||AMB.on)return; AMB.on=true;
+  try{
+    const len=(c.sampleRate*2)|0, buf=c.createBuffer(1,len,c.sampleRate), d=buf.getChannelData(0);
+    let lp=0; for(let i=0;i<len;i++){ lp=lp*.94+(Math.random()*2-1)*.06; d[i]=lp*3.2; }
+    const mk=(freq,q,gain)=>{ const src=c.createBufferSource(); src.buffer=buf; src.loop=true;
+      const f=c.createBiquadFilter(); f.type='bandpass'; f.frequency.value=freq; f.Q.value=q;
+      const g=c.createGain(); g.gain.value=gain;
+      src.connect(f); f.connect(g); g.connect(c.destination); src.start(0); return {src,g}; };
+    const w=mk(520,.7,0.0); AMB.wind=w.src; AMB.windG=w.g;          // viento
+    const a=mk(2100,1.6,0.0); AMB.wat=a.src; AMB.watG=a.g;          // agua
+  }catch(e){}}
+function ambStep(){ if(!AMB.on||!SV.mus)return;
+  const c=ACX; if(!c)return; const t=c.currentTime;
+  // viento: sube al correr y al planear
+  const wv=.012+Math.min(.055,HERO.sp*.0055)+(HERO.glide?.03:0);
+  if(AMB.windG)AMB.windG.gain.setTargetAtTime(wv,t,.4);
+  // agua: según lo cerca que estés del cauce del río
+  const river=Math.abs(HERO.z-Math.sin(HERO.x*0.021)*26-6);
+  const av=river<26?(1-river/26)*.05:0;
+  if(AMB.watG)AMB.watG.gain.setTargetAtTime(av,t,.5); }
 let _auOK=false;
 function audioUnlock(){ const c=acx(); if(!c)return;
   if(!_auOK){ _auOK=true; try{ const b=c.createBuffer(1,1,22050),s=c.createBufferSource();
     s.buffer=b; s.connect(c.destination); s.start(0); }catch(e){} loadAudio(); }
   if(c.state==='suspended')c.resume().catch(()=>{});
+  ambStart();
   if(SV.mus&&!musK&&wantMus)music(wantMus); }
 ['pointerdown','touchend','click','keydown'].forEach(e=>addEventListener(e,audioUnlock,{passive:true}));
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&ACX&&ACX.state==='suspended')ACX.resume().catch(()=>{}); });
 
 /* ================= render ================= */
-const renderer=new THREE.WebGLRenderer({antialias:Q.aa,powerPreference:'high-performance'});
+const renderer=new THREE.WebGLRenderer({antialias:Q.aa,powerPreference:'high-performance',
+  precision:Q.phong?'mediump':'highp',stencil:false,alpha:false});
 renderer.domElement.className='gl';
-renderer.setPixelRatio(Math.min(devicePixelRatio||1,Q.dpr));
+let resScale=1;
+const applyDpr=()=>renderer.setPixelRatio(Math.min(devicePixelRatio||1,Q.dpr)*resScale);
+applyDpr();
 renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.0;
+/* ACES es lo más caro por píxel; Neutral (Khronos) cuesta bastante menos y conserva la
+   saturación, que en Frutiger Aero es media identidad. Lineal dejaba todo apagado. */
+renderer.toneMapping=Q.phong?(THREE.NeutralToneMapping||THREE.ACESFilmicToneMapping):THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=Q.phong?1.12:1.0;
 renderer.shadowMap.enabled=Q.shadow>0;
 renderer.shadowMap.type=THREE.PCFShadowMap;
 $('wrap').appendChild(renderer.domElement);
@@ -355,6 +415,33 @@ function applySky(tex){ scene.background=tex;
   try{ const pm=new THREE.PMREMGenerator(renderer); ENVMAP=pm.fromEquirectangular(tex).texture;
     scene.environment=ENVMAP; pm.dispose(); }catch(e){} }
 
+/* ULD/BAJA: PBR (MeshStandard/Physical) -> Phong. El sombreado PBR por píxel es lo más
+   caro en un móvil de gama baja; Phong conserva brillo y textura y cuesta la mitad. */
+const _cheap=new Map();
+function cheapMats(root){ if(!root||!Q.phong)return root;
+  root.traverse(o=>{ if(!(o.isMesh||o.isSkinnedMesh||o.isInstancedMesh))return;
+    const arr=Array.isArray(o.material)?o.material:[o.material];
+    const out=arr.map(m=>{ if(!m||!(m.isMeshStandardMaterial||m.isMeshPhysicalMaterial))return m;
+      let n=_cheap.get(m); if(n)return n;
+      n=new THREE.MeshPhongMaterial({ color:m.color, map:m.map, emissive:m.emissive,
+        emissiveMap:m.emissiveMap, emissiveIntensity:m.emissiveIntensity==null?1:m.emissiveIntensity,
+        transparent:m.transparent, opacity:m.opacity, alphaTest:m.alphaTest, alphaMap:m.alphaMap,
+        side:m.side, depthWrite:m.depthWrite, fog:m.fog, flatShading:m.flatShading,
+        shininess:Math.max(6,(1-(m.roughness==null?.4:m.roughness))*90),
+        specular:new THREE.Color().setScalar(.10+.30*(m.metalness||0)),
+        reflectivity:.5, envMap:m.envMap||null });
+      n.name=m.name; _cheap.set(m,n); return n; });
+    o.material=Array.isArray(o.material)?out:out[0]; });
+  return root; }
+/* baja la resolución de una textura al tope del preset (ahorra VRAM y ancho de banda) */
+function shrinkTex(t){ if(!t||!t.image||!Q.texMax)return t;
+  const im=t.image, w=im.width||im.naturalWidth, h=im.height||im.naturalHeight;
+  if(!w||!h||Math.max(w,h)<=Q.texMax)return t;
+  const k=Q.texMax/Math.max(w,h), cv=document.createElement('canvas');
+  cv.width=Math.max(1,Math.round(w*k)); cv.height=Math.max(1,Math.round(h*k));
+  cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);
+  t.image=cv; t.needsUpdate=true; return t; }
+
 /* ================= terreno ================= */
 const WORLD=760, CITY={x:210,z:0,r:170};   // la ciudad vive al este
 function hash2(x,z){ let h=Math.sin(x*127.1+z*311.7)*43758.5453; return h-Math.floor(h); }
@@ -373,7 +460,7 @@ function terrainH(x,z){
   h=lerp(0.25,h,cityFlat(x,z));   // ciudad plana
   return h; }
 const WATER_Y=-1.9;
-const T_SEG=110;
+const T_SEG=(Q.qual==='high'?110:(Q.qual==='med'?84:60));   // menos vértices de terreno en ULD
 const terGeo=new THREE.PlaneGeometry(WORLD,WORLD,T_SEG,T_SEG); terGeo.rotateX(-Math.PI/2);
 { const p=terGeo.attributes.position, col=[];
   // tintes SUAVES: la textura manda el color, el vértice sólo matiza (nada de verde puro)
@@ -391,7 +478,7 @@ const _tl=new THREE.TextureLoader();
 const TEX={};
 function loadTex(key,url,rep,onDone){ if(!ok(url))return;
   _tl.load(url,t=>{ t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping;
-    t.repeat.set(rep,rep); t.anisotropy=Q.qual==='high'?8:(Q.qual==='med'?4:2);
+    t.repeat.set(rep,rep); t.anisotropy=Q.qual==='high'?8:(Q.qual==='med'?2:1); shrinkTex(t);
     TEX[key]=t; if(onDone)onDone(t); },undefined,()=>{}); }
 // suelo de pasto: textura nueva, suave (sin el verde puro exagerado)
 loadTex('grass',ok(A.tGrass)?A.tGrass:A.grass,64,t=>{ terMat.map=t;
@@ -401,9 +488,38 @@ const watMat=new THREE.MeshStandardMaterial({color:0x39b6e8,transparent:true,opa
   envMap:null,side:THREE.DoubleSide});
 const water=new THREE.Mesh(new THREE.PlaneGeometry(WORLD,WORLD,1,1),watMat);
 water.rotation.x=-Math.PI/2; water.position.y=WATER_Y; scene.add(water);
+/* textura de agua GENERADA (caústicas): se desplaza sola para que el río se vea vivo */
+loadTex('water',A.tWater,90,t=>{ watMat.map=t; watMat.color.set(0xbff0ff);
+  watMat.opacity=.86; watMat.roughness=.12; watMat.needsUpdate=true;
+  if(Q.phong)cheapMats(water); });
+
+/* ================= nubes Frutiger Aero (sprites generados) ================= */
+const CLOUDS=[]; const cloudGroup=new THREE.Group(); scene.add(cloudGroup);
+(function(){
+  const urls=[A.cloud1,A.cloud2,A.cloud3,A.cloud4].filter(ok);
+  if(!urls.length)return;
+  const mats=urls.map(u=>{ const t=_tl.load(u); t.colorSpace=THREE.SRGBColorSpace;
+    return new THREE.SpriteMaterial({map:t,transparent:true,depthWrite:false,opacity:.95,fog:false}); });
+  const N=Q.clouds||8;
+  for(let i=0;i<N;i++){
+    const sp=new THREE.Sprite(mats[i%mats.length]);
+    const a=hash2(i,17)*6.28, r=55+hash2(i,23)*265;
+    const sc=76+hash2(i,29)*104;
+    sp.scale.set(sc,sc*0.46,1);
+    sp.position.set(Math.cos(a)*r, 46+hash2(i,31)*44, Math.sin(a)*r);
+    cloudGroup.add(sp);
+    CLOUDS.push({sp,vx:.55+hash2(i,37)*.85,ph:hash2(i,41)*6.28,base:sp.position.y,sc}); }
+})();
+function cloudStep(dt){
+  // el grupo sigue al jugador: el cielo nunca se queda vacío por alejarse
+  cloudGroup.position.x=HERO.x; cloudGroup.position.z=HERO.z;
+  const lim=340;
+  for(const c of CLOUDS){ const p=c.sp.position;
+    p.x+=c.vx*dt; if(p.x>lim)p.x=-lim;
+    p.y=c.base+Math.sin(TT*.14+c.ph)*1.8; } }
 
 /* ================= césped animado ================= */
-const bladeGeo=new THREE.PlaneGeometry(.085,.52,1,3); bladeGeo.translate(0,.26,0);
+const bladeGeo=new THREE.PlaneGeometry(.085,.52,1,Q.qual==='high'?3:(Q.qual==='med'?2:1)); bladeGeo.translate(0,.26,0);
 // ¡sin vertexColors! el color viene por instancia (instanceColor); con vertexColors la brizna sale negra
 const grassMat=new THREE.MeshLambertMaterial({color:0xffffff,side:THREE.DoubleSide,
   emissive:0x25340f,emissiveIntensity:1});
@@ -531,6 +647,11 @@ loadTex('lawn', ok(A.tGrass)?A.tGrass:A.grass, 5,t=>{ lawnMat.map=t; lawnMat.nee
 /* ---- GLOSSY: le sube el brillo y el reflejo a cualquier modelo generado ---- */
 function glossify(root,amount){
   const k=(amount==null?1:amount);
+  if(Q.phong){ // en ULD/BAJA el brillo va por Phong (mucho más barato que PBR)
+    root.traverse(o=>{ if(o.isMesh&&o.material){
+      const ms=Array.isArray(o.material)?o.material:[o.material];
+      for(const m of ms){ if('roughness' in m)m.roughness=Math.max(.05,(m.roughness==null?1:m.roughness)*(1-.62*k)); } } });
+    return cheapMats(root); }
   root.traverse(o=>{ if(!o.isMesh||!o.material)return;
     const mats=Array.isArray(o.material)?o.material:[o.material];
     o.material=Array.isArray(o.material)?mats.map(m=>gloss1(m,k)):gloss1(mats[0],k); }); }
@@ -690,12 +811,14 @@ function fillPlats(){ if(!BT.plat)return;
 
 /* ================= burbujas iridiscentes ================= */
 const BN=Q.bub;
-const bubGeo=new THREE.SphereGeometry(1,14,11);
+const bubGeo=new THREE.SphereGeometry(1,Q.qual==='high'?14:9,Q.qual==='high'?11:7);
 const bubMat=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:0,metalness:0,transparent:true,opacity:.34,
   clearcoat:1,clearcoatRoughness:0,iridescence:1,iridescenceIOR:1.35,iridescenceThicknessRange:[120,520],
   envMapIntensity:1.6,side:THREE.DoubleSide,depthWrite:false});
 const bubbles=new THREE.InstancedMesh(bubGeo,bubMat,BN);
 bubbles.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bubbles.frustumCulled=false; scene.add(bubbles);
+/* burbuja de PLANEO: la misma esfera iridiscente de las burbujas del mundo */
+const glideBub=new THREE.Mesh(bubGeo,bubMat); glideBub.visible=false; glideBub.renderOrder=2; scene.add(glideBub);
 const BUB=[];
 function spawnBub(i,near){
   const a=Math.random()*6.28, r=near?(8+Math.random()*40):(10+Math.random()*150);
@@ -814,17 +937,18 @@ const blob=new THREE.Mesh(new THREE.CircleGeometry(.75,18),
 blob.rotation.x=-Math.PI/2; scene.add(blob);
 
 /* ================= estado del héroe / cámara ================= */
-const HERO={ x:0,z:8,y:0, vy:0, h:0, sp:0, onGround:true, onPlat:null };
+const HERO={ x:0,z:8,y:0, vy:0, h:0, sp:0, onGround:true, onPlat:null, dbl:false, glide:false, stepT:0 };
 HERO.y=terrainH(HERO.x,HERO.z);
-const CAM={ yaw:0, pitch:.28, dist:9.5, tx:0,ty:0,tz:0 };
+const CAM={ yaw:0, pitch:.28, dist:9.5, tx:0,ty:0,tz:0, shake:0 };
 const V0=new THREE.Vector3();
 /* ================= entrada ================= */
 const K={}; const KMAP={ KeyW:'up',ArrowUp:'up',KeyS:'dn',ArrowDown:'dn',KeyA:'lf',ArrowLeft:'lf',
   KeyD:'rt',ArrowRight:'rt',Space:'jump',ShiftLeft:'run',ShiftRight:'run',KeyP:'pause',Escape:'pause' };
+const HOLD={};   // estado MANTENIDO (K.jump se consume al saltar; esto no)
 addEventListener('keydown',e=>{ const c=KMAP[e.code]; if(!c)return;
   if(c==='pause'){ if(APP==='play')togglePause(); else if(APP==='pause')togglePause(); return; }
-  K[c]=true; if(c==='jump')e.preventDefault(); });
-addEventListener('keyup',e=>{ const c=KMAP[e.code]; if(c)K[c]=false; });
+  if(!HOLD[c])K[c]=true; HOLD[c]=true; if(c==='jump')e.preventDefault(); });
+addEventListener('keyup',e=>{ const c=KMAP[e.code]; if(c){K[c]=false;HOLD[c]=false;} });
 let touchDev=(navigator.maxTouchPoints||0)>0;
 let joy={active:false,dx:0,dy:0,id:null};
 const stick=$('stick'), knob=$('knob');
@@ -839,8 +963,8 @@ function joyEnd(e){ if(e&&e.pointerId!==joy.id)return; joy.active=false; joy.dx=
 stick.addEventListener('pointerdown',e=>{ e.preventDefault(); touchDev=true; joyStart(e); });
 stick.addEventListener('pointermove',joyMove);
 stick.addEventListener('pointerup',joyEnd); stick.addEventListener('pointercancel',joyEnd);
-const bindBtn=(el,key)=>{ const on=e=>{ e.preventDefault(); e.stopPropagation(); touchDev=true; K[key]=true; };
-  const off=e=>{ if(e)e.preventDefault(); K[key]=false; };
+const bindBtn=(el,key)=>{ const on=e=>{ e.preventDefault(); e.stopPropagation(); touchDev=true; K[key]=true; HOLD[key]=true; };
+  const off=e=>{ if(e)e.preventDefault(); K[key]=false; HOLD[key]=false; };
   el.addEventListener('pointerdown',e=>{ el.setPointerCapture(e.pointerId); on(e); });
   el.addEventListener('pointerup',off); el.addEventListener('pointercancel',off); };
 bindBtn($('bJump'),'jump'); bindBtn($('bRun'),'run');
@@ -868,14 +992,33 @@ function pads(){ const gp=navigator.getGamepads?navigator.getGamepads():[]; let 
   return {ax,ay,j,r}; }
 
 /* ================= misiones ================= */
+/* 8 misiones. Cada una define su objetivo en el mundo (at) para la brújula, y algunas
+   desbloquean una habilidad al completarse. */
 const MIS=[
- {id:'m1',goal:8, get:()=>Math.min(RUN.cry,8)},
- {id:'m2',goal:12,get:()=>Math.min(RUN.bub,12)},
- {id:'m3',goal:3, get:()=>RUN.marks},
- {id:'m4',goal:1, get:()=>RUN.top?1:0},
- {id:'m5',goal:4, get:()=>RUN.orbs}];
-const RUN={ cry:0,bub:0,marks:0,orbs:0,top:false };
+ {id:'m1',goal:8, get:()=>Math.min(RUN.cry,8),  at:()=>nearestCry()},
+ {id:'m2',goal:12,get:()=>Math.min(RUN.bub,12), at:()=>nearestBub(), unlock:'glide'},
+ {id:'m3',goal:3, get:()=>RUN.marks,            at:()=>nearestMark()},
+ {id:'m4',goal:1, get:()=>RUN.top?1:0,          at:()=>({x:PLAT_TOP.x,y:PLAT_TOP.y,z:PLAT_TOP.z}), unlock:'dbl'},
+ {id:'m5',goal:4, get:()=>RUN.orbs,             at:()=>nearestOrb()},
+ {id:'m6',goal:20,get:()=>Math.min(RUN.cry,20), at:()=>nearestCry()},
+ {id:'m7',goal:3, get:()=>RUN.fish,             at:()=>nearestFish()},
+ {id:'m8',goal:30,get:()=>Math.min(RUN.bub,30), at:()=>({x:CITY.x,y:GROUND_Y+2,z:CITY.z})}];
+const RUN={ cry:0,bub:0,marks:0,orbs:0,fish:0,top:false };
+const SK={ glide:false, dbl:false };   // habilidades desbloqueadas
+/* objetivos más cercanos (para la brújula) */
+const _dist2=(a,b)=>{const dx=a.x-b.x,dz=a.z-b.z;return dx*dx+dz*dz;};
+function nearestOf(list,get){ let best=null,bd=1e18;
+  for(const it of list){ const p=get(it); if(!p)continue;
+    const d=_dist2(p,HERO); if(d<bd){bd=d;best=p;} } return best; }
+const nearestCry =()=>nearestOf(CRY, c=>c.on?{x:c.x,y:c.y,z:c.z}:null);
+const nearestBub =()=>nearestOf(BUB, b=>b.pop>0?null:{x:b.x,y:b.y,z:b.z});
+const nearestMark=()=>nearestOf(MARK,m=>m.on?{x:m.x,y:m.y+2,z:m.z}:null);
+const nearestOrb =()=>nearestOf(ORBS,o=>o.on?{x:o.x,y:o.y,z:o.z}:null);
+const nearestFish=()=>nearestOf(FISH,f=>({x:f.o.position.x,y:f.o.position.y,z:f.o.position.z}));
 let misIdx=clamp(SV.mis|0,0,MIS.length);
+for(const k of (SV.sk||[]))if(k in SK)SK[k]=true;
+// misiones ya cumplidas => habilidades correspondientes
+for(let i=0;i<misIdx&&i<MIS.length;i++)if(MIS[i].unlock)SK[MIS[i].unlock]=true;
 function misSync(){
   const done=misIdx>=MIS.length;
   const tr=$('mTrack');
@@ -893,10 +1036,31 @@ function misSync(){
 }
 function misCheck(){ if(misIdx>=MIS.length)return;
   const M=MIS[misIdx]; if(M.get()<M.goal)return;
-  misIdx++; SV.mis=misIdx; if(!SV.done.includes(M.id))SV.done.push(M.id); save();
+  misIdx++; SV.mis=misIdx; if(!SV.done.includes(M.id))SV.done.push(M.id);
+  if(M.unlock&&!SK[M.unlock]){ SK[M.unlock]=true; SV.sk=SV.sk||[];
+    if(!SV.sk.includes(M.unlock))SV.sk.push(M.unlock);
+    setTimeout(()=>toast('⭐ '+T(M.unlock==='glide'?'skGlide':'skDbl')+'<br><small style="opacity:.8">'
+      +T(M.unlock==='glide'?'skGlideD':'skDblD')+'</small>'),1800); }
+  save();
   S.win(); toast('✨ '+T('misDone')+' — '+T(M.id));
   if(misIdx>=MIS.length){ setTimeout(()=>showEnd(),1400); }
   misSync(); }
+/* brújula: flecha en el HUD que apunta al objetivo actual y su distancia.
+   Es DOM (no geometría procedural en el mundo) y cuesta cero. */
+let compAcc=0;
+function updSkills(){ const el=$('pSk'); if(!el)return;
+  const on=[]; if(SK.glide)on.push('🫧'); if(SK.dbl)on.push('⤴⤴');
+  if(!on.length||APP!=='play'){ el.style.display='none'; return; }
+  el.style.display=''; el.textContent=on.join(' '); }
+function updCompass(){ const el=$('pComp'); if(!el)return;
+  const M=(misIdx<MIS.length)?MIS[misIdx]:null;
+  const t=M&&M.at?M.at():null;
+  if(!t||APP!=='play'){ el.style.display='none'; return; }
+  el.style.display='';
+  const dx=t.x-HERO.x, dz=t.z-HERO.z;
+  const ang=(Math.atan2(dx,dz)-CAM.yaw)*57.29578;
+  el.querySelector('i').style.transform='rotate('+ang.toFixed(0)+'deg)';
+  el.querySelector('span').textContent=Math.round(Math.hypot(dx,dz))+' m'; }
 function toast(t){ const e=$('toast'); e.innerHTML=t; e.style.opacity=1;
   clearTimeout(toast._t); toast._t=setTimeout(()=>e.style.opacity=0,2600); }
 
@@ -937,6 +1101,18 @@ function drawMini(){ const W=mCv.width,H=mCv.height,R=W/2, SCALE=R/165;
 
 /* ================= bucle ================= */
 let APP='load', last=performance.now(), TT=0, hintT=0;
+/* resolución adaptativa: si no llega a 30 fps recorta píxeles antes que geometría */
+let _fAcc=0,_fN=0,_fCd=0;
+function adaptRes(dtMs){
+  if(Q.qual==='high')return;
+  _fAcc+=dtMs; _fN++; if(_fCd>0)_fCd-=dtMs;
+  if(_fAcc<1500)return;
+  const fps=1000/(_fAcc/_fN); _fAcc=0; _fN=0;
+  if(_fCd>0)return;
+  const flr=Q.floor||.7; let ns=resScale;
+  if(fps<30&&resScale>flr)ns=Math.max(flr,resScale-.12);
+  else if(fps>50&&resScale<1)ns=Math.min(1,resScale+.06);
+  if(ns!==resScale){ resScale=ns; _fCd=2500; applyDpr(); } }
 function heroStep(dt){
   const gp=pads();
   let ix=0, iz=0;
@@ -972,11 +1148,24 @@ function heroStep(dt){
   for(const p of PLATS){ if(Math.hypot(HERO.x-p.x,HERO.z-p.z)>p.r)continue;
     if(HERO.y+.35>=p.y&&p.y>ground){ ground=p.y; plat=p; } }
   HERO.onPlat=plat;
-  // salto / gravedad
-  if((K.jump||gp.j)&&HERO.onGround){ HERO.vy=8.6; HERO.onGround=false; S.jump(); K.jump=false; }
-  HERO.vy-=22*dt; HERO.y+=HERO.vy*dt;
-  if(HERO.y<=ground){ HERO.y=ground; HERO.vy=0; HERO.onGround=true; }
+  // salto / doble salto / planeo
+  const jHold=(HOLD.jump||gp.j);
+  if((K.jump||gp.j)&&HERO.onGround){ HERO.vy=8.6; HERO.onGround=false; HERO.dbl=false; S.jump(); K.jump=false; }
+  else if(K.jump&&!HERO.onGround&&SK.dbl&&!HERO.dbl){     // DOBLE SALTO (misión 4)
+    HERO.vy=7.4; HERO.dbl=true; S.jump(); K.jump=false;
+    burst(HERO.x,HERO.y+.7,HERO.z,8); }
+  // PLANEO (misión 2): mantené salto en el aire y bajás flotando con una burbuja
+  HERO.glide=(!HERO.onGround&&SK.glide&&jHold&&HERO.vy<0);
+  HERO.vy-=(HERO.glide?4.2:22)*dt;
+  if(HERO.glide&&HERO.vy<-2.4)HERO.vy=-2.4;
+  HERO.y+=HERO.vy*dt;
+  if(HERO.y<=ground){
+    if(!HERO.onGround&&HERO.vy<-6.5){ for(let i=0;i<4;i++)burst(HERO.x,ground+.2,HERO.z,2); CAM.shake=Math.min(1,-HERO.vy/22); }
+    HERO.y=ground; HERO.vy=0; HERO.onGround=true; HERO.dbl=false; HERO.glide=false; }
   else HERO.onGround=false;
+  if(glideBub){ glideBub.visible=!!HERO.glide;
+    if(HERO.glide){ glideBub.position.set(HERO.x,HERO.y+1.1,HERO.z);
+      const p=1+Math.sin(TT*7)*.05; glideBub.scale.setScalar(1.55*p); } }
   // animación
   if(!HERO.onGround)setAnim('jump'); else if(HERO.sp>1.1)setAnim('run'); else setAnim('idle');
   heroRoot.position.set(HERO.x,HERO.y,HERO.z); heroRoot.rotation.y=HERO.h;
@@ -984,6 +1173,9 @@ function heroStep(dt){
   if(!heroReady&&procH){ const t=TT*(HERO.sp>1?9:2.2), L=procH.userData.limbs;
     L[0].rotation.x=Math.sin(t)*(HERO.sp>1?1:.18); L[2].rotation.x=-L[0].rotation.x;
     L[1].rotation.x=-Math.sin(t)*(HERO.sp>1?1.1:.12); L[3].rotation.x=-L[1].rotation.x; }
+  // polvo al correr (cada pocos pasos, sólo si vas rápido y en el piso)
+  if(HERO.onGround&&HERO.sp>6.5){ HERO.stepT=(HERO.stepT||0)+dt;
+    if(HERO.stepT>.22){ HERO.stepT=0; burst(HERO.x,HERO.y+.12,HERO.z,2); } }
   blob.position.set(HERO.x,(HERO.onPlat?HERO.onPlat.y:terrainH(HERO.x,HERO.z))+.03,HERO.z);
   blob.material.opacity=clamp(.32-(HERO.y-(HERO.onPlat?HERO.onPlat.y:terrainH(HERO.x,HERO.z)))*.05,.05,.32);
   // cámara tercera persona
@@ -997,7 +1189,13 @@ function heroStep(dt){
     const ox=b.hw+1.2-Math.abs(dx), oz=b.hd+1.2-Math.abs(dz);
     if(ox>0&&oz>0){ if(ox<oz)cx=b.x+Math.sign(dx||1)*(b.hw+1.2); else cz=b.z+Math.sign(dz||1)*(b.hd+1.2); } }
   camera.position.lerp(V0.set(cx,Math.max(cy,terrainH(cx,cz)+1.4),cz),1-Math.exp(-9*dt));
+  if(CAM.shake>0.01){ CAM.shake=Math.max(0,CAM.shake-dt*3.2);
+    camera.position.x+=(Math.random()-.5)*CAM.shake*.35;
+    camera.position.y+=(Math.random()-.5)*CAM.shake*.28; }
   camera.lookAt(hx,hy,hz);
+  // el campo de visión se abre al correr (sensación de velocidad)
+  const fovT=62+(HERO.sp>6.5?7:0)+(HERO.glide?4:0);
+  if(Math.abs(camera.fov-fovT)>.05){ camera.fov+=(fovT-camera.fov)*Math.min(1,dt*4); camera.updateProjectionMatrix(); }
 }
 function worldStep(dt){
   TT+=dt;
@@ -1007,8 +1205,10 @@ function worldStep(dt){
     lastGX=HERO.x; lastGZ=HERO.z; regrass(HERO.x,HERO.z); }
   // sol/sombra siguen al jugador (shadow map chico y efectivo)
   if(Q.shadow>0){ sun.position.set(HERO.x+70,120,HERO.z+50); sun.target.position.set(HERO.x,0,HERO.z); }
-  // agua
+  // agua (la textura se desliza: oleaje sin geometría extra) + nubes
   water.position.set(HERO.x,WATER_Y+Math.sin(TT*.6)*.05,HERO.z);
+  if(watMat.map){ watMat.map.offset.x=TT*.012; watMat.map.offset.y=Math.sin(TT*.09)*.02; }
+  cloudStep(dt);
   if(ENVMAP&&!watMat.envMap){ watMat.envMap=ENVMAP; watMat.needsUpdate=true; }
   // burbujas
   for(let i=0;i<BN;i++){ const b=BUB[i];
@@ -1035,7 +1235,11 @@ function worldStep(dt){
     const x=f.cx+Math.cos(f.ph)*f.r, z=f.cz+Math.sin(f.ph)*f.r;
     const y=f.y+Math.sin(f.ph*2.3)*1.5;
     f.o.position.set(x,y,z); f.o.rotation.y=-f.ph;
-    f.o.rotation.z=Math.sin(f.ph*3)*.14; }
+    f.o.rotation.z=Math.sin(f.ph*3)*.14;
+    // misión 7: nadar cerca de 3 peces distintos
+    if(APP==='play'&&!f.met&&Math.hypot(x-HERO.x,z-HERO.z)<4.5&&Math.abs(y-(HERO.y+1.1))<3.5){
+      f.met=true; RUN.fish++; S.gem(); burst(x,y,z,8);
+      toast('🐟 '+RUN.fish+'/3'); misSync(); misCheck(); } }
   // cristales
   for(const c of CRY){ if(!c.on)continue;
     c.m.rotation.y+=dt*1.5; c.m.position.y=c.y+Math.sin(TT*2+c.ph)*.22;
@@ -1073,6 +1277,7 @@ function worldStep(dt){
   cullAcc+=dt; if(cullAcc>.25){ cullAcc=0; cullByDistance(); }
   // minimapa (no cada frame)
   miniAcc+=dt; if(miniAcc>.1){ miniAcc=0; drawMini(); }
+  compAcc+=dt; if(compAcc>.12){ compAcc=0; updCompass(); updSkills(); ambStep(); }
 }
 let cullAcc=0;
 const FAR=Q.fog*0.92, FAR2=FAR*FAR;
@@ -1085,14 +1290,21 @@ function cullByDistance(){
   for(const p of PLATS){ p.g.visible=(p.g.position.distanceToSquared(camera.position)<FAR2); }
   for(const c of CRY){ if(!c.on)continue; const dx=c.x-HERO.x, dz=c.z-HERO.z;
     c.m.visible=(dx*dx+dz*dz)<FAR2; } }
+/* Barrido: lo que se creó fuera de glossify (agua, burbujas, héroe, cristales) también
+   pasa a Phong en ULD/BAJA. Se repite unas cuantas veces porque los GLB llegan tarde. */
+function cheapenAll(){ if(!Q.phong)return; cheapMats(scene); }
+[0,400,1200,2600,5000,9000,15000,26000].forEach(t=>setTimeout(cheapenAll,t));
 function frame(){ requestAnimationFrame(frame);
   const now=performance.now(); const dt=Math.min(.05,(now-last)/1000); last=now;
+  adaptRes(Math.min(120,now-(frame._a||now))); frame._a=now;
   if(APP==='play'){ heroStep(dt); worldStep(dt); }
   else if(APP==='title'){ TT+=dt;
     const r=26, a=TT*.06;
     camera.position.set(Math.cos(a)*r,11+Math.sin(TT*.2)*1.4,Math.sin(a)*r);
     camera.lookAt(0,3,0);
     if(grassMat.userData.sh)grassMat.userData.sh.uniforms.uT.value=TT;
+    cloudStep(dt);
+    if(watMat.map)watMat.map.offset.x=TT*.012;
     for(const f of FISH){ f.ph+=dt*f.sp; f.o.position.set(f.cx+Math.cos(f.ph)*f.r,f.y+Math.sin(f.ph*2.3)*1.5,f.cz+Math.sin(f.ph)*f.r);
       f.o.rotation.y=-f.ph; }
     for(let i=0;i<BN;i++){ const b=BUB[i]; b.y+=b.vy*dt*.6;
@@ -1111,6 +1323,7 @@ function applyLang(){ document.documentElement.lang=LANG;
   $('qLow').innerHTML=T('qlow')+'<small>'+T('qlowD')+'</small>';
   $('qMed').innerHTML=T('qmed')+'<small>'+T('qmedD')+'</small>';
   $('qHigh').innerHTML=T('qhigh')+'<small>'+T('qhighD')+'</small>';
+  $('qOk').textContent=T('qok')||'OK';
   $('pCry').querySelector('span').textContent=RUN.cry; $('pBub').querySelector('span').textContent=RUN.bub;
   $('lgTitle').textContent=T('missions'); $('lgClose').textContent=T('close');
   $('pTitle').textContent=T('pause'); $('pResume').textContent=T('resume'); $('pMenu').textContent=T('menu');
@@ -1124,7 +1337,7 @@ function showScreen(n){ ['sLoad','sLang','sQual','sTitle','sLog','sPause','sEnd'
   if(n)$(n).classList.remove('hide'); }
 function toTitle(){ APP='title'; showScreen('sTitle'); $('hud').classList.add('hide');
   camera.position.set(24,12,24); music('mMenu'); }
-function startPlay(){ APP='play'; showScreen(null); $('hud').classList.remove('hide');
+function startPlay(){ APP='play'; showScreen(null); $('hud').classList.remove('hide'); cheapenAll(); updSkills();
   $('touch').style.display=touchDev?'block':'none';
   RUN.cry=0; RUN.bub=0;
   $('pCry').querySelector('span').textContent=0; $('pBub').querySelector('span').textContent=0;
@@ -1139,16 +1352,21 @@ function showLog(){ let h='';
     h+='<div class="mrow'+(done?' done':'')+(cur?' cur':'')+'"><div class="ic">'+(done?'✅':cur?'▶️':'🔒')+'</div>'+
        '<div><b>'+T(M.id)+'</b><small>'+T(M.id+'d')+(cur?' &nbsp;('+M.get()+'/'+M.goal+')':'')+'</small></div></div>'; });
   $('lgList').innerHTML=h; showScreen('sLog'); }
-function showEnd(){ showScreen('sEnd'); applyLang(); }
+function showEnd(){ showScreen('sEnd'); applyLang();
+  const b=$('eBody'); if(b&&I18N[LANG]&&I18N[LANG].allDoneB2)b.innerHTML=I18N[LANG].allDoneB2; }
 document.querySelectorAll('#sLang [data-lang]').forEach(b=>b.addEventListener('click',()=>{ audioUnlock(); S.ui();
   LANG=b.dataset.lang; SV.lang=LANG; save(); applyLang();
   document.querySelectorAll('#sQual [data-q]').forEach(q=>q.classList.toggle('sel',q.dataset.q===SV.qual));
   showScreen('sQual'); }));
+/* elegir sólo marca; se confirma con OK (así se puede comparar antes de aplicar) */
+let qPick=SV.qual||'low';
 document.querySelectorAll('#sQual [data-q]').forEach(b=>b.addEventListener('click',()=>{ audioUnlock(); S.ui();
-  const q=b.dataset.q; SV.qual=q; save();
-  document.querySelectorAll('#sQual [data-q]').forEach(x=>x.classList.toggle('sel',x===b));
+  qPick=b.dataset.q;
+  document.querySelectorAll('#sQual [data-q]').forEach(x=>x.classList.toggle('sel',x===b)); }));
+$('qOk').addEventListener('click',()=>{ audioUnlock(); S.ui();
+  const q=qPick; SV.qual=q; save();
   if(q!==QKEY){ setTimeout(()=>location.reload(),260); return; }
-  toTitle(); }));
+  toTitle(); });
 $('bPlay').addEventListener('click',()=>{ S.ui(); startPlay(); });
 $('bLogT').addEventListener('click',()=>{ S.ui(); showLog(); });
 $('bSet').addEventListener('click',()=>{ S.ui(); showScreen('sQual'); });
@@ -1189,12 +1407,12 @@ if(ok(A.sky)){ const im=new Image(); im.crossOrigin='anonymous';
 else applySky(skyFromImage(null));
 applyLang(); regrass(0,10); preload(); frame();
 /* hook de pruebas */
-window.__A={ app:()=>APP, hero:()=>({x:HERO.x,y:HERO.y,z:HERO.z,h:HERO.h,sp:HERO.sp,anim:animK}),
+window.__A={ app:()=>APP, hero:()=>({x:HERO.x,y:HERO.y,z:HERO.z,h:HERO.h,sp:HERO.sp,anim:animK,vy:HERO.vy,glide:!!HERO.glide,dbl:!!HERO.dbl,ground:HERO.onGround}),
   cry:()=>RUN.cry, bub:()=>RUN.bub, mis:()=>misIdx, lang:()=>LANG, qual:()=>SV.qual,
   grassN:()=>GN, bubN:()=>BN, trees:()=>treeGroup.children.length, boxes:()=>BOXES.length,
   setLang:l=>{ LANG=l; SV.lang=l; applyLang(); }, screen:n=>showScreen(n),
   play:()=>startPlay(), title:()=>toTitle(), log:()=>showLog(), pause:()=>togglePause(),
-  press:(k,v)=>{ K[k]=v; }, move:(x,z)=>{ joy.dx=x; joy.dy=z; },
+  press:(k,v)=>{ K[k]=v; HOLD[k]=v; }, move:(x,z)=>{ joy.dx=x; joy.dy=z; },
   tp:(x,z)=>{ HERO.x=x; HERO.z=z; HERO.y=terrainH(x,z)+.2; regrass(x,z); },
   terrainH, calls:()=>renderer.info.render.calls, tris:()=>renderer.info.render.triangles,
   misIdx:()=>misIdx, orbs:()=>RUN.orbs, marks:()=>RUN.marks, top:()=>RUN.top,
@@ -1208,6 +1426,28 @@ window.__A={ app:()=>APP, hero:()=>({x:HERO.x,y:HERO.y,z:HERO.z,h:HERO.h,sp:HERO
   rebuild:()=>{ try{ buildCity(); return 'ok kids='+cityGroup.children.length+' boxes='+BOXES.length; }catch(e){ return 'THROW: '+e.message; } },
   diag:()=>({builds:cityBuilds,err:cityErr,kids:cityGroup.children.length,boxes:BOXES.length}),
   btKeys:()=>Object.keys(BT).filter(k=>!!BT[k]),
+  newStuff:()=>{ let phong=0,pbr=0;
+    scene.traverse(o=>{ if(!o.material)return; const ms=Array.isArray(o.material)?o.material:[o.material];
+      for(const m of ms){ if(!m)continue; if(m.isMeshPhongMaterial)phong++;
+        else if(m.isMeshStandardMaterial||m.isMeshPhysicalMaterial)pbr++; } });
+    return{clouds:CLOUDS.length,waterTex:!!watMat.map,mis:MIS.length,phong,pbr,
+      dpr:+renderer.getPixelRatio().toFixed(3),qual:Q.qual}; },
+  compass:()=>{ updCompass(); const e=$('pComp');
+    const tr=e.querySelector('i').style.transform||'rotate(0deg)';
+    return{visible:e.style.display!=='none',txt:e.querySelector('span').textContent,
+      rot:parseFloat(tr.replace(/[^-\d.]/g,''))||0}; },
+  skills:()=>({glide:SK.glide,dbl:SK.dbl}),
+  misIdxNow:()=>misIdx,
+  finishMis:()=>{ const M=MIS[misIdx]; if(!M)return misIdx;
+    if(M.id==='m1'||M.id==='m6')RUN.cry=Math.max(RUN.cry,M.goal);
+    if(M.id==='m2'||M.id==='m8')RUN.bub=Math.max(RUN.bub,M.goal);
+    if(M.id==='m3')RUN.marks=M.goal;
+    if(M.id==='m4')RUN.top=true;
+    if(M.id==='m5')RUN.orbs=M.goal;
+    if(M.id==='m7')RUN.fish=M.goal;
+    misSync(); misCheck(); return misIdx; },
+  cheapen:()=>cheapenAll(),
+  amb:()=>{ ambStep(); return{on:AMB.on,wind:AMB.windG?AMB.windG.gain.value:0,wat:AMB.watG?AMB.watG.gain.value:0}; },
   bldgH:()=>cityGroup.children.map(o=>{ const bb=new THREE.Box3().setFromObject(o); return +(bb.max.y-bb.min.y).toFixed(0); }).sort((a,b)=>b-a).slice(0,8),
   giveCry:n=>{ RUN.cry+=n; misSync(); misCheck(); }, giveBub:n=>{ RUN.bub+=n; misSync(); misCheck(); } };
 </script>
