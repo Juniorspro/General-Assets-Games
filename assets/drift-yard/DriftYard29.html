@@ -861,6 +861,7 @@ function pollPads(){padSteer=0;padGas=0;padBrake=0;padVert=0;const cur={};
     if(cur[i]&&!padPrev[i])pressed.push(nm==="okA"?"ok":nm);
     if(cur[i])held.add("pad_"+nm);else held.delete("pad_"+nm);padPrev[i]=cur[i];}}
 let touchDevice=navigator.maxTouchPoints>0;
+let relocating=false;   // declarado acá arriba: refreshTouchUI lo consulta
 const tstate={left:false,right:false,gas:false,brake:false,hand:false};
 for(const id of["tleft","tright","tgas","tbrake","thand","ftjump","ftpunch"]){
   const el=document.getElementById(id);if(!el)continue;
@@ -956,17 +957,24 @@ function applyScheme(){
   refreshTouchUI();}
 const _tb=(ic,lb)=>'<span class="ic">'+ic+'</span>'+(lb?'<span class="lb">'+lb+'</span>':'');
 function refreshTouchUI(){
-  const race=mode==="race"&&sess&&!(sess.onFoot&&sess.onFoot.active);
-  const foot=mode==="race"&&sess&&sess.onFoot&&sess.onFoot.active;
+  /* En modo REUBICAR hay que mostrar los controles aunque estés en pausa y aunque no
+     seas un dispositivo táctil: si no, al tocar la pantalla para arrastrar un botón
+     este mismo refresco los escondía todos. */
+  const onFoot=!!(sess&&sess.onFoot&&sess.onFoot.active);
+  const inRace=mode==="race"&&!!sess;
+  const reloc=relocating;
+  const race=reloc?!onFoot:(inRace&&!onFoot);
+  const foot=reloc?onFoot:(inRace&&onFoot);
+  const vis=reloc||touchDevice;
   const joy=save.scheme==="joy";
   const joyDrive=!!(race&&joy);
   document.body.classList.toggle("drv-joy",joyDrive);   // el stick de manejar es más grande
-  document.getElementById("touch").style.display=(touchDevice&&race)?"block":"none";
-  document.getElementById("foottouch").style.display=(touchDevice&&foot)?"block":"none";
+  document.getElementById("touch").style.display=(vis&&race)?"block":"none";
+  document.getElementById("foottouch").style.display=(vis&&foot)?"block":"none";
   // el joystick vive aparte: sirve a pie y, en el esquema joystick, también al volante
   const jw=document.getElementById("joywrap");
-  if(jw)jw.style.display=(touchDevice&&(foot||joyDrive))?"block":"none";
-  document.getElementById("doorbtn").style.display=(mode==="race")?"block":"none";
+  if(jw)jw.style.display=(vis&&(foot||joyDrive))?"block":"none";
+  document.getElementById("doorbtn").style.display=(reloc||mode==="race")?"block":"none";
   document.getElementById("doorbtn").innerHTML=_tb(foot?"🚗":"🚪",foot?L.getin:L.getout);
   document.body.classList.toggle("onfoot",!!foot);
   document.getElementById("ftjump").innerHTML=_tb("⤒",L.jump||"");
@@ -981,14 +989,11 @@ function refreshTouchUI(){
 const MOV_IDS=["tleft","tright","tgas","tbrake","thand","joy","ftjump","ftpunch","doorbtn","pausebtn","cambtn","chatbtn","micbtn"];
 function applyCtrlPos(){for(const id of MOV_IDS){const el=document.getElementById(id);if(!el)continue;
   const p=save.ctrl&&save.ctrl[id];el.style.transform=p?`translate(${p.x}px,${p.y}px)`:"";}}
-let relocating=false,dragEl=null,dragId=null,dragStart=null,dragBase=null;
+let dragEl=null,dragId=null,dragStart=null,dragBase=null;
 function startRelocate(){
   relocating=true;document.body.classList.add("relocating");
-  const foot=sess&&sess.onFoot&&sess.onFoot.active;
   hud.style.display="block";
-  document.getElementById("touch").style.display=foot?"none":"block";
-  document.getElementById("foottouch").style.display=foot?"block":"none";
-  document.getElementById("doorbtn").style.display="block";
+  refreshTouchUI();   // muestra el juego de controles que corresponda (incluido el joystick)
   S.pause.classList.add("hidden"); // ocultar menú de pausa, dejar solo los controles
   const r=document.getElementById("reloc");r.classList.add("on");
   document.getElementById("reloctip").textContent=L.relocTip||"Arrastrá cada botón a donde quieras";
@@ -997,8 +1002,7 @@ function startRelocate(){
   bar.appendChild(btn(L.done||"LISTO",()=>endRelocate()));}
 function endRelocate(){relocating=false;dragEl=null;document.body.classList.remove("relocating");
   document.getElementById("reloc").classList.remove("on");
-  document.getElementById("touch").style.display="none";
-  document.getElementById("foottouch").style.display="none";
+  refreshTouchUI();
   hud.style.display="none";persist();buildPause();}
 const MOV_SEL="#"+MOV_IDS.join(",#");
 addEventListener("pointerdown",e=>{if(!relocating)return;
@@ -3903,6 +3907,15 @@ if(DEV)window.__dy={
   ss:()=>(sess?{freeroam:!!sess.freeroam,armed:!!sess.armed,grid:!!sess.gridHold,lap:sess.lap}:null),
   voiceOn:()=>VOICE.enable(),
   relocating:()=>relocating,ctrl:()=>save.ctrl,
+  reloc:()=>startRelocate(), relocDone:()=>endRelocate(),
+  ctrlVis:()=>{ const g=id=>{const e=document.getElementById(id);if(!e)return false;
+      const p=e.parentElement;
+      if(p&&p!==document.body&&getComputedStyle(p).display==='none')return false;
+      if(getComputedStyle(e).display==='none')return false;
+      const r=e.getBoundingClientRect(); return r.width>1&&r.height>1; };
+    return{joy:g('joy'),gas:g('tgas'),brake:g('tbrake'),hand:g('thand'),
+      left:g('tleft'),right:g('tright'),door:g('doorbtn'),
+      jump:g('ftjump'),punch:g('ftpunch'),reloc:relocating}; },
   gped:()=>{const p=garagePed;if(!p)return null;const b=new THREE.Box3().setFromObject(p.holder);
     return{ok:true,y:+p.holder.position.y.toFixed(2),cx:+p.holder.position.x.toFixed(2),cur:p.cur};},
   swapCar:d=>swapCarLive(d),swapPed:d=>swapPedLive(d),
