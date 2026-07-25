@@ -1032,9 +1032,13 @@ addEventListener("pointerup",e=>{if(!dragEl)return;e.preventDefault();e.stopProp
 const app=document.getElementById("app");
 const canvas=document.getElementById("gl");
 let renderer;
-try{const _lowQ=(save.quality!=="high");   // BAJA: sin MSAA y con precisión media = mucho más rápido en Adreno/Mali
+/* OJO con `precision`: three lo aplica al VERTEX shader además del fragment. Con "mediump"
+   (16 bits reales en Mali/Adreno) las posiciones lejanas pierden precisión y el piso
+   TIEMBLA y TITILA, como si hubiera dos texturas peleándose. En PC no se nota porque el
+   driver lo promueve a highp. Va highp siempre; el ahorro no valía el artefacto. */
+try{const _lowQ=(save.quality!=="high");   // BAJA/ULD: sin MSAA (eso sí es gratis)
   renderer=new THREE.WebGLRenderer({canvas,antialias:!_lowQ,powerPreference:"high-performance",
-    precision:_lowQ?"mediump":"highp",stencil:false,depth:true,alpha:false});}
+    precision:"highp",stencil:false,depth:true,alpha:false});}
 catch(e){document.getElementById("loadmsg").textContent="Tu navegador bloqueó WebGL: "+e.message;throw e;}
 /* Si al aparato se le acaba la memoria de video, Chrome mata el contexto y el juego
    quedaba congelado sin decir nada. Ahora avisa y ofrece recargar en calidad más baja. */
@@ -1069,7 +1073,7 @@ renderer.shadowMap.autoUpdate=false; // el mapa de sombras se refresca 1 de cada
 renderer.toneMapping=THREE.NeutralToneMapping||THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.15;
 const scene=new THREE.Scene();
 const garageScene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(CFG.fovBase,1,.4,2000);
+const camera=new THREE.PerspectiveCamera(CFG.fovBase,1,.55,2000);   // near más lejos = z-buffer más fino
 function applyRotation(){ // portrait phone -> render landscape rotated 90°
   const portrait=innerHeight>innerWidth&&touchDevice;
   document.body.classList.toggle("rot",portrait);}
@@ -1384,13 +1388,14 @@ function baseEnv(group,timeKey,{floorTex="concrete",floorColor=0xd6d9e2,floorRep
   if(marks){const mm=new THREE.Mesh(hole?rectHoleGeo(w,d,hole):new THREE.PlaneGeometry(w,d),
     new THREE.MeshBasicMaterial({map:marks,transparent:true,depthWrite:false,
       polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4}));
-    if(!hole)mm.rotation.x=-Math.PI/2;mm.position.y=.02;group.add(mm);}
+    // separación en CENTÍMETROS: a 8 mm los planos se pelean por el z-buffer de lejos
+    if(!hole)mm.rotation.x=-Math.PI/2;mm.position.y=.06;group.add(mm);}
   if(!noGround){const gm=stdMat(groundTex,{repeat:[160,160]});gm.color.set(groundColor);
     if(groundNoMap){gm.map=null;gm.needsUpdate=true;}
     const around=new THREE.Mesh(hole?circleHoleGeo(1600,hole):new THREE.CircleGeometry(1600,40),gm);
-    if(!hole)around.rotation.x=-Math.PI/2;around.position.y=-.02;group.add(around);
+    if(!hole)around.rotation.x=-Math.PI/2;around.position.y=-.22;group.add(around);
     if(apron){const ap=new THREE.Mesh(hole?rectHoleGeo(w+120,d+120,hole):new THREE.PlaneGeometry(w+120,d+120),stdMat("road",{repeat:[34,28]}));
-      if(!hole)ap.rotation.x=-Math.PI/2;ap.position.y=-.012;group.add(ap);}}
+      if(!hole)ap.rotation.x=-Math.PI/2;ap.position.y=-.09;group.add(ap);}}
   if(fenceOn){
     const postGeo=new THREE.BoxGeometry(.14,1.15,.14);postGeo.translate(0,.575,0);
     const postMat=stdMat("metal");postMat.metalness=.55;
@@ -1895,7 +1900,7 @@ function buildBosque(group,timeKey){
   // grass world
   const gm=stdMat("ground",{repeat:[200,200]});gm.color.set(0x6f8a55);
   const terr=new THREE.Mesh(new THREE.CircleGeometry(1600,48),gm);
-  terr.rotation.x=-Math.PI/2;terr.position.y=-.02;terr.receiveShadow=true;group.add(terr);
+  terr.rotation.x=-Math.PI/2;terr.position.y=-.16;terr.receiveShadow=true;group.add(terr);
   // road loop
   const pts=[[0,-260],[170,-240],[290,-140],[310,20],[220,120],[250,240],[80,300],
     [-120,260],[-90,120],[-230,80],[-320,-60],[-230,-220]].map(p=>new THREE.Vector3(p[0],0,p[1]));
@@ -2425,7 +2430,7 @@ function buildTouge(group,timeKey){
   const{colliders,T}=baseEnv(group,timeKey,{fenceOn:false,apron:false,noGround:true,w:1,d:1,marks:null,skyBiome:"bosque"});
   const gm=stdMat("ground",{repeat:[200,200]});gm.color.set(0x4d5f42);
   const terr=new THREE.Mesh(new THREE.CircleGeometry(1500,48),gm);
-  terr.rotation.x=-Math.PI/2;terr.position.y=-.02;terr.receiveShadow=true;group.add(terr);
+  terr.rotation.x=-Math.PI/2;terr.position.y=-.16;terr.receiveShadow=true;group.add(terr);
   // horquillas de montaña: zigzag oeste + recta rápida este
   const pts=[[-240,-320],[40,-280],[-170,-205],[70,-140],[-150,-70],[90,-5],[-130,70],
     [110,140],[-90,215],[130,290],[260,180],[290,-60],[160,-330]].map(p=>new THREE.Vector3(p[0],0,p[1]));
@@ -3444,10 +3449,10 @@ function writeMark(s,lm){
           lz=M.has?M.z-Math.cos(M.h)*1.4-Math.sin(M.h)*w:rz-ch*.6;
     const j=markHead=(markHead+1)%MARKN,o=j*12;
     const px=ch*.14,pz=-sh*.14;
-    pos[o]=lx-px;pos[o+1]=.04;pos[o+2]=lz-pz;
-    pos[o+3]=lx+px;pos[o+4]=.04;pos[o+5]=lz+pz;
-    pos[o+6]=rx-px;pos[o+7]=.04;pos[o+8]=rz-pz;
-    pos[o+9]=rx+px;pos[o+10]=.04;pos[o+11]=rz+pz;}
+    pos[o]=lx-px;pos[o+1]=.10;pos[o+2]=lz-pz;
+    pos[o+3]=lx+px;pos[o+4]=.10;pos[o+5]=lz+pz;
+    pos[o+6]=rx-px;pos[o+7]=.10;pos[o+8]=rz-pz;
+    pos[o+9]=rx+px;pos[o+10]=.10;pos[o+11]=rz+pz;}
   markGeo.attributes.position.needsUpdate=true;
   M.x=s.x;M.z=s.z;M.h=s.h;M.has=true;}
 function clearMarks(){if(!markGeo)return;
@@ -3807,16 +3812,24 @@ function cullWorld(dt){
 /* ===== resolución ADAPTATIVA: si el equipo no llega a 30 fps, baja píxeles;
        si le sobra, los devuelve. Es lo que más se nota en gama baja. ===== */
 let _fpsAcc=0,_fpsN=0,_scaleCd=0;
+let _warm=0,_bad=0;
 function adaptRes(dtMs){
   if(save.quality==="high")return;
+  // arranque en caliente: los primeros 4 s el FPS es bajo por compilar shaders y
+  // decodificar texturas. Si se adaptaba ahí, la resolución saltaba varias veces seguidas
+  // y se veía como un temblor/titileo al empezar.
+  if(mode!=="race"){_warm=0;_fpsAcc=0;_fpsN=0;return;}
+  if(_warm<4000){_warm+=dtMs;_fpsAcc=0;_fpsN=0;return;}
   _fpsAcc+=dtMs;_fpsN++; if(_scaleCd>0)_scaleCd-=dtMs;
   if(_fpsAcc<1500)return;
   const fpsNow=1000/(_fpsAcc/_fpsN); _fpsAcc=0;_fpsN=0;
   if(_scaleCd>0)return;
   let ns=resScale;
   const flr=QP.fpsFloor||.6;
-  // objetivo: no bajar de 30 fps. Antes de sacar geometría, se recorta resolución.
-  if(fpsNow<30&&resScale>flr)ns=Math.max(flr,resScale-.12);
+  // objetivo: no bajar de 30 fps. Hacen falta DOS medidas malas seguidas (histéresis):
+  // así un tirón aislado no cambia la resolución.
+  if(fpsNow<30){_bad++;}else{_bad=0;}
+  if(_bad>=2&&resScale>flr){ns=Math.max(flr,resScale-.12);_bad=0;}
   else if(fpsNow>50&&resScale<1)ns=Math.min(1,resScale+.06);
   if(ns!==resScale){ resScale=ns; _scaleCd=2500;
     renderer.setPixelRatio(Math.min(devicePixelRatio||1,QP.dpr)*resScale); }}
@@ -3957,6 +3970,17 @@ if(DEV)window.__dy={
     return{exists:true,r:Math.round(g.radius||0),far:camera.far,
       y:Math.round(sk.position.y),vis:sk.visible,seg:g.widthSegments};},
   cullOnce:()=>{cullAcc=99;cullWorld(1);},
+  pxr:()=>+renderer.getPixelRatio().toFixed(3),
+  zfight:()=>{ // alturas de los planos grandes del suelo, de arriba a abajo
+    const ys=[];
+    if(world)world.group.traverse(o=>{ if(!o.isMesh||!o.geometry)return;
+      const p=o.geometry.parameters||{}, ty=o.geometry.type||'';
+      if(/Sphere/.test(ty))return;                    // la cúpula del cielo no es piso
+      const big=(p.width>=100&&p.height>=100)||(/Circle|Shape/.test(ty)&&p.radius>=200);
+      if(big)ys.push(+o.position.y.toFixed(3)); });
+    ys.sort((a,b)=>b-a);
+    const gaps=[]; for(let i=1;i<ys.length;i++)gaps.push(Math.abs(ys[i-1]-ys[i]));
+    return{precision:renderer.capabilities.precision,ys,gaps,near:camera.near}; },
   ghostCollide:()=>{if(sess)ghostCollide(sess,1/60);},
   mp:()=>({ping:NET.ping,n:Object.keys(ghosts).length,
     list:Object.keys(ghosts).map(id=>{const g=ghosts[id];
