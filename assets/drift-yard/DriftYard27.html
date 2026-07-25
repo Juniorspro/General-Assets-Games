@@ -49,6 +49,22 @@ body.rot #app{inset:auto;top:0;left:0;width:100vh;height:100vw; /* unidades de v
   min-width:48px;min-height:48px;font:900 calc(var(--vm)*0.055) inherit;color:var(--ink);background:var(--panel);
   border:2px solid rgba(242,239,232,.35);border-radius:12px}
 #gprev{left:calc(var(--vm)*0.02)}#gnext{right:calc(var(--vm)*0.02)}
+/* ===== PAUSA: tarjeta compacta. Antes eran 6 barras a lo ancho apiladas: en un celu
+   apaisado no entraban, se desbordaban y los selectores se solapaban con el auto. ===== */
+#s_pause{gap:calc(var(--ah)*0.018);padding:calc(var(--ah)*0.02) 0}
+#s_pause .title-xl{font-size:clamp(17px,calc(var(--ah)*0.052),34px);margin:0}
+.pausecard{width:min(calc(var(--aw)*0.80),620px);max-height:calc(var(--ah)*0.80);overflow-y:auto;
+  display:flex;flex-direction:column;gap:calc(var(--ah)*0.016);
+  background:rgba(16,17,22,.86);border:1.5px solid rgba(242,239,232,.18);border-radius:16px;
+  padding:calc(var(--ah)*0.025) calc(var(--aw)*0.022);box-shadow:0 10px 34px rgba(0,0,0,.55)}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--ah)*0.016) calc(var(--aw)*0.016)}
+.pgrid .btn{min-width:0;width:100%;padding:.62em .5em;
+  font-size:clamp(11px,calc(var(--ah)*0.032),17px);letter-spacing:.05em}
+.pgrid .btn.wide{grid-column:1 / -1}
+.pgrid .btn.go{background:linear-gradient(180deg,rgba(255,180,106,.28),rgba(255,122,26,.22));border-color:var(--org)}
+.custrow{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--aw)*0.016)}
+.custrow .cyc{min-width:0}
+.custrow.one{grid-template-columns:1fr}
 .cyc{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);border:1.5px solid rgba(242,239,232,.22);border-radius:8px;padding:3px 5px}
 .cyclab{font-size:clamp(9px,calc(var(--vm)*0.018),11px);letter-spacing:.1em;color:var(--dim);flex:1;text-align:center;min-width:0}
 .cyclab b{display:block;color:var(--ink);font-size:clamp(12px,calc(var(--vm)*0.026),15px)}
@@ -1346,8 +1362,11 @@ function instChunks(group,geo,mat,items,{shadow=true,tag="prop"}={}){
     try{ inst.computeBoundingSphere(); }catch(e){}   // frustum culling correcto por chunk
     group.add(inst); out.push(inst);}
   return out;}
-function instPlace(group,mi,items,{shadow=true}={}){ // items:[x,z,rotY,scale]
-  items=thin(items);
+/* solid:true = este prop TIENE collider, así que NO se recorta. Antes se recortaba el
+   dibujo pero los colliders quedaban todos: en ULD el 78% de los props era invisible y
+   seguía frenándote (chocabas contra nada). Lo decorativo sí se sigue recortando. */
+function instPlace(group,mi,items,{shadow=true,solid=false}={}){ // items:[x,z,rotY,scale]
+  if(!solid)items=thin(items);
   if(!mi||!items.length)return;
   const l=instChunks(group,mi.geo,mi.mat,items,{shadow,tag:"prop"});
   return l&&l[0];}
@@ -1527,12 +1546,12 @@ function arenaFeatures(group,colliders,rng,spec){
     if(mi){const items=[];for(const t of spec.tires){const n=2+((rng()*3)|0);
       for(let k=0;k<n;k++)items.push([t[0]+(rng()-.5)*.3,t[1]+(rng()-.5)*.3,rng()*6.28,k*.34,1]);
       colliders.push({type:"circle",x:t[0],z:t[1],r:1.35});}
-      instPlace(group,mi,items);}}
+      instPlace(group,mi,items,{solid:true});}}
   for(const key of["containers","stacks"]){const list=spec[key];const glb=key==="stacks"?A.glb.stack:A.glb.container;
     if((list||[]).length&&glb){const mi=mergedForInstancing(glb,{length:6.1});
       if(mi){const items=[];for(const c of list){const a=(c[2]||0)*Math.PI/180;
         items.push([c[0],c[1],a,0,1]);colliders.push(obb(c[0],c[1],3.2,key==="stacks"?1.7:1.35,a));}
-        instPlace(group,mi,items);}}}
+        instPlace(group,mi,items,{solid:true});}}}
   if((spec.cones||[]).length)conesAt(group,rng,spec.cones);}
 
 /* ================= trampa: piso de cristal + trituradora de engranajes ================= */
@@ -1810,7 +1829,7 @@ function buildPuerto(group,timeKey){
   if(jerseyMi){const items=[];
     for(let i=0;i<14;i++){const x=-26+i*3.7,z=D-24;items.push([x,z,Math.PI/2,0,1]);
       colliders.push(obb(x,z,1.9,.6,0));}
-    instPlace(group,jerseyMi,items);}
+    instPlace(group,jerseyMi,items,{solid:true});}
   const bleachT=normalizeModel(A.glb.bleachers,{height:3.4});
   if(bleachT)for(const x of[-8,12]){const b2=bleachT.clone(true);
     b2.position.set(x,0,D-16);b2.rotation.y=Math.PI;group.add(b2);
@@ -1853,7 +1872,7 @@ function buildPuerto(group,timeKey){
      for(const[x,z,rot]of[[6,-20,0],[6,-8,0],[20,-14,Math.PI/2],[38,-26,0],[52,-14,Math.PI/2],
        [38,6,Math.PI/2],[64,-2,0],[-14,22,Math.PI/2],[0,34,0],[-30,34,0]]){
        items.push([x,z,rot,0,1]);colliders.push(obb(x,z,1.35,6.4,rot));}
-     instPlace(group,mi,items);}}
+     instPlace(group,mi,items,{solid:true});}}
   // barco de carga atracado detrás del muelle norte
   {const shipT=normalizeModel(A.glb.ship,{length:150});
    if(shipT){const sh=shipT.clone(true);sh.position.set(-40,-3,-D-240);sh.rotation.y=Math.PI/2.4;group.add(sh);}} // lejos, fuera del mapa (paisaje)
@@ -2058,7 +2077,7 @@ function buildGP(group,timeKey){
   const tireMi=A.glb.tirewall?mergedForInstancing(A.glb.tirewall,{height:1.1}):null;
   if(tireMi){const tires=[];for(let i=0;i<n;i+=8){const p=P[i].clone().addScaledVector(LF[i],halfW+7.6);
     tires.push([p.x,p.z,Math.atan2(TN[i].x,TN[i].z),1]);colliders.push({type:"circle",x:p.x,z:p.z,r:1.3});}
-    instPlace(group,tireMi,tires,{shadow:false});}
+    instPlace(group,tireMi,tires,{shadow:false,solid:true});}
   // ---- PARED DE COLISIÓN CONTINUA JUSTO DETRÁS del muro de gomas visible (rellena los huecos; no te caés) ----
   // va por fuera de las gomas (halfW+7.6) para que choques contra las gomas VISIBLES, no contra una pared invisible
   {const STEP=5,lat=halfW+8.2;
@@ -2168,13 +2187,13 @@ function buildAero(group,timeKey){
     colliders.push({type:"circle",x,z,r:5});}
   const contMi=mergedForInstancing(A.glb.container,{length:12.2});
   if(contMi){const items=[];for(let i=0;i<6;i++)items.push([W-24,-D+30+i*15,0,0,1]);
-    instPlace(group,contMi,items);
+    instPlace(group,contMi,items,{solid:true});
     colliders.push(obb(W-24,-D+30+37,1.6,45,0));}
   const jerseyMi=mergedForInstancing(A.glb.jersey,{length:3.6});
   if(jerseyMi){const items=[];
     for(let i=0;i<10;i++){const x=-60+i*4,z=0;items.push([x,z,Math.PI/2,0,1]);
       colliders.push(obb(x,z,1.9,.6,0));}
-    instPlace(group,jerseyMi,items);}
+    instPlace(group,jerseyMi,items,{solid:true});}
   const tireT=normalizeModel(A.glb.tires,{height:1.1});
   if(tireT)for(const[x,z]of[[60,-40],[100,30],[-140,50],[0,70],[-30,-70]]){
     const t=tireT.clone(true);t.position.set(x,0,z);t.rotation.y=rng()*6.3;group.add(t);
@@ -2209,7 +2228,7 @@ function buildAzotea(group,timeKey){
       for(let i=0;i<=cnt;i++){const t=i/cnt;
         items.push([x1+(x2-x1)*t,z1+(z2-z1)*t,ang,0,1]);}
       colliders.push(obb((x1+x2)/2,(z1+z2)/2,.6,lenR/2+.4,ang));}
-    instPlace(group,jerseyMi,items);}
+    instPlace(group,jerseyMi,items,{solid:true});}
   // tanques de agua / salidas de aire pegados a los bordes (el centro queda limpio para derrapar)
   const siloT=normalizeModel(A.glb.silo,{height:5});
   if(siloT)for(const[x,z]of[[-W+14,-D+16],[-W+24,-D+14],[W-16,D-18]]){
@@ -2383,7 +2402,7 @@ function buildEstadio(group,timeKey){
    if(mi){const items=[];
      for(const[x,z,rot]of[[-30,-18,.4],[26,14,-.5],[0,-40,1.2]]){
        items.push([x,z,rot,0,1]);colliders.push(obb(x,z,1.35,6.4,rot));}
-     instPlace(group,mi,items);}}
+     instPlace(group,mi,items,{solid:true});}}
   conesAt(group,rng,[[-45,25,9,18],[48,-28,9,18]]);
   {const tireT2=normalizeModel(A.glb.tires,{height:1.1});
    if(tireT2)for(const[x,z]of[[-60,-30],[60,32],[-20,44],[30,-46]]){
@@ -2512,7 +2531,15 @@ function colAABB(c){
   if(c.type==="circle")return[c.x-c.r,c.z-c.r,c.x+c.r,c.z+c.r];
   if(c.type==="capsule")return[Math.min(c.ax,c.bx)-c.r,Math.min(c.az,c.bz)-c.r,Math.max(c.ax,c.bx)+c.r,Math.max(c.az,c.bz)+c.r];
   const r=Math.hypot(c.hw,c.hd)+.4;return[c.x-r,c.z-r,c.x+r,c.z+r];}
+/* Hasta qué altura te choca cada collider. Antes, con el auto por encima de 1.1 m se
+   apagaban TODAS las colisiones y atravesabas contenedores y muros en pleno salto.
+   Ahora lo chico (conos, gomas) se puede saltar y lo grande sigue siendo sólido. */
+function colTop(c){
+  if(c.top!=null)return c.top;
+  const sz=(c.type==="circle")?c.r:Math.max(c.hw||0,c.hd||0);
+  return sz>2.6?7:(sz>1.2?2.8:1.5);}
 function buildColliderGrid(cols){
+  for(const c of cols)if(c.top==null)c.top=colTop(c);
   const grid=new Map();
   for(let i=0;i<cols.length;i++){const[x0,z0,x1,z1]=colAABB(cols[i]);
     for(let cx=Math.floor(x0/GRID_CELL);cx<=Math.floor(x1/GRID_CELL);cx++)
@@ -3201,8 +3228,9 @@ function update(dt){
     if(s.x>B.W){s.x=B.W;s.vx=-Math.abs(s.vx)*.35;hit=hit||speed>7;}
     if(s.z<-B.D){s.z=-B.D;s.vz=Math.abs(s.vz)*.35;hit=hit||speed>7;}
     if(s.z>B.D){s.z=B.D;s.vz=-Math.abs(s.vz)*.35;hit=hit||speed>7;}}
-  const _cand=(s.y>1.1?[]:queryColliders(s.x,s.z,CFG.carR+2))||world.colliders.map((_,i)=>i);
+  const _cand=queryColliders(s.x,s.z,CFG.carR+2)||world.colliders.map((_,i)=>i);
   for(const _ci of _cand){const c=world.colliders[_ci];
+    if((s.y||0)>(c.top==null?1.5:c.top))continue;   // sólo salta lo que es realmente bajo
     if(c.type==="circle"){const dx=s.x-c.x,dz=s.z-c.z,d=Math.hypot(dx,dz),m=c.r+CFG.carR;
       if(d<m&&d>1e-4){s.x=c.x+dx/d*m;s.z=c.z+dz/d*m;
         const dot=(s.vx*dx+s.vz*dz)/d;
@@ -3652,8 +3680,7 @@ function buildTimeSel(){const s=S.time;s.innerHTML="";
 function buildPause(){const s=S.pause;s.innerHTML="";
   const sc=document.createElement("div");sc.className="scrim";s.appendChild(sc);
   const t=document.createElement("div");t.className="title-xl org";t.textContent=L.paused;s.appendChild(t);
-  s.appendChild(btn(L.resume,()=>togglePause()));
-  s.appendChild(btn(L.restart,()=>startSession()));
+  const card=document.createElement("div");card.className="pausecard";s.appendChild(card);
   // cambiar auto (solo comprados) / piloto en plena partida
   const cyc=(lab,val,fn)=>{const w=document.createElement("div");w.className="cyc";
     const l=btn("◀",()=>{try{interact();}catch(e){}fn(-1);});l.classList.add("mini");
@@ -3661,14 +3688,20 @@ function buildPause(){const s=S.pause;s.innerHTML="";
     const tx=document.createElement("span");tx.className="cyclab";tx.innerHTML=`${lab}<b>${val}</b>`;
     w.appendChild(l);w.appendChild(tx);w.appendChild(r);return w;};
   const swapRow=document.createElement("div");swapRow.className="custrow";
+  if(save.owned.length<2)swapRow.classList.add("one");   // un solo selector: ancho completo
   if(save.owned.length>1)swapRow.appendChild(cyc(L.swapCar||"AUTO",CARS[save.car].name,d=>swapCarLive(d)));
   swapRow.appendChild(cyc(L.swapPed||"PILOTO",`${save.char+1}/${PEDS.length}`,d=>swapPedLive(d)));
-  s.appendChild(swapRow);
-  s.appendChild(btn("🕹 "+(L.sch||"ESQUEMA")+": "+(save.scheme==="joy"?L.c_joy:L.c_carx),()=>{
+  card.appendChild(swapRow);
+  const g=document.createElement("div");g.className="pgrid";card.appendChild(g);
+  const add=(el,cls)=>{if(cls)for(const c of cls.split(" "))el.classList.add(c);g.appendChild(el);return el;};
+  add(btn("▶ "+L.resume,()=>togglePause()),"wide go");
+  add(btn("↻ "+L.restart,()=>startSession()));
+  add(btn("🕹 "+(save.scheme==="joy"?L.c_joy:L.c_carx),()=>{
     save.scheme=save.scheme==="joy"?"carx":"joy";persist();applyScheme();buildPause();}));
-  s.appendChild(btn("🎮 "+(L.controls||"CONTROLES"),()=>startRelocate()));
-  s.appendChild(btn(save.sound?L.sound_on:L.sound_off,()=>{save.sound=!save.sound;persist();applySound();buildPause();}));
-  s.appendChild(btn(L.exit,()=>{loopsStop();sess=null;music("music_menu");buildMaps();}));
+  add(btn("🎮 "+(L.controls||"CONTROLES"),()=>startRelocate()));
+  add(btn((save.sound?"🔊 ":"🔇 ")+(save.sound?L.sound_on:L.sound_off),
+    ()=>{save.sound=!save.sound;persist();applySound();buildPause();}));
+  add(btn("✕ "+L.exit,()=>{loopsStop();sess=null;music("music_menu");buildMaps();}),"wide");
   show("pause");}
 function medalFor(m,val){ // drift: higher better; race: lower better
   if(m.mode==="race"){let md=0;for(let i=0;i<3;i++)if(val<=m.targets[i])md=i+1;return md;}
@@ -3881,6 +3914,38 @@ if(DEV)window.__dy={
   setJoy:(x,z)=>{joyVec.x=x;joyVec.z=z;},
   cmd:()=>commands(),
   scheme:()=>save.scheme,
+  /* ---- colisiones ---- */
+  solidThin:()=>{const geo=new THREE.BoxGeometry(1,1,1),mat=new THREE.MeshBasicMaterial();
+    const mk=()=>{const it=[];for(let i=0;i<200;i++)it.push([(i%20)*30-300,Math.floor(i/20)*30-300,0,0,1]);return it;};
+    const cnt=g=>{let n=0;g.traverse(o=>{if(o.isInstancedMesh)n+=o.count;});return n;};
+    const A=new THREE.Group();instPlace(A,{geo,mat},mk(),{});
+    const B=new THREE.Group();instPlace(B,{geo,mat},mk(),{solid:true});
+    return{deco:cnt(A),solid:cnt(B)};},
+  colProbe:()=>{
+    const big={type:"circle",x:400,z:400,r:3},small={type:"circle",x:460,z:400,r:.8};
+    world.colliders.push(big,small);world.grid=buildColliderGrid(world.colliders);
+    const hits=(c,y)=>{const s2=sess;s2.y=y;s2.x=c.x+(c.r+CFG.carR)*.7;s2.z=c.z;
+      const cand=queryColliders(s2.x,s2.z,CFG.carR+2)||[];
+      for(const i of cand){const cc=world.colliders[i];
+        if((s2.y||0)>(cc.top==null?1.5:cc.top))continue;
+        if(cc===c)return true;}
+      return false;};
+    const r={bigTop:big.top,smallTop:small.top,
+      bigGround:hits(big,0),bigAir:hits(big,2.2),
+      smallGround:hits(small,0),smallAir:hits(small,2.2)};
+    world.colliders.pop();world.colliders.pop();world.grid=buildColliderGrid(world.colliders);
+    if(sess){sess.y=0;}
+    return r;},
+  pauseLayout:()=>{const s2=document.getElementById("s_pause"),r=s2.getBoundingClientRect();
+    const card=s2.querySelector(".pausecard");if(!card)return null;
+    const btns=[...s2.querySelectorAll(".btn")].filter(b=>!b.classList.contains("mini"));
+    return{n:btns.length,overflow:card.scrollHeight>card.clientHeight+2,
+      cols:new Set(btns.map(b=>Math.round(b.getBoundingClientRect().left))).size,
+      allInside:btns.every(b=>{const q=b.getBoundingClientRect();
+        return q.top>=r.top-1&&q.bottom<=r.bottom+1&&q.left>=r.left-1&&q.right<=r.right+1;}),
+      cardH:Math.round(card.getBoundingClientRect().height),
+      screenH:Math.round(r.height)};},
+  pauseOpen:()=>buildPause(),
   marksProbe:()=>{const t=marksYard(300,220),c=t.image;
     const g=c.getContext("2d"),d=g.getImageData(0,0,c.width,c.height).data;
     let sum=0,n=0,cov=0;
