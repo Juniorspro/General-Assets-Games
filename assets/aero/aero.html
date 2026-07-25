@@ -189,7 +189,7 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
    vidrio, burbujas iridiscentes, peces voladores y 5 misiones.
    Assets generados con Higgsfield · three.js
    ============================================================ */
-const HASH='f0366b5';   // commit del repo con los assets
+const HASH='1dcaff2';   // commit del repo con los assets
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/aero/';
 const A={ sky:BASE+'sky.jpg', grass:BASE+'grass.jpg', logo:BASE+'logo.png', keyart:BASE+'keyart.jpg',
   heroIdle:BASE+'hero-idle.glb', heroRun:BASE+'hero-run.glb', heroJump:BASE+'hero-jump.glb',
@@ -397,7 +397,7 @@ function loadTex(key,url,rep,onDone){ if(!ok(url))return;
 loadTex('grass',ok(A.tGrass)?A.tGrass:A.grass,64,t=>{ terMat.map=t;
   terMat.color.set(0xffffff); terMat.vertexColors=true; terMat.needsUpdate=true; });
 /* ---- agua ---- */
-const watMat=new THREE.MeshStandardMaterial({color:0x2fa8dd,transparent:true,opacity:.72,roughness:.08,metalness:.35,
+const watMat=new THREE.MeshStandardMaterial({color:0x39b6e8,transparent:true,opacity:.74,roughness:.02,metalness:.6,envMapIntensity:1.8,
   envMap:null,side:THREE.DoubleSide});
 const water=new THREE.Mesh(new THREE.PlaneGeometry(WORLD,WORLD,1,1),watMat);
 water.rotation.x=-Math.PI/2; water.position.y=WATER_Y; scene.add(water);
@@ -500,7 +500,7 @@ function buildTrees(){ for(const t of TREE_SPOTS){
     fit(m,(treeTpl?5.6:5.2)*t.s); m.position.x=t.x; m.position.z=t.z; m.position.y+=t.y;
     m.rotation.y=hash2(t.x,t.z)*6.28; if(Q.shadow>0)m.traverse(o=>{ if(o.isMesh)o.castShadow=true; });
     treeGroup.add(m); } }
-loadGLB(A.tree,g=>{ treeTpl=g.scene; treeGroup.clear(); buildTrees();
+loadGLB(A.tree,g=>{ treeTpl=g.scene; glossify(treeTpl,.45); treeGroup.clear(); buildTrees();
   if(typeof cityLater==='function')cityLater(); });   // la ciudad también usa árboles
 
 /* ================= ciudad de vidrio ================= */
@@ -511,14 +511,36 @@ const glassMat=new THREE.MeshStandardMaterial({color:0x5cc8ee,roughness:.03,meta
 const whiteMat=new THREE.MeshStandardMaterial({color:0xf2f9fd,roughness:.22,metalness:.14,envMapIntensity:.9});
 // piso de la plaza con paneles Y2K
 /* materiales del suelo urbano: TEXTURAS GENERADAS (Higgsfield), nada de canvas */
-const roadMat =new THREE.MeshStandardMaterial({color:0xc7d3db,roughness:.62,metalness:.05});
-const plazaMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.24,metalness:.18,envMapIntensity:.6});
-const walkMat =new THREE.MeshStandardMaterial({color:0xe8e6df,roughness:.7,metalness:.03});
+// GLOSSY: baja rugosidad + reflejo del cielo (envMap) = asfalto y baldosa mojados Frutiger Aero
+const roadMat =new THREE.MeshStandardMaterial({color:0xdfe9ef,roughness:.15,metalness:.42,envMapIntensity:1.35});
+const plazaMat=new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.07,metalness:.45,
+  clearcoat:1,clearcoatRoughness:.03,envMapIntensity:1.7});
+const walkMat =new THREE.MeshStandardMaterial({color:0xf2f2ee,roughness:.28,metalness:.22,envMapIntensity:1.1});
 const lawnMat =new THREE.MeshLambertMaterial({color:0xffffff});
-loadTex('road', A.tRoad, 30,t=>{ roadMat.map=t;  roadMat.needsUpdate=true; });
+const roadMatV=roadMat.clone();   // tiras verticales: UV rotado
+loadTex('road', A.tRoad, 1,t=>{
+  // densidad de textura UNIFORME: ~11 m por baldosa en ambos ejes, sin estirar
+  const L=46*7, R=12, U=L/11, V=R/11;
+  const th=t.clone(); th.needsUpdate=true; th.wrapS=th.wrapT=THREE.RepeatWrapping; th.repeat.set(U,V);
+  const tv=t.clone(); tv.needsUpdate=true; tv.wrapS=tv.wrapT=THREE.RepeatWrapping; tv.repeat.set(V,U);
+  roadMat.map=th;  roadMat.needsUpdate=true;
+  roadMatV.map=tv; roadMatV.needsUpdate=true; });
 loadTex('plaza',A.tPlaza,34,t=>{ plazaMat.map=t; plazaMat.needsUpdate=true; });
-loadTex('walk', A.tWalk, 26,t=>{ walkMat.map=t;  walkMat.needsUpdate=true; });
+loadTex('walk', A.tWalk, 4,t=>{ walkMat.map=t;  walkMat.needsUpdate=true; });
 loadTex('lawn', ok(A.tGrass)?A.tGrass:A.grass, 5,t=>{ lawnMat.map=t; lawnMat.needsUpdate=true; });
+/* ---- GLOSSY: le sube el brillo y el reflejo a cualquier modelo generado ---- */
+function glossify(root,amount){
+  const k=(amount==null?1:amount);
+  root.traverse(o=>{ if(!o.isMesh||!o.material)return;
+    const mats=Array.isArray(o.material)?o.material:[o.material];
+    o.material=Array.isArray(o.material)?mats.map(m=>gloss1(m,k)):gloss1(mats[0],k); }); }
+function gloss1(m,k){ if(!m||m.__glossed)return m;
+  const c=m.clone(); c.__glossed=true;
+  if('roughness' in c)c.roughness=Math.max(.05,Math.min(1,(c.roughness==null?1:c.roughness)*(1-.62*k)));
+  if('metalness' in c)c.metalness=Math.max(c.metalness||0,.34*k);
+  if('envMapIntensity' in c)c.envMapIntensity=1.25*k;
+  c.needsUpdate=true; return c; }
+
 /* ---- modelos 3D de la ciudad (Higgsfield) ---- */
 const BT={ tower1:null,tower2:null,tower3:null,dome:null,mall:null,eco:null,
   office:null,spire:null,apt:null,kiosk:null,fountain:null,lamp:null,bench:null,car:null };
@@ -563,7 +585,7 @@ function buildCity(){
   const dashes=[];
   for(let i=-NB-1;i<=NB;i++){ const c=(i+.5)*BLOCK;
     for(const horiz of [true,false]){
-      const st=new THREE.Mesh(horiz?new THREE.PlaneGeometry(L,ROAD):new THREE.PlaneGeometry(ROAD,L),roadMat);
+      const st=new THREE.Mesh(horiz?new THREE.PlaneGeometry(L,ROAD):new THREE.PlaneGeometry(ROAD,L),horiz?roadMat:roadMatV);
       st.rotation.x=-Math.PI/2;
       st.position.set(CITY.x+(horiz?0:c),GROUND_Y+.02,CITY.z+(horiz?c:0)); cityGroup.add(st);
       for(let k=-11;k<=11;k++)dashes.push([CITY.x+(horiz?k*10:c),CITY.z+(horiz?c:k*10),horiz]); } }
@@ -600,7 +622,7 @@ function buildCity(){
       const h=(central?95:55)+hash2(i,79)*(central?65:40);
       const w=(central?20:17)+hash2(i,81)*7;
       const b=putBldg(tpl,c.x,c.z,h,rot,w);
-      if(lows.length&&hash2(i,83)<.4)
+      if(lows.length&&Q.qual!=='low'&&hash2(i,83)<.4)
         putBldg(lows[(hash2(i,91)*lows.length)|0],c.x+(b.w*.5+11)*(hash2(i,89)<.5?1:-1),c.z+6,20,rot,24);
     } else if(lows.length){
       const tpl=lows[(hash2(i,97)*lows.length)|0];
@@ -641,7 +663,7 @@ const fillLater=()=>{ if(typeof fillPlats==='function')fillPlats();
 [['tower1',A.tower1],['tower2',A.tower2],['tower3',A.tower3],['dome',A.dome],['mall',A.mall],['eco',A.bush],
  ['office',A.office],['spire',A.spire],['apt',A.apt],['kiosk',A.kiosk],['fountain',A.fountain],
  ['lamp',A.lamp],['bench',A.bench],['car',A.car],['plat',A.plat],['gem',A.gem],['fish',A.fish]]
-  .forEach(([k,u])=>{ loadGLB(u,g=>{ BT[k]=g.scene; fillLater(); cityLater(); }); });
+  .forEach(([k,u])=>{ loadGLB(u,g=>{ BT[k]=g.scene; glossify(BT[k],1); fillLater(); cityLater(); }); });
 // red de seguridad: si algún modelo llegó tarde, la ciudad se rearma igual
 [3000,8000,16000,28000,45000].forEach(t=>setTimeout(()=>{ fillLater(); safeBuild(); },t));
 buildCity();
@@ -777,7 +799,7 @@ function loadHero(url,key){ loadGLB(url,g=>{ const m=g.scene;
     const bb2=new THREE.Box3().setFromObject(m); m.position.y=-bb2.min.y;
     // el modelo mira a su +Z local: NO se rota, así HERO.h=atan2(wx,wz) lo apunta al movimiento
     if(Q.shadow>0)m.traverse(o=>{ if(o.isMesh)o.castShadow=true; });
-    HM[key]=m; m.visible=(key===animK);
+    glossify(m,.6); HM[key]=m; m.visible=(key===animK);
     if(g.animations&&g.animations.length){ const clip=g.animations[0]; lockRoot(clip);
       const mx=new THREE.AnimationMixer(m); const act=mx.clipAction(clip);
       act.timeScale=key==='run'?1.25:1; act.play(); HMX[key]=mx; }
