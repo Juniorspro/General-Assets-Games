@@ -5020,6 +5020,9 @@ function setupChar(g){
 /* ángulos hallados midiendo la posición del hueso de la mano (búsqueda numérica):
    la derecha va a la empuñadura y la izquierda al caño */
 const ARM={rArm:[0,0,-46],rFore:[0,0,126],lArm:[0,0,103],lFore:[0,0,-103]};
+/* la malla dibuja las manos ~18 cm más abajo que el hueso (el skin las arrastra):
+   este ajuste, medido a ojo contra capturas, pone el arma EN las manos */
+const GDLT=[.03,-.18,.15];
 const _ae=new THREE.Euler(),_aq=new THREE.Quaternion();
 function poseArms(w){
   for(const k of ['rArm','lArm','rFore','lFore']){
@@ -5608,7 +5611,7 @@ function handTrack(){
   if(l){ l.updateWorldMatrix(true,false);
     _hv2.setFromMatrixPosition(l.matrixWorld);charRoot.worldToLocal(_hv2);
     _hv.lerp(_hv2,.34); }
-  chestAnchor.position.set(_hv.x,_hv.y+.02,_hv.z+.04);
+  chestAnchor.position.set(_hv.x+GDLT[0],_hv.y+GDLT[1],_hv.z+GDLT[2]);
 }
 
 /* ================= cámara ================= */
@@ -6253,6 +6256,14 @@ if(DEV)window.__H={
     return o;},
   poseNow:()=>{poseArms();handTrack();return true;},
   zoom:()=>zoomOn,fov:()=>+camera.fov.toFixed(1),
+  gdlt:(x,y,z)=>{GDLT[0]=x;GDLT[1]=y;GDLT[2]=z;handTrack();return GDLT.slice();},
+  anchorPos:()=>{if(!chestAnchor||!wModel)return null;
+    const p=chestAnchor.position;
+    const bb=new THREE.Box3().setFromObject(wModel),s2=new THREE.Vector3(),c2=new THREE.Vector3();
+    bb.getSize(s2);bb.getCenter(c2);
+    return{anchor:[+p.x.toFixed(3),+p.y.toFixed(3),+p.z.toFixed(3)],
+      wSize:[+s2.x.toFixed(2),+s2.y.toFixed(2),+s2.z.toFixed(2)],
+      wCtrWorld:[+c2.x.toFixed(2),+c2.y.toFixed(2),+c2.z.toFixed(2)]};},
   glbSize:k=>{const g=PGLB[k];if(!g)return null;
     const bb=new THREE.Box3().setFromObject(g.scene),s2=new THREE.Vector3();bb.getSize(s2);
     return[+s2.x.toFixed(2),+s2.y.toFixed(2),+s2.z.toFixed(2)];},
