@@ -5022,7 +5022,7 @@ function setupChar(g){
 const ARM={rArm:[0,0,-46],rFore:[0,0,126],lArm:[0,0,103],lFore:[0,0,-103]};
 /* la malla dibuja las manos ~18 cm más abajo que el hueso (el skin las arrastra):
    este ajuste, medido a ojo contra capturas, pone el arma EN las manos */
-const GDLT=[.03,-.18,.15];
+const GDLT=[.02,-.06,.12];   // corrimiento del arma dentro de la palma (en metros)
 const _ae=new THREE.Euler(),_aq=new THREE.Quaternion();
 function poseArms(w){
   for(const k of ['rArm','lArm','rFore','lFore']){
@@ -5041,26 +5041,54 @@ const RAY={skipBackfaces:true,collisionFilterMask:1};
 function addClip(name,g){
   if(g&&g.animations&&g.animations.length){CLIPS[name]=g.animations[0];buildActions();}
 }
+/* ---- dos capas de animación ----
+   Los clips generados son genéricos: el de caminar abre los brazos como un avión.
+   Partimos cada clip en TREN INFERIOR (cadera y piernas) y TREN SUPERIOR (torso, brazos):
+   las piernas usan caminar/correr/saltar y el torso se queda con el de reposo, que es
+   justo la pose en la que se generó el personaje (sosteniendo el arma).
+   Son datos de animación reales en las dos capas, no una pose procedural. */
+const UPPER=/(spine|chest|torso|neck|head|shoulder|clavicle|arm|elbow|hand|finger|thumb|index|middle|ring|pinky)/i;
+function splitClip(clip,which){
+  const tr=clip.tracks.filter(t=>{
+    const bone=t.name.split('.')[0].replace(/^.*\//,'');
+    const up=UPPER.test(bone);
+    return which==='up'?up:!up;});
+  if(!tr.length)return null;
+  return new THREE.AnimationClip(clip.name+'|'+which,clip.duration,tr);
+}
+const ACTU={};
 function buildActions(){
   if(!mixer)return;
   for(const k in CLIPS){
     if(ACTS[k])continue;
-    const a=mixer.clipAction(CLIPS[k]);
+    const low=splitClip(CLIPS[k],'low')||CLIPS[k];
+    const a=mixer.clipAction(low);
     a.enabled=true;a.setEffectiveWeight(k==='walk'?1:0);
     if(k==='jump'){a.setLoop(THREE.LoopOnce,1);a.clampWhenFinished=true;}
     ACTS[k]=a;
     if(k!=='walk')a.play();
+    const up=splitClip(CLIPS[k],'up');
+    if(up){ const b=mixer.clipAction(up);
+      b.enabled=true;b.setEffectiveWeight(0);b.play();ACTU[k]=b; }
   }
+  /* el torso se queda con el reposo (o con caminar si el reposo aún no llegó) */
+  const key=ACTU.idle?'idle':(ACTU.walk?'walk':null);
+  if(key)for(const k in ACTU)ACTU[k].setEffectiveWeight(k===key?1:0);
 }
 function setAnim(st,sp){
   if(!mixer||!ACTS[st])return;
   if(st!==animState){
-    for(const k in ACTS){ if(k===st)continue; ACTS[k].fadeOut(.2); }
-    ACTS[st].reset().fadeIn(.2).play();
+    for(const k in ACTS){ if(k===st)continue; ACTS[k].fadeOut(.22); }
+    ACTS[st].reset().fadeIn(.22).play();
     animState=st;
+    /* el torso sólo cambia para el salto (el cuerpo acompaña), si no se queda en reposo */
+    const want=(st==='jump'&&ACTU.jump)?'jump':(ACTU.idle?'idle':'walk');
+    for(const k in ACTU){ if(k===want)ACTU[k].reset().fadeIn(.22).play();
+      else ACTU[k].fadeOut(.22); }
   }
-  if(st==='walk')ACTS.walk.timeScale=clamp(sp/3.1,.55,1.9);
-  else if(st==='run')ACTS.run.timeScale=clamp(sp/8.4,.7,1.5);
+  const ts=st==='walk'?clamp(sp/3.1,.55,1.9):(st==='run'?clamp(sp/8.4,.7,1.5):1);
+  ACTS[st].timeScale=ts;
+  if(ACTU[st])ACTU[st].timeScale=ts;
 }
 function animStep(dt){
   if(!mixer)return;
@@ -5169,6 +5197,9 @@ function attachWeapon(){
   if(PL.fp){ vmGroup.add(wModel);
     wModel.scale.setScalar(.66);
     wModel.position.set(.19,-.19,-.30-L*.26);wModel.rotation.set(.02,-.05,0); }
+  else if(bones.rHand||bones.rFore){ (bones.rHand||bones.rFore).add(wModel);
+    wModel.position.set(0,0,0);wModel.rotation.set(0,0,0);
+    holdWeapon(); }
   else if(chestAnchor){ chestAnchor.add(wModel);
     wModel.scale.setScalar(1/(charK||1));wModel.position.set(0,0,0);wModel.rotation.set(0,0,0); }
 }
@@ -5600,18 +5631,32 @@ function camDirY(){return 0;}
 
 /* el arma va donde está la mano derecha del rig, pero siempre apuntando adelante */
 const _hv=new THREE.Vector3(),_hv2=new THREE.Vector3();
-/* el arma queda ENTRE las dos manos (empuñadura del lado de la derecha) */
+const _bq=new THREE.Quaternion(),_bs=new THREE.Vector3(),_wq=new THREE.Quaternion(),
+      _we=new THREE.Euler();
+/* El arma es HIJA DEL HUESO de la mano: su posición es exactamente la de la mano y
+   acompaña la animación. Sólo le estabilizamos la rotación (y la escala del rig) para
+   que el caño apunte a donde mira el jugador en vez de girar con la muñeca. */
+function holdWeapon(){
+  if(!wModel||PL.fp)return;
+  const b=bones.rHand||bones.rFore;
+  if(!b||wModel.parent!==b)return;
+  b.updateWorldMatrix(true,false);
+  b.matrixWorld.decompose(_hv,_bq,_bs);
+  _we.set(clamp(PL.pitch,-.7,.7)*.55,PL.yaw,0,'YXZ');
+  _wq.setFromEuler(_we);
+  wModel.quaternion.copy(_bq).invert().multiply(_wq);
+  const k=1/Math.max(.0001,_bs.x);
+  wModel.scale.set(k,k,k);
+  wModel.position.set(GDLT[0]*k,GDLT[1]*k,GDLT[2]*k);
+}
+/* respaldo si el rig no trae hueso de mano: ancla fija en el pecho */
 function handTrack(){
   if(!chestAnchor||!charRoot)return;
   const r=bones.rHand||bones.rFore;
   if(!r)return;
   r.updateWorldMatrix(true,false);
   _hv.setFromMatrixPosition(r.matrixWorld);charRoot.worldToLocal(_hv);
-  const l=bones.lHand;
-  if(l){ l.updateWorldMatrix(true,false);
-    _hv2.setFromMatrixPosition(l.matrixWorld);charRoot.worldToLocal(_hv2);
-    _hv.lerp(_hv2,.34); }
-  chestAnchor.position.set(_hv.x+GDLT[0],_hv.y+GDLT[1],_hv.z+GDLT[2]);
+  chestAnchor.position.set(_hv.x,_hv.y,_hv.z);
 }
 
 /* ================= cámara ================= */
@@ -6122,7 +6167,7 @@ function frame(){
     _dfT+=dt;
     if(_dfT>.6){_dfT=0;distFreeze(plBody.position.x,plBody.position.z);budget();
 }
-    animStep(dt);poseArms();handTrack();
+    animStep(dt);holdWeapon();
     camStep(dt);
     if(SV.desc)describe();
   } else if(APP==='pause'||APP==='spawn'){ camStep(dt);stepThumbs(); }
@@ -6197,7 +6242,7 @@ if(DEV)window.__H={
   clear:()=>{clearAll();return PROPS.length;},
   step:(n)=>{for(let i=0;i<(n||60);i++){playerStep(1/60);weaponStep(1/60);world.step(1/60,1/60,2);
     for(const p of actives())if(!p.frozen)syncMat(p);stepBalloons();stepWater();entStep(1/60);
-    animStep(1/60);poseArms();handTrack();camStep(1/60);}},
+    animStep(1/60);holdWeapon();camStep(1/60);}},
   tp:(x,y,z)=>{plBody.position.set(x,y,z);plBody.velocity.set(0,0,0);camStep(0);},
   look:(y,p)=>{PL.yaw=y;PL.pitch=p||0;camStep(0);},
   aimAt:i=>{const p=PROPS[i];if(!p)return false;
@@ -6246,7 +6291,10 @@ if(DEV)window.__H={
   setOpt:(k,v)=>{SV[k]=v;applyOpts(true);return SV[k];},
   thumbs:()=>thumbQ.length,drainThumbs:n=>{for(let i=0;i<(n||40);i++)stepThumbs();return thumbQ.length;},
   wdir:()=>wModel?(wModel.userData.dir+' L='+wModel.userData.len):null,
-  anim:()=>({state:animState,clips:Object.keys(CLIPS),acts:Object.keys(ACTS)}),
+  anim:()=>({state:animState,clips:Object.keys(CLIPS),acts:Object.keys(ACTS),
+    upper:Object.keys(ACTU).filter(k=>ACTU[k].getEffectiveWeight()>.5),
+    tracks:(()=>{const o={};for(const k in CLIPS){const l=splitClip(CLIPS[k],'low'),u=splitClip(CLIPS[k],'up');
+      o[k]=[l?l.tracks.length:0,u?u.tracks.length:0];}return o;})()}),
   handPos:()=>{ if(!charRoot||!bones.rHand)return null;
     const o={};
     for(const k of['rHand','lHand']){ const b=bones[k];if(!b)continue;
@@ -6254,7 +6302,21 @@ if(DEV)window.__H={
       const v=new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
       charRoot.worldToLocal(v);o[k]=[+v.x.toFixed(3),+v.y.toFixed(3),+v.z.toFixed(3)];}
     return o;},
-  poseNow:()=>{poseArms();handTrack();return true;},
+  poseNow:()=>{holdWeapon();return true;},
+  /* invariante real: el arma cuelga del hueso de la mano y su origen queda a centímetros de él */
+  holdCheck:()=>{const b=bones.rHand||bones.rFore;
+    if(!b||!wModel)return null;
+    b.updateWorldMatrix(true,false);wModel.updateWorldMatrix(true,false);
+    const hp=new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+    const wp=new THREE.Vector3().setFromMatrixPosition(wModel.matrixWorld);
+    const fw=new THREE.Vector3(0,0,-1).applyQuaternion(
+      new THREE.Quaternion().setFromRotationMatrix(wModel.matrixWorld));
+    const want=new THREE.Vector3(-Math.sin(PL.yaw),0,-Math.cos(PL.yaw));
+    return{parentIsHand:wModel.parent===b,d:+hp.distanceTo(wp).toFixed(3),
+      aim:+fw.setY(0).normalize().dot(want).toFixed(3)};},
+  handOf:()=>{const b=bones.rHand;if(!b)return null;b.updateWorldMatrix(true,false);
+    const p=new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+    return[+p.x.toFixed(3),+p.y.toFixed(3),+p.z.toFixed(3)];},
   zoom:()=>zoomOn,fov:()=>+camera.fov.toFixed(1),
   gdlt:(x,y,z)=>{GDLT[0]=x;GDLT[1]=y;GDLT[2]=z;handTrack();return GDLT.slice();},
   anchorPos:()=>{if(!chestAnchor||!wModel)return null;
