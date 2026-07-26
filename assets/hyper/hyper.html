@@ -5065,7 +5065,7 @@ const WEAP=[
  {id:'toolgun', name:'ToolBaton',  kind:'tool',  glb:'toolgun', len:.34,
   mdir:'x+', roll:0, hold:[.010,-.066,.048], lg:.11},
  {id:'hands',   name:'Hands',      kind:'melee', dmg:14,rof:.34,reach:2.2,imp:10,
-  hold:[0,-.010,.020], lg:0},
+  hold:[0,-.010,.020], lg:0, noModel:1},   // los puños ya son parte del personaje
  {id:'bat',     name:'Bat',        kind:'melee', dmg:38,rof:.5, reach:2.7,imp:26,glb:'bat',len:.86,
   mdir:'x+', roll:0, hold:[.010,-.070,.054], lg:.09},
  {id:'pistol',  name:'Pistol',     kind:'gun',   dmg:20,rof:.17,mag:17,imp:9, spread:.006,glb:'pistol',len:.22,
@@ -5095,7 +5095,11 @@ function equip(i){
   const w=weap();
   if(wModel){wModel.parent&&wModel.parent.remove(wModel);wModel=null;}
   const g=w.glb&&MODELS[w.glb];
-  if(g){
+  if(w.noModel){
+    /* con los puños no se dibuja nada en la mano: antes se metía un cubo de tela de medio
+       metro (se veía como un ladrillo negro colgando del brazo) */
+    wModel=null;
+  } else if(g){
     wModel=g.scene.clone(true);
     wModel.traverse(o=>{if(o.isMesh){o.castShadow=false;o.frustumCulled=false;
       if(w.tint&&o.material){o.material=o.material.clone();o.material.color=new THREE.Color(w.tint);}
@@ -5196,12 +5200,12 @@ function rigWeapon(m,w){
 function attachWeapon(){
   if(!wModel)return;
   const L=(wModel.userData&&wModel.userData.len)||.5;
-  if(PL.fp){ vmGroup.add(wModel);
-    wModel.scale.setScalar(.66);
-    wModel.position.set(.19,-.19,-.30-L*.26);wModel.rotation.set(.02,-.05,0); }
-  else if(bones.rHand||bones.rFore){ (bones.rHand||bones.rFore).add(wModel);
+  if(bones.rHand||bones.rFore){ (bones.rHand||bones.rFore).add(wModel);
     wModel.position.set(0,0,0);wModel.rotation.set(0,0,0);
     holdWeapon(); }
+  else if(PL.fp){ vmGroup.add(wModel);      // respaldo: rig sin huesos de mano
+    wModel.scale.setScalar(.66);
+    wModel.position.set(.19,-.19,-.30-L*.26);wModel.rotation.set(.02,-.05,0); }
   else if(chestAnchor){ chestAnchor.add(wModel);
     wModel.scale.setScalar(1/(charK||1));wModel.position.set(0,0,0);wModel.rotation.set(0,0,0); }
 }
@@ -5211,6 +5215,7 @@ function syncSlot(){
   $('wslot').querySelector('b').textContent=w.mag?(w.ammo+' | ∞'):'';
   const cv=$('wslot').querySelector('canvas');
   if(wModel&&cv){ try{ drawObjThumb(wModel,cv); }catch(e){} }
+  else if(cv)cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
 }
 function drawObjThumb(obj,cv){
   const clone=obj.clone(true);clone.position.set(0,0,0);clone.rotation.set(0,0,0);clone.scale.set(1,1,1);
@@ -5645,7 +5650,10 @@ function camStep(dt){
   const px=plBody.position.x,py=plBody.position.y,pz=plBody.position.z;
   const eye=py+(PL.rag?.4:PL.h-.28);
   if(PL.fp){
-    camera.position.set(px,eye,pz);
+    /* 1ª PERSONA DE VERDAD: la cámara va 14 cm delante de los ojos (la cara queda atrás,
+       no se ve por dentro de la cabeza) y el cuerpo sigue dibujado, así que en pantalla se
+       ven los BRAZOS y las MANOS sosteniendo el arma, la misma que se ve en 3ª persona. */
+    camera.position.set(px-Math.sin(PL.yaw)*.14,eye+.02,pz-Math.cos(PL.yaw)*.14);
   } else {
     const dist=4.05,side=.72;
     const sy=Math.sin(PL.yaw),cy=Math.cos(PL.yaw),cp=Math.cos(PL.pitch),spp=Math.sin(PL.pitch);
@@ -5666,7 +5674,7 @@ function camStep(dt){
   recoil*=Math.max(0,1-dt*9);
   // personaje
   if(charRoot){
-    charRoot.visible=!PL.fp;
+    charRoot.visible=true;      // también en 1ª persona: se ven los brazos
     charRoot.position.set(px,py-.02,pz);
     charRoot.rotation.y=PL.yaw+Math.PI;
     if(PL.rag)charRoot.rotation.set(plBody.quaternion.x*1.6,PL.yaw+Math.PI,plBody.quaternion.z*1.6);
@@ -6554,7 +6562,7 @@ const _bq=new THREE.Quaternion(),_bs=new THREE.Vector3(),_wq=new THREE.Quaternio
 function holdWeapon(){
   if(!wModel)return;
   rigGrip(wModel,weap());     // también en 1ª persona: si no, el arma queda al revés
-  if(PL.fp){
+  if(PL.fp&&wModel.parent===vmGroup){
     /* con la empuñadura en el origen del rig hay que recolocar el arma de 1ª persona:
        queda a la derecha y abajo, y el caño se va solo para adelante */
     if(wModel.parent!==bones.rHand&&wModel.parent!==bones.rFore){
@@ -6566,6 +6574,7 @@ function holdWeapon(){
   }
   const b=bones.rHand||bones.rFore;
   if(!b||wModel.parent!==b)return;
+  if(PL.fp){rikRestore();armIKR();rikStore();}
   b.updateWorldMatrix(true,false);
   b.matrixWorld.decompose(_hv,_bq,_bs);
   _we.set(clamp(PL.pitch,-.7,.7)*.55,PL.yaw,0,'YXZ');
@@ -6585,6 +6594,92 @@ function holdWeapon(){
   armIK();
 }
 
+/* ============================================================
+   1ª PERSONA: EL ARMA SUBE A LA LÍNEA DE LOS OJOS
+   ------------------------------------------------------------
+   La cámara va en la cabeza, así que las manos del clip de reposo (a la altura del pecho)
+   caen fuera del campo de visión: no se ve nada. Entonces en 1ª persona se lleva la MANO
+   DERECHA con IK a un punto delante de la cara — abajo y a la derecha, como en cualquier
+   FPS — y como el arma cuelga de esa mano, sube con ella. La mano izquierda sigue al arma
+   con el IK que ya estaba. Los brazos que se ven son los del personaje, no un "view model".
+   FPT = [a la derecha, abajo, adelante] en metros, respecto de los ojos.
+   ============================================================ */
+const FPT=[.185,-.225,.305];
+const RIK={};
+function rikBones(){
+  if(RIK.ok!==undefined)return RIK.ok;
+  const fo=bones.rFore,ha=bones.rHand;
+  if(!fo||!ha){RIK.ok=false;return false;}
+  const up=fo.parent&&fo.parent.isBone?fo.parent:bones.rArm;
+  if(!up){RIK.ok=false;return false;}
+  RIK.up=up;RIK.fo=fo;RIK.ha=ha;
+  RIK.ok=true;return true;
+}
+/* punto del mundo al que tiene que ir el puño derecho en 1ª persona */
+const _fe=new THREE.Vector3(),_ff=new THREE.Vector3(),_fr=new THREE.Vector3();
+function fpHandTarget(out){
+  const ps=Math.sin(PL.pitch),pc=Math.cos(PL.pitch),
+        ys=Math.sin(PL.yaw),yc=Math.cos(PL.yaw);
+  _fe.set(plBody.position.x-ys*.14,
+          plBody.position.y+(PL.h-.28)+.02,
+          plBody.position.z-yc*.14);
+  _ff.set(-ys*pc,ps,-yc*pc);
+  _fr.set(yc,0,-ys);
+  /* las armas cortas necesitan subir y acercarse, si no quedan como un puntito en la
+     esquina: k va de 0 (fusil largo) a 1 (pistola) */
+  const k=clamp((.55-(weap().len||.5))/.35,0,1);
+  out.copy(_fe).addScaledVector(_fr,FPT[0]-.025*k).addScaledVector(_ff,FPT[2]-.075*k);
+  out.y+=FPT[1]+.075*k;   // la altura baja en vertical, no sobre el eje de puntería
+  return out;
+}
+/* IK de dos huesos genérico: lleva la punta de la cadena (ha) al punto pT del mundo, con el
+   codo saliendo hacia pole. Devuelve false si la cadena no sirve. */
+const _rA=new THREE.Vector3(),_rB=new THREE.Vector3(),_rE=new THREE.Vector3(),
+      _rT=new THREE.Vector3(),_rd=new THREE.Vector3(),_rc=new THREE.Vector3(),
+      _rp=new THREE.Vector3(),_rx=new THREE.Vector3(),
+      _rq=new THREE.Quaternion(),_rq2=new THREE.Quaternion();
+function twoBone(up,fo,ha,pT,pole){
+  up.updateWorldMatrix(true,false);fo.updateWorldMatrix(true,false);ha.updateWorldMatrix(true,false);
+  _rA.setFromMatrixPosition(up.matrixWorld);
+  _rB.setFromMatrixPosition(fo.matrixWorld);
+  _rE.setFromMatrixPosition(ha.matrixWorld);
+  const a=_rA.distanceTo(_rB),b=_rB.distanceTo(_rE);
+  if(a<1e-4||b<1e-4)return false;
+  const R=(a+b)*.985;
+  _rT.copy(pT);
+  _rd.copy(_rT).sub(_rA);
+  if(_rd.length()>R)_rT.copy(_rA).addScaledVector(_rd.normalize(),R);   // si no alcanza
+  _rd.copy(_rT).sub(_rA);
+  const c=clamp(_rd.length(),Math.abs(a-b)+1e-3,a+b-1e-3);
+  _rd.normalize();
+  const alpha=Math.acos(clamp((a*a+c*c-b*b)/(2*a*c),-1,1));
+  _rx.copy(_rd).cross(pole);
+  if(_rx.lengthSq()<1e-6)_rx.set(0,1,0);
+  _rx.normalize();
+  _rq.setFromAxisAngle(_rx,alpha);
+  _rc.copy(_rd).applyQuaternion(_rq);                    // dirección hombro->codo deseada
+  _rq.setFromUnitVectors(_rp.copy(_rB).sub(_rA).normalize(),_rc);
+  worldTwist(up,_rq);
+  _rB.setFromMatrixPosition(fo.matrixWorld);
+  _rE.setFromMatrixPosition(ha.matrixWorld);
+  _rc.copy(_rE).sub(_rB);
+  _rp.copy(_rT).sub(_rB);
+  if(_rc.lengthSq()<1e-8||_rp.lengthSq()<1e-8)return true;
+  _rq2.setFromUnitVectors(_rc.normalize(),_rp.normalize());
+  worldTwist(fo,_rq2);
+  return true;
+}
+/* el codo derecho sale hacia abajo y hacia atrás-afuera */
+const RPOLE=[.45,-1,.55];
+const _rpo=new THREE.Vector3(),_rtg=new THREE.Vector3();
+function armIKR(){
+  if(!PL.fp||PL.rag||!rikBones())return false;
+  const ys=Math.sin(PL.yaw),yc=Math.cos(PL.yaw);
+  /* derecha=(yc,0,-ys), atrás=(ys,0,yc) */
+  _rpo.set(yc*RPOLE[0]+ys*RPOLE[2],RPOLE[1],-ys*RPOLE[0]+yc*RPOLE[2]).normalize();
+  return twoBone(RIK.up,RIK.fo,RIK.ha,fpHandTarget(_rtg),_rpo);
+}
+
 /* ---- 2. IK analítico de dos huesos para el brazo izquierdo ----
    bones.lArm es la CLAVÍCULA (LeftShoulder) en este rig: el hombro de verdad es su hijo
    (LeftArm) y es el que gira. Cadena: lArm(clavícula) > hombro > lFore(codo) > lHand. */
@@ -6602,20 +6697,36 @@ const _pA=new THREE.Vector3(),_pB=new THREE.Vector3(),_pE=new THREE.Vector3(),
       _pT=new THREE.Vector3(),_t0=new THREE.Vector3(),_t1=new THREE.Vector3(),
       _kd=new THREE.Vector3(),_cur=new THREE.Vector3(),_pole=new THREE.Vector3(),
       _axis=new THREE.Vector3(),_qA=new THREE.Quaternion(),_qB=new THREE.Quaternion(),
-      _qP=new THREE.Quaternion(),_qT=new THREE.Quaternion(),_pC=new THREE.Vector3();
+      _qP=new THREE.Quaternion(),_qT=new THREE.Quaternion(),_pC=new THREE.Vector3(),
+      _pP=new THREE.Vector3(),_pW=new THREE.Vector3();
 /* --- de dónde parte el IK ---
    El IK del hombro es incremental (gira la clavícula un porcentaje hacia el objetivo), así
    que tiene que arrancar SIEMPRE de la pose de la animación; si no, cada llamada de
    holdWeapon() sumaría otro giro. IKQ guarda esa pose (la del mixer) e IKW la que dejó el
    IK, para saber si el mixer realmente reescribió el hueso o no. */
 const IKB=['cl','up','fo','ha'],IKQ={},IKW={};
+const RKB=['up','fo','ha'],RQ={},RW={};
 const _qsame=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y)+Math.abs(a.z-b.z)+Math.abs(a.w-b.w)<1e-6;
 function ikSnap(){
+  if(rikBones())for(const k of RKB){ const b=RIK[k];if(!b)continue;
+    if(RW[k]&&RQ[k]&&_qsame(b.quaternion,RW[k]))b.quaternion.copy(RQ[k]);
+    else (RQ[k]||(RQ[k]=new THREE.Quaternion())).copy(b.quaternion);
+  }
   if(!ikBones())return;
   for(const k of IKB){ const b=IK[k];if(!b)continue;
     if(IKW[k]&&IKQ[k]&&_qsame(b.quaternion,IKW[k]))b.quaternion.copy(IKQ[k]); // el mixer no lo animó
     else (IKQ[k]||(IKQ[k]=new THREE.Quaternion())).copy(b.quaternion);
   }
+}
+function rikRestore(){
+  if(!rikBones())return;
+  for(const k of RKB){ const b=RIK[k];if(!b)continue;
+    if(RQ[k])b.quaternion.copy(RQ[k]);
+    else (RQ[k]=new THREE.Quaternion()).copy(b.quaternion); }
+}
+function rikStore(){
+  if(!rikBones())return;
+  for(const k of RKB){ const b=RIK[k];if(b)(RW[k]||(RW[k]=new THREE.Quaternion())).copy(b.quaternion);}
 }
 function ikRestore(){
   for(const k of IKB){ const b=IK[k];if(!b)continue;
@@ -6698,13 +6809,51 @@ function torsoAim(){
     (TW[i]||(TW[i]=new THREE.Quaternion())).copy(ch[i].quaternion);
 }
 
+/* ============================================================
+   DÓNDE DIBUJA LA MALLA LA MANO (y no dónde está el hueso)
+   ------------------------------------------------------------
+   El hueso de la muñeca NO está en el medio del puño: la malla dibuja la mano bastante más
+   allá. Con el IK apuntado al HUESO, la mano quedaba colgando debajo del arma (se ve en las
+   capturas: el guante y los dedos por abajo del guardamano, sin tocarlo).
+   Acá se mide de una vez, del propio skinning: se promedian los vértices cuyo peso manda
+   para el hueso de la mano y se pasa ese promedio al espacio LOCAL del hueso. Eso da el
+   vector hueso->puño (constante del rig). Después el IK apunta el PUÑO al arma, no el hueso:
+   la muñeca se ubica a |puño| del punto del arma, del lado del hombro, y la mano se gira
+   para que el puño caiga justo sobre el arma. De paso el brazo necesita ~8 cm menos de
+   alcance, que es justo lo que le faltaba. */
+const _palm={};
+function palmLocal(bone){
+  if(!bone||!charRoot)return null;
+  if(_palm[bone.uuid]!==undefined)return _palm[bone.uuid];
+  const sum=new THREE.Vector3();let n=0;
+  const v=new THREE.Vector3(),m=new THREE.Matrix4();
+  charRoot.traverse(o=>{
+    if(!o.isSkinnedMesh||!o.skeleton||!o.geometry)return;
+    const sk=o.skeleton,bi=sk.bones.indexOf(bone);
+    if(bi<0)return;
+    const pa=o.geometry.attributes.position,si=o.geometry.attributes.skinIndex,
+          sw=o.geometry.attributes.skinWeight;
+    if(!pa||!si||!sw)return;
+    if(!sk.boneInverses||!sk.boneInverses[bi])return;
+    m.multiplyMatrices(sk.boneInverses[bi],o.bindMatrix);
+    for(let i=0;i<pa.count;i++){
+      let bw=0,bb=-1;
+      for(let k=0;k<4;k++){const w=sw.getComponent(i,k);
+        if(w>bw){bw=w;bb=si.getComponent(i,k);}}
+      if(bb!==bi||bw<.5)continue;
+      sum.add(v.fromBufferAttribute(pa,i).applyMatrix4(m));n++;
+    }});
+  _palm[bone.uuid]=n?sum.multiplyScalar(1/n):null;
+  return _palm[bone.uuid];
+}
+
 /* el codo de la mano de apoyo cae hacia abajo y un poco hacia afuera (a la izquierda) */
 const IKPOLE=[.55,-1,.30];      // [izquierda, abajo, atrás] en el marco de puntería
 /* CLW = cuánto se le permite colaborar a la clavícula (0..1) y CLMAX el tope en radianes:
    una clavícula real protrae 15-20°, no 80°. Con el torso ya enderezado no hace falta más. */
 let ikOn=true, CLW=.85, CLMAX=.32;
 function armIK(){
-  if(!ikOn||!wModel||PL.fp||PL.rag||!charRoot||!ikBones())return;
+  if(!ikOn||!wModel||PL.rag||!charRoot||!ikBones())return;   // el IK también en 1ª persona
   const g=wModel.userData._g;
   if(!g||g.bad||g.S.none)return;
   const up=IK.up,fo=IK.fo,ha=IK.ha;
@@ -6756,15 +6905,29 @@ function armIK(){
       }
     }
   }
+  /* --- el objetivo es el PUÑO, no el hueso de la muñeca ---
+     El puño está PLEN metros más allá del hueso (medido del skinning, ver palmLocal). Así
+     que el ALCANCE útil para llegar al arma es R+PLEN, y la muñeca se planta a PLEN del
+     punto del arma, del lado del hombro. Con la mano después girada para que el puño mire a
+     ese punto, el puño cae exactamente sobre el arma. */
+  /* ojo: palmLocal está en unidades LOCALES del hueso (este rig las trae en cm), así que el
+     largo hay que medirlo en el mundo, no con pl.length() */
+  const pl=palmLocal(ha);
+  let PLEN=0;
+  if(pl){_pW.copy(pl).applyMatrix4(ha.matrixWorld);PLEN=_pW.distanceTo(_pE);}
+  const RP=R+PLEN;
   _kd.copy(_t1).sub(_t0);
   _cur.copy(_t0).sub(_pA);
   let t=1;
-  if(_t1.distanceTo(_pA)>R){
-    const A=_kd.dot(_kd),B=2*_cur.dot(_kd),C=_cur.dot(_cur)-R*R,
+  if(_t1.distanceTo(_pA)>RP){
+    const A=_kd.dot(_kd),B=2*_cur.dot(_kd),C=_cur.dot(_cur)-RP*RP,
           D=B*B-4*A*C;
     t=(A>1e-9&&D>0)?clamp((-B+Math.sqrt(D))/(2*A),0,1):0;
   }
-  _pT.copy(_kd).multiplyScalar(t).add(_t0);
+  _pP.copy(_kd).multiplyScalar(t).add(_t0);     // punto del ARMA donde tiene que ir el puño
+  _pT.copy(_pA).sub(_pP);                       // ... y ahí, a PLEN, va la muñeca
+  const dpp=_pT.length();
+  if(dpp>1e-5)_pT.multiplyScalar(Math.min(PLEN,dpp)/dpp).add(_pP);else _pT.copy(_pP);
   /* --- ley de cosenos --- */
   _kd.copy(_pT).sub(_pA);
   const c=clamp(_kd.length(),Math.abs(a-b)+1e-3,a+b-1e-3);
@@ -6791,41 +6954,45 @@ function armIK(){
   _qB.setFromUnitVectors(_cur.normalize(),_t1.normalize());
   worldTwist(fo,_qB);
   /* --- la muñeca ---
-     Los huesos de este rig van por su +Y (cada hijo cuelga en (0,len,0)), o sea que el +Y
-     de la mano es la dirección de los dedos. Se la gira para que los dedos apunten al
-     punto del arma: así la mano CIERRA sobre el guardamano en vez de quedar apuntando a
-     cualquier lado (que es lo que hace la animación, pensada para otra pose).
-     ANTES esto se salteaba con las armas de una mano (two:0) y se veía fatal: con la
-     pistola la mano izquierda quedaba con los dedos apuntando al cielo, al costado del
-     arma, como saludando. Ahora se orienta también en esas: los dedos van a la empuñadura
-     (pg está a la altura del puño derecho cuando two=0), o sea la izquierda envuelve la
-     derecha, que es como se toma una pistola a dos manos. */
-  if(IK.wr!==0){
+     Se gira la mano para que el PUÑO (el vector hueso->puño que salió del skinning) apunte
+     al punto del arma. Como la muñeca ya quedó a |puño| de ese punto, el puño aterriza
+     encima del arma.
+     ANTES esto se salteaba con las armas de una mano (two:0) y se veía fatal: con la pistola
+     la mano izquierda quedaba con los dedos al aire, al costado del arma, como saludando.
+     Y con las de dos manos apuntaba el +Y del hueso, no el puño, así que la mano se pasaba
+     ~10 cm del guardamano (el puño está a 16 cm del hueso en este rig, no a 2). */
+  if(IK.wr!==0&&pl&&PLEN>1e-4){
     _pE.setFromMatrixPosition(ha.matrixWorld);
-    _pT.copy(g.pg0).lerp(_t0.copy(g.pg1),t).applyMatrix4(wModel.matrixWorld);
-    _cur.copy(_pT).sub(_pE);
-    if(_cur.lengthSq()>1e-8){
-      _cur.normalize();
-      /* los dedos no apuntan de lleno al caño (la mano lo atravesaría): se inclinan hacia
-         adelante, que es como se envuelve un guardamano con el pulgar para el frente */
-      const wf=g.S.wf===undefined?.55:g.S.wf;
-      if(wf){ _t1.set(-Math.sin(PL.yaw),0,-Math.cos(PL.yaw));
-        _cur.addScaledVector(_t1,wf).normalize(); }
-      ha.getWorldQuaternion(_qP);
-      _kd.set(0,1,0).applyQuaternion(_qP);
-      _qB.setFromUnitVectors(_kd,_cur);
+    _pW.copy(pl).applyMatrix4(ha.matrixWorld);   // dónde está el puño ahora
+    _cur.copy(_pP).sub(_pE);
+    _kd.copy(_pW).sub(_pE);
+    if(_cur.lengthSq()>1e-8&&_kd.lengthSq()>1e-8){
+      _qB.setFromUnitVectors(_kd.normalize(),_cur.normalize());
       worldTwist(ha,_qB);
     }
   }
   ikStore();
 }
-/* distancia de la mano izquierda al eje del arma (metros): el número que se mira */
+/* Distancia (m) de la mano izquierda al eje del arma: el número que mira el test.
+   MIDE EL PUÑO, no el hueso de la muñeca. El hueso está 16 cm detrás de donde la malla
+   dibuja la mano (medido del skinning, palmLocal), así que "hueso pegado al eje" no quiere
+   decir "la mano agarra el arma": con el hueso sobre el eje la mano se dibujaba 10 cm más
+   allá del guardamano. Se mide el mismo invariante — que la mano izquierda esté tomando el
+   arma — pero sobre el punto que se VE. Si el rig no trae skinning usable, se cae al hueso,
+   que es lo que se medía antes. */
+function lhPoint(){
+  const b=bones.lHand;if(!b)return null;
+  b.updateWorldMatrix(true,false);
+  const p=new THREE.Vector3(),pl=palmLocal(b);
+  if(pl)p.copy(pl).applyMatrix4(b.matrixWorld);
+  else p.setFromMatrixPosition(b.matrixWorld);
+  return p;
+}
 function lhDist(){
   if(!wModel||!bones.lHand)return null;
   const g=wModel.userData._g;if(!g||g.bad)return null;
   wModel.updateWorldMatrix(true,false);
-  bones.lHand.updateWorldMatrix(true,false);
-  const p=new THREE.Vector3().setFromMatrixPosition(bones.lHand.matrixWorld);
+  const p=lhPoint();if(!p)return null;
   const A=g.ax0.clone().applyMatrix4(wModel.matrixWorld),
         B=g.ax1.clone().applyMatrix4(wModel.matrixWorld),
         AB=B.clone().sub(A);
@@ -6868,6 +7035,7 @@ if(DEV&&window.__H)Object.assign(window.__H,{
       muzzle:F(g.ax1.clone().applyMatrix4(wModel.matrixWorld)),
       tgt:F(g.lh1.clone().applyMatrix4(wModel.matrixWorld)),
       lh:F(P(bones.lHand)),rh:F(P(bones.rHand)),
+      lhp:(()=>{const p=lhPoint();return p?F(p):null;})(),   // el PUÑO izquierdo
       lhd:+lhDist().toFixed(4)};
     if(ikBones()){o.sh=F(P(IK.up));o.el=F(P(IK.fo));
       o.reach=+(P(IK.up).distanceTo(P(IK.fo))+P(IK.fo).distanceTo(P(IK.ha))).toFixed(3);
@@ -6890,12 +7058,10 @@ if(DEV&&window.__H)Object.assign(window.__H,{
       [g.lh1.clone().applyMatrix4(wModel.matrixWorld),0xffff00],
       [g.ax1.clone().applyMatrix4(wModel.matrixWorld),0xff00ff]];
     if(ikBones())pts.push([P(IK.up),0xffffff],[P(IK.fo),0x00ffff]);
-    /* eje +Y (dedos) de cada mano: dos puntos naranjas la izquierda, dos grises la derecha */
+    /* el PUÑO de cada mano (donde la malla la dibuja): naranja la izquierda, gris la derecha */
     for(const b of[bones.lHand,bones.rHand]){ if(!b)continue;
-      const q=new THREE.Quaternion();b.getWorldQuaternion(q);
-      const p0=P(b),d=new THREE.Vector3(0,1,0).applyQuaternion(q);
-      pts.push([p0.clone().add(d.clone().multiplyScalar(.04)),b===bones.lHand?0xff8000:0x808080],
-               [p0.clone().add(d.clone().multiplyScalar(.08)),b===bones.lHand?0xff8000:0x808080]); }
+      const pl=palmLocal(b);if(!pl)continue;
+      pts.push([pl.clone().applyMatrix4(b.matrixWorld),b===bones.lHand?0xff8000:0x909090]); }
     for(const p of pts){const m=new THREE.Mesh(new THREE.SphereGeometry(.022,10,8),
       new THREE.MeshBasicMaterial({color:p[1],depthTest:false}));
       m.position.copy(p[0]);m.renderOrder=9;_mk.add(m);}
@@ -6911,6 +7077,11 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     _ws=new THREE.Group();_ws.add(inner.clone(true));
     _ws.position.set(x,y,z);scene.add(_ws);
     return true;},
+  /* vector hueso->puño, medido del skinning, en el espacio local del hueso de la mano */
+  palm:()=>{const o={};
+    for(const k of['lHand','rHand','lFore']){const p=palmLocal(bones[k]);
+      o[k]=p?[+p.x.toFixed(4),+p.y.toFixed(4),+p.z.toFixed(4),+p.length().toFixed(4)]:null;}
+    return o;},
   /* el esqueleto como viene: nombre y padre de cada hueso */
   bonesTree:()=>{if(!charRoot)return null;const o=[];
     charRoot.traverse(b=>{if(b.isBone)o.push(b.name+' < '+(b.parent?b.parent.name:'-'));});
