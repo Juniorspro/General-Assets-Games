@@ -7,7 +7,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import * as CANNON from 'cannon';
 
-const HASH='c1ad190';
+const HASH='f3f8704';
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/hyper/';
 const okUrl=u=>typeof u==='string'&&u.indexOf('@PEND')<0;
 const $=i=>document.getElementById(i);
@@ -172,7 +172,7 @@ world.addContactMaterial(new CANNON.ContactMaterial(MAT.prop,MAT.player,{frictio
 /* ================= texturas ================= */
 const TL=new THREE.TextureLoader(),TEX={};
 let texPend=0,texDone=0;
-function shrink(t,max){ const m=max||QP.texMax*(SV.texq||1);
+function shrink(t,max){ const m=max||QP.texMax*(SV.texq||1);   // max=0 -> el de la calidad
   if(!t.image||!m)return t;
   const im=t.image,w=im.width||im.naturalWidth,h=im.height||im.naturalHeight;
   if(!w||Math.max(w,h)<=m)return t;
@@ -186,8 +186,33 @@ function loadTex(key,file,cb){ if(!okUrl(BASE))return;
   texPend++;
   TL.load(BASE+file,t=>{texDone++;
     t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;
-    t.anisotropy=QP.anis;shrink(t);TEX[key]=t;if(cb)cb(t);
+    t.anisotropy=QP.anis;
+    /* el cielo es un panorama de 1536 px: bajarlo a 256 (ULD) lo dejaba como manchones
+       verticales con una costura visible, así que tiene su propio piso de resolución */
+    shrink(t,key==='sky'?Math.max(768,QP.texMax):0);
+    TEX[key]=t;if(cb)cb(t);
     paintLoad(texDone/Math.max(1,texPend));},undefined,()=>{texDone++;});}
+
+/* Los GLB generados vienen con materiales imposibles: el personaje trae emissive=[1,1,1] y
+   metalness=1, así que en ALTA (donde el material se usa tal cual) se dibujaba como una
+   SILUETA BLANCA sin textura; en ULD/LOW no se notaba porque ahí el material se reemplaza por
+   Phong. Esto los deja usables sin tocar el mapa de color. */
+function sanGlb(g){
+  const root=g&&(g.scene||(g.scenes&&g.scenes[0]));
+  if(!root)return g;
+  root.traverse(o=>{
+    if(!o.isMesh&&!o.isSkinnedMesh)return;
+    for(const m of (Array.isArray(o.material)?o.material:[o.material])){
+      if(!m||m._san)continue; m._san=1;
+      if(m.emissive)m.emissive.setScalar(0);
+      if(m.emissiveMap)m.emissiveMap=null;
+      if(m.metalness!==undefined)m.metalness=Math.min(m.metalness,.18);
+      if(m.roughness!==undefined)m.roughness=clamp(m.roughness||.6,.35,.95);
+      if(m.transparent&&m.opacity>=.99)m.transparent=false;
+      m.needsUpdate=true;
+    }});
+  return g;
+}
 
 /* ================= materiales de props ================= */
 /* Un material por nombre. El tinte de cada parte se hornea en los COLORES DE VÉRTICE,
@@ -216,7 +241,11 @@ const MDEF={
 const PMAT={};
 function buildMats(){
   for(const k in MDEF){ const d=MDEF[k];
-    const o={color:new THREE.Color(d.c),vertexColors:true};
+    /* el color base va SÓLO en los materiales con textura (que lo pierden en cuanto la
+       textura llega, ver texMats). En los demás nace BLANCO y el color viaja en el color
+       del vértice, que es el albedo real de cada parte: si el material también llevara su
+       color, un tinte claro quedaría multiplicado dos veces y se vería negro. */
+    const o={color:new THREE.Color(d.t?d.c:0xffffff),vertexColors:true};
     if(d.op!=null){o.transparent=true;o.opacity=d.op;}
     let m;
     if(QP.phong){ o.shininess=Math.max(6,(1-d.r)*80);
@@ -264,10 +293,25 @@ function partMatrix(q){
   _e.set(r[0]*D2R,r[1]*D2R,r[2]*D2R,'XYZ');_q.setFromEuler(_e);
   return _m4.compose(_v3.set(p[0],p[1],p[2]),_q,new THREE.Vector3(1,1,1)).clone();
 }
-function tintGeo(g,hex){
+/* El color del VÉRTICE es el albedo completo de la parte: si la parte declara c: manda ese
+   tinte, y si no manda el color base del material (que ahora nace blanco).
+   Antes acá había además un convertSRGBToLinear() a mano, pero THREE.Color ya convierte al
+   espacio de trabajo al asignar el hex: el tinte se pasaba a lineal DOS veces y encima se
+   multiplicaba por el color del material, o sea tres veces. Un gris claro como el del hangar
+   (0x8b9299) terminaba casi negro y los mapas se veían de noche a pleno sol. */
+/* Brillo medio LINEAL de cada textura generada, medido sobre el archivo .jpg. El tinte de una
+   parte se DIVIDE por ese brillo para que el color declarado sea el albedo final.
+   Sin esto, t-asphalt (brillo medio 0.089: es una textura muy oscura) multiplicada por un
+   gris 0x63676c daba 1 % de reflectancia y las plataformas del mapa Base se dibujaban negras
+   a pleno sol. Lo mismo el ladrillo (0.068) y el óxido (0.108). */
+const TEXK={grass:4.83,concrete:1.59,brick:14.61,asphalt:11.25,steel:5.14,corrugated:4.70,
+  wood:4.34,rust:9.25,water:24.97};
+function tintGeo(g,hex,mat){
   const n=g.attributes.position.count,arr=new Float32Array(n*3);
-  const c=new THREE.Color(hex==null?0xffffff:hex);
-  if(renderer.outputColorSpace===THREE.SRGBColorSpace)c.convertSRGBToLinear();
+  const d=MDEF[mat||'concrete'];
+  const c=new THREE.Color(hex==null?((d&&!d.t)?d.c:0xffffff):hex);
+  /* con textura, el tinte se normaliza; sin tinte no se toca nada (queda igual que antes) */
+  if(hex!=null&&d&&d.t&&TEXK[d.t]){const k=TEXK[d.t];c.r*=k;c.g*=k;c.b*=k;}
   for(let i=0;i<n;i++){arr[i*3]=c.r;arr[i*3+1]=c.g;arr[i*3+2]=c.b;}
   g.setAttribute('color',new THREE.BufferAttribute(arr,3));return g;
 }
@@ -337,7 +381,7 @@ function buildDef(def){
     g.applyMatrix4(M);
     const big=Math.max.apply(null,q.d);
     uvScale(g,Math.max(.35,big/2.2));
-    tintGeo(g,q.c);
+    tintGeo(g,q.c,q.m);
     const mn2=new THREE.Box3().setFromBufferAttribute(g.attributes.position);
     for(let i=0;i<3;i++){const a=['x','y','z'][i];
       mnAll[i]=Math.min(mnAll[i],mn2.min[a]);mxAll[i]=Math.max(mxAll[i],mn2.max[a]);
@@ -525,7 +569,7 @@ function buildMap(id){
   const byMat={};
   for(const q of d.parts){
     const g=partGeo(q);g.applyMatrix4(partMatrix(q));
-    uvScale(g,Math.max(.4,Math.max.apply(null,q.d)/2.2));tintGeo(g,q.c);
+    uvScale(g,Math.max(.4,Math.max.apply(null,q.d)/2.2));tintGeo(g,q.c,q.m);
     (byMat[q.m||'concrete']=byMat[q.m||'concrete']||[]).push(g);
     if(!q.nc)addBody(q);
   }
@@ -560,7 +604,7 @@ function addBody(q){
 function addStatic(q,withMesh){
   addBody(q);
   if(withMesh){ const g=partGeo(q);g.applyMatrix4(partMatrix(q));
-    uvScale(g,Math.max(.4,Math.max.apply(null,q.d)/2.4));tintGeo(g,q.c);
+    uvScale(g,Math.max(.4,Math.max.apply(null,q.d)/2.4));tintGeo(g,q.c,q.m);
     const me=new THREE.Mesh(g,PMAT[q.m]||PMAT.concrete);
     me.receiveShadow=true;me.frustumCulled=false;mapGroup.add(me); }
 }

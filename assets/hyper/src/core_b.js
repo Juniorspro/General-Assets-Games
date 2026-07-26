@@ -32,7 +32,7 @@ const MODELS={};
 function loadGLB(key,file,cb){
   if(!okUrl(BASE))return;
   glbPend++;
-  GL.load(BASE+file,g=>{glbDone++;MODELS[key]=g;if(cb)cb(g);
+  GL.load(BASE+file,g=>{glbDone++;sanGlb(g);MODELS[key]=g;if(cb)cb(g);
       paintLoad((texDone+glbDone)/Math.max(1,texPend+glbPend));},
     undefined,()=>{glbDone++;});
 }
@@ -693,11 +693,37 @@ function camDirY(){return 0;}
 /* ================= cámara ================= */
 const camTarget=new THREE.Vector3();
 let freeCam=null;
+const _rgA=new THREE.Quaternion(),_rgB=new THREE.Quaternion(),_rgE=new THREE.Euler();
+/* dónde y cómo se dibuja el personaje: una sola función, la usan el juego y la cámara libre */
+function placeChar(){
+  if(!charRoot)return;
+  const px=plBody.position.x,py=plBody.position.y,pz=plBody.position.z;
+  charRoot.visible=true;        // también en 1ª persona: se ven los brazos
+  if(PL.rag){
+    /* RAGDOLL: el cuerpo físico se desbloquea y tumbea de verdad, así que se copia su
+       orientación REAL y además se acuesta al personaje 90°. Antes se usaban las COMPONENTES
+       del cuaternión como si fueran ángulos de Euler (quaternion.x*1.6), que mueve unos pocos
+       grados: el muñeco se quedaba parado en pose de reposo. */
+    /* se lo acuesta SIEMPRE plano contra el piso (-90° en X: la cabeza pasa a apuntar
+       adelante) y gira sobre el piso siguiendo el giro real del cuerpo físico. Componer
+       directamente el cuaternión del cuerpo dejaba al muñeco tieso a 45°, flotando. */
+    const by=2*Math.atan2(plBody.quaternion.y,plBody.quaternion.w);
+    _rgE.set(-Math.PI*.5,PL.yaw+Math.PI+by,0,'YXZ');
+    charRoot.quaternion.setFromEuler(_rgE);
+    charRoot.position.set(px,Math.max(.10,py-.42),pz);
+  } else {
+    charRoot.position.set(px,py-.02,pz);
+    charRoot.rotation.set(0,PL.yaw+Math.PI,0);
+  }
+}
 function camStep(dt){
   if(extRun('cam',dt))return;
   if(freeCam){camera.position.set(freeCam[0],freeCam[1],freeCam[2]);
     camera.lookAt(freeCam[3],freeCam[4],freeCam[5]);
-    if(charRoot){charRoot.visible=true;charRoot.position.set(plBody.position.x,plBody.position.y-.02,plBody.position.z);charRoot.rotation.set(0,PL.yaw+Math.PI,0);}
+    /* la cámara libre es sólo para inspeccionar: el personaje se coloca con la MISMA función
+       que en el juego. Antes esta rama lo paraba derecho y salía, así que el ragdoll no se
+       veía nunca en las capturas de prueba (y me hizo creer que no funcionaba). */
+    placeChar();
     return;}
   const px=plBody.position.x,py=plBody.position.y,pz=plBody.position.z;
   const eye=py+(PL.rag?.4:PL.h-.28);
@@ -725,13 +751,8 @@ function camStep(dt){
   camera.quaternion.setFromEuler(new THREE.Euler(PL.pitch+rk,PL.yaw,0,'YXZ'));
   recoil*=Math.max(0,1-dt*9);
   // personaje
-  if(charRoot){
-    charRoot.visible=true;      // también en 1ª persona: se ven los brazos
-    charRoot.position.set(px,py-.02,pz);
-    charRoot.rotation.y=PL.yaw+Math.PI;
-    if(PL.rag)charRoot.rotation.set(plBody.quaternion.x*1.6,PL.yaw+Math.PI,plBody.quaternion.z*1.6);
-    else charRoot.rotation.set(0,PL.yaw+Math.PI,0);
-  }
+  placeChar();
+  
 }
 
 /* ================= HUD / entradas ================= */
@@ -1326,6 +1347,39 @@ if(DEV)window.__H={
     max:SV.maxProps,lim:SV.fpslim}),
   setOpt:(k,v)=>{SV[k]=v;applyOpts(true);return SV[k];},
   thumbs:()=>thumbQ.length,drainThumbs:n=>{for(let i=0;i<(n||40);i++)stepThumbs();return thumbQ.length;},
+  /* radiografía de color: cómo quedó cada material del mapa y su color de vértice */
+  dbgMat:()=>{const out={cm:THREE.ColorManagement.enabled,tone:renderer.toneMapping,
+      exp:renderer.toneMappingExposure,hemi:hemi.intensity,sun:sun.intensity,
+      fill:fill.intensity,phong:!!QP.phong,shadow:renderer.shadowMap.enabled,meshes:[]};
+    mapGroup.traverse(o=>{if(o.isMesh&&out.meshes.length<6){
+      const c=o.geometry.attributes.color,m=o.material;
+      out.meshes.push({mat:m.name||'?',map:!!m.map,vcOn:!!m.vertexColors,
+        col:[+m.color.r.toFixed(3),+m.color.g.toFixed(3),+m.color.b.toFixed(3)],
+        vc:c?[+c.getX(0).toFixed(3),+c.getY(0).toFixed(3),+c.getZ(0).toFixed(3)]:null});}});
+    return out;},
+  /* radiografía del material del personaje (para el caso "sale todo blanco" en ALTA) */
+  dbgChar:()=>{const out={qual:QP.key,phong:!!QP.phong,mats:[]};
+    if(charRoot)charRoot.traverse(o=>{ if(!o.isMesh&&!o.isSkinnedMesh)return;
+      for(const m of (Array.isArray(o.material)?o.material:[o.material])){ if(!m)continue;
+        out.mats.push({type:m.type,name:m.name||o.name,map:!!m.map,
+          mapImg:m.map&&m.map.image?((m.map.image.width||0)+'x'+(m.map.image.height||0)):null,
+          col:[+m.color.r.toFixed(2),+m.color.g.toFixed(2),+m.color.b.toFixed(2)],
+          rough:m.roughness,metal:m.metalness,vc:!!m.vertexColors,
+          em:m.emissive?[+m.emissive.r.toFixed(2),+m.emissive.g.toFixed(2),+m.emissive.b.toFixed(2)]:null,
+          lit:!!m._lit,skin:!!o.isSkinnedMesh}); }});
+    return out;},
+  /* qué mallas hay alrededor del jugador (para cazar objetos huérfanos en la escena) */
+  near:(r)=>{const R=r||2.2,out=[],p=new THREE.Vector3();
+    scene.traverse(o=>{ if(!o.isMesh&&!o.isInstancedMesh)return;
+      o.getWorldPosition(p);
+      const d=Math.hypot(p.x-plBody.position.x,p.z-plBody.position.z);
+      if(d<R)out.push({n:o.name||o.type,geo:o.geometry&&o.geometry.type,
+        mat:o.material&&(o.material.name||o.material.type),
+        d:+d.toFixed(2),y:+p.y.toFixed(2),
+        vis:o.visible,par:(o.parent&&(o.parent.name||o.parent.type))||null,
+        cnt:o.isInstancedMesh?o.count:null});});
+    return out.slice(0,16);},
+  fx:()=>({sparks:SPARKS.map(s=>+s.t.toFixed(2)),tracers:TRACERS.length,proj:PROJ.length}),
   wdir:()=>wModel?(wModel.userData.dir+' L='+wModel.userData.len+' roll='+wModel.userData.roll):null,
   wshow:(id,mdir)=>{ /* muestra el arma SOLA, con el caño hacia -Z, para inspeccionarla */
     const w=WEAP[WIX[id]];if(!w||!w.glb||!MODELS[w.glb])return null;

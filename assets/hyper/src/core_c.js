@@ -66,6 +66,10 @@ function animStep(dt){
   mixer.update(dt);
   torsoAim();    // enderezar el torso hacia la puntería (antes de mirar el brazo)
   ikSnap();      // guardar la pose que dejó la animación, antes de tocar nada
+  /* el brazo derecho sube a la línea de los ojos en 1ª persona. Va acá y no en
+     holdWeapon() porque holdWeapon() se corta cuando no hay arma: con los PUÑOS o con el
+     bate la pantalla quedaba vacía, sin manos. */
+  if(PL.fp){rikRestore();armIKR();rikStore();}
 }
 
 /* ============================================================
@@ -85,24 +89,26 @@ function animStep(dt){
    lz : cuánto adelante de la empuñadura agarra la mano izquierda (fracción del largo)
    lx : corrimiento lateral de la mano izquierda (metros)
    two: 0 = agarre de pistola (la izquierda se pega a la derecha)
-   flip: forzar el sentido del modelo (1 = darlo vuelta) en vez de medirlo */
+   fat: la punta GORDA va adelante (el bate)
+   flip: dar vuelta el modelo media vuelta (1). Arranca apagado en todas: ver la nota de
+         abajo sobre por qué acá ya no se mide nada. */
 const GSPEC={
-  _rifle : {gf:.30,gy:.24,ay:.33,lz:.20,lx:-.045,ly:-.055,two:1,wf:1.25},
+  _rifle : {gf:.30,gy:.24,ay:.33,lz:.20,lx:-.045,ly:-.055,two:1},
   _pistol: {gf:.34,gy:.22,ay:.50,lz:.20,lx:-.030,ly:-.020,two:0},
-  _melee : {gf:.11,gy:.02,ay:.02,lz:.13,lx:-.020,ly:-.020,two:1,wf:1.5,fat:1},
+  _melee : {gf:.11,gy:.02,ay:.02,lz:.13,lx:-.020,ly:-.020,two:1,fat:1},
   pistol  :{gf:.34,gy:.22,ay:.50,lz:.20,lx:-.030,ly:-.020,two:0},
   revolver:{gf:.32,gy:.22,ay:.50,lz:.17,lx:-.030,ly:-.020,two:0},
-  physgun :{gf:.30,gy:.24,ay:.30,lz:.30,lx:-.045,ly:-.055,two:1,wf:1.25},
-  gravgun :{gf:.30,gy:.24,ay:.30,lz:.30,lx:-.045,ly:-.055,two:1,wf:1.25},
+  physgun :{gf:.30,gy:.24,ay:.30,lz:.30,lx:-.045,ly:-.055,two:1},
+  gravgun :{gf:.30,gy:.24,ay:.30,lz:.30,lx:-.045,ly:-.055,two:1},
   toolgun :{gf:.34,gy:.22,ay:.45,lz:.24,lx:-.030,ly:-.020,two:0},
-  smg     :{gf:.30,gy:.24,ay:.32,lz:.26,lx:-.045,ly:-.055,two:1,wf:1.25},
-  akm     :{gf:.29,gy:.24,ay:.34,lz:.19,lx:-.045,ly:-.055,two:1,wf:1.25},
-  shotgun :{gf:.29,gy:.24,ay:.30,lz:.18,lx:-.045,ly:-.055,two:1,wf:1.25},
-  sniper  :{gf:.28,gy:.26,ay:.22,lz:.15,lx:-.045,ly:-.055,two:1,wf:1.25},
-  crossbow:{gf:.30,gy:.24,ay:.28,lz:.20,lx:-.045,ly:-.055,two:1,wf:1.25},
+  smg     :{gf:.30,gy:.24,ay:.32,lz:.26,lx:-.045,ly:-.055,two:1},
+  akm     :{gf:.29,gy:.24,ay:.34,lz:.19,lx:-.045,ly:-.055,two:1},
+  shotgun :{gf:.29,gy:.24,ay:.30,lz:.18,lx:-.045,ly:-.055,two:1},
+  sniper  :{gf:.28,gy:.26,ay:.22,lz:.15,lx:-.045,ly:-.055,two:1},
+  crossbow:{gf:.30,gy:.24,ay:.28,lz:.20,lx:-.045,ly:-.055,two:1},
   /* el RPG va al hombro: la izquierda toma el mango de adelante */
-  rpg     :{gf:.30,gy:.26,ay:.30,lz:.14,lx:-.045,ly:-.058,two:1,wf:1.25},
-  bat     :{gf:.10,gy:.02,ay:.02,lz:.12,lx:-.020,ly:-.020,two:1,wf:1.5,fat:1},
+  rpg     :{gf:.30,gy:.26,ay:.30,lz:.14,lx:-.045,ly:-.058,two:1},
+  bat     :{gf:.10,gy:.02,ay:.02,lz:.12,lx:-.020,ly:-.020,two:1,fat:1},
   hands   :{gf:.30,gy:.20,ay:.20,lz:0,  lx:0,   ly:0,   two:0,none:1}
 };
 function gspec(w){
@@ -185,12 +191,9 @@ function rigGrip(wm,w){
     /* eje del caño, en el espacio del rig: de la culata (+Z) a la punta (-Z) */
     ax0:new THREE.Vector3(0,ay,L*S.gf),
     ax1:new THREE.Vector3(0,ay,-L*(1-S.gf)),
-    /* el punto del arma que toma la mano izquierda (sobre el eje) ... */
-    pg0:new THREE.Vector3(0,S.two?ay:0,0),
-    pg1:new THREE.Vector3(0,S.two?ay:0,-lz),
-    /* ... y donde va la MUÑECA: al costado y un poco abajo, para que los dedos
-       queden cruzando el guardamano en vez de atravesarlo.
-       Con pistola la izquierda envuelve a la derecha, entre la empuñadura y el caño. */
+    /* Dónde va el PUÑO izquierdo (no la muñeca: ver palmLocal): sobre el arma, corrido al
+       costado y un poco abajo del eje, que es por donde se envuelve un guardamano.
+       Con pistola cae a la altura del puño derecho, o sea la izquierda envuelve la derecha. */
     lh0:new THREE.Vector3(S.lx,(S.two?ay:ay*.5)+S.ly,0),
     lh1:new THREE.Vector3(S.lx,(S.two?ay:ay*.5)+S.ly,-lz)};
   wm.userData._g=g;
@@ -218,20 +221,27 @@ function holdWeapon(){
   }
   const b=bones.rHand||bones.rFore;
   if(!b||wModel.parent!==b)return;
-  if(PL.fp){rikRestore();armIKR();rikStore();}
   b.updateWorldMatrix(true,false);
   b.matrixWorld.decompose(_hv,_bq,_bs);
-  _we.set(clamp(PL.pitch,-.7,.7)*.55,PL.yaw,0,'YXZ');
-  _wq.setFromEuler(_we);
-  _bi.copy(_bq).invert();
-  wModel.quaternion.copy(_bi).multiply(_wq);
   const k=1/Math.max(.0001,_bs.x);
   wModel.scale.set(k,k,k);
   /* dónde se apoya la empuñadura dentro de la palma: cada arma trae su hold en la tabla
      (una pistola se mete más adentro del puño que un fusil), GDLT es el respaldo.
      Está en el marco de puntería (adelante = -Z): lo paso al espacio del hueso. */
   const H=weap().hold||GDLT;
-  _hv2.set(H[0],H[1],-H[2]).applyQuaternion(_wq)
+  /* Las armas largas metían la culata en el pecho (el RPG salía por el costado izquierdo):
+     lo que sobresale DETRÁS del puño es len*gf, y el pecho está a unos 15 cm de la mano.
+     Se corre el arma a la derecha y se la gira unos grados, así la culata pasa al costado de
+     las costillas en vez de atravesarlas. El caño sigue apuntando a donde se mira (el giro
+     máximo es ~9°, y los disparos salen del rayo de la cámara igual). */
+  const gg=wModel.userData._g;
+  const back=gg?gg.len*gg.S.gf:0;
+  const ex=clamp((back-.15)*.60,0,.09), eyaw=clamp((back-.15)*.55,0,.16);
+  _we.set(clamp(PL.pitch,-.7,.7)*.55,PL.yaw+eyaw,0,'YXZ');
+  _wq.setFromEuler(_we);
+  _bi.copy(_bq).invert();
+  wModel.quaternion.copy(_bi).multiply(_wq);
+  _hv2.set(H[0]+ex,H[1],-H[2]).applyQuaternion(_wq)
       .applyQuaternion(_bi).multiplyScalar(k);
   wModel.position.copy(_hv2);
   wModel.updateMatrixWorld(true);
@@ -271,7 +281,9 @@ function fpHandTarget(out){
   _fr.set(yc,0,-ys);
   /* las armas cortas necesitan subir y acercarse, si no quedan como un puntito en la
      esquina: k va de 0 (fusil largo) a 1 (pistola) */
-  const k=clamp((.55-(weap().len||.5))/.35,0,1);
+  /* con los PUÑOS no hay arma: la mano tiene que subir del todo o no se ve nada */
+  const wl=weap().noModel?.12:(weap().len||.5);
+  const k=clamp((.55-wl)/.35,0,1);
   out.copy(_fe).addScaledVector(_fr,FPT[0]-.025*k).addScaledVector(_ff,FPT[2]-.075*k);
   out.y+=FPT[1]+.075*k;   // la altura baja en vertical, no sobre el eje de puntería
   return out;
