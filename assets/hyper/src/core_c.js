@@ -20,49 +20,81 @@ function splitClip(clip,which){
   return new THREE.AnimationClip(clip.name+'|'+which,clip.duration,tr);
 }
 const ACTU={};
+/* ---- POR QUÉ ACÁ NO SE USA setEffectiveWeight/fadeIn/fadeOut ----
+   El personaje "no caminaba, sólo parpadeaba": corriendo o parado las piernas quedaban
+   CLAVADAS en la pose de referencia (recorrido del pie medido: 0.0000 m en los tres ejes en
+   180 frames) y sólo el clip de caminar animaba.
+   La causa es de three.js: setEffectiveWeight(0) escribe action.weight=0, y fadeIn()/fadeOut()
+   NO escriben weight, programan un interpolante que lo MULTIPLICA (_updateWeight hace
+   weight = this.weight * interpolante). reset() tampoco lo restaura. O sea que idle/run/jump
+   nacían con weight=0 y el fadeIn(.22) de setAnim() no los podía levantar NUNCA: su reloj
+   corría con peso efectivo 0 para siempre.
+   Así que acá el peso lo maneja mixTo() escribiendo .weight a mano, y nadie más lo toca. */
 function buildActions(){
   if(!mixer)return;
   for(const k in CLIPS){
     if(ACTS[k])continue;
     const low=splitClip(CLIPS[k],'low')||CLIPS[k];
     const a=mixer.clipAction(low);
-    a.enabled=true;a.setEffectiveWeight(k==='walk'?1:0);
+    a.enabled=true;a.weight=(k==='walk'?1:0);
     if(k==='jump'){a.setLoop(THREE.LoopOnce,1);a.clampWhenFinished=true;}
-    ACTS[k]=a;
-    if(k!=='walk')a.play();
+    ACTS[k]=a;a.play();          // todas suenan; el peso decide cuál se ve
     const up=splitClip(CLIPS[k],'up');
     if(up){ const b=mixer.clipAction(up);
-      b.enabled=true;b.setEffectiveWeight(0);b.play();ACTU[k]=b; }
+      b.enabled=true;b.weight=0;b.play();ACTU[k]=b; }
   }
   /* el torso se queda con el reposo (o con caminar si el reposo aún no llegó) */
   const key=ACTU.idle?'idle':(ACTU.walk?'walk':null);
-  if(key)for(const k in ACTU)ACTU[k].setEffectiveWeight(k===key?1:0);
+  if(key)for(const k in ACTU){ACTU[k].enabled=true;ACTU[k].weight=(k===key?1:0);}
 }
-function setAnim(st,sp){
-  if(!mixer||!ACTS[st])return;
-  if(st!==animState){
-    for(const k in ACTS){ if(k===st)continue; ACTS[k].fadeOut(.22); }
-    ACTS[st].reset().fadeIn(.22).play();
-    animState=st;
-    /* el torso sólo cambia para el salto (el cuerpo acompaña), si no se queda en reposo */
-    const want=(st==='jump'&&ACTU.jump)?'jump':(ACTU.idle?'idle':'walk');
-    for(const k in ACTU){ if(k===want)ACTU[k].reset().fadeIn(.22).play();
-      else ACTU[k].fadeOut(.22); }
+/* mezcla exponencial de un polo: la suma de los pesos arranca en 1 y se queda en 1 (los
+   objetivos suman 1), así el mixer nunca se queda sin nadie escribiendo un hueso. Antes, cada
+   cambio de estado hacía reset()+fadeIn desde 0: el clip volvía a t=0 y la pose SALTABA
+   (medido: hasta 27,8 cm de pie en un frame) — eso era el "parpadeo". */
+const AFADE=10;                  // 1/s: llega al 95% en ~0.30 s (los .22 de antes eran a mano)
+function mixTo(map,want,dt){
+  const k1=Math.min(1,AFADE*Math.max(0,dt));
+  for(const k in map){ const a=map[k];
+    a.enabled=true;
+    if(!a.isRunning())a.play();
+    a.weight+=((k===want?1:0)-a.weight)*k1;
+    if(a.weight<1e-3&&k!==want)a.weight=0;
   }
+}
+function setAnim(st,sp,dt){
+  if(!mixer||!ACTS[st])return;
+  /* sólo el salto se rearma (es LoopOnce + clampWhenFinished: si no se resetea queda pegado
+     en el último cuadro). Los cíclicos NO se resetean: por eso ya no hay salto de pose. */
+  if(st!==animState){ if(st==='jump')ACTS[st].reset(); animState=st; }
+  mixTo(ACTS,st,dt||1/60);
+  /* EL TORSO SIEMPRE EN REPOSO. Es la pose en la que se generó el personaje (sosteniendo el
+     arma) y es la que el IK de los brazos da por sentada. El clip de salto del tren superior
+     abría los brazos y soltaba el agarre, y encima era el que dejaba la capa de arriba en peso
+     0 al titilar jump<->idle: los brazos y la cabeza se quedaban sin nadie que los escriba y
+     el snapshot del IK los congelaba. */
+  const want=(ACTU.idle?'idle':(ACTU.walk?'walk':null));
+  if(want)mixTo(ACTU,want,dt||1/60);
   const ts=st==='walk'?clamp(sp/3.1,.55,1.9):(st==='run'?clamp(sp/8.4,.7,1.5):1);
   ACTS[st].timeScale=ts;
-  if(ACTU[st])ACTU[st].timeScale=ts;
 }
 function animStep(dt){
   if(!mixer)return;
   const sp=Math.hypot(plBody.velocity.x,plBody.velocity.z);
+  /* HISTÉRESIS en los umbrales: PL.spd (6.4) queda a 1 m/s del umbral de correr, así que
+     subir una rampa o rozar una pared hacía cruzar el límite ida y vuelta varias veces por
+     segundo (medido: 4,66 cambios de estado por segundo saltando). Cada cambio relanzaba la
+     mezcla y se veía como un tirón. */
+  const rTh=animState==='run'?6.2:7.4;
+  const wTh=(animState==='walk'||animState==='run')?.35:.55;
   let st;
   if(PL.rag)st='jump';
-  else if(!grounded&&!inWater&&Math.abs(plBody.velocity.y)>1.1)st=ACTS.jump?'jump':'walk';
-  else if(sp>7.4)st=ACTS.run?'run':'walk';
-  else if(sp>.55)st='walk';
+  /* y en el AIRE no se sale de 'jump' aunque |vy| pase por 0 en el vértice del salto */
+  else if(!grounded&&!inWater&&(Math.abs(plBody.velocity.y)>1.1||animState==='jump'))
+    st=ACTS.jump?'jump':'walk';
+  else if(sp>rTh)st=ACTS.run?'run':'walk';
+  else if(sp>wTh)st='walk';
   else st=ACTS.idle?'idle':'walk';
-  setAnim(st,sp);
+  setAnim(st,sp,dt);
   mixer.update(dt);
   torsoAim();    // enderezar el torso hacia la puntería (antes de mirar el brazo)
   ikSnap();      // guardar la pose que dejó la animación, antes de tocar nada
@@ -70,6 +102,18 @@ function animStep(dt){
      holdWeapon() porque holdWeapon() se corta cuando no hay arma: con los PUÑOS o con el
      bate la pantalla quedaba vacía, sin manos. */
   if(PL.fp){rikRestore();armIKR();rikStore();}
+  fpHead();
+}
+/* EN 1ª PERSONA LA CABEZA SE ENCOGE.
+   La cámara va en los ojos (es la única forma de que el brazo alcance el arma sin saturar el
+   IK, ver camStep), y desde ahí la cabeza y el cuello quedan pegados al plano cercano: los
+   triángulos que lo cruzan salen como esquirlas negras flotando en el cielo. No se puede
+   apagar sólo la cabeza (es una sola malla con skinning), así que se le pone escala ~0 al hueso
+   de la cabeza: sus vértices se juntan en un punto detrás de la cámara y desaparecen. */
+function fpHead(){
+  const h=bones.head;if(!h)return;
+  const k=(PL.fp&&!PL.rag)?.001:1;
+  if(h.scale.x!==k){h.scale.setScalar(k);h.updateMatrixWorld(true);}
 }
 
 /* ============================================================
@@ -88,27 +132,47 @@ function animStep(dt){
    ay : altura del eje del caño respecto del centro (para el punto de la izquierda)
    lz : cuánto adelante de la empuñadura agarra la mano izquierda (fracción del largo)
    lx : corrimiento lateral de la mano izquierda (metros)
-   two: 0 = agarre de pistola (la izquierda se pega a la derecha)
+   ly : cuánto DEBAJO del eje del caño cae el puño izquierdo (metros, negativo)
+   two: arma larga (la izquierda toma el guardamano lejos de la derecha). Con 0 el objetivo se
+        queda cerca de la empuñadura. Ojo: acá ya NO se divide ay por dos con two:0 — eso dejaba
+        el puño colgando en el aire debajo del arma (ver la nota de abajo).
    fat: la punta GORDA va adelante (el bate)
    flip: dar vuelta el modelo media vuelta (1). Arranca apagado en todas: ver la nota de
          abajo sobre por qué acá ya no se mide nada. */
+/* ---- POR QUÉ CAMBIARON lx / ly / ay ----
+   "Algunas armas las agarra con una sola mano": el puño izquierdo quedaba CERRADO EN EL AIRE al
+   costado y abajo del arma (se veía pasto entre el puño y el guardamano). No era el IK: el IK
+   llegaba exacto al objetivo, el objetivo estaba mal puesto. lx=-.045 / ly=-.055 eran constantes
+   para toda arma larga, y el cuerpo de un fusil mide 4-6 cm de ancho: el puño se plantaba 4,5 cm
+   AL COSTADO y 5,5 cm DEBAJO del arma. Medido: distancia del puño al eje = hypot(.045,.055) =
+   0.0711 m en 10 de 13 armas, o sea el mismo agujero para todas.
+   Ahora el objetivo cae SOBRE el arma (lx -.012, ly -.020 en las largas) y en las cortas la
+   izquierda envuelve a la derecha en vez de estirarse sobre la corredera. */
 const GSPEC={
-  _rifle : {gf:.30,gy:.24,ay:.33,lz:.20,lx:-.045,ly:-.055,two:1},
-  _pistol: {gf:.34,gy:.22,ay:.50,lz:.20,lx:-.030,ly:-.020,two:0},
-  _melee : {gf:.11,gy:.02,ay:.02,lz:.13,lx:-.020,ly:-.020,two:1,fat:1},
-  pistol  :{gf:.34,gy:.22,ay:.50,lz:.20,lx:-.030,ly:-.020,two:0},
-  revolver:{gf:.32,gy:.22,ay:.50,lz:.17,lx:-.030,ly:-.020,two:0},
-  physgun :{gf:.30,gy:.24,ay:.30,lz:.30,lx:-.045,ly:-.055,two:1},
-  gravgun :{gf:.30,gy:.24,ay:.30,lz:.30,lx:-.045,ly:-.055,two:1},
-  toolgun :{gf:.34,gy:.22,ay:.45,lz:.24,lx:-.030,ly:-.020,two:0},
-  smg     :{gf:.30,gy:.24,ay:.32,lz:.26,lx:-.045,ly:-.055,two:1},
-  akm     :{gf:.29,gy:.24,ay:.34,lz:.19,lx:-.045,ly:-.055,two:1},
-  shotgun :{gf:.29,gy:.24,ay:.30,lz:.18,lx:-.045,ly:-.055,two:1},
-  sniper  :{gf:.28,gy:.26,ay:.22,lz:.15,lx:-.045,ly:-.055,two:1},
-  crossbow:{gf:.30,gy:.24,ay:.28,lz:.20,lx:-.045,ly:-.055,two:1},
+  _rifle : {gf:.30,gy:.24,ay:.33,lz:.20,lx:-.012,ly:-.020,two:1},
+  _pistol: {gf:.34,gy:.22,ay:.50,lz:.20,lx:-.014,ly:-.048,two:0},
+  _melee : {gf:.11,gy:.02,ay:.02,lz:.13,lx:-.014,ly:-.016,two:1,fat:1},
+  /* PISTOLAS: agarre a dos manos de verdad — la izquierda envuelve la derecha por debajo del
+     guardamonte, no estirada 8-11 cm adelante sobre la corredera. Por eso ly es grande (baja
+     desde el eje del caño hasta la altura del puño) y lg (en WEAP) es corto. */
+  pistol  :{gf:.34,gy:.22,ay:.52,lz:.20,lx:-.014,ly:-.050,two:0},
+  revolver:{gf:.32,gy:.22,ay:.52,lz:.17,lx:-.014,ly:-.052,two:0},
+  physgun :{gf:.30,gy:.24,ay:.30,lz:.30,lx:-.012,ly:-.026,two:1},
+  gravgun :{gf:.30,gy:.24,ay:.30,lz:.30,lx:-.012,ly:-.024,two:1},
+  toolgun :{gf:.34,gy:.22,ay:.52,lz:.24,lx:-.014,ly:-.052,two:0},
+  smg     :{gf:.30,gy:.24,ay:.32,lz:.26,lx:-.012,ly:-.020,two:1},
+  akm     :{gf:.29,gy:.24,ay:.34,lz:.19,lx:-.012,ly:-.020,two:1},
+  /* shotgun y sniper: el "eje" sale de la ALTURA DE LA CAJA, que incluye la mira y el bípode,
+     así que con el ay viejo el eje caía por debajo del cuerpo del arma */
+  shotgun :{gf:.29,gy:.24,ay:.44,lz:.18,lx:-.012,ly:-.020,two:1},
+  sniper  :{gf:.28,gy:.26,ay:.35,lz:.15,lx:-.012,ly:-.020,two:1},
+  crossbow:{gf:.30,gy:.24,ay:.28,lz:.20,lx:-.012,ly:-.018,two:1},
   /* el RPG va al hombro: la izquierda toma el mango de adelante */
-  rpg     :{gf:.30,gy:.26,ay:.30,lz:.14,lx:-.045,ly:-.058,two:1},
-  bat     :{gf:.10,gy:.02,ay:.02,lz:.12,lx:-.020,ly:-.020,two:1,fat:1},
+  rpg     :{gf:.30,gy:.26,ay:.30,lz:.14,lx:-.012,ly:-.022,two:1},
+  bat     :{gf:.10,gy:.02,ay:.02,lz:.12,lx:-.014,ly:-.016,two:1,fat:1},
+  /* la cámara se sostiene con las dos manos pero no es un arma: entrada propia para que no caiga
+     en _rifle por el largo */
+  camera  :{gf:.40,gy:.20,ay:.42,lz:.06,lx:-.014,ly:-.030,two:0},
   hands   :{gf:.30,gy:.20,ay:.20,lz:0,  lx:0,   ly:0,   two:0,none:1}
 };
 function gspec(w){
@@ -193,9 +257,12 @@ function rigGrip(wm,w){
     ax1:new THREE.Vector3(0,ay,-L*(1-S.gf)),
     /* Dónde va el PUÑO izquierdo (no la muñeca: ver palmLocal): sobre el arma, corrido al
        costado y un poco abajo del eje, que es por donde se envuelve un guardamano.
-       Con pistola cae a la altura del puño derecho, o sea la izquierda envuelve la derecha. */
-    lh0:new THREE.Vector3(S.lx,(S.two?ay:ay*.5)+S.ly,0),
-    lh1:new THREE.Vector3(S.lx,(S.two?ay:ay*.5)+S.ly,-lz)};
+       ANTES acá había un `S.two?ay:ay*.5`: con las armas de una mano bajaba el objetivo OTROS
+       3,8-4,6 cm con la excusa de "que caiga en el puño derecho", pero ay*sz.y/2 no es la altura
+       del puño derecho sino la mitad de un eje medido sobre la caja del modelo: el puño terminaba
+       en el aire debajo del arma. Ahora cada arma dice con su ly cuánto baja, y se ve. */
+    lh0:new THREE.Vector3(S.lx,ay+S.ly,0),
+    lh1:new THREE.Vector3(S.lx,ay+S.ly,-lz)};
   wm.userData._g=g;
   return g;
 }
@@ -236,13 +303,26 @@ function holdWeapon(){
      máximo es ~9°, y los disparos salen del rayo de la cámara igual). */
   const gg=wModel.userData._g;
   const back=gg?gg.len*gg.S.gf:0;
-  const ex=clamp((back-.15)*.60,0,.09), eyaw=clamp((back-.15)*.55,0,.16);
+  /* el corrimiento LATERAL que usaba antes para sacar la culata del pecho movía el arma
+     LEJOS DEL PUÑO (medido: hasta 11 cm en el rpg, y por eso la mano derecha no la tocaba).
+     Ahora sólo se GIRA, que es un giro alrededor de la empuñadura: la culata se va al costado
+     igual y el puño no se despega del arma. */
+  const ex=0, eyaw=clamp((back-.15)*.72,0,.21);
   _we.set(clamp(PL.pitch,-.7,.7)*.55,PL.yaw+eyaw,0,'YXZ');
   _wq.setFromEuler(_we);
   _bi.copy(_bq).invert();
   wModel.quaternion.copy(_bi).multiply(_wq);
-  _hv2.set(H[0]+ex,H[1],-H[2]).applyQuaternion(_wq)
+  /* LA EMPUÑADURA VA EN EL PUÑO QUE SE VE, NO EN EL HUESO DE LA MUÑECA.
+     Medido con handsOn(): la mano derecha quedaba hasta 22 cm separada del arma (rpg 0.219 m,
+     sniper 0.171, akm 0.148) porque el arma colgaba del hueso y la malla dibuja el puño bien
+     más adelante y abajo. Con la izquierda no se notaba porque ésa va al arma por IK contra el
+     PUÑO (lhPoint): el resultado era un arma sostenida por una sola mano.
+     palmLocal() promedia los vértices que el skinning le asigna al hueso: ése es el puño que
+     se ve. Viene en unidades locales del hueso (este rig las trae en cm), igual que position. */
+  const pl=palmLocal(b);
+  _hv2.set(H[0]*.45+ex,H[1]*.45,-H[2]*.45).applyQuaternion(_wq)
       .applyQuaternion(_bi).multiplyScalar(k);
+  if(pl)_hv2.add(pl);
   wModel.position.copy(_hv2);
   wModel.updateMatrixWorld(true);
   armIK();
@@ -258,7 +338,12 @@ function holdWeapon(){
    con el IK que ya estaba. Los brazos que se ven son los del personaje, no un "view model".
    FPT = [a la derecha, abajo, adelante] en metros, respecto de los ojos.
    ============================================================ */
-const FPT=[.185,-.225,.305];
+/* El punto de apoyo tiene que estar DENTRO DEL ALCANCE del brazo: el hombro derecho queda unos
+   6 cm detrás del centro del cuerpo y el brazo alcanza 44 cm, así que el objetivo no puede irse
+   más de ~38 cm adelante de los ojos. Con .305 (lo de antes) más los 14 cm que se corría la
+   cámara, el pedido eran 52 cm: el IK se saturaba SIEMPRE y el arma dejaba de seguir a la vista.
+   Con .25 quedan 32 cm quietos y 38 caminando, con el codo flexionado en todo el ciclo del paso. */
+const FPT=[.185,-.205,.250];
 const RIK={};
 function rikBones(){
   if(RIK.ok!==undefined)return RIK.ok;
@@ -274,9 +359,11 @@ const _fe=new THREE.Vector3(),_ff=new THREE.Vector3(),_fr=new THREE.Vector3();
 function fpHandTarget(out){
   const ps=Math.sin(PL.pitch),pc=Math.cos(PL.pitch),
         ys=Math.sin(PL.yaw),yc=Math.cos(PL.yaw);
-  _fe.set(plBody.position.x-ys*.14,
-          plBody.position.y+(PL.h-.28)+.02,
-          plBody.position.z-yc*.14);
+  /* EL MISMO punto de ojo que usa camStep() (y la MISMA posición dibujada, la interpolada):
+     así el objetivo es una CONSTANTE en el espacio de la cámara y el arma no se puede mover
+     respecto de la vista. Antes esto usaba plBody.position cruda y 14 cm de adelanto. */
+  const pd=plDraw();
+  _fe.set(pd.x,pd.y+(PL.h-.28)+.02,pd.z);
   _ff.set(-ys*pc,ps,-yc*pc);
   _fr.set(yc,0,-ys);
   /* las armas cortas necesitan subir y acercarse, si no quedan como un puntito en la
@@ -327,13 +414,42 @@ function twoBone(up,fo,ha,pT,pole){
 }
 /* el codo derecho sale hacia abajo y hacia atrás-afuera */
 const RPOLE=[.45,-1,.55];
-const _rpo=new THREE.Vector3(),_rtg=new THREE.Vector3();
+const _rpo=new THREE.Vector3(),_rtg=new THREE.Vector3(),
+      _rk0=new THREE.Vector3(),_rk1=new THREE.Vector3(),_rk2=new THREE.Vector3();
 function armIKR(){
   if(!PL.fp||PL.rag||!rikBones())return false;
   const ys=Math.sin(PL.yaw),yc=Math.cos(PL.yaw);
   /* derecha=(yc,0,-ys), atrás=(ys,0,yc) */
   _rpo.set(yc*RPOLE[0]+ys*RPOLE[2],RPOLE[1],-ys*RPOLE[0]+yc*RPOLE[2]).normalize();
-  return twoBone(RIK.up,RIK.fo,RIK.ha,fpHandTarget(_rtg),_rpo);
+  fpHandTarget(_rtg);
+  /* RED DE SEGURIDAD: si el objetivo se pasa del alcance, twoBone() lo recorta y la mano queda
+     SOLDADA al hombro — y entonces el arma copia el bamboleo del cuerpo en vez de quedarse
+     quieta en la pantalla, que era el temblor que se veía. Recortando acá al 92% del brazo el
+     codo siempre queda doblado y el IK nunca se satura en silencio si mañana cambia el rig. */
+  RIK.up.updateWorldMatrix(true,false);RIK.fo.updateWorldMatrix(true,false);
+  RIK.ha.updateWorldMatrix(true,false);
+  _rk0.setFromMatrixPosition(RIK.up.matrixWorld);
+  _rk1.setFromMatrixPosition(RIK.fo.matrixWorld);
+  _rk2.setFromMatrixPosition(RIK.ha.matrixWorld);
+  /* El largo de los dos huesos se mide con un filtro lento (4% por frame) en vez de frame a
+     frame: los clips generados traen PISTAS DE POSICIÓN de los huesos, así que el "alcance"
+     medido cambia unos centímetros dentro del ciclo del paso (0.53 m parado, 0.45 m corriendo).
+     Si el recorte usara ese número el objetivo bailaría al ritmo de la caminata y el arma
+     temblaría por culpa del propio recorte. */
+  const A=_rk0.distanceTo(_rk1),B=_rk1.distanceTo(_rk2);
+  if(RIK.a===undefined){RIK.a=A;RIK.b=B;}
+  else{RIK.a+=(A-RIK.a)*.04;RIK.b+=(B-RIK.b)*.04;}
+  /* DOS topes, no uno: el objetivo tiene que quedar en la corona del brazo.
+     - afuera: si se pasa de (a+b) la mano queda SOLDADA al hombro y el arma copia el bamboleo
+       del cuerpo (era el temblor grande de 1ª persona).
+     - ADENTRO: el clip de correr sube y baja la cadera 25 cm, así que en el rebote el hombro
+       pasa a 5 cm del objetivo y el codo no se puede plegar tanto: el IK no llegaba y la mano
+       pegaba un tirón de 15 mm en un frame. Empujando el objetivo hasta |a-b|+4 cm el brazo
+       siempre tiene solución. */
+  const Rmax=(RIK.a+RIK.b)*.94,d=_rtg.distanceTo(_rk0);
+  RIK.sat=d>Rmax;RIK.need=d;
+  if(d>1e-4&&RIK.sat)_rtg.sub(_rk0).multiplyScalar(Rmax/d).add(_rk0);
+  return twoBone(RIK.up,RIK.fo,RIK.ha,_rtg,_rpo);
 }
 
 /* ---- 2. IK analítico de dos huesos para el brazo izquierdo ----
@@ -672,8 +788,10 @@ if(DEV&&window.__H)Object.assign(window.__H,{
   /* distancia (m) de la mano IZQUIERDA al eje del arma */
   lhand:()=>{const d=lhDist();return d==null?null:+d.toFixed(4);},
   /* lo mismo para todas las armas, en la animación actual */
+  /* ojo: se miden TODAS las que tienen modelo, no sólo las que traen GLB. Antes filtraba por
+     w.glb y la CÁMARA (que usa el arma de primitivas) no se medía nunca: quedaba fuera del test */
   lhandAll:()=>{const o={},i0=weap().id;
-    for(const w of WEAP){ if(!w.glb)continue;
+    for(const w of WEAP){ if(w.noModel)continue;
       equip(WIX[w.id]);holdWeapon();
       const d=lhDist();o[w.id]=d==null?null:+d.toFixed(4); }
     equip(WIX[i0]);holdWeapon();return o;},
@@ -761,9 +879,211 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     ikOn=true;holdWeapon();const on=snap();
     ikOn=was;holdWeapon();
     return {off,on,lhd:lhDist()==null?null:+lhDist().toFixed(4)};},
+  /* qué trae cada clip: pistas con amplitud, para ver de dónde sale el rebote del cuerpo */
+  clipInfo:()=>{const o={};
+    for(const k in CLIPS){const c=CLIPS[k],a=[];
+      for(const t of c.tracks){
+        const n=t.name,vs=t.values,st=t.getValueSize();
+        const mn=[],mx=[];
+        for(let i=0;i<st;i++){mn.push(1e9);mx.push(-1e9);}
+        for(let i=0;i<vs.length;i++){const j=i%st;
+          if(vs[i]<mn[j])mn[j]=vs[i];if(vs[i]>mx[j])mx[j]=vs[i];}
+        const amp=mn.map((v,i)=>+(mx[i]-v).toFixed(3));
+        if(Math.max(...amp)>.02)a.push(n+' '+amp.join('/'));
+      }
+      o[k]=a;}
+    return o;},
   gspec:(k,v)=>{const g=gspec(weap());if(k!==undefined){g[k]=v;
     if(wModel)delete wModel.userData._g;holdWeapon();}
     return JSON.parse(JSON.stringify(g));},
   pole:(a,b,c)=>{if(a!==undefined){IKPOLE[0]=a;IKPOLE[1]=b;IKPOLE[2]=c;holdWeapon();}
     return IKPOLE.slice();},
-  clav:v=>{if(v!==undefined){CLW=+v;holdWeapon();}return CLW;}});
+  clav:v=>{if(v!==undefined){CLW=+v;holdWeapon();}return CLW;},
+
+  /* ---------------- MEDIDORES (los usan los scripts de prueba) ----------------
+     Los tres corren sobre FRAMES REALES (esperan a que el renderer dibuje): __H.step() no
+     dispara el bucle de verdad, así que medir con step() no sirve para esto. */
+
+  /* TEMBLOR del arma respecto de la CÁMARA, en milímetros. En 1ª persona la posición ideal del
+     arma en el espacio de la cámara es una CONSTANTE, así que todo lo que se mueva es error.
+     alt = índice de alternancia (1 = oscila con período de 2 frames, 0 = ruido, -1 = deriva
+     suave): sirve para cazar el desfase de un frame entre charRoot y la cámara. */
+  jitter:(n,keep)=>new Promise(res=>{
+    const N=Math.max(8,n||120),P=[],A=[],ER=[],DBG=[];
+    const inv=new THREE.Matrix4(),v=new THREE.Vector3(),d=new THREE.Vector3(),
+          tg=new THREE.Vector3(),sh=new THREE.Vector3(),el=new THREE.Vector3(),ha=new THREE.Vector3();
+    let lastFrame=-1;
+    const sample=()=>{
+      /* de paso: ¿el IK del brazo derecho LLEGÓ al objetivo, o se saturó? Si se satura la mano
+         queda soldada al hombro y el arma copia el bamboleo del cuerpo. */
+      if(PL.fp&&rikBones()){
+        fpHandTarget(tg);
+        RIK.up.updateWorldMatrix(true,false);RIK.fo.updateWorldMatrix(true,false);
+        RIK.ha.updateWorldMatrix(true,false);
+        sh.setFromMatrixPosition(RIK.up.matrixWorld);
+        el.setFromMatrixPosition(RIK.fo.matrixWorld);
+        ha.setFromMatrixPosition(RIK.ha.matrixWorld);
+        ER.push([ha.distanceTo(tg)*1000,sh.distanceTo(tg),
+                 sh.distanceTo(el)+el.distanceTo(ha),RIK.sat?1:0]);
+        if(keep)DBG.push({st:animState,
+          tg:[+tg.x.toFixed(3),+tg.y.toFixed(3),+tg.z.toFixed(3)],
+          sh:[+sh.x.toFixed(3),+sh.y.toFixed(3),+sh.z.toFixed(3)],
+          ha:[+ha.x.toFixed(3),+ha.y.toFixed(3),+ha.z.toFixed(3)],
+          cr:[+charRoot.position.x.toFixed(3),+charRoot.position.y.toFixed(3),+charRoot.position.z.toFixed(3)],
+          pb:[+plBody.position.x.toFixed(3),+plBody.position.y.toFixed(3),+plBody.position.z.toFixed(3)],
+          ip:[+plBody.interpolatedPosition.x.toFixed(3),+plBody.interpolatedPosition.y.toFixed(3),
+              +plBody.interpolatedPosition.z.toFixed(3)],
+          cam:[+camera.position.x.toFixed(3),+camera.position.y.toFixed(3),+camera.position.z.toFixed(3)],
+          yaw:+PL.yaw.toFixed(4)});
+      }
+      const ref=wModel||bones.rHand;if(!ref)return false;
+      ref.updateWorldMatrix(true,false);
+      camera.updateMatrixWorld(true);
+      inv.copy(camera.matrixWorld).invert();
+      v.setFromMatrixPosition(ref.matrixWorld).applyMatrix4(inv);
+      P.push([v.x*1000,v.y*1000,v.z*1000]);
+      /* dirección del caño (o del hueso) llevada al espacio de la cámara */
+      d.set(0,0,-1).transformDirection(ref.matrixWorld).transformDirection(inv).normalize();
+      A.push([d.x,d.y,d.z]);
+      return true;
+    };
+    const tick=()=>{
+      const f=renderer.info.render.frame;
+      if(f!==lastFrame){lastFrame=f;sample();}
+      if(P.length<N)requestAnimationFrame(tick);
+      else res(stats());
+    };
+    const stats=()=>{
+      const o={n:P.length},ax=['x','y','z'];
+      for(let k=0;k<3;k++){
+        let s=0,mn=1e9,mx=-1e9;
+        for(const p of P){s+=p[k];mn=Math.min(mn,p[k]);mx=Math.max(mx,p[k]);}
+        const m=s/P.length;let q=0;
+        for(const p of P)q+=(p[k]-m)*(p[k]-m);
+        o['sd'+ax[k]]=+Math.sqrt(q/P.length).toFixed(3);
+        o['ptp'+ax[k]]=+(mx-mn).toFixed(3);
+        o['m'+ax[k]]=+m.toFixed(2);
+      }
+      const D=[];let dmax=0,dsum=0;
+      for(let i=1;i<P.length;i++){
+        const q=[P[i][0]-P[i-1][0],P[i][1]-P[i-1][1],P[i][2]-P[i-1][2]];
+        D.push(q);const L=Math.hypot(q[0],q[1],q[2]);dmax=Math.max(dmax,L);dsum+=L;
+      }
+      o.dmax=+dmax.toFixed(3);o.dmean=+(dsum/Math.max(1,D.length)).toFixed(3);
+      let num=0,den=0;
+      for(let i=1;i<D.length;i++){
+        num+=D[i][0]*D[i-1][0]+D[i][1]*D[i-1][1]+D[i][2]*D[i-1][2];
+        den+=Math.hypot(...D[i])*Math.hypot(...D[i-1]);
+      }
+      o.alt=+(den>1e-9?-num/den:0).toFixed(3);
+      let amax=0;
+      for(let i=1;i<A.length;i++){
+        const dot=clamp(A[i][0]*A[i-1][0]+A[i][1]*A[i-1][1]+A[i][2]*A[i-1][2],-1,1);
+        amax=Math.max(amax,Math.acos(dot)/D2R);
+      }
+      o.degmax=+amax.toFixed(4);
+      if(ER.length){ let e=0,nd=0,rmn=9,rmx=0,sat=0;
+        for(const r of ER){e=Math.max(e,r[0]);nd=Math.max(nd,r[1]);
+          rmn=Math.min(rmn,r[2]);rmx=Math.max(rmx,r[2]);sat+=r[3];}
+        o.ikErrMax=+e.toFixed(2);          // mm de la mano al objetivo (0 = el IK llegó)
+        o.needMax=+nd.toFixed(3);o.reach=[+rmn.toFixed(3),+rmx.toFixed(3)];
+        o.satPct=Math.round(100*sat/ER.length);   // % de frames con el brazo al límite
+      }
+      if(keep){o.dbg=DBG;o.rows=P.map((p,i)=>[+p[0].toFixed(2),+p[1].toFixed(2),+p[2].toFixed(2),
+        ER[i]?+ER[i][0].toFixed(2):null,ER[i]?+ER[i][1].toFixed(3):null,
+        ER[i]?+ER[i][2].toFixed(3):null,ER[i]?ER[i][3]:null]);}
+      return o;
+    };
+    requestAnimationFrame(tick);
+  }),
+
+  /* ¿LAS DOS MANOS ESTÁN SOBRE EL ARMA? Por arma: distancia de cada PUÑO (donde la malla
+     dibuja la mano, no el hueso) a la SUPERFICIE del modelo del arma y al eje del caño, más si
+     el IK izquierdo llegó al objetivo. surf <= ~.05 m = el puño toca el arma. */
+  handsOn:only=>{
+    const out={},i0=weap().id;
+    const pts=[],mw=new THREE.Vector3();
+    for(const w of WEAP){
+      if(only&&w.id!==only)continue;
+      equip(WIX[w.id]);
+      if(!wModel){out[w.id]={noModel:true};continue;}
+      holdWeapon();
+      const g=wModel.userData._g;
+      wModel.updateWorldMatrix(true,true);
+      pts.length=0;
+      wModel.traverse(o=>{ if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;
+        const pa=o.geometry.attributes.position,st=Math.max(1,Math.floor(pa.count/500));
+        for(let i=0;i<pa.count;i+=st)
+          pts.push(new THREE.Vector3().fromBufferAttribute(pa,i).applyMatrix4(o.matrixWorld)); });
+      const fist=b=>{ if(!b)return null;b.updateWorldMatrix(true,false);
+        const pl=palmLocal(b),p=new THREE.Vector3();
+        if(pl)p.copy(pl).applyMatrix4(b.matrixWorld);
+        else p.setFromMatrixPosition(b.matrixWorld);
+        return p; };
+      const surf=p=>{ if(!p||!pts.length)return null;let m=1e9;
+        for(const q of pts)m=Math.min(m,q.distanceToSquared(p));
+        return +Math.sqrt(m).toFixed(4); };
+      const L=fist(bones.lHand),R=fist(bones.rHand);
+      const o={l:surf(L),r:surf(R),lhd:(()=>{const d=lhDist();return d==null?null:+d.toFixed(4);})()};
+      if(g&&!g.bad&&ikBones()){
+        const B=b=>{b.updateWorldMatrix(true,false);
+          return new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);};
+        const A=B(IK.up),E=B(IK.fo),H=B(IK.ha);
+        mw.copy(A);
+        const tgt=g.lh1.clone().applyMatrix4(wModel.matrixWorld);
+        o.need=+mw.distanceTo(tgt).toFixed(3);
+        o.reach=+(A.distanceTo(E)+E.distanceTo(H)).toFixed(3);
+      }
+      o.two=!!(o.l!=null&&o.l<=.05&&o.r!=null&&o.r<=.05);
+      out[w.id]=o;
+    }
+    equip(WIX[i0]);holdWeapon();
+    return out;},
+
+  /* ¿EL PERSONAJE CAMINA? Por frame real: estado, pesos de las dos capas, si está visible y
+     cuánto se movió el pie. travel = recorrido pico a pico del pie en el marco del personaje:
+     si es ~0 las piernas están congeladas. */
+  walkProbe:n=>new Promise(res=>{
+    const N=Math.max(8,n||60),rows=[];
+    let foot=null,leg=null;
+    if(charRoot)charRoot.traverse(b=>{ if(!b.isBone)return;
+      const s=b.name.toLowerCase();
+      if(!foot&&/foot/.test(s)&&/(left|_l$|\.l$|l_)/.test(s))foot=b;
+      if(!leg&&/(upleg|thigh|upperleg)/.test(s)&&/(left|_l$|\.l$|l_)/.test(s))leg=b; });
+    let lastFrame=-1;
+    const v=new THREE.Vector3();
+    const tick=()=>{
+      const f=renderer.info.render.frame;
+      if(f!==lastFrame){ lastFrame=f;
+        const r={st:animState,vis:charRoot?charRoot.visible:false,
+          lo:{},up:{},sp:+Math.hypot(plBody.velocity.x,plBody.velocity.z).toFixed(2)};
+        for(const k in ACTS)r.lo[k]=+ACTS[k].getEffectiveWeight().toFixed(3);
+        for(const k in ACTU)r.up[k]=+ACTU[k].getEffectiveWeight().toFixed(3);
+        if(foot&&charRoot){foot.updateWorldMatrix(true,false);
+          v.setFromMatrixPosition(foot.matrixWorld);charRoot.worldToLocal(v);
+          r.foot=[+v.x.toFixed(4),+v.y.toFixed(4),+v.z.toFixed(4)];}
+        rows.push(r); }
+      if(rows.length<N)requestAnimationFrame(tick);
+      else{
+        const o={n:rows.length,states:{},invisible:0,changes:0,
+          wLoMin:9,wUpMin:9,travel:[0,0,0],rows:rows};
+        let prev=null;
+        const mn=[9,9,9],mx=[-9,-9,-9];
+        for(const r of rows){
+          o.states[r.st]=(o.states[r.st]||0)+1;
+          if(!r.vis)o.invisible++;
+          if(prev&&prev!==r.st)o.changes++;
+          prev=r.st;
+          let sl=0,su=0;
+          for(const k in r.lo)sl+=r.lo[k];
+          for(const k in r.up)su+=r.up[k];
+          o.wLoMin=Math.min(o.wLoMin,+sl.toFixed(3));o.wUpMin=Math.min(o.wUpMin,+su.toFixed(3));
+          if(r.foot)for(let k=0;k<3;k++){mn[k]=Math.min(mn[k],r.foot[k]);mx[k]=Math.max(mx[k],r.foot[k]);}
+        }
+        for(let k=0;k<3;k++)o.travel[k]=+(mx[k]-mn[k]).toFixed(4);
+        o.bone=foot?foot.name:null;
+        res(o);
+      }
+    };
+    requestAnimationFrame(tick);
+  })});

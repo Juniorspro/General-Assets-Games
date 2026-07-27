@@ -115,28 +115,29 @@ const WEAP=[
  {id:'gravgun', name:'GravityGun', kind:'grav',  glb:'physgun', len:.44, tint:0xffc24d,
   mdir:'x+', roll:0, hold:[.010,-.070,.056], lg:.17},
  {id:'toolgun', name:'ToolBaton',  kind:'tool',  glb:'toolgun', len:.34,
-  mdir:'x+', roll:0, hold:[.010,-.066,.048], lg:.11},
+  mdir:'x+', roll:0, hold:[.010,-.066,.048], lg:.085},
  {id:'hands',   name:'Hands',      kind:'melee', dmg:14,rof:.34,reach:2.2,imp:10,
   hold:[0,-.010,.020], lg:0, noModel:1},   // los puños ya son parte del personaje
  {id:'bat',     name:'Bat',        kind:'melee', dmg:38,rof:.5, reach:2.7,imp:26,glb:'bat',len:.86,
   mdir:'x+', roll:0, hold:[.010,-.070,.054], lg:.09},
  {id:'pistol',  name:'Pistol',     kind:'gun',   dmg:20,rof:.17,mag:17,imp:9, spread:.006,glb:'pistol',len:.22,
-  mdir:'x+', roll:0, hold:[.010,-.064,.046], lg:.08},
+  mdir:'x+', roll:0, hold:[.010,-.064,.046], lg:.045},
  {id:'revolver',name:'Revolver',   kind:'gun',   dmg:48,rof:.5, mag:6, imp:24,spread:.005,glb:'revolver',len:.33,
-  mdir:'x+', roll:0, hold:[.010,-.065,.048], lg:.10},
+  mdir:'x+', roll:0, hold:[.010,-.065,.048], lg:.055},
  {id:'smg',     name:'Smg',        kind:'gun',   dmg:14,rof:.075,mag:30,imp:7, spread:.016,auto:1,glb:'smg',len:.52,
-  mdir:'x+', roll:0, hold:[.010,-.069,.055], lg:.21},
+  mdir:'x+', roll:0, hold:[0,-.02,.01], lg:.21},
  {id:'akm',     name:'Akm',        kind:'gun',   dmg:24,rof:.1, mag:30,imp:12,spread:.012,auto:1,glb:'akm',len:.88,
   mdir:'x+', roll:0, hold:[.012,-.072,.062], lg:.20},
  {id:'shotgun', name:'Shotgun',    kind:'gun',   dmg:11,rof:.75,mag:6, imp:6, spread:.055,pellets:8,glb:'shotgun',len:.95,
-  mdir:'x+', roll:0, hold:[.012,-.072,.062], lg:.33},
+  mdir:'x+', roll:0, hold:[.012,-.072,.062], lg:.22},
  {id:'sniper',  name:'Sniper',     kind:'gun',   dmg:90,rof:1.15,mag:5,imp:44,spread:.001,zoom:3,glb:'sniper',len:1.24,
   mdir:'x+', roll:0, hold:[.012,-.074,.066], lg:.18},
  {id:'crossbow',name:'Crossbow',   kind:'proj',  dmg:75,rof:1.2,mag:1, imp:28,proj:'bolt',glb:'crossbow',len:.78,
   mdir:'x+', roll:0, hold:[.012,-.071,.060], lg:.19},
  {id:'rpg',     name:'RPG',        kind:'proj',  dmg:130,rof:1.9,mag:1,imp:0, proj:'rocket',blast:8,glb:'rpg',len:1.15,
-  mdir:'x+', roll:0, hold:[.020,-.038,.058], lg:.30},
- {id:'camera',  name:'Camera',     kind:'cam', hold:[.010,-.060,.044], lg:.08}];
+  mdir:'x+', roll:0, hold:[.020,-.038,.058], lg:.22},
+ {id:'camera',  name:'Camera',     kind:'cam', len:.16,
+  mdir:'z+', roll:0, hold:[.010,-.060,.044], lg:.05}];
 const WIX={};WEAP.forEach((w,i)=>{WIX[w.id]=i;w.ammo=w.mag||0;});
 let wIdx=0;
 const weap=()=>WEAP[wIdx];
@@ -222,11 +223,19 @@ function rigWeapon(m,w){
   /* ¿está boca arriba o de costado? La empuñadura y el cargador pesan hacia ABAJO:
      si el centroide queda por encima del centro de la caja, el arma está girada sobre su
      propio caño. Probamos los 4 giros de 90° y elegimos el que baja más el centroide. */
-  inner.updateMatrixWorld(true);
+  /* los puntos se toman en el espacio de inner SIN su giro en Y (el giro lo prueba el bucle de
+     abajo). ANTES se usaba la geometría CRUDA, sin la matriz de cada malla: con un arma armada de
+     varias piezas (las procedurales de procWeapon, o cualquier GLB con el grip en una malla
+     aparte) todas las piezas quedaban superpuestas en el origen, el medidor veía un bloque
+     simétrico y elegía roll=-90°: el arma salía ACOSTADA como una tabla. */
+  const _ry=inner.rotation.y;inner.rotation.y=0;inner.updateMatrixWorld(true);
   const pts=[];
   inner.traverse(o=>{ if(o.isMesh&&o.geometry&&o.geometry.attributes.position){
+    o.updateWorldMatrix(true,false);
     const pa=o.geometry.attributes.position,st=Math.max(1,Math.floor(pa.count/700));
-    for(let i=0;i<pa.count;i+=st)pts.push(new THREE.Vector3().fromBufferAttribute(pa,i));}});
+    for(let i=0;i<pa.count;i+=st)
+      pts.push(new THREE.Vector3().fromBufferAttribute(pa,i).applyMatrix4(o.matrixWorld));}});
+  inner.rotation.y=_ry;inner.updateMatrixWorld(true);
   if(pts.length){
     const mm=new THREE.Matrix4();let best=null;
     for(const rz of [0,Math.PI/2,Math.PI,-Math.PI/2]){
@@ -643,7 +652,7 @@ function ragdoll(on){
 function respawn(){
   const sp=(CURMAP&&CURMAP.def.spawns)||[[0,1.4,20,180]];
   const s=sp[Math.floor(Math.random()*sp.length)];
-  plBody.position.set(s[0],s[1]+.2,s[2]);plBody.velocity.set(0,0,0);
+  plBody.position.set(s[0],s[1]+.2,s[2]);plBody.velocity.set(0,0,0);plSync();
   PL.yaw=(s[3]||0)*D2R;PL.pitch=-.05;
   if(PL.rag)ragdoll(false);
   PL.hp=100;heal(0);
@@ -694,10 +703,37 @@ function camDirY(){return 0;}
 const camTarget=new THREE.Vector3();
 let freeCam=null;
 const _rgA=new THREE.Quaternion(),_rgB=new THREE.Quaternion(),_rgE=new THREE.Euler();
+/* ---- POSICIÓN DEL JUGADOR **PARA DIBUJAR** ----
+   world.step(1/60,dt,3) avanza en pasos FIJOS y por frame entran 0, 1, 2 o 3: plBody.position
+   avanza a saltos (medido caminando: 49..268 mm por frame; corriendo 0..453 mm, con el 21% de
+   los frames sin avanzar nada). Como la cámara y el personaje leen los dos plBody.position, eso
+   no es temblor del arma sino un TIRONEO de toda la vista, que es la mitad de "tiembla en 1ª
+   persona con el personaje también".
+   cannon-es ya calcula body.interpolatedPosition justo para esto (lerp entre el paso anterior y
+   el actual con el sobrante del acumulador): dibujamos con esa. La FÍSICA sigue usando
+   plBody.position, acá sólo se decide dónde se PINTA.
+   Si alguien escribió la posición a mano (teleport, respawn, salir de un auto) la interpolada
+   queda vieja: se detecta por distancia y se usa la real, así no hace falta que cada escritor
+   se acuerde de sincronizar. */
+const _plD=new THREE.Vector3();
+function plDraw(){
+  const p=plBody.position,ip=plBody.interpolatedPosition;
+  if(!ip||PL.noclip||PL.rag||plBody.type!==CANNON.Body.DYNAMIC)return _plD.set(p.x,p.y,p.z);
+  const dx=ip.x-p.x,dy=ip.y-p.y,dz=ip.z-p.z;
+  if(dx*dx+dy*dy+dz*dz>.25)return _plD.set(p.x,p.y,p.z);   // salto raro: gana la real
+  return _plD.set(ip.x,ip.y,ip.z);
+}
+/* al escribir plBody.position a mano hay que blanquear la interpolación, si no el primer frame
+   dibuja a mitad de camino entre el lugar viejo y el nuevo */
+function plSync(){
+  plBody.previousPosition.copy(plBody.position);
+  plBody.interpolatedPosition.copy(plBody.position);
+}
 /* dónde y cómo se dibuja el personaje: una sola función, la usan el juego y la cámara libre */
 function placeChar(){
   if(!charRoot)return;
-  const px=plBody.position.x,py=plBody.position.y,pz=plBody.position.z;
+  const d=plDraw();
+  const px=d.x,py=d.y,pz=d.z;
   charRoot.visible=true;        // también en 1ª persona: se ven los brazos
   if(PL.rag){
     /* RAGDOLL: el cuerpo físico se desbloquea y tumbea de verdad, así que se copia su
@@ -725,13 +761,19 @@ function camStep(dt){
        veía nunca en las capturas de prueba (y me hizo creer que no funcionaba). */
     placeChar();
     return;}
-  const px=plBody.position.x,py=plBody.position.y,pz=plBody.position.z;
+  const d0=plDraw();
+  const px=d0.x,py=d0.y,pz=d0.z;
   const eye=py+(PL.rag?.4:PL.h-.28);
   if(PL.fp){
-    /* 1ª PERSONA DE VERDAD: la cámara va 14 cm delante de los ojos (la cara queda atrás,
-       no se ve por dentro de la cabeza) y el cuerpo sigue dibujado, así que en pantalla se
-       ven los BRAZOS y las MANOS sosteniendo el arma, la misma que se ve en 3ª persona. */
-    camera.position.set(px-Math.sin(PL.yaw)*.14,eye+.02,pz-Math.cos(PL.yaw)*.14);
+    /* 1ª PERSONA: LA CÁMARA VA EN LOS OJOS.
+       Antes se la corría 14 cm hacia adelante, y esos 14 cm eran justo lo que le faltaba al
+       brazo: el hombro derecho queda ~20 cm DETRÁS de la cámara y el objetivo de la mano caía
+       30 cm adelante, o sea 52 cm para un brazo que alcanza 44 cm. twoBone() se saturaba el
+       100% de los frames y la mano quedaba SOLDADA al hombro: el arma dejaba de seguir a la
+       cámara y pasaba a copiar el bamboleo del cuerpo (109 mm de recorrido caminando). Encima
+       las manos caían debajo del borde inferior de la pantalla.
+       Desde los ojos no se ve nada de la cabeza (está detrás del near) y se ven las dos manos. */
+    camera.position.set(px,eye+.02,pz);
   } else {
     const dist=4.05,side=.72;
     const sy=Math.sin(PL.yaw),cy=Math.cos(PL.yaw),cp=Math.cos(PL.pitch),spp=Math.sin(PL.pitch);
@@ -1223,6 +1265,16 @@ function frame(){
     _dfT+=dt;
     if(_dfT>.6){_dfT=0;distFreeze(plBody.position.x,plBody.position.z);budget();
 }
+    /* EL PERSONAJE SE COLOCA **ANTES** DE RESOLVER LOS IK.
+       animStep() (armIKR/torsoAim) y holdWeapon() (armIK) resuelven en el MUNDO: el objetivo
+       sale de plBody y PL.yaw de ESTE frame, pero charRoot todavía tenía la posición y el yaw
+       del frame ANTERIOR, porque el único placeChar() estaba dentro de camStep(), que corre
+       después. La pose se resolvía en un marco viejo y después placeChar() la arrastraba: el
+       error es exactamente v·dt (medido: 22,7 cm de desfase a 8,9 m/s) y alterna frame a frame
+       (pico de DFT en fs/2), que es el zumbido de 1 frame que se veía girando la vista.
+       Manda placeChar(): charRoot es función pura de plBody + PL.yaw, que ya quedaron
+       definitivos al terminar world.step. Es idempotente, camStep() la vuelve a llamar igual. */
+    placeChar();
     animStep(dt);holdWeapon();
     camStep(dt);
     if(SV.desc)describe();
@@ -1297,10 +1349,11 @@ if(DEV)window.__H={
     return{size:b.size.map(v=>+v.toFixed(2)),mats:b.mats,shapes:b.shapes.length,dy:+b.dy.toFixed(2),
       parts:d.parts.length,mass:d.mass,name:d.name};},
   clear:()=>{clearAll();return PROPS.length;},
+  /* mismo orden que frame(): placeChar() ANTES de los IK, si no los tests miden el bug viejo */
   step:(n)=>{for(let i=0;i<(n||60);i++){playerStep(1/60);weaponStep(1/60);world.step(1/60,1/60,2);
     for(const p of actives())if(!p.frozen)syncMat(p);stepBalloons();stepWater();entStep(1/60);
-    animStep(1/60);holdWeapon();camStep(1/60);}},
-  tp:(x,y,z)=>{plBody.position.set(x,y,z);plBody.velocity.set(0,0,0);camStep(0);},
+    placeChar();animStep(1/60);holdWeapon();camStep(1/60);}},
+  tp:(x,y,z)=>{plBody.position.set(x,y,z);plBody.velocity.set(0,0,0);plSync();camStep(0);},
   look:(y,p)=>{PL.yaw=y;PL.pitch=p||0;camStep(0);},
   aimAt:i=>{const p=PROPS[i];if(!p)return false;
     /* en 3ª persona la cámara ORBITA al cambiar el yaw, así que iteramos hasta converger */
