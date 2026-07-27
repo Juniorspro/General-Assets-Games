@@ -261,7 +261,11 @@ function rigWeapon(m,w){
 function attachWeapon(){
   if(!wModel)return;
   const L=(wModel.userData&&wModel.userData.len)||.5;
-  if(bones.rHand||bones.rFore){ (bones.rHand||bones.rFore).add(wModel);
+  /* 1ª PERSONA: el arma cuelga de la CÁMARA (vmGroup), no del hueso de la mano. Es lo único
+     que deja el arma quieta a la derecha mire donde mire, y en 1ª persona el personaje no se
+     dibuja, así que no hay mano que la tenga que sostener. */
+  if(PL.fp){ vmGroup.add(wModel); holdWeapon(); }
+  else if(bones.rHand||bones.rFore){ (bones.rHand||bones.rFore).add(wModel);
     wModel.position.set(0,0,0);wModel.rotation.set(0,0,0);
     holdWeapon(); }
   else if(PL.fp){ vmGroup.add(wModel);      // respaldo: rig sin huesos de mano
@@ -734,7 +738,12 @@ function placeChar(){
   if(!charRoot)return;
   const d=plDraw();
   const px=d.x,py=d.y,pz=d.z;
-  charRoot.visible=true;        // también en 1ª persona: se ven los brazos
+  /* EN 1ª PERSONA NO SE DIBUJA EL PERSONAJE.
+     Lo había puesto visible para que se vieran las manos, y con la cámara en los ojos el
+     resultado fue el que mostró el usuario: la pantalla tapada por el propio pecho y, mirando
+     de costado, la cara por dentro. El arma cuelga de la cámara (siempre a la derecha), que es
+     lo que hace falta ver. Con la cámara libre de prueba sí se dibuja, para poder inspeccionarlo. */
+  charRoot.visible=!PL.fp||!!freeCam;
   if(PL.rag){
     /* RAGDOLL: el cuerpo físico se desbloquea y tumbea de verdad, así que se copia su
        orientación REAL y además se acuesta al personaje 90°. Antes se usaban las COMPONENTES
@@ -765,14 +774,7 @@ function camStep(dt){
   const px=d0.x,py=d0.y,pz=d0.z;
   const eye=py+(PL.rag?.4:PL.h-.28);
   if(PL.fp){
-    /* 1ª PERSONA: LA CÁMARA VA EN LOS OJOS.
-       Antes se la corría 14 cm hacia adelante, y esos 14 cm eran justo lo que le faltaba al
-       brazo: el hombro derecho queda ~20 cm DETRÁS de la cámara y el objetivo de la mano caía
-       30 cm adelante, o sea 52 cm para un brazo que alcanza 44 cm. twoBone() se saturaba el
-       100% de los frames y la mano quedaba SOLDADA al hombro: el arma dejaba de seguir a la
-       cámara y pasaba a copiar el bamboleo del cuerpo (109 mm de recorrido caminando). Encima
-       las manos caían debajo del borde inferior de la pantalla.
-       Desde los ojos no se ve nada de la cabeza (está detrás del near) y se ven las dos manos. */
+    /* la cámara va en los ojos: el personaje no se dibuja, así que nada se interpone */
     camera.position.set(px,eye+.02,pz);
   } else {
     const dist=4.05,side=.72;

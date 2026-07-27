@@ -276,14 +276,20 @@ const _bq=new THREE.Quaternion(),_bs=new THREE.Vector3(),_wq=new THREE.Quaternio
 function holdWeapon(){
   if(!wModel)return;
   rigGrip(wModel,weap());     // también en 1ª persona: si no, el arma queda al revés
-  if(PL.fp&&wModel.parent===vmGroup){
-    /* con la empuñadura en el origen del rig hay que recolocar el arma de 1ª persona:
-       queda a la derecha y abajo, y el caño se va solo para adelante */
-    if(wModel.parent!==bones.rHand&&wModel.parent!==bones.rFore){
-      wModel.scale.setScalar(.66);
-      wModel.position.set(.17,-.20,-.30);
-      wModel.rotation.set(.02,-.05,.02);
-    }
+  if(PL.fp){
+    /* ARMA DE 1ª PERSONA: colgada de la cámara, SIEMPRE A LA DERECHA mire donde mire, con un
+       vaivén de reposo y nada más (4 mm quieto, hasta 12 mm y 1,2° caminando). Antes colgaba
+       del hueso de la mano y copiaba el bamboleo del cuerpo: 84 mm pico a pico caminando. */
+    if(wModel.parent!==vmGroup)vmGroup.add(wModel);
+    const k2=clamp((.55-(weap().noModel?.12:(weap().len||.5)))/.35,0,1);
+    const spv=Math.hypot(plBody.velocity.x,plBody.velocity.z);
+    const amp=.004+Math.min(.008,spv*.0016), wv=1.9+Math.min(3.4,spv*.55);
+    wModel.scale.setScalar(1);
+    wModel.position.set(FPT[0]-.025*k2+Math.sin(TT*wv)*amp,
+                        FPT[1]+.075*k2+Math.sin(TT*wv*2)*amp*.6,
+                        -(FPT[2]-.075*k2));
+    wModel.rotation.set(0,0,Math.sin(TT*wv)*.021);
+    wModel.updateMatrixWorld(true);
     return;
   }
   const b=bones.rHand||bones.rFore;
