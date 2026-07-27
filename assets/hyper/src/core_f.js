@@ -1,5 +1,5 @@
 /* ============================================================
-   HYPER SANDBOX — MULTIJUGADOR DE VERDAD
+   SUX SANDBOX — MULTIJUGADOR DE VERDAD
    ------------------------------------------------------------
    Mismo patrón que el multijugador de Drift Yard, que ya está probado en la calle:
    MQTT sobre WSS al broker público broker.emqx.io:8084, paquetes JSON cortos, QoS 0

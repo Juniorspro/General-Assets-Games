@@ -1,5 +1,5 @@
 /* ============================================================
-   HYPER SANDBOX — núcleo (mundo, materiales, props, mapas)
+   SUX SANDBOX — núcleo (mundo, materiales, props, mapas)
    Física rígida real (cannon-es) · 280+ props · 4 mapas
    ============================================================ */
 import * as THREE from 'three';

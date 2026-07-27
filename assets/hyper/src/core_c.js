@@ -1,5 +1,5 @@
 /* ============================================================
-   HYPER SANDBOX — capa de ANIMACIÓN y AGARRE del personaje
+   SUX SANDBOX — capa de ANIMACIÓN y AGARRE del personaje
    (este archivo se concatena después de core_a.js y core_b.js:
     ya existen THREE, CANNON, bones, charRoot, mixer, CLIPS, ACTS,
     wModel, weap(), PL, plBody, clamp, grounded, inWater, chestAnchor)
@@ -308,7 +308,10 @@ function holdWeapon(){
      Ahora sólo se GIRA, que es un giro alrededor de la empuñadura: la culata se va al costado
      igual y el puño no se despega del arma. */
   const ex=0, eyaw=clamp((back-.15)*.72,0,.21);
-  _we.set(clamp(PL.pitch,-.7,.7)*.55,PL.yaw+eyaw,0,'YXZ');
+  /* El arma seguía sólo el 55% del cabeceo y con tope en 40°: mirando para arriba se quedaba
+     abajo y se la veía "desde abajo", como avisó el usuario. Ahora sigue el cabeceo COMPLETO
+     (con un tope amplio para que la culata no atraviese el hombro mirando a los pies). */
+  _we.set(clamp(PL.pitch,-1.15,1.15),PL.yaw+eyaw,0,'YXZ');
   _wq.setFromEuler(_we);
   _bi.copy(_bq).invert();
   wModel.quaternion.copy(_bi).multiply(_wq);

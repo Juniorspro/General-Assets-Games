@@ -321,14 +321,18 @@ if(ok(A_GRASS)){ new THREE.TextureLoader().load(A_GRASS,t=>{ t.colorSpace=THREE.
   t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(6,6); t.anisotropy=4;
   M_GRASS2.map=t; M_GRASS2.color.set(0xffffff); M_GRASS2.needsUpdate=true; }); }
 const M_SAND=new THREE.MeshStandardMaterial({color:0x9c7a4a,roughness:1});
-function mkTree(x,z,big){ const t=new THREE.Group();
-  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.22*(big?1.6:1),0.34*(big?1.6:1),2.6*(big?1.5:1),7),M_ROOT);
-  trunk.position.y=1.3*(big?1.5:1); t.add(trunk);
-  for(let r=0;r<4;r++){ const a=r/4*Math.PI*2+0.4;   // RAÍCES
+/* cheap = árbol de fondo: sin raíces y con menos gajos. Son los que están a 11 m o más de la
+   pista (y los de la otra orilla del río): 140 de éstos por partida, así que cada malla que se
+   saca acá se multiplica por 140. Pasa de 6 mallas y ~1.100 triángulos a 2 mallas y ~200. */
+function mkTree(x,z,big,cheap){ const t=new THREE.Group();
+  const k=big?1.6:1, ky=big?1.5:1;
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.22*k,0.34*k,2.6*ky,cheap?5:7),M_ROOT);
+  trunk.position.y=1.3*ky; t.add(trunk);
+  if(!cheap)for(let r=0;r<4;r++){ const a=r/4*Math.PI*2+0.4;   // RAÍCES
     const root=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.2,1.1,5),M_ROOT);
     root.position.set(Math.cos(a)*0.5,0.28,Math.sin(a)*0.5); root.rotation.z=Math.cos(a)*0.8; root.rotation.x=-Math.sin(a)*0.8; t.add(root); }
-  const top=new THREE.Mesh(new THREE.SphereGeometry(1.5*(big?1.6:1),7,6),M_LEAF);
-  top.scale.y=0.75; top.position.y=3.2*(big?1.5:1); t.add(top);
+  const top=new THREE.Mesh(new THREE.SphereGeometry(1.5*k,cheap?5:7,cheap?4:6),M_LEAF);
+  top.scale.y=0.75; top.position.y=3.2*ky; t.add(top);
   t.position.set(x,0,z); return t; }
 function mkSeg(i){ const g=new THREE.Group();
   const fl=new THREE.Mesh(new THREE.BoxGeometry(HALF*2+2.4,1,SEGL),M_FLOOR); fl.position.y=-0.5; g.add(fl);
@@ -352,18 +356,19 @@ function mkSeg(i){ const g=new THREE.Group();
     // BOSQUE: SUELO de pasto lateral + árboles 3D selváticos que siguen HACIA LOS COSTADOS
     const gpl=new THREE.Mesh(new THREE.PlaneGeometry(46,SEGL),M_GRASS2);   // suelo del bosque a los lados
     gpl.rotation.x=-Math.PI/2; gpl.position.set(sd*(HALF+23),-0.06,0); T.bosque.add(gpl);
-    for(const xo of [2.4,6.2]){   // árboles CERCA → modelos 3D (ancla que se rellena al cargar el GLB)
+    for(const xo of [2.4,6.2]){   // árboles del BORDE DE LA PISTA → modelo 3D (con LOD por distancia)
       const a=new THREE.Group(); a.position.set(sd*(HALF+xo),0,(Math.random()-0.5)*SEGL*0.7);
-      const h=9+Math.random()*4; a.add(mkTree(0,0,true));   // árboles GRANDES (9-13m); placeholder hasta cargar GLB
-      T.bosque.add(a); BANCHORS.push({g:a,h}); }
-    for(const xo of [11,18,27]){   // árboles LEJOS → también modelos 3D (anclas), grandes
+      const h=9+Math.random()*4; const ph=mkTree(0,0,true,true);   // procedural barato: es el LOD lejano
+      a.add(ph);
+      T.bosque.add(a); BANCHORS.push({g:a,h,near:true,ph,seg:g}); }
+    for(const xo of [11,18,27]){   // árboles de AFUERA → siempre procedurales (livianos)
       const a2=new THREE.Group(); a2.position.set(sd*(HALF+xo+Math.random()*3),0,(Math.random()-0.5)*SEGL);
-      const h2=11+Math.random()*5; a2.add(mkTree(0,0,true));
-      T.bosque.add(a2); BANCHORS.push({g:a2,h:h2}); }
+      const h2=11+Math.random()*5; a2.add(mkTree(0,0,true,true));
+      T.bosque.add(a2); }
     for(let k=0;k<3;k++){ const ba=new THREE.Group();   // ARBUSTOS → ancla que se rellena con el modelo 3D
       ba.position.set(sd*(HALF+0.9+Math.random()*3),0,(Math.random()-0.5)*SEGL*0.9);
       const ph=new THREE.Mesh(new THREE.SphereGeometry(0.5+Math.random()*0.3,6,5),M_LEAF); ph.scale.y=0.6; ph.position.y=0.3; ba.add(ph);
-      T.bosque.add(ba); BUSHA.push({g:ba,h:0.9+Math.random()*0.6}); }
+      T.bosque.add(ba); BUSHA.push({g:ba,h:0.9+Math.random()*0.6,ph,seg:g}); }
     for(let k=0;k<2;k++){ const root=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.16,1.6,5),M_ROOT);
       root.position.set(sd*(HALF-0.2),0.12,(Math.random()-0.5)*SEGL*0.8); root.rotation.z=Math.PI/2.2*sd; T.bosque.add(root); }
     // RÍO: agua ANCHA que se expande a los costados + orilla de arena + juncos + peces + árboles al fondo
@@ -374,7 +379,7 @@ function mkSeg(i){ const g=new THREE.Group();
     for(let k=0;k<2;k++){ const reed=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.06,1.1,5),M_LEAF);
       reed.position.set(sd*(HALF+0.65),0.55,(Math.random()-0.5)*SEGL*0.8); T.rio.add(reed); }
     for(const xo of [46,54]){ const ra=new THREE.Group(); ra.position.set(sd*(HALF+xo+Math.random()*4),0,(Math.random()-0.5)*SEGL);
-      const rh=12+Math.random()*5; ra.add(mkTree(0,0,true)); T.rio.add(ra); BANCHORS.push({g:ra,h:rh}); }   // árboles 3D en la orilla lejana
+      ra.add(mkTree(0,0,true,true)); T.rio.add(ra); }   // otra orilla: a 50 m, procedural y liviano
     const fish=new THREE.Mesh(new THREE.SphereGeometry(0.16,6,5),new THREE.MeshStandardMaterial({color:0xff8a3a,roughness:0.5}));
     fish.scale.set(1.6,0.8,0.8); fish.position.set(sd*(HALF+2.6+6+Math.random()*8),0.3,(i%NSEG-7)); T.rio.add(fish);
     FISHES.push({m:fish,ph:Math.random()*6,x:fish.position.x});
@@ -551,19 +556,107 @@ function loadObs(url,otype,mtype){ if(!ok(url))return;
       const m=tmpl.clone(true); fitObs(m,mtype); o.add(m); }
   },undefined,()=>{}); }
 loadObs(A_OBS.log,'low','log'); loadObs(A_OBS.gate,'high','gate'); loadObs(A_OBS.totem,'wall','totem');
+
+/* ================= LOD DE VEGETACIÓN =================
+   Los árboles y el arbusto que generó Higgsfield traen 30.000 triángulos CADA UNO (medido en
+   el .glb: tree1 30.498, tree2 29.945, tree3 29.657, bush 30.648). El bosque planta 196
+   árboles y 84 arbustos, o sea ~8,5 MILLONES de triángulos: de ahí la caída de fps al entrar
+   al bosque, no de las texturas.
+   Acá se arregla sin borrar nada:
+     1) decimate(): agrupa los vértices en una grilla y rearma la malla. Para follaje alcanza
+        de sobra y baja ~8 veces los triángulos, conservando la silueta y las UV.
+     2) sólo los árboles del BORDE DE LA PISTA (los dos primeros de cada lado) usan el modelo
+        3D; los de más afuera y los de la otra orilla del río quedan procedurales.
+     3) y hasta ésos vuelven al procedural cuando el tramo queda lejos (LOD por distancia).
+   ==================================================== */
+function decimate(geo,cells){
+  const pa=geo.attributes.position; if(!pa)return geo;
+  const na=geo.attributes.normal, ua=geo.attributes.uv;
+  const idx=geo.index?geo.index.array:null;
+  const n=pa.count;
+  let mnx=1e9,mny=1e9,mnz=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;
+  for(let i=0;i<n;i++){ const x=pa.getX(i),y=pa.getY(i),z=pa.getZ(i);
+    if(x<mnx)mnx=x; if(x>mxx)mxx=x; if(y<mny)mny=y; if(y>mxy)mxy=y; if(z<mnz)mnz=z; if(z>mxz)mxz=z; }
+  const big=Math.max(mxx-mnx,mxy-mny,mxz-mnz)||1, cell=big/(cells||26);
+  const map=new Map(), remap=new Int32Array(n);
+  const P=[],N=[],U=[];
+  for(let i=0;i<n;i++){
+    const x=pa.getX(i),y=pa.getY(i),z=pa.getZ(i);
+    const k=((x-mnx)/cell|0)+'_'+((y-mny)/cell|0)+'_'+((z-mnz)/cell|0);
+    let c=map.get(k);
+    if(c===undefined){ c=P.length/3; map.set(k,c);
+      P.push(x,y,z);
+      if(na)N.push(na.getX(i),na.getY(i),na.getZ(i));
+      if(ua)U.push(ua.getX(i),ua.getY(i));
+      P.cnt=(P.cnt||0); }
+    remap[i]=c;
+  }
+  const src=idx||{length:n,get:(i)=>i};
+  const out=[]; const seen=new Set();
+  const gi=i=>idx?idx[i]:i;
+  for(let i=0;i+2<(idx?idx.length:n);i+=3){
+    const a=remap[gi(i)],b=remap[gi(i+1)],c=remap[gi(i+2)];
+    if(a===b||b===c||a===c)continue;                 // se cayó dentro de la misma celda
+    const key=a<b?(a<c?a:c):(b<c?b:c);
+    const kk=a+'_'+b+'_'+c;
+    if(seen.has(kk))continue; seen.add(kk);
+    out.push(a,b,c);
+  }
+  const g2=new THREE.BufferGeometry();
+  g2.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
+  if(na)g2.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
+  if(ua)g2.setAttribute('uv',new THREE.Float32BufferAttribute(U,2));
+  g2.setIndex(out.length>65535?new THREE.Uint32BufferAttribute(out,1)
+                              :new THREE.Uint16BufferAttribute(out,1));
+  if(!na)g2.computeVertexNormals();
+  g2.computeBoundingSphere();
+  return g2;
+}
+function lowPoly(root,cells){
+  let a=0,b=0;
+  root.traverse(o=>{ if(!o.isMesh||!o.geometry)return;
+    const g=o.geometry, t0=(g.index?g.index.count:g.attributes.position.count)/3;
+    const g2=decimate(g,cells); o.geometry=g2;
+    a+=t0; b+=(g2.index?g2.index.count:g2.attributes.position.count)/3; });
+  return {antes:Math.round(a),despues:Math.round(b)};
+}
 // ---- ÁRBOLES 3D selváticos (Higgsfield) rellenan las anclas del bosque ----
 function fitTree(m,h){ const bb=new THREE.Box3().setFromObject(m), sz=bb.getSize(new THREE.Vector3());
   const k=h/Math.max(sz.y,0.01); m.scale.setScalar(k);
   const bb2=new THREE.Box3().setFromObject(m); m.position.y-=bb2.min.y;
   m.position.y-=h*0.16+0.5; }   // HUNDE las raíces bajo el suelo (no flotan)
 function fillAnchors(){ if(!TREES.length)return;
-  for(const a of BANCHORS){ for(let i=a.g.children.length-1;i>=0;i--)a.g.remove(a.g.children[i]);
-    const tm=TREES[(a.h*7|0)%TREES.length].clone(true); fitTree(tm,a.h); tm.rotation.y=a.h*2.3; a.g.add(tm); } }
-A_TREE.forEach(u=>{ if(ok(u))_ogl.load(u,g=>{ TREES.push(g.scene); fillAnchors(); },undefined,()=>{}); });
+  for(const a of BANCHORS){
+    if(a.m3d)continue;                                  // ya tiene su modelo
+    const tm=TREES[(a.h*7|0)%TREES.length].clone(true); fitTree(tm,a.h); tm.rotation.y=a.h*2.3;
+    a.g.add(tm); a.m3d=tm;                              // el procedural queda como LOD lejano
+    tm.visible=true; if(a.ph)a.ph.visible=false; } }
+A_TREE.forEach(u=>{ if(ok(u))_ogl.load(u,g=>{
+  const st=lowPoly(g.scene,26);                         // 30.000 -> ~4.000 triángulos
+  if(window.__RQ)console.log('árbol decimado',st.antes,'->',st.despues,'tris');
+  TREES.push(g.scene); fillAnchors(); },undefined,()=>{}); });
+/* ---- LOD por distancia: el modelo 3D sólo cerca; más lejos, el procedural ----
+   Corre cada 6 frames y no toca nada si no hay que cambiar: 56 anclas de árbol y 84 de
+   arbusto, comparar una z por ancla no se siente. */
+const LOD3D={arbol:95,arbusto:60};
+let lodT=0;
+function lodStep(){
+  if(++lodT%6)return;
+  const cz=hero.position.z;
+  for(const a of BANCHORS){ if(!a.m3d||!a.seg)continue;
+    const d=Math.abs(a.seg.position.z+a.g.position.z-cz);
+    const on=d<LOD3D.arbol;
+    if(a.m3d.visible!==on){ a.m3d.visible=on; if(a.ph)a.ph.visible=!on; } }
+  for(const a of BUSHA){ if(!a.m3d||!a.seg)continue;
+    const d=Math.abs(a.seg.position.z+a.g.position.z-cz);
+    const on=d<LOD3D.arbusto;
+    if(a.m3d.visible!==on){ a.m3d.visible=on; if(a.ph)a.ph.visible=!on; } }
+}
 function fillBushes(){ if(!BUSH)return;
-  for(const a of BUSHA){ for(let i=a.g.children.length-1;i>=0;i--)a.g.remove(a.g.children[i]);
-    const bm=BUSH.clone(true); fitTree(bm,a.h); bm.position.y+=a.h*0.16+0.5-0.15; bm.rotation.y=a.h*5; a.g.add(bm); } }   // arbusto casi al ras (poco hundido)
-if(ok(A_BUSH))_ogl.load(A_BUSH,g=>{ BUSH=g.scene; fillBushes(); },undefined,()=>{});
+  for(const a of BUSHA){ if(a.m3d)continue;
+    const bm=BUSH.clone(true); fitTree(bm,a.h); bm.position.y+=a.h*0.16+0.5-0.15; bm.rotation.y=a.h*5;
+    a.g.add(bm); a.m3d=bm; if(a.ph)a.ph.visible=false; } }   // arbusto casi al ras (poco hundido)
+if(ok(A_BUSH))_ogl.load(A_BUSH,g=>{ lowPoly(g.scene,22); BUSH=g.scene; fillBushes(); },undefined,()=>{});
 const coinGeo=new THREE.CylinderGeometry(0.3,0.3,0.08,14);
 for(let i=0;i<70;i++){ const m=new THREE.Mesh(coinGeo,M_GOLD); m.rotation.x=Math.PI/2; m.visible=false; scene.add(m);
   COINS.push({m,on:false,gem:false}); }
@@ -953,6 +1046,7 @@ function step(dt){
   // mover el MUNDO hacia el jugador
   const biome=BIOMES[Math.floor(R.wz/230)%BIOMES.length];   // ESTACIÓN nueva cada 230 m (por wz → igual para todos)
   for(const s of SEGS){ s.position.z+=mv; if(s.position.z>SEGL+24){ s.position.z-=NSEG*SEGL; segTheme(s,biome); } }
+  lodStep();
   for(const F of FISHES){ if(!F.m.parent.visible)continue;   // peces del RÍO saltando
     F.ph+=dt*3; const yy=Math.abs(Math.sin(F.ph))*0.9; F.m.position.y=0.1+yy; F.m.rotation.z=Math.cos(F.ph)*0.9; }
   for(const t of TORCHES){ t.position.z+=mv; if(t.position.z>18)t.position.z-=180; t.userData.fl.material.opacity=0.75+Math.random()*0.25;

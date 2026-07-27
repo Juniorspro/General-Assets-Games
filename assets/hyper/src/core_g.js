@@ -1,5 +1,5 @@
 /* ============================================================
-   HYPER SANDBOX — EFECTOS QUE FALTABAN
+   SUX SANDBOX — EFECTOS QUE FALTABAN
    ------------------------------------------------------------
    Tres cosas que el pase de QA marcó y que se notan todo el tiempo:
      1) no había FOGONAZO y el trazador salía de la CÁMARA, no del caño: en tercera

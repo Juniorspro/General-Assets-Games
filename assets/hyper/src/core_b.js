@@ -1,5 +1,5 @@
 /* ============================================================
-   HYPER SANDBOX — jugador, armas, herramientas, HUD y menús
+   SUX SANDBOX — jugador, armas, herramientas, HUD y menús
    ============================================================ */
 
 /* ================= API de extensión =================
@@ -933,7 +933,7 @@ function toggleAim(){
 }
 function photo(){
   try{ renderer.render(scene,camera);
-    const a=document.createElement('a');a.download='hyper-sandbox.png';
+    const a=document.createElement('a');a.download='sux-sandbox.png';
     a.href=renderer.domElement.toDataURL('image/png');a.click();toast(T('tShot')); }
   catch(e){toast('📷');}
 }

@@ -1,5 +1,5 @@
 /* ============================================================
-   HYPER SANDBOX — CONDUCIR VEHÍCULOS  (RaycastVehicle de cannon-es)
+   SUX SANDBOX — CONDUCIR VEHÍCULOS  (RaycastVehicle de cannon-es)
    Este archivo se concatena después de core_a..core_d: ya existen THREE, CANNON,
    world, PROPS, PDEF, buildDef, partGeo, partMatrix, freezeProp, plBody, PL, K,
    camera, charRoot, EXT, bindBtn, toast, clamp, D2R, $, RAY, rr, grab, grabEnd…
@@ -283,6 +283,7 @@ function vhExit(){
   plBody.collisionResponse=true;
   plBody.position.set(px,py,pz);
   plBody.velocity.set(0,0,0);plBody.angularVelocity.set(0,0,0);
+  plSync();                       // se dibuja con la interpolada: hay que blanquearla al bajar
   plBody.wakeUp();
   if(wasFP&&!PL.fp){PL.fp=true;attachWeapon();}
   if(charRoot)charRoot.visible=!PL.fp;
@@ -350,6 +351,7 @@ function vhSeat(){
   _vhv.set(sp.seat[0],sp.seat[1],sp.seat[2]);
   b.pointToWorldFrame(_vhv,_vhv2);
   plBody.position.set(_vhv2.x,_vhv2.y,_vhv2.z);
+  plSync();                       // el asiento manda: la posición interpolada la sigue
   plBody.velocity.set(b.velocity.x,b.velocity.y,b.velocity.z);
   plBody.angularVelocity.set(0,0,0);
   if(charRoot)charRoot.visible=false;

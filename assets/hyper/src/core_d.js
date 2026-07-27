@@ -1,5 +1,5 @@
 /* ============================================================
-   HYPER SANDBOX — ICONOS DE LOS CONTROLES
+   SUX SANDBOX — ICONOS DE LOS CONTROLES
    Los botones del HUD arrancan con un emoji (así el juego se ve completo incluso
    sin red) y acá se reemplaza por la IMAGEN GENERADA en cuanto carga. Si la imagen
    no llega (sin conexión, CDN caída) el emoji se queda donde estaba.
@@ -48,7 +48,7 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     heart:!!document.querySelector('#hp em img')})});
 
 /* ============================================================
-   HYPER SANDBOX — VEHÍCULOS: ATROPELLAR PROPS + API DE PRUEBA
+   SUX SANDBOX — VEHÍCULOS: ATROPELLAR PROPS + API DE PRUEBA
    ------------------------------------------------------------
    El manejo en sí (CANNON.RaycastVehicle sobre el cuerpo del prop, cámara detrás,
    botón SUBIR/BAJAR y freno de mano) YA está implementado en core_e.js, que se

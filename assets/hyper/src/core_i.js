@@ -1,5 +1,5 @@
 /* ============================================================
-   HYPER SANDBOX — CAPA DE ICONOS GENERADOS  (body.gicons)
+   SUX SANDBOX — CAPA DE ICONOS GENERADOS  (body.gicons)
    ------------------------------------------------------------
    Todos los controles del juego (HUD, palanca, botones del vehículo, pestañas y
    herramientas del menú de spawn) muestran IMÁGENES generadas, no emojis.
