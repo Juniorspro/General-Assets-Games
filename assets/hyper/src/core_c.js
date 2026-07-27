@@ -98,6 +98,9 @@ function animStep(dt){
   mixer.update(dt);
   torsoAim();    // enderezar el torso hacia la puntería (antes de mirar el brazo)
   ikSnap();      // guardar la pose que dejó la animación, antes de tocar nada
+  /* en 1ª persona el brazo derecho va al arma (que cuelga de la cámara en el mismo punto que
+     calcula fpHandTarget), así los brazos están SIEMPRE ahí donde se mire */
+  if(PL.fp){rikRestore();armIKR();rikStore();}
   /* el brazo derecho sube a la línea de los ojos en 1ª persona. Va acá y no en
      holdWeapon() porque holdWeapon() se corta cuando no hay arma: con los PUÑOS o con el
      bate la pantalla quedaba vacía, sin manos. */

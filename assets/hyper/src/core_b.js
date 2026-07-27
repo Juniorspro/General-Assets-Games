@@ -738,12 +738,9 @@ function placeChar(){
   if(!charRoot)return;
   const d=plDraw();
   const px=d.x,py=d.y,pz=d.z;
-  /* EN 1ª PERSONA NO SE DIBUJA EL PERSONAJE.
-     Lo había puesto visible para que se vieran las manos, y con la cámara en los ojos el
-     resultado fue el que mostró el usuario: la pantalla tapada por el propio pecho y, mirando
-     de costado, la cara por dentro. El arma cuelga de la cámara (siempre a la derecha), que es
-     lo que hace falta ver. Con la cámara libre de prueba sí se dibuja, para poder inspeccionarlo. */
-  charRoot.visible=!PL.fp||!!freeCam;
+  /* en 1ª persona el personaje SE DIBUJA (se ven los brazos y las piernas): lo que se recorta
+     es sólo la cabeza, con un plano de recorte sobre SU material — ver core_h. */
+  charRoot.visible=true;
   if(PL.rag){
     /* RAGDOLL: el cuerpo físico se desbloquea y tumbea de verdad, así que se copia su
        orientación REAL y además se acuesta al personaje 90°. Antes se usaban las COMPONENTES
@@ -805,7 +802,11 @@ const HOLD={fire:0,jump:0};
 let touchDev=matchMedia('(pointer:coarse)').matches||'ontouchstart' in window;
 function bindBtn(id,down,up){
   const e=$(id);if(!e)return;
-  const d=ev=>{ev.preventDefault();ev.stopPropagation();e.classList.add('act');down&&down();};
+  /* los botones con clase `look` NO cortan la propagación: así el mismo dedo que mantiene el
+     disparo (o la physgun agarrando algo) puede arrastrar y mover la cámara, como en cualquier
+     shooter de celular. Los demás sí la cortan, para no girar la vista sin querer. */
+  const d=ev=>{ev.preventDefault();if(!e.classList.contains('look'))ev.stopPropagation();
+    e.classList.add('act');down&&down();};
   const u=ev=>{ev&&ev.preventDefault();e.classList.remove('act');up&&up();};
   e.addEventListener('touchstart',d,{passive:false});e.addEventListener('touchend',u);
   e.addEventListener('touchcancel',u);
@@ -838,7 +839,9 @@ function bindBtn(id,down,up){
 (function(){
   let id=null,lx=0,ly=0;
   const ok=t=>{ const e=document.elementFromPoint(t.clientX,t.clientY);
-    return !(e&&e.closest&&e.closest('.rb,#stick,#wslot,#chat,#spawn,#pause,#opts,.screen')); };
+    if(!e||!e.closest)return true;
+    if(e.closest('.rb.look'))return true;      // disparo y mira: se puede arrastrar encima
+    return !e.closest('.rb,#stick,#wslot,#chat,#spawn,#pause,#opts,.screen,#hedBar'); };
   addEventListener('touchstart',e=>{ if(APP!=='play')return;
     for(const t of e.changedTouches)if(id==null&&ok(t)){id=t.identifier;lx=t.clientX;ly=t.clientY;} },
     {passive:true});
