@@ -6997,6 +6997,14 @@ function fpHandTarget(out){
      un poco hacia adelante, proporcional a la velocidad (3 cm a fondo) */
   const spF=Math.hypot(plBody.velocity.x,plBody.velocity.z);
   if(spF>1)out.addScaledVector(_ff,Math.min(.03,spF*.004));   // ayuda, pero el brazo ya está al límite
+  /* MIRANDO ABAJO EL ARMA ATRAVESABA EL CUERPO (el usuario lo mostró: el caño cruzando la pierna).
+     La forma sana no es darle colisión al cuerpo — eso pelearía con el IK y costaría carísimo por
+     frame — sino la que usan los shooters: al bajar la mira el arma se ADELANTA y se corre a la
+     derecha, de modo que pasa POR FUERA del torso y de la pierna en vez de por dentro. Es
+     determinista y no cuesta nada: un corrimiento proporcional al cabeceo negativo. */
+  const pd=clamp(-PL.pitch,0,1.2)/1.2;
+  if(pd>0)out.addScaledVector(_ff,.20*pd).addScaledVector(_fr,.055*pd)
+             .addScaledVector(_fu,-.02*pd);
   return out;
 }
 /* IK de dos huesos genérico: lleva la punta de la cadena (ha) al punto pT del mundo, con el
