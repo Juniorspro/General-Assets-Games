@@ -282,7 +282,10 @@ function holdWeapon(){
   const gg=wModel.userData._g;
   const back=gg?gg.len*gg.S.gf:0;
   const ex=clamp((back-.15)*.60,0,.09), eyaw=clamp((back-.15)*.55,0,.16);
-  _we.set(clamp(PL.pitch,-.7,.7)*.55,PL.yaw+eyaw,0,'YXZ');
+  /* EN 1ª PERSONA EL ARMA SIGUE EL CABECEO COMPLETO: con el .55 y el tope en 40° se quedaba
+     abajo al mirar para arriba (se la veía por debajo). En 3ª persona se deja el 55%, que es lo
+     que hace que el personaje no quede haciendo cosas raras con los hombros. */
+  _we.set(PL.fp?clamp(PL.pitch,-1.25,1.25):clamp(PL.pitch,-.7,.7)*.55,PL.yaw+eyaw,0,'YXZ');
   _wq.setFromEuler(_we);
   _bi.copy(_bq).invert();
   wModel.quaternion.copy(_bi).multiply(_wq);

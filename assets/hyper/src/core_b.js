@@ -703,6 +703,7 @@ function camDirY(){return 0;}
 const camTarget=new THREE.Vector3();
 let freeCam=null;
 const _rgA=new THREE.Quaternion(),_rgB=new THREE.Quaternion(),_rgE=new THREE.Euler();
+const _fpH=new THREE.Vector3(); let _fpY=null;   // ancla de la cámara de 1ª persona
 /* ---- POSICIÓN DEL JUGADOR **PARA DIBUJAR** ----
    world.step(1/60,dt,3) avanza en pasos FIJOS y por frame entran 0, 1, 2 o 3: plBody.position
    avanza a saltos (medido caminando: 49..268 mm por frame; corriendo 0..453 mm, con el 21% de
@@ -770,7 +771,19 @@ function camStep(dt){
     /* 1ª PERSONA DE VERDAD: la cámara va 14 cm delante de los ojos (la cara queda atrás,
        no se ve por dentro de la cabeza) y el cuerpo sigue dibujado, así que en pantalla se
        ven los BRAZOS y las MANOS sosteniendo el arma, la misma que se ve en 3ª persona. */
-    camera.position.set(px-Math.sin(PL.yaw)*.14,eye+.02,pz-Math.cos(PL.yaw)*.14);
+    /* LA CÁMARA VA EN LA CABEZA, no en un punto fijo del cuerpo.
+       Corriendo, el clip inclina el torso hacia adelante y la espalda/los hombros llegaban a la
+       cámara y se veían en pantalla. Anclando la cámara al hueso de la cabeza (más 16 cm hacia
+       adelante) la cámara acompaña esa inclinación, así que el cuerpo nunca la cruza. La altura
+       se suaviza un poco para que el cabeceo del paso no maree. */
+    const hb=bones.head||bones.spine;
+    if(hb){
+      hb.updateWorldMatrix(true,false);
+      _fpH.setFromMatrixPosition(hb.matrixWorld);
+      if(_fpY==null)_fpY=_fpH.y;
+      _fpY+=(_fpH.y-_fpY)*.35;
+      camera.position.set(_fpH.x-Math.sin(PL.yaw)*.16,_fpY+.045,_fpH.z-Math.cos(PL.yaw)*.16);
+    } else camera.position.set(px-Math.sin(PL.yaw)*.14,eye+.02,pz-Math.cos(PL.yaw)*.14);
   } else {
     const dist=4.05,side=.72;
     const sy=Math.sin(PL.yaw),cy=Math.cos(PL.yaw),cp=Math.cos(PL.pitch),spp=Math.sin(PL.pitch);
