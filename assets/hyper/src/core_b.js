@@ -261,11 +261,7 @@ function rigWeapon(m,w){
 function attachWeapon(){
   if(!wModel)return;
   const L=(wModel.userData&&wModel.userData.len)||.5;
-  /* 1ª PERSONA: el arma cuelga de la CÁMARA (vmGroup), no del hueso de la mano. Es lo único
-     que deja el arma quieta a la derecha mire donde mire, y en 1ª persona el personaje no se
-     dibuja, así que no hay mano que la tenga que sostener. */
-  if(PL.fp){ vmGroup.add(wModel); holdWeapon(); }
-  else if(bones.rHand||bones.rFore){ (bones.rHand||bones.rFore).add(wModel);
+  if(bones.rHand||bones.rFore){ (bones.rHand||bones.rFore).add(wModel);
     wModel.position.set(0,0,0);wModel.rotation.set(0,0,0);
     holdWeapon(); }
   else if(PL.fp){ vmGroup.add(wModel);      // respaldo: rig sin huesos de mano
@@ -771,8 +767,10 @@ function camStep(dt){
   const px=d0.x,py=d0.y,pz=d0.z;
   const eye=py+(PL.rag?.4:PL.h-.28);
   if(PL.fp){
-    /* la cámara va en los ojos: el personaje no se dibuja, así que nada se interpone */
-    camera.position.set(px,eye+.02,pz);
+    /* 1ª PERSONA DE VERDAD: la cámara va 14 cm delante de los ojos (la cara queda atrás,
+       no se ve por dentro de la cabeza) y el cuerpo sigue dibujado, así que en pantalla se
+       ven los BRAZOS y las MANOS sosteniendo el arma, la misma que se ve en 3ª persona. */
+    camera.position.set(px-Math.sin(PL.yaw)*.14,eye+.02,pz-Math.cos(PL.yaw)*.14);
   } else {
     const dist=4.05,side=.72;
     const sy=Math.sin(PL.yaw),cy=Math.cos(PL.yaw),cp=Math.cos(PL.pitch),spp=Math.sin(PL.pitch);

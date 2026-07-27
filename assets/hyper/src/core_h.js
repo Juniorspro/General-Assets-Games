@@ -135,31 +135,8 @@ function hudEditMode(on){
   hudApply();
 })();
 
-/* ---------- 2. la cabeza no entra en la pantalla ---------- */
-const FPCLIP=new THREE.Plane(new THREE.Vector3(0,0,-1),1e5);
-const FPCD=.30;                       // cuánto adelante del ojo se empieza a dibujar el cuerpo
-const _fcF=new THREE.Vector3(),_fcP=new THREE.Vector3();
-let fpClipOn=false;
-function fpClipApply(){
-  if(!charRoot)return;
-  charRoot.traverse(o=>{ if(!o.isMesh&&!o.isSkinnedMesh)return;
-    for(const m of (Array.isArray(o.material)?o.material:[o.material])){
-      if(!m||m._clip)continue; m._clip=1;
-      m.clippingPlanes=[FPCLIP]; m.clipShadows=true; m.needsUpdate=true; } });
-}
-EXT.frame.push(()=>{
-  if(!charRoot)return;
-  if(!fpClipOn){ renderer.localClippingEnabled=true; fpClipOn=true; }
-  fpClipApply();
-  if(PL.fp&&!freeCam){
-    camera.getWorldDirection(_fcF);
-    _fcP.copy(camera.position).addScaledVector(_fcF,FPCD);
-    FPCLIP.normal.copy(_fcF);
-    FPCLIP.constant=-_fcF.dot(_fcP);      // se dibuja sólo lo que está más allá del plano
-  } else {
-    FPCLIP.normal.set(0,0,-1); FPCLIP.constant=1e5;   // en 3ª persona no recorta nada
-  }
-});
+/* (la cabeza en 1ª persona la maneja fpHead() en core_c: es la forma de la versión que
+   el usuario mandó, y con ella las manos quedan bien sobre el arma) */
 
 /* ---------- 3. arrastrar sobre los botones de acción mueve la cámara ---------- */
 (function(){
@@ -171,6 +148,4 @@ if(DEV&&window.__H)Object.assign(window.__H,{
   hudEdit:v=>{ if(v!==undefined)hudEditMode(v); return hudEdit; },
   hudMove:(id,x,y)=>{ SV.hud.pos[id]=[x,y]; hudApply();
     const e=document.getElementById(id); return e?hudPct(e):null; },
-  fpClip:()=>({d:FPCD,constante:+FPCLIP.constant.toFixed(3),
-    normal:[+FPCLIP.normal.x.toFixed(2),+FPCLIP.normal.y.toFixed(2),+FPCLIP.normal.z.toFixed(2)],
-    activo:renderer.localClippingEnabled})});
+  fpHead:()=>{const b=bones.head;return b?+b.scale.x.toFixed(4):null;}});
