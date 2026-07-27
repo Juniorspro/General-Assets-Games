@@ -105,16 +105,61 @@ function animStep(dt){
   if(PL.fp){rikRestore();armIKR();rikStore();}
   fpHead();
 }
-/* EN 1ª PERSONA LA CABEZA SE ENCOGE.
+/* EN 1ª PERSONA LA CABEZA SE RECORTA (antes se le ponía escala .001 al hueso).
    La cámara va en los ojos (es la única forma de que el brazo alcance el arma sin saturar el
-   IK, ver camStep), y desde ahí la cabeza y el cuello quedan pegados al plano cercano: los
-   triángulos que lo cruzan salen como esquirlas negras flotando en el cielo. No se puede
-   apagar sólo la cabeza (es una sola malla con skinning), así que se le pone escala ~0 al hueso
-   de la cabeza: sus vértices se juntan en un punto detrás de la cámara y desaparecen. */
+   IK, ver camStep), así que la cabeza y el cuello cruzan el plano cercano y los triángulos que
+   lo cruzan salen como esquirlas flotando.
+   ENCOGER EL HUESO NO SIRVE: los vértices que el skinning reparte entre cabeza y cuello se
+   quedan a medio camino y estiran triángulos larguísimos hasta ese punto — son las dos púas
+   verdosas que entraban desde abajo al mirar para arriba.
+   Entonces no se toca la geometría: se le pone un PLANO DE RECORTE a los materiales, unos
+   centímetros delante de la cámara y mirando adonde mira ella. Todo lo que queda atrás
+   (cabeza, cuello, pecho) desaparece sin deformarse. Dos detalles:
+     - el plano va SÓLO en las mallas con skin (o.isSkinnedMesh). El arma cuelga del hueso de
+       la mano, o sea que está dentro de charRoot: si el recorte fuera del grupo entero, también
+       se comería el arma.
+     - recorta únicamente lo que está DETRÁS de la cámara, así que aunque el material se
+       comparta con otros personajes no les saca nada visible (lo de atrás no se dibuja igual).
+   clipShadows queda en false (el default), así la sombra del jugador sigue completa. */
+/* 0.125 y no 0.14: CORRIENDO la mano derecha entra y sale del recorte (medido a lo largo de la
+   zancada: 0.140 / 0.141 / 0.145 / 0.151 / 0.164 m contra el plano) y en esos cuadros el fusil se
+   veía flotando sin mano. La cabeza y el cuello quedan DETRÁS de la cámara (medido: -0.16 a -0.11),
+   así que bajar el plano no los devuelve a cuadro; y el plano cercano de la cámara está en 0.12,
+   o sea que 0.125 sigue estando delante de él. */
+const FPCLIPD=.112;   /* medido en la zancada: la mano derecha baja hasta 0.125 m de la cámara y
+                         el brazo YA está estirado al máximo (el IK se satura corriendo), así que
+                         empujar el objetivo no la aleja: hay que bajar el plano. Queda 1,3 cm de
+                         margen contra la mano y 2,2 cm contra el plano cercano de la cámara. */
+const FPCLIP=new THREE.Plane(new THREE.Vector3(0,0,-1),0),FPCLIPA=[FPCLIP];
+const _fcd=new THREE.Vector3(),_fcp=new THREE.Vector3();
+let fpClipOn=false,fpClipMats=null;
+function fpClipMaterials(){
+  if(fpClipMats)return fpClipMats;
+  if(!charRoot)return null;
+  const a=[];
+  charRoot.traverse(o=>{ if(!o.isSkinnedMesh)return;
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of ms)if(m&&a.indexOf(m)<0)a.push(m); });
+  return a.length?(fpClipMats=a):null;
+}
+/* se llama al final de camStep(), cuando la cámara ya quedó puesta: el plano tiene que salir de
+   la pose de ESTE frame o al girar rápido se ve un pedazo de cabeza un fotograma. */
+function fpClip(){
+  const ms=fpClipMaterials();if(!ms)return;
+  const on=!!(PL.fp&&!PL.rag&&!freeCam);
+  if(on){
+    camera.getWorldDirection(_fcd);
+    _fcp.copy(camera.position).addScaledVector(_fcd,FPCLIPD);
+    FPCLIP.setFromNormalAndCoplanarPoint(_fcd,_fcp);
+  }
+  if(on===fpClipOn)return;                 // cambiar clippingPlanes recompila el shader
+  fpClipOn=on;
+  for(const m of ms){m.clippingPlanes=on?FPCLIPA:null;m.needsUpdate=true;}
+}
+/* el hueso de la cabeza vuelve a escala 1 y se queda ahí: ya no se encoge nada */
 function fpHead(){
   const h=bones.head;if(!h)return;
-  const k=(PL.fp&&!PL.rag)?.001:1;
-  if(h.scale.x!==k){h.scale.setScalar(k);h.updateMatrixWorld(true);}
+  if(h.scale.x!==1){h.scale.setScalar(1);h.updateMatrixWorld(true);}
 }
 
 /* ============================================================
@@ -318,11 +363,22 @@ function rikBones(){
   RIK.ok=true;return true;
 }
 /* punto del mundo al que tiene que ir el puño derecho en 1ª persona */
-const _fe=new THREE.Vector3(),_ff=new THREE.Vector3(),_fr=new THREE.Vector3();
+const _fe=new THREE.Vector3(),_ff=new THREE.Vector3(),_fr=new THREE.Vector3(),
+      _fu=new THREE.Vector3();
 function fpHandTarget(out){
   const ps=Math.sin(PL.pitch),pc=Math.cos(PL.pitch),
         ys=Math.sin(PL.yaw),yc=Math.cos(PL.yaw);
-  _fe.set(plBody.position.x-ys*.14,
+  /* EL ORIGEN ES LA CÁMARA DE VERDAD (el hueso de la cabeza + 16 cm, igual que camStep), no
+     una altura calculada del cuerpo físico. Con la cuenta vieja el punto salía 33 cm por
+     DEBAJO de la cámara — plBody.position.y es el centro de la cápsula, no los pies — y al
+     mirar arriba esos 33 cm se le restaban al "adelante": la mano terminaba a 3 cm de la
+     cámara (medido con __H.fpDiag), o sea detrás del plano cercano, y el arma desaparecía. */
+  const hb=bones.head;
+  if(hb){
+    hb.updateWorldMatrix(true,false);
+    _fe.setFromMatrixPosition(hb.matrixWorld);
+    _fe.set(_fe.x-ys*.16,_fe.y+.045,_fe.z-yc*.16);
+  } else _fe.set(plBody.position.x-ys*.14,
           plBody.position.y+(PL.h-.28)+.02,
           plBody.position.z-yc*.14);
   _ff.set(-ys*pc,ps,-yc*pc);
@@ -332,8 +388,33 @@ function fpHandTarget(out){
   /* con los PUÑOS no hay arma: la mano tiene que subir del todo o no se ve nada */
   const wl=weap().noModel?.12:(weap().len||.5);
   const k=clamp((.55-wl)/.35,0,1);
-  out.copy(_fe).addScaledVector(_fr,FPT[0]-.025*k).addScaledVector(_ff,FPT[2]-.075*k);
-  out.y+=FPT[1]+.075*k;   // la altura baja en vertical, no sobre el eje de puntería
+  /* EL OBJETIVO VA EN EL MARCO DE LA CÁMARA, NO EN EL DEL MUNDO.
+     Antes el "abajo" era vertical del mundo (out.y+=FPT[1]) mientras el "adelante" seguía el
+     cabeceo: mirando al cielo con pitch .95 el adelante sube 0.81·.30 = 25 cm y el abajo no
+     compensa nada, así que la mano terminaba a la altura de los ojos y a 17 cm de la cara. El
+     arma, que cuelga de esa mano y encima gira con el cabeceo completo, se iba arriba y atrás
+     del cuadro: mirando arriba no se veía en ninguna parte.
+     Usando el ARRIBA de la cámara (_fu = adelante girado 90°) el punto queda SIEMPRE en el
+     mismo lugar de la pantalla — abajo a la derecha — mire donde mire, que es lo que hace
+     cualquier FPS. Y la distancia al hombro no crece: a pitch .95 son ~45 cm contra los ~55 cm
+     de brazo, o sea el IK no se satura. */
+  _fu.set(-ys*(-ps),pc,-yc*(-ps));      // arriba de la cámara = (adelante) rotado +90° en pitch
+  /* MIRANDO ARRIBA EL ARMA SE ACERCA A LA CARA. Con el punto siempre a 30 cm el hombro queda
+     abajo y atrás, y hacen falta 67 cm de brazo cuando hay 53 (medido con __H.fpDiag: needR
+     0.672 contra reachR 0.531): el IK se saturaba, la mano se quedaba 14 cm corta y el arma
+     salía del cuadro por arriba. Así que a partir del horizonte el punto se acerca y sube un
+     poco — como cuando uno levanta el fusil al cielo, que lo pega más al cuerpo. */
+  const pu=clamp(PL.pitch,0,1.1)/1.1;
+  /* y se corre HACIA AFUERA (a la derecha) al mismo tiempo: el antebrazo pasa muy cerca del
+     objetivo de la cámara y, si queda en el medio, el plano cercano lo corta al medio de la
+     pantalla y se ve una cuña de piel. Corrido a la derecha el corte queda contra el borde. */
+  out.copy(_fe).addScaledVector(_fr,FPT[0]-.025*k+.075*pu)
+               .addScaledVector(_ff,(FPT[2]-.075*k)*(1-.32*pu))
+               .addScaledVector(_fu,(FPT[1]+.075*k)*(1-.50*pu));
+  /* corriendo, la pose acerca la mano a la cámara y quedaba al filo del recorte: se la empuja
+     un poco hacia adelante, proporcional a la velocidad (3 cm a fondo) */
+  const spF=Math.hypot(plBody.velocity.x,plBody.velocity.z);
+  if(spF>1)out.addScaledVector(_ff,Math.min(.03,spF*.004));   // ayuda, pero el brazo ya está al límite
   return out;
 }
 /* IK de dos huesos genérico: lleva la punta de la cadena (ha) al punto pT del mundo, con el
@@ -746,6 +827,23 @@ if(DEV&&window.__H)Object.assign(window.__H,{
       o.need=+P(IK.up).distanceTo(g.lh1.clone().applyMatrix4(wModel.matrixWorld)).toFixed(3);}
     return o;},
   ik:v=>{if(v!==undefined){ikOn=!!v;holdWeapon();}return ikOn;},
+  /* diagnóstico del recorte de 1ª persona: a qué distancia DELANTE de la cámara cae cada
+     hueso/punto (negativo = detrás del plano, o sea recortado) */
+  fpDiag:()=>{ const d=new THREE.Vector3(),v=new THREE.Vector3(),o={};
+    camera.getWorldDirection(d);
+    const f=(n,p)=>{o[n]=+v.copy(p).sub(camera.position).dot(d).toFixed(3);};
+    const P=b=>{b.updateWorldMatrix(true,false);
+      return new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);};
+    for(const k of['head','neck','rHand','rFore','rArm','lHand'])
+      if(bones[k])f(k,P(bones[k]));
+    if(wModel){wModel.updateWorldMatrix(true,false);
+      f('arma',new THREE.Vector3().setFromMatrixPosition(wModel.matrixWorld));}
+    o.clip=FPCLIPD;o.on=fpClipOn;o.near=camera.near;
+    if(rikBones()){ const t=fpHandTarget(new THREE.Vector3());
+      f('tgt',t);
+      o.needR=+P(RIK.up).distanceTo(t).toFixed(3);
+      o.reachR=+(P(RIK.up).distanceTo(P(RIK.fo))+P(RIK.fo).distanceTo(P(RIK.ha))).toFixed(3);}
+    return o;},
   wrist:v=>{if(v!==undefined){IK.wr=+v;holdWeapon();}return IK.wr;},
   /* pelotitas de referencia: 0 hueso mano der, 1 hueso mano izq, 2 empuñadura,
      3 objetivo de la izquierda, 4 punta del caño, 5 hombro izq */

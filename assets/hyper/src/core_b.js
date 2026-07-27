@@ -756,13 +756,16 @@ function placeChar(){
   }
 }
 function camStep(dt){
-  if(extRun('cam',dt))return;
+  /* la cámara de los vehículos la pone la extensión: igual hay que refrescar el plano de
+     recorte, si no queda con la pose de otro frame y le come un pedazo al personaje */
+  if(extRun('cam',dt)){fpClip();return;}
   if(freeCam){camera.position.set(freeCam[0],freeCam[1],freeCam[2]);
     camera.lookAt(freeCam[3],freeCam[4],freeCam[5]);
     /* la cámara libre es sólo para inspeccionar: el personaje se coloca con la MISMA función
        que en el juego. Antes esta rama lo paraba derecho y salía, así que el ragdoll no se
        veía nunca en las capturas de prueba (y me hizo creer que no funcionaba). */
     placeChar();
+    fpClip();     // con cámara libre el recorte se apaga: se quiere ver el personaje entero
     return;}
   const d0=plDraw();
   const px=d0.x,py=d0.y,pz=d0.z;
@@ -804,7 +807,8 @@ function camStep(dt){
   recoil*=Math.max(0,1-dt*9);
   // personaje
   placeChar();
-  
+  /* el plano que le saca la cabeza de la vista en 1ª persona: va acá, con la cámara ya puesta */
+  fpClip();
 }
 
 /* ================= HUD / entradas ================= */

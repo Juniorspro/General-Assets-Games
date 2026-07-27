@@ -123,11 +123,14 @@ renderer.toneMapping=THREE.NeutralToneMapping||THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1;
 renderer.shadowMap.enabled=QP.shadow>0;
 renderer.shadowMap.type=THREE.PCFShadowMap;
+/* recorte POR MATERIAL: en 1ª persona se le pone un plano de recorte sólo a las mallas con
+   skin del personaje, para que la cabeza no se meta en la vista (ver fpClip en core_c). */
+renderer.localClippingEnabled=true;
 $('wrap').appendChild(renderer.domElement);
 
 const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x9fbcd4);
-const camera=new THREE.PerspectiveCamera(72,1,.12,QP.far);
+const camera=new THREE.PerspectiveCamera(72,1,.09,QP.far);   // .09: corriendo la mano llega a 12,5 cm de la cámara y no se puede recortar
 const thumbCam=new THREE.PerspectiveCamera(30,1,.1,60);
 /* ---- rotación forzada a horizontal: si el teléfono está vertical, giramos el juego 90°
        (no le pedimos nada al jugador) ---- */
