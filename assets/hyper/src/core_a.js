@@ -7,7 +7,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import * as CANNON from 'cannon';
 
-const HASH='f3f8704';
+const HASH='595ea5a';
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/hyper/';
 const okUrl=u=>typeof u==='string'&&u.indexOf('@PEND')<0;
 const $=i=>document.getElementById(i);

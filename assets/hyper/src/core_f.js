@@ -319,7 +319,19 @@ function charClone(){
   for(const o of kill)if(o.parent)o.parent.remove(o);
   c.position.set(0,-9999,0);c.rotation.set(0,0,0);c.visible=true;
   c.traverse(o=>{ if(o.isMesh||o.isSkinnedMesh){o.frustumCulled=false;o.visible=true;
-    o.castShadow=QP.shadow>0;} });
+    o.castShadow=QP.shadow>0;}
+    /* material PROPIO, no compartido con charRoot: SkeletonUtils.clone() clona huesos y
+       mallas pero deja el/los material por REFERENCIA (ver core_m, fpArms), así que sin este
+       .clone() el fantasma pisaría el uArms del jugador local (o al revés) y ambos quedarían
+       recortados o enteros juntos. Material.clone() copia userData por JSON: si el local
+       estaba en 1ª persona en este instante puede traer uArms:{value:1} de arrastre, por eso
+       se resetea SIEMPRE a 0 (el fantasma se ve entero salvo que él mismo esté en 1ª persona,
+       y eso lo decide su propio fpClip cuando exista, no el del jugador local). */
+    if(o.isSkinnedMesh&&o.material){
+      o.material=Array.isArray(o.material)?o.material.map(m=>m.clone()):o.material.clone();
+      const ms=Array.isArray(o.material)?o.material:[o.material];
+      for(const m of ms)m.userData.uArms={value:0};
+    } });
   return c;
 }
 
@@ -350,7 +362,12 @@ function ghostActs(g){
   const k0=g.acts.idle?'idle':(g.acts.walk?'walk':null);
   if(k0){g.acts[k0].setEffectiveWeight(1);g.anim=k0;}
   const u0=g.actu.idle?'idle':(g.actu.walk?'walk':null);
-  if(u0)g.actu[u0].setEffectiveWeight(1);
+  if(u0){g.actu[u0].setEffectiveWeight(1);
+    /* mismo motivo que ACTU.idle en el jugador local (core_c, setAnim): el clip de reposo
+       entero gira la cabeza/torso en loop; sin esto los fantasmas también "miran a los
+       lados" solos, en loop, todo el tiempo. */
+    g.actu[u0].time=0;g.actu[u0].timeScale=0;
+  }
 }
 function ghostAnim(g,st){
   if(!g.acts||!g.acts[st]||st===g.anim)return;

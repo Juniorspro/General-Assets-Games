@@ -31,6 +31,33 @@ const ACTU={};
    nacían con weight=0 y el fadeIn(.22) de setAnim() no los podía levantar NUNCA: su reloj
    corría con peso efectivo 0 para siempre.
    Así que acá el peso lo maneja mixTo() escribiendo .weight a mano, y nadie más lo toca. */
+/* IDLE ABAJO: por qué se decide con los tracks y no a ojo.
+   El pedido es "las piernas de abajo que sigan igual, salvo que el clip las mueva de forma
+   notoria": si el reposo trae un ciclo real de cadera/pierna, al congelar el torso de arriba
+   (más abajo) ese ciclo queda deslizando el pie contra el piso sin nada arriba que lo
+   disimule. Se mide el recorrido de las pistas de POSICIÓN del tren inferior: unos pocos
+   milímetros de vaivén son un idle normal (no desliza nada) y un recorrido de centímetros es
+   un ciclo real (la cadera se traslada, como en una caminata). Se loguean los nombres de las
+   pistas (con ?dev) para poder revisarlo a ojo si hace falta. */
+function idleLowMoves(clip){
+  if(!clip)return false;
+  let maxRange=0;
+  for(const t of clip.tracks){
+    /* posición (Vector) Y TAMBIÉN rotación (Quaternion): el vaivén de este idle está en la
+       ROTACIÓN de la cadera —la cabeza barría 0,31 m con las pistas de posición quietas—.
+       Para cuaterniones se mide el rango por componente: es un proxy grosero pero alcanza
+       para distinguir "respira" de "se hamaca". */
+    const v=t.values,st=t instanceof THREE.QuaternionKeyframeTrack?4:3;
+    const K=t instanceof THREE.QuaternionKeyframeTrack?.55:1;  // ~rad->m a la altura de la cabeza
+    for(let ax=0;ax<st;ax++){
+      let mn=Infinity,mx=-Infinity;
+      for(let i=ax;i<v.length;i+=st){if(v[i]<mn)mn=v[i];if(v[i]>mx)mx=v[i];}
+      if((mx-mn)*K>maxRange)maxRange=(mx-mn)*K;
+    }
+  }
+  if(DEV)console.log('[hyper] ACTS.idle tracks:',clip.tracks.map(t=>t.name),'recorrido máx',maxRange.toFixed(4)+'m');
+  return maxRange>.02;   // 2 cm: debajo es idle normal, arriba es un ciclo real que desliza
+}
 function buildActions(){
   if(!mixer)return;
   for(const k in CLIPS){
@@ -40,6 +67,9 @@ function buildActions(){
     a.enabled=true;a.weight=(k==='walk'?1:0);
     if(k==='jump'){a.setLoop(THREE.LoopOnce,1);a.clampWhenFinished=true;}
     ACTS[k]=a;a.play();          // todas suenan; el peso decide cuál se ve
+    /* si el reposo mueve la cadera/pierna de forma notoria, se clava en el cuadro 0 igual que
+       el torso: ver idleLowMoves arriba. Si no, se deja tal cual (el vaivén sutil está bien). */
+    if(k==='idle'&&idleLowMoves(low)){a.time=0;a.timeScale=0;a.userData_frozen=1;}
     const up=splitClip(CLIPS[k],'up');
     if(up){ const b=mixer.clipAction(up);
       b.enabled=true;b.weight=0;b.play();ACTU[k]=b; }
@@ -74,9 +104,56 @@ function setAnim(st,sp,dt){
      0 al titilar jump<->idle: los brazos y la cabeza se quedaban sin nadie que los escriba y
      el snapshot del IK los congelaba. */
   const want=(ACTU.idle?'idle':(ACTU.walk?'walk':null));
-  if(want)mixTo(ACTU,want,dt||1/60);
+  if(want){
+    mixTo(ACTU,want,dt||1/60);
+    /* CONGELADO EN EL CUADRO 0 (no basta con el peso). El clip de reposo entero giraba la
+       cabeza y el torso de un lado al otro en loop —de ahí que el personaje "mirara a los
+       lados" y moviera el pecho aun caminando o corriendo, porque este ACTU.idle es el único
+       que escribe el tren superior siempre—. .time/.timeScale no son .weight: mixTo() sigue
+       siendo el único que toca pesos, esto sólo le clava el reloj a la acción que ya está en
+       peso 1. El cuadro 0 es la pose de generación sosteniendo el arma, la misma que asume el
+       IK de los brazos (ver la nota de arriba), así que clavar ahí no descoloca nada.
+       Se hace todos los frames (no una vez en buildActions) para cubrir cualquier ACTU que
+       termine siendo "want" por default, sin depender del orden en que se construyeron. */
+    const wa=ACTU[want];
+    wa.time=0;wa.timeScale=0;
+  }
   const ts=st==='walk'?clamp(sp/3.1,.55,1.9):(st==='run'?clamp(sp/8.4,.7,1.5):1);
-  ACTS[st].timeScale=ts;
+  /* OJO: esta línea des-congelaba el idle de las piernas cada frame (le volvía a poner
+     timeScale=1 después de que buildActions lo clavó en 0): el personaje quedaba hamacándose
+     parado — la cabeza barría 0,21 m. Si la acción está marcada como congelada, no se toca. */
+  if(!ACTS[st].userData_frozen)ACTS[st].timeScale=ts;
+  else{ACTS[st].time=0;ACTS[st].timeScale=0;}
+}
+/* RESPIRACIÓN DEL PECHO. Con el torso clavado en el cuadro 0 (arriba) el personaje quedaba de
+   estatua parado: se le suma al hueso del pecho (bones.spine) una rotación procedural chica,
+   dos senoidales en ejes distintos para que no se vea como un metrónomo. Se acumula con dt
+   (nunca performance.now: bajo un frame lento el ángulo tiene que avanzar lo que corresponde
+   a ese dt, no saltar según el reloj de pared) y se aplica DESPUÉS de mixer.update(): como el
+   mixer reescribe la pose del hueso entero cada frame, multiplicar sobre eso ya es sumar
+   sobre la pose de la animación, sin acumular nada de un frame al otro.
+   Amplitud MUY chica a propósito, y no es sólo estética: bones.spine es la BASE de la cadena
+   que usa torsoAim() (Spine>Spine01>Spine02, ver más abajo) para calcular cuánto girar el
+   torso hacia la puntería. torsoAim vuelve a medir la línea de hombros TODOS los frames desde
+   la pose recién escrita por el mixer+respiración, así que la rotación de la respiración queda
+   dentro de esa medición y el giro que aplica torsoAim la "seguía" — con .012/.004 rad (0,7°)
+   la cabeza terminaba barriendo 0,15 a 0,23 m (medido con __H.boneW en 3ª persona quieto, sin
+   ninguna tecla apretada), muy por encima del margen pedido para el idle calmo. Medido también
+   que la relación es LINEAL con la amplitud (al 10% de .012/.004 el barrido bajó a ~0,03 m, al
+   mismo ritmo), o sea que no hay que tocar torsoAim (prohibido) para arreglarlo: alcanza con
+   una amplitud de entrada chica que, ya amplificada, siga quedando dentro del margen y a la vez
+   se note de cerca. */
+const BREATHHZX=.22,BREATHAMPX=.001,BREATHHZZ=.18,BREATHAMPZ=.00035,BREATHPHZ=1.7;
+let breathT=0;
+const _brQ=new THREE.Quaternion(),_brE=new THREE.Euler();
+function breathe(dt){
+  const sp=bones.spine;if(!sp)return;
+  breathT+=dt||1/60;
+  const bx=Math.sin(breathT*Math.PI*2*BREATHHZX)*BREATHAMPX;
+  const bz=Math.sin(breathT*Math.PI*2*BREATHHZZ+BREATHPHZ)*BREATHAMPZ;
+  _brE.set(bx,0,bz);
+  _brQ.setFromEuler(_brE);
+  sp.quaternion.multiply(_brQ);          // aditivo sobre lo que el mixer acaba de escribir
 }
 function animStep(dt){
   if(!mixer)return;
@@ -97,6 +174,7 @@ function animStep(dt){
   else st=ACTS.idle?'idle':'walk';
   setAnim(st,sp,dt);
   mixer.update(dt);
+  breathe(dt);   // respiración procedural del pecho, aditiva sobre la pose recién escrita
   torsoAim();    // enderezar el torso hacia la puntería
   ikSnap();      // guardar la pose que dejó la animación, antes de tocar nada
   /* el brazo derecho sube a la línea de los ojos en 1ª persona. Va acá y no en
@@ -945,5 +1023,38 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     return JSON.parse(JSON.stringify(g));},
   pole:(a,b,c)=>{if(a!==undefined){IKPOLE[0]=a;IKPOLE[1]=b;IKPOLE[2]=c;holdWeapon();}
     return IKPOLE.slice();},
-  clav:v=>{if(v!==undefined){CLW=+v;holdWeapon();}return CLW;}});
+  clav:v=>{if(v!==undefined){CLW=+v;holdWeapon();}return CLW;},
+  /* posición MUNDIAL de un hueso por nombre (bones[name] primero, si no se busca en
+     charRoot): para medir desde afuera el torso congelado / la respiración sin depender de
+     qué claves tiene el objeto bones */
+  /* primer hueso cuyo nombre CONTIENE la subcadena (para pies/cadera, que no están en bones{}) */
+  boneLike:sub=>{
+    let b=null;sub=String(sub).toLowerCase();
+    if(charRoot)charRoot.traverse(o=>{if(!b&&o.isBone&&o.name.toLowerCase().indexOf(sub)>=0)b=o;});
+    if(!b)return null;
+    b.updateWorldMatrix(true,false);
+    const v=new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+    return [+v.x.toFixed(4),+v.y.toFixed(4),+v.z.toFixed(4)];},
+  boneW:name=>{
+    let b=bones&&bones[name];
+    if(!b&&charRoot)charRoot.traverse(o=>{if(!b&&o.isBone&&o.name===name)b=o;});
+    if(!b)return null;
+    b.updateWorldMatrix(true,false);
+    const v=new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+    return [+v.x.toFixed(4),+v.y.toFixed(4),+v.z.toFixed(4)];},
+  /* lo mismo pero relativo a charRoot (resta la posición del grupo, no hace falta rotar por
+     -yaw: alcanza para comparar dos capturas del mismo hueso sin que el desplazamiento del
+     personaje por el mundo tape la medida) */
+  boneRel:name=>{
+    let b=bones&&bones[name];
+    if(!b&&charRoot)charRoot.traverse(o=>{if(!b&&o.isBone&&o.name===name)b=o;});
+    if(!b||!charRoot)return null;
+    b.updateWorldMatrix(true,false);
+    const v=new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+    v.sub(charRoot.position);
+    return [+v.x.toFixed(4),+v.y.toFixed(4),+v.z.toFixed(4)];},
+  /* estado de la mezcla de animación: para verificar desde un test que el tren superior quedó
+     clavado (upIdleTime/upIdleTS) y ver la fase de la respiración */
+  animInfo:()=>({state:animState,upIdleTime:ACTU.idle&&ACTU.idle.time,
+    upIdleTS:ACTU.idle&&ACTU.idle.timeScale,breath:breathT})});
 

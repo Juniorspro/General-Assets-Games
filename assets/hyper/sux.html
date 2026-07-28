@@ -4659,7 +4659,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import * as CANNON from 'cannon';
 
-const HASH='f3f8704';
+const HASH='595ea5a';
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/hyper/';
 const okUrl=u=>typeof u==='string'&&u.indexOf('@PEND')<0;
 const $=i=>document.getElementById(i);
@@ -6912,6 +6912,33 @@ const ACTU={};
    nacían con weight=0 y el fadeIn(.22) de setAnim() no los podía levantar NUNCA: su reloj
    corría con peso efectivo 0 para siempre.
    Así que acá el peso lo maneja mixTo() escribiendo .weight a mano, y nadie más lo toca. */
+/* IDLE ABAJO: por qué se decide con los tracks y no a ojo.
+   El pedido es "las piernas de abajo que sigan igual, salvo que el clip las mueva de forma
+   notoria": si el reposo trae un ciclo real de cadera/pierna, al congelar el torso de arriba
+   (más abajo) ese ciclo queda deslizando el pie contra el piso sin nada arriba que lo
+   disimule. Se mide el recorrido de las pistas de POSICIÓN del tren inferior: unos pocos
+   milímetros de vaivén son un idle normal (no desliza nada) y un recorrido de centímetros es
+   un ciclo real (la cadera se traslada, como en una caminata). Se loguean los nombres de las
+   pistas (con ?dev) para poder revisarlo a ojo si hace falta. */
+function idleLowMoves(clip){
+  if(!clip)return false;
+  let maxRange=0;
+  for(const t of clip.tracks){
+    /* posición (Vector) Y TAMBIÉN rotación (Quaternion): el vaivén de este idle está en la
+       ROTACIÓN de la cadera —la cabeza barría 0,31 m con las pistas de posición quietas—.
+       Para cuaterniones se mide el rango por componente: es un proxy grosero pero alcanza
+       para distinguir "respira" de "se hamaca". */
+    const v=t.values,st=t instanceof THREE.QuaternionKeyframeTrack?4:3;
+    const K=t instanceof THREE.QuaternionKeyframeTrack?.55:1;  // ~rad->m a la altura de la cabeza
+    for(let ax=0;ax<st;ax++){
+      let mn=Infinity,mx=-Infinity;
+      for(let i=ax;i<v.length;i+=st){if(v[i]<mn)mn=v[i];if(v[i]>mx)mx=v[i];}
+      if((mx-mn)*K>maxRange)maxRange=(mx-mn)*K;
+    }
+  }
+  if(DEV)console.log('[hyper] ACTS.idle tracks:',clip.tracks.map(t=>t.name),'recorrido máx',maxRange.toFixed(4)+'m');
+  return maxRange>.02;   // 2 cm: debajo es idle normal, arriba es un ciclo real que desliza
+}
 function buildActions(){
   if(!mixer)return;
   for(const k in CLIPS){
@@ -6921,6 +6948,9 @@ function buildActions(){
     a.enabled=true;a.weight=(k==='walk'?1:0);
     if(k==='jump'){a.setLoop(THREE.LoopOnce,1);a.clampWhenFinished=true;}
     ACTS[k]=a;a.play();          // todas suenan; el peso decide cuál se ve
+    /* si el reposo mueve la cadera/pierna de forma notoria, se clava en el cuadro 0 igual que
+       el torso: ver idleLowMoves arriba. Si no, se deja tal cual (el vaivén sutil está bien). */
+    if(k==='idle'&&idleLowMoves(low)){a.time=0;a.timeScale=0;a.userData_frozen=1;}
     const up=splitClip(CLIPS[k],'up');
     if(up){ const b=mixer.clipAction(up);
       b.enabled=true;b.weight=0;b.play();ACTU[k]=b; }
@@ -6955,9 +6985,56 @@ function setAnim(st,sp,dt){
      0 al titilar jump<->idle: los brazos y la cabeza se quedaban sin nadie que los escriba y
      el snapshot del IK los congelaba. */
   const want=(ACTU.idle?'idle':(ACTU.walk?'walk':null));
-  if(want)mixTo(ACTU,want,dt||1/60);
+  if(want){
+    mixTo(ACTU,want,dt||1/60);
+    /* CONGELADO EN EL CUADRO 0 (no basta con el peso). El clip de reposo entero giraba la
+       cabeza y el torso de un lado al otro en loop —de ahí que el personaje "mirara a los
+       lados" y moviera el pecho aun caminando o corriendo, porque este ACTU.idle es el único
+       que escribe el tren superior siempre—. .time/.timeScale no son .weight: mixTo() sigue
+       siendo el único que toca pesos, esto sólo le clava el reloj a la acción que ya está en
+       peso 1. El cuadro 0 es la pose de generación sosteniendo el arma, la misma que asume el
+       IK de los brazos (ver la nota de arriba), así que clavar ahí no descoloca nada.
+       Se hace todos los frames (no una vez en buildActions) para cubrir cualquier ACTU que
+       termine siendo "want" por default, sin depender del orden en que se construyeron. */
+    const wa=ACTU[want];
+    wa.time=0;wa.timeScale=0;
+  }
   const ts=st==='walk'?clamp(sp/3.1,.55,1.9):(st==='run'?clamp(sp/8.4,.7,1.5):1);
-  ACTS[st].timeScale=ts;
+  /* OJO: esta línea des-congelaba el idle de las piernas cada frame (le volvía a poner
+     timeScale=1 después de que buildActions lo clavó en 0): el personaje quedaba hamacándose
+     parado — la cabeza barría 0,21 m. Si la acción está marcada como congelada, no se toca. */
+  if(!ACTS[st].userData_frozen)ACTS[st].timeScale=ts;
+  else{ACTS[st].time=0;ACTS[st].timeScale=0;}
+}
+/* RESPIRACIÓN DEL PECHO. Con el torso clavado en el cuadro 0 (arriba) el personaje quedaba de
+   estatua parado: se le suma al hueso del pecho (bones.spine) una rotación procedural chica,
+   dos senoidales en ejes distintos para que no se vea como un metrónomo. Se acumula con dt
+   (nunca performance.now: bajo un frame lento el ángulo tiene que avanzar lo que corresponde
+   a ese dt, no saltar según el reloj de pared) y se aplica DESPUÉS de mixer.update(): como el
+   mixer reescribe la pose del hueso entero cada frame, multiplicar sobre eso ya es sumar
+   sobre la pose de la animación, sin acumular nada de un frame al otro.
+   Amplitud MUY chica a propósito, y no es sólo estética: bones.spine es la BASE de la cadena
+   que usa torsoAim() (Spine>Spine01>Spine02, ver más abajo) para calcular cuánto girar el
+   torso hacia la puntería. torsoAim vuelve a medir la línea de hombros TODOS los frames desde
+   la pose recién escrita por el mixer+respiración, así que la rotación de la respiración queda
+   dentro de esa medición y el giro que aplica torsoAim la "seguía" — con .012/.004 rad (0,7°)
+   la cabeza terminaba barriendo 0,15 a 0,23 m (medido con __H.boneW en 3ª persona quieto, sin
+   ninguna tecla apretada), muy por encima del margen pedido para el idle calmo. Medido también
+   que la relación es LINEAL con la amplitud (al 10% de .012/.004 el barrido bajó a ~0,03 m, al
+   mismo ritmo), o sea que no hay que tocar torsoAim (prohibido) para arreglarlo: alcanza con
+   una amplitud de entrada chica que, ya amplificada, siga quedando dentro del margen y a la vez
+   se note de cerca. */
+const BREATHHZX=.22,BREATHAMPX=.001,BREATHHZZ=.18,BREATHAMPZ=.00035,BREATHPHZ=1.7;
+let breathT=0;
+const _brQ=new THREE.Quaternion(),_brE=new THREE.Euler();
+function breathe(dt){
+  const sp=bones.spine;if(!sp)return;
+  breathT+=dt||1/60;
+  const bx=Math.sin(breathT*Math.PI*2*BREATHHZX)*BREATHAMPX;
+  const bz=Math.sin(breathT*Math.PI*2*BREATHHZZ+BREATHPHZ)*BREATHAMPZ;
+  _brE.set(bx,0,bz);
+  _brQ.setFromEuler(_brE);
+  sp.quaternion.multiply(_brQ);          // aditivo sobre lo que el mixer acaba de escribir
 }
 function animStep(dt){
   if(!mixer)return;
@@ -6978,6 +7055,7 @@ function animStep(dt){
   else st=ACTS.idle?'idle':'walk';
   setAnim(st,sp,dt);
   mixer.update(dt);
+  breathe(dt);   // respiración procedural del pecho, aditiva sobre la pose recién escrita
   torsoAim();    // enderezar el torso hacia la puntería
   ikSnap();      // guardar la pose que dejó la animación, antes de tocar nada
   /* el brazo derecho sube a la línea de los ojos en 1ª persona. Va acá y no en
@@ -7826,7 +7904,40 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     return JSON.parse(JSON.stringify(g));},
   pole:(a,b,c)=>{if(a!==undefined){IKPOLE[0]=a;IKPOLE[1]=b;IKPOLE[2]=c;holdWeapon();}
     return IKPOLE.slice();},
-  clav:v=>{if(v!==undefined){CLW=+v;holdWeapon();}return CLW;}});
+  clav:v=>{if(v!==undefined){CLW=+v;holdWeapon();}return CLW;},
+  /* posición MUNDIAL de un hueso por nombre (bones[name] primero, si no se busca en
+     charRoot): para medir desde afuera el torso congelado / la respiración sin depender de
+     qué claves tiene el objeto bones */
+  /* primer hueso cuyo nombre CONTIENE la subcadena (para pies/cadera, que no están en bones{}) */
+  boneLike:sub=>{
+    let b=null;sub=String(sub).toLowerCase();
+    if(charRoot)charRoot.traverse(o=>{if(!b&&o.isBone&&o.name.toLowerCase().indexOf(sub)>=0)b=o;});
+    if(!b)return null;
+    b.updateWorldMatrix(true,false);
+    const v=new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+    return [+v.x.toFixed(4),+v.y.toFixed(4),+v.z.toFixed(4)];},
+  boneW:name=>{
+    let b=bones&&bones[name];
+    if(!b&&charRoot)charRoot.traverse(o=>{if(!b&&o.isBone&&o.name===name)b=o;});
+    if(!b)return null;
+    b.updateWorldMatrix(true,false);
+    const v=new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+    return [+v.x.toFixed(4),+v.y.toFixed(4),+v.z.toFixed(4)];},
+  /* lo mismo pero relativo a charRoot (resta la posición del grupo, no hace falta rotar por
+     -yaw: alcanza para comparar dos capturas del mismo hueso sin que el desplazamiento del
+     personaje por el mundo tape la medida) */
+  boneRel:name=>{
+    let b=bones&&bones[name];
+    if(!b&&charRoot)charRoot.traverse(o=>{if(!b&&o.isBone&&o.name===name)b=o;});
+    if(!b||!charRoot)return null;
+    b.updateWorldMatrix(true,false);
+    const v=new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+    v.sub(charRoot.position);
+    return [+v.x.toFixed(4),+v.y.toFixed(4),+v.z.toFixed(4)];},
+  /* estado de la mezcla de animación: para verificar desde un test que el tren superior quedó
+     clavado (upIdleTime/upIdleTS) y ver la fase de la respiración */
+  animInfo:()=>({state:animState,upIdleTime:ACTU.idle&&ACTU.idle.time,
+    upIdleTS:ACTU.idle&&ACTU.idle.timeScale,breath:breathT})});
 
 
 /* ==== core_d.js ==== */
@@ -8891,7 +9002,19 @@ function charClone(){
   for(const o of kill)if(o.parent)o.parent.remove(o);
   c.position.set(0,-9999,0);c.rotation.set(0,0,0);c.visible=true;
   c.traverse(o=>{ if(o.isMesh||o.isSkinnedMesh){o.frustumCulled=false;o.visible=true;
-    o.castShadow=QP.shadow>0;} });
+    o.castShadow=QP.shadow>0;}
+    /* material PROPIO, no compartido con charRoot: SkeletonUtils.clone() clona huesos y
+       mallas pero deja el/los material por REFERENCIA (ver core_m, fpArms), así que sin este
+       .clone() el fantasma pisaría el uArms del jugador local (o al revés) y ambos quedarían
+       recortados o enteros juntos. Material.clone() copia userData por JSON: si el local
+       estaba en 1ª persona en este instante puede traer uArms:{value:1} de arrastre, por eso
+       se resetea SIEMPRE a 0 (el fantasma se ve entero salvo que él mismo esté en 1ª persona,
+       y eso lo decide su propio fpClip cuando exista, no el del jugador local). */
+    if(o.isSkinnedMesh&&o.material){
+      o.material=Array.isArray(o.material)?o.material.map(m=>m.clone()):o.material.clone();
+      const ms=Array.isArray(o.material)?o.material:[o.material];
+      for(const m of ms)m.userData.uArms={value:0};
+    } });
   return c;
 }
 
@@ -8922,7 +9045,12 @@ function ghostActs(g){
   const k0=g.acts.idle?'idle':(g.acts.walk?'walk':null);
   if(k0){g.acts[k0].setEffectiveWeight(1);g.anim=k0;}
   const u0=g.actu.idle?'idle':(g.actu.walk?'walk':null);
-  if(u0)g.actu[u0].setEffectiveWeight(1);
+  if(u0){g.actu[u0].setEffectiveWeight(1);
+    /* mismo motivo que ACTU.idle en el jugador local (core_c, setAnim): el clip de reposo
+       entero gira la cabeza/torso en loop; sin esto los fantasmas también "miran a los
+       lados" solos, en loop, todo el tiempo. */
+    g.actu[u0].time=0;g.actu[u0].timeScale=0;
+  }
 }
 function ghostAnim(g,st){
   if(!g.acts||!g.acts[st]||st===g.anim)return;
@@ -10663,6 +10791,454 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     parts:PARR.length,bursts:BURSTN,
     btn:bFw.style.display!=='none'?bFw.textContent:null}),
   fwBurst:(x,y,z,style)=>{burst(x,y,z,{burst:style||'peony',clr:[0xff5533,0x33ccff],size:1.4});return true;}
+});
+
+/* ==== core_m.js ==== */
+
+/* ============================================================
+   HYPER SANDBOX — 1ª PERSONA: SÓLO LOS BRAZOS, POR SHADER
+   ------------------------------------------------------------
+   Antes (core_c, fpClip) el recorte de 1ª persona era DOS THREE.Plane puestos delante de la
+   cámara y a la altura de la cadera: sirve mientras se mira más o menos al frente, pero el
+   pedido es "si miras arriba o abajo tampoco tenés que verte la cabeza ni las piernas", y un
+   plano fijo al ojo no distingue brazo de torso cuando la cámara gira: en algún ángulo el plano
+   de la cadera te deja ver el pecho, o el de la cara te come el hombro.
+   ACÁ SE CAMBIA POR UN DISCARD POR PESO DE HUESO: cada vértice ya sabe, por su propio
+   skinning, qué porcentaje de su movimiento depende de huesos de BRAZO (mano, antebrazo,
+   dedos, brazo — no clavícula/hombro). Ese porcentaje viaja a la varying vArm, y en 1ª persona
+   el fragment shader descarta lo que no llega a ser brazo. No hay geometría estirada ni un
+   plano que pueda "fallar" mirando para arriba: es una propiedad del vértice, no de la cámara.
+   Y como el shadow map usa el MeshDepthMaterial (que no pasa por este onBeforeCompile), la
+   sombra del jugador sigue completa aunque en cámara sólo se vean los brazos.
+   Se concatena último (después de core_c y core_f): ya existen THREE, charRoot, bones, PL,
+   freeCam, camera, GH (core_f) y fpClip/fpClipMaterials (core_c, funciones REASIGNABLES: acá
+   se pisa fpClip entero, la versión de planos queda sin uso pero sin tocar core_c).
+   ============================================================ */
+
+/* ---------- 1. qué huesos son "brazo" ----------
+   mano, antebrazo y dedos son brazo sin dudarlo. La palabra "arm" sola también (el brazo de
+   arriba), PERO no si es hombro/clavícula: esos mueven el torso entero y si se dejaran adentro
+   el pecho se colaría cada vez que el hombro sube con la animación. */
+const FARM_HAND=/hand|fore|thumb|index|middle|ring|pinky|finger/i;
+const FARM_ARM=/arm/i, FARM_NOARM=/shoulder|clavicle/i;
+const fpArmFlag=name=>{
+  const n=String(name||'').toLowerCase();
+  return (FARM_HAND.test(n)||(FARM_ARM.test(n)&&!FARM_NOARM.test(n)))?1:0;
+};
+
+/* ---------- 2. flags por hueso, medidos del PRIMER SkinnedMesh ----------
+   se asume un solo esqueleto para todo el personaje (es como viene el GLB): si algún día
+   hubiera mallas con esqueletos distintos, el índice de un hueso de una no vale para la otra,
+   pero eso no pasa en este rig. */
+let fpArmFlags=null,fpArmNB=0;
+function fpArmBoneFlags(){
+  if(fpArmFlags)return fpArmFlags;
+  if(!charRoot)return null;
+  let sk=null;
+  charRoot.traverse(o=>{ if(!sk&&o.isSkinnedMesh&&o.skeleton&&o.skeleton.bones.length)sk=o.skeleton; });
+  if(!sk)return null;
+  const bones=sk.bones,n=bones.length;
+  const f=new Float32Array(n);
+  for(let i=0;i<n;i++)f[i]=fpArmFlag(bones[i].name);
+  fpArmNB=n;
+  return (fpArmFlags=f);
+}
+
+/* ---------- 3. parchar un material skinned ----------
+   NO se toca el material del arma (cuelga de un hueso pero no es skinned) ni nada que no sea
+   SkinnedMesh: sólo el cuerpo necesita el discard. */
+function fpArmPatch(mat,flags,NB){
+  if(!mat||mat.userData._farm)return;      // no parchar el mismo material dos veces
+  mat.userData._farm=1;
+  mat.clippingPlanes=null;                 // ya no hace falta el recorte por plano de core_c
+  if(!mat.userData.uArms)mat.userData.uArms={value:0};
+  mat.onBeforeCompile=function(shader){
+    /* uArms: 0/1, un jugador entero o sólo brazos. uArmF: por hueso, cuánto es "brazo".
+       this.userData.uArms se guarda en el MATERIAL (no en una variable de este archivo) para
+       que sobreviva a Material.clone(): el fantasma clona el material entero (ver core_f,
+       charClone) y ahí se le resetea el value a 0, así el mismo onBeforeCompile —que se copia
+       por referencia, no se vuelve a ejecutar el .clone()— lee el uArms PROPIO del fantasma. */
+    shader.uniforms.uArms=this.userData.uArms||(this.userData.uArms={value:0});
+    shader.uniforms.uArmF={value:flags};
+    /* vertex: cuánto de este vértice es brazo, según los mismos índices/pesos que ya usa el
+       skinning normal (skinIndex/skinWeight vienen de #include <skinning_pars_vertex>, que se
+       resuelve ANTES de <skinning_vertex> en el template de three). Si el chunk no matchea
+       (shader distinto al esperado) el replace no hace nada: el personaje queda entero, sano. */
+    shader.vertexShader=shader.vertexShader.replace('#include <common>',
+      '#include <common>\nvarying float vArm;\nuniform float uArmF['+NB+'];');
+    shader.vertexShader=shader.vertexShader.replace('#include <skinning_vertex>',
+      '#include <skinning_vertex>\n'
+      +'\tvArm = uArmF[int(skinIndex.x)]*skinWeight.x + uArmF[int(skinIndex.y)]*skinWeight.y'
+      +' + uArmF[int(skinIndex.z)]*skinWeight.z + uArmF[int(skinIndex.w)]*skinWeight.w;');
+    /* fragment: al ARRANQUE de main(), antes de cualquier cuenta de luz (más barato: no se
+       calcula nada de un fragmento que se va a tirar). .32 y no .5: un vértice que reparte su
+       peso entre antebrazo y torso (la zona del codo/hombro) tiene que seguir viéndose brazo,
+       si no queda una costura pelada justo en el codo. */
+    shader.fragmentShader=shader.fragmentShader.replace('#include <common>',
+      '#include <common>\nvarying float vArm;\nuniform float uArms;');
+    shader.fragmentShader=shader.fragmentShader.replace('void main() {',
+      'void main() {\n\tif(uArms>.5 && vArm<.32)discard;');
+  };
+  /* +NB: si algún día conviven dos esqueletos con distinto número de huesos, cada uno necesita
+     su propio programa (el tamaño de uArmF va fijo en el código del shader) */
+  mat.customProgramCacheKey=()=>'fparms'+NB;
+  mat.needsUpdate=true;
+}
+
+/* ---------- 4. lista de materiales del charRoot LOCAL, lazy (igual que fpClipMaterials) ----------
+   el personaje puede no estar listo todavía (GLB async): se reintenta cada frame hasta que
+   aparezca, después queda cacheada para siempre (los materiales no cambian en caliente). */
+let fpArmMats=null;
+function fpArmMaterials(){
+  if(fpArmMats)return fpArmMats;
+  if(!charRoot)return null;
+  const flags=fpArmBoneFlags();
+  if(!flags)return null;
+  const NB=fpArmNB,a=[];
+  charRoot.traverse(o=>{ if(!o.isSkinnedMesh)return;
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of ms)if(m&&a.indexOf(m)<0)a.push(m); });
+  if(!a.length)return null;
+  for(const m of a)fpArmPatch(m,flags,NB);
+  return (fpArmMats=a);
+}
+
+/* ---------- 5. fpClip REASIGNADA ----------
+   fpClip está declarada con "function" en core_c: al concatenarse todo en UN SOLO módulo ES,
+   volver a escribir "function fpClip(){...}" acá sería una SEGUNDA declaración del mismo
+   nombre en el mismo scope de módulo, y eso es SyntaxError en modo estricto (los módulos
+   siempre lo son) — probado a mano: "Identifier 'fpClip' has already been declared".
+   Function declarations SÍ crean un binding MUTABLE (no es const), así que la forma correcta
+   de pisarla es una asignación común, no una nueva declaración. La versión de planos de
+   core_c queda escrita pero sin uso; no se toca ese archivo.
+   Ya no hay que "cambiar clippingPlanes" (eso SÍ recompilaba el shader, por eso antes se
+   evitaba tocarlo si el estado no cambiaba): acá sólo se escribe un uniforme, que no cuesta
+   recompilación ninguna, así que se puede escribir todos los frames sin culpa. */
+fpClip=function(){
+  const ms=fpArmMaterials();
+  if(!ms)return;
+  const on=(PL.fp&&!PL.rag&&!freeCam)?1:0;
+  for(const m of ms){
+    const u=m.userData.uArms||(m.userData.uArms={value:0});
+    u.value=on;
+  }
+};
+
+if(DEV&&window.__H)Object.assign(window.__H,{
+  /* estado del recorte por shader: on = valor actual del uniforme (0 entero, 1 sólo brazos),
+     mats = materiales locales parchados, flags = cuántos huesos se marcaron como brazo,
+     sharedWithGhost = true si por error algún fantasma sigue compartiendo un material con el
+     charRoot local (el bug que el fix de core_f/charClone evita) */
+  fpArms:()=>{
+    const ms=fpArmMats,first=ms&&ms[0];
+    let shared=false;
+    if(ms&&typeof GH==='object')for(const id in GH){
+      const g=GH[id];if(!g||!g.root||shared)continue;
+      g.root.traverse(o=>{ if(shared||!o.isSkinnedMesh)return;
+        const gm=Array.isArray(o.material)?o.material:[o.material];
+        for(const m of gm)if(m&&ms.indexOf(m)>=0)shared=true; });
+    }
+    return {on:first?first.userData.uArms.value:null,
+      mats:ms?ms.length:0,
+      flags:fpArmFlags?fpArmFlags.reduce((s,v)=>s+(v>0?1:0),0):0,
+      sharedWithGhost:shared};
+  },
+  /* forzar el uniforme a mano (para probar sin depender de PL.fp/rag/freeCam): dura hasta el
+     próximo camStep, que llama a fpClip() y lo vuelve a fijar según el estado real */
+  fpArmsSet:v=>{
+    const ms=fpArmMaterials();if(!ms)return false;
+    const val=v?1:0;
+    for(const m of ms){ const u=m.userData.uArms||(m.userData.uArms={value:0}); u.value=val; }
+    return true;
+  }
+});
+
+/* ==== core_n.js ==== */
+/* ============================================================
+   SUX SANDBOX — AUDIO REAL (47 efectos + música de menú, generados)
+   ------------------------------------------------------------
+   Hasta acá todo el sonido era sintetizado con osciladores (SFX de core_b). Este módulo
+   trae los archivos generados (assets/hyper/snd/*.mp3 + mus-menu.m4a) y:
+     1. REEMPLAZA cada SFX.* por su grabación — con el sintetizador de RESPALDO: si un
+        buffer no cargó (sin red, códec que falta), suena el beep de siempre. Nada se rompe.
+     2. Suma sonidos que antes no existían: pasos, saltar/caer, zambullida, impactos de
+        props por material (madera/metal/plástico/vidrio), spawn/borrar, sentarse, chat,
+        clicks de menú, mecha/despegue/estallido de la pirotecnia, motor del auto al subir
+        y andando, frenada, choque, y música tranquila en el menú.
+     3. Volumen en Ajustes (SV.vol) sobre el gain maestro MG que ya existía.
+   Reglas de la casa: los enganches son WRAPS de funciones ya declaradas (se concatena
+   último, así que puede pisar cualquier declaración), todo dentro de nsafe, y los sonidos
+   del mundo se atenúan por distancia a la cámara. Nada de esto está en el camino crítico:
+   el juego arranca igual aunque no cargue ni un archivo.
+   ============================================================ */
+
+/* ---------- catálogo ---------- */
+const SND={
+  'shot-pistol':1,'shot-revolver':1,'shot-shotgun':1,'shot-smg':1,'shot-akm':1,
+  'shot-sniper':1,'shot-rpg':1,'shot-crossbow':1,'bat-swing':1,'bat-hit':1,
+  reload:1,empty:1,'phys-hum':1,grab:1,toolgun:1,
+  boom:1,'fw-launch':1,'fw-burst':1,'fw-crackle':1,'fw-fountain':1,'fw-fuse':1,
+  'fw-wheel':1,'fw-bang':1,
+  'step-grass':1,'step-concrete':1,jump:1,land:1,splash:1,hurt:1,
+  'imp-wood':1,'imp-metal':1,'imp-plastic':1,glass:1,spawn:1,trash:1,freeze:1,pop:1,weld:1,
+  'eng-start':1,'eng-loop':1,horn:1,skid:1,crash:1,
+  ui:1,menu:1,chat:1,sit:1};
+const SNDMUS='mus-menu';                       /* .m4a (AAC): los celulares lo decodifican */
+const BUF={};let sndPend=0,sndDone=0,sndFail=0,sndOn=false;
+let lastSnd='',sndPlays=0;
+
+function sndLoad(){
+  if(sndOn||!okUrl(BASE))return;sndOn=true;
+  const names=Object.keys(SND).concat([SNDMUS]);
+  let i=0;
+  const next=()=>{
+    if(i>=names.length)return;
+    const n=names[i++];
+    const f=n===SNDMUS?n+'.m4a':n+'.mp3';
+    sndPend++;
+    fetch(BASE+'snd/'+f).then(r=>{if(!r.ok)throw 0;return r.arrayBuffer();})
+      .then(ab=>{const a=ac();if(!a)throw 0;
+        return new Promise((res,rej)=>a.decodeAudioData(ab,res,rej));})
+      .then(b=>{BUF[n]=b;sndDone++;next();})
+      .catch(()=>{sndFail++;sndDone++;next();});
+  };
+  /* de a 4 en paralelo: ~2 MB en total, no pelea con las texturas (ya cargaron) */
+  for(let k=0;k<4;k++)next();
+}
+
+/* ---------- reproducir ---------- */
+const _sv=new THREE.Vector3();
+function sPlay(name,o){
+  o=o||{};
+  const a=ac(),b=BUF[name];
+  if(!a||!b)return false;
+  let vol=o.vol==null?1:o.vol;
+  if(o.at){ _sv.set(o.at.x!==undefined?o.at.x:o.at[0],
+                    o.at.y!==undefined?o.at.y:o.at[1],
+                    o.at.z!==undefined?o.at.z:o.at[2]);
+    const d=camera.position.distanceTo(_sv);
+    vol*=1/(1+d/9);
+    if(vol<.02)return false; }
+  const src=a.createBufferSource();src.buffer=b;
+  src.playbackRate.value=(o.rate||1)*(o.jit===false?1:.94+Math.random()*.12);
+  const g=a.createGain();g.gain.value=vol;
+  src.connect(g);g.connect(MG);
+  src.start();
+  lastSnd=name;sndPlays++;
+  return true;
+}
+/* bucle con dueño: arranca una vez y se corta cuando la condición muere */
+function sLoop(name,vol){
+  const a=ac(),b=BUF[name];
+  if(!a||!b)return null;
+  const src=a.createBufferSource();src.buffer=b;src.loop=true;
+  const g=a.createGain();g.gain.value=vol==null?1:vol;
+  src.connect(g);g.connect(MG);src.start();
+  return {src,g,stop(){try{src.stop();}catch(e){}},set(v){g.gain.value=v;},
+    rate(r){src.playbackRate.value=r;}};
+}
+
+/* ---------- 1. SFX.* pasan a las grabaciones (con respaldo) ---------- */
+const _SFX0=Object.assign({},SFX);
+const sTry=(n,o,fb)=>{ if(!sPlay(n,o)&&_SFX0[fb||'ui'])nsafe(()=>_SFX0[fb||'ui'](),'sfxfb'); };
+SFX.shot=k=>{ const id=weap().id;
+  const n=SND['shot-'+id]?'shot-'+id:(id==='bat'||id==='hands'?'bat-swing':'shot-pistol');
+  if(!sPlay(n,{vol:.9}))_SFX0.shot(k); };
+SFX.boom =()=>{ if(!sPlay('boom',{vol:1}))_SFX0.boom(); };
+SFX.melee=()=>{ if(!sPlay('bat-swing',{vol:.8}))_SFX0.melee(); };
+SFX.grab =()=>{ if(!sPlay('grab',{vol:.7}))_SFX0.grab(); };
+SFX.drop =()=>{ if(!sPlay('grab',{vol:.5,rate:.72}))_SFX0.drop(); };
+SFX.tool =()=>{ if(!sPlay('toolgun',{vol:.7}))_SFX0.tool(); };
+SFX.freeze=()=>{ if(!sPlay('freeze',{vol:.8}))_SFX0.freeze(); };
+SFX.hurt =()=>{ if(!sPlay('hurt',{vol:.9}))_SFX0.hurt(); };
+SFX.reload=()=>{ if(!sPlay('reload',{vol:.8}))_SFX0.reload(); };
+SFX.ui   =()=>{ if(!sPlay('ui',{vol:.5}))_SFX0.ui(); };
+
+/* ---------- 2. sonidos nuevos ---------- */
+/* pasos: al ritmo del paso real (walk ~2 Hz, run ~3 Hz), material según el piso del mapa */
+let stepT=0;
+function stepGround(){ return (CURMAP&&(CURMAP.def.ground==='asphalt'))?'step-concrete':'step-grass'; }
+function stepStep(dt){
+  if(APP!=='play'||!grounded||PL.rag||PL.sit)return;
+  const sp=Math.hypot(plBody.velocity.x,plBody.velocity.z);
+  if(sp<1.2){stepT=0;return;}
+  stepT+=dt;
+  const iv=sp>7?.32:.48;
+  if(stepT>=iv){stepT=0;sPlay(stepGround(),{vol:.32,rate:sp>7?1.06:1});}
+}
+/* saltar / caer / zambullirse: por transiciones de grounded/inWater */
+let wasGround=true,wasWater=false,airT=0;
+function bodySnd(dt){
+  if(APP!=='play')return;
+  if(!grounded)airT+=dt;
+  if(wasGround&&!grounded&&plBody.velocity.y>3)sPlay('jump',{vol:.45});
+  if(!wasGround&&grounded&&airT>.18&&!inWater)sPlay('land',{vol:Math.min(.8,.3+airT*.4)});
+  if(grounded)airT=0;
+  wasGround=grounded;
+  if(!wasWater&&inWater)sPlay('splash',{vol:.9});
+  wasWater=inWater;
+}
+/* physgun: zumbido mientras se sostiene algo */
+let humL=null;
+function humSnd(){
+  const want=!!grab&&APP==='play';
+  if(want&&!humL)humL=sLoop('phys-hum',.30);
+  else if(!want&&humL){humL.stop();humL=null;}
+}
+/* spawn / borrar props (con freno para que limpiar todo no meta 300 pops) */
+const _spawnN0=spawnProp;let _sT=0,_tT=0;
+spawnProp=function(id,pos,quat,opt){
+  const p=_spawnN0(id,pos,quat,opt);
+  if(p&&APP==='play'){const now=performance.now();
+    if(now-_sT>90){_sT=now;nsafe(()=>sPlay('spawn',{vol:.55,at:p.body.position}),'ssp');}}
+  return p;
+};
+const _removeP0=removeProp;
+removeProp=function(p){
+  if(p&&APP==='play'){const now=performance.now();
+    if(now-_tT>90){_tT=now;nsafe(()=>sPlay('trash',{vol:.5,at:p.body.position}),'str');}}
+  return _removeP0(p);
+};
+/* impactos de props por material: un listener de colisión por prop spawneado */
+let _impT=0;
+function impName(def){
+  const ms={};for(const q of def.parts)ms[q.m||'metal']=1;
+  if(ms.glass)return 'glass';
+  if(ms.wood||ms.plank||ms.cardboard)return 'imp-wood';
+  if(ms.metal||ms.steel||ms.chrome||ms.rust||ms.corrugated)return 'imp-metal';
+  return 'imp-plastic';
+}
+const _spawnN1=spawnProp;
+spawnProp=function(id,pos,quat,opt){
+  const p=_spawnN1(id,pos,quat,opt);
+  if(p)nsafe(()=>{
+    p.body.addEventListener('collide',e=>{
+      const now=performance.now();
+      if(now-_impT<70||now-(p._imp||0)<300)return;
+      let v=0;nsafe(()=>{v=Math.abs(e.contact.getImpactVelocityAlongNormal());},'iv');
+      if(v<2.6)return;
+      _impT=now;p._imp=now;
+      sPlay(impName(p.def),{vol:Math.min(.85,.2+v*.07),at:p.body.position});
+    });},'impl');
+  return p;
+};
+/* globo pinchado: pop cuando el globo desaparece lo maneja removeProp (trash); el POP de
+   verdad va en los balloons de la herramienta — se cuelga del SFX de boom chico que ya
+   usa stepBalloons? no hay: se usa el wrap de removeProp con sonido especial para globos */
+const _removeP1=removeProp;
+removeProp=function(p){
+  if(p&&p.def&&/balloon|globo/i.test(p.def.name||'')&&APP==='play')
+    nsafe(()=>sPlay('pop',{vol:.8,at:p.body.position}),'pop');
+  return _removeP1(p);
+};
+/* soldar (la herramienta weld usa SFX.tool: le sumamos el zap de soldadura) */
+const _tool0=SFX.tool;
+SFX.tool=()=>{ const t=(T('tools')||[])[toolIdx]||'';
+  if(/sold|weld/i.test(t)){ if(!sPlay('weld',{vol:.7}))_tool0(); }
+  else _tool0(); };
+
+/* sentarse */
+const _sit0=sitDown;
+sitDown=function(p){ const r=_sit0(p); if(r)nsafe(()=>sPlay('sit',{vol:.7}),'sit'); return r; };
+
+/* chat entrante */
+nsafe(()=>{ const c0=NET.onChat;
+  NET.onChat=d=>{ nsafe(()=>c0(d),'chat0'); if(!d.sys)sPlay('chat',{vol:.5}); }; },'chatw');
+
+/* pirotecnia: mecha al encender (botón), estallidos por estilo, petardo ya suena por boom */
+nsafe(()=>{ const e=$('bFw'); if(e){
+  const f=()=>nsafe(()=>{sPlay('fw-fuse',{vol:.6});
+    setTimeout(()=>{if(APP==='play')sPlay('fw-launch',{vol:.55});},800);},'fuse');
+  e.addEventListener('touchstart',f,{passive:true});
+  e.addEventListener('mousedown',f);} },'fwbtn');
+const _burst0=burst;
+burst=function(x,y,z,opts){
+  _burst0(x,y,z,opts);
+  nsafe(()=>{
+    const st=(opts&&opts.burst)||'peony';
+    const n=st==='crackle'?'fw-crackle':'fw-burst';
+    sPlay(n,{vol:1,at:[x,y,z]});
+  },'fwsnd');
+};
+
+/* vehículos: arranque al subir, motor en bucle mientras se maneja, frenada y choque */
+let engL=null,_vColT=0;
+const _vhEnter0=vhEnter;
+vhEnter=function(p){
+  const r=_vhEnter0(p);
+  if(r!==false&&VHS){ nsafe(()=>sPlay('eng-start',{vol:.8}),'eng');
+    nsafe(()=>{ if(VHS.p&&VHS.p.body)VHS.p.body.addEventListener('collide',e=>{
+      const now=performance.now();if(now-_vColT<600)return;
+      let v=0;nsafe(()=>{v=Math.abs(e.contact.getImpactVelocityAlongNormal());},'vv');
+      if(v<5)return;_vColT=now;sPlay('crash',{vol:Math.min(1,.4+v*.05)});});},'vcol'); }
+  return r;
+};
+const _vhExit0=vhExit;
+vhExit=function(){ if(engL){engL.stop();engL=null;} return _vhExit0(); };
+function engSnd(){
+  const on=!!VHS&&APP==='play';
+  if(on&&!engL&&BUF['eng-loop'])engL=sLoop('eng-loop',.4);
+  if(!on&&engL){engL.stop();engL=null;}
+  if(on&&engL){ const k=Math.min(1,Math.abs(vhSpeed())/22);
+    engL.rate(.85+k*.75); engL.set(.3+k*.35); }
+}
+nsafe(()=>{ const e=$('bBrake'); if(e){
+  const f=()=>{ if(VHS&&Math.abs(vhSpeed())>6)sPlay('skid',{vol:.75}); };
+  e.addEventListener('touchstart',f,{passive:true});e.addEventListener('mousedown',f);} },'brk');
+
+/* clicks de interfaz + menú de spawn */
+document.addEventListener('click',e=>{
+  const t=e.target;
+  if(!t||!t.closest)return;
+  if(t.closest('#spawn .pit'))return;                     /* el spawn ya suena solo */
+  if(t.closest('.btn,.sptab,.fold,#pmenu button,#optfoot button,.mapit'))sPlay('ui',{vol:.4});
+},true);
+nsafe(()=>{ const e=$('bTools'); if(e){
+  const f=()=>sPlay('menu',{vol:.5});
+  e.addEventListener('touchstart',f,{passive:true});e.addEventListener('mousedown',f);} },'mn');
+
+/* ---------- 3. música de menú ---------- */
+let musL=null;
+function musSnd(){
+  const inMenu=(APP==='title'||APP==='qual'||APP==='help'||APP==='map'||APP==='lang');
+  const a=AC;                                    /* sólo si el contexto ya existe (gesto) */
+  if(inMenu&&!musL&&a&&BUF[SNDMUS])musL=sLoop(SNDMUS,.16);
+  if(!inMenu&&musL){ musL.g.gain.setTargetAtTime(0,AC.currentTime,.4);
+    const m=musL;musL=null;setTimeout(()=>m.stop(),1400); }
+}
+
+/* ---------- 4. volumen en Ajustes ---------- */
+if(SV.vol==null)SV.vol=.5;
+function volApply(){ if(MG)MG.gain.value=SV.vol; }
+nsafe(()=>{
+  const card=document.getElementById('optcard');if(!card)return;
+  const row=document.createElement('div');row.className='sl';
+  row.innerHTML='<label><span id="oVolL">Volumen</span><b id="oVolV"></b></label>'
+    +'<input type="range" id="oVol" min="0" max="100" value="'+Math.round(SV.vol*100)+'">';
+  const foot=document.getElementById('optfoot');
+  card.insertBefore(row,foot);
+  const sl=row.querySelector('#oVol'),vv=row.querySelector('#oVolV');
+  vv.textContent=Math.round(SV.vol*100)+'%';
+  sl.addEventListener('input',()=>{SV.vol=sl.value/100;vv.textContent=sl.value+'%';volApply();});
+  sl.addEventListener('change',()=>save());
+},'volui');
+
+/* ---------- enganche al bucle ---------- */
+let _ldT=0;
+EXT.frame.push(dt=>{
+  if(!sndOn){ _ldT+=dt; if(_ldT>1&&APP!=='load')nsafe(sndLoad,'sndload'); }
+  volApply();
+  nsafe(()=>{stepStep(dt);bodySnd(dt);humSnd();engSnd();musSnd();},'sndtick');
+});
+
+if(DEV&&window.__H)Object.assign(window.__H,{
+  sndInfo:()=>({on:sndOn,pend:sndPend,done:sndDone,fail:sndFail,
+    loaded:Object.keys(BUF).length,plays:sndPlays,last:lastSnd,
+    hum:!!humL,eng:!!engL,mus:!!musL,vol:SV.vol,ac:!!AC}),
+  sndPlay:n=>sPlay(n,{vol:1}),
+  sndShot:()=>{SFX.shot(0);return lastSnd;},
+  sndHave:n=>!!BUF[n],
+  sndNames:()=>Object.keys(SND).concat([SNDMUS])
 });
 
 </script>
