@@ -7,7 +7,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import * as CANNON from 'cannon';
 
-const HASH='595ea5a';
+const HASH='4e434fb';
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/hyper/';
 const okUrl=u=>typeof u==='string'&&u.indexOf('@PEND')<0;
 const $=i=>document.getElementById(i);
@@ -600,6 +600,7 @@ function addBody(q){
   const p=q.p||[0,0,0],r=q.r||[0,0,0];
   const b=new CANNON.Body({mass:0,material:MAT.world});
   b.addShape(partShape(q));
+  b.userData={m:q.m||'concrete'};    // material real del piso/parte, para el sonido de paso (core_n)
   b.position.set(p[0],p[1],p[2]);
   if(r[0]||r[1]||r[2])b.quaternion.setFromEuler(r[0]*D2R,r[1]*D2R,r[2]*D2R,'XYZ');
   world.addBody(b);mapBodies.push(b);return b;

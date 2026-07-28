@@ -4659,7 +4659,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import * as CANNON from 'cannon';
 
-const HASH='595ea5a';
+const HASH='4e434fb';
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/hyper/';
 const okUrl=u=>typeof u==='string'&&u.indexOf('@PEND')<0;
 const $=i=>document.getElementById(i);
@@ -5252,6 +5252,7 @@ function addBody(q){
   const p=q.p||[0,0,0],r=q.r||[0,0,0];
   const b=new CANNON.Body({mass:0,material:MAT.world});
   b.addShape(partShape(q));
+  b.userData={m:q.m||'concrete'};    // material real del piso/parte, para el sonido de paso (core_n)
   b.position.set(p[0],p[1],p[2]);
   if(r[0]||r[1]||r[2])b.quaternion.setFromEuler(r[0]*D2R,r[1]*D2R,r[2]*D2R,'XYZ');
   world.addBody(b);mapBodies.push(b);return b;
@@ -5345,7 +5346,7 @@ plBody.addShape(new CANNON.Sphere(PL.r),new CANNON.Vec3(0,PL.h-PL.r-.06,0));
 plBody.updateMassProperties();
 plBody.position.set(0,1.2,20);
 world.addBody(plBody);
-let grounded=false,coyote=0,inWater=false;
+let grounded=false,coyote=0,inWater=false,groundBody=null;
 
 /* modelo del personaje (GLB generado) */
 let charRoot=null,mixer=null,walkAct=null,bones={},handGrip=null,chestAnchor=null,charH=1.8,charK=1;
@@ -5992,6 +5993,7 @@ function playerStep(dt){
   const to=new CANNON.Vec3(plBody.position.x,plBody.position.y-.34,plBody.position.z);
   rr.reset();world.raycastClosest(from,to,RAY,rr);
   grounded=rr.hasHit&&rr.body!==plBody;
+  groundBody=grounded?rr.body:null;                 // para elegir el sonido de paso por material (core_n)
   if(grounded)coyote=.12;else coyote=Math.max(0,coyote-dt);
   // agua
   inWater=false;
@@ -10364,6 +10366,14 @@ if(DEV&&window.__H)Object.assign(window.__H,{
    window.__H…
    ============================================================ */
 
+/* ---------- contrato FWEV: eventos de sonido (los reproduce core_n, en paralelo) ----------
+   core_l sólo EMITE; nunca reproduce nada acá. Se declara el guard porque build.js
+   concatena los core_[a-z] en orden alfabético y "n" va DESPUÉS de "l": si dejáramos
+   FWEV sin declarar, cualquier llamada acá explotaría hasta que core_n se cargue. Con
+   'var' y el typeof-guard, core_n puede REASIGNAR la función (nunca re-declararla, eso
+   sí rompe) sin que el orden de concatenación importe. */
+if(typeof FWEV==='undefined')var FWEV=null;
+
 Object.assign(I18N.es,{fwLight:'🔥 Encender'});
 Object.assign(I18N.en,{fwLight:'🔥 Light'});
 Object.assign(I18N.pt,{fwLight:'🔥 Acender'});
@@ -10506,6 +10516,9 @@ function burst(x,y,z,opts){
   const clrArr=fwClrArr(opts&&opts.clr);
   const size=Math.max(.3,Math.min(3,(opts&&opts.size)||1));
   const spd=6.5+size*3.2;
+  /* estilo/size YA resueltos (los mismos que eligen la función de abajo): el sonido
+     necesita justo estos, no los opts crudos que puedan venir sin default. */
+  if(FWEV)nsafe(()=>FWEV('burst',x,y,z,{style,size}),'fwev');
   litLight(x,y,z,clrArr[0]);
   /* FOGONAZO: unas pocas partículas grandes y blancas de vida cortísima en el centro.
      Es lo que hace que el estallido se note incluso contra el cielo claro de día. */
@@ -10584,6 +10597,9 @@ function fireShell(p,fw,isCandle){
   const b=buildDef(p.def);
   fwPoint(p,b.size[1]-.03,0,0,_fwV3);
   const apex=apexFor(fw,isCandle),vy0=Math.sqrt(2*19.6*Math.max(1,apex)),c=pickColor(fw.clr);
+  /* mortero/torta vs vela romana son el mismo disparo balístico, pero el sonido
+     que le corresponde a cada uno es distinto -> evento distinto según isCandle */
+  if(FWEV){const ev=isCandle?'candle':'shell';nsafe(()=>FWEV(ev,_fwV3.x,_fwV3.y,_fwV3.z),'fwev');}
   spawnParticle({x:_fwV3.x,y:_fwV3.y,z:_fwV3.z,
     vx:(Math.random()-.5)*1.1,vy:vy0,vz:(Math.random()-.5)*1.1,
     life:6,r:c.r,g:c.g,b:c.b,grav:19.6,drag:.02,psize:1.3,
@@ -10616,7 +10632,10 @@ function stepRocket(st,dt){
   if(st.phase==='fuse'){
     st.emitAcc=(st.emitAcc||0)+dt*34;
     while(st.emitAcc>=1){st.emitAcc--;spawnFuseSpark(p);}
-    if(st.t>=.8){st.t=0;st.phase='fly';freezeProp(p,false);}
+    if(st.t>=.8){
+      st.t=0;st.phase='fly';freezeProp(p,false);
+      if(FWEV){const P=p.body.position;nsafe(()=>FWEV('launch',P.x,P.y,P.z,{k:fw.k}),'fwev');}
+    }
     return;
   }
   const fly=Math.max(.15,fw.fly||2.2),ft=Math.min(1,st.t/fly);
@@ -10655,7 +10674,14 @@ function stepCandle(st,dt){
 }
 function stepFountain(st,dt){
   const p=st.p,fw=st.fw;
-  if(st.t>=Math.max(.2,fw.dur||2)){FWLIT.delete(p);return;}
+  if(!st.started){
+    st.started=true;
+    if(FWEV){const P=p.body.position;nsafe(()=>FWEV('fountain0',P.x,P.y,P.z),'fwev');}
+  }
+  if(st.t>=Math.max(.2,fw.dur||2)){
+    if(FWEV){const P=p.body.position;nsafe(()=>FWEV('fountain1',P.x,P.y,P.z),'fwev');}
+    FWLIT.delete(p);return;
+  }
   const b=buildDef(p.def);
   fwPoint(p,b.size[1]-.03,0,0,_fwV3);
   fwUpWorld(p,_fwDirV);
@@ -10673,6 +10699,7 @@ function stepWheel(st,dt){
   if(!st.started){
     st.started=true;if(p.frozen)freezeProp(p,false);
     st.spin=6+(fw.size||1)*3;
+    if(FWEV){const P=p.body.position;nsafe(()=>FWEV('wheel0',P.x,P.y,P.z),'fwev');}
   }
   p.body.wakeUp();
   p.body.velocity.set(0,0,0);
@@ -10688,7 +10715,11 @@ function stepWheel(st,dt){
       vx:ox*4+(Math.random()-.5)*.6,vy:1+Math.random()*1.2,vz:oz*4+(Math.random()-.5)*.6,
       life:.22+Math.random()*.2,r:c.r,g:c.g,b:c.b,grav:4,drag:.5,psize:.65});
   }
-  if(st.t>=Math.max(.3,fw.dur||3)){freezeProp(p,true);FWLIT.delete(p);}
+  if(st.t>=Math.max(.3,fw.dur||3)){
+    freezeProp(p,true);
+    if(FWEV){const P=p.body.position;nsafe(()=>FWEV('wheel1',P.x,P.y,P.z),'fwev');}
+    FWLIT.delete(p);
+  }
 }
 const BOMB_FUSE=1.2;
 function stepBomb(st,dt){
@@ -10707,6 +10738,9 @@ function stepBomb(st,dt){
     const P=p.body.position;
     boom(new THREE.Vector3(P.x,P.y,P.z),3+(fw.size||1));
     groundFlash(P.x,P.y,P.z,fw);
+    /* ADEMAS del boom() de física: el petardo también avisa por FWEV, igual que
+       cualquier otro estallido (el boom() no sabe nada de pirotecnia). */
+    if(FWEV)nsafe(()=>FWEV('bomb',P.x,P.y,P.z),'fwev');
     FWLIT.delete(p);removeProp(p);
   }
 }
@@ -10714,7 +10748,15 @@ function fwStep(dt){
   if(!HASFW||!FWLIT.size)return;
   for(const st of Array.from(FWLIT.values())){
     const p=st.p;
-    if(PROPS.indexOf(p)<0){FWLIT.delete(p);continue;}
+    if(PROPS.indexOf(p)<0){
+      /* el prop se borró desde afuera (otro sistema) a mitad de fuente/rueda: sin este
+         chequeo el sonido de "empezó" quedaría sin su "terminó" del otro lado. */
+      if(FWEV&&st.started&&(st.k==='fountain'||st.k==='wheel')){
+        const ev=st.k==='fountain'?'fountain1':'wheel1',P=p.body.position;
+        nsafe(()=>FWEV(ev,P.x,P.y,P.z),'fwev');
+      }
+      FWLIT.delete(p);continue;
+    }
     st.t+=dt;
     if(st.k==='rocket'||st.k==='missile')stepRocket(st,dt);
     else if(st.k==='mortar'||st.k==='cake')stepMortarCake(st,dt);
@@ -10733,6 +10775,8 @@ function fwLight(target){
   const fw=p.def.fw;
   if((fw.k==='rocket'||fw.k==='missile')&&!p.frozen)freezeProp(p,true);
   FWLIT.set(p,{p,fw,k:fw.k,t:0,phase:'fuse',shotsLeft:fw.shots||0,nextShot:0});
+  /* 'fuse' es el único evento que no depende del tipo: se prende la mecha, listo */
+  if(FWEV){const P=p.body.position;nsafe(()=>FWEV('fuse',P.x,P.y,P.z),'fwev');}
   if(nearFW===p)nearFW=null;
   fwBtnPaint();
   return true;
@@ -10800,23 +10844,30 @@ if(DEV&&window.__H)Object.assign(window.__H,{
 /* ==== core_m.js ==== */
 
 /* ============================================================
-   HYPER SANDBOX — 1ª PERSONA: SÓLO LOS BRAZOS, POR SHADER
+   HYPER SANDBOX — 1ª PERSONA: BRAZOS POR SHADER + PLANO CERCANO
    ------------------------------------------------------------
-   Antes (core_c, fpClip) el recorte de 1ª persona era DOS THREE.Plane puestos delante de la
-   cámara y a la altura de la cadera: sirve mientras se mira más o menos al frente, pero el
-   pedido es "si miras arriba o abajo tampoco tenés que verte la cabeza ni las piernas", y un
-   plano fijo al ojo no distingue brazo de torso cuando la cámara gira: en algún ángulo el plano
-   de la cadera te deja ver el pecho, o el de la cara te come el hombro.
-   ACÁ SE CAMBIA POR UN DISCARD POR PESO DE HUESO: cada vértice ya sabe, por su propio
-   skinning, qué porcentaje de su movimiento depende de huesos de BRAZO (mano, antebrazo,
-   dedos, brazo — no clavícula/hombro). Ese porcentaje viaja a la varying vArm, y en 1ª persona
-   el fragment shader descarta lo que no llega a ser brazo. No hay geometría estirada ni un
-   plano que pueda "fallar" mirando para arriba: es una propiedad del vértice, no de la cámara.
-   Y como el shadow map usa el MeshDepthMaterial (que no pasa por este onBeforeCompile), la
-   sombra del jugador sigue completa aunque en cámara sólo se vean los brazos.
+   Antes (core_c, fpClip) el recorte de 1ª persona era DOS THREE.Plane: uno pegado a la cámara
+   (FPCLIP, cabeza/cuello) y uno horizontal a la altura de la cadera (FPLEG, piernas). Servía
+   mirando más o menos al frente, pero mirando arriba o abajo un plano fijo al ojo no distingue
+   brazo de torso: en algún ángulo el de la cadera dejaba ver el pecho, o el de la cara se comía
+   el hombro.
+   ACÁ SE AGREGA UN DISCARD POR PESO DE HUESO PARA EL TORSO/PIERNAS: cada vértice ya sabe, por
+   su propio skinning, qué porcentaje de su movimiento depende de huesos de BRAZO (mano,
+   antebrazo, dedos, brazo — no clavícula/hombro). Ese porcentaje viaja a la varying vArm, y en
+   1ª persona el fragment shader descarta lo que no llega a ser brazo: FPLEG (la pierna) ya no
+   hace falta, el discard la saca sola sea cual sea el ángulo de cámara.
+   PERO EL DISCARD POR SÍ SOLO NO ALCANZA (bug real, con capturas de celular): sin ningún plano
+   cercano el BRAZO SIGUE SIENDO GEOMETRÍA, y esa geometría cruza literalmente el punto de la
+   cámara cuando el brazo está estirado hacia el arma (mirar arriba: el antebrazo tapa media
+   pantalla de negro; mirar abajo: quedan pedazos color piel desgarrados cerca del ojo) — el
+   discard sólo decide QUÉ vértices sobreviven, no impide que un triángulo que sobrevive pase
+   ADELANTE del near plane de la cámara y se vea gigante y deformado. Por eso acá se RECUPERA
+   sólo FPCLIP (el plano pegado a la cámara, mirando adonde mira ella): FPLEG no vuelve, esa la
+   sigue sacando el discard.
    Se concatena último (después de core_c y core_f): ya existen THREE, charRoot, bones, PL,
-   freeCam, camera, GH (core_f) y fpClip/fpClipMaterials (core_c, funciones REASIGNABLES: acá
-   se pisa fpClip entero, la versión de planos queda sin uso pero sin tocar core_c).
+   freeCam, camera, GH (core_f) y fpClip/fpClipMaterials/FPCLIP/FPCLIPD (core_c, funciones y
+   variables REASIGNABLES/MUTABLES: acá se pisa fpClip entero combinando lo nuevo —discard— con
+   lo viejo —FPCLIP—, sin tocar core_c).
    ============================================================ */
 
 /* ---------- 1. qué huesos son "brazo" ----------
@@ -10851,10 +10902,18 @@ function fpArmBoneFlags(){
 /* ---------- 3. parchar un material skinned ----------
    NO se toca el material del arma (cuelga de un hueso pero no es skinned) ni nada que no sea
    SkinnedMesh: sólo el cuerpo necesita el discard. */
+/* .45 y no .32 — MEDIDO contra las capturas del bug: con .32 sobrevivían al discard restos de
+   piel/tela del antebrazo cerca del codo/hombro (vértices con el peso repartido entre el hueso
+   de brazo y el de torso), que es justo lo que se veía como "pedazos desgarrados color piel"
+   cerca de la cámara mirando hacia abajo. Subir el umbral empuja el corte más adentro del brazo
+   (más lejos del torso), así que si algún día se ve la MANO recortada (poco probable: la mano
+   entera flaggea 1.0 en fpArmFlag, no queda en zona de mezcla) hay que bajar este número, no el
+   .5 de uArms (ese es el interruptor entero/brazos, no la zona de mezcla del vértice). */
+const FP_ARM_THRESHOLD=.45;
 function fpArmPatch(mat,flags,NB){
   if(!mat||mat.userData._farm)return;      // no parchar el mismo material dos veces
   mat.userData._farm=1;
-  mat.clippingPlanes=null;                 // ya no hace falta el recorte por plano de core_c
+  mat.clippingPlanes=null;                 // estado inicial: lo prende fpClip() al entrar en 1ª
   if(!mat.userData.uArms)mat.userData.uArms={value:0};
   mat.onBeforeCompile=function(shader){
     /* uArms: 0/1, un jugador entero o sólo brazos. uArmF: por hueso, cuánto es "brazo".
@@ -10875,13 +10934,13 @@ function fpArmPatch(mat,flags,NB){
       +'\tvArm = uArmF[int(skinIndex.x)]*skinWeight.x + uArmF[int(skinIndex.y)]*skinWeight.y'
       +' + uArmF[int(skinIndex.z)]*skinWeight.z + uArmF[int(skinIndex.w)]*skinWeight.w;');
     /* fragment: al ARRANQUE de main(), antes de cualquier cuenta de luz (más barato: no se
-       calcula nada de un fragmento que se va a tirar). .32 y no .5: un vértice que reparte su
-       peso entre antebrazo y torso (la zona del codo/hombro) tiene que seguir viéndose brazo,
-       si no queda una costura pelada justo en el codo. */
+       calcula nada de un fragmento que se va a tirar). FP_ARM_THRESHOLD (no .5): un vértice que
+       reparte su peso entre antebrazo y torso (la zona del codo/hombro) tiene que seguir
+       viéndose brazo hasta ese punto, si no queda una costura pelada justo en el codo. */
     shader.fragmentShader=shader.fragmentShader.replace('#include <common>',
       '#include <common>\nvarying float vArm;\nuniform float uArms;');
     shader.fragmentShader=shader.fragmentShader.replace('void main() {',
-      'void main() {\n\tif(uArms>.5 && vArm<.32)discard;');
+      'void main() {\n\tif(uArms>.5 && vArm<'+FP_ARM_THRESHOLD+')discard;');
   };
   /* +NB: si algún día conviven dos esqueletos con distinto número de huesos, cada uno necesita
      su propio programa (el tamaño de uArmF va fijo en el código del shader) */
@@ -10913,19 +10972,37 @@ function fpArmMaterials(){
    nombre en el mismo scope de módulo, y eso es SyntaxError en modo estricto (los módulos
    siempre lo son) — probado a mano: "Identifier 'fpClip' has already been declared".
    Function declarations SÍ crean un binding MUTABLE (no es const), así que la forma correcta
-   de pisarla es una asignación común, no una nueva declaración. La versión de planos de
-   core_c queda escrita pero sin uso; no se toca ese archivo.
-   Ya no hay que "cambiar clippingPlanes" (eso SÍ recompilaba el shader, por eso antes se
-   evitaba tocarlo si el estado no cambiaba): acá sólo se escribe un uniforme, que no cuesta
-   recompilación ninguna, así que se puede escribir todos los frames sin culpa. */
+   de pisarla es una asignación común, no una nueva declaración. fpClipOn (let, core_c) es el
+   MISMO motivo: se reasigna, no se vuelve a declarar.
+   uArms (el discard) se puede escribir TODOS los frames sin culpa, es sólo un uniforme y no
+   cuesta recompilación. clippingPlanes en cambio SÍ recompila el shader (dispara needsUpdate,
+   three reconstruye el programa), así que igual que hacía la fpClip original de core_c, sólo se
+   toca cuando el estado on/off cambia — fpClipOn (la variable de core_c) sigue sirviendo
+   exactamente para eso, por más que ahora la arme esta función y no la de core_c.
+   FPLEG NO vuelve: la pierna la sigue sacando el discard de vArm, este plano es sólo el cercano
+   pegado a la cámara (el que evita que el brazo estirado cruce el ojo, ver el bug de arriba).
+   Los fantasmas (core_f, charClone) clonan el material entero: clippingPlanes es un array por
+   INSTANCIA de material (Material.clone() copia la referencia del array, pero fpArmMaterials()
+   sólo agarra los materiales del charRoot LOCAL, nunca los clonados), así que esto no les toca
+   nada — igual que ya pasaba con uArms. */
 fpClip=function(){
   const ms=fpArmMaterials();
   if(!ms)return;
   const on=(PL.fp&&!PL.rag&&!freeCam)?1:0;
+  if(on){
+    /* mismo cálculo que la fpClip de core_c: el plano sale de la pose de ESTE frame, con la
+       cámara ya puesta (camStep llama a fpClip() al final, ver ese archivo). */
+    camera.getWorldDirection(_fcd);
+    _fcp.copy(camera.position).addScaledVector(_fcd,FPCLIPD);
+    FPCLIP.setFromNormalAndCoplanarPoint(_fcd,_fcp);
+  }
   for(const m of ms){
     const u=m.userData.uArms||(m.userData.uArms={value:0});
     u.value=on;
   }
+  if(on===fpClipOn)return;                 // sin cambio de estado: no tocar clippingPlanes
+  fpClipOn=on;
+  for(const m of ms){m.clippingPlanes=on?[FPCLIP]:null;m.needsUpdate=true;}
 };
 
 if(DEV&&window.__H)Object.assign(window.__H,{
@@ -10959,17 +11036,21 @@ if(DEV&&window.__H)Object.assign(window.__H,{
 
 /* ==== core_n.js ==== */
 /* ============================================================
-   SUX SANDBOX — AUDIO REAL (47 efectos + música de menú, generados)
+   SUX SANDBOX — AUDIO REAL (68 efectos + música de menú, generados)
    ------------------------------------------------------------
    Hasta acá todo el sonido era sintetizado con osciladores (SFX de core_b). Este módulo
    trae los archivos generados (assets/hyper/snd/*.mp3 + mus-menu.m4a) y:
      1. REEMPLAZA cada SFX.* por su grabación — con el sintetizador de RESPALDO: si un
         buffer no cargó (sin red, códec que falta), suena el beep de siempre. Nada se rompe.
-     2. Suma sonidos que antes no existían: pasos, saltar/caer, zambullida, impactos de
-        props por material (madera/metal/plástico/vidrio), spawn/borrar, sentarse, chat,
-        clicks de menú, mecha/despegue/estallido de la pirotecnia, motor del auto al subir
-        y andando, frenada, choque, y música tranquila en el menú.
-     3. Volumen en Ajustes (SV.vol) sobre el gain maestro MG que ya existía.
+     2. Suma sonidos que antes no existían: pasos por material real, saltar/caer, nadar,
+        impactos de props por material (madera/metal/plástico/vidrio) y de balas (rebote/
+        hormigón), daño/muerte, spawn/borrar, sentarse, chat, clicks de menú, pirotecnia
+        completa (mecha/despegue/estallido/rueda/fuente/petardo, por evento real via FWEV),
+        motor del auto (o de la moto) al subir y andando, bocina, frenada, choque, ambiente
+        de mapa (viento + pájaros en pasto), y música tranquila en el menú.
+     3. Corrige mapeos que sonaban "a cualquier cosa": physgun/toolgun ya no caen al
+        fallback de pistola, los pasos ya no son siempre pasto, etc. (ver cada sección).
+     4. Volumen en Ajustes (SV.vol) sobre el gain maestro MG que ya existía.
    Reglas de la casa: los enganches son WRAPS de funciones ya declaradas (se concatena
    último, así que puede pisar cualquier declaración), todo dentro de nsafe, y los sonidos
    del mundo se atenúan por distancia a la cámara. Nada de esto está en el camino crítico:
@@ -10986,10 +11067,22 @@ const SND={
   'step-grass':1,'step-concrete':1,jump:1,land:1,splash:1,hurt:1,
   'imp-wood':1,'imp-metal':1,'imp-plastic':1,glass:1,spawn:1,trash:1,freeze:1,pop:1,weld:1,
   'eng-start':1,'eng-loop':1,horn:1,skid:1,crash:1,
-  ui:1,menu:1,chat:1,sit:1};
+  ui:1,menu:1,chat:1,sit:1,
+  /* nuevos: disparos que no eran pistola/pistola, pasos por piso real, nadar, daño/muerte,
+     rebotes de bala, pirotecnia ampliada (por evento), moto y ambiente de mapa */
+  'fw-whistle':1,'fw-boomfar':1,'fw-finale':1,'fw-sparkle':1,'fw-thump':1,'fw-candle':1,
+  'fw-bigburst':1,'fw-wheel2':1,'phys-shot':1,'tool-ok':1,'crossbow-load':1,ricochet:1,
+  'imp-concrete':1,swim:1,hurt2:1,death:1,'amb-wind':1,'amb-birds':1,'eng-moto':1,
+  'step-metal':1,'step-wood':1};
 const SNDMUS='mus-menu';                       /* .m4a (AAC): los celulares lo decodifican */
 const BUF={};let sndPend=0,sndDone=0,sndFail=0,sndOn=false;
 let lastSnd='',sndPlays=0;
+/* historial corto de reproducciones, SÓLO en DEV: lastSnd es un escalar y varios sonidos
+   pueden dispararse en el mismo tick del juego (p.ej. el estallido de un cohete y el 'trash'
+   de borrar el prop se llaman uno atrás del otro, sin ceder el hilo) — un test de afuera que
+   sondea sndInfo().last a intervalos SIEMPRE puede perderse el que quedó pisado en el medio,
+   por más seguido que sondee. Con el historial no hace falta adivinar el timing. */
+const sndHistArr=[];
 
 function sndLoad(){
   if(sndOn||!okUrl(BASE))return;sndOn=true;
@@ -11029,6 +11122,7 @@ function sPlay(name,o){
   src.connect(g);g.connect(MG);
   src.start();
   lastSnd=name;sndPlays++;
+  if(DEV){sndHistArr.push(name);if(sndHistArr.length>60)sndHistArr.shift();}
   return true;
 }
 /* bucle con dueño: arranca una vez y se corta cuando la condición muere */
@@ -11041,34 +11135,121 @@ function sLoop(name,vol){
   return {src,g,stop(){try{src.stop();}catch(e){}},set(v){g.gain.value=v;},
     rate(r){src.playbackRate.value=r;}};
 }
+/* apaga un bucle con fundido (usado por música y ambiente al salir del contexto) */
+function fadeOut(l){
+  if(!l||!AC)return;
+  l.g.gain.setTargetAtTime(0,AC.currentTime,.4);
+  setTimeout(()=>{try{l.stop();}catch(e){}},1400);
+}
+
+/* ---------- material dominante (compartido: impactos de props, pasos, rebotes) ---------- */
+function propMatSet(def){
+  const ms={};for(const q of def.parts)ms[q.m||'metal']=1;
+  return ms;
+}
+function impName(def){
+  const ms=propMatSet(def);
+  if(ms.glass)return 'glass';
+  if(ms.wood||ms.plank||ms.cardboard)return 'imp-wood';
+  if(ms.metal||ms.steel||ms.chrome||ms.rust||ms.corrugated)return 'imp-metal';
+  return 'imp-plastic';
+}
+/* paso de un prop pisado (capot de auto, tablón, etc.): misma idea que impName */
+function propStepSound(def){
+  const ms=propMatSet(def);
+  if(ms.wood||ms.plank||ms.cardboard)return 'step-wood';
+  if(ms.metal||ms.steel||ms.chrome||ms.rust||ms.corrugated)return 'step-metal';
+  if(ms.grass||ms.dirt)return 'step-grass';
+  return 'step-concrete';
+}
+/* paso sobre el piso del mapa (userData.m puesto por addBody en core_a) */
+function matStepSound(m){
+  if(m==='grass'||m==='dirt')return 'step-grass';
+  if(m==='wood'||m==='plank')return 'step-wood';
+  if(m==='steel'||m==='metal'||m==='corrugated'||m==='chrome'||m==='rust')return 'step-metal';
+  return 'step-concrete';                        // concrete/brick/asphalt/tile/… y cualquier otro
+}
+/* ¿el cuerpo que pegó la bala es metálico? prop: por su material dominante; mapa: por userData.m */
+function isMetalHit(h){
+  if(h.prop)return impName(h.prop.def)==='imp-metal';
+  const m=h.body&&h.body.userData&&h.body.userData.m;
+  return /steel|metal|chrome|rust|corrugated/.test(m||'');
+}
 
 /* ---------- 1. SFX.* pasan a las grabaciones (con respaldo) ---------- */
 const _SFX0=Object.assign({},SFX);
 const sTry=(n,o,fb)=>{ if(!sPlay(n,o)&&_SFX0[fb||'ui'])nsafe(()=>_SFX0[fb||'ui'](),'sfxfb'); };
-SFX.shot=k=>{ const id=weap().id;
-  const n=SND['shot-'+id]?'shot-'+id:(id==='bat'||id==='hands'?'bat-swing':'shot-pistol');
-  if(!sPlay(n,{vol:.9}))_SFX0.shot(k); };
+/* disparo por arma real (queja: physgun/toolgun sonaban a pistola porque no había
+   'shot-physgun'/'shot-toolgun' y todo caía al fallback) */
+function shotNameFor(w){
+  const id=w.id;
+  if(id==='physgun'||id==='gravgun')return 'phys-shot';
+  if(id==='toolgun')return 'tool-ok';
+  if(id==='bat'||id==='hands')return 'bat-swing';
+  return SND['shot-'+id]?'shot-'+id:'shot-pistol';
+}
+SFX.shot=k=>{
+  const w=weap(),n=shotNameFor(w);
+  if(!sPlay(n,{vol:.9}))_SFX0.shot(k);
+  /* bala que pega: sólo armas de fuego de verdad (gun/proj), no melee/phys/tool */
+  if(w.kind==='gun'||w.kind==='proj')nsafe(()=>{
+    const h=aimRay(60,0);
+    if(h)sPlay((isMetalHit(h)&&Math.random()<.3)?'ricochet':'imp-concrete',{vol:.22,at:h.p});
+  },'ricochet');
+};
 SFX.boom =()=>{ if(!sPlay('boom',{vol:1}))_SFX0.boom(); };
 SFX.melee=()=>{ if(!sPlay('bat-swing',{vol:.8}))_SFX0.melee(); };
 SFX.grab =()=>{ if(!sPlay('grab',{vol:.7}))_SFX0.grab(); };
 SFX.drop =()=>{ if(!sPlay('grab',{vol:.5,rate:.72}))_SFX0.drop(); };
 SFX.tool =()=>{ if(!sPlay('toolgun',{vol:.7}))_SFX0.tool(); };
 SFX.freeze=()=>{ if(!sPlay('freeze',{vol:.8}))_SFX0.freeze(); };
-SFX.hurt =()=>{ if(!sPlay('hurt',{vol:.9}))_SFX0.hurt(); };
-SFX.reload=()=>{ if(!sPlay('reload',{vol:.8}))_SFX0.reload(); };
+/* daño: hurt(n) en core_b llama a SFX.hurt() ANTES de aplicar el daño (no recibe n), así
+   que lo envolvemos para saber si ESTE golpe deja la vida en 0 y avisar con 'death' */
+let _pendKill=false;
+const _hurt0=hurt;
+hurt=function(n){ _pendKill=n>0&&(PL.hp-n<=0); _hurt0(n); };
+SFX.hurt=()=>{ const n=_pendKill?'death':(Math.random()<.5?'hurt':'hurt2');
+  if(!sPlay(n,{vol:.9}))_SFX0.hurt(); };
+/* recarga: la ballesta tensa la cuerda a mano, no es instantáneo -> 0.3s de delay.
+   Como el disparo con mag:1 dispara reload() en el mismo instante, este delay ES el
+   "crossbow-load 0.3s después del disparo" pedido, sin duplicar el sonido. */
+SFX.reload=()=>{
+  const w=weap();
+  if(w.id==='crossbow'){
+    setTimeout(()=>{ if(APP==='play')nsafe(()=>{ if(!sPlay('crossbow-load',{vol:.6}))_SFX0.reload(); },'xload'); },300);
+    return;
+  }
+  if(!sPlay('reload',{vol:.8}))_SFX0.reload();
+};
 SFX.ui   =()=>{ if(!sPlay('ui',{vol:.5}))_SFX0.ui(); };
 
 /* ---------- 2. sonidos nuevos ---------- */
-/* pasos: al ritmo del paso real (walk ~2 Hz, run ~3 Hz), material según el piso del mapa */
+/* pasos: al ritmo del paso real (walk ~2 Hz, run ~3 Hz); material real del piso (groundBody,
+   puesto por playerStep en core_b) o fallback por CURMAP.def.ground si no hay userData */
 let stepT=0;
-function stepGround(){ return (CURMAP&&(CURMAP.def.ground==='asphalt'))?'step-concrete':'step-grass'; }
+function stepGroundFallback(){ return (CURMAP&&(CURMAP.def.ground==='asphalt'))?'step-concrete':'step-grass'; }
+function groundStepSound(){
+  if(groundBody&&groundBody.userData){
+    if(groundBody.userData.prop)return propStepSound(groundBody.userData.prop.def);
+    if(groundBody.userData.m)return matStepSound(groundBody.userData.m);
+  }
+  return stepGroundFallback();
+}
 function stepStep(dt){
-  if(APP!=='play'||!grounded||PL.rag||PL.sit)return;
+  if(APP!=='play'||PL.rag||PL.sit)return;
+  if(inWater){                                   // nadando: brazada en vez de paso
+    const sp=Math.hypot(plBody.velocity.x,plBody.velocity.y,plBody.velocity.z);
+    if(sp<1.5){stepT=0;return;}
+    stepT+=dt;
+    if(stepT>=.8){stepT=0;sPlay('swim',{vol:.4});}
+    return;
+  }
+  if(!grounded){stepT=0;return;}
   const sp=Math.hypot(plBody.velocity.x,plBody.velocity.z);
   if(sp<1.2){stepT=0;return;}
   stepT+=dt;
   const iv=sp>7?.32:.48;
-  if(stepT>=iv){stepT=0;sPlay(stepGround(),{vol:.32,rate:sp>7?1.06:1});}
+  if(stepT>=iv){stepT=0;sPlay(groundStepSound(),{vol:.32,rate:sp>7?1.06:1});}
 }
 /* saltar / caer / zambullirse: por transiciones de grounded/inWater */
 let wasGround=true,wasWater=false,airT=0;
@@ -11105,13 +11286,6 @@ removeProp=function(p){
 };
 /* impactos de props por material: un listener de colisión por prop spawneado */
 let _impT=0;
-function impName(def){
-  const ms={};for(const q of def.parts)ms[q.m||'metal']=1;
-  if(ms.glass)return 'glass';
-  if(ms.wood||ms.plank||ms.cardboard)return 'imp-wood';
-  if(ms.metal||ms.steel||ms.chrome||ms.rust||ms.corrugated)return 'imp-metal';
-  return 'imp-plastic';
-}
 const _spawnN1=spawnProp;
 spawnProp=function(id,pos,quat,opt){
   const p=_spawnN1(id,pos,quat,opt);
@@ -11149,23 +11323,41 @@ sitDown=function(p){ const r=_sit0(p); if(r)nsafe(()=>sPlay('sit',{vol:.7}),'sit
 nsafe(()=>{ const c0=NET.onChat;
   NET.onChat=d=>{ nsafe(()=>c0(d),'chat0'); if(!d.sys)sPlay('chat',{vol:.5}); }; },'chatw');
 
-/* pirotecnia: mecha al encender (botón), estallidos por estilo, petardo ya suena por boom */
-nsafe(()=>{ const e=$('bFw'); if(e){
-  const f=()=>nsafe(()=>{sPlay('fw-fuse',{vol:.6});
-    setTimeout(()=>{if(APP==='play')sPlay('fw-launch',{vol:.55});},800);},'fuse');
-  e.addEventListener('touchstart',f,{passive:true});
-  e.addEventListener('mousedown',f);} },'fwbtn');
-const _burst0=burst;
-burst=function(x,y,z,opts){
-  _burst0(x,y,z,opts);
+/* ---------- pirotecnia: FWEV, el contrato con core_l ---------- */
+/* antes había un wrap de burst() y un listener de bFw tocando fw-fuse/fw-launch a mano:
+   sonaba siempre igual (no distinguía mecha real de estallido, ni estilo, ni fuentes/ruedas
+   en bucle) y duplicaba el burst. Ahora core_l llama a FWEV(ev,x,y,z,extra) en cada evento
+   real (fuse/launch/shell/candle/burst/bomb/fountain0-1/wheel0-1) y acá se decide el sonido. */
+if(typeof FWEV==='undefined')var FWEV=null;
+const fwKey=(x,y,z)=>Math.round(x*4)+'_'+Math.round(y*4)+'_'+Math.round(z*4);   // varias fuentes/ruedas a la vez
+const fwFountains={},fwWheels={};
+FWEV=function(ev,x,y,z,extra){
   nsafe(()=>{
-    const st=(opts&&opts.burst)||'peony';
-    const n=st==='crackle'?'fw-crackle':'fw-burst';
-    sPlay(n,{vol:1,at:[x,y,z]});
-  },'fwsnd');
+    const at=[x,y,z];
+    if(ev==='fuse'){ sPlay('fw-fuse',{vol:.6}); }
+    else if(ev==='launch'){
+      const missile=extra&&extra.k==='missile';
+      const n=missile?'fw-launch':(Math.random()<.5?'fw-launch':'fw-whistle');   // variar los cohetes
+      sPlay(n,{vol:.55,at});
+    }
+    else if(ev==='shell'){ sPlay('fw-thump',{vol:.6,at}); }
+    else if(ev==='candle'){ sPlay('fw-candle',{vol:.55,at}); }
+    else if(ev==='burst'){
+      const size=(extra&&extra.size)||1,style=(extra&&extra.style)||'peony';
+      const n=size>=3?'fw-bigburst':style==='crackle'?'fw-crackle':style==='multi'?'fw-finale':'fw-burst';
+      sPlay(n,{vol:.75,at});
+      if(style==='willow')setTimeout(()=>nsafe(()=>sPlay('fw-sparkle',{vol:.5,at}),'fwsp'),300);
+      if(Math.random()<.35)setTimeout(()=>nsafe(()=>sPlay('fw-boomfar',{vol:.4,at}),'fwbf'),500); // profundidad
+    }
+    else if(ev==='bomb'){ sPlay('fw-bang',{vol:1,at}); }
+    else if(ev==='fountain0'){ const k=fwKey(x,y,z); if(!fwFountains[k])fwFountains[k]=sLoop('fw-fountain',.4); }
+    else if(ev==='fountain1'){ const k=fwKey(x,y,z); if(fwFountains[k]){fwFountains[k].stop();delete fwFountains[k];} }
+    else if(ev==='wheel0'){ const k=fwKey(x,y,z); if(!fwWheels[k])fwWheels[k]=sLoop('fw-wheel2',.4); }
+    else if(ev==='wheel1'){ const k=fwKey(x,y,z); if(fwWheels[k]){fwWheels[k].stop();delete fwWheels[k];} }
+  },'fwev');
 };
 
-/* vehículos: arranque al subir, motor en bucle mientras se maneja, frenada y choque */
+/* vehículos: arranque al subir, motor en bucle (moto suena distinto), bocina, frenada, choque */
 let engL=null,_vColT=0;
 const _vhEnter0=vhEnter;
 vhEnter=function(p){
@@ -11179,9 +11371,11 @@ vhEnter=function(p){
 };
 const _vhExit0=vhExit;
 vhExit=function(){ if(engL){engL.stop();engL=null;} return _vhExit0(); };
+const isMoto=()=>!!(VHS&&VHS.p&&VHS.p.def&&(/moto/i.test(VHS.p.def.id||'')||/moto/i.test(VHS.p.def.name||'')));
 function engSnd(){
   const on=!!VHS&&APP==='play';
-  if(on&&!engL&&BUF['eng-loop'])engL=sLoop('eng-loop',.4);
+  const name=(on&&isMoto()&&BUF['eng-moto'])?'eng-moto':'eng-loop';
+  if(on&&!engL&&BUF[name])engL=sLoop(name,.4);
   if(!on&&engL){engL.stop();engL=null;}
   if(on&&engL){ const k=Math.min(1,Math.abs(vhSpeed())/22);
     engL.rate(.85+k*.75); engL.set(.3+k*.35); }
@@ -11189,6 +11383,21 @@ function engSnd(){
 nsafe(()=>{ const e=$('bBrake'); if(e){
   const f=()=>{ if(VHS&&Math.abs(vhSpeed())>6)sPlay('skid',{vol:.75}); };
   e.addEventListener('touchstart',f,{passive:true});e.addEventListener('mousedown',f);} },'brk');
+/* bocina: botón chico, mismo estilo/patrón que bBrake (core_e), sólo visible manejando */
+nsafe(()=>{
+  const st=document.createElement('style');
+  st.textContent='#bHorn{right:22vmin;bottom:37vmin;width:10vmin;height:10vmin;max-width:52px;'
+    +'max-height:52px;background:rgba(255,196,74,.58);font-size:4vmin;display:none}'
+    +'#bHorn.on{display:flex}';
+  document.head.appendChild(st);
+  const hud=$('hud');
+  const e=document.createElement('div');e.id='bHorn';e.className='rb';e.innerHTML='📯';
+  if(hud)hud.appendChild(e);
+  const f=()=>{ if(VHS)sPlay('horn',{vol:.85}); };
+  e.addEventListener('touchstart',f,{passive:true});
+  e.addEventListener('mousedown',f);
+},'horn');
+function hornSync(){ const e=$('bHorn'); if(e)e.classList.toggle('on',!!VHS); }
 
 /* clicks de interfaz + menú de spawn */
 document.addEventListener('click',e=>{
@@ -11201,14 +11410,23 @@ nsafe(()=>{ const e=$('bTools'); if(e){
   const f=()=>sPlay('menu',{vol:.5});
   e.addEventListener('touchstart',f,{passive:true});e.addEventListener('mousedown',f);} },'mn');
 
-/* ---------- 3. música de menú ---------- */
+/* ---------- 3. música de menú + ambiente de mapa ---------- */
 let musL=null;
 function musSnd(){
   const inMenu=(APP==='title'||APP==='qual'||APP==='help'||APP==='map'||APP==='lang');
   const a=AC;                                    /* sólo si el contexto ya existe (gesto) */
   if(inMenu&&!musL&&a&&BUF[SNDMUS])musL=sLoop(SNDMUS,.16);
-  if(!inMenu&&musL){ musL.g.gain.setTargetAtTime(0,AC.currentTime,.4);
-    const m=musL;musL=null;setTimeout(()=>m.stop(),1400); }
+  if(!inMenu&&musL){ fadeOut(musL);musL=null; }
+}
+/* viento siempre de fondo en partida; pájaros sólo si el piso base del mapa es pasto */
+let windL=null,birdsL=null;
+function ambSnd(){
+  const on=APP==='play';
+  if(on&&!windL&&BUF['amb-wind'])windL=sLoop('amb-wind',.05);
+  if(!on&&windL){ fadeOut(windL);windL=null; }
+  const wantBirds=on&&CURMAP&&CURMAP.def&&CURMAP.def.ground==='grass';
+  if(wantBirds&&!birdsL&&BUF['amb-birds'])birdsL=sLoop('amb-birds',.07);
+  if(!wantBirds&&birdsL){ fadeOut(birdsL);birdsL=null; }
 }
 
 /* ---------- 4. volumen en Ajustes ---------- */
@@ -11232,17 +11450,22 @@ let _ldT=0;
 EXT.frame.push(dt=>{
   if(!sndOn){ _ldT+=dt; if(_ldT>1&&APP!=='load')nsafe(sndLoad,'sndload'); }
   volApply();
-  nsafe(()=>{stepStep(dt);bodySnd(dt);humSnd();engSnd();musSnd();},'sndtick');
+  nsafe(()=>{stepStep(dt);bodySnd(dt);humSnd();engSnd();hornSync();musSnd();ambSnd();},'sndtick');
 });
 
 if(DEV&&window.__H)Object.assign(window.__H,{
+  /* amb: true si suena algo del ambiente de mapa (viento siempre en partida, pájaros sólo
+     con piso de pasto — ver ambSnd más arriba); sin esto no había forma de probar por afuera
+     que el viento/pájaros realmente están sonando, sólo se podía adivinar por sndNames() */
   sndInfo:()=>({on:sndOn,pend:sndPend,done:sndDone,fail:sndFail,
     loaded:Object.keys(BUF).length,plays:sndPlays,last:lastSnd,
-    hum:!!humL,eng:!!engL,mus:!!musL,vol:SV.vol,ac:!!AC}),
+    hum:!!humL,eng:!!engL,mus:!!musL,vol:SV.vol,ac:!!AC,amb:!!windL||!!birdsL}),
   sndPlay:n=>sPlay(n,{vol:1}),
   sndShot:()=>{SFX.shot(0);return lastSnd;},
+  sndHist:()=>sndHistArr.slice(),
   sndHave:n=>!!BUF[n],
-  sndNames:()=>Object.keys(SND).concat([SNDMUS])
+  sndNames:()=>Object.keys(SND).concat([SNDMUS]),
+  sndMap:()=>({shot:shotNameFor(weap()),ground:groundStepSound()})
 });
 
 </script>

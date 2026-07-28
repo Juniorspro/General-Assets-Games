@@ -21,7 +21,7 @@ plBody.addShape(new CANNON.Sphere(PL.r),new CANNON.Vec3(0,PL.h-PL.r-.06,0));
 plBody.updateMassProperties();
 plBody.position.set(0,1.2,20);
 world.addBody(plBody);
-let grounded=false,coyote=0,inWater=false;
+let grounded=false,coyote=0,inWater=false,groundBody=null;
 
 /* modelo del personaje (GLB generado) */
 let charRoot=null,mixer=null,walkAct=null,bones={},handGrip=null,chestAnchor=null,charH=1.8,charK=1;
@@ -668,6 +668,7 @@ function playerStep(dt){
   const to=new CANNON.Vec3(plBody.position.x,plBody.position.y-.34,plBody.position.z);
   rr.reset();world.raycastClosest(from,to,RAY,rr);
   grounded=rr.hasHit&&rr.body!==plBody;
+  groundBody=grounded?rr.body:null;                 // para elegir el sonido de paso por material (core_n)
   if(grounded)coyote=.12;else coyote=Math.max(0,coyote-dt);
   // agua
   inWater=false;

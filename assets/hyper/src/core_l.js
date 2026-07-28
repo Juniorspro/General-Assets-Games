@@ -40,6 +40,14 @@
    window.__H…
    ============================================================ */
 
+/* ---------- contrato FWEV: eventos de sonido (los reproduce core_n, en paralelo) ----------
+   core_l sólo EMITE; nunca reproduce nada acá. Se declara el guard porque build.js
+   concatena los core_[a-z] en orden alfabético y "n" va DESPUÉS de "l": si dejáramos
+   FWEV sin declarar, cualquier llamada acá explotaría hasta que core_n se cargue. Con
+   'var' y el typeof-guard, core_n puede REASIGNAR la función (nunca re-declararla, eso
+   sí rompe) sin que el orden de concatenación importe. */
+if(typeof FWEV==='undefined')var FWEV=null;
+
 Object.assign(I18N.es,{fwLight:'🔥 Encender'});
 Object.assign(I18N.en,{fwLight:'🔥 Light'});
 Object.assign(I18N.pt,{fwLight:'🔥 Acender'});
@@ -182,6 +190,9 @@ function burst(x,y,z,opts){
   const clrArr=fwClrArr(opts&&opts.clr);
   const size=Math.max(.3,Math.min(3,(opts&&opts.size)||1));
   const spd=6.5+size*3.2;
+  /* estilo/size YA resueltos (los mismos que eligen la función de abajo): el sonido
+     necesita justo estos, no los opts crudos que puedan venir sin default. */
+  if(FWEV)nsafe(()=>FWEV('burst',x,y,z,{style,size}),'fwev');
   litLight(x,y,z,clrArr[0]);
   /* FOGONAZO: unas pocas partículas grandes y blancas de vida cortísima en el centro.
      Es lo que hace que el estallido se note incluso contra el cielo claro de día. */
@@ -260,6 +271,9 @@ function fireShell(p,fw,isCandle){
   const b=buildDef(p.def);
   fwPoint(p,b.size[1]-.03,0,0,_fwV3);
   const apex=apexFor(fw,isCandle),vy0=Math.sqrt(2*19.6*Math.max(1,apex)),c=pickColor(fw.clr);
+  /* mortero/torta vs vela romana son el mismo disparo balístico, pero el sonido
+     que le corresponde a cada uno es distinto -> evento distinto según isCandle */
+  if(FWEV){const ev=isCandle?'candle':'shell';nsafe(()=>FWEV(ev,_fwV3.x,_fwV3.y,_fwV3.z),'fwev');}
   spawnParticle({x:_fwV3.x,y:_fwV3.y,z:_fwV3.z,
     vx:(Math.random()-.5)*1.1,vy:vy0,vz:(Math.random()-.5)*1.1,
     life:6,r:c.r,g:c.g,b:c.b,grav:19.6,drag:.02,psize:1.3,
@@ -292,7 +306,10 @@ function stepRocket(st,dt){
   if(st.phase==='fuse'){
     st.emitAcc=(st.emitAcc||0)+dt*34;
     while(st.emitAcc>=1){st.emitAcc--;spawnFuseSpark(p);}
-    if(st.t>=.8){st.t=0;st.phase='fly';freezeProp(p,false);}
+    if(st.t>=.8){
+      st.t=0;st.phase='fly';freezeProp(p,false);
+      if(FWEV){const P=p.body.position;nsafe(()=>FWEV('launch',P.x,P.y,P.z,{k:fw.k}),'fwev');}
+    }
     return;
   }
   const fly=Math.max(.15,fw.fly||2.2),ft=Math.min(1,st.t/fly);
@@ -331,7 +348,14 @@ function stepCandle(st,dt){
 }
 function stepFountain(st,dt){
   const p=st.p,fw=st.fw;
-  if(st.t>=Math.max(.2,fw.dur||2)){FWLIT.delete(p);return;}
+  if(!st.started){
+    st.started=true;
+    if(FWEV){const P=p.body.position;nsafe(()=>FWEV('fountain0',P.x,P.y,P.z),'fwev');}
+  }
+  if(st.t>=Math.max(.2,fw.dur||2)){
+    if(FWEV){const P=p.body.position;nsafe(()=>FWEV('fountain1',P.x,P.y,P.z),'fwev');}
+    FWLIT.delete(p);return;
+  }
   const b=buildDef(p.def);
   fwPoint(p,b.size[1]-.03,0,0,_fwV3);
   fwUpWorld(p,_fwDirV);
@@ -349,6 +373,7 @@ function stepWheel(st,dt){
   if(!st.started){
     st.started=true;if(p.frozen)freezeProp(p,false);
     st.spin=6+(fw.size||1)*3;
+    if(FWEV){const P=p.body.position;nsafe(()=>FWEV('wheel0',P.x,P.y,P.z),'fwev');}
   }
   p.body.wakeUp();
   p.body.velocity.set(0,0,0);
@@ -364,7 +389,11 @@ function stepWheel(st,dt){
       vx:ox*4+(Math.random()-.5)*.6,vy:1+Math.random()*1.2,vz:oz*4+(Math.random()-.5)*.6,
       life:.22+Math.random()*.2,r:c.r,g:c.g,b:c.b,grav:4,drag:.5,psize:.65});
   }
-  if(st.t>=Math.max(.3,fw.dur||3)){freezeProp(p,true);FWLIT.delete(p);}
+  if(st.t>=Math.max(.3,fw.dur||3)){
+    freezeProp(p,true);
+    if(FWEV){const P=p.body.position;nsafe(()=>FWEV('wheel1',P.x,P.y,P.z),'fwev');}
+    FWLIT.delete(p);
+  }
 }
 const BOMB_FUSE=1.2;
 function stepBomb(st,dt){
@@ -383,6 +412,9 @@ function stepBomb(st,dt){
     const P=p.body.position;
     boom(new THREE.Vector3(P.x,P.y,P.z),3+(fw.size||1));
     groundFlash(P.x,P.y,P.z,fw);
+    /* ADEMAS del boom() de física: el petardo también avisa por FWEV, igual que
+       cualquier otro estallido (el boom() no sabe nada de pirotecnia). */
+    if(FWEV)nsafe(()=>FWEV('bomb',P.x,P.y,P.z),'fwev');
     FWLIT.delete(p);removeProp(p);
   }
 }
@@ -390,7 +422,15 @@ function fwStep(dt){
   if(!HASFW||!FWLIT.size)return;
   for(const st of Array.from(FWLIT.values())){
     const p=st.p;
-    if(PROPS.indexOf(p)<0){FWLIT.delete(p);continue;}
+    if(PROPS.indexOf(p)<0){
+      /* el prop se borró desde afuera (otro sistema) a mitad de fuente/rueda: sin este
+         chequeo el sonido de "empezó" quedaría sin su "terminó" del otro lado. */
+      if(FWEV&&st.started&&(st.k==='fountain'||st.k==='wheel')){
+        const ev=st.k==='fountain'?'fountain1':'wheel1',P=p.body.position;
+        nsafe(()=>FWEV(ev,P.x,P.y,P.z),'fwev');
+      }
+      FWLIT.delete(p);continue;
+    }
     st.t+=dt;
     if(st.k==='rocket'||st.k==='missile')stepRocket(st,dt);
     else if(st.k==='mortar'||st.k==='cake')stepMortarCake(st,dt);
@@ -409,6 +449,8 @@ function fwLight(target){
   const fw=p.def.fw;
   if((fw.k==='rocket'||fw.k==='missile')&&!p.frozen)freezeProp(p,true);
   FWLIT.set(p,{p,fw,k:fw.k,t:0,phase:'fuse',shotsLeft:fw.shots||0,nextShot:0});
+  /* 'fuse' es el único evento que no depende del tipo: se prende la mecha, listo */
+  if(FWEV){const P=p.body.position;nsafe(()=>FWEV('fuse',P.x,P.y,P.z),'fwev');}
   if(nearFW===p)nearFW=null;
   fwBtnPaint();
   return true;

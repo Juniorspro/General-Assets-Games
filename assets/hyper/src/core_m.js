@@ -1,22 +1,29 @@
 
 /* ============================================================
-   HYPER SANDBOX — 1ª PERSONA: SÓLO LOS BRAZOS, POR SHADER
+   HYPER SANDBOX — 1ª PERSONA: BRAZOS POR SHADER + PLANO CERCANO
    ------------------------------------------------------------
-   Antes (core_c, fpClip) el recorte de 1ª persona era DOS THREE.Plane puestos delante de la
-   cámara y a la altura de la cadera: sirve mientras se mira más o menos al frente, pero el
-   pedido es "si miras arriba o abajo tampoco tenés que verte la cabeza ni las piernas", y un
-   plano fijo al ojo no distingue brazo de torso cuando la cámara gira: en algún ángulo el plano
-   de la cadera te deja ver el pecho, o el de la cara te come el hombro.
-   ACÁ SE CAMBIA POR UN DISCARD POR PESO DE HUESO: cada vértice ya sabe, por su propio
-   skinning, qué porcentaje de su movimiento depende de huesos de BRAZO (mano, antebrazo,
-   dedos, brazo — no clavícula/hombro). Ese porcentaje viaja a la varying vArm, y en 1ª persona
-   el fragment shader descarta lo que no llega a ser brazo. No hay geometría estirada ni un
-   plano que pueda "fallar" mirando para arriba: es una propiedad del vértice, no de la cámara.
-   Y como el shadow map usa el MeshDepthMaterial (que no pasa por este onBeforeCompile), la
-   sombra del jugador sigue completa aunque en cámara sólo se vean los brazos.
+   Antes (core_c, fpClip) el recorte de 1ª persona era DOS THREE.Plane: uno pegado a la cámara
+   (FPCLIP, cabeza/cuello) y uno horizontal a la altura de la cadera (FPLEG, piernas). Servía
+   mirando más o menos al frente, pero mirando arriba o abajo un plano fijo al ojo no distingue
+   brazo de torso: en algún ángulo el de la cadera dejaba ver el pecho, o el de la cara se comía
+   el hombro.
+   ACÁ SE AGREGA UN DISCARD POR PESO DE HUESO PARA EL TORSO/PIERNAS: cada vértice ya sabe, por
+   su propio skinning, qué porcentaje de su movimiento depende de huesos de BRAZO (mano,
+   antebrazo, dedos, brazo — no clavícula/hombro). Ese porcentaje viaja a la varying vArm, y en
+   1ª persona el fragment shader descarta lo que no llega a ser brazo: FPLEG (la pierna) ya no
+   hace falta, el discard la saca sola sea cual sea el ángulo de cámara.
+   PERO EL DISCARD POR SÍ SOLO NO ALCANZA (bug real, con capturas de celular): sin ningún plano
+   cercano el BRAZO SIGUE SIENDO GEOMETRÍA, y esa geometría cruza literalmente el punto de la
+   cámara cuando el brazo está estirado hacia el arma (mirar arriba: el antebrazo tapa media
+   pantalla de negro; mirar abajo: quedan pedazos color piel desgarrados cerca del ojo) — el
+   discard sólo decide QUÉ vértices sobreviven, no impide que un triángulo que sobrevive pase
+   ADELANTE del near plane de la cámara y se vea gigante y deformado. Por eso acá se RECUPERA
+   sólo FPCLIP (el plano pegado a la cámara, mirando adonde mira ella): FPLEG no vuelve, esa la
+   sigue sacando el discard.
    Se concatena último (después de core_c y core_f): ya existen THREE, charRoot, bones, PL,
-   freeCam, camera, GH (core_f) y fpClip/fpClipMaterials (core_c, funciones REASIGNABLES: acá
-   se pisa fpClip entero, la versión de planos queda sin uso pero sin tocar core_c).
+   freeCam, camera, GH (core_f) y fpClip/fpClipMaterials/FPCLIP/FPCLIPD (core_c, funciones y
+   variables REASIGNABLES/MUTABLES: acá se pisa fpClip entero combinando lo nuevo —discard— con
+   lo viejo —FPCLIP—, sin tocar core_c).
    ============================================================ */
 
 /* ---------- 1. qué huesos son "brazo" ----------
@@ -51,10 +58,18 @@ function fpArmBoneFlags(){
 /* ---------- 3. parchar un material skinned ----------
    NO se toca el material del arma (cuelga de un hueso pero no es skinned) ni nada que no sea
    SkinnedMesh: sólo el cuerpo necesita el discard. */
+/* .45 y no .32 — MEDIDO contra las capturas del bug: con .32 sobrevivían al discard restos de
+   piel/tela del antebrazo cerca del codo/hombro (vértices con el peso repartido entre el hueso
+   de brazo y el de torso), que es justo lo que se veía como "pedazos desgarrados color piel"
+   cerca de la cámara mirando hacia abajo. Subir el umbral empuja el corte más adentro del brazo
+   (más lejos del torso), así que si algún día se ve la MANO recortada (poco probable: la mano
+   entera flaggea 1.0 en fpArmFlag, no queda en zona de mezcla) hay que bajar este número, no el
+   .5 de uArms (ese es el interruptor entero/brazos, no la zona de mezcla del vértice). */
+const FP_ARM_THRESHOLD=.45;
 function fpArmPatch(mat,flags,NB){
   if(!mat||mat.userData._farm)return;      // no parchar el mismo material dos veces
   mat.userData._farm=1;
-  mat.clippingPlanes=null;                 // ya no hace falta el recorte por plano de core_c
+  mat.clippingPlanes=null;                 // estado inicial: lo prende fpClip() al entrar en 1ª
   if(!mat.userData.uArms)mat.userData.uArms={value:0};
   mat.onBeforeCompile=function(shader){
     /* uArms: 0/1, un jugador entero o sólo brazos. uArmF: por hueso, cuánto es "brazo".
@@ -75,13 +90,13 @@ function fpArmPatch(mat,flags,NB){
       +'\tvArm = uArmF[int(skinIndex.x)]*skinWeight.x + uArmF[int(skinIndex.y)]*skinWeight.y'
       +' + uArmF[int(skinIndex.z)]*skinWeight.z + uArmF[int(skinIndex.w)]*skinWeight.w;');
     /* fragment: al ARRANQUE de main(), antes de cualquier cuenta de luz (más barato: no se
-       calcula nada de un fragmento que se va a tirar). .32 y no .5: un vértice que reparte su
-       peso entre antebrazo y torso (la zona del codo/hombro) tiene que seguir viéndose brazo,
-       si no queda una costura pelada justo en el codo. */
+       calcula nada de un fragmento que se va a tirar). FP_ARM_THRESHOLD (no .5): un vértice que
+       reparte su peso entre antebrazo y torso (la zona del codo/hombro) tiene que seguir
+       viéndose brazo hasta ese punto, si no queda una costura pelada justo en el codo. */
     shader.fragmentShader=shader.fragmentShader.replace('#include <common>',
       '#include <common>\nvarying float vArm;\nuniform float uArms;');
     shader.fragmentShader=shader.fragmentShader.replace('void main() {',
-      'void main() {\n\tif(uArms>.5 && vArm<.32)discard;');
+      'void main() {\n\tif(uArms>.5 && vArm<'+FP_ARM_THRESHOLD+')discard;');
   };
   /* +NB: si algún día conviven dos esqueletos con distinto número de huesos, cada uno necesita
      su propio programa (el tamaño de uArmF va fijo en el código del shader) */
@@ -113,19 +128,37 @@ function fpArmMaterials(){
    nombre en el mismo scope de módulo, y eso es SyntaxError en modo estricto (los módulos
    siempre lo son) — probado a mano: "Identifier 'fpClip' has already been declared".
    Function declarations SÍ crean un binding MUTABLE (no es const), así que la forma correcta
-   de pisarla es una asignación común, no una nueva declaración. La versión de planos de
-   core_c queda escrita pero sin uso; no se toca ese archivo.
-   Ya no hay que "cambiar clippingPlanes" (eso SÍ recompilaba el shader, por eso antes se
-   evitaba tocarlo si el estado no cambiaba): acá sólo se escribe un uniforme, que no cuesta
-   recompilación ninguna, así que se puede escribir todos los frames sin culpa. */
+   de pisarla es una asignación común, no una nueva declaración. fpClipOn (let, core_c) es el
+   MISMO motivo: se reasigna, no se vuelve a declarar.
+   uArms (el discard) se puede escribir TODOS los frames sin culpa, es sólo un uniforme y no
+   cuesta recompilación. clippingPlanes en cambio SÍ recompila el shader (dispara needsUpdate,
+   three reconstruye el programa), así que igual que hacía la fpClip original de core_c, sólo se
+   toca cuando el estado on/off cambia — fpClipOn (la variable de core_c) sigue sirviendo
+   exactamente para eso, por más que ahora la arme esta función y no la de core_c.
+   FPLEG NO vuelve: la pierna la sigue sacando el discard de vArm, este plano es sólo el cercano
+   pegado a la cámara (el que evita que el brazo estirado cruce el ojo, ver el bug de arriba).
+   Los fantasmas (core_f, charClone) clonan el material entero: clippingPlanes es un array por
+   INSTANCIA de material (Material.clone() copia la referencia del array, pero fpArmMaterials()
+   sólo agarra los materiales del charRoot LOCAL, nunca los clonados), así que esto no les toca
+   nada — igual que ya pasaba con uArms. */
 fpClip=function(){
   const ms=fpArmMaterials();
   if(!ms)return;
   const on=(PL.fp&&!PL.rag&&!freeCam)?1:0;
+  if(on){
+    /* mismo cálculo que la fpClip de core_c: el plano sale de la pose de ESTE frame, con la
+       cámara ya puesta (camStep llama a fpClip() al final, ver ese archivo). */
+    camera.getWorldDirection(_fcd);
+    _fcp.copy(camera.position).addScaledVector(_fcd,FPCLIPD);
+    FPCLIP.setFromNormalAndCoplanarPoint(_fcd,_fcp);
+  }
   for(const m of ms){
     const u=m.userData.uArms||(m.userData.uArms={value:0});
     u.value=on;
   }
+  if(on===fpClipOn)return;                 // sin cambio de estado: no tocar clippingPlanes
+  fpClipOn=on;
+  for(const m of ms){m.clippingPlanes=on?[FPCLIP]:null;m.needsUpdate=true;}
 };
 
 if(DEV&&window.__H)Object.assign(window.__H,{
