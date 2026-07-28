@@ -129,35 +129,82 @@ function setAnim(st,sp,dt){
    estatua parado: se le suma al hueso del pecho (bones.spine) una rotación procedural chica,
    dos senoidales en ejes distintos para que no se vea como un metrónomo. Se acumula con dt
    (nunca performance.now: bajo un frame lento el ángulo tiene que avanzar lo que corresponde
-   a ese dt, no saltar según el reloj de pared) y se aplica DESPUÉS de mixer.update(): como el
-   mixer reescribe la pose del hueso entero cada frame, multiplicar sobre eso ya es sumar
-   sobre la pose de la animación, sin acumular nada de un frame al otro.
-   Amplitud MUY chica a propósito, y no es sólo estética: bones.spine es la BASE de la cadena
-   que usa torsoAim() (Spine>Spine01>Spine02, ver más abajo) para calcular cuánto girar el
-   torso hacia la puntería. torsoAim vuelve a medir la línea de hombros TODOS los frames desde
-   la pose recién escrita por el mixer+respiración, así que la rotación de la respiración queda
-   dentro de esa medición y el giro que aplica torsoAim la "seguía" — con .012/.004 rad (0,7°)
-   la cabeza terminaba barriendo 0,15 a 0,23 m (medido con __H.boneW en 3ª persona quieto, sin
-   ninguna tecla apretada), muy por encima del margen pedido para el idle calmo. Medido también
-   que la relación es LINEAL con la amplitud (al 10% de .012/.004 el barrido bajó a ~0,03 m, al
-   mismo ritmo), o sea que no hay que tocar torsoAim (prohibido) para arreglarlo: alcanza con
-   una amplitud de entrada chica que, ya amplificada, siga quedando dentro del margen y a la vez
-   se note de cerca. */
-/* .0025, MEDIDO — la amplitud no es lineal: torsoAim() re-mide los hombros cada frame sobre la
-   misma cadena y realimenta la entrada. Con .001 rad la cabeza barre 0,8 mm (estatua), con .006
-   barre 86 mm (mareo); .0025 da ~39 mm de vaivén LENTO a 0,22 Hz: se nota respirar de cerca y
-   de lejos no llama la atención. Si se toca, medir con __H.boneW('head') quieto 3 s. */
-const BREATHHZX=.22,BREATHAMPX=.0025,BREATHHZZ=.18,BREATHAMPZ=.0009,BREATHPHZ=1.7;
-let breathT=0;
-const _brQ=new THREE.Quaternion(),_brE=new THREE.Euler();
+   a ese dt, no saltar según el reloj de pared).
+
+   ---- POSE ACUMULATIVA: por qué acá ya NO se hace quaternion.multiply() a lo que haya ----
+   El usuario lo reportó en un celular real: "se buguea todo al caminar en primera persona,
+   también en tercera: como que se va inclinando mientras más caminas y queda ahí todo chueco".
+   MEDIDO con __H.spineQ() (ángulo local de cada hueso de la columna contra el primer frame
+   caminando, muestreado cuadro por cuadro):
+     con respiración : Spine 0,8° | Spine01 0,8° | Spine02 **48,7°**  (rampa monótona:
+                       1,7° 3,1° 11,8° 21,2° 29,0° 35,2° 39,8° 43,1° 45,8° 48,0° 50,0° 51,5°
+                       en los primeros 12 cuadros, y ahí se queda "chueco")
+     sin respiración : Spine 16,9° | Spine01 16,9° | Spine02 16,9°   (el reparto que quiere
+                       torsoAim: tres huesos iguales, 3×16,9 = 50,6° de giro total, y NO deriva)
+   La causa NO era la amplitud (con .001 pasaba lo mismo, más lento): era un LAZO DE
+   REALIMENTACIÓN con torsoAim(). torsoAim() se protege de acumular guardando la pose que dejó
+   (TW) y la de la animación (TQ): si el hueso sigue igual a TW, restaura TQ antes de volver a
+   girar. Medido con __H.aimDbg(): el mixer NO reescribe NINGUNO de los tres huesos de la
+   columna (el clip de arriba está congelado en el cuadro 0), así que ese caché es lo ÚNICO que
+   evita la acumulación — y acertaba 152/152 cuadros en Spine y Spine01 y **0/152** en Spine02,
+   que es justo bones.spine, el hueso que tocaba la respiración. Al multiplicar la respiración
+   sobre el hueso ENTRE mixer.update() y torsoAim(), torsoAim veía una pose distinta de TW,
+   tomaba como "pose de animación" la que YA tenía su propio giro anterior, y giraba otra vez
+   encima: se sumaba cuadro a cuadro hasta que la línea de hombros alcanzaba la puntería, o sea
+   hasta que TODO el giro (50°) quedaba en un solo hueso, el pecho, en vez de repartido.
+   ARREGLO (dos partes, las dos necesarias):
+     1) la respiración se aplica DESPUÉS de torsoAim(), así torsoAim ve la pose limpia;
+     2) breathRestore() la DESHACE antes de que torsoAim mire (si nadie más tocó el hueso), así
+        el hueso llega a torsoAim exactamente como lo dejó TW y el caché vuelve a acertar.
+   Y la respiración misma dejó de ser aditiva: se guarda la pose BASE (la que dejaron el mixer y
+   torsoAim) y cada frame se escribe base·respiración, nunca multiply sobre lo del frame
+   anterior. Es el mismo patrón que rikRestore()/rikStore() usa para el brazo derecho. */
+/* .030 MEDIDO. Roto el lazo, la respiración ya NO se amplifica ~20 veces (antes .0025 movía la
+   cabeza 62 mm: era el lazo, no la respiración), así que con la amplitud vieja quedaba en 2,6 mm
+   = estatua otra vez. Ahora el barrido es LINEAL con la amplitud, medido con __H.boneW('head')
+   5 s quieto en 3ª persona (un ciclo entero es 4,5 s):
+     respiración apagada -> 1,7 mm (piso: lo que se mueve el resto de la pose)
+     .0025 -> 2,6 mm | .010 -> 8,4 | .020 -> 19,5 | .030 -> 31,2 | .045 -> 40,3
+     .060 -> 52,7 | .080 -> 65,3
+   .030 rad = 1,7° de flexión del tronco da 31 mm de vaivén a 0,22 Hz: entra en los 2-4 cm que
+   se pidieron (se ve respirar de cerca, de lejos no llama la atención) y es un ángulo anatómico.
+   Si se toca, medir de nuevo con __H.boneW('head') quieto 5 s Y la deriva con __H.spineQ()
+   caminando 25 s (tiene que quedar abajo de 1°). */
+/* BREATHAMPX es let (no const) para poder barrerla desde un test con __H.breathAmp() y medir
+   el vaivén real de la cabeza sin recompilar; el valor de acá es el que queda en el juego. */
+/* el eje Z (inclinación al costado) va al 35% del X y con otra frecuencia y otra fase: dos
+   senoidales incomensurables para que la respiración no se lea como un metrónomo. Es una
+   FRACCIÓN de BREATHAMPX y no un valor propio, así __H.breathAmp() barre las dos juntas y la
+   forma del movimiento no cambia con la amplitud. */
+const BREATHHZX=.22,BREATHHZZ=.18,BREATHPHZ=1.7,BREATHRZ=.355;
+let BREATHAMPX=.030;
+let breathT=0,breathOn=true;
+const _brQ=new THREE.Quaternion(),_brE=new THREE.Euler(),
+      _brBase=new THREE.Quaternion(),_brOut=new THREE.Quaternion();
+let _brB=null;                     // a qué hueso corresponden _brBase/_brOut
+/* deshace la respiración del frame anterior. Va DESPUÉS de mixer.update() y ANTES de
+   torsoAim(): si el hueso sigue teniendo exactamente lo que dejó breathe(), nadie lo reescribió
+   y se vuelve a la pose base, así torsoAim() reconoce su propio TW y no acumula. Si cambió (el
+   mixer lo animó, o entró un ragdoll) no se toca: manda la pose nueva. */
+function breathRestore(){
+  const sp=bones.spine;if(!sp||sp!==_brB)return;
+  if(_qsame(sp.quaternion,_brOut))sp.quaternion.copy(_brBase);
+}
 function breathe(dt){
   const sp=bones.spine;if(!sp)return;
+  if(!breathOn){_brB=null;return;}
   breathT+=dt||1/60;
   const bx=Math.sin(breathT*Math.PI*2*BREATHHZX)*BREATHAMPX;
-  const bz=Math.sin(breathT*Math.PI*2*BREATHHZZ+BREATHPHZ)*BREATHAMPZ;
+  const bz=Math.sin(breathT*Math.PI*2*BREATHHZZ+BREATHPHZ)*BREATHAMPX*BREATHRZ;
   _brE.set(bx,0,bz);
   _brQ.setFromEuler(_brE);
-  sp.quaternion.multiply(_brQ);          // aditivo sobre lo que el mixer acaba de escribir
+  /* la BASE es la pose de este frame (mixer + torsoAim), no lo que quedó del frame anterior:
+     escribir base·respiración es un offset ABSOLUTO y no puede acumular ni con el mixer
+     callado. _brOut queda guardado para que breathRestore() sepa si alguien lo pisó. */
+  _brBase.copy(sp.quaternion);
+  _brOut.copy(_brBase).multiply(_brQ);
+  sp.quaternion.copy(_brOut);
+  _brB=sp;
 }
 function animStep(dt){
   if(!mixer)return;
@@ -178,8 +225,13 @@ function animStep(dt){
   else st=ACTS.idle?'idle':'walk';
   setAnim(st,sp,dt);
   mixer.update(dt);
-  breathe(dt);   // respiración procedural del pecho, aditiva sobre la pose recién escrita
-  torsoAim();    // enderezar el torso hacia la puntería
+  /* ORDEN: la respiración va DESPUÉS de torsoAim(), y antes se DESHACE la del frame anterior.
+     Al revés (respirar entre el mixer y torsoAim) torsoAim tomaba la respiración como parte de
+     la pose de la animación y giraba encima de su propio giro: el torso se iba inclinando y
+     quedaba chueco (48,7° acumulados en un solo hueso, medido — ver la nota de breathe()). */
+  breathRestore();
+  torsoAim();    // enderezar el torso hacia la puntería (ve la pose limpia de la animación)
+  breathe(dt);   // respiración procedural del pecho, offset absoluto sobre la pose de este frame
   ikSnap();      // guardar la pose que dejó la animación, antes de tocar nada
   /* el brazo derecho sube a la línea de los ojos en 1ª persona. Va acá y no en
      holdWeapon() porque holdWeapon() se corta cuando no hay arma: con los PUÑOS o con el
@@ -665,7 +717,7 @@ function spineChain(){
   }
   return SPN;
 }
-const TQ=[],TW=[],_tqa=new THREE.Quaternion(),_ty=new THREE.Vector3(0,1,0);
+const TQ=[],TW=[],TAH=[],TAN=[],_tqa=new THREE.Quaternion(),_ty=new THREE.Vector3(0,1,0);
 let torsoOn=true,TWMAX=1.05,TWG=1;              // giro máximo total (rad) y ganancia
 function torsoAim(){
   if(!torsoOn||!charRoot||PL.rag||!ikBones())return;
@@ -677,7 +729,13 @@ function torsoAim(){
   /* mismo cuidado que en el IK: si el mixer no reescribió estos huesos, volver a la pose de
      la animación antes de girar, para no ir sumando el mismo giro frame tras frame */
   for(let i=0;i<ch.length;i++){
-    if(TW[i]&&TQ[i]&&_qsame(ch[i].quaternion,TW[i]))ch[i].quaternion.copy(TQ[i]);
+    const hit=!!(TW[i]&&TQ[i]&&_qsame(ch[i].quaternion,TW[i]));
+    /* DEV: cuántos frames el caché reconoció SU PROPIA pose (hit) contra cuántos la vio
+       cambiada. Un hueso con hit≈0 es un hueso que alguien está reescribiendo entre dos
+       torsoAim(): si no es el mixer, es una realimentación y la pose se acumula (fue el bug
+       de la POSE ACUMULATIVA: la respiración tocaba bones.spine y le rompía este caché). */
+    if(DEV){TAN[i]=(TAN[i]||0)+1;if(hit)TAH[i]=(TAH[i]||0)+1;}
+    if(hit)ch[i].quaternion.copy(TQ[i]);
     else (TQ[i]||(TQ[i]=new THREE.Quaternion())).copy(ch[i].quaternion);
   }
   IK.up.updateWorldMatrix(true,false);rs.updateWorldMatrix(true,false);
@@ -959,6 +1017,24 @@ if(DEV&&window.__H)Object.assign(window.__H,{
       o.needR=+P(RIK.up).distanceTo(t).toFixed(3);
       o.reachR=+(P(RIK.up).distanceTo(P(RIK.fo))+P(RIK.fo).distanceTo(P(RIK.ha))).toFixed(3);}
     return o;},
+  /* ¿ESTÁ EL ARMA DENTRO DEL CUADRO? fpDiag() sólo da la PROFUNDIDAD delante de la cámara, así
+     que un arma perfectamente enfocada pero caída abajo del borde inferior daba los mismos
+     números que una bien puesta. Acá se proyecta a coordenadas de pantalla NDC (x,y en -1..1,
+     el centro es 0,0): dentro = |x|<=1 && |y|<=1 && z entre -1 y 1.
+     Hizo falta para una captura de 1ª persona que salió SIN arma: con esto se distingue "el
+     arma no se dibuja" de "el arma está fuera de cuadro" sin depender del ojo, y se puede
+     esperar a que el IK se asiente antes de sacar la foto. */
+  fpScreen:()=>{ const v=new THREE.Vector3(),o={};
+    const put=(n,p)=>{v.copy(p).project(camera);
+      o[n]={x:+v.x.toFixed(3),y:+v.y.toFixed(3),z:+v.z.toFixed(3),
+        in:Math.abs(v.x)<=1&&Math.abs(v.y)<=1&&v.z>=-1&&v.z<=1};};
+    const P=b=>{b.updateWorldMatrix(true,false);
+      return new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);};
+    for(const k of['rHand','lHand','head'])if(bones[k])put(k,P(bones[k]));
+    if(wModel){wModel.updateWorldMatrix(true,false);
+      put('arma',new THREE.Vector3().setFromMatrixPosition(wModel.matrixWorld));
+      o.vis=wModel.visible;}
+    return o;},
   wrist:v=>{if(v!==undefined){IK.wr=+v;holdWeapon();}return IK.wr;},
   /* pelotitas de referencia: 0 hueso mano der, 1 hueso mano izq, 2 empuñadura,
      3 objetivo de la izquierda, 4 punta del caño, 5 hombro izq */
@@ -1060,5 +1136,33 @@ if(DEV&&window.__H)Object.assign(window.__H,{
   /* estado de la mezcla de animación: para verificar desde un test que el tren superior quedó
      clavado (upIdleTime/upIdleTS) y ver la fase de la respiración */
   animInfo:()=>({state:animState,upIdleTime:ACTU.idle&&ACTU.idle.time,
-    upIdleTS:ACTU.idle&&ACTU.idle.timeScale,breath:breathT})});
+    upIdleTS:ACTU.idle&&ACTU.idle.timeScale,breath:breathT}),
+  /* CUATERNIÓN LOCAL de cada hueso de la cadena de columna (spineChain: Spine>Spine01>Spine02)
+     más cuello y cabeza. Es la medida que delata la POSE ACUMULATIVA: sobre estos huesos
+     escriben el mixer, breathe() y torsoAim(), y si alguno realimenta al otro el ángulo local
+     crece frame a frame y no vuelve. Devuelve [nombre,x,y,z,w] por hueso, en el orden de la
+     cadena (de arriba hacia abajo) y después cuello/cabeza. */
+  /* con nobr=1 devuelve la pose SIN la respiración (la base que guardó breathe()): es la que
+     controlan el mixer y torsoAim, o sea donde se ve la DERIVA sin el vaivén de respirar
+     encima — el vaivén es sano y vuelve solo, la deriva no. */
+  spineQ:nobr=>{
+    const ch=spineChain(),o=[];
+    const put=b=>{if(!b)return;const q=(nobr&&b===_brB)?_brBase:b.quaternion;
+      o.push([b.name,q.x,q.y,q.z,q.w]);};
+    for(let i=0;i<ch.length;i++)put(ch[i]);
+    for(const k of['neck','head'])if(bones[k])put(bones[k]);
+    return o;},
+  /* la amplitud de la respiración, para poder medirla/ajustarla desde un test sin recompilar */
+  breathAmp:v=>{if(v!==undefined)BREATHAMPX=+v;return BREATHAMPX;},
+  /* apagar/prender la respiración ENTERA (los dos ejes): es la prueba de causalidad del bug de
+     pose acumulativa — con esto en 0 la columna no tiene que moverse de la pose de la animación */
+  breathOn:v=>{if(v!==undefined)breathOn=!!v;return breathOn;},
+  /* por hueso de la cadena: fracción de frames en que torsoAim reconoció su propia pose del
+     frame anterior. 1 = nadie más lo escribe (el caché anti-acumulación funciona), 0 = alguien
+     lo reescribe todos los frames (o el mixer, que es legítimo, o una realimentación) */
+  aimDbg:z=>{const ch=spineChain(),o=[];
+    for(let i=0;i<ch.length;i++)o.push([ch[i].name,TAN[i]||0,TAH[i]||0,
+      +(((TAH[i]||0)/Math.max(1,TAN[i]||0))).toFixed(3)]);
+    if(z)for(let i=0;i<ch.length;i++){TAN[i]=0;TAH[i]=0;}
+    return o;}});
 

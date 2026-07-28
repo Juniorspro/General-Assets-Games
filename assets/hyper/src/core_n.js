@@ -46,6 +46,13 @@ let lastSnd='',sndPlays=0;
    sondea sndInfo().last a intervalos SIEMPRE puede perderse el que quedó pisado en el medio,
    por más seguido que sondee. Con el historial no hace falta adivinar el timing. */
 const sndHistArr=[];
+/* nombre de la grabación que sonó por el ARMA en el último SFX.shot(). Va aparte de lastSnd
+   porque SFX.shot toca dos cosas seguidas: el disparo y, si la bala pega en algo a menos de
+   60 m, el impacto ('imp-concrete'/'ricochet') — que deja lastSnd apuntando al impacto.
+   Un test que preguntaba por lastSnd veía 'imp-concrete' en las 8 armas de fuego y parecía que
+   el arma sonaba mal cuando lo que estaba mal era la medición; y el resultado dependía de si
+   había una pared enfrente, así que el test pasaba o fallaba según dónde hubiera spawneado. */
+let lastShotSnd='';
 
 function sndLoad(){
   if(sndOn||!okUrl(BASE))return;sndOn=true;
@@ -66,6 +73,40 @@ function sndLoad(){
   for(let k=0;k<4;k++)next();
 }
 
+/* ---------- recorte sin re-encodear (SOFF / SLEN) ----------
+   El modelo que generó estos archivos (mirelo) mete SILENCIO ANTES del sonido, y no
+   siempre el mismo: medido sobre la envolvente de cada archivo, el golpe llegaba a los
+   0.638 s en la AKM, a los 1.111 s en el shotgun, a los 0.987 s en bat-hit... El efecto
+   en el juego es que el disparo se escucha TARDE y se siente flojo, desacoplado del
+   click y del fogonazo.
+   No hace falta tocar los .mp3 ni re-encodear nada: AudioBufferSourceNode.start acepta
+   un offset DENTRO del buffer como segundo argumento y un largo como tercero, así que
+   src.start(0, off, len) arranca directo en el golpe y descarta la cola de más. El
+   archivo queda igual (mismo nombre, mismo HASH de CDN), el recorte es en reproducción.
+     SOFF = segundos a saltear al principio (arranque del golpe menos ~20 ms de aire).
+     SLEN = segundos a reproducir (sólo donde hay basura después de la cola útil).
+   Los offsets salieron de medir la envolvente de cada archivo, no a ojo: está
+   automatizado en sndcheck.js, que vuelve a medir y falla si algo se desalinea.
+   OJO: los sonidos en bucle (amb-*, eng-*, phys-hum, fw-fountain, fw-wheel2) van por
+   sLoop y quedan A PROPÓSITO fuera de la tabla: recortarles el arranque no sirve de nada
+   (el bucle vuelve a 0 igual) y de paso rompe el empalme. */
+const SOFF={
+  'fw-crackle':1.624,'shot-shotgun':1.086,'bat-hit':0.987,pop:0.945,glass:0.926,
+  'imp-concrete':0.753,trash:0.644,'step-wood':0.593,'bat-swing':0.553,'step-metal':0.456,
+  'shot-crossbow':0.453,'fw-finale':0.381,ui:0.320,'fw-whistle':0.305,'fw-launch':0.267,
+  'fw-fuse':0.241,'fw-sparkle':0.226,land:0.218,'shot-revolver':0.161,'shot-smg':0.150,
+  ricochet:0.113,'phys-shot':0.094,'shot-akm':0.057};
+/* Largo a reproducir, donde el archivo trae basura DESPUÉS de la cola útil:
+     shot-smg     el modelo entregó una ráfaga; con esta ventana queda UN solo tiro
+     shot-shotgun después del retumbe vuelve a subir ruido que no es parte del disparo
+     shot-sniper  el eco útil dura ~1 s y después aparecen golpes sueltos que sonaban
+                  a segundo disparo (era justo el problema del sniper) */
+const SLEN={'shot-smg':0.28,'shot-shotgun':0.52,'shot-sniper':1.10};
+/* Al cortar con SLEN el archivo puede quedar sonando fuerte justo en el corte (el
+   shotgun queda al ~18% del pico), y un corte seco ahí CLICKEA. Se apaga con una
+   rampa corta de gain: SFADE segundos de fundido al final de la ventana. */
+const SFADE=.04;
+
 /* ---------- reproducir ---------- */
 const _sv=new THREE.Vector3();
 function sPlay(name,o){
@@ -83,7 +124,18 @@ function sPlay(name,o){
   src.playbackRate.value=(o.rate||1)*(o.jit===false?1:.94+Math.random()*.12);
   const g=a.createGain();g.gain.value=vol;
   src.connect(g);g.connect(MG);
-  src.start();
+  /* saltea el silencio inicial del archivo (y corta la basura del final si hace falta).
+     Si el offset se pasara del largo del buffer, start() tiraría; se acota por las dudas. */
+  const off=Math.min(SOFF[name]||0,Math.max(0,b.duration-.02));
+  const len=Math.min(SLEN[name]||0,b.duration-off);
+  if(len>0){
+    /* el 3er argumento de start() está en segundos DE BUFFER: en tiempo real el tramo
+       dura len/rate, así que el fundido se agenda con la velocidad ya aplicada */
+    const real=len/(src.playbackRate.value||1),t0=a.currentTime,fd=Math.min(SFADE,real/2);
+    src.start(0,off,len);
+    g.gain.setValueAtTime(vol,t0+real-fd);
+    g.gain.linearRampToValueAtTime(0,t0+real);
+  }else src.start(0,off);
   lastSnd=name;sndPlays++;
   if(DEV){sndHistArr.push(name);if(sndHistArr.length>60)sndHistArr.shift();}
   return true;
@@ -153,7 +205,10 @@ function shotNameFor(w){
 }
 SFX.shot=k=>{
   const w=weap(),n=shotNameFor(w);
-  if(!sPlay(n,{vol:.9}))_SFX0.shot(k);
+  /* lastShotSnd queda vacío si el buffer no estaba y hubo que caer al sintetizador: así el
+     hook no puede devolver un nombre que en realidad no sonó */
+  if(!sPlay(n,{vol:.9})){lastShotSnd='';_SFX0.shot(k);}
+  else lastShotSnd=n;
   /* bala que pega: sólo armas de fuego de verdad (gun/proj), no melee/phys/tool */
   if(w.kind==='gun'||w.kind==='proj')nsafe(()=>{
     const h=aimRay(60,0);
@@ -424,9 +479,23 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     loaded:Object.keys(BUF).length,plays:sndPlays,last:lastSnd,
     hum:!!humL,eng:!!engL,mus:!!musL,vol:SV.vol,ac:!!AC,amb:!!windL||!!birdsL}),
   sndPlay:n=>sPlay(n,{vol:1}),
-  sndShot:()=>{SFX.shot(0);return lastSnd;},
+  /* dispara y devuelve la grabación DEL ARMA (no lastSnd, que puede haber quedado en el
+     impacto de la bala — ver lastShotSnd arriba) */
+  sndShot:()=>{SFX.shot(0);return lastShotSnd;},
   sndHist:()=>sndHistArr.slice(),
   sndHave:n=>!!BUF[n],
   sndNames:()=>Object.keys(SND).concat([SNDMUS]),
-  sndMap:()=>({shot:shotNameFor(weap()),ground:groundStepSound()})
+  sndMap:()=>({shot:shotNameFor(weap()),ground:groundStepSound()}),
+  /* VERIFICACIÓN DEL RECORTE (SOFF/SLEN). El recorte pasa adentro de start(0,off,len) y desde
+     afuera no se puede oír; lo que sí se puede comprobar es que las cuentas cierran contra el
+     buffer REALMENTE decodificado: off tiene que caer dentro del archivo y len no pasarse del
+     resto. Se calcula con las MISMAS expresiones que sPlay (si alguien las cambia en un lado y
+     no en el otro, esto lo delata) y avisa si el acote de seguridad tuvo que actuar (clamped),
+     que sería tabla desalineada con el mp3 — el caso que rompería el disparo. */
+  sndOff:n=>{const b=BUF[n];if(!b)return null;
+    const off=Math.min(SOFF[n]||0,Math.max(0,b.duration-.02));
+    const len=Math.min(SLEN[n]||0,b.duration-off);
+    return {tabOff:SOFF[n]||0,tabLen:SLEN[n]||0,off:+off.toFixed(3),len:+len.toFixed(3),
+      dur:+b.duration.toFixed(3),clamped:(SOFF[n]||0)>off+1e-9,rest:+(b.duration-off).toFixed(3)};},
+  sndOffNames:()=>({soff:Object.keys(SOFF),slen:Object.keys(SLEN)})
 });

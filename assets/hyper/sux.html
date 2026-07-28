@@ -4659,7 +4659,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import * as CANNON from 'cannon';
 
-const HASH='4e434fb';
+const HASH='95ece8e';
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/hyper/';
 const okUrl=u=>typeof u==='string'&&u.indexOf('@PEND')<0;
 const $=i=>document.getElementById(i);
@@ -7012,35 +7012,82 @@ function setAnim(st,sp,dt){
    estatua parado: se le suma al hueso del pecho (bones.spine) una rotación procedural chica,
    dos senoidales en ejes distintos para que no se vea como un metrónomo. Se acumula con dt
    (nunca performance.now: bajo un frame lento el ángulo tiene que avanzar lo que corresponde
-   a ese dt, no saltar según el reloj de pared) y se aplica DESPUÉS de mixer.update(): como el
-   mixer reescribe la pose del hueso entero cada frame, multiplicar sobre eso ya es sumar
-   sobre la pose de la animación, sin acumular nada de un frame al otro.
-   Amplitud MUY chica a propósito, y no es sólo estética: bones.spine es la BASE de la cadena
-   que usa torsoAim() (Spine>Spine01>Spine02, ver más abajo) para calcular cuánto girar el
-   torso hacia la puntería. torsoAim vuelve a medir la línea de hombros TODOS los frames desde
-   la pose recién escrita por el mixer+respiración, así que la rotación de la respiración queda
-   dentro de esa medición y el giro que aplica torsoAim la "seguía" — con .012/.004 rad (0,7°)
-   la cabeza terminaba barriendo 0,15 a 0,23 m (medido con __H.boneW en 3ª persona quieto, sin
-   ninguna tecla apretada), muy por encima del margen pedido para el idle calmo. Medido también
-   que la relación es LINEAL con la amplitud (al 10% de .012/.004 el barrido bajó a ~0,03 m, al
-   mismo ritmo), o sea que no hay que tocar torsoAim (prohibido) para arreglarlo: alcanza con
-   una amplitud de entrada chica que, ya amplificada, siga quedando dentro del margen y a la vez
-   se note de cerca. */
-/* .0025, MEDIDO — la amplitud no es lineal: torsoAim() re-mide los hombros cada frame sobre la
-   misma cadena y realimenta la entrada. Con .001 rad la cabeza barre 0,8 mm (estatua), con .006
-   barre 86 mm (mareo); .0025 da ~39 mm de vaivén LENTO a 0,22 Hz: se nota respirar de cerca y
-   de lejos no llama la atención. Si se toca, medir con __H.boneW('head') quieto 3 s. */
-const BREATHHZX=.22,BREATHAMPX=.0025,BREATHHZZ=.18,BREATHAMPZ=.0009,BREATHPHZ=1.7;
-let breathT=0;
-const _brQ=new THREE.Quaternion(),_brE=new THREE.Euler();
+   a ese dt, no saltar según el reloj de pared).
+
+   ---- POSE ACUMULATIVA: por qué acá ya NO se hace quaternion.multiply() a lo que haya ----
+   El usuario lo reportó en un celular real: "se buguea todo al caminar en primera persona,
+   también en tercera: como que se va inclinando mientras más caminas y queda ahí todo chueco".
+   MEDIDO con __H.spineQ() (ángulo local de cada hueso de la columna contra el primer frame
+   caminando, muestreado cuadro por cuadro):
+     con respiración : Spine 0,8° | Spine01 0,8° | Spine02 **48,7°**  (rampa monótona:
+                       1,7° 3,1° 11,8° 21,2° 29,0° 35,2° 39,8° 43,1° 45,8° 48,0° 50,0° 51,5°
+                       en los primeros 12 cuadros, y ahí se queda "chueco")
+     sin respiración : Spine 16,9° | Spine01 16,9° | Spine02 16,9°   (el reparto que quiere
+                       torsoAim: tres huesos iguales, 3×16,9 = 50,6° de giro total, y NO deriva)
+   La causa NO era la amplitud (con .001 pasaba lo mismo, más lento): era un LAZO DE
+   REALIMENTACIÓN con torsoAim(). torsoAim() se protege de acumular guardando la pose que dejó
+   (TW) y la de la animación (TQ): si el hueso sigue igual a TW, restaura TQ antes de volver a
+   girar. Medido con __H.aimDbg(): el mixer NO reescribe NINGUNO de los tres huesos de la
+   columna (el clip de arriba está congelado en el cuadro 0), así que ese caché es lo ÚNICO que
+   evita la acumulación — y acertaba 152/152 cuadros en Spine y Spine01 y **0/152** en Spine02,
+   que es justo bones.spine, el hueso que tocaba la respiración. Al multiplicar la respiración
+   sobre el hueso ENTRE mixer.update() y torsoAim(), torsoAim veía una pose distinta de TW,
+   tomaba como "pose de animación" la que YA tenía su propio giro anterior, y giraba otra vez
+   encima: se sumaba cuadro a cuadro hasta que la línea de hombros alcanzaba la puntería, o sea
+   hasta que TODO el giro (50°) quedaba en un solo hueso, el pecho, en vez de repartido.
+   ARREGLO (dos partes, las dos necesarias):
+     1) la respiración se aplica DESPUÉS de torsoAim(), así torsoAim ve la pose limpia;
+     2) breathRestore() la DESHACE antes de que torsoAim mire (si nadie más tocó el hueso), así
+        el hueso llega a torsoAim exactamente como lo dejó TW y el caché vuelve a acertar.
+   Y la respiración misma dejó de ser aditiva: se guarda la pose BASE (la que dejaron el mixer y
+   torsoAim) y cada frame se escribe base·respiración, nunca multiply sobre lo del frame
+   anterior. Es el mismo patrón que rikRestore()/rikStore() usa para el brazo derecho. */
+/* .030 MEDIDO. Roto el lazo, la respiración ya NO se amplifica ~20 veces (antes .0025 movía la
+   cabeza 62 mm: era el lazo, no la respiración), así que con la amplitud vieja quedaba en 2,6 mm
+   = estatua otra vez. Ahora el barrido es LINEAL con la amplitud, medido con __H.boneW('head')
+   5 s quieto en 3ª persona (un ciclo entero es 4,5 s):
+     respiración apagada -> 1,7 mm (piso: lo que se mueve el resto de la pose)
+     .0025 -> 2,6 mm | .010 -> 8,4 | .020 -> 19,5 | .030 -> 31,2 | .045 -> 40,3
+     .060 -> 52,7 | .080 -> 65,3
+   .030 rad = 1,7° de flexión del tronco da 31 mm de vaivén a 0,22 Hz: entra en los 2-4 cm que
+   se pidieron (se ve respirar de cerca, de lejos no llama la atención) y es un ángulo anatómico.
+   Si se toca, medir de nuevo con __H.boneW('head') quieto 5 s Y la deriva con __H.spineQ()
+   caminando 25 s (tiene que quedar abajo de 1°). */
+/* BREATHAMPX es let (no const) para poder barrerla desde un test con __H.breathAmp() y medir
+   el vaivén real de la cabeza sin recompilar; el valor de acá es el que queda en el juego. */
+/* el eje Z (inclinación al costado) va al 35% del X y con otra frecuencia y otra fase: dos
+   senoidales incomensurables para que la respiración no se lea como un metrónomo. Es una
+   FRACCIÓN de BREATHAMPX y no un valor propio, así __H.breathAmp() barre las dos juntas y la
+   forma del movimiento no cambia con la amplitud. */
+const BREATHHZX=.22,BREATHHZZ=.18,BREATHPHZ=1.7,BREATHRZ=.355;
+let BREATHAMPX=.030;
+let breathT=0,breathOn=true;
+const _brQ=new THREE.Quaternion(),_brE=new THREE.Euler(),
+      _brBase=new THREE.Quaternion(),_brOut=new THREE.Quaternion();
+let _brB=null;                     // a qué hueso corresponden _brBase/_brOut
+/* deshace la respiración del frame anterior. Va DESPUÉS de mixer.update() y ANTES de
+   torsoAim(): si el hueso sigue teniendo exactamente lo que dejó breathe(), nadie lo reescribió
+   y se vuelve a la pose base, así torsoAim() reconoce su propio TW y no acumula. Si cambió (el
+   mixer lo animó, o entró un ragdoll) no se toca: manda la pose nueva. */
+function breathRestore(){
+  const sp=bones.spine;if(!sp||sp!==_brB)return;
+  if(_qsame(sp.quaternion,_brOut))sp.quaternion.copy(_brBase);
+}
 function breathe(dt){
   const sp=bones.spine;if(!sp)return;
+  if(!breathOn){_brB=null;return;}
   breathT+=dt||1/60;
   const bx=Math.sin(breathT*Math.PI*2*BREATHHZX)*BREATHAMPX;
-  const bz=Math.sin(breathT*Math.PI*2*BREATHHZZ+BREATHPHZ)*BREATHAMPZ;
+  const bz=Math.sin(breathT*Math.PI*2*BREATHHZZ+BREATHPHZ)*BREATHAMPX*BREATHRZ;
   _brE.set(bx,0,bz);
   _brQ.setFromEuler(_brE);
-  sp.quaternion.multiply(_brQ);          // aditivo sobre lo que el mixer acaba de escribir
+  /* la BASE es la pose de este frame (mixer + torsoAim), no lo que quedó del frame anterior:
+     escribir base·respiración es un offset ABSOLUTO y no puede acumular ni con el mixer
+     callado. _brOut queda guardado para que breathRestore() sepa si alguien lo pisó. */
+  _brBase.copy(sp.quaternion);
+  _brOut.copy(_brBase).multiply(_brQ);
+  sp.quaternion.copy(_brOut);
+  _brB=sp;
 }
 function animStep(dt){
   if(!mixer)return;
@@ -7061,8 +7108,13 @@ function animStep(dt){
   else st=ACTS.idle?'idle':'walk';
   setAnim(st,sp,dt);
   mixer.update(dt);
-  breathe(dt);   // respiración procedural del pecho, aditiva sobre la pose recién escrita
-  torsoAim();    // enderezar el torso hacia la puntería
+  /* ORDEN: la respiración va DESPUÉS de torsoAim(), y antes se DESHACE la del frame anterior.
+     Al revés (respirar entre el mixer y torsoAim) torsoAim tomaba la respiración como parte de
+     la pose de la animación y giraba encima de su propio giro: el torso se iba inclinando y
+     quedaba chueco (48,7° acumulados en un solo hueso, medido — ver la nota de breathe()). */
+  breathRestore();
+  torsoAim();    // enderezar el torso hacia la puntería (ve la pose limpia de la animación)
+  breathe(dt);   // respiración procedural del pecho, offset absoluto sobre la pose de este frame
   ikSnap();      // guardar la pose que dejó la animación, antes de tocar nada
   /* el brazo derecho sube a la línea de los ojos en 1ª persona. Va acá y no en
      holdWeapon() porque holdWeapon() se corta cuando no hay arma: con los PUÑOS o con el
@@ -7548,7 +7600,7 @@ function spineChain(){
   }
   return SPN;
 }
-const TQ=[],TW=[],_tqa=new THREE.Quaternion(),_ty=new THREE.Vector3(0,1,0);
+const TQ=[],TW=[],TAH=[],TAN=[],_tqa=new THREE.Quaternion(),_ty=new THREE.Vector3(0,1,0);
 let torsoOn=true,TWMAX=1.05,TWG=1;              // giro máximo total (rad) y ganancia
 function torsoAim(){
   if(!torsoOn||!charRoot||PL.rag||!ikBones())return;
@@ -7560,7 +7612,13 @@ function torsoAim(){
   /* mismo cuidado que en el IK: si el mixer no reescribió estos huesos, volver a la pose de
      la animación antes de girar, para no ir sumando el mismo giro frame tras frame */
   for(let i=0;i<ch.length;i++){
-    if(TW[i]&&TQ[i]&&_qsame(ch[i].quaternion,TW[i]))ch[i].quaternion.copy(TQ[i]);
+    const hit=!!(TW[i]&&TQ[i]&&_qsame(ch[i].quaternion,TW[i]));
+    /* DEV: cuántos frames el caché reconoció SU PROPIA pose (hit) contra cuántos la vio
+       cambiada. Un hueso con hit≈0 es un hueso que alguien está reescribiendo entre dos
+       torsoAim(): si no es el mixer, es una realimentación y la pose se acumula (fue el bug
+       de la POSE ACUMULATIVA: la respiración tocaba bones.spine y le rompía este caché). */
+    if(DEV){TAN[i]=(TAN[i]||0)+1;if(hit)TAH[i]=(TAH[i]||0)+1;}
+    if(hit)ch[i].quaternion.copy(TQ[i]);
     else (TQ[i]||(TQ[i]=new THREE.Quaternion())).copy(ch[i].quaternion);
   }
   IK.up.updateWorldMatrix(true,false);rs.updateWorldMatrix(true,false);
@@ -7842,6 +7900,24 @@ if(DEV&&window.__H)Object.assign(window.__H,{
       o.needR=+P(RIK.up).distanceTo(t).toFixed(3);
       o.reachR=+(P(RIK.up).distanceTo(P(RIK.fo))+P(RIK.fo).distanceTo(P(RIK.ha))).toFixed(3);}
     return o;},
+  /* ¿ESTÁ EL ARMA DENTRO DEL CUADRO? fpDiag() sólo da la PROFUNDIDAD delante de la cámara, así
+     que un arma perfectamente enfocada pero caída abajo del borde inferior daba los mismos
+     números que una bien puesta. Acá se proyecta a coordenadas de pantalla NDC (x,y en -1..1,
+     el centro es 0,0): dentro = |x|<=1 && |y|<=1 && z entre -1 y 1.
+     Hizo falta para una captura de 1ª persona que salió SIN arma: con esto se distingue "el
+     arma no se dibuja" de "el arma está fuera de cuadro" sin depender del ojo, y se puede
+     esperar a que el IK se asiente antes de sacar la foto. */
+  fpScreen:()=>{ const v=new THREE.Vector3(),o={};
+    const put=(n,p)=>{v.copy(p).project(camera);
+      o[n]={x:+v.x.toFixed(3),y:+v.y.toFixed(3),z:+v.z.toFixed(3),
+        in:Math.abs(v.x)<=1&&Math.abs(v.y)<=1&&v.z>=-1&&v.z<=1};};
+    const P=b=>{b.updateWorldMatrix(true,false);
+      return new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);};
+    for(const k of['rHand','lHand','head'])if(bones[k])put(k,P(bones[k]));
+    if(wModel){wModel.updateWorldMatrix(true,false);
+      put('arma',new THREE.Vector3().setFromMatrixPosition(wModel.matrixWorld));
+      o.vis=wModel.visible;}
+    return o;},
   wrist:v=>{if(v!==undefined){IK.wr=+v;holdWeapon();}return IK.wr;},
   /* pelotitas de referencia: 0 hueso mano der, 1 hueso mano izq, 2 empuñadura,
      3 objetivo de la izquierda, 4 punta del caño, 5 hombro izq */
@@ -7943,7 +8019,35 @@ if(DEV&&window.__H)Object.assign(window.__H,{
   /* estado de la mezcla de animación: para verificar desde un test que el tren superior quedó
      clavado (upIdleTime/upIdleTS) y ver la fase de la respiración */
   animInfo:()=>({state:animState,upIdleTime:ACTU.idle&&ACTU.idle.time,
-    upIdleTS:ACTU.idle&&ACTU.idle.timeScale,breath:breathT})});
+    upIdleTS:ACTU.idle&&ACTU.idle.timeScale,breath:breathT}),
+  /* CUATERNIÓN LOCAL de cada hueso de la cadena de columna (spineChain: Spine>Spine01>Spine02)
+     más cuello y cabeza. Es la medida que delata la POSE ACUMULATIVA: sobre estos huesos
+     escriben el mixer, breathe() y torsoAim(), y si alguno realimenta al otro el ángulo local
+     crece frame a frame y no vuelve. Devuelve [nombre,x,y,z,w] por hueso, en el orden de la
+     cadena (de arriba hacia abajo) y después cuello/cabeza. */
+  /* con nobr=1 devuelve la pose SIN la respiración (la base que guardó breathe()): es la que
+     controlan el mixer y torsoAim, o sea donde se ve la DERIVA sin el vaivén de respirar
+     encima — el vaivén es sano y vuelve solo, la deriva no. */
+  spineQ:nobr=>{
+    const ch=spineChain(),o=[];
+    const put=b=>{if(!b)return;const q=(nobr&&b===_brB)?_brBase:b.quaternion;
+      o.push([b.name,q.x,q.y,q.z,q.w]);};
+    for(let i=0;i<ch.length;i++)put(ch[i]);
+    for(const k of['neck','head'])if(bones[k])put(bones[k]);
+    return o;},
+  /* la amplitud de la respiración, para poder medirla/ajustarla desde un test sin recompilar */
+  breathAmp:v=>{if(v!==undefined)BREATHAMPX=+v;return BREATHAMPX;},
+  /* apagar/prender la respiración ENTERA (los dos ejes): es la prueba de causalidad del bug de
+     pose acumulativa — con esto en 0 la columna no tiene que moverse de la pose de la animación */
+  breathOn:v=>{if(v!==undefined)breathOn=!!v;return breathOn;},
+  /* por hueso de la cadena: fracción de frames en que torsoAim reconoció su propia pose del
+     frame anterior. 1 = nadie más lo escribe (el caché anti-acumulación funciona), 0 = alguien
+     lo reescribe todos los frames (o el mixer, que es legítimo, o una realimentación) */
+  aimDbg:z=>{const ch=spineChain(),o=[];
+    for(let i=0;i<ch.length;i++)o.push([ch[i].name,TAN[i]||0,TAH[i]||0,
+      +(((TAH[i]||0)/Math.max(1,TAN[i]||0))).toFixed(3)]);
+    if(z)for(let i=0;i<ch.length;i++){TAN[i]=0;TAH[i]=0;}
+    return o;}});
 
 
 /* ==== core_d.js ==== */
@@ -11083,6 +11187,13 @@ let lastSnd='',sndPlays=0;
    sondea sndInfo().last a intervalos SIEMPRE puede perderse el que quedó pisado en el medio,
    por más seguido que sondee. Con el historial no hace falta adivinar el timing. */
 const sndHistArr=[];
+/* nombre de la grabación que sonó por el ARMA en el último SFX.shot(). Va aparte de lastSnd
+   porque SFX.shot toca dos cosas seguidas: el disparo y, si la bala pega en algo a menos de
+   60 m, el impacto ('imp-concrete'/'ricochet') — que deja lastSnd apuntando al impacto.
+   Un test que preguntaba por lastSnd veía 'imp-concrete' en las 8 armas de fuego y parecía que
+   el arma sonaba mal cuando lo que estaba mal era la medición; y el resultado dependía de si
+   había una pared enfrente, así que el test pasaba o fallaba según dónde hubiera spawneado. */
+let lastShotSnd='';
 
 function sndLoad(){
   if(sndOn||!okUrl(BASE))return;sndOn=true;
@@ -11103,6 +11214,40 @@ function sndLoad(){
   for(let k=0;k<4;k++)next();
 }
 
+/* ---------- recorte sin re-encodear (SOFF / SLEN) ----------
+   El modelo que generó estos archivos (mirelo) mete SILENCIO ANTES del sonido, y no
+   siempre el mismo: medido sobre la envolvente de cada archivo, el golpe llegaba a los
+   0.638 s en la AKM, a los 1.111 s en el shotgun, a los 0.987 s en bat-hit... El efecto
+   en el juego es que el disparo se escucha TARDE y se siente flojo, desacoplado del
+   click y del fogonazo.
+   No hace falta tocar los .mp3 ni re-encodear nada: AudioBufferSourceNode.start acepta
+   un offset DENTRO del buffer como segundo argumento y un largo como tercero, así que
+   src.start(0, off, len) arranca directo en el golpe y descarta la cola de más. El
+   archivo queda igual (mismo nombre, mismo HASH de CDN), el recorte es en reproducción.
+     SOFF = segundos a saltear al principio (arranque del golpe menos ~20 ms de aire).
+     SLEN = segundos a reproducir (sólo donde hay basura después de la cola útil).
+   Los offsets salieron de medir la envolvente de cada archivo, no a ojo: está
+   automatizado en sndcheck.js, que vuelve a medir y falla si algo se desalinea.
+   OJO: los sonidos en bucle (amb-*, eng-*, phys-hum, fw-fountain, fw-wheel2) van por
+   sLoop y quedan A PROPÓSITO fuera de la tabla: recortarles el arranque no sirve de nada
+   (el bucle vuelve a 0 igual) y de paso rompe el empalme. */
+const SOFF={
+  'fw-crackle':1.624,'shot-shotgun':1.086,'bat-hit':0.987,pop:0.945,glass:0.926,
+  'imp-concrete':0.753,trash:0.644,'step-wood':0.593,'bat-swing':0.553,'step-metal':0.456,
+  'shot-crossbow':0.453,'fw-finale':0.381,ui:0.320,'fw-whistle':0.305,'fw-launch':0.267,
+  'fw-fuse':0.241,'fw-sparkle':0.226,land:0.218,'shot-revolver':0.161,'shot-smg':0.150,
+  ricochet:0.113,'phys-shot':0.094,'shot-akm':0.057};
+/* Largo a reproducir, donde el archivo trae basura DESPUÉS de la cola útil:
+     shot-smg     el modelo entregó una ráfaga; con esta ventana queda UN solo tiro
+     shot-shotgun después del retumbe vuelve a subir ruido que no es parte del disparo
+     shot-sniper  el eco útil dura ~1 s y después aparecen golpes sueltos que sonaban
+                  a segundo disparo (era justo el problema del sniper) */
+const SLEN={'shot-smg':0.28,'shot-shotgun':0.52,'shot-sniper':1.10};
+/* Al cortar con SLEN el archivo puede quedar sonando fuerte justo en el corte (el
+   shotgun queda al ~18% del pico), y un corte seco ahí CLICKEA. Se apaga con una
+   rampa corta de gain: SFADE segundos de fundido al final de la ventana. */
+const SFADE=.04;
+
 /* ---------- reproducir ---------- */
 const _sv=new THREE.Vector3();
 function sPlay(name,o){
@@ -11120,7 +11265,18 @@ function sPlay(name,o){
   src.playbackRate.value=(o.rate||1)*(o.jit===false?1:.94+Math.random()*.12);
   const g=a.createGain();g.gain.value=vol;
   src.connect(g);g.connect(MG);
-  src.start();
+  /* saltea el silencio inicial del archivo (y corta la basura del final si hace falta).
+     Si el offset se pasara del largo del buffer, start() tiraría; se acota por las dudas. */
+  const off=Math.min(SOFF[name]||0,Math.max(0,b.duration-.02));
+  const len=Math.min(SLEN[name]||0,b.duration-off);
+  if(len>0){
+    /* el 3er argumento de start() está en segundos DE BUFFER: en tiempo real el tramo
+       dura len/rate, así que el fundido se agenda con la velocidad ya aplicada */
+    const real=len/(src.playbackRate.value||1),t0=a.currentTime,fd=Math.min(SFADE,real/2);
+    src.start(0,off,len);
+    g.gain.setValueAtTime(vol,t0+real-fd);
+    g.gain.linearRampToValueAtTime(0,t0+real);
+  }else src.start(0,off);
   lastSnd=name;sndPlays++;
   if(DEV){sndHistArr.push(name);if(sndHistArr.length>60)sndHistArr.shift();}
   return true;
@@ -11190,7 +11346,10 @@ function shotNameFor(w){
 }
 SFX.shot=k=>{
   const w=weap(),n=shotNameFor(w);
-  if(!sPlay(n,{vol:.9}))_SFX0.shot(k);
+  /* lastShotSnd queda vacío si el buffer no estaba y hubo que caer al sintetizador: así el
+     hook no puede devolver un nombre que en realidad no sonó */
+  if(!sPlay(n,{vol:.9})){lastShotSnd='';_SFX0.shot(k);}
+  else lastShotSnd=n;
   /* bala que pega: sólo armas de fuego de verdad (gun/proj), no melee/phys/tool */
   if(w.kind==='gun'||w.kind==='proj')nsafe(()=>{
     const h=aimRay(60,0);
@@ -11461,11 +11620,414 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     loaded:Object.keys(BUF).length,plays:sndPlays,last:lastSnd,
     hum:!!humL,eng:!!engL,mus:!!musL,vol:SV.vol,ac:!!AC,amb:!!windL||!!birdsL}),
   sndPlay:n=>sPlay(n,{vol:1}),
-  sndShot:()=>{SFX.shot(0);return lastSnd;},
+  /* dispara y devuelve la grabación DEL ARMA (no lastSnd, que puede haber quedado en el
+     impacto de la bala — ver lastShotSnd arriba) */
+  sndShot:()=>{SFX.shot(0);return lastShotSnd;},
   sndHist:()=>sndHistArr.slice(),
   sndHave:n=>!!BUF[n],
   sndNames:()=>Object.keys(SND).concat([SNDMUS]),
-  sndMap:()=>({shot:shotNameFor(weap()),ground:groundStepSound()})
+  sndMap:()=>({shot:shotNameFor(weap()),ground:groundStepSound()}),
+  /* VERIFICACIÓN DEL RECORTE (SOFF/SLEN). El recorte pasa adentro de start(0,off,len) y desde
+     afuera no se puede oír; lo que sí se puede comprobar es que las cuentas cierran contra el
+     buffer REALMENTE decodificado: off tiene que caer dentro del archivo y len no pasarse del
+     resto. Se calcula con las MISMAS expresiones que sPlay (si alguien las cambia en un lado y
+     no en el otro, esto lo delata) y avisa si el acote de seguridad tuvo que actuar (clamped),
+     que sería tabla desalineada con el mp3 — el caso que rompería el disparo. */
+  sndOff:n=>{const b=BUF[n];if(!b)return null;
+    const off=Math.min(SOFF[n]||0,Math.max(0,b.duration-.02));
+    const len=Math.min(SLEN[n]||0,b.duration-off);
+    return {tabOff:SOFF[n]||0,tabLen:SLEN[n]||0,off:+off.toFixed(3),len:+len.toFixed(3),
+      dur:+b.duration.toFixed(3),clamped:(SOFF[n]||0)>off+1e-9,rest:+(b.duration-off).toFixed(3)};},
+  sndOffNames:()=>({soff:Object.keys(SOFF),slen:Object.keys(SLEN)})
+});
+
+/* ==== core_o.js ==== */
+/* ============================================================
+   SUX SANDBOX — MÁS SONIDOS (18 efectos nuevos, enganchados a acciones reales)
+   ------------------------------------------------------------
+   core_n ya trajo las 69 grabaciones y el reproductor (sPlay/sLoop, SOFF/SLEN, ambiente,
+   motor, pirotecnia). Faltaban cosas que el jugador HACE todo el tiempo y no sonaban:
+   cambiar de arma, cambiar de herramienta, romper madera, arrastrar chapa, un barril
+   rodando, salir del agua, caminar con el agua a los tobillos, quedarse sin aire de tanto
+   correr, comerse una caída larga, la puerta del auto, la suspensión al aterrizar un salto,
+   la mecha larga chisporroteando, la lluvia de estrellas que baja silbando, el "no hay nada
+   ahí" / "límite de props", guardar, reaparecer, y quién entra o sale de la sala.
+   Reglas de la casa (iguales que en core_n):
+     · Nada re-declarado: todo lo que ya existe se ENVUELVE (const _xO=x; x=function...).
+       core_o se concatena DESPUÉS de core_n, así que puede pisar cualquier binding.
+     · Todo callback dentro de nsafe: si un sonido falla, el juego sigue igual.
+     · Nada por frame sin dt; el barrido de props es cada 0.12 s y por tandas, no completo.
+     · No se toca ni un sonido de arma ni core_n: sólo se agregan claves a SND/SOFF (son
+       objetos const: se MUTAN, no se reasignan) y se envuelven funciones.
+   ============================================================ */
+
+/* ---------- catálogo nuevo ---------- */
+const SNDO=['equip','tool-switch','wood-break','metal-scrape','prop-roll','water-exit','wade',
+  'breath-hard','fall-hard','car-door','suspension','fw-fuse-long','fw-whistle-down',
+  'ui-error','save','respawn','mp-join','mp-leave'];
+/* sndLoad (core_n) arranca ~1 s después del primer frame, o sea DESPUÉS de que este módulo
+   se ejecuta: alcanza con sumar las claves al catálogo y los baja junto con los otros 69,
+   con la misma cola de 4 en paralelo. El loader propio de más abajo es sólo el plan B. */
+for(const n of SNDO)if(!SND[n])SND[n]=1;
+
+/* Offsets medidos sobre la envolvente de cada archivo (mismo problema que en core_n: el
+   modelo mete silencio ANTES del sonido, y distinto en cada archivo). Los cinco que se
+   pasaban de 0.15 s:
+     mp-join          la campanita entra a los 0.585 s (tres intentos de "notification
+                      chime" salieron pegados al final del archivo, inservibles; el que
+                      quedó es una campana de bronce real, que sí trae cola útil)
+     wade             el chapoteo arranca a los 0.074 s
+     breath-hard      la primera bocanada empieza a los 0.196 s
+     ui-error         el buzz entra a los 0.204 s
+     fw-whistle-down  el barrido descendente empieza a los 0.139 s
+   Los otros trece abren en los primeros 20 ms y no necesitan recorte. fw-fuse-long va por
+   sLoop, así que queda a propósito FUERA de la tabla (recortarle el arranque no sirve: el
+   bucle vuelve a 0 igual y encima se rompe el empalme). */
+Object.assign(SOFF,{'breath-hard':.17,wade:.05,'fw-whistle-down':.12,'ui-error':.18,
+  'mp-join':.56});
+
+/* ---------- plan B: loader propio ----------
+   Si sndLoad ya hubiera corrido antes de este módulo (orden de concatenación distinto,
+   o alguien lo llamó a mano), las claves nuevas no entrarían en su lista y nunca se
+   bajarían. Este loader es idéntico al de core_n pero sólo para lo que falte. */
+const SNDOREQ={};let sndoTry=0,sndoT=0;
+function sndoLoad(){
+  if(!okUrl(BASE))return;
+  const a=ac();if(!a)return;                     /* sin AudioContext no se puede decodificar */
+  for(const n of SNDO){
+    if(BUF[n]||SNDOREQ[n])continue;
+    SNDOREQ[n]=1;
+    fetch(BASE+'snd/'+n+'.mp3').then(r=>{if(!r.ok)throw 0;return r.arrayBuffer();})
+      .then(ab=>new Promise((res,rej)=>a.decodeAudioData(ab,res,rej)))
+      .then(b=>{BUF[n]=b;})
+      .catch(()=>{delete SNDOREQ[n];});           /* que un reintento posterior pueda volver */
+  }
+}
+
+/* ---------- reproducir contando (para el hook de test) ---------- */
+const oPlays={};let oPlaysN=0;
+function oPlay(n,o){
+  const r=sPlay(n,o);
+  if(r){oPlays[n]=(oPlays[n]||0)+1;oPlaysN++;}
+  return r;
+}
+const _ov=new THREE.Vector3();                   /* temporal propio: no pisar el _sv de core_n */
+const oDist=b=>{_ov.set(b.position.x,b.position.y,b.position.z);
+  return camera.position.distanceTo(_ov);};
+
+/* ============================================================
+   1. JUGADOR / INVENTARIO
+   ============================================================ */
+/* equipar arma: equip() se llama al arrancar (equipReady) y cada vez que cambiás de slot;
+   sólo suena si estás jugando Y el arma cambió de verdad (re-equipar el mismo slot pasa
+   seguido — attachWeapon/syncSlot — y sonaría a repetido) */
+const _equipO=equip;let _eqT=0;
+equip=function(i){
+  const prev=wIdx;
+  const r=_equipO(i);
+  if(APP==='play'&&wIdx!==prev){
+    const now=performance.now();
+    if(now-_eqT>90){_eqT=now;nsafe(()=>oPlay('equip',{vol:.55}),'eqs');}
+  }
+  return r;
+};
+
+/* cambio de herramienta del toolgun: se elige de tres lados distintos (botones de la lista
+   en core_b, el hook __H.tool y el teclado), así que en vez de envolver tres cosas se mira
+   el valor de toolIdx una vez por frame — es una comparación de enteros, cuesta nada */
+let _tiPrev=toolIdx;
+function toolSwitchO(){
+  if(toolIdx===_tiPrev)return;
+  _tiPrev=toolIdx;
+  if(APP==='play'||APP==='spawn'||APP==='pause')nsafe(()=>oPlay('tool-switch',{vol:.5}),'tsw');
+}
+
+/* respiración agitada: corriendo (sp>7, el mismo umbral con el que core_n acelera los pasos)
+   más de 4.5 s seguidos. Se repite cada ~3.6 s mientras siga el sprint y se descuenta al
+   trotar/parar, así que caminar no lo dispara nunca. Manejando no corre nadie: VHS lo corta. */
+let oRunT=0,oBrT=0;
+function breathO(dt){
+  if(APP!=='play'||PL.rag||PL.sit||VHS){oRunT=0;return;}
+  const sp=Math.hypot(plBody.velocity.x,plBody.velocity.z);
+  if(grounded&&!inWater&&sp>7)oRunT+=dt;else oRunT=Math.max(0,oRunT-dt*.6);
+  oBrT-=dt;
+  if(oRunT>4.5&&oBrT<=0){oBrT=3.6;nsafe(()=>oPlay('breath-hard',{vol:.5}),'brth');}
+}
+
+/* caída grande: core_n ya toca 'land' en cualquier aterrizaje; esto es la CAPA de arriba
+   para el porrazo de verdad (más de 0.85 s en el aire y bajando a más de 11 m/s, o sea
+   ~6 m de altura). Se mide la velocidad vertical MÍNIMA del vuelo porque en el frame del
+   aterrizaje cannon ya la anuló. Estado propio: el airT de core_n se resetea en su propio
+   callback (corre antes que éste) y no se puede leer a tiempo. */
+let oWasG=true,oAirT=0,oVyMin=0;
+function fallO(dt){
+  if(APP!=='play'){oWasG=grounded;return;}
+  if(!grounded&&!inWater){oAirT+=dt;oVyMin=Math.min(oVyMin,plBody.velocity.y);}
+  if(!oWasG&&grounded&&oAirT>.85&&oVyMin<-11)
+    nsafe(()=>oPlay('fall-hard',{vol:Math.min(.9,.4+oAirT*.22)}),'fall');
+  if(grounded||inWater){oAirT=0;oVyMin=0;}
+  oWasG=grounded;
+}
+
+/* ============================================================
+   2. AGUA
+   ============================================================ */
+/* salir del agua: transición inWater true->false, con estado propio (el wasWater de core_n
+   es de su callback). Pide medio segundo adentro para que rozar el borde de la pileta de un
+   salto no chorree agua. */
+let oWasW=false,oInWT=0;
+function waterOutO(dt){
+  if(APP!=='play'){oWasW=inWater;return;}
+  if(inWater)oInWT+=dt;
+  if(oWasW&&!inWater){
+    if(oInWT>.5)nsafe(()=>oPlay('water-exit',{vol:.7}),'wout');
+    oInWT=0;
+  }
+  oWasW=inWater;
+}
+/* agua POCO PROFUNDA: si estás dentro del volumen de agua pero los pies siguen tocando el
+   piso, no estás nadando: estás caminando con el agua a los tobillos. core_n en ese caso
+   metía la brazada de 'swim' (sonaba a nadar parado). Se envuelve stepStep entero para
+   REEMPLAZAR el paso en ese caso (si no, se sumarían chapoteo + brazada y queda barroso). */
+const _stepStepO=stepStep;let oWadeT=0;
+stepStep=function(dt){
+  if(APP==='play'&&inWater&&grounded&&!PL.rag&&!PL.sit){
+    const sp=Math.hypot(plBody.velocity.x,plBody.velocity.z);
+    if(sp<1.1){oWadeT=0;return;}
+    oWadeT+=dt;
+    if(oWadeT>=.42){oWadeT=0;nsafe(()=>oPlay('wade',{vol:.42}),'wade');}
+    return;
+  }
+  oWadeT=0;
+  return _stepStepO(dt);
+};
+
+/* ============================================================
+   3. FÍSICA DE PROPS
+   ============================================================ */
+const oIsWood=def=>{const ms=propMatSet(def);return !!(ms.wood||ms.plank||ms.cardboard);};
+const oIsMetal=def=>{const ms=propMatSet(def);
+  return !!(ms.metal||ms.steel||ms.chrome||ms.rust||ms.corrugated);};
+const oIsRound=def=>{for(const q of (def.parts||[]))if(q.s==='cyl'||q.s==='sph')return true;
+  return false;};
+/* madera que se quiebra: el golpe FUERTE (>7.5 m/s) de un prop de madera/cartón no es el
+   mismo "toc" que el impacto normal de core_n (imp-wood, desde 2.6 m/s) — acá se astilla.
+   Es un listener aparte, con su propio enfriado, así que el impacto normal sigue sonando
+   debajo y las dos capas juntas dan el crujido. */
+const _spawnPropO=spawnProp;let oBrkT=0;
+spawnProp=function(id,pos,quat,opt){
+  const p=_spawnPropO(id,pos,quat,opt);
+  if(p&&p.def&&p.def.parts&&oIsWood(p.def))nsafe(()=>{
+    p.body.addEventListener('collide',e=>{
+      const now=performance.now();
+      if(now-oBrkT<220)return;                   /* un tablón contra otro son 6 contactos */
+      let v=0;nsafe(()=>{v=Math.abs(e.contact.getImpactVelocityAlongNormal());},'bv');
+      if(v<7.5)return;
+      oBrkT=now;
+      nsafe(()=>oPlay('wood-break',{vol:Math.min(.9,.35+v*.03),at:p.body.position}),'brk');
+    });
+  },'brkl');
+  return p;
+};
+/* chapa que se arrastra y barril que rueda: NO se puede hacer con listeners de colisión
+   (un prop apoyado deslizando genera contactos permanentes, sonaría 60 veces por segundo).
+   Va por barrido: cada 0.12 s se miran hasta 90 props (cursor rotativo, así 400 props no
+   cuestan más que 90) y se elige UN candidato para cada bucle — el más fuerte y más cerca.
+   Dos bucles globales, no uno por prop: 20 barriles rodando no son 20 sLoop.
+     rodar    = mucha velocidad angular + forma redonda (cyl/sph en el def)
+     arrastrar= poca velocidad angular + material metálico (chapa/viga deslizando)
+   Los que están cayendo (|vy| grande) se ignoran: eso ya lo cubre el impacto de core_n. */
+let oScanT=0,oScanI=0,rollL=null,scrapeL=null;
+function physScanO(dt){
+  oScanT+=dt;
+  if(oScanT<.12)return;
+  oScanT=0;
+  let bR=0,bS=0;
+  const N=PROPS.length;
+  if(N&&APP==='play'){
+    const LIM=Math.min(N,90);
+    for(let k=0;k<LIM;k++){
+      const p=PROPS[(oScanI+k)%N];
+      if(!p||!p.body||!p.def||p.frozen||p.drive)continue;
+      const b=p.body;
+      if(b.sleepState===CANNON.Body.SLEEPING)continue;
+      const vh=Math.hypot(b.velocity.x,b.velocity.z);
+      if(vh<1.2||Math.abs(b.velocity.y)>1.6)continue;
+      const d=oDist(b);
+      if(d>22)continue;
+      const w=Math.hypot(b.angularVelocity.x,b.angularVelocity.y,b.angularVelocity.z);
+      const sc=vh/(1+d/9);
+      if(w>2.6&&oIsRound(p.def)){ if(sc>bR)bR=sc; }
+      else if(w<1.4&&oIsMetal(p.def)){ if(sc>bS)bS=sc; }
+    }
+    oScanI=(oScanI+LIM)%N;
+  }
+  /* los bucles no pasan por la atenuación por distancia de sPlay (sPlay sólo la aplica a
+     los one-shot), así que el volumen sale del score, que ya trae la distancia adentro */
+  if(bR>.4){ if(!rollL)rollL=sLoop('prop-roll',0);
+    if(rollL){rollL.set(Math.min(.30,bR*.055));rollL.rate(.82+Math.min(.55,bR*.05));} }
+  else if(rollL){rollL.stop();rollL=null;}
+  if(bS>.4){ if(!scrapeL)scrapeL=sLoop('metal-scrape',0);
+    if(scrapeL){scrapeL.set(Math.min(.32,bS*.06));scrapeL.rate(.85+Math.min(.5,bS*.045));} }
+  else if(scrapeL){scrapeL.stop();scrapeL=null;}
+}
+
+/* ============================================================
+   4. VEHÍCULO
+   ============================================================ */
+/* puerta al subir y al bajar: vhEnter/vhExit ya los envolvió core_n para el motor, se
+   vuelve a envolver encima (r!==false && VHS = subió de verdad, no rebotó por PL.rag) */
+const _vhEnterO=vhEnter;
+vhEnter=function(p){
+  const r=_vhEnterO(p);
+  if(r!==false&&VHS)nsafe(()=>oPlay('car-door',{vol:.6}),'door');
+  return r;
+};
+const _vhExitO=vhExit;
+vhExit=function(){
+  const had=!!VHS;
+  const r=_vhExitO();
+  if(had)nsafe(()=>oPlay('car-door',{vol:.55,rate:.94}),'door2');
+  return r;
+};
+/* suspensión al aterrizar: el chasis venía bajando (vy<-4 por más de 0.18 s) y en un frame
+   se frena. Se guarda la vy del frame ANTERIOR porque en el del aterrizaje ya vale ~0 y no
+   se podría medir la fuerza del golpe. */
+let oVhAir=0,oVhVy=0;
+function suspO(dt){
+  if(!VHS||!VHS.p||!VHS.p.body){oVhAir=0;oVhVy=0;return;}
+  const vy=VHS.p.body.velocity.y;
+  if(vy<-4)oVhAir+=dt;
+  if(oVhAir>.18&&vy>-2.2&&oVhVy<-5){
+    nsafe(()=>oPlay('suspension',{vol:Math.min(.9,.3+Math.abs(oVhVy)*.04)}),'susp');
+    oVhAir=0;
+  }
+  if(vy>-1)oVhAir=Math.max(0,oVhAir-dt);
+  oVhVy=vy;
+}
+
+/* ============================================================
+   5. PIROTECNIA
+   ============================================================ */
+/* mecha larga: core_n toca 'fw-fuse' una vez al encender, pero la mecha CHISPORROTEA todo
+   el rato hasta que sale el cohete (fase 'fuse' del estado en FWLIT, core_l). Un bucle
+   mientras haya al menos una mecha prendida — igual que las fuentes/ruedas de core_n. */
+let fuseL=null;
+function fuseSndO(){
+  let any=false;
+  if(typeof FWLIT!=='undefined'&&FWLIT&&FWLIT.forEach)
+    FWLIT.forEach(st=>{if(st&&st.phase==='fuse')any=true;});
+  if(any&&APP==='play'){ if(!fuseL)fuseL=sLoop('fw-fuse-long',.28); }
+  else if(fuseL){fuseL.stop();fuseL=null;}
+}
+/* silbato descendente: la lluvia de estrellas/restos que CAE después del estallido. Se
+   agenda 0.42 s después del burst (el estallido tiene que sonar primero); siempre en las
+   bombas grandes (size>=2) y a veces en las chicas, para que no sea un patrón fijo. */
+if(typeof FWEV!=='undefined'&&FWEV){
+  const _FWEVO=FWEV;
+  FWEV=function(ev,x,y,z,extra){
+    nsafe(()=>_FWEVO(ev,x,y,z,extra),'fwev0');
+    nsafe(()=>{
+      if(ev!=='burst')return;
+      const size=(extra&&extra.size)||1;
+      if(size<2&&Math.random()>=.4)return;
+      setTimeout(()=>nsafe(()=>{ if(APP==='play')oPlay('fw-whistle-down',{vol:.45,at:[x,y,z]}); },'fwwd'),420);
+    },'fwevo');
+  };
+}
+
+/* ============================================================
+   6. INTERFAZ / PARTIDA / MULTIJUGADOR
+   ============================================================ */
+/* acción inválida y límite de props: los dos avisos ya existen como texto (toast), lo que
+   faltaba era el sonido. Se envuelve toast() y se compara con el texto traducido, así vale
+   en los tres idiomas sin tocar quien llama. El límite usa el mismo buzz más grave y más
+   fuerte: es "no podés" pero más serio.
+   OJO: la función original usa toast._t para su timeout; al reasignar el binding esa
+   propiedad pasa a vivir en ESTE wrapper (que es lo que 'toast' nombra ahora), así que
+   clearTimeout/setTimeout siguen apuntando al mismo lugar y el aviso se sigue borrando. */
+const _toastO=toast;
+toast=function(t){
+  nsafe(()=>{
+    if(APP==='load')return;
+    const s=String(t==null?'':t);
+    if(s===T('tNo'))oPlay('ui-error',{vol:.55});
+    else if(s===T('tMax'))oPlay('ui-error',{vol:.7,rate:.78});
+  },'terr');
+  return _toastO(t);
+};
+/* guardar partida */
+const _saveGameO=saveGame;
+saveGame=function(){
+  const r=_saveGameO();
+  nsafe(()=>oPlay('save',{vol:.6}),'sv');
+  return r;
+};
+/* reaparecer (botón de la pausa y muerte) */
+const _respawnO=respawn;
+respawn=function(){
+  const r=_respawnO();
+  if(APP==='play'||APP==='pause'||APP==='spawn')nsafe(()=>oPlay('respawn',{vol:.7}),'rsp');
+  return r;
+};
+/* abrir/cerrar menús: el listener de clicks de core_n sólo cubre los BOTONES; con Esc o Q
+   (teclado) la pausa y el spawn se abrían y cerraban mudos. Se reusa el 'menu' que ya
+   existe: agudo al abrir, más grave al cerrar (no hace falta un archivo nuevo). */
+const _togglePauseO=togglePause;
+togglePause=function(){
+  const was=APP;
+  const r=_togglePauseO();
+  nsafe(()=>{ if(APP!==was)sPlay('menu',{vol:.5,rate:APP==='pause'?1:.82}); },'pmn');
+  return r;
+};
+const _openSpawnO=openSpawn;
+openSpawn=function(tab){
+  const was=APP;
+  const r=_openSpawnO(tab);
+  nsafe(()=>{ if(APP==='spawn'&&was!=='spawn')sPlay('menu',{vol:.5}); },'spmn');
+  return r;
+};
+/* alguien entra / alguien sale de la sala: llegan como mensaje de sistema del chat, con el
+   texto T('mpJoin')/T('mpLeft') (core_f). core_n ya envolvió NET.onChat para el chat normal
+   (y a propósito NO suena en los de sistema): acá se le pone el aviso a cada uno. */
+nsafe(()=>{
+  const c0=NET.onChat;
+  NET.onChat=d=>{
+    nsafe(()=>{if(c0)c0(d);},'chato');
+    nsafe(()=>{
+      if(!d||!d.sys)return;
+      const m=String(d.m||'');
+      if(m===T('mpLeft'))oPlay('mp-leave',{vol:.5});
+      else if(m===T('mpJoin'))oPlay('mp-join',{vol:.5});
+    },'mpj');
+  };
+},'chatwo');
+
+/* ---------- enganche al bucle ---------- */
+EXT.frame.push(dt=>{
+  /* plan B del loader: si a los 6 s todavía falta algún archivo nuevo (sndLoad ya había
+     corrido, o el AudioContext no existía cuando arrancó), se bajan acá. Tres intentos. */
+  if(sndoTry<3){
+    sndoT+=dt;
+    if(sndoT>6){ sndoT=0;
+      if(SNDO.some(n=>!BUF[n])){sndoTry++;nsafe(sndoLoad,'sndoload');}
+      else sndoTry=3;
+    }
+  }
+  nsafe(()=>{
+    toolSwitchO();breathO(dt);fallO(dt);waterOutO(dt);
+    physScanO(dt);suspO(dt);fuseSndO();
+  },'sndotick');
+});
+
+if(DEV&&window.__H)Object.assign(window.__H,{
+  /* para el verificador: qué se bajó de lo nuevo, cómo se llama cada cosa y cuántas veces
+     sonó cada una (oPlay lleva la cuenta sólo de los sonidos de este módulo) */
+  sndExtra:()=>({loaded:SNDO.filter(n=>!!BUF[n]).length,names:SNDO.slice(),
+    plays:Object.assign({},oPlays),total:oPlaysN,
+    missing:SNDO.filter(n=>!BUF[n]),
+    loops:{roll:!!rollL,scrape:!!scrapeL,fuse:!!fuseL}}),
+  sndExtraPlay:n=>oPlay(n,{vol:1})
 });
 
 </script>
