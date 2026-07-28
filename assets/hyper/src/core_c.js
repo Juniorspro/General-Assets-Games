@@ -143,7 +143,11 @@ function setAnim(st,sp,dt){
    mismo ritmo), o sea que no hay que tocar torsoAim (prohibido) para arreglarlo: alcanza con
    una amplitud de entrada chica que, ya amplificada, siga quedando dentro del margen y a la vez
    se note de cerca. */
-const BREATHHZX=.22,BREATHAMPX=.001,BREATHHZZ=.18,BREATHAMPZ=.00035,BREATHPHZ=1.7;
+/* .0025, MEDIDO — la amplitud no es lineal: torsoAim() re-mide los hombros cada frame sobre la
+   misma cadena y realimenta la entrada. Con .001 rad la cabeza barre 0,8 mm (estatua), con .006
+   barre 86 mm (mareo); .0025 da ~39 mm de vaivén LENTO a 0,22 Hz: se nota respirar de cerca y
+   de lejos no llama la atención. Si se toca, medir con __H.boneW('head') quieto 3 s. */
+const BREATHHZX=.22,BREATHAMPX=.0025,BREATHHZZ=.18,BREATHAMPZ=.0009,BREATHPHZ=1.7;
 let breathT=0;
 const _brQ=new THREE.Quaternion(),_brE=new THREE.Euler();
 function breathe(dt){
