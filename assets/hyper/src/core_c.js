@@ -102,7 +102,7 @@ function animStep(dt){
   /* el brazo derecho sube a la línea de los ojos en 1ª persona. Va acá y no en
      holdWeapon() porque holdWeapon() se corta cuando no hay arma: con los PUÑOS o con el
      bate la pantalla quedaba vacía, sin manos. */
-  if(PL.fp){rikRestore();armIKR();rikStore();}
+  if(PL.fp){fpEyeCalc(dt);rikRestore();armIKR();rikStore();}
   fpHead();
 }
 /* EN 1ª PERSONA LA CABEZA SE RECORTA (antes se le ponía escala .001 al hueso).
@@ -130,7 +130,16 @@ const FPCLIPD=.112;   /* medido en la zancada: la mano derecha baja hasta 0.125 
                          el brazo YA está estirado al máximo (el IK se satura corriendo), así que
                          empujar el objetivo no la aleja: hay que bajar el plano. Queda 1,3 cm de
                          margen contra la mano y 2,2 cm contra el plano cercano de la cámara. */
-const FPCLIP=new THREE.Plane(new THREE.Vector3(0,0,-1),0),FPCLIPA=[FPCLIP];
+const FPCLIP=new THREE.Plane(new THREE.Vector3(0,0,-1),0);
+/* SEGUNDO PLANO: LA PARTE BAJA. En 1ª persona las piernas se veían al mirar abajo y al correr,
+   y el usuario pidió sacarlas ("elimina la parte baja"). Un plano horizontal a la altura de la
+   cadera recorta todo lo que queda debajo — como cualquier FPS: brazos y torso sí, piernas no.
+   Con varios planos y clipIntersection en false (el default) three.js descarta el fragmento
+   que quede del lado malo de CUALQUIERA de los dos, que es justo lo que se quiere. Sentado
+   (PL.sit, ver core_k) el corte baja al muslo para que se vea la falda de las piernas. */
+const FPLEG=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+const FPCLIPA=[FPCLIP,FPLEG];
+const FPLEGH=.92;
 const _fcd=new THREE.Vector3(),_fcp=new THREE.Vector3();
 let fpClipOn=false,fpClipMats=null;
 function fpClipMaterials(){
@@ -151,6 +160,8 @@ function fpClip(){
     camera.getWorldDirection(_fcd);
     _fcp.copy(camera.position).addScaledVector(_fcd,FPCLIPD);
     FPCLIP.setFromNormalAndCoplanarPoint(_fcd,_fcp);
+    /* normal (0,1,0): se dibuja lo que cumple y > corte */
+    FPLEG.constant=-(plDraw().y+(PL.sit?.42:FPLEGH));
   }
   if(on===fpClipOn)return;                 // cambiar clippingPlanes recompila el shader
   fpClipOn=on;
@@ -351,7 +362,12 @@ function holdWeapon(){
    con el IK que ya estaba. Los brazos que se ven son los del personaje, no un "view model".
    FPT = [a la derecha, abajo, adelante] en metros, respecto de los ojos.
    ============================================================ */
-const FPT=[.185,-.225,.305];
+/* la Z bajó de .305 a .27 (y el "abajo" un toque): con el ojo estabilizado la CÁMARA ya no
+   acompaña la zancada, pero el HOMBRO sí sigue subiendo y bajando con la animación, y a .305
+   el brazo quedaba justo al límite: en la parte baja del paso el IK se saturaba y la mano caía
+   corta A LO LARGO DE LA VISTA (medido: 84 mm de vaivén en profundidad contra 4,5 mm lateral).
+   Con 3,5 cm de margen el brazo llega SIEMPRE y el arma queda clavada también en profundidad. */
+const FPT=[.185,-.21,.27];
 const RIK={};
 function rikBones(){
   if(RIK.ok!==undefined)return RIK.ok;
@@ -373,14 +389,12 @@ function fpHandTarget(out){
      DEBAJO de la cámara — plBody.position.y es el centro de la cápsula, no los pies — y al
      mirar arriba esos 33 cm se le restaban al "adelante": la mano terminaba a 3 cm de la
      cámara (medido con __H.fpDiag), o sea detrás del plano cercano, y el arma desaparecía. */
-  const hb=bones.head;
-  if(hb){
-    hb.updateWorldMatrix(true,false);
-    _fe.setFromMatrixPosition(hb.matrixWorld);
-    _fe.set(_fe.x-ys*.16,_fe.y+.045,_fe.z-yc*.16);
-  } else _fe.set(plBody.position.x-ys*.14,
-          plBody.position.y+(PL.h-.28)+.02,
-          plBody.position.z-yc*.14);
+  /* ahora el origen es el OJO ESTABILIZADO (fpEyeCalc, core_b): el mismo punto exacto que va
+     a usar la cámara este frame. Con el hueso crudo, la mano acompañaba todo el vaivén de la
+     zancada y el arma se balanceaba contra la pantalla ("se balancea mucho el arma y los
+     brazos"). animStep lo calcula justo antes de llamar acá; si nadie lo calculó aún (primer
+     frame en 1ª persona), se calcula sin avanzar el filtro. */
+  _fe.copy(_fpOn?_fpE:fpEyeCalc(0));
   _ff.set(-ys*pc,ps,-yc*pc);
   _fr.set(yc,0,-ys);
   /* las armas cortas necesitan subir y acercarse, si no quedan como un puntito en la
@@ -411,10 +425,11 @@ function fpHandTarget(out){
   out.copy(_fe).addScaledVector(_fr,FPT[0]-.025*k+.075*pu)
                .addScaledVector(_ff,(FPT[2]-.075*k)*(1-.32*pu))
                .addScaledVector(_fu,(FPT[1]+.075*k)*(1-.50*pu));
-  /* corriendo, la pose acerca la mano a la cámara y quedaba al filo del recorte: se la empuja
-     un poco hacia adelante, proporcional a la velocidad (3 cm a fondo) */
+  /* corriendo la mano quedaba al filo del recorte cuando la cámara acompañaba la zancada;
+     con el ojo estabilizado ya casi no pasa, así que el empuje queda mínimo (1 cm): más
+     empuje = más lejos del hombro = el IK se satura y el arma "respira" en profundidad */
   const spF=Math.hypot(plBody.velocity.x,plBody.velocity.z);
-  if(spF>1)out.addScaledVector(_ff,Math.min(.03,spF*.004));   // ayuda, pero el brazo ya está al límite
+  if(spF>1)out.addScaledVector(_ff,Math.min(.01,spF*.0014));
   /* MIRANDO ABAJO EL ARMA ATRAVESABA EL CUERPO (el usuario lo mostró: el caño cruzando la pierna).
      La forma sana no es darle colisión al cuerpo — eso pelearía con el IK y costaría carísimo por
      frame — sino la que usan los shooters: al bajar la mira el arma se ADELANTA y se corre a la
@@ -806,6 +821,16 @@ function handTrack(){
 /* ---- hooks de test propios de esta capa ---- */
 let _mk=null,_ws=null;
 if(DEV&&window.__H)Object.assign(window.__H,{
+  /* posición del ARMA en el marco de la CÁMARA (x,y,z) + altura de la cámara: para medir el
+     balanceo contra la pantalla en frames reales, que es lo que el jugador ve */
+  weapCam:()=>{ if(!wModel)return null;
+    const v=new THREE.Vector3();wModel.updateWorldMatrix(true,false);
+    v.setFromMatrixPosition(wModel.matrixWorld);
+    camera.updateMatrixWorld(true);
+    v.applyMatrix4(new THREE.Matrix4().copy(camera.matrixWorld).invert());
+    return [+v.x.toFixed(4),+v.y.toFixed(4),+v.z.toFixed(4),+camera.position.y.toFixed(4)]; },
+  look:(yaw,pitch)=>{ if(yaw!=null)PL.yaw=yaw; if(pitch!=null)PL.pitch=pitch;
+    return [PL.yaw,PL.pitch]; },
   /* distancia (m) de la mano IZQUIERDA al eje del arma */
   lhand:()=>{const d=lhDist();return d==null?null:+d.toFixed(4);},
   /* lo mismo para todas las armas, en la animación actual */
