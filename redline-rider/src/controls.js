@@ -24,7 +24,13 @@ const DEG = Math.PI / 180;
 
 export const input = { throttle:0, brake:0, steer:0, horn:false, tiltDeg:0 };
 
-const gyro = { available:false, granted:false, zero:null, raw:0, active:false, flat:0 };
+/* everActive se aparta de active a proposito: active puede caerse un instante si el jugador
+   tumba el movil, y si el esquema se decidiera con active el mando cambiaria EN MEDIO de la
+   carrera. Una vez que ha llegado una lectura valida, el aparato tiene giroscopio y punto. */
+const gyro = { available:false, granted:false, zero:null, raw:0, active:false,
+               everActive:false, flat:0, samples:[] };
+const ZERO_SAMPLES = 6;         // lecturas que se promedian para fijar el centro
+const ZERO_MIN_FLAT = 0.30;     // no se calibra con el movil casi plano: ahi el alabeo es ruido
 let gyroSteer = 0;
 let stage = null;               // envoltorio rotado, para mapear el puntero
 let rotated = false;
@@ -45,6 +51,10 @@ export const isRotated = () => rotated;
 export function layoutStage(){
   if (!stage) return { w:innerWidth, h:innerHeight };
   const portrait = innerHeight > innerWidth;
+  /* Si la presentacion pasa de girada a no girada es porque el jugador acaba de girar el
+     aparato 90 grados de verdad, asi que su postura neutra ha girado con el y el centro
+     viejo queda perpendicular al nuevo. Hay que retomarlo. */
+  if (portrait !== rotated && gyro.everActive) calibrateGyro();
   rotated = portrait;
   if (portrait){
     /* El escenario mide al reves (ancho = alto de pantalla). rotate(90deg) con origen en
@@ -123,18 +133,43 @@ function onOrient(e){
 
   gyro.available = true;
   gyro.flat = Math.hypot(gx, gy);
-  /* Con el movil casi plano la gravedad no tiene componente en el plano de la pantalla y
-     el alabeo no esta definido: se ignora la lectura en vez de dar un valor que salta. */
-  if (gyro.flat < 0.18) return;
+  /* Con el movil casi plano la gravedad no tiene componente en el plano de la pantalla y el
+     alabeo no esta definido. Antes se salia sin tocar raw, con lo que el ultimo angulo se
+     quedaba pegado: tumbar el movil a tope de giro dejaba la moto girando para siempre.
+     Ahora se relaja hacia el centro, que es lo que el jugador espera al dejar de inclinar. */
+  if (gyro.flat < 0.18){
+    gyro.raw *= 0.85;
+    return;
+  }
 
   const roll = Math.atan2(gx, -gy) / DEG;
-  if (gyro.zero === null) gyro.zero = roll;       // primera lectura = postura neutra
+
+  /* El centro se promedia sobre varias lecturas y solo con el movil bien inclinado. Tomarlo
+     de UNA lectura lo cogia con el dedo todavia sobre el boton y en una postura cualquiera,
+     y un centro desviado se siente igual que unos controles invertidos. */
+  if (gyro.zero === null){
+    if (gyro.flat < ZERO_MIN_FLAT) return;
+    gyro.samples.push(roll);
+    if (gyro.samples.length < ZERO_SAMPLES) return;
+    // media circular: promediar angulos en crudo cruza mal el salto de +-180
+    let sx = 0, sy = 0;
+    for (const a of gyro.samples){ sx += Math.cos(a * DEG); sy += Math.sin(a * DEG); }
+    gyro.zero = Math.atan2(sy, sx) / DEG;
+    gyro.samples.length = 0;
+  }
+
   gyro.raw = wrap180(roll - gyro.zero);
   gyro.active = true;
+  gyro.everActive = true;
 }
 
 /** Vuelve a tomar la postura actual como centro. */
-export function calibrateGyro(){ gyro.zero = null; gyro.raw = 0; gyroSteer = 0; }
+export function calibrateGyro(){
+  gyro.zero = null;
+  gyro.samples.length = 0;
+  gyro.raw = 0;
+  gyroSteer = 0;
+}
 
 /* ---------- teclado, mando y pedales ---------- */
 
@@ -175,12 +210,37 @@ export function install(canvas){
     puede acelerar y girar a la vez. Un unico manejador en el lienzo no lo permite. */
 export function bindButton(el, onDown, onUp){
   if (!el) return;
-  const down = e => { e.preventDefault(); el.classList.add('press'); onDown(); };
-  const up = e => { e.preventDefault(); el.classList.remove('press'); onUp(); };
-  el.addEventListener('pointerdown', down);
-  el.addEventListener('pointerup', up);
-  el.addEventListener('pointercancel', up);
-  el.addEventListener('pointerleave', up);
+  /* Un conjunto de punteros, no un booleano: el jugador recoloca la mano y acaba con dos
+     dedos sobre el mismo boton sin darse cuenta, y al levantar el primero se soltaria el
+     mando estando el segundo puesto. */
+  const held = new Set();
+
+  const press = e => {
+    e.preventDefault();
+    if (!held.size){
+      el.classList.add('press');
+      onDown();
+      if (state.haptics && navigator.vibrate) try { navigator.vibrate(8); } catch (err) {}
+    }
+    held.add(e.pointerId);
+    /* La captura garantiza que el pointerup caiga en ESTE elemento aunque el dedo se haya
+       salido. Sin ella habria que usar pointerleave, que no sirve como "se solto": no tiene
+       histeresis sobre un borde curvo, y en tactil parece funcionar solo porque la captura
+       implicita lo silencia, asi que el fallo no se ve probando en el movil. */
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+  };
+  const release = e => {
+    if (!held.delete(e.pointerId)) return;
+    if (!held.size){ el.classList.remove('press'); onUp(); }
+  };
+
+  el.addEventListener('pointerdown', press);
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  /* Ocultar el mando con display:none mientras esta pulsado NO dispara pointerup ni
+     pointerleave: el unico evento que llega es lostpointercapture. Sin escucharlo, cambiar
+     de esquema con el gas pulsado dejaba el gas pegado a fondo. */
+  el.addEventListener('lostpointercapture', release);
   el.addEventListener('contextmenu', e => e.preventDefault());
 }
 
@@ -213,18 +273,29 @@ export function defaultScheme(){
   return touch && window.DeviceOrientationEvent ? 'tilt' : 'touch';
 }
 
-/** El esquema activo, con respaldo: si se pide giroscopio y no llega ni una lectura, se
-    conduce con arrastre en vez de quedarse sin direccion. */
+/** El esquema activo, con respaldo: si se pide giroscopio y no ha llegado NUNCA una lectura,
+    se conduce con arrastre en vez de quedarse sin direccion. Se mira everActive y no active
+    para que un instante con el movil plano no cambie el mando a mitad de carrera. */
 export function activeScheme(){
   const s = SCHEMES.includes(state.scheme) ? state.scheme : defaultScheme();
-  if (s === 'tilt' && !gyro.active) return 'touch';
+  if (s === 'tilt' && !gyro.everActive) return 'touch';
   return s;
+}
+
+/** Para que la interfaz pueda decir por que el giroscopio no responde en vez de degradar al
+    arrastre en silencio, que es justo la queja de "pedi giroscopio y no lo tengo". */
+export function gyroStatus(){
+  if (!window.DeviceOrientationEvent) return 'unsupported';
+  if (!gyro.granted) return 'denied';
+  if (!gyro.everActive) return 'waiting';
+  return 'live';
 }
 
 /* ---------- resolucion por fotograma ---------- */
 
 export function update(dt){
   const pad = padState();
+  const sens = state.sens || 1;
 
   let throttle = pedal.gas ? 1 : 0;
   let brake = pedal.brake ? 1 : 0;
@@ -234,16 +305,23 @@ export function update(dt){
 
   const scheme = activeScheme();
 
-  // giroscopio: respuesta con mas resolucion en el centro, para colocarse en el carril
+  /* Giroscopio: respuesta con mas resolucion en el centro, para colocarse en el carril, y
+     tope al final para el cambio de carril rapido.
+     La sensibilidad escala el ANGULO, no la salida. Multiplicando la salida, con sens=2 se
+     saturaba a 11 grados mientras la zona muerta seguia en 1,6: la curva dejaba de ser la
+     curva y la zona de control fino se comprimia a la mitad. */
   if (gyro.active){
-    const mag = clamp((Math.abs(gyro.raw) - TILT_DEAD) / (TILT_FULL - TILT_DEAD), 0, 1);
+    const full = Math.max(8, TILT_FULL / sens);
+    const mag = clamp((Math.abs(gyro.raw) - TILT_DEAD) / (full - TILT_DEAD), 0, 1);
     const target = Math.sign(gyro.raw) * (mag * mag * 0.62 + mag * 0.38);
     gyroSteer += (target - gyroSteer) * (1 - Math.exp(-TILT_SMOOTH * dt));
   } else {
     gyroSteer = 0;
   }
 
-  let steer = scheme === 'tilt' ? gyroSteer : scheme === 'buttons' ? btnSteer : touchSteer;
+  let steer = scheme === 'tilt' ? gyroSteer
+            : scheme === 'buttons' ? btnSteer * sens
+            : touchSteer * sens;
 
   // teclado y mando pisan cualquier esquema, para que el escritorio siempre funcione
   let kb = 0;
@@ -259,7 +337,7 @@ export function update(dt){
 
   input.throttle = clamp(throttle, 0, 1);
   input.brake = clamp(brake, 0, 1);
-  input.steer = clamp(steer * (state.sens || 1), -1, 1);
+  input.steer = clamp(steer, -1, 1);
   input.horn = pedal.horn || keys.has('KeyH');
   input.tiltDeg = gyro.active ? gyro.raw : 0;
 

@@ -252,7 +252,14 @@ export class UI {
       v => {
         state.scheme = v;
         if (v === 'tilt') controls.enableGyro().then(ok => {
-          if (!ok) this.toast(t('sch.nogyro'));
+          if (!ok) return this.toast(t('sch.nogyro'));
+          /* Conceder el permiso no garantiza lecturas: en un iframe sin allow="gyroscope" el
+             evento no llega nunca. Se comprueba pasado un momento en vez de degradar al
+             arrastre en silencio, que es exactamente la queja de pedir inclinacion y no
+             tenerla sin saber por que. */
+          setTimeout(() => {
+            if (controls.gyroStatus() !== 'live') this.toast(t('sch.nogyro'));
+          }, 1600);
         });
         this.paintPedals();
       });
