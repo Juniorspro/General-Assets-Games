@@ -45,12 +45,35 @@ const MODELS = {
   truck: { url:'assets/models/truck.glb', len:12.0, wid:2.50, hei:3.60 },
   bus:   { url:'assets/models/bus.glb',   len:11.0, wid:2.55, hei:3.10 }
 };
+
+/* Todos estos GLB salen del mismo generador y traen el eje largo en X con el MORRO EN -X.
+   Medido: se renderizo cada modelo preparado, visto desde el puesto del jugador, y con el
+   giro de +90 grados se les veia el frente a todos, o sea que el trafico venia de cara y la
+   moto del jugador miraba hacia atras. Con -90 el morro cae en -Z, que es el sentido de la
+   marcha, y al trafico se le ve la trasera como toca.
+   Se deja como campo por modelo, no como constante suelta, porque en cuanto un GLB venga de
+   otro sitio hara falta el otro signo y hay que poder cambiarlo de uno en uno. */
+const NOSE_MINUS_X = -Math.PI / 2;
+for (const k in MODELS) if (MODELS[k].yaw === undefined) MODELS[k].yaw = NOSE_MINUS_X;
 export const TRAFFIC_KINDS = ['sedan','suv','van','truck','bus'];
 const ASSETS = (typeof window !== 'undefined' && window.__HX_ASSETS) || null;
 const BASE_URL = (typeof window !== 'undefined' && window.__HX_ASSET_BASE) || '';
 const resolveUrl = u => (ASSETS && ASSETS[u]) || (BASE_URL ? BASE_URL + u : u);
 
 const FOV = 74;
+
+/* Puesto del piloto, medido sobre la moto ya normalizada (2,05 m de largo centrada en z=0,
+   asi que el morro cae en z=-1,02 y la cola en z=+1,02).
+
+   EYE_Z = 0,62 pone la camara justo detras del asiento: por delante quedan 1,64 m de moto,
+   que es lo que deja ver el deposito y el manillar. Con el valor anterior de 0,20 la camara
+   caia en MITAD de la moto, o sea dentro de la malla, y con las caras traseras descartadas
+   solo asomaba un trozo del carenado visto desde arriba.
+   EYE_Y = 1,34 es la altura de los ojos de un piloto sentado: asiento a 0,80 y cabeza medio
+   metro por encima. NEAR = 0,12 en vez de 0,25 para no recortar el propio deposito. */
+const EYE_Y = 1.34;
+const EYE_Z = 0.62;
+const NEAR = 0.12;
 
 export class World {
   constructor(canvas){
@@ -60,7 +83,7 @@ export class World {
     this.renderer.toneMapping = THREE.NoToneMapping;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.25, VIEW_Z + 120);
+    this.camera = new THREE.PerspectiveCamera(FOV, 1, NEAR, VIEW_Z + 120);
 
     this.glowTex = glowTexture();
     this.shadowTex = shadowTexture();
@@ -274,8 +297,8 @@ export class World {
     const k = spec.len / longest;
     obj.scale.setScalar(k);
 
-    // reorienta para que el eje largo mire a -Z (sentido de la marcha)
-    if (size.x > size.z) obj.rotation.y = Math.PI / 2;
+    // reorienta para que el MORRO mire a -Z (sentido de la marcha), no solo el eje largo
+    if (size.x > size.z) obj.rotation.y = spec.yaw === undefined ? -Math.PI / 2 : spec.yaw;
 
     /* Se centra en X y Z y se apoya en Y=0. Cada GLB trae su pivote donde le parece, y
        sin normalizarlo la camara de casco y las colisiones dependerian de ese capricho. */
@@ -330,10 +353,13 @@ export class World {
     }
     // luces traseras y sombra de contacto
     const s = MODELS[kind];
+    /* El resplandor de los pilotos tiene que ser PEQUENO. A 1,5 veces el ancho del coche el
+       sprite aditivo cubria la carroceria entera y, como se encendia con solo tener al
+       jugador a 20 m, los coches se veian rojos de dia. */
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map:this.glowTex, color:0xff3b1e,
       transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, opacity:0.0 }));
-    halo.scale.setScalar(s.wid * 1.5);
-    halo.position.set(0, s.hei * 0.45, s.len * 0.5);
+    halo.scale.setScalar(s.wid * 0.6);
+    halo.position.set(0, s.hei * 0.38, s.len * 0.5 + 0.06);
     obj.add(halo);
     const sh = new THREE.Mesh(new THREE.PlaneGeometry(s.wid * 1.7, s.len * 1.15),
       new THREE.MeshBasicMaterial({ map:this.shadowTex, transparent:true, depthWrite:false, opacity:0.5 }));
@@ -386,13 +412,10 @@ export class World {
     const pitch = clamp(accel * 0.012 - brake * 0.03, -0.05, 0.035);
     const bob = Math.sin(this.time * 22) * 0.006 * (0.3 + speedFrac);
     const sh = this.shake;
-    /* Camara de casco: sobre el asiento y por ENCIMA del manillar. Con el modelo
-       centrado, la moto ocupa z de -1.02 a +1.02, asi que a z=+0.20 se ve el deposito y
-       el manillar por delante; mas atras la moto tapa media pantalla. */
     this.camera.position.set(
       x + (Math.random() - 0.5) * sh * 0.25,
-      1.32 + bob + (Math.random() - 0.5) * sh * 0.25,
-      0.20
+      EYE_Y + bob + (Math.random() - 0.5) * sh * 0.25,
+      EYE_Z
     );
     this.camera.rotation.set(pitch + (Math.random() - 0.5) * sh * 0.02, 0, -lean * 0.16);
     // el campo de vision se abre con la velocidad: es el truco clasico de sensacion de velocidad

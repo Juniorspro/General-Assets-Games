@@ -4,6 +4,7 @@ import { t, LANGS, setLang, getLang, TIP_COUNT } from './i18n.js';
 import { state, save, wipe, BIKES, bikeById, bikeStats, buyBike, buyUpgrade,
          UPGRADES, UPGRADE_TIERS, upgradeCost, tierOf, QUALITIES } from './state.js';
 import * as audio from './audio.js';
+import * as controls from './controls.js';
 
 const $ = id => document.getElementById(id);
 const SCREENS = ['boot','lang','quality','menu','garage','settings','credits','pause','results'];
@@ -242,6 +243,24 @@ export class UI {
     this.rp.quality = this.seg($('set-quality'),
       QUALITIES.map(q => ({ label:t('q.' + q), value:q })),
       () => state.quality, v => { state.quality = v; this.h.onQuality && this.h.onQuality(v); });
+    /* Elegir giroscopio tiene que pedir el permiso AQUI, dentro del gesto del toque: iOS
+       rechaza requestPermission fuera de uno, y si se intentase al empezar la partida el
+       jugador se quedaria sin direccion en plena autopista. */
+    this.rp.scheme = this.seg($('set-scheme'),
+      controls.SCHEMES.map(s => ({ label:t('sch.' + s), value:s })),
+      () => state.scheme || controls.defaultScheme(),
+      v => {
+        state.scheme = v;
+        if (v === 'tilt') controls.enableGyro().then(ok => {
+          if (!ok) this.toast(t('sch.nogyro'));
+        });
+        this.paintPedals();
+      });
+    $('b-calib').addEventListener('click', () => {
+      controls.calibrateGyro();
+      this.toast(t('sch.calibrated'));
+    });
+
     this.rp.haptics = this.seg($('set-haptics'),
       [{ label:t('common.on'), value:true }, { label:t('common.off'), value:false }],
       () => state.haptics, v => { state.haptics = v; });
@@ -266,11 +285,30 @@ export class UI {
     });
   }
 
+  /** Los pedales de giro solo tienen sentido con el esquema de botones. */
+  paintPedals(){
+    const p = $('pedals');
+    if (p) p.classList.toggle('btns', controls.activeScheme() === 'buttons');
+  }
+
+  /** Punto vivo del angulo de inclinacion: es la unica forma de que el jugador vea que el
+      giroscopio responde de verdad y hacia donde. */
+  tilt(deg, live){
+    const bar = $('tiltbar');
+    if (!bar || this.screen !== 'settings') return;
+    bar.classList.toggle('dead', !live);
+    const k = Math.max(-1, Math.min(1, deg / 22));
+    bar.firstElementChild.nextElementSibling.style.transform = 'translateX(' + (k * 52) + 'px)';
+  }
+
   refreshSettings(){
     if (!this.rp) return;
     for (const k in this.rp) this.rp[k]();
+    this.paintPedals();
     const q = $('set-quality').children;
     QUALITIES.forEach((x, i) => { if (q[i]) q[i].textContent = t('q.' + x); });
+    const sc = $('set-scheme').children;
+    controls.SCHEMES.forEach((x, i) => { if (sc[i]) sc[i].textContent = t('sch.' + x); });
     for (const host of [$('set-haptics'), $('set-invert')]){
       if (host.children[0]) host.children[0].textContent = t('common.on');
       if (host.children[1]) host.children[1].textContent = t('common.off');
@@ -321,6 +359,8 @@ export class UI {
   wire(){
     const ui = $('ui');
     ui.addEventListener('pointerdown', e => { if (e.target.closest('button')) audio.play('click'); });
+    controls.bindPedals({ gas:$('p-gas'), brake:$('p-brake'),
+                          left:$('p-left'), right:$('p-right'), horn:$('p-horn') });
     const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
     on('b-play',     () => this.h.onPlay && this.h.onPlay());
     on('b-garage',   () => this.show('garage'));

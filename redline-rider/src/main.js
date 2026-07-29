@@ -3,6 +3,7 @@
 import { load, save, state } from './state.js';
 import { setLang, detectLang, t } from './i18n.js';
 import * as audio from './audio.js';
+import * as controls from './controls.js';
 import { World } from './world.js';
 import { Game } from './game.js';
 import { UI } from './ui.js';
@@ -12,6 +13,12 @@ const FIXED = 1 / 120;
 function boot(){
   load();
   setLang(state.lang || detectLang());
+
+  /* El escenario se coloca ANTES de crear el mundo: three.js mide el lienzo en su
+     constructor, y si todavia no se ha girado el envoltorio mide al reves y arranca con la
+     relacion de aspecto cambiada. */
+  controls.setStage(document.getElementById('stage'));
+  controls.layoutStage();
 
   const canvas = document.getElementById('gl');
   let world;
@@ -24,8 +31,14 @@ function boot(){
   }
   world.setQuality(state.quality || 'high');
 
+  controls.install(canvas);
   const ui = new UI({});
   const game = new Game(world, {});
+
+  /* Si el jugador nunca ha elegido esquema, se resuelve por el aparato. En un movil eso es
+     giroscopio, y el permiso de iOS se pedira en el primer toque de la pantalla de carga,
+     que si es un gesto valido. */
+  if (!controls.SCHEMES.includes(state.scheme)) state.scheme = controls.defaultScheme();
 
   /* ---------- flujo ---------- */
   const toMenu = () => {
@@ -44,6 +57,9 @@ function boot(){
 
   ui.h = {
     onBootDone: () => {
+      /* Este es el primer gesto real del jugador, y el unico sitio desde el que iOS acepta
+         conceder el giroscopio. Si lo deniega, activeScheme() cae a arrastre por su cuenta. */
+      if (state.scheme === 'tilt') controls.enableGyro().catch(() => {});
       if (!state.lang) ui.show('lang');
       else if (!state.quality) ui.show('quality');
       else toMenu();
@@ -97,7 +113,7 @@ function boot(){
   })();
 
   // gancho de pruebas: con ?debug=1 se puede pilotar desde un script
-  if (/[?&]debug=1/.test(location.search)) window.__rr = { game, world, ui, state, audio };
+  if (/[?&]debug=1/.test(location.search)) window.__rr = { game, world, ui, state, audio, controls };
 
   /* ---------- bucle ---------- */
   let last = 0, acc = 0;
@@ -107,6 +123,10 @@ function boot(){
     last = ts;
     // un frame largo recupera hasta 100 ms; colapsarlo a un paso congelaria el juego
     if (dt > 0.1) dt = 0.1;
+    /* La entrada se resuelve UNA vez por fotograma, no por paso de fisica: el suavizado del
+       giroscopio va en segundos reales y aplicarlo 120 veces por fotograma lo dispararia. */
+    controls.update(dt);
+    ui.tilt(controls.input.tiltDeg, controls.gyroLive());
     acc = Math.min(0.2, acc + dt);
     while (acc >= FIXED){ game.step(FIXED); acc -= FIXED; }
     world.update(dt, game.speed ? game.speed / game.vMax : 0);
@@ -115,10 +135,19 @@ function boot(){
   };
   requestAnimationFrame(frame);
 
-  addEventListener('resize', () => world.resize(), { passive:true });
-  addEventListener('orientationchange', () => setTimeout(() => world.resize(), 150), { passive:true });
+  const relayout = () => { controls.layoutStage(); world.resize(); };
+  addEventListener('resize', relayout, { passive:true });
+  /* Tras girar el aparato el navegador informa del tamano nuevo con retardo: medir en el
+     propio evento devuelve todavia el tamano viejo, asi que se mide dos veces. */
+  addEventListener('orientationchange', () => {
+    relayout();
+    setTimeout(relayout, 180);
+    setTimeout(relayout, 500);
+  }, { passive:true });
+  if (window.visualViewport) visualViewport.addEventListener('resize', relayout);
   document.addEventListener('visibilitychange', () => {
     last = 0; acc = 0;
+    controls.releaseAll();
     if (document.hidden && game.mode === 'play') ui.h.onPause();
   });
   addEventListener('pagehide', save);

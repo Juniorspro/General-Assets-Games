@@ -8,6 +8,7 @@ import { LANE_X, LANES, CLAMP_X, VIEW_Z, TRAFFIC_KINDS } from './world.js';
 import { clamp, lerp } from './gfx.js';
 import { state, bikeStats, finishRun } from './state.js';
 import * as audio from './audio.js';
+import * as controls from './controls.js';
 
 const KMH = 1 / 3.6;                        // km/h -> m/s
 const GEARS = [2.80, 1.95, 1.55, 1.30, 1.13, 1.00];
@@ -31,58 +32,21 @@ export class Game {
     this.world = world;
     this.hooks = hooks || {};
     this.mode = 'menu';
-    this.keys = new Set();
-    this.drag = null;
     this.pool = [];
-    this.installInput(world.canvas);
-  }
-
-  /* ---------- entrada ---------- */
-  installInput(cv){
-    cv.addEventListener('pointerdown', e => {
-      if (this.mode !== 'play') return;
-      // mitad derecha acelera, mitad izquierda frena; arrastrar en cualquiera gira
-      this.drag = { id:e.pointerId, x:e.clientX, side: e.clientX > cv.clientWidth * 0.5 ? 1 : -1 };
-      try { cv.setPointerCapture(e.pointerId); } catch (err) {}
-    });
-    cv.addEventListener('pointermove', e => {
-      if (!this.drag || e.pointerId !== this.drag.id) return;
-      const dx = e.clientX - this.drag.x;
-      this.drag.x = e.clientX;
-      const k = (14 / Math.max(240, cv.clientWidth)) * state.sens * (state.invert ? -1 : 1);
-      this.steerInput = clamp(this.steerInput + dx * k, -1, 1);
-    });
-    const end = e => { if (this.drag && e.pointerId === this.drag.id) this.drag = null; };
-    cv.addEventListener('pointerup', end);
-    cv.addEventListener('pointercancel', end);
-
+    this.hornPrev = false;
+    /* La entrada vive fuera, en controls.js. Aqui solo queda la pausa por teclado: el resto
+       (teclado, mando, pedales, arrastre, giroscopio) escribe en un unico objeto y este
+       modulo solo lo lee, de modo que anadir un esquema no toca la fisica. */
     addEventListener('keydown', e => {
-      this.keys.add(e.code);
-      if (e.code === 'Escape' || e.code === 'KeyP'){
-        if (this.mode === 'play') this.hooks.onPause && this.hooks.onPause();
-      }
-      if (e.code === 'KeyH' && this.mode === 'play') audio.play('horn');
+      if ((e.code === 'Escape' || e.code === 'KeyP') && this.mode === 'play')
+        this.hooks.onPause && this.hooks.onPause();
     });
-    addEventListener('keyup', e => this.keys.delete(e.code));
-    addEventListener('blur', () => this.keys.clear());
-  }
-
-  padState(){
-    if (!navigator.getGamepads) return null;
-    for (const p of navigator.getGamepads()){
-      if (!p) continue;
-      const ax = p.axes && p.axes.length ? p.axes[0] : 0;
-      const rt = p.buttons && p.buttons[7] ? p.buttons[7].value : 0;
-      const lt = p.buttons && p.buttons[6] ? p.buttons[6].value : 0;
-      if (Math.abs(ax) > 0.12 || rt > 0.05 || lt > 0.05)
-        return { steer: Math.abs(ax) > 0.12 ? ax : 0, throttle: rt, brake: lt };
-    }
-    return null;
   }
 
   /* ---------- ciclo ---------- */
   enterMenu(){
     this.mode = 'menu';
+    controls.releaseAll();
     this.clearTraffic();
     this.world.setEnv('sunset');
     this.world.setPlayerBike(bikeStats(state.bike).color);
@@ -91,6 +55,12 @@ export class Game {
   }
 
   start(env){
+    /* Se toma la postura actual como centro al arrancar: el jugador sujeta el movil de una
+       forma distinta cada partida, y calibrar solo una vez al conceder el permiso deja la
+       moto tirando hacia un lado el resto de la sesion. */
+    controls.calibrateGyro();
+    controls.releaseAll();
+    this.hornPrev = false;
     this.stats = bikeStats(state.bike);
     this.world.setEnv(env || 'day');
     this.world.setPlayerBike(this.stats.color);
@@ -190,23 +160,17 @@ export class Game {
       return;
     }
 
-    const pad = this.padState();
-    let throttle = 0, brake = 0;
-    if (this.keys.has('ArrowUp') || this.keys.has('KeyW')) throttle = 1;
-    if (this.keys.has('ArrowDown') || this.keys.has('KeyS')) brake = 1;
-    let steer = 0;
-    if (this.keys.has('ArrowLeft') || this.keys.has('KeyA')) steer -= 1;
-    if (this.keys.has('ArrowRight') || this.keys.has('KeyD')) steer += 1;
-    if (pad){
-      throttle = Math.max(throttle, pad.throttle);
-      brake = Math.max(brake, pad.brake);
-      if (pad.steer) steer = pad.steer;
-    }
-    if (steer) this.steerInput = clamp(this.steerInput + steer * dt * 4.5, -1, 1);
-    else if (!this.drag) this.steerInput *= Math.exp(-6 * dt);   // se autocentra al soltar
-    // al arrastrar con la mitad derecha se acelera, con la izquierda se frena
-    if (this.drag) { if (this.drag.side > 0) throttle = 1; else brake = 1; }
-    if (state.invert) steer = -steer;
+    const throttle = controls.input.throttle;
+    const brake = controls.input.brake;
+    /* controls.input.steer ya es la posicion PEDIDA del manillar de -1 a 1, con la
+       sensibilidad y la inversion aplicadas. Aqui solo se persigue con un limite de
+       velocidad, para que el manillar tenga inercia y no salte de tope a tope. */
+    const want = controls.input.steer;
+    const rate = 5.5;
+    this.steerInput = clamp(this.steerInput + clamp(want - this.steerInput, -rate * dt, rate * dt), -1, 1);
+
+    if (controls.input.horn && !this.hornPrev) audio.play('horn');
+    this.hornPrev = controls.input.horn;
 
     /* caja de cambios: la relacion define las revoluciones a esta velocidad, y el par
        cae al acercarse a la zona roja para que las marchas se noten */
@@ -303,9 +267,13 @@ export class Game {
         }
       }
 
-      // luces de freno cuando el jugador se le echa encima
-      if (v.obj.userData.halo)
-        v.obj.userData.halo.material.opacity = this.world.env.night ? 0.85 : (dz > -20 && dz < 0 ? 0.5 : 0.15);
+      /* Pilotos siempre encendidos de noche; de dia solo frenan los que el jugador va a
+         alcanzar de verdad, que es cuando la luz aporta informacion en vez de ruido. */
+      if (v.obj.userData.halo){
+        const closing = dz > -26 && dz < 0 && v.speed < this.speed * 0.92;
+        v.obj.userData.halo.material.opacity =
+          this.world.env.night ? 0.6 : (closing ? 0.34 : 0);
+      }
 
       v.obj.position.set(v.x, 0, v.z);
 
@@ -346,7 +314,9 @@ export class Game {
     this.hooks.onDead && this.hooks.onDead(r, rec);
   }
 
-  pause(){ if (this.mode === 'play'){ this.mode = 'pause'; audio.engineStop(); audio.duck(true); } }
+  /* Al pausar hay que soltar los mandos a mano: si el dedo estaba en el gas cuando salta la
+     pausa, el boton no recibe el pointerup y al reanudar la moto sale acelerando sola. */
+  pause(){ if (this.mode === 'play'){ this.mode = 'pause'; controls.releaseAll(); audio.engineStop(); audio.duck(true); } }
   resume(){ if (this.mode === 'pause'){ this.mode = 'play'; audio.engineStart(); audio.duck(false); } }
 
   pushHud(){

@@ -8,17 +8,32 @@
   :root{
     --accent:#ff6a1a; --ink:#07080c; --panel:rgba(11,15,23,.82); --line:rgba(255,255,255,.13);
     --text:#eef2f8; --dim:#8b97a8;
+    --sa-t:env(safe-area-inset-top); --sa-r:env(safe-area-inset-right);
+    --sa-b:env(safe-area-inset-bottom); --sa-l:env(safe-area-inset-left);
+  }
+  /* Con el escenario girado 90 grados, el borde fisico de arriba pasa a ser el borde
+     DERECHO del juego. Sin remapear las muescas el HUD se aparta del lado equivocado y
+     acaba justo debajo de la camara frontal. Local +x va a la pantalla hacia abajo y
+     local +y hacia la izquierda, de donde sale este cambio de nombres. */
+  html.rot{
+    --sa-t:env(safe-area-inset-right); --sa-r:env(safe-area-inset-bottom);
+    --sa-b:env(safe-area-inset-left);  --sa-l:env(safe-area-inset-top);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%;overflow:hidden;background:#07080c;color:var(--text);
     font-family:"Segoe UI Variable","Segoe UI",system-ui,-apple-system,Inter,Roboto,sans-serif;
     -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
     touch-action:none;overscroll-behavior:none}
-  #gl{position:fixed;inset:0;width:100%;height:100%;display:block}
-  #ui{position:fixed;inset:0;pointer-events:none;z-index:2}
+  /* El escenario se gira cuando el navegador dice que la pantalla esta en vertical, para
+     presentar el juego en horizontal sin pedirle al jugador que gire el telefono.
+     transform-origin en 0 0 para que la matematica del puntero sea invertible a mano. */
+  #stage{position:fixed;left:0;top:0;width:100%;height:100%;transform-origin:0 0;
+    overflow:hidden;background:#07080c}
+  #gl{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #ui{position:absolute;inset:0;pointer-events:none;z-index:2}
   .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
-    justify-content:center;gap:16px;padding:calc(16px + env(safe-area-inset-top)) 16px
-    calc(16px + env(safe-area-inset-bottom));opacity:0;visibility:hidden;pointer-events:none;
+    justify-content:center;gap:16px;padding:calc(16px + var(--sa-t)) 16px
+    calc(16px + var(--sa-b));opacity:0;visibility:hidden;pointer-events:none;
     transition:opacity .26s ease,visibility .26s;overflow:hidden}
   .screen.on{opacity:1;visibility:visible;pointer-events:auto}
   .screen.dim{background:radial-gradient(115% 85% at 50% 15%,rgba(4,6,11,.4),rgba(4,6,11,.88))}
@@ -116,7 +131,7 @@
   /* ---- HUD ---- */
   #hud{position:absolute;inset:0;opacity:0;visibility:hidden;transition:opacity .25s}
   #hud.on{opacity:1;visibility:visible}
-  #hudtop{position:absolute;top:calc(9px + env(safe-area-inset-top));left:0;right:0;
+  #hudtop{position:absolute;top:calc(9px + var(--sa-t));left:0;right:0;
     display:flex;align-items:flex-start;justify-content:space-between;padding:0 12px;gap:8px}
   .chip{background:rgba(6,9,15,.55);border:1px solid var(--line);border-radius:12px;padding:7px 10px;
     backdrop-filter:blur(7px)}
@@ -127,21 +142,21 @@
     backdrop-filter:blur(7px)}
   #pausebtn i{width:3px;height:13px;background:currentColor;border-radius:2px;box-shadow:6px 0 0 currentColor;
     display:block;margin-left:-3px}
-  #speedo{position:absolute;right:calc(14px + env(safe-area-inset-right));
-    bottom:calc(16px + env(safe-area-inset-bottom));text-align:right;
+  #speedo{position:absolute;left:50%;transform:translateX(-50%);
+    bottom:calc(10px + var(--sa-b));text-align:center;
     text-shadow:0 3px 14px rgba(0,0,0,.65)}
-  #speedo .n{font-size:clamp(44px,12vw,68px);font-weight:900;line-height:.92;font-variant-numeric:tabular-nums}
+  #speedo .n{font-size:clamp(38px,8vw,58px);font-weight:900;line-height:.92;font-variant-numeric:tabular-nums}
   #speedo .u{font-size:11px;font-weight:800;letter-spacing:.22em;color:var(--dim)}
   #speedo .g{margin-top:5px;font-size:13px;font-weight:900;letter-spacing:.12em;color:var(--accent)}
-  #rpm{position:absolute;right:calc(14px + env(safe-area-inset-right));
-    bottom:calc(104px + env(safe-area-inset-bottom));width:min(46vw,190px);height:5px;
+  #rpm{position:absolute;left:50%;transform:translateX(-50%);
+    bottom:calc(96px + var(--sa-b));width:min(42vw,210px);height:5px;
     border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
   #rpm>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7cf39a,#ffd23f 62%,#ff2d2d)}
   #popup{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);text-align:center;
     opacity:0;pointer-events:none;text-shadow:0 4px 18px rgba(0,0,0,.6)}
   #popup .t{font-size:clamp(20px,5.5vw,30px);font-weight:900;letter-spacing:.05em;color:#fff}
   #popup .p{font-size:clamp(15px,4vw,21px);font-weight:900;color:var(--accent);margin-top:2px}
-  #combo{position:absolute;left:50%;top:calc(9px + env(safe-area-inset-top) + 58px);
+  #combo{position:absolute;left:50%;top:calc(9px + var(--sa-t) + 58px);
     transform:translateX(-50%);font-size:13px;font-weight:900;letter-spacing:.1em;
     color:var(--accent);opacity:0;transition:opacity .2s;text-shadow:0 2px 10px rgba(0,0,0,.6)}
   #combo.on{opacity:1}
@@ -153,15 +168,55 @@
     border-bottom:1px solid rgba(255,255,255,.07)}
   .kv b{font-variant-numeric:tabular-nums}
   .record{text-align:center;font-size:11.5px;font-weight:900;letter-spacing:.1em;color:var(--accent);margin-top:5px}
-  .toast{position:absolute;left:50%;bottom:calc(78px + env(safe-area-inset-bottom));
+  .toast{position:absolute;left:50%;bottom:calc(78px + var(--sa-b));
     transform:translateX(-50%);background:rgba(6,9,15,.92);border:1px solid var(--line);
     border-radius:11px;padding:9px 15px;font-size:11.5px;font-weight:700;opacity:0;
     transition:opacity .25s;pointer-events:none;white-space:nowrap}
   .toast.on{opacity:1}
   #nogl{position:fixed;inset:0;display:none;place-items:center;padding:28px;text-align:center;
     font-size:13.5px;line-height:1.6;color:var(--dim);z-index:9}
+
+  /* ---- mandos en pantalla ----
+     El gas a la derecha y el freno a su lado porque el pulgar derecho es el que descansa
+     ahi sujetando el aparato; el giro a la izquierda. 76 px es el minimo con el que un
+     pulgar acierta sin mirar, y 14 px de separacion evitan pulsar los dos a la vez. */
+  #pedals{position:absolute;inset:0;pointer-events:none}
+  .pad{position:absolute;pointer-events:auto;display:grid;place-items:center;
+    border-radius:50%;border:1px solid rgba(255,255,255,.22);color:var(--text);
+    background:rgba(9,13,20,.42);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    font-size:10px;font-weight:900;letter-spacing:.12em;text-align:center;line-height:1.15;
+    transition:transform .07s,background .12s;touch-action:none;-webkit-user-select:none;
+    user-select:none;box-shadow:0 6px 18px rgba(0,0,0,.4)}
+  .pad.press{transform:scale(.94);background:rgba(255,106,26,.42);border-color:var(--accent)}
+  .pad .ico{font-size:20px;line-height:1;font-weight:400}
+  #p-gas{right:calc(16px + var(--sa-r));bottom:calc(16px + var(--sa-b));
+    width:clamp(76px,17vmin,104px);height:clamp(76px,17vmin,104px);
+    background:rgba(255,106,26,.24);border-color:rgba(255,140,70,.5)}
+  #p-brake{right:calc(112px + var(--sa-r));bottom:calc(16px + var(--sa-b));
+    width:clamp(68px,14vmin,86px);height:clamp(68px,14vmin,86px)}
+  #p-left{left:calc(16px + var(--sa-l));bottom:calc(16px + var(--sa-b));
+    width:clamp(72px,15vmin,92px);height:clamp(72px,15vmin,92px)}
+  #p-right{left:calc(102px + var(--sa-l));bottom:calc(16px + var(--sa-b));
+    width:clamp(72px,15vmin,92px);height:clamp(72px,15vmin,92px)}
+  #p-horn{left:calc(16px + var(--sa-l));bottom:calc(104px + var(--sa-b));
+    width:clamp(52px,10vmin,64px);height:clamp(52px,10vmin,64px);font-size:9px}
+  /* El giro por botones solo se ensena cuando es el esquema activo: con giroscopio o
+     arrastre esas dos ruedas solo taparian carretera. */
+  #pedals:not(.btns) .steer{display:none}
+  #pedals.btns #p-horn{left:calc(196px + var(--sa-l));bottom:calc(20px + var(--sa-b))}
+
+  /* Indicador vivo del giroscopio en los ajustes: sin el, el jugador no sabe si el permiso
+     se concedio de verdad ni hacia donde esta inclinando. */
+  #tiltbar{position:relative;width:124px;height:20px;border-radius:99px;
+    background:rgba(255,255,255,.1);overflow:hidden}
+  #tiltbar>i{position:absolute;top:3px;width:14px;height:14px;border-radius:50%;
+    background:var(--accent);left:calc(50% - 7px);transition:transform .06s linear}
+  #tiltbar>u{position:absolute;top:0;bottom:0;left:calc(50% - 1px);width:2px;
+    background:rgba(255,255,255,.28)}
+  #tiltbar.dead{opacity:.35}
 </style>
 
+<div id="stage">
 <canvas id="gl"></canvas>
 
 <div id="ui">
@@ -220,6 +275,14 @@
       <div class="scroll">
         <div class="row"><span class="lb" data-i18n="set.lang"></span><div class="seg" id="set-lang"></div></div>
         <div class="row"><span class="lb" data-i18n="set.quality"></span><div class="seg" id="set-quality"></div></div>
+        <div class="row"><span class="lb" data-i18n="set.scheme"></span><div class="seg" id="set-scheme"></div></div>
+        <div class="row" id="row-tilt">
+          <span class="lb" data-i18n="set.tilt"></span>
+          <div style="display:flex;align-items:center;gap:9px">
+            <div id="tiltbar" class="dead"><u></u><i></i></div>
+            <button class="btn ghost small" id="b-calib" data-i18n="set.calibrate"></button>
+          </div>
+        </div>
         <div class="row"><span class="lb" data-i18n="set.music"></span><input type="range" id="set-music" min="0" max="100"></div>
         <div class="row"><span class="lb" data-i18n="set.sfx"></span><input type="range" id="set-sfx" min="0" max="100"></div>
         <div class="row"><span class="lb" data-i18n="set.sens"></span><input type="range" id="set-sens" min="50" max="200"></div>
@@ -251,6 +314,13 @@
     <div id="popup"><div class="t"></div><div class="p"></div></div>
     <div id="rpm"><i></i></div>
     <div id="speedo"><div class="n" id="h-kmh">0</div><div class="u">KM/H</div><div class="g" id="h-gear"></div></div>
+    <div id="pedals">
+      <div class="pad" id="p-gas"><span data-i18n="pad.gas"></span></div>
+      <div class="pad" id="p-brake"><span data-i18n="pad.brake"></span></div>
+      <div class="pad steer" id="p-left"><span class="ico">◀</span></div>
+      <div class="pad steer" id="p-right"><span class="ico">▶</span></div>
+      <div class="pad" id="p-horn"><span data-i18n="pad.horn"></span></div>
+    </div>
   </div>
 
   <div class="screen dim blur" id="s-pause">
@@ -284,6 +354,7 @@
   </div>
 
   <div class="toast" id="toast"></div>
+</div>
 </div>
 
 <div id="nogl">WebGL no está disponible en este navegador.<br>WebGL is not available in this browser.</div>

@@ -112,8 +112,13 @@ function onOrient(e){
   const b = e.beta, g = e.gamma;
   if ((b === null || b === undefined) && (g === null || g === undefined)) return;
   const B = (b || 0) * DEG, G = (g || 0) * DEG;
-  // gravedad reconstruida en los ejes del aparato (x derecha, y arriba, z sale de pantalla)
-  const gx = -Math.cos(B) * Math.sin(G);
+  /* Gravedad reconstruida en los ejes del aparato (x derecha, y arriba, z sale de pantalla).
+     Sale de invertir la rotacion del propio evento, que es intrinseca Z-X'-Y'':
+       R = Rz(alfa)*Rx(beta)*Ry(gamma),  g_aparato = R^T * (0,0,-1) = -R[2]
+     y la tercera fila de R es (-cosB*sinG, sinB, cosB*cosG). De ahi los signos: el de X es
+     POSITIVO. Tenerlo negado es exactamente el bug de "controles al reves", y no se ve a
+     ojo porque la moto sigue girando, solo hacia el lado contrario. */
+  const gx = Math.cos(B) * Math.sin(G);
   const gy = -Math.sin(B);
 
   gyro.available = true;

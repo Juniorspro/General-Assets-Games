@@ -29,6 +29,10 @@ export const QUALITIES = ['low', 'med', 'high', 'ultra'];
 const DEFAULTS = () => ({
   lang: null,                  // null -> se pregunta al primer arranque
   quality: null,               // null -> se pregunta al primer arranque
+  /* null -> lo decide el aparato en el primer arranque: giroscopio en un movil, arrastre en
+     un escritorio. Guardarlo resuelto de fabrica dejaria a medio mundo con el esquema
+     equivocado, y guardar la eleccion del jugador es lo que hay que respetar. */
+  scheme: null,
   music: 0.5, sfx: 0.85,
   haptics: true, invert: false, sens: 1,
   cash: 0, distanceTotal: 0,
@@ -62,7 +66,8 @@ export function save(){
 }
 
 export function wipe(){
-  const keep = { lang:state.lang, quality:state.quality, music:state.music, sfx:state.sfx,
+  const keep = { lang:state.lang, quality:state.quality, scheme:state.scheme,
+                 music:state.music, sfx:state.sfx,
                  haptics:state.haptics, invert:state.invert, sens:state.sens };
   Object.assign(state, DEFAULTS(), keep);
   save();
