@@ -42,9 +42,15 @@ export const MUSIC_FILES = {
 /* Mezcla por sonido. Los assets vienen de generaciones independientes y no comparten
    nivel; estos son los factores que los igualan (efectos por debajo de los bucles de
    motor, musica muy por debajo de todo). */
+/* Las ganancias del motor salen de la ENERGIA MEDIDA de cada muestra, no del oido: los tres
+   assets vienen de generaciones independientes y no comparten nivel. Medido con
+   tools/probe_engine.mjs: rms 0,156 / 0,051 / 0,173, o sea que la capa intermedia sale tres
+   veces mas floja que las otras dos. Con ganancias parecidas, el cruce se HUNDIA justo en
+   medio del rango de vueltas, que es donde mas tiempo pasa el jugador. Estos factores llevan
+   las tres al mismo nivel percibido. */
 const GAIN = {
-  horn:0.55, crash:0.9, nearmiss:0.5, coin:0.5, brake:0.55, click:0.4,
-  engineLow:0.55, engineMid:0.6, engineHigh:0.65, wind:0.4
+  horn:0.55, crash:0.9, nearmiss:0.5, coin:0.55, brake:0.55, click:0.4,
+  engineLow:0.50, engineMid:1.00, engineHigh:0.45, wind:0.4
 };
 
 const POOL_SIZE = 4;
