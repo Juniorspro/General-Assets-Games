@@ -36,20 +36,37 @@ let spRaf=0,spFitPend=0;
 const SPCFG={rowMin:23,rowMax:40,colMax:3,colW:104,budget:5,perFrame:8};
 
 /* ---------- 1) AJUSTE DE LAYOUT (sin scroll en pestañas ni carpetas) ---------- */
+/* EL BUG DEL TELÉFONO VERTICAL (menú "vacío"): acá se medía con window.innerWidth/innerHeight
+   y getBoundingClientRect(). Los dos hablan en coordenadas del VIEWPORT REAL, pero
+   body.style.top/bottom se aplican en el layout INTERNO de #stage, y cuando el teléfono está
+   vertical core_a rota el escenario 90° (width=innerHeight, transform:rotate(90deg)): la fila
+   de pestañas, vista desde el viewport real, pasa a ser una tira VERTICAL cuyo rect "bottom"
+   es el ANCHO del juego (~900), no su alto (~412). El panel quedaba en top:920px/bottom:916px
+   dentro de un escenario de 412 px => carpetas y grilla enteras fuera de pantalla, que es
+   exactamente el "no aparecen los props" del celular. En un chromium horizontal viewport y
+   escenario coinciden y el bug no se ve.
+   Solución de RAÍZ: medir TODO en el espacio de layout del escenario, que no se entera de la
+   rotación: clientWidth/clientHeight del propio #stage (core_a le fija el tamaño en px) y
+   offsetTop/offsetHeight (offsets del árbol, inmunes a transform) en vez de rects de viewport.
+   La detección de miniaturas visibles (spVisRange) ya era por scrollTop/offsetWidth —también
+   layout puro— así que con el panel bien ubicado funciona igual en las dos orientaciones. */
 function spFitLayout(){
   const sp=$('spawn'),tabs=$('sptabs'),body=$('spbody'),fold=$('spfold'),foot=$('spfoot');
   if(!sp||!tabs||!body||!fold)return null;
-  /* con el menú cerrado (display:none) todos los rects son 0: medir ahí no sirve de nada */
+  /* con el menú cerrado (display:none) offsets y alturas son 0: medir ahí no sirve de nada */
   if(!sp.classList.contains('on'))return null;
-  const W=window.innerWidth,H=window.innerHeight;
+  /* tamaño del ESCENARIO (no del viewport): vertical => W es el lado largo del teléfono */
+  const st=$('stage');
+  const W=st?st.clientWidth:window.innerWidth,H=st?st.clientHeight:window.innerHeight;
   /* modo compacto: en 780x360 el tamaño normal no deja lugar para 8 carpetas legibles */
   sp.classList.toggle('cmp',H<400||W<820);
   const gap=Math.max(4,Math.round(H*.012));
-  /* el panel arranca DEBAJO de la fila (o filas) de pestañas, medidas de verdad */
-  const tb=tabs.getBoundingClientRect();
-  body.style.top=Math.round(tb.bottom+gap)+'px';
-  if(foot){const fb=foot.getBoundingClientRect();
-    if(fb.height)body.style.bottom=Math.round(H-fb.top+Math.round(gap*.6))+'px';}
+  /* el panel arranca DEBAJO de la fila (o filas) de pestañas, medidas de verdad.
+     #sptabs y #spfoot son hijos absolutos de #spawn (inset:0 => su 0,0 es el del escenario):
+     offsetTop/offsetHeight ya vienen en píxeles de layout del escenario, gire o no gire. */
+  body.style.top=Math.round(tabs.offsetTop+tabs.offsetHeight+gap)+'px';
+  if(foot&&foot.offsetHeight){
+    body.style.bottom=Math.round(H-foot.offsetTop+Math.round(gap*.6))+'px';}
   /* --- carpetas: columnas y alto de fila calculados para que entren TODAS --- */
   const kids=fold.children,n=kids.length;
   if(n){
@@ -219,15 +236,19 @@ openSpawn=function(tab){
 
 /* ---------- hooks de medición ---------- */
 if(typeof DEV!=='undefined'&&DEV&&window.__H)Object.assign(window.__H,{
-  /* [{id,scrollH,clientH,overflow,...}] — overflow true = hay que deslizar */
+  /* [{id,scrollH,clientH,overflow,...}] — overflow true = hay que deslizar.
+     OJO: w/h/top/bot van en píxeles de LAYOUT del escenario (offsets acumulados), no en
+     rect de viewport: con el teléfono vertical el rect real está rotado y esos números
+     mentían (el "alto" del panel era su ancho). Así la sonda mide lo mismo en las dos
+     orientaciones y top/bot se comparan contra el alto del escenario, no del viewport. */
   spawnFit:()=>['sptabs','spfold','spgrid'].map(id=>{
     const e=$(id);if(!e)return{id,miss:true};
-    const r=e.getBoundingClientRect();
+    let top=0;for(let o=e;o;o=o.offsetParent)top+=o.offsetTop;
     return{id,scrollH:e.scrollHeight,clientH:e.clientHeight,
       scrollW:e.scrollWidth,clientW:e.clientWidth,
       overflow:e.scrollHeight>e.clientHeight+1||e.scrollWidth>e.clientWidth+1,
-      n:e.children.length,w:Math.round(r.width),h:Math.round(r.height),
-      top:Math.round(r.top),bot:Math.round(r.bottom)};
+      n:e.children.length,w:e.offsetWidth,h:e.offsetHeight,
+      top,bot:top+e.offsetHeight};
   }),
   /* mide abrir una carpeta (por defecto Pirotecnia): ms de armado + estado de la caché */
   spawnOpenMs:f=>{

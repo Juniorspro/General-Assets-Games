@@ -1,5 +1,5 @@
 /* ============================================================
-   SUX SANDBOX — AUDIO REAL (68 efectos + música de menú, generados)
+   SUX SANDBOX — AUDIO REAL (69 efectos + música de menú, generados)
    ------------------------------------------------------------
    Hasta acá todo el sonido era sintetizado con osciladores (SFX de core_b). Este módulo
    trae los archivos generados (assets/hyper/snd/*.mp3 + mus-menu.m4a) y:
@@ -36,7 +36,10 @@ const SND={
   'fw-whistle':1,'fw-boomfar':1,'fw-finale':1,'fw-sparkle':1,'fw-thump':1,'fw-candle':1,
   'fw-bigburst':1,'fw-wheel2':1,'phys-shot':1,'tool-ok':1,'crossbow-load':1,ricochet:1,
   'imp-concrete':1,swim:1,hurt2:1,death:1,'amb-wind':1,'amb-birds':1,'eng-moto':1,
-  'step-metal':1,'step-wood':1};
+  'step-metal':1,'step-wood':1,
+  /* 'jump-b' es la SEGUNDA capa del salto (exhalación corta de esfuerzo): el salto de una
+     sola toma seguía sonando a whoosh por más recorte que se le hiciera — ver bodySnd */
+  'jump-b':1};
 const SNDMUS='mus-menu';                       /* .m4a (AAC): los celulares lo decodifican */
 const BUF={};let sndPend=0,sndDone=0,sndFail=0,sndOn=false;
 let lastSnd='',sndPlays=0;
@@ -91,10 +94,10 @@ function sndLoad(){
    sLoop y quedan A PROPÓSITO fuera de la tabla: recortarles el arranque no sirve de nada
    (el bucle vuelve a 0 igual) y de paso rompe el empalme. */
 const SOFF={
-  'fw-crackle':1.624,'tool-switch':1.317,'imp-plastic':1.257,empty:1.237,'mp-leave':1.200,
+  'fw-crackle':1.624,jump:1.536,'jump-b':1.482,'tool-switch':1.317,'imp-plastic':1.257,empty:1.237,'mp-leave':1.200,
   'shot-shotgun':1.086,'bat-hit':0.987,equip:0.950,pop:0.945,glass:0.926,'wood-break':0.863,'tool-ok':0.828,save:0.780,
   'imp-concrete':0.753,trash:0.644,'step-wood':0.593,'bat-swing':0.553,'step-metal':0.456,
-  'shot-crossbow':0.453,'imp-wood':0.404,'fw-finale':0.381,ui:0.320,'fw-whistle':0.305,
+  'shot-crossbow':0.453,'fw-wheel':0.420,'imp-wood':0.404,'fw-finale':0.381,ui:0.320,'fw-whistle':0.305,
   'fw-launch':0.267,'fw-fuse':0.241,'fw-sparkle':0.226,land:0.200,'shot-revolver':0.161,
   'shot-smg':0.150,ricochet:0.113,spawn:0.100,'phys-shot':0.094,'shot-akm':0.057};
 /* Largo a reproducir, donde el archivo trae basura DESPUÉS de la cola útil:
@@ -102,14 +105,23 @@ const SOFF={
      shot-shotgun después del retumbe vuelve a subir ruido que no es parte del disparo
      shot-sniper  el eco útil dura ~1 s y después aparecen golpes sueltos que sonaban
                   a segundo disparo (era justo el problema del sniper) */
-/* Las 13 entradas nuevas son las tomas REEMPLAZADAS (ver el bloque de la mezcla): el modelo
+/* Las entradas no-arma son las tomas REEMPLAZADAS (ver el bloque de la mezcla): el modelo
    entrega 1.5-2 s y el evento útil dura entre 0.19 s y 0.70 s. Cerrar la ventana justo en el
-   evento es lo que hace que se sienta SECO — sobre todo el salto, que es la queja del usuario:
-   0.35 s, cortado con el fundido de SFADE, sin la cola de tela/habitación del archivo.
+   evento es lo que hace que se sienta SECO, cortado con el fundido de SFADE.
+   EL SALTO, SEGUNDA VUELTA (la queja siguió después del primer recorte): recortar no
+   alcanzaba porque el DEFECTO era del contenido, no del largo — medido sobre la ventana que
+   sonaba, el jump viejo tenía flatness espectral 0.05 (un TONO, silbido de dibujito) con
+   todo el cuerpo en ~1 kHz. Un despegue real es material FÍSICO: flatness 0.10-0.20.
+   Se midieron 6 tomas nuevas + las 8 viejas (ver jumpmeas.py) con criterio explícito
+   (evento<0.25 s, ataque<0.08 s, cola<0.30 s, centroide 300-2600 Hz, flatness 0.07-0.28):
+   la única elegible fue el scuff de zapatilla (ataque 0.03 s, evento 0.165 s, centroide
+   1154 Hz, flatness 0.116) -> es el 'jump' nuevo, y se le suma la capa 'jump-b'
+   (exhalación de esfuerzo, 50 ms después y más baja — ver bodySnd). fw-wheel: 0.70 es la
+   llamarada de encendido de la rueda (pico a 0.45 s del archivo), no el giro entero.
    OJO: nada de comentarios ADENTRO del literal — sndcheck.js parsea esta tabla con una regex
    y un "texto: 0.35" en un comentario le entra como si fuera una clave. */
 const SLEN={'shot-smg':0.28,'shot-shotgun':0.52,'shot-sniper':1.10,
-  jump:0.35,land:0.66,'fall-hard':0.60,'imp-wood':0.28,save:0.45,spawn:0.60,equip:0.35,
+  jump:0.30,'jump-b':0.20,'fw-wheel':0.70,land:0.66,'fall-hard':0.60,'imp-wood':0.28,save:0.45,spawn:0.60,equip:0.35,
   'tool-ok':0.45,'tool-switch':0.19,empty:0.25,'mp-leave':0.30,'wood-break':0.50,
   'imp-plastic':0.25};
 /* ---------- archivos que el generador NUNCA entregó (alias documentado) ----------
@@ -165,7 +177,7 @@ const SCATR=[
   [/^(shot-shotgun|shot-sniper|shot-rpg|boom|fw-bang|fw-bigburst)$/,'armaG'],
   [/^(shot-|bat-|reload$|empty$|crossbow-load$|phys-shot$|tool-ok$|toolgun$|weld$)/,'armaC'],
   [/^(imp-|glass$|ricochet$|wood-break$|crash$|pop$|splash$|water-exit$)/,'impacto'],
-  [/^(step-|jump$|land$|fall-hard$|swim$|wade$|breath-hard$|suspension$)/,'cuerpo'],
+  [/^(step-|jump(-b)?$|land$|fall-hard$|swim$|wade$|breath-hard$|suspension$)/,'cuerpo'],
   [/^(hurt|death$)/,'voz'],
   [/^fw-/,'fw'],
   /* phys-hum es una MÁQUINA (el zumbido de la physgun), no ambiente de mapa: va con el
@@ -335,14 +347,18 @@ function sPlay(name,o){
      Si el offset se pasara del largo del buffer, start() tiraría; se acota por las dudas. */
   const off=Math.min(SOFF[key]||0,Math.max(0,b.duration-.02));
   const len=Math.min(SLEN[key]||0,b.duration-off);
+  /* o.delay (segundos): arranque diferido AGENDADO en el reloj de audio, para poder apilar
+     capas de un mismo evento (salto = bota + esfuerzo) sin setTimeout — el reloj de audio
+     no depende del framerate, así el desfase entre capas es siempre el mismo. */
+  const t0=a.currentTime+(o.delay>0?o.delay:0);
   if(len>0){
     /* el 3er argumento de start() está en segundos DE BUFFER: en tiempo real el tramo
        dura len/rate, así que el fundido se agenda con la velocidad ya aplicada */
-    const real=len/(src.playbackRate.value||1),t0=a.currentTime,fd=Math.min(SFADE,real/2);
-    src.start(0,off,len);
+    const real=len/(src.playbackRate.value||1),fd=Math.min(SFADE,real/2);
+    src.start(t0,off,len);
     g.gain.setValueAtTime(vol,t0+real-fd);
     g.gain.linearRampToValueAtTime(0,t0+real);
-  }else src.start(0,off);
+  }else src.start(t0,off);
   lastSnd=name;sndPlays++;
   if(DEV){sndHistArr.push(name);if(sndHistArr.length>60)sndHistArr.shift();}
   return true;
@@ -486,7 +502,17 @@ let wasGround=true,wasWater=false,airT=0;
 function bodySnd(dt){
   if(APP!=='play')return;
   if(!grounded)airT+=dt;
-  if(wasGround&&!grounded&&plBody.velocity.y>3)sPlay('jump',{vol:.45});
+  /* SALTO EN DOS CAPAS. Una sola toma nunca quedó bien (dos rondas de quejas): o era un
+     whoosh tonal o era un tic seco sin persona. Lo que vende el salto es la SUMA de dos
+     cosas que pasan de verdad: la bota que empuja el piso (jump: scuff corto, ataque
+     30 ms) y el esfuerzo del que salta (jump-b: exhalación, 50 ms después y ~5 dB abajo,
+     con el delay agendado en el reloj de audio para que el desfase no dependa del frame).
+     La mezcla medida pasa el criterio del salto: evento 0.165 s, centroide 1250 Hz,
+     flatness 0.145 — material físico, no silbido (ver jumpmeas.py en el scratchpad). */
+  if(wasGround&&!grounded&&plBody.velocity.y>3){
+    sPlay('jump',{vol:.45});
+    sPlay('jump-b',{vol:.25,delay:.05});
+  }
   if(!wasGround&&grounded&&airT>.18&&!inWater)sPlay('land',{vol:Math.min(.8,.3+airT*.4)});
   if(grounded)airT=0;
   wasGround=grounded;
@@ -582,7 +608,15 @@ FWEV=function(ev,x,y,z,extra){
     else if(ev==='bomb'){ sPlay('fw-bang',{vol:1,at}); }
     else if(ev==='fountain0'){ const k=fwKey(x,y,z); if(!fwFountains[k])fwFountains[k]=sLoop('fw-fountain',.71); }
     else if(ev==='fountain1'){ const k=fwKey(x,y,z); if(fwFountains[k]){fwFountains[k].stop();delete fwFountains[k];} }
-    else if(ev==='wheel0'){ const k=fwKey(x,y,z); if(!fwWheels[k])fwWheels[k]=sLoop('fw-wheel2',.63); }
+    else if(ev==='wheel0'){ const k=fwKey(x,y,z);
+      if(!fwWheels[k]){
+        fwWheels[k]=sLoop('fw-wheel2',.63);
+        /* llamarada de ENCENDIDO por arriba del bucle: 'fw-wheel' había quedado huérfano
+           cuando el giro pasó a fw-wheel2 (nadie lo tocaba — auditoría de sonidos mudos), y
+           una rueda real no arranca en seco: la pólvora prende con un flash. La ventana
+           0.42-1.12 s del archivo es justo esa llamarada (pico a 0.45 s). */
+        sPlay('fw-wheel',{vol:.55,at});
+      } }
     else if(ev==='wheel1'){ const k=fwKey(x,y,z); if(fwWheels[k]){fwWheels[k].stop();delete fwWheels[k];} }
   },'fwev');
 };

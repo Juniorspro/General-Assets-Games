@@ -336,7 +336,9 @@ const S='/tmp/claude-0/-home-user-General-Assets-Games/34392e50-740e-5db0-ad10-5
   /* ---------- menú de spawn ---------- */
   const ui=await pg.evaluate(()=>{window.__H.openSpawn();const u=window.__H.spawnUI();
     window.__H.drainThumbs(50);return u;});
-  ok(ui.open&&ui.tabs.length===5,'el menú de spawn abre con 5 pestañas ('+ui.tabs.join(', ')+')');
+  /* 6 y no 5: se agregó la pestaña de EXPERIMENTOS (core_u), que es una función pedida por el
+     usuario. El assert viejo afirmaba el estado anterior del juego, no una regla. */
+  ok(ui.open&&ui.tabs.length===6,'el menú de spawn abre con 6 pestañas ('+ui.tabs.join(', ')+')');
   ok(ui.folders.length>=7,'y '+ui.folders.length+' carpetas: '+ui.folders.slice(0,8).join(', '));
   ok(ui.items>=20,'con '+ui.items+' props en la carpeta abierta');
   const arm=await pg.evaluate(()=>{window.__H.openSpawn('arm');return window.__H.spawnUI().items;});

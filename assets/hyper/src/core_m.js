@@ -27,23 +27,29 @@
    ============================================================ */
 
 /* ---------- 1. qué huesos son "brazo" ----------
-   mano, antebrazo y dedos son brazo sin dudarlo. La palabra "arm" sola también (el brazo de
+   mano y dedos son brazo sin dudarlo. La palabra "arm" sola también (el brazo de
    arriba), PERO no si es hombro/clavícula: esos mueven el torso entero y si se dejaran adentro
    el pecho se colaría cada vez que el hombro sube con la animación. */
-const FARM_HAND=/hand|fore|lowerarm|thumb|index|middle|ring|pinky|finger/i;
+const FARM_HAND=/hand|thumb|index|middle|ring|pinky|finger/i;
+const FARM_FORE=/fore|lowerarm/i;
 const FARM_ARM=/arm/i, FARM_NOARM=/shoulder|clavicle/i;
-/* EL FLAG YA NO ES 0/1 SINO GRADUADO: antebrazo+mano+dedos = 1, brazo de arriba = .6, resto 0.
-   Con un flag binario el umbral sólo podía elegir "brazo entero o nada"; con dos escalones el
-   MISMO shader sirve para las dos cosas según el umbral (que ahora es un uniforme, uArmT):
-     umbral .45  -> sobrevive el brazo entero (lo que hacía este archivo antes)
-     umbral .75  -> sobrevive sólo antebrazo+mano (el codo y el hombro se van)
-   Eso último es lo que necesita el VIEWMODEL: en las capturas del celular lo que cruzaba el
-   cuadro por el borde izquierdo era justo el CODO/HOMBRO, y con un solo uniforme se puede
-   cortar ahí sin recompilar el shader ni tener dos arrays de flags. */
+/* EL FLAG YA NO ES 0/1 SINO GRADUADO EN TRES ESCALONES: mano+dedos = 1, ANTEBRAZO = .8,
+   brazo de arriba = .4, resto 0. Con un flag binario el umbral sólo podía elegir "brazo entero
+   o nada"; con escalones el MISMO shader sirve para todo según el umbral (uniforme uArmT):
+     umbral .45  -> antebrazo+mano (modo respaldo: el brazo de arriba .4 ya NO pasa, así que
+                    ni el codo alto ni el hombro entran aunque el clon no se haya podido armar)
+     umbral .85+ -> sólo mano+muñeca (lo que usa el VIEWMODEL)
+   ANTES el antebrazo flaggeaba 1 junto con la mano y por eso el umbral NUNCA podía recortarlo:
+   en la captura del celular (vertical) se veía el ANTEBRAZO ENTERO cruzando hasta el centro
+   del cuadro con jirones de manga — medido con vmDiff: bbox hasta NDC y=-0.06 (el centro) y
+   x=-0.25 (mitad izquierda). Con el antebrazo en su propio escalón (.8) el umbral del clon
+   corta a la altura de la muñeca: se ven manos + un pedazo corto de antebrazo, como en
+   cualquier FPS, y la zona de mezcla muñeca-antebrazo hace el degradé del corte. */
 const fpArmFlag=name=>{
   const n=String(name||'').toLowerCase();
   if(FARM_HAND.test(n))return 1;
-  return (FARM_ARM.test(n)&&!FARM_NOARM.test(n))?.6:0;
+  if(FARM_FORE.test(n))return .8;
+  return (FARM_ARM.test(n)&&!FARM_NOARM.test(n))?.4:0;
 };
 
 /* ---------- 2. flags por hueso, medidos del PRIMER SkinnedMesh ----------
@@ -70,10 +76,13 @@ function fpArmBoneFlags(){
 /* .45 y no .32 — MEDIDO contra las capturas del bug: con .32 sobrevivían al discard restos de
    piel/tela del antebrazo cerca del codo/hombro (vértices con el peso repartido entre el hueso
    de brazo y el de torso), que es justo lo que se veía como "pedazos desgarrados color piel"
-   cerca de la cámara mirando hacia abajo. Subir el umbral empuja el corte más adentro del brazo
-   (más lejos del torso), así que si algún día se ve la MANO recortada (poco probable: la mano
-   entera flaggea 1.0 en fpArmFlag, no queda en zona de mezcla) hay que bajar este número, no el
-   .5 de uArms (ese es el interruptor entero/brazos, no la zona de mezcla del vértice). */
+   cerca de la cámara mirando hacia abajo. Con los flags graduados de arriba, .45 cae ENTRE el
+   brazo de arriba (.4) y el antebrazo (.8): el modo respaldo muestra antebrazo+mano y el codo
+   alto/hombro mueren — antes el brazo entero (flag .6) pasaba y era EXACTAMENTE lo que el
+   usuario fotografió cuando el viewmodel no estaba: el codo cruzando el cuadro. Si algún día
+   se ve la MANO recortada (poco probable: la mano entera flaggea 1.0 en fpArmFlag, no queda en
+   zona de mezcla) hay que bajar este número, no el .5 de uArms (ese es el interruptor
+   entero/brazos, no la zona de mezcla del vértice). */
 const FP_ARM_THRESHOLD=.45;
 function fpArmPatch(mat,flags,NB){
   if(!mat||mat.userData._farm)return;      // no parchar el mismo material dos veces
@@ -218,36 +227,55 @@ fpClip=function(){
    ============================================================ */
 
 /* ---- constantes, TODAS tocables en vivo con __H.vmSet(k,v) ----
-   x/y/z/rx/ry/rz/sc = dónde queda el ARMA en el marco de la cámara (metros y radianes). El
-     resto del conjunto (manos, antebrazos) sale de ahí: la pose es rígida, así que fijar el
-     arma fija todo. z negativo = adelante.
+   ax/ay = ancla del ARMA en NDC (-1..1, +derecha/+arriba). EL PUNTO CLAVE DEL FIX: antes el
+     arma se fijaba en METROS (x=.18) y eso en pantalla depende del aspecto — el semiancho del
+     cuadro a z fijo vale (-z)·tan(fov/2)·aspect, así que los mismos .18 m caían a NDC .23
+     (casi el centro: 61% del ancho) y en el teléfono vertical (aspecto 2.2 con el escenario
+     rotado) más al centro todavía. Anclar en NDC hace la posición RELATIVA AL ASPECTO: la
+     esquina es la esquina en cualquier pantalla y con cualquier zoom.
+   x/y = ajuste FINO en metros SOBRE el ancla (default 0; se mantienen para __H.vmSet).
+   z/rx/ry/rz/sc = distancia y orientación del arma en el marco de la cámara. z negativo =
+     adelante. El resto del conjunto (manos, muñecas) sale de ahí: la pose es rígida.
+   fov = FOV VERTICAL PROPIO del viewmodel (grados) — la técnica estándar de los FPS de
+     renderizar el arma con otro FOV, acá sin segundo pase: ver el warp exacto en vmPlace.
+     Con el FOV del juego (72 de vertical ≈ 113° de horizontal en 2.2:1) una mano a 50 cm
+     anclada en la esquina se estira feo y el conjunto ABARCA medio cuadro; con ~92 el mismo
+     conjunto ocupa 0.79× en pantalla sin moverlo ni un metro. 72 = warp apagado.
    bob* = amplitud del balanceo (metros) y frecuencia (Hz) caminando / corriendo.
    sway* = retardo al girar la vista. tau = constante de tiempo del filtro (s).
-   armT = umbral del discard del clon (ver fpArmFlag: .6 es el brazo de arriba, 1 el antebrazo).
+   armT = umbral del discard del clon (ver fpArmFlag: .4 brazo alto, .8 antebrazo, 1 mano).
 */
 const VMC={
   on:1,
-  /* MEDIDO con __H.vmDiff() (píxeles que aporta el viewmodel) y capturas leídas una por una:
-     con z=-.36 el conjunto tapaba el 14% de la pantalla y las manos abiertas del modelo (el rig
-     NO tiene huesos de dedo: son 6 huesos de brazo y ninguno de mano cerrada, así que la mano
-     queda como viene) se veían enormes abajo al centro — es el "manchón" de la captura del
-     celular. A z=-.52 el aporte baja al 6,8% y queda todo en el tercio de abajo. */
-  x:.180,y:-.220,z:-.520,rx:.010,ry:-.030,rz:.020,sc:1,
+  /* MEDIDO con __H.vmDiff() y las capturas de la sonda VERTICAL 412×915 (el caso real del
+     teléfono, aspecto 2.22) leídas una por una. ANTES: arma en NDC [.22,-.58] (casi centro),
+     viewmodel 7.2% del cuadro, bbox [-0.23,-0.99 → 0.52,-0.06]: el antebrazo entero llegaba
+     al CENTRO del cuadro — la captura del usuario. Los valores de acá abajo son el DESPUÉS
+     medido con la misma sonda (ver x-vm-vert-*.png): arma en la esquina inferior derecha,
+     solo manos+muñecas, nada cruzando el eje vertical del cuadro. */
+  ax:.62,ay:-.66,                                 /* ancla del arma en NDC: esquina inf. der. */
+  x:0,y:0,z:-.560,rx:.010,ry:-.030,rz:.020,sc:1,
+  fov:92,                                         /* FOV propio del viewmodel (72 = apagado) */
   bobWX:.011,bobWY:.008,bobRX:.020,bobRY:.014,   /* W = walk, R = run */
   fW:1.15,fR:2.0,                                 /* Hz del paso (el pedido: 1,0-1,3 / 1,8-2,2) */
   idleX:.0035,idleY:.0030,idleF1:.17,idleF2:.23,  /* sway lento estando quieto */
-  swayP:.18,swayR:.30,swayMax:.045,tau:.085,      /* retardo de la vista (m por rad de atraso) */
+  swayP:.18,swayR:.30,swayMax:.040,tau:.085,      /* retardo de la vista (m por rad de atraso) */
   tilt:.030,tiltP:.014,                           /* inclinación al desplazarse de costado */
   kick:.045,kickR:.35,                            /* patada del disparo (usa recoil de core_b) */
-  /* armT MEDIDO, no elegido a ojo: con .50 el brazo de arriba (flag .6) sobrevive, cruza el
-     plano cercano de la cámara y __H.vmDiff() acusa 41 píxeles en el borde IZQUIERDO y 50 en el
-     derecho mirando hacia abajo (la caja del diferencial se abre a toda la pantalla: es
-     exactamente el bug de las capturas del celular). Desde .62 los bordes dan 0; se deja .70
-     para tener margen contra otras poses/armas sin acortar el antebrazo más de lo necesario. */
-  armT:.70,                                       /* corte del clon: sólo antebrazo+mano */
+  /* armT con los flags graduados nuevos: mano=1, antebrazo=.8, brazo alto=.4. Con .70 el
+     ANTEBRAZO ENTERO (flag .8) sobrevivía y es lo que cruzaba el cuadro en la captura del
+     usuario; con .88 el corte cae en la zona de mezcla muñeca-antebrazo: quedan las manos,
+     las muñecas y un pedazo corto de antebrazo que sale por el borde de abajo. Si se ve la
+     mano pelada (sin nada de muñeca) bajar hacia .82; si vuelve a asomar antebrazo, subir. */
+  armT:.88,                                       /* corte del clon: mano+muñeca */
   air:.35                                         /* cuánto queda del bobbing en el aire */
 };
-let VMG=null,vmChar=null,vmHand=null,vmMats=null,vmBoneMap=null;
+/* VMF = grupo intermedio del "FOV del viewmodel": camera → VMF (escala del warp) → VMG
+   (bob/sway) → clon. La escala vive en su propio grupo y no en VMG porque VMG ROTA con el
+   sway: escalar y rotar en el mismo nodo aplicaría la escala en los ejes YA rotados (cizalla
+   espuria); acá la escala queda clavada a los ejes de la CÁMARA, que es lo que pide la
+   equivalencia exacta con "renderizar con otro FOV" (ver vmPlace). */
+let VMG=null,VMF=null,vmChar=null,vmHand=null,vmMats=null,vmBoneMap=null;
 let vmOn=false,vmDt=1/60,vmFail=0,vmCapW=null,vmCapClean=false;
 let vmPhase=0,vmTime=0,vmYawF=0,vmPitF=0,vmSpF=0,vmAirF=0;
 const vmOff={x:0,y:0,z:0,rx:0,ry:0,rz:0};        /* último offset aplicado, para __H.vmInfo */
@@ -256,6 +284,9 @@ const _vmW=new THREE.Matrix4(),_vmH=new THREE.Matrix4(),_vmM=new THREE.Matrix4()
       _vmS=new THREE.Vector3(),_vmV=new THREE.Vector3(),_vmE=new THREE.Euler();
 const vmCap={p:new THREE.Vector3(),q:new THREE.Quaternion(),s:new THREE.Vector3(1,1,1),
              hq:new THREE.Quaternion()};
+/* ancla del arma en el espacio de VMG (pre-warp), guardada por vmPlace: vmMotion la usa como
+   PIVOTE de las rotaciones del balanceo (ver ahí el porqué). */
+const vmAnc=new THREE.Vector3();
 
 /* ¿corresponde viewmodel ahora? En vehículo NO: ahí la cámara la pone EXT.cam (core_e) y las
    manos van al volante, no a la pantalla. Ragdoll y cámara libre tampoco (se quiere ver el
@@ -276,7 +307,13 @@ function vmMap(root){
    intentos para no quedar probando para siempre si el modelo no trae huesos de mano). */
 function vmInit(){
   if(vmChar||vmFail>8)return !!vmChar;
-  if(!charRoot||!(bones.rHand||bones.rFore)||typeof charClone!=='function'){vmFail++;return false;}
+  /* GLB todavía no cargado NO es un fallo: en un teléfono con red lenta el personaje tarda
+     cientos de frames y antes esto QUEMABA los 8 reintentos en los primeros 8 frames de 1ª
+     persona — el jugador quedaba clavado para siempre en el modo respaldo (brazos reales con
+     IK: el codo cruzando el cuadro, la foto del usuario). Esperar no consume intentos; los
+     intentos son para fallos REALES con el modelo ya presente (clon sin hueso de mano). */
+  if(!charRoot||typeof charClone!=='function')return false;
+  if(!(bones.rHand||bones.rFore)){vmFail++;return false;}
   const c=nsafe(()=>charClone(),'vmclone');
   if(!c){vmFail++;return false;}
   const map=vmMap(c),rb=bones.rHand||bones.rFore,h=map[rb.name];
@@ -302,7 +339,8 @@ function vmInit(){
   }
   c.position.set(0,0,0);c.rotation.set(0,0,0);
   VMG=new THREE.Group();VMG.name='vm';VMG.visible=false;
-  VMG.add(c);camera.add(VMG);
+  VMF=new THREE.Group();VMF.name='vmfov';
+  VMG.add(c);VMF.add(VMG);camera.add(VMF);
   vmChar=c;vmHand=h;vmMats=mats;vmBoneMap=map;
   return true;
 }
@@ -363,19 +401,47 @@ function vmAttach(){
   vmHand.add(wModel);
   wModel.position.copy(vmCap.p);wModel.quaternion.copy(vmCap.q);wModel.scale.copy(vmCap.s);
 }
-/* ---- ANCLAJE: el arma queda en un punto FIJO del marco de la cámara ----
-   El conjunto es rígido, así que se resuelve con matrices y no con IK:
+/* ---- ANCLAJE: el arma queda en un punto FIJO DE LA PANTALLA (no del espacio) ----
+   Dos piezas, las dos por frame (vmStep llama a esto SIEMPRE porque fov —zoom del sniper—,
+   aspecto —rotar el teléfono— y hasta el propio ancla —vmSet— cambian en vivo; son cuatro
+   composiciones de matrices, nada por vértice):
+
+   1) EL WARP DE FOV (VMF.scale): la escala (k,k,1) en los ejes de la cámara con
+        k = tan(fovCam/2)/tan(fovVM/2)
+      reproduce EXACTAMENTE la proyección que tendría el conjunto renderizado con fovVM:
+      NDC = k·x/(-z·tan(fovCam/2)·a) = x/(-z·tan(fovVM/2)·a). Misma imagen que el segundo
+      pase clásico de los FPS, sin segundo pase (el z del fragmento no se toca, así que la
+      oclusión contra el mundo sigue sana: el conjunto vive a medio metro, siempre gana).
+      fovVM > fovCam ⇒ k<1 ⇒ el conjunto se COMPRIME alrededor del eje óptico: manos más
+      chicas y sin el estirón de esquina del FOV horizontal de 113°.
+
+   2) EL ANCLA EN NDC: se quiere el arma en (ax,ay) de NDC a distancia |z|. En el espacio
+      interno (pre-warp) eso es
+        x = ax·(-z)·tan(fovVM/2)·aspect     y = ay·(-z)·tan(fovVM/2)
+      (la mitad visible del cuadro a esa distancia, CON LA TRIGONOMETRÍA DEL FOV DEL
+      VIEWMODEL: el warp multiplica por k y devuelve el punto al NDC pedido con el fov real).
+      Así "esquina inferior derecha" es la MISMA esquina en 2.09:1 (chromium apaisado),
+      2.22:1 (teléfono vertical con el escenario rotado) o con el zoom puesto — antes el arma
+      estaba clavada en metros y el NDC resultante era una función del aspecto: en el
+      teléfono caía casi al centro (la captura del usuario).
+
+   El conjunto es rígido, así que el resto se resuelve con matrices y no con IK:
      M(arma en el marco de VMG) = clon.matrix · M(mano rel. clon) · M(arma rel. mano)
-   se quiere que eso sea VMW (la constante de arriba), entonces
+   se quiere que eso sea VMW (el ancla), entonces
      clon.matrix = VMW · inv(M(mano rel. clon) · M(arma rel. mano))
    relMat() (core_c) da la matriz de un hueso relativa a la raíz multiplicando SÓLO matrices
    locales: no depende de dónde esté la cámara ni arrastra el error de invertir una matrixWorld.
    Sin arma (puños) se ancla la MANO con la orientación capturada (vmCap.hq). */
 function vmPlace(){
   if(!vmChar||!vmHand)return false;
+  const tanC=Math.tan(camera.fov*Math.PI/360),
+        tanV=Math.tan(Math.max(30,VMC.fov)*Math.PI/360);
+  if(VMF){const k=tanC/tanV;VMF.scale.set(k,k,1);}
+  const hw=(-VMC.z)*tanV*Math.max(.4,camera.aspect),hh=(-VMC.z)*tanV;
   _vmE.set(VMC.rx,VMC.ry,VMC.rz,'YXZ');
   _vmQ.setFromEuler(_vmE);
-  _vmP.set(VMC.x,VMC.y,VMC.z);
+  _vmP.set(VMC.ax*hw+VMC.x,VMC.ay*hh+VMC.y,VMC.z);
+  vmAnc.copy(_vmP);                         // pivote del balanceo (ver vmMotion)
   _vmS.setScalar(VMC.sc);
   _vmW.compose(_vmP,_vmQ,_vmS);
   relMat(vmChar,vmHand,_vmH);
@@ -445,9 +511,16 @@ function vmMotion(dt){
   vmOff.rx=rx+rk*VMC.kickR+by*.6;
   vmOff.ry=ry+bx*.8;
   vmOff.rz=-lat*VMC.tilt+bx*1.2;
-  VMG.position.set(vmOff.x,vmOff.y,vmOff.z);
   _vmE.set(vmOff.rx,vmOff.ry,vmOff.rz,'YXZ');
   VMG.quaternion.setFromEuler(_vmE);
+  /* las rotaciones del balanceo PIVOTEAN EN EL ANCLA del arma, no en el ojo: q → R·(q−a)+a+off.
+     MEDIDO el porqué: girando alrededor del ojo, el arma —que con el ancla NDC quedó a ~1 m
+     del eje óptico— se traslada rz·x+rx·z ≈ 0.03-0.05 de NDC por ciclo de paso, y el pico a
+     pico corriendo se iba a 0.147 (el contrato de _final exige <0.12). Con el pivote en el
+     arma la rotación se ve igual (el conjunto cabecea/rola) pero el arma queda clavada a su
+     esquina y el NDC sólo lo mueve el offset de traslación (~0.05 pico a pico). */
+  _vmV.copy(vmAnc).applyQuaternion(VMG.quaternion);
+  VMG.position.set(vmOff.x+vmAnc.x-_vmV.x,vmOff.y+vmAnc.y-_vmV.y,vmOff.z+vmAnc.z-_vmV.z);
   /* el mundo ya está actualizado hasta la cámara (camStep la colocó); refrescar acá el subárbol
      deja el arma con matrixWorld válida para los efectos de core_g (fogonazo, haz) y para
      cualquier medición del mismo frame, sin esperar al render. */
@@ -484,6 +557,11 @@ function vmStep(dt){
   if(id!==vmCapW||(wModel&&wModel.parent!==vmHand))vmCapture();
   else if(!vmCapClean&&Math.hypot(plBody.velocity.x,plBody.velocity.z)<.6&&Math.abs(PL.pitch)<.45)
     vmCapture();
+  /* el anclaje se rehace TODOS los frames: fov (zoom del sniper), aspecto (girar el teléfono
+     dispara resize y el stage cambia de proporción) y las constantes (vmSet) son todos
+     estados vivos, y el ancla es una función de los tres. Son 4 matrices, no hay nada por
+     vértice: más barato que detectar el cambio y con cero estados que puedan quedar viejos. */
+  vmPlace();
   vmMotion(dt);
 }
 /* dt: fpClip() no lo recibe, así que se lo guarda acá. Se envuelve camStep en vez de tocarla
@@ -614,13 +692,18 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     }
     o.parts=parts;
     o.armT=vmMats&&vmMats[0]?vmMats[0].userData.uArmT.value:null;
+    /* estado del anclaje relativo: con esto una sonda puede verificar que el ancla siga al
+       aspecto (weapNDC≈[ax,ay] en cualquier viewport) y que el warp esté aplicado */
+    o.anchor=[VMC.ax,VMC.ay];o.vmFov=VMC.fov;
+    o.warpK=VMF?+VMF.scale.x.toFixed(4):null;
+    o.aspect=+camera.aspect.toFixed(3);o.camFov=+camera.fov.toFixed(1);
     return o;
   },
   vmSet:(k,v)=>{
     if(k==='armT'){VMC.armT=+v;if(vmMats)for(const m of vmMats)m.userData.uArmT.value=+v;return VMC.armT;}
     if(!(k in VMC))return null;
     VMC[k]=+v;
-    if('xyz'.indexOf(k)>=0||k==='rx'||k==='ry'||k==='rz'||k==='sc')nsafe(()=>vmPlace(),'vmset');
+    if(/^(a?[xyz]|r[xyz]|sc|fov)$/.test(k))nsafe(()=>vmPlace(),'vmset');
     if(k==='on'&&!VMC.on&&vmOn){vmOn=false;vmLeave();}
     return VMC[k];
   },
