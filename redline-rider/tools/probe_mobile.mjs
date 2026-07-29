@@ -29,7 +29,8 @@ page.on('console', m => { if (m.type() === 'error') errs.push('CONSOLE: ' + m.te
 page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message.slice(0, 200)));
 page.on('requestfailed', r => errs.push('REQFAIL: ' + r.url().slice(-60)));
 
-await page.goto(base + 'index.html?debug=1');
+const FILE = process.argv[2] || 'index.html';
+await page.goto(base + FILE + '?debug=1');
 await page.waitForFunction('window.__rr && window.__rr.ui', { timeout: 30000 });
 await page.waitForFunction('document.getElementById("boot-go").classList.contains("on")', { timeout: 90000 });
 
