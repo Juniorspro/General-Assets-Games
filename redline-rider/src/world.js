@@ -484,9 +484,17 @@ export class World {
   /** Avanza el mundo: la carretera se desplaza por textura y los props se reciclan. */
   advance(metres){
     this.roadOffset += metres / TILE_M;
-    if (this.roadMat.map) this.roadMat.map.offset.y = -this.roadOffset;
-    if (this.shoulderMat.map) this.shoulderMat.map.offset.y = -this.roadOffset * (TILE_M / 8);
-    this.barrierTex.offset.x = this.roadOffset * (TILE_M / 4);
+    /* El desplazamiento va en POSITIVO, y esto no se puede razonar de memoria: depende de la
+       rotacion del plano, de cual de los ejes del UV crece hacia delante y del convenio de
+       offset de three.js, y los tres se pueden equivocar por separado sin que se note en una
+       captura fija. Medido de dos formas independientes con tools/probe_road.mjs: con el signo
+       negativo, una raya de la textura pasaba de z=24,17 a z=22,67 al avanzar 1,5 m, o sea que
+       se ALEJABA del jugador, y la correlacion de pixeles daba -37 filas (hacia el horizonte)
+       con un pico de 0,80. Las farolas, que se mueven por posicion y no por textura, si iban
+       bien, asi que el asfalto se deslizaba al reves que todo lo demas. */
+    if (this.roadMat.map) this.roadMat.map.offset.y = this.roadOffset;
+    if (this.shoulderMat.map) this.shoulderMat.map.offset.y = this.roadOffset * (TILE_M / 8);
+    this.barrierTex.offset.x = -this.roadOffset * (TILE_M / 4);
 
     for (const l of this.lamps){
       l.position.z += metres;
