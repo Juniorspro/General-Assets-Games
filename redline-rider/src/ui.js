@@ -43,6 +43,7 @@ export class UI {
     this.screen = name;
     for (const s of SCREENS) this.el[s].classList.toggle('on', s === name);
     this.hudEl.classList.toggle('on', name === 'game' || name === 'pause');
+    this.paintPedals();
     if (name === 'menu') this.refreshMenu();
     if (name === 'garage') this.refreshGarage();
     if (name === 'settings') this.refreshSettings();
@@ -251,17 +252,19 @@ export class UI {
       () => state.scheme || controls.defaultScheme(),
       v => {
         state.scheme = v;
-        if (v === 'tilt') controls.enableGyro().then(ok => {
-          if (!ok) return this.toast(t('sch.nogyro'));
+        if (v === 'tilt') controls.enableGyro().then(() => {
           /* Conceder el permiso no garantiza lecturas: en un iframe sin allow="gyroscope" el
-             evento no llega nunca. Se comprueba pasado un momento en vez de degradar al
-             arrastre en silencio, que es exactamente la queja de pedir inclinacion y no
-             tenerla sin saber por que. */
+             evento no llega nunca. Se comprueba pasado un momento y se dice el motivo exacto,
+             en vez de degradar en silencio, que es la queja de pedir inclinacion y no tenerla
+             sin saber por que. */
+          this.paintTilt();
           setTimeout(() => {
-            if (controls.gyroStatus() !== 'live') this.toast(t('sch.nogyro'));
+            this.paintTilt();
+            if (controls.gyroStatus() !== 'live') this.toast(t('sch.' + controls.gyroStatus()));
           }, 1600);
         });
         this.paintPedals();
+        this.paintTilt();
       });
     $('b-calib').addEventListener('click', () => {
       controls.calibrateGyro();
@@ -292,19 +295,34 @@ export class UI {
     });
   }
 
-  /** Los pedales de giro solo tienen sentido con el esquema de botones. */
+  /** Los pedales de giro solo tienen sentido con el esquema de botones, y los mandos solo
+      mientras se conduce: en pausa quedaban pulsables sobre el panel. */
   paintPedals(){
     const p = $('pedals');
-    if (p) p.classList.toggle('btns', controls.activeScheme() === 'buttons');
+    if (!p) return;
+    p.classList.toggle('btns', controls.activeScheme() === 'buttons');
+    p.classList.toggle('ride', this.screen === 'game');
   }
 
   /** Punto vivo del angulo de inclinacion: es la unica forma de que el jugador vea que el
       giroscopio responde de verdad y hacia donde. */
+  /** Dice POR QUE no hay giroscopio, no solo que no lo hay. */
+  paintTilt(){
+    const m = $('tiltmsg');
+    if (!m) return;
+    const st = controls.gyroStatus();
+    const scheme = controls.activeScheme();
+    m.textContent = (state.scheme || controls.defaultScheme()) === 'tilt'
+      ? t('sch.' + st) + (scheme !== 'tilt' ? ' — ' + t('sch.buttons').toLowerCase() : '')
+      : '';
+  }
+
   tilt(deg, live){
     const bar = $('tiltbar');
     if (!bar || this.screen !== 'settings') return;
     bar.classList.toggle('dead', !live);
-    const k = Math.max(-1, Math.min(1, deg / 22));
+    // a escala del angulo de tope REAL, que la sensibilidad cambia
+    const k = Math.max(-1, Math.min(1, deg / controls.tiltFull()));
     bar.firstElementChild.nextElementSibling.style.transform = 'translateX(' + (k * 52) + 'px)';
   }
 
@@ -312,6 +330,7 @@ export class UI {
     if (!this.rp) return;
     for (const k in this.rp) this.rp[k]();
     this.paintPedals();
+    this.paintTilt();
     const q = $('set-quality').children;
     QUALITIES.forEach((x, i) => { if (q[i]) q[i].textContent = t('q.' + x); });
     const sc = $('set-scheme').children;

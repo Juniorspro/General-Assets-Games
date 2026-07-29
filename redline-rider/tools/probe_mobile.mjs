@@ -288,6 +288,78 @@ console.log('12 gas tras cambiar de app:', JSON.stringify(ghost),
   ghost.antes === 1 && ghost.sueltoOk && ghost.despues === 1 ? 'OK' : 'FALLA');
 await page.evaluate(() => { window.__rr.state.sens = 1; window.__rr.controls.releaseAll(); });
 
+
+/* ---------- 13. soltar una flecha con la otra pulsada ---------- */
+/* Con un solo signo compartido, soltar la derecha con la izquierda aun pulsada dejaba el giro
+   en cero en vez de volver a la izquierda. */
+const both = await page.evaluate(async () => {
+  const rr = window.__rr;
+  rr.state.scheme = 'buttons'; rr.state.sens = 1; rr.state.invert = false;
+  rr.controls.releaseAll();
+  const L = document.getElementById('p-left'), R = document.getElementById('p-right');
+  const ev = (el, t, id) => el.dispatchEvent(new PointerEvent(t, { pointerId:id, bubbles:true }));
+  ev(L, 'pointerdown', 701);
+  await new Promise(r => setTimeout(r, 700));
+  const soloIzq = +rr.controls.input.steer.toFixed(2);
+  ev(R, 'pointerdown', 702);
+  await new Promise(r => setTimeout(r, 700));
+  const ambas = +rr.controls.input.steer.toFixed(2);
+  ev(R, 'pointerup', 702);
+  await new Promise(r => setTimeout(r, 700));
+  const vueltaIzq = +rr.controls.input.steer.toFixed(2);
+  ev(L, 'pointerup', 701);
+  return { soloIzq, ambas, vueltaIzq };
+});
+console.log('13 flechas simultaneas:', JSON.stringify(both),
+  both.soloIzq < -0.9 && Math.abs(both.ambas) < 0.2 && both.vueltaIzq < -0.9 ? 'OK' : 'FALLA');
+
+/* ---------- 14. el respaldo del giroscopio deja algo VISIBLE que tocar ---------- */
+const fbPage = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true });
+await fbPage.goto(base + FILE + '?debug=1');
+await fbPage.waitForFunction('window.__rr && window.__rr.controls', { timeout: 30000 });
+const fb = await fbPage.evaluate(() => {
+  const rr = window.__rr;
+  rr.state.scheme = 'tilt';           // aparato sin sensor: nunca ha llegado una lectura
+  const esquema = rr.controls.activeScheme();
+  rr.ui.paintPedals();
+  const flechas = getComputedStyle(document.getElementById('p-left')).display !== 'none';
+  return { esquema, flechas, estado: rr.controls.gyroStatus() };
+});
+await fbPage.close();
+console.log('14 respaldo sin sensor:', JSON.stringify(fb),
+  fb.esquema === 'buttons' ? 'OK' : 'FALLA (' + fb.esquema + ' no deja nada visible que tocar)');
+
+/* ---------- 15. los mandos no deben estar pulsables en PAUSA ---------- */
+const paused = await page.evaluate(async () => {
+  const rr = window.__rr;
+  rr.ui.h.onPlay();
+  await new Promise(r => setTimeout(r, 300));
+  const cs = () => getComputedStyle(document.getElementById('pedals'));
+  const conduciendo = { vis: cs().visibility, op: +cs().opacity };
+  rr.ui.h.onPause();
+  await new Promise(r => setTimeout(r, 400));
+  const enPausa = { vis: cs().visibility, op: +cs().opacity };
+  rr.ui.h.onResume();
+  return { conduciendo, enPausa };
+});
+console.log('15 mandos en pausa:', JSON.stringify(paused),
+  paused.conduciendo.op === 1 && paused.enPausa.op === 0 ? 'OK' : 'FALLA');
+
+/* ---------- 16. la sacudida del choque no debe tumbar la camara ---------- */
+const shake = await page.evaluate(async () => {
+  const rr = window.__rr;
+  rr.world.addShake(1.6);                     // lo que mete un choque
+  let peor = 0;
+  for (let i = 0; i < 40; i++){
+    await new Promise(r => requestAnimationFrame(r));
+    // sobre el cabeceo y descontando su reposo: el alabeo por inclinacion falsearia el pico
+    peor = Math.max(peor, Math.abs(rr.world.camera.rotation.x - rr.world.pitch));
+  }
+  return +(peor * 180 / Math.PI).toFixed(2);
+});
+console.log('16 sacudida del choque:', shake, 'grados de pico',
+  shake < 8 ? 'OK' : 'FALLA (la camara acaba mirando al suelo)');
+
 /* ---------- 7. encuadre de la moto ---------- */
 const framing = await page.evaluate(() => {
   const rr = window.__rr;

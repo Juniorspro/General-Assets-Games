@@ -28,7 +28,7 @@ export const input = { throttle:0, brake:0, steer:0, horn:false, tiltDeg:0 };
    tumba el movil, y si el esquema se decidiera con active el mando cambiaria EN MEDIO de la
    carrera. Una vez que ha llegado una lectura valida, el aparato tiene giroscopio y punto. */
 const gyro = { available:false, granted:false, zero:null, raw:0, active:false,
-               everActive:false, flat:0, samples:[], last:0 };
+               everActive:false, flat:0, samples:[], last:0, refused:false };
 /* Sin lecturas durante este tiempo se da el sensor por dormido. Medio segundo es de sobra:
    un giroscopio real emite a 60 Hz. */
 const GYRO_STALE_MS = 500;
@@ -43,7 +43,10 @@ let gyroSteer = 0;
    regular en un mando digital, y el tope siempre se alcanza. */
 const DRAG_GAIN = 3.4;
 const BTN_RATE = 3.2;
-let btnDir = 0;                 // -1, 0, +1: lo que piden los botones
+/* Una bandera por flecha, no un solo signo. Con un signo compartido, pulsar izquierda,
+   pulsar derecha y soltar la derecha dejaba el giro en CERO (medido) en vez de volver a la
+   izquierda, que es la que el dedo sigue apretando. */
+const arrow = { left:false, right:false };
 let drag = null;                // arrastre en curso, a nivel de modulo para poder cancelarlo
 const buttons = [];             // mandos vinculados, para poder soltarlos todos de golpe
 let stage = null;               // envoltorio rotado, para mapear el puntero
@@ -103,9 +106,11 @@ export function layoutStage(){
        distinto segun la orientacion por un motivo que no tiene nada que ver con girar. */
     stage.style.transform = 'rotate(0deg)';
   }
-  /* Las muescas de pantalla cambian de lado al girar: lo que fisicamente es el borde
-     superior pasa a ser el borde DERECHO del juego. Sin remapear, el HUD se aparta del
-     lado equivocado y queda pegado a la muesca. */
+  /* Las muescas cambian de lado al girar. Con local (x,y) -> pantalla (W-y, x): el borde
+     IZQUIERDO del juego (x=0) cae en la pantalla arriba (y=0), y el borde SUPERIOR del juego
+     (y=0) cae a la derecha (x=W). O sea: arriba fisico = izquierda del juego, y ahi es donde
+     estan la distancia y la puntuacion. El CSS de .rot ya hace ese cambio; el comentario
+     anterior decia lo contrario y solo servia para "arreglarlo" al reves. */
   document.documentElement.classList.toggle('rot', portrait);
   return { w: stage.clientWidth, h: stage.clientHeight };
 }
@@ -131,8 +136,8 @@ export async function enableGyro(){
   if (!DOE) return false;
   if (typeof DOE.requestPermission === 'function'){
     try {
-      if (await DOE.requestPermission() !== 'granted') return false;
-    } catch (e) { return false; }
+      if (await DOE.requestPermission() !== 'granted'){ gyro.refused = true; return false; }
+    } catch (e) { gyro.refused = true; return false; }
   }
   if (!gyro.granted){
     gyro.granted = true;
@@ -287,8 +292,8 @@ export function bindButton(el, onDown, onUp){
 export function bindPedals(els){
   bindButton(els.gas,   () => { pedal.gas = true; },   () => { pedal.gas = false; });
   bindButton(els.brake, () => { pedal.brake = true; }, () => { pedal.brake = false; });
-  bindButton(els.left,  () => { btnDir = -1; },        () => { if (btnDir < 0) btnDir = 0; });
-  bindButton(els.right, () => { btnDir = 1; },         () => { if (btnDir > 0) btnDir = 0; });
+  bindButton(els.left,  () => { arrow.left = true; },  () => { arrow.left = false; });
+  bindButton(els.right, () => { arrow.right = true; }, () => { arrow.right = false; });
   bindButton(els.horn,  () => { pedal.horn = true; },  () => { pedal.horn = false; });
 }
 
@@ -309,16 +314,17 @@ function padState(){
 
 /** Esquema que toca por defecto: giroscopio si el aparato lo tiene, arrastre si no. */
 export function defaultScheme(){
-  const touch = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
-  return touch && window.DeviceOrientationEvent ? 'tilt' : 'touch';
+  return coarsePointer() && window.DeviceOrientationEvent ? 'tilt' : 'touch';
 }
 
-/** El esquema activo, con respaldo: si se pide giroscopio y no ha llegado NUNCA una lectura,
-    se conduce con arrastre en vez de quedarse sin direccion. Se mira everActive y no active
-    para que un instante con el movil plano no cambie el mando a mitad de carrera. */
+/** El esquema activo, con respaldo. Si se pide giroscopio y no ha llegado NUNCA una lectura se
+    cae a BOTONES, no a arrastre: el arrastre no deja nada visible que tocar, y quedarse sin
+    nada que tocar despues de haber pedido inclinacion es exactamente la queja del jugador.
+    Se mira everActive y no active para que un instante con el movil plano no cambie el mando
+    a mitad de carrera. */
 export function activeScheme(){
   const s = SCHEMES.includes(state.scheme) ? state.scheme : defaultScheme();
-  if (s === 'tilt' && !gyro.everActive) return 'touch';
+  if (s === 'tilt' && !gyro.everActive) return 'buttons';
   return s;
 }
 
@@ -326,7 +332,11 @@ export function activeScheme(){
     arrastre en silencio, que es justo la queja de "pedi giroscopio y no lo tengo". */
 export function gyroStatus(){
   if (!window.DeviceOrientationEvent) return 'unsupported';
-  if (!gyro.granted) return 'denied';
+  /* Sin contexto seguro el navegador no entrega el sensor, y el sintoma es identico a un
+     permiso denegado. Distinguirlo es la diferencia entre poder explicarlo o no. */
+  if (typeof isSecureContext !== 'undefined' && !isSecureContext) return 'insecure';
+  if (gyro.refused) return 'denied';
+  if (!gyro.granted) return 'ask';
   if (!gyro.everActive) return 'waiting';
   if (!gyro.active) return 'stale';
   return 'live';
@@ -357,6 +367,7 @@ export function update(dt){
   const scheme = activeScheme();
 
   // el giro por botones va hacia su tope a una velocidad, no de golpe: ver BTN_RATE
+  const btnDir = (arrow.right ? 1 : 0) - (arrow.left ? 1 : 0);
   btnSteer += clamp(btnDir - btnSteer, -BTN_RATE * sens * dt, BTN_RATE * sens * dt);
   if (!btnDir && Math.abs(btnSteer) < 0.01) btnSteer = 0;
 
@@ -407,7 +418,7 @@ export function update(dt){
 export function releaseAll(){
   keys.clear();
   pedal.gas = pedal.brake = pedal.horn = false;
-  btnDir = 0;
+  arrow.left = arrow.right = false;
   btnSteer = 0;
   touchSteer = 0;
   /* El arrastre en curso tambien: era local a install() y sobrevivia a releaseAll, asi que
@@ -426,5 +437,9 @@ export function releaseAll(){
   input.throttle = input.brake = input.steer = 0;
   input.horn = false;
 }
+
+/** Angulo que hoy equivale a tope de giro, ya escalado por la sensibilidad. La interfaz lo
+    necesita para dibujar el indicador a escala en vez de dividir por un 22 fijo. */
+export const tiltFull = () => Math.max(8, TILT_FULL / (state.sens || 1));
 
 export const gyroDebug = () => ({ ...gyro, steer:gyroSteer, rotated });

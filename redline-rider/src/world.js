@@ -141,6 +141,10 @@ const ROLL_FRAC = 0.32;
 const PITCH_ACC = 1.5 * DEG, PITCH_BRK = 3.0 * DEG, PITCH_W = 14;
 const BOB_LO = 0.006, BOB_HI = 0.012, BOB_HZ_LO = 1.8, BOB_HZ_HI = 3.2;
 const SHAKE_HZ = 14, SHAKE_DEG = 0.6;
+/* Grados de rotacion que aporta la sacudida a tope. Estaba en 12, y como addShake llega a 1,6
+   tras un choque eso daba (0,6 + 1,6*12) = 19,8 grados de cabeceo: la camara acababa mirando
+   al suelo justo en el momento en que el jugador necesita ver que ha pasado. */
+const SHAKE_GAIN = 2.2;
 const FOV_TAU = 0.35;
 
 export class World {
@@ -535,7 +539,7 @@ export class World {
     const bob = Math.sin(this.time * 2 * Math.PI * bobHz) * bobA;
     const bobX = Math.cos(this.time * Math.PI * bobHz) * bobA * 0.5;
 
-    const amp = (SHAKE_DEG * (0.25 + 0.75 * speedFrac) + this.shake * 12) * DEG;
+    const amp = (SHAKE_DEG * (0.25 + 0.75 * speedFrac) + this.shake * SHAKE_GAIN) * DEG;
     this.camera.position.set(x + sway + bobX, EYE_Y + bob, EYE_Z);
     this.camera.rotation.set(
       this.pitch + vnoise(this.time, 1) * amp,

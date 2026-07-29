@@ -11,10 +11,11 @@
     --sa-t:env(safe-area-inset-top, 0px); --sa-r:env(safe-area-inset-right, 0px);
     --sa-b:env(safe-area-inset-bottom, 0px); --sa-l:env(safe-area-inset-left, 0px);
   }
-  /* Con el escenario girado 90 grados, el borde fisico de arriba pasa a ser el borde
-     DERECHO del juego. Sin remapear las muescas el HUD se aparta del lado equivocado y
-     acaba justo debajo de la camara frontal. Local +x va a la pantalla hacia abajo y
-     local +y hacia la izquierda, de donde sale este cambio de nombres. */
+  /* Con el escenario girado 90 grados las muescas cambian de lado. Local (x,y) acaba en
+     pantalla en (W-y, x), asi que el borde IZQUIERDO del juego cae en el borde superior
+     fisico (donde suele estar la muesca) y el borde SUPERIOR del juego cae a la derecha
+     fisica. Sin este cambio de nombres, la distancia y la puntuacion acaban justo debajo de
+     la camara frontal. */
   html.rot{
     --sa-t:env(safe-area-inset-right, 0px); --sa-r:env(safe-area-inset-bottom, 0px);
     --sa-b:env(safe-area-inset-left, 0px);  --sa-l:env(safe-area-inset-top, 0px);
@@ -23,7 +24,7 @@
   html,body{height:100%;overflow:hidden;background:#07080c;color:var(--text);
     font-family:"Segoe UI Variable","Segoe UI",system-ui,-apple-system,Inter,Roboto,sans-serif;
     -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
-    touch-action:none;overscroll-behavior:none}
+    -webkit-touch-callout:none;touch-action:none;overscroll-behavior:none}
   /* El escenario se gira cuando el navegador dice que la pantalla esta en vertical, para
      presentar el juego en horizontal sin pedirle al jugador que gire el telefono.
      transform-origin en 0 0 para que la matematica del puntero sea invertible a mano. */
@@ -32,8 +33,10 @@
   #gl{position:absolute;inset:0;width:100%;height:100%;display:block}
   #ui{position:absolute;inset:0;pointer-events:none;z-index:2}
   .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
-    justify-content:center;gap:16px;padding:calc(16px + var(--sa-t)) 16px
-    calc(16px + var(--sa-b));opacity:0;visibility:hidden;pointer-events:none;
+    justify-content:center;gap:16px;
+    padding:calc(16px + var(--sa-t)) calc(16px + var(--sa-r))
+            calc(16px + var(--sa-b)) calc(16px + var(--sa-l));
+    opacity:0;visibility:hidden;pointer-events:none;
     transition:opacity .26s ease,visibility .26s;overflow:hidden}
   .screen.on{opacity:1;visibility:visible;pointer-events:auto}
   .screen.dim{background:radial-gradient(115% 85% at 50% 15%,rgba(4,6,11,.4),rgba(4,6,11,.88))}
@@ -180,7 +183,11 @@
      El gas a la derecha y el freno a su lado porque el pulgar derecho es el que descansa
      ahi sujetando el aparato; el giro a la izquierda. 76 px es el minimo con el que un
      pulgar acierta sin mirar, y 14 px de separacion evitan pulsar los dos a la vez. */
-  #pedals{position:absolute;inset:0;pointer-events:none}
+  /* Los mandos solo mientras se conduce. En pausa seguian visibles Y pulsables por encima
+     del panel, asi que se podia acelerar con el juego parado. */
+  #pedals{position:absolute;inset:0;pointer-events:none;opacity:0;visibility:hidden;
+    transition:opacity .18s}
+  #pedals.ride{opacity:1;visibility:visible}
   .pad{position:absolute;pointer-events:auto;display:grid;place-items:center;
     border-radius:50%;border:1px solid rgba(255,255,255,.22);color:var(--text);
     background:rgba(9,13,20,.5);font-size:10px;font-weight:900;letter-spacing:.12em;text-align:center;line-height:1.15;
@@ -217,6 +224,10 @@
   #tiltbar>u{position:absolute;top:0;bottom:0;left:calc(50% - 1px);width:2px;
     background:rgba(255,255,255,.28)}
   #tiltbar.dead{opacity:.35}
+  /* Sin esta linea el jugador solo sabe que el giroscopio "no va", no POR QUE: falta permiso,
+     no hay sensor, hace falta https, o el sensor ha dejado de responder. */
+  .hint{display:block;font-size:10px;font-weight:600;letter-spacing:0;color:var(--dim);
+    margin-top:3px;max-width:190px;line-height:1.35}
 </style>
 
 <div id="stage">
@@ -280,7 +291,7 @@
         <div class="row"><span class="lb" data-i18n="set.quality"></span><div class="seg" id="set-quality"></div></div>
         <div class="row"><span class="lb" data-i18n="set.scheme"></span><div class="seg" id="set-scheme"></div></div>
         <div class="row" id="row-tilt">
-          <span class="lb" data-i18n="set.tilt"></span>
+          <span class="lb" data-i18n="set.tilt"><br><span id="tiltmsg" class="hint"></span></span>
           <div style="display:flex;align-items:center;gap:9px">
             <div id="tiltbar" class="dead"><u></u><i></i></div>
             <button class="btn ghost small" id="b-calib" data-i18n="set.calibrate"></button>
