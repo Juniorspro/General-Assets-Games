@@ -253,12 +253,17 @@ const stale = await page.evaluate(async () => {
   burst(35.0, 0, 12);
   await new Promise(r => setTimeout(r, 250));
   burst(32.7, 13.5, 12);                        // ahora si, inclinado 20 grados a la derecha
-  await new Promise(r => setTimeout(r, 450));
+  /* 300 ms y no 450: el vigilante da el sensor por dormido a los 500 ms, y con 450 la lectura
+     caia pegada al umbral. En un fotograma lento el reloj real se pasaba de 500 antes de leer y
+     la prueba fallaba una vez de cada dos, culpando al juego de un limite de la propia prueba. */
+  await new Promise(r => setTimeout(r, 300));
   const girando = +rr.controls.input.steer.toFixed(3);
   const estado1 = rr.controls.gyroStatus();
   const d1 = rr.controls.gyroDebug();
   await new Promise(r => setTimeout(r, 1600));  // el sensor se calla: app en segundo plano
   return { girando, estado1, raw:+d1.raw.toFixed(1), activo:d1.active,
+           zero:d1.zero, muestras:d1.samples.length, flat:+d1.flat.toFixed(2),
+           concedido:d1.granted, alguna:d1.everActive,
            despues:+rr.controls.input.steer.toFixed(3), estado2: rr.controls.gyroStatus() };
 });
 console.log('11 sensor dormido:', JSON.stringify(stale),

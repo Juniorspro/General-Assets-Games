@@ -28,10 +28,15 @@ export const input = { throttle:0, brake:0, steer:0, horn:false, tiltDeg:0 };
    tumba el movil, y si el esquema se decidiera con active el mando cambiaria EN MEDIO de la
    carrera. Una vez que ha llegado una lectura valida, el aparato tiene giroscopio y punto. */
 const gyro = { available:false, granted:false, zero:null, raw:0, active:false,
-               everActive:false, flat:0, samples:[], last:0, refused:false };
+               everActive:false, flat:0, samples:[], last:0, refused:false, grantedAt:0 };
 /* Sin lecturas durante este tiempo se da el sensor por dormido. Medio segundo es de sobra:
    un giroscopio real emite a 60 Hz. */
 const GYRO_STALE_MS = 500;
+/* Margen para que el sensor arranque antes de declararlo ausente. Conceder el permiso y
+   recibir la primera lectura no es instantaneo, y sin esta espera el juego decidia "no hay
+   giroscopio" en el mismo instante del permiso: escondia el giro por inclinacion, sacaba las
+   flechas y el tutorial ensenaba a girar con botones a alguien que SI tiene sensor. */
+const GYRO_GRACE_MS = 2500;
 const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : 0);
 const ZERO_SAMPLES = 6;         // lecturas que se promedian para fijar el centro
 const ZERO_MIN_FLAT = 0.30;     // no se calibra con el movil casi plano: ahi el alabeo es ruido
@@ -141,6 +146,7 @@ export async function enableGyro(){
   }
   if (!gyro.granted){
     gyro.granted = true;
+    gyro.grantedAt = nowMs();
     addEventListener('deviceorientation', onOrient, { passive:true });
   }
   gyro.zero = null;
@@ -324,8 +330,18 @@ export function defaultScheme(){
     a mitad de carrera. */
 export function activeScheme(){
   const s = SCHEMES.includes(state.scheme) ? state.scheme : defaultScheme();
-  if (s === 'tilt' && !gyro.everActive) return 'buttons';
-  return s;
+  if (s !== 'tilt' || gyro.everActive) return s;
+  // todavia dentro del margen: se le da al sensor la oportunidad de contestar
+  if (gyro.granted && (nowMs() - gyro.grantedAt) < GYRO_GRACE_MS) return 'tilt';
+  return 'buttons';
+}
+
+/** true mientras aun se esta esperando la primera lectura del sensor. Quien decida algo segun
+    el esquema debe consultarlo para no comprometerse antes de tiempo. */
+export function gyroSettling(){
+  const s = SCHEMES.includes(state.scheme) ? state.scheme : defaultScheme();
+  return s === 'tilt' && !gyro.everActive && gyro.granted &&
+         (nowMs() - gyro.grantedAt) < GYRO_GRACE_MS;
 }
 
 /** Para que la interfaz pueda decir por que el giroscopio no responde en vez de degradar al

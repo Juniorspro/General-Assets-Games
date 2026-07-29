@@ -34,13 +34,18 @@ const KMH = 1 / 3.6;
      setup    preparacion de la escena
      done     condicion para pasar al siguiente; si falta, se pasa con el boton
    El orden es el de aprendizaje: primero moverse, luego puntuar, luego el peligro. */
-function buildSteps(){
-  const scheme = controls.activeScheme();
-  const steerKey = scheme === 'tilt' ? 'tut.steer.tilt'
-                 : scheme === 'buttons' ? 'tut.steer.buttons'
-                 : 'tut.steer.touch';
-  const steerHl = scheme === 'buttons' ? 'p-left' : null;
+/* El esquema se resuelve CUANDO SE LLEGA al paso, no al empezar el tutorial. Al arrancar, el
+   sensor puede no haber entregado todavia su primera lectura, y decidir ahi dejaba a un movil
+   con giroscopio aprendiendo a girar con botones. Al llegar al cuarto paso ya han pasado varios
+   segundos y el sensor ha contestado si existe. */
+const steerScheme = () => controls.activeScheme();
+const steerKey = () => {
+  const s = steerScheme();
+  return s === 'tilt' ? 'tut.steer.tilt' : s === 'buttons' ? 'tut.steer.buttons' : 'tut.steer.touch';
+};
+const steerHl = () => steerScheme() === 'buttons' ? 'p-left' : null;
 
+function buildSteps(){
   return [
     { pose:'hola', key:'tut.hello', traffic:false },
 
@@ -53,7 +58,11 @@ function buildSteps(){
     { pose:'explica', key:steerKey, hl:steerHl, traffic:false,
       /* Se pide llegar a un carril distinto del inicial, no solo mover el manillar: girar un
          instante y volver no ensena a cambiar de carril. */
-      setup: g => { g.tutLane = laneOf(g.x); },
+      setup: g => {
+        g.tutLane = laneOf(g.x);
+        // con giroscopio se retoma el centro aqui: es el momento en que el jugador va a inclinar
+        if (steerScheme() === 'tilt') controls.calibrateGyro();
+      },
       done: g => laneOf(g.x) !== g.tutLane },
 
     { pose:'explica', key:'tut.lanes', traffic:false,
@@ -138,28 +147,33 @@ export class Tutorial {
   get step(){ return this.steps[this.i] || null; }
 
   next(){
-    const prev = this.step;
-    if (prev && prev.hl) this.ui.highlight(null);
+    if (this.curHl) this.ui.highlight(null);
     this.i++;
     if (this.i >= this.steps.length){ this.finish(); return; }
     const s = this.step;
     this.holdT = 0;
     this.met = false;
+    const key = typeof s.key === 'function' ? s.key() : s.key;
+    const hl = typeof s.hl === 'function' ? s.hl() : s.hl;
+    this.curHl = hl;
     /* El trafico se apaga en los pasos que ensenan a moverse: morir mientras te explican como
        acelerar convence al jugador de que el juego es injusto, no de que tiene que aprender. */
     this.game.tutNoTraffic = !s.traffic;
     if (!s.traffic) this.game.clearTraffic();
     if (s.setup) s.setup(this.game, this.world);
+    /* Los mandos se repintan en cada paso: si el sensor contesta a mitad del tutorial, las
+       flechas tienen que desaparecer en ese momento, no al terminar. */
+    this.ui.paintPedals();
     this.ui.tutorial({
       pose: s.pose,
-      text: t(s.key),
+      text: t(key),
       n: this.i + 1,
       total: this.steps.length,
       /* Los pasos con condicion no ensenan boton: el boton los dejaria saltar sin hacer la
          accion, que es justo lo que se quiere evitar. */
       manual: !s.done
     });
-    if (s.hl) this.ui.highlight(s.hl);
+    if (hl) this.ui.highlight(hl);
   }
 
   /** Escala de tiempo que pide el paso activo, para la camara lenta didactica. */
