@@ -121,8 +121,11 @@ function checkNose(obj, spec){
    por encima. EYE_Z pone la camara sobre el asiento, con la moto entera por delante; con el
    valor original de 0,20 caia en MITAD de la moto, o sea dentro de la malla, y con las caras
    traseras descartadas solo asomaba un trozo de carenado visto desde arriba.
-   NEAR se queda por debajo de la distancia medida al deposito (0,47 m tumbado a tope): mas
-   cerca no hace falta y cuesta precision de profundidad en toda la escena. */
+   NEAR vuelve a 0,20. El valor de 0,12 se justificaba diciendo que 0,25 recortaba el
+   deposito, y eso era FALSO: medido, el vertice mas cercano de la malla queda a 0,358 m con
+   el puesto viejo y a 0,4 m con este, o sea que no habia recorte ni con 0,25 ni con 0,30.
+   Bajarlo solo empeoraba la precision de profundidad de toda la escena (near/far pasaba de
+   1520 a 3167) a cambio de nada. */
 const EYE_Y = 1.38;
 const EYE_Z = 0.48;
 const NEAR = 0.20;
@@ -132,7 +135,7 @@ const PITCH0 = -3.5 * DEG;              // se mira un poco hacia abajo, como sob
    EYE_Y*sin(lean). Si la camara no lo acompana, la moto se va del centro del encuadre: medido
    18,9% del ancho de pantalla a 20 grados de inclinacion. Se acompana casi todo, y el
    balanceo de la imagen se queda en una fraccion porque al 100% marea. */
-const LEAN_SWAY = 0.95;
+const LEAN_SWAY = 0.80;
 const ROLL_FRAC = 0.32;
 
 const PITCH_ACC = 1.5 * DEG, PITCH_BRK = 3.0 * DEG, PITCH_W = 14;
@@ -512,8 +515,8 @@ export class World {
        el mismo lado que la moto y el desvio se DUPLICA: medido 34,2% del ancho frente al
        18,9% de no acompanar nada, y con el signo bueno baja a un 4%.
        No se pone a 1 (camara totalmente solidaria) porque el resto del desvio no viene de
-       aqui sino del guinada de bg.rotation.y, y subirlo no lo quita: medido igual a 0,95 y
-       a 1,00. Un 4% de desvio al tumbar ademas ayuda a sentir la inclinacion. */
+       aqui sino de la guinada de bg.rotation.y, y subirlo no lo quita: medido igual a 0,80,
+       0,95 y 1,00. Dejar algo de desvio al tumbar ademas ayuda a sentir la inclinacion. */
     const sway = -LEAN_SWAY * EYE_Y * Math.sin(leanAng);
 
     /* Cabeceo con resorte criticamente amortiguado, no un salto por fotograma: asi la moto
