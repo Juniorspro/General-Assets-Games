@@ -47,20 +47,49 @@
    ctx (lo que recibe start/stop/step/frame y los on de los controles):
      ctx.id ctx.xp        el experimento
      ctx.prop             la instancia de prop que abrió/activó el experimento (o null)
+     ctx.mem              CAJÓN PROPIO: guardá acá tus mallas, cuerpos y temporizadores
+                          ({} al registrar, sobrevive a start/stop; vaciálo vos si querés)
      ctx.v                objeto con TODOS los valores
      ctx.get(k)           leer un valor      ctx.set(k,v)  escribir (repinta y dispara on)
+     ctx.on()             ¿está corriendo?
      ctx.run() ctx.stop() ctx.open() ctx.close()
      ctx.toast(t)         aviso en pantalla  ctx.fx(x,y,z,opts)  fogonazo de partículas
      ctx.point(p,x,y,z,out)  punto local del def -> mundo (para colgar nubes, tornados…)
 
+   EJEMPLO COMPLETO DE OTRO AGENTE (nube con lluvia sobre una palanca) — copiar y cambiar:
+     XP.add({
+       id:'xp_rain', name:'Palanca Lluvia', cat:'clima', near:2.4, btn:'🌧 Palanca de lluvia',
+       ui:{title:'Lluvia',controls:[
+         {k:'on',t:'switch',label:'Llover',val:false,
+          on:(c,v)=>{ v?c.run():c.stop(); }},
+         {k:'n',t:'slider',label:'Gotas',min:20,max:800,step:20,val:200,unit:''},
+         {t:'texto',label:'Estado',live:c=>c.on()?'lloviendo':'seco'}]},
+       start(c){ c.mem.g=new THREE.Group(); scene.add(c.mem.g); },   // scene es global
+       stop(c){ if(c.mem.g){scene.remove(c.mem.g);c.mem.g=null;} },
+       step(c,dt){ if(!c.mem.g||!c.prop)return;
+         c.point(c.prop,0,3.2,0,_v);           // 3,2 m sobre la BASE del prop, ya girado
+         c.mem.g.position.copy(_v);
+         // … y acá mover las gotas con dt, NUNCA con constantes por frame …
+       }
+     });
+
    RESTO DE LA API
      XP.list()            [{id,name,cat,run,near}]
-     XP.get(id) XP.set(id,k,v) XP.run(id[,prop]) XP.stop(id)
+     XP.get(id) XP.set(id,k,v) XP.run(id[,prop]) XP.stop(id) XP.running(id) XP.of(id)
      XP.open(id[,prop])   abre el panel     XP.close()
      XP.screen(titulo,controles[,opts])     panel a mano, sin prop ni experimento
      XP.propOf(id)        primera instancia viva de ese prop   XP.near()  el más cercano
      XP.point(prop,x,y,z,out)  XP.toast(t)  XP.fx(x,y,z,opts)
+     XP.size(k)           escala del jugador (la usa el experimento (a); 0,12 … 5)
+     XP.motion()          re-aplica PL.spd/run/jump = XP.M × factor de escala
+     XP.M {spd,run,jump}  BASE editable de movimiento — TOCÁ ESTO, no PL directamente
+     XP.M0                los valores de fábrica (para los botones "volver a normal")
+     XP.Z {k,mv,h0,r0}    estado de la escala del jugador
      XP.sec               la sección "Varios" donde caen los props creados en runtime
+     XP.adopt()           re-adopta secciones 'xp*' (ya se llama solo en cada XP.add)
+
+   HOOKS DE MEDICIÓN (sólo con ?dev): __H.xpList xpNear xpOpen xpClose xpSet xpGet xpRun
+     xpStop xpPanel xpBtn xpBtnBox xpTap xpSecs xpTabOn xpInfo xpSize xpPl xpScreen xpSlide
 
    DÓNDE PONER LOS PROPS
    - Lo mejor: un props/xp_algo.js con HP.section('xp_algo','MiCarpeta','ent',[…]) — el tab
@@ -178,11 +207,18 @@ nsafe(()=>{
    '.xptx{color:var(--dim);font:700 min(2.4vmin,12.5px)/1.45 inherit;'+
    '  background:rgba(0,0,0,.28);border-radius:5px;padding:1.1vmin 1.4vmin}'+
    '.xptx b{color:var(--ink)}'+
-   /* botón de cercanía: mismo patrón visual que bSit (core_k) y bFw (core_l) */
-   '#xpBtn{position:absolute;left:50%;bottom:30vmin;transform:translateX(-50%);'+
+   /* Botón de cercanía: mismo patrón visual que bSit (core_k) y bFw (core_l), pero core_k
+      escribe sus estilos con style.cssText (inline) y acá van en una HOJA DE ESTILO. La
+      diferencia importa: con 'display:none' en la hoja, hacer style.display='' (que es lo que
+      hace core_k para mostrar el botón) BORRA el inline y vuelve a ganar la regla => el botón
+      no se veía nunca, aunque style.display!=='none' dijera que sí. Por eso acá se muestra y
+      se esconde con una CLASE, igual que #xpWrap.
+      30vmin de abajo: bSit está a 16 y bFw a 23, así los tres botones de cercanía nunca se pisan. */
+   '#xpBtn{position:absolute;left:50%;bottom:30vmin;transform:translateX(-50%);z-index:12;'+
    '  pointer-events:auto;background:rgba(20,24,30,.82);border:1px solid rgba(108,240,255,.55);'+
    '  border-radius:12px;padding:10px 18px;color:#fff;font:800 14px system-ui,sans-serif;'+
    '  white-space:nowrap;display:none;text-shadow:0 1px 2px #000}'+
+   '#xpBtn.on{display:block}'+
    '#xpBtn:active{background:rgba(40,50,62,.94);border-color:var(--acc2)}';
   document.head.appendChild(st);
 },'xpcss');
@@ -271,7 +307,12 @@ function xpAdd(o){
     xp.v[c.k]=xpCoerce(c,sav[c.k]!==undefined?sav[c.k]:d);
   }
   xp.ctx={id:xp.id,xp,prop:null,v:xp.v,
+    /* mem: cajón propio del experimento para guardar SUS cosas (mallas, temporizadores,
+       cuerpos) sin ensuciar el módulo ni pisarse con los otros 74 experimentos.
+       Sobrevive a start/stop: si querés arrancar limpio, vaciálo vos en start(). */
+    mem:{},
     get:k=>xp.v[k],set:(k,v)=>xpSetV(xp,k,v),
+    on:()=>XPRUN.has(xp),
     run:p=>xpRun(xp.id,p),stop:()=>xpStop(xp.id),
     open:p=>xpOpen(xp.id,p),close:()=>xpClose(),
     toast:t=>{toast(t);return true;},fx:(x,y,z,op)=>XP.fx(x,y,z,op),
@@ -287,8 +328,9 @@ function xpSetV(xp,k,v){
   const c=xpCtl(xp,k);
   const nv=c?xpCoerce(c,v):v;
   xp.v[k]=nv;
-  (SV.xp[xp.id]=SV.xp[xp.id]||{})[k]=nv;
-  xpSaveT=.5;                                    /* localStorage recién en medio segundo */
+  /* los paneles a mano (XP.screen) NO se guardan: son de usar y tirar y ensuciarían SV.xp
+     con una entrada '__xpScreen' que nadie vuelve a leer nunca */
+  if(!xp.ui0){(SV.xp[xp.id]=SV.xp[xp.id]||{})[k]=nv;xpSaveT=.5;}  /* localStorage en medio segundo */
   nsafe(()=>xpPaintCtl(xp,k),'xppaint');
   /* re-entrada: si el on() vuelve a llamar set() con la MISMA clave sólo se guarda el valor
      (si no, un on que "corrige" su propio valor se llamaría para siempre) */
@@ -492,16 +534,27 @@ function xpPaint(){
   xpWrap.classList.toggle('on',!!vis);
   xpBtnPaint();
 }
+/* El repintado normal va con el escaneo de cercanía, 4 veces por segundo. Eso alcanza para el
+   botón, pero NO para entrar y salir de la pausa: togglePause dibuja la miniatura del
+   personaje (drawObjThumb) y ese frame puede tardar más que el intervalo, así que el panel se
+   quedaba un rato visible ENCIMA del menú de pausa. Se envuelven las tres funciones que
+   cambian APP para repintar en el mismo instante. Envolver, nunca reescribir: core_r y core_i
+   ya envolvieron openSpawn/closeSpawn antes. */
+const _xpPause=togglePause,_xpOpenSp=openSpawn,_xpCloseSp=closeSpawn;
+togglePause=function(){const r=_xpPause.apply(this,arguments);nsafe(xpPaint,'xppz');return r;};
+openSpawn=function(){const r=_xpOpenSp.apply(this,arguments);nsafe(xpPaint,'xpsp');return r;};
+closeSpawn=function(){const r=_xpCloseSp.apply(this,arguments);nsafe(xpPaint,'xpcs');return r;};
 
 /* ================= 4. botón de cercanía ================= */
 const xpBtn=document.createElement('div');xpBtn.id='xpBtn';
 nsafe(()=>{const h=$('hud');if(h)h.appendChild(xpBtn);},'xpbtn');
 let xpNearP=null,xpScanT=0;
 function xpBtnPaint(){
-  const show=!XPP.open&&APP==='play'&&xpNearP&&XPI[xpNearP.def.xp];
-  xpBtn.style.display=show?'':'none';
+  const show=!!(!XPP.open&&APP==='play'&&xpNearP&&XPI[xpNearP.def.xp]);
+  xpBtn.classList.toggle('on',show);
   if(show){const xp=XPI[xpNearP.def.xp];
     xpBtn.textContent=xp.btn||((T('xpOpen')||'🔬 Abrir')+' · '+xp.name);}
+  return show;
 }
 const xpTap=e=>{if(e){e.preventDefault();e.stopPropagation();}
   if(!xpNearP)return false;
@@ -509,14 +562,19 @@ const xpTap=e=>{if(e){e.preventDefault();e.stopPropagation();}
   return xpOpen(xp.id,xpNearP);};
 xpBtn.addEventListener('touchstart',xpTap,{passive:false});
 xpBtn.addEventListener('mousedown',xpTap);
-/* cercanía: 4 veces por segundo, igual que seatScan (core_k) y fwScan (core_l) */
+/* cercanía: 4 veces por segundo, igual que seatScan (core_k) y fwScan (core_l).
+   De paso, en la MISMA pasada se anota qué props de experimento hay vivos (XPHAVE): con 75
+   experimentos registrados, el arranque automático buscando cada uno con propOf() sería
+   75 × PROPS recorridos cuatro veces por segundo. Con el mapa anotado acá queda O(PROPS+XPL). */
+const XPHAVE=new Map();          /* id de experimento -> su primera instancia viva */
 function xpScan(){
-  xpNearP=null;
+  xpNearP=null;XPHAVE.clear();
   if(APP!=='play'||PL.rag)return null;
   let best=Infinity;
   const px=plBody.position.x,py=plBody.position.y,pz=plBody.position.z;
   for(const p of PROPS){
     const id=p.def&&p.def.xp;if(!id||!XPI[id])continue;
+    if(!XPHAVE.has(id))XPHAVE.set(id,p);
     const R=XPI[id].near,dx=p.body.position.x-px,dy=p.body.position.y-py,dz=p.body.position.z-pz;
     const dd=dx*dx+dz*dz;
     if(dd>R*R||Math.abs(dy)>2.4||dd>=best)continue;
@@ -663,9 +721,15 @@ function xpWeapScale(){
 /* ================= 7. enganche al bucle ================= */
 /* step() de los experimentos: DESPUÉS de world.step y sólo jugando (es el slot de la lógica
    de juego, el mismo que usa la pirotecnia de core_l). */
+/* XPIT: la copia de XPRUN sobre la que se itera. Hay que iterar una COPIA porque un step()
+   puede llamar a stop() (o a run() de otro) y mutar el Set en el medio; pero se reusa el mismo
+   array en vez de hacer Array.from por frame — con el motor a 60 Hz eso era basura nueva en
+   cada frame y en cada uno de los DOS ganchos, o sea 120 arrays por segundo para nada. */
+const XPIT=[];
+function xpIter(){XPIT.length=0;for(const xp of XPRUN)XPIT.push(xp);return XPIT;}
 EXT.post.push(dt=>{
   if(!XPRUN.size)return;
-  for(const xp of Array.from(XPRUN)){
+  for(const xp of xpIter()){
     if(xp.stopOnGone&&xp.ctx.prop&&PROPS.indexOf(xp.ctx.prop)<0){xpStop(xp.id);continue;}
     if(xp.step)nsafe(()=>xp.step(xp.ctx,dt),'xpstep_'+xp.id);
   }
@@ -675,8 +739,9 @@ EXT.frame.push(dt=>{
   xpScanT+=dt;
   if(xpScanT>=.25){
     xpScanT=0;xpScan();xpPaint();
-    /* arranque automático de los experimentos que lo pidieron, en cuanto su prop existe */
-    for(const xp of XPL)if(xp.auto&&!XPRUN.has(xp)){const p=XP.propOf(xp.id);if(p)xpRun(xp.id,p);}
+    /* arranque automático de los que lo pidieron, en cuanto su prop existe (lista de xpScan) */
+    if(XPHAVE.size)for(const xp of XPL)
+      if(xp.auto&&!XPRUN.has(xp)&&XPHAVE.has(xp.id))xpRun(xp.id,XPHAVE.get(xp.id));
     /* textos vivos del panel abierto */
     if(XPP.open&&XPP.xp)for(const c of (XPP.xp.ui.controls||[]))
       if(c._tx&&c.live){const s=nsafe(()=>c.live(XPP.xp.ctx),'xplive');
@@ -686,7 +751,8 @@ EXT.frame.push(dt=>{
      asíncrono): un compare de floats por frame lo repone sin costo medible */
   if(XPZ.k!==1)nsafe(()=>{xpCharScale();if(APP==='play')xpWeapScale();},'xpscale');
   /* frame() de los experimentos: siempre, también en pausa (cosas puramente visuales) */
-  for(const xp of Array.from(XPRUN))if(xp.frame)nsafe(()=>xp.frame(xp.ctx,dt),'xpframe_'+xp.id);
+  if(XPRUN.size)for(const xp of xpIter())
+    if(xp.frame)nsafe(()=>xp.frame(xp.ctx,dt),'xpframe_'+xp.id);
   /* guardado diferido de los valores */
   if(xpSaveT>0){xpSaveT-=dt;if(xpSaveT<=0)nsafe(save,'xpsave');}
 });
@@ -795,19 +861,33 @@ if(DEV&&window.__H)Object.assign(window.__H,{
   xpRun:(id,useNear)=>xpRun(id,useNear?XP.propOf(id):null),
   xpStop:id=>xpStop(id),
   xpPanel:()=>({open:XPP.open,vis:xpWrap.classList.contains('on'),
-    id:XPP.xp?XPP.xp.id:null,title:xpTitEl.textContent,
+    id:XPP.xp?XPP.xp.id:null,
+    title:xpTitEl.firstChild?xpTitEl.firstChild.textContent:'',   /* sólo el <span> del título */
+    cat:XPP.xp?(XPP.xp.cat||''):'',
     controls:XPP.xp?((XPP.xp.ui.controls||[]).map(c=>({k:c.k||null,t:xpTy(c),
       label:c.label||null,val:c.k?XPP.xp.v[c.k]:null,txt:c._val?c._val.textContent:null}))):[],
     rect:(()=>{const r=xpCard.getBoundingClientRect();
       return [Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)];})(),
-    /* medido en LAYOUT del escenario (offsets), que no se entera de la rotación de 90° */
+    /* Medido en LAYOUT del escenario (offsets), que NO se entera de la rotación de 90°: es la
+       única forma de comprobar desde un chromium horizontal que en un teléfono vertical la
+       tarjeta cae adentro (ver el encabezado y core_r).
+       OJO: la tarjeta se centra con left/top:50% + transform:translate(-50%,-50%) y el
+       transform no aparece en los offsets, así que la esquina real es (left-w/2, top-h/2).
+       Medir sin restar eso daba 'inside:false' incluso con el panel perfectamente centrado. */
     lay:(()=>{let top=0,left=0;for(let o=xpCard;o;o=o.offsetParent){top+=o.offsetTop;left+=o.offsetLeft;}
-      const st=$('stage');
-      return {left,top,w:xpCard.offsetWidth,h:xpCard.offsetHeight,
+      const st=$('stage'),w=xpCard.offsetWidth,h=xpCard.offsetHeight;
+      const x=Math.round(left-w/2),y=Math.round(top-h/2);
+      return {left:x,top:y,w,h,cx:left,cy:top,
         stW:st?st.clientWidth:0,stH:st?st.clientHeight:0,
-        inside:!!st&&left>=0&&top>=0&&left+xpCard.offsetWidth<=st.clientWidth+1
-               &&top+xpCard.offsetHeight<=st.clientHeight+1};})()}),
-  xpBtn:()=>xpBtn.style.display!=='none'?xpBtn.textContent:null,
+        inside:!!st&&x>=0&&y>=0&&x+w<=st.clientWidth+1&&y+h<=st.clientHeight+1};})()}),
+  /* se mira el estilo CALCULADO, no el inline: el inline decía "visible" mientras la hoja lo
+     tenía en display:none y la sonda daba por bueno un botón que no se veía en la captura */
+  xpBtn:()=>{const s=getComputedStyle(xpBtn);
+    return (s.display!=='none'&&s.visibility!=='hidden')?xpBtn.textContent:null;},
+  xpBtnBox:()=>{const r=xpBtn.getBoundingClientRect();
+    return {vis:getComputedStyle(xpBtn).display!=='none',
+      x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2),
+      w:Math.round(r.width),h:Math.round(r.height)};},
   xpTap:()=>{xpScan();return xpTap(null);},
   xpSecs:()=>SECTS.filter(s=>s.tab==='xp').map(s=>({id:s.id,name:s.name,n:s.props.length})),
   xpTabOn:()=>{const b=$('sptabs')&&$('sptabs').querySelector('[data-tab="xp"]');
