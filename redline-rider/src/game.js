@@ -50,7 +50,7 @@ export class Game {
     this.clearTraffic();
     this.world.setEnv('sunset');
     this.world.setPlayerBike(bikeStats(state.bike).color);
-    this.world.setRider(0, 0, 0, 0, 0);
+    this.world.setRider(0, 0, 0, 0, 0, 0);
     audio.engineStop();
   }
 
@@ -212,7 +212,7 @@ export class Game {
     this.comboT -= dt;
     if (this.comboT <= 0 && this.combo > 0){ this.combo = 0; }
 
-    this.world.setRider(this.x, this.lean, this.speed / this.vMax, accel * 60, dec * 20);
+    this.world.setRider(this.x, this.lean, this.speed / this.vMax, throttle, brake, dt);
     audio.engine(this.rpm, this.speed / this.vMax, throttle);
 
     this.hudAcc += dt;

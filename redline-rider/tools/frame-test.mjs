@@ -14,7 +14,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const shots = process.argv.includes('--shots');
@@ -48,6 +48,7 @@ const DEVICES = [
 
 const RUN = steer => {          // 10 s a gas abierto, sin depender de la entrada real
   const { game, world, controls } = window.__rr;
+  game.crash = () => {};        // medida determinista: un choque congelaria la camara
   game.start('day');
   controls.input.throttle = 1;
   controls.input.steer = steer;
@@ -150,7 +151,7 @@ const MEASURE = () => {
     canvas:[W, H], buffer:[bw, bh], aspect:+(W / H).toFixed(3),
     vfov:+cam.fov.toFixed(1),
     hfov:+(2 * Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect) * 180 / Math.PI).toFixed(1),
-    near:cam.near, kmh:Math.round(game.speed * 3.6),
+    near:cam.near, kmh:Math.round(game.speed * 3.6), mode:game.mode,
     eye:[+cam.position.x.toFixed(3), +cam.position.y.toFixed(3), +cam.position.z.toFixed(3)],
     pitchDeg:+(cam.rotation.x * 180 / Math.PI).toFixed(2),
     rollDeg:+(cam.rotation.z * 180 / Math.PI).toFixed(2),
@@ -171,6 +172,8 @@ for (const d of DEVICES){
   const page = await browser.newPage({ viewport:{ width:d.w, height:d.h },
     deviceScaleFactor:d.dpr, isMobile:d.touch, hasTouch:d.touch });
   page.on('pageerror', e => { console.log('  ERROR DE PAGINA:', e.message); fail++; });
+  // los avisos de checkNose salen por aqui: un GLB girado se canta en la consola
+  page.on('console', e => { if (e.type() === 'warning') console.log('  AVISO: ' + e.text()); });
   await page.goto(base + '/index.html?debug=1');
   await page.waitForFunction('window.__rr && Object.keys(window.__rr.world.models).length >= 6',
                              null, { timeout:120000 });

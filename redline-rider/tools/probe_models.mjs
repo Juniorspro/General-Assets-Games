@@ -33,12 +33,12 @@ const html = `<canvas id=c></canvas><div id=out></div>
 import * as THREE from 'three';
 import { GLTFLoader } from '${base}vendor/three/GLTFLoader.js';
 window.THREE = THREE;
-const KINDS = ['bike','sedan','truck','bus'];
+const KINDS = ['bike','sedan','suv','van','truck','bus'];
 const VIEWS = [
   { name:'desde el jugador', dir:[0, 0.20, 1] },
   { name:'lado', dir:[1, 0.18, 0] }
 ];
-const CELL = 380;
+const CELL = 300;
 const r = new THREE.WebGLRenderer({ canvas:document.getElementById('c'), antialias:true, preserveDrawingBuffer:true });
 r.setSize(CELL*VIEWS.length, CELL*KINDS.length, false);
 r.setClearColor(0x202530, 1);
@@ -61,8 +61,15 @@ for (let k = 0; k < KINDS.length; k++){
   const box = new THREE.Box3().setFromObject(obj);
   const size = new THREE.Vector3(); box.getSize(size);
   const c = new THREE.Vector3(); box.getCenter(c);
+  let tris = 0, verts = 0;
+  obj.traverse(o => {
+    if (!o.isMesh || !o.geometry) return;
+    const g = o.geometry;
+    verts += g.attributes.position ? g.attributes.position.count : 0;
+    tris += g.index ? g.index.count / 3 : (g.attributes.position ? g.attributes.position.count / 3 : 0);
+  });
   info.push({ kind, size:[+size.x.toFixed(2),+size.y.toFixed(2),+size.z.toFixed(2)],
-              centro:[+c.x.toFixed(2),+c.y.toFixed(2),+c.z.toFixed(2)] });
+              vertices: verts, triangulos: Math.round(tris) });
   // se apoya y se centra para que quepa en la celda, escalado a 4 m de largo
   const longest = Math.max(size.x, size.z) || 1;
   obj.scale.setScalar(4 / longest);
@@ -95,8 +102,8 @@ await page.goto(base + 'sheet.html');
 await page.waitForFunction('window.__done', { timeout: 90000 });
 console.log('crudo (x,y,z) y centro:');
 for (const r of JSON.parse(await page.textContent('#out')))
-  console.log('  ' + r.kind.padEnd(6), 'tamano', JSON.stringify(r.size), 'centro', JSON.stringify(r.centro));
-console.log('filas: bike, sedan, truck, bus | columnas: desde el jugador, de lado');
+  console.log('  ' + r.kind.padEnd(6), 'tamano', JSON.stringify(r.size).padEnd(22), r.triangulos + ' triangulos');
+console.log('filas: ' + 'bike sedan suv van truck bus'.split(' ').join(', ') + ' | columnas: desde el jugador, de lado');
 console.log('la flecha roja apunta a -Z, que es el sentido de la marcha');
 await page.locator('#c').screenshot({ path: OUT });
 await browser.close();

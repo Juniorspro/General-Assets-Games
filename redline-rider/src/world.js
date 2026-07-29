@@ -38,12 +38,12 @@ export const ENVS = {
 /* Modelos: si uno falta, se sustituye por una caja proporcionada. Asi el juego es
    jugable desde el primer momento y mejora conforme llegan los GLB. */
 const MODELS = {
-  bike:  { url:'assets/models/bike.glb',  len:2.05, wid:0.78, hei:1.20 },
-  sedan: { url:'assets/models/sedan.glb', len:4.45, wid:1.80, hei:1.45 },
-  suv:   { url:'assets/models/suv.glb',   len:4.80, wid:1.92, hei:1.80 },
-  van:   { url:'assets/models/van.glb',   len:5.40, wid:2.00, hei:2.35 },
-  truck: { url:'assets/models/truck.glb', len:12.0, wid:2.50, hei:3.60 },
-  bus:   { url:'assets/models/bus.glb',   len:11.0, wid:2.55, hei:3.10 }
+  bike:  { url:'assets/models/bike.glb',  len:2.05, wid:0.78, hei:1.20, fit:'len' },
+  sedan: { url:'assets/models/sedan.glb', len:4.45, wid:1.80, hei:1.45, fit:'box' },
+  suv:   { url:'assets/models/suv.glb',   len:4.80, wid:1.92, hei:1.80, fit:'box' },
+  van:   { url:'assets/models/van.glb',   len:5.40, wid:2.00, hei:2.35, fit:'box' },
+  truck: { url:'assets/models/truck.glb', len:12.0, wid:2.50, hei:3.60, fit:'box' },
+  bus:   { url:'assets/models/bus.glb',   len:11.0, wid:2.55, hei:3.10, fit:'box' }
 };
 
 /* Todos estos GLB salen del mismo generador y traen el eje largo en X con el MORRO EN -X.
@@ -60,20 +60,85 @@ const ASSETS = (typeof window !== 'undefined' && window.__HX_ASSETS) || null;
 const BASE_URL = (typeof window !== 'undefined' && window.__HX_ASSET_BASE) || '';
 const resolveUrl = u => (ASSETS && ASSETS[u]) || (BASE_URL ? BASE_URL + u : u);
 
-const FOV = 74;
+const DEG = Math.PI / 180;
+/* Campo de vision HORIZONTAL, no vertical. three.js recibe el vertical, y fijarlo deja el
+   horizontal a merced de la relacion de aspecto: 74 grados verticales son 106 en un 16:9 y
+   117 medidos en un movil apaisado de 2,17, o sea ojo de pez. Se fija el horizontal y se
+   deriva el vertical, con un techo para que en una ventana estrecha no se vaya a 90. */
+const HFOV = 86, HFOV_GAIN = 10, VFOV_MAX = 78;
+
+/* Ruido suave para el temblor: dos muestras por semilla interpoladas con smoothstep. Con un
+   Math.random() por fotograma el temblor es ruido blanco, la camara teleporta, y eso es
+   justo lo que marea; asi queda una oscilacion continua. */
+function vnoise(t, seed){
+  const x = t * SHAKE_HZ + seed * 71.3;
+  const i = Math.floor(x), f = x - i;
+  const h = n => { const s = Math.sin(n * 127.1 + seed * 311.7) * 43758.5453; return (s - Math.floor(s)) * 2 - 1; };
+  const u = f * f * (3 - 2 * f);
+  return h(i) * (1 - u) + h(i + 1) * u;
+}
+
+/* Aviso de GLB girado. La rebanada mas ANCHA del eje largo son los espejos, y en una moto el
+   manillar: siempre por delante del centro. Sirve para AVISAR, no para decidir: en un
+   autobus, que es una caja, la geometria no dice nada, y la altura del contorno miente de
+   signo (en un coche el techo esta detras, en una moto el manillar delante). El giro se
+   DECLARA por modelo y esto solo canta cuando no cuadra. */
+function checkNose(obj, spec){
+  const N = 12, wmin = new Array(N).fill(1e9), wmax = new Array(N).fill(-1e9);
+  let zmin = 1e9, zmax = -1e9;
+  const pts = [];
+  obj.updateWorldMatrix(true, true);
+  obj.traverse(o => {
+    if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+    const pos = o.geometry.attributes.position;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i += 8){
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      pts.push(v.x, v.z);
+      if (v.z < zmin) zmin = v.z;
+      if (v.z > zmax) zmax = v.z;
+    }
+  });
+  if (!pts.length || zmax <= zmin) return;
+  for (let i = 0; i < pts.length; i += 2){
+    const b = Math.min(N - 1, ((pts[i + 1] - zmin) / (zmax - zmin) * N) | 0);
+    if (pts[i] < wmin[b]) wmin[b] = pts[i];
+    if (pts[i] > wmax[b]) wmax[b] = pts[i];
+  }
+  let best = 0;
+  for (let i = 1; i < N; i++) if (wmax[i] - wmin[i] > wmax[best] - wmin[best]) best = i;
+  const frac = (best + 0.5) / N;
+  if (frac > 0.5)
+    console.warn('[world] ' + spec.url + ': la rebanada mas ancha cae en la fraccion ' +
+      frac.toFixed(2) + ' del eje largo. Si de verdad son los espejos, el modelo esta ' +
+      'girado 180 grados: prueba spec.yaw = ' + ((spec.yaw || 0) + Math.PI).toFixed(4));
+}
 
 /* Puesto del piloto, medido sobre la moto ya normalizada (2,05 m de largo centrada en z=0,
    asi que el morro cae en z=-1,02 y la cola en z=+1,02).
 
-   EYE_Z = 0,62 pone la camara justo detras del asiento: por delante quedan 1,64 m de moto,
-   que es lo que deja ver el deposito y el manillar. Con el valor anterior de 0,20 la camara
-   caia en MITAD de la moto, o sea dentro de la malla, y con las caras traseras descartadas
-   solo asomaba un trozo del carenado visto desde arriba.
-   EYE_Y = 1,34 es la altura de los ojos de un piloto sentado: asiento a 0,80 y cabeza medio
-   metro por encima. NEAR = 0,12 en vez de 0,25 para no recortar el propio deposito. */
-const EYE_Y = 1.34;
-const EYE_Z = 0.62;
-const NEAR = 0.12;
+   EYE_Y es la altura de los ojos de un piloto sentado: asiento a 0,80 y cabeza medio metro
+   por encima. EYE_Z pone la camara sobre el asiento, con la moto entera por delante; con el
+   valor original de 0,20 caia en MITAD de la moto, o sea dentro de la malla, y con las caras
+   traseras descartadas solo asomaba un trozo de carenado visto desde arriba.
+   NEAR se queda por debajo de la distancia medida al deposito (0,47 m tumbado a tope): mas
+   cerca no hace falta y cuesta precision de profundidad en toda la escena. */
+const EYE_Y = 1.38;
+const EYE_Z = 0.48;
+const NEAR = 0.20;
+const PITCH0 = -3.5 * DEG;              // se mira un poco hacia abajo, como sobre una moto
+
+/* Al tumbar, la moto gira sobre la huella de los neumaticos, asi que el deposito se desplaza
+   EYE_Y*sin(lean). Si la camara no lo acompana, la moto se va del centro del encuadre: medido
+   18,9% del ancho de pantalla a 20 grados de inclinacion. Se acompana casi todo, y el
+   balanceo de la imagen se queda en una fraccion porque al 100% marea. */
+const LEAN_SWAY = 0.95;
+const ROLL_FRAC = 0.32;
+
+const PITCH_ACC = 1.5 * DEG, PITCH_BRK = 3.0 * DEG, PITCH_W = 14;
+const BOB_LO = 0.006, BOB_HI = 0.012, BOB_HZ_LO = 1.8, BOB_HZ_HI = 3.2;
+const SHAKE_HZ = 14, SHAKE_DEG = 0.6;
+const FOV_TAU = 0.35;
 
 export class World {
   constructor(canvas){
@@ -83,7 +148,11 @@ export class World {
     this.renderer.toneMapping = THREE.NoToneMapping;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(FOV, 1, NEAR, VIEW_Z + 120);
+    // el vertical se calcula en _applyFov a partir del horizontal y la relacion de aspecto
+    this.camera = new THREE.PerspectiveCamera(60, 1, NEAR, VIEW_Z + 120);
+    this.hfov = HFOV;
+    this.pitch = PITCH0;
+    this.pitchV = 0;
 
     this.glowTex = glowTexture();
     this.shadowTex = shadowTexture();
@@ -293,12 +362,24 @@ export class World {
     });
     const box = new THREE.Box3().setFromObject(obj);
     const size = new THREE.Vector3(); box.getSize(size);
-    const longest = Math.max(size.x, size.z) || 1;
-    const k = spec.len / longest;
-    obj.scale.setScalar(k);
+    const longX = size.x > size.z;
+    const along = (longX ? size.x : size.z) || 1;
+    const across = (longX ? size.z : size.x) || 1;
+    /* Escalar solo por la LONGITUD deja el ancho a lo que quiso el generador: medido, el
+       autobus salia de 4,06 m de ancho, un 59% mas que su colisionador de 2,55, se comia el
+       carril de al lado (3,6 m) y el jugador lo atravesaba sin chocar. Para el trafico se
+       ajusta cada eje a la caja declarada, que es la MISMA que usa la fisica. La moto se
+       ajusta por longitud: ahi el manillar puede sobresalir, que es lo normal. */
+    if (spec.fit === 'box'){
+      obj.scale.set(longX ? spec.len / along : spec.wid / across,
+                    spec.hei / (size.y || 1),
+                    longX ? spec.wid / across : spec.len / along);
+    } else {
+      obj.scale.setScalar(spec.len / along);
+    }
 
     // reorienta para que el MORRO mire a -Z (sentido de la marcha), no solo el eje largo
-    if (size.x > size.z) obj.rotation.y = spec.yaw === undefined ? -Math.PI / 2 : spec.yaw;
+    if (longX) obj.rotation.y = spec.yaw === undefined ? -Math.PI / 2 : spec.yaw;
 
     /* Se centra en X y Z y se apoya en Y=0. Cada GLB trae su pivote donde le parece, y
        sin normalizarlo la camara de casco y las colisiones dependerian de ese capricho. */
@@ -307,9 +388,13 @@ export class World {
     obj.position.x -= c.x;
     obj.position.z -= c.z;
     obj.position.y -= b2.min.y;
+    const s2 = new THREE.Vector3(); new THREE.Box3().setFromObject(obj).getSize(s2);
     const wrap = new THREE.Group();
     wrap.add(obj);
-    wrap.userData.size = spec;
+    /* La caja MEDIDA, no la declarada: si la malla y el colisionador no son el mismo numero,
+       el jugador ve como pasa por dentro de un coche y encima se le puntua un roce. */
+    wrap.userData.size = { len:s2.z, wid:s2.x, hei:s2.y };
+    checkNose(obj, spec);
     return wrap;
   }
 
@@ -351,8 +436,8 @@ export class World {
         }
       });
     }
-    // luces traseras y sombra de contacto
-    const s = MODELS[kind];
+    // luces traseras y sombra de contacto, sobre la caja MEDIDA de la malla
+    const s = obj.userData.size || MODELS[kind];
     /* El resplandor de los pilotos tiene que ser PEQUENO. A 1,5 veces el ancho del coche el
        sprite aditivo cubria la carroceria entera y, como se encendia con solo tener al
        jugador a 20 m, los coches se veian rojos de dia. */
@@ -361,7 +446,7 @@ export class World {
     halo.scale.setScalar(s.wid * 0.6);
     halo.position.set(0, s.hei * 0.38, s.len * 0.5 + 0.06);
     obj.add(halo);
-    const sh = new THREE.Mesh(new THREE.PlaneGeometry(s.wid * 1.7, s.len * 1.15),
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(s.wid * 1.15, s.len * 1.05),
       new THREE.MeshBasicMaterial({ map:this.shadowTex, transparent:true, depthWrite:false, opacity:0.5 }));
     sh.rotation.x = -Math.PI / 2;
     sh.position.y = 0.02;
@@ -402,28 +487,62 @@ export class World {
     }
   }
 
-  /** Camara de casco: altura de ojos, cabeceo con la aceleracion y balanceo al girar. */
-  setRider(x, lean, speedFrac, accel, brake){
-    const bg = this.bikeGroup;
-    bg.position.set(x, 0, 0);
-    bg.rotation.z = -lean * 0.5;
-    bg.rotation.y = lean * 0.10;
-
-    const pitch = clamp(accel * 0.012 - brake * 0.03, -0.05, 0.035);
-    const bob = Math.sin(this.time * 22) * 0.006 * (0.3 + speedFrac);
-    const sh = this.shake;
-    this.camera.position.set(
-      x + (Math.random() - 0.5) * sh * 0.25,
-      EYE_Y + bob + (Math.random() - 0.5) * sh * 0.25,
-      EYE_Z
-    );
-    this.camera.rotation.set(pitch + (Math.random() - 0.5) * sh * 0.02, 0, -lean * 0.16);
-    // el campo de vision se abre con la velocidad: es el truco clasico de sensacion de velocidad
-    const fov = FOV + speedFrac * 14;
-    if (Math.abs(this.camera.fov - fov) > 0.01){
+  /** Se fija el campo HORIZONTAL y se deriva el vertical de la relacion de aspecto, asi la
+      carretera se ve igual de ancha en un movil apaisado de 2,17 que en un 16:9. */
+  _applyFov(){
+    const v = 2 * Math.atan(Math.tan(this.hfov * DEG / 2) / this.camera.aspect) / DEG;
+    const fov = Math.min(VFOV_MAX, v);
+    if (Math.abs(this.camera.fov - fov) > 0.02){
       this.camera.fov = fov;
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  /** Camara de casco: el ojo va solidario al chasis tumbado, el cabeceo por resorte y el
+      temblor SOLO en rotacion, que es lo que se siente sin marear. */
+  setRider(x, lean, speedFrac, throttle, brake, dt){
+    const bg = this.bikeGroup;
+    const leanAng = -lean * 0.5;
+    bg.position.set(x, 0, 0);
+    bg.rotation.z = leanAng;
+    bg.rotation.y = lean * 0.10;
+
+    /* Girando el chasis un angulo t sobre la huella de los neumaticos, un punto a altura h
+       se va a x = -h*sin(t), no a +h*sin(t). Con el signo al reves la camara se aparta hacia
+       el mismo lado que la moto y el desvio se DUPLICA: medido 34,2% del ancho frente al
+       18,9% de no acompanar nada, y con el signo bueno baja a un 4%.
+       No se pone a 1 (camara totalmente solidaria) porque el resto del desvio no viene de
+       aqui sino del guinada de bg.rotation.y, y subirlo no lo quita: medido igual a 0,95 y
+       a 1,00. Un 4% de desvio al tumbar ademas ayuda a sentir la inclinacion. */
+    const sway = -LEAN_SWAY * EYE_Y * Math.sin(leanAng);
+
+    /* Cabeceo con resorte criticamente amortiguado, no un salto por fotograma: asi la moto
+       se hunde al frenar y se estira al acelerar con inercia, en vez de parpadear. */
+    const target = PITCH0 + PITCH_ACC * clamp(throttle, 0, 1) - PITCH_BRK * clamp(brake, 0, 1);
+    if (dt > 0){
+      this.pitchV += (-2 * PITCH_W * this.pitchV - PITCH_W * PITCH_W * (this.pitch - target)) * dt;
+      this.pitch += this.pitchV * dt;
+    } else {
+      this.pitch = target;
+      this.pitchV = 0;
+    }
+
+    const bobHz = lerp(BOB_HZ_LO, BOB_HZ_HI, speedFrac);
+    const bobA = lerp(BOB_LO, BOB_HI, speedFrac);
+    const bob = Math.sin(this.time * 2 * Math.PI * bobHz) * bobA;
+    const bobX = Math.cos(this.time * Math.PI * bobHz) * bobA * 0.5;
+
+    const amp = (SHAKE_DEG * (0.25 + 0.75 * speedFrac) + this.shake * 12) * DEG;
+    this.camera.position.set(x + sway + bobX, EYE_Y + bob, EYE_Z);
+    this.camera.rotation.set(
+      this.pitch + vnoise(this.time, 1) * amp,
+      vnoise(this.time, 2) * amp * 0.6,
+      leanAng * ROLL_FRAC + vnoise(this.time, 3) * amp);
+
+    // el campo se abre con la velocidad, filtrado para que no bombee al soltar gas
+    const want = HFOV + HFOV_GAIN * speedFrac;
+    this.hfov += (want - this.hfov) * (dt > 0 ? 1 - Math.exp(-dt / FOV_TAU) : 1);
+    this._applyFov();
   }
 
   update(dt, speedFrac){
@@ -458,6 +577,7 @@ export class World {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this._applyFov();
   }
 
   render(){ this.renderer.render(this.scene, this.camera); }
