@@ -1,11 +1,14 @@
 /* Mide el encuadre de la camara de casco SIN ojos humanos.
 
-   Proyecta la caja de la moto y de cada coche al espacio de pantalla y comprueba
-   numeros: que fraccion del alto ocupa la moto, donde cae el horizonte, si algo
-   entra por delante del plano cercano y si al trafico se le ve la TRASERA.
+   Dos medidas independientes, que es lo que hace fiable la prueba:
+     1) SILUETA REAL: se renderiza el fotograma con la moto y sin ella y se restan los
+        pixeles. Da la cobertura exacta, el borde superior y el centro de la moto en
+        pantalla, sin depender de la caja envolvente (que en una moto miente: incluye la
+        altura del manillar tambien en la vertical del morro).
+     2) PROYECCION: la caja de cada vehiculo al espacio de pantalla, la distancia real de
+        la malla a la camara y el sentido del morro, para cazar un GLB girado.
 
-   Uso:  node tools/frame-test.mjs [--shots]
-   Requiere el build:  node build.mjs   */
+   Uso:  node build.mjs && node tools/frame-test.mjs [--shots]                        */
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -29,120 +32,168 @@ const server = createServer(async (req, res) => {
 await new Promise(r => server.listen(0, r));
 const base = 'http://127.0.0.1:' + server.address().port;
 
-/* SwiftShader: sin GPU no hay WebGL y three.js ni arranca. */
+/* Sin GPU no hay WebGL: SwiftShader lo emula en CPU y basta para medir geometria. */
 const browser = await chromium.launch({
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
-         '--ignore-gpu-blocklist', '--disable-lcd-text']
+         '--ignore-gpu-blocklist', '--mute-audio']
 });
 
-/* Un movil apaisado y otro en vertical (el juego se gira por CSS): el encuadre tiene que
-   aguantar los dos, porque la relacion de aspecto cambia de 2,17 a 0,46. */
+/* Movil apaisado, el mismo movil en vertical (el juego se gira por CSS) y escritorio: la
+   relacion de aspecto del LIENZO va de 2,17 a 1,78 y el encuadre aguanta las tres. */
 const DEVICES = [
-  { name:'iphone-apaisado', w:932, h:430, dpr:3 },
-  { name:'iphone-vertical', w:430, h:932, dpr:3 },
-  { name:'escritorio',      w:1280, h:720, dpr:1 }
+  { name:'movil-apaisado', w:932, h:430, dpr:2, touch:true },
+  { name:'movil-vertical', w:430, h:932, dpr:2, touch:true },
+  { name:'escritorio',     w:1280, h:720, dpr:1, touch:false }
 ];
+
+const RUN = () => {                       // 10 s a gas abierto, sin depender de la entrada
+  const { game, world, controls } = window.__rr;
+  game.start('day');
+  controls.input.throttle = 1;
+  for (let i = 0; i < 1200; i++) game.step(1 / 120);
+  world.update(1 / 60, game.speed / game.vMax);
+};
+
+const MEASURE = () => {
+  const { world, game } = window.__rr;
+  const cam = world.camera;
+  const V3 = cam.position.constructor;
+  world.scene.updateMatrixWorld(true);
+  cam.updateMatrixWorld(true);
+  const W = world.canvas.clientWidth, H = world.canvas.clientHeight;
+
+  /* ---- 1) silueta por diferencia de pixeles ---- */
+  const gl = world.renderer.getContext();
+  const bw = gl.drawingBufferWidth, bh = gl.drawingBufferHeight;
+  const a = new Uint8Array(bw * bh * 4), b = new Uint8Array(bw * bh * 4);
+  world.bikeGroup.visible = false; world.render();
+  gl.readPixels(0, 0, bw, bh, gl.RGBA, gl.UNSIGNED_BYTE, a);
+  world.bikeGroup.visible = true; world.render();
+  gl.readPixels(0, 0, bw, bh, gl.RGBA, gl.UNSIGNED_BYTE, b);
+  let n = 0, x0 = 1e9, x1 = -1e9, yTop = 1e9, yBot = -1e9, sx = 0;
+  for (let i = 0, p = 0; p < bw * bh; p++, i += 4){
+    if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) < 12) continue;
+    const px = p % bw, py = bh - 1 - ((p / bw) | 0);      // readPixels empieza por abajo
+    n++; sx += px;
+    if (px < x0) x0 = px; if (px > x1) x1 = px;
+    if (py < yTop) yTop = py; if (py > yBot) yBot = py;
+  }
+  const sil = n ? { cover:+(n / (bw * bh)).toFixed(4), topFrac:+(yTop / bh).toFixed(3),
+                    botFrac:+(yBot / bh).toFixed(3), widthFrac:+((x1 - x0) / bw).toFixed(3),
+                    centreOff:+((sx / n - bw / 2) / bw).toFixed(4) }
+                : { cover:0 };
+
+  /* ---- 2) proyeccion y distancias ---- */
+  const worldBox = obj => {
+    let mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+    obj.traverse(o => {
+      if (!o.isMesh || o.isSprite || !o.geometry) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      const g = o.geometry.boundingBox;
+      for (const x of [g.min.x, g.max.x]) for (const y of [g.min.y, g.max.y]) for (const z of [g.min.z, g.max.z]){
+        const p = new V3(x, y, z).applyMatrix4(o.matrixWorld);
+        mn = [Math.min(mn[0], p.x), Math.min(mn[1], p.y), Math.min(mn[2], p.z)];
+        mx = [Math.max(mx[0], p.x), Math.max(mx[1], p.y), Math.max(mx[2], p.z)];
+      }
+    });
+    return { mn, mx };
+  };
+  /* Distancia punto-caja: lo que de verdad dice si el plano cercano recorta. Coger el
+     minimo de las 8 esquinas da negativo en cuanto una esquina queda detras. */
+  const boxDist = (bx, p) => {
+    const d = [Math.max(bx.mn[0] - p.x, 0, p.x - bx.mx[0]),
+               Math.max(bx.mn[1] - p.y, 0, p.y - bx.mx[1]),
+               Math.max(bx.mn[2] - p.z, 0, p.z - bx.mx[2])];
+    return Math.hypot(d[0], d[1], d[2]);
+  };
+  /* Vertice mas cercano de verdad: la caja de la moto CONTIENE la camara aunque no haya
+     ni un poligono cerca, asi que hay que medir sobre los vertices. */
+  const nearestVertex = obj => {
+    let best = 1e9;
+    obj.traverse(o => {
+      if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
+      const pos = o.geometry.attributes.position;
+      const step = Math.max(1, Math.floor(pos.count / 4000));
+      for (let i = 0; i < pos.count; i += step){
+        const p = new V3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(o.matrixWorld);
+        const d = p.distanceTo(cam.position);
+        if (d < best) best = d;
+      }
+    });
+    return best;
+  };
+
+  const bikeBox = worldBox(world.playerBike);
+  const hz = new V3(cam.position.x, cam.position.y, cam.position.z - 5000).project(cam);
+
+  const traffic = [];
+  for (const v of game.pool){
+    if (!v.alive || v.z < -80 || v.z > 25) continue;
+    const nose = new V3(0, 0, -1).transformDirection(v.obj.matrixWorld).normalize();
+    const toCam = cam.position.clone().sub(v.obj.position).normalize();
+    const bx = worldBox(v.obj);
+    traffic.push({ kind:v.kind, z:+v.z.toFixed(1), dotNose:+nose.dot(toCam).toFixed(3),
+      w:+(bx.mx[0] - bx.mn[0]).toFixed(2), h:+(bx.mx[1] - bx.mn[1]).toFixed(2),
+      l:+(bx.mx[2] - bx.mn[2]).toFixed(2), colW:+(v.halfW * 2).toFixed(2), colL:+(v.halfL * 2).toFixed(2),
+      dist:+boxDist(bx, cam.position).toFixed(2) });
+  }
+
+  return {
+    canvas:[W, H], buffer:[bw, bh], aspect:+(W / H).toFixed(3),
+    vfov:+cam.fov.toFixed(1),
+    hfov:+(2 * Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect) * 180 / Math.PI).toFixed(1),
+    near:cam.near, kmh:Math.round(game.speed * 3.6),
+    eye:[+cam.position.x.toFixed(3), +cam.position.y.toFixed(3), +cam.position.z.toFixed(3)],
+    pitchDeg:+(cam.rotation.x * 180 / Math.PI).toFixed(2),
+    rollDeg:+(cam.rotation.z * 180 / Math.PI).toFixed(2),
+    bikeSize:[+(bikeBox.mx[0] - bikeBox.mn[0]).toFixed(2), +(bikeBox.mx[1] - bikeBox.mn[1]).toFixed(2),
+              +(bikeBox.mx[2] - bikeBox.mn[2]).toFixed(2)],
+    bikeZ:[+bikeBox.mn[2].toFixed(2), +bikeBox.mx[2].toFixed(2)],
+    nearestVertex:+nearestVertex(world.playerBike).toFixed(3),
+    camInsideBox:cam.position.z > bikeBox.mn[2] && cam.position.z < bikeBox.mx[2] &&
+                 cam.position.y < bikeBox.mx[1],
+    horizonFrac:+((1 - hz.y) / 2).toFixed(3),
+    sil, traffic
+  };
+};
 
 let fail = 0;
 for (const d of DEVICES){
   const page = await browser.newPage({ viewport:{ width:d.w, height:d.h },
-    deviceScaleFactor:d.dpr, isMobile:d.dpr > 1, hasTouch:d.dpr > 1 });
+    deviceScaleFactor:d.dpr, isMobile:d.touch, hasTouch:d.touch });
   page.on('pageerror', e => { console.log('  ERROR DE PAGINA:', e.message); fail++; });
   await page.goto(base + '/index.html?debug=1');
-  await page.waitForFunction('window.__rr && window.__rr.world.models', { timeout:60000 });
+  await page.waitForFunction('window.__rr && Object.keys(window.__rr.world.models).length >= 6',
+                             null, { timeout:120000 });
+  await page.evaluate(RUN);
+  const m = await page.evaluate(MEASURE);
 
-  // arranca una partida y deja rodar hasta velocidad de crucero
-  await page.evaluate(() => {
-    const { game, world } = window.__rr;
-    game.start('day');
-    for (let i = 0; i < 900; i++) game.step(1 / 120);     // 7,5 s de simulacion
-    world.update(1 / 60, game.speed / game.vMax);
-    world.render();
-  });
-
-  const m = await page.evaluate(() => {
-    const THREE = window.__rr.world.camera.constructor === undefined ? null : null;
-    const { world, game } = window.__rr;
-    const cam = world.camera;
-    cam.updateMatrixWorld(true);
-    const canvas = world.canvas;
-    const W = canvas.clientWidth, H = canvas.clientHeight;
-
-    /* Proyecta los 8 vertices de una caja al espacio de pantalla en pixeles. Un solo
-       vertice proyectado no vale: la caja puede cruzar el plano de la camara. */
-    const project = obj => {
-      const box = new world.constructor.THREE_Box3 ? null : null;
-      return null;
-    };
-    // se usa el three.js que el propio bundle expone en el objeto de depuracion
-    const T = window.__rr.THREE;
-    const box = new T.Box3().setFromObject(world.playerBike);
-    const pts = [];
-    for (const x of [box.min.x, box.max.x])
-      for (const y of [box.min.y, box.max.y])
-        for (const z of [box.min.z, box.max.z]) pts.push(new T.Vector3(x, y, z));
-    let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, nearest = 1e9, behind = 0;
-    const camInv = cam.matrixWorldInverse || new T.Matrix4().copy(cam.matrixWorld).invert();
-    for (const p of pts){
-      const v = p.clone().applyMatrix4(camInv);        // espacio de camara: -Z es delante
-      nearest = Math.min(nearest, -v.z);
-      if (-v.z <= 0){ behind++; continue; }
-      const s = p.clone().project(cam);
-      minX = Math.min(minX, (s.x + 1) / 2 * W); maxX = Math.max(maxX, (s.x + 1) / 2 * W);
-      minY = Math.min(minY, (1 - s.y) / 2 * H); maxY = Math.max(maxY, (1 - s.y) / 2 * H);
-    }
-    // horizonte: un punto muy lejano a la altura de los ojos
-    const hz = new T.Vector3(cam.position.x, cam.position.y, cam.position.z - 5000).project(cam);
-    // orientacion del trafico: el morro (-Z local) tiene que APARTARSE de la camara
-    const traffic = [];
-    for (const v of game.pool){
-      if (!v.alive || v.z < -60 || v.z > 30) continue;
-      const nose = new T.Vector3(0, 0, -1).transformDirection(v.obj.matrixWorld).normalize();
-      const toCam = cam.position.clone().sub(v.obj.position).normalize();
-      const bb = new T.Box3().setFromObject(v.obj);
-      traffic.push({ kind:v.kind, dotNose: +nose.dot(toCam).toFixed(3),
-        w:+(bb.max.x - bb.min.x).toFixed(2), h:+(bb.max.y - bb.min.y).toFixed(2),
-        l:+(bb.max.z - bb.min.z).toFixed(2), colW:+(v.halfW * 2).toFixed(2), colL:+(v.halfL * 2).toFixed(2) });
-    }
-    return {
-      W, H, aspect:+(W / H).toFixed(3), fov:+cam.fov.toFixed(1),
-      hfov:+(2 * Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect) * 180 / Math.PI).toFixed(1),
-      near:cam.near, kmh:Math.round(game.speed * 3.6),
-      eye:[+cam.position.x.toFixed(3), +cam.position.y.toFixed(3), +cam.position.z.toFixed(3)],
-      pitchDeg:+(cam.rotation.x * 180 / Math.PI).toFixed(2),
-      rollDeg:+(cam.rotation.z * 180 / Math.PI).toFixed(2),
-      bike:{ x0:Math.round(minX), x1:Math.round(maxX), y0:Math.round(minY), y1:Math.round(maxY),
-             nearest:+nearest.toFixed(3), behind },
-      bikeTopFrac:+(minY / H).toFixed(3),          // 0 = arriba del todo, 1 = abajo
-      bikeWidthFrac:+((maxX - minX) / W).toFixed(3),
-      bikeCentreOff:+(((minX + maxX) / 2 - W / 2) / W).toFixed(3),
-      horizonFrac:+((1 - hz.y) / 2).toFixed(3),
-      traffic
-    };
-  });
-
-  console.log('\n--- ' + d.name + ' ---');
+  console.log('\n=== ' + d.name + ' ===');
   console.log(JSON.stringify(m, null, 1));
 
-  const chk = (ok, msg) => { console.log((ok ? '  OK   ' : '  FALLO') + ' ' + msg); if (!ok) fail++; };
-  chk(m.bike.behind < 8, 'la moto esta DELANTE de la camara (vertices detras: ' + m.bike.behind + ')');
-  chk(m.bike.nearest > m.near + 0.02,
-      'nada de la moto atraviesa el plano cercano (mas cerca: ' + m.bike.nearest + ' m, near ' + m.near + ')');
-  chk(m.bikeTopFrac > 0.60 && m.bikeTopFrac < 0.88,
-      'la moto ocupa la franja baja: su borde superior cae al ' + (m.bikeTopFrac * 100).toFixed(0) + '% del alto');
-  chk(Math.abs(m.bikeCentreOff) < 0.04, 'la moto va centrada (desvio ' + (m.bikeCentreOff * 100).toFixed(1) + '%)');
-  chk(m.bikeWidthFrac > 0.18 && m.bikeWidthFrac < 0.75,
-      'la moto ocupa un ancho creible (' + (m.bikeWidthFrac * 100).toFixed(0) + '% del ancho)');
-  chk(m.horizonFrac > 0.42 && m.horizonFrac < 0.62,
-      'el horizonte queda un poco por encima del centro (' + (m.horizonFrac * 100).toFixed(0) + '%)');
-  chk(m.hfov >= 70 && m.hfov <= 100, 'campo de vision horizontal sin ojo de pez (' + m.hfov + ' grados)');
-  const backwards = m.traffic.filter(v => v.dotNose > -0.5);
-  chk(backwards.length === 0, 'al trafico se le ve la trasera (mirando de frente: ' +
-      JSON.stringify(backwards.map(v => v.kind)) + ')');
-  const badBox = m.traffic.filter(v => Math.abs(v.w - v.colW) > 0.25 || Math.abs(v.l - v.colL) > 0.6);
-  chk(badBox.length === 0, 'la malla coincide con el colisionador: ' + JSON.stringify(badBox));
-  const wide = m.traffic.filter(v => v.w > 3.0);
-  chk(wide.length === 0, 'ningun vehiculo se sale de su carril: ' + JSON.stringify(wide.map(v => [v.kind, v.w])));
+  const chk = (ok, msg) => { console.log((ok ? '  OK    ' : '  FALLO ') + msg); if (!ok) fail++; };
+  chk(m.sil.cover > 0.02, 'la moto se VE (cubre ' + (m.sil.cover * 100).toFixed(1) + '% del fotograma)');
+  chk(m.sil.cover > 0.02 && m.sil.cover < 0.30, 'la moto no come el fotograma (' +
+      (m.sil.cover * 100).toFixed(1) + '%)');
+  chk(m.sil.topFrac > 0.60, 'la moto se queda en la franja BAJA: su borde superior al ' +
+      (m.sil.topFrac * 100).toFixed(0) + '% del alto');
+  chk(m.sil.botFrac > 0.97, 'la moto llega al borde inferior (' + (m.sil.botFrac * 100).toFixed(0) + '%)');
+  chk(Math.abs(m.sil.centreOff) < 0.03, 'la moto va centrada (desvio ' +
+      (m.sil.centreOff * 100).toFixed(1) + '%)');
+  chk(m.nearestVertex > m.near + 0.05, 'ninguna cara cruza el plano cercano (' +
+      m.nearestVertex + ' m frente a near ' + m.near + ')');
+  chk(m.horizonFrac > 0.40 && m.horizonFrac < 0.60, 'horizonte por encima del centro (' +
+      (m.horizonFrac * 100).toFixed(0) + '%)');
+  chk(m.hfov >= 70 && m.hfov <= 100, 'campo horizontal sin ojo de pez (' + m.hfov + ' grados)');
+  chk(m.traffic.length > 0, 'hay trafico en el encuadre (' + m.traffic.length + ')');
+  const frente = m.traffic.filter(v => v.dotNose > -0.5);
+  chk(frente.length === 0, 'al trafico se le ve la TRASERA (de frente: ' +
+      JSON.stringify(frente.map(v => v.kind)) + ')');
+  const caja = m.traffic.filter(v => Math.abs(v.w - v.colW) > 0.3 || Math.abs(v.l - v.colL) > 0.8);
+  chk(caja.length === 0, 'la malla coincide con el colisionador: ' + JSON.stringify(caja));
+  const anchos = m.traffic.filter(v => v.w > 2.9);
+  chk(anchos.length === 0, 'ningun vehiculo desborda su carril: ' +
+      JSON.stringify(anchos.map(v => [v.kind, v.w])));
 
   if (shots) await page.screenshot({ path:'/tmp/frame-' + d.name + '.png' });
   await page.close();

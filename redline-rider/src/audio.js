@@ -31,10 +31,12 @@ export const LOOP_FILES = {
   engineHigh: BASE + 'engine/high.mp3',
   wind:       BASE + 'sfx/wind.mp3'
 };
-/* sonilo_music devuelve m4a (AAC), no mp3. Se respeta la extension real: el empaquetador
-   deduce el tipo MIME por extension y ponerle .mp3 a un AAC rompe el data URI. */
+/* La musica va en mp3, NO en m4a. El AAC lo genera sonilo_music por defecto, pero medido en
+   el propio navegador: canPlayType('audio/mp4; codecs="mp4a.40.2"') devuelve "" en Chromium
+   de codigo abierto, que no trae los codecs propietarios. La pista se quedaba en readyState 0
+   y el menu sonaba en silencio en Chromium, en muchas compilaciones de Linux y en Brave. */
 export const MUSIC_FILES = {
-  menu: BASE + 'music/menu.m4a'
+  menu: BASE + 'music/menu.mp3'
 };
 
 /* Mezcla por sonido. Los assets vienen de generaciones independientes y no comparten
@@ -261,6 +263,16 @@ export function refreshVolumes(){
       else if (a.paused){ const r = a.play(); if (r && r.catch) r.catch(() => {}); }
     }
   }
+}
+
+/** Solo para las herramientas de verificacion. Un formato que el navegador no sabe
+    decodificar no lanza ningun error: deja readyState y duration a cero y no suena, asi que
+    esta es la unica forma de comprobar desde fuera que una pista existe de verdad. */
+export function probe(name){
+  if (music.has(name)) return music.get(name);
+  if (loops.has(name)) return loops.get(name);
+  const p = pools.get(name);
+  return p ? p.els[0] : null;
 }
 
 export const currentTrack = () => current;
