@@ -3,7 +3,7 @@
    file://, y el objetivo es que el juego se pueda abrir haciendo doble clic. */
 
 import * as esbuild from 'esbuild';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,34 +28,34 @@ function assetsRef(){
   return sha;
 }
 
-/* Version de un solo fichero: el audio viaja empotrado como data URI.
-   Se deja fuera la segunda pista de gameplay, que es opcional y pesa 4 MB; la UI
-   filtra sola las pistas que no viajan. */
-const EMBED = [
-  'assets/audio/ui/click.mp3',
-  'assets/audio/ui/hover.mp3',
-  'assets/audio/music/menu.mp3',
-  'assets/audio/music/game-aero.mp3',
-  'assets/audio/sfx/bounce.mp3',
-  'assets/audio/sfx/bounce-hard.mp3',
-  'assets/audio/sfx/pass.mp3',
-  'assets/audio/sfx/smash.mp3',
-  'assets/audio/sfx/coin.mp3',
-  'assets/audio/sfx/fire.mp3',
-  'assets/audio/sfx/die.mp3',
-  'assets/audio/sfx/win.mp3',
-  'assets/audio/sfx/portal.mp3'
-];
+/* Version de un solo fichero: los assets viajan empotrados como data URI.
+   Se recorre assets/ en vez de mantener una lista a mano, que se desincroniza en cuanto
+   se anade o quita un modelo. */
+const MIME = { '.mp3':'audio/mpeg', '.m4a':'audio/mp4', '.ogg':'audio/ogg', '.glb':'model/gltf-binary',
+               '.png':'image/png', '.jpg':'image/jpeg', '.webp':'image/webp' };
+
+async function walk(dir, out = []){
+  for (const e of await readdir(dir, { withFileTypes:true })){
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) await walk(p, out);
+    else out.push(p);
+  }
+  return out;
+}
 
 async function embedAssets(){
+  const dir = path.join(root, 'assets');
+  const files = (await walk(dir)).filter(f => MIME[path.extname(f).toLowerCase()]);
+  files.sort();
   const map = {};
   let bytes = 0;
-  for (const rel of EMBED){
-    const buf = await readFile(path.join(root, rel));
+  for (const abs of files){
+    const rel = path.relative(root, abs).split(path.sep).join('/');
+    const buf = await readFile(abs);
     bytes += buf.length;
-    map[rel] = 'data:audio/mpeg;base64,' + buf.toString('base64');
+    map[rel] = 'data:' + MIME[path.extname(abs).toLowerCase()] + ';base64,' + buf.toString('base64');
   }
-  console.log('empotrados', EMBED.length, 'audios,', (bytes / 1048576).toFixed(1), 'MB en crudo');
+  console.log('empotrados', files.length, 'assets,', (bytes / 1048576).toFixed(2), 'MB en crudo');
   return 'window.__HX_ASSETS=' + JSON.stringify(map) + ';\n';
 }
 

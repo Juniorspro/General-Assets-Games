@@ -31,8 +31,10 @@ export const LOOP_FILES = {
   engineHigh: BASE + 'engine/high.mp3',
   wind:       BASE + 'sfx/wind.mp3'
 };
+/* sonilo_music devuelve m4a (AAC), no mp3. Se respeta la extension real: el empaquetador
+   deduce el tipo MIME por extension y ponerle .mp3 a un AAC rompe el data URI. */
 export const MUSIC_FILES = {
-  menu: BASE + 'music/menu.mp3'
+  menu: BASE + 'music/menu.m4a'
 };
 
 /* Mezcla por sonido. Los assets vienen de generaciones independientes y no comparten
@@ -61,6 +63,24 @@ function el(url, loop){
   return a;
 }
 
+/* Un data URI largo no siempre lo acepta un <audio> (la pista de musica de 1,5 MB en
+   base64 se quedaba en readyState 0 y no sonaba). Se pasa por Blob: el navegador recibe
+   un recurso con su tipo real, y ademas el pool comparte una sola copia en memoria.
+   fetch sobre data: esta permitido incluso en file://, asi que no rompe el modo local. */
+const blobCache = new Map();
+async function playable(url){
+  if (!url.startsWith('data:')) return url;
+  if (blobCache.has(url)) return blobCache.get(url);
+  try {
+    const r = await fetch(url);
+    const b = URL.createObjectURL(await r.blob());
+    blobCache.set(url, b);
+    return b;
+  } catch (e) {
+    return url;                            // si falla, se intenta con el data URI tal cual
+  }
+}
+
 /** Espera datos suficientes sin colgar la carga. No llama a load(): asignar .src con
     preload='auto' ya inicia la descarga, y repetirla la aborta y la reinicia. */
 function ready(a, timeout = 15000){
@@ -84,8 +104,9 @@ function ready(a, timeout = 15000){
     un blob y todas salen de ahi; por ruta directa cada copia lanzaria su propia peticion. */
 async function poolFor(name){
   const direct = resolve(SFX_FILES[name]);
-  let url = direct;
-  if (!direct.startsWith('data:')){
+  let url = await playable(direct);
+  if (url === direct && !direct.startsWith('data:')){
+    // servido por ruta: una sola descarga a blob para las cuatro copias del pool
     try {
       const r = await fetch(direct);
       if (r.ok) url = URL.createObjectURL(await r.blob());
@@ -98,7 +119,7 @@ async function poolFor(name){
 }
 
 async function loopFor(name){
-  const a = el(resolve(LOOP_FILES[name]), true);
+  const a = el(await playable(resolve(LOOP_FILES[name])), true);
   a.volume = 0;
   loops.set(name, a);
   await ready(a);
@@ -117,7 +138,7 @@ export function preloadMusic(){
 
 async function loadMusic(name){
   if (!MUSIC_FILES[name] || music.has(name)) return music.get(name);
-  const a = el(resolve(MUSIC_FILES[name]), true);
+  const a = el(await playable(resolve(MUSIC_FILES[name])), true);
   a.volume = 0;
   music.set(name, a);
   await ready(a, 20000);
