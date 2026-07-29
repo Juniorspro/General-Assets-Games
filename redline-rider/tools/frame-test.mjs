@@ -46,12 +46,17 @@ const DEVICES = [
   { name:'escritorio',     w:1280, h:720, dpr:1, touch:false }
 ];
 
-const RUN = () => {                       // 10 s a gas abierto, sin depender de la entrada
+const RUN = steer => {          // 10 s a gas abierto, sin depender de la entrada real
   const { game, world, controls } = window.__rr;
   game.start('day');
   controls.input.throttle = 1;
-  for (let i = 0; i < 1200; i++) game.step(1 / 120);
+  controls.input.steer = steer;
+  for (let i = 0; i < 1200; i++){
+    game.step(1 / 120);
+    game.x = Math.max(-5.4, Math.min(5.4, game.x));   // que no se pegue al quitamiedos
+  }
   world.update(1 / 60, game.speed / game.vMax);
+  return { lean:+game.lean.toFixed(3) };
 };
 
 const MEASURE = () => {
@@ -128,10 +133,13 @@ const MEASURE = () => {
 
   const traffic = [];
   for (const v of game.pool){
-    if (!v.alive || v.z < -80 || v.z > 25) continue;
+    /* Solo los que van DELANTE: a los de detras se les ve el morro y es correcto. */
+    if (!v.alive || v.z < -80 || v.z > -3) continue;
     const nose = new V3(0, 0, -1).transformDirection(v.obj.matrixWorld).normalize();
     const toCam = cam.position.clone().sub(v.obj.position).normalize();
-    const bx = worldBox(v.obj);
+    /* children[0] es la malla: la sombra de contacto y el halo son hijos del envoltorio y
+       falsean la medida (la sombra mide 1,7 veces el ancho declarado). */
+    const bx = worldBox(v.obj.children[0]);
     traffic.push({ kind:v.kind, z:+v.z.toFixed(1), dotNose:+nose.dot(toCam).toFixed(3),
       w:+(bx.mx[0] - bx.mn[0]).toFixed(2), h:+(bx.mx[1] - bx.mn[1]).toFixed(2),
       l:+(bx.mx[2] - bx.mn[2]).toFixed(2), colW:+(v.halfW * 2).toFixed(2), colL:+(v.halfL * 2).toFixed(2),
@@ -153,6 +161,7 @@ const MEASURE = () => {
     camInsideBox:cam.position.z > bikeBox.mn[2] && cam.position.z < bikeBox.mx[2] &&
                  cam.position.y < bikeBox.mx[1],
     horizonFrac:+((1 - hz.y) / 2).toFixed(3),
+    lean:+((world.bikeGroup.rotation.z * 180 / Math.PI)).toFixed(1),
     sil, traffic
   };
 };
@@ -165,7 +174,7 @@ for (const d of DEVICES){
   await page.goto(base + '/index.html?debug=1');
   await page.waitForFunction('window.__rr && Object.keys(window.__rr.world.models).length >= 6',
                              null, { timeout:120000 });
-  await page.evaluate(RUN);
+  await page.evaluate(RUN, 0);
   const m = await page.evaluate(MEASURE);
 
   console.log('\n=== ' + d.name + ' ===');
@@ -196,6 +205,20 @@ for (const d of DEVICES){
       JSON.stringify(anchos.map(v => [v.kind, v.w])));
 
   if (shots) await page.screenshot({ path:'/tmp/frame-' + d.name + '.png' });
+
+  /* Y ahora tumbada: la moto gira sobre la huella de los neumaticos, asi que si la camara
+     no acompana el deposito se le va de debajo y la moto queda descentrada en cada curva. */
+  await page.evaluate(RUN, 1);
+  const c = await page.evaluate(MEASURE);
+  console.log(' tumbada: lean=' + c.lean + ' grados  roll=' + c.rollDeg +
+              '  centro=' + (c.sil.centreOff * 100).toFixed(1) + '%  cobertura=' +
+              (c.sil.cover * 100).toFixed(1) + '%  vertice mas cercano=' + c.nearestVertex);
+  chk(Math.abs(c.sil.centreOff) < 0.10, 'en curva la moto sigue centrada (desvio ' +
+      (c.sil.centreOff * 100).toFixed(1) + '%)');
+  chk(c.sil.cover > 0.015, 'en curva la moto sigue en el encuadre (' +
+      (c.sil.cover * 100).toFixed(1) + '%)');
+  chk(c.nearestVertex > c.near + 0.05, 'en curva nada cruza el plano cercano (' + c.nearestVertex + ')');
+  if (shots) await page.screenshot({ path:'/tmp/frame-' + d.name + '-curva.png' });
   await page.close();
 }
 

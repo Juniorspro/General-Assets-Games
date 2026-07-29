@@ -137,12 +137,12 @@ function boot(){
 
   const relayout = () => { controls.layoutStage(); world.resize(); };
   addEventListener('resize', relayout, { passive:true });
-  /* Tras girar el aparato el navegador informa del tamano nuevo con retardo: medir en el
-     propio evento devuelve todavia el tamano viejo, asi que se mide dos veces. */
+  /* orientationchange se dispara ANTES de que el navegador actualice clientWidth y
+     clientHeight, y iOS anima la barra de herramientas durante un rato despues. Una sola
+     medida en el evento devuelve el tamano viejo, asi que se repite en cascada. */
   addEventListener('orientationchange', () => {
-    relayout();
-    setTimeout(relayout, 180);
-    setTimeout(relayout, 500);
+    requestAnimationFrame(relayout);
+    for (const ms of [60, 200, 450, 800]) setTimeout(relayout, ms);
   }, { passive:true });
   if (window.visualViewport) visualViewport.addEventListener('resize', relayout);
   document.addEventListener('visibilitychange', () => {

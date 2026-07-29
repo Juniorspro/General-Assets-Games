@@ -8,16 +8,16 @@
   :root{
     --accent:#ff6a1a; --ink:#07080c; --panel:rgba(11,15,23,.82); --line:rgba(255,255,255,.13);
     --text:#eef2f8; --dim:#8b97a8;
-    --sa-t:env(safe-area-inset-top); --sa-r:env(safe-area-inset-right);
-    --sa-b:env(safe-area-inset-bottom); --sa-l:env(safe-area-inset-left);
+    --sa-t:env(safe-area-inset-top, 0px); --sa-r:env(safe-area-inset-right, 0px);
+    --sa-b:env(safe-area-inset-bottom, 0px); --sa-l:env(safe-area-inset-left, 0px);
   }
   /* Con el escenario girado 90 grados, el borde fisico de arriba pasa a ser el borde
      DERECHO del juego. Sin remapear las muescas el HUD se aparta del lado equivocado y
      acaba justo debajo de la camara frontal. Local +x va a la pantalla hacia abajo y
      local +y hacia la izquierda, de donde sale este cambio de nombres. */
   html.rot{
-    --sa-t:env(safe-area-inset-right); --sa-r:env(safe-area-inset-bottom);
-    --sa-b:env(safe-area-inset-left);  --sa-l:env(safe-area-inset-top);
+    --sa-t:env(safe-area-inset-right, 0px); --sa-r:env(safe-area-inset-bottom, 0px);
+    --sa-b:env(safe-area-inset-left, 0px);  --sa-l:env(safe-area-inset-top, 0px);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%;overflow:hidden;background:#07080c;color:var(--text);
@@ -31804,6 +31804,7 @@ void main() {
   var gyroSteer = 0;
   var stage = null;
   var rotated = false;
+  var stageW = 0;
   var keys = /* @__PURE__ */ new Set();
   var touchSteer = 0;
   var btnSteer = 0;
@@ -31812,26 +31813,30 @@ void main() {
     stage = el2;
   }
   var isRotated = () => rotated;
+  var coarsePointer = () => (navigator.maxTouchPoints || 0) > 0 || window.matchMedia && matchMedia("(pointer: coarse)").matches;
   function layoutStage() {
-    if (!stage) return { w: innerWidth, h: innerHeight };
-    const portrait = innerHeight > innerWidth;
+    const vw = document.documentElement.clientWidth || innerWidth;
+    const vh = document.documentElement.clientHeight || innerHeight;
+    if (!stage) return { w: vw, h: vh };
+    const portrait = vh > vw && coarsePointer();
     if (portrait !== rotated && gyro.everActive) calibrateGyro();
     rotated = portrait;
+    stageW = vw;
     if (portrait) {
-      stage.style.width = innerHeight + "px";
-      stage.style.height = innerWidth + "px";
-      stage.style.transform = "translateX(" + innerWidth + "px) rotate(90deg)";
+      stage.style.width = vh + "px";
+      stage.style.height = vw + "px";
+      stage.style.transform = "translateX(" + vw + "px) rotate(90deg)";
     } else {
-      stage.style.width = innerWidth + "px";
-      stage.style.height = innerHeight + "px";
-      stage.style.transform = "none";
+      stage.style.width = vw + "px";
+      stage.style.height = vh + "px";
+      stage.style.transform = "rotate(0deg)";
     }
     document.documentElement.classList.toggle("rot", portrait);
     return { w: stage.clientWidth, h: stage.clientHeight };
   }
   function mapPointer(e) {
     if (!rotated) return { x: e.clientX, y: e.clientY };
-    return { x: e.clientY, y: innerWidth - e.clientX };
+    return { x: e.clientY, y: (stageW || innerWidth) - e.clientX };
   }
   var gyroAvailable = () => gyro.available;
   var gyroGranted = () => gyro.granted;
@@ -35995,9 +36000,8 @@ void main() {
     };
     addEventListener("resize", relayout, { passive: true });
     addEventListener("orientationchange", () => {
-      relayout();
-      setTimeout(relayout, 180);
-      setTimeout(relayout, 500);
+      requestAnimationFrame(relayout);
+      for (const ms of [60, 200, 450, 800]) setTimeout(relayout, ms);
     }, { passive: true });
     if (window.visualViewport) visualViewport.addEventListener("resize", relayout);
     document.addEventListener("visibilitychange", () => {

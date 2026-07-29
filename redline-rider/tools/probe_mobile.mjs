@@ -250,6 +250,21 @@ const land = await page.evaluate(() => ({
 console.log('8 horizontal:', JSON.stringify(land));
 await page.screenshot({ path: SHOT + 'rr-horizontal.png' });
 
+/* ---------- 9. un escritorio estrecho NO debe girarse ---------- */
+/* Una ventana de ordenador puede medir mas alto que ancho, y girar el juego 90 grados ahi
+   seria absurdo: la condicion tiene que exigir tambien un aparato de dedo. */
+const pcPage = await browser.newPage({ viewport: { width: 520, height: 900 }, hasTouch: false });
+await pcPage.goto(base + FILE + '?debug=1');
+await pcPage.waitForFunction('window.__rr && window.__rr.controls', { timeout: 30000 });
+await pcPage.waitForTimeout(500);
+const pc = await pcPage.evaluate(() => ({
+  rot: document.documentElement.classList.contains('rot'),
+  transform: getComputedStyle(document.getElementById('stage')).transform,
+  dedo: (navigator.maxTouchPoints || 0) > 0 || matchMedia('(pointer: coarse)').matches
+}));
+console.log('9 escritorio 520x900:', JSON.stringify(pc), pc.rot ? 'FALLA' : 'OK');
+await pcPage.close();
+
 console.log('errores:', errs.length ? errs.slice(0, 6) : 'ninguno');
 await browser.close();
 server.close();

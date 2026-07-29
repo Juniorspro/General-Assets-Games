@@ -34,6 +34,11 @@ const ZERO_MIN_FLAT = 0.30;     // no se calibra con el movil casi plano: ahi el
 let gyroSteer = 0;
 let stage = null;               // envoltorio rotado, para mapear el puntero
 let rotated = false;
+/* El ancho con el que se coloco el escenario, cacheado. mapPointer NO debe releer innerWidth
+   por su cuenta: serian dos medidas independientes del mismo numero, y si cambia entre la
+   colocacion y el toque (barra de herramientas que se recoge, teclado virtual) el dedo se
+   mapea desplazado justo esa diferencia. */
+let stageW = 0;
 const keys = new Set();
 let touchSteer = 0;
 let btnSteer = 0;
@@ -48,26 +53,41 @@ export function setStage(el){ stage = el; }
 
 export const isRotated = () => rotated;
 
+/** Coarse: aparato de dedo. Una ventana de escritorio estrecha tambien mide mas alto que
+    ancho, y girar el juego 90 grados en un ordenador seria absurdo. */
+const coarsePointer = () => (navigator.maxTouchPoints || 0) > 0 ||
+  (window.matchMedia && matchMedia('(pointer: coarse)').matches);
+
 export function layoutStage(){
-  if (!stage) return { w:innerWidth, h:innerHeight };
-  const portrait = innerHeight > innerWidth;
+  /* Se mide con documentElement.clientWidth/clientHeight, que es el viewport de MAQUETACION:
+     es lo que vale para un elemento fijo a pantalla completa, y a diferencia de innerWidth no
+     incluye la barra de desplazamiento. */
+  const vw = document.documentElement.clientWidth || innerWidth;
+  const vh = document.documentElement.clientHeight || innerHeight;
+  if (!stage) return { w:vw, h:vh };
+  const portrait = vh > vw && coarsePointer();
   /* Si la presentacion pasa de girada a no girada es porque el jugador acaba de girar el
      aparato 90 grados de verdad, asi que su postura neutra ha girado con el y el centro
      viejo queda perpendicular al nuevo. Hay que retomarlo. */
   if (portrait !== rotated && gyro.everActive) calibrateGyro();
   rotated = portrait;
+  stageW = vw;
   if (portrait){
     /* El escenario mide al reves (ancho = alto de pantalla). rotate(90deg) con origen en
        0,0 manda el contenido fuera de pantalla por la izquierda, y translateX lo devuelve.
        Se aplica el translate PRIMERO en la lista porque las transformaciones se leen de
        derecha a izquierda: primero gira, despues se desplaza. */
-    stage.style.width = innerHeight + 'px';
-    stage.style.height = innerWidth + 'px';
-    stage.style.transform = 'translateX(' + innerWidth + 'px) rotate(90deg)';
+    stage.style.width = vh + 'px';
+    stage.style.height = vw + 'px';
+    stage.style.transform = 'translateX(' + vw + 'px) rotate(90deg)';
   } else {
-    stage.style.width = innerWidth + 'px';
-    stage.style.height = innerHeight + 'px';
-    stage.style.transform = 'none';
+    stage.style.width = vw + 'px';
+    stage.style.height = vh + 'px';
+    /* rotate(0deg) y no none: cualquier transform distinto de none convierte al envoltorio en
+       bloque contenedor de sus descendientes position:fixed. Con none, esos hijos pasarian a
+       medir el viewport en horizontal y el escenario en vertical, y el CSS se comportaria
+       distinto segun la orientacion por un motivo que no tiene nada que ver con girar. */
+    stage.style.transform = 'rotate(0deg)';
   }
   /* Las muescas de pantalla cambian de lado al girar: lo que fisicamente es el borde
      superior pasa a ser el borde DERECHO del juego. Sin remapear, el HUD se aparta del
@@ -82,7 +102,7 @@ export function layoutStage(){
     Con origen 0 0 y translateX(W) rotate(90deg), el local (x,y) acaba en (W - y, x). */
 export function mapPointer(e){
   if (!rotated) return { x:e.clientX, y:e.clientY };
-  return { x:e.clientY, y:innerWidth - e.clientX };
+  return { x:e.clientY, y:(stageW || innerWidth) - e.clientX };
 }
 
 /* ---------- giroscopio ---------- */
