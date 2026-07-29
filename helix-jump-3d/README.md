@@ -6,14 +6,22 @@ completo: carga de assets → selección de idioma → menú principal.
 
 ## Jugar
 
-Abre `index.html`. Funciona con doble clic (`file://`) y también servido por http:
+Hay dos versiones, las dos funcionan con doble clic (`file://`) y servidas por http:
+
+| Fichero | Peso | Qué es |
+|---|---|---|
+| `helix-jump-3d.html` | 8,1 MB | **Un solo fichero, nada más.** Audio empotrado en base64. Para pasarlo por chat o llevarlo en un USB. |
+| `index.html` + `assets/` | 641 KB + 9,5 MB | Versión de trabajo. El audio se sirve aparte, así que carga progresiva y cachea mejor. |
 
 ```bash
 npm run serve       # http://localhost:8080
 ```
 
-El juego va empaquetado en un único `index.html` (three.js incluido). No necesita
-instalar nada para jugar; `npm install` sólo hace falta para recompilar.
+Ninguna necesita instalar nada para jugar; `npm install` sólo hace falta para recompilar.
+
+La única diferencia de contenido: la versión de un fichero no lleva la segunda pista de
+gameplay (*Rooftop*, 4 MB de los 8), porque es opcional. El selector de pista se ajusta
+solo a lo que viaja en cada build, no aparece una opción muda.
 
 ## Controles
 
@@ -89,8 +97,9 @@ vendor/three/     three.js 0.185.1 (licencia MIT incluida)
 
 ```bash
 npm install
-npm run build     # -> index.html
-npm run dev       # igual, sin minificar
+npm run build     # -> index.html (audio en assets/)
+npm run single    # -> helix-jump-3d.html (audio empotrado en base64)
+npm run dev       # como build, sin minificar
 ```
 
 Se compila a un IIFE clásico a propósito: un `<script type="module">` no carga desde

@@ -24,6 +24,14 @@ export const MUSIC_FILES = {
   rooftop: BASE + 'music/game-rooftop.mp3'
 };
 
+/* En la version de un solo fichero el audio viaja empotrado como data URI. El mapa lo
+   inyecta build.mjs --single justo antes del bundle; si no existe, se usan las rutas. */
+const ASSETS = (typeof window !== 'undefined' && window.__HX_ASSETS) || null;
+const resolve = url => (ASSETS && ASSETS[url]) || url;
+
+/** Una pista solo esta disponible si su fichero existe o va empotrado. */
+export const trackAvailable = id => id === 'none' || !ASSETS || !!ASSETS[MUSIC_FILES[id]];
+
 /* Mezcla por sonido: los assets vienen de packs distintos y no comparten nivel. */
 const GAIN = {
   click:0.5, hover:0.25, bounce:0.65, bounceHard:0.8, pass:0.35,
@@ -71,12 +79,14 @@ function ready(a, timeout = 12000){
     una vez a un blob y todas las copias salen de ahi; con la ruta directa cada copia
     lanzaria su propia peticion. En file:// fetch esta bloqueado y se usa la ruta tal cual. */
 async function poolFor(name){
-  const direct = SFX_FILES[name];
+  const direct = resolve(SFX_FILES[name]);
   let url = direct;
-  try {
-    const r = await fetch(direct);
-    if (r.ok) url = URL.createObjectURL(await r.blob());
-  } catch (e) { /* file:// -> se cargan por ruta */ }
+  if (!direct.startsWith('data:')){          // empotrado ya no necesita descarga
+    try {
+      const r = await fetch(direct);
+      if (r.ok) url = URL.createObjectURL(await r.blob());
+    } catch (e) { /* file:// -> se cargan por ruta */ }
+  }
   const loop = name === 'fire';
   const els = [];
   for (let i = 0; i < POOL_SIZE; i++) els.push(el(url, loop));
@@ -92,15 +102,15 @@ export function musicTasks(){
   // solo el menu y la pista elegida entran en la carga inicial; el resto va en diferido
   const names = ['menu'];
   if (state.track && state.track !== 'none') names.push(state.track);
-  return names.map(name => ({
+  return names.filter(trackAvailable).map(name => ({
     label: 'music:' + name,
     run: async () => { await loadMusic(name); }
   }));
 }
 
 async function loadMusic(name){
-  if (!MUSIC_FILES[name] || music.has(name)) return music.get(name);
-  const a = el(MUSIC_FILES[name], true);
+  if (!MUSIC_FILES[name] || music.has(name) || !trackAvailable(name)) return music.get(name);
+  const a = el(resolve(MUSIC_FILES[name]), true);
   a.volume = 0;
   music.set(name, a);
   await ready(a, 20000);

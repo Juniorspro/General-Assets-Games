@@ -13,6 +13,8 @@ const FIXED = 1 / 120;
 function boot(){
   load();
   setLang(state.lang || detectLang());
+  // una pista guardada que no viaja en este build volveria muda: se cae a la que si esta
+  if (!audio.trackAvailable(state.track)) state.track = audio.trackAvailable('aero') ? 'aero' : 'none';
 
   const canvas = document.getElementById('gl');
   let world;

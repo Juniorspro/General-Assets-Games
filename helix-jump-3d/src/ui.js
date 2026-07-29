@@ -203,8 +203,10 @@ export class UI {
       () => getLang(),
       v => { setLang(v); state.lang = v; this.applyI18n(); });
 
+    // en la version de un solo fichero no viajan todas las pistas
+    this.tracks = TRACKS.filter(x => audio.trackAvailable(x.id));
     this.repaint.track = this.seg($('set-track'),
-      TRACKS.map(x => ({ label:t(x.key), value:x.id })),
+      this.tracks.map(x => ({ label:t(x.key), value:x.id })),
       () => state.track,
       v => { state.track = v; this.h.onTrack && this.h.onTrack(v); });
 
@@ -245,7 +247,7 @@ export class UI {
     for (const k in this.repaint) this.repaint[k]();
     // los textos de las opciones dependen del idioma activo
     const tr = $('set-track').children, q = $('set-quality').children;
-    TRACKS.forEach((x, i) => { if (tr[i]) tr[i].textContent = t(x.key); });
+    (this.tracks || TRACKS).forEach((x, i) => { if (tr[i]) tr[i].textContent = t(x.key); });
     ['quality.low','quality.med','quality.high'].forEach((k, i) => { if (q[i]) q[i].textContent = t(k); });
     [$('set-haptics'), $('set-invert')].forEach(host => {
       if (host.children[0]) host.children[0].textContent = t('common.on');
