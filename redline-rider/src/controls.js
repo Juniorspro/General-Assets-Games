@@ -117,7 +117,22 @@ export function layoutStage(){
      estan la distancia y la puntuacion. El CSS de .rot ya hace ese cambio; el comentario
      anterior decia lo contrario y solo servia para "arreglarlo" al reves. */
   document.documentElement.classList.toggle('rot', portrait);
-  return { w: stage.clientWidth, h: stage.clientHeight };
+
+  /* Medidas del ESCENARIO para el CSS. Las unidades del navegador no sirven aqui: vh y vmax miran
+     el viewport de verdad, y con la presentacion girada el navegador ve un movil de pie mientras
+     el juego se dibuja tumbado, asi que una media query de orientacion dice justo lo contrario de
+     lo que hace falta. Estas dos variables y estas dos clases son la unica forma de escribir CSS
+     que reaccione a la forma en la que el jugador ve el juego.
+
+     wide  el escenario es claramente mas ancho que alto: las pantallas se reparten en dos
+           columnas en vez de apilar una sola columna estrecha en el centro.
+     short poco alto util: se recortan rellenos, huecos y tamanos de letra. */
+  const w = stage.clientWidth, h = stage.clientHeight;
+  stage.style.setProperty('--stw', w + 'px');
+  stage.style.setProperty('--sth', h + 'px');
+  stage.classList.toggle('wide', h > 0 && w / h >= 1.5);
+  stage.classList.toggle('short', h < 460);
+  return { w, h };
 }
 
 /** Punto de pantalla -> coordenadas locales del escenario rotado.

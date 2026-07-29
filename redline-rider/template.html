@@ -71,6 +71,7 @@
   .btn.small{width:auto;padding:9px 14px;font-size:12px;border-radius:11px}
   .btn[disabled]{opacity:.42;cursor:default}
   .btnstack{display:flex;flex-direction:column;gap:9px;width:min(94%,330px)}
+  .back{width:min(94%,330px)}
 
   .stats{display:flex;gap:8px;width:min(94%,330px)}
   .stat{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:14px;
@@ -109,6 +110,8 @@
     font-size:10.5px;color:var(--dim)}
   .track{height:5px;border-radius:99px;background:rgba(255,255,255,.13);overflow:hidden}
   .track>i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+  .bfoot{margin-top:9px}
+  .ups{margin-top:10px}
   .uprow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
   .pips{display:flex;gap:3px}
   .pip{width:13px;height:5px;border-radius:2px;background:rgba(255,255,255,.16)}
@@ -130,6 +133,139 @@
   input[type=range]::-moz-range-thumb{width:17px;height:17px;border:0;border-radius:50%;background:var(--accent)}
   .danger{color:#ff8080!important;border-color:rgba(255,120,120,.4)!important}
   .note{font-size:10.5px;color:var(--dim);text-align:center;margin-top:9px;line-height:1.55;white-space:pre-line}
+
+  /* ---- maquetacion horizontal ----
+     El juego SIEMPRE se presenta tumbado, asi que "apretado" no es un caso raro: es EL caso.
+     Una sola columna centrada en un escenario de 844x390 deja los dos lados vacios y encima no
+     cabe a lo alto. Medido con tools/probe_layout.mjs antes de tocar nada: el menu se salia
+     25-53 px, los resultados 62-88, y ninguna pantalla pasaba del 47% del ancho mientras el
+     garaje pedia 474 px de scroll. En horizontal las pantallas se reparten en DOS columnas:
+     identidad y cifras a la izquierda, lo que hay que pulsar a la derecha.
+
+     Las clases wide y short las pone controls.layoutStage() midiendo el escenario, NO una media
+     query: con la presentacion girada el navegador ve un movil de pie mientras el juego se dibuja
+     tumbado, asi que una media query de orientacion acierta exactamente al reves. */
+
+  /* Poco alto util: se recorta todo lo que solo es aire. */
+  #stage.short .screen{gap:10px;
+    padding:calc(10px + var(--sa-t)) calc(14px + var(--sa-r))
+            calc(10px + var(--sa-b)) calc(14px + var(--sa-l))}
+  #stage.short .panel{padding:14px;border-radius:18px}
+  #stage.short .panel.tall{max-height:min(92%,600px)}
+  #stage.short .ptitle{font-size:12.5px;margin-bottom:9px}
+  #stage.short .btn{padding:11px 16px;border-radius:13px}
+  #stage.short .btn.ghost{padding:10px 15px}
+  #stage.short .btnstack{gap:7px}
+  #stage.short .brand i{margin-top:4px}
+  #stage.short .row{padding:8px 2px}
+  #stage.short .note{margin-top:6px}
+  /* Los mandos de tocar NO se encogen con la pantalla. Un segmentado de 24 px de alto es la
+     mitad de lo que un pulgar acierta sin mirar, y en horizontal es justo donde el aparato se
+     sujeta con las dos manos y se toca de refilon. */
+  .seg button{min-height:34px}
+  .btn.small{min-height:34px}
+
+  /* ---- dos columnas ---- */
+  #stage.wide #s-menu, #stage.wide #s-pause, #stage.wide #s-boot, #stage.wide #s-lang,
+  #stage.wide #s-quality, #stage.wide #s-results, #stage.wide #s-garage,
+  #stage.wide #s-settings, #stage.wide #s-credits{
+    display:grid;align-content:center;justify-content:center;
+    column-gap:clamp(16px,4vmin,48px);row-gap:9px}
+
+  /* Menu: marca arriba y cifras debajo en la izquierda, los cinco botones en la derecha. Apilados
+     los ocho elementos no caben en 358 px de alto util; en dos columnas sobran 100. */
+  #stage.wide #s-menu{grid-template-columns:minmax(0,auto) minmax(230px,320px);
+    grid-template-areas:"brand acciones" "stats acciones"}
+  /* La marca y las cifras se alinean a la IZQUIERDA en su columna: centradas cada una respecto a
+     si misma, quedaban descolgadas entre ellas y parecia que estuvieran puestas a mano. */
+  #stage.wide #s-menu .brand{grid-area:brand;align-self:end;text-align:left}
+  #stage.wide #s-menu .brand i{text-indent:0}
+  #stage.wide #s-menu .stats{grid-area:stats;align-self:start;width:100%}
+  #stage.wide #s-menu .btnstack{grid-area:acciones;align-self:center;width:100%}
+
+  /* Velo por la izquierda, solo en el menu. El menu no lleva atenuacion a proposito, porque la
+     gracia es ver la moto; pero con la marca a un lado y un cielo de atardecer detras, un texto
+     que degrada de blanco a naranja sobre naranja no se lee. El velo cubre la mitad del texto y
+     deja la moto y la carretera despejadas. */
+  #stage.wide #s-menu{background:linear-gradient(90deg,rgba(4,6,11,.78) 0%,rgba(4,6,11,.55) 38%,
+    rgba(4,6,11,.12) 64%,rgba(4,6,11,0) 82%)}
+  /* Sombra corta y oscura pegada a la letra, ademas de la difusa: la difusa da profundidad pero no
+     separa la letra de un fondo del mismo color. Y line-height a 1: con .9 sobre una letra de 64 px
+     la caja queda mas corta que el propio texto y el subtitulo se sube encima del rabo de las
+     letras de arriba, que es exactamente lo que se ve apretado. */
+  #stage.wide .brand b{line-height:1;
+    filter:drop-shadow(0 2px 3px rgba(0,0,0,.85)) drop-shadow(0 6px 18px rgba(0,0,0,.5))}
+  #stage.wide .brand i{margin-top:7px}
+
+  #stage.wide #s-pause{grid-template-columns:minmax(0,auto) minmax(210px,300px);align-items:center}
+  #stage.wide #s-pause .btnstack{width:100%}
+
+  #stage.wide #s-lang, #stage.wide #s-quality{
+    grid-template-columns:minmax(0,auto) minmax(250px,420px);align-items:center}
+  #stage.wide #s-lang .panel, #stage.wide #s-quality .panel{width:100%}
+
+  /* Arranque: la marca a la izquierda y la barra, el porcentaje y el consejo en la derecha, en la
+     misma columna. El consejo se alinea a la izquierda porque centrado a media pantalla salta de
+     sitio en cada frase. */
+  #stage.wide #s-boot{grid-template-columns:minmax(0,auto) minmax(230px,360px);
+    grid-template-rows:auto auto auto auto;row-gap:7px}
+  #stage.wide #s-boot .brand{grid-column:1;grid-row:1/span 4;align-self:center;text-align:right}
+  #stage.wide #s-boot #bar{grid-column:2;grid-row:1;width:100%}
+  #stage.wide #s-boot #boot-pct{grid-column:2;grid-row:2;text-align:left}
+  #stage.wide #s-boot #boot-tip{grid-column:2;grid-row:3;max-width:100%;text-align:left;min-height:2.8em}
+  #stage.wide #s-boot #boot-go{grid-column:2;grid-row:4;text-align:left}
+
+  /* Resultados: tres bloques a lo ancho. La puntuacion grande a la izquierda, el desglose en el
+     medio y los dos botones a la derecha. Apilado se salia 88 px, o sea que el ultimo boton
+     quedaba fuera de la pantalla justo cuando hay que pulsarlo. */
+  #stage.wide #s-results{grid-template-columns:minmax(0,1fr) minmax(190px,260px);align-items:center}
+  #stage.wide #s-results .panel{width:100%;max-width:none;display:grid;
+    grid-template-columns:minmax(96px,auto) minmax(0,1fr);
+    grid-template-rows:auto auto auto auto;column-gap:clamp(12px,3vmin,26px);align-items:center}
+  #stage.wide #s-results .ptitle{grid-column:1/-1;grid-row:1;margin-bottom:4px;text-align:left}
+  #stage.wide #s-results .lab{grid-column:1;grid-row:2;align-self:end}
+  #stage.wide #s-results .big{grid-column:1;grid-row:3}
+  #stage.wide #s-results .record{grid-column:1;grid-row:4;align-self:start;margin-top:2px}
+  #stage.wide #s-results .kvs{grid-column:2;grid-row:2/span 3;margin-top:0}
+  #stage.wide #s-results .btnstack{width:100%}
+
+  /* Garaje, ajustes y creditos: el panel ocupa el ancho de verdad y el boton de volver se va a
+     una columna propia a la derecha, que es donde cae el pulgar. */
+  /* La fila se declara con minmax(0,1fr) y NO en automatico. Con una fila automatica el alto sale
+     del contenido, asi que el max-height del panel no ataba nada: dejaba de haber scroll interno
+     y el panel crecia fuera de la pantalla (236 px de garaje por debajo del borde). Con la fila de
+     alto definido, el 100% del panel ya significa algo y la lista vuelve a desplazarse dentro. */
+  #stage.wide #s-garage, #stage.wide #s-settings, #stage.wide #s-credits{
+    grid-template-columns:minmax(0,1fr) minmax(110px,160px);
+    grid-template-rows:minmax(0,1fr);align-items:center}
+  /* Los creditos son tres frases: estirarlos a lo ancho de la pantalla deja un panel plano y
+     vacio. Se les pone techo y el par panel-boton se centra. */
+  #stage.wide #s-credits{grid-template-columns:minmax(0,540px) minmax(110px,160px)}
+  #stage.wide #s-garage .panel, #stage.wide #s-settings .panel, #stage.wide #s-credits .panel{
+    width:100%;max-width:none;align-self:center}
+  #stage.wide #s-garage .panel.tall, #stage.wide #s-settings .panel.tall{max-height:100%}
+  #stage.wide .back{width:100%;align-self:center}
+
+  /* El contenido largo pasa a dos columnas: con el panel al ancho de la pantalla, una sola
+     columna deja media pantalla en blanco y obliga a 300-500 px de scroll. */
+  #stage.wide #s-settings .scroll{display:grid;grid-template-columns:1fr 1fr;
+    column-gap:clamp(14px,3vmin,30px);align-content:start}
+  /* El borrado va a lo ancho: es una accion aparte y no debe compartir fila con un ajuste. La del
+     sensor NO, aunque lleve barra y boton: ocupando las dos columnas obligaba a la fila anterior a
+     quedarse sola y dejaba un hueco vacio en medio de la lista. */
+  #stage.wide #s-settings #row-wipe{grid-column:1/-1}
+  /* El garaje se parte DENTRO de cada tarjeta, no en dos columnas de tarjetas: prestaciones a la
+     izquierda y mejoras a la derecha. Con dos columnas de tarjetas, la moto en uso (que trae lista
+     de mejoras) media el doble que la que solo se puede comprar y dejaba un hueco enorme al lado,
+     con la tercera moto empujada fuera de la vista. Partiendo la tarjeta, cada una mide la mitad
+     de alto y ocupa el ancho entero. */
+  #stage.wide #bikelist .bike{display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    column-gap:clamp(12px,2.5vmin,24px);align-content:start}
+  #stage.wide #bikelist .bike>*{grid-column:1}
+  #stage.wide #bikelist .bike>.ups{grid-column:2;grid-row:1/span 7;margin-top:0}
+  #stage.short .barrow{margin-top:5px}
+  #stage.short .uprow{margin-top:6px}
 
   /* ---- HUD ---- */
   #hud{position:absolute;inset:0;opacity:0;visibility:hidden;transition:opacity .25s}
@@ -328,7 +464,7 @@
       <div class="ptitle" data-i18n="garage.title"></div>
       <div class="scroll" id="bikelist"></div>
     </div>
-    <button class="btn ghost" style="width:min(94%,330px)" data-back data-i18n="common.back"></button>
+    <button class="btn ghost back" data-back data-i18n="common.back"></button>
   </div>
 
   <div class="screen dim blur" id="s-settings">
@@ -350,12 +486,12 @@
         <div class="row"><span class="lb" data-i18n="set.sens"></span><input type="range" id="set-sens" min="50" max="200"></div>
         <div class="row"><span class="lb" data-i18n="set.haptics"></span><div class="seg" id="set-haptics"></div></div>
         <div class="row"><span class="lb" data-i18n="set.invert"></span><div class="seg" id="set-invert"></div></div>
-        <div class="row" style="justify-content:center">
+        <div class="row" id="row-wipe" style="justify-content:center">
           <button class="btn ghost small danger" id="b-wipe" data-i18n="set.reset"></button>
         </div>
       </div>
     </div>
-    <button class="btn ghost" style="width:min(94%,330px)" data-back data-i18n="common.back"></button>
+    <button class="btn ghost back" data-back data-i18n="common.back"></button>
   </div>
 
   <div class="screen dim blur" id="s-credits">
@@ -363,7 +499,7 @@
       <div class="ptitle" data-i18n="cred.title"></div>
       <div class="note" style="font-size:12px" data-i18n="cred.body"></div>
     </div>
-    <button class="btn ghost" style="width:min(94%,330px)" data-back data-i18n="common.back"></button>
+    <button class="btn ghost back" data-back data-i18n="common.back"></button>
   </div>
 
   <div id="hud">
@@ -414,7 +550,7 @@
       <div class="lab" data-i18n="res.score"></div>
       <div class="big" id="r-score">0</div>
       <div class="record" id="r-rec"></div>
-      <div style="margin-top:11px">
+      <div class="kvs">
         <div class="kv"><span data-i18n="res.dist"></span><b id="r-dist">0</b></div>
         <div class="kv"><span data-i18n="res.over"></span><b id="r-over">0</b></div>
         <div class="kv"><span data-i18n="res.close"></span><b id="r-close">0</b></div>

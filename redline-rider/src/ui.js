@@ -148,7 +148,7 @@ export class UI {
         '<div class="bhead"><span class="bname"></span><span class="btop"></span></div>' +
         bar('garage.top', st.topKmh / 340) + bar('garage.acc', st.amax / 8) +
         bar('garage.brk', st.brake / 15) + bar('garage.grp', st.handling / 1.3) +
-        '<div style="margin-top:9px"></div>';
+        '<div class="bfoot"></div>';
       d.querySelector('.bname').textContent = b.name;
       d.querySelector('.btop').textContent = Math.round(st.topKmh) + ' km/h';
       const foot = d.lastElementChild;
@@ -181,7 +181,9 @@ export class UI {
 
       if (owned){
         const ups = document.createElement('div');
-        ups.style.marginTop = '10px';
+        /* Con nombre, no con estilo en linea: en horizontal esta lista se coloca en una segunda
+           columna DENTRO de la tarjeta, y para eso el CSS tiene que poder alcanzarla. */
+        ups.className = 'ups';
         const ttl = document.createElement('div');
         ttl.className = 'lab';
         ttl.style.textAlign = 'left';
