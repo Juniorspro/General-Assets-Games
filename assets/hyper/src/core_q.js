@@ -25,18 +25,30 @@
    Mientras el jugador rota o endereza, el CUATERNIÓN del cuerpo lo gobierna este core (PG.gov):
    se escribe a mano y la velocidad angular queda en 0. Es la única forma de tener un giro exacto
    de 360°: con torque/velocidad angular el objeto sigue girando solo cuando se levanta el dedo.
+   OJO CON EL ORDEN DEL FRAME: escribirlo en grabStep() (que corre ANTES de world.step) no
+   alcanzaba — el solver de cannon mete velocidad angular propia durante el paso y medíamos
+   av≈2,15 rad/s con el dedo quieto. Por eso el gobierno se repite en EXT.post, que corre DESPUÉS
+   de world.step, y ahí mismo se vuelve a llamar a syncMat(prop) para que la InstancedMesh no
+   quede un frame atrasada respecto del cuaternión que acabamos de imponer.
    El "enderezar" elige entre las 24 rotaciones rectas de un cubo (6 caras × 4 giros) la más
    cercana por producto punto y hace un slerp de 0,15 s. El usuario habló de "7 direcciones":
    su intención es "que quede derecho como está ahora, sin inclinación", y eso es justo lo que
    dan esas 24 (acostado sigue acostado, parado sigue parado, pero a escuadra).
 
-   CONTORNO
-   Los props se dibujan con InstancedMesh (un prop = una instancia de un pool compartido), así
-   que clonar la malla para pintarla de amarillo obligaría a rearmar todos los grupos de
-   materiales del prop y a sumar draw calls. En cambio se usa UNA sola LineSegments con las
-   aristas de un cubo unitario, escalada al tamaño del prop y girada con su cuaternión: queda un
-   contorno ORIENTADO (no un AABB que "crece" al girar), cuesta 1 draw call para siempre y con
-   depthTest:false se ve incluso si el prop quedó detrás de una pared, como el halo de gmod.
+   CONTORNO — SE PROBARON LAS DOS TÉCNICAS Y GANÓ LA JAULA
+   No se puede pintar la InstancedMesh del pool: un prop es UNA instancia de una malla
+   compartida, así que teñirla amarilla teñiría a todos los props de ese tipo.
+   - 'sil' (clon de las mallas del prop con material amarillo BackSide a escala 1,028): es la
+     técnica "canónica" de contorno y en un cubo cerrado queda igual que la referencia. Acá NO
+     sirve: la mayoría de los props de SUX son huecos o de varias partes (el BigCrate es una caja
+     ABIERTA arriba) y por la boca se ven las caras traseras del cascarón — el prop entero queda
+     RELLENO de amarillo. Medido con captura: g2-pg-outline-sil.png. Queda disponible con
+     __H.pgOutMode('sil') pero no es el modo por defecto.
+   - 'box' (LA QUE SE USA): las aristas de un cubo unitario escaladas al AABB del prop y giradas
+     con su cuaternión. Es un contorno ORIENTADO (no un AABB que "crece" al girar), cuesta UN
+     draw call para siempre (una sola LineSegments reutilizada), funciona con cualquier prop —
+     hueco, de mil partes o de GLB — y con depthTest:false se ve incluso si el prop quedó detrás
+     de una pared, como el halo de gmod. Captura: g2-pg-outline.png.
    ============================================================ */
 
 /* ---------- 0. convención reutilizable de "botón activo" ---------- */
@@ -52,6 +64,19 @@ btnAct=function(t,on){
   return !!on;
 };
 window.btnAct=btnAct;
+/* destello de "un solo clic": el botón se pone amarillo un ratito y se apaga solo. Hace falta
+   porque bindBtn() borra .act en el touchend y un tap dura 40 ms — no se llegaba a ver. */
+if(typeof btnFlash==='undefined')var btnFlash=null;
+btnFlash=function(t,ms){
+  const e=(typeof t==='string')?document.getElementById(t):t;
+  if(!e)return false;
+  if(e.dataset.act==='1')return true;              // ya está prendido de forma pegada: no tocar
+  btnAct(e,true);
+  clearTimeout(e._bfT);
+  e._bfT=setTimeout(()=>{ if(e.dataset.act==='1'&&!e._bfKeep)btnAct(e,false); },ms||220);
+  return true;
+};
+window.btnFlash=btnFlash;
 
 /* ---------- 1. CSS (inyectado desde acá: head.html no se toca) ---------- */
 nsafe(()=>{
@@ -119,9 +144,10 @@ const pgBS=pgMk('pgRst',PGICO.rst,'Enderezar');
 nsafe(()=>{const h=$('hud');if(h)h.appendChild(pgPanel);},'pgpanel');
 
 /* ---------- 4. estado ---------- */
-const PG={rot:false,gov:false,rt:0,rT:.15,lastV:0,
+/* out: técnica del contorno. 'box' por defecto — ver la explicación de la sección 9 */
+const PG={rot:false,gov:false,rt:0,rT:.15,lastV:0,out:'box',
   q:new THREE.Quaternion(),q0:new THREE.Quaternion(),qT:new THREE.Quaternion()};
-let pgLatch=false;
+let pgLatch=false,pgInPaint=false;
 const _pgY=new THREE.Vector3(0,1,0),_pgR=new THREE.Vector3(),
       _pgQa=new THREE.Quaternion(),_pgQb=new THREE.Quaternion();
 const pgBodyQ=(b,out)=>out.set(b.quaternion.x,b.quaternion.y,b.quaternion.z,b.quaternion.w);
@@ -147,8 +173,13 @@ const _pgWeapStep=weaponStep;
 const _pgLook=look;
 const _pgEquip=equip;
 
+/* ¿está en la mano una physgun? El agarre por tap vale SÓLO para kind 'phys': con cualquier otra
+   arma este core no tiene que existir (y el hook de test tampoco puede saltarse la regla). */
+function pgIsPhys(){ let k=null; nsafe(()=>{k=weap()&&weap().kind;},'pgkind'); return k==='phys'; }
+
 function pgTap(){
   if(typeof hudEdit!=='undefined'&&hudEdit)return false;
+  if(!pgIsPhys())return false;
   if(grab){pgRelease();return false;}
   grabStart();                                    // el original: rayo, despierta el cuerpo, sonido
   if(grab){pgBodyQ(grab.body,PG.q);PG.gov=false;PG.rt=0;PG.rot=false;pgPaint();}
@@ -161,7 +192,7 @@ function pgRelease(){
   grabEnd();                                      // suelta de verdad (sin tocar core_b)
   /* el contorno se apaga YA: si esperara al próximo frame, un lanzar seguido de una pausa
      dejaría el halo amarillo pegado en el aire */
-  pgOut.visible=false;
+  pgOutHide();
   pgPaint();
   return true;
 }
@@ -170,22 +201,49 @@ function pgRelease(){
    en vez de agarrar. cannon-es pone body.world=null al sacarlo, así que el chequeo es O(1). */
 function pgOrphan(){
   if(!grab)return false;
-  if(grab.body&&grab.body.world)return false;
+  if(grab.body&&grab.body.world&&PROPS.indexOf(grab)>=0)return false;
   grab=null;PG.gov=false;PG.rt=0;PG.rot=false;rotMode=false;
-  pgOut.visible=false;
+  pgOutHide();
+  /* repintar YA (y no en el próximo EXT.frame): el panel tiene que desaparecer en el mismo tick
+     en que el prop dejó de existir, o queda un panel que actúa sobre la nada */
+  if(!pgInPaint)pgPaint();
   return true;
 }
-/* la physgun por tap: mantener apretado ya no hace falta, y soltar el botón NO suelta el prop */
+/* EL TAP SE ENGANCHA EN EL EVENTO, NO EN EL FRAME.
+   Medido: un tap del botón bFire manda mousedown y mouseup en el MISMO tick de JS, así que
+   HOLD.fire vuelve a 0 antes de que corra el frame siguiente y un latch que mira HOLD.fire una
+   vez por frame no ve NADA (el agarre no pasaba nunca con un toque rápido; en el celular sólo
+   funcionaba si el dedo se quedaba >16 ms, y menos todavía con el frame caído a 25 fps).
+   Solución: se instala un accessor en HOLD.fire que cuenta los FLANCOS de subida, venga el
+   evento de donde venga (botón del HUD, click en la pantalla, o __H.press). Así el toque más
+   corto posible queda registrado y se consume en el próximo weaponStep. */
+let pgReq=0,pgEdge=false;
+nsafe(()=>{
+  let v=HOLD.fire?1:0;
+  Object.defineProperty(HOLD,'fire',{configurable:true,enumerable:true,
+    get:()=>v,
+    set:x=>{const n=x?1:0;if(n&&!v)pgReq++;v=n;}});
+  pgEdge=true;
+},'pgedge');
 function pgFire(dt){
   pgOrphan();
-  const want=!!HOLD.fire;
-  if(want&&!pgLatch){pgLatch=true;nsafe(pgTap,'pgtap');}
-  if(!want)pgLatch=false;
+  if(pgEdge){
+    /* tope de 2 por frame: si algo dejó flancos acumulados (pausa, menú) no se descargan todos
+       de golpe en un agarrá-soltá-agarrá que el jugador no pidió */
+    let n=Math.min(2,pgReq);pgReq=0;
+    while(n-->0)nsafe(pgTap,'pgtap');
+  }else{
+    const want=!!HOLD.fire;                        // respaldo si defineProperty no estuviera
+    if(want&&!pgLatch){pgLatch=true;nsafe(pgTap,'pgtap');}
+    if(!want)pgLatch=false;
+  }
   grabStep(dt);
 }
 weaponStep=function(dt){
   const w=weap();
-  if(w.kind!=='phys')return _pgWeapStep(dt);
+  /* los flancos de otras armas no se guardan: si no, al cambiar a la physgun el primer frame
+     consumía el gatillo del arma anterior y agarraba solo */
+  if(w.kind!=='phys'){pgReq=0;return _pgWeapStep(dt);}
   /* mantenimiento por frame idéntico al original (no depende del arma) */
   fireT=Math.max(0,fireT-dt);reloadT=Math.max(0,reloadT-dt);
   pgFire(dt);
@@ -209,15 +267,25 @@ equip=function(i){
 grabStep=function(dt){
   if(!grab)return;
   _pgGrabStep(dt);                                // posición por resorte de velocidad, como siempre
-  const b=grab.body;
   if(PG.rt>0){
     PG.rt=Math.max(0,PG.rt-dt);
     const t=1-PG.rt/PG.rT, s=t*t*(3-2*t);         // suavizado: arranca y frena despacio
     PG.q.slerpQuaternions(PG.q0,PG.qT,s);
     if(PG.rt<=0)PG.q.copy(PG.qT);                 // el último frame cae EXACTO en la canónica
   }
-  if(PG.gov)pgWriteQ(b);
+  if(PG.gov)pgWriteQ(grab.body);
 };
+/* EL gobierno de verdad va DESPUÉS de integrar: el solver de cannon le mete velocidad angular
+   propia al cuerpo durante el paso (medido: av≈2,15 rad/s con el dedo quieto y el cuaternión ya
+   escrito antes de world.step), así que reimponerlo es lo único que garantiza el giro exacto.
+   Se cuelga del evento 'postStep' del mundo y NO de EXT.post por dos razones: (1) world.step
+   puede hacer varios subpasos por frame y así se corrige en cada uno; (2) corre DENTRO de
+   world.step, o sea ANTES del syncMat() de core_b, así la InstancedMesh no queda un frame
+   atrasada respecto del cuaternión impuesto (con EXT.post sí quedaba). */
+nsafe(()=>{ world.addEventListener('postStep',()=>{ nsafe(()=>{
+  if(!grab||!PG.gov)return;
+  pgWriteQ(grab.body);
+},'pggov'); }); },'pggovadd');
 /* arrastrar el dedo gira el prop 360° en los dos ejes */
 function pgDrag(dx,dy){
   if(!grab)return false;
@@ -244,9 +312,13 @@ look=function(dx,dy){
 function pgRotSet(v){
   const on=!!v&&!!grab;
   PG.rot=on;
-  rotMode=on;                                     // core_b también corta la cámara con esto
-  rotV.x=rotV.y=0;                                // el original los usa como velocidad angular: en 0
+  /* rotMode de core_b tiene que quedar en false: su grabStep le escribe angularVelocity desde
+     rotV y acá el cuaternión se gobierna a mano. Con rotMode=true el amortiguado de la rama
+     `else` no corría y el prop se iba girando solo entre frames. */
+  rotMode=false;
+  rotV.x=rotV.y=0;
   if(on){pgBodyQ(grab.body,PG.q);PG.gov=true;PG.rt=0;}
+  pgBR._bfKeep=on;                                // el destello no puede apagar un toggle prendido
   pgPaint();
   return PG.rot;
 }
@@ -263,7 +335,9 @@ function pgThrow(){
   const sp=13,m=p.body.mass||1;
   p.body.applyImpulse(new CANNON.Vec3(_dir.x*sp*m,(_dir.y*sp+2.4)*m,_dir.z*sp*m),
                       new CANNON.Vec3(0,0,0));
-  nsafe(()=>SFX.drop(),'pgthrsnd');
+  /* 'phys-shot' es la grabación de la physgun; SFX.drop() ya lo tocó grabEnd() dentro de
+     pgRelease(), así que acá va el disparo y no un segundo "drop" pegado */
+  nsafe(()=>{ if(typeof sPlay==='function')sPlay('phys-shot',{vol:.9}); },'pgthrsnd');
   toast(T('pgThr'));
   PG.lastV=Math.hypot(p.body.velocity.x,p.body.velocity.y,p.body.velocity.z);
   return PG.lastV;
@@ -306,23 +380,65 @@ function pgAxErr(){
 
 /* ---------- 8. botones ---------- */
 nsafe(()=>{
-  bindBtn('pgThrow',()=>{ if(typeof hudEdit!=='undefined'&&hudEdit)return; nsafe(pgThrow,'pgb1'); });
-  bindBtn('pgFrz',  ()=>{ if(typeof hudEdit!=='undefined'&&hudEdit)return; nsafe(pgFreeze,'pgb2'); });
-  bindBtn('pgRotB', ()=>{ if(typeof hudEdit!=='undefined'&&hudEdit)return;
-    nsafe(()=>{pgRotSet(!PG.rot);toast(T(PG.rot?'pgRotOn':'pgRotOff'));nsafe(()=>SFX.tool(),'pgb3s');},'pgb3'); });
-  bindBtn('pgRst',  ()=>{ if(typeof hudEdit!=='undefined'&&hudEdit)return; nsafe(pgReset,'pgb4'); });
+  const tap=(el,fn)=>bindBtn(el,()=>{ if(typeof hudEdit!=='undefined'&&hudEdit)return;
+    btnFlash(el,240); nsafe(fn,'pgb_'+el); });
+  tap('pgThrow',pgThrow);
+  tap('pgFrz',pgFreeze);
+  tap('pgRst',pgReset);
+  /* el de rotar NO destella: es un toggle, se queda amarillo hasta que lo apaguen */
+  bindBtn('pgRotB',()=>{ if(typeof hudEdit!=='undefined'&&hudEdit)return;
+    nsafe(()=>{pgRotSet(!PG.rot);toast(T(PG.rot?'pgRotOn':'pgRotOff'));
+      nsafe(()=>SFX.tool(),'pgb3s');},'pgb3'); });
 },'pgbind');
 
 /* ---------- 9. contorno amarillo del prop agarrado ---------- */
+/* (a) SILUETA (modo 'sil', NO por defecto): clon de las mallas del prop, material amarillo
+   BackSide, escala 1,028. Se deja implementada porque en props CERRADOS es la que mejor se ve,
+   pero con props huecos rellena el interior — ver el encabezado del archivo. */
+const pgSilMat=new THREE.MeshBasicMaterial({color:0xffc24d,side:THREE.BackSide,
+  depthWrite:false,fog:false,toneMapped:false});
+const pgSil=new THREE.Group();
+pgSil.renderOrder=999;pgSil.visible=false;
+/* (b) JAULA (modo 'box', LA QUE SE USA): aristas del AABB orientado, 1 draw call, sirve para
+   cualquier prop y se ve a través de las paredes. */
 const pgOutMat=new THREE.LineBasicMaterial({color:0xffc24d,transparent:true,opacity:.96,
   depthTest:false,depthWrite:false,fog:false});
 const pgOut=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1,1,1)),pgOutMat);
 pgOut.renderOrder=998;pgOut.frustumCulled=false;pgOut.visible=false;
-nsafe(()=>scene.add(pgOut),'pgout');
+nsafe(()=>{scene.add(pgOut);scene.add(pgSil);},'pgout');
+const pgOutHide=()=>{pgOut.visible=false;pgSil.visible=false;};
+/* las mallas del clon se rearman sólo cuando cambia el def del prop agarrado (no por frame) */
+let pgSilDef=null;
+function pgSilBuild(def){
+  if(pgSilDef===def)return pgSil.children.length>0;
+  pgSilDef=def;
+  while(pgSil.children.length)pgSil.remove(pgSil.children[0]);
+  let n=0;
+  nsafe(()=>{
+    const b=buildDef(def);
+    for(const g of b.groups){
+      if(!g.geo||!g.geo.attributes||!g.geo.attributes.position)continue;
+      /* se REUSA la geometría del pool (nunca se dispose acá): no cuesta memoria */
+      const m=new THREE.Mesh(g.geo,pgSilMat);
+      m.frustumCulled=false;m.renderOrder=999;
+      pgSil.add(m);n++;
+    }
+  },'pgsilb');
+  return n>0;
+}
 function pgOutStep(){
-  if(!grab||APP!=='play'&&APP!=='pause'&&APP!=='spawn'){ if(pgOut.visible)pgOut.visible=false; return; }
-  const b=buildDef(grab.def),bo=grab.body;       // buildDef cachea en def._b: no cuesta nada
-  pgOut.visible=true;
+  if(!grab||(APP!=='play'&&APP!=='pause'&&APP!=='spawn')){ pgOutHide(); return; }
+  const bo=grab.body;
+  const sil=PG.out==='sil'&&pgSilBuild(grab.def);
+  if(sil){
+    pgSil.visible=true;pgOut.visible=false;
+    pgSil.position.set(bo.position.x,bo.position.y,bo.position.z);
+    pgSil.quaternion.set(bo.quaternion.x,bo.quaternion.y,bo.quaternion.z,bo.quaternion.w);
+    pgSil.scale.setScalar(1.028);
+    return;
+  }
+  const b=buildDef(grab.def);                    // buildDef cachea en def._b: no cuesta nada
+  pgSil.visible=false;pgOut.visible=true;
   pgOut.position.set(bo.position.x,bo.position.y,bo.position.z);
   pgOut.quaternion.set(bo.quaternion.x,bo.quaternion.y,bo.quaternion.z,bo.quaternion.w);
   pgOut.scale.set(b.size[0]*1.03+.012,b.size[1]*1.03+.012,b.size[2]*1.03+.012);
@@ -331,22 +447,27 @@ function pgOutStep(){
 /* ---------- 10. pintar el HUD (sólo cuando algo cambia, no todos los frames) ---------- */
 const pgUI={};
 function pgPaint(){
-  pgOrphan();
-  const held=!!grab,phys=weap().kind==='phys';
-  const show=held&&phys&&APP==='play';
-  if(pgUI.show!==show){
-    pgUI.show=show;
-    pgPanel.classList.toggle('on',show);
-    /* recargar y apuntar no hacen nada con la physgun: se esconden para que el panel respire */
-    for(const id of['bRel','bAim']){const e=$(id);if(e)e.style.display=show?'none':'';}
-  }
-  const sp=$('spawn');
-  const st={bFire:held&&phys,          // la physgun queda amarilla mientras sostiene algo
-            bFrz:held,                 // congelar está "armado": va a caer sobre el prop agarrado
-            pgRotB:PG.rot,             // modo rotación: queda prendido hasta tocarlo de nuevo
-            bAim:!!zoomOn,             // apuntando
-            bTools:!!(sp&&sp.classList.contains('on'))};
-  for(const id in st){ if(pgUI[id]===st[id])continue; pgUI[id]=st[id]; btnAct(id,st[id]); }
+  if(pgInPaint)return;                            // pgOrphan() puede llamar acá: sin reentrada
+  pgInPaint=true;
+  try{
+    pgOrphan();
+    const held=!!grab,phys=pgIsPhys();
+    const show=held&&phys&&APP==='play';
+    if(pgUI.show!==show){
+      pgUI.show=show;
+      pgPanel.classList.toggle('on',show);
+      /* recargar y apuntar no hacen nada con la physgun: se esconden para que el panel respire */
+      for(const id of['bRel','bAim']){const e=$(id);if(e)e.style.display=show?'none':'';}
+    }
+    const sp=$('spawn');
+    const st={bFire:held&&phys,        // la physgun queda amarilla mientras sostiene algo
+              bFrz:held,               // congelar está "armado": va a caer sobre el prop agarrado
+              pgRotB:PG.rot,           // modo rotación: queda prendido hasta tocarlo de nuevo
+              bAim:!!zoomOn,           // apuntando
+              bTools:!!(sp&&sp.classList.contains('on'))};
+    for(const id in st){ if(pgUI[id]===st[id])continue; pgUI[id]=st[id];
+      const e=$(id); if(e)e._bfKeep=st[id]; btnAct(id,st[id]); }
+  }finally{ pgInPaint=false; }
 }
 EXT.frame.push(dt=>{ nsafe(()=>{pgPaint();pgOutStep();},'pgframe'); });
 
@@ -361,8 +482,11 @@ nsafe(()=>{
 /* ---------- 12. ganchos de test ---------- */
 if(DEV&&window.__H)Object.assign(window.__H,{
   pgInfo:()=>({held:grab?grab.id:null,heldIdx:grab?PROPS.indexOf(grab):-1,
-    panel:pgPanel.classList.contains('on'),rot:PG.rot,gov:PG.gov,outline:pgOut.visible,
-    outScale:pgOut.visible?[+pgOut.scale.x.toFixed(2),+pgOut.scale.y.toFixed(2),+pgOut.scale.z.toFixed(2)]:null,
+    panel:pgPanel.classList.contains('on'),rot:PG.rot,gov:PG.gov,
+    outline:pgOut.visible||pgSil.visible,outMode:pgSil.visible?'sil':(pgOut.visible?'box':null),
+    silMeshes:pgSil.children.length,
+    outScale:pgOut.visible?[+pgOut.scale.x.toFixed(2),+pgOut.scale.y.toFixed(2),+pgOut.scale.z.toFixed(2)]:
+      (pgSil.visible?[+pgSil.scale.x.toFixed(3)]:null),
     btns:{bFire:pgQA('bFire'),bFrz:pgQA('bFrz'),pgRotB:pgQA('pgRotB'),bAim:pgQA('bAim'),
       bTools:pgQA('bTools'),pgThrow:pgQA('pgThrow'),pgRst:pgQA('pgRst')},
     err:pgAxErr(),dist:+grabDist.toFixed(2),lastThrow:+PG.lastV.toFixed(2),
@@ -371,12 +495,13 @@ if(DEV&&window.__H)Object.assign(window.__H,{
             +grab.body.quaternion.z.toFixed(4),+grab.body.quaternion.w.toFixed(4)]:null,
     av:grab?+Math.hypot(grab.body.angularVelocity.x,grab.body.angularVelocity.y,
             grab.body.angularVelocity.z).toFixed(3):null}),
-  pgTap:()=>{pgTap();return grab?PROPS.indexOf(grab):-1;},
+  pgTap:()=>{nsafe(pgTap,'hpgtap');return grab?PROPS.indexOf(grab):-1;},
   pgThrow:()=>+pgThrow().toFixed(2),
   pgFreeze:()=>pgFreeze(),
   pgRot:v=>pgRotSet(v===undefined?!PG.rot:v),
   pgReset:()=>pgReset(),
   pgDrag:(dx,dy)=>pgDrag(dx||0,dy||0),
+  pgOutMode:m=>{if(m)PG.out=m;pgSilDef=null;return PG.out;},
   pgBtn:id=>{const e=$(id);if(!e)return false;
     e.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
     e.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));return true;},

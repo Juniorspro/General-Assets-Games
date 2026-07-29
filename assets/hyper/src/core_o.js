@@ -221,10 +221,10 @@ function physScanO(dt){
   /* los bucles no pasan por la atenuación por distancia de sPlay (sPlay sólo la aplica a
      los one-shot), así que el volumen sale del score, que ya trae la distancia adentro */
   if(bR>.4){ if(!rollL)rollL=sLoop('prop-roll',0);
-    if(rollL){rollL.set(Math.min(.30,bR*.055));rollL.rate(.82+Math.min(.55,bR*.05));} }
+    if(rollL){rollL.set(Math.min(.71,bR*.125));rollL.rate(.82+Math.min(.55,bR*.05));} }
   else if(rollL){rollL.stop();rollL=null;}
   if(bS>.4){ if(!scrapeL)scrapeL=sLoop('metal-scrape',0);
-    if(scrapeL){scrapeL.set(Math.min(.32,bS*.06));scrapeL.rate(.85+Math.min(.5,bS*.045));} }
+    if(scrapeL){scrapeL.set(Math.min(.71,bS*.14));scrapeL.rate(.85+Math.min(.5,bS*.045));} }
   else if(scrapeL){scrapeL.stop();scrapeL=null;}
 }
 
@@ -273,7 +273,7 @@ function fuseSndO(){
   let any=false;
   if(typeof FWLIT!=='undefined'&&FWLIT&&FWLIT.forEach)
     FWLIT.forEach(st=>{if(st&&st.phase==='fuse')any=true;});
-  if(any&&APP==='play'){ if(!fuseL)fuseL=sLoop('fw-fuse-long',.28); }
+  if(any&&APP==='play'){ if(!fuseL)fuseL=sLoop('fw-fuse-long',.5); }
   else if(fuseL){fuseL.stop();fuseL=null;}
 }
 /* silbato descendente: la lluvia de estrellas/restos que CAE después del estallido. Se

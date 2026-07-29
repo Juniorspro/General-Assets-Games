@@ -91,43 +91,250 @@ function sndLoad(){
    sLoop y quedan A PROPÓSITO fuera de la tabla: recortarles el arranque no sirve de nada
    (el bucle vuelve a 0 igual) y de paso rompe el empalme. */
 const SOFF={
-  'fw-crackle':1.624,'shot-shotgun':1.086,'bat-hit':0.987,pop:0.945,glass:0.926,
+  'fw-crackle':1.624,'tool-switch':1.317,'imp-plastic':1.257,empty:1.237,'mp-leave':1.200,
+  'shot-shotgun':1.086,'bat-hit':0.987,equip:0.950,pop:0.945,glass:0.926,'wood-break':0.863,'tool-ok':0.828,save:0.780,
   'imp-concrete':0.753,trash:0.644,'step-wood':0.593,'bat-swing':0.553,'step-metal':0.456,
-  'shot-crossbow':0.453,'fw-finale':0.381,ui:0.320,'fw-whistle':0.305,'fw-launch':0.267,
-  'fw-fuse':0.241,'fw-sparkle':0.226,land:0.218,'shot-revolver':0.161,'shot-smg':0.150,
-  ricochet:0.113,'phys-shot':0.094,'shot-akm':0.057};
+  'shot-crossbow':0.453,'imp-wood':0.404,'fw-finale':0.381,ui:0.320,'fw-whistle':0.305,
+  'fw-launch':0.267,'fw-fuse':0.241,'fw-sparkle':0.226,land:0.200,'shot-revolver':0.161,
+  'shot-smg':0.150,ricochet:0.113,spawn:0.100,'phys-shot':0.094,'shot-akm':0.057};
 /* Largo a reproducir, donde el archivo trae basura DESPUÉS de la cola útil:
      shot-smg     el modelo entregó una ráfaga; con esta ventana queda UN solo tiro
      shot-shotgun después del retumbe vuelve a subir ruido que no es parte del disparo
      shot-sniper  el eco útil dura ~1 s y después aparecen golpes sueltos que sonaban
                   a segundo disparo (era justo el problema del sniper) */
-const SLEN={'shot-smg':0.28,'shot-shotgun':0.52,'shot-sniper':1.10};
+/* Las 13 entradas nuevas son las tomas REEMPLAZADAS (ver el bloque de la mezcla): el modelo
+   entrega 1.5-2 s y el evento útil dura entre 0.19 s y 0.70 s. Cerrar la ventana justo en el
+   evento es lo que hace que se sienta SECO — sobre todo el salto, que es la queja del usuario:
+   0.35 s, cortado con el fundido de SFADE, sin la cola de tela/habitación del archivo.
+   OJO: nada de comentarios ADENTRO del literal — sndcheck.js parsea esta tabla con una regex
+   y un "texto: 0.35" en un comentario le entra como si fuera una clave. */
+const SLEN={'shot-smg':0.28,'shot-shotgun':0.52,'shot-sniper':1.10,
+  jump:0.35,land:0.66,'fall-hard':0.60,'imp-wood':0.28,save:0.45,spawn:0.60,equip:0.35,
+  'tool-ok':0.45,'tool-switch':0.19,empty:0.25,'mp-leave':0.30,'wood-break':0.50,
+  'imp-plastic':0.25};
+/* ---------- archivos que el generador NUNCA entregó (alias documentado) ----------
+   'fw-candle' salió MUDO en 3 tomas seguidas (ruido plano a -47 dBFS, sin evento: pico
+   -30 dBFS con 1.9 dB de contraste, o sea nada). En vez de dejar un sonido que no suena o
+   amplificar x200 un ruido plano, la vela romana usa el 'fw-thump' (el golpe de la carga
+   que lanza la estrella, que es exactamente eso) sonando más agudo. Es una decisión de
+   MEZCLA, está acá y no escondida en el llamador: FWEV sigue pidiendo 'fw-candle'. */
+const SALIAS={'fw-candle':{n:'fw-thump',rate:1.35}};
 /* Al cortar con SLEN el archivo puede quedar sonando fuerte justo en el corte (el
    shotgun queda al ~18% del pico), y un corte seco ahí CLICKEA. Se apaga con una
    rampa corta de gain: SFADE segundos de fundido al final de la ventana. */
 const SFADE=.04;
 
+/* ============================================================
+   MEZCLA PAREJA — normalización MEDIDA (SLOUD/SGAIN) + limitador
+   ------------------------------------------------------------
+   QUEJA: "hay armas y cosas que suenan menos que otras y se siente fea la experiencia".
+   CAUSA MEDIDA: cada sPlay traía un `vol` puesto a ojo, y los archivos que entregó el
+   modelo tienen loudness dispares de verdad — midiendo la ventana que REALMENTE suena
+   (respetando SOFF/SLEN) el rango iba de -6 dBFS (phys-hum) a -64 dBFS: 58 dB de
+   diferencia entre archivos. Y 12 de los 86 estaban directamente MUDOS (pico por debajo de
+   -40 dBFS y sin ningún evento: ruido plano) — o sea que había acciones del juego que no
+   sonaban nada, no que sonaban poco. Ningún `vol` a mano arregla eso, porque el vol del
+   jugador y la distancia lo multiplican todo por igual.
+   PARTE 1 DEL ARREGLO: se reemplazaron 13 archivos por tomas nuevas medidas (los 12 mudos
+   + el 'jump', que era un whoosh de ropa de 1 s en vez de un salto).
+   PARTE 2, acá: normalización medida.
+   SOLUCIÓN: se mide el archivo YA DECODIFICADO por el navegador (no el waveform del
+   proveedor, que es una envolvente normalizada y no dice nada de nivel absoluto), se le
+   asigna una CATEGORÍA y se calcula un factor que lo lleve al objetivo de su categoría.
+   El factor se aplica adentro de sPlay/sLoop, así que los `vol` de todos los llamadores
+   siguen valiendo lo que siempre quisieron decir: énfasis RELATIVO del evento (más fuerte
+   el impacto violento que el suave), no compensación de archivo.
+   MÉTRICA (medida, no elegida a ojo — se probaron las tres):
+     · RMS de TODA la ventana: no sirve para one-shots. Un disparo con 1 s de eco mide
+       bajísimo aunque el golpe sea brutal, y normalizar por eso te revienta el eco.
+     · RMS máximo de una ventana corrida de 300 ms: mejor, pero subestima los clicks. El
+       'ui' (un tic de 5 ms) daba -31 dBFS con pico -3.8: 28 dB de factor de cresta. Para
+       llevarlo al objetivo hacía falta x4.7 y el pico se iba a +1 dBFS — el tope de pico
+       lo frenaba y el click quedaba 10 dB por debajo de su categoría.
+     · LA QUE QUEDÓ: RMS máximo de 100 ms, con el factor de cresta ACOTADO a 12 dB, o sea
+       L = max(rms100, pico/4). Un transitorio se percibe más fuerte de lo que dice su RMS,
+       y de paso el acote garantiza que el pico normalizado nunca pase de objetivo+12 dB
+       (con los objetivos de acá, ≤ -1 dBFS): la normalización NO PUEDE clipear sola.
+   ============================================================ */
+const SLOUD={};                                /* caché nombre -> medición del buffer */
+/* los que suenan por sLoop se miden ENTEROS: SOFF/SLEN no les aplica (el bucle vuelve a 0) */
+const SLOOPN=/^(amb-|eng-|mus-|phys-hum$|fw-fountain$|fw-wheel2$|fw-fuse-long$|prop-roll$|metal-scrape$)/;
+/* categoría por nombre: reglas EN ORDEN, gana la primera que engancha. Es por regex y no
+   una tabla nombre a nombre para que un archivo nuevo caiga solo en su familia. */
+const SCATR=[
+  [/^(shot-shotgun|shot-sniper|shot-rpg|boom|fw-bang|fw-bigburst)$/,'armaG'],
+  [/^(shot-|bat-|reload$|empty$|crossbow-load$|phys-shot$|tool-ok$|toolgun$|weld$)/,'armaC'],
+  [/^(imp-|glass$|ricochet$|wood-break$|crash$|pop$|splash$|water-exit$)/,'impacto'],
+  [/^(step-|jump$|land$|fall-hard$|swim$|wade$|breath-hard$|suspension$)/,'cuerpo'],
+  [/^(hurt|death$)/,'voz'],
+  [/^fw-/,'fw'],
+  /* phys-hum es una MÁQUINA (el zumbido de la physgun), no ambiente de mapa: va con el
+     motor, si no quedaba 6 dB por debajo de donde tiene que estar */
+  [/^(eng-|horn$|skid$|car-door$|prop-roll$|metal-scrape$|phys-hum$)/,'motor'],
+  [/^mus-/,'mus'],
+  [/^amb-/,'amb'],
+];
+function sCat(n){ for(const r of SCATR)if(r[0].test(n))return r[1]; return 'ui'; }
+/* OBJETIVOS por categoría, en dBFS de la métrica de arriba. Son decisión de MEZCLA y el
+   escalonado es a propósito (todo al mismo número sería una mezcla plana y fea):
+     armaG  -13: las armas grandes PEGAN 6 dB más que las chicas — es lo que el jugador
+            espera del sniper/rpg/escopeta y era justo lo que se sentía flojo.
+     amb/mus muy abajo: son cama, no evento.
+   PASO 2 DE LA MEZCLA (medido): con la primera pasada armaG quedó apenas 4 dB sobre armaC
+   y el sniper/rpg/escopeta seguían sin destacarse. Subir armaG NO se puede: a -13 dBFS de
+   loudness el pico de fw-bang ya queda en -1.0 dBFS y con el objetivo más alto el tope de
+   pico le comería el objetivo. Así que se bajaron 2 dB TODAS las demás categorías, que da
+   lo mismo en relación de fuerzas y deja 2 dB más de aire arriba. Los 2 dB de nivel
+   absoluto los recupera de sobra SV.vol (arranca en 0.5, o sea 6 dB de margen).
+   El nivel absoluto de todo esto lo sigue mandando SV.vol sobre MG. */
+const STGT={armaG:-13,armaC:-19,impacto:-20,cuerpo:-21,voz:-19,fw:-18,motor:-21,
+  amb:-26,mus:-22,ui:-21};
+const SGAIN={};                                /* nombre -> factor (se llena al medir) */
+/* Piso y techo del factor. El techo es alto A PROPÓSITO: hay archivos que el modelo
+   entregó a -60 dBFS y necesitan x100 para existir. Amplificar un mp3 no revela un piso
+   de ruido absoluto (el ruido del mp3 es relativo a la señal, así que la relación
+   señal/ruido no cambia al escalar), y el acote de cresta de arriba impide que el pico se
+   vaya de rango. Lo que un techo bajo SÍ hacía era dejar 12 archivos inaudibles. */
+const SGCLAMP=[.1,200];
+const SCREST=12;                               /* dB de cresta máximos que se le reconocen */
+
+/* ventana que se mide = la que se escucha (o el archivo entero si va en bucle) */
+function sWin(name){
+  const b=BUF[name];if(!b)return null;
+  if(SLOOPN.test(name))return {off:0,len:b.duration};
+  const off=Math.min(SOFF[name]||0,Math.max(0,b.duration-.02));
+  let len=Math.min(SLEN[name]||0,b.duration-off);
+  if(len<=0)len=b.duration-off;
+  return {off,len};
+}
+function sMeasure(name){
+  if(SLOUD[name])return SLOUD[name];
+  const b=BUF[name];if(!b)return null;
+  const w=sWin(name),sr=b.sampleRate;
+  const i0=Math.max(0,Math.floor(w.off*sr)),i1=Math.min(b.length,i0+Math.ceil(w.len*sr));
+  const n=i1-i0;
+  if(n<256)return SLOUD[name]={rms:0,pk:0,L:0,rms_db:-99,pk_db:-99,loud_db:-99,
+    cat:sCat(name),n:0};
+  /* mezcla a mono: lo que llega al parlante es la suma de canales, no un canal suelto */
+  const ch=b.numberOfChannels,m=new Float64Array(n);
+  for(let c=0;c<ch;c++){const d=b.getChannelData(c);
+    for(let i=0;i<n;i++)m[i]+=d[i0+i]/ch;}
+  let pk=0;for(let i=0;i<n;i++){const a=m[i]<0?-m[i]:m[i];if(a>pk)pk=a;}
+  const W=Math.min(n,Math.max(512,Math.round(.1*sr)));
+  let acc=0;for(let i=0;i<W;i++)acc+=m[i]*m[i];
+  let best=acc;
+  for(let i=W;i<n;i++){acc+=m[i]*m[i]-m[i-W]*m[i-W];if(acc>best)best=acc;}
+  const rms=Math.sqrt(Math.max(0,best)/W);
+  /* cresta acotada: lo que se percibe de un transitorio corto está más cerca del pico que
+     de su RMS (ver el bloque de arriba) */
+  const L=Math.max(rms,pk/Math.pow(10,SCREST/20));
+  const db=v=>v>1e-7?20*Math.log10(v):-99;
+  return SLOUD[name]={rms,pk,L,rms_db:+db(rms).toFixed(2),pk_db:+db(pk).toFixed(2),
+    loud_db:+db(L).toFixed(2),cat:sCat(name),n};
+}
+function sGain(name){
+  if(SGAIN[name]!=null)return SGAIN[name];
+  const m=sMeasure(name);
+  if(!m||m.L<=0)return 1;                      /* sin medir todavía: no se cachea el 1 */
+  const t=STGT[m.cat]==null?-19:STGT[m.cat];
+  let g=Math.pow(10,(t-m.loud_db)/20);
+  g=Math.min(SGCLAMP[1],Math.max(SGCLAMP[0],g));
+  /* red de seguridad final: que el archivo SOLO no llegue a 0 dBFS de pico antes de vol y
+     de MG. Con el acote de cresta esto no debería activarse nunca (el pico queda en
+     objetivo+12 = -1 dBFS como peor caso); está para que un archivo raro no lo rompa. */
+  if(m.pk*g>.891)g=.891/m.pk;
+  return SGAIN[name]=+g.toFixed(4);
+}
+
+/* ---------- limitador (DynamicsCompressorNode entre MG y destination) ----------
+   Con los factores de arriba varios sonidos suben, y en un estallido de pirotecnia con
+   props cayendo se suman 6 u 8 fuentes: la suma se pasa de 1.0 y el navegador recorta a
+   lo bruto (distorsión sucia). Un compresor con ratio alto y ataque de 4 ms hace de
+   limitador: agarra sólo los picos de la SUMA y deja intacto lo demás. */
+let SCOMP=null,SSHP=null,SANA=null,SABUF=null,sPkMax=0,sClip=0;
+function compInit(){
+  if(SCOMP||!AC||!MG)return;
+  nsafe(()=>{
+    const a=AC;
+    SCOMP=a.createDynamicsCompressor();
+    SCOMP.threshold.value=-8;SCOMP.knee.value=6;SCOMP.ratio.value=12;
+    SCOMP.attack.value=.003;SCOMP.release.value=.25;
+    /* El compresor SOLO no alcanza: medido con 12 sonidos fuertes juntos y el volumen al
+       máximo, su salida llegaba a 1.076 (+0.63 dBFS) — 8 frames clipeando, porque con
+       ataque de 3 ms el primer transitorio de la suma se le escapa. Se le encadena un
+       WaveShaper con curva de saturación SUAVE: unidad hasta 0.7 (o sea, no toca nada de
+       lo normal) y de ahí una tangente hiperbólica que satura en 0.99. Como el spec de
+       WaveShaper acota la entrada a [-1,1] antes de mirar la curva, cualquier cosa por
+       encima de 1 cae en el último punto de la curva: el techo queda GARANTIZADO por
+       construcción, no por confianza en el compresor. */
+    SSHP=a.createWaveShaper();
+    const N=4097,c=new Float32Array(N),K=.7;
+    for(let i=0;i<N;i++){
+      const x=i/(N-1)*2-1,ax=Math.abs(x),s=x<0?-1:1;
+      /* continua y con derivada 1 en ax=K, techo K+(1-K)*tanh(1)=0.929 en ax=1 */
+      c[i]=ax<=K?x:s*(K+(1-K)*Math.tanh((ax-K)/(1-K)));
+    }
+    SSHP.curve=c;SSHP.oversample='2x';        /* 2x: menos alias cuando de verdad satura */
+    /* core_b conecta MG directo a destination y NADA más sale de MG, así que cortar sus
+       conexiones y re-enrutar es seguro: todo (grabaciones y el sintetizador de respaldo)
+       pasa por MG y por lo tanto por el limitador. */
+    try{MG.disconnect();}catch(e){}
+    MG.connect(SCOMP);SCOMP.connect(SSHP);SSHP.connect(a.destination);
+    /* medidor de pico en el ÚLTIMO nodo antes de destination: es la única forma de
+       verificar de verdad que nada clipea (el analyser no necesita ir a destination) */
+    SANA=a.createAnalyser();SANA.fftSize=2048;SANA.smoothingTimeConstant=0;
+    SSHP.connect(SANA);SABUF=new Float32Array(SANA.fftSize);
+  },'comp');
+}
+function compWatch(){                          /* sólo en DEV: 2048 floats por frame */
+  if(!SANA||!SABUF)return;
+  SANA.getFloatTimeDomainData(SABUF);
+  let m=0;for(let i=0;i<SABUF.length;i++){const a=SABUF[i]<0?-SABUF[i]:SABUF[i];if(a>m)m=a;}
+  if(m>sPkMax)sPkMax=m;
+  if(m>=.999)sClip++;
+}
+/* pre-medición por tandas: medir un buffer es una pasada de ~50k muestras, imperceptible,
+   pero hacerlo en el primer sPlay del sonido sería un hipo justo cuando suena. Se adelanta
+   de a 4 por frame y sólo cuando aparecieron buffers nuevos (comparación de enteros). */
+let _sWn=-1;
+function loudWarm(){
+  const k=Object.keys(BUF);
+  if(k.length===_sWn)return;
+  let budget=4;
+  for(const n of k){ if(SLOUD[n])continue; sMeasure(n);sGain(n); if(--budget<=0)return; }
+  _sWn=k.length;
+}
+
 /* ---------- reproducir ---------- */
 const _sv=new THREE.Vector3();
 function sPlay(name,o){
   o=o||{};
-  const a=ac(),b=BUF[name];
+  /* alias (ver SALIAS): el llamador pide el sonido que quiere, acá se resuelve QUÉ archivo
+     suena. Todo lo que sigue usa 'key' (buffer, SOFF/SLEN, factor de mezcla); lastSnd y el
+     historial siguen guardando el nombre PEDIDO, así los tests no dependen del alias. */
+  const al=SALIAS[name],key=al?al.n:name;
+  const a=ac(),b=BUF[key];
   if(!a||!b)return false;
-  let vol=o.vol==null?1:o.vol;
+  /* el vol del llamador es ÉNFASIS del evento; el nivel del archivo lo pone sGain (ver
+     la sección de mezcla arriba). o.raw:true saltea la normalización, para poder medir. */
+  let vol=(o.vol==null?1:o.vol)*(o.raw?1:sGain(key));
   if(o.at){ _sv.set(o.at.x!==undefined?o.at.x:o.at[0],
                     o.at.y!==undefined?o.at.y:o.at[1],
                     o.at.z!==undefined?o.at.z:o.at[2]);
     const d=camera.position.distanceTo(_sv);
     vol*=1/(1+d/9);
-    if(vol<.02)return false; }
+    /* corte de inaudibles: bajó de .02 a .006 porque ahora vol ya trae el factor de
+       normalización adentro y a los que se les bajó (factor 0.3) el umbral viejo les
+       comía sonidos a 30 m que ANTES sí se escuchaban */
+    if(vol<.006)return false; }
   const src=a.createBufferSource();src.buffer=b;
-  src.playbackRate.value=(o.rate||1)*(o.jit===false?1:.94+Math.random()*.12);
+  src.playbackRate.value=(o.rate||1)*(al&&al.rate?al.rate:1)*(o.jit===false?1:.94+Math.random()*.12);
   const g=a.createGain();g.gain.value=vol;
   src.connect(g);g.connect(MG);
   /* saltea el silencio inicial del archivo (y corta la basura del final si hace falta).
      Si el offset se pasara del largo del buffer, start() tiraría; se acota por las dudas. */
-  const off=Math.min(SOFF[name]||0,Math.max(0,b.duration-.02));
-  const len=Math.min(SLEN[name]||0,b.duration-off);
+  const off=Math.min(SOFF[key]||0,Math.max(0,b.duration-.02));
+  const len=Math.min(SLEN[key]||0,b.duration-off);
   if(len>0){
     /* el 3er argumento de start() está en segundos DE BUFFER: en tiempo real el tramo
        dura len/rate, así que el fundido se agenda con la velocidad ya aplicada */
@@ -145,9 +352,14 @@ function sLoop(name,vol){
   const a=ac(),b=BUF[name];
   if(!a||!b)return null;
   const src=a.createBufferSource();src.buffer=b;src.loop=true;
-  const g=a.createGain();g.gain.value=vol==null?1:vol;
+  /* mismo criterio que sPlay: el vol del llamador es énfasis, el nivel del archivo lo
+     pone sGain. OJO: set(v) también tiene que multiplicar por gg — los llamadores lo usan
+     por frame (motor con la velocidad, barril rodando) y si no, el bucle se saldría de la
+     mezcla en cuanto alguien mueve el volumen. */
+  const gg=sGain(name);
+  const g=a.createGain();g.gain.value=(vol==null?1:vol)*gg;
   src.connect(g);g.connect(MG);src.start();
-  return {src,g,stop(){try{src.stop();}catch(e){}},set(v){g.gain.value=v;},
+  return {src,g,gain:gg,stop(){try{src.stop();}catch(e){}},set(v){g.gain.value=v*gg;},
     rate(r){src.playbackRate.value=r;}};
 }
 /* apaga un bucle con fundido (usado por música y ambiente al salir del contexto) */
@@ -285,7 +497,7 @@ function bodySnd(dt){
 let humL=null;
 function humSnd(){
   const want=!!grab&&APP==='play';
-  if(want&&!humL)humL=sLoop('phys-hum',.30);
+  if(want&&!humL)humL=sLoop('phys-hum',.89);   /* .71 sobre el objetivo motor (-19) = -22 dBFS */
   else if(!want&&humL){humL.stop();humL=null;}
 }
 /* spawn / borrar props (con freno para que limpiar todo no meta 300 pops) */
@@ -368,9 +580,9 @@ FWEV=function(ev,x,y,z,extra){
       if(Math.random()<.35)setTimeout(()=>nsafe(()=>sPlay('fw-boomfar',{vol:.4,at}),'fwbf'),500); // profundidad
     }
     else if(ev==='bomb'){ sPlay('fw-bang',{vol:1,at}); }
-    else if(ev==='fountain0'){ const k=fwKey(x,y,z); if(!fwFountains[k])fwFountains[k]=sLoop('fw-fountain',.4); }
+    else if(ev==='fountain0'){ const k=fwKey(x,y,z); if(!fwFountains[k])fwFountains[k]=sLoop('fw-fountain',.71); }
     else if(ev==='fountain1'){ const k=fwKey(x,y,z); if(fwFountains[k]){fwFountains[k].stop();delete fwFountains[k];} }
-    else if(ev==='wheel0'){ const k=fwKey(x,y,z); if(!fwWheels[k])fwWheels[k]=sLoop('fw-wheel2',.4); }
+    else if(ev==='wheel0'){ const k=fwKey(x,y,z); if(!fwWheels[k])fwWheels[k]=sLoop('fw-wheel2',.63); }
     else if(ev==='wheel1'){ const k=fwKey(x,y,z); if(fwWheels[k]){fwWheels[k].stop();delete fwWheels[k];} }
   },'fwev');
 };
@@ -393,10 +605,10 @@ const isMoto=()=>!!(VHS&&VHS.p&&VHS.p.def&&(/moto/i.test(VHS.p.def.id||'')||/mot
 function engSnd(){
   const on=!!VHS&&APP==='play';
   const name=(on&&isMoto()&&BUF['eng-moto'])?'eng-moto':'eng-loop';
-  if(on&&!engL&&BUF[name])engL=sLoop(name,.4);
+  if(on&&!engL&&BUF[name])engL=sLoop(name,.63);
   if(!on&&engL){engL.stop();engL=null;}
   if(on&&engL){ const k=Math.min(1,Math.abs(vhSpeed())/22);
-    engL.rate(.85+k*.75); engL.set(.3+k*.35); }
+    engL.rate(.85+k*.75); engL.set(.63+k*1.4); }
 }
 nsafe(()=>{ const e=$('bBrake'); if(e){
   const f=()=>{ if(VHS&&Math.abs(vhSpeed())>6)sPlay('skid',{vol:.75}); };
@@ -433,17 +645,17 @@ let musL=null;
 function musSnd(){
   const inMenu=(APP==='title'||APP==='qual'||APP==='help'||APP==='map'||APP==='lang');
   const a=AC;                                    /* sólo si el contexto ya existe (gesto) */
-  if(inMenu&&!musL&&a&&BUF[SNDMUS])musL=sLoop(SNDMUS,.16);
+  if(inMenu&&!musL&&a&&BUF[SNDMUS])musL=sLoop(SNDMUS,.63);
   if(!inMenu&&musL){ fadeOut(musL);musL=null; }
 }
 /* viento siempre de fondo en partida; pájaros sólo si el piso base del mapa es pasto */
 let windL=null,birdsL=null;
 function ambSnd(){
   const on=APP==='play';
-  if(on&&!windL&&BUF['amb-wind'])windL=sLoop('amb-wind',.05);
+  if(on&&!windL&&BUF['amb-wind'])windL=sLoop('amb-wind',.2);
   if(!on&&windL){ fadeOut(windL);windL=null; }
   const wantBirds=on&&CURMAP&&CURMAP.def&&CURMAP.def.ground==='grass';
-  if(wantBirds&&!birdsL&&BUF['amb-birds'])birdsL=sLoop('amb-birds',.07);
+  if(wantBirds&&!birdsL&&BUF['amb-birds'])birdsL=sLoop('amb-birds',.25);
   if(!wantBirds&&birdsL){ fadeOut(birdsL);birdsL=null; }
 }
 
@@ -468,6 +680,9 @@ let _ldT=0;
 EXT.frame.push(dt=>{
   if(!sndOn){ _ldT+=dt; if(_ldT>1&&APP!=='load')nsafe(sndLoad,'sndload'); }
   volApply();
+  /* el limitador se engancha en cuanto exista el AudioContext (se crea con el primer gesto
+     o con el primer decode), y la pre-medición corre por tandas mientras entran buffers */
+  nsafe(()=>{compInit();loudWarm();if(DEV)compWatch();},'sndmix');
   nsafe(()=>{stepStep(dt);bodySnd(dt);humSnd();engSnd();hornSync();musSnd();ambSnd();},'sndtick');
 });
 
@@ -498,4 +713,41 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     return {tabOff:SOFF[n]||0,tabLen:SLEN[n]||0,off:+off.toFixed(3),len:+len.toFixed(3),
       dur:+b.duration.toFixed(3),clamped:(SOFF[n]||0)>off+1e-9,rest:+(b.duration-off).toFixed(3)};},
   sndOffNames:()=>({soff:Object.keys(SOFF),slen:Object.keys(SLEN)})
+});
+
+/* ---------- hooks de la MEZCLA (medición real, no promesas) ---------- */
+if(DEV&&window.__H)Object.assign(window.__H,{
+  /* un archivo: nivel medido de la ventana que suena, categoría, objetivo y factor */
+  sndLoud:n=>{const m=sMeasure(n);if(!m)return null;
+    const g=sGain(n),w=sWin(n),gd=20*Math.log10(g);
+    return {rms_db:m.rms_db,pk_db:m.pk_db,loud_db:m.loud_db,cat:m.cat,
+      target_db:STGT[m.cat],gain:g,
+      /* out_db es LA MEZCLA: la loudness después del factor, y es la que tiene que dar el
+         objetivo. out_rms_db queda de referencia y NO da el objetivo a propósito: cuánto
+         RMS le sobra a un archivo sobre su loudness es su factor de cresta, que es del
+         contenido (un click seco contra un disparo con eco) y no algo a nivelar. */
+      out_db:+(m.loud_db+gd).toFixed(2),
+      out_rms_db:+(m.rms_db+gd).toFixed(2),
+      out_pk_db:+(m.pk_db+gd).toFixed(2),
+      clamped:(g<=SGCLAMP[0]+1e-9||g>=SGCLAMP[1]-1e-9),alias:(SALIAS[n]||{}).n||null,
+      loop:SLOOPN.test(n),off:+w.off.toFixed(3),len:+w.len.toFixed(3),samples:m.n};},
+  /* la tabla entera, tal como la aplica sPlay */
+  sndMix:()=>{const o={};
+    for(const n of Object.keys(BUF)){const m=sMeasure(n);if(!m)continue;
+      const g=sGain(n),gd=20*Math.log10(g);
+      o[n]={rms_db:m.rms_db,pk_db:m.pk_db,loud_db:m.loud_db,cat:m.cat,
+        target_db:STGT[m.cat],gain:g,out_db:+(m.loud_db+gd).toFixed(2),
+        out_rms_db:+(m.rms_db+gd).toFixed(2),out_pk_db:+(m.pk_db+gd).toFixed(2),
+        clamped:(g<=SGCLAMP[0]+1e-9||g>=SGCLAMP[1]-1e-9),
+        alias:(SALIAS[n]||{}).n||null};}
+    return o;},
+  sndTargets:()=>Object.assign({},STGT),
+  /* estado del limitador + pico REAL medido a su salida (0 dBFS = clip) */
+  sndComp:()=>({on:!!SCOMP,thr:SCOMP?SCOMP.threshold.value:null,
+    ratio:SCOMP?SCOMP.ratio.value:null,red_db:SCOMP?+SCOMP.reduction.toFixed(2):null,
+    peak:+sPkMax.toFixed(4),peak_db:sPkMax>0?+(20*Math.log10(sPkMax)).toFixed(2):-99,
+    clip:sClip}),
+  sndPeakReset:()=>{sPkMax=0;sClip=0;return true;},
+  /* reproducir SIN normalizar, para poder comparar antes/después en la misma corrida */
+  sndPlayRaw:n=>sPlay(n,{vol:1,raw:true,jit:false})
 });
