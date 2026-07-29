@@ -70,7 +70,10 @@ const a = await p1.evaluate(() => {
 console.log('1a apertura:', JSON.stringify(a));
 const limpio = a.cash === 0 && a.runs === 0 && a.lang === null && a.quality === null &&
                a.motos === 1 && a.record === 0 && a.bike === 'street';
-console.log('   empieza de cero:', limpio ? 'OK' : 'FALLA');
+/* El veredicto depende del sello: en una compilacion normal NO empezar de cero es lo correcto,
+   y decir "FALLA" ahi hacia que la prueba se leyera como rota cuando estaba pasando. */
+console.log('   empieza de cero:', limpio ? 'si' : 'no',
+            sello ? (limpio ? 'OK' : 'FALLA') : '(compilacion sin sello: no debe borrar)');
 
 /* ---------- se juega algo y se guarda ---------- */
 await p1.evaluate(() => {

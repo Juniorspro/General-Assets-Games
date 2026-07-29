@@ -46,6 +46,10 @@ await page.mouse.click(422, 195);
 await page.evaluate(() => {
   const rr = window.__rr;
   rr.state.lang = 'es'; rr.state.quality = 'high';
+  /* El tutorial se marca hecho: sus pasos avanzan solos al cumplirse la accion, y el paso
+     siguiente llama a clearTraffic(), lo que se llevaba por delante los coches que esta
+     prueba coloca a mano. Lo que se mide aqui no es el tutorial. */
+  rr.state.tutorialDone = true;
   rr.ui.h.onBootDone();
 });
 // la musica no bloquea la carga, asi que se le deja tiempo aparte
@@ -55,7 +59,10 @@ const decoded = await page.evaluate(async () => {
   const rr = window.__rr;
   await rr.audio.playMusic('menu');
   await new Promise(r => setTimeout(r, 2500));
-  const names = ['menu', 'engineLow', 'engineMid', 'engineHigh', 'wind',
+  /* El motor y el viento ya NO estan en la lista: los sintetiza engine.js y no hay fichero que
+     decodificar. Que suenen de verdad lo comprueba tools/probe_engine.mjs midiendo el espectro
+     que sale del sintetizador. */
+  const names = ['menu', 'ambDay', 'ambSunset', 'ambNight',
                  'crash', 'horn', 'coin', 'brake', 'nearmiss', 'click'];
   const out = {};
   for (const n of names){

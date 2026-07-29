@@ -17,8 +17,12 @@ const SHIFT_TIME = 0.22;                    // corte de gas al cambiar
 const TORQUE_TOP = 0.65;                    // par que queda al llegar a la zona roja
 const ROLL_DRAG = 0.35;                     // rozamiento constante (rodadura + transmision)
 
-const PLAYER_HALF_W = 0.275, PLAYER_HALF_L = 0.95;   // colisionador 0,55 x 1,90 m
-const CLOSE_TIERS = [1.20, 0.80, 0.45];              // holgura lateral, de flojo a rasante
+/* Se exportan porque el tutorial tiene que MONTAR un roce, y para eso necesita los mismos
+   numeros con los que el juego lo reconoce. Copiarlos alli daba un paso que no se podia
+   terminar: el coche quedaba a 2,4 m del jugador y el primer umbral de roce es de 1,20. */
+export const PLAYER_HALF_W = 0.275;
+const PLAYER_HALF_L = 0.95;                          // colisionador 0,55 x 1,90 m
+export const CLOSE_TIERS = [1.20, 0.80, 0.45];       // holgura lateral, de flojo a rasante
 const CLOSE_POINTS = [25, 60, 140];
 /* Monedas por roce, por nivel de holgura. Antes salian de dividir los puntos entre 6, asi que
    el dinero era invisible: un roce flojo daba 4 monedas y no se anunciaba por ninguna parte.
@@ -65,6 +69,7 @@ export class Game {
     this.world.setPlayerBike(bikeStats(state.bike).color);
     this.world.setRider(0, 0, 0, 0, 0, 0);
     audio.engineStop();
+    audio.ambienceOn(false);          // en el menu manda la musica
   }
 
   start(env){
@@ -77,6 +82,7 @@ export class Game {
     this.stats = bikeStats(state.bike);
     this.world.setEnv(env || 'day');
     this.world.setPlayerBike(this.stats.color);
+    audio.setAmbience(env || 'day');
 
     this.vMax = this.stats.topKmh * KMH;
     /* La resistencia se DERIVA de la punta de esta moto, no se codifica: con un
@@ -112,6 +118,7 @@ export class Game {
 
     this.mode = 'play';
     audio.engineStart();
+    audio.ambienceOn(true);
     this.pushHud();
   }
 
@@ -149,6 +156,7 @@ export class Game {
     v.halfL = size.len / 2;
     v.passed = false;
     v.scored = false;
+    v.xOff = 0;                         // desvio dentro del carril; lo usa el tutorial
     v.laneT = 2 + Math.random() * 6;    // cuenta para pensar un cambio de carril
     v.obj.visible = true;
     v.obj.position.set(v.x, 0, v.z);
@@ -250,7 +258,10 @@ export class Game {
         const nl = v.lane + dir;
         if (nl >= 0 && nl < LANES && this.freeAt(v.z, nl, v.halfL)) v.lane = nl;
       }
-      v.x = lerp(v.x, LANE_X[v.lane], 1 - Math.exp(-2.2 * dt));
+      /* El objetivo lateral es el centro del carril MAS su desvio. Sin el desvio, cualquier
+         posicion que se le ponga a mano al coche se deshace en un segundo, porque esta linea lo
+         devuelve al centro en cada fotograma. */
+      v.x = lerp(v.x, LANE_X[v.lane] + (v.xOff || 0), 1 - Math.exp(-2.2 * dt));
 
       const dz = v.z;                       // el jugador esta en z=0
       const gap = Math.abs(this.x - v.x) - (PLAYER_HALF_W + v.halfW);
@@ -357,8 +368,8 @@ export class Game {
 
   /* Al pausar hay que soltar los mandos a mano: si el dedo estaba en el gas cuando salta la
      pausa, el boton no recibe el pointerup y al reanudar la moto sale acelerando sola. */
-  pause(){ if (this.mode === 'play'){ this.mode = 'pause'; controls.releaseAll(); audio.engineStop(); audio.duck(true); } }
-  resume(){ if (this.mode === 'pause'){ this.mode = 'play'; audio.engineStart(); audio.duck(false); } }
+  pause(){ if (this.mode === 'play'){ this.mode = 'pause'; controls.releaseAll(); audio.engineStop(); audio.ambienceOn(false); audio.duck(true); } }
+  resume(){ if (this.mode === 'pause'){ this.mode = 'play'; audio.engineStart(); audio.ambienceOn(true); audio.duck(false); } }
 
   pushHud(){
     this.hooks.onHud && this.hooks.onHud({

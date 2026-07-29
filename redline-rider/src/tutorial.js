@@ -19,6 +19,7 @@ import { t } from './i18n.js';
 import { state, save } from './state.js';
 import * as controls from './controls.js';
 import { LANE_X } from './world.js';
+import { PLAYER_HALF_W, CLOSE_TIERS } from './game.js';
 
 /* Poses disponibles del personaje. Los nombres son los ficheros de assets/img/dino. */
 export const POSES = ['hola', 'senala', 'celebra', 'alerta', 'explica'];
@@ -46,14 +47,20 @@ const steerKey = () => {
 const steerHl = () => steerScheme() === 'buttons' ? 'p-left' : null;
 
 function buildSteps(){
-  return [
-    { pose:'hola', key:'tut.hello', traffic:false },
+  /* CINCO pasos, no trece, y ninguno se pasa con un boton: cada uno espera la accion. Trece
+     mensajes seguidos se leen como una charla y el jugador aprende a cerrarlos sin mirarlos;
+     lo que hay que dejar claro es como se mueve la moto y de que se saca dinero, y el resto se
+     descubre jugando. El combo, el claxon, las revoluciones y el garaje se cayeron de aqui a
+     proposito: ninguno hace falta para dar la primera vuelta.
 
+     El unico paso sin accion es la despedida, y se va sola pasado un rato: un boton para
+     cerrarla volveria a meter el boton por la puerta de atras. */
+  /* El orden es gas, direccion, freno, roce. La direccion va ANTES del freno a proposito: con el
+     freno en medio, el jugador aplicado llega al cambio de carril casi parado, y aprender a
+     cambiar de carril con la moto detenida no se parece a nada de lo que va a hacer despues. */
+  return [
     { pose:'senala', key:'tut.gas', hl:'p-gas', traffic:false,
       done: g => g.speed > 55 * KMH },
-
-    { pose:'senala', key:'tut.brake', hl:'p-brake', traffic:false,
-      done: g => g.speed < 25 * KMH },
 
     { pose:'explica', key:steerKey, hl:steerHl, traffic:false,
       /* Se pide llegar a un carril distinto del inicial, no solo mover el manillar: girar un
@@ -65,56 +72,49 @@ function buildSteps(){
       },
       done: g => laneOf(g.x) !== g.tutLane },
 
-    { pose:'explica', key:'tut.lanes', traffic:false,
-      done: g => g.speed > 70 * KMH },
+    { pose:'senala', key:'tut.brake', hl:'p-brake', traffic:false,
+      done: g => g.speed < 25 * KMH },
 
     /* Roce. Un solo coche, en el carril de al lado, CERCA y bastante mas lento.
-       La primera version lo ponia a 45 m y solo un 18% mas lento que el jugador: alcanzarlo
-       llevaba unos 13 s de juego y, con la camara lenta de este paso, mas de 20 s reales. Un
-       paso de tutorial que se pasa esperando no ensena, aburre. A 20 m y al 55% de la
-       velocidad del jugador el adelantamiento llega en un par de segundos. */
+       Ponerlo a 45 m y solo un 18% mas lento obligaba a perseguirlo unos 13 s de juego, y con
+       la camara lenta de este paso mas de 20 s reales: un paso que se pasa esperando aburre. */
     { pose:'senala', key:'tut.close', traffic:false, slow:0.55,
       setup: (g, w) => {
         g.clearTraffic();
         g.tutCloses = g.closes;
-        const v = g.spawn(-20);
+        /* Este paso MONTA una escena, y tiene que montarla entera. El paso anterior es el freno,
+           asi que aqui se llega casi parado; se devuelve la velocidad de marcha con la que
+           arranca cualquier partida. Sin esto el coche sale por delante y no se le alcanza. */
+        g.speed = Math.max(g.speed, 16);
+        const mio = laneOf(g.x);
+        const v = g.spawn(-22);
         if (v){
-          v.lane = laneOf(g.x) === 0 ? 1 : laneOf(g.x) - 1;
-          v.x = LANE_X[v.lane];
-          v.z = -20;
-          v.speed = Math.max(12, g.speed * 0.55);
+          v.lane = mio === 0 ? 1 : mio - 1;
+          v.z = -22;
+          /* La velocidad del coche se DERIVA de la del jugador. Con el suelo fijo de 12 m/s que
+             habia antes, el coche corria mas que un jugador recien frenado y se escapaba: el paso
+             no se podia terminar, solo perseguir. */
+          v.speed = Math.max(3, g.speed * 0.5);
           v.laneT = 1e9;                       // que no cambie de carril mientras se explica
+
+          /* El coche se ARRIMA al jugador dentro de su carril. Puesto en el centro del carril de
+             al lado la holgura es de 2,4 m y el umbral de roce mas flojo es de 1,20: el paso
+             contaba como adelantamiento, nunca como roce, y no habia forma de terminarlo sin
+             salirse del carril. Se deja a tres cuartos del primer umbral, asi que pasar de largo
+             ya cuenta y arrimarse aun mas sube de nivel. */
+          /* La referencia es la x REAL del jugador, no el centro de su carril: el paso anterior es
+             el cambio de carril y lo deja donde lo deje, hasta a 1,8 m del centro. Midiendo desde
+             el centro, la holgura montada podia salir del doble de la pedida. */
+          const centro = PLAYER_HALF_W + v.halfW + CLOSE_TIERS[0] * 0.75;
+          const objetivo = g.x + (v.lane < mio ? -centro : centro);
+          v.xOff = objetivo - LANE_X[v.lane];
+          v.x = objetivo;
           v.obj.position.set(v.x, 0, v.z);
         }
       },
       done: g => g.closes > g.tutCloses },
 
-    { pose:'celebra', key:'tut.coins', traffic:false },
-
-    { pose:'explica', key:'tut.combo', traffic:true },
-
-    { pose:'senala', key:'tut.horn', hl:'p-horn', traffic:true,
-      done: () => controls.input.horn },
-
-    /* Peligro. No se provoca un choque: se ensena la distancia a la que ya no se puede
-       esquivar, en camara lenta, y se deja al jugador salir de ahi. */
-    { pose:'alerta', key:'tut.danger', traffic:false, slow:0.4,
-      setup: g => {
-        g.clearTraffic();
-        const v = g.spawn(-28);
-        if (v){
-          v.lane = laneOf(g.x);
-          v.x = LANE_X[v.lane];
-          v.z = -28;
-          v.speed = Math.max(10, g.speed * 0.45);   // mas lento: se le echa encima
-          v.laneT = 1e9;
-          v.obj.position.set(v.x, 0, v.z);
-        }
-      } },
-
-    { pose:'explica', key:'tut.rpm', traffic:true },
-    { pose:'explica', key:'tut.cash', traffic:true },
-    { pose:'celebra', key:'tut.done', traffic:true }
+    { pose:'celebra', key:'tut.done', traffic:true, dwell:3.2 }
   ];
 }
 
@@ -185,7 +185,15 @@ export class Tutorial {
   update(dt){
     if (!this.active) return;
     const s = this.step;
-    if (!s || !s.done) return;
+    if (!s) return;
+    /* Paso sin accion: se va solo pasado su tiempo. Es la unica forma de cerrar un mensaje sin
+       accion sin volver a poner un boton. */
+    if (!s.done){
+      if (!s.dwell) return;
+      this.holdT += dt;
+      if (this.holdT > s.dwell) this.next();
+      return;
+    }
     /* La condicion se ENGANCHA en cuanto se cumple una vez, y a partir de ahi corre el margen.
        Exigir que siga cumpliendose durante el margen rompe cualquier accion momentanea: el
        claxon solo esta pulsado un instante, asi que el jugador lo tocaba, no pasaba nada, y el

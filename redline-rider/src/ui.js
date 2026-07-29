@@ -321,10 +321,9 @@ export class UI {
     img.src = (A && A[url]) || (BASE ? BASE + url : url);
     $('tut-n').textContent = t('tut.step', { n:step.n, total:step.total });
     $('tut-txt').textContent = step.text;
-    /* El boton de siguiente solo aparece en los pasos que no piden nada. En los que piden una
-       accion, tenerlo permitiria saltarla, que es justo lo que el tutorial evita. */
-    $('tut-next').style.display = step.manual ? '' : 'none';
-    $('tut-next').textContent = t('tut.next');
+    /* No hay boton de siguiente. Todos los pasos avanzan con la ACCION, y el ultimo se va solo
+       pasado su tiempo: un boton para pasar de pantalla convierte el tutorial en una lectura y
+       se acaba pulsando sin leer. Solo queda SALTAR, que es la salida de emergencia. */
     $('tut-skip').textContent = t('tut.skip');
     box.classList.add('on');
   }
@@ -477,7 +476,6 @@ export class UI {
     on('b-again',   () => this.h.onRestart && this.h.onRestart());
     on('b-rmenu',   () => this.h.onMenu && this.h.onMenu());
     on('b-tutorial', () => this.h.onTutorial && this.h.onTutorial());
-    on('tut-next',   () => this.h.onTutNext && this.h.onTutNext());
     on('tut-skip',   () => this.h.onTutSkip && this.h.onTutSkip());
   }
 }

@@ -39,6 +39,10 @@ await page.mouse.click(450, 230);
 await page.evaluate(() => {
   const rr = window.__rr;
   rr.state.lang = 'es'; rr.state.quality = 'high'; rr.state.scheme = 'buttons';
+  /* El tutorial se marca hecho: sus pasos avanzan solos al cumplirse la accion, y el paso
+     siguiente llama a clearTraffic(), lo que se llevaba por delante los coches que esta
+     prueba coloca a mano. Lo que se mide aqui no es el tutorial. */
+  rr.state.tutorialDone = true;
   rr.ui.h.onBootDone();
 });
 await page.waitForTimeout(250);

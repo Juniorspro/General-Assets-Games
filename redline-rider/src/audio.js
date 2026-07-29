@@ -1,11 +1,12 @@
 /* Audio con HTMLAudioElement: decodeAudioData necesita fetch, que el navegador bloquea
    en file://, y el juego tiene que sonar igual abierto como archivo local que servido.
 
-   Lo propio de este genero es el motor: no es un efecto puntual sino tres bucles
-   (ralenti / medio / alto) cruzados de forma continua por revoluciones, mas un bucle de
-   viento que sube con la velocidad. Eso es lo que hace que acelerar se sienta. */
+   El motor y el viento NO estan aqui: se sintetizan en engine.js, porque con muestras las
+   revoluciones solo eligen cual suena y se oyen los escalones. Aqui quedan los efectos
+   puntuales, los ambientes y la musica, que si son grabaciones. */
 
 import { state } from './state.js';
+import * as synth from './engine.js';
 
 const BASE = 'assets/audio/';
 
@@ -25,11 +26,13 @@ export const SFX_FILES = {
 };
 /* Bucles continuos: se manejan aparte de los efectos puntuales porque nunca se
    reinician, solo cambian de volumen. */
+/* El motor y el viento ya NO son muestras: los sintetiza engine.js. Con bucles grabados las
+   revoluciones solo elegian cual sonaba, se oian los escalones, y dos de las tres muestras
+   caian en el mismo tono. Aqui solo quedan los ambientes, que si son grabaciones. */
 export const LOOP_FILES = {
-  engineLow:  BASE + 'engine/low.mp3',
-  engineMid:  BASE + 'engine/mid.mp3',
-  engineHigh: BASE + 'engine/high.mp3',
-  wind:       BASE + 'sfx/wind.mp3'
+  ambDay:    BASE + 'amb/day.mp3',
+  ambSunset: BASE + 'amb/sunset.mp3',
+  ambNight:  BASE + 'amb/night.mp3'
 };
 /* La musica va en mp3, NO en m4a. El AAC lo genera sonilo_music por defecto, pero medido en
    el propio navegador: canPlayType('audio/mp4; codecs="mp4a.40.2"') devuelve "" en Chromium
@@ -42,15 +45,15 @@ export const MUSIC_FILES = {
 /* Mezcla por sonido. Los assets vienen de generaciones independientes y no comparten
    nivel; estos son los factores que los igualan (efectos por debajo de los bucles de
    motor, musica muy por debajo de todo). */
-/* Las ganancias del motor salen de la ENERGIA MEDIDA de cada muestra, no del oido: los tres
-   assets vienen de generaciones independientes y no comparten nivel. Medido con
-   tools/probe_engine.mjs: rms 0,156 / 0,051 / 0,173, o sea que la capa intermedia sale tres
-   veces mas floja que las otras dos. Con ganancias parecidas, el cruce se HUNDIA justo en
-   medio del rango de vueltas, que es donde mas tiempo pasa el jugador. Estos factores llevan
-   las tres al mismo nivel percibido. */
+/* El ambiente va por DEBAJO del motor: es fondo, no protagonista. Los tres factores salen de la
+   ENERGIA MEDIDA de cada clip, no del oido, porque vienen de generaciones independientes y no
+   comparten nivel. Medido con tools/seam.mjs: rms 0,112 dia / 0,149 atardecer / 0,205 noche.
+   Contra lo que parecia ("carretera vacia de noche" deberia ser el clip mas flojo), el nocturno
+   sale casi el doble de fuerte que el diurno, asi que es el que hay que BAJAR. Los factores
+   igualan los tres al nivel del de dia. */
 const GAIN = {
   horn:0.55, crash:0.9, nearmiss:0.5, coin:0.55, brake:0.55, click:0.4,
-  engineLow:0.50, engineMid:1.00, engineHigh:0.45, wind:0.4
+  ambDay:0.32, ambSunset:0.24, ambNight:0.18
 };
 
 const POOL_SIZE = 4;
@@ -61,6 +64,7 @@ let current = null;
 let fadeTimer = null;
 let unlocked = false;
 let running = false;         // el motor solo suena en marcha
+let ambOn = false;           // el ambiente tambien, y va por su cuenta
 
 function el(url, loop){
   const a = new Audio();
@@ -157,6 +161,8 @@ async function loadMusic(name){
 export function unlock(){
   if (unlocked) return;
   unlocked = true;
+  // el motor sintetizado tambien necesita el gesto: AudioContext arranca suspendido
+  synth.init();
   for (const p of pools.values()){
     const a = p.els[0], v = a.volume;
     a.volume = 0;
@@ -181,53 +187,61 @@ export function play(name, opts){
   return a;
 }
 
-/* ---------- motor ---------- */
+/* ---------- bucles ---------- */
 
+/* Los unicos bucles que quedan son los ambientes; el motor ya no es una muestra. La condicion
+   de marcha es ambOn, NO la del motor: colgar el ambiente de la bandera del motor lo dejaba
+   sonando al pausar, porque pause() para el motor y nadie volvia a tocar el bucle. */
 function setLoop(name, vol, rate){
   const a = loops.get(name);
   if (!a) return;
   const v = Math.max(0, Math.min(1, vol * state.sfx * (GAIN[name] || 1)));
   a.volume = v;
   if (rate) a.playbackRate = Math.max(0.5, Math.min(2.6, rate));
-  if (v > 0.001 && a.paused && running){
+  if (v > 0.001 && a.paused && ambOn){
     const r = a.play(); if (r && r.catch) r.catch(() => {});
-  } else if ((v <= 0.001 || !running) && !a.paused){
+  } else if ((v <= 0.001 || !ambOn) && !a.paused){
     try { a.pause(); } catch (e) {}
   }
 }
 
+/* ---------- motor ---------- */
+
 export function engineStart(){
   running = true;
-  for (const n of ['engineLow','engineMid','engineHigh','wind']){
-    const a = loops.get(n);
-    if (a){ a.volume = 0; try { a.currentTime = 0; } catch (e) {} }
-  }
+  synth.start();
 }
 export function engineStop(){
   running = false;
-  for (const n of ['engineLow','engineMid','engineHigh','wind']) setLoop(n, 0);
+  synth.stop();
 }
+
+/* ---------- ambiente ----------
+   Un bucle por ambiente, y solo suena el del ambiente activo. Se cruzan con una rampa para que
+   cambiar de partida no corte el sonido de golpe. */
+const AMB = { day:'ambDay', sunset:'ambSunset', night:'ambNight' };
+let ambCur = null;
+export function setAmbience(env){
+  const want = AMB[env] || null;
+  if (want === ambCur) return;
+  ambCur = want;
+  for (const name of Object.values(AMB)) setLoop(name, name === want ? 1 : 0);
+}
+export function ambienceOn(on){
+  ambOn = !!on;
+  for (const name of Object.values(AMB)) setLoop(name, on && name === ambCur ? 1 : 0);
+}
+export const ambienceTrack = () => ambCur;
 
 /**
  * Mezcla el motor. rpm 0..1 recorre las tres capas con solape, asi que no hay salto
  * audible al pasar de una a otra; el playbackRate anade el barrido dentro de cada capa,
  * que es lo que da la sensacion de marcha larga. throttle baja el volumen al soltar gas.
  */
+/** El nombre se mantiene para no tocar a quien lo llama; el trabajo lo hace el sintetizador. */
 export function engine(rpm, speedFrac, throttle){
   if (!running) return;
-  const r = Math.max(0, Math.min(1, rpm));
-  const gas = 0.45 + 0.55 * Math.max(0, Math.min(1, throttle));
-
-  // triangulos de mezcla centrados en 0.0 / 0.5 / 1.0
-  const low  = Math.max(0, 1 - r / 0.5);
-  const mid  = Math.max(0, 1 - Math.abs(r - 0.5) / 0.5);
-  const high = Math.max(0, (r - 0.5) / 0.5);
-
-  setLoop('engineLow',  low  * gas, 0.85 + r * 0.5);
-  setLoop('engineMid',  mid  * gas, 0.85 + r * 0.6);
-  setLoop('engineHigh', high * gas, 0.90 + r * 0.7);
-  // el viento no depende de las revoluciones sino de la velocidad real
-  setLoop('wind', Math.pow(Math.max(0, Math.min(1, speedFrac)), 1.4));
+  synth.update(rpm, speedFrac, throttle);
 }
 
 /* ---------- musica ---------- */
@@ -282,6 +296,8 @@ export function probe(name){
 }
 
 export const currentTrack = () => current;
+/** Tambien solo para las pruebas: da acceso al sintetizador para medir su salida real. */
+export const engineDebug = () => synth._debug();
 export function duck(on){
   const a = current ? music.get(current) : null;
   if (a) a.volume = Math.max(0, Math.min(1, state.music * (on ? 0.35 : 1)));

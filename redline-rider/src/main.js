@@ -89,7 +89,6 @@ function boot(){
     onBike: () => { game.enterMenu(); ui.refreshGarage(); },
     onWipe: () => toMenu(),
     onTutorial: () => teach(),
-    onTutNext: () => tut.next(),
     onTutSkip: () => tut.skip()
   };
 
