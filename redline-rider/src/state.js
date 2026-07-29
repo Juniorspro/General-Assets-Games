@@ -1,6 +1,13 @@
 /* Estado persistente: ajustes, progreso, motos y mejoras. Todo en localStorage. */
 
 const KEY = 'redline.v1';
+const RESET_KEY = 'redline.reset';
+
+/* Sello de compilacion que pide empezar de cero. Lo inyecta build.mjs con --fresh, y el
+   borrado se hace UNA sola vez por sello: al abrir ese fichero la primera vez se limpia el
+   progreso, y desde ahi ya guarda normal. Borrar en cada apertura seria peor que no borrar,
+   porque no se podria juntar caja para probar el garaje ni las mejoras. */
+const RESET_STAMP = (typeof window !== 'undefined' && window.__HX_RESET) || null;
 
 /* Tres motos con techos de 180 / 250 / 320 km/h, segun la especificacion. Los precios
    crecen fuerte porque son el objetivo a medio plazo de todo lo que ganas rodando. */
@@ -47,6 +54,12 @@ export const state = DEFAULTS();
 
 export function load(){
   let raw = null;
+  try {
+    if (RESET_STAMP && localStorage.getItem(RESET_KEY) !== RESET_STAMP){
+      localStorage.removeItem(KEY);
+      localStorage.setItem(RESET_KEY, RESET_STAMP);
+    }
+  } catch (e) { /* sin localStorage no hay nada que borrar: cada apertura ya empieza limpia */ }
   try { raw = localStorage.getItem(KEY); } catch (e) { /* modo privado: se juega sin guardar */ }
   if (raw){
     try {

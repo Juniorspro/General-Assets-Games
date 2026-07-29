@@ -12,6 +12,10 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const dev = process.argv.includes('--dev');
 const single = process.argv.includes('--single');
 const cdn = process.argv.includes('--cdn');
+/* --fresh marca la compilacion para que borre el progreso guardado la PRIMERA vez que se
+   abra, y solo esa vez. Sirve para poder verificar el juego desde el principio (idioma,
+   calidad, garaje vacio) sin que borre la partida cada vez que se abre el fichero. */
+const fresh = process.argv.includes('--fresh');
 
 const REPO = 'Juniorspro/General-Assets-Games';
 const SUBDIR = 'redline-rider';
@@ -79,6 +83,14 @@ else if (cdn){
   const base = `https://cdn.jsdelivr.net/gh/${REPO}@${ref}/${SUBDIR}/`;
   prelude = 'window.__HX_ASSET_BASE=' + JSON.stringify(base) + ';\n';
   console.log('assets desde jsDelivr, commit', ref.slice(0, 10));
+}
+
+if (fresh){
+  /* El sello lleva la hora de compilacion: cada compilacion con --fresh es un sello nuevo, y
+     por tanto un reseteo nuevo, mientras que reabrir el mismo fichero respeta el progreso. */
+  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  prelude = 'window.__HX_RESET=' + JSON.stringify('fresh-' + stamp) + ';\n' + prelude;
+  console.log('compilacion con reseteo, sello fresh-' + stamp);
 }
 
 const js = (prelude + bundle).replace(/<\/script/gi, '<\\/script');
