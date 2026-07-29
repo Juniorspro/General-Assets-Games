@@ -306,6 +306,36 @@ export class UI {
 
   /** Punto vivo del angulo de inclinacion: es la unica forma de que el jugador vea que el
       giroscopio responde de verdad y hacia donde. */
+  /** Desenfoque y fundido del choque.
+      El desenfoque se hace con un filtro CSS sobre el lienzo en vez de con una pasada de
+      posproceso: cuesta un solo estilo por fotograma y solo durante los dos segundos del
+      choque, mientras que montar un objetivo de render intermedio encarece TODA la partida. */
+  crashFx(blurPx, phase){
+    const gl = $('gl'), fade = $('fade');
+    if (!gl || !fade) return;
+    if (blurPx <= 0.01){
+      if (this.fxOn){
+        gl.style.filter = '';
+        fade.style.opacity = '0';
+        this.hudEl.style.opacity = '';
+        this.fxOn = false;
+        this.paintPedals();
+      }
+      return;
+    }
+    this.fxOn = true;
+    gl.style.filter = 'blur(' + blurPx.toFixed(1) + 'px)';
+    /* El HUD se va con el choque. Dejar el velocimetro nitido y el boton de GAS puesto
+       mientras el piloto da vueltas por el aire desmiente la escena entera: ya no hay nada
+       que acelerar. */
+    this.hudEl.style.opacity = Math.max(0, 1 - phase * 5).toFixed(3);
+    const pedals = $('pedals');
+    if (pedals) pedals.classList.remove('ride');
+    /* El negro entra en la ULTIMA mitad de la secuencia: si empieza con el vuelo, el golpe se
+       pierde detras del fundido justo cuando hay algo que ver. */
+    fade.style.opacity = Math.max(0, (phase - 0.45) / 0.55).toFixed(3);
+  }
+
   /** Dice POR QUE no hay giroscopio, no solo que no lo hay. */
   paintTilt(){
     const m = $('tiltmsg');
@@ -350,6 +380,7 @@ export class UI {
     $('h-gear').textContent = t('hud.gear') + ' ' + d.gear;
     $('h-dist').textContent = (d.distance / 1000).toFixed(2) + ' km';
     $('h-score').textContent = num(d.score);
+    $('h-cash').textContent = num(d.cash);
     $('rpm').firstElementChild.style.width = Math.round(Math.min(1, d.rpm) * 100) + '%';
     const c = $('combo');
     c.classList.toggle('on', d.combo >= 3);
@@ -367,6 +398,22 @@ export class UI {
       el.style.transition = 'opacity .6s ease, transform .6s cubic-bezier(.2,.9,.2,1)';
       el.style.opacity = '0';
       el.style.transform = 'translate(-50%,-60%) scale(1)';
+    });
+  }
+
+  /** Aviso de monedas ganadas al rozar. Va aparte del de puntos y mas abajo: en un roce
+      saltan los dos a la vez y superpuestos no se lee ninguno. */
+  coins(n){
+    const el = $('coinpop');
+    if (!el || !n) return;
+    el.textContent = '+' + num(n);
+    el.style.transition = 'none';
+    el.style.opacity = '1';
+    el.style.transform = 'translate(-50%,-50%) scale(1.1)';
+    requestAnimationFrame(() => {
+      el.style.transition = 'opacity .7s ease, transform .7s cubic-bezier(.2,.9,.2,1)';
+      el.style.opacity = '0';
+      el.style.transform = 'translate(-50%,-115%) scale(1)';
     });
   }
 

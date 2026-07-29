@@ -147,6 +147,21 @@ const SHAKE_HZ = 14, SHAKE_DEG = 0.6;
 const SHAKE_GAIN = 2.2;
 const FOV_TAU = 0.35;
 
+/* Choque. El piloto y la moto se separan y vuelan por su cuenta, que es lo que se ve en un
+   accidente de verdad: si los dos siguieran juntos parecerian pegados con cola.
+   Al piloto se le da la velocidad que llevaba mas un empujon hacia ARRIBA y hacia el lado del
+   golpe, y a partir de ahi manda la gravedad. El giro es libre en los tres ejes, con
+   velocidades distintas para que no parezca una peonza. */
+const CRASH_UP = 6.5;              // m/s de empujon vertical al salir despedido
+const CRASH_SIDE = 3.2;            // m/s hacia el lado del golpe
+const CRASH_G = 16;                // gravedad exagerada: la real hace el vuelo pesado y lento
+const CRASH_SPIN = [2.4, 1.7, 3.1];// rad/s de giro en x, y, z
+const CRASH_BIKE_SPIN = [5.5, 2.2, 7.0];
+const CRASH_GROUND = 0.35;         // altura a la que se considera que ya rueda por el suelo
+const CRASH_BOUNCE = 0.35;         // cuanto rebota al tocar
+const CRASH_BLUR_MAX = 14;         // px de desenfoque en el pico
+const CRASH_TIME = 2.6;            // segundos de secuencia hasta el fundido completo
+
 export class World {
   constructor(canvas){
     this.canvas = canvas;
@@ -160,6 +175,7 @@ export class World {
     this.hfov = HFOV;
     this.pitch = PITCH0;
     this.pitchV = 0;
+    this.crash = null;
 
     this.glowTex = glowTexture();
     this.shadowTex = shadowTexture();
@@ -585,6 +601,67 @@ export class World {
   }
 
   addShake(v){ this.shake = Math.min(1.6, this.shake + v); }
+
+  /**
+   * Lanza la secuencia de choque. side es -1 o +1 segun por donde llego el golpe, para que
+   * salga despedido hacia el lado contrario al obstaculo.
+   * speed en m/s: el vuelo hereda la velocidad que llevaba, asi que chocar a 80 y chocar a
+   * 300 no se ven igual.
+   */
+  startCrash(speed, side){
+    const c = this.camera;
+    this.crash = {
+      t: 0,
+      // piloto
+      p: [c.position.x, c.position.y, c.position.z],
+      v: [side * CRASH_SIDE, CRASH_UP, -speed * 0.55],
+      r: [c.rotation.x, c.rotation.y, c.rotation.z],
+      w: [CRASH_SPIN[0], CRASH_SPIN[1] * side, CRASH_SPIN[2] * -side],
+      // moto: sale mas plana y girando mas
+      bp: [this.bikeGroup.position.x, 0.3, 0],
+      bv: [side * CRASH_SIDE * 1.6, CRASH_UP * 0.55, -speed * 0.8],
+      br: [0, 0, this.bikeGroup.rotation.z],
+      bw: [CRASH_BIKE_SPIN[0], CRASH_BIKE_SPIN[1] * side, CRASH_BIKE_SPIN[2] * side]
+    };
+  }
+
+  /** Progreso 0..1 de la secuencia, para que la interfaz sincronice desenfoque y fundido. */
+  crashPhase(){ return this.crash ? Math.min(1, this.crash.t / CRASH_TIME) : 0; }
+  crashBlur(){
+    if (!this.crash) return 0;
+    // sube rapido y se queda: el fundido a negro es el que cierra
+    return CRASH_BLUR_MAX * Math.min(1, this.crash.t / 0.55);
+  }
+
+  /** Integra el vuelo. Devuelve false cuando la secuencia ha terminado. */
+  stepCrash(dt){
+    const c = this.crash;
+    if (!c) return false;
+    c.t += dt;
+    const move = (p, v, spin, r) => {
+      v[1] -= CRASH_G * dt;
+      for (let i = 0; i < 3; i++){ p[i] += v[i] * dt; r[i] += spin[i] * dt; }
+      if (p[1] < CRASH_GROUND){
+        p[1] = CRASH_GROUND;
+        /* Al tocar el suelo se pierde casi todo: el rebote elastico manda al piloto otra vez
+           al aire y parece una pelota. Tambien se frena el giro, porque un cuerpo que raspa
+           el asfalto deja de girar libre. */
+        v[1] = Math.abs(v[1]) * CRASH_BOUNCE;
+        v[0] *= 0.55; v[2] *= 0.7;
+        for (let i = 0; i < 3; i++) spin[i] *= 0.45;
+      }
+    };
+    move(c.p, c.v, c.w, c.r);
+    move(c.bp, c.bv, c.bw, c.br);
+
+    this.camera.position.set(c.p[0], c.p[1], c.p[2]);
+    this.camera.rotation.set(c.r[0], c.r[1], c.r[2]);
+    this.bikeGroup.position.set(c.bp[0], c.bp[1], c.bp[2]);
+    this.bikeGroup.rotation.set(c.br[0], c.br[1], c.br[2]);
+    return c.t < CRASH_TIME;
+  }
+
+  endCrash(){ this.crash = null; }
 
   resize(){
     const w = this.canvas.clientWidth || window.innerWidth;

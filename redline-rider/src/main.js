@@ -80,7 +80,7 @@ function boot(){
   game.hooks = {
     onHud: d => ui.hud(d),
     onPause: () => ui.h.onPause(),
-    onClose: (tier, pts) => ui.popup(t('hud.close'), pts),
+    onClose: (tier, pts, mult, coins) => { ui.popup(t('hud.close'), pts); ui.coins(coins); },
     onOvertake: () => {},
     onDead: (r, rec) => setTimeout(() => ui.showResults(r, rec), 1100)
   };
@@ -128,10 +128,15 @@ function boot(){
        giroscopio va en segundos reales y aplicarlo 120 veces por fotograma lo dispararia. */
     controls.update(dt);
     ui.tilt(controls.input.tiltDeg, controls.gyroLive());
-    acc = Math.min(0.2, acc + dt);
+    /* La camara lenta escala el tiempo del JUEGO, no el del bucle: la entrada y la interfaz
+       siguen en tiempo real, que es lo que hace que responda igual de bien durante el efecto. */
+    const scale = game.timeScale(dt);
+    const gdt = dt * scale;
+    acc = Math.min(0.2, acc + gdt);
     while (acc >= FIXED){ game.step(FIXED); acc -= FIXED; }
-    world.update(dt, game.speed ? game.speed / game.vMax : 0);
+    world.update(gdt, game.speed ? game.speed / game.vMax : 0);
     world.render();
+    ui.crashFx(world.crashBlur(), world.crashPhase());
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

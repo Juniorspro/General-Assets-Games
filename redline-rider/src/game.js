@@ -20,8 +20,19 @@ const ROLL_DRAG = 0.35;                     // rozamiento constante (rodadura + 
 const PLAYER_HALF_W = 0.275, PLAYER_HALF_L = 0.95;   // colisionador 0,55 x 1,90 m
 const CLOSE_TIERS = [1.20, 0.80, 0.45];              // holgura lateral, de flojo a rasante
 const CLOSE_POINTS = [25, 60, 140];
+/* Monedas por roce, por nivel de holgura. Antes salian de dividir los puntos entre 6, asi que
+   el dinero era invisible: un roce flojo daba 4 monedas y no se anunciaba por ninguna parte.
+   Ahora es una recompensa declarada, escalada por el multiplicador de combo igual que los
+   puntos, porque arrimarse es LO que se quiere premiar. */
+const CLOSE_CASH = [6, 16, 40];
+const OVERTAKE_CASH = 2;
 const COMBO_WINDOW = 2.0;
 const BONUS_KMH = 100;
+
+/* Camara lenta del choque. 0,28 es lo bastante lento para seguir el vuelo con la vista y lo
+   bastante rapido para no aburrir; 1,1 s cubre el salto y el primer bote. */
+const SLOWMO_SCALE = 0.28;
+const SLOWMO_TIME = 1.1;
 
 const TRAFFIC_MAX = 22;
 const SPAWN_AHEAD = VIEW_Z - 20;
@@ -34,6 +45,7 @@ export class Game {
     this.mode = 'menu';
     this.pool = [];
     this.hornPrev = false;
+    this.slowmo = 0;
     /* La entrada vive fuera, en controls.js. Aqui solo queda la pausa por teclado: el resto
        (teclado, mando, pedales, arrastre, giroscopio) escribe en un unico objeto y este
        modulo solo lo lee, de modo que anadir un esquema no toca la fisica. */
@@ -91,6 +103,8 @@ export class Game {
     this.topKmh = 0;
     this.hudAcc = 0;
     this.deadT = 0;
+    this.slowmo = 0;
+    this.world.endCrash();
 
     this.clearTraffic();
     for (let i = 0; i < 10; i++) this.spawn(-40 - Math.random() * SPAWN_AHEAD);
@@ -157,6 +171,7 @@ export class Game {
     }
     if (this.mode !== 'play'){
       this.deadT += dt;
+      if (this.mode === 'dead') this.world.stepCrash(dt);
       return;
     }
 
@@ -254,15 +269,17 @@ export class Game {
           this.comboT = COMBO_WINDOW;
           this.bestCombo = Math.max(this.bestCombo, this.combo);
           const pts = CLOSE_POINTS[tier] * mult;
+          const coins = CLOSE_CASH[tier] * mult;
           this.score += pts;
-          this.cash += Math.round(pts / 6);
+          this.cash += coins;
           audio.play('nearmiss', { vol: 0.5 + tier * 0.25, rate: 0.95 + Math.random() * 0.1 });
           this.world.addShake(0.12 + tier * 0.12);
           if (state.haptics && navigator.vibrate) try { navigator.vibrate(8 + tier * 8); } catch (e) {}
-          this.hooks.onClose && this.hooks.onClose(tier, pts, mult);
+          audio.play('coin', { vol: 0.5 + tier * 0.2 });
+          this.hooks.onClose && this.hooks.onClose(tier, pts, mult, coins);
         } else {
           this.score += 12;
-          this.cash += 2;
+          this.cash += OVERTAKE_CASH;
           this.hooks.onOvertake && this.hooks.onOvertake();
         }
       }
@@ -299,6 +316,14 @@ export class Game {
   crash(v){
     this.mode = 'dead';
     this.deadT = 0;
+    /* Sale despedido hacia el lado CONTRARIO al del obstaculo: si el coche estaba a la
+       derecha, el piloto vuela a la izquierda. Salir hacia el coche con el que acabas de
+       chocar no se entiende. */
+    const side = this.x < v.x ? -1 : 1;
+    this.world.startCrash(this.speed, side);
+    /* Camara lenta en el impacto. Es lo que deja ver el golpe: a velocidad normal el vuelo
+       entero dura menos de lo que tarda el ojo en encontrar la moto. */
+    this.slowmo = SLOWMO_TIME;
     audio.engineStop();
     audio.play('crash');
     audio.duck(true);
@@ -312,6 +337,18 @@ export class Game {
     };
     const rec = finishRun(r);
     this.hooks.onDead && this.hooks.onDead(r, rec);
+  }
+
+  /** Escala de tiempo del juego. Consume el reloj de camara lenta con dt REAL: si se
+      alimentara con el dt ya escalado, la camara lenta se alargaria sola. */
+  timeScale(dtReal){
+    if (this.slowmo > 0){
+      this.slowmo = Math.max(0, this.slowmo - dtReal);
+      // arranca muy lento y vuelve a la normalidad de forma suave, no de golpe
+      const k = this.slowmo / SLOWMO_TIME;
+      return lerp(1, SLOWMO_SCALE, Math.min(1, k * 1.6));
+    }
+    return 1;
   }
 
   /* Al pausar hay que soltar los mandos a mano: si el dedo estaba en el gas cuando salta la

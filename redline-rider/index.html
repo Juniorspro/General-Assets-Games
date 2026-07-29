@@ -140,6 +140,12 @@
     backdrop-filter:blur(7px)}
   .chip .k{font-size:8px;font-weight:800;letter-spacing:.15em;color:var(--dim)}
   .chip .v{font-size:17px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.1}
+  .chip.cash .v{color:#ffd23f}
+  /* Aviso de monedas, aparte del de puntos: los dos salen a la vez en un roce y superpuestos
+     no se lee ninguno, asi que este sale mas abajo y en dorado. */
+  #coinpop{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);text-align:center;
+    pointer-events:none;opacity:0;font-size:clamp(16px,4.4vmin,24px);font-weight:900;
+    color:#ffd23f;text-shadow:0 2px 10px rgba(0,0,0,.7)}
   #pausebtn{pointer-events:auto;width:38px;height:38px;border-radius:11px;border:1px solid var(--line);
     background:rgba(6,9,15,.55);color:var(--text);cursor:pointer;display:grid;place-items:center;
     backdrop-filter:blur(7px)}
@@ -178,6 +184,10 @@
   .toast.on{opacity:1}
   #nogl{position:fixed;inset:0;display:none;place-items:center;padding:28px;text-align:center;
     font-size:13.5px;line-height:1.6;color:var(--dim);z-index:9}
+
+  /* Fundido del choque. Va DENTRO del escenario y por encima del lienzo pero por debajo de
+     las pantallas, para que el panel de resultados aparezca ya sobre negro. */
+  #fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:1}
 
   /* ---- mandos en pantalla ----
      El gas a la derecha y el freno a su lado porque el pulgar derecho es el que descansa
@@ -232,6 +242,7 @@
 
 <div id="stage">
 <canvas id="gl"></canvas>
+<div id="fade"></div>
 
 <div id="ui">
   <div class="screen on dim" id="s-boot">
@@ -322,10 +333,12 @@
     <div id="hudtop">
       <div class="chip"><div class="k" data-i18n="hud.dist"></div><div class="v" id="h-dist">0</div></div>
       <div class="chip" style="text-align:center"><div class="k" data-i18n="hud.score"></div><div class="v" id="h-score">0</div></div>
+      <div class="chip cash" style="text-align:right"><div class="k" data-i18n="hud.cash"></div><div class="v" id="h-cash">0</div></div>
       <button id="pausebtn" aria-label="pause"><i></i></button>
     </div>
     <div id="combo"></div>
     <div id="popup"><div class="t"></div><div class="p"></div></div>
+  <div id="coinpop"></div>
     <div id="rpm"><i></i></div>
     <div id="speedo"><div class="n" id="h-kmh">0</div><div class="u">KM/H</div><div class="g" id="h-gear"></div></div>
     <div id="pedals">
@@ -564,6 +577,7 @@
       "hud.gear": "MARCHA",
       "hud.dist": "DISTANCIA",
       "hud.score": "PUNTOS",
+      "hud.cash": "CAJA",
       "hud.close": "\xA1ROCE!",
       "hud.overtake": "ADELANTAMIENTO",
       "pause.title": "PAUSA",
@@ -660,6 +674,7 @@
       "hud.gear": "GEAR",
       "hud.dist": "DISTANCE",
       "hud.score": "SCORE",
+      "hud.cash": "CASH",
       "hud.close": "CLOSE PASS!",
       "hud.overtake": "OVERTAKE",
       "pause.title": "PAUSED",
@@ -756,6 +771,7 @@
       "hud.gear": "MARCHA",
       "hud.dist": "DIST\xC2NCIA",
       "hud.score": "PONTOS",
+      "hud.cash": "CAIXA",
       "hud.close": "RASPOU!",
       "hud.overtake": "ULTRAPASSAGEM",
       "pause.title": "PAUSA",
@@ -852,6 +868,7 @@
       "hud.gear": "VITESSE",
       "hud.dist": "DISTANCE",
       "hud.score": "POINTS",
+      "hud.cash": "CAISSE",
       "hud.close": "FR\xD4L\xC9 !",
       "hud.overtake": "D\xC9PASSEMENT",
       "pause.title": "PAUSE",
@@ -34882,6 +34899,15 @@ void main() {
   var SHAKE_DEG = 0.6;
   var SHAKE_GAIN = 2.2;
   var FOV_TAU = 0.35;
+  var CRASH_UP = 6.5;
+  var CRASH_SIDE = 3.2;
+  var CRASH_G = 16;
+  var CRASH_SPIN = [2.4, 1.7, 3.1];
+  var CRASH_BIKE_SPIN = [5.5, 2.2, 7];
+  var CRASH_GROUND = 0.35;
+  var CRASH_BOUNCE = 0.35;
+  var CRASH_BLUR_MAX = 14;
+  var CRASH_TIME = 2.6;
   var World = class {
     constructor(canvas2) {
       this.canvas = canvas2;
@@ -34893,6 +34919,7 @@ void main() {
       this.hfov = HFOV;
       this.pitch = PITCH0;
       this.pitchV = 0;
+      this.crash = null;
       this.glowTex = glowTexture();
       this.shadowTex = shadowTexture();
       this.barrierTex = barrierTexture();
@@ -35294,6 +35321,66 @@ void main() {
     addShake(v) {
       this.shake = Math.min(1.6, this.shake + v);
     }
+    /**
+     * Lanza la secuencia de choque. side es -1 o +1 segun por donde llego el golpe, para que
+     * salga despedido hacia el lado contrario al obstaculo.
+     * speed en m/s: el vuelo hereda la velocidad que llevaba, asi que chocar a 80 y chocar a
+     * 300 no se ven igual.
+     */
+    startCrash(speed, side) {
+      const c = this.camera;
+      this.crash = {
+        t: 0,
+        // piloto
+        p: [c.position.x, c.position.y, c.position.z],
+        v: [side * CRASH_SIDE, CRASH_UP, -speed * 0.55],
+        r: [c.rotation.x, c.rotation.y, c.rotation.z],
+        w: [CRASH_SPIN[0], CRASH_SPIN[1] * side, CRASH_SPIN[2] * -side],
+        // moto: sale mas plana y girando mas
+        bp: [this.bikeGroup.position.x, 0.3, 0],
+        bv: [side * CRASH_SIDE * 1.6, CRASH_UP * 0.55, -speed * 0.8],
+        br: [0, 0, this.bikeGroup.rotation.z],
+        bw: [CRASH_BIKE_SPIN[0], CRASH_BIKE_SPIN[1] * side, CRASH_BIKE_SPIN[2] * side]
+      };
+    }
+    /** Progreso 0..1 de la secuencia, para que la interfaz sincronice desenfoque y fundido. */
+    crashPhase() {
+      return this.crash ? Math.min(1, this.crash.t / CRASH_TIME) : 0;
+    }
+    crashBlur() {
+      if (!this.crash) return 0;
+      return CRASH_BLUR_MAX * Math.min(1, this.crash.t / 0.55);
+    }
+    /** Integra el vuelo. Devuelve false cuando la secuencia ha terminado. */
+    stepCrash(dt) {
+      const c = this.crash;
+      if (!c) return false;
+      c.t += dt;
+      const move = (p, v, spin, r) => {
+        v[1] -= CRASH_G * dt;
+        for (let i = 0; i < 3; i++) {
+          p[i] += v[i] * dt;
+          r[i] += spin[i] * dt;
+        }
+        if (p[1] < CRASH_GROUND) {
+          p[1] = CRASH_GROUND;
+          v[1] = Math.abs(v[1]) * CRASH_BOUNCE;
+          v[0] *= 0.55;
+          v[2] *= 0.7;
+          for (let i = 0; i < 3; i++) spin[i] *= 0.45;
+        }
+      };
+      move(c.p, c.v, c.w, c.r);
+      move(c.bp, c.bv, c.bw, c.br);
+      this.camera.position.set(c.p[0], c.p[1], c.p[2]);
+      this.camera.rotation.set(c.r[0], c.r[1], c.r[2]);
+      this.bikeGroup.position.set(c.bp[0], c.bp[1], c.bp[2]);
+      this.bikeGroup.rotation.set(c.br[0], c.br[1], c.br[2]);
+      return c.t < CRASH_TIME;
+    }
+    endCrash() {
+      this.crash = null;
+    }
     resize() {
       const w = this.canvas.clientWidth || window.innerWidth;
       const h = this.canvas.clientHeight || window.innerHeight;
@@ -35323,8 +35410,12 @@ void main() {
   var PLAYER_HALF_L = 0.95;
   var CLOSE_TIERS = [1.2, 0.8, 0.45];
   var CLOSE_POINTS = [25, 60, 140];
+  var CLOSE_CASH = [6, 16, 40];
+  var OVERTAKE_CASH = 2;
   var COMBO_WINDOW = 2;
   var BONUS_KMH = 100;
+  var SLOWMO_SCALE = 0.28;
+  var SLOWMO_TIME = 1.1;
   var TRAFFIC_MAX = 22;
   var SPAWN_AHEAD = VIEW_Z - 20;
   var TRAFFIC_KMH = { sedan: [75, 105], suv: [70, 98], van: [62, 88], truck: [55, 78], bus: [52, 74] };
@@ -35335,6 +35426,7 @@ void main() {
       this.mode = "menu";
       this.pool = [];
       this.hornPrev = false;
+      this.slowmo = 0;
       addEventListener("keydown", (e) => {
         if ((e.code === "Escape" || e.code === "KeyP") && this.mode === "play")
           this.hooks.onPause && this.hooks.onPause();
@@ -35378,6 +35470,8 @@ void main() {
       this.topKmh = 0;
       this.hudAcc = 0;
       this.deadT = 0;
+      this.slowmo = 0;
+      this.world.endCrash();
       this.clearTraffic();
       for (let i = 0; i < 10; i++) this.spawn(-40 - Math.random() * SPAWN_AHEAD);
       this.mode = "play";
@@ -35440,6 +35534,7 @@ void main() {
       }
       if (this.mode !== "play") {
         this.deadT += dt;
+        if (this.mode === "dead") this.world.stepCrash(dt);
         return;
       }
       const throttle = input.throttle;
@@ -35526,18 +35621,20 @@ void main() {
             this.comboT = COMBO_WINDOW;
             this.bestCombo = Math.max(this.bestCombo, this.combo);
             const pts = CLOSE_POINTS[tier] * mult;
+            const coins = CLOSE_CASH[tier] * mult;
             this.score += pts;
-            this.cash += Math.round(pts / 6);
+            this.cash += coins;
             play("nearmiss", { vol: 0.5 + tier * 0.25, rate: 0.95 + Math.random() * 0.1 });
             this.world.addShake(0.12 + tier * 0.12);
             if (state.haptics && navigator.vibrate) try {
               navigator.vibrate(8 + tier * 8);
             } catch (e) {
             }
-            this.hooks.onClose && this.hooks.onClose(tier, pts, mult);
+            play("coin", { vol: 0.5 + tier * 0.2 });
+            this.hooks.onClose && this.hooks.onClose(tier, pts, mult, coins);
           } else {
             this.score += 12;
-            this.cash += 2;
+            this.cash += OVERTAKE_CASH;
             this.hooks.onOvertake && this.hooks.onOvertake();
           }
         }
@@ -35569,6 +35666,9 @@ void main() {
     crash(v) {
       this.mode = "dead";
       this.deadT = 0;
+      const side = this.x < v.x ? -1 : 1;
+      this.world.startCrash(this.speed, side);
+      this.slowmo = SLOWMO_TIME;
       engineStop();
       play("crash");
       duck(true);
@@ -35589,6 +35689,16 @@ void main() {
       };
       const rec = finishRun(r);
       this.hooks.onDead && this.hooks.onDead(r, rec);
+    }
+    /** Escala de tiempo del juego. Consume el reloj de camara lenta con dt REAL: si se
+        alimentara con el dt ya escalado, la camara lenta se alargaria sola. */
+    timeScale(dtReal) {
+      if (this.slowmo > 0) {
+        this.slowmo = Math.max(0, this.slowmo - dtReal);
+        const k = this.slowmo / SLOWMO_TIME;
+        return lerp2(1, SLOWMO_SCALE, Math.min(1, k * 1.6));
+      }
+      return 1;
     }
     /* Al pausar hay que soltar los mandos a mano: si el dedo estaba en el gas cuando salta la
        pausa, el boton no recibe el pointerup y al reanudar la moto sale acelerando sola. */
@@ -35950,6 +36060,30 @@ void main() {
     }
     /** Punto vivo del angulo de inclinacion: es la unica forma de que el jugador vea que el
         giroscopio responde de verdad y hacia donde. */
+    /** Desenfoque y fundido del choque.
+        El desenfoque se hace con un filtro CSS sobre el lienzo en vez de con una pasada de
+        posproceso: cuesta un solo estilo por fotograma y solo durante los dos segundos del
+        choque, mientras que montar un objetivo de render intermedio encarece TODA la partida. */
+    crashFx(blurPx, phase) {
+      const gl = $("gl"), fade = $("fade");
+      if (!gl || !fade) return;
+      if (blurPx <= 0.01) {
+        if (this.fxOn) {
+          gl.style.filter = "";
+          fade.style.opacity = "0";
+          this.hudEl.style.opacity = "";
+          this.fxOn = false;
+          this.paintPedals();
+        }
+        return;
+      }
+      this.fxOn = true;
+      gl.style.filter = "blur(" + blurPx.toFixed(1) + "px)";
+      this.hudEl.style.opacity = Math.max(0, 1 - phase * 5).toFixed(3);
+      const pedals = $("pedals");
+      if (pedals) pedals.classList.remove("ride");
+      fade.style.opacity = Math.max(0, (phase - 0.45) / 0.55).toFixed(3);
+    }
     /** Dice POR QUE no hay giroscopio, no solo que no lo hay. */
     paintTilt() {
       const m = $("tiltmsg");
@@ -35992,6 +36126,7 @@ void main() {
       $("h-gear").textContent = t("hud.gear") + " " + d.gear;
       $("h-dist").textContent = (d.distance / 1e3).toFixed(2) + " km";
       $("h-score").textContent = num(d.score);
+      $("h-cash").textContent = num(d.cash);
       $("rpm").firstElementChild.style.width = Math.round(Math.min(1, d.rpm) * 100) + "%";
       const c = $("combo");
       c.classList.toggle("on", d.combo >= 3);
@@ -36008,6 +36143,21 @@ void main() {
         el2.style.transition = "opacity .6s ease, transform .6s cubic-bezier(.2,.9,.2,1)";
         el2.style.opacity = "0";
         el2.style.transform = "translate(-50%,-60%) scale(1)";
+      });
+    }
+    /** Aviso de monedas ganadas al rozar. Va aparte del de puntos y mas abajo: en un roce
+        saltan los dos a la vez y superpuestos no se lee ninguno. */
+    coins(n) {
+      const el2 = $("coinpop");
+      if (!el2 || !n) return;
+      el2.textContent = "+" + num(n);
+      el2.style.transition = "none";
+      el2.style.opacity = "1";
+      el2.style.transform = "translate(-50%,-50%) scale(1.1)";
+      requestAnimationFrame(() => {
+        el2.style.transition = "opacity .7s ease, transform .7s cubic-bezier(.2,.9,.2,1)";
+        el2.style.opacity = "0";
+        el2.style.transform = "translate(-50%,-115%) scale(1)";
       });
     }
     showResults(r, rec) {
@@ -36120,7 +36270,10 @@ void main() {
     game.hooks = {
       onHud: (d) => ui.hud(d),
       onPause: () => ui.h.onPause(),
-      onClose: (tier, pts) => ui.popup(t("hud.close"), pts),
+      onClose: (tier, pts, mult, coins) => {
+        ui.popup(t("hud.close"), pts);
+        ui.coins(coins);
+      },
       onOvertake: () => {
       },
       onDead: (r, rec) => setTimeout(() => ui.showResults(r, rec), 1100)
@@ -36160,13 +36313,16 @@ void main() {
       if (dt > 0.1) dt = 0.1;
       update(dt);
       ui.tilt(input.tiltDeg, gyroLive());
-      acc = Math.min(0.2, acc + dt);
+      const scale = game.timeScale(dt);
+      const gdt = dt * scale;
+      acc = Math.min(0.2, acc + gdt);
       while (acc >= FIXED) {
         game.step(FIXED);
         acc -= FIXED;
       }
-      world.update(dt, game.speed ? game.speed / game.vMax : 0);
+      world.update(gdt, game.speed ? game.speed / game.vMax : 0);
       world.render();
+      ui.crashFx(world.crashBlur(), world.crashPhase());
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
