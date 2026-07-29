@@ -213,6 +213,81 @@ for (const r of rowsL) console.log('   alabeo ' + String(r.alabeo).padStart(4) +
   '   leido ' + String(r.leido).padStart(6) + '   steer ' + String(r.steer).padStart(7));
 console.log('   signo', rowsL.every(r => r.alabeo === 0 || Math.sign(r.steer) === Math.sign(r.alabeo)) ? 'OK' : 'FALLA');
 
+
+/* ---------- 10. la sensibilidad no debe impedir llegar al tope ---------- */
+/* Multiplicar la SALIDA ya recortada a +-1 hace que con sens < 1 el tope sea inalcanzable
+   (no se puede cambiar de carril) y que con sens > 1 el ajuste no haga nada. */
+const sensRows = [];
+for (const sens of [0.5, 1, 2]){
+  const r = await page.evaluate(async sv => {
+    const rr = window.__rr;
+    rr.state.sens = sv; rr.state.scheme = 'buttons'; rr.state.invert = false;
+    rr.controls.releaseAll();
+    // se mantiene el boton derecho pulsado y se deja correr el barrido
+    const el = document.getElementById('p-right');
+    el.dispatchEvent(new PointerEvent('pointerdown', { pointerId:901, bubbles:true }));
+    await new Promise(r2 => setTimeout(r2, 1400));
+    const tope = rr.controls.input.steer;
+    el.dispatchEvent(new PointerEvent('pointerup', { pointerId:901, bubbles:true }));
+    return +tope.toFixed(3);
+  }, sens);
+  sensRows.push({ sens, tope:r });
+}
+console.log('10 sensibilidad (botones, tope alcanzable):',
+  sensRows.map(r => 'sens ' + r.sens + ' -> ' + r.tope).join(' | '),
+  sensRows.every(r => r.tope > 0.98) ? 'OK' : 'FALLA');
+
+/* ---------- 11. el sensor dormido no debe dejar el manillar pegado ---------- */
+const stale = await page.evaluate(async () => {
+  const rr = window.__rr;
+  rr.state.scheme = 'tilt'; rr.state.sens = 1; rr.state.invert = false;
+  await rr.controls.enableGyro();
+  rr.controls.calibrateGyro();
+  const burst = (beta, gamma, n) => {
+    for (let i = 0; i < n; i++)
+      dispatchEvent(new DeviceOrientationEvent('deviceorientation', { beta, gamma, alpha:0 }));
+  };
+  /* Primero la postura NEUTRA, que es la que fija el centro (se promedian varias lecturas).
+     Calibrar directamente sobre la postura inclinada haria que el angulo relativo fuese cero
+     y la prueba mediria otra cosa. */
+  burst(35.0, 0, 12);
+  await new Promise(r => setTimeout(r, 250));
+  burst(32.7, 13.5, 12);                        // ahora si, inclinado 20 grados a la derecha
+  await new Promise(r => setTimeout(r, 450));
+  const girando = +rr.controls.input.steer.toFixed(3);
+  const estado1 = rr.controls.gyroStatus();
+  const d1 = rr.controls.gyroDebug();
+  await new Promise(r => setTimeout(r, 1600));  // el sensor se calla: app en segundo plano
+  return { girando, estado1, raw:+d1.raw.toFixed(1), activo:d1.active,
+           despues:+rr.controls.input.steer.toFixed(3), estado2: rr.controls.gyroStatus() };
+});
+console.log('11 sensor dormido:', JSON.stringify(stale),
+  stale.girando > 0.1 && Math.abs(stale.despues) < 0.02 && stale.estado2 === 'stale' ? 'OK' : 'FALLA');
+
+/* ---------- 12. el gas no debe quedar muerto tras cambiar de aplicacion ---------- */
+/* Sin pointerup, el conjunto de punteros del mando conserva un id rancio: held.size deja de
+   ser cero y el siguiente onDown NO dispara. El gas queda muerto el resto de la partida. */
+const ghost = await page.evaluate(async () => {
+  const rr = window.__rr;
+  rr.state.scheme = 'buttons';
+  const el = document.getElementById('p-gas');
+  el.dispatchEvent(new PointerEvent('pointerdown', { pointerId:801, bubbles:true }));
+  await new Promise(r => setTimeout(r, 120));
+  const antes = rr.controls.input.throttle;
+  rr.controls.releaseAll();                     // equivale a cambiar de aplicacion
+  await new Promise(r => setTimeout(r, 120));
+  const sueltoOk = rr.controls.input.throttle === 0;
+  // al volver, el navegador SIEMPRE asigna un pointerId nuevo
+  el.dispatchEvent(new PointerEvent('pointerdown', { pointerId:802, bubbles:true }));
+  await new Promise(r => setTimeout(r, 150));
+  const despues = rr.controls.input.throttle;
+  el.dispatchEvent(new PointerEvent('pointerup', { pointerId:802, bubbles:true }));
+  return { antes, sueltoOk, despues };
+});
+console.log('12 gas tras cambiar de app:', JSON.stringify(ghost),
+  ghost.antes === 1 && ghost.sueltoOk && ghost.despues === 1 ? 'OK' : 'FALLA');
+await page.evaluate(() => { window.__rr.state.sens = 1; window.__rr.controls.releaseAll(); });
+
 /* ---------- 7. encuadre de la moto ---------- */
 const framing = await page.evaluate(() => {
   const rr = window.__rr;

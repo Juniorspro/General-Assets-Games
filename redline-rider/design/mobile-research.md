@@ -1,6 +1,6 @@
 # Investigacion: Redline Rider en movil
 
-Devuelto por los agentes del workflow. 5 de 7.
+Devuelto por los agentes del workflow. 6 de 7.
 
 ## Presentacion en horizontal por CSS (envoltorio rotado), sin cartel de "gira el movil": bloque contenedor, safe-area remapeada, Screen Orientation API, medida del renderer de three.js
 
@@ -2363,3 +2363,860 @@ function checkNose(obj, spec){
 - Cifras medidas DESPUES: campo horizontal 93,9 en los tres aparatos (vertical 52,6 en movil y 62,1 en escritorio); cobertura 5,7-6,6% con el borde superior al 71-75% y el inferior al 100%; centrada al 0,3-0,9% en recto y al -2,0/-2,3% con 21 grados de inclinacion; vertice mas cercano 0,373-0,383 m con near 0,20; horizonte al 46-49%; malla y colisionador coincidentes en los seis modelos; nada de mas de 2,9 m de ancho. Las 13 comprobaciones por aparato pasan en los tres.
 - El aviso de checkNose sale por la consola de la pagina y el guion lo reenvia con page.on('console'). En este repo tiene que cantar exactamente uno: van.glb (fraccion 0,71). Hay que mirarlo una vez en la hoja de contactos de tools/probe_models.mjs y, si esta girado, poner van: { ..., yaw: Math.PI/2 }.
 - Las capturas de --shots (/tmp/frame-<aparato>.png y /tmp/frame-<aparato>-curva.png) son para mirarlas DESPUES de que los numeros pasen, no para decidir. En la de movil apaisado se ve el manillar y los espejos cruzando la franja baja, el deposito abajo al centro, el horizonte justo por encima del medio y un camion de frente a lo lejos visto por detras; en la de curva el manillar sigue centrado y lo que se inclina es el horizonte.
+
+## Los tres esquemas de direccion (giroscopio / arrastre / botones) y los ajustes de control
+
+### area
+
+Los tres esquemas de direccion (giroscopio / arrastre / botones) y los ajustes de control
+
+### diagnosis
+
+Premisa corregida antes de nada: el campo `scheme` SI existe en los DEFAULTS (src/state.js:35, con su comentario en :32-34). El defecto real es el contrario, y esta en src/main.js:41 — `if (!controls.SCHEMES.includes(state.scheme)) state.scheme = controls.defaultScheme();` resuelve el valor del aparato y lo escribe en el estado, y como src/main.js:153 guarda en `pagehide`, ese valor deducido queda PERSISTIDO como si el jugador lo hubiera elegido. Contradice literalmente el comentario de state.js:32-34 y hace que el aparato nunca vuelva a opinar (un movil que arranco sin permiso de sensor se queda con 'touch' guardado para siempre).
+
+Todo lo demas lo he comprobado en Chromium headless (probe en /tmp/claude-0/-home-user-General-Assets-Games/5db9e9a6-ad49-51d1-8b36-07bc1d920a78/scratchpad/probe_schemes.mjs, salida real citada):
+
+1. Sensibilidad en botones: rota. src/controls.js:343 `btnSteer * sens`, con `btnSteer` = ±1. Medido: sens 0.5 -> steer maximo 0.5 (NO se puede cambiar de carril entero), sens 1 -> 1, sens 2 -> 1 (el clamp de :360 ya recorta, la sensibilidad no hace NADA por encima de 1). El deslizador es dañino por debajo de 1 e inerte por encima.
+
+2. Sensibilidad en arrastre: rota igual. src/controls.js:344 `touchSteer * sens`, pero `touchSteer` ya viene recortado a ±1 en :221. Medido: con sens 0.5, arrastrando 600 px el steer se queda clavado en 0.5 y nunca llega al tope (`pxParaTope: -1`); con sens 2 el tope llega a los 130 px, es decir la sensibilidad recorta el recorrido util del dedo en vez de cambiar la ganancia. El unico sitio correcto es la ganancia `k` de :220, antes del recorte.
+
+3. `gyro.active` nunca vuelve a false: se pone a true en src/controls.js:182 y no hay quien lo baje. Medido: inclino a la derecha (steer 0.49), dejo de emitir eventos 5 segundos (equivalente a cambiar de app, revocar el permiso o que el sensor se duerma) y el resultado es `{steer:0.49, live:true, estado:"live"}`. El manillar se queda PEGADO a medio giro y src/controls.js:307 `gyroStatus()` le miente a la interfaz diciendo "live". Esto es, tal cual, "controles pegados al recuperar el foco".
+
+4. Pedal fantasma, el peor de todos. `bindButton` (src/controls.js:231-265) guarda los punteros en un `Set` local `held`, y `releaseAll()` (:368) no lo toca. Al cambiar de app no siempre llega `pointerup`/`pointercancel`. Medido: pointerdown en #p-gas -> throttle 1; `releaseAll()` -> throttle 0 pero `held` conserva el id y la clase `.press` se queda puesta; el jugador vuelve y pulsa con otro pointerId (siempre es otro) -> `held.size` ya no es 0, `onDown()` no se dispara, **throttle 0: el gas queda muerto el resto de la partida**.
+
+5. Arrastre rancio: `drag` es local a `install()` (src/controls.js:210) y `releaseAll()` no lo cancela. Medido: pointerdown arriba, `releaseAll()`, y el primer `pointermove` al volver compara con la posicion de hace un minuto -> **steer = 1 de golpe sin haber arrastrado**.
+
+6. Deteccion de aparato: hay DOS tests distintos que tienen que coincidir y no coinciden. `coarsePointer()` (:58) usa `maxTouchPoints>0 || pointer:coarse` y decide si se GIRA la pantalla; `defaultScheme()` (:292) usa `maxTouchPoints>0 || 'ontouchstart' in window` y decide el ESQUEMA. En un portatil con pantalla tactil (Windows: `maxTouchPoints` 10, `pointer:fine`, `hover:hover`) ambos dan falso positivo por la rama de `maxTouchPoints`: el juego se gira 90 grados en un ordenador y encima elige giroscopio. `'ontouchstart' in window` es el peor test posible (lo cumple cualquier Chrome de escritorio con la emulacion tocada) y `window.DeviceOrientationEvent` existe en TODOS los Chrome de escritorio sin ningun sensor detras (medido: `{DOE:true}` en 1280x800 sin dedo).
+
+7. El respaldo va al esquema equivocado. src/controls.js:301 cae a 'touch'; design/spec.md:229 dice literalmente "If no DeviceOrientation event arrives within 1.5 s of enabling tilt (or permission is denied on iOS), auto-fall-back to **buttons** and say why". Caer al arrastre deja al jugador sin NADA visible con lo que girar, que es justo su queja. Y `enableGyro()` (:115-129) devuelve true en cuanto hay permiso, sin esperar ninguna lectura, de modo que quien decide si hay sensor es un `setTimeout(1600)` colgado en la interfaz (src/ui.js:260-262) que solo se ejecuta en el instante de tocar el segmento.
+
+8. Izquierda + derecha a la vez pierde el boton que sigue pulsado: src/controls.js:270-271, soltar DERECHA con IZQUIERDA aun pulsada deja `btnSteer` en 0 en vez de volver a -1.
+
+9. Fila de ajustes: `#row-tilt` (template.html:282) tiene id pero NADIE lo referencia (grep: cero usos en src/) — la fila del giroscopio y su boton CENTRAR se ven con cualquier esquema, y las filas que si dependen del esquema (Sensibilidad, Invertir) estan separadas del selector por dos deslizadores de audio (template.html:289-293). El indicador vivo escala con `deg / 22` a pelo (src/ui.js:307), duplicando TILT_FULL y sin tener en cuenta que la sensibilidad divide ese angulo: con sens 2 el manillar esta a tope a 11 grados y el punto solo ha recorrido la mitad, con lo que parece que el sensor no llega. Y `bar.firstElementChild.nextElementSibling` (:308) depende del orden `<u><i>` del HTML.
+
+10. La inversion (src/controls.js:356) se aplica DESPUES de que el teclado y el mando pisen el valor (:350-351), asi que activar "Invertir giro" para arreglar un giroscopio al reves invierte tambien la flecha izquierda del teclado y las flechas ◀ ▶ de la pantalla. Una flecha etiquetada que gira al otro lado no es un ajuste, es un bug.
+
+11. Sensibilidad global: design/spec.md:121 la quiere "stored per scheme" y en rango 0.4-2.0; state.js:37 tiene un escalar y template.html:291 el deslizador va de 50 a 200.
+
+### recommendation
+
+Los cinco defectos del jugador salen de la misma raiz: hay tres esquemas pero ni el codigo ni la pantalla dicen nunca cual esta MANDANDO de verdad. Mi propuesta se sostiene sobre cuatro decisiones.
+
+Primera, una sola funcion de deteccion para todo el modulo. `isCoarse()` = `matchMedia('(pointer: coarse)')`, y solo si el navegador no tiene consultas de puntero se cae a `maxTouchPoints`. Ese es el test que decide GIRAR la pantalla, porque un portatil tactil reporta `pointer:fine` y asi deja de girarse. Encima, `isHandheld()` = `isCoarse() && !matchMedia('(hover: hover)')`, que es el que decide el esquema: un portatil tactil siempre da `hover:hover`. `'ontouchstart' in window` no se usa para nada. Por defecto: aparato de mano con `DeviceOrientationEvent` y sin ser http en claro -> `tilt`; aparato de mano sin sensor -> `buttons`; escritorio -> `touch` (que ahi es un adorno, porque manda el teclado). `buttons` no es nunca un valor por defecto deducido, es el destino del respaldo y la eleccion manual de quien no quiere inclinar.
+
+Segunda, el respaldo se demuestra, no se supone, y termina en botones. `sniffGyro()` engancha el listener sin pedir permiso en todo lo que no sea iOS (donde `requestPermission` no existe), asi que en Android se sabe si hay sensor ANTES de que el jugador pulse CONDUCIR. `enableGyro()` pasa a resolver a `true` solo cuando ha llegado una lectura de verdad, esperando hasta 1500 ms como manda design/spec.md:229. `activeScheme()` devuelve 'buttons' — no 'touch' — mientras `gyro.everActive` sea falso, con lo que las flechas ◀ ▶ aparecen solas en pantalla en el mismo momento en que el giroscopio falla, y el jugador nunca se queda sin saber donde tocar. Se mira `everActive` y no `active` para no cambiar el mando a mitad de curva; si el sensor se queda mudo en marcha no se cambia de esquema, solo se relaja el manillar al centro y la fila de ajustes lo dice.
+
+Tercera, `gyro.active` se deriva de un reloj. `gyro.last = performance.now()` en cada evento y `active = granted && zero!==null && (now - last) < 500`. Es la linea que arregla a la vez los controles pegados al volver del segundo plano y el estado mentiroso del indicador.
+
+Cuarta, la sensibilidad entra al PRINCIPIO de cada cadena y nunca al final, porque cada esquema tiene una unidad distinta: en giroscopio escala el ANGULO de tope (`22/sens`, que es lo unico que ya estaba bien en :334), en arrastre escala la ganancia de PIXELES a manillar antes del recorte, y en botones escala la RAMPA (topes por segundo). Multiplicar el valor final es lo que produce los dos numeros medidos: tope de giro imposible por debajo de 1 y deslizador inerte por encima. Y se guarda por esquema, como pide design/spec.md:121, porque el valor bueno para el pulgar no es el bueno para las muñecas. La inversion, al contrario, es un espejo y va al final, pero SOLO sobre el valor que ha producido el esquema del aparato (tilt y touch) y antes de que el teclado o el mando pisen: nunca sobre botones etiquetados con flechas, ni sobre teclado, ni sobre mando.
+
+En la pantalla de ajustes el grupo de control va PRIMERO, arriba del todo del scroll, porque es la queja: Control (selector) -> linea de estado en palabras -> fila Giroscopio (barra viva + CENTRAR, visible solo con tilt) -> Sensibilidad (con su numero) -> Invertir (oculta con botones) -> y despues Idioma, Calidad, audio y borrado. La linea de estado es la pieza que falta: traduce `gyroStatus()` a una frase ('Giroscopio activo', 'Esperando lecturas del sensor', 'Permiso del sensor denegado — se conduce con botones') y se repinta sola cuando el estado cambia. El indicador vivo escala con `tiltFullDeg()`, no con un 22 a pelo, para que el punto llegue al extremo exactamente cuando el manillar llega al tope. Y CENTRAR se duplica en la pantalla de PAUSA, porque el momento en que uno se da cuenta de que el centro esta torcido es conduciendo, no en el menu (design/spec.md:109 ya pide ahi un panel CONTROLS reducido).
+
+Al pausar y al recuperar el foco: `releaseAll()` tiene que soltar TODO — los `Set` de punteros de cada boton (registrando los botones en una lista al enlazarlos), la sesion de arrastre, la rampa de los botones y el suavizado del giroscopio. Y al reanudar no se recentra a ciegas: se compara la postura actual con el cero guardado y solo si difiere mas de 12 grados se recentra con aviso, tal como manda design/spec.md:229.
+
+Del campo `scheme` en state.js no hay que añadir el valor inicial (ya esta en null, que es lo correcto): hay que BORRAR src/main.js:41 para que null siga significando "lo decide el aparato en cada arranque", y añadir una revision de ajustes con dos migraciones que si hacen falta: el escalar `sens` a un objeto por esquema, y el apagado de una sola vez de `invert` en los guardados anteriores al arreglo del signo de la gravedad (src/controls.js:151), porque quien jugo con el giroscopio al reves activo ese ajuste para compensar y ahora se lo encontraria invertido otra vez.
+
+### code
+
+========================================================================
+1) src/state.js — SCHEMES pasa a vivir aqui, sens por esquema, migracion
+========================================================================
+
+--- Tras la linea 27 (`export const QUALITIES = ...`), añadir:
+
++/* Los tres esquemas viven en el estado y no en controls.js para que state.js pueda validar un
++   guardado sin importar el modulo de entrada, que a su vez importa el estado: seria un ciclo. */
++export const SCHEMES = ['tilt', 'touch', 'buttons'];
++export const SETTINGS_REV = 1;
++/* Avisos de la migracion. No viven en state porque no son ajustes: se leen una vez al arrancar
++   para poder decirselo al jugador y se olvidan. */
++export const notes = { invertFixed:false };
+
+--- Reemplazar el bloque DEFAULTS (lineas 29-44) por:
+
+ const DEFAULTS = () => ({
+   lang: null,                  // null -> se pregunta al primer arranque
+   quality: null,               // null -> se pregunta al primer arranque
+   /* null -> lo decide el aparato EN CADA arranque: giroscopio en un movil con sensor, botones
+      en un movil sin sensor, arrastre en un escritorio. No se resuelve nunca sobre el estado:
+      guardar el valor deducido convierte una suposicion en una eleccion del jugador, y un movil
+      que arranco una vez sin permiso se quedaria con el esquema equivocado para siempre. */
+   scheme: null,
++  rev: 0,                      // revision de ajustes; migrate() la sube
+   music: 0.5, sfx: 0.85,
+-  haptics: true, invert: false, sens: 1,
++  haptics: true, invert: false,
++  /* La sensibilidad se guarda POR esquema: el valor bueno para el pulgar arrastrando no es el
++     bueno para las muñecas inclinando. Lo pide design/spec.md:121. */
++  sens: { tilt:1, touch:1, buttons:1 },
+   cash: 0, distanceTotal: 0,
+   ...
+ });
+
++/** Sensibilidad del esquema dado, siempre un numero valido dentro del rango del deslizador. */
++export const SENS_MIN = 0.4, SENS_MAX = 2.0;
++export function sensOf(scheme){
++  const v = state.sens && +state.sens[scheme];
++  return (isFinite(v) && v >= SENS_MIN && v <= SENS_MAX) ? v : 1;
++}
++export function setSens(scheme, v){
++  if (!state.sens || typeof state.sens !== 'object') state.sens = { tilt:1, touch:1, buttons:1 };
++  state.sens[scheme] = Math.min(SENS_MAX, Math.max(SENS_MIN, +v || 1));
++}
+
++/* ---------- migracion de ajustes de control ----------
++   Cada regla arregla un guardado que quedo con un valor que hoy ya no puede existir. Se ejecuta
++   sobre el estado YA cargado, para que valga igual para un guardado de hace dos versiones. */
++function migrate(){
++  // Cualquier cosa que no sea uno de los tres esquemas vuelve a null = lo decide el aparato.
++  if (state.scheme !== null && !SCHEMES.includes(state.scheme)) state.scheme = null;
++  // sens era un escalar hasta la rev 1. Un NaN aqui deja el manillar muerto sin sintomas.
++  if (typeof state.sens === 'number' || typeof state.sens === 'string'){
++    const v = +state.sens;
++    const k = (isFinite(v) && v >= SENS_MIN && v <= SENS_MAX) ? v : 1;
++    state.sens = { tilt:k, touch:k, buttons:k };
++  }
++  if (!state.sens || typeof state.sens !== 'object') state.sens = { tilt:1, touch:1, buttons:1 };
++  for (const s of SCHEMES) setSens(s, sensOf(s));
++  if (typeof state.invert !== 'boolean') state.invert = false;
++  /* rev 0 -> 1: hasta esta version el giroscopio tenia negado el signo de la gravedad en X, asi
++     que quien jugo inclinando activo "Invertir giro" para compensar unos controles al reves.
++     Con el signo arreglado ese ajuste vuelve a invertir de verdad, asi que se apaga UNA vez y
++     se avisa: dejarlo puesto reintroduciria exactamente el fallo que se acaba de arreglar. */
++  if ((state.rev | 0) < 1 && state.invert){
++    state.invert = false;
++    notes.invertFixed = true;
++  }
++  state.rev = SETTINGS_REV;
++}
+
+--- En load(), tras la linea 58 (`if (!state.owned.includes(state.bike)) ...`) y FUERA del if(raw),
+    justo antes del `return state`:
+
+     } catch (e) { /* guardado corrupto: se empieza limpio */ }
+   }
++  migrate();
+   return state;
+ }
+
+--- wipe() (linea 69): conservar tambien rev, o la migracion se repite y vuelve a apagar invert.
+
+-  const keep = { lang:state.lang, quality:state.quality, scheme:state.scheme,
++  const keep = { lang:state.lang, quality:state.quality, scheme:state.scheme, rev:state.rev,
+                  music:state.music, sfx:state.sfx,
+                  haptics:state.haptics, invert:state.invert, sens:state.sens };
+
+
+========================================================================
+2) src/controls.js — deteccion, respaldo, sensibilidad y soltado
+========================================================================
+
+--- Lineas 12-15, cabecera:
+
+-import { state } from './state.js';
++import { state, SCHEMES, sensOf } from './state.js';
+ import { clamp } from './gfx.js';
+-export const SCHEMES = ['tilt', 'touch', 'buttons'];
++export { SCHEMES };   // ui.js sigue leyendolo de aqui
+
+--- Lineas 17-22, constantes. Los valores salen de design/spec.md:229:
+
+-const TILT_FULL = 22;
+-const TILT_DEAD = 1.6;
+-const TILT_SMOOTH = 14;
++const TILT_FULL   = 22;    // grados de alabeo que valen tope de giro a sensibilidad 1
++const TILT_DEAD   = 2.0;   // zona muerta en grados, con renormalizacion despues
++const TILT_CLAMP  = 30;    // mas alla no se lee: ahi ya no se ve la pantalla
++const TILT_EXPO   = 1.3;   // curva de respuesta de la especificacion
++const TILT_SMOOTH = 14;    // 1/s; equivale al alpha 0,20 por fotograma a 60 Hz del spec
++const TILT_REZERO = 12;    // grados de cambio de postura que obligan a recentrar al reanudar
++const GYRO_WAIT    = 1500; // ms de espera a la PRIMERA lectura antes de dar el sensor por muerto
++const GYRO_TIMEOUT = 500;  // ms sin lecturas -> el sensor esta mudo
++const BTN_ATTACK  = 1 / 0.12;   // topes por segundo al pulsar
++const BTN_RELEASE = 1 / 0.08;   // topes por segundo al soltar, mas rapido: endereza
++const TOUCH_GAIN  = 3.4;   // topes de manillar por ancho de pantalla arrastrado
++const TOUCH_DECAY = 5;     // 1/s de autocentrado al soltar el dedo
+ const DEG = Math.PI / 180;
+
+--- Lineas 30-45, estado interno:
+
+ const gyro = { available:false, granted:false, denied:false, zero:null, raw:0, active:false,
+-               everActive:false, flat:0, samples:[] };
++               everActive:false, flat:0, samples:[], t0:0, last:0 };
+-const ZERO_SAMPLES = 6;
++const ZERO_MS = 500, ZERO_MAX = 30, ZERO_MIN = 4;   // media de 0,5 s o 30 lecturas, la que antes
+ const ZERO_MIN_FLAT = 0.30;
+ let gyroSteer = 0;
+ ...
+ const keys = new Set();
+ let touchSteer = 0;
+-let btnSteer = 0;
++let btnL = false, btnR = false;   // dos banderas, no un signo: soltar una devuelve el mando a la
++let btnSteer = 0;                 // otra si sigue pulsada, y las dos juntas dan 0 (spec:229)
+ const pedal = { gas:false, brake:false, horn:false };
++let drag = null;                  // sesion de arrastre EN CURSO, a nivel de modulo para poder
++const bound = [];                 // cancelarla; y los botones enlazados, para soltarlos todos
+
+--- Lineas 56-59, deteccion. Sustituir coarsePointer() por dos funciones y usarlas en todo el
+    modulo, que es la unica forma de que la decision de girar y la de esquema no se contradigan:
+
+-const coarsePointer = () => (navigator.maxTouchPoints || 0) > 0 ||
+-  (window.matchMedia && matchMedia('(pointer: coarse)').matches);
++const mm = q => !!(window.matchMedia && matchMedia(q).matches);
++/** Puntero grueso PRIMARIO: movil o tableta. Es el unico test que decide girar la pantalla.
++    maxTouchPoints solo entra si el navegador no tiene consultas de puntero, porque en un
++    portatil con pantalla tactil vale 10 y ahi no hay absolutamente nada que girar. */
++export const isCoarse = () =>
++  window.matchMedia ? mm('(pointer: coarse)') : (navigator.maxTouchPoints || 0) > 0;
++/** Aparato de mano: puntero grueso y sin raton encima. Un portatil tactil da coarse en algun
++    navegador, pero siempre da hover, y ahi el giroscopio no existe o no se usa nunca.
++    Se cachea porque activeScheme() se llama una vez por fotograma. */
++let handheld = null;
++export const isHandheld = () =>
++  handheld === null ? (handheld = isCoarse() && !mm('(hover: hover)')) : handheld;
++/** http en claro (no localhost): Chrome no entrega los sensores y el evento no llega jamas.
++    Se mira el protocolo y no solo isSecureContext porque file:// no es http y ahi si funciona. */
++const insecureHttp = () => location.protocol === 'http:' && !window.isSecureContext;
+
+--- Linea 68 y 61-72 de layoutStage:
+
+ export function layoutStage(){
++  handheld = null;               // la ventana puede haber cambiado de aparato (escritorio remoto)
+   const vw = ...
+-  const portrait = vh > vw && coarsePointer();
++  const portrait = vh > vw && isCoarse();
+
+--- Lineas 110-129, API del giroscopio. enableGyro pasa a resolver con la VERDAD:
+
+ export const gyroAvailable = () => gyro.available;
+ export const gyroGranted = () => gyro.granted;
+ export const gyroLive = () => gyro.active;
++/** Angulo de tope EFECTIVO. La interfaz lo necesita para que el indicador vivo llegue al
++    extremo exactamente cuando el manillar llega al tope, y no a mitad de recorrido. */
++export const tiltFullDeg = () => Math.max(8, TILT_FULL / sensOf('tilt'));
++
++const waitFor = (test, ms) => new Promise(res => {
++  const t0 = performance.now();
++  const tick = () => test() ? res(true)
++            : performance.now() - t0 > ms ? res(false) : setTimeout(tick, 60);
++  tick();
++});
++
++/** Engancha el sensor SIN pedir permiso donde no hay que pedirlo (todo menos iOS). Asi en
++    Android se sabe si hay lecturas antes de que el jugador pulse CONDUCIR, y el respaldo a
++    botones se decide en el menu en vez de en plena autopista. */
++export function sniffGyro(){
++  const DOE = window.DeviceOrientationEvent;
++  if (!DOE || gyro.granted) return false;
++  if (typeof DOE.requestPermission === 'function') return false;   // iOS: hace falta un gesto
++  gyro.granted = true;
++  addEventListener('deviceorientation', onOrient, { passive:true });
++  return true;
++}
+ 
+ /** Debe llamarse DENTRO de un gesto del usuario: iOS rechaza el permiso fuera de uno.
+-    Resuelve a true si hay permiso. */
++    Resuelve a true solo si ha llegado una lectura DE VERDAD: conceder el permiso no es tener
++    sensor. En un iframe sin allow="gyroscope", en http sin cifrar o en un aparato sin
++    giroscopio el evento no llega nunca, y quien tiene que enterarse es la interfaz. */
+ export async function enableGyro(){
+   const DOE = window.DeviceOrientationEvent;
+   if (!DOE) return false;
+   if (typeof DOE.requestPermission === 'function'){
+-    try {
+-      if (await DOE.requestPermission() !== 'granted') return false;
+-    } catch (e) { return false; }
++    let res = 'denied';
++    try { res = await DOE.requestPermission(); } catch (e) { res = 'denied'; }
++    if (res !== 'granted'){ gyro.denied = true; return false; }
+   }
++  gyro.denied = false;
+   if (!gyro.granted){
+     gyro.granted = true;
+     addEventListener('deviceorientation', onOrient, { passive:true });
+   }
+-  gyro.zero = null;
+-  return true;
++  calibrateGyro();
++  if (!gyro.everActive) await waitFor(() => gyro.everActive, GYRO_WAIT);
++  return gyro.everActive;
+ }
+
+--- Dentro de onOrient (lineas 154-184). Dos cambios: sellar la hora de CADA lectura antes del
+    retorno por movil plano, y dejar de escribir gyro.active a mano:
+
+   gyro.available = true;
++  /* La hora se sella aqui, antes del retorno por movil plano: el sensor esta vivo aunque la
++     lectura no sirva para sacar alabeo. Si se sellara despues, tumbar el movil en la mesa se
++     confundiria con que el sensor ha muerto. */
++  gyro.last = performance.now();
+   gyro.flat = Math.hypot(gx, gy);
+   if (gyro.flat < 0.18){ gyro.raw *= 0.85; return; }
+ 
+   const roll = Math.atan2(gx, -gy) / DEG;
+ 
+   if (gyro.zero === null){
+     if (gyro.flat < ZERO_MIN_FLAT) return;
++    if (!gyro.samples.length) gyro.t0 = gyro.last;
+     gyro.samples.push(roll);
+-    if (gyro.samples.length < ZERO_SAMPLES) return;
++    /* Media de 0,5 s o de 30 lecturas, la que se cumpla antes (design/spec.md:229 pide 30 en
++       0,5 s = 60 Hz). Contar solo lecturas dejaria 3 segundos de espera en un sensor a 10 Hz. */
++    const enough = gyro.samples.length >= ZERO_MAX ||
++      (gyro.samples.length >= ZERO_MIN && gyro.last - gyro.t0 >= ZERO_MS);
++    if (!enough) return;
+     let sx = 0, sy = 0;
+     for (const a of gyro.samples){ sx += Math.cos(a * DEG); sy += Math.sin(a * DEG); }
+     gyro.zero = Math.atan2(sy, sx) / DEG;
+     gyro.samples.length = 0;
+   }
+ 
+-  gyro.raw = wrap180(roll - gyro.zero);
+-  gyro.active = true;
++  gyro.raw = clamp(wrap180(roll - gyro.zero), -TILT_CLAMP, TILT_CLAMP);
+   gyro.everActive = true;
+ }
+
+--- Tras calibrateGyro (linea 192), añadir el recentrado condicional del spec:
+
++/** Recentra SOLO si la postura ha cambiado de verdad. Recentrar siempre al reanudar castiga a
++    quien no ha movido las manos, y no recentrar nunca deja la moto tirando de un lado a quien
++    dejo el movil en la mesa. Devuelve true si ha recentrado, para poder avisar. */
++export function rezeroIfMoved(){
++  if (!gyro.everActive || gyro.zero === null) return false;
++  if (Math.abs(gyro.raw) < TILT_REZERO) return false;
++  calibrateGyro();
++  return true;
++}
+
+--- install() (lineas 196-227): blur delega en releaseAll, drag sube a modulo y la sensibilidad
+    entra en la GANANCIA:
+
+   addEventListener('keyup', e => keys.delete(e.code));
+-  addEventListener('blur', () => { keys.clear(); pedal.gas = ...; btnSteer = 0; });
++  /* blur soltaba solo el teclado y los pedales, dejando el arrastre y los botones de pantalla
++     puestos. Se suelta TODO por el mismo camino que la pausa: dos formas distintas de soltar
++     son dos sitios donde olvidarse de algo. */
++  addEventListener('blur', releaseAll);
+ 
+-  let drag = null;
+   canvas.addEventListener('pointerdown', e => {
+     drag = { id:e.pointerId, x:mapPointer(e).x };
+     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+   });
+   canvas.addEventListener('pointermove', e => {
+     if (!drag || e.pointerId !== drag.id) return;
+     const p = mapPointer(e);
+     const dx = p.x - drag.x;
+     drag.x = p.x;
+-    const k = 3.4 / Math.max(240, stage ? stage.clientWidth : innerWidth);
++    /* La sensibilidad entra AQUI, en el paso de pixeles a manillar, ANTES del recorte a +-1.
++       Multiplicando touchSteer despues del recorte (que es lo que se hacia) la sensibilidad al
++       minimo dejaba el tope de giro en 0,5 pasando el dedo por toda la pantalla: 600 px medidos
++       y sin llegar al tope. Y por encima de 1 no hacia nada, porque el clamp ya recortaba. */
++    const k = TOUCH_GAIN * sensOf('touch') / Math.max(240, stage ? stage.clientWidth : innerWidth);
+     touchSteer = clamp(touchSteer + dx * k, -1, 1);
+   });
+
+--- bindButton (lineas 231-265): registrar un "olvidalo todo" por boton:
+
+   const held = new Set();
++  /* Soltado forzoso, para releaseAll. Al cambiar de app no siempre llega pointerup ni
++     pointercancel: el id se queda dentro del conjunto, el siguiente pointerdown ya no es el
++     primero, onDown no vuelve a dispararse y el gas queda MUERTO el resto de la partida.
++     Comprobado en Chromium: throttle 1 -> releaseAll -> nuevo pointerdown -> throttle 0. */
++  const forget = () => {
++    if (!held.size) return;
++    held.clear();
++    el.classList.remove('press');
++    onUp();
++  };
++  bound.push(forget);
+   const press = e => { ... };   // sin cambios
+
+--- bindPedals (lineas 267-273): dos banderas para las flechas:
+
+ export function bindPedals(els){
+   bindButton(els.gas,   () => { pedal.gas = true; },   () => { pedal.gas = false; });
+   bindButton(els.brake, () => { pedal.brake = true; }, () => { pedal.brake = false; });
+-  bindButton(els.left,  () => { btnSteer = -1; },      () => { if (btnSteer < 0) btnSteer = 0; });
+-  bindButton(els.right, () => { btnSteer = 1; },       () => { if (btnSteer > 0) btnSteer = 0; });
++  /* Una bandera por flecha: soltar DERECHA con IZQUIERDA aun pulsada tiene que devolver el
++     mando a la izquierda, no dejarlo a cero, y las dos juntas valen 0 (design/spec.md:229). */
++  bindButton(els.left,  () => { btnL = true; },  () => { btnL = false; });
++  bindButton(els.right, () => { btnR = true; },  () => { btnR = false; });
+   bindButton(els.horn,  () => { pedal.horn = true; },  () => { pedal.horn = false; });
+ }
+
+--- Lineas 290-312, esquemas y estado. El respaldo termina en BOTONES, no en arrastre:
+
+ /** Esquema que toca por defecto en este aparato. NO se guarda: se recalcula en cada arranque. */
+ export function defaultScheme(){
+-  const touch = (navigator.maxTouchPoints || 0) > 0 || 'ontouchstart' in window;
+-  return touch && window.DeviceOrientationEvent ? 'tilt' : 'touch';
++  /* 'ontouchstart' in window lo cumple cualquier Chrome de escritorio con la emulacion tocada,
++     y DeviceOrientationEvent existe en TODOS los Chrome de escritorio sin ningun sensor detras
++     (medido). Ninguno de los dos vale por si solo. */
++  if (!isHandheld()) return 'touch';            // escritorio: el teclado pisa cualquier esquema
++  if (!window.DeviceOrientationEvent) return 'buttons';
++  if (insecureHttp()) return 'buttons';         // http en claro: el navegador retiene el sensor
++  return 'tilt';
+ }
+ 
++/** Lo que el jugador ha PEDIDO, con el aparato decidiendo cuando no ha pedido nada. */
++export const wantedScheme = () =>
++  SCHEMES.includes(state.scheme) ? state.scheme : defaultScheme();
++
+ export function activeScheme(){
+-  const s = SCHEMES.includes(state.scheme) ? state.scheme : defaultScheme();
+-  if (s === 'tilt' && !gyro.everActive) return 'touch';
++  const s = wantedScheme();
++  /* Respaldo a BOTONES y no a arrastre: design/spec.md:229 lo dice, y sobre todo caer al
++     arrastre deja al jugador sin nada visible con lo que girar, que es justo su queja. Con
++     botones aparecen solas las dos flechas en pantalla en el mismo instante del fallo.
++     Se mira everActive y no active para no cambiar el mando a mitad de curva. */
++  if (s === 'tilt' && !gyro.everActive) return 'buttons';
+   return s;
+ }
+ 
+ export function gyroStatus(){
+   if (!window.DeviceOrientationEvent) return 'unsupported';
++  if (insecureHttp()) return 'insecure';
++  if (gyro.denied) return 'denied';
+-  if (!gyro.granted) return 'denied';
++  if (!gyro.granted) return 'ask';
+   if (!gyro.everActive) return 'waiting';
++  if (!gyro.active) return 'stalled';
+   return 'live';
+ }
+
+--- update() (lineas 316-366), reescrito de la linea 326 en adelante:
+
+ export function update(dt){
+   const pad = padState();
+-  const sens = state.sens || 1;
+   ... gas y freno sin cambios ...
+   const scheme = activeScheme();
++  const now = performance.now();
+ 
+-  if (gyro.active){
+-    const full = Math.max(8, TILT_FULL / sens);
++  /* El sensor esta vivo o no segun el RELOJ. gyro.active se ponia a true y no habia quien lo
++     bajara: al cambiar de app dejaban de llegar eventos, el ultimo angulo se quedaba dentro y
++     el manillar se quedaba pegado a medio giro. Medido: steer 0,49 congelado cinco segundos
++     despues del ultimo evento, y gyroStatus() contestando "live". */
++  gyro.active = gyro.granted && gyro.zero !== null && (now - gyro.last) < GYRO_TIMEOUT;
++
++  if (gyro.active){
++    /* La sensibilidad escala el ANGULO de tope, no la salida: multiplicando la salida, con
++       sens 2 se saturaba a 11 grados mientras la zona muerta seguia en 2, y la zona de control
++       fino se comprimia a la mitad. */
++    const full = tiltFullDeg();
+     const mag = clamp((Math.abs(gyro.raw) - TILT_DEAD) / (full - TILT_DEAD), 0, 1);
+-    const target = Math.sign(gyro.raw) * (mag * mag * 0.62 + mag * 0.38);
++    const target = Math.sign(gyro.raw) * Math.pow(mag, TILT_EXPO);
+     gyroSteer += (target - gyroSteer) * (1 - Math.exp(-TILT_SMOOTH * dt));
+-  } else { gyroSteer = 0; }
++  } else {
++    // relajar y no cortar en seco: un corte a cero se siente como un tiron del manillar
++    gyroSteer += (0 - gyroSteer) * (1 - Math.exp(-TILT_SMOOTH * dt));
++  }
++
++  /* Botones: la sensibilidad manda en la RAMPA, no en el destino. Multiplicar +-1 por la
++     sensibilidad dejaba el tope de giro en 0,5 con el deslizador al minimo (no se podia
++     cambiar de carril) y no hacia NADA por encima de 1, porque el clamp final ya recortaba.
++     Medido: 0,5 / 1 / 1 para sensibilidades 0,5 / 1 / 2. */
++  const btnDir = (btnR ? 1 : 0) + (btnL ? -1 : 0);
++  const btnRate = (btnDir ? BTN_ATTACK : BTN_RELEASE) * sensOf('buttons');
++  btnSteer += clamp(btnDir - btnSteer, -btnRate * dt, btnRate * dt);
+ 
+   let steer = scheme === 'tilt' ? gyroSteer
+             : scheme === 'buttons' ? btnSteer
+             : touchSteer;
++  /* Red de seguridad: con giroscopio, un arrastre EN CURSO manda. Si el sensor se queda mudo a
++     200 km/h el pulgar sigue sirviendo, y como hace falta estar arrastrando no pelea nunca con
++     la inclinacion. */
++  if (scheme === 'tilt' && drag) steer = touchSteer;
++
++  /* La inversion es un espejo del esquema del APARATO y se aplica antes de que el teclado o el
++     mando pisen. Nunca sobre botones: una flecha etiquetada ◀ que gira a la derecha no es un
++     ajuste, es un fallo. Y nunca sobre teclado ni mando, por lo mismo. */
++  if (state.invert && (scheme === 'tilt' || scheme === 'touch')) steer = -steer;
+ 
+   let kb = 0;
+   if (keys.has('ArrowLeft') || keys.has('KeyA')) kb -= 1;
+   if (keys.has('ArrowRight') || keys.has('KeyD')) kb += 1;
+   if (kb) steer = kb;
+   else if (pad && pad.steer) steer = pad.steer;
+-  if (state.invert) steer = -steer;
+ 
+   input.throttle = clamp(throttle, 0, 1);
+   input.brake = clamp(brake, 0, 1);
+   input.steer = clamp(steer, -1, 1);
+   input.horn = pedal.horn || keys.has('KeyH');
+-  input.tiltDeg = gyro.active ? gyro.raw : 0;
++  /* El angulo se publica SIEMPRE: el indicador de los ajustes tiene que poder mostrar el punto
++     congelado cuando el sensor calla, que es distinto de mostrarlo centrado. */
++  input.tiltDeg = gyro.raw;
+ 
+-  if (scheme === 'touch' && !kb) touchSteer *= Math.exp(-5 * dt);
++  // el arrastre se autocentra siempre que no haya dedo puesto, tambien con giroscopio activo
++  if (!drag && !kb) touchSteer *= Math.exp(-TOUCH_DECAY * dt);
+ }
+
+--- releaseAll (lineas 368-375), completo:
+
+ export function releaseAll(){
+   keys.clear();
+   pedal.gas = pedal.brake = pedal.horn = false;
+-  btnSteer = 0;
++  btnL = btnR = false;
++  btnSteer = 0;
+   touchSteer = 0;
++  gyroSteer = 0;
++  /* La sesion de arrastre TAMBIEN se cancela: con el dedo puesto al irse a segundo plano, el
++     primer pointermove al volver comparaba con una posicion de hace un minuto y metia el
++     manillar a tope de golpe. Medido: steer 1 sin haber arrastrado. */
++  drag = null;
++  /* Y los botones de pantalla se dan por soltados uno a uno: sin esto el id fantasma se queda
++     dentro del conjunto y el gas no vuelve a responder. */
++  for (const forget of bound) forget();
+   input.throttle = input.brake = input.steer = 0;
+   input.horn = false;
+ }
+
+
+========================================================================
+3) src/main.js
+========================================================================
+
+--- Borrar la linea 41 entera y poner en su lugar:
+
+-  if (!controls.SCHEMES.includes(state.scheme)) state.scheme = controls.defaultScheme();
++  /* NO se resuelve el esquema sobre el estado: state.scheme en null significa "lo decide el
++     aparato en cada arranque", y escribirlo aqui lo persistia por el guardado de pagehide,
++     convirtiendo una suposicion en la eleccion del jugador. Solo se engancha el sensor cuando
++     el esquema que toca es inclinar, para saber si hay lecturas antes de pulsar CONDUCIR. */
++  if (controls.wantedScheme() === 'tilt') controls.sniffGyro();
+
+--- onBootDone (lineas 59-66):
+
+     onBootDone: () => {
+-      if (state.scheme === 'tilt') controls.enableGyro().catch(() => {});
++      /* Primer gesto real del jugador, y el unico sitio desde el que iOS acepta conceder el
++         giroscopio. enableGyro ya espera 1,5 s a que llegue una lectura de verdad, asi que si
++         resuelve false hay motivo concreto que contar y el respaldo a botones ya esta activo. */
++      if (controls.wantedScheme() === 'tilt')
++        controls.enableGyro().then(ok => {
++          if (!ok) ui.toast(t('sch.' + controls.gyroStatus()));
++          ui.paintPedals();
++        }).catch(() => {});
++      if (notes.invertFixed) ui.toast(t('sch.invertfix'));
+       if (!state.lang) ui.show('lang');
+
+--- ride() (linea 49) y onResume (linea 71):
+
+   const ride = () => {
+     const envs = ['day', 'sunset', 'night'];
+     game.start(envs[state.runs % envs.length]);
++    ui.paintPedals();          // el respaldo puede haber cambiado el esquema activo
+     ui.show('game');
+
+-    onResume: () => { game.resume(); ui.show('game'); },
++    onResume: () => {
++      /* Al reanudar se recentra SOLO si la postura ha cambiado de verdad (mas de 12 grados,
++         design/spec.md:229): recentrar siempre castiga a quien no ha movido las manos, y no
++         recentrar nunca deja tirando de un lado a quien dejo el movil en la mesa. */
++      if (controls.activeScheme() === 'tilt' && controls.rezeroIfMoved())
++        ui.toast(t('sch.calibrated'));
++      game.resume(); ui.show('game');
++    },
+
+--- Importar notes y reforzar pagehide (linea 153):
+
+-import { load, save, state } from './state.js';
++import { load, save, state, notes } from './state.js';
+...
+-  addEventListener('pagehide', save);
++  /* pagehide llega tambien al congelar la pestaña en iOS, y ahi el dedo puede quedarse puesto:
++     se suelta todo antes de guardar. */
++  addEventListener('pagehide', () => { controls.releaseAll(); save(); });
+
+
+========================================================================
+4) template.html — grupo de control primero, filas condicionales, PAUSA
+========================================================================
+
+--- CSS, tras la linea 121 (.seg button.on):
+
++  .row.off{display:none}
++  /* Linea de estado del control: es la pieza que faltaba. Sin ella el selector puede decir
++     INCLINAR mientras se conduce con botones y el jugador no tiene forma de enterarse. */
++  .row.hint{display:block;padding:0 2px 10px}
++  #scheme-hint{font-size:10.5px;font-weight:600;color:var(--dim);line-height:1.45}
++  #scheme-hint.bad{color:#ffb060}
++  #tiltbar.dead>i{background:var(--dim)}
++  #tiltbar.stall>i{background:#ffb060}
++  #set-sensval{font-size:10.5px;font-weight:800;color:var(--dim);
++    font-variant-numeric:tabular-nums;min-width:34px;text-align:right}
++  .tiltwrap{display:flex;align-items:center;gap:9px}
+
+--- Reemplazar las filas de ajustes (lineas 279-296) por este orden. Control primero porque es
+    la queja; idioma y calidad ya se eligen en el primer arranque:
+
+       <div class="scroll">
++        <div class="row"><span class="lb" data-i18n="set.scheme"></span><div class="seg" id="set-scheme"></div></div>
++        <div class="row hint"><span id="scheme-hint"></span></div>
++        <div class="row off" id="row-tilt">
++          <span class="lb" data-i18n="set.tilt"></span>
++          <div class="tiltwrap">
++            <div id="tiltbar" class="dead"><u></u><i></i></div>
++            <button class="btn ghost small" id="b-calib" data-i18n="set.calibrate"></button>
++          </div>
++        </div>
++        <div class="row" id="row-sens"><span class="lb" data-i18n="set.sens"></span>
++          <div class="tiltwrap"><input type="range" id="set-sens" min="40" max="200"><span id="set-sensval"></span></div></div>
++        <div class="row" id="row-invert"><span class="lb" data-i18n="set.invert"></span><div class="seg" id="set-invert"></div></div>
+         <div class="row"><span class="lb" data-i18n="set.lang"></span><div class="seg" id="set-lang"></div></div>
+         <div class="row"><span class="lb" data-i18n="set.quality"></span><div class="seg" id="set-quality"></div></div>
+-        <div class="row"><span class="lb" data-i18n="set.scheme"></span>...</div>
+-        <div class="row" id="row-tilt">...</div>
+         <div class="row"><span class="lb" data-i18n="set.music"></span><input type="range" id="set-music" min="0" max="100"></div>
+         <div class="row"><span class="lb" data-i18n="set.sfx"></span><input type="range" id="set-sfx" min="0" max="100"></div>
+-        <div class="row"><span class="lb" data-i18n="set.sens"></span><input type="range" id="set-sens" min="50" max="200"></div>
+         <div class="row"><span class="lb" data-i18n="set.haptics"></span><div class="seg" id="set-haptics"></div></div>
+-        <div class="row"><span class="lb" data-i18n="set.invert"></span><div class="seg" id="set-invert"></div></div>
+         <div class="row" style="justify-content:center">
+           <button class="btn ghost small danger" id="b-wipe" data-i18n="set.reset"></button>
+         </div>
+
+--- Pantalla de PAUSA (linea 331), CENTRAR donde se necesita de verdad:
+
+     <div class="btnstack">
+       <button class="btn" id="b-resume" data-i18n="pause.resume"></button>
++      <!-- El centro torcido se descubre conduciendo, no en el menu. design/spec.md:109 pide
++           aqui un panel CONTROLS reducido; esto es su minimo utilizable. -->
++      <button class="btn ghost off" id="b-calib2" data-i18n="set.calibrate"></button>
+       <button class="btn ghost" id="b-restart" data-i18n="pause.restart"></button>
+
+
+========================================================================
+5) src/ui.js
+========================================================================
+
+--- Reemplazar el bloque del esquema (lineas 246-269) por:
+
++    /* Elegir giroscopio pide el permiso AQUI, dentro del gesto del toque: iOS rechaza
++       requestPermission fuera de uno. Volver a tocar el mismo segmento reintenta, que es la
++       unica salida para quien denego sin querer. */
+     this.rp.scheme = this.seg($('set-scheme'),
+       controls.SCHEMES.map(s => ({ label:t('sch.' + s), value:s })),
+-      () => state.scheme || controls.defaultScheme(),
++      () => controls.wantedScheme(),
+       v => {
+         state.scheme = v;
+-        if (v === 'tilt') controls.enableGyro().then(ok => { ...setTimeout(1600)... });
+         this.paintPedals();
++        this.paintControlRows();
++        if (v !== 'tilt') return;
++        controls.enableGyro().then(ok => {
++          this.paintControlRows();
++          this.paintPedals();
++          // se dice el motivo concreto, no un "no hay giroscopio" generico
++          if (!ok) this.toast(t('sch.' + controls.gyroStatus()));
++        });
+       });
+-    $('b-calib').addEventListener('click', () => { controls.calibrateGyro(); this.toast(t('sch.calibrated')); });
++    const calib = () => { controls.calibrateGyro(); this.toast(t('sch.calibrated')); };
++    $('b-calib').addEventListener('click', calib);
++    if ($('b-calib2')) $('b-calib2').addEventListener('click', calib);
+
+--- Deslizador de sensibilidad (linea 285): por esquema y con su numero a la vista
+
+-    slider($('set-sens'), () => Math.round(state.sens * 100), v => { state.sens = v / 100; });
++    /* Por esquema (design/spec.md:121): el valor bueno para el pulgar no es el bueno para las
++       muñecas. Y con el numero delante, porque un deslizador sin cifra no se puede repetir. */
++    slider($('set-sens'), () => Math.round(sensOf(controls.wantedScheme()) * 100),
++      v => { setSens(controls.wantedScheme(), v / 100); this.paintSens(); });
+
+--- Añadir los tres metodos nuevos (junto a paintPedals, linea 295):
+
++  paintSens(){
++    const el = $('set-sensval');
++    if (el) el.textContent = 'x' + sensOf(controls.wantedScheme()).toFixed(2).replace('.', ',');
++  }
++
++  /** Solo se ensenan las filas que hacen algo con el esquema elegido, y se dice CON PALABRAS
++      por que el giroscopio no responde en vez de degradar en silencio, que es literalmente la
++      queja de "pedi giroscopio y tengo la interfaz de otra cosa". */
++  paintControlRows(){
++    const want = controls.wantedScheme();
++    const act = controls.activeScheme();
++    const st = controls.gyroStatus();
++    const row = (id, on) => { const el = $(id); if (el) el.classList.toggle('off', !on); };
++    row('row-tilt', want === 'tilt');
++    // invertir un boton etiquetado con una flecha no tiene sentido: la fila se esconde
++    row('row-invert', want === 'tilt' || want === 'touch');
++    const c2 = $('b-calib2');
++    if (c2) c2.classList.toggle('off', act !== 'tilt');
++    const hint = $('scheme-hint');
++    if (hint){
++      const bad = want === 'tilt' && act !== 'tilt';
++      hint.textContent = want === 'tilt' && st !== 'live'
++        ? t('sch.' + st) + (bad ? ' — ' + t('sch.fallback') : '')
++        : t('sch.hint.' + want);
++      hint.classList.toggle('bad', bad);
++    }
++    this.paintSens();
++  }
+
+--- tilt() (lineas 301-309), reescrito:
+
+   tilt(deg, live){
+-    const bar = $('tiltbar');
+-    if (!bar || this.screen !== 'settings') return;
+-    bar.classList.toggle('dead', !live);
+-    const k = Math.max(-1, Math.min(1, deg / 22));
+-    bar.firstElementChild.nextElementSibling.style.transform = 'translateX(' + (k * 52) + 'px)';
++    if (this.screen !== 'settings') return;
++    const bar = $('tiltbar');
++    if (!bar) return;
++    /* Se escala con el angulo de tope EFECTIVO y no con un 22 a pelo: la sensibilidad divide
++       ese angulo, asi que con sens 2 el manillar estaba a tope a 11 grados y el punto se
++       quedaba a mitad de recorrido, con lo que parecia que el sensor no llegaba. */
++    const k = Math.max(-1, Math.min(1, deg / controls.tiltFullDeg()));
++    const st = controls.gyroStatus();
++    bar.classList.toggle('dead', !live && st !== 'stalled');
++    bar.classList.toggle('stall', st === 'stalled');   // punto ambar: hubo sensor y ha callado
++    bar.querySelector('i').style.transform = 'translateX(' + (k * 52).toFixed(1) + 'px)';
++    if (st !== this.lastGyroStatus){ this.lastGyroStatus = st; this.paintControlRows(); }
+   }
+
+--- refreshSettings (lineas 311-326): añadir la llamada y quitar la del sens global
+
+     for (const k in this.rp) this.rp[k]();
+     this.paintPedals();
++    this.paintControlRows();
+     ...
+-    $('set-sens').value = Math.round(state.sens * 100);
++    $('set-sens').value = Math.round(sensOf(controls.wantedScheme()) * 100);
+
+--- Import (linea 4): añadir sensOf y setSens
+-import { state, save, wipe, BIKES, ... QUALITIES } from './state.js';
++import { state, save, wipe, sensOf, setSens, BIKES, ... QUALITIES } from './state.js';
+
+
+========================================================================
+6) src/i18n.js — 12 claves nuevas x 4 lenguas
+========================================================================
+
+es (tras 'sch.calibrated', linea 40):
++    'sch.hint.tilt':'Inclina el móvil como si fuera el manillar. Pulsa CENTRAR sujetándolo en tu postura de conducir.',
++    'sch.hint.touch':'Arrastra el pulgar por la pantalla para girar. Al soltar, la moto se endereza.',
++    'sch.hint.buttons':'Gira con las dos flechas de abajo a la izquierda.',
++    'sch.live':'Giroscopio activo',
++    'sch.waiting':'Esperando lecturas del sensor…',
++    'sch.ask':'Toca INCLINAR otra vez para dar permiso al sensor',
++    'sch.denied':'Permiso del sensor denegado',
++    'sch.unsupported':'Este aparato no tiene giroscopio',
++    'sch.insecure':'Sin https el navegador no entrega el sensor',
++    'sch.stalled':'El sensor ha dejado de responder',
++    'sch.fallback':'se conduce con botones',
++    'sch.invertfix':'Se ha desactivado «Invertir giro»: el giro ya no está al revés',
+-    'sch.nogyro':'Este aparato no da lecturas de inclinacion',
++    'sch.nogyro':'Este aparato no da lecturas de inclinación',
+
+en:
++    'sch.hint.tilt':'Tilt the phone like the handlebars. Tap CENTRE while holding it in your riding posture.',
++    'sch.hint.touch':'Drag your thumb across the screen to steer. Let go and the bike straightens up.',
++    'sch.hint.buttons':'Steer with the two arrows at the bottom left.',
++    'sch.live':'Gyroscope live',
++    'sch.waiting':'Waiting for sensor readings…',
++    'sch.ask':'Tap TILT again to allow the sensor',
++    'sch.denied':'Sensor permission denied',
++    'sch.unsupported':'This device has no gyroscope',
++    'sch.insecure':'Without https the browser withholds the sensor',
++    'sch.stalled':'The sensor stopped responding',
++    'sch.fallback':'steering with buttons',
++    'sch.invertfix':'“Invert steering” has been turned off: steering is no longer reversed',
+
+pt:
++    'sch.hint.tilt':'Incline o celular como se fosse o guidão. Toque em CENTRAR segurando-o na sua posição de pilotagem.',
++    'sch.hint.touch':'Arraste o polegar pela tela para virar. Ao soltar, a moto se endireita.',
++    'sch.hint.buttons':'Vire com as duas setas embaixo à esquerda.',
++    'sch.live':'Giroscópio ativo',
++    'sch.waiting':'Aguardando leituras do sensor…',
++    'sch.ask':'Toque em INCLINAR novamente para permitir o sensor',
++    'sch.denied':'Permissão do sensor negada',
++    'sch.unsupported':'Este aparelho não tem giroscópio',
++    'sch.insecure':'Sem https o navegador não entrega o sensor',
++    'sch.stalled':'O sensor parou de responder',
++    'sch.fallback':'pilotando com botões',
++    'sch.invertfix':'“Inverter direção” foi desativado: a direção não está mais invertida',
+
+fr:
++    'sch.hint.tilt':'Inclinez le téléphone comme un guidon. Appuyez sur CENTRER en le tenant dans votre position de conduite.',
++    'sch.hint.touch':'Faites glisser le pouce sur l’écran pour tourner. Au relâchement, la moto se redresse.',
++    'sch.hint.buttons':'Tournez avec les deux flèches en bas à gauche.',
++    'sch.live':'Gyroscope actif',
++    'sch.waiting':'En attente des mesures du capteur…',
++    'sch.ask':'Touchez INCLINER à nouveau pour autoriser le capteur',
++    'sch.denied':'Autorisation du capteur refusée',
++    'sch.unsupported':'Cet appareil n’a pas de gyroscope',
++    'sch.insecure':'Sans https le navigateur ne fournit pas le capteur',
++    'sch.stalled':'Le capteur ne répond plus',
++    'sch.fallback':'direction aux boutons',
++    'sch.invertfix':'« Inverser la direction » a été désactivé : la direction n’est plus inversée',
+
+### constants
+
+- **name**: TILT_FULL — **value**: 22 grados — **why**: Alabeo que vale tope de giro a sensibilidad 1. Es lo que se alcanza girando las muñecas sin mover los brazos; mas obliga a inclinar el movil hasta perder de vista la pantalla. Coincide con design/spec.md:229 ("full lock at 22/sensitivity deg").
+- **name**: TILT_DEAD — **value**: 2.0 grados — **why**: Zona muerta con renormalizacion posterior, segun design/spec.md:229. El codigo tenia 1.6; a 2.0 la moto no vibra sola en la mano y la renormalizacion evita el escalon a la salida de la zona muerta.
+- **name**: TILT_CLAMP — **value**: 30 grados — **why**: Mas alla no se lee (spec:229). A 30 grados el jugador ya no ve bien la pantalla; leer 60 solo sirve para que un tropiezo meta el manillar a tope.
+- **name**: TILT_EXPO — **value**: 1.3 — **why**: Exponente de la curva de respuesta (spec:229). Da mas resolucion en el centro para colocarse en el carril. La curva hibrida que habia (mag^2*0.62+mag*0.38) difiere menos de 0,06 en todo el recorrido; se cambia por alinear con el spec, no por sensacion.
+- **name**: TILT_SMOOTH — **value**: 14 /s — **why**: Equivalente continuo del filtro de un polo con alpha 0,20 por fotograma a 60 Hz que pide el spec: -ln(1-0,20)*60 = 13,4. Se aplica una vez por FOTOGRAMA (main.js:128), nunca por paso de fisica, o el suavizado se dispara x120.
+- **name**: TILT_REZERO — **value**: 12 grados — **why**: Diferencia de postura que obliga a recentrar al reanudar (spec:229). Por debajo son las manos moviendose; por encima es otra postura. Recentrar siempre castiga a quien no movio nada.
+- **name**: GYRO_WAIT — **value**: 1500 ms — **why**: Espera a la PRIMERA lectura antes de dar el sensor por muerto. Lo fija design/spec.md:229. iOS entrega el primer evento en 100-300 ms tras conceder y Android en un periodo de sensor, asi que 1,5 s no da falsos negativos y aun contesta antes de que el jugador se vaya de la fila de ajustes.
+- **name**: GYRO_TIMEOUT — **value**: 500 ms — **why**: Silencio que convierte el sensor en mudo. Los sensores mas lentos que he visto reportan a 10 Hz, asi que 500 ms son cinco lecturas perdidas: no hay falso positivo, y medio segundo de manillar congelado es sobrevivible a 200 km/h.
+- **name**: ZERO_MS / ZERO_MAX / ZERO_MIN — **value**: 500 ms / 30 lecturas / 4 lecturas — **why**: Media circular del centro: se cierra a los 0,5 s o a las 30 lecturas, la que llegue antes, con un minimo de 4. El spec pide 30 en 0,5 s (60 Hz); contar solo lecturas dejaria 3 segundos de espera en un sensor a 10 Hz y el jugador cree que CENTRAR no funciona.
+- **name**: ZERO_MIN_FLAT — **value**: 0.30 (|g| en el plano de la pantalla) — **why**: No se calibra con el movil casi plano: 0,30 son unos 17 grados de inclinacion, por debajo el alabeo es ruido y un centro torcido se siente exactamente igual que unos controles invertidos.
+- **name**: BTN_ATTACK — **value**: 1/0.12 = 8.33 topes/s — **why**: Rampa al pulsar una flecha (spec:229 "attack 0.12 s"). Ojo: game.js:169-170 limita el manillar a 5,5 topes/s, asi que hoy el techo real son 182 ms y la sensibilidad por encima de 0,66 no se nota. Hay que subir ese 5.5 a ~9 o aceptar que el ajuste satura.
+- **name**: BTN_RELEASE — **value**: 1/0.08 = 12.5 topes/s — **why**: Vuelta al centro al soltar (spec:229 "release 0.08 s"). El spec tambien dice "auto-centre at 4x the attack rate" (33/s), que se contradice con 0,08 s; me quedo con el numero conservador porque endereza de forma predecible en vez de dar un tiron.
+- **name**: TOUCH_GAIN — **value**: 3.4 topes de manillar por ancho de pantalla — **why**: Ganancia del arrastre, ya presente en controls.js:220. Un barrido completo da 3,4 topes, o sea que el tope se alcanza con el 29% del ancho: alcanzable con el pulgar sin recolocar la mano. La sensibilidad multiplica AQUI, antes del recorte a +-1.
+- **name**: TOUCH_DECAY — **value**: 5 /s — **why**: Autocentrado del arrastre al levantar el dedo: 200 ms de constante de tiempo, el pulgar suelta y la moto se endereza sin que parezca que se ha quedado enganchada. Ahora corre tambien con giroscopio activo, para que touchSteer no se quede acumulado a +-1 en segundo plano.
+- **name**: SENS_MIN / SENS_MAX — **value**: 0.4 / 2.0 — **why**: Rango del deslizador segun design/spec.md:121. El template esta en 50-200 y hay que bajar el minimo a 40. Con la sensibilidad puesta en la rampa y en la ganancia (y no en el valor final) el tope de giro sigue siendo alcanzable en todo el rango, que es lo que hoy NO ocurre.
+- **name**: Recorrido del punto del indicador — **value**: +-52 px sobre una barra de 124 px — **why**: El punto mide 14 px y arranca centrado en 62: 52 px lo llevan a 114, con el borde en 121, dentro de la barra. Se escala con tiltFullDeg() y no con 22, para que el extremo del recorrido coincida exactamente con el tope de giro a cualquier sensibilidad.
+
+### pitfalls
+
+- window.DeviceOrientationEvent existe en TODOS los Chrome de escritorio sin ningun sensor detras: lo he medido, `{DOE:true}` en una ventana de 1280x800 sin dedo. Existir el constructor no es tener giroscopio, y tampoco lo es tener el permiso concedido. Lo unico que demuestra que hay sensor es una lectura con beta/gamma no nulos, y hasta que llegue el esquema activo tiene que ser otro.
+- `'ontouchstart' in window` da verdadero en cualquier Chrome de escritorio con la emulacion tactil tocada y en todo portatil con pantalla tactil. Usarlo como test de movil es el motivo por el que un portatil acaba con el juego girado 90 grados y con giroscopio elegido. `matchMedia('(pointer: coarse)')` es el puntero PRIMARIO y en un portatil tactil vale fine; ahi esta la diferencia.
+- Playwright NO puede emular un portatil tactil de verdad: `hasTouch:true` con `isMobile:false` fuerza igualmente `pointer:coarse` y `hover:none` (medido). La deteccion hay que probarla inyectando un matchMedia falso con `page.addInitScript`, no con un perfil de dispositivo.
+- Algun WebView de Android antiguo reporta `hover:hover` por error. Por eso la rotacion de pantalla usa solo `isCoarse()` (sin la clausula de hover) y el hover solo interviene en el ESQUEMA por defecto: el peor caso pasa a ser un movil que arranca con arrastre en vez de con inclinacion, que el jugador arregla en un toque, en vez de un movil sin girar.
+- iOS recuerda la denegacion por origen: `requestPermission()` vuelve a resolver 'denied' al instante y sin dialogo. Reintentar en bucle no sirve de nada; hay que decirle al jugador que el permiso esta denegado (y que se quita desde Ajustes de Safari), no repetir la peticion.
+- `requestPermission()` solo vale dentro de un gesto. `enableGyro()` es async pero llama a requestPermission de forma SINCRONA antes del primer await, y por eso funciona desde el pointerdown de la pantalla de carga (ui.js:78). Si alguien mete un `await` delante, la peticion sale fuera de la ventana de activacion y falla en silencio en iOS.
+- Un iframe sin `allow="gyroscope"` concede el permiso y no entrega NUNCA un evento. Es el caso que hace obligatorio esperar una lectura de verdad en vez de fiarse del 'granted', y el que justifica el estado 'waiting' separado de 'denied'.
+- http en claro sobre una IP de LAN (probar en el movil contra el portatil) bloquea los sensores en Chrome; localhost y file:// si son contexto seguro (medido: file:// da `isSecureContext:true`). Por eso el test es `location.protocol === 'http:' && !isSecureContext` y no `!isSecureContext` a secas, que romperia la distribucion en un solo fichero abierta desde file://.
+- Cambiar de app no garantiza pointerup ni pointercancel. Cualquier estado de pulsacion que viva en un Set dentro de una clausura y no se pueda vaciar desde fuera acaba con un id fantasma dentro, y con un id dentro el siguiente pointerdown no es el primero: el boton queda muerto para siempre. Todo estado de pulsacion tiene que ser alcanzable desde releaseAll.
+- Una sesion de arrastre guarda la ULTIMA posicion del dedo. Si sobrevive a un viaje al segundo plano, el primer pointermove al volver produce un delta gigante y mete el manillar a tope de golpe (medido: steer 1 sin arrastrar). Cancelar la sesion es tan obligatorio como poner a cero el valor.
+- `gyro.active` como bandera que solo sube es la trampa clasica: en el movil parece funcionar siempre, porque mientras miras la pantalla los eventos llegan. Solo se ve al cambiar de app o al revocar el permiso, y entonces el manillar se queda pegado a medio giro (medido: 0,49 congelado). Tiene que derivarse de la hora de la ultima lectura.
+- La sensibilidad multiplicando el valor final es indetectable a ojo porque la moto sigue girando. Solo se ve midiendo: por debajo de 1 el tope de giro es inalcanzable (0,5 con sens 0,5) y por encima de 1 el ajuste es inerte porque el clamp ya recorta. Cada esquema tiene su unidad y la sensibilidad entra en la unidad, no en la salida.
+- Invertir el valor final invierte tambien el teclado, el mando y las flechas ◀ ▶ de la pantalla. Una flecha etiquetada que gira al otro lado no se lee como un ajuste, se lee como que el juego esta roto; y quien activo invertir para compensar el giroscopio al reves se encuentra el teclado del reves en el escritorio.
+- Un guardado con `invert:true` puesto para compensar el signo negado de la gravedad (controls.js:151) reintroduce el fallo en cuanto se arregla el signo. Es exactamente el caso que exige una revision de ajustes y no un simple valor por defecto: sin la migracion, el jugador que reporto "controles en reversa" los sigue teniendo en reversa despues del arreglo.
+- Resolver el esquema por defecto SOBRE el estado lo convierte en persistido en cuanto algo guarde (pagehide guarda siempre). El valor deducido tiene que recalcularse en cada arranque y null tiene que seguir siendo null hasta que el jugador toque el selector.
+- design/spec.md:229 manda respaldar a BOTONES, no a arrastre. No es un detalle de estilo: con botones aparecen dos flechas visibles en el mismo instante del fallo, y con arrastre el jugador se queda mirando una pantalla sin nada que tocar, que es literalmente lo que ha reportado.
+- El limitador del manillar de game.js:169-170 (5,5 topes/s) es mas lento que la rampa de botones que pide el spec (8,33). Mientras siga ahi, la sensibilidad de botones por encima de 0,66 no cambia nada: el techo lo pone la fisica, no la entrada. Hay que subirlo o documentar que el ajuste satura.
+- design/spec.md:229 pide ademas "swipe-into-button" en las flechas: hoy `bindButton` solo escucha pointerdown, asi que deslizar el pulgar desde el hueco hasta la flecha no la pulsa. Hace falta un `pointerenter` con `e.buttons !== 0` para completarlo.
+
+### verify
+
+- El probe que he escrito y ejecutado ya cubre los cinco defectos y hay que moverlo a tools/probe_schemes.mjs para que quede en el repo: `cp /tmp/claude-0/-home-user-General-Assets-Games/5db9e9a6-ad49-51d1-8b36-07bc1d920a78/scratchpad/probe_schemes.mjs /home/user/General-Assets-Games/redline-rider/tools/` y `node tools/probe_schemes.mjs`. Salida ANTES del arreglo (real): botones [0.5, 1, 1]; arrastre sens 0,5 con pxParaTope -1; 'FALLA: el gas queda muerto'; 'FALLA: salto a tope sin arrastrar'; 'FALLA: el manillar se queda pegado'.
+- Criterios de aceptacion del mismo probe DESPUES del arreglo, uno por defecto: (1) botones -> steer 1.0 con las tres sensibilidades, y el tiempo hasta el tope escala 1/sens; (2) arrastre -> pxParaTope finito con sens 0,4 y proporcional a 1/sens; (3) tras releaseAll con el dedo puesto, un pointerdown con OTRO pointerId devuelve throttle 1 y la clase .press queda limpia; (4) tras releaseAll, un pointermove al otro extremo deja |steer| < 0,05; (5) 500 ms sin eventos de orientacion -> |steer| < 0,05, gyroLive() false y gyroStatus() 'stalled'.
+- Matriz de deteccion sin dispositivos, con matchMedia falseado antes del arranque: `page.addInitScript(({c,h}) => { const real = matchMedia; window.matchMedia = q => /pointer: coarse/.test(q) ? {matches:c} : /hover: hover/.test(q) ? {matches:h} : real(q); }, {c,h})`. Cuatro casos y sus valores esperados: movil (coarse true, hover false) -> defaultScheme 'tilt' y html.rot true en vertical; tableta (true,false) -> igual; portatil tactil (false,true) con maxTouchPoints 10 -> 'touch' y rot FALSE (es el falso positivo que hay hoy); escritorio (false,true) -> 'touch' y rot false.
+- Cadena de respaldo, cuatro escenarios en el mismo probe: sin DeviceOrientationEvent (`delete window.DeviceOrientationEvent` en addInitScript) -> activeScheme 'buttons', gyroStatus 'unsupported', y `#pedals` con la clase btns puesta y las dos flechas con display distinto de none; requestPermission devolviendo 'denied' (stub) -> 'buttons' y estado 'denied'; permiso concedido y CERO eventos -> enableGyro resuelve false en ~1500 ms y estado 'waiting'; permiso concedido con eventos -> resuelve true, estado 'live' y activeScheme 'tilt'.
+- Signo y centro del giroscopio: reutilizar tal cual el bloque 6 de tools/probe_mobile.mjs (deriva beta/gamma de una postura fisica en vez de repetir la formula del modulo, con lo que la contrasta de verdad) y comprobar ademas que el mismo alabeo con `state.invert = true` da el signo opuesto SOLO en tilt y touch, y el MISMO signo con scheme 'buttons', con el teclado y con el mando.
+- Indicador vivo: con `setSens('tilt', 2)` y un alabeo de 11 grados, `#tiltbar > i` tiene que estar en translateX(52px) (tope del recorrido) y no en 26; con el sensor mudo la barra lleva la clase 'stall' y `#scheme-hint` contiene el texto de sch.stalled.
+- Filas condicionales: recorrer los tres esquemas por `ui.rp.scheme` y comprobar en cada uno que row-tilt solo se ve con tilt, row-invert no se ve con buttons, row-sens se ve siempre, y que el texto de #scheme-hint no queda vacio ni contiene la clave sin traducir (una clave que falte en i18n.js se devuelve tal cual por i18n.js:185, asi que buscar 'sch.' en el textContent detecta cualquier traduccion que se me haya olvidado, en las cuatro lenguas).
+- Migracion, sin navegador: `localStorage.setItem('redline.v1', JSON.stringify({sens:1.4, invert:true, scheme:'gyro'}))` antes de arrancar, y tras load() comprobar `state.scheme === null`, `state.sens` = {tilt:1.4, touch:1.4, buttons:1.4}, `state.invert === false`, `state.rev === 1` y `notes.invertFixed === true`. Recargar una segunda vez: invertFixed tiene que ser false y un invert que el jugador vuelva a activar debe sobrevivir. Y tras `wipe()`, rev sigue en 1 (si no, la migracion vuelve a apagar invert).
+- Ciclo de pausa completo: pulsar #p-gas, disparar `document.dispatchEvent(new Event('visibilitychange'))` con `document.hidden` forzado a true, volver, y comprobar throttle 0, sin clases .press colgadas y que un toque nuevo en el gas responde; despues, con la pantalla de pausa abierta, inclinar 20 grados y pulsar CONTINUAR: `rezeroIfMoved()` tiene que devolver true, salir el aviso de sch.calibrated y quedar |input.steer| < 0,05 en el fotograma siguiente.
+- Al terminar, reconstruir y volver a pasar el probe sobre el fichero empaquetado, no solo sobre src: `node build.mjs && node tools/probe_schemes.mjs index.html && node tools/probe_mobile.mjs index.html`. Todo esto se compila a un IIFE clasico, y una exportacion reexportada (`export { SCHEMES }` desde state.js) es justo el tipo de cosa que funciona en modulos y hay que ver funcionando tambien empaquetada.

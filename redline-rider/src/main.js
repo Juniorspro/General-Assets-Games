@@ -35,10 +35,10 @@ function boot(){
   const ui = new UI({});
   const game = new Game(world, {});
 
-  /* Si el jugador nunca ha elegido esquema, se resuelve por el aparato. En un movil eso es
-     giroscopio, y el permiso de iOS se pedira en el primer toque de la pantalla de carga,
-     que si es un gesto valido. */
-  if (!controls.SCHEMES.includes(state.scheme)) state.scheme = controls.defaultScheme();
+  /* El esquema NO se resuelve aqui. Escribirlo en el estado lo persistia como si lo hubiera
+     elegido el jugador, contra lo que dice el comentario de state.js: un movil que arranco sin
+     permiso de sensor se quedaba con 'touch' guardado para siempre y el aparato no volvia a
+     opinar nunca. Se deja en null y lo resuelve activeScheme() en cada arranque. */
 
   /* ---------- flujo ---------- */
   const toMenu = () => {
@@ -59,7 +59,8 @@ function boot(){
     onBootDone: () => {
       /* Este es el primer gesto real del jugador, y el unico sitio desde el que iOS acepta
          conceder el giroscopio. Si lo deniega, activeScheme() cae a arrastre por su cuenta. */
-      if (state.scheme === 'tilt') controls.enableGyro().catch(() => {});
+      if (controls.activeScheme() === 'tilt' || controls.defaultScheme() === 'tilt')
+        controls.enableGyro().catch(() => {});
       if (!state.lang) ui.show('lang');
       else if (!state.quality) ui.show('quality');
       else toMenu();

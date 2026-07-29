@@ -28,10 +28,24 @@ export const input = { throttle:0, brake:0, steer:0, horn:false, tiltDeg:0 };
    tumba el movil, y si el esquema se decidiera con active el mando cambiaria EN MEDIO de la
    carrera. Una vez que ha llegado una lectura valida, el aparato tiene giroscopio y punto. */
 const gyro = { available:false, granted:false, zero:null, raw:0, active:false,
-               everActive:false, flat:0, samples:[] };
+               everActive:false, flat:0, samples:[], last:0 };
+/* Sin lecturas durante este tiempo se da el sensor por dormido. Medio segundo es de sobra:
+   un giroscopio real emite a 60 Hz. */
+const GYRO_STALE_MS = 500;
+const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : 0);
 const ZERO_SAMPLES = 6;         // lecturas que se promedian para fijar el centro
 const ZERO_MIN_FLAT = 0.30;     // no se calibra con el movil casi plano: ahi el alabeo es ruido
 let gyroSteer = 0;
+/* Ganancia del arrastre y del giro por botones. En botones no puede ser instantaneo: si
+   btnSteer salta a 1 de golpe, la sensibilidad no tiene donde aplicarse (multiplicar la
+   salida solo la recorta por debajo de 1 y no hace nada por encima). Aqui la sensibilidad
+   escala la VELOCIDAD con la que el manillar llega al tope, que es lo unico que se puede
+   regular en un mando digital, y el tope siempre se alcanza. */
+const DRAG_GAIN = 3.4;
+const BTN_RATE = 3.2;
+let btnDir = 0;                 // -1, 0, +1: lo que piden los botones
+let drag = null;                // arrastre en curso, a nivel de modulo para poder cancelarlo
+const buttons = [];             // mandos vinculados, para poder soltarlos todos de golpe
 let stage = null;               // envoltorio rotado, para mapear el puntero
 let rotated = false;
 /* El ancho con el que se coloco el escenario, cacheado. mapPointer NO debe releer innerWidth
@@ -181,6 +195,7 @@ function onOrient(e){
   gyro.raw = wrap180(roll - gyro.zero);
   gyro.active = true;
   gyro.everActive = true;
+  gyro.last = nowMs();
 }
 
 /** Vuelve a tomar la postura actual como centro. */
@@ -199,15 +214,10 @@ export function install(canvas){
     if (e.code === 'KeyC') calibrateGyro();
   });
   addEventListener('keyup', e => keys.delete(e.code));
-  addEventListener('blur', () => {
-    keys.clear();
-    pedal.gas = pedal.brake = pedal.horn = false;
-    btnSteer = 0;
-  });
+  addEventListener('blur', releaseAll);
 
   /* Zona de direccion tactil sobre el lienzo. El puntero se mapea al espacio del
      escenario para que arrastrar "a la derecha" sea derecha tambien con la pagina girada. */
-  let drag = null;
   canvas.addEventListener('pointerdown', e => {
     drag = { id:e.pointerId, x:mapPointer(e).x };
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
@@ -217,7 +227,11 @@ export function install(canvas){
     const p = mapPointer(e);
     const dx = p.x - drag.x;
     drag.x = p.x;
-    const k = 3.4 / Math.max(240, stage ? stage.clientWidth : innerWidth);
+    /* La sensibilidad va en la GANANCIA, antes del recorte. Multiplicando la salida ya
+       recortada, con sens 0,5 el arrastre se clavaba en 0,5 y no llegaba nunca al tope
+       (medido: recorrido infinito sin alcanzarlo), y con sens 2 el tope llegaba a los 130 px:
+       recortaba el recorrido util del dedo en vez de cambiar la ganancia. */
+    const k = DRAG_GAIN * (state.sens || 1) / Math.max(240, stage ? stage.clientWidth : innerWidth);
     touchSteer = clamp(touchSteer + dx * k, -1, 1);
   });
   const end = e => { if (drag && e.pointerId === drag.id) drag = null; };
@@ -232,8 +246,14 @@ export function bindButton(el, onDown, onUp){
   if (!el) return;
   /* Un conjunto de punteros, no un booleano: el jugador recoloca la mano y acaba con dos
      dedos sobre el mismo boton sin darse cuenta, y al levantar el primero se soltaria el
-     mando estando el segundo puesto. */
+     mando estando el segundo puesto.
+
+     El conjunto se REGISTRA para que releaseAll pueda vaciarlo. Al cambiar de aplicacion no
+     siempre llega el pointerup, y con un id rancio dentro held.size ya no es cero: al volver,
+     el jugador pulsa con otro id (siempre es otro), onDown no se dispara y el gas se queda
+     MUERTO el resto de la partida. */
   const held = new Set();
+  buttons.push({ el, held, onUp });
 
   const press = e => {
     e.preventDefault();
@@ -267,8 +287,8 @@ export function bindButton(el, onDown, onUp){
 export function bindPedals(els){
   bindButton(els.gas,   () => { pedal.gas = true; },   () => { pedal.gas = false; });
   bindButton(els.brake, () => { pedal.brake = true; }, () => { pedal.brake = false; });
-  bindButton(els.left,  () => { btnSteer = -1; },      () => { if (btnSteer < 0) btnSteer = 0; });
-  bindButton(els.right, () => { btnSteer = 1; },       () => { if (btnSteer > 0) btnSteer = 0; });
+  bindButton(els.left,  () => { btnDir = -1; },        () => { if (btnDir < 0) btnDir = 0; });
+  bindButton(els.right, () => { btnDir = 1; },         () => { if (btnDir > 0) btnDir = 0; });
   bindButton(els.horn,  () => { pedal.horn = true; },  () => { pedal.horn = false; });
 }
 
@@ -308,6 +328,7 @@ export function gyroStatus(){
   if (!window.DeviceOrientationEvent) return 'unsupported';
   if (!gyro.granted) return 'denied';
   if (!gyro.everActive) return 'waiting';
+  if (!gyro.active) return 'stale';
   return 'live';
 }
 
@@ -323,7 +344,21 @@ export function update(dt){
   if (keys.has('ArrowDown') || keys.has('KeyS')) brake = 1;
   if (pad){ throttle = Math.max(throttle, pad.throttle); brake = Math.max(brake, pad.brake); }
 
+  /* Vigilante del sensor: gyro.active se ponia a true y no habia quien lo bajara. Medido:
+     inclinando a la derecha y dejando de emitir eventos 5 segundos (cambiar de aplicacion,
+     revocar el permiso, o que el sensor se duerma) el manillar se quedaba PEGADO a medio
+     giro y gyroStatus seguia diciendo "live". Eso es, tal cual, "controles pegados al
+     recuperar el foco". */
+  if (gyro.active && gyro.last && (nowMs() - gyro.last) > GYRO_STALE_MS){
+    gyro.active = false;
+    gyro.raw = 0;
+  }
+
   const scheme = activeScheme();
+
+  // el giro por botones va hacia su tope a una velocidad, no de golpe: ver BTN_RATE
+  btnSteer += clamp(btnDir - btnSteer, -BTN_RATE * sens * dt, BTN_RATE * sens * dt);
+  if (!btnDir && Math.abs(btnSteer) < 0.01) btnSteer = 0;
 
   /* Giroscopio: respuesta con mas resolucion en el centro, para colocarse en el carril, y
      tope al final para el cambio de carril rapido.
@@ -339,9 +374,13 @@ export function update(dt){
     gyroSteer = 0;
   }
 
+  /* Ninguno de los tres se multiplica por la sensibilidad AQUI: el giroscopio ya la lleva en
+     el angulo, el arrastre en la ganancia y los botones en la velocidad de barrido. Aplicarla
+     a la salida, que ya esta recortada a +-1, solo impide llegar al tope por debajo de 1 y no
+     hace nada por encima. */
   let steer = scheme === 'tilt' ? gyroSteer
-            : scheme === 'buttons' ? btnSteer * sens
-            : touchSteer * sens;
+            : scheme === 'buttons' ? btnSteer
+            : touchSteer;
 
   // teclado y mando pisan cualquier esquema, para que el escritorio siempre funcione
   let kb = 0;
@@ -368,8 +407,22 @@ export function update(dt){
 export function releaseAll(){
   keys.clear();
   pedal.gas = pedal.brake = pedal.horn = false;
+  btnDir = 0;
   btnSteer = 0;
   touchSteer = 0;
+  /* El arrastre en curso tambien: era local a install() y sobrevivia a releaseAll, asi que
+     al volver a la partida el siguiente pointermove seguia desde la posicion vieja del dedo
+     y daba un tiron de manillar. */
+  drag = null;
+  /* Y los conjuntos de punteros de cada mando, o el mando queda inservible: sin pointerup
+     conservan un id rancio, held.size deja de ser cero y el siguiente onDown no dispara. */
+  for (const b of buttons){
+    if (b.held.size){
+      b.held.clear();
+      b.el.classList.remove('press');
+      b.onUp();
+    }
+  }
   input.throttle = input.brake = input.steer = 0;
   input.horn = false;
 }
