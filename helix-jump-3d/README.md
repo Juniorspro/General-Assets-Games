@@ -10,8 +10,9 @@ Hay dos versiones, las dos funcionan con doble clic (`file://`) y servidas por h
 
 | Fichero | Peso | Qué es |
 |---|---|---|
-| `helix-jump-3d.html` | 8,1 MB | **Un solo fichero, nada más.** Audio empotrado en base64. Para pasarlo por chat o llevarlo en un USB. |
-| `index.html` + `assets/` | 641 KB + 9,5 MB | Versión de trabajo. El audio se sirve aparte, así que carga progresiva y cachea mejor. |
+| `helix-jump-3d-cdn.html` | **631 KB** | **Un fichero y ligero.** El audio se sirve desde jsDelivr, cacheado en el borde. Necesita conexión la primera vez. |
+| `helix-jump-3d.html` | 8,1 MB | Un fichero y **sin red**. Audio empotrado en base64. Para USB o sitios sin internet. |
+| `index.html` + `assets/` | 631 KB + 9,5 MB | Versión de trabajo, con los assets al lado. |
 
 ```bash
 npm run serve       # http://localhost:8080
@@ -48,13 +49,13 @@ ajustan en Ajustes.
 | Más anillos y menos hueco al avanzar | `8 + nivel·2` anillos (máx. 28); hueco de 3 → 2 slots |
 | +1 punto por anillo atravesado | `passRing()` |
 | Combos por encadenar anillos | Bonus `combo·2` al aterrizar; aviso en pantalla |
-| **3 anillos seguidos → invencible / bola de fuego** | `FIRE_COMBO = 3` activa fuego 3,2 s |
-| **Flechas verdes → bola de fuego** | Una o dos por nivel a partir del nivel 2; 5 s de fuego |
+| **3 anillos seguidos → invencible / bola de fuego** | 3 anillos activan el fuego, medido en plataformas a romper |
+| **Flechas verdes → bola de fuego** | Una o dos por nivel a partir del nivel 2, con 2 cargas extra |
 | La bola de fuego rompe plataformas | Rompe cualquier anillo, incluidos los rojos, y sigue cayendo |
 | Plataformas que se destruyen en pedazos | Cada segmento se parte en 3 escombros con velocidad y giro |
 | 27 pelotas desbloqueables por rareza | 27 acabados: 8 comunes, 8 raras, 7 épicas, 4 legendarias |
 | Monedas y misiones | Monedas en los huecos; 3 misiones que escalan su objetivo al cobrarlas |
-| Dificultad creciente | Más rojo, hueco más estrecho, caída más rápida |
+| Dificultad creciente | Más rojo, hueco más estrecho, caída más rápida y **más separación entre plataformas** |
 | Anillos móviles | Anillos con giro propio desde el nivel 4 |
 | Vibración al impactar | `navigator.vibrate`, desactivable |
 
@@ -64,6 +65,9 @@ ajustan en Ajustes.
   de la escena, con consejos rotativos.
 - **Idioma** — se pregunta una sola vez y queda guardado (es / en / pt / fr).
 - **Menú principal** — nivel, récord y monedas, con la torre girando de fondo.
+- **Mejoras** — la bola de fuego sube de nivel sin techo, del 1 al ∞. Cada nivel rompe
+  una plataforma más y el precio crece de forma geométrica (`120 · 1,62^(n-1)`): del 1 al 5
+  cuesta unas 1.900 monedas, del 1 al 15 unas 250.000.
 - **Pelotas** — las 27, con rareza, precio y nivel requerido.
 - **Misiones** — 3 activas con barra de progreso y recompensa.
 - **Ajustes** — idioma, volumen de música y efectos, pista, calidad, sensibilidad,
@@ -98,9 +102,14 @@ vendor/three/     three.js 0.185.1 (licencia MIT incluida)
 ```bash
 npm install
 npm run build     # -> index.html (audio en assets/)
+npm run cdn       # -> helix-jump-3d-cdn.html (audio desde jsDelivr)
 npm run single    # -> helix-jump-3d.html (audio empotrado en base64)
 npm run dev       # como build, sin minificar
 ```
+
+El build de CDN fija la URL al commit que tocó `assets/` por última vez, no a la rama:
+es inmutable, así que jsDelivr lo cachea indefinidamente y el enlace no se rompe cuando
+la rama avanza. Se resuelve solo con `git log`, no hay que escribir el hash a mano.
 
 Se compila a un IIFE clásico a propósito: un `<script type="module">` no carga desde
 `file://`, y el objetivo es que el juego se pueda abrir haciendo doble clic.

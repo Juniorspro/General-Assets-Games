@@ -27,7 +27,9 @@ export const MUSIC_FILES = {
 /* En la version de un solo fichero el audio viaja empotrado como data URI. El mapa lo
    inyecta build.mjs --single justo antes del bundle; si no existe, se usan las rutas. */
 const ASSETS = (typeof window !== 'undefined' && window.__HX_ASSETS) || null;
-const resolve = url => (ASSETS && ASSETS[url]) || url;
+// version CDN: el mismo codigo, con el audio servido desde jsDelivr
+const BASE_URL = (typeof window !== 'undefined' && window.__HX_ASSET_BASE) || '';
+const resolve = url => (ASSETS && ASSETS[url]) || (BASE_URL ? BASE_URL + url : url);
 
 /** Una pista solo esta disponible si su fichero existe o va empotrado. */
 export const trackAvailable = id => id === 'none' || !ASSETS || !!ASSETS[MUSIC_FILES[id]];
@@ -98,14 +100,13 @@ export function sfxTasks(){
   return Object.keys(SFX_FILES).map(name => ({ label:name, run: () => poolFor(name) }));
 }
 
-export function musicTasks(){
-  // solo el menu y la pista elegida entran en la carga inicial; el resto va en diferido
+/** La musica NO entra en la barra de carga: son megas frente a los kilobytes de los
+    efectos, y esperarla multiplica por siete el arranque. Se pide en segundo plano y
+    playMusic ya espera por ella si aun no esta lista. */
+export function preloadMusic(){
   const names = ['menu'];
   if (state.track && state.track !== 'none') names.push(state.track);
-  return names.filter(trackAvailable).map(name => ({
-    label: 'music:' + name,
-    run: async () => { await loadMusic(name); }
-  }));
+  for (const n of names.filter(trackAvailable)) loadMusic(n).catch(() => {});
 }
 
 async function loadMusic(name){

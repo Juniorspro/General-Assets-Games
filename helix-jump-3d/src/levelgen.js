@@ -5,13 +5,17 @@ import { TAU, norm2 } from './gfx.js';
 
 export const SLOTS = 12;
 export const SLOT = TAU / SLOTS;
-export const LEVEL_H = 3.0;          // separacion vertical entre anillos
+export const BASE_LEVEL_H = 3.0;
 export const R_CORE = 1.7;
 export const R_OUT = 4.4;
 export const RING_H = 0.42;
 export const R_PATH = (R_CORE + R_OUT) / 2;
 export const BALL_R = 0.50;
-export const START_H = LEVEL_H * 1.5; // altura de caida inicial
+
+/** La separacion entre anillos crece con el nivel: mas caida libre entre plataformas,
+    mas velocidad de impacto y menos margen para reaccionar. */
+export const levelHFor = level => Math.min(5.6, BASE_LEVEL_H + (level - 1) * 0.16);
+export const startHFor = level => levelHFor(level) * 1.5;
 
 export const ringCountFor = level => Math.min(28, 8 + level * 2);
 
@@ -27,8 +31,8 @@ function gapsOf(segs){
   return out;
 }
 
-function makeRing(i, level, d){
-  const y = -i * LEVEL_H;
+function makeRing(i, level, d, levelH){
+  const y = -i * levelH;
 
   let gapWide = Math.max(2, Math.round(3 - d));         // 3 -> 2 slots por hueco
   let gapCount = Math.random() < 0.25 ? 3 : 2;
@@ -75,8 +79,9 @@ function makeRing(i, level, d){
 export function makeLevel(level){
   const d = Math.min(1, (level - 1) / 12);
   const count = ringCountFor(level);
+  const levelH = levelHFor(level);
   const rings = [];
-  for (let i = 0; i < count; i++) rings.push(makeRing(i, level, d));
+  for (let i = 0; i < count; i++) rings.push(makeRing(i, level, d, levelH));
 
   // monedas en los huecos: recompensan pasar por el sitio justo
   for (const r of rings){
@@ -100,7 +105,7 @@ export function makeLevel(level){
     }
   }
 
-  return { level, rings, count, goalY: -count * LEVEL_H, d };
+  return { level, rings, count, levelH, startH: levelH * 1.5, goalY: -count * levelH, d };
 }
 
 /** Segmento solido bajo el angulo local dado, o null si hay hueco. */

@@ -2,20 +2,28 @@
    y es la torre la que gira, igual que en el original. */
 
 import { TAU, norm2 } from './gfx.js';
-import { makeLevel, solidAt, LEVEL_H, BALL_R, START_H } from './levelgen.js';
+import { makeLevel, solidAt, levelHFor, BALL_R } from './levelgen.js';
 import { themeOf } from './palette.js';
 import { state, save, bumpMissions, skinById } from './state.js';
 import * as audio from './audio.js';
 
 const FRONT = Math.PI / 2;
 const GRAV = 66;
-const BOUNCE = 15.5;            // altura de rebote ~1.8 < LEVEL_H, nunca sube un anillo
+const BOUNCE = 15.5;            // altura de rebote ~1.8, siempre menor que la separacion
 const VY_MAX = 26;              // velocidad terminal: sin ella la caida encadenada se descontrola
 const TOL = 0.10;               // holgura angular de la pelota
 const PICK_A = 0.30;            // apertura para recoger moneda o flecha
 const FIRE_COMBO = 3;           // 3 anillos seguidos -> bola de fuego (como el original)
-const FIRE_TIME = 3.2;
-const FIRE_TIME_ARROW = 5.0;
+
+/* La bola de fuego se mide en PLATAFORMAS que puede romper, no en segundos. Por
+   duracion se barria el nivel entero de una pasada; el original solo da invencibilidad
+   "en el primer rebote". De base rompe una, y las mejoras suben esa cuenta.
+   El temporizador solo evita que la carga quede colgada el resto del nivel. */
+const FIRE_WINDOW = 5.0;
+const ARROW_BONUS = 2;          // la flecha verde da algo mas que el combo
+
+/** Plataformas que rompe la bola de fuego, segun la mejora comprada. */
+const chargesFromUpgrade = () => Math.max(1, state.fireLevel | 0);
 
 export class Game {
   constructor(world, hooks){
@@ -84,7 +92,7 @@ export class Game {
     this.world.build(this.data);
     this.world.setMenuMode(true);
     this.world.setSkin(skinById(state.skin));
-    this.world.camY = -LEVEL_H * 2.5;
+    this.world.camY = -levelHFor(this.level) * 2.5;
   }
 
   startLevel(level){
@@ -97,7 +105,7 @@ export class Game {
     this.world.setFire(false);
 
     this.rot = 0; this.rotVel = 0;
-    this.ball.y = START_H; this.ball.vy = 0; this.ball.squash = 0;
+    this.ball.y = this.data.startH; this.ball.vy = 0; this.ball.squash = 0;
     this.world.setBall(this.ball.y, 0);
     this.world.camY = this.ball.y;
     this.score = 0;
@@ -107,7 +115,7 @@ export class Game {
     this.coins = 0;
     this.smashes = 0;
     this.fireT = 0;
-    this.fireMax = 0;
+    this.fireCharges = 0;
     this.hudAcc = 0;
     this.fires = 0;
     this.deathT = 0;
@@ -120,7 +128,8 @@ export class Game {
     return {
       level: this.level, score: this.score, combo: this.combo,
       progress: this.cleared / Math.max(1, this.data.count),
-      fire: this.fireT > 0, fireFrac: this.fireT / (this.fireMax || FIRE_TIME), coins: this.coins
+      fire: this.fireCharges > 0, fireCharges: this.fireCharges,
+      fireFrac: this.fireT / FIRE_WINDOW, coins: this.coins
     };
   }
 
@@ -135,7 +144,7 @@ export class Game {
     if (this.mode === 'menu'){
       this.rot += dt * 0.18;
       this.world.setRot(this.rot);
-      this.world.ball.position.y = -LEVEL_H * 2.5 + Math.sin(this.t * 0.25) * 1.4;
+      this.world.ball.position.y = -levelHFor(this.level) * 2.5 + Math.sin(this.t * 0.25) * 1.4;
       return;
     }
     if (this.mode !== 'play'){
@@ -152,13 +161,13 @@ export class Game {
     this.world.syncRings(this.data.rings);
     this.world.setRot(this.rot);
 
-    if (this.fireT > 0){
+    if (this.fireCharges > 0){
       this.fireT -= dt;
-      // el medidor de fuego se vacia de forma continua, pero sin tocar el DOM 120 veces por segundo
+      // el medidor se vacia de forma continua, pero sin tocar el DOM 120 veces por segundo
       this.hudAcc += dt;
       if (this.hudAcc > 0.08 || this.fireT <= 0){
         this.hudAcc = 0;
-        if (this.fireT <= 0){ this.fireT = 0; this.world.setFire(false); audio.fireLoop(false); }
+        if (this.fireT <= 0) this.endFire();
         this.hooks.onHud && this.hooks.onHud(this.hudData());
       }
     }
@@ -217,14 +226,15 @@ export class Game {
       const d = Game.arcDist(local - ring.offset, ring.arrow.a);
       if (d < PICK_A){
         this.world.takeArrow(ring.arrow);
-        this.igniteFire(FIRE_TIME_ARROW);
+        this.igniteFire(chargesFromUpgrade() + ARROW_BONUS);
       }
     }
 
     const sg = solidAt(ring, local, TOL);
 
-    if (sg && this.fireT > 0){
-      // bola de fuego: rompe la plataforma y sigue cayendo, tambien las rojas
+    if (sg && this.fireCharges > 0){
+      // bola de fuego: gasta una carga, rompe la plataforma (roja incluida) y sigue cayendo
+      this.fireCharges--;
       this.world.smashRing(ring, true);
       this.world.addShake(0.5);
       this.smashes++; this.score += 2;
@@ -233,6 +243,8 @@ export class Game {
       audio.play('smash');
       this.passRing(ring, false);
       if (state.haptics && navigator.vibrate) try { navigator.vibrate(18); } catch (e) {}
+      if (this.fireCharges <= 0) this.endFire();
+      this.hooks.onHud && this.hooks.onHud(this.hudData());
       return;
     }
 
@@ -277,15 +289,22 @@ export class Game {
     if (countCombo){
       this.combo++;
       audio.play('pass', { vol: 0.6 + Math.min(0.4, this.combo * 0.1) });
-      if (this.combo === FIRE_COMBO) this.igniteFire(FIRE_TIME);
+      if (this.combo === FIRE_COMBO) this.igniteFire(chargesFromUpgrade());
     }
     this.hooks.onHud && this.hooks.onHud(this.hudData());
   }
 
-  igniteFire(time){
-    const fresh = this.fireT <= 0;
-    this.fireT = Math.max(this.fireT, time);
-    this.fireMax = this.fireT;      // el medidor se vacia sobre la duracion real, no sobre el maximo posible
+  endFire(){
+    this.fireCharges = 0;
+    this.fireT = 0;
+    this.world.setFire(false);
+    audio.fireLoop(false);
+  }
+
+  igniteFire(charges){
+    const fresh = this.fireCharges <= 0;
+    this.fireCharges = Math.max(this.fireCharges, charges);
+    this.fireT = FIRE_WINDOW;
     this.world.setFire(true);
     if (fresh){
       this.fires++;
@@ -318,8 +337,7 @@ export class Game {
     this.deathT = 0;
     this.ball.vy = 0;
     this.world.addShake(1.2);
-    this.world.setFire(false);
-    audio.fireLoop(false);
+    this.endFire();
     audio.play('die');
     audio.duck(true);
     if (state.haptics && navigator.vibrate) try { navigator.vibrate([0, 60, 40, 90]); } catch (e) {}
@@ -332,8 +350,7 @@ export class Game {
   win(){
     this.mode = 'win';
     this.deathT = 0;
-    this.world.setFire(false);
-    audio.fireLoop(false);
+    this.endFire();
     audio.play('win');
     audio.duck(true);
     this.world.addShake(0.5);

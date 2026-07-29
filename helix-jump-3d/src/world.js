@@ -3,12 +3,12 @@
 import * as THREE from 'three';
 import { sectorGeometry, glowTexture, sparkTexture, skyTexture, coreTexture, hazardTexture,
          shadowTexture, TAU, norm2 } from './gfx.js';
-import { R_CORE, R_OUT, RING_H, R_PATH, BALL_R, LEVEL_H, START_H, solidAt } from './levelgen.js';
+import { R_CORE, R_OUT, RING_H, R_PATH, BALL_R, BASE_LEVEL_H, solidAt } from './levelgen.js';
 import { DANGER, GOAL, ARROW, COIN } from './palette.js';
 
 const FOV = 50;
 const FIT_W = R_OUT * 2.34;     // ancho visible minimo: la torre siempre entra a lo ancho
-const FIT_H = LEVEL_H * 5.0;    // alto visible minimo: unos cinco anillos a la vista
+const FIT_RINGS = 5.0;          // alto visible minimo, en anillos (la separacion crece por nivel)
 
 export class World {
   constructor(canvas){
@@ -29,6 +29,7 @@ export class World {
     this.shadowTex = shadowTexture();
 
     this.quality = 'high';
+    this.levelH = BASE_LEVEL_H;
     this.shake = 0;
     this.punch = 0;
     this.camY = 0;
@@ -270,7 +271,7 @@ export class World {
     this._buildGoal(levelData.goalY);
 
     // la columna cubre todo el nivel de una pieza
-    const top = START_H + 6, bot = levelData.goalY - 4;
+    const top = levelData.startH + 6, bot = levelData.goalY - 4;
     const h = top - bot;
     this.core.geometry.dispose();
     this.core.geometry = new THREE.CylinderGeometry(R_CORE, R_CORE, h, 56, 1, true);
@@ -278,6 +279,9 @@ export class World {
     this.coreTex.repeat.set(1, h / 3.2);
 
     this.levelData = levelData;
+    // la separacion crece por nivel, asi que la camara se recalcula
+    this.levelH = levelData.levelH;
+    this.resize();
     // compila aqui, no en el primer frame de la partida
     const wasVisible = this.ball.visible;
     this.ball.visible = true;          // compile() ignora lo invisible
@@ -489,7 +493,7 @@ export class World {
     // camara: sigue la pelota con retardo y un limite duro para que nunca se escape
     const targetY = this.ball.position.y;
     this.camY += (targetY - this.camY) * Math.min(1, dt * 9);
-    if (this.camY - targetY > LEVEL_H * 0.9) this.camY = targetY + LEVEL_H * 0.9;
+    if (this.camY - targetY > this.levelH * 0.9) this.camY = targetY + this.levelH * 0.9;
 
     this.shake *= Math.exp(-6 * dt);
     this.punch *= Math.exp(-5 * dt);
@@ -498,10 +502,10 @@ export class World {
     const dist = this.camDist * (1 + this.punch * 0.05);
     this.camera.position.set(
       (Math.random() - 0.5) * sh * 0.55,
-      this.camY + LEVEL_H * 0.78 + (Math.random() - 0.5) * sh * 0.55,
+      this.camY + this.levelH * 0.78 + (Math.random() - 0.5) * sh * 0.55,
       dist
     );
-    this.camera.lookAt(0, this.camY - LEVEL_H * 0.5, 0);
+    this.camera.lookAt(0, this.camY - this.levelH * 0.5, 0);
 
     this.sky.position.set(0, this.camY, 0);
     this.sunTarget.position.set(0, this.camY, 0);
@@ -516,7 +520,7 @@ export class World {
         if (r.y >= by) continue;
         if (solidAt(r, local, 0.10)){ sy = r.y; break; }
       }
-      const fade = Math.max(0, 1 - (by - sy) / (LEVEL_H * 1.7));
+      const fade = Math.max(0, 1 - (by - sy) / (this.levelH * 1.7));
       this.ballShadow.visible = fade > 0.02;
       if (this.ballShadow.visible){
         this.ballShadow.position.set(0, sy + RING_H / 2 + 0.015, R_PATH);
@@ -608,7 +612,7 @@ export class World {
     // la distancia sale de encajar a la vez el ancho de la torre y varios anillos de alto
     const tan = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
     const dW = (FIT_W / 2) / (tan * this.camera.aspect);
-    const dH = (FIT_H / 2) / tan;
+    const dH = (this.levelH * FIT_RINGS / 2) / tan;
     this.camDist = Math.max(dW, dH);
     this.camera.updateProjectionMatrix();
   }

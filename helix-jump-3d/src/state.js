@@ -59,6 +59,7 @@ const DEFAULTS = () => ({
   music: 0.55, sfx: 0.8, track: 'aero',
   quality: 'high', haptics: true, invert: false, sens: 1,
   level: 1, best: 0, coins: 0,
+  fireLevel: 1,                     // plataformas que rompe la bola de fuego; sin techo
   skin: 'classic', owned: ['classic'],
   tier: 0,                          // cuantas veces se ha reciclado cada mision
   missions: null,
@@ -131,6 +132,23 @@ export function claimMission(m){
   if (state.missions.every(x => x.claimed)){ state.tier++; rollMissions(); }
   save();
   return reward;
+}
+
+/* Mejora infinita de la bola de fuego: cada nivel rompe una plataforma mas, y el precio
+   crece de forma geometrica, no lineal. Subir del 1 al 5 cuesta ~1.900; del 1 al 15,
+   ~250.000. Sin techo: siempre hay un siguiente nivel que comprar. */
+export const FIRE_BASE_COST = 120;
+export const FIRE_COST_MUL = 1.62;
+export const fireUpgradeCost = level =>
+  Math.round(FIRE_BASE_COST * Math.pow(FIRE_COST_MUL, Math.max(0, (level | 0) - 1)));
+
+export function buyFireUpgrade(){
+  const cost = fireUpgradeCost(state.fireLevel);
+  if (!isFinite(cost) || state.coins < cost) return 0;
+  state.coins -= cost;
+  state.fireLevel = (state.fireLevel | 0) + 1;
+  save();
+  return cost;
 }
 
 export function skinLocked(skin){

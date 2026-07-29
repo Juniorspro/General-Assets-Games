@@ -1,11 +1,24 @@
 /* Capa de interfaz: pantallas, menus y HUD. El juego 3D nunca toca el DOM directamente. */
 
 import { t, LANGS, setLang, getLang, TIP_COUNT } from './i18n.js';
-import { state, save, SKINS, TRACKS, skinById, skinLocked, buySkin, missionReady, claimMission, missionDef, wipe } from './state.js';
+import { state, save, SKINS, TRACKS, skinById, skinLocked, buySkin, missionReady, claimMission,
+         missionDef, wipe, fireUpgradeCost, buyFireUpgrade } from './state.js';
 import * as audio from './audio.js';
 
 const $ = id => document.getElementById(id);
-const SCREENS = ['boot','lang','menu','skins','missions','settings','credits','pause','over','win'];
+const SCREENS = ['boot','lang','menu','upgrades','skins','missions','settings','credits','pause','over','win'];
+
+/* Las mejoras no tienen techo, asi que los precios llegan a ser enormes: 1.2M en vez
+   de 1200000. */
+function num(n){
+  if (!isFinite(n)) return '∞';
+  if (n < 100000) return String(Math.round(n));
+  try {
+    return new Intl.NumberFormat(getLang(), { notation:'compact', maximumFractionDigits:1 }).format(n);
+  } catch (e) {
+    return Math.round(n).toExponential(1);
+  }
+}
 
 export class UI {
   constructor(hooks){
@@ -21,6 +34,7 @@ export class UI {
 
     this.buildLangGrid();
     this.buildSettings();
+    this.buildUpgrades();
     this.wire();
     this.applyI18n();
     this.startTips();
@@ -30,6 +44,7 @@ export class UI {
   applyI18n(){
     document.querySelectorAll('[data-i18n]').forEach(n => { n.textContent = t(n.dataset.i18n); });
     this.refreshMenu();
+    this.refreshUpgrades();
     this.refreshSkins();
     this.refreshMissions();
     this.refreshSettings();
@@ -42,6 +57,7 @@ export class UI {
     for (const s of SCREENS) this.el[s].classList.toggle('on', s === name);
     this.hudEl.classList.toggle('on', name === 'game' || name === 'pause');
     if (name === 'menu') this.refreshMenu();
+    if (name === 'upgrades') this.refreshUpgrades();
     if (name === 'skins') this.refreshSkins();
     if (name === 'missions') this.refreshMissions();
     if (name === 'settings') this.refreshSettings();
@@ -107,6 +123,30 @@ export class UI {
     $('m-level').textContent = state.level;
     $('m-best').textContent = state.best;
     $('m-coins').textContent = state.coins;
+  }
+
+  /* ---------- mejoras ---------- */
+  buildUpgrades(){
+    $('b-fire-up').addEventListener('click', () => {
+      const paid = buyFireUpgrade();
+      if (paid){
+        this.toast('-' + num(paid));
+        this.refreshUpgrades();
+        this.refreshMenu();
+      } else this.toast(t('up.nocoins'));
+    });
+  }
+
+  refreshUpgrades(){
+    const lv = Math.max(1, state.fireLevel | 0);
+    const cost = fireUpgradeCost(lv);
+    $('u-fire-level').textContent = t('up.level', { v:lv });
+    $('u-fire-desc').textContent = t('up.fireDesc', { v:lv });
+    $('u-fire-next').textContent = t('up.next', { v:lv + 1 });
+    const b = $('b-fire-up');
+    b.textContent = t('up.buy', { v:num(cost) });
+    b.disabled = state.coins < cost;
+    $('u-coins').textContent = t('menu.coins') + ': ' + num(state.coins);
   }
 
   /* ---------- pelotas ---------- */
@@ -265,8 +305,11 @@ export class UI {
     $('prog').firstElementChild.style.width = Math.round(d.progress * 100) + '%';
     const fb = $('firebar');
     fb.classList.toggle('on', !!d.fire);
-    if (d.fire) fb.querySelector('.tr').firstElementChild.style.width =
-      Math.max(0, Math.min(100, d.fireFrac * 100)) + '%';
+    if (d.fire){
+      fb.querySelector('.lb').textContent = t('hud.fireN', { v:d.fireCharges });
+      fb.querySelector('.tr').firstElementChild.style.width =
+        Math.max(0, Math.min(100, d.fireFrac * 100)) + '%';
+    }
   }
 
   combo(n, bonus){
@@ -312,6 +355,7 @@ export class UI {
 
     const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
     on('b-play',     () => this.h.onPlay && this.h.onPlay());
+    on('b-upgrades', () => this.show('upgrades'));
     on('b-skins',    () => this.show('skins'));
     on('b-missions', () => this.show('missions'));
     on('b-settings', () => this.show('settings'));

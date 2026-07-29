@@ -72,7 +72,9 @@ function boot(){
   };
 
   /* ---------- carga con progreso real ---------- */
-  const tasks = audio.sfxTasks().concat(audio.musicTasks());
+  // solo los efectos bloquean el arranque; la musica llega en segundo plano
+  audio.preloadMusic();
+  const tasks = audio.sfxTasks();
   tasks.push({ label:'scene', run: async () => {
     game.enterMenu();
     world.setMenuMode(true);
@@ -93,7 +95,7 @@ function boot(){
         ui.setProgress(++done / total);
       }
     };
-    await Promise.all([worker(), worker(), worker()]);
+    await Promise.all(Array.from({ length: 6 }, worker));
   };
 
   runAll().then(() => {
