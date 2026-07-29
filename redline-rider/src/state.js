@@ -47,6 +47,10 @@ const DEFAULTS = () => ({
   owned: ['street'],
   upgrades: { street:{}, sport:{}, superbike:{} },
   best: { score:0, distance:0, overtakes:0, topKmh:0, combo:0 },
+  /* Se ofrece el tutorial una sola vez, tras elegir calidad. Repetirlo en cada arranque es la
+     forma mas rapida de que el jugador aprenda a cerrarlo sin leerlo. Queda accesible siempre
+     desde el menu. */
+  tutorialDone: false,
   runs: 0
 });
 

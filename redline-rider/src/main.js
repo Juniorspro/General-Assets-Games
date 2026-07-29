@@ -7,6 +7,7 @@ import * as controls from './controls.js';
 import { World } from './world.js';
 import { Game } from './game.js';
 import { UI } from './ui.js';
+import { Tutorial } from './tutorial.js';
 
 const FIXED = 1 / 120;
 
@@ -34,6 +35,7 @@ function boot(){
   controls.install(canvas);
   const ui = new UI({});
   const game = new Game(world, {});
+  const tut = new Tutorial(game, world, ui);
 
   /* El esquema NO se resuelve aqui. Escribirlo en el estado lo persistia como si lo hubiera
      elegido el jugador, contra lo que dice el comentario de state.js: un movil que arranco sin
@@ -46,6 +48,16 @@ function boot(){
     ui.show('menu');
     audio.playMusic('menu');
   };
+  /* El tutorial se juega DENTRO de una partida real, con el trafico gobernado por cada paso.
+     Se arranca la partida primero y el tutorial despues, porque los pasos preparan la escena. */
+  const teach = () => {
+    game.start('day');
+    ui.show('game');
+    audio.playMusic(null, 400);
+    audio.duck(false);
+    tut.start();
+  };
+
   const ride = () => {
     // el ambiente rota por partida para que no sea siempre la misma autopista
     const envs = ['day', 'sunset', 'night'];
@@ -63,10 +75,11 @@ function boot(){
         controls.enableGyro().catch(() => {});
       if (!state.lang) ui.show('lang');
       else if (!state.quality) ui.show('quality');
+      else if (!state.tutorialDone) teach();
       else toMenu();
     },
     onLangPicked: () => { if (!state.quality) ui.show('quality'); else toMenu(); },
-    onQualityPicked: () => { if (ui.screen === 'quality') toMenu(); },
+    onQualityPicked: () => { if (ui.screen === 'quality'){ if (state.tutorialDone) toMenu(); else teach(); } },
     onPlay: () => ride(),
     onPause: () => { game.pause(); ui.show('pause'); },
     onResume: () => { game.resume(); ui.show('game'); },
@@ -74,7 +87,10 @@ function boot(){
     onMenu: () => toMenu(),
     onQuality: q => world.setQuality(q),
     onBike: () => { game.enterMenu(); ui.refreshGarage(); },
-    onWipe: () => toMenu()
+    onWipe: () => toMenu(),
+    onTutorial: () => teach(),
+    onTutNext: () => tut.next(),
+    onTutSkip: () => tut.skip()
   };
 
   game.hooks = {
@@ -114,7 +130,7 @@ function boot(){
   })();
 
   // gancho de pruebas: con ?debug=1 se puede pilotar desde un script
-  if (/[?&]debug=1/.test(location.search)) window.__rr = { game, world, ui, state, audio, controls };
+  if (/[?&]debug=1/.test(location.search)) window.__rr = { game, world, ui, state, audio, controls, tut };
 
   /* ---------- bucle ---------- */
   let last = 0, acc = 0;
@@ -130,10 +146,13 @@ function boot(){
     ui.tilt(controls.input.tiltDeg, controls.gyroLive());
     /* La camara lenta escala el tiempo del JUEGO, no el del bucle: la entrada y la interfaz
        siguen en tiempo real, que es lo que hace que responda igual de bien durante el efecto. */
-    const scale = game.timeScale(dt);
+    /* Se toma la MENOR de las dos escalas: si el tutorial pide camara lenta y encima hay un
+       choque, manda la mas lenta, no el producto, que hundiria el juego casi a parado. */
+    const scale = Math.min(game.timeScale(dt), tut.timeScale());
     const gdt = dt * scale;
     acc = Math.min(0.2, acc + gdt);
     while (acc >= FIXED){ game.step(FIXED); acc -= FIXED; }
+    tut.update(gdt);
     world.update(gdt, game.speed ? game.speed / game.vMax : 0);
     world.render();
     ui.crashFx(world.crashBlur(), world.crashPhase());

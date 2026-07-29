@@ -46,6 +46,7 @@ export class Game {
     this.pool = [];
     this.hornPrev = false;
     this.slowmo = 0;
+    this.tutNoTraffic = false;
     /* La entrada vive fuera, en controls.js. Aqui solo queda la pausa por teclado: el resto
        (teclado, mando, pedales, arrastre, giroscopio) escribe en un unico objeto y este
        modulo solo lo lee, de modo que anadir un esquema no toca la fisica. */
@@ -296,6 +297,9 @@ export class Game {
 
       if (v.z > 40) v.alive = false, v.obj.visible = false;
     }
+
+    // durante los pasos del tutorial que ensenan a moverse no se repone trafico
+    if (this.tutNoTraffic) return;
 
     // repone trafico por delante, siempre en huecos libres
     let live = 0;

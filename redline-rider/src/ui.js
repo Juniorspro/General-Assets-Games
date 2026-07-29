@@ -306,6 +306,36 @@ export class UI {
 
   /** Punto vivo del angulo de inclinacion: es la unica forma de que el jugador vea que el
       giroscopio responde de verdad y hacia donde. */
+  /* ---------- tutorial ---------- */
+
+  /** Pinta un paso, o lo quita con null. Las poses se resuelven por el mapa de assets, igual
+      que el audio y los modelos, para que funcionen en las tres variantes de compilacion. */
+  tutorial(step){
+    const box = $('tut');
+    if (!box) return;
+    if (!step){ box.classList.remove('on'); return; }
+    const img = $('tut-dino');
+    const url = 'assets/img/dino/' + step.pose + '.webp';
+    const A = (typeof window !== 'undefined' && window.__HX_ASSETS) || null;
+    const BASE = (typeof window !== 'undefined' && window.__HX_ASSET_BASE) || '';
+    img.src = (A && A[url]) || (BASE ? BASE + url : url);
+    $('tut-n').textContent = t('tut.step', { n:step.n, total:step.total });
+    $('tut-txt').textContent = step.text;
+    /* El boton de siguiente solo aparece en los pasos que no piden nada. En los que piden una
+       accion, tenerlo permitiria saltarla, que es justo lo que el tutorial evita. */
+    $('tut-next').style.display = step.manual ? '' : 'none';
+    $('tut-next').textContent = t('tut.next');
+    $('tut-skip').textContent = t('tut.skip');
+    box.classList.add('on');
+  }
+
+  /** Resalta un mando, o quita el resalte con null. */
+  highlight(id){
+    if (this.hlId){ const p = $(this.hlId); if (p) p.classList.remove('hl'); }
+    this.hlId = id;
+    if (id){ const p = $(id); if (p) p.classList.add('hl'); }
+  }
+
   /** Desenfoque y fundido del choque.
       El desenfoque se hace con un filtro CSS sobre el lienzo en vez de con una pasada de
       posproceso: cuesta un solo estilo por fotograma y solo durante los dos segundos del
@@ -446,5 +476,8 @@ export class UI {
     on('b-tomenu',  () => this.h.onMenu && this.h.onMenu());
     on('b-again',   () => this.h.onRestart && this.h.onRestart());
     on('b-rmenu',   () => this.h.onMenu && this.h.onMenu());
+    on('b-tutorial', () => this.h.onTutorial && this.h.onTutorial());
+    on('tut-next',   () => this.h.onTutNext && this.h.onTutNext());
+    on('tut-skip',   () => this.h.onTutSkip && this.h.onTutSkip());
   }
 }
