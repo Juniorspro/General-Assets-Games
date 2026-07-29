@@ -197,8 +197,6 @@ const norm2 = a => { const p = Math.PI * 2; return ((a % p) + p) % p; };
 /* generacion de un nivel: huecos garantizados, peligro escalado con la profundidad */
 function makeLevel(i){
   const y = START_Y + i * LEVEL_H;
-  if (i === 0) return { i, y, segs:[{ s:0, len:Math.PI*2, danger:false }], passed:true };
-
   const d = Math.min(1, i / 70);                       // curva de dificultad
   let gapWide  = Math.max(2, Math.round(3 - d));        // 3 -> 2 slots por hueco
   let gapCount = Math.random() < 0.25 ? 3 : 2;          // variedad, sin romper el reparto
@@ -239,7 +237,9 @@ function makeLevel(i){
 function reset(){
   levels = []; nextIdx = 0;
   for (let k = 0; k < 16; k++) levels.push(makeLevel(nextIdx++));
-  ball.y = START_Y - BALL_R; ball.vy = 0; ball.squash = 0;
+  // la pelota entra cayendo desde encima del primer nivel: una plataforma inicial
+  // solida sin huecos se veria atravesada por la pelota
+  ball.y = START_Y - LEVEL_H * 1.5; ball.vy = 0; ball.squash = 0;
   rot = 0; rotVel = 0; score = 0; combo = 0; shake = 0;
   parts = []; rings = []; comboT = 0;
   camY = ball.y - 0.35 * H / S;
@@ -540,7 +540,7 @@ const FIXED = 1 / 120;
 function frame(ts){
   if (!last) last = ts;
   let dt = (ts - last) / 1000; last = ts;
-  if (dt > 0.25) dt = FIXED;                 // pestana en background
+  if (dt > 0.1) dt = 0.1;                    // recupera hasta 100 ms; colapsar a un paso congelaria el juego
   acc = Math.min(0.2, acc + dt);
   while (acc >= FIXED){ step(FIXED); acc -= FIXED; }
   render();
