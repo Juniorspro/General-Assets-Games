@@ -334,6 +334,7 @@ ARC.snapGL=function(){
 
 /* ---------------------------------------------------------------- 5. PANTALLAS */
 const SCRS=['menu','pause','over','levels','opts'];
+let optFrom='menu';
 ARC.show=function(s){
   for(const k of SCRS)$(k).classList.toggle('on',k===s);
   if(s!=='load')$('load').style.display='none';
@@ -469,8 +470,12 @@ function bindInput(){
   B('bPlay',()=>ARC.play(GAME.levels?Math.min(GAME.levels,(SAVE.done||0)+1):1));
   B('bLevels',()=>{buildLevels();ARC.show('levels');});
   B('bLvBack',()=>ARC.menu());
-  B('bOpts',()=>{ARC.show('opts');});
-  B('bOptBack',()=>ARC.menu());
+  /* AJUSTES se puede abrir desde el MENÚ y desde la PAUSA, y LISTO vuelve a donde
+     se abrió. Lo pidieron los tres verificadores: antes, cambiar idioma o gráficos
+     obligaba a abandonar la partida (bOptBack llamaba siempre a ARC.menu()). */
+  B('bOpts',()=>{optFrom='menu';ARC.show('opts');});
+  B('bOpts2',()=>{optFrom='pause';ARC.show('opts');});
+  B('bOptBack',()=>{if(optFrom==='pause'&&ARC.alive){ARC.show('pause');}else ARC.menu();});
   B('pPause',()=>ARC.pause());
   B('bRes',()=>ARC.resume());
   B('bRetry',()=>ARC.play(ARC.lvl));
