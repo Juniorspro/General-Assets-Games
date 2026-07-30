@@ -97,9 +97,101 @@ function saveLoad(){
   if(!SAVE.best)SAVE.best=0;
   if(!SAVE.coins)SAVE.coins=0;
   if(!SAVE.done)SAVE.done=0;      /* nivel más alto superado */
+  if(!SAVE.lang)SAVE.lang=(navigator.language||'es').slice(0,2).toLowerCase();
+  if(!STR[SAVE.lang])SAVE.lang='es';
+  if(SAVE.gfx==null)SAVE.gfx=2;
 }
 function saveNow(){try{localStorage.setItem(saveKey(),JSON.stringify(SAVE));}catch(e){}}
 ARC.save=saveNow;ARC.S=SAVE;
+
+
+/* ------------------------------------------------------------------ 2b. IDIOMAS
+   Todo texto visible sale de acá (data-i18n en el DOM + T() en el código). Cada
+   juego puede sumar sus propias claves con GAME.i18n={es:{},en:{},pt:{}} y se
+   mezclan sobre estas. El idioma se elige en la pantalla de carga la primera vez
+   y después en Ajustes; queda guardado. Si falta una clave se cae al español. */
+const LANGS=[['es','ES'],['en','EN'],['pt','PT']];
+const STR={
+  es:{loading:'CARGANDO',lang:'IDIOMA',tapPlay:'TOCÁ PARA JUGAR',play:'JUGAR',levels:'NIVELES',
+    settings:'AJUSTES',pause:'PAUSA',resume:'SEGUIR',retry:'REINTENTAR',menu:'MENÚ',next:'SIGUIENTE',
+    again:'OTRA VEZ',back:'VOLVER',done:'LISTO',wipe:'BORRAR PROGRESO',music:'Música',sfx:'Sonidos',
+    vib:'Vibración',extraFx:'Efectos extra',showFps:'Mostrar FPS',graphics:'Gráficos',
+    gfx0:'Bajo',gfx1:'Medio',gfx2:'Alto',gfx3:'Ultra',record:'RÉCORD',level:'NIVEL',
+    win:'¡NIVEL SUPERADO!',lost:'PERDISTE',points:'PUNTOS',wiped:'Progreso borrado',
+    art:'arte',sounds:'sonidos',models:'modelos',engine:'motor 3D',ready:'listo'},
+  en:{loading:'LOADING',lang:'LANGUAGE',tapPlay:'TAP TO PLAY',play:'PLAY',levels:'LEVELS',
+    settings:'SETTINGS',pause:'PAUSED',resume:'RESUME',retry:'RETRY',menu:'MENU',next:'NEXT',
+    again:'AGAIN',back:'BACK',done:'DONE',wipe:'WIPE PROGRESS',music:'Music',sfx:'Sound',
+    vib:'Vibration',extraFx:'Extra effects',showFps:'Show FPS',graphics:'Graphics',
+    gfx0:'Low',gfx1:'Medium',gfx2:'High',gfx3:'Ultra',record:'BEST',level:'LEVEL',
+    win:'LEVEL COMPLETE!',lost:'GAME OVER',points:'SCORE',wiped:'Progress wiped',
+    art:'art',sounds:'sounds',models:'models',engine:'3D engine',ready:'ready'},
+  pt:{loading:'CARREGANDO',lang:'IDIOMA',tapPlay:'TOQUE PARA JOGAR',play:'JOGAR',levels:'NÍVEIS',
+    settings:'AJUSTES',pause:'PAUSA',resume:'CONTINUAR',retry:'TENTAR DE NOVO',menu:'MENU',next:'SEGUINTE',
+    again:'DE NOVO',back:'VOLTAR',done:'PRONTO',wipe:'APAGAR PROGRESSO',music:'Música',sfx:'Sons',
+    vib:'Vibração',extraFx:'Efeitos extra',showFps:'Mostrar FPS',graphics:'Gráficos',
+    gfx0:'Baixo',gfx1:'Médio',gfx2:'Alto',gfx3:'Ultra',record:'RECORDE',level:'NÍVEL',
+    win:'NÍVEL COMPLETO!',lost:'VOCÊ PERDEU',points:'PONTOS',wiped:'Progresso apagado',
+    art:'arte',sounds:'sons',models:'modelos',engine:'motor 3D',ready:'pronto'}
+};
+function lang(){return SAVE.lang||'es';}
+ARC.T=function(k){
+  const g=(GAME.i18n&&GAME.i18n[lang()])||{};
+  if(g[k]!=null)return g[k];
+  const d=STR[lang()]||STR.es;
+  if(d[k]!=null)return d[k];
+  const ge=(GAME.i18n&&GAME.i18n.es)||{};
+  return ge[k]!=null?ge[k]:(STR.es[k]!=null?STR.es[k]:k);
+};
+const T=ARC.T;
+ARC.i18nApply=function(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=T(el.getAttribute('data-i18n'));});
+  if(GAME.subKey)$('mSub').innerHTML=T(GAME.subKey);
+  if(ARC.scr==='menu')refreshMenu();
+  if(GAME.i18nDone)nsafe2(()=>GAME.i18nDone());
+};
+const nsafe2=f=>{try{return f();}catch(e){console.warn(e);}};
+ARC.lang=function(l){
+  if(l){SAVE.lang=l;saveNow();ARC.i18nApply();paintSegs();}
+  return lang();
+};
+
+/* --------------------------------------------------------------- 2c. GRÁFICOS
+   Un solo número (0-3) que decide DPR, sombras, partículas y niebla. Se aplica en
+   caliente: no hace falta reiniciar el juego. */
+const GFXP=[{dpr:1,part:.45,sh:0,fog:.7},{dpr:1.25,part:.75,sh:0,fog:.85},
+            {dpr:1.75,part:1,sh:1,fog:1},{dpr:2.5,part:1.35,sh:1,fog:1.15}];
+ARC.gfx=function(v){
+  if(v!==undefined){SAVE.gfx=clamp(v|0,0,3);saveNow();applyGfx();paintSegs();}
+  return SAVE.gfx==null?2:SAVE.gfx;
+};
+function applyGfx(){
+  const p=GFXP[ARC.gfx()];
+  ARC.q=p.part;
+  if(ARC.rnd){
+    ARC.rnd.setPixelRatio(Math.min(window.devicePixelRatio||1,p.dpr));
+    ARC.rnd.shadowMap.enabled=!!(GAME.shadows&&p.sh);
+    ARC.rnd.setSize(ARC.W,ARC.H,false);
+  }
+  if(GAME.gfxApply)nsafe2(()=>GAME.gfxApply(p));
+}
+ARC.gfxP=()=>GFXP[ARC.gfx()];
+function paintSegs(){
+  const mk=(host,items,cur,fn)=>{
+    const el=$(host);if(!el)return;
+    el.innerHTML='';
+    items.forEach(it=>{
+      const b=document.createElement('b');
+      b.textContent=it[1];b.className=(it[0]===cur?'on':'');
+      b.addEventListener('pointerdown',e=>{e.preventDefault();ARC.sfx('tap');ARC.vib(8);fn(it[0]);});
+      el.appendChild(b);
+    });
+  };
+  mk('langs',LANGS,lang(),l=>ARC.lang(l));
+  mk('segLang',LANGS,lang(),l=>ARC.lang(l));
+  mk('segGfx',[[0,T('gfx0')],[1,T('gfx1')],[2,T('gfx2')],[3,T('gfx3')]],ARC.gfx(),v=>ARC.gfx(v));
+}
+ARC.paintSegs=paintSegs;
 
 /* -------------------------------------------------------------------- 3. AUDIO */
 const SND={ctx:null,buf:{},gain:null,mus:null,ready:false};
@@ -244,6 +336,7 @@ ARC.snapGL=function(){
 const SCRS=['menu','pause','over','levels','opts'];
 ARC.show=function(s){
   for(const k of SCRS)$(k).classList.toggle('on',k===s);
+  if(s!=='load')$('load').style.display='none';
   $('hud').style.display=(s==='game')?'block':'none';
   ARC.scr=s;
 };
@@ -288,8 +381,8 @@ ARC.over=function(o){
   if(o.score!=null&&o.score>SAVE.best)SAVE.best=o.score;
   if(o.coins)SAVE.coins+=o.coins;
   saveNow();
-  $('oTtl').textContent=o.title||(o.win?'¡NIVEL SUPERADO!':'PERDISTE');
-  $('oScore').textContent=o.score!=null?('PUNTOS '+o.score):'';
+  $('oTtl').textContent=o.title||(o.win?T('win'):T('lost'));
+  $('oScore').textContent=o.score!=null?(T('points')+' '+o.score):'';
   $('oSub').innerHTML=o.sub||'';
   const S=$('oStars').children;
   $('oStars').style.display=o.noStars?'none':'flex';
@@ -388,7 +481,7 @@ function bindInput(){
   B('bWipe',()=>{const m=SAVE.mus,s=SAVE.sfx,v=SAVE.vib,f=SAVE.fx;
     for(const k in SAVE)delete SAVE[k];
     SAVE.mus=m;SAVE.sfx=s;SAVE.vib=v;SAVE.fx=f;SAVE.stars={};SAVE.best=0;SAVE.done=0;SAVE.coins=0;
-    saveNow();ARC.toast('Progreso borrado');refreshMenu();});
+    saveNow();ARC.toast(T('wiped'));refreshMenu();});
   const SW=(id,key,fn)=>{const el=$(id);if(!el)return;
     el.classList.toggle('on',!!SAVE[key]);
     el.addEventListener('pointerdown',e=>{e.preventDefault();
@@ -410,10 +503,10 @@ function bindInput(){
 /* -------------------------------------------------------- 9. MENÚ / NIVELES */
 function refreshMenu(){
   $('mTtl').innerHTML=GAME.title;
-  $('mSub').innerHTML=GAME.sub;
+  $('mSub').innerHTML=GAME.subKey?T(GAME.subKey):GAME.sub;
   const b=[];
-  if(GAME.bestLabel!==null)b.push('<b>'+(GAME.bestLabel||'RÉCORD')+'</b> '+(SAVE.best||0));
-  if(GAME.levels)b.push('NIVEL '+Math.min(GAME.levels,(SAVE.done||0)+1)+'/'+GAME.levels);
+  if(GAME.bestLabel!==null)b.push('<b>'+(GAME.bestKey?T(GAME.bestKey):(GAME.bestLabel||T('record')))+'</b> '+(SAVE.best||0));
+  if(GAME.levels)b.push(T('level')+' '+Math.min(GAME.levels,(SAVE.done||0)+1)+'/'+GAME.levels);
   b.push('★ '+Object.values(SAVE.stars||{}).reduce((s,v)=>s+v,0));
   $('best').innerHTML=b.join('<br>');
   $('bLevels').style.display=GAME.levels?'flex':'none';
@@ -439,13 +532,38 @@ function buildLevels(){
 ARC.boot=async function(){
   document.documentElement.style.setProperty('--acc',GAME.acc||'#ffd166');
   document.documentElement.style.setProperty('--acc2',GAME.acc2||'#f0a02a');
-  $('ldTtl').textContent=GAME.name||'CARGANDO';
   saveLoad();
   if(GAME.portrait)document.body.classList.add('vert');
-  /* three.js sólo si el juego es 3D: se carga por importmap (dinámico para que un
-     juego 2D no pague la descarga) */
+  $('ldName').textContent=GAME.name||'';
+  ARC.i18nApply();paintSegs();
+  fit();bindInput();
+  $('fps').style.display=SAVE.fps?'block':'none';
+
+  /* ---------------- CARGA DE ASSETS con barra de verdad ----------------
+     Se cuentan TODOS los pasos (motor 3D, arte, sonidos, modelos) y la barra
+     avanza por paso terminado. El fondo de la pantalla de carga es el arte del
+     propio juego, como en los otros juegos del repo. Al final NO se entra solo:
+     aparece "TOCÁ PARA JUGAR", porque ese toque es lo que habilita el audio en
+     el celular (sin gesto, el navegador no deja sonar nada). */
+  const steps=[];
+  if(GAME.three)steps.push('engine');
+  if(GAME.art)steps.push('art');
+  const sfxN=Object.keys(GAME.sfx||{}).length;
+  if(sfxN)steps.push('sounds');
+  const glbN=Object.keys(GAME.glb||{}).length;
+  if(glbN)steps.push('models');
+  let done=0;
+  const total=Math.max(1,steps.length);
+  const prog=(k)=>{
+    done++;
+    const pc=Math.round(done/total*100);
+    $('ldBar').style.width=pc+'%';$('ldPct').textContent=pc+'%';
+    $('ldTxt').textContent=T(k)||'';
+  };
+  $('ldTxt').textContent=T(steps[0]||'loading');
+
+  /* 1. motor 3D (por importmap, sólo si el juego es 3D) */
   if(GAME.three){
-    $('ldTxt').textContent='motor 3D…';
     try{
       const THREE=await import('three');
       ARC.THREE=THREE;
@@ -455,54 +573,69 @@ ARC.boot=async function(){
       if(THREE.SRGBColorSpace)ARC.rnd.outputColorSpace=THREE.SRGBColorSpace;
       ARC.rnd.shadowMap.enabled=!!GAME.shadows;
       if(GAME.shadows)ARC.rnd.shadowMap.type=THREE.PCFSoftShadowMap;
-    }catch(e){
-      $('ldTxt').textContent='sin WebGL';
-      console.warn('three',e);
-    }
+      fit();
+    }catch(e){console.warn('three',e);}
+    prog('engine');
   }
-  fit();bindInput();
-  $('fps').style.display=SAVE.fps?'block':'none';
-  /* arte del menú: si no llega, queda el degradado del CSS y el juego arranca igual */
-  let pend=1,ok=0;
-  const step=()=>{ok++;$('ldBar').style.width=Math.round(ok/(pend+1)*100)+'%';};
-  const go=()=>{
+  applyGfx();
+
+  /* 2. arte del menú (y fondo de esta misma pantalla) */
+  if(GAME.art){
+    await new Promise(res=>{
+      const im=new Image();
+      im.onload=()=>{
+        $('load').style.backgroundImage='url('+GAME.art+')';
+        const el=$('menu');
+        if(GAME.portrait){
+          el.style.backgroundImage='url('+GAME.art+'), linear-gradient(180deg,'+
+            (GAME.acc2||'#222')+'55 0%, #0a0d12 46%, #05070a 100%)';
+          el.style.backgroundSize='100% auto, 100% 100%';
+          el.style.backgroundRepeat='no-repeat, no-repeat';
+          el.style.backgroundPosition='center 14%, center';
+        }else{
+          el.style.backgroundImage='url('+GAME.art+')';
+        }
+        el.classList.add('hasart');res();
+      };
+      im.onerror=()=>res();
+      im.src=GAME.art;
+    });
+    prog('art');
+  }
+  /* 3. sonidos */
+  if(sfxN){
+    await new Promise(res=>ARC.sndLoad(GAME.sfx,res));
+    prog('sounds');
+  }
+  /* 4. modelos 3D (opcional: los juegos que usan GLB los declaran en GAME.glb) */
+  if(glbN&&ARC.THREE){
+    try{
+      const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
+      const ld=new GLTFLoader();
+      ARC.glb={};
+      await Promise.all(Object.keys(GAME.glb).map(k=>new Promise(res=>{
+        ld.load(GAME.glb[k],g=>{ARC.glb[k]=g;res();},undefined,()=>{ARC.glb[k]=null;res();});
+      })));
+    }catch(e){console.warn('glb',e);ARC.glb=ARC.glb||{};}
+    prog('models');
+  }
+  /* 5. listo: el juego se prepara y se espera el toque */
+  nsafe2(()=>GAME.init&&GAME.init());
+  requestAnimationFrame(loop);
+  $('ldBar').style.width='100%';$('ldPct').textContent='100%';
+  $('ldTxt').textContent=T('ready');
+  $('ldGo').classList.add('on');
+  const enter=()=>{
+    $('ldGo').removeEventListener('pointerdown',enter);
+    ARC.sndResume();
     $('load').style.display='none';
     ARC.show('menu');refreshMenu();
-    GAME.init&&GAME.init();
-    requestAnimationFrame(loop);
+    ARC.music(GAME.music);
   };
-  if(GAME.art){
-    $('ldTxt').textContent='arte…';
-    const im=new Image();
-    im.onload=()=>{
-      const el=$('menu');
-      if(GAME.portrait){
-        /* vertical: el arte 16:9 va como banda de arriba (ajustado por ancho, así el
-           título no se corta) y el resto de la columna lo llena un degradado con el
-           color del juego, en vez de quedar negro vacío. */
-        el.style.backgroundImage='url('+GAME.art+'), linear-gradient(180deg,'+
-          (GAME.acc2||'#222')+'55 0%, #0a0d12 46%, #05070a 100%)';
-        el.style.backgroundSize='100% auto, 100% 100%';
-        el.style.backgroundRepeat='no-repeat, no-repeat';
-        el.style.backgroundPosition='center 14%, center';
-      }else{
-        el.style.backgroundImage='url('+GAME.art+')';
-      }
-      el.classList.add('hasart');step();fin();};
-    im.onerror=()=>{step();fin();};
-    im.src=GAME.art;
-  }else{pend=0;}
-  let done=0;
-  const fin=()=>{if(++done>=1)afterArt();};
-  const afterArt=()=>{
-    $('ldTxt').textContent='sonidos…';
-    ARC.sndLoad(GAME.sfx||{},()=>{$('ldBar').style.width='100%';setTimeout(go,120);});
-  };
-  if(!GAME.art)afterArt();
-  /* el audio necesita un gesto: el primer toque en cualquier parte lo despierta */
-  const wake=()=>{ARC.sndResume();ARC.music(GAME.music);
-    window.removeEventListener('pointerdown',wake);};
-  window.addEventListener('pointerdown',wake);
+  $('ldGo').addEventListener('pointerdown',e=>{e.preventDefault();enter();});
+  /* atajo para las sondas y para el teclado */
+  ARC.enterMenu=enter;
+  document.addEventListener('keydown',e=>{if(ARC.scr==='load'&&(e.code==='Space'||e.code==='Enter'))enter();});
 };
 
 /* ============================ CONTRATO DEL JUEGO ============================

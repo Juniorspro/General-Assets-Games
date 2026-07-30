@@ -27,8 +27,13 @@ canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
 #cv{z-index:1;pointer-events:auto;background:transparent}
 /* ---- capas ---- */
 .lay{position:absolute;inset:0;pointer-events:none}
+/* z-index 5: MEDIDO CON TOQUES REALES — sin él, el canvas (#cv, z-index 1) queda
+   por encima de estas pantallas y se come el toque: document.elementFromPoint en
+   el centro de REINTENTAR devolvía "cv", así que reiniciar/seguir/menú/niveles/
+   ajustes NO funcionaban en ningún juego. Las sondas no lo veían porque disparaban
+   el evento directo al botón en vez de tocar la pantalla. */
 .scr{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
-  justify-content:center;pointer-events:auto;background:rgba(6,9,13,.62);
+  justify-content:center;pointer-events:auto;background:rgba(6,9,13,.62);z-index:5;
   backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .scr.on{display:flex;animation:fade .18s ease-out}
 @keyframes fade{from{opacity:0}to{opacity:1}}
@@ -124,16 +129,34 @@ body.vert .btn{font-size:clamp(13px,3.8vw,20px)}
 .sw.on:after{transform:translateX(calc(100% + 2px))}
 .opt{display:flex;align-items:center;justify-content:space-between;gap:2vmin;width:min(70vmin,100%)}
 /* ---- avisos ---- */
-#toast{position:absolute;left:50%;top:16%;transform:translateX(-50%) scale(.9);opacity:0;
+#toast{position:absolute;left:50%;top:16%;z-index:8;transform:translateX(-50%) scale(.9);opacity:0;
   padding:.5em 1.1em;border-radius:12px;background:rgba(10,14,19,.9);font-weight:900;
   font-size:clamp(12px,2.8vmin,20px);transition:opacity .18s,transform .18s;z-index:5}
 #toast.on{opacity:1;transform:translateX(-50%) scale(1)}
 #fps{position:absolute;left:50%;bottom:.6vmin;transform:translateX(-50%);font-size:10px;
   opacity:.35;z-index:5}
+/* ---- pantalla de CARGA: fondo del propio juego, barra real y elección de idioma ---- */
 #load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  flex-direction:column;gap:2vmin;background:#05070a;z-index:9}
-#load .bar{width:44vmin;height:6px;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden}
-#load .bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+  flex-direction:column;gap:2.2vmin;background:#05070a center/cover no-repeat;z-index:9;
+  text-align:center;padding:4vmin}
+#load:before{content:"";position:absolute;inset:0;backdrop-filter:blur(3px);
+  background:linear-gradient(0deg,rgba(4,6,9,.95),rgba(4,6,9,.62))}
+#load>*{position:relative;z-index:1}
+#ldName{font-size:clamp(20px,6vmin,46px);font-weight:900;letter-spacing:.5px;
+  text-shadow:0 3px 14px rgba(0,0,0,.8)}
+#ldPct{font-weight:900;font-size:clamp(12px,2.6vmin,18px);opacity:.9}
+#langs{display:flex;gap:1.4vmin;flex-wrap:wrap;justify-content:center;margin-top:1vmin}
+#ldGo{display:none}
+#ldGo.on{display:flex;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+#load .bar{width:min(52vmin,340px);height:8px;border-radius:999px;background:rgba(255,255,255,.14);
+  overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.1)}
+#load .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));
+  transition:width .25s}
+.seg{display:flex;gap:.4vmin;background:rgba(255,255,255,.08);padding:.35em;border-radius:12px}
+.seg b{font-weight:900;font-size:clamp(10px,2.2vmin,15px);padding:.45em .8em;border-radius:9px;
+  opacity:.6;pointer-events:auto;white-space:nowrap}
+.seg b.on{background:var(--acc);color:#10141a;opacity:1}
 </style></head><body>
 <div id="stage">
   <canvas id="gl"></canvas>
@@ -148,17 +171,17 @@ body.vert .btn{font-size:clamp(13px,3.8vw,20px)}
       <div class="ttl" id="mTtl"></div>
       <div class="sm sub" id="mSub"></div>
       <div class="row mrow">
-        <div class="btn" id="bPlay">JUGAR</div>
-        <div class="btn gh" id="bLevels">NIVELES</div>
+        <div class="btn" id="bPlay" data-i18n="play">JUGAR</div>
+        <div class="btn gh" id="bLevels" data-i18n="levels">NIVELES</div>
         <div class="btn gh sq" id="bOpts">⚙</div>
       </div>
     </div><div class="sm" id="best"></div></div>
   <div class="scr" id="pause"><div class="card">
-      <div class="h1">PAUSA</div>
+      <div class="h1" data-i18n="pause">PAUSA</div>
       <div class="row">
-        <div class="btn" id="bRes">SEGUIR</div>
-        <div class="btn gh" id="bRetry">REINTENTAR</div>
-        <div class="btn gh" id="bQuit">MENÚ</div>
+        <div class="btn" id="bRes" data-i18n="resume">SEGUIR</div>
+        <div class="btn gh" id="bRetry" data-i18n="retry">REINTENTAR</div>
+        <div class="btn gh" id="bQuit" data-i18n="menu">MENÚ</div>
       </div></div></div>
   <div class="scr" id="over"><div class="card">
       <div class="h1" id="oTtl">FIN</div>
@@ -166,25 +189,35 @@ body.vert .btn{font-size:clamp(13px,3.8vw,20px)}
       <div class="h2" id="oScore"></div>
       <div class="sm" id="oSub"></div>
       <div class="row">
-        <div class="btn" id="bNext">SEGUIR</div>
-        <div class="btn gh" id="bAgain">OTRA VEZ</div>
-        <div class="btn gh" id="bMenu">MENÚ</div>
+        <div class="btn" id="bNext" data-i18n="next">SIGUIENTE</div>
+        <div class="btn gh" id="bAgain" data-i18n="again">OTRA VEZ</div>
+        <div class="btn gh" id="bMenu" data-i18n="menu">MENÚ</div>
       </div></div></div>
   <div class="scr" id="levels"><div class="card">
-      <div class="h2">NIVELES</div>
+      <div class="h2" data-i18n="levels">NIVELES</div>
       <div class="grid" id="lvGrid"></div>
-      <div class="btn gh" id="bLvBack">VOLVER</div></div></div>
+      <div class="btn gh" id="bLvBack" data-i18n="back">VOLVER</div></div></div>
   <div class="scr" id="opts"><div class="card">
-      <div class="h2">AJUSTES</div>
-      <div class="opt"><div class="sm">Música</div><div class="sw on" id="swMus"></div></div>
-      <div class="opt"><div class="sm">Sonidos</div><div class="sw on" id="swSfx"></div></div>
-      <div class="opt"><div class="sm">Vibración</div><div class="sw on" id="swVib"></div></div>
-      <div class="opt"><div class="sm">Efectos extra</div><div class="sw on" id="swFx"></div></div>
-      <div class="opt"><div class="sm">Mostrar FPS</div><div class="sw" id="swFps"></div></div>
-      <div class="row"><div class="btn gh" id="bWipe">BORRAR PROGRESO</div>
-        <div class="btn" id="bOptBack">LISTO</div></div></div></div>
+      <div class="h2" data-i18n="settings">AJUSTES</div>
+      <div class="opt"><div class="sm" data-i18n="music">Música</div><div class="sw on" id="swMus"></div></div>
+      <div class="opt"><div class="sm" data-i18n="sfx">Sonidos</div><div class="sw on" id="swSfx"></div></div>
+      <div class="opt"><div class="sm" data-i18n="vib">Vibración</div><div class="sw on" id="swVib"></div></div>
+      <div class="opt"><div class="sm" data-i18n="extraFx">Efectos extra</div><div class="sw on" id="swFx"></div></div>
+      <div class="opt"><div class="sm" data-i18n="showFps">Mostrar FPS</div><div class="sw" id="swFps"></div></div>
+      <div class="opt"><div class="sm" data-i18n="graphics">Gráficos</div><div class="seg" id="segGfx"></div></div>
+      <div class="opt"><div class="sm" data-i18n="lang">Idioma</div><div class="seg" id="segLang"></div></div>
+      <div class="row"><div class="btn gh" id="bWipe" data-i18n="wipe">BORRAR PROGRESO</div>
+        <div class="btn" id="bOptBack" data-i18n="done">LISTO</div></div></div></div>
   <div id="toast"></div>
   <div id="fps" style="display:none">–</div>
-  <div id="load"><div class="h2" id="ldTtl">CARGANDO</div><div class="bar"><i id="ldBar"></i></div>
-    <div class="sm" id="ldTxt">preparando…</div></div>
+  <div id="load">
+    <div id="ldName">…</div>
+    <div class="sm" id="ldTtl" data-i18n="loading">CARGANDO</div>
+    <div class="bar"><i id="ldBar"></i></div>
+    <div id="ldPct">0%</div>
+    <div class="sm" id="ldTxt">…</div>
+    <div class="sm" data-i18n="lang" style="margin-top:2vmin">IDIOMA</div>
+    <div class="seg" id="langs"></div>
+    <div class="btn" id="ldGo" data-i18n="tapPlay">TOCÁ PARA JUGAR</div>
+  </div>
 </div>
