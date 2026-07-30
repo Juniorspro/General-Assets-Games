@@ -507,8 +507,10 @@ function bodySnd(dt){
      cosas que pasan de verdad: la bota que empuja el piso (jump: scuff corto, ataque
      30 ms) y el esfuerzo del que salta (jump-b: exhalación, 50 ms después y ~5 dB abajo,
      con el delay agendado en el reloj de audio para que el desfase no dependa del frame).
-     La mezcla medida pasa el criterio del salto: evento 0.165 s, centroide 1250 Hz,
-     flatness 0.145 — material físico, no silbido (ver jumpmeas.py en el scratchpad). */
+     La mezcla, renderizada offline con las MISMAS cuentas de sPlay (sGain de cada capa,
+     delay 0.05, fundido SFADE) y pasada por el mismo veredicto, cumple TODO el criterio:
+     evento 0.145 s, ataque 0.055 s, cola 0.17 s, centroide 1867 Hz, flatness 0.257,
+     aire 0.055 — material físico, no silbido (jumpmeas.py + jumpmix.py en el scratchpad). */
   if(wasGround&&!grounded&&plBody.velocity.y>3){
     sPlay('jump',{vol:.45});
     sPlay('jump-b',{vol:.25,delay:.05});

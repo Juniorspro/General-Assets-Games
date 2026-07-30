@@ -84,6 +84,25 @@ function spFitLayout(){
     const fs=row<25?10:row<30?11:row<35?12:13;
     for(let i=0;i<n;i++)kids[i].style.fontSize=fs+'px';
   }
+  /* --- grilla: el "casi entra" se arregla achicando la miniatura, no scrolleando ---
+     PORQUE: en el teléfono vertical el escenario mide ~412 de alto (contra 430 del chromium
+     horizontal de las sondas) y las 4 filas de la carpeta por defecto quedaban a 8px de
+     entrar: se veía la 4ª fila cortada, que parece rota aunque el scroll funcione. Se baja
+     --pitH (altura del canvas de la miniatura, ver head.html) de a un escalón hasta que el
+     contenido entre. Una carpeta grande (Pirotecnia: 112 props) no entra ni achicando: se
+     restaura la altura por defecto y scrollea, que para eso #spgrid tiene overflow-y. */
+  const grid=$('spgrid');
+  if(grid){
+    grid.style.removeProperty('--pitH');
+    if(grid.children.length&&grid.scrollHeight>grid.clientHeight){
+      let fit=false;
+      for(const h of [47,44,41,38]){
+        grid.style.setProperty('--pitH',h+'px');
+        if(grid.scrollHeight<=grid.clientHeight){fit=true;break;}
+      }
+      if(!fit)grid.style.removeProperty('--pitH');
+    }
+  }
   return true;
 }
 /* si cambia el tamaño de la ventana con el menú abierto hay que recalcular */

@@ -88,6 +88,27 @@ equip=function(i){
   return r;
 };
 
+/* gatillo en seco ('empty'): la auditoría de sonidos que no suenan encontró que NADIE lo
+   disparaba — el archivo existía, tenía offset medido (1.237 s) y hasta ventana (0.25 s),
+   pero fireGun con cargador vacío llama a reload() y listo, y el gate del bucle
+   (want && fireT<=0 && reloadT<=0) hace que DURANTE la recarga apretar el gatillo no llegue
+   nunca a fireGun: no había ningún camino de código hacia 'empty'. Se mira el FLANCO de
+   subida de HOLD.fire una vez por frame (mismo patrón barato que toolSwitchO): si el arma
+   es de fuego y está recargando o sin balas, suena el clic. Enfriado de 250 ms para que
+   tamborilear el botón no meta una ametralladora de clics. */
+let _dryPrev=0,_dryT=0;
+function drySndO(){
+  const f=HOLD.fire?1:0;
+  if(f&&!_dryPrev&&APP==='play'&&!VHS){
+    const w=weap();
+    if(w&&(w.kind==='gun'||w.kind==='proj')&&(reloadT>0||w.ammo<=0)){
+      const now=performance.now();
+      if(now-_dryT>250){_dryT=now;nsafe(()=>oPlay('empty',{vol:.6}),'dry');}
+    }
+  }
+  _dryPrev=f;
+}
+
 /* cambio de herramienta del toolgun: se elige de tres lados distintos (botones de la lista
    en core_b, el hook __H.tool y el teclado), así que en vez de envolver tres cosas se mira
    el valor de toolIdx una vez por frame — es una comparación de enteros, cuesta nada */
@@ -371,7 +392,7 @@ EXT.frame.push(dt=>{
     }
   }
   nsafe(()=>{
-    toolSwitchO();breathO(dt);fallO(dt);waterOutO(dt);
+    toolSwitchO();drySndO();breathO(dt);fallO(dt);waterOutO(dt);
     physScanO(dt);suspO(dt);fuseSndO();
   },'sndotick');
 });
