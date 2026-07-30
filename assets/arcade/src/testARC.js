@@ -29,6 +29,13 @@ const ink2=pg=>pg.evaluate(()=>new Promise(res=>requestAnimationFrame(()=>{
     pg.on('console',m=>{if(m.type()==='error'){const t=m.text();if(!/404|Failed to load|decode/.test(t))errs.push('C:'+t.slice(0,140));}});
     await pg.goto('http://127.0.0.1:8951/arc-'+slug+'.html?local',{waitUntil:'load'});
     await sleep(3500);
+    /* la carga ya no entra sola: hay que TOCAR "TOCÁ PARA JUGAR" (ese gesto es el
+       que habilita el audio en el celular). Se toca de verdad, con el mouse. */
+    const go=await pg.evaluate(()=>{const e=document.getElementById('ldGo');
+      if(!e||!e.classList.contains('on'))return null;
+      const b=e.getBoundingClientRect();
+      return{x:Math.round(b.left+b.width/2),y:Math.round(b.top+b.height/2)};});
+    if(go){await pg.mouse.click(go.x,go.y);await sleep(900);}
     const st=await pg.evaluate(()=>{const s=document.getElementById('stage');
       return {w:s.clientWidth,h:s.clientHeight,tr:s.style.transform,
         load:getComputedStyle(document.getElementById('load')).display,
