@@ -159,8 +159,10 @@ ARC.lang=function(l){
 /* --------------------------------------------------------------- 2c. GRÁFICOS
    Un solo número (0-3) que decide DPR, sombras, partículas y niebla. Se aplica en
    caliente: no hace falta reiniciar el juego. */
-const GFXP=[{dpr:1,part:.45,sh:0,fog:.7},{dpr:1.25,part:.75,sh:0,fog:.85},
-            {dpr:1.75,part:1,sh:1,fog:1},{dpr:2.5,part:1.35,sh:1,fog:1.15}];
+/* DPR: el 3D a más de 1.6 no se nota en un celular y cuesta el doble de píxeles.
+   Medido en este pack: con 2.5 el relleno de pantalla era el cuello de botella. */
+const GFXP=[{dpr:.75,part:.4,sh:0,fog:.7},{dpr:1,part:.7,sh:0,fog:.85},
+            {dpr:1.35,part:1,sh:1,fog:1},{dpr:1.6,part:1.3,sh:1,fog:1.15}];
 ARC.gfx=function(v){
   if(v!==undefined){SAVE.gfx=clamp(v|0,0,3);saveNow();applyGfx();paintSegs();}
   return SAVE.gfx==null?2:SAVE.gfx;
@@ -337,6 +339,7 @@ const SCRS=['menu','pause','over','levels','opts'];
 let optFrom='menu';
 ARC.show=function(s){
   for(const k of SCRS)$(k).classList.toggle('on',k===s);
+  if(s==='menu'&&GAME.attract)$('menu').classList.add('live');
   if(s!=='load')$('load').style.display='none';
   $('hud').style.display=(s==='game')?'block':'none';
   ARC.scr=s;
@@ -443,7 +446,14 @@ function loop(ts){
   if(ARC.scr==='game'||ARC.scr==='pause'||ARC.scr==='over'){
     GAME.draw(g,acc/STEP);
     fxDraw(g);
-  }else if(ARC.rnd&&ARC.clearGL){ARC.rnd.clear();}
+  }else if(ARC.scr==='menu'&&GAME.attract){
+    /* MODO ATRACCIÓN: el juego dibuja su propia escena viva detrás del menú (eso es
+       lo que hace que un menú se sienta moderno y no una tarjeta con una foto).
+       El juego avisa que la tiene con GAME.attract; el shell le pone la clase
+       .live al menú para que el arte fijo no compita con la escena. */
+    nsafe2(()=>GAME.attract(STEP,g));
+    fxDraw(g);
+  }
 }
 
 /* ------------------------------------------------------------- 8. ENTRADA */
@@ -474,6 +484,9 @@ function bindInput(){
      se abrió. Lo pidieron los tres verificadores: antes, cambiar idioma o gráficos
      obligaba a abandonar la partida (bOptBack llamaba siempre a ARC.menu()). */
   B('bOpts',()=>{optFrom='menu';ARC.show('opts');});
+  /* botón libre del menú: cada juego lo usa para lo suyo (personajes, tienda...) */
+  if(GAME.extra){const e=$('bExtra');e.style.display='flex';e.innerHTML=GAME.extra.icon||'★';
+    B('bExtra',()=>nsafe2(()=>GAME.extra.fn()));}
   B('bOpts2',()=>{optFrom='pause';ARC.show('opts');});
   B('bOptBack',()=>{if(optFrom==='pause'&&ARC.alive){ARC.show('pause');}else ARC.menu();});
   B('pPause',()=>ARC.pause());
@@ -509,12 +522,21 @@ function bindInput(){
 function refreshMenu(){
   $('mTtl').innerHTML=GAME.title;
   $('mSub').innerHTML=GAME.subKey?T(GAME.subKey):GAME.sub;
-  const b=[];
-  if(GAME.bestLabel!==null)b.push('<b>'+(GAME.bestKey?T(GAME.bestKey):(GAME.bestLabel||T('record')))+'</b> '+(SAVE.best||0));
-  if(GAME.levels)b.push(T('level')+' '+Math.min(GAME.levels,(SAVE.done||0)+1)+'/'+GAME.levels);
-  b.push('★ '+Object.values(SAVE.stars||{}).reduce((s,v)=>s+v,0));
-  $('best').innerHTML=b.join('<br>');
+  $('mCoins').textContent=SAVE.coins||0;
+  const bl=GAME.bestKey?T(GAME.bestKey):(GAME.bestLabel||T('record'));
+  $('mBest').innerHTML=(GAME.bestLabel===null?'':('<i>★</i>'+bl+' '+(SAVE.best||0)));
+  $('mBest').style.display=GAME.bestLabel===null?'none':'flex';
+  const lv=$('mLvl');
+  if(GAME.levels){
+    lv.style.display='flex';
+    const st=Object.values(SAVE.stars||{}).reduce((s2,v)=>s2+v,0);
+    lv.innerHTML='<i>▸</i>'+T('level')+' '+Math.min(GAME.levels,(SAVE.done||0)+1)+'/'+GAME.levels+
+      ' <i>★</i>'+st;
+  }else lv.style.display='none';
   $('bLevels').style.display=GAME.levels?'flex':'none';
+  /* la animación de entrada se re-dispara cada vez que se vuelve al menú */
+  document.querySelectorAll('#menu .anim').forEach(el=>{
+    el.style.animation='none';void el.offsetWidth;el.style.animation='';});
   ARC.music(GAME.music);
 }
 function buildLevels(){
@@ -623,6 +645,51 @@ ARC.boot=async function(){
       })));
     }catch(e){console.warn('glb',e);ARC.glb=ARC.glb||{};}
     prog('models');
+  }
+  /* 4b. LOS GLB GENERADOS VIENEN CON DEMASIADA MALLA. Medido en este pack: la
+     sierra y el arco de Rueda traían 28.725 y 27.592 triángulos cada uno, y la
+     escena llegaba a 99.793 triángulos a 11 fps. Se simplifican UNA vez al
+     cargarlos, hasta GAME.glbTris (por defecto 1200 por modelo).
+     DOS PASOS, y el primero es el que importa: SimplifyModifier NO puede colapsar
+     nada si los vértices están duplicados por triángulo (así vienen los GLB de
+     image_to_3d), así que primero se SUELDAN con mergeVertices y después se
+     simplifica. Sin el soldado, modify() devolvía la malla igual (medido:
+     28725 -> 28725). Si algo falla, se deja la malla como vino: nunca se rompe. */
+  if(ARC.glb&&Object.keys(ARC.glb).length){
+    const target=GAME.glbTris||1200;
+    try{
+      const [{SimplifyModifier},BGU]=await Promise.all([
+        import('three/addons/modifiers/SimplifyModifier.js'),
+        import('three/addons/utils/BufferGeometryUtils.js')]);
+      const mod=new SimplifyModifier();
+      ARC.glbTris={};
+      for(const k in ARC.glb){
+        const g=ARC.glb[k];if(!g||!g.scene)continue;
+        let before=0,after=0;
+        g.scene.traverse(o=>{
+          if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;
+          const tri0=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;
+          before+=tri0;
+          if(tri0<=target){after+=tri0;return;}
+          try{
+            let geo=o.geometry;
+            /* soldar: de 3 vértices por triángulo a vértices compartidos */
+            if(BGU&&BGU.mergeVertices)geo=BGU.mergeVertices(geo,1e-4);
+            const verts=geo.attributes.position.count;
+            const tri=(geo.index?geo.index.count:verts)/3;
+            const keep=clamp(target/tri,.03,1);
+            const drop=Math.floor(verts*(1-keep));
+            const sim=drop>0?mod.modify(geo,drop):geo;
+            const tri2=(sim.index?sim.index.count:sim.attributes.position.count)/3;
+            if(sim&&tri2>20&&tri2<tri){
+              o.geometry.dispose();o.geometry=sim;o.geometry.computeVertexNormals();
+              after+=tri2;
+            }else after+=tri0;
+          }catch(e){after+=tri0;}
+        });
+        ARC.glbTris[k]=[Math.round(before),Math.round(after)];
+      }
+    }catch(e){console.warn('simplify',e);}
   }
   /* 5. listo: el juego se prepara y se espera el toque */
   nsafe2(()=>GAME.init&&GAME.init());

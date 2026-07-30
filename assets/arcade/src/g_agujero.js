@@ -80,6 +80,7 @@ const G={
   sub:'Movés el pozo con el dedo y te tragás el barrio.',
   subKey:'sub',
   acc:'#c084fc',acc2:'#8b5cf6',levels:6,bestKey:'mass',bestLabel:'MASA',
+  glbTris:300,   /* medido: con 1200 por modelo la escena llegaba a 80.896 triángulos a 15 fps */
   three:true,sky:'#cfe3f5',shadows:false,
   art:A('art-agujero.jpg'),music:A('mus-agujero.m4a'),
   /* MEDIDO archivo por archivo (decodificados en el navegador, pico de la onda):

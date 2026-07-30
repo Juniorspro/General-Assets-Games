@@ -62,15 +62,61 @@ canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
   font-size:clamp(15px,3.4vmin,23px)}
 .row{display:flex;gap:clamp(6px,1.6vmin,14px);align-items:center}
 .col{display:flex;flex-direction:column;gap:clamp(6px,1.6vmin,14px)}
-/* ---- menú ---- */
-#menu .wrap{position:relative;z-index:1;width:100%;height:100%;display:flex;
-  flex-direction:column;justify-content:flex-end;padding:0 5.5vmin 4.5vmin;gap:1.8vmin}
-#menu .ttl{font-size:clamp(26px,8.4vmin,68px);font-weight:900;line-height:.94;
-  letter-spacing:-.5px;text-shadow:0 3px 0 rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.6)}
+/* ---- MENÚ (rehecho: animado y con el JUGAR grande al centro) ----
+   El anterior era "arte arriba + botón chico abajo a la izquierda", que se leía
+   como una ficha de Netflix. Ahora: fondo vivo (la escena 3D del propio juego si
+   el juego expone attract(), o el arte con un zoom lento), insignias arriba,
+   botón JUGAR grande al centro con latido y destello, y fila de botones redondos.
+   Todo entra con animación escalonada. */
+#menu{background-position:center;overflow:hidden}
+#menu .wrap{position:relative;z-index:2;width:100%;height:100%;display:flex;
+  flex-direction:column;justify-content:space-between;align-items:center;
+  padding:2.6vmin 3.4vmin 3.4vmin;gap:1vmin}
+#menu .mTop{width:100%;display:flex;justify-content:space-between;align-items:flex-start;gap:1vmin}
+#menu .mMid{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;
+  gap:1.4vmin;text-align:center;width:100%}
+#menu .ttl{font-size:clamp(28px,9vmin,74px);font-weight:900;line-height:.92;letter-spacing:-1px;
+  text-shadow:0 4px 0 rgba(0,0,0,.45),0 12px 34px rgba(0,0,0,.7)}
 #menu .ttl em{font-style:normal;color:var(--acc)}
-#menu .sub{max-width:52vmin}
-#menu .mrow{margin-top:1.2vmin}
-#best{position:absolute;right:3.4vmin;bottom:4.5vmin;text-align:right;z-index:1;line-height:1.5}
+#menu .sub{max-width:min(62vmin,520px);opacity:.86}
+#menu .mBot{width:100%;display:flex;flex-direction:column;align-items:center;gap:1.6vmin}
+/* botón JUGAR grande, con destello que barre y latido suave */
+#bPlay{position:relative;overflow:hidden;min-width:min(52vmin,340px);
+  padding:.86em 2.2em;border-radius:18px;font-size:clamp(17px,4.6vmin,30px);letter-spacing:1px;
+  box-shadow:0 6px 0 rgba(0,0,0,.35),0 14px 40px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.5);
+  /* OJO: las DOS animaciones van juntas acá. Si se deja sólo "beat", este selector
+     de ID pisa el "rise" de .anim y el botón se queda en opacity:0 (invisible: pasó
+     de verdad, medido con getComputedStyle -> opacity 0, animationName "beat"). */
+  animation:rise .5s cubic-bezier(.2,.9,.25,1) .2s forwards, beat 2.3s ease-in-out .8s infinite}
+#bPlay:after{content:"";position:absolute;top:-60%;left:-30%;width:28%;height:220%;
+  background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.55),rgba(255,255,255,0));
+  transform:rotate(18deg);animation:shine 3.4s ease-in-out infinite}
+@keyframes beat{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@keyframes shine{0%{left:-40%}55%{left:130%}100%{left:130%}}
+#menu .mRow{display:flex;gap:1.8vmin;align-items:center;justify-content:center}
+.rnd{pointer-events:auto;width:clamp(42px,9.4vmin,64px);height:clamp(42px,9.4vmin,64px);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:clamp(17px,4.2vmin,27px);background:rgba(16,20,27,.62);color:#eef2f6;
+  border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(6px);
+  box-shadow:0 4px 0 rgba(0,0,0,.3),0 10px 24px rgba(0,0,0,.45);transition:transform .1s}
+.rnd:active{transform:translateY(3px) scale(.96)}
+.badge{display:flex;align-items:center;gap:.4em;padding:.42em .9em;border-radius:999px;
+  background:rgba(16,20,27,.62);border:1px solid rgba(255,255,255,.18);
+  font-weight:900;font-size:clamp(11px,2.5vmin,17px);backdrop-filter:blur(6px);white-space:nowrap}
+.badge i{font-style:normal;color:var(--acc);font-size:1.1em}
+#menu .bcol{display:flex;flex-direction:column;gap:.8vmin;align-items:flex-end}
+/* entrada escalonada */
+.anim{opacity:0;transform:translateY(14px);animation:rise .5s cubic-bezier(.2,.9,.25,1) forwards}
+.anim.d1{animation-delay:.06s}.anim.d2{animation-delay:.14s}.anim.d3{animation-delay:.22s}
+.anim.d4{animation-delay:.3s}
+@keyframes rise{to{opacity:1;transform:none}}
+/* el arte de fondo respira (si no hay escena 3D viva detrás) */
+#menu.hasart:not(.live){background-size:cover;animation:kb 18s ease-in-out infinite alternate}
+@keyframes kb{0%{background-size:104%}100%{background-size:118%}}
+#menu.live{background-image:none!important;background-color:transparent}
+#menu.live:before{background:linear-gradient(0deg,rgba(4,6,9,.9) 0%,rgba(4,6,9,.35) 34%,
+  rgba(4,6,9,0) 62%,rgba(4,6,9,.55) 100%)}
 /* ---- HUD ---- */
 #hud{position:absolute;inset:0;pointer-events:none;z-index:2}
 .pill{position:absolute;display:flex;align-items:center;gap:.45em;padding:.42em .8em;
@@ -95,7 +141,19 @@ body.vert #menu .wrap{padding:0 7vw 7vh;gap:2.4vh}
 /* en vertical el arte 16:9 se recortaba tanto que el título quedaba cortado
    ("ZA CA" en la captura V3): se ajusta por ANCHO y se pega arriba, y el resto de
    la columna lo llena el color del juego. */
-body.vert #menu{background-size:100% auto;background-position:center 16%}
+/* VERTICAL: el arte 16:9 va como banda de arriba (ajustado por ancho, así el título
+   no se corta) y la mitad de abajo NO queda negra vacía: lleva un resplandor del
+   color del juego que respira, más las insignias y el botón grande. */
+body.vert #menu{background-size:100% auto;background-position:center 5%}
+body.vert #menu:after{content:"";position:absolute;left:50%;top:62%;width:150vw;height:70vh;
+  transform:translate(-50%,-50%);pointer-events:none;z-index:1;
+  background:radial-gradient(closest-side,var(--acc) 0%,transparent 72%);
+  opacity:.20;animation:glow 5s ease-in-out infinite}
+@keyframes glow{0%,100%{opacity:.13;transform:translate(-50%,-50%) scale(.92)}
+  50%{opacity:.26;transform:translate(-50%,-50%) scale(1.06)}}
+body.vert #menu .mMid{justify-content:flex-start;padding-top:37vh}
+body.vert #menu .mBot{gap:2.4vh;padding-bottom:2vh}
+body.vert #bPlay{min-width:70vw}
 body.vert #menu:before{background:linear-gradient(0deg,rgba(5,7,10,.97) 0%,rgba(5,7,10,.82) 34%,rgba(5,7,10,.12) 62%,rgba(5,7,10,.35) 100%)}
 body.vert #menu .sub{max-width:100%}
 body.vert #best{right:5vw;bottom:7vh}
@@ -168,14 +226,26 @@ body.vert .btn{font-size:clamp(13px,3.8vw,20px)}
     <div id="tray"></div>
   </div>
   <div class="scr" id="menu"><div class="wrap">
-      <div class="ttl" id="mTtl"></div>
-      <div class="sm sub" id="mSub"></div>
-      <div class="row mrow">
-        <div class="btn" id="bPlay" data-i18n="play">JUGAR</div>
-        <div class="btn gh" id="bLevels" data-i18n="levels">NIVELES</div>
-        <div class="btn gh sq" id="bOpts">⚙</div>
+      <div class="mTop">
+        <div class="badge anim d1"><i>◉</i><span id="mCoins">0</span></div>
+        <div class="bcol">
+          <div class="badge anim d1" id="mBest"></div>
+          <div class="badge anim d2" id="mLvl" style="display:none"></div>
+        </div>
       </div>
-    </div><div class="sm" id="best"></div></div>
+      <div class="mMid">
+        <div class="ttl anim d1" id="mTtl"></div>
+        <div class="sm sub anim d2" id="mSub"></div>
+      </div>
+      <div class="mBot">
+        <div class="btn anim d3" id="bPlay" data-i18n="play">JUGAR</div>
+        <div class="mRow anim d4">
+          <div class="rnd" id="bLevels" title="niveles">☰</div>
+          <div class="rnd" id="bOpts" title="ajustes">⚙</div>
+          <div class="rnd" id="bExtra" style="display:none"></div>
+        </div>
+      </div>
+    </div></div>
   <div class="scr" id="pause"><div class="card">
       <div class="h1" data-i18n="pause">PAUSA</div>
       <div class="row">
