@@ -11,7 +11,7 @@ import * as CANNON from 'cannon';
    los 7 cielos 360 (e7fc8e6) y la pantalla del tablero xpx-hmi.jpg (fb2baec). Con el
    HASH viejo (3bfd310) esos archivos daban 404 en produccion: el juego no crasheaba
    (TextureLoader avisa y sigue) pero los experimentos de clima quedaban sin cielo. */
-const HASH='fb2baec';
+const HASH='24a3a07';
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/hyper/';
 const okUrl=u=>typeof u==='string'&&u.indexOf('@PEND')<0;
 const $=i=>document.getElementById(i);

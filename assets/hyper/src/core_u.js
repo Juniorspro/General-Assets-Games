@@ -151,61 +151,91 @@ Object.assign(I18N.en,{xpTab:'Experiments',xpOpen:'🔬 Open',xpClose:'Close',
 Object.assign(I18N.pt,{xpTab:'Experimentos',xpOpen:'🔬 Abrir',xpClose:'Fechar',
   xpMisc:'Vários',xpOn:'ON',xpOff:'OFF',xpReset:'↺ Voltar ao normal'});
 
-/* ================= 1. CSS (inyectado: head.html no se toca) ================= */
+/* ================= 1. CSS (inyectado: head.html trae sólo lo general) ================= */
 nsafe(()=>{
   const st=document.createElement('style');
   st.textContent=
    /* capa: cubre el escenario pero NO recibe toques (sólo la tarjeta) */
    '#xpWrap{position:absolute;inset:0;z-index:14;display:none;pointer-events:none}'+
    '#xpWrap.on{display:block}'+
-   /* la tarjeta: medidas en vmin = lado corto del escenario en las DOS orientaciones */
+   /* la tarjeta: medidas en vmin = lado corto del escenario en las DOS orientaciones.
+      ANCHO SEGÚN CUÁNTOS CONTROLES HAY (clases c1/c2/c3 que pone xpBuild): el juego se ve
+      SIEMPRE horizontal (≈2:1), así que una columna larga que hay que deslizar desperdicia
+      media pantalla. Con 30 controles se abre en 3 columnas y entra casi todo de una. */
    '#xpCard{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);'+
-   '  width:min(94%,78vmin);max-height:84vmin;display:flex;flex-direction:column;'+
-   '  pointer-events:auto;background:rgba(17,19,22,.94);border:1px solid rgba(255,255,255,.10);'+
-   '  border-left:3px solid var(--acc);border-radius:6px;'+
-   '  box-shadow:0 14px 44px rgba(0,0,0,.6);overflow:hidden}'+
-   '#xpHead{flex:none;display:flex;align-items:center;gap:8px;padding:2.1vmin 2.4vmin 1.4vmin;'+
-   '  border-bottom:1px solid rgba(255,255,255,.08)}'+
-   '#xpTit{font:900 min(3.6vmin,19px)/1.15 inherit;letter-spacing:.02em;flex:1;min-width:0;'+
+   '  width:min(94%,88vmin);max-height:90vmin;display:flex;flex-direction:column;'+
+   '  pointer-events:auto;background:rgba(17,19,22,.95);border:1px solid rgba(255,255,255,.10);'+
+   '  border-left:3px solid var(--acc);border-radius:7px;'+
+   '  box-shadow:0 16px 48px rgba(0,0,0,.62);overflow:hidden}'+
+   '#xpCard.c2{width:min(94%,126vmin)}'+
+   '#xpCard.c3{width:min(95%,172vmin)}'+
+   '#xpHead{flex:none;display:flex;align-items:center;gap:8px;padding:1.8vmin 2vmin 1.3vmin;'+
+   '  border-bottom:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.03)}'+
+   '#xpTit{font-weight:900;font-size:clamp(17.5px,3.4vmin,19px);line-height:1.15;letter-spacing:.02em;flex:1;min-width:0;'+
    '  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
-   '#xpTit small{display:block;color:var(--dim);font:700 min(2.2vmin,11.5px) inherit;'+
+   '#xpTit small{display:block;color:var(--dim);font-weight:700;font-size:clamp(10.5px,2.1vmin,11.5px);'+
    '  letter-spacing:.06em;text-transform:uppercase;margin-top:2px}'+
-   '#xpX{flex:none;width:8.4vmin;height:8.4vmin;min-width:30px;min-height:30px;max-width:40px;'+
-   '  max-height:40px;border:0;border-radius:6px;background:#e05a5a;color:#fff;'+
-   '  font:900 min(3.4vmin,17px) inherit}'+
+   /* el ✕ es lo único que se toca del encabezado: 40px de área, no 30 */
+   '#xpX{flex:none;width:9vmin;height:9vmin;min-width:38px;min-height:38px;max-width:46px;'+
+   '  max-height:46px;border:0;border-radius:6px;background:#c9484c;color:#fff;'+
+   '  font-weight:900;font-size:clamp(16.5px,3.4vmin,18px)}'+
    '#xpX:active{background:#f07070}'+
-   /* el cuerpo desliza con el dedo: html/body tienen touch-action:none, hay que devolvérselo */
-   '#xpBody{flex:1;min-height:0;overflow-y:auto;touch-action:pan-y;padding:1.6vmin 2.4vmin 2.4vmin}'+
-   '#xpDesc{color:var(--dim);font:600 min(2.4vmin,12.5px)/1.4 inherit;margin-bottom:1.4vmin}'+
-   '.xpr{margin-top:1.5vmin}'+
-   '.xpr>label{display:flex;align-items:baseline;gap:8px;font:800 min(2.6vmin,13.5px) inherit;'+
-   '  margin-bottom:.7vmin}'+
+   /* EL CUERPO SE DESLIZA: alto acotado por el flex (el techo real lo pone xpFit midiendo
+      #stage.clientHeight) y el gesto de dedo lo mueve uiScroll — ver el comentario largo de
+      uiScroll: con el escenario rotado el scroll nativo NO andaba. */
+   /* position:relative para que el cuerpo sea el offsetParent de las filas: así offsetTop es la
+      coordenada DENTRO del contenido y se puede medir "¿el último control entra?" sin rects del
+      viewport (que con el escenario rotado están cruzados) */
+   '#xpBody{flex:1;min-height:0;position:relative;overflow-y:auto;overflow-x:hidden;'+
+   '  touch-action:none;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;'+
+   '  padding:1.4vmin 2vmin 2vmin;display:grid;align-content:start;'+
+   '  grid-template-columns:repeat(auto-fill,minmax(min(100%,204px),1fr));gap:1.1vmin 2vmin}'+
+   /* barra de scroll fina y ámbar: además de no molestar, AVISA que hay más abajo */
+   '#xpBody::-webkit-scrollbar{width:6px}'+
+   '#xpBody::-webkit-scrollbar-track{background:rgba(255,255,255,.06);border-radius:3px}'+
+   '#xpBody::-webkit-scrollbar-thumb{background:rgba(242,161,58,.6);border-radius:3px}'+
+   /* velo de abajo + flecha: el segundo aviso de "seguí deslizando" (lo prende xpMoreUpd) */
+   '#xpFade{position:absolute;left:0;right:0;bottom:0;height:5vmin;min-height:22px;'+
+   '  pointer-events:none;opacity:0;transition:opacity .18s;'+
+   '  background:linear-gradient(180deg,rgba(17,19,22,0),rgba(17,19,22,.92))}'+
+   '#xpFade.on{opacity:1}'+
+   '#xpFade i{position:absolute;left:50%;bottom:2px;transform:translateX(-50%);font-style:normal;'+
+   '  color:var(--acc2);font-weight:900;font-size:clamp(11.5px,2.6vmin,13px);letter-spacing:.1em}'+
+   '#xpDesc{grid-column:1/-1;color:var(--dim);font-weight:600;font-size:clamp(11px,2.3vmin,12.5px);line-height:1.4;'+
+   '  border-left:2px solid rgba(242,161,58,.5);padding-left:1.2vmin;margin-bottom:.4vmin}'+
+   /* cada control es una celda del grid; el hueco lo pone el gap, no un margin */
+   '.xpr{min-width:0}'+
+   '.xpr.wide{grid-column:1/-1}'+
+   '.xpr>label{display:flex;align-items:baseline;gap:8px;font-weight:800;font-size:clamp(11.5px,2.5vmin,13px);'+
+   '  margin-bottom:.5vmin}'+
    '.xpr>label>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
    '.xpr>label>b{flex:none;color:var(--acc2);font-variant-numeric:tabular-nums}'+
-   /* fila del slider: −  barra  + */
-   '.xpsl{display:flex;align-items:center;gap:1.4vmin}'+
-   '.xpsl input[type=range]{flex:1;min-width:0;height:5.4vmin;max-height:26px}'+
-   '.xpb{flex:none;border:0;border-radius:5px;background:rgba(70,76,84,.9);color:var(--ink);'+
-   '  font:900 min(3vmin,15px)/1 inherit;min-width:9vmin;height:7.4vmin;min-height:28px;'+
-   '  max-height:36px;padding:0 1.2vmin}'+
+   /* fila del slider: −  barra  + ; 36px de alto para que se toque con el dedo, no con la uña
+      (la barra en sí la pinta head.html para TODO el juego) */
+   '.xpsl{display:flex;align-items:center;gap:1.2vmin}'+
+   '.xpsl input[type=range]{flex:1;min-width:0}'+
+   '.xpb{flex:none;border:0;border-radius:6px;background:rgba(70,76,84,.9);color:var(--ink);'+
+   '  font-weight:900;font-size:clamp(14.5px,3vmin,16px);line-height:1;width:36px;min-width:36px;height:36px;padding:0}'+
    '.xpb:active{background:var(--acc);color:#241503}'+
-   /* interruptor, botones y chips de lista comparten la misma pinta plana del juego */
-   '.xpsw{display:flex;align-items:center;gap:8px;width:100%;border:0;border-radius:5px;'+
-   '  border-left:3px solid transparent;background:rgba(40,44,50,.72);color:var(--ink);'+
-   '  font:800 min(2.6vmin,13.5px) inherit;padding:1.5vmin 1.8vmin;text-align:left}'+
+   /* interruptor: fila entera tocable (38px) con la pastilla ON/OFF a la derecha */
+   '.xpsw{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;border:0;'+
+   '  border-radius:6px;border-left:3px solid transparent;background:rgba(40,44,50,.78);'+
+   '  color:var(--ink);font-weight:800;font-size:clamp(11.5px,2.5vmin,13px);padding:1vmin 1.4vmin;text-align:left}'+
    '.xpsw>span{flex:1;min-width:0}'+
-   '.xpsw>i{flex:none;font-style:normal;font:900 min(2.4vmin,12px) inherit;color:var(--dim);'+
-   '  border:1px solid rgba(255,255,255,.18);border-radius:4px;padding:2px 7px}'+
+   '.xpsw>i{flex:none;font-style:normal;font-weight:900;font-size:clamp(10.5px,2.2vmin,11.5px);color:var(--dim);'+
+   '  background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.16);border-radius:999px;'+
+   '  min-width:42px;text-align:center;padding:3px 8px}'+
    '.xpsw[data-on="1"]{background:rgba(90,96,104,.95);border-left-color:var(--acc)}'+
    '.xpsw[data-on="1"]>i{color:#241503;background:var(--acc2);border-color:var(--acc2)}'+
-   '.xpbs{display:flex;flex-wrap:wrap;gap:1.1vmin}'+
-   '.xpbs>button{flex:1 1 auto;border:0;border-radius:5px;background:rgba(56,62,70,.9);'+
-   '  color:var(--ink);font:800 min(2.5vmin,13px) inherit;padding:1.3vmin 1.4vmin;min-width:16%}'+
+   '.xpbs{display:flex;flex-wrap:wrap;gap:1vmin}'+
+   '.xpbs>button{flex:1 1 auto;border:0;border-radius:6px;background:rgba(56,62,70,.9);'+
+   '  color:var(--ink);font-weight:800;font-size:clamp(11px,2.4vmin,12.5px);padding:0 1.4vmin;min-height:34px;'+
+   '  min-width:18%}'+
    '.xpbs>button:active{background:var(--acc);color:#241503}'+
    '.xpbs>button.on{background:linear-gradient(180deg,#5f666f,#3c4148);'+
    '  box-shadow:inset 3px 0 0 var(--acc)}'+
-   '.xptx{color:var(--dim);font:700 min(2.4vmin,12.5px)/1.45 inherit;'+
-   '  background:rgba(0,0,0,.28);border-radius:5px;padding:1.1vmin 1.4vmin}'+
+   '.xptx{color:var(--dim);font-weight:700;font-size:clamp(11px,2.3vmin,12.5px);line-height:1.45;'+
+   '  background:rgba(0,0,0,.28);border-radius:6px;padding:1vmin 1.3vmin}'+
    '.xptx b{color:var(--ink)}'+
    /* Botón de cercanía: mismo patrón visual que bSit (core_k) y bFw (core_l), pero core_k
       escribe sus estilos con style.cssText (inline) y acá van en una HOJA DE ESTILO. La
@@ -362,13 +392,15 @@ function xpStop(id){
 /* ================= 3. la pantalla ================= */
 const xpWrap=document.createElement('div');xpWrap.id='xpWrap';
 xpWrap.innerHTML='<div id="xpCard"><div id="xpHead"><div id="xpTit"></div>'+
-  '<button id="xpX">✕</button></div><div id="xpBody"></div></div>';
+  '<button id="xpX">✕</button></div><div id="xpBody"></div>'+
+  '<div id="xpFade"><i>▼ ▼ ▼</i></div></div>';
 /* se cuelga de #stage (no de <body>): con el teléfono vertical #stage está rotado 90° y todo
    lo que viva afuera queda con la geometría del viewport REAL, o sea al revés. */
 nsafe(()=>{const s=$('stage')||document.body;s.appendChild(xpWrap);},'xpwrap');
 const xpCard=xpWrap.querySelector('#xpCard');
 const xpBodyEl=xpWrap.querySelector('#xpBody');
 const xpTitEl=xpWrap.querySelector('#xpTit');
+const xpFadeEl=xpWrap.querySelector('#xpFade');
 /* cortar la propagación: el "mirar arrastrando" de core_b escucha en window y no conoce esta
    tarjeta, así que sin esto arrastrar un slider giraba la cámara. */
 nsafe(()=>{
@@ -378,8 +410,110 @@ nsafe(()=>{
   xpWrap.querySelector('#xpX').addEventListener('click',()=>nsafe(xpClose,'xpx'));
 },'xpcard');
 
+/* ========== DESLIZAR CON EL DEDO (el bug que reportó el usuario) ==========
+   MEDIDO antes de tocar nada, con un arrastre REAL (CDP Input.dispatchTouchEvent, que pasa por
+   el compositor igual que un dedo):
+     · 900x430 (escenario sin rotar): arrastre vertical -> scrollTop 0 → 125.  Andaba.
+     · 412x915 (teléfono vertical, #stage con transform:rotate(90deg)): arrastre vertical -> 0,
+       arrastre horizontal -> 0. NO SE MOVÍA NI UN PÍXEL, y con 1331 px de contenido en 293 px
+       de alto los últimos 25 controles eran inalcanzables.
+   Por qué: el compositor decide si el gesto puede scrollear comparando su dirección EN PANTALLA
+   contra touch-action, y la rotación de 90° cruza los ejes: el eje que scrollea el panel es
+   horizontal en pantalla, así que 'pan-y' lo rechazaba… y el horizontal también, porque pan-y
+   sólo habilita el vertical.
+   Solución: no depender del gesto nativo. touch-action:none en el contenedor y el scroll a mano,
+   pasando el delta del dedo por dStage() (core_a) — la misma función que usa "mirar
+   arrastrando" —, que es exactamente lo que convierte pantalla → escenario gire o no gire.
+   Queda overflow-y:auto igual, así la rueda del mouse, el teclado y scrollTop siguen andando. */
+const UIS={el:null,v:0,t:0,raf:0};        /* inercia: un solo contenedor a la vez */
+function uiGlide(){
+  UIS.raf=0;
+  const el=UIS.el;if(!el||!UIS.v)return;
+  const now=performance.now(),dt=Math.min(.05,(now-UIS.t)/1000);UIS.t=now;
+  /* UIS.v está en unidades de scrollTop por segundo y CON el mismo signo que scrollTop: el
+     touchmove hace scrollTop -= d.y y guarda v = -d.y/dt, o sea "cuánto sube scrollTop por
+     segundo". Por eso acá se SUMA. Restarlo (como estaba) mandaba la inercia al revés: el dedo
+     llevaba la lista al fondo y al soltar se volvía sola para arriba ~35 px, así que el último
+     control nunca quedaba alcanzable de verdad — medido con __H.xpScroll(): 207 (el máximo) al
+     levantar el dedo y 173 medio segundo después. */
+  const b=el.scrollTop;el.scrollTop=b+UIS.v*dt;
+  /* frenada exponencial con dt (nada por frame sin dt: a 30 o a 120 fps frena igual) */
+  UIS.v*=Math.pow(.006,dt);
+  if(Math.abs(UIS.v)<16||el.scrollTop===b){UIS.v=0;return;}
+  UIS.raf=requestAnimationFrame(uiGlide);
+}
+/* hace deslizable con el dedo cualquier contenedor con overflow-y:auto */
+function uiScroll(el){
+  if(!el||el._uiScr)return el;el._uiScr=1;
+  let id=null,lx=0,ly=0;
+  /* los controles se quedan con su gesto: arrastrar un slider mueve el slider, no la lista.
+     Los <canvas> (miniaturas de mapa) NO están en la lista: ahí sí queremos deslizar. */
+  const ctl=t=>{const e=t&&t.target;
+    return !!(e&&e.closest&&e.closest('input,select,textarea'));};
+  el.addEventListener('touchstart',e=>{
+    if(id!==null)return;
+    const t=e.changedTouches[0];if(!t||ctl(t))return;
+    id=t.identifier;lx=t.clientX;ly=t.clientY;
+    UIS.el=el;UIS.v=0;UIS.t=performance.now();     /* tocar corta la inercia anterior */
+  },{passive:true});
+  el.addEventListener('touchmove',e=>{
+    if(id===null)return;
+    for(const t of e.changedTouches){
+      if(t.identifier!==id)continue;
+      const d=dStage(t.clientX-lx,t.clientY-ly);   /* pantalla -> escenario (core_a) */
+      lx=t.clientX;ly=t.clientY;
+      const b=el.scrollTop;el.scrollTop=b-d.y;
+      const now=performance.now(),dt=Math.max(.008,(now-UIS.t)/1000);
+      UIS.el=el;UIS.v=clamp(-d.y/dt,-4200,4200);UIS.t=now;
+      /* si de verdad movimos la lista, el gesto es nuestro */
+      if(el.scrollTop!==b&&e.cancelable)e.preventDefault();
+    }
+  },{passive:false});
+  const end=e=>{
+    if(id===null)return;
+    let mine=false;for(const t of e.changedTouches)if(t.identifier===id)mine=true;
+    if(!mine)return;
+    id=null;
+    if(UIS.el===el&&Math.abs(UIS.v)>60&&!UIS.raf){UIS.t=performance.now();
+      UIS.raf=requestAnimationFrame(uiGlide);}
+  };
+  el.addEventListener('touchend',end);el.addEventListener('touchcancel',end);
+  /* arrastrar con el mouse (PC y sondas): mismo camino, sin depender de la rueda */
+  el.addEventListener('mousedown',e=>{
+    if(e.target&&e.target.closest&&e.target.closest('input,select,textarea,button,canvas'))return;
+    let px=e.clientX,py=e.clientY;
+    const mv=ev=>{const d=dStage(ev.clientX-px,ev.clientY-py);px=ev.clientX;py=ev.clientY;
+      el.scrollTop-=d.y;};
+    const up=()=>{removeEventListener('mousemove',mv);removeEventListener('mouseup',up);};
+    addEventListener('mousemove',mv);addEventListener('mouseup',up);
+  });
+  return el;
+}
+nsafe(()=>uiScroll(xpBodyEl),'xpscr');
+/* techo de la tarjeta MEDIDO CONTRA EL ESCENARIO. Con el teléfono vertical #stage está rotado y
+   su alto es innerWidth: usar vh/innerHeight (lo que hacía .card de head.html) daba una tarjeta
+   más alta que la pantalla y la mitad de los controles quedaba fuera del vidrio. */
+function xpFit(){
+  const st=$('stage');if(!st||!xpCard)return null;
+  const W=st.clientWidth,H=st.clientHeight;
+  if(!W||!H)return null;
+  xpCard.style.maxHeight=Math.round(H*.92)+'px';
+  xpCard.style.maxWidth=Math.round(W*.95)+'px';
+  nsafe(xpMoreUpd,'xpmore1');
+  return {W,H,maxH:Math.round(H*.92)};
+}
+addEventListener('resize',()=>nsafe(xpFit,'xpfitr'));
+/* aviso de "hay más abajo": se apaga al llegar al final */
+function xpMoreUpd(){
+  if(!xpFadeEl||!xpBodyEl)return false;
+  const more=xpBodyEl.scrollHeight-xpBodyEl.clientHeight-xpBodyEl.scrollTop>8;
+  xpFadeEl.classList.toggle('on',!!more);
+  return more;
+}
+nsafe(()=>xpBodyEl.addEventListener('scroll',()=>nsafe(xpMoreUpd,'xpmore2'),{passive:true}),'xpscl');
+
 /* estado del panel */
-const XPP={open:false,xp:null,adhoc:null,liveT:0};
+const XPP={open:false,xp:null,adhoc:null,liveT:0,vis:false};
 
 function xpFmt(c,v){
   if(c.fmt){const r=nsafe(()=>c.fmt(v),'xpfmt');if(r!=null)return String(r);}
@@ -410,6 +544,7 @@ function xpPaintCtl(xp,k){
 /* arma la tarjeta de un experimento (o de un XP.screen a mano) */
 function xpBuild(xp){
   xpBodyEl.replaceChildren();
+  xpBodyEl.scrollTop=0;UIS.v=0;              /* panel nuevo, lista arriba y sin inercia vieja */
   xpTitEl.innerHTML='';
   const h=document.createElement('span');
   h.textContent=(xp.ui&&xp.ui.title)||xp.name||'';
@@ -417,7 +552,15 @@ function xpBuild(xp){
   if(xp.cat){const s=document.createElement('small');s.textContent=xp.cat;xpTitEl.appendChild(s);}
   if(xp.desc){const d=document.createElement('div');d.id='xpDesc';d.textContent=xp.desc;
     xpBodyEl.appendChild(d);}
-  for(const c of (xp.ui&&xp.ui.controls)||[])nsafe(()=>xpBuildCtl(xp,c),'xpctl_'+xp.id);
+  const cs=(xp.ui&&xp.ui.controls)||[];
+  /* ANCHO SEGÚN LA CARGA: con 3 controles una tarjeta de 700 px queda ridícula, y con 30 una de
+     350 px obliga a deslizar cuatro pantallas. 1 columna hasta 5 controles, 2 hasta 11, 3 arriba
+     de eso (el grid del cuerpo hace el resto y colapsa solo si el escenario es angosto). */
+  const cols=cs.length>11?3:(cs.length>5?2:1);
+  xpCard.classList.toggle('c2',cols===2);
+  xpCard.classList.toggle('c3',cols===3);
+  for(const c of cs)nsafe(()=>xpBuildCtl(xp,c),'xpctl_'+xp.id);
+  nsafe(xpFit,'xpfitb');
 }
 function xpMkBtn(txt,cls){
   const b=document.createElement('button');b.className=cls||'xpb';b.textContent=txt;return b;
@@ -473,6 +616,9 @@ function xpBuildCtl(xp,c){
   }
   /* --- botones / lista: la misma fila de chips; 'lista' además marca el elegido --- */
   if(t==='btns'||t==='list'){
+    /* con 3 o más chips (o etiquetas largas) la fila necesita el ancho entero: en una columna
+       de 200 px "⏹ Apagar todos los climas" se partía en tres renglones */
+    if((c.items||[]).length>2)row.classList.add('wide');
     const box=document.createElement('div');box.className='xpbs';c._chips=[];
     for(let i=0;i<(c.items||[]).length;i++){
       const it=c.items[i],b=xpMkBtn(it.label==null?String(it.v):it.label,'');
@@ -492,6 +638,8 @@ function xpBuildCtl(xp,c){
     xpBodyEl.appendChild(row);return;
   }
   /* --- texto de sólo lectura (con live() se refresca 4 veces por segundo) --- */
+  /* los bloques de texto son párrafos: en una columna angosta quedan altísimos, van a lo ancho */
+  row.classList.add('wide');
   const tx=document.createElement('div');tx.className='xptx';
   tx.innerHTML=c.html||'';if(!c.html)tx.textContent=c.val==null?'':String(c.val);
   c._tx=tx;row.appendChild(tx);xpBodyEl.appendChild(row);
@@ -532,6 +680,11 @@ function xpScreen(title,controls,opt){
 function xpPaint(){
   const vis=XPP.open&&APP==='play';
   xpWrap.classList.toggle('on',!!vis);
+  /* al PASAR a visible hay que volver a medir: con display:none el cuerpo mide 0 y el aviso de
+     "hay más abajo" salía siempre apagado aunque el contenido midiera el doble. Sólo en el
+     cambio de estado: xpPaint corre 4 veces por segundo y no vamos a forzar layout de gratis. */
+  if(vis&&!XPP.vis)nsafe(xpFit,'xpfitv');
+  XPP.vis=!!vis;
   xpBtnPaint();
 }
 /* El repintado normal va con el escaneo de cercanía, 4 veces por segundo. Eso alcanza para el
@@ -860,6 +1013,33 @@ if(DEV&&window.__H)Object.assign(window.__H,{
   xpGet:id=>{const x=XPI[id];return x?Object.assign({_run:XPRUN.has(x)},x.v):null;},
   xpRun:(id,useNear)=>xpRun(id,useNear?XP.propOf(id):null),
   xpStop:id=>xpStop(id),
+  /* TODO lo del deslizamiento en un objeto: alto del contenido, cuánto se ve, dónde está y si
+     el ÚLTIMO control cae dentro del cuerpo (que es lo que el usuario no podía alcanzar).
+     Se mide en layout del escenario con offsetTop, no con rects del viewport. */
+  xpScroll:()=>{
+    const rows=[...xpBodyEl.children],last=rows[rows.length-1];
+    const btn=last?(last.querySelector('button,input,select')||last):null;
+    const off=e=>{let y=0;for(let o=e;o&&o!==xpBodyEl;o=o.offsetParent)y+=o.offsetTop;return y;};
+    const st=$('stage');
+    return {top:Math.round(xpBodyEl.scrollTop),client:xpBodyEl.clientHeight,
+      scroll:xpBodyEl.scrollHeight,max:xpBodyEl.scrollHeight-xpBodyEl.clientHeight,
+      more:xpFadeEl.classList.contains('on'),rows:rows.length,
+      cols:getComputedStyle(xpBodyEl).gridTemplateColumns.split(' ').length,
+      card:[xpCard.offsetWidth,xpCard.offsetHeight],
+      stage:st?[st.clientWidth,st.clientHeight]:null,
+      fitsStage:!!st&&xpCard.offsetHeight<=st.clientHeight&&xpCard.offsetWidth<=st.clientWidth,
+      lastTop:last?off(last):null,lastH:last?last.offsetHeight:null,
+      /* visible = el control de la última fila entra entero en la ventana del cuerpo */
+      lastVis:!!btn&&off(btn)>=xpBodyEl.scrollTop-1&&
+        off(btn)+btn.offsetHeight<=xpBodyEl.scrollTop+xpBodyEl.clientHeight+1,
+      /* y tocable de verdad: elementFromPoint en el centro del control cae en él */
+      lastHit:(()=>{if(!btn)return null;const r=btn.getBoundingClientRect();
+        if(r.width<2||r.height<2)return false;
+        const e=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+        return !!e&&(e===btn||btn.contains(e)||e.contains(btn));})()};
+  },
+  xpScrollTo:v=>{xpBodyEl.scrollTop=v;nsafe(xpMoreUpd,'xpmh');return xpBodyEl.scrollTop;},
+  xpFit:()=>xpFit(),
   xpPanel:()=>({open:XPP.open,vis:xpWrap.classList.contains('on'),
     id:XPP.xp?XPP.xp.id:null,
     title:xpTitEl.firstChild?xpTitEl.firstChild.textContent:'',   /* sólo el <span> del título */

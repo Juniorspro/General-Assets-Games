@@ -13,6 +13,24 @@ html,body{height:100%;overflow:hidden;background:#0a0d12;color:var(--ink);
 canvas{display:block}
 #wrap{position:fixed;inset:0}
 .hide{display:none!important}
+/* ---------- SLIDERS DE TODO EL JUEGO ----------
+   Se toca con el DEDO, no con el mouse: la barra nativa daba 22 px de alto con un pulgar de
+   ~12 px y en un teléfono se falla el agarre. Acá la barra queda fina (8 px) pero el ÁREA
+   TOCABLE mide 36 px de alto y el pulgar 26 px. touch-action:none porque el gesto lo maneja el
+   propio slider: si el navegador cree que es un scroll se lo roba (y con #stage rotado ni
+   siquiera acierta el eje). Lo usan Ajustes, el panel de experimentos, el editor de HUD… */
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:36px;
+  background:none;touch-action:none}
+input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:5px;
+  background:rgba(255,255,255,.17);box-shadow:inset 0 1px 2px rgba(0,0,0,.55)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;
+  margin-top:-9px;border-radius:50%;border:2px solid rgba(0,0,0,.4);
+  background:radial-gradient(circle at 38% 32%,#ffd784,#e0851a 72%);
+  box-shadow:0 2px 6px rgba(0,0,0,.55)}
+input[type=range]:active::-webkit-slider-thumb{background:radial-gradient(circle at 38% 32%,#fff,#ffb545 72%)}
+input[type=range]::-moz-range-track{height:8px;border-radius:5px;background:rgba(255,255,255,.17)}
+input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;border:2px solid rgba(0,0,0,.4);
+  background:#f2a13a}
 /* ---------- pantallas ----------
    El FONDO del menú es el juego: core_j arma un mapa de verdad y lo filma con una cámara
    que orbita, así que acá va sólo un velo oscuro (más cerrado del lado del panel) en vez
@@ -20,9 +38,16 @@ canvas{display:block}
 .screen{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
   padding:14px;background:linear-gradient(100deg,rgba(6,7,9,.62) 0%,rgba(6,7,9,.42) 34%,
     rgba(6,7,9,.10) 68%,rgba(6,7,9,.26) 100%)}
-.card{width:min(560px,94vw);max-height:94vh;overflow-y:auto;background:rgba(17,19,22,.62);
+/* vmax/vmin y NO vw/vh: con el teléfono vertical #stage está rotado 90°, así que el ancho del
+   escenario es innerHeight (=vmax) y su alto innerWidth (=vmin). Con 94vh de techo la tarjeta
+   medía 860 px en un escenario de 412 y se salía por arriba y por abajo. */
+.card{width:min(560px,94vmax);max-height:94vmin;overflow-y:auto;touch-action:none;
+  overscroll-behavior:contain;background:rgba(17,19,22,.62);
   border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:16px 15px;
   box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.card::-webkit-scrollbar{width:6px}
+.card::-webkit-scrollbar-track{background:rgba(255,255,255,.06);border-radius:3px}
+.card::-webkit-scrollbar-thumb{background:rgba(242,161,58,.6);border-radius:3px}
 h1{font:900 clamp(23px,4.6vmin,32px)/1 inherit;letter-spacing:.03em;text-transform:uppercase;
   margin-bottom:6px}
 h1 b{color:var(--acc)}
@@ -60,6 +85,23 @@ h1 b{color:var(--acc)}
   display:none}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .row2 .btn{margin-top:0}
+/* ---------- CONTROLES (#sHelp) ----------
+   Era un párrafo de cinco renglones en una columna de 560 px con media pantalla al lado sin usar.
+   core_y lo parte en fichas "tecla → qué hace" y acá se acomodan en varias columnas: en
+   horizontal se lee de un vistazo y ninguna ficha se corta. */
+/* fondo casi opaco: la tarjeta ancha se le monta al panel del menú principal y con el .62 de
+   .card se leían los dos textos encimados */
+#sHelp .card{width:min(96%,170vmax);max-width:none;background:rgba(17,19,22,.93)}
+.hkg{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,205px),1fr));
+  gap:7px;margin:2px 0 12px}
+.hkc{display:flex;align-items:center;gap:9px;min-height:40px;padding:6px 9px;border-radius:6px;
+  background:rgba(40,44,50,.62);border-left:3px solid rgba(242,161,58,.55)}
+.hkc>b{flex:none;min-width:32px;padding:3px 6px;border-radius:5px;text-align:center;
+  background:rgba(0,0,0,.35);color:var(--acc2);font-weight:900;font-size:14px}
+.hkc>span{flex:1;min-width:0;color:#dde3e9;font-weight:700;font-size:12px;line-height:1.25;overflow-wrap:anywhere}
+/* la última línea del texto original ("Con la PhysicsGun…") no es una tecla: va de ancho entero */
+.hkc.full{grid-column:1/-1;border-left-color:rgba(108,240,255,.5)}
+.hkc.full>span{font-weight:700;font-size:12.5px;line-height:1.35}
 /* ---------- selector de mapa ---------- */
 #maps{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin:4px 0 12px}
 .mapit{background:#1b2330;border:2px solid rgba(242,245,248,.12);border-radius:12px;overflow:hidden;
@@ -203,20 +245,87 @@ h1 b{color:var(--acc)}
 #plist .pcard{margin-top:8px;background:#fff;color:#111;border-radius:4px;padding:7px;width:120px;
   text-align:center;font:800 12px inherit}
 #plist .pcard canvas{width:100%;height:78px;display:block;background:#dfe4e9;border-radius:3px}
+/* ============ AJUSTES ============
+   Rehecho para HORIZONTAL: el juego se ve siempre ~2:1, así que en vez de dos columnas largas
+   que se salían del vidrio (medido: en 900x430 el título y los dos botones del pie quedaban
+   cortados, y en 412x915 la mitad de la tarjeta caía fuera del escenario porque no tenía techo)
+   van CUATRO columnas de secciones, encabezado y pie fijos, y el medio deslizable.
+   Las medidas van en vmin, que es el LADO CORTO DEL ESCENARIO en las dos orientaciones: con
+   #stage rotado 90° (teléfono vertical) vh/vw son del VIEWPORT y están cruzadas — ése fue el bug
+   del menú de props. El contenido lo rearma core_y moviendo los controles que ya existen (los
+   ids no cambian: applyOpts y los listeners de core_b/n/s/h siguen intactos). */
 #opts{position:fixed;inset:0;z-index:19;display:none;align-items:center;justify-content:center;
-  background:rgba(6,8,11,.5)}
+  padding:1.6vmin;background:rgba(6,8,11,.62)}
 #opts.on{display:flex}
-#optcard{width:min(760px,94vw);background:rgba(88,88,88,.97);border-radius:8px;padding:16px;
-  display:grid;grid-template-columns:1fr 1fr;gap:10px 22px}
-#optcard h3{grid-column:1/-1;font:900 16px inherit;margin-bottom:2px}
-.chk{display:flex;align-items:center;gap:10px;font:800 15px inherit;padding:5px 0}
-.chk input{width:22px;height:22px}
-.sl label{display:flex;justify-content:space-between;font:800 14px inherit;margin-bottom:3px}
-.sl input{width:100%}
-.sl select{width:100%;padding:6px;border-radius:5px;border:0;font:700 13px inherit}
-#optfoot{grid-column:1/-1;display:flex;gap:10px;margin-top:6px}
-#optfoot button{flex:1;border:0;border-radius:6px;padding:11px;font:800 14px inherit;color:#fff}
-#optDef{background:#3aa9ee}#optClose{background:#e05a5a}
+#optcard{width:min(97%,206vmin);max-height:94vmin;display:flex;flex-direction:column;
+  background:rgba(17,19,22,.96);border:1px solid rgba(255,255,255,.10);
+  border-left:3px solid var(--acc);border-radius:8px;overflow:hidden;
+  box-shadow:0 18px 54px rgba(0,0,0,.66)}
+#optHed{flex:none;display:flex;align-items:center;gap:10px;padding:1.5vmin 1.8vmin 1.2vmin;
+  border-bottom:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.03)}
+#optcard h3{font-weight:900;font-size:clamp(16.5px,3.2vmin,18px);letter-spacing:.05em;text-transform:uppercase;
+  flex:none}
+#optSub{flex:1;min-width:0;color:var(--dim);font-weight:800;font-size:clamp(10.5px,2vmin,11px);letter-spacing:.09em;
+  text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* el medio desliza con el dedo (uiScroll de core_u): touch-action:none porque con el escenario
+   rotado el scroll NATIVO no reconoce el eje — está medido en el comentario de uiScroll */
+#optBody{flex:1;min-height:0;position:relative;overflow-y:auto;overflow-x:hidden;touch-action:none;
+  overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:1.4vmin 1.8vmin 1.8vmin;
+  display:grid;align-content:start;gap:1.2vmin 1.8vmin;
+  grid-template-columns:repeat(auto-fill,minmax(min(100%,190px),1fr))}
+#optBody::-webkit-scrollbar{width:6px}
+#optBody::-webkit-scrollbar-track{background:rgba(255,255,255,.06);border-radius:3px}
+#optBody::-webkit-scrollbar-thumb{background:rgba(242,161,58,.6);border-radius:3px}
+#optFade{position:absolute;left:0;right:0;bottom:0;height:4.6vmin;min-height:20px;opacity:0;
+  pointer-events:none;transition:opacity .18s;
+  background:linear-gradient(180deg,rgba(17,19,22,0),rgba(17,19,22,.92))}
+#optFade.on{opacity:1}
+.oCol{min-width:0;display:flex;flex-direction:column;gap:7px;align-content:start}
+.oGrp{min-width:0;display:flex;flex-direction:column;gap:4px}
+/* título de sección con su filete ámbar */
+.oSec{display:flex;align-items:center;gap:7px;font-weight:900;font-size:10.5px;white-space:nowrap;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--acc);margin:2px 0 0}
+.oSec:after{content:"";flex:1;height:1px;
+  background:linear-gradient(90deg,rgba(242,161,58,.55),rgba(242,161,58,0))}
+/* fila pareja: nombre a la izquierda, control a la derecha. El nombre PARTE EN RENGLONES antes
+   que recortarse (nada de texto cortado en columnas angostas), y parte por palabras: con
+   'anywhere' quedaba "Postprocesamien / to". */
+.oRow,.chk{display:flex;align-items:center;gap:7px;min-height:34px;padding:3px 8px;
+  border-radius:6px;background:rgba(40,44,50,.6);border-left:2px solid transparent}
+.oRow:active{background:rgba(56,62,70,.75)}
+.oNm{flex:1;min-width:0;font-weight:800;font-size:12px;line-height:1.2;overflow-wrap:break-word;hyphens:auto}
+.oRow.on{border-left-color:var(--acc)}
+/* fila de slider: nombre + valor arriba, barra abajo a lo ancho */
+.oRow.oSlr,.sl{display:block;padding:2px 8px 0;min-height:0}
+.oRow.oSlr .oTop,.sl>label{display:flex;align-items:baseline;gap:7px;margin-bottom:-4px}
+.oRow.oSlr .oNm{flex:1}
+.oRow.oSlr b,.sl b{flex:none;color:var(--acc2);font-weight:900;font-size:12px;
+  font-variant-numeric:tabular-nums}
+/* INTERRUPTOR DE VERDAD (el <input type=checkbox> sigue ahí, invisible: los listeners y
+   applyOpts(true) que le escriben .checked no se enteran de nada) */
+.osw{position:relative;flex:none;width:44px;height:26px}
+.osw input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0}
+.osw i{position:absolute;inset:0;border-radius:999px;background:rgba(0,0,0,.5);
+  border:1px solid rgba(255,255,255,.15);transition:background .15s,border-color .15s}
+.osw i:after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
+  background:#8b939c;box-shadow:0 1px 3px rgba(0,0,0,.5);transition:transform .15s,background .15s}
+.osw input:checked+i{background:rgba(242,161,58,.5);border-color:var(--acc)}
+.osw input:checked+i:after{transform:translateX(18px);background:#ffc24d}
+/* desplegable (calidad de textura): oscuro, y las opciones también */
+.oRow select,.sl select{flex:none;max-width:52%;min-height:30px;border-radius:6px;padding:0 5px;
+  border:1px solid rgba(255,255,255,.16);background:#20242a;color:var(--ink);
+  font-weight:800;font-size:12px}
+.oRow select option,.sl select option{background:#20242a;color:var(--ink)}
+/* el botón "Mover los controles" (core_h) entra como una fila más */
+#optBody .btn{margin:0;background:rgba(40,44,50,.6);font-weight:800;font-size:12px;padding:5px 8px}
+#optBody .btn small{font-weight:600;font-size:10px;line-height:1.25;margin-top:1px}
+#optfoot{flex:none;display:flex;gap:9px;padding:6px 1.8vmin;
+  border-top:1px solid rgba(255,255,255,.09);background:rgba(0,0,0,.28)}
+#optfoot button{flex:1;border:0;border-radius:6px;min-height:38px;padding:0 10px;
+  font-weight:900;font-size:clamp(12px,2.5vmin,13.5px);letter-spacing:.03em}
+#optDef{background:rgba(70,76,84,.95);color:var(--ink)}
+#optDef:active{background:rgba(96,102,110,.98)}
+#optClose{background:linear-gradient(180deg,#ffb545,#e07d12);color:#241503;text-transform:uppercase}
 /* ============ iconos generados: imágenes en vez de emojis ============
    Todos los controles llevan su emoji DENTRO de <i class="ic ic-algo">…</i>. Mientras
    las imágenes no estén, el emoji se ve como siempre y ningún botón queda vacío.
@@ -330,26 +439,33 @@ body.gicons .pit>.ic{display:block;width:100%;height:62px;border-radius:3px;
   </div>
 </div>
 
+<!-- Ajustes: encabezado y pie FIJOS, el medio deslizable. Los controles son los mismos de
+     siempre (mismos ids: applyOpts de core_b, el volumen de core_n, el Ultra 4K de core_s y el
+     tamaño de botones de core_h siguen encontrándolos); core_y los reparte en secciones con
+     título y en columnas para el formato horizontal. -->
 <div id="opts"><div id="optcard">
-  <h3 id="optTit">Ajustes</h3>
-  <div>
-    <label class="chk"><input type="checkbox" id="oShadow"><span id="oShadowL">Sombra</span></label>
-    <label class="chk"><input type="checkbox" id="oDesc"><span id="oDescL">Describir</span></label>
-    <label class="chk"><input type="checkbox" id="oPost"><span id="oPostL">Postprocesamiento</span></label>
-    <label class="chk"><input type="checkbox" id="oFps"><span id="oFpsL">Fps meter</span></label>
-    <label class="chk"><input type="checkbox" id="oHide"><span id="oHideL">Esconder UI</span></label>
+  <div id="optHed"><h3 id="optTit">Ajustes</h3><span id="optSub">SUX SANDBOX</span></div>
+  <div id="optBody">
+    <div class="oCol">
+      <label class="chk"><input type="checkbox" id="oShadow"><span id="oShadowL">Sombra</span></label>
+      <label class="chk"><input type="checkbox" id="oDesc"><span id="oDescL">Describir</span></label>
+      <label class="chk"><input type="checkbox" id="oPost"><span id="oPostL">Postprocesamiento</span></label>
+      <label class="chk"><input type="checkbox" id="oFps"><span id="oFpsL">Fps meter</span></label>
+      <label class="chk"><input type="checkbox" id="oHide"><span id="oHideL">Esconder UI</span></label>
+    </div>
+    <div class="oCol">
+      <div class="sl"><label><span id="oSensL">Sensibilidad</span><b id="oSensV">1.0</b></label>
+        <input type="range" id="oSens" min="30" max="260" value="100"></div>
+      <div class="sl"><label><span id="oLimL">Fps Limit</span><b id="oLimV">Off</b></label>
+        <input type="range" id="oLim" min="0" max="120" step="10" value="0"></div>
+      <div class="sl"><label><span id="oTexL">Calidad de textura</span></label>
+        <select id="oTex"><option value="1">100%</option><option value="0.5">50%</option>
+        <option value="0.25">25%</option></select></div>
+      <div class="sl"><label><span id="oMaxL">Límite de props</span><b id="oMaxV">300</b></label>
+        <input type="range" id="oMax" min="50" max="9999" step="1" value="300"></div>
+    </div>
   </div>
-  <div>
-    <div class="sl"><label><span id="oSensL">Sensibilidad</span><b id="oSensV">1.0</b></label>
-      <input type="range" id="oSens" min="30" max="260" value="100"></div>
-    <div class="sl"><label><span id="oLimL">Fps Limit</span><b id="oLimV">Off</b></label>
-      <input type="range" id="oLim" min="0" max="120" step="10" value="0"></div>
-    <div class="sl"><label><span id="oTexL">Calidad de textura</span></label>
-      <select id="oTex"><option value="1">100%</option><option value="0.5">50%</option>
-      <option value="0.25">25%</option></select></div>
-    <div class="sl"><label><span id="oMaxL">Límite de props</span><b id="oMaxV">300</b></label>
-      <input type="range" id="oMax" min="50" max="9999" step="1" value="300"></div>
-  </div>
+  <div id="optFade"></div>
   <div id="optfoot"><button id="optDef">Por defecto</button><button id="optClose">Cerrar</button></div>
 </div></div>
 
@@ -5726,7 +5842,7 @@ import * as CANNON from 'cannon';
    los 7 cielos 360 (e7fc8e6) y la pantalla del tablero xpx-hmi.jpg (fb2baec). Con el
    HASH viejo (3bfd310) esos archivos daban 404 en produccion: el juego no crasheaba
    (TextureLoader avisa y sigue) pero los experimentos de clima quedaban sin cielo. */
-const HASH='fb2baec';
+const HASH='24a3a07';
 const BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'+HASH+'/assets/hyper/';
 const okUrl=u=>typeof u==='string'&&u.indexOf('@PEND')<0;
 const $=i=>document.getElementById(i);
@@ -12218,307 +12334,534 @@ fpClip=function(){
 };
 
 /* ============================================================
-   VIEWMODEL DE 1ª PERSONA — BRAZOS+ARMA COLGADOS DE LA CÁMARA, BALANCEO PROCEDURAL
+   VIEWMODEL DE 1ª PERSONA — UN PAR DE MANOS PROPIAS SOSTENIENDO EL ARMA
    ------------------------------------------------------------
-   POR QUÉ. Hasta acá los brazos de 1ª persona eran los del ESQUELETO REAL: la cámara en los
-   ojos, la mano derecha llevada por IK a un punto del marco de la cámara y el arma colgando de
-   esa mano. Dos problemas que el discard por peso de hueso no puede arreglar, los dos con
-   capturas del celular:
-     1) el HOMBRO y el CODO cuelgan del torso, y el torso hace la animación de correr: el codo
-        entraba cruzando el cuadro desde el borde izquierdo y el antebrazo pasaba literalmente
-        por delante del ojo. El discard elige qué vértices se dibujan, no dónde están.
-     2) la animación de correr sacude las manos ("en primera persona es incómodo... mueve mucho
-        las manos"), y en 1ª persona eso no se quiere: se quiere el balanceo suave de cualquier
-        FPS, que es PROCEDURAL.
-   CÓMO. Un grupo VMG hijo de la CÁMARA con un CLON del personaje (charClone de core_f, que ya
-   clona esqueleto y materiales propios) congelado en UNA pose (la que dejan armIKR+armIK
-   sosteniendo el arma) y el arma metida en la mano del clon. Todo el conjunto es RÍGIDO
-   respecto de la pantalla; lo único que se mueve es VMG, con bobbing/sway procedurales por dt.
-   El cuerpo real pasa a modo 2 (no se dibuja) pero sigue existiendo: sigue haciendo la
-   animación de correr para la SOMBRA, para la 3ª persona y para el paquete de red (los otros
-   jugadores lo siguen viendo corriendo, ver core_f — no se toca nada de eso).
-   EL CLON NO ES CARO: es una malla con skin más, sin sombra y con el fragment shader
-   descartando todo lo que no sea antebrazo/mano, y sólo existe mientras haya 1ª persona.
+   POR QUÉ SE CAMBIÓ DE RAÍZ (6 capturas del celular: pistol, shotgun, hands ×2, physgun, bat).
+   La versión anterior clonaba EL PERSONAJE (charClone) y le borraba todo lo que no fuera mano
+   con un discard por peso de hueso (uArmT=.88). Un discard NO recorta un sólido: recorta
+   FRAGMENTOS. La malla del brazo es una cáscara de una sola cara, así que cortarla por la
+   mitad la deja ABIERTA y se ve el interior — que es exactamente lo fotografiado: tiras de
+   piel, pedazos de manga negra y triángulos abiertos flotando en la esquina. Y el borde del
+   corte es una curva DISTINTA EN CADA FRAME (depende de los pesos de cada vértice y de la
+   pose), así que ninguna "tapa" fija lo puede cerrar: por eso no se eligió la opción B.
+   Peor todavía con los PUÑOS (arma sin modelo): ahí el anclaje pasaba por la muñeca del clon y,
+   con el rig del personaje en centímetros, el conjunto salía escalado ~100 y aparecía EL CUERPO
+   ENTERO delante de la cámara (fotos 788eeaf6 y c3e6ed3a).
+   AHORA (opción A): un modelo PROPIO de mano de primera persona, hecho para esto:
+   assets/hyper/vm-hands.glb — generado con Higgsfield (nano_banana_pro -> image_to_3d), un puño
+   con guante táctico, malla CERRADA de 30k triángulos y textura de 512 (1,3 MB). Se usa tal cual
+   para la derecha y ESPEJADO EN Z para la izquierda, y se lo apoya sobre el arma con las medidas
+   del propio rig del arma (rigGrip de core_c: empuñadura en el origen, caño a -Z, lh0/lh1 = por
+   dónde toma la mano izquierda). No hay NADA que recortar, ningún hueso del personaje participa,
+   y el cuerpo real no se dibuja (uArms=2, ver fpClip arriba).
+   Si el GLB no está (CDN viejo, red caída) hay un puño PROCEDURAL de cajas como respaldo, que
+   también es geometría cerrada: en ningún caso se vuelve al clon recortado.
+
+   JERARQUÍA (los nombres vmChar/vmHand/vmCap/VMG/VMF se MANTIENEN porque core_p —melee— los
+   usa; ver la nota en vmPlace):
+     camera → VMF (warp de FOV) → VMG (balanceo) → vmChar (conjunto) → vmHand (empuñadura)
+              vmHand → wModel (el arma, transformada local identidad)
+                     → HRG (mano derecha)  → malla + manga
+                     → HLG (mano izquierda) → malla espejada + manga
    ============================================================ */
 
-/* ---- constantes, TODAS tocables en vivo con __H.vmSet(k,v) ----
-   ax/ay = ancla del ARMA en NDC (-1..1, +derecha/+arriba). EL PUNTO CLAVE DEL FIX: antes el
-     arma se fijaba en METROS (x=.18) y eso en pantalla depende del aspecto — el semiancho del
-     cuadro a z fijo vale (-z)·tan(fov/2)·aspect, así que los mismos .18 m caían a NDC .23
-     (casi el centro: 61% del ancho) y en el teléfono vertical (aspecto 2.2 con el escenario
-     rotado) más al centro todavía. Anclar en NDC hace la posición RELATIVA AL ASPECTO: la
-     esquina es la esquina en cualquier pantalla y con cualquier zoom.
-   x/y = ajuste FINO en metros SOBRE el ancla (default 0; se mantienen para __H.vmSet).
-   z/rx/ry/rz/sc = distancia y orientación del arma en el marco de la cámara. z negativo =
-     adelante. El resto del conjunto (manos, muñecas) sale de ahí: la pose es rígida.
-   fov = FOV VERTICAL PROPIO del viewmodel (grados) — la técnica estándar de los FPS de
-     renderizar el arma con otro FOV, acá sin segundo pase: ver el warp exacto en vmPlace.
-     Con el FOV del juego (72 de vertical ≈ 113° de horizontal en 2.2:1) una mano a 50 cm
-     anclada en la esquina se estira feo y el conjunto ABARCA medio cuadro; con ~92 el mismo
-     conjunto ocupa 0.79× en pantalla sin moverlo ni un metro. 72 = warp apagado.
-   bob* = amplitud del balanceo (metros) y frecuencia (Hz) caminando / corriendo.
-   sway* = retardo al girar la vista. tau = constante de tiempo del filtro (s).
-   armT = umbral del discard del clon (ver fpArmFlag: .4 brazo alto, .8 antebrazo, 1 mano).
-*/
+/* ---- 6.1 el modelo de manos ----
+   MEDIDO con scratchpad/_glbfix.js sobre la malla generada (unidades de la malla):
+     caja  x[-0.950,0.949] y[-0.633,0.632] z[-0.498,0.496]
+     +X  = hacia el CODO (ahí está la manga y su agujero),  -X = los nudillos
+     +Y  = el DORSO de la mano,  Z = el eje del AGARRE (los 4 dedos se apilan en Z)
+     puño = x<=-0.38 (alto 1.078 unidades ≈ 10,5 cm de puño real → sc≈.098)
+     agujero de la manga: x>=0.873, centro (y=0.20,z=-0.013), radio 0.32-0.456
+   El agujero es el ÚNICO borde abierto de la malla (la imagen se cortaba ahí), así que se le
+   pega un TUBO CERRADO de manga que además lleva el brazo fuera de la pantalla: con eso el
+   conjunto no tiene ni un borde abierto en ningún ángulo. */
+const VMH={
+  file:'vm-hands.glb',
+  sc:.098,                       /* metros por unidad de malla */
+  /* gz=-.13 y no 0: MEDIDO con capturas (vm-A/C-v-pistol-fr). El eje Z de la malla es la columna
+     en que se apilan los dedos, o sea a qué ALTURA de la empuñadura agarra el puño: con 0 el puño
+     quedaba al pie de la empuñadura y la pistola le flotaba por encima; con -.13 (1,3 cm) el
+     puño sube y la empuñadura le entra adentro. */
+  grip:[-.575,-.135,-.13],       /* punto de la malla que se apoya en la empuñadura del arma */
+  /* cuff 4.6 unidades = 45 cm de manga: MEDIDO, con 2.6 la punta del antebrazo IZQUIERDO
+     terminaba dentro del cuadro y su tapa se veía como un bloque negro (capturas vm-F/G1). El
+     antebrazo de una mano que envuelve un caño sale perpendicular al caño (igual que la muñeca al
+     agarrar un martillo: eso es lo que hace vmBasis), así que la única forma de que salga del
+     cuadro es que sea largo. Con 4.6 las dos mangas cruzan el borde de abajo. */
+  hole:[.90,.20,-.013],holeR:.455,cuff:4.6,   /* manga: dónde, qué radio, cuánto se alarga */
+  cuffC:0x15181c,                /* color de la manga agregada (negro como la del modelo) */
+  emis:.05                       /* piso de emisivo: la mano cuelga de la cámara y de noche o
+                                    mirando a contraluz quedaba una silueta negra. NO subirlo: con
+                                    .14 el guante y la manga se ven grises y planos (probado). */
+};
+/* CÓMO SE TOMA CADA ARMA — todo en el espacio del rig del arma (rigGrip): +X a la derecha del
+   arma, +Y arriba, -Z el caño. Para cada mano se dan dos direcciones y de ahí sale la
+   orientación completa (vmBasis): hacia dónde se va el ANTEBRAZO (el +X de la malla) y el EJE
+   DEL AGARRE (el Z de la malla, la línea en que se apilan los dedos).
+   El antebrazo derecho se va atrás-abajo-afuera para SALIR POR LA ESQUINA de la pantalla; el
+   izquierdo entra desde abajo-izquierda. Así ninguno de los dos cruza el centro del cuadro. */
+const VMHP={
+  rArm:[.30,-.62,.72],   rAx:[0,1,-.20],   /* derecha: columna de la empuñadura casi vertical */
+  /* la izquierda va casi vertical: su antebrazo no puede tener componente hacia la cámara (sale
+     perpendicular al caño por anatomía, ver vmBasis) así que se elige el rumbo que ANTES sale del
+     cuadro — abajo con un poco de izquierda. Con [-.62,-.66,0] terminaba en mitad de pantalla. */
+  lArm:[-.30,-.95,0],                      /* izquierda de dos manos: entra desde abajo */
+  lPist:[-.045,-.055,.012],lArmP:[-.28,-.62,.73],  /* pistola: la izquierda calza bajo la derecha */
+  /* PUÑOS (arma sin modelo): cada mano tiene su propio ancla en NDC, como una guardia */
+  fR:[.42,-.56],fL:[-.18,-.60],fArmR:[.34,-.60,.72],fArmL:[-.34,-.60,.72],fAx:[0,1,-.12]
+};
+/* AJUSTES POR ARMA sobre el ancla (NDC/metros/radianes). El bate y el RPG son los dos casos que
+   no entran con el ancla de las armas de fuego: el bate mide 86 cm y con el caño a -Z se iría
+   de punta al horizonte (se lo levanta y se lo gira, como en 3ª persona), y el RPG va al
+   hombro. Los demás salen bien con el ancla común. */
+const VMWK={
+  _:{},
+  /* el bate a una mano con la punta ARRIBA (rx>0 gira el caño -Z hacia +Y): así se ve el palo
+     entero listo para el mazazo en vez de un tubo horizontal cruzando la esquina (capturas
+     mK: rx=.55 contra rx=-.50) */
+  bat     :{ax:-.02,ay:-.04,z:.06,rx:.55,ry:-.16,rz:.30,oneH:1},
+  hands   :{},
+  rpg     :{ax:-.04,ay:.06,z:-.06,rx:.06,ry:-.02},
+  sniper  :{ax:-.02,ay:.02,z:-.04},
+  shotgun :{ax:-.01,ay:.01},
+  akm     :{ax:-.01,ay:.01},
+  crossbow:{ax:-.01,ay:.02,z:-.02},
+  physgun :{ax:.01,ay:-.01},
+  gravgun :{ax:.01,ay:-.01}
+};
+
+/* ---- constantes del conjunto, TODAS tocables en vivo con __H.vmSet(k,v) ----
+   ax/ay = ancla del ARMA en NDC (-1..1, +derecha/+arriba). Anclar en NDC y no en metros es lo
+     que hace que "la esquina" sea la esquina en cualquier pantalla: el semiancho del cuadro a z
+     fijo vale (-z)·tan(fov/2)·aspect, así que unos metros fijos caen a un NDC distinto en el
+     celular vertical (aspecto 2.22 con el escenario rotado) que en el chromium apaisado.
+   x/y = ajuste fino en metros SOBRE el ancla. z/rx/ry/rz/sc = distancia y orientación.
+   fov = FOV VERTICAL propio del viewmodel (grados): la técnica estándar de los FPS, acá sin
+     segundo pase (ver el warp en vmPlaceH). 72 = apagado.
+   bob y f = balanceo del paso, sway = retardo al girar, tilt = inclinación al ir de costado,
+   kick* = patada del disparo, air = cuánto queda del bobbing en el aire.
+   armT = umbral del discard del CUERPO REAL en el modo de respaldo (mode 1). Ya no lo usa el
+     viewmodel: las manos son un modelo aparte y no se recorta nada. */
 const VMC={
   on:1,
-  /* MEDIDO con __H.vmDiff() y las capturas de la sonda VERTICAL 412×915 (el caso real del
-     teléfono, aspecto 2.22) leídas una por una. ANTES: arma en NDC [.22,-.58] (casi centro),
-     viewmodel 7.2% del cuadro, bbox [-0.23,-0.99 → 0.52,-0.06]: el antebrazo entero llegaba
-     al CENTRO del cuadro — la captura del usuario. Los valores de acá abajo son el DESPUÉS
-     medido con la misma sonda (ver x-vm-vert-*.png): arma en la esquina inferior derecha,
-     solo manos+muñecas, nada cruzando el eje vertical del cuadro. */
-  ax:.62,ay:-.66,                                 /* ancla del arma en NDC: esquina inf. der. */
+  ax:.62,ay:-.66,
   x:0,y:0,z:-.560,rx:.010,ry:-.030,rz:.020,sc:1,
-  fov:92,                                         /* FOV propio del viewmodel (72 = apagado) */
+  /* fov 98: el warp comprime el conjunto hacia el eje óptico. MEDIDO sobre las 84 mediciones de
+     _vmall: con 92 el RPG llegaba al 5,54% del cuadro (el contrato de _vert pide <5,5%) y con 98
+     el peor caso baja a 4,8% sin que se note más chico (comparadas las capturas mL). */
+  fov:98,
   bobWX:.011,bobWY:.008,bobRX:.020,bobRY:.014,   /* W = walk, R = run */
-  fW:1.15,fR:2.0,                                 /* Hz del paso (el pedido: 1,0-1,3 / 1,8-2,2) */
-  idleX:.0035,idleY:.0030,idleF1:.17,idleF2:.23,  /* sway lento estando quieto */
-  swayP:.18,swayR:.30,swayMax:.040,tau:.085,      /* retardo de la vista (m por rad de atraso) */
-  tilt:.030,tiltP:.014,                           /* inclinación al desplazarse de costado */
-  kick:.045,kickR:.35,                            /* patada del disparo (usa recoil de core_b) */
-  /* armT con los flags graduados nuevos: mano=1, antebrazo=.8, brazo alto=.4. Con .70 el
-     ANTEBRAZO ENTERO (flag .8) sobrevivía y es lo que cruzaba el cuadro en la captura del
-     usuario; con .88 el corte cae en la zona de mezcla muñeca-antebrazo: quedan las manos,
-     las muñecas y un pedazo corto de antebrazo que sale por el borde de abajo. Si se ve la
-     mano pelada (sin nada de muñeca) bajar hacia .82; si vuelve a asomar antebrazo, subir. */
-  armT:.88,                                       /* corte del clon: mano+muñeca */
-  air:.35                                         /* cuánto queda del bobbing en el aire */
+  fW:1.15,fR:2.0,                                 /* Hz del paso */
+  idleX:.0035,idleY:.0030,idleF1:.17,idleF2:.23,
+  swayP:.18,swayR:.30,swayMax:.040,tau:.085,
+  tilt:.030,tiltP:.014,
+  kick:.045,kickR:.35,
+  armT:.88,
+  air:.35
 };
-/* VMF = grupo intermedio del "FOV del viewmodel": camera → VMF (escala del warp) → VMG
-   (bob/sway) → clon. La escala vive en su propio grupo y no en VMG porque VMG ROTA con el
-   sway: escalar y rotar en el mismo nodo aplicaría la escala en los ejes YA rotados (cizalla
-   espuria); acá la escala queda clavada a los ejes de la CÁMARA, que es lo que pide la
-   equivalencia exacta con "renderizar con otro FOV" (ver vmPlace). */
+/* VMF = grupo del warp de FOV. La escala vive en su propio nodo y no en VMG porque VMG ROTA con
+   el balanceo: escalar y rotar en el mismo nodo aplicaría la escala en los ejes YA rotados
+   (cizalla espuria); acá queda clavada a los ejes de la CÁMARA, que es lo que pide la
+   equivalencia exacta con "renderizar con otro FOV". */
 let VMG=null,VMF=null,vmChar=null,vmHand=null,vmMats=null,vmBoneMap=null;
-let vmOn=false,vmDt=1/60,vmFail=0,vmCapW=null,vmCapClean=false;
+let vmOn=false,vmDt=1/60,vmFail=0,vmCapW=null,vmCapClean=true;
 let vmPhase=0,vmTime=0,vmYawF=0,vmPitF=0,vmSpF=0,vmAirF=0;
+let HRG=null,HLG=null,vmHD=null,vmAsk=false,vmHW=1,vmHH=1;
 const vmOff={x:0,y:0,z:0,rx:0,ry:0,rz:0};        /* último offset aplicado, para __H.vmInfo */
+/* estos temporales los USA TAMBIÉN core_p (su vmPlace de melee): no se les cambia el nombre */
 const _vmW=new THREE.Matrix4(),_vmH=new THREE.Matrix4(),_vmM=new THREE.Matrix4(),
       _vmI=new THREE.Matrix4(),_vmP=new THREE.Vector3(),_vmQ=new THREE.Quaternion(),
       _vmS=new THREE.Vector3(),_vmV=new THREE.Vector3(),_vmE=new THREE.Euler();
 const vmCap={p:new THREE.Vector3(),q:new THREE.Quaternion(),s:new THREE.Vector3(1,1,1),
              hq:new THREE.Quaternion()};
-/* ancla del arma en el espacio de VMG (pre-warp), guardada por vmPlace: vmMotion la usa como
-   PIVOTE de las rotaciones del balanceo (ver ahí el porqué). */
-const vmAnc=new THREE.Vector3();
+const vmAnc=new THREE.Vector3();   /* ancla en el espacio de VMG: pivote del balanceo */
+const _vhx=new THREE.Vector3(),_vhy=new THREE.Vector3(),_vhz=new THREE.Vector3(),
+      _vhp=new THREE.Vector3(),_vhw=new THREE.Vector3(),_vhm=new THREE.Matrix4(),
+      _vhq=new THREE.Quaternion(),_vhq2=new THREE.Quaternion(),_vhe=new THREE.Euler();
 
 /* ¿corresponde viewmodel ahora? En vehículo NO: ahí la cámara la pone EXT.cam (core_e) y las
-   manos van al volante, no a la pantalla. Ragdoll y cámara libre tampoco (se quiere ver el
-   cuerpo). VHS es el estado del auto (core_e, ya inicializado cuando esto corre por frame). */
+   manos van al volante. Ragdoll y cámara libre tampoco (se quiere ver el cuerpo). */
 function vmWant(){
   if(!VMC.on||!PL.fp||PL.rag||freeCam)return false;
   if(typeof VHS!=='undefined'&&VHS)return false;
   return true;
 }
-/* huesos del clon por nombre: SkeletonUtils.clone() conserva los nombres, así que copiar la
-   pose es un for por nombre y no depende de ningún orden. */
-function vmMap(root){
-  const m={};
-  root.traverse(o=>{ if(o.isBone&&!m[o.name])m[o.name]=o; });
-  return m;
-}
-/* arma el clon UNA vez (el GLB es asíncrono: se reintenta hasta que exista, con un tope de
-   intentos para no quedar probando para siempre si el modelo no trae huesos de mano). */
-function vmInit(){
-  if(vmChar||vmFail>8)return !!vmChar;
-  /* GLB todavía no cargado NO es un fallo: en un teléfono con red lenta el personaje tarda
-     cientos de frames y antes esto QUEMABA los 8 reintentos en los primeros 8 frames de 1ª
-     persona — el jugador quedaba clavado para siempre en el modo respaldo (brazos reales con
-     IK: el codo cruzando el cuadro, la foto del usuario). Esperar no consume intentos; los
-     intentos son para fallos REALES con el modelo ya presente (clon sin hueso de mano). */
-  if(!charRoot||typeof charClone!=='function')return false;
-  if(!(bones.rHand||bones.rFore)){vmFail++;return false;}
-  const c=nsafe(()=>charClone(),'vmclone');
-  if(!c){vmFail++;return false;}
-  const map=vmMap(c),rb=bones.rHand||bones.rFore,h=map[rb.name];
-  if(!h){vmFail=99;if(c.parent)c.parent.remove(c);return false;}
-  /* sin sombra: el conjunto vive a 30 cm de la cámara y proyectaría una mancha enorme en el
-     piso. La sombra del jugador la sigue tirando el cuerpo REAL (modo 2 sólo apaga el color). */
-  const mats=[];
-  c.traverse(o=>{ if(!o.isMesh&&!o.isSkinnedMesh)return;
-    o.castShadow=false;o.receiveShadow=false;o.frustumCulled=false;o.visible=true;
-    const ms=Array.isArray(o.material)?o.material:[o.material];
-    for(const m of ms)if(m&&mats.indexOf(m)<0)mats.push(m); });
-  /* los materiales del clon vienen de Material.clone(): userData se copia por JSON, así que
-     traen _farm=1 y un uArms/uArmT que NO son los objetos del original (JSON los aplana a
-     {value:n}). Se los vuelve a parchar a mano — hace falta porque onBeforeCompile no se copia
-     en el clone y sin él no existe ni el discard ni el varying. */
-  const flags=fpArmBoneFlags(),NB=fpArmNB;
-  for(const m of mats){
-    delete m.userData._farm;
-    m.userData.uArms={value:1};
-    m.userData.uArmT={value:VMC.armT};
-    if(flags)fpArmPatch(m,flags,NB);
-    m.clippingPlanes=null;
+
+/* ---- 6.2 geometría: espejo, manga y puño de respaldo ---- */
+/* ESPEJO REAL, no scale.z=-1: una escala negativa invierte el determinante y con eso el sentido
+   de las caras, así que la mano izquierda se dibujaría del REVÉS (se vería el interior, que es
+   justo el aspecto del bug que se está arreglando). Acá se niega la Z de posiciones y normales
+   y se DA VUELTA EL ORDEN de cada triángulo, que deja la malla igual de cerrada y bien orientada. */
+function vmMirrorGeo(g){
+  const o=g.clone();
+  const p=o.attributes.position,n=o.attributes.normal;
+  for(let i=0;i<p.count;i++)p.setZ(i,-p.getZ(i));
+  if(n)for(let i=0;i<n.count;i++)n.setZ(i,-n.getZ(i));
+  p.needsUpdate=true;if(n)n.needsUpdate=true;
+  const ix=o.index;
+  if(ix){ for(let i=0;i+2<ix.count;i+=3){const a=ix.getX(i+1),b=ix.getX(i+2);
+            ix.setX(i+1,b);ix.setX(i+2,a);} ix.needsUpdate=true; }
+  else { /* sin índice: se permutan los vértices 1 y 2 de cada triángulo, atributo por atributo */
+    for(const k in o.attributes){ const a=o.attributes[k],n2=a.itemSize;
+      for(let i=0;i+2<a.count;i+=3)for(let c=0;c<n2;c++){
+        const v1=a.array[(i+1)*n2+c],v2=a.array[(i+2)*n2+c];
+        a.array[(i+1)*n2+c]=v2;a.array[(i+2)*n2+c]=v1;}
+      a.needsUpdate=true; }
   }
-  c.position.set(0,0,0);c.rotation.set(0,0,0);
+  o.computeBoundingBox();o.computeBoundingSphere();
+  return o;
+}
+/* TUBO DE MANGA: tapa el único borde abierto del modelo (el agujero por donde se cortó el
+   antebrazo) y de paso alarga el brazo para que su punta quede FUERA de la pantalla. Cilindro
+   con las dos bases cerradas (openEnded=false): sea de donde se lo mire no hay interior. */
+function vmCuff(d,side){
+  const r0=d.holeR*1.03,r1=d.holeR*.82,L=d.cuff;
+  const g=new THREE.CylinderGeometry(r1,r0,L,12,1,false);
+  g.rotateZ(-Math.PI/2);                       /* el eje Y del cilindro pasa a ser +X (al codo) */
+  g.translate(d.hole[0]+L*.5,d.hole[1],d.hole[2]*side);
+  return g;
+}
+/* junta geometrías en UNA con color por vértice: un solo draw call, y cada pieza sigue siendo
+   un volumen cerrado (para el puño de respaldo) */
+function vmMerge(list){
+  const P=[],N=[],C=[];
+  for(const it of list){
+    const g0=it[0],c=new THREE.Color(it[1]);
+    const g=g0.index?g0.toNonIndexed():g0;
+    const p=g.attributes.position,n=g.attributes.normal;
+    for(let i=0;i<p.count;i++){
+      P.push(p.getX(i),p.getY(i),p.getZ(i));
+      N.push(n?n.getX(i):0,n?n.getY(i):1,n?n.getZ(i):0);
+      C.push(c.r,c.g,c.b);
+    }
+    if(g!==g0)g.dispose();
+    g0.dispose();
+  }
+  const o=new THREE.BufferGeometry();
+  o.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
+  o.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
+  o.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
+  o.computeBoundingBox();o.computeBoundingSphere();
+  return o;
+}
+function vmPBox(out,sx,sy,sz,px,py,pz,rz,col){
+  const g=new THREE.BoxGeometry(sx,sy,sz,1,1,1);
+  _vhe.set(0,0,rz||0,'YXZ');
+  _vhm.makeRotationFromEuler(_vhe);_vhm.setPosition(px,py,pz);
+  g.applyMatrix4(_vhm);
+  out.push([g,col]);
+}
+/* PUÑO PROCEDURAL (respaldo). Mismo marco que el GLB: origen = empuñadura, +X al codo,
+   -X nudillos, +Y dorso, Z eje del agarre. Va en METROS (sc=1). Feo pero cerrado y prolijo:
+   nunca se vuelve al clon recortado. */
+function vmProcGeo(){
+  /* colores CLAROS a propósito: con el guante casi negro (0x2c3238) y la manga negra el respaldo
+     se veía como un bloque oscuro sin forma en la esquina (captura mproc). */
+  const G=0x424a53,S=0xc79372,K=0x23272d;      /* guante, piel, manga */
+  const L=[];
+  vmPBox(L,.075,.085,.092,.020,.006,0,0,G);          /* palma */
+  vmPBox(L,.030,.058,.088,-.030,.020,0,.12,G);       /* nudillos */
+  vmPBox(L,.046,.032,.084,-.026,-.032,0,-.10,S);     /* dedos plegados */
+  vmPBox(L,.030,.024,.026,-.020,.014,-.050,0,G);     /* pulgar */
+  vmPBox(L,.052,.070,.076,.062,.004,0,0,S);          /* muñeca */
+  vmPBox(L,.030,.076,.082,.084,.002,0,0,K);          /* puño de la manga */
+  return vmMerge(L);
+}
+/* descriptor de la mano en uso: del GLB si está, si no el procedural */
+function vmDesc(){
+  const g=MODELS.vmhands;
+  if(g){
+    let mesh=null;
+    (g.scene||g.scenes[0]).traverse(o=>{ if(!mesh&&o.isMesh&&o.geometry)mesh=o; });
+    if(mesh&&mesh.geometry){
+      /* la malla viene en el nodo raíz sin transformada (node.matrix = identidad, medido con
+         _glbfix), así que la geometría se usa directo. Igual se aplica la matriz del nodo por si
+         un GLB futuro trae una: si no se hace, la mano aparecería corrida. */
+      let geo=mesh.geometry;
+      mesh.updateWorldMatrix(true,false);
+      const e=mesh.matrixWorld.elements;
+      const ident=(Math.abs(e[0]-1)+Math.abs(e[5]-1)+Math.abs(e[10]-1)
+                  +Math.abs(e[12])+Math.abs(e[13])+Math.abs(e[14]))<1e-4;
+      if(!ident){geo=geo.clone();geo.applyMatrix4(mesh.matrixWorld);}
+      const mat=(Array.isArray(mesh.material)?mesh.material[0]:mesh.material).clone();
+      /* DoubleSide: el conjunto vive a medio metro del ojo y basta que un triángulo quede de
+         canto para que se vea el hueco. Con las dos caras no hay forma de ver "el interior".
+         Emisivo bajo: que la mano no quede negra a contraluz. */
+      mat.side=THREE.DoubleSide;
+      if(mat.emissive)mat.emissive.setScalar(VMH.emis);
+      if(mat.metalness!==undefined)mat.metalness=Math.min(mat.metalness,.06);
+      if(mat.roughness!==undefined)mat.roughness=Math.max(mat.roughness||.6,.62);
+      mat.fog=false;                       /* medio metro de niebla no hace nada, y evita que en
+                                              el mapa con neblina la mano se lave */
+      mat.needsUpdate=true;
+      return {kind:'glb',sc:VMH.sc,grip:VMH.grip,hole:VMH.hole,holeR:VMH.holeR,cuff:VMH.cuff,
+        geoR:geo,geoL:vmMirrorGeo(geo),mat:mat,
+        cuffMat:new THREE.MeshStandardMaterial({color:VMH.cuffC,roughness:.94,metalness:0,
+          side:THREE.DoubleSide,fog:false,emissive:new THREE.Color(VMH.emis*.5,VMH.emis*.5,VMH.emis*.5)})};
+    }
+  }
+  /* respaldo procedural (y pedido del GLB para el próximo intento) */
+  if(!vmAsk){vmAsk=true;nsafe(()=>loadGLB('vmhands',VMH.file),'vmglb');}
+  const geo=vmProcGeo();
+  return {kind:'proc',sc:1.15,grip:[0,0,0],hole:[.098,0,0],holeR:.040,cuff:.30,
+    geoR:geo,geoL:vmMirrorGeo(geo),
+    mat:new THREE.MeshStandardMaterial({vertexColors:true,roughness:.8,metalness:.02,
+      side:THREE.DoubleSide,fog:false}),
+    cuffMat:new THREE.MeshStandardMaterial({color:VMH.cuffC,roughness:.94,metalness:0,
+      side:THREE.DoubleSide,fog:false})};
+}
+/* (re)viste las dos manos con el mejor descriptor disponible. Se vuelve a llamar cuando llega el
+   GLB: así el jugador nunca ve el modo de respaldo del CUERPO (mode 1) por esperar una descarga. */
+function vmSkin(){
+  if(!HRG||!HLG)return false;
+  const d=nsafe(()=>vmDesc(),'vmdesc');
+  if(!d)return false;
+  const old=vmHD;
+  for(const G of [HRG,HLG]){ while(G.children.length)G.remove(G.children[0]); }
+  const mk=(G,geo,side)=>{
+    const m=new THREE.Mesh(geo,d.mat);
+    m.castShadow=false;m.receiveShadow=false;m.frustumCulled=false;
+    G.add(m);
+    const c=new THREE.Mesh(vmCuff(d,side),d.cuffMat);
+    c.castShadow=false;c.receiveShadow=false;c.frustumCulled=false;
+    G.add(c);
+  };
+  mk(HRG,d.geoR,1);mk(HLG,d.geoL,-1);
+  vmHD=d;vmMats=[d.mat,d.cuffMat];
+  /* al cambiar de piel (procedural -> GLB) se liberan las mallas viejas: son 2 geometrías y 2
+     materiales, pero el respaldo se arma en el celular y no hay por qué dejarlo en la GPU */
+  if(old&&old!==d){ for(const g of [old.geoR,old.geoL])if(g&&g.dispose)g.dispose();
+    for(const m of [old.mat,old.cuffMat])if(m&&m.dispose)m.dispose(); }
+  return true;
+}
+/* ---- 6.3 armado ---- */
+function vmInit(){
+  if(vmChar)return true;
+  if(vmFail>8)return false;
   VMG=new THREE.Group();VMG.name='vm';VMG.visible=false;
   VMF=new THREE.Group();VMF.name='vmfov';
-  VMG.add(c);VMF.add(VMG);camera.add(VMF);
-  vmChar=c;vmHand=h;vmMats=mats;vmBoneMap=map;
+  vmChar=new THREE.Group();vmChar.name='vmhands';
+  vmHand=new THREE.Group();vmHand.name='vmgrip';   /* transformada local IDENTIDAD: ver vmPlace */
+  HRG=new THREE.Group();HRG.name='vmR';
+  HLG=new THREE.Group();HLG.name='vmL';
+  vmHand.add(HRG);vmHand.add(HLG);
+  vmChar.add(vmHand);VMG.add(vmChar);VMF.add(VMG);camera.add(VMF);
+  vmBoneMap={};                    /* vacío a propósito: core_p lo consulta por nombre de hueso y
+                                      así sus rutinas de esqueleto (melVmArm/melVmGrip) se
+                                      autoexcluyen solas — el viewmodel ya no tiene esqueleto */
+  if(!vmSkin()){vmFail++;camera.remove(VMF);VMG=VMF=vmChar=vmHand=HRG=HLG=null;return false;}
   return true;
 }
-/* copia la pose ENTERA (todos los huesos, transformada local) del esqueleto real al clon y la
-   deja congelada. Se llama sólo al capturar: es lo que hace que en 1ª persona no exista la
-   animación de correr, sin tocar la animación real (que sigue para la sombra/3ª/red). */
-function vmPose(){
-  if(!vmBoneMap||!charRoot)return;
-  charRoot.traverse(o=>{
-    if(!o.isBone)return;
-    const d=vmBoneMap[o.name];if(!d)return;
-    d.position.copy(o.position);d.quaternion.copy(o.quaternion);d.scale.copy(o.scale);
-  });
-}
-/* ---- CAPTURA: de dónde sale la pose ----
-   La pose buena es la que YA tiene el motor: animStep() corre armIKR() (mano derecha al marco
-   de la cámara) y holdWeapon() corre armIK() (mano izquierda al guardamano). Para que la
-   izquierda esté puesta hace falta que el arma cuelgue del hueso REAL, así que la captura
-   devuelve el arma a la mano un instante, llama a holdWeapon() (armIK() arranca con
-   ikRestore(), o sea que llamarla dos veces en el mismo frame NO acumula giro) y se guarda:
-     - la pose de todos los huesos,
-     - la transformada LOCAL del arma dentro del hueso de la mano (vmCap.p/q/s),
-     - la orientación de la mano respecto de la cámara (vmCap.hq), que es el respaldo para las
-       armas sin modelo (puños): ahí no hay arma de la que colgarse.
-   Con eso el conjunto queda rígido y se puede ANCLAR por el arma (ver vmPlace). */
-function vmCapture(){
-  if(!vmChar)return false;
-  const rb=bones.rHand||bones.rFore;if(!rb)return false;
-  const w=weap();
-  if(wModel){
-    const prev=wModel.parent;
-    rb.add(wModel);wModel.position.set(0,0,0);wModel.rotation.set(0,0,0);
-    nsafe(()=>holdWeapon(),'vmhold');
-    vmCap.p.copy(wModel.position);vmCap.q.copy(wModel.quaternion);vmCap.s.copy(wModel.scale);
-    if(prev&&prev!==rb)prev.add(wModel);
-  }
-  rb.updateWorldMatrix(true,false);
-  rb.getWorldQuaternion(_vmQ);
-  camera.getWorldQuaternion(vmCap.hq);
-  vmCap.hq.invert().multiply(_vmQ);          // mano respecto de la cámara
-  vmPose();
-  vmCapW=w?w.id:'-';
-  /* "limpia" = capturada quieto y mirando más o menos al horizonte. Con la pose congelada da
-     casi lo mismo (el anclaje recoloca el conjunto igual), pero de pie el IK no está saturado
-     y el codo queda en su sitio natural: si la primera captura salió corriendo, se repite una
-     vez cuando el jugador se queda quieto. */
-  vmCapClean=(Math.hypot(plBody.velocity.x,plBody.velocity.z)<.6&&Math.abs(PL.pitch)<.45);
-  vmAttach();
-  vmPlace();
-  return true;
-}
-/* el arma pasa a la mano DEL CLON con la transformada local capturada: así el agarre es
-   exactamente el mismo que en 3ª persona (empuñadura en el puño), pero rígido y colgado de la
-   cámara. holdWeapon() (core_c) se autoexcluye sola: chequea wModel.parent===bones.rHand y
-   acá el padre es el hueso del clon, así que no vuelve a tocar ni el arma ni el brazo. */
-function vmAttach(){
-  if(!wModel||!vmHand)return;
-  vmHand.add(wModel);
-  wModel.position.copy(vmCap.p);wModel.quaternion.copy(vmCap.q);wModel.scale.copy(vmCap.s);
-}
-/* ---- ANCLAJE: el arma queda en un punto FIJO DE LA PANTALLA (no del espacio) ----
-   Dos piezas, las dos por frame (vmStep llama a esto SIEMPRE porque fov —zoom del sniper—,
-   aspecto —rotar el teléfono— y hasta el propio ancla —vmSet— cambian en vivo; son cuatro
-   composiciones de matrices, nada por vértice):
 
-   1) EL WARP DE FOV (VMF.scale): la escala (k,k,1) en los ejes de la cámara con
+/* ---- 6.4 orientación de una mano ----
+   De dos direcciones sale la rotación entera: el +X de la malla (hacia el codo) y su Z (el eje
+   del agarre, la línea en que se apilan los cuatro dedos). Los dos tienen que ser
+   PERPENDICULARES —lo son en la anatomía: el mango de un martillo sale a 90° del antebrazo, y la
+   malla está hecha así— y sólo uno de los dos se puede respetar exacto:
+     keep='ax'  (con arma) el eje del agarre manda, porque es el que decide si la mano envuelve
+                bien el caño; el antebrazo se ortogonaliza contra él.
+     keep='arm' (pistola con la izquierda de apoyo, y los puños) manda el ANTEBRAZO, porque ahí no
+                hay tubo que envolver y lo que importa es que el brazo salga del cuadro. MEDIDO:
+                con keep='ax' en la pistola, la proyección le comía la componente vertical al
+                antebrazo izquierdo y quedaba una barra negra HORIZONTAL cruzando la pantalla
+                (captura I-b-toolgun-fr).
+   Y = Z×X para que la base sea derecha (determinante +1): con determinante negativo la malla se
+   dibujaría dada vuelta (se vería el interior, el bug que se está arreglando). */
+function vmBasis(arm,ax,out,keep){
+  _vhz.set(ax[0],ax[1],ax[2]);
+  if(_vhz.lengthSq()<1e-9)_vhz.set(0,1,0);
+  _vhz.normalize();
+  _vhx.set(arm[0],arm[1],arm[2]);
+  if(_vhx.lengthSq()<1e-9)_vhx.set(1,0,0);
+  if(keep==='arm'){
+    _vhx.normalize();
+    _vhz.addScaledVector(_vhx,-_vhz.dot(_vhx));     /* el eje del agarre cede */
+    if(_vhz.lengthSq()<1e-9)_vhz.set(0,1,0).addScaledVector(_vhx,-_vhx.y);
+    _vhz.normalize();
+  }else{
+    _vhx.addScaledVector(_vhz,-_vhx.dot(_vhz));     /* el antebrazo cede */
+    if(_vhx.lengthSq()<1e-9)_vhx.set(1,0,0).addScaledVector(_vhz,-_vhz.x);
+    _vhx.normalize();
+  }
+  _vhy.crossVectors(_vhz,_vhx);
+  _vhm.makeBasis(_vhx,_vhy,_vhz);
+  out.setFromRotationMatrix(_vhm);
+  return out;
+}
+/* pone una mano con su punto de agarre en p (espacio de vmHand) y la orientación de vmBasis:
+   la malla tiene el agarre en d.grip, así que la posición del nodo es p - R·(grip·escala) */
+function vmHandAt(G,p,arm,ax,keep){
+  const d=vmHD;if(!G||!d)return;
+  vmBasis(arm,ax,_vhq,keep);
+  G.quaternion.copy(_vhq);
+  G.scale.setScalar(d.sc);
+  _vhp.set(d.grip[0]*d.sc,d.grip[1]*d.sc,d.grip[2]*d.sc).applyQuaternion(_vhq);
+  G.position.set(p.x-_vhp.x,p.y-_vhp.y,p.z-_vhp.z);
+  G.updateMatrix();
+}
+/* ---- 6.5 dónde va cada mano para el arma de ahora ----
+   Se corre TODOS LOS FRAMES junto con el ancla: el ancla depende del aspecto (girar el teléfono)
+   y del fov (zoom del sniper), y el puño izquierdo de los PUÑOS se ubica por NDC, así que
+   depende de lo mismo. Son dos bases ortonormales y dos posiciones: nada por vértice. */
+function vmLay(){
+  if(!vmHand||!vmHD)return false;
+  const w=weap();
+  let g=null;
+  if(wModel&&wModel.parent===vmHand){
+    g=nsafe(()=>rigGrip(wModel,w),'vmrig');
+    if(g&&g.bad)g=null;
+  }
+  const K0=VMWK[w?w.id:'-']||VMWK._;
+  if(g){
+    /* con arma: la derecha en la empuñadura (el origen del rig) */
+    _vhw.set(0,0,0);
+    vmHandAt(HRG,_vhw,VMHP.rArm,VMHP.rAx);
+    /* oneH: armas que en 1ª persona quedan mejor con UNA mano. El bate es el caso: con las dos
+       manos en el mango (que es lo que hace la 3ª persona) el antebrazo izquierdo sale
+       perpendicular al palo y cruza la pantalla como una barra negra. Un bate a una mano es lo
+       normal en cualquier FPS. */
+    const two=!!(g.S&&g.S.two)&&!K0.oneH;
+    if(K0.oneH){HLG.visible=false;HRG.visible=true;return true;}
+    if(two){
+      /* dos manos: la izquierda en el punto del guardamano que ya calcula rigGrip (lh1), con el
+         eje del agarre a lo largo del CAÑÓN (envuelve el tubo, no la columna de la empuñadura) */
+      _vhw.copy(g.lh1);
+      _vhz.copy(g.lh1).sub(g.lh0);
+      if(_vhz.lengthSq()<1e-8)_vhz.set(0,0,-1);
+      _vhz.normalize();
+      vmHandAt(HLG,_vhw,VMHP.lArm,[_vhz.x,_vhz.y,_vhz.z]);
+    }else{
+      /* pistola: la izquierda no tiene guardamano, calza abajo y a la izquierda de la derecha
+         (la misma columna de agarre), como en cualquier agarre a dos manos de pistola */
+      _vhw.set(VMHP.lPist[0],VMHP.lPist[1],VMHP.lPist[2]);
+      vmHandAt(HLG,_vhw,VMHP.lArmP,VMHP.rAx,'arm');
+    }
+    HLG.visible=true;HRG.visible=true;
+    return true;
+  }
+  /* PUÑOS (arma sin modelo): no hay nada que sostener, así que cada puño tiene SU PROPIO ancla en
+     NDC (una guardia). vmChar está anclado en (ax0,ay0), así que cada mano se corre por la
+     DIFERENCIA de NDC pasada a metros (vmHW/vmHH), llevada al espacio LOCAL de vmChar: hay que
+     deshacer su rotación (VMC.rx/ry/rz) y su escala, porque las manos son sus hijas. */
+  const ax0=VMC.ax+(K0.ax||0),ay0=VMC.ay+(K0.ay||0);
+  const S=(vmChar&&vmChar.scale.x)||1;
+  /* _vhq2 y NO _vhq: vmHandAt escribe en _vhq (ahí le deja la rotación a la mano), así que usar
+     el mismo temporal para la rotación inversa del conjunto hacía que el SEGUNDO puño se
+     colocara con la rotación del primero — el puño izquierdo aparecía como un tubo negro suelto
+     en el borde de arriba (captura I-b-hands-fr). */
+  _vhq2.copy(vmChar?vmChar.quaternion:_vmQ).invert();
+  const put=(G,a,arm)=>{
+    _vhw.set((a[0]-ax0)*vmHW,(a[1]-ay0)*vmHH,0).applyQuaternion(_vhq2).multiplyScalar(1/S);
+    vmHandAt(G,_vhw,arm,VMHP.fAx,'arm');
+  };
+  put(HRG,VMHP.fR,VMHP.fArmR);
+  put(HLG,VMHP.fL,VMHP.fArmL);
+  HLG.visible=true;HRG.visible=true;
+  return true;
+}
+/* ---- 6.6 ANCLAJE: el arma queda en un punto FIJO DE LA PANTALLA ----
+   1) WARP DE FOV (VMF.scale): la escala (k,k,1) en los ejes de la cámara con
         k = tan(fovCam/2)/tan(fovVM/2)
       reproduce EXACTAMENTE la proyección que tendría el conjunto renderizado con fovVM:
-      NDC = k·x/(-z·tan(fovCam/2)·a) = x/(-z·tan(fovVM/2)·a). Misma imagen que el segundo
-      pase clásico de los FPS, sin segundo pase (el z del fragmento no se toca, así que la
-      oclusión contra el mundo sigue sana: el conjunto vive a medio metro, siempre gana).
-      fovVM > fovCam ⇒ k<1 ⇒ el conjunto se COMPRIME alrededor del eje óptico: manos más
-      chicas y sin el estirón de esquina del FOV horizontal de 113°.
-
-   2) EL ANCLA EN NDC: se quiere el arma en (ax,ay) de NDC a distancia |z|. En el espacio
-      interno (pre-warp) eso es
+        NDC = k·x/(-z·tan(fovCam/2)·a) = x/(-z·tan(fovVM/2)·a)
+      Misma imagen que el segundo pase clásico de los FPS, sin segundo pase (no se toca el z del
+      fragmento, así que la oclusión contra el mundo sigue sana). fovVM > fovCam ⇒ k<1 ⇒ el
+      conjunto se comprime hacia el eje óptico: manos más chicas y sin el estirón de esquina del
+      FOV horizontal de 113° del teléfono vertical.
+   2) ANCLA EN NDC: para que el arma caiga en (ax,ay) de NDC a distancia |z|,
         x = ax·(-z)·tan(fovVM/2)·aspect     y = ay·(-z)·tan(fovVM/2)
-      (la mitad visible del cuadro a esa distancia, CON LA TRIGONOMETRÍA DEL FOV DEL
-      VIEWMODEL: el warp multiplica por k y devuelve el punto al NDC pedido con el fov real).
-      Así "esquina inferior derecha" es la MISMA esquina en 2.09:1 (chromium apaisado),
-      2.22:1 (teléfono vertical con el escenario rotado) o con el zoom puesto — antes el arma
-      estaba clavada en metros y el NDC resultante era una función del aspecto: en el
-      teléfono caía casi al centro (la captura del usuario).
-
-   El conjunto es rígido, así que el resto se resuelve con matrices y no con IK:
-     M(arma en el marco de VMG) = clon.matrix · M(mano rel. clon) · M(arma rel. mano)
-   se quiere que eso sea VMW (el ancla), entonces
-     clon.matrix = VMW · inv(M(mano rel. clon) · M(arma rel. mano))
-   relMat() (core_c) da la matriz de un hueso relativa a la raíz multiplicando SÓLO matrices
-   locales: no depende de dónde esté la cámara ni arrastra el error de invertir una matrixWorld.
-   Sin arma (puños) se ancla la MANO con la orientación capturada (vmCap.hq). */
-function vmPlace(){
-  if(!vmChar||!vmHand)return false;
+      (con la trigonometría del FOV DEL VIEWMODEL, porque el warp multiplica después por k).
+   OJO: esta función se llama vmPlaceH y NO vmPlace. core_p (melee) reemplaza vmPlace por una
+   versión escrita para el viewmodel VIEJO (el clon del personaje: compone MREST, lee vmCap.p/q/s
+   y decompone en vmChar). Con las manos dedicadas eso no aplica —el arma ya no cuelga de un
+   hueso— y además ancla en METROS, así que con el ancla en NDC el bate le quedaba en el CENTRO
+   del cuadro. Como core_p se concatena DESPUÉS no se lo puede desarmar desde acá; lo que sí se
+   puede es no pasar por ahí: vmStep llama a vmPlaceH directo y el bate se acomoda con VMWK.bat. */
+function vmPlaceH(){
+  if(!vmChar)return false;
+  const w=weap(),K=VMWK[w?w.id:'-']||VMWK._;
   const tanC=Math.tan(camera.fov*Math.PI/360),
         tanV=Math.tan(Math.max(30,VMC.fov)*Math.PI/360);
   if(VMF){const k=tanC/tanV;VMF.scale.set(k,k,1);}
-  const hw=(-VMC.z)*tanV*Math.max(.4,camera.aspect),hh=(-VMC.z)*tanV;
-  _vmE.set(VMC.rx,VMC.ry,VMC.rz,'YXZ');
+  const z=VMC.z+(K.z||0);
+  vmHW=(-z)*tanV*Math.max(.4,camera.aspect);vmHH=(-z)*tanV;
+  _vmP.set((VMC.ax+(K.ax||0))*vmHW+VMC.x+(K.x||0),
+           (VMC.ay+(K.ay||0))*vmHH+VMC.y+(K.y||0),z);
+  _vmE.set(VMC.rx+(K.rx||0),VMC.ry+(K.ry||0),VMC.rz+(K.rz||0),'YXZ');
   _vmQ.setFromEuler(_vmE);
-  _vmP.set(VMC.ax*hw+VMC.x,VMC.ay*hh+VMC.y,VMC.z);
-  vmAnc.copy(_vmP);                         // pivote del balanceo (ver vmMotion)
-  _vmS.setScalar(VMC.sc);
-  _vmW.compose(_vmP,_vmQ,_vmS);
-  relMat(vmChar,vmHand,_vmH);
-  if(wModel&&wModel.parent===vmHand){
-    _vmM.compose(vmCap.p,vmCap.q,vmCap.s);
-    _vmH.multiply(_vmM);                    // mano · arma = arma relativa al clon
-  }else{
-    _vmW.compose(_vmP,vmCap.hq,_vmS);       // sin arma: se ancla la mano
-  }
-  _vmI.copy(_vmH).invert();
-  _vmM.copy(_vmW).multiply(_vmI);
-  _vmM.decompose(vmChar.position,vmChar.quaternion,vmChar.scale);
+  vmChar.position.copy(_vmP);
+  vmChar.quaternion.copy(_vmQ);
+  vmChar.scale.setScalar(VMC.sc*(K.sc||1));
   vmChar.updateMatrix();
+  vmAnc.copy(_vmP);                    /* pivote del balanceo (ver vmMotion) */
+  vmLay();
   return true;
 }
-/* ---- BALANCEO PROCEDURAL ----
+/* vmPlace queda DEFINIDA con este nombre porque core_p la envuelve al cargar (typeof vmPlace);
+   no la llama nadie del motor. Apunta a lo mismo para que __H y cualquier llamador externo
+   obtengan el anclaje nuevo. */
+function vmPlace(){ return vmPlaceH(); }
+
+/* ---- 6.7 el arma pasa al viewmodel ----
+   rigGrip() dejó el rig con la EMPUÑADURA EN EL ORIGEN y el caño a -Z, y rigWeapon() lo había
+   escalado a w.len metros: colgado de vmHand con transformada IDENTIDAD el arma queda en su
+   tamaño real, sin el 1/escala-del-rig que holdWeapon() le pone cuando cuelga del hueso (ese
+   factor es lo que hacía falta cuando el padre era un hueso en centímetros).
+   vmCap.p/q/s se dejan en identidad porque core_p los lee para su vmPlace. */
+function vmGrab(){
+  if(!vmHand)return false;
+  const w=weap();
+  vmCapW=w?w.id:'-';
+  if(!wModel)return true;
+  if(wModel.parent!==vmHand)vmHand.add(wModel);
+  wModel.position.set(0,0,0);wModel.quaternion.identity();wModel.scale.setScalar(1);
+  nsafe(()=>rigGrip(wModel,w),'vmrig');
+  wModel.updateMatrix();
+  vmCap.p.set(0,0,0);vmCap.q.identity();vmCap.s.set(1,1,1);
+  return true;
+}
+/* vmCapture/vmAttach/vmPose se mantienen con estos nombres porque core_p envuelve vmCapture (la
+   bloquea en mitad de un golpe) y el resto del motor las llamaba: ahora "capturar" es
+   simplemente agarrar el arma y recalcular el apoyo de las manos. */
+function vmCapture(){ const r=vmGrab(); vmPlaceH(); vmCapClean=true; return r; }
+function vmAttach(){ return vmGrab(); }
+function vmPose(){}
+
+/* ---- 6.8 BALANCEO PROCEDURAL ----
    Todo se calcula como OFFSET ABSOLUTO del estado de este frame y se ESCRIBE (no se suma) en
-   VMG: es la misma lección que dejó la deriva de 57° de la respiración (core_c). Lo único que
-   se acumula es la fase del paso, que es lo que tiene que acumular, y va por dt.
-   Frecuencias: el pedido son 1,0-1,3 Hz caminando y 1,8-2,2 Hz corriendo. La vertical va al
-   DOBLE de la lateral (dos pasos por ciclo de cadera = el 8 acostado clásico), así que la fase
-   base es la lateral. */
+   VMG: es la misma lección que dejó la deriva de 57° de la respiración (core_c). Lo único que se
+   acumula es la fase del paso, que es lo que tiene que acumular, y va por dt.
+   Frecuencias: 1,0-1,3 Hz caminando y 1,8-2,2 Hz corriendo; la vertical va al DOBLE de la
+   lateral (dos pasos por ciclo de cadera = el 8 acostado clásico). */
 function vmMotion(dt){
   if(!VMG)return;
   dt=dt>0?Math.min(dt,.1):0;
   vmTime+=dt;
   const vx=plBody.velocity.x,vz=plBody.velocity.z,sp=Math.hypot(vx,vz);
-  /* filtros exponenciales por dt (nada de constantes por frame) */
   const kf=dt>0?1-Math.exp(-dt*8):1;
   vmSpF+=(sp-vmSpF)*kf;
   vmAirF+=((grounded||inWater?1:0)-vmAirF)*(dt>0?1-Math.exp(-dt*6):1);
-  /* mezcla caminar->correr por velocidad: 0 a PL.spd es caminata, PL.run es carrera */
   const t=clamp((vmSpF-PL.spd*.55)/Math.max(.5,PL.run-PL.spd*.55),0,1);
   const mv=clamp((vmSpF-.35)/1.2,0,1)*(vmAirF+(1-vmAirF)*VMC.air);
   const f=VMC.fW+(VMC.fR-VMC.fW)*t;
   const AX=(VMC.bobWX+(VMC.bobRX-VMC.bobWX)*t)*mv,
         AY=(VMC.bobWY+(VMC.bobRY-VMC.bobWY)*t)*mv;
   vmPhase+=dt*Math.PI*2*f;
-  if(vmPhase>Math.PI*2)vmPhase-=Math.PI*2;   // acotada: no crece sin límite en partidas largas
+  if(vmPhase>Math.PI*2)vmPhase-=Math.PI*2;
   const bx=Math.sin(vmPhase)*AX, by=Math.sin(vmPhase*2)*AY;
-  /* idle sway: dos senoidales lentas y desfasadas, sólo cuando casi no se mueve */
   const iw=1-mv;
   const ix=Math.sin(vmTime*Math.PI*2*VMC.idleF1)*VMC.idleX*iw,
         iy=Math.sin(vmTime*Math.PI*2*VMC.idleF2+1.1)*VMC.idleY*iw;
-  /* retardo de la vista: el filtro persigue la mirada y la DIFERENCIA es el atraso del arma */
   const ks=dt>0?1-Math.exp(-dt/Math.max(.01,VMC.tau)):1;
   let dy=PL.yaw-vmYawF;
-  while(dy>Math.PI)dy-=Math.PI*2; while(dy<-Math.PI)dy+=Math.PI*2;   // yaw es circular
+  while(dy>Math.PI)dy-=Math.PI*2; while(dy<-Math.PI)dy+=Math.PI*2;
   vmYawF+=dy*ks;
   const dp=PL.pitch-vmPitF;vmPitF+=dp*ks;
-  /* swayP está en METROS POR RADIÁN de atraso: girando a ω rad/s el atraso vale ≈ ω·tau, así
-     que el corrimiento sale proporcional a la velocidad de giro y se detiene solo al parar.
-     SIGNOS: girando a la izquierda (yaw crece) el mundo se va a la derecha en pantalla y el
-     arma, que se quedó atrás, también → sx>0. Mirando arriba (pitch crece) el arma se queda
-     abajo → sy<0. Las rotaciones van al revés que la cámara por el mismo motivo. */
   const sx=clamp(dy*VMC.swayP,-VMC.swayMax,VMC.swayMax),
         sy=clamp(-dp*VMC.swayP,-VMC.swayMax,VMC.swayMax);
   const ry=clamp(-dy*VMC.swayR,-.10,.10), rx=clamp(-dp*VMC.swayR,-.10,.10);
-  /* inclinación al desplazarse de costado: velocidad lateral en el marco de la cámara */
   const ys=Math.sin(PL.yaw),yc=Math.cos(PL.yaw);
   const lat=clamp((vx*yc-vz*ys)/Math.max(1,PL.spd),-1,1);
-  /* patada del disparo: recoil (core_b) ya viene decayendo por dt, sólo se lee */
   const rk=(typeof recoil==='number')?recoil:0;
   vmOff.x=bx+ix+sx-lat*VMC.tiltP;
   vmOff.y=by+iy+sy;
@@ -12529,11 +12872,10 @@ function vmMotion(dt){
   _vmE.set(vmOff.rx,vmOff.ry,vmOff.rz,'YXZ');
   VMG.quaternion.setFromEuler(_vmE);
   /* las rotaciones del balanceo PIVOTEAN EN EL ANCLA del arma, no en el ojo: q → R·(q−a)+a+off.
-     MEDIDO el porqué: girando alrededor del ojo, el arma —que con el ancla NDC quedó a ~1 m
-     del eje óptico— se traslada rz·x+rx·z ≈ 0.03-0.05 de NDC por ciclo de paso, y el pico a
-     pico corriendo se iba a 0.147 (el contrato de _final exige <0.12). Con el pivote en el
-     arma la rotación se ve igual (el conjunto cabecea/rola) pero el arma queda clavada a su
-     esquina y el NDC sólo lo mueve el offset de traslación (~0.05 pico a pico). */
+     Girando alrededor del ojo, el arma —que con el ancla NDC queda a ~1 m del eje óptico— se
+     traslada rz·x+rx·z ≈ 0.03-0.05 de NDC por ciclo de paso y el pico a pico corriendo se iba a
+     0.147 (el contrato de _final exige <0.12). Con el pivote en el arma la rotación se ve igual
+     (el conjunto cabecea/rola) y el NDC sólo lo mueve el offset de traslación. */
   _vmV.copy(vmAnc).applyQuaternion(VMG.quaternion);
   VMG.position.set(vmOff.x+vmAnc.x-_vmV.x,vmOff.y+vmAnc.y-_vmV.y,vmOff.z+vmAnc.z-_vmV.z);
   /* el mundo ya está actualizado hasta la cámara (camStep la colocó); refrescar acá el subárbol
@@ -12548,9 +12890,8 @@ function vmEnter(){
      desde el borde de la pantalla (el sway ve un salto de yaw enorme el primer frame). */
   vmYawF=PL.yaw;vmPitF=PL.pitch;vmSpF=Math.hypot(plBody.velocity.x,plBody.velocity.z);
   vmAirF=grounded?1:0;
-  const w=weap();
-  if(!vmCapW||vmCapW!==(w?w.id:'-'))vmCapture();
-  else {vmAttach();vmPlace();}
+  vmGrab();
+  vmPlaceH();
   vmMotion(0);
 }
 function vmLeave(){
@@ -12560,28 +12901,32 @@ function vmLeave(){
   if(wModel&&vmHand&&wModel.parent===vmHand)nsafe(()=>attachWeapon(),'vmback');
 }
 function vmStep(dt){
+  /* el GLB de manos se PIDE al entrar en partida y no en boot(): loadGLB incrementa glbPend y la
+     pantalla de carga espera a todos los GLB (1,3 MB más de espera para algo que sólo se ve en 1ª
+     persona). Pidiéndolo acá, en 3ª persona ya está descargado cuando el jugador aprieta el ojo,
+     y si no llegó todavía se ven los puños procedurales — nunca el cuerpo recortado. */
+  if(!vmAsk&&!MODELS.vmhands&&typeof APP!=='undefined'&&APP!=='load'&&APP!=='title'){
+    vmAsk=true;nsafe(()=>loadGLB('vmhands',VMH.file),'vmglb');
+  }
   const want=vmWant();
   if(want&&!vmChar)vmInit();
+  /* si el viewmodel arrancó con el puño procedural y mientras tanto llegó el GLB, se cambia la
+     piel en caliente: el jugador ve las manos buenas sin recargar y, sobre todo, NUNCA queda en
+     el modo de respaldo del cuerpo real por esperar una descarga. */
+  if(vmChar&&vmHD&&vmHD.kind!=='glb'&&MODELS.vmhands)nsafe(()=>vmSkin(),'vmup');
   const on=want&&!!vmChar;
   if(on!==vmOn){vmOn=on;if(on)vmEnter();else vmLeave();return;}
   if(!vmOn)return;
-  /* recapturar si cambió el arma (otro agarre, otra transformada local), si alguien devolvió el
-     arma a la mano real (equip/respawn llaman a attachWeapon) o si todavía no se pudo capturar
-     de pie y ahora sí. */
+  /* re-agarrar si cambió el arma o si alguien la devolvió a la mano real (equip/respawn llaman a
+     attachWeapon) */
   const w=weap(),id=w?w.id:'-';
-  if(id!==vmCapW||(wModel&&wModel.parent!==vmHand))vmCapture();
-  else if(!vmCapClean&&Math.hypot(plBody.velocity.x,plBody.velocity.z)<.6&&Math.abs(PL.pitch)<.45)
-    vmCapture();
-  /* el anclaje se rehace TODOS los frames: fov (zoom del sniper), aspecto (girar el teléfono
-     dispara resize y el stage cambia de proporción) y las constantes (vmSet) son todos
-     estados vivos, y el ancla es una función de los tres. Son 4 matrices, no hay nada por
-     vértice: más barato que detectar el cambio y con cero estados que puedan quedar viejos. */
-  vmPlace();
+  if(id!==vmCapW||(wModel&&wModel.parent!==vmHand))vmGrab();
+  vmPlaceH();
   vmMotion(dt);
 }
 /* dt: fpClip() no lo recibe, así que se lo guarda acá. Se envuelve camStep en vez de tocarla
-   (es de core_b) y se llama SIEMPRE a la original: si otro archivo la envuelve también, las
-   dos capas siguen funcionando. */
+   (es de core_b) y se llama SIEMPRE a la original: si otro archivo la envuelve también, las dos
+   capas siguen funcionando. */
 const camStepVM=camStep;
 camStep=function(dt){ vmDt=(dt>0?Math.min(dt,.1):0); return camStepVM(dt); };
 /* si el arma cambia de modelo o el jugador reaparece, core_b la vuelve a colgar del hueso real:
@@ -12593,15 +12938,47 @@ attachWeapon=function(){
   return r;
 };
 
-/* ---- MEDIDOR: cuántos píxeles aporta el viewmodel y por dónde ----
+/* ---- MEDIDOR: cuántos píxeles aporta el viewmodel, por dónde y SI ESTÁ ROTO ----
    Se dibuja la MISMA escena dos veces en un render target (sin y con VMG) y se restan. La
    diferencia es exactamente lo que el viewmodel pone en pantalla: si en la franja del borde
-   izquierdo/superior/derecho hay 0 píxeles distintos, por ahí no entra NADA (ni codo, ni
-   hombro, ni torso). Se usa un RT y no el canvas porque leer el framebuffer por defecto
-   depende de que no haya habido swap; el RT es determinista.
-   La mitad de resolución alcanza y cuesta la mitad: los pedazos de cuerpo del bug medían
-   decenas de miles de píxeles, no uno. */
+   izquierdo/superior/derecho hay 0 píxeles distintos, por ahí no entra NADA (ni codo, ni hombro,
+   ni torso). Se usa un RT y no el canvas porque leer el framebuffer por defecto depende de que
+   no haya habido swap; el RT es determinista.
+   ADEMÁS SE MIDE LA CONTINUIDAD, que es lo que distingue "manos" de "amasijo": se etiquetan las
+   componentes conexas (4 vecinos) de la máscara y se reportan
+     blobs  = cuántas componentes de >=8 px hay (una mano con su arma es 1; los dos puños, 2)
+     debris = píxeles en componentes chicas (<2% del total) = JIRONES SUELTOS
+     rough  = perímetro / (4·√n): 1 = bloque compacto, mucho más = borde desgarrado/deshilachado
+   La malla recortada del bug daba decenas de componentes y un perímetro enorme; una malla
+   cerrada da pocas componentes y un borde corto. */
 let vmRT=null;
+function vmIslands(mask,W,H){
+  const lab=new Int32Array(W*H).fill(-1);
+  const stack=new Int32Array(W*H);
+  let nb=0,best=0,sizes=[],n=0,per=0;
+  for(let i=0;i<W*H;i++)if(mask[i])n++;
+  for(let s=0;s<W*H;s++){
+    if(!mask[s]||lab[s]>=0)continue;
+    let sp=0,cnt=0;stack[sp++]=s;lab[s]=nb;
+    while(sp>0){
+      const p=stack[--sp];cnt++;
+      const x=p%W,y=(p-x)/W;
+      if(x>0&&mask[p-1]&&lab[p-1]<0){lab[p-1]=nb;stack[sp++]=p-1;}
+      if(x<W-1&&mask[p+1]&&lab[p+1]<0){lab[p+1]=nb;stack[sp++]=p+1;}
+      if(y>0&&mask[p-W]&&lab[p-W]<0){lab[p-W]=nb;stack[sp++]=p-W;}
+      if(y<H-1&&mask[p+W]&&lab[p+W]<0){lab[p+W]=nb;stack[sp++]=p+W;}
+    }
+    sizes.push(cnt);if(cnt>best)best=cnt;nb++;
+  }
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=y*W+x;if(!mask[i])continue;
+    if(x===0||y===0||x===W-1||y===H-1||!mask[i-1]||!mask[i+1]||!mask[i-W]||!mask[i+W])per++;
+  }
+  const small=sizes.filter(v=>v<Math.max(8,n*.02)).reduce((a,b)=>a+b,0);
+  return {blobs:sizes.filter(v=>v>=8).length,parts:sizes.length,
+    big:best,debris:small,debrisFrac:n?+(small/n).toFixed(4):0,
+    per:per,rough:n?+(per/(4*Math.sqrt(n))).toFixed(3):0};
+}
 function vmDiff(){
   if(!renderer||!VMG)return null;
   const cv=renderer.domElement;
@@ -12617,24 +12994,27 @@ function vmDiff(){
   let n=0,x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
   const ed={left:0,right:0,top:0,bottom:0};
   const bx=Math.max(1,Math.round(W*.03)),by=Math.max(1,Math.round(H*.03));
+  const mask=new Uint8Array(W*H);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const i=(y*W+x)*4;
     if(Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2])<12)continue;
-    n++;
+    n++;mask[y*W+x]=1;
     if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
     if(x<bx)ed.left++; if(x>=W-bx)ed.right++;
     if(y>=H-by)ed.top++; if(y<by)ed.bottom++;      // en el RT la fila 0 es la de ABAJO
   }
   const nx=x=>+((x+.5)/W*2-1).toFixed(3),ny=y=>+((y+.5)/H*2-1).toFixed(3);
+  const isl=n?vmIslands(mask,W,H):{blobs:0,parts:0,big:0,debris:0,debrisFrac:0,per:0,rough:0};
   return {n,frac:+(n/(W*H)).toFixed(4),w:W,h:H,edge:ed,
-    bbox:n?[nx(x0),ny(y0),nx(x1),ny(y1)]:null};
+    bbox:n?[nx(x0),ny(y0),nx(x1),ny(y1)]:null,
+    blobs:isl.blobs,parts:isl.parts,debris:isl.debris,debrisFrac:isl.debrisFrac,rough:isl.rough};
 }
 
 if(DEV&&window.__H)Object.assign(window.__H,{
-  /* estado del recorte por shader: on = valor actual del uniforme (0 entero, 1 sólo brazos),
-     mats = materiales locales parchados, flags = cuántos huesos se marcaron como brazo,
-     sharedWithGhost = true si por error algún fantasma sigue compartiendo un material con el
-     charRoot local (el bug que el fix de core_f/charClone evita) */
+  /* estado del recorte por shader del CUERPO REAL: on = valor del uniforme (0 entero, 1 sólo
+     brazos = respaldo, 2 nada), mats = materiales locales parchados, flags = huesos marcados
+     como brazo, sharedWithGhost = true si algún fantasma comparte material con el charRoot local
+     (el bug que evita el fix de core_f/charClone) */
   fpArms:()=>{
     const ms=fpArmMats,first=ms&&ms[0];
     let shared=false;
@@ -12649,8 +13029,6 @@ if(DEV&&window.__H)Object.assign(window.__H,{
       flags:fpArmFlags?fpArmFlags.reduce((s,v)=>s+(v>0?1:0),0):0,
       sharedWithGhost:shared};
   },
-  /* forzar el uniforme a mano (para probar sin depender de PL.fp/rag/freeCam): dura hasta el
-     próximo camStep, que llama a fpClip() y lo vuelve a fijar según el estado real */
   fpArmsSet:v=>{
     const ms=fpArmMaterials();if(!ms)return false;
     const val=v?1:0;
@@ -12658,17 +13036,14 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     return true;
   },
   /* ---- instrumentación del VIEWMODEL ----
-     vmInfo(): estado + posición del arma EN PANTALLA (NDC) + si el cuerpo real se dibuja +
-       dónde caen los huesos que no tienen que verse (codo/hombro/torso/cabeza del clon).
-     vmSet(k,v): cualquier constante de VMC en vivo (posición del arma, amplitudes, umbral del
-       discard...). Recoloca el conjunto si hace falta.
-     vmDiff(): MEDICIÓN de verdad de "no se ve nada del cuerpo": dibuja la escena dos veces en
-       un render target (con y sin viewmodel) y cuenta los píxeles que cambian, su caja en NDC y
-       cuántos tocan cada borde. Todo lo que aporta el viewmodel a la pantalla está en ese
-       diferencial, así que si el borde izquierdo/superior da 0 no hay codo ni hombro entrando. */
+     vmInfo(): estado + posición del arma EN PANTALLA (NDC) + si el cuerpo real se dibuja + dónde
+       caen las dos manos y las puntas de las mangas (que son lo único que podría asomar).
+     vmSet(k,v): cualquier constante de VMC en vivo. vmHandSet(k,v): las del modelo de manos
+       (escala, punto de agarre, largo de la manga) — recalcula y revisten si hace falta.
+     vmDiff(): la medición dura (ver arriba): píxeles, caja, bordes, componentes conexas. */
   vmInfo:()=>{
     const o={on:vmOn,mode:vmOn?'vm':(PL.fp?'clip':'off'),ready:!!vmChar,fail:vmFail,
-      cap:vmCapW,clean:vmCapClean,
+      cap:vmCapW,clean:vmCapClean,hands:vmHD?vmHD.kind:null,hsc:vmHD?vmHD.sc:null,
       bobX:+vmOff.x.toFixed(4),bobY:+vmOff.y.toFixed(4),
       swayYaw:+vmOff.ry.toFixed(4),swayPit:+vmOff.rx.toFixed(4),roll:+vmOff.rz.toFixed(4),
       off:[+vmOff.x.toFixed(4),+vmOff.y.toFixed(4),+vmOff.z.toFixed(4)],
@@ -12682,46 +13057,65 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     if(wo){
       wo.getWorldPosition(_vmV);_vmV.project(camera);
       o.weapNDC=[+_vmV.x.toFixed(4),+_vmV.y.toFixed(4)];
-      /* y también en el MARCO DE LA CÁMARA (metros): así se ve el balanceo en cm y se puede
-         comprobar que el anclaje dejó el arma justo donde dicen las constantes VMC.x/y/z */
       wo.getWorldPosition(_vmV);
       _vmI.copy(camera.matrixWorld).invert();
       _vmV.applyMatrix4(_vmI);
       o.weapCam=[+_vmV.x.toFixed(4),+_vmV.y.toFixed(4),+_vmV.z.toFixed(4)];
     }
-    /* huesos que NO se tienen que ver: se informa su NDC y si caen dentro del cuadro (caer
-       dentro no significa dibujarse — el discard los tira — pero sirve para saber qué tan al
-       filo está la pose; la prueba dura es vmDiff). */
-    const pk={elbowR:/right.*fore|fore.*r$|rightforearm/i,elbowL:/left.*fore|leftforearm/i,
-      shR:/rightarm|right.*upperarm/i,shL:/leftarm|left.*upperarm/i,
-      head:/head/i,hips:/hips|pelvis/i};
-    const parts={inFrame:0};
-    if(vmBoneMap)for(const k in pk){
-      let b=null;
-      for(const n in vmBoneMap)if(!b&&pk[k].test(n))b=vmBoneMap[n];
-      if(!b){parts[k]=null;continue;}
-      b.getWorldPosition(_vmV);_vmV.project(camera);
-      const inF=_vmV.z<1&&Math.abs(_vmV.x)<=1&&Math.abs(_vmV.y)<=1;
-      parts[k]=[+_vmV.x.toFixed(3),+_vmV.y.toFixed(3),inF?1:0];
-      if(inF)parts.inFrame++;
+    /* puntos del propio viewmodel en NDC: el agarre de cada mano y la PUNTA de cada manga (el
+       extremo del conjunto: si ésa está fuera del cuadro, el brazo sale por el borde como en
+       cualquier FPS y no hay ningún corte a la vista) */
+    const pk={};
+    if(vmHD&&HRG&&HLG){
+      const hx=vmHD.hole[0]+vmHD.cuff;
+      for(const it of [['handR',HRG,1],['handL',HLG,-1],['cuffR',HRG,1],['cuffL',HLG,-1]]){
+        const G=it[1],side=it[2],cuff=it[0][0]==='c';
+        G.updateWorldMatrix(true,false);
+        _vmV.set(cuff?hx:vmHD.grip[0],cuff?vmHD.hole[1]:vmHD.grip[1],
+                 (cuff?vmHD.hole[2]:vmHD.grip[2])*side);
+        _vmV.applyMatrix4(G.matrixWorld);_vmV.project(camera);
+        const inF=_vmV.z<1&&Math.abs(_vmV.x)<=1&&Math.abs(_vmV.y)<=1;
+        pk[it[0]]=[+_vmV.x.toFixed(3),+_vmV.y.toFixed(3),inF?1:0];
+      }
     }
-    o.parts=parts;
-    o.armT=vmMats&&vmMats[0]?vmMats[0].userData.uArmT.value:null;
-    /* estado del anclaje relativo: con esto una sonda puede verificar que el ancla siga al
-       aspecto (weapNDC≈[ax,ay] en cualquier viewport) y que el warp esté aplicado */
+    o.parts=pk;
+    o.armT=VMC.armT;
     o.anchor=[VMC.ax,VMC.ay];o.vmFov=VMC.fov;
     o.warpK=VMF?+VMF.scale.x.toFixed(4):null;
     o.aspect=+camera.aspect.toFixed(3);o.camFov=+camera.fov.toFixed(1);
     return o;
   },
   vmSet:(k,v)=>{
-    if(k==='armT'){VMC.armT=+v;if(vmMats)for(const m of vmMats)m.userData.uArmT.value=+v;return VMC.armT;}
+    if(k==='armT'){VMC.armT=+v;
+      const ms=fpArmMaterials();
+      if(ms)for(const m of ms)if(m.userData.uArmT)m.userData.uArmT.value=+v;
+      return VMC.armT;}
     if(!(k in VMC))return null;
     VMC[k]=+v;
-    if(/^(a?[xyz]|r[xyz]|sc|fov)$/.test(k))nsafe(()=>vmPlace(),'vmset');
-    if(k==='on'&&!VMC.on&&vmOn){vmOn=false;vmLeave();}
+    if(k==='on'&&!VMC.on&&vmOn){vmOn=false;vmLeave();return VMC[k];}
+    nsafe(()=>vmPlaceH(),'vmset');
     return VMC[k];
   },
+  /* perillas del MODELO de manos: sc (metros por unidad), gx/gy/gz (el punto de la malla que se
+     apoya en la empuñadura), cuff (largo de la manga). Se revisten las manos si cambia la manga. */
+  vmHandSet:(k,v)=>{
+    if(!vmHD)return null;
+    if(k==='sc'){VMH.sc=+v;if(vmHD.kind==='glb')vmHD.sc=+v;}
+    else if(k==='gx'||k==='gy'||k==='gz'){const i={gx:0,gy:1,gz:2}[k];vmHD.grip[i]=+v;
+      if(vmHD.kind==='glb')VMH.grip[i]=+v;}
+    else if(k==='cuff'){vmHD.cuff=+v;if(vmHD.kind==='glb')VMH.cuff=+v;nsafe(()=>vmSkin(),'vmcuff');}
+    /* emis = piso de emisivo del material: el conjunto cuelga de la cámara, así que su
+       iluminación depende de hacia dónde mira el jugador y a contraluz quedaba una silueta */
+    else if(k==='emis'){VMH.emis=+v;
+      for(const m of (vmMats||[]))if(m&&m.emissive){m.emissive.setScalar(+v);m.needsUpdate=true;}}
+    else if(k in VMHP){VMHP[k]=v;}
+    else return null;
+    nsafe(()=>vmPlaceH(),'vmhset');
+    return vmHD.kind+':'+k+'='+v;
+  },
+  /* ajuste por arma sobre el ancla, para calibrar sin recompilar: vmWeapSet('bat','rx',-.6) */
+  vmWeapSet:(id,k,v)=>{ const K=VMWK[id]||(VMWK[id]={});K[k]=+v;nsafe(()=>vmPlaceH(),'vmwset');
+    return JSON.stringify(K); },
   vmCap:()=>nsafe(()=>vmCapture(),'vmcap'),
   vmShow:b=>{if(VMG)VMG.visible=!!b;return VMG?VMG.visible:null;},
   vmDiff:()=>nsafe(()=>vmDiff(),'vmdiff')
@@ -17885,61 +18279,91 @@ Object.assign(I18N.en,{xpTab:'Experiments',xpOpen:'🔬 Open',xpClose:'Close',
 Object.assign(I18N.pt,{xpTab:'Experimentos',xpOpen:'🔬 Abrir',xpClose:'Fechar',
   xpMisc:'Vários',xpOn:'ON',xpOff:'OFF',xpReset:'↺ Voltar ao normal'});
 
-/* ================= 1. CSS (inyectado: head.html no se toca) ================= */
+/* ================= 1. CSS (inyectado: head.html trae sólo lo general) ================= */
 nsafe(()=>{
   const st=document.createElement('style');
   st.textContent=
    /* capa: cubre el escenario pero NO recibe toques (sólo la tarjeta) */
    '#xpWrap{position:absolute;inset:0;z-index:14;display:none;pointer-events:none}'+
    '#xpWrap.on{display:block}'+
-   /* la tarjeta: medidas en vmin = lado corto del escenario en las DOS orientaciones */
+   /* la tarjeta: medidas en vmin = lado corto del escenario en las DOS orientaciones.
+      ANCHO SEGÚN CUÁNTOS CONTROLES HAY (clases c1/c2/c3 que pone xpBuild): el juego se ve
+      SIEMPRE horizontal (≈2:1), así que una columna larga que hay que deslizar desperdicia
+      media pantalla. Con 30 controles se abre en 3 columnas y entra casi todo de una. */
    '#xpCard{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);'+
-   '  width:min(94%,78vmin);max-height:84vmin;display:flex;flex-direction:column;'+
-   '  pointer-events:auto;background:rgba(17,19,22,.94);border:1px solid rgba(255,255,255,.10);'+
-   '  border-left:3px solid var(--acc);border-radius:6px;'+
-   '  box-shadow:0 14px 44px rgba(0,0,0,.6);overflow:hidden}'+
-   '#xpHead{flex:none;display:flex;align-items:center;gap:8px;padding:2.1vmin 2.4vmin 1.4vmin;'+
-   '  border-bottom:1px solid rgba(255,255,255,.08)}'+
-   '#xpTit{font:900 min(3.6vmin,19px)/1.15 inherit;letter-spacing:.02em;flex:1;min-width:0;'+
+   '  width:min(94%,88vmin);max-height:90vmin;display:flex;flex-direction:column;'+
+   '  pointer-events:auto;background:rgba(17,19,22,.95);border:1px solid rgba(255,255,255,.10);'+
+   '  border-left:3px solid var(--acc);border-radius:7px;'+
+   '  box-shadow:0 16px 48px rgba(0,0,0,.62);overflow:hidden}'+
+   '#xpCard.c2{width:min(94%,126vmin)}'+
+   '#xpCard.c3{width:min(95%,172vmin)}'+
+   '#xpHead{flex:none;display:flex;align-items:center;gap:8px;padding:1.8vmin 2vmin 1.3vmin;'+
+   '  border-bottom:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.03)}'+
+   '#xpTit{font-weight:900;font-size:clamp(17.5px,3.4vmin,19px);line-height:1.15;letter-spacing:.02em;flex:1;min-width:0;'+
    '  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
-   '#xpTit small{display:block;color:var(--dim);font:700 min(2.2vmin,11.5px) inherit;'+
+   '#xpTit small{display:block;color:var(--dim);font-weight:700;font-size:clamp(10.5px,2.1vmin,11.5px);'+
    '  letter-spacing:.06em;text-transform:uppercase;margin-top:2px}'+
-   '#xpX{flex:none;width:8.4vmin;height:8.4vmin;min-width:30px;min-height:30px;max-width:40px;'+
-   '  max-height:40px;border:0;border-radius:6px;background:#e05a5a;color:#fff;'+
-   '  font:900 min(3.4vmin,17px) inherit}'+
+   /* el ✕ es lo único que se toca del encabezado: 40px de área, no 30 */
+   '#xpX{flex:none;width:9vmin;height:9vmin;min-width:38px;min-height:38px;max-width:46px;'+
+   '  max-height:46px;border:0;border-radius:6px;background:#c9484c;color:#fff;'+
+   '  font-weight:900;font-size:clamp(16.5px,3.4vmin,18px)}'+
    '#xpX:active{background:#f07070}'+
-   /* el cuerpo desliza con el dedo: html/body tienen touch-action:none, hay que devolvérselo */
-   '#xpBody{flex:1;min-height:0;overflow-y:auto;touch-action:pan-y;padding:1.6vmin 2.4vmin 2.4vmin}'+
-   '#xpDesc{color:var(--dim);font:600 min(2.4vmin,12.5px)/1.4 inherit;margin-bottom:1.4vmin}'+
-   '.xpr{margin-top:1.5vmin}'+
-   '.xpr>label{display:flex;align-items:baseline;gap:8px;font:800 min(2.6vmin,13.5px) inherit;'+
-   '  margin-bottom:.7vmin}'+
+   /* EL CUERPO SE DESLIZA: alto acotado por el flex (el techo real lo pone xpFit midiendo
+      #stage.clientHeight) y el gesto de dedo lo mueve uiScroll — ver el comentario largo de
+      uiScroll: con el escenario rotado el scroll nativo NO andaba. */
+   /* position:relative para que el cuerpo sea el offsetParent de las filas: así offsetTop es la
+      coordenada DENTRO del contenido y se puede medir "¿el último control entra?" sin rects del
+      viewport (que con el escenario rotado están cruzados) */
+   '#xpBody{flex:1;min-height:0;position:relative;overflow-y:auto;overflow-x:hidden;'+
+   '  touch-action:none;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;'+
+   '  padding:1.4vmin 2vmin 2vmin;display:grid;align-content:start;'+
+   '  grid-template-columns:repeat(auto-fill,minmax(min(100%,204px),1fr));gap:1.1vmin 2vmin}'+
+   /* barra de scroll fina y ámbar: además de no molestar, AVISA que hay más abajo */
+   '#xpBody::-webkit-scrollbar{width:6px}'+
+   '#xpBody::-webkit-scrollbar-track{background:rgba(255,255,255,.06);border-radius:3px}'+
+   '#xpBody::-webkit-scrollbar-thumb{background:rgba(242,161,58,.6);border-radius:3px}'+
+   /* velo de abajo + flecha: el segundo aviso de "seguí deslizando" (lo prende xpMoreUpd) */
+   '#xpFade{position:absolute;left:0;right:0;bottom:0;height:5vmin;min-height:22px;'+
+   '  pointer-events:none;opacity:0;transition:opacity .18s;'+
+   '  background:linear-gradient(180deg,rgba(17,19,22,0),rgba(17,19,22,.92))}'+
+   '#xpFade.on{opacity:1}'+
+   '#xpFade i{position:absolute;left:50%;bottom:2px;transform:translateX(-50%);font-style:normal;'+
+   '  color:var(--acc2);font-weight:900;font-size:clamp(11.5px,2.6vmin,13px);letter-spacing:.1em}'+
+   '#xpDesc{grid-column:1/-1;color:var(--dim);font-weight:600;font-size:clamp(11px,2.3vmin,12.5px);line-height:1.4;'+
+   '  border-left:2px solid rgba(242,161,58,.5);padding-left:1.2vmin;margin-bottom:.4vmin}'+
+   /* cada control es una celda del grid; el hueco lo pone el gap, no un margin */
+   '.xpr{min-width:0}'+
+   '.xpr.wide{grid-column:1/-1}'+
+   '.xpr>label{display:flex;align-items:baseline;gap:8px;font-weight:800;font-size:clamp(11.5px,2.5vmin,13px);'+
+   '  margin-bottom:.5vmin}'+
    '.xpr>label>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
    '.xpr>label>b{flex:none;color:var(--acc2);font-variant-numeric:tabular-nums}'+
-   /* fila del slider: −  barra  + */
-   '.xpsl{display:flex;align-items:center;gap:1.4vmin}'+
-   '.xpsl input[type=range]{flex:1;min-width:0;height:5.4vmin;max-height:26px}'+
-   '.xpb{flex:none;border:0;border-radius:5px;background:rgba(70,76,84,.9);color:var(--ink);'+
-   '  font:900 min(3vmin,15px)/1 inherit;min-width:9vmin;height:7.4vmin;min-height:28px;'+
-   '  max-height:36px;padding:0 1.2vmin}'+
+   /* fila del slider: −  barra  + ; 36px de alto para que se toque con el dedo, no con la uña
+      (la barra en sí la pinta head.html para TODO el juego) */
+   '.xpsl{display:flex;align-items:center;gap:1.2vmin}'+
+   '.xpsl input[type=range]{flex:1;min-width:0}'+
+   '.xpb{flex:none;border:0;border-radius:6px;background:rgba(70,76,84,.9);color:var(--ink);'+
+   '  font-weight:900;font-size:clamp(14.5px,3vmin,16px);line-height:1;width:36px;min-width:36px;height:36px;padding:0}'+
    '.xpb:active{background:var(--acc);color:#241503}'+
-   /* interruptor, botones y chips de lista comparten la misma pinta plana del juego */
-   '.xpsw{display:flex;align-items:center;gap:8px;width:100%;border:0;border-radius:5px;'+
-   '  border-left:3px solid transparent;background:rgba(40,44,50,.72);color:var(--ink);'+
-   '  font:800 min(2.6vmin,13.5px) inherit;padding:1.5vmin 1.8vmin;text-align:left}'+
+   /* interruptor: fila entera tocable (38px) con la pastilla ON/OFF a la derecha */
+   '.xpsw{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;border:0;'+
+   '  border-radius:6px;border-left:3px solid transparent;background:rgba(40,44,50,.78);'+
+   '  color:var(--ink);font-weight:800;font-size:clamp(11.5px,2.5vmin,13px);padding:1vmin 1.4vmin;text-align:left}'+
    '.xpsw>span{flex:1;min-width:0}'+
-   '.xpsw>i{flex:none;font-style:normal;font:900 min(2.4vmin,12px) inherit;color:var(--dim);'+
-   '  border:1px solid rgba(255,255,255,.18);border-radius:4px;padding:2px 7px}'+
+   '.xpsw>i{flex:none;font-style:normal;font-weight:900;font-size:clamp(10.5px,2.2vmin,11.5px);color:var(--dim);'+
+   '  background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.16);border-radius:999px;'+
+   '  min-width:42px;text-align:center;padding:3px 8px}'+
    '.xpsw[data-on="1"]{background:rgba(90,96,104,.95);border-left-color:var(--acc)}'+
    '.xpsw[data-on="1"]>i{color:#241503;background:var(--acc2);border-color:var(--acc2)}'+
-   '.xpbs{display:flex;flex-wrap:wrap;gap:1.1vmin}'+
-   '.xpbs>button{flex:1 1 auto;border:0;border-radius:5px;background:rgba(56,62,70,.9);'+
-   '  color:var(--ink);font:800 min(2.5vmin,13px) inherit;padding:1.3vmin 1.4vmin;min-width:16%}'+
+   '.xpbs{display:flex;flex-wrap:wrap;gap:1vmin}'+
+   '.xpbs>button{flex:1 1 auto;border:0;border-radius:6px;background:rgba(56,62,70,.9);'+
+   '  color:var(--ink);font-weight:800;font-size:clamp(11px,2.4vmin,12.5px);padding:0 1.4vmin;min-height:34px;'+
+   '  min-width:18%}'+
    '.xpbs>button:active{background:var(--acc);color:#241503}'+
    '.xpbs>button.on{background:linear-gradient(180deg,#5f666f,#3c4148);'+
    '  box-shadow:inset 3px 0 0 var(--acc)}'+
-   '.xptx{color:var(--dim);font:700 min(2.4vmin,12.5px)/1.45 inherit;'+
-   '  background:rgba(0,0,0,.28);border-radius:5px;padding:1.1vmin 1.4vmin}'+
+   '.xptx{color:var(--dim);font-weight:700;font-size:clamp(11px,2.3vmin,12.5px);line-height:1.45;'+
+   '  background:rgba(0,0,0,.28);border-radius:6px;padding:1vmin 1.3vmin}'+
    '.xptx b{color:var(--ink)}'+
    /* Botón de cercanía: mismo patrón visual que bSit (core_k) y bFw (core_l), pero core_k
       escribe sus estilos con style.cssText (inline) y acá van en una HOJA DE ESTILO. La
@@ -18096,13 +18520,15 @@ function xpStop(id){
 /* ================= 3. la pantalla ================= */
 const xpWrap=document.createElement('div');xpWrap.id='xpWrap';
 xpWrap.innerHTML='<div id="xpCard"><div id="xpHead"><div id="xpTit"></div>'+
-  '<button id="xpX">✕</button></div><div id="xpBody"></div></div>';
+  '<button id="xpX">✕</button></div><div id="xpBody"></div>'+
+  '<div id="xpFade"><i>▼ ▼ ▼</i></div></div>';
 /* se cuelga de #stage (no de <body>): con el teléfono vertical #stage está rotado 90° y todo
    lo que viva afuera queda con la geometría del viewport REAL, o sea al revés. */
 nsafe(()=>{const s=$('stage')||document.body;s.appendChild(xpWrap);},'xpwrap');
 const xpCard=xpWrap.querySelector('#xpCard');
 const xpBodyEl=xpWrap.querySelector('#xpBody');
 const xpTitEl=xpWrap.querySelector('#xpTit');
+const xpFadeEl=xpWrap.querySelector('#xpFade');
 /* cortar la propagación: el "mirar arrastrando" de core_b escucha en window y no conoce esta
    tarjeta, así que sin esto arrastrar un slider giraba la cámara. */
 nsafe(()=>{
@@ -18112,8 +18538,110 @@ nsafe(()=>{
   xpWrap.querySelector('#xpX').addEventListener('click',()=>nsafe(xpClose,'xpx'));
 },'xpcard');
 
+/* ========== DESLIZAR CON EL DEDO (el bug que reportó el usuario) ==========
+   MEDIDO antes de tocar nada, con un arrastre REAL (CDP Input.dispatchTouchEvent, que pasa por
+   el compositor igual que un dedo):
+     · 900x430 (escenario sin rotar): arrastre vertical -> scrollTop 0 → 125.  Andaba.
+     · 412x915 (teléfono vertical, #stage con transform:rotate(90deg)): arrastre vertical -> 0,
+       arrastre horizontal -> 0. NO SE MOVÍA NI UN PÍXEL, y con 1331 px de contenido en 293 px
+       de alto los últimos 25 controles eran inalcanzables.
+   Por qué: el compositor decide si el gesto puede scrollear comparando su dirección EN PANTALLA
+   contra touch-action, y la rotación de 90° cruza los ejes: el eje que scrollea el panel es
+   horizontal en pantalla, así que 'pan-y' lo rechazaba… y el horizontal también, porque pan-y
+   sólo habilita el vertical.
+   Solución: no depender del gesto nativo. touch-action:none en el contenedor y el scroll a mano,
+   pasando el delta del dedo por dStage() (core_a) — la misma función que usa "mirar
+   arrastrando" —, que es exactamente lo que convierte pantalla → escenario gire o no gire.
+   Queda overflow-y:auto igual, así la rueda del mouse, el teclado y scrollTop siguen andando. */
+const UIS={el:null,v:0,t:0,raf:0};        /* inercia: un solo contenedor a la vez */
+function uiGlide(){
+  UIS.raf=0;
+  const el=UIS.el;if(!el||!UIS.v)return;
+  const now=performance.now(),dt=Math.min(.05,(now-UIS.t)/1000);UIS.t=now;
+  /* UIS.v está en unidades de scrollTop por segundo y CON el mismo signo que scrollTop: el
+     touchmove hace scrollTop -= d.y y guarda v = -d.y/dt, o sea "cuánto sube scrollTop por
+     segundo". Por eso acá se SUMA. Restarlo (como estaba) mandaba la inercia al revés: el dedo
+     llevaba la lista al fondo y al soltar se volvía sola para arriba ~35 px, así que el último
+     control nunca quedaba alcanzable de verdad — medido con __H.xpScroll(): 207 (el máximo) al
+     levantar el dedo y 173 medio segundo después. */
+  const b=el.scrollTop;el.scrollTop=b+UIS.v*dt;
+  /* frenada exponencial con dt (nada por frame sin dt: a 30 o a 120 fps frena igual) */
+  UIS.v*=Math.pow(.006,dt);
+  if(Math.abs(UIS.v)<16||el.scrollTop===b){UIS.v=0;return;}
+  UIS.raf=requestAnimationFrame(uiGlide);
+}
+/* hace deslizable con el dedo cualquier contenedor con overflow-y:auto */
+function uiScroll(el){
+  if(!el||el._uiScr)return el;el._uiScr=1;
+  let id=null,lx=0,ly=0;
+  /* los controles se quedan con su gesto: arrastrar un slider mueve el slider, no la lista.
+     Los <canvas> (miniaturas de mapa) NO están en la lista: ahí sí queremos deslizar. */
+  const ctl=t=>{const e=t&&t.target;
+    return !!(e&&e.closest&&e.closest('input,select,textarea'));};
+  el.addEventListener('touchstart',e=>{
+    if(id!==null)return;
+    const t=e.changedTouches[0];if(!t||ctl(t))return;
+    id=t.identifier;lx=t.clientX;ly=t.clientY;
+    UIS.el=el;UIS.v=0;UIS.t=performance.now();     /* tocar corta la inercia anterior */
+  },{passive:true});
+  el.addEventListener('touchmove',e=>{
+    if(id===null)return;
+    for(const t of e.changedTouches){
+      if(t.identifier!==id)continue;
+      const d=dStage(t.clientX-lx,t.clientY-ly);   /* pantalla -> escenario (core_a) */
+      lx=t.clientX;ly=t.clientY;
+      const b=el.scrollTop;el.scrollTop=b-d.y;
+      const now=performance.now(),dt=Math.max(.008,(now-UIS.t)/1000);
+      UIS.el=el;UIS.v=clamp(-d.y/dt,-4200,4200);UIS.t=now;
+      /* si de verdad movimos la lista, el gesto es nuestro */
+      if(el.scrollTop!==b&&e.cancelable)e.preventDefault();
+    }
+  },{passive:false});
+  const end=e=>{
+    if(id===null)return;
+    let mine=false;for(const t of e.changedTouches)if(t.identifier===id)mine=true;
+    if(!mine)return;
+    id=null;
+    if(UIS.el===el&&Math.abs(UIS.v)>60&&!UIS.raf){UIS.t=performance.now();
+      UIS.raf=requestAnimationFrame(uiGlide);}
+  };
+  el.addEventListener('touchend',end);el.addEventListener('touchcancel',end);
+  /* arrastrar con el mouse (PC y sondas): mismo camino, sin depender de la rueda */
+  el.addEventListener('mousedown',e=>{
+    if(e.target&&e.target.closest&&e.target.closest('input,select,textarea,button,canvas'))return;
+    let px=e.clientX,py=e.clientY;
+    const mv=ev=>{const d=dStage(ev.clientX-px,ev.clientY-py);px=ev.clientX;py=ev.clientY;
+      el.scrollTop-=d.y;};
+    const up=()=>{removeEventListener('mousemove',mv);removeEventListener('mouseup',up);};
+    addEventListener('mousemove',mv);addEventListener('mouseup',up);
+  });
+  return el;
+}
+nsafe(()=>uiScroll(xpBodyEl),'xpscr');
+/* techo de la tarjeta MEDIDO CONTRA EL ESCENARIO. Con el teléfono vertical #stage está rotado y
+   su alto es innerWidth: usar vh/innerHeight (lo que hacía .card de head.html) daba una tarjeta
+   más alta que la pantalla y la mitad de los controles quedaba fuera del vidrio. */
+function xpFit(){
+  const st=$('stage');if(!st||!xpCard)return null;
+  const W=st.clientWidth,H=st.clientHeight;
+  if(!W||!H)return null;
+  xpCard.style.maxHeight=Math.round(H*.92)+'px';
+  xpCard.style.maxWidth=Math.round(W*.95)+'px';
+  nsafe(xpMoreUpd,'xpmore1');
+  return {W,H,maxH:Math.round(H*.92)};
+}
+addEventListener('resize',()=>nsafe(xpFit,'xpfitr'));
+/* aviso de "hay más abajo": se apaga al llegar al final */
+function xpMoreUpd(){
+  if(!xpFadeEl||!xpBodyEl)return false;
+  const more=xpBodyEl.scrollHeight-xpBodyEl.clientHeight-xpBodyEl.scrollTop>8;
+  xpFadeEl.classList.toggle('on',!!more);
+  return more;
+}
+nsafe(()=>xpBodyEl.addEventListener('scroll',()=>nsafe(xpMoreUpd,'xpmore2'),{passive:true}),'xpscl');
+
 /* estado del panel */
-const XPP={open:false,xp:null,adhoc:null,liveT:0};
+const XPP={open:false,xp:null,adhoc:null,liveT:0,vis:false};
 
 function xpFmt(c,v){
   if(c.fmt){const r=nsafe(()=>c.fmt(v),'xpfmt');if(r!=null)return String(r);}
@@ -18144,6 +18672,7 @@ function xpPaintCtl(xp,k){
 /* arma la tarjeta de un experimento (o de un XP.screen a mano) */
 function xpBuild(xp){
   xpBodyEl.replaceChildren();
+  xpBodyEl.scrollTop=0;UIS.v=0;              /* panel nuevo, lista arriba y sin inercia vieja */
   xpTitEl.innerHTML='';
   const h=document.createElement('span');
   h.textContent=(xp.ui&&xp.ui.title)||xp.name||'';
@@ -18151,7 +18680,15 @@ function xpBuild(xp){
   if(xp.cat){const s=document.createElement('small');s.textContent=xp.cat;xpTitEl.appendChild(s);}
   if(xp.desc){const d=document.createElement('div');d.id='xpDesc';d.textContent=xp.desc;
     xpBodyEl.appendChild(d);}
-  for(const c of (xp.ui&&xp.ui.controls)||[])nsafe(()=>xpBuildCtl(xp,c),'xpctl_'+xp.id);
+  const cs=(xp.ui&&xp.ui.controls)||[];
+  /* ANCHO SEGÚN LA CARGA: con 3 controles una tarjeta de 700 px queda ridícula, y con 30 una de
+     350 px obliga a deslizar cuatro pantallas. 1 columna hasta 5 controles, 2 hasta 11, 3 arriba
+     de eso (el grid del cuerpo hace el resto y colapsa solo si el escenario es angosto). */
+  const cols=cs.length>11?3:(cs.length>5?2:1);
+  xpCard.classList.toggle('c2',cols===2);
+  xpCard.classList.toggle('c3',cols===3);
+  for(const c of cs)nsafe(()=>xpBuildCtl(xp,c),'xpctl_'+xp.id);
+  nsafe(xpFit,'xpfitb');
 }
 function xpMkBtn(txt,cls){
   const b=document.createElement('button');b.className=cls||'xpb';b.textContent=txt;return b;
@@ -18207,6 +18744,9 @@ function xpBuildCtl(xp,c){
   }
   /* --- botones / lista: la misma fila de chips; 'lista' además marca el elegido --- */
   if(t==='btns'||t==='list'){
+    /* con 3 o más chips (o etiquetas largas) la fila necesita el ancho entero: en una columna
+       de 200 px "⏹ Apagar todos los climas" se partía en tres renglones */
+    if((c.items||[]).length>2)row.classList.add('wide');
     const box=document.createElement('div');box.className='xpbs';c._chips=[];
     for(let i=0;i<(c.items||[]).length;i++){
       const it=c.items[i],b=xpMkBtn(it.label==null?String(it.v):it.label,'');
@@ -18226,6 +18766,8 @@ function xpBuildCtl(xp,c){
     xpBodyEl.appendChild(row);return;
   }
   /* --- texto de sólo lectura (con live() se refresca 4 veces por segundo) --- */
+  /* los bloques de texto son párrafos: en una columna angosta quedan altísimos, van a lo ancho */
+  row.classList.add('wide');
   const tx=document.createElement('div');tx.className='xptx';
   tx.innerHTML=c.html||'';if(!c.html)tx.textContent=c.val==null?'':String(c.val);
   c._tx=tx;row.appendChild(tx);xpBodyEl.appendChild(row);
@@ -18266,6 +18808,11 @@ function xpScreen(title,controls,opt){
 function xpPaint(){
   const vis=XPP.open&&APP==='play';
   xpWrap.classList.toggle('on',!!vis);
+  /* al PASAR a visible hay que volver a medir: con display:none el cuerpo mide 0 y el aviso de
+     "hay más abajo" salía siempre apagado aunque el contenido midiera el doble. Sólo en el
+     cambio de estado: xpPaint corre 4 veces por segundo y no vamos a forzar layout de gratis. */
+  if(vis&&!XPP.vis)nsafe(xpFit,'xpfitv');
+  XPP.vis=!!vis;
   xpBtnPaint();
 }
 /* El repintado normal va con el escaneo de cercanía, 4 veces por segundo. Eso alcanza para el
@@ -18594,6 +19141,33 @@ if(DEV&&window.__H)Object.assign(window.__H,{
   xpGet:id=>{const x=XPI[id];return x?Object.assign({_run:XPRUN.has(x)},x.v):null;},
   xpRun:(id,useNear)=>xpRun(id,useNear?XP.propOf(id):null),
   xpStop:id=>xpStop(id),
+  /* TODO lo del deslizamiento en un objeto: alto del contenido, cuánto se ve, dónde está y si
+     el ÚLTIMO control cae dentro del cuerpo (que es lo que el usuario no podía alcanzar).
+     Se mide en layout del escenario con offsetTop, no con rects del viewport. */
+  xpScroll:()=>{
+    const rows=[...xpBodyEl.children],last=rows[rows.length-1];
+    const btn=last?(last.querySelector('button,input,select')||last):null;
+    const off=e=>{let y=0;for(let o=e;o&&o!==xpBodyEl;o=o.offsetParent)y+=o.offsetTop;return y;};
+    const st=$('stage');
+    return {top:Math.round(xpBodyEl.scrollTop),client:xpBodyEl.clientHeight,
+      scroll:xpBodyEl.scrollHeight,max:xpBodyEl.scrollHeight-xpBodyEl.clientHeight,
+      more:xpFadeEl.classList.contains('on'),rows:rows.length,
+      cols:getComputedStyle(xpBodyEl).gridTemplateColumns.split(' ').length,
+      card:[xpCard.offsetWidth,xpCard.offsetHeight],
+      stage:st?[st.clientWidth,st.clientHeight]:null,
+      fitsStage:!!st&&xpCard.offsetHeight<=st.clientHeight&&xpCard.offsetWidth<=st.clientWidth,
+      lastTop:last?off(last):null,lastH:last?last.offsetHeight:null,
+      /* visible = el control de la última fila entra entero en la ventana del cuerpo */
+      lastVis:!!btn&&off(btn)>=xpBodyEl.scrollTop-1&&
+        off(btn)+btn.offsetHeight<=xpBodyEl.scrollTop+xpBodyEl.clientHeight+1,
+      /* y tocable de verdad: elementFromPoint en el centro del control cae en él */
+      lastHit:(()=>{if(!btn)return null;const r=btn.getBoundingClientRect();
+        if(r.width<2||r.height<2)return false;
+        const e=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+        return !!e&&(e===btn||btn.contains(e)||e.contains(btn));})()};
+  },
+  xpScrollTo:v=>{xpBodyEl.scrollTop=v;nsafe(xpMoreUpd,'xpmh');return xpBodyEl.scrollTop;},
+  xpFit:()=>xpFit(),
   xpPanel:()=>({open:XPP.open,vis:xpWrap.classList.contains('on'),
     id:XPP.xp?XPP.xp.id:null,
     title:xpTitEl.firstChild?xpTitEl.firstChild.textContent:'',   /* sólo el <span> del título */
@@ -25793,6 +26367,435 @@ if(DEV&&window.__H)Object.assign(window.__H,{
     return {ok:XXHMI.ok,map:!!XXM.hmi.map,vis,boards:n};},
   /* escribir el estado de UN nodo (por número): las palancas y las baterías son por prop */
   xxSetSeq:(seq,k,v)=>{const n=xxSeqOf(seq);if(!n)return false;n.s[k]=v;return true;}
+});
+
+/* ==== core_y.js ==== */
+/* ============================================================================================
+   core_y.js — LA PANTALLA DE AJUSTES Y LA DE CONTROLES, PENSADAS PARA HORIZONTAL
+   ============================================================================================
+   El usuario pidió tres cosas: que el panel de los experimentos se pueda deslizar (eso está en
+   core_u: uiScroll + xpFit), que la interfaz esté pensada para horizontal, y que Ajustes deje de
+   ser feo. Acá van las dos pantallas que no son mías de nacimiento:
+
+   1) AJUSTES (#opts/#optcard, de core_b) — se REARMA, no se rehace.
+      Los controles son EXACTAMENTE los mismos nodos que ya existían; sólo se MUEVEN a una
+      estructura nueva (secciones con título, filas parejas, interruptores de verdad). Se mueven y
+      no se recrean por una razón concreta: cada uno tiene listeners vivos de otros cores
+      (core_b: applyOpts en 'input' de los 9 de siempre; core_n: el volumen; core_s: Ultra 4K;
+      core_h: el tamaño de los botones del HUD) y applyOpts(true) les escribe .checked/.value por
+      id. Recrear un <input> mata su listener y rompe todo eso sin que nada avise; moverlo no
+      cambia nada del comportamiento — sólo el lugar donde se dibuja.
+      El <input type=checkbox> sigue existiendo dentro del interruptor: está transparente encima
+      de la pastilla y el <label> que lo envuelve le pasa el toque. Así SV.shadow, SV.desc,
+      SV.post, SV.fpsm, SV.hideui, SV.sens, SV.fpslim, SV.texq, SV.maxProps, SV.vol, SV.ultra…
+      siguen viajando por donde viajaban.
+      #gfxBox (core_s) se deja ENTERO con sus clases .gfxg/.gfxa/.gfxh: gfxUI() prende y apaga
+      #gfxBox.off/#gfxBox.na y esas reglas apuntan a esos hijos. Se le cambia la pinta por CSS y
+      se le convierten los checkboxes en interruptores, pero la caja no se desarma.
+
+   2) CONTROLES (#sHelp) — el texto de ayuda (T('hB'), un párrafo con <br> y ' · ') se parte en
+      fichas "tecla → qué hace" y se acomoda en columnas. Se re-arma detrás de applyLang porque
+      core_b escribe $('hBody').innerHTML=T('hB') cada vez que cambia el idioma.
+
+   POR QUÉ TODO SE MIDE CONTRA #stage Y NO CONTRA LA VENTANA
+   El juego se ve siempre horizontal: con el teléfono vertical core_a le pone a #stage un
+   transform:rotate(90deg) y le fija clientWidth/clientHeight. Entonces vw/vh (y cualquier
+   getBoundingClientRect contra el viewport) están CRUZADOS respecto de lo que ve el jugador. Las
+   medidas van en vmin (= lado corto del escenario, su alto) y vmax (= lado largo, su ancho), y
+   los techos finos se calculan con #stage.clientWidth/clientHeight. Con 94vh de techo la tarjeta
+   de Ajustes medía 860 px dentro de un escenario de 412 y se salía por los dos lados.
+
+   DESLIZAR: el gesto lo maneja uiScroll (core_u), que pasa el delta del dedo por dStage(). Está
+   medido que el scroll NATIVO no funciona con el escenario rotado (ver el comentario largo de
+   uiScroll en core_u): por eso los contenedores llevan touch-action:none y el scroll a mano.
+
+   OJO CON 'font:' Y 'inherit'. En este proyecto hay 40 reglas escritas 'font:800 13px inherit' y
+   TODAS están muertas: 'inherit' no es una familia válida, así que el navegador tira la
+   declaración entera y el texto queda en 16 px normales (medido: getComputedStyle daba 16px/400).
+   Por eso las reglas nuevas de Ajustes y Controles usan font-weight/font-size/line-height
+   sueltos. Con las medidas de verdad aplicándose, Ajustes pasó de 487 px de alto a 213.
+
+   Se concatena al final de todos: ya existen $, nsafe, clamp, SV, save, T, I18N, applyOpts,
+   applyLang, gfxUI, uiScroll, xpFit, EXT, APP, DEV, __H…
+   ============================================================================================ */
+
+/* ================= 1. AJUSTES: rearmado en secciones ================= */
+/* las cuatro secciones que pidió el usuario (GRÁFICOS, SONIDO, CONTROLES, JUEGO) más la caja de
+   Ultra 4K que agrega core_s. El reparto en columnas NO está escrito acá: lo hace oyLayout
+   midiendo, así ninguna columna queda el doble de alta que las otras. */
+const OYSEC=[
+  {t:'oGfx',  ids:['oShadow','oPost','oTex','oLim']},
+  {t:'oPlay', ids:['oDesc','oFps','oHide','oMax']},
+  {t:'oSnd',  ids:['oVol']},
+  {t:'oCtl',  ids:['oSens','oHudK','oHudMove']},
+  {t:'oUlt',  ids:['#gfxBox']}
+];
+Object.assign(I18N.es,{oGfx:'Gráficos',oSnd:'Sonido',oCtl:'Controles',oPlay:'Juego',
+  oUlt:'Extra',oHudK:'Tamaño de botones',oSubT:'Todo se guarda solo'});
+Object.assign(I18N.en,{oGfx:'Graphics',oSnd:'Sound',oCtl:'Controls',oPlay:'Game',
+  oUlt:'Extra',oHudK:'Button size',oSubT:'Everything saves itself'});
+Object.assign(I18N.pt,{oGfx:'Gráficos',oSnd:'Som',oCtl:'Controles',oPlay:'Jogo',
+  oUlt:'Extra',oHudK:'Tamanho dos botões',oSubT:'Tudo salva sozinho'});
+
+/* ---- CSS propio: va DESPUÉS del de core_s/core_h (se inyectan en el <head> al cargar), así que
+   con la misma especificidad gana el mío y puedo reformar #gfxBox sin editar core_s ---- */
+nsafe(()=>{
+  const st=document.createElement('style');
+  st.textContent=
+   /* #gfxBox deja de ser "una fila de la grilla de dos columnas" y pasa a ser una columna más */
+   '#gfxBox{grid-column:auto;border-top:0;margin:0;padding:0;display:flex;flex-direction:column;'+
+   '  gap:4px;min-width:0}'+
+   '#gfxBox .gfxt{display:flex;align-items:center;gap:7px;font-weight:900;font-size:10.5px;'+
+   '  letter-spacing:.12em;text-transform:uppercase;color:var(--acc);margin:2px 0 0;'+
+   '  white-space:nowrap;overflow:hidden}'+
+   '#gfxBox .gfxt:after{content:"";flex:1;height:1px;'+
+   '  background:linear-gradient(90deg,rgba(242,161,58,.55),rgba(242,161,58,0))}'+
+   /* la fila del interruptor maestro usa la misma pinta que las demás (.oRow) */
+   '#gfxBox .gfxh{display:flex;align-items:center;gap:7px;min-height:34px;padding:3px 8px;'+
+   '  border-radius:6px;background:rgba(40,44,50,.6);border-left:2px solid var(--acc);'+
+   '  font-weight:900;font-size:12px}'+
+   /* la explicación larga: 3 renglones como techo (en una columna de 200 px eran ocho y se
+      comía la pantalla), con su tamaño chico de nota al pie */
+   '#gfxBox .gfxs{font-weight:600;font-size:10px;line-height:1.3;opacity:.7;margin:1px 0 2px;'+
+   '  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}'+
+   '#gfxBox .gfxg{display:flex;flex-direction:column;gap:4px}'+
+   /* LAS SUBOPCIONES SE PLIEGAN CUANDO ULTRA ESTÁ APAGADO. core_s ya les ponía opacity:.42 y
+      pointer-events:none con #gfxBox.off (o sea: no se pueden tocar), así que gastar 245 px de
+      pantalla en cinco controles muertos era el único motivo por el que Ajustes no entraba sin
+      deslizar. Con el interruptor maestro apagado —el caso normal— ahora entra todo; al prenderlo
+      aparecen las cinco y, si hace falta, se desliza (y se desliza bien). */
+   '#gfxBox.off .gfxg,#gfxBox.off .gfxa{display:none}'+
+   '#gfxBox .gfxw{font-weight:800;font-size:10.5px;line-height:1.25;color:#ffd479;display:none}'+
+   '#gfxBox .gfxa{margin:0}'+
+   /* el nombre del slider de core_h venía con color:var(--dim) inline; ya sin el inline, hereda */
+   '#optBody .oNm{color:var(--ink)}';
+  document.head.appendChild(st);
+},'oycss');
+
+/* ---- helpers de armado ---- */
+/* una fila "nombre + interruptor": el checkbox ORIGINAL queda adentro, invisible y clickeable */
+function oySwitch(inp,lab){
+  const row=document.createElement('div');row.className='oRow';
+  const nm=document.createElement('span');nm.className='oNm';
+  if(lab)nm.appendChild(lab);else nm.textContent=inp.id;
+  const sw=document.createElement('label');sw.className='osw';
+  sw.appendChild(inp);sw.appendChild(document.createElement('i'));
+  row.appendChild(nm);row.appendChild(sw);
+  return row;
+}
+/* una fila de slider: nombre + valor arriba, barra a lo ancho abajo */
+function oySlider(inp,lab,val){
+  const row=document.createElement('div');row.className='oRow oSlr';
+  const top=document.createElement('div');top.className='oTop';
+  const nm=document.createElement('span');nm.className='oNm';
+  if(lab)nm.appendChild(lab);else nm.textContent=inp.id;
+  top.appendChild(nm);
+  if(val)top.appendChild(val);
+  row.appendChild(top);row.appendChild(inp);
+  return row;
+}
+/* una fila de desplegable */
+function oySelect(sel,lab){
+  const row=document.createElement('div');row.className='oRow';
+  const nm=document.createElement('span');nm.className='oNm';
+  if(lab)nm.appendChild(lab);else nm.textContent=sel.id;
+  row.appendChild(nm);row.appendChild(sel);
+  return row;
+}
+/* convierte una fila VIEJA (label.chk o div.sl, las que escribieron core_b y core_n) en una fila
+   nueva, reutilizando sus nodos. Devuelve el elemento a insertar. */
+function oyRowOf(id){
+  const e=document.getElementById(id);if(!e)return null;
+  if(e.closest('.oRow'))return null;           /* ya convertido: no rehacer */
+  /* el <span> del nombre y el <b> del valor son los que traduce/actualiza el resto del juego:
+     se mueven tal cual, jamás se recrean */
+  const old=e.closest('label.chk,div.sl,div.gfxh')||e.parentElement;
+  const lab=old?old.querySelector('span'):null;
+  const val=old?old.querySelector('b'):null;
+  let row=null;
+  if(e.tagName==='SELECT')row=oySelect(e,lab);
+  else if(e.type==='checkbox')row=oySwitch(e,lab);
+  else if(e.type==='range')row=oySlider(e,lab,val);
+  /* el envase viejo queda vacío: si no se saca, es un hijo fantasma que empuja el layout */
+  if(row&&old&&old!==row&&!old.querySelector('input,select,span,b'))old.remove();
+  return row;
+}
+/* #gfxBox (core_s) se deja ENTERO —gfxUI() prende #gfxBox.off/.na y esas reglas apuntan a sus
+   hijos .gfxg/.gfxa/.gfxh— pero sus checkboxes chatos se convierten en interruptores en el
+   lugar: mismo input, mismo id, mismo listener; sólo cambia el envase. */
+function oyGfxRows(){
+  const box=$('gfxBox');if(!box)return 0;
+  let n=0;
+  /* el maestro: la fila .gfxh se conserva (tiene la regla .na) y se le reordena el contenido */
+  const h=box.querySelector('.gfxh'),mi=$('oUltra');
+  if(h&&mi&&!mi.closest('.osw')){
+    const sp=h.querySelector('span');
+    const nm=document.createElement('span');nm.className='oNm';
+    if(sp)nm.appendChild(sp);
+    const sw=document.createElement('label');sw.className='osw';
+    sw.appendChild(mi);sw.appendChild(document.createElement('i'));
+    h.replaceChildren(nm,sw);n++;
+  }
+  /* los cuatro de abajo: label.chk -> div.oRow (un <label> no puede anidar otro <label>, así que
+     el envase viejo se descarta y queda el input, que es el que tiene el listener) */
+  for(const lb of [...box.querySelectorAll('label.chk')]){
+    const inp=lb.querySelector('input');if(!inp)continue;
+    lb.replaceWith(oySwitch(inp,lb.querySelector('span')));n++;
+  }
+  return n;
+}
+function oyTitle(key){
+  const h=document.createElement('div');h.className='oSec';h.dataset.t=key;
+  h.textContent=T(key)||key;return h;
+}
+/* la fila de core_h (tamaño de botones): viene en un div con estilos inline y en el orden
+   span→input→b, así que el valor caía DEBAJO de la barra. Se rearma como cualquier otra. */
+function oyHudRow(){
+  const k=$('oHudK');if(!k)return null;
+  if(k.closest('.oRow'))return k.closest('.oRow');
+  const inner=k.parentElement;if(!inner)return null;
+  const lab=inner.querySelector('span'),val=inner.querySelector('b');
+  for(const e of [lab,val])if(e)e.removeAttribute('style');
+  const row=oySlider(k,lab,val);
+  if(!inner.querySelector('input,select,span,b'))inner.remove();
+  return row;
+}
+/* el rearmado entero. Idempotente: se puede volver a llamar. */
+let oyGrps=null;
+function oyBuild(){
+  const card=$('optcard'),body=$('optBody');if(!card||!body)return false;
+  nsafe(oyGfxRows,'oygfx');
+  oyGrps=[];
+  for(const s of OYSEC){
+    const rows=[];
+    for(const id of s.ids){
+      if(id[0]==='#'){                        /* una caja entera (el #gfxBox de core_s) */
+        const box=document.getElementById(id.slice(1));
+        if(box)rows.push(box);
+        continue;
+      }
+      if(id==='oHudK'){const r=oyHudRow();if(r)rows.push(r);continue;}
+      if(id==='oHudMove'){
+        const b=$('oHudMove');if(!b)continue;
+        /* el <div> con el que core_h le hizo appendChild al #optcard (y que por eso caía DEBAJO
+           del pie, fuera de la pantalla) queda vacío al sacarle el botón: se va, o estorba en el
+           flex de la tarjeta */
+        const host=b.parentElement;
+        rows.push(b);
+        if(host&&host!==b&&host.parentElement===card)
+          setTimeout(()=>nsafe(()=>{if(!host.children.length)host.remove();},'oyrm'),0);
+        continue;
+      }
+      const r=oyRowOf(id);if(r)rows.push(r);
+    }
+    if(!rows.length)continue;                 /* si un core no cargó, su sección no aparece */
+    const g=document.createElement('div');g.className='oGrp';g.dataset.sec=s.t;
+    /* #gfxBox ya trae su propio título (.gfxt, que core_s traduce): no se le pone otro */
+    if(!(rows.length===1&&rows[0].id==='gfxBox'))g.appendChild(oyTitle(s.t));
+    for(const r of rows)g.appendChild(r);
+    oyGrps.push(g);
+  }
+  body.replaceChildren();
+  oyLayout(4);
+  /* pie y velo siempre al final y en ese orden */
+  const foot=$('optfoot'),fade=$('optFade');
+  if(fade)card.appendChild(fade);
+  if(foot)card.appendChild(foot);
+  const sub=$('optSub');if(sub)sub.textContent=T('oSubT')||'';
+  nsafe(oyFit,'oyfit');
+  return true;
+}
+/* reparte los bloques en N columnas dejándolas PAREJAS de alto (el más alto primero, siempre a
+   la columna más corta). Sin esto, con el bloque de Ultra 4K —que mide el doble que los otros—
+   la pantalla crecía de alto por una sola columna mientras las otras tres quedaban a medio usar.
+   Si los bloques todavía miden 0 (Ajustes cerrado) reparte por orden: al abrirse se vuelve a
+   llamar con las medidas de verdad. */
+function oyLayout(n){
+  const body=$('optBody');if(!body||!oyGrps||!oyGrps.length)return 0;
+  /* cuántas columnas entran DE VERDAD: se le pregunta a la grilla, no se adivina */
+  let N=n||4;
+  if(body.clientWidth>0){
+    const gt=getComputedStyle(body).gridTemplateColumns;
+    const k=gt&&gt!=='none'?gt.split(' ').length:0;
+    if(k>0)N=Math.min(N,k);
+  }
+  N=Math.max(1,Math.min(N,oyGrps.length));
+  const cols=[];
+  for(let i=0;i<N;i++){const c=document.createElement('div');c.className='oCol';
+    c.dataset.col=i;cols.push(c);}
+  const h=oyGrps.map(g=>g.offsetHeight||0);
+  const measured=h.some(v=>v>0);
+  const idx=oyGrps.map((g,i)=>i);
+  if(measured)idx.sort((a,b)=>h[b]-h[a]);
+  const sum=new Array(N).fill(0),put=new Array(N).fill(null).map(()=>[]);
+  for(const i of idx){
+    let best=0;for(let c=1;c<N;c++)if(sum[c]<sum[best])best=c;
+    put[best].push(i);sum[best]+=h[i]+7;
+  }
+  /* dentro de cada columna se respeta el orden original (leer de arriba a abajo tiene sentido) */
+  for(let c=0;c<N;c++){put[c].sort((a,b)=>a-b);
+    for(const i of put[c])cols[c].appendChild(oyGrps[i]);}
+  body.replaceChildren(...cols);
+  return N;
+}
+/* techo de la tarjeta MEDIDO CONTRA EL ESCENARIO (no innerHeight: ver el encabezado) */
+function oyFit(){
+  const st=$('stage'),card=$('optcard');if(!st||!card)return null;
+  const W=st.clientWidth,H=st.clientHeight;if(!W||!H)return null;
+  card.style.maxHeight=Math.round(H*.95)+'px';
+  card.style.maxWidth=Math.round(W*.97)+'px';
+  nsafe(oyMore,'oymore');
+  return {W,H,card:[card.offsetWidth,card.offsetHeight]};
+}
+/* aviso de "hay más abajo" (el mismo velo que el panel de experimentos) */
+function oyMore(){
+  const b=$('optBody'),f=$('optFade');if(!b||!f)return false;
+  const more=b.scrollHeight-b.clientHeight-b.scrollTop>8;
+  f.classList.toggle('on',!!more);
+  return more;
+}
+/* al abrir (o al girar el teléfono) se remide TODO: con la pantalla cerrada los bloques miden 0.
+   Dos pasadas de reparto porque la primera cambia el ancho de columna y con eso el alto de los
+   bloques: la segunda ya reparte con las medidas definitivas. */
+function oyShow(){
+  oyLayout(4);oyLayout(4);
+  oyFit();
+  const b=$('optBody');if(b)b.scrollTop=0;
+  oyMore();
+  return true;
+}
+nsafe(()=>{
+  oyBuild();
+  uiScroll($('optBody'));                    /* deslizar con el dedo, ver core_u */
+  $('optBody').addEventListener('scroll',()=>nsafe(oyMore,'oymore2'),{passive:true});
+  addEventListener('resize',()=>nsafe(()=>{
+    if($('opts').classList.contains('on'))oyShow();else oyFit();},'oyfitr'));
+  /* Ajustes se abre desde el menú de pausa (core_b: $('pOpts') le agrega la clase .on) */
+  const po=$('pOpts');
+  if(po)po.addEventListener('click',()=>nsafe(oyShow,'oyopen'));
+  /* prender/apagar Ultra 4K despliega o pliega cinco controles: hay que volver a repartir las
+     columnas o queda una torre altísima al lado de tres columnas vacías. Este listener se
+     registra DESPUÉS del de core_s, así que corre con el estado ya aplicado. */
+  const ul=$('oUltra');
+  if(ul)ul.addEventListener('input',()=>nsafe(()=>{
+    if($('opts').classList.contains('on'))oyShow();},'oyultra'));
+},'oyopts');
+
+/* applyLang() rehace los textos de core_b y core_s/core_h reescriben los suyos: los títulos de
+   sección se traducen a mano y las fichas de Controles se rearman (core_b acaba de pisar
+   #hBody con el párrafo crudo). */
+const _oyLang=applyLang;
+applyLang=function(){
+  const r=_oyLang.apply(this,arguments);
+  nsafe(()=>{
+    for(const h of document.querySelectorAll('#optBody .oSec'))
+      if(h.dataset.t)h.textContent=T(h.dataset.t)||h.dataset.t;
+    const sub=$('optSub');if(sub)sub.textContent=T('oSubT')||'';
+    /* el nombre del slider de core_h no está en su I18N: se traduce acá */
+    const kl=$('oHudKL');if(kl&&T('oHudK'))kl.textContent=T('oHudK');
+    oyHelp();
+  },'oylang');
+  return r;
+};
+
+/* ================= 2. CONTROLES (#sHelp): fichas en columnas ================= */
+/* T('hB') es un párrafo: renglones separados por <br> y dentro fichas separadas por ' · ', cada
+   una con la tecla/botón en <b>. Se parte en fichas de verdad para que en horizontal se lean en
+   varias columnas en vez de cinco renglones larguísimos con media pantalla vacía al lado. */
+function oyHelp(){
+  const box=$('hBody');if(!box)return false;
+  const src=T('hB')||'';
+  const g=document.createElement('div');g.className='hkg';
+  let n=0;
+  for(const line of src.split(/<br\s*\/?>/i)){
+    for(const raw of line.split('·')){
+      const s=raw.trim();if(!s)continue;
+      const d=document.createElement('div');d.className='hkc';
+      /* la ficha "buena" empieza con <b>tecla</b> y sigue con lo que hace. La pastilla crece si
+         la "tecla" es una frase ("arrastrá la pantalla"): antes esas caían en el molde de prosa
+         y se comían un renglón entero cada una. */
+      const m=s.match(/^<b>(.*?)<\/b>\s*([\s\S]*)$/i);
+      if(m&&m[2].trim()){
+        const b=document.createElement('b');b.innerHTML=m[1];
+        const sp=document.createElement('span');sp.innerHTML=m[2].trim();
+        d.appendChild(b);d.appendChild(sp);
+      } else {
+        /* renglón de prosa (el de la PhysicsGun): de ancho entero y sin pastilla */
+        d.className='hkc full';
+        const sp=document.createElement('span');sp.innerHTML=s;
+        d.appendChild(sp);
+      }
+      g.appendChild(d);n++;
+    }
+  }
+  box.classList.remove('sub');                /* .sub le metía un margen de párrafo */
+  box.replaceChildren(g);
+  return n;
+}
+nsafe(oyHelp,'oyhelp0');
+/* las tarjetas de las pantallas (idioma, gráficos, mapa, controles) también tienen que poder
+   deslizarse con el dedo cuando no entran: mismo motor que el panel de experimentos */
+nsafe(()=>{for(const c of document.querySelectorAll('.screen .card'))uiScroll(c);},'oycards');
+
+/* ================= 3. hooks de medición ================= */
+if(DEV&&window.__H)Object.assign(window.__H,{
+  /* TODO lo de Ajustes en un objeto. Se mide en LAYOUT (offsets) porque con el teléfono vertical
+     los rects del viewport están rotados. 'zero' = controles sin dibujar; 'reach' = con el
+     cuerpo deslizado al fondo, el último bloque entra en la ventana. */
+  optUI:()=>{
+    const card=$('optcard'),body=$('optBody'),st=$('stage');
+    const on=$('opts').classList.contains('on');
+    const off=e=>{let y=0,x=0;for(let o=e;o;o=o.offsetParent){y+=o.offsetTop;x+=o.offsetLeft;}
+      return {x,y};};
+    const c=off(card);
+    const ids=['oShadow','oDesc','oPost','oFps','oHide','oSens','oLim','oTex','oMax','oVol',
+      'oUltra','oMblur','oGsh','oDli','oGenv','oMbA','oHudK','oHudMove'];
+    const miss=ids.filter(i=>!document.getElementById(i));
+    const zero=[];
+    if(on)for(const i of ids){const e=document.getElementById(i);if(!e)continue;
+      const r=e.getBoundingClientRect();if(r.width<2||r.height<2)zero.push(i);}
+    const last=(()=>{let ymax=-1;
+      for(const col of body.querySelectorAll('.oCol')){
+        const k=col.lastElementChild;if(!k)continue;
+        const y=k.offsetTop+k.offsetHeight;if(y>ymax)ymax=y;}
+      return {y:ymax,ok:ymax>=0&&ymax<=body.scrollTop+body.clientHeight+2};})();
+    return {on,ids:ids.length,miss,zero,reach:last.ok,lastY:last.y,
+      cols:[...body.querySelectorAll('.oCol')].map(k=>k.children.length),
+      secs:[...body.querySelectorAll('.oSec')].map(k=>k.textContent),
+      switches:body.querySelectorAll('.osw').length,
+      gfxIn:!!$('gfxBox')&&!!$('gfxBox').closest('#optBody'),
+      hudIn:!!$('oHudK')&&!!$('oHudK').closest('#optBody'),
+      volIn:!!$('oVol')&&!!$('oVol').closest('#optBody'),
+      footLast:card.lastElementChild===$('optfoot'),
+      card:[card.offsetWidth,card.offsetHeight],lay:[c.x,c.y],
+      stage:st?[st.clientWidth,st.clientHeight]:null,
+      inside:!!st&&c.x>=0&&c.y>=0&&c.x+card.offsetWidth<=st.clientWidth+1&&
+        c.y+card.offsetHeight<=st.clientHeight+1,
+      scroll:{top:Math.round(body.scrollTop),client:body.clientHeight,h:body.scrollHeight,
+        max:Math.max(0,body.scrollHeight-body.clientHeight),more:oyMore()}};
+  },
+  optOpen:v=>{$('opts').classList.toggle('on',v!==false);
+    if(v!==false)nsafe(oyShow,'oyh1');
+    return $('opts').classList.contains('on');},
+  optScrollTo:v=>{$('optBody').scrollTop=v;nsafe(oyMore,'oyh2');return $('optBody').scrollTop;},
+  /* toca el interruptor como un dedo: click en el <label>, que es lo que hay en pantalla */
+  optTap:id=>{const e=document.getElementById(id);if(!e)return null;
+    (e.closest('label')||e).click();
+    return e.type==='checkbox'?e.checked:e.value;},
+  helpUI:()=>{const b=$('hBody'),card=$('sHelp').querySelector('.card'),st=$('stage');
+    const chips=[...b.querySelectorAll('.hkc')];
+    const off=e=>{let y=0,x=0;for(let o=e;o;o=o.offsetParent){y+=o.offsetTop;x+=o.offsetLeft;}
+      return {x,y};};
+    const c=off(card);
+    return {chips:chips.length,full:chips.filter(k=>k.classList.contains('full')).length,
+      cols:getComputedStyle(b.querySelector('.hkg')||b).gridTemplateColumns.split(' ').length,
+      txt:chips.slice(0,4).map(k=>k.textContent.slice(0,26)),
+      card:[card.offsetWidth,card.offsetHeight],
+      stage:st?[st.clientWidth,st.clientHeight]:null,
+      inside:!!st&&c.x>=0&&c.y>=0&&c.x+card.offsetWidth<=st.clientWidth+1&&
+        c.y+card.offsetHeight<=st.clientHeight+1,
+      scrollable:card.scrollHeight>card.clientHeight+2};},
+  oyRebuild:()=>oyBuild()
 });
 
 </script>
