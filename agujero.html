@@ -1,0 +1,974 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d1014">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>AGUJERO</title>
+<style>
+/* ================= ARCADE SHELL — CSS común de los 5 juegos =================
+   REGLA DE ORO DEL CELULAR VERTICAL: el juego SIEMPRE se ve apaisado. Si el
+   teléfono está vertical, #stage se rota 90° y se le fijan ancho/alto EN PX
+   (los del viewport cruzados). Todo lo que mida la UI tiene que medirse en el
+   espacio del #stage (clientWidth/clientHeight, offsetTop), NUNCA contra
+   window.innerWidth/innerHeight ni con getBoundingClientRect: con el stage
+   rotado esas dos cosas viven en ejes distintos. El puntero se convierte a mano
+   (ver ARC.pt) porque la rotación cruza los ejes del compositor.            */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#05070a;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#eef2f6}
+#stage{position:absolute;left:0;top:0;overflow:hidden;background:#0d1014;
+  transform-origin:0 0;touch-action:none}
+canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
+/* dos lienzos: #gl es la escena 3D (WebGL) y #cv la capa 2D de efectos y texto
+   flotante que va ENCIMA. Así los juegos 3D siguen usando ARC.fx sin shaders. */
+#gl{z-index:0}
+#cv{z-index:1;pointer-events:auto;background:transparent}
+/* ---- capas ---- */
+.lay{position:absolute;inset:0;pointer-events:none}
+.scr{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;pointer-events:auto;background:rgba(6,9,13,.62);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.scr.on{display:flex;animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+#menu{background:#0d1014 center/cover no-repeat;backdrop-filter:none;-webkit-backdrop-filter:none}
+/* el arte del menú ya trae el título: el degradado va de ABAJO para que los
+   botones se lean sin tapar la ilustración, y el título de DOM sólo aparece si
+   la imagen no llegó (#menu sin .hasart). */
+#menu:before{content:"";position:absolute;inset:0;
+  background:linear-gradient(0deg,rgba(5,7,10,.94) 0%,rgba(5,7,10,.55) 30%,rgba(5,7,10,.05) 62%)}
+#menu.hasart .ttl{display:none}
+/* ---- tipografía ---- */
+.h1{font-size:clamp(22px,5.2vmin,44px);font-weight:900;letter-spacing:.5px;
+  text-shadow:0 2px 10px rgba(0,0,0,.75)}
+.h2{font-size:clamp(14px,3vmin,22px);font-weight:800;opacity:.95}
+.sm{font-size:clamp(10px,2.1vmin,15px);font-weight:600;opacity:.72;line-height:1.35}
+/* ---- botones ---- */
+.btn{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:.5em;
+  padding:.62em 1.25em;border-radius:14px;font-weight:900;font-size:clamp(12px,2.6vmin,19px);
+  background:linear-gradient(180deg,var(--acc) 0%,var(--acc2) 100%);color:#10141a;
+  border:1px solid rgba(255,255,255,.28);box-shadow:0 4px 0 rgba(0,0,0,.35),0 8px 22px rgba(0,0,0,.4);
+  transition:transform .08s,box-shadow .08s;white-space:nowrap}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.35)}
+.btn.gh{background:rgba(255,255,255,.09);color:#eef2f6;border-color:rgba(255,255,255,.22);
+  box-shadow:0 3px 0 rgba(0,0,0,.28)}
+.btn.sq{padding:0;width:clamp(34px,7.4vmin,52px);height:clamp(34px,7.4vmin,52px);border-radius:13px;
+  font-size:clamp(15px,3.4vmin,23px)}
+.row{display:flex;gap:clamp(6px,1.6vmin,14px);align-items:center}
+.col{display:flex;flex-direction:column;gap:clamp(6px,1.6vmin,14px)}
+/* ---- menú ---- */
+#menu .wrap{position:relative;z-index:1;width:100%;height:100%;display:flex;
+  flex-direction:column;justify-content:flex-end;padding:0 5.5vmin 4.5vmin;gap:1.8vmin}
+#menu .ttl{font-size:clamp(26px,8.4vmin,68px);font-weight:900;line-height:.94;
+  letter-spacing:-.5px;text-shadow:0 3px 0 rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.6)}
+#menu .ttl em{font-style:normal;color:var(--acc)}
+#menu .sub{max-width:52vmin}
+#menu .mrow{margin-top:1.2vmin}
+#best{position:absolute;right:3.4vmin;bottom:4.5vmin;text-align:right;z-index:1;line-height:1.5}
+/* ---- HUD ---- */
+#hud{position:absolute;inset:0;pointer-events:none;z-index:2}
+.pill{position:absolute;display:flex;align-items:center;gap:.45em;padding:.42em .8em;
+  border-radius:999px;background:rgba(10,14,19,.66);border:1px solid rgba(255,255,255,.14);
+  font-weight:900;font-size:clamp(11px,2.4vmin,17px);backdrop-filter:blur(4px)}
+#pScore{left:3vmin;top:2.4vmin}
+#pInfo{left:50%;top:2.4vmin;transform:translateX(-50%)}
+#pPause{right:3vmin;top:2.4vmin;pointer-events:auto;padding:0;
+  width:clamp(30px,6.6vmin,46px);height:clamp(30px,6.6vmin,46px);justify-content:center}
+#tray{position:absolute;left:0;right:0;bottom:2.2vmin;display:flex;justify-content:center;
+  gap:1.4vmin;pointer-events:auto;flex-wrap:wrap;padding:0 2vmin}
+/* ---- juegos VERTICALES (body.vert): los controles van grandes y bien abajo,
+   porque en vertical el pulgar llega a la franja de abajo y no a los costados ---- */
+body.vert #tray{bottom:3.5%;gap:2.5vw}
+body.vert #tray .btn{min-width:16vw;padding:.85em 1.1em;font-size:clamp(15px,4.4vw,26px)}
+body.vert #tray .btn.sq{width:16vw;height:16vw}
+body.vert .pill{font-size:clamp(12px,3.4vw,20px);padding:.5em .9em}
+body.vert #pScore{left:4vw;top:2vh}
+body.vert #pInfo{top:2vh}
+body.vert #pPause{right:4vw;top:2vh;width:11vw;height:11vw}
+body.vert #menu .wrap{padding:0 7vw 7vh;gap:2.4vh}
+/* en vertical el arte 16:9 se recortaba tanto que el título quedaba cortado
+   ("ZA CA" en la captura V3): se ajusta por ANCHO y se pega arriba, y el resto de
+   la columna lo llena el color del juego. */
+body.vert #menu{background-size:100% auto;background-position:center 16%}
+body.vert #menu:before{background:linear-gradient(0deg,rgba(5,7,10,.97) 0%,rgba(5,7,10,.82) 34%,rgba(5,7,10,.12) 62%,rgba(5,7,10,.35) 100%)}
+body.vert #menu .sub{max-width:100%}
+body.vert #best{right:5vw;bottom:7vh}
+body.vert .card{max-width:88vw}
+body.vert .h1{font-size:clamp(22px,7vw,44px)}
+body.vert .h2{font-size:clamp(14px,4.4vw,24px)}
+body.vert .sm{font-size:clamp(11px,3.2vw,16px)}
+body.vert .btn{font-size:clamp(13px,3.8vw,20px)}
+/* ---- tarjetas / paneles ---- */
+.card{background:rgba(14,18,24,.92);border:1px solid rgba(255,255,255,.14);border-radius:18px;
+  padding:clamp(12px,3vmin,26px);box-shadow:0 18px 50px rgba(0,0,0,.6);max-width:86vmin;
+  display:flex;flex-direction:column;align-items:center;gap:1.6vmin}
+.stars{display:flex;gap:.35em;font-size:clamp(20px,5.6vmin,42px);line-height:1}
+.stars i{font-style:normal;opacity:.22}
+.stars i.on{opacity:1;filter:drop-shadow(0 0 8px rgba(255,196,60,.7))}
+.grid{display:grid;gap:1.2vmin}
+.lvl{width:clamp(38px,8.4vmin,60px);height:clamp(38px,8.4vmin,60px);border-radius:13px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);font-weight:900;
+  font-size:clamp(12px,2.7vmin,18px);pointer-events:auto}
+.lvl.done{background:linear-gradient(180deg,var(--acc),var(--acc2));color:#10141a}
+.lvl.lock{opacity:.35}
+.lvl b{font-size:.52em;letter-spacing:1px;opacity:.9}
+/* ---- ajustes ---- */
+.sw{width:clamp(42px,9vmin,62px);height:clamp(24px,5vmin,34px);border-radius:999px;
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);position:relative;
+  pointer-events:auto;transition:background .15s}
+.sw:after{content:"";position:absolute;top:2px;left:2px;width:calc(100% - 4px);height:calc(100% - 4px);
+  aspect-ratio:1;border-radius:999px;background:#eef2f6;transition:transform .15s}
+.sw.on{background:var(--acc)}
+.sw.on:after{transform:translateX(calc(100% + 2px))}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:2vmin;width:min(70vmin,100%)}
+/* ---- avisos ---- */
+#toast{position:absolute;left:50%;top:16%;transform:translateX(-50%) scale(.9);opacity:0;
+  padding:.5em 1.1em;border-radius:12px;background:rgba(10,14,19,.9);font-weight:900;
+  font-size:clamp(12px,2.8vmin,20px);transition:opacity .18s,transform .18s;z-index:5}
+#toast.on{opacity:1;transform:translateX(-50%) scale(1)}
+#fps{position:absolute;left:50%;bottom:.6vmin;transform:translateX(-50%);font-size:10px;
+  opacity:.35;z-index:5}
+#load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:2vmin;background:#05070a;z-index:9}
+#load .bar{width:44vmin;height:6px;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden}
+#load .bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+</style></head><body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <canvas id="cv"></canvas>
+  <div id="hud">
+    <div class="pill" id="pScore">0</div>
+    <div class="pill" id="pInfo"></div>
+    <div class="pill" id="pPause">II</div>
+    <div id="tray"></div>
+  </div>
+  <div class="scr" id="menu"><div class="wrap">
+      <div class="ttl" id="mTtl"></div>
+      <div class="sm sub" id="mSub"></div>
+      <div class="row mrow">
+        <div class="btn" id="bPlay">JUGAR</div>
+        <div class="btn gh" id="bLevels">NIVELES</div>
+        <div class="btn gh sq" id="bOpts">⚙</div>
+      </div>
+    </div><div class="sm" id="best"></div></div>
+  <div class="scr" id="pause"><div class="card">
+      <div class="h1">PAUSA</div>
+      <div class="row">
+        <div class="btn" id="bRes">SEGUIR</div>
+        <div class="btn gh" id="bRetry">REINTENTAR</div>
+        <div class="btn gh" id="bQuit">MENÚ</div>
+      </div></div></div>
+  <div class="scr" id="over"><div class="card">
+      <div class="h1" id="oTtl">FIN</div>
+      <div class="stars" id="oStars"><i>★</i><i>★</i><i>★</i></div>
+      <div class="h2" id="oScore"></div>
+      <div class="sm" id="oSub"></div>
+      <div class="row">
+        <div class="btn" id="bNext">SEGUIR</div>
+        <div class="btn gh" id="bAgain">OTRA VEZ</div>
+        <div class="btn gh" id="bMenu">MENÚ</div>
+      </div></div></div>
+  <div class="scr" id="levels"><div class="card">
+      <div class="h2">NIVELES</div>
+      <div class="grid" id="lvGrid"></div>
+      <div class="btn gh" id="bLvBack">VOLVER</div></div></div>
+  <div class="scr" id="opts"><div class="card">
+      <div class="h2">AJUSTES</div>
+      <div class="opt"><div class="sm">Música</div><div class="sw on" id="swMus"></div></div>
+      <div class="opt"><div class="sm">Sonidos</div><div class="sw on" id="swSfx"></div></div>
+      <div class="opt"><div class="sm">Vibración</div><div class="sw on" id="swVib"></div></div>
+      <div class="opt"><div class="sm">Efectos extra</div><div class="sw on" id="swFx"></div></div>
+      <div class="opt"><div class="sm">Mostrar FPS</div><div class="sw" id="swFps"></div></div>
+      <div class="row"><div class="btn gh" id="bWipe">BORRAR PROGRESO</div>
+        <div class="btn" id="bOptBack">LISTO</div></div></div></div>
+  <div id="toast"></div>
+  <div id="fps" style="display:none">–</div>
+  <div id="load"><div class="h2" id="ldTtl">CARGANDO</div><div class="bar"><i id="ldBar"></i></div>
+    <div class="sm" id="ldTxt">preparando…</div></div>
+</div>
+
+<script>
+(function(){var Q=new URLSearchParams(location.search);var TV="0.170.0";
+var t=Q.has("local")?"/_vthree/build/three.module.js":"https://cdn.jsdelivr.net/npm/three@"+TV+"/build/three.module.js";
+var a=Q.has("local")?"/_vthree/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@"+TV+"/examples/jsm/";
+document.write('<script type="importmap">{"imports":{"three":"'+t+'","three/addons/":"'+a+'"}}<\/script>');
+})();
+</script>
+<script type="module">
+/* ---- assets ---- */
+const BASE=(new URLSearchParams(location.search).has('local')?'/assets/arcade/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@52a0c3d/assets/arcade/');
+const A=f=>BASE+f;
+/* ============================================================================
+   ARCADE SHELL — el motor común de los 5 juegos
+   ----------------------------------------------------------------------------
+   Un solo archivo, cero dependencias, canvas 2D + overlays de DOM para los
+   menús (el texto queda nítido y se estila con CSS en vez de dibujarse).
+   Lo que resuelve por todos:
+     · APAISADO SIEMPRE (rota #stage 90° si el teléfono está vertical) y puntero
+       convertido a mano, porque la rotación del compositor cruza los ejes.
+     · Bucle de paso FIJO a 60 Hz con interpolación al dibujar: la simulación no
+       cambia con los FPS del celular y el movimiento no tiembla a 120 Hz.
+     · Audio (WebAudio con limitador + música por <audio>), con SÍNTESIS de
+       respaldo: si un mp3 no está o el navegador no lo decodifica, suena un
+       blip generado y el juego no se queda muerto de sonido.
+     · Guardado en localStorage, pantallas (menú/pausa/fin/niveles/ajustes),
+       partículas, texto flotante, sacudida de cámara, toast, FPS y calidad
+       adaptativa (si baja de 45 fps se recortan las partículas).
+   Contrato del juego (window.GAME): ver el final del archivo.
+   ========================================================================== */
+'use strict';
+const ARC={W:0,H:0,dpr:1,q:1,t:0,dt:1/60,frame:0,fps:60,paused:false,scr:'load',lvl:1,alive:false};
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const rndi=(a,b)=>Math.floor(rnd(a,b+1));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const TAU=Math.PI*2;
+
+/* ---------------------------------------------------------------- 1. ESCENARIO
+   Si el viewport está vertical se rota el escenario 90° y se le fijan ancho y
+   alto EN PX (cruzados). Todo lo demás vive en ese espacio: ARC.W/ARC.H son las
+   medidas del juego, siempre apaisadas. */
+let ROT=false,OFFX=0;
+function fit(){
+  const vw=Math.round(window.innerWidth),vh=Math.round(window.innerHeight);
+  const st=$('stage');
+  /* GAME.portrait = el juego se juega VERTICAL de verdad (tipo Crossy Road): no se
+     rota nada. En una ventana apaisada (escritorio) se centra una columna 9:16 y
+     el resto queda negro, para que el encuadre sea el mismo que en el teléfono. */
+  if(GAME.portrait){
+    ROT=false;
+    const w=Math.min(vw,Math.round(vh*.58));
+    OFFX=Math.round((vw-w)/2);
+    st.style.width=w+'px';st.style.height=vh+'px';
+    st.style.transform=OFFX?('translateX('+OFFX+'px)'):'none';
+  }else{
+    OFFX=0;
+    ROT=vh>vw;
+    if(ROT){
+      st.style.width=vh+'px';st.style.height=vw+'px';
+      st.style.transform='translateX('+vw+'px) rotate(90deg)';
+    }else{
+      st.style.width=vw+'px';st.style.height=vh+'px';st.style.transform='none';
+    }
+  }
+  ARC.W=st.clientWidth;ARC.H=st.clientHeight;
+  const cv=$('cv');
+  ARC.dpr=clamp(window.devicePixelRatio||1,1,2.5);
+  cv.style.width=ARC.W+'px';cv.style.height=ARC.H+'px';
+  cv.width=Math.round(ARC.W*ARC.dpr);cv.height=Math.round(ARC.H*ARC.dpr);
+  ARC.g=cv.getContext('2d');
+  ARC.g.setTransform(ARC.dpr,0,0,ARC.dpr,0,0);
+  /* la escena 3D usa su propio lienzo y su propio DPR (más barato en el celular:
+     el 3D a 1.5x se ve igual y cuesta la mitad que a 3x) */
+  const gl=$('gl');
+  gl.style.width=ARC.W+'px';gl.style.height=ARC.H+'px';
+  if(ARC.rnd){
+    ARC.rnd.setPixelRatio(Math.min(ARC.dpr,1.75));
+    ARC.rnd.setSize(ARC.W,ARC.H,false);
+  }
+  if(GAME.resize)GAME.resize();
+}
+window.addEventListener('resize',()=>{fit();},{passive:true});
+window.addEventListener('orientationchange',()=>setTimeout(fit,120),{passive:true});
+
+/* ---- puntero: del evento del navegador al espacio del escenario ----
+   Con el escenario rotado 90° y corrido vw en X, un punto (sx,sy) del escenario
+   cae en pantalla en (vw−sy, sx). La inversa es la que hace falta acá. NO se usa
+   getBoundingClientRect: devuelve la caja YA rotada y mezcla los ejes. */
+ARC.pt=function(e){
+  const x=e.clientX,y=e.clientY;
+  if(ROT)return{x:y,y:Math.round(window.innerWidth)-x};
+  return{x:x-OFFX,y:y};      /* OFFX = columna centrada de los juegos verticales */
+};
+
+/* ------------------------------------------------------------------ 2. GUARDADO */
+const SAVE={};
+function saveKey(){return 'arc.'+GAME.slug;}
+function saveLoad(){
+  try{Object.assign(SAVE,JSON.parse(localStorage.getItem(saveKey())||'{}'));}catch(e){}
+  if(SAVE.mus===undefined)SAVE.mus=1;
+  if(SAVE.sfx===undefined)SAVE.sfx=1;
+  if(SAVE.vib===undefined)SAVE.vib=1;
+  if(SAVE.fx===undefined)SAVE.fx=1;
+  if(SAVE.fps===undefined)SAVE.fps=0;
+  if(!SAVE.stars)SAVE.stars={};
+  if(!SAVE.best)SAVE.best=0;
+  if(!SAVE.coins)SAVE.coins=0;
+  if(!SAVE.done)SAVE.done=0;      /* nivel más alto superado */
+}
+function saveNow(){try{localStorage.setItem(saveKey(),JSON.stringify(SAVE));}catch(e){}}
+ARC.save=saveNow;ARC.S=SAVE;
+
+/* -------------------------------------------------------------------- 3. AUDIO */
+const SND={ctx:null,buf:{},gain:null,mus:null,ready:false};
+function actx(){
+  if(SND.ctx)return SND.ctx;
+  const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
+  SND.ctx=new C();
+  const lim=SND.ctx.createDynamicsCompressor();
+  lim.threshold.value=-6;lim.knee.value=0;lim.ratio.value=12;lim.attack.value=.003;lim.release.value=.15;
+  SND.gain=SND.ctx.createGain();SND.gain.gain.value=.85;
+  SND.gain.connect(lim);lim.connect(SND.ctx.destination);
+  return SND.ctx;
+}
+ARC.sndResume=function(){const c=actx();if(c&&c.state==='suspended')c.resume();};
+/* carga de efectos: si algo no llega o no se puede decodificar, se deja sin
+   buffer y sonará el blip sintetizado (nunca silencio total ni excepción) */
+ARC.sndLoad=function(map,done){
+  const ks=Object.keys(map);let n=0;
+  if(!ks.length){done&&done();return;}
+  ks.forEach(k=>{
+    fetch(map[k]).then(r=>r.arrayBuffer()).then(b=>{
+      const c=actx();if(!c)throw 0;
+      return new Promise((res,rej)=>c.decodeAudioData(b,res,rej));
+    }).then(buf=>{SND.buf[k]=buf;}).catch(()=>{}).then(()=>{
+      if(++n===ks.length){SND.ready=true;done&&done();}
+    });
+  });
+};
+/* blips de respaldo por nombre: no pretenden imitar el mp3, pero dan feedback */
+const BEEP={tap:[520,.05,'square',.25],pop:[720,.08,'sine',.3],chime:[1040,.16,'triangle',.28],
+  coin:[1180,.1,'square',.25],win:[880,.4,'triangle',.3],lose:[180,.4,'sawtooth',.25],
+  click:[1400,.04,'square',.22],wood:[240,.12,'sawtooth',.3],glass:[2200,.1,'triangle',.22],
+  splat:[300,.14,'sine',.3],groan:[120,.35,'sawtooth',.22],launch:[420,.14,'sawtooth',.28],
+  boom:[90,.35,'sawtooth',.35],power:[1320,.22,'triangle',.28],shoot:[640,.07,'square',.22]};
+ARC.sfx=function(name,o){
+  if(!SAVE.sfx)return;
+  const c=actx();if(!c)return;
+  o=o||{};
+  const b=SND.buf[name];
+  if(b){
+    const s=c.createBufferSource();s.buffer=b;
+    s.playbackRate.value=o.rate||1;
+    const g=c.createGain();g.gain.value=(o.vol==null?1:o.vol);
+    s.connect(g);g.connect(SND.gain);s.start(0);return;
+  }
+  const d=BEEP[name]||BEEP.tap;
+  const os=c.createOscillator(),g=c.createGain();
+  os.type=d[2];os.frequency.value=d[0]*(o.rate||1);
+  const v=d[3]*(o.vol==null?1:o.vol);
+  g.gain.setValueAtTime(0,c.currentTime);
+  g.gain.linearRampToValueAtTime(v,c.currentTime+.008);
+  g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+d[1]);
+  os.connect(g);g.connect(SND.gain);os.start();os.stop(c.currentTime+d[1]+.02);
+};
+ARC.music=function(url){
+  if(!url)return;
+  if(!SND.mus){
+    SND.mus=new Audio();SND.mus.loop=true;SND.mus.volume=.42;
+    SND.mus.addEventListener('error',()=>{},{passive:true});
+  }
+  if(SND.mus.src!==url){SND.mus.src=url;}
+  if(SAVE.mus){const p=SND.mus.play();if(p&&p.catch)p.catch(()=>{});}
+};
+ARC.musicStop=function(){if(SND.mus)SND.mus.pause();};
+ARC.vib=function(ms){if(SAVE.vib&&navigator.vibrate)try{navigator.vibrate(ms||12);}catch(e){}};
+
+/* ---------------------------------------------------------------- 4. EFECTOS */
+const PT=[],TX=[];
+let shake=0,shakeT=0;
+ARC.fx={
+  burst(x,y,o){
+    o=o||{};
+    let n=Math.round((o.n||14)*ARC.q*(SAVE.fx?1:.45));
+    const sp=o.speed||220,life=o.life||.55,g=o.g==null?900:o.g;
+    for(let i=0;i<n;i++){
+      const a=o.a==null?rnd(0,TAU):o.a+rnd(-.6,.6);
+      const v=sp*rnd(.35,1);
+      PT.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:life*rnd(.6,1.2),L:life,
+        s:(o.size||5)*rnd(.6,1.4),c:o.color||'#ffd166',g,sq:!!o.sq,
+        rot:rnd(0,TAU),spin:rnd(-8,8),fade:o.fade!==false});
+    }
+  },
+  ring(x,y,o){o=o||{};PT.push({ring:1,x,y,r:o.r0||6,R:o.r||90,l:o.life||.35,L:o.life||.35,
+    c:o.color||'#fff',w:o.w||4});},
+  text(x,y,txt,o){o=o||{};TX.push({x,y,t:txt,l:o.life||.8,L:o.life||.8,c:o.color||'#fff',
+    s:o.size||22,vy:o.vy==null?-46:o.vy});}
+};
+ARC.shake=function(m){shake=Math.max(shake,m||6);};
+function fxStep(dt){
+  for(let i=PT.length-1;i>=0;i--){const p=PT[i];
+    p.l-=dt;if(p.l<=0){PT.splice(i,1);continue;}
+    if(p.ring){p.r=lerp(p.r,p.R,1-Math.pow(.001,dt));continue;}
+    p.vy+=p.g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.rot+=p.spin*dt;
+    if(p.bounce&&p.y>p.bounce){p.y=p.bounce;p.vy*=-.42;p.vx*=.7;}
+  }
+  for(let i=TX.length-1;i>=0;i--){const t=TX[i];t.l-=dt;if(t.l<=0){TX.splice(i,1);continue;}
+    t.y+=t.vy*dt;}
+  if(shake>0){shakeT+=dt*46;shake=Math.max(0,shake-dt*shake*7-dt*3);}
+}
+function fxDraw(g){
+  for(const p of PT){
+    const k=p.l/p.L;
+    g.globalAlpha=p.fade===false?1:clamp(k*1.4,0,1);
+    if(p.ring){g.strokeStyle=p.c;g.lineWidth=p.w*k;g.beginPath();g.arc(p.x,p.y,p.r,0,TAU);g.stroke();continue;}
+    g.fillStyle=p.c;
+    if(p.sq){g.save();g.translate(p.x,p.y);g.rotate(p.rot);
+      g.fillRect(-p.s/2,-p.s/2,p.s,p.s);g.restore();}
+    else{g.beginPath();g.arc(p.x,p.y,p.s*(.4+.6*k),0,TAU);g.fill();}
+  }
+  g.globalAlpha=1;
+  for(const t of TX){
+    const k=t.l/t.L;
+    g.globalAlpha=clamp(k*1.6,0,1);
+    g.font='900 '+t.s+'px system-ui,sans-serif';g.textAlign='center';
+    g.lineWidth=4;g.strokeStyle='rgba(0,0,0,.55)';g.strokeText(t.t,t.x,t.y);
+    g.fillStyle=t.c;g.fillText(t.t,t.x,t.y);
+  }
+  g.globalAlpha=1;g.textAlign='left';
+}
+
+/* foto de la escena 3D para las sondas: se lee el framebuffer DENTRO de un
+   requestAnimationFrame, que corre después del render del bucle en el MISMO
+   frame — ahí el buffer todavía está intacto (después del compositado ya no). */
+ARC.snapGL=function(){
+  return new Promise(res=>{
+    requestAnimationFrame(()=>{
+      const r=ARC.rnd;if(!r){res(null);return;}
+      const gl=r.getContext();
+      const W=gl.drawingBufferWidth,H=gl.drawingBufferHeight;
+      const px=new Uint8Array(W*H*4);
+      gl.readPixels(0,0,W,H,gl.RGBA,gl.UNSIGNED_BYTE,px);
+      let sum=0,n=0;const uniq={};
+      for(let i=0;i<px.length;i+=4*37){n++;
+        sum+=px[i]*.3+px[i+1]*.6+px[i+2]*.1;
+        uniq[(px[i]>>5)+','+(px[i+1]>>5)+','+(px[i+2]>>5)]=1;}
+      res({luz:+(sum/Math.max(1,n)).toFixed(1),colores:Object.keys(uniq).length});
+    });
+  });
+};
+
+/* ---------------------------------------------------------------- 5. PANTALLAS */
+const SCRS=['menu','pause','over','levels','opts'];
+ARC.show=function(s){
+  for(const k of SCRS)$(k).classList.toggle('on',k===s);
+  $('hud').style.display=(s==='game')?'block':'none';
+  ARC.scr=s;
+};
+ARC.toast=function(t,ms){
+  const el=$('toast');el.textContent=t;el.classList.add('on');
+  clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),ms||1100);
+};
+ARC.hud=function(score,info){
+  if(score!==undefined)$('pScore').textContent=score;
+  if(info!==undefined)$('pInfo').innerHTML=info;
+};
+/* bandeja de botones del juego (impulsar, boosters, etc.) */
+ARC.tray=function(list){
+  const t=$('tray');t.innerHTML='';
+  (list||[]).forEach(b=>{
+    const el=document.createElement('div');
+    el.className='btn '+(b.gh?'gh ':'')+(b.sq?'sq':'');
+    el.id='tb_'+b.id;el.innerHTML=b.txt;
+    el.addEventListener('pointerdown',ev=>{ev.preventDefault();ARC.sfx('tap');ARC.vib(10);b.fn&&b.fn(el);});
+    t.appendChild(el);
+  });
+};
+ARC.trayTxt=function(id,txt){const el=$('tb_'+id);if(el)el.innerHTML=txt;};
+
+/* --------------------------------------------------------------- 6. PARTIDA */
+ARC.play=function(lvl){
+  ARC.lvl=lvl||1;
+  ARC.alive=true;ARC.paused=false;
+  PT.length=0;TX.length=0;shake=0;
+  ARC.show('game');
+  GAME.start(ARC.lvl);
+  ARC.music(GAME.music);
+};
+ARC.over=function(o){
+  o=o||{};ARC.alive=false;
+  const st=Math.max(0,Math.min(3,o.stars==null?(o.win?3:0):o.stars));
+  if(o.win){
+    const key=String(ARC.lvl);
+    if((SAVE.stars[key]||0)<st){SAVE.stars[key]=st;}
+    if(ARC.lvl>SAVE.done)SAVE.done=ARC.lvl;
+  }
+  if(o.score!=null&&o.score>SAVE.best)SAVE.best=o.score;
+  if(o.coins)SAVE.coins+=o.coins;
+  saveNow();
+  $('oTtl').textContent=o.title||(o.win?'¡NIVEL SUPERADO!':'PERDISTE');
+  $('oScore').textContent=o.score!=null?('PUNTOS '+o.score):'';
+  $('oSub').innerHTML=o.sub||'';
+  const S=$('oStars').children;
+  $('oStars').style.display=o.noStars?'none':'flex';
+  for(let i=0;i<3;i++)S[i].classList.toggle('on',i<st);
+  $('bNext').style.display=(o.win&&GAME.levels&&ARC.lvl<GAME.levels)?'flex':'none';
+  ARC.sfx(o.win?'win':'lose');
+  ARC.vib(o.win?[10,40,10]:60);
+  ARC.show('over');
+};
+ARC.pause=function(){
+  if(!ARC.alive||ARC.paused)return;
+  ARC.paused=true;ARC.show('pause');GAME.pause&&GAME.pause();
+};
+ARC.resume=function(){
+  if(!ARC.alive)return;
+  ARC.paused=false;ARC.show('game');GAME.resume&&GAME.resume();
+};
+ARC.menu=function(){
+  ARC.alive=false;ARC.paused=false;ARC.show('menu');refreshMenu();
+};
+
+/* --------------------------------------------------------------- 7. EL BUCLE
+   Paso FIJO de 1/60 con acumulador y alpha de interpolación al dibujar: la
+   física no depende de los FPS (un celular a 30 y otro a 120 simulan igual) y
+   el dibujo no tiembla. Se cortan los saltos grandes (pestaña en segundo plano)
+   a 5 pasos por frame para no colgar el hilo. */
+const STEP=1/60;
+let acc=0,last=0,fpsA=60,slowT=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(!last)last=ts;
+  let d=(ts-last)/1000;last=ts;
+  if(d>.25)d=.25;
+  ARC.fps=fpsA=lerp(fpsA,1/Math.max(.001,d),.06);
+  if(SAVE.fps)$('fps').textContent=Math.round(fpsA)+' fps';
+  /* calidad adaptativa: dos segundos por debajo de 45 fps y se recortan
+     partículas (ARC.q lo leen los juegos y ARC.fx.burst) */
+  if(fpsA<45){slowT+=d;if(slowT>2&&ARC.q>.5){ARC.q=.5;slowT=0;}}
+  else{slowT=Math.max(0,slowT-d);if(fpsA>56&&ARC.q<1)ARC.q=Math.min(1,ARC.q+d*.2);}
+  const run=ARC.alive&&!ARC.paused;
+  acc+=d;
+  let n=0;
+  while(acc>=STEP&&n<5){
+    acc-=STEP;n++;ARC.t+=STEP;ARC.frame++;
+    if(run)GAME.step(STEP);
+    fxStep(STEP);
+  }
+  if(acc>STEP*5)acc=0;
+  const g=ARC.g;if(!g)return;
+  g.setTransform(ARC.dpr,0,0,ARC.dpr,0,0);
+  g.clearRect(0,0,ARC.W,ARC.H);
+  if(shake>.05){
+    g.translate(Math.sin(shakeT*1.7)*shake,Math.cos(shakeT*2.3)*shake*.8);
+  }
+  /* en el menú no se dibuja el juego: el canvas queda limpio (el arte del menú es
+     DOM) y el celular no gasta batería dibujando un tablero que nadie ve */
+  if(ARC.scr==='game'||ARC.scr==='pause'||ARC.scr==='over'){
+    GAME.draw(g,acc/STEP);
+    fxDraw(g);
+  }else if(ARC.rnd&&ARC.clearGL){ARC.rnd.clear();}
+}
+
+/* ------------------------------------------------------------- 8. ENTRADA */
+function bindInput(){
+  const cv=$('cv');
+  const down=e=>{
+    e.preventDefault();ARC.sndResume();
+    if(ARC.alive&&!ARC.paused&&GAME.down)GAME.down(ARC.pt(e),e);
+  };
+  const move=e=>{
+    e.preventDefault();
+    if(ARC.alive&&!ARC.paused&&GAME.move)GAME.move(ARC.pt(e),e);
+  };
+  const up=e=>{
+    e.preventDefault();
+    if(ARC.alive&&!ARC.paused&&GAME.up)GAME.up(ARC.pt(e),e);
+  };
+  cv.addEventListener('pointerdown',down);
+  cv.addEventListener('pointermove',move);
+  cv.addEventListener('pointerup',up);
+  cv.addEventListener('pointercancel',up);
+  const B=(id,fn)=>{const el=$(id);if(!el)return;
+    el.addEventListener('pointerdown',e=>{e.preventDefault();ARC.sndResume();ARC.sfx('tap');ARC.vib(10);fn(el);});};
+  B('bPlay',()=>ARC.play(GAME.levels?Math.min(GAME.levels,(SAVE.done||0)+1):1));
+  B('bLevels',()=>{buildLevels();ARC.show('levels');});
+  B('bLvBack',()=>ARC.menu());
+  B('bOpts',()=>{ARC.show('opts');});
+  B('bOptBack',()=>ARC.menu());
+  B('pPause',()=>ARC.pause());
+  B('bRes',()=>ARC.resume());
+  B('bRetry',()=>ARC.play(ARC.lvl));
+  B('bQuit',()=>ARC.menu());
+  B('bAgain',()=>ARC.play(ARC.lvl));
+  B('bMenu',()=>ARC.menu());
+  B('bNext',()=>ARC.play(Math.min(GAME.levels||1,ARC.lvl+1)));
+  B('bWipe',()=>{const m=SAVE.mus,s=SAVE.sfx,v=SAVE.vib,f=SAVE.fx;
+    for(const k in SAVE)delete SAVE[k];
+    SAVE.mus=m;SAVE.sfx=s;SAVE.vib=v;SAVE.fx=f;SAVE.stars={};SAVE.best=0;SAVE.done=0;SAVE.coins=0;
+    saveNow();ARC.toast('Progreso borrado');refreshMenu();});
+  const SW=(id,key,fn)=>{const el=$(id);if(!el)return;
+    el.classList.toggle('on',!!SAVE[key]);
+    el.addEventListener('pointerdown',e=>{e.preventDefault();
+      SAVE[key]=SAVE[key]?0:1;el.classList.toggle('on',!!SAVE[key]);saveNow();
+      ARC.sfx('tap');ARC.vib(10);fn&&fn(SAVE[key]);});};
+  SW('swMus','mus',v=>{if(v)ARC.music(GAME.music);else ARC.musicStop();});
+  SW('swSfx','sfx');
+  SW('swVib','vib');
+  SW('swFx','fx');
+  SW('swFps','fps',v=>{$('fps').style.display=v?'block':'none';});
+  document.addEventListener('keydown',e=>{
+    if(e.code==='Escape'){if(ARC.alive&&!ARC.paused)ARC.pause();else if(ARC.paused)ARC.resume();}
+    if(GAME.key)GAME.key(e.code,true);
+  });
+  document.addEventListener('keyup',e=>{if(GAME.key)GAME.key(e.code,false);});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden&&ARC.alive)ARC.pause();});
+}
+
+/* -------------------------------------------------------- 9. MENÚ / NIVELES */
+function refreshMenu(){
+  $('mTtl').innerHTML=GAME.title;
+  $('mSub').innerHTML=GAME.sub;
+  const b=[];
+  if(GAME.bestLabel!==null)b.push('<b>'+(GAME.bestLabel||'RÉCORD')+'</b> '+(SAVE.best||0));
+  if(GAME.levels)b.push('NIVEL '+Math.min(GAME.levels,(SAVE.done||0)+1)+'/'+GAME.levels);
+  b.push('★ '+Object.values(SAVE.stars||{}).reduce((s,v)=>s+v,0));
+  $('best').innerHTML=b.join('<br>');
+  $('bLevels').style.display=GAME.levels?'flex':'none';
+  ARC.music(GAME.music);
+}
+function buildLevels(){
+  const g=$('lvGrid');g.innerHTML='';
+  const n=GAME.levels||1;
+  const cols=Math.min(8,Math.ceil(Math.sqrt(n)+1));
+  g.style.gridTemplateColumns='repeat('+cols+',auto)';
+  for(let i=1;i<=n;i++){
+    const st=SAVE.stars[String(i)]||0;
+    const lock=i>(SAVE.done||0)+1;
+    const el=document.createElement('div');
+    el.className='lvl'+(st?' done':'')+(lock?' lock':'');
+    el.innerHTML=i+(st?'<b>'+'★'.repeat(st)+'</b>':'');
+    if(!lock)el.addEventListener('pointerdown',e=>{e.preventDefault();ARC.sfx('tap');ARC.play(i);});
+    g.appendChild(el);
+  }
+}
+
+/* -------------------------------------------------------------- 10. ARRANQUE */
+ARC.boot=async function(){
+  document.documentElement.style.setProperty('--acc',GAME.acc||'#ffd166');
+  document.documentElement.style.setProperty('--acc2',GAME.acc2||'#f0a02a');
+  $('ldTtl').textContent=GAME.name||'CARGANDO';
+  saveLoad();
+  if(GAME.portrait)document.body.classList.add('vert');
+  /* three.js sólo si el juego es 3D: se carga por importmap (dinámico para que un
+     juego 2D no pague la descarga) */
+  if(GAME.three){
+    $('ldTxt').textContent='motor 3D…';
+    try{
+      const THREE=await import('three');
+      ARC.THREE=THREE;
+      const gl=$('gl');
+      ARC.rnd=new THREE.WebGLRenderer({canvas:gl,antialias:true,alpha:false,powerPreference:'high-performance'});
+      ARC.rnd.setClearColor(new THREE.Color(GAME.sky||'#0d1014'),1);
+      if(THREE.SRGBColorSpace)ARC.rnd.outputColorSpace=THREE.SRGBColorSpace;
+      ARC.rnd.shadowMap.enabled=!!GAME.shadows;
+      if(GAME.shadows)ARC.rnd.shadowMap.type=THREE.PCFSoftShadowMap;
+    }catch(e){
+      $('ldTxt').textContent='sin WebGL';
+      console.warn('three',e);
+    }
+  }
+  fit();bindInput();
+  $('fps').style.display=SAVE.fps?'block':'none';
+  /* arte del menú: si no llega, queda el degradado del CSS y el juego arranca igual */
+  let pend=1,ok=0;
+  const step=()=>{ok++;$('ldBar').style.width=Math.round(ok/(pend+1)*100)+'%';};
+  const go=()=>{
+    $('load').style.display='none';
+    ARC.show('menu');refreshMenu();
+    GAME.init&&GAME.init();
+    requestAnimationFrame(loop);
+  };
+  if(GAME.art){
+    $('ldTxt').textContent='arte…';
+    const im=new Image();
+    im.onload=()=>{
+      const el=$('menu');
+      if(GAME.portrait){
+        /* vertical: el arte 16:9 va como banda de arriba (ajustado por ancho, así el
+           título no se corta) y el resto de la columna lo llena un degradado con el
+           color del juego, en vez de quedar negro vacío. */
+        el.style.backgroundImage='url('+GAME.art+'), linear-gradient(180deg,'+
+          (GAME.acc2||'#222')+'55 0%, #0a0d12 46%, #05070a 100%)';
+        el.style.backgroundSize='100% auto, 100% 100%';
+        el.style.backgroundRepeat='no-repeat, no-repeat';
+        el.style.backgroundPosition='center 14%, center';
+      }else{
+        el.style.backgroundImage='url('+GAME.art+')';
+      }
+      el.classList.add('hasart');step();fin();};
+    im.onerror=()=>{step();fin();};
+    im.src=GAME.art;
+  }else{pend=0;}
+  let done=0;
+  const fin=()=>{if(++done>=1)afterArt();};
+  const afterArt=()=>{
+    $('ldTxt').textContent='sonidos…';
+    ARC.sndLoad(GAME.sfx||{},()=>{$('ldBar').style.width='100%';setTimeout(go,120);});
+  };
+  if(!GAME.art)afterArt();
+  /* el audio necesita un gesto: el primer toque en cualquier parte lo despierta */
+  const wake=()=>{ARC.sndResume();ARC.music(GAME.music);
+    window.removeEventListener('pointerdown',wake);};
+  window.addEventListener('pointerdown',wake);
+};
+
+/* ============================ CONTRATO DEL JUEGO ============================
+   window.GAME = {
+     slug, name, title (HTML), sub (HTML), acc, acc2,   // identidad y colores
+     art, music, sfx:{nombre:url},                      // assets
+     levels, bestLabel,                                 // progresión
+     init(), start(lvl), step(dt), draw(g,alpha),       // ciclo
+     down(p,e), move(p,e), up(p,e), key(code,down),     // entrada (p en px del stage)
+     resize(), pause(), resume()                        // opcionales
+   }
+   El juego avisa el final con ARC.over({win,score,stars,sub,coins}).
+   ========================================================================== */
+
+/* ============================================================================
+   AGUJERO — un pozo negro que se come el barrio y crece
+   ----------------------------------------------------------------------------
+   Arrastrá para mover el agujero. Se traga TODO lo que sea más chico que él y
+   cada cosa lo agranda, así que primero bancos y arbolitos y al final las casas.
+   Hay dos agujeros rivales comiendo al mismo tiempo: gana el más grande cuando
+   se termina el tiempo. 6 barrios, cada uno con más cosas y rivales más rápidos.
+   ========================================================================== */
+const G={
+  slug:'agujero',name:'AGUJERO',
+  title:'A<em>GUJERO</em>',
+  sub:'Movés el pozo con el dedo y te tragás el barrio: cada cosa que cae te agranda. Dos rivales compiten por la misma cuadra.',
+  acc:'#c084fc',acc2:'#8b5cf6',levels:6,bestLabel:'MASA',
+  three:true,sky:'#cfe3f5',shadows:false,
+  art:A('art-agujero.jpg'),music:A('mus-agujero.m4a'),
+  sfx:{tap:A('sfx-tap.mp3'),pop:A('sfx-pop.mp3'),wood:A('sfx-wood.mp3'),glass:A('sfx-glass.mp3'),
+       coin:A('sfx-coin.mp3'),win:A('sfx-win.mp3'),lose:A('sfx-lose.mp3'),power:A('sfx-power.mp3'),
+       boom:A('sfx-boom.mp3')}
+};
+const MAP=26;                       /* medio lado del barrio */
+let T3,scene,cam,ground,props=[],holes=[],time=0,lvl=1,drag=null,dirv={x:0,z:0},done=false;
+const MAT={},GEO={};
+function mat(c){if(MAT[c])return MAT[c];return MAT[c]=new T3.MeshLambertMaterial({color:new T3.Color(c)});}
+function box(w,h,d){const k=w+'_'+h+'_'+d;return GEO[k]||(GEO[k]=new T3.BoxGeometry(w,h,d));}
+function addProp(kind,x,z){
+  const g=new T3.Group();g.position.set(x,0,z);
+  let r=.5,mass=1;
+  if(kind==='banco'){
+    g.add(new T3.Mesh(box(1.1,.16,.42),mat('#c58a4e')));g.children[0].position.y=.42;
+    g.add(new T3.Mesh(box(.14,.42,.4),mat('#8a95a3')));g.children[1].position.set(-.42,.21,0);
+    g.add(new T3.Mesh(box(.14,.42,.4),mat('#8a95a3')));g.children[2].position.set(.42,.21,0);
+    r=.62;mass=1;
+  }else if(kind==='arbol'){
+    g.add(new T3.Mesh(box(.3,.9,.3),mat('#6b4b2a')));g.children[0].position.y=.45;
+    const c=new T3.Mesh(new T3.SphereGeometry(.72,10,8),mat('#3f9e5c'));c.position.y=1.35;g.add(c);
+    r=.82;mass=2;
+  }else if(kind==='auto'){
+    g.add(new T3.Mesh(box(2.1,.6,1),mat(pick(['#e0503f','#2f6df6','#f6c343','#16a34a']))));
+    g.children[0].position.y=.5;
+    g.add(new T3.Mesh(box(1.1,.42,.94),mat('#dbe6f2')));g.children[1].position.set(-.1,.95,0);
+    r=1.18;mass=5;
+  }else if(kind==='kiosco'){
+    g.add(new T3.Mesh(box(2.2,2,2.2),mat('#f0a02a')));g.children[0].position.y=1;
+    g.add(new T3.Mesh(box(2.5,.2,2.5),mat('#e0503f')));g.children[1].position.y=2.1;
+    r=1.6;mass=12;
+  }else if(kind==='casa'){
+    const h=rnd(3,5.2);
+    g.add(new T3.Mesh(box(3.4,h,3.4),mat(pick(['#dfe6ee','#e8d9c5','#cfd8e3']))));
+    g.children[0].position.y=h/2;
+    g.add(new T3.Mesh(box(3.8,.4,3.8),mat('#8c4b3a')));g.children[1].position.y=h+.2;
+    r=2.5;mass=30;
+  }else{                            /* farol */
+    g.add(new T3.Mesh(box(.16,2.4,.16),mat('#5a6472')));g.children[0].position.y=1.2;
+    const l=new T3.Mesh(box(.4,.3,.4),mat('#fff3b0'));l.position.y=2.5;g.add(l);
+    r=.5;mass=1;
+  }
+  scene.add(g);
+  props.push({g,x,z,r,mass,kind,taken:0,fy:0,vr:rnd(-4,4)});
+}
+function buildCity(n){
+  for(const p of props)scene.remove(p.g);
+  props=[];
+  if(ground)scene.remove(ground);
+  ground=new T3.Group();
+  const base=new T3.Mesh(box(MAP*2,.4,MAP*2),mat('#c9d3c0'));
+  base.position.y=-.2;ground.add(base);
+  /* calles */
+  for(let i=-2;i<=2;i++){
+    const r1=new T3.Mesh(box(MAP*2,.06,4.2),mat('#4a5058'));r1.position.set(0,.02,i*11);ground.add(r1);
+    const r2=new T3.Mesh(box(4.2,.06,MAP*2),mat('#4a5058'));r2.position.set(i*11,.02,0);ground.add(r2);
+  }
+  scene.add(ground);
+  const kinds=['banco','arbol','farol','auto','kiosco','casa'];
+  const N=90+n*26;
+  for(let i=0;i<N;i++){
+    const k=kinds[Math.min(kinds.length-1,Math.floor(Math.pow(Math.random(),1.5)*kinds.length))];
+    let x=rnd(-MAP+3,MAP-3),z=rnd(-MAP+3,MAP-3);
+    /* no encima de las calles */
+    if(Math.abs(x%11)<3.2||Math.abs(z%11)<3.2){x+=5;z+=5;}
+    addProp(k,clamp(x,-MAP+3,MAP-3),clamp(z,-MAP+3,MAP-3));
+  }
+}
+function mkHole(col,ai){
+  const g=new T3.Group();
+  const disc=new T3.Mesh(new T3.CircleGeometry(1,28),new T3.MeshBasicMaterial({color:0x05060a}));
+  disc.rotation.x=-Math.PI/2;disc.position.y=.06;g.add(disc);
+  const ring=new T3.Mesh(new T3.RingGeometry(.98,1.16,28),
+    new T3.MeshBasicMaterial({color:new T3.Color(col),side:T3.DoubleSide}));
+  ring.rotation.x=-Math.PI/2;ring.position.y=.07;g.add(ring);
+  scene.add(g);
+  return {g,disc,ring,x:rnd(-8,8),z:rnd(-8,8),r:1,mass:0,ai:!!ai,col,tx:0,tz:0,t:0,sp:ai?5.6:7.4};
+}
+function radiusFor(mass){return Math.sqrt(1+mass*.055)*1.02;}
+/* ---- entrada ---- */
+G.down=function(p){drag={x:p.x,y:p.y};};
+G.move=function(p){
+  if(!drag)return;
+  const dx=p.x-drag.x,dy=p.y-drag.y,L=Math.hypot(dx,dy);
+  if(L<4){dirv.x=dirv.z=0;return;}
+  const k=Math.min(1,L/(ARC.H*.22));
+  dirv.x=dx/L*k;dirv.z=dy/L*k;
+};
+G.up=function(){drag=null;dirv.x=dirv.z=0;};
+G.key=function(c,d){
+  const v=d?1:0;
+  if(c==='ArrowLeft'||c==='KeyA')dirv.x=-v;
+  if(c==='ArrowRight'||c==='KeyD')dirv.x=v;
+  if(c==='ArrowUp'||c==='KeyW')dirv.z=-v;
+  if(c==='ArrowDown'||c==='KeyS')dirv.z=v;
+};
+/* ---- ciclo ---- */
+G.init=function(){
+  T3=ARC.THREE;if(!T3)return;
+  scene=new T3.Scene();
+  scene.background=new T3.Color('#cfe3f5');
+  scene.fog=new T3.Fog(0xcfe3f5,44,86);
+  cam=new T3.PerspectiveCamera(52,ARC.W/ARC.H,.5,180);
+  scene.add(new T3.HemisphereLight(0xffffff,0x9fb08f,1.05));
+  const d=new T3.DirectionalLight(0xfff6e0,.6);d.position.set(10,20,12);scene.add(d);
+};
+G.resize=function(){if(cam){cam.aspect=ARC.W/ARC.H;cam.updateProjectionMatrix();}};
+G.start=function(l){
+  if(!T3)return;
+  lvl=l||1;done=false;
+  buildCity(lvl);
+  for(const h of holes)scene.remove(h.g);
+  holes=[mkHole('#c084fc',false),mkHole('#4dd0ff',true),mkHole('#ff7ab8',true)];
+  holes[0].x=0;holes[0].z=6;
+  time=95-lvl*4;
+  ARC.hud(0,'TIEMPO '+Math.ceil(time));
+  ARC.tray([{id:'inf',txt:'BARRIO '+lvl,gh:1,fn:()=>ARC.toast('Comé todo lo que puedas antes que los rivales')}]);
+};
+function eatStep(h,dt){
+  for(const p of props){
+    if(p.taken)continue;
+    const dx=p.x-h.x,dz=p.z-h.z,d=Math.hypot(dx,dz);
+    if(d<h.r*.92&&p.r<=h.r*1.02){
+      p.taken=1;p.hole=h;
+      h.mass+=p.mass;h.r=radiusFor(h.mass);
+      if(!h.ai){
+        ARC.sfx(p.mass>=12?'boom':(p.mass>=5?'wood':'pop'),{rate:1.1-Math.min(.4,p.mass*.02)});
+        if(p.mass>=5)ARC.shake(Math.min(9,3+p.mass*.2));
+        ARC.hud(Math.round(h.mass),'TIEMPO '+Math.ceil(time));
+        ARC.fx.text(ARC.W/2+rnd(-60,60),ARC.H*.5,'+'+p.mass,{color:'#c084fc',size:18});
+      }
+    }
+  }
+}
+function aiStep(h,dt){
+  h.t-=dt;
+  if(h.t<=0||!h.target||h.target.taken){
+    h.t=rnd(.6,1.4);
+    let best=null,bd=1e9;
+    for(const p of props){
+      if(p.taken||p.r>h.r*1.02)continue;
+      const d=Math.hypot(p.x-h.x,p.z-h.z)-p.mass*.35;
+      if(d<bd){bd=d;best=p;}
+    }
+    h.target=best;
+  }
+  if(h.target){
+    const dx=h.target.x-h.x,dz=h.target.z-h.z,L=Math.hypot(dx,dz)||1;
+    h.x+=dx/L*h.sp*dt;h.z+=dz/L*h.sp*dt;
+  }
+}
+G.step=function(dt){
+  if(!T3||done)return;
+  time-=dt;
+  const me=holes[0];
+  me.x=clamp(me.x+dirv.x*me.sp*dt,-MAP+1,MAP-1);
+  me.z=clamp(me.z+dirv.z*me.sp*dt,-MAP+1,MAP-1);
+  for(const h of holes){
+    if(h.ai)aiStep(h,dt);
+    h.x=clamp(h.x,-MAP+1,MAP-1);h.z=clamp(h.z,-MAP+1,MAP-1);
+    eatStep(h,dt);
+    h.g.position.set(h.x,0,h.z);
+    h.g.scale.setScalar(h.r);
+  }
+  /* cosas cayendo */
+  for(const p of props){
+    if(!p.taken)continue;
+    p.fy-=13*dt;
+    p.g.position.y+=p.fy*dt;
+    p.g.position.x=lerp(p.g.position.x,p.hole.x,1-Math.pow(.02,dt));
+    p.g.position.z=lerp(p.g.position.z,p.hole.z,1-Math.pow(.02,dt));
+    p.g.rotation.x+=p.vr*dt;p.g.rotation.z+=p.vr*.6*dt;
+    p.g.scale.setScalar(Math.max(0,p.g.scale.x-dt*.55));
+    if(p.g.position.y<-6){scene.remove(p.g);p.taken=2;}
+  }
+  ARC.hud(Math.round(me.mass),'TIEMPO '+Math.max(0,Math.ceil(time)));
+  if(time<=0){
+    done=true;
+    const rank=holes.slice().sort((a,b)=>b.mass-a.mass);
+    const pos=rank.indexOf(me)+1;
+    const win=pos===1;
+    ARC.over({win,score:Math.round(me.mass),stars:win?(me.mass>rank[1].mass*1.6?3:2):0,
+      title:win?'¡PRIMER PUESTO!':'PUESTO '+pos,coins:Math.round(me.mass/3),
+      sub:'Tu masa: '+Math.round(me.mass)+'<br>Rivales: '+rank.filter(h=>h!==me).map(h=>Math.round(h.mass)).join(' · ')});
+  }
+};
+G.draw=function(g){
+  if(!ARC.rnd||!scene)return;
+  const me=holes[0];
+  /* la cámara mira BIEN de arriba (1,75 de alto por 0,8 de atrás): con el ángulo
+     bajo de antes el horizonte partía la pantalla al medio y media pantalla era
+     cielo vacío (medido en la captura P-agujero). */
+  const d=10+me.r*3.2;
+  cam.position.set(me.x,d*1.75,me.z+d*.8);
+  cam.lookAt(me.x,0,me.z-me.r*.5);
+  ARC.rnd.render(scene,cam);
+  /* marcador de rivales */
+  const rank=holes.slice().sort((a,b)=>b.mass-a.mass);
+  const fs=Math.max(10,ARC.H*.032);
+  g.font='900 '+fs+'px system-ui,sans-serif';
+  rank.forEach((h,i)=>{
+    const y=ARC.H*.2+i*fs*1.5;
+    g.fillStyle=h===me?'#fff':'rgba(255,255,255,.72)';
+    g.fillText((i+1)+'.',ARC.W*.035,y);
+    g.fillStyle=h.col;
+    g.fillRect(ARC.W*.035+fs*1.2,y-fs*.7,Math.max(4,ARC.W*.1*clamp(h.mass/Math.max(1,rank[0].mass),.05,1)),fs*.7);
+    g.fillStyle=h===me?'#fff':'rgba(255,255,255,.72)';
+    g.fillText(Math.round(h.mass)+'',ARC.W*.035+fs*1.2+ARC.W*.11,y);
+  });
+  if(time>90-lvl*4-2.5){
+    g.fillStyle='rgba(20,24,32,.85)';
+    g.font='900 '+Math.max(12,ARC.H*.042)+'px system-ui,sans-serif';g.textAlign='center';
+    g.fillText('ARRASTRÁ PARA MOVER EL POZO',ARC.W/2,ARC.H*.9);g.textAlign='left';
+  }
+};
+G.dbg={
+  state:()=>({mass:Math.round(holes[0]?holes[0].mass:0),r:+(holes[0]?holes[0].r:0).toFixed(2),
+    time:+time.toFixed(1),props:props.filter(p=>!p.taken).length,done,lvl}),
+  autoMove:()=>{
+    if(done||!holes.length)return false;
+    const h=holes[0];
+    let best=null,bd=1e9;
+    for(const p of props){
+      if(p.taken||p.r>h.r*1.02)continue;
+      const d=Math.hypot(p.x-h.x,p.z-h.z);
+      if(d<bd){bd=d;best=p;}
+    }
+    if(!best)return false;
+    const dx=best.x-h.x,dz=best.z-h.z,L=Math.hypot(dx,dz)||1;
+    dirv.x=dx/L;dirv.z=dz/L;
+    return true;
+  }
+};
+window.GAME=G;
+
+window.ARC=ARC;window.GAME=GAME;
+ARC.boot();
+</script>
+</body></html>

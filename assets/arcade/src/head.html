@@ -1,0 +1,190 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d1014">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>__TITLE__</title>
+<style>
+/* ================= ARCADE SHELL — CSS común de los 5 juegos =================
+   REGLA DE ORO DEL CELULAR VERTICAL: el juego SIEMPRE se ve apaisado. Si el
+   teléfono está vertical, #stage se rota 90° y se le fijan ancho/alto EN PX
+   (los del viewport cruzados). Todo lo que mida la UI tiene que medirse en el
+   espacio del #stage (clientWidth/clientHeight, offsetTop), NUNCA contra
+   window.innerWidth/innerHeight ni con getBoundingClientRect: con el stage
+   rotado esas dos cosas viven en ejes distintos. El puntero se convierte a mano
+   (ver ARC.pt) porque la rotación cruza los ejes del compositor.            */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#05070a;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#eef2f6}
+#stage{position:absolute;left:0;top:0;overflow:hidden;background:#0d1014;
+  transform-origin:0 0;touch-action:none}
+canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
+/* dos lienzos: #gl es la escena 3D (WebGL) y #cv la capa 2D de efectos y texto
+   flotante que va ENCIMA. Así los juegos 3D siguen usando ARC.fx sin shaders. */
+#gl{z-index:0}
+#cv{z-index:1;pointer-events:auto;background:transparent}
+/* ---- capas ---- */
+.lay{position:absolute;inset:0;pointer-events:none}
+.scr{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;pointer-events:auto;background:rgba(6,9,13,.62);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.scr.on{display:flex;animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+#menu{background:#0d1014 center/cover no-repeat;backdrop-filter:none;-webkit-backdrop-filter:none}
+/* el arte del menú ya trae el título: el degradado va de ABAJO para que los
+   botones se lean sin tapar la ilustración, y el título de DOM sólo aparece si
+   la imagen no llegó (#menu sin .hasart). */
+#menu:before{content:"";position:absolute;inset:0;
+  background:linear-gradient(0deg,rgba(5,7,10,.94) 0%,rgba(5,7,10,.55) 30%,rgba(5,7,10,.05) 62%)}
+#menu.hasart .ttl{display:none}
+/* ---- tipografía ---- */
+.h1{font-size:clamp(22px,5.2vmin,44px);font-weight:900;letter-spacing:.5px;
+  text-shadow:0 2px 10px rgba(0,0,0,.75)}
+.h2{font-size:clamp(14px,3vmin,22px);font-weight:800;opacity:.95}
+.sm{font-size:clamp(10px,2.1vmin,15px);font-weight:600;opacity:.72;line-height:1.35}
+/* ---- botones ---- */
+.btn{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:.5em;
+  padding:.62em 1.25em;border-radius:14px;font-weight:900;font-size:clamp(12px,2.6vmin,19px);
+  background:linear-gradient(180deg,var(--acc) 0%,var(--acc2) 100%);color:#10141a;
+  border:1px solid rgba(255,255,255,.28);box-shadow:0 4px 0 rgba(0,0,0,.35),0 8px 22px rgba(0,0,0,.4);
+  transition:transform .08s,box-shadow .08s;white-space:nowrap}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.35)}
+.btn.gh{background:rgba(255,255,255,.09);color:#eef2f6;border-color:rgba(255,255,255,.22);
+  box-shadow:0 3px 0 rgba(0,0,0,.28)}
+.btn.sq{padding:0;width:clamp(34px,7.4vmin,52px);height:clamp(34px,7.4vmin,52px);border-radius:13px;
+  font-size:clamp(15px,3.4vmin,23px)}
+.row{display:flex;gap:clamp(6px,1.6vmin,14px);align-items:center}
+.col{display:flex;flex-direction:column;gap:clamp(6px,1.6vmin,14px)}
+/* ---- menú ---- */
+#menu .wrap{position:relative;z-index:1;width:100%;height:100%;display:flex;
+  flex-direction:column;justify-content:flex-end;padding:0 5.5vmin 4.5vmin;gap:1.8vmin}
+#menu .ttl{font-size:clamp(26px,8.4vmin,68px);font-weight:900;line-height:.94;
+  letter-spacing:-.5px;text-shadow:0 3px 0 rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.6)}
+#menu .ttl em{font-style:normal;color:var(--acc)}
+#menu .sub{max-width:52vmin}
+#menu .mrow{margin-top:1.2vmin}
+#best{position:absolute;right:3.4vmin;bottom:4.5vmin;text-align:right;z-index:1;line-height:1.5}
+/* ---- HUD ---- */
+#hud{position:absolute;inset:0;pointer-events:none;z-index:2}
+.pill{position:absolute;display:flex;align-items:center;gap:.45em;padding:.42em .8em;
+  border-radius:999px;background:rgba(10,14,19,.66);border:1px solid rgba(255,255,255,.14);
+  font-weight:900;font-size:clamp(11px,2.4vmin,17px);backdrop-filter:blur(4px)}
+#pScore{left:3vmin;top:2.4vmin}
+#pInfo{left:50%;top:2.4vmin;transform:translateX(-50%)}
+#pPause{right:3vmin;top:2.4vmin;pointer-events:auto;padding:0;
+  width:clamp(30px,6.6vmin,46px);height:clamp(30px,6.6vmin,46px);justify-content:center}
+#tray{position:absolute;left:0;right:0;bottom:2.2vmin;display:flex;justify-content:center;
+  gap:1.4vmin;pointer-events:auto;flex-wrap:wrap;padding:0 2vmin}
+/* ---- juegos VERTICALES (body.vert): los controles van grandes y bien abajo,
+   porque en vertical el pulgar llega a la franja de abajo y no a los costados ---- */
+body.vert #tray{bottom:3.5%;gap:2.5vw}
+body.vert #tray .btn{min-width:16vw;padding:.85em 1.1em;font-size:clamp(15px,4.4vw,26px)}
+body.vert #tray .btn.sq{width:16vw;height:16vw}
+body.vert .pill{font-size:clamp(12px,3.4vw,20px);padding:.5em .9em}
+body.vert #pScore{left:4vw;top:2vh}
+body.vert #pInfo{top:2vh}
+body.vert #pPause{right:4vw;top:2vh;width:11vw;height:11vw}
+body.vert #menu .wrap{padding:0 7vw 7vh;gap:2.4vh}
+/* en vertical el arte 16:9 se recortaba tanto que el título quedaba cortado
+   ("ZA CA" en la captura V3): se ajusta por ANCHO y se pega arriba, y el resto de
+   la columna lo llena el color del juego. */
+body.vert #menu{background-size:100% auto;background-position:center 16%}
+body.vert #menu:before{background:linear-gradient(0deg,rgba(5,7,10,.97) 0%,rgba(5,7,10,.82) 34%,rgba(5,7,10,.12) 62%,rgba(5,7,10,.35) 100%)}
+body.vert #menu .sub{max-width:100%}
+body.vert #best{right:5vw;bottom:7vh}
+body.vert .card{max-width:88vw}
+body.vert .h1{font-size:clamp(22px,7vw,44px)}
+body.vert .h2{font-size:clamp(14px,4.4vw,24px)}
+body.vert .sm{font-size:clamp(11px,3.2vw,16px)}
+body.vert .btn{font-size:clamp(13px,3.8vw,20px)}
+/* ---- tarjetas / paneles ---- */
+.card{background:rgba(14,18,24,.92);border:1px solid rgba(255,255,255,.14);border-radius:18px;
+  padding:clamp(12px,3vmin,26px);box-shadow:0 18px 50px rgba(0,0,0,.6);max-width:86vmin;
+  display:flex;flex-direction:column;align-items:center;gap:1.6vmin}
+.stars{display:flex;gap:.35em;font-size:clamp(20px,5.6vmin,42px);line-height:1}
+.stars i{font-style:normal;opacity:.22}
+.stars i.on{opacity:1;filter:drop-shadow(0 0 8px rgba(255,196,60,.7))}
+.grid{display:grid;gap:1.2vmin}
+.lvl{width:clamp(38px,8.4vmin,60px);height:clamp(38px,8.4vmin,60px);border-radius:13px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);font-weight:900;
+  font-size:clamp(12px,2.7vmin,18px);pointer-events:auto}
+.lvl.done{background:linear-gradient(180deg,var(--acc),var(--acc2));color:#10141a}
+.lvl.lock{opacity:.35}
+.lvl b{font-size:.52em;letter-spacing:1px;opacity:.9}
+/* ---- ajustes ---- */
+.sw{width:clamp(42px,9vmin,62px);height:clamp(24px,5vmin,34px);border-radius:999px;
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);position:relative;
+  pointer-events:auto;transition:background .15s}
+.sw:after{content:"";position:absolute;top:2px;left:2px;width:calc(100% - 4px);height:calc(100% - 4px);
+  aspect-ratio:1;border-radius:999px;background:#eef2f6;transition:transform .15s}
+.sw.on{background:var(--acc)}
+.sw.on:after{transform:translateX(calc(100% + 2px))}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:2vmin;width:min(70vmin,100%)}
+/* ---- avisos ---- */
+#toast{position:absolute;left:50%;top:16%;transform:translateX(-50%) scale(.9);opacity:0;
+  padding:.5em 1.1em;border-radius:12px;background:rgba(10,14,19,.9);font-weight:900;
+  font-size:clamp(12px,2.8vmin,20px);transition:opacity .18s,transform .18s;z-index:5}
+#toast.on{opacity:1;transform:translateX(-50%) scale(1)}
+#fps{position:absolute;left:50%;bottom:.6vmin;transform:translateX(-50%);font-size:10px;
+  opacity:.35;z-index:5}
+#load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:2vmin;background:#05070a;z-index:9}
+#load .bar{width:44vmin;height:6px;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden}
+#load .bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+</style></head><body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <canvas id="cv"></canvas>
+  <div id="hud">
+    <div class="pill" id="pScore">0</div>
+    <div class="pill" id="pInfo"></div>
+    <div class="pill" id="pPause">II</div>
+    <div id="tray"></div>
+  </div>
+  <div class="scr" id="menu"><div class="wrap">
+      <div class="ttl" id="mTtl"></div>
+      <div class="sm sub" id="mSub"></div>
+      <div class="row mrow">
+        <div class="btn" id="bPlay">JUGAR</div>
+        <div class="btn gh" id="bLevels">NIVELES</div>
+        <div class="btn gh sq" id="bOpts">⚙</div>
+      </div>
+    </div><div class="sm" id="best"></div></div>
+  <div class="scr" id="pause"><div class="card">
+      <div class="h1">PAUSA</div>
+      <div class="row">
+        <div class="btn" id="bRes">SEGUIR</div>
+        <div class="btn gh" id="bRetry">REINTENTAR</div>
+        <div class="btn gh" id="bQuit">MENÚ</div>
+      </div></div></div>
+  <div class="scr" id="over"><div class="card">
+      <div class="h1" id="oTtl">FIN</div>
+      <div class="stars" id="oStars"><i>★</i><i>★</i><i>★</i></div>
+      <div class="h2" id="oScore"></div>
+      <div class="sm" id="oSub"></div>
+      <div class="row">
+        <div class="btn" id="bNext">SEGUIR</div>
+        <div class="btn gh" id="bAgain">OTRA VEZ</div>
+        <div class="btn gh" id="bMenu">MENÚ</div>
+      </div></div></div>
+  <div class="scr" id="levels"><div class="card">
+      <div class="h2">NIVELES</div>
+      <div class="grid" id="lvGrid"></div>
+      <div class="btn gh" id="bLvBack">VOLVER</div></div></div>
+  <div class="scr" id="opts"><div class="card">
+      <div class="h2">AJUSTES</div>
+      <div class="opt"><div class="sm">Música</div><div class="sw on" id="swMus"></div></div>
+      <div class="opt"><div class="sm">Sonidos</div><div class="sw on" id="swSfx"></div></div>
+      <div class="opt"><div class="sm">Vibración</div><div class="sw on" id="swVib"></div></div>
+      <div class="opt"><div class="sm">Efectos extra</div><div class="sw on" id="swFx"></div></div>
+      <div class="opt"><div class="sm">Mostrar FPS</div><div class="sw" id="swFps"></div></div>
+      <div class="row"><div class="btn gh" id="bWipe">BORRAR PROGRESO</div>
+        <div class="btn" id="bOptBack">LISTO</div></div></div></div>
+  <div id="toast"></div>
+  <div id="fps" style="display:none">–</div>
+  <div id="load"><div class="h2" id="ldTtl">CARGANDO</div><div class="bar"><i id="ldBar"></i></div>
+    <div class="sm" id="ldTxt">preparando…</div></div>
+</div>
