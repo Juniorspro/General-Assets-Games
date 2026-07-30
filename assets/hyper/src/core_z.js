@@ -134,9 +134,73 @@ function fpFreezeRoot(){
    quieta. Así torsoAim ve la pose ya congelada y su corrección es estable. */
 const breathRestoreFP=breathRestore;
 breathRestore=function(){
+  nsafe(()=>zscApply(),'fpzsc');
   nsafe(()=>fpFreezeRoot(),'fpfrz');
   return breathRestoreFP.apply(this,arguments);
 };
+
+/* ---------- B-bis. LA ESCALA DE LOS HUESOS: por qué se deformaba el brazo ----------
+   REPORTE: "después de unos saltos y movimientos se deforma el brazo, y la muñeca está baja".
+   MEDIDO (sonda _zdef/_zdef2, 692 cuadros saltando y corriendo en 1ª persona con el AKM):
+     largo del brazo (hombro→codo)  : 0,3979 m parado  ->  0,3253 m corriendo   (-18%)
+     largo del antebrazo (codo→mano): 0,2237 m parado  ->  0,1901 m corriendo   (-15%)
+     alcance total del brazo        : 0,5308 m parado  ->  0,4512 m corriendo
+     lo que necesita el IK          : 0,456 m (el objetivo de pantalla, casi constante)
+     => 750 de 818 cuadros (91,7%) con el brazo SATURADO: no llega, la mano queda corta.
+   Y la causa NO es el IK ni la posición local de ningún hueso (medidas: RightForeArm siempre en
+   [0,26.11,0] y RightHand en [0,19.01,0], escala LOCAL 1 en los dos): es que LOS CLIPS TRAEN
+   PISTAS DE ESCALA PARA TODOS LOS HUESOS (medido con __H.ztracks(): Hips.scale, Spine*.scale,
+   RightArm.scale, ... en los cuatro clips) y cada clip escribe un valor DISTINTO:
+     __H.zchain() parado    -> Hips.scale = 1.1764   (lo que escribe el clip de reposo)
+     __H.zchain() corriendo -> Hips.scale = 1.0      (lo que escribe el de correr)
+   Todo el cuerpo cuelga de Hips, así que ese 1.1764 -> 1.0 encoge el torso y los brazos un 15%
+   mientras el jugador se mueve. Peor todavía con el reparto de capas: Hips NO matchea el regex
+   UPPER, así que Hips.scale va a la capa de las PIERNAS (que sí anima) mientras RightArm.scale y
+   compañía van a la capa de arriba (congelada en el cuadro 0 del reposo) — o sea que las escalas
+   del brazo y de su padre quedan de clips distintos y las proporciones se pelean. Y el salto es
+   LoopOnce con clampWhenFinished: al terminar deja su última escala escrita, y ahí queda "todo
+   chueco" hasta que otro clip lo pise. Eso es exactamente "después de unos saltos se deforma".
+   ARREGLO: la escala del esqueleto se CLAVA. Se toma la del cuadro 0 del clip de reposo —la pose
+   en la que se generó el personaje sosteniendo el arma, la misma con la que se midieron TODAS las
+   constantes del agarre (FPT, hold, lg, palmLocal)— y se reescribe sobre cada hueso después de
+   mixer.update(). No es una animación que se pierde: una pista de escala en un esqueleto humano
+   es basura del exportador (nadie encoge el húmero al correr), y con esto el brazo mide siempre
+   0,53 m, o sea 7 cm de sobra contra los 0,456 que pide el objetivo: el IK deja de saturarse, la
+   mano llega, la muñeca sube a su lugar y la malla no se estira más.
+   Va en 1ª Y en 3ª persona: el encogimiento deformaba el personaje para todos, no sólo en la
+   vista propia. */
+const ZSC={on:1,map:null,n:0,got:0,fix:0};
+const _zs=new THREE.Vector3();
+function zscBuild(){
+  if(ZSC.map)return ZSC.map;
+  const root=fpRootBone();if(!root)return null;
+  const list=[];root.traverse(o=>{if(o.isBone)list.push(o);});
+  if(!list.length)return null;
+  /* de qué clip se saca la referencia: el de reposo (y si no está, el de caminar) */
+  const cl=(typeof CLIPS==='object')&&(CLIPS.idle||CLIPS.walk);
+  const ref={};
+  if(cl&&cl.tracks)for(const t of cl.tracks){
+    if(!/scale/i.test(t.name)||t.values.length<3)continue;
+    const bn=t.name.split('.')[0].replace(/^.*\//,'');
+    ref[bn]=[t.values[0],t.values[1],t.values[2]];
+  }
+  const map=[];
+  for(const b of list){
+    const r=ref[b.name];
+    map.push({b,s:new THREE.Vector3(r?r[0]:b.scale.x,r?r[1]:b.scale.y,r?r[2]:b.scale.z)});
+    if(r)ZSC.got++;
+  }
+  ZSC.n=map.length;
+  return (ZSC.map=map);
+}
+function zscApply(){
+  if(!ZSC.on)return;
+  const m=zscBuild();if(!m)return;
+  for(let i=0;i<m.length;i++){
+    const e=m[i],b=e.b;
+    if(b.scale.x!==e.s.x||b.scale.y!==e.s.y||b.scale.z!==e.s.z){b.scale.copy(e.s);ZSC.fix++;}
+  }
+}
 
 /* ---------- C. balanceo procedural de 1ª persona ----------
    Todo se calcula como OFFSET ABSOLUTO del estado de ESTE frame (nada se acumula salvo la fase
@@ -218,6 +282,11 @@ fpHandTarget=function(out){
   fpHandTargetSW.call(this,out);
   if(!FPSW.on)return out;
   out.addScaledVector(_fr,fpOF.x).addScaledVector(_fu,fpOF.y).addScaledVector(_ff,-fpOF.z);
+  /* la muñeca, más arriba (ver FPW). El MELEE queda como estaba: el bate mide 86 cm y sube
+     inclinado (con la subida su silueta pasaba a ocupar el 9,3% de la caja del centro, contra
+     6,9% antes) y los puños ya estaban en su lugar (con la subida iban al 10,7%). MEDIDO por
+     arma en Z-*-fr con el medidor de regiones. */
+  if(FPW.up&&weap().kind!=='melee')out.addScaledVector(_fu,FPW.up);
   /* puños: la muñeca se aleja del ojo (ver FPFIST) */
   if(weap().noModel)out.addScaledVector(_ff,FPFIST.push)
                        .addScaledVector(_fr,FPFIST.side).addScaledVector(_fu,FPFIST.drop);
@@ -258,6 +327,17 @@ holdWeapon=function(){
    cada lado, y el centro del cuadro libre. La IZQUIERDA no se toca: ya la lleva melFpLeft()
    (core_p) a su punto de la pantalla con la misma disciplina de caché. */
 const FPFIST={push:.190,side:.020,drop:-.055};
+/* ---------- LA MUÑECA VA MÁS ARRIBA ----------
+   REPORTE: "recién me doy cuenta de que la muñeca está baja". MEDIDO: el hueso de la mano
+   proyectaba en NDC y=-1,07 y la EMPUÑADURA (el origen del arma, donde apoya la palma) en
+   y=-1,15, o sea las dos POR DEBAJO del borde de abajo: se veía el antebrazo entrando por el
+   borde y el arma flotando arriba, nunca la mano agarrando.
+   Con el brazo ya sin encogerse hay 5,7 cm de sobra de alcance (0,531 contra 0,474), así que se
+   puede levantar el objetivo entero sin que el IK se sature. FPW.up = 5 cm sube la empuñadura
+   0,20 de NDC y la BOCA del caño sólo 0,08 (está a 0,9 m y la mano a 0,35: la perspectiva la
+   mueve menos), así que el arma además queda MÁS HORIZONTAL y la boca sigue por debajo de la
+   mira. Se aplica en el marco de la cámara, igual que el resto: no cambia con el ángulo. */
+const FPW={up:.045};
 /* y la IZQUIERDA de la guardia (core_p, MFISTL: es un const pero sus ELEMENTOS son mutables) se
    corre igual: mismo alejamiento y misma bajada, así los dos puños quedan del mismo tamaño y a
    la misma altura. MEDIDO en Z-hands-fr: con los valores de core_p (35 cm) el puño derecho
@@ -295,6 +375,53 @@ if(DEV&&window.__H)Object.assign(window.__H,{
   /* tocar cualquier constante del balanceo en vivo (para medir sin recompilar) */
   fpSwaySet:(k,v)=>{if(!(k in FPSW))return null;FPSW[k]=+v;return FPSW[k];},
   fpSwayOn:v=>{if(v!==undefined)FPSW.on=v?1:0;return FPSW.on;},
+  /* radiografía del brazo: escala del personaje, escala LOCAL de cada hueso y largo de cada
+     segmento (si un largo cambia sin que cambie ninguna escala, la malla no se puede estirar) */
+  zbones:()=>{
+    const o={charScale:charRoot?+charRoot.scale.x.toFixed(4):null},P={};
+    const g=k=>{const b=bones[k];if(!b)return null;b.updateWorldMatrix(true,false);
+      P[k]=new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+      return {sc:[+b.scale.x.toFixed(4),+b.scale.y.toFixed(4),+b.scale.z.toFixed(4)],
+              lp:[+b.position.x.toFixed(4),+b.position.y.toFixed(4),+b.position.z.toFixed(4)]};};
+    for(const k of['rArm','rFore','rHand','lArm','lFore','lHand','spine','head'])o[k]=g(k);
+    const d=(a,b)=>(P[a]&&P[b])?+P[a].distanceTo(P[b]).toFixed(4):null;
+    o.seg={rUp:d('rArm','rFore'),rLo:d('rFore','rHand'),lUp:d('lArm','lFore'),lLo:d('lFore','lHand')};
+    if(RIK.up){RIK.up.updateWorldMatrix(true,false);
+      const pu=new THREE.Vector3().setFromMatrixPosition(RIK.up.matrixWorld);
+      o.rikUp=RIK.up.name;o.reach=+(pu.distanceTo(P.rFore)+P.rFore.distanceTo(P.rHand)).toFixed(4);}
+    return o;},
+  /* pies contra el piso del dibujo: cuánto sobresale el pie MÁS BAJO por debajo de la base del
+     personaje (charRoot). 0 = apoyado, negativo = hundido. */
+  zfeet:()=>{
+    if(!charRoot)return null;
+    let lo=Infinity,n=0;const v=new THREE.Vector3();
+    charRoot.traverse(o=>{ if(!o.isBone)return;
+      if(!/(foot|toe)/i.test(o.name))return;
+      o.updateWorldMatrix(true,false);v.setFromMatrixPosition(o.matrixWorld);
+      if(v.y<lo)lo=v.y;n++; });
+    return {base:+charRoot.position.y.toFixed(3),pieMasBajo:n?+lo.toFixed(3):null,
+            sobresale:n?+(lo-charRoot.position.y).toFixed(3):null,huesos:n,
+            escala:+charRoot.scale.x.toFixed(4)};},
+  /* subir/bajar la muñeca en vivo (m) */
+  fpUp:v=>{if(v!==undefined)FPW.up=+v;return FPW.up;},
+  /* escala clavada: cuántos huesos, cuántos con referencia del clip y cuántas correcciones */
+  zsc:v=>{if(v!==undefined){ZSC.on=v?1:0;}
+    zscBuild();
+    return {on:ZSC.on,huesos:ZSC.n,conRef:ZSC.got,correcciones:ZSC.fix};},
+  /* la cadena de padres de la mano derecha con la escala LOCAL de cada uno: si algún ancestro
+     tiene escala no uniforme, rotarlo cambia el largo APARENTE de los huesos de abajo (la malla
+     se estira sin que ningún hueso cambie de tamaño) */
+  zchain:()=>{
+    const o=[];let b=bones.rHand;
+    while(b){o.push({n:b.name,sc:[+b.scale.x.toFixed(4),+b.scale.y.toFixed(4),+b.scale.z.toFixed(4)],
+                     bone:!!b.isBone});
+      b=b.parent;if(o.length>14)break;}
+    return o;},
+  /* qué pistas de ESCALA traen los clips (una pista de escala en el esqueleto deforma la malla) */
+  ztracks:()=>{const o={};
+    for(const k in CLIPS){const c=CLIPS[k];if(!c)continue;
+      o[k]=c.tracks.filter(t=>/scale/i.test(t.name)).map(t=>t.name);}
+    return o;},
   /* volver a prender el viewmodel de manos (comparación A/B contra el agarre real) */
   vmOn:v=>{if(v!==undefined){VMC.on=v?1:0;if(v)vmAsk=false;}return VMC.on;}
 });
