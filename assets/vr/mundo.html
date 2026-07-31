@@ -94,6 +94,7 @@
     <div class="b y" id="bFlash">LINTERNA</div>
     <div class="b" id="bCenter">CENTRAR</div>
     <div class="b" id="bHands">MANOS</div>
+    <div class="b" id="bMirror">ESPEJO: NO</div>
     <div class="b" id="bStereo">ESTÉREO</div>
     <div class="b r" id="bExit">SALIR</div>
   </div>
@@ -126,6 +127,7 @@
     <div class="row" style="margin-top:8px">
       <div class="mini" id="dCopy">COPIAR</div>
       <div class="mini" id="dAgain">MEDIR OTRA VEZ</div>
+      <div class="mini" id="dXR">PROBAR XR AHORA</div>
     </div>
     <div class="tip">Si algo no anda, copiá esto y mandámelo: dice exactamente qué le
       falta a tu celular o a la WebView.</div>
@@ -217,10 +219,13 @@ async function diag(){
     }
   } catch(e) { DIAG.webgl = 'ERROR ' + e.message; }
   /* prueba real de sensores: se escuchan 700 ms y se ve si LLEGA algo */
-  DIAG.giroLlega = false; DIAG.movimLlega = false; DIAG.acelSinGravedad = false;
+  DIAG.giroLlega = false; DIAG.movimLlega = false;
+  DIAG.acelSinGravedad = false; DIAG.acelConGravedad = false;
   const on1 = e => { if (e.alpha !== null || e.beta !== null) DIAG.giroLlega = true; };
   const on2 = e => { DIAG.movimLlega = true;
-    if (e.acceleration && e.acceleration.x !== null) DIAG.acelSinGravedad = true; };
+    if (e.acceleration && e.acceleration.x !== null) DIAG.acelSinGravedad = true;
+    if (e.accelerationIncludingGravity && e.accelerationIncludingGravity.x !== null)
+      DIAG.acelConGravedad = true; };
   addEventListener('deviceorientation', on1);
   addEventListener('devicemotion', on2);
   await new Promise(r => setTimeout(r, 700));
@@ -241,7 +246,8 @@ function pintaDiag(){
   si('  …y LLEGAN datos', DIAG.giroLlega);
   si('devicemotion', DIAG.movim);
   si('  …y LLEGAN datos', DIAG.movimLlega);
-  si('  …con gravedad quitada', DIAG.acelSinGravedad);
+  si('  …con gravedad quitada (acceleration)', DIAG.acelSinGravedad);
+  si('  …con gravedad incluida (sirve igual)', DIAG.acelConGravedad);
   si('getUserMedia (cámara)', DIAG.camara);
   si('WebAssembly', DIAG.wasm);
   L.push('webgl: ' + DIAG.webgl);
@@ -762,7 +768,8 @@ const P = {
   /* inclinación real integrada del acelerómetro (6DoF corto, sin deriva) */
   lean: new T.Vector3(), leanS: new T.Vector3(), vel: new T.Vector3(),
   bias: new T.Vector3(), accF: new T.Vector3(),
-  acc: new T.Vector3(), accHay: false,
+  acc: new T.Vector3(), accHay: false, conG: false, accFuente: 'no llega',
+  calib: 0,          /* 0 = hay que engancharse a la lectura antes de integrar */
   vy: 0, enSuelo: true
 };
 /* ---------------------------------------------------------------------------
@@ -782,9 +789,12 @@ const EST_NOM = ['NO', 'MEDIO', 'MÁXIMO'];
    hay por qué bajarla: si se baja, se va también el paralaje de un movimiento
    de verdad, que es justo lo que le da la sensación de 6DoF. */
 const EST_CFG = [
-  { tauQ: [.012, .012], gan: .55, tauL: .04, tope: .35, banda: .10 },
-  { tauQ: [.020, .130], gan: .62, tauL: .10, tope: .30, banda: .30 },
-  { tauQ: [.055, .300], gan: 0,   tauL: .18, tope: .10, banda: .60 }
+  /* tauQ = suavizado de rotación [girando, quieto] · tauA = pasabajos del
+     acelerómetro · gan = ganancia · tauL = suavizado de la salida · banda = zona
+     muerta. En NO todo está casi crudo a propósito: es para poder comparar. */
+  { tauQ: [.012, .012], tauA: .004, gan: .55, tauL: .02, tope: .35, banda: .06 },
+  { tauQ: [.020, .130], tauA: .070, gan: .62, tauL: .10, tope: .30, banda: .30 },
+  { tauQ: [.055, .300], tauA: .120, gan: 0,   tauL: .18, tope: .10, banda: .60 }
 ];
 let orientPantalla = 0;
 function leePantalla(){
@@ -822,11 +832,27 @@ function onDOrel(e){
   DOfuente = e.absolute ? 'absoluta' : 'relativa';
   DO = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 };
 }
+/* ---------------------------------------------------------------------------
+   ACELERÓMETRO. Muchísimos Android (y casi toda WebView) dejan
+   e.acceleration en null y sólo dan e.accelerationIncludingGravity. Si sólo se
+   mira el primero, la inclinación NO EXISTE y el 6DoF corto no anda: es
+   exactamente el síntoma "no anda el 6dof". Se usa el que haya; la gravedad se
+   saca después, en el marco del MUNDO, donde es un vector constante.
+   --------------------------------------------------------------------------- */
 function onDM(e){
   const a = e.acceleration;
-  if (!a || a.x === null || a.x === undefined) { P.accHay = false; return; }
-  P.accHay = true;
-  P.acc.set(a.x || 0, a.y || 0, a.z || 0);
+  if (a && a.x !== null && a.x !== undefined){
+    P.accHay = true; P.conG = false; P.accFuente = 'sin gravedad';
+    P.acc.set(a.x || 0, a.y || 0, a.z || 0);
+    return;
+  }
+  const g = e.accelerationIncludingGravity;
+  if (g && g.x !== null && g.x !== undefined){
+    P.accHay = true; P.conG = true; P.accFuente = 'con gravedad';
+    P.acc.set(g.x || 0, g.y || 0, g.z || 0);
+    return;
+  }
+  P.accHay = false; P.accFuente = 'no llega';
 }
 function quatDeGiro(q){
   if (!DO) return false;
@@ -956,6 +982,11 @@ let tPajaro = 3;
    ========================================================================== */
 const MANO = { on: false, cargando: false, hl: null, video: null, lm: null,
   ms: 0, pinza: 0, pinzaPrev: 0, visto: 0, err: '', cada: 2, cont: 0,
+  /* espejo: +1 cámara de ATRÁS (la imagen es el mundo tal cual, no se invierte),
+     -1 cámara de ADELANTE (te ve de frente, tu derecha cae a la izquierda de la
+     imagen). Poner esto al revés es lo que hacía que tu mano izquierda saliera
+     como la derecha. */
+  espejo: 1, facing: '?', lado: '',
   pts: Array.from({ length: 21 }, () => new T.Vector3()) };
 const MD_R = new T.Vector3(), MD_U = new T.Vector3(), MD_F = new T.Vector3();
 async function manosOn(){
@@ -981,6 +1012,11 @@ async function manosOn(){
       audio: false });
     const v = $('cam'); v.srcObject = st; await v.play().catch(() => {});
     v.style.display = 'block';
+    /* qué cámara nos dio de verdad el sistema, que no siempre es la que pedimos */
+    const se = st.getVideoTracks()[0].getSettings ? st.getVideoTracks()[0].getSettings() : {};
+    MANO.facing = se.facingMode || 'environment';
+    MANO.espejo = MANO.facing === 'user' ? -1 : 1;
+    v.style.transform = MANO.espejo < 0 ? 'scaleX(-1)' : 'none';
     MANO.video = v; MANO.on = true; MANO.cargando = false;
     iMano.visible = huesos.visible = true;
     $('bHands').classList.add('on');
@@ -1072,8 +1108,19 @@ function manoPaso(){
   let r = null;
   try { r = MANO.hl.detectForVideo(MANO.video, t0); } catch (e) { return; }
   MANO.ms = MANO.ms * .8 + (performance.now() - t0) * .2;
-  if (r && r.landmarks && r.landmarks.length){ MANO.lm = r.landmarks[0]; MANO.visto = 1; }
-  else { MANO.visto = 0; }
+  if (r && r.landmarks && r.landmarks.length){
+    MANO.lm = r.landmarks[0]; MANO.visto = 1;
+    /* MediaPipe decide izquierda/derecha suponiendo imagen de SELFIE (espejada).
+       Con la cámara de atrás la imagen no está espejada, así que su etiqueta
+       viene al revés y hay que darla vuelta para nombrar bien la mano. */
+    const h = (r.handednesses || r.handedness || [])[0];
+    if (h && h[0]){
+      const cat = h[0].categoryName || '';
+      MANO.lado = MANO.espejo > 0
+        ? (cat === 'Left' ? 'derecha' : 'izquierda')
+        : (cat === 'Left' ? 'izquierda' : 'derecha');
+    }
+  } else { MANO.visto = 0; }
 }
 /* los 21 puntos van al mundo delante de la cara: x,y normalizados y el tamaño
    de la mano hace de profundidad (lo único que se puede sacar de una cámara sola) */
@@ -1092,7 +1139,7 @@ function manoDibuja(){
   const bp = huesos.geometry.attributes.position;
   for (let i = 0; i < 21; i++){
     const p = lm[i];
-    const u = (.5 - p.x) * 1.10, v = (.5 - p.y) * .82;
+    const u = (p.x - .5) * MANO.espejo * 1.10, v = (.5 - p.y) * .82;
     const dz = (p.z || 0) * 1.4;
     V3.copy(HP)
       .addScaledVector(ade, z + dz)
@@ -1223,18 +1270,29 @@ function fisica(dt){
   }
   /* --- inclinación real del acelerómetro: 6DoF corto y SIN deriva --- */
   if (P.src === 'giro' && P.accHay && E.gan > 0){
-    /* 1. pasabajos sobre la lectura cruda: mata el ruido de alta frecuencia */
-    P.accF.lerp(P.acc, 1 - Math.exp(-dt / .07));
-    /* 2. pasaaltos: se le resta la media lenta, que es el sesgo del sensor */
+    /* 1. PRIMERO al marco del mundo. Este orden importa: en el mundo la
+       gravedad es un vector fijo (0,-9.8,0), así que el pasaaltos del paso 3 la
+       borra sola y girar el celu no inventa una inclinación falsa. Al revés
+       (filtrar en el marco del aparato) cada rotación mete un empujón fantasma. */
+    vA.copy(P.acc).applyQuaternion(HQ);
+    /* 1b. ENGANCHE. Si el pasaaltos arranca en cero, los 9,8 m/s² de la gravedad
+       se integran durante el segundo que tarda en converger, y eso es un tirón
+       que se va derecho al tope de 30 cm. Se engancha a la primera lectura, así
+       arranca ya convergido y nunca hay tirón: ni al entrar, ni al CENTRAR. */
+    if (!P.calib){
+      P.accF.copy(vA); P.bias.copy(vA); P.calib = 1;
+      P.vel.set(0, 0, 0); P.lean.set(0, 0, 0);
+    }
+    /* 2. pasabajos: mata el ruido de alta frecuencia */
+    P.accF.lerp(vA, 1 - Math.exp(-dt / E.tauA));
+    /* 3. pasaaltos: se le resta la media lenta = gravedad + sesgo del sensor */
     P.bias.lerp(P.accF, 1 - Math.pow(.35, dt));
-    const a = vA.copy(P.accF).sub(P.bias);
-    /* 3. ZONA MUERTA: por debajo de esto no es un movimiento tuyo, es ruido.
+    const a = vD.copy(P.accF).sub(P.bias);
+    /* 4. ZONA MUERTA: por debajo de esto no es un movimiento tuyo, es ruido.
        Es lo que de verdad saca el temblor cuando tenés el celu quieto. */
     const m = a.length();
     if (m < E.banda) a.set(0, 0, 0);
     else a.multiplyScalar((m - E.banda) / m);
-    /* 4. del marco del aparato al del mundo, con la orientación de la cabeza */
-    a.applyQuaternion(HQ);
     P.vel.addScaledVector(a, dt * E.gan);
     P.vel.multiplyScalar(Math.pow(.02, dt));               /* tau ≈ .25 s */
     P.lean.addScaledVector(P.vel, dt);
@@ -1381,8 +1439,13 @@ function hudTick(){
       (P.src === 'xr' ? ' (' + XR.tipo + ')' : '') +
       (P.src === 'giro' ? '  [' + (DOfuente || '¿?') + ']' : '') + '\n' +
     'estable: ' + EST_NOM[EST] + '\n' +
+    (P.src === 'giro'
+      ? '6dof: ' + (P.leanS.length() * 100).toFixed(1) + ' cm  [' + P.accFuente + ']\n'
+      : '') +
     'buffer: ' + (rs * 100 | 0) + '%' + (ESTEREO ? '  estéreo' : '') +
-    (MANO.on ? '\nmanos: ' + MANO.ms.toFixed(0) + ' ms  ' + (MANO.visto ? 'VEO' : '—') : '');
+    (MANO.on ? '\nmanos: ' + MANO.ms.toFixed(0) + ' ms  ' + (MANO.visto ? 'VEO' : '—') +
+               '  ' + MANO.lado + '  (' + MANO.facing + (MANO.espejo < 0 ? ' espejada' : '') + ')'
+             : '');
 }
 function paso(dt){
   fisica(dt);
@@ -1462,6 +1525,43 @@ $('dCopy').onclick = () => {
   if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => aviso('copiado'), () => {});
 };
 $('dAgain').onclick = async () => { $('diag').textContent = 'midiendo…'; await diag(); pintaDiag(); pintaModos(); };
+/* PROBAR XR: pide la sesión de verdad y escribe el motivo exacto del fallo en el
+   panel, que queda ahí para leerlo. Los avisos de 4 segundos no alcanzan para
+   diagnosticar nada desde un celular. */
+$('dXR').onclick = async () => {
+  const L = [];
+  const p = t => { L.push(t); $('diag').textContent = L.join('\n'); };
+  p('probando WebXR…');
+  if (!navigator.xr){
+    p('NO hay navigator.xr.');
+    p('Si estás en una WebView, es esperable: WebView NO expone WebXR.');
+    p('Abrilo en Chrome de Android para tener 6DoF real.');
+    return;
+  }
+  for (const m of ['immersive-ar', 'immersive-vr']){
+    let sop = false;
+    try { sop = await navigator.xr.isSessionSupported(m); } catch (e) { p(m + ': error ' + e.message); }
+    p(m + ' soportado: ' + (sop ? 'SÍ' : 'NO'));
+    if (!sop) continue;
+    try {
+      const s = await navigator.xr.requestSession(m, { optionalFeatures: ['local-floor'] });
+      let esp = 'ninguno';
+      for (const t of ['local-floor', 'local', 'viewer']){
+        try { await s.requestReferenceSpace(t); esp = t; break; } catch (e) {}
+      }
+      p('  SESIÓN ABIERTA. espacio: ' + esp);
+      await s.end();
+      p('  (cerrada. elegí "XR 6DoF" arriba y entrá)');
+      return;
+    } catch (e) {
+      p('  requestSession falló: ' + ((e && e.name) || '') + ' ' + ((e && e.message) || e));
+    }
+  }
+  p('---');
+  p('En Android el 6DoF real sale de immersive-ar, y eso necesita');
+  p('"Servicios de Google Play para RA" (ARCore) instalado y Chrome, no WebView.');
+  p('Sin eso, el modo "Giro + inclinación" es lo máximo que se puede.');
+};
 
 async function entra(){
   audio(); if (AC && AC.state === 'suspended') AC.resume();
@@ -1476,7 +1576,7 @@ async function entra(){
     catch (e) { aviso('XR no arrancó (' + ((e && e.message) || e) + '). Voy con giro.', 4200);
       P.src = DIAG.giroLlega ? 'giro' : 'toque'; await pideSensores(); }
   } else if (modoSel === 'giro'){
-    P.src = 'giro'; await pideSensores();
+    P.src = 'giro'; P.calib = 0; await pideSensores();
     aviso('movés la cabeza con el celu; el pulgar camina', 3200);
   } else {
     P.src = 'toque'; aviso('arrastrá para mirar, WASD o palanca para caminar', 3200);
@@ -1489,8 +1589,7 @@ $('bJump').onclick = salta;
 $('bCenter').onclick = () => {
   if (DO){ const q = new T.Quaternion(); P.yawOff = 0; quatDeGiro(q);
     const e = new T.Euler().setFromQuaternion(q, 'YXZ'); P.yawOff = -e.y + Math.PI; }
-  P.lean.set(0,0,0); P.leanS.set(0,0,0); P.vel.set(0,0,0);
-  P.bias.copy(P.acc); P.accF.copy(P.acc);
+  P.lean.set(0,0,0); P.leanS.set(0,0,0); P.vel.set(0,0,0); P.calib = 0;
   aviso('centrado');
 };
 function setEst(n){
@@ -1498,12 +1597,23 @@ function setEst(n){
   $('bEst').textContent = 'ESTABLE: ' + EST_NOM[EST];
   $('bEst').classList.toggle('on', EST === 2);
   if (EST === 2){ P.lean.set(0,0,0); P.vel.set(0,0,0); }
+  P.calib = 0;                                   /* cambió el filtro: re-enganchar */
   aviso(EST === 0 ? 'sin filtro: se mueve todo, hasta el ruido del sensor'
       : EST === 1 ? 'filtro medio: se saca el temblor y queda el paralaje'
                   : 'máximo: la imagen queda fija, sólo gira', 2600);
 }
 $('bEst').onclick = () => setEst(EST + 1);
 $('bFlash').onclick = flash;
+/* por si la cámara miente sobre si es la de adelante o la de atrás: se da vuelta
+   a mano y listo, sin adivinar */
+$('bMirror').onclick = () => {
+  MANO.espejo = -MANO.espejo;
+  $('cam').style.transform = MANO.espejo < 0 ? 'scaleX(-1)' : 'none';
+  $('bMirror').textContent = 'ESPEJO: ' + (MANO.espejo < 0 ? 'SÍ' : 'NO');
+  $('bMirror').classList.toggle('on', MANO.espejo < 0);
+  aviso('mano espejada ' + (MANO.espejo < 0 ? 'SÍ' : 'NO') +
+        ' · si te sale del lado equivocado, tocá esto', 2600);
+};
 $('bHands').onclick = () => { MANO.on ? manosOff() : manosOn(); };
 $('bStereo').onclick = () => setEstereo(!ESTEREO);
 $('stbar').onclick   = () => setEstereo(false);
@@ -1534,6 +1644,7 @@ window.__VR = {
     x: +HP.x.toFixed(3), y: +HP.y.toFixed(3), z: +HP.z.toFixed(3),
     yaw: +P.yaw.toFixed(3), lean: +P.lean.length().toFixed(3),
     est: EST, leanS: +P.leanS.length().toFixed(3), luz: LUZ.on,
+    accFuente: P.accFuente, accHay: P.accHay, espejo: MANO.espejo, lado: MANO.lado,
     botonLuz: $('bFlash').textContent, botonEst: $('bEst').textContent,
     manoOn: MANO.on, manoMs: +MANO.ms.toFixed(1), manoVe: MANO.visto, manoErr: MANO.err,
     menu: $('menu').style.display !== 'none', audio: AC ? AC.state : 'no' }; },
@@ -1546,21 +1657,26 @@ window.__VR = {
   movim(x, y, z){ P.accHay = true; P.acc.set(x, y, z); },
   estereo(v){ setEstereo(v); },
   est(n){ setEst(n); }, flash, flashOff,
+  espejo(s){ MANO.espejo = s < 0 ? -1 : 1; },
+  ceroLean(){ P.lean.set(0,0,0); P.leanS.set(0,0,0); P.vel.set(0,0,0);
+    P.bias.set(0,0,0); P.accF.set(0,0,0); P.calib = 0; },
   /* MIDE EL TEMBLOR: inyecta ruido de acelerómetro como el de un celular en la
      mano y devuelve cuánto se mueve el punto de vista, en milímetros RMS.
      Es la única forma de saber si el filtro sirve o si me lo estoy imaginando. */
   async pruebaTemblor(n){
     const antes = P.src; P.src = 'giro';
     P.lean.set(0,0,0); P.leanS.set(0,0,0); P.vel.set(0,0,0);
-    P.bias.set(0,0,0); P.accF.set(0,0,0);
+    P.bias.set(0,0,0); P.accF.set(0,0,0); P.calib = 0;
     const pts = [];
     for (let i = 0; i < n; i++){
       P.accHay = true;
-      /* ruido tipo mano: alterna rápido y no tiene media cero exacta */
+      /* lo que reporta un celular EN LA MANO: la gravedad, más un temblor de
+         unas décimas de g que alterna rápido. La gravedad importa: es 9,8 y si
+         el filtro no la saca bien, el temblor medido sale de ahí. */
       const s = (i % 2) ? 1 : -1;
-      P.acc.set(.55 * s + Math.sin(i * 2.3) * .25,
-                .40 * ((i % 3) ? 1 : -1),
-                .50 * s + Math.cos(i * 1.7) * .2);
+      P.acc.set(.80 * s + Math.sin(i * 2.3) * .35,
+                9.8 + .55 * ((i % 3) ? 1 : -1),
+                .75 * s + Math.cos(i * 1.7) * .3);
       await new Promise(r => requestAnimationFrame(r));
       if (i > n * .35) pts.push(HP.clone());
     }
@@ -1570,7 +1686,25 @@ window.__VR = {
     c.divideScalar(pts.length || 1);
     let s2 = 0;
     for (const p of pts) s2 += p.distanceToSquared(c);
+    /* TRES números, y el que decide es el tercero:
+       · mm      = cuánto se aparta del centro. Incluye el movimiento LENTO, que
+                   es paralaje legítimo y no hay que sacarlo.
+       · saltoMm = cambio de un cuadro al siguiente. Todavía mezcla: un barrido
+                   suave de 7 mm en un segundo también da 0,3 mm por cuadro.
+       · zigzagMm= SEGUNDA diferencia. Un movimiento parejo da CERO; sólo crece
+                   si el punto de vista va y viene entre cuadros. Eso es lo que
+                   el ojo ve como vibración, y es lo único que hay que matar. */
+    let j2 = 0, z2 = 0;
+    for (let i = 1; i < pts.length; i++) j2 += pts[i].distanceToSquared(pts[i-1]);
+    for (let i = 2; i < pts.length; i++){
+      const zx = pts[i].x - 2 * pts[i-1].x + pts[i-2].x;
+      const zy = pts[i].y - 2 * pts[i-1].y + pts[i-2].y;
+      const zz = pts[i].z - 2 * pts[i-1].z + pts[i-2].z;
+      z2 += zx * zx + zy * zy + zz * zz;
+    }
     return { mm: +(Math.sqrt(s2 / (pts.length || 1)) * 1000).toFixed(2),
+             saltoMm: +(Math.sqrt(j2 / Math.max(1, pts.length - 1)) * 1000).toFixed(3),
+             zigzagMm: +(Math.sqrt(z2 / Math.max(1, pts.length - 2)) * 1000).toFixed(3),
              cuadros: pts.length, est: EST };
   },
   salta, tocaMundo, manosOn, manosOff,
