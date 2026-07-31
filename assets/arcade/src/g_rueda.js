@@ -125,7 +125,7 @@ const G={
   subKey:'sub',
   acc:'#22d3ee',acc2:'#0891b2',levels:8,bestLabel:'METROS',bestKey:'metL',
   three:true,sky:'#04070e',shadows:false,
-  art:A('art-rueda.jpg'),music:A('mus-rueda-neon.m4a'),
+  art:A('art-rueda.jpg'),music:A('mus-r14.m4a'),
   sfx:{tap:A('sfx-tap.mp3'),click:A('sfx-click.mp3'),coin:A('sfx-coin.mp3'),win:A('sfx-win.mp3'),
        lose:A('sfx-lose.mp3'),boom:A('sfx-boom.mp3'),power:A('sfx-power.mp3'),chime:A('sfx-chime.mp3'),
        gem:A('sfx-rueda-gem.mp3'),saw:A('sfx-rueda-saw.mp3'),check:A('sfx-rueda-check.mp3'),
@@ -142,6 +142,11 @@ const G={
       boost:'¡IMPULSO!',statTime:'Tiempo',statBest:'Mejor',newTime:'¡RÉCORD DE TIEMPO!',
       gust:'RÁFAGA',
       almost:'¡CASI!',zone:'ZONA',medals:'MEDALLAS',medNew:'¡MEDALLA NUEVA!',
+      music:'MÚSICA',mAuto:'AUTOMÁTICO',mAutoD:'la música que le toca a cada zona',mExtra:'extra',
+      t01:'Cielo Abierto',t02:'Ruta Nocturna',t03:'Isla Neón',t04:'Estadio',
+      t05:'Caramelo',t06:'Escarcha',t07:'Fundición',t08:'Coronación',
+      t09:'Corriente',t10:'Muro de Pared',t11:'Atardecer 84',t12:'Circuito Roto',
+      t13:'Ascenso',t14:'Sala de Espera',t15:'Ficha Extra',
       medClean:'Sin usar el arco',medGems:'Todos los diamantes',medFast:'Bajo el tiempo par',
       balls:'PELOTAS',use:'USAR',inUse:'EN USO',buy:'COMPRAR',locked:'Te faltan diamantes',
       bought:'¡DESBLOQUEADA!',close:'CERRAR',gemsTot:'juntados',parT:'Par',
@@ -157,6 +162,11 @@ const G={
       boost:'BOOST!',statTime:'Time',statBest:'Best',newTime:'BEST TIME!',
       gust:'CROSSWIND',
       almost:'SO CLOSE!',zone:'ZONE',medals:'MEDALS',medNew:'NEW MEDAL!',
+      music:'MUSIC',mAuto:'AUTOMATIC',mAutoD:'the track that belongs to each zone',mExtra:'extra',
+      t01:'Open Sky',t02:'Night Route',t03:'Neon Island',t04:'Stadium',
+      t05:'Candy',t06:'Frost',t07:'Foundry',t08:'Coronation',
+      t09:'Current',t10:'Wall of Kicks',t11:'Sunset 84',t12:'Broken Circuit',
+      t13:'Ascent',t14:'Waiting Room',t15:'Extra Coin',
       medClean:'No checkpoint used',medGems:'Every diamond',medFast:'Under par time',
       balls:'BALLS',use:'USE',inUse:'IN USE',buy:'BUY',locked:'Not enough diamonds',
       bought:'UNLOCKED!',close:'CLOSE',gemsTot:'collected',parT:'Par',
@@ -172,6 +182,11 @@ const G={
       boost:'IMPULSO!',statTime:'Tempo',statBest:'Melhor',newTime:'RECORDE DE TEMPO!',
       gust:'RAJADA',
       almost:'QUASE!',zone:'ZONA',medals:'MEDALHAS',medNew:'MEDALHA NOVA!',
+      music:'MÚSICA',mAuto:'AUTOMÁTICO',mAutoD:'a música de cada zona',mExtra:'extra',
+      t01:'Céu Aberto',t02:'Rota Noturna',t03:'Ilha Neon',t04:'Estádio',
+      t05:'Caramelo',t06:'Geada',t07:'Fundição',t08:'Coroação',
+      t09:'Correnteza',t10:'Muro de Batidas',t11:'Poente 84',t12:'Circuito Quebrado',
+      t13:'Subida',t14:'Sala de Espera',t15:'Ficha Extra',
       medClean:'Sem usar o arco',medGems:'Todos os diamantes',medFast:'Abaixo do tempo par',
       balls:'BOLAS',use:'USAR',inUse:'EM USO',buy:'COMPRAR',locked:'Faltam diamantes',
       bought:'DESBLOQUEADA!',close:'FECHAR',gemsTot:'juntados',parT:'Par',
@@ -1126,6 +1141,9 @@ G.start=function(l){
   DEMO=0;demoOn=0;
   cssFix();
   startLevel(l,false);
+  /* el motor arranca GAME.music (la del menú); acá se pisa con la de ESTA zona,
+     o con la que el jugador clavó en el tocadiscos */
+  playTrack(lvl);
   ARC.tray([
     {id:'lf',txt:'◀',gh:1,fn:()=>nudge(-1)},
     {id:'rt',txt:'▶',gh:1,fn:()=>nudge(1)}
@@ -1494,10 +1512,45 @@ function ballThumb(B){
   g.strokeStyle=B.g;g.lineWidth=2.5;g.stroke();
   return cv;
 }
+/* ================================================== TOCADISCOS (15 temas)
+   Quince pistas propias, cada una con su estilo. Por defecto suena la que le toca
+   a la ZONA del nivel (así el juego cambia de ánimo a medida que avanzás) y desde
+   el panel se puede clavar una a mano. La pista NO se precarga con los efectos:
+   ARC.music le pasa la URL a un <audio> que la baja cuando hace falta, así que
+   tener quince no le cuesta nada al arranque — se baja UNA (1,5 MB).
+   El orden de zona es el de ZONAS: cyan, violeta, jungla, ámbar, rosa, hielo,
+   lava, oro; las siete de más quedan sólo para elegir. */
+const TRACKS=[
+  {f:'mus-r01.m4a',k:'t01'},{f:'mus-r02.m4a',k:'t02'},{f:'mus-r03.m4a',k:'t03'},
+  {f:'mus-r04.m4a',k:'t04'},{f:'mus-r05.m4a',k:'t05'},{f:'mus-r06.m4a',k:'t06'},
+  {f:'mus-r07.m4a',k:'t07'},{f:'mus-r08.m4a',k:'t08'},{f:'mus-r09.m4a',k:'t09'},
+  {f:'mus-r10.m4a',k:'t10'},{f:'mus-r11.m4a',k:'t11'},{f:'mus-r12.m4a',k:'t12'},
+  {f:'mus-r13.m4a',k:'t13'},{f:'mus-r14.m4a',k:'t14'},{f:'mus-r15.m4a',k:'t15'}
+];
+const ZTRACK=[0,1,2,3,4,5,6,7];        /* qué tema le toca a cada nivel/zona */
+/* -1 = automático por zona */
+function trackPick(){const v=ARC.S.trk;return v==null?-1:v|0;}
+function trackFor(l){
+  const p=trackPick();
+  if(p>=0&&p<TRACKS.length)return p;
+  return ZTRACK[clamp((l|0)-1,0,7)];
+}
+function playTrack(l){
+  const i=trackFor(l);
+  ARC.music(A(TRACKS[i].f));
+  return i;
+}
+function setTrack(i){
+  ARC.S.trk=(i<0?null:i);ARC.save();
+  playTrack(lvl||1);
+  ARC.sfx('gem',{vol:.5});
+  panelFill();
+}
 function panelBuild(){
   if(panelEl)return;
   const d=document.createElement('div');d.id='rdP';
-  d.innerHTML='<div class="rdCard"><div class="rdTabs"><b id="rdT0"></b><b id="rdT1"></b></div>'+
+  d.innerHTML='<div class="rdCard"><div class="rdTabs"><b id="rdT0"></b><b id="rdT1"></b>'+
+    '<b id="rdT2"></b></div>'+
     '<div class="rdBody" id="rdBody"></div>'+
     '<div class="rdFoot"><span id="rdC">◆ 0</span><div class="btn" id="rdX"></div></div></div>';
   document.getElementById('stage').appendChild(d);
@@ -1508,6 +1561,7 @@ function panelBuild(){
       ARC.sndResume();ARC.sfx('click');fn();});};
   B2('rdT0',()=>{panelTab=0;panelFill();});
   B2('rdT1',()=>{panelTab=1;panelFill();});
+  B2('rdT2',()=>{panelTab=2;panelFill();});
   B2('rdX',()=>panelClose());
 }
 function panelFill(){
@@ -1515,12 +1569,30 @@ function panelFill(){
   const b=document.getElementById('rdBody');
   document.getElementById('rdT0').textContent=T('balls');
   document.getElementById('rdT1').textContent=T('medals');
-  document.getElementById('rdT0').className=panelTab?'':'on';
-  document.getElementById('rdT1').className=panelTab?'on':'';
+  document.getElementById('rdT2').textContent=T('music');
+  document.getElementById('rdT0').className=panelTab===0?'on':'';
+  document.getElementById('rdT1').className=panelTab===1?'on':'';
+  document.getElementById('rdT2').className=panelTab===2?'on':'';
   document.getElementById('rdX').textContent=T('close');
   document.getElementById('rdC').textContent='◆ '+(ARC.S.coins||0)+
     '   ('+(ARC.S.gems||0)+' '+T('gemsTot')+')';
   b.innerHTML='';b.className='rdBody'+(panelTab?' q':'');
+  if(panelTab===2){
+    /* TOCADISCOS: primero AUTOMÁTICO y después las quince pistas */
+    const cur=trackPick();
+    const row=(idx,name,sub)=>{
+      const el=document.createElement('div');
+      el.className='rdQ rdTr'+(cur===idx?' dn':'');
+      el.innerHTML='<b>'+(cur===idx?'▶ ':'')+name+'</b><span>'+sub+'</span>';
+      el.addEventListener('pointerdown',ev=>{ev.preventDefault();ev.stopPropagation();
+        ARC.sndResume();setTrack(idx);});
+      b.appendChild(el);
+    };
+    row(-1,T('mAuto'),T('mAutoD'));
+    TRACKS.forEach((t,i)=>row(i,(i+1)+'. '+T(t.k),
+      i<8?(T('zone')+' '+(i+1)+' · '+zoneName(i+1)):T('mExtra')));
+    return;
+  }
   if(panelTab===0){
     const cur=curBall().id;
     BALLS.forEach((B,i)=>{
@@ -1616,6 +1688,9 @@ const CSSFIX=`
   background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
 #rdP .rdQ.dn{border-color:#43e57a;background:rgba(67,229,122,.13)}
 #rdP .rdQ.lk{opacity:.45}
+#rdP .rdTr{cursor:pointer}
+#rdP .rdTr b{min-width:9.5em}
+#rdP .rdTr:active{transform:scale(.985)}
 #rdP .rdQ b{font-size:clamp(9px,calc(var(--smn)*.038),15px);font-weight:900;white-space:nowrap}
 #rdP .rdQ span{flex:1;font-size:clamp(8px,calc(var(--smn)*.033),13px);opacity:.8;font-weight:800;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

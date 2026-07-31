@@ -357,9 +357,25 @@ ARC.tray=function(list){
   const t=$('tray');t.innerHTML='';
   (list||[]).forEach(b=>{
     const el=document.createElement('div');
-    el.className='btn '+(b.gh?'gh ':'')+(b.sq?'sq':'');
+    el.className='btn '+(b.gh?'gh ':'')+(b.sq?'sq ':'')+(b.cls||'');
     el.id='tb_'+b.id;el.innerHTML=b.txt;
-    el.addEventListener('pointerdown',ev=>{ev.preventDefault();ARC.sfx('tap');ARC.vib(10);b.fn&&b.fn(el);});
+    if(b.hold){
+      /* botón SOSTENIDO (disparar): avisa al apretar y al soltar. Se captura el
+         puntero para que soltar afuera del botón también cuente como soltar: sin
+         eso el dedo se corre 3 px, sale del círculo y el juego queda disparando
+         para siempre. */
+      const on=ev=>{ev.preventDefault();ev.stopPropagation();
+        if(el.dataset.on)return;el.dataset.on='1';el.classList.add('hold');
+        try{el.setPointerCapture(ev.pointerId);}catch(e){}
+        ARC.vib(8);b.hold(1,el);};
+      const off=ev=>{if(!el.dataset.on)return;delete el.dataset.on;
+        el.classList.remove('hold');b.hold(0,el);};
+      el.addEventListener('pointerdown',on);
+      el.addEventListener('pointerup',off);
+      el.addEventListener('pointercancel',off);
+      el.addEventListener('lostpointercapture',off);
+    }else
+      el.addEventListener('pointerdown',ev=>{ev.preventDefault();ARC.sfx('tap');ARC.vib(10);b.fn&&b.fn(el);});
     t.appendChild(el);
   });
 };
@@ -656,21 +672,34 @@ ARC.boot=async function(){
      simplifica. Sin el soldado, modify() devolvía la malla igual (medido:
      28725 -> 28725). Si algo falla, se deja la malla como vino: nunca se rompe. */
   if(ARC.glb&&Object.keys(ARC.glb).length){
-    const target=GAME.glbTris||1200;
+    /* GAME.glbTris puede ser UN número (mismo tope para todos) o un objeto con un
+       tope por modelo y "_" como defecto; 0 = no tocar ese modelo. Hace falta
+       porque un personaje con hueso se lleva su propio presupuesto y los bichos
+       instanciados, que se dibujan de a doce, necesitan uno mucho más chico. */
+    const tg=GAME.glbTris,tgOf=k=>{
+      if(tg==null)return 1200;
+      if(typeof tg==='number')return tg;
+      return tg[k]!=null?tg[k]:(tg._!=null?tg._:1200);
+    };
     try{
       const [{SimplifyModifier},BGU]=await Promise.all([
         import('three/addons/modifiers/SimplifyModifier.js'),
         import('three/addons/utils/BufferGeometryUtils.js')]);
       const mod=new SimplifyModifier();
+      ARC.BGU=BGU;      /* los juegos también lo usan para fusionar mallas */
       ARC.glbTris={};
       for(const k in ARC.glb){
         const g=ARC.glb[k];if(!g||!g.scene)continue;
+        const target=tgOf(k);
         let before=0,after=0;
         g.scene.traverse(o=>{
           if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;
           const tri0=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;
           before+=tri0;
-          if(tri0<=target){after+=tri0;return;}
+          /* MALLA CON HUESO: NO se toca. SimplifyModifier sólo reconstruye
+             position/normal/uv, así que se comería skinIndex y skinWeight y el
+             personaje quedaría hecho un nudo al animarlo. */
+          if(o.isSkinnedMesh||!target||tri0<=target){after+=tri0;return;}
           try{
             let geo=o.geometry;
             /* soldar: de 3 vértices por triángulo a vértices compartidos */
