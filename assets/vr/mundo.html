@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#0b1020"/>
+<title>MUNDO 6DOF</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;background:#0b1020;color:#eaf2ff;
+    font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    overflow:hidden;touch-action:none;overscroll-behavior:none;user-select:none}
+  #gl{position:fixed;left:0;top:0;width:100%;height:100%;display:block}
+  #cam{position:fixed;right:8px;bottom:8px;width:96px;height:72px;object-fit:cover;
+    border:2px solid #7fd0ff;border-radius:8px;opacity:.85;display:none;z-index:5;transform:scaleX(-1)}
+
+  /* ---------------- HUD ---------------- */
+  #hud{position:fixed;inset:0;z-index:4;pointer-events:none;display:none}
+  #hud.on{display:block}
+  .pane{position:absolute;background:rgba(6,12,26,.55);border:1px solid rgba(140,190,255,.28);
+    border-radius:10px;padding:6px 9px;backdrop-filter:blur(4px)}
+  #stat{left:8px;top:8px;font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre;color:#a9e7ff}
+  #gem{right:8px;top:8px;font-weight:700;font-size:15px;color:#ffe27a}
+  #msg{left:50%;top:22%;transform:translateX(-50%);font-weight:700;font-size:15px;
+    text-align:center;opacity:0;transition:opacity .3s;max-width:80vw}
+  #msg.on{opacity:1}
+
+  #joy{position:absolute;left:14px;bottom:14px;width:124px;height:124px;border-radius:50%;
+    background:rgba(10,20,40,.35);border:2px solid rgba(150,200,255,.35);pointer-events:auto}
+  #nub{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;
+    background:rgba(150,210,255,.55);border:2px solid #cfeaff}
+  #btns{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:7px;
+    align-items:flex-end;pointer-events:auto}
+  .b{min-width:74px;text-align:center;padding:9px 11px;border-radius:11px;font-weight:700;font-size:12px;
+    background:linear-gradient(180deg,#2c5b96,#183a68);border:1px solid #7fb6ee;color:#eaf6ff;
+    pointer-events:auto;cursor:pointer}
+  .b:active{transform:translateY(1px);filter:brightness(1.25)}
+  .b.g{background:linear-gradient(180deg,#2b8f5a,#17603c);border-color:#7fe0a8}
+  .b.r{background:linear-gradient(180deg,#9a3a3a,#6a2020);border-color:#f0a0a0}
+  .b.on{background:linear-gradient(180deg,#e0b23a,#a07414);border-color:#ffe9a0;color:#241a02}
+  #look{position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:auto}
+  #stbar{position:absolute;left:50%;top:4px;transform:translateX(-50%);display:none;pointer-events:auto}
+
+  /* ---------------- MENÚ ---------------- */
+  #menu{position:fixed;inset:0;z-index:9;overflow-y:auto;
+    background:radial-gradient(120% 90% at 50% 0%,#1b3a63 0%,#0b1020 60%,#05070f 100%);
+    padding:18px 14px 26px;-webkit-overflow-scrolling:touch}
+  #menu h1{margin:2px 0 0;font-size:22px;letter-spacing:.06em;
+    background:linear-gradient(180deg,#eaf6ff,#7fc4ff);-webkit-background-clip:text;background-clip:text;
+    -webkit-text-fill-color:transparent;text-align:center}
+  #menu .sub{text-align:center;color:#8fb4dd;font-size:11.5px;margin-bottom:10px}
+  .card{max-width:520px;margin:0 auto 12px;background:rgba(10,20,38,.6);
+    border:1px solid rgba(140,190,255,.22);border-radius:14px;padding:12px 13px}
+  .card h2{margin:0 0 8px;font-size:13px;letter-spacing:.1em;color:#8fd0ff;text-transform:uppercase}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .opt{flex:1 1 140px;min-width:130px;text-align:left;padding:10px;border-radius:11px;cursor:pointer;
+    background:rgba(30,60,100,.5);border:1px solid rgba(150,200,255,.3)}
+  .opt.sel{background:linear-gradient(180deg,#2f6fb0,#1d4a7d);
+    border-color:#9fd8ff;box-shadow:0 0 0 1px #9fd8ff inset}
+  .opt.no{opacity:.42}
+  .opt b{display:block;font-size:13px}
+  .opt span{display:block;font-size:11px;color:#a9c8e8;margin-top:2px}
+  /* pegado abajo: en apaisado de 420 px de alto el botón tiene que verse SIEMPRE */
+  #go{position:sticky;bottom:6px;display:block;width:100%;max-width:520px;margin:12px auto;
+    padding:15px;font-size:19px;font-weight:800;letter-spacing:.08em;border-radius:14px;
+    cursor:pointer;background:linear-gradient(180deg,#38d07a,#1a8b4e);
+    border:1px solid #b6ffd6;color:#032314;box-shadow:0 6px 22px #000a;z-index:2}
+  #diag{font:10.5px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;color:#9fe0c0;
+    max-height:190px;overflow:auto;background:rgba(0,0,0,.3);border-radius:8px;padding:8px}
+  .mini{padding:7px 10px;font-size:11px;border-radius:9px;cursor:pointer;
+    background:rgba(40,80,130,.6);border:1px solid rgba(150,200,255,.35);color:#dff0ff}
+  .tip{font-size:11.5px;color:#95b8dc;margin-top:8px}
+  .tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:6px;margin-left:5px;vertical-align:1px}
+  .tag.si{background:#1c6b3f;color:#c9ffdf}
+  .tag.no{background:#6b1c1c;color:#ffd4d4}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<video id="cam" playsinline muted autoplay></video>
+
+<div id="hud">
+  <div class="pane" id="stat">…</div>
+  <div class="pane" id="gem">◆ 0/14</div>
+  <div class="pane" id="msg"></div>
+  <div id="look"></div>
+  <div id="joy"><div id="nub"></div></div>
+  <div id="btns">
+    <div class="b g" id="bJump">SALTAR</div>
+    <div class="b" id="bCenter">CENTRAR</div>
+    <div class="b" id="bHands">MANOS</div>
+    <div class="b" id="bStereo">ESTÉREO</div>
+    <div class="b r" id="bExit">SALIR</div>
+  </div>
+  <div class="b" id="stbar">SALIR DEL ESTÉREO</div>
+</div>
+
+<div id="menu">
+  <h1>MUNDO 6DOF</h1>
+  <div class="sub">demostración · isla lowpoly · Android + WebView</div>
+
+  <div class="card">
+    <h2>Cómo se mueve la cabeza</h2>
+    <div class="row" id="modes"></div>
+    <div class="tip" id="modeTip"></div>
+  </div>
+
+  <div class="card">
+    <h2>Extras</h2>
+    <div class="row">
+      <div class="opt" id="oStereo"><b>Estéreo (visor)</b><span>parte la pantalla en dos ojos</span></div>
+      <div class="opt" id="oHands"><b>Manos (MediaPipe)</b><span>+8 MB, cámara de atrás</span></div>
+    </div>
+  </div>
+
+  <button id="go">ENTRAR</button>
+
+  <div class="card">
+    <h2>Qué soporta este aparato</h2>
+    <div id="diag">midiendo…</div>
+    <div class="row" style="margin-top:8px">
+      <div class="mini" id="dCopy">COPIAR</div>
+      <div class="mini" id="dAgain">MEDIR OTRA VEZ</div>
+    </div>
+    <div class="tip">Si algo no anda, copiá esto y mandámelo: dice exactamente qué le
+      falta a tu celular o a la WebView.</div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   MUNDO 6DOF — demostración de VR en el navegador de un CELULAR ANDROID, hecha
+   para que ande TAMBIÉN dentro de una WebView (que es donde no existe WebXR).
+
+   TRES FUENTES DE POSTURA DE CABEZA, y el programa elige la mejor que haya:
+
+     1) XR   · navigator.xr + sesión 'immersive-ar' (Chrome/Android con ARCore, o
+               'immersive-vr' si es un visor). Es 6DoF DE VERDAD, en metros: te
+               agachás, te asomás, das un paso y el mundo responde. NO existe
+               dentro de android.webkit.WebView, por eso hay plan B.
+
+     2) GIRO · deviceorientation (rotación exacta, 3DoF) + INCLINACIÓN REAL
+               integrada del acelerómetro con resorte de vuelta al centro
+               (±35 cm). Da paralaje verdadero al asomarse y NO deriva, porque
+               siempre vuelve al cero. Es lo que sí anda en una WebView.
+               El desplazamiento largo es con la palanca del pulgar.
+
+     3) TOQUE· arrastrar para mirar. Para escritorio y para las pruebas de acá.
+
+   REGLA DE RENDIMIENTO que se respeta en todo el archivo: en celular el cuello
+   de botella NO son los triángulos, es el RELLENO DE PÍXELES. Por eso:
+     · CERO luces: la iluminación está COCINADA en los colores de vértice y todo
+       el mundo usa MeshBasicMaterial (el fragmento no calcula nada).
+     · todo lo repetido va fusionado en una sola malla → 10 llamadas de dibujo.
+     · resolución adaptativa: si baja de 40 fps, baja el buffer; si sube, lo
+       devuelve. En estéreo arranca más abajo porque son dos pasadas.
+   ========================================================================== */
+
+(async () => {
+'use strict';
+const Q = new URLSearchParams(location.search);
+const LOC = Q.has('local');                 /* ?local = todo desde este servidor */
+const HASH = 'd524ab4';
+const CDN = 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASH + '/assets/vr/';
+const A   = f => LOC ? ('/assets/vr/' + f) : (CDN + f);
+const TRE = LOC ? '/_vthree/build/three.module.js'
+                : 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+const MPB = LOC ? '/_vmp/vision_bundle.mjs'
+                : 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs';
+const MPW = LOC ? '/_vmp/wasm'
+                : 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
+const MPM = LOC ? '/_vmp/hand_landmarker.task' : A('hand_landmarker.task');
+
+const $ = i => document.getElementById(i);
+const cv = $('gl');
+const T = await import(TRE);
+
+/* ==========================================================================
+   1. DIAGNÓSTICO — qué tiene realmente el aparato. Sirve para no adivinar.
+   ========================================================================== */
+const DIAG = {};
+async function diag(){
+  const ua = navigator.userAgent;
+  DIAG.ua = ua;
+  DIAG.webview = /;\s*wv\)/.test(ua) || (/Version\/[\d.]+.*Chrome/.test(ua) && /Android/.test(ua));
+  DIAG.seguro   = !!window.isSecureContext;
+  DIAG.origen   = location.origin;
+  DIAG.xr       = !!navigator.xr;
+  DIAG.xr_ar = DIAG.xr_vr = false;
+  if (navigator.xr) {
+    try { DIAG.xr_ar = await navigator.xr.isSessionSupported('immersive-ar'); } catch(e){}
+    try { DIAG.xr_vr = await navigator.xr.isSessionSupported('immersive-vr'); } catch(e){}
+  }
+  DIAG.giro   = 'DeviceOrientationEvent' in window;
+  DIAG.giroAbs = 'ondeviceorientationabsolute' in window;
+  DIAG.giroPide = !!(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission);
+  DIAG.movim  = 'DeviceMotionEvent' in window;
+  DIAG.camara = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  DIAG.wasm   = typeof WebAssembly === 'object';
+  DIAG.hilos  = navigator.hardwareConcurrency || 0;
+  DIAG.memoria = navigator.deviceMemory || 0;
+  DIAG.dpr    = +(window.devicePixelRatio || 1).toFixed(2);
+  DIAG.pantalla = innerWidth + 'x' + innerHeight;
+  try {
+    const c = document.createElement('canvas');
+    const g = c.getContext('webgl2') || c.getContext('webgl');
+    DIAG.webgl = g ? (g.getParameter(g.VERSION) + '') : 'NO';
+    if (g) {
+      const d = g.getExtension('WEBGL_debug_renderer_info');
+      DIAG.gpu = d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : '(oculta)';
+      DIAG.maxTex = g.getParameter(g.MAX_TEXTURE_SIZE);
+    }
+  } catch(e) { DIAG.webgl = 'ERROR ' + e.message; }
+  /* prueba real de sensores: se escuchan 700 ms y se ve si LLEGA algo */
+  DIAG.giroLlega = false; DIAG.movimLlega = false; DIAG.acelSinGravedad = false;
+  const on1 = e => { if (e.alpha !== null || e.beta !== null) DIAG.giroLlega = true; };
+  const on2 = e => { DIAG.movimLlega = true;
+    if (e.acceleration && e.acceleration.x !== null) DIAG.acelSinGravedad = true; };
+  addEventListener('deviceorientation', on1);
+  addEventListener('devicemotion', on2);
+  await new Promise(r => setTimeout(r, 700));
+  removeEventListener('deviceorientation', on1);
+  removeEventListener('devicemotion', on2);
+  return DIAG;
+}
+function pintaDiag(){
+  const L = [];
+  const si = (k, v) => L.push((v ? '  SI  ' : '  no  ') + k);
+  L.push('agente: ' + DIAG.ua);
+  si('parece WebView', DIAG.webview);
+  si('contexto seguro (https)', DIAG.seguro);
+  si('navigator.xr', DIAG.xr);
+  si("xr 'immersive-ar' (6DoF real)", DIAG.xr_ar);
+  si("xr 'immersive-vr' (visor)", DIAG.xr_vr);
+  si('deviceorientation', DIAG.giro);
+  si('  …y LLEGAN datos', DIAG.giroLlega);
+  si('devicemotion', DIAG.movim);
+  si('  …y LLEGAN datos', DIAG.movimLlega);
+  si('  …con gravedad quitada', DIAG.acelSinGravedad);
+  si('getUserMedia (cámara)', DIAG.camara);
+  si('WebAssembly', DIAG.wasm);
+  L.push('webgl: ' + DIAG.webgl);
+  L.push('gpu: ' + DIAG.gpu);
+  L.push('hilos: ' + DIAG.hilos + '   memoria: ' + (DIAG.memoria || '?') + ' GB');
+  L.push('dpr: ' + DIAG.dpr + '   pantalla: ' + DIAG.pantalla);
+  $('diag').textContent = L.join('\n');
+}
+
+/* ==========================================================================
+   2. MUNDO LOWPOLY — todo con luz cocinada en los vértices.
+   ========================================================================== */
+const SUN = (() => { const v = new T.Vector3(.45, .80, .38).normalize(); return v; })();
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const R_ISLA = 46, R_MAR = 150;
+
+/* altura del terreno: la MISMA función se usa para armar la malla y para
+   apoyar los pies, así que el suelo nunca miente */
+function H(x, z){
+  const r = Math.hypot(x, z);
+  let h = 5.4 * Math.exp(-Math.pow(r / 27, 2) * .95);
+  h += 1.9 * Math.sin(x * .085) * Math.cos(z * .105);
+  h += 0.9 * Math.sin(x * .225 + 1.7) * Math.cos(z * .19 - .4);
+  h += 4.2 * Math.exp(-(((x - 19) * (x - 19) + (z + 15) * (z + 15)) / 150));
+  h += 3.1 * Math.exp(-(((x + 22) * (x + 22) + (z - 18) * (z - 18)) / 190));
+  h += 2.4 * Math.exp(-(((x + 6) * (x + 6) + (z + 26) * (z + 26)) / 130));
+  const cae = 1 - smooth(R_ISLA - 17, R_ISLA, r);
+  return h * cae - 2.4 * smooth(R_ISLA - 10, R_ISLA + 14, r);
+}
+const hex = h => { const n = parseInt(h.slice(1), 16);
+  return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+
+/* lote de triángulos con luz cocinada: un solo Mesh, un solo dibujo */
+class Lote {
+  constructor(){ this.p = []; this.c = []; }
+  tri(a, b, c, col, luzExtra){
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+    const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const L = Math.hypot(nx, ny, nz) || 1; nx /= L; ny /= L; nz /= L;
+    let f = .40 + .60 * Math.max(0, nx * SUN.x + ny * SUN.y + nz * SUN.z)
+              + .12 * Math.max(0, ny);
+    if (luzExtra) f *= luzExtra;
+    const r = col[0] * f, g = col[1] * f, bb = col[2] * f;
+    this.p.push(a[0],a[1],a[2], b[0],b[1],b[2], c[0],c[1],c[2]);
+    this.c.push(r,g,bb, r,g,bb, r,g,bb);
+  }
+  /* OJO CON EL ORDEN: a,b,c,d en sentido antihorario visto DESDE AFUERA.
+     Si se invierte, la cara desaparece (culling de caras traseras). */
+  quad(a, b, c, d, col, e){ this.tri(a, b, c, col, e); this.tri(a, c, d, col, e); }
+  caja(cx, cy, cz, w, h, d, col, rotY, e){
+    const s = Math.sin(rotY || 0), co = Math.cos(rotY || 0);
+    const P = (x, y, z) => [cx + x * co + z * s, cy + y, cz - x * s + z * co];
+    const X = w / 2, Y = h / 2, Z = d / 2;
+    const a = P(-X, -Y, Z), b = P(X, -Y, Z), c = P(X, Y, Z), d2 = P(-X, Y, Z);
+    const e1 = P(-X, -Y, -Z), f = P(X, -Y, -Z), g = P(X, Y, -Z), h2 = P(-X, Y, -Z);
+    this.quad(a, b, c, d2, col, e);      /* frente  +Z */
+    this.quad(f, e1, h2, g, col, e);     /* atrás   -Z */
+    this.quad(b, f, g, c, col, e);       /* derecha +X */
+    this.quad(e1, a, d2, h2, col, e);    /* izq     -X */
+    this.quad(d2, c, g, h2, col, e);     /* arriba  +Y */
+    this.quad(e1, f, b, a, col, e);      /* abajo   -Y */
+  }
+  cono(cx, cy, cz, r, h, n, col, e){
+    const ap = [cx, cy + h, cz];
+    for (let i = 0; i < n; i++){
+      const a0 = i / n * Math.PI * 2, a1 = (i + 1) / n * Math.PI * 2;
+      const p0 = [cx + Math.cos(a0) * r, cy, cz + Math.sin(a0) * r];
+      const p1 = [cx + Math.cos(a1) * r, cy, cz + Math.sin(a1) * r];
+      this.tri(p0, p1, ap, col, e);
+    }
+  }
+  cil(cx, cy, cz, r0, r1, h, n, col, e){
+    for (let i = 0; i < n; i++){
+      const a0 = i / n * Math.PI * 2, a1 = (i + 1) / n * Math.PI * 2;
+      const b0 = [cx + Math.cos(a0) * r0, cy, cz + Math.sin(a0) * r0];
+      const b1 = [cx + Math.cos(a1) * r0, cy, cz + Math.sin(a1) * r0];
+      const t0 = [cx + Math.cos(a0) * r1, cy + h, cz + Math.sin(a0) * r1];
+      const t1 = [cx + Math.cos(a1) * r1, cy + h, cz + Math.sin(a1) * r1];
+      this.quad(b0, b1, t1, t0, col, e);
+    }
+  }
+  bola(cx, cy, cz, r, nu, nv, col, ap, e){
+    ap = ap || 1;
+    for (let j = 0; j < nv; j++){
+      const t0 = j / nv * Math.PI, t1 = (j + 1) / nv * Math.PI;
+      for (let i = 0; i < nu; i++){
+        const p0 = i / nu * Math.PI * 2, p1 = (i + 1) / nu * Math.PI * 2;
+        const V = (t, p) => [cx + r * Math.sin(t) * Math.cos(p),
+                             cy + r * ap * Math.cos(t),
+                             cz + r * Math.sin(t) * Math.sin(p)];
+        const a = V(t0, p0), b = V(t0, p1), c = V(t1, p1), d = V(t1, p0);
+        if (j === 0)        this.tri(a, c, d, col, e);
+        else if (j === nv-1) this.tri(a, b, c, col, e);
+        else                this.quad(a, b, c, d, col, e);
+      }
+    }
+  }
+  malla(mat){
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(new Float32Array(this.p), 3));
+    g.setAttribute('color',    new T.BufferAttribute(new Float32Array(this.c), 3));
+    g.computeBoundingSphere();
+    const m = mat || new T.MeshBasicMaterial({ vertexColors: true });
+    const me = new T.Mesh(g, m);
+    me.userData.tris = this.p.length / 9;
+    return me;
+  }
+}
+
+/* --- azar reproducible: el mundo es siempre EL MISMO (verificable) --- */
+let _s = 20260731;
+const rnd = () => { _s = (_s * 1664525 + 1013904223) >>> 0; return _s / 4294967296; };
+const rr = (a, b) => a + (b - a) * rnd();
+
+const scene = new T.Scene();
+const CIELO_ALTO = '#2f7ad0', CIELO_BAJO = '#cfe7f7';
+scene.fog = new T.Fog(new T.Color(CIELO_BAJO), 95, 330);
+
+/* ---- cielo: una esfera con degradado en los vértices. Sin textura, sin luz,
+   sin niebla; una sola pasada de relleno casi gratis. ---- */
+(function cielo(){
+  const g = new T.SphereGeometry(420, 18, 12);
+  const p = g.attributes.position, col = new Float32Array(p.count * 3);
+  const A2 = new T.Color(CIELO_ALTO), B2 = new T.Color(CIELO_BAJO), c = new T.Color();
+  for (let i = 0; i < p.count; i++){
+    const t = Math.min(1, Math.max(0, (p.getY(i) / 420 + .12) / .85));
+    c.copy(B2).lerp(A2, Math.pow(t, .7));
+    col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+  }
+  g.setAttribute('color', new T.BufferAttribute(col, 3));
+  const m = new T.Mesh(g, new T.MeshBasicMaterial({
+    vertexColors: true, side: T.BackSide, fog: false, depthWrite: false }));
+  m.renderOrder = -10; m.frustumCulled = false;
+  scene.add(m);
+})();
+
+/* ---- sol + halo: dos quads planos, siempre de frente ---- */
+(function sol(){
+  const tex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'), d = g.createRadialGradient(32,32,0,32,32,32);
+    d.addColorStop(0,'rgba(255,255,235,1)'); d.addColorStop(.28,'rgba(255,246,200,.85)');
+    d.addColorStop(1,'rgba(255,240,180,0)');
+    g.fillStyle = d; g.fillRect(0,0,64,64);
+    const t = new T.CanvasTexture(c); return t;
+  })();
+  const s = new T.Sprite(new T.SpriteMaterial({ map: tex, transparent: true,
+    blending: T.AdditiveBlending, depthWrite: false, fog: false }));
+  s.scale.set(90, 90, 1);
+  s.position.copy(SUN).multiplyScalar(360);
+  s.renderOrder = -9;
+  scene.add(s);
+})();
+
+/* ---- terreno ---- */
+const N_T = 54, PASO = (R_ISLA + 10) * 2 / N_T;
+const tierra = new Lote();
+(function terreno(){
+  const C_ARENA = hex('#e9dba6'), C_PASTO = hex('#63b95c'), C_PASTO2 = hex('#4e9d51'),
+        C_ROCA = hex('#8d8f99'), C_ROCA2 = hex('#a6a8b2'), C_CIMA = hex('#e6ecf2');
+  const O = -(R_ISLA + 10);
+  const V = (i, j) => { const x = O + i * PASO, z = O + j * PASO; return [x, H(x, z), z]; };
+  for (let j = 0; j < N_T; j++) for (let i = 0; i < N_T; i++){
+    const a = V(i, j), b = V(i + 1, j), c = V(i + 1, j + 1), d = V(i, j + 1);
+    const hm = (a[1] + b[1] + c[1] + d[1]) / 4;
+    const pend = Math.max(Math.abs(a[1]-c[1]), Math.abs(b[1]-d[1])) / PASO;
+    let col;
+    if (hm < .55) col = C_ARENA;
+    else if (hm > 7.6) col = C_CIMA;
+    else if (pend > .78) col = (i + j) & 1 ? C_ROCA : C_ROCA2;
+    else col = ((i * 7 + j * 3) % 5) < 2 ? C_PASTO2 : C_PASTO;
+    /* antihorario mirado desde arriba: a,d,c,b */
+    tierra.quad(a, d, c, b, col, .92 + ((i * 13 + j * 7) % 7) * .022);
+  }
+  const m = tierra.malla(); m.name = 'terreno'; scene.add(m);
+})();
+
+/* ---- agua: una malla chica con olas, material básico y translúcido ---- */
+let agua, aguaP0;
+(function mar(){
+  const g = new T.PlaneGeometry(R_MAR * 2, R_MAR * 2, 14, 14);
+  g.rotateX(-Math.PI / 2);
+  const p = g.attributes.position, col = new Float32Array(p.count * 3);
+  const c1 = new T.Color('#2f86c8'), c2 = new T.Color('#8fd6e8'), c = new T.Color();
+  for (let i = 0; i < p.count; i++){
+    const r = Math.hypot(p.getX(i), p.getZ(i));
+    c.copy(c2).lerp(c1, smooth(R_ISLA - 6, R_ISLA + 55, r));
+    col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+  }
+  g.setAttribute('color', new T.BufferAttribute(col, 3));
+  aguaP0 = Float32Array.from(p.array);
+  agua = new T.Mesh(g, new T.MeshBasicMaterial({ vertexColors: true,
+    transparent: true, opacity: .86, depthWrite: false }));
+  agua.position.y = -.05; agua.renderOrder = -1;
+  scene.add(agua);
+})();
+
+/* ---- vegetación y piedras: TODO en un lote → 1 dibujo ---- */
+/* puntito redondo compartido por luciérnagas y flores: sin esto los Points son
+   cuadrados y se ven como cubitos flotando */
+const TEX_PUNTO = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const g = c.getContext('2d'), d = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  d.addColorStop(0, 'rgba(255,255,255,1)'); d.addColorStop(.55, 'rgba(255,255,255,.85)');
+  d.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = d; g.fillRect(0, 0, 32, 32);
+  return new T.CanvasTexture(c);
+})();
+/* claros reservados: acá NO se plantan cosas, porque son los sitios del mundo
+   (cabaña, torre, círculo de piedras, fogata, muelle) */
+const ZONAS = [[7,-9,7],[19,-15,7],[-19,15,9],[-3,4,5],[-14,-30,6],[0,0,5]];
+const enZona = (x, z) => ZONAS.some(q => (q[0]-x)*(q[0]-x) + (q[1]-z)*(q[1]-z) < q[2]*q[2]);
+const PROPS = [];
+let FOGATA = null, llama = null;
+(function flora(){
+  const L = new Lote();
+  const C_TR = hex('#7a5535'), C_H1 = hex('#3f9c4e'), C_H2 = hex('#2f7d43'),
+        C_H3 = hex('#57b85f'), C_ROSA = hex('#e97fb0'), C_PIED = hex('#8e9099'),
+        C_HONGO = hex('#f0eee0'), C_TAPA = hex('#e05a4a');
+  let puestos = 0, intentos = 0;
+  while (puestos < 150 && intentos < 9000){
+    intentos++;
+    const x = rr(-R_ISLA + 6, R_ISLA - 6), z = rr(-R_ISLA + 6, R_ISLA - 6);
+    const r = Math.hypot(x, z); if (r > R_ISLA - 7) continue;
+    const y = H(x, z); if (y < 1.0 || y > 7.4) continue;
+    const pend = Math.abs(H(x + 1, z) - y) + Math.abs(H(x, z + 1) - y);
+    if (pend > 1.5) continue;
+    if (enZona(x, z)) continue;                        /* claros reservados */
+    let ok = true;
+    for (const q of PROPS) if ((q[0]-x)*(q[0]-x) + (q[1]-z)*(q[1]-z) < 7) { ok = false; break; }
+    if (!ok) continue;
+    PROPS.push([x, z]);
+    puestos++;
+    const k = rnd();
+    if (k < .52){                                       /* pino de tres capas */
+      const h = rr(2.6, 4.6), tr = rr(.17, .26);
+      L.cil(x, y, z, tr, tr * .8, h * .42, 5, C_TR);
+      const cc = rnd() < .5 ? C_H1 : C_H2;
+      L.cono(x, y + h * .30, z, h * .40, h * .48, 6, cc);
+      L.cono(x, y + h * .56, z, h * .32, h * .44, 6, cc, 1.06);
+      L.cono(x, y + h * .82, z, h * .21, h * .40, 6, cc, 1.12);
+    } else if (k < .74){                                /* árbol redondo */
+      const h = rr(2.2, 3.6);
+      L.cil(x, y, z, .2, .16, h * .5, 5, C_TR);
+      L.bola(x, y + h * .74, z, rr(1.0, 1.5), 7, 5, rnd() < .5 ? C_H3 : C_H1, .86);
+    } else if (k < .82){                                /* arbusto con flores */
+      L.bola(x, y + .35, z, rr(.55, .85), 6, 4, C_H3, .8);
+      for (let i = 0; i < 3; i++)
+        L.bola(x + rr(-.5,.5), y + rr(.5,.9), z + rr(-.5,.5), .1, 5, 3, C_ROSA, 1, 1.25);
+    } else if (k < .92){                                /* piedra */
+      const s = rr(.5, 1.5);
+      L.caja(x, y + s * .3, z, s * 1.5, s * .7, s * 1.2, C_PIED, rr(0, 3.14));
+      L.caja(x + s * .3, y + s * .62, z - s * .2, s * .8, s * .5, s * .7, C_PIED, rr(0, 3.14));
+    } else {                                            /* hongo */
+      const h = rr(.4, .8);
+      L.cil(x, y, z, .09, .11, h, 5, C_HONGO);
+      L.bola(x, y + h, z, h * .7, 7, 4, C_TAPA, .6);
+    }
+  }
+  /* --- cabaña en el claro --- */
+  (function cabana(){
+    const cx = 7, cz = -9, y = H(cx, cz);
+    const C_MAD = hex('#c39a63'), C_MAD2 = hex('#a67c48'), C_TE = hex('#b04a3e');
+    L.caja(cx, y + 1.4, cz, 5.2, 2.8, 4.4, C_MAD, .35);
+    L.caja(cx, y + 2.9, cz, 5.8, .35, 5.0, C_MAD2, .35);
+    const s = Math.sin(.35), co = Math.cos(.35);
+    const P = (dx, dy, dz) => [cx + dx * co + dz * s, y + dy, cz - dx * s + dz * co];
+    const A0 = P(-3.0, 3.05, 2.6), B0 = P(3.0, 3.05, 2.6),
+          C0 = P(3.0, 3.05, -2.6), D0 = P(-3.0, 3.05, -2.6);
+    const T0 = P(0, 4.7, 1.0), T1 = P(0, 4.7, -1.0);
+    L.tri(A0, B0, T0, C_TE);          /* faldón sur   */
+    L.tri(C0, D0, T1, C_TE);          /* faldón norte */
+    L.quad(B0, C0, T1, T0, C_TE);     /* agua este    */
+    L.quad(D0, A0, T0, T1, C_TE);     /* agua oeste   */
+    L.caja(...P(0, 1.1, 2.25), 1.1, 2.0, .18, hex('#6b4a2c'), .35);
+  })();
+  /* --- muelle de madera hacia el mar --- */
+  (function muelle(){
+    const C_MAD = hex('#c8a473'), C_POS = hex('#8a6a45');
+    for (let i = 0; i < 16; i++){
+      const z = -(R_ISLA - 18) - i * 1.6, x = -14 + Math.sin(i * .3) * .4;
+      L.caja(x, .55, z, 3.0, .18, 1.4, C_MAD, .04);
+      if (i % 3 === 0){ L.caja(x - 1.3, .0, z, .22, 1.3, .22, C_POS);
+                        L.caja(x + 1.3, .0, z, .22, 1.3, .22, C_POS); }
+    }
+  })();
+  /* --- círculo de piedras paradas: un sitio al que caminar --- */
+  (function crómlech(){
+    const C = hex('#9a9aa4'), C2 = hex('#86868f');
+    const cx = -19, cz = 15;
+    for (let i = 0; i < 9; i++){
+      const a = i / 9 * 6.284, x = cx + Math.cos(a) * 5.2, z = cz + Math.sin(a) * 5.2;
+      const y = H(x, z), h = rr(1.8, 2.9);
+      L.caja(x, y + h / 2, z, .9, h, .55, i & 1 ? C : C2, a + rr(-.2, .2));
+      if (i % 3 === 0) L.caja(x, y + h + .16, z, 1.15, .3, .8, C2, a);
+    }
+    const y0 = H(cx, cz);
+    L.caja(cx, y0 + .12, cz, 3.2, .24, 3.2, hex('#b9b2a0'), .78);
+  })();
+  /* --- fogata en el claro: los leños; la llama es un sprite aditivo --- */
+  (function fogata(){
+    const cx = -3, cz = 4, y = H(cx, cz);
+    const C_LE = hex('#6b4a2c'), C_PI = hex('#8f8f96');
+    for (let i = 0; i < 7; i++){
+      const a = i / 7 * 6.284;
+      L.caja(cx + Math.cos(a) * .95, y + .13, cz + Math.sin(a) * .95, .55, .26, .3, C_PI, a);
+    }
+    for (let i = 0; i < 4; i++){
+      const a = i / 4 * 3.14;
+      L.caja(cx, y + .38, cz, 1.5, .17, .17, C_LE, a);
+    }
+    FOGATA = { x: cx, y: y + .55, z: cz };
+  })();
+  /* --- torre mirador sobre el cerro grande --- */
+  (function torre(){
+    const cx = 19, cz = -15, y = H(cx, cz), h = 6.4;
+    const C_M = hex('#c09a68'), C_M2 = hex('#a37f4e'), C_TE = hex('#7d4f3a');
+    for (const s of [[-1.3,-1.3],[1.3,-1.3],[1.3,1.3],[-1.3,1.3]])
+      L.caja(cx + s[0], y + h / 2, cz + s[1], .3, h, .3, C_M2);
+    L.caja(cx, y + h, cz, 3.6, .28, 3.6, C_M);
+    for (let i = 0; i < 4; i++){
+      const a = i / 4 * 6.284;
+      L.caja(cx + Math.cos(a) * 1.6, y + h + .55, cz + Math.sin(a) * 1.6, 3.4, .8, .2, C_M, a);
+    }
+    L.cono(cx, y + h + 1.05, cz, 2.7, 1.9, 6, C_TE);
+    for (let i = 0; i < 9; i++)                            /* escalera */
+      L.caja(cx - 1.5, y + .5 + i * .66, cz + 1.5 - i * .12, 1.5, .12, .5, C_M2);
+  })();
+  const m = L.malla(); m.name = 'flora'; scene.add(m);
+})();
+
+/* ---- la llama de la fogata: un sprite aditivo que late ---- */
+(function fuego(){
+  if (!FOGATA) return;
+  const c = document.createElement('canvas'); c.width = c.height = 48;
+  const g = c.getContext('2d'), d = g.createRadialGradient(24, 30, 0, 24, 30, 22);
+  d.addColorStop(0, 'rgba(255,250,210,1)'); d.addColorStop(.35, 'rgba(255,180,60,.85)');
+  d.addColorStop(1, 'rgba(255,90,20,0)');
+  g.fillStyle = d; g.beginPath(); g.moveTo(24, 0); g.quadraticCurveTo(48, 30, 24, 48);
+  g.quadraticCurveTo(0, 30, 24, 0); g.fill();
+  llama = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c),
+    transparent: true, blending: T.AdditiveBlending, depthWrite: false, fog: false }));
+  llama.position.set(FOGATA.x, FOGATA.y + .45, FOGATA.z);
+  llama.scale.set(1.1, 1.5, 1);
+  scene.add(llama);
+})();
+
+/* ---- florcitas: un Points a ras del suelo. Alfombra de color por 1 dibujo ---- */
+(function flores(){
+  const N = 420, p = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const c = new T.Color();
+  let n = 0, it = 0;
+  while (n < N && it < 9000){
+    it++;
+    const a = rnd() * 6.284, dd = rr(3, R_ISLA - 8);
+    const x = Math.cos(a) * dd, z = Math.sin(a) * dd, y = H(x, z);
+    if (y < 1.0 || y > 7.0) continue;
+    p[n*3] = x; p[n*3+1] = y + .16; p[n*3+2] = z;
+    const k = rnd();
+    c.setHSL(k < .4 ? .13 : k < .7 ? .92 : .74, .85, .68);
+    col[n*3] = c.r; col[n*3+1] = c.g; col[n*3+2] = c.b;
+    n++;
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(p.slice(0, n * 3), 3));
+  g.setAttribute('color', new T.BufferAttribute(col.slice(0, n * 3), 3));
+  scene.add(new T.Points(g, new T.PointsMaterial({ size: .26, map: TEX_PUNTO,
+    vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true })));
+})();
+
+/* ---- nubes: 7 quads con textura suave, lejos y sin escritura de profundidad ---- */
+(function nubes(){
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  for (let i = 0; i < 14; i++){
+    const x = 20 + Math.random() * 88, y = 40 + Math.random() * 46,
+          r = 14 + Math.random() * 24;
+    const d = g.createRadialGradient(x, y, 0, x, y, r);
+    d.addColorStop(0, 'rgba(255,255,255,.95)'); d.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = d; g.beginPath(); g.arc(x, y, r, 0, 6.284); g.fill();
+  }
+  const tex = new T.CanvasTexture(c);
+  const mat = new T.SpriteMaterial({ map: tex, transparent: true, opacity: .9,
+    depthWrite: false, fog: false });
+  const gr = new T.Group();
+  for (let i = 0; i < 7; i++){
+    const s = new T.Sprite(mat);
+    const a = i / 7 * 6.284 + .4, d = rr(120, 240);
+    s.position.set(Math.cos(a) * d, rr(46, 78), Math.sin(a) * d);
+    s.scale.set(rr(70, 130), rr(26, 44), 1);
+    gr.add(s);
+  }
+  gr.renderOrder = -8; scene.add(gr);
+})();
+
+/* ---- luciérnagas: un solo Points aditivo ---- */
+let motas, motasP0;
+(function luces(){
+  const N = 130, p = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const c = new T.Color();
+  for (let i = 0; i < N; i++){
+    const a = rnd() * 6.284, d = rr(4, R_ISLA - 8);
+    const x = Math.cos(a) * d, z = Math.sin(a) * d;
+    p[i*3] = x; p[i*3+1] = Math.max(.6, H(x, z)) + rr(.4, 3.4); p[i*3+2] = z;
+    c.setHSL(rr(.12, .19), .95, rr(.6, .78));
+    col[i*3] = c.r; col[i*3+1] = c.g; col[i*3+2] = c.b;
+  }
+  motasP0 = Float32Array.from(p);
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(p, 3));
+  g.setAttribute('color', new T.BufferAttribute(col, 3));
+  motas = new T.Points(g, new T.PointsMaterial({ size: .42, map: TEX_PUNTO, vertexColors: true,
+    transparent: true, blending: T.AdditiveBlending, depthWrite: false, sizeAttenuation: true }));
+  scene.add(motas);
+})();
+
+/* ---- gemas: 14 recolectables, en InstancedMesh (2 dibujos con el brillo) ---- */
+const GEMAS = [];
+let iGema, iHalo;
+(function gemas(){
+  const N = 14;
+  const g = new T.OctahedronGeometry(.42, 0);
+  iGema = new T.InstancedMesh(g, new T.MeshBasicMaterial({ vertexColors: false, color: 0x9ff0ff }), N);
+  iGema.instanceColor = new T.InstancedBufferAttribute(new Float32Array(N * 3), 3);
+  iHalo = new T.InstancedMesh(new T.OctahedronGeometry(.78, 0),
+    new T.MeshBasicMaterial({ color: 0x9ff0ff, transparent: true, opacity: .3,
+      blending: T.AdditiveBlending, depthWrite: false }), N);
+  iGema.frustumCulled = iHalo.frustumCulled = false;
+  const c = new T.Color();
+  let puestas = 0, it = 0;
+  while (puestas < N && it < 3000){
+    it++;
+    const a = rnd() * 6.284, d = rr(7, R_ISLA - 10);
+    const x = Math.cos(a) * d, z = Math.sin(a) * d, y = H(x, z);
+    if (y < .9) continue;
+    let ok = true;
+    for (const q of GEMAS) if ((q.x-x)*(q.x-x) + (q.z-z)*(q.z-z) < 40) { ok = false; break; }
+    /* que no quede metida dentro de un árbol ni de una piedra */
+    if (ok) for (const q of PROPS) if ((q[0]-x)*(q[0]-x) + (q[1]-z)*(q[1]-z) < 6.5) { ok = false; break; }
+    if (!ok) continue;
+    c.setHSL(rr(.44, .62), .85, .62);
+    GEMAS.push({ x, y: y + 1.15, gy: y + 1.15, z, ph: rnd() * 6.284,
+                 viva: 1, col: c.clone(), mira: 0, foco: 0 });
+    iGema.setColorAt(puestas, c);
+    puestas++;
+  }
+  scene.add(iGema); scene.add(iHalo);
+})();
+
+/* ---- retícula: un anillo que se pone delante de la cámara cada cuadro,
+   así se ve BIEN en los dos ojos del estéreo y también en XR ---- */
+const reticula = new T.Mesh(new T.RingGeometry(.016, .026, 20),
+  new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .8,
+    depthTest: false, fog: false }));
+reticula.renderOrder = 999; scene.add(reticula);
+const reticulaB = new T.Mesh(new T.RingGeometry(.030, .040, 24),
+  new T.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0,
+    depthTest: false, fog: false }));
+reticulaB.renderOrder = 999; scene.add(reticulaB);
+
+/* ---- mano de MediaPipe: 21 nudillos + huesos, 2 dibujos ---- */
+let iMano = null, huesos = null;
+const HUESOS = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+                [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+(function mano(){
+  iMano = new T.InstancedMesh(new T.SphereGeometry(1, 6, 4),
+    new T.MeshBasicMaterial({ color: 0xffd9b0 }), 21);
+  iMano.frustumCulled = false; iMano.visible = false; scene.add(iMano);
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(new Float32Array(HUESOS.length * 6), 3));
+  huesos = new T.LineSegments(g, new T.LineBasicMaterial({ color: 0xffb070 }));
+  huesos.frustumCulled = false; huesos.visible = false; scene.add(huesos);
+})();
+
+/* ==========================================================================
+   3. RENDER
+   ========================================================================== */
+const ren = new T.WebGLRenderer({ canvas: cv, antialias: false, alpha: false,
+  powerPreference: 'high-performance' });
+ren.setClearColor(new T.Color(CIELO_BAJO), 1);
+ren.autoClear = true;
+const cam  = new T.PerspectiveCamera(72, 1, .12, 460);
+const camL = new T.PerspectiveCamera(72, 1, .12, 460);
+const camR = new T.PerspectiveCamera(72, 1, .12, 460);
+/* La cámara va DENTRO de un rig. Es la única forma correcta de caminar en
+   WebXR: la postura de la cabeza la pone el navegador (y three la lee del
+   PADRE de la cámara), así que para desplazarse se mueve el rig, nunca la
+   cámara. Fuera de XR el rig queda en el origen y la cámara se pone a mano. */
+const rig = new T.Group(); scene.add(rig); rig.add(cam);
+/* HP/HQ = postura de la cabeza EN EL MUNDO. Todo lo demás (retícula, mirada,
+   manos, ojos del estéreo) usa esto y NO cam.position, que en XR es local. */
+const HP = new T.Vector3(0, 1.65, 16), HQ = new T.Quaternion();
+
+let rs = 1;                      /* escala de resolución (el pedal del relleno) */
+function aplicaRS(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  ren.setPixelRatio(dpr * rs);
+  ren.setSize(innerWidth, innerHeight, false);
+  cv.style.width = innerWidth + 'px'; cv.style.height = innerHeight + 'px';
+  const a = innerWidth / innerHeight;
+  cam.aspect = a; cam.updateProjectionMatrix();
+  camL.aspect = camR.aspect = a / 2;
+  camL.updateProjectionMatrix(); camR.updateProjectionMatrix();
+}
+addEventListener('resize', () => aplicaRS());
+aplicaRS();
+
+/* ==========================================================================
+   4. POSTURA DE CABEZA
+   ========================================================================== */
+const P = {
+  src: 'toque',            /* 'xr' | 'giro' | 'toque' */
+  pos: new T.Vector3(0, 1.65, 16),
+  yaw: Math.PI, pitch: -.05,
+  q: new T.Quaternion(),
+  yawOff: 0,
+  /* inclinación real integrada del acelerómetro (6DoF corto, sin deriva) */
+  lean: new T.Vector3(), vel: new T.Vector3(), bias: new T.Vector3(),
+  acc: new T.Vector3(), accHay: false,
+  vy: 0, enSuelo: true
+};
+let orientPantalla = 0;
+function leePantalla(){
+  const o = (screen.orientation && screen.orientation.angle);
+  orientPantalla = T.MathUtils.degToRad(o != null ? o : (window.orientation || 0));
+}
+leePantalla();
+addEventListener('orientationchange', leePantalla);
+
+const qX = new T.Quaternion().setFromAxisAngle(new T.Vector3(1, 0, 0), -Math.PI / 2);
+const zee = new T.Vector3(0, 0, 1), UP = new T.Vector3(0, 1, 0);
+const qTmp = new T.Quaternion(), eTmp = new T.Euler(), eTmp2 = new T.Euler();
+const qYaw = new T.Quaternion(), qSuave = new T.Quaternion();
+const vA = new T.Vector3(), vB = new T.Vector3(), vC = new T.Vector3(), vD = new T.Vector3();
+let DO = null;                                   /* último deviceorientation */
+function onDO(e){ if (e.alpha === null && e.beta === null) return;
+  DO = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 }; }
+function onDM(e){
+  const a = e.acceleration;
+  if (!a || a.x === null || a.x === undefined) { P.accHay = false; return; }
+  P.accHay = true;
+  P.acc.set(a.x || 0, a.y || 0, a.z || 0);
+}
+function quatDeGiro(q){
+  if (!DO) return false;
+  const a = T.MathUtils.degToRad(DO.a), b = T.MathUtils.degToRad(DO.b),
+        g = T.MathUtils.degToRad(DO.g);
+  eTmp.set(b, a, -g, 'YXZ');
+  q.setFromEuler(eTmp);
+  q.multiply(qX);
+  q.multiply(qYaw.setFromAxisAngle(zee, -orientPantalla));
+  q.premultiply(qYaw.setFromAxisAngle(UP, P.yawOff));
+  return true;
+}
+function pideSensores(){
+  const pedir = w => (w && w.requestPermission) ? w.requestPermission().catch(() => 'denied')
+                                                : Promise.resolve('granted');
+  return Promise.all([pedir(window.DeviceOrientationEvent), pedir(window.DeviceMotionEvent)])
+    .then(() => {
+      addEventListener('deviceorientationabsolute', onDO, true);
+      addEventListener('deviceorientation', onDO, true);
+      addEventListener('devicemotion', onDM, true);
+    });
+}
+
+/* ---------- palanca del pulgar + arrastre para mirar ---------- */
+const JOY = { x: 0, y: 0, act: false, id: -1, cx: 0, cy: 0 };
+(function joystick(){
+  const el = $('joy'), nub = $('nub'), R = 46;
+  const set = (dx, dy) => {
+    const d = Math.hypot(dx, dy), k = d > R ? R / d : 1;
+    dx *= k; dy *= k;
+    nub.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    JOY.x = dx / R; JOY.y = dy / R;
+  };
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault(); JOY.act = true; JOY.id = e.pointerId;
+    const r = el.getBoundingClientRect(); JOY.cx = r.left + r.width / 2; JOY.cy = r.top + r.height / 2;
+    try { el.setPointerCapture(e.pointerId); } catch (x) {}
+    set(e.clientX - JOY.cx, e.clientY - JOY.cy);
+  });
+  el.addEventListener('pointermove', e => { if (!JOY.act || e.pointerId !== JOY.id) return;
+    e.preventDefault(); set(e.clientX - JOY.cx, e.clientY - JOY.cy); });
+  const fin = e => { if (e.pointerId !== JOY.id && JOY.id !== -1) return;
+    JOY.act = false; JOY.id = -1; set(0, 0); };
+  el.addEventListener('pointerup', fin); el.addEventListener('pointercancel', fin);
+  el.addEventListener('lostpointercapture', fin);
+})();
+(function mirar(){
+  const el = $('look');
+  let act = false, lx = 0, ly = 0, id = -1, movio = 0, t0 = 0;
+  el.addEventListener('pointerdown', e => {
+    act = true; id = e.pointerId; lx = e.clientX; ly = e.clientY; movio = 0; t0 = performance.now();
+    try { el.setPointerCapture(e.pointerId); } catch (x) {}
+  });
+  el.addEventListener('pointermove', e => {
+    if (!act || e.pointerId !== id) return;
+    const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
+    movio += Math.abs(dx) + Math.abs(dy);
+    if (P.src === 'toque'){
+      P.yaw -= dx * .0042;
+      P.pitch = Math.max(-1.35, Math.min(1.35, P.pitch - dy * .0042));
+    }
+  });
+  const fin = e => {
+    if (!act) return; act = false; id = -1;
+    if (movio < 12 && performance.now() - t0 < 350) tocaMundo();
+  };
+  el.addEventListener('pointerup', fin); el.addEventListener('pointercancel', fin);
+  el.addEventListener('lostpointercapture', fin);
+})();
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || k === 'arrowup') JOY.y = -1;
+  if (k === 's' || k === 'arrowdown') JOY.y = 1;
+  if (k === 'a' || k === 'arrowleft') JOY.x = -1;
+  if (k === 'd' || k === 'arrowright') JOY.x = 1;
+  if (k === ' ') salta();
+});
+addEventListener('keyup', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || k === 's' || k === 'arrowup' || k === 'arrowdown') JOY.y = 0;
+  if (k === 'a' || k === 'd' || k === 'arrowleft' || k === 'arrowright') JOY.x = 0;
+});
+
+/* ==========================================================================
+   5. SONIDO — todo sintetizado, cero archivos
+   ========================================================================== */
+let AC = null, master = null;
+function audio(){
+  if (AC) return;
+  try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+  master = AC.createGain(); master.gain.value = .5; master.connect(AC.destination);
+  /* viento: ruido rosa por un pasabajos con un LFO lento en el volumen */
+  const n = AC.createBufferSource();
+  const buf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
+  const d = buf.getChannelData(0);
+  let l = 0;
+  for (let i = 0; i < d.length; i++){ const w = Math.random() * 2 - 1;
+    l = l * .97 + w * .03; d[i] = l * 3.2; }
+  n.buffer = buf; n.loop = true;
+  const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 420;
+  const g = AC.createGain(); g.gain.value = .10;
+  const lfo = AC.createOscillator(); lfo.frequency.value = .06;
+  const lg = AC.createGain(); lg.gain.value = .06;
+  lfo.connect(lg); lg.connect(g.gain); lfo.start();
+  n.connect(f); f.connect(g); g.connect(master); n.start();
+  /* almohada armónica muy baja, para que el mundo "suene" */
+  [110, 164.8, 220].forEach((hz, i) => {
+    const o = AC.createOscillator(); o.type = 'sine'; o.frequency.value = hz * (1 + i * .0007);
+    const og = AC.createGain(); og.gain.value = .022;
+    o.connect(og); og.connect(master); o.start();
+  });
+}
+function tono(hz, dur, vol, tipo){
+  if (!AC) return;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = tipo || 'triangle'; o.frequency.value = hz;
+  g.gain.setValueAtTime(0, AC.currentTime);
+  g.gain.linearRampToValueAtTime(vol || .2, AC.currentTime + .012);
+  g.gain.exponentialRampToValueAtTime(.0001, AC.currentTime + dur);
+  o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime + dur + .05);
+}
+const campana = () => { [880, 1320, 1760].forEach((h, i) => setTimeout(() => tono(h, .5, .16 - i * .04, 'sine'), i * 55)); };
+let tPajaro = 3;
+
+/* ==========================================================================
+   6. MANOS (MediaPipe) — se carga SOLO si se pide, para no pagar 8 MB de gusto
+   ========================================================================== */
+const MANO = { on: false, cargando: false, hl: null, video: null, lm: null,
+  ms: 0, pinza: 0, pinzaPrev: 0, visto: 0, err: '', cada: 2, cont: 0,
+  pts: Array.from({ length: 21 }, () => new T.Vector3()) };
+const MD_R = new T.Vector3(), MD_U = new T.Vector3(), MD_F = new T.Vector3();
+async function manosOn(){
+  if (MANO.on || MANO.cargando) return;
+  MANO.cargando = true; aviso('cargando el modelo de manos (8 MB)…');
+  try {
+    const V = await import(MPB);
+    const fs = await V.FilesetResolver.forVisionTasks(MPW);
+    let hl = null;
+    try {
+      hl = await V.HandLandmarker.createFromOptions(fs, {
+        baseOptions: { modelAssetPath: MPM, delegate: 'GPU' },
+        runningMode: 'VIDEO', numHands: 1,
+        minHandDetectionConfidence: .5, minHandPresenceConfidence: .5, minTrackingConfidence: .5 });
+    } catch (e) {
+      hl = await V.HandLandmarker.createFromOptions(fs, {
+        baseOptions: { modelAssetPath: MPM, delegate: 'CPU' },
+        runningMode: 'VIDEO', numHands: 1 });
+    }
+    MANO.hl = hl;
+    const st = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false });
+    const v = $('cam'); v.srcObject = st; await v.play().catch(() => {});
+    v.style.display = 'block';
+    MANO.video = v; MANO.on = true; MANO.cargando = false;
+    iMano.visible = huesos.visible = true;
+    $('bHands').classList.add('on');
+    aviso('manos listas · movela delante de la cámara de atrás');
+  } catch (e) {
+    MANO.cargando = false; MANO.err = (e && e.message) || ('' + e);
+    aviso('las manos no arrancaron: ' + MANO.err);
+  }
+}
+function manosOff(){
+  MANO.on = false; iMano.visible = huesos.visible = false;
+  $('bHands').classList.remove('on'); $('cam').style.display = 'none';
+  const v = $('cam');
+  if (v.srcObject) { v.srcObject.getTracks().forEach(t => t.stop()); v.srcObject = null; }
+}
+function manoPaso(){
+  if (!MANO.on || !MANO.hl || !MANO.video || MANO.video.readyState < 2) return;
+  if (++MANO.cont % MANO.cada) return;                 /* uno de cada N cuadros */
+  const t0 = performance.now();
+  let r = null;
+  try { r = MANO.hl.detectForVideo(MANO.video, t0); } catch (e) { return; }
+  MANO.ms = MANO.ms * .8 + (performance.now() - t0) * .2;
+  if (r && r.landmarks && r.landmarks.length){ MANO.lm = r.landmarks[0]; MANO.visto = 1; }
+  else { MANO.visto = 0; }
+}
+/* los 21 puntos van al mundo delante de la cara: x,y normalizados y el tamaño
+   de la mano hace de profundidad (lo único que se puede sacar de una cámara sola) */
+const M4 = new T.Matrix4(), V3 = new T.Vector3(), V3b = new T.Vector3();
+function manoDibuja(){
+  if (!MANO.lm || !MANO.visto){ iMano.visible = huesos.visible = false; return; }
+  iMano.visible = huesos.visible = true;
+  const lm = MANO.lm;
+  const w = lm[0], mid = lm[9];
+  const tam = Math.hypot(w.x - mid.x, w.y - mid.y) || .1;
+  const z = Math.max(.28, Math.min(1.1, .085 / tam));   /* mano grande = cerca */
+  const der = MD_R.set(1, 0, 0).applyQuaternion(HQ);
+  const arr = MD_U.set(0, 1, 0).applyQuaternion(HQ);
+  const ade = MD_F.set(0, 0, -1).applyQuaternion(HQ);
+  const pos = MANO.pts;
+  const bp = huesos.geometry.attributes.position;
+  for (let i = 0; i < 21; i++){
+    const p = lm[i];
+    const u = (.5 - p.x) * 1.10, v = (.5 - p.y) * .82;
+    const dz = (p.z || 0) * 1.4;
+    V3.copy(HP)
+      .addScaledVector(ade, z + dz)
+      .addScaledVector(der, u * z * 2.2)
+      .addScaledVector(arr, v * z * 2.2);
+    pos[i].copy(V3);
+    const s = i % 4 === 0 ? .019 : .014;
+    M4.makeScale(s, s, s); M4.setPosition(V3);
+    iMano.setMatrixAt(i, M4);
+  }
+  iMano.instanceMatrix.needsUpdate = true;
+  for (let k = 0; k < HUESOS.length; k++){
+    const a = pos[HUESOS[k][0]], b = pos[HUESOS[k][1]];
+    bp.setXYZ(k * 2, a.x, a.y, a.z); bp.setXYZ(k * 2 + 1, b.x, b.y, b.z);
+  }
+  bp.needsUpdate = true;
+  /* pinza: pulgar (4) contra índice (8), normalizada por el tamaño de la mano */
+  const d = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y) / tam;
+  MANO.pinzaPrev = MANO.pinza;
+  MANO.pinza = d < .75 ? 1 : 0;
+  if (MANO.pinza && !MANO.pinzaPrev) agarra(pos[8]);
+}
+
+/* ==========================================================================
+   7. JUEGO: juntar gemas mirándolas, tocando o con la pinza
+   ========================================================================== */
+let juntadas = 0;
+function aviso(t, ms){
+  const m = $('msg'); m.textContent = t; m.classList.add('on');
+  clearTimeout(aviso._t); aviso._t = setTimeout(() => m.classList.remove('on'), ms || 2600);
+}
+function junta(g){
+  if (!g.viva) return;
+  g.viva = 0; juntadas++;
+  $('gem').textContent = '◆ ' + juntadas + '/' + GEMAS.length;
+  campana();
+  if (juntadas === GEMAS.length) aviso('¡las 14! recorriste toda la isla', 5000);
+  else aviso('+1 gema  (' + juntadas + '/' + GEMAS.length + ')', 1200);
+}
+function tocaMundo(){
+  const g = mirando();
+  if (g) junta(g);
+}
+function agarra(punta){
+  if (!punta) return;
+  let mejor = null, dm = .55;
+  for (const g of GEMAS){
+    if (!g.viva) continue;
+    const d = Math.hypot(g.x - punta.x, g.gy - punta.y, g.z - punta.z);
+    if (d < dm) { dm = d; mejor = g; }
+  }
+  if (mejor) junta(mejor);
+  else tono(300, .12, .1, 'square');
+}
+const FWD = new T.Vector3(), DIR = new T.Vector3();
+function mirando(){
+  FWD.set(0, 0, -1).applyQuaternion(HQ);
+  let mejor = null, best = .965;                       /* ~15° de tolerancia */
+  for (const g of GEMAS){
+    if (!g.viva) continue;
+    DIR.set(g.x - HP.x, g.gy - HP.y, g.z - HP.z);
+    const d = DIR.length(); if (d > 34) continue;
+    DIR.multiplyScalar(1 / d);
+    const c = DIR.dot(FWD);
+    if (c > best) { best = c; mejor = g; }
+  }
+  return mejor;
+}
+function salta(){
+  if (!P.enSuelo) return;
+  P.vy = 5.6; P.enSuelo = false; tono(420, .12, .12, 'sine');
+}
+
+/* ==========================================================================
+   8. SESIÓN XR (6DoF de verdad, cuando el aparato lo permite)
+   ========================================================================== */
+let XR = { ses: null, tipo: '', subeY: 0 };
+async function entraXR(){
+  if (!navigator.xr) throw new Error('sin navigator.xr');
+  const modo = DIAG.xr_ar ? 'immersive-ar' : 'immersive-vr';
+  const ses = await navigator.xr.requestSession(modo, {
+    optionalFeatures: ['local-floor', 'dom-overlay', 'hand-tracking'],
+    domOverlay: { root: $('hud') }
+  });
+  /* 'local-floor' pone el cero en el PISO (lo que uno quiere). Si el aparato no
+     lo da, se usa 'local', que pone el cero en la cabeza, y se compensa 1,55 m
+     a mano; si no, uno arranca con los pies enterrados. */
+  XR.tipo = 'local-floor';
+  try { await ses.requestReferenceSpace('local-floor'); }
+  catch (e) { XR.tipo = 'local'; }
+  XR.subeY = XR.tipo === 'local' ? 1.55 : 0;
+  ren.xr.enabled = true;
+  ren.xr.setReferenceSpaceType(XR.tipo);
+  await ren.xr.setSession(ses);
+  XR.ses = ses;
+  P.src = 'xr';
+  ses.addEventListener('end', () => { XR.ses = null; ren.xr.enabled = false;
+    P.src = DIAG.giroLlega ? 'giro' : 'toque'; ren.setAnimationLoop(null);
+    requestAnimationFrame(bucle); aviso('salió de XR'); });
+  ses.addEventListener('select', () => tocaMundo());
+  ren.setAnimationLoop(bucleXR);
+  aviso('XR ' + modo + ' · espacio ' + XR.tipo + ' · 6DoF real: agachate, asomate, ' +
+        'da un paso y el mundo responde', 5200);
+}
+
+/* ==========================================================================
+   9. BUCLE
+   ========================================================================== */
+let tPrev = performance.now(), fps = 60, msAcum = 0, cuadros = 0, tRS = 0, TT = 0;
+let ESTEREO = false;
+const IPD = .064;
+const stat = $('stat');
+
+function fisica(dt){
+  /* --- orientación --- */
+  if (P.src === 'giro' && quatDeGiro(qTmp)) {
+    /* suavizado con constante de tiempo de 30 ms: saca el ruido del sensor sin
+       meter retardo perceptible (con más que eso ya marea) */
+    qSuave.slerp(qTmp, 1 - Math.exp(-dt / .03));
+    HQ.copy(qSuave);
+    P.yaw = eTmp2.setFromQuaternion(HQ, 'YXZ').y;
+  } else if (P.src !== 'xr') {
+    HQ.setFromEuler(eTmp.set(P.pitch, P.yaw, 0, 'YXZ'));
+  }
+  /* --- inclinación real del acelerómetro: 6DoF corto y SIN deriva --- */
+  if (P.src === 'giro' && P.accHay){
+    /* pasaaltos: se le resta la media lenta, que es el sesgo del sensor */
+    P.bias.lerp(P.acc, 1 - Math.pow(.35, dt));
+    const a = vA.copy(P.acc).sub(P.bias);
+    /* del marco del aparato al del mundo, con la orientación de la cabeza */
+    a.applyQuaternion(HQ);
+    P.vel.addScaledVector(a, dt * .55);
+    P.vel.multiplyScalar(Math.pow(.02, dt));               /* tau ≈ .25 s */
+    P.lean.addScaledVector(P.vel, dt);
+    P.lean.multiplyScalar(Math.pow(.20, dt));              /* resorte al centro */
+    const L = P.lean.length();
+    if (L > .35) P.lean.multiplyScalar(.35 / L);
+  } else if (P.src !== 'xr') {
+    P.lean.multiplyScalar(Math.pow(.05, dt));
+  }
+  /* --- caminar con la palanca (siempre, también en XR: el celu no tiene sala) --- */
+  const vel = 5.2 * (1 + (Math.hypot(JOY.x, JOY.y) > .92 ? .5 : 0));
+  const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
+  const fx = -sy, fz = -cy, rx = cy, rz = -sy;
+  P.pos.x += (fx * -JOY.y + rx * JOY.x) * vel * dt;
+  P.pos.z += (fz * -JOY.y + rz * JOY.x) * vel * dt;
+  const r = Math.hypot(P.pos.x, P.pos.z);
+  if (r > R_ISLA - 3){ const k = (R_ISLA - 3) / r; P.pos.x *= k; P.pos.z *= k; }
+  /* --- pies en el suelo --- */
+  const suelo = Math.max(.15, H(P.pos.x, P.pos.z)) + 1.65;
+  if (!P.enSuelo){
+    P.vy -= 13.5 * dt; P.pos.y += P.vy * dt;
+    if (P.pos.y <= suelo){ P.pos.y = suelo; P.vy = 0; P.enSuelo = true; }
+  } else {
+    P.pos.y += (suelo - P.pos.y) * Math.min(1, dt * 12);
+  }
+}
+function animaMundo(dt){
+  TT += dt;
+  /* olas */
+  const p = agua.geometry.attributes.position, a0 = aguaP0;
+  for (let i = 0; i < p.count; i++){
+    const x = a0[i*3], z = a0[i*3+2];
+    p.array[i*3+1] = Math.sin(x * .06 + TT * 1.1) * .28 + Math.cos(z * .05 - TT * .8) * .22;
+  }
+  p.needsUpdate = true;
+  /* luciérnagas */
+  const mp = motas.geometry.attributes.position, m0 = motasP0;
+  for (let i = 0; i < mp.count; i++){
+    mp.array[i*3]   = m0[i*3]   + Math.sin(TT * .5 + i) * .9;
+    mp.array[i*3+1] = m0[i*3+1] + Math.sin(TT * .9 + i * 2.1) * .45;
+    mp.array[i*3+2] = m0[i*3+2] + Math.cos(TT * .43 + i * 1.7) * .9;
+  }
+  mp.needsUpdate = true;
+  /* gemas: giran, flotan y se acercan cuando las mirás */
+  const objetivo = mirando();
+  for (let i = 0; i < GEMAS.length; i++){
+    const g = GEMAS[i];
+    g.mira += ((objetivo === g ? 1 : 0) - g.mira) * Math.min(1, dt * 6);
+    if (objetivo === g && g.viva){
+      g.foco = (g.foco || 0) + dt;
+      if (g.foco > .5) { g.foco = 0; junta(g); }
+    } else g.foco = 0;
+    const s = g.viva ? (1 + g.mira * .35) : 0;
+    g.gy = g.y + Math.sin(TT * 1.6 + g.ph) * .22;
+    M4.makeRotationY(TT * 1.5 + g.ph);
+    M4.scale(V3.set(s, s, s));
+    M4.setPosition(g.x, g.gy, g.z);
+    iGema.setMatrixAt(i, M4);
+    const sh = s * (1.05 + Math.sin(TT * 3 + g.ph) * .08);
+    M4.makeRotationY(-TT * .9 + g.ph); M4.scale(V3.set(sh, sh, sh));
+    M4.setPosition(g.x, g.gy, g.z);
+    iHalo.setMatrixAt(i, M4);
+  }
+  iGema.instanceMatrix.needsUpdate = true; iHalo.instanceMatrix.needsUpdate = true;
+  /* retícula delante de la cara + realce cuando hay gema */
+  vB.set(0, 0, -1).applyQuaternion(HQ);
+  reticula.position.copy(HP).addScaledVector(vB, 1.4);
+  reticula.quaternion.copy(HQ);
+  reticulaB.position.copy(reticula.position); reticulaB.quaternion.copy(HQ);
+  const o2 = objetivo ? Math.min(1, (objetivo.foco || 0) / .5) : 0;
+  reticulaB.material.opacity = objetivo ? .35 + o2 * .65 : 0;
+  /* la llama late */
+  if (llama){
+    llama.scale.set(1.1 * (1 + Math.sin(TT * 11) * .12 + Math.sin(TT * 17.3) * .06),
+                    1.5 * (1 + Math.sin(TT * 13.7) * .15), 1);
+  }
+  /* pajaritos de vez en cuando */
+  tPajaro -= dt;
+  if (tPajaro < 0){ tPajaro = rr(6, 16);
+    const b = 1200 + rnd() * 900;
+    tono(b, .09, .05, 'sine'); setTimeout(() => tono(b * 1.25, .07, .04, 'sine'), 110); }
+}
+function pintaCam(){
+  if (XR.ses) return;                    /* en XR la postura la pone bucleXR */
+  rig.position.set(0, 0, 0);
+  HP.copy(P.pos).add(P.lean);
+  cam.position.copy(HP); cam.quaternion.copy(HQ);
+  rig.updateMatrixWorld(true);
+}
+function dibuja(){
+  if (!ESTEREO){ ren.setScissorTest(false); ren.render(scene, cam); return; }
+  /* estéreo casero: dos vistas con tijera, sin post-proceso (el post-proceso
+     es otra pasada de pantalla completa, y el relleno es justo lo que hay que
+     cuidar en un celular) */
+  const w = innerWidth, h = innerHeight, half = w / 2;
+  const der = vC.set(1, 0, 0).applyQuaternion(HQ);
+  for (let e = 0; e < 2; e++){
+    const c = e ? camR : camL;
+    c.quaternion.copy(HQ);
+    c.position.copy(HP).addScaledVector(der, (e ? .5 : -.5) * IPD);
+    c.updateMatrixWorld();
+    ren.setViewport(e * half, 0, half, h);
+    ren.setScissor(e * half, 0, half, h);
+    ren.setScissorTest(true);
+    ren.autoClear = e === 0;
+    ren.render(scene, c);
+  }
+  ren.autoClear = true;
+  ren.setViewport(0, 0, w, h);
+}
+function setEstereo(v){
+  ESTEREO = !!v; rs = 1; aplicaRS();
+  $('stbar').style.display = ESTEREO ? 'block' : 'none';
+  $('btns').style.display  = ESTEREO ? 'none' : 'flex';
+  $('joy').style.opacity   = ESTEREO ? .35 : 1;
+  $('oStereo').classList.toggle('sel', ESTEREO);
+}
+function rsTick(dt){
+  tRS += dt;
+  if (tRS < .7) return;
+  tRS = 0;
+  const lim = ESTEREO ? .55 : .62;
+  if (fps < 38 && rs > lim){ rs = Math.max(lim, rs - .1); aplicaRS(); }
+  else if (fps > 54 && rs < 1){ rs = Math.min(1, rs + .07); aplicaRS(); }
+}
+function hudTick(){
+  const i = ren.info.render;
+  stat.textContent =
+    fps.toFixed(0) + ' fps   ' + (1000 / Math.max(fps, 1)).toFixed(1) + ' ms\n' +
+    i.calls + ' dibujos   ' + (i.triangles / 1000).toFixed(1) + 'k tri\n' +
+    'postura: ' + P.src + (P.src === 'giro' && P.accHay ? ' + inclinación' : '') +
+      (P.src === 'xr' ? ' (' + XR.tipo + ')' : '') + '\n' +
+    'buffer: ' + (rs * 100 | 0) + '%' + (ESTEREO ? '  estéreo' : '') +
+    (MANO.on ? '\nmanos: ' + MANO.ms.toFixed(0) + ' ms  ' + (MANO.visto ? 'VEO' : '—') : '');
+}
+function paso(dt){
+  fisica(dt);
+  pintaCam();
+  manoPaso();
+  manoDibuja();
+  animaMundo(dt);
+}
+function bucle(t){
+  if (XR.ses) return;
+  const dt = Math.min(.05, (t - tPrev) / 1000) || .016;
+  tPrev = t;
+  msAcum += dt; cuadros++;
+  if (msAcum > .35){ fps = fps * .35 + (cuadros / msAcum) * .65; msAcum = 0; cuadros = 0; hudTick(); }
+  paso(dt);
+  dibuja();
+  rsTick(dt);
+  requestAnimationFrame(bucle);
+}
+function bucleXR(t, frame){
+  const dt = Math.min(.05, (t - tPrev) / 1000) || .016;
+  tPrev = t;
+  msAcum += dt; cuadros++;
+  if (msAcum > .35){ fps = fps * .35 + (cuadros / msAcum) * .65; msAcum = 0; cuadros = 0; hudTick(); }
+  /* En XR la postura de la cabeza la pone el navegador (eso ES el 6DoF real).
+     Lo único nuestro es DÓNDE está parado el jugador: se mueve el rig, y la
+     cámara, que es su hija, viaja con él. */
+  fisica(dt);
+  rig.position.set(P.pos.x, Math.max(.15, H(P.pos.x, P.pos.z)) + XR.subeY, P.pos.z);
+  rig.updateMatrixWorld(true);
+  const rsp = ren.xr.getReferenceSpace && ren.xr.getReferenceSpace();
+  const pose = (frame && rsp) ? frame.getViewerPose(rsp) : null;
+  if (pose){
+    const o = pose.transform.orientation, p = pose.transform.position;
+    HQ.set(o.x, o.y, o.z, o.w);
+    HP.set(p.x + rig.position.x, p.y + rig.position.y, p.z + rig.position.z);
+    P.yaw = eTmp2.setFromQuaternion(HQ, 'YXZ').y;
+  }
+  manoPaso(); manoDibuja(); animaMundo(dt);
+  ren.render(scene, cam);
+}
+
+/* ==========================================================================
+   10. MENÚ
+   ========================================================================== */
+const MODOS = [
+  { k: 'xr',    t: 'XR 6DoF',     d: 'posición REAL en metros (ARCore / visor)' },
+  { k: 'giro',  t: 'Giro + inclinación', d: 'gira exacto + asomarse ±35 cm · anda en WebView' },
+  { k: 'toque', t: 'Toque',       d: 'arrastrar para mirar (escritorio)' }
+];
+let modoSel = 'giro';
+function pintaModos(){
+  const r = $('modes'); r.innerHTML = '';
+  for (const m of MODOS){
+    const hay = m.k === 'xr' ? (DIAG.xr_ar || DIAG.xr_vr)
+              : m.k === 'giro' ? (DIAG.giro && DIAG.giroLlega) : true;
+    const el = document.createElement('div');
+    el.className = 'opt' + (m.k === modoSel ? ' sel' : '') + (hay ? '' : ' no');
+    el.innerHTML = '<b>' + m.t + '<span class="tag ' + (hay ? 'si">HAY' : 'no">NO HAY') +
+      '</span></b><span>' + m.d + '</span>';
+    el.onclick = () => { modoSel = m.k; pintaModos(); };
+    r.appendChild(el);
+  }
+  const hayXR = DIAG.xr_ar || DIAG.xr_vr;
+  $('modeTip').textContent = hayXR
+    ? 'Este aparato SÍ tiene XR: elegí "XR 6DoF" para posición real.'
+    : (DIAG.giroLlega
+        ? 'Este aparato no expone WebXR (típico de una WebView). "Giro + inclinación" es el modo que sí anda: la rotación es exacta y al asomarte hay paralaje real.'
+        : 'No llegan datos de los sensores. Si estás en escritorio es normal: usá "Toque".');
+}
+$('oStereo').onclick = () => { ESTEREO = !ESTEREO; $('oStereo').classList.toggle('sel', ESTEREO); };
+/* ojo: en el menú sólo se marca la intención; setEstereo() se llama al ENTRAR */
+let pedirManos = false;
+$('oHands').onclick = () => { pedirManos = !pedirManos; $('oHands').classList.toggle('sel', pedirManos); };
+$('dCopy').onclick = () => {
+  const t = $('diag').textContent;
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => aviso('copiado'), () => {});
+};
+$('dAgain').onclick = async () => { $('diag').textContent = 'midiendo…'; await diag(); pintaDiag(); pintaModos(); };
+
+async function entra(){
+  audio(); if (AC && AC.state === 'suspended') AC.resume();
+  $('menu').style.display = 'none';
+  $('hud').classList.add('on');
+  setEstereo(ESTEREO);
+  try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) {}
+  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
+  leePantalla();
+  if (modoSel === 'xr'){
+    try { await entraXR(); }
+    catch (e) { aviso('XR no arrancó (' + ((e && e.message) || e) + '). Voy con giro.', 4200);
+      P.src = DIAG.giroLlega ? 'giro' : 'toque'; await pideSensores(); }
+  } else if (modoSel === 'giro'){
+    P.src = 'giro'; await pideSensores();
+    aviso('movés la cabeza con el celu; el pulgar camina', 3200);
+  } else {
+    P.src = 'toque'; aviso('arrastrá para mirar, WASD o palanca para caminar', 3200);
+  }
+  if (pedirManos) manosOn();
+  if (!XR.ses){ tPrev = performance.now(); requestAnimationFrame(bucle); }
+}
+$('go').onclick = entra;
+$('bJump').onclick = salta;
+$('bCenter').onclick = () => {
+  if (DO){ const q = new T.Quaternion(); P.yawOff = 0; quatDeGiro(q);
+    const e = new T.Euler().setFromQuaternion(q, 'YXZ'); P.yawOff = -e.y + Math.PI; }
+  P.lean.set(0,0,0); P.vel.set(0,0,0); aviso('centrado');
+};
+$('bHands').onclick = () => { MANO.on ? manosOff() : manosOn(); };
+$('bStereo').onclick = () => setEstereo(!ESTEREO);
+$('stbar').onclick   = () => setEstereo(false);
+$('bExit').onclick = () => {
+  if (XR.ses) { XR.ses.end(); return; }
+  $('hud').classList.remove('on'); $('menu').style.display = 'block';
+  try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
+};
+
+/* ---- arranque: se mide el aparato y se preselecciona el mejor modo ---- */
+await diag(); pintaDiag();
+modoSel = (DIAG.xr_ar || DIAG.xr_vr) ? 'xr' : (DIAG.giroLlega ? 'giro' : 'toque');
+pintaModos();
+/* se dibuja un cuadro con el mundo detrás del menú para que no arranque en negro */
+P.src = 'toque';
+HQ.setFromEuler(eTmp.set(P.pitch, P.yaw, 0, 'YXZ'));
+pintaCam(); animaMundo(0); dibuja();
+
+/* ==========================================================================
+   11. GANCHOS DE PRUEBA (los usa la sonda headless; no molestan en el celu)
+   ========================================================================== */
+window.__VR = {
+  T, scene, ren, cam, P, GEMAS, DIAG,
+  get(){ const i = ren.info.render; return {
+    fps: +fps.toFixed(1), dibujos: i.calls, tri: i.triangles, src: P.src,
+    estereo: ESTEREO, rs: +rs.toFixed(2), juntadas, total: GEMAS.length,
+    x: +HP.x.toFixed(3), y: +HP.y.toFixed(3), z: +HP.z.toFixed(3),
+    yaw: +P.yaw.toFixed(3), lean: +P.lean.length().toFixed(3),
+    manoOn: MANO.on, manoMs: +MANO.ms.toFixed(1), manoVe: MANO.visto, manoErr: MANO.err,
+    menu: $('menu').style.display !== 'none', audio: AC ? AC.state : 'no' }; },
+  entra, modo(k){ modoSel = k; pintaModos(); },
+  src(k){ P.src = k; },
+  joy(x, y){ JOY.x = x; JOY.y = y; },
+  mira(y, p){ P.yaw = y; P.pitch = p; },
+  giro(a, b, g){ DO = { a, b, g }; },
+  movim(x, y, z){ P.accHay = true; P.acc.set(x, y, z); },
+  estereo(v){ setEstereo(v); },
+  salta, tocaMundo, manosOn, manosOff,
+  manoSim(lm){ MANO.lm = lm; MANO.visto = 1; MANO.on = true;
+    iMano.visible = huesos.visible = true; manoDibuja(); },
+  gema(i){ return GEMAS[i]; },
+  /* lee el framebuffer DE VERDAD: es la única forma de saber si algo se dibujó */
+  pix(){
+    dibuja();
+    const gl = ren.getContext();
+    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    const b = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b);
+    const set = new Set(); let neg = 0, n = 0;
+    for (let i = 0; i < b.length; i += 4 * 37){
+      set.add((b[i] >> 4) << 8 | (b[i+1] >> 4) << 4 | (b[i+2] >> 4));
+      if (b[i] + b[i+1] + b[i+2] < 14) neg++;
+      n++;
+    }
+    const at = (fx, fy) => { const x = Math.floor(fx * (w - 1)), y = Math.floor((1 - fy) * (h - 1));
+      const i = (y * w + x) * 4; return [b[i], b[i+1], b[i+2]]; };
+    return { w, h, colores: set.size, negro: +(neg / n).toFixed(3),
+      arriba: at(.5, .05), centro: at(.5, .5), abajo: at(.5, .95),
+      ojoIzq: at(.25, .5), ojoDer: at(.75, .5), borde: at(.5, .5) };
+  },
+  /* corre MediaPipe de verdad sobre una foto: prueba el camino completo */
+  async manoDeImagen(url){
+    const V = await import(MPB);
+    const fs = await V.FilesetResolver.forVisionTasks(MPW);
+    const hl = await V.HandLandmarker.createFromOptions(fs, {
+      baseOptions: { modelAssetPath: MPM, delegate: 'CPU' },
+      runningMode: 'IMAGE', numHands: 1 });
+    const img = new Image(); img.src = url; await img.decode();
+    const t0 = performance.now();
+    const r = hl.detect(img);
+    const ms = performance.now() - t0;
+    hl.close();
+    const lm = (r.landmarks || [])[0] || null;
+    return { n: (r.landmarks || []).length, pts: lm ? lm.length : 0,
+      ms: +ms.toFixed(1), lm };
+  },
+  H, alturaEn: H,
+  tris(){ let n = 0; scene.traverse(o => { if (o.geometry && o.geometry.attributes.position)
+    n += o.geometry.attributes.position.count / 3; }); return n | 0; },
+  MPB, MPW, MPM, LOC
+};
+})().catch(e => {
+  document.body.insertAdjacentHTML('beforeend',
+    '<pre style="position:fixed;left:8px;top:8px;z-index:99;color:#f88;background:#000c;padding:10px;' +
+    'max-width:92vw;white-space:pre-wrap">SE ROMPIÓ:\n' + ((e && (e.stack || e.message)) || e) + '</pre>');
+  window.__VRERR = '' + (e && (e.stack || e.message) || e);
+});
+</script>
+</body>
+</html>
