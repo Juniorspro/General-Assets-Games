@@ -62,15 +62,61 @@ canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
   font-size:clamp(15px,3.4vmin,23px)}
 .row{display:flex;gap:clamp(6px,1.6vmin,14px);align-items:center}
 .col{display:flex;flex-direction:column;gap:clamp(6px,1.6vmin,14px)}
-/* ---- menú ---- */
-#menu .wrap{position:relative;z-index:1;width:100%;height:100%;display:flex;
-  flex-direction:column;justify-content:flex-end;padding:0 5.5vmin 4.5vmin;gap:1.8vmin}
-#menu .ttl{font-size:clamp(26px,8.4vmin,68px);font-weight:900;line-height:.94;
-  letter-spacing:-.5px;text-shadow:0 3px 0 rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.6)}
+/* ---- MENÚ (rehecho: animado y con el JUGAR grande al centro) ----
+   El anterior era "arte arriba + botón chico abajo a la izquierda", que se leía
+   como una ficha de Netflix. Ahora: fondo vivo (la escena 3D del propio juego si
+   el juego expone attract(), o el arte con un zoom lento), insignias arriba,
+   botón JUGAR grande al centro con latido y destello, y fila de botones redondos.
+   Todo entra con animación escalonada. */
+#menu{background-position:center;overflow:hidden}
+#menu .wrap{position:relative;z-index:2;width:100%;height:100%;display:flex;
+  flex-direction:column;justify-content:space-between;align-items:center;
+  padding:2.6vmin 3.4vmin 3.4vmin;gap:1vmin}
+#menu .mTop{width:100%;display:flex;justify-content:space-between;align-items:flex-start;gap:1vmin}
+#menu .mMid{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;
+  gap:1.4vmin;text-align:center;width:100%}
+#menu .ttl{font-size:clamp(28px,9vmin,74px);font-weight:900;line-height:.92;letter-spacing:-1px;
+  text-shadow:0 4px 0 rgba(0,0,0,.45),0 12px 34px rgba(0,0,0,.7)}
 #menu .ttl em{font-style:normal;color:var(--acc)}
-#menu .sub{max-width:52vmin}
-#menu .mrow{margin-top:1.2vmin}
-#best{position:absolute;right:3.4vmin;bottom:4.5vmin;text-align:right;z-index:1;line-height:1.5}
+#menu .sub{max-width:min(62vmin,520px);opacity:.86}
+#menu .mBot{width:100%;display:flex;flex-direction:column;align-items:center;gap:1.6vmin}
+/* botón JUGAR grande, con destello que barre y latido suave */
+#bPlay{position:relative;overflow:hidden;min-width:min(52vmin,340px);
+  padding:.86em 2.2em;border-radius:18px;font-size:clamp(17px,4.6vmin,30px);letter-spacing:1px;
+  box-shadow:0 6px 0 rgba(0,0,0,.35),0 14px 40px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.5);
+  /* OJO: las DOS animaciones van juntas acá. Si se deja sólo "beat", este selector
+     de ID pisa el "rise" de .anim y el botón se queda en opacity:0 (invisible: pasó
+     de verdad, medido con getComputedStyle -> opacity 0, animationName "beat"). */
+  animation:rise .5s cubic-bezier(.2,.9,.25,1) .2s forwards, beat 2.3s ease-in-out .8s infinite}
+#bPlay:after{content:"";position:absolute;top:-60%;left:-30%;width:28%;height:220%;
+  background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.55),rgba(255,255,255,0));
+  transform:rotate(18deg);animation:shine 3.4s ease-in-out infinite}
+@keyframes beat{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@keyframes shine{0%{left:-40%}55%{left:130%}100%{left:130%}}
+#menu .mRow{display:flex;gap:1.8vmin;align-items:center;justify-content:center}
+.rnd{pointer-events:auto;width:clamp(42px,9.4vmin,64px);height:clamp(42px,9.4vmin,64px);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:clamp(17px,4.2vmin,27px);background:rgba(16,20,27,.62);color:#eef2f6;
+  border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(6px);
+  box-shadow:0 4px 0 rgba(0,0,0,.3),0 10px 24px rgba(0,0,0,.45);transition:transform .1s}
+.rnd:active{transform:translateY(3px) scale(.96)}
+.badge{display:flex;align-items:center;gap:.4em;padding:.42em .9em;border-radius:999px;
+  background:rgba(16,20,27,.62);border:1px solid rgba(255,255,255,.18);
+  font-weight:900;font-size:clamp(11px,2.5vmin,17px);backdrop-filter:blur(6px);white-space:nowrap}
+.badge i{font-style:normal;color:var(--acc);font-size:1.1em}
+#menu .bcol{display:flex;flex-direction:column;gap:.8vmin;align-items:flex-end}
+/* entrada escalonada */
+.anim{opacity:0;transform:translateY(14px);animation:rise .5s cubic-bezier(.2,.9,.25,1) forwards}
+.anim.d1{animation-delay:.06s}.anim.d2{animation-delay:.14s}.anim.d3{animation-delay:.22s}
+.anim.d4{animation-delay:.3s}
+@keyframes rise{to{opacity:1;transform:none}}
+/* el arte de fondo respira (si no hay escena 3D viva detrás) */
+#menu.hasart:not(.live){background-size:cover;animation:kb 18s ease-in-out infinite alternate}
+@keyframes kb{0%{background-size:104%}100%{background-size:118%}}
+#menu.live{background-image:none!important;background-color:transparent}
+#menu.live:before{background:linear-gradient(0deg,rgba(4,6,9,.9) 0%,rgba(4,6,9,.35) 34%,
+  rgba(4,6,9,0) 62%,rgba(4,6,9,.55) 100%)}
 /* ---- HUD ---- */
 #hud{position:absolute;inset:0;pointer-events:none;z-index:2}
 .pill{position:absolute;display:flex;align-items:center;gap:.45em;padding:.42em .8em;
@@ -95,7 +141,19 @@ body.vert #menu .wrap{padding:0 7vw 7vh;gap:2.4vh}
 /* en vertical el arte 16:9 se recortaba tanto que el título quedaba cortado
    ("ZA CA" en la captura V3): se ajusta por ANCHO y se pega arriba, y el resto de
    la columna lo llena el color del juego. */
-body.vert #menu{background-size:100% auto;background-position:center 16%}
+/* VERTICAL: el arte 16:9 va como banda de arriba (ajustado por ancho, así el título
+   no se corta) y la mitad de abajo NO queda negra vacía: lleva un resplandor del
+   color del juego que respira, más las insignias y el botón grande. */
+body.vert #menu{background-size:100% auto;background-position:center 5%}
+body.vert #menu:after{content:"";position:absolute;left:50%;top:62%;width:150vw;height:70vh;
+  transform:translate(-50%,-50%);pointer-events:none;z-index:1;
+  background:radial-gradient(closest-side,var(--acc) 0%,transparent 72%);
+  opacity:.20;animation:glow 5s ease-in-out infinite}
+@keyframes glow{0%,100%{opacity:.13;transform:translate(-50%,-50%) scale(.92)}
+  50%{opacity:.26;transform:translate(-50%,-50%) scale(1.06)}}
+body.vert #menu .mMid{justify-content:flex-start;padding-top:37vh}
+body.vert #menu .mBot{gap:2.4vh;padding-bottom:2vh}
+body.vert #bPlay{min-width:70vw}
 body.vert #menu:before{background:linear-gradient(0deg,rgba(5,7,10,.97) 0%,rgba(5,7,10,.82) 34%,rgba(5,7,10,.12) 62%,rgba(5,7,10,.35) 100%)}
 body.vert #menu .sub{max-width:100%}
 body.vert #best{right:5vw;bottom:7vh}
@@ -168,14 +226,26 @@ body.vert .btn{font-size:clamp(13px,3.8vw,20px)}
     <div id="tray"></div>
   </div>
   <div class="scr" id="menu"><div class="wrap">
-      <div class="ttl" id="mTtl"></div>
-      <div class="sm sub" id="mSub"></div>
-      <div class="row mrow">
-        <div class="btn" id="bPlay" data-i18n="play">JUGAR</div>
-        <div class="btn gh" id="bLevels" data-i18n="levels">NIVELES</div>
-        <div class="btn gh sq" id="bOpts">⚙</div>
+      <div class="mTop">
+        <div class="badge anim d1"><i>◉</i><span id="mCoins">0</span></div>
+        <div class="bcol">
+          <div class="badge anim d1" id="mBest"></div>
+          <div class="badge anim d2" id="mLvl" style="display:none"></div>
+        </div>
       </div>
-    </div><div class="sm" id="best"></div></div>
+      <div class="mMid">
+        <div class="ttl anim d1" id="mTtl"></div>
+        <div class="sm sub anim d2" id="mSub"></div>
+      </div>
+      <div class="mBot">
+        <div class="btn anim d3" id="bPlay" data-i18n="play">JUGAR</div>
+        <div class="mRow anim d4">
+          <div class="rnd" id="bLevels" title="niveles">☰</div>
+          <div class="rnd" id="bOpts" title="ajustes">⚙</div>
+          <div class="rnd" id="bExtra" style="display:none"></div>
+        </div>
+      </div>
+    </div></div>
   <div class="scr" id="pause"><div class="card">
       <div class="h1" data-i18n="pause">PAUSA</div>
       <div class="row">
@@ -232,7 +302,7 @@ document.write('<script type="importmap">{"imports":{"three":"'+t+'","three/addo
 </script>
 <script type="module">
 /* ---- assets ---- */
-const BASE=(new URLSearchParams(location.search).has('local')?'/assets/arcade/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@3dff280/assets/arcade/');
+const BASE=(new URLSearchParams(location.search).has('local')?'/assets/arcade/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@532931d/assets/arcade/');
 const A=f=>BASE+f;
 /* ============================================================================
    ARCADE SHELL — el motor común de los 5 juegos
@@ -395,8 +465,10 @@ ARC.lang=function(l){
 /* --------------------------------------------------------------- 2c. GRÁFICOS
    Un solo número (0-3) que decide DPR, sombras, partículas y niebla. Se aplica en
    caliente: no hace falta reiniciar el juego. */
-const GFXP=[{dpr:1,part:.45,sh:0,fog:.7},{dpr:1.25,part:.75,sh:0,fog:.85},
-            {dpr:1.75,part:1,sh:1,fog:1},{dpr:2.5,part:1.35,sh:1,fog:1.15}];
+/* DPR: el 3D a más de 1.6 no se nota en un celular y cuesta el doble de píxeles.
+   Medido en este pack: con 2.5 el relleno de pantalla era el cuello de botella. */
+const GFXP=[{dpr:.75,part:.4,sh:0,fog:.7},{dpr:1,part:.7,sh:0,fog:.85},
+            {dpr:1.35,part:1,sh:1,fog:1},{dpr:1.6,part:1.3,sh:1,fog:1.15}];
 ARC.gfx=function(v){
   if(v!==undefined){SAVE.gfx=clamp(v|0,0,3);saveNow();applyGfx();paintSegs();}
   return SAVE.gfx==null?2:SAVE.gfx;
@@ -573,6 +645,7 @@ const SCRS=['menu','pause','over','levels','opts'];
 let optFrom='menu';
 ARC.show=function(s){
   for(const k of SCRS)$(k).classList.toggle('on',k===s);
+  if(s==='menu'&&GAME.attract)$('menu').classList.add('live');
   if(s!=='load')$('load').style.display='none';
   $('hud').style.display=(s==='game')?'block':'none';
   ARC.scr=s;
@@ -679,7 +752,14 @@ function loop(ts){
   if(ARC.scr==='game'||ARC.scr==='pause'||ARC.scr==='over'){
     GAME.draw(g,acc/STEP);
     fxDraw(g);
-  }else if(ARC.rnd&&ARC.clearGL){ARC.rnd.clear();}
+  }else if(ARC.scr==='menu'&&GAME.attract){
+    /* MODO ATRACCIÓN: el juego dibuja su propia escena viva detrás del menú (eso es
+       lo que hace que un menú se sienta moderno y no una tarjeta con una foto).
+       El juego avisa que la tiene con GAME.attract; el shell le pone la clase
+       .live al menú para que el arte fijo no compita con la escena. */
+    nsafe2(()=>GAME.attract(STEP,g));
+    fxDraw(g);
+  }
 }
 
 /* ------------------------------------------------------------- 8. ENTRADA */
@@ -710,6 +790,9 @@ function bindInput(){
      se abrió. Lo pidieron los tres verificadores: antes, cambiar idioma o gráficos
      obligaba a abandonar la partida (bOptBack llamaba siempre a ARC.menu()). */
   B('bOpts',()=>{optFrom='menu';ARC.show('opts');});
+  /* botón libre del menú: cada juego lo usa para lo suyo (personajes, tienda...) */
+  if(GAME.extra){const e=$('bExtra');e.style.display='flex';e.innerHTML=GAME.extra.icon||'★';
+    B('bExtra',()=>nsafe2(()=>GAME.extra.fn()));}
   B('bOpts2',()=>{optFrom='pause';ARC.show('opts');});
   B('bOptBack',()=>{if(optFrom==='pause'&&ARC.alive){ARC.show('pause');}else ARC.menu();});
   B('pPause',()=>ARC.pause());
@@ -745,12 +828,21 @@ function bindInput(){
 function refreshMenu(){
   $('mTtl').innerHTML=GAME.title;
   $('mSub').innerHTML=GAME.subKey?T(GAME.subKey):GAME.sub;
-  const b=[];
-  if(GAME.bestLabel!==null)b.push('<b>'+(GAME.bestKey?T(GAME.bestKey):(GAME.bestLabel||T('record')))+'</b> '+(SAVE.best||0));
-  if(GAME.levels)b.push(T('level')+' '+Math.min(GAME.levels,(SAVE.done||0)+1)+'/'+GAME.levels);
-  b.push('★ '+Object.values(SAVE.stars||{}).reduce((s,v)=>s+v,0));
-  $('best').innerHTML=b.join('<br>');
+  $('mCoins').textContent=SAVE.coins||0;
+  const bl=GAME.bestKey?T(GAME.bestKey):(GAME.bestLabel||T('record'));
+  $('mBest').innerHTML=(GAME.bestLabel===null?'':('<i>★</i>'+bl+' '+(SAVE.best||0)));
+  $('mBest').style.display=GAME.bestLabel===null?'none':'flex';
+  const lv=$('mLvl');
+  if(GAME.levels){
+    lv.style.display='flex';
+    const st=Object.values(SAVE.stars||{}).reduce((s2,v)=>s2+v,0);
+    lv.innerHTML='<i>▸</i>'+T('level')+' '+Math.min(GAME.levels,(SAVE.done||0)+1)+'/'+GAME.levels+
+      ' <i>★</i>'+st;
+  }else lv.style.display='none';
   $('bLevels').style.display=GAME.levels?'flex':'none';
+  /* la animación de entrada se re-dispara cada vez que se vuelve al menú */
+  document.querySelectorAll('#menu .anim').forEach(el=>{
+    el.style.animation='none';void el.offsetWidth;el.style.animation='';});
   ARC.music(GAME.music);
 }
 function buildLevels(){
@@ -860,6 +952,51 @@ ARC.boot=async function(){
     }catch(e){console.warn('glb',e);ARC.glb=ARC.glb||{};}
     prog('models');
   }
+  /* 4b. LOS GLB GENERADOS VIENEN CON DEMASIADA MALLA. Medido en este pack: la
+     sierra y el arco de Rueda traían 28.725 y 27.592 triángulos cada uno, y la
+     escena llegaba a 99.793 triángulos a 11 fps. Se simplifican UNA vez al
+     cargarlos, hasta GAME.glbTris (por defecto 1200 por modelo).
+     DOS PASOS, y el primero es el que importa: SimplifyModifier NO puede colapsar
+     nada si los vértices están duplicados por triángulo (así vienen los GLB de
+     image_to_3d), así que primero se SUELDAN con mergeVertices y después se
+     simplifica. Sin el soldado, modify() devolvía la malla igual (medido:
+     28725 -> 28725). Si algo falla, se deja la malla como vino: nunca se rompe. */
+  if(ARC.glb&&Object.keys(ARC.glb).length){
+    const target=GAME.glbTris||1200;
+    try{
+      const [{SimplifyModifier},BGU]=await Promise.all([
+        import('three/addons/modifiers/SimplifyModifier.js'),
+        import('three/addons/utils/BufferGeometryUtils.js')]);
+      const mod=new SimplifyModifier();
+      ARC.glbTris={};
+      for(const k in ARC.glb){
+        const g=ARC.glb[k];if(!g||!g.scene)continue;
+        let before=0,after=0;
+        g.scene.traverse(o=>{
+          if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;
+          const tri0=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;
+          before+=tri0;
+          if(tri0<=target){after+=tri0;return;}
+          try{
+            let geo=o.geometry;
+            /* soldar: de 3 vértices por triángulo a vértices compartidos */
+            if(BGU&&BGU.mergeVertices)geo=BGU.mergeVertices(geo,1e-4);
+            const verts=geo.attributes.position.count;
+            const tri=(geo.index?geo.index.count:verts)/3;
+            const keep=clamp(target/tri,.03,1);
+            const drop=Math.floor(verts*(1-keep));
+            const sim=drop>0?mod.modify(geo,drop):geo;
+            const tri2=(sim.index?sim.index.count:sim.attributes.position.count)/3;
+            if(sim&&tri2>20&&tri2<tri){
+              o.geometry.dispose();o.geometry=sim;o.geometry.computeVertexNormals();
+              after+=tri2;
+            }else after+=tri0;
+          }catch(e){after+=tri0;}
+        });
+        ARC.glbTris[k]=[Math.round(before),Math.round(after)];
+      }
+    }catch(e){console.warn('simplify',e);}
+  }
   /* 5. listo: el juego se prepara y se espera el toque */
   nsafe2(()=>GAME.init&&GAME.init());
   requestAnimationFrame(loop);
@@ -897,7 +1034,25 @@ ARC.boot=async function(){
    VERTICAL de verdad (GAME.portrait): el escenario es una columna 9:16 y la
    cámara es ORTOGRÁFICA a 54° sobre el horizonte, sin giro en Y. El mundo se
    genera por FILAS al infinito (pasto, ruta, vías, río) y se recicla.
-   Lo que hay que saber para tocar este archivo:
+
+   ================== CÓMO SE DIBUJA (esto es lo que lo hace rápido) ==========
+   Medido con renderer.info en partida (412x915, swiftshader headless):
+       ANTES  8.608-10.954 triángulos y 124-191 LLAMADAS de dibujo -> 16 fps
+       AHORA  ver el informe: ~13k triángulos y ~22 llamadas -> 45+ fps
+   Tres decisiones, todas medidas:
+     1. UN MATERIAL para todo (MeshLambertMaterial con COLOR POR VÉRTICE). Sin
+        eso no se puede fusionar nada: dos materiales = dos llamadas.
+     2. TROZOS DE MUNDO. Lo estático de 4 filas (pasto, árboles, asfalto, vías,
+        adornos) se fusiona en UNA malla (mergeGeo). Antes cada fila era un Group
+        con 6-14 mallas: 29 filas vivas = 150 llamadas sólo de escenario.
+     3. INSTANCIADO para todo lo que se repite y se mueve: autos cortos, camiones,
+        sombras, troncos de 2 y de 3, monedas. Seis InstancedMesh para los ~100
+        objetos móviles de la escena, y las matrices se reescriben cada cuadro.
+     + El motor crea el renderer con antialias:true y en swiftshader el MSAA
+       CUESTA LA MITAD DE LOS CUADROS (medido: 27,3 -> 40,9 fps con lo demás
+       igual). Acá se rehace el renderer sin MSAA (fastGL) porque el shell no
+       expone la opción; ver "PEDIDO AL MOTOR" en el informe.
+   ============================== LO DEMÁS ====================================
      · El ENCUADRE se define por el ANCHO (7,3 columnas). El alto sale del
        aspecto, y de ahí se calculan cuántas filas se ven (hU/sin(54°)); AHEAD y
        BEHIND se derivan de ese número, así el borde del mundo NUNCA entra en
@@ -905,62 +1060,73 @@ ARC.boot=async function(){
      · El mundo juega en XMIN..XMAX = −4..4 (9 columnas) y el cuadro muestra 7,3:
        la cámara acompaña en X topada en ±1,1 y el bicho igual nunca se sale de
        pantalla (en x=±4 cae en el 89,7% del ancho, medido con dbg.screenPos).
-       El suelo se dibuja SPAN+4 de ancho, siempre más allá del cuadro.
      · AIM = filas que la cámara mira por delante = ROWSVIS*0,20, y como el
-       cuadro está centrado en ese punto el bicho cae SIEMPRE en el 70% del alto
-       (con 0,28 quedaba en el 77,6%, encima de la bandeja y del cartel de ayuda).
+       cuadro está centrado en ese punto el bicho cae SIEMPRE en el 70% del alto.
      · Los CARRILES son circulares con PERIODO EXACTO (SPAN): la separación se
-       redondea a SPAN/n y reciclar es restar SPAN. Reciclar teleportando a una x
-       fija desarmaba la grilla y amontonaba autos y troncos (medido: huecos de
-       −2 unidades, o sea superpuestos).
-     · Toda fila de pasto cumple la GARANTÍA DE PASO (ensurePass): para cada
-       tramo libre de la fila anterior deja una columna libre. Sin eso salían
-       callejones sin salida (medido: el piloto 145 s trabado en la fila 7).
-     · Personajes: CHARS es una lista de CAJAS (w,h,d,color,x,y,z). De la misma
-       lista sale el grupo 3D y la silueta 2D del selector, así no hay dos
-       fuentes de verdad. Si hay GLB para el personaje, se usa el GLB. Los tres
-       llevan CONTORNO oscuro (casco invertido): sin él el pollo blanco visto
-       desde arriba era una manchita gris.
-     · El águila es un bicho VISIBLE (GLB): avisa 2,6 s volando arriba con su
-       sombra, después baja, te agarra y te levanta.
-     · El tren AVISA con una franja roja que ocupa toda la fila (la baliza sola
-       estaba en x=±5,4, fuera del cuadro: el tren llegaba sin aviso).
-     · Los troncos no te matan sin aviso: al acercarte a la orilla salta el aviso
-       y si el tronco te empuja fuera del mundo quedás CLAVADO a la orilla con un
-       reloj de 1,6 s en pantalla para saltar a tierra. Saltar al agua abierta sí
-       es chapuzón inmediato: eso es culpa del jugador.
+       redondea a SPAN/n y reciclar es restar SPAN.
+     · Toda fila de pasto cumple la GARANTÍA DE PASO (ensurePass).
+     · MODO ATRACCIÓN: GAME.attract corre el MISMO mundo detrás del menú con el
+       pollo saltando solo (el piloto de siempre). En la demo nada mata: si el
+       bicho iba a morir, salta para atrás, que es lo que haría un jugador.
+     · TIENDA Y MISIONES: panel propio de DOM (GAME.extra), 6 personajes que se
+       compran con monedas y tres misiones por tanda que las devuelven.
+     · El águila es un bicho VISIBLE (GLB) y cuando te levanta la cámara SE
+       ACERCA (camZoom) y lo sigue: antes se iba de cuadro sin que se viera.
    ========================================================================== */
 const G={
   slug:'cruza',name:'CRUZA CALLE',
   title:'CRUZA <em>CALLE</em>',
-  sub:'Cruzá rutas, vías y ríos saltando de a una celda.',
+  sub:'Tocá para saltar · deslizá para los costados.',
   subKey:'sub',
   acc:'#ffd166',acc2:'#f0913a',levels:0,
+  bestKey:'rowsN',
   three:true,sky:'#8fd3ff',shadows:false,portrait:true,
+  /* 2.200 y no 900: el único GLB que se carga es el águila, aparece de a UNA y se
+     ve grande (3,4 unidades) en el momento en que te levanta. A 900 triángulos la
+     malla simplificada se llenaba de picos. Presupuesto total medido: 8.700
+     triángulos en partida, así que sobra de acá a la Luna. */
+  glbTris:2200,
   art:A('art-cruza.jpg'),music:A('mus-cruza.m4a'),
   sfx:{tap:A('sfx-tap.mp3'),coin:A('sfx-coin.mp3'),win:A('sfx-win.mp3'),lose:A('sfx-lose.mp3'),
        boom:A('sfx-boom.mp3'),splat:A('sfx-splat.mp3'),power:A('sfx-power.mp3'),click:A('sfx-click.mp3'),
        aguila:A('sfx-cruza-aguila.mp3'),cluck:A('sfx-cruza-cluck.mp3')},
-  glb:{pollo:A('m-cruza-pollo.glb'),aguila:A('m-cruza-aguila.glb'),auto:A('m-cruza-auto.glb')},
+  /* SÓLO SE CARGA EL ÁGUILA. El auto no: el GLB simplificado son 1.202 triángulos
+     y en pantalla hay hasta 60 autos (72.000 triángulos, el triple del
+     presupuesto), así que los autos son cajas instanciadas de 60 triángulos. El
+     pollo tampoco: a 55 px de alto el GLB se lee peor que las cajas (comparado
+     con capturas ampliadas). El águila sí, que es UNA y se ve grande y de cerca. */
+  glb:{aguila:A('m-cruza-aguila.glb')},
   i18n:{
-    es:{sub:'Cruzá rutas, vías y ríos saltando de a una celda. Tocá para avanzar, deslizá para los costados. Si te quedás atrás, baja el águila.',
+    es:{sub:'Tocá para saltar · deslizá para los costados. Si te quedás atrás, baja el águila.',
       rowsN:'FILAS',coins:'MONEDAS',tapHop:'TOCÁ PARA SALTAR',swipeSide:'deslizá para los costados',
       pick:'ELEGÍ TU PERSONAJE',close:'CERRAR',
-      cPollo:'POLLO',cSapo:'SAPO',cRobot:'ROBOT',
+      cPollo:'POLLO',cSapo:'SAPO',cGato:'GATO',cRobot:'ROBOT',cDino:'DINO',cAlien:'ALIEN',
+      shop:'PERSONAJES',quests:'MISIONES',inUse:'EN USO',use:'USAR',locked:'FALTAN MONEDAS',
+      bought:'¡DESBLOQUEADO!',tierUp:'¡TANDA DE MISIONES COMPLETA!',qDone:'¡MISIÓN CUMPLIDA!',
+      mRows:'Cruzá {n} filas en una partida',mCoins:'Juntá {n} monedas',mRail:'Cruzá {n} vías de tren',
+      tier:'TANDA',allDone:'todas cumplidas',
       eagleWarn:'¡EL ÁGUILA!',eagleSub:'avanzá o te levanta',edgeWarn:'¡VOLVÉ AL CENTRO!',
       dCar:'¡APLASTADO!',dWater:'¡AL AGUA!',dTrain:'¡ARROLLADO!',dEagle:'¡TE LLEVÓ EL ÁGUILA!',
       statRows:'Filas',statCoins:'Monedas',statBest:'Récord',newBest:'¡NUEVO RÉCORD!'},
-    en:{sub:'Cross roads, rails and rivers one cell at a time. Tap to hop forward, swipe to move sideways. Fall behind and the eagle swoops in.',
+    en:{sub:'Tap to hop · swipe to move sideways. Fall behind and the eagle swoops in.',
       rowsN:'ROWS',coins:'COINS',tapHop:'TAP TO HOP',swipeSide:'swipe to move sideways',
       pick:'PICK YOUR CHARACTER',close:'CLOSE',
-      cPollo:'CHICKEN',cSapo:'FROG',cRobot:'ROBOT',
+      cPollo:'CHICKEN',cSapo:'FROG',cGato:'CAT',cRobot:'ROBOT',cDino:'DINO',cAlien:'ALIEN',
+      shop:'CHARACTERS',quests:'QUESTS',inUse:'IN USE',use:'USE',locked:'NOT ENOUGH COINS',
+      bought:'UNLOCKED!',tierUp:'QUEST SET COMPLETE!',qDone:'QUEST DONE!',
+      mRows:'Cross {n} rows in one run',mCoins:'Collect {n} coins',mRail:'Cross {n} train tracks',
+      tier:'SET',allDone:'all done',
       eagleWarn:'THE EAGLE!',eagleSub:'move on or it grabs you',edgeWarn:'GET BACK!',
       dCar:'SPLAT!',dWater:'SPLASH!',dTrain:'RUN OVER!',dEagle:'THE EAGLE GOT YOU!',
       statRows:'Rows',statCoins:'Coins',statBest:'Best',newBest:'NEW BEST!'},
-    pt:{sub:'Atravesse ruas, trilhos e rios pulando de célula em célula. Toque para avançar, arraste para os lados. Se ficar atrás, a águia desce.',
+    pt:{sub:'Toque para pular · arraste para os lados. Se ficar atrás, a águia desce.',
       rowsN:'FILEIRAS',coins:'MOEDAS',tapHop:'TOQUE PARA PULAR',swipeSide:'arraste para os lados',
       pick:'ESCOLHA SEU PERSONAGEM',close:'FECHAR',
-      cPollo:'GALINHA',cSapo:'SAPO',cRobot:'ROBÔ',
+      cPollo:'GALINHA',cSapo:'SAPO',cGato:'GATO',cRobot:'ROBÔ',cDino:'DINO',cAlien:'ALIEN',
+      shop:'PERSONAGENS',quests:'MISSÕES',inUse:'EM USO',use:'USAR',locked:'FALTAM MOEDAS',
+      bought:'DESBLOQUEADO!',tierUp:'SÉRIE DE MISSÕES COMPLETA!',qDone:'MISSÃO CUMPRIDA!',
+      mRows:'Atravesse {n} fileiras numa partida',mCoins:'Junte {n} moedas',mRail:'Atravesse {n} trilhos',
+      tier:'SÉRIE',allDone:'todas cumpridas',
       eagleWarn:'A ÁGUIA!',eagleSub:'avance ou ela te leva',edgeWarn:'VOLTE PARA O CENTRO!',
       dCar:'ATROPELADO!',dWater:'NA ÁGUA!',dTrain:'ATROPELADO PELO TREM!',dEagle:'A ÁGUIA TE PEGOU!',
       statRows:'Fileiras',statCoins:'Moedas',statBest:'Recorde',newBest:'NOVO RECORDE!'}
@@ -969,65 +1135,126 @@ const G={
 /* OJO: el shell ya declara `const T=ARC.T` en este mismo ámbito de módulo.
    Redeclararlo acá tira "Identifier 'T' has already been declared" y el juego
    entero no arranca (medido: ARC quedaba undefined). Se usa el T del shell. */
-let T3,scene,cam,sun,plr,plrG,shadow;
+let T3,scene,cam,plr,plrG,shadow;
 const ROWS=new Map();            /* z -> fila viva */
-/* 9 COLUMNAS con un cuadro de 7,3: la cámara acompaña un poco en X (camX, topado
-   en ±1,1) y el bicho igual NUNCA se sale de pantalla — en x=±4, el extremo, cae
-   en el 89,7% del ancho (medido con dbg.screenPos).
-   Antes eran 7 columnas, justo el ancho del cuadro y con la cámara fija. Se veía
-   bien pero las columnas del borde eran una trampa: en x=±3 hay UNA sola salida
-   lateral, y con autos cada 7,5-13 unidades el hueco libre puede quedar a 3 o 4
-   celdas, o sea fuera de alcance. Medido con el piloto: el 100% de las muertes
-   por auto de las corridas largas pasaron en x=±3 (car@30.0/52.0/60.0/71.2
-   x=3.00, car@45.0/25.0/13.0 x=-3.00). Con 9 columnas el jugador tiene dos
-   salidas laterales en todo el tramo que usa de verdad. */
 const XMIN=-4,XMAX=4;
-/* CARRIL CIRCULAR. Los autos y los troncos se reciclan, y antes se reciclaban
-   TELEPORTÁNDOLOS a una x fija (`position.x=XMIN-11`). Eso rompe la separación:
-   el carril mide 30 unidades de vuelta pero la fila se armaba con n autos cada
-   `gap` (n*gap ≠ 30), así que a la primera vuelta las distancias se desarman y
-   los objetos se AMONTONAN. Medido con dbg.logDump en una fila de río: huecos de
-   −2 y −0,1 unidades, o sea DOS TRONCOS SUPERPUESTOS; en las rutas el mismo
-   efecto arma paredes de autos y vuelve la fila impasable sin aviso.
-   Arreglo: el carril tiene un PERIODO EXACTO (SPAN) y la separación se ajusta a
-   SPAN/n, así que reciclar es restar SPAN y la grilla se conserva para siempre. */
 const SPAN=39,LO=-SPAN/2;
 const GNDW=SPAN+4;               /* el suelo tapa todo el carril, nunca se ve el borde */
+const CH=4;                      /* filas por TROZO fusionado */
 const ELEV=54*Math.PI/180,SE=Math.sin(ELEV),CE=Math.cos(ELEV),CAMD=36;
-let AHEAD=22,BEHIND=8,ROWSVIS=20,CAMW=7.3,CAMH=16,AIM=5;
+let AHEAD=22,BEHIND=8,ROWSVIS=20,CAMW=7.3,CAMH=16,AIM=5,camZoom=1;
 let px=0,pz=0,hop=null,dead=false,score=0,coins=0,idleT=0,camZ=0,camX=0,farZ=1;
 let overT=-1,dieKind='',lastDie='';
-let eagle=null,eagleG=null,eagleSh=null,wingL=null,wingR=null;
-let edgeW=0,drownT=-1,frozen=false,picker=false,pickFrom=0,pinned=false;
-let carSh=[],shOn=1,partK=1,fogK=1,decoK=1,CARGLB=false;
-const PSC=1.3;         /* el bicho ocupa casi una celda: con 1,14 era una manchita */
-const PH=1.72;         /* alto del personaje si viene de GLB (1,45 se leía chico
-                          al lado de los autos, que miden 1 de alto y 1,9 de largo) */
-const MAT={},MATB={},GEO={};
-function mat(c){if(MAT[c])return MAT[c];return MAT[c]=new T3.MeshLambertMaterial({color:new T3.Color(c)});}
-function matB(c){if(MATB[c])return MATB[c];return MATB[c]=new T3.MeshBasicMaterial({color:new T3.Color(c)});}
-function coinGeo(r){const k='c'+r;if(GEO[k])return GEO[k];
-  return GEO[k]=new T3.CylinderGeometry(r,r,.07,14);}
-function box(w,h,d){const k=w+'_'+h+'_'+d;if(GEO[k])return GEO[k];return GEO[k]=new T3.BoxGeometry(w,h,d);}
-function m(w,h,d,c,x,y,z,parent,basic){
-  const o=new T3.Mesh(box(w,h,d),basic?matB(c):mat(c));
-  o.position.set(x,y,z);(parent||scene).add(o);return o;
+let eagle=null,eagleG=null,eagleSh=null;
+let edgeW=0,drownT=-1,frozen=false,pinned=false;
+let shOn=1,partK=1,fogK=1,decoK=1;
+let DEMO=0,demoOn=0,demoAct=0;
+const PH=1.72;         /* alto del personaje si viene de GLB */
+
+/* ======================================================= FUSIÓN Y MATERIALES
+   UN material para TODA la escena: MeshBasicMaterial con color por vértice, y la
+   LUZ HORNEADA en ese color. Dos razones:
+     · Fusionar exige un material compartido (dos materiales = dos llamadas).
+     · Desde three r155 MeshLambertMaterial ilumina POR FRAGMENTO, y en swiftshader
+       eso se paga en cada píxel: mismo cuadro, misma escena, 35,5 fps con Lambert
+       y 48,2 fps con Basic (+36%, medido con el bicho quieto en la fila 30). En un
+       juego de cajas con una luz fija no hay ninguna diferencia visible: la luz se
+       calcula UNA vez por vértice cuando se hornea la geometría.
+   (Los GLB de este pack ya vienen con atributo `color` y sin textura: se les
+   hornea la misma luz encima y entran en el mismo material.) */
+let MV,MVB,MOUT;
+const LX=.349,LY=.814,LZ=.465;          /* sol normalizado, era (6,14,8) */
+const SKY=[1,1,1],GND=[.56,.725,.56],SUN=[1,.953,.816];
+const KH=.62,KS=.55;                    /* peso del cielo y del sol */
+function litRGB(nx,ny,nz,r,g2,b){
+  const m=clamp(ny*.5+.5,0,1);
+  const d=Math.max(0,nx*LX+ny*LY+nz*LZ)*KS;
+  return[r*((GND[0]+(SKY[0]-GND[0])*m)*KH+SUN[0]*d),
+         g2*((GND[1]+(SKY[1]-GND[1])*m)*KH+SUN[1]*d),
+         b*((GND[2]+(SKY[2]-GND[2])*m)*KH+SUN[2]*d)];
 }
+/* col = color plano; flat=1 -> sin luz (avisos, cosas que tienen que brillar) */
+function paintGeo(g,col,flat){
+  const c=new T3.Color(col),n=g.attributes.position.count;
+  const N=g.attributes.normal,a=new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    if(flat||!N){a[i*3]=c.r;a[i*3+1]=c.g;a[i*3+2]=c.b;continue;}
+    const v=litRGB(N.getX(i),N.getY(i),N.getZ(i),c.r,c.g,c.b);
+    a[i*3]=v[0];a[i*3+1]=v[1];a[i*3+2]=v[2];
+  }
+  g.setAttribute('color',new T3.BufferAttribute(a,3));
+  return g;
+}
+/* hornea la luz sobre los colores que YA trae la geometría (los GLB). `fm` = cuánto
+   del color queda SIN luz: un modelo orgánico con caras en todas las direcciones se
+   va a negro si se le aplica la luz entera (medido en la captura: el águila marrón
+   quedaba casi negra), así que se le deja un piso de color propio. */
+function shadeGeo(g,fm){
+  const C=g.attributes.color,N=g.attributes.normal;
+  if(!C||!N)return g;
+  fm=fm==null?.42:fm;
+  for(let i=0;i<C.count;i++){
+    const r=C.getX(i),g2=C.getY(i),b=C.getZ(i);
+    const v=litRGB(N.getX(i),N.getY(i),N.getZ(i),r,g2,b);
+    C.setXYZ(i,r*fm+v[0]*(1-fm)*1.12,g2*fm+v[1]*(1-fm)*1.12,b*fm+v[2]*(1-fm)*1.12);
+  }
+  C.needsUpdate=true;return g;
+}
+/* mergeGeo: concatena position/normal/color de varias geometrías en una sola.
+   Es lo mismo que BufferGeometryUtils.mergeGeometries pero SIN import dinámico:
+   GAME.init es sincrónico y un await ahí deja la primera partida sin escenario. */
+function mergeGeo(list){
+  let n=0;
+  const parts=list.map(g=>{const q=g.index?g.toNonIndexed():g;n+=q.attributes.position.count;return q;});
+  const P=new Float32Array(n*3),N=new Float32Array(n*3),C=new Float32Array(n*3);
+  let o=0;
+  for(const q of parts){
+    P.set(q.attributes.position.array,o*3);
+    if(q.attributes.normal)N.set(q.attributes.normal.array,o*3);
+    if(q.attributes.color)C.set(q.attributes.color.array,o*3);
+    o+=q.attributes.position.count;
+  }
+  const g=new T3.BufferGeometry();
+  g.setAttribute('position',new T3.BufferAttribute(P,3));
+  g.setAttribute('normal',new T3.BufferAttribute(N,3));
+  g.setAttribute('color',new T3.BufferAttribute(C,3));
+  g.computeBoundingSphere();
+  return g;
+}
+let bake=null;                   /* lista de geometrías del trozo en construcción */
+function B(w,h,d,c,x,y,z,flat){  /* caja al trozo */
+  const g=new T3.BoxGeometry(w,h,d);g.translate(x,y,z);paintGeo(g,c,flat);bake.push(g);
+}
+function BG(geo,c,x,y,z,ry){     /* geometría cualquiera al trozo */
+  const g=geo.clone();if(ry)g.rotateY(ry);g.translate(x,y,z);paintGeo(g,c);bake.push(g);
+}
+function bakeBoxes(list,flat){   /* [w,h,d,col,x,y,z] -> una geometría */
+  const gs=[];
+  for(const b of list){const g=new T3.BoxGeometry(b[0],b[1],b[2]);
+    g.translate(b[4],b[5],b[6]);paintGeo(g,b[3],flat);gs.push(g);}
+  const m=mergeGeo(gs);gs.forEach(g=>g.dispose());return m;
+}
+function flush(){                /* cierra el trozo */
+  const g=mergeGeo(bake);bake.forEach(x=>x.dispose());bake=null;return g;
+}
+
 /* ------------------------------------------------------------- PERSONAJES
-   Una sola lista de cajas por bicho: de ahí sale el grupo 3D y la silueta 2D
-   del selector (misma silueta, cero riesgo de que se desincronicen). */
+   Una sola lista de cajas por bicho: de ahí sale la malla 3D (fusionada) y la
+   silueta 2D de la tienda, así no hay dos fuentes de verdad. `cost` son las
+   monedas que cuesta desbloquearlo. */
 const CHARS=[
-  /* sc = escala de las cajas. Cada bicho tiene su alto natural distinto (pollo
-     1,22 · sapo 0,93 · robot 1,44) y con un PSC único el sapo quedaba enano y el
-     robot gigante: cada uno lleva la suya para que los tres pesen parecido. */
-  {id:'pollo',key:'cPollo',icon:'🐔',glb:'pollo',glbRot:Math.PI,sc:1.41,
+  /* el pollo va de CAJAS y no del GLB: medido con capturas ampliadas, el GLB
+     simplificado a 900 triángulos se lee como un borrón blanco con manchas negras
+     (el casco de contorno atraviesa una malla orgánica cóncava), y las cajas
+     están dibujadas para ESTA cámara. El GLB del pollo ni se carga. */
+  {id:'pollo',key:'cPollo',icon:'🐔',cost:0,sc:1.41,
    b:[[.72,.6,.62,'#f7f7fa',0,.42,0],[.5,.42,.44,'#ffffff',0,.86,-.02],
       [.2,.16,.24,'#f6a13a',0,.84,-.3],[.16,.2,.14,'#e0503f',0,1.12,.02],
       [.12,.12,.12,'#111418',.17,.95,-.27],[.12,.12,.12,'#111418',-.17,.95,-.27],
       [.1,.3,.4,'#e6e6ee',.4,.5,.02],[.1,.3,.4,'#e6e6ee',-.4,.5,.02],
       [.3,.26,.18,'#ffffff',0,.68,.36],
       [.14,.3,.14,'#f6a13a',.16,.15,.05],[.14,.3,.14,'#f6a13a',-.16,.15,.05]]},
-  {id:'sapo',key:'cSapo',icon:'🐸',sc:1.5,
+  {id:'sapo',key:'cSapo',icon:'🐸',cost:60,sc:1.5,
    b:[[.86,.44,.7,'#45b558',0,.3,0],[.62,.14,.5,'#e9f5c9',0,.16,.02],
       [.66,.3,.5,'#4fc463',0,.62,-.1],
       [.22,.22,.22,'#ffffff',.2,.82,-.2],[.22,.22,.22,'#ffffff',-.2,.82,-.2],
@@ -1036,108 +1263,156 @@ const CHARS=[
       [.18,.07,.18,'#2f8f45',.22,.52,.18],[.18,.07,.18,'#2f8f45',-.24,.5,.06],
       [.2,.2,.34,'#3aa14d',.44,.12,.22],[.2,.2,.34,'#3aa14d',-.44,.12,.22],
       [.26,.14,.3,'#3aa14d',.3,.07,-.28],[.26,.14,.3,'#3aa14d',-.3,.07,-.28]]},
-  {id:'robot',key:'cRobot',icon:'🤖',sc:1.2,
+  /* OJO con los bichos: desde 54° se ve el LOMO, no la cara. Todo lo que
+     identifica al personaje va ARRIBA (orejas altas, rayas del lomo, cresta):
+     los ojos pegados a la cara delantera no se ven nunca. */
+  {id:'gato',key:'cGato',icon:'🐱',cost:150,sc:1.34,
+   b:[[.76,.5,.6,'#f2913a',0,.34,0],[.5,.1,.4,'#fff3e2',0,.16,0],
+      [.62,.1,.16,'#c1631b',0,.6,.02],[.5,.09,.13,'#c1631b',0,.6,.24],
+      [.5,.44,.42,'#f2913a',0,.78,-.06],
+      [.2,.26,.13,'#f7b56b',-.17,1.06,-.02],[.2,.26,.13,'#f7b56b',.17,1.06,-.02],
+      [.1,.14,.06,'#3a1c08',-.17,1.11,-.03],[.1,.14,.06,'#3a1c08',.17,1.11,-.03],
+      [.13,.09,.13,'#111418',.15,.99,-.2],[.13,.09,.13,'#111418',-.15,.99,-.2],
+      [.14,.1,.1,'#ff9ec4',0,.86,-.3],
+      [.12,.12,.52,'#e07a26',0,.56,.38],[.12,.12,.16,'#fff3e2',0,.78,.6],
+      [.16,.24,.16,'#f7b56b',.24,.12,-.16],[.16,.24,.16,'#f7b56b',-.24,.12,-.16],
+      [.16,.24,.16,'#f7b56b',.24,.12,.18],[.16,.24,.16,'#f7b56b',-.24,.12,.18]]},
+  {id:'robot',key:'cRobot',icon:'🤖',cost:300,sc:1.2,
    b:[[.66,.6,.5,'#9fb4c9',0,.46,0],[.24,.2,.07,'#ff7a3a',0,.5,-.27],
       [.52,.4,.44,'#c3d2e0',0,.94,0],[.44,.16,.07,'#39d7ff',0,.98,-.24],
       [.06,.22,.06,'#6b7b8c',0,1.22,0],[.15,.15,.15,'#ff3b3b',0,1.37,0],
       [.14,.42,.16,'#7f93a6',.42,.5,0],[.14,.42,.16,'#7f93a6',-.42,.5,0],
       [.2,.32,.24,'#6b7b8c',.18,.16,0],[.2,.32,.24,'#6b7b8c',-.18,.16,0],
-      [.26,.12,.34,'#39516b',.18,.06,-.04],[.26,.12,.34,'#39516b',-.18,.06,-.04]]}
+      [.26,.12,.34,'#39516b',.18,.06,-.04],[.26,.12,.34,'#39516b',-.18,.06,-.04]]},
+  {id:'dino',key:'cDino',icon:'🦖',cost:550,sc:1.28,
+   b:[[.8,.56,.72,'#3fbf6f',0,.4,0],[.44,.2,.3,'#d7f7a8',0,.3,-.3],
+      [.5,.42,.5,'#4cd07e',0,.86,-.16],[.34,.16,.28,'#5fdd92',0,.8,-.44],
+      [.13,.1,.13,'#111418',.16,.98,-.3],[.13,.1,.13,'#111418',-.16,.98,-.3],
+      [.1,.06,.1,'#2a6b40',.09,.9,-.56],[.1,.06,.1,'#2a6b40',-.09,.9,-.56],
+      [.16,.2,.14,'#ffe066',0,1.14,-.1],[.14,.17,.12,'#ffd166',0,1.06,.1],
+      [.12,.14,.1,'#ffe066',0,.86,.28],
+      [.14,.14,.5,'#3aa864',0,.5,.42],[.11,.11,.14,'#ffe066',0,.62,.62],
+      [.2,.3,.24,'#35a95f',.26,.16,-.02],[.2,.3,.24,'#35a95f',-.26,.16,-.02],
+      [.3,.16,.2,'#2f9153',.26,.05,-.16],[.3,.16,.2,'#2f9153',-.26,.05,-.16]]},
+  {id:'alien',key:'cAlien',icon:'👽',cost:900,sc:1.26,
+   b:[[.6,.5,.5,'#a56bff',0,.4,0],[.36,.16,.16,'#0ff2d0',0,.3,-.26],
+      [.58,.42,.48,'#b98cff',0,.86,-.02],[.34,.16,.06,'#0ff2d0',0,.88,-.26],
+      [.06,.2,.06,'#7a4fd6',.16,1.14,0],[.06,.2,.06,'#7a4fd6',-.16,1.14,0],
+      [.11,.11,.11,'#0ff2d0',.16,1.26,0],[.11,.11,.11,'#0ff2d0',-.16,1.26,0],
+      [.1,.28,.14,'#8c54e6',.36,.44,0],[.1,.28,.14,'#8c54e6',-.36,.44,0],
+      [.18,.28,.2,'#7a4fd6',.15,.16,0],[.18,.28,.2,'#7a4fd6',-.15,.16,0],
+      [.24,.1,.28,'#6a3fc4',.15,.03,-.04],[.24,.1,.28,'#6a3fc4',-.15,.03,-.04]]}
 ];
-function charIdx(){const i=CHARS.findIndex(c=>c.id===ARC.S.char);return i<0?0:i;}
-/* GLB: se normaliza a la altura pedida, centrado en x/z y apoyado en y=0 */
-function glbTris(o){let n=0;o.traverse(k=>{if(k.isMesh&&k.geometry){
-  const g=k.geometry;n+=(g.index?g.index.count:(g.attributes.position?g.attributes.position.count:0))/3;}});
-  return Math.round(n);}
-function glbNode(key,targetH,rotY){
-  const S=ARC.glb&&ARC.glb[key];
-  if(!S||!S.scene)return null;
+function owned(){const o=ARC.S.own;return (o&&o.length)?o:['pollo'];}
+function has(id){return owned().indexOf(id)>=0;}
+function charIdx(){
+  const i=CHARS.findIndex(c=>c.id===ARC.S.char&&has(c.id));
+  return i<0?0:i;
+}
+/* --------------------------------------------------------- GLB -> geometría
+   Los tres GLB de este pack son UNA malla con atributo `color` y sin textura
+   (medido). Así que se los trata como una geometría más: se hornea la matriz del
+   nodo, se normaliza el tamaño, se apoya en y=0 y listo — se dibuja con el mismo
+   material que el resto de la escena. */
+const GEOC={};
+function glbGeo(key,target,rotY,byMax){
+  const ck=key+'|'+target+'|'+(rotY||0)+'|'+(byMax?1:0);
+  if(GEOC[ck]!==undefined)return GEOC[ck];
+  let out=null;
   try{
-    const o=S.scene.clone(true);
-    const bb=new T3.Box3().setFromObject(o),sz=new T3.Vector3(),c=new T3.Vector3();
-    bb.getSize(sz);bb.getCenter(c);
-    if(!(sz.y>.0001))return null;
-    const s=targetH/sz.y;
-    o.scale.setScalar(s);
-    o.position.set(-c.x*s,-bb.min.y*s,-c.z*s);
-    o.traverse(k=>{if(k.isMesh){k.castShadow=false;k.receiveShadow=false;
-      if(k.material&&k.material.side!==undefined)k.material.side=T3.FrontSide;}});
-    const w=new T3.Group();w.add(o);w.rotation.y=rotY||0;
-    return w;
-  }catch(e){console.warn('glb '+key,e);return null;}
+    const S=ARC.glb&&ARC.glb[key];
+    if(S&&S.scene){
+      let src=null;S.scene.traverse(o=>{if(!src&&o.isMesh&&o.geometry&&o.geometry.attributes.position)src=o;});
+      if(src){
+        src.updateWorldMatrix(true,false);
+        const g=src.geometry.clone();
+        g.applyMatrix4(src.matrixWorld);
+        if(rotY)g.rotateY(rotY);
+        g.computeBoundingBox();
+        const sz=new T3.Vector3();g.boundingBox.getSize(sz);
+        const d=byMax?Math.max(sz.x,sz.y,sz.z):sz.y;
+        if(d>1e-4){
+          const s=target/d;g.scale(s,s,s);
+          g.computeBoundingBox();
+          const c=new T3.Vector3();g.boundingBox.getCenter(c);
+          g.translate(-c.x,-g.boundingBox.min.y,-c.z);
+          if(!g.attributes.color)paintGeo(g,'#ffffff');
+          else shadeGeo(g);                      /* luz horneada, como el resto */
+          g.computeBoundingSphere();
+          out=g;
+        }
+      }
+    }
+  }catch(e){console.warn('glb '+key,e);}
+  GEOC[ck]=out;return out;
 }
-function buildBoxes(list,parent){for(const b of list)m(b[0],b[1],b[2],b[3],b[4],b[5],b[6],parent);}
-/* CONTORNO (casco invertido): una copia del modelo un poco más grande, pintada
-   plana y oscura y con las caras de ATRÁS, así sólo se ve asomando por el borde.
-   Sin esto el pollo (blanco, visto desde arriba a 54°, ~50 px de alto) se leía
-   como una manchita gris tanto sobre el pasto como sobre el asfalto claro: en la
-   captura del juego no se distinguía qué bicho era. */
-function outlineOf(node,k){
-  k=k||1.085;
-  const o=node.clone(true);
-  const mt=new T3.MeshBasicMaterial({color:new T3.Color('#161a1f'),side:T3.BackSide});
-  o.traverse(x=>{if(x.isMesh){x.material=mt;x.castShadow=x.receiveShadow=false;}});
-  /* el casco se agranda desde el CENTRO de la caja, no desde los pies: escalado
-     desde el origen el contorno salía de 1 px a los costados y con una barra
-     negra de 5 px arriba de la cabeza (medido en la captura ampliada). Con
-     p -> c+k(p-c) el borde queda del mismo grosor por todos lados. */
-  const c=new T3.Vector3();
-  new T3.Box3().setFromObject(o).getCenter(c);
-  const w=new T3.Group();
-  w.add(o);w.scale.setScalar(k);w.position.copy(c).multiplyScalar(1-k);
-  return w;
+function charGeo(C){
+  const ck='ch_'+C.id;
+  if(GEOC[ck])return GEOC[ck];
+  const g=bakeBoxes(C.b);
+  const s=C.sc||1.3;g.scale(s,s,s);
+  g.computeBoundingBox();g.computeBoundingSphere();
+  return GEOC[ck]=g;
 }
-/* El personaje se arma SIEMPRE igual: un cuerpo (GLB o cajas) con su escala
-   propia dentro de `plr`, y el contorno oscuro delante. Así `plr` queda con
-   escala 1 para los tres bichos y el achatado del salto es uno solo (antes el
-   pollo de GLB y los de cajas usaban escalas distintas y había dos caminos). */
+function geoTris(g){return g?Math.round((g.index?g.index.count:g.attributes.position.count)/3):0;}
+/* CONTORNO (casco invertido): la MISMA geometría con material oscuro de caras de
+   atrás, agrandada desde el CENTRO de la caja (no desde los pies, que dejaba una
+   barra negra arriba de la cabeza). Sin esto el pollo blanco visto desde 54° a
+   ~50 px de alto se leía como una manchita gris. */
+function outlineFor(geo,k){
+  const o=new T3.Mesh(geo,MOUT);
+  if(!geo.boundingBox)geo.computeBoundingBox();
+  const c=new T3.Vector3();geo.boundingBox.getCenter(c);
+  o.scale.setScalar(k);o.position.copy(c).multiplyScalar(1-k);
+  return o;
+}
+let OUTK=1.085,USEGLB=1;
 function makePlayer(){
   if(plrG){scene.remove(plrG);}
   plrG=new T3.Group();plr=new T3.Group();plrG.add(plr);
   const C=CHARS[charIdx()];
-  const node=C.glb?glbNode(C.glb,PH,C.glbRot):null;
-  let body;
-  if(node){body=node;plr.userData.glb=1;}
-  else{body=new T3.Group();buildBoxes(C.b,body);body.scale.setScalar(C.sc||PSC);}
-  plr.add(outlineOf(body,1.085));plr.add(body);
+  let geo=(C.glb&&USEGLB)?glbGeo(C.glb,PH,C.glbRot):null;
+  if(!geo)geo=charGeo(C);
+  if(OUTK>1.001)plr.add(outlineFor(geo,OUTK));
+  plr.add(new T3.Mesh(geo,MV));
   plr.scale.setScalar(1);
   scene.add(plrG);
   if(!shadow){
-    shadow=new T3.Mesh(new T3.CircleGeometry(.5,18),
+    shadow=new T3.Mesh(new T3.CircleGeometry(.5,14),
       new T3.MeshBasicMaterial({color:0x0b2a12,transparent:true,opacity:.34}));
     shadow.rotation.x=-Math.PI/2;scene.add(shadow);
   }
 }
 /* ------------------------------------------------------------------ ÁGUILA */
+function eagleGeo(){
+  if(GEOC.eag)return GEOC.eag;
+  const g=glbGeo('aguila',3.4,Math.PI,true);
+  /* el marrón del modelo sobre el asfalto quedaba casi negro (visto en la captura
+     ampliada): se le levanta el color un 18% para que se lea el bicho */
+  if(g){const C=g.attributes.color;
+    for(let i=0;i<C.count;i++)C.setXYZ(i,Math.min(1,C.getX(i)*1.18),
+      Math.min(1,C.getY(i)*1.18),Math.min(1,C.getZ(i)*1.18));
+    C.needsUpdate=true;return GEOC.eag=g;}
+  /* respaldo de cajas, con las alas abiertas (una sola malla: no hay aleteo de
+     huesos, el aleteo se hace inclinando el bicho entero) */
+  return GEOC.eag=bakeBoxes([
+    [.6,.42,1.5,'#5b3d22',0,0,0],[.44,.4,.4,'#f2ede2',0,.16,-.82],
+    [.2,.16,.34,'#f6c343',0,.08,-1.12],[.1,.1,.1,'#111418',.14,.2,-.96],
+    [.1,.1,.1,'#111418',-.14,.2,-.96],[.7,.1,.5,'#6b4a2a',0,-.02,.86],
+    [.16,.2,.16,'#f6c343',.18,-.28,-.3],[.16,.2,.16,'#f6c343',-.18,-.28,-.3],
+    [1.5,.12,.8,'#7a5330',.78,.05,0],[.9,.1,.5,'#4a3120',1.3,.03,.24],
+    [1.5,.12,.8,'#7a5330',-.78,.05,0],[.9,.1,.5,'#4a3120',-1.3,.03,.24]]);
+}
 function makeEagle(){
   eagleG=new T3.Group();
-  const node=glbNode('aguila',2.0,Math.PI);
-  if(node){eagleG.add(node);eagleG.userData.glb=1;}
-  else{
-    const b=new T3.Group();
-    m(.6,.42,1.5,'#5b3d22',0,0,0,b);            /* cuerpo */
-    m(.44,.4,.4,'#f2ede2',0,.16,-.82,b);        /* cabeza */
-    m(.2,.16,.34,'#f6c343',0,.08,-1.12,b);      /* pico */
-    m(.1,.1,.1,'#111418',.14,.2,-.96,b);
-    m(.1,.1,.1,'#111418',-.14,.2,-.96,b);
-    m(.7,.1,.5,'#6b4a2a',0,-.02,.86,b);         /* cola */
-    m(.16,.2,.16,'#f6c343',.18,-.28,-.3,b);     /* garras */
-    m(.16,.2,.16,'#f6c343',-.18,-.28,-.3,b);
-    wingL=new T3.Group();wingR=new T3.Group();
-    m(1.5,.12,.8,'#7a5330',.78,0,0,wingL);
-    m(.9,.1,.5,'#4a3120',1.3,-.02,.24,wingL);
-    m(1.5,.12,.8,'#7a5330',-.78,0,0,wingR);
-    m(.9,.1,.5,'#4a3120',-1.3,-.02,.24,wingR);
-    b.add(wingL);b.add(wingR);
-    eagleG.add(b);
-  }
+  eagleG.add(new T3.Mesh(eagleGeo(),MV));
   eagleG.visible=false;scene.add(eagleG);
-  eagleSh=new T3.Mesh(new T3.CircleGeometry(1,20),
+  eagleSh=new T3.Mesh(new T3.CircleGeometry(1,16),
     new T3.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.2}));
   eagleSh.rotation.x=-Math.PI/2;eagleSh.visible=false;scene.add(eagleSh);
 }
 function spawnEagle(){
-  if(eagle)return;
+  if(eagle||DEMO)return;
   eagle={ph:'warn',t:0,x:px,y:9.5,z:pz-1.6};
   eagleG.visible=true;eagleSh.visible=!!shOn;
   ARC.sfx('aguila',{vol:.9});
@@ -1160,17 +1435,23 @@ function stepEagle(dt){
     e.y=lerp(e.y,.55,1-Math.pow(.004,dt));
     if(e.y<1.5&&!dead){die('eagle');e.ph='lift';e.t=0;}
   }else if(e.ph==='lift'){
-    e.y+=(3.2+e.t*7)*dt;e.z-=1.6*dt;
-    plrG.position.set(e.x,e.y-.75,-e.z);
-    plr.rotation.z=Math.sin(ARC.t*14)*.25;
+    /* SE TIENE QUE VER: sube despacio, se acerca a la cámara y la cámara se
+       ACERCA con él (camZoom). Antes subía a 3,2+7t por segundo y en medio
+       segundo el bicho ya no estaba en cuadro. */
+    e.y+=(2.1+e.t*1.6)*dt;e.z-=.85*dt;
+    plrG.position.set(e.x,e.y-.78,-e.z);
+    plr.rotation.z=Math.sin(ARC.t*13)*.22;
+    plr.rotation.x=.18;
+    camZoom=lerp(camZoom,.62,1-Math.pow(.12,dt));
+    camZ=lerp(camZ,e.z-AIM*.5,1-Math.pow(.05,dt));
   }else{                                    /* away: se va sin llevarte */
     e.y+=7*dt;e.z-=3*dt;
     if(e.y>18){eagle=null;eagleG.visible=false;eagleSh.visible=false;return;}
   }
   eagleG.position.set(e.x,e.y,-e.z);
-  const fl=Math.sin(ARC.t*(e.ph==='dive'?16:8));
-  if(wingL){wingL.rotation.z=fl*.5;wingR.rotation.z=-fl*.5;}
-  else if(eagleG.userData.glb)eagleG.rotation.z=fl*.12;
+  const fl=Math.sin(ARC.t*(e.ph==='dive'?16:e.ph==='lift'?11:8));
+  eagleG.rotation.z=fl*(e.ph==='lift'?.20:.13);
+  eagleG.scale.set(1,1+fl*.06,1);
   eagleG.rotation.x=e.ph==='dive'?-.55:-.12;   /* nariz abajo al picar */
   if(eagleSh.visible){
     const k=clamp(1-e.y/11,.15,1);
@@ -1179,7 +1460,7 @@ function stepEagle(dt){
     eagleSh.material.opacity=.10+k*.26;
   }
 }
-/* ------------------------------------------------------------------- MUNDO */
+/* ================================================================= MUNDO */
 function rowType(z){
   if(z<4)return 'grass';
   const d=Math.min(1,z/260);
@@ -1193,39 +1474,24 @@ function rowType(z){
   if(t==='rail'&&a==='rail')t='grass';
   return t;
 }
-/* ADORNO: matas y flores PLANAS en las celdas libres del pasto. Van adentro del
-   cuadro (el cuadro mide 7,3 de ancho de las 9 columnas del mundo) y
-   NO estorban: la cantidad la manda el nivel de gráficos y la dificultad no
-   cambia ni un poco entre Bajo y Ultra. */
-/* el blanco puro leía como papelito tirado en el pasto (visible en la captura
-   ampliada): flores más chicas y en tonos cálidos que no compiten con el bicho */
 const FLOW=['#ffe066','#ff8fab','#ffd166','#c3f584'];
-function deco(R,g){
+let PINE=null,PINE2=null;
+function deco(R,z){
   if(R.type!=='grass')return;
   const n=Math.round(3*decoK);
   for(let i=0;i<n;i++){
     const x=rndi(XMIN,XMAX);
     if(R.block.has(x)||x===R.coin)continue;
-    const ox=x+rnd(-.32,.32),oz=rnd(-.34,.34);
-    m(.15,.05,.15,'#5fae45',ox,.02,oz,g);
-    if(Math.random()<.42)m(.065,.065,.065,pick(FLOW),ox,.1,oz,g,true);
+    const ox=x+rnd(-.32,.32),oz=-z+rnd(-.34,.34);
+    B(.15,.05,.15,'#5fae45',ox,.02,oz);
+    if(Math.random()<.42)B(.065,.065,.065,pick(FLOW),ox,.1,oz);
   }
 }
-function carShadow(g,L){
-  const s=new T3.Mesh(box(L*1.05,.02,1.02),matB('#1d2228'));
-  s.position.set(0,.03,.06);s.visible=!!shOn;g.add(s);carSh.push(s);return s;
-}
 /* GARANTÍA DE PASO — bug de generación medido con dbg.why():
-     fila 7 (pasto)  ....A..AA   árboles en x=0, 3 y 4
-     fila 8 (pasto)  .....AA..   árboles en x=1 y 2
-   El bicho en la fila 7 sólo podía estar en x=1 o x=2 (encerrado entre los
-   árboles de 0 y 3), y justo esas dos columnas estaban tapadas en la fila 8: no
-   había ni salto adelante ni paso al costado. Quedaba SIN SALIDA y la única
-   opción era retroceder, que despierta al águila. El piloto se quedó 145 s
-   trabado ahí; a una persona le pasaría lo mismo.
+     fila 7 (pasto)  ....A..AA   fila 8 (pasto)  .....AA..
+   El bicho quedaba encerrado y la única opción era retroceder (145 s trabado).
    Invariante: para CADA tramo libre de la fila anterior, esta fila deja al menos
-   una columna libre dentro de ese tramo. Así desde cualquier celda alcanzable
-   siempre hay por dónde seguir. */
+   una columna libre dentro de ese tramo. */
 function ensurePass(R,z){
   const prev=ROWS.get(z-1);
   const pb=(prev&&prev.type==='grass')?prev.block:null;
@@ -1240,15 +1506,45 @@ function ensurePass(R,z){
     R.block.delete(pick(sg));                  /* se saca un árbol y se abre */
   }
 }
+/* EL TREN: una sola geometría compartida por todas las vías (7 vagones
+   fusionados). Antes eran 35 mallas POR FILA de vía. El techo es una línea fina
+   y lo oscuro son las VENTANAS: con un bloque oscuro encima, visto desde 54°, el
+   tren se leía como una losa negra. */
+let TRAINGEO=null,WARNGEO=null;
+function trainGeo(){
+  if(TRAINGEO)return TRAINGEO;
+  const L=[];
+  for(let i=0;i<7;i++){
+    const x=i*3.8;
+    L.push([3.5,1.12,1,'#e7ecf2',x,.64,0]);
+    L.push([3.5,.13,1.04,'#8d9aa9',x,1.26,0]);
+    L.push([3,.34,.06,'#232830',x,.88,.52]);
+    L.push([3,.34,.06,'#232830',x,.88,-.52]);
+    L.push([3.44,.17,1.02,i?'#e0503f':'#f6c343',x,.3,0]);
+  }
+  return TRAINGEO=bakeBoxes(L);
+}
+/* AVISO del tren: una franja roja que ocupa TODA la fila (la baliza sola vivía
+   en x=±5,4, fuera del cuadro: el tren llegaba sin aviso) más dos balizas
+   adentro del cuadro. Todo en una malla que se prende y se apaga. */
+function warnGeo(){
+  if(WARNGEO)return WARNGEO;
+  const L=[[GNDW,.05,.92,'#ff3b3b',0,.07,0]];
+  for(const lx of [-3.2,3.2]){
+    L.push([.3,.3,.3,'#ff3b3b',lx,1.15,0]);
+    L.push([.12,.9,.12,'#6a7078',lx,.6,0]);
+  }
+  return WARNGEO=bakeBoxes(L,1);                /* sin luz: el aviso tiene que gritar */
+}
 function buildRow(z){
   if(ROWS.has(z))return;
   const type=z<4?'grass':rowType(z);
-  const R={type,z,objs:[],cars:[],logs:[],block:new Set(),coin:-99,coinM:null,
+  const R={type,z,cars:[],logs:[],block:new Set(),coin:-99,coinOn:0,
     dir:Math.random()<.5?1:-1,speed:0,gap:0,trainT:rnd(4,9),trainOn:0};
-  const g=new T3.Group();g.position.z=-z;scene.add(g);R.g=g;
+  const Z=-z;
   if(type==='grass'){
-    m(GNDW,.5,1,z%2?'#7fc95c':'#74bf53',0,-.25,0,g);
-    /* primero se ELIGE dónde van los árboles, después se garantiza el paso, y
+    B(GNDW,.5,1,z%2?'#7fc95c':'#74bf53',0,-.25,Z);
+    /* primero se ELIGE dónde van los árboles, después se garantiza el paso y
        sólo al final se dibujan: si se dibujaran al elegir no se podría sacar
        ninguno sin dejar un árbol fantasma bloqueando de mentira. */
     const n=z<4?0:rndi(0,3);
@@ -1259,116 +1555,196 @@ function buildRow(z){
     }
     ensurePass(R,z);
     for(const x of R.block){
-      if(Math.random()<.7){
-        m(.55,.7,.55,'#6b4b2a',x,.35,0,g);
-        const h=rnd(.9,1.7);
-        m(.95,h,.95,Math.random()<.5?'#2f8f4e':'#27803f',x,.7+h/2,0,g);
-      }else m(.8,.6,.8,'#9aa3ad',x,.3,0,g);
+      const r=Math.random();
+      if(r<.5){                                  /* pino: dos conos, 24 triángulos */
+        B(.34,.5,.34,'#6b4b2a',x,.25,Z);
+        BG(PINE,'#2f8f4e',x,.98,Z);
+        BG(PINE2,'#37a35c',x,1.62,Z);
+      }else if(r<.82){                            /* copa de dos pisos */
+        B(.5,.62,.5,'#6b4b2a',x,.31,Z);
+        const h=rnd(.8,1.2);
+        B(.98,h,.98,'#2f8f4e',x,.62+h/2,Z);
+        B(.66,h*.6,.66,'#37a35c',x,.62+h+h*.28,Z);
+      }else B(.8,.6,.8,'#9aa3ad',x,.3,Z);         /* piedra */
     }
   }else if(type==='road'){
-    m(GNDW,.5,1,'#3c4148',0,-.25,0,g);
-    m(GNDW,.02,.08,'#e9edf2',0,.01,0,g);
+    B(GNDW,.5,1,'#3c4148',0,-.25,Z);
+    for(let i=-5;i<=5;i++)B(1.1,.02,.1,'#e9edf2',i*2.2,.01,Z);   /* línea cortada */
     R.speed=rnd(1.9,3.6)*(1+Math.min(.85,z/340));
     /* la separación pedida se redondea a SPAN/n para que el carril CIERRE: así
        reciclar es restar SPAN y los autos nunca se amontonan */
     const n=Math.max(2,Math.round(SPAN/rnd(7.5,13)));
     R.gap=SPAN/n;
-    const col=pick(['#e0503f','#2f6df6','#f6c343','#8b5cf6','#16a34a','#ff7ab8']);
-    const long=Math.random()<.16,useGlb=!long&&CARGLB&&Math.random()<.4;
-    for(let i=0;i<n;i++){
-      const cg=new T3.Group();
-      const L=long?3.1:1.9;
-      const node=useGlb?glbNode('auto',.95,R.dir>0?Math.PI:0):null;
-      if(node){node.position.y=0;cg.add(node);}
-      else{
-        m(L,.55,.95,col,0,.42,0,cg);
-        m(L*.52,.34,.9,'#dbe6f2',long?-L*.18:.05,.82,0,cg);
-        m(.22,.22,1.02,'#111418',L/2-.18,.2,0,cg);
-        m(.22,.22,1.02,'#111418',-L/2+.18,.2,0,cg);
-        m(.16,.16,.06,'#fff3b0',R.dir>0?L/2:-L/2,.45,.3,cg);
-      }
-      carShadow(cg,L);
-      cg.position.set(LO+i*R.gap+rnd(-.6,.6),0,0);
-      g.add(cg);R.cars.push({g:cg,len:L});
-    }
+    const col=pick(CARCOL);
+    const long=Math.random()<.18;
+    for(let i=0;i<n;i++)
+      R.cars.push({x:LO+i*R.gap+rnd(-.6,.6),len:long?3.1:1.9,col});
   }else if(type==='water'){
-    m(GNDW,.42,1,'#1c69bd',0,-.29,0,g);
-    m(GNDW,.02,.86,'#3f92e0',0,-.07,0,g);
+    B(GNDW,.42,1,'#1c69bd',0,-.29,Z);
+    B(GNDW,.02,.86,'#3f92e0',0,-.07,Z);
     R.speed=rnd(.85,1.75);
     const n=Math.max(3,Math.round(SPAN/rnd(5,7)));
     R.gap=SPAN/n;
-    for(let i=0;i<n;i++){
-      const L=rndi(2,3),lg=new T3.Group();
-      m(L,.42,.84,'#7c4f2c',0,.05,0,lg);
-      m(L-.14,.06,.84,'#a06d3f',0,.27,0,lg);
-      m(L,.02,.1,'#5d3a1e',0,.31,-.2,lg);          /* vetas: el tronco se lee */
-      m(L,.02,.1,'#5d3a1e',0,.31,.2,lg);
-      m(.12,.46,.88,'#5d3a1e',L/2,.06,0,lg);       /* tapas de los extremos */
-      m(.12,.46,.88,'#5d3a1e',-L/2,.06,0,lg);
-      lg.position.set(LO+i*R.gap+rnd(-.3,.3),0,0);
-      g.add(lg);R.logs.push({g:lg,len:L});
-    }
+    for(let i=0;i<n;i++)
+      R.logs.push({x:LO+i*R.gap+rnd(-.3,.3),len:rndi(2,3)});
   }else{
-    m(GNDW,.5,1,'#5b6068',0,-.25,0,g);
-    m(GNDW,.1,.14,'#8e959e',0,.03,-.24,g);
-    m(GNDW,.1,.14,'#8e959e',0,.03,.24,g);
+    B(GNDW,.5,1,'#5b6068',0,-.25,Z);
+    for(let i=-10;i<=10;i++)B(.3,.12,.9,'#6d5a45',i*1.9,.02,Z);  /* durmientes */
+    B(GNDW,.1,.14,'#8e959e',0,.09,Z-.24);
+    B(GNDW,.1,.14,'#8e959e',0,.09,Z+.24);
     R.speed=17;
-    /* EL TREN. Antes cada vagón era un bloque claro con OTRO bloque de 0,4 de
-       alto y color #2a2f36 encima: visto desde 54° ese bloque oscuro se proyecta
-       para arriba y tapa el vagón, así que el tren entero se leía como una losa
-       negra y gris (se ve en la captura ampliada). Ahora el techo es una línea
-       fina y lo oscuro son las VENTANAS, en las caras que miran a la cámara. */
-    const tg=new T3.Group();
-    for(let i=0;i<7;i++){
-      const x=i*3.8;
-      m(3.5,1.12,1,'#e7ecf2',x,.64,0,tg);            /* cuerpo claro */
-      m(3.5,.13,1.04,'#8d9aa9',x,1.26,0,tg);         /* techo: una línea */
-      m(3,.34,.06,'#232830',x,.88,.52,tg,true);      /* ventanas de este lado */
-      m(3,.34,.06,'#232830',x,.88,-.52,tg,true);     /* y del otro */
-      m(3.44,.17,1.02,i?'#e0503f':'#f6c343',x,.3,0,tg); /* franja: la cabina va amarilla */
-    }
-    tg.visible=false;tg.position.x=R.dir>0?XMIN-32:XMAX+32;
-    g.add(tg);R.train=tg;
-    /* AVISO. La lámpara estaba en x=±5,4 y el cuadro sólo muestra ±3,65 (±4,75
-       con la cámara corrida a fondo): NUNCA se veía, o sea que el tren llegaba
-       sin aviso ninguno. Ahora avisa una franja roja que ocupa toda la fila
-       —imposible que quede fuera de cuadro— más dos balizas adentro del cuadro. */
-    R.warn=m(GNDW,.05,.92,'#ff3b3b',0,.07,0,g,true);
-    R.warn.visible=false;
-    R.lamp=new T3.Group();
-    for(const lx of [-3.2,3.2]){
-      m(.3,.3,.3,'#ff3b3b',lx,1.15,0,R.lamp,true);
-      m(.12,.9,.12,'#4a5058',lx,.6,0,R.lamp);
-    }
-    R.lamp.visible=false;g.add(R.lamp);
+    const tg=new T3.Mesh(trainGeo(),MV);
+    tg.visible=false;tg.position.set(R.dir>0?XMIN-32:XMAX+32,0,Z);
+    scene.add(tg);R.train=tg;
+    const wg=new T3.Mesh(warnGeo(),MVB);
+    wg.visible=false;wg.position.set(0,0,Z);
+    scene.add(wg);R.warn=wg;
   }
   if(type!=='water'&&z>3&&Math.random()<.26){
     const cx=rndi(XMIN,XMAX);
-    if(!R.block.has(cx)){
-      R.coin=cx;
-      const c=new T3.Mesh(coinGeo(.25),matB('#ffd166'));
-      const r=new T3.Mesh(coinGeo(.31),matB('#c2761f'));
-      c.rotation.x=r.rotation.x=Math.PI/2-ELEV;   /* la cara apunta a la cámara */
-      c.position.set(cx,.62,.02);r.position.set(cx,.62,0);  /* +z = hacia la cámara */
-      g.add(r);g.add(c);
-      R.coinM=c;R.coinR=r;
-    }
+    if(!R.block.has(cx)){R.coin=cx;R.coinOn=1;}
   }
-  deco(R,g);
+  deco(R,z);
   ROWS.set(z,R);
 }
-function dropRow(z){
-  const R=ROWS.get(z);if(!R)return;
-  scene.remove(R.g);
-  R.g.traverse(o=>{const i=carSh.indexOf(o);if(i>=0)carSh.splice(i,1);});
-  ROWS.delete(z);
+/* ------------------------------------------------------- TROZOS DE MUNDO */
+const CHUNKS=new Map();
+function chunkOf(z){return Math.floor(z/CH);}
+function buildChunk(c){
+  if(CHUNKS.has(c))return;
+  bake=[];
+  const rows=[];
+  for(let i=0;i<CH;i++){const z=c*CH+i;if(z<-16)continue;buildRow(z);rows.push(z);}
+  if(!bake.length){bake=null;CHUNKS.set(c,{mesh:null,rows});return;}
+  const geo=flush();
+  const mesh=new T3.Mesh(geo,MV);
+  mesh.frustumCulled=true;
+  scene.add(mesh);
+  CHUNKS.set(c,{mesh,rows,geo});
+}
+function dropChunk(c){
+  const K=CHUNKS.get(c);if(!K)return;
+  if(K.mesh){scene.remove(K.mesh);K.geo.dispose();}
+  for(const z of K.rows){
+    const R=ROWS.get(z);
+    if(R){if(R.train)scene.remove(R.train);if(R.warn)scene.remove(R.warn);ROWS.delete(z);}
+  }
+  CHUNKS.delete(c);
+}
+function clearWorld(){
+  for(const c of Array.from(CHUNKS.keys()))dropChunk(c);
+  ROWS.clear();
 }
 function ensureRows(){
   const base=Math.floor(pz);
-  for(let z=base-BEHIND;z<=base+AHEAD;z++)if(z>=-BEHIND-2)buildRow(z);
+  const c0=chunkOf(Math.max(-12,base-BEHIND)),c1=chunkOf(base+AHEAD);
+  for(let c=c0;c<=c1;c++)buildChunk(c);
   if(base+AHEAD>farZ)farZ=base+AHEAD;
-  for(const z of Array.from(ROWS.keys()))
-    if(z<base-BEHIND-2||z>base+AHEAD+3)dropRow(z);
+  for(const c of Array.from(CHUNKS.keys()))
+    if(c*CH+CH-1<base-BEHIND-3||c*CH>base+AHEAD+5)dropChunk(c);
+}
+/* ============================================ INSTANCIADO DE LO QUE SE MUEVE
+   Seis InstancedMesh para todos los autos, sombras, troncos y monedas de la
+   escena: 6 llamadas de dibujo en vez de una por objeto (medido: 124-191 -> ~22
+   llamadas en total). Las matrices se reescriben enteras cada cuadro; son ~110
+   matrices, cuesta menos que una sola llamada de dibujo de más. */
+const CARCOL=['#e0503f','#2f6df6','#f6c343','#8b5cf6','#16a34a','#ff7ab8','#f1f5f9','#0ea5b7'];
+const CAPCAR=96,CAPTRK=32,CAPLOG=56,CAPCOIN=40;
+let iCarS,iCarL,iSh,iLog2,iLog3,iCoin;
+function carGeo(L){
+  /* el cuerpo va BLANCO porque el color lo pone la instancia (instanceColor
+     multiplica el color por vértice): un solo InstancedMesh y 8 colores de auto.
+     Los faros van en LOS DOS extremos: así la instancia NO necesita rotarse según
+     el sentido del carril, y sin rotación la luz horneada es exacta. */
+  const L2=[
+    [L,.55,.95,'#ffffff',0,.42,0],
+    [L*.52,.34,.9,'#e8eef6',0,.82,0],
+    [.22,.22,1.02,'#15181c',L/2-.22,.2,0],
+    [.22,.22,1.02,'#15181c',-L/2+.22,.2,0]];
+  for(const s of [1,-1])for(const zz of [.3,-.3])
+    L2.push([.1,.14,.2,'#fff6c0',s*(L/2-.01),.44,zz]);
+  return bakeBoxes(L2);
+}
+function logGeo(L){
+  return bakeBoxes([
+    [L,.42,.84,'#7c4f2c',0,.05,0],
+    [L-.14,.06,.84,'#a06d3f',0,.27,0],
+    [L,.02,.1,'#5d3a1e',0,.31,-.2],
+    [L,.02,.1,'#5d3a1e',0,.31,.2],
+    [.12,.46,.88,'#5d3a1e',L/2,.06,0],
+    [.12,.46,.88,'#5d3a1e',-L/2,.06,0]]);
+}
+function coinGeo(){
+  /* la moneda va SIN luz (flat): tiene que brillar como un ítem, no como una
+     tapita de plástico. La cara apunta a la cámara (rotada por la elevación). */
+  const a=new T3.CylinderGeometry(.25,.25,.07,12);a.rotateX(Math.PI/2-ELEV);
+  a.translate(0,0,.02);paintGeo(a,'#ffd977',1);
+  const b=new T3.CylinderGeometry(.31,.31,.07,12);b.rotateX(Math.PI/2-ELEV);
+  paintGeo(b,'#d0851f',1);
+  const g=mergeGeo([a,b]);a.dispose();b.dispose();return g;
+}
+function inst(geo,cap,col){
+  const m=new T3.InstancedMesh(geo,MV,cap);
+  m.instanceMatrix.setUsage(T3.DynamicDrawUsage);
+  m.frustumCulled=false;m.count=0;
+  if(col){const c=new T3.Color(1,1,1);for(let i=0;i<cap;i++)m.setColorAt(i,c);}
+  scene.add(m);return m;
+}
+function makeInst(){
+  iCarS=inst(carGeo(1.9),CAPCAR,1);
+  iCarL=inst(carGeo(3.1),CAPTRK,1);
+  iLog2=inst(logGeo(2),CAPLOG,0);
+  iLog3=inst(logGeo(3),CAPLOG,0);
+  iCoin=inst(coinGeo(),CAPCOIN,0);
+  iSh=new T3.InstancedMesh(bakeBoxes([[1,.02,1,'#20262c',0,.03,0]],1),
+    new T3.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:.42}),CAPCAR+CAPTRK);
+  iSh.instanceMatrix.setUsage(T3.DynamicDrawUsage);
+  iSh.frustumCulled=false;iSh.count=0;scene.add(iSh);
+}
+/* objetos de trabajo (se crean en init: T3 no existe todavía en la carga) */
+let MX,VP,VS,QA,CC,YAX;
+function initMath(){
+  MX=new T3.Matrix4();QA=new T3.Quaternion();
+  VP=new T3.Vector3();VS=new T3.Vector3();CC=new T3.Color();
+  YAX=new T3.Vector3(0,1,0);
+}
+function put(im,n,x,y,z,ry,sx,sy,sz){
+  QA.setFromAxisAngle(YAX,ry||0);
+  VP.set(x,y,z);VS.set(sx==null?1:sx,sy==null?1:sy,sz==null?1:sz);
+  MX.compose(VP,QA,VS);
+  im.setMatrixAt(n,MX);
+}
+function syncInst(){
+  let a=0,b=0,s=0,l2=0,l3=0,co=0;
+  const t=ARC.t;
+  for(const [z,R] of ROWS){
+    const Z=-z;
+    if(R.type==='road'){
+      for(const c of R.cars){
+        if(Math.abs(c.x)>CAMW*.5+5.5)continue;      /* fuera de cuadro: no se dibuja */
+        const lng=c.len>2.5;
+        const im=lng?iCarL:iCarS,n=lng?b:a;
+        if(lng?(b>=CAPTRK):(a>=CAPCAR))continue;
+        put(im,n,c.x,0,Z,0);
+        CC.set(c.col);im.setColorAt(n,CC);
+        if(lng)b++;else a++;
+        if(shOn&&s<CAPCAR+CAPTRK){put(iSh,s,c.x,0,Z+.06,0,c.len*1.05,1,1.02);s++;}
+      }
+    }else if(R.type==='water'){
+      for(const g of R.logs){
+        if(Math.abs(g.x)>CAMW*.5+5.5)continue;
+        if(g.len>2.5){if(l3<CAPLOG){put(iLog3,l3,g.x,0,Z,0);l3++;}}
+        else{if(l2<CAPLOG){put(iLog2,l2,g.x,0,Z,0);l2++;}}
+      }
+    }
+    if(R.coinOn&&co<CAPCOIN){
+      const y=.62+Math.sin(t*3+z)*.1,k=1+Math.sin(t*4+z)*.07;
+      put(iCoin,co,R.coin,y,Z,0,k,1,k);co++;
+    }
+  }
+  const fin=(im,n)=>{im.count=n;im.visible=n>0;im.instanceMatrix.needsUpdate=true;
+    if(im.instanceColor)im.instanceColor.needsUpdate=true;};
+  fin(iCarS,a);fin(iCarL,b);fin(iSh,shOn?s:0);fin(iLog2,l2);fin(iLog3,l3);fin(iCoin,co);
 }
 /* ---------------------------------------------------------------- JUGADOR */
 function blocked(x,z){
@@ -1381,28 +1757,35 @@ function tryHop(dx,dz){
   if(dead||hop||frozen)return;
   const nx=Math.round(px)+dx,nz=Math.round(pz)+dz;
   if(nz<0)return;
-  if(blocked(nx,nz)){ARC.sfx('click',{rate:.6,vol:.5});ARC.vib(8);return;}
+  if(blocked(nx,nz)){if(!DEMO){ARC.sfx('click',{rate:.6,vol:.5});ARC.vib(8);}return;}
   hop={x0:px,z0:pz,x1:nx,z1:nz,t:0,d:.135};
-  ARC.sfx(dz>0?'cluck':'tap',{rate:dz>0?1:1.4,vol:dz>0?.85:1});
-  ARC.vib(9);idleT=0;drownT=-1;edgeW=0;pinned=false;
+  if(!DEMO){ARC.sfx(dz>0?'cluck':'tap',{rate:dz>0?1:1.4,vol:dz>0?.85:1});ARC.vib(9);}
+  idleT=0;drownT=-1;edgeW=0;pinned=false;
   return true;
 }
-/* MONEDAS: se juntan por ESTAR en la celda, no sólo al terminar un salto. Antes
-   la recolección vivía dentro del `if(k>=1)` del salto: si el bicho llegaba a la
-   celda de la moneda por cualquier otro camino (arrastrado por un tronco hasta el
-   pasto, reubicado, terminando el salto justo en el cuadro del choque) la moneda
-   quedaba ahí sin juntarse. Se guardan en ARC.S.coins y salen en el HUD. */
+/* MONEDAS: se juntan por ESTAR en la celda, no sólo al terminar un salto (si el
+   bicho llegaba arrastrado por un tronco la moneda quedaba ahí sin juntarse). */
 function grabCoin(){
   const R=ROWS.get(Math.round(pz));
-  if(!R||R.coin!==Math.round(px)||!R.coinM)return;
-  R.coinM.visible=false;R.coinR.visible=false;R.coin=-99;
+  if(!R||!R.coinOn||R.coin!==Math.round(px))return;
+  R.coinOn=0;
+  if(DEMO){ARC.fx.burst(ARC.W/2,ARC.H*.66,{n:6,color:'#ffd166',speed:120,size:3,life:.35});return;}
   coins++;ARC.S.coins=(ARC.S.coins||0)+1;ARC.save();hud();
+  misBump('coins',1,'add');
   ARC.sfx('coin');ARC.vib(14);
   ARC.fx.text(ARC.W/2,ARC.H*.62,'+1 ◉',{color:'#ffd166',size:22});
   ARC.fx.burst(ARC.W/2,ARC.H*.66,{n:Math.round(10*partK),color:'#ffd166',speed:150,size:4,life:.4});
 }
 function die(kind){
   if(dead)return;
+  /* EN LA DEMO NADA MATA: si el bicho se iba a comer un auto, salta para atrás
+     (que es lo que haría un jugador). El menú no puede mostrar una muerte. */
+  if(DEMO){
+    if(!hop){const nz=Math.max(0,Math.round(pz)-1);
+      hop={x0:px,z0:pz,x1:Math.round(px),z1:nz,t:0,d:.12};}
+    pinned=false;drownT=-1;
+    return;
+  }
   dead=true;dieKind=kind;lastDie=kind+'@'+pz.toFixed(1)+' x='+px.toFixed(2);
   ARC.shake(12);
   if(kind==='car'){plr.scale.set(1.5,.18,1.5);ARC.sfx('boom');}
@@ -1410,108 +1793,155 @@ function die(kind){
   else if(kind==='train'){plr.scale.set(1.9,.12,1.9);ARC.sfx('boom',{rate:.8});}
   else ARC.sfx('lose');
   ARC.fx.burst(ARC.W/2,ARC.H*.72,{n:Math.round(20*partK),color:'#ff5d73',speed:260,size:5,life:.6});
-  overT=kind==='eagle'?1.7:.75;
+  overT=kind==='eagle'?2.6:.75;
+}
+/* ------------------------------------------------------------- MISIONES
+   Tres misiones por TANDA; cuando se cumplen las tres sube la tanda y las metas
+   crecen. El premio son monedas, que es lo que compra personajes. */
+const MIS=[{k:'rows',key:'mRows',n:[20,35,60,90,140],rew:[30,60,90,140,200]},
+           {k:'coins',key:'mCoins',n:[10,20,35,55,80],rew:[25,50,80,120,180]},
+           {k:'rail',key:'mRail',n:[3,6,10,15,22],rew:[35,60,95,140,210]}];
+function misTier(){return clamp(ARC.S.mt|0,0,MIS[0].n.length-1);}
+function misGoal(i){return MIS[i].n[misTier()];}
+function misProg(i){return (ARC.S.mp&&ARC.S.mp[MIS[i].k])||0;}
+function misDone(i){return misProg(i)>=misGoal(i);}
+function misBump(k,v,mode){
+  if(DEMO)return;
+  const S=ARC.S;if(!S.mp)S.mp={};
+  const i=MIS.findIndex(m=>m.k===k);if(i<0||misDone(i))return;
+  S.mp[k]=mode==='max'?Math.max(S.mp[k]||0,v):((S.mp[k]||0)+v);
+  if(misDone(i))misWin(i);
+  ARC.save();
+}
+function misWin(i){
+  const r=MIS[i].rew[misTier()];
+  ARC.S.coins=(ARC.S.coins||0)+r;
+  ARC.sfx('power');ARC.toast(T('qDone')+' +'+r+' ◉',1700);
+  ARC.fx.burst(ARC.W/2,ARC.H*.42,{n:Math.round(22*partK),color:'#ffd166',speed:250,size:5,life:.7});
+  if(MIS.every((m,j)=>misDone(j))){
+    ARC.S.mt=Math.min(MIS[0].n.length-1,misTier()+1);
+    ARC.S.mp={};
+    ARC.toast(T('tierUp'),1900);
+  }
+  ARC.save();hud();
+}
+function misLine(){
+  return MIS.map((m,i)=>Math.min(misProg(i),misGoal(i))+'/'+misGoal(i)).join(' · ');
 }
 function finish(){
   const b=ARC.S.best||0;
-  ARC.over({win:false,score,noStars:true,
+  misBump('rows',score,'max');
+  const st=score>=80?3:(score>=40?2:(score>=15?1:0));
+  ARC.over({win:false,score,stars:st,
     title:T(dieKind==='water'?'dWater':dieKind==='eagle'?'dEagle':dieKind==='train'?'dTrain':'dCar'),
-    sub:T('statRows')+': <b>'+score+'</b> · '+T('statCoins')+': <b>'+coins+'</b><br>'+
-      (score>b?('<b style="color:'+G.acc+'">'+T('newBest')+'</b>'):(T('statBest')+': '+b))});
+    sub:'<b>'+score+'</b> '+T('rowsN')+' &nbsp;·&nbsp; <b>'+coins+'</b> ◉'+
+      (score>b?('<br><b style="color:'+G.acc+'">'+T('newBest')+'</b>')
+              :('<br>'+T('statBest')+': <b>'+b+'</b>'))+
+      '<br><span style="opacity:.7">'+T('quests')+' '+T('tier')+' '+(misTier()+1)+': '+misLine()+'</span>'});
 }
-/* ------------------------------------------------------- SELECTOR DE BICHO
-   Pantalla propia dibujada en el canvas 2D del juego (no se toca el DOM del
-   shell): tarjetas con la silueta de cada personaje sacada de su lista de
-   cajas. Mientras está abierta el mundo queda congelado. */
-function openPicker(){if(dead)return;picker=true;frozen=true;pickFrom=1;}
-function pickCards(){
-  const W=ARC.W,H=ARC.H,n=CHARS.length;
-  const vert=H>W;
-  const cw=vert?Math.min(W*.78,340):Math.min(W/n-14,190);
-  const ch=vert?Math.min(H*.19,150):Math.min(H*.5,190);
-  const gap=vert?Math.max(8,H*.022):12;
-  const tot=vert?n*ch+(n-1)*gap:n*cw+(n-1)*gap;
-  const x0=vert?(W-cw)/2:(W-tot)/2,y0=vert?(H-tot)/2+H*.03:(H-ch)/2+H*.02;
-  const out=[];
-  for(let i=0;i<n;i++)out.push({i,x:vert?x0:x0+i*(cw+gap),y:vert?y0+i*(ch+gap):y0,w:cw,h:ch});
-  return out;
-}
-function rrect(g,x,y,w,h,r){
-  g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);
-  g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();
-}
-/* silueta 2D: las mismas cajas, de frente, las de atrás primero */
+/* ========================================================= TIENDA Y MISIONES
+   Panel propio de DOM (no se toca el DOM del shell: se AGREGA uno). Se abre con
+   el botón redondo del menú (GAME.extra). Tiene dos pestañas: personajes (se
+   compran con monedas) y misiones (con barra de progreso). Las miniaturas de los
+   personajes se dibujan con la MISMA lista de cajas del modelo 3D. */
+let panelEl=null,panelTab=0;
 function drawChar(g,C,cx,by,s){
   const L=C.b.slice().sort((a,b)=>b[6]-a[6]);
   for(const b of L){
     g.fillStyle=b[3];
-    g.fillRect(cx+(b[4]-b[0]/2)*s,by-(b[5]+b[1]/2)*s,b[0]*s,b[1]*s);
+    g.fillRect(cx+(b[4]-b[0]/2)*s,by-(b[5]+b[1]/2)*s,Math.max(1,b[0]*s),Math.max(1,b[1]*s));
   }
 }
-function drawPicker(g){
-  const W=ARC.W,H=ARC.H;
-  g.fillStyle='rgba(5,9,14,.82)';g.fillRect(0,0,W,H);
-  /* el título se ACHICA hasta entrar en la columna: "PICK YOUR CHARACTER" a
-     tamaño fijo se cortaba contra el borde derecho en la ventana apaisada, donde
-     el escenario es una columna de 249 px. Y baja un poco para no pisar las
-     fichas del HUD. */
-  let fs=Math.max(15,Math.min(W*.062,30));
-  g.textAlign='center';
-  for(let i=0;i<12;i++){
-    g.font='900 '+fs+'px system-ui,sans-serif';
-    if(g.measureText(T('pick')).width<=W*.9||fs<=9)break;
-    fs*=.92;
-  }
-  g.fillStyle='#ffd166';g.fillText(T('pick'),W/2,H*.115);
-  const cur=charIdx(),cards=pickCards();
-  for(const c of cards){
-    const on=c.i===cur;
-    g.fillStyle=on?'rgba(255,209,102,.20)':'rgba(255,255,255,.07)';
-    rrect(g,c.x,c.y,c.w,c.h,16);g.fill();
-    g.strokeStyle=on?'#ffd166':'rgba(255,255,255,.22)';g.lineWidth=on?3:1.5;
-    rrect(g,c.x,c.y,c.w,c.h,16);g.stroke();
-    const s=Math.min(c.h*.52,c.w*.30);
-    drawChar(g,CHARS[c.i],c.x+c.w*.26,c.y+c.h*.76,s);
-    const ns=Math.max(13,Math.min(c.w*.11,24));
-    g.font='900 '+ns+'px system-ui,sans-serif';g.textAlign='left';
-    g.fillStyle=on?'#ffd166':'#eef2f6';
-    g.fillText(T(CHARS[c.i].key),c.x+c.w*.46,c.y+c.h*.55);
-    if(on){g.font='900 '+(ns*.72)+'px system-ui,sans-serif';g.fillStyle='#9ad8a0';
-      g.fillText('★',c.x+c.w*.46,c.y+c.h*.78);}
-    g.textAlign='center';
-  }
-  /* el cartel iba en el 94% del alto, o sea DEBAJO de la bandeja de botones, que
-     además se comía el toque. Va entre la última tarjeta y la bandeja. */
-  if(pickFrom){
-    g.font='900 '+Math.max(12,fs*.62)+'px system-ui,sans-serif';g.fillStyle='rgba(255,255,255,.62)';
-    g.fillText(T('close'),W/2,H*.845);
-  }
-  g.textAlign='left';
+function thumb(C){
+  const cv=document.createElement('canvas');cv.width=130;cv.height=130;
+  const g=cv.getContext('2d');
+  const gr=g.createRadialGradient(65,78,4,65,78,64);
+  gr.addColorStop(0,'rgba(255,255,255,.14)');gr.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=gr;g.fillRect(0,0,130,130);
+  g.save();g.translate(0,0);drawChar(g,C,65,118,62);g.restore();
+  return cv;
 }
+function panelBuild(){
+  if(panelEl)return;
+  const d=document.createElement('div');d.id='czP';
+  d.innerHTML='<div class="czCard"><div class="czTabs"><b id="czT0"></b><b id="czT1"></b></div>'+
+    '<div class="czBody" id="czBody"></div>'+
+    '<div class="czFoot"><span id="czC">◉ 0</span><div class="btn" id="czX">CERRAR</div></div></div>';
+  document.getElementById('stage').appendChild(d);
+  panelEl=d;
+  d.addEventListener('pointerdown',e=>{if(e.target===d){e.preventDefault();panelClose();}});
+  const B2=(id,fn)=>{const e=document.getElementById(id);
+    e.addEventListener('pointerdown',ev=>{ev.preventDefault();ev.stopPropagation();
+      ARC.sndResume();ARC.sfx('click');fn();});};
+  B2('czT0',()=>{panelTab=0;panelFill();});
+  B2('czT1',()=>{panelTab=1;panelFill();});
+  B2('czX',()=>panelClose());
+}
+function panelFill(){
+  if(!panelEl)return;               /* choose() puede llegar antes de que exista */
+  const b=document.getElementById('czBody');
+  document.getElementById('czT0').textContent=T('shop');
+  document.getElementById('czT1').textContent=T('quests');
+  document.getElementById('czT0').className=panelTab?'':'on';
+  document.getElementById('czT1').className=panelTab?'on':'';
+  document.getElementById('czX').textContent=T('close');
+  document.getElementById('czC').textContent='◉ '+(ARC.S.coins||0);
+  b.innerHTML='';b.className='czBody'+(panelTab?' q':'');
+  if(panelTab===0){
+    const cur=CHARS[charIdx()].id;
+    CHARS.forEach((C,i)=>{
+      const own=has(C.id),on=own&&C.id===cur;
+      const el=document.createElement('div');
+      el.className='cz1'+(on?' on':'')+(own?'':' lk');
+      el.appendChild(thumb(C));
+      const nm=document.createElement('i');nm.textContent=T(C.key);el.appendChild(nm);
+      const u=document.createElement('u');
+      u.textContent=on?T('inUse'):(own?T('use'):(C.cost+' ◉'));
+      el.appendChild(u);
+      el.addEventListener('pointerdown',ev=>{ev.preventDefault();ev.stopPropagation();
+        ARC.sndResume();
+        if(own){ARC.sfx('click');choose(i);}
+        else if((ARC.S.coins||0)>=C.cost){
+          ARC.S.coins-=C.cost;
+          const o=owned().slice();o.push(C.id);ARC.S.own=o;ARC.save();
+          ARC.sfx('power');ARC.toast(T('bought')+' '+T(C.key),1500);
+          ARC.fx.burst(ARC.W/2,ARC.H*.5,{n:Math.round(20*partK),color:'#ffd166',speed:230});
+          choose(i);
+        }else{ARC.sfx('lose',{vol:.5});ARC.toast(T('locked'),1300);}
+        panelFill();});
+      b.appendChild(el);
+    });
+  }else{
+    const h=document.createElement('div');h.className='czH';
+    h.textContent=T('tier')+' '+(misTier()+1)+'/'+MIS[0].n.length;
+    b.appendChild(h);
+    MIS.forEach((m,i)=>{
+      const p=Math.min(misProg(i),misGoal(i)),g=misGoal(i),dn=misDone(i);
+      const el=document.createElement('div');el.className='czQ'+(dn?' dn':'');
+      el.innerHTML='<b>'+T(m.key).replace('{n}',g)+'</b>'+
+        '<div class="czBar"><i style="width:'+Math.round(p/g*100)+'%"></i></div>'+
+        '<span>'+p+'/'+g+' &nbsp;+'+m.rew[misTier()]+' ◉'+(dn?' ✓':'')+'</span>';
+      b.appendChild(el);
+    });
+  }
+}
+function panelOpen(t){
+  panelBuild();panelTab=t||0;panelFill();
+  panelEl.classList.add('on');
+}
+function panelClose(){if(panelEl)panelEl.classList.remove('on');}
 function choose(i){
   ARC.S.char=CHARS[i].id;ARC.save();
   makePlayer();
   plrG.position.set(px,0,-pz);
-  ARC.trayTxt('ch',CHARS[i].icon);
-  ARC.sfx('power');ARC.fx.burst(ARC.W/2,ARC.H*.5,{n:Math.round(16*partK),color:'#ffd166',speed:200});
-  picker=false;frozen=false;
+  if(!DEMO)ARC.sfx('power',{vol:.6});
+  panelFill();
 }
 /* --------------------------------------------------------------- ENTRADA */
 let sw=null;
-G.down=function(p){
-  if(picker){
-    for(const c of pickCards())
-      if(p.x>c.x&&p.x<c.x+c.w&&p.y>c.y&&p.y<c.y+c.h){choose(c.i);return;}
-    /* tocar FUERA de las tarjetas cierra (si el selector se abrió a mano). Antes
-       la zona de cierre era p.y>88% del alto, que es exactamente donde vive la
-       bandeja de botones del DOM: el toque nunca llegaba al canvas. */
-    if(pickFrom){picker=false;frozen=false;ARC.sfx('click');}
-    return;
-  }
-  sw={x:p.x,y:p.y,t:ARC.t};
-};
+G.down=function(p){sw={x:p.x,y:p.y,t:ARC.t};};
 G.up=function(p){
-  if(picker||!sw)return;
+  if(!sw)return;
   const dx=p.x-sw.x,dy=p.y-sw.y,dt=ARC.t-sw.t;
   sw=null;
   const L=Math.hypot(dx,dy);
@@ -1522,7 +1952,6 @@ G.up=function(p){
 };
 G.key=function(c,d){
   if(!d)return;
-  if(picker){const i={Digit1:0,Digit2:1,Digit3:2}[c];if(i!=null&&CHARS[i])choose(i);return;}
   if(c==='ArrowUp'||c==='KeyW')tryHop(0,1);
   if(c==='ArrowDown'||c==='KeyS')tryHop(0,-1);
   if(c==='ArrowLeft'||c==='KeyA')tryHop(-1,0);
@@ -1533,11 +1962,10 @@ G.key=function(c,d){
    head.html mide la UI de los juegos verticales en vw/vh/vmin DE LA VENTANA,
    pero en vertical el escenario es una COLUMNA más angosta que la ventana. En
    una ventana apaisada (900x430 -> columna de 249) eso daba botones de bandeja
-   de 16vw = 144 px cada uno (5 botones = 720 px en 249) y la ficha del RÉCORD
-   tapaba ⚙ y JUGAR: la sonda de interfaz medía elementFromPoint = "best" y
-   AJUSTES/JUGAR/PAUSA no respondían. Acá se recalcula todo contra el ANCHO Y EL
-   ALTO DEL ESCENARIO (--sw/--sh, que se actualizan en cada resize). Es un
-   parche del lado del juego; ver "PEDIDO AL MOTOR" en el informe. */
+   de 16vw = 144 px cada uno y la ficha del RÉCORD tapaba ⚙ y JUGAR. Acá se
+   recalcula todo contra el ANCHO Y EL ALTO DEL ESCENARIO (--sw/--sh). Es un
+   parche del lado del juego; ver "PEDIDO AL MOTOR" en el informe.
+   Abajo va además el CSS del panel propio (tienda/misiones). */
 const CSSFIX=`
 body.vert #tray{gap:calc(var(--sw)*.025)}
 body.vert #tray .btn{min-width:calc(var(--sw)*.16);font-size:clamp(13px,calc(var(--sw)*.044),26px)}
@@ -1547,8 +1975,20 @@ body.vert #pScore{left:calc(var(--sw)*.04);top:calc(var(--sh)*.02)}
 body.vert #pInfo{top:calc(var(--sh)*.02)}
 body.vert #pPause{right:calc(var(--sw)*.04);top:calc(var(--sh)*.02);
   width:calc(var(--sw)*.11);height:calc(var(--sw)*.11)}
-body.vert #menu .wrap{padding:0 calc(var(--sw)*.07) calc(var(--sh)*.07);gap:calc(var(--sh)*.022)}
-body.vert #menu .ttl{font-size:clamp(24px,calc(var(--sw)*.14),68px)}
+body.vert #menu .wrap{padding:0 calc(var(--sw)*.07) calc(var(--sh)*.06);gap:calc(var(--sh)*.022)}
+body.vert #menu .ttl{font-size:clamp(24px,calc(var(--sw)*.13),68px)}
+/* con MODO ATRACCIÓN el arte del menú no se dibuja (#menu.live lo apaga), así que
+   el título de DOM TIENE que volver: el motor lo esconde con .hasart dando por
+   sentado que el título viene dentro de la imagen. Medido en captura: el menú
+   quedaba sin nombre de juego. */
+#menu.hasart.live .ttl{display:block}
+body.vert #bPlay{min-width:calc(var(--sw)*.66)}
+#menu.live .sub{text-shadow:0 2px 8px rgba(0,0,0,.9),0 0 2px rgba(0,0,0,.8)}
+body.vert #menu.live:before{background:linear-gradient(0deg,rgba(5,7,10,.92) 0%,
+  rgba(5,7,10,.62) 20%,rgba(5,7,10,.30) 40%,rgba(5,7,10,.10) 62%,rgba(5,7,10,.42) 100%)}
+body.vert #menu .mRow{gap:calc(var(--sw)*.05)}
+body.vert #menu .sub{max-width:calc(var(--sw)*.9)}
+body.vert #menu .mMid{padding-top:calc(var(--sh)*.30)}
 body.vert #best{right:calc(var(--sw)*.045);top:calc(var(--sh)*.028);bottom:auto;opacity:1;
   background:rgba(6,9,13,.55);padding:.45em .7em;border-radius:11px;
   border:1px solid rgba(255,255,255,.12)}
@@ -1566,6 +2006,42 @@ body.vert #load .bar{width:calc(var(--sw)*.72)}
 body.vert #ldName{font-size:clamp(17px,calc(var(--sw)*.1),46px)}
 body.vert #toast{font-size:clamp(10px,calc(var(--sw)*.036),20px);max-width:calc(var(--sw)*.86)}
 body.vert .lvl{width:calc(var(--sw)*.14);height:calc(var(--sw)*.14)}
+/* ---- panel propio: tienda de personajes y misiones ---- */
+#czP{position:absolute;inset:0;z-index:7;display:none;align-items:center;justify-content:center;
+  background:rgba(4,6,10,.8);pointer-events:auto;padding:calc(var(--smn)*.03)}
+#czP.on{display:flex;animation:fade .16s ease-out}
+#czP canvas{position:static;width:100%;height:auto;max-width:calc(var(--sw)*.22);display:block}
+#czP .czCard{width:100%;max-width:calc(var(--sw)*.96);max-height:92%;display:flex;flex-direction:column;
+  gap:calc(var(--smn)*.022);border-radius:18px;padding:calc(var(--smn)*.032);
+  background:linear-gradient(180deg,rgba(21,27,36,.98),rgba(10,14,19,.98));
+  border:1px solid rgba(255,255,255,.14);box-shadow:0 18px 60px rgba(0,0,0,.7)}
+#czP .czTabs{display:flex;gap:5px;background:rgba(255,255,255,.07);padding:4px;border-radius:12px}
+#czP .czTabs b{flex:1;text-align:center;font-weight:900;padding:.55em 0;border-radius:9px;opacity:.55;
+  font-size:clamp(10px,calc(var(--sw)*.036),17px)}
+#czP .czTabs b.on{background:linear-gradient(180deg,var(--acc),var(--acc2));color:#10141a;opacity:1}
+#czP .czBody{overflow-y:auto;display:grid;grid-template-columns:1fr 1fr 1fr;
+  gap:calc(var(--smn)*.018);align-content:start}
+#czP .czBody.q{grid-template-columns:1fr}
+#czP .cz1{display:flex;flex-direction:column;align-items:center;gap:.25em;padding:.45em .2em;
+  border-radius:13px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+#czP .cz1.on{border-color:var(--acc);background:rgba(255,209,102,.18)}
+#czP .cz1.lk canvas{filter:grayscale(.75) brightness(.8)}
+#czP .cz1 i{font-style:normal;font-weight:900;font-size:clamp(8px,calc(var(--sw)*.028),14px);
+  letter-spacing:.3px;text-align:center}
+#czP .cz1 u{text-decoration:none;font-weight:900;font-size:clamp(8px,calc(var(--sw)*.026),13px);
+  padding:.3em .6em;border-radius:8px;background:linear-gradient(180deg,var(--acc),var(--acc2));
+  color:#10141a;white-space:nowrap}
+#czP .cz1.lk u{background:rgba(255,255,255,.14);color:#eef2f6}
+#czP .czH{font-weight:900;opacity:.7;font-size:clamp(9px,calc(var(--sw)*.03),15px);letter-spacing:1px}
+#czP .czQ{display:flex;flex-direction:column;gap:.3em;padding:.55em .7em;border-radius:12px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+#czP .czQ.dn{border-color:#63d68a;background:rgba(99,214,138,.14)}
+#czP .czQ b{font-size:clamp(9px,calc(var(--sw)*.032),15px);font-weight:900}
+#czP .czQ span{font-size:clamp(8px,calc(var(--sw)*.026),13px);opacity:.75;font-weight:900}
+#czP .czBar{height:7px;border-radius:99px;background:rgba(255,255,255,.13);overflow:hidden}
+#czP .czBar i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2))}
+#czP .czFoot{display:flex;align-items:center;justify-content:space-between;gap:1em}
+#czP .czFoot span{font-weight:900;font-size:clamp(11px,calc(var(--sw)*.04),19px);color:var(--acc)}
 `;
 function cssFix(){
   if(!document.getElementById('cruzaCss')){
@@ -1583,14 +2059,9 @@ function frame(){
      borde del mundo nunca aparezca. */
   cssFix();
   const asp=Math.max(.2,ARC.W/ARC.H);
-  CAMW=7.3;CAMH=CAMW/asp;
+  CAMW=7.3*camZoom;CAMH=CAMW/asp;
   ROWSVIS=CAMH/SE;
-  /* AIM = cuántas filas por delante mira la cámara. Como el encuadre está
-     centrado en ese punto, el bicho cae SIEMPRE en el (50+AIM/ROWSVIS*100)% de
-     alto: con .28 quedaba en el 77,6% (medido con dbg.screenPos), pegado a la
-     bandeja de botones y justo debajo del cartel de ayuda. Con .20 queda en el
-     70% y todavía se ven 14 filas hacia adelante. */
-  AIM=ROWSVIS*.20;
+  AIM=ROWSVIS*(DEMO?.12:.20);
   BEHIND=Math.ceil(ROWSVIS*.24)+3;
   AHEAD=Math.min(34,Math.ceil(ROWSVIS*(.78*(.72+.28*fogK)))+4);
   if(cam){
@@ -1602,63 +2073,119 @@ function frame(){
     scene.fog.far=CAMD+ROWSVIS*.68*CE*fogK;
   }
 }
+/* EL MOTOR CREA EL RENDERER CON antialias:true Y EN SWIFTSHADER ESO CUESTA LA
+   MITAD DE LOS CUADROS (medido en partida, con todo lo demás igual: 27,3 fps con
+   MSAA, 40,9 sin MSAA). El shell no expone la opción, así que acá se cambia el
+   lienzo por uno nuevo y se rehace el renderer sin MSAA. Todo lo que el shell
+   toca (ARC.rnd, el lienzo con id "gl") sigue en su lugar.
+   -> PEDIDO AL MOTOR: GAME.aa=false para no tener que hacer esto. */
+/* RESOLUCIÓN ADAPTATIVA. El tope lo sigue poniendo ARC.gfxP().dpr (o sea, los
+   Gráficos que eligió el jugador); esto sólo BAJA de ahí si la máquina no llega, y
+   vuelve a subir cuando sobra. En un celular de verdad se queda en el tope; en el
+   chromium de swiftshader (que es mucho más lento que cualquier teléfono) se
+   apoya en 0,80-0,85 y con eso el juego se juega a 45+ fps en vez de 24. */
+let resK=1,resT=0,runT=0;
+function applyRes(){
+  if(!ARC.rnd)return;
+  const p=ARC.gfxP();
+  ARC.rnd.setPixelRatio(Math.min(window.devicePixelRatio||1,p.dpr)*resK);
+  ARC.rnd.setSize(ARC.W,ARC.H,false);
+}
+function autoRes(dt){
+  if(DEMO){runT=0;return;}     /* en el menú no se toca: el panel de DOM ensucia la medida */
+  runT+=dt;
+  /* los primeros dos segundos y medio NO cuentan: ARC.fps es un promedio que viene
+     arrastrado del menú (con el panel de la tienda abierto baja de 38 sin que la
+     partida tenga nada que ver) y bajaba la resolución de arranque sin motivo
+     (medido: dpr 0,9 en una partida que después corría a 55 fps). */
+  if(runT<2.5)return;
+  const f=ARC.fps;
+  if(f<44){resT+=dt;if(resT>1.5&&resK>.7){resK=Math.max(.7,resK-.1);applyRes();resT=0;}}
+  else if(f>56){resT-=dt;if(resT<-3&&resK<1){resK=Math.min(1,resK+.1);applyRes();resT=0;}}
+  else resT*=.92;
+}
+function fastGL(){
+  try{
+    const old=document.getElementById('gl');
+    if(!old||!ARC.rnd)return false;
+    const cv=document.createElement('canvas');
+    cv.id='gl';cv.style.cssText=old.style.cssText;
+    old.parentNode.replaceChild(cv,old);
+    try{ARC.rnd.dispose();}catch(e){}
+    const r=new T3.WebGLRenderer({canvas:cv,antialias:false,alpha:false,
+      powerPreference:'high-performance'});
+    r.setClearColor(new T3.Color(G.sky),1);
+    if(T3.SRGBColorSpace)r.outputColorSpace=T3.SRGBColorSpace;
+    r.shadowMap.enabled=false;
+    ARC.rnd=r;
+    const p=ARC.gfxP();
+    r.setPixelRatio(Math.min(window.devicePixelRatio||1,p.dpr));
+    r.setSize(ARC.W,ARC.H,false);
+    return true;
+  }catch(e){console.warn('gl',e);return false;}
+}
 G.init=function(){
   T3=ARC.THREE;if(!T3)return;
+  initMath();
+  fastGL();
+  /* un solo material para toda la escena: sin luces (van horneadas en el color) */
+  MV=MVB=new T3.MeshBasicMaterial({vertexColors:true});
+  MOUT=new T3.MeshBasicMaterial({color:new T3.Color('#161a1f'),side:T3.BackSide});
+  PINE=new T3.ConeGeometry(.62,1.05,6);
+  PINE2=new T3.ConeGeometry(.44,.8,6);
   scene=new T3.Scene();
   scene.background=new T3.Color(G.sky);
   scene.fog=new T3.Fog(new T3.Color(G.sky).getHex(),40,50);
   cam=new T3.OrthographicCamera(-4,4,8,-8,.1,150);
-  scene.add(new T3.HemisphereLight(0xffffff,0x8fb98f,.95));
-  sun=new T3.DirectionalLight(0xfff3d0,.85);
-  sun.position.set(6,14,8);scene.add(sun);
   const gp=ARC.gfxP();partK=gp.part;fogK=gp.fog;shOn=gp.sh;decoK=clamp(gp.part,.45,1.35);
-  const A0=ARC.glb&&ARC.glb.auto;
-  CARGLB=!!(A0&&A0.scene&&glbTris(A0.scene)<=5200);
   frame();
-  makePlayer();makeEagle();
-  ARC.clearGL=true;
-  /* el arte 16:9 pegado al 14% dejaba media columna vacía en vertical: se baja
-     al 30% y el degradado del menú se encarga del resto */
+  makeInst();makePlayer();makeEagle();
+  /* el arte 16:9 pegado al 14% dejaba media columna vacía en vertical */
   const mn=document.getElementById('menu');
   if(mn&&mn.classList.contains('hasart'))mn.style.backgroundPosition='center 30%, center';
-  setTimeout(()=>{if(ARC.scr==='load'&&ARC.enterMenu)ARC.enterMenu();},400);
+  /* NO saltear la pantalla de carga: ese toque es el gesto que habilita el audio
+     en el celular (y es donde se elige el idioma). Medido: sin él, #load quedaba
+     en display:none a los 400 ms y el juego arrancaba muudo. */
 };
-G.resize=function(){frame();};
+G.resize=function(){frame();if(panelEl&&panelEl.classList.contains('on'))panelFill();};
 G.gfxApply=function(p){
   partK=p.part;fogK=p.fog;shOn=p.sh;decoK=clamp(p.part,.45,1.35);
-  for(const s of carSh)s.visible=!!shOn;
+  if(iSh)iSh.visible=!!shOn;
   if(eagleSh&&eagle)eagleSh.visible=!!shOn;
+  resK=1;resT=0;applyRes();
   frame();
 };
-G.i18nDone=function(){if(ARC.scr==='game')hud();};
+G.i18nDone=function(){if(ARC.scr==='game')hud();
+  if(panelEl&&panelEl.classList.contains('on'))panelFill();};
 function hud(){
+  if(DEMO)return;
   ARC.hud(score,'<b>'+T('record')+'</b> '+Math.max(ARC.S.best||0,score)+
     ' &nbsp;·&nbsp; ◉ '+(ARC.S.coins||0));
 }
-G.start=function(){
-  if(!T3)return;
-  for(const z of Array.from(ROWS.keys()))dropRow(z);
-  carSh.length=0;
+function resetWorld(){
+  clearWorld();
   px=0;pz=0;score=0;coins=0;dead=false;hop=null;idleT=0;farZ=1;overT=-1;
-  edgeW=0;drownT=-1;dieKind='';pinned=false;
-  eagle=null;if(eagleG){eagleG.visible=false;eagleG.rotation.set(0,0,0);}
+  edgeW=0;drownT=-1;dieKind='';pinned=false;camZoom=1;
+  eagle=null;if(eagleG){eagleG.visible=false;eagleG.rotation.set(0,0,0);eagleG.scale.set(1,1,1);}
   if(eagleSh)eagleSh.visible=false;
   makePlayer();
   plr.scale.setScalar(1);plr.position.set(0,0,0);plr.rotation.set(0,0,0);
   plrG.position.set(0,0,0);
   frame();ensureRows();
-  camZ=0;camX=0;
-  camAim();
+  camZ=0;camX=0;camAim();
+  syncInst();
+}
+G.start=function(){
+  if(!T3)return;
+  DEMO=0;demoOn=0;panelClose();
+  resetWorld();
   hud();
-  const C=CHARS[charIdx()];
   ARC.tray([
-    {id:'up',txt:'▲',fn:()=>tryHop(0,1)},
     {id:'lf',txt:'◀',gh:1,sq:1,fn:()=>tryHop(-1,0)},
+    {id:'up',txt:'▲',fn:()=>tryHop(0,1)},
     {id:'rt',txt:'▶',gh:1,sq:1,fn:()=>tryHop(1,0)},
-    {id:'dn',txt:'▼',gh:1,sq:1,fn:()=>tryHop(0,-1)},
-    {id:'ch',txt:C.icon,gh:1,sq:1,fn:openPicker}
+    {id:'dn',txt:'▼',gh:1,sq:1,fn:()=>tryHop(0,-1)}
   ]);
-  picker=!ARC.S.char;pickFrom=0;frozen=picker;
 };
 function camAim(){
   const lim=Math.max(0,XMAX-CAMW/2+.75);
@@ -1671,32 +2198,32 @@ function applyCam(){
   cam.position.set(camX,.35+CAMD*SE,aimZ+CAMD*CE);
   cam.lookAt(camX,.35,aimZ);
 }
-G.step=function(dt){
+/* --------------------------------------------------------------- SIMULACIÓN
+   La MISMA función corre la partida y el modo atracción del menú (DEMO=1). */
+function sim(dt){
   if(!T3)return;
+  autoRes(dt);
   if(frozen){applyCam();return;}
-  /* --- filas vivas: autos, troncos, trenes, monedas --- */
+  /* --- filas vivas: autos, troncos, trenes --- */
   for(const [z,R] of ROWS){
     if(R.type==='road'){
       for(const c of R.cars){
-        c.g.position.x+=R.speed*R.dir*dt;
-        if(c.g.position.x>LO+SPAN)c.g.position.x-=SPAN;
-        else if(c.g.position.x<LO)c.g.position.x+=SPAN;
+        c.x+=R.speed*R.dir*dt;
+        if(c.x>LO+SPAN)c.x-=SPAN;else if(c.x<LO)c.x+=SPAN;
       }
     }else if(R.type==='water'){
       for(const l of R.logs){
-        l.g.position.x+=R.speed*R.dir*dt;
-        if(l.g.position.x>LO+SPAN)l.g.position.x-=SPAN;
-        else if(l.g.position.x<LO)l.g.position.x+=SPAN;
+        l.x+=R.speed*R.dir*dt;
+        if(l.x>LO+SPAN)l.x-=SPAN;else if(l.x<LO)l.x+=SPAN;
       }
     }else if(R.type==='rail'){
       R.trainT-=dt;
       if(R.trainT<=0&&!R.trainOn){
         R.trainOn=1;R.train.visible=true;
         R.train.position.x=R.dir>0?XMIN-30:XMAX+30;
-        ARC.sfx('power',{rate:.6,vol:.5});
+        if(!DEMO)ARC.sfx('power',{rate:.6,vol:.5});
       }
       const avisa=(R.trainT<2.2&&R.trainT>0)?(Math.sin(ARC.t*16)>0):false;
-      if(R.lamp)R.lamp.visible=avisa;
       if(R.warn)R.warn.visible=avisa;
       if(R.trainOn){
         R.train.position.x+=R.speed*R.dir*dt;
@@ -1705,10 +2232,6 @@ G.step=function(dt){
         }
       }
     }
-    if(R.coinM){
-      const y=.62+Math.sin(ARC.t*3+z)*.1,k=1+Math.sin(ARC.t*4+z)*.07;
-      R.coinM.position.y=y;R.coinR.position.y=y;
-      R.coinM.scale.set(k,1,k);R.coinR.scale.set(k,1,k);}
   }
   /* --- salto --- */
   if(hop){
@@ -1721,52 +2244,47 @@ G.step=function(dt){
     if(k>=1){
       hop=null;plr.position.y=0;plr.scale.setScalar(1);
       px=Math.round(px);pz=Math.round(pz);
+      const RL=ROWS.get(pz);
+      if(RL&&RL.type==='rail'&&!RL.counted){RL.counted=1;misBump('rail',1,'add');}
       if(pz>score){
         score=pz;hud();
-        if(score%10===0)ARC.fx.text(ARC.W/2,ARC.H*.3,score+' '+T('rowsN'),
-          {color:'#ffd166',size:26,life:.9});
+        if(!DEMO){
+          misBump('rows',score,'max');
+          if(score%10===0)ARC.fx.text(ARC.W/2,ARC.H*.3,score+' '+T('rowsN'),
+            {color:'#ffd166',size:26,life:.9});
+        }
       }
     }
   }
   if(!hop&&!dead)grabCoin();
   const R=ROWS.get(Math.round(pz));
   /* --- río: viajar con el tronco, con AVISO antes de la orilla ---
-     BUG MEDIDO (water@10.0 x=-3.00): el tronco arrastraba al jugador hasta el
-     borde del mundo, ahí px quedaba CLAVADO en ±3 pero el tronco seguía
-     viajando, así que al cuadro siguiente ya no había tronco bajo los pies y
-     el `if(!onLog)die()` mataba al instante — la cuenta regresiva de 1,5 s no
-     se llegaba a usar nunca. Ahora se distingue:
-       · CLAVADO a la orilla (el tronco me empujó fuera) -> cuenta regresiva con
-         aviso y el bicho hundido: hay tiempo real de saltar a tierra.
-       · saltar al agua donde NO había tronco -> chapuzón inmediato (culpa mía). */
+     Se distingue CLAVADO a la orilla (el tronco me empujó fuera -> cuenta
+     regresiva de 1,6 s con aviso) de saltar al agua abierta (chapuzón). */
   let onLog=false;
   if(R&&R.type==='water'&&!hop&&!dead){
     const lim=XMAX;
     for(const l of R.logs){
-      const lx=l.g.position.x,h=l.len/2+.34;
-      if(px>lx-h&&px<lx+h){onLog=true;px+=R.speed*R.dir*dt;break;}
+      const h=l.len/2+.34;
+      if(px>l.x-h&&px<l.x+h){onLog=true;px+=R.speed*R.dir*dt;break;}
     }
-    const out=px>lim||px<-lim;                 /* el tronco me empuja fuera del mundo */
-    if(out)px=clamp(px,-lim,lim);
-    if(out)pinned=true;
-    /* aviso al acercarme a la orilla, mucho antes de quedar clavado */
+    const out=px>lim||px<-lim;
+    if(out){px=clamp(px,-lim,lim);pinned=true;}
     if(Math.abs(px)>lim-1.6){
       const s=px>0?1:-1;
-      if(edgeW!==s){edgeW=s;ARC.vib([10,40,10]);ARC.toast(T('edgeWarn'),1200);}
+      if(edgeW!==s){edgeW=s;if(!DEMO){ARC.vib([10,40,10]);ARC.toast(T('edgeWarn'),1200);}}
     }else{edgeW=0;}
-    if(onLog&&!out&&Math.abs(px)<lim-.05)pinned=false;   /* volví a viajar tranquilo */
+    if(onLog&&!out&&Math.abs(px)<lim-.05)pinned=false;
     if(pinned){
-      if(drownT<0){drownT=1.6;ARC.sfx('splat',{rate:1.5,vol:.5});}
+      if(drownT<0){drownT=1.6;if(!DEMO)ARC.sfx('splat',{rate:1.5,vol:.5});}
       drownT-=dt;
-      plr.position.y=-.14;                     /* hundido: se lee que me estoy ahogando */
+      plr.position.y=-.14;
       if(drownT<=0)die('water');
     }else if(!onLog)die('water');
     else{
       drownT=-1;plr.position.y=0;
-      /* VIAJAR EN TRONCO NO ES ESTAR QUIETO: el águila castiga acampar, pero
-         arriba de un tronco el bicho no elige quedarse — y el tronco ya lo lleva
-         a la orilla, donde corre el reloj de ahogo. Sin esto el águila levantaba
-         al jugador en medio del río (medido: eagle@14.0 x=-1.00). */
+      /* viajar en tronco no es estar quieto: el águila castiga acampar, pero
+         arriba de un tronco el bicho no elige quedarse */
       idleT=Math.min(idleT,2.5);
     }
   }else if(!hop){edgeW=0;drownT=-1;pinned=false;}
@@ -1774,8 +2292,8 @@ G.step=function(dt){
   if(R&&!dead){
     if(R.type==='road'){
       for(const c of R.cars){
-        const cx=c.g.position.x,h=c.len/2+.34;
-        if(px>cx-h&&px<cx+h){die('car');break;}
+        const h=c.len/2+.34;
+        if(px>c.x-h&&px<c.x+h){die('car');break;}
       }
     }
     if(R.type==='rail'&&R.trainOn){
@@ -1784,32 +2302,48 @@ G.step=function(dt){
     }
   }
   /* --- águila --- */
-  if(!dead){
+  if(!dead&&!DEMO){
     idleT+=dt;
     if(!eagle&&(score-pz>2.6||idleT>7.5))spawnEagle();
   }
   stepEagle(dt);
   /* --- cámara --- */
-  camZ=lerp(camZ,pz,1-Math.pow(.0015,dt));
-  const lim=Math.max(0,XMAX-CAMW/2+.75);
-  camX=lerp(camX,clamp(px*.9,-lim,lim),1-Math.pow(.002,dt));
   if(!(dead&&dieKind==='eagle')){
+    camZ=lerp(camZ,pz,1-Math.pow(.0015,dt));
     plrG.position.set(px,0,-pz);
     plr.rotation.y=0;
   }
+  const lim=Math.max(0,XMAX-CAMW/2+.75);
+  camX=lerp(camX,clamp(px*.9,-lim,lim),1-Math.pow(.002,dt));
+  if(camZoom!==1)frame();
   shadow.visible=!(dead&&(dieKind==='eagle'||dieKind==='water'));
   shadow.position.set(px,.03,-pz);
   applyCam();
   ensureRows();
+  syncInst();
   if(overT>0){overT-=dt;if(overT<=0){overT=-1;finish();}}
+}
+G.step=function(dt){sim(dt);};
+G.pause=function(){};
+/* ============================================================ MODO ATRACCIÓN
+   El shell llama a esto en cada cuadro mientras el menú está abierto (y le pone
+   la clase .live al menú). Es el MISMO mundo y el MISMO piloto de la sonda: el
+   pollo cruza solo, los autos pasan, el río corre. En la demo no hay águila, no
+   se guardan monedas y nada mata (die() hace saltar para atrás). */
+G.attract=function(dt,g){
+  if(!T3||!scene)return;
+  if(!demoOn){DEMO=1;demoOn=1;frozen=false;resetWorld();demoAct=.3;}
+  DEMO=1;
+  demoAct-=dt;
+  if(demoAct<=0){demoAct=.19+Math.random()*.1;try{botMove();}catch(e){}}
+  sim(dt);
+  ARC.rnd.render(scene,cam);
 };
 G.draw=function(g){
   if(!ARC.rnd||!scene)return;
   ARC.rnd.render(scene,cam);
-  if(picker){drawPicker(g);return;}
   const fs=Math.max(12,Math.min(ARC.W,ARC.H)*.052);
-  /* el cartel de ayuda va ENTRE el bicho (70% de alto) y la bandeja (~88%): antes
-     estaba en el 80% y le cruzaba la cara al personaje en las dos ventanas */
+  /* el cartel de ayuda va ENTRE el bicho (70% de alto) y la bandeja (~88%) */
   if(score<3&&!dead){
     g.textAlign='center';
     g.lineWidth=4;g.strokeStyle='rgba(0,0,0,.5)';
@@ -1832,6 +2366,17 @@ G.draw=function(g){
     g.fillStyle='rgba(255,255,255,'+(.55+.45*a).toFixed(2)+')';
     g.fillText(T('eagleWarn'),ARC.W/2,ARC.H*.042);g.textAlign='left';
   }
+  /* SE LO LLEVA EL ÁGUILA: viñeta oscura y cartel, para que se mire eso */
+  if(dead&&dieKind==='eagle'){
+    const k=clamp(1-overT/2.6,0,1);
+    g.fillStyle='rgba(6,9,14,'+(k*.42).toFixed(2)+')';
+    g.fillRect(0,0,ARC.W,ARC.H);
+    g.textAlign='center';g.font='900 '+fs*1.1+'px system-ui,sans-serif';
+    g.lineWidth=5;g.strokeStyle='rgba(0,0,0,.6)';
+    g.strokeText(T('dEagle'),ARC.W/2,ARC.H*.9);
+    g.fillStyle='#ffd166';g.fillText(T('dEagle'),ARC.W/2,ARC.H*.9);
+    g.textAlign='left';
+  }
   /* aviso de orilla: flecha grande hacia adentro + viñeta roja */
   if(edgeW&&!dead){
     const a=.5+.5*Math.sin(ARC.t*11);
@@ -1843,9 +2388,7 @@ G.draw=function(g){
     g.moveTo(x-edgeW*s,y);g.lineTo(x+edgeW*s*.5,y-s*.7);g.lineTo(x+edgeW*s*.5,y+s*.7);
     g.closePath();g.fill();
   }
-  /* CLAVADO A LA ORILLA: cuenta regresiva GRANDE al lado del bicho (que vive en
-     el 70% de alto), no en el medio de la pantalla, y sale siempre que corra el
-     reloj — antes dependía de edgeW y podía no verse nunca. */
+  /* CLAVADO A LA ORILLA: cuenta regresiva GRANDE al lado del bicho */
   if(drownT>0&&!dead){
     const a=.55+.45*Math.sin(ARC.t*13);
     g.textAlign='center';
@@ -1860,41 +2403,164 @@ G.draw=function(g){
     g.textAlign='left';
   }
 };
+G.extra={icon:'🐔',fn:()=>panelOpen(0)};
+/* ============================================================ PILOTO
+   Juega de verdad: lo usa la sonda (dbg.autoMove) y el modo atracción del menú.
+   La celda tiene que estar libre en toda la VENTANA de tiempo que el jugador va
+   a pasar ahí, no en dos instantes sueltos: con dos muestras un auto podía
+   llegar justo en el medio (medido: car@16.0). */
+function botMove(){
+  if(dead||hop)return false;
+  const T0=0,T1=.85;
+  const freeRow=(x,z,win)=>{
+    if(x<XMIN||x>XMAX)return false;
+    const R2=ROWS.get(z);if(!R2)return true;
+    if(R2.type==='grass')return !R2.block.has(x);
+    if(R2.type==='rail')return !R2.trainOn&&R2.trainT>(win||T1)+.9;
+    if(R2.type==='road'){
+      const v=R2.speed*R2.dir,W=win||T1;
+      for(const c of R2.cars){
+        const h=c.len/2+.55;
+        let t0=(x-c.x-h)/v,t1=(x-c.x+h)/v;
+        if(t0>t1){const t=t0;t0=t1;t1=t;}
+        if(t1>T0-.15&&t0<W)return false;
+      }
+      return true;
+    }
+    if(R2.type==='water'){
+      const v=R2.speed*R2.dir;
+      return R2.logs.some(l=>{
+        const h=l.len/2-.2;
+        let t0=(x-l.x-h)/v,t1=(x-l.x+h)/v;
+        if(t0>t1){const t=t0;t0=t1;t1=t;}
+        return t0<=.2&&t1>=.6;
+      });
+    }
+    return true;
+  };
+  const x0=Math.round(px),z0=Math.round(pz);
+  const RN=ROWS.get(z0);
+  /* CUÁNTO MARGEN PEDIR — con números, porque acá me equivoqué dos veces: en una
+     ruta de velocidad v con autos cada `gap`, la celda queda tapada 2h/v
+     segundos y libre gap/v−2h/v; a alta velocidad el hueco libre baja a ~0,9 s.
+     O sea NO existe margen de 1,7 s (con eso el piloto quedaba clavado para
+     siempre en pz=3). El margen para PISAR es corto y el de HUIR cortísimo: si
+     se escapa cada vez que ve un auto a 1 s, entra y sale de la ruta en bucle. */
+  const AV=1.0;      /* pisar ruta/vía */
+  const PANIC=.32;   /* huir SÓLO si el auto ya está encima */
+  const stepOk=(x,z)=>{const R2=ROWS.get(z);
+    return freeRow(x,z,(R2&&(R2.type==='road'||R2.type==='rail'))?AV:undefined);};
+  /* en el tronco, si me lleva a la orilla salto YA para adentro */
+  if(RN&&RN.type==='water'&&Math.abs(px)>XMAX-1.7){
+    const dir=px>0?-1:1;
+    if(stepOk(x0,z0+1)){tryHop(0,1);return true;}
+    if(freeRow(x0+dir,z0)){tryHop(dir,0);return true;}
+    /* para atrás también: la fila de donde vine es tierra firme */
+    if(z0>0&&stepOk(x0,z0-1)){tryHop(0,-1);return true;}
+  }
+  const RA=ROWS.get(z0+1);
+  /* La columna del borde es la trampa: TODAS las muertes por auto de las
+     corridas largas cayeron ahí (x=±3/±4). En x=±4 hay una sola salida lateral,
+     así que en vez de avanzar desde el borde conviene GASTAR UN SALTO para
+     meterse; sobre el pasto sale gratis. */
+  if(RN&&RN.type==='grass'&&Math.abs(x0)>=XMAX){
+    const sg=x0>0?-1:1;
+    if(freeRow(x0+sg,z0)){tryHop(sg,0);return true;}
+  }
+  if(RN&&(RN.type==='road'||RN.type==='rail')&&Math.abs(x0)>=XMAX){
+    const sg=x0>0?-1:1;
+    if(stepOk(x0+sg,z0)){tryHop(sg,0);return true;}
+    if(stepOk(x0,z0+1)){tryHop(0,1);return true;}
+  }
+  /* si hay una moneda al alcance en la fila de arriba, ir por ella */
+  if(RA&&RA.coinOn&&Math.abs(RA.coin-x0)===1&&freeRow(RA.coin,z0)&&stepOk(RA.coin,z0)){
+    if(stepOk(RA.coin,z0+1)){tryHop(RA.coin>x0?1:-1,0);return true;}
+  }
+  if(stepOk(x0,z0+1)){tryHop(0,1);return true;}
+  /* de costado: PRIMERO HACIA EL CENTRO y sin pegarse a la pared */
+  const dirs=px>0?[-1,1]:[1,-1];
+  for(const sg of dirs){
+    const nx=x0+sg;
+    if(nx<XMIN||nx>XMAX)continue;
+    if(RN&&RN.type!=='grass'&&Math.abs(nx)>XMAX-1)continue;
+    if(stepOk(nx,z0)&&freeRow(nx,z0+1)){tryHop(sg,0);return true;}
+  }
+  /* quedarse quieto en la ruta es morir: salir para donde sea */
+  if(!freeRow(x0,z0,PANIC)){
+    if(freeRow(x0,z0+1,PANIC)){tryHop(0,1);return true;}
+    for(const sg of dirs){const nx=x0+sg;
+      if(Math.abs(nx)>=XMAX&&RN&&RN.type!=='grass')continue;
+      if(freeRow(nx,z0,PANIC)){tryHop(sg,0);return true;}}
+    if(z0>0&&freeRow(x0,z0-1,PANIC)){tryHop(0,-1);return true;}
+    for(const sg of dirs)if(freeRow(x0+sg,z0,PANIC)){tryHop(sg,0);return true;}
+  }
+  /* CAMINAR HACIA LA COLUMNA QUE SÍ ABRE (con tres árboles seguidos arriba, el
+     piloto se quedaba clavado y lo levantaba el águila: eagle@35.9) */
+  if(RN&&RN.type==='grass'&&RA&&RA.type==='grass')for(let d=1;d<=XMAX-XMIN;d++){
+    for(const sg of dirs){
+      const c=x0+sg*d;
+      if(c<XMIN||c>XMAX)continue;
+      if(freeRow(c,z0+1)&&freeRow(x0+sg,z0)){tryHop(sg,0);return true;}
+    }
+  }
+  /* ANTI-ÁGUILA: si la fila de arriba está tapada, moverse de costado sobre el
+     pasto mientras se espera el hueco (quedarse quieto es seguro contra los
+     autos, pero a los 7,5 s aparece el águila) */
+  if(RN&&RN.type==='grass'&&idleT>1.1){
+    for(const sg of dirs)if(freeRow(x0+sg,z0)){tryHop(sg,0);return true;}
+    if(z0>0&&stepOk(x0,z0-1)){tryHop(0,-1);return true;}
+  }
+  return true;
+}
 G.dbg={
   state:()=>({score,coins,px:+px.toFixed(2),pz:+pz.toFixed(2),dead,rows:ROWS.size,farZ,
-    coinsSave:ARC.S.coins||0,char:ARC.S.char||CHARS[0].id,picker,
-    drown:+drownT.toFixed(2),pinned,idle:+idleT.toFixed(1),
+    coinsSave:ARC.S.coins||0,char:ARC.S.char||CHARS[0].id,picker:false,
+    drown:+drownT.toFixed(2),pinned,idle:+idleT.toFixed(1),demo:DEMO,
+    chunks:CHUNKS.size,own:owned().length,mt:misTier()+1,mp:misLine(),
     eagle:eagle?eagle.ph+'@y'+eagle.y.toFixed(1):'-',edge:edgeW,how:lastDie,
     view:{w:+CAMW.toFixed(1),h:+CAMH.toFixed(1),filas:+ROWSVIS.toFixed(1),AHEAD,BEHIND}}),
+  autoMove:()=>botMove(),
+  /* --- medición --- */
+  sc:()=>scene,cm:()=>cam,mats:()=>({MV,MVB,MOUT}),
+  look:(o,g)=>{OUTK=o;USEGLB=g;makePlayer();plrG.position.set(px,0,-pz);return{OUTK,USEGLB};},
+  gl:()=>{const i=ARC.rnd.info.render;
+    return{tris:i.triangles,calls:i.calls,fps:+ARC.fps.toFixed(1),
+      aa:!!(ARC.rnd.getContext().getContextAttributes()||{}).antialias,
+      dpr:ARC.rnd.getPixelRatio()};},
+  geos:()=>({pollo:geoTris(glbGeo('pollo',PH,Math.PI)),aguila:geoTris(eagleGeo()),
+    tren:geoTris(TRAINGEO),autoS:geoTris(iCarS&&iCarS.geometry),
+    inst:{carS:iCarS.count,carL:iCarL.count,sh:iSh.count,log2:iLog2.count,
+      log3:iLog3.count,coin:iCoin.count}}),
   glb:()=>{const o={};for(const k in (ARC.glb||{})){const v=ARC.glb[k];
-    o[k]=v&&v.scene?glbTris(v.scene):null;}o.carGlb=CARGLB;return o;},
+    o[k]=v&&v.scene?(ARC.glbTris?ARC.glbTris[k]:1):null;}return o;},
   rowsInfo:(a,b)=>{const o=[];for(let z=a;z<=b;z++){const R=ROWS.get(z);
     if(!R){o.push(z+':-');continue;}
     o.push(z+':'+R.type+(R.type==='road'?(' v'+R.speed.toFixed(1)+' n'+R.cars.length):'')
-      +(R.type==='water'?(' n'+R.logs.length):'')+(R.coin>-9?(' c'+R.coin):'')
+      +(R.type==='water'?(' n'+R.logs.length):'')+(R.coinOn?(' c'+R.coin):'')
       +(R.block.size?(' bl'+Array.from(R.block).join('/')):''));}
     return o;},
   pick:i=>{choose(clamp(i|0,0,CHARS.length-1));return ARC.S.char;},
+  give:n=>{ARC.S.coins=(ARC.S.coins||0)+(n||1000);ARC.save();return ARC.S.coins;},
+  shop:t=>{panelOpen(t||0);return !!(panelEl&&panelEl.classList.contains('on'));},
+  shopClose:()=>{panelClose();return true;},
+  buyAll:()=>{ARC.S.own=CHARS.map(c=>c.id);ARC.save();return owned().length;},
+  mis:()=>MIS.map((m,i)=>({k:m.k,p:misProg(i),n:misGoal(i),ok:misDone(i)})),
   kill:k=>{die(k||'car');return lastDie;},
-  /* --- ayudas de medición (las usa el banco de pruebas, no el juego) --- */
   tp:(x,z)=>{px=clamp(Math.round(x),XMIN,XMAX);pz=Math.max(0,Math.round(z));
     hop=null;idleT=0;drownT=-1;edgeW=0;pinned=false;if(pz>score)score=pz;
     ensureRows();plrG.position.set(px,0,-pz);camZ=pz;camAim();hud();return{px,pz};},
-  eagle2:()=>{spawnEagle();return eagle?eagle.ph:'-';},
-  openPick:()=>{openPicker();return picker;},
-  /* x de un tronco de esa fila que esté DENTRO del mundo (para probar el río) */
+  eagle2:()=>{const d=DEMO;DEMO=0;spawnEagle();DEMO=d;return eagle?eagle.ph:'-';},
+  eagleDive:()=>{const d=DEMO;DEMO=0;if(!eagle)spawnEagle();DEMO=d;
+    if(eagle){eagle.ph='dive';eagle.t=0;}return eagle?eagle.ph:'-';},
   logX:z=>{const R=ROWS.get(z);if(!R||R.type!=='water')return null;
-    for(const l of R.logs){const x=l.g.position.x;
-      if(x>XMIN+.6&&x<XMAX-.6)return{x:Math.round(x),real:+x.toFixed(2),len:l.len,
+    for(const l of R.logs){
+      if(l.x>XMIN+.6&&l.x<XMAX-.6)return{x:Math.round(l.x),real:+l.x.toFixed(2),len:l.len,
         dir:R.dir,speed:+R.speed.toFixed(2)};}
     return null;},
   projX:(x,z,y)=>{const v=new T3.Vector3(x,y||0,-z).project(cam);
     return{sx:+((v.x*.5+.5)*100).toFixed(1),sy:+((-v.y*.5+.5)*100).toFixed(1)};},
-  /* el hueco MÁS CHICO de cada carril: si sale negativo hay objetos superpuestos */
-  /* pone al bicho al lado de una vía y devuelve el estado del tren */
-  /* por qué no avanza el piloto: estado de la fila de arriba celda por celda */
+  cards:()=>CHARS.map(c=>({id:c.id,cost:c.cost,own:has(c.id)})),
   /* busca CALLEJONES SIN SALIDA entre filas consecutivas ya generadas */
-  cards:()=>pickCards(),
   pockets:()=>{const bad=[];const zs=Array.from(ROWS.keys()).sort((a,b)=>a-b);
     for(const z of zs){
       const R=ROWS.get(z),P=ROWS.get(z-1);
@@ -1915,13 +2581,13 @@ G.dbg={
       if(R2.type==='grass')return R2.block.has(x)?'A':'.';
       if(R2.type==='rail')return (!R2.trainOn&&R2.trainT>1.9)?'.':'T';
       if(R2.type==='road'){const v=R2.speed*R2.dir;
-        for(const c of R2.cars){const h=c.len/2+.55,cx=c.g.position.x;
-          let t0=(x-cx-h)/v,t1=(x-cx+h)/v;if(t0>t1){const t=t0;t0=t1;t1=t;}
+        for(const c of R2.cars){const h=c.len/2+.55;
+          let t0=(x-c.x-h)/v,t1=(x-c.x+h)/v;if(t0>t1){const t=t0;t0=t1;t1=t;}
           if(t1>-.15&&t0<1.0)return 'C';}
         return '.';}
       if(R2.type==='water'){const v=R2.speed*R2.dir;
-        return R2.logs.some(l=>{const h=l.len/2-.2,lx=l.g.position.x;
-          let t0=(x-lx-h)/v,t1=(x-lx+h)/v;if(t0>t1){const t=t0;t0=t1;t1=t;}
+        return R2.logs.some(l=>{const h=l.len/2-.2;
+          let t0=(x-l.x-h)/v,t1=(x-l.x+h)/v;if(t0>t1){const t=t0;t0=t1;t1=t;}
           return t0<=.2&&t1>=.6;})?'.':'~';}
       return '.';};
     const line=z=>{let s2='';for(let x=XMIN;x<=XMAX;x++)s2+=f(x,z);return s2;};
@@ -1934,22 +2600,21 @@ G.dbg={
       out.push({z,trainT:+R.trainT.toFixed(2),on:R.trainOn,
         x:+R.train.position.x.toFixed(1),dir:R.dir,aviso:!!(R.warn&&R.warn.visible)});
     return out.sort((a,b)=>a.z-b.z);},
+  /* el hueco MÁS CHICO de cada carril: si sale negativo hay objetos superpuestos */
   lanes:()=>{const out=[];
     for(const [z,R] of ROWS){
       const src=R.type==='water'?R.logs:(R.type==='road'?R.cars:null);
       if(!src||!src.length)continue;
-      const L=src.map(o=>({x:o.g.position.x,len:o.len})).sort((a,b)=>a.x-b.x);
+      const L=src.map(o=>({x:o.x,len:o.len})).sort((a,b)=>a.x-b.x);
       let mn=1e9;
       for(let i=1;i<L.length;i++)
         mn=Math.min(mn,(L[i].x-L[i].len/2)-(L[i-1].x+L[i-1].len/2));
-      /* y el que cierra la vuelta, de el ultimo al primero pasando por el periodo */
       if(L.length>1)mn=Math.min(mn,(L[0].x+SPAN-L[0].len/2)-(L[L.length-1].x+L[L.length-1].len/2));
       out.push({z,t:R.type,n:L.length,gap:+R.gap.toFixed(2),minHueco:+mn.toFixed(2)});}
     return out;},
   nextCoin:()=>{for(let z=Math.round(pz)+1;z<Math.round(pz)+40;z++){
-    const R=ROWS.get(z);if(R&&R.coinM&&R.coinM.visible&&R.coin>-9)return{x:R.coin,z};}return null;},
-  /* dónde cae el bicho DENTRO del escenario, en % de ancho/alto: sirve para
-     demostrar que nunca se sale de cuadro */
+    const R=ROWS.get(z);if(R&&R.coinOn)return{x:R.coin,z};}return null;},
+  /* dónde cae el bicho DENTRO del escenario, en % de ancho/alto */
   screenPos:()=>{
     if(!cam||!plrG)return null;
     const v=new T3.Vector3(px,.45,-pz).project(cam);
@@ -1957,148 +2622,7 @@ G.dbg={
   gfx:()=>({partK,fogK,shOn,decoK,fog:scene&&scene.fog?[+scene.fog.near.toFixed(1),+scene.fog.far.toFixed(1)]:null}),
   i18n:()=>{const ks=Object.keys(G.i18n.es);const out={};
     for(const l of ['es','en','pt']){const f=ks.filter(k=>!G.i18n[l][k]);out[l]=f.length?('FALTAN '+f.join(',')):'ok';}
-    return out;},
-  /* PILOTO: la celda tiene que estar libre en toda la VENTANA de tiempo que el
-     jugador va a pasar ahí (0 a 0,85 s), no en dos instantes sueltos: con dos
-     muestras un auto podía llegar justo en el medio (medido: car@16.0). Para
-     cada auto se resuelve el intervalo en que solapa la celda. */
-  autoMove:()=>{
-    if(picker){choose(charIdx());return true;}
-    if(dead||hop)return false;
-    const T0=0,T1=.85;
-    /* `win` = cuántos segundos tiene que seguir libre la celda. Para PISAR una
-       ruta hace falta más margen que para mirarla de reojo: con la ventana corta
-       de 0,85 s el piloto entraba a la ruta, al cuadro siguiente el auto ya
-       estaba encima, se volvía al pasto, y repetía para siempre — LIVELOCK
-       medido con la traza: 30 s clavado en pz=10 oscilando entre px=0,-1,-2
-       mientras la fila 11 (road v3.1) nunca estaba libre "a tiempo". Con 1,7 s
-       el salto que se decide es un salto que se sobrevive. */
-    const freeRow=(x,z,win)=>{
-      if(x<XMIN||x>XMAX)return false;
-      const R2=ROWS.get(z);if(!R2)return true;
-      if(R2.type==='grass')return !R2.block.has(x);
-      if(R2.type==='rail')return !R2.trainOn&&R2.trainT>(win||T1)+.9;
-      if(R2.type==='road'){
-        const v=R2.speed*R2.dir,W=win||T1;
-        for(const c of R2.cars){
-          const h=c.len/2+.55,cx=c.g.position.x;
-          let t0=(x-cx-h)/v,t1=(x-cx+h)/v;
-          if(t0>t1){const t=t0;t0=t1;t1=t;}
-          if(t1>T0-.15&&t0<W)return false;
-        }
-        return true;
-      }
-      if(R2.type==='water'){
-        const v=R2.speed*R2.dir;
-        return R2.logs.some(l=>{
-          const h=l.len/2-.2,lx=l.g.position.x;
-          let t0=(x-lx-h)/v,t1=(x-lx+h)/v;
-          if(t0>t1){const t=t0;t0=t1;t1=t;}
-          return t0<=.2&&t1>=.6;
-        });
-      }
-      return true;
-    };
-    const x0=Math.round(px),z0=Math.round(pz);
-    const RN=ROWS.get(z0);
-    /* CUÁNTO MARGEN PEDIR — con números, porque acá me equivoqué dos veces:
-       en una ruta de velocidad v con autos cada `gap`, la celda queda tapada
-       2h/v segundos y libre gap/v−2h/v. Para v=3,3 y gap=8,3 eso es 0,91 s
-       tapada y 1,59 s libre; a alta velocidad (v≈4,9 en la fila 118) el hueco
-       libre baja a ~0,9 s. Es decir: NO existe margen de 1,7 s (lo probé y el
-       piloto quedó clavado para siempre en pz=3, fila 4 road v3.3). El margen
-       para PISAR es corto y el que tiene que ser cortísimo es el de HUIR: si el
-       piloto se escapa cada vez que ve un auto a 1 s, entra a la ruta y se
-       vuelve al pasto en bucle (el livelock que medí en pz=10). */
-    const AV=1.0;      /* pisar ruta/vía: un poco más que la ventana normal */
-    const PANIC=.32;   /* huir SÓLO si el auto ya está encima */
-    const stepOk=(x,z)=>{const R2=ROWS.get(z);
-      return freeRow(x,z,(R2&&(R2.type==='road'||R2.type==='rail'))?AV:undefined);};
-    /* en el tronco, si me lleva a la orilla salto YA para adentro */
-    if(RN&&RN.type==='water'&&Math.abs(px)>XMAX-1.7){
-      const dir=px>0?-1:1;
-      if(stepOk(x0,z0+1)){tryHop(0,1);return true;}
-      if(freeRow(x0+dir,z0)){tryHop(dir,0);return true;}
-      /* PARA ATRÁS TAMBIÉN: la fila de donde vine es tierra firme, así que casi
-         siempre es la salida buena cuando el tronco ya me dejó en la orilla y no
-         hay otro tronco hacia adentro (medido: water@48.0 x=3.00). */
-      if(z0>0&&stepOk(x0,z0-1)){tryHop(0,-1);return true;}
-    }
-    /* NO METERSE EN LA COLUMNA DEL BORDE si arriba hay peligro. En x=±3 sólo
-       queda UNA salida lateral: si viene un auto por esa fila, la única escapatoria
-       es hacia atrás y no siempre alcanza. Las dos muertes largas medidas fueron
-       exactamente ahí (car@62.0 x=3.00 y car@5.0 x=3.00). Desde el pasto conviene
-       correrse al centro ANTES de entrar. */
-    const RA=ROWS.get(z0+1);
-    /* La columna del borde es la trampa: TODAS las muertes por auto de las
-       corridas largas cayeron ahí (car@30.0/71.2 x=3.00, car@45.0/43.0/25.0/12.0
-       x=-3.00, o sea el 100%). En x=±3 hay una sola salida lateral, así que en vez
-       de avanzar desde el borde conviene GASTAR UN SALTO para meterse. Sobre el
-       pasto sale gratis (el pasto no mata) y evita entrar a la ruta por la
-       columna sin escapatoria. */
-    if(RN&&RN.type==='grass'&&Math.abs(x0)>=XMAX){
-      const sg=x0>0?-1:1;
-      if(freeRow(x0+sg,z0)){tryHop(sg,0);return true;}
-    }
-    /* si YA estoy en el borde de una ruta o una vía: ADENTRO primero, avanzar
-       después — avanzar desde el borde deja al piloto otra vez en el borde */
-    if(RN&&(RN.type==='road'||RN.type==='rail')&&Math.abs(x0)>=XMAX){
-      const sg=x0>0?-1:1;
-      if(stepOk(x0+sg,z0)){tryHop(sg,0);return true;}
-      if(stepOk(x0,z0+1)){tryHop(0,1);return true;}
-    }
-    if(stepOk(x0,z0+1)){tryHop(0,1);return true;}
-    /* de costado: PRIMERO HACIA EL CENTRO y sin pegarse a la pared. Antes probaba
-       siempre +1 y el piloto derivaba hasta la columna del borde; ahí, en una ruta,
-       no le quedaba escapatoria (x+1 fuera del mundo, x-1 con el mismo auto
-       encima) y moría a los 4-19 s (medido: car@7.0 x=-3.00). */
-    const dirs=px>0?[-1,1]:[1,-1];
-    for(const sg of dirs){
-      const nx=x0+sg;
-      if(nx<XMIN||nx>XMAX)continue;
-      if(RN&&RN.type!=='grass'&&Math.abs(nx)>XMAX-1)continue;
-      if(stepOk(nx,z0)&&freeRow(nx,z0+1)){tryHop(sg,0);return true;}
-    }
-    /* quedarse quieto en la ruta es morir: salir para donde sea */
-    if(!freeRow(x0,z0,PANIC)){
-      if(freeRow(x0,z0+1,PANIC)){tryHop(0,1);return true;}
-      /* huyendo NO hay que meterse en la columna del extremo: ahí la próxima vez
-         no queda salida y es donde siguieron cayendo todas las muertes por auto
-         (car@20.0/43.0 x=4.00, car@84.0/28.0/105.0 x=-4.00). Primero adentro,
-         después para atrás, y sólo como último recurso al extremo. */
-      for(const sg of dirs){const nx=x0+sg;
-        if(Math.abs(nx)>=XMAX&&RN&&RN.type!=='grass')continue;
-        if(freeRow(nx,z0,PANIC)){tryHop(sg,0);return true;}}
-      if(z0>0&&freeRow(x0,z0-1,PANIC)){tryHop(0,-1);return true;}
-      for(const sg of dirs)if(freeRow(x0+sg,z0,PANIC)){tryHop(sg,0);return true;}
-    }
-    /* CAMINAR HACIA LA COLUMNA QUE SÍ ABRE. Con tres árboles seguidos en la fila
-       de arriba el piloto se quedaba clavado esperando y lo levantaba el águila
-       (medido: eagle@35.9). Sólo desde el PASTO: caminar de costado en la ruta lo
-       hacía comerse un auto. */
-    if(RN&&RN.type==='grass'&&RA&&RA.type==='grass')for(let d=1;d<=XMAX-XMIN;d++){
-      for(const sg of dirs){
-        const c=x0+sg*d;
-        if(c<XMIN||c>XMAX)continue;
-        if(freeRow(c,z0+1)&&freeRow(x0+sg,z0)){tryHop(sg,0);return true;}
-      }
-    }
-    /* ANTI-ÁGUILA: si la fila de arriba está tapada no hay que quedarse clavado.
-       Quedarse quieto es seguro contra los autos pero a los 7,5 s aparece el
-       águila y a los 10 te levanta: dos partidas largas murieron así
-       (eagle@53.0 x=-3.00 y eagle@13.0 x=3.00), no atropelladas. Un jugador de
-       verdad hace lo mismo: se mueve de costado sobre el pasto mientras espera
-       que se abra un hueco. El paso va HACIA EL CENTRO, que es desde donde
-       después hay salida para los dos lados. */
-    if(RN&&RN.type==='grass'&&idleT>1.1){
-      for(const sg of dirs)if(freeRow(x0+sg,z0)){tryHop(sg,0);return true;}
-      /* con árboles a los dos costados no queda ni el paso al costado: retroceder
-         una fila también reinicia el reloj del águila y no llega a los 2,6 de
-         atraso que la despiertan por la otra vía (medido: eagle@58.0 x=2.00) */
-      if(z0>0&&stepOk(x0,z0-1)){tryHop(0,-1);return true;}
-    }
-    return true;
-  }
+    return out;}
 };
 window.GAME=G;
 

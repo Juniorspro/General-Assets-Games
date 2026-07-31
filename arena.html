@@ -1,0 +1,2690 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d1014">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>ARENA</title>
+<style>
+/* ================= ARCADE SHELL — CSS común de los 5 juegos =================
+   REGLA DE ORO DEL CELULAR VERTICAL: el juego SIEMPRE se ve apaisado. Si el
+   teléfono está vertical, #stage se rota 90° y se le fijan ancho/alto EN PX
+   (los del viewport cruzados). Todo lo que mida la UI tiene que medirse en el
+   espacio del #stage (clientWidth/clientHeight, offsetTop), NUNCA contra
+   window.innerWidth/innerHeight ni con getBoundingClientRect: con el stage
+   rotado esas dos cosas viven en ejes distintos. El puntero se convierte a mano
+   (ver ARC.pt) porque la rotación cruza los ejes del compositor.            */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#05070a;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#eef2f6}
+#stage{position:absolute;left:0;top:0;overflow:hidden;background:#0d1014;
+  transform-origin:0 0;touch-action:none}
+canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
+/* dos lienzos: #gl es la escena 3D (WebGL) y #cv la capa 2D de efectos y texto
+   flotante que va ENCIMA. Así los juegos 3D siguen usando ARC.fx sin shaders. */
+#gl{z-index:0}
+#cv{z-index:1;pointer-events:auto;background:transparent}
+/* ---- capas ---- */
+.lay{position:absolute;inset:0;pointer-events:none}
+/* z-index 5: MEDIDO CON TOQUES REALES — sin él, el canvas (#cv, z-index 1) queda
+   por encima de estas pantallas y se come el toque: document.elementFromPoint en
+   el centro de REINTENTAR devolvía "cv", así que reiniciar/seguir/menú/niveles/
+   ajustes NO funcionaban en ningún juego. Las sondas no lo veían porque disparaban
+   el evento directo al botón en vez de tocar la pantalla. */
+.scr{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;pointer-events:auto;background:rgba(6,9,13,.62);z-index:5;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.scr.on{display:flex;animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+#menu{background:#0d1014 center/cover no-repeat;backdrop-filter:none;-webkit-backdrop-filter:none}
+/* el arte del menú ya trae el título: el degradado va de ABAJO para que los
+   botones se lean sin tapar la ilustración, y el título de DOM sólo aparece si
+   la imagen no llegó (#menu sin .hasart). */
+#menu:before{content:"";position:absolute;inset:0;
+  background:linear-gradient(0deg,rgba(5,7,10,.94) 0%,rgba(5,7,10,.55) 30%,rgba(5,7,10,.05) 62%)}
+#menu.hasart .ttl{display:none}
+/* ---- tipografía ---- */
+.h1{font-size:clamp(22px,5.2vmin,44px);font-weight:900;letter-spacing:.5px;
+  text-shadow:0 2px 10px rgba(0,0,0,.75)}
+.h2{font-size:clamp(14px,3vmin,22px);font-weight:800;opacity:.95}
+.sm{font-size:clamp(10px,2.1vmin,15px);font-weight:600;opacity:.72;line-height:1.35}
+/* ---- botones ---- */
+.btn{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:.5em;
+  padding:.62em 1.25em;border-radius:14px;font-weight:900;font-size:clamp(12px,2.6vmin,19px);
+  background:linear-gradient(180deg,var(--acc) 0%,var(--acc2) 100%);color:#10141a;
+  border:1px solid rgba(255,255,255,.28);box-shadow:0 4px 0 rgba(0,0,0,.35),0 8px 22px rgba(0,0,0,.4);
+  transition:transform .08s,box-shadow .08s;white-space:nowrap}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.35)}
+.btn.gh{background:rgba(255,255,255,.09);color:#eef2f6;border-color:rgba(255,255,255,.22);
+  box-shadow:0 3px 0 rgba(0,0,0,.28)}
+.btn.sq{padding:0;width:clamp(34px,7.4vmin,52px);height:clamp(34px,7.4vmin,52px);border-radius:13px;
+  font-size:clamp(15px,3.4vmin,23px)}
+.row{display:flex;gap:clamp(6px,1.6vmin,14px);align-items:center}
+.col{display:flex;flex-direction:column;gap:clamp(6px,1.6vmin,14px)}
+/* ---- MENÚ (rehecho: animado y con el JUGAR grande al centro) ----
+   El anterior era "arte arriba + botón chico abajo a la izquierda", que se leía
+   como una ficha de Netflix. Ahora: fondo vivo (la escena 3D del propio juego si
+   el juego expone attract(), o el arte con un zoom lento), insignias arriba,
+   botón JUGAR grande al centro con latido y destello, y fila de botones redondos.
+   Todo entra con animación escalonada. */
+#menu{background-position:center;overflow:hidden}
+#menu .wrap{position:relative;z-index:2;width:100%;height:100%;display:flex;
+  flex-direction:column;justify-content:space-between;align-items:center;
+  padding:2.6vmin 3.4vmin 3.4vmin;gap:1vmin}
+#menu .mTop{width:100%;display:flex;justify-content:space-between;align-items:flex-start;gap:1vmin}
+#menu .mMid{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;
+  gap:1.4vmin;text-align:center;width:100%}
+#menu .ttl{font-size:clamp(28px,9vmin,74px);font-weight:900;line-height:.92;letter-spacing:-1px;
+  text-shadow:0 4px 0 rgba(0,0,0,.45),0 12px 34px rgba(0,0,0,.7)}
+#menu .ttl em{font-style:normal;color:var(--acc)}
+#menu .sub{max-width:min(62vmin,520px);opacity:.86}
+#menu .mBot{width:100%;display:flex;flex-direction:column;align-items:center;gap:1.6vmin}
+/* botón JUGAR grande, con destello que barre y latido suave */
+#bPlay{position:relative;overflow:hidden;min-width:min(52vmin,340px);
+  padding:.86em 2.2em;border-radius:18px;font-size:clamp(17px,4.6vmin,30px);letter-spacing:1px;
+  box-shadow:0 6px 0 rgba(0,0,0,.35),0 14px 40px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.5);
+  /* OJO: las DOS animaciones van juntas acá. Si se deja sólo "beat", este selector
+     de ID pisa el "rise" de .anim y el botón se queda en opacity:0 (invisible: pasó
+     de verdad, medido con getComputedStyle -> opacity 0, animationName "beat"). */
+  animation:rise .5s cubic-bezier(.2,.9,.25,1) .2s forwards, beat 2.3s ease-in-out .8s infinite}
+#bPlay:after{content:"";position:absolute;top:-60%;left:-30%;width:28%;height:220%;
+  background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.55),rgba(255,255,255,0));
+  transform:rotate(18deg);animation:shine 3.4s ease-in-out infinite}
+@keyframes beat{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@keyframes shine{0%{left:-40%}55%{left:130%}100%{left:130%}}
+#menu .mRow{display:flex;gap:1.8vmin;align-items:center;justify-content:center}
+.rnd{pointer-events:auto;width:clamp(42px,9.4vmin,64px);height:clamp(42px,9.4vmin,64px);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:clamp(17px,4.2vmin,27px);background:rgba(16,20,27,.62);color:#eef2f6;
+  border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(6px);
+  box-shadow:0 4px 0 rgba(0,0,0,.3),0 10px 24px rgba(0,0,0,.45);transition:transform .1s}
+.rnd:active{transform:translateY(3px) scale(.96)}
+.badge{display:flex;align-items:center;gap:.4em;padding:.42em .9em;border-radius:999px;
+  background:rgba(16,20,27,.62);border:1px solid rgba(255,255,255,.18);
+  font-weight:900;font-size:clamp(11px,2.5vmin,17px);backdrop-filter:blur(6px);white-space:nowrap}
+.badge i{font-style:normal;color:var(--acc);font-size:1.1em}
+#menu .bcol{display:flex;flex-direction:column;gap:.8vmin;align-items:flex-end}
+/* entrada escalonada */
+.anim{opacity:0;transform:translateY(14px);animation:rise .5s cubic-bezier(.2,.9,.25,1) forwards}
+.anim.d1{animation-delay:.06s}.anim.d2{animation-delay:.14s}.anim.d3{animation-delay:.22s}
+.anim.d4{animation-delay:.3s}
+@keyframes rise{to{opacity:1;transform:none}}
+/* el arte de fondo respira (si no hay escena 3D viva detrás) */
+#menu.hasart:not(.live){background-size:cover;animation:kb 18s ease-in-out infinite alternate}
+@keyframes kb{0%{background-size:104%}100%{background-size:118%}}
+#menu.live{background-image:none!important;background-color:transparent}
+#menu.live:before{background:linear-gradient(0deg,rgba(4,6,9,.9) 0%,rgba(4,6,9,.35) 34%,
+  rgba(4,6,9,0) 62%,rgba(4,6,9,.55) 100%)}
+/* ---- HUD ---- */
+#hud{position:absolute;inset:0;pointer-events:none;z-index:2}
+.pill{position:absolute;display:flex;align-items:center;gap:.45em;padding:.42em .8em;
+  border-radius:999px;background:rgba(10,14,19,.66);border:1px solid rgba(255,255,255,.14);
+  font-weight:900;font-size:clamp(11px,2.4vmin,17px);backdrop-filter:blur(4px)}
+#pScore{left:3vmin;top:2.4vmin}
+#pInfo{left:50%;top:2.4vmin;transform:translateX(-50%)}
+#pPause{right:3vmin;top:2.4vmin;pointer-events:auto;padding:0;
+  width:clamp(30px,6.6vmin,46px);height:clamp(30px,6.6vmin,46px);justify-content:center}
+#tray{position:absolute;left:0;right:0;bottom:2.2vmin;display:flex;justify-content:center;
+  gap:1.4vmin;pointer-events:auto;flex-wrap:wrap;padding:0 2vmin}
+/* ---- juegos VERTICALES (body.vert): los controles van grandes y bien abajo,
+   porque en vertical el pulgar llega a la franja de abajo y no a los costados ---- */
+body.vert #tray{bottom:3.5%;gap:2.5vw}
+body.vert #tray .btn{min-width:16vw;padding:.85em 1.1em;font-size:clamp(15px,4.4vw,26px)}
+body.vert #tray .btn.sq{width:16vw;height:16vw}
+body.vert .pill{font-size:clamp(12px,3.4vw,20px);padding:.5em .9em}
+body.vert #pScore{left:4vw;top:2vh}
+body.vert #pInfo{top:2vh}
+body.vert #pPause{right:4vw;top:2vh;width:11vw;height:11vw}
+body.vert #menu .wrap{padding:0 7vw 7vh;gap:2.4vh}
+/* en vertical el arte 16:9 se recortaba tanto que el título quedaba cortado
+   ("ZA CA" en la captura V3): se ajusta por ANCHO y se pega arriba, y el resto de
+   la columna lo llena el color del juego. */
+/* VERTICAL: el arte 16:9 va como banda de arriba (ajustado por ancho, así el título
+   no se corta) y la mitad de abajo NO queda negra vacía: lleva un resplandor del
+   color del juego que respira, más las insignias y el botón grande. */
+body.vert #menu{background-size:100% auto;background-position:center 5%}
+body.vert #menu:after{content:"";position:absolute;left:50%;top:62%;width:150vw;height:70vh;
+  transform:translate(-50%,-50%);pointer-events:none;z-index:1;
+  background:radial-gradient(closest-side,var(--acc) 0%,transparent 72%);
+  opacity:.20;animation:glow 5s ease-in-out infinite}
+@keyframes glow{0%,100%{opacity:.13;transform:translate(-50%,-50%) scale(.92)}
+  50%{opacity:.26;transform:translate(-50%,-50%) scale(1.06)}}
+body.vert #menu .mMid{justify-content:flex-start;padding-top:37vh}
+body.vert #menu .mBot{gap:2.4vh;padding-bottom:2vh}
+body.vert #bPlay{min-width:70vw}
+body.vert #menu:before{background:linear-gradient(0deg,rgba(5,7,10,.97) 0%,rgba(5,7,10,.82) 34%,rgba(5,7,10,.12) 62%,rgba(5,7,10,.35) 100%)}
+body.vert #menu .sub{max-width:100%}
+body.vert #best{right:5vw;bottom:7vh}
+body.vert .card{max-width:88vw}
+body.vert .h1{font-size:clamp(22px,7vw,44px)}
+body.vert .h2{font-size:clamp(14px,4.4vw,24px)}
+body.vert .sm{font-size:clamp(11px,3.2vw,16px)}
+body.vert .btn{font-size:clamp(13px,3.8vw,20px)}
+/* ---- tarjetas / paneles ---- */
+.card{background:rgba(14,18,24,.92);border:1px solid rgba(255,255,255,.14);border-radius:18px;
+  padding:clamp(12px,3vmin,26px);box-shadow:0 18px 50px rgba(0,0,0,.6);max-width:86vmin;
+  display:flex;flex-direction:column;align-items:center;gap:1.6vmin}
+.stars{display:flex;gap:.35em;font-size:clamp(20px,5.6vmin,42px);line-height:1}
+.stars i{font-style:normal;opacity:.22}
+.stars i.on{opacity:1;filter:drop-shadow(0 0 8px rgba(255,196,60,.7))}
+.grid{display:grid;gap:1.2vmin}
+.lvl{width:clamp(38px,8.4vmin,60px);height:clamp(38px,8.4vmin,60px);border-radius:13px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);font-weight:900;
+  font-size:clamp(12px,2.7vmin,18px);pointer-events:auto}
+.lvl.done{background:linear-gradient(180deg,var(--acc),var(--acc2));color:#10141a}
+.lvl.lock{opacity:.35}
+.lvl b{font-size:.52em;letter-spacing:1px;opacity:.9}
+/* ---- ajustes ---- */
+.sw{width:clamp(42px,9vmin,62px);height:clamp(24px,5vmin,34px);border-radius:999px;
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);position:relative;
+  pointer-events:auto;transition:background .15s}
+.sw:after{content:"";position:absolute;top:2px;left:2px;width:calc(100% - 4px);height:calc(100% - 4px);
+  aspect-ratio:1;border-radius:999px;background:#eef2f6;transition:transform .15s}
+.sw.on{background:var(--acc)}
+.sw.on:after{transform:translateX(calc(100% + 2px))}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:2vmin;width:min(70vmin,100%)}
+/* ---- avisos ---- */
+#toast{position:absolute;left:50%;top:16%;z-index:8;transform:translateX(-50%) scale(.9);opacity:0;
+  padding:.5em 1.1em;border-radius:12px;background:rgba(10,14,19,.9);font-weight:900;
+  font-size:clamp(12px,2.8vmin,20px);transition:opacity .18s,transform .18s;z-index:5}
+#toast.on{opacity:1;transform:translateX(-50%) scale(1)}
+#fps{position:absolute;left:50%;bottom:.6vmin;transform:translateX(-50%);font-size:10px;
+  opacity:.35;z-index:5}
+/* ---- pantalla de CARGA: fondo del propio juego, barra real y elección de idioma ---- */
+#load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:2.2vmin;background:#05070a center/cover no-repeat;z-index:9;
+  text-align:center;padding:4vmin}
+#load:before{content:"";position:absolute;inset:0;backdrop-filter:blur(3px);
+  background:linear-gradient(0deg,rgba(4,6,9,.95),rgba(4,6,9,.62))}
+#load>*{position:relative;z-index:1}
+#ldName{font-size:clamp(20px,6vmin,46px);font-weight:900;letter-spacing:.5px;
+  text-shadow:0 3px 14px rgba(0,0,0,.8)}
+#ldPct{font-weight:900;font-size:clamp(12px,2.6vmin,18px);opacity:.9}
+#langs{display:flex;gap:1.4vmin;flex-wrap:wrap;justify-content:center;margin-top:1vmin}
+#ldGo{display:none}
+#ldGo.on{display:flex;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+#load .bar{width:min(52vmin,340px);height:8px;border-radius:999px;background:rgba(255,255,255,.14);
+  overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.1)}
+#load .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));
+  transition:width .25s}
+.seg{display:flex;gap:.4vmin;background:rgba(255,255,255,.08);padding:.35em;border-radius:12px}
+.seg b{font-weight:900;font-size:clamp(10px,2.2vmin,15px);padding:.45em .8em;border-radius:9px;
+  opacity:.6;pointer-events:auto;white-space:nowrap}
+.seg b.on{background:var(--acc);color:#10141a;opacity:1}
+</style></head><body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <canvas id="cv"></canvas>
+  <div id="hud">
+    <div class="pill" id="pScore">0</div>
+    <div class="pill" id="pInfo"></div>
+    <div class="pill" id="pPause">II</div>
+    <div id="tray"></div>
+  </div>
+  <div class="scr" id="menu"><div class="wrap">
+      <div class="mTop">
+        <div class="badge anim d1"><i>◉</i><span id="mCoins">0</span></div>
+        <div class="bcol">
+          <div class="badge anim d1" id="mBest"></div>
+          <div class="badge anim d2" id="mLvl" style="display:none"></div>
+        </div>
+      </div>
+      <div class="mMid">
+        <div class="ttl anim d1" id="mTtl"></div>
+        <div class="sm sub anim d2" id="mSub"></div>
+      </div>
+      <div class="mBot">
+        <div class="btn anim d3" id="bPlay" data-i18n="play">JUGAR</div>
+        <div class="mRow anim d4">
+          <div class="rnd" id="bLevels" title="niveles">☰</div>
+          <div class="rnd" id="bOpts" title="ajustes">⚙</div>
+          <div class="rnd" id="bExtra" style="display:none"></div>
+        </div>
+      </div>
+    </div></div>
+  <div class="scr" id="pause"><div class="card">
+      <div class="h1" data-i18n="pause">PAUSA</div>
+      <div class="row">
+        <div class="btn" id="bRes" data-i18n="resume">SEGUIR</div>
+        <div class="btn gh" id="bRetry" data-i18n="retry">REINTENTAR</div>
+        <div class="btn gh sq" id="bOpts2">⚙</div>
+        <div class="btn gh" id="bQuit" data-i18n="menu">MENÚ</div>
+      </div></div></div>
+  <div class="scr" id="over"><div class="card">
+      <div class="h1" id="oTtl">FIN</div>
+      <div class="stars" id="oStars"><i>★</i><i>★</i><i>★</i></div>
+      <div class="h2" id="oScore"></div>
+      <div class="sm" id="oSub"></div>
+      <div class="row">
+        <div class="btn" id="bNext" data-i18n="next">SIGUIENTE</div>
+        <div class="btn gh" id="bAgain" data-i18n="again">OTRA VEZ</div>
+        <div class="btn gh" id="bMenu" data-i18n="menu">MENÚ</div>
+      </div></div></div>
+  <div class="scr" id="levels"><div class="card">
+      <div class="h2" data-i18n="levels">NIVELES</div>
+      <div class="grid" id="lvGrid"></div>
+      <div class="btn gh" id="bLvBack" data-i18n="back">VOLVER</div></div></div>
+  <div class="scr" id="opts"><div class="card">
+      <div class="h2" data-i18n="settings">AJUSTES</div>
+      <div class="opt"><div class="sm" data-i18n="music">Música</div><div class="sw on" id="swMus"></div></div>
+      <div class="opt"><div class="sm" data-i18n="sfx">Sonidos</div><div class="sw on" id="swSfx"></div></div>
+      <div class="opt"><div class="sm" data-i18n="vib">Vibración</div><div class="sw on" id="swVib"></div></div>
+      <div class="opt"><div class="sm" data-i18n="extraFx">Efectos extra</div><div class="sw on" id="swFx"></div></div>
+      <div class="opt"><div class="sm" data-i18n="showFps">Mostrar FPS</div><div class="sw" id="swFps"></div></div>
+      <div class="opt"><div class="sm" data-i18n="graphics">Gráficos</div><div class="seg" id="segGfx"></div></div>
+      <div class="opt"><div class="sm" data-i18n="lang">Idioma</div><div class="seg" id="segLang"></div></div>
+      <div class="row"><div class="btn gh" id="bWipe" data-i18n="wipe">BORRAR PROGRESO</div>
+        <div class="btn" id="bOptBack" data-i18n="done">LISTO</div></div></div></div>
+  <div id="toast"></div>
+  <div id="fps" style="display:none">–</div>
+  <div id="load">
+    <div id="ldName">…</div>
+    <div class="sm" id="ldTtl" data-i18n="loading">CARGANDO</div>
+    <div class="bar"><i id="ldBar"></i></div>
+    <div id="ldPct">0%</div>
+    <div class="sm" id="ldTxt">…</div>
+    <div class="sm" data-i18n="lang" style="margin-top:2vmin">IDIOMA</div>
+    <div class="seg" id="langs"></div>
+    <div class="btn" id="ldGo" data-i18n="tapPlay">TOCÁ PARA JUGAR</div>
+  </div>
+</div>
+
+<script>
+(function(){var Q=new URLSearchParams(location.search);var TV="0.170.0";
+var t=Q.has("local")?"/_vthree/build/three.module.js":"https://cdn.jsdelivr.net/npm/three@"+TV+"/build/three.module.js";
+var a=Q.has("local")?"/_vthree/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@"+TV+"/examples/jsm/";
+document.write('<script type="importmap">{"imports":{"three":"'+t+'","three/addons/":"'+a+'"}}<\/script>');
+})();
+</script>
+<script type="module">
+/* ---- assets ---- */
+const BASE=(new URLSearchParams(location.search).has('local')?'/assets/arcade/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@532931d/assets/arcade/');
+const A=f=>BASE+f;
+/* ============================================================================
+   ARCADE SHELL — el motor común de los 5 juegos
+   ----------------------------------------------------------------------------
+   Un solo archivo, cero dependencias, canvas 2D + overlays de DOM para los
+   menús (el texto queda nítido y se estila con CSS en vez de dibujarse).
+   Lo que resuelve por todos:
+     · APAISADO SIEMPRE (rota #stage 90° si el teléfono está vertical) y puntero
+       convertido a mano, porque la rotación del compositor cruza los ejes.
+     · Bucle de paso FIJO a 60 Hz con interpolación al dibujar: la simulación no
+       cambia con los FPS del celular y el movimiento no tiembla a 120 Hz.
+     · Audio (WebAudio con limitador + música por <audio>), con SÍNTESIS de
+       respaldo: si un mp3 no está o el navegador no lo decodifica, suena un
+       blip generado y el juego no se queda muerto de sonido.
+     · Guardado en localStorage, pantallas (menú/pausa/fin/niveles/ajustes),
+       partículas, texto flotante, sacudida de cámara, toast, FPS y calidad
+       adaptativa (si baja de 45 fps se recortan las partículas).
+   Contrato del juego (window.GAME): ver el final del archivo.
+   ========================================================================== */
+'use strict';
+const ARC={W:0,H:0,dpr:1,q:1,t:0,dt:1/60,frame:0,fps:60,paused:false,scr:'load',lvl:1,alive:false};
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const rndi=(a,b)=>Math.floor(rnd(a,b+1));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const TAU=Math.PI*2;
+
+/* ---------------------------------------------------------------- 1. ESCENARIO
+   Si el viewport está vertical se rota el escenario 90° y se le fijan ancho y
+   alto EN PX (cruzados). Todo lo demás vive en ese espacio: ARC.W/ARC.H son las
+   medidas del juego, siempre apaisadas. */
+let ROT=false,OFFX=0;
+function fit(){
+  const vw=Math.round(window.innerWidth),vh=Math.round(window.innerHeight);
+  const st=$('stage');
+  /* GAME.portrait = el juego se juega VERTICAL de verdad (tipo Crossy Road): no se
+     rota nada. En una ventana apaisada (escritorio) se centra una columna 9:16 y
+     el resto queda negro, para que el encuadre sea el mismo que en el teléfono. */
+  if(GAME.portrait){
+    ROT=false;
+    const w=Math.min(vw,Math.round(vh*.58));
+    OFFX=Math.round((vw-w)/2);
+    st.style.width=w+'px';st.style.height=vh+'px';
+    st.style.transform=OFFX?('translateX('+OFFX+'px)'):'none';
+  }else{
+    OFFX=0;
+    ROT=vh>vw;
+    if(ROT){
+      st.style.width=vh+'px';st.style.height=vw+'px';
+      st.style.transform='translateX('+vw+'px) rotate(90deg)';
+    }else{
+      st.style.width=vw+'px';st.style.height=vh+'px';st.style.transform='none';
+    }
+  }
+  ARC.W=st.clientWidth;ARC.H=st.clientHeight;
+  const cv=$('cv');
+  ARC.dpr=clamp(window.devicePixelRatio||1,1,2.5);
+  cv.style.width=ARC.W+'px';cv.style.height=ARC.H+'px';
+  cv.width=Math.round(ARC.W*ARC.dpr);cv.height=Math.round(ARC.H*ARC.dpr);
+  ARC.g=cv.getContext('2d');
+  ARC.g.setTransform(ARC.dpr,0,0,ARC.dpr,0,0);
+  /* la escena 3D usa su propio lienzo y su propio DPR (más barato en el celular:
+     el 3D a 1.5x se ve igual y cuesta la mitad que a 3x) */
+  const gl=$('gl');
+  gl.style.width=ARC.W+'px';gl.style.height=ARC.H+'px';
+  if(ARC.rnd){
+    ARC.rnd.setPixelRatio(Math.min(ARC.dpr,1.75));
+    ARC.rnd.setSize(ARC.W,ARC.H,false);
+  }
+  if(GAME.resize)GAME.resize();
+}
+window.addEventListener('resize',()=>{fit();},{passive:true});
+window.addEventListener('orientationchange',()=>setTimeout(fit,120),{passive:true});
+
+/* ---- puntero: del evento del navegador al espacio del escenario ----
+   Con el escenario rotado 90° y corrido vw en X, un punto (sx,sy) del escenario
+   cae en pantalla en (vw−sy, sx). La inversa es la que hace falta acá. NO se usa
+   getBoundingClientRect: devuelve la caja YA rotada y mezcla los ejes. */
+ARC.pt=function(e){
+  const x=e.clientX,y=e.clientY;
+  if(ROT)return{x:y,y:Math.round(window.innerWidth)-x};
+  return{x:x-OFFX,y:y};      /* OFFX = columna centrada de los juegos verticales */
+};
+
+/* ------------------------------------------------------------------ 2. GUARDADO */
+const SAVE={};
+function saveKey(){return 'arc.'+GAME.slug;}
+function saveLoad(){
+  try{Object.assign(SAVE,JSON.parse(localStorage.getItem(saveKey())||'{}'));}catch(e){}
+  if(SAVE.mus===undefined)SAVE.mus=1;
+  if(SAVE.sfx===undefined)SAVE.sfx=1;
+  if(SAVE.vib===undefined)SAVE.vib=1;
+  if(SAVE.fx===undefined)SAVE.fx=1;
+  if(SAVE.fps===undefined)SAVE.fps=0;
+  if(!SAVE.stars)SAVE.stars={};
+  if(!SAVE.best)SAVE.best=0;
+  if(!SAVE.coins)SAVE.coins=0;
+  if(!SAVE.done)SAVE.done=0;      /* nivel más alto superado */
+  if(!SAVE.lang)SAVE.lang=(navigator.language||'es').slice(0,2).toLowerCase();
+  if(!STR[SAVE.lang])SAVE.lang='es';
+  if(SAVE.gfx==null)SAVE.gfx=2;
+}
+function saveNow(){try{localStorage.setItem(saveKey(),JSON.stringify(SAVE));}catch(e){}}
+ARC.save=saveNow;ARC.S=SAVE;
+
+
+/* ------------------------------------------------------------------ 2b. IDIOMAS
+   Todo texto visible sale de acá (data-i18n en el DOM + T() en el código). Cada
+   juego puede sumar sus propias claves con GAME.i18n={es:{},en:{},pt:{}} y se
+   mezclan sobre estas. El idioma se elige en la pantalla de carga la primera vez
+   y después en Ajustes; queda guardado. Si falta una clave se cae al español. */
+const LANGS=[['es','ES'],['en','EN'],['pt','PT']];
+const STR={
+  es:{loading:'CARGANDO',lang:'IDIOMA',tapPlay:'TOCÁ PARA JUGAR',play:'JUGAR',levels:'NIVELES',
+    settings:'AJUSTES',pause:'PAUSA',resume:'SEGUIR',retry:'REINTENTAR',menu:'MENÚ',next:'SIGUIENTE',
+    again:'OTRA VEZ',back:'VOLVER',done:'LISTO',wipe:'BORRAR PROGRESO',music:'Música',sfx:'Sonidos',
+    vib:'Vibración',extraFx:'Efectos extra',showFps:'Mostrar FPS',graphics:'Gráficos',
+    gfx0:'Bajo',gfx1:'Medio',gfx2:'Alto',gfx3:'Ultra',record:'RÉCORD',level:'NIVEL',
+    win:'¡NIVEL SUPERADO!',lost:'PERDISTE',points:'PUNTOS',wiped:'Progreso borrado',
+    art:'arte',sounds:'sonidos',models:'modelos',engine:'motor 3D',ready:'listo'},
+  en:{loading:'LOADING',lang:'LANGUAGE',tapPlay:'TAP TO PLAY',play:'PLAY',levels:'LEVELS',
+    settings:'SETTINGS',pause:'PAUSED',resume:'RESUME',retry:'RETRY',menu:'MENU',next:'NEXT',
+    again:'AGAIN',back:'BACK',done:'DONE',wipe:'WIPE PROGRESS',music:'Music',sfx:'Sound',
+    vib:'Vibration',extraFx:'Extra effects',showFps:'Show FPS',graphics:'Graphics',
+    gfx0:'Low',gfx1:'Medium',gfx2:'High',gfx3:'Ultra',record:'BEST',level:'LEVEL',
+    win:'LEVEL COMPLETE!',lost:'GAME OVER',points:'SCORE',wiped:'Progress wiped',
+    art:'art',sounds:'sounds',models:'models',engine:'3D engine',ready:'ready'},
+  pt:{loading:'CARREGANDO',lang:'IDIOMA',tapPlay:'TOQUE PARA JOGAR',play:'JOGAR',levels:'NÍVEIS',
+    settings:'AJUSTES',pause:'PAUSA',resume:'CONTINUAR',retry:'TENTAR DE NOVO',menu:'MENU',next:'SEGUINTE',
+    again:'DE NOVO',back:'VOLTAR',done:'PRONTO',wipe:'APAGAR PROGRESSO',music:'Música',sfx:'Sons',
+    vib:'Vibração',extraFx:'Efeitos extra',showFps:'Mostrar FPS',graphics:'Gráficos',
+    gfx0:'Baixo',gfx1:'Médio',gfx2:'Alto',gfx3:'Ultra',record:'RECORDE',level:'NÍVEL',
+    win:'NÍVEL COMPLETO!',lost:'VOCÊ PERDEU',points:'PONTOS',wiped:'Progresso apagado',
+    art:'arte',sounds:'sons',models:'modelos',engine:'motor 3D',ready:'pronto'}
+};
+function lang(){return SAVE.lang||'es';}
+ARC.T=function(k){
+  const g=(GAME.i18n&&GAME.i18n[lang()])||{};
+  if(g[k]!=null)return g[k];
+  const d=STR[lang()]||STR.es;
+  if(d[k]!=null)return d[k];
+  const ge=(GAME.i18n&&GAME.i18n.es)||{};
+  return ge[k]!=null?ge[k]:(STR.es[k]!=null?STR.es[k]:k);
+};
+const T=ARC.T;
+ARC.i18nApply=function(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=T(el.getAttribute('data-i18n'));});
+  if(GAME.subKey)$('mSub').innerHTML=T(GAME.subKey);
+  if(ARC.scr==='menu')refreshMenu();
+  if(GAME.i18nDone)nsafe2(()=>GAME.i18nDone());
+};
+const nsafe2=f=>{try{return f();}catch(e){console.warn(e);}};
+ARC.lang=function(l){
+  if(l){SAVE.lang=l;saveNow();ARC.i18nApply();paintSegs();}
+  return lang();
+};
+
+/* --------------------------------------------------------------- 2c. GRÁFICOS
+   Un solo número (0-3) que decide DPR, sombras, partículas y niebla. Se aplica en
+   caliente: no hace falta reiniciar el juego. */
+/* DPR: el 3D a más de 1.6 no se nota en un celular y cuesta el doble de píxeles.
+   Medido en este pack: con 2.5 el relleno de pantalla era el cuello de botella. */
+const GFXP=[{dpr:.75,part:.4,sh:0,fog:.7},{dpr:1,part:.7,sh:0,fog:.85},
+            {dpr:1.35,part:1,sh:1,fog:1},{dpr:1.6,part:1.3,sh:1,fog:1.15}];
+ARC.gfx=function(v){
+  if(v!==undefined){SAVE.gfx=clamp(v|0,0,3);saveNow();applyGfx();paintSegs();}
+  return SAVE.gfx==null?2:SAVE.gfx;
+};
+function applyGfx(){
+  const p=GFXP[ARC.gfx()];
+  ARC.q=p.part;
+  if(ARC.rnd){
+    ARC.rnd.setPixelRatio(Math.min(window.devicePixelRatio||1,p.dpr));
+    ARC.rnd.shadowMap.enabled=!!(GAME.shadows&&p.sh);
+    ARC.rnd.setSize(ARC.W,ARC.H,false);
+  }
+  if(GAME.gfxApply)nsafe2(()=>GAME.gfxApply(p));
+}
+ARC.gfxP=()=>GFXP[ARC.gfx()];
+function paintSegs(){
+  const mk=(host,items,cur,fn)=>{
+    const el=$(host);if(!el)return;
+    el.innerHTML='';
+    items.forEach(it=>{
+      const b=document.createElement('b');
+      b.textContent=it[1];b.className=(it[0]===cur?'on':'');
+      b.addEventListener('pointerdown',e=>{e.preventDefault();ARC.sfx('tap');ARC.vib(8);fn(it[0]);});
+      el.appendChild(b);
+    });
+  };
+  mk('langs',LANGS,lang(),l=>ARC.lang(l));
+  mk('segLang',LANGS,lang(),l=>ARC.lang(l));
+  mk('segGfx',[[0,T('gfx0')],[1,T('gfx1')],[2,T('gfx2')],[3,T('gfx3')]],ARC.gfx(),v=>ARC.gfx(v));
+}
+ARC.paintSegs=paintSegs;
+
+/* -------------------------------------------------------------------- 3. AUDIO */
+const SND={ctx:null,buf:{},gain:null,mus:null,ready:false};
+function actx(){
+  if(SND.ctx)return SND.ctx;
+  const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
+  SND.ctx=new C();
+  const lim=SND.ctx.createDynamicsCompressor();
+  lim.threshold.value=-6;lim.knee.value=0;lim.ratio.value=12;lim.attack.value=.003;lim.release.value=.15;
+  SND.gain=SND.ctx.createGain();SND.gain.gain.value=.85;
+  SND.gain.connect(lim);lim.connect(SND.ctx.destination);
+  return SND.ctx;
+}
+ARC.sndResume=function(){const c=actx();if(c&&c.state==='suspended')c.resume();};
+/* carga de efectos: si algo no llega o no se puede decodificar, se deja sin
+   buffer y sonará el blip sintetizado (nunca silencio total ni excepción) */
+ARC.sndLoad=function(map,done){
+  const ks=Object.keys(map);let n=0;
+  if(!ks.length){done&&done();return;}
+  ks.forEach(k=>{
+    fetch(map[k]).then(r=>r.arrayBuffer()).then(b=>{
+      const c=actx();if(!c)throw 0;
+      return new Promise((res,rej)=>c.decodeAudioData(b,res,rej));
+    }).then(buf=>{SND.buf[k]=buf;}).catch(()=>{}).then(()=>{
+      if(++n===ks.length){SND.ready=true;done&&done();}
+    });
+  });
+};
+/* blips de respaldo por nombre: no pretenden imitar el mp3, pero dan feedback */
+const BEEP={tap:[520,.05,'square',.25],pop:[720,.08,'sine',.3],chime:[1040,.16,'triangle',.28],
+  coin:[1180,.1,'square',.25],win:[880,.4,'triangle',.3],lose:[180,.4,'sawtooth',.25],
+  click:[1400,.04,'square',.22],wood:[240,.12,'sawtooth',.3],glass:[2200,.1,'triangle',.22],
+  splat:[300,.14,'sine',.3],groan:[120,.35,'sawtooth',.22],launch:[420,.14,'sawtooth',.28],
+  boom:[90,.35,'sawtooth',.35],power:[1320,.22,'triangle',.28],shoot:[640,.07,'square',.22]};
+ARC.sfx=function(name,o){
+  if(!SAVE.sfx)return;
+  const c=actx();if(!c)return;
+  o=o||{};
+  const b=SND.buf[name];
+  if(b){
+    const s=c.createBufferSource();s.buffer=b;
+    s.playbackRate.value=o.rate||1;
+    const g=c.createGain();g.gain.value=(o.vol==null?1:o.vol);
+    s.connect(g);g.connect(SND.gain);s.start(0);return;
+  }
+  const d=BEEP[name]||BEEP.tap;
+  const os=c.createOscillator(),g=c.createGain();
+  os.type=d[2];os.frequency.value=d[0]*(o.rate||1);
+  const v=d[3]*(o.vol==null?1:o.vol);
+  g.gain.setValueAtTime(0,c.currentTime);
+  g.gain.linearRampToValueAtTime(v,c.currentTime+.008);
+  g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+d[1]);
+  os.connect(g);g.connect(SND.gain);os.start();os.stop(c.currentTime+d[1]+.02);
+};
+ARC.music=function(url){
+  if(!url)return;
+  if(!SND.mus){
+    SND.mus=new Audio();SND.mus.loop=true;SND.mus.volume=.42;
+    SND.mus.addEventListener('error',()=>{},{passive:true});
+  }
+  if(SND.mus.src!==url){SND.mus.src=url;}
+  if(SAVE.mus){const p=SND.mus.play();if(p&&p.catch)p.catch(()=>{});}
+};
+ARC.musicStop=function(){if(SND.mus)SND.mus.pause();};
+ARC.vib=function(ms){if(SAVE.vib&&navigator.vibrate)try{navigator.vibrate(ms||12);}catch(e){}};
+
+/* ---------------------------------------------------------------- 4. EFECTOS */
+const PT=[],TX=[];
+let shake=0,shakeT=0;
+ARC.fx={
+  burst(x,y,o){
+    o=o||{};
+    let n=Math.round((o.n||14)*ARC.q*(SAVE.fx?1:.45));
+    const sp=o.speed||220,life=o.life||.55,g=o.g==null?900:o.g;
+    for(let i=0;i<n;i++){
+      const a=o.a==null?rnd(0,TAU):o.a+rnd(-.6,.6);
+      const v=sp*rnd(.35,1);
+      PT.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:life*rnd(.6,1.2),L:life,
+        s:(o.size||5)*rnd(.6,1.4),c:o.color||'#ffd166',g,sq:!!o.sq,
+        rot:rnd(0,TAU),spin:rnd(-8,8),fade:o.fade!==false});
+    }
+  },
+  ring(x,y,o){o=o||{};PT.push({ring:1,x,y,r:o.r0||6,R:o.r||90,l:o.life||.35,L:o.life||.35,
+    c:o.color||'#fff',w:o.w||4});},
+  text(x,y,txt,o){o=o||{};TX.push({x,y,t:txt,l:o.life||.8,L:o.life||.8,c:o.color||'#fff',
+    s:o.size||22,vy:o.vy==null?-46:o.vy});}
+};
+ARC.shake=function(m){shake=Math.max(shake,m||6);};
+function fxStep(dt){
+  for(let i=PT.length-1;i>=0;i--){const p=PT[i];
+    p.l-=dt;if(p.l<=0){PT.splice(i,1);continue;}
+    if(p.ring){p.r=lerp(p.r,p.R,1-Math.pow(.001,dt));continue;}
+    p.vy+=p.g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.rot+=p.spin*dt;
+    if(p.bounce&&p.y>p.bounce){p.y=p.bounce;p.vy*=-.42;p.vx*=.7;}
+  }
+  for(let i=TX.length-1;i>=0;i--){const t=TX[i];t.l-=dt;if(t.l<=0){TX.splice(i,1);continue;}
+    t.y+=t.vy*dt;}
+  if(shake>0){shakeT+=dt*46;shake=Math.max(0,shake-dt*shake*7-dt*3);}
+}
+function fxDraw(g){
+  for(const p of PT){
+    const k=p.l/p.L;
+    g.globalAlpha=p.fade===false?1:clamp(k*1.4,0,1);
+    if(p.ring){g.strokeStyle=p.c;g.lineWidth=p.w*k;g.beginPath();g.arc(p.x,p.y,p.r,0,TAU);g.stroke();continue;}
+    g.fillStyle=p.c;
+    if(p.sq){g.save();g.translate(p.x,p.y);g.rotate(p.rot);
+      g.fillRect(-p.s/2,-p.s/2,p.s,p.s);g.restore();}
+    else{g.beginPath();g.arc(p.x,p.y,p.s*(.4+.6*k),0,TAU);g.fill();}
+  }
+  g.globalAlpha=1;
+  for(const t of TX){
+    const k=t.l/t.L;
+    g.globalAlpha=clamp(k*1.6,0,1);
+    g.font='900 '+t.s+'px system-ui,sans-serif';g.textAlign='center';
+    g.lineWidth=4;g.strokeStyle='rgba(0,0,0,.55)';g.strokeText(t.t,t.x,t.y);
+    g.fillStyle=t.c;g.fillText(t.t,t.x,t.y);
+  }
+  g.globalAlpha=1;g.textAlign='left';
+}
+
+/* foto de la escena 3D para las sondas: se lee el framebuffer DENTRO de un
+   requestAnimationFrame, que corre después del render del bucle en el MISMO
+   frame — ahí el buffer todavía está intacto (después del compositado ya no). */
+ARC.snapGL=function(){
+  return new Promise(res=>{
+    requestAnimationFrame(()=>{
+      const r=ARC.rnd;if(!r){res(null);return;}
+      const gl=r.getContext();
+      const W=gl.drawingBufferWidth,H=gl.drawingBufferHeight;
+      const px=new Uint8Array(W*H*4);
+      gl.readPixels(0,0,W,H,gl.RGBA,gl.UNSIGNED_BYTE,px);
+      let sum=0,n=0;const uniq={};
+      for(let i=0;i<px.length;i+=4*37){n++;
+        sum+=px[i]*.3+px[i+1]*.6+px[i+2]*.1;
+        uniq[(px[i]>>5)+','+(px[i+1]>>5)+','+(px[i+2]>>5)]=1;}
+      res({luz:+(sum/Math.max(1,n)).toFixed(1),colores:Object.keys(uniq).length});
+    });
+  });
+};
+
+/* ---------------------------------------------------------------- 5. PANTALLAS */
+const SCRS=['menu','pause','over','levels','opts'];
+let optFrom='menu';
+ARC.show=function(s){
+  for(const k of SCRS)$(k).classList.toggle('on',k===s);
+  if(s==='menu'&&GAME.attract)$('menu').classList.add('live');
+  if(s!=='load')$('load').style.display='none';
+  $('hud').style.display=(s==='game')?'block':'none';
+  ARC.scr=s;
+};
+ARC.toast=function(t,ms){
+  const el=$('toast');el.textContent=t;el.classList.add('on');
+  clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),ms||1100);
+};
+ARC.hud=function(score,info){
+  if(score!==undefined)$('pScore').textContent=score;
+  if(info!==undefined)$('pInfo').innerHTML=info;
+};
+/* bandeja de botones del juego (impulsar, boosters, etc.) */
+ARC.tray=function(list){
+  const t=$('tray');t.innerHTML='';
+  (list||[]).forEach(b=>{
+    const el=document.createElement('div');
+    el.className='btn '+(b.gh?'gh ':'')+(b.sq?'sq':'');
+    el.id='tb_'+b.id;el.innerHTML=b.txt;
+    el.addEventListener('pointerdown',ev=>{ev.preventDefault();ARC.sfx('tap');ARC.vib(10);b.fn&&b.fn(el);});
+    t.appendChild(el);
+  });
+};
+ARC.trayTxt=function(id,txt){const el=$('tb_'+id);if(el)el.innerHTML=txt;};
+
+/* --------------------------------------------------------------- 6. PARTIDA */
+ARC.play=function(lvl){
+  ARC.lvl=lvl||1;
+  ARC.alive=true;ARC.paused=false;
+  PT.length=0;TX.length=0;shake=0;
+  ARC.show('game');
+  GAME.start(ARC.lvl);
+  ARC.music(GAME.music);
+};
+ARC.over=function(o){
+  o=o||{};ARC.alive=false;
+  const st=Math.max(0,Math.min(3,o.stars==null?(o.win?3:0):o.stars));
+  if(o.win){
+    const key=String(ARC.lvl);
+    if((SAVE.stars[key]||0)<st){SAVE.stars[key]=st;}
+    if(ARC.lvl>SAVE.done)SAVE.done=ARC.lvl;
+  }
+  if(o.score!=null&&o.score>SAVE.best)SAVE.best=o.score;
+  if(o.coins)SAVE.coins+=o.coins;
+  saveNow();
+  $('oTtl').textContent=o.title||(o.win?T('win'):T('lost'));
+  $('oScore').textContent=o.score!=null?(T('points')+' '+o.score):'';
+  $('oSub').innerHTML=o.sub||'';
+  const S=$('oStars').children;
+  $('oStars').style.display=o.noStars?'none':'flex';
+  for(let i=0;i<3;i++)S[i].classList.toggle('on',i<st);
+  $('bNext').style.display=(o.win&&GAME.levels&&ARC.lvl<GAME.levels)?'flex':'none';
+  ARC.sfx(o.win?'win':'lose');
+  ARC.vib(o.win?[10,40,10]:60);
+  ARC.show('over');
+};
+ARC.pause=function(){
+  if(!ARC.alive||ARC.paused)return;
+  ARC.paused=true;ARC.show('pause');GAME.pause&&GAME.pause();
+};
+ARC.resume=function(){
+  if(!ARC.alive)return;
+  ARC.paused=false;ARC.show('game');GAME.resume&&GAME.resume();
+};
+ARC.menu=function(){
+  ARC.alive=false;ARC.paused=false;ARC.show('menu');refreshMenu();
+};
+
+/* --------------------------------------------------------------- 7. EL BUCLE
+   Paso FIJO de 1/60 con acumulador y alpha de interpolación al dibujar: la
+   física no depende de los FPS (un celular a 30 y otro a 120 simulan igual) y
+   el dibujo no tiembla. Se cortan los saltos grandes (pestaña en segundo plano)
+   a 5 pasos por frame para no colgar el hilo. */
+const STEP=1/60;
+let acc=0,last=0,fpsA=60,slowT=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(!last)last=ts;
+  let d=(ts-last)/1000;last=ts;
+  if(d>.25)d=.25;
+  ARC.fps=fpsA=lerp(fpsA,1/Math.max(.001,d),.06);
+  if(SAVE.fps)$('fps').textContent=Math.round(fpsA)+' fps';
+  /* calidad adaptativa: dos segundos por debajo de 45 fps y se recortan
+     partículas (ARC.q lo leen los juegos y ARC.fx.burst) */
+  if(fpsA<45){slowT+=d;if(slowT>2&&ARC.q>.5){ARC.q=.5;slowT=0;}}
+  else{slowT=Math.max(0,slowT-d);if(fpsA>56&&ARC.q<1)ARC.q=Math.min(1,ARC.q+d*.2);}
+  const run=ARC.alive&&!ARC.paused;
+  acc+=d;
+  let n=0;
+  while(acc>=STEP&&n<5){
+    acc-=STEP;n++;ARC.t+=STEP;ARC.frame++;
+    if(run)GAME.step(STEP);
+    fxStep(STEP);
+  }
+  if(acc>STEP*5)acc=0;
+  const g=ARC.g;if(!g)return;
+  g.setTransform(ARC.dpr,0,0,ARC.dpr,0,0);
+  g.clearRect(0,0,ARC.W,ARC.H);
+  if(shake>.05){
+    g.translate(Math.sin(shakeT*1.7)*shake,Math.cos(shakeT*2.3)*shake*.8);
+  }
+  /* en el menú no se dibuja el juego: el canvas queda limpio (el arte del menú es
+     DOM) y el celular no gasta batería dibujando un tablero que nadie ve */
+  if(ARC.scr==='game'||ARC.scr==='pause'||ARC.scr==='over'){
+    GAME.draw(g,acc/STEP);
+    fxDraw(g);
+  }else if(ARC.scr==='menu'&&GAME.attract){
+    /* MODO ATRACCIÓN: el juego dibuja su propia escena viva detrás del menú (eso es
+       lo que hace que un menú se sienta moderno y no una tarjeta con una foto).
+       El juego avisa que la tiene con GAME.attract; el shell le pone la clase
+       .live al menú para que el arte fijo no compita con la escena. */
+    nsafe2(()=>GAME.attract(STEP,g));
+    fxDraw(g);
+  }
+}
+
+/* ------------------------------------------------------------- 8. ENTRADA */
+function bindInput(){
+  const cv=$('cv');
+  const down=e=>{
+    e.preventDefault();ARC.sndResume();
+    if(ARC.alive&&!ARC.paused&&GAME.down)GAME.down(ARC.pt(e),e);
+  };
+  const move=e=>{
+    e.preventDefault();
+    if(ARC.alive&&!ARC.paused&&GAME.move)GAME.move(ARC.pt(e),e);
+  };
+  const up=e=>{
+    e.preventDefault();
+    if(ARC.alive&&!ARC.paused&&GAME.up)GAME.up(ARC.pt(e),e);
+  };
+  cv.addEventListener('pointerdown',down);
+  cv.addEventListener('pointermove',move);
+  cv.addEventListener('pointerup',up);
+  cv.addEventListener('pointercancel',up);
+  const B=(id,fn)=>{const el=$(id);if(!el)return;
+    el.addEventListener('pointerdown',e=>{e.preventDefault();ARC.sndResume();ARC.sfx('tap');ARC.vib(10);fn(el);});};
+  B('bPlay',()=>ARC.play(GAME.levels?Math.min(GAME.levels,(SAVE.done||0)+1):1));
+  B('bLevels',()=>{buildLevels();ARC.show('levels');});
+  B('bLvBack',()=>ARC.menu());
+  /* AJUSTES se puede abrir desde el MENÚ y desde la PAUSA, y LISTO vuelve a donde
+     se abrió. Lo pidieron los tres verificadores: antes, cambiar idioma o gráficos
+     obligaba a abandonar la partida (bOptBack llamaba siempre a ARC.menu()). */
+  B('bOpts',()=>{optFrom='menu';ARC.show('opts');});
+  /* botón libre del menú: cada juego lo usa para lo suyo (personajes, tienda...) */
+  if(GAME.extra){const e=$('bExtra');e.style.display='flex';e.innerHTML=GAME.extra.icon||'★';
+    B('bExtra',()=>nsafe2(()=>GAME.extra.fn()));}
+  B('bOpts2',()=>{optFrom='pause';ARC.show('opts');});
+  B('bOptBack',()=>{if(optFrom==='pause'&&ARC.alive){ARC.show('pause');}else ARC.menu();});
+  B('pPause',()=>ARC.pause());
+  B('bRes',()=>ARC.resume());
+  B('bRetry',()=>ARC.play(ARC.lvl));
+  B('bQuit',()=>ARC.menu());
+  B('bAgain',()=>ARC.play(ARC.lvl));
+  B('bMenu',()=>ARC.menu());
+  B('bNext',()=>ARC.play(Math.min(GAME.levels||1,ARC.lvl+1)));
+  B('bWipe',()=>{const m=SAVE.mus,s=SAVE.sfx,v=SAVE.vib,f=SAVE.fx;
+    for(const k in SAVE)delete SAVE[k];
+    SAVE.mus=m;SAVE.sfx=s;SAVE.vib=v;SAVE.fx=f;SAVE.stars={};SAVE.best=0;SAVE.done=0;SAVE.coins=0;
+    saveNow();ARC.toast(T('wiped'));refreshMenu();});
+  const SW=(id,key,fn)=>{const el=$(id);if(!el)return;
+    el.classList.toggle('on',!!SAVE[key]);
+    el.addEventListener('pointerdown',e=>{e.preventDefault();
+      SAVE[key]=SAVE[key]?0:1;el.classList.toggle('on',!!SAVE[key]);saveNow();
+      ARC.sfx('tap');ARC.vib(10);fn&&fn(SAVE[key]);});};
+  SW('swMus','mus',v=>{if(v)ARC.music(GAME.music);else ARC.musicStop();});
+  SW('swSfx','sfx');
+  SW('swVib','vib');
+  SW('swFx','fx');
+  SW('swFps','fps',v=>{$('fps').style.display=v?'block':'none';});
+  document.addEventListener('keydown',e=>{
+    if(e.code==='Escape'){if(ARC.alive&&!ARC.paused)ARC.pause();else if(ARC.paused)ARC.resume();}
+    if(GAME.key)GAME.key(e.code,true);
+  });
+  document.addEventListener('keyup',e=>{if(GAME.key)GAME.key(e.code,false);});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden&&ARC.alive)ARC.pause();});
+}
+
+/* -------------------------------------------------------- 9. MENÚ / NIVELES */
+function refreshMenu(){
+  $('mTtl').innerHTML=GAME.title;
+  $('mSub').innerHTML=GAME.subKey?T(GAME.subKey):GAME.sub;
+  $('mCoins').textContent=SAVE.coins||0;
+  const bl=GAME.bestKey?T(GAME.bestKey):(GAME.bestLabel||T('record'));
+  $('mBest').innerHTML=(GAME.bestLabel===null?'':('<i>★</i>'+bl+' '+(SAVE.best||0)));
+  $('mBest').style.display=GAME.bestLabel===null?'none':'flex';
+  const lv=$('mLvl');
+  if(GAME.levels){
+    lv.style.display='flex';
+    const st=Object.values(SAVE.stars||{}).reduce((s2,v)=>s2+v,0);
+    lv.innerHTML='<i>▸</i>'+T('level')+' '+Math.min(GAME.levels,(SAVE.done||0)+1)+'/'+GAME.levels+
+      ' <i>★</i>'+st;
+  }else lv.style.display='none';
+  $('bLevels').style.display=GAME.levels?'flex':'none';
+  /* la animación de entrada se re-dispara cada vez que se vuelve al menú */
+  document.querySelectorAll('#menu .anim').forEach(el=>{
+    el.style.animation='none';void el.offsetWidth;el.style.animation='';});
+  ARC.music(GAME.music);
+}
+function buildLevels(){
+  const g=$('lvGrid');g.innerHTML='';
+  const n=GAME.levels||1;
+  const cols=Math.min(8,Math.ceil(Math.sqrt(n)+1));
+  g.style.gridTemplateColumns='repeat('+cols+',auto)';
+  for(let i=1;i<=n;i++){
+    const st=SAVE.stars[String(i)]||0;
+    const lock=i>(SAVE.done||0)+1;
+    const el=document.createElement('div');
+    el.className='lvl'+(st?' done':'')+(lock?' lock':'');
+    el.innerHTML=i+(st?'<b>'+'★'.repeat(st)+'</b>':'');
+    if(!lock)el.addEventListener('pointerdown',e=>{e.preventDefault();ARC.sfx('tap');ARC.play(i);});
+    g.appendChild(el);
+  }
+}
+
+/* -------------------------------------------------------------- 10. ARRANQUE */
+ARC.boot=async function(){
+  document.documentElement.style.setProperty('--acc',GAME.acc||'#ffd166');
+  document.documentElement.style.setProperty('--acc2',GAME.acc2||'#f0a02a');
+  saveLoad();
+  if(GAME.portrait)document.body.classList.add('vert');
+  $('ldName').textContent=GAME.name||'';
+  ARC.i18nApply();paintSegs();
+  fit();bindInput();
+  $('fps').style.display=SAVE.fps?'block':'none';
+
+  /* ---------------- CARGA DE ASSETS con barra de verdad ----------------
+     Se cuentan TODOS los pasos (motor 3D, arte, sonidos, modelos) y la barra
+     avanza por paso terminado. El fondo de la pantalla de carga es el arte del
+     propio juego, como en los otros juegos del repo. Al final NO se entra solo:
+     aparece "TOCÁ PARA JUGAR", porque ese toque es lo que habilita el audio en
+     el celular (sin gesto, el navegador no deja sonar nada). */
+  const steps=[];
+  if(GAME.three)steps.push('engine');
+  if(GAME.art)steps.push('art');
+  const sfxN=Object.keys(GAME.sfx||{}).length;
+  if(sfxN)steps.push('sounds');
+  const glbN=Object.keys(GAME.glb||{}).length;
+  if(glbN)steps.push('models');
+  let done=0;
+  const total=Math.max(1,steps.length);
+  const prog=(k)=>{
+    done++;
+    const pc=Math.round(done/total*100);
+    $('ldBar').style.width=pc+'%';$('ldPct').textContent=pc+'%';
+    $('ldTxt').textContent=T(k)||'';
+  };
+  $('ldTxt').textContent=T(steps[0]||'loading');
+
+  /* 1. motor 3D (por importmap, sólo si el juego es 3D) */
+  if(GAME.three){
+    try{
+      const THREE=await import('three');
+      ARC.THREE=THREE;
+      const gl=$('gl');
+      ARC.rnd=new THREE.WebGLRenderer({canvas:gl,antialias:true,alpha:false,powerPreference:'high-performance'});
+      ARC.rnd.setClearColor(new THREE.Color(GAME.sky||'#0d1014'),1);
+      if(THREE.SRGBColorSpace)ARC.rnd.outputColorSpace=THREE.SRGBColorSpace;
+      ARC.rnd.shadowMap.enabled=!!GAME.shadows;
+      if(GAME.shadows)ARC.rnd.shadowMap.type=THREE.PCFSoftShadowMap;
+      fit();
+    }catch(e){console.warn('three',e);}
+    prog('engine');
+  }
+  applyGfx();
+
+  /* 2. arte del menú (y fondo de esta misma pantalla) */
+  if(GAME.art){
+    await new Promise(res=>{
+      const im=new Image();
+      im.onload=()=>{
+        $('load').style.backgroundImage='url('+GAME.art+')';
+        const el=$('menu');
+        if(GAME.portrait){
+          el.style.backgroundImage='url('+GAME.art+'), linear-gradient(180deg,'+
+            (GAME.acc2||'#222')+'55 0%, #0a0d12 46%, #05070a 100%)';
+          el.style.backgroundSize='100% auto, 100% 100%';
+          el.style.backgroundRepeat='no-repeat, no-repeat';
+          el.style.backgroundPosition='center 14%, center';
+        }else{
+          el.style.backgroundImage='url('+GAME.art+')';
+        }
+        el.classList.add('hasart');res();
+      };
+      im.onerror=()=>res();
+      im.src=GAME.art;
+    });
+    prog('art');
+  }
+  /* 3. sonidos */
+  if(sfxN){
+    await new Promise(res=>ARC.sndLoad(GAME.sfx,res));
+    prog('sounds');
+  }
+  /* 4. modelos 3D (opcional: los juegos que usan GLB los declaran en GAME.glb) */
+  if(glbN&&ARC.THREE){
+    try{
+      const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
+      const ld=new GLTFLoader();
+      ARC.glb={};
+      await Promise.all(Object.keys(GAME.glb).map(k=>new Promise(res=>{
+        ld.load(GAME.glb[k],g=>{ARC.glb[k]=g;res();},undefined,()=>{ARC.glb[k]=null;res();});
+      })));
+    }catch(e){console.warn('glb',e);ARC.glb=ARC.glb||{};}
+    prog('models');
+  }
+  /* 4b. LOS GLB GENERADOS VIENEN CON DEMASIADA MALLA. Medido en este pack: la
+     sierra y el arco de Rueda traían 28.725 y 27.592 triángulos cada uno, y la
+     escena llegaba a 99.793 triángulos a 11 fps. Se simplifican UNA vez al
+     cargarlos, hasta GAME.glbTris (por defecto 1200 por modelo).
+     DOS PASOS, y el primero es el que importa: SimplifyModifier NO puede colapsar
+     nada si los vértices están duplicados por triángulo (así vienen los GLB de
+     image_to_3d), así que primero se SUELDAN con mergeVertices y después se
+     simplifica. Sin el soldado, modify() devolvía la malla igual (medido:
+     28725 -> 28725). Si algo falla, se deja la malla como vino: nunca se rompe. */
+  if(ARC.glb&&Object.keys(ARC.glb).length){
+    const target=GAME.glbTris||1200;
+    try{
+      const [{SimplifyModifier},BGU]=await Promise.all([
+        import('three/addons/modifiers/SimplifyModifier.js'),
+        import('three/addons/utils/BufferGeometryUtils.js')]);
+      const mod=new SimplifyModifier();
+      ARC.glbTris={};
+      for(const k in ARC.glb){
+        const g=ARC.glb[k];if(!g||!g.scene)continue;
+        let before=0,after=0;
+        g.scene.traverse(o=>{
+          if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;
+          const tri0=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;
+          before+=tri0;
+          if(tri0<=target){after+=tri0;return;}
+          try{
+            let geo=o.geometry;
+            /* soldar: de 3 vértices por triángulo a vértices compartidos */
+            if(BGU&&BGU.mergeVertices)geo=BGU.mergeVertices(geo,1e-4);
+            const verts=geo.attributes.position.count;
+            const tri=(geo.index?geo.index.count:verts)/3;
+            const keep=clamp(target/tri,.03,1);
+            const drop=Math.floor(verts*(1-keep));
+            const sim=drop>0?mod.modify(geo,drop):geo;
+            const tri2=(sim.index?sim.index.count:sim.attributes.position.count)/3;
+            if(sim&&tri2>20&&tri2<tri){
+              o.geometry.dispose();o.geometry=sim;o.geometry.computeVertexNormals();
+              after+=tri2;
+            }else after+=tri0;
+          }catch(e){after+=tri0;}
+        });
+        ARC.glbTris[k]=[Math.round(before),Math.round(after)];
+      }
+    }catch(e){console.warn('simplify',e);}
+  }
+  /* 5. listo: el juego se prepara y se espera el toque */
+  nsafe2(()=>GAME.init&&GAME.init());
+  requestAnimationFrame(loop);
+  $('ldBar').style.width='100%';$('ldPct').textContent='100%';
+  $('ldTxt').textContent=T('ready');
+  $('ldGo').classList.add('on');
+  const enter=()=>{
+    $('ldGo').removeEventListener('pointerdown',enter);
+    ARC.sndResume();
+    $('load').style.display='none';
+    ARC.show('menu');refreshMenu();
+    ARC.music(GAME.music);
+  };
+  $('ldGo').addEventListener('pointerdown',e=>{e.preventDefault();enter();});
+  /* atajo para las sondas y para el teclado */
+  ARC.enterMenu=enter;
+  document.addEventListener('keydown',e=>{if(ARC.scr==='load'&&(e.code==='Space'||e.code==='Enter'))enter();});
+};
+
+/* ============================ CONTRATO DEL JUEGO ============================
+   window.GAME = {
+     slug, name, title (HTML), sub (HTML), acc, acc2,   // identidad y colores
+     art, music, sfx:{nombre:url},                      // assets
+     levels, bestLabel,                                 // progresión
+     init(), start(lvl), step(dt), draw(g,alpha),       // ciclo
+     down(p,e), move(p,e), up(p,e), key(code,down),     // entrada (p en px del stage)
+     resize(), pause(), resume()                        // opcionales
+   }
+   El juego avisa el final con ARC.over({win,score,stars,sub,coins}).
+   ========================================================================== */
+
+/* ============================================================================
+   ARENA — arena de supervivencia en tres cuartos (tipo Archero)
+   ----------------------------------------------------------------------------
+   LA MECÁNICA: el héroe DISPARA SOLO, pero únicamente cuando está QUIETO. El dedo
+   lo mueve (joystick flotante: nace donde tocás, en cualquier parte de la
+   pantalla). Moverse = no disparar. Ahí está toda la tensión del género.
+
+   ESTRUCTURA: 8 SALAS por nivel, JEFE en la 4 y en la 8. Entre salas se elige
+   UNA de TRES MEJORAS al azar (daño, tiro doble, rebote, atravesar, vida,
+   velocidad, imán, crítico, cadencia). Las monedas se guardan entre partidas y
+   se gastan en la FRAGUA (botón redondo propio del menú, GAME.extra) en mejoras
+   PERMANENTES que arrancan con vos.
+
+   ENEMIGOS con patrones distintos y silueta distinta (se leen de un vistazo):
+     mole    (icosaedro)  persigue y golpea al contacto
+     torre   (cono)       mantiene distancia y dispara
+     púa     (octaedro)   se planta, avisa con un anillo, y EMBISTE
+     divisor (icosaedro grande, verde) al morir se parte en dos moles chicos
+     JEFE    (modelo 3D)  cicla volea radial / embestida / invocación / espiral
+
+   LO QUE HAY QUE SABER PARA TOCAR ESTE ARCHIVO
+   --------------------------------------------
+   · VELOCIDAD. Todo lo repetido va en InstancedMesh (enemigos por SILUETA, balas de
+     los dos bandos, monedas, sombras, anillos de aviso) y todo lo estático va
+     FUSIONADO en una sola geometría con color por vértice: piso+muros+faldón+
+     braseros = 1 llamada, decorado de afuera = 1 llamada, cajas de la sala = 1.
+     Medido con renderer.info en partida: 1.700 triángulos y 6 llamadas en una sala
+     normal, 3.159 / 13 con la sala llena a mano (12 bichos + 60 balas + 30
+     monedas) y 7.310 / 9 en la sala del jefe (ahí pesan los dos GLB). Presupuesto
+     del pack: 25.000 y 60. Los GLB venían con 29.411 y 29.380 triángulos y el
+     shell los baja a 3.311 y 3.041 (GAME.glbTris = 5.000).
+   · EL CUELLO DE BOTELLA DE ESTE JUEGO ES EL RELLENO, NO LA MALLA. Es una vista de
+     arriba: el piso cubre el 85% del cuadro. Medido sin vsync en el chromium de
+     swiftshader, un píxel cubierto cuesta ~72 ns, así que la cuenta se paga en
+     PÍXELES y no en triángulos. Lo que se hizo, en orden de lo que rindió:
+       -15,0 ms  fuera el plano de suelo de 150x150 (media pantalla de más)
+       -13,0 ms  materiales de los GLB: Standard (PBR) -> Lambert con la misma
+                 textura y facetado (el shader PBR por píxel es carísimo acá)
+       - 2,7 ms  la capa 2D del HUD: menos texto, degradado del jefe cacheado,
+                 viñeta de daño en los bordes en vez de un fillRect entero
+       - 1,9 ms  las monedas no llevan sombra (eran 56 discos transparentes)
+     Total: 42,5 ms por cuadro -> 17-19 ms. Y por si el aparato igual no llega,
+     hay RESOLUCIÓN ADAPTATIVA (ver resStep): en un celular real nunca baja.
+   · CÁMARA FIJA que encuadra TODA la sala. fitCam() calcula la distancia con el
+     aspecto real del escenario, así en 900x430 y en el celular vertical rotado
+     (915x412) no se corta ni un muro. La sala mide 21 x 12 justamente para que a
+     52° de inclinación llene el cuadro apaisado.
+   · MODO ATRACCIÓN (GAME.attract): el menú tiene la arena viva detrás — el héroe
+     gira y dispara, los enemigos orbitan y explotan, la cámara se balancea. Es la
+     MISMA escena y los MISMOS pools que la partida (cero costo extra de memoria).
+   · UNA SOLA VERDAD DE POSICIÓN: hero.x/hero.z son la posición real; el dibujo
+     interpola entre el paso anterior y el actual (px/pz) con el alpha del shell.
+   · JUSTICIA: los enemigos aparecen con un anillo de aviso 0,55 s antes y nunca
+     a menos de 5 unidades del héroe. La sala 1 del nivel 1 arranca con 3 moles
+     lentos y sin torres: nadie muere en el primer segundo.
+   · EL PILOTO (dbg.autoMove) puntúa 16 direcciones + "quedarse quieto" mirando
+     0,35 s adelante: descarta lo que sale de la arena, premia alejarse del enemigo
+     más cercano y de la trayectoria de las balas, y si quedarse quieto es seguro
+     se queda quieto (porque quieto es cuando dispara). También elige la mejora
+     cuando aparecen las cartas, si no la sonda se quedaría trabada ahí.
+   ========================================================================== */
+const G={
+  slug:'arena',name:'ARENA',
+  title:'<em>ARENA</em>',
+  sub:'El héroe dispara solo cuando está QUIETO. Salas, jefes y mejoras.',
+  subKey:'sub',
+  acc:'#ffb02e',acc2:'#e0651b',
+  levels:8,bestLabel:'SALAS',bestKey:'roomsL',
+  three:true,sky:'#0b0713',shadows:false,
+  glbTris:5000,
+  art:A('art-arena.jpg'),music:A('mus-arena.m4a'),
+  sfx:{tap:A('sfx-tap.mp3'),click:A('sfx-click.mp3'),coin:A('sfx-coin.mp3'),win:A('sfx-win.mp3'),
+       lose:A('sfx-lose.mp3'),boom:A('sfx-boom.mp3'),power:A('sfx-power.mp3'),chime:A('sfx-chime.mp3'),
+       shoot:A('sfx-arena-shoot.mp3'),splat:A('sfx-arena-splat.mp3'),groan:A('sfx-arena-roar.mp3')},
+  glb:{heroe:A('m-arena-heroe.glb'),jefe:A('m-arena-jefe.glb')},
+  i18n:{
+    es:{sub:'El héroe dispara solo cuando está <b>QUIETO</b>.<br>8 salas por nivel, jefe en la 4 y en la 8, y una mejora a elección entre salas.',
+      roomsL:'SALAS',room:'SALA',bossRoom:'SALA DEL JEFE',wave:'OLEADA',bossHere:'¡JEFE!',
+      clear:'¡SALA LIMPIA!',pick:'ELEGÍ UNA MEJORA',pickSub:'toca una carta',
+      tutMove:'ARRASTRÁ PARA MOVERTE',tutStop:'QUIETO = DISPARA',
+      abil:'RÁFAGA',abilRdy:'RÁFAGA LISTA',
+      uDmg:'DAÑO',uDmgD:'+35% de daño',
+      uRate:'CADENCIA',uRateD:'+25% de disparos',
+      uMult:'TIRO MÚLTIPLE',uMultD:'+1 flecha por disparo',
+      uBounce:'REBOTE',uBounceD:'las flechas rebotan +1 vez',
+      uPierce:'ATRAVESAR',uPierceD:'las flechas cruzan +1 enemigo',
+      uHp:'VIDA',uHpD:'+2 de vida máxima y curás 2',
+      uHeal:'CURACIÓN',uHealD:'recuperás 4 de vida',
+      uSpd:'VELOCIDAD',uSpdD:'+14% de velocidad',
+      uMag:'IMÁN',uMagD:'+70% de alcance del imán',
+      uCrit:'CRÍTICO',uCritD:'+14% de golpe doble',
+      shop:'FRAGUA',shopSub:'Mejoras PERMANENTES: se aplican en cada partida.',
+      sHp:'Corazón extra',sDmg:'Filo eterno',sMag:'Imán del enano',sRate:'Cuerda tensa',
+      sHpD:'+1 de vida al empezar',sDmgD:'+8% de daño al empezar',
+      sMagD:'+45% de imán al empezar',sRateD:'+7% de cadencia al empezar',
+      buy:'MEJORAR',max:'AL MÁXIMO',close:'CERRAR',noCoins:'Te faltan monedas',
+      bought:'¡MEJORADO!',coins:'monedas',lvlN:'nivel',
+      dTtl:'TE MATARON',wTtl:'¡NIVEL SUPERADO!',
+      statRooms:'Salas',statKills:'Bajas',statCoins:'Monedas',statBest:'Mejor',
+      hpLbl:'VIDA',newRec:'¡NUEVO RÉCORD!',allUp:'MEJORAS'},
+    en:{sub:'The hero only shoots while <b>STANDING STILL</b>.<br>8 rooms per level, a boss on 4 and 8, one upgrade of your choice between rooms.',
+      roomsL:'ROOMS',room:'ROOM',bossRoom:'BOSS ROOM',wave:'WAVE',bossHere:'BOSS!',
+      clear:'ROOM CLEAR!',pick:'PICK AN UPGRADE',pickSub:'tap a card',
+      tutMove:'DRAG TO MOVE',tutStop:'STAND STILL = SHOOT',
+      abil:'BURST',abilRdy:'BURST READY',
+      uDmg:'DAMAGE',uDmgD:'+35% damage',
+      uRate:'FIRE RATE',uRateD:'+25% shots',
+      uMult:'MULTISHOT',uMultD:'+1 arrow per shot',
+      uBounce:'BOUNCE',uBounceD:'arrows bounce +1 time',
+      uPierce:'PIERCE',uPierceD:'arrows go through +1 enemy',
+      uHp:'HEALTH',uHpD:'+2 max health, heal 2',
+      uHeal:'HEAL',uHealD:'restore 4 health',
+      uSpd:'SPEED',uSpdD:'+14% move speed',
+      uMag:'MAGNET',uMagD:'+70% magnet range',
+      uCrit:'CRIT',uCritD:'+14% double hit',
+      shop:'FORGE',shopSub:'PERMANENT upgrades: they apply to every run.',
+      sHp:'Extra heart',sDmg:'Eternal edge',sMag:'Dwarf magnet',sRate:'Tight string',
+      sHpD:'+1 starting health',sDmgD:'+8% starting damage',
+      sMagD:'+45% starting magnet',sRateD:'+7% starting fire rate',
+      buy:'UPGRADE',max:'MAXED',close:'CLOSE',noCoins:'Not enough coins',
+      bought:'UPGRADED!',coins:'coins',lvlN:'level',
+      dTtl:'YOU DIED',wTtl:'LEVEL COMPLETE!',
+      statRooms:'Rooms',statKills:'Kills',statCoins:'Coins',statBest:'Best',
+      hpLbl:'HEALTH',newRec:'NEW BEST!',allUp:'UPGRADES'},
+    pt:{sub:'O herói só atira <b>PARADO</b>.<br>8 salas por nível, chefe na 4 e na 8, e uma melhoria à escolha entre salas.',
+      roomsL:'SALAS',room:'SALA',bossRoom:'SALA DO CHEFE',wave:'ONDA',bossHere:'CHEFE!',
+      clear:'SALA LIMPA!',pick:'ESCOLHA UMA MELHORIA',pickSub:'toque numa carta',
+      tutMove:'ARRASTE PARA MOVER',tutStop:'PARADO = ATIRA',
+      abil:'RAJADA',abilRdy:'RAJADA PRONTA',
+      uDmg:'DANO',uDmgD:'+35% de dano',
+      uRate:'CADÊNCIA',uRateD:'+25% de tiros',
+      uMult:'TIRO MÚLTIPLO',uMultD:'+1 flecha por tiro',
+      uBounce:'RICOCHETE',uBounceD:'as flechas ricocheteiam +1 vez',
+      uPierce:'PERFURAR',uPierceD:'as flechas atravessam +1 inimigo',
+      uHp:'VIDA',uHpD:'+2 de vida máxima e cura 2',
+      uHeal:'CURA',uHealD:'recupera 4 de vida',
+      uSpd:'VELOCIDADE',uSpdD:'+14% de velocidade',
+      uMag:'ÍMÃ',uMagD:'+70% de alcance do ímã',
+      uCrit:'CRÍTICO',uCritD:'+14% de golpe duplo',
+      shop:'FORJA',shopSub:'Melhorias PERMANENTES: valem em todas as partidas.',
+      sHp:'Coração extra',sDmg:'Fio eterno',sMag:'Ímã do anão',sRate:'Corda tensa',
+      sHpD:'+1 de vida ao começar',sDmgD:'+8% de dano ao começar',
+      sMagD:'+45% de ímã ao começar',sRateD:'+7% de cadência ao começar',
+      buy:'MELHORAR',max:'NO MÁXIMO',close:'FECHAR',noCoins:'Faltam moedas',
+      bought:'MELHORADO!',coins:'moedas',lvlN:'nível',
+      dTtl:'VOCÊ MORREU',wTtl:'NÍVEL COMPLETO!',
+      statRooms:'Salas',statKills:'Baixas',statCoins:'Moedas',statBest:'Melhor',
+      hpLbl:'VIDA',newRec:'NOVO RECORDE!',allUp:'MELHORIAS'}
+  }
+};
+/* OJO: el shell ya declara `const T=ARC.T` en este mismo ámbito de módulo, y
+   build.js declara `const A=f=>BASE+f`. Redeclarar cualquiera de los dos rompe el
+   juego entero ("Identifier already declared"). Acá se usan los del shell. */
+
+/* --------------------------------------------------------------- constantes */
+/* MEDIDA DE LA SALA. Se elige para que el HÉROE entre ~14 veces a lo ancho (en el
+   género el personaje ocupa ~7% del ancho; con la sala de 19 unidades entraba 20
+   veces y en 900x430 medía 30 px: una manchita). Y el ALTO PROYECTADO tiene que
+   llenar el cuadro apaisado:  2·RW / (2·RH·sen52 + muro·cos52) ~ 2,1  */
+const RW=7.8,RH=3.9;               /* media arena: 15,6 x 7,8 unidades */
+const TS=1.3;                      /* lado de la baldosa */
+const NX=Math.round(RW*2/TS),NZ=Math.round(RH*2/TS);
+const FOV=48,PITCH=52*Math.PI/180; /* tres cuartos: 52° sobre el horizonte */
+const HR=.48;                      /* radio del héroe */
+const CAPE=48,CAPB=72,CAPEB=96,CAPC=56,CAPS=64,CAPT=14;  /* capacidad de los pools */
+const HYAW=0;                       /* los GLB de image_to_3d salen mirando a +Z, igual que aim */
+const PAL={
+  f0:'#4b4074',f1:'#413767',rim:'#a992f0',wall:'#251b40',wallTop:'#54447f',
+  strip:'#ffb02e',floorGlow:'#5d4f92',ground:'#1b1333',prop:'#241a3d',propTop:'#3d2f66',
+  hero:'#ffc24a',heroD:'#6b3f10',
+  e1:'#ff3d68',e2:'#c04bff',e3:'#ff7a1c',e4:'#57e08a',boss:'#ff2e5e',
+  hb:'#7df0ff',eb:'#ff5cc8',coin:'#ffd83d',sh:'#07040f',
+  tel:'#ff2e5e',door:'#7a5cc0',doorOn:'#57e08a',fog:'#150d24'
+};
+/* MEJORAS. cap = cuántas veces se puede tomar (0 = infinitas). */
+const UPS=[
+  {id:'dmg'   ,ic:'⚔',k:'uDmg'   ,d:'uDmgD'   ,cap:0,fn:()=>{P.dmg*=1.35;}},
+  {id:'rate'  ,ic:'⏱',k:'uRate'  ,d:'uRateD'  ,cap:5,fn:()=>{P.rate*=1.25;}},
+  {id:'mult'  ,ic:'⋔',k:'uMult'  ,d:'uMultD'  ,cap:3,fn:()=>{P.mult++;}},
+  {id:'bounce',ic:'◤',k:'uBounce',d:'uBounceD',cap:2,fn:()=>{P.bounce++;}},
+  {id:'pierce',ic:'➤',k:'uPierce',d:'uPierceD',cap:2,fn:()=>{P.pierce++;}},
+  {id:'hp'    ,ic:'❤',k:'uHp'    ,d:'uHpD'    ,cap:0,fn:()=>{P.hpMax+=2;hp=Math.min(P.hpMax,hp+2);}},
+  {id:'heal'  ,ic:'✚',k:'uHeal'  ,d:'uHealD'  ,cap:0,fn:()=>{hp=Math.min(P.hpMax,hp+4);}},
+  {id:'spd'   ,ic:'»',k:'uSpd'   ,d:'uSpdD'   ,cap:4,fn:()=>{P.spd*=1.14;}},
+  {id:'mag'   ,ic:'◉',k:'uMag'   ,d:'uMagD'   ,cap:3,fn:()=>{P.mag*=1.7;}},
+  {id:'crit'  ,ic:'✸',k:'uCrit'  ,d:'uCritD'  ,cap:5,fn:()=>{P.crit+=.14;}}
+];
+/* FRAGUA: mejoras permanentes. cost(n) = precio del nivel n. */
+const SHOP=[
+  {id:'hp'  ,ic:'❤',k:'sHp'  ,d:'sHpD'  ,max:4,c:n=>60+n*70},
+  {id:'dmg' ,ic:'⚔',k:'sDmg' ,d:'sDmgD' ,max:5,c:n=>80+n*90},
+  {id:'mag' ,ic:'◉',k:'sMag' ,d:'sMagD' ,max:3,c:n=>50+n*60},
+  {id:'rate',ic:'⏱',k:'sRate',d:'sRateD',max:4,c:n=>90+n*95}
+];
+
+/* ------------------------------------------------------------------ estado */
+let T3,scene,cam,CD=20,camA=0,camK=1,camDZ=0;
+let arenaM,decoM,obsM,doorM,heroN,heroFB,bossN,bossFB;
+let IE=[],IHB,IEB,ICN,ISH,ITL;                 /* mallas instanciadas */
+let dum,V0;
+let hx=0,hz=3,phx=0,phz=3,vx=0,vz=0,aim=0,paim=0;
+let hp=6,inv=0,shotT=0,moving=0,stillT=0,hitFlash=0;
+let ens=[],hbs=[],ebs=[],cns=[],tels=[];
+let boss=null,bossHpMax=1;
+let lvl=1,room=1,ph='fight',phT=0,waveI=0,waveN=1,pend=0,pendT=0;
+let kills=0,coinRun=0,roomsRun=0,notice='',noticeT=0,noticeBig=0;
+let P=null,taken={},cards=[],cardR=[],abilT=0;
+let joy=null,botOn=0,demo=0,tut=0;
+let partK=1,fogK=1,decoK=1,recTold=false,lastEv='';
+/* RESOLUCIÓN ADAPTATIVA. El cuello de botella de este juego es el RELLENO: la
+   arena vista de arriba cubre medio cuadro y en el chromium de swiftshader un
+   píxel cubierto cuesta ~72 ns (medido sin vsync: escena vacía 8,7 ms, con la
+   arena 27 ms). En vez de castigar al celular real bajando la resolución a mano,
+   se mide y se ajusta: se arranca con el DPR que pide el shell y si el cuadro no
+   llega se recorta hasta 0,55; si sobra, se devuelve. En un teléfono de verdad
+   (GPU 50x más rápida en relleno) nunca baja y se ve nítido. */
+let resK=1,resT=0,resBase=1,resLock=0;
+function resApply(){
+  if(!ARC.rnd)return;
+  const p=ARC.gfxP?ARC.gfxP():{dpr:1.35};
+  resBase=Math.min(window.devicePixelRatio||1,p.dpr);
+  ARC.rnd.setPixelRatio(Math.max(.5,resBase*resK));
+  ARC.rnd.setSize(ARC.W,ARC.H,false);
+}
+function resStep(dt){
+  if(resLock)return;
+  resT-=dt;if(resT>0)return;
+  const f=ARC.fps;
+  /* BAJA RÁPIDO (0,6 s) y SUBE DESPACIO (2,5 s), y el umbral de subida deja
+     margen (58,5) para no quedar rebotando entre 60 y 30: con los umbrales
+     anteriores (50/57,5) la media medida se clavaba en 42 fps porque uno de cada
+     dos cuadros perdía el vsync. */
+  /* el disparador es 42: con vsync los fps salen cuantizados (60/30/20), así que
+     por debajo de 42 el cuadro está perdiendo el vsync de verdad. Con 52 (lo que
+     había antes) bajaba la resolución en un entorno que ya daba 46-55 fps. */
+  if(f<42&&resK>.55){resK=Math.max(.55,resK-.1);resT=.7;resApply();}
+  else if(f>56&&resK<1){resK=Math.min(1,resK+.05);resT=2.2;resApply();}
+  else resT=.45;
+}
+const GEO={},MAT={},COL={};
+function colOf(h){return COL[h]||(COL[h]=new T3.Color(h));}
+
+/* -------------------------------------------- geometría fusionada (1 llamada) */
+function VA(){return{p:[],c:[]};}
+function CC(h){const c=new T3.Color(h);return[c.r,c.g,c.b];}
+function vq(ac,a,b,c,d,col){
+  const t=[a,b,c,a,c,d];
+  for(const v of t){ac.p.push(v[0],v[1],v[2]);ac.c.push(col[0],col[1],col[2]);}
+}
+function vplate(ac,x,z,w,d,y,col){
+  vq(ac,[x-w/2,y,z+d/2],[x+w/2,y,z+d/2],[x+w/2,y,z-d/2],[x-w/2,y,z-d/2],col);
+}
+/* caja de 5 caras (sin fondo: nunca se ve) con el giro correcto, así el
+   rasterizador descarta la mitad de los triángulos con FrontSide */
+function vbox(ac,x,y,z,w,h,d,ct,cs){
+  const x0=x-w/2,x1=x+w/2,y0=y,y1=y+h,z0=z-d/2,z1=z+d/2;
+  vq(ac,[x0,y1,z1],[x1,y1,z1],[x1,y1,z0],[x0,y1,z0],ct);
+  vq(ac,[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1],cs);
+  vq(ac,[x1,y0,z0],[x0,y0,z0],[x0,y1,z0],[x1,y1,z0],cs);
+  vq(ac,[x0,y0,z0],[x0,y0,z1],[x0,y1,z1],[x0,y1,z0],cs);
+  vq(ac,[x1,y0,z1],[x1,y0,z0],[x1,y1,z0],[x1,y1,z1],cs);
+}
+function vmesh(ac,fog){
+  const g=new T3.BufferGeometry();
+  g.setAttribute('position',new T3.Float32BufferAttribute(ac.p,3));
+  g.setAttribute('color',new T3.Float32BufferAttribute(ac.c,3));
+  g.computeBoundingSphere();
+  const m=new T3.MeshBasicMaterial({vertexColors:true,side:T3.FrontSide,fog:fog!==false});
+  return new T3.Mesh(g,m);
+}
+function rng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
+function tris(o){let n=0;o.traverse(k=>{if(k.isMesh&&k.geometry){const g=k.geometry;
+  n+=(g.index?g.index.count:(g.attributes.position?g.attributes.position.count:0))/3;}});
+  return Math.round(n);}
+
+/* ---------------------------------------------------------- la arena estática
+   Piso en damero + muros + tira de neón en la base + almenas + braseros: TODO en
+   una sola geometría. Medido: 1.512 triángulos, 1 llamada de dibujo. */
+function buildArena(){
+  if(arenaM){scene.remove(arenaM);arenaM.geometry.dispose();}
+  const ac=VA();
+  const f0=CC(PAL.f0),f1=CC(PAL.f1),gl=CC(PAL.floorGlow),rim=CC(PAL.rim);
+  const wl=CC(PAL.wall),wt=CC(PAL.wallTop),st=CC(PAL.strip);
+  for(let ix=0;ix<NX;ix++)for(let iz=0;iz<NZ;iz++){
+    const x=-RW+(ix+.5)*TS,z=-RH+(iz+.5)*TS;
+    /* el centro lleva un ruedo más claro: da un punto de fuga y ayuda a leer
+       las distancias cuando la sala está llena de bichos */
+    const cd=Math.hypot(x*.55,z);
+    vplate(ac,x,z,TS,TS,0,cd<2.6?gl:(((ix+iz)&1)?f0:f1));
+  }
+  /* junta de las baldosas: líneas finas oscuras cada 3 unidades */
+  for(let ix=-RW+TS*2;ix<RW-.1;ix+=TS*2)vplate(ac,ix,0,.07,RH*2,.006,CC('#2b2350'));
+  for(let iz=-RH+TS*2;iz<RH-.1;iz+=TS*2)vplate(ac,0,iz,RW*2,.07,.006,CC('#2b2350'));
+  /* borde interior de la arena */
+  vplate(ac,0,-RH+.12,RW*2,.24,.012,rim);
+  vplate(ac,0, RH-.12,RW*2,.24,.012,rim);
+  vplate(ac,-RW+.12,0,.24,RH*2,.012,rim);
+  vplate(ac, RW-.12,0,.24,RH*2,.012,rim);
+  /* muros: el de atrás alto (se ve), los costados medios, el de adelante un
+     zócalo bajo (si fuese alto taparía al héroe) */
+  vbox(ac,0,0,-RH-.35,RW*2+1.4,2.5,.7,wt,wl);
+  /* hueco de la puerta en el muro del fondo (la puerta baja y se ve el pasillo) */
+  vbox(ac,0,0,-RH-.02,3.3,2.15,.12,CC('#0b0716'),CC('#0b0716'));
+  vbox(ac,-RW-.35,0,0,.7,1.7,RH*2,wt,wl);
+  vbox(ac, RW+.35,0,0,.7,1.7,RH*2,wt,wl);
+  vbox(ac,0,0, RH+.3,RW*2+1.4,.42,.6,wt,wl);
+  /* tira de neón en la base de los muros (contornea la sala) */
+  vplate(ac,0,-RH+.06,RW*2,.12,.02,st);
+  vplate(ac,0, RH-.06,RW*2,.12,.02,st);
+  vplate(ac,-RW+.06,0,.12,RH*2,.02,st);
+  vplate(ac, RW-.06,0,.12,RH*2,.02,st);
+  vbox(ac,0,.72,-RH+.06,RW*2,.16,.1,st,st);   /* franja en la cara del muro */
+  /* almenas del muro del fondo */
+  for(let x=-RW;x<=RW+.01;x+=1.95)vbox(ac,x,2.5,-RH-.35,.85,.5,.7,wt,wl);
+  /* FALDÓN: sin el plano de suelo la arena flota, así que se le ve el canto. Un
+     labio oscuro de 1,2 de alto en los tres lados visibles la convierte en una
+     plataforma sólida (y cuesta 0,3 ms porque es una tira finita). */
+  vbox(ac,0,-1.25,RH+.6,RW*2+1.4,1.25,.5,CC('#1a1230'),CC('#120c22'));
+  vbox(ac,-RW-.6,-1.25,0,.5,1.25,RH*2+1.4,CC('#1a1230'),CC('#120c22'));
+  vbox(ac, RW+.6,-1.25,0,.5,1.25,RH*2+1.4,CC('#1a1230'),CC('#120c22'));
+  /* braseros en las cuatro esquinas */
+  for(const sx of [-1,1])for(const sz of [-1,1]){
+    vbox(ac,sx*(RW-.42),0,sz*(RH-.42),.3,1.15,.3,CC('#6a58a8'),CC('#33265c'));
+    vbox(ac,sx*(RW-.42),1.15,sz*(RH-.42),.44,.12,.44,CC('#ffe6a0'),CC(PAL.strip));
+    vbox(ac,sx*(RW-.42),1.27,sz*(RH-.42),.26,.26,.26,CC('#fff3cf'),CC('#ffd166'));
+  }
+  arenaM=vmesh(ac,true);scene.add(arenaM);
+  /* la puerta del fondo: se abre cuando la sala queda limpia */
+  if(!doorM){
+    doorM=new T3.Mesh(new T3.BoxGeometry(3.1,2.15,.3),
+      new T3.MeshBasicMaterial({color:new T3.Color(PAL.door)}));
+    scene.add(doorM);
+  }
+  doorM.position.set(0,1.1,-RH-.12);
+}
+/* decorado de AFUERA. MEDIDO SIN VSYNC en el chromium de swiftshader (que cobra
+   ~72 ns por píxel cubierto): el plano de suelo de 150x150 que había acá costaba
+   15 ms de los 42 ms del cuadro, sólo por pintar la mitad de la pantalla que no
+   es la arena. Se fue. Ahora la arena FLOTA en el vacío (como la pista de RUEDA:
+   el color de fondo se resuelve con el clear, que es gratis) y lo único que se
+   dibuja afuera son siluetas chicas detrás del muro del fondo, que llenan la
+   franja de arriba sin cubrir cuadro. Deco: 15 ms -> 1,9 ms. */
+function buildDeco(){
+  if(decoM){scene.remove(decoM);decoM.geometry.dispose();decoM=null;}
+  const ac=VA(),pt=CC(PAL.propTop),pp=CC(PAL.prop);
+  const R=rng(20250730),n=Math.round(11*clamp(decoK,.4,1.3));
+  /* columnas SÓLO detrás del muro del fondo y a los costados, y siempre por
+     encima del horizonte: ocupan la franja negra de arriba y nada más */
+  for(let i=0;i<n;i++){
+    const x=(-RW-6)+R()*(RW*2+12);
+    const z=-RH-2.4-R()*11;
+    const w=.8+R()*2,h=2.2+R()*6;
+    vbox(ac,x,-1.4,z,w,h,w*(.7+R()*.6),pt,pp);
+  }
+  /* una sola grada baja detrás del muro: cierra la base sin tapar nada */
+  vbox(ac,0,-1.4,-RH-2.2,RW*2+7,1.6,1.7,pt,pp);
+  decoM=vmesh(ac,true);scene.add(decoM);
+}
+/* cajas de la sala (tapan balas y frenan enemigos): 1 llamada de dibujo */
+let obs=[],plan=null;
+function buildObs(){
+  if(obsM){scene.remove(obsM);obsM.geometry.dispose();obsM=null;}
+  if(!obs.length)return;
+  const ac=VA(),ct=CC('#8f79d4'),cs=CC('#4a3a78');
+  for(const o of obs){vbox(ac,o.x,0,o.z,o.r*1.95,o.h,o.r*1.95,ct,cs);
+    vbox(ac,o.x,o.h,o.z,o.r*2.2,.14,o.r*2.2,CC('#b7a2f2'),CC('#6a58a8'));}
+  obsM=vmesh(ac,true);scene.add(obsM);
+}
+
+/* ----------------------------------------------------------- pools instanciados
+   Un InstancedMesh por forma. Se sube la matriz de cada instancia viva y se pone
+   .count: el celular dibuja 40 enemigos en UNA llamada. */
+function IM(geo,mat,cap){
+  const m=new T3.InstancedMesh(geo,mat,cap);
+  m.instanceMatrix.setUsage(T3.DynamicDrawUsage);
+  m.frustumCulled=false;m.count=0;
+  scene.add(m);return m;
+}
+function lam(c){return new T3.MeshLambertMaterial({color:new T3.Color(c)});}
+function bas(c,o){const m=new T3.MeshBasicMaterial({color:new T3.Color(c)});
+  if(o!=null){m.transparent=true;m.opacity=o;m.depthWrite=false;}return m;}
+function buildPools(){
+  dum=new T3.Object3D();V0=new T3.Vector3();
+  /* tres siluetas de enemigo, tres mallas instanciadas, 3 llamadas en total */
+  IE=[
+    IM(new T3.IcosahedronGeometry(.5,0),lam('#ffffff'),CAPE),   /* mole / divisor */
+    IM(new T3.ConeGeometry(.5,1.15,6),lam('#ffffff'),CAPE),     /* torre */
+    IM(new T3.OctahedronGeometry(.56,0),lam('#ffffff'),CAPE)    /* púa */
+  ];
+  IHB=IM(new T3.OctahedronGeometry(.17,0),bas(PAL.hb),CAPB);
+  IEB=IM(new T3.OctahedronGeometry(.21,0),bas(PAL.eb),CAPEB);
+  /* la moneda va con material BASIC (siempre brillante, no depende de la luz) y
+     con el eje inclinado el mismo ángulo que la cámara: se ve el disco, no el canto */
+  ICN=IM(new T3.CylinderGeometry(.25,.25,.07,10),bas(PAL.coin),CAPC);
+  ISH=IM(new T3.CircleGeometry(1,10),bas(PAL.sh,.34),CAPS);
+  ITL=IM(new T3.RingGeometry(.82,1,18),bas(PAL.tel,.7),CAPT);
+  /* OJO: girar la malla ENTERA no sirve con instancias (la matriz de cada
+     instancia pisa la del objeto): el -90 en X va en cada dum.rotation. */
+}
+/* héroe y jefe: modelo GLB si cargó (ya simplificado por el shell a 800
+   triángulos), y si no, geometría propia fusionada — una sola llamada */
+function glbNode(key,targetH,yaw){
+  const S=ARC.glb&&ARC.glb[key];
+  if(!S||!S.scene)return null;
+  try{
+    const o=S.scene.clone(true);
+    const bb=new T3.Box3().setFromObject(o),sz=new T3.Vector3(),c=new T3.Vector3();
+    bb.getSize(sz);bb.getCenter(c);
+    if(!(sz.y>.0001))return null;
+    const s=targetH/sz.y;
+    o.scale.setScalar(s);
+    o.position.set(-c.x*s,-bb.min.y*s,-c.z*s);
+    o.rotation.y=yaw||0;
+    /* MATERIAL: los GLB de image_to_3d vienen con MeshStandardMaterial (PBR). En
+       este pack todo es mate y plano, y un shader PBR cuesta bastante más por
+       píxel; se cambia por Lambert con la MISMA textura y facetado, que además es
+       el aspecto del resto del juego. */
+    o.traverse(k=>{
+      if(!k.isMesh)return;
+      k.castShadow=false;k.receiveShadow=false;
+      const m=k.material;
+      if(m&&!m.userData.arena){
+        const n2=new T3.MeshLambertMaterial({
+          map:m.map||null,color:m.map?0xffffff:(m.color?m.color.clone():0xffffff),
+          flatShading:true,fog:false});
+        n2.userData.arena=1;
+        k.material=n2;
+      }else if(m)m.fog=false;
+    });
+    const w=new T3.Group();w.add(o);return w;
+  }catch(e){console.warn('glb '+key,e);return null;}
+}
+function heroGeo(){
+  const ac=VA(),bd=CC(PAL.hero),dk=CC(PAL.heroD),cy=CC(PAL.hb),hd=CC('#ffd980');
+  vbox(ac,0,.18,0,.62,.5,.44,bd,dk);          /* torso */
+  vbox(ac,-.16,0,0,.2,.2,.26,dk,dk);          /* piernas */
+  vbox(ac, .16,0,0,.2,.2,.26,dk,dk);
+  vbox(ac,0,.68,-.02,.52,.44,.48,hd,bd);      /* casco */
+  vplate(ac,0,-.26,.42,.06,.86,cy);           /* visor (mira a -Z) */
+  vbox(ac,0,.34,-.3,.7,.14,.2,cy,cy);         /* ballesta */
+  vbox(ac,-.34,.28,0,.16,.3,.2,dk,dk);        /* hombreras */
+  vbox(ac, .34,.28,0,.16,.3,.2,dk,dk);
+  return vmesh(ac,false);
+}
+function bossGeo(){
+  const ac=VA(),bd=CC(PAL.boss),dk=CC('#5c0b23'),bn=CC('#ffeccb'),ey=CC('#ffe14d');
+  vbox(ac,0,.4,0,1.9,1.7,1.5,bd,dk);
+  vbox(ac,0,0,0,.6,.42,.5,dk,dk);
+  vbox(ac,0,2.1,0,1.5,1.05,1.2,bd,dk);
+  vbox(ac,-.62,3.1,0,.26,.7,.26,bn,bn);
+  vbox(ac, .62,3.1,0,.26,.7,.26,bn,bn);
+  for(const dx of [-.42,0,.42])vplate(ac,dx,-.62,.26,.06,2.5,ey);
+  vbox(ac,-1.15,1.5,0,.5,.9,.5,dk,dk);
+  vbox(ac, 1.15,1.5,0,.5,.9,.5,dk,dk);
+  vplate(ac,0,-.78,1.2,.08,1.3,CC(PAL.strip));
+  return vmesh(ac,false);
+}
+
+/* --------------------------------------------------------------- cámara */
+/* ENCUADRE. Antes se calculaba con tangentes (extensión/tan(fov/2)), que es la
+   aproximación ORTOGRÁFICA: el borde de ADELANTE de la arena está mucho más cerca
+   de la cámara que el centro, subtiende más ángulo y se salía del cuadro (medido en
+   la captura: el faldón y los muros laterales cortados en 900x430). Ahora se busca
+   por bisección la distancia MÍNIMA en la que las ocho esquinas de la caja de la
+   sala caen dentro del ±0,94 del NDC. Sale exacto en cualquier aspecto. */
+const FITP=[];
+function fitPts(){
+  if(FITP.length)return FITP;
+  const X=RW+.9,Z1=RH+1.1,Z0=-RH-1.0;
+  for(const sx of [-1,0,1]){
+    FITP.push([sx*X,0,Z1]);          /* borde de adelante y faldón */
+    FITP.push([sx*X,2.9,Z0]);        /* alto del muro del fondo + almenas */
+    FITP.push([sx*X,1.8,Z1]);
+  }
+  FITP.push([0,-1.3,Z1]);
+  return FITP;
+}
+function fitCam(){
+  const asp=ARC.W/Math.max(1,ARC.H);
+  if(!cam){CD=18;return;}
+  cam.aspect=asp;cam.fov=FOV;cam.updateProjectionMatrix();
+  const pts=fitPts(),v=new T3.Vector3();
+  const fits=d=>{
+    CD=d;placeCam(0,0,0);cam.updateMatrixWorld(true);
+    for(const p of pts){
+      v.set(p[0],p[1],p[2]).project(cam);
+      if(Math.abs(v.x)>.94||Math.abs(v.y)>.94)return false;
+    }
+    return true;
+  };
+  let lo=8,hi=64;
+  if(!fits(hi))hi=96;
+  for(let i=0;i<26;i++){const m=(lo+hi)/2;if(fits(m))hi=m;else lo=m;}
+  CD=hi;
+}
+function placeCam(cx,cz,ang){
+  const D=CD*camK;
+  const s=Math.sin(PITCH),c=Math.cos(PITCH);
+  const dx=Math.sin(ang)*D*c,dz=Math.cos(ang)*D*c;
+  cam.position.set(cx+dx,D*s,cz+dz);
+  cam.lookAt(cx,.9,cz);
+}
+function proj(x,y,z){
+  const v=V0.set(x,y,z).project(cam);
+  return{x:(v.x*.5+.5)*ARC.W,y:(-v.y*.5+.5)*ARC.H,z:v.z};
+}
+
+/* -------------------------------------------------------- salas y enemigos
+   Cada sala se arma con una semilla: nivel+sala. La misma sala del mismo nivel
+   siempre trae lo mismo (se aprende). El jefe cae en la 4 y en la 8. */
+const isBoss=r=>r===4||r===8;
+function roomPlan(l,r){
+  const R=rng(7919+l*331+r*37);
+  const kmul=1+.34*(l-1);                       /* vida de los enemigos por nivel */
+  const smul=1+.05*(l-1);                       /* velocidad */
+  if(isBoss(r))return{R,boss:true,kmul,smul,waves:1,n:0,types:[]};
+  const types=['mole'];
+  if(r>=2||l>1)types.push('torre');
+  if(r>=3||l>2)types.push('pua');
+  if(r>=5||l>3)types.push('div');
+  const n=clamp(2+r+Math.floor(l*.8),3,10);
+  return{R,boss:false,kmul,smul,waves:r>=3?2:1,n,types};
+}
+function edgeSpot(R){
+  /* aparecen pegados a los muros y nunca a menos de 5 del héroe */
+  for(let i=0;i<24;i++){
+    const x=(-RW+1.1)+R()*(RW*2-2.2);
+    const z=(-RH+1.1)+R()*(RH*2-2.2)*.62;      /* .62: más arriba que el héroe */
+    if(Math.hypot(x-hx,z-hz)>4.2&&!inObs(x,z,.8))return{x,z};
+  }
+  return{x:0,z:-RH+1.6};
+}
+function mkEnemy(t,pl,x,z,gen){
+  const kmul=pl.kmul,smul=pl.smul;
+  const B={mole :{shape:0,hp:9 ,sp:1.9,r:.5 ,dmg:1,col:PAL.e1,sc:1  },
+           torre:{shape:1,hp:7 ,sp:1.5,r:.52,dmg:1,col:PAL.e2,sc:1  },
+           pua  :{shape:2,hp:11,sp:2.2,r:.55,dmg:2,col:PAL.e3,sc:1  },
+           div  :{shape:0,hp:16,sp:1.4,r:.72,dmg:1,col:PAL.e4,sc:1.4},
+           mini :{shape:0,hp:6 ,sp:2.6,r:.36,dmg:1,col:PAL.e4,sc:.7 }}[t];
+  const yo=B.shape===1?.6:(B.shape===2?.56:.5);
+  const e={t,shape:B.shape,x,z,px:x,pz:z,r:B.r,sc:B.sc,col:B.col,yo,
+    hp:Math.round(B.hp*kmul),hpMax:Math.round(B.hp*kmul),sp:B.sp*smul,dmg:B.dmg,
+    st:'in',stT:.55,ph:rnd(0,TAU),flash:0,bob:rnd(0,TAU),gen:gen||0,cd:rnd(.6,1.8)};
+  ens.push(e);
+  tels.push({x,z,r:e.r*2.2,l:.55,L:.55});
+  return e;
+}
+function spawnWave(){
+  const pl=plan||(plan=roomPlan(lvl,room));
+  waveI++;
+  const per=Math.ceil(pl.n/pl.waves);
+  const nn=Math.min(per,CAPE-ens.length-4);
+  for(let i=0;i<nn;i++){
+    const t=pl.types[Math.floor(pl.R()*pl.types.length)];
+    const s=edgeSpot(pl.R);
+    mkEnemy(t,pl,s.x,s.z,0);
+  }
+  if(waveI>1){notice=T('wave')+' '+waveI+'/'+waveN;noticeT=1.5;noticeBig=0;}
+}
+function spawnBoss(){
+  const hpv=Math.round((52+lvl*26+(room===8?38:0)));
+  boss={x:0,z:-RH+1.9,px:0,pz:-RH+1.9,r:1.32,hp:hpv,hpMax:hpv,flash:0,
+    st:'idle',stT:1.4,pat:0,shots:0,ang:0,dmg:2,sp:1.5+lvl*.06};
+  bossHpMax=hpv;
+  if(bossN)bossN.visible=true;
+  notice=T('bossHere');noticeT=2;noticeBig=1;
+  ARC.sfx('groan');ARC.shake(9);ARC.vib([20,60,20]);
+}
+function newRoom(){
+  const pl=plan=roomPlan(lvl,room);
+  ens.length=0;hbs.length=0;ebs.length=0;tels.length=0;boss=null;
+  if(bossN)bossN.visible=false;
+  if(bossFB)bossFB.visible=false;
+  waveI=0;waveN=pl.waves;pend=0;pendT=0;ph='fight';phT=0;
+  /* cajas: nunca en el centro ni pegadas al héroe */
+  obs=[];
+  const nb=isBoss(room)?0:(pl.R()<.72?1+Math.floor(pl.R()*3):0);
+  for(let i=0;i<nb;i++){
+    const x=(-RW+2.2)+pl.R()*(RW*2-4.4),z=(-RH+1.9)+pl.R()*(RH*2-4.4);
+    if(Math.hypot(x-hx,z-hz)<2.6)continue;
+    obs.push({x,z,r:.62,h:1.45});
+  }
+  buildObs();
+  hx=0;hz=RH-1.25;phx=hx;phz=hz;vx=vz=0;
+  if(pl.boss){waveI=waveN=1;spawnBoss();}
+  else{spawnWave();notice=T('room')+' '+room+'/8';noticeT=1.4;noticeBig=0;}
+  hud();
+}
+function inObs(x,z,r){
+  for(const o of obs)if(Math.hypot(x-o.x,z-o.z)<o.r+r)return true;
+  return false;
+}
+
+/* ------------------------------------------------------------- disparos */
+function fire(){
+  const tg=nearestEnemy(hx,hz);
+  if(tg)aim=Math.atan2(tg.x-hx,tg.z-hz);
+  const n=Math.min(4,P.mult);
+  for(let k=0;k<n;k++){
+    const a=aim+(k-(n-1)/2)*.15;
+    shoot(a,P.dmg);
+  }
+  ARC.sfx('shoot',{vol:.5,rate:1+rnd(-.06,.06)});
+  /* FOGONAZO: el disparo es automático, así que si no se ve salir la flecha el
+     jugador no entiende por qué le conviene quedarse quieto */
+  if(partK>.5){
+    /* el ángulo del chispazo se saca proyectando DOS puntos del mundo: el ángulo
+       de la pantalla no es el del mundo (la cámara está inclinada 52°) */
+    const p=proj(hx+Math.sin(aim)*.62,.78,hz+Math.cos(aim)*.62);
+    const p2=proj(hx+Math.sin(aim)*2,.78,hz+Math.cos(aim)*2);
+    ARC.fx.burst(p.x,p.y,{n:3,color:PAL.hb,speed:130,size:3,life:.16,g:0,
+      a:Math.atan2(p2.y-p.y,p2.x-p.x)});
+    ARC.fx.ring(p.x,p.y,{r0:2,r:ARC.H*.032,color:PAL.hb,w:2,life:.14});
+  }
+  shotT=1/P.rate;
+}
+function shoot(a,dmg){
+  if(hbs.length>=CAPB)return;
+  const crit=Math.random()<P.crit;
+  hbs.push({x:hx+Math.sin(a)*.55,z:hz+Math.cos(a)*.55,
+    vx:Math.sin(a)*13,vz:Math.cos(a)*13,dmg:crit?dmg*2:dmg,crit,
+    b:P.bounce,pc:P.pierce,l:1.9,hit:[]});
+}
+function ability(){
+  if(abilT>0||ph!=='fight'||!ARC.alive)return;
+  abilT=12;
+  for(let k=0;k<10;k++)shoot(aim+(k-4.5)*.13,P.dmg*.8);
+  ARC.sfx('power');ARC.shake(5);ARC.vib(18);
+  ARC.fx.ring(ARC.W/2,ARC.H*.62,{r:ARC.H*.3,color:PAL.hb,w:5,life:.4});
+}
+function ebShoot(x,z,a,sp,dmg){
+  if(ebs.length>=CAPEB)return;
+  ebs.push({x,z,vx:Math.sin(a)*sp,vz:Math.cos(a)*sp,dmg:dmg||1,l:4.5,r:.24});
+}
+function nearestEnemy(x,z){
+  let b=null,bd=1e9;
+  if(boss&&boss.hp>0){bd=Math.hypot(boss.x-x,boss.z-z);b=boss;}
+  for(const e of ens){
+    if(e.st==='in')continue;
+    const d=Math.hypot(e.x-x,e.z-z);
+    if(d<bd){bd=d;b=e;}
+  }
+  return b;
+}
+/* -------------------------------------------------------------- daño y muerte */
+function dmgEnemy(e,d,bx,bz,crit){
+  e.hp-=d;e.flash=.16;
+  ARC.shake(crit?4:2);
+  const p=proj(e.x,(e.r*e.sc)+.5,e.z);
+  ARC.fx.text(p.x,p.y,(crit?'✸':'')+Math.round(d),
+    {color:crit?'#fff07a':'#ffffff',size:Math.max(11,ARC.H*(crit?.055:.042)),life:.6});
+  if(partK>.5)ARC.fx.burst(p.x,p.y,{n:crit?7:4,color:PAL.hb,speed:150,size:3,life:.28,g:200});
+  if(e.hp<=0)killEnemy(e,bx,bz);
+}
+function killEnemy(e,bx,bz){
+  const p=proj(e.x,.6,e.z);
+  ARC.fx.burst(p.x,p.y,{n:Math.round(16*partK),color:e.col,speed:240,size:5,life:.55,sq:true});
+  ARC.fx.ring(p.x,p.y,{r:ARC.H*.09,color:e.col,w:3,life:.3});
+  ARC.sfx('splat',{vol:.55,rate:1+rnd(-.1,.15)});
+  ARC.shake(4);kills++;lastEv='kill:'+e.t;
+  dropCoins(e.x,e.z,e.t==='mini'?1:(e.t==='div'?4:2));
+  if(e.t==='div'&&!e.gen){
+    const pl=plan;
+    for(const s of [-1,1]){
+      const m=mkEnemy('mini',pl,clamp(e.x+s*.9,-RW+1,RW-1),clamp(e.z,-RH+1,RH-1),1);
+      m.st='walk';m.stT=0;tels.pop();
+    }
+  }
+  const i=ens.indexOf(e);if(i>=0)ens.splice(i,1);
+}
+function dropCoins(x,z,n){
+  for(let i=0;i<n&&cns.length<CAPC;i++){
+    const a=rnd(0,TAU);
+    cns.push({x,z,y:.5,vx:Math.cos(a)*rnd(.5,2),vz:Math.sin(a)*rnd(.5,2),vy:rnd(2.5,4.5),sp:rnd(0,TAU)});
+  }
+}
+function hurtHero(d){
+  if(inv>0||ph!=='fight')return;
+  hp-=d;inv=.85;hitFlash=.3;
+  ARC.sfx('boom',{vol:.5});ARC.shake(11);ARC.vib(45);
+  const p=proj(hx,1.3,hz);
+  ARC.fx.text(p.x,p.y,'-'+d,{color:'#ff6b8a',size:Math.max(14,ARC.H*.06),life:.7});
+  ARC.fx.burst(p.x,p.y,{n:Math.round(10*partK),color:'#ff3d68',speed:190,size:4,life:.4});
+  if(hp<=0){hp=0;die();}
+}
+function die(){
+  if(ph==='dead')return;
+  ph='dead';phT=0;
+  ARC.shake(16);
+  const p=proj(hx,.8,hz);
+  ARC.fx.burst(p.x,p.y,{n:Math.round(30*partK),color:PAL.hero,speed:300,size:6,life:.9,sq:true});
+  setTimeout(()=>{
+    if(ph!=='dead')return;
+    const sc=(lvl-1)*8+roomsRun;
+    ARC.over({win:false,score:sc,stars:0,coins:coinRun,title:T('dTtl'),
+      sub:T('statRooms')+': '+roomsRun+'/8 &nbsp;·&nbsp; '+T('statKills')+': '+kills+
+        '<br>'+T('statCoins')+': ◉ '+coinRun+' &nbsp;·&nbsp; '+T('statBest')+': '+Math.max(ARC.S.best||0,sc)+
+        '<br>'+T('allUp')+': '+upList()});
+  },900);
+}
+function upList(){
+  const o=[];for(const u of UPS)if(taken[u.id])o.push(u.ic+' x'+taken[u.id]);
+  return o.length?o.join(' '):'—';
+}
+
+/* ------------------------------------------------------------- las cartas */
+function layoutCards(){
+  const W=ARC.W,H=ARC.H;
+  const n=cards.length||3;
+  const cw=Math.min(W*.26,H*.46),gap=Math.max(8,W*.022);
+  const ch=cw*1.34;
+  const tot=n*cw+(n-1)*gap;
+  const y=H*.5-ch*.42;
+  cardR=[];
+  for(let i=0;i<n;i++)cardR.push({x:(W-tot)/2+i*(cw+gap),y,w:cw,h:ch});
+}
+function openPick(){
+  ph='pick';phT=0;
+  const pool=UPS.filter(u=>!u.cap||(taken[u.id]||0)<u.cap)
+                .filter(u=>u.id!=='heal'||hp<P.hpMax-1);
+  cards=[];
+  const bag=pool.slice();
+  for(let i=0;i<3&&bag.length;i++)cards.push(bag.splice(Math.floor(Math.random()*bag.length),1)[0]);
+  while(cards.length<3)cards.push(UPS[0]);
+  layoutCards();
+  ARC.sfx('chime');
+}
+function pickCard(i){
+  const u=cards[i];if(!u)return;
+  taken[u.id]=(taken[u.id]||0)+1;
+  u.fn();
+  ARC.sfx('power');ARC.vib(20);
+  ARC.fx.ring(ARC.W/2,ARC.H/2,{r:ARC.H*.5,color:G.acc,w:6,life:.45});
+  cards=[];cardR=[];
+  room++;roomsRun=room-1;
+  newRoom();
+}
+function roomCleared(){
+  ph='clear';phT=0;
+  roomsRun=room;
+  /* aspiradora: lo que quedó en el piso es tuyo */
+  if(cns.length){
+    coinRun+=cns.length;
+    ARC.sfx('coin',{rate:1.3});
+    const p=proj(hx,1,hz);
+    ARC.fx.text(p.x,p.y-ARC.H*.06,'+'+cns.length+' ◉',
+      {color:PAL.coin,size:Math.max(12,ARC.H*.05),life:.9});
+    cns.length=0;hud();
+  }
+  ARC.sfx('win',{vol:.4});
+  doorM.material.color.set(PAL.doorOn);
+  notice=T('clear');noticeT=1.3;noticeBig=1;
+  if(!recTold&&(lvl-1)*8+room>(ARC.S.best||0)&&(ARC.S.best||0)>3){recTold=true;ARC.toast(T('newRec'));}
+}
+function winLevel(){
+  ph='won';
+  const frac=hp/P.hpMax;
+  const st=frac>=.7?3:(frac>=.34?2:1);
+  ARC.fx.burst(ARC.W/2,ARC.H*.5,{n:Math.round(40*partK),color:G.acc,speed:320,size:6,life:1});
+  setTimeout(()=>ARC.over({win:true,score:lvl*8,stars:st,coins:coinRun+20,title:T('wTtl'),
+    sub:T('statKills')+': '+kills+' &nbsp;·&nbsp; '+T('statCoins')+': ◉ '+(coinRun+20)+
+      '<br>'+T('hpLbl')+': '+hp+'/'+P.hpMax+'<br>'+T('allUp')+': '+upList()}),700);
+}
+
+/* --------------------------------------------------------------- la FRAGUA */
+function shopState(){
+  if(!ARC.S.shop)ARC.S.shop={hp:0,dmg:0,mag:0,rate:0};
+  return ARC.S.shop;
+}
+function shopOpen(){
+  const S=shopState();
+  let el=document.getElementById('arShop');
+  if(!el){
+    el=document.createElement('div');el.id='arShop';el.className='scr';
+    document.getElementById('stage').appendChild(el);
+  }
+  const row=(it)=>{
+    const n=S[it.id]|0,mx=n>=it.max,c=it.c(n);
+    return '<div class="opt" style="gap:1.2vmin">'+
+      '<div class="sm" style="text-align:left;flex:1;opacity:1">'+
+        '<b style="font-size:1.15em">'+it.ic+' '+T(it.k)+'</b>'+
+        '<div style="opacity:.7">'+T(it.d)+' · '+T('lvlN')+' '+n+'/'+it.max+'</div></div>'+
+      '<div class="btn'+(mx?' gh':'')+'" data-buy="'+it.id+'" style="min-width:9em">'+
+        (mx?T('max'):(T('buy')+' ◉'+c))+'</div></div>';
+  };
+  el.innerHTML='<div class="card" style="max-width:92vmin;gap:1.1vmin">'+
+    '<div class="h2">⚒ '+T('shop')+'</div>'+
+    '<div class="sm">'+T('shopSub')+'</div>'+
+    '<div class="sm" style="opacity:1"><b style="font-size:1.3em;color:var(--acc)">◉ '+
+      (ARC.S.coins||0)+'</b> '+T('coins')+'</div>'+
+    SHOP.map(row).join('')+
+    '<div class="btn" id="arShopX">'+T('close')+'</div></div>';
+  el.classList.add('on');
+  el.querySelectorAll('[data-buy]').forEach(b=>{
+    b.addEventListener('pointerdown',e=>{
+      e.preventDefault();
+      const it=SHOP.find(s=>s.id===b.getAttribute('data-buy'));
+      const n=S[it.id]|0;
+      if(n>=it.max){ARC.sfx('click');return;}
+      const c=it.c(n);
+      if((ARC.S.coins||0)<c){ARC.sfx('lose',{vol:.4});ARC.toast(T('noCoins'));return;}
+      ARC.S.coins-=c;S[it.id]=n+1;ARC.save();
+      ARC.sfx('power');ARC.vib(18);ARC.toast(T('bought'));
+      const mc=document.getElementById('mCoins');if(mc)mc.textContent=ARC.S.coins;
+      shopOpen();
+    });
+  });
+  const x=document.getElementById('arShopX');
+  x.addEventListener('pointerdown',e=>{e.preventDefault();ARC.sfx('tap');
+    el.classList.remove('on');});
+}
+G.extra={icon:'⚒',fn:shopOpen};
+
+/* ------------------------------------------------------------------ entrada */
+function joyVec(){
+  if(!joy)return null;
+  const dx=joy.x-joy.ox,dy=joy.y-joy.oy;
+  const d=Math.hypot(dx,dy);
+  if(d<ARC.H*.035)return null;
+  const k=Math.min(1,d/(ARC.H*.16));
+  return{x:dx/d*k,y:dy/d*k};
+}
+G.down=function(p){
+  if(ph==='pick'){
+    for(let i=0;i<cardR.length;i++){
+      const r=cardR[i];
+      if(p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h){pickCard(i);return;}
+    }
+    return;
+  }
+  botOn=0;joy={ox:p.x,oy:p.y,x:p.x,y:p.y};
+};
+G.move=function(p){if(joy){joy.x=p.x;joy.y=p.y;}};
+G.up=function(){joy=null;};
+G.key=function(c,d){
+  const k={ArrowLeft:[-1,0],KeyA:[-1,0],ArrowRight:[1,0],KeyD:[1,0],
+           ArrowUp:[0,-1],KeyW:[0,-1],ArrowDown:[0,1],KeyS:[0,1]}[c];
+  if(k){
+    botOn=0;
+    if(d)joy={ox:0,oy:0,x:k[0]*ARC.H*.2,y:k[1]*ARC.H*.2};
+    else joy=null;
+    return;
+  }
+  if(d&&(c==='Space'))ability();
+  if(d&&c==='Digit1'&&ph==='pick')pickCard(0);
+};
+
+/* -------------------------------------------------------------------- ciclo */
+function menuCss(){
+  if(document.getElementById('arCss'))return;
+  const st=document.createElement('style');st.id='arCss';
+  st.textContent=
+    '#menu.hasart.live .ttl{display:block}'+
+    '#menu.live .ttl{font-size:clamp(30px,10.5vmin,86px);'+
+      'background:linear-gradient(180deg,#ffe8a8 0%,#ffb02e 52%,#e0651b 100%);'+
+      '-webkit-background-clip:text;background-clip:text;color:transparent;'+
+      'filter:drop-shadow(0 3px 0 rgba(60,20,0,.55)) drop-shadow(0 10px 26px rgba(0,0,0,.8))}'+
+    '#menu.live .ttl em{color:inherit}'+
+    '#menu.live .mMid{justify-content:flex-start;padding-top:1vmin}'+
+    '#menu.live .sub{max-width:min(70vmin,560px)}'+
+    '#menu.live .sub{text-shadow:0 2px 10px rgba(4,2,10,.95),0 0 22px rgba(4,2,10,.9)}';
+  document.head.appendChild(st);
+}
+G.init=function(){
+  T3=ARC.THREE;if(!T3)return;
+  menuCss();
+  const gp=ARC.gfxP?ARC.gfxP():{part:1,fog:1};
+  partK=gp.part;fogK=gp.fog;decoK=clamp(gp.part,.4,1.3);
+  scene=new T3.Scene();
+  scene.background=new T3.Color(G.sky);
+  scene.fog=new T3.Fog(new T3.Color(PAL.fog).getHex(),34*fogK,96*fogK);
+  cam=new T3.PerspectiveCamera(FOV,ARC.W/Math.max(1,ARC.H),.1,220);
+  scene.add(new T3.HemisphereLight(0xf3e2ff,0x2a1c40,1.5));
+  const d=new T3.DirectionalLight(0xffffff,.95);d.position.set(4,10,7);scene.add(d);
+  buildPools();
+  buildArena();buildDeco();
+  heroN=glbNode('heroe',1.62,HYAW);
+  if(!heroN){heroFB=new T3.Group();const hm=heroGeo();hm.scale.setScalar(1.34);
+    heroFB.add(hm);scene.add(heroFB);}
+  else scene.add(heroN);
+  bossN=glbNode('jefe',3.0,HYAW);
+  if(!bossN){bossFB=new T3.Group();const bm=bossGeo();bm.scale.setScalar(.92);
+    bossFB.add(bm);scene.add(bossFB);bossFB.visible=false;}
+  else{scene.add(bossN);bossN.visible=false;}
+  P=basePerks();
+  fitCam();
+};
+G.resize=function(){fitCam();resApply();if(ph==='pick')layoutCards();};
+G.gfxApply=function(gp){
+  partK=gp.part;fogK=gp.fog;
+  const nd=clamp(gp.part,.4,1.3);
+  if(scene&&scene.fog){scene.fog.near=34*fogK;scene.fog.far=96*fogK;}
+  if(scene&&nd!==decoK){decoK=nd;buildDeco();}
+  resApply();
+};
+function basePerks(){
+  const S=shopState();
+  return{dmg:6*(1+.08*(S.dmg|0)),rate:2.4*(1+.07*(S.rate|0)),spd:5.2,
+    hpMax:6+(S.hp|0),mult:1,bounce:0,pierce:0,mag:2.2*(1+.45*(S.mag|0)),crit:.05};
+}
+G.start=function(l){
+  if(!T3)return;
+  demo=0;camK=1;camDZ=0;
+  lvl=clamp(l||1,1,8);
+  P=basePerks();taken={};
+  hp=P.hpMax;inv=0;shotT=0;kills=0;coinRun=0;roomsRun=0;abilT=0;
+  cns.length=0;hbs.length=0;ebs.length=0;tels.length=0;
+  room=1;recTold=false;botOn=0;joy=null;tut=1;lastEv='';
+  hitFlash=0;camA=0;
+  doorM.material.color.set(PAL.door);
+  newRoom();
+  ARC.tray([{id:'ab',txt:'⚡',sq:1,fn:ability}]);
+  hud();
+};
+function hud(){
+  ARC.hud(coinRun,T('level')+' '+lvl+' · '+(isBoss(room)?T('bossRoom'):T('room')+' '+room+'/8'));
+}
+G.i18nDone=function(){if(ARC.scr==='game')hud();};
+G.pause=function(){joy=null;};
+
+/* ---------------------------------------------------------------- simulación */
+G.step=function(dt){
+  if(!T3)return;
+  phx=hx;phz=hz;paim=aim;
+  for(const e of ens){e.px=e.x;e.pz=e.z;}
+  if(boss){boss.px=boss.x;boss.pz=boss.z;}
+  if(abilT>0){const q=Math.ceil(abilT);abilT=Math.max(0,abilT-dt);
+    const q2=abilT>0?Math.ceil(abilT):0;
+    if(q2!==q)ARC.trayTxt('ab',q2?q2:'⚡');}
+  resStep(dt);
+  if(noticeT>0)noticeT-=dt;
+  if(hitFlash>0)hitFlash-=dt;
+  if(inv>0)inv-=dt;
+  for(let i=tels.length-1;i>=0;i--){tels[i].l-=dt;if(tels[i].l<=0)tels.splice(i,1);}
+  stepCoins(dt);
+  if(ph==='dead'){phT+=dt;stepBullets(dt,true);return;}
+  if(ph==='won')return;
+  if(ph==='clear'){
+    phT+=dt;
+    stepBullets(dt,true);
+    if(phT>1.05){
+      if(room>=8)winLevel();
+      else openPick();
+    }
+    return;
+  }
+  if(ph==='pick'){phT+=dt;stepBullets(dt,true);return;}
+  /* ---- pelea ---- */
+  phT+=dt;
+  if(botOn)botThink();
+  const jv=joyVec();
+  moving=0;
+  if(jv){
+    /* la pantalla apunta a -Z arriba: el vector del dedo se mapea directo */
+    vx=jv.x*P.spd;vz=jv.y*P.spd;
+    moving=1;stillT=0;
+    aim=Math.atan2(vx,vz);
+  }else{vx=vz=0;stillT+=dt;}
+  hx=clamp(hx+vx*dt,-RW+HR,RW-HR);
+  hz=clamp(hz+vz*dt,-RH+HR,RH-HR);
+  for(const o of obs){                        /* empujar fuera de las cajas */
+    const d=Math.hypot(hx-o.x,hz-o.z),m=o.r+HR;
+    if(d<m&&d>.0001){hx=o.x+(hx-o.x)/d*m;hz=o.z+(hz-o.z)/d*m;}
+  }
+  hx=clamp(hx,-RW+HR,RW-HR);hz=clamp(hz,-RH+HR,RH-HR);
+  /* DISPARO AUTOMÁTICO: sólo quieto. Es la mecánica del género. */
+  shotT-=dt;
+  if(!moving&&stillT>.08){
+    const tg=nearestEnemy(hx,hz);
+    if(tg){
+      aim=Math.atan2(tg.x-hx,tg.z-hz);
+      if(shotT<=0)fire();
+    }
+  }
+  stepEnemies(dt);
+  stepBoss(dt);
+  stepBullets(dt,false);
+  /* ¿sala limpia? */
+  if(!ens.length&&!boss){
+    if(waveI<waveN){
+      pendT-=dt;
+      if(pendT<=0){pendT=1.1;spawnWave();}
+    }else if(phT>.4)roomCleared();
+  }else pendT=1.1;
+  if(tut&&(phT>7||kills>0))tut=0;
+};
+function stepCoins(dt){
+  for(let i=cns.length-1;i>=0;i--){
+    const c=cns[i];
+    c.vy-=13*dt;c.y+=c.vy*dt;
+    if(c.y<.22){c.y=.22;c.vy=0;c.vx*=.7;c.vz*=.7;}
+    c.x=clamp(c.x+c.vx*dt,-RW+.4,RW-.4);
+    c.z=clamp(c.z+c.vz*dt,-RH+.4,RH-.4);
+    c.sp+=dt*5;
+    const d=Math.hypot(c.x-hx,c.z-hz);
+    if(d<P.mag&&ph!=='dead'){                 /* imán: tirón proporcional */
+      const k=Math.min(.55,7*dt/Math.max(.8,d));
+      c.x+=(hx-c.x)*k;c.z+=(hz-c.z)*k;
+    }
+    if(d<.62){
+      cns.splice(i,1);coinRun++;
+      ARC.sfx('coin',{vol:.4,rate:1+Math.min(.5,coinRun*.01)});
+      const p=proj(hx,1,hz);
+      ARC.fx.text(p.x,p.y,'+1',{color:PAL.coin,size:Math.max(10,ARC.H*.034),life:.45});
+      hud();
+    }
+  }
+}
+function stepEnemies(dt){
+  const t=ARC.t;
+  for(let i=ens.length-1;i>=0;i--){
+    const e=ens[i];
+    if(e.flash>0)e.flash-=dt;
+    e.bob+=dt*6;
+    if(e.st==='in'){                            /* apareciendo (aviso) */
+      e.stT-=dt;
+      if(e.stT<=0){e.st='walk';e.stT=0;}
+      continue;
+    }
+    const dx=hx-e.x,dz=hz-e.z,d=Math.hypot(dx,dz)||.001;
+    if(e.t==='torre'){
+      /* mantiene distancia y dispara */
+      const want=4.9;
+      const s=(d<want-1?-1:(d>want+1.4?1:0))*e.sp;
+      e.x+=dx/d*s*dt;e.z+=dz/d*s*dt;
+      e.x+=-dz/d*e.sp*.5*dt*Math.sin(t*.8+e.ph);
+      e.z+= dx/d*e.sp*.5*dt*Math.sin(t*.8+e.ph);
+      e.cd-=dt;
+      if(e.cd<=0&&d<11){e.cd=1.6;ebShoot(e.x,e.z,Math.atan2(dx,dz),6.6,1);
+        ARC.sfx('click',{vol:.25,rate:.7});}
+    }else if(e.t==='pua'){
+      /* se planta, avisa con un anillo, y embiste en línea recta */
+      if(e.st==='walk'){
+        e.x+=dx/d*e.sp*.55*dt;e.z+=dz/d*e.sp*.55*dt;
+        if(d<5.8){e.st='wind';e.stT=.65;
+          tels.push({x:e.x,z:e.z,r:1.1,l:.65,L:.65});}
+      }else if(e.st==='wind'){
+        e.stT-=dt;
+        if(e.stT<=0){e.st='dash';e.stT=.5;e.dvx=dx/d*12;e.dvz=dz/d*12;
+          ARC.sfx('swipe',{vol:.3});}
+      }else if(e.st==='dash'){
+        e.stT-=dt;e.x+=e.dvx*dt;e.z+=e.dvz*dt;
+        if(e.stT<=0){e.st='rest';e.stT=.7;}
+      }else{e.stT-=dt;if(e.stT<=0)e.st='walk';}
+    }else{
+      /* mole / divisor / mini: van al héroe */
+      const s=e.sp*(e.t==='div'?.85:1);
+      e.x+=dx/d*s*dt;e.z+=dz/d*s*dt;
+    }
+    /* separación: sin esto se apilan y parecen un solo bicho */
+    for(let j=0;j<ens.length;j++){
+      if(j===i)continue;
+      const o=ens[j];
+      const ddx=e.x-o.x,ddz=e.z-o.z,dd=Math.hypot(ddx,ddz),m=(e.r*e.sc+o.r*o.sc)*.95;
+      if(dd<m&&dd>.0001){e.x+=ddx/dd*(m-dd)*.5;e.z+=ddz/dd*(m-dd)*.5;}
+    }
+    for(const o of obs){
+      const ddx=e.x-o.x,ddz=e.z-o.z,dd=Math.hypot(ddx,ddz),m=o.r+e.r*e.sc;
+      if(dd<m&&dd>.0001){e.x=o.x+ddx/dd*m;e.z=o.z+ddz/dd*m;}
+    }
+    e.x=clamp(e.x,-RW+.5,RW-.5);e.z=clamp(e.z,-RH+.5,RH-.5);
+    /* contacto */
+    if(d<e.r*e.sc+HR+.05){
+      hurtHero(e.dmg);
+      const k=e.t==='pua'?1.6:.9;
+      e.x-=dx/d*k;e.z-=dz/d*k;
+      if(e.t==='pua'&&e.st==='dash'){e.st='rest';e.stT=.8;}
+    }
+  }
+}
+function stepBoss(dt){
+  if(!boss)return;
+  const b=boss;
+  if(b.flash>0)b.flash-=dt;
+  const dx=hx-b.x,dz=hz-b.z,d=Math.hypot(dx,dz)||.001;
+  b.stT-=dt;
+  if(b.st==='idle'){
+    b.x+=dx/d*b.sp*.5*dt;b.z+=dz/d*b.sp*.5*dt;
+    if(b.stT<=0){
+      b.pat=(b.pat+1)%4;b.shots=0;
+      if(b.pat===0){b.st='volley';b.stT=.35;}
+      else if(b.pat===1){b.st='wind';b.stT=.85;
+        tels.push({x:b.x,z:b.z,r:2.1,l:.85,L:.85});}
+      else if(b.pat===2){b.st='summon';b.stT=.5;}
+      else{b.st='spiral';b.stT=.1;b.ang=0;}
+    }
+  }else if(b.st==='volley'){
+    if(b.stT<=0){
+      const n=10+lvl;
+      for(let k=0;k<n;k++)ebShoot(b.x,b.z,k/n*TAU+b.shots*.3,5.6,1);
+      ARC.sfx('groan',{vol:.45,rate:1.3});ARC.shake(6);
+      b.shots++;b.stT=.55;
+      if(b.shots>=2){b.st='idle';b.stT=1.5;}
+    }
+  }else if(b.st==='wind'){
+    if(b.stT<=0){b.st='charge';b.stT=1.15;b.dvx=dx/d*9.5;b.dvz=dz/d*9.5;
+      ARC.sfx('groan',{vol:.5});}
+  }else if(b.st==='charge'){
+    b.x+=b.dvx*dt;b.z+=b.dvz*dt;
+    if(b.x<-RW+b.r||b.x>RW-b.r){b.dvx*=-1;ARC.shake(8);}
+    if(b.z<-RH+b.r||b.z>RH-b.r){b.dvz*=-1;ARC.shake(8);}
+    if(b.stT<=0){b.st='idle';b.stT=1.3;}
+  }else if(b.st==='summon'){
+    if(b.stT<=0){
+      const pl=plan;
+      for(let k=0;k<3;k++){
+        const a=k/3*TAU;
+        mkEnemy('mole',pl,clamp(b.x+Math.cos(a)*1.9,-RW+1,RW-1),
+                          clamp(b.z+Math.sin(a)*1.9,-RH+1,RH-1),1);
+      }
+      ARC.sfx('power',{rate:.7});
+      b.st='idle';b.stT=1.6;
+    }
+  }else if(b.st==='spiral'){
+    if(b.stT<=0){
+      b.ang+=.55;
+      for(const o of [0,Math.PI])ebShoot(b.x,b.z,b.ang+o,5.2,1);
+      b.stT=.075;b.shots++;
+      if(b.shots>26){b.st='idle';b.stT=1.4;}
+    }
+  }
+  b.x=clamp(b.x,-RW+b.r,RW-b.r);b.z=clamp(b.z,-RH+b.r,RH-b.r);
+  if(d<b.r+HR+.1)hurtHero(b.dmg);
+}
+function stepBullets(dt,calmOnly){
+  /* balas del héroe */
+  for(let i=hbs.length-1;i>=0;i--){
+    const b=hbs[i];
+    b.l-=dt;
+    b.x+=b.vx*dt;b.z+=b.vz*dt;
+    let out=false;
+    if(b.x<-RW+.1||b.x>RW-.1){if(b.b>0){b.b--;b.vx*=-1;b.x=clamp(b.x,-RW+.15,RW-.15);}else out=true;}
+    if(b.z<-RH+.1||b.z>RH-.1){if(b.b>0){b.b--;b.vz*=-1;b.z=clamp(b.z,-RH+.15,RH-.15);}else out=true;}
+    for(const o of obs){
+      if(Math.hypot(b.x-o.x,b.z-o.z)<o.r+.15){
+        if(b.b>0){b.b--;const nx=(b.x-o.x),nz=(b.z-o.z),nn=Math.hypot(nx,nz)||1;
+          const dot=(b.vx*nx+b.vz*nz)/nn/nn*2;
+          b.vx-=dot*nx;b.vz-=dot*nz;b.x+=b.vx*dt*2;b.z+=b.vz*dt*2;}
+        else out=true;
+      }
+    }
+    if(!calmOnly){
+      if(boss&&boss.hp>0&&b.hit.indexOf('B')<0&&Math.hypot(b.x-boss.x,b.z-boss.z)<boss.r+.2){
+        boss.hp-=b.dmg;boss.flash=.14;b.hit.push('B');
+        const p=proj(boss.x,2.4,boss.z);
+        ARC.fx.text(p.x,p.y,(b.crit?'✸':'')+Math.round(b.dmg),
+          {color:b.crit?'#fff07a':'#ffffff',size:Math.max(11,ARC.H*(b.crit?.055:.042)),life:.6});
+        if(partK>.5)ARC.fx.burst(p.x,p.y,{n:4,color:PAL.hb,speed:150,size:3,life:.25,g:200});
+        ARC.shake(3);
+        if(boss.hp<=0)bossDie();
+        if(b.pc>0)b.pc--;else out=true;
+      }
+      for(const e of ens){
+        if(e.st==='in')continue;
+        if(b.hit.indexOf(e)>=0)continue;
+        if(Math.hypot(b.x-e.x,b.z-e.z)<e.r*e.sc+.2){
+          b.hit.push(e);
+          dmgEnemy(e,b.dmg,b.x,b.z,b.crit);
+          if(b.pc>0)b.pc--;else out=true;
+          break;
+        }
+      }
+    }
+    if(out||b.l<=0)hbs.splice(i,1);
+  }
+  /* balas enemigas */
+  for(let i=ebs.length-1;i>=0;i--){
+    const b=ebs[i];
+    b.l-=dt;b.x+=b.vx*dt;b.z+=b.vz*dt;
+    let out=b.l<=0||b.x<-RW||b.x>RW||b.z<-RH||b.z>RH;
+    for(const o of obs)if(Math.hypot(b.x-o.x,b.z-o.z)<o.r+.2)out=true;
+    if(!out&&!calmOnly&&ph==='fight'&&Math.hypot(b.x-hx,b.z-hz)<HR+b.r){
+      hurtHero(b.dmg);out=true;
+    }
+    if(out)ebs.splice(i,1);
+  }
+}
+function bossDie(){
+  const b=boss;boss=null;
+  if(bossN)bossN.visible=false;
+  if(bossFB)bossFB.visible=false;
+  const p=proj(b.x,1.6,b.z);
+  for(let k=0;k<3;k++)setTimeout(()=>{
+    ARC.fx.burst(p.x+rnd(-40,40),p.y+rnd(-30,30),
+      {n:Math.round(18*partK),color:PAL.boss,speed:280,size:6,life:.7,sq:true});
+    ARC.sfx('boom',{rate:.8+k*.15});
+  },k*130);
+  ARC.shake(18);ARC.vib([25,50,25]);
+  dropCoins(b.x,b.z,16+lvl*2);
+  kills++;lastEv='boss';
+}
+
+/* ------------------------------------------------------------------- dibujo */
+function setInst(im,n){
+  im.count=n;im.visible=n>0;
+  if(n>0)im.instanceMatrix.needsUpdate=true;
+}
+function drawScene(a){
+  const ihx=lerp(phx,hx,a),ihz=lerp(phz,hz,a);
+  /* héroe */
+  const hn=heroN||heroFB;
+  if(hn){
+    hn.position.set(ihx,ph==='dead'?-.4:0,ihz);
+    hn.rotation.y=aim+(heroN?HYAW:Math.PI);
+    hn.visible=ph!=='dead'||phT<.5;
+    /* rebote al caminar y parpadeo de invulnerabilidad */
+    const bounce=moving?Math.abs(Math.sin(ARC.t*11))*.09:0;
+    hn.position.y+=bounce;
+    hn.scale.setScalar(inv>0&&((ARC.frame>>2)&1)?.86:1);
+  }
+  /* jefe */
+  const bn=bossN||bossFB;
+  if(bn){
+    if(boss){
+      bn.visible=true;
+      bn.position.set(lerp(boss.px,boss.x,a),0,lerp(boss.pz,boss.z,a));
+      bn.rotation.y=Math.atan2(hx-boss.x,hz-boss.z)+(bossN?HYAW:Math.PI);
+      const k=boss.flash>0?1.06:1;bn.scale.setScalar(k*(boss.st==='wind'?1.1:1));
+    }else bn.visible=false;
+  }
+  /* enemigos: una matriz por instancia, agrupados por silueta */
+  const cnt=[0,0,0];
+  let sh=0;
+  for(const e of ens){
+    const im=IE[e.shape];
+    if(cnt[e.shape]>=CAPE)continue;
+    const ex=lerp(e.px,e.x,a),ez=lerp(e.pz,e.z,a);
+    const grow=e.st==='in'?clamp(1-e.stT/.55,.05,1):1;
+    const bob=e.st==='in'?0:Math.sin(e.bob)*.06;
+    dum.position.set(ex,e.yo*e.sc*grow+bob+.04,ez);
+    dum.rotation.set(0,Math.atan2(hx-e.x,hz-e.z),0);
+    const s=e.sc*grow*(e.flash>0?1.22:1)*(e.st==='wind'?1.16:1);
+    dum.scale.setScalar(s);
+    dum.updateMatrix();
+    im.setMatrixAt(cnt[e.shape],dum.matrix);
+    im.setColorAt(cnt[e.shape],colOf(e.flash>0?'#ffffff':e.col));
+    cnt[e.shape]++;
+    /* sombra */
+    if(sh<CAPS){
+      dum.position.set(ex,.02,ez);dum.rotation.set(-Math.PI/2,0,0);
+      dum.scale.setScalar(e.r*e.sc*1.1*grow);dum.updateMatrix();
+      ISH.setMatrixAt(sh++,dum.matrix);
+    }
+  }
+  for(let i=0;i<3;i++){
+    setInst(IE[i],cnt[i]);
+    if(IE[i].instanceColor)IE[i].instanceColor.needsUpdate=true;
+  }
+  /* sombras del héroe y del jefe */
+  if(sh<CAPS){dum.position.set(ihx,.02,ihz);dum.rotation.set(-Math.PI/2,0,0);
+    dum.scale.setScalar(.55);dum.updateMatrix();ISH.setMatrixAt(sh++,dum.matrix);}
+  if(boss&&sh<CAPS){dum.position.set(boss.x,.02,boss.z);dum.rotation.set(-Math.PI/2,0,0);
+    dum.scale.setScalar(boss.r*1.05);dum.updateMatrix();ISH.setMatrixAt(sh++,dum.matrix);}
+  /* OJO: las monedas NO llevan sombra. Con 56 monedas en el piso eran 56 discos
+     transparentes (sin depthWrite = relleno puro, y el relleno es LO que cuesta
+     acá): 1,9 ms del cuadro por un detalle de 4 px. */
+  setInst(ISH,sh);
+  /* balas */
+  let n=0;
+  for(const b of hbs){
+    if(n>=CAPB)break;
+    dum.position.set(b.x,.6,b.z);
+    dum.rotation.set(0,Math.atan2(b.vx,b.vz),ARC.t*9);
+    dum.scale.set(1,1,2.1);dum.updateMatrix();
+    IHB.setMatrixAt(n++,dum.matrix);
+  }
+  setInst(IHB,n);
+  n=0;
+  for(const b of ebs){
+    if(n>=CAPEB)break;
+    dum.position.set(b.x,.55,b.z);
+    dum.rotation.set(ARC.t*5,ARC.t*7,0);
+    dum.scale.setScalar(1);dum.updateMatrix();
+    IEB.setMatrixAt(n++,dum.matrix);
+  }
+  setInst(IEB,n);
+  /* monedas */
+  n=0;
+  for(const c of cns){
+    if(n>=CAPC)break;
+    dum.position.set(c.x,c.y+.06,c.z);
+    dum.rotation.set(Math.PI/2-PITCH,c.sp,0);   /* la cara MIRA a la cámara (con el
+       signo al revés se veía el canto y la moneda parecía un aro gris) */
+    dum.scale.setScalar(1);dum.updateMatrix();
+    ICN.setMatrixAt(n++,dum.matrix);
+  }
+  setInst(ICN,n);
+  /* anillos de aviso */
+  n=0;
+  for(const t of tels){
+    if(n>=CAPT)break;
+    const k=1-t.l/t.L;
+    dum.position.set(t.x,.03,t.z);dum.rotation.set(-Math.PI/2,0,0);
+    dum.scale.setScalar(t.r*(.5+k*.75));dum.updateMatrix();
+    ITL.setMatrixAt(n++,dum.matrix);
+  }
+  setInst(ITL,n);
+  /* puerta: se abre cuando la sala queda limpia */
+  if(doorM){
+    const open=(ph==='clear'||ph==='pick'||ph==='won');
+    doorM.position.y=lerp(doorM.position.y,open?-1.35:1.1,.09);
+  }
+  /* cámara: sigue un poco al héroe, y se sacude sola en la embestida del jefe */
+  const fx=clamp(ihx*.1,-1.4,1.4),fz=clamp((ihz-.4)*.08,-.8,.8);
+  placeCam(fx,fz+camDZ,camA);
+  ARC.rnd.render(scene,cam);
+}
+G.draw=function(g,alpha){
+  if(!ARC.rnd||!scene||!P)return;
+  const a=clamp(alpha||0,0,1);
+  drawScene(a);
+  drawHUD(g);
+};
+/* ---- capa 2D: vida, jefe, avisos, joystick, cartas ---- */
+function rr(g,x,y,w,h,r){
+  g.beginPath();
+  g.moveTo(x+r,y);g.lineTo(x+w-r,y);g.quadraticCurveTo(x+w,y,x+w,y+r);
+  g.lineTo(x+w,y+h-r);g.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  g.lineTo(x+r,y+h);g.quadraticCurveTo(x,y+h,x,y+h-r);
+  g.lineTo(x,y+r);g.quadraticCurveTo(x,y,x+r,y);
+  g.closePath();
+}
+let bossGrd=null,bossGrdW=0;
+function drawHUD(g){
+  const W=ARC.W,H=ARC.H;
+  /* destello rojo al recibir daño */
+  /* VIÑETA de daño en los cuatro bordes. Antes era un fillRect de TODA la
+     pantalla en el lienzo 2D (0,4 Mpx por cuadro durante 0,3 s): además de costar,
+     tapaba el juego justo cuando más hay que ver. */
+  if(hitFlash>0){
+    g.globalAlpha=clamp(hitFlash*2.4,0,.62);
+    g.fillStyle='#ff2244';
+    const mx=W*.1,my=H*.13;
+    g.fillRect(0,0,W,my);g.fillRect(0,H-my,W,my);
+    g.fillRect(0,my,mx,H-my*2);g.fillRect(W-mx,my,mx,H-my*2);
+    g.globalAlpha=1;
+  }
+  /* barra de vida del héroe, arriba a la izquierda debajo del marcador */
+  const bw=Math.min(W*.3,H*.62),bh=Math.max(7,H*.028);
+  const bx=W*.03,by=H*.13;
+  g.fillStyle='rgba(8,5,16,.72)';rr(g,bx-3,by-3,bw+6,bh+6,bh*.6);g.fill();
+  const seg=Math.max(1,Math.round(P.hpMax));
+  for(let i=0;i<seg;i++){
+    const sw=(bw-(seg-1)*2)/seg;
+    g.fillStyle=i<hp?(hp<=2?'#ff3d68':'#57e08a'):'rgba(255,255,255,.14)';
+    g.fillRect(bx+i*(sw+2),by,sw,bh);
+  }
+  /* el texto "VIDA 6/6" se fue: la barra segmentada ya lo dice y cada fillText en
+     el lienzo 2D de software cuesta. La capa 2D bajó de 4,1 ms a 1,4 ms. */
+  g.textAlign='left';
+  /* mejoras tomadas, en fila abajo a la izquierda */
+  /* FICHAS de las mejoras tomadas. Antes era una línea de glifos a 13 px que en la
+     captura se leía como una cruz suelta en la esquina. */
+  const ups=[];for(const u of UPS)if(taken[u.id])ups.push([u.ic,taken[u.id]]);
+  if(ups.length){
+    const cs=Math.max(16,H*.055),cy=H-cs-H*.03;
+    g.font='900 '+cs*.58+'px system-ui,sans-serif';g.textAlign='center';
+    for(let i=0;i<ups.length;i++){
+      const cx=bx+i*(cs+cs*.16);
+      g.fillStyle='rgba(10,6,20,.72)';rr(g,cx,cy,cs,cs,cs*.28);g.fill();
+      g.strokeStyle='rgba(255,176,46,.5)';g.lineWidth=1.2;g.stroke();
+      g.fillStyle=G.acc;g.fillText(ups[i][0],cx+cs/2,cy+cs*.68);
+      if(ups[i][1]>1){g.fillStyle='#fff';g.font='900 '+cs*.34+'px system-ui,sans-serif';
+        g.fillText(ups[i][1],cx+cs*.84,cy+cs*.28);
+        g.font='900 '+cs*.58+'px system-ui,sans-serif';}
+    }
+    g.textAlign='left';
+  }
+  /* barra de vida del JEFE */
+  if(boss){
+    const w2=W*.5,x2=(W-w2)/2,y2=H*.075,h2=Math.max(8,H*.03);
+    g.fillStyle='rgba(8,5,16,.8)';rr(g,x2-4,y2-4,w2+8,h2+8,h2*.7);g.fill();
+    const k=clamp(boss.hp/bossHpMax,0,1);
+    g.fillStyle='rgba(255,255,255,.12)';g.fillRect(x2,y2,w2,h2);
+    /* el degradado se arma UNA vez (createLinearGradient por cuadro era 0,6 ms) */
+    if(!bossGrd||bossGrdW!==W){bossGrd=g.createLinearGradient(x2,0,x2+w2,0);
+      bossGrd.addColorStop(0,'#ff2e5e');bossGrd.addColorStop(.6,'#ff7a1c');
+      bossGrd.addColorStop(1,'#ffd166');bossGrdW=W;}
+    g.fillStyle=bossGrd;g.fillRect(x2,y2,w2*k,h2);
+    g.fillStyle='#fff';g.font='900 '+Math.max(9,H*.028)+'px system-ui,sans-serif';
+    g.textAlign='center';g.fillText('☠ '+Math.ceil(boss.hp)+'/'+bossHpMax,W/2,y2+h2+Math.max(10,H*.033));
+    g.textAlign='left';
+  }
+  /* barras de vida de los enemigos golpeados */
+  let nb=0;
+  for(const e of ens){
+    if(e.hp>=e.hpMax||e.st==='in')continue;
+    if(++nb>8)break;
+    const p=proj(e.x,e.r*e.sc*2+.45,e.z);
+    if(p.z>1)continue;
+    const w3=Math.max(16,H*.07),h3=Math.max(3,H*.011);
+    g.fillStyle='rgba(0,0,0,.55)';g.fillRect(p.x-w3/2-1,p.y-1,w3+2,h3+2);
+    g.fillStyle='#ff5c7a';g.fillRect(p.x-w3/2,p.y,w3*clamp(e.hp/e.hpMax,0,1),h3);
+  }
+  /* joystick flotante */
+  const jv=joyVec();
+  if(joy){
+    const R0=H*.16;
+    g.globalAlpha=.28;g.strokeStyle='#fff';g.lineWidth=Math.max(2,H*.008);
+    g.beginPath();g.arc(joy.ox,joy.oy,R0,0,TAU);g.stroke();
+    g.globalAlpha=.5;g.fillStyle=G.acc;
+    const kx=jv?joy.ox+jv.x*R0:joy.ox,ky=jv?joy.oy+jv.y*R0:joy.oy;
+    g.beginPath();g.arc(kx,ky,R0*.34,0,TAU);g.fill();
+    g.globalAlpha=1;
+  }
+  /* aviso grande de sala / oleada / jefe */
+  if(noticeT>0&&notice){
+    const k=clamp(noticeT/.5,0,1);
+    g.globalAlpha=k;
+    g.textAlign='center';
+    /* el cuerpo se ajusta al ANCHO: "ROOM CLEAR!" a H*0,11 medía 380 px y tapaba
+       la sala entera. Nunca pasa del 74% del ancho. */
+    let fs=Math.max(14,H*(noticeBig?.105:.07));
+    g.font='900 '+fs+'px system-ui,sans-serif';
+    const tw=g.measureText(notice).width;
+    if(tw>W*.74){fs=Math.max(12,fs*W*.74/tw);g.font='900 '+fs+'px system-ui,sans-serif';}
+    g.lineWidth=Math.max(3,fs*.16);g.strokeStyle='rgba(4,2,10,.85)';
+    g.strokeText(notice,W/2,H*.3);
+    g.fillStyle=noticeBig?(notice===T('bossHere')?PAL.boss:G.acc):'#fff';
+    g.fillText(notice,W/2,H*.3);
+    g.globalAlpha=1;g.textAlign='left';
+  }
+  /* ayuda al empezar */
+  if(tut&&ph==='fight'&&room===1&&lvl===1){
+    g.globalAlpha=clamp(1-phT/7,0,1)*.95;
+    g.textAlign='center';g.fillStyle='#fff';
+    g.font='900 '+Math.max(12,H*.05)+'px system-ui,sans-serif';
+    g.fillText(T('tutMove'),W/2,H*.62);
+    g.font='800 '+Math.max(10,H*.036)+'px system-ui,sans-serif';
+    g.fillStyle=G.acc;g.fillText(T('tutStop'),W/2,H*.69);
+    g.globalAlpha=1;g.textAlign='left';
+  }
+  /* CARTAS DE MEJORA */
+  if(ph==='pick'&&cards.length){
+    g.fillStyle='rgba(6,4,14,.78)';g.fillRect(0,0,W,H);
+    g.textAlign='center';
+    g.fillStyle='#fff';g.font='900 '+Math.max(13,H*.058)+'px system-ui,sans-serif';
+    g.fillText(T('pick'),W/2,H*.16);
+    g.fillStyle='rgba(255,255,255,.6)';g.font='800 '+Math.max(9,H*.03)+'px system-ui,sans-serif';
+    g.fillText(T('pickSub'),W/2,H*.22);
+    for(let i=0;i<cards.length;i++){
+      const r=cardR[i],u=cards[i];
+      const pop=Math.sin(ARC.t*3+i)*.01+1;
+      g.save();
+      g.translate(r.x+r.w/2,r.y+r.h/2);g.scale(pop,pop);g.translate(-r.w/2,-r.h/2);
+      g.fillStyle='rgba(20,14,34,.98)';rr(g,0,0,r.w,r.h,r.w*.1);g.fill();
+      g.strokeStyle=G.acc;g.lineWidth=Math.max(2,r.w*.018);g.stroke();
+      g.fillStyle=G.acc;g.font='900 '+r.w*.42+'px system-ui,sans-serif';
+      g.fillText(u.ic,r.w/2,r.h*.42);
+      g.fillStyle='#fff';g.font='900 '+Math.max(9,r.w*.135)+'px system-ui,sans-serif';
+      g.fillText(T(u.k),r.w/2,r.h*.62);
+      g.fillStyle='rgba(255,255,255,.66)';
+      g.font='700 '+Math.max(7,r.w*.093)+'px system-ui,sans-serif';
+      wrap(g,T(u.d),r.w/2,r.h*.75,r.w*.86,Math.max(9,r.w*.115));
+      const n=taken[u.id]||0;
+      if(n){g.fillStyle=G.acc;g.font='900 '+Math.max(8,r.w*.1)+'px system-ui,sans-serif';
+        g.fillText('x'+n,r.w/2,r.h*.94);}
+      g.restore();
+    }
+    g.textAlign='left';
+  }
+}
+function wrap(g,txt,cx,cy,w,lh){
+  const ws=String(txt).split(' ');let line='',y=cy;
+  for(const wd of ws){
+    const t=line?line+' '+wd:wd;
+    if(g.measureText(t).width>w&&line){g.fillText(line,cx,y);y+=lh;line=wd;}
+    else line=t;
+  }
+  if(line)g.fillText(line,cx,y);
+}
+
+/* --------------------------------------------------------- MODO ATRACCIÓN
+   El menú NO puede verse vacío. Se usa la misma arena, los mismos pools y el
+   mismo héroe: los enemigos orbitan, el héroe gira y dispara de verdad, la
+   cámara se balancea 28° a cada lado. Cuesta lo mismo que una partida floja. */
+let dmT=0;
+function demoInit(){
+  demo=1;dmT=0;camK=1.1;camDZ=-1.15;ph='fight';phT=0;moving=0;inv=0;hitFlash=0;joy=null;shotT=0;
+  P=P||basePerks();
+  ens.length=0;hbs.length=0;ebs.length=0;cns.length=0;tels.length=0;
+  boss=null;if(bossN)bossN.visible=false;if(bossFB)bossFB.visible=false;
+  obs=[];buildObs();
+  hx=-3.2;hz=.9;phx=hx;phz=hz;aim=0;hp=P.hpMax;
+  const pl=plan=roomPlan(1,1);
+  for(let i=0;i<7;i++){
+    const a=i/7*TAU;
+    const e=mkEnemy(['mole','torre','pua','div'][i&3],pl,Math.cos(a)*5.2,Math.sin(a)*2.4-.9,0);
+    e.st='walk';e.stT=0;e.orb=a;e.hp=e.hpMax=999;
+  }
+  tels.length=0;
+}
+G.attract=function(dt,g){
+  if(!T3||!ARC.rnd||!scene)return;
+  if(!demo)demoInit();
+  dmT+=dt;resStep(dt);
+  /* enemigos en órbita, con bamboleo */
+  for(const e of ens){
+    e.px=e.x;e.pz=e.z;
+    e.orb+=dt*.42*(e.shape===1?-.7:1);
+    const rad=4.6+Math.sin(dmT*.6+e.orb*2)*1.4;
+    e.x=Math.cos(e.orb)*rad;e.z=Math.sin(e.orb)*rad*.52-.9;
+    e.bob+=dt*6;
+    if(e.flash>0)e.flash-=dt;
+  }
+  /* el héroe gira y dispara al que tenga más cerca */
+  const tg=nearestEnemy(hx,hz);
+  if(tg)aim=lerp(aim,Math.atan2(tg.x-hx,tg.z-hz),.14);
+  shotT-=dt;
+  if(shotT<=0&&tg){
+    shotT=.28;
+    for(let k=0;k<2;k++)shoot(aim+(k-.5)*.13,1);
+  }
+  for(let i=hbs.length-1;i>=0;i--){
+    const b=hbs[i];b.l-=dt;b.x+=b.vx*dt;b.z+=b.vz*dt;
+    let out=b.l<=0||Math.abs(b.x)>RW||Math.abs(b.z)>RH;
+    for(const e of ens){
+      if(Math.hypot(b.x-e.x,b.z-e.z)<e.r*e.sc+.25){
+        out=true;e.flash=.16;
+        const p=proj(e.x,.9,e.z);
+        ARC.fx.burst(p.x,p.y,{n:Math.round(6*partK),color:e.col,speed:170,size:4,life:.35,sq:true});
+        break;
+      }
+    }
+    if(out)hbs.splice(i,1);
+  }
+  /* monedas que caen solas, para que el cuadro tenga brillo */
+  if(Math.random()<dt*1.4)dropCoins(rnd(-5,5),rnd(-2.6,2.2),1);
+  for(let i=cns.length-1;i>=0;i--){
+    const c=cns[i];c.vy-=13*dt;c.y+=c.vy*dt;c.sp+=dt*5;
+    if(c.y<.22){c.y=.22;c.vy=0;}
+    if(cns.length>16&&i===0)cns.splice(0,1);
+  }
+  /* el vaivén es de ±0,3 rad: con ±0,5 la esquina de la arena se salía del cuadro */
+  camA=Math.sin(dmT*.16)*.3;
+  drawScene(1);
+};
+
+/* ---------------------------------------------------------------- el piloto
+   Puntúa 16 direcciones + "quedarse quieto" mirando 0,35 s adelante. Quieto es
+   la jugada BUENA (es cuando dispara), así que sólo se mueve si quieto es
+   peligroso. Sin esto el bot caminaba siempre y nunca disparaba: la sonda
+   terminaba con 0 bajas y el juego parecía roto. */
+function threatScore(x,z,tAhead){
+  let s=0;
+  if(x<-RW+HR+.15||x>RW-HR-.15||z<-RH+HR+.15||z>RH-HR-.15)return -1e6;
+  for(const o of obs){const d=Math.hypot(x-o.x,z-o.z);if(d<o.r+HR+.1)return -1e6;}
+  let dn=1e9;
+  for(const e of ens){
+    if(e.st==='in')continue;
+    let ex=e.x,ez=e.z;
+    if(e.st==='dash'){ex+=e.dvx*tAhead;ez+=e.dvz*tAhead;}
+    else{const dx=hx-e.x,dz=hz-e.z,d=Math.hypot(dx,dz)||1;
+      ex+=dx/d*e.sp*tAhead;ez+=dz/d*e.sp*tAhead;}
+    dn=Math.min(dn,Math.hypot(x-ex,z-ez)-e.r*e.sc);
+  }
+  if(boss){
+    let bx2=boss.x,bz2=boss.z;
+    if(boss.st==='charge'){bx2+=boss.dvx*tAhead;bz2+=boss.dvz*tAhead;}
+    dn=Math.min(dn,Math.hypot(x-bx2,z-bz2)-boss.r);
+  }
+  if(dn<1e8)s+=Math.min(dn,7)*10;
+  /* balas: distancia al punto donde va a estar la bala */
+  for(const b of ebs){
+    const bx2=b.x+b.vx*tAhead,bz2=b.z+b.vz*tAhead;
+    const d=Math.hypot(x-bx2,z-bz2);
+    if(d<1.5)s-=(1.5-d)*90;
+  }
+  /* monedas fuera del imán: un empujoncito para juntarlas */
+  for(const c of cns){
+    const d=Math.hypot(x-c.x,z-c.z);
+    if(d<5)s+=(5-d)*.7;
+  }
+  /* quedarse cerca del centro: menos chance de quedar acorralado */
+  s-=Math.hypot(x*.35,z*.6)*.9;
+  return s;
+}
+function botThink(){
+  if(ph==='pick'){
+    /* elige lo que más rinde: daño, tiro múltiple, y curación si está flojo */
+    let bi=0,bs=-1;
+    for(let i=0;i<cards.length;i++){
+      const id=cards[i].id;
+      let v={dmg:9,mult:8,rate:7,pierce:6,bounce:5,crit:5,spd:4,mag:3,hp:6,heal:hp<P.hpMax-2?8:1}[id]||4;
+      if(v>bs){bs=v;bi=i;}
+    }
+    pickCard(bi);
+    return;
+  }
+  if(ph!=='fight')return;
+  const tA=.35;
+  const stay=threatScore(hx,hz,tA);
+  let best=stay,bx2=0,bz2=0,mv=false;
+  const step=P.spd*tA;
+  for(let k=0;k<16;k++){
+    const a=k/16*TAU;
+    const nx=hx+Math.cos(a)*step,nz=hz+Math.sin(a)*step;
+    const s=threatScore(nx,nz,tA)-6;          /* 6 = lo que "vale" quedarse quieto */
+    if(s>best){best=s;bx2=Math.cos(a);bz2=Math.sin(a);mv=true;}
+  }
+  if(mv)joy={ox:0,oy:0,x:bx2*ARC.H*.2,y:bz2*ARC.H*.2};
+  else joy=null;
+}
+G.dbg={
+  state:()=>({lvl,room,ph,hp,hpMax:P?P.hpMax:0,ens:ens.length,boss:boss?Math.ceil(boss.hp):0,
+    kills,coins:coinRun,rooms:roomsRun,hbs:hbs.length,ebs:ebs.length,cns:cns.length,
+    bot:botOn,ev:lastEv,ups:upList(),
+    perks:P?{dmg:+P.dmg.toFixed(1),rate:+P.rate.toFixed(2),mult:P.mult,
+      bounce:P.bounce,pierce:P.pierce,spd:+P.spd.toFixed(1),mag:+P.mag.toFixed(1)}:null,
+    gfx:{part:partK,deco:decoK,resK:+resK.toFixed(2),dpr:+(resBase*resK).toFixed(2),cd:+CD.toFixed(1)}}),
+  perf:()=>{
+    const i=ARC.rnd?ARC.rnd.info:null;
+    return i?{tris:i.render.triangles,calls:i.render.calls,
+      geos:i.memory.geometries,fps:Math.round(ARC.fps)}:null;
+  },
+  glb:()=>({heroe:ARC.glb&&ARC.glb.heroe?tris(ARC.glb.heroe.scene):0,
+            jefe:ARC.glb&&ARC.glb.jefe?tris(ARC.glb.jefe.scene):0,
+            simpl:ARC.glbTris||null,usa:{heroe:!!heroN,jefe:!!bossN}}),
+  heroScreen:()=>{const p=proj(hx,.6,hz);
+    return{sx:+(p.x/ARC.W*100).toFixed(1),sy:+(p.y/ARC.H*100).toFixed(1)};},
+  /* apagar piezas para medir de dónde sale el costo de relleno */
+  hide:(k,v)=>{const m={deco:decoM,arena:arenaM,obs:obsM,door:doorM,
+      hero:heroN||heroFB,boss:bossN||bossFB};
+    if(m[k])m[k].visible=(v===undefined?!m[k].visible:!!v);return !!(m[k]&&m[k].visible);},
+  /* fija la resolución a mano y APAGA el control automático (para las capturas:
+     así se ve lo que ve un celular real, no el modo degradado de swiftshader) */
+  res:k=>{resLock=1;resK=clamp(k,.3,1);resApply();return{resK,dpr:resBase*resK};},
+  dpr:v=>{ARC.rnd.setPixelRatio(v);ARC.rnd.setSize(ARC.W,ARC.H,false);return v;},
+  fog:v=>{scene.fog=v?new T3.Fog(new T3.Color(PAL.fog).getHex(),34*fogK,96*fogK):null;
+    scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});return !!scene.fog;},
+  /* sólo la escena 3D, sin la capa 2D (para medir dónde se va el cuadro) */
+  only3d:a=>drawScene(clamp(a||0,0,1)),
+  /* limpia la sala de golpe (para llegar a las cartas en las capturas) */
+  hurt:()=>{inv=0;hurtHero(1);return hp;},
+  wipe:()=>{for(let i=ens.length-1;i>=0;i--)killEnemy(ens[i]);if(boss)bossDie();
+    return{ens:ens.length,boss:!!boss};},
+  /* abre las cartas de mejora a mano */
+  pick:()=>{openPick();return cards.map(c=>c.id);},
+  /* fuerza la sala n (para revisar el jefe y las cartas sin jugar 4 salas) */
+  goRoom:n=>{room=clamp(n|0,1,8);roomsRun=room-1;newRoom();return room;},
+  fill:()=>{const pl=plan||(plan=roomPlan(lvl,room));for(let i=0;i<12;i++){
+    const s=edgeSpot(pl.R);mkEnemy(['mole','torre','pua','div'][i&3],pl,s.x,s.z,0);}
+    for(let i=0;i<60;i++)ebShoot(rnd(-RW,RW),rnd(-RH,RH),rnd(0,TAU),4,1);
+    dropCoins(0,0,30);return{ens:ens.length,ebs:ebs.length,cns:cns.length};},
+  i18n:()=>{const ks=Object.keys(G.i18n.es),out={};
+    for(const l of ['es','en','pt']){const f=ks.filter(k=>!G.i18n[l][k]);
+      out[l]=f.length?('FALTAN '+f.join(',')):'ok';}
+    return out;},
+  autoMove:()=>{
+    if(ph==='dead'||ph==='won')return false;
+    botOn=1;botThink();
+    return true;
+  }
+};
+window.GAME=G;
+
+window.ARC=ARC;window.GAME=GAME;
+ARC.boot();
+</script>
+</body></html>
