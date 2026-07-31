@@ -3,46 +3,79 @@
    ----------------------------------------------------------------------------
    La pelota avanza sola; el dedo la mueve de costado. La pista tiene AGUJEROS
    (te caés), MUROS (te frenan), SIERRAS que giran, COMPUERTAS que se abren y
-   cierran con ritmo, RAMPAS DE IMPULSO y DIAMANTES para juntar. 8 niveles con
-   pista fija (semilla por nivel: mismo nivel = misma pista, se aprende de
-   memoria) y un ARCO DE CONTROL a la mitad que te devuelve una vez.
+   cierran con ritmo, RÁFAGAS de viento cruzado, RAMPAS DE IMPULSO y DIAMANTES
+   para juntar. 8 niveles con pista fija (semilla por nivel: mismo nivel = misma
+   pista, se aprende de memoria) y un ARCO DE CONTROL a la mitad que te devuelve
+   una vez. Los diamantes se GASTAN en pelotas y cada nivel tiene tres MEDALLAS y
+   su mejor tiempo.
 
    LO QUE HAY QUE SABER PARA TOCAR ESTE ARCHIVO
    --------------------------------------------
+   · LA PISTA VA EN TROZOS FUSIONADOS (lo que la hizo rápida de verdad). Todo lo
+     estático de un tramo de 48 m —baldosas, faldón, aristas de luz, travesaños,
+     portales, rampas, muros, marcos de compuerta, chapas de aviso y las columnas
+     del vacío— se hornea en UNA sola geometría con color por vértice. Cada trozo
+     es UNA llamada de dibujo y sólo se dibujan los que están entre −14 m y
+     +118 m de la pelota (la niebla se cierra en 132). MEDIDO con renderer.info en
+     el nivel 8, 412×915: antes eran 3 mallas para los 390 m enteros y se
+     dibujaban SIEMPRE completas → 24.530 triángulos, 45 llamadas, 44,5 fps
+     mínimos y la resolución bajando sola a 0,9. Con trozos + instancias + cielo
+     de CSS: 12.550 triángulos, 12 llamadas, 50,7 fps mínimos y la resolución al
+     tope. Lo que se ahorró es lo que se gastó en el cielo y los arcos nuevos.
    · LEGIBILIDAD DE LA PISTA. Antes las baldosas eran Lambert oscuras con niebla
      negra: a 25 m la pista se fundía con el vacío y no se veía dónde estaba el
      borde ni el agujero (medido con snapGL: luz 34-39 con el 60% del cuadro en
-     negro). Ahora la pista se arma en TRES MALLAS FUSIONADAS (una sola llamada
-     de dibujo cada una, así el celular no sufre):
-       tilesM  baldosas + faldón, colores por VÉRTICE (damero) y con niebla;
-       glowM   ARISTAS: cada celda dibuja una tira brillante en cada lado que
-               NO tiene vecina. Eso contornea la pista Y el borde de cada
-               agujero, que es lo que hace que el camino se lea de lejos;
-               además travesaños cada 4 m, los PORTALES de los niveles altos,
-               las RAMPAS de impulso y las chapas de aviso de peligro;
-       propM   columnas del vacío (paralaje), densidad de ARC.gfxP().part.
+     negro). Ahora cada celda emite ARISTAS de luz en cada lado que NO tiene
+     vecina: eso contornea la pista Y el borde de cada agujero, que es lo que
+     hace que el camino se lea de lejos.
      La niebla ya no es negra: es del color de la ZONA y arranca lejos, así la
      distancia se lee como BRUMA y no como pozo negro.
+   · EL VACÍO YA NO ES UN POZO NEGRO, Y EL CIELO NO CUESTA NI UN CUADRO. El fondo
+     es un DEGRADADO de la zona con bruma en la lejanía más 46 estrellas, y las
+     dos cosas son CSS en el fondo del lienzo #gl (el renderer se rehace con
+     alpha:true y limpia con alfa 0). Medido A/B con la misma partida y la
+     resolución clavada (ab_rueda.js, nivel 5, 412×915): el mismo degradado como
+     scene.background costaba 51,1 fps contra 60,0 sin él, y 240 estrellas en un
+     THREE.Points otros 5 fps (en swiftshader llenar la pantalla de nuevo y
+     dibujar gl.POINTS con mezcla es carísimo). En CSS lo compone el navegador una
+     vez y sale gratis.
+   · LO QUE SE MUEVE VA INSTANCIADO. Sierras, compuertas y diamantes son tres
+     InstancedMesh; las visibles se empaquetan en los primeros índices y se baja
+     `count`, así ni se dibujan ni cuentan triángulos las que están detrás de la
+     bruma. En el nivel 8 eso pasó de ~42 llamadas de dibujo a 3.
+   · RÁFAGAS (el peligro nuevo de las zonas altas, niveles 4 a 8): tramos de 15 m
+     con el piso marcado donde el viento arrastra el DESTINO del dedo 1,05 m/s
+     hacia un costado (empuja tx y NO bx: el viento nunca te mete de prepo en un
+     agujero, sólo te desvía si te quedás quieto).
+   · NADA DE GLB EN ESTE JUEGO. Los dos modelos generados (sierra y arco) pasan
+     por el simplificador del motor y quedan en 383 y 304 triángulos: en pantalla
+     son bollos de papel oscuros (capturas Z-saw5.png y Z-cparch.png del informe:
+     el arco de control era un montón de esquirlas negras a los costados de la
+     pista). Se cambiaron por geometría propia, teñida por zona, que además pesa
+     2,5 MB menos de descarga y saca un paso de la pantalla de carga.
    · UNA ZONA POR NIVEL (TH8). Cada nivel trae su paleta completa (baldosas,
      aristas, niebla, cielo, columnas, color de peligro, color del arco y de los
      diamantes) y su nombre; el nivel 8 no se parece en nada al 1. La paleta se
      aplica ANTES de armar las mallas, porque los colores van horneados por
      vértice.
-   · CUATRO PELIGROS. muro (fijo), sierra (gira; algunas BARREN carriles),
+   · CINCO PELIGROS. muro (fijo), sierra (gira; algunas BARREN carriles),
      COMPUERTA (`puls`: una pared que sube y baja con ritmo propio; se cruza
      cuando está abajo — es el único peligro de TIEMPO, no de posición) y el
      vacío. Cada uno deja (a) chapa magenta con galón en las 2 baldosas
      anteriores, (b) sombra en su baldosa y (c) galón 2D pulsante proyectado en
-     pantalla entre 3,5 y 27 m. A 11,3 m/s eso son 2,1 s de aviso.
+     pantalla entre 3,5 y 27 m. A 11,3 m/s eso son 2,1 s de aviso. La ráfaga es
+     el quinto y avisa distinto: alfombra oscura con flechas en el piso, aviso al
+     entrar y rayas 2D cruzando la pantalla.
    · RAMPAS DE IMPULSO (boosts). Van SOBRE el camino garantizado, cada ~26 m y
      nunca a menos de 6 m de un peligro. Dan +45% de velocidad que decae en
      1,4 s (≈0,3 s de tiempo ganado cada una). Son lo que hace que el MEJOR
      TIEMPO por nivel se pueda mejorar: sin rampas el tiempo sería fijo
      (largo/velocidad) y la medalla de velocidad no significaría nada.
-   · EL PUESTO DE CONTROL SE VE EN LA PISTA: es un ARCO (GLB si cargó, si no
-     geometría) con una franja ancha cruzando la pista, y el arco y su franja NO
-     tienen niebla, así se ven venir desde 150 m. Al pasarlo la franja cambia de
-     ámbar a verde y el arco se enciende. La meta es otro arco con cuadros.
+   · EL PUESTO DE CONTROL SE VE EN LA PISTA: es un ARCO de neón (dos pilonas con
+     tira de luz y un dintel con tres barras) con una franja ancha cruzando la
+     pista, y el arco y su franja NO tienen niebla, así se ven venir desde 150 m.
+     Al pasarlo la franja cambia de ámbar a verde y el arco se enciende. La meta
+     es otro arco, con cuadros de bandera a cuadros en el piso.
    · UNA SOLA VERDAD DE POSICIÓN. Antes `bx` era el destino Y el colisionador,
      mientras la pelota dibujada iba interpolada: se moría por una pared que en
      pantalla estaba a medio carril. Ahora `bx` es la posición REAL (se mueve a
@@ -92,21 +125,22 @@ const G={
   subKey:'sub',
   acc:'#22d3ee',acc2:'#0891b2',levels:8,bestLabel:'METROS',bestKey:'metL',
   three:true,sky:'#04070e',shadows:false,
-  glbTris:520,
   art:A('art-rueda.jpg'),music:A('mus-rueda-neon.m4a'),
   sfx:{tap:A('sfx-tap.mp3'),click:A('sfx-click.mp3'),coin:A('sfx-coin.mp3'),win:A('sfx-win.mp3'),
        lose:A('sfx-lose.mp3'),boom:A('sfx-boom.mp3'),power:A('sfx-power.mp3'),chime:A('sfx-chime.mp3'),
        gem:A('sfx-rueda-gem.mp3'),saw:A('sfx-rueda-saw.mp3'),check:A('sfx-rueda-check.mp3'),
        gate:A('sfx-rueda-gate.mp3')},
-  glb:{sierra:A('m-rueda-sierra.glb'),arco:A('m-rueda-arco.glb')},
+  /* SIN GLB a propósito (ver la cabecera): los modelos generados quedan en bollos
+     de 300-400 triángulos y la pista es de neón, no de fotos. */
   i18n:{
-    es:{sub:'Pista de neón en el vacío: esquivá agujeros, muros, sierras y compuertas, juntá diamantes y llegá a la meta. 8 zonas, arco de control a la mitad.',
+    es:{sub:'Pista de neón en el vacío: esquivá agujeros, muros, sierras y compuertas, juntá diamantes y llegá a la meta. 8 zonas, ráfagas de viento y arco de control a la mitad.',
       metL:'METROS',tutDrag:'ARRASTRÁ PARA MOVERTE',tutSide:'o usá ◀ ▶',
       cpGot:'ARCO DE CONTROL',cpBack:'¡VOLVÉS AL ARCO!',goal:'¡META!',
       dFall:'AL VACÍO',dHit:'CHOCASTE',dSaw:'TE CORTÓ LA SIERRA',dGate:'TE CERRÓ LA COMPUERTA',
       statMet:'Metros',statGems:'Diamantes',usedCp:'Usaste el arco de control',
       warn:'¡PELIGRO!',gemsAll:'¡TODOS LOS DIAMANTES!',newRec:'¡NUEVO RÉCORD!',
       boost:'¡IMPULSO!',statTime:'Tiempo',statBest:'Mejor',newTime:'¡RÉCORD DE TIEMPO!',
+      gust:'RÁFAGA',
       almost:'¡CASI!',zone:'ZONA',medals:'MEDALLAS',medNew:'¡MEDALLA NUEVA!',
       medClean:'Sin usar el arco',medGems:'Todos los diamantes',medFast:'Bajo el tiempo par',
       balls:'PELOTAS',use:'USAR',inUse:'EN USO',buy:'COMPRAR',locked:'Te faltan diamantes',
@@ -114,13 +148,14 @@ const G={
       b1:'SOL',b2:'HIELO',b3:'BRASA',b4:'TÓXICA',b5:'VIOLETA',b6:'ORO',
       z1:'CIAN',z2:'VIOLETA',z3:'SELVA',z4:'ÁMBAR',z5:'ROSA',z6:'HIELO',z7:'LAVA',z8:'ORO',
       allMed:'¡LAS TRES MEDALLAS!',lock:'Superá el nivel anterior'},
-    en:{sub:'A neon track in the void: dodge holes, walls, saws and gates, grab diamonds and reach the goal. 8 zones, one checkpoint arch halfway.',
+    en:{sub:'A neon track in the void: dodge holes, walls, saws and gates, grab diamonds and reach the goal. 8 zones, crosswinds and one checkpoint arch halfway.',
       metL:'METRES',tutDrag:'DRAG TO MOVE',tutSide:'or use ◀ ▶',
       cpGot:'CHECKPOINT ARCH',cpBack:'BACK TO THE ARCH!',goal:'GOAL!',
       dFall:'INTO THE VOID',dHit:'CRASHED',dSaw:'THE SAW GOT YOU',dGate:'THE GATE SHUT ON YOU',
       statMet:'Metres',statGems:'Diamonds',usedCp:'You used the checkpoint',
       warn:'DANGER!',gemsAll:'ALL THE DIAMONDS!',newRec:'NEW BEST!',
       boost:'BOOST!',statTime:'Time',statBest:'Best',newTime:'BEST TIME!',
+      gust:'CROSSWIND',
       almost:'SO CLOSE!',zone:'ZONE',medals:'MEDALS',medNew:'NEW MEDAL!',
       medClean:'No checkpoint used',medGems:'Every diamond',medFast:'Under par time',
       balls:'BALLS',use:'USE',inUse:'IN USE',buy:'BUY',locked:'Not enough diamonds',
@@ -128,13 +163,14 @@ const G={
       b1:'SUN',b2:'ICE',b3:'EMBER',b4:'TOXIC',b5:'VIOLET',b6:'GOLD',
       z1:'CYAN',z2:'VIOLET',z3:'JUNGLE',z4:'AMBER',z5:'PINK',z6:'ICE',z7:'LAVA',z8:'GOLD',
       allMed:'ALL THREE MEDALS!',lock:'Beat the previous level'},
-    pt:{sub:'Pista de neon no vazio: desvie de buracos, muros, serras e portões, junte diamantes e chegue à meta. 8 zonas, arco de controle no meio.',
+    pt:{sub:'Pista de neon no vazio: desvie de buracos, muros, serras e portões, junte diamantes e chegue à meta. 8 zonas, rajadas de vento e arco de controle no meio.',
       metL:'METROS',tutDrag:'ARRASTE PARA MOVER',tutSide:'ou use ◀ ▶',
       cpGot:'ARCO DE CONTROLE',cpBack:'VOLTA AO ARCO!',goal:'META!',
       dFall:'NO VAZIO',dHit:'VOCÊ BATEU',dSaw:'A SERRA TE PEGOU',dGate:'O PORTÃO FECHOU EM VOCÊ',
       statMet:'Metros',statGems:'Diamantes',usedCp:'Você usou o arco de controle',
       warn:'PERIGO!',gemsAll:'TODOS OS DIAMANTES!',newRec:'NOVO RECORDE!',
       boost:'IMPULSO!',statTime:'Tempo',statBest:'Melhor',newTime:'RECORDE DE TEMPO!',
+      gust:'RAJADA',
       almost:'QUASE!',zone:'ZONA',medals:'MEDALHAS',medNew:'MEDALHA NOVA!',
       medClean:'Sem usar o arco',medGems:'Todos os diamantes',medFast:'Abaixo do tempo par',
       balls:'BOLAS',use:'USAR',inUse:'EM USO',buy:'COMPRAR',locked:'Faltam diamantes',
@@ -150,8 +186,11 @@ const G={
 
 /* --------------------------------------------------------------- constantes */
 const LANES=5,CW=1.25,HALF=(LANES-1)/2*CW;   /* 5 carriles de 1,25 → pista 6,25 */
-const LODZ=24;                               /* hasta acá la sierra es el modelo 3D */
-const ARCHZ=150;                             /* y hasta acá se dibujan los arcos */
+/* TROZOS DE PISTA: 48 m por trozo, se dibuja de −14 m a +118 m de la pelota. Con
+   trozos más chicos se ahorran triángulos pero suben las llamadas de dibujo; con
+   48 m quedan 4 trozos vivos (4 llamadas) y ~8,7 k triángulos en el nivel 8. */
+const CH=48,VISZ=118,BEHZ=14;
+const ARCHZ=150;                             /* hasta acá se dibujan los arcos */
 const BR=.42;                                /* radio de la pelota */
 const LSP=10.5;                              /* velocidad LATERAL (u/s): 0,12 s por carril */
 const TH=.26;                                /* espesor de la baldosa */
@@ -159,18 +198,27 @@ const BOOSTT=1.4,BOOSTK=.45;                 /* la rampa dura 1,4 s y da +45% */
 /* CURVA DE DIFICULTAD, a mano y medida con el piloto (ver informe):
    len metros · spd m/s · clean metros limpios al empezar · shift metros mínimos
    entre corrimientos del camino · hole/narrow/wall/saw/puls/mov probabilidad por
-   metro · ring cada cuántos metros va un PORTAL (0 = ninguno)
+   metro · ring cada cuántos metros va un PORTAL (0 = ninguno) · gust cuántas
+   RÁFAGAS (tramos con viento cruzado) trae el nivel
    (los diamantes y las rampas van por reparto fijo, ver más abajo) */
 const LV=[
-  {len:112,spd:6.0 ,clean:34,shift:5,hole:.10,narrow:0  ,wall:.055,saw:0   ,puls:0   ,mov:0  ,ring:0 },
-  {len:140,spd:6.7 ,clean:30,shift:4,hole:.14,narrow:.04,wall:.075,saw:.03 ,puls:0   ,mov:0  ,ring:0 },
-  {len:172,spd:7.4 ,clean:28,shift:4,hole:.18,narrow:.07,wall:.090,saw:.055,puls:0   ,mov:0  ,ring:28},
-  {len:205,spd:8.1 ,clean:26,shift:3,hole:.22,narrow:.10,wall:.100,saw:.075,puls:.030,mov:0  ,ring:24},
-  {len:240,spd:8.8 ,clean:26,shift:3,hole:.25,narrow:.13,wall:.105,saw:.085,puls:.045,mov:0  ,ring:20},
-  {len:280,spd:9.6 ,clean:24,shift:3,hole:.28,narrow:.16,wall:.110,saw:.095,puls:.055,mov:.05,ring:18},
-  {len:330,spd:10.4,clean:24,shift:3,hole:.31,narrow:.19,wall:.115,saw:.105,puls:.065,mov:.07,ring:16},
-  {len:390,spd:11.3,clean:22,shift:3,hole:.34,narrow:.22,wall:.120,saw:.115,puls:.075,mov:.09,ring:14}
+  {len:112,spd:6.0 ,clean:34,shift:5,hole:.10,narrow:0  ,wall:.055,saw:0   ,puls:0   ,mov:0  ,ring:0 ,gust:0},
+  {len:140,spd:6.7 ,clean:30,shift:4,hole:.14,narrow:.04,wall:.075,saw:.03 ,puls:0   ,mov:0  ,ring:0 ,gust:0},
+  {len:172,spd:7.4 ,clean:28,shift:4,hole:.18,narrow:.07,wall:.090,saw:.055,puls:0   ,mov:0  ,ring:28,gust:0},
+  {len:205,spd:8.1 ,clean:26,shift:3,hole:.22,narrow:.10,wall:.100,saw:.075,puls:.030,mov:0  ,ring:24,gust:1},
+  {len:240,spd:8.8 ,clean:26,shift:3,hole:.25,narrow:.13,wall:.105,saw:.085,puls:.045,mov:0  ,ring:20,gust:1},
+  {len:280,spd:9.6 ,clean:24,shift:3,hole:.28,narrow:.16,wall:.110,saw:.095,puls:.055,mov:.05,ring:18,gust:2},
+  {len:330,spd:10.4,clean:24,shift:3,hole:.31,narrow:.19,wall:.115,saw:.105,puls:.065,mov:.07,ring:16,gust:2},
+  {len:390,spd:11.3,clean:22,shift:3,hole:.34,narrow:.22,wall:.120,saw:.115,puls:.075,mov:.09,ring:14,gust:3}
 ];
+/* RÁFAGA (viento cruzado), el peligro nuevo de las zonas altas. No es un bicho: es
+   un TRAMO de 15 m con el piso rayado y flechas, donde el viento arrastra el
+   DESTINO del dedo (tx) 1,05 m/s hacia un costado. Hay que sostener el dedo contra
+   el viento: los 15 m a 9,6 m/s son 1,6 s y el arrastre suma ~1,6 m, o sea un
+   carril y cuarto. Empuja tx y NO bx a propósito: así el viento nunca te mete de
+   prepo en un agujero (eso sería una muerte que el jugador no puede evitar), lo
+   que hace es desviarte si te quedás quieto. */
+const WINDV=1.05;
 /* CUÁNTAS RAMPAS DE IMPULSO lleva cada nivel: una cada 24 m de pista útil. Es
    una cuenta cerrada (no depende de dónde caigan) para que el TIEMPO PAR se
    pueda calcular sin armar la pista (lo necesita el panel de medallas). */
@@ -250,17 +298,19 @@ function setBestT(n,s){
 /* 12,4 s en castellano y portugués; 12.4 s en inglés */
 function fmtT(s){const v=(+s).toFixed(1);return (ARC.lang&&ARC.lang()==='en'?v:v.replace('.',','))+' s';}
 
-let T3,scene,cam,ball,ballGlow,ballSh,trackG,dynG,propM,tilesM,glowM;
-let cells=[],obs=[],obsZ=[],gems=[],boosts=[],pathL=[],sawG=[],gemG=[];
+let T3,scene,cam,ball,ballGlow,ballSh,trackG,dynG,skyG,stars,skyTex;
+let chunks=[];                               /* una malla fusionada por tramo de 48 m */
+let sawIM,gateIM,gemIM;                      /* lo que se mueve, instanciado */
+let cells=[],obs=[],obsZ=[],gems=[],boosts=[],pathL=[],sawG=[],winds=[];
 const NOOBS=[];
 let cpArch=null,finArch=null,cpBand=null,cpBandOn=null;
 let lvl=1,LEN=0,SPD=0,CPZ=0,PAR=0;
 let bx=0,tx=0,bz=0,vz=0,fallV=0,dead=0,won=false,drag=null;
 let pbx=0,pbz=0,hudM=-1;                     /* estado anterior: interpolación al dibujar */
 let gemN=0,gemT=0,cpOn=0,cpUsed=0,tilt=0,warm=0,lastDie='',dieK='';
-let botOn=0,sawSnd=0,recTold=false,runT=0,boostT=0,boostN=0;
+let botOn=0,sawSnd=0,recTold=false,runT=0,boostT=0,boostN=0,windOn=0;
 let DEMO=0,demoOn=0,demoRe=0;
-let partK=1,fogK=1,decoK=1,SAWGLB=false,ARCGLB=false;
+let partK=1,fogK=1,decoK=1,chVis=0,cssSky=false;
 const MAT={},GEO={},V3=[];
 function vec(){if(!V3.length)V3.push(new T3.Vector3());return V3[0];}
 function mat(c,e){const k=c+(e?'e':'');if(MAT[k])return MAT[k];
@@ -292,6 +342,17 @@ function bq(A,x,y,z,w,h,d,ct,cs){          /* caja (5 caras, sin fondo) */
 function plate(A,x,z,w,d,y,col){           /* chapa horizontal */
   Q(A,[x-w/2,y,z+d/2],[x+w/2,y,z+d/2],[x+w/2,y,z-d/2],[x-w/2,y,z-d/2],col);
 }
+/* FLECHA en el piso apuntando a un costado (dir −1 / +1): un triángulo (1 solo
+   triángulo) más la cola. La primera versión de la ráfaga las armaba con tres
+   chapas rectangulares y en pantalla se leían como cuadraditos sueltos, no como
+   flechas (captura SC-rafaga2.png de esa vuelta). El orden de los vértices manda
+   la cara: con dz y dx del mismo signo la normal sale hacia ARRIBA. */
+function arrow(A,x,z,y,ln,wd,dir,col){
+  const x0=x-dir*ln*.35,x1=x+dir*ln*.65;
+  if(dir>0)TRI(A,[x0,y,z-wd],[x0,y,z+wd],[x1,y,z],col);
+  else       TRI(A,[x0,y,z+wd],[x0,y,z-wd],[x1,y,z],col);
+  plate(A,x-dir*ln*.55,z,ln*.5,wd*.55,y,col);
+}
 function meshOf(A,fog,op){
   const g=new T3.BufferGeometry();
   g.setAttribute('position',new T3.Float32BufferAttribute(A.p,3));
@@ -304,44 +365,86 @@ function meshOf(A,fog,op){
   if(op!=null){m.transparent=true;m.opacity=op;}
   const me=new T3.Mesh(g,m);me.userData.own=1;return me;
 }
-function glbTris(o){let n=0;o.traverse(k=>{if(k.isMesh&&k.geometry){
-  const g=k.geometry;n+=(g.index?g.index.count:(g.attributes.position?g.attributes.position.count:0))/3;}});
-  return Math.round(n);}
-/* GLB centrado en x/y/z (la sierra gira sobre su centro) o apoyado (el arco) */
-function glbNode(key,targetH,noFog){
-  const S=ARC.glb&&ARC.glb[key];
-  if(!S||!S.scene)return null;
-  try{
-    const o=S.scene.clone(true);
-    const bb=new T3.Box3().setFromObject(o),sz=new T3.Vector3(),c=new T3.Vector3();
-    bb.getSize(sz);bb.getCenter(c);
-    if(!(sz.y>.0001))return null;
-    const s=targetH/sz.y;
-    o.scale.setScalar(s);
-    o.position.set(-c.x*s,-c.y*s,-c.z*s);
-    o.traverse(k=>{if(k.isMesh){k.castShadow=false;k.receiveShadow=false;
-      if(k.material&&noFog)k.material.fog=false;}});
-    const w=new T3.Group();w.add(o);
-    return w;
-  }catch(e){console.warn('glb '+key,e);return null;}
+/* ------------------------------------------------------------------ EL CIELO
+   Degradado de la zona en un canvas de 8×256 usado como scene.background: cero
+   triángulos, una llamada, y el vacío deja de ser un rectángulo negro. Arriba el
+   color de cielo de la zona, abajo un resplandor del color de la niebla (así el
+   horizonte no tiene costura con la bruma de la pista). */
+/* Los topes del degradado, iguales para el CSS y para la textura de respaldo.
+   OJO CON EL SENTIDO: 0% es ARRIBA de la pantalla. La primera versión tenía el
+   resplandor al final y salió con la franja brillante ABAJO, o sea DEBAJO de la
+   pista, en el vacío (captura A-rueda-mid-h.png de esa vuelta). El horizonte de
+   este juego cae al 21% del alto (medido con el encuadre CAMY/AIM), así que el
+   resplandor va ahí y para abajo se apaga. */
+function skyStops(){
+  return[[0,mixc(PAL.sky,'#000000',.45)],[.10,PAL.sky],
+    [.14,mixc(PAL.fog,PAL.sky,.45)],
+    [.225,mixc(PAL.fog,PAL.rail,.22)],          /* la bruma lejana, difusa */
+    [.32,mixc(PAL.fog,PAL.sky,.25)],
+    [.55,mixc(PAL.sky,'#000000',.5)],
+    [1,mixc(PAL.sky,'#000000',.78)]];
 }
-/* el arco se estira a lo ANCHO de la pista y se limita en ALTO: el modelo viene
-   casi cuadrado y a 7 unidades de alto tapaba media pantalla */
-function glbArch(key,targetW,targetH){
-  const S=ARC.glb&&ARC.glb[key];
-  if(!S||!S.scene)return null;
-  try{
-    const o=S.scene.clone(true);
-    const bb=new T3.Box3().setFromObject(o),sz=new T3.Vector3(),c=new T3.Vector3();
-    bb.getSize(sz);bb.getCenter(c);
-    if(!(sz.x>.0001)||!(sz.y>.0001))return null;
-    const sx=targetW/sz.x,sy=targetH/sz.y;
-    o.scale.set(sx,sy,sx);
-    o.position.set(-c.x*sx,-bb.min.y*sy,-c.z*sx);
-    o.traverse(k=>{if(k.isMesh&&k.material)k.material.fog=false;});
-    const w=new T3.Group();w.add(o);
-    return w;
-  }catch(e){console.warn('glb '+key,e);return null;}
+/* EL CIELO SE PINTA CON CSS, NO CON WebGL. Medido A/B en el nivel 5 a 412×915 con
+   la resolución clavada (ab_rueda.js): con el degradado como scene.background —o
+   sea un rectángulo de pantalla completa con textura— 51,1 fps; sin él, 60,0. En
+   swiftshader llenar la pantalla otra vez cuesta el 17% del cuadro.
+   La solución: el renderer se rehace con alpha:true y limpia con alfa 0 (fastGL),
+   el degradado va como background del lienzo #gl y lo compone el navegador una
+   sola vez. Sale gratis y se ve igual. Si por lo que sea no se pudo rehacer el
+   renderer, se cae a la textura (feo pero nunca negro). */
+/* LAS ESTRELLAS TAMBIÉN SON CSS. Medido A/B con la misma partida y la resolución
+   clavada (ab_rueda.js, nivel 5, 412×915): con 240 estrellas en un THREE.Points
+   49,8 fps, sin ellas 54,8. Cinco cuadros por 240 puntitos no se pagan: en
+   swiftshader gl.POINTS con mezcla cuesta carísimo. Puestas como radial-gradient
+   en el mismo fondo del lienzo salen gratis (el navegador pinta esa capa UNA vez)
+   y ni se nota que no tienen paralaje: están a 100 m. */
+let starCss='';
+function buildStarCss(){
+  const R=rng(20260731);const a=[];
+  for(let i=0;i<46;i++){
+    const x=(R()*100).toFixed(1),y=(R()*R()*34).toFixed(1);   /* apiñadas arriba */
+    const s=(R()<.25?1.8:1.1).toFixed(1),o=(.35+R()*.5).toFixed(2);
+    a.push('radial-gradient('+s+'px '+s+'px at '+x+'% '+y+'%,rgba(255,255,255,'+o+') 0,rgba(255,255,255,0) 100%)');
+  }
+  starCss=a.join(',');
+}
+function setSky(){
+  const st=skyStops();
+  if(cssSky){
+    const gl=document.getElementById('gl');
+    if(!starCss)buildStarCss();
+    if(gl)gl.style.background=starCss+',linear-gradient(180deg,'+
+      st.map(s=>s[1]+' '+(s[0]*100).toFixed(1)+'%').join(',')+')';
+    scene.background=null;
+    if(stars)stars.visible=false;
+  }else{
+    const cv=document.createElement('canvas');cv.width=8;cv.height=256;
+    const g=cv.getContext('2d');
+    const gr=g.createLinearGradient(0,0,0,256);
+    st.forEach(s=>gr.addColorStop(s[0],s[1]));
+    g.fillStyle=gr;g.fillRect(0,0,8,256);
+    const t=new T3.CanvasTexture(cv);
+    if(T3.SRGBColorSpace)t.colorSpace=T3.SRGBColorSpace;
+    if(skyTex)skyTex.dispose();
+    skyTex=t;scene.background=t;
+  }
+  if(stars)stars.material.color.set(mixc(PAL.rail,'#ffffff',.5));
+}
+/* 240 estrellas en UN THREE.Points (una llamada, cero triángulos) metidas en un
+   grupo que sigue a la cámara: es un cielo, no decorado de la pista. */
+function buildStars(){
+  const N=240,p=new Float32Array(N*3);
+  const R=rng(77);
+  for(let i=0;i<N;i++){
+    const a=R()*TAU,r=40+R()*140,y=6+R()*70;
+    p[i*3]=Math.cos(a)*r;p[i*3+1]=y;p[i*3+2]=-Math.abs(Math.sin(a))*r-20;
+  }
+  const g=new T3.BufferGeometry();
+  g.setAttribute('position',new T3.Float32BufferAttribute(p,3));
+  const m=new T3.PointsMaterial({color:new T3.Color('#cfe9ff'),size:1.7,
+    sizeAttenuation:false,transparent:true,opacity:.85,fog:false});
+  stars=new T3.Points(g,m);
+  skyG=new T3.Group();skyG.add(stars);scene.add(skyG);
 }
 /* --------------------------------------------------- generador determinista */
 function rng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
@@ -353,9 +456,9 @@ function buildTrack(n){
   LEN=P.len;SPD=P.spd;CPZ=Math.round(LEN/2);PAR=parOf(n);
   setTheme(n);
   const R=rng(4177+n*977);
-  cells=[];obs=[];obsZ=[];gems=[];boosts=[];pathL=[];sawG=[];gemG=[];
+  cells=[];obs=[];obsZ=[];gems=[];boosts=[];pathL=[];sawG=[];winds=[];
   clearG(trackG);clearG(dynG);
-  propM=tilesM=glowM=null;
+  chunks=[];
   /* 1) camino garantizado */
   let lane=Math.floor(LANES/2),lastSh=-99;
   for(let z=0;z<=LEN+2;z++){
@@ -405,8 +508,15 @@ function buildTrack(n){
            abajo. Nunca dos seguidas a menos de 3 m, para que la lectura del
            ritmo alcance. */
         const i=free[Math.floor(R()*free.length)];
-        if(noObsNear(z,3))obs.push({t:'puls',i,z,x:lx(i),w:CW*.46,amp:0,ph:R()*3,sp:0,per:1.5+R()*.6});
-      }else if(r<P.wall+P.saw+P.puls+P.mov&&rowSolid(z)&&noObsNear(z,3)){
+        /* NUNCA una compuerta donde el camino se está corriendo. MEDIDO con el
+           piloto en el nivel 7: la línea iba 4→3→2 en las filas 263 y 266 y había
+           una compuerta en la 267; hay que cambiar dos carriles en 4 filas (a
+           10,4 m/s un carril cuesta 2) y encima acertarle al ritmo de la
+           compuerta: caída al vacío en la 266,5 en las dos corridas. Con el
+           camino quieto ±2 filas alrededor, el peligro de TIEMPO no se junta con
+           el de POSICIÓN. */
+        if(noObsNear(z,3)&&pathStable(z,2))obs.push({t:'puls',i,z,x:lx(i),w:CW*.46,amp:0,ph:R()*3,sp:0,per:1.5+R()*.6});
+      }else if(r<P.wall+P.saw+P.puls+P.mov&&rowSolid(z)&&noObsNear(z,3)&&pathStable(z,2)){
         /* SIERRA QUE BARRE: sólo en filas enteras (siempre hay escape a los
            costados) y a 2 carriles del camino, con amplitud 1,45·CW para que sí
            llegue a invadir el carril bueno: la esquivás moviéndote, no rezando */
@@ -448,10 +558,26 @@ function buildTrack(n){
     }
     if(put>=0)boosts.push({z:put,i:pathL[put],x:lx(pathL[put])});
   }
+  /* 3d) RAFAGAS: tramos de 15 m repartidos por el nivel, nunca en los primeros
+     metros limpios ni pegados a la meta, y con el lado sorteado. */
+  const ng=P.gust|0;
+  for(let k=0;k<ng;k++){
+    const z0=Math.round(P.clean+18+(LEN-P.clean-40)*(k+.5)/Math.max(1,ng));
+    if(z0<8||z0+16>LEN-8)continue;
+    if(Math.abs(z0+7-CPZ)<12)continue;      /* que no tape el arco de control */
+    winds.push({z0,z1:z0+15,d:(R()<.5?-1:1)});
+  }
   /* 4) mallas */
   buildMeshes(P);
-  buildProps();
   buildArches();
+  setSky();
+}
+/* ¿el camino garantizado está QUIETO alrededor de esta fila? (lo piden los
+   peligros de tiempo: ver el comentario de la compuerta) */
+function pathStable(z,d){
+  const a=pathL[clamp(z,0,pathL.length-1)];
+  for(let k=-d;k<=d;k++)if(pathL[clamp(z+k,0,pathL.length-1)]!==a)return false;
+  return true;
 }
 function keepAt(z,i){
   return pathL[Math.max(0,z-1)]===i||pathL[z]===i||pathL[Math.min(pathL.length-1,z+1)]===i;
@@ -463,84 +589,134 @@ function rowFull(z){const r=cells[z];if(!r)return false;
 function noObsNear(z,d){for(const o of obs)if(Math.abs(o.z-z)<d)return false;return true;}
 function solid(z,i){const r=cells[z];return!!(r&&r[i]);}
 const obsAt=z=>obsZ[z]||NOOBS;
+/* lado hacia el que sopla en este metro (0 = sin viento) */
+function windAt(z){for(const w of winds)if(z>=w.z0&&z<=w.z1)return w.d;return 0;}
 
+/* TODO LO ESTÁTICO EN TROZOS DE 48 m.
+   Cada trozo se hornea en UNA geometría (baldosas + faldón + aristas + travesaños
+   + portales + rampas + muros + marcos + avisos + columnas del vacío) y en cada
+   cuadro sólo se dibujan los trozos entre −14 m y +118 m de la pelota. Antes eran
+   3 mallas de los 390 m enteros, dibujadas SIEMPRE completas. */
 function buildMeshes(P){
-  const TA=A0(),GA=A0();
+  const NC=Math.floor((LEN+6)/CH)+1;
+  const acc=[];for(let k=0;k<NC;k++)acc.push(A0());
+  chunks=new Array(NC);
+  const AT=z=>acc[clamp(Math.floor(z/CH),0,NC-1)];
   const t0=C(PAL.t0),t1=C(PAL.t1),sk=C(PAL.skirt),rl=C(PAL.rail),br=C(PAL.bar);
   const dg=C(PAL.danger),sh=C(PAL.shadow),bo=C(PAL.boost);
   const E=.085;                               /* ancho de la arista brillante */
   for(let z=0;z<cells.length;z++){
+    const A=AT(z);
     for(let i=0;i<LANES;i++){
       if(!cells[z][i])continue;
       const x=lx(i),zc=-z;
       const col=((z+i)&1)?t0:t1;
       /* tapa */
-      Q(TA,[x-CW/2,0,zc+.5],[x+CW/2,0,zc+.5],[x+CW/2,0,zc-.5],[x-CW/2,0,zc-.5],col);
+      Q(A,[x-CW/2,0,zc+.5],[x+CW/2,0,zc+.5],[x+CW/2,0,zc-.5],[x-CW/2,0,zc-.5],col);
       /* faldón sólo donde no hay vecina (así se ve el espesor en los bordes) */
-      if(!solid(z,i-1))Q(TA,[x-CW/2,-TH,zc-.5],[x-CW/2,-TH,zc+.5],[x-CW/2,0,zc+.5],[x-CW/2,0,zc-.5],sk);
-      if(!solid(z,i+1))Q(TA,[x+CW/2,-TH,zc+.5],[x+CW/2,-TH,zc-.5],[x+CW/2,0,zc-.5],[x+CW/2,0,zc+.5],sk);
-      if(!solid(z-1,i))Q(TA,[x-CW/2,-TH,zc+.5],[x+CW/2,-TH,zc+.5],[x+CW/2,0,zc+.5],[x-CW/2,0,zc+.5],sk);
-      if(!solid(z+1,i))Q(TA,[x+CW/2,-TH,zc-.5],[x-CW/2,-TH,zc-.5],[x-CW/2,0,zc-.5],[x+CW/2,0,zc-.5],sk);
+      if(!solid(z,i-1))Q(A,[x-CW/2,-TH,zc-.5],[x-CW/2,-TH,zc+.5],[x-CW/2,0,zc+.5],[x-CW/2,0,zc-.5],sk);
+      if(!solid(z,i+1))Q(A,[x+CW/2,-TH,zc+.5],[x+CW/2,-TH,zc-.5],[x+CW/2,0,zc-.5],[x+CW/2,0,zc+.5],sk);
+      if(!solid(z-1,i))Q(A,[x-CW/2,-TH,zc+.5],[x+CW/2,-TH,zc+.5],[x+CW/2,0,zc+.5],[x-CW/2,0,zc+.5],sk);
+      if(!solid(z+1,i))Q(A,[x+CW/2,-TH,zc-.5],[x-CW/2,-TH,zc-.5],[x-CW/2,0,zc-.5],[x+CW/2,0,zc-.5],sk);
       /* ARISTAS DE LUZ en cada lado sin vecina: contornea la pista y CADA
          agujero. Es lo que hace legible el camino a 60 m. */
-      if(!solid(z,i-1)){plate(GA,x-CW/2+E/2,zc,E,1,.012,rl);
+      if(!solid(z,i-1)){plate(A,x-CW/2+E/2,zc,E,1,.012,rl);
         /* la ALETA vertical va sólo en el borde de la pista (i=0 / i=4): puesta
            también en los bordes de los agujeros parecían paredes y tapaban el
            camino de más adelante */
-        if(i===0)bq(GA,x-CW/2+.03,0,zc,.06,.19,1,rl,rl);}
-      if(!solid(z,i+1)){plate(GA,x+CW/2-E/2,zc,E,1,.012,rl);
-        if(i===LANES-1)bq(GA,x+CW/2-.03,0,zc,.06,.19,1,rl,rl);}
-      if(!solid(z-1,i))plate(GA,x,zc+.5-E/2,CW,E,.012,rl);
-      if(!solid(z+1,i))plate(GA,x,zc-.5+E/2,CW,E,.012,rl);
+        if(i===0)bq(A,x-CW/2+.03,0,zc,.06,.19,1,rl,rl);}
+      if(!solid(z,i+1)){plate(A,x+CW/2-E/2,zc,E,1,.012,rl);
+        if(i===LANES-1)bq(A,x+CW/2-.03,0,zc,.06,.19,1,rl,rl);}
+      if(!solid(z-1,i))plate(A,x,zc+.5-E/2,CW,E,.012,rl);
+      if(!solid(z+1,i))plate(A,x,zc-.5+E/2,CW,E,.012,rl);
       /* travesaño cada 4 m: da ritmo y escala de distancia */
-      if(z%4===0)plate(GA,x,zc,CW*.98,.09,.008,br);
+      if(z%4===0)plate(A,x,zc,CW*.98,.09,.008,br);
     }
   }
-  /* PORTALES de la zona (niveles 3+): marco de luz cruzando la pista cada
-     P.ring metros. Van FUSIONADOS: cuestan 30 triángulos y cero llamadas. */
+  /* PORTALES de la zona (niveles 3+) cada P.ring metros: dos pilonas altas con
+     tira de luz y un dintel FINO Y ALTO. MEDIDO en captura (M-ANTES-lv5-h.png):
+     con el dintel de 16 cm a 2,6 m de alto, al pasarlo tapaba la pantalla entera
+     con una banda pastel de 35 px que se leía como un error de la interfaz. Con
+     10 cm a 3,4 m pasa como un destello arriba del cuadro. */
   if(P.ring){
-    const rg=C(PAL.ring),W=CW*LANES+.5;
+    /* APAGADOS a propósito (mezclados con la niebla) y más bajos que el arco de
+       control: en la captura SC-cp.png del nivel 8 los portales eran igual de
+       llamativos que el arco y no se distinguía cuál era el hito que importa. */
+    const rg=C(mixc(PAL.ring,PAL.fog,.45)),rw=C(mixc(PAL.ring,'#ffffff',.3)),W=CW*LANES+.5;
     for(let z=P.ring;z<LEN-4;z+=P.ring){
-      if(Math.abs(z-CPZ)<3)continue;
-      for(const s of [-1,1])bq(GA,s*(W/2),0,-z,.16,2.6,.16,rg,rg);
-      bq(GA,0,2.6,-z,W,.16,.16,rg,rg);
+      if(Math.abs(z-CPZ)<5)continue;
+      const A=AT(z);
+      for(const s of [-1,1]){
+        bq(A,s*(W/2),0,-z,.15,2.9,.15,rg,C(mixc(PAL.ring,'#000000',.6)));
+        bq(A,s*(W/2)-s*.09,.5,-z,.05,2.1,.18,rw,rw);  /* tira de luz de la pilona */
+      }
+      bq(A,0,2.9,-z,W,.09,.13,rw,rg);
     }
   }
   /* RAMPAS DE IMPULSO: tres galones verdes en la baldosa y dos marcas al costado */
   for(const b of boosts){
-    plate(GA,b.x,-b.z,CW*.9,.94,.013,C(mixc(PAL.boost,'#000000',.6)));
+    const A=AT(b.z);
+    plate(A,b.x,-b.z,CW*.9,.94,.013,C(mixc(PAL.boost,'#000000',.6)));
     for(let k=0;k<3;k++){
-      plate(GA,b.x,-b.z+.3-k*.3,CW*.66,.11,.019,bo);
-      plate(GA,b.x-CW*.24,-b.z+.36-k*.3,.1,.2,.019,bo);
-      plate(GA,b.x+CW*.24,-b.z+.36-k*.3,.1,.2,.019,bo);
+      plate(A,b.x,-b.z+.3-k*.3,CW*.66,.11,.019,bo);
+      plate(A,b.x-CW*.24,-b.z+.36-k*.3,.1,.2,.019,bo);
+      plate(A,b.x+CW*.24,-b.z+.36-k*.3,.1,.2,.019,bo);
     }
   }
   /* muros, compuertas y avisos */
   for(const o of obs){
+    const A=AT(o.z);
     if(o.t==='wall'){
-      bq(TA,o.x,0,-o.z,CW*.92,.82,.34,C(PAL.wallTop),C(PAL.wall));
-      plate(GA,o.x,-o.z,CW*.9,.3,.83,C(PAL.wallTop));
+      bq(A,o.x,0,-o.z,CW*.92,.82,.34,C(PAL.wallTop),C(PAL.wall));
+      plate(A,o.x,-o.z,CW*.9,.3,.83,C(PAL.wallTop));
     }
     if(o.t==='puls'){
       /* marco de la compuerta: dos postes que quedan SIEMPRE, así se ve que ahí
          hay una compuerta aunque en ese momento esté abierta */
-      for(const s of [-1,1])bq(GA,o.x+s*CW*.47,0,-o.z,.1,1.15,.24,C(PAL.rail),C(PAL.rail));
-      bq(GA,o.x,1.15,-o.z,CW*.94+.1,.1,.24,C(PAL.rail),C(PAL.rail));
+      for(const s of [-1,1])bq(A,o.x+s*CW*.47,0,-o.z,.1,1.15,.24,C(PAL.rail),C(PAL.rail));
+      bq(A,o.x,1.15,-o.z,CW*.94+.1,.1,.24,C(PAL.rail),C(PAL.rail));
     }
     /* sombra en el piso debajo del peligro */
-    if(solid(o.z,o.i))plate(GA,o.x,-o.z,CW*.86,.86,.016,sh);
+    if(solid(o.z,o.i))plate(A,o.x,-o.z,CW*.86,.86,.016,sh);
     /* PISTA DE AVISO: dos baldosas antes del peligro, oscuras con galones magenta.
        Con una sola (2 m) a 11,3 m/s el aviso duraba 0,18 s: no es un aviso, es un
        adorno. Con dos son 0,35 s de alfombra roja además de ver el bicho de lejos. */
     for(const dz of [2,3]){
       const zw=o.z-dz;
       if(!solid(zw,o.i))continue;
-      plate(GA,o.x,-zw,CW*.9,.94,.014,C(PAL.dangerD));
-      plate(GA,o.x,-zw+.24,CW*.62,.13,.018,dg);
-      plate(GA,o.x,-zw-.06,CW*.62,.13,.018,dg);
+      const B=AT(zw);
+      plate(B,o.x,-zw,CW*.9,.94,.014,C(PAL.dangerD));
+      plate(B,o.x,-zw+.24,CW*.62,.13,.018,dg);
+      plate(B,o.x,-zw-.06,CW*.62,.13,.018,dg);
     }
   }
-  /* franja del arco de control y de la meta */
+  /* RAFAGAS: el piso del tramo va rayado y con flechas hacia donde sopla, para que
+     se vea ANTES de entrar (la primera version no marcaba nada y el jugador solo
+     sentia que la pelota "se iba sola": eso es un bug, no un peligro). */
+  for(const w of winds){
+    /* MEDIDO EN CAPTURA (SC-rafaga.png): con las flechas del color de los
+       travesaños sobre las baldosas doradas del nivel 8 no se veían. Ahora va una
+       ALFOMBRA oscura por todo el tramo y las flechas en claro encima: se lee el
+       corredor de viento desde lejos, igual que la alfombra de peligro. */
+    /* la alfombra va OSCURA PERO CON EL COLOR DE LA ZONA, no casi negra: con
+       mixc(fog,negro) el tramo parecía un agujero de 15 m (captura SC-rafaga.png
+       de esa vuelta) y un agujero es justo lo que mata en este juego. */
+    const dark=C(mixc(PAL.t1,'#000000',.45)),ar=C(mixc(PAL.rail,'#ffffff',.35));
+    const wAll=CW*LANES;
+    for(let z=w.z0;z<=w.z1;z++){
+      const A=AT(z);
+      plate(A,0,-z,wAll,1,.010,dark);                 /* alfombra del corredor */
+      plate(A,0,-z,wAll,.07,.013,ar);                 /* raya que cruza la pista */
+      if(z%3===0)for(let q=-1;q<=1;q++)arrow(A,q*CW*1.7,-z,.017,.85,.19,w.d,ar);
+    }
+  }
+  addProps(AT);
+  for(let k=0;k<NC;k++){
+    const m=meshOf(acc[k],true);
+    m.frustumCulled=false;                    /* la visibilidad la manda chunkVis */
+    chunks[k]=m;trackG.add(m);
+  }
+  /* franja del arco de control y de la meta (sin niebla: se ven venir de lejos) */
   const cb=A0(),cbOn=A0();
   const wAll=CW*LANES;
   plate(cb,0,-CPZ,wAll,.55,.02,C(PAL.cp));
@@ -549,53 +725,70 @@ function buildMeshes(P){
     plate(cb,-wAll/2+wAll*(k+.5)/10,-LEN,wAll/10,.7,.02,k&1?C('#ffffff'):C('#12222c'));
     plate(cbOn,-wAll/2+wAll*(k+.5)/10,-LEN,wAll/10,.702,.02,k&1?C('#ffffff'):C('#12222c'));
   }
-  tilesM=meshOf(TA,true);trackG.add(tilesM);
-  glowM=meshOf(GA,true);trackG.add(glowM);
   cpBand=meshOf(cb,false);trackG.add(cpBand);
   cpBandOn=meshOf(cbOn,false);cpBandOn.visible=false;trackG.add(cpBandOn);
 }
-function buildProps(){
-  if(propM){trackG.remove(propM);propM.geometry.dispose();propM=null;}
-  const A=A0(),cp=C(PAL.prop),ct=C(PAL.propTop);
+/* COLUMNAS DEL VACÍO: paralaje y sensación de velocidad. Van en el mismo trozo que
+   la pista que tienen al lado, así se cullean con ella. Arrancan a 4,5 del borde
+   (a 2,2 parecían edificios encima de la pista y le robaban el ojo al camino) y
+   una de cada tres lleva una TIRA DE NEÓN vertical: es lo que convierte el vacío
+   negro en una ciudad de neón por 2 triángulos. */
+function addProps(AT){
+  const cp=C(PAL.prop),ct=C(PAL.propTop),ne=C(mixc(PAL.rail,PAL.fog,.45));
   const R=rng(9001+lvl*31);
   const step=Math.max(5,Math.round(10/Math.max(.3,decoK)));
-  /* LEJOS: con las columnas a 2,2 unidades del borde parecían edificios encima de
-     la pista y le robaban el ojo al camino. Ahora arrancan a 4,5 y son oscuras:
-     dan paralaje y sensación de velocidad, nada más. */
   for(let z=-6;z<LEN+20;z+=step){
     for(const s of [-1,1]){
       if(R()<.3)continue;
       const x=s*(HALF+4.5+R()*14);
       const h=2+R()*15,w=1+R()*2.4,y=-1.6-R()*5;
-      bq(A,x,y,-z-R()*3,w,h,w*(.7+R()*.8),ct,cp);
+      const zz=-z-R()*3;
+      const A=AT(Math.max(0,z));
+      bq(A,x,y,zz,w,h,w*(.7+R()*.8),ct,cp);
+      /* tira de neón en la CARA INTERNA (la que mira a la pista). El orden de los
+         vértices decide la cara que se ve: con FrontSide y la tira al revés no se
+         dibujaba nada (probado con el producto vectorial, ver meshOf). */
+      if(R()<.34&&h>5){
+        const xf=x-s*(w/2+.03),y0=y+h*.16,y1=y+h*.86,zA=zz-.18,zB=zz+.18;
+        if(s>0)Q(A,[xf,y0,zA],[xf,y0,zB],[xf,y1,zB],[xf,y1,zA],ne);
+        else   Q(A,[xf,y0,zB],[xf,y0,zA],[xf,y1,zA],[xf,y1,zB],ne);
+      }
     }
   }
-  propM=meshOf(A,true);trackG.add(propM);
+}
+/* ARCO DE NEÓN (control y meta) en UNA malla fusionada: dos pilonas con tira de
+   luz, dintel de tres barras y una placa de luz al medio. Reemplaza al GLB
+   simplificado, que en pantalla era un montón de esquirlas negras. */
+function archMesh(fin){
+  const W=CW*LANES+.9;
+  const A=A0();
+  const cc=C(fin?PAL.rail:PAL.cp),dk=C(PAL.fin),wt=C(mixc(fin?PAL.rail:PAL.cp,'#ffffff',.5));
+  for(const s of [-1,1]){
+    const x=s*(W/2-.2);
+    bq(A,x,0,0,.44,2.6,.44,cc,dk);                 /* pilona */
+    bq(A,x-s*.24,.25,0,.06,2.1,.5,wt,wt);          /* tira de luz de la cara interna */
+    bq(A,x,2.6,0,.6,.18,.6,wt,cc);                 /* capitel */
+  }
+  bq(A,0,2.78,0,W,.34,.44,cc,dk);                  /* dintel */
+  bq(A,0,2.62,0,W-.3,.1,.52,wt,wt);                /* barra de luz de abajo */
+  bq(A,0,3.12,0,W*.34,.16,.3,wt,cc);              /* cartel del medio */
+  const m=meshOf(A,false);                         /* sin niebla: se ve a 150 m */
+  m.frustumCulled=false;
+  return m;
 }
 function buildArches(){
-  const W=CW*LANES+.9;
-  const mk=(fin)=>{
-    let g=ARCGLB?glbArch('arco',W,3.3):null;
-    if(g)return g;
-    /* geometría de respaldo: dos pilares y un dintel */
-    g=new T3.Group();
-    const cc=fin?PAL.rail:PAL.cp;
-    for(const s of [-1,1]){
-      const p=new T3.Mesh(box(.42,2.5,.42),mat(PAL.fin,1));
-      p.position.set(s*(W/2-.2),1.25,0);g.add(p);
-      const e=new T3.Mesh(box(.48,.16,.48),mat(cc,1));
-      e.position.set(s*(W/2-.2),2.5,0);g.add(e);
-      const f=new T3.Mesh(box(.07,2.4,.5),mat(cc,1));
-      f.position.set(s*(W/2-.2)+s*.24,1.25,0);g.add(f);
-    }
-    const b=new T3.Mesh(box(W,.42,.42),mat(PAL.fin,1));
-    b.position.set(0,2.7,0);g.add(b);
-    const b2=new T3.Mesh(box(W,.1,.5),mat(cc,1));
-    b2.position.set(0,2.48,0);g.add(b2);
-    return g;
-  };
-  cpArch=mk(false);cpArch.position.z=-CPZ;trackG.add(cpArch);
-  finArch=mk(true);finArch.position.z=-LEN;trackG.add(finArch);
+  cpArch=archMesh(false);cpArch.position.z=-CPZ;trackG.add(cpArch);
+  finArch=archMesh(true);finArch.position.z=-LEN;trackG.add(finArch);
+}
+/* visibilidad de los trozos: sólo lo que está entre −14 m y +118 m de la pelota */
+function chunkVis(){
+  let n=0;
+  for(let k=0;k<chunks.length;k++){
+    const z0=k*CH,z1=z0+CH;
+    const v=(z0<=bz+VISZ)&&(z1>=bz-BEHZ);
+    chunks[k].visible=v;if(v)n++;
+  }
+  chVis=n;
 }
 /* ------------------------------------------------------------------- física */
 function cellAt(x,z){
@@ -721,12 +914,13 @@ function fastGL(){
     cv.id='gl';cv.style.cssText=old.style.cssText;
     old.parentNode.replaceChild(cv,old);
     try{ARC.rnd.dispose();}catch(e){}
-    const r=new T3.WebGLRenderer({canvas:cv,antialias:false,alpha:false,
-      powerPreference:'high-performance'});
-    r.setClearColor(new T3.Color(G.sky),1);
+    /* alpha:true + alfa 0 al limpiar = el vacío lo pinta el CSS (ver setSky) */
+    const r=new T3.WebGLRenderer({canvas:cv,antialias:false,alpha:true,
+      premultipliedAlpha:true,powerPreference:'high-performance'});
+    r.setClearColor(new T3.Color(G.sky),0);
     if(T3.SRGBColorSpace)r.outputColorSpace=T3.SRGBColorSpace;
     r.shadowMap.enabled=false;
-    ARC.rnd=r;
+    ARC.rnd=r;cssSky=true;
     applyRes();
     return true;
   }catch(e){console.warn('gl',e);return false;}
@@ -734,7 +928,7 @@ function fastGL(){
 /* RESOLUCIÓN ADAPTATIVA. El tope lo sigue poniendo ARC.gfxP().dpr (los Gráficos
    que eligió el jugador); esto sólo BAJA de ahí si la máquina no llega, y vuelve
    a subir cuando sobra. En un celular se queda en el tope. */
-let resK=1,resT=0,runFps=0;
+let resK=1,resT=0,runFps=0,noRes=0;
 function applyRes(){
   if(!ARC.rnd)return;
   const p=ARC.gfxP();
@@ -742,7 +936,7 @@ function applyRes(){
   ARC.rnd.setSize(ARC.W,ARC.H,false);
 }
 function autoRes(dt){
-  if(DEMO){runFps=0;return;}
+  if(DEMO||noRes){runFps=0;return;}
   runFps+=dt;
   if(runFps<2.5)return;      /* ARC.fps viene arrastrado del menú los primeros 2,5 s */
   const f=ARC.fps;
@@ -758,29 +952,46 @@ G.init=function(){
   cssFix();
   setTheme(1);
   scene=new T3.Scene();
-  scene.background=new T3.Color(PAL.sky);
   scene.fog=new T3.Fog(new T3.Color(PAL.fog).getHex(),46*fogK,132*fogK);
   cam=new T3.PerspectiveCamera(52,ARC.W/Math.max(1,ARC.H),.1,320);
   scene.add(new T3.HemisphereLight(0xd8f6ff,0x123043,1.35));
   const d=new T3.DirectionalLight(0xffffff,.85);d.position.set(3,9,6);scene.add(d);
+  buildStars();setSky();
   trackG=new T3.Group();scene.add(trackG);
   dynG=new T3.Group();scene.add(dynG);
-  ball=new T3.Mesh(new T3.SphereGeometry(BR,20,14),
-    new T3.MeshLambertMaterial({color:new T3.Color('#ffc95c'),emissive:new T3.Color('#5a3200')}));
+  ball=new T3.Mesh(ballGeo(),
+    new T3.MeshLambertMaterial({color:new T3.Color('#ffc95c'),emissive:new T3.Color('#5a3200'),
+      vertexColors:true}));
   scene.add(ball);
-  ballGlow=new T3.Mesh(new T3.SphereGeometry(BR*1.5,16,10),
+  ballGlow=new T3.Mesh(new T3.SphereGeometry(BR*1.5,12,8),
     new T3.MeshBasicMaterial({color:new T3.Color('#ffd98a'),transparent:true,opacity:.16,fog:false}));
   ball.add(ballGlow);
   ballSh=new T3.Mesh(new T3.CircleGeometry(BR*1.15,18),
     new T3.MeshBasicMaterial({color:new T3.Color('#7ef0ff'),transparent:true,opacity:.42,fog:false}));
   ballSh.rotation.x=-Math.PI/2;scene.add(ballSh);
   applyBall();
-  const S0=ARC.glb&&ARC.glb.sierra,A1=ARC.glb&&ARC.glb.arco;
-  SAWGLB=!!(S0&&S0.scene);ARCGLB=!!(A1&&A1.scene);
   /* la ficha de monedas del motor es la de DIAMANTES en este juego */
   const ci=document.querySelector('#menu .mTop .badge i');
   if(ci)ci.textContent='◆';
 };
+/* LA PELOTA TIENE QUE VERSE RODAR. Una esfera de un color liso gira y en pantalla
+   parece quieta (medido a ojo en las capturas: la pelota "flotaba"). Se le hornea
+   un DAMERO por vértice —el material multiplica su color por el del vértice, así
+   el damero sale del color de la pelota elegida sin materiales extra— y el giro se
+   lee de una. 520 triángulos, cero llamadas nuevas. */
+function ballGeo(){
+  if(GEO.ball)return GEO.ball;
+  const g=new T3.SphereGeometry(BR,20,14);
+  const p=g.attributes.position,n=p.count,col=new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    const x=p.getX(i),y=p.getY(i),z=p.getZ(i);
+    const u=Math.atan2(z,x)/TAU*6,v=Math.acos(clamp(y/BR,-1,1))/Math.PI*4;
+    const k=((Math.floor(u)+Math.floor(v))&1)?1:.55;
+    col[i*3]=col[i*3+1]=col[i*3+2]=k;
+  }
+  g.setAttribute('color',new T3.Float32BufferAttribute(col,3));
+  return GEO.ball=g;
+}
 function applyBall(){
   const B=curBall();
   if(!ball)return;
@@ -795,26 +1006,35 @@ G.resize=function(){
   if(panelEl&&panelEl.classList.contains('on'))panelFill();
 };
 G.gfxApply=function(p){
-  const wasGlb=partK>=.7;
   partK=p.part;fogK=p.fog;decoK=clamp(p.part,.4,1.35);
   resK=1;resT=0;applyRes();
   if(scene&&scene.fog){scene.fog.near=46*fogK;scene.fog.far=132*fogK;}
-  if(trackG&&cells.length){buildProps();if(wasGlb!==(partK>=.7))buildDyn();}
+  if(stars)stars.visible=!cssSky&&partK>.45;
+  /* las columnas del vacío viven DENTRO de los trozos de pista (para cullearse con
+     ellos), así que cambiar la densidad de decorado rehace los trozos. Cuesta unos
+     milisegundos y pasa sólo cuando el jugador toca Gráficos. */
+  if(trackG&&cells.length)rebuildStatic();
 };
-function sawGlb(){
-  /* el GLB de la sierra trae 28,7 k triángulos y el motor lo simplifica al
-     cargarlo hasta GAME.glbTris (medido: 552). Aun así el modelo se usa SÓLO en
-     las cercanas (ver LODZ) y sólo en gráficos Alto/Ultra. */
-  if(SAWGLB&&partK>=.7)return glbNode('sierra',1.12);
-  return null;
+function rebuildStatic(){
+  clearG(trackG);
+  buildMeshes(LV[clamp(lvl,1,8)-1]);
+  buildArches();
+  cpBand.visible=!cpOn;cpBandOn.visible=!!cpOn;
+  chunkVis();
 }
-/* sierra de geometría en UNA malla fusionada: antes era un grupo de 13 mallas y
+/* SIERRA de geometría en UNA malla fusionada: antes era un grupo de 13 mallas y
    con 12 sierras en pantalla el cuadro se iba a 180 llamadas de dibujo (medido
-   con renderer.info: 189). Fusionada son 12 llamadas. */
+   con renderer.info: 189). Fusionada son 12 llamadas.
+   TEÑIDA POR ZONA: los colores estaban a mano en azul petróleo y en la zona ORO o
+   ROSA la sierra era un borrón oscuro que no se leía como peligro (captura
+   Z-saw5.png). Ahora el cuerpo es el color de peligro oscurecido, los dientes ese
+   mismo color en claro y el cubo blanco: se ve de lejos en las 8 zonas. */
 function sawGeo(){
-  if(GEO.saw)return GEO.saw;
+  const key='saw'+lvl;
+  if(GEO[key])return GEO[key];
   const A=A0(),N=12,R0=.44,TZ=.07;
-  const dk=C('#16303f'),lt=C('#24586f'),dg=C('#ff2d78'),hb=C('#7ef0ff');
+  const dk=C(mixc(PAL.danger,'#000000',.72)),lt=C(mixc(PAL.danger,'#000000',.45));
+  const dg=C(mixc(PAL.danger,'#ffffff',.15)),hb=C('#ffffff');
   for(let k=0;k<N;k++){
     const a0=k/N*TAU,a1=(k+1)/N*TAU;
     const p0=[Math.cos(a0)*R0,Math.sin(a0)*R0],p1=[Math.cos(a1)*R0,Math.sin(a1)*R0];
@@ -835,11 +1055,11 @@ function sawGeo(){
   g.setAttribute('position',new T3.Float32BufferAttribute(A.p,3));
   g.setAttribute('color',new T3.Float32BufferAttribute(A.c,3));
   g.computeBoundingSphere();
-  return GEO.saw=g;
+  return GEO[key]=g;
 }
-function sawMesh(){
+function sawMat(){
   if(!MAT._saw)MAT._saw=new T3.MeshBasicMaterial({vertexColors:true,side:T3.FrontSide});
-  return new T3.Mesh(sawGeo(),MAT._saw);
+  return MAT._saw;
 }
 /* la hoja de la compuerta: caja apoyada en el piso (la geometría se corre media
    altura para arriba, así scale.y la hace crecer desde la baldosa) */
@@ -849,44 +1069,51 @@ function gateGeo(){
   g.translate(0,.55,0);
   return GEO.gate=g;
 }
-/* sierras, compuertas y diamantes: mallas propias porque giran o se mueven. Se
-   rearman también cuando cambian los gráficos (la sierra pasa de modelo a
-   geometría). */
+/* LO QUE SE MUEVE VA EN TRES InstancedMesh: sierras, compuertas y diamantes.
+   Antes era una malla por bicho: en el nivel 8, con 45 sierras, 29 compuertas y 98
+   diamantes, las visibles sumaban ~42 llamadas de dibujo por cuadro (medido con
+   renderer.info: 45 llamadas en total con la pista incluida). Instanciadas son 3.
+   El truco para que además no cuesten triángulos de más: las visibles se EMPAQUETAN
+   en los primeros índices y se baja `count`, así el renderer no procesa ni dibuja
+   las que están detrás de la bruma (si se escondieran con escala 0 seguirían
+   contando en renderer.info.render.triangles). */
+function mkIM(geo,mtl,n){
+  const m=new T3.InstancedMesh(geo,mtl,Math.max(1,n));
+  m.frustumCulled=false;m.count=0;
+  m.instanceMatrix.setUsage(T3.DynamicDrawUsage);
+  dynG.add(m);return m;
+}
 function buildDyn(){
-  clearG(dynG);sawG=[];gemG=[];
+  clearG(dynG);sawG=[];
+  sawIM=gateIM=gemIM=null;
+  let ns=0,ng=0;
   for(const o of obs){
-    if(o.t==='saw'){
-      const m=sawMesh();
-      m.position.set(o.x,.62,-o.z);
-      dynG.add(m);o.m=m;
-      const gl=sawGlb();
-      if(gl){gl.position.set(o.x,.62,-o.z);gl.visible=false;dynG.add(gl);o.mg=gl;}
-      else o.mg=null;
-      sawG.push(o);
-    }else if(o.t==='puls'){
-      const m=new T3.Mesh(gateGeo(),mat(PAL.danger,1));
-      m.position.set(o.x,0,-o.z);m.visible=false;
-      dynG.add(m);o.m=m;o.mg=null;
-      sawG.push(o);                       /* misma lista: culling y animación */
-    }
+    if(o.t==='saw'){o.rot=Math.random()*TAU;ns++;sawG.push(o);}
+    else if(o.t==='puls'){ng++;sawG.push(o);}
   }
-  const gg=octa(.30);
-  for(const gm of gems){
-    const m=new T3.Mesh(gg,mat(PAL.gem,1));
-    m.position.set(gm.x,.62,-gm.z);
-    m.visible=!gm.got;
-    dynG.add(m);gm.m=m;gemG.push(m);
-  }
+  sawIM=mkIM(sawGeo(),sawMat(),ns);
+  gateIM=mkIM(gateGeo(),mat(PAL.danger,1),ng);
+  gemIM=mkIM(octa(.30),mat(PAL.gem,1),gems.length);
+}
+/* una sola matriz reutilizada: componer 40 matrices por cuadro no ensucia el GC */
+const _M=[],_Q=[],_S=[],_E=[];
+function imSet(im,k,x,y,z,rz,ry,sy){
+  if(!_M.length){_M.push(new T3.Matrix4());_Q.push(new T3.Quaternion());
+    _S.push(new T3.Vector3());_S.push(new T3.Vector3());_E.push(new T3.Euler());}
+  const e=_S[0].set(x,y,z),sc=_S[1].set(1,sy==null?1:sy,1);
+  _Q[0].setFromEuler(_E[0].set(0,ry||0,rz||0));
+  _M[0].compose(e,_Q[0],sc);
+  im.setMatrixAt(k,_M[0]);
 }
 function startLevel(l,demo){
   lvl=clamp(l||1,1,8);
-  buildTrack(lvl);
-  scene.background.set(PAL.sky);
-  if(ARC.rnd)ARC.rnd.setClearColor(new T3.Color(PAL.sky),1);
+  buildTrack(lvl);                     /* buildTrack deja el cielo de la zona puesto */
+  if(ARC.rnd)ARC.rnd.setClearColor(new T3.Color(PAL.sky),cssSky?0:1);
   if(scene.fog){scene.fog.color.set(PAL.fog);scene.fog.near=46*fogK;scene.fog.far=132*fogK;}
+  if(stars)stars.visible=!cssSky&&partK>.45;
   bx=tx=lx(pathL[0]);bz=0;vz=0;dead=0;won=false;gemN=0;cpOn=0;cpUsed=0;
   warm=0;fallV=0;tilt=0;drag=null;botOn=0;sawSnd=0;recTold=false;lastDie='';
-  runT=0;boostT=0;boostN=0;demoRe=0;resK=1;resT=0;runFps=0;
+  runT=0;boostT=0;boostN=0;windOn=0;demoRe=0;resK=1;resT=0;runFps=0;
   pbx=bx;pbz=0;
   cpBand.visible=true;cpBandOn.visible=false;
   applyBall();applyRes();
@@ -923,29 +1150,31 @@ function sim(dt){
      diamantes eran 140 llamadas de dibujo por cuadro para cosas que están
      detrás de la bruma) */
   const t=ARC.t;
+  chunkVis();
+  /* sierras, compuertas y diamantes: se empaquetan las visibles en los primeros
+     índices de cada InstancedMesh y se baja count (ver buildDyn) */
+  let ks=0,kg=0,kd=0;
   for(const o of sawG){
     const d=o.z-bz;
-    const vis=d>-4&&d<90;
     if(o.t==='puls'){
       const h=pulsH(o,t);
-      o.m.visible=vis&&h>.02;
-      if(o.m.visible)o.m.scale.y=Math.max(.02,h);
+      if(d>-4&&d<90&&h>.02)imSet(gateIM,kg++,o.x,0,-o.z,0,0,Math.max(.02,h));
       continue;
     }
-    const near=vis&&!!o.mg&&d<LODZ;
-    o.m.visible=vis&&!near;
-    if(o.mg)o.mg.visible=near;
-    if(!vis)continue;
-    const rt=-dt*11,mm=near?o.mg:o.m;
-    mm.rotation.z+=rt;
-    if(o.amp){const sx=sawX(o,t);o.m.position.x=sx;if(o.mg)o.mg.position.x=sx;}
+    if(d<-4||d>90)continue;
+    o.rot-=dt*11;
+    imSet(sawIM,ks++,o.amp?sawX(o,t):o.x,.62,-o.z,o.rot,0,1);
   }
   for(const gm of gems){
     if(gm.got)continue;
     const d=gm.z-bz;
-    gm.m.visible=d>-3&&d<70;
-    if(gm.m.visible)gm.m.rotation.y+=dt*2.6;
+    if(d<-3||d>70)continue;
+    imSet(gemIM,kd++,gm.x,.62+Math.sin(t*2.2+gm.z)*.06,-gm.z,0,t*2.6+gm.z,1);
   }
+  sawIM.count=ks;gateIM.count=kg;gemIM.count=kd;
+  sawIM.instanceMatrix.needsUpdate=true;
+  gateIM.instanceMatrix.needsUpdate=true;
+  gemIM.instanceMatrix.needsUpdate=true;
   /* los arcos no llevan niebla (para verlos venir), así que se apagan a 150 m:
      si no, en el nivel 8 el arco de la meta flotaba solo en el vacío desde el
      metro 0, con la pista ya borrada por la bruma */
@@ -967,6 +1196,15 @@ function sim(dt){
   if(boostT>0)boostT=Math.max(0,boostT-dt);
   vz=SPD*(.55+.45*warm)*(1+BOOSTK*(boostT/BOOSTT));
   bz+=vz*dt;
+  /* RÁFAGA: el viento arrastra el destino del dedo mientras se cruza el tramo */
+  const wd=windAt(bz);
+  if(wd){
+    tx=clamp(tx+wd*WINDV*dt,-HALF,HALF);
+    if(windOn!==wd){
+      windOn=wd;
+      if(!DEMO){ARC.toast(T('gust')+' '+(wd>0?'▶':'◀'),1100);ARC.sfx('click',{vol:.5,rate:.8});}
+    }
+  }else windOn=0;
   /* movimiento lateral REAL (bx es la posición, tx el destino del dedo) */
   const dx=tx-bx,mx=LSP*dt;
   bx+=Math.abs(dx)<=mx?dx:(dx>0?mx:-mx);
@@ -1000,7 +1238,7 @@ function sim(dt){
   for(const gm of gems){
     if(gm.got||Math.abs(gm.z-bz)>.7)continue;
     if(Math.abs(gm.x-bx)<.62){
-      gm.got=1;gm.m.visible=false;gemN++;
+      gm.got=1;gemN++;
       sfx('gem',{rate:1+Math.min(.5,gemN*.02)});
       if(!DEMO){
         ARC.fx.text(ARC.W/2,ARC.H*.44,'+1',{color:PAL.gem,size:Math.max(14,ARC.H*.05)});
@@ -1060,7 +1298,7 @@ function demoBack(){
   const z=Math.max(0,Math.round(bz)-7);
   bz=z;bx=tx=lx(pathL[clamp(z,0,pathL.length-1)]);
   dead=0;fallV=0;boostT=0;warm=1;pbx=bx;pbz=bz;
-  ball.position.set(bx,BR,-bz);
+  ball.position.set(bx,BR,-bz);ball.rotation.set(0,0,0);
 }
 function demoNext(){
   const n=clamp(lvl%8+1,1,8);
@@ -1090,16 +1328,26 @@ function drawScene(alpha){
   const ibx=lerp(pbx,bx,a),ibz=lerp(pbz,bz,a);
   ball.position.x=ibx;ball.position.z=-ibz;
   if(DEMO){
-    /* CÁMARA DEL MENÚ: orbita lento alrededor de la pelota y mira 14 m adelante,
-       así la cinta de pista cruza el cuadro en diagonal y nunca queda medio
-       cuadro de vacío (con la cámara de partida el horizonte cae al 21% y el
-       menú tapaba justo la pista). */
-    const w=ARC.t*.13;
-    cam.position.set(ibx*.4+Math.sin(w)*7.2,4.4+Math.sin(w*1.6)*1.1,-ibz+9.4+Math.cos(w)*2.2);
-    cam.lookAt(ibx*.25,.5,-ibz-13);
-    cam.rotation.z=Math.sin(w*.9)*.03;
+    /* CÁMARA DEL MENÚ. Dos cosas que se corrigieron mirando las capturas:
+       (a) la cámara orbitaba y cada tanto dejaba la pelota EN EL CENTRO, justo
+           debajo del botón JUGAR (captura M-ANTES-menu2-h.png: la pelota tapada
+           por el botón);
+       (b) miraba casi de frente y la cinta de pista se iba al punto de fuga del
+           medio, que es donde vive el título.
+       La cuenta se hizo con la proyección a mano y se comprobó con
+       dbg.ballScreen(): cámara 2,2 m a la DERECHA de la pelota y 12 m atrás,
+       mirando 5,3 m más a la derecha y 15 m adelante. Con eso la pelota cae al
+       ~29% de ancho y ~61% de alto: a la izquierda del título y ARRIBA del botón
+       JUGAR (que ocupa del 72% al 85% del alto), y la pista entra por abajo a la
+       izquierda y se va al horizonte. El vaivén es chico (±1,8 m) para que la
+       pelota no se vuelva a meter debajo del botón. */
+    const w=ARC.t*.15;
+    cam.position.set(ibx*.25+2.2+Math.sin(w)*1.8,2.9+Math.sin(w*1.7)*.5,-ibz+12+Math.cos(w*.8)*1.4);
+    cam.lookAt(ibx*.2+7.5,.5,-ibz-15);
+    cam.rotation.z=-.03+Math.sin(w*.9)*.02;
     ballSh.position.set(ibx,.03,-ibz);
     ballSh.visible=!dead;
+    if(skyG)skyG.position.set(cam.position.x,0,cam.position.z);
     ARC.rnd.render(scene,cam);
     return;
   }
@@ -1110,6 +1358,8 @@ function drawScene(alpha){
   cam.position.set(ibx*.42,CAMY+(dead&&dieK==='fall'?-.4:0),-ibz+CAMZ);
   cam.lookAt(ibx*.22,.15,-ibz-AIM);
   cam.rotation.z=tilt*.018;
+  /* el cielo (estrellas) es un skybox: sigue a la cámara en el plano del piso */
+  if(skyG)skyG.position.set(cam.position.x,0,cam.position.z);
   ballSh.position.set(ibx,.03,-ibz);
   ballSh.visible=!dead||dieK!=='fall';
   ARC.rnd.render(scene,cam);
@@ -1135,6 +1385,19 @@ G.draw=function(g,alpha){
       g.fillStyle=gr;g.beginPath();g.arc(p.x,p.y,r,0,TAU);g.fill();
       if(B.sp&&(ARC.frame%9===0))ARC.fx.burst(p.x,p.y,{n:2,color:B.g,speed:70,size:2.2,life:.35,g:120});
     }
+  }
+  /* RÁFAGA: rayas que cruzan la pantalla hacia donde sopla + flecha grande. Sin
+     esto el viento se siente como un bug del control. */
+  if(windOn&&!dead&&!won){
+    const d=windOn;
+    g.globalAlpha=.5;g.strokeStyle=PAL.bar;g.lineWidth=Math.max(1,H*.005);
+    for(let i=0;i<7;i++){
+      const yy=H*(.20+i*.088),ph=((ARC.t*1.35+i*.37)%1);
+      const x0=(d>0?-.15+ph*1.2:1.15-ph*1.2)*W,ln=W*(.10+.05*Math.sin(i*2.1));
+      g.globalAlpha=.10+.34*Math.sin(ph*Math.PI);
+      g.beginPath();g.moveTo(x0,yy);g.lineTo(x0+d*ln,yy);g.stroke();
+    }
+    g.globalAlpha=1;g.textAlign='left';
   }
   /* líneas de velocidad del impulso */
   if(boostT>0&&!dead){
@@ -1236,7 +1499,7 @@ function panelBuild(){
   const d=document.createElement('div');d.id='rdP';
   d.innerHTML='<div class="rdCard"><div class="rdTabs"><b id="rdT0"></b><b id="rdT1"></b></div>'+
     '<div class="rdBody" id="rdBody"></div>'+
-    '<div class="rdFoot"><span id="rdC">◆ 0</span><div class="btn" id="rdX">CERRAR</div></div></div>';
+    '<div class="rdFoot"><span id="rdC">◆ 0</span><div class="btn" id="rdX"></div></div></div>';
   document.getElementById('stage').appendChild(d);
   panelEl=d;
   d.addEventListener('pointerdown',e=>{if(e.target===d){e.preventDefault();panelClose();}});
@@ -1324,9 +1587,12 @@ const CSSFIX=`
 #rdP{position:absolute;inset:0;z-index:7;display:none;align-items:center;justify-content:center;
   background:rgba(4,6,10,.82);pointer-events:auto;padding:calc(var(--smn)*.03)}
 #rdP.on{display:flex;animation:fade .16s ease-out}
-#rdP canvas{position:static;width:100%;height:auto;max-width:calc(var(--smn)*.17);display:block}
-#rdP .rdCard{width:100%;max-width:calc(var(--sw)*.9);max-height:94%;display:flex;flex-direction:column;
-  gap:calc(var(--smn)*.022);border-radius:18px;padding:calc(var(--smn)*.032);
+/* MEDIDO EN CAPTURA (SC-panel-pelotas.png): con las pelotas a 0,17 del lado corto
+   la segunda fila quedaba cortada y no se veía el PRECIO de las tres pelotas de
+   abajo. A 0,115 entran las dos filas completas en 412 px de alto. */
+#rdP canvas{position:static;width:100%;height:auto;max-width:calc(var(--smn)*.115);display:block}
+#rdP .rdCard{width:100%;max-width:calc(var(--sw)*.9);max-height:97%;display:flex;flex-direction:column;
+  gap:calc(var(--smn)*.016);border-radius:18px;padding:calc(var(--smn)*.026);
   background:linear-gradient(180deg,rgba(18,26,34,.98),rgba(8,12,18,.98));
   border:1px solid rgba(255,255,255,.14);box-shadow:0 18px 60px rgba(0,0,0,.7)}
 #rdP .rdTabs{display:flex;gap:5px;background:rgba(255,255,255,.07);padding:4px;border-radius:12px}
@@ -1335,18 +1601,18 @@ const CSSFIX=`
 #rdP .rdTabs b.on{background:linear-gradient(180deg,var(--acc),var(--acc2));color:#10141a;opacity:1}
 #rdP .rdBody{overflow-y:auto;display:grid;grid-template-columns:1fr 1fr 1fr;
   gap:calc(var(--smn)*.02);align-content:start}
-#rdP .rdBody.q{grid-template-columns:1fr;gap:calc(var(--smn)*.014)}
-#rdP .rd1{display:flex;flex-direction:column;align-items:center;gap:.25em;padding:.45em .2em;
+#rdP .rdBody.q{grid-template-columns:1fr;gap:calc(var(--smn)*.008)}
+#rdP .rd1{display:flex;flex-direction:column;align-items:center;gap:.18em;padding:.3em .2em;
   border-radius:13px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
 #rdP .rd1.on{border-color:var(--acc);background:rgba(34,211,238,.18)}
-#rdP .rd1.lk canvas{filter:grayscale(.8) brightness(.72)}
+#rdP .rd1.lk canvas{filter:grayscale(.3) brightness(.8)}
 #rdP .rd1 i{font-style:normal;font-weight:900;font-size:clamp(8px,calc(var(--smn)*.036),14px);
   letter-spacing:.4px;text-align:center}
 #rdP .rd1 u{text-decoration:none;font-weight:900;font-size:clamp(8px,calc(var(--smn)*.034),13px);
   padding:.3em .6em;border-radius:8px;background:linear-gradient(180deg,var(--acc),var(--acc2));
   color:#10141a;white-space:nowrap}
 #rdP .rd1.lk u{background:rgba(255,255,255,.14);color:#eef2f6}
-#rdP .rdQ{display:flex;align-items:center;gap:.6em;padding:.45em .7em;border-radius:12px;
+#rdP .rdQ{display:flex;align-items:center;gap:.5em;padding:.16em .6em;border-radius:10px;
   background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
 #rdP .rdQ.dn{border-color:#43e57a;background:rgba(67,229,122,.13)}
 #rdP .rdQ.lk{opacity:.45}
@@ -1499,10 +1765,10 @@ G.dbg={
     cp:cpOn,cpUsed,vz:+vz.toFixed(1),x:+bx.toFixed(2),bot:botOn,how:lastDie,demo:DEMO,
     t:+runT.toFixed(2),par:PAR,boostN,boosts:boosts.length,
     obs:obs.length,saws:obs.filter(o=>o.t==='saw').length,gates:obs.filter(o=>o.t==='puls').length,
+    winds:winds.length,wind:windOn,
     ball:curBall().id,res:+resK.toFixed(2),
-    glb:{sierra:SAWGLB,arco:ARCGLB,
-      tris:{sierra:SAWGLB?glbTris(ARC.glb.sierra.scene):0,arco:ARCGLB?glbTris(ARC.glb.arco.scene):0}},
-    gfx:{part:partK,fog:fogK,fogN:scene&&scene.fog?+scene.fog.near.toFixed(0):0},
+    ch:{n:chunks.length,vis:chVis,ch:CH},
+    gfx:{part:partK,fog:fogK,fogN:scene&&scene.fog?+scene.fog.near.toFixed(0):0,stars:!!(stars&&stars.visible)},
     saved:{coins:ARC.S.coins||0,gems:ARC.S.gems||0,lv:ARC.S.gemLv||{},med:ARC.S.med||{},
       tLv:ARC.S.tLv||{},balls:ownedB()}}),
   rows:(a,b)=>{const o=[];for(let z=a;z<=b;z++){
@@ -1519,6 +1785,16 @@ G.dbg={
   /* para el informe: cuánto se dibuja de verdad */
   info:()=>ARC.rnd?{tris:ARC.rnd.info.render.triangles,calls:ARC.rnd.info.render.calls,
     fps:+ARC.fps.toFixed(1),res:+resK.toFixed(2)}:null,
+  /* para medir A/B el costo de cada cosa (cielo, estrellas, trozos) con la
+     resolución CLAVADA: si autoRes baja la resolución en medio de la prueba, los
+     fps de las dos ramas no se pueden comparar */
+  scene:()=>scene,
+  lockRes:()=>{noRes=1;resK=1;applyRes();return true;},
+  /* teleporte al carril del camino, para fotografiar un punto concreto de la pista
+     (la ráfaga, el arco de control, la meta) sin jugar 200 m */
+  tp:z=>{bz=clamp(z,0,LEN-1);bx=tx=lx(guide(Math.round(bz)));pbx=bx;pbz=bz;
+    warm=1;dead=0;fallV=0;ball.position.set(bx,BR,-bz);return +bz.toFixed(1);},
+  winds:()=>winds.map(w=>({z0:w.z0,z1:w.z1,d:w.d})),
   i18n:()=>{const ks=Object.keys(G.i18n.es),out={};
     for(const l of ['es','en','pt']){const f=ks.filter(k=>!G.i18n[l][k]);out[l]=f.length?('FALTAN '+f.join(',')):'ok';}
     return out;},

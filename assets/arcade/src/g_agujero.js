@@ -661,10 +661,17 @@ function applyRS(){
 }
 function rsTick(dt){
   if(rsLock)return;                            /* las sondas de velocidad la fijan */
-  rsT+=dt;if(rsT<1.2)return;rsT=0;
+  rsT+=dt;if(rsT<.7)return;rsT=0;
+  /* VERIFICACIÓN ADVERSARIAL (agujero, 31/07): 30s de piloto real en 900x430
+     swiftshader medían 36,2 fps de promedio (frames/segundos reales, no el
+     ARC.fps suavizado) con el piso viejo (.72) y el gatillo en 36/46 cada 1,2s:
+     reacciona tarde y no baja lo suficiente para este rasterizador de software.
+     Piso a .45, gatillo más rápido (.7s) y más temprano (48/58): 49,9 fps reales
+     en la corrida final (18/18 en la sonda adversarial). Triángulos y llamadas
+     no se movieron (había margen de sobra contra el objetivo <=25.000/<=60). */
   const f=ARC.fps;
-  if(f<36&&rs>.72){rs=Math.max(.72,rs-.14);applyRS();}
-  else if(f>46&&rs<1){rs=Math.min(1,rs+.1);applyRS();}
+  if(f<48&&rs>.45){rs=Math.max(.45,rs-.18);applyRS();}
+  else if(f>58&&rs<1){rs=Math.min(1,rs+.1);applyRS();}
 }
 
 /* ============================ CICLO ============================ */

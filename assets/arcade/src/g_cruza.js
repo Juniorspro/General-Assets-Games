@@ -1113,7 +1113,9 @@ G.init=function(){
   /* el arte 16:9 pegado al 14% dejaba media columna vacía en vertical */
   const mn=document.getElementById('menu');
   if(mn&&mn.classList.contains('hasart'))mn.style.backgroundPosition='center 30%, center';
-  setTimeout(()=>{if(ARC.scr==='load'&&ARC.enterMenu)ARC.enterMenu();},400);
+  /* NO saltear la pantalla de carga: ese toque es el gesto que habilita el audio
+     en el celular (y es donde se elige el idioma). Medido: sin él, #load quedaba
+     en display:none a los 400 ms y el juego arrancaba muudo. */
 };
 G.resize=function(){frame();if(panelEl&&panelEl.classList.contains('on'))panelFill();};
 G.gfxApply=function(p){

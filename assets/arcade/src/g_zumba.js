@@ -96,7 +96,7 @@ const G={
       clear:'¡OLEADA LIMPIA!',hit:'¡TE PEGARON!',bossDown:'¡JEFE DESTRUIDO!',
       overT:'TE APLASTARON',arsenal:'ARSENAL',skins:'CAÑONES',done:'LISTO',
       own:'TUYO',use:'USAR',using:'EN USO',locked:'TRABADO',
-      stWave:'Oleada',stKills:'Bloques roscos',stCoins:'Monedas',stStreak:'Mejor racha',
+      stWave:'Oleada',stKills:'Bloques rotos',stCoins:'Monedas',stStreak:'Mejor racha',
       newRec:'¡NUEVO RÉCORD!',noCoins:'Faltan monedas',mult:'RACHA',
       sk0:'ORO',sk1:'HIELO',sk2:'TÓXICO',sk3:'INFIERNO'},
     en:{sub:'Drag the cannon, it fires by itself. Smash the blocks before they crush you and upgrade it forever. Endless waves and a BOSS every 10.',
