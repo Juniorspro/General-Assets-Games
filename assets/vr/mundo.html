@@ -32,9 +32,11 @@
     background:rgba(150,210,255,.55);border:2px solid #cfeaff}
   #btns{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:7px;
     align-items:flex-end;pointer-events:auto}
-  .b{min-width:74px;text-align:center;padding:9px 11px;border-radius:11px;font-weight:700;font-size:12px;
+  .b{min-width:72px;text-align:center;padding:7px 10px;border-radius:10px;font-weight:700;font-size:11px;
     background:linear-gradient(180deg,#2c5b96,#183a68);border:1px solid #7fb6ee;color:#eaf6ff;
     pointer-events:auto;cursor:pointer}
+  .b.big{padding:11px 13px;font-size:13px}
+  .b.y{background:linear-gradient(180deg,#c9a227,#8a6c10);border-color:#ffe9a0;color:#2a1f02}
   .b:active{transform:translateY(1px);filter:brightness(1.25)}
   .b.g{background:linear-gradient(180deg,#2b8f5a,#17603c);border-color:#7fe0a8}
   .b.r{background:linear-gradient(180deg,#9a3a3a,#6a2020);border-color:#f0a0a0}
@@ -87,7 +89,9 @@
   <div id="look"></div>
   <div id="joy"><div id="nub"></div></div>
   <div id="btns">
-    <div class="b g" id="bJump">SALTAR</div>
+    <div class="b g big" id="bJump">SALTAR</div>
+    <div class="b" id="bEst">ESTABLE: MEDIO</div>
+    <div class="b y" id="bFlash">LINTERNA</div>
     <div class="b" id="bCenter">CENTRAR</div>
     <div class="b" id="bHands">MANOS</div>
     <div class="b" id="bStereo">ESTÉREO</div>
@@ -756,10 +760,32 @@ const P = {
   q: new T.Quaternion(),
   yawOff: 0,
   /* inclinación real integrada del acelerómetro (6DoF corto, sin deriva) */
-  lean: new T.Vector3(), vel: new T.Vector3(), bias: new T.Vector3(),
+  lean: new T.Vector3(), leanS: new T.Vector3(), vel: new T.Vector3(),
+  bias: new T.Vector3(), accF: new T.Vector3(),
   acc: new T.Vector3(), accHay: false,
   vy: 0, enSuelo: true
 };
+/* ---------------------------------------------------------------------------
+   ESTABILIZACIÓN. El temblor de un celular en modo giro tiene DOS fuentes y
+   ninguna es un error de dibujo:
+     · el acelerómetro. Su ruido se INTEGRA DOS VECES para sacar la inclinación,
+       y eso convierte un ruido chico en un vaivén de centímetros. Se ataca con
+       pasabajos + zona muerta + menos ganancia + suavizado de la salida.
+     · el giróscopo. Ruido de décimas de grado que a 72° de campo se ve. Se ataca
+       con un suavizado ADAPTATIVO: mucho cuando estás quieto (es ruido), casi
+       nada cuando girás de verdad (para no meter retardo, que marea).
+   Tres niveles, y el que manda por defecto es MEDIO.
+   --------------------------------------------------------------------------- */
+let EST = 1;                                     /* 0 libre · 1 medio · 2 máximo */
+const EST_NOM = ['NO', 'MEDIO', 'MÁXIMO'];
+/* La zona muerta y el pasabajos son los que sacan el temblor. La GANANCIA no
+   hay por qué bajarla: si se baja, se va también el paralaje de un movimiento
+   de verdad, que es justo lo que le da la sensación de 6DoF. */
+const EST_CFG = [
+  { tauQ: [.012, .012], gan: .55, tauL: .04, tope: .35, banda: .10 },
+  { tauQ: [.020, .130], gan: .62, tauL: .10, tope: .30, banda: .30 },
+  { tauQ: [.055, .300], gan: 0,   tauL: .18, tope: .10, banda: .60 }
+];
 let orientPantalla = 0;
 function leePantalla(){
   const o = (screen.orientation && screen.orientation.angle);
@@ -774,8 +800,28 @@ const qTmp = new T.Quaternion(), eTmp = new T.Euler(), eTmp2 = new T.Euler();
 const qYaw = new T.Quaternion(), qSuave = new T.Quaternion();
 const vA = new T.Vector3(), vB = new T.Vector3(), vC = new T.Vector3(), vD = new T.Vector3();
 let DO = null;                                   /* último deviceorientation */
-function onDO(e){ if (e.alpha === null && e.beta === null) return;
-  DO = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 }; }
+/* ---------------------------------------------------------------------------
+   UNA SOLA FUENTE DE ORIENTACIÓN, Y ESTO NO ES UN DETALLE.
+   En Android Chrome disparan LOS DOS eventos: 'deviceorientationabsolute'
+   (alpha referida al norte magnético) y 'deviceorientation' (alpha relativa a
+   donde estaba el aparato al empezar). Son convenciones DISTINTAS: si se
+   escuchan las dos, cada cuadro llega un alpha diferente y la imagen salta de
+   ida y de vuelta 60 veces por segundo. Eso es "vibra mucho la pantalla".
+   Se traba la fuente en la primera que entregue datos, con prioridad a la
+   absoluta, y la otra se ignora para siempre.
+   --------------------------------------------------------------------------- */
+let DOfuente = '';
+function onDOabs(e){
+  if (e.alpha === null && e.beta === null) return;
+  DOfuente = 'absoluta';
+  DO = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 };
+}
+function onDOrel(e){
+  if (DOfuente === 'absoluta') return;           /* ya manda la otra: se ignora */
+  if (e.alpha === null && e.beta === null) return;
+  DOfuente = e.absolute ? 'absoluta' : 'relativa';
+  DO = { a: e.alpha || 0, b: e.beta || 0, g: e.gamma || 0 };
+}
 function onDM(e){
   const a = e.acceleration;
   if (!a || a.x === null || a.x === undefined) { P.accHay = false; return; }
@@ -798,8 +844,8 @@ function pideSensores(){
                                                 : Promise.resolve('granted');
   return Promise.all([pedir(window.DeviceOrientationEvent), pedir(window.DeviceMotionEvent)])
     .then(() => {
-      addEventListener('deviceorientationabsolute', onDO, true);
-      addEventListener('deviceorientation', onDO, true);
+      addEventListener('deviceorientationabsolute', onDOabs, true);
+      addEventListener('deviceorientation', onDOrel, true);
       addEventListener('devicemotion', onDM, true);
     });
 }
@@ -944,10 +990,79 @@ async function manosOn(){
     aviso('las manos no arrancaron: ' + MANO.err);
   }
 }
+/* ==========================================================================
+   6b. LINTERNA. El LED de la cámara se prende por una restricción de la PISTA de
+   video: hace falta un getUserMedia de la cámara de atrás vivo, y el aparato
+   tiene que declarar 'torch' en getCapabilities(). Si ya está andando el modo
+   MANOS se reusa esa misma pista en vez de abrir otra cámara.
+   ========================================================================== */
+const LUZ = { st: null, track: null, on: false };
+async function pistaAtras(){
+  if (MANO.on && MANO.video && MANO.video.srcObject){
+    const t = MANO.video.srcObject.getVideoTracks()[0];
+    if (t && t.readyState === 'live') return t;
+  }
+  if (LUZ.st){
+    const t = LUZ.st.getVideoTracks()[0];
+    if (t && t.readyState === 'live') return t;
+    LUZ.st = null;
+  }
+  LUZ.st = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' } }, audio: false });
+  return LUZ.st.getVideoTracks()[0];
+}
+async function flash(){
+  const bt = $('bFlash');
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+      { aviso('esta WebView no da acceso a la cámara'); return; }
+    bt.textContent = 'LINTERNA…';
+    const tr = await pistaAtras();
+    LUZ.track = tr;
+    /* algunos Android no publican 'torch' hasta que la pista entregó un cuadro */
+    let cap = tr.getCapabilities ? tr.getCapabilities() : {};
+    if (!('torch' in cap)){
+      await new Promise(r => setTimeout(r, 400));
+      cap = tr.getCapabilities ? tr.getCapabilities() : {};
+    }
+    if (!('torch' in cap)){
+      bt.textContent = 'SIN LINTERNA';
+      aviso('este aparato no expone la linterna por el navegador ' +
+            '(pasa en muchas WebView y en cámaras sin LED)', 4200);
+      return;
+    }
+    LUZ.on = !LUZ.on;
+    await tr.applyConstraints({ advanced: [{ torch: LUZ.on }] });
+    bt.classList.toggle('on', LUZ.on);
+    bt.textContent = LUZ.on ? 'LINTERNA ON' : 'LINTERNA';
+    aviso(LUZ.on ? 'linterna prendida · el juego sigue andando'
+                 : 'linterna apagada', 1500);
+    tono(LUZ.on ? 900 : 500, .1, .1, 'sine');
+  } catch (e) {
+    bt.textContent = 'LINTERNA';
+    aviso('la linterna falló: ' + ((e && e.message) || e), 4200);
+  }
+}
+function flashOff(){
+  if (LUZ.on && LUZ.track){
+    try { LUZ.track.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) {}
+  }
+  LUZ.on = false;
+  $('bFlash').classList.remove('on'); $('bFlash').textContent = 'LINTERNA';
+  /* la pista propia se cierra; la de MANOS no, que la usa el seguimiento */
+  if (LUZ.st){ LUZ.st.getTracks().forEach(t => t.stop()); LUZ.st = null; }
+}
 function manosOff(){
   MANO.on = false; iMano.visible = huesos.visible = false;
   $('bHands').classList.remove('on'); $('cam').style.display = 'none';
   const v = $('cam');
+  /* si la linterna está colgada de ESTA pista, se apaga antes de cerrarla, o
+     queda el LED prendido con la pista muerta */
+  if (v.srcObject && LUZ.on && LUZ.track && v.srcObject.getVideoTracks()[0] === LUZ.track){
+    try { LUZ.track.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) {}
+    LUZ.on = false; LUZ.track = null;
+    $('bFlash').classList.remove('on'); $('bFlash').textContent = 'LINTERNA';
+  }
   if (v.srcObject) { v.srcObject.getTracks().forEach(t => t.stop()); v.srcObject = null; }
 }
 function manoPaso(){
@@ -1092,32 +1207,46 @@ const IPD = .064;
 const stat = $('stat');
 
 function fisica(dt){
-  /* --- orientación --- */
+  const E = EST_CFG[EST];
+  /* --- orientación, con suavizado ADAPTATIVO --- */
   if (P.src === 'giro' && quatDeGiro(qTmp)) {
-    /* suavizado con constante de tiempo de 30 ms: saca el ruido del sensor sin
-       meter retardo perceptible (con más que eso ya marea) */
-    qSuave.slerp(qTmp, 1 - Math.exp(-dt / .03));
+    /* cuánto se movió respecto de lo que ya teníamos: si es poco, es ruido y se
+       suaviza fuerte; si es mucho, estás girando y hay que seguirte de cerca */
+    const dAng = qSuave.angleTo(qTmp);
+    const k = Math.min(1, dAng / .06);                     /* 3,4° = "movimiento" */
+    const tau = E.tauQ[1] + (E.tauQ[0] - E.tauQ[1]) * k;
+    qSuave.slerp(qTmp, 1 - Math.exp(-dt / Math.max(tau, .004)));
     HQ.copy(qSuave);
     P.yaw = eTmp2.setFromQuaternion(HQ, 'YXZ').y;
   } else if (P.src !== 'xr') {
     HQ.setFromEuler(eTmp.set(P.pitch, P.yaw, 0, 'YXZ'));
   }
   /* --- inclinación real del acelerómetro: 6DoF corto y SIN deriva --- */
-  if (P.src === 'giro' && P.accHay){
-    /* pasaaltos: se le resta la media lenta, que es el sesgo del sensor */
-    P.bias.lerp(P.acc, 1 - Math.pow(.35, dt));
-    const a = vA.copy(P.acc).sub(P.bias);
-    /* del marco del aparato al del mundo, con la orientación de la cabeza */
+  if (P.src === 'giro' && P.accHay && E.gan > 0){
+    /* 1. pasabajos sobre la lectura cruda: mata el ruido de alta frecuencia */
+    P.accF.lerp(P.acc, 1 - Math.exp(-dt / .07));
+    /* 2. pasaaltos: se le resta la media lenta, que es el sesgo del sensor */
+    P.bias.lerp(P.accF, 1 - Math.pow(.35, dt));
+    const a = vA.copy(P.accF).sub(P.bias);
+    /* 3. ZONA MUERTA: por debajo de esto no es un movimiento tuyo, es ruido.
+       Es lo que de verdad saca el temblor cuando tenés el celu quieto. */
+    const m = a.length();
+    if (m < E.banda) a.set(0, 0, 0);
+    else a.multiplyScalar((m - E.banda) / m);
+    /* 4. del marco del aparato al del mundo, con la orientación de la cabeza */
     a.applyQuaternion(HQ);
-    P.vel.addScaledVector(a, dt * .55);
+    P.vel.addScaledVector(a, dt * E.gan);
     P.vel.multiplyScalar(Math.pow(.02, dt));               /* tau ≈ .25 s */
     P.lean.addScaledVector(P.vel, dt);
     P.lean.multiplyScalar(Math.pow(.20, dt));              /* resorte al centro */
     const L = P.lean.length();
-    if (L > .35) P.lean.multiplyScalar(.35 / L);
+    if (L > E.tope) P.lean.multiplyScalar(E.tope / L);
   } else if (P.src !== 'xr') {
     P.lean.multiplyScalar(Math.pow(.05, dt));
+    P.vel.multiplyScalar(Math.pow(.02, dt));
   }
+  /* 5. y encima se suaviza la SALIDA: lo que ve el ojo nunca salta */
+  P.leanS.lerp(P.lean, 1 - Math.exp(-dt / Math.max(E.tauL, .01)));
   /* --- caminar con la palanca (siempre, también en XR: el celu no tiene sala) --- */
   const vel = 5.2 * (1 + (Math.hypot(JOY.x, JOY.y) > .92 ? .5 : 0));
   const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
@@ -1194,7 +1323,7 @@ function animaMundo(dt){
 function pintaCam(){
   if (XR.ses) return;                    /* en XR la postura la pone bucleXR */
   rig.position.set(0, 0, 0);
-  HP.copy(P.pos).add(P.lean);
+  HP.copy(P.pos).add(P.leanS);
   cam.position.copy(HP); cam.quaternion.copy(HQ);
   rig.updateMatrixWorld(true);
 }
@@ -1226,13 +1355,22 @@ function setEstereo(v){
   $('joy').style.opacity   = ESTEREO ? .35 : 1;
   $('oStereo').classList.toggle('sel', ESTEREO);
 }
+/* La resolución adaptativa también puede "vibrar": si sube y baja cada rato, se
+   ve el salto de nitidez. Se pide DOS medidas seguidas del mismo lado antes de
+   tocar nada, y la zona muerta es ancha. */
+let rsVotos = 0;
 function rsTick(dt){
   tRS += dt;
-  if (tRS < .7) return;
+  if (tRS < .8) return;
   tRS = 0;
   const lim = ESTEREO ? .55 : .62;
-  if (fps < 38 && rs > lim){ rs = Math.max(lim, rs - .1); aplicaRS(); }
-  else if (fps > 54 && rs < 1){ rs = Math.min(1, rs + .07); aplicaRS(); }
+  const quiere = fps < 34 ? -1 : (fps > 56 ? 1 : 0);
+  if (quiere === 0 || (rsVotos !== 0 && Math.sign(rsVotos) !== quiere)) { rsVotos = 0; return; }
+  rsVotos += quiere;
+  if (Math.abs(rsVotos) < 2) return;
+  rsVotos = 0;
+  if (quiere < 0 && rs > lim){ rs = Math.max(lim, rs - .1); aplicaRS(); }
+  else if (quiere > 0 && rs < 1){ rs = Math.min(1, rs + .07); aplicaRS(); }
 }
 function hudTick(){
   const i = ren.info.render;
@@ -1240,7 +1378,9 @@ function hudTick(){
     fps.toFixed(0) + ' fps   ' + (1000 / Math.max(fps, 1)).toFixed(1) + ' ms\n' +
     i.calls + ' dibujos   ' + (i.triangles / 1000).toFixed(1) + 'k tri\n' +
     'postura: ' + P.src + (P.src === 'giro' && P.accHay ? ' + inclinación' : '') +
-      (P.src === 'xr' ? ' (' + XR.tipo + ')' : '') + '\n' +
+      (P.src === 'xr' ? ' (' + XR.tipo + ')' : '') +
+      (P.src === 'giro' ? '  [' + (DOfuente || '¿?') + ']' : '') + '\n' +
+    'estable: ' + EST_NOM[EST] + '\n' +
     'buffer: ' + (rs * 100 | 0) + '%' + (ESTEREO ? '  estéreo' : '') +
     (MANO.on ? '\nmanos: ' + MANO.ms.toFixed(0) + ' ms  ' + (MANO.visto ? 'VEO' : '—') : '');
 }
@@ -1349,13 +1489,27 @@ $('bJump').onclick = salta;
 $('bCenter').onclick = () => {
   if (DO){ const q = new T.Quaternion(); P.yawOff = 0; quatDeGiro(q);
     const e = new T.Euler().setFromQuaternion(q, 'YXZ'); P.yawOff = -e.y + Math.PI; }
-  P.lean.set(0,0,0); P.vel.set(0,0,0); aviso('centrado');
+  P.lean.set(0,0,0); P.leanS.set(0,0,0); P.vel.set(0,0,0);
+  P.bias.copy(P.acc); P.accF.copy(P.acc);
+  aviso('centrado');
 };
+function setEst(n){
+  EST = ((n % 3) + 3) % 3;
+  $('bEst').textContent = 'ESTABLE: ' + EST_NOM[EST];
+  $('bEst').classList.toggle('on', EST === 2);
+  if (EST === 2){ P.lean.set(0,0,0); P.vel.set(0,0,0); }
+  aviso(EST === 0 ? 'sin filtro: se mueve todo, hasta el ruido del sensor'
+      : EST === 1 ? 'filtro medio: se saca el temblor y queda el paralaje'
+                  : 'máximo: la imagen queda fija, sólo gira', 2600);
+}
+$('bEst').onclick = () => setEst(EST + 1);
+$('bFlash').onclick = flash;
 $('bHands').onclick = () => { MANO.on ? manosOff() : manosOn(); };
 $('bStereo').onclick = () => setEstereo(!ESTEREO);
 $('stbar').onclick   = () => setEstereo(false);
 $('bExit').onclick = () => {
   if (XR.ses) { XR.ses.end(); return; }
+  flashOff();
   $('hud').classList.remove('on'); $('menu').style.display = 'block';
   try { if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
 };
@@ -1379,6 +1533,8 @@ window.__VR = {
     estereo: ESTEREO, rs: +rs.toFixed(2), juntadas, total: GEMAS.length,
     x: +HP.x.toFixed(3), y: +HP.y.toFixed(3), z: +HP.z.toFixed(3),
     yaw: +P.yaw.toFixed(3), lean: +P.lean.length().toFixed(3),
+    est: EST, leanS: +P.leanS.length().toFixed(3), luz: LUZ.on,
+    botonLuz: $('bFlash').textContent, botonEst: $('bEst').textContent,
     manoOn: MANO.on, manoMs: +MANO.ms.toFixed(1), manoVe: MANO.visto, manoErr: MANO.err,
     menu: $('menu').style.display !== 'none', audio: AC ? AC.state : 'no' }; },
   entra, modo(k){ modoSel = k; pintaModos(); },
@@ -1386,8 +1542,37 @@ window.__VR = {
   joy(x, y){ JOY.x = x; JOY.y = y; },
   mira(y, p){ P.yaw = y; P.pitch = p; },
   giro(a, b, g){ DO = { a, b, g }; },
+  sensores: pideSensores, dofuente(){ return DOfuente; },
   movim(x, y, z){ P.accHay = true; P.acc.set(x, y, z); },
   estereo(v){ setEstereo(v); },
+  est(n){ setEst(n); }, flash, flashOff,
+  /* MIDE EL TEMBLOR: inyecta ruido de acelerómetro como el de un celular en la
+     mano y devuelve cuánto se mueve el punto de vista, en milímetros RMS.
+     Es la única forma de saber si el filtro sirve o si me lo estoy imaginando. */
+  async pruebaTemblor(n){
+    const antes = P.src; P.src = 'giro';
+    P.lean.set(0,0,0); P.leanS.set(0,0,0); P.vel.set(0,0,0);
+    P.bias.set(0,0,0); P.accF.set(0,0,0);
+    const pts = [];
+    for (let i = 0; i < n; i++){
+      P.accHay = true;
+      /* ruido tipo mano: alterna rápido y no tiene media cero exacta */
+      const s = (i % 2) ? 1 : -1;
+      P.acc.set(.55 * s + Math.sin(i * 2.3) * .25,
+                .40 * ((i % 3) ? 1 : -1),
+                .50 * s + Math.cos(i * 1.7) * .2);
+      await new Promise(r => requestAnimationFrame(r));
+      if (i > n * .35) pts.push(HP.clone());
+    }
+    P.src = antes;
+    const c = new T.Vector3();
+    for (const p of pts) c.add(p);
+    c.divideScalar(pts.length || 1);
+    let s2 = 0;
+    for (const p of pts) s2 += p.distanceToSquared(c);
+    return { mm: +(Math.sqrt(s2 / (pts.length || 1)) * 1000).toFixed(2),
+             cuadros: pts.length, est: EST };
+  },
   salta, tocaMundo, manosOn, manosOff,
   manoSim(lm){ MANO.lm = lm; MANO.visto = 1; MANO.on = true;
     iMano.visible = huesos.visible = true; manoDibuja(); },
