@@ -128,6 +128,13 @@ canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
   width:clamp(30px,6.6vmin,46px);height:clamp(30px,6.6vmin,46px);justify-content:center}
 #tray{position:absolute;left:0;right:0;bottom:2.2vmin;display:flex;justify-content:center;
   gap:1.4vmin;pointer-events:auto;flex-wrap:wrap;padding:0 2vmin}
+/* botón SOSTENIDO (ARC.tray con hold): se hunde y se enciende mientras está
+   apretado, así se ve que el disparo está saliendo */
+#tray .btn.hold{transform:scale(.9);background:var(--acc);color:#100c04;
+  box-shadow:0 0 0 4px rgba(255,255,255,.22),0 0 26px var(--acc)}
+#tray .btn.big{width:clamp(58px,13vmin,96px);height:clamp(58px,13vmin,96px);
+  font-size:clamp(22px,5.4vmin,40px)}
+body.vert #tray .btn.big{width:21vw;height:21vw;font-size:8vw}
 /* ---- juegos VERTICALES (body.vert): los controles van grandes y bien abajo,
    porque en vertical el pulgar llega a la franja de abajo y no a los costados ---- */
 body.vert #tray{bottom:3.5%;gap:2.5vw}
@@ -302,7 +309,7 @@ document.write('<script type="importmap">{"imports":{"three":"'+t+'","three/addo
 </script>
 <script type="module">
 /* ---- assets ---- */
-const BASE=(new URLSearchParams(location.search).has('local')?'/assets/arcade/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@2549dad/assets/arcade/');
+const BASE=(new URLSearchParams(location.search).has('local')?'/assets/arcade/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@0d93f9c/assets/arcade/');
 const A=f=>BASE+f;
 /* ============================================================================
    ARCADE SHELL — el motor común de los 5 juegos
@@ -663,9 +670,25 @@ ARC.tray=function(list){
   const t=$('tray');t.innerHTML='';
   (list||[]).forEach(b=>{
     const el=document.createElement('div');
-    el.className='btn '+(b.gh?'gh ':'')+(b.sq?'sq':'');
+    el.className='btn '+(b.gh?'gh ':'')+(b.sq?'sq ':'')+(b.cls||'');
     el.id='tb_'+b.id;el.innerHTML=b.txt;
-    el.addEventListener('pointerdown',ev=>{ev.preventDefault();ARC.sfx('tap');ARC.vib(10);b.fn&&b.fn(el);});
+    if(b.hold){
+      /* botón SOSTENIDO (disparar): avisa al apretar y al soltar. Se captura el
+         puntero para que soltar afuera del botón también cuente como soltar: sin
+         eso el dedo se corre 3 px, sale del círculo y el juego queda disparando
+         para siempre. */
+      const on=ev=>{ev.preventDefault();ev.stopPropagation();
+        if(el.dataset.on)return;el.dataset.on='1';el.classList.add('hold');
+        try{el.setPointerCapture(ev.pointerId);}catch(e){}
+        ARC.vib(8);b.hold(1,el);};
+      const off=ev=>{if(!el.dataset.on)return;delete el.dataset.on;
+        el.classList.remove('hold');b.hold(0,el);};
+      el.addEventListener('pointerdown',on);
+      el.addEventListener('pointerup',off);
+      el.addEventListener('pointercancel',off);
+      el.addEventListener('lostpointercapture',off);
+    }else
+      el.addEventListener('pointerdown',ev=>{ev.preventDefault();ARC.sfx('tap');ARC.vib(10);b.fn&&b.fn(el);});
     t.appendChild(el);
   });
 };
@@ -962,21 +985,34 @@ ARC.boot=async function(){
      simplifica. Sin el soldado, modify() devolvía la malla igual (medido:
      28725 -> 28725). Si algo falla, se deja la malla como vino: nunca se rompe. */
   if(ARC.glb&&Object.keys(ARC.glb).length){
-    const target=GAME.glbTris||1200;
+    /* GAME.glbTris puede ser UN número (mismo tope para todos) o un objeto con un
+       tope por modelo y "_" como defecto; 0 = no tocar ese modelo. Hace falta
+       porque un personaje con hueso se lleva su propio presupuesto y los bichos
+       instanciados, que se dibujan de a doce, necesitan uno mucho más chico. */
+    const tg=GAME.glbTris,tgOf=k=>{
+      if(tg==null)return 1200;
+      if(typeof tg==='number')return tg;
+      return tg[k]!=null?tg[k]:(tg._!=null?tg._:1200);
+    };
     try{
       const [{SimplifyModifier},BGU]=await Promise.all([
         import('three/addons/modifiers/SimplifyModifier.js'),
         import('three/addons/utils/BufferGeometryUtils.js')]);
       const mod=new SimplifyModifier();
+      ARC.BGU=BGU;      /* los juegos también lo usan para fusionar mallas */
       ARC.glbTris={};
       for(const k in ARC.glb){
         const g=ARC.glb[k];if(!g||!g.scene)continue;
+        const target=tgOf(k);
         let before=0,after=0;
         g.scene.traverse(o=>{
           if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;
           const tri0=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;
           before+=tri0;
-          if(tri0<=target){after+=tri0;return;}
+          /* MALLA CON HUESO: NO se toca. SimplifyModifier sólo reconstruye
+             position/normal/uv, así que se comería skinIndex y skinWeight y el
+             personaje quedaría hecho un nudo al animarlo. */
+          if(o.isSkinnedMesh||!target||tri0<=target){after+=tri0;return;}
           try{
             let geo=o.geometry;
             /* soldar: de 3 vértices por triángulo a vértices compartidos */
@@ -1097,12 +1133,25 @@ const G={
   acc:'#ffb02e',acc2:'#e0651b',
   levels:8,bestLabel:'SALAS',bestKey:'roomsL',
   three:true,sky:'#0b0713',shadows:false,
-  glbTris:5000,
+  /* PRESUPUESTO DE TRIÁNGULOS POR MODELO. El héroe tiene hueso: el motor no lo
+     simplifica (rompería el skin) y se lleva sus 8.776 enteros. Los bichos se
+     dibujan de a doce por instancia, así que cada uno paga 12 veces: a 700 son
+     8.400 y el cuadro entero queda en ~20.000 de los 25.000 del pack. */
+  glbTris:{_:700,heroe:0,heroeR:0,heroeA:0,jefe:2600},
   art:A('art-arena.jpg'),music:A('mus-arena.m4a'),
   sfx:{tap:A('sfx-tap.mp3'),click:A('sfx-click.mp3'),coin:A('sfx-coin.mp3'),win:A('sfx-win.mp3'),
        lose:A('sfx-lose.mp3'),boom:A('sfx-boom.mp3'),power:A('sfx-power.mp3'),chime:A('sfx-chime.mp3'),
-       shoot:A('sfx-arena-shoot.mp3'),splat:A('sfx-arena-splat.mp3'),groan:A('sfx-arena-roar.mp3')},
-  glb:{heroe:A('m-arena-heroe.glb'),jefe:A('m-arena-jefe.glb')},
+       shoot:A('sfx-arena-shoot.mp3'),splat:A('sfx-arena-splat.mp3'),groan:A('sfx-arena-roar.mp3'),
+       slash:A('sfx-arena-slash.mp3'),hit:A('sfx-arena-hit.mp3'),hurt:A('sfx-arena-hurt.mp3'),
+       door:A('sfx-arena-door.mp3'),up:A('sfx-arena-up.mp3'),charge:A('sfx-arena-charge.mp3'),
+       lava:A('sfx-arena-lava.mp3'),ice:A('sfx-arena-ice.mp3')},
+  /* heroe = malla con hueso + el clip de guardia; heroeR/heroeA son GLB de SÓLO
+     ANIMACIÓN (28 y 54 kB): mismo esqueleto, así que sus pistas se resuelven por
+     nombre contra el héroe ya cargado. Medido: las tres ligan sus 72 pistas. */
+  glb:{heroe:A('m-arena-heroe.glb'),heroeR:A('m-arena-run.glb'),heroeA:A('m-arena-atk.glb'),
+       jefe:A('m-arena-jefe.glb'),
+       mole:A('m-arena-mole.glb'),torre:A('m-arena-torre.glb'),
+       pua:A('m-arena-pua.glb'),div:A('m-arena-div.glb')},
   i18n:{
     es:{sub:'El héroe dispara solo cuando está <b>QUIETO</b>.<br>8 salas por nivel, jefe en la 4 y en la 8, y una mejora a elección entre salas.',
       roomsL:'SALAS',room:'SALA',bossRoom:'SALA DEL JEFE',wave:'OLEADA',bossHere:'¡JEFE!',
@@ -1127,7 +1176,12 @@ const G={
       bought:'¡MEJORADO!',coins:'monedas',lvlN:'nivel',
       dTtl:'TE MATARON',wTtl:'¡NIVEL SUPERADO!',
       statRooms:'Salas',statKills:'Bajas',statCoins:'Monedas',statBest:'Mejor',
-      hpLbl:'VIDA',newRec:'¡NUEVO RÉCORD!',allUp:'MEJORAS'},
+      hpLbl:'VIDA',newRec:'¡NUEVO RÉCORD!',allUp:'MEJORAS',
+      zCripta:'CRIPTA',zFragua:'FRAGUA',zJardin:'JARDÍN',zHielo:'HIELO',zVacio:'VACÍO',
+      hLava:'¡CUIDADO CON LAS GRIETAS!',hEspina:'LAS ZARZAS TE FRENAN',
+      hHielo:'EL PISO RESBALA',hVacio:'EL PISO SE CAE',
+      fire:'DISPARAR',fireHint:'MANTENÉ PARA DISPARAR EN MOVIMIENTO',
+      statZones:'Zonas'},
     en:{sub:'The hero only shoots while <b>STANDING STILL</b>.<br>8 rooms per level, a boss on 4 and 8, one upgrade of your choice between rooms.',
       roomsL:'ROOMS',room:'ROOM',bossRoom:'BOSS ROOM',wave:'WAVE',bossHere:'BOSS!',
       clear:'ROOM CLEAR!',pick:'PICK AN UPGRADE',pickSub:'tap a card',
@@ -1151,7 +1205,12 @@ const G={
       bought:'UPGRADED!',coins:'coins',lvlN:'level',
       dTtl:'YOU DIED',wTtl:'LEVEL COMPLETE!',
       statRooms:'Rooms',statKills:'Kills',statCoins:'Coins',statBest:'Best',
-      hpLbl:'HEALTH',newRec:'NEW BEST!',allUp:'UPGRADES'},
+      hpLbl:'HEALTH',newRec:'NEW BEST!',allUp:'UPGRADES',
+      zCripta:'CRYPT',zFragua:'FORGE',zJardin:'GARDEN',zHielo:'ICE',zVacio:'VOID',
+      hLava:'MIND THE VENTS!',hEspina:'THORNS SLOW YOU DOWN',
+      hHielo:'THE FLOOR IS SLIPPERY',hVacio:'THE FLOOR FALLS AWAY',
+      fire:'FIRE',fireHint:'HOLD TO SHOOT WHILE MOVING',
+      statZones:'Zones'},
     pt:{sub:'O herói só atira <b>PARADO</b>.<br>8 salas por nível, chefe na 4 e na 8, e uma melhoria à escolha entre salas.',
       roomsL:'SALAS',room:'SALA',bossRoom:'SALA DO CHEFE',wave:'ONDA',bossHere:'CHEFE!',
       clear:'SALA LIMPA!',pick:'ESCOLHA UMA MELHORIA',pickSub:'toque numa carta',
@@ -1175,7 +1234,12 @@ const G={
       bought:'MELHORADO!',coins:'moedas',lvlN:'nível',
       dTtl:'VOCÊ MORREU',wTtl:'NÍVEL COMPLETO!',
       statRooms:'Salas',statKills:'Baixas',statCoins:'Moedas',statBest:'Melhor',
-      hpLbl:'VIDA',newRec:'NOVO RECORDE!',allUp:'MELHORIAS'}
+      hpLbl:'VIDA',newRec:'NOVO RECORDE!',allUp:'MELHORIAS',
+      zCripta:'CRIPTA',zFragua:'FORJA',zJardin:'JARDIM',zHielo:'GELO',zVacio:'VAZIO',
+      hLava:'CUIDADO COM AS FENDAS!',hEspina:'OS ESPINHOS TE FREIAM',
+      hHielo:'O CHÃO ESCORREGA',hVacio:'O CHÃO DESABA',
+      fire:'ATIRAR',fireHint:'SEGURE PARA ATIRAR EM MOVIMENTO',
+      statZones:'Zonas'}
   }
 };
 /* OJO: el shell ya declara `const T=ARC.T` en este mismo ámbito de módulo, y
@@ -1200,8 +1264,109 @@ const PAL={
   hero:'#ffc24a',heroD:'#6b3f10',
   e1:'#ff3d68',e2:'#c04bff',e3:'#ff7a1c',e4:'#57e08a',boss:'#ff2e5e',
   hb:'#7df0ff',eb:'#ff5cc8',coin:'#ffd83d',sh:'#07040f',
-  tel:'#ff2e5e',door:'#7a5cc0',doorOn:'#57e08a',fog:'#150d24'
+  tel:'#ff2e5e',door:'#7a5cc0',doorOn:'#57e08a',fog:'#150d24',
+  skirt:'#1a1230',skirtD:'#120c22',joint:'#2b2350'
 };
+/* ============================================================== ZONAS (BIOMAS)
+   Cada NIVEL atraviesa DOS zonas: salas 1-4 en una y 5-8 en otra, así una corrida
+   siempre cambia de escenario a mitad de camino (y el jefe de la 8 cae en la
+   segunda). Cada zona trae su paleta ENTERA y UN peligro propio:
+     cripta  nada (la de siempre)
+     fragua  grietas que avisan y escupen fuego
+     jardín  zarzas que te frenan a la mitad
+     hielo   el piso patina (la velocidad tiene inercia)
+     vacío   baldosas que se caen y dejan agujeros que no se pueden cruzar
+   PAL se sobreescribe con la zona activa y se reconstruye la malla fusionada de
+   la arena: no cuesta nada por cuadro porque es geometría horneada UNA vez. */
+const ZONES=[
+  {k:'cripta',nk:'zCripta',haz:null,sky:'#0b0713',
+   f0:'#4b4074',f1:'#413767',rim:'#a992f0',wall:'#251b40',wallTop:'#54447f',
+   strip:'#ffb02e',floorGlow:'#5d4f92',prop:'#241a3d',propTop:'#3d2f66',fog:'#150d24',
+   skirt:'#1a1230',skirtD:'#120c22',joint:'#2b2350'},
+  {k:'fragua',nk:'zFragua',haz:'lava',sky:'#170603',
+   f0:'#5a2a20',f1:'#4a231b',rim:'#ff9d5c',wall:'#341008',wallTop:'#7a3218',
+   strip:'#ffd166',floorGlow:'#8a3a1e',prop:'#2c0f07',propTop:'#5a2312',fog:'#210805',
+   skirt:'#2a1008',skirtD:'#1a0a04',joint:'#3a1a10'},
+  {k:'jardin',nk:'zJardin',haz:'espina',sky:'#04120b',
+   f0:'#2c5a3c',f1:'#254c33',rim:'#8ef0b0',wall:'#12301f',wallTop:'#3a7a4e',
+   strip:'#d8ff6a',floorGlow:'#3a7a52',prop:'#0e2617',propTop:'#255c38',fog:'#06180e',
+   skirt:'#0e2a1a',skirtD:'#081a10',joint:'#1a3c26'},
+  {k:'hielo',nk:'zHielo',haz:'hielo',sky:'#03101c',
+   f0:'#2e5e7e',f1:'#27516d',rim:'#a8ecff',wall:'#122d40',wallTop:'#3d7fa4',
+   strip:'#7df0ff',floorGlow:'#3a7ea4',prop:'#0e2434',propTop:'#255d7c',fog:'#051624',
+   skirt:'#0e2636',skirtD:'#081824',joint:'#1a3c52'},
+  {k:'vacio',nk:'zVacio',haz:'vacio',sky:'#0a0410',
+   f0:'#4a2456',f1:'#3d1e48',rim:'#f09aff',wall:'#2a0f33',wallTop:'#6a2c7c',
+   strip:'#ff6ae0',floorGlow:'#6a2f7c',prop:'#200a28',propTop:'#4c1c5a',fog:'#12061a',
+   skirt:'#24102c',skirtD:'#180a1e',joint:'#341844'}
+];
+let zone=ZONES[0],zoneI=0,zonesSeen={};
+/* la zona depende SÓLO del nivel y de la mitad de la sala: es reproducible, así
+   el jugador aprende el orden y el piloto de la sonda ve siempre lo mismo */
+function zoneFor(l,r){
+  const a=(l-1)%ZONES.length, b=(l+1+((l*3)%2))%ZONES.length;
+  return r<=4?a:(b===a?(a+2)%ZONES.length:b);
+}
+function setZone(i,rebuild){
+  if(i===zoneI&&zone&&!rebuild)return false;
+  zoneI=i;zone=ZONES[i];
+  for(const k of ['f0','f1','rim','wall','wallTop','strip','floorGlow','prop','propTop','fog'])
+    PAL[k]=zone[k];
+  PAL.skirt=zone.skirt;PAL.skirtD=zone.skirtD;PAL.joint=zone.joint;
+  if(scene){
+    scene.background=new T3.Color(zone.sky);
+    if(scene.fog)scene.fog.color=new T3.Color(zone.fog);
+    buildArena();buildDeco();buildObs();
+    if(doorM)doorM.material.color.set(PAL.door);
+  }
+  zonesSeen[zone.k]=1;
+  return true;
+}
+/* ---- PELIGROS ---- */
+const HAZ={lava:{r:1.05,n:4,dmg:1},espina:{r:1.15,n:5,slow:.5},
+           hielo:{},vacio:{r:.95,n:4}};
+let HZL=[],IHZ=null,IHZ2=null;
+function clearHaz(){HZL.length=0;}
+function buildHaz(pl){
+  clearHaz();
+  const t=zone.haz;if(!t||t==='hielo')return;
+  const C=HAZ[t],R=pl?pl.R:Math.random;
+  for(let i=0;i<C.n;i++){
+    /* nunca sobre el punto de entrada del héroe (0, RH-1.2) ni pegados entre sí */
+    for(let k=0;k<24;k++){
+      const x=(-RW+1.6)+R()*(RW*2-3.2), z=(-RH+1.4)+R()*(RH*2-2.8);
+      if(Math.hypot(x-0,z-(RH-1.2))<2.4)continue;
+      if(HZL.some(h=>Math.hypot(h.x-x,h.z-z)<C.r*2.1))continue;
+      if(inObs(x,z,C.r))continue;
+      HZL.push({x,z,r:C.r,t,ph:R()*3.4,on:0,warn:0});break;
+    }
+  }
+}
+/* devuelve el peligro ACTIVO que pisa (x,z), o null */
+function hazAt(x,z){
+  for(const h of HZL){
+    if(h.t==='espina'){if(Math.hypot(h.x-x,h.z-z)<h.r)return h;}
+    else if(h.on>0&&Math.hypot(h.x-x,h.z-z)<h.r)return h;
+  }
+  return null;
+}
+function hazStep(dt){
+  const t=zone.haz;
+  if(t==='lava')for(const h of HZL){
+    h.ph+=dt;const c=h.ph%3.6;
+    h.warn=c>2.1&&c<=2.9?(c-2.1)/.8:0;      /* 0,8 s de aviso: se puede salir */
+    const was=h.on;h.on=c>2.9?1:0;
+    if(h.on&&!was){ARC.sfx('lava',{vol:.5,rate:.95+Math.random()*.1});
+      if(cam){const p=proj(h.x,.2,h.z);
+        ARC.fx.burst(p.x,p.y,{n:Math.round(12*partK),color:PAL.strip,
+          speed:150,size:4,life:.45});}}
+  }
+  else if(t==='vacio')for(const h of HZL){
+    h.ph+=dt;const c=h.ph%6.4;
+    h.warn=c>3.4&&c<=4.2?(c-3.4)/.8:0;
+    h.on=c>4.2?1:0;                          /* abierto: no se puede pasar */
+  }
+}
 /* MEJORAS. cap = cuántas veces se puede tomar (0 = infinitas). */
 const UPS=[
   {id:'dmg'   ,ic:'⚔',k:'uDmg'   ,d:'uDmgD'   ,cap:0,fn:()=>{P.dmg*=1.35;}},
@@ -1235,7 +1400,7 @@ let boss=null,bossHpMax=1;
 let lvl=1,room=1,ph='fight',phT=0,waveI=0,waveN=1,pend=0,pendT=0;
 let kills=0,coinRun=0,roomsRun=0,notice='',noticeT=0,noticeBig=0;
 let P=null,taken={},cards=[],cardR=[],abilT=0;
-let joy=null,botOn=0,demo=0,tut=0;
+let joy=null,botOn=0,demo=0,tut=0,fireHold=0,shotsN=0;
 let partK=1,fogK=1,decoK=1,recTold=false,lastEv='';
 /* RESOLUCIÓN ADAPTATIVA. El cuello de botella de este juego es el RELLENO: la
    arena vista de arriba cubre medio cuadro y en el chromium de swiftshader un
@@ -1319,8 +1484,8 @@ function buildArena(){
     vplate(ac,x,z,TS,TS,0,cd<2.6?gl:(((ix+iz)&1)?f0:f1));
   }
   /* junta de las baldosas: líneas finas oscuras cada 3 unidades */
-  for(let ix=-RW+TS*2;ix<RW-.1;ix+=TS*2)vplate(ac,ix,0,.07,RH*2,.006,CC('#2b2350'));
-  for(let iz=-RH+TS*2;iz<RH-.1;iz+=TS*2)vplate(ac,0,iz,RW*2,.07,.006,CC('#2b2350'));
+  for(let ix=-RW+TS*2;ix<RW-.1;ix+=TS*2)vplate(ac,ix,0,.07,RH*2,.006,CC(PAL.joint));
+  for(let iz=-RH+TS*2;iz<RH-.1;iz+=TS*2)vplate(ac,0,iz,RW*2,.07,.006,CC(PAL.joint));
   /* borde interior de la arena */
   vplate(ac,0,-RH+.12,RW*2,.24,.012,rim);
   vplate(ac,0, RH-.12,RW*2,.24,.012,rim);
@@ -1330,7 +1495,7 @@ function buildArena(){
      zócalo bajo (si fuese alto taparía al héroe) */
   vbox(ac,0,0,-RH-.35,RW*2+1.4,2.5,.7,wt,wl);
   /* hueco de la puerta en el muro del fondo (la puerta baja y se ve el pasillo) */
-  vbox(ac,0,0,-RH-.02,3.3,2.15,.12,CC('#0b0716'),CC('#0b0716'));
+  vbox(ac,0,0,-RH-.02,3.3,2.15,.12,CC(zone.sky),CC(zone.sky));
   vbox(ac,-RW-.35,0,0,.7,1.7,RH*2,wt,wl);
   vbox(ac, RW+.35,0,0,.7,1.7,RH*2,wt,wl);
   vbox(ac,0,0, RH+.3,RW*2+1.4,.42,.6,wt,wl);
@@ -1345,12 +1510,12 @@ function buildArena(){
   /* FALDÓN: sin el plano de suelo la arena flota, así que se le ve el canto. Un
      labio oscuro de 1,2 de alto en los tres lados visibles la convierte en una
      plataforma sólida (y cuesta 0,3 ms porque es una tira finita). */
-  vbox(ac,0,-1.25,RH+.6,RW*2+1.4,1.25,.5,CC('#1a1230'),CC('#120c22'));
-  vbox(ac,-RW-.6,-1.25,0,.5,1.25,RH*2+1.4,CC('#1a1230'),CC('#120c22'));
-  vbox(ac, RW+.6,-1.25,0,.5,1.25,RH*2+1.4,CC('#1a1230'),CC('#120c22'));
+  vbox(ac,0,-1.25,RH+.6,RW*2+1.4,1.25,.5,CC(PAL.skirt),CC(PAL.skirtD));
+  vbox(ac,-RW-.6,-1.25,0,.5,1.25,RH*2+1.4,CC(PAL.skirt),CC(PAL.skirtD));
+  vbox(ac, RW+.6,-1.25,0,.5,1.25,RH*2+1.4,CC(PAL.skirt),CC(PAL.skirtD));
   /* braseros en las cuatro esquinas */
   for(const sx of [-1,1])for(const sz of [-1,1]){
-    vbox(ac,sx*(RW-.42),0,sz*(RH-.42),.3,1.15,.3,CC('#6a58a8'),CC('#33265c'));
+    vbox(ac,sx*(RW-.42),0,sz*(RH-.42),.3,1.15,.3,CC(PAL.propTop),CC(PAL.prop));
     vbox(ac,sx*(RW-.42),1.15,sz*(RH-.42),.44,.12,.44,CC('#ffe6a0'),CC(PAL.strip));
     vbox(ac,sx*(RW-.42),1.27,sz*(RH-.42),.26,.26,.26,CC('#fff3cf'),CC('#ffd166'));
   }
@@ -1391,9 +1556,9 @@ let obs=[],plan=null;
 function buildObs(){
   if(obsM){scene.remove(obsM);obsM.geometry.dispose();obsM=null;}
   if(!obs.length)return;
-  const ac=VA(),ct=CC('#8f79d4'),cs=CC('#4a3a78');
+  const ac=VA(),ct=CC(PAL.wallTop),cs=CC(PAL.wall);
   for(const o of obs){vbox(ac,o.x,0,o.z,o.r*1.95,o.h,o.r*1.95,ct,cs);
-    vbox(ac,o.x,o.h,o.z,o.r*2.2,.14,o.r*2.2,CC('#b7a2f2'),CC('#6a58a8'));}
+    vbox(ac,o.x,o.h,o.z,o.r*2.2,.14,o.r*2.2,CC(PAL.rim),CC(PAL.propTop));}
   obsM=vmesh(ac,true);scene.add(obsM);
 }
 
@@ -1409,14 +1574,83 @@ function IM(geo,mat,cap){
 function lam(c){return new T3.MeshLambertMaterial({color:new T3.Color(c)});}
 function bas(c,o){const m=new T3.MeshBasicMaterial({color:new T3.Color(c)});
   if(o!=null){m.transparent=true;m.opacity=o;m.depthWrite=false;}return m;}
+/* GEOMETRÍA DE UN GLB, lista para instanciar: se fusionan todas las mallas del
+   modelo en UNA, se centra en el piso y se escala a la altura pedida. Así cada
+   tipo de bicho sigue costando UNA llamada de dibujo aunque sean doce, y el color
+   de señal lo pone la instancia (que es lo que hace que se lean de un vistazo). */
+function glbGeo(key,targetH){
+  const S=ARC.glb&&ARC.glb[key];
+  if(!S||!S.scene)return null;
+  try{
+    S.scene.updateMatrixWorld(true);
+    const gs=[];
+    S.scene.traverse(o=>{
+      if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;
+      const g=o.geometry.clone();
+      /* sólo posición y normal: los atributos de más no se pueden fusionar entre
+         mallas con distinta cantidad de canales y hacen fallar el merge */
+      for(const a in g.attributes)if(a!=='position'&&a!=='normal')g.deleteAttribute(a);
+      if(!g.attributes.normal)g.computeVertexNormals();
+      g.applyMatrix4(o.matrixWorld);
+      gs.push(g);
+    });
+    if(!gs.length)return null;
+    let geo=gs[0];
+    if(gs.length>1&&ARC.BGU&&ARC.BGU.mergeGeometries)
+      geo=ARC.BGU.mergeGeometries(gs,false)||gs[0];
+    else if(gs.length>1)geo=mergeManual(gs)||gs[0];
+    geo.computeBoundingBox();
+    const bb=geo.boundingBox,sz=new T3.Vector3();bb.getSize(sz);
+    if(!(sz.y>1e-4))return null;
+    const s=targetH/sz.y;
+    geo.translate(-(bb.min.x+bb.max.x)/2,-bb.min.y,-(bb.min.z+bb.max.z)/2);
+    geo.scale(s,s,s);
+    geo.computeVertexNormals();
+    return geo;
+  }catch(e){console.warn('glbGeo '+key,e);return null;}
+}
+/* fusión a mano (sin el addon): sólo position+normal, sin índice */
+function mergeManual(gs){
+  let n=0;for(const g of gs)n+=g.attributes.position.count;
+  const P=new Float32Array(n*3),N=new Float32Array(n*3);let o=0;
+  for(const g of gs){
+    const p=g.attributes.position,nn=g.attributes.normal;
+    const idx=g.index?g.index.array:null;
+    if(idx){ /* se expande el índice: el destino va sin índice */ }
+    for(let i=0;i<p.count;i++){
+      P[(o+i)*3]=p.getX(i);P[(o+i)*3+1]=p.getY(i);P[(o+i)*3+2]=p.getZ(i);
+      if(nn){N[(o+i)*3]=nn.getX(i);N[(o+i)*3+1]=nn.getY(i);N[(o+i)*3+2]=nn.getZ(i);}
+    }
+    o+=p.count;
+  }
+  const g2=new T3.BufferGeometry();
+  g2.setAttribute('position',new T3.BufferAttribute(P,3));
+  g2.setAttribute('normal',new T3.BufferAttribute(N,3));
+  return g2;
+}
+/* alturas de cada bicho en unidades de mundo (el héroe mide 1,62) */
+const EH={mole:1.02,torre:1.34,pua:.94,div:1.28};
+let eGeoOK=0;
 function buildPools(){
   dum=new T3.Object3D();V0=new T3.Vector3();
-  /* tres siluetas de enemigo, tres mallas instanciadas, 3 llamadas en total */
+  /* CUATRO siluetas de enemigo, cuatro mallas instanciadas. Si los modelos 3D
+     cargaron se usan ésos; si alguno faltó, ese tipo cae al cuerpo geométrico de
+     antes y el juego sigue igual. */
+  const gm=glbGeo('mole',EH.mole),gt=glbGeo('torre',EH.torre),
+        gp=glbGeo('pua',EH.pua),gd=glbGeo('div',EH.div);
+  eGeoOK=(gm?1:0)+(gt?2:0)+(gp?4:0)+(gd?8:0);
   IE=[
-    IM(new T3.IcosahedronGeometry(.5,0),lam('#ffffff'),CAPE),   /* mole / divisor */
-    IM(new T3.ConeGeometry(.5,1.15,6),lam('#ffffff'),CAPE),     /* torre */
-    IM(new T3.OctahedronGeometry(.56,0),lam('#ffffff'),CAPE)    /* púa */
+    IM(gm||new T3.IcosahedronGeometry(.5,0),lam('#ffffff'),CAPE),   /* mole */
+    IM(gt||new T3.ConeGeometry(.5,1.15,6),lam('#ffffff'),CAPE),     /* torre */
+    IM(gp||new T3.OctahedronGeometry(.56,0),lam('#ffffff'),CAPE),   /* púa */
+    IM(gd||new T3.IcosahedronGeometry(.5,0),lam('#ffffff'),CAPE)    /* divisor */
   ];
+  /* con modelo el bicho apoya en el piso (yo=0); con la primitiva va flotando a
+     media altura como antes, así el cambio no descoloca las siluetas viejas */
+  IE.glb=[!!gm,!!gt,!!gp,!!gd];
+  /* peligros de la zona: un disco por peligro y un aro de aviso encima */
+  IHZ=IM(new T3.CircleGeometry(1,16),bas('#ffffff',.85),8);
+  IHZ2=IM(new T3.RingGeometry(.84,1,20),bas('#ffffff',.9),8);
   IHB=IM(new T3.OctahedronGeometry(.17,0),bas(PAL.hb),CAPB);
   IEB=IM(new T3.OctahedronGeometry(.21,0),bas(PAL.eb),CAPEB);
   /* la moneda va con material BASIC (siempre brillante, no depende de la luz) y
@@ -1429,11 +1663,15 @@ function buildPools(){
 }
 /* héroe y jefe: modelo GLB si cargó (ya simplificado por el shell a 800
    triángulos), y si no, geometría propia fusionada — una sola llamada */
-function glbNode(key,targetH,yaw){
+function glbNode(key,targetH,yaw,noClone){
   const S=ARC.glb&&ARC.glb[key];
   if(!S||!S.scene)return null;
   try{
-    const o=S.scene.clone(true);
+    /* MALLA CON HUESO: NO se clona. Object3D.clone() copia la jerarquía pero deja
+       el SkinnedMesh apuntando al esqueleto viejo, así que el clon se queda
+       congelado en la pose de reposo. Como el héroe es uno solo, se usa la escena
+       tal cual y el mixer la anima directamente. */
+    const o=noClone?S.scene:S.scene.clone(true);
     const bb=new T3.Box3().setFromObject(o),sz=new T3.Vector3(),c=new T3.Vector3();
     bb.getSize(sz);bb.getCenter(c);
     if(!(sz.y>.0001))return null;
@@ -1453,12 +1691,61 @@ function glbNode(key,targetH,yaw){
         const n2=new T3.MeshLambertMaterial({
           map:m.map||null,color:m.map?0xffffff:(m.color?m.color.clone():0xffffff),
           flatShading:true,fog:false});
+        /* con cámara de arriba el personaje se ve casi todo en sombra y el ámbar
+           quedaba marrón barro (medido en la captura). Un rescoldo levanta las
+           caras oscuras sin aplanar la forma. */
+        if(key==='heroe')n2.emissive=new T3.Color('#54320c');
+        if(key==='jefe')n2.emissive=new T3.Color('#3a0a16');
         n2.userData.arena=1;
         k.material=n2;
       }else if(m)m.fog=false;
     });
-    const w=new T3.Group();w.add(o);return w;
+    const w=new T3.Group();w.add(o);w.inner=o;return w;
   }catch(e){console.warn('glb '+key,e);return null;}
+}
+/* ================================================== HÉROE CON HUESO Y CLIPS
+   El GLB del héroe viene riggeado (24 huesos) con el clip de GUARDIA, y los otros
+   dos clips llegan en GLB de sólo-animación (28 y 54 kB) que comparten el mismo
+   esqueleto: three resuelve sus pistas por NOMBRE de hueso contra este esqueleto.
+   Medido en la prueba: las tres ligan sus 72 pistas y las posturas difieren hasta
+   1,06 unidades, así que no es un clip mudo que "parece" andar.
+   El clip de ataque dura 2,83 s: se le pone timeScale para que el mandoble entre
+   justo en el intervalo de disparo, si no el héroe golpearía en cámara lenta. */
+let MX=null,ACT={},actNow='',heroSk=null;
+function heroAnim(node){
+  const S=ARC.glb&&ARC.glb.heroe;
+  if(!S||!S.animations||!S.animations.length)return false;
+  try{
+    MX=new T3.AnimationMixer(node);
+    node.traverse(o=>{if(o.isSkinnedMesh)heroSk=o;});
+    const add=(k,clip,loop)=>{
+      if(!clip)return;
+      const a=MX.clipAction(clip);
+      a.loop=loop===false?T3.LoopOnce:T3.LoopRepeat;
+      if(loop===false)a.clampWhenFinished=true;
+      a.enabled=true;a.setEffectiveWeight(0);a.play();
+      ACT[k]={a,dur:clip.duration};
+    };
+    add('idle',S.animations[0]);
+    const R=ARC.glb.heroeR,Aa=ARC.glb.heroeA;
+    add('run',R&&R.animations&&R.animations[0]);
+    add('atk',Aa&&Aa.animations&&Aa.animations[0]);
+    if(!ACT.idle)return false;
+    ACT.idle.a.setEffectiveWeight(1);actNow='idle';
+    return true;
+  }catch(e){console.warn('heroAnim',e);MX=null;return false;}
+}
+/* mezcla suave: sube el peso del que toca y baja los otros. Nada de fadeIn/Out,
+   que dejan acciones a medio camino cuando se cambia dos veces en un cuadro. */
+function heroAct(k,dt){
+  if(!MX||!ACT[k])return;
+  if(k!=='atk'&&actNow==='atk'&&ACT.atk&&ACT.atk.a.time<ACT.atk.dur*.55)k='atk';
+  actNow=k;
+  for(const n in ACT){
+    const w=ACT[n].a.getEffectiveWeight();
+    const to=n===k?1:0;
+    ACT[n].a.setEffectiveWeight(w+(to-w)*Math.min(1,dt*11));
+  }
 }
 function heroGeo(){
   const ac=VA(),bd=CC(PAL.hero),dk=CC(PAL.heroD),cy=CC(PAL.hb),hd=CC('#ffd980');
@@ -1565,9 +1852,11 @@ function mkEnemy(t,pl,x,z,gen){
   const B={mole :{shape:0,hp:9 ,sp:1.9,r:.5 ,dmg:1,col:PAL.e1,sc:1  },
            torre:{shape:1,hp:7 ,sp:1.5,r:.52,dmg:1,col:PAL.e2,sc:1  },
            pua  :{shape:2,hp:11,sp:2.2,r:.55,dmg:2,col:PAL.e3,sc:1  },
-           div  :{shape:0,hp:16,sp:1.4,r:.72,dmg:1,col:PAL.e4,sc:1.4},
+           div  :{shape:3,hp:16,sp:1.4,r:.72,dmg:1,col:PAL.e4,sc:1.15},
            mini :{shape:0,hp:6 ,sp:2.6,r:.36,dmg:1,col:PAL.e4,sc:.7 }}[t];
-  const yo=B.shape===1?.6:(B.shape===2?.56:.5);
+  /* con modelo 3D el bicho APOYA en el piso (el pivote quedó en la base al
+     hornear la geometría); con la primitiva vieja flota a media altura */
+  const yo=(IE.glb&&IE.glb[B.shape])?0:(B.shape===1?.6:(B.shape===2?.56:.5));
   const e={t,shape:B.shape,x,z,px:x,pz:z,r:B.r,sc:B.sc,col:B.col,yo,
     hp:Math.round(B.hp*kmul),hpMax:Math.round(B.hp*kmul),sp:B.sp*smul,dmg:B.dmg,
     st:'in',stT:.55,ph:rnd(0,TAU),flash:0,bob:rnd(0,TAU),gen:gen||0,cd:rnd(.6,1.8)};
@@ -1611,9 +1900,20 @@ function newRoom(){
     obs.push({x,z,r:.62,h:1.45});
   }
   buildObs();
+  /* ZONA: cambia a mitad del nivel (salas 1-4 una, 5-8 otra). Si cambió se
+     rehornea la arena entera con la paleta nueva y se reparten sus peligros. */
+  const zi=zoneFor(lvl,room);
+  const changed=setZone(zi);
+  buildHaz(pl);
   hx=0;hz=RH-1.25;phx=hx;phz=hz;vx=vz=0;
   if(pl.boss){waveI=waveN=1;spawnBoss();}
   else{spawnWave();notice=T('room')+' '+room+'/8';noticeT=1.4;noticeBig=0;}
+  if(changed){
+    notice=T(zone.nk);noticeT=2.1;noticeBig=1;
+    const hk={lava:'hLava',espina:'hEspina',hielo:'hHielo',vacio:'hVacio'}[zone.haz];
+    if(hk)ARC.toast(T(hk));
+    ARC.sfx('door',{vol:.45});
+  }
   hud();
 }
 function inObs(x,z,r){
@@ -1622,7 +1922,11 @@ function inObs(x,z,r){
 }
 
 /* ------------------------------------------------------------- disparos */
-function fire(){
+/* rk = multiplicador de cadencia: 1 quieto (automático), 0,65 con el botón en
+   movimiento. El mandoble del héroe se reinicia acá para que el golpe coincida
+   con la flecha que sale. */
+function fire(rk){
+  rk=rk||1;
   const tg=nearestEnemy(hx,hz);
   if(tg)aim=Math.atan2(tg.x-hx,tg.z-hz);
   const n=Math.min(4,P.mult);
@@ -1630,7 +1934,14 @@ function fire(){
     const a=aim+(k-(n-1)/2)*.15;
     shoot(a,P.dmg);
   }
-  ARC.sfx('shoot',{vol:.5,rate:1+rnd(-.06,.06)});
+  ARC.sfx('slash',{vol:.42,rate:1+rnd(-.08,.08)});
+  if(MX&&ACT.atk){
+    /* el clip dura 2,83 s: se acelera para que el mandoble entre justo en el
+       intervalo entre disparos, si no golpearía en cámara lenta */
+    ACT.atk.a.timeScale=clamp(ACT.atk.dur/Math.max(.18,1/(P.rate*rk)),1,6);
+    ACT.atk.a.reset().play();
+    heroAct('atk',1);
+  }
   /* FOGONAZO: el disparo es automático, así que si no se ve salir la flecha el
      jugador no entiende por qué le conviene quedarse quieto */
   if(partK>.5){
@@ -1642,7 +1953,8 @@ function fire(){
       a:Math.atan2(p2.y-p.y,p2.x-p.x)});
     ARC.fx.ring(p.x,p.y,{r0:2,r:ARC.H*.032,color:PAL.hb,w:2,life:.14});
   }
-  shotT=1/P.rate;
+  shotT=1/(P.rate*rk);
+  shotsN++;
 }
 function shoot(a,dmg){
   if(hbs.length>=CAPB)return;
@@ -1871,6 +2183,8 @@ G.key=function(c,d){
     else joy=null;
     return;
   }
+  if(c==='KeyJ'||c==='ShiftLeft'||c==='ShiftRight'){fireHold=d?1:0;
+    if(d&&shotT>.12)shotT=.12;return;}
   if(d&&(c==='Space'))ability();
   if(d&&c==='Digit1'&&ph==='pick')pickCard(0);
 };
@@ -1904,10 +2218,10 @@ G.init=function(){
   const d=new T3.DirectionalLight(0xffffff,.95);d.position.set(4,10,7);scene.add(d);
   buildPools();
   buildArena();buildDeco();
-  heroN=glbNode('heroe',1.62,HYAW);
+  heroN=glbNode('heroe',2.3,HYAW,true);
   if(!heroN){heroFB=new T3.Group();const hm=heroGeo();hm.scale.setScalar(1.34);
     heroFB.add(hm);scene.add(heroFB);}
-  else scene.add(heroN);
+  else{scene.add(heroN);heroAnim(heroN.inner);}
   bossN=glbNode('jefe',3.0,HYAW);
   if(!bossN){bossFB=new T3.Group();const bm=bossGeo();bm.scale.setScalar(.92);
     bossFB.add(bm);scene.add(bossFB);bossFB.visible=false;}
@@ -1938,19 +2252,29 @@ G.start=function(l){
   room=1;recTold=false;botOn=0;joy=null;tut=1;lastEv='';
   hitFlash=0;camA=0;
   doorM.material.color.set(PAL.door);
+  fireHold=0;
   newRoom();
-  ARC.tray([{id:'ab',txt:'⚡',sq:1,fn:ability}]);
+  /* BOTÓN DE DISPARO propio, aparte del automático: sostenido dispara también en
+     movimiento (a 65% de cadencia). El del rayo queda al lado, como estaba. */
+  ARC.tray([{id:'ab',txt:'⚡',sq:1,fn:ability},
+            {id:'fi',txt:'⚔',sq:1,cls:'big',hold:d=>{fireHold=d;
+              if(d&&shotT>.12)shotT=.12;}}]);
   hud();
 };
 function hud(){
   ARC.hud(coinRun,T('level')+' '+lvl+' · '+(isBoss(room)?T('bossRoom'):T('room')+' '+room+'/8'));
 }
 G.i18nDone=function(){if(ARC.scr==='game')hud();};
-G.pause=function(){joy=null;};
+G.pause=function(){joy=null;fireHold=0;};
 
 /* ---------------------------------------------------------------- simulación */
 G.step=function(dt){
   if(!T3)return;
+  if(MX)MX.update(dt);
+  /* los peligros laten en CUALQUIER fase: si sólo latieran en 'fight', entre
+     oleadas y mientras se elige la mejora el piso quedaba congelado (y la sonda
+     no veía nunca el aviso de la grieta). */
+  hazStep(dt);
   phx=hx;phz=hz;paim=aim;
   for(const e of ens){e.px=e.x;e.pz=e.z;}
   if(boss){boss.px=boss.x;boss.pz=boss.z;}
@@ -1980,28 +2304,67 @@ G.step=function(dt){
   if(botOn)botThink();
   const jv=joyVec();
   moving=0;
+  /* ZARZAS: el jardín frena a la mitad mientras estés dentro de la mata */
+  const hzOn=hazAt(hx,hz);
+  const slow=(hzOn&&hzOn.t==='espina')?HAZ.espina.slow:1;
+  let tvx=0,tvz=0;
   if(jv){
     /* la pantalla apunta a -Z arriba: el vector del dedo se mapea directo */
-    vx=jv.x*P.spd;vz=jv.y*P.spd;
+    tvx=jv.x*P.spd*slow;tvz=jv.y*P.spd*slow;
     moving=1;stillT=0;
-    aim=Math.atan2(vx,vz);
-  }else{vx=vz=0;stillT+=dt;}
+  }else stillT+=dt;
+  /* HIELO: el piso patina. La velocidad no salta al valor del dedo, lo persigue,
+     así que frenar lleva medio segundo y hay que anticipar. En las otras zonas la
+     respuesta es instantánea como siempre (tau=0). */
+  if(zone.haz==='hielo'){
+    const k=Math.min(1,dt*3.4);
+    vx+=(tvx-vx)*k;vz+=(tvz-vz)*k;
+    if(Math.hypot(vx,vz)>.25)moving=1,stillT=0;   /* patinando NO se dispara solo */
+  }else{vx=tvx;vz=tvz;}
+  if(moving||Math.hypot(vx,vz)>.05)aim=Math.atan2(vx,vz);
+  const ohx=hx,ohz=hz;
   hx=clamp(hx+vx*dt,-RW+HR,RW-HR);
   hz=clamp(hz+vz*dt,-RH+HR,RH-HR);
   for(const o of obs){                        /* empujar fuera de las cajas */
     const d=Math.hypot(hx-o.x,hz-o.z),m=o.r+HR;
     if(d<m&&d>.0001){hx=o.x+(hx-o.x)/d*m;hz=o.z+(hz-o.z)/d*m;}
   }
-  hx=clamp(hx,-RW+HR,RW-HR);hz=clamp(hz,-RH+HR,RH-HR);
-  /* DISPARO AUTOMÁTICO: sólo quieto. Es la mecánica del género. */
-  shotT-=dt;
-  if(!moving&&stillT>.08){
-    const tg=nearestEnemy(hx,hz);
-    if(tg){
-      aim=Math.atan2(tg.x-hx,tg.z-hz);
-      if(shotT<=0)fire();
-    }
+  /* VACÍO: el agujero abierto no se puede cruzar (empuja para afuera como una caja) */
+  if(zone.haz==='vacio')for(const h of HZL){
+    if(!h.on)continue;
+    const d=Math.hypot(hx-h.x,hz-h.z),m=h.r+HR*.8;
+    if(d<m&&d>.0001){hx=h.x+(hx-h.x)/d*m;hz=h.z+(hz-h.z)/d*m;vx*=.2;vz*=.2;}
   }
+  hx=clamp(hx,-RW+HR,RW-HR);hz=clamp(hz,-RH+HR,RH-HR);
+  /* FRAGUA: la grieta encendida quema (con los 0,8 s de aviso para salir) */
+  if(zone.haz==='lava'&&inv<=0){
+    const h=hazAt(hx,hz);
+    if(h&&h.t==='lava'){hurtHero(HAZ.lava.dmg);
+      const p=proj(hx,.5,hz);
+      ARC.fx.burst(p.x,p.y,{n:Math.round(14*partK),color:PAL.strip,
+        speed:180,size:5,life:.5});}
+  }
+  if(zone.haz==='hielo'&&moving&&Math.random()<dt*1.6)
+    ARC.sfx('ice',{vol:.16,rate:1.1+Math.random()*.3});
+  /* DISPARO. AUTOMÁTICO quieto (la mecánica del género) y MANUAL con el botón
+     sostenido, que sí dispara en movimiento pero a 65% de cadencia: así el botón
+     agrega opciones sin borrar la tensión de tener que plantarse. */
+  shotT-=dt;
+  const tg0=nearestEnemy(hx,hz);
+  if(!moving&&stillT>.08){
+    if(tg0){
+      aim=Math.atan2(tg0.x-hx,tg0.z-hz);
+      if(shotT<=0)fire(1);
+    }
+  }else if(fireHold){
+    /* con blanco apunta solo; sin blanco tira para donde mira. Si exigiera blanco,
+       apretar el botón en una sala vacía no haría NADA y se sentiría roto. */
+    if(tg0)aim=Math.atan2(tg0.x-hx,tg0.z-hz);
+    if(shotT<=0)fire(.65);
+  }
+  /* ANIMACIÓN DEL HÉROE: corre si se mueve, guardia si está plantado. El ataque lo
+     dispara fire() y heroAct lo protege hasta la mitad del mandoble. */
+  heroAct(moving?'run':'idle',dt);
   stepEnemies(dt);
   stepBoss(dt);
   stepBullets(dt,false);
@@ -2036,11 +2399,20 @@ function stepCoins(dt){
     }
   }
 }
-function stepEnemies(dt){
+function stepEnemies(dt0){
   const t=ARC.t;
   for(let i=ens.length-1;i>=0;i--){
     const e=ens[i];
-    if(e.flash>0)e.flash-=dt;
+    /* las ZARZAS frenan a TODOS: si sólo frenaran al héroe serían un castigo, y
+       así en cambio son terreno que conviene usar a favor. OJO: el paso frenado
+       es LOCAL de este enemigo (si se tocara el dt de la función, el freno se le
+       pegaría a todos los que vienen después en el mismo cuadro). */
+    if(zone.haz==='espina'){
+      const h=hazAt(e.x,e.z);
+      e.slow=(h&&h.t==='espina')?HAZ.espina.slow:1;
+    }else e.slow=1;
+    const dt=dt0*e.slow;
+    if(e.flash>0)e.flash-=dt0;
     e.bob+=dt*6;
     if(e.st==='in'){                            /* apareciendo (aviso) */
       e.stT-=dt;
@@ -2233,9 +2605,9 @@ function drawScene(a){
     hn.position.set(ihx,ph==='dead'?-.4:0,ihz);
     hn.rotation.y=aim+(heroN?HYAW:Math.PI);
     hn.visible=ph!=='dead'||phT<.5;
-    /* rebote al caminar y parpadeo de invulnerabilidad */
-    const bounce=moving?Math.abs(Math.sin(ARC.t*11))*.09:0;
-    hn.position.y+=bounce;
+    /* el rebote de caminar sólo hace falta SIN esqueleto: con el clip de corrida
+       el brinco ya lo hace la animación y sumarle otro lo hace saltar doble */
+    if(!MX){const bounce=moving?Math.abs(Math.sin(ARC.t*11))*.09:0;hn.position.y+=bounce;}
     hn.scale.setScalar(inv>0&&((ARC.frame>>2)&1)?.86:1);
   }
   /* jefe */
@@ -2248,8 +2620,44 @@ function drawScene(a){
       const k=boss.flash>0?1.06:1;bn.scale.setScalar(k*(boss.st==='wind'?1.1:1));
     }else bn.visible=false;
   }
+  /* PELIGROS DE LA ZONA: un disco tirado en el piso por peligro y, cuando avisa,
+     un aro que se cierra encima. Dos llamadas de dibujo para todos. */
+  if(IHZ){
+    let nh=0,nw=0;
+    for(const h of HZL){
+      if(nh>=8)break;
+      let col,op,sc=h.r;
+      if(h.t==='espina'){col=PAL.e4;op=.5;}
+      else if(h.t==='lava'){
+        const k=h.on?1:(h.warn>0?.35+h.warn*.5:.22);
+        col=h.on?'#ffd166':(h.warn>0?PAL.strip:'#7a2a10');op=k;
+        sc=h.r*(h.on?1.06:1);
+      }else{ /* vacío: el agujero se abre */
+        col=h.on?zone.sky:(h.warn>0?PAL.rim:PAL.f0);
+        op=h.on?1:(h.warn>0?.75:.45);
+        sc=h.r*(h.on?1:.9+h.warn*.1);
+      }
+      dum.position.set(h.x,.03,h.z);dum.rotation.set(-Math.PI/2,0,0);
+      dum.scale.setScalar(sc);dum.updateMatrix();
+      IHZ.setMatrixAt(nh,dum.matrix);IHZ.setColorAt(nh,colOf(col));
+      IHZ.material.opacity=.85;nh++;
+      if(h.warn>0&&nw<8){
+        dum.position.set(h.x,.05,h.z);dum.rotation.set(-Math.PI/2,0,0);
+        dum.scale.setScalar(h.r*(1.9-h.warn));dum.updateMatrix();
+        IHZ2.setMatrixAt(nw,dum.matrix);
+        IHZ2.setColorAt(nw,colOf(h.t==='lava'?'#ffe6a0':PAL.rim));nw++;
+      }
+      /* mientras hace efecto, un poco de brasa/escarcha */
+      if(h.on&&h.t==='lava'&&partK>.5&&Math.random()<.10){
+        const p=proj(h.x,.25,h.z);
+        ARC.fx.burst(p.x,p.y,{n:3,color:PAL.strip,speed:90,size:3,life:.35,g:-40});}
+    }
+    setInst(IHZ,nh);setInst(IHZ2,nw);
+    if(IHZ.instanceColor)IHZ.instanceColor.needsUpdate=true;
+    if(IHZ2.instanceColor)IHZ2.instanceColor.needsUpdate=true;
+  }
   /* enemigos: una matriz por instancia, agrupados por silueta */
-  const cnt=[0,0,0];
+  const cnt=[0,0,0,0];
   let sh=0;
   for(const e of ens){
     const im=IE[e.shape];
@@ -2272,7 +2680,7 @@ function drawScene(a){
       ISH.setMatrixAt(sh++,dum.matrix);
     }
   }
-  for(let i=0;i<3;i++){
+  for(let i=0;i<4;i++){
     setInst(IE[i],cnt[i]);
     if(IE[i].instanceColor)IE[i].instanceColor.needsUpdate=true;
   }
@@ -2596,6 +3004,17 @@ function threatScore(x,z,tAhead){
     const d=Math.hypot(x-bx2,z-bz2);
     if(d<1.5)s-=(1.5-d)*90;
   }
+  /* PELIGROS DE LA ZONA. Sin esto el piloto se paraba tranquilo encima de una
+     grieta y la sonda medía "el juego mata sin motivo": la grieta avisa 0,8 s
+     antes, así que la esquiva es parte de jugar bien y el piloto tiene que verla. */
+  for(const h of HZL){
+    const d=Math.hypot(x-h.x,z-h.z);
+    if(h.t==='espina'){if(d<h.r+HR)s-=26;}                     /* frena: molesta */
+    else if(h.t==='vacio'){if(h.on&&d<h.r+HR)return -1e6;       /* agujero: no se pisa */
+      if(h.warn>0&&d<h.r+HR+.3)s-=120;}
+    else if(h.t==='lava'){                                     /* se paga desde el aviso */
+      if(d<h.r+HR+.25)s-=(h.on?900:(h.warn>0?420:70));}
+  }
   /* monedas fuera del imán: un empujoncito para juntarlas */
   for(const c of cns){
     const d=Math.hypot(x-c.x,z-c.z);
@@ -2635,9 +3054,31 @@ G.dbg={
   state:()=>({lvl,room,ph,hp,hpMax:P?P.hpMax:0,ens:ens.length,boss:boss?Math.ceil(boss.hp):0,
     kills,coins:coinRun,rooms:roomsRun,hbs:hbs.length,ebs:ebs.length,cns:cns.length,
     bot:botOn,ev:lastEv,ups:upList(),
+    zona:zone.k,haz:zone.haz||'-',hz:HZL.length,hzOn:HZL.filter(h=>h.on).length,
+    shots:shotsN,mv:moving,shotT:+shotT.toFixed(2),
+    zonas:Object.keys(zonesSeen).length,fire:fireHold,
+    anim:MX?(actNow+' '+Object.keys(ACT).join('/')):'sin-hueso',
+    eGlb:eGeoOK,
     perks:P?{dmg:+P.dmg.toFixed(1),rate:+P.rate.toFixed(2),mult:P.mult,
       bounce:P.bounce,pierce:P.pierce,spd:+P.spd.toFixed(1),mag:+P.mag.toFixed(1)}:null,
     gfx:{part:partK,deco:decoK,resK:+resK.toFixed(2),dpr:+(resBase*resK).toFixed(2),cd:+CD.toFixed(1)}}),
+  /* enganches para las sondas: forzar zona, saltar de sala y sostener el disparo */
+  zone:i=>{setZone(((i|0)%ZONES.length+ZONES.length)%ZONES.length,1);buildHaz(plan);
+    if(ph!=='fight'){ph='fight';phT=0;}
+    return {zona:zone.k,haz:zone.haz||'-',hz:HZL.length,ph};},
+  goRoom:n=>{room=clamp(n|0,1,8);newRoom();return{room,zona:zone.k,haz:zone.haz||'-'};},
+  fire:d=>{fireHold=d?1:0;if(d&&shotT>.12)shotT=.12;return fireHold;},
+  put:(x,z)=>{hx=clamp(x,-RW+HR,RW-HR);hz=clamp(z,-RH+HR,RH-HR);phx=hx;phz=hz;
+    vx=vz=0;return{hx:+hx.toFixed(2),hz:+hz.toFixed(2)};},
+  hazAt:()=>HZL.map(h=>({t:h.t,x:+h.x.toFixed(2),z:+h.z.toFixed(2),on:h.on,
+    warn:+h.warn.toFixed(2)})),
+  heroPose:()=>{                      /* posición mundial de los huesos: prueba que la animación mueve el mesh */
+    if(!heroN||!heroN.inner)return null;
+    heroN.inner.updateMatrixWorld(true);
+    const v=new T3.Vector3(),o=[];
+    heroN.inner.traverse(b=>{if(b.isBone){b.getWorldPosition(v);
+      o.push(+v.x.toFixed(4),+v.y.toFixed(4),+v.z.toFixed(4));}});
+    return o;},
   perf:()=>{
     const i=ARC.rnd?ARC.rnd.info:null;
     return i?{tris:i.render.triangles,calls:i.render.calls,

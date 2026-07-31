@@ -128,6 +128,13 @@ canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
   width:clamp(30px,6.6vmin,46px);height:clamp(30px,6.6vmin,46px);justify-content:center}
 #tray{position:absolute;left:0;right:0;bottom:2.2vmin;display:flex;justify-content:center;
   gap:1.4vmin;pointer-events:auto;flex-wrap:wrap;padding:0 2vmin}
+/* botón SOSTENIDO (ARC.tray con hold): se hunde y se enciende mientras está
+   apretado, así se ve que el disparo está saliendo */
+#tray .btn.hold{transform:scale(.9);background:var(--acc);color:#100c04;
+  box-shadow:0 0 0 4px rgba(255,255,255,.22),0 0 26px var(--acc)}
+#tray .btn.big{width:clamp(58px,13vmin,96px);height:clamp(58px,13vmin,96px);
+  font-size:clamp(22px,5.4vmin,40px)}
+body.vert #tray .btn.big{width:21vw;height:21vw;font-size:8vw}
 /* ---- juegos VERTICALES (body.vert): los controles van grandes y bien abajo,
    porque en vertical el pulgar llega a la franja de abajo y no a los costados ---- */
 body.vert #tray{bottom:3.5%;gap:2.5vw}
@@ -302,7 +309,7 @@ document.write('<script type="importmap">{"imports":{"three":"'+t+'","three/addo
 </script>
 <script type="module">
 /* ---- assets ---- */
-const BASE=(new URLSearchParams(location.search).has('local')?'/assets/arcade/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@2549dad/assets/arcade/');
+const BASE=(new URLSearchParams(location.search).has('local')?'/assets/arcade/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@0d93f9c/assets/arcade/');
 const A=f=>BASE+f;
 /* ============================================================================
    ARCADE SHELL — el motor común de los 5 juegos
@@ -663,9 +670,25 @@ ARC.tray=function(list){
   const t=$('tray');t.innerHTML='';
   (list||[]).forEach(b=>{
     const el=document.createElement('div');
-    el.className='btn '+(b.gh?'gh ':'')+(b.sq?'sq':'');
+    el.className='btn '+(b.gh?'gh ':'')+(b.sq?'sq ':'')+(b.cls||'');
     el.id='tb_'+b.id;el.innerHTML=b.txt;
-    el.addEventListener('pointerdown',ev=>{ev.preventDefault();ARC.sfx('tap');ARC.vib(10);b.fn&&b.fn(el);});
+    if(b.hold){
+      /* botón SOSTENIDO (disparar): avisa al apretar y al soltar. Se captura el
+         puntero para que soltar afuera del botón también cuente como soltar: sin
+         eso el dedo se corre 3 px, sale del círculo y el juego queda disparando
+         para siempre. */
+      const on=ev=>{ev.preventDefault();ev.stopPropagation();
+        if(el.dataset.on)return;el.dataset.on='1';el.classList.add('hold');
+        try{el.setPointerCapture(ev.pointerId);}catch(e){}
+        ARC.vib(8);b.hold(1,el);};
+      const off=ev=>{if(!el.dataset.on)return;delete el.dataset.on;
+        el.classList.remove('hold');b.hold(0,el);};
+      el.addEventListener('pointerdown',on);
+      el.addEventListener('pointerup',off);
+      el.addEventListener('pointercancel',off);
+      el.addEventListener('lostpointercapture',off);
+    }else
+      el.addEventListener('pointerdown',ev=>{ev.preventDefault();ARC.sfx('tap');ARC.vib(10);b.fn&&b.fn(el);});
     t.appendChild(el);
   });
 };
@@ -962,21 +985,34 @@ ARC.boot=async function(){
      simplifica. Sin el soldado, modify() devolvía la malla igual (medido:
      28725 -> 28725). Si algo falla, se deja la malla como vino: nunca se rompe. */
   if(ARC.glb&&Object.keys(ARC.glb).length){
-    const target=GAME.glbTris||1200;
+    /* GAME.glbTris puede ser UN número (mismo tope para todos) o un objeto con un
+       tope por modelo y "_" como defecto; 0 = no tocar ese modelo. Hace falta
+       porque un personaje con hueso se lleva su propio presupuesto y los bichos
+       instanciados, que se dibujan de a doce, necesitan uno mucho más chico. */
+    const tg=GAME.glbTris,tgOf=k=>{
+      if(tg==null)return 1200;
+      if(typeof tg==='number')return tg;
+      return tg[k]!=null?tg[k]:(tg._!=null?tg._:1200);
+    };
     try{
       const [{SimplifyModifier},BGU]=await Promise.all([
         import('three/addons/modifiers/SimplifyModifier.js'),
         import('three/addons/utils/BufferGeometryUtils.js')]);
       const mod=new SimplifyModifier();
+      ARC.BGU=BGU;      /* los juegos también lo usan para fusionar mallas */
       ARC.glbTris={};
       for(const k in ARC.glb){
         const g=ARC.glb[k];if(!g||!g.scene)continue;
+        const target=tgOf(k);
         let before=0,after=0;
         g.scene.traverse(o=>{
           if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;
           const tri0=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;
           before+=tri0;
-          if(tri0<=target){after+=tri0;return;}
+          /* MALLA CON HUESO: NO se toca. SimplifyModifier sólo reconstruye
+             position/normal/uv, así que se comería skinIndex y skinWeight y el
+             personaje quedaría hecho un nudo al animarlo. */
+          if(o.isSkinnedMesh||!target||tri0<=target){after+=tri0;return;}
           try{
             let geo=o.geometry;
             /* soldar: de 3 vértices por triángulo a vértices compartidos */
