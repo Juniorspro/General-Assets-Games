@@ -95,6 +95,47 @@ juego. Si algo falla, primero sospechar de la sonda (pasó: teleport a un
 edificio, tocar un botón con `mousedown` cuando escucha `click`, medir el canvas
 2D cuando la escena está en el de WebGL).
 
+## El menú (esto es lo que el usuario mira primero)
+
+Menú vivo o no sirve: `GAME.attract(dt,g)` dibuja la escena real **detrás** del menú
+(`#menu.live` saca el arte de fondo). Se comprueba con dos `ARC.snapGL()` separados
+1 s: si `luz`/`colores` no cambian, el menú está muerto. Arriba las insignias
+(monedas, récord, nivel), en el medio el título grande, y el **JUGAR grande y
+centrado**: el botón abajo con una lista arriba "parece Netflix" (palabras del
+usuario) y es un rechazo directo. En vertical el JUGAR va a `min-width:70vw`.
+
+## Velocidad: en swiftshader (y en celulares baratos) el enemigo es el RELLENO
+
+Medido en esta caja: **un píxel cubierto cuesta ~72 ns**. Antes de tocar la
+geometría, medir bajando la resolución del renderer: si los fps se duplican, el
+problema es relleno y no triángulos. Lo que rindió de verdad, en orden:
+
+1. **Cielo/piso a pantalla completa → al color de borrado** (`clear` es gratis).
+   En ZUMBA eso solo fue 27 → 60 fps con los mismos triángulos.
+2. **MSAA fuera**: el shell crea el renderer con `antialias:true` y eso cuesta la
+   mitad de los cuadros (27,3 → 40,9 medido). CRUZA lo evita con `fastGL()`.
+3. **`MeshStandardMaterial` → `MeshBasicMaterial` con color por vértice** (luz
+   horneada). Desde three r155 hasta Lambert ilumina por fragmento: 35,5 → 48,2.
+4. **Fusionar e instanciar**: CRUZA pasó de **191 a 19 llamadas de dibujo** (lo
+   estático de 4 filas horneado en una malla + 6 `InstancedMesh`).
+5. **Emitir de cerca a lejos** para que el descarte por profundidad tire el fondo.
+6. Los GLB de `image_to_3d` vienen **sin índice**: hay que soldar con
+   `BufferGeometryUtils.mergeVertices` ANTES de simplificar o no colapsa nada.
+   Y rehornear su textura a 512 (vienen con JPEG de 2048²): 4,5 MB → 1,45 MB.
+
+Topes que se exigen y se miden con `renderer.info` **en partida** (piloto en cada
+rAF): **≤25.000 triángulos, ≤60 llamadas, ≥40 fps**. Lo entregado: 1.7k-10.9k
+triángulos y 7-22 llamadas en los cinco juegos.
+
+## Que se pueda ganar y perder (se mide, no se supone)
+
+AGUJERO tenía el bug de "no se gana ni se pierde" y la causa fue medible: **el
+censo de props llegaba a 0 a los 24 s con 62 s de reloj todavía por delante** — el
+resultado estaba decidido y después el jugador miraba un descampado. Un juego por
+rondas necesita: objetivo explícito en pantalla al arrancar, barra en el HUD,
+reloj que no sobre, y **las dos puntas probadas**: piloto que gana, y una corrida
+sin nadie tocando que pierda de verdad.
+
 ## Errores ya cometidos (no repetirlos)
 
 - Dibujar el juego mientras el menú está abierto: el `draw` explota si el estado
@@ -107,3 +148,18 @@ edificio, tocar un botón con `mousedown` cuando escucha `click`, medir el canva
   lee mucho peor. Sin giro en Y, ~30° sobre el horizonte.
 - Matar al jugador en el primer obstáculo (sin tiempo de reacción): los primeros
   metros/anillos/filas van siempre limpios.
+- **Saltear la pantalla de carga** con un `setTimeout(()=>ARC.enterMenu(),400)`:
+  ese toque es el gesto que habilita el audio en el celular (y donde se elige el
+  idioma). Sin él el juego arranca mudo. Se detecta midiendo `#ldGo`: si mide
+  0x0 porque `#load` ya está en `display:none`, alguien lo salteó.
+- `dispatchEvent` sobre un botón en vez de un toque real: tapó durante días que el
+  canvas se comía los toques (`.scr` sin `z-index`). Las sondas tocan con
+  `pg.mouse.click` en el centro del rect y comprueban `document.elementFromPoint`.
+- Poner las DOS animaciones del `#bPlay` en reglas separadas: el `beat` del ID pisa
+  el `rise` de `.anim` y el botón queda en `opacity:0` (invisible, medido).
+- Referenciar un `sfx-*.mp3` que nunca se generó: el motor lo tapa con el blip
+  sintetizado y no se nota hasta que se revisa el 404. Antes de entregar hay que
+  pedirle un `200` a **cada** URL del HTML final, no a una muestra.
+- Verificar los HTML del CDN dentro del sandbox: el chromium de acá no sale por el
+  proxy (`ERR_CONNECTION_RESET`). Se verifica el build `--test` con `?local` y las
+  URLs del CDN por `curl`.
