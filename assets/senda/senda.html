@@ -98,13 +98,15 @@
      · terreno con SPLAT de 4 texturas (pasto fotográfico, tierra del sendero,
        hojarasca bajo los árboles, roca en las pendientes) mezcladas por un mapa
        de control + la pendiente, en un shader propio con luz de sol+cielo y niebla
-     · ÁRBOLES DE VERDAD: tronco cilíndrico con CORTEZA fotográfica y copa de
-       nubes de tarjetas con HOJAS REALES (color+opacidad de ambientCG), con
-       recorte alfa. Setecientos árboles en 4 llamadas de dibujo (instancias).
+     · ÁRBOLES CON RAMAS: tronco cónico con corteza fotográfica, 4-5 ramas
+       inclinadas y las HOJAS REALES (color+opacidad de ambientCG) colgadas en
+       la punta de cada rama. Se MECEN con el viento (vertex shader con fase
+       por posición de instancia). Mil árboles en 4 llamadas de dibujo.
      · cielo: foto equirectangular 2K de amanecer (scene.background), que además
        alimenta los REFLEJOS del lago vía PMREM (scene.environment)
-     · lago espejado (MeshStandardMaterial metálico), muelle de madera, cabaña
-       con tablones fotográficos, rocas con textura, arbustos, luciérnagas
+     · AGUA VIVA: oleaje de vértices + normal perturbada por ondas que corren,
+       así el reflejo del cielo (PMREM) se mueve; muelle, CABAÑA DE TRONCOS con
+       hastiales, chimenea de piedra, porche y ventana que se enciende de noche
      · CICLO DE DÍA guiado por la historia: cada capítulo mueve el sol, la
        niebla y el tono del cielo (amanecer → tarde → atardecer → noche → alba)
 
@@ -179,6 +181,19 @@ function alturaBase(x, z){
   /* la colina del roble */
   const dr = Math.hypot(x - POI.roble.x, z - POI.roble.z);
   h += 14 * Math.exp(-(dr * dr) / (170 * 170));
+  /* CORREDOR SECO a lo largo de la senda. La cuenca del lago hundía el camino y
+     el muelle quedaba en una isla: no se podía llegar caminando (lo reportó el
+     jugador; la sonda teletransportaba y no lo vio). En vez de una loma puntual,
+     se levanta el terreno a lo largo de los tramos de senda que cruzan la zona
+     baja: donde va el jugador, el suelo nunca baja de -2,2. */
+  for (const [a, b] of SECO){
+    const abx = b.x - a.x, abz = b.z - a.z;
+    const t = Math.max(0, Math.min(1,
+      ((x - a.x) * abx + (z - a.z) * abz) / (abx * abx + abz * abz || 1)));
+    const ds = Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t));
+    const w = Math.exp(-(ds * ds) / (17 * 17));
+    h = h * (1 - w) + Math.max(h, -2.2) * w;
+  }
   return h;
 }
 function H(x, z){
@@ -193,11 +208,13 @@ function H(x, z){
   }
   return h;
 }
+/* la SENDA que une los puntos (para pintar tierra en el splat y guiar) */
+const SENDA = [POI.inicio, POI.cabana, POI.roble, POI.muelle, POI.santuario];
+/* tramos que cruzan la zona baja del lago: acá el terreno se mantiene seco */
+const SECO = [[POI.roble, POI.muelle], [POI.muelle, POI.santuario]];
 for (const k in POI) POI[k].h = alturaBase(POI[k].x, POI[k].z);
 POI.muelle.h = AGUA_Y + 1.1;                    /* el muelle nace a orilla */
 
-/* la SENDA que une los puntos (para pintar tierra en el splat y guiar) */
-const SENDA = [POI.inicio, POI.cabana, POI.roble, POI.muelle, POI.santuario];
 
 /* ============================ CARGA DE TEXTURAS ============================ */
 const cargaTex = (url, rep) => new Promise((res, rej) => {
@@ -373,7 +390,7 @@ const terrChunks = [];
 /* falda del horizonte: tapa la parte BAJA de la foto del cielo (que es oscura)
    con suelo que a esa distancia ya es color de niebla puro */
 {
-  const f = new T.Mesh(new T.CircleGeometry(3000, 24),
+  const f = new T.Mesh(new T.CircleGeometry(1150, 24),
     new T.MeshLambertMaterial({ color: 0x4a6a3a }));
   f.rotation.x = -Math.PI / 2;
   f.position.y = -10;
@@ -381,9 +398,32 @@ const terrChunks = [];
   scene.add(f);
 }
 /* ------------------------------- EL LAGO ----------------------------------- */
-const agua = new T.Mesh(new T.CircleGeometry(170, 40),
-  new T.MeshStandardMaterial({ color: 0x2e4a3e, metalness: .88, roughness: .16,
-    transparent: true, opacity: .93 }));
+/* AGUA VIVA: plano con grilla (para el oleaje de vértices) + normal perturbada
+   por ondas que CORREN en el fragmento — el reflejo del cielo (PMREM) se mueve
+   con ellas, que es lo que hace que el agua se lea como agua y no como vidrio.
+   El plano es cuadrado a propósito: donde el terreno está más alto lo tapa la
+   prueba de profundidad, así que la orilla la dibuja el propio lago. */
+const AGUAU = { value: 0 };
+const aguaMat = new T.MeshStandardMaterial({ color: 0x2e4a3e, metalness: .92,
+  roughness: .12, transparent: true, opacity: .94 });
+aguaMat.onBeforeCompile = sh => {
+  sh.uniforms.uT = AGUAU;
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;')
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      vWp = position.xy;
+      transformed.z += sin(position.x*.075 + uT*1.15)*.16
+                     + cos(position.y*.06 - uT*.85)*.13;`);
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;')
+    .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+      {
+        float a1 = sin(vWp.x*.42 + uT*1.9)*.11 + sin(vWp.x*.16 - uT*1.1)*.07;
+        float a2 = cos(vWp.y*.38 + uT*1.5)*.11 + cos(vWp.y*.14 + uT*.8)*.07;
+        normal = normalize(normal + vec3(a1, a2, 0.0));
+      }`);
+};
+const agua = new T.Mesh(new T.PlaneGeometry(380, 380, 40, 40), aguaMat);
 agua.rotation.x = -Math.PI / 2;
 agua.position.set(POI.lago.x, AGUA_Y, POI.lago.z);
 scene.add(agua);
@@ -392,17 +432,8 @@ scene.add(agua);
    Tronco: cilindro con corteza fotográfica. Copa: 7 tarjetas con hojas reales
    y recorte alfa, orientadas al azar dentro de un elipsoide. TODO instanciado:
    setecientos árboles en cuatro llamadas de dibujo. */
-function geoCopa(nq, radio, alto){
-  const geos = [];
-  for (let i = 0; i < nq; i++){
-    const g = new T.PlaneGeometry(radio * rr(1.5, 2.2), radio * rr(1.2, 1.8));
-    const e = new T.Euler(rr(-0.6, 0.6), rr(0, 6.28), rr(-0.5, 0.5));
-    g.rotateX(e.x); g.rotateY(e.y); g.rotateZ(e.z);
-    const a = rr(0, 6.28), rd = rr(0, radio * .55);
-    g.translate(Math.cos(a) * rd, alto + rr(-radio * .35, radio * .5), Math.sin(a) * rd);
-    geos.push(g);
-  }
-  /* fusión a mano (sin dependencias): posiciones + uv + normal */
+/* fusión a mano de varias geometrías indexadas (sin dependencias) */
+function fusiona(geos){
   let nv = 0; for (const g of geos) nv += g.attributes.position.count;
   const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2);
   const I = [];
@@ -410,7 +441,7 @@ function geoCopa(nq, radio, alto){
   for (const g of geos){
     P.set(g.attributes.position.array, off * 3);
     N.set(g.attributes.normal.array, off * 3);
-    U.set(g.attributes.uv.array, off * 2);
+    if (g.attributes.uv) U.set(g.attributes.uv.array, off * 2);
     const idx = g.index.array;
     for (let k = 0; k < idx.length; k++) I.push(idx[k] + off);
     off += g.attributes.position.count;
@@ -421,6 +452,87 @@ function geoCopa(nq, radio, alto){
   g.setAttribute('uv', new T.BufferAttribute(U, 2));
   g.setIndex(I);
   return g;
+}
+function geoCopa(nq, radio, alto){
+  const geos = [];
+  for (let i = 0; i < nq; i++){
+    const g = new T.PlaneGeometry(radio * rr(1.5, 2.2), radio * rr(1.2, 1.8));
+    const e = new T.Euler(rr(-0.6, 0.6), rr(0, 6.28), rr(-0.5, 0.5));
+    g.rotateX(e.x); g.rotateY(e.y); g.rotateZ(e.z);
+    const a = rr(0, 6.28), rd = rr(0, radio * .55);
+    g.translate(Math.cos(a) * rd, alto + rr(-radio * .35, radio * .5), Math.sin(a) * rd);
+    geos.push(g);
+  }
+  return fusiona(geos);
+}
+/* ÁRBOL CON RAMAS. El reclamo era justo: un cilindro con una nube de hojas no es
+   un árbol. Acá el tronco es cónico, salen 4-5 RAMAS inclinadas hacia arriba a
+   distintas alturas, y las hojas van EN LA PUNTA de cada rama más una corona
+   arriba. Devuelve {leña, hojas}: dos geometrías fusionadas por especie, que
+   después van instanciadas (mil árboles = 4 llamadas de dibujo igual). */
+function geoArbol(altura, nRamas, rHojas){
+  const lena = [], puntas = [];
+  const tr = new T.CylinderGeometry(.16, .42, altura, 6, 1, true);
+  tr.translate(0, altura / 2, 0);
+  lena.push(tr);
+  for (let i = 0; i < nRamas; i++){
+    const hFrac = .42 + .5 * (i / Math.max(1, nRamas - 1)) + rr(-.04, .04);
+    const largo = altura * rr(.3, .45) * (1.15 - hFrac * .5);
+    const inclina = rr(.6, 1.0);                 /* desde la vertical */
+    const giro = i * 2.399 + rr(-.3, .3);        /* ángulo áureo: no se apilan */
+    const g = new T.CylinderGeometry(.05, .13, largo, 4, 1, true);
+    g.translate(0, largo / 2, 0);
+    g.rotateZ(inclina); g.rotateY(giro);
+    const y0 = altura * hFrac;
+    g.translate(0, y0, 0);
+    lena.push(g);
+    /* punta de la rama, para colgar las hojas ahí */
+    const px2 = Math.cos(giro) * Math.sin(inclina) * largo;
+    const pz2 = -Math.sin(giro) * Math.sin(inclina) * largo;
+    puntas.push([px2, y0 + Math.cos(inclina) * largo, pz2]);
+  }
+  puntas.push([0, altura * 1.02, 0]);            /* la corona */
+  const hojas = [];
+  for (const [qx, qy, qz] of puntas){
+    const esCorona = qy > altura;
+    const n = esCorona ? 4 : 2;
+    for (let k = 0; k < n; k++){
+      const r2 = rHojas * (esCorona ? 1.25 : .9) * rr(.85, 1.2);
+      const g = new T.PlaneGeometry(r2 * 2.1, r2 * 1.6);
+      g.rotateX(rr(-.6, .6)); g.rotateY(rr(0, 6.28)); g.rotateZ(rr(-.5, .5));
+      g.translate(qx + rr(-.4, .4), qy + rr(-.2, .5), qz + rr(-.4, .4));
+      hojas.push(g);
+    }
+  }
+  return { lena: fusiona(lena), hojas: fusiona(hojas) };
+}
+/* VIENTO: las copas y los arbustos se mecen en el vertex shader. La fase sale de
+   la posición EN EL MUNDO (instanceMatrix), así cada árbol va a su ritmo, y la
+   amplitud crece con la altura: la base quieta, la copa meciéndose. */
+const VIENTO = { value: 0 };
+function conViento(mat, fuerza){
+  mat.onBeforeCompile = sh => {
+    /* el uniforme LEE de VIENTO.value: un solo reloj para todas las copas */
+    sh.uniforms.uViento = {};
+    Object.defineProperty(sh.uniforms.uViento, 'value',
+      { get: () => VIENTO.value, set: () => {} });
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uViento;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          #ifdef USE_INSTANCING
+            vec4 wq = instanceMatrix * vec4(transformed, 1.0);
+          #else
+            vec4 wq = vec4(transformed, 1.0);
+          #endif
+          float sw = sin(uViento*1.7 + wq.x*.21 + wq.z*.17)
+                   + .5*sin(uViento*2.9 + wq.z*.33 + wq.x*.07);
+          float amp = ${fuerza.toFixed(2)} * max(transformed.y - .6, 0.0) * .05;
+          transformed.x += sw * amp;
+          transformed.z += .6 * sw * amp;
+        }`);
+  };
+  return mat;
 }
 const ARB = [];                                /* [x,z,r] choque */
 /* ¿está el punto a menos de `margen` del sendero o de un punto de la historia?
@@ -453,16 +565,14 @@ function plantar(){
     (rnd() < .6 ? pos1 : pos2).push([x, y, z, rr(.8, 1.5)]);
     ARB.push([x, z, .7]);
   }
-  const tronco = new T.CylinderGeometry(.28, .48, 7.5, 7);
-  tronco.translate(0, 3.75, 0);
   const matTr = new T.MeshLambertMaterial({ map: TX.corteza });
   TX.corteza.repeat.set(1.6, 2.4);
-  const copa1 = geoCopa(9, 3.6, 8.2), copa2 = geoCopa(8, 3.1, 7.4);
-  const matC1 = new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .42, side: T.DoubleSide });
-  const matC2 = new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .42, side: T.DoubleSide });
-  const arma = (posiciones, copa, matC) => {
-    const iT = new T.InstancedMesh(tronco, matTr, posiciones.length);
-    const iC = new T.InstancedMesh(copa, matC, posiciones.length);
+  const esp1 = geoArbol(8.4, 5, 1.9), esp2 = geoArbol(7.2, 4, 1.7);
+  const matC1 = conViento(new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .26, side: T.DoubleSide }), 1);
+  const matC2 = conViento(new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .26, side: T.DoubleSide }), 1);
+  const arma = (posiciones, esp, matC) => {
+    const iT = new T.InstancedMesh(esp.lena, matTr, posiciones.length);
+    const iC = new T.InstancedMesh(esp.hojas, matC, posiciones.length);
     for (let i = 0; i < posiciones.length; i++){
       const [x, y, z, s] = posiciones[i];
       Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
@@ -472,20 +582,39 @@ function plantar(){
     iT.frustumCulled = iC.frustumCulled = false;
     scene.add(iT); scene.add(iC);
   };
-  arma(pos1, copa1, matC1);
-  arma(pos2, copa2, matC2);
-  /* arbustos: la misma tarjeta de hojas, al ras, chiquita */
-  const matA = new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .42, side: T.DoubleSide });
-  const arb = new T.InstancedMesh(geoCopa(3, 1.1, .7), matA, 420);
-  for (let i = 0; i < 420; i++){
+  arma(pos1, esp1, matC1);
+  arma(pos2, esp2, matC2);
+  /* ARBUSTOS: un domo de tarjetas ANCLADO al suelo (antes eran hojas sueltas
+     flotando: con razón se veían mal). Tinte más oscuro que los árboles y
+     plantados sólo donde el ruido dice bosque, no en el medio del pasto. */
+  const domo = (() => {
+    const gs = [];
+    for (let k = 0; k < 6; k++){
+      const g = new T.PlaneGeometry(rr(1.3, 1.8), rr(.9, 1.2));
+      g.rotateX(rr(-.35, .1)); g.rotateY(k / 6 * 6.28 + rr(-.3, .3)); g.rotateZ(rr(-.25, .25));
+      const a = k / 6 * 6.28, rd = rr(.15, .4);
+      g.translate(Math.cos(a) * rd, rr(.3, .75), Math.sin(a) * rd);
+      gs.push(g);
+    }
+    return fusiona(gs);
+  })();
+  const matA = conViento(new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .26,
+    side: T.DoubleSide, color: 0x9ab88a }), .6);
+  const arb = new T.InstancedMesh(domo, matA, 420);
+  let pa = 0, ita = 0;
+  while (pa < 420 && ita < 30000){
+    ita++;
     const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    if (vnoise(x * .011 + 60, z * .011 + 22) < .42) continue;   /* sólo en el bosque */
     const y = H(x, z);
-    const fuera = y < AGUA_Y + 1 || molesta(x, z, 5);
+    if (y < AGUA_Y + 1 || molesta(x, z, 5)) continue;
     Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
-    M4.compose(V3.set(x, fuera ? -999 : y, z), Q4,
-      new T.Vector3(1, 1, 1).multiplyScalar(rr(.7, 1.6)));
-    arb.setMatrixAt(i, M4);
+    M4.compose(V3.set(x, y, z), Q4,
+      new T.Vector3(1, 1, 1).multiplyScalar(rr(.8, 1.7)));
+    arb.setMatrixAt(pa, M4);
+    pa++;
   }
+  arb.count = pa;
   arb.frustumCulled = false;
   scene.add(arb);
   /* rocas con textura */
@@ -520,34 +649,105 @@ plantar();
   tr.position.set(p.x, y + 8, p.z);
   scene.add(tr);
   const copa = new T.Mesh(geoCopa(14, 9, 17),
-    new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .42, side: T.DoubleSide }));
+    new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .26, side: T.DoubleSide }));
   copa.position.set(p.x, y, p.z);
   copa.frustumCulled = false;
   scene.add(copa);
   ARB.push([p.x, p.z, 2.8]);
 }
-/* ---------------- LA CABAÑA: tablones fotográficos ------------------------- */
+/* ---------------- LA CABAÑA DE TRONCOS -------------------------------------
+   Cabaña de verdad: hiladas de TRONCOS con corteza fotográfica cruzados en las
+   esquinas (con las puntas sobresaliendo, como una cabaña de troncos real),
+   hastiales de tablones, techo a dos aguas con alero, CHIMENEA de piedra,
+   porche con postes y escalón, puerta con marco y una VENTANA que se enciende
+   cuando cae la noche. Todo fusionado: 6 mallas. */
+let ventanaMat = null;
 {
-  const p = POI.cabana, y = H(p.x, p.z);
-  const mM = new T.MeshLambertMaterial({ map: TX.madera });
-  const caja = (w, h, d, x, y2, z, ry) => {
-    const m = new T.Mesh(new T.BoxGeometry(w, h, d), mM);
-    m.position.set(p.x + x, y + y2, p.z + z);
-    if (ry) m.rotation.y = ry;
-    scene.add(m); return m;
-  };
-  caja(9, 4.4, 7, 0, 2.2, 0, .3);                       /* cuerpo */
-  const techo = new T.Mesh(new T.ConeGeometry(7.4, 3.4, 4),
-    new T.MeshLambertMaterial({ map: TX.tierra }));
-  techo.position.set(p.x, y + 6.1, p.z);
-  techo.rotation.y = .3 + Math.PI / 4;
+  const p = POI.cabana, y = H(p.x, p.z), RY = .3;
+  const AN = 9.2, FO = 7.0, RT = .24, NH = 8;           /* ancho, fondo, radio, hiladas */
+  const rot = (x, z) => [p.x + x * Math.cos(RY) + z * Math.sin(RY),
+                         p.z - x * Math.sin(RY) + z * Math.cos(RY)];
+  /* --- troncos: geometrías locales, un solo Mesh --- */
+  const logs = [];
+  for (let i = 0; i < NH; i++){
+    const yy = RT + i * RT * 1.85;
+    for (const lado of [-1, 1]){
+      const gA = new T.CylinderGeometry(RT, RT, AN + .9, 6, 1, true);
+      gA.rotateZ(Math.PI / 2);
+      gA.translate(0, yy, lado * FO / 2);
+      logs.push(gA);
+      const gB = new T.CylinderGeometry(RT, RT, FO + .9, 6, 1, true);
+      gB.rotateX(Math.PI / 2);
+      gB.translate(lado * AN / 2, yy + RT * .9, 0);
+      logs.push(gB);
+    }
+  }
+  const cuerpo = new T.Mesh(fusiona(logs), new T.MeshLambertMaterial({ map: TX.corteza }));
+  cuerpo.position.set(p.x, y, p.z); cuerpo.rotation.y = RY;
+  scene.add(cuerpo);
+  const altoMuro = RT + (NH - 1) * RT * 1.85 + RT;
+  /* --- hastiales (triángulos de tablones) --- */
+  const hast = [];
+  for (const lado of [-1, 1]){
+    const g = new T.BufferGeometry();
+    const a = altoMuro, pico = a + 2.6, w = AN / 2 + .2;
+    const pos = new Float32Array([-w, a, 0, w, a, 0, 0, pico, 0]);
+    g.setAttribute('position', new T.BufferAttribute(pos, 3));
+    g.setAttribute('normal', new T.BufferAttribute(new Float32Array([0,0,1, 0,0,1, 0,0,1]), 3));
+    g.setAttribute('uv', new T.BufferAttribute(new Float32Array([0,0, 2,0, 1,1.2]), 2));
+    g.setIndex(lado > 0 ? [0,1,2] : [2,1,0]);
+    g.translate(0, 0, lado * FO / 2);
+    hast.push(g);
+  }
+  const hastM = new T.Mesh(fusiona(hast),
+    new T.MeshLambertMaterial({ map: TX.madera, side: T.DoubleSide }));
+  hastM.position.set(p.x, y, p.z); hastM.rotation.y = RY;
+  scene.add(hastM);
+  /* --- techo a dos aguas con alero --- */
+  const tejas = [];
+  for (const lado of [-1, 1]){
+    const g = new T.BoxGeometry(AN + 1.6, .18, 4.6);
+    g.rotateX(lado * .52);
+    g.translate(0, altoMuro + 1.45, lado * 1.86);
+    tejas.push(g);
+  }
+  const techo = new T.Mesh(fusiona(tejas), new T.MeshLambertMaterial({ map: TX.madera }));
+  techo.position.set(p.x, y, p.z); techo.rotation.y = RY;
   scene.add(techo);
-  const puerta = new T.Mesh(new T.BoxGeometry(1.5, 2.6, .2),
-    new T.MeshLambertMaterial({ color: 0x3a2a1a }));
-  puerta.position.set(p.x + Math.sin(.3) * 3.6 - 1, y + 1.3, p.z + Math.cos(.3) * 3.6);
-  puerta.rotation.y = .3;
-  scene.add(puerta);
-  ARB.push([p.x, p.z, 5.6]);
+  /* --- chimenea de piedra, humeando no (todavía) --- */
+  const chi = new T.Mesh(new T.BoxGeometry(1.2, altoMuro + 4.2, 1.2),
+    new T.MeshLambertMaterial({ map: TX.roca }));
+  const [cx2, cz2] = rot(AN / 2 - .4, -FO / 2 + 1.2);
+  chi.position.set(cx2, y + (altoMuro + 4.2) / 2, cz2); chi.rotation.y = RY;
+  scene.add(chi);
+  /* --- porche: piso, dos postes, techito y escalón --- */
+  const por = [];
+  const pf = new T.BoxGeometry(4.6, .22, 2.6); pf.translate(0, .5, FO / 2 + 1.5); por.push(pf);
+  const esc = new T.BoxGeometry(2.2, .22, .8); esc.translate(0, .24, FO / 2 + 2.9); por.push(esc);
+  for (const lado of [-1, 1]){
+    const po = new T.CylinderGeometry(.12, .14, 2.4, 5, 1, true);
+    po.translate(lado * 1.9, 1.7, FO / 2 + 2.4); por.push(po);
+  }
+  const pt = new T.BoxGeometry(5.2, .14, 3.2);
+  pt.rotateX(.16); pt.translate(0, 3.0, FO / 2 + 1.6); por.push(pt);
+  const porM = new T.Mesh(fusiona(por), new T.MeshLambertMaterial({ map: TX.madera }));
+  porM.position.set(p.x, y, p.z); porM.rotation.y = RY;
+  scene.add(porM);
+  /* --- puerta con marco + VENTANA que se prende de noche --- */
+  const pu = [];
+  const ph = new T.BoxGeometry(1.4, 2.5, .16); ph.translate(-1.1, 1.55, FO / 2 + .13); pu.push(ph);
+  const ma1 = new T.BoxGeometry(.18, 2.7, .2); ma1.translate(-1.85, 1.6, FO / 2 + .12); pu.push(ma1);
+  const ma2 = new T.BoxGeometry(.18, 2.7, .2); ma2.translate(-.35, 1.6, FO / 2 + .12); pu.push(ma2);
+  const puM = new T.Mesh(fusiona(pu), new T.MeshLambertMaterial({ color: 0x2e2015 }));
+  puM.position.set(p.x, y, p.z); puM.rotation.y = RY;
+  scene.add(puM);
+  ventanaMat = new T.MeshBasicMaterial({ color: 0x584a33 });
+  const ven = new T.Mesh(new T.PlaneGeometry(1.2, 1.0), ventanaMat);
+  const [vx2, vz2] = rot(1.6, FO / 2 + .02);
+  ven.position.set(vx2, y + 2.0, vz2); ven.rotation.y = RY;
+  scene.add(ven);
+  ARB.push([p.x, p.z, 6.2]);
+  window.__CAB_PARTES = 6;
 }
 /* ---------------- EL MUELLE + BOTE ------------------------------------------ */
 {
@@ -693,6 +893,11 @@ function pasoLuz(dt){
   uniTerr.cieloCol.value.set(0xbcd8ee).multiplyScalar(hemi.intensity * .8);
   uniTerr.fogColor.value.copy(scene.fog.color);
   uniTerr.fogFar.value = scene.fog.far;
+  /* la ventana de la cabaña se enciende sola cuando oscurece */
+  if (ventanaMat){
+    const osc = cl(1 - sol.position.y / 160, 0, 1);
+    ventanaMat.color.setRGB(.35 + .65 * osc, .29 + .55 * osc, .2 + .28 * osc);
+  }
 }
 function dialogo(titulo, cuerpo, alCerrar){
   enDlg = true;
@@ -885,6 +1090,8 @@ function bucle(t){
       P.needsUpdate = true;
     }
   }
+  VIENTO.value = t0;
+  AGUAU.value = t0;
   ponCam();
   ren.render(scene, cam);
 }
@@ -935,6 +1142,8 @@ window.__S = {
     save: (() => { try { return JSON.parse(localStorage.getItem('senda1') || 'null'); } catch(e){ return null; } })() };
   },
   entrar, tp(x, z){ px = x; pz = z; },
+  aguaT(){ return AGUAU.value; }, vientoT(){ return VIENTO.value; },
+  cabPartes(){ return window.__CAB_PARTES || 0; },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
   dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
   usar(){ if ($('bUsar').classList.contains('on') && !enDlg) llegaObjetivo(); },
