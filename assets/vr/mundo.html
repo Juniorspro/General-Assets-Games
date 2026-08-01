@@ -1351,14 +1351,46 @@ function salta(){
 /* ==========================================================================
    8. SESIÓN XR (6DoF de verdad, cuando el aparato lo permite)
    ========================================================================== */
-let XR = { ses: null, tipo: '', subeY: 0 };
-async function entraXR(){
-  if (!navigator.xr) throw new Error('sin navigator.xr');
-  const modo = DIAG.xr_ar ? 'immersive-ar' : 'immersive-vr';
-  const ses = await navigator.xr.requestSession(modo, {
+let XR = { ses: null, tipo: '', subeY: 0, modo: '', err: '' };
+/* ---------------------------------------------------------------------------
+   PEDIR LA SESIÓN, Y PEDIRLA EN EL MISMO TICK DEL TOQUE.
+   requestSession() exige "activación transitoria de usuario". Esperar un
+   requestFullscreen() o un screen.orientation.lock() LA CONSUME, y entonces la
+   sesión se rechaza y el permiso de AR NUNCA aparece en pantalla: parece que el
+   botón no hiciera nada. Por eso acá no hay un solo await antes del pedido, y en
+   modo XR ni se pide pantalla completa (la sesión ya toma la pantalla).
+   --------------------------------------------------------------------------- */
+function pedirSesionXR(){
+  XR.err = '';
+  if (!navigator.xr)
+    return Promise.reject(new Error('este navegador no expone navigator.xr'));
+  /* se intenta AR igual aunque el sondeo del arranque haya dicho que no: el
+     sondeo puede haber corrido antes de que ARCore estuviera listo */
+  XR.modo = (DIAG.xr_vr && !DIAG.xr_ar) ? 'immersive-vr' : 'immersive-ar';
+  return navigator.xr.requestSession(XR.modo, {
     optionalFeatures: ['local-floor', 'dom-overlay', 'hand-tracking'],
     domOverlay: { root: $('hud') }
   });
+}
+function falloXR(e){
+  XR.err = ((e && e.name) ? e.name + ': ' : '') + ((e && e.message) || e);
+  /* el motivo queda ESCRITO en el panel del menú, no en un aviso de 4 segundos:
+     desde un celular no hay forma de leer un cartel que se va */
+  $('menu').style.display = 'block';
+  $('hud').classList.remove('on');
+  $('diag').textContent =
+    'LA SESIÓN DE AR NO ARRANCÓ\n' +
+    'modo pedido: ' + XR.modo + '\n' +
+    'motivo: ' + XR.err + '\n' +
+    '\nSi el motivo habla de "user gesture" o "activation", es un problema del\n' +
+    'programa. Si dice "not supported" o "NotSupportedError", este aparato no\n' +
+    'tiene ARCore: hace falta que el modelo esté en la lista de Google\n' +
+    '(developers.google.com/ar/devices) y "Servicios de Google Play para RA"\n' +
+    'instalado. Y dentro de una WebView no existe WebXR en ningún caso.\n' +
+    '\nSin AR el techo es "Giro + inclinación", que sí funciona acá.';
+  aviso('AR no arrancó: ' + XR.err + ' — el motivo quedó escrito en el menú', 6000);
+}
+async function montaXR(ses){
   /* 'local-floor' pone el cero en el PISO (lo que uno quiere). Si el aparato no
      lo da, se usa 'local', que pone el cero en la cabeza, y se compensa 1,55 m
      a mano; si no, uno arranca con los pies enterrados. */
@@ -1376,7 +1408,7 @@ async function entraXR(){
     requestAnimationFrame(bucle); aviso('salió de XR'); });
   ses.addEventListener('select', () => tocaMundo());
   ren.setAnimationLoop(bucleXR);
-  aviso('XR ' + modo + ' · espacio ' + XR.tipo + ' · 6DoF real: agachate, asomate, ' +
+  aviso('XR ' + XR.modo + ' · espacio ' + XR.tipo + ' · 6DoF real: agachate, asomate, ' +
         'da un paso y el mundo responde', 5200);
 }
 
@@ -1685,60 +1717,82 @@ $('dAgain').onclick = async () => { $('diag').textContent = 'midiendo…'; await
 /* PROBAR XR: pide la sesión de verdad y escribe el motivo exacto del fallo en el
    panel, que queda ahí para leerlo. Los avisos de 4 segundos no alcanzan para
    diagnosticar nada desde un celular. */
-$('dXR').onclick = async () => {
+$('dXR').onclick = () => {
   const L = [];
   const p = t => { L.push(t); $('diag').textContent = L.join('\n'); };
-  p('probando WebXR…');
   if (!navigator.xr){
-    p('NO hay navigator.xr.');
-    p('Si estás en una WebView, es esperable: WebView NO expone WebXR.');
-    p('Abrilo en Chrome de Android para tener 6DoF real.');
+    p('NO hay navigator.xr en este navegador.');
+    p('Dentro de una WebView es lo esperable: WebView NO expone WebXR,');
+    p('por eso nunca aparece el permiso de AR: no hay sesión que pedir.');
+    p('Para 6DoF real hay que abrirlo en Chrome de Android.');
     return;
   }
-  for (const m of ['immersive-ar', 'immersive-vr']){
-    let sop = false;
-    try { sop = await navigator.xr.isSessionSupported(m); } catch (e) { p(m + ': error ' + e.message); }
-    p(m + ' soportado: ' + (sop ? 'SÍ' : 'NO'));
-    if (!sop) continue;
-    try {
-      const s = await navigator.xr.requestSession(m, { optionalFeatures: ['local-floor'] });
+  p('pidiendo immersive-ar…  (si el aparato lo soporta, ACÁ tiene que');
+  p('aparecer el cartel de permiso de AR)');
+  /* se pide SIN ningún await antes, para no perder la activación del toque: es
+     exactamente el error que hacía que el permiso no apareciera nunca */
+  navigator.xr.requestSession('immersive-ar', { optionalFeatures: ['local-floor'] })
+    .then(async s => {
       let esp = 'ninguno';
       for (const t of ['local-floor', 'local', 'viewer']){
         try { await s.requestReferenceSpace(t); esp = t; break; } catch (e) {}
       }
-      p('  SESIÓN ABIERTA. espacio: ' + esp);
-      await s.end();
-      p('  (cerrada. elegí "XR 6DoF" arriba y entrá)');
-      return;
-    } catch (e) {
-      p('  requestSession falló: ' + ((e && e.name) || '') + ' ' + ((e && e.message) || e));
-    }
-  }
-  p('---');
-  p('En Android el 6DoF real sale de immersive-ar, y eso necesita');
-  p('"Servicios de Google Play para RA" (ARCore) instalado y Chrome, no WebView.');
-  p('Sin eso, el modo "Giro + inclinación" es lo máximo que se puede.');
+      p('SESIÓN DE AR ABIERTA. espacio: ' + esp);
+      try { await s.end(); } catch (e) {}
+      p('(cerrada) Tenés 6DoF real: elegí "XR 6DoF" arriba y entrá.');
+    }, async e => {
+      p('immersive-ar falló → ' + ((e && e.name) || '') + ': ' + ((e && e.message) || e));
+      let ar = false, vr = false;
+      try { ar = await navigator.xr.isSessionSupported('immersive-ar'); } catch (x) {}
+      try { vr = await navigator.xr.isSessionSupported('immersive-vr'); } catch (x) {}
+      p('isSessionSupported → ar: ' + ar + '   vr: ' + vr);
+      p('---');
+      if (/gesture|activation|SecurityError/i.test(XR.err + ' ' + ((e && e.name) || '') + ((e && e.message) || '')))
+        p('Habla de gesto/activación: es un problema del programa, avisame.');
+      else
+        p('NotSupportedError acá significa que este modelo no tiene ARCore.\n' +
+          'La lista de Google es developers.google.com/ar/devices y NO alcanza\n' +
+          'con que el celular sea potente: Google tiene que haber calibrado ese\n' +
+          'modelo. Si no está, immersive-ar no existe y no hay 6DoF en metros.\n' +
+          'El techo real ahí es "Giro + inclinación", que sí anda.');
+    });
 };
 
 async function entra(){
+  /* ---- PRIMERA LÍNEA, Y SIN NINGÚN await ANTES: el pedido de sesión XR tiene
+     que salir en el mismo tick del toque o pierde la activación de usuario y el
+     permiso de AR no aparece nunca. Todo lo demás va después. ---- */
+  let pXR = null;
+  if (modoSel === 'xr') pXR = pedirSesionXR().then(s => ({ ses: s }), e => ({ err: e }));
+
   audio(); if (AC && AC.state === 'suspended') AC.resume();
   $('menu').style.display = 'none';
   $('hud').classList.add('on');
   setEstereo(ESTEREO);
-  try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) {}
-  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
+  if (!pXR){
+    /* pantalla completa y traba de orientación SÓLO fuera de XR: en XR la sesión
+       ya toma la pantalla, y pedirlas antes es justo lo que rompía el permiso */
+    try { if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) {}
+    try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
+  }
   leePantalla();
-  if (modoSel === 'xr'){
-    try { await entraXR(); }
-    catch (e) { aviso('XR no arrancó (' + ((e && e.message) || e) + '). Voy con giro.', 4200);
-      P.src = DIAG.giroLlega ? 'giro' : 'toque'; await pideSensores(); }
+  if (pXR){
+    const r = await pXR;
+    if (r.ses){
+      try { await montaXR(r.ses); }
+      catch (e) { try { r.ses.end(); } catch (x) {} falloXR(e); }
+    } else {
+      falloXR(r.err);
+      P.src = DIAG.giroLlega ? 'giro' : 'toque'; P.calib = 0; await pideSensores();
+    }
   } else if (modoSel === 'giro'){
     P.src = 'giro'; P.calib = 0; await pideSensores();
     aviso('movés la cabeza con el celu; el pulgar camina', 3200);
   } else {
     P.src = 'toque'; aviso('arrastrá para mirar, WASD o palanca para caminar', 3200);
   }
-  if (pedirManos) manosOn();
+  /* si XR falló volvimos al menú: no se pide la cámara encima del menú */
+  if (pedirManos && !(XR.err && !XR.ses)) manosOn();
   if (!XR.ses){ tPrev = performance.now(); requestAnimationFrame(bucle); }
 }
 $('go').onclick = entra;
