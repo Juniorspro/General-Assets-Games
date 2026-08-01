@@ -48,10 +48,11 @@
     background:rgba(8,16,11,.5);padding:3px 6px;border-radius:6px}
 
   /* ---------------- MENÚ ---------------- */
+  /* el menú es un velo: DETRÁS se ve el valle en vivo (cámara cinemática) */
   #menu{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;
     justify-content:center;background:
-    radial-gradient(120% 100% at 50% 0%,rgba(38,80,44,.55) 0%,rgba(7,14,9,.94) 62%),
-    #0a1410;text-align:center;padding:20px}
+    linear-gradient(180deg,rgba(7,14,9,.16) 0%,rgba(7,14,9,.34) 55%,rgba(6,12,8,.72) 100%);
+    text-align:center;padding:16px;overflow-y:auto}
   #menu h1{margin:0;font-size:54px;font-weight:900;letter-spacing:.22em;
     background:linear-gradient(180deg,#f2ffe8,#8fc76e);-webkit-background-clip:text;
     background-clip:text;-webkit-text-fill-color:transparent}
@@ -60,7 +61,14 @@
     font-weight:800;letter-spacing:.06em;border-radius:14px;cursor:pointer;color:#eaf6df;
     background:rgba(24,46,28,.8);border:1.5px solid rgba(190,230,180,.4)}
   .mbtn.go{background:linear-gradient(180deg,#4e8f3d,#2c5c22);border-color:#bfe9a0}
-  #mCap{color:#8fc76e;font-size:12px;margin-top:14px;letter-spacing:.1em}
+  #mCap{color:#8fc76e;font-size:12px;margin-top:14px;letter-spacing:.1em;
+    text-shadow:0 1px 8px rgba(0,0,0,.8)}
+  .fila{display:flex;gap:8px;justify-content:center;margin:10px 0 0;flex-wrap:wrap}
+  .filaT{font-size:10.5px;letter-spacing:.22em;color:#9dbb90;margin-top:16px;
+    text-shadow:0 1px 6px rgba(0,0,0,.8)}
+  .chip{padding:8px 16px;border-radius:20px;font-weight:800;font-size:12.5px;cursor:pointer;
+    background:rgba(14,28,18,.72);border:1.5px solid rgba(190,230,180,.35);color:#cfe4c4}
+  .chip.on{background:linear-gradient(180deg,#4e8f3d,#2c5c22);border-color:#bfe9a0;color:#f2ffe8}
   #cargando{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;
     background:#0a1410;color:#9dbb90;font-size:13px;letter-spacing:.2em}
 </style>
@@ -86,6 +94,18 @@
   <div class="mbtn go" id="mJugar">EMPEZAR LA HISTORIA</div>
   <div class="mbtn" id="mSeguir" style="display:none">CONTINUAR</div>
   <div id="mCap"></div>
+  <div class="filaT" id="tLang">IDIOMA</div>
+  <div class="fila" id="fLang">
+    <div class="chip" data-l="es">ESPAÑOL</div>
+    <div class="chip" data-l="en">ENGLISH</div>
+    <div class="chip" data-l="pt">PORTUGUÊS</div>
+  </div>
+  <div class="filaT" id="tGfx">GRÁFICOS</div>
+  <div class="fila" id="fGfx">
+    <div class="chip" data-g="b">BAJOS</div>
+    <div class="chip" data-g="m">MEDIOS</div>
+    <div class="chip" data-g="a">ALTOS</div>
+  </div>
 </div>
 <div id="cargando">CARGANDO EL VALLE…</div>
 
@@ -288,9 +308,26 @@ const scene = new T.Scene();
 TX.cielo.mapping = T.EquirectangularReflectionMapping;
 scene.background = TX.cielo;
 scene.backgroundIntensity = 1;
-/* PMREM del mismo cielo: es lo que hace que el LAGO refleje el amanecer */
+/* PMREM para los reflejos del lago. NO se usa la foto tal cual: debajo de su
+   horizonte es casi negra (el suelo del que la sacaron), y cualquier ola con
+   pendiente hace que el reflejo caiga ahí: franjas negras (pasó). Se fabrica un
+   entorno con la MITAD DE ARRIBA de la foto y un degradado de agua/bruma en la
+   de abajo: ahora las olas pueden ser altas y el reflejo siempre es plausible. */
 const pm = new T.PMREMGenerator(ren);
-scene.environment = pm.fromEquirectangular(TX.cielo).texture;
+{
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const g = c.getContext('2d');
+  g.drawImage(TX.cielo.image, 0, 0, 1024, 512);
+  const d = g.createLinearGradient(0, 256, 0, 512);
+  d.addColorStop(0, 'rgba(190,205,208,1)');
+  d.addColorStop(.25, 'rgba(120,150,150,1)');
+  d.addColorStop(1, 'rgba(30,52,58,1)');
+  g.fillStyle = d; g.fillRect(0, 256, 1024, 256);
+  const envTex = new T.CanvasTexture(c);
+  envTex.mapping = T.EquirectangularReflectionMapping;
+  envTex.colorSpace = T.SRGBColorSpace;
+  scene.environment = pm.fromEquirectangular(envTex).texture;
+}
 scene.fog = new T.Fog(new T.Color('#cfd8c8'), 60, 430);
 const cam = new T.PerspectiveCamera(72, 1, .1, 1200);
 cam.rotation.order = 'YXZ';
@@ -428,6 +465,16 @@ const terrChunks = [];
   f.position.y = -10;
   f.frustumCulled = false;
   scene.add(f);
+  /* PARED DE LOMAS LEJANAS: una falda plana converge exactamente a la altura del
+     ojo, así que desde cualquier punto alto (la colina del roble, la cámara del
+     menú) se veía la franja oscura de la foto del cielo entre la falda y el
+     horizonte. Este anillo sube hasta +70 a 1.100 m: a esa distancia la niebla lo
+     pinta liso y se lee como una serranía en la bruma que CIERRA el horizonte. */
+  const pared = new T.Mesh(new T.CylinderGeometry(1100, 660, 78, 24, 1, true),
+    new T.MeshLambertMaterial({ color: 0x51684c, side: T.BackSide }));
+  pared.position.y = 31;         /* base -8, borde +70 */
+  pared.frustumCulled = false;
+  scene.add(pared);
 }
 /* ------------------------------- EL LAGO ----------------------------------- */
 /* AGUA VIVA: plano con grilla (para el oleaje de vértices) + normal perturbada
@@ -436,26 +483,38 @@ const terrChunks = [];
    El plano es cuadrado a propósito: donde el terreno está más alto lo tapa la
    prueba de profundidad, así que la orilla la dibuja el propio lago. */
 const AGUAU = { value: 0 };
-const aguaMat = new T.MeshStandardMaterial({ color: 0x2e4a3e, metalness: .9,
-  roughness: .2, transparent: true, opacity: .94 });
+const aguaMat = new T.MeshStandardMaterial({ color: 0x274a44, metalness: .96,
+  roughness: .14, transparent: true, opacity: .96 });
+aguaMat.envMapIntensity = .72;
 aguaMat.onBeforeCompile = sh => {
   sh.uniforms.uT = AGUAU;
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;')
+    .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;varying float vD;')
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       vWp = position.xy;
-      transformed.z += sin(position.x*.075 + uT*1.15)*.09
-                     + cos(position.y*.06 - uT*.85)*.07;`);
+      /* cuatro trenes de olas cruzados: marejada larga + dos medianas + picada */
+      transformed.z += sin(position.x*.055 + uT*1.05)*.22
+                     + cos(position.y*.048 - uT*.85)*.18
+                     + sin(position.x*.13 + position.y*.09 + uT*1.7)*.10
+                     + cos(position.x*.021 - position.y*.031 + uT*.5)*.16;
+      vD = -(modelViewMatrix * vec4(transformed, 1.0)).z;`);
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;')
+    .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;varying float vD;')
     .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
       {
-        float a1 = sin(vWp.x*.42 + uT*1.9)*.045 + sin(vWp.x*.16 - uT*1.1)*.028;
-        float a2 = cos(vWp.y*.38 + uT*1.5)*.045 + cos(vWp.y*.14 + uT*.8)*.028;
+        /* seis trenes de rizado: MUCHAS olas chicas encima de la marejada.
+           El rizado se APAGA con la distancia: de cerca agua brava, de lejos
+           espejo — sin esto, en ángulo rasante el rizado pescaba la franja
+           brillante del horizonte y el fondo del lago se quemaba en blanco. */
+        float lejos = clamp(1.0 - vD / 300.0, .28, 1.0);
+        float a1 = (sin(vWp.x*.42 + uT*1.9)*.09  + sin(vWp.x*1.3 - uT*2.6)*.05
+                 + sin((vWp.x+vWp.y)*2.7 + uT*3.4)*.028) * lejos;
+        float a2 = (cos(vWp.y*.38 + uT*1.5)*.09  + cos(vWp.y*1.1 + uT*2.2)*.05
+                 + cos((vWp.y-vWp.x)*2.3 - uT*3.1)*.028) * lejos;
         normal = normalize(normal + vec3(a1, a2, 0.0));
       }`);
 };
-const agua = new T.Mesh(new T.PlaneGeometry(380, 380, 40, 40), aguaMat);
+const agua = new T.Mesh(new T.PlaneGeometry(380, 380, 84, 84), aguaMat);
 agua.rotation.x = -Math.PI / 2;
 agua.position.set(POI.lago.x, AGUA_Y, POI.lago.z);
 scene.add(agua);
@@ -876,7 +935,16 @@ const marca3d = new T.Mesh(new T.OctahedronGeometry(1.1, 0),
 scene.add(marca3d);
 
 /* ================================ HISTORIA ================================= */
-const CAPS = [
+/* ===== IDIOMAS. El texto ES la historia: va entero en los tres. ===== */
+const L = {
+es: { ui: { sub: 'la historia del guardabosque · un valle entero para caminar',
+  empezar: 'EMPEZAR LA HISTORIA', otra: 'JUGAR OTRA VEZ', denuevo: 'EMPEZAR DE NUEVO',
+  seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENÚ', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
+  idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAJOS', g_m: 'MEDIOS', g_a: 'ALTOS',
+  completa: (m2, mn) => 'HISTORIA COMPLETA · ' + m2 + ' m caminados · ' + mn + ' min',
+  introT: 'El valle',
+  intro: 'Volviste después de veinte años.\nEl valle sigue igual: el olor a pino, el sendero,\nla niebla de la mañana.\n\nLa cabaña del abuelo está al norte. Seguí el sendero.' },
+caps: [
   { n: 'CAPÍTULO 1', t: 'EL REGRESO', obj: 'cabana', objT: 'Llegá a la cabaña del abuelo',
     dT: 'La cabaña', d: 'La puerta está cerrada con el pasador de siempre.\nHay una nota clavada, con la letra del abuelo:\n\n«Si volviste, ya sabés adónde fui.\nEl roble grande guarda lo que no te pude decir.»' },
   { n: 'CAPÍTULO 2', t: 'EL ROBLE VIEJO', obj: 'roble', objT: 'Encontrá el roble grande de la colina',
@@ -889,7 +957,54 @@ const CAPS = [
     dT: 'La última nota', d: 'La luz del farol tiembla y se queda quieta.\nBajo la piedra del altar, la última nota:\n\n«Nunca me fui del valle. Estoy en cada árbol\nque plantamos juntos. Cuidalo por los dos.»' },
   { n: 'CAPÍTULO 6', t: 'EL AMANECER', obj: 'cabana', objT: 'Volvé a casa',
     dT: 'FIN', d: 'El sol vuelve a salir sobre el valle.\nLa cabaña ya no está vacía: ahora vivís acá.\n\nSENDA — fin de la historia.\nGracias por caminarla.' }
-];
+] },
+en: { ui: { sub: "the ranger's story · a whole valley to walk",
+  empezar: 'START THE STORY', otra: 'PLAY AGAIN', denuevo: 'START OVER',
+  seguir: 'CONTINUE', correr: 'RUN', menu: 'MENU', usar: '◉ USE', dlgGo: 'CONTINUE ▸',
+  idioma: 'LANGUAGE', graficos: 'GRAPHICS', g_b: 'LOW', g_m: 'MEDIUM', g_a: 'HIGH',
+  completa: (m2, mn) => 'STORY COMPLETE · ' + m2 + ' m walked · ' + mn + ' min',
+  introT: 'The valley',
+  intro: 'You came back after twenty years.\nThe valley is just the same: the pine smell, the trail,\nthe morning mist.\n\nGrandpa\u2019s cabin is up north. Follow the trail.' },
+caps: [
+  { n: 'CHAPTER 1', t: 'THE RETURN', obj: 'cabana', objT: "Reach grandpa's cabin",
+    dT: 'The cabin', d: 'The door is latched the way it always was.\nA note is nailed to it, in grandpa\u2019s handwriting:\n\n\u201cIf you came back, you know where I went.\nThe old oak keeps what I never got to tell you.\u201d' },
+  { n: 'CHAPTER 2', t: 'THE OLD OAK', obj: 'roble', objT: 'Find the great oak on the hill',
+    dT: 'The oak', d: 'A heart is carved into the bark, forty years old.\nBetween the roots, a tin box:\nthe boat key, and one more line:\n\n\u201cThe lake keeps what we lost. Go down to the dock.\u201d' },
+  { n: 'CHAPTER 3', t: 'THE DOCK', obj: 'muelle', objT: 'Go down to the lake dock',
+    dT: 'The dock', d: 'The boat is still tied up, worn by twenty winters.\nInside, wrapped in canvas: grandpa\u2019s lantern.\nIt still works.\n\nThe sun is setting. Fireflies come out early here.' },
+  { n: 'CHAPTER 4', t: 'THE LIGHTS', obj: 'santuario', objT: 'Follow the fireflies through the woods',
+    dT: 'The stone circle', d: 'The fireflies led you to the valley\u2019s shrine.\nGrandpa brought you here once, at night, like now.\n\n\u201cLight the lantern on the altar,\u201d he always said.' },
+  { n: 'CHAPTER 5', t: 'THE SHRINE', obj: 'santuario', objT: 'Light the lantern on the altar', usar: true,
+    dT: 'The last note', d: 'The lantern\u2019s flame trembles, then holds still.\nUnder the altar stone, the last note:\n\n\u201cI never left the valley. I\u2019m in every tree\nwe planted together. Look after it for us both.\u201d' },
+  { n: 'CHAPTER 6', t: 'THE SUNRISE', obj: 'cabana', objT: 'Go back home',
+    dT: 'THE END', d: 'The sun rises over the valley again.\nThe cabin isn\u2019t empty anymore: you live here now.\n\nSENDA \u2014 end of the story.\nThank you for walking it.' }
+] },
+pt: { ui: { sub: 'a história do guarda-florestal · um vale inteiro para caminhar',
+  empezar: 'COMEÇAR A HISTÓRIA', otra: 'JOGAR DE NOVO', denuevo: 'RECOMEÇAR',
+  seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENU', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
+  idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAIXOS', g_m: 'MÉDIOS', g_a: 'ALTOS',
+  completa: (m2, mn) => 'HISTÓRIA COMPLETA · ' + m2 + ' m caminhados · ' + mn + ' min',
+  introT: 'O vale',
+  intro: 'Você voltou depois de vinte anos.\nO vale continua igual: o cheiro de pinheiro, a trilha,\na névoa da manhã.\n\nA cabana do vovô fica ao norte. Siga a trilha.' },
+caps: [
+  { n: 'CAPÍTULO 1', t: 'O REGRESSO', obj: 'cabana', objT: 'Chegue à cabana do vovô',
+    dT: 'A cabana', d: 'A porta está trancada com o ferrolho de sempre.\nHá um bilhete pregado, com a letra do vovô:\n\n«Se você voltou, já sabe aonde eu fui.\nO carvalho grande guarda o que não pude te dizer.»' },
+  { n: 'CAPÍTULO 2', t: 'O CARVALHO VELHO', obj: 'roble', objT: 'Encontre o carvalho grande da colina',
+    dT: 'O carvalho', d: 'No tronco há um coração talhado há quarenta anos.\nEntre as raízes, uma caixa de lata:\na chave do barco, e mais uma linha:\n\n«O lago guarda o que perdemos. Desça ao píer.»' },
+  { n: 'CAPÍTULO 3', t: 'O PÍER', obj: 'muelle', objT: 'Desça ao píer do lago',
+    dT: 'O píer', d: 'O barco segue amarrado, gasto por vinte invernos.\nDentro, enrolado em lona: o lampião do vovô.\nAinda funciona.\n\nEstá entardecendo. Os vaga-lumes saem cedo aqui.' },
+  { n: 'CAPÍTULO 4', t: 'AS LUZES', obj: 'santuario', objT: 'Siga os vaga-lumes pela floresta',
+    dT: 'O círculo de pedras', d: 'Os vaga-lumes te trouxeram ao santuário do vale.\nO vovô te trouxe aqui uma só vez, de noite, como agora.\n\n«Acenda o lampião no altar», dizia sempre.' },
+  { n: 'CAPÍTULO 5', t: 'O SANTUÁRIO', obj: 'santuario', objT: 'Acenda o lampião no altar', usar: true,
+    dT: 'O último bilhete', d: 'A luz do lampião treme e fica quieta.\nSob a pedra do altar, o último bilhete:\n\n«Nunca saí do vale. Estou em cada árvore\nque plantamos juntos. Cuide dele por nós dois.»' },
+  { n: 'CAPÍTULO 6', t: 'O AMANHECER', obj: 'cabana', objT: 'Volte para casa',
+    dT: 'FIM', d: 'O sol volta a nascer sobre o vale.\nA cabana já não está vazia: agora você mora aqui.\n\nSENDA — fim da história.\nObrigado por caminhá-la.' }
+] } };
+let LANG = 'es';
+try { LANG = localStorage.getItem('senda_lang') || 'es'; } catch(e){}
+if (!L[LANG]) LANG = 'es';
+let CAPS = L[LANG].caps;
+const Tx = k => L[LANG].ui[k];
 /* luz por capítulo: [posSol, colorSol, intensidad, cielo bg, niebla, hemi] */
 const LUZCAP = [
   { sol: [.5, .7, .3],   solI: 2.4, bg: 1.0,  fog: '#cfd8c8', fogFar: 430, hemiI: .9 },
@@ -937,7 +1052,7 @@ function pasoLuz(dt){
   hemi.intensity = A2.hemiI + (B2.hemiI - A2.hemiI) * k;
   scene.backgroundIntensity = A2.bg + (B2.bg - A2.bg) * k;
   scene.fog.color.set(A2.fog).lerp(new T.Color(B2.fog), k);
-  scene.fog.far = A2.fogFar + (B2.fogFar - A2.fogFar) * k;
+  scene.fog.far = (A2.fogFar + (B2.fogFar - A2.fogFar) * k) * GFXQ[GFX].fogK;
   uniTerr.solDir.value.copy(sol.position).normalize();
   uniTerr.solCol.value.set(0xfff2d8).multiplyScalar(sol.intensity * .56);
   uniTerr.cieloCol.value.set(0xbcd8ee).multiplyScalar(hemi.intensity * .8);
@@ -972,9 +1087,8 @@ function finDeHistoria(){
   guardarFin();
   $('menu').style.display = 'flex';
   $('hud').classList.remove('on');
-  $('mCap').textContent = 'HISTORIA COMPLETA · ' + Math.round(stats.dist) + ' m caminados · ' +
-    Math.round(stats.t / 60) + ' min';
-  $('mJugar').textContent = 'JUGAR OTRA VEZ';
+  $('mCap').textContent = Tx('completa')(Math.round(stats.dist), Math.round(stats.t / 60));
+  $('mJugar').textContent = Tx('otra');
   $('mSeguir').style.display = 'none';
 }
 function guardarFin(){ try { localStorage.removeItem('senda1'); } catch(e){} }
@@ -1041,7 +1155,7 @@ $('bCorre').addEventListener('pointerdown', e => { e.preventDefault();
   corre = !corre; $('bCorre').classList.toggle('on', corre); });
 $('bMenu').addEventListener('pointerdown', e => { e.preventDefault();
   fase = 'menu'; $('menu').style.display = 'flex'; $('hud').classList.remove('on');
-  $('mJugar').textContent = 'EMPEZAR DE NUEVO';
+  $('mJugar').textContent = Tx('denuevo');
   const sv = cargar();
   if (sv && sv.cap > 0){ $('mSeguir').style.display = 'block';
     $('mCap').textContent = CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t; }
@@ -1093,9 +1207,13 @@ addEventListener('keyup', e => {
 });
 
 /* ------------------------ resolución adaptativa ---------------------------- */
+const GFXQ = { b: { dpr: .7, fogK: .78 }, m: { dpr: 1.15, fogK: 1 }, a: { dpr: 2, fogK: 1.25 } };
+let GFX = 'm';
+try { GFX = localStorage.getItem('senda_gfx') || 'm'; } catch(e){}
+if (!GFXQ[GFX]) GFX = 'm';
 let rs = 1, rsVotos = 0, tRS = 0, fps = 60;
 function aplicaRS(){
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, GFXQ[GFX].dpr);
   ren.setPixelRatio(dpr * rs);
   ren.setSize(innerWidth, innerHeight, false);
   cam.aspect = innerWidth / innerHeight;
@@ -1126,6 +1244,17 @@ function bucle(t){
   if (msAcum > .5){ fps = fps * .3 + (nCuadros / msAcum) * .7; msAcum = 0; nCuadros = 0;
     $('fps').textContent = fps.toFixed(0) + ' fps · ' + (rs * 100 | 0) + '% · ' +
       ren.info.render.calls + ' dib · ' + (ren.info.render.triangles / 1000).toFixed(0) + 'k tri'; }
+  if (fase !== 'juego'){
+    /* MENÚ: el valle se ve DETRÁS, con una cámara que orbita despacio entre la
+       cabaña y el lago (el pedido: que el fondo del menú sea el mapa) */
+    const cx2 = (POI.cabana.x + POI.lago.x) / 2, cz2 = (POI.cabana.z + POI.lago.z) / 2;
+    const a = t0 * .045;
+    cam.position.set(cx2 + Math.cos(a) * 240, 64 + Math.sin(t0 * .1) * 10,
+                     cz2 + Math.sin(a) * 240);
+    cam.lookAt(cx2, 0, cz2);
+    cam.fov = 62; cam.updateProjectionMatrix();
+    pasoLuz(dt);
+  }
   if (fase === 'juego'){
     if (!enDlg) fisica(dt);
     pasoLuz(dt);
@@ -1142,7 +1271,7 @@ function bucle(t){
   }
   VIENTO.value = t0;
   AGUAU.value = t0;
-  ponCam();
+  if (fase === 'juego') ponCam();
   ren.render(scene, cam);
 }
 requestAnimationFrame(bucle);
@@ -1158,7 +1287,7 @@ function entrar(desde){
     px = POI.inicio.x; pz = POI.inicio.z; yaw = 0; pitch = -.03;   /* mirando al valle, no al borde */
     stats.t = 0; stats.dist = 0;
     ponCap(0);
-    dialogo('El valle', 'Volviste después de veinte años.\nEl valle sigue igual: el olor a pino, el sendero,\nla niebla de la mañana.\n\nLa cabaña del abuelo está al norte. Seguí el sendero.', null);
+    dialogo(Tx('introT'), Tx('intro'), null);
   } else {
     const sv = cargar();
     const c2 = sv ? sv.cap : 0;
@@ -1168,6 +1297,50 @@ function entrar(desde){
     ponCap(c2, true);
   }
 }
+/* ---------- idioma ---------- */
+function aplicaIdioma(){
+  CAPS = L[LANG].caps;
+  document.querySelector('#menu .sub').textContent = Tx('sub');
+  if (!/OTRA|AGAIN|DE NOVO|DE NUEVO|OVER|RECOME/.test($('mJugar').textContent))
+    $('mJugar').textContent = Tx('empezar');
+  $('mSeguir').textContent = Tx('seguir');
+  $('tLang').textContent = Tx('idioma');
+  $('tGfx').textContent = Tx('graficos');
+  const g = { b: 'g_b', m: 'g_m', a: 'g_a' };
+  document.querySelectorAll('#fGfx .chip').forEach(ch => ch.textContent = Tx(g[ch.dataset.g]));
+  $('bCorre').textContent = Tx('correr');
+  $('bMenu').textContent = Tx('menu');
+  $('bUsar').textContent = Tx('usar');
+  $('dlgGo').textContent = Tx('dlgGo');
+  document.querySelectorAll('#fLang .chip').forEach(ch =>
+    ch.classList.toggle('on', ch.dataset.l === LANG));
+  if (fase === 'juego') ponCap(cap, true);
+  const sv = cargar();
+  if (sv && sv.cap > 0 && fase === 'menu')
+    $('mCap').textContent = CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t;
+}
+function setLang(l){
+  if (!L[l]) return;
+  LANG = l;
+  try { localStorage.setItem('senda_lang', l); } catch(e){}
+  aplicaIdioma();
+}
+document.querySelectorAll('#fLang .chip').forEach(ch =>
+  ch.addEventListener('pointerdown', e => { e.preventDefault(); setLang(ch.dataset.l); }));
+
+/* ---------- calidad gráfica: tope de resolución y alcance de la niebla ------ */
+function setGfx(g){
+  if (!GFXQ[g]) return;
+  GFX = g;
+  try { localStorage.setItem('senda_gfx', g); } catch(e){}
+  document.querySelectorAll('#fGfx .chip').forEach(ch =>
+    ch.classList.toggle('on', ch.dataset.g === GFX));
+  rs = 1; aplicaRS();
+  luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;   /* re-apunta la niebla */
+}
+document.querySelectorAll('#fGfx .chip').forEach(ch =>
+  ch.addEventListener('pointerdown', e => { e.preventDefault(); setGfx(ch.dataset.g); }));
+
 {
   const sv = cargar();
   if (sv && sv.cap > 0){
@@ -1175,6 +1348,8 @@ function entrar(desde){
     $('mCap').textContent = sv ? (CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t) : '';
   }
 }
+aplicaIdioma();
+setGfx(GFX);
 $('mJugar').onclick = () => entrar(0);
 $('mSeguir').onclick = () => entrar(1);
 $('cargando').style.display = 'none';
@@ -1193,6 +1368,8 @@ window.__S = {
   },
   entrar, tp(x, z){ px = x; pz = z; },
   aguaT(){ return AGUAU.value; }, vientoT(){ return VIENTO.value; },
+  lang(){ return LANG; }, setLang, gfx(){ return GFX; }, setGfx,
+  pr(){ return ren.getPixelRatio(); },
   sendaPts(){ return SENDA_PTS; }, arboles(){ return ARB; },
   cabPartes(){ return window.__CAB_PARTES || 0; },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
