@@ -147,9 +147,13 @@ const cl = (v, a, b) => v < a ? a : (v > b ? b : v);
 const MAPA = 900, MITAD = MAPA / 2;
 const AGUA_Y = -3.2;
 function hash2(i, j){
-  let h = (i * 374761393 + j * 668265263) ^ 20260801;
-  h = (h ^ (h >> 13)) * 1274126177;
-  return ((h ^ (h >> 16)) >>> 0) / 4294967296;
+  /* Math.imul, no `*`: en JS el producto de enteros grandes se hace float y
+     PIERDE los bits bajos (>2^53) — el hash quedaba sesgado hacia abajo y el
+     ruido casi nunca pasaba de 0,36. Medido: la compuerta de densidad rechazaba
+     3.356 de 3.481 celdas y el "bosque" tenía 83 árboles. */
+  let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263)) ^ 20260801;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 function vnoise(x, z){
   const i = Math.floor(x), j = Math.floor(z);
@@ -208,10 +212,44 @@ function H(x, z){
   }
   return h;
 }
+/* HAY AGUA SOLO DONDE HAY LAGO. El plano de agua mide 380x380 alrededor del
+   lago; el resto del valle puede estar más bajo que la cota del agua y aun así
+   es tierra seca. La primera versión trataba TODO lo bajo como agua: la mitad
+   del mapa quedaba sin árboles y sin poder caminarse (medido: 1.827 de 3.481
+   celdas rechazadas por "agua" que no existe). */
+function enAgua(x, z, margenY){
+  return Math.abs(x - POI.lago.x) < 192 && Math.abs(z - POI.lago.z) < 192 &&
+         H(x, z) < AGUA_Y + (margenY == null ? .5 : margenY);
+}
 /* la SENDA que une los puntos (para pintar tierra en el splat y guiar) */
 const SENDA = [POI.inicio, POI.cabana, POI.roble, POI.muelle, POI.santuario];
-/* tramos que cruzan la zona baja del lago: acá el terreno se mantiene seco */
-const SECO = [[POI.roble, POI.muelle], [POI.muelle, POI.santuario]];
+/* EL CAMINO REAL ES CURVO. El splat lo pinta con curvas (control ±90 m), pero
+   los chequeos de "no plantar acá" y el corredor seco usaban las RECTAS entre
+   puntos: por eso había árboles ENCIMA del sendero visible (lo reportó el
+   jugador) y el corredor seco podía no coincidir con el camino pintado. Ahora
+   la curva se muestrea UNA vez y esa polilínea manda en todo: splat, plantado
+   y terreno seco. */
+const SENDA_PTS = [], PTS_SEG = [[]];
+for (let i = 1; i < SENDA.length; i++){
+  const a = SENDA[i - 1], b = SENDA[i];
+  const mx = (a.x + b.x) / 2 + (fbm(i * 9.7, i * 3.1) - .5) * 90;
+  const mz = (a.z + b.z) / 2 + (fbm(i * 4.3, i * 8.9) - .5) * 90;
+  const seg = [];
+  for (let k = 0; k <= 24; k++){
+    const t = k / 24, u = 1 - t;
+    const P = [u*u*a.x + 2*u*t*mx + t*t*b.x, u*u*a.z + 2*u*t*mz + t*t*b.z];
+    seg.push(P);
+    if (i === 1 || k > 0) SENDA_PTS.push(P);
+  }
+  PTS_SEG.push(seg);
+}
+/* tramos que cruzan la zona baja del lago: el terreno se mantiene seco A LO
+   LARGO DE LA CURVA (tramos 3 y 4: roble→muelle→santuario) */
+const SECO = [];
+for (const si of [3, 4])
+  for (let k = 1; k < PTS_SEG[si].length; k++)
+    SECO.push([{ x: PTS_SEG[si][k-1][0], z: PTS_SEG[si][k-1][1] },
+               { x: PTS_SEG[si][k][0],   z: PTS_SEG[si][k][1] }]);
 for (const k in POI) POI[k].h = alturaBase(POI[k].x, POI[k].z);
 POI.muelle.h = AGUA_Y + 1.1;                    /* el muelle nace a orilla */
 
@@ -288,14 +326,8 @@ const wz2u = z => (z + MITAD) / MAPA * 512;
   for (const [w, c] of [[16, 'rgba(140,0,0,.55)'], [8, 'rgba(255,0,0,.85)']]){
     g.strokeStyle = c; g.lineWidth = w; g.lineCap = g.lineJoin = 'round';
     g.beginPath();
-    g.moveTo(wx2u(SENDA[0].x), wz2u(SENDA[0].z));
-    for (let i = 1; i < SENDA.length; i++){
-      const a = SENDA[i - 1], b = SENDA[i];
-      /* leve curva para que no sea una regla */
-      const mx = (a.x + b.x) / 2 + (fbm(i * 9.7, i * 3.1) - .5) * 90;
-      const mz = (a.z + b.z) / 2 + (fbm(i * 4.3, i * 8.9) - .5) * 90;
-      g.quadraticCurveTo(wx2u(mx), wz2u(mz), wx2u(b.x), wz2u(b.z));
-    }
+    g.moveTo(wx2u(SENDA_PTS[0][0]), wz2u(SENDA_PTS[0][1]));
+    for (const P of SENDA_PTS) g.lineTo(wx2u(P[0]), wz2u(P[1]));
     g.stroke();
   }
   /* claros: cabaña y santuario sin hojarasca, con algo de tierra */
@@ -404,22 +436,22 @@ const terrChunks = [];
    El plano es cuadrado a propósito: donde el terreno está más alto lo tapa la
    prueba de profundidad, así que la orilla la dibuja el propio lago. */
 const AGUAU = { value: 0 };
-const aguaMat = new T.MeshStandardMaterial({ color: 0x2e4a3e, metalness: .92,
-  roughness: .12, transparent: true, opacity: .94 });
+const aguaMat = new T.MeshStandardMaterial({ color: 0x2e4a3e, metalness: .9,
+  roughness: .2, transparent: true, opacity: .94 });
 aguaMat.onBeforeCompile = sh => {
   sh.uniforms.uT = AGUAU;
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;')
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       vWp = position.xy;
-      transformed.z += sin(position.x*.075 + uT*1.15)*.16
-                     + cos(position.y*.06 - uT*.85)*.13;`);
+      transformed.z += sin(position.x*.075 + uT*1.15)*.09
+                     + cos(position.y*.06 - uT*.85)*.07;`);
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;')
     .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
       {
-        float a1 = sin(vWp.x*.42 + uT*1.9)*.11 + sin(vWp.x*.16 - uT*1.1)*.07;
-        float a2 = cos(vWp.y*.38 + uT*1.5)*.11 + cos(vWp.y*.14 + uT*.8)*.07;
+        float a1 = sin(vWp.x*.42 + uT*1.9)*.045 + sin(vWp.x*.16 - uT*1.1)*.028;
+        float a2 = cos(vWp.y*.38 + uT*1.5)*.045 + cos(vWp.y*.14 + uT*.8)*.028;
         normal = normalize(normal + vec3(a1, a2, 0.0));
       }`);
 };
@@ -526,8 +558,9 @@ function conViento(mat, fuerza){
             vec4 wq = vec4(transformed, 1.0);
           #endif
           float sw = sin(uViento*1.7 + wq.x*.21 + wq.z*.17)
-                   + .5*sin(uViento*2.9 + wq.z*.33 + wq.x*.07);
-          float amp = ${fuerza.toFixed(2)} * max(transformed.y - .6, 0.0) * .05;
+                   + .5*sin(uViento*2.9 + wq.z*.33 + wq.x*.07)
+                   + .22*sin(uViento*6.1 + wq.x*1.3 + wq.y*.9);
+          float amp = ${fuerza.toFixed(2)} * max(transformed.y - .6, 0.0) * .075;
           transformed.x += sw * amp;
           transformed.z += .6 * sw * amp;
         }`);
@@ -541,36 +574,50 @@ const ARB = [];                                /* [x,z,r] choque */
 function molesta(x, z, margen){
   for (const k in POI){ const p = POI[k];
     if (k !== 'lago' && Math.hypot(x - p.x, z - p.z) < 16) return true; }
-  for (let i = 1; i < SENDA.length; i++){
-    const a = SENDA[i - 1], b = SENDA[i];
-    const t = cl(((x - a.x) * (b.x - a.x) + (z - a.z) * (b.z - a.z)) /
-      ((b.x - a.x) ** 2 + (b.z - a.z) ** 2 || 1), 0, 1);
-    if (Math.hypot(x - (a.x + (b.x - a.x) * t), z - (a.z + (b.z - a.z) * t)) < margen)
-      return true;
+  const m2 = margen * margen;
+  for (const P of SENDA_PTS){
+    const dx = x - P[0], dz = z - P[1];
+    if (dx * dx + dz * dz < m2) return true;
   }
   return false;
 }
 const M4 = new T.Matrix4(), V3 = new T.Vector3(), Q4 = new T.Quaternion(), E3 = new T.Euler();
 function plantar(){
-  const pos1 = [], pos2 = [];                  /* dos especies */
-  let it = 0;
-  while (pos1.length + pos2.length < 1150 && it < 150000){
-    it++;
-    const x = rr(-MITAD + 14, MITAD - 14), z = rr(-MITAD + 14, MITAD - 14);
-    /* bosque por ruido: hay claros y hay espesura, no una alfombra pareja */
-    if (vnoise(x * .011 + 60, z * .011 + 22) < .40) continue;
+  /* GRILLA TEMBLADA en vez de tiros al azar: una celda de 15 m con jitter de
+     ±5 garantiza separación mínima (~5 m en el peor caso, ~15 típica) — nada de
+     árboles amontonados — y el ruido decide la DENSIDAD por zona, así hay
+     espesura y claros pero repartidos por todo el valle. */
+  const pos1 = [], pos2 = [];
+  const PASO_A = 17;   /* con el hash arreglado, 15 daba 1.875 árboles y 205k tri visibles */
+  const CTA = { tot: 0, dens: 0, agua: 0, camino: 0, ok: 0 };
+  window.__PLANTA = CTA;
+  for (let gz = -MITAD + 12; gz < MITAD - 12; gz += PASO_A)
+  for (let gx = -MITAD + 12; gx < MITAD - 12; gx += PASO_A){
+    CTA.tot++;
+    const x = gx + rr(-5, 5), z = gz + rr(-5, 5);
+    const dens = vnoise(x * .011 + 60, z * .011 + 22);
+    if (dens < .36){ CTA.dens++; continue; }              /* claro */
+    if (dens < .52 && rnd() > (dens - .36) * 5){ CTA.dens++; continue; }
     const y = H(x, z);
-    if (y < AGUA_Y + 1.2) continue;                       /* no en el agua */
-    if (molesta(x, z, 7)) continue;
-    (rnd() < .6 ? pos1 : pos2).push([x, y, z, rr(.8, 1.5)]);
+    if (enAgua(x, z, 1.2)){ CTA.agua++; continue; }
+    if (molesta(x, z, 15)){ CTA.camino++; continue; }     /* LEJOS del camino */
+    CTA.ok++;
+    (rnd() < .6 ? pos1 : pos2).push([x, y, z, rr(.75, 1.5)]);
     ARB.push([x, z, .7]);
   }
-  const matTr = new T.MeshLambertMaterial({ map: TX.corteza });
+  /* la LEÑA también se mece (misma fórmula y misma fase que sus hojas: como la
+     amplitud crece con la altura, la punta de la rama y su mata de hojas se
+     mueven JUNTAS y el árbol no se desarma) */
+  const matTr = conViento(new T.MeshLambertMaterial({ map: TX.corteza }), 1);
   TX.corteza.repeat.set(1.6, 2.4);
-  const esp1 = geoArbol(8.4, 5, 1.9), esp2 = geoArbol(7.2, 4, 1.7);
-  const matC1 = conViento(new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .26, side: T.DoubleSide }), 1);
-  const matC2 = conViento(new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .26, side: T.DoubleSide }), 1);
+  /* SEIS SILUETAS distintas (3 por especie): antes todos los árboles de una
+     especie eran clones rotados y el bosque se veía estampado */
+  const esp1v = [geoArbol(8.6, 5, 1.9), geoArbol(10.4, 6, 2.1), geoArbol(7.4, 4, 1.8)];
+  const esp2v = [geoArbol(7.2, 4, 1.7), geoArbol(8.8, 5, 1.8), geoArbol(6.2, 4, 1.5)];
+  const matC1 = conViento(new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .18, side: T.DoubleSide }), 1);
+  const matC2 = conViento(new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .18, side: T.DoubleSide }), 1);
   const arma = (posiciones, esp, matC) => {
+    if (!posiciones.length) return;
     const iT = new T.InstancedMesh(esp.lena, matTr, posiciones.length);
     const iC = new T.InstancedMesh(esp.hojas, matC, posiciones.length);
     for (let i = 0; i < posiciones.length; i++){
@@ -582,8 +629,10 @@ function plantar(){
     iT.frustumCulled = iC.frustumCulled = false;
     scene.add(iT); scene.add(iC);
   };
-  arma(pos1, esp1, matC1);
-  arma(pos2, esp2, matC2);
+  for (let v = 0; v < 3; v++){
+    arma(pos1.filter((_, i) => i % 3 === v), esp1v[v], matC1);
+    arma(pos2.filter((_, i) => i % 3 === v), esp2v[v], matC2);
+  }
   /* ARBUSTOS: un domo de tarjetas ANCLADO al suelo (antes eran hojas sueltas
      flotando: con razón se veían mal). Tinte más oscuro que los árboles y
      plantados sólo donde el ruido dice bosque, no en el medio del pasto. */
@@ -598,7 +647,7 @@ function plantar(){
     }
     return fusiona(gs);
   })();
-  const matA = conViento(new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .26,
+  const matA = conViento(new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .18,
     side: T.DoubleSide, color: 0x9ab88a }), .6);
   const arb = new T.InstancedMesh(domo, matA, 420);
   let pa = 0, ita = 0;
@@ -607,7 +656,7 @@ function plantar(){
     const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
     if (vnoise(x * .011 + 60, z * .011 + 22) < .42) continue;   /* sólo en el bosque */
     const y = H(x, z);
-    if (y < AGUA_Y + 1 || molesta(x, z, 5)) continue;
+    if (enAgua(x, z, 1) || molesta(x, z, 10)) continue;
     Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
     M4.compose(V3.set(x, y, z), Q4,
       new T.Vector3(1, 1, 1).multiplyScalar(rr(.8, 1.7)));
@@ -628,13 +677,14 @@ function plantar(){
   const roq = new T.InstancedMesh(gr, new T.MeshLambertMaterial({ map: TX.roca }), 70);
   for (let i = 0; i < 70; i++){
     let x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
-    for (let k = 0; k < 20 && molesta(x, z, 9); k++){
+    for (let k = 0; k < 20 && molesta(x, z, 14); k++){
       x = rr(-MITAD + 10, MITAD - 10); z = rr(-MITAD + 10, MITAD - 10); }
+    if (molesta(x, z, 14)) continue;   /* antes se plantaba IGUAL tras agotar los intentos */
     const y = H(x, z), s = rr(.8, 3.2);
     Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
-    M4.compose(V3.set(x, y < AGUA_Y + .5 ? -999 : y + s * .18, z), Q4, new T.Vector3(s, s, s));
+    M4.compose(V3.set(x, enAgua(x, z) ? -999 : y + s * .18, z), Q4, new T.Vector3(s, s, s));
     roq.setMatrixAt(i, M4);
-    if (s > 1.6 && y > AGUA_Y + .5) ARB.push([x, z, s * .8]);
+    if (s > 1.6 && !enAgua(x, z)) ARB.push([x, z, s * .8]);
   }
   roq.frustumCulled = false;
   scene.add(roq);
@@ -649,7 +699,7 @@ plantar();
   tr.position.set(p.x, y + 8, p.z);
   scene.add(tr);
   const copa = new T.Mesh(geoCopa(14, 9, 17),
-    new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .26, side: T.DoubleSide }));
+    new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .18, side: T.DoubleSide }));
   copa.position.set(p.x, y, p.z);
   copa.frustumCulled = false;
   scene.add(copa);
@@ -949,7 +999,7 @@ function fisica(dt){
   let nx = cl(px + pvx * dt, -MITAD + 6, MITAD - 6);
   let nz = cl(pz + pvz * dt, -MITAD + 6, MITAD - 6);
   /* ni por el agua ni a través de los troncos */
-  if (H(nx, nz) < AGUA_Y + .5){ nx = px; nz = pz; }
+  if (enAgua(nx, nz)){ nx = px; nz = pz; }
   for (const a of ARB){
     const dx = nx - a[0], dz = nz - a[1], d = Math.hypot(dx, dz), rq = a[2] + .5;
     if (d < rq && d > 1e-4){ nx = a[0] + dx / d * rq; nz = a[1] + dz / d * rq; }
@@ -1143,6 +1193,7 @@ window.__S = {
   },
   entrar, tp(x, z){ px = x; pz = z; },
   aguaT(){ return AGUAU.value; }, vientoT(){ return VIENTO.value; },
+  sendaPts(){ return SENDA_PTS; }, arboles(){ return ARB; },
   cabPartes(){ return window.__CAB_PARTES || 0; },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
   dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
