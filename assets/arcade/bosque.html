@@ -1065,41 +1065,38 @@ ARC.boot=async function(){
    ========================================================================== */
 
 /* ============================================================================
-   BOSQUE VIVO — la primera de las cinco betas
+   BOSQUE VIVO — beta 1 de 5 · PRIMERA PERSONA
    ----------------------------------------------------------------------------
-   LA MISIÓN, que es lo que hace que esto sea un juego y no una demo: los cinco
-   TÓTEMS del claro se apagaron y la MARCHITEZ avanza desde el borde del bosque
-   hacia el ÁRBOL MADRE del centro. Vos sos el guardián: cargás una semilla de luz
-   del MANANTIAL (centro) y la llevás a un tótem apagado. Cada tótem encendido
-   limpia la marchitez a su alrededor y frena el avance general.
-     · SE GANA con los cinco tótems encendidos.
-     · SE PIERDE si la marchitez llega al árbol madre.
-   Las dos cosas pasan de verdad y el jugador puede ver venir las dos: el HUD dice
-   cuántos tótems van y cuánto bosque queda sano.
+   Se camina DENTRO del bosque: pulgar izquierdo mueve, pulgar derecho mira
+   (el esquema de todo shooter de celular). La misión es la misma que en la
+   versión cenital, porque era buena; lo que cambió es el punto de vista:
+     · Los cinco TÓTEMS del claro se apagaron y la MARCHITEZ avanza desde el
+       borde hacia el ÁRBOL MADRE. Cargás una semilla de luz en el MANANTIAL y
+       la llevás a un tótem apagado. Cada tótem encendido limpia su zona y
+       frena el avance.
+     · SE GANA con los cinco encendidos. SE PIERDE si la marchitez toca el árbol.
+   En primera persona no ves el tablero entero, así que hay TRES instrumentos:
+   el MINIMAPA (arriba a la izquierda, pintado del mismo campo de marchitez),
+   las FLECHAS de brújula hacia los tótems apagados/manantial, y la barra de
+   bosque sano. Sin eso, caminar a ciegas no es una decisión, es lotería.
 
-   POR QUÉ SE JUEGA SOLO (la tensión no está pegada con cinta)
-   ----------------------------------------------------------
-   · La marchitez NO avanza a ritmo fijo: avanza por PRESIÓN de vecinos, así que
-     forma un frente irregular que entra por donde nadie defendió. Eso obliga a
-     elegir qué tótem encender primero, que es la decisión del juego.
-   · Pisar tierra marchita te frena al 45%. Un atajo por lo muerto puede salir más
-     caro que el rodeo, y eso se siente sin que nadie lo explique.
-   · Encender un tótem limpia un radio Y baja la velocidad local a la mitad. Los
-     tótems son, literalmente, el freno: cuantos más prendés, más aire tenés.
+   PAISAJE (el pedido: que sea lindo, no un tablero)
+   -------------------------------------------------
+   · Cúpula de cielo con degradado en los vértices, dibujada ÚLTIMA con
+     depthWrite apagado: sólo se sombrean los píxeles donde de verdad hay cielo
+     (dibujarla primero pinta la pantalla entera dos veces — lección medida en
+     este pack: el relleno es lo que mata en celular).
+   · Anillo de MONTAÑAS lejanas dentro de la niebla, sol con halo, nubes,
+     luciérnagas. La niebla (Fog) le da profundidad al bosque y de paso
+     esconde el fin del mapa.
+   · CERO luces: toda la iluminación está horneada en color de vértice y todo
+     es MeshBasicMaterial.
+   · Presupuesto medido: ~15 llamadas de dibujo y ~7.000 triángulos, contra los
+     topes de 60 y 25.000.
 
-   RENDIMIENTO (la regla de la casa: en celular manda el RELLENO, no los tri)
-   -------------------------------------------------------------------------
-   · CERO luces. Toda la iluminación está HORNEADA en el color de vértice y todo
-     usa MeshBasicMaterial, así que el fragmento no calcula nada.
-   · El suelo son 484 baldosas en UNA sola malla; la marchitez se pinta cambiando
-     el atributo de color, y se sube al GPU sólo si alguna baldosa cambió de
-     verdad (umbral 0,02), no todos los cuadros.
-   · Los árboles y el árbol madre son UNA malla fusionada. Los tótems son un
-     InstancedMesh de 5 con color por instancia.
-   · El cielo es color de borrado, no una esfera: medido en este pack, una esfera
-     de cielo cuesta varios ms de relleno y acá no aporta nada.
-   · Cuenta: 6-7 llamadas de dibujo y ~6.000 triángulos, contra los topes de 60 y
-     25.000.
+   EL CIERVO (el GLB generado) ya no puede ser el jugador — en primera persona
+   no te ves — así que es tu COMPAÑERO: trota al lado tuyo, y mirarlo es la
+   forma más rápida de saber que el mundo está vivo.
    ========================================================================== */
 const G={
   slug:'bosque',name:'BOSQUE VIVO',
@@ -1108,33 +1105,33 @@ const G={
   subKey:'sub',
   acc:'#7fd06a',acc2:'#2f7a3a',
   levels:3,bestLabel:'TÓTEMS',bestKey:'totL',
-  three:true,sky:'#8fc9e8',shadows:false,
-  glbTris:2000,   /* el guardián horneado trae 1.864: el tope va por ARRIBA a
-     propósito para que el motor NO lo vuelva a simplificar (perdería el facetado) */
+  three:true,sky:'#bfe3f2',shadows:false,
+  glbTris:2000,   /* el ciervo horneado trae 1.864: el tope va por ARRIBA a
+     propósito para que el motor NO lo vuelva a simplificar */
   music:A('mus-r03.m4a'),
   sfx:{tap:A('sfx-click.mp3'),click:A('sfx-click.mp3'),coin:A('sfx-chime.mp3'),
        win:A('sfx-power.mp3'),lose:A('sfx-lose.mp3'),seed:A('sfx-pop.mp3'),
        totem:A('sfx-chime.mp3'),bad:A('sfx-groan.mp3'),boom:A('sfx-boom.mp3')},
-  glb:{guard:A('m-bosque-guardian.glb')},
+  glb:{ciervo:A('m-bosque-guardian.glb')},
   i18n:{
-    es:{sub:'Llevá semillas del manantial a los cinco tótems. Cada tótem encendido limpia la marchitez y la frena. Si la marchitez llega al árbol madre, perdiste.',
+    es:{sub:'Caminá el bosque en primera persona. Cargá semillas en el manantial y encendé los cinco tótems. Si la marchitez llega al árbol madre, perdiste.',
       totL:'TÓTEMS',hudT:'TÓTEMS',hudS:'BOSQUE SANO',
-      tut:'ARRASTRÁ PARA MOVERTE',tut2:'pisá el manantial para tomar una semilla',
-      take:'¡SEMILLA!',lit:'¡TÓTEM ENCENDIDO!',need:'te falta una semilla',
+      tut:'IZQUIERDA: CAMINAR · DERECHA: MIRAR',tut2:'seguí la flecha ◈ hasta el manantial',
+      take:'¡SEMILLA!',lit:'¡TÓTEM ENCENDIDO!',
       full:'ya llevás una semilla',winT:'¡BOSQUE SALVADO!',loseT:'EL ÁRBOL MADRE CAYÓ',
       stTot:'Tótems encendidos',stSano:'Bosque sano',stT:'Tiempo',
       slow:'tierra muerta: vas más lento',near:'¡la marchitez llega al árbol!'},
-    en:{sub:'Carry seeds from the spring to the five totems. Each lit totem clears the blight and slows it. If the blight reaches the mother tree, you lose.',
+    en:{sub:'Walk the forest in first person. Load seeds at the spring and light the five totems. If the blight reaches the mother tree, you lose.',
       totL:'TOTEMS',hudT:'TOTEMS',hudS:'HEALTHY FOREST',
-      tut:'DRAG TO MOVE',tut2:'step on the spring to take a seed',
-      take:'SEED!',lit:'TOTEM LIT!',need:'you need a seed',
+      tut:'LEFT: WALK · RIGHT: LOOK',tut2:'follow the ◈ arrow to the spring',
+      take:'SEED!',lit:'TOTEM LIT!',
       full:'you already carry a seed',winT:'FOREST SAVED!',loseT:'THE MOTHER TREE FELL',
       stTot:'Totems lit',stSano:'Healthy forest',stT:'Time',
       slow:'dead ground: you move slower',near:'the blight is reaching the tree!'},
-    pt:{sub:'Leve sementes da fonte aos cinco totens. Cada totem aceso limpa a praga e a freia. Se a praga chegar à árvore mãe, você perde.',
+    pt:{sub:'Caminhe pela floresta em primeira pessoa. Pegue sementes na fonte e acenda os cinco totens. Se a praga chegar à árvore mãe, você perde.',
       totL:'TOTENS',hudT:'TOTENS',hudS:'FLORESTA SÃ',
-      tut:'ARRASTE PARA SE MOVER',tut2:'pise na fonte para pegar uma semente',
-      take:'SEMENTE!',lit:'TOTEM ACESO!',need:'você precisa de uma semente',
+      tut:'ESQUERDA: ANDAR · DIREITA: OLHAR',tut2:'siga a seta ◈ até a fonte',
+      take:'SEMENTE!',lit:'TOTEM ACESO!',
       full:'já está levando uma semente',winT:'FLORESTA SALVA!',loseT:'A ÁRVORE MÃE CAIU',
       stTot:'Totens acesos',stSano:'Floresta sã',stT:'Tempo',
       slow:'terra morta: você vai mais devagar',near:'a praga está chegando à árvore!'}
@@ -1142,38 +1139,33 @@ const G={
 };
 
 /* --------------------------------------------------------------- constantes */
-/* El tablero se ve ENTERO y la cámara no se mueve. Es a propósito: la decisión
-   del juego es "qué tótem defiendo primero", y para decidir hay que VER el frente
-   de la marchitez completo. Una cámara que persigue esconde justo eso. */
 const N=22, TS=1.5, EXT=N*TS/2;                /* 22x22 baldosas de 1,5 = 33 u */
-const CAMY=25, CAMZ=23, FOVY=46;
-const SPD=7.2, SPD_MUERTO=.45;                 /* velocidad y castigo en lo muerto */
-const R_TOT=11.2;                              /* radio del anillo de tótems */
-const B_MUERTO=.60;                            /* desde acá la baldosa está muerta */
-const B_LIMPIA=4.6;                            /* radio que limpia un tótem */
-const MAN={x:0,z:5.2};      /* el MANANTIAL va aparte del árbol madre: bajo la
-   copa no se veía ni el agua ni el guardián (se vio en la captura), y además
-   separar el lugar donde SE TOMA del lugar que SE DEFIENDE hace mejor el ida y
-   vuelta: son dos puntos del mapa, no uno. */
-const T_SEMILLA=.55;                           /* tarda esto en cargar la semilla */
+const OJO=1.66, FOVY=70;
+const SPD=6.4, SPD_MUERTO=.45;
+const R_TOT=11.2;
+const B_MUERTO=.60, B_LIMPIA=4.6;
+const MAN={x:0,z:6.4};
+const T_SEMILLA=.55;
 const NIV=[{spd:.115,name:'CALMO'},{spd:.165,name:'DURO'},{spd:.225,name:'FURIA'}];
 
 let T3=null,scene=null,cam=null;
-let sueloM=null,sueloCol=null,sueloBase=null,decorM=null;
-let totIM=null,cristIM=null,guard=null,orbe=null,manan=null;
-let B=null,Bsub=null;                          /* marchitez por baldosa, y la subida */
-let prot=null;                                 /* freno local por tótem encendido */
-let px=0,pz=6,pvx=0,pvz=0,pyaw=0;
+let sueloM=null,sueloCol=null,sueloBase=null,decorM=null,lejosM=null;
+let totIM=null,cristIM=null,ciervo=null,orbe=null,manan=null,motas=null,motas0=null;
+let B=null,Bsub=null,prot=null;
+let px=0,pz=9,pvx=0,pvz=0,yaw=Math.PI,pitch=-.04;
 let lleva=0,carga=0,tots=[],encendidos=0,fase='off',tJuego=0,nivel=1;
-let joy=null,joyV={x:0,y:0},keyV={x:0,y:0};
-let tutT=0,avisoT=0,sanoPct=1,hudTxt='',bot=0,demo=0;
+let tutT=0,avisoT=0,sanoPct=1,hudTxt='',bot=0,demo=0,bobF=0;
+let cvx=0,cvz=0;                               /* pos del ciervo compañero */
+const ARBOLES=[];                              /* [x,z,radio] para no atravesarlos */
+let mini=null,miniDirty=true;                  /* minimapa fuera de línea */
+/* punteros: izquierda = palanca de andar, derecha = mirar */
+const DED={mov:null,mira:null};
+let movV={x:0,y:0},keyV={x:0,y:0},keyL={x:0,y:0};
 const TAU2=Math.PI*2;
 const cl=(v,a,b)=>v<a?a:(v>b?b:v);
 const hx=h=>{const n=parseInt(h.slice(1),16);return [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255];};
 const ix=(i,j)=>j*N+i;
 
-/* altura suave del claro: la MISMA función para armar el suelo y para apoyar las
-   patas, así el guardián nunca flota ni se hunde */
 function H(x,z){
   const r=Math.hypot(x,z);
   return Math.sin(x*.19)*Math.cos(z*.17)*.34 + Math.sin(x*.07+1.3)*.5
@@ -1181,7 +1173,6 @@ function H(x,z){
 }
 
 /* ------------------------------------------------------- lote de triángulos */
-/* mismo patrón que el resto del pack: un solo Mesh con la luz cocinada */
 const SUN=(()=>{const v=[.42,.82,.36],L=Math.hypot(...v);return v.map(x=>x/L);})();
 function Lote(){return {p:[],c:[]};}
 function tri(A,a,b,c,col,e){
@@ -1194,8 +1185,6 @@ function tri(A,a,b,c,col,e){
   A.p.push(a[0],a[1],a[2],b[0],b[1],b[2],c[0],c[1],c[2]);
   for(let i=0;i<3;i++)A.c.push(col[0]*f,col[1]*f,col[2]*f);
 }
-/* OJO CON EL ORDEN: a,b,c,d en sentido antihorario visto DESDE AFUERA. Al revés
-   la cara desaparece por el descarte de caras traseras. */
 const quad=(A,a,b,c,d,col,e)=>{tri(A,a,b,c,col,e);tri(A,a,c,d,col,e);};
 function caja(A,cx,cy,cz,w,h,d,col,rot,e){
   const s=Math.sin(rot||0),co=Math.cos(rot||0);
@@ -1206,10 +1195,9 @@ function caja(A,cx,cy,cz,w,h,d,col,rot,e){
   quad(A,a,b,c,d2,col,e); quad(A,f,e1,h2,g2,col,e); quad(A,b,f,g2,c,col,e);
   quad(A,e1,a,d2,h2,col,e); quad(A,d2,c,g2,h2,col,e); quad(A,e1,f,b,a,col,e);
 }
-/* OJO CON EL SENTIDO. Con x=cos y z=sin, recorrer el ángulo hacia adelante da
-   vuelta la cara: la normal apunta HACIA ADENTRO y el cono queda invisible desde
-   afuera. Se vio en la primera captura — el árbol madre sin copa y los pinos como
-   triángulos planos. Por eso el vértice va (a1, a0, punta) y no (a0, a1, punta). */
+/* OJO CON EL SENTIDO: con x=cos y z=sin hay que recorrer el ángulo AL REVÉS
+   (a1 antes que a0) o la normal apunta adentro y el descarte de caras traseras
+   se come el cono entero — el árbol madre sin copa de la primera captura. */
 function cono(A,cx,cy,cz,r,h,n,col,e){
   const ap=[cx,cy+h,cz];
   for(let i=0;i<n;i++){
@@ -1239,15 +1227,11 @@ function malla(A){
 const C_PASTO=hx('#63b95c'),C_PASTO2=hx('#4e9d51'),C_TIERRA=hx('#8a7351');
 const C_MUERTO=hx('#4a3f57'),C_MUERTO2=hx('#2e2738');
 function buildSuelo(){
-  /* Las baldosas van en UNA malla, con el color por vértice MUTABLE: la marchitez
-     se pinta cambiando ese atributo, que es mucho más barato que rehacer geometría
-     o tener 484 mallas. */
   const p=[],c=[];
   sueloBase=new Float32Array(N*N*3);
   for(let j=0;j<N;j++)for(let i=0;i<N;i++){
     const x0=-EXT+i*TS,z0=-EXT+j*TS,x1=x0+TS,z1=z0+TS;
     const a=[x0,H(x0,z0),z0],b=[x1,H(x1,z0),z0],cc=[x1,H(x1,z1),z1],d=[x0,H(x0,z1),z1];
-    /* antihorario mirado desde arriba: a,d,c,b */
     for(const t of [[a,d,cc],[a,cc,b]]){
       p.push(t[0][0],t[0][1],t[0][2],t[1][0],t[1][1],t[1][2],t[2][0],t[2][1],t[2][2]);
       for(let k=0;k<3;k++)c.push(0,0,0);
@@ -1265,12 +1249,10 @@ function buildSuelo(){
   g.setAttribute('color',new T3.BufferAttribute(sueloCol,3));
   g.computeBoundingSphere();
   sueloM=new T3.Mesh(g,new T3.MeshBasicMaterial({vertexColors:true}));
-  sueloM.name='suelo';scene.add(sueloM);
+  scene.add(sueloM);
   Bsub=new Float32Array(N*N).fill(-1);
   pintaSuelo(true);
 }
-/* pinta SÓLO lo que cambió: 484 baldosas x 6 vértices son 8.700 floats, y subir
-   eso cada cuadro por gusto es el tipo de gasto que después no se encuentra */
 function pintaSuelo(forzar){
   let toco=false;
   for(let t=0;t<N*N;t++){
@@ -1278,79 +1260,177 @@ function pintaSuelo(forzar){
     if(!forzar&&Math.abs(b-Bsub[t])<.02)continue;
     Bsub[t]=b;toco=true;
     const k=t*3;
-    const m=cl((b-.15)/.85,0,1);              /* recién sobre 0,15 se ve enfermo */
+    const m=cl((b-.15)/.85,0,1);
     const mc=b>=B_MUERTO?C_MUERTO2:C_MUERTO;
     const r=sueloBase[k]*(1-m)+mc[0]*m;
     const g2=sueloBase[k+1]*(1-m)+mc[1]*m;
     const bl=sueloBase[k+2]*(1-m)+mc[2]*m;
     for(let v=0;v<6;v++){const o=(t*6+v)*3;sueloCol[o]=r;sueloCol[o+1]=g2;sueloCol[o+2]=bl;}
   }
-  if(toco||forzar)sueloM.geometry.attributes.color.needsUpdate=true;
+  if(toco||forzar){sueloM.geometry.attributes.color.needsUpdate=true;miniDirty=true;}
 }
 function buildDecor(){
   const A=Lote();
   const C_TR=hx('#7a5535'),C_H1=hx('#3f9c4e'),C_H2=hx('#2f7d43'),C_PI=hx('#8e9099');
-  /* ÁRBOL MADRE en el centro: es el objetivo que hay que defender, así que tiene
-     que verse de lejos y distinto a todo lo demás */
-  cil(A,0,0,0,1.15,.85,3.4,7,C_TR);
-  for(let i=0;i<3;i++)cono(A,0,2.6+i*1.1,0,2.7-i*.62,2.0,8,i%2?C_H2:C_H1,1+i*.05);
+  ARBOLES.length=0;
+  /* ÁRBOL MADRE, el que se defiende: enorme, para verlo desde cualquier punta */
+  cil(A,0,0,0,1.25,.9,4.6,7,C_TR);
+  for(let i=0;i<4;i++)cono(A,0,3.4+i*1.5,0,4.4-i*.95,2.4,8,i%2?C_H2:C_H1,1+i*.05);
+  ARBOLES.push([0,0,1.6]);
   for(const s of [-1,1]){
-    cil(A,s*.9,1.6,0,.22,.16,1.5,5,C_TR);
-    cono(A,s*1.5,2.9,0,.9,1.0,6,C_H2);
+    cil(A,s*1.05,2.2,0,.24,.18,1.8,5,C_TR);
+    cono(A,s*1.9,3.8,0,1.1,1.3,6,C_H2);
   }
-  /* MANANTIAL: anillo de piedras y el agua (la baldosa donde se toma la semilla) */
+  /* MANANTIAL */
   for(let i=0;i<10;i++){
     const a=i/10*TAU2;
     caja(A,MAN.x+Math.cos(a)*2.3,H(MAN.x,MAN.z)+.12,MAN.z+Math.sin(a)*2.3,.7,.34,.5,C_PI,a);
   }
-  /* árboles y piedras del claro, esquivando el centro y los tótems */
+  /* bosque */
   let s0=987654321;
   const rn=()=>{s0=(s0*1664525+1013904223)>>>0;return s0/4294967296;};
   const rr=(a,b)=>a+(b-a)*rn();
   const puestos=[];
   let it=0;
-  while(puestos.length<64&&it<3000){
+  while(puestos.length<70&&it<3500){
     it++;
     const x=rr(-EXT+1.5,EXT-1.5),z=rr(-EXT+1.5,EXT-1.5);
     const r=Math.hypot(x,z);
-    if(r<4.6)continue;                                  /* claro del árbol madre */
-    if(Math.hypot(x-MAN.x,z-MAN.z)<3.6)continue;        /* claro del manantial */
+    if(r<4.8)continue;
+    if(Math.hypot(x-MAN.x,z-MAN.z)<3.6)continue;
     let ok=true;
-    for(const t of tots)if(Math.hypot(t.x-x,t.z-z)<3.4){ok=false;break;}
+    for(const t of tots)if(Math.hypot(t.x-x,t.z-z)<3.2){ok=false;break;}
     if(!ok)continue;
-    for(const q of puestos)if((q[0]-x)**2+(q[1]-z)**2<5.2){ok=false;break;}
+    for(const q of puestos)if((q[0]-x)**2+(q[1]-z)**2<4.6){ok=false;break;}
     if(!ok)continue;
     puestos.push([x,z]);
     const y=H(x,z);
-    if(rn()<.72){
-      const h=rr(2.4,4.2);
-      cil(A,x,y,z,.2,.16,h*.42,5,C_TR);
+    if(rn()<.74){
+      const h=rr(2.6,4.6);
+      cil(A,x,y,z,.22,.17,h*.42,5,C_TR);
       const cc=rn()<.5?C_H1:C_H2;
-      cono(A,x,y+h*.3,z,h*.40,h*.5,6,cc);
-      cono(A,x,y+h*.58,z,h*.30,h*.46,6,cc,1.06);
+      cono(A,x,y+h*.3,z,h*.42,h*.52,6,cc);
+      cono(A,x,y+h*.60,z,h*.30,h*.46,6,cc,1.06);
+      ARBOLES.push([x,z,.55]);
     }else{
       const s2=rr(.5,1.3);
       caja(A,x,y+s2*.3,z,s2*1.5,s2*.7,s2*1.2,C_PI,rr(0,3.14));
+      ARBOLES.push([x,z,s2*.8]);
     }
   }
-  /* cerco de troncos caídos en el borde: marca de dónde entra la marchitez */
-  for(let i=0;i<N;i+=2){
-    const x=-EXT+i*TS+TS/2;
-    caja(A,x,H(x,-EXT)+.2,-EXT+.3,TS*1.7,.4,.4,C_TR,.05,.8);
-    caja(A,x,H(x,EXT)+.2,EXT-.3,TS*1.7,.4,.4,C_TR,.05,.8);
+  /* florcitas: puntitos de color a ras del pasto, 1 llamada */
+  decorM=malla(A);scene.add(decorM);
+}
+/* lo LEJANO: falda de pasto que sigue hasta la niebla + montañas + el cerco */
+function buildLejos(){
+  const A=Lote();
+  const C_F=hx('#4e9d51'),C_M1=hx('#5d7a8c'),C_M2=hx('#48617a'),C_NV=hx('#e8eef4');
+  /* falda: del BORDE CUADRADO del mapa hacia afuera (la niebla la funde).
+     OJO: un anillo REDONDO acá estaba mal — el mapa es cuadrado, en las esquinas
+     el jugador queda AFUERA del anillo y las cuerdas cruzan el mapa: media
+     pantalla tapada por un triángulo (se vio en la captura). Marco cuadrado. */
+  const SEG=10;
+  const lado=(p0,p1)=>{
+    for(let i=0;i<SEG;i++){
+      const t0=i/SEG,t1=(i+1)/SEG;
+      const ax=p0[0]+(p1[0]-p0[0])*t0,az=p0[1]+(p1[1]-p0[1])*t0;
+      const bx2=p0[0]+(p1[0]-p0[0])*t1,bz2=p0[1]+(p1[1]-p0[1])*t1;
+      const ka=95/Math.max(Math.abs(ax),Math.abs(az),1);
+      const kb=95/Math.max(Math.abs(bx2),Math.abs(bz2),1);
+      const a=[ax,H(ax,az),az],b=[bx2,H(bx2,bz2),bz2];
+      const ao=[ax*ka,-2.5,az*ka],bo=[bx2*kb,-2.5,bz2*kb];
+      /* el sentido se decide con la normal calculada: si mira abajo, se invierte */
+      const ny=(ao[2]-a[2])*(bo[0]-a[0])-(ao[0]-a[0])*(bo[2]-a[2]);
+      if(ny>0)quad(A,a,ao,bo,b,C_F,.9);
+      else    quad(A,a,b,bo,ao,C_F,.9);
+    }
+  };
+  const E2=EXT-.02;
+  lado([-E2,E2],[E2,E2]);lado([E2,E2],[E2,-E2]);
+  lado([E2,-E2],[-E2,-E2]);lado([-E2,-E2],[-E2,E2]);
+  /* montañas: conos grandes con nieve, dentro de la niebla */
+  let s0=24681357;
+  const rn=()=>{s0=(s0*1664525+1013904223)>>>0;return s0/4294967296;};
+  for(let i=0;i<14;i++){
+    const a=i/14*TAU2+rn()*.3;
+    const d=64+rn()*26,h=12+rn()*18,r=9+rn()*8;
+    const x=Math.cos(a)*d,z=Math.sin(a)*d;
+    cono(A,x,-2,z,r,h,7,rn()<.5?C_M1:C_M2);
+    cono(A,x,-2+h*.62,z,r*(1-.62)*1.02,h*.38,7,C_NV,1.15);
   }
-  decorM=malla(A);decorM.name='decor';scene.add(decorM);
+  lejosM=malla(A);scene.add(lejosM);
+}
+function buildCielo(){
+  /* cúpula con degradado en vértices; se dibuja ÚLTIMA (renderOrder alto,
+     depthWrite off): sólo se pintan los píxeles que quedaron sin tapar */
+  const g=new T3.SphereGeometry(150,18,10);
+  const p=g.attributes.position,col=new Float32Array(p.count*3);
+  const A2=new T3.Color('#3e8fd4'),B2=new T3.Color('#cfe9f5'),c=new T3.Color();
+  for(let i=0;i<p.count;i++){
+    const t=cl((p.getY(i)/150+.14)/.9,0,1);
+    c.copy(B2).lerp(A2,Math.pow(t,.75));
+    col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;
+  }
+  g.setAttribute('color',new T3.BufferAttribute(col,3));
+  const m=new T3.Mesh(g,new T3.MeshBasicMaterial({vertexColors:true,side:T3.BackSide,
+    fog:false,depthWrite:false}));
+  m.renderOrder=8;m.frustumCulled=false;m.name='cielo';
+  scene.add(m);
+  /* sol con halo + nubes: sprites (fog:false, se dibujan con el cielo) */
+  const tx=(fn)=>{const cn=document.createElement('canvas');cn.width=cn.height=64;
+    fn(cn.getContext('2d'));return new T3.CanvasTexture(cn);};
+  const sol=new T3.Sprite(new T3.SpriteMaterial({map:tx(g2=>{
+    const d=g2.createRadialGradient(32,32,0,32,32,32);
+    d.addColorStop(0,'rgba(255,252,230,1)');d.addColorStop(.3,'rgba(255,244,190,.9)');
+    d.addColorStop(1,'rgba(255,238,170,0)');g2.fillStyle=d;g2.fillRect(0,0,64,64);}),
+    transparent:true,blending:T3.AdditiveBlending,depthWrite:false,fog:false}));
+  sol.scale.set(46,46,1);
+  sol.position.set(SUN[0]*130,SUN[1]*130,SUN[2]*130);
+  sol.renderOrder=9;scene.add(sol);
+  const nubeT=tx(g2=>{for(let i=0;i<12;i++){
+    const x=14+Math.random()*40,y=22+Math.random()*22,r=8+Math.random()*12;
+    const d=g2.createRadialGradient(x,y,0,x,y,r);
+    d.addColorStop(0,'rgba(255,255,255,.95)');d.addColorStop(1,'rgba(255,255,255,0)');
+    g2.fillStyle=d;g2.beginPath();g2.arc(x,y,r,0,6.284);g2.fill();}});
+  const nm=new T3.SpriteMaterial({map:nubeT,transparent:true,opacity:.92,
+    depthWrite:false,fog:false});
+  for(let i=0;i<5;i++){
+    const s=new T3.Sprite(nm);
+    const a=i/5*TAU2+.5,d=70+((i*37)%40);
+    s.position.set(Math.cos(a)*d,26+(i%3)*9,Math.sin(a)*d);
+    s.scale.set(34+(i%3)*14,13+(i%2)*6,1);
+    s.renderOrder=9;scene.add(s);
+  }
+  /* luciérnagas: un Points */
+  const NM=90,pp=new Float32Array(NM*3),cc2=new Float32Array(NM*3);
+  const c3=new T3.Color();
+  let s1=1357;
+  const rn=()=>{s1=(s1*1664525+1013904223)>>>0;return s1/4294967296;};
+  for(let i=0;i<NM;i++){
+    const a=rn()*TAU2,d=3+rn()*(EXT-4);
+    const x=Math.cos(a)*d,z=Math.sin(a)*d;
+    pp[i*3]=x;pp[i*3+1]=H(x,z)+.5+rn()*2.4;pp[i*3+2]=z;
+    c3.setHSL(.12+rn()*.08,.95,.62+rn()*.15);
+    cc2[i*3]=c3.r;cc2[i*3+1]=c3.g;cc2[i*3+2]=c3.b;
+  }
+  motas0=Float32Array.from(pp);
+  const gg=new T3.BufferGeometry();
+  gg.setAttribute('position',new T3.BufferAttribute(pp,3));
+  gg.setAttribute('color',new T3.BufferAttribute(cc2,3));
+  motas=new T3.Points(gg,new T3.PointsMaterial({size:.32,map:tx(g2=>{
+    const d=g2.createRadialGradient(32,32,0,32,32,32);
+    d.addColorStop(0,'rgba(255,255,255,1)');d.addColorStop(1,'rgba(255,255,255,0)');
+    g2.fillStyle=d;g2.fillRect(0,0,64,64);}),vertexColors:true,transparent:true,
+    blending:T3.AdditiveBlending,depthWrite:false,sizeAttenuation:true}));
+  scene.add(motas);
 }
 function buildTotems(){
   tots=[];
   for(let i=0;i<5;i++){
     const a=-Math.PI/2+i/5*TAU2;
-    const x=Math.cos(a)*R_TOT,z=Math.sin(a)*R_TOT;
-    tots.push({x,z,on:0,pulso:0});
+    tots.push({x:Math.cos(a)*R_TOT,z:Math.sin(a)*R_TOT,on:0});
   }
   const gb=new T3.BoxGeometry(1,1,1);
-  /* la caja de three viene con normales suaves; se hornea el sombreado por CARA
-     en el color de vértice para que el tótem tenga volumen sin una sola luz */
   const sh=[.78,.62,1.0,.52,.9,.7];
   const cA=new Float32Array(gb.attributes.position.count*3);
   for(let i=0;i<cA.length/3;i++){const s=sh[Math.floor(i/4)]||1;
@@ -1359,7 +1439,7 @@ function buildTotems(){
   totIM=new T3.InstancedMesh(gb,new T3.MeshBasicMaterial({vertexColors:true}),5);
   totIM.instanceColor=new T3.InstancedBufferAttribute(new Float32Array(15),3);
   cristIM=new T3.InstancedMesh(new T3.OctahedronGeometry(.52,0),
-    new T3.MeshBasicMaterial({vertexColors:false}),5);
+    new T3.MeshBasicMaterial({}),5);
   cristIM.instanceColor=new T3.InstancedBufferAttribute(new Float32Array(15),3);
   totIM.frustumCulled=cristIM.frustumCulled=false;
   scene.add(totIM);scene.add(cristIM);
@@ -1371,10 +1451,10 @@ function ponTotems(){
     M.makeScale(1.05,3.1,1.05);M.setPosition(t.x,y+1.55,t.z);
     totIM.setMatrixAt(i,M);
     C.set(t.on?'#dff6c8':'#6b6357');totIM.setColorAt(i,C);
-    const s=t.on?(1.15+Math.sin(ARC.t*3+i)*.12):.75;
+    const s=t.on?(1.15+Math.sin(ARC.t*3+i)*.12):.8;
     M.makeRotationY(ARC.t*(t.on?1.6:.35)+i);
     M.scale(V.set(s,s,s));
-    M.setPosition(t.x,y+3.5+(t.on?Math.sin(ARC.t*2+i)*.14:0),t.z);
+    M.setPosition(t.x,y+3.6+(t.on?Math.sin(ARC.t*2+i)*.14:0),t.z);
     cristIM.setMatrixAt(i,M);
     C.set(t.on?'#c6ff8a':'#3d4a52');cristIM.setColorAt(i,C);
   }
@@ -1384,28 +1464,25 @@ function ponTotems(){
 }
 
 /* --------------------------------------------------------------- marchitez */
-function resetB(){
-  B=new Float32Array(N*N);
-  prot=new Float32Array(N*N).fill(1);
-  /* arranca sólo en el borde: el frente tiene que ENTRAR, no aparecer encima */
-  for(let i=0;i<N;i++){B[ix(i,0)]=.9;B[ix(i,N-1)]=.9;B[ix(0,i)]=.9;B[ix(N-1,i)]=.9;}
-  if(Bsub)Bsub.fill(-1);
-}
 function recuenta(){
   let sano=0;
   for(let t=0;t<N*N;t++)if(B[t]<B_MUERTO)sano++;
   sanoPct=sano/(N*N);
 }
-function limpiaAlrededor(cx,cz){
+function resetB(){
+  B=new Float32Array(N*N);
+  prot=new Float32Array(N*N).fill(1);
+  for(let i=0;i<N;i++){B[ix(i,0)]=.9;B[ix(i,N-1)]=.9;B[ix(0,i)]=.9;B[ix(N-1,i)]=.9;}
+  if(Bsub)Bsub.fill(-1);
+  recuenta();
+}
+function limpiaAlrededor(cx2,cz2){
   for(let j=0;j<N;j++)for(let i=0;i<N;i++){
     const x=-EXT+i*TS+TS/2,z=-EXT+j*TS+TS/2;
-    const d=Math.hypot(x-cx,z-cz);
+    const d=Math.hypot(x-cx2,z-cz2);
     if(d<B_LIMPIA){B[ix(i,j)]=0;prot[ix(i,j)]=.5;}
     else if(d<B_LIMPIA*1.8)prot[ix(i,j)]=Math.min(prot[ix(i,j)],.72);
   }
-  /* se recuenta ACÁ y no en el paso siguiente: encender un tótem es el momento de
-     recompensa del juego, y la barra de bosque sano tiene que saltar en el mismo
-     cuadro, no un dieciseisavo de segundo después */
   recuenta();
 }
 function avanzaB(dt){
@@ -1414,9 +1491,6 @@ function avanzaB(dt){
   let sano=0;
   for(let j=0;j<N;j++)for(let i=0;i<N;i++){
     const t=ix(i,j),b=B[t];
-    /* PRESIÓN DE VECINOS: así el frente sale irregular y entra por donde nadie
-       defendió. Con un avance por anillos concéntricos el juego no tendría
-       decisión: alcanzaría con dar vueltas al mismo ritmo. */
     let pr=0;
     if(i>0)pr=Math.max(pr,B[t-1]);
     if(i<N-1)pr=Math.max(pr,B[t+1]);
@@ -1442,11 +1516,13 @@ function metrics(){
 }
 function nuevaPartida(lvl){
   nivel=cl(lvl||1,1,3);
-  px=MAN.x;pz=MAN.z+2.4;pvx=pvz=0;pyaw=0;
+  px=MAN.x;pz=MAN.z+3.2;pvx=pvz=0;
+  yaw=Math.PI;pitch=-.04;
+  cvx=px+1.6;cvz=pz+1.2;
   lleva=0;carga=0;encendidos=0;tJuego=0;
-  for(const t of tots){t.on=0;t.pulso=0;}
+  for(const t of tots)t.on=0;
   resetB();pintaSuelo(true);
-  fase='play';tutT=4.2;avisoT=0;hudTxt='';
+  fase='play';tutT=5.2;avisoT=0;hudTxt='';
   hud(true);
 }
 function hud(forzar){
@@ -1454,29 +1530,29 @@ function hud(forzar){
   if(forzar||t!==hudTxt){hudTxt=t;ARC.hud(lleva?'◆':'◇',t);}
 }
 function tomaSemilla(){
-  if(lleva){if(!demo)ARC.toast(T('full'));return;}
+  if(lleva)return;
   lleva=1;carga=0;
   if(demo)return;
   ARC.sfx('seed');ARC.vib(14);
   ARC.toast(T('take'));
-  const p=proj(0,1.4,0);if(p)ARC.fx.ring(p.x,p.y,{r:70,color:'#dff6c8'});
   hud(true);
 }
 function enciende(t){
-  t.on=1;t.pulso=1;lleva=0;encendidos++;
+  t.on=1;lleva=0;encendidos++;
   limpiaAlrededor(t.x,t.z);
   pintaSuelo(true);
-  if(demo)return;
-  ARC.sfx('totem');ARC.vib([12,40,12]);ARC.shake(5);
-  const p=proj(t.x,H(t.x,t.z)+3.5,t.z);
-  if(p){ARC.fx.burst(p.x,p.y,{n:26,color:'#c6ff8a',speed:260,life:.7});
-        ARC.fx.ring(p.x,p.y,{r:120,color:'#dff6c8'});
-        ARC.fx.text(p.x,p.y-30,T('lit'),{color:'#dff6c8',size:Math.max(14,ARC.H*.05),life:1});}
-  ARC.toast(T('lit'));
-  hud(true);
+  if(!demo){
+    ARC.sfx('totem');ARC.vib([12,40,12]);ARC.shake(5);
+    const p=proj(t.x,H(t.x,t.z)+3.6,t.z);
+    if(p){ARC.fx.burst(p.x,p.y,{n:26,color:'#c6ff8a',speed:260,life:.7});
+          ARC.fx.ring(p.x,p.y,{r:120,color:'#dff6c8'});}
+    ARC.toast(T('lit'));
+    hud(true);
+  }
   if(encendidos>=5)gana();
 }
 function gana(){
+  if(demo)return;
   fase='fin';
   ARC.over({win:true,title:T('winT'),score:Math.round(sanoPct*100),
     stars:sanoPct>.72?3:(sanoPct>.5?2:1),
@@ -1484,12 +1560,11 @@ function gana(){
         T('stT')+': '+tJuego.toFixed(0)+'s'});
 }
 function pierde(){
+  if(demo)return;
   fase='fin';
-  ARC.over({win:false,title:T('loseT'),score:encendidos,noStars:false,stars:0,
+  ARC.over({win:false,title:T('loseT'),score:encendidos,stars:0,
     sub:T('stTot')+': '+encendidos+'/5<br>'+T('stSano')+': '+Math.round(sanoPct*100)+'%'});
 }
-
-/* proyección mundo→pantalla para los carteles de la capa 2D */
 let projV=null;
 function proj(x,y,z){
   if(!cam)return null;
@@ -1504,33 +1579,54 @@ function simula(dt){
   tJuego+=dt;
   if(tutT>0)tutT-=dt;
   if(avisoT>0)avisoT-=dt;
-  /* --- movimiento --- */
-  let vx=joyV.x+keyV.x,vz=joyV.y+keyV.y;
-  if(bot||demo){const b=botDir();vx=b.x;vz=b.y;}
-  const m=Math.hypot(vx,vz);
-  if(m>1){vx/=m;vz/=m;}
+  /* --- mirar con teclas (flechas) --- */
+  yaw-=keyL.x*2.4*dt;
+  pitch=cl(pitch-keyL.y*1.8*dt,-1.15,1.15);
+  /* --- andar: la palanca es RELATIVA A LA MIRADA (adelante = adonde mirás) --- */
+  let mx=movV.x+keyV.x,my=movV.y+keyV.y;
+  if(bot||demo){const b=botDir();
+    /* el piloto también gira la cabeza hacia donde va: en primera persona un bot
+       que camina de costado sin mirar se ve roto en el modo atracción */
+    const quiero=Math.atan2(-b.x,-b.y);
+    let d=quiero-yaw;while(d>Math.PI)d-=TAU2;while(d<-Math.PI)d+=TAU2;
+    yaw+=cl(d,-2.6*dt,2.6*dt);
+    mx=0;my=-Math.min(1,Math.hypot(b.x,b.y));
+  }
+  const m=Math.hypot(mx,my);
+  if(m>1){mx/=m;my/=m;}
   const muerto=bEn(px,pz)>=B_MUERTO;
   const sp=SPD*(muerto?SPD_MUERTO:1);
-  pvx=vx*sp;pvz=vz*sp;
-  px=cl(px+pvx*dt,-EXT+1,EXT-1);
-  pz=cl(pz+pvz*dt,-EXT+1,EXT-1);
-  if(m>.05)pyaw=Math.atan2(pvx,pvz);
+  const sy=Math.sin(yaw),cy=Math.cos(yaw);
+  const fx=-sy,fz=-cy,rx=cy,rz=-sy;
+  pvx=(fx*-my+rx*mx)*sp;
+  pvz=(fz*-my+rz*mx)*sp;
+  let nx=cl(px+pvx*dt,-EXT+1,EXT-1);
+  let nz=cl(pz+pvz*dt,-EXT+1,EXT-1);
+  /* no atravesar troncos: empuje radial simple */
+  for(const a of ARBOLES){
+    const dx=nx-a[0],dz=nz-a[1],d=Math.hypot(dx,dz),rr2=a[2]+.42;
+    if(d<rr2&&d>1e-4){nx=a[0]+dx/d*rr2;nz=a[1]+dz/d*rr2;}
+  }
+  px=nx;pz=nz;
+  bobF+=dt*(2+7*Math.min(1,Math.hypot(pvx,pvz)/SPD));
   if(muerto&&!demo&&avisoT<=0&&fase==='play'){avisoT=3.5;ARC.toast(T('slow'));}
-  /* --- manantial: se carga sosteniéndose encima --- */
-  if(Math.hypot(px-MAN.x,pz-MAN.z)<2.4&&!lleva){
+  /* --- ciervo compañero: trota a tu lado --- */
+  const txC=px+rx*1.9-fx*1.2,tzC=pz+rz*1.9-fz*1.2;
+  cvx+=(txC-cvx)*Math.min(1,dt*3.2);
+  cvz+=(tzC-cvz)*Math.min(1,dt*3.2);
+  /* --- manantial --- */
+  if(Math.hypot(px-MAN.x,pz-MAN.z)<2.6&&!lleva){
     carga+=dt;
     if(carga>=T_SEMILLA)tomaSemilla();
   }else if(!lleva)carga=Math.max(0,carga-dt*2);
   /* --- entregar --- */
   if(lleva)for(const t of tots){
     if(t.on)continue;
-    if(Math.hypot(t.x-px,t.z-pz)<2.3){enciende(t);break;}
+    if(Math.hypot(t.x-px,t.z-pz)<2.6){enciende(t);break;}
   }
   /* --- marchitez --- */
   avanzaB(dt);
   pintaSuelo(false);
-  for(const t of tots)if(t.pulso>0)t.pulso=Math.max(0,t.pulso-dt*1.6);
-  /* --- derrota: la marchitez toca el árbol madre --- */
   const bc=bEn(0,0);
   if(!demo&&fase==='play'){
     if(bc>.55&&avisoT<=0){avisoT=4;ARC.sfx('bad',{vol:.6});ARC.toast(T('near'));}
@@ -1538,10 +1634,8 @@ function simula(dt){
   }
   hud();
 }
-/* piloto: el que encuentra los bugs. Va al manantial si no lleva semilla, y si
-   lleva va al tótem apagado más cercano, ESQUIVANDO lo muerto cuando puede. */
 function botDir(){
-  let tx=0,tz=0;
+  let tx,tz;
   if(!lleva){tx=MAN.x;tz=MAN.z;}
   else{
     let mej=null,dm=1e9;
@@ -1551,34 +1645,49 @@ function botDir(){
   }
   let dx=tx-px,dz=tz-pz;
   const d=Math.hypot(dx,dz)||1;dx/=d;dz/=d;
-  /* si el paso siguiente cae en tierra muerta, prueba desviarse 45° */
   if(bEn(px+dx*2.2,pz+dz*2.2)>=B_MUERTO){
     for(const a of [.8,-.8,1.6,-1.6]){
       const c=Math.cos(a),s=Math.sin(a);
-      const nx=dx*c-dz*s,nz=dx*s+dz*c;
-      if(bEn(px+nx*2.2,pz+nz*2.2)<B_MUERTO){return {x:nx,y:nz};}
+      const nx2=dx*c-dz*s,nz2=dx*s+dz*c;
+      if(bEn(px+nx2*2.2,pz+nz2*2.2)<B_MUERTO)return {x:nx2,y:nz2};
     }
   }
   return {x:dx,y:dz};
 }
 function pon3D(alpha){
-  const y=H(px,pz);
-  if(guard){
-    guard.position.set(px+pvx*alpha*(1/60),y,pz+pvz*alpha*(1/60));
-    guard.rotation.y=pyaw;
-    /* trotecito: sube y baja según la velocidad, sin esqueleto ni animación */
-    const v=Math.hypot(pvx,pvz)/SPD;
-    guard.position.y=y+Math.abs(Math.sin(ARC.t*11))*.12*v;
-    guard.rotation.z=Math.sin(ARC.t*11)*.05*v;
+  const st=alpha*(1/60);
+  const cx3=px+pvx*st,cz3=pz+pvz*st;
+  const v=Math.min(1,Math.hypot(pvx,pvz)/SPD);
+  cam.position.set(cx3,H(cx3,cz3)+OJO+Math.abs(Math.sin(bobF))*.055*v,cz3);
+  cam.rotation.order='YXZ';
+  cam.rotation.y=yaw;
+  cam.rotation.x=pitch+Math.sin(bobF*2)*.004*v;
+  cam.rotation.z=0;
+  if(ciervo){
+    ciervo.position.set(cvx,H(cvx,cvz)+Math.abs(Math.sin(ARC.t*9))*.1*v,cvz);
+    ciervo.rotation.y=Math.atan2(px-cvx,pz-cvz);
   }
   if(orbe){
     orbe.visible=!!lleva||carga>.05;
     const k=lleva?1:carga/T_SEMILLA;
-    orbe.position.set(px,y+2.15+Math.sin(ARC.t*3)*.1,pz);
-    orbe.scale.setScalar(.28*k+.06);
+    /* la semilla flota DELANTE de la cara, abajo: es tu "mano" */
+    const sy2=Math.sin(yaw),cy2=Math.cos(yaw);
+    orbe.position.set(cam.position.x-sy2*.9+cy2*.34,
+                      cam.position.y-.42+Math.sin(ARC.t*3)*.04,
+                      cam.position.z-cy2*.9-sy2*.34);
+    orbe.scale.setScalar(.11*k+.03);
     orbe.rotation.y=ARC.t*2.2;orbe.rotation.x=ARC.t*1.3;
   }
-  if(manan)manan.rotation.y=ARC.t*.35;
+  if(manan)manan.rotation.z=ARC.t*.35;
+  if(motas){
+    const p=motas.geometry.attributes.position;
+    for(let i=0;i<p.count;i++){
+      p.array[i*3]=motas0[i*3]+Math.sin(ARC.t*.5+i)*.5;
+      p.array[i*3+1]=motas0[i*3+1]+Math.sin(ARC.t*.9+i*2.1)*.3;
+      p.array[i*3+2]=motas0[i*3+2]+Math.cos(ARC.t*.43+i*1.7)*.5;
+    }
+    p.needsUpdate=true;
+  }
   ponTotems();
 }
 
@@ -1586,35 +1695,31 @@ function pon3D(alpha){
 G.init=function(){
   T3=ARC.THREE;if(!T3)return;
   scene=new T3.Scene();
-  cam=new T3.PerspectiveCamera(FOVY,ARC.W/Math.max(1,ARC.H),.5,120);
-  cam.position.set(0,CAMY,CAMZ);cam.lookAt(0,1.2,0);
+  /* niebla: profundidad para el bosque y de paso funde la falda con el cielo */
+  scene.fog=new T3.Fog(new T3.Color('#cfe9f5'),22,118);
+  cam=new T3.PerspectiveCamera(FOVY,ARC.W/Math.max(1,ARC.H),.1,220);
   metrics();
   buildTotems();
   resetB();
   buildSuelo();
   buildDecor();
-  /* el guardián: viene del GLB horneado, con su color de vértice */
-  const gl=ARC.glb&&ARC.glb.guard;
+  buildLejos();
+  buildCielo();
+  const gl=ARC.glb&&ARC.glb.ciervo;
   if(gl&&gl.scene){
-    guard=gl.scene;
-    guard.traverse(o=>{if(o.isMesh)o.material=new T3.MeshBasicMaterial({
-      vertexColors:!!o.geometry.attributes.color});});
-    guard.scale.setScalar(1);
-    scene.add(guard);
-  }else{
-    /* respaldo si el GLB no cargó: el juego NO se cae por un asset */
-    const A=Lote();
-    caja(A,0,.75,0,.8,.9,1.5,hx('#5f8347'));
-    caja(A,0,1.3,.75,.5,.5,.5,hx('#b9cf8c'));
-    guard=malla(A);scene.add(guard);
+    ciervo=gl.scene;
+    ciervo.traverse(o=>{if(o.isMesh){o.material=new T3.MeshBasicMaterial({
+      vertexColors:!!o.geometry.attributes.color});o.frustumCulled=false;}});
+    scene.add(ciervo);
   }
   orbe=new T3.Mesh(new T3.OctahedronGeometry(1,0),
-    new T3.MeshBasicMaterial({color:0xdff6c8}));
+    new T3.MeshBasicMaterial({color:0xdff6c8,fog:false}));
   orbe.visible=false;scene.add(orbe);
   manan=new T3.Mesh(new T3.CircleGeometry(2.0,14),
     new T3.MeshBasicMaterial({color:0x7fd6ea}));
   manan.rotation.x=-Math.PI/2;
   manan.position.set(MAN.x,H(MAN.x,MAN.z)+.06,MAN.z);scene.add(manan);
+  mini=document.createElement('canvas');mini.width=mini.height=N*4;
   ARC.tray([]);
 };
 G.resize=function(){metrics();};
@@ -1623,7 +1728,7 @@ G.start=function(lvl){
   if(!scene)return;
   demo=0;bot=0;
   nuevaPartida(lvl);
-  ARC.tray([]);          /* se maneja arrastrando: no hace falta ningún botón */
+  ARC.tray([]);
 };
 G.step=function(dt){
   if(fase!=='play')return;
@@ -1643,21 +1748,42 @@ G.attract=function(dt,g){
   pon3D(0);
   ARC.rnd.render(scene,cam);
 };
-G.down=function(p){if(fase!=='play')return;joy={x:p.x,y:p.y};joyV.x=joyV.y=0;bot=0;};
-G.move=function(p){
-  if(!joy||fase!=='play')return;
-  const dx=p.x-joy.x,dy=p.y-joy.y;
-  const R=Math.max(28,ARC.H*.11),d=Math.hypot(dx,dy);
-  const k=d>R?R/d:1;
-  joyV.x=dx*k/R;joyV.y=dy*k/R;
+/* punteros: mitad izquierda palanca, mitad derecha mirar. El id de cada puntero
+   se guarda para que los dos pulgares trabajen a la vez sin pisarse. */
+G.down=function(p,e){
+  if(fase!=='play')return;
+  bot=0;
+  const id=e&&e.pointerId!=null?e.pointerId:0;
+  if(p.x<ARC.W*.5&&!DED.mov){DED.mov={id,x0:p.x,y0:p.y};movV.x=movV.y=0;}
+  else if(!DED.mira)DED.mira={id,x:p.x,y:p.y};
 };
-G.up=function(){joy=null;joyV.x=joyV.y=0;};
+G.move=function(p,e){
+  const id=e&&e.pointerId!=null?e.pointerId:0;
+  if(DED.mov&&DED.mov.id===id){
+    const R=Math.max(30,ARC.H*.12);
+    const dx=p.x-DED.mov.x0,dy=p.y-DED.mov.y0;
+    const d=Math.hypot(dx,dy),k=d>R?R/d:1;
+    movV.x=dx*k/R;movV.y=dy*k/R;
+  }else if(DED.mira&&DED.mira.id===id){
+    yaw-=(p.x-DED.mira.x)*.0052;
+    pitch=cl(pitch-(p.y-DED.mira.y)*.0052,-1.15,1.15);
+    DED.mira.x=p.x;DED.mira.y=p.y;
+  }
+};
+G.up=function(p,e){
+  const id=e&&e.pointerId!=null?e.pointerId:0;
+  if(DED.mov&&DED.mov.id===id){DED.mov=null;movV.x=movV.y=0;}
+  if(DED.mira&&DED.mira.id===id)DED.mira=null;
+};
 G.key=function(c,d){
-  const v=d?1:0;
-  if(c==='ArrowUp'||c==='KeyW')keyV.y=d?-1:0;
-  if(c==='ArrowDown'||c==='KeyS')keyV.y=d?1:0;
-  if(c==='ArrowLeft'||c==='KeyA')keyV.x=d?-1:0;
-  if(c==='ArrowRight'||c==='KeyD')keyV.x=d?1:0;
+  if(c==='KeyW')keyV.y=d?-1:0;
+  if(c==='KeyS')keyV.y=d?1:0;
+  if(c==='KeyA')keyV.x=d?-1:0;
+  if(c==='KeyD')keyV.x=d?1:0;
+  if(c==='ArrowLeft')keyL.x=d?-1:0;
+  if(c==='ArrowRight')keyL.x=d?1:0;
+  if(c==='ArrowUp')keyL.y=d?-1:0;
+  if(c==='ArrowDown')keyL.y=d?1:0;
   if(d)bot=0;
 };
 
@@ -1670,38 +1796,76 @@ function txt(g,s,x,y,size,col,al){
   g.strokeText(s,x,y);g.fillStyle=col;g.fillText(s,x,y);
   g.restore();
 }
+function pintaMini(){
+  const g=mini.getContext('2d'),S2=4;
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){
+    const b=B[ix(i,j)];
+    const m=cl((b-.15)/.85,0,1);
+    const r=Math.round((99+ (74-99)*0)+ (46-99)*m);   /* verde → violeta oscuro */
+    g.fillStyle=b>=B_MUERTO?'#2e2738':(m>0? 'rgb('+Math.round(99-40*m)+','+Math.round(185-110*m)+','+Math.round(92+10*m)+')':'#63b95c');
+    g.fillRect(i*S2,j*S2,S2,S2);
+  }
+  miniDirty=false;
+}
+/* marcador de brújula: si el blanco está en pantalla, cartel encima; si no, una
+   flecha en el borde hacia donde hay que girar. Sin esto, primera persona en un
+   mapa de 33 u es caminar perdido. */
+function marca(g,wx,wy,wz,glifo,col){
+  const p=proj(wx,wy,wz);
+  const enPant=p&&p.x>ARC.W*.06&&p.x<ARC.W*.94&&p.y>ARC.H*.08&&p.y<ARC.H*.92;
+  if(enPant){txt(g,glifo,p.x,p.y,Math.max(15,ARC.H*.055),col);return;}
+  const dx=wx-px,dz=wz-pz;
+  const objetivo=Math.atan2(-dx,-dz);
+  let rel=objetivo-yaw;while(rel>Math.PI)rel-=TAU2;while(rel<-Math.PI)rel+=TAU2;
+  const ex=ARC.W*.5-Math.sin(rel)*ARC.W*.42;
+  const ey=ARC.H*.16;
+  g.save();
+  g.translate(ex,ey);g.rotate(-rel);
+  txt(g,'▲',0,0,Math.max(13,ARC.H*.05),col);
+  g.restore();
+}
 function dibuja2D(g){
-  /* barra de bosque sano: es el reloj del juego y tiene que leerse de un ojo */
-  const w=ARC.W*.32,h=Math.max(7,ARC.H*.022),x=ARC.W*.5-w/2,y=ARC.H*.045;
+  /* barra de bosque sano */
+  const w=ARC.W*.3,h=Math.max(6,ARC.H*.02),x=ARC.W*.5-w/2,y=ARC.H*.052;
   g.fillStyle='rgba(6,16,10,.55)';g.fillRect(x-2,y-2,w+4,h+4);
   const k=cl(sanoPct,0,1);
   g.fillStyle=k>.55?'#7fd06a':(k>.3?'#e0c04a':'#e06a6a');
   g.fillRect(x,y,w*k,h);
   g.strokeStyle='rgba(220,255,230,.5)';g.lineWidth=1.5;g.strokeRect(x,y,w,h);
-  /* sin rótulo debajo: el HUD del motor ya dice "BOSQUE SANO 83%" ahí arriba y
-     repetirlo se pisaba con la barra (se vio en la captura) */
-  /* semilla cargando */
+  /* minimapa: se redibuja fuera de línea SÓLO cuando cambió el suelo */
+  if(miniDirty)pintaMini();
+  const ms=Math.max(64,ARC.H*.26),mx2=10,my2=ARC.H*.5-ms/2;
+  g.save();g.globalAlpha=.88;
+  g.drawImage(mini,mx2,my2,ms,ms);
+  g.strokeStyle='rgba(220,255,230,.6)';g.lineWidth=2;g.strokeRect(mx2,my2,ms,ms);
+  const W2=(v)=>mx2+((v+EXT)/(EXT*2))*ms,Z2=(v)=>my2+((v+EXT)/(EXT*2))*ms;
+  for(const t of tots){
+    g.fillStyle=t.on?'#c6ff8a':'#8b8377';
+    g.beginPath();g.arc(W2(t.x),Z2(t.z),3,0,TAU2);g.fill();
+  }
+  g.fillStyle='#7fd6ea';g.beginPath();g.arc(W2(MAN.x),Z2(MAN.z),3,0,TAU2);g.fill();
+  g.fillStyle='#2f7a3a';g.beginPath();g.arc(W2(0),Z2(0),3.6,0,TAU2);g.fill();
+  /* el jugador: triángulo apuntando adonde mira */
+  g.save();g.translate(W2(px),Z2(pz));g.rotate(Math.atan2(-Math.sin(yaw),-Math.cos(yaw)));
+  g.fillStyle='#fff';g.beginPath();g.moveTo(0,-4.4);g.lineTo(3,3.4);g.lineTo(-3,3.4);
+  g.closePath();g.fill();g.restore();
+  g.restore();
+  /* brújula */
+  if(lleva){for(const t of tots)if(!t.on)marca(g,t.x,H(t.x,t.z)+4.6,t.z,'▾','#dff6c8');}
+  else marca(g,MAN.x,H(MAN.x,MAN.z)+2.2,MAN.z,'◈','#7fd6ea');
+  /* carga de semilla */
   if(!lleva&&carga>.02){
-    const p=proj(px,H(px,pz)+2.4,pz);
-    if(p){const r=Math.max(12,ARC.H*.045);
-      g.strokeStyle='rgba(223,246,200,.35)';g.lineWidth=4;
-      g.beginPath();g.arc(p.x,p.y,r,0,TAU2);g.stroke();
-      g.strokeStyle='#dff6c8';g.beginPath();
-      g.arc(p.x,p.y,r,-Math.PI/2,-Math.PI/2+TAU2*(carga/T_SEMILLA));g.stroke();}
+    const r=Math.max(14,ARC.H*.05);
+    g.strokeStyle='rgba(223,246,200,.35)';g.lineWidth=5;
+    g.beginPath();g.arc(ARC.W*.5,ARC.H*.62,r,0,TAU2);g.stroke();
+    g.strokeStyle='#dff6c8';g.beginPath();
+    g.arc(ARC.W*.5,ARC.H*.62,r,-Math.PI/2,-Math.PI/2+TAU2*(carga/T_SEMILLA));g.stroke();
   }
-  /* flechas a los tótems apagados: sin esto, en un tablero de 33 u el jugador no
-     sabe adónde ir cuando ya tiene la semilla */
-  if(lleva)for(const t of tots){
-    if(t.on)continue;
-    const p=proj(t.x,H(t.x,t.z)+4.4,t.z);
-    if(p)txt(g,'▾',p.x,p.y,Math.max(16,ARC.H*.06),'#dff6c8');
-  }
-  /* tutorial de los primeros segundos */
   if(tutT>0&&fase==='play'){
     const a=cl(tutT/1.2,0,1);
     g.save();g.globalAlpha=a;
-    txt(g,T('tut'),ARC.W*.5,ARC.H*.80,Math.max(12,ARC.H*.055),'#fff');
-    txt(g,T('tut2'),ARC.W*.5,ARC.H*.88,Math.max(10,ARC.H*.04),'#cfe9d0');
+    txt(g,T('tut'),ARC.W*.5,ARC.H*.80,Math.max(12,ARC.H*.05),'#fff');
+    txt(g,T('tut2'),ARC.W*.5,ARC.H*.88,Math.max(10,ARC.H*.038),'#cfe9d0');
     g.restore();
   }
 }
@@ -1709,11 +1873,12 @@ function dibuja2D(g){
 /* --------------------------------------------------------------- depuración */
 G.dbg={
   get state(){return {fase,encendidos,sanoPct:+sanoPct.toFixed(3),lleva,carga:+carga.toFixed(2),
-    px:+px.toFixed(2),pz:+pz.toFixed(2),bCentro:+bEn(0,0).toFixed(3),
-    t:+tJuego.toFixed(1),nivel,tots:tots.map(t=>t.on)};},
+    px:+px.toFixed(2),pz:+pz.toFixed(2),yaw:+yaw.toFixed(3),pitch:+pitch.toFixed(3),
+    bCentro:+bEn(0,0).toFixed(3),t:+tJuego.toFixed(1),nivel,tots:tots.map(t=>t.on)};},
   autoMove(v){bot=v==null?1:(v?1:0);},
   seed(){lleva=1;carga=0;},
   goto(x,z){px=x;pz=z;},
+  mira(y,p){yaw=y;if(p!=null)pitch=cl(p,-1.15,1.15);},
   light(i){if(tots[i]&&!tots[i].on){lleva=1;enciende(tots[i]);}},
   blight(v){B.fill(v);recuenta();pintaSuelo(true);},
   center(v){for(let j=8;j<14;j++)for(let i=8;i<14;i++)B[ix(i,j)]=v;recuenta();pintaSuelo(true);},

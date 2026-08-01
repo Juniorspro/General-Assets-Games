@@ -1,7 +1,9 @@
 # CINCO BETAS — juegos 3D apaisados, cada uno con una misión que se gana o se pierde
 
 Todos entran al motor ARCADE (`g_<slug>.js`), apaisados (girados 90° en celular
-vertical, que es lo que hace el shell), 3D con luz HORNEADA en color de vértice y
+vertical, que es lo que hace el shell), en PRIMERA PERSONA — pulgar izquierdo
+camina, pulgar derecho mira — con paisaje de verdad (cielo con degradado,
+montañas en la niebla, sol, nubes), 3D con luz HORNEADA en color de vértice y
 `MeshBasicMaterial`: cero luces por fragmento, que es lo que mata en celular.
 Presupuesto por juego: ≤60 llamadas de dibujo, ≤25.000 triángulos, ≥40 fps headless.
 
@@ -39,7 +41,7 @@ dice acá para que quede escrito por qué el quinto es procedural.
 
 ## Estado
 
-- [ ] bosque
+- [x] bosque — primera persona, 23 asertos en verde
 - [ ] orbita
 - [ ] fosa
 - [ ] forja
