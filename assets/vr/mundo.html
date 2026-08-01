@@ -12,8 +12,16 @@
     font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     overflow:hidden;touch-action:none;overscroll-behavior:none;user-select:none}
   #gl{position:fixed;left:0;top:0;width:100%;height:100%;display:block}
-  #cam{position:fixed;right:8px;bottom:8px;width:96px;height:72px;object-fit:cover;
-    border:2px solid #7fd0ff;border-radius:8px;opacity:.85;display:none;z-index:5;transform:scaleX(-1)}
+  /* vista de la cámara con el esqueleto encima: sin esto no hay forma de saber si
+     el detector ve la mano o no, y se termina adivinando */
+  #camwrap{position:fixed;left:8px;bottom:150px;width:152px;height:114px;display:none;
+    border:2px solid #7fd0ff;border-radius:8px;overflow:hidden;z-index:6;background:#000}
+  #camwrap.on{display:block}
+  #cam,#camcv{position:absolute;left:0;top:0;width:100%;height:100%}
+  #cam{object-fit:cover;opacity:.9}
+  #camcv{pointer-events:none}
+  #camtx{position:absolute;left:0;bottom:0;right:0;font:10px ui-monospace,monospace;
+    background:rgba(0,0,0,.6);color:#bfe9ff;padding:1px 3px;text-align:center}
 
   /* ---------------- HUD ---------------- */
   #hud{position:fixed;inset:0;z-index:4;pointer-events:none;display:none}
@@ -80,7 +88,11 @@
 </head>
 <body>
 <canvas id="gl"></canvas>
-<video id="cam" playsinline muted autoplay></video>
+<div id="camwrap">
+  <video id="cam" playsinline muted autoplay></video>
+  <canvas id="camcv" width="152" height="114"></canvas>
+  <div id="camtx">…</div>
+</div>
 
 <div id="hud">
   <div class="pane" id="stat">…</div>
@@ -90,6 +102,7 @@
   <div id="joy"><div id="nub"></div></div>
   <div id="btns">
     <div class="b g big" id="bJump">SALTAR</div>
+    <div class="b" id="bWalk">CAMINAR: NO</div>
     <div class="b" id="bEst">ESTABLE: MEDIO</div>
     <div class="b y" id="bFlash">LINTERNA</div>
     <div class="b" id="bCenter">CENTRAR</div>
@@ -992,7 +1005,11 @@ const MANO = { on: false, cargando: false, hl: null, video: null, lm: null,
      como la derecha. */
   espejo: 1, facing: '?', lado: '',
   pts: Array.from({ length: 21 }, () => new T.Vector3()),
-  dedos: [0,0,0,0,0], gesto: '', gCont: 0, avanza: false, lado: '' };
+  dedos: [0,0,0,0,0], gesto: '', gCont: 0, avanza: false, lado: '',
+  espejo: 1, facing: '?', det: 0, detN: 0, detT: 0, tVis: 0 };
+/* CAMINAR fijo: por si el gesto no entra en tu aparato, esto siempre te deja
+   moverte. No reemplaza al gesto, es la salida de emergencia. */
+let ANDA = false;
 const MD_R = new T.Vector3(), MD_U = new T.Vector3(), MD_F = new T.Vector3();
 async function manosOn(){
   if (MANO.on || MANO.cargando) return;
@@ -1016,12 +1033,13 @@ async function manosOn(){
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } },
       audio: false });
     const v = $('cam'); v.srcObject = st; await v.play().catch(() => {});
-    v.style.display = 'block';
+    $('camwrap').classList.add('on');
     /* qué cámara nos dio de verdad el sistema, que no siempre es la que pedimos */
     const se = st.getVideoTracks()[0].getSettings ? st.getVideoTracks()[0].getSettings() : {};
     MANO.facing = se.facingMode || 'environment';
     MANO.espejo = MANO.facing === 'user' ? -1 : 1;
     v.style.transform = MANO.espejo < 0 ? 'scaleX(-1)' : 'none';
+    MANO.detT = performance.now(); MANO.detN = 0;
     MANO.video = v; MANO.on = true; MANO.cargando = false;
     iMano.visible = huesos.visible = true;
     $('bHands').classList.add('on');
@@ -1092,12 +1110,13 @@ function flashOff(){
   LUZ.on = false;
   $('bFlash').classList.remove('on'); $('bFlash').textContent = 'LINTERNA';
   /* la pista propia se cierra; la de MANOS no, que la usa el seguimiento */
+  /* (si la linterna estaba colgada de la pista de MANOS, esa no se toca acá) */
   if (LUZ.st){ LUZ.st.getTracks().forEach(t => t.stop()); LUZ.st = null; }
 }
 function manosOff(){
   MANO.on = false; MANO.gCont = 0; MANO.avanza = false; MANO.gesto = '';
   iMano.visible = huesos.visible = false;
-  $('bHands').classList.remove('on'); $('cam').style.display = 'none';
+  $('bHands').classList.remove('on'); $('camwrap').classList.remove('on');
   const v = $('cam');
   /* si la linterna está colgada de ESTA pista, se apaga antes de cerrarla, o
      queda el LED prendido con la pista muerta */
@@ -1109,12 +1128,16 @@ function manosOff(){
   if (v.srcObject) { v.srcObject.getTracks().forEach(t => t.stop()); v.srcObject = null; }
 }
 function manoPaso(){
-  if (!MANO.on || !MANO.hl || !MANO.video || MANO.video.readyState < 2) return;
+  if (!MANO.on) return;
+  if (!MANO.hl || !MANO.video || MANO.video.readyState < 2){ pintaEspejito(); return; }
   if (++MANO.cont % MANO.cada) return;                 /* uno de cada N cuadros */
   const t0 = performance.now();
   let r = null;
-  try { r = MANO.hl.detectForVideo(MANO.video, t0); } catch (e) { return; }
+  try { r = MANO.hl.detectForVideo(MANO.video, t0); }
+  catch (e) { MANO.err = (e && e.message) || ('' + e); pintaEspejito(); return; }
   MANO.ms = MANO.ms * .8 + (performance.now() - t0) * .2;
+  MANO.detN++;
+  if (t0 - MANO.detT > 1000){ MANO.det = MANO.detN; MANO.detN = 0; MANO.detT = t0; }
   if (r && r.landmarks && r.landmarks.length){
     MANO.lm = r.landmarks[0]; MANO.visto = 1;
     /* MediaPipe decide izquierda/derecha suponiendo imagen de SELFIE (espejada).
@@ -1129,6 +1152,7 @@ function manoPaso(){
     }
     dedosDe(MANO.lm); gestoPaso(true);
   } else { MANO.visto = 0; gestoPaso(false); }
+  pintaEspejito();
 }
 /* ---------------------------------------------------------------------------
    GESTOS. Qué dedos están estirados se decide comparando la distancia de la
@@ -1137,22 +1161,41 @@ function manoPaso(){
    torcida y a cualquier distancia de la cámara — mirar si la punta está "más
    arriba" sólo funciona con la mano derecha y vertical.
    --------------------------------------------------------------------------- */
-const DEDOS = [[1,2,4],[5,6,8],[9,10,12],[13,14,16],[17,18,20]];
 const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
+/* ángulo en el vértice b, en grados */
+function angulo(a, b, c){
+  const ax = a.x - b.x, ay = a.y - b.y, az = (a.z || 0) - (b.z || 0);
+  const cx = c.x - b.x, cy = c.y - b.y, cz = (c.z || 0) - (b.z || 0);
+  const m = Math.hypot(ax, ay, az) * Math.hypot(cx, cy, cz);
+  if (m < 1e-9) return 180;
+  const t = Math.max(-1, Math.min(1, (ax*cx + ay*cy + az*cz) / m));
+  return Math.acos(t) * 180 / Math.PI;
+}
 function dedosDe(lm){
   const w = lm[0], out = MANO.dedos;
-  for (let i = 0; i < 5; i++){
-    const f = DEDOS[i];
-    out[i] = dist3(lm[f[2]], w) > dist3(lm[f[1]], w) * 1.14 ? 1 : 0;
+  for (let f = 0; f < 5; f++){
+    const i0 = 1 + f * 4;                    /* mcp, pip, dip, tip */
+    const mcp = lm[i0], pip = lm[i0+1], dip = lm[i0+2], tip = lm[i0+3];
+    /* CRITERIO 1: el dedo está DERECHO. Se mira el ángulo de las dos falanges.
+       Esto es lo que hace que ande cuando la mano apunta A LA CÁMARA: ahí el
+       dedo se ve corto por perspectiva, pero sigue estando derecho. */
+    const derecho = (angulo(mcp, pip, dip) + angulo(pip, dip, tip)) / 2 > 148;
+    /* CRITERIO 2: la punta está LEJOS de la muñeca. Sirve cuando la mano se ve
+       de costado y los ángulos salen ruidosos. */
+    const lejos = dist3(tip, w) > dist3(pip, w) * 1.25;
+    out[f] = (derecho || lejos) ? 1 : 0;
   }
   return out;
 }
 function gestoDe(d){
-  /* el pulgar (d[0]) se ignora a propósito: es el que peor se estima */
-  if ( d[1] &&  d[2] && !d[3] && !d[4]) return 'dos';
-  if (!d[1] && !d[2] && !d[3] && !d[4]) return 'puño';
-  if ( d[1] &&  d[2] &&  d[3] &&  d[4]) return 'palma';
-  if ( d[1] && !d[2] && !d[3] && !d[4]) return 'uno';
+  /* el pulgar (d[0]) se ignora a propósito: es el que peor se estima.
+     Y no se exige que anular y meñique estén PERFECTAMENTE doblados: se tolera
+     que uno de los dos salga mal clasificado, porque con una mano real pasa. */
+  const iM = d[1] && d[2], otros = d[3] + d[4];
+  if (iM && otros <= 1) return 'dos';
+  if (iM && otros === 2) return 'palma';
+  if (!d[1] && !d[2] && otros === 0) return 'puño';
+  if (d[1] !== d[2] && otros === 0) return 'uno';
   return '';
 }
 /* HISTÉRESIS: hacen falta 2 lecturas seguidas para arrancar y 3 para frenar. Sin
@@ -1167,7 +1210,42 @@ function gestoPaso(hay){
 /* Guarda: si la cámara se muere o se apaga el modo manos con el gesto puesto, el
    jugador se quedaría caminando solo para siempre. Se exige mano FRESCA. */
 function avanzando(){
-  return MANO.avanza && MANO.on && (performance.now() - (MANO.tVis || 0)) < 600;
+  return ANDA || (MANO.avanza && MANO.on && (performance.now() - (MANO.tVis || 0)) < 600);
+}
+
+/* ---------------------------------------------------------------------------
+   ESPEJITO DE LA CÁMARA con el esqueleto encima. Cada dedo se pinta verde si el
+   detector lo cree ESTIRADO y rojo si lo cree doblado. Es lo único que convierte
+   un "no funciona" en un dato: se ve si la cámara entrega imagen, si encuentra la
+   mano, y qué dedo está leyendo mal.
+   --------------------------------------------------------------------------- */
+const DEDO_DE = [0,0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3, 4,4,4,4];
+function pintaEspejito(){
+  const cv2 = $('camcv'), g = cv2.getContext('2d');
+  const W = cv2.width, H = cv2.height;
+  g.clearRect(0, 0, W, H);
+  const v = MANO.video;
+  const vw = v ? (v.videoWidth || 0) : 0, vh = v ? (v.videoHeight || 0) : 0;
+  $('camtx').textContent = !MANO.on ? 'manos off'
+    : !vw ? 'CÁMARA SIN IMAGEN'
+    : (vw + 'x' + vh + '  ' + (MANO.visto ? (MANO.gesto || 'mano') : 'no veo mano') +
+       '  ' + MANO.det + '/s');
+  if (!MANO.visto || !MANO.lm) return;
+  const lm = MANO.lm;
+  /* la imagen se muestra con object-fit:cover; para el esqueleto alcanza el mapeo
+     directo, que es lo que hace falta para juzgar la detección */
+  const X = p => (MANO.espejo < 0 ? (1 - p.x) : p.x) * W;
+  const Y = p => p.y * H;
+  g.lineWidth = 2;
+  for (const [a, b] of HUESOS){
+    const f = DEDO_DE[b];
+    g.strokeStyle = MANO.dedos[f] ? '#4cff8a' : '#ff6060';
+    g.beginPath(); g.moveTo(X(lm[a]), Y(lm[a])); g.lineTo(X(lm[b]), Y(lm[b])); g.stroke();
+  }
+  g.fillStyle = '#fff';
+  for (let i = 0; i < 21; i++){
+    g.beginPath(); g.arc(X(lm[i]), Y(lm[i]), i % 4 === 0 ? 2.6 : 1.8, 0, 6.284); g.fill();
+  }
 }
 
 /* los 21 puntos van al mundo delante de la cara: x,y normalizados y el tamaño
@@ -1368,7 +1446,7 @@ function fisica(dt){
      hundiría. Con yaw se camina siempre pegado al suelo, mires donde mires. */
   const av = avanzando();
   let mx = JOY.x, my = JOY.y;
-  if (av) my = -1;                               /* dos dedos = adelante */
+  if (av && Math.abs(my) < .1) my = -1;          /* dos dedos (o CAMINAR) = adelante */
   const vel = (av && Math.abs(JOY.y) < .1 ? 3.6 : 5.2)
             * (1 + (Math.hypot(mx, my) > .92 && !av ? .5 : 0));
   const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
@@ -1665,6 +1743,13 @@ async function entra(){
 }
 $('go').onclick = entra;
 $('bJump').onclick = salta;
+$('bWalk').onclick = () => {
+  ANDA = !ANDA;
+  $('bWalk').textContent = 'CAMINAR: ' + (ANDA ? 'SÍ' : 'NO');
+  $('bWalk').classList.toggle('on', ANDA);
+  aviso(ANDA ? 'caminando solo hacia donde mirás · tocá otra vez para frenar'
+             : 'frenado', 2200);
+};
 $('bCenter').onclick = () => {
   if (DO){ const q = new T.Quaternion(); P.yawOff = 0; quatDeGiro(q);
     const e = new T.Euler().setFromQuaternion(q, 'YXZ'); P.yawOff = -e.y + Math.PI; }
@@ -1736,6 +1821,7 @@ window.__VR = {
   movim(x, y, z){ P.accHay = true; P.acc.set(x, y, z); },
   estereo(v){ setEstereo(v); },
   est(n){ setEst(n); }, flash, flashOff,
+  anda(v){ ANDA = !!v; $('bWalk').textContent = 'CAMINAR: ' + (ANDA ? 'SÍ' : 'NO'); },
   espejo(s){ MANO.espejo = s < 0 ? -1 : 1; },
   ceroLean(){ P.lean.set(0,0,0); P.leanS.set(0,0,0); P.vel.set(0,0,0);
     P.bias.set(0,0,0); P.accF.set(0,0,0); P.calib = 0; },
@@ -1789,7 +1875,7 @@ window.__VR = {
   salta, tocaMundo, manosOn, manosOff,
   manoSim(lm){ MANO.lm = lm; MANO.visto = 1; MANO.on = true;
     iMano.visible = huesos.visible = true;
-    dedosDe(lm); gestoPaso(true); manoDibuja(); },
+    dedosDe(lm); gestoPaso(true); manoDibuja(); pintaEspejito(); },
   MANO, dedosDe, gestoDe, avanzando,
   gema(i){ return GEMAS[i]; },
   /* lee el framebuffer DE VERDAD: es la única forma de saber si algo se dibujó */
