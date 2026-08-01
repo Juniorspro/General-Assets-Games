@@ -1,0 +1,1729 @@
+<!doctype html><html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0d1014">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>BOSQUE VIVO</title>
+<style>
+/* ================= ARCADE SHELL — CSS común de los 5 juegos =================
+   REGLA DE ORO DEL CELULAR VERTICAL: el juego SIEMPRE se ve apaisado. Si el
+   teléfono está vertical, #stage se rota 90° y se le fijan ancho/alto EN PX
+   (los del viewport cruzados). Todo lo que mida la UI tiene que medirse en el
+   espacio del #stage (clientWidth/clientHeight, offsetTop), NUNCA contra
+   window.innerWidth/innerHeight ni con getBoundingClientRect: con el stage
+   rotado esas dos cosas viven en ejes distintos. El puntero se convierte a mano
+   (ver ARC.pt) porque la rotación cruza los ejes del compositor.            */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#05070a;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#eef2f6}
+#stage{position:absolute;left:0;top:0;overflow:hidden;background:#0d1014;
+  transform-origin:0 0;touch-action:none}
+canvas{position:absolute;left:0;top:0;display:block;touch-action:none}
+/* dos lienzos: #gl es la escena 3D (WebGL) y #cv la capa 2D de efectos y texto
+   flotante que va ENCIMA. Así los juegos 3D siguen usando ARC.fx sin shaders. */
+#gl{z-index:0}
+#cv{z-index:1;pointer-events:auto;background:transparent}
+/* ---- capas ---- */
+.lay{position:absolute;inset:0;pointer-events:none}
+/* z-index 5: MEDIDO CON TOQUES REALES — sin él, el canvas (#cv, z-index 1) queda
+   por encima de estas pantallas y se come el toque: document.elementFromPoint en
+   el centro de REINTENTAR devolvía "cv", así que reiniciar/seguir/menú/niveles/
+   ajustes NO funcionaban en ningún juego. Las sondas no lo veían porque disparaban
+   el evento directo al botón en vez de tocar la pantalla. */
+.scr{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;pointer-events:auto;background:rgba(6,9,13,.62);z-index:5;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.scr.on{display:flex;animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+#menu{background:#0d1014 center/cover no-repeat;backdrop-filter:none;-webkit-backdrop-filter:none}
+/* el arte del menú ya trae el título: el degradado va de ABAJO para que los
+   botones se lean sin tapar la ilustración, y el título de DOM sólo aparece si
+   la imagen no llegó (#menu sin .hasart). */
+#menu:before{content:"";position:absolute;inset:0;
+  background:linear-gradient(0deg,rgba(5,7,10,.94) 0%,rgba(5,7,10,.55) 30%,rgba(5,7,10,.05) 62%)}
+#menu.hasart .ttl{display:none}
+/* ---- tipografía ---- */
+.h1{font-size:clamp(22px,5.2vmin,44px);font-weight:900;letter-spacing:.5px;
+  text-shadow:0 2px 10px rgba(0,0,0,.75)}
+.h2{font-size:clamp(14px,3vmin,22px);font-weight:800;opacity:.95}
+.sm{font-size:clamp(10px,2.1vmin,15px);font-weight:600;opacity:.72;line-height:1.35}
+/* ---- botones ---- */
+.btn{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:.5em;
+  padding:.62em 1.25em;border-radius:14px;font-weight:900;font-size:clamp(12px,2.6vmin,19px);
+  background:linear-gradient(180deg,var(--acc) 0%,var(--acc2) 100%);color:#10141a;
+  border:1px solid rgba(255,255,255,.28);box-shadow:0 4px 0 rgba(0,0,0,.35),0 8px 22px rgba(0,0,0,.4);
+  transition:transform .08s,box-shadow .08s;white-space:nowrap}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.35)}
+.btn.gh{background:rgba(255,255,255,.09);color:#eef2f6;border-color:rgba(255,255,255,.22);
+  box-shadow:0 3px 0 rgba(0,0,0,.28)}
+.btn.sq{padding:0;width:clamp(34px,7.4vmin,52px);height:clamp(34px,7.4vmin,52px);border-radius:13px;
+  font-size:clamp(15px,3.4vmin,23px)}
+.row{display:flex;gap:clamp(6px,1.6vmin,14px);align-items:center}
+.col{display:flex;flex-direction:column;gap:clamp(6px,1.6vmin,14px)}
+/* ---- MENÚ (rehecho: animado y con el JUGAR grande al centro) ----
+   El anterior era "arte arriba + botón chico abajo a la izquierda", que se leía
+   como una ficha de Netflix. Ahora: fondo vivo (la escena 3D del propio juego si
+   el juego expone attract(), o el arte con un zoom lento), insignias arriba,
+   botón JUGAR grande al centro con latido y destello, y fila de botones redondos.
+   Todo entra con animación escalonada. */
+#menu{background-position:center;overflow:hidden}
+#menu .wrap{position:relative;z-index:2;width:100%;height:100%;display:flex;
+  flex-direction:column;justify-content:space-between;align-items:center;
+  padding:2.6vmin 3.4vmin 3.4vmin;gap:1vmin}
+#menu .mTop{width:100%;display:flex;justify-content:space-between;align-items:flex-start;gap:1vmin}
+#menu .mMid{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;
+  gap:1.4vmin;text-align:center;width:100%}
+#menu .ttl{font-size:clamp(28px,9vmin,74px);font-weight:900;line-height:.92;letter-spacing:-1px;
+  text-shadow:0 4px 0 rgba(0,0,0,.45),0 12px 34px rgba(0,0,0,.7)}
+#menu .ttl em{font-style:normal;color:var(--acc)}
+#menu .sub{max-width:min(62vmin,520px);opacity:.86}
+#menu .mBot{width:100%;display:flex;flex-direction:column;align-items:center;gap:1.6vmin}
+/* botón JUGAR grande, con destello que barre y latido suave */
+#bPlay{position:relative;overflow:hidden;min-width:min(52vmin,340px);
+  padding:.86em 2.2em;border-radius:18px;font-size:clamp(17px,4.6vmin,30px);letter-spacing:1px;
+  box-shadow:0 6px 0 rgba(0,0,0,.35),0 14px 40px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.5);
+  /* OJO: las DOS animaciones van juntas acá. Si se deja sólo "beat", este selector
+     de ID pisa el "rise" de .anim y el botón se queda en opacity:0 (invisible: pasó
+     de verdad, medido con getComputedStyle -> opacity 0, animationName "beat"). */
+  animation:rise .5s cubic-bezier(.2,.9,.25,1) .2s forwards, beat 2.3s ease-in-out .8s infinite}
+#bPlay:after{content:"";position:absolute;top:-60%;left:-30%;width:28%;height:220%;
+  background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.55),rgba(255,255,255,0));
+  transform:rotate(18deg);animation:shine 3.4s ease-in-out infinite}
+@keyframes beat{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@keyframes shine{0%{left:-40%}55%{left:130%}100%{left:130%}}
+#menu .mRow{display:flex;gap:1.8vmin;align-items:center;justify-content:center}
+.rnd{pointer-events:auto;width:clamp(42px,9.4vmin,64px);height:clamp(42px,9.4vmin,64px);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:clamp(17px,4.2vmin,27px);background:rgba(16,20,27,.62);color:#eef2f6;
+  border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(6px);
+  box-shadow:0 4px 0 rgba(0,0,0,.3),0 10px 24px rgba(0,0,0,.45);transition:transform .1s}
+.rnd:active{transform:translateY(3px) scale(.96)}
+.badge{display:flex;align-items:center;gap:.4em;padding:.42em .9em;border-radius:999px;
+  background:rgba(16,20,27,.62);border:1px solid rgba(255,255,255,.18);
+  font-weight:900;font-size:clamp(11px,2.5vmin,17px);backdrop-filter:blur(6px);white-space:nowrap}
+.badge i{font-style:normal;color:var(--acc);font-size:1.1em}
+#menu .bcol{display:flex;flex-direction:column;gap:.8vmin;align-items:flex-end}
+/* entrada escalonada */
+.anim{opacity:0;transform:translateY(14px);animation:rise .5s cubic-bezier(.2,.9,.25,1) forwards}
+.anim.d1{animation-delay:.06s}.anim.d2{animation-delay:.14s}.anim.d3{animation-delay:.22s}
+.anim.d4{animation-delay:.3s}
+@keyframes rise{to{opacity:1;transform:none}}
+/* el arte de fondo respira (si no hay escena 3D viva detrás) */
+#menu.hasart:not(.live){background-size:cover;animation:kb 18s ease-in-out infinite alternate}
+@keyframes kb{0%{background-size:104%}100%{background-size:118%}}
+#menu.live{background-image:none!important;background-color:transparent}
+#menu.live:before{background:linear-gradient(0deg,rgba(4,6,9,.9) 0%,rgba(4,6,9,.35) 34%,
+  rgba(4,6,9,0) 62%,rgba(4,6,9,.55) 100%)}
+/* ---- HUD ---- */
+#hud{position:absolute;inset:0;pointer-events:none;z-index:2}
+.pill{position:absolute;display:flex;align-items:center;gap:.45em;padding:.42em .8em;
+  border-radius:999px;background:rgba(10,14,19,.66);border:1px solid rgba(255,255,255,.14);
+  font-weight:900;font-size:clamp(11px,2.4vmin,17px);backdrop-filter:blur(4px)}
+#pScore{left:3vmin;top:2.4vmin}
+#pInfo{left:50%;top:2.4vmin;transform:translateX(-50%)}
+#pPause{right:3vmin;top:2.4vmin;pointer-events:auto;padding:0;
+  width:clamp(30px,6.6vmin,46px);height:clamp(30px,6.6vmin,46px);justify-content:center}
+#tray{position:absolute;left:0;right:0;bottom:2.2vmin;display:flex;justify-content:center;
+  gap:1.4vmin;pointer-events:auto;flex-wrap:wrap;padding:0 2vmin}
+/* botón SOSTENIDO (ARC.tray con hold): se hunde y se enciende mientras está
+   apretado, así se ve que el disparo está saliendo */
+#tray .btn.hold{transform:scale(.9);background:var(--acc);color:#100c04;
+  box-shadow:0 0 0 4px rgba(255,255,255,.22),0 0 26px var(--acc)}
+#tray .btn.big{width:clamp(58px,13vmin,96px);height:clamp(58px,13vmin,96px);
+  font-size:clamp(22px,5.4vmin,40px)}
+body.vert #tray .btn.big{width:21vw;height:21vw;font-size:8vw}
+/* ---- juegos VERTICALES (body.vert): los controles van grandes y bien abajo,
+   porque en vertical el pulgar llega a la franja de abajo y no a los costados ---- */
+body.vert #tray{bottom:3.5%;gap:2.5vw}
+body.vert #tray .btn{min-width:16vw;padding:.85em 1.1em;font-size:clamp(15px,4.4vw,26px)}
+body.vert #tray .btn.sq{width:16vw;height:16vw}
+body.vert .pill{font-size:clamp(12px,3.4vw,20px);padding:.5em .9em}
+body.vert #pScore{left:4vw;top:2vh}
+body.vert #pInfo{top:2vh}
+body.vert #pPause{right:4vw;top:2vh;width:11vw;height:11vw}
+body.vert #menu .wrap{padding:0 7vw 7vh;gap:2.4vh}
+/* en vertical el arte 16:9 se recortaba tanto que el título quedaba cortado
+   ("ZA CA" en la captura V3): se ajusta por ANCHO y se pega arriba, y el resto de
+   la columna lo llena el color del juego. */
+/* VERTICAL: el arte 16:9 va como banda de arriba (ajustado por ancho, así el título
+   no se corta) y la mitad de abajo NO queda negra vacía: lleva un resplandor del
+   color del juego que respira, más las insignias y el botón grande. */
+body.vert #menu{background-size:100% auto;background-position:center 5%}
+body.vert #menu:after{content:"";position:absolute;left:50%;top:62%;width:150vw;height:70vh;
+  transform:translate(-50%,-50%);pointer-events:none;z-index:1;
+  background:radial-gradient(closest-side,var(--acc) 0%,transparent 72%);
+  opacity:.20;animation:glow 5s ease-in-out infinite}
+@keyframes glow{0%,100%{opacity:.13;transform:translate(-50%,-50%) scale(.92)}
+  50%{opacity:.26;transform:translate(-50%,-50%) scale(1.06)}}
+body.vert #menu .mMid{justify-content:flex-start;padding-top:37vh}
+body.vert #menu .mBot{gap:2.4vh;padding-bottom:2vh}
+body.vert #bPlay{min-width:70vw}
+body.vert #menu:before{background:linear-gradient(0deg,rgba(5,7,10,.97) 0%,rgba(5,7,10,.82) 34%,rgba(5,7,10,.12) 62%,rgba(5,7,10,.35) 100%)}
+body.vert #menu .sub{max-width:100%}
+body.vert #best{right:5vw;bottom:7vh}
+body.vert .card{max-width:88vw}
+body.vert .h1{font-size:clamp(22px,7vw,44px)}
+body.vert .h2{font-size:clamp(14px,4.4vw,24px)}
+body.vert .sm{font-size:clamp(11px,3.2vw,16px)}
+body.vert .btn{font-size:clamp(13px,3.8vw,20px)}
+/* ---- tarjetas / paneles ---- */
+.card{background:rgba(14,18,24,.92);border:1px solid rgba(255,255,255,.14);border-radius:18px;
+  padding:clamp(12px,3vmin,26px);box-shadow:0 18px 50px rgba(0,0,0,.6);max-width:86vmin;
+  display:flex;flex-direction:column;align-items:center;gap:1.6vmin}
+.stars{display:flex;gap:.35em;font-size:clamp(20px,5.6vmin,42px);line-height:1}
+.stars i{font-style:normal;opacity:.22}
+.stars i.on{opacity:1;filter:drop-shadow(0 0 8px rgba(255,196,60,.7))}
+.grid{display:grid;gap:1.2vmin}
+.lvl{width:clamp(38px,8.4vmin,60px);height:clamp(38px,8.4vmin,60px);border-radius:13px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);font-weight:900;
+  font-size:clamp(12px,2.7vmin,18px);pointer-events:auto}
+.lvl.done{background:linear-gradient(180deg,var(--acc),var(--acc2));color:#10141a}
+.lvl.lock{opacity:.35}
+.lvl b{font-size:.52em;letter-spacing:1px;opacity:.9}
+/* ---- ajustes ---- */
+.sw{width:clamp(42px,9vmin,62px);height:clamp(24px,5vmin,34px);border-radius:999px;
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);position:relative;
+  pointer-events:auto;transition:background .15s}
+.sw:after{content:"";position:absolute;top:2px;left:2px;width:calc(100% - 4px);height:calc(100% - 4px);
+  aspect-ratio:1;border-radius:999px;background:#eef2f6;transition:transform .15s}
+.sw.on{background:var(--acc)}
+.sw.on:after{transform:translateX(calc(100% + 2px))}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:2vmin;width:min(70vmin,100%)}
+/* ---- avisos ---- */
+#toast{position:absolute;left:50%;top:16%;z-index:8;transform:translateX(-50%) scale(.9);opacity:0;
+  padding:.5em 1.1em;border-radius:12px;background:rgba(10,14,19,.9);font-weight:900;
+  font-size:clamp(12px,2.8vmin,20px);transition:opacity .18s,transform .18s;z-index:5}
+#toast.on{opacity:1;transform:translateX(-50%) scale(1)}
+#fps{position:absolute;left:50%;bottom:.6vmin;transform:translateX(-50%);font-size:10px;
+  opacity:.35;z-index:5}
+/* ---- pantalla de CARGA: fondo del propio juego, barra real y elección de idioma ---- */
+#load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:2.2vmin;background:#05070a center/cover no-repeat;z-index:9;
+  text-align:center;padding:4vmin}
+#load:before{content:"";position:absolute;inset:0;backdrop-filter:blur(3px);
+  background:linear-gradient(0deg,rgba(4,6,9,.95),rgba(4,6,9,.62))}
+#load>*{position:relative;z-index:1}
+#ldName{font-size:clamp(20px,6vmin,46px);font-weight:900;letter-spacing:.5px;
+  text-shadow:0 3px 14px rgba(0,0,0,.8)}
+#ldPct{font-weight:900;font-size:clamp(12px,2.6vmin,18px);opacity:.9}
+#langs{display:flex;gap:1.4vmin;flex-wrap:wrap;justify-content:center;margin-top:1vmin}
+#ldGo{display:none}
+#ldGo.on{display:flex;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+#load .bar{width:min(52vmin,340px);height:8px;border-radius:999px;background:rgba(255,255,255,.14);
+  overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.1)}
+#load .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));
+  transition:width .25s}
+.seg{display:flex;gap:.4vmin;background:rgba(255,255,255,.08);padding:.35em;border-radius:12px}
+.seg b{font-weight:900;font-size:clamp(10px,2.2vmin,15px);padding:.45em .8em;border-radius:9px;
+  opacity:.6;pointer-events:auto;white-space:nowrap}
+.seg b.on{background:var(--acc);color:#10141a;opacity:1}
+</style></head><body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <canvas id="cv"></canvas>
+  <div id="hud">
+    <div class="pill" id="pScore">0</div>
+    <div class="pill" id="pInfo"></div>
+    <div class="pill" id="pPause">II</div>
+    <div id="tray"></div>
+  </div>
+  <div class="scr" id="menu"><div class="wrap">
+      <div class="mTop">
+        <div class="badge anim d1"><i>◉</i><span id="mCoins">0</span></div>
+        <div class="bcol">
+          <div class="badge anim d1" id="mBest"></div>
+          <div class="badge anim d2" id="mLvl" style="display:none"></div>
+        </div>
+      </div>
+      <div class="mMid">
+        <div class="ttl anim d1" id="mTtl"></div>
+        <div class="sm sub anim d2" id="mSub"></div>
+      </div>
+      <div class="mBot">
+        <div class="btn anim d3" id="bPlay" data-i18n="play">JUGAR</div>
+        <div class="mRow anim d4">
+          <div class="rnd" id="bLevels" title="niveles">☰</div>
+          <div class="rnd" id="bOpts" title="ajustes">⚙</div>
+          <div class="rnd" id="bExtra" style="display:none"></div>
+        </div>
+      </div>
+    </div></div>
+  <div class="scr" id="pause"><div class="card">
+      <div class="h1" data-i18n="pause">PAUSA</div>
+      <div class="row">
+        <div class="btn" id="bRes" data-i18n="resume">SEGUIR</div>
+        <div class="btn gh" id="bRetry" data-i18n="retry">REINTENTAR</div>
+        <div class="btn gh sq" id="bOpts2">⚙</div>
+        <div class="btn gh" id="bQuit" data-i18n="menu">MENÚ</div>
+      </div></div></div>
+  <div class="scr" id="over"><div class="card">
+      <div class="h1" id="oTtl">FIN</div>
+      <div class="stars" id="oStars"><i>★</i><i>★</i><i>★</i></div>
+      <div class="h2" id="oScore"></div>
+      <div class="sm" id="oSub"></div>
+      <div class="row">
+        <div class="btn" id="bNext" data-i18n="next">SIGUIENTE</div>
+        <div class="btn gh" id="bAgain" data-i18n="again">OTRA VEZ</div>
+        <div class="btn gh" id="bMenu" data-i18n="menu">MENÚ</div>
+      </div></div></div>
+  <div class="scr" id="levels"><div class="card">
+      <div class="h2" data-i18n="levels">NIVELES</div>
+      <div class="grid" id="lvGrid"></div>
+      <div class="btn gh" id="bLvBack" data-i18n="back">VOLVER</div></div></div>
+  <div class="scr" id="opts"><div class="card">
+      <div class="h2" data-i18n="settings">AJUSTES</div>
+      <div class="opt"><div class="sm" data-i18n="music">Música</div><div class="sw on" id="swMus"></div></div>
+      <div class="opt"><div class="sm" data-i18n="sfx">Sonidos</div><div class="sw on" id="swSfx"></div></div>
+      <div class="opt"><div class="sm" data-i18n="vib">Vibración</div><div class="sw on" id="swVib"></div></div>
+      <div class="opt"><div class="sm" data-i18n="extraFx">Efectos extra</div><div class="sw on" id="swFx"></div></div>
+      <div class="opt"><div class="sm" data-i18n="showFps">Mostrar FPS</div><div class="sw" id="swFps"></div></div>
+      <div class="opt"><div class="sm" data-i18n="graphics">Gráficos</div><div class="seg" id="segGfx"></div></div>
+      <div class="opt"><div class="sm" data-i18n="lang">Idioma</div><div class="seg" id="segLang"></div></div>
+      <div class="row"><div class="btn gh" id="bWipe" data-i18n="wipe">BORRAR PROGRESO</div>
+        <div class="btn" id="bOptBack" data-i18n="done">LISTO</div></div></div></div>
+  <div id="toast"></div>
+  <div id="fps" style="display:none">–</div>
+  <div id="load">
+    <div id="ldName">…</div>
+    <div class="sm" id="ldTtl" data-i18n="loading">CARGANDO</div>
+    <div class="bar"><i id="ldBar"></i></div>
+    <div id="ldPct">0%</div>
+    <div class="sm" id="ldTxt">…</div>
+    <div class="sm" data-i18n="lang" style="margin-top:2vmin">IDIOMA</div>
+    <div class="seg" id="langs"></div>
+    <div class="btn" id="ldGo" data-i18n="tapPlay">TOCÁ PARA JUGAR</div>
+  </div>
+</div>
+
+<script>
+(function(){var Q=new URLSearchParams(location.search);var TV="0.170.0";
+var t=Q.has("local")?"/_vthree/build/three.module.js":"https://cdn.jsdelivr.net/npm/three@"+TV+"/build/three.module.js";
+var a=Q.has("local")?"/_vthree/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@"+TV+"/examples/jsm/";
+document.write('<script type="importmap">{"imports":{"three":"'+t+'","three/addons/":"'+a+'"}}<\/script>');
+})();
+</script>
+<script type="module">
+/* ---- assets ---- */
+const BASE=(new URLSearchParams(location.search).has('local')?'/assets/arcade/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@e2e8b16/assets/arcade/');
+const A=f=>BASE+f;
+/* ============================================================================
+   ARCADE SHELL — el motor común de los 5 juegos
+   ----------------------------------------------------------------------------
+   Un solo archivo, cero dependencias, canvas 2D + overlays de DOM para los
+   menús (el texto queda nítido y se estila con CSS en vez de dibujarse).
+   Lo que resuelve por todos:
+     · APAISADO SIEMPRE (rota #stage 90° si el teléfono está vertical) y puntero
+       convertido a mano, porque la rotación del compositor cruza los ejes.
+     · Bucle de paso FIJO a 60 Hz con interpolación al dibujar: la simulación no
+       cambia con los FPS del celular y el movimiento no tiembla a 120 Hz.
+     · Audio (WebAudio con limitador + música por <audio>), con SÍNTESIS de
+       respaldo: si un mp3 no está o el navegador no lo decodifica, suena un
+       blip generado y el juego no se queda muerto de sonido.
+     · Guardado en localStorage, pantallas (menú/pausa/fin/niveles/ajustes),
+       partículas, texto flotante, sacudida de cámara, toast, FPS y calidad
+       adaptativa (si baja de 45 fps se recortan las partículas).
+   Contrato del juego (window.GAME): ver el final del archivo.
+   ========================================================================== */
+'use strict';
+const ARC={W:0,H:0,dpr:1,q:1,t:0,dt:1/60,frame:0,fps:60,paused:false,scr:'load',lvl:1,alive:false};
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const rndi=(a,b)=>Math.floor(rnd(a,b+1));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const TAU=Math.PI*2;
+
+/* ---------------------------------------------------------------- 1. ESCENARIO
+   Si el viewport está vertical se rota el escenario 90° y se le fijan ancho y
+   alto EN PX (cruzados). Todo lo demás vive en ese espacio: ARC.W/ARC.H son las
+   medidas del juego, siempre apaisadas. */
+let ROT=false,OFFX=0;
+function fit(){
+  const vw=Math.round(window.innerWidth),vh=Math.round(window.innerHeight);
+  const st=$('stage');
+  /* GAME.portrait = el juego se juega VERTICAL de verdad (tipo Crossy Road): no se
+     rota nada. En una ventana apaisada (escritorio) se centra una columna 9:16 y
+     el resto queda negro, para que el encuadre sea el mismo que en el teléfono. */
+  if(GAME.portrait){
+    ROT=false;
+    const w=Math.min(vw,Math.round(vh*.58));
+    OFFX=Math.round((vw-w)/2);
+    st.style.width=w+'px';st.style.height=vh+'px';
+    st.style.transform=OFFX?('translateX('+OFFX+'px)'):'none';
+  }else{
+    OFFX=0;
+    ROT=vh>vw;
+    if(ROT){
+      st.style.width=vh+'px';st.style.height=vw+'px';
+      st.style.transform='translateX('+vw+'px) rotate(90deg)';
+    }else{
+      st.style.width=vw+'px';st.style.height=vh+'px';st.style.transform='none';
+    }
+  }
+  ARC.W=st.clientWidth;ARC.H=st.clientHeight;
+  const cv=$('cv');
+  ARC.dpr=clamp(window.devicePixelRatio||1,1,2.5);
+  cv.style.width=ARC.W+'px';cv.style.height=ARC.H+'px';
+  cv.width=Math.round(ARC.W*ARC.dpr);cv.height=Math.round(ARC.H*ARC.dpr);
+  ARC.g=cv.getContext('2d');
+  ARC.g.setTransform(ARC.dpr,0,0,ARC.dpr,0,0);
+  /* la escena 3D usa su propio lienzo y su propio DPR (más barato en el celular:
+     el 3D a 1.5x se ve igual y cuesta la mitad que a 3x) */
+  const gl=$('gl');
+  gl.style.width=ARC.W+'px';gl.style.height=ARC.H+'px';
+  if(ARC.rnd){
+    ARC.rnd.setPixelRatio(Math.min(ARC.dpr,1.75));
+    ARC.rnd.setSize(ARC.W,ARC.H,false);
+  }
+  if(GAME.resize)GAME.resize();
+}
+window.addEventListener('resize',()=>{fit();},{passive:true});
+window.addEventListener('orientationchange',()=>setTimeout(fit,120),{passive:true});
+
+/* ---- puntero: del evento del navegador al espacio del escenario ----
+   Con el escenario rotado 90° y corrido vw en X, un punto (sx,sy) del escenario
+   cae en pantalla en (vw−sy, sx). La inversa es la que hace falta acá. NO se usa
+   getBoundingClientRect: devuelve la caja YA rotada y mezcla los ejes. */
+ARC.pt=function(e){
+  const x=e.clientX,y=e.clientY;
+  if(ROT)return{x:y,y:Math.round(window.innerWidth)-x};
+  return{x:x-OFFX,y:y};      /* OFFX = columna centrada de los juegos verticales */
+};
+
+/* ------------------------------------------------------------------ 2. GUARDADO */
+const SAVE={};
+function saveKey(){return 'arc.'+GAME.slug;}
+function saveLoad(){
+  try{Object.assign(SAVE,JSON.parse(localStorage.getItem(saveKey())||'{}'));}catch(e){}
+  if(SAVE.mus===undefined)SAVE.mus=1;
+  if(SAVE.sfx===undefined)SAVE.sfx=1;
+  if(SAVE.vib===undefined)SAVE.vib=1;
+  if(SAVE.fx===undefined)SAVE.fx=1;
+  if(SAVE.fps===undefined)SAVE.fps=0;
+  if(!SAVE.stars)SAVE.stars={};
+  if(!SAVE.best)SAVE.best=0;
+  if(!SAVE.coins)SAVE.coins=0;
+  if(!SAVE.done)SAVE.done=0;      /* nivel más alto superado */
+  if(!SAVE.lang)SAVE.lang=(navigator.language||'es').slice(0,2).toLowerCase();
+  if(!STR[SAVE.lang])SAVE.lang='es';
+  if(SAVE.gfx==null)SAVE.gfx=2;
+}
+function saveNow(){try{localStorage.setItem(saveKey(),JSON.stringify(SAVE));}catch(e){}}
+ARC.save=saveNow;ARC.S=SAVE;
+
+
+/* ------------------------------------------------------------------ 2b. IDIOMAS
+   Todo texto visible sale de acá (data-i18n en el DOM + T() en el código). Cada
+   juego puede sumar sus propias claves con GAME.i18n={es:{},en:{},pt:{}} y se
+   mezclan sobre estas. El idioma se elige en la pantalla de carga la primera vez
+   y después en Ajustes; queda guardado. Si falta una clave se cae al español. */
+const LANGS=[['es','ES'],['en','EN'],['pt','PT']];
+const STR={
+  es:{loading:'CARGANDO',lang:'IDIOMA',tapPlay:'TOCÁ PARA JUGAR',play:'JUGAR',levels:'NIVELES',
+    settings:'AJUSTES',pause:'PAUSA',resume:'SEGUIR',retry:'REINTENTAR',menu:'MENÚ',next:'SIGUIENTE',
+    again:'OTRA VEZ',back:'VOLVER',done:'LISTO',wipe:'BORRAR PROGRESO',music:'Música',sfx:'Sonidos',
+    vib:'Vibración',extraFx:'Efectos extra',showFps:'Mostrar FPS',graphics:'Gráficos',
+    gfx0:'Bajo',gfx1:'Medio',gfx2:'Alto',gfx3:'Ultra',record:'RÉCORD',level:'NIVEL',
+    win:'¡NIVEL SUPERADO!',lost:'PERDISTE',points:'PUNTOS',wiped:'Progreso borrado',
+    art:'arte',sounds:'sonidos',models:'modelos',engine:'motor 3D',ready:'listo'},
+  en:{loading:'LOADING',lang:'LANGUAGE',tapPlay:'TAP TO PLAY',play:'PLAY',levels:'LEVELS',
+    settings:'SETTINGS',pause:'PAUSED',resume:'RESUME',retry:'RETRY',menu:'MENU',next:'NEXT',
+    again:'AGAIN',back:'BACK',done:'DONE',wipe:'WIPE PROGRESS',music:'Music',sfx:'Sound',
+    vib:'Vibration',extraFx:'Extra effects',showFps:'Show FPS',graphics:'Graphics',
+    gfx0:'Low',gfx1:'Medium',gfx2:'High',gfx3:'Ultra',record:'BEST',level:'LEVEL',
+    win:'LEVEL COMPLETE!',lost:'GAME OVER',points:'SCORE',wiped:'Progress wiped',
+    art:'art',sounds:'sounds',models:'models',engine:'3D engine',ready:'ready'},
+  pt:{loading:'CARREGANDO',lang:'IDIOMA',tapPlay:'TOQUE PARA JOGAR',play:'JOGAR',levels:'NÍVEIS',
+    settings:'AJUSTES',pause:'PAUSA',resume:'CONTINUAR',retry:'TENTAR DE NOVO',menu:'MENU',next:'SEGUINTE',
+    again:'DE NOVO',back:'VOLTAR',done:'PRONTO',wipe:'APAGAR PROGRESSO',music:'Música',sfx:'Sons',
+    vib:'Vibração',extraFx:'Efeitos extra',showFps:'Mostrar FPS',graphics:'Gráficos',
+    gfx0:'Baixo',gfx1:'Médio',gfx2:'Alto',gfx3:'Ultra',record:'RECORDE',level:'NÍVEL',
+    win:'NÍVEL COMPLETO!',lost:'VOCÊ PERDEU',points:'PONTOS',wiped:'Progresso apagado',
+    art:'arte',sounds:'sons',models:'modelos',engine:'motor 3D',ready:'pronto'}
+};
+function lang(){return SAVE.lang||'es';}
+ARC.T=function(k){
+  const g=(GAME.i18n&&GAME.i18n[lang()])||{};
+  if(g[k]!=null)return g[k];
+  const d=STR[lang()]||STR.es;
+  if(d[k]!=null)return d[k];
+  const ge=(GAME.i18n&&GAME.i18n.es)||{};
+  return ge[k]!=null?ge[k]:(STR.es[k]!=null?STR.es[k]:k);
+};
+const T=ARC.T;
+ARC.i18nApply=function(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=T(el.getAttribute('data-i18n'));});
+  if(GAME.subKey)$('mSub').innerHTML=T(GAME.subKey);
+  if(ARC.scr==='menu')refreshMenu();
+  if(GAME.i18nDone)nsafe2(()=>GAME.i18nDone());
+};
+const nsafe2=f=>{try{return f();}catch(e){console.warn(e);}};
+ARC.lang=function(l){
+  if(l){SAVE.lang=l;saveNow();ARC.i18nApply();paintSegs();}
+  return lang();
+};
+
+/* --------------------------------------------------------------- 2c. GRÁFICOS
+   Un solo número (0-3) que decide DPR, sombras, partículas y niebla. Se aplica en
+   caliente: no hace falta reiniciar el juego. */
+/* DPR: el 3D a más de 1.6 no se nota en un celular y cuesta el doble de píxeles.
+   Medido en este pack: con 2.5 el relleno de pantalla era el cuello de botella. */
+const GFXP=[{dpr:.75,part:.4,sh:0,fog:.7},{dpr:1,part:.7,sh:0,fog:.85},
+            {dpr:1.35,part:1,sh:1,fog:1},{dpr:1.6,part:1.3,sh:1,fog:1.15}];
+ARC.gfx=function(v){
+  if(v!==undefined){SAVE.gfx=clamp(v|0,0,3);saveNow();applyGfx();paintSegs();}
+  return SAVE.gfx==null?2:SAVE.gfx;
+};
+function applyGfx(){
+  const p=GFXP[ARC.gfx()];
+  ARC.q=p.part;
+  if(ARC.rnd){
+    ARC.rnd.setPixelRatio(Math.min(window.devicePixelRatio||1,p.dpr));
+    ARC.rnd.shadowMap.enabled=!!(GAME.shadows&&p.sh);
+    ARC.rnd.setSize(ARC.W,ARC.H,false);
+  }
+  if(GAME.gfxApply)nsafe2(()=>GAME.gfxApply(p));
+}
+ARC.gfxP=()=>GFXP[ARC.gfx()];
+function paintSegs(){
+  const mk=(host,items,cur,fn)=>{
+    const el=$(host);if(!el)return;
+    el.innerHTML='';
+    items.forEach(it=>{
+      const b=document.createElement('b');
+      b.textContent=it[1];b.className=(it[0]===cur?'on':'');
+      b.addEventListener('pointerdown',e=>{e.preventDefault();ARC.sfx('tap');ARC.vib(8);fn(it[0]);});
+      el.appendChild(b);
+    });
+  };
+  mk('langs',LANGS,lang(),l=>ARC.lang(l));
+  mk('segLang',LANGS,lang(),l=>ARC.lang(l));
+  mk('segGfx',[[0,T('gfx0')],[1,T('gfx1')],[2,T('gfx2')],[3,T('gfx3')]],ARC.gfx(),v=>ARC.gfx(v));
+}
+ARC.paintSegs=paintSegs;
+
+/* -------------------------------------------------------------------- 3. AUDIO */
+const SND={ctx:null,buf:{},gain:null,mus:null,ready:false};
+function actx(){
+  if(SND.ctx)return SND.ctx;
+  const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
+  SND.ctx=new C();
+  const lim=SND.ctx.createDynamicsCompressor();
+  lim.threshold.value=-6;lim.knee.value=0;lim.ratio.value=12;lim.attack.value=.003;lim.release.value=.15;
+  SND.gain=SND.ctx.createGain();SND.gain.gain.value=.85;
+  SND.gain.connect(lim);lim.connect(SND.ctx.destination);
+  return SND.ctx;
+}
+ARC.sndResume=function(){const c=actx();if(c&&c.state==='suspended')c.resume();};
+/* carga de efectos: si algo no llega o no se puede decodificar, se deja sin
+   buffer y sonará el blip sintetizado (nunca silencio total ni excepción) */
+ARC.sndLoad=function(map,done){
+  const ks=Object.keys(map);let n=0;
+  if(!ks.length){done&&done();return;}
+  ks.forEach(k=>{
+    fetch(map[k]).then(r=>r.arrayBuffer()).then(b=>{
+      const c=actx();if(!c)throw 0;
+      return new Promise((res,rej)=>c.decodeAudioData(b,res,rej));
+    }).then(buf=>{SND.buf[k]=buf;}).catch(()=>{}).then(()=>{
+      if(++n===ks.length){SND.ready=true;done&&done();}
+    });
+  });
+};
+/* blips de respaldo por nombre: no pretenden imitar el mp3, pero dan feedback */
+const BEEP={tap:[520,.05,'square',.25],pop:[720,.08,'sine',.3],chime:[1040,.16,'triangle',.28],
+  coin:[1180,.1,'square',.25],win:[880,.4,'triangle',.3],lose:[180,.4,'sawtooth',.25],
+  click:[1400,.04,'square',.22],wood:[240,.12,'sawtooth',.3],glass:[2200,.1,'triangle',.22],
+  splat:[300,.14,'sine',.3],groan:[120,.35,'sawtooth',.22],launch:[420,.14,'sawtooth',.28],
+  boom:[90,.35,'sawtooth',.35],power:[1320,.22,'triangle',.28],shoot:[640,.07,'square',.22]};
+ARC.sfx=function(name,o){
+  if(!SAVE.sfx)return;
+  const c=actx();if(!c)return;
+  o=o||{};
+  const b=SND.buf[name];
+  if(b){
+    const s=c.createBufferSource();s.buffer=b;
+    s.playbackRate.value=o.rate||1;
+    const g=c.createGain();g.gain.value=(o.vol==null?1:o.vol);
+    s.connect(g);g.connect(SND.gain);s.start(0);return;
+  }
+  const d=BEEP[name]||BEEP.tap;
+  const os=c.createOscillator(),g=c.createGain();
+  os.type=d[2];os.frequency.value=d[0]*(o.rate||1);
+  const v=d[3]*(o.vol==null?1:o.vol);
+  g.gain.setValueAtTime(0,c.currentTime);
+  g.gain.linearRampToValueAtTime(v,c.currentTime+.008);
+  g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+d[1]);
+  os.connect(g);g.connect(SND.gain);os.start();os.stop(c.currentTime+d[1]+.02);
+};
+ARC.music=function(url){
+  if(!url)return;
+  if(!SND.mus){
+    SND.mus=new Audio();SND.mus.loop=true;SND.mus.volume=.42;
+    SND.mus.addEventListener('error',()=>{},{passive:true});
+  }
+  if(SND.mus.src!==url){SND.mus.src=url;}
+  if(SAVE.mus){const p=SND.mus.play();if(p&&p.catch)p.catch(()=>{});}
+};
+ARC.musicStop=function(){if(SND.mus)SND.mus.pause();};
+ARC.vib=function(ms){if(SAVE.vib&&navigator.vibrate)try{navigator.vibrate(ms||12);}catch(e){}};
+
+/* ---------------------------------------------------------------- 4. EFECTOS */
+const PT=[],TX=[];
+let shake=0,shakeT=0;
+ARC.fx={
+  burst(x,y,o){
+    o=o||{};
+    let n=Math.round((o.n||14)*ARC.q*(SAVE.fx?1:.45));
+    const sp=o.speed||220,life=o.life||.55,g=o.g==null?900:o.g;
+    for(let i=0;i<n;i++){
+      const a=o.a==null?rnd(0,TAU):o.a+rnd(-.6,.6);
+      const v=sp*rnd(.35,1);
+      PT.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:life*rnd(.6,1.2),L:life,
+        s:(o.size||5)*rnd(.6,1.4),c:o.color||'#ffd166',g,sq:!!o.sq,
+        rot:rnd(0,TAU),spin:rnd(-8,8),fade:o.fade!==false});
+    }
+  },
+  ring(x,y,o){o=o||{};PT.push({ring:1,x,y,r:o.r0||6,R:o.r||90,l:o.life||.35,L:o.life||.35,
+    c:o.color||'#fff',w:o.w||4});},
+  text(x,y,txt,o){o=o||{};TX.push({x,y,t:txt,l:o.life||.8,L:o.life||.8,c:o.color||'#fff',
+    s:o.size||22,vy:o.vy==null?-46:o.vy});}
+};
+ARC.shake=function(m){shake=Math.max(shake,m||6);};
+function fxStep(dt){
+  for(let i=PT.length-1;i>=0;i--){const p=PT[i];
+    p.l-=dt;if(p.l<=0){PT.splice(i,1);continue;}
+    if(p.ring){p.r=lerp(p.r,p.R,1-Math.pow(.001,dt));continue;}
+    p.vy+=p.g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.rot+=p.spin*dt;
+    if(p.bounce&&p.y>p.bounce){p.y=p.bounce;p.vy*=-.42;p.vx*=.7;}
+  }
+  for(let i=TX.length-1;i>=0;i--){const t=TX[i];t.l-=dt;if(t.l<=0){TX.splice(i,1);continue;}
+    t.y+=t.vy*dt;}
+  if(shake>0){shakeT+=dt*46;shake=Math.max(0,shake-dt*shake*7-dt*3);}
+}
+function fxDraw(g){
+  for(const p of PT){
+    const k=p.l/p.L;
+    g.globalAlpha=p.fade===false?1:clamp(k*1.4,0,1);
+    if(p.ring){g.strokeStyle=p.c;g.lineWidth=p.w*k;g.beginPath();g.arc(p.x,p.y,p.r,0,TAU);g.stroke();continue;}
+    g.fillStyle=p.c;
+    if(p.sq){g.save();g.translate(p.x,p.y);g.rotate(p.rot);
+      g.fillRect(-p.s/2,-p.s/2,p.s,p.s);g.restore();}
+    else{g.beginPath();g.arc(p.x,p.y,p.s*(.4+.6*k),0,TAU);g.fill();}
+  }
+  g.globalAlpha=1;
+  for(const t of TX){
+    const k=t.l/t.L;
+    g.globalAlpha=clamp(k*1.6,0,1);
+    g.font='900 '+t.s+'px system-ui,sans-serif';g.textAlign='center';
+    g.lineWidth=4;g.strokeStyle='rgba(0,0,0,.55)';g.strokeText(t.t,t.x,t.y);
+    g.fillStyle=t.c;g.fillText(t.t,t.x,t.y);
+  }
+  g.globalAlpha=1;g.textAlign='left';
+}
+
+/* foto de la escena 3D para las sondas: se lee el framebuffer DENTRO de un
+   requestAnimationFrame, que corre después del render del bucle en el MISMO
+   frame — ahí el buffer todavía está intacto (después del compositado ya no). */
+ARC.snapGL=function(){
+  return new Promise(res=>{
+    requestAnimationFrame(()=>{
+      const r=ARC.rnd;if(!r){res(null);return;}
+      const gl=r.getContext();
+      const W=gl.drawingBufferWidth,H=gl.drawingBufferHeight;
+      const px=new Uint8Array(W*H*4);
+      gl.readPixels(0,0,W,H,gl.RGBA,gl.UNSIGNED_BYTE,px);
+      let sum=0,n=0;const uniq={};
+      for(let i=0;i<px.length;i+=4*37){n++;
+        sum+=px[i]*.3+px[i+1]*.6+px[i+2]*.1;
+        uniq[(px[i]>>5)+','+(px[i+1]>>5)+','+(px[i+2]>>5)]=1;}
+      res({luz:+(sum/Math.max(1,n)).toFixed(1),colores:Object.keys(uniq).length});
+    });
+  });
+};
+
+/* ---------------------------------------------------------------- 5. PANTALLAS */
+const SCRS=['menu','pause','over','levels','opts'];
+let optFrom='menu';
+ARC.show=function(s){
+  for(const k of SCRS)$(k).classList.toggle('on',k===s);
+  if(s==='menu'&&GAME.attract)$('menu').classList.add('live');
+  if(s!=='load')$('load').style.display='none';
+  $('hud').style.display=(s==='game')?'block':'none';
+  ARC.scr=s;
+};
+ARC.toast=function(t,ms){
+  const el=$('toast');el.textContent=t;el.classList.add('on');
+  clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),ms||1100);
+};
+ARC.hud=function(score,info){
+  if(score!==undefined)$('pScore').textContent=score;
+  if(info!==undefined)$('pInfo').innerHTML=info;
+};
+/* bandeja de botones del juego (impulsar, boosters, etc.) */
+ARC.tray=function(list){
+  const t=$('tray');t.innerHTML='';
+  (list||[]).forEach(b=>{
+    const el=document.createElement('div');
+    el.className='btn '+(b.gh?'gh ':'')+(b.sq?'sq ':'')+(b.cls||'');
+    el.id='tb_'+b.id;el.innerHTML=b.txt;
+    if(b.hold){
+      /* botón SOSTENIDO (disparar): avisa al apretar y al soltar. Se captura el
+         puntero para que soltar afuera del botón también cuente como soltar: sin
+         eso el dedo se corre 3 px, sale del círculo y el juego queda disparando
+         para siempre. */
+      const on=ev=>{ev.preventDefault();ev.stopPropagation();
+        if(el.dataset.on)return;el.dataset.on='1';el.classList.add('hold');
+        try{el.setPointerCapture(ev.pointerId);}catch(e){}
+        ARC.vib(8);b.hold(1,el);};
+      const off=ev=>{if(!el.dataset.on)return;delete el.dataset.on;
+        el.classList.remove('hold');b.hold(0,el);};
+      el.addEventListener('pointerdown',on);
+      el.addEventListener('pointerup',off);
+      el.addEventListener('pointercancel',off);
+      el.addEventListener('lostpointercapture',off);
+    }else
+      el.addEventListener('pointerdown',ev=>{ev.preventDefault();ARC.sfx('tap');ARC.vib(10);b.fn&&b.fn(el);});
+    t.appendChild(el);
+  });
+};
+ARC.trayTxt=function(id,txt){const el=$('tb_'+id);if(el)el.innerHTML=txt;};
+
+/* --------------------------------------------------------------- 6. PARTIDA */
+ARC.play=function(lvl){
+  ARC.lvl=lvl||1;
+  ARC.alive=true;ARC.paused=false;
+  PT.length=0;TX.length=0;shake=0;
+  ARC.show('game');
+  GAME.start(ARC.lvl);
+  ARC.music(GAME.music);
+};
+ARC.over=function(o){
+  o=o||{};ARC.alive=false;
+  const st=Math.max(0,Math.min(3,o.stars==null?(o.win?3:0):o.stars));
+  if(o.win){
+    const key=String(ARC.lvl);
+    if((SAVE.stars[key]||0)<st){SAVE.stars[key]=st;}
+    if(ARC.lvl>SAVE.done)SAVE.done=ARC.lvl;
+  }
+  if(o.score!=null&&o.score>SAVE.best)SAVE.best=o.score;
+  if(o.coins)SAVE.coins+=o.coins;
+  saveNow();
+  $('oTtl').textContent=o.title||(o.win?T('win'):T('lost'));
+  $('oScore').textContent=o.score!=null?(T('points')+' '+o.score):'';
+  $('oSub').innerHTML=o.sub||'';
+  const S=$('oStars').children;
+  $('oStars').style.display=o.noStars?'none':'flex';
+  for(let i=0;i<3;i++)S[i].classList.toggle('on',i<st);
+  $('bNext').style.display=(o.win&&GAME.levels&&ARC.lvl<GAME.levels)?'flex':'none';
+  ARC.sfx(o.win?'win':'lose');
+  ARC.vib(o.win?[10,40,10]:60);
+  ARC.show('over');
+};
+ARC.pause=function(){
+  if(!ARC.alive||ARC.paused)return;
+  ARC.paused=true;ARC.show('pause');GAME.pause&&GAME.pause();
+};
+ARC.resume=function(){
+  if(!ARC.alive)return;
+  ARC.paused=false;ARC.show('game');GAME.resume&&GAME.resume();
+};
+ARC.menu=function(){
+  ARC.alive=false;ARC.paused=false;ARC.show('menu');refreshMenu();
+};
+
+/* --------------------------------------------------------------- 7. EL BUCLE
+   Paso FIJO de 1/60 con acumulador y alpha de interpolación al dibujar: la
+   física no depende de los FPS (un celular a 30 y otro a 120 simulan igual) y
+   el dibujo no tiembla. Se cortan los saltos grandes (pestaña en segundo plano)
+   a 5 pasos por frame para no colgar el hilo. */
+const STEP=1/60;
+let acc=0,last=0,fpsA=60,slowT=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  if(!last)last=ts;
+  let d=(ts-last)/1000;last=ts;
+  if(d>.25)d=.25;
+  ARC.fps=fpsA=lerp(fpsA,1/Math.max(.001,d),.06);
+  if(SAVE.fps)$('fps').textContent=Math.round(fpsA)+' fps';
+  /* calidad adaptativa: dos segundos por debajo de 45 fps y se recortan
+     partículas (ARC.q lo leen los juegos y ARC.fx.burst) */
+  if(fpsA<45){slowT+=d;if(slowT>2&&ARC.q>.5){ARC.q=.5;slowT=0;}}
+  else{slowT=Math.max(0,slowT-d);if(fpsA>56&&ARC.q<1)ARC.q=Math.min(1,ARC.q+d*.2);}
+  const run=ARC.alive&&!ARC.paused;
+  acc+=d;
+  let n=0;
+  while(acc>=STEP&&n<5){
+    acc-=STEP;n++;ARC.t+=STEP;ARC.frame++;
+    if(run)GAME.step(STEP);
+    fxStep(STEP);
+  }
+  if(acc>STEP*5)acc=0;
+  const g=ARC.g;if(!g)return;
+  g.setTransform(ARC.dpr,0,0,ARC.dpr,0,0);
+  g.clearRect(0,0,ARC.W,ARC.H);
+  if(shake>.05){
+    g.translate(Math.sin(shakeT*1.7)*shake,Math.cos(shakeT*2.3)*shake*.8);
+  }
+  /* en el menú no se dibuja el juego: el canvas queda limpio (el arte del menú es
+     DOM) y el celular no gasta batería dibujando un tablero que nadie ve */
+  if(ARC.scr==='game'||ARC.scr==='pause'||ARC.scr==='over'){
+    GAME.draw(g,acc/STEP);
+    fxDraw(g);
+  }else if(ARC.scr==='menu'&&GAME.attract){
+    /* MODO ATRACCIÓN: el juego dibuja su propia escena viva detrás del menú (eso es
+       lo que hace que un menú se sienta moderno y no una tarjeta con una foto).
+       El juego avisa que la tiene con GAME.attract; el shell le pone la clase
+       .live al menú para que el arte fijo no compita con la escena. */
+    nsafe2(()=>GAME.attract(STEP,g));
+    fxDraw(g);
+  }
+}
+
+/* ------------------------------------------------------------- 8. ENTRADA */
+function bindInput(){
+  const cv=$('cv');
+  const down=e=>{
+    e.preventDefault();ARC.sndResume();
+    if(ARC.alive&&!ARC.paused&&GAME.down)GAME.down(ARC.pt(e),e);
+  };
+  const move=e=>{
+    e.preventDefault();
+    if(ARC.alive&&!ARC.paused&&GAME.move)GAME.move(ARC.pt(e),e);
+  };
+  const up=e=>{
+    e.preventDefault();
+    if(ARC.alive&&!ARC.paused&&GAME.up)GAME.up(ARC.pt(e),e);
+  };
+  cv.addEventListener('pointerdown',down);
+  cv.addEventListener('pointermove',move);
+  cv.addEventListener('pointerup',up);
+  cv.addEventListener('pointercancel',up);
+  const B=(id,fn)=>{const el=$(id);if(!el)return;
+    el.addEventListener('pointerdown',e=>{e.preventDefault();ARC.sndResume();ARC.sfx('tap');ARC.vib(10);fn(el);});};
+  B('bPlay',()=>ARC.play(GAME.levels?Math.min(GAME.levels,(SAVE.done||0)+1):1));
+  B('bLevels',()=>{buildLevels();ARC.show('levels');});
+  B('bLvBack',()=>ARC.menu());
+  /* AJUSTES se puede abrir desde el MENÚ y desde la PAUSA, y LISTO vuelve a donde
+     se abrió. Lo pidieron los tres verificadores: antes, cambiar idioma o gráficos
+     obligaba a abandonar la partida (bOptBack llamaba siempre a ARC.menu()). */
+  B('bOpts',()=>{optFrom='menu';ARC.show('opts');});
+  /* botón libre del menú: cada juego lo usa para lo suyo (personajes, tienda...) */
+  if(GAME.extra){const e=$('bExtra');e.style.display='flex';e.innerHTML=GAME.extra.icon||'★';
+    B('bExtra',()=>nsafe2(()=>GAME.extra.fn()));}
+  B('bOpts2',()=>{optFrom='pause';ARC.show('opts');});
+  B('bOptBack',()=>{if(optFrom==='pause'&&ARC.alive){ARC.show('pause');}else ARC.menu();});
+  B('pPause',()=>ARC.pause());
+  B('bRes',()=>ARC.resume());
+  B('bRetry',()=>ARC.play(ARC.lvl));
+  B('bQuit',()=>ARC.menu());
+  B('bAgain',()=>ARC.play(ARC.lvl));
+  B('bMenu',()=>ARC.menu());
+  B('bNext',()=>ARC.play(Math.min(GAME.levels||1,ARC.lvl+1)));
+  B('bWipe',()=>{const m=SAVE.mus,s=SAVE.sfx,v=SAVE.vib,f=SAVE.fx;
+    for(const k in SAVE)delete SAVE[k];
+    SAVE.mus=m;SAVE.sfx=s;SAVE.vib=v;SAVE.fx=f;SAVE.stars={};SAVE.best=0;SAVE.done=0;SAVE.coins=0;
+    saveNow();ARC.toast(T('wiped'));refreshMenu();});
+  const SW=(id,key,fn)=>{const el=$(id);if(!el)return;
+    el.classList.toggle('on',!!SAVE[key]);
+    el.addEventListener('pointerdown',e=>{e.preventDefault();
+      SAVE[key]=SAVE[key]?0:1;el.classList.toggle('on',!!SAVE[key]);saveNow();
+      ARC.sfx('tap');ARC.vib(10);fn&&fn(SAVE[key]);});};
+  SW('swMus','mus',v=>{if(v)ARC.music(GAME.music);else ARC.musicStop();});
+  SW('swSfx','sfx');
+  SW('swVib','vib');
+  SW('swFx','fx');
+  SW('swFps','fps',v=>{$('fps').style.display=v?'block':'none';});
+  document.addEventListener('keydown',e=>{
+    if(e.code==='Escape'){if(ARC.alive&&!ARC.paused)ARC.pause();else if(ARC.paused)ARC.resume();}
+    if(GAME.key)GAME.key(e.code,true);
+  });
+  document.addEventListener('keyup',e=>{if(GAME.key)GAME.key(e.code,false);});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden&&ARC.alive)ARC.pause();});
+}
+
+/* -------------------------------------------------------- 9. MENÚ / NIVELES */
+function refreshMenu(){
+  $('mTtl').innerHTML=GAME.title;
+  $('mSub').innerHTML=GAME.subKey?T(GAME.subKey):GAME.sub;
+  $('mCoins').textContent=SAVE.coins||0;
+  const bl=GAME.bestKey?T(GAME.bestKey):(GAME.bestLabel||T('record'));
+  $('mBest').innerHTML=(GAME.bestLabel===null?'':('<i>★</i>'+bl+' '+(SAVE.best||0)));
+  $('mBest').style.display=GAME.bestLabel===null?'none':'flex';
+  const lv=$('mLvl');
+  if(GAME.levels){
+    lv.style.display='flex';
+    const st=Object.values(SAVE.stars||{}).reduce((s2,v)=>s2+v,0);
+    lv.innerHTML='<i>▸</i>'+T('level')+' '+Math.min(GAME.levels,(SAVE.done||0)+1)+'/'+GAME.levels+
+      ' <i>★</i>'+st;
+  }else lv.style.display='none';
+  $('bLevels').style.display=GAME.levels?'flex':'none';
+  /* la animación de entrada se re-dispara cada vez que se vuelve al menú */
+  document.querySelectorAll('#menu .anim').forEach(el=>{
+    el.style.animation='none';void el.offsetWidth;el.style.animation='';});
+  ARC.music(GAME.music);
+}
+function buildLevels(){
+  const g=$('lvGrid');g.innerHTML='';
+  const n=GAME.levels||1;
+  const cols=Math.min(8,Math.ceil(Math.sqrt(n)+1));
+  g.style.gridTemplateColumns='repeat('+cols+',auto)';
+  for(let i=1;i<=n;i++){
+    const st=SAVE.stars[String(i)]||0;
+    const lock=i>(SAVE.done||0)+1;
+    const el=document.createElement('div');
+    el.className='lvl'+(st?' done':'')+(lock?' lock':'');
+    el.innerHTML=i+(st?'<b>'+'★'.repeat(st)+'</b>':'');
+    if(!lock)el.addEventListener('pointerdown',e=>{e.preventDefault();ARC.sfx('tap');ARC.play(i);});
+    g.appendChild(el);
+  }
+}
+
+/* -------------------------------------------------------------- 10. ARRANQUE */
+ARC.boot=async function(){
+  document.documentElement.style.setProperty('--acc',GAME.acc||'#ffd166');
+  document.documentElement.style.setProperty('--acc2',GAME.acc2||'#f0a02a');
+  saveLoad();
+  if(GAME.portrait)document.body.classList.add('vert');
+  $('ldName').textContent=GAME.name||'';
+  ARC.i18nApply();paintSegs();
+  fit();bindInput();
+  $('fps').style.display=SAVE.fps?'block':'none';
+
+  /* ---------------- CARGA DE ASSETS con barra de verdad ----------------
+     Se cuentan TODOS los pasos (motor 3D, arte, sonidos, modelos) y la barra
+     avanza por paso terminado. El fondo de la pantalla de carga es el arte del
+     propio juego, como en los otros juegos del repo. Al final NO se entra solo:
+     aparece "TOCÁ PARA JUGAR", porque ese toque es lo que habilita el audio en
+     el celular (sin gesto, el navegador no deja sonar nada). */
+  const steps=[];
+  if(GAME.three)steps.push('engine');
+  if(GAME.art)steps.push('art');
+  const sfxN=Object.keys(GAME.sfx||{}).length;
+  if(sfxN)steps.push('sounds');
+  const glbN=Object.keys(GAME.glb||{}).length;
+  if(glbN)steps.push('models');
+  let done=0;
+  const total=Math.max(1,steps.length);
+  const prog=(k)=>{
+    done++;
+    const pc=Math.round(done/total*100);
+    $('ldBar').style.width=pc+'%';$('ldPct').textContent=pc+'%';
+    $('ldTxt').textContent=T(k)||'';
+  };
+  $('ldTxt').textContent=T(steps[0]||'loading');
+
+  /* 1. motor 3D (por importmap, sólo si el juego es 3D) */
+  if(GAME.three){
+    try{
+      const THREE=await import('three');
+      ARC.THREE=THREE;
+      const gl=$('gl');
+      ARC.rnd=new THREE.WebGLRenderer({canvas:gl,antialias:true,alpha:false,powerPreference:'high-performance'});
+      ARC.rnd.setClearColor(new THREE.Color(GAME.sky||'#0d1014'),1);
+      if(THREE.SRGBColorSpace)ARC.rnd.outputColorSpace=THREE.SRGBColorSpace;
+      ARC.rnd.shadowMap.enabled=!!GAME.shadows;
+      if(GAME.shadows)ARC.rnd.shadowMap.type=THREE.PCFSoftShadowMap;
+      fit();
+    }catch(e){console.warn('three',e);}
+    prog('engine');
+  }
+  applyGfx();
+
+  /* 2. arte del menú (y fondo de esta misma pantalla) */
+  if(GAME.art){
+    await new Promise(res=>{
+      const im=new Image();
+      im.onload=()=>{
+        $('load').style.backgroundImage='url('+GAME.art+')';
+        const el=$('menu');
+        if(GAME.portrait){
+          el.style.backgroundImage='url('+GAME.art+'), linear-gradient(180deg,'+
+            (GAME.acc2||'#222')+'55 0%, #0a0d12 46%, #05070a 100%)';
+          el.style.backgroundSize='100% auto, 100% 100%';
+          el.style.backgroundRepeat='no-repeat, no-repeat';
+          el.style.backgroundPosition='center 14%, center';
+        }else{
+          el.style.backgroundImage='url('+GAME.art+')';
+        }
+        el.classList.add('hasart');res();
+      };
+      im.onerror=()=>res();
+      im.src=GAME.art;
+    });
+    prog('art');
+  }
+  /* 3. sonidos */
+  if(sfxN){
+    await new Promise(res=>ARC.sndLoad(GAME.sfx,res));
+    prog('sounds');
+  }
+  /* 4. modelos 3D (opcional: los juegos que usan GLB los declaran en GAME.glb) */
+  if(glbN&&ARC.THREE){
+    try{
+      const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');
+      const ld=new GLTFLoader();
+      ARC.glb={};
+      await Promise.all(Object.keys(GAME.glb).map(k=>new Promise(res=>{
+        ld.load(GAME.glb[k],g=>{ARC.glb[k]=g;res();},undefined,()=>{ARC.glb[k]=null;res();});
+      })));
+    }catch(e){console.warn('glb',e);ARC.glb=ARC.glb||{};}
+    prog('models');
+  }
+  /* 4b. LOS GLB GENERADOS VIENEN CON DEMASIADA MALLA. Medido en este pack: la
+     sierra y el arco de Rueda traían 28.725 y 27.592 triángulos cada uno, y la
+     escena llegaba a 99.793 triángulos a 11 fps. Se simplifican UNA vez al
+     cargarlos, hasta GAME.glbTris (por defecto 1200 por modelo).
+     DOS PASOS, y el primero es el que importa: SimplifyModifier NO puede colapsar
+     nada si los vértices están duplicados por triángulo (así vienen los GLB de
+     image_to_3d), así que primero se SUELDAN con mergeVertices y después se
+     simplifica. Sin el soldado, modify() devolvía la malla igual (medido:
+     28725 -> 28725). Si algo falla, se deja la malla como vino: nunca se rompe. */
+  if(ARC.glb&&Object.keys(ARC.glb).length){
+    /* GAME.glbTris puede ser UN número (mismo tope para todos) o un objeto con un
+       tope por modelo y "_" como defecto; 0 = no tocar ese modelo. Hace falta
+       porque un personaje con hueso se lleva su propio presupuesto y los bichos
+       instanciados, que se dibujan de a doce, necesitan uno mucho más chico. */
+    const tg=GAME.glbTris,tgOf=k=>{
+      if(tg==null)return 1200;
+      if(typeof tg==='number')return tg;
+      return tg[k]!=null?tg[k]:(tg._!=null?tg._:1200);
+    };
+    try{
+      const [{SimplifyModifier},BGU]=await Promise.all([
+        import('three/addons/modifiers/SimplifyModifier.js'),
+        import('three/addons/utils/BufferGeometryUtils.js')]);
+      const mod=new SimplifyModifier();
+      ARC.BGU=BGU;      /* los juegos también lo usan para fusionar mallas */
+      ARC.glbTris={};
+      for(const k in ARC.glb){
+        const g=ARC.glb[k];if(!g||!g.scene)continue;
+        const target=tgOf(k);
+        let before=0,after=0;
+        g.scene.traverse(o=>{
+          if(!o.isMesh||!o.geometry||!o.geometry.attributes.position)return;
+          const tri0=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3;
+          before+=tri0;
+          /* MALLA CON HUESO: NO se toca. SimplifyModifier sólo reconstruye
+             position/normal/uv, así que se comería skinIndex y skinWeight y el
+             personaje quedaría hecho un nudo al animarlo. */
+          if(o.isSkinnedMesh||!target||tri0<=target){after+=tri0;return;}
+          try{
+            let geo=o.geometry;
+            /* soldar: de 3 vértices por triángulo a vértices compartidos */
+            if(BGU&&BGU.mergeVertices)geo=BGU.mergeVertices(geo,1e-4);
+            const verts=geo.attributes.position.count;
+            const tri=(geo.index?geo.index.count:verts)/3;
+            const keep=clamp(target/tri,.03,1);
+            const drop=Math.floor(verts*(1-keep));
+            const sim=drop>0?mod.modify(geo,drop):geo;
+            const tri2=(sim.index?sim.index.count:sim.attributes.position.count)/3;
+            if(sim&&tri2>20&&tri2<tri){
+              o.geometry.dispose();o.geometry=sim;o.geometry.computeVertexNormals();
+              after+=tri2;
+            }else after+=tri0;
+          }catch(e){after+=tri0;}
+        });
+        ARC.glbTris[k]=[Math.round(before),Math.round(after)];
+      }
+    }catch(e){console.warn('simplify',e);}
+  }
+  /* 5. listo: el juego se prepara y se espera el toque */
+  nsafe2(()=>GAME.init&&GAME.init());
+  requestAnimationFrame(loop);
+  $('ldBar').style.width='100%';$('ldPct').textContent='100%';
+  $('ldTxt').textContent=T('ready');
+  $('ldGo').classList.add('on');
+  const enter=()=>{
+    $('ldGo').removeEventListener('pointerdown',enter);
+    ARC.sndResume();
+    $('load').style.display='none';
+    ARC.show('menu');refreshMenu();
+    ARC.music(GAME.music);
+  };
+  $('ldGo').addEventListener('pointerdown',e=>{e.preventDefault();enter();});
+  /* atajo para las sondas y para el teclado */
+  ARC.enterMenu=enter;
+  document.addEventListener('keydown',e=>{if(ARC.scr==='load'&&(e.code==='Space'||e.code==='Enter'))enter();});
+};
+
+/* ============================ CONTRATO DEL JUEGO ============================
+   window.GAME = {
+     slug, name, title (HTML), sub (HTML), acc, acc2,   // identidad y colores
+     art, music, sfx:{nombre:url},                      // assets
+     levels, bestLabel,                                 // progresión
+     init(), start(lvl), step(dt), draw(g,alpha),       // ciclo
+     down(p,e), move(p,e), up(p,e), key(code,down),     // entrada (p en px del stage)
+     resize(), pause(), resume()                        // opcionales
+   }
+   El juego avisa el final con ARC.over({win,score,stars,sub,coins}).
+   ========================================================================== */
+
+/* ============================================================================
+   BOSQUE VIVO — la primera de las cinco betas
+   ----------------------------------------------------------------------------
+   LA MISIÓN, que es lo que hace que esto sea un juego y no una demo: los cinco
+   TÓTEMS del claro se apagaron y la MARCHITEZ avanza desde el borde del bosque
+   hacia el ÁRBOL MADRE del centro. Vos sos el guardián: cargás una semilla de luz
+   del MANANTIAL (centro) y la llevás a un tótem apagado. Cada tótem encendido
+   limpia la marchitez a su alrededor y frena el avance general.
+     · SE GANA con los cinco tótems encendidos.
+     · SE PIERDE si la marchitez llega al árbol madre.
+   Las dos cosas pasan de verdad y el jugador puede ver venir las dos: el HUD dice
+   cuántos tótems van y cuánto bosque queda sano.
+
+   POR QUÉ SE JUEGA SOLO (la tensión no está pegada con cinta)
+   ----------------------------------------------------------
+   · La marchitez NO avanza a ritmo fijo: avanza por PRESIÓN de vecinos, así que
+     forma un frente irregular que entra por donde nadie defendió. Eso obliga a
+     elegir qué tótem encender primero, que es la decisión del juego.
+   · Pisar tierra marchita te frena al 45%. Un atajo por lo muerto puede salir más
+     caro que el rodeo, y eso se siente sin que nadie lo explique.
+   · Encender un tótem limpia un radio Y baja la velocidad local a la mitad. Los
+     tótems son, literalmente, el freno: cuantos más prendés, más aire tenés.
+
+   RENDIMIENTO (la regla de la casa: en celular manda el RELLENO, no los tri)
+   -------------------------------------------------------------------------
+   · CERO luces. Toda la iluminación está HORNEADA en el color de vértice y todo
+     usa MeshBasicMaterial, así que el fragmento no calcula nada.
+   · El suelo son 484 baldosas en UNA sola malla; la marchitez se pinta cambiando
+     el atributo de color, y se sube al GPU sólo si alguna baldosa cambió de
+     verdad (umbral 0,02), no todos los cuadros.
+   · Los árboles y el árbol madre son UNA malla fusionada. Los tótems son un
+     InstancedMesh de 5 con color por instancia.
+   · El cielo es color de borrado, no una esfera: medido en este pack, una esfera
+     de cielo cuesta varios ms de relleno y acá no aporta nada.
+   · Cuenta: 6-7 llamadas de dibujo y ~6.000 triángulos, contra los topes de 60 y
+     25.000.
+   ========================================================================== */
+const G={
+  slug:'bosque',name:'BOSQUE VIVO',
+  title:'BOSQUE <em>VIVO</em>',
+  sub:'Encendé los tótems antes de que la marchitez llegue al árbol madre.',
+  subKey:'sub',
+  acc:'#7fd06a',acc2:'#2f7a3a',
+  levels:3,bestLabel:'TÓTEMS',bestKey:'totL',
+  three:true,sky:'#8fc9e8',shadows:false,
+  glbTris:2000,   /* el guardián horneado trae 1.864: el tope va por ARRIBA a
+     propósito para que el motor NO lo vuelva a simplificar (perdería el facetado) */
+  music:A('mus-r03.m4a'),
+  sfx:{tap:A('sfx-click.mp3'),click:A('sfx-click.mp3'),coin:A('sfx-chime.mp3'),
+       win:A('sfx-power.mp3'),lose:A('sfx-lose.mp3'),seed:A('sfx-pop.mp3'),
+       totem:A('sfx-chime.mp3'),bad:A('sfx-groan.mp3'),boom:A('sfx-boom.mp3')},
+  glb:{guard:A('m-bosque-guardian.glb')},
+  i18n:{
+    es:{sub:'Llevá semillas del manantial a los cinco tótems. Cada tótem encendido limpia la marchitez y la frena. Si la marchitez llega al árbol madre, perdiste.',
+      totL:'TÓTEMS',hudT:'TÓTEMS',hudS:'BOSQUE SANO',
+      tut:'ARRASTRÁ PARA MOVERTE',tut2:'pisá el manantial para tomar una semilla',
+      take:'¡SEMILLA!',lit:'¡TÓTEM ENCENDIDO!',need:'te falta una semilla',
+      full:'ya llevás una semilla',winT:'¡BOSQUE SALVADO!',loseT:'EL ÁRBOL MADRE CAYÓ',
+      stTot:'Tótems encendidos',stSano:'Bosque sano',stT:'Tiempo',
+      slow:'tierra muerta: vas más lento',near:'¡la marchitez llega al árbol!'},
+    en:{sub:'Carry seeds from the spring to the five totems. Each lit totem clears the blight and slows it. If the blight reaches the mother tree, you lose.',
+      totL:'TOTEMS',hudT:'TOTEMS',hudS:'HEALTHY FOREST',
+      tut:'DRAG TO MOVE',tut2:'step on the spring to take a seed',
+      take:'SEED!',lit:'TOTEM LIT!',need:'you need a seed',
+      full:'you already carry a seed',winT:'FOREST SAVED!',loseT:'THE MOTHER TREE FELL',
+      stTot:'Totems lit',stSano:'Healthy forest',stT:'Time',
+      slow:'dead ground: you move slower',near:'the blight is reaching the tree!'},
+    pt:{sub:'Leve sementes da fonte aos cinco totens. Cada totem aceso limpa a praga e a freia. Se a praga chegar à árvore mãe, você perde.',
+      totL:'TOTENS',hudT:'TOTENS',hudS:'FLORESTA SÃ',
+      tut:'ARRASTE PARA SE MOVER',tut2:'pise na fonte para pegar uma semente',
+      take:'SEMENTE!',lit:'TOTEM ACESO!',need:'você precisa de uma semente',
+      full:'já está levando uma semente',winT:'FLORESTA SALVA!',loseT:'A ÁRVORE MÃE CAIU',
+      stTot:'Totens acesos',stSano:'Floresta sã',stT:'Tempo',
+      slow:'terra morta: você vai mais devagar',near:'a praga está chegando à árvore!'}
+  }
+};
+
+/* --------------------------------------------------------------- constantes */
+/* El tablero se ve ENTERO y la cámara no se mueve. Es a propósito: la decisión
+   del juego es "qué tótem defiendo primero", y para decidir hay que VER el frente
+   de la marchitez completo. Una cámara que persigue esconde justo eso. */
+const N=22, TS=1.5, EXT=N*TS/2;                /* 22x22 baldosas de 1,5 = 33 u */
+const CAMY=25, CAMZ=23, FOVY=46;
+const SPD=7.2, SPD_MUERTO=.45;                 /* velocidad y castigo en lo muerto */
+const R_TOT=11.2;                              /* radio del anillo de tótems */
+const B_MUERTO=.60;                            /* desde acá la baldosa está muerta */
+const B_LIMPIA=4.6;                            /* radio que limpia un tótem */
+const MAN={x:0,z:5.2};      /* el MANANTIAL va aparte del árbol madre: bajo la
+   copa no se veía ni el agua ni el guardián (se vio en la captura), y además
+   separar el lugar donde SE TOMA del lugar que SE DEFIENDE hace mejor el ida y
+   vuelta: son dos puntos del mapa, no uno. */
+const T_SEMILLA=.55;                           /* tarda esto en cargar la semilla */
+const NIV=[{spd:.115,name:'CALMO'},{spd:.165,name:'DURO'},{spd:.225,name:'FURIA'}];
+
+let T3=null,scene=null,cam=null;
+let sueloM=null,sueloCol=null,sueloBase=null,decorM=null;
+let totIM=null,cristIM=null,guard=null,orbe=null,manan=null;
+let B=null,Bsub=null;                          /* marchitez por baldosa, y la subida */
+let prot=null;                                 /* freno local por tótem encendido */
+let px=0,pz=6,pvx=0,pvz=0,pyaw=0;
+let lleva=0,carga=0,tots=[],encendidos=0,fase='off',tJuego=0,nivel=1;
+let joy=null,joyV={x:0,y:0},keyV={x:0,y:0};
+let tutT=0,avisoT=0,sanoPct=1,hudTxt='',bot=0,demo=0;
+const TAU2=Math.PI*2;
+const cl=(v,a,b)=>v<a?a:(v>b?b:v);
+const hx=h=>{const n=parseInt(h.slice(1),16);return [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255];};
+const ix=(i,j)=>j*N+i;
+
+/* altura suave del claro: la MISMA función para armar el suelo y para apoyar las
+   patas, así el guardián nunca flota ni se hunde */
+function H(x,z){
+  const r=Math.hypot(x,z);
+  return Math.sin(x*.19)*Math.cos(z*.17)*.34 + Math.sin(x*.07+1.3)*.5
+       - Math.max(0,(r-EXT+3))*.18;
+}
+
+/* ------------------------------------------------------- lote de triángulos */
+/* mismo patrón que el resto del pack: un solo Mesh con la luz cocinada */
+const SUN=(()=>{const v=[.42,.82,.36],L=Math.hypot(...v);return v.map(x=>x/L);})();
+function Lote(){return {p:[],c:[]};}
+function tri(A,a,b,c,col,e){
+  const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2];
+  const vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+  let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+  const L=Math.hypot(nx,ny,nz)||1;nx/=L;ny/=L;nz/=L;
+  let f=.44+.56*Math.max(0,nx*SUN[0]+ny*SUN[1]+nz*SUN[2])+.10*Math.max(0,ny);
+  if(e)f*=e;
+  A.p.push(a[0],a[1],a[2],b[0],b[1],b[2],c[0],c[1],c[2]);
+  for(let i=0;i<3;i++)A.c.push(col[0]*f,col[1]*f,col[2]*f);
+}
+/* OJO CON EL ORDEN: a,b,c,d en sentido antihorario visto DESDE AFUERA. Al revés
+   la cara desaparece por el descarte de caras traseras. */
+const quad=(A,a,b,c,d,col,e)=>{tri(A,a,b,c,col,e);tri(A,a,c,d,col,e);};
+function caja(A,cx,cy,cz,w,h,d,col,rot,e){
+  const s=Math.sin(rot||0),co=Math.cos(rot||0);
+  const P=(x,y,z)=>[cx+x*co+z*s,cy+y,cz-x*s+z*co];
+  const X=w/2,Y=h/2,Z=d/2;
+  const a=P(-X,-Y,Z),b=P(X,-Y,Z),c=P(X,Y,Z),d2=P(-X,Y,Z);
+  const e1=P(-X,-Y,-Z),f=P(X,-Y,-Z),g2=P(X,Y,-Z),h2=P(-X,Y,-Z);
+  quad(A,a,b,c,d2,col,e); quad(A,f,e1,h2,g2,col,e); quad(A,b,f,g2,c,col,e);
+  quad(A,e1,a,d2,h2,col,e); quad(A,d2,c,g2,h2,col,e); quad(A,e1,f,b,a,col,e);
+}
+/* OJO CON EL SENTIDO. Con x=cos y z=sin, recorrer el ángulo hacia adelante da
+   vuelta la cara: la normal apunta HACIA ADENTRO y el cono queda invisible desde
+   afuera. Se vio en la primera captura — el árbol madre sin copa y los pinos como
+   triángulos planos. Por eso el vértice va (a1, a0, punta) y no (a0, a1, punta). */
+function cono(A,cx,cy,cz,r,h,n,col,e){
+  const ap=[cx,cy+h,cz];
+  for(let i=0;i<n;i++){
+    const a0=i/n*TAU2,a1=(i+1)/n*TAU2;
+    tri(A,[cx+Math.cos(a1)*r,cy,cz+Math.sin(a1)*r],
+         [cx+Math.cos(a0)*r,cy,cz+Math.sin(a0)*r],ap,col,e);
+  }
+}
+function cil(A,cx,cy,cz,r0,r1,h,n,col,e){
+  for(let i=0;i<n;i++){
+    const a0=i/n*TAU2,a1=(i+1)/n*TAU2;
+    quad(A,[cx+Math.cos(a1)*r0,cy,cz+Math.sin(a1)*r0],
+          [cx+Math.cos(a0)*r0,cy,cz+Math.sin(a0)*r0],
+          [cx+Math.cos(a0)*r1,cy+h,cz+Math.sin(a0)*r1],
+          [cx+Math.cos(a1)*r1,cy+h,cz+Math.sin(a1)*r1],col,e);
+  }
+}
+function malla(A){
+  const g=new T3.BufferGeometry();
+  g.setAttribute('position',new T3.BufferAttribute(new Float32Array(A.p),3));
+  g.setAttribute('color',new T3.BufferAttribute(new Float32Array(A.c),3));
+  g.computeBoundingSphere();
+  return new T3.Mesh(g,new T3.MeshBasicMaterial({vertexColors:true}));
+}
+
+/* ------------------------------------------------------------------ mundo */
+const C_PASTO=hx('#63b95c'),C_PASTO2=hx('#4e9d51'),C_TIERRA=hx('#8a7351');
+const C_MUERTO=hx('#4a3f57'),C_MUERTO2=hx('#2e2738');
+function buildSuelo(){
+  /* Las baldosas van en UNA malla, con el color por vértice MUTABLE: la marchitez
+     se pinta cambiando ese atributo, que es mucho más barato que rehacer geometría
+     o tener 484 mallas. */
+  const p=[],c=[];
+  sueloBase=new Float32Array(N*N*3);
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){
+    const x0=-EXT+i*TS,z0=-EXT+j*TS,x1=x0+TS,z1=z0+TS;
+    const a=[x0,H(x0,z0),z0],b=[x1,H(x1,z0),z0],cc=[x1,H(x1,z1),z1],d=[x0,H(x0,z1),z1];
+    /* antihorario mirado desde arriba: a,d,c,b */
+    for(const t of [[a,d,cc],[a,cc,b]]){
+      p.push(t[0][0],t[0][1],t[0][2],t[1][0],t[1][1],t[1][2],t[2][0],t[2][1],t[2][2]);
+      for(let k=0;k<3;k++)c.push(0,0,0);
+    }
+    const mx=x0+TS/2,mz=z0+TS/2;
+    const r=Math.min(Math.hypot(mx,mz),Math.hypot(mx-MAN.x,mz-MAN.z));
+    const base=r<2.7?C_TIERRA:(((i*7+j*3)%5)<2?C_PASTO2:C_PASTO);
+    const e=.92+((i*13+j*7)%7)*.022;
+    const k=ix(i,j)*3;
+    sueloBase[k]=base[0]*e;sueloBase[k+1]=base[1]*e;sueloBase[k+2]=base[2]*e;
+  }
+  const g=new T3.BufferGeometry();
+  g.setAttribute('position',new T3.BufferAttribute(new Float32Array(p),3));
+  sueloCol=new Float32Array(c.length);
+  g.setAttribute('color',new T3.BufferAttribute(sueloCol,3));
+  g.computeBoundingSphere();
+  sueloM=new T3.Mesh(g,new T3.MeshBasicMaterial({vertexColors:true}));
+  sueloM.name='suelo';scene.add(sueloM);
+  Bsub=new Float32Array(N*N).fill(-1);
+  pintaSuelo(true);
+}
+/* pinta SÓLO lo que cambió: 484 baldosas x 6 vértices son 8.700 floats, y subir
+   eso cada cuadro por gusto es el tipo de gasto que después no se encuentra */
+function pintaSuelo(forzar){
+  let toco=false;
+  for(let t=0;t<N*N;t++){
+    const b=B[t];
+    if(!forzar&&Math.abs(b-Bsub[t])<.02)continue;
+    Bsub[t]=b;toco=true;
+    const k=t*3;
+    const m=cl((b-.15)/.85,0,1);              /* recién sobre 0,15 se ve enfermo */
+    const mc=b>=B_MUERTO?C_MUERTO2:C_MUERTO;
+    const r=sueloBase[k]*(1-m)+mc[0]*m;
+    const g2=sueloBase[k+1]*(1-m)+mc[1]*m;
+    const bl=sueloBase[k+2]*(1-m)+mc[2]*m;
+    for(let v=0;v<6;v++){const o=(t*6+v)*3;sueloCol[o]=r;sueloCol[o+1]=g2;sueloCol[o+2]=bl;}
+  }
+  if(toco||forzar)sueloM.geometry.attributes.color.needsUpdate=true;
+}
+function buildDecor(){
+  const A=Lote();
+  const C_TR=hx('#7a5535'),C_H1=hx('#3f9c4e'),C_H2=hx('#2f7d43'),C_PI=hx('#8e9099');
+  /* ÁRBOL MADRE en el centro: es el objetivo que hay que defender, así que tiene
+     que verse de lejos y distinto a todo lo demás */
+  cil(A,0,0,0,1.15,.85,3.4,7,C_TR);
+  for(let i=0;i<3;i++)cono(A,0,2.6+i*1.1,0,2.7-i*.62,2.0,8,i%2?C_H2:C_H1,1+i*.05);
+  for(const s of [-1,1]){
+    cil(A,s*.9,1.6,0,.22,.16,1.5,5,C_TR);
+    cono(A,s*1.5,2.9,0,.9,1.0,6,C_H2);
+  }
+  /* MANANTIAL: anillo de piedras y el agua (la baldosa donde se toma la semilla) */
+  for(let i=0;i<10;i++){
+    const a=i/10*TAU2;
+    caja(A,MAN.x+Math.cos(a)*2.3,H(MAN.x,MAN.z)+.12,MAN.z+Math.sin(a)*2.3,.7,.34,.5,C_PI,a);
+  }
+  /* árboles y piedras del claro, esquivando el centro y los tótems */
+  let s0=987654321;
+  const rn=()=>{s0=(s0*1664525+1013904223)>>>0;return s0/4294967296;};
+  const rr=(a,b)=>a+(b-a)*rn();
+  const puestos=[];
+  let it=0;
+  while(puestos.length<64&&it<3000){
+    it++;
+    const x=rr(-EXT+1.5,EXT-1.5),z=rr(-EXT+1.5,EXT-1.5);
+    const r=Math.hypot(x,z);
+    if(r<4.6)continue;                                  /* claro del árbol madre */
+    if(Math.hypot(x-MAN.x,z-MAN.z)<3.6)continue;        /* claro del manantial */
+    let ok=true;
+    for(const t of tots)if(Math.hypot(t.x-x,t.z-z)<3.4){ok=false;break;}
+    if(!ok)continue;
+    for(const q of puestos)if((q[0]-x)**2+(q[1]-z)**2<5.2){ok=false;break;}
+    if(!ok)continue;
+    puestos.push([x,z]);
+    const y=H(x,z);
+    if(rn()<.72){
+      const h=rr(2.4,4.2);
+      cil(A,x,y,z,.2,.16,h*.42,5,C_TR);
+      const cc=rn()<.5?C_H1:C_H2;
+      cono(A,x,y+h*.3,z,h*.40,h*.5,6,cc);
+      cono(A,x,y+h*.58,z,h*.30,h*.46,6,cc,1.06);
+    }else{
+      const s2=rr(.5,1.3);
+      caja(A,x,y+s2*.3,z,s2*1.5,s2*.7,s2*1.2,C_PI,rr(0,3.14));
+    }
+  }
+  /* cerco de troncos caídos en el borde: marca de dónde entra la marchitez */
+  for(let i=0;i<N;i+=2){
+    const x=-EXT+i*TS+TS/2;
+    caja(A,x,H(x,-EXT)+.2,-EXT+.3,TS*1.7,.4,.4,C_TR,.05,.8);
+    caja(A,x,H(x,EXT)+.2,EXT-.3,TS*1.7,.4,.4,C_TR,.05,.8);
+  }
+  decorM=malla(A);decorM.name='decor';scene.add(decorM);
+}
+function buildTotems(){
+  tots=[];
+  for(let i=0;i<5;i++){
+    const a=-Math.PI/2+i/5*TAU2;
+    const x=Math.cos(a)*R_TOT,z=Math.sin(a)*R_TOT;
+    tots.push({x,z,on:0,pulso:0});
+  }
+  const gb=new T3.BoxGeometry(1,1,1);
+  /* la caja de three viene con normales suaves; se hornea el sombreado por CARA
+     en el color de vértice para que el tótem tenga volumen sin una sola luz */
+  const sh=[.78,.62,1.0,.52,.9,.7];
+  const cA=new Float32Array(gb.attributes.position.count*3);
+  for(let i=0;i<cA.length/3;i++){const s=sh[Math.floor(i/4)]||1;
+    cA[i*3]=s;cA[i*3+1]=s;cA[i*3+2]=s;}
+  gb.setAttribute('color',new T3.BufferAttribute(cA,3));
+  totIM=new T3.InstancedMesh(gb,new T3.MeshBasicMaterial({vertexColors:true}),5);
+  totIM.instanceColor=new T3.InstancedBufferAttribute(new Float32Array(15),3);
+  cristIM=new T3.InstancedMesh(new T3.OctahedronGeometry(.52,0),
+    new T3.MeshBasicMaterial({vertexColors:false}),5);
+  cristIM.instanceColor=new T3.InstancedBufferAttribute(new Float32Array(15),3);
+  totIM.frustumCulled=cristIM.frustumCulled=false;
+  scene.add(totIM);scene.add(cristIM);
+}
+function ponTotems(){
+  const M=new T3.Matrix4(),V=new T3.Vector3(),C=new T3.Color();
+  for(let i=0;i<5;i++){
+    const t=tots[i],y=H(t.x,t.z);
+    M.makeScale(1.05,3.1,1.05);M.setPosition(t.x,y+1.55,t.z);
+    totIM.setMatrixAt(i,M);
+    C.set(t.on?'#dff6c8':'#6b6357');totIM.setColorAt(i,C);
+    const s=t.on?(1.15+Math.sin(ARC.t*3+i)*.12):.75;
+    M.makeRotationY(ARC.t*(t.on?1.6:.35)+i);
+    M.scale(V.set(s,s,s));
+    M.setPosition(t.x,y+3.5+(t.on?Math.sin(ARC.t*2+i)*.14:0),t.z);
+    cristIM.setMatrixAt(i,M);
+    C.set(t.on?'#c6ff8a':'#3d4a52');cristIM.setColorAt(i,C);
+  }
+  totIM.instanceMatrix.needsUpdate=true;cristIM.instanceMatrix.needsUpdate=true;
+  if(totIM.instanceColor)totIM.instanceColor.needsUpdate=true;
+  if(cristIM.instanceColor)cristIM.instanceColor.needsUpdate=true;
+}
+
+/* --------------------------------------------------------------- marchitez */
+function resetB(){
+  B=new Float32Array(N*N);
+  prot=new Float32Array(N*N).fill(1);
+  /* arranca sólo en el borde: el frente tiene que ENTRAR, no aparecer encima */
+  for(let i=0;i<N;i++){B[ix(i,0)]=.9;B[ix(i,N-1)]=.9;B[ix(0,i)]=.9;B[ix(N-1,i)]=.9;}
+  if(Bsub)Bsub.fill(-1);
+}
+function recuenta(){
+  let sano=0;
+  for(let t=0;t<N*N;t++)if(B[t]<B_MUERTO)sano++;
+  sanoPct=sano/(N*N);
+}
+function limpiaAlrededor(cx,cz){
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){
+    const x=-EXT+i*TS+TS/2,z=-EXT+j*TS+TS/2;
+    const d=Math.hypot(x-cx,z-cz);
+    if(d<B_LIMPIA){B[ix(i,j)]=0;prot[ix(i,j)]=.5;}
+    else if(d<B_LIMPIA*1.8)prot[ix(i,j)]=Math.min(prot[ix(i,j)],.72);
+  }
+  /* se recuenta ACÁ y no en el paso siguiente: encender un tótem es el momento de
+     recompensa del juego, y la barra de bosque sano tiene que saltar en el mismo
+     cuadro, no un dieciseisavo de segundo después */
+  recuenta();
+}
+function avanzaB(dt){
+  const spd=NIV[nivel-1].spd;
+  const nb=new Float32Array(N*N);
+  let sano=0;
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){
+    const t=ix(i,j),b=B[t];
+    /* PRESIÓN DE VECINOS: así el frente sale irregular y entra por donde nadie
+       defendió. Con un avance por anillos concéntricos el juego no tendría
+       decisión: alcanzaría con dar vueltas al mismo ritmo. */
+    let pr=0;
+    if(i>0)pr=Math.max(pr,B[t-1]);
+    if(i<N-1)pr=Math.max(pr,B[t+1]);
+    if(j>0)pr=Math.max(pr,B[t-N]);
+    if(j<N-1)pr=Math.max(pr,B[t+N]);
+    const emp=Math.max(0,pr-.42)*(1+b*.6);
+    nb[t]=cl(b+dt*spd*emp*prot[t]*2.4,0,1);
+    if(nb[t]<B_MUERTO)sano++;
+  }
+  B.set(nb);
+  sanoPct=sano/(N*N);
+}
+const bEn=(x,z)=>{
+  const i=cl(Math.floor((x+EXT)/TS),0,N-1),j=cl(Math.floor((z+EXT)/TS),0,N-1);
+  return B[ix(i,j)];
+};
+
+/* ------------------------------------------------------------------ juego */
+function metrics(){
+  if(!cam)return;
+  cam.aspect=ARC.W/Math.max(1,ARC.H);
+  cam.updateProjectionMatrix();
+}
+function nuevaPartida(lvl){
+  nivel=cl(lvl||1,1,3);
+  px=MAN.x;pz=MAN.z+2.4;pvx=pvz=0;pyaw=0;
+  lleva=0;carga=0;encendidos=0;tJuego=0;
+  for(const t of tots){t.on=0;t.pulso=0;}
+  resetB();pintaSuelo(true);
+  fase='play';tutT=4.2;avisoT=0;hudTxt='';
+  hud(true);
+}
+function hud(forzar){
+  const t=T('hudT')+' '+encendidos+'/5   ·   '+T('hudS')+' '+Math.round(sanoPct*100)+'%';
+  if(forzar||t!==hudTxt){hudTxt=t;ARC.hud(lleva?'◆':'◇',t);}
+}
+function tomaSemilla(){
+  if(lleva){if(!demo)ARC.toast(T('full'));return;}
+  lleva=1;carga=0;
+  if(demo)return;
+  ARC.sfx('seed');ARC.vib(14);
+  ARC.toast(T('take'));
+  const p=proj(0,1.4,0);if(p)ARC.fx.ring(p.x,p.y,{r:70,color:'#dff6c8'});
+  hud(true);
+}
+function enciende(t){
+  t.on=1;t.pulso=1;lleva=0;encendidos++;
+  limpiaAlrededor(t.x,t.z);
+  pintaSuelo(true);
+  if(demo)return;
+  ARC.sfx('totem');ARC.vib([12,40,12]);ARC.shake(5);
+  const p=proj(t.x,H(t.x,t.z)+3.5,t.z);
+  if(p){ARC.fx.burst(p.x,p.y,{n:26,color:'#c6ff8a',speed:260,life:.7});
+        ARC.fx.ring(p.x,p.y,{r:120,color:'#dff6c8'});
+        ARC.fx.text(p.x,p.y-30,T('lit'),{color:'#dff6c8',size:Math.max(14,ARC.H*.05),life:1});}
+  ARC.toast(T('lit'));
+  hud(true);
+  if(encendidos>=5)gana();
+}
+function gana(){
+  fase='fin';
+  ARC.over({win:true,title:T('winT'),score:Math.round(sanoPct*100),
+    stars:sanoPct>.72?3:(sanoPct>.5?2:1),
+    sub:T('stTot')+': 5/5<br>'+T('stSano')+': '+Math.round(sanoPct*100)+'%<br>'+
+        T('stT')+': '+tJuego.toFixed(0)+'s'});
+}
+function pierde(){
+  fase='fin';
+  ARC.over({win:false,title:T('loseT'),score:encendidos,noStars:false,stars:0,
+    sub:T('stTot')+': '+encendidos+'/5<br>'+T('stSano')+': '+Math.round(sanoPct*100)+'%'});
+}
+
+/* proyección mundo→pantalla para los carteles de la capa 2D */
+let projV=null;
+function proj(x,y,z){
+  if(!cam)return null;
+  if(!projV)projV=new T3.Vector3();
+  projV.set(x,y,z).project(cam);
+  if(projV.z>1)return null;
+  return {x:(projV.x*.5+.5)*ARC.W,y:(-projV.y*.5+.5)*ARC.H,z:projV.z};
+}
+
+/* ------------------------------------------------------------------- pasos */
+function simula(dt){
+  tJuego+=dt;
+  if(tutT>0)tutT-=dt;
+  if(avisoT>0)avisoT-=dt;
+  /* --- movimiento --- */
+  let vx=joyV.x+keyV.x,vz=joyV.y+keyV.y;
+  if(bot||demo){const b=botDir();vx=b.x;vz=b.y;}
+  const m=Math.hypot(vx,vz);
+  if(m>1){vx/=m;vz/=m;}
+  const muerto=bEn(px,pz)>=B_MUERTO;
+  const sp=SPD*(muerto?SPD_MUERTO:1);
+  pvx=vx*sp;pvz=vz*sp;
+  px=cl(px+pvx*dt,-EXT+1,EXT-1);
+  pz=cl(pz+pvz*dt,-EXT+1,EXT-1);
+  if(m>.05)pyaw=Math.atan2(pvx,pvz);
+  if(muerto&&!demo&&avisoT<=0&&fase==='play'){avisoT=3.5;ARC.toast(T('slow'));}
+  /* --- manantial: se carga sosteniéndose encima --- */
+  if(Math.hypot(px-MAN.x,pz-MAN.z)<2.4&&!lleva){
+    carga+=dt;
+    if(carga>=T_SEMILLA)tomaSemilla();
+  }else if(!lleva)carga=Math.max(0,carga-dt*2);
+  /* --- entregar --- */
+  if(lleva)for(const t of tots){
+    if(t.on)continue;
+    if(Math.hypot(t.x-px,t.z-pz)<2.3){enciende(t);break;}
+  }
+  /* --- marchitez --- */
+  avanzaB(dt);
+  pintaSuelo(false);
+  for(const t of tots)if(t.pulso>0)t.pulso=Math.max(0,t.pulso-dt*1.6);
+  /* --- derrota: la marchitez toca el árbol madre --- */
+  const bc=bEn(0,0);
+  if(!demo&&fase==='play'){
+    if(bc>.55&&avisoT<=0){avisoT=4;ARC.sfx('bad',{vol:.6});ARC.toast(T('near'));}
+    if(bc>.85)pierde();
+  }
+  hud();
+}
+/* piloto: el que encuentra los bugs. Va al manantial si no lleva semilla, y si
+   lleva va al tótem apagado más cercano, ESQUIVANDO lo muerto cuando puede. */
+function botDir(){
+  let tx=0,tz=0;
+  if(!lleva){tx=MAN.x;tz=MAN.z;}
+  else{
+    let mej=null,dm=1e9;
+    for(const t of tots){if(t.on)continue;
+      const d=Math.hypot(t.x-px,t.z-pz);if(d<dm){dm=d;mej=t;}}
+    if(!mej){tx=MAN.x;tz=MAN.z;}else{tx=mej.x;tz=mej.z;}
+  }
+  let dx=tx-px,dz=tz-pz;
+  const d=Math.hypot(dx,dz)||1;dx/=d;dz/=d;
+  /* si el paso siguiente cae en tierra muerta, prueba desviarse 45° */
+  if(bEn(px+dx*2.2,pz+dz*2.2)>=B_MUERTO){
+    for(const a of [.8,-.8,1.6,-1.6]){
+      const c=Math.cos(a),s=Math.sin(a);
+      const nx=dx*c-dz*s,nz=dx*s+dz*c;
+      if(bEn(px+nx*2.2,pz+nz*2.2)<B_MUERTO){return {x:nx,y:nz};}
+    }
+  }
+  return {x:dx,y:dz};
+}
+function pon3D(alpha){
+  const y=H(px,pz);
+  if(guard){
+    guard.position.set(px+pvx*alpha*(1/60),y,pz+pvz*alpha*(1/60));
+    guard.rotation.y=pyaw;
+    /* trotecito: sube y baja según la velocidad, sin esqueleto ni animación */
+    const v=Math.hypot(pvx,pvz)/SPD;
+    guard.position.y=y+Math.abs(Math.sin(ARC.t*11))*.12*v;
+    guard.rotation.z=Math.sin(ARC.t*11)*.05*v;
+  }
+  if(orbe){
+    orbe.visible=!!lleva||carga>.05;
+    const k=lleva?1:carga/T_SEMILLA;
+    orbe.position.set(px,y+2.15+Math.sin(ARC.t*3)*.1,pz);
+    orbe.scale.setScalar(.28*k+.06);
+    orbe.rotation.y=ARC.t*2.2;orbe.rotation.x=ARC.t*1.3;
+  }
+  if(manan)manan.rotation.y=ARC.t*.35;
+  ponTotems();
+}
+
+/* -------------------------------------------------------------- API MOTOR */
+G.init=function(){
+  T3=ARC.THREE;if(!T3)return;
+  scene=new T3.Scene();
+  cam=new T3.PerspectiveCamera(FOVY,ARC.W/Math.max(1,ARC.H),.5,120);
+  cam.position.set(0,CAMY,CAMZ);cam.lookAt(0,1.2,0);
+  metrics();
+  buildTotems();
+  resetB();
+  buildSuelo();
+  buildDecor();
+  /* el guardián: viene del GLB horneado, con su color de vértice */
+  const gl=ARC.glb&&ARC.glb.guard;
+  if(gl&&gl.scene){
+    guard=gl.scene;
+    guard.traverse(o=>{if(o.isMesh)o.material=new T3.MeshBasicMaterial({
+      vertexColors:!!o.geometry.attributes.color});});
+    guard.scale.setScalar(1);
+    scene.add(guard);
+  }else{
+    /* respaldo si el GLB no cargó: el juego NO se cae por un asset */
+    const A=Lote();
+    caja(A,0,.75,0,.8,.9,1.5,hx('#5f8347'));
+    caja(A,0,1.3,.75,.5,.5,.5,hx('#b9cf8c'));
+    guard=malla(A);scene.add(guard);
+  }
+  orbe=new T3.Mesh(new T3.OctahedronGeometry(1,0),
+    new T3.MeshBasicMaterial({color:0xdff6c8}));
+  orbe.visible=false;scene.add(orbe);
+  manan=new T3.Mesh(new T3.CircleGeometry(2.0,14),
+    new T3.MeshBasicMaterial({color:0x7fd6ea}));
+  manan.rotation.x=-Math.PI/2;
+  manan.position.set(MAN.x,H(MAN.x,MAN.z)+.06,MAN.z);scene.add(manan);
+  ARC.tray([]);
+};
+G.resize=function(){metrics();};
+G.gfxApply=function(){};
+G.start=function(lvl){
+  if(!scene)return;
+  demo=0;bot=0;
+  nuevaPartida(lvl);
+  ARC.tray([]);          /* se maneja arrastrando: no hace falta ningún botón */
+};
+G.step=function(dt){
+  if(fase!=='play')return;
+  simula(dt);
+};
+G.draw=function(g,alpha){
+  if(!ARC.rnd||!scene)return;
+  pon3D(alpha||0);
+  ARC.rnd.render(scene,cam);
+  dibuja2D(g);
+};
+G.attract=function(dt,g){
+  if(!ARC.rnd||!scene)return;
+  if(!demo){demo=1;nuevaPartida(2);fase='play';}
+  simula(dt);
+  if(encendidos>=5||bEn(0,0)>.85){nuevaPartida(2);fase='play';}
+  pon3D(0);
+  ARC.rnd.render(scene,cam);
+};
+G.down=function(p){if(fase!=='play')return;joy={x:p.x,y:p.y};joyV.x=joyV.y=0;bot=0;};
+G.move=function(p){
+  if(!joy||fase!=='play')return;
+  const dx=p.x-joy.x,dy=p.y-joy.y;
+  const R=Math.max(28,ARC.H*.11),d=Math.hypot(dx,dy);
+  const k=d>R?R/d:1;
+  joyV.x=dx*k/R;joyV.y=dy*k/R;
+};
+G.up=function(){joy=null;joyV.x=joyV.y=0;};
+G.key=function(c,d){
+  const v=d?1:0;
+  if(c==='ArrowUp'||c==='KeyW')keyV.y=d?-1:0;
+  if(c==='ArrowDown'||c==='KeyS')keyV.y=d?1:0;
+  if(c==='ArrowLeft'||c==='KeyA')keyV.x=d?-1:0;
+  if(c==='ArrowRight'||c==='KeyD')keyV.x=d?1:0;
+  if(d)bot=0;
+};
+
+/* ------------------------------------------------------------- capa 2D */
+function txt(g,s,x,y,size,col,al){
+  g.save();
+  g.font='800 '+size+'px system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
+  g.textAlign=al||'center';g.textBaseline='middle';
+  g.lineWidth=Math.max(2,size*.17);g.strokeStyle='rgba(6,14,10,.72)';
+  g.strokeText(s,x,y);g.fillStyle=col;g.fillText(s,x,y);
+  g.restore();
+}
+function dibuja2D(g){
+  /* barra de bosque sano: es el reloj del juego y tiene que leerse de un ojo */
+  const w=ARC.W*.32,h=Math.max(7,ARC.H*.022),x=ARC.W*.5-w/2,y=ARC.H*.045;
+  g.fillStyle='rgba(6,16,10,.55)';g.fillRect(x-2,y-2,w+4,h+4);
+  const k=cl(sanoPct,0,1);
+  g.fillStyle=k>.55?'#7fd06a':(k>.3?'#e0c04a':'#e06a6a');
+  g.fillRect(x,y,w*k,h);
+  g.strokeStyle='rgba(220,255,230,.5)';g.lineWidth=1.5;g.strokeRect(x,y,w,h);
+  /* sin rótulo debajo: el HUD del motor ya dice "BOSQUE SANO 83%" ahí arriba y
+     repetirlo se pisaba con la barra (se vio en la captura) */
+  /* semilla cargando */
+  if(!lleva&&carga>.02){
+    const p=proj(px,H(px,pz)+2.4,pz);
+    if(p){const r=Math.max(12,ARC.H*.045);
+      g.strokeStyle='rgba(223,246,200,.35)';g.lineWidth=4;
+      g.beginPath();g.arc(p.x,p.y,r,0,TAU2);g.stroke();
+      g.strokeStyle='#dff6c8';g.beginPath();
+      g.arc(p.x,p.y,r,-Math.PI/2,-Math.PI/2+TAU2*(carga/T_SEMILLA));g.stroke();}
+  }
+  /* flechas a los tótems apagados: sin esto, en un tablero de 33 u el jugador no
+     sabe adónde ir cuando ya tiene la semilla */
+  if(lleva)for(const t of tots){
+    if(t.on)continue;
+    const p=proj(t.x,H(t.x,t.z)+4.4,t.z);
+    if(p)txt(g,'▾',p.x,p.y,Math.max(16,ARC.H*.06),'#dff6c8');
+  }
+  /* tutorial de los primeros segundos */
+  if(tutT>0&&fase==='play'){
+    const a=cl(tutT/1.2,0,1);
+    g.save();g.globalAlpha=a;
+    txt(g,T('tut'),ARC.W*.5,ARC.H*.80,Math.max(12,ARC.H*.055),'#fff');
+    txt(g,T('tut2'),ARC.W*.5,ARC.H*.88,Math.max(10,ARC.H*.04),'#cfe9d0');
+    g.restore();
+  }
+}
+
+/* --------------------------------------------------------------- depuración */
+G.dbg={
+  get state(){return {fase,encendidos,sanoPct:+sanoPct.toFixed(3),lleva,carga:+carga.toFixed(2),
+    px:+px.toFixed(2),pz:+pz.toFixed(2),bCentro:+bEn(0,0).toFixed(3),
+    t:+tJuego.toFixed(1),nivel,tots:tots.map(t=>t.on)};},
+  autoMove(v){bot=v==null?1:(v?1:0);},
+  seed(){lleva=1;carga=0;},
+  goto(x,z){px=x;pz=z;},
+  light(i){if(tots[i]&&!tots[i].on){lleva=1;enciende(tots[i]);}},
+  blight(v){B.fill(v);recuenta();pintaSuelo(true);},
+  center(v){for(let j=8;j<14;j++)for(let i=8;i<14;i++)B[ix(i,j)]=v;recuenta();pintaSuelo(true);},
+  info(){return {dib:ARC.rnd?ARC.rnd.info.render.calls:0,
+    tri:ARC.rnd?ARC.rnd.info.render.triangles:0,N,tiles:N*N};},
+  proj
+};
+window.GAME=G;
+
+window.ARC=ARC;window.GAME=GAME;
+ARC.boot();
+</script>
+</body></html>
