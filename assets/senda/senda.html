@@ -483,36 +483,88 @@ const terrChunks = [];
    El plano es cuadrado a propósito: donde el terreno está más alto lo tapa la
    prueba de profundidad, así que la orilla la dibuja el propio lago. */
 const AGUAU = { value: 0 };
-const aguaMat = new T.MeshStandardMaterial({ color: 0x274a44, metalness: .96,
-  roughness: .14, transparent: true, opacity: .96 });
+/* RUIDO AZULEJABLE para el agua: 3 octavas de ruido de valor con la retícula en
+   módulo (los bordes empalman). Es lo que mata el "se ve programado": los senos
+   puros hacen crestas RECTAS que se repiten; el ruido no se repite nunca a la
+   vista. Se genera una vez en un canvas de 256. */
+const RUIDO = (() => {
+  const N2 = 256, c = document.createElement('canvas');
+  c.width = c.height = N2;
+  const g = c.getContext('2d'), img = g.createImageData(N2, N2);
+  const val = (x, y, per) => {
+    const i = Math.floor(x), j = Math.floor(y);
+    const fx = x - i, fy = y - j;
+    const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    const h = (a, b) => hash2(((a % per) + per) % per + 101, ((b % per) + per) % per + 37);
+    const a = h(i, j), b = h(i + 1, j), c2 = h(i, j + 1), d = h(i + 1, j + 1);
+    return a + (b - a) * sx + (c2 - a) * sy + (a - b - c2 + d) * sx * sy;
+  };
+  for (let y = 0; y < N2; y++) for (let x = 0; x < N2; x++){
+    let v = 0, amp = .55, per = 8;
+    for (let o = 0; o < 3; o++){ v += amp * val(x / N2 * per, y / N2 * per, per); amp *= .5; per *= 2; }
+    const k = Math.round(cl(v, 0, 1) * 255), i4 = (y * N2 + x) * 4;
+    img.data[i4] = img.data[i4+1] = img.data[i4+2] = k; img.data[i4+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  return t;
+})();
+const aguaMat = new T.MeshStandardMaterial({ color: 0x274a44, metalness: .94,
+  roughness: .16, transparent: true, opacity: .96 });
 aguaMat.envMapIntensity = .72;
 aguaMat.onBeforeCompile = sh => {
   sh.uniforms.uT = AGUAU;
+  sh.uniforms.tRuido = { value: RUIDO };
+  aguaMat.userData.sh = sh;
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;varying float vD;')
+    .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;varying float vD;varying float vAlt;')
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       vWp = position.xy;
-      /* cuatro trenes de olas cruzados: marejada larga + dos medianas + picada */
-      transformed.z += sin(position.x*.055 + uT*1.05)*.22
-                     + cos(position.y*.048 - uT*.85)*.18
-                     + sin(position.x*.13 + position.y*.09 + uT*1.7)*.10
-                     + cos(position.x*.021 - position.y*.031 + uT*.5)*.16;
+      /* DOMINIO DEFORMADO: antes de calcular la ola, la posición se tuerce con
+         dos senos lentos. Las crestas dejan de ser líneas rectas: se curvan y
+         serpentean como en el mar de verdad. */
+      vec2 pw = position.xy + vec2(sin(position.y*.021 + uT*.33),
+                                   cos(position.x*.017 - uT*.27)) * 16.0;
+      float hh = sin(pw.x*.052 + uT*1.02)*.22
+               + cos(pw.y*.047 - uT*.83)*.18
+               + sin((pw.x + pw.y)*.093 + uT*1.61)*.11
+               + cos(pw.x*.019 - pw.y*.029 + uT*.47)*.15;
+      transformed.z += hh;
+      vAlt = hh;
       vD = -(modelViewMatrix * vec4(transformed, 1.0)).z;`);
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;varying float vD;')
-    .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+    .replace('#include <common>', '#include <common>\nuniform float uT;uniform sampler2D tRuido;varying vec2 vWp;varying float vD;varying float vAlt;')
+    /* OJO CON EL ORDEN DEL PIPELINE: color_fragment y roughnessmap corren ANTES
+       que normal_fragment_begin. Todo el cálculo (ruido, espuma, gradiente) se
+       hace en color_fragment y la normal sólo CONSUME el gradiente después. */
+    .replace('#include <color_fragment>', `#include <color_fragment>
+      float espuma; vec2 aguaG;
       {
-        /* seis trenes de rizado: MUCHAS olas chicas encima de la marejada.
-           El rizado se APAGA con la distancia: de cerca agua brava, de lejos
-           espejo — sin esto, en ángulo rasante el rizado pescaba la franja
-           brillante del horizonte y el fondo del lago se quemaba en blanco. */
-        float lejos = clamp(1.0 - vD / 300.0, .28, 1.0);
-        float a1 = (sin(vWp.x*.42 + uT*1.9)*.09  + sin(vWp.x*1.3 - uT*2.6)*.05
-                 + sin((vWp.x+vWp.y)*2.7 + uT*3.4)*.028) * lejos;
-        float a2 = (cos(vWp.y*.38 + uT*1.5)*.09  + cos(vWp.y*1.1 + uT*2.2)*.05
-                 + cos((vWp.y-vWp.x)*2.3 - uT*3.1)*.028) * lejos;
-        normal = normalize(normal + vec3(a1, a2, 0.0));
-      }`);
+        /* rizado por RUIDO: dos capas que se desplazan en direcciones distintas.
+           La normal sale del gradiente del ruido (diferencias), así el brillo
+           del reflejo rompe en manchas vivas, no en rayas. Se apaga con la
+           distancia para no quemar el fondo en ángulo rasante. */
+        float lejos = clamp(1.0 - vD / 320.0, .3, 1.0);
+        vec2 uvA = vWp*.011 + vec2(uT*.016,  uT*.010);
+        vec2 uvB = vWp*.043 + vec2(-uT*.024, uT*.019);
+        float e2 = .014;
+        float n1  = texture2D(tRuido, uvA).r;
+        float n2  = texture2D(tRuido, uvB).r;
+        float gxA = texture2D(tRuido, uvA + vec2(e2, 0.)).r - n1;
+        float gyA = texture2D(tRuido, uvA + vec2(0., e2)).r - n1;
+        float gxB = texture2D(tRuido, uvB + vec2(e2, 0.)).r - n2;
+        float gyB = texture2D(tRuido, uvB + vec2(0., e2)).r - n2;
+        aguaG = vec2(gxA*3.5 + gxB*5.5, gyA*3.5 + gyB*5.5) * lejos;
+        /* ESPUMA: en las crestas altas (vAlt) y en las vetas donde las dos capas
+           de ruido coinciden — las manchas claras de la referencia */
+        espuma = smoothstep(.98, 1.28, n1*.85 + n2*.85 + max(vAlt, 0.)*1.15) * lejos;
+      }
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.72, .82, .76), espuma * .85);`)
+    .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      roughnessFactor = mix(roughnessFactor, .85, espuma);`)
+    .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+      normal = normalize(normal + vec3(aguaG.x, aguaG.y, 0.0));`);
 };
 const agua = new T.Mesh(new T.PlaneGeometry(380, 380, 84, 84), aguaMat);
 agua.rotation.x = -Math.PI / 2;
@@ -725,26 +777,39 @@ function plantar(){
   arb.count = pa;
   arb.frustumCulled = false;
   scene.add(arb);
-  /* rocas con textura */
-  const gr = new T.IcosahedronGeometry(1, 1);
-  { const P = gr.attributes.position;
+  /* ROCAS. Las anteriores estaban mal por tres lados (lo dijo el jugador y es
+     cierto): el centro quedaba ARRIBA del suelo (flotaban con luz por abajo),
+     el icosaedro embarraba la textura en los polos, y caían en pendientes donde
+     una punta quedaba en el aire. Ahora: esfera deformada con ruido (uv decente,
+     repetida x2), ACHATADA, ENTERRADA un cuarto, y sólo en suelo llano. */
+  const gr = new T.SphereGeometry(1, 9, 7);
+  { const P = gr.attributes.position, UV = gr.attributes.uv;
     for (let i = 0; i < P.count; i++){
-      const k = .75 + hash2(i, 7) * .5;
-      P.setXYZ(i, P.getX(i) * k, P.getY(i) * k * .7, P.getZ(i) * k);
+      const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+      const k = .74 + .42 * vnoise(x * 1.9 + 9 + y * 1.1, z * 1.9 + 4);
+      P.setXYZ(i, x * k, y * k * .58, z * k);
+      UV.setXY(i, UV.getX(i) * 2, UV.getY(i) * 1.4);
     }
     gr.computeVertexNormals(); }
+  window.__ROCAS = [];
   const roq = new T.InstancedMesh(gr, new T.MeshLambertMaterial({ map: TX.roca }), 70);
-  for (let i = 0; i < 70; i++){
-    let x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
-    for (let k = 0; k < 20 && molesta(x, z, 14); k++){
-      x = rr(-MITAD + 10, MITAD - 10); z = rr(-MITAD + 10, MITAD - 10); }
-    if (molesta(x, z, 14)) continue;   /* antes se plantaba IGUAL tras agotar los intentos */
-    const y = H(x, z), s = rr(.8, 3.2);
+  let nr = 0;
+  for (let i = 0; i < 200 && nr < 70; i++){
+    const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    if (molesta(x, z, 14) || enAgua(x, z, 1)) continue;
+    const y = H(x, z);
+    /* pendiente: en ladera empinada una punta queda en el aire */
+    const pend = Math.max(Math.abs(H(x + 2, z) - y), Math.abs(H(x, z + 2) - y));
+    if (pend > 1.1) continue;
+    const s = rr(.9, 3.0);
     Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
-    M4.compose(V3.set(x, enAgua(x, z) ? -999 : y + s * .18, z), Q4, new T.Vector3(s, s, s));
-    roq.setMatrixAt(i, M4);
-    if (s > 1.6 && !enAgua(x, z)) ARB.push([x, z, s * .8]);
+    M4.compose(V3.set(x, y - s * .16, z), Q4, new T.Vector3(s, s, s));
+    roq.setMatrixAt(nr, M4);
+    if (s > 1.6) ARB.push([x, z, s * .75]);
+    window.__ROCAS.push([x, z, s, +pend.toFixed(2)]);
+    nr++;
   }
+  roq.count = nr;
   roq.frustumCulled = false;
   scene.add(roq);
 }
