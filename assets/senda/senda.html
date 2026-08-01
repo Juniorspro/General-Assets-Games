@@ -328,7 +328,7 @@ const pm = new T.PMREMGenerator(ren);
   envTex.colorSpace = T.SRGBColorSpace;
   scene.environment = pm.fromEquirectangular(envTex).texture;
 }
-scene.fog = new T.Fog(new T.Color('#cfd8c8'), 60, 430);
+scene.fog = new T.Fog(new T.Color('#c2d2c6'), 60, 430);
 const cam = new T.PerspectiveCamera(72, 1, .1, 1200);
 cam.rotation.order = 'YXZ';
 
@@ -510,9 +510,9 @@ const RUIDO = (() => {
   t.wrapS = t.wrapT = T.RepeatWrapping;
   return t;
 })();
-const aguaMat = new T.MeshStandardMaterial({ color: 0x274a44, metalness: .94,
-  roughness: .16, transparent: true, opacity: .96 });
-aguaMat.envMapIntensity = .72;
+const aguaMat = new T.MeshStandardMaterial({ color: 0x1f3f3a, metalness: .95,
+  roughness: .11, transparent: true, opacity: .96 });
+aguaMat.envMapIntensity = .8;
 aguaMat.onBeforeCompile = sh => {
   sh.uniforms.uT = AGUAU;
   sh.uniforms.tRuido = { value: RUIDO };
@@ -541,26 +541,33 @@ aguaMat.onBeforeCompile = sh => {
     .replace('#include <color_fragment>', `#include <color_fragment>
       float espuma; vec2 aguaG;
       {
-        /* rizado por RUIDO: dos capas que se desplazan en direcciones distintas.
-           La normal sale del gradiente del ruido (diferencias), así el brillo
-           del reflejo rompe en manchas vivas, no en rayas. Se apaga con la
-           distancia para no quemar el fondo en ángulo rasante. */
+        /* TRES ESCALAS de rizado por ruido. La primera versión usaba capas de
+           ~90 m y ~23 m: en la pantalla del celular eran manchones lechosos sin
+           detalle (captura del jugador: "está horrible", y sí). Escalas nuevas:
+           oleaje ~20 m + olitas ~4,5 m + micro-rizado ~1,5 m. El detalle fino es
+           lo que hace que el agua se lea como agua a cualquier distancia. */
         float lejos = clamp(1.0 - vD / 320.0, .3, 1.0);
-        vec2 uvA = vWp*.011 + vec2(uT*.016,  uT*.010);
-        vec2 uvB = vWp*.043 + vec2(-uT*.024, uT*.019);
-        float e2 = .014;
+        vec2 uvA = vWp*.048 + vec2(uT*.020,  uT*.013);
+        vec2 uvB = vWp*.19  + vec2(-uT*.036, uT*.028);
+        vec2 uvC = vWp*.55  + vec2(uT*.05,  -uT*.041);
+        float e2 = .02;
         float n1  = texture2D(tRuido, uvA).r;
         float n2  = texture2D(tRuido, uvB).r;
+        float n3  = texture2D(tRuido, uvC).r;
         float gxA = texture2D(tRuido, uvA + vec2(e2, 0.)).r - n1;
         float gyA = texture2D(tRuido, uvA + vec2(0., e2)).r - n1;
         float gxB = texture2D(tRuido, uvB + vec2(e2, 0.)).r - n2;
         float gyB = texture2D(tRuido, uvB + vec2(0., e2)).r - n2;
-        aguaG = vec2(gxA*3.5 + gxB*5.5, gyA*3.5 + gyB*5.5) * lejos;
-        /* ESPUMA: en las crestas altas (vAlt) y en las vetas donde las dos capas
-           de ruido coinciden — las manchas claras de la referencia */
-        espuma = smoothstep(.98, 1.28, n1*.85 + n2*.85 + max(vAlt, 0.)*1.15) * lejos;
+        float gxC = texture2D(tRuido, uvC + vec2(e2, 0.)).r - n3;
+        float gyC = texture2D(tRuido, uvC + vec2(0., e2)).r - n3;
+        aguaG = vec2(gxA*2.4 + gxB*3.6 + gxC*2.2,
+                     gyA*2.4 + gyB*3.6 + gyC*2.2) * lejos;
+        /* ESPUMA ESCASA: vetas finas donde coinciden la cresta y las dos capas
+           chicas — no manchones. El micro-rizado la recorta en hilos. */
+        espuma = smoothstep(1.42, 1.62, n2*.9 + n3*.75 + max(vAlt, 0.)*.9)
+               * smoothstep(.35, .6, n3) * lejos;
       }
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.72, .82, .76), espuma * .85);`)
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.74, .84, .78), espuma * .6);`)
     .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
       roughnessFactor = mix(roughnessFactor, .85, espuma);`)
     .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
@@ -1072,8 +1079,8 @@ let CAPS = L[LANG].caps;
 const Tx = k => L[LANG].ui[k];
 /* luz por capítulo: [posSol, colorSol, intensidad, cielo bg, niebla, hemi] */
 const LUZCAP = [
-  { sol: [.5, .7, .3],   solI: 2.4, bg: 1.0,  fog: '#cfd8c8', fogFar: 430, hemiI: .9 },
-  { sol: [.2, .9, .2],   solI: 2.6, bg: 1.05, fog: '#d8e0cc', fogFar: 460, hemiI: 1.0 },
+  { sol: [.5, .7, .3],   solI: 2.4, bg: 1.0,  fog: '#c2d2c6', fogFar: 430, hemiI: .9 },
+  { sol: [.2, .9, .2],   solI: 2.6, bg: 1.05, fog: '#c8d6c4', fogFar: 460, hemiI: 1.0 },
   { sol: [-.6, .35, .2], solI: 2.0, bg: .8,   fog: '#d8c4a8', fogFar: 380, hemiI: .75 },
   { sol: [-.8, .12, .1], solI: 1.1, bg: .42,  fog: '#8a7a80', fogFar: 300, hemiI: .5 },
   { sol: [-.4, .06, -.3],solI: .5,  bg: .16,  fog: '#3a3a52', fogFar: 240, hemiI: .34 },
