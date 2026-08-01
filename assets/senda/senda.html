@@ -82,6 +82,7 @@
   <div id="fps"></div>
   <div id="btns">
     <div class="b usar" id="bUsar">◉ USAR</div>
+    <div class="b" id="bSon">🔊</div>
     <div class="b corre" id="bCorre">CORRER</div>
     <div class="b" id="bMenu">MENÚ</div>
   </div>
@@ -510,17 +511,41 @@ const RUIDO = (() => {
   t.wrapS = t.wrapT = T.RepeatWrapping;
   return t;
 })();
+/* TEXTURA DE PROFUNDIDAD: el agua "no tenía masa" (dicho del jugador, y es
+   exacto) porque la orilla era el corte seco del polígono contra el terreno.
+   Se precalcula cuánto terreno hay DEBAJO de cada punto del agua (256x256 sobre
+   los 380x380 del plano) y con eso el shader hace lo que hace el agua real:
+   transparente y clara en el bajío, honda y oscura en el centro, espuma
+   lamiendo la orilla, y las olas se aplanan al llegar a la costa. */
+const PROF = (() => {
+  const N2 = 256, c = document.createElement('canvas');
+  c.width = c.height = N2;
+  const g = c.getContext('2d'), img = g.createImageData(N2, N2);
+  for (let j = 0; j < N2; j++) for (let i = 0; i < N2; i++){
+    const x = POI.lago.x + (i / (N2 - 1) - .5) * 380;
+    const z = POI.lago.z + (j / (N2 - 1) - .5) * 380;
+    const d = cl((AGUA_Y - H(x, z)) / 7, 0, 1);        /* 0 = orilla, 1 = hondo */
+    const k = Math.round(d * 255), i4 = (j * N2 + i) * 4;
+    img.data[i4] = img.data[i4+1] = img.data[i4+2] = k; img.data[i4+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.ClampToEdgeWrapping;
+  return t;
+})();
 const aguaMat = new T.MeshStandardMaterial({ color: 0x1f3f3a, metalness: .95,
   roughness: .11, transparent: true, opacity: .96 });
 aguaMat.envMapIntensity = .8;
 aguaMat.onBeforeCompile = sh => {
   sh.uniforms.uT = AGUAU;
   sh.uniforms.tRuido = { value: RUIDO };
+  sh.uniforms.tProf = { value: PROF };
   aguaMat.userData.sh = sh;
   sh.vertexShader = sh.vertexShader
-    .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;varying float vD;varying float vAlt;')
+    .replace('#include <common>', '#include <common>\nuniform float uT;uniform sampler2D tProf;varying vec2 vWp;varying float vD;varying float vAlt;varying float vProf;')
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       vWp = position.xy;
+      vProf = texture2D(tProf, position.xy / 380.0 + 0.5).r;
       /* DOMINIO DEFORMADO: antes de calcular la ola, la posición se tuerce con
          dos senos lentos. Las crestas dejan de ser líneas rectas: se curvan y
          serpentean como en el mar de verdad. */
@@ -530,16 +555,19 @@ aguaMat.onBeforeCompile = sh => {
                + cos(pw.y*.047 - uT*.83)*.18
                + sin((pw.x + pw.y)*.093 + uT*1.61)*.11
                + cos(pw.x*.019 - pw.y*.029 + uT*.47)*.15;
+      /* la ola se APLANA al entrar al bajío: si no, el borde del agua sube y
+         baja despegándose de la costa y se ve la lámina */
+      hh *= smoothstep(0.0, 0.22, vProf);
       transformed.z += hh;
       vAlt = hh;
       vD = -(modelViewMatrix * vec4(transformed, 1.0)).z;`);
   sh.fragmentShader = sh.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform float uT;uniform sampler2D tRuido;varying vec2 vWp;varying float vD;varying float vAlt;')
+    .replace('#include <common>', '#include <common>\nuniform float uT;uniform sampler2D tRuido;varying vec2 vWp;varying float vD;varying float vAlt;varying float vProf;')
     /* OJO CON EL ORDEN DEL PIPELINE: color_fragment y roughnessmap corren ANTES
        que normal_fragment_begin. Todo el cálculo (ruido, espuma, gradiente) se
        hace en color_fragment y la normal sólo CONSUME el gradiente después. */
     .replace('#include <color_fragment>', `#include <color_fragment>
-      float espuma; vec2 aguaG;
+      float espuma; vec2 aguaG; float n3;
       {
         /* TRES ESCALAS de rizado por ruido. La primera versión usaba capas de
            ~90 m y ~23 m: en la pantalla del celular eran manchones lechosos sin
@@ -553,7 +581,7 @@ aguaMat.onBeforeCompile = sh => {
         float e2 = .02;
         float n1  = texture2D(tRuido, uvA).r;
         float n2  = texture2D(tRuido, uvB).r;
-        float n3  = texture2D(tRuido, uvC).r;
+        n3  = texture2D(tRuido, uvC).r;
         float gxA = texture2D(tRuido, uvA + vec2(e2, 0.)).r - n1;
         float gyA = texture2D(tRuido, uvA + vec2(0., e2)).r - n1;
         float gxB = texture2D(tRuido, uvB + vec2(e2, 0.)).r - n2;
@@ -567,7 +595,16 @@ aguaMat.onBeforeCompile = sh => {
         espuma = smoothstep(1.42, 1.62, n2*.9 + n3*.75 + max(vAlt, 0.)*.9)
                * smoothstep(.35, .6, n3) * lejos;
       }
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.74, .84, .78), espuma * .6);`)
+      /* MASA DEL AGUA: bajío claro y verdoso -> hondo oscuro. Es la señal de
+         volumen que le faltaba. */
+      diffuseColor.rgb = mix(vec3(.30, .48, .42), diffuseColor.rgb,
+                             smoothstep(0.0, 0.55, vProf));
+      /* espuma que LAME la orilla, ondulando con el ruido fino y el tiempo */
+      float lame = smoothstep(.16, .045, vProf + sin(uT*1.4 + vWp.x*.3 + vWp.y*.23)*.025);
+      espuma = max(espuma, lame * (.45 + .55 * n3));
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.74, .84, .78), espuma * .6);
+      /* y el borde mismo se DESVANECE: nada de corte poligonal seco */
+      diffuseColor.a *= smoothstep(0.0, 0.05, vProf);`)
     .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
       roughnessFactor = mix(roughnessFactor, .85, espuma);`)
     .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
@@ -1165,6 +1202,101 @@ function finDeHistoria(){
 }
 function guardarFin(){ try { localStorage.removeItem('senda1'); } catch(e){} }
 
+/* ========================= AMBIENTE SONORO ================================
+   SINTETIZADO con WebAudio. Quedaban 0,39 créditos de generación y un audio
+   cuesta ~2,5: no alcanzaba, así que el ambiente se fabrica acá y no cuesta un
+   byte de descarga. Cuatro voces:
+     · VIENTO: ruido rosa por un pasabajos, con vaivén lento
+     · LAGO: el mismo ruido por un pasabanda grave con marejada de amplitud;
+       su volumen sube al ACERCARSE a la orilla y desaparece tierra adentro
+     · PÁJAROS de día: barridos cortos de seno, cada 5-14 s
+     · GRILLOS de noche: ráfagas de pulsos de 4,3 kHz, atadas a la altura del
+       sol del ciclo de la historia
+   ========================================================================== */
+const AMB = { ctx: null, master: null, on: true, viento: null, lago: null,
+  grillos: null, tAve: 6, tCri: 2 };
+try { AMB.on = localStorage.getItem('senda_son') !== '0'; } catch(e){}
+function ambienteOn(){
+  if (AMB.ctx){ if (AMB.ctx.state === 'suspended') AMB.ctx.resume(); return; }
+  try { AMB.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return; }
+  const A2 = AMB.ctx;
+  AMB.master = A2.createGain();
+  AMB.master.gain.value = AMB.on ? 1 : 0;
+  AMB.master.connect(A2.destination);
+  const buf = A2.createBuffer(1, A2.sampleRate * 3, A2.sampleRate);
+  const d = buf.getChannelData(0); let l = 0;
+  for (let i = 0; i < d.length; i++){ const w = Math.random() * 2 - 1;
+    l = l * .97 + w * .03; d[i] = l * 3.0; }
+  const nv = A2.createBufferSource(); nv.buffer = buf; nv.loop = true;
+  const fv = A2.createBiquadFilter(); fv.type = 'lowpass'; fv.frequency.value = 380;
+  AMB.viento = A2.createGain(); AMB.viento.gain.value = .07;
+  nv.connect(fv); fv.connect(AMB.viento); AMB.viento.connect(AMB.master); nv.start();
+  const nl = A2.createBufferSource(); nl.buffer = buf; nl.loop = true;
+  nl.playbackRate.value = .6;
+  const fl = A2.createBiquadFilter(); fl.type = 'bandpass';
+  fl.frequency.value = 260; fl.Q.value = .8;
+  const oleo = A2.createGain(); oleo.gain.value = .7;
+  const lfo = A2.createOscillator(); lfo.frequency.value = .37;
+  const lg = A2.createGain(); lg.gain.value = .4;
+  lfo.connect(lg); lg.connect(oleo.gain); lfo.start();
+  AMB.lago = A2.createGain(); AMB.lago.gain.value = 0;
+  nl.connect(fl); fl.connect(oleo); oleo.connect(AMB.lago);
+  AMB.lago.connect(AMB.master); nl.start();
+  AMB.grillos = A2.createGain(); AMB.grillos.gain.value = 0;
+  AMB.grillos.connect(AMB.master);
+}
+function pio(){
+  const A2 = AMB.ctx; if (!A2) return;
+  const n = 2 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < n; i++){
+    const o = A2.createOscillator(), g = A2.createGain();
+    const t = A2.currentTime + i * .17 + Math.random() * .05;
+    const f0 = 2100 + Math.random() * 900;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f0 * (1.25 + Math.random() * .3), t + .09);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(.045, t + .02);
+    g.gain.exponentialRampToValueAtTime(.0001, t + .16);
+    o.connect(g); g.connect(AMB.master); o.start(t); o.stop(t + .2);
+  }
+}
+function cri(){
+  const A2 = AMB.ctx; if (!A2) return;
+  const t0b = A2.currentTime;
+  for (let i = 0; i < 5; i++){
+    const o = A2.createOscillator(), g = A2.createGain();
+    const t = t0b + i * .055;
+    o.frequency.value = 4300 + Math.random() * 300;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(.85, t + .008);
+    g.gain.exponentialRampToValueAtTime(.001, t + .045);
+    o.connect(g); g.connect(AMB.grillos); o.start(t); o.stop(t + .06);
+  }
+}
+function ambTick(dt){
+  if (!AMB.ctx || fase !== 'juego') return;
+  AMB.viento.gain.value = .05 + .05 * Math.abs(Math.sin(t0 * .07));
+  /* el chapoteo vive EN LA ORILLA (anillo a ~150 m del centro del lago) */
+  const dl = Math.hypot(px - POI.lago.x, pz - POI.lago.z);
+  AMB.lago.gain.value = cl(1 - Math.abs(dl - 150) / 90, 0, 1) * .4;
+  const osc = cl(1 - sol.position.y / 160, 0, 1);
+  AMB.grillos.gain.value = osc > .5 ? (osc - .5) : 0;
+  AMB.tAve -= dt;
+  if (AMB.tAve <= 0){ AMB.tAve = 5 + Math.random() * 9;
+    if (sol.position.y > 70) pio(); }
+  AMB.tCri -= dt;
+  if (AMB.tCri <= 0){ AMB.tCri = .5 + Math.random() * 1.4;
+    if (osc > .55) cri(); }
+}
+$('bSon').addEventListener('pointerdown', e => {
+  e.preventDefault();
+  AMB.on = !AMB.on;
+  try { localStorage.setItem('senda_son', AMB.on ? '1' : '0'); } catch(e2){}
+  if (AMB.master) AMB.master.gain.value = AMB.on ? 1 : 0;
+  $('bSon').textContent = AMB.on ? '🔊' : '🔇';
+});
+$('bSon').textContent = AMB.on ? '🔊' : '🔇';
+
 /* ================================ JUGADOR ================================== */
 const stats = { t: 0, dist: 0 };
 let px = POI.inicio.x, pz = POI.inicio.z, yaw = 0, pitch = -.03;
@@ -1332,6 +1464,7 @@ function bucle(t){
     pasoLuz(dt);
     pasoObjetivo();
     rsTick(dt);
+    ambTick(dt);
     /* luciérnagas ondulando */
     if (luci.visible){
       const P = luci.geometry.attributes.position;
@@ -1351,6 +1484,7 @@ requestAnimationFrame(bucle);
 /* ================================ MENÚ ===================================== */
 function entrar(desde){
   fase = 'juego';
+  ambienteOn();
   $('menu').style.display = 'none';
   $('hud').classList.add('on');
   try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch (e) {}
@@ -1441,6 +1575,9 @@ window.__S = {
   entrar, tp(x, z){ px = x; pz = z; },
   aguaT(){ return AGUAU.value; }, vientoT(){ return VIENTO.value; },
   lang(){ return LANG; }, setLang, gfx(){ return GFX; }, setGfx,
+  amb(){ return AMB.ctx ? { estado: AMB.ctx.state, master: AMB.master.gain.value,
+    viento: +AMB.viento.gain.value.toFixed(3), lago: +AMB.lago.gain.value.toFixed(3),
+    grillos: +AMB.grillos.gain.value.toFixed(3) } : null; },
   pr(){ return ren.getPixelRatio(); },
   sendaPts(){ return SENDA_PTS; }, arboles(){ return ARB; },
   cabPartes(){ return window.__CAB_PARTES || 0; },
