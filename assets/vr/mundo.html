@@ -109,9 +109,10 @@
     <div class="b" id="bHands">MANOS</div>
     <div class="b" id="bMirror">ESPEJO: NO</div>
     <div class="b" id="bStereo">ESTÉREO</div>
+    <div class="b" id="bVR">MENÚ VR</div>
     <div class="b r" id="bExit">SALIR</div>
   </div>
-  <div class="b" id="stbar">SALIR DEL ESTÉREO</div>
+  <div class="b" id="stbar">MENÚ VR · mirá el ☰ de abajo o tocá la pantalla</div>
 </div>
 
 <div id="menu">
@@ -127,7 +128,8 @@
   <div class="card">
     <h2>Extras</h2>
     <div class="row">
-      <div class="opt" id="oStereo"><b>Estéreo (visor)</b><span>parte la pantalla en dos ojos</span></div>
+      <div class="opt" id="oStereo"><b>Estéreo SBS (visor)</b>
+        <span>dos ojos + corrección de lente · menú VR con la mirada</span></div>
       <div class="opt" id="oHands"><b>Manos + gesto para caminar</b>
         <span>+8 MB · cámara de atrás · <b>dos dedos en V = avanzar</b></span></div>
     </div>
@@ -395,7 +397,12 @@ scene.fog = new T.Fog(new T.Color(CIELO_BAJO), 95, 330);
   g.setAttribute('color', new T.BufferAttribute(col, 3));
   const m = new T.Mesh(g, new T.MeshBasicMaterial({
     vertexColors: true, side: T.BackSide, fog: false, depthWrite: false }));
-  m.renderOrder = -10; m.frustumCulled = false;
+  /* EL CIELO VA ÚLTIMO, no primero. Dibujado primero se pinta la pantalla entera
+     y después el terreno la tapa: se paga dos veces el relleno, que es el costo
+     que manda en un celular. Dibujado al final, con prueba de profundidad, sólo
+     se rellenan los píxeles donde de verdad se ve cielo. Medido: el cielo era
+     3 de los 23 ms del cuadro. */
+  m.renderOrder = 5; m.frustumCulled = false; m.name = 'cielo';
   scene.add(m);
 })();
 
@@ -454,9 +461,13 @@ let agua, aguaP0;
   }
   g.setAttribute('color', new T.BufferAttribute(col, 3));
   aguaP0 = Float32Array.from(p.array);
-  agua = new T.Mesh(g, new T.MeshBasicMaterial({ vertexColors: true,
-    transparent: true, opacity: .86, depthWrite: false }));
-  agua.position.y = -.05; agua.renderOrder = -1;
+  /* OPACA a propósito. Medido en esta caja: con mezcla alfa el mar solo costaba
+     4 de los 23 ms del cuadro, porque ocupa media pantalla. Es el caso de siempre
+     en celular: el cuello de botella es el RELLENO, no los triángulos. Se ve
+     igual de bien porque el color ya viene degradado en los vértices. */
+  agua = new T.Mesh(g, new T.MeshBasicMaterial({ vertexColors: true }));
+  /* después del terreno: donde hay isla, la profundidad descarta el mar */
+  agua.position.y = -.05; agua.renderOrder = 1; agua.name = 'agua';
   scene.add(agua);
 })();
 
@@ -612,7 +623,7 @@ let FOGATA = null, llama = null;
 
 /* ---- florcitas: un Points a ras del suelo. Alfombra de color por 1 dibujo ---- */
 (function flores(){
-  const N = 420, p = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const N = 280, p = new Float32Array(N * 3), col = new Float32Array(N * 3);
   const c = new T.Color();
   let n = 0, it = 0;
   while (n < N && it < 9000){
@@ -661,7 +672,7 @@ let FOGATA = null, llama = null;
 /* ---- luciérnagas: un solo Points aditivo ---- */
 let motas, motasP0;
 (function luces(){
-  const N = 130, p = new Float32Array(N * 3), col = new Float32Array(N * 3);
+  const N = 100, p = new Float32Array(N * 3), col = new Float32Array(N * 3);
   const c = new T.Color();
   for (let i = 0; i < N; i++){
     const a = rnd() * 6.284, d = rr(4, R_ISLA - 8);
@@ -759,16 +770,82 @@ const rig = new T.Group(); scene.add(rig); rig.add(cam);
    manos, ojos del estéreo) usa esto y NO cam.position, que en XR es local. */
 const HP = new T.Vector3(0, 1.65, 16), HQ = new T.Quaternion();
 
+/* ==========================================================================
+   3b. SBS CON CORRECCIÓN DE LENTE (barril)
+   La lente de un visor de cartón AGRANDA y mete distorsión de almohadilla: las
+   rectas se curvan hacia adentro. Se compensa dibujando la imagen con
+   distorsión de BARRIL, que es lo contrario.
+   Cómo: los dos ojos se dibujan a una TEXTURA (cada uno en su mitad) y después
+   se pasa UNA sola vez por pantalla con un fragmento que muestrea torcido. Una
+   sola pasada para los dos ojos, no dos: en celular el relleno de pantalla es el
+   costo que hay que cuidar.
+   El radio se normaliza para que valga 1 en la ESQUINA del ojo, así k1 y k2 son
+   números manejables, y la cámara del ojo se abre justo lo que crece el barril
+   (fmax) para que el muestreo nunca caiga fuera de la textura.
+   ========================================================================== */
+const LENTE = [
+  { n: 'NO',     k1: 0,   k2: 0   },
+  { n: 'SUAVE',  k1: .14, k2: .04 },
+  { n: 'MEDIA',  k1: .26, k2: .08 },
+  { n: 'FUERTE', k1: .40, k2: .14 }
+];
+let lente = 0, IPD = .064;
+let RT = null;
+const warpEsc = new T.Scene(), warpCam = new T.Camera();
+const warpMat = new T.ShaderMaterial({
+  uniforms: { tex: { value: null }, k1: { value: 0 }, k2: { value: 0 },
+    fmax: { value: 1 }, asp: { value: 1 }, rmax2: { value: 2 } },
+  vertexShader:
+    'varying vec2 vUv;\n' +
+    'void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader:
+    'precision mediump float;\n' +
+    'uniform sampler2D tex; uniform float k1,k2,fmax,asp,rmax2;\n' +
+    'varying vec2 vUv;\n' +
+    'void main(){\n' +
+    '  float lado = step(0.5, vUv.x);\n' +
+    '  vec2 loc = vec2((vUv.x - lado*0.5)*2.0, vUv.y);\n' +
+    '  vec2 c = (loc - vec2(0.5)) * vec2(2.0*asp, 2.0);\n' +
+    '  float rn2 = dot(c,c)/rmax2;\n' +
+    '  float f = (1.0 + k1*rn2 + k2*rn2*rn2)/fmax;\n' +
+    '  vec2 uvE = (c*f)/vec2(2.0*asp, 2.0) + vec2(0.5);\n' +
+    '  if (uvE.x < 0.003 || uvE.x > 0.997 || uvE.y < 0.003 || uvE.y > 0.997){\n' +
+    '    gl_FragColor = vec4(0.0,0.0,0.0,1.0); return; }\n' +
+    '  gl_FragColor = texture2D(tex, vec2(uvE.x*0.5 + lado*0.5, uvE.y));\n' +
+    '}',
+  depthTest: false, depthWrite: false });
+warpEsc.add(new T.Mesh(new T.PlaneGeometry(2, 2), warpMat));
+
 let rs = 1;                      /* escala de resolución (el pedal del relleno) */
+const FOV0 = 72;
 function aplicaRS(){
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   ren.setPixelRatio(dpr * rs);
   ren.setSize(innerWidth, innerHeight, false);
   cv.style.width = innerWidth + 'px'; cv.style.height = innerHeight + 'px';
   const a = innerWidth / innerHeight;
-  cam.aspect = a; cam.updateProjectionMatrix();
-  camL.aspect = camR.aspect = a / 2;
+  cam.aspect = a; cam.fov = FOV0; cam.updateProjectionMatrix();
+  const L = LENTE[lente];
+  const aOjo = a / 2;
+  const fmax = 1 + L.k1 + L.k2;
+  /* la cámara del ojo se abre en tangente por fmax: así la textura contiene lo
+     que el barril va a estirar hacia los bordes */
+  const fovOjo = lente ? 2 * Math.atan(Math.tan(FOV0 * Math.PI / 360) * fmax) * 180 / Math.PI
+                       : FOV0;
+  camL.aspect = camR.aspect = aOjo;
+  camL.fov = camR.fov = fovOjo;
   camL.updateProjectionMatrix(); camR.updateProjectionMatrix();
+  warpMat.uniforms.k1.value = L.k1; warpMat.uniforms.k2.value = L.k2;
+  warpMat.uniforms.fmax.value = fmax;
+  warpMat.uniforms.asp.value = aOjo;
+  warpMat.uniforms.rmax2.value = aOjo * aOjo + 1;
+  /* la textura de los dos ojos: del tamaño real del framebuffer */
+  const v2 = ren.getDrawingBufferSize(new T.Vector2());
+  if (lente){
+    if (!RT) RT = new T.WebGLRenderTarget(v2.x, v2.y,
+      { minFilter: T.LinearFilter, magFilter: T.LinearFilter });
+    else RT.setSize(v2.x, v2.y);
+  } else if (RT){ RT.dispose(); RT = null; }
 }
 addEventListener('resize', () => aplicaRS());
 aplicaRS();
@@ -934,7 +1011,13 @@ const JOY = { x: 0, y: 0, act: false, id: -1, cx: 0, cy: 0 };
   });
   const fin = e => {
     if (!act) return; act = false; id = -1;
-    if (movio < 12 && performance.now() - t0 < 350) tocaMundo();
+    if (movio < 12 && performance.now() - t0 < 350){
+      /* un toque: con el menú abierto elige; en estéreo lo abre (porque el HUD de
+         HTML no se puede usar con el celu en un visor); si no, junta la gema */
+      if (MVR.on) mvrActivar();
+      else if (ESTEREO) mvrAbrir(true);
+      else tocaMundo();
+    }
   };
   el.addEventListener('pointerup', fin); el.addEventListener('pointercancel', fin);
   el.addEventListener('lostpointercapture', fin);
@@ -1331,6 +1414,8 @@ function agarra(punta){
 }
 const FWD = new T.Vector3(), DIR = new T.Vector3();
 function mirando(){
+  /* con el menú VR abierto la mirada es para el menú, no para juntar gemas */
+  if (MVR.on) return null;
   FWD.set(0, 0, -1).applyQuaternion(HQ);
   let mejor = null, best = .965;                       /* ~15° de tolerancia */
   for (const g of GEMAS){
@@ -1413,12 +1498,200 @@ async function montaXR(ses){
 }
 
 /* ==========================================================================
+   8b. MENÚ VR — un panel EN EL MUNDO que se maneja con la mirada.
+   En estéreo el HUD de HTML no se puede usar: está partido en dos y no se llega
+   con el dedo si el celu está en un visor. Así que los controles van a un panel
+   3D, que los dos ojos ven bien porque es geometría de la escena.
+   Se apunta con la retícula y se sostiene la mirada ~0,9 s. El panel se planta
+   FIJO EN EL MUNDO al abrirlo: si siguiera a la cabeza nunca podrías mirar otra
+   opción que la del centro.
+   La textura se redibuja SÓLO cuando cambia un texto; el resaltado y la barra de
+   avance son dos quads aparte, para no subir un canvas de 1024 px cada cuadro.
+   ========================================================================== */
+/* el panel es grande y cerca a propósito: con la lente el ojo pasa a 96° de campo
+   y todo se ve más chico, así que un panel "normal" queda ilegible en un visor */
+const MVR = { on: false, sel: -1, dwell: 0, cambio: true,
+  W: 1.42, H: .86, dist: 1.48, cols: 2, filas: 5, abreDwell: 0 };
+const MVR_IT = [
+  { id: 'cont',  t: () => 'CONTINUAR' },
+  { id: 'anda',  t: () => 'CAMINAR: ' + (ANDA ? 'SÍ' : 'NO') },
+  { id: 'est',   t: () => 'ESTABLE: ' + EST_NOM[EST] },
+  { id: 'mano',  t: () => 'MANOS: ' + (MANO.on ? 'SÍ' : 'NO') },
+  { id: 'luz',   t: () => 'LINTERNA: ' + (LUZ.on ? 'SÍ' : 'NO') },
+  { id: 'cent',  t: () => 'CENTRAR VISTA' },
+  { id: 'ipd',   t: () => 'OJOS: ' + Math.round(IPD * 1000) + ' mm' },
+  { id: 'lente', t: () => 'LENTE: ' + LENTE[lente].n },
+  { id: 'sbs',   t: () => ESTEREO ? 'SALIR DEL ESTÉREO' : 'ENTRAR EN ESTÉREO' },
+  { id: 'salir', t: () => 'SALIR AL MENÚ' }
+];
+const MVRcv = document.createElement('canvas');
+MVRcv.width = 1024; MVRcv.height = 620;
+const MVRtex = new T.CanvasTexture(MVRcv);
+const mvrPanel = new T.Mesh(new T.PlaneGeometry(MVR.W, MVR.H),
+  new T.MeshBasicMaterial({ map: MVRtex, transparent: true, depthTest: false, fog: false }));
+mvrPanel.renderOrder = 900; mvrPanel.visible = false; mvrPanel.frustumCulled = false;
+scene.add(mvrPanel);
+const mvrRes = new T.Mesh(new T.PlaneGeometry(1, 1),
+  new T.MeshBasicMaterial({ color: 0x8fd8ff, transparent: true, opacity: .22,
+    blending: T.AdditiveBlending, depthTest: false, fog: false }));
+mvrRes.renderOrder = 901; mvrRes.visible = false; mvrRes.frustumCulled = false;
+scene.add(mvrRes);
+const mvrBar = new T.Mesh(new T.PlaneGeometry(1, 1),
+  new T.MeshBasicMaterial({ color: 0x6cff9a, transparent: true, opacity: .95,
+    depthTest: false, fog: false }));
+mvrBar.renderOrder = 902; mvrBar.visible = false; mvrBar.frustumCulled = false;
+scene.add(mvrBar);
+/* blanco de apertura: un ☰ que vive abajo, pisado hacia el piso. Sigue el yaw
+   pero no el cabeceo, así que se "llega" mirando para abajo. */
+const mvrAbre = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(8,16,32,.72)'; g.beginPath();
+  g.roundRect(8, 26, 112, 76, 16); g.fill();
+  g.strokeStyle = '#9fd8ff'; g.lineWidth = 3; g.stroke();
+  g.fillStyle = '#eaf6ff';
+  for (let i = 0; i < 3; i++) g.fillRect(34, 44 + i * 16, 60, 6);
+  g.font = 'bold 15px system-ui'; g.textAlign = 'center';
+  g.fillText('MENÚ', 64, 116);
+  const m = new T.Mesh(new T.PlaneGeometry(.20, .20),
+    new T.MeshBasicMaterial({ map: new T.CanvasTexture(c), transparent: true,
+      depthTest: false, fog: false }));
+  m.renderOrder = 890; m.frustumCulled = false; scene.add(m); return m;
+})();
+
+function mvrPinta(){
+  const g = MVRcv.getContext('2d'), W = MVRcv.width, H = MVRcv.height;
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = 'rgba(6,14,30,.90)';
+  g.beginPath(); g.roundRect(4, 4, W - 8, H - 8, 26); g.fill();
+  g.strokeStyle = 'rgba(150,205,255,.55)'; g.lineWidth = 3; g.stroke();
+  g.fillStyle = '#8fd0ff'; g.font = 'bold 40px system-ui'; g.textAlign = 'center';
+  g.fillText('MENÚ VR', W / 2, 58);
+  g.fillStyle = '#8fb8dc'; g.font = '23px system-ui';
+  g.fillText('mirá una opción y sostené la mirada', W / 2, 90);
+  const mx = 26, my = 110, cw = (W - mx * 2) / MVR.cols, ch = (H - my - 20) / MVR.filas;
+  for (let i = 0; i < MVR_IT.length; i++){
+    const cx0 = mx + (i % MVR.cols) * cw, cy0 = my + Math.floor(i / MVR.cols) * ch;
+    g.fillStyle = 'rgba(34,72,120,.75)';
+    g.beginPath(); g.roundRect(cx0 + 7, cy0 + 6, cw - 14, ch - 12, 14); g.fill();
+    g.strokeStyle = 'rgba(150,205,255,.4)'; g.lineWidth = 2; g.stroke();
+    g.fillStyle = '#eaf6ff'; g.font = 'bold 33px system-ui'; g.textAlign = 'center';
+    g.fillText(MVR_IT[i].t(), cx0 + cw / 2, cy0 + ch / 2 + 12);
+  }
+  MVRtex.needsUpdate = true;
+  MVR.cambio = false;
+}
+function mvrCelda(i){
+  /* centro y tamaño de la celda i, en metros y en el marco del panel */
+  const cw = MVR.W / MVR.cols, ch = (MVR.H * (620 - 130) / 620) / MVR.filas;
+  const y0 = MVR.H / 2 - MVR.H * 110 / 620;
+  return { x: -MVR.W / 2 + cw * ((i % MVR.cols) + .5),
+           y: y0 - ch * (Math.floor(i / MVR.cols) + .5),
+           w: cw, h: ch };
+}
+function mvrAbrir(v){
+  MVR.on = !!v; MVR.sel = -1; MVR.dwell = 0;
+  mvrPanel.visible = MVR.on; mvrRes.visible = false; mvrBar.visible = false;
+  if (!MVR.on) return;
+  if (MVR.cambio) mvrPinta();
+  /* la colocación se hace en mvrTick, con la postura del cuadro: HP se actualiza
+     una vez por cuadro, así que plantarlo acá lo dejaría atado a la posición
+     ANTERIOR si abrís justo después de moverte */
+  MVR.colocar = true;
+  tono(700, .1, .12, 'sine');
+}
+function mvrColocar(){
+  MVR.colocar = false;
+  /* delante de la cara, sin cabeceo, y QUIETO en el mundo: si siguiera a la
+     cabeza nunca podrías mirar otra opción que la del centro */
+  const f = vB.set(-Math.sin(P.yaw), 0, -Math.cos(P.yaw));
+  mvrPanel.position.copy(HP).addScaledVector(f, MVR.dist);
+  mvrPanel.quaternion.setFromEuler(eTmp.set(0, P.yaw, 0, 'YXZ'));
+}
+function mvrActivar(){
+  const i = MVR.sel;
+  if (i < 0){ mvrAbrir(false); return; }
+  const id = MVR_IT[i].id;
+  MVR.dwell = 0; MVR.cambio = true;
+  tono(980, .12, .14, 'sine');
+  if (id === 'cont')       mvrAbrir(false);
+  else if (id === 'anda')  { ANDA = !ANDA; $('bWalk').textContent = 'CAMINAR: ' + (ANDA ? 'SÍ' : 'NO'); }
+  else if (id === 'est')   setEst(EST + 1);
+  else if (id === 'mano')  { MANO.on ? manosOff() : manosOn(); }
+  else if (id === 'luz')   flash();
+  else if (id === 'cent')  $('bCenter').onclick();
+  else if (id === 'ipd')   { const L = [.056, .060, .064, .068, .072];
+    IPD = L[(L.indexOf(+IPD.toFixed(3)) + 1) % L.length]; }
+  else if (id === 'lente') { lente = (lente + 1) % LENTE.length; rs = 1; aplicaRS(); }
+  else if (id === 'sbs')   { setEstereo(!ESTEREO); if (!ESTEREO) mvrAbrir(false); }
+  else if (id === 'salir') { mvrAbrir(false); $('bExit').onclick(); }
+  if (MVR.on) mvrPinta();
+}
+function mvrTick(dt){
+  if (MVR.colocar) mvrColocar();
+  /* el ☰ vive abajo: sigue el rumbo pero mira 30° hacia el piso.
+     Sólo existe en estéreo: es la forma de abrir el menú cuando el celu está en
+     un visor y no hay botones a mano. En mono está el botón MENÚ VR del HUD, y
+     este quad cuesta caro de más (medido en esta caja: varios ms por cuadro). */
+  mvrAbre.visible = !MVR.on && ESTEREO;
+  FWD.set(0, 0, -1).applyQuaternion(HQ);
+  if (mvrAbre.visible || MVR.abreDwell > 0){
+    const cy = Math.cos(P.yaw), sy = Math.sin(P.yaw);
+    vD.set(-sy * .866, -.5, -cy * .866);
+    mvrAbre.position.copy(HP).addScaledVector(vD, 1.25);
+    mvrAbre.quaternion.copy(HQ);
+  }
+  if (!MVR.on){
+    if (!ESTEREO){ MVR.abreDwell = 0; return; }
+    /* apuntarle al ☰ un segundo lo abre: sirve en un visor, sin manos */
+    const mira = FWD.dot(vD) > .985;
+    MVR.abreDwell = mira ? MVR.abreDwell + dt : 0;
+    mvrAbre.scale.setScalar(1 + (mira ? Math.min(1, MVR.abreDwell / 1) * .45 : 0));
+    if (MVR.abreDwell > 1){ MVR.abreDwell = 0; mvrAbrir(true); }
+    return;
+  }
+  /* rayo de la mirada contra el plano del panel */
+  const n = vA.set(0, 0, 1).applyQuaternion(mvrPanel.quaternion);
+  const den = FWD.dot(n);
+  let sel = -1, hx = 0, hy = 0;
+  if (Math.abs(den) > 1e-4){
+    const t = vC.copy(mvrPanel.position).sub(HP).dot(n) / den;
+    if (t > .2 && t < 8){
+      vC.copy(HP).addScaledVector(FWD, t).sub(mvrPanel.position)
+        .applyQuaternion(qTmp.copy(mvrPanel.quaternion).invert());
+      hx = vC.x; hy = vC.y;
+      for (let i = 0; i < MVR_IT.length; i++){
+        const c = mvrCelda(i);
+        if (Math.abs(hx - c.x) < c.w / 2 && Math.abs(hy - c.y) < c.h / 2){ sel = i; break; }
+      }
+    }
+  }
+  if (sel !== MVR.sel){ MVR.sel = sel; MVR.dwell = 0; if (sel >= 0) tono(520, .05, .06, 'sine'); }
+  else if (sel >= 0) MVR.dwell += dt;
+  mvrRes.visible = mvrBar.visible = sel >= 0;
+  if (sel >= 0){
+    const c = mvrCelda(sel);
+    const q = mvrPanel.quaternion;
+    mvrRes.quaternion.copy(q); mvrBar.quaternion.copy(q);
+    mvrRes.scale.set(c.w - .012, c.h - .014, 1);
+    mvrRes.position.copy(mvrPanel.position)
+      .add(vA.set(c.x, c.y, .004).applyQuaternion(q));
+    const p = Math.min(1, MVR.dwell / .9);
+    mvrBar.scale.set(Math.max(.001, (c.w - .03) * p), .012, 1);
+    mvrBar.position.copy(mvrPanel.position)
+      .add(vA.set(c.x - (c.w - .03) * (1 - p) / 2, c.y - c.h / 2 + .016, .006)
+        .applyQuaternion(q));
+    if (MVR.dwell >= .9) mvrActivar();
+  }
+}
+
+/* ==========================================================================
    9. BUCLE
    ========================================================================== */
 let tPrev = performance.now(), fps = 60, msAcum = 0, cuadros = 0, tRS = 0, TT = 0;
 let ESTEREO = false;
-const IPD = .064;
 const stat = $('stat');
+const INFO = { calls: 0, tris: 0 };   /* lo real, sumando los dos ojos */
 
 function fisica(dt){
   const E = EST_CFG[EST];
@@ -1476,8 +1749,8 @@ function fisica(dt){
      La dirección sale del YAW solamente. Es a propósito: si se usara el vector
      de la mirada completo, mirar al cielo te haría volar y mirar al piso te
      hundiría. Con yaw se camina siempre pegado al suelo, mires donde mires. */
-  const av = avanzando();
-  let mx = JOY.x, my = JOY.y;
+  const av = avanzando() && !MVR.on;
+  let mx = MVR.on ? 0 : JOY.x, my = MVR.on ? 0 : JOY.y;
   if (av && Math.abs(my) < .1) my = -1;          /* dos dedos (o CAMINAR) = adelante */
   const vel = (av && Math.abs(JOY.y) < .1 ? 3.6 : 5.2)
             * (1 + (Math.hypot(mx, my) > .92 && !av ? .5 : 0));
@@ -1560,17 +1833,20 @@ function pintaCam(){
   rig.updateMatrixWorld(true);
 }
 function dibuja(){
-  if (!ESTEREO){ ren.setScissorTest(false); ren.render(scene, cam); return; }
-  /* estéreo casero: dos vistas con tijera, sin post-proceso (el post-proceso
-     es otra pasada de pantalla completa, y el relleno es justo lo que hay que
-     cuidar en un celular) */
+  if (!ESTEREO){
+    ren.setScissorTest(false); ren.render(scene, cam);
+    INFO.calls = ren.info.render.calls; INFO.tris = ren.info.render.triangles;
+    return;
+  }
   const w = innerWidth, h = innerHeight, half = w / 2;
   const der = vC.set(1, 0, 0).applyQuaternion(HQ);
+  const destino = lente ? RT : null;
   for (let e = 0; e < 2; e++){
     const c = e ? camR : camL;
     c.quaternion.copy(HQ);
     c.position.copy(HP).addScaledVector(der, (e ? .5 : -.5) * IPD);
     c.updateMatrixWorld();
+    ren.setRenderTarget(destino);
     ren.setViewport(e * half, 0, half, h);
     ren.setScissor(e * half, 0, half, h);
     ren.setScissorTest(true);
@@ -1578,10 +1854,27 @@ function dibuja(){
     ren.render(scene, c);
   }
   ren.autoClear = true;
+  ren.setScissorTest(false);
   ren.setViewport(0, 0, w, h);
+  if (lente){
+    /* se guardan los números de LOS DOS OJOS antes de la pasada de pantalla, que
+       los pisa: si no, el HUD informa "1 dibujo" y me miento a mí mismo cuando
+       uso esos números para decidir qué optimizar */
+    INFO.calls = ren.info.render.calls + 1;
+    INFO.tris = ren.info.render.triangles;
+    ren.setRenderTarget(null);
+    warpMat.uniforms.tex.value = RT.texture;
+    ren.render(warpEsc, warpCam);
+  } else { INFO.calls = ren.info.render.calls; INFO.tris = ren.info.render.triangles; }
 }
 function setEstereo(v){
-  ESTEREO = !!v; rs = 1; aplicaRS();
+  ESTEREO = !!v; rs = 1;
+  /* un visor de cartón SIEMPRE necesita corrección de lente: si se entra en
+     estéreo sin ella, las rectas se ven curvadas. Se pone MEDIA por defecto y
+     desde el menú VR se cambia. Fuera del estéreo se apaga: es una pasada de
+     pantalla completa y no hay por qué pagarla. */
+  if (ESTEREO){ if (!lente) lente = 2; } else lente = 0;
+  aplicaRS();
   $('stbar').style.display = ESTEREO ? 'block' : 'none';
   $('btns').style.display  = ESTEREO ? 'none' : 'flex';
   $('joy').style.opacity   = ESTEREO ? .35 : 1;
@@ -1605,10 +1898,11 @@ function rsTick(dt){
   else if (quiere > 0 && rs < 1){ rs = Math.min(1, rs + .07); aplicaRS(); }
 }
 function hudTick(){
-  const i = ren.info.render;
+  const i = INFO.calls ? INFO : ren.info.render;
+  const tri = INFO.calls ? INFO.tris : ren.info.render.triangles;
   stat.textContent =
     fps.toFixed(0) + ' fps   ' + (1000 / Math.max(fps, 1)).toFixed(1) + ' ms\n' +
-    i.calls + ' dibujos   ' + (i.triangles / 1000).toFixed(1) + 'k tri\n' +
+    i.calls + ' dibujos   ' + (tri / 1000).toFixed(1) + 'k tri\n' +
     'postura: ' + P.src + (P.src === 'giro' && P.accHay ? ' + inclinación' : '') +
       (P.src === 'xr' ? ' (' + XR.tipo + ')' : '') +
       (P.src === 'giro' ? '  [' + (DOfuente || '¿?') + ']' : '') + '\n' +
@@ -1616,7 +1910,8 @@ function hudTick(){
     (P.src === 'giro'
       ? '6dof: ' + (P.leanS.length() * 100).toFixed(1) + ' cm  [' + P.accFuente + ']\n'
       : '') +
-    'buffer: ' + (rs * 100 | 0) + '%' + (ESTEREO ? '  estéreo' : '') +
+    'buffer: ' + (rs * 100 | 0) + '%' +
+      (ESTEREO ? '  sbs lente:' + LENTE[lente].n + ' ojos:' + Math.round(IPD * 1000) : '') +
     (MANO.on ? '\nmanos: ' + MANO.ms.toFixed(0) + ' ms  ' + (MANO.visto ? 'VEO' : '—') +
                '  ' + MANO.lado + '  (' + MANO.facing + (MANO.espejo < 0 ? ' espejada' : '') + ')' +
                '\ngesto: ' + (MANO.gesto || '—') + '  ' + MANO.dedos.join('') +
@@ -1629,6 +1924,7 @@ function paso(dt){
   manoPaso();
   manoDibuja();
   animaMundo(dt);
+  mvrTick(dt);
 }
 function bucle(t){
   if (XR.ses) return;
@@ -1660,7 +1956,7 @@ function bucleXR(t, frame){
     HP.set(p.x + rig.position.x, p.y + rig.position.y, p.z + rig.position.z);
     P.yaw = eTmp2.setFromQuaternion(HQ, 'YXZ').y;
   }
-  manoPaso(); manoDibuja(); animaMundo(dt);
+  manoPaso(); manoDibuja(); animaMundo(dt); mvrTick(dt);
   ren.render(scene, cam);
 }
 
@@ -1834,7 +2130,8 @@ $('bMirror').onclick = () => {
 };
 $('bHands').onclick = () => { MANO.on ? manosOff() : manosOn(); };
 $('bStereo').onclick = () => setEstereo(!ESTEREO);
-$('stbar').onclick   = () => setEstereo(false);
+$('bVR').onclick     = () => mvrAbrir(!MVR.on);
+$('stbar').onclick   = () => mvrAbrir(true);
 $('bExit').onclick = () => {
   if (XR.ses) { XR.ses.end(); return; }
   flashOff();
@@ -1856,8 +2153,9 @@ pintaCam(); animaMundo(0); dibuja();
    ========================================================================== */
 window.__VR = {
   T, scene, ren, cam, P, GEMAS, DIAG,
-  get(){ const i = ren.info.render; return {
-    fps: +fps.toFixed(1), dibujos: i.calls, tri: i.triangles, src: P.src,
+  get(){ const i = INFO.calls ? INFO : { calls: ren.info.render.calls, tris: ren.info.render.triangles };
+    return {
+    fps: +fps.toFixed(1), dibujos: i.calls, tri: i.tris, src: P.src,
     estereo: ESTEREO, rs: +rs.toFixed(2), juntadas, total: GEMAS.length,
     x: +HP.x.toFixed(3), y: +HP.y.toFixed(3), z: +HP.z.toFixed(3),
     yaw: +P.yaw.toFixed(3), lean: +P.lean.length().toFixed(3),
@@ -1877,6 +2175,23 @@ window.__VR = {
   est(n){ setEst(n); }, flash, flashOff,
   anda(v){ ANDA = !!v; $('bWalk').textContent = 'CAMINAR: ' + (ANDA ? 'SÍ' : 'NO'); },
   espejo(s){ MANO.espejo = s < 0 ? -1 : 1; },
+  lente(n){ lente = ((n % LENTE.length) + LENTE.length) % LENTE.length; rs = 1; aplicaRS(); },
+  ipd(v){ IPD = v; },
+  vr(v){ mvrAbrir(v); }, vrSel(){ return MVR.sel; }, vrAct(){ mvrActivar(); },
+  vrEstado(){ return { on: MVR.on, sel: MVR.sel, dwell: +MVR.dwell.toFixed(2),
+    items: MVR_IT.map(o => o.t()), lente: LENTE[lente].n, lenteI: lente,
+    ipd: +IPD.toFixed(3), fovOjo: +camL.fov.toFixed(1), rt: !!RT,
+    panel: mvrPanel.visible, res: mvrRes.visible, abre: mvrAbre.visible }; },
+  vrMirarCelda(i){
+    /* apunta la cabeza al centro de la celda i: es como "mirar" esa opción */
+    const c = mvrCelda(i);
+    const p = mvrPanel.position.clone()
+      .add(new T.Vector3(c.x, c.y, 0).applyQuaternion(mvrPanel.quaternion));
+    const d = p.clone().sub(HP).normalize();
+    P.yaw = Math.atan2(-d.x, -d.z);
+    P.pitch = Math.asin(Math.max(-1, Math.min(1, d.y)));
+    return { yaw: +P.yaw.toFixed(3), pitch: +P.pitch.toFixed(3) };
+  },
   ceroLean(){ P.lean.set(0,0,0); P.leanS.set(0,0,0); P.vel.set(0,0,0);
     P.bias.set(0,0,0); P.accF.set(0,0,0); P.calib = 0; },
   /* MIDE EL TEMBLOR: inyecta ruido de acelerómetro como el de un celular en la
@@ -1932,6 +2247,20 @@ window.__VR = {
     dedosDe(lm); gestoPaso(true); manoDibuja(); pintaEspejito(); },
   MANO, dedosDe, gestoDe, avanzando,
   gema(i){ return GEMAS[i]; },
+  /* mediana del tiempo de cuadro. Un fps suavizado de una sola lectura en esta
+     caja varía entre 21 y 28 ms según cómo venga la máquina; la mediana de una
+     ventana es lo único con lo que se puede afirmar algo. */
+  async medMs(n){
+    for (let i = 0; i < 20; i++) await new Promise(r => requestAnimationFrame(r));
+    const t = []; let p = performance.now();
+    for (let i = 0; i < (n || 90); i++){
+      await new Promise(r => requestAnimationFrame(r));
+      const q = performance.now(); t.push(q - p); p = q;
+    }
+    t.sort((a, b) => a - b);
+    return { ms: +t[t.length >> 1].toFixed(2), p90: +t[Math.floor(t.length * .9)].toFixed(2),
+      fps: +(1000 / t[t.length >> 1]).toFixed(1), dibujos: INFO.calls };
+  },
   /* lee el framebuffer DE VERDAD: es la única forma de saber si algo se dibujó */
   pix(){
     dibuja();
