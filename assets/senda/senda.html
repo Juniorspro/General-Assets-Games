@@ -36,6 +36,18 @@
   .b.usar{background:rgba(58,110,52,.78);border-color:#c9f0a8;font-size:15px;display:none}
   .b.usar.on{display:block}
   .b.corre.on{background:rgba(58,110,52,.78)}
+  /* ayuda de controles de PC: sale sola al detectar mouse/teclado */
+  #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
+    font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
+    background:rgba(8,16,11,.5);border:1px solid rgba(190,230,180,.26);
+    border-radius:10px;padding:8px 10px;backdrop-filter:blur(4px);max-width:44vw}
+  body.pc #pcHelp{display:block}
+  #pcHelp b{display:block;font:800 9px/1 ui-sans-serif,system-ui,sans-serif;
+    letter-spacing:.16em;opacity:.6;margin-bottom:6px}
+  #pcHelp .row{margin-top:4px;white-space:nowrap}
+  #pcHelp kbd{display:inline-block;min-width:13px;text-align:center;padding:1px 5px;
+    margin-right:1px;border-radius:5px;font:700 10px ui-monospace,monospace;
+    background:rgba(190,230,180,.16);border:1px solid rgba(190,230,180,.3);color:#eaf6df}
   #dlg{position:absolute;left:50%;bottom:8%;transform:translateX(-50%);width:min(560px,92vw);
     background:rgba(8,16,11,.88);border:1px solid rgba(190,230,180,.35);border-radius:16px;
     padding:16px 18px 13px;display:none;pointer-events:auto;backdrop-filter:blur(6px)}
@@ -105,6 +117,15 @@
     font-weight:800;letter-spacing:.06em;border-radius:14px;cursor:pointer;color:#eaf6df;
     background:rgba(24,46,28,.8);border:1.5px solid rgba(190,230,180,.4)}
   .mbtn.go{background:linear-gradient(180deg,#4e8f3d,#2c5c22);border-color:#bfe9a0}
+  /* portadas distintas por mundo: cada juego alinea su menú diferente */
+  #menu.m-izq{align-items:flex-start;text-align:left;padding-left:min(10vw,110px)}
+  #menu.m-izq .mbtn,#menu.m-izq #fLang,#menu.m-izq #fGfx{margin-left:0;margin-right:auto}
+  #menu.m-der{align-items:flex-end;text-align:right;padding-right:min(10vw,110px)}
+  #menu.m-der .mbtn,#menu.m-der #fLang,#menu.m-der #fGfx{margin-right:0;margin-left:auto}
+  #menu.m-abajo{justify-content:flex-end;padding-bottom:min(9vh,74px)}
+  #menu.m-arriba{justify-content:flex-start;padding-top:min(7vh,56px)}
+  #menu.m-grande h1{font-size:70px;letter-spacing:.3em}
+  #menu.m-compacto h1{font-size:40px;letter-spacing:.5em;font-weight:800}
   #mCap{color:#8fc76e;font-size:12px;margin-top:14px;letter-spacing:.1em;
     text-shadow:0 1px 8px rgba(0,0,0,.8)}
   .fila{display:flex;gap:8px;justify-content:center;margin:10px 0 0;flex-wrap:wrap}
@@ -136,6 +157,7 @@
   </div>
   <div id="dlg"><div id="dlgFila"><canvas id="dlgCara" width="96" height="96"></canvas><div style="flex:1;min-width:0"><div id="dlgT"></div><div id="dlgB"></div></div></div><div id="dlgGo">SEGUIR ▸</div></div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
+  <div id="pcHelp"></div>
 </div>
 
 <div id="menu">
@@ -1369,6 +1391,9 @@ const MUNDO_AUDIO = { amb: 'amb-senda.mp3', mus: 'mus-senda.m4a', paso: 'pasos-p
    (senda ya trae su foto). Los mk_*.py lo pisan con el de cada mundo. Se carga
    y reemplaza el fondo pintado; si falla, queda el pintado. */
 const MUNDO_CIELO = '';
+/* disposición del MENÚ por mundo (clases en #menu): cada juego arma su portada
+   distinta. '' = centrado (senda). Los mk_*.py lo pisan. */
+const MUNDO_MENU = '';
 /* PROPS 3D generados (Tripo, estáticos): edificios/vehículos de cada mundo.
    Se colocan en su POI, se apoyan en el terreno y OCULTAN la estructura
    procedural (que pasa como grupo en `ocultar`). Si el GLB no llega, queda la
@@ -2190,6 +2215,33 @@ addEventListener('keyup', e => {
   if (c === 'ShiftLeft') { corre = false; $('bCorre').classList.remove('on'); }
 });
 
+/* -------- detección PC (mouse/teclado) + ayuda de controles al costado ----- */
+const PCH = {
+  es: { t: 'CONTROLES PC', mov: 'moverse', mir: 'mirar', cor: 'correr', usa: 'usar', dlg: 'seguir' },
+  en: { t: 'PC CONTROLS', mov: 'move', mir: 'look', cor: 'run', usa: 'use', dlg: 'next' },
+  pt: { t: 'CONTROLES PC', mov: 'mover', mir: 'olhar', cor: 'correr', usa: 'usar', dlg: 'seguir' }
+};
+function pintaPCHelp(){
+  const d = PCH[LANG] || PCH.es;
+  $('pcHelp').innerHTML =
+    '<b>' + d.t + '</b>' +
+    '<div class="row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ' + d.mov + '</div>' +
+    '<div class="row"><kbd>🖱</kbd> / <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> ' + d.mir + '</div>' +
+    '<div class="row"><kbd>Shift</kbd> ' + d.cor + ' · <kbd>E</kbd> ' + d.usa + '</div>' +
+    '<div class="row"><kbd>Enter</kbd> ' + d.dlg + '</div>';
+}
+let esPC = false;
+function activaPC(){ if (esPC) return; esPC = true; document.body.classList.add('pc'); pintaPCHelp(); }
+function desactivaPC(){ if (!esPC) return; esPC = false; document.body.classList.remove('pc'); }
+addEventListener('keydown', e => {
+  if (/^(Key|Arrow|Shift|Enter|Space)/.test(e.code)) activaPC(); }, true);
+addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') activaPC(); }, true);
+addEventListener('touchstart', desactivaPC, { passive: true, capture: true });
+try {
+  if (window.matchMedia && matchMedia('(pointer:fine)').matches
+      && !matchMedia('(pointer:coarse)').matches) activaPC();
+} catch(e){}
+
 /* ------------------------ resolución adaptativa ---------------------------- */
 /* som = lado del mapa de sombra (0 = sin sombras, para la gama baja) */
 const GFXQ = { b: { dpr: .7, fogK: .78, som: 0 },
@@ -2337,6 +2389,7 @@ function aplicaIdioma(){
   $('bMenu').textContent = Tx('menu');
   $('bUsar').textContent = Tx('usar');
   $('dlgGo').textContent = Tx('dlgGo');
+  if (esPC) pintaPCHelp();
   document.querySelectorAll('#fLang .chip').forEach(ch =>
     ch.classList.toggle('on', ch.dataset.l === LANG));
   if (fase === 'juego') ponCap(cap, true);
@@ -2383,6 +2436,7 @@ document.querySelectorAll('#fGfx .chip').forEach(ch =>
 }
 aplicaIdioma();
 setGfx(GFX);
+if (MUNDO_MENU) MUNDO_MENU.split(/\s+/).forEach(c => c && $('menu').classList.add(c));
 $('mJugar').onclick = () => entrar(0);
 $('mSeguir').onclick = () => entrar(1);
 $('cargando').style.display = 'none';
