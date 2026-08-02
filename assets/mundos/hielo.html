@@ -183,6 +183,12 @@ const Q = new URLSearchParams(location.search);
 const LOC = Q.has('local');
 /* CERO descargas de assets: todas las texturas se pintan al vuelo.
    Lo único que llega de la red es three.js. */
+/* assets compartidos de los mundos hermanos (cielos, modelos 3D, audio). Se
+   define acá arriba —antes del armado del mundo— porque los mk_*.py insertan
+   propGLB()/AX() en el cuerpo del build, que corre mucho antes. */
+const HASHAX = '56bf5e7';
+const AX = f => (LOC ? '/assets/mundos/'
+  : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHAX + '/assets/mundos/') + f;
 const TRE = LOC ? '/_vthree/build/three.module.js'
   : 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
 /* importmap ANTES de cargar GLTFLoader (que importa 'three' por specifier).
@@ -1000,6 +1006,7 @@ let ventanaMat = null;
   scene.add(barril);
   ARB.push([p.x, p.z, 3.4]);
   ARB.push([p.x - 3.2, p.z + 1.8, 1.1]);
+  propGLB({ url:'prop/carpa-hielo.glb', x:p.x, z:p.z, esc:3.8, giro:.3, ocultar:[mCarpa, boca] });
   window.__PARTES = 5;
 }
 /* ---------------- EL LAGO CONGELADO -----------------------------------------
@@ -1050,10 +1057,11 @@ let beaconMat = null;
 {
   const p = POI.faro, y = H(p.x, p.z);
   const matMet = new T.MeshLambertMaterial({ map: TX.metal });
+  const torreParts = [];
   const torre = new T.Mesh(new T.CylinderGeometry(1.1, 2.2, 14, 10), matMet);
   torre.position.set(p.x, y + 7, p.z);
   torre.castShadow = true;
-  scene.add(torre);
+  scene.add(torre); torreParts.push(torre);
   /* franjas rojas del faro: dos anillos */
   for (const hh of [3.5, 9.5]){
     const anillo = new T.Mesh(new T.CylinderGeometry(
@@ -1061,23 +1069,27 @@ let beaconMat = null;
       1.4, 10, 1, true),
       new T.MeshLambertMaterial({ color: 0xc23a2c }));
     anillo.position.set(p.x, y + hh + .7, p.z);
-    scene.add(anillo);
+    scene.add(anillo); torreParts.push(anillo);
   }
   const plataforma = new T.Mesh(new T.CylinderGeometry(1.9, 1.9, .25, 10), matMet);
   plataforma.position.set(p.x, y + 14.2, p.z);
   plataforma.castShadow = true;
-  scene.add(plataforma);
+  scene.add(plataforma); torreParts.push(plataforma);
   const cabina = new T.Mesh(new T.CylinderGeometry(1.2, 1.3, 1.8, 8, 1, true), matMet);
   cabina.position.set(p.x, y + 15.2, p.z);
-  scene.add(cabina);
-  /* LA LÁMPARA */
+  scene.add(cabina); torreParts.push(cabina);
+  /* LA LÁMPARA (se queda: late en el bucle cuando el faro está encendido) */
   beaconMat = new T.MeshBasicMaterial({ color: 0xffd870, transparent: true });
-  const lampara = new T.Mesh(new T.SphereGeometry(.85, 10, 8), beaconMat);
-  lampara.position.set(p.x, y + 15.3, p.z);
+  const lampara = new T.Mesh(new T.SphereGeometry(.7, 10, 8), beaconMat);
+  /* dentro de la linterna del faro 3D (el GLB llega a ~14 m sobre el piso) */
+  lampara.position.set(p.x, y + 11.9, p.z);
   scene.add(lampara);
   const techo = new T.Mesh(new T.ConeGeometry(1.5, 1.1, 8), matMet);
   techo.position.set(p.x, y + 16.7, p.z);
-  scene.add(techo);
+  scene.add(techo); torreParts.push(techo);
+  /* el faro 3D de Higgsfield reemplaza el cuerpo procedural; la lámpara y el
+     tablero del USAR se quedan porque son gameplay */
+  propGLB({ url:'prop/faro-hielo.glb', x:p.x, z:p.z, esc:14, giro:.4, ocultar:torreParts });
   /* el tablero del USAR */
   const tab = new T.Mesh(new T.BoxGeometry(.9, 1.2, .4), matMet);
   tab.position.set(p.x + 2.7, y + .6, p.z + 2.3);
@@ -1316,14 +1328,34 @@ function guardarFin(){ try { localStorage.removeItem('hielo1'); } catch(e){} }
    decodifican lo apagan; si una URL falla (offline o el navegador no decodifica
    AAC) el sintetizado sigue solo. Vive acá (motor compartido) y no en la
    sección AMB, que cada mundo reescribe. Los mk_*.py pisan MUNDO_AUDIO. */
-const HASHAX = '56bf5e7';
-const AX = f => (LOC ? '/assets/mundos/'
-  : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHAX + '/assets/mundos/') + f;
 const MUNDO_AUDIO = { amb: 'amb-hielo.mp3', mus: 'mus-hielo.m4a', paso: 'pasos-nieve.mp3', pasoRate: 1.4 };
 /* CIELO fotográfico generado (equirectangular). Vacío = deja el cielo actual
    (senda ya trae su foto). Los mk_*.py lo pisan con el de cada mundo. Se carga
    y reemplaza el fondo pintado; si falla, queda el pintado. */
 const MUNDO_CIELO = 'cielo-hielo.jpg';
+/* PROPS 3D generados (Tripo, estáticos): edificios/vehículos de cada mundo.
+   Se colocan en su POI, se apoyan en el terreno y OCULTAN la estructura
+   procedural (que pasa como grupo en `ocultar`). Si el GLB no llega, queda la
+   procedural. Los mk_*.py llaman propGLB en su bloque de estructura. */
+function propGLB(o){
+  if (!GLTF){ return; }
+  new GLTF().load(AX(o.url), g => {
+    const m = g.scene;
+    m.scale.setScalar(o.esc || 1);
+    m.rotation.set(o.rx || 0, o.giro || 0, o.rz || 0);
+    m.position.set(o.x, 0, o.z);
+    m.traverse(n => { if (n.isMesh){ n.castShadow = true; n.receiveShadow = true;
+      n.frustumCulled = false; if (n.material) n.material.metalness = 0; } });
+    /* AUTO-APOYO: el punto más bajo del modelo se posa en el suelo + o.y */
+    m.updateWorldMatrix(true, true);
+    const caja = new T.Box3().setFromObject(m);
+    m.position.y = H(o.x, o.z) + (o.y || 0) - caja.min.y;
+    scene.add(m);
+    if (o.ocultar){ const a = Array.isArray(o.ocultar) ? o.ocultar : [o.ocultar];
+      for (const x of a) x.visible = false; }         /* apagar la procedural */
+    window.__PROPS = (window.__PROPS || 0) + 1;
+  }, undefined, () => {});
+}
 function cargarCieloFoto(){
   if (!MUNDO_CIELO) return;
   new T.TextureLoader().load(AX(MUNDO_CIELO), tex => {
@@ -2433,6 +2465,7 @@ window.__S = {
   partes(){ return window.__PARTES || 0; },
   cristales(){ return window.__CRISTALES || 0; },
   rover(){ return window.__ROVER || 0; },
+  props(){ return window.__PROPS || 0; },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
   dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
   usar(){ usarAccion(); },

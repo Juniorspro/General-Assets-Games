@@ -206,6 +206,12 @@ const HASH = '3ac547e';
 const BASE = LOC ? '/assets/senda/'
   : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASH + '/assets/senda/';
 const A = f => BASE + f;
+/* assets compartidos de los mundos hermanos (cielos, modelos 3D, audio). Se
+   define acá arriba —antes del armado del mundo— porque los mk_*.py insertan
+   propGLB()/AX() en el cuerpo del build, que corre mucho antes. */
+const HASHAX = '56bf5e7';
+const AX = f => (LOC ? '/assets/mundos/'
+  : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHAX + '/assets/mundos/') + f;
 const TRE = LOC ? '/_vthree/build/three.module.js'
   : 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
 /* importmap ANTES de cargar GLTFLoader (que importa 'three' por specifier).
@@ -1357,15 +1363,35 @@ function guardarFin(){ try { localStorage.removeItem('senda1'); } catch(e){} }
    decodifican lo apagan; si una URL falla (offline o el navegador no decodifica
    AAC) el sintetizado sigue solo. Vive acá (motor compartido) y no en la
    sección AMB, que cada mundo reescribe. Los mk_*.py pisan MUNDO_AUDIO. */
-const HASHAX = '56bf5e7';
-const AX = f => (LOC ? '/assets/mundos/'
-  : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHAX + '/assets/mundos/') + f;
 const MUNDO_AUDIO = { amb: 'amb-senda.mp3', mus: 'mus-senda.m4a', paso: 'pasos-pasto.mp3',
   pasoRate: 1.4 };
 /* CIELO fotográfico generado (equirectangular). Vacío = deja el cielo actual
    (senda ya trae su foto). Los mk_*.py lo pisan con el de cada mundo. Se carga
    y reemplaza el fondo pintado; si falla, queda el pintado. */
 const MUNDO_CIELO = '';
+/* PROPS 3D generados (Tripo, estáticos): edificios/vehículos de cada mundo.
+   Se colocan en su POI, se apoyan en el terreno y OCULTAN la estructura
+   procedural (que pasa como grupo en `ocultar`). Si el GLB no llega, queda la
+   procedural. Los mk_*.py llaman propGLB en su bloque de estructura. */
+function propGLB(o){
+  if (!GLTF){ return; }
+  new GLTF().load(AX(o.url), g => {
+    const m = g.scene;
+    m.scale.setScalar(o.esc || 1);
+    m.rotation.set(o.rx || 0, o.giro || 0, o.rz || 0);
+    m.position.set(o.x, 0, o.z);
+    m.traverse(n => { if (n.isMesh){ n.castShadow = true; n.receiveShadow = true;
+      n.frustumCulled = false; if (n.material) n.material.metalness = 0; } });
+    /* AUTO-APOYO: el punto más bajo del modelo se posa en el suelo + o.y */
+    m.updateWorldMatrix(true, true);
+    const caja = new T.Box3().setFromObject(m);
+    m.position.y = H(o.x, o.z) + (o.y || 0) - caja.min.y;
+    scene.add(m);
+    if (o.ocultar){ const a = Array.isArray(o.ocultar) ? o.ocultar : [o.ocultar];
+      for (const x of a) x.visible = false; }         /* apagar la procedural */
+    window.__PROPS = (window.__PROPS || 0) + 1;
+  }, undefined, () => {});
+}
 function cargarCieloFoto(){
   if (!MUNDO_CIELO) return;
   new T.TextureLoader().load(AX(MUNDO_CIELO), tex => {
@@ -2386,6 +2412,7 @@ window.__S = {
     foco: +focoCasa.intensity.toFixed(1) }; },
   sendaPts(){ return SENDA_PTS; }, arboles(){ return ARB; },
   cabPartes(){ return window.__CAB_PARTES || 0; },
+  props(){ return window.__PROPS || 0; },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
   dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
   usar(){ usarAccion(); },
