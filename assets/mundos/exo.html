@@ -1,0 +1,1840 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#0c081a"/>
+<title>EXO</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;background:#0c081a;color:#f0eef8;
+    font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    overflow:hidden;touch-action:none;overscroll-behavior:none;user-select:none}
+  #gl{position:fixed;left:0;top:0;width:100%;height:100%;display:block}
+
+  /* ---------------- HUD ---------------- */
+  #hud{position:fixed;inset:0;z-index:4;pointer-events:none;display:none}
+  #hud.on{display:block}
+  #obj{position:absolute;left:50%;top:10px;transform:translateX(-50%);
+    background:rgba(14,10,26,.62);border:1px solid rgba(190,170,255,.25);border-radius:12px;
+    padding:7px 14px;text-align:center;backdrop-filter:blur(4px);max-width:86vw}
+  #objT{font-weight:800;font-size:13px;letter-spacing:.04em;color:#ece4ff}
+  #objD{font-size:11.5px;color:#b0a0d8;margin-top:1px}
+  #capCard{position:absolute;left:50%;top:32%;transform:translateX(-50%);text-align:center;
+    opacity:0;transition:opacity 1.1s;pointer-events:none;width:92vw}
+  #capCard.on{opacity:1}
+  #capN{font-size:13px;letter-spacing:.34em;color:#cdbcf4;font-weight:700}
+  #capT{font-size:30px;font-weight:900;letter-spacing:.06em;margin-top:4px;
+    text-shadow:0 2px 18px rgba(0,0,0,.65)}
+  #btns{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;
+    gap:9px;align-items:flex-end;pointer-events:auto}
+  .b{min-width:86px;text-align:center;padding:12px 15px;border-radius:14px;font-weight:800;
+    font-size:13px;background:rgba(20,14,36,.62);border:1.5px solid rgba(190,170,255,.4);
+    color:#ece4ff;pointer-events:auto;cursor:pointer;backdrop-filter:blur(3px)}
+  .b:active{transform:translateY(1px);filter:brightness(1.3)}
+  .b.usar{background:rgba(60,180,150,.78);border-color:#a0ffe0;font-size:15px;display:none}
+  .b.usar.on{display:block}
+  .b.corre.on{background:rgba(60,180,150,.78)}
+  #dlg{position:absolute;left:50%;bottom:8%;transform:translateX(-50%);width:min(560px,92vw);
+    background:rgba(12,8,22,.88);border:1px solid rgba(190,170,255,.35);border-radius:16px;
+    padding:16px 18px 13px;display:none;pointer-events:auto;backdrop-filter:blur(6px)}
+  #dlg.on{display:block}
+  #dlgT{font-weight:900;letter-spacing:.05em;color:#cdbcf4;font-size:13px;margin-bottom:6px}
+  #dlgB{font-size:14.5px;line-height:1.5;color:#f0eef8;white-space:pre-wrap}
+  #dlgGo{margin-top:12px;text-align:center;padding:11px;border-radius:11px;font-weight:800;
+    background:linear-gradient(180deg,#2a9a80,#14584a);border:1px solid #a0ffe0;cursor:pointer}
+  #fps{position:absolute;left:10px;top:10px;font:10px ui-monospace,monospace;color:#9fd0c8;
+    background:rgba(12,8,22,.5);padding:3px 6px;border-radius:6px}
+  /* viñeta cinematográfica: oscurece apenas las esquinas, gratis (es CSS) */
+  #vig{position:fixed;inset:0;z-index:2;pointer-events:none;
+    background:radial-gradient(ellipse 78% 68% at 50% 46%,transparent 62%,rgba(0,0,10,.34) 100%)}
+
+  /* ---------------- MENÚ ---------------- */
+  /* el menú es un velo: DETRÁS se ve el valle en vivo (cámara cinemática) */
+  #menu{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;background:
+    linear-gradient(180deg,rgba(8,6,16,.16) 0%,rgba(8,6,16,.34) 55%,rgba(7,5,14,.72) 100%);
+    text-align:center;padding:16px;overflow-y:auto}
+  #menu h1{margin:0;font-size:54px;font-weight:900;letter-spacing:.22em;
+    background:linear-gradient(180deg,#f2e8ff,#9a6ee8);-webkit-background-clip:text;
+    background-clip:text;-webkit-text-fill-color:transparent}
+  #menu .sub{color:#a290c4;font-size:13px;margin:6px 0 26px;letter-spacing:.08em}
+  .mbtn{display:block;width:min(320px,84vw);margin:7px auto;padding:15px;font-size:16px;
+    font-weight:800;letter-spacing:.06em;border-radius:14px;cursor:pointer;color:#ece4ff;
+    background:rgba(30,22,52,.8);border:1.5px solid rgba(190,170,255,.4)}
+  .mbtn.go{background:linear-gradient(180deg,#2a9a80,#14584a);border-color:#a0ffe0}
+  #mCap{color:#9a6ee8;font-size:12px;margin-top:14px;letter-spacing:.1em;
+    text-shadow:0 1px 8px rgba(0,0,0,.8)}
+  .fila{display:flex;gap:8px;justify-content:center;margin:10px 0 0;flex-wrap:wrap}
+  .filaT{font-size:10.5px;letter-spacing:.22em;color:#a290c4;margin-top:16px;
+    text-shadow:0 1px 6px rgba(0,0,0,.8)}
+  .chip{padding:8px 16px;border-radius:20px;font-weight:800;font-size:12.5px;cursor:pointer;
+    background:rgba(18,14,34,.72);border:1.5px solid rgba(190,170,255,.35);color:#cfc4e8}
+  .chip.on{background:linear-gradient(180deg,#2a9a80,#14584a);border-color:#a0ffe0;color:#f2e8ff}
+  #cargando{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;
+    background:#0c081a;color:#a290c4;font-size:13px;letter-spacing:.2em}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="vig"></div>
+
+<div id="hud">
+  <div id="obj"><div id="objT">…</div><div id="objD"></div></div>
+  <div id="capCard"><div id="capN"></div><div id="capT"></div></div>
+  <div id="fps"></div>
+  <div id="btns">
+    <div class="b usar" id="bUsar">◉ USAR</div>
+    <div class="b" id="bSon">🔊</div>
+    <div class="b corre" id="bCorre">CORRER</div>
+    <div class="b" id="bMenu">MENÚ</div>
+  </div>
+  <div id="dlg"><div id="dlgT"></div><div id="dlgB"></div><div id="dlgGo">SEGUIR ▸</div></div>
+</div>
+
+<div id="menu">
+  <h1>EXO</h1>
+  <div class="sub">el bosque que brilla · un planeta que respira despacio</div>
+  <div class="mbtn go" id="mJugar">EMPEZAR LA HISTORIA</div>
+  <div class="mbtn" id="mSeguir" style="display:none">CONTINUAR</div>
+  <div id="mCap"></div>
+  <div class="filaT" id="tLang">IDIOMA</div>
+  <div class="fila" id="fLang">
+    <div class="chip" data-l="es">ESPAÑOL</div>
+    <div class="chip" data-l="en">ENGLISH</div>
+    <div class="chip" data-l="pt">PORTUGUÊS</div>
+  </div>
+  <div class="filaT" id="tGfx">GRÁFICOS</div>
+  <div class="fila" id="fGfx">
+    <div class="chip" data-g="b">BAJOS</div>
+    <div class="chip" data-g="m">MEDIOS</div>
+    <div class="chip" data-g="a">ALTOS</div>
+  </div>
+</div>
+<div id="cargando">CARGANDO EXO…</div>
+
+<script>
+/* ============================================================================
+   EXO — mundo hermano bioluminiscente, 100% procedural sobre el motor de
+   SENDA (este fork CONSERVA el agua: acá el lago BRILLA). Un planeta en
+   crepúsculo perpetuo alrededor de una enana violeta:
+     · HOJAS ALIENÍGENAS pintadas en canvas (racimos de pétalos con puntas
+       de luz), corteza índigo acanalada, musgo verdeazul — y el VIENTO de
+       SENDA meciendo todo, porque este bosque también respira
+     · el LAGO DE LUZ: el shader de agua de SENDA (ruido azulejable,
+       profundidad, espuma que lame) MÁS emisión cian en el bajío que
+       pulsa despacio: el agua es la lámpara del valle
+     · HONGOS FAROL instanciados que laten de noche, esporas a la deriva,
+       DOS LUNAS pintadas (una con anillos), monolitos con runa encendida
+     · de noche el mundo no se apaga: SE ENCIENDE (capítulo 5)
+   HISTORIA (6 caps, ES/EN/PT): NARA, xenobotánica caída del cielo, y la
+   Madre — el árbol que apagó al bosque para esperar una semilla.
+   ========================================================================== */
+(async () => {
+'use strict';
+const Q = new URLSearchParams(location.search);
+const LOC = Q.has('local');
+/* CERO descargas de assets: todas las texturas se pintan al vuelo. */
+const TRE = LOC ? '/_vthree/build/three.module.js'
+  : 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+const T = await import(TRE);
+const $ = i => document.getElementById(i);
+
+/* ---------------- azar reproducible: el valle es SIEMPRE el mismo ---------- */
+let _s = 20270707;
+const rnd = () => { _s = (_s * 1664525 + 1013904223) >>> 0; return _s / 4294967296; };
+const rr = (a, b) => a + (b - a) * rnd();
+const cl = (v, a, b) => v < a ? a : (v > b ? b : v);
+
+/* ---------------- terreno: ruido de valor FBM, determinista ---------------- */
+const MAPA = 900, MITAD = MAPA / 2;
+const AGUA_Y = -3.2;
+function hash2(i, j){
+  /* Math.imul, no `*`: en JS el producto de enteros grandes se hace float y
+     PIERDE los bits bajos (>2^53) — el hash quedaba sesgado hacia abajo y el
+     ruido casi nunca pasaba de 0,36. Medido: la compuerta de densidad rechazaba
+     3.356 de 3.481 celdas y el "bosque" tenía 83 árboles. */
+  let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263)) ^ 20260801;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function vnoise(x, z){
+  const i = Math.floor(x), j = Math.floor(z);
+  const fx = x - i, fz = z - j;
+  const sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz);
+  const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+  return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
+}
+function fbm(x, z){
+  let v = 0, amp = .5, f = 1;
+  for (let o = 0; o < 4; o++){ v += amp * vnoise(x * f, z * f); amp *= .5; f *= 2.03; }
+  return v;
+}
+/* PUNTOS DE LA HISTORIA (fijos, el terreno se allana alrededor) */
+const POI = {
+  inicio:  { x: 0,    z: 380 },
+  capsula: { x: -40,  z: 190 },
+  madre:   { x: 150,  z: -40 },
+  orilla:  { x: -120, z: -215 },
+  anillo:  { x: 210,  z: -330 },
+  lagoluz: { x: -190, z: -280 }
+};
+function alturaBase(x, z){
+  let h = fbm(x * .006 + 7, z * .006 + 3) * 34 - 12;      /* colinas grandes */
+  h += fbm(x * .02 + 40, z * .02 + 9) * 5;                /* detalle */
+  /* cuenca del lago */
+  const dl = Math.hypot(x - POI.lagoluz.x, z - POI.lagoluz.z);
+  h -= 16 * Math.exp(-(dl * dl) / (150 * 150));
+  /* la colina del roble */
+  const dr = Math.hypot(x - POI.madre.x, z - POI.madre.z);
+  h += 14 * Math.exp(-(dr * dr) / (170 * 170));
+  /* CORREDOR SECO a lo largo de la senda. La cuenca del lago hundía el camino y
+     el muelle quedaba en una isla: no se podía llegar caminando (lo reportó el
+     jugador; la sonda teletransportaba y no lo vio). En vez de una loma puntual,
+     se levanta el terreno a lo largo de los tramos de senda que cruzan la zona
+     baja: donde va el jugador, el suelo nunca baja de -2,2. */
+  for (const [a, b] of SECO){
+    const abx = b.x - a.x, abz = b.z - a.z;
+    const t = Math.max(0, Math.min(1,
+      ((x - a.x) * abx + (z - a.z) * abz) / (abx * abx + abz * abz || 1)));
+    const ds = Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t));
+    const w = Math.exp(-(ds * ds) / (17 * 17));
+    h = h * (1 - w) + Math.max(h, -2.2) * w;
+  }
+  return h;
+}
+function H(x, z){
+  let h = alturaBase(x, z);
+  /* allanar alrededor de cada punto de la historia (mezcla suave) */
+  for (const k in POI){
+    if (k === 'lagoluz') continue;
+    const p = POI[k];
+    const d = Math.hypot(x - p.x, z - p.z);
+    const w = Math.exp(-(d * d) / (26 * 26));
+    h = h * (1 - w) + (p.h != null ? p.h : alturaBase(p.x, p.z)) * w;
+  }
+  return h;
+}
+/* HAY AGUA SOLO DONDE HAY LAGO. El plano de agua mide 380x380 alrededor del
+   lago; el resto del valle puede estar más bajo que la cota del agua y aun así
+   es tierra seca. La primera versión trataba TODO lo bajo como agua: la mitad
+   del mapa quedaba sin árboles y sin poder caminarse (medido: 1.827 de 3.481
+   celdas rechazadas por "agua" que no existe). */
+function enAgua(x, z, margenY){
+  return Math.abs(x - POI.lagoluz.x) < 192 && Math.abs(z - POI.lagoluz.z) < 192 &&
+         H(x, z) < AGUA_Y + (margenY == null ? .5 : margenY);
+}
+/* la SENDA que une los puntos (para pintar tierra en el splat y guiar) */
+const SENDA = [POI.inicio, POI.capsula, POI.madre, POI.orilla, POI.anillo];
+/* EL CAMINO REAL ES CURVO. El splat lo pinta con curvas (control ±90 m), pero
+   los chequeos de "no plantar acá" y el corredor seco usaban las RECTAS entre
+   puntos: por eso había árboles ENCIMA del sendero visible (lo reportó el
+   jugador) y el corredor seco podía no coincidir con el camino pintado. Ahora
+   la curva se muestrea UNA vez y esa polilínea manda en todo: splat, plantado
+   y terreno seco. */
+const SENDA_PTS = [], PTS_SEG = [[]];
+for (let i = 1; i < SENDA.length; i++){
+  const a = SENDA[i - 1], b = SENDA[i];
+  const mx = (a.x + b.x) / 2 + (fbm(i * 9.7, i * 3.1) - .5) * 90;
+  const mz = (a.z + b.z) / 2 + (fbm(i * 4.3, i * 8.9) - .5) * 90;
+  const seg = [];
+  for (let k = 0; k <= 24; k++){
+    const t = k / 24, u = 1 - t;
+    const P = [u*u*a.x + 2*u*t*mx + t*t*b.x, u*u*a.z + 2*u*t*mz + t*t*b.z];
+    seg.push(P);
+    if (i === 1 || k > 0) SENDA_PTS.push(P);
+  }
+  PTS_SEG.push(seg);
+}
+/* tramos que cruzan la zona baja del lago: el terreno se mantiene seco A LO
+   LARGO DE LA CURVA (tramos 3 y 4: roble→muelle→santuario) */
+const SECO = [];
+for (const si of [3, 4])
+  for (let k = 1; k < PTS_SEG[si].length; k++)
+    SECO.push([{ x: PTS_SEG[si][k-1][0], z: PTS_SEG[si][k-1][1] },
+               { x: PTS_SEG[si][k][0],   z: PTS_SEG[si][k][1] }]);
+for (const k in POI) POI[k].h = alturaBase(POI[k].x, POI[k].z);
+POI.orilla.h = AGUA_Y + 1.1;                    /* el muelle nace a orilla */
+
+
+/* ==================== TEXTURAS PROCEDURALES (canvas) ========================
+   No hay créditos de generación: acá TODO se PINTA, hasta las hojas con
+   recorte alfa. El ruido azulejable es el mismo del terreno. */
+const lienzo = (n, fn) => {
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  fn(c.getContext('2d'), n);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  t.colorSpace = T.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+};
+const valT = (x, y, per) => {
+  const i = Math.floor(x), j = Math.floor(y);
+  const fx = x - i, fy = y - j;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const h = (a, b) => hash2(((a % per) + per) % per + 101, ((b % per) + per) % per + 37);
+  const a = h(i, j), b = h(i + 1, j), c2 = h(i, j + 1), d = h(i + 1, j + 1);
+  return a + (b - a) * sx + (c2 - a) * sy + (a - b - c2 + d) * sx * sy;
+};
+const fbmT = (x, y, per, oct) => {
+  let v = 0, amp = .55, p = per;
+  for (let o = 0; o < oct; o++){ v += amp * valT(x * p, y * p, p); amp *= .5; p *= 2; }
+  return cl(v, 0, 1);
+};
+const mezC = (a, b, t) => [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+function texSuelo(n, colA, colB, pecas, chispas){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      const t = fbmT(x / n, y / n, 6, 4);
+      let c = mezC(colA, colB, t);
+      const r = hash2(x + 7, y + 13);
+      if (pecas && r > .967) c = mezC(c, [10, 8, 16], .55);
+      else if (chispas && r < .006) c = [140, 255, 220];      /* esporas pegadas */
+      const gr = .92 + .16 * hash2(x + 91, y + 57);
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0] * gr; img.data[i4+1] = c[1] * gr; img.data[i4+2] = c[2] * gr;
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+/* corteza índigo ACANALADA: vetas verticales torcidas por el ruido */
+function texCorteza(n){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      const tw = fbmT(x / n, y / n, 4, 3);
+      const veta = .5 + .5 * Math.sin((x / n * 14 + tw * 3.2) * 6.283);
+      let c = mezC([52, 40, 80], [112, 90, 152], veta * .7 + tw * .3);
+      if (hash2(x + 3, y + 9) > .992) c = [120, 240, 210];    /* liquen que brilla */
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0]; img.data[i4+1] = c[1]; img.data[i4+2] = c[2];
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+/* HOJAS ALIENÍGENAS con recorte alfa: racimo de pétalos alargados que van
+   del índigo oscuro en la base a la punta ENCENDIDA, más motas de luz */
+function texHojas(n, base, punta){
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, n, n);
+  for (let i = 0; i < 30; i++){
+    const cx = n * (.15 + rnd() * .7), cy = n * (.15 + rnd() * .7);
+    const a = rnd() * 6.283, L = n * (.09 + rnd() * .13), W2 = L * (.3 + rnd() * .2);
+    const d = g.createLinearGradient(cx - Math.cos(a) * L, cy - Math.sin(a) * L,
+                                     cx + Math.cos(a) * L, cy + Math.sin(a) * L);
+    d.addColorStop(0, 'rgb(' + base.join(',') + ')');
+    d.addColorStop(.75, 'rgb(' + mezC(base, punta, .55).map(Math.round).join(',') + ')');
+    d.addColorStop(1, 'rgb(' + punta.join(',') + ')');
+    g.fillStyle = d;
+    g.save();
+    g.translate(cx, cy); g.rotate(a);
+    g.beginPath(); g.ellipse(0, 0, L, W2, 0, 0, 6.284); g.fill();
+    g.restore();
+  }
+  /* motas bioluminiscentes en las hojas */
+  for (let i = 0; i < 40; i++){
+    g.fillStyle = 'rgba(' + punta.join(',') + ',.9)';
+    g.beginPath(); g.arc(rnd() * n, rnd() * n, .8 + rnd() * 1.6, 0, 6.284); g.fill();
+  }
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+/* el CIELO de EXO: crepúsculo violeta con nebulosa y estrellas */
+const cieloX = (() => {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const g = c.getContext('2d');
+  const d = g.createLinearGradient(0, 0, 0, 512);
+  d.addColorStop(0, '#07061a');
+  d.addColorStop(.3, '#1c1440');
+  d.addColorStop(.46, '#4a2a68');
+  d.addColorStop(.5, '#8a4a92');
+  d.addColorStop(.55, '#2a1a3e');
+  d.addColorStop(1, '#0c081a');
+  g.fillStyle = d; g.fillRect(0, 0, 1024, 512);
+  /* la nebulosa: madeja de elipses tenues alrededor de una diagonal */
+  for (let i = 0; i < 70; i++){
+    const t = i / 70;
+    const x = 200 + t * 500, y = 40 + t * 130 + Math.sin(t * 9) * 22;
+    const rojo = 120 + rnd() * 80 | 0;
+    g.fillStyle = 'rgba(' + rojo + ',' + (60 + rnd() * 50 | 0) + ',' +
+      (150 + rnd() * 90 | 0) + ',' + (.02 + rnd() * .03).toFixed(3) + ')';
+    g.beginPath(); g.ellipse(x, y, 26 + rnd() * 60, 9 + rnd() * 22, .5, 0, 6.284); g.fill();
+  }
+  for (let i = 0; i < 700; i++){
+    const x = rnd() * 1024, y = rnd() * 245;
+    g.fillStyle = 'rgba(' + (200 + rnd() * 55 | 0) + ',' + (190 + rnd() * 50 | 0) +
+      ',255,' + (.25 + rnd() * .6).toFixed(2) + ')';
+    const r = rnd() < .05 ? 1.5 : .8;
+    g.fillRect(x, y, r, r);
+  }
+  const t = new T.CanvasTexture(c);
+  t.mapping = T.EquirectangularReflectionMapping;
+  t.colorSpace = T.SRGBColorSpace;
+  return t;
+})();
+const TX = {
+  pasto:     texSuelo(256, [46, 88, 74], [78, 140, 112], true, true),
+  tierra:    texSuelo(256, [128, 106, 152], [168, 142, 198], false, true),
+  hojarasca: texSuelo(256, [58, 40, 92], [100, 72, 148], true, true),
+  roca:      texSuelo(256, [54, 48, 76], [94, 86, 126], true, false),
+  corteza:   texCorteza(256),
+  madera:    texSuelo(128, [40, 32, 60], [70, 58, 96], true, false),
+  hojas1:    texHojas(256, [42, 74, 108], [110, 245, 215]),   /* copas cian */
+  hojas2:    texHojas(256, [74, 38, 100], [240, 130, 230]),  /* copas magenta */
+  cielo:     cieloX
+};
+
+/* ================================ ESCENA =================================== */
+const ren = new T.WebGLRenderer({ canvas: $('gl'), antialias: false,
+  powerPreference: 'high-performance' });
+ren.outputColorSpace = T.SRGBColorSpace;
+/* GOTY: tone mapping FÍLMICO (ACES) — los blancos ruedan suave en vez de
+   recortarse, los atardeceres saturan como en cine — y SOMBRAS suaves (PCF).
+   La exposición la maneja el ciclo del día, capítulo a capítulo. */
+ren.toneMapping = T.ACESFilmicToneMapping;
+ren.toneMappingExposure = 1.12;
+ren.shadowMap.enabled = true;
+ren.shadowMap.type = T.PCFSoftShadowMap;
+const scene = new T.Scene();
+scene.background = TX.cielo;
+scene.backgroundIntensity = 1;
+const pm = new T.PMREMGenerator(ren);
+scene.environment = pm.fromEquirectangular(TX.cielo).texture;
+scene.fog = new T.Fog(new T.Color('#241a38'), 60, 380);
+const cam = new T.PerspectiveCamera(72, 1, .1, 1200);
+cam.rotation.order = 'YXZ';
+
+/* luz: UNA direccional (el sol) + hemisferio. Lambert por fragmento.
+   El sol PROYECTA SOMBRA: su caja de sombra (±78 m) viaja pegada al jugador —
+   con un mapa de 900 m una sola caja fija daría texels de medio metro; así el
+   texel queda en ~15 cm y las copas dibujan sombra de verdad sobre el sendero. */
+const SOLD = new T.Vector3(.5, .7, .3).normalize();   /* dirección actual del sol */
+const sol = new T.DirectionalLight(0xd8b4ff, 1.8);   /* la enana violeta */
+sol.position.copy(SOLD).multiplyScalar(420);
+{
+  const sc = sol.shadow.camera;
+  sc.left = sc.bottom = -78; sc.right = sc.top = 78;
+  sc.near = 40; sc.far = 760;
+  sol.shadow.mapSize.set(1024, 1024);
+  sol.shadow.bias = -0.0006;
+  sol.shadow.normalBias = 1.6;      /* sin esto el terreno de quads de 5 m se acnea */
+}
+scene.add(sol); scene.add(sol.target);
+const hemi = new T.HemisphereLight(0x8a76c8, 0x1e3c38, .85);
+scene.add(hemi);
+/* el DESTELLO del sol: un sprite aditivo donde apunta SOLD. Con niebla y ACES
+   es lo que hace que mirar contra el sol "queme" como en un juego grande. */
+const glare = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const d = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  d.addColorStop(0, 'rgba(240,224,255,1)');
+  d.addColorStop(.12, 'rgba(218,190,255,.85)');
+  d.addColorStop(.4, 'rgba(180,140,255,.22)');
+  d.addColorStop(1, 'rgba(150,110,255,0)');
+  g.fillStyle = d; g.fillRect(0, 0, 128, 128);
+  const s = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c),
+    transparent: true, blending: T.AdditiveBlending, depthWrite: false, fog: false }));
+  s.scale.set(300, 300, 1);
+  scene.add(s);
+  return s;
+})();
+/* la ventana de la cabaña, de noche, VUELCA luz cálida al porche */
+const focoCasa = new T.PointLight(0x7affe0, 0, 26, 1.7);
+scene.add(focoCasa);
+/* DOS LUNAS pintadas, siempre en el cielo: la grande con ANILLOS y una
+   hermanita rojiza más lejos */
+const LUNAS = [];
+{
+  const c = document.createElement('canvas'); c.width = 192; c.height = 128;
+  const g = c.getContext('2d');
+  /* la luna con anillos: disco + elipse de anillo por delante y por detrás */
+  g.strokeStyle = 'rgba(200,190,230,.55)'; g.lineWidth = 5;
+  g.beginPath(); g.ellipse(96, 64, 84, 22, -.3, .3, 3.44); g.stroke();
+  const d = g.createRadialGradient(80, 50, 4, 96, 64, 46);
+  d.addColorStop(0, '#cfc4ea');
+  d.addColorStop(.7, '#8a7ab0');
+  d.addColorStop(1, '#4a3e66');
+  g.fillStyle = d;
+  g.beginPath(); g.arc(96, 64, 44, 0, 6.284); g.fill();
+  for (let i = 0; i < 10; i++){
+    g.fillStyle = 'rgba(60,50,90,.35)';
+    g.beginPath();
+    g.arc(96 + (rnd() - .5) * 70, 64 + (rnd() - .5) * 66, 2 + rnd() * 6, 0, 6.284);
+    g.fill();
+  }
+  g.strokeStyle = 'rgba(230,222,250,.8)'; g.lineWidth = 5;
+  g.beginPath(); g.ellipse(96, 64, 84, 22, -.3, 3.6, 6.1); g.stroke();
+  const spA = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c),
+    transparent: true, opacity: .92, depthWrite: false, fog: false }));
+  spA.scale.set(150, 100, 1);
+  spA.userData.dir = new T.Vector3(-.45, .5, -.45).normalize();
+  scene.add(spA); LUNAS.push(spA);
+  const c2 = document.createElement('canvas'); c2.width = c2.height = 64;
+  const g2 = c2.getContext('2d');
+  const d2 = g2.createRadialGradient(26, 24, 2, 32, 32, 30);
+  d2.addColorStop(0, '#e0a090');
+  d2.addColorStop(.8, '#8a4a44');
+  d2.addColorStop(1, '#3a1e20');
+  g2.fillStyle = d2; g2.beginPath(); g2.arc(32, 32, 29, 0, 6.284); g2.fill();
+  const spB = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c2),
+    transparent: true, opacity: .85, depthWrite: false, fog: false }));
+  spB.scale.set(34, 34, 1);
+  spB.userData.dir = new T.Vector3(.7, .34, -.3).normalize();
+  scene.add(spB); LUNAS.push(spB);
+}
+
+/* --------------------------- SPLAT DE CONTROL ------------------------------
+   R = tierra del sendero · G = hojarasca bajo el bosque. Se pinta UNA vez en un
+   canvas de 512: el sendero como trazo gordo entre los puntos de la historia,
+   la hojarasca como manchas de ruido donde después van los árboles. */
+const SPL = document.createElement('canvas'); SPL.width = SPL.height = 512;
+const wx2u = x => (x + MITAD) / MAPA * 512;
+const wz2u = z => (z + MITAD) / MAPA * 512;
+{
+  const g = SPL.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 512, 512);
+  /* hojarasca: manchas */
+  g.fillStyle = '#003800';
+  for (let i = 0; i < 900; i++){
+    const x = rnd() * 512, y = rnd() * 512, r = 6 + rnd() * 22;
+    if (vnoise(x * .02, y * .02) < .52) continue;
+    g.beginPath(); g.arc(x, y, r, 0, 6.284); g.fill();
+  }
+  g.filter = 'blur(6px)';
+  g.drawImage(SPL, 0, 0);
+  g.filter = 'none';
+  /* el sendero: R fuerte, con borde difuso */
+  for (const [w, c] of [[16, 'rgba(140,0,0,.55)'], [8, 'rgba(255,0,0,.85)']]){
+    g.strokeStyle = c; g.lineWidth = w; g.lineCap = g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(wx2u(SENDA_PTS[0][0]), wz2u(SENDA_PTS[0][1]));
+    for (const P of SENDA_PTS) g.lineTo(wx2u(P[0]), wz2u(P[1]));
+    g.stroke();
+  }
+  /* claros: cabaña y santuario sin hojarasca, con algo de tierra */
+  for (const k of ['capsula', 'anillo']){
+    g.fillStyle = 'rgba(160,0,0,.5)';
+    g.beginPath(); g.arc(wx2u(POI[k].x), wz2u(POI[k].z), 12, 0, 6.284); g.fill();
+  }
+}
+const splTex = new T.CanvasTexture(SPL);
+splTex.colorSpace = T.NoColorSpace;
+
+/* ----------------------------- MATERIAL DEL TERRENO ------------------------
+   Antes era un ShaderMaterial propio: sol+hemi calculados a mano, SIN sombras,
+   sin tone mapping y con la niebla sincronizada por uniformes. Ahora es un
+   Lambert con el SPLAT inyectado en map_fragment: el mismo mezclado de 4
+   texturas, pero con TODO el pipeline de three gratis — RECIBE las sombras del
+   sol, pasa por ACES, y la niebla y el colorspace son los del resto del mundo
+   (antes el terreno y los árboles se iluminaban por recetas distintas y había
+   que emparejarlos a ojo). La roca por pendiente se calcula en el VÉRTICE: la
+   malla del terreno no rota, así que la normal del objeto ES la del mundo. */
+const uniTerr = {
+  tTierra: { value: TX.tierra }, tHoja: { value: TX.hojarasca },
+  tRoca: { value: TX.roca }, tSplat: { value: splTex },
+  repite: { value: MAPA / 7 }
+};
+const matTerr = new T.MeshLambertMaterial({ map: TX.pasto });
+matTerr.onBeforeCompile = sh => {
+  Object.assign(sh.uniforms, uniTerr);
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying float vRocoso;')
+    .replace('#include <begin_vertex>',
+      '#include <begin_vertex>\n  vRocoso = smoothstep(.82, .6, normal.y);');
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', `#include <common>
+      uniform sampler2D tTierra, tHoja, tRoca, tSplat;
+      uniform float repite;
+      varying float vRocoso;`)
+    .replace('#include <map_fragment>', `
+      vec2 uvT = vMapUv * repite;
+      vec3 spl = texture2D(tSplat, vMapUv).rgb;
+      vec3 c = texture2D(map, uvT).rgb;
+      c = mix(c, texture2D(tHoja, uvT*1.3).rgb, clamp(spl.g*1.5, 0., 1.));
+      c = mix(c, texture2D(tTierra, uvT*1.6).rgb, clamp(spl.r*1.35, 0., 1.));
+      c = mix(c, texture2D(tRoca, uvT*.9).rgb, vRocoso);
+      diffuseColor.rgb *= c;`);
+};
+
+/* ---------------------- malla del terreno en 36 trozos --------------------- */
+const CHN = 6, CVERT = 30;                    /* 6x6 trozos de 30x30 celdas */
+const terrChunks = [];
+{
+  const paso = MAPA / (CHN * CVERT);
+  for (let cj = 0; cj < CHN; cj++) for (let ci = 0; ci < CHN; ci++){
+    const g = new T.PlaneGeometry(MAPA / CHN, MAPA / CHN, CVERT, CVERT);
+    g.rotateX(-Math.PI / 2);
+    const ox = -MITAD + (ci + .5) * MAPA / CHN;
+    const oz = -MITAD + (cj + .5) * MAPA / CHN;
+    const P = g.attributes.position, UV = g.attributes.uv;
+    for (let i = 0; i < P.count; i++){
+      const x = P.getX(i) + ox, z = P.getZ(i) + oz;
+      P.setY(i, H(x, z));
+      /* uv GLOBAL del valle, para que el splat y el tileado sigan entre trozos */
+      UV.setXY(i, (x + MITAD) / MAPA, (z + MITAD) / MAPA);
+    }
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    /* los vértices son LOCALES al trozo; la posición del mesh los lleva al mundo.
+       (la primera versión además trasladaba la geometría: doble desplazamiento y
+       los 36 trozos caían apilados en el centro) */
+    const m = new T.Mesh(g, matTerr);
+    m.position.set(ox, 0, oz);
+    m.receiveShadow = true;
+    m.castShadow = true;          /* las lomas se sombrean entre sí al atardecer */
+    scene.add(m);
+    terrChunks.push(m);
+  }
+}
+
+/* falda del horizonte: tapa la parte BAJA de la foto del cielo (que es oscura)
+   con suelo que a esa distancia ya es color de niebla puro */
+{
+  const f = new T.Mesh(new T.CircleGeometry(1150, 24),
+    new T.MeshLambertMaterial({ color: 0x1c3236 }));
+  f.rotation.x = -Math.PI / 2;
+  f.position.y = -10;
+  f.frustumCulled = false;
+  scene.add(f);
+  /* PARED DE LOMAS LEJANAS: una falda plana converge exactamente a la altura del
+     ojo, así que desde cualquier punto alto (la colina del roble, la cámara del
+     menú) se veía la franja oscura de la foto del cielo entre la falda y el
+     horizonte. Este anillo sube hasta +70 a 1.100 m: a esa distancia la niebla lo
+     pinta liso y se lee como una serranía en la bruma que CIERRA el horizonte. */
+  const pared = new T.Mesh(new T.CylinderGeometry(1100, 660, 78, 24, 1, true),
+    new T.MeshLambertMaterial({ color: 0x262040, side: T.BackSide }));
+  pared.position.y = 31;         /* base -8, borde +70 */
+  pared.frustumCulled = false;
+  scene.add(pared);
+}
+/* ------------------------------- EL LAGO ----------------------------------- */
+/* AGUA VIVA: plano con grilla (para el oleaje de vértices) + normal perturbada
+   por ondas que CORREN en el fragmento — el reflejo del cielo (PMREM) se mueve
+   con ellas, que es lo que hace que el agua se lea como agua y no como vidrio.
+   El plano es cuadrado a propósito: donde el terreno está más alto lo tapa la
+   prueba de profundidad, así que la orilla la dibuja el propio lago. */
+const AGUAU = { value: 0 };
+/* RUIDO AZULEJABLE para el agua: 3 octavas de ruido de valor con la retícula en
+   módulo (los bordes empalman). Es lo que mata el "se ve programado": los senos
+   puros hacen crestas RECTAS que se repiten; el ruido no se repite nunca a la
+   vista. Se genera una vez en un canvas de 256. */
+const RUIDO = (() => {
+  const N2 = 256, c = document.createElement('canvas');
+  c.width = c.height = N2;
+  const g = c.getContext('2d'), img = g.createImageData(N2, N2);
+  const val = (x, y, per) => {
+    const i = Math.floor(x), j = Math.floor(y);
+    const fx = x - i, fy = y - j;
+    const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    const h = (a, b) => hash2(((a % per) + per) % per + 101, ((b % per) + per) % per + 37);
+    const a = h(i, j), b = h(i + 1, j), c2 = h(i, j + 1), d = h(i + 1, j + 1);
+    return a + (b - a) * sx + (c2 - a) * sy + (a - b - c2 + d) * sx * sy;
+  };
+  for (let y = 0; y < N2; y++) for (let x = 0; x < N2; x++){
+    let v = 0, amp = .55, per = 8;
+    for (let o = 0; o < 3; o++){ v += amp * val(x / N2 * per, y / N2 * per, per); amp *= .5; per *= 2; }
+    const k = Math.round(cl(v, 0, 1) * 255), i4 = (y * N2 + x) * 4;
+    img.data[i4] = img.data[i4+1] = img.data[i4+2] = k; img.data[i4+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  return t;
+})();
+/* TEXTURA DE PROFUNDIDAD: el agua "no tenía masa" (dicho del jugador, y es
+   exacto) porque la orilla era el corte seco del polígono contra el terreno.
+   Se precalcula cuánto terreno hay DEBAJO de cada punto del agua (256x256 sobre
+   los 380x380 del plano) y con eso el shader hace lo que hace el agua real:
+   transparente y clara en el bajío, honda y oscura en el centro, espuma
+   lamiendo la orilla, y las olas se aplanan al llegar a la costa. */
+const PROF = (() => {
+  const N2 = 256, c = document.createElement('canvas');
+  c.width = c.height = N2;
+  const g = c.getContext('2d'), img = g.createImageData(N2, N2);
+  for (let j = 0; j < N2; j++) for (let i = 0; i < N2; i++){
+    const x = POI.lagoluz.x + (i / (N2 - 1) - .5) * 380;
+    const z = POI.lagoluz.z + (j / (N2 - 1) - .5) * 380;
+    const d = cl((AGUA_Y - H(x, z)) / 7, 0, 1);        /* 0 = orilla, 1 = hondo */
+    const k = Math.round(d * 255), i4 = (j * N2 + i) * 4;
+    img.data[i4] = img.data[i4+1] = img.data[i4+2] = k; img.data[i4+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.ClampToEdgeWrapping;
+  return t;
+})();
+const aguaMat = new T.MeshStandardMaterial({ color: 0x0d3038, metalness: .95,
+  roughness: .11, transparent: true, opacity: .96 });
+aguaMat.envMapIntensity = .8;
+aguaMat.onBeforeCompile = sh => {
+  sh.uniforms.uT = AGUAU;
+  sh.uniforms.tRuido = { value: RUIDO };
+  sh.uniforms.tProf = { value: PROF };
+  aguaMat.userData.sh = sh;
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nuniform float uT;uniform sampler2D tProf;varying vec2 vWp;varying float vD;varying float vAlt;varying float vProf;')
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      vWp = position.xy;
+      vProf = texture2D(tProf, position.xy / 380.0 + 0.5).r;
+      /* DOMINIO DEFORMADO: antes de calcular la ola, la posición se tuerce con
+         dos senos lentos. Las crestas dejan de ser líneas rectas: se curvan y
+         serpentean como en el mar de verdad. */
+      vec2 pw = position.xy + vec2(sin(position.y*.021 + uT*.33),
+                                   cos(position.x*.017 - uT*.27)) * 16.0;
+      float hh = sin(pw.x*.052 + uT*1.02)*.22
+               + cos(pw.y*.047 - uT*.83)*.18
+               + sin((pw.x + pw.y)*.093 + uT*1.61)*.11
+               + cos(pw.x*.019 - pw.y*.029 + uT*.47)*.15;
+      /* la ola se APLANA al entrar al bajío: si no, el borde del agua sube y
+         baja despegándose de la costa y se ve la lámina */
+      hh *= smoothstep(0.0, 0.22, vProf);
+      transformed.z += hh;
+      vAlt = hh;
+      vD = -(modelViewMatrix * vec4(transformed, 1.0)).z;`);
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform float uT;uniform sampler2D tRuido;varying vec2 vWp;varying float vD;varying float vAlt;varying float vProf;')
+    /* OJO CON EL ORDEN DEL PIPELINE: color_fragment y roughnessmap corren ANTES
+       que normal_fragment_begin. Todo el cálculo (ruido, espuma, gradiente) se
+       hace en color_fragment y la normal sólo CONSUME el gradiente después. */
+    .replace('#include <color_fragment>', `#include <color_fragment>
+      float espuma; vec2 aguaG; float n3;
+      {
+        /* TRES ESCALAS de rizado por ruido. La primera versión usaba capas de
+           ~90 m y ~23 m: en la pantalla del celular eran manchones lechosos sin
+           detalle (captura del jugador: "está horrible", y sí). Escalas nuevas:
+           oleaje ~20 m + olitas ~4,5 m + micro-rizado ~1,5 m. El detalle fino es
+           lo que hace que el agua se lea como agua a cualquier distancia. */
+        float lejos = clamp(1.0 - vD / 320.0, .3, 1.0);
+        vec2 uvA = vWp*.048 + vec2(uT*.020,  uT*.013);
+        vec2 uvB = vWp*.19  + vec2(-uT*.036, uT*.028);
+        vec2 uvC = vWp*.55  + vec2(uT*.05,  -uT*.041);
+        float e2 = .02;
+        float n1  = texture2D(tRuido, uvA).r;
+        float n2  = texture2D(tRuido, uvB).r;
+        n3  = texture2D(tRuido, uvC).r;
+        float gxA = texture2D(tRuido, uvA + vec2(e2, 0.)).r - n1;
+        float gyA = texture2D(tRuido, uvA + vec2(0., e2)).r - n1;
+        float gxB = texture2D(tRuido, uvB + vec2(e2, 0.)).r - n2;
+        float gyB = texture2D(tRuido, uvB + vec2(0., e2)).r - n2;
+        float gxC = texture2D(tRuido, uvC + vec2(e2, 0.)).r - n3;
+        float gyC = texture2D(tRuido, uvC + vec2(0., e2)).r - n3;
+        aguaG = vec2(gxA*2.4 + gxB*3.6 + gxC*2.2,
+                     gyA*2.4 + gyB*3.6 + gyC*2.2) * lejos;
+        /* ESPUMA ESCASA: vetas finas donde coinciden la cresta y las dos capas
+           chicas — no manchones. El micro-rizado la recorta en hilos. */
+        espuma = smoothstep(1.42, 1.62, n2*.9 + n3*.75 + max(vAlt, 0.)*.9)
+               * smoothstep(.35, .6, n3) * lejos;
+      }
+      /* MASA DEL AGUA: bajío claro y verdoso -> hondo oscuro. Es la señal de
+         volumen que le faltaba. */
+      diffuseColor.rgb = mix(vec3(.10, .55, .50), diffuseColor.rgb,
+                             smoothstep(0.0, 0.55, vProf));
+      /* espuma que LAME la orilla, ondulando con el ruido fino y el tiempo */
+      float lame = smoothstep(.16, .045, vProf + sin(uT*1.4 + vWp.x*.3 + vWp.y*.23)*.025);
+      espuma = max(espuma, lame * (.45 + .55 * n3));
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.55, .98, .90), espuma * .6);
+      /* y el borde mismo se DESVANECE: nada de corte poligonal seco */
+      diffuseColor.a *= smoothstep(0.0, 0.05, vProf);`)
+    .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      roughnessFactor = mix(roughnessFactor, .85, espuma);`)
+    /* EL AGUA ES LA LÁMPARA: el bajío EMITE luz cian que late despacio */
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      totalEmissiveRadiance += vec3(.06, .55, .46) *
+        (1.0 - smoothstep(0.0, 0.5, vProf)) *
+        (0.55 + 0.45 * sin(uT * 0.8 + vWp.x * .05 + vWp.y * .04));`)
+    .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+      normal = normalize(normal + vec3(aguaG.x, aguaG.y, 0.0));`);
+};
+const agua = new T.Mesh(new T.PlaneGeometry(380, 380, 84, 84), aguaMat);
+agua.rotation.x = -Math.PI / 2;
+agua.position.set(POI.lagoluz.x, AGUA_Y, POI.lagoluz.z);
+scene.add(agua);
+
+/* ------------------------------ LOS ÁRBOLES --------------------------------
+   Tronco: cilindro con corteza fotográfica. Copa: 7 tarjetas con hojas reales
+   y recorte alfa, orientadas al azar dentro de un elipsoide. TODO instanciado:
+   setecientos árboles en cuatro llamadas de dibujo. */
+/* fusión a mano de varias geometrías indexadas (sin dependencias) */
+function fusiona(geos){
+  let nv = 0; for (const g of geos) nv += g.attributes.position.count;
+  const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2);
+  const I = [];
+  let off = 0;
+  for (const g of geos){
+    P.set(g.attributes.position.array, off * 3);
+    N.set(g.attributes.normal.array, off * 3);
+    if (g.attributes.uv) U.set(g.attributes.uv.array, off * 2);
+    const idx = g.index.array;
+    for (let k = 0; k < idx.length; k++) I.push(idx[k] + off);
+    off += g.attributes.position.count;
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P, 3));
+  g.setAttribute('normal', new T.BufferAttribute(N, 3));
+  g.setAttribute('uv', new T.BufferAttribute(U, 2));
+  g.setIndex(I);
+  return g;
+}
+function geoCopa(nq, radio, alto){
+  const geos = [];
+  for (let i = 0; i < nq; i++){
+    const g = new T.PlaneGeometry(radio * rr(1.5, 2.2), radio * rr(1.2, 1.8));
+    const e = new T.Euler(rr(-0.6, 0.6), rr(0, 6.28), rr(-0.5, 0.5));
+    g.rotateX(e.x); g.rotateY(e.y); g.rotateZ(e.z);
+    const a = rr(0, 6.28), rd = rr(0, radio * .55);
+    g.translate(Math.cos(a) * rd, alto + rr(-radio * .35, radio * .5), Math.sin(a) * rd);
+    geos.push(g);
+  }
+  return fusiona(geos);
+}
+/* ÁRBOL CON RAMAS. El reclamo era justo: un cilindro con una nube de hojas no es
+   un árbol. Acá el tronco es cónico, salen 4-5 RAMAS inclinadas hacia arriba a
+   distintas alturas, y las hojas van EN LA PUNTA de cada rama más una corona
+   arriba. Devuelve {leña, hojas}: dos geometrías fusionadas por especie, que
+   después van instanciadas (mil árboles = 4 llamadas de dibujo igual). */
+function geoArbol(altura, nRamas, rHojas){
+  const lena = [], puntas = [];
+  const tr = new T.CylinderGeometry(.16, .42, altura, 6, 1, true);
+  tr.translate(0, altura / 2, 0);
+  lena.push(tr);
+  for (let i = 0; i < nRamas; i++){
+    const hFrac = .42 + .5 * (i / Math.max(1, nRamas - 1)) + rr(-.04, .04);
+    const largo = altura * rr(.3, .45) * (1.15 - hFrac * .5);
+    const inclina = rr(.6, 1.0);                 /* desde la vertical */
+    const giro = i * 2.399 + rr(-.3, .3);        /* ángulo áureo: no se apilan */
+    const g = new T.CylinderGeometry(.05, .13, largo, 4, 1, true);
+    g.translate(0, largo / 2, 0);
+    g.rotateZ(inclina); g.rotateY(giro);
+    const y0 = altura * hFrac;
+    g.translate(0, y0, 0);
+    lena.push(g);
+    /* punta de la rama, para colgar las hojas ahí */
+    const px2 = Math.cos(giro) * Math.sin(inclina) * largo;
+    const pz2 = -Math.sin(giro) * Math.sin(inclina) * largo;
+    puntas.push([px2, y0 + Math.cos(inclina) * largo, pz2]);
+  }
+  puntas.push([0, altura * 1.02, 0]);            /* la corona */
+  const hojas = [];
+  for (const [qx, qy, qz] of puntas){
+    const esCorona = qy > altura;
+    const n = esCorona ? 4 : 2;
+    for (let k = 0; k < n; k++){
+      const r2 = rHojas * (esCorona ? 1.25 : .9) * rr(.85, 1.2);
+      const g = new T.PlaneGeometry(r2 * 2.1, r2 * 1.6);
+      g.rotateX(rr(-.6, .6)); g.rotateY(rr(0, 6.28)); g.rotateZ(rr(-.5, .5));
+      g.translate(qx + rr(-.4, .4), qy + rr(-.2, .5), qz + rr(-.4, .4));
+      hojas.push(g);
+    }
+  }
+  return { lena: fusiona(lena), hojas: fusiona(hojas) };
+}
+/* VIENTO: las copas y los arbustos se mecen en el vertex shader. La fase sale de
+   la posición EN EL MUNDO (instanceMatrix), así cada árbol va a su ritmo, y la
+   amplitud crece con la altura: la base quieta, la copa meciéndose. */
+const VIENTO = { value: 0 };
+function conViento(mat, fuerza){
+  mat.onBeforeCompile = sh => {
+    /* el uniforme LEE de VIENTO.value: un solo reloj para todas las copas */
+    sh.uniforms.uViento = {};
+    Object.defineProperty(sh.uniforms.uViento, 'value',
+      { get: () => VIENTO.value, set: () => {} });
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uViento;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          #ifdef USE_INSTANCING
+            vec4 wq = instanceMatrix * vec4(transformed, 1.0);
+          #else
+            vec4 wq = vec4(transformed, 1.0);
+          #endif
+          float sw = sin(uViento*1.7 + wq.x*.21 + wq.z*.17)
+                   + .5*sin(uViento*2.9 + wq.z*.33 + wq.x*.07)
+                   + .22*sin(uViento*6.1 + wq.x*1.3 + wq.y*.9);
+          float amp = ${fuerza.toFixed(2)} * max(transformed.y - .6, 0.0) * .075;
+          transformed.x += sw * amp;
+          transformed.z += .6 * sw * amp;
+        }`);
+  };
+  return mat;
+}
+const ARB = [];                                /* [x,z,r] choque */
+/* ¿está el punto a menos de `margen` del sendero o de un punto de la historia?
+   Lo usan árboles, ROCAS y ARBUSTOS: plantar una roca con colisión en el medio
+   del sendero es una trampa invisible (la sonda se la comió caminando). */
+function molesta(x, z, margen){
+  for (const k in POI){ const p = POI[k];
+    if (k !== 'lagoluz' && Math.hypot(x - p.x, z - p.z) < 16) return true; }
+  const m2 = margen * margen;
+  for (const P of SENDA_PTS){
+    const dx = x - P[0], dz = z - P[1];
+    if (dx * dx + dz * dz < m2) return true;
+  }
+  return false;
+}
+const M4 = new T.Matrix4(), V3 = new T.Vector3(), Q4 = new T.Quaternion(), E3 = new T.Euler();
+function plantar(){
+  /* GRILLA TEMBLADA en vez de tiros al azar: una celda de 15 m con jitter de
+     ±5 garantiza separación mínima (~5 m en el peor caso, ~15 típica) — nada de
+     árboles amontonados — y el ruido decide la DENSIDAD por zona, así hay
+     espesura y claros pero repartidos por todo el valle. */
+  const pos1 = [], pos2 = [];
+  const PASO_A = 17;   /* con el hash arreglado, 15 daba 1.875 árboles y 205k tri visibles */
+  const CTA = { tot: 0, dens: 0, agua: 0, camino: 0, ok: 0 };
+  window.__PLANTA = CTA;
+  for (let gz = -MITAD + 12; gz < MITAD - 12; gz += PASO_A)
+  for (let gx = -MITAD + 12; gx < MITAD - 12; gx += PASO_A){
+    CTA.tot++;
+    const x = gx + rr(-5, 5), z = gz + rr(-5, 5);
+    const dens = vnoise(x * .011 + 60, z * .011 + 22);
+    if (dens < .36){ CTA.dens++; continue; }              /* claro */
+    if (dens < .52 && rnd() > (dens - .36) * 5){ CTA.dens++; continue; }
+    const y = H(x, z);
+    if (enAgua(x, z, 1.2)){ CTA.agua++; continue; }
+    if (molesta(x, z, 15)){ CTA.camino++; continue; }     /* LEJOS del camino */
+    CTA.ok++;
+    (rnd() < .6 ? pos1 : pos2).push([x, y, z, rr(.75, 1.5)]);
+    ARB.push([x, z, .7]);
+  }
+  /* la LEÑA también se mece (misma fórmula y misma fase que sus hojas: como la
+     amplitud crece con la altura, la punta de la rama y su mata de hojas se
+     mueven JUNTAS y el árbol no se desarma) */
+  const matTr = conViento(new T.MeshLambertMaterial({ map: TX.corteza }), 1);
+  TX.corteza.repeat.set(1.4, 2.0);
+  /* SEIS SILUETAS distintas (3 por especie): antes todos los árboles de una
+     especie eran clones rotados y el bosque se veía estampado */
+  /* siluetas alien: más flacas y altas que un pino terrestre */
+  const esp1v = [geoArbol(10.5, 5, 2.0), geoArbol(12.5, 6, 2.2), geoArbol(8.6, 4, 1.9)];
+  const esp2v = [geoArbol(8.4, 4, 1.8), geoArbol(10.2, 5, 1.9), geoArbol(7.0, 4, 1.6)];
+  const matC1 = conViento(new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .18, side: T.DoubleSide }), 1);
+  const matC2 = conViento(new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .18, side: T.DoubleSide }), 1);
+  /* SOMBRA DE LAS COPAS: el material de profundidad por defecto ignora el alfa
+     y cada copa sombrearía como un cartel SÓLIDO. Uno propio con el mismo mapa
+     y alphaTest hace que la sombra sea el calado de las hojas. */
+  const depthHojas = tex => new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking,
+    map: tex, alphaTest: .35, side: T.DoubleSide });
+  const dH1 = depthHojas(TX.hojas1), dH2 = depthHojas(TX.hojas2);
+  const arma = (posiciones, esp, matC, dC) => {
+    if (!posiciones.length) return;
+    const iT = new T.InstancedMesh(esp.lena, matTr, posiciones.length);
+    const iC = new T.InstancedMesh(esp.hojas, matC, posiciones.length);
+    for (let i = 0; i < posiciones.length; i++){
+      const [x, y, z, s] = posiciones[i];
+      Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+      M4.compose(V3.set(x, y - .3, z), Q4, new T.Vector3(s, s * rr(.9, 1.25), s));
+      iT.setMatrixAt(i, M4); iC.setMatrixAt(i, M4);
+    }
+    iT.frustumCulled = iC.frustumCulled = false;
+    iT.castShadow = iT.receiveShadow = true;
+    iC.castShadow = true;
+    iC.customDepthMaterial = dC;
+    scene.add(iT); scene.add(iC);
+  };
+  for (let v = 0; v < 3; v++){
+    arma(pos1.filter((_, i) => i % 3 === v), esp1v[v], matC1, dH1);
+    arma(pos2.filter((_, i) => i % 3 === v), esp2v[v], matC2, dH2);
+  }
+  /* ARBUSTOS: un domo de tarjetas ANCLADO al suelo (antes eran hojas sueltas
+     flotando: con razón se veían mal). Tinte más oscuro que los árboles y
+     plantados sólo donde el ruido dice bosque, no en el medio del pasto. */
+  const domo = (() => {
+    const gs = [];
+    for (let k = 0; k < 6; k++){
+      const g = new T.PlaneGeometry(rr(1.3, 1.8), rr(.9, 1.2));
+      g.rotateX(rr(-.35, .1)); g.rotateY(k / 6 * 6.28 + rr(-.3, .3)); g.rotateZ(rr(-.25, .25));
+      const a = k / 6 * 6.28, rd = rr(.15, .4);
+      g.translate(Math.cos(a) * rd, rr(.3, .75), Math.sin(a) * rd);
+      gs.push(g);
+    }
+    return fusiona(gs);
+  })();
+  const matA = conViento(new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .18,
+    side: T.DoubleSide, color: 0x9ab88a }), .6);
+  const arb = new T.InstancedMesh(domo, matA, 420);
+  let pa = 0, ita = 0;
+  while (pa < 420 && ita < 30000){
+    ita++;
+    const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    if (vnoise(x * .011 + 60, z * .011 + 22) < .42) continue;   /* sólo en el bosque */
+    const y = H(x, z);
+    if (enAgua(x, z, 1) || molesta(x, z, 10)) continue;
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+    M4.compose(V3.set(x, y, z), Q4,
+      new T.Vector3(1, 1, 1).multiplyScalar(rr(.8, 1.7)));
+    arb.setMatrixAt(pa, M4);
+    pa++;
+  }
+  arb.count = pa;
+  arb.frustumCulled = false;
+  scene.add(arb);
+  /* ROCAS. Las anteriores estaban mal por tres lados (lo dijo el jugador y es
+     cierto): el centro quedaba ARRIBA del suelo (flotaban con luz por abajo),
+     el icosaedro embarraba la textura en los polos, y caían en pendientes donde
+     una punta quedaba en el aire. Ahora: esfera deformada con ruido (uv decente,
+     repetida x2), ACHATADA, ENTERRADA un cuarto, y sólo en suelo llano. */
+  const gr = new T.SphereGeometry(1, 9, 7);
+  { const P = gr.attributes.position, UV = gr.attributes.uv;
+    for (let i = 0; i < P.count; i++){
+      const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+      const k = .74 + .42 * vnoise(x * 1.9 + 9 + y * 1.1, z * 1.9 + 4);
+      P.setXYZ(i, x * k, y * k * .58, z * k);
+      UV.setXY(i, UV.getX(i) * 2, UV.getY(i) * 1.4);
+    }
+    gr.computeVertexNormals(); }
+  window.__ROCAS = [];
+  const roq = new T.InstancedMesh(gr, new T.MeshLambertMaterial({ map: TX.roca }), 70);
+  let nr = 0;
+  for (let i = 0; i < 200 && nr < 70; i++){
+    const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    if (molesta(x, z, 14) || enAgua(x, z, 1)) continue;
+    const y = H(x, z);
+    /* pendiente: en ladera empinada una punta queda en el aire */
+    const pend = Math.max(Math.abs(H(x + 2, z) - y), Math.abs(H(x, z + 2) - y));
+    if (pend > 1.1) continue;
+    const s = rr(.9, 3.0);
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+    M4.compose(V3.set(x, y - s * .16, z), Q4, new T.Vector3(s, s, s));
+    roq.setMatrixAt(nr, M4);
+    if (s > 1.6) ARB.push([x, z, s * .75]);
+    window.__ROCAS.push([x, z, s, +pend.toFixed(2)]);
+    nr++;
+  }
+  roq.count = nr;
+  roq.frustumCulled = false;
+  roq.castShadow = roq.receiveShadow = true;
+  scene.add(roq);
+  /* HONGOS FAROL: tallo + sombrero que EMITE luz; laten en el bucle.
+     Viven en la espesura y cerca del agua, nunca en el camino. */
+  const gTallo = new T.CylinderGeometry(.09, .16, 1.0, 6, 1, true);
+  gTallo.translate(0, .5, 0);
+  const gSomb = new T.SphereGeometry(.55, 8, 5, 0, 6.284, 0, 1.7);
+  gSomb.scale(1, .62, 1);
+  gSomb.translate(0, 1.0, 0);
+  window.__HONGO_MAT = new T.MeshLambertMaterial({ color: 0x14303a,
+    emissive: 0x36e8c4, emissiveIntensity: .9 });
+  const matTallo2 = new T.MeshLambertMaterial({ map: TX.madera });
+  const iSomb = new T.InstancedMesh(gSomb, window.__HONGO_MAT, 220);
+  const iTallo = new T.InstancedMesh(gTallo, matTallo2, 220);
+  let nh = 0, ith = 0;
+  while (nh < 220 && ith < 40000){
+    ith++;
+    const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    const cerca = Math.hypot(x - POI.lagoluz.x, z - POI.lagoluz.z);
+    const dens = vnoise(x * .011 + 60, z * .011 + 22);
+    if (dens < .45 && cerca > 220) continue;
+    if (enAgua(x, z, .6) || molesta(x, z, 8)) continue;
+    const sc = rr(.5, 1.6);
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), rr(-.1, .1)));
+    M4.compose(V3.set(x, H(x, z), z), Q4, new T.Vector3(sc, sc, sc));
+    iSomb.setMatrixAt(nh, M4); iTallo.setMatrixAt(nh, M4);
+    nh++;
+  }
+  iSomb.count = iTallo.count = nh;
+  iSomb.frustumCulled = iTallo.frustumCulled = false;
+  scene.add(iSomb); scene.add(iTallo);
+  window.__FLORA = pos1.length + pos2.length + pa + nh;
+}
+plantar();
+
+/* ---------------- LA MADRE: el árbol que apagó al bosque -------------------
+   Tronco COLOSAL con contrafuertes de raíz, una corona enorme de hojas cian
+   y ORBES colgantes que respiran (puntos aditivos). */
+{
+  const p = POI.madre, y = H(p.x, p.z);
+  const matTrM = new T.MeshLambertMaterial({ map: TX.corteza });
+  const tr = new T.Mesh(new T.CylinderGeometry(2.2, 4.2, 26, 10), matTrM);
+  tr.position.set(p.x, y + 13, p.z);
+  tr.castShadow = true;
+  scene.add(tr);
+  /* contrafuertes: conos tumbados alrededor de la base */
+  const raices = [];
+  for (let i = 0; i < 6; i++){
+    const a = i / 6 * 6.284;
+    const g = new T.ConeGeometry(1.1, 7, 5);
+    g.rotateZ(1.35);
+    g.rotateY(-a);
+    g.translate(Math.cos(a) * 4.4, 1.0, Math.sin(a) * 4.4);
+    raices.push(g);
+  }
+  const mR = new T.Mesh(fusiona(raices), matTrM);
+  mR.position.set(p.x, y, p.z);
+  mR.castShadow = true;
+  scene.add(mR);
+  const copa = new T.Mesh(geoCopa(16, 10, 26),
+    new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .18, side: T.DoubleSide }));
+  copa.position.set(p.x, y, p.z);
+  copa.frustumCulled = false;
+  copa.castShadow = true;
+  copa.customDepthMaterial = new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking,
+    map: TX.hojas1, alphaTest: .35, side: T.DoubleSide });
+  scene.add(copa);
+  /* orbes colgantes de la corona */
+  const NO = 22, PO = new Float32Array(NO * 3), CO = new Float32Array(NO * 3);
+  for (let i = 0; i < NO; i++){
+    const a = rr(0, 6.283), rd = rr(3, 9);
+    PO[i*3] = p.x + Math.cos(a) * rd;
+    PO[i*3+1] = y + rr(17, 26);
+    PO[i*3+2] = p.z + Math.sin(a) * rd;
+    CO[i*3] = .35; CO[i*3+1] = 1; CO[i*3+2] = .85;
+  }
+  const gO = new T.BufferGeometry();
+  gO.setAttribute('position', new T.BufferAttribute(PO, 3));
+  gO.setAttribute('color', new T.BufferAttribute(CO, 3));
+  const cvO = document.createElement('canvas'); cvO.width = cvO.height = 32;
+  const gcO = cvO.getContext('2d');
+  const dO = gcO.createRadialGradient(16,16,0,16,16,16);
+  dO.addColorStop(0,'rgba(255,255,255,1)'); dO.addColorStop(1,'rgba(255,255,255,0)');
+  gcO.fillStyle = dO; gcO.fillRect(0,0,32,32);
+  const orbes = new T.Points(gO, new T.PointsMaterial({ size: 1.4,
+    map: new T.CanvasTexture(cvO), vertexColors: true, transparent: true,
+    blending: T.AdditiveBlending, depthWrite: false, sizeAttenuation: true }));
+  scene.add(orbes);
+  ARB.push([p.x, p.z, 4.8]);
+}
+/* ---------------- LA CÁPSULA: el bote salvavidas de NARA --------------------
+   Cápsula de reentrada tumbada y medio enterrada, escudo térmico chamuscado,
+   escotilla abierta, ventana que se enciende (focoCasa vuelca esa luz),
+   antena de emergencia. 5 piezas. */
+let ventanaMat = null;
+{
+  const p = POI.capsula, y = H(p.x, p.z);
+  const matMet = new T.MeshLambertMaterial({ map: TX.roca, color: 0xb8c0c8 });
+  const matQuem = new T.MeshLambertMaterial({ map: TX.roca, color: 0x584838 });
+  const casco = new T.Mesh(new T.CapsuleGeometry(1.9, 2.6, 6, 12), matMet);
+  casco.position.set(p.x, y + 1.6, p.z);
+  casco.rotation.z = 1.35;                        /* tumbada */
+  casco.rotation.y = .5;
+  casco.castShadow = casco.receiveShadow = true;
+  scene.add(casco);
+  const escudo = new T.Mesh(new T.CylinderGeometry(2.0, 1.7, .5, 14), matQuem);
+  escudo.position.set(p.x - 2.9, y + 1.35, p.z - 1.6);
+  escudo.rotation.z = 1.35; escudo.rotation.y = .5;
+  escudo.castShadow = true;
+  scene.add(escudo);
+  const esco = new T.Mesh(new T.CircleGeometry(.75, 10),
+    new T.MeshLambertMaterial({ color: 0x0a0c12 }));
+  esco.position.set(p.x + 1.2, y + 1.7, p.z + 1.55);
+  esco.rotation.y = .8;
+  scene.add(esco);
+  ventanaMat = new T.MeshBasicMaterial({ color: 0x2a4a44 });
+  const ven = new T.Mesh(new T.PlaneGeometry(.9, .55), ventanaMat);
+  ven.position.set(p.x - .4, y + 2.3, p.z + 1.72);
+  ven.rotation.y = .5;
+  scene.add(ven);
+  focoCasa.position.set(p.x + 1.2, y + 2.0, p.z + 3.0);
+  const ant = new T.Mesh(new T.CylinderGeometry(.03, .05, 3.0, 5), matMet);
+  ant.position.set(p.x + 2.2, y + 3.2, p.z - 1.2);
+  ant.rotation.z = -.2;
+  scene.add(ant);
+  ARB.push([p.x, p.z, 3.6]);
+  window.__PARTES = 5;
+}
+/* ---------------- LA ORILLA: la semilla de luz ------------------------------
+   Una raíz colosal que se arquea y entra al agua, tres piedras encendidas,
+   y la SEMILLA: una vaina que late sobre su pedestal de roca. */
+let semillaMat = null;
+{
+  const p = POI.orilla;
+  const dir = Math.atan2(POI.lagoluz.x - p.x, POI.lagoluz.z - p.z);
+  const matTrM = new T.MeshLambertMaterial({ map: TX.corteza });
+  const puntos = [];
+  for (let i = 0; i <= 10; i++){
+    const t = i / 10;
+    puntos.push(new T.Vector3(
+      p.x + Math.sin(dir) * t * 22,
+      H(p.x, p.z) + Math.sin(t * 3.1415) * 5.5 - t * 2.5,
+      p.z + Math.cos(dir) * t * 22));
+  }
+  const raiz = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(puntos), 12, .7, 6), matTrM);
+  raiz.castShadow = true;
+  scene.add(raiz);
+  ARB.push([p.x + Math.sin(dir) * 4, p.z + Math.cos(dir) * 4, 1.6]);
+  /* piedras encendidas */
+  const matPiedraLuz = new T.MeshLambertMaterial({ color: 0x1a2a30,
+    emissive: 0x2ab8a0, emissiveIntensity: .5 });
+  for (let i = 0; i < 3; i++){
+    const a = dir + (i - 1) * .8;
+    const x = p.x + Math.sin(a) * 6, z = p.z + Math.cos(a) * 6;
+    const m = new T.Mesh(new T.SphereGeometry(rr(.5, .8), 7, 5), matPiedraLuz);
+    m.position.set(x, H(x, z) + .3, z);
+    m.scale.y = .6;
+    scene.add(m);
+  }
+  /* la semilla, latiendo sobre su pedestal */
+  const pedX = p.x - Math.sin(dir) * 3, pedZ = p.z - Math.cos(dir) * 3;
+  const ped = new T.Mesh(new T.CylinderGeometry(.5, .7, 1.0, 7),
+    new T.MeshLambertMaterial({ map: TX.roca }));
+  ped.position.set(pedX, H(pedX, pedZ) + .5, pedZ);
+  ped.castShadow = true;
+  scene.add(ped);
+  semillaMat = new T.MeshLambertMaterial({ color: 0x123a34,
+    emissive: 0x50ffd8, emissiveIntensity: .9 });
+  const sem = new T.Mesh(new T.SphereGeometry(.42, 8, 6), semillaMat);
+  sem.scale.y = 1.35;
+  sem.position.set(pedX, H(pedX, pedZ) + 1.45, pedZ);
+  scene.add(sem);
+  ARB.push([pedX, pedZ, .9]);
+}
+/* ---------------- EL ANILLO: monolitos con runa encendida -------------------
+   Ocho lajas oscuras inclinadas hacia adentro, cada una con su RUNA (tira
+   emisiva que late en el bucle), y el altar del USAR en el centro. */
+let runaMat = null;
+{
+  const p = POI.anillo, y = H(p.x, p.z);
+  const mR = new T.MeshLambertMaterial({ map: TX.roca });
+  runaMat = new T.MeshBasicMaterial({ color: 0x4affdc, transparent: true });
+  for (let i = 0; i < 8; i++){
+    const a = i / 8 * 6.284;
+    const alto = rr(3.0, 4.4);
+    const m = new T.Mesh(new T.BoxGeometry(1.3, alto, .7), mR);
+    m.position.set(p.x + Math.cos(a) * 7, y + alto / 2 - .3, p.z + Math.sin(a) * 7);
+    m.rotation.y = a;
+    m.rotation.z = .08;
+    m.castShadow = m.receiveShadow = true;
+    scene.add(m);
+    const runa = new T.Mesh(new T.PlaneGeometry(.22, alto * .62), runaMat);
+    runa.position.set(p.x + Math.cos(a) * 6.6, y + alto / 2 - .2, p.z + Math.sin(a) * 6.6);
+    runa.rotation.y = -a + Math.PI / 2;
+    scene.add(runa);
+  }
+  const altar = new T.Mesh(new T.BoxGeometry(2.4, 1.1, 2.4), mR);
+  altar.position.set(p.x, y + .55, p.z);
+  altar.castShadow = altar.receiveShadow = true;
+  scene.add(altar);
+  ARB.push([p.x, p.z, 1.9]);
+}
+/* -------- ESPORAS a la deriva (capítulos 4-5) + marcador ------------------- */
+let luci = null, luci0 = null;
+{
+  const NL = 160, P = new Float32Array(NL * 3), C = new Float32Array(NL * 3);
+  const c = new T.Color();
+  const a = POI.orilla, b = POI.anillo;
+  for (let i = 0; i < NL; i++){
+    const t = i / NL;
+    const x = a.x + (b.x - a.x) * t + rr(-14, 14);
+    const z = a.z + (b.z - a.z) * t + rr(-14, 14);
+    P[i*3] = x; P[i*3+1] = H(x, z) + rr(1, 4); P[i*3+2] = z;
+    c.setHSL(.83 + rnd() * .08, .9, .7);
+    C[i*3] = c.r; C[i*3+1] = c.g; C[i*3+2] = c.b;
+  }
+  luci0 = Float32Array.from(P);
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P, 3));
+  g.setAttribute('color', new T.BufferAttribute(C, 3));
+  const cn = document.createElement('canvas'); cn.width = cn.height = 32;
+  const g2 = cn.getContext('2d');
+  const d = g2.createRadialGradient(16,16,0,16,16,16);
+  d.addColorStop(0,'rgba(255,255,255,1)'); d.addColorStop(1,'rgba(255,255,255,0)');
+  g2.fillStyle = d; g2.fillRect(0,0,32,32);
+  luci = new T.Points(g, new T.PointsMaterial({ size: .8, map: new T.CanvasTexture(cn),
+    vertexColors: true, transparent: true, blending: T.AdditiveBlending,
+    depthWrite: false, sizeAttenuation: true }));
+  luci.visible = false;
+  scene.add(luci);
+}
+const marca3d = new T.Mesh(new T.OctahedronGeometry(1.1, 0),
+  new T.MeshBasicMaterial({ color: 0x8affdf, fog: false, transparent: true, opacity: .9 }));
+scene.add(marca3d);
+
+/* ================================ HISTORIA ================================= */
+/* ===== IDIOMAS. El texto ES la historia: va entero en los tres. ===== */
+const L = {
+es: { ui: { sub: 'el bosque que brilla · un planeta que respira despacio',
+  empezar: 'EMPEZAR LA HISTORIA', otra: 'JUGAR OTRA VEZ', denuevo: 'EMPEZAR DE NUEVO',
+  seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENÚ', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
+  idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAJOS', g_m: 'MEDIOS', g_a: 'ALTOS',
+  completa: (m2, mn) => 'HISTORIA COMPLETA · ' + m2 + ' m caminados · ' + mn + ' min',
+  introT: 'La caída',
+  intro: 'La cápsula entró de costado y el cielo era violeta.\nEso es lo último que anotaste antes del golpe.\n\nSos NARA, xenobotánica de la expedición Ceniza.\nEl planeta se llama Umbra: nunca es de día del todo,\ny sin embargo hay un bosque. Algo lo alimenta.\n\nTu cápsula quedó al norte. Empezá por ahí.' },
+caps: [
+  { n: 'CAPÍTULO 1', t: 'LA CÁPSULA', obj: 'capsula', objT: 'Volvé a tu cápsula de escape',
+    dT: 'El inventario', d: 'El casco aguantó. Raciones, sellador, tu cuaderno.\nY la última lectura del orbitador, impresa antes\nde caer:\n\n«Fuente térmica anómala, 2 km SE. Biomasa\nconcentrada alrededor de UN SOLO organismo.»\n\nUn solo organismo. Un árbol.' },
+  { n: 'CAPÍTULO 2', t: 'LA MADRE', obj: 'madre', objT: 'Encontrá al gran árbol',
+    dT: 'El árbol', d: 'Es enorme y está APAGADO.\nTodo el bosque brilla menos él.\n\nEn la corteza hay surcos que bajan hacia el lago,\ncomo venas vacías. El musgo se enciende bajo tus\nbotas y se apaga detrás, como si el bosque\nte estuviera leyendo.' },
+  { n: 'CAPÍTULO 3', t: 'EL LAGO DE LUZ', obj: 'orilla', objT: 'Bajá a la orilla del lago',
+    dT: 'La semilla', d: 'El lago ES la fuente térmica: brilla desde abajo,\ncomo un cielo dado vuelta.\n\nSobre un pedestal de roca, junto a la raíz grande,\nhay una vaina que late. Una semilla de luz.\n\nLas esporas ya salieron. Van todas hacia el este.' },
+  { n: 'CAPÍTULO 4', t: 'LAS ESPORAS', obj: 'anillo', objT: 'Seguí las esporas hasta el anillo',
+    dT: 'El anillo', d: 'Ocho monolitos con runas encendidas, en círculo.\nNo los construyó nadie que camine en dos patas:\nlas raíces los LEVANTARON, como quien alza\nuna antena.\n\nEl altar del centro tiene la forma exacta\nde la semilla.' },
+  { n: 'CAPÍTULO 5', t: 'LA SIEMBRA', obj: 'anillo', objT: 'Plantá la semilla en el altar', usar: true,
+    dT: 'La respuesta', d: 'La semilla encaja y el anillo respira.\nLa luz corre por las runas, baja por las raíces,\ncruza el valle entero hasta la Madre—\n\n—y la Madre SE ENCIENDE, rama por rama,\ncomo una ciudad que vuelve de un apagón.\n\nEl bosque entero te mira. Ahora sí.' },
+  { n: 'CAPÍTULO 6', t: 'EL AMANECER AJENO', obj: 'capsula', objT: 'Volvé a la cápsula',
+    dT: 'FIN', d: 'La baliza de rescate parpadea: la Ceniza te\nencontró. Podés irte mañana.\n\nMirás el bosque encendido, el lago, las dos lunas.\nEn el cuaderno anotás una sola línea:\n\n«Solicito extender la misión. Esto recién empieza.»\n\nEXO — fin de la historia.' }
+] },
+en: { ui: { sub: 'the glowing forest · a planet that breathes slowly',
+  empezar: 'START THE STORY', otra: 'PLAY AGAIN', denuevo: 'START OVER',
+  seguir: 'CONTINUE', correr: 'RUN', menu: 'MENU', usar: '◉ USE', dlgGo: 'CONTINUE ▸',
+  idioma: 'LANGUAGE', graficos: 'GRAPHICS', g_b: 'LOW', g_m: 'MEDIUM', g_a: 'HIGH',
+  completa: (m2, mn) => 'STORY COMPLETE · ' + m2 + ' m walked · ' + mn + ' min',
+  introT: 'The fall',
+  intro: 'The capsule came in sideways and the sky was violet.\nThat is the last thing you wrote before impact.\n\nYou are NARA, xenobotanist of the Cinder expedition.\nThe planet is called Umbra: it is never quite day,\nand yet there is a forest. Something feeds it.\n\nYour capsule is up north. Start there.' },
+caps: [
+  { n: 'CHAPTER 1', t: 'THE CAPSULE', obj: 'capsula', objT: 'Return to your escape capsule',
+    dT: 'The inventory', d: 'The hull held. Rations, sealant, your notebook.\nAnd the orbiter’s last reading, printed before\nthe fall:\n\n“Anomalous heat source, 2 km SE. Biomass\nconcentrated around a SINGLE organism.”\n\nA single organism. A tree.' },
+  { n: 'CHAPTER 2', t: 'THE MOTHER', obj: 'madre', objT: 'Find the great tree',
+    dT: 'The tree', d: 'It is enormous, and it is DARK.\nThe whole forest glows except for it.\n\nThe bark has grooves running down toward the lake,\nlike empty veins. The moss lights up under your\nboots and fades behind you, as if the forest\nwere reading you.' },
+  { n: 'CHAPTER 3', t: 'THE LAKE OF LIGHT', obj: 'orilla', objT: 'Go down to the lakeshore',
+    dT: 'The seed', d: 'The lake IS the heat source: it glows from below,\nlike a sky turned upside down.\n\nOn a rock pedestal, by the great root, there is\na pod with a pulse. A seed of light.\n\nThe spores are already out. All drifting east.' },
+  { n: 'CHAPTER 4', t: 'THE SPORES', obj: 'anillo', objT: 'Follow the spores to the ring',
+    dT: 'The ring', d: 'Eight monoliths with lit runes, in a circle.\nNothing that walks on two legs built them:\nthe roots RAISED them, the way one raises\nan antenna.\n\nThe altar at the center has the exact shape\nof the seed.' },
+  { n: 'CHAPTER 5', t: 'THE SOWING', obj: 'anillo', objT: 'Plant the seed on the altar', usar: true,
+    dT: 'The answer', d: 'The seed fits, and the ring breathes.\nLight runs along the runes, down the roots,\nacross the whole valley to the Mother—\n\n—and the Mother LIGHTS UP, branch by branch,\nlike a city coming back from a blackout.\n\nThe whole forest is looking at you now.' },
+  { n: 'CHAPTER 6', t: 'A FOREIGN DAWN', obj: 'capsula', objT: 'Return to the capsule',
+    dT: 'THE END', d: 'The rescue beacon blinks: the Cinder found you.\nYou can leave tomorrow.\n\nYou look at the lit forest, the lake, the two moons.\nIn the notebook you write a single line:\n\n“Requesting mission extension. This is just beginning.”\n\nEXO — end of the story.' }
+] },
+pt: { ui: { sub: 'a floresta que brilha · um planeta que respira devagar',
+  empezar: 'COMEÇAR A HISTÓRIA', otra: 'JOGAR DE NOVO', denuevo: 'RECOMEÇAR',
+  seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENU', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
+  idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAIXOS', g_m: 'MÉDIOS', g_a: 'ALTOS',
+  completa: (m2, mn) => 'HISTÓRIA COMPLETA · ' + m2 + ' m caminhados · ' + mn + ' min',
+  introT: 'A queda',
+  intro: 'A cápsula entrou de lado e o céu era violeta.\nFoi a última coisa que você anotou antes do impacto.\n\nVocê é NARA, xenobotânica da expedição Cinza.\nO planeta se chama Umbra: nunca é dia de verdade,\ne mesmo assim há uma floresta. Algo a alimenta.\n\nSua cápsula ficou ao norte. Comece por lá.' },
+caps: [
+  { n: 'CAPÍTULO 1', t: 'A CÁPSULA', obj: 'capsula', objT: 'Volte à sua cápsula de escape',
+    dT: 'O inventário', d: 'O casco aguentou. Rações, selante, seu caderno.\nE a última leitura do orbitador, impressa antes\nda queda:\n\n«Fonte térmica anômala, 2 km SE. Biomassa\nconcentrada ao redor de UM ÚNICO organismo.»\n\nUm único organismo. Uma árvore.' },
+  { n: 'CAPÍTULO 2', t: 'A MÃE', obj: 'madre', objT: 'Encontre a grande árvore',
+    dT: 'A árvore', d: 'É enorme e está APAGADA.\nA floresta inteira brilha, menos ela.\n\nNa casca há sulcos que descem até o lago,\ncomo veias vazias. O musgo acende sob suas\nbotas e apaga atrás, como se a floresta\nestivesse lendo você.' },
+  { n: 'CAPÍTULO 3', t: 'O LAGO DE LUZ', obj: 'orilla', objT: 'Desça à margem do lago',
+    dT: 'A semente', d: 'O lago É a fonte térmica: brilha de baixo,\ncomo um céu virado ao contrário.\n\nSobre um pedestal de rocha, junto à raiz grande,\nhá uma vagem que pulsa. Uma semente de luz.\n\nOs esporos já saíram. Vão todos para o leste.' },
+  { n: 'CAPÍTULO 4', t: 'OS ESPOROS', obj: 'anillo', objT: 'Siga os esporos até o anel',
+    dT: 'O anel', d: 'Oito monólitos com runas acesas, em círculo.\nNinguém que anda em duas pernas os construiu:\nas raízes os ERGUERAM, como quem levanta\numa antena.\n\nO altar do centro tem a forma exata\nda semente.' },
+  { n: 'CAPÍTULO 5', t: 'A SEMEADURA', obj: 'anillo', objT: 'Plante a semente no altar', usar: true,
+    dT: 'A resposta', d: 'A semente encaixa e o anel respira.\nA luz corre pelas runas, desce pelas raízes,\ncruza o vale inteiro até a Mãe—\n\n—e a Mãe SE ACENDE, galho por galho,\ncomo uma cidade voltando de um apagão.\n\nA floresta inteira olha para você. Agora sim.' },
+  { n: 'CAPÍTULO 6', t: 'UM AMANHECER ALHEIO', obj: 'capsula', objT: 'Volte à cápsula',
+    dT: 'FIM', d: 'O sinal de resgate pisca: a Cinza achou você.\nPode partir amanhã.\n\nVocê olha a floresta acesa, o lago, as duas luas.\nNo caderno, anota uma única linha:\n\n«Solicito estender a missão. Isto está só começando.»\n\nEXO — fim da história.' }
+] } };
+let LANG = 'es';
+try { LANG = localStorage.getItem('exo_lang') || 'es'; } catch(e){}
+if (!L[LANG]) LANG = 'es';
+let CAPS = L[LANG].caps;
+const Tx = k => L[LANG].ui[k];
+/* luz por capítulo: dirección/intensidad del sol, cielo, niebla, hemisferio y
+   EXPOSICIÓN del tone mapping (la cámara "abre" en el atardecer, "cierra" de
+   noche: el mismo truco de exposición que usan los juegos grandes) */
+const LUZCAP = [
+  { sol: [.5, .42, .3],  solI: 1.3, bg: 1.0, fog: '#2e2248', fogFar: 380, hemiI: .85, exp: 1.14 },
+  { sol: [.2, .55, .2],  solI: 1.5, bg: 1.05,fog: '#342a52', fogFar: 400, hemiI: .92, exp: 1.16 },
+  { sol: [-.6, .25, .2], solI: 1.1, bg: .85, fog: '#3c2a58', fogFar: 340, hemiI: .78, exp: 1.2 },
+  { sol: [-.8, .12, .1], solI: .65, bg: .55, fog: '#2c1e44', fogFar: 300, hemiI: .62, exp: 1.14 },
+  { sol: [-.4, .05, -.3],solI: .32, bg: .35, fog: '#1a1030', fogFar: 260, hemiI: .52, exp: 1.06 },
+  { sol: [.6, .4, .35],  solI: 1.25,bg: .95, fog: '#362a52', fogFar: 380, hemiI: .85, exp: 1.16 }
+];
+let cap = 0, enDlg = false, fase = 'menu';
+let luzDe = LUZCAP[0], luzA = LUZCAP[0], luzK = 1;
+function guardar(){ try { localStorage.setItem('exo1', JSON.stringify({ cap, t: stats.t, dist: stats.dist })); } catch(e){} }
+function cargar(){ try { return JSON.parse(localStorage.getItem('exo1') || 'null'); } catch(e){ return null; } }
+function ponCap(n, silencio){
+  cap = cl(n, 0, CAPS.length - 1);
+  const C = CAPS[cap];
+  $('objT').textContent = C.objT;
+  luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;
+  luci.visible = cap === 3 || cap === 4;
+  if (!silencio){
+    $('capN').textContent = C.n;
+    $('capT').textContent = C.t;
+    $('capCard').classList.add('on');
+    clearTimeout(ponCap._t);
+    ponCap._t = setTimeout(() => $('capCard').classList.remove('on'), 3400);
+  }
+  guardar();
+}
+function mezclaLuz(){
+  /* estado ACTUAL de la luz (para arrancar la transición desde donde está) */
+  return { sol: [SOLD.x, SOLD.y, SOLD.z],
+    solI: sol.intensity, bg: scene.backgroundIntensity,
+    fog: '#' + scene.fog.color.getHexString(), fogFar: scene.fog.far,
+    hemiI: hemi.intensity, exp: ren.toneMappingExposure };
+}
+function pasoLuz(dt){
+  if (luzK >= 1) return;
+  luzK = Math.min(1, luzK + dt / 7);           /* la transición dura ~7 s */
+  const k = luzK * luzK * (3 - 2 * luzK);
+  const A2 = luzDe, B2 = luzA;
+  /* la DIRECCIÓN del sol se mezcla acá; su POSICIÓN la pone el bucle cada
+     cuadro, pegada al jugador, para que la caja de sombra lo siga */
+  SOLD.set(A2.sol[0] + (B2.sol[0] - A2.sol[0]) * k,
+           A2.sol[1] + (B2.sol[1] - A2.sol[1]) * k,
+           A2.sol[2] + (B2.sol[2] - A2.sol[2]) * k).normalize();
+  sol.intensity = A2.solI + (B2.solI - A2.solI) * k;
+  hemi.intensity = A2.hemiI + (B2.hemiI - A2.hemiI) * k;
+  scene.backgroundIntensity = A2.bg + (B2.bg - A2.bg) * k;
+  scene.fog.color.set(A2.fog).lerp(new T.Color(B2.fog), k);
+  scene.fog.far = (A2.fogFar + (B2.fogFar - A2.fogFar) * k) * GFXQ[GFX].fogK;
+  const eA = A2.exp != null ? A2.exp : 1.12, eB = B2.exp != null ? B2.exp : 1.12;
+  ren.toneMappingExposure = eA + (eB - eA) * k;
+  /* la ventana de la cabaña se enciende sola cuando oscurece, y VUELCA luz */
+  if (ventanaMat){
+    const osc = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+    ventanaMat.color.setRGB(.16 + .3 * osc, .3 + .68 * osc, .27 + .6 * osc);
+    focoCasa.intensity = osc * osc * 60;
+  }
+}
+function dialogo(titulo, cuerpo, alCerrar){
+  enDlg = true;
+  $('dlgT').textContent = titulo;
+  $('dlgB').textContent = cuerpo;
+  $('dlg').classList.add('on');
+  $('dlgGo').onclick = () => {
+    $('dlg').classList.remove('on');
+    enDlg = false;
+    if (alCerrar) alCerrar();
+  };
+}
+function llegaObjetivo(){
+  const C = CAPS[cap];
+  dialogo(C.dT, C.d, () => {
+    if (cap >= CAPS.length - 1){ finDeHistoria(); return; }
+    ponCap(cap + 1);
+  });
+}
+function finDeHistoria(){
+  fase = 'fin';
+  guardarFin();
+  $('menu').style.display = 'flex';
+  $('hud').classList.remove('on');
+  $('mCap').textContent = Tx('completa')(Math.round(stats.dist), Math.round(stats.t / 60));
+  $('mJugar').textContent = Tx('otra');
+  $('mSeguir').style.display = 'none';
+}
+function guardarFin(){ try { localStorage.removeItem('exo1'); } catch(e){} }
+
+/* ========================= AMBIENTE SONORO ================================
+   SINTETIZADO con WebAudio. Cuatro voces de Umbra:
+     · VIENTO bajo entre la flora (ruido rosa, pasabajos)
+     · el CORO del lago: dos senos desafinados batiendo — sube al acercarse
+       al agua que brilla (fuente POSICIONAL)
+     · ULULATOS: llamadas lejanas de algo que nadie vio, glissando abajo
+     · CHIRRIDO nocturno: un enjambre agudo que despierta con la oscuridad
+   ========================================================================== */
+const AMB = { ctx: null, master: null, on: true, viento: null, pos: null,
+  noche: null, tBlip: 7 };
+try { AMB.on = localStorage.getItem('exo_son') !== '0'; } catch(e){}
+function ambienteOn(){
+  if (AMB.ctx){ if (AMB.ctx.state === 'suspended') AMB.ctx.resume(); return; }
+  try { AMB.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return; }
+  const A2 = AMB.ctx;
+  AMB.master = A2.createGain();
+  AMB.master.gain.value = AMB.on ? 1 : 0;
+  AMB.master.connect(A2.destination);
+  const buf = A2.createBuffer(1, A2.sampleRate * 3, A2.sampleRate);
+  const d = buf.getChannelData(0); let l = 0;
+  for (let i = 0; i < d.length; i++){ const w = Math.random() * 2 - 1;
+    l = l * .97 + w * .03; d[i] = l * 3.0; }
+  const nv = A2.createBufferSource(); nv.buffer = buf; nv.loop = true;
+  const fv = A2.createBiquadFilter(); fv.type = 'lowpass'; fv.frequency.value = 320;
+  AMB.viento = A2.createGain(); AMB.viento.gain.value = .06;
+  nv.connect(fv); fv.connect(AMB.viento); AMB.viento.connect(AMB.master); nv.start();
+  /* el coro del lago: senos desafinados que baten despacio */
+  const o1 = A2.createOscillator(); o1.frequency.value = 110;
+  const o2 = A2.createOscillator(); o2.frequency.value = 110.7;
+  const o3 = A2.createOscillator(); o3.frequency.value = 220.4;
+  const g3 = A2.createGain(); g3.gain.value = .3;
+  AMB.pos = A2.createGain(); AMB.pos.gain.value = 0;
+  o1.connect(AMB.pos); o2.connect(AMB.pos); o3.connect(g3); g3.connect(AMB.pos);
+  AMB.pos.connect(AMB.master); o1.start(); o2.start(); o3.start();
+  /* chirrido nocturno: enjambre por pasabanda agudo */
+  const ne = A2.createBufferSource(); ne.buffer = buf; ne.loop = true;
+  ne.playbackRate.value = 2.6;
+  const fe = A2.createBiquadFilter(); fe.type = 'bandpass';
+  fe.frequency.value = 3600; fe.Q.value = 3.5;
+  AMB.noche = A2.createGain(); AMB.noche.gain.value = 0;
+  ne.connect(fe); fe.connect(AMB.noche); AMB.noche.connect(AMB.master); ne.start();
+}
+/* el ululato: una llamada que cae en glissando, lejos */
+function ululato(){
+  const A2 = AMB.ctx; if (!A2) return;
+  const o = A2.createOscillator(), g = A2.createGain();
+  const t = A2.currentTime;
+  const f0 = 380 + Math.random() * 260;
+  o.type = 'sine';
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(f0 * .45, t + 1.4);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(.025, t + .25);
+  g.gain.exponentialRampToValueAtTime(.0001, t + 1.6);
+  o.connect(g); g.connect(AMB.master); o.start(t); o.stop(t + 1.7);
+}
+function ambTick(dt){
+  if (!AMB.ctx || fase !== 'juego') return;
+  AMB.viento.gain.value = .045 + .045 * Math.abs(Math.sin(t0 * .07));
+  /* el coro vive sobre el agua que brilla */
+  const dl = Math.hypot(px - POI.lagoluz.x, pz - POI.lagoluz.z);
+  AMB.pos.gain.value = cl(1 - dl / 190, 0, 1) * .16 *
+    (0.7 + .3 * Math.sin(t0 * .8));
+  const osc = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+  AMB.noche.gain.value = osc > .5 ? (osc - .5) * .1 : 0;
+  AMB.tBlip -= dt;
+  if (AMB.tBlip <= 0){ AMB.tBlip = 9 + Math.random() * 14; ululato(); }
+}
+$('bSon').addEventListener('pointerdown', e => {
+  e.preventDefault();
+  AMB.on = !AMB.on;
+  try { localStorage.setItem('exo_son', AMB.on ? '1' : '0'); } catch(e2){}
+  if (AMB.master) AMB.master.gain.value = AMB.on ? 1 : 0;
+  $('bSon').textContent = AMB.on ? '🔊' : '🔇';
+});
+$('bSon').textContent = AMB.on ? '🔊' : '🔇';
+
+/* ================================ JUGADOR ================================== */
+const stats = { t: 0, dist: 0 };
+let px = POI.inicio.x, pz = POI.inicio.z, yaw = 0, pitch = -.03;
+let pvx = 0, pvz = 0, bobF = 0, corre = false;
+const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
+const DED = { mov: null, mira: null };
+let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
+function fisica(dt){
+  yaw -= keyL.x * 2.2 * dt;
+  pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+  let mx = movV.x + keyV.x, my = movV.y + keyV.y;
+  const m = Math.hypot(mx, my);
+  if (m > 1){ mx /= m; my /= m; }
+  const sp = corre ? VEL_CORRE : VEL;
+  const sy = Math.sin(yaw), cy = Math.cos(yaw);
+  pvx = (-sy * -my + cy * mx) * sp;
+  pvz = (-cy * -my - sy * mx) * sp;
+  let nx = cl(px + pvx * dt, -MITAD + 6, MITAD - 6);
+  let nz = cl(pz + pvz * dt, -MITAD + 6, MITAD - 6);
+  /* ni por el agua ni a través de los troncos */
+  if (enAgua(nx, nz)){ nx = px; nz = pz; }
+  for (const a of ARB){
+    const dx = nx - a[0], dz = nz - a[1], d = Math.hypot(dx, dz), rq = a[2] + .5;
+    if (d < rq && d > 1e-4){ nx = a[0] + dx / d * rq; nz = a[1] + dz / d * rq; }
+  }
+  stats.dist += Math.hypot(nx - px, nz - pz);
+  px = nx; pz = nz;
+  bobF += dt * (2 + 8 * Math.min(1, Math.hypot(pvx, pvz) / VEL));
+  stats.t += dt;
+}
+function ponCam(){
+  const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
+  cam.position.set(px, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, pz);
+  cam.rotation.y = yaw;
+  cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
+  cam.fov = 72 + (corre ? 5 : 0);
+  cam.updateProjectionMatrix();
+}
+
+/* -------- objetivo: marcador 3D + distancia + botón USAR ------------------- */
+function pasoObjetivo(){
+  const C = CAPS[cap];
+  const p = POI[C.obj];
+  const d = Math.hypot(px - p.x, pz - p.z);
+  $('objD').textContent = Math.round(d) + ' m';
+  marca3d.position.set(p.x, H(p.x, p.z) + 6.5 + Math.sin(t0 * 2) * .5, p.z);
+  marca3d.rotation.y = t0 * 1.4;
+  marca3d.visible = !enDlg;
+  const cerca = d < (C.usar ? 7 : 10);
+  if (C.usar){
+    $('bUsar').classList.toggle('on', cerca && !enDlg);
+    if (window.__autoUsar && cerca && !enDlg) llegaObjetivo();
+  } else if (cerca && !enDlg){
+    llegaObjetivo();
+  }
+}
+$('bUsar').addEventListener('pointerdown', e => { e.preventDefault();
+  if (!enDlg && $('bUsar').classList.contains('on')) llegaObjetivo(); });
+$('bCorre').addEventListener('pointerdown', e => { e.preventDefault();
+  corre = !corre; $('bCorre').classList.toggle('on', corre); });
+$('bMenu').addEventListener('pointerdown', e => { e.preventDefault();
+  fase = 'menu'; $('menu').style.display = 'flex'; $('hud').classList.remove('on');
+  $('mJugar').textContent = Tx('denuevo');
+  const sv = cargar();
+  if (sv && sv.cap > 0){ $('mSeguir').style.display = 'block';
+    $('mCap').textContent = CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t; }
+});
+
+/* -------------------------- entrada táctil / teclado ----------------------- */
+const cv = $('gl');
+cv.addEventListener('pointerdown', e => {
+  if (fase !== 'juego' || enDlg) return;
+  const x = e.clientX, y = e.clientY;
+  if (x < innerWidth * .5 && !DED.mov) DED.mov = { id: e.pointerId, x0: x, y0: y };
+  else if (!DED.mira) DED.mira = { id: e.pointerId, x, y };
+});
+cv.addEventListener('pointermove', e => {
+  if (DED.mov && DED.mov.id === e.pointerId){
+    const R = Math.max(34, innerHeight * .12);
+    const dx = e.clientX - DED.mov.x0, dy = e.clientY - DED.mov.y0;
+    const d = Math.hypot(dx, dy), k = d > R ? R / d : 1;
+    movV.x = dx * k / R; movV.y = dy * k / R;
+  } else if (DED.mira && DED.mira.id === e.pointerId){
+    yaw -= (e.clientX - DED.mira.x) * .005;
+    pitch = cl(pitch - (e.clientY - DED.mira.y) * .005, -1.2, 1.2);
+    DED.mira.x = e.clientX; DED.mira.y = e.clientY;
+  }
+});
+const sueltaDedo = e => {
+  if (DED.mov && DED.mov.id === e.pointerId){ DED.mov = null; movV.x = movV.y = 0; }
+  if (DED.mira && DED.mira.id === e.pointerId) DED.mira = null;
+};
+cv.addEventListener('pointerup', sueltaDedo);
+cv.addEventListener('pointercancel', sueltaDedo);
+addEventListener('keydown', e => {
+  const c = e.code;
+  if (c === 'KeyW') keyV.y = -1; if (c === 'KeyS') keyV.y = 1;
+  if (c === 'KeyA') keyV.x = -1; if (c === 'KeyD') keyV.x = 1;
+  if (c === 'ArrowLeft') keyL.x = -1; if (c === 'ArrowRight') keyL.x = 1;
+  if (c === 'ArrowUp') keyL.y = -1; if (c === 'ArrowDown') keyL.y = 1;
+  if (c === 'ShiftLeft') { corre = true; $('bCorre').classList.add('on'); }
+  if (c === 'KeyE' && $('bUsar').classList.contains('on') && !enDlg) llegaObjetivo();
+  if (c === 'Enter' && enDlg) $('dlgGo').onclick();
+});
+addEventListener('keyup', e => {
+  const c = e.code;
+  if (c === 'KeyW' || c === 'KeyS') keyV.y = 0;
+  if (c === 'KeyA' || c === 'KeyD') keyV.x = 0;
+  if (c === 'ArrowLeft' || c === 'ArrowRight') keyL.x = 0;
+  if (c === 'ArrowUp' || c === 'ArrowDown') keyL.y = 0;
+  if (c === 'ShiftLeft') { corre = false; $('bCorre').classList.remove('on'); }
+});
+
+/* ------------------------ resolución adaptativa ---------------------------- */
+/* som = lado del mapa de sombra (0 = sin sombras, para la gama baja) */
+const GFXQ = { b: { dpr: .7, fogK: .78, som: 0 },
+               m: { dpr: 1.15, fogK: 1, som: 1024 },
+               a: { dpr: 2, fogK: 1.25, som: 2048 } };
+let SOMBRAS = true;
+const FOCO = { x: 0, z: 0 };
+let GFX = 'm';
+try { GFX = localStorage.getItem('exo_gfx') || 'm'; } catch(e){}
+if (!GFXQ[GFX]) GFX = 'm';
+let rs = 1, rsVotos = 0, tRS = 0, fps = 60;
+function aplicaRS(){
+  const dpr = Math.min(window.devicePixelRatio || 1, GFXQ[GFX].dpr);
+  ren.setPixelRatio(dpr * rs);
+  ren.setSize(innerWidth, innerHeight, false);
+  cam.aspect = innerWidth / innerHeight;
+  cam.updateProjectionMatrix();
+}
+addEventListener('resize', aplicaRS);
+aplicaRS();
+function rsTick(dt){
+  tRS += dt;
+  if (tRS < .8) return;
+  tRS = 0;
+  const quiere = fps < 34 ? -1 : (fps > 55 ? 1 : 0);
+  if (quiere === 0 || (rsVotos !== 0 && Math.sign(rsVotos) !== quiere)){ rsVotos = 0; return; }
+  rsVotos += quiere;
+  if (Math.abs(rsVotos) < 2) return;
+  rsVotos = 0;
+  if (quiere < 0 && rs > .5){ rs = Math.max(.5, rs - .1); aplicaRS(); }
+  else if (quiere > 0 && rs < 1){ rs = Math.min(1, rs + .08); aplicaRS(); }
+}
+
+/* ================================ BUCLE ==================================== */
+let t0 = 0, tPrev = performance.now(), msAcum = 0, nCuadros = 0;
+function bucle(t){
+  requestAnimationFrame(bucle);
+  const dt = Math.min(.05, (t - tPrev) / 1000) || .016;
+  tPrev = t; t0 += dt;
+  msAcum += dt; nCuadros++;
+  if (msAcum > .5){ fps = fps * .3 + (nCuadros / msAcum) * .7; msAcum = 0; nCuadros = 0;
+    $('fps').textContent = fps.toFixed(0) + ' fps · ' + (rs * 100 | 0) + '% · ' +
+      ren.info.render.calls + ' dib · ' + (ren.info.render.triangles / 1000).toFixed(0) + 'k tri'; }
+  if (fase !== 'juego'){
+    /* MENÚ: el valle se ve DETRÁS, con una cámara que orbita despacio entre la
+       cabaña y el lago (el pedido: que el fondo del menú sea el mapa) */
+    const cx2 = (POI.capsula.x + POI.lagoluz.x) / 2, cz2 = (POI.capsula.z + POI.lagoluz.z) / 2;
+    const a = t0 * .045;
+    cam.position.set(cx2 + Math.cos(a) * 240, 64 + Math.sin(t0 * .1) * 10,
+                     cz2 + Math.sin(a) * 240);
+    cam.lookAt(cx2, 0, cz2);
+    cam.fov = 62; cam.updateProjectionMatrix();
+    pasoLuz(dt);
+    FOCO.x = cx2; FOCO.z = cz2;
+  } else { FOCO.x = px; FOCO.z = pz; }
+  /* el sol (y su caja de sombra) viajan con el foco de la cámara; con el sol
+     casi acostado la sombra direccional se apaga (rayos horizontales barren
+     el mapa entero y el resultado es puro artefacto, no una sombra) */
+  sol.target.position.set(FOCO.x, 0, FOCO.z);
+  sol.position.set(FOCO.x + SOLD.x * 420, SOLD.y * 420, FOCO.z + SOLD.z * 420);
+  sol.castShadow = SOMBRAS && SOLD.y > .12;
+  glare.position.set(cam.position.x + SOLD.x * 950, cam.position.y + SOLD.y * 950,
+                     cam.position.z + SOLD.z * 950);
+  glare.material.opacity = cl((sol.intensity - .6) / 1.6, 0, 1);
+  if (fase === 'juego'){
+    if (!enDlg) fisica(dt);
+    pasoLuz(dt);
+    pasoObjetivo();
+    rsTick(dt);
+    ambTick(dt);
+    /* luciérnagas ondulando */
+    if (luci.visible){
+      const P = luci.geometry.attributes.position;
+      for (let i = 0; i < P.count; i++){
+        P.array[i*3+1] = luci0[i*3+1] + Math.sin(t0 * .9 + i * 1.7) * .5;
+      }
+      P.needsUpdate = true;
+    }
+  }
+  VIENTO.value = t0;
+  AGUAU.value = t0;
+  /* las lunas pegadas al cielo de la cámara; hongos, runas y semilla LATEN */
+  for (const lu of LUNAS){
+    lu.position.set(cam.position.x + lu.userData.dir.x * 900,
+      cam.position.y + lu.userData.dir.y * 900,
+      cam.position.z + lu.userData.dir.z * 900);
+  }
+  if (window.__HONGO_MAT)
+    window.__HONGO_MAT.emissiveIntensity = .75 + .35 * Math.sin(t0 * 1.3);
+  if (runaMat) runaMat.opacity = .55 + .45 * (.5 + .5 * Math.sin(t0 * 1.7));
+  if (semillaMat) semillaMat.emissiveIntensity = .6 + .4 * Math.sin(t0 * 2.4);
+  if (fase === 'juego') ponCam();
+  ren.render(scene, cam);
+}
+requestAnimationFrame(bucle);
+
+/* ================================ MENÚ ===================================== */
+function entrar(desde){
+  fase = 'juego';
+  ambienteOn();
+  $('menu').style.display = 'none';
+  $('hud').classList.add('on');
+  try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch (e) {}
+  try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
+  if (desde === 0){
+    px = POI.inicio.x; pz = POI.inicio.z; yaw = 0; pitch = -.03;   /* mirando al valle, no al borde */
+    stats.t = 0; stats.dist = 0;
+    ponCap(0);
+    dialogo(Tx('introT'), Tx('intro'), null);
+  } else {
+    const sv = cargar();
+    const c2 = sv ? sv.cap : 0;
+    if (sv){ stats.t = sv.t || 0; stats.dist = sv.dist || 0; }
+    const p = POI[CAPS[c2].obj === 'capsula' && c2 === 0 ? 'inicio' : CAPS[Math.max(0, c2 - 1)].obj];
+    px = p.x + 8; pz = p.z + 8;
+    ponCap(c2, true);
+  }
+}
+/* ---------- idioma ---------- */
+function aplicaIdioma(){
+  CAPS = L[LANG].caps;
+  document.querySelector('#menu .sub').textContent = Tx('sub');
+  if (!/OTRA|AGAIN|DE NOVO|DE NUEVO|OVER|RECOME/.test($('mJugar').textContent))
+    $('mJugar').textContent = Tx('empezar');
+  $('mSeguir').textContent = Tx('seguir');
+  $('tLang').textContent = Tx('idioma');
+  $('tGfx').textContent = Tx('graficos');
+  const g = { b: 'g_b', m: 'g_m', a: 'g_a' };
+  document.querySelectorAll('#fGfx .chip').forEach(ch => ch.textContent = Tx(g[ch.dataset.g]));
+  $('bCorre').textContent = Tx('correr');
+  $('bMenu').textContent = Tx('menu');
+  $('bUsar').textContent = Tx('usar');
+  $('dlgGo').textContent = Tx('dlgGo');
+  document.querySelectorAll('#fLang .chip').forEach(ch =>
+    ch.classList.toggle('on', ch.dataset.l === LANG));
+  if (fase === 'juego') ponCap(cap, true);
+  const sv = cargar();
+  if (sv && sv.cap > 0 && fase === 'menu')
+    $('mCap').textContent = CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t;
+}
+function setLang(l){
+  if (!L[l]) return;
+  LANG = l;
+  try { localStorage.setItem('exo_lang', l); } catch(e){}
+  aplicaIdioma();
+}
+document.querySelectorAll('#fLang .chip').forEach(ch =>
+  ch.addEventListener('pointerdown', e => { e.preventDefault(); setLang(ch.dataset.l); }));
+
+/* ---------- calidad gráfica: tope de resolución y alcance de la niebla ------ */
+function setGfx(g){
+  if (!GFXQ[g]) return;
+  GFX = g;
+  try { localStorage.setItem('exo_gfx', g); } catch(e){}
+  document.querySelectorAll('#fGfx .chip').forEach(ch =>
+    ch.classList.toggle('on', ch.dataset.g === GFX));
+  rs = 1; aplicaRS();
+  /* sombras por calidad: apagadas en BAJOS, 1k en MEDIOS, 2k en ALTOS.
+     Cambiar el tamaño exige tirar el mapa viejo para que three lo recree. */
+  const s = GFXQ[g].som;
+  SOMBRAS = s > 0;
+  if (s > 0 && sol.shadow.mapSize.x !== s){
+    sol.shadow.mapSize.set(s, s);
+    if (sol.shadow.map){ sol.shadow.map.dispose(); sol.shadow.map = null; }
+  }
+  luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;   /* re-apunta la niebla */
+}
+document.querySelectorAll('#fGfx .chip').forEach(ch =>
+  ch.addEventListener('pointerdown', e => { e.preventDefault(); setGfx(ch.dataset.g); }));
+
+{
+  const sv = cargar();
+  if (sv && sv.cap > 0){
+    $('mSeguir').style.display = 'block';
+    $('mCap').textContent = sv ? (CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t) : '';
+  }
+}
+aplicaIdioma();
+setGfx(GFX);
+$('mJugar').onclick = () => entrar(0);
+$('mSeguir').onclick = () => entrar(1);
+$('cargando').style.display = 'none';
+
+/* =========================== GANCHOS DE PRUEBA ============================= */
+window.__S = {
+  T, scene, ren, cam, POI, CAPS, H, AGUA_Y,
+  get(){ return { fase, cap, enDlg, px: +px.toFixed(1), pz: +pz.toFixed(1),
+    yaw: +yaw.toFixed(2), fps: +fps.toFixed(1), rs,
+    dib: ren.info.render.calls, tri: ren.info.render.triangles,
+    dist: Math.round(stats.dist), obj: CAPS[cap].obj,
+    dObj: Math.round(Math.hypot(px - POI[CAPS[cap].obj].x, pz - POI[CAPS[cap].obj].z)),
+    solY: +sol.position.y.toFixed(0), bg: +scene.backgroundIntensity.toFixed(2),
+    luci: luci.visible, usar: $('bUsar').classList.contains('on'),
+    save: (() => { try { return JSON.parse(localStorage.getItem('exo1') || 'null'); } catch(e){ return null; } })() };
+  },
+  entrar, tp(x, z){ px = x; pz = z; },
+  aguaT(){ return AGUAU.value; }, vientoT(){ return VIENTO.value; },
+  lang(){ return LANG; }, setLang, gfx(){ return GFX; }, setGfx,
+  amb(){ return AMB.ctx ? { estado: AMB.ctx.state, master: AMB.master.gain.value,
+    viento: +AMB.viento.gain.value.toFixed(3), pos: +AMB.pos.gain.value.toFixed(3),
+    noche: +AMB.noche.gain.value.toFixed(3) } : null; },
+  pr(){ return ren.getPixelRatio(); },
+  sombras(){ return { on: SOMBRAS, sol: sol.castShadow, mapa: sol.shadow.mapSize.x,
+    tipo: ren.shadowMap.type, tone: ren.toneMapping, exp: +ren.toneMappingExposure.toFixed(2),
+    terr: terrChunks[0].receiveShadow, solY: +SOLD.y.toFixed(2),
+    foco: +focoCasa.intensity.toFixed(1) }; },
+  sendaPts(){ return SENDA_PTS; }, arboles(){ return ARB; },
+  partes(){ return window.__PARTES || 0; },
+  flora(){ return window.__FLORA || 0; },
+  mira(y, p){ yaw = y; if (p != null) pitch = p; },
+  dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
+  usar(){ if ($('bUsar').classList.contains('on') && !enDlg) llegaObjetivo(); },
+  cap(n){ ponCap(n, true); },
+  corre(v){ corre = !!v; },
+  luzYa(){ luzK = .999; pasoLuz(1); },
+  pix(){
+    ren.render(scene, cam);
+    const gl = ren.getContext();
+    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    const b = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b);
+    const at = (fx, fy) => { const x = Math.floor(fx*(w-1)), y = Math.floor((1-fy)*(h-1));
+      const i = (y*w + x)*4; return [b[i], b[i+1], b[i+2]]; };
+    const set = new Set(); let neg = 0, n = 0;
+    for (let i = 0; i < b.length; i += 4*41){
+      set.add((b[i]>>4)+','+(b[i+1]>>4)+','+(b[i+2]>>4));
+      if (b[i]+b[i+1]+b[i+2] < 14) neg++;
+      n++;
+    }
+    return { w, h, colores: set.size, negro: +(neg/n).toFixed(3),
+      arriba: at(.5,.08), centro: at(.5,.5), abajo: at(.5,.92) };
+  }
+};
+})().catch(e => {
+  document.body.insertAdjacentHTML('beforeend',
+    '<pre style="position:fixed;left:8px;top:8px;z-index:99;color:#f88;background:#000c;' +
+    'padding:10px;max-width:92vw;white-space:pre-wrap">SE ROMPIÓ:\n' +
+    ((e && (e.stack || e.message)) || e) + '</pre>');
+  window.__SERR = '' + (e && (e.stack || e.message) || e);
+});
+</script>
+</body>
+</html>
