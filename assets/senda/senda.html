@@ -1362,6 +1362,20 @@ const AX = f => (LOC ? '/assets/mundos/'
   : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHAX + '/assets/mundos/') + f;
 const MUNDO_AUDIO = { amb: 'amb-senda.mp3', mus: 'mus-senda.m4a', paso: 'pasos-pasto.mp3',
   pasoRate: 1.4 };
+/* CIELO fotográfico generado (equirectangular). Vacío = deja el cielo actual
+   (senda ya trae su foto). Los mk_*.py lo pisan con el de cada mundo. Se carga
+   y reemplaza el fondo pintado; si falla, queda el pintado. */
+const MUNDO_CIELO = '';
+function cargarCieloFoto(){
+  if (!MUNDO_CIELO) return;
+  new T.TextureLoader().load(AX(MUNDO_CIELO), tex => {
+    tex.mapping = T.EquirectangularReflectionMapping;
+    tex.colorSpace = T.SRGBColorSpace;
+    scene.background = tex;
+    /* HIELO dibuja el cielo en un DOMO; los demás usan scene.background */
+    if (typeof DOMO !== 'undefined' && DOMO){ DOMO.material.map = tex; DOMO.material.needsUpdate = true; }
+  }, undefined, () => {});
+}
 function cargarAudioReal(){
   const A2 = AMB.ctx; if (!A2 || AMB._cargado) return;
   AMB._cargado = true;
@@ -1806,6 +1820,7 @@ function cargarCuerpoGLB(){
   }, undefined, () => {});
 }
 cargarCuerpoGLB();
+cargarCieloFoto();
 function cuerpoTick(dt){
   const enJuego = fase === 'juego';
   CUERPO.root.visible = enJuego;
