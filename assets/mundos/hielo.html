@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#071018"/>
+<title>HIELO</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;background:#071018;color:#eef4f9;
+    font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    overflow:hidden;touch-action:none;overscroll-behavior:none;user-select:none}
+  #gl{position:fixed;left:0;top:0;width:100%;height:100%;display:block}
+
+  /* ---------------- HUD ---------------- */
+  #hud{position:fixed;inset:0;z-index:4;pointer-events:none;display:none}
+  #hud.on{display:block}
+  #obj{position:absolute;left:50%;top:10px;transform:translateX(-50%);
+    background:rgba(9,18,26,.62);border:1px solid rgba(180,220,255,.25);border-radius:12px;
+    padding:7px 14px;text-align:center;backdrop-filter:blur(4px);max-width:86vw}
+  #objT{font-weight:800;font-size:13px;letter-spacing:.04em;color:#e2f0fc}
+  #objD{font-size:11.5px;color:#9cbcd8;margin-top:1px}
+  #capCard{position:absolute;left:50%;top:32%;transform:translateX(-50%);text-align:center;
+    opacity:0;transition:opacity 1.1s;pointer-events:none;width:92vw}
+  #capCard.on{opacity:1}
+  #capN{font-size:13px;letter-spacing:.34em;color:#bfe0f8;font-weight:700}
+  #capT{font-size:30px;font-weight:900;letter-spacing:.06em;margin-top:4px;
+    text-shadow:0 2px 18px rgba(0,0,0,.65)}
+  #btns{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;
+    gap:9px;align-items:flex-end;pointer-events:auto}
+  .b{min-width:86px;text-align:center;padding:12px 15px;border-radius:14px;font-weight:800;
+    font-size:13px;background:rgba(12,22,32,.62);border:1.5px solid rgba(180,220,255,.4);
+    color:#e2f0fc;pointer-events:auto;cursor:pointer;backdrop-filter:blur(3px)}
+  .b:active{transform:translateY(1px);filter:brightness(1.3)}
+  .b.usar{background:rgba(40,110,160,.78);border-color:#bfe6ff;font-size:15px;display:none}
+  .b.usar.on{display:block}
+  .b.corre.on{background:rgba(40,110,160,.78)}
+  #dlg{position:absolute;left:50%;bottom:8%;transform:translateX(-50%);width:min(560px,92vw);
+    background:rgba(7,14,22,.88);border:1px solid rgba(180,220,255,.35);border-radius:16px;
+    padding:16px 18px 13px;display:none;pointer-events:auto;backdrop-filter:blur(6px)}
+  #dlg.on{display:block}
+  #dlgT{font-weight:900;letter-spacing:.05em;color:#bfe0f8;font-size:13px;margin-bottom:6px}
+  #dlgB{font-size:14.5px;line-height:1.5;color:#eef4f9;white-space:pre-wrap}
+  #dlgGo{margin-top:12px;text-align:center;padding:11px;border-radius:11px;font-weight:800;
+    background:linear-gradient(180deg,#2e7cb8,#174a74);border:1px solid #bfe6ff;cursor:pointer}
+  #fps{position:absolute;left:10px;top:10px;font:10px ui-monospace,monospace;color:#a8cce8;
+    background:rgba(7,14,22,.5);padding:3px 6px;border-radius:6px}
+  /* viñeta cinematográfica: oscurece apenas las esquinas, gratis (es CSS) */
+  #vig{position:fixed;inset:0;z-index:2;pointer-events:none;
+    background:radial-gradient(ellipse 78% 68% at 50% 46%,transparent 62%,rgba(0,0,10,.34) 100%)}
+
+  /* ---------------- MENÚ ---------------- */
+  /* el menú es un velo: DETRÁS se ve el valle en vivo (cámara cinemática) */
+  #menu{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;background:
+    linear-gradient(180deg,rgba(5,10,16,.16) 0%,rgba(5,10,16,.34) 55%,rgba(4,8,13,.72) 100%);
+    text-align:center;padding:16px;overflow-y:auto}
+  #menu h1{margin:0;font-size:54px;font-weight:900;letter-spacing:.22em;
+    background:linear-gradient(180deg,#f2f9ff,#6aa8dc);-webkit-background-clip:text;
+    background-clip:text;-webkit-text-fill-color:transparent}
+  #menu .sub{color:#8fb0c8;font-size:13px;margin:6px 0 26px;letter-spacing:.08em}
+  .mbtn{display:block;width:min(320px,84vw);margin:7px auto;padding:15px;font-size:16px;
+    font-weight:800;letter-spacing:.06em;border-radius:14px;cursor:pointer;color:#e2f0fc;
+    background:rgba(14,30,44,.8);border:1.5px solid rgba(180,220,255,.4)}
+  .mbtn.go{background:linear-gradient(180deg,#2e7cb8,#174a74);border-color:#bfe6ff}
+  #mCap{color:#6aa8dc;font-size:12px;margin-top:14px;letter-spacing:.1em;
+    text-shadow:0 1px 8px rgba(0,0,0,.8)}
+  .fila{display:flex;gap:8px;justify-content:center;margin:10px 0 0;flex-wrap:wrap}
+  .filaT{font-size:10.5px;letter-spacing:.22em;color:#8fb0c8;margin-top:16px;
+    text-shadow:0 1px 6px rgba(0,0,0,.8)}
+  .chip{padding:8px 16px;border-radius:20px;font-weight:800;font-size:12.5px;cursor:pointer;
+    background:rgba(10,20,30,.72);border:1.5px solid rgba(180,220,255,.35);color:#c2ddf2}
+  .chip.on{background:linear-gradient(180deg,#2e7cb8,#174a74);border-color:#bfe6ff;color:#f2f9ff}
+  #cargando{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;
+    background:#071018;color:#8fb0c8;font-size:13px;letter-spacing:.2em}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="vig"></div>
+
+<div id="hud">
+  <div id="obj"><div id="objT">…</div><div id="objD"></div></div>
+  <div id="capCard"><div id="capN"></div><div id="capT"></div></div>
+  <div id="fps"></div>
+  <div id="btns">
+    <div class="b usar" id="bUsar">◉ USAR</div>
+    <div class="b" id="bSon">🔊</div>
+    <div class="b corre" id="bCorre">CORRER</div>
+    <div class="b" id="bMenu">MENÚ</div>
+  </div>
+  <div id="dlg"><div id="dlgT"></div><div id="dlgB"></div><div id="dlgGo">SEGUIR ▸</div></div>
+</div>
+
+<div id="menu">
+  <h1>HIELO</h1>
+  <div class="sub">la expedición aurora · un valle blanco que canta de noche</div>
+  <div class="mbtn go" id="mJugar">EMPEZAR LA HISTORIA</div>
+  <div class="mbtn" id="mSeguir" style="display:none">CONTINUAR</div>
+  <div id="mCap"></div>
+  <div class="filaT" id="tLang">IDIOMA</div>
+  <div class="fila" id="fLang">
+    <div class="chip" data-l="es">ESPAÑOL</div>
+    <div class="chip" data-l="en">ENGLISH</div>
+    <div class="chip" data-l="pt">PORTUGUÊS</div>
+  </div>
+  <div class="filaT" id="tGfx">GRÁFICOS</div>
+  <div class="fila" id="fGfx">
+    <div class="chip" data-g="b">BAJOS</div>
+    <div class="chip" data-g="m">MEDIOS</div>
+    <div class="chip" data-g="a">ALTOS</div>
+  </div>
+</div>
+<div id="cargando">CARGANDO EL HIELO…</div>
+
+<script>
+/* ============================================================================
+   HIELO — el cuarto mundo hermano: un valle glacial, 100% procedural.
+     · NIEVE con chispas pintada en canvas, huella pisada en la senda,
+       roca fría por pendiente — y un LAGO CONGELADO que se CRUZA A PIE:
+       el terreno se clava a la cota del hielo dentro de la cuenca y encima
+       va una placa con GRIETAS pintadas, pulida y reflectante
+     · la AURORA: dos cortinas gigantes animadas por shader (ruido +
+       ondulación de vértices, aditivas), que despiertan con la noche
+     · NEVADA de partículas que viaja con la cámara, remolinos de nieve
+       errantes, cristales de hielo instanciados que brillan
+     · campamento con carpa que se ENCIENDE de noche, cueva de hielo con
+       su depósito, y el FARO de la señal: la historia es encenderlo
+     · ambiente sintetizado: viento que silba, la estufa del campamento
+       (posicional), y de noche EL HIELO CANTA (gemidos graves + crujidos)
+   HISTORIA (6 caps, ES/EN/PT): KAI, glacióloga de la expedición Aurora,
+   sin generador y con un avión de suministros buscando una luz.
+   ========================================================================== */
+(async () => {
+'use strict';
+const Q = new URLSearchParams(location.search);
+const LOC = Q.has('local');
+/* CERO descargas de assets: todas las texturas se pintan al vuelo.
+   Lo único que llega de la red es three.js. */
+const TRE = LOC ? '/_vthree/build/three.module.js'
+  : 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+const T = await import(TRE);
+const $ = i => document.getElementById(i);
+
+/* ---------------- azar reproducible: el valle es SIEMPRE el mismo ---------- */
+let _s = 20271111;
+const rnd = () => { _s = (_s * 1664525 + 1013904223) >>> 0; return _s / 4294967296; };
+const rr = (a, b) => a + (b - a) * rnd();
+const cl = (v, a, b) => v < a ? a : (v > b ? b : v);
+
+/* ---------------- terreno: ruido de valor FBM, determinista ---------------- */
+const MAPA = 900, MITAD = MAPA / 2;
+function hash2(i, j){
+  /* Math.imul, no `*`: en JS el producto de enteros grandes se hace float y
+     PIERDE los bits bajos (>2^53) — el hash quedaba sesgado hacia abajo y el
+     ruido casi nunca pasaba de 0,36. Medido: la compuerta de densidad rechazaba
+     3.356 de 3.481 celdas y el "bosque" tenía 83 árboles. */
+  let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263)) ^ 20260801;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function vnoise(x, z){
+  const i = Math.floor(x), j = Math.floor(z);
+  const fx = x - i, fz = z - j;
+  const sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz);
+  const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+  return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
+}
+function fbm(x, z){
+  let v = 0, amp = .5, f = 1;
+  for (let o = 0; o < 4; o++){ v += amp * vnoise(x * f, z * f); amp *= .5; f *= 2.03; }
+  return v;
+}
+/* PUNTOS DE LA HISTORIA (fijos, el terreno se allana alrededor) */
+const POI = {
+  inicio:     { x: 0,    z: 380 },
+  campamento: { x: -40,  z: 190 },
+  cuevahielo: { x: 150,  z: -40 },
+  lagohielo:  { x: -120, z: -215 },
+  faro:       { x: 210,  z: -330 },
+  crater:     { x: -190, z: -280 }
+};
+/* la cota del hielo: dentro de la cuenca, el suelo NUNCA baja de acá.
+   El lago congelado se camina. */
+const HIELO_Y = -2.4;
+function alturaBase(x, z){
+  let h = fbm(x * .006 + 7, z * .006 + 3) * 30 - 10;      /* lomas nevadas */
+  h += fbm(x * .02 + 40, z * .02 + 9) * 4;
+  /* la cuenca del lago congelado */
+  const dl = Math.hypot(x - POI.crater.x, z - POI.crater.z);
+  h -= 20 * Math.exp(-(dl * dl) / (140 * 140));
+  /* la loma de la cueva */
+  const dr = Math.hypot(x - POI.cuevahielo.x, z - POI.cuevahielo.z);
+  h += 12 * Math.exp(-(dr * dr) / (170 * 170));
+  /* EL HIELO: piso firme dentro de la cuenca */
+  if (dl < 185) h = Math.max(h, HIELO_Y);
+  return h;
+}
+function H(x, z){
+  let h = alturaBase(x, z);
+  for (const k in POI){
+    if (k === 'crater') continue;
+    const p = POI[k];
+    const d = Math.hypot(x - p.x, z - p.z);
+    const w = Math.exp(-(d * d) / (26 * 26));
+    h = h * (1 - w) + (p.h != null ? p.h : alturaBase(p.x, p.z)) * w;
+  }
+  return h;
+}
+/* la SENDA: huellas de trineo entre los puntos */
+const SENDA = [POI.inicio, POI.campamento, POI.cuevahielo, POI.lagohielo, POI.faro];
+const SENDA_PTS = [], PTS_SEG = [[]];
+for (let i = 1; i < SENDA.length; i++){
+  const a = SENDA[i - 1], b = SENDA[i];
+  const mx = (a.x + b.x) / 2 + (fbm(i * 9.7, i * 3.1) - .5) * 90;
+  const mz = (a.z + b.z) / 2 + (fbm(i * 4.3, i * 8.9) - .5) * 90;
+  const seg = [];
+  for (let k = 0; k <= 24; k++){
+    const t = k / 24, u = 1 - t;
+    const P = [u*u*a.x + 2*u*t*mx + t*t*b.x, u*u*a.z + 2*u*t*mz + t*t*b.z];
+    seg.push(P);
+    if (i === 1 || k > 0) SENDA_PTS.push(P);
+  }
+  PTS_SEG.push(seg);
+}
+for (const k in POI) POI[k].h = alturaBase(POI[k].x, POI[k].z);
+
+
+/* ==================== TEXTURAS PROCEDURALES (canvas) ========================
+   No hay créditos de generación: acá TODO se PINTA. Cada textura es un canvas
+   con ruido FBM azulejable (retícula en módulo, del mismo motor del terreno),
+   así que empalman sin costura y no pesan un byte de descarga. */
+const lienzo = (n, fn) => {
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  fn(c.getContext('2d'), n);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  t.colorSpace = T.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+};
+const valT = (x, y, per) => {
+  const i = Math.floor(x), j = Math.floor(y);
+  const fx = x - i, fy = y - j;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const h = (a, b) => hash2(((a % per) + per) % per + 101, ((b % per) + per) % per + 37);
+  const a = h(i, j), b = h(i + 1, j), c2 = h(i, j + 1), d = h(i + 1, j + 1);
+  return a + (b - a) * sx + (c2 - a) * sy + (a - b - c2 + d) * sx * sy;
+};
+const fbmT = (x, y, per, oct) => {
+  let v = 0, amp = .55, p = per;
+  for (let o = 0; o < oct; o++){ v += amp * valT(x * p, y * p, p); amp *= .5; p *= 2; }
+  return cl(v, 0, 1);
+};
+const mezC = (a, b, t) => [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+/* suelo genérico: dos colores por FBM + pecas (piedritas y chispas de polvo)
+   + rayas de duna opcionales (ondas de arena talladas por el viento) */
+function texSuelo(n, colA, colB, pecas, rayas){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      let t = fbmT(x / n, y / n, 6, 4);
+      if (rayas){
+        const w = Math.sin((y / n * 18 + fbmT(x / n, y / n, 5, 3) * 2.6) * 6.283);
+        t = cl(t * .55 + .45 * (.5 + .5 * w), 0, 1);
+      }
+      let c = mezC(colA, colB, t);
+      const r = hash2(x + 7, y + 13);
+      if (pecas && r > .965) c = mezC(c, [16, 18, 24], .55);
+      else if (r < .012) c = [255, 255, 255];   /* la nieve CHISPEA al sol */
+      const gr = .92 + .16 * hash2(x + 91, y + 57);
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0] * gr; img.data[i4+1] = c[1] * gr; img.data[i4+2] = c[2] * gr;
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+/* chapa de nave: paneles con junta, remaches y mugre de polvo en las costuras */
+function texMetal(n){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      const px2 = x % 64, py = y % 48;
+      let c = mezC([196, 202, 206], [166, 174, 181], fbmT(x / n, y / n, 5, 3));
+      if (px2 < 2 || py < 2) c = [118, 126, 133];
+      if ((px2 - 7) * (px2 - 7) + (py - 7) * (py - 7) < 4) c = [108, 116, 123];
+      c = mezC(c, [152, 96, 58], .4 * fbmT(x / n + .3, y / n + .7, 7, 3) *
+        fbmT(x / n, y / n, 3, 2));
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0]; img.data[i4+1] = c[1]; img.data[i4+2] = c[2];
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+/* celda fotovoltaica: azul profundo con retícula clara y reflejos */
+function texPanel(n){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      const cx = x % 42, cy2 = y % 42;
+      let c = mezC([15, 27, 56], [34, 58, 104], fbmT(x / n, y / n, 6, 3));
+      if (cx < 3 || cy2 < 3) c = [186, 194, 202];
+      if (hash2(x + 3, y + 9) > .994) c = [130, 170, 230];
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0]; img.data[i4+1] = c[1]; img.data[i4+2] = c[2];
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+/* HIELO del lago: azul pálido veteado con GRIETAS pintadas a trazo */
+function texHielo(n){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      const t = fbmT(x / n, y / n, 5, 4);
+      const c = mezC([168, 200, 226], [222, 240, 250], t);
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0]; img.data[i4+1] = c[1]; img.data[i4+2] = c[2];
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    /* las grietas: trazos finos azul profundo que se ramifican */
+    for (let i = 0; i < 22; i++){
+      g.strokeStyle = 'rgba(60,100,150,' + (.25 + rnd() * .3).toFixed(2) + ')';
+      g.lineWidth = .8 + rnd() * 1.4;
+      let x = rnd() * n, y = rnd() * n;
+      g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 5; k++){
+        x += (rnd() - .5) * n * .3; y += (rnd() - .5) * n * .3;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  });
+}
+/* el CIELO ártico: azul empolvado, claridad baja en el horizonte, estrellas
+   tenues arriba (que la noche revela) */
+const cieloM = (() => {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const g = c.getContext('2d');
+  const d = g.createLinearGradient(0, 0, 0, 512);
+  d.addColorStop(0, '#1c2c44');
+  d.addColorStop(.3, '#5c7ea6');
+  d.addColorStop(.46, '#aec8de');
+  d.addColorStop(.5, '#e6eef4');
+  d.addColorStop(.56, '#8ea6ba');
+  d.addColorStop(1, '#3c4a58');
+  g.fillStyle = d; g.fillRect(0, 0, 1024, 512);
+  for (let i = 0; i < 380; i++){
+    const x = rnd() * 1024, y = rnd() * 200;
+    g.fillStyle = 'rgba(255,255,255,' + (.12 + rnd() * .3).toFixed(2) + ')';
+    g.fillRect(x, y, .9, .9);
+  }
+  const t = new T.CanvasTexture(c);
+  t.mapping = T.EquirectangularReflectionMapping;
+  t.colorSpace = T.SRGBColorSpace;
+  return t;
+})();
+/* mismas CLAVES que el motor: pasto=regolito, tierra=arena de la senda,
+   hojarasca=grava oscura, roca=basalto (por pendiente) */
+const TX = {
+  pasto:     texSuelo(256, [208, 220, 234], [238, 245, 252], false, false),
+  tierra:    texSuelo(256, [172, 184, 200], [200, 211, 224], false, true),
+  hojarasca: texSuelo(256, [150, 180, 210], [192, 216, 238], false, false),
+  roca:      texSuelo(256, [56, 62, 78], [98, 108, 128], true, false),
+  metal:     texMetal(256),
+  panel:     texPanel(256),
+  oscuro:    texSuelo(128, [30, 34, 42], [56, 62, 74], true, false),
+  hielo:     texHielo(256),
+  cielo:     cieloM
+};
+
+/* ================================ ESCENA =================================== */
+const ren = new T.WebGLRenderer({ canvas: $('gl'), antialias: false,
+  powerPreference: 'high-performance' });
+ren.outputColorSpace = T.SRGBColorSpace;
+/* GOTY: tone mapping FÍLMICO (ACES) — los blancos ruedan suave en vez de
+   recortarse, los atardeceres saturan como en cine — y SOMBRAS suaves (PCF).
+   La exposición la maneja el ciclo del día, capítulo a capítulo. */
+ren.toneMapping = T.ACESFilmicToneMapping;
+ren.toneMappingExposure = 1.12;
+ren.shadowMap.enabled = true;
+ren.shadowMap.type = T.PCFSoftShadowMap;
+const scene = new T.Scene();
+scene.background = TX.cielo;
+scene.backgroundIntensity = 1;
+/* el canvas del cielo ya trae un "suelo" pintado bajo el horizonte: el PMREM
+   sale directo, sin el parche que necesitaba la foto de SENDA */
+const pm = new T.PMREMGenerator(ren);
+scene.environment = pm.fromEquirectangular(TX.cielo).texture;
+scene.fog = new T.Fog(new T.Color('#b8cadb'), 60, 430);
+const cam = new T.PerspectiveCamera(72, 1, .1, 1200);
+cam.rotation.order = 'YXZ';
+
+/* luz: UNA direccional (el sol) + hemisferio. Lambert por fragmento.
+   El sol PROYECTA SOMBRA: su caja de sombra (±78 m) viaja pegada al jugador —
+   con un mapa de 900 m una sola caja fija daría texels de medio metro; así el
+   texel queda en ~15 cm y las copas dibujan sombra de verdad sobre el sendero. */
+const SOLD = new T.Vector3(.5, .7, .3).normalize();   /* dirección actual del sol */
+const sol = new T.DirectionalLight(0xfff4e0, 2.4);
+sol.position.copy(SOLD).multiplyScalar(420);
+{
+  const sc = sol.shadow.camera;
+  sc.left = sc.bottom = -78; sc.right = sc.top = 78;
+  sc.near = 40; sc.far = 760;
+  sol.shadow.mapSize.set(1024, 1024);
+  sol.shadow.bias = -0.0006;
+  sol.shadow.normalBias = 1.6;      /* sin esto el terreno de quads de 5 m se acnea */
+}
+scene.add(sol); scene.add(sol.target);
+const hemi = new T.HemisphereLight(0xbdd4ee, 0x8a97a8, .85);
+scene.add(hemi);
+/* el DESTELLO del sol: un sprite aditivo donde apunta SOLD. Con niebla y ACES
+   es lo que hace que mirar contra el sol "queme" como en un juego grande. */
+const glare = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const d = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  d.addColorStop(0, 'rgba(255,248,225,1)');
+  d.addColorStop(.12, 'rgba(255,238,190,.85)');
+  d.addColorStop(.4, 'rgba(255,214,140,.22)');
+  d.addColorStop(1, 'rgba(255,200,120,0)');
+  g.fillStyle = d; g.fillRect(0, 0, 128, 128);
+  const s = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c),
+    transparent: true, blending: T.AdditiveBlending, depthWrite: false, fog: false }));
+  s.scale.set(300, 300, 1);
+  scene.add(s);
+  return s;
+})();
+/* la ventana de la cabaña, de noche, VUELCA luz cálida al porche */
+const focoCasa = new T.PointLight(0xffb46a, 0, 26, 1.7);
+scene.add(focoCasa);
+/* al caer el sol el halo ártico vira al ROSA de las nubes de hielo */
+const AZUL_OCASO = new T.Color(0xffb8cf);
+/* UNA LUNA pálida de invierno (solo de noche) + LA AURORA + LA NEVADA */
+const LUNAS = [];
+{
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const d = g.createRadialGradient(28, 26, 2, 32, 32, 30);
+  d.addColorStop(0, '#f8fbff');
+  d.addColorStop(.75, '#c9d6e4');
+  d.addColorStop(1, '#7c8ba0');
+  g.fillStyle = d; g.beginPath(); g.arc(32, 32, 29, 0, 6.284); g.fill();
+  for (let i = 0; i < 7; i++){
+    g.fillStyle = 'rgba(140,155,175,.4)';
+    g.beginPath();
+    g.arc(32 + (rnd() - .5) * 40, 32 + (rnd() - .5) * 40, 2 + rnd() * 5, 0, 6.284);
+    g.fill();
+  }
+  const sp = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c),
+    transparent: true, opacity: 0, depthWrite: false, fog: false }));
+  sp.scale.set(46, 46, 1);
+  sp.userData.dir = new T.Vector3(-.4, .55, -.5).normalize();
+  scene.add(sp); LUNAS.push(sp);
+}
+/* LA AURORA: dos cortinas gigantes, aditivas, animadas por shader — el ruido
+   les da las varillas verticales, el vértice las hace ondular como tela */
+const AURORA_MAT = (() => {
+  const ruidoA = texSuelo(128, [0, 0, 0], [255, 255, 255], false, false);
+  return new T.ShaderMaterial({
+    uniforms: { uT: { value: 0 }, tN: { value: ruidoA }, uOp: { value: 0 } },
+    transparent: true, depthWrite: false, side: T.DoubleSide,
+    blending: T.AdditiveBlending,
+    vertexShader: `varying vec2 vUv; uniform float uT;
+      void main(){ vUv = uv;
+        vec3 p = position;
+        p.y += sin(uv.x*9.0 + uT*.3) * 7.0;
+        p.z += sin(uv.x*5.0 - uT*.22) * 9.0;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.); }`,
+    fragmentShader: `varying vec2 vUv; uniform float uT; uniform sampler2D tN;
+      uniform float uOp;
+      void main(){
+        float cort = texture2D(tN, vec2(vUv.x*2.0 + uT*.012, uT*.006)).r;
+        float veil = texture2D(tN, vec2(vUv.x*6.0 - uT*.02, vUv.y*.5)).r;
+        float a = smoothstep(.28, .78, cort*.65 + veil*.55);
+        a *= smoothstep(0.0, .15, vUv.y) * smoothstep(1.0, .35, vUv.y);
+        vec3 col = mix(vec3(.12, .95, .5), vec3(.2, .55, .95), vUv.x);
+        col = mix(col, vec3(.68, .3, .92), smoothstep(.55, 1., vUv.y));
+        gl_FragColor = vec4(col, a * uOp); }`
+  });
+})();
+{
+  const cortinas = [[150, 200, -620, -.15], [-260, 235, -520, .55]];
+  for (const [x, y, z, ry] of cortinas){
+    const m = new T.Mesh(new T.PlaneGeometry(950, 130, 56, 1), AURORA_MAT);
+    m.position.set(x, y, z);
+    m.rotation.y = ry;
+    m.frustumCulled = false;
+    scene.add(m);
+  }
+}
+/* LA NEVADA: una nube de copos que viaja con la cámara */
+const NIEVE = (() => {
+  const N3 = 520, P = new Float32Array(N3 * 3);
+  for (let i = 0; i < N3; i++){
+    P[i*3] = rr(-38, 38); P[i*3+1] = rr(0, 30); P[i*3+2] = rr(-38, 38);
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P, 3));
+  const cv = document.createElement('canvas'); cv.width = cv.height = 16;
+  const gc = cv.getContext('2d');
+  const dd = gc.createRadialGradient(8, 8, 0, 8, 8, 8);
+  dd.addColorStop(0, 'rgba(255,255,255,1)'); dd.addColorStop(1, 'rgba(255,255,255,0)');
+  gc.fillStyle = dd; gc.fillRect(0, 0, 16, 16);
+  const pts = new T.Points(g, new T.PointsMaterial({ size: .3,
+    map: new T.CanvasTexture(cv), transparent: true, depthWrite: false,
+    opacity: .85, sizeAttenuation: true }));
+  pts.frustumCulled = false;
+  scene.add(pts);
+  return pts;
+})();
+function pasoNieve(dt){
+  const P = NIEVE.geometry.attributes.position;
+  for (let i = 0; i < P.count; i++){
+    let y = P.array[i*3+1] - dt * (1.5 + (i % 5) * .25);
+    if (y < 0) y += 30;
+    P.array[i*3+1] = y;
+    P.array[i*3] += Math.sin(t0 * .8 + i) * dt * .5;
+    if (P.array[i*3] > 38) P.array[i*3] = -38;
+    if (P.array[i*3] < -38) P.array[i*3] = 38;
+  }
+  P.needsUpdate = true;
+  NIEVE.position.set(cam.position.x, cam.position.y - 14, cam.position.z);
+}
+
+/* --------------------------- SPLAT DE CONTROL ------------------------------
+   R = tierra del sendero · G = hojarasca bajo el bosque. Se pinta UNA vez en un
+   canvas de 512: el sendero como trazo gordo entre los puntos de la historia,
+   la hojarasca como manchas de ruido donde después van los árboles. */
+const SPL = document.createElement('canvas'); SPL.width = SPL.height = 512;
+const wx2u = x => (x + MITAD) / MAPA * 512;
+const wz2u = z => (z + MITAD) / MAPA * 512;
+{
+  const g = SPL.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 512, 512);
+  /* placas de hielo azulado: manchas */
+  g.fillStyle = '#003800';
+  for (let i = 0; i < 900; i++){
+    const x = rnd() * 512, y = rnd() * 512, r = 6 + rnd() * 22;
+    if (vnoise(x * .02, y * .02) < .52) continue;
+    g.beginPath(); g.arc(x, y, r, 0, 6.284); g.fill();
+  }
+  g.filter = 'blur(6px)';
+  g.drawImage(SPL, 0, 0);
+  g.filter = 'none';
+  /* el sendero: R fuerte, con borde difuso */
+  for (const [w, c] of [[16, 'rgba(140,0,0,.55)'], [8, 'rgba(255,0,0,.85)']]){
+    g.strokeStyle = c; g.lineWidth = w; g.lineCap = g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(wx2u(SENDA_PTS[0][0]), wz2u(SENDA_PTS[0][1]));
+    for (const P of SENDA_PTS) g.lineTo(wx2u(P[0]), wz2u(P[1]));
+    g.stroke();
+  }
+  /* claros: cabaña y santuario sin hojarasca, con algo de tierra */
+  for (const k of ['campamento', 'faro']){
+    g.fillStyle = 'rgba(160,0,0,.5)';
+    g.beginPath(); g.arc(wx2u(POI[k].x), wz2u(POI[k].z), 12, 0, 6.284); g.fill();
+  }
+}
+const splTex = new T.CanvasTexture(SPL);
+splTex.colorSpace = T.NoColorSpace;
+
+/* ----------------------------- MATERIAL DEL TERRENO ------------------------
+   Antes era un ShaderMaterial propio: sol+hemi calculados a mano, SIN sombras,
+   sin tone mapping y con la niebla sincronizada por uniformes. Ahora es un
+   Lambert con el SPLAT inyectado en map_fragment: el mismo mezclado de 4
+   texturas, pero con TODO el pipeline de three gratis — RECIBE las sombras del
+   sol, pasa por ACES, y la niebla y el colorspace son los del resto del mundo
+   (antes el terreno y los árboles se iluminaban por recetas distintas y había
+   que emparejarlos a ojo). La roca por pendiente se calcula en el VÉRTICE: la
+   malla del terreno no rota, así que la normal del objeto ES la del mundo. */
+const uniTerr = {
+  tTierra: { value: TX.tierra }, tHoja: { value: TX.hojarasca },
+  tRoca: { value: TX.roca }, tSplat: { value: splTex },
+  repite: { value: MAPA / 7 }
+};
+const matTerr = new T.MeshLambertMaterial({ map: TX.pasto });
+matTerr.onBeforeCompile = sh => {
+  Object.assign(sh.uniforms, uniTerr);
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying float vRocoso;')
+    .replace('#include <begin_vertex>',
+      '#include <begin_vertex>\n  vRocoso = smoothstep(.82, .6, normal.y);');
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', `#include <common>
+      uniform sampler2D tTierra, tHoja, tRoca, tSplat;
+      uniform float repite;
+      varying float vRocoso;`)
+    .replace('#include <map_fragment>', `
+      vec2 uvT = vMapUv * repite;
+      vec3 spl = texture2D(tSplat, vMapUv).rgb;
+      vec3 c = texture2D(map, uvT).rgb;
+      c = mix(c, texture2D(tHoja, uvT*1.3).rgb, clamp(spl.g*1.5, 0., 1.));
+      c = mix(c, texture2D(tTierra, uvT*1.6).rgb, clamp(spl.r*1.35, 0., 1.));
+      c = mix(c, texture2D(tRoca, uvT*.9).rgb, vRocoso);
+      diffuseColor.rgb *= c;`);
+};
+
+/* ---------------------- malla del terreno en 36 trozos --------------------- */
+const CHN = 6, CVERT = 30;                    /* 6x6 trozos de 30x30 celdas */
+const terrChunks = [];
+{
+  const paso = MAPA / (CHN * CVERT);
+  for (let cj = 0; cj < CHN; cj++) for (let ci = 0; ci < CHN; ci++){
+    const g = new T.PlaneGeometry(MAPA / CHN, MAPA / CHN, CVERT, CVERT);
+    g.rotateX(-Math.PI / 2);
+    const ox = -MITAD + (ci + .5) * MAPA / CHN;
+    const oz = -MITAD + (cj + .5) * MAPA / CHN;
+    const P = g.attributes.position, UV = g.attributes.uv;
+    for (let i = 0; i < P.count; i++){
+      const x = P.getX(i) + ox, z = P.getZ(i) + oz;
+      P.setY(i, H(x, z));
+      /* uv GLOBAL del valle, para que el splat y el tileado sigan entre trozos */
+      UV.setXY(i, (x + MITAD) / MAPA, (z + MITAD) / MAPA);
+    }
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    /* los vértices son LOCALES al trozo; la posición del mesh los lleva al mundo.
+       (la primera versión además trasladaba la geometría: doble desplazamiento y
+       los 36 trozos caían apilados en el centro) */
+    const m = new T.Mesh(g, matTerr);
+    m.position.set(ox, 0, oz);
+    m.receiveShadow = true;
+    m.castShadow = true;          /* las lomas se sombrean entre sí al atardecer */
+    scene.add(m);
+    terrChunks.push(m);
+  }
+}
+
+/* falda del horizonte: tapa la parte BAJA de la foto del cielo (que es oscura)
+   con suelo que a esa distancia ya es color de niebla puro */
+{
+  const f = new T.Mesh(new T.CircleGeometry(1150, 24),
+    new T.MeshLambertMaterial({ color: 0xb6c6d6 }));
+  f.rotation.x = -Math.PI / 2;
+  f.position.y = -10;
+  f.frustumCulled = false;
+  scene.add(f);
+  /* PARED DE LOMAS LEJANAS: una falda plana converge exactamente a la altura del
+     ojo, así que desde cualquier punto alto (la colina del roble, la cámara del
+     menú) se veía la franja oscura de la foto del cielo entre la falda y el
+     horizonte. Este anillo sube hasta +70 a 1.100 m: a esa distancia la niebla lo
+     pinta liso y se lee como una serranía en la bruma que CIERRA el horizonte. */
+  const pared = new T.Mesh(new T.CylinderGeometry(1100, 660, 78, 24, 1, true),
+    new T.MeshLambertMaterial({ color: 0x9fb4c8, side: T.BackSide }));
+  pared.position.y = 31;         /* base -8, borde +70 */
+  pared.frustumCulled = false;
+  scene.add(pared);
+}
+/* --------------------------- REMOLINOS DE NIEVE ----------------------------
+   Tres remolinos de ventisca que vagan por el valle: conos translúcidos con
+   vetas blancas, girando sobre sí mismos. */
+const dustTex = lienzo(128, (g, n) => {
+  g.clearRect(0, 0, n, n);
+  for (let i = 0; i < 90; i++){
+    g.strokeStyle = 'rgba(235,244,255,' + (.05 + rnd() * .1).toFixed(3) + ')';
+    g.lineWidth = 1 + rnd() * 3;
+    const x = rnd() * n;
+    g.beginPath(); g.moveTo(x, 0);
+    g.bezierCurveTo(x + 8, n * .3, x - 8, n * .6, x + rnd() * 10 - 5, n);
+    g.stroke();
+  }
+});
+const TOLVAS = [];
+{
+  const geoT = new T.CylinderGeometry(3.2, .6, 30, 10, 1, true);
+  geoT.translate(0, 15, 0);
+  for (let i = 0; i < 3; i++){
+    const m = new T.Mesh(geoT, new T.MeshLambertMaterial({ map: dustTex,
+      transparent: true, opacity: .16, side: T.DoubleSide, depthWrite: false }));
+    m.userData = { cx: [230, -300, 40][i], cz: [120, 100, -60][i],
+      R: 60 + i * 25, w: .05 + i * .013, f: i * 2.1 };
+    scene.add(m);
+    TOLVAS.push(m);
+  }
+}
+function pasoTolvas(t){
+  for (const m of TOLVAS){
+    const u = m.userData;
+    const x = u.cx + Math.cos(t * u.w + u.f) * u.R;
+    const z = u.cz + Math.sin(t * u.w + u.f) * u.R;
+    m.position.set(x, H(x, z) - .5, z);
+    m.rotation.y = t * 5 + u.f;
+    m.material.opacity = .1 + .07 * Math.abs(Math.sin(t * .3 + u.f));
+  }
+}
+
+/* ------------- ROCAS FRÍAS + PIEDRITAS + CRISTALES DE HIELO ---------------
+   Rocas oscuras asomando de la nieve, y racimos de CRISTALES celestes con un
+   brillo propio, más densos cerca del lago congelado. */
+function fusiona(geos){
+  let nv = 0; for (const g of geos) nv += g.attributes.position.count;
+  const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2);
+  const I = [];
+  let off = 0;
+  for (const g of geos){
+    P.set(g.attributes.position.array, off * 3);
+    N.set(g.attributes.normal.array, off * 3);
+    if (g.attributes.uv) U.set(g.attributes.uv.array, off * 2);
+    const idx = g.index.array;
+    for (let k = 0; k < idx.length; k++) I.push(idx[k] + off);
+    off += g.attributes.position.count;
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P, 3));
+  g.setAttribute('normal', new T.BufferAttribute(N, 3));
+  g.setAttribute('uv', new T.BufferAttribute(U, 2));
+  g.setIndex(I);
+  return g;
+}
+const ARB = [];                                /* [x,z,r] choque */
+function molesta(x, z, margen){
+  for (const k in POI){ const p = POI[k];
+    if (k !== 'crater' && Math.hypot(x - p.x, z - p.z) < 16) return true; }
+  const m2 = margen * margen;
+  for (const P of SENDA_PTS){
+    const dx = x - P[0], dz = z - P[1];
+    if (dx * dx + dz * dz < m2) return true;
+  }
+  return false;
+}
+const M4 = new T.Matrix4(), V3 = new T.Vector3(), Q4 = new T.Quaternion(), E3 = new T.Euler();
+function geoRoca(sem, punta){
+  const g = new T.SphereGeometry(1, 7, 5);
+  const P = g.attributes.position, UV = g.attributes.uv;
+  for (let i = 0; i < P.count; i++){
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+    const k = .6 + .62 * vnoise(x * 2.1 + sem, z * 2.1 + y * 1.3 + sem * 2);
+    P.setXYZ(i, x * k, y * k * punta, z * k);
+    UV.setXY(i, UV.getX(i) * 2, UV.getY(i) * 1.4);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function plantar(){
+  const variantes = [geoRoca(3, .55), geoRoca(17, .72), geoRoca(41, .62), geoRoca(77, .9)];
+  const posV = [[], [], [], []];
+  const PASO_A = 18;
+  const CTA = { tot: 0, dens: 0, camino: 0, ok: 0 };
+  window.__PLANTA = CTA;
+  for (let gz = -MITAD + 12; gz < MITAD - 12; gz += PASO_A)
+  for (let gx = -MITAD + 12; gx < MITAD - 12; gx += PASO_A){
+    CTA.tot++;
+    const x = gx + rr(-5, 5), z = gz + rr(-5, 5);
+    let dens = vnoise(x * .011 + 60, z * .011 + 22);
+    const dl = Math.hypot(x - POI.crater.x, z - POI.crater.z);
+    dens += .22 * Math.exp(-((dl - 185) * (dl - 185)) / (70 * 70));
+    if (dens < .46){ CTA.dens++; continue; }
+    if (dens < .58 && rnd() > (dens - .46) * 6){ CTA.dens++; continue; }
+    if (molesta(x, z, 13)){ CTA.camino++; continue; }
+    const y = H(x, z);
+    const pend = Math.max(Math.abs(H(x + 2, z) - y), Math.abs(H(x, z + 2) - y));
+    if (pend > 1.6){ CTA.dens++; continue; }
+    CTA.ok++;
+    const sc = rr(.5, 2.7);
+    posV[(rnd() * 4) | 0].push([x, y - sc * .18, z, sc]);
+    if (sc > 1.4) ARB.push([x, z, sc * .8]);
+  }
+  const matRoca = new T.MeshLambertMaterial({ map: TX.roca });
+  for (let v = 0; v < 4; v++){
+    const arr = posV[v];
+    if (!arr.length) continue;
+    const im = new T.InstancedMesh(variantes[v], matRoca, arr.length);
+    for (let i = 0; i < arr.length; i++){
+      const [x, y, z, sc] = arr[i];
+      Q4.setFromEuler(E3.set(0, rr(0, 6.28), rr(-.08, .08)));
+      M4.compose(V3.set(x, y, z), Q4, new T.Vector3(sc, sc * rr(.85, 1.1), sc));
+      im.setMatrixAt(i, M4);
+    }
+    im.frustumCulled = false;
+    im.castShadow = im.receiveShadow = true;
+    scene.add(im);
+  }
+  /* PIEDRITAS: sin colisión ni sombra, puro detalle del regolito */
+  const chico = new T.InstancedMesh(geoRoca(5, .5), matRoca, 400);
+  for (let i = 0; i < 400; i++){
+    const x = rr(-MITAD + 8, MITAD - 8), z = rr(-MITAD + 8, MITAD - 8);
+    const sc = rr(.08, .3);
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+    M4.compose(V3.set(x, H(x, z) - sc * .2, z), Q4, new T.Vector3(sc, sc, sc));
+    chico.setMatrixAt(i, M4);
+  }
+  chico.frustumCulled = false;
+  scene.add(chico);
+  /* CRISTALES DE HIELO: racimos de tres agujas, con emisión propia */
+  const gCri = (() => {
+    const conos = [];
+    for (let k = 0; k < 3; k++){
+      const g = new T.ConeGeometry(.16 + k * .05, 1.1 + k * .45, 5);
+      g.rotateX(rr(-.3, .3)); g.rotateZ(rr(-.3, .3));
+      g.translate(rr(-.25, .25), (1.1 + k * .45) / 2, rr(-.25, .25));
+      conos.push(g);
+    }
+    return fusiona(conos);
+  })();
+  window.__CRISTAL_MAT = new T.MeshLambertMaterial({ color: 0x9fc8e8,
+    emissive: 0x3a78b8, emissiveIntensity: .3, transparent: true, opacity: .92 });
+  const iCri = new T.InstancedMesh(gCri, window.__CRISTAL_MAT, 160);
+  let nc = 0, itc = 0;
+  while (nc < 160 && itc < 40000){
+    itc++;
+    const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    const dl2 = Math.hypot(x - POI.crater.x, z - POI.crater.z);
+    if (dl2 > 320 && rnd() < .6) continue;      /* más cerca del lago */
+    if (dl2 < 180 && rnd() < .7) continue;      /* pero no SOBRE el hielo */
+    if (molesta(x, z, 9)) continue;
+    const sc = rr(.5, 1.8);
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+    M4.compose(V3.set(x, H(x, z) - .1, z), Q4, new T.Vector3(sc, sc, sc));
+    iCri.setMatrixAt(nc, M4);
+    if (sc > 1.2) ARB.push([x, z, .9]);
+    nc++;
+  }
+  iCri.count = nc;
+  iCri.frustumCulled = false;
+  iCri.castShadow = true;
+  scene.add(iCri);
+  window.__CRISTALES = nc;
+  /* CARGA de la expedición: cajones medio tapados por la nieve, cerca de la
+     senda entre el campamento y la cueva */
+  const matMet = new T.MeshLambertMaterial({ map: TX.metal });
+  for (let i = 0; i < 6; i++){
+    const t = .15 + i * .13;
+    const a = POI.campamento, b = POI.cuevahielo;
+    const x = a.x + (b.x - a.x) * t + rr(8, 16) * (i % 2 ? 1 : -1);
+    const z = a.z + (b.z - a.z) * t + rr(8, 16) * (i % 2 ? -1 : 1);
+    const m = new T.Mesh(new T.BoxGeometry(rr(1.2, 2.4), .08, rr(.8, 1.6)), matMet);
+    m.position.set(x, H(x, z) + .05, z);
+    m.rotation.set(rr(-.3, .3), rr(0, 6.28), rr(-.25, .25));
+    m.castShadow = true;
+    scene.add(m);
+  }
+}
+plantar();
+
+/* ---------------- LA CUEVA DE HIELO: el depósito ----------------------------
+   Un arco de hielo (medio toro) clavado en la loma, cristales custodiando la
+   boca, y adentro los cajones del depósito con las células de energía. */
+{
+  const p = POI.cuevahielo, y = H(p.x, p.z);
+  const matHielo = new T.MeshLambertMaterial({ map: TX.hielo });
+  const arco = new T.Mesh(new T.TorusGeometry(4.2, 1.3, 7, 14, Math.PI), matHielo);
+  arco.position.set(p.x, y + .2, p.z);
+  arco.rotation.y = .4;
+  arco.castShadow = true;
+  scene.add(arco);
+  /* dos colmillos de hielo a los lados de la boca */
+  for (const lado of [-1, 1]){
+    const colm = new T.Mesh(new T.ConeGeometry(.7, 3.2, 6), matHielo);
+    const cx = p.x + Math.cos(.4) * lado * 5.4, cz = p.z - Math.sin(.4) * lado * 5.4;
+    colm.position.set(cx, H(cx, cz) + 1.5, cz);
+    colm.rotation.z = lado * .12;
+    colm.castShadow = true;
+    scene.add(colm);
+    ARB.push([cx, cz, 1.1]);
+  }
+  /* los cajones del depósito */
+  const matMet2 = new T.MeshLambertMaterial({ map: TX.metal });
+  for (let i = 0; i < 3; i++){
+    const caja = new T.Mesh(new T.BoxGeometry(1.1, .8, .8), matMet2);
+    const cx = p.x + 1.5 - i * 1.3, cz = p.z + 1.2 + (i % 2) * .9;
+    caja.position.set(cx, H(cx, cz) + .35, cz);
+    caja.rotation.y = rr(0, 1.2);
+    caja.castShadow = true;
+    scene.add(caja);
+  }
+  ARB.push([p.x, p.z, 2.4]);
+  window.__ROVER = 3;
+}
+/* ---------------- EL CAMPAMENTO: la carpa que se enciende -------------------
+   Carpa prisma con lona que de noche brilla desde adentro (ventanaMat +
+   focoCasa), el generador muerto, el mástil de la radio, cajas y un barril.
+   5 piezas. */
+let ventanaMat = null;
+{
+  const p = POI.campamento, y = H(p.x, p.z);
+  const matMet = new T.MeshLambertMaterial({ map: TX.metal });
+  const matOsc = new T.MeshLambertMaterial({ map: TX.oscuro });
+  /* la carpa: prisma triangular (lona) */
+  const carpa = [];
+  const gA2 = new T.CylinderGeometry(2.6, 2.6, 5.2, 3, 1, false);
+  gA2.rotateZ(Math.PI / 2);
+  gA2.rotateX(Math.PI / 6);
+  gA2.scale(1, .78, 1);
+  gA2.translate(0, 1.55, 0);
+  carpa.push(gA2);
+  const mCarpa = new T.Mesh(fusiona(carpa),
+    new T.MeshLambertMaterial({ color: 0xc85a30 }));   /* lona naranja expedición */
+  mCarpa.position.set(p.x, y, p.z);
+  mCarpa.rotation.y = .3;
+  mCarpa.castShadow = mCarpa.receiveShadow = true;
+  scene.add(mCarpa);
+  /* la boca de la carpa, que se enciende de noche */
+  ventanaMat = new T.MeshBasicMaterial({ color: 0x584a33 });
+  const boca = new T.Mesh(new T.CircleGeometry(1.15, 3), ventanaMat);
+  boca.position.set(p.x + Math.sin(.3 + Math.PI / 2) * 2.62,
+    y + 1.5, p.z + Math.cos(.3 + Math.PI / 2) * 2.62);
+  boca.rotation.y = .3 + Math.PI / 2;
+  boca.scale.y = .8;
+  scene.add(boca);
+  focoCasa.position.set(p.x + 3.4, y + 1.6, p.z + 1.2);
+  /* generador muerto + mástil de radio + barril */
+  const gen = new T.Mesh(new T.BoxGeometry(1.4, 1.0, .9), matMet);
+  gen.position.set(p.x - 3.2, y + .45, p.z + 1.8);
+  gen.castShadow = true;
+  scene.add(gen);
+  const mast = new T.Mesh(new T.CylinderGeometry(.05, .07, 5.2, 5), matMet);
+  mast.position.set(p.x - 1.8, y + 2.6, p.z - 2.4);
+  scene.add(mast);
+  const barril = new T.Mesh(new T.CylinderGeometry(.45, .45, 1.0, 9), matOsc);
+  barril.position.set(p.x + 2.8, y + .45, p.z - 2.2);
+  barril.castShadow = true;
+  scene.add(barril);
+  ARB.push([p.x, p.z, 3.4]);
+  ARB.push([p.x - 3.2, p.z + 1.8, 1.1]);
+  window.__PARTES = 5;
+}
+/* ---------------- EL LAGO CONGELADO -----------------------------------------
+   La PLACA de hielo (encima del terreno clavado a HIELO_Y): pulida, con las
+   grietas pintadas y el reflejo del cielo. En la orilla, el trineo de carga
+   y el cartel de la expedición. */
+{
+  const placa = new T.Mesh(new T.CircleGeometry(184, 36),
+    new T.MeshStandardMaterial({ map: TX.hielo, metalness: .05, roughness: .18,
+      transparent: true, opacity: .94, envMapIntensity: .9 }));
+  TX.hielo.repeat.set(9, 9);
+  placa.rotation.x = -Math.PI / 2;
+  placa.position.set(POI.crater.x, HIELO_Y + .07, POI.crater.z);
+  placa.receiveShadow = true;
+  scene.add(placa);
+  /* la orilla: el trineo y el cartel */
+  const p = POI.lagohielo, y = H(p.x, p.z);
+  const matMad = new T.MeshLambertMaterial({ map: TX.oscuro });
+  const tri = [];
+  const base = new T.BoxGeometry(2.4, .16, 1.1); base.translate(0, .45, 0); tri.push(base);
+  for (const lado of [-1, 1]){
+    const patin = new T.BoxGeometry(2.9, .1, .14);
+    patin.translate(.1, .12, lado * .48);
+    tri.push(patin);
+  }
+  const frente = new T.BoxGeometry(.14, .5, 1.1); frente.translate(1.15, .75, 0); tri.push(frente);
+  const mTri = new T.Mesh(fusiona(tri), matMad);
+  mTri.position.set(p.x + 3, y, p.z + 2);
+  mTri.rotation.y = .7;
+  mTri.castShadow = true;
+  scene.add(mTri);
+  ARB.push([p.x + 3, p.z + 2, 1.6]);
+  const poste = new T.Mesh(new T.CylinderGeometry(.06, .08, 2.2, 5),
+    new T.MeshLambertMaterial({ map: TX.metal }));
+  poste.position.set(p.x - 2, y + 1.1, p.z - 1);
+  scene.add(poste);
+  const cartel = new T.Mesh(new T.BoxGeometry(1.3, .5, .06),
+    new T.MeshLambertMaterial({ color: 0xc85a30 }));
+  cartel.position.set(p.x - 2, y + 1.9, p.z - 1);
+  cartel.rotation.y = .4;
+  scene.add(cartel);
+}
+/* ---------------- EL FARO DE LA SEÑAL ---------------------------------------
+   Torre cónica con plataforma, cabina y la GRAN LÁMPARA (beaconMat: late en
+   el bucle — encendida cuenta como historia), la escalera de tambores y el
+   tablero del USAR al pie. */
+let beaconMat = null;
+{
+  const p = POI.faro, y = H(p.x, p.z);
+  const matMet = new T.MeshLambertMaterial({ map: TX.metal });
+  const torre = new T.Mesh(new T.CylinderGeometry(1.1, 2.2, 14, 10), matMet);
+  torre.position.set(p.x, y + 7, p.z);
+  torre.castShadow = true;
+  scene.add(torre);
+  /* franjas rojas del faro: dos anillos */
+  for (const hh of [3.5, 9.5]){
+    const anillo = new T.Mesh(new T.CylinderGeometry(
+      1.1 + (14 - hh) / 14 * 1.1 + .06, 1.1 + (14 - hh - 1.4) / 14 * 1.1 + .06,
+      1.4, 10, 1, true),
+      new T.MeshLambertMaterial({ color: 0xc23a2c }));
+    anillo.position.set(p.x, y + hh + .7, p.z);
+    scene.add(anillo);
+  }
+  const plataforma = new T.Mesh(new T.CylinderGeometry(1.9, 1.9, .25, 10), matMet);
+  plataforma.position.set(p.x, y + 14.2, p.z);
+  plataforma.castShadow = true;
+  scene.add(plataforma);
+  const cabina = new T.Mesh(new T.CylinderGeometry(1.2, 1.3, 1.8, 8, 1, true), matMet);
+  cabina.position.set(p.x, y + 15.2, p.z);
+  scene.add(cabina);
+  /* LA LÁMPARA */
+  beaconMat = new T.MeshBasicMaterial({ color: 0xffd870, transparent: true });
+  const lampara = new T.Mesh(new T.SphereGeometry(.85, 10, 8), beaconMat);
+  lampara.position.set(p.x, y + 15.3, p.z);
+  scene.add(lampara);
+  const techo = new T.Mesh(new T.ConeGeometry(1.5, 1.1, 8), matMet);
+  techo.position.set(p.x, y + 16.7, p.z);
+  scene.add(techo);
+  /* el tablero del USAR */
+  const tab = new T.Mesh(new T.BoxGeometry(.9, 1.2, .4), matMet);
+  tab.position.set(p.x + 2.7, y + .6, p.z + 2.3);
+  tab.castShadow = true;
+  scene.add(tab);
+  ARB.push([p.x, p.z, 2.6]);
+  window.__PANELES = 4;
+}
+/* -------- BALIZAS de emergencia flotantes (capítulos 4-5) + marcador ------- */
+let luci = null, luci0 = null;
+{
+  const NL = 90, P = new Float32Array(NL * 3), C = new Float32Array(NL * 3);
+  const c = new T.Color();
+  const a = POI.lagohielo, b = POI.faro;
+  for (let i = 0; i < NL; i++){
+    const t = i / NL;
+    const x = a.x + (b.x - a.x) * t + rr(-14, 14);
+    const z = a.z + (b.z - a.z) * t + rr(-14, 14);
+    P[i*3] = x; P[i*3+1] = H(x, z) + rr(1, 4); P[i*3+2] = z;
+    c.setHSL(.42 + rnd() * .12, .9, .7);
+    C[i*3] = c.r; C[i*3+1] = c.g; C[i*3+2] = c.b;
+  }
+  luci0 = Float32Array.from(P);
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P, 3));
+  g.setAttribute('color', new T.BufferAttribute(C, 3));
+  const cn = document.createElement('canvas'); cn.width = cn.height = 32;
+  const g2 = cn.getContext('2d');
+  const d = g2.createRadialGradient(16,16,0,16,16,16);
+  d.addColorStop(0,'rgba(255,255,255,1)'); d.addColorStop(1,'rgba(255,255,255,0)');
+  g2.fillStyle = d; g2.fillRect(0,0,32,32);
+  luci = new T.Points(g, new T.PointsMaterial({ size: .8, map: new T.CanvasTexture(cn),
+    vertexColors: true, transparent: true, blending: T.AdditiveBlending,
+    depthWrite: false, sizeAttenuation: true }));
+  luci.visible = false;
+  scene.add(luci);
+}
+const marca3d = new T.Mesh(new T.OctahedronGeometry(1.1, 0),
+  new T.MeshBasicMaterial({ color: 0x9fffd8, fog: false, transparent: true, opacity: .9 }));
+scene.add(marca3d);
+
+/* ================================ HISTORIA ================================= */
+/* ===== IDIOMAS. El texto ES la historia: va entero en los tres. ===== */
+const L = {
+es: { ui: { sub: 'la expedición aurora · un valle blanco que canta de noche',
+  empezar: 'EMPEZAR LA EXPEDICIÓN', otra: 'JUGAR OTRA VEZ', denuevo: 'EMPEZAR DE NUEVO',
+  seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENÚ', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
+  idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAJOS', g_m: 'MEDIOS', g_a: 'ALTOS',
+  completa: (m2, mn) => 'EXPEDICIÓN COMPLETA · ' + m2 + ' m caminados · ' + mn + ' min',
+  introT: 'El apagón',
+  intro: 'La ventisca duró tres días y se llevó el generador.\nSin generador no hay luz. Sin luz, el avión de\nsuministros no encuentra el valle.\n\nSos KAI, glacióloga de la expedición Aurora.\nEl avión pasa esta noche.\n\nEl campamento está al norte. Abrigate y caminá.' },
+caps: [
+  { n: 'CAPÍTULO 1', t: 'EL CAMPAMENTO', obj: 'campamento', objT: 'Volvé al campamento base',
+    dT: 'La radio', d: 'La carpa aguantó. La radio también, a pilas:\n\n«…Aurora, aquí VUELO 7. Sobrevolamos a las 03:00.\nSi no vemos el FARO encendido, seguimos al sur.\nRepito: si no hay luz, seguimos al sur.»\n\nHay células de energía en la cueva de hielo.' },
+  { n: 'CAPÍTULO 2', t: 'LA CUEVA', obj: 'cuevahielo', objT: 'Buscá las células en la cueva de hielo',
+    dT: 'El depósito', d: 'La boca de la cueva es un arco de hielo viejo.\nAdentro, los cajones del verano pasado: raciones,\ncuerda… y las células. CARGADAS.\n\nAl salir lo escuchás por primera vez:\nun gemido largo, abajo, lejos. El lago.' },
+  { n: 'CAPÍTULO 3', t: 'EL LAGO HELADO', obj: 'lagohielo', objT: 'Cruzá por la orilla del lago congelado',
+    dT: 'El hielo canta', d: 'El atajo al faro cruza el lago congelado.\nEl hielo CANTA bajo tus botas: gemidos, chasquidos,\nun latigazo que corre de orilla a orilla.\n\nCanta, pero aguanta. Los glaciólogos lo sabemos:\nel hielo que canta es hielo vivo. El mudo mata.' },
+  { n: 'CAPÍTULO 4', t: 'LA AURORA', obj: 'faro', objT: 'Seguí las chispas hasta el faro',
+    dT: 'El cielo verde', d: 'Y entonces el cielo se enciende.\n\nLa aurora cae en cortinas verdes y violetas,\ntan bajas que parece que se pueden tocar.\nEl faro espera, apagado, negro contra el cielo\nque baila. Última subida.' },
+  { n: 'CAPÍTULO 5', t: 'EL ENCENDIDO', obj: 'faro', objT: 'Instalá las células y encendé el faro', usar: true,
+    dT: 'La luz', d: 'Célula uno. Célula dos. El interruptor pesa\ncomo todos los interruptores importantes.\n\nLa lámpara parpadea… y AGARRA.\nUn haz dorado barre el valle blanco.\n\nA las 03:04, un punto de luz allá arriba\nmueve las alas: te vieron.' },
+  { n: 'CAPÍTULO 6', t: 'EL REGRESO', obj: 'campamento', objT: 'Volvé al campamento',
+    dT: 'FIN', d: 'Volvés con el faro barriendo la nieve a tu espalda\ny la aurora todavía bailando.\n\nMañana llega el suministro. Esta noche, chocolate\ncaliente y el hielo cantando de fondo.\n\nHIELO — fin de la historia.' }
+] },
+en: { ui: { sub: 'the aurora expedition · a white valley that sings at night',
+  empezar: 'START THE EXPEDITION', otra: 'PLAY AGAIN', denuevo: 'START OVER',
+  seguir: 'CONTINUE', correr: 'RUN', menu: 'MENU', usar: '◉ USE', dlgGo: 'CONTINUE ▸',
+  idioma: 'LANGUAGE', graficos: 'GRAPHICS', g_b: 'LOW', g_m: 'MEDIUM', g_a: 'HIGH',
+  completa: (m2, mn) => 'EXPEDITION COMPLETE · ' + m2 + ' m walked · ' + mn + ' min',
+  introT: 'The blackout',
+  intro: 'The blizzard lasted three days and took the generator.\nNo generator, no light. No light, and the supply\nplane cannot find the valley.\n\nYou are KAI, glaciologist of the Aurora expedition.\nThe plane flies over tonight.\n\nCamp is up north. Bundle up and walk.' },
+caps: [
+  { n: 'CHAPTER 1', t: 'THE CAMP', obj: 'campamento', objT: 'Return to base camp',
+    dT: 'The radio', d: 'The tent held. So did the radio, on batteries:\n\n“…Aurora, this is FLIGHT 7. Flyover at 03:00.\nIf we do not see the BEACON lit, we continue south.\nRepeat: no light, we continue south.”\n\nThere are power cells in the ice cave.' },
+  { n: 'CHAPTER 2', t: 'THE CAVE', obj: 'cuevahielo', objT: 'Fetch the cells from the ice cave',
+    dT: 'The depot', d: 'The cave mouth is an arch of old ice.\nInside, last summer’s crates: rations, rope…\nand the cells. CHARGED.\n\nOn the way out you hear it for the first time:\na long groan, below, far away. The lake.' },
+  { n: 'CHAPTER 3', t: 'THE FROZEN LAKE', obj: 'lagohielo', objT: 'Cross by the frozen lakeshore',
+    dT: 'The ice sings', d: 'The shortcut to the beacon crosses the frozen lake.\nThe ice SINGS under your boots: groans, snaps,\na whipcrack running from shore to shore.\n\nIt sings, but it holds. Glaciologists know:\nsinging ice is living ice. The silent kind kills.' },
+  { n: 'CHAPTER 4', t: 'THE AURORA', obj: 'faro', objT: 'Follow the sparks to the beacon tower',
+    dT: 'The green sky', d: 'And then the sky turns on.\n\nThe aurora falls in green and violet curtains,\nso low you could almost touch them.\nThe tower waits, unlit, black against a dancing\nsky. One last climb.' },
+  { n: 'CHAPTER 5', t: 'THE LIGHTING', obj: 'faro', objT: 'Install the cells and light the beacon', usar: true,
+    dT: 'The light', d: 'Cell one. Cell two. The switch is heavy,\nthe way all important switches are.\n\nThe lamp flickers… and CATCHES.\nA golden beam sweeps the white valley.\n\nAt 03:04, a point of light up there\nwags its wings: they saw you.' },
+  { n: 'CHAPTER 6', t: 'THE RETURN', obj: 'campamento', objT: 'Return to camp',
+    dT: 'THE END', d: 'You walk back with the beacon sweeping the snow\nbehind you and the aurora still dancing.\n\nThe supplies arrive tomorrow. Tonight: hot\nchocolate, and the ice singing along.\n\nICE — end of the story.' }
+] },
+pt: { ui: { sub: 'a expedição aurora · um vale branco que canta à noite',
+  empezar: 'COMEÇAR A EXPEDIÇÃO', otra: 'JOGAR DE NOVO', denuevo: 'RECOMEÇAR',
+  seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENU', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
+  idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAIXOS', g_m: 'MÉDIOS', g_a: 'ALTOS',
+  completa: (m2, mn) => 'EXPEDIÇÃO COMPLETA · ' + m2 + ' m caminhados · ' + mn + ' min',
+  introT: 'O apagão',
+  intro: 'A nevasca durou três dias e levou o gerador.\nSem gerador não há luz. Sem luz, o avião de\nsuprimentos não encontra o vale.\n\nVocê é KAI, glaciologista da expedição Aurora.\nO avião passa esta noite.\n\nO acampamento fica ao norte. Agasalhe-se e caminhe.' },
+caps: [
+  { n: 'CAPÍTULO 1', t: 'O ACAMPAMENTO', obj: 'campamento', objT: 'Volte ao acampamento base',
+    dT: 'O rádio', d: 'A barraca aguentou. O rádio também, a pilhas:\n\n«…Aurora, aqui VOO 7. Sobrevoo às 03:00.\nSe não virmos o FAROL aceso, seguimos ao sul.\nRepito: sem luz, seguimos ao sul.»\n\nHá células de energia na caverna de gelo.' },
+  { n: 'CAPÍTULO 2', t: 'A CAVERNA', obj: 'cuevahielo', objT: 'Busque as células na caverna de gelo',
+    dT: 'O depósito', d: 'A boca da caverna é um arco de gelo velho.\nDentro, os caixotes do verão passado: rações,\ncorda… e as células. CARREGADAS.\n\nAo sair você o escuta pela primeira vez:\num gemido longo, abaixo, longe. O lago.' },
+  { n: 'CAPÍTULO 3', t: 'O LAGO CONGELADO', obj: 'lagohielo', objT: 'Cruze pela margem do lago congelado',
+    dT: 'O gelo canta', d: 'O atalho ao farol cruza o lago congelado.\nO gelo CANTA sob suas botas: gemidos, estalos,\num chicote que corre de margem a margem.\n\nCanta, mas aguenta. Os glaciologistas sabem:\ngelo que canta é gelo vivo. O mudo mata.' },
+  { n: 'CAPÍTULO 4', t: 'A AURORA', obj: 'faro', objT: 'Siga as faíscas até o farol',
+    dT: 'O céu verde', d: 'E então o céu se acende.\n\nA aurora cai em cortinas verdes e violetas,\ntão baixas que parece dar para tocar.\nO farol espera, apagado, negro contra o céu\nque dança. Última subida.' },
+  { n: 'CAPÍTULO 5', t: 'O ACENDIMENTO', obj: 'faro', objT: 'Instale as células e acenda o farol', usar: true,
+    dT: 'A luz', d: 'Célula um. Célula dois. O interruptor pesa\ncomo pesam todos os interruptores importantes.\n\nA lâmpada pisca… e PEGA.\nUm feixe dourado varre o vale branco.\n\nÀs 03:04, um ponto de luz lá em cima\nbalança as asas: viram você.' },
+  { n: 'CAPÍTULO 6', t: 'O REGRESSO', obj: 'campamento', objT: 'Volte ao acampamento',
+    dT: 'FIM', d: 'Você volta com o farol varrendo a neve às suas\ncostas e a aurora ainda dançando.\n\nAmanhã chegam os suprimentos. Hoje à noite:\nchocolate quente e o gelo cantando de fundo.\n\nGELO — fim da história.' }
+] } };
+let LANG = 'es';
+try { LANG = localStorage.getItem('hielo_lang') || 'es'; } catch(e){}
+if (!L[LANG]) LANG = 'es';
+let CAPS = L[LANG].caps;
+const Tx = k => L[LANG].ui[k];
+/* luz por capítulo: dirección/intensidad del sol, cielo, niebla, hemisferio y
+   EXPOSICIÓN del tone mapping (la cámara "abre" en el atardecer, "cierra" de
+   noche: el mismo truco de exposición que usan los juegos grandes) */
+const LUZCAP = [
+  { sol: [.5, .5, .3],   solI: 2.4, bg: 1.0,  fog: '#b8cadb', fogFar: 430, hemiI: .85, exp: 1.1 },
+  { sol: [.2, .75, .2],  solI: 2.6, bg: 1.05, fog: '#c2d3e2', fogFar: 460, hemiI: .95, exp: 1.12 },
+  { sol: [-.6, .28, .2], solI: 1.9, bg: .85,  fog: '#cfaeb4', fogFar: 390, hemiI: .7,  exp: 1.2 },
+  { sol: [-.8, .1, .1],  solI: 1.0, bg: .5,   fog: '#8a92b8', fogFar: 330, hemiI: .55, exp: 1.16 },
+  { sol: [-.4, .05, -.3],solI: .3,  bg: .2,   fog: '#0e1626', fogFar: 280, hemiI: .5,  exp: 1.02 },
+  { sol: [.6, .42, .35], solI: 2.2, bg: .92,  fog: '#c8d4e0', fogFar: 430, hemiI: .85, exp: 1.12 }
+];
+let cap = 0, enDlg = false, fase = 'menu';
+let luzDe = LUZCAP[0], luzA = LUZCAP[0], luzK = 1;
+function guardar(){ try { localStorage.setItem('hielo1', JSON.stringify({ cap, t: stats.t, dist: stats.dist })); } catch(e){} }
+function cargar(){ try { return JSON.parse(localStorage.getItem('hielo1') || 'null'); } catch(e){ return null; } }
+function ponCap(n, silencio){
+  cap = cl(n, 0, CAPS.length - 1);
+  const C = CAPS[cap];
+  $('objT').textContent = C.objT;
+  luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;
+  luci.visible = cap === 3 || cap === 4;
+  if (!silencio){
+    $('capN').textContent = C.n;
+    $('capT').textContent = C.t;
+    $('capCard').classList.add('on');
+    clearTimeout(ponCap._t);
+    ponCap._t = setTimeout(() => $('capCard').classList.remove('on'), 3400);
+  }
+  guardar();
+}
+function mezclaLuz(){
+  /* estado ACTUAL de la luz (para arrancar la transición desde donde está) */
+  return { sol: [SOLD.x, SOLD.y, SOLD.z],
+    solI: sol.intensity, bg: scene.backgroundIntensity,
+    fog: '#' + scene.fog.color.getHexString(), fogFar: scene.fog.far,
+    hemiI: hemi.intensity, exp: ren.toneMappingExposure };
+}
+function pasoLuz(dt){
+  if (luzK >= 1) return;
+  luzK = Math.min(1, luzK + dt / 7);           /* la transición dura ~7 s */
+  const k = luzK * luzK * (3 - 2 * luzK);
+  const A2 = luzDe, B2 = luzA;
+  /* la DIRECCIÓN del sol se mezcla acá; su POSICIÓN la pone el bucle cada
+     cuadro, pegada al jugador, para que la caja de sombra lo siga */
+  SOLD.set(A2.sol[0] + (B2.sol[0] - A2.sol[0]) * k,
+           A2.sol[1] + (B2.sol[1] - A2.sol[1]) * k,
+           A2.sol[2] + (B2.sol[2] - A2.sol[2]) * k).normalize();
+  sol.intensity = A2.solI + (B2.solI - A2.solI) * k;
+  hemi.intensity = A2.hemiI + (B2.hemiI - A2.hemiI) * k;
+  scene.backgroundIntensity = A2.bg + (B2.bg - A2.bg) * k;
+  scene.fog.color.set(A2.fog).lerp(new T.Color(B2.fog), k);
+  scene.fog.far = (A2.fogFar + (B2.fogFar - A2.fogFar) * k) * GFXQ[GFX].fogK;
+  const eA = A2.exp != null ? A2.exp : 1.12, eB = B2.exp != null ? B2.exp : 1.12;
+  ren.toneMappingExposure = eA + (eB - eA) * k;
+  /* el ATARDECER AZUL: el halo del sol vira del caramelo al azul al caer */
+  glare.material.color.set(0xfff0dc).lerp(AZUL_OCASO, cl(1 - SOLD.y * 2.4, 0, 1));
+  /* la ventana de la cabaña se enciende sola cuando oscurece, y VUELCA luz */
+  if (ventanaMat){
+    const osc = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+    ventanaMat.color.setRGB(.35 + .65 * osc, .29 + .55 * osc, .2 + .28 * osc);
+    focoCasa.intensity = osc * osc * 60;
+  }
+}
+function dialogo(titulo, cuerpo, alCerrar){
+  enDlg = true;
+  $('dlgT').textContent = titulo;
+  $('dlgB').textContent = cuerpo;
+  $('dlg').classList.add('on');
+  $('dlgGo').onclick = () => {
+    $('dlg').classList.remove('on');
+    enDlg = false;
+    if (alCerrar) alCerrar();
+  };
+}
+function llegaObjetivo(){
+  const C = CAPS[cap];
+  dialogo(C.dT, C.d, () => {
+    if (cap >= CAPS.length - 1){ finDeHistoria(); return; }
+    ponCap(cap + 1);
+  });
+}
+function finDeHistoria(){
+  fase = 'fin';
+  guardarFin();
+  $('menu').style.display = 'flex';
+  $('hud').classList.remove('on');
+  $('mCap').textContent = Tx('completa')(Math.round(stats.dist), Math.round(stats.t / 60));
+  $('mJugar').textContent = Tx('otra');
+  $('mSeguir').style.display = 'none';
+}
+function guardarFin(){ try { localStorage.removeItem('hielo1'); } catch(e){} }
+
+/* ========================= AMBIENTE SONORO ================================
+   SINTETIZADO con WebAudio. Las voces del valle blanco:
+     · VIENTO que SILBA: ruido grave + un pasabanda agudo cuya frecuencia
+       sube y baja con las ráfagas (el silbido de la ventisca)
+     · la ESTUFA del campamento: crepitar filtrado, sube al ACERCARSE
+     · EL HIELO CANTA de noche: gemidos graves y CRUJIDOS secos al azar
+   ========================================================================== */
+const AMB = { ctx: null, master: null, on: true, viento: null, pos: null,
+  noche: null, silbF: null, tBlip: 6 };
+try { AMB.on = localStorage.getItem('hielo_son') !== '0'; } catch(e){}
+function ambienteOn(){
+  if (AMB.ctx){ if (AMB.ctx.state === 'suspended') AMB.ctx.resume(); return; }
+  try { AMB.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return; }
+  const A2 = AMB.ctx;
+  AMB.master = A2.createGain();
+  AMB.master.gain.value = AMB.on ? 1 : 0;
+  AMB.master.connect(A2.destination);
+  const buf = A2.createBuffer(1, A2.sampleRate * 3, A2.sampleRate);
+  const d = buf.getChannelData(0); let l = 0;
+  for (let i = 0; i < d.length; i++){ const w = Math.random() * 2 - 1;
+    l = l * .972 + w * .028; d[i] = l * 3.1; }
+  /* viento base + silbido (mismo ruido por un pasabanda que sube y baja) */
+  const nv = A2.createBufferSource(); nv.buffer = buf; nv.loop = true;
+  const fv = A2.createBiquadFilter(); fv.type = 'lowpass'; fv.frequency.value = 300;
+  AMB.viento = A2.createGain(); AMB.viento.gain.value = .08;
+  nv.connect(fv); fv.connect(AMB.viento); AMB.viento.connect(AMB.master); nv.start();
+  const ns = A2.createBufferSource(); ns.buffer = buf; ns.loop = true;
+  AMB.silbF = A2.createBiquadFilter(); AMB.silbF.type = 'bandpass';
+  AMB.silbF.frequency.value = 700; AMB.silbF.Q.value = 9;
+  const gs = A2.createGain(); gs.gain.value = .05;
+  ns.connect(AMB.silbF); AMB.silbF.connect(gs); gs.connect(AMB.master); ns.start();
+  /* la estufa: crepitar (ruido rápido por pasaaltos, con mordidas) */
+  const ne2 = A2.createBufferSource(); ne2.buffer = buf; ne2.loop = true;
+  ne2.playbackRate.value = 1.9;
+  const fe2 = A2.createBiquadFilter(); fe2.type = 'highpass'; fe2.frequency.value = 1400;
+  AMB.pos = A2.createGain(); AMB.pos.gain.value = 0;
+  ne2.connect(fe2); fe2.connect(AMB.pos); AMB.pos.connect(AMB.master); ne2.start();
+  /* el gemido del hielo: seno gravísimo con vibrato lento */
+  const og = A2.createOscillator(); og.frequency.value = 62;
+  const vib = A2.createOscillator(); vib.frequency.value = .5;
+  const vg = A2.createGain(); vg.gain.value = 7;
+  vib.connect(vg); vg.connect(og.frequency); vib.start();
+  AMB.noche = A2.createGain(); AMB.noche.gain.value = 0;
+  og.connect(AMB.noche); AMB.noche.connect(AMB.master); og.start();
+}
+/* el CRUJIDO del hielo: golpe de ruido grave con caída rápida */
+function crujido(){
+  const A2 = AMB.ctx; if (!A2) return;
+  const dur = .25, sr = A2.sampleRate;
+  const b = A2.createBuffer(1, sr * dur, sr);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++)
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * .04));
+  const src = A2.createBufferSource(); src.buffer = b;
+  const f = A2.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(900, A2.currentTime);
+  f.frequency.exponentialRampToValueAtTime(120, A2.currentTime + dur);
+  const g = A2.createGain(); g.gain.value = .5;
+  src.connect(f); f.connect(g); g.connect(AMB.master); src.start();
+}
+function ambTick(dt){
+  if (!AMB.ctx || fase !== 'juego') return;
+  const rafaga = Math.abs(Math.sin(t0 * .09)) * .6 + Math.max(0, Math.sin(t0 * .23)) * .4;
+  AMB.viento.gain.value = .06 + .09 * rafaga;
+  AMB.silbF.frequency.value = 550 + 500 * rafaga;
+  const dh = Math.hypot(px - POI.campamento.x, pz - POI.campamento.z);
+  AMB.pos.gain.value = cl(1 - dh / 40, 0, 1) * .2;
+  const osc = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+  const enLago = Math.hypot(px - POI.crater.x, pz - POI.crater.z) < 220 ? 1.6 : 1;
+  AMB.noche.gain.value = (osc > .5 ? (osc - .5) * .3 : 0) * enLago;
+  AMB.tBlip -= dt;
+  if (AMB.tBlip <= 0){
+    AMB.tBlip = 7 + Math.random() * 12;
+    if (osc > .4 || enLago > 1) crujido();
+  }
+}
+$('bSon').addEventListener('pointerdown', e => {
+  e.preventDefault();
+  AMB.on = !AMB.on;
+  try { localStorage.setItem('hielo_son', AMB.on ? '1' : '0'); } catch(e2){}
+  if (AMB.master) AMB.master.gain.value = AMB.on ? 1 : 0;
+  $('bSon').textContent = AMB.on ? '🔊' : '🔇';
+});
+$('bSon').textContent = AMB.on ? '🔊' : '🔇';
+
+/* ================================ JUGADOR ================================== */
+const stats = { t: 0, dist: 0 };
+let px = POI.inicio.x, pz = POI.inicio.z, yaw = 0, pitch = -.03;
+let pvx = 0, pvz = 0, bobF = 0, corre = false;
+const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
+const DED = { mov: null, mira: null };
+let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
+function fisica(dt){
+  yaw -= keyL.x * 2.2 * dt;
+  pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+  let mx = movV.x + keyV.x, my = movV.y + keyV.y;
+  const m = Math.hypot(mx, my);
+  if (m > 1){ mx /= m; my /= m; }
+  const sp = corre ? VEL_CORRE : VEL;
+  const sy = Math.sin(yaw), cy = Math.cos(yaw);
+  pvx = (-sy * -my + cy * mx) * sp;
+  pvz = (-cy * -my - sy * mx) * sp;
+  let nx = cl(px + pvx * dt, -MITAD + 6, MITAD - 6);
+  let nz = cl(pz + pvz * dt, -MITAD + 6, MITAD - 6);
+  /* a través de las rocas y las máquinas, no */
+  for (const a of ARB){
+    const dx = nx - a[0], dz = nz - a[1], d = Math.hypot(dx, dz), rq = a[2] + .5;
+    if (d < rq && d > 1e-4){ nx = a[0] + dx / d * rq; nz = a[1] + dz / d * rq; }
+  }
+  stats.dist += Math.hypot(nx - px, nz - pz);
+  px = nx; pz = nz;
+  bobF += dt * (2 + 8 * Math.min(1, Math.hypot(pvx, pvz) / VEL));
+  stats.t += dt;
+}
+function ponCam(){
+  const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
+  cam.position.set(px, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, pz);
+  cam.rotation.y = yaw;
+  cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
+  cam.fov = 72 + (corre ? 5 : 0);
+  cam.updateProjectionMatrix();
+}
+
+/* -------- objetivo: marcador 3D + distancia + botón USAR ------------------- */
+function pasoObjetivo(){
+  const C = CAPS[cap];
+  const p = POI[C.obj];
+  const d = Math.hypot(px - p.x, pz - p.z);
+  $('objD').textContent = Math.round(d) + ' m';
+  marca3d.position.set(p.x, H(p.x, p.z) + 6.5 + Math.sin(t0 * 2) * .5, p.z);
+  marca3d.rotation.y = t0 * 1.4;
+  marca3d.visible = !enDlg;
+  const cerca = d < (C.usar ? 7 : 10);
+  if (C.usar){
+    $('bUsar').classList.toggle('on', cerca && !enDlg);
+    if (window.__autoUsar && cerca && !enDlg) llegaObjetivo();
+  } else if (cerca && !enDlg){
+    llegaObjetivo();
+  }
+}
+$('bUsar').addEventListener('pointerdown', e => { e.preventDefault();
+  if (!enDlg && $('bUsar').classList.contains('on')) llegaObjetivo(); });
+$('bCorre').addEventListener('pointerdown', e => { e.preventDefault();
+  corre = !corre; $('bCorre').classList.toggle('on', corre); });
+$('bMenu').addEventListener('pointerdown', e => { e.preventDefault();
+  fase = 'menu'; $('menu').style.display = 'flex'; $('hud').classList.remove('on');
+  $('mJugar').textContent = Tx('denuevo');
+  const sv = cargar();
+  if (sv && sv.cap > 0){ $('mSeguir').style.display = 'block';
+    $('mCap').textContent = CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t; }
+});
+
+/* -------------------------- entrada táctil / teclado ----------------------- */
+const cv = $('gl');
+cv.addEventListener('pointerdown', e => {
+  if (fase !== 'juego' || enDlg) return;
+  const x = e.clientX, y = e.clientY;
+  if (x < innerWidth * .5 && !DED.mov) DED.mov = { id: e.pointerId, x0: x, y0: y };
+  else if (!DED.mira) DED.mira = { id: e.pointerId, x, y };
+});
+cv.addEventListener('pointermove', e => {
+  if (DED.mov && DED.mov.id === e.pointerId){
+    const R = Math.max(34, innerHeight * .12);
+    const dx = e.clientX - DED.mov.x0, dy = e.clientY - DED.mov.y0;
+    const d = Math.hypot(dx, dy), k = d > R ? R / d : 1;
+    movV.x = dx * k / R; movV.y = dy * k / R;
+  } else if (DED.mira && DED.mira.id === e.pointerId){
+    yaw -= (e.clientX - DED.mira.x) * .005;
+    pitch = cl(pitch - (e.clientY - DED.mira.y) * .005, -1.2, 1.2);
+    DED.mira.x = e.clientX; DED.mira.y = e.clientY;
+  }
+});
+const sueltaDedo = e => {
+  if (DED.mov && DED.mov.id === e.pointerId){ DED.mov = null; movV.x = movV.y = 0; }
+  if (DED.mira && DED.mira.id === e.pointerId) DED.mira = null;
+};
+cv.addEventListener('pointerup', sueltaDedo);
+cv.addEventListener('pointercancel', sueltaDedo);
+addEventListener('keydown', e => {
+  const c = e.code;
+  if (c === 'KeyW') keyV.y = -1; if (c === 'KeyS') keyV.y = 1;
+  if (c === 'KeyA') keyV.x = -1; if (c === 'KeyD') keyV.x = 1;
+  if (c === 'ArrowLeft') keyL.x = -1; if (c === 'ArrowRight') keyL.x = 1;
+  if (c === 'ArrowUp') keyL.y = -1; if (c === 'ArrowDown') keyL.y = 1;
+  if (c === 'ShiftLeft') { corre = true; $('bCorre').classList.add('on'); }
+  if (c === 'KeyE' && $('bUsar').classList.contains('on') && !enDlg) llegaObjetivo();
+  if (c === 'Enter' && enDlg) $('dlgGo').onclick();
+});
+addEventListener('keyup', e => {
+  const c = e.code;
+  if (c === 'KeyW' || c === 'KeyS') keyV.y = 0;
+  if (c === 'KeyA' || c === 'KeyD') keyV.x = 0;
+  if (c === 'ArrowLeft' || c === 'ArrowRight') keyL.x = 0;
+  if (c === 'ArrowUp' || c === 'ArrowDown') keyL.y = 0;
+  if (c === 'ShiftLeft') { corre = false; $('bCorre').classList.remove('on'); }
+});
+
+/* ------------------------ resolución adaptativa ---------------------------- */
+/* som = lado del mapa de sombra (0 = sin sombras, para la gama baja) */
+const GFXQ = { b: { dpr: .7, fogK: .78, som: 0 },
+               m: { dpr: 1.15, fogK: 1, som: 1024 },
+               a: { dpr: 2, fogK: 1.25, som: 2048 } };
+let SOMBRAS = true;
+const FOCO = { x: 0, z: 0 };
+let GFX = 'm';
+try { GFX = localStorage.getItem('hielo_gfx') || 'm'; } catch(e){}
+if (!GFXQ[GFX]) GFX = 'm';
+let rs = 1, rsVotos = 0, tRS = 0, fps = 60;
+function aplicaRS(){
+  const dpr = Math.min(window.devicePixelRatio || 1, GFXQ[GFX].dpr);
+  ren.setPixelRatio(dpr * rs);
+  ren.setSize(innerWidth, innerHeight, false);
+  cam.aspect = innerWidth / innerHeight;
+  cam.updateProjectionMatrix();
+}
+addEventListener('resize', aplicaRS);
+aplicaRS();
+function rsTick(dt){
+  tRS += dt;
+  if (tRS < .8) return;
+  tRS = 0;
+  const quiere = fps < 34 ? -1 : (fps > 55 ? 1 : 0);
+  if (quiere === 0 || (rsVotos !== 0 && Math.sign(rsVotos) !== quiere)){ rsVotos = 0; return; }
+  rsVotos += quiere;
+  if (Math.abs(rsVotos) < 2) return;
+  rsVotos = 0;
+  if (quiere < 0 && rs > .5){ rs = Math.max(.5, rs - .1); aplicaRS(); }
+  else if (quiere > 0 && rs < 1){ rs = Math.min(1, rs + .08); aplicaRS(); }
+}
+
+/* ================================ BUCLE ==================================== */
+let t0 = 0, tPrev = performance.now(), msAcum = 0, nCuadros = 0;
+function bucle(t){
+  requestAnimationFrame(bucle);
+  const dt = Math.min(.05, (t - tPrev) / 1000) || .016;
+  tPrev = t; t0 += dt;
+  msAcum += dt; nCuadros++;
+  if (msAcum > .5){ fps = fps * .3 + (nCuadros / msAcum) * .7; msAcum = 0; nCuadros = 0;
+    $('fps').textContent = fps.toFixed(0) + ' fps · ' + (rs * 100 | 0) + '% · ' +
+      ren.info.render.calls + ' dib · ' + (ren.info.render.triangles / 1000).toFixed(0) + 'k tri'; }
+  if (fase !== 'juego'){
+    /* MENÚ: el valle se ve DETRÁS, con una cámara que orbita despacio entre la
+       cabaña y el lago (el pedido: que el fondo del menú sea el mapa) */
+    const cx2 = (POI.campamento.x + POI.crater.x) / 2, cz2 = (POI.campamento.z + POI.crater.z) / 2;
+    const a = t0 * .045;
+    cam.position.set(cx2 + Math.cos(a) * 240, 64 + Math.sin(t0 * .1) * 10,
+                     cz2 + Math.sin(a) * 240);
+    cam.lookAt(cx2, 0, cz2);
+    cam.fov = 62; cam.updateProjectionMatrix();
+    pasoLuz(dt);
+    FOCO.x = cx2; FOCO.z = cz2;
+  } else { FOCO.x = px; FOCO.z = pz; }
+  /* el sol (y su caja de sombra) viajan con el foco de la cámara; con el sol
+     casi acostado la sombra direccional se apaga (rayos horizontales barren
+     el mapa entero y el resultado es puro artefacto, no una sombra) */
+  sol.target.position.set(FOCO.x, 0, FOCO.z);
+  sol.position.set(FOCO.x + SOLD.x * 420, SOLD.y * 420, FOCO.z + SOLD.z * 420);
+  sol.castShadow = SOMBRAS && SOLD.y > .12;
+  glare.position.set(cam.position.x + SOLD.x * 950, cam.position.y + SOLD.y * 950,
+                     cam.position.z + SOLD.z * 950);
+  glare.material.opacity = cl((sol.intensity - .6) / 1.6, 0, 1);
+  if (fase === 'juego'){
+    if (!enDlg) fisica(dt);
+    pasoLuz(dt);
+    pasoObjetivo();
+    rsTick(dt);
+    ambTick(dt);
+    /* luciérnagas ondulando */
+    if (luci.visible){
+      const P = luci.geometry.attributes.position;
+      for (let i = 0; i < P.count; i++){
+        P.array[i*3+1] = luci0[i*3+1] + Math.sin(t0 * .9 + i * 1.7) * .5;
+      }
+      P.needsUpdate = true;
+    }
+  }
+  pasoTolvas(t0);
+  pasoNieve(dt);
+  if (beaconMat) beaconMat.opacity = .35 + .65 * (.5 + .5 * Math.sin(t0 * 3.6));
+  /* la aurora despierta con la noche */
+  AURORA_MAT.uniforms.uT.value = t0;
+  /* las lunas y la Tierra solo viven de noche, pegadas al cielo de la cámara */
+  const nocheK = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+  AURORA_MAT.uniforms.uOp.value = .06 + nocheK * .85;
+  for (const lu of LUNAS){
+    lu.position.set(cam.position.x + lu.userData.dir.x * 900,
+      cam.position.y + lu.userData.dir.y * 900,
+      cam.position.z + lu.userData.dir.z * 900);
+    lu.material.opacity = nocheK * .9;
+  }
+  if (fase === 'juego') ponCam();
+  ren.render(scene, cam);
+}
+requestAnimationFrame(bucle);
+
+/* ================================ MENÚ ===================================== */
+function entrar(desde){
+  fase = 'juego';
+  ambienteOn();
+  $('menu').style.display = 'none';
+  $('hud').classList.add('on');
+  try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch (e) {}
+  try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
+  if (desde === 0){
+    px = POI.inicio.x; pz = POI.inicio.z; yaw = 0; pitch = -.03;   /* mirando al valle, no al borde */
+    stats.t = 0; stats.dist = 0;
+    ponCap(0);
+    dialogo(Tx('introT'), Tx('intro'), null);
+  } else {
+    const sv = cargar();
+    const c2 = sv ? sv.cap : 0;
+    if (sv){ stats.t = sv.t || 0; stats.dist = sv.dist || 0; }
+    const p = POI[CAPS[c2].obj === 'campamento' && c2 === 0 ? 'inicio' : CAPS[Math.max(0, c2 - 1)].obj];
+    px = p.x + 8; pz = p.z + 8;
+    ponCap(c2, true);
+  }
+}
+/* ---------- idioma ---------- */
+function aplicaIdioma(){
+  CAPS = L[LANG].caps;
+  document.querySelector('#menu .sub').textContent = Tx('sub');
+  if (!/OTRA|AGAIN|DE NOVO|DE NUEVO|OVER|RECOME/.test($('mJugar').textContent))
+    $('mJugar').textContent = Tx('empezar');
+  $('mSeguir').textContent = Tx('seguir');
+  $('tLang').textContent = Tx('idioma');
+  $('tGfx').textContent = Tx('graficos');
+  const g = { b: 'g_b', m: 'g_m', a: 'g_a' };
+  document.querySelectorAll('#fGfx .chip').forEach(ch => ch.textContent = Tx(g[ch.dataset.g]));
+  $('bCorre').textContent = Tx('correr');
+  $('bMenu').textContent = Tx('menu');
+  $('bUsar').textContent = Tx('usar');
+  $('dlgGo').textContent = Tx('dlgGo');
+  document.querySelectorAll('#fLang .chip').forEach(ch =>
+    ch.classList.toggle('on', ch.dataset.l === LANG));
+  if (fase === 'juego') ponCap(cap, true);
+  const sv = cargar();
+  if (sv && sv.cap > 0 && fase === 'menu')
+    $('mCap').textContent = CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t;
+}
+function setLang(l){
+  if (!L[l]) return;
+  LANG = l;
+  try { localStorage.setItem('hielo_lang', l); } catch(e){}
+  aplicaIdioma();
+}
+document.querySelectorAll('#fLang .chip').forEach(ch =>
+  ch.addEventListener('pointerdown', e => { e.preventDefault(); setLang(ch.dataset.l); }));
+
+/* ---------- calidad gráfica: tope de resolución y alcance de la niebla ------ */
+function setGfx(g){
+  if (!GFXQ[g]) return;
+  GFX = g;
+  try { localStorage.setItem('hielo_gfx', g); } catch(e){}
+  document.querySelectorAll('#fGfx .chip').forEach(ch =>
+    ch.classList.toggle('on', ch.dataset.g === GFX));
+  rs = 1; aplicaRS();
+  /* sombras por calidad: apagadas en BAJOS, 1k en MEDIOS, 2k en ALTOS.
+     Cambiar el tamaño exige tirar el mapa viejo para que three lo recree. */
+  const s = GFXQ[g].som;
+  SOMBRAS = s > 0;
+  if (s > 0 && sol.shadow.mapSize.x !== s){
+    sol.shadow.mapSize.set(s, s);
+    if (sol.shadow.map){ sol.shadow.map.dispose(); sol.shadow.map = null; }
+  }
+  luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;   /* re-apunta la niebla */
+}
+document.querySelectorAll('#fGfx .chip').forEach(ch =>
+  ch.addEventListener('pointerdown', e => { e.preventDefault(); setGfx(ch.dataset.g); }));
+
+{
+  const sv = cargar();
+  if (sv && sv.cap > 0){
+    $('mSeguir').style.display = 'block';
+    $('mCap').textContent = sv ? (CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t) : '';
+  }
+}
+aplicaIdioma();
+setGfx(GFX);
+$('mJugar').onclick = () => entrar(0);
+$('mSeguir').onclick = () => entrar(1);
+$('cargando').style.display = 'none';
+
+/* =========================== GANCHOS DE PRUEBA ============================= */
+window.__S = {
+  T, scene, ren, cam, POI, CAPS, H,
+  get(){ return { fase, cap, enDlg, px: +px.toFixed(1), pz: +pz.toFixed(1),
+    yaw: +yaw.toFixed(2), fps: +fps.toFixed(1), rs,
+    dib: ren.info.render.calls, tri: ren.info.render.triangles,
+    dist: Math.round(stats.dist), obj: CAPS[cap].obj,
+    dObj: Math.round(Math.hypot(px - POI[CAPS[cap].obj].x, pz - POI[CAPS[cap].obj].z)),
+    solY: +sol.position.y.toFixed(0), bg: +scene.backgroundIntensity.toFixed(2),
+    luci: luci.visible, usar: $('bUsar').classList.contains('on'),
+    save: (() => { try { return JSON.parse(localStorage.getItem('hielo1') || 'null'); } catch(e){ return null; } })() };
+  },
+  entrar, tp(x, z){ px = x; pz = z; },
+  lang(){ return LANG; }, setLang, gfx(){ return GFX; }, setGfx,
+  amb(){ return AMB.ctx ? { estado: AMB.ctx.state, master: AMB.master.gain.value,
+    viento: +AMB.viento.gain.value.toFixed(3), pos: +AMB.pos.gain.value.toFixed(3),
+    noche: +AMB.noche.gain.value.toFixed(3) } : null; },
+  pr(){ return ren.getPixelRatio(); },
+  sombras(){ return { on: SOMBRAS, sol: sol.castShadow, mapa: sol.shadow.mapSize.x,
+    tipo: ren.shadowMap.type, tone: ren.toneMapping, exp: +ren.toneMappingExposure.toFixed(2),
+    terr: terrChunks[0].receiveShadow, solY: +SOLD.y.toFixed(2),
+    foco: +focoCasa.intensity.toFixed(1) }; },
+  sendaPts(){ return SENDA_PTS; }, arboles(){ return ARB; },
+  partes(){ return window.__PARTES || 0; },
+  cristales(){ return window.__CRISTALES || 0; },
+  rover(){ return window.__ROVER || 0; },
+  mira(y, p){ yaw = y; if (p != null) pitch = p; },
+  dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
+  usar(){ if ($('bUsar').classList.contains('on') && !enDlg) llegaObjetivo(); },
+  cap(n){ ponCap(n, true); },
+  corre(v){ corre = !!v; },
+  luzYa(){ luzK = .999; pasoLuz(1); },
+  pix(){
+    ren.render(scene, cam);
+    const gl = ren.getContext();
+    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    const b = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b);
+    const at = (fx, fy) => { const x = Math.floor(fx*(w-1)), y = Math.floor((1-fy)*(h-1));
+      const i = (y*w + x)*4; return [b[i], b[i+1], b[i+2]]; };
+    const set = new Set(); let neg = 0, n = 0;
+    for (let i = 0; i < b.length; i += 4*41){
+      set.add((b[i]>>4)+','+(b[i+1]>>4)+','+(b[i+2]>>4));
+      if (b[i]+b[i+1]+b[i+2] < 14) neg++;
+      n++;
+    }
+    return { w, h, colores: set.size, negro: +(neg/n).toFixed(3),
+      arriba: at(.5,.08), centro: at(.5,.5), abajo: at(.5,.92) };
+  }
+};
+})().catch(e => {
+  document.body.insertAdjacentHTML('beforeend',
+    '<pre style="position:fixed;left:8px;top:8px;z-index:99;color:#f88;background:#000c;' +
+    'padding:10px;max-width:92vw;white-space:pre-wrap">SE ROMPIÓ:\n' +
+    ((e && (e.stack || e.message)) || e) + '</pre>');
+  window.__SERR = '' + (e && (e.stack || e.message) || e);
+});
+</script>
+</body>
+</html>
