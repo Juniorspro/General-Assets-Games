@@ -1294,6 +1294,40 @@ function finDeHistoria(){
 }
 function guardarFin(){ try { localStorage.removeItem('hielo1'); } catch(e){} }
 
+/* ================= AUDIO GENERADO (Higgsfield) ============================
+   Ambiente + música + pasos por mundo, cargados SOBRE el sintetizado: cuando
+   decodifican lo apagan; si una URL falla (offline o el navegador no decodifica
+   AAC) el sintetizado sigue solo. Vive acá (motor compartido) y no en la
+   sección AMB, que cada mundo reescribe. Los mk_*.py pisan MUNDO_AUDIO. */
+const HASHAX = '67a12b9';
+const AX = f => (LOC ? '/assets/mundos/'
+  : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHAX + '/assets/mundos/') + f;
+const MUNDO_AUDIO = { amb: 'amb-hielo.mp3', mus: 'mus-hielo.m4a', paso: 'pasos-nieve.mp3', pasoRate: 1.4 };
+function cargarAudioReal(){
+  const A2 = AMB.ctx; if (!A2 || AMB._cargado) return;
+  AMB._cargado = true;
+  const carga = async url => A2.decodeAudioData(await (await fetch(url)).arrayBuffer());
+  /* los tres en PARALELO e independientes: si el m4a no decodifica (AAC), ni
+     el ambiente ni los pasos lo esperan */
+  carga(AX(MUNDO_AUDIO.amb)).then(ba => {
+    const na = A2.createBufferSource(); na.buffer = ba; na.loop = true;
+    AMB.ambReal = A2.createGain(); AMB.ambReal.gain.value = .55;
+    na.connect(AMB.ambReal); AMB.ambReal.connect(AMB.master); na.start();
+    if (AMB.viento) AMB.viento.gain.value *= .35;   /* duck del sintetizado */
+  }).catch(() => {});
+  carga(AX(MUNDO_AUDIO.mus)).then(bm => {
+    const nm = A2.createBufferSource(); nm.buffer = bm; nm.loop = true;
+    AMB.musGain = A2.createGain(); AMB.musGain.gain.value = .3;
+    nm.connect(AMB.musGain); AMB.musGain.connect(AMB.master); nm.start();
+  }).catch(() => {});
+  carga(AX(MUNDO_AUDIO.paso)).then(bp => {
+    AMB.pasoSrc = A2.createBufferSource(); AMB.pasoSrc.buffer = bp; AMB.pasoSrc.loop = true;
+    AMB.pasoSrc.playbackRate.value = MUNDO_AUDIO.pasoRate || 1.4;
+    AMB.pasoGain = A2.createGain(); AMB.pasoGain.gain.value = 0;
+    AMB.pasoSrc.connect(AMB.pasoGain); AMB.pasoGain.connect(AMB.master); AMB.pasoSrc.start();
+  }).catch(() => {});
+}
+
 /* ========================= CINEMÁTICAS =====================================
    Cámara sobre rieles: cada paso vuela de `de` a `a` mirando a `mira`, con
    subtítulo y letterbox. Se saltea con un toque. El sol (y su caja de sombra)
@@ -1571,6 +1605,123 @@ function medPon(v){
 function fundido(fn){
   $('fundido').style.opacity = 1;
   setTimeout(() => { fn(); $('fundido').style.opacity = 0; }, 800);
+}
+
+/* ===================== EL CUERPO EN PRIMERA PERSONA ========================
+   Como en los juegos de parkour: MANOS y antebrazos siempre a la vista
+   (viewmodel colgado de la cámara) que bombean al caminar y se aprietan al
+   correr; PIERNAS de verdad con rodilla al mirar hacia abajo; y un torso y
+   cabeza que NO se dibujan (colorWrite=false) pero SÍ proyectan: tu propia
+   sombra camina entera por el suelo. Colores por mundo en MUNDO_CUERPO. */
+const MUNDO_CUERPO = { mangas: 0xc85a30, guantes: 0x2a3a48, pantalon: 0x33424e, botas: 0x1e2830 };  /* KAI: parka naranja */
+const CUERPO = {};
+{
+  const mM = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.mangas });
+  const mG = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.guantes });
+  const mPa = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.pantalon });
+  const mB = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.botas });
+  /* material FANTASMA: invisible a la cámara, visible para el sol */
+  const mF = new T.MeshLambertMaterial({ color: 0x000000 });
+  mF.colorWrite = false; mF.depthWrite = false;
+
+  /* --- viewmodel: dos antebrazos con puño, hijos de la CÁMARA --- */
+  scene.add(cam);                 /* la cámara entra a la escena para tener hijos */
+  const vm = new T.Group();
+  const brazoVM = s2 => {
+    const g = new T.Group();
+    const puno = new T.Mesh(new T.BoxGeometry(.09, .08, .11), mG);
+    puno.rotation.z = s2 * .18;
+    g.add(puno);
+    const pulgar = new T.Mesh(new T.BoxGeometry(.028, .03, .05), mG);
+    pulgar.position.set(-s2 * .052, .012, .012);
+    g.add(pulgar);
+    const ante = new T.Mesh(new T.CapsuleGeometry(.05, .3, 3, 8), mM);
+    ante.position.set(s2 * .07, -.16, .15);
+    ante.rotation.x = .95;
+    ante.rotation.z = -s2 * .3;
+    g.add(ante);
+    g.position.set(s2 * .23, -.26, -.46);
+    vm.add(g);
+    return g;
+  };
+  CUERPO.bI = brazoVM(-1);
+  CUERPO.bD = brazoVM(1);
+  cam.add(vm);
+  CUERPO.vm = vm;
+
+  /* --- el cuerpo en el mundo: piernas visibles + resto sólo-sombra --- */
+  const root = new T.Group();
+  const pierna = s2 => {
+    const cad = new T.Group();
+    cad.position.set(s2 * .115, .98, .03);
+    const muslo = new T.Mesh(new T.CapsuleGeometry(.075, .3, 3, 8), mPa);
+    muslo.geometry.translate(0, -.21, 0);
+    muslo.castShadow = true;
+    cad.add(muslo);
+    const rodilla = new T.Group();
+    rodilla.position.set(0, -.46, 0);
+    const canilla = new T.Mesh(new T.CapsuleGeometry(.06, .28, 3, 8), mPa);
+    canilla.geometry.translate(0, -.19, 0);
+    canilla.castShadow = true;
+    rodilla.add(canilla);
+    const bota = new T.Mesh(new T.BoxGeometry(.11, .09, .24), mB);
+    bota.position.set(0, -.42, .05);
+    bota.castShadow = true;
+    rodilla.add(bota);
+    cad.add(rodilla);
+    root.add(cad);
+    return { cad, rodilla };
+  };
+  const pI = pierna(-1), pD = pierna(1);
+  CUERPO.pI = pI.cad; CUERPO.rI = pI.rodilla;
+  CUERPO.pD = pD.cad; CUERPO.rD = pD.rodilla;
+  /* torso, cabeza y brazos FANTASMA: sólo existen en la sombra */
+  const torso = new T.Mesh(new T.CapsuleGeometry(.17, .5, 4, 8), mF);
+  torso.position.y = 1.28; torso.castShadow = true; root.add(torso);
+  const cabeza = new T.Mesh(new T.SphereGeometry(.12, 8, 6), mF);
+  cabeza.position.y = 1.72; cabeza.castShadow = true; root.add(cabeza);
+  CUERPO.bsI = new T.Mesh(new T.CapsuleGeometry(.05, .55, 3, 6), mF);
+  CUERPO.bsI.geometry.translate(0, -.3, 0);
+  CUERPO.bsI.position.set(-.28, 1.5, 0); CUERPO.bsI.castShadow = true;
+  root.add(CUERPO.bsI);
+  CUERPO.bsD = CUERPO.bsI.clone();
+  CUERPO.bsD.position.x = .28;
+  root.add(CUERPO.bsD);
+  root.visible = false;
+  vm.visible = false;
+  scene.add(root);
+  CUERPO.root = root;
+}
+function cuerpoTick(dt){
+  const enJuego = fase === 'juego';
+  CUERPO.root.visible = enJuego;
+  CUERPO.vm.visible = enJuego && !enDlg;
+  if (!enJuego) return;
+  CUERPO.root.position.set(px, H(px, pz), pz);
+  CUERPO.root.rotation.y = yaw;
+  const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
+  const sw = Math.sin(bobF) * (corre ? .95 : .62) * v;
+  /* piernas: péndulo desde la cadera, rodilla que se dobla al recoger */
+  CUERPO.pI.rotation.x = sw;
+  CUERPO.pD.rotation.x = -sw;
+  CUERPO.rI.rotation.x = Math.max(0, -sw) * 1.25;
+  CUERPO.rD.rotation.x = Math.max(0, sw) * 1.25;
+  /* brazos de la sombra, en contrafase con las piernas */
+  CUERPO.bsI.rotation.x = -sw * .8;
+  CUERPO.bsD.rotation.x = sw * .8;
+  /* el viewmodel BOMBEA: quieto respira, caminando alterna, corriendo los
+     puños se juntan y suben (parkour) */
+  const pump = Math.sin(bobF) * v;
+  const amp = corre ? .10 : .06;
+  const baseX = corre ? .17 : .23;
+  const baseY = -.26 + (corre ? .035 : 0);   /* corriendo los puños SUBEN */
+  const resp = Math.sin(t0 * 1.3) * .006;
+  CUERPO.bD.position.set(baseX, baseY + pump * amp + resp, -.46 + Math.cos(bobF) * .05 * v);
+  CUERPO.bI.position.set(-baseX, baseY - pump * amp + resp, -.46 - Math.cos(bobF) * .05 * v);
+  CUERPO.bD.rotation.z = -.06 + pump * .16;
+  CUERPO.bI.rotation.z = .06 + pump * .16;
+  CUERPO.bD.rotation.x = -.12 + pump * .14;
+  CUERPO.bI.rotation.x = -.12 - pump * .14;
 }
 
 /* ========================= AMBIENTE SONORO ================================
@@ -2027,6 +2178,13 @@ function bucle(t){
       P.needsUpdate = true;
     }
   }
+  cuerpoTick(dt);
+  /* los PASOS suenan mientras caminás, más rápido al correr */
+  if (AMB.pasoGain){
+    const cam2 = fase === 'juego' ? Math.min(1, Math.hypot(pvx, pvz) / VEL) : 0;
+    AMB.pasoGain.gain.value = cam2 * (corre ? .5 : .34);
+    if (AMB.pasoSrc) AMB.pasoSrc.playbackRate.value = (MUNDO_AUDIO.pasoRate || 1.4) * (corre ? 1.5 : 1);
+  }
   pasoTolvas(t0);
   pasoNieve(dt);
   if (beaconMat) beaconMat.opacity = .35 + .65 * (.5 + .5 * Math.sin(t0 * 3.6));
@@ -2054,6 +2212,7 @@ requestAnimationFrame(bucle);
 function entrar(desde){
   fase = 'juego';
   ambienteOn();
+  cargarAudioReal();
   $('menu').style.display = 'none';
   $('hud').classList.add('on');
   try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch (e) {}
@@ -2185,6 +2344,10 @@ window.__S = {
   med(){ return { on: MED.on, v: +MED.v.toFixed(3) }; },
   medSet(v){ medPon(v); },
   accion(){ const a = accionUsable(); return a ? a.tipo : null; },
+  cuerpo(){ return { visible: CUERPO.root.visible, vm: CUERPO.vm.visible,
+    pierna: +CUERPO.pD.rotation.x.toFixed(3), brazoY: +CUERPO.bD.position.y.toFixed(3) }; },
+  audio(){ return { amb: !!AMB.ambReal, mus: !!AMB.musGain, paso: !!AMB.pasoGain,
+    pasoVol: AMB.pasoGain ? +AMB.pasoGain.gain.value.toFixed(2) : null }; },
   luzYa(){ luzK = .999; pasoLuz(1); },
   pix(){
     ren.render(scene, cam);
