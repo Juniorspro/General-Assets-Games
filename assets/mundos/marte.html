@@ -189,7 +189,24 @@ const LOC = Q.has('local');
    Lo único que llega de la red es three.js. */
 const TRE = LOC ? '/_vthree/build/three.module.js'
   : 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+/* importmap ANTES de cargar GLTFLoader (que importa 'three' por specifier).
+   Se inyecta al vuelo: el import de three es por URL absoluta, así que no lo
+   afecta, y el mapa resuelve el 'three' de GLTFLoader al MISMO módulo. */
+{
+  const im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: { three: TRE } });
+  document.head.appendChild(im);
+}
 const T = await import(TRE);
+/* GLTFLoader para los personajes 3D generados (riggeados + animados). Si por
+   lo que sea no carga, GLTF queda null y todo cae al personaje procedural. */
+let GLTF = null;
+try {
+  const GLU = LOC ? '/_vthree/examples/jsm/loaders/GLTFLoader.js'
+    : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
+  GLTF = (await import(GLU)).GLTFLoader;
+} catch (e) {}
 const $ = i => document.getElementById(i);
 
 /* ---------------- azar reproducible: el valle es SIEMPRE el mismo ---------- */
@@ -1363,16 +1380,44 @@ function figCriatura(col){
   g.userData.late = domo.material;
   return g;
 }
+const MIXERS = [];
+/* carga un personaje 3D generado y lo cuelga del Group del NPC, apagando la
+   figura procedural; si falla, la procedural se queda. Reproduce su clip. */
+function ponerModelo(npc){
+  if (!GLTF || !npc.glb) return;
+  new GLTF().load(AX(npc.glb), g => {
+    const m = g.scene;
+    m.scale.setScalar(npc.glbEsc || 1);
+    m.position.y = npc.glbY || 0;
+    m.rotation.y = npc.glbGiro || 0;
+    m.traverse(o => { if (o.isMesh){ o.castShadow = true; o.frustumCulled = false;
+      if (o.material){ o.material.metalness = 0; } } });
+    /* apagar la figura procedural (queda de respaldo si el modelo no llegó) */
+    npc.fig.traverse(o => { if (o.isMesh) o.visible = false; });
+    npc.fig.add(m);
+    npc.modelo = m;
+    if (g.animations && g.animations.length){
+      const mix = new T.AnimationMixer(m);
+      mix.clipAction(g.animations[0]).play();
+      npc.mixer = mix; MIXERS.push(mix);
+    }
+    npc.cargado = true;
+  }, undefined, () => {});
+}
 function nuevoNPC(o){
   o.fig.position.set(o.x, H(o.x, o.z) + (o.vuela ? (o.alto || 2.2) : 0), o.z);
   o.fig.rotation.y = o.giro || 0;
   scene.add(o.fig);
   o.fase = rr(0, 6.28); o.li = 0;
   NPCS.push(o);
+  ponerModelo(o);
   return o;
 }
 function npcTick(dt){
+  for (const mix of MIXERS) mix.update(dt);
   for (const npc of NPCS){
+    /* el modelo 3D generado ya trae su propia orientación: si el clip es de
+       caminar, no le sumamos el balanceo procedural de las extremidades */
     const f = npc.fig;
     const d = Math.hypot(px - f.position.x, pz - f.position.z);
     let anda = 0;
@@ -2101,6 +2146,10 @@ window.__S = {
     pierna: +CUERPO.pD.rotation.x.toFixed(3), brazoY: +CUERPO.bD.position.y.toFixed(3) }; },
   audio(){ return { amb: !!AMB.ambReal, mus: !!AMB.musGain, paso: !!AMB.pasoGain,
     pasoVol: AMB.pasoGain ? +AMB.pasoGain.gain.value.toFixed(2) : null }; },
+  modelos(){ let sk = 0, mx = MIXERS.length;
+    scene.traverse(o => { if (o.isSkinnedMesh) sk++; });
+    return { skinned: sk, mixers: mx, glb: !!GLTF,
+      cargados: NPCS.filter(n => n.cargado).map(n => n.clave || n.nombre) }; },
   luzYa(){ luzK = .999; pasoLuz(1); },
   pix(){
     ren.render(scene, cam);
