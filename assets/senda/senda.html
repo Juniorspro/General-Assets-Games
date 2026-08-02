@@ -1357,7 +1357,7 @@ function guardarFin(){ try { localStorage.removeItem('senda1'); } catch(e){} }
    decodifican lo apagan; si una URL falla (offline o el navegador no decodifica
    AAC) el sintetizado sigue solo. Vive acá (motor compartido) y no en la
    sección AMB, que cada mundo reescribe. Los mk_*.py pisan MUNDO_AUDIO. */
-const HASHAX = '67a12b9';
+const HASHAX = '56bf5e7';
 const AX = f => (LOC ? '/assets/mundos/'
   : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHAX + '/assets/mundos/') + f;
 const MUNDO_AUDIO = { amb: 'amb-senda.mp3', mus: 'mus-senda.m4a', paso: 'pasos-pasto.mp3',
@@ -1700,7 +1700,7 @@ function fundido(fn){
    correr; PIERNAS de verdad con rodilla al mirar hacia abajo; y un torso y
    cabeza que NO se dibujan (colorWrite=false) pero SÍ proyectan: tu propia
    sombra camina entera por el suelo. Colores por mundo en MUNDO_CUERPO. */
-const MUNDO_CUERPO = { mangas: 0x4e6b3a, guantes: 0xc9976b, pantalon: 0x56523c, botas: 0x4a3020 };
+const MUNDO_CUERPO = { mangas: 0x4e6b3a, guantes: 0xc9976b, pantalon: 0x56523c, botas: 0x4a3020, glb: 'npc/cuerpo-senda.glb' };
 const CUERPO = {};
 {
   const mM = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.mangas });
@@ -1779,14 +1779,52 @@ const CUERPO = {};
   scene.add(root);
   CUERPO.root = root;
 }
+/* CUERPO 3D generado (riggeado + caminar) en PRIMERA PERSONA: se cuelga del
+   mismo Group que sigue al jugador; se apaga el cuerpo procedural; se ENCOGE
+   el hueso de la cabeza para no tapar la cámara; el clip de caminar avanza a
+   la velocidad del paso. Si el GLB no llega, queda el procedural. */
+function cargarCuerpoGLB(){
+  if (!GLTF || !MUNDO_CUERPO.glb) return;
+  new GLTF().load(AX(MUNDO_CUERPO.glb), g => {
+    const m = g.scene;
+    m.rotation.y = Math.PI;                 /* de frente a la marcha */
+    m.traverse(o => { if (o.isMesh){ o.castShadow = true; o.frustumCulled = false;
+      if (o.material) o.material.metalness = 0; }
+      if (o.isBone && /head|cabeza|neck/i.test(o.name) && !CUERPO.headBone)
+        CUERPO.headBone = o; });
+    CUERPO.root.add(m);
+    CUERPO.glb = m;
+    /* apagar el cuerpo procedural (piernas + fantasma + viewmodel) */
+    CUERPO.root.traverse(o => { if (o.isMesh && o !== m && !m.getObjectById(o.id)) o.visible = false; });
+    CUERPO.pI.visible = CUERPO.pD.visible = false;
+    CUERPO.bsI.visible = CUERPO.bsD.visible = false;
+    if (g.animations && g.animations.length){
+      CUERPO.mixer = new T.AnimationMixer(m);
+      CUERPO.accion = CUERPO.mixer.clipAction(g.animations[0]);
+      CUERPO.accion.play();
+    }
+  }, undefined, () => {});
+}
+cargarCuerpoGLB();
 function cuerpoTick(dt){
   const enJuego = fase === 'juego';
   CUERPO.root.visible = enJuego;
-  CUERPO.vm.visible = enJuego && !enDlg;
+  CUERPO.vm.visible = enJuego && !enDlg && !CUERPO.glb;   /* con GLB no hay viewmodel */
   if (!enJuego) return;
   CUERPO.root.position.set(px, H(px, pz), pz);
   CUERPO.root.rotation.y = yaw;
   const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
+  /* --- rama del CUERPO 3D generado --- */
+  if (CUERPO.glb){
+    if (CUERPO.mixer){
+      /* el clip avanza con la velocidad: parado se congela, corriendo vuela */
+      CUERPO.mixer.timeScale = v * (corre ? 2.4 : 1.4);
+      CUERPO.mixer.update(dt);
+    }
+    /* achicar la cabeza CADA cuadro (el mixer la reescribe) para no taparte */
+    if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02);
+    return;
+  }
   const sw = Math.sin(bobF) * (corre ? .95 : .62) * v;
   /* piernas: péndulo desde la cadera, rodilla que se dobla al recoger */
   CUERPO.pI.rotation.x = sw;
@@ -2024,7 +2062,12 @@ function fisica(dt){
 }
 function ponCam(){
   const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
-  cam.position.set(px, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, pz);
+  let ex = px, ez = pz;
+  /* con CUERPO 3D: el ojo va a la altura de la frente y un pelo ADELANTE del
+     cuello, así al mirar abajo ves el pecho y las piernas sin el agujero del
+     cuello, y la cabeza colapsada queda detrás del lente */
+  if (CUERPO.glb){ ex = px + Math.sin(yaw) * -.16; ez = pz + Math.cos(yaw) * -.16; }
+  cam.position.set(ex, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, ez);
   cam.rotation.y = yaw;
   cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
   cam.fov = 72 + (corre ? 5 : 0);
@@ -2350,6 +2393,8 @@ window.__S = {
     scene.traverse(o => { if (o.isSkinnedMesh) sk++; });
     return { skinned: sk, mixers: mx, glb: !!GLTF,
       cargados: NPCS.filter(n => n.cargado).map(n => n.clave || n.nombre) }; },
+  cuerpoGLB(){ return CUERPO.glb ? { cargado: true, mixer: !!CUERPO.mixer,
+    cabeza: !!CUERPO.headBone } : null; },
   luzYa(){ luzK = .999; pasoLuz(1); },
   pix(){
     ren.render(scene, cam);
