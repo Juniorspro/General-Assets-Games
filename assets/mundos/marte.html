@@ -1477,6 +1477,7 @@ function ponerModelo(npc){
           if (o.name === 'LeftArm') arm.la = o; else if (o.name === 'RightArm') arm.ra = o;
           else if (o.name === 'LeftForeArm') arm.lf = o;
           else if (o.name === 'RightForeArm') arm.rf = o; } });
+        for (const k in arm) arm[k].userData.bindQ = arm[k].quaternion.clone();
         npc.arms = arm; npc.armPh = 0;
       }
     }
@@ -1538,13 +1539,9 @@ function npcTick(dt){
        (pisa lo que dejó el mixer, que subía las dos manos a la vez) */
     if (npc.arms){
       npc.armPh += dt * (anda ? (corre ? 9 : 6.2) : 0);
-      const swA = Math.sin(npc.armPh) * (anda ? 0.5 : 0);
-      const respA = Math.sin(t0 * 1.3 + npc.fase) * 0.04 * (anda ? 0 : 1);
-      const A = npc.arms, UAZ = 1.28, FX = 0.18;
-      if (A.la) A.la.rotation.set(swA + respA, 0,  UAZ);
-      if (A.ra) A.ra.rotation.set(-swA + respA, 0, -UAZ);
-      if (A.lf) A.lf.rotation.set(FX + Math.max(0, swA) * 0.5, 0, 0);
-      if (A.rf) A.rf.rotation.set(FX + Math.max(0, -swA) * 0.5, 0, 0);
+      const swA = Math.sin(npc.armPh) * (anda ? 0.42 : 0)
+        + Math.sin(t0 * 1.3 + npc.fase) * 0.03 * (anda ? 0 : 1);
+      apuntarBrazos(npc.arms, swA);
     }
   }
 }
@@ -1721,6 +1718,7 @@ function cargarCuerpoGLB(){
         else if (o.name === 'LeftForeArm') arm.lf = o;
         else if (o.name === 'RightForeArm') arm.rf = o;
       } });
+    for (const k in arm) arm[k].userData.bindQ = arm[k].quaternion.clone();
     CUERPO.arms = arm;
     CUERPO.root.add(m);
     CUERPO.glb = m;
@@ -1737,6 +1735,28 @@ function cargarCuerpoGLB(){
 }
 cargarCuerpoGLB();
 cargarCieloFoto();
+/* apunta los brazos de un modelo Meshy SIN depender de su pose de bind (que
+   varía por modelo): orienta cada hombro para que el brazo señale HACIA ABAJO
+   en el mundo (algo adelante y afuera), con `sw` de vaivén. Así quedan colgando
+   normales en los 5 cuerpos y en los NPC, sin importar cómo vino riggeado. */
+const _brAim = new T.Vector3(), _brTgt = new T.Vector3(), _brPw = new T.Quaternion();
+function apuntarBrazos(A, sw, outX, fwdZ, forebend){
+  outX = outX == null ? 0.17 : outX;
+  fwdZ = fwdZ == null ? 0.12 : fwdZ;
+  forebend = forebend == null ? 0.28 : forebend;
+  const aim = (up, fore, side, s) => {
+    if (!up || !fore) return;
+    _brAim.copy(fore.position).normalize();
+    _brTgt.set(side * outX, -1, fwdZ + s).normalize();
+    up.parent.getWorldQuaternion(_brPw);
+    _brTgt.applyQuaternion(_brPw.invert());
+    up.quaternion.setFromUnitVectors(_brAim, _brTgt);
+  };
+  aim(A.la, A.lf, 1, sw);
+  aim(A.ra, A.rf, -1, -sw);
+  if (A.lf && A.lf.userData.bindQ){ A.lf.quaternion.copy(A.lf.userData.bindQ); A.lf.rotateX(forebend); }
+  if (A.rf && A.rf.userData.bindQ){ A.rf.quaternion.copy(A.rf.userData.bindQ); A.rf.rotateX(forebend); }
+}
 function cuerpoTick(dt){
   const enJuego = fase === 'juego';
   CUERPO.root.visible = enJuego;
@@ -1753,17 +1773,11 @@ function cuerpoTick(dt){
       CUERPO.mixer.timeScale = v * (corre ? 2.4 : 1.4);
       CUERPO.mixer.update(dt);
     }
-    /* brazos a mano: colgando a los costados, con vaivén al caminar (fase
-       opuesta) y una respiración mínima al estar quieto. Pisan al clip. */
-    const A = CUERPO.arms;
-    if (A){
-      const UAZ = 1.30, FX = 0.20;
-      const sw = Math.sin(bobF) * v * (corre ? 0.62 : 0.42);
-      const resp = Math.sin(t0 * 1.4) * 0.045 * (1 - v);
-      if (A.la) A.la.rotation.set(sw + resp, 0,  UAZ);
-      if (A.ra) A.ra.rotation.set(-sw + resp, 0, -UAZ);
-      if (A.lf) A.lf.rotation.set(FX + Math.max(0, sw) * 0.5, 0, 0);
-      if (A.rf) A.rf.rotation.set(FX + Math.max(0, -sw) * 0.5, 0, 0);
+    /* brazos apuntados HACIA ABAJO (independiente del bind de cada modelo),
+       con vaivén al caminar y respiración mínima al estar quieto */
+    if (CUERPO.arms){
+      const sw = Math.sin(bobF) * v * (corre ? 0.5 : 0.34) + Math.sin(t0 * 1.4) * 0.03 * (1 - v);
+      apuntarBrazos(CUERPO.arms, sw);
     }
     /* achicar la cabeza CADA cuadro (el mixer la reescribe) para no taparte */
     if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02);
@@ -2319,13 +2333,9 @@ window.__S = {
   bodyDur(){ return CUERPO.accion ? CUERPO.accion.getClip().duration : 0; },
   bodyTime(t){ if (CUERPO.accion){ CUERPO.mixer.timeScale = 0; CUERPO.accion.time = t;
     CUERPO.mixer.update(0); if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02); } },
-  armCal(uax, uaz, fx){ if (!CUERPO.glb) return; CUERPO.mixer && (CUERPO.mixer.timeScale = 0);
-    CUERPO.mixer && CUERPO.mixer.update(0);
-    CUERPO.glb.traverse(o => { if (!o.isBone) return;
-      if (o.name === 'LeftArm')  o.rotation.set(uax, 0,  uaz);
-      if (o.name === 'RightArm') o.rotation.set(uax, 0, -uaz);
-      if (o.name === 'LeftForeArm')  o.rotation.set(fx, 0, 0);
-      if (o.name === 'RightForeArm') o.rotation.set(fx, 0, 0); });
+  armCal(outX, fwdZ, swing, forebend){ if (!CUERPO.glb || !CUERPO.arms) return;
+    CUERPO.mixer && (CUERPO.mixer.timeScale = 0); CUERPO.mixer && CUERPO.mixer.update(0);
+    apuntarBrazos(CUERPO.arms, swing || 0, outX, fwdZ, forebend);
     if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02); },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
   dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
