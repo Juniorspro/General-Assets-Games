@@ -47,6 +47,22 @@ Solución: entregar SIEMPRE por **raw.githack.com** (sirve `text/html`). Los ass
 internos (three, glb, jpg, m4a) sí pueden ir por jsdelivr sin problema.
 Portal: `assets/g3/index.html` con links RELATIVOS (quedan en githack, hash-agnóstico).
 
+## MAREA (juego nuevo GOTY) + HUB unificado + ALAS arreglado
+- **MAREA** (`g_marea.js`): moto de agua contrarreloj cruzando puertas de boyas
+  sobre océano. Agua = plano subdividido con olas por vértice (`waveH`) + reflejo
+  del cielo por envMap. Moto de agua 3D GENERADA (Higgsfield image_to_3d
+  texturizado) en `assets/g3/mdl-marea.glb`; ojo: viene de perfil → `m.rotation.y=PI/2`.
+  Respaldo procedural si el GLB falla. Assets generados: `sky-marea.jpg` (atardecer
+  oceánico), `tex-agua.jpg`, `art-marea.jpg` (portada AAA), `mus-marea.m4a` (sonilo).
+- **ALAS arreglado**: nubes ahora son sprites suaves (miran a cámara, sin efecto
+  vidrio); se quitaron los árboles flotantes (quedaban feos).
+- **HUB**: `assets/mundos/index.html` es la página única con TODOS los juegos:
+  sección ARCADE (MAREA, ALAS, RELIQUIA, NITRO GP) + los 5 MUNDOS. Links RELATIVOS.
+  `assets/g3/index.html` redirige al hub. HORDA/NUDILLOS/FURIA/VÉRTIGO quedaron
+  fuera del hub (rechazados por el usuario: "mugre") pero siguen deployados.
+- Higgsfield: `generate_3d image_to_3d` DEFAULTEA `should_texture:false` → pasar
+  `should_texture:true` para que el GLB traiga textura. `sonilo_music` sí acepta.
+
 ## Pendiente / notas
 - La sonda no corre el m4a (AAC): verificar música solo en dispositivo real.
 - dbg de horda tiene tp(x,z) y def(t) para tests rápidos de campaña.
