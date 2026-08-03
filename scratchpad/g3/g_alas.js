@@ -40,6 +40,7 @@ async function init3d(THREE) {
   m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; if (o.material) o.material.metalness = .3; } });
   const ctr = new T.Box3().setFromObject(m).getCenter(new T.Vector3());
   m.position.sub(ctr);
+  m.rotation.y = Math.PI / 2;            // el modelo viene de perfil: proa hacia adelante
   ship = new T.Group(); ship.add(m); scene.add(ship);
   // estela
   const trail = new T.PointLight(0xffc070, 1.2, 10); trail.position.set(0, 0, 3); ship.add(trail);
