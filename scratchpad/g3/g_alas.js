@@ -15,7 +15,10 @@ async function init3d(THREE) {
   scene.fog = new T.Fog(0xf2d9a8, 90, 320);
   scene.add(new T.HemisphereLight(0xfff2d0, 0xc89858, 1.7));
   scene.add(new T.AmbientLight(0xffffff, .5));
-  const sun = new T.DirectionalLight(0xffe8c0, 2.4); sun.position.set(-30, 14, -40); scene.add(sun);
+  const sun = new T.DirectionalLight(0xffe8c0, 2.4); sun.position.set(-30, 80, -40);
+  sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+  { const s = sun.shadow.camera; s.left = -80; s.right = 80; s.top = 80; s.bottom = -80; s.near = 1; s.far = 260; sun.shadow.bias = -0.0006; }
+  scene.add(sun);
   ren.toneMappingExposure = 1.15;
   // nubes: planos blancos suaves esparcidos (impostores baratos)
   // nubes volumétricas baratas: sprites suaves que SIEMPRE miran a la cámara
@@ -37,7 +40,7 @@ async function init3d(THREE) {
   const g = await ARC.loadGLB(MDL.ship); const m = g.scene;
   const box = new T.Box3().setFromObject(m); const szv = box.getSize(new T.Vector3());
   m.scale.setScalar(3.2 / (Math.max(szv.x, szv.z) || 1));
-  m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; if (o.material) o.material.metalness = .3; } });
+  m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; if (o.material) o.material.metalness = .3; } });
   const ctr = new T.Box3().setFromObject(m).getCenter(new T.Vector3());
   m.position.sub(ctr);
   m.rotation.y = Math.PI / 2;            // el modelo viene de perfil: proa hacia adelante

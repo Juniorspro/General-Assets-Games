@@ -38,7 +38,7 @@ const META = {
   marea: { name: 'MAREA', sub: 'laguna tropical',
     art: 'assets/g3/art-marea.jpg', music: 'assets/g3/mus-marea.m4a',  sky: '#3fb9c9', acc: '#2fd1e0',
     mdl: { craft: 'assets/g3/mdl-marea.glb', palm: 'assets/g3/mdl-palm.glb', island: 'assets/g3/mdl-island.glb' },
-    tex: { sky: 'assets/g3/sky-marea.jpg', agua: 'assets/g3/tex-agua.jpg' } }
+    tex: { sky: 'assets/g3/sky-marea.jpg', sand: 'assets/g3/tex-sand.jpg', caustics: 'assets/g3/tex-caustics.jpg' } }
 };
 const SFXN = ['shoot', 'boom', 'coin', 'win', 'lose', 'power', 'swipe'];
 

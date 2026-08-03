@@ -206,6 +206,7 @@ async function boot() {
     const gm = await import(GLTFURL); GLTF = gm.GLTFLoader;
     renderer = new THREE.WebGLRenderer({ canvas: gl, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
     renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;   // sombras en tiempo real (los juegos activan castShadow)
     scene = new THREE.Scene();
     cam = new THREE.PerspectiveCamera(70, LW / LH, .1, 400);
     fit();

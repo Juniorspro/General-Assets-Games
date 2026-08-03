@@ -29,7 +29,8 @@ window.LIFE = (function () {
     const body = new T.Mesh(new T.CapsuleGeometry(.28, .7, 4, 8), new T.MeshStandardMaterial({ color: col, roughness: .7 })); body.position.y = .65; g.add(body);
     const head = new T.Mesh(new T.SphereGeometry(.26, 10, 10), new T.MeshStandardMaterial({ color: 0xe8b98a, roughness: .8 })); head.position.y = 1.28; g.add(head);
     const arm = new T.Mesh(new T.CapsuleGeometry(.09, .5, 4, 6), new T.MeshStandardMaterial({ color: col, roughness: .7 })); arm.position.set(.34, .95, 0); g.add(arm);
-    wavers.push({ arm, ph: Math.random() * 6.28 }); return g;
+    wavers.push({ arm, ph: Math.random() * 6.28 });
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; }); return g;
   }
 
   /* isla de arena con palmeras, sombrilla y gente */
@@ -48,6 +49,7 @@ window.LIFE = (function () {
     if (opts.npc !== false) { const cols = [0x3a7bd5, 0xffd23f, 0xff7043, 0xffffff];
       const nn = 1 + (Math.random() * 2 | 0); for (let i = 0; i < nn; i++) { const a = Math.random() * 6.28, rr = r * (.2 + Math.random() * .4);
         g.add(npc(Math.cos(a) * rr, r * .07, Math.sin(a) * rr, cols[Math.random() * cols.length | 0])); } }
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     scene.add(g); return g;
   }
 
