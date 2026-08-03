@@ -6,27 +6,33 @@ const only = process.argv.find((a, i) => i >= 2 && !a.startsWith('-'));
 let HASH = ''; try { HASH = fs.readFileSync(path.join(DIR, 'HASH'), 'utf8').trim(); } catch (e) {}
 
 const META = {
-  horda: { name: 'HORDA', sub: 'sobreviví las oleadas', sky: '#241826', acc: '#ff5470', char: true,
+  horda: { name: 'HORDA', sub: 'distrito cero · campaña', sky: '#241826', acc: '#ff5470', char: true,
+    art: 'assets/g3/art-horda.jpg', music: 'assets/g3/mus-horda.m4a',
     mdl: { char: 'assets/hyper/char.glb', aIdle: 'assets/hyper/anim-idle.glb', aRun: 'assets/hyper/anim-run.glb',
-      gun: 'assets/hyper/w-smg.glb', enemy: 'assets/arcade/m-arena-run.glb',
+      gun: 'assets/hyper/w-smg.glb', enemy: 'assets/arcade/m-arena-run.glb', jefe: 'assets/arcade/m-arena-jefe.glb',
       veh: ['assets/fp/cdn/7463a5d5-c4f5-4c85-8059-d58c4026d137.glb', 'assets/fp/cdn/00dbd02b-db37-442c-924b-327899e5b05a.glb',
         'assets/fp/cdn/101f89a4-08af-433a-8756-b7bc7050c77d.glb', 'assets/fp/cdn/282959d6-0a49-4e1e-85b5-0dc2bc8e7f15.glb',
         'assets/fp/cdn/5701504c-5afd-494a-b052-258853b27c87.glb', 'assets/fp/cdn/4582a91c-a517-4d50-bc9b-5359177e5463.glb'] },
-    tex: { sky: 'assets/g3/sky-horda.jpg', ground: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp', roof: 'assets/fp/tex/roof.webp' } },
-  nudillos: { name: 'NUDILLOS', sub: 'combo tras combo', sky: '#241826', acc: '#ffb04d', char: true,
+    tex: { sky: 'assets/g3/sky-horda.jpg', asfalto: 'assets/g3/tex-asfalto.jpg', stucco: 'assets/fp/tex/stucco.webp',
+      brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp', roof: 'assets/fp/tex/roof.webp' } },
+  nudillos: { name: 'NUDILLOS', sub: 'combo tras combo',
+    art: 'assets/g3/art-nudillos.jpg', music: 'assets/g3/mus-nudillos.m4a',  sky: '#241826', acc: '#ffb04d', char: true,
     mdl: { char: 'assets/hyper/char.glb', aIdle: 'assets/hyper/anim-idle.glb', aRun: 'assets/hyper/anim-run.glb',
       aP1: 'assets/hyper/anim-punch1.glb', aP2: 'assets/hyper/anim-punch2.glb', aBat: 'assets/hyper/anim-bat.glb',
       bat: 'assets/hyper/w-bat.glb', enemy: 'assets/arcade/m-arena-atk.glb', crate: 'assets/hyper/p-crate.glb' },
     tex: { sky: 'assets/g3/sky-horda.jpg', ground: 'assets/fp/tex/brick.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp' } },
-  furia: { name: 'FURIA', sub: 'derby de destrucción', sky: '#c8b088', acc: '#ffd23f',
+  furia: { name: 'FURIA', sub: 'derby de destrucción',
+    art: 'assets/g3/art-furia.jpg', music: 'assets/g3/mus-furia.m4a',  sky: '#c8b088', acc: '#ffd23f',
     mdl: { me: 'assets/fp/cdn/101f89a4-08af-433a-8756-b7bc7050c77d.glb',
       foes: ['assets/fp/cdn/4582a91c-a517-4d50-bc9b-5359177e5463.glb', 'assets/fp/cdn/282959d6-0a49-4e1e-85b5-0dc2bc8e7f15.glb',
         'assets/fp/cdn/5701504c-5afd-494a-b052-258853b27c87.glb', 'assets/fp/cdn/00dbd02b-db37-442c-924b-327899e5b05a.glb'] },
     tex: { sky: 'assets/g3/sky-furia.jpg', ground: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp' } },
-  vertigo: { name: 'VÉRTIGO', sub: 'cruzá las puertas', sky: '#c8b998', acc: '#2bd97e',
+  vertigo: { name: 'VÉRTIGO', sub: 'cruzá las puertas',
+    art: 'assets/g3/art-vertigo.jpg', music: 'assets/g3/mus-vertigo.m4a',  sky: '#c8b998', acc: '#2bd97e',
     mdl: { me: 'assets/fp/cdn/4582a91c-a517-4d50-bc9b-5359177e5463.glb' },
     tex: { sky: 'assets/g3/sky-furia.jpg', ground: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp', roof: 'assets/fp/tex/roof.webp' } },
-  alas: { name: 'ALAS', sub: 'volá entre anillos', sky: '#e8c890', acc: '#35e0c0',
+  alas: { name: 'ALAS', sub: 'volá entre anillos',
+    art: 'assets/g3/art-alas.jpg', music: 'assets/g3/mus-alas.m4a',  sky: '#e8c890', acc: '#35e0c0',
     mdl: { ship: 'assets/arcade/m-orbita-nave.glb' },
     tex: { sky: 'assets/g3/sky-alas.jpg' } }
 };
@@ -44,7 +50,7 @@ function build(slug) {
   const tre = TEST ? '/_vthree/build/three.module.js' : TV + 'build/three.module.js';
   const gltf = TEST ? '/_vthree/examples/jsm/loaders/GLTFLoader.js' : TV + 'examples/jsm/loaders/GLTFLoader.js';
   const mdl = JSON.stringify(m.mdl), tex = JSON.stringify(m.tex);
-  const sfx = '{' + SFXN.map(n => n + ":R('assets/vert/sfx-" + n + ".mp3')").join(',') + '}';
+  const sfx = '{' + SFXN.map(n => n + ":R('assets/g3/sfx-" + n + ".mp3')").join(',') + '}';
 
   const html = '<!doctype html><html lang="es"><head>' + sub(head) +
     '<script type="importmap">{"imports":{"three":"' + tre + '","three/addons/":"' + gltf.replace('jsm/loaders/GLTFLoader.js', 'jsm/') + '"}}</script>' +
@@ -54,7 +60,9 @@ function build(slug) {
     'const MDL=_map(' + mdl + ');const TEX=_map(' + tex + ');const SFX=' + sfx + ';</script>' +
     (charjs ? '<script>' + charjs + '</script>' : '') +
     '<script>' + game + '</script>' +
-    '<script>Object.assign(window.GAME,{sfx:SFX});</script>' +
+    '<script>Object.assign(window.GAME,{sfx:SFX' +
+    (m.art ? ",art:R('" + m.art + "')" : '') +
+    (m.music ? ",music:R('" + m.music + "')" : '') + '});</script>' +
     '<script>' + shell + '</script>' +
     '<script>__BOOT();</script></body></html>';
 

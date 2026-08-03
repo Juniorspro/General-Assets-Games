@@ -183,9 +183,24 @@ let LANG = 'es'; try { LANG = localStorage.getItem(SLUG + '_lang') || 'es'; } ca
 window.LANG = LANG;
 
 /* -------- init 3D + boot -------- */
+function loadArt() {
+  if (!GAME.art) return;
+  const img = new Image();
+  img.onload = () => {
+    const ld = $('load');
+    ld.style.backgroundImage = 'linear-gradient(180deg,rgba(5,6,12,.05),rgba(5,6,12,.45)),url(' + GAME.art + ')';
+    ld.style.backgroundSize = 'cover'; ld.style.backgroundPosition = 'center';
+    $('ldT').style.display = 'none';
+    const mn = $('menu');
+    mn.style.backgroundImage = 'url(' + GAME.art + ')';
+    mn.style.backgroundSize = 'cover'; mn.style.backgroundPosition = 'center';
+    $('mTitle').style.display = 'none';       // la portada ya trae el título
+  };
+  img.src = GAME.art;
+}
 async function boot() {
   document.querySelectorAll('#ldLang .chip').forEach(c => c.classList.toggle('on', c.dataset.l === LANG));
-  bind();
+  bind(); loadArt();
   try {
     THREE = await import(TRE);
     const gm = await import(GLTFURL); GLTF = gm.GLTFLoader;
