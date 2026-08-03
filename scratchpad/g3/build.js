@@ -33,11 +33,11 @@ const META = {
     tex: { sky: 'assets/g3/sky-furia.jpg', ground: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp', roof: 'assets/fp/tex/roof.webp' } },
   alas: { name: 'ALAS', sub: 'volá entre anillos',
     art: 'assets/g3/art-alas.jpg', music: 'assets/g3/mus-alas.m4a',  sky: '#e8c890', acc: '#35e0c0',
-    mdl: { ship: 'assets/arcade/m-orbita-nave.glb', palm: 'assets/g3/mdl-palm.glb' },
+    mdl: { ship: 'assets/arcade/m-orbita-nave.glb', palm: 'assets/g3/mdl-palm.glb', island: 'assets/g3/mdl-island.glb' },
     tex: { sky: 'assets/g3/sky-alas.jpg' } },
   marea: { name: 'MAREA', sub: 'laguna tropical',
     art: 'assets/g3/art-marea.jpg', music: 'assets/g3/mus-marea.m4a',  sky: '#3fb9c9', acc: '#2fd1e0',
-    mdl: { craft: 'assets/g3/mdl-marea.glb', palm: 'assets/g3/mdl-palm.glb' },
+    mdl: { craft: 'assets/g3/mdl-marea.glb', palm: 'assets/g3/mdl-palm.glb', island: 'assets/g3/mdl-island.glb' },
     tex: { sky: 'assets/g3/sky-marea.jpg', agua: 'assets/g3/tex-agua.jpg' } }
 };
 const SFXN = ['shoot', 'boom', 'coin', 'win', 'lose', 'power', 'swipe'];
