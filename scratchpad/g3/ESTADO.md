@@ -32,6 +32,21 @@ vehículos texturizados (assets/fp/cdn/*.glb), PBR fp/tex/*.webp.
 2. `node build.js` (todos) → commit de assets/g3/*.html → push
 Los HTML cargan three.js r0.170 desde cdn.jsdelivr.net/npm (no _vthree, que no está commiteado).
 
+## Props (densificado)
+`props.js` (inyectado en todos): `PROPS.spawn(THREE,scene,defs,opts)` carga GLB del
+repo y los CLONA en masa para llenar los mundos. Modelos que RENDERIZAN bien:
+`hyper/p-tree`, `hyper/p-crate`, `arcade/m-agujero-arbol`, `arcade/m-arena-pua`,
+`reliquia/obs-totem`, `reliquia/obs-log`. OJO: `reliquia/tree1-3.glb` y `bush.glb`
+NO aparecieron en escena (por eso VÉRTIGO/ALAS usan p-tree/m-agujero-arbol).
+HORDA/NUDILLOS/FURIA/VÉRTIGO llenos de escombros/árboles; ALAS con islas flotantes
++ 72 nubes. Verificado por captura (`*-props.png`) y sonda 20/20 en los 5.
+
+## LINK (causa de "no anda"): CONTENT-TYPE
+jsDelivr sirve el HTML como `text/plain` → el celular mostraba el código, no el juego.
+Solución: entregar SIEMPRE por **raw.githack.com** (sirve `text/html`). Los assets
+internos (three, glb, jpg, m4a) sí pueden ir por jsdelivr sin problema.
+Portal: `assets/g3/index.html` con links RELATIVOS (quedan en githack, hash-agnóstico).
+
 ## Pendiente / notas
 - La sonda no corre el m4a (AAC): verificar música solo en dispositivo real.
 - dbg de horda tiene tp(x,z) y def(t) para tests rápidos de campaña.

@@ -19,10 +19,10 @@ async function init3d(THREE) {
   ren.toneMappingExposure = 1.15;
   // nubes: planos blancos suaves esparcidos (impostores baratos)
   const cmat = new T.MeshBasicMaterial({ color: 0xfff4e0, transparent: true, opacity: .32, depthWrite: false });
-  for (let i = 0; i < 40; i++) {
-    const w = ARC.rnd(20, 60);
+  for (let i = 0; i < 72; i++) {
+    const w = ARC.rnd(18, 64);
     const c = new T.Mesh(new T.PlaneGeometry(w, w * .4), cmat);
-    c.position.set(ARC.rnd(-260, 260), ARC.rnd(-30, -6), ARC.rnd(-260, 260));
+    c.position.set(ARC.rnd(-300, 300), ARC.rnd(-34, -4), ARC.rnd(-300, 300));
     c.rotation.x = -Math.PI / 2; c.rotation.z = ARC.rnd(0, 6.28);
     scene.add(c); clouds.push(c);
   }
@@ -41,6 +41,14 @@ async function init3d(THREE) {
   const rmat = new T.MeshBasicMaterial({ color: 0x35e0c0 });
   const torus = new T.Mesh(new T.TorusGeometry(6.5, .55, 10, 28), rmat);
   ring.grp.add(torus); scene.add(ring.grp);
+  // islas/espiras flotantes lejanas para dar profundidad al vuelo
+  try {
+    await PROPS.spawn(T, scene, [
+      { url: R('assets/hyper/p-tree.glb'), h: 16, weight: 2 },
+      { url: R('assets/arcade/m-agujero-arbol.glb'), h: 15, weight: 2 },
+      { url: R('assets/reliquia/obs-totem.glb'), h: 9, weight: 1 }
+    ], { seed: 5, count: 22, near: 90, radius: 260, y: -18 });
+  } catch (e) {}
 }
 
 function placeRing() {

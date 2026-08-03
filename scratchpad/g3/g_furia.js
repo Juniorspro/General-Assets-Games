@@ -49,6 +49,17 @@ async function init3d(THREE) {
   scene.add(car.mesh);
   const foeMeshes = await Promise.all(MDL.foes.map(u => loadCar(u, true).catch(() => null)));
   car.foeMeshes = foeMeshes.filter(Boolean);
+  // chatarra y dressing fuera del muro (entre los galpones)
+  try {
+    await PROPS.spawn(T, scene, [
+      { url: R('assets/hyper/p-crate.glb'), h: 1.6, weight: 3 },
+      { url: R('assets/reliquia/obs-log.glb'), h: 1.4, weight: 2 },
+      { url: R('assets/arcade/m-agujero-arbol.glb'), h: 6, weight: 1 },
+      { url: R('assets/reliquia/obs-totem.glb'), h: 3, weight: 1 }
+    ], { seed: 22, count: 40, near: ARENA + 6, radius: ARENA + 38 });
+    await PROPS.spawn(T, scene, MDL.foes.map(u => ({ url: u, h: 1.7, weight: 1 })),
+      { seed: 8, count: 10, near: ARENA + 8, radius: ARENA + 36 });
+  } catch (e) {}
   foes = [];
 }
 

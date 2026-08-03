@@ -55,6 +55,16 @@ async function init3d(THREE) {
     tmplEnemy.scale.setScalar(2.0 / (sz.y || 1));
     tmplEnemy.traverse(o => { if (o.isMesh) o.frustumCulled = false; });
   } catch (e) { tmplEnemy = new T.Mesh(new T.CapsuleGeometry(.5, 1.1, 4, 8), new T.MeshStandardMaterial({ color: 0xff5470 })); }
+  // dressing del patio: chatarra, árboles muertos, tótems y púas alrededor
+  try {
+    await PROPS.spawn(T, scene, [
+      { url: R('assets/hyper/p-crate.glb'), h: 1.3, weight: 3 },
+      { url: R('assets/hyper/p-tree.glb'), h: 6, weight: 2 },
+      { url: R('assets/reliquia/obs-totem.glb'), h: 2.6, weight: 1 },
+      { url: R('assets/reliquia/obs-log.glb'), h: 1.2, weight: 2 },
+      { url: R('assets/arcade/m-arena-pua.glb'), h: 1.8, weight: 2 }
+    ], { seed: 31, count: 42, near: ARENA - 2, radius: ARENA + 24 });
+  } catch (e) {}
   enemies = []; meds = [];
 }
 

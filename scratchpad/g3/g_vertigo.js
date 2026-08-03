@@ -58,6 +58,16 @@ async function init3d(THREE) {
     const top = new T.Mesh(new T.BoxGeometry(9.6, .7, .7), mat); top.position.y = 6; grp.add(top);
     scene.add(grp); gates.push({ grp, x: 0, z: 0, on: false });
   }
+  // arbolado, arbustos y accesorios llenando toda la ciudad hasta el borde
+  try {
+    const nearB = (x, z) => { for (const b of buildings) if (Math.abs(x - b.x) < b.rx + 2 && Math.abs(z - b.z) < b.rz + 2) return true; return false; };
+    await PROPS.spawn(T, scene, [
+      { url: R('assets/hyper/p-tree.glb'), h: 7, weight: 4 },
+      { url: R('assets/arcade/m-agujero-arbol.glb'), h: 6.5, weight: 4 },
+      { url: R('assets/hyper/p-crate.glb'), h: 1.4, weight: 2 },
+      { url: R('assets/reliquia/obs-totem.glb'), h: 3, weight: 1 }
+    ], { seed: 14, count: 100, rect: [MAPA - 6, MAPA - 6], keepOut: (x, z) => nearB(x, z) || Math.hypot(x, z) < 12 });
+  } catch (e) {}
   gi = 0;
 }
 

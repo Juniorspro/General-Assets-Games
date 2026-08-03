@@ -43,6 +43,7 @@ function build(slug) {
   const read = f => fs.readFileSync(path.join(DIR, f), 'utf8');
   const head = read('head.html'), body = read('body.html'), shell = read('shell.js'), game = read('g_' + slug + '.js');
   const charjs = m.char ? read('char.js') : '';
+  const propsjs = read('props.js');
   const sub = s => s.replace(/__TITLE__/g, m.name).replace(/__NAME__/g, m.name).replace(/__SUB__/g, m.sub).replace(/__SKY__/g, m.sky).replace(/__ACC__/g, m.acc);
   const cdn = 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASH + '/';
   const R = TEST ? "p=>'/'+p" : "p=>(location.search.indexOf('local')>=0?'/':'" + cdn + "')+p";
@@ -59,6 +60,7 @@ function build(slug) {
     ';const R=' + R + ';const _map=m=>{const o={};for(const k in m)o[k]=Array.isArray(m[k])?m[k].map(R):R(m[k]);return o};' +
     'const MDL=_map(' + mdl + ');const TEX=_map(' + tex + ');const SFX=' + sfx + ';</script>' +
     (charjs ? '<script>' + charjs + '</script>' : '') +
+    '<script>' + propsjs + '</script>' +
     '<script>' + game + '</script>' +
     '<script>Object.assign(window.GAME,{sfx:SFX' +
     (m.art ? ",art:R('" + m.art + "')" : '') +

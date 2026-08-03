@@ -168,6 +168,21 @@ async function init3d(THREE) {
     tmplBoss.scale.setScalar(4.6 / (sz.y || 1));
     tmplBoss.traverse(o => { if (o.isMesh) o.frustumCulled = false; });
   } catch (e) { tmplBoss = null; }
+  // escombros de calle: cajones, árboles muertos, troncos, barricadas, tótems
+  try {
+    const noPOI = (x, z) => { for (const k in POI) if (Math.hypot(x - POI[k].x, z - POI[k].z) < 12) return true; return false; };
+    await PROPS.spawn(T, scene, [
+      { url: R('assets/hyper/p-crate.glb'), h: 1.15, weight: 4, tag: 'crate' },
+      { url: R('assets/hyper/p-tree.glb'), h: 6.5, weight: 3 },
+      { url: R('assets/arcade/m-agujero-arbol.glb'), h: 6, weight: 2 },
+      { url: R('assets/reliquia/obs-log.glb'), h: 1.3, weight: 2 },
+      { url: R('assets/reliquia/obs-totem.glb'), h: 2.6, weight: 1 },
+      { url: R('assets/arcade/m-arena-pua.glb'), h: 1.9, weight: 2 }
+    ], { seed: 91, count: 64, rect: [MAPA - 6, MAPA - 6], keepOut: (x, z) => solid(x, z) || Math.hypot(x, z) < 11 || noPOI(x, z) });
+    // más autos destrozados repartidos
+    await PROPS.spawn(T, scene, MDL.veh.map(u => ({ url: u, h: 1.7, weight: 1 })),
+      { seed: 55, count: 14, rect: [MAPA - 10, MAPA - 10], keepOut: (x, z) => solid(x, z) || Math.hypot(x, z) < 14 });
+  } catch (e) {}
   enemies = []; tracers = []; meds = []; crates = [];
 }
 
