@@ -34,7 +34,11 @@ const META = {
   alas: { name: 'ALAS', sub: 'volá entre anillos',
     art: 'assets/g3/art-alas.jpg', music: 'assets/g3/mus-alas.m4a',  sky: '#e8c890', acc: '#35e0c0',
     mdl: { ship: 'assets/arcade/m-orbita-nave.glb' },
-    tex: { sky: 'assets/g3/sky-alas.jpg' } }
+    tex: { sky: 'assets/g3/sky-alas.jpg' } },
+  marea: { name: 'MAREA', sub: 'olas al atardecer',
+    art: 'assets/g3/art-marea.jpg', music: 'assets/g3/mus-marea.m4a',  sky: '#e9b06a', acc: '#2fd1e0',
+    mdl: { craft: 'assets/g3/mdl-marea.glb' },
+    tex: { sky: 'assets/g3/sky-marea.jpg', agua: 'assets/g3/tex-agua.jpg' } }
 };
 const SFXN = ['shoot', 'boom', 'coin', 'win', 'lose', 'power', 'swipe'];
 

@@ -18,13 +18,20 @@ async function init3d(THREE) {
   const sun = new T.DirectionalLight(0xffe8c0, 2.4); sun.position.set(-30, 14, -40); scene.add(sun);
   ren.toneMappingExposure = 1.15;
   // nubes: planos blancos suaves esparcidos (impostores baratos)
-  const cmat = new T.MeshBasicMaterial({ color: 0xfff4e0, transparent: true, opacity: .32, depthWrite: false });
-  for (let i = 0; i < 72; i++) {
-    const w = ARC.rnd(18, 64);
-    const c = new T.Mesh(new T.PlaneGeometry(w, w * .4), cmat);
-    c.position.set(ARC.rnd(-300, 300), ARC.rnd(-34, -4), ARC.rnd(-300, 300));
-    c.rotation.x = -Math.PI / 2; c.rotation.z = ARC.rnd(0, 6.28);
-    scene.add(c); clouds.push(c);
+  // nubes volumétricas baratas: sprites suaves que SIEMPRE miran a la cámara
+  // (nada de planos que de costado parecen vidrios). Textura de puffs procedural.
+  const cc = document.createElement('canvas'); cc.width = cc.height = 128; const cg = cc.getContext('2d');
+  for (let i = 0; i < 6; i++) { const bx = 28 + Math.random() * 72, by = 44 + Math.random() * 44, br = 24 + Math.random() * 28;
+    const gr = cg.createRadialGradient(bx, by, 0, bx, by, br);
+    gr.addColorStop(0, 'rgba(255,251,242,.92)'); gr.addColorStop(.6, 'rgba(255,246,232,.5)'); gr.addColorStop(1, 'rgba(255,246,232,0)');
+    cg.fillStyle = gr; cg.beginPath(); cg.arc(bx, by, br, 0, 6.28); cg.fill(); }
+  const cloudTex = new T.CanvasTexture(cc); cloudTex.colorSpace = T.SRGBColorSpace;
+  for (let i = 0; i < 110; i++) {
+    const far = Math.random() < .5;
+    const sp = new T.Sprite(new T.SpriteMaterial({ map: cloudTex, transparent: true, opacity: ARC.rnd(.3, .72), depthWrite: false }));
+    const sc = far ? ARC.rnd(60, 130) : ARC.rnd(24, 60); sp.scale.set(sc, sc * .6, 1);
+    sp.position.set(ARC.rnd(-340, 340), far ? ARC.rnd(-16, 22) : ARC.rnd(-30, 2), ARC.rnd(-340, 340));
+    scene.add(sp); clouds.push(sp);
   }
   // nave del repo
   const g = await ARC.loadGLB(MDL.ship); const m = g.scene;
@@ -41,14 +48,6 @@ async function init3d(THREE) {
   const rmat = new T.MeshBasicMaterial({ color: 0x35e0c0 });
   const torus = new T.Mesh(new T.TorusGeometry(6.5, .55, 10, 28), rmat);
   ring.grp.add(torus); scene.add(ring.grp);
-  // islas/espiras flotantes lejanas para dar profundidad al vuelo
-  try {
-    await PROPS.spawn(T, scene, [
-      { url: R('assets/hyper/p-tree.glb'), h: 16, weight: 2 },
-      { url: R('assets/arcade/m-agujero-arbol.glb'), h: 15, weight: 2 },
-      { url: R('assets/reliquia/obs-totem.glb'), h: 9, weight: 1 }
-    ], { seed: 5, count: 22, near: 90, radius: 260, y: -18 });
-  } catch (e) {}
 }
 
 function placeRing() {
