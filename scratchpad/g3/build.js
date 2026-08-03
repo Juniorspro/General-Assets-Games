@@ -6,9 +6,12 @@ const only = process.argv.find((a, i) => i >= 2 && !a.startsWith('-'));
 let HASH = ''; try { HASH = fs.readFileSync(path.join(DIR, 'HASH'), 'utf8').trim(); } catch (e) {}
 
 const META = {
-  horda: { name: 'HORDA', sub: 'sobreviví las oleadas', sky: '#121a2a', acc: '#ff5470',
-    mdl: { hands: 'assets/hyper/vm-hands.glb', gun: 'assets/hyper/w-smg.glb', enemy: 'assets/arcade/m-arena-run.glb' },
-    tex: { stucco: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp', roof: 'assets/fp/tex/roof.webp' } }
+  horda: { name: 'HORDA', sub: 'sobreviví las oleadas', sky: '#241826', acc: '#ff5470',
+    mdl: { hands: 'assets/hyper/vm-hands.glb', gun: 'assets/hyper/w-smg.glb', enemy: 'assets/arcade/m-arena-run.glb',
+      veh: ['assets/fp/cdn/7463a5d5-c4f5-4c85-8059-d58c4026d137.glb', 'assets/fp/cdn/00dbd02b-db37-442c-924b-327899e5b05a.glb',
+        'assets/fp/cdn/101f89a4-08af-433a-8756-b7bc7050c77d.glb', 'assets/fp/cdn/282959d6-0a49-4e1e-85b5-0dc2bc8e7f15.glb',
+        'assets/fp/cdn/5701504c-5afd-494a-b052-258853b27c87.glb', 'assets/fp/cdn/4582a91c-a517-4d50-bc9b-5359177e5463.glb'] },
+    tex: { sky: 'assets/g3/sky-horda.jpg', ground: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp', roof: 'assets/fp/tex/roof.webp' } }
 };
 const SFXN = ['shoot', 'boom', 'coin', 'win', 'lose', 'power', 'swipe'];
 
@@ -29,8 +32,8 @@ function build(slug) {
     '<script type="importmap">{"imports":{"three":"' + tre + '","three/addons/":"' + gltf.replace('jsm/loaders/GLTFLoader.js', 'jsm/') + '"}}</script>' +
     '</head><body>' + sub(body) +
     '<script>const SLUG=' + JSON.stringify(slug) + ';const TRE=' + JSON.stringify(tre) + ';const GLTFURL=' + JSON.stringify(gltf) +
-    ';const R=' + R + ';const MDL=(m=>{const o={};for(const k in m)o[k]=R(m[k]);return o})(' + mdl + ');' +
-    'const TEX=(m=>{const o={};for(const k in m)o[k]=R(m[k]);return o})(' + tex + ');const SFX=' + sfx + ';</script>' +
+    ';const R=' + R + ';const _map=m=>{const o={};for(const k in m)o[k]=Array.isArray(m[k])?m[k].map(R):R(m[k]);return o};' +
+    'const MDL=_map(' + mdl + ');const TEX=_map(' + tex + ');const SFX=' + sfx + ';</script>' +
     '<script>' + game + '</script>' +
     '<script>Object.assign(window.GAME,{sfx:SFX});</script>' +
     '<script>' + shell + '</script>' +
