@@ -33,11 +33,11 @@ const META = {
     tex: { sky: 'assets/g3/sky-furia.jpg', ground: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp', roof: 'assets/fp/tex/roof.webp' } },
   alas: { name: 'ALAS', sub: 'volá entre anillos',
     art: 'assets/g3/art-alas.jpg', music: 'assets/g3/mus-alas.m4a',  sky: '#e8c890', acc: '#35e0c0',
-    mdl: { ship: 'assets/arcade/m-orbita-nave.glb' },
+    mdl: { ship: 'assets/arcade/m-orbita-nave.glb', palm: 'assets/g3/mdl-palm.glb' },
     tex: { sky: 'assets/g3/sky-alas.jpg' } },
-  marea: { name: 'MAREA', sub: 'olas al atardecer',
-    art: 'assets/g3/art-marea.jpg', music: 'assets/g3/mus-marea.m4a',  sky: '#e9b06a', acc: '#2fd1e0',
-    mdl: { craft: 'assets/g3/mdl-marea.glb' },
+  marea: { name: 'MAREA', sub: 'laguna tropical',
+    art: 'assets/g3/art-marea.jpg', music: 'assets/g3/mus-marea.m4a',  sky: '#3fb9c9', acc: '#2fd1e0',
+    mdl: { craft: 'assets/g3/mdl-marea.glb', palm: 'assets/g3/mdl-palm.glb' },
     tex: { sky: 'assets/g3/sky-marea.jpg', agua: 'assets/g3/tex-agua.jpg' } }
 };
 const SFXN = ['shoot', 'boom', 'coin', 'win', 'lose', 'power', 'swipe'];
@@ -48,6 +48,7 @@ function build(slug) {
   const head = read('head.html'), body = read('body.html'), shell = read('shell.js'), game = read('g_' + slug + '.js');
   const charjs = m.char ? read('char.js') : '';
   const propsjs = read('props.js');
+  const lifejs = read('life.js');
   const sub = s => s.replace(/__TITLE__/g, m.name).replace(/__NAME__/g, m.name).replace(/__SUB__/g, m.sub).replace(/__SKY__/g, m.sky).replace(/__ACC__/g, m.acc);
   const cdn = 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASH + '/';
   const R = TEST ? "p=>'/'+p" : "p=>(location.search.indexOf('local')>=0?'/':'" + cdn + "')+p";
@@ -65,6 +66,7 @@ function build(slug) {
     'const MDL=_map(' + mdl + ');const TEX=_map(' + tex + ');const SFX=' + sfx + ';</script>' +
     (charjs ? '<script>' + charjs + '</script>' : '') +
     '<script>' + propsjs + '</script>' +
+    '<script>' + lifejs + '</script>' +
     '<script>' + game + '</script>' +
     '<script>Object.assign(window.GAME,{sfx:SFX' +
     (m.art ? ",art:R('" + m.art + "')" : '') +

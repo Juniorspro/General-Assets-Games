@@ -5,8 +5,9 @@
 window.GAME = (function () {
 let T, scene, cam, ren;
 let craft, sx, sz, yaw, v, bank, timeLeft, score, streak, dead, tPlay, won;
-let keys = {}, drag = null, water = null, waterGeo = null, baseY = null, sprayT = 0;
+let keys = {}, water = null, waterGeo = null, baseY = null, sprayT = 0;
 let GATES = [], gGroups = [], gi = 0, laps = 0, mark = null;
+let pad = null, ISL = [], vCruise = 18, vMax = 34, autoIx = null, autoBoost = false;
 
 /* config elegida en el menú */
 const cfg = { modo: 'circuito', dif: 'normal' };
@@ -71,6 +72,15 @@ async function init3d(THREE) {
     scene.add(grp); gGroups.push(grp); }
   // marcador flotante sobre la boya activa
   mark = new T.Mesh(new T.OctahedronGeometry(1.4), new T.MeshBasicMaterial({ color: 0x2fd1e0 })); scene.add(mark);
+  // ---- VIDA: islas tropicales con palmeras + gente, y pájaros ----
+  LIFE.setup(T);
+  let palmRoot = null; try { const pg = await ARC.loadGLB(MDL.palm); palmRoot = pg.scene; } catch (e) {}
+  const mkPalm = LIFE.palmTemplate(palmRoot);
+  ISL = [{ x: 0, z: 0, r: 24 }, { x: -52, z: 34, r: 15 }, { x: 46, z: -40, r: 14 }, { x: 24, z: 58, r: 12 }, { x: -58, z: -50, r: 13 },
+    { x: 255, z: 70, r: 42 }, { x: -260, z: -40, r: 46 }, { x: 70, z: 285, r: 40 }, { x: -130, z: -275, r: 42 }, { x: 300, z: -190, r: 48 }];
+  for (const s of ISL) LIFE.island(scene, s.x, s.z, s.r, mkPalm);
+  LIFE.flock(scene, { count: 16, area: 260, ylo: 16, yhi: 52 });
+  pad = LIFE.pad({ onPause: () => window.ARC_pause() });
   setupMenu();
 }
 
@@ -108,7 +118,8 @@ function placeGateAhead() {   // modo contrarreloj: boya al frente al azar
 function start() {
   const d = DIF[cfg.dif] || DIF.normal;
   buildCircuit();
-  won = false; dead = false; score = 0; streak = 0; tPlay = 0; laps = 0; v = d.v; bank = 0;
+  won = false; dead = false; score = 0; streak = 0; tPlay = 0; laps = 0; bank = 0;
+  vCruise = d.v * .6; vMax = d.v * 1.18; v = vCruise;
   gGroups.forEach((g, i) => { g.visible = true; g.position.set(GATES[i].x, 0, GATES[i].z);
     const nx = GATES[(i + 1) % NG]; g.lookAt(nx.x, 0, nx.z); });
   if (cfg.modo === 'contra') {
@@ -135,11 +146,18 @@ function step(dt) {
   const p = waterGeo.attributes.position.array;
   for (let i = 0; i < p.length; i += 3) p[i + 1] = waveH(baseY[i], baseY[i + 2], tPlay);
   waterGeo.attributes.position.needsUpdate = true; waterGeo.computeVertexNormals();
-  // dirección
-  let ix = 0; if (keys.KeyA || keys.ArrowLeft) ix = -1; if (keys.KeyD || keys.ArrowRight) ix = 1; if (drag) ix += drag.x;
+  // dirección (flechas en pantalla / teclado) + acelerador
+  let ix = pad ? pad.steer : 0;
+  if (keys.KeyA || keys.ArrowLeft) ix = -1; if (keys.KeyD || keys.ArrowRight) ix = 1;
+  if (autoIx != null) ix = autoIx;
+  const boosting = autoBoost || (pad && pad.boost) || keys.KeyW || keys.ArrowUp || keys.Space || keys.ShiftLeft;
+  v += ((boosting ? vMax : vCruise) - v) * Math.min(1, dt * 2.2);
   yaw -= ix * dt * 1.7; bank += (ix * .5 - bank) * Math.min(1, dt * 6);
   sx += Math.sin(yaw) * v * dt; sz += Math.cos(yaw) * v * dt;
   const L = Math.hypot(sx, sz); if (L > 300) { sx *= 300 / L; sz *= 300 / L; }
+  // choque suave contra islas
+  for (const s of ISL) { const dx = sx - s.x, dz = sz - s.z, dd = Math.hypot(dx, dz), rr = s.r + 2.5;
+    if (dd < rr && dd > .001) { sx = s.x + dx / dd * rr; sz = s.z + dz / dd * rr; v *= .6; ARC.shake(3); } }
   const wy = waveH(sx, sz, tPlay);
   craft.position.set(sx, wy + .2 + Math.sin(tPlay * 3) * .08, sz);
   craft.rotation.set(0, 0, 0); craft.rotateY(yaw + Math.PI); craft.rotateZ(-bank); craft.rotateX(-.06 + Math.sin(tPlay * 2) * .03);
@@ -150,9 +168,13 @@ function step(dt) {
   // marcador sobre la activa
   const g = GATES[gi]; const gy = waveH(g.x, g.z, tPlay);
   mark.position.set(g.x, gy + 5 + Math.sin(tPlay * 3) * .4, g.z); mark.rotation.y += dt * 2;
-  // estela/spray
-  sprayT -= dt; if (sprayT <= 0) { sprayT = .05; const bp = worldToScreen(sx - Math.sin(yaw) * 2, wy + .4, sz - Math.cos(yaw) * 2);
-    if (bp) { ARC.fx.burst(bp.x, bp.y, 'rgba(255,255,255,.9)', 3, 2.4); if (Math.abs(bank) > .25) ARC.fx.burst(bp.x, bp.y, 'rgba(210,240,255,.8)', 2, 3.2); } }
+  LIFE.update(dt);
+  // estela/spray de agua al andar (más fuerte con acelerador / al virar)
+  sprayT -= dt; if (sprayT <= 0) { sprayT = .035;
+    const bp = worldToScreen(sx - Math.sin(yaw) * 2, wy + .35, sz - Math.cos(yaw) * 2);
+    if (bp) { const n = boosting ? 5 : 3, sp2 = boosting ? 3.4 : 2.4;
+      ARC.fx.burst(bp.x, bp.y, 'rgba(255,255,255,.92)', n, sp2);
+      if (Math.abs(bank) > .2) ARC.fx.burst(bp.x, bp.y, 'rgba(205,238,255,.85)', 3, 3.6); } }
   // ¿cruzó la boya activa?
   const d2 = (sx - g.x) ** 2 + (sz - g.z) ** 2;
   if (d2 < 34) {
@@ -185,14 +207,15 @@ function draw2d(g) {
     g.fillStyle = '#ffe6a0'; g.beginPath(); g.moveTo(0, -26); g.lineTo(14, 8); g.lineTo(-14, 8); g.closePath(); g.fill(); g.restore(); }
   // MINIMAPA del circuito
   if (cfg.modo !== 'contra') {
-    const cxp = W - 74, cyp = H - 74, R = 52, k = R / 200;
+    const cxp = W - 66, cyp = 116, R = 44, k = R / 200;
     g.fillStyle = 'rgba(6,20,28,.55)'; g.beginPath(); g.arc(cxp, cyp, R + 8, 0, 6.28); g.fill();
     g.strokeStyle = 'rgba(120,220,240,.5)'; g.lineWidth = 2; g.beginPath();
     for (let i = 0; i <= NG; i++) { const q = GATES[i % NG]; const mx = cxp + q.x * k, my = cyp + q.z * k; i ? g.lineTo(mx, my) : g.moveTo(mx, my); } g.closePath(); g.stroke();
     for (let i = 0; i < NG; i++) { const q = GATES[i]; g.fillStyle = i === gi ? '#ffe6a0' : 'rgba(180,230,245,.5)'; g.beginPath(); g.arc(cxp + q.x * k, cyp + q.z * k, i === gi ? 4 : 2.4, 0, 6.28); g.fill(); }
     g.fillStyle = '#fff'; g.beginPath(); g.arc(cxp + sx * k, cyp + sz * k, 3.4, 0, 6.28); g.fill();
   }
-  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(W - 52, 16, 36, 36); g.fillStyle = '#fff'; g.font = '900 18px system-ui'; g.textAlign = 'center'; g.fillText('❚❚', W - 34, 40);
+  if (pad) pad.draw(g, '#2fd1e0');
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(W - 52, 16, 36, 36); g.fillStyle = '#fff'; g.font = '900 18px system-ui'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillText('❚❚', W - 34, 40);
 }
 
 let menuA = 0;
@@ -200,11 +223,10 @@ function attract3d(dt) { menuA += dt * .4; tPlay = (tPlay || 0) + dt;
   if (waterGeo) { const p = waterGeo.attributes.position.array; for (let i = 0; i < p.length; i += 3) p[i + 1] = waveH(baseY[i], baseY[i + 2], tPlay); waterGeo.attributes.position.needsUpdate = true; }
   if (craft) { const wy = waveH(0, 0, tPlay); craft.position.set(0, wy + .2, 0); craft.rotation.set(0, menuA, 0); }
   if (cam) { cam.position.set(Math.cos(menuA) * 13, 4.5 + Math.sin(menuA * .7) * 1.2, Math.sin(menuA) * 13); cam.lookAt(0, 1.2, 0); }
+  if (window.LIFE) LIFE.update(dt);
 }
 
-function down(p) { if (p.x > ARC.W - 60 && p.y < 56) { window.ARC_pause(); return; } drag = { x0: p.x, x: 0 }; }
-function move(p) { if (!drag) return; drag.x = ARC.clamp((p.x - drag.x0) / 110, -1, 1); }
-function up() { drag = null; }
+function down() {} function move() {} function up() {}
 function key(code, dn) { keys[code] = dn; if (code === 'Escape' && dn) window.ARC_pause(); }
 
 return {
@@ -212,8 +234,8 @@ return {
   init3d, start, step, draw2d, attract3d, resize() {}, down, move, up, look() {}, key,
   dbg: {
     state: () => ({ score, t: timeLeft == null ? 0 : +timeLeft.toFixed(1), laps, gi, dead, won, x: sx | 0, z: sz | 0 }),
-    autoPlay() { if (dead) { drag = null; return; } const g = GATES[gi]; const ty = Math.atan2(g.x - sx, g.z - sz);
-      let dy = ty - yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283; drag = { x0: 0, x: ARC.clamp(-dy * 2.2, -1, 1) }; }
+    autoPlay() { if (dead) { autoIx = 0; autoBoost = false; return; } const g = GATES[gi]; const ty = Math.atan2(g.x - sx, g.z - sz);
+      let dy = ty - yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283; autoIx = ARC.clamp(-dy * 2.2, -1, 1); autoBoost = true; }
   }
 };
 })();

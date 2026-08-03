@@ -5,7 +5,7 @@
 window.GAME = (function () {
 let T, scene, cam, ren;
 let ship, sx, sy, sz, yaw, pitch, v, ring, timeLeft, score, streak, dead, tPlay;
-let keys = {}, drag = null, clouds = [];
+let keys = {}, clouds = [], pad = null, vCruise = 15, vMax = 30, autoIx = null, autoBoost = false;
 
 async function init3d(THREE) {
   T = THREE; scene = ARC.scene; cam = ARC.cam; ren = ARC.renderer;
@@ -49,6 +49,14 @@ async function init3d(THREE) {
   const rmat = new T.MeshBasicMaterial({ color: 0x35e0c0 });
   const torus = new T.Mesh(new T.TorusGeometry(6.5, .55, 10, 28), rmat);
   ring.grp.add(torus); scene.add(ring.grp);
+  // ---- VIDA: islas flotantes con palmeras (debajo del vuelo) + pájaros ----
+  LIFE.setup(T);
+  let palmRoot = null; try { const pg = await ARC.loadGLB(MDL.palm); palmRoot = pg.scene; } catch (e) {}
+  const mkPalm = LIFE.palmTemplate(palmRoot);
+  const spots = [[120, 60, 18], [-140, 80, 20], [60, -160, 16], [-90, -120, 18], [190, -40, 22], [-40, 180, 17]];
+  for (const s of spots) LIFE.island(scene, s[0], s[1], s[2], mkPalm, { y: -13 });
+  LIFE.flock(scene, { count: 18, area: 300, ylo: 22, yhi: 62 });
+  pad = LIFE.pad({ onPause: () => window.ARC_pause() });
 }
 
 function placeRing() {
@@ -66,7 +74,7 @@ function placeRing() {
 }
 
 function start() {
-  sx = 0; sy = 26; sz = 0; yaw = 0; pitch = 0; v = 24;
+  sx = 0; sy = 26; sz = 0; yaw = 0; pitch = 0; vCruise = 15; vMax = 30; v = vCruise;
   timeLeft = 45; score = 0; streak = 0; dead = false; tPlay = 0;
   placeRing();
 }
@@ -79,16 +87,18 @@ function step(dt) {
   timeLeft -= dt;
   if (timeLeft <= 0) { timeLeft = 0; dead = true;
     ARC.over({ win: score >= 600, score, title: score >= 600 ? '¡AS DEL CIELO!' : 'SIN TIEMPO', coins: (score / 30 | 0) }); return; }
-  let ix = 0, iy = 0;
+  let ix = pad ? pad.steer : 0;
   if (keys.KeyA || keys.ArrowLeft) ix = -1; if (keys.KeyD || keys.ArrowRight) ix = 1;
-  if (keys.KeyW || keys.ArrowUp) iy = -1; if (keys.KeyS || keys.ArrowDown) iy = 1;
-  if (drag) { ix += drag.x; iy += drag.y; }
+  if (autoIx != null) ix = autoIx;
+  const boosting = autoBoost || (pad && pad.boost) || keys.KeyW || keys.ArrowUp || keys.Space || keys.ShiftLeft;
+  v += ((boosting ? vMax : vCruise) - v) * Math.min(1, dt * 2);
   yaw -= ix * dt * 1.5;
-  pitch = ARC.clamp(pitch - iy * dt * 1.3, -.9, .9);
-  pitch *= (1 - dt * .4);                    // vuelve sola al nivel
+  // altitud automática hacia el anillo (control simple: virar + acelerar)
+  const tgtY = ring.on ? ring.y : sy;
+  pitch += (ARC.clamp((tgtY - sy) * .02, -.5, .5) - pitch) * Math.min(1, dt * 2);
   sx += Math.sin(yaw) * Math.cos(pitch) * v * dt;
   sz += Math.cos(yaw) * Math.cos(pitch) * v * dt;
-  sy += Math.sin(pitch) * v * dt * -1;
+  sy += Math.sin(pitch) * v * dt;
   sy = ARC.clamp(sy, 4, 70);
   const L = Math.hypot(sx, sz); if (L > 250) { sx *= 250 / L; sz *= 250 / L; }
   ship.position.set(sx, sy, sz);
@@ -110,10 +120,12 @@ function step(dt) {
       if (sp) { ARC.fx.ring(sp.x, sp.y, '#35e0c0', 14); ARC.fx.text(sp.x, sp.y - 30, '+' + bonus.toFixed(1) + 's', '#35e0c0'); }
       ARC.sfx('coin', { vol: .6, rate: 1 + streak * .05 }); ARC.vib(20);
       placeRing();
-    } else if (d2 < 240 && Math.abs(Math.sqrt(d2) - 6.5) < 2) {
-      // pasó cerca del aro sin entrar: nada, el jugador aprende
     }
   }
+  LIFE.update(dt);
+  // estela de la nave (más fuerte al acelerar)
+  if (boosting) { const bp = worldToScreen(sx - Math.sin(yaw) * 3, sy - .5, sz - Math.cos(yaw) * 3);
+    if (bp) ARC.fx.burst(bp.x, bp.y, 'rgba(255,224,180,.7)', 2, 2.2); }
 }
 
 function draw2d(g) {
@@ -135,20 +147,17 @@ function draw2d(g) {
       g.restore();
     }
   }
-  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(W - 52, 16, 36, 36); g.fillStyle = '#fff'; g.font = '900 18px system-ui'; g.textAlign = 'center'; g.fillText('❚❚', W - 34, 40);
+  if (pad) pad.draw(g, '#35e0c0');
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(W - 52, 16, 36, 36); g.fillStyle = '#fff'; g.font = '900 18px system-ui'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillText('❚❚', W - 34, 40);
 }
 
 let menuA = 0;
 function attract3d(dt) { menuA += dt * .5;
+  if (window.LIFE) LIFE.update(dt);
   if (cam) { cam.position.set(Math.cos(menuA) * 14, 30 + Math.sin(menuA * .6) * 3, Math.sin(menuA) * 14); cam.lookAt(0, 26, 0); }
   if (ship) { ship.position.set(0, 26, 0); ship.rotation.y += dt * .4; } }
 
-function down(p) { if (p.x > ARC.W - 60 && p.y < 56) { window.ARC_pause(); return; }
-  drag = { x0: p.x, y0: p.y, x: 0, y: 0 }; }
-function move(p) { if (!drag) return;
-  drag.x = ARC.clamp((p.x - drag.x0) / 120, -1, 1);
-  drag.y = ARC.clamp((p.y - drag.y0) / 120, -1, 1); }
-function up() { drag = null; }
+function down() {} function move() {} function up() {}
 function key(code, dn) { keys[code] = dn; if (code === 'Escape' && dn) window.ARC_pause(); }
 
 return {
@@ -158,11 +167,10 @@ return {
   dbg: {
     state: () => ({ score, t: timeLeft == null ? 0 : +timeLeft.toFixed(1), streak, dead, y: sy | 0 }),
     autoPlay() {
-      if (dead || !ring.on) { drag = null; return; }
+      if (dead || !ring.on) { autoIx = 0; autoBoost = false; return; }
       const ty = Math.atan2(ring.x - sx, ring.z - sz);
       let dy = ty - yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283;
-      const dv = ring.y - sy;
-      drag = { x0: 0, y0: 0, x: ARC.clamp(-dy * 2, -1, 1), y: ARC.clamp(-dv * .2, -1, 1) };
+      autoIx = ARC.clamp(-dy * 2, -1, 1); autoBoost = true;
     }
   }
 };
