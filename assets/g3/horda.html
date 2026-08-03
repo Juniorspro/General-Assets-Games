@@ -5,7 +5,7 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;
   -webkit-user-select:none;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:none}
-#stage{position:absolute;left:50%;top:50%;transform-origin:center;background:#121a2a;overflow:hidden}
+#stage{position:absolute;left:50%;top:50%;transform-origin:center;background:#241826;overflow:hidden}
 #gl,#cv{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
 #cv{pointer-events:none}
 .scr{position:absolute;inset:0;z-index:5;display:none;color:#fff}
@@ -13,7 +13,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:no
 #load.on,#menu.on,#pause.on,#over.on{display:flex}
 #hud.on{display:block}
 /* carga */
-#load{z-index:20;background:#121a2a}
+#load{z-index:20;background:#241826}
 #ldT{font-size:11vmin;font-weight:900;letter-spacing:.03em;text-shadow:0 4px 24px rgba(0,0,0,.6)}
 #ldS{margin-top:1.6vmin;font-size:3vmin;color:#ff5470;font-weight:700;letter-spacing:.16em}
 #ldLang{display:flex;gap:2vmin;margin-top:4vmin}
@@ -103,7 +103,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:no
 
   <div id="toast"></div>
 </div>
-<script>const SLUG="horda";const TRE="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js";const GLTFURL="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js";const R=p=>(location.search.indexOf('local')>=0?'/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@e7c7df0/')+p;const MDL=(m=>{const o={};for(const k in m)o[k]=R(m[k]);return o})({"hands":"assets/hyper/vm-hands.glb","gun":"assets/hyper/w-smg.glb","enemy":"assets/arcade/m-arena-run.glb"});const TEX=(m=>{const o={};for(const k in m)o[k]=R(m[k]);return o})({"stucco":"assets/fp/tex/stucco.webp","brick":"assets/fp/tex/brick.webp","facade":"assets/fp/tex/facade.webp","roof":"assets/fp/tex/roof.webp"});const SFX={shoot:R('assets/vert/sfx-shoot.mp3'),boom:R('assets/vert/sfx-boom.mp3'),coin:R('assets/vert/sfx-coin.mp3'),win:R('assets/vert/sfx-win.mp3'),lose:R('assets/vert/sfx-lose.mp3'),power:R('assets/vert/sfx-power.mp3'),swipe:R('assets/vert/sfx-swipe.mp3')};</script><script>/* ===== HORDA — shooter de oleadas en primera persona ====================== */
+<script>const SLUG="horda";const TRE="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js";const GLTFURL="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js";const R=p=>(location.search.indexOf('local')>=0?'/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@5f0e245/')+p;const _map=m=>{const o={};for(const k in m)o[k]=Array.isArray(m[k])?m[k].map(R):R(m[k]);return o};const MDL=_map({"hands":"assets/hyper/vm-hands.glb","gun":"assets/hyper/w-smg.glb","enemy":"assets/arcade/m-arena-run.glb","veh":["assets/fp/cdn/7463a5d5-c4f5-4c85-8059-d58c4026d137.glb","assets/fp/cdn/00dbd02b-db37-442c-924b-327899e5b05a.glb","assets/fp/cdn/101f89a4-08af-433a-8756-b7bc7050c77d.glb","assets/fp/cdn/282959d6-0a49-4e1e-85b5-0dc2bc8e7f15.glb","assets/fp/cdn/5701504c-5afd-494a-b052-258853b27c87.glb","assets/fp/cdn/4582a91c-a517-4d50-bc9b-5359177e5463.glb"]});const TEX=_map({"sky":"assets/g3/sky-horda.jpg","ground":"assets/fp/tex/stucco.webp","brick":"assets/fp/tex/brick.webp","facade":"assets/fp/tex/facade.webp","roof":"assets/fp/tex/roof.webp"});const SFX={shoot:R('assets/vert/sfx-shoot.mp3'),boom:R('assets/vert/sfx-boom.mp3'),coin:R('assets/vert/sfx-coin.mp3'),win:R('assets/vert/sfx-win.mp3'),lose:R('assets/vert/sfx-lose.mp3'),power:R('assets/vert/sfx-power.mp3'),swipe:R('assets/vert/sfx-swipe.mp3')};</script><script>/* ===== HORDA — shooter de oleadas en primera persona ====================== */
 window.GAME = (function () {
 const EYE = 1.7, ARENA = 42;
 let T, scene, cam, ren;
@@ -114,38 +114,55 @@ let enemies, tmplEnemy, hp, ammo, mag, reloadT, score, kills, wave, spawnLeft, s
 async function init3d(THREE) {
   T = THREE; scene = ARC.scene; cam = ARC.cam; ren = ARC.renderer;
   cam.rotation.order = 'YXZ'; cam.position.set(0, EYE, 0);
-  scene.background = new T.Color(0x2b3a52);
-  scene.fog = new T.Fog(0x2b3a52, 34, 95);
-  scene.add(new T.HemisphereLight(0xdfeaff, 0x39322a, 1.9));
-  scene.add(new T.AmbientLight(0xffffff, .45));
-  const sun = new T.DirectionalLight(0xfff2d8, 2.4); sun.position.set(-14, 26, 10); scene.add(sun);
-  ren.toneMappingExposure = 1.25;
-  // suelo PBR
   const tl = new T.TextureLoader();
+  // CIELO 360 (atardecer bélico) de fondo
+  const sky = tl.load(TEX.sky); sky.mapping = T.EquirectangularReflectionMapping; sky.colorSpace = T.SRGBColorSpace;
+  scene.background = sky; scene.environment = sky;
+  scene.fog = new T.Fog(0x3a2836, 44, 150);
+  // luz de atardecer
+  scene.add(new T.HemisphereLight(0xffc48a, 0x2a2030, 1.15));
+  scene.add(new T.AmbientLight(0xffe6c8, .35));
+  const sun = new T.DirectionalLight(0xffd0a0, 2.3); sun.position.set(2, 10, -46); scene.add(sun);
+  const rim = new T.DirectionalLight(0x9a7cff, .8); rim.position.set(-20, 8, 20); scene.add(rim);
+  ren.toneMappingExposure = 1.12;
   const load = (u, rep) => { const t = tl.load(u); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(rep, rep); t.colorSpace = T.SRGBColorSpace; return t; };
-  const ground = new T.Mesh(new T.CircleGeometry(ARENA + 4, 48), new T.MeshStandardMaterial({ map: load(TEX.stucco, 16), roughness: .95 }));
+  // suelo: asfalto oscuro
+  const ground = new T.Mesh(new T.CircleGeometry(ARENA + 30, 56), new T.MeshStandardMaterial({ map: load(TEX.ground, 26), color: 0x8a7f86, roughness: .96 }));
   ground.rotation.x = -Math.PI / 2; scene.add(ground);
-  // muro perimetral + edificios de fondo con textura de fachada
-  const facade = load(TEX.facade, 3), roof = load(TEX.brick, 3);
-  const matF = new T.MeshStandardMaterial({ map: facade, roughness: .9 });
-  const matR = new T.MeshStandardMaterial({ map: roof, roughness: .95 });
-  for (let i = 0; i < 16; i++) {
-    const a = i / 16 * 6.28, r = ARENA + ARC.rnd(3, 9), h = ARC.rnd(8, 20), w = ARC.rnd(5, 9);
-    const b = new T.Mesh(new T.BoxGeometry(w, h, w), i % 3 ? matF : matR);
-    b.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r); b.rotation.y = ARC.rnd(0, 6.28); scene.add(b);
+  // EDIFICIOS PBR: anillo de torres entre el jugador y el skyline del cielo
+  const facade = load(TEX.facade, 1), brick = load(TEX.brick, 1), roof = load(TEX.roof, 1);
+  const mats = [new T.MeshStandardMaterial({ map: facade, roughness: .92, color: 0xbfc8de }),
+    new T.MeshStandardMaterial({ map: brick, roughness: .95, color: 0xc89a80 }),
+    new T.MeshStandardMaterial({ map: roof, roughness: .9, color: 0x9aa4b8 }),
+    new T.MeshStandardMaterial({ map: facade, roughness: .92, color: 0x8892b0 }),
+    new T.MeshStandardMaterial({ map: brick, roughness: .95, color: 0x7a6a62 })];
+  for (let i = 0; i < 26; i++) {
+    const a = i / 26 * 6.28 + ARC.rnd(-.1, .1), r = ARENA + ARC.rnd(2, 26), h = ARC.rnd(12, 42), w = ARC.rnd(6, 12), dp = ARC.rnd(6, 12);
+    const g2 = new T.BoxGeometry(w, h, dp); const uv = g2.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * (w / 4), uv.getY(k) * (h / 4));
+    const b = new T.Mesh(g2, mats[i % mats.length]); b.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r); b.rotation.y = ARC.rnd(0, 6.28); scene.add(b);
   }
-  // cajas de cobertura
-  const matC = new T.MeshStandardMaterial({ map: load(TEX.brick, 1), roughness: .9 });
-  for (let i = 0; i < 8; i++) { const a = ARC.rnd(0, 6.28), r = ARC.rnd(8, ARENA - 6);
-    const s = ARC.rnd(1.4, 2.6); const c = new T.Mesh(new T.BoxGeometry(s, s, s), matC);
-    c.position.set(Math.cos(a) * r, s / 2, Math.sin(a) * r); c.rotation.y = ARC.rnd(0, 6.28); scene.add(c); }
-  // viewmodel: sólo el arma, escalada y ubicada abajo a la derecha
+  // VEHÍCULOS del repo como cobertura (calle de guerra)
+  try {
+    const vs = await Promise.all(MDL.veh.map(u => ARC.loadGLB(u).then(g => g.scene).catch(() => null)));
+    let idx = 0;
+    for (let i = 0; i < 10; i++) { const src = vs[i % vs.length]; if (!src) continue;
+      const v = src.clone(true); const vb = new T.Box3().setFromObject(v); const vsz = vb.getSize(new T.Vector3());
+      const vk = 4.6 / (Math.max(vsz.x, vsz.z) || 1); v.scale.setScalar(vk);
+      /* medir la caja EN EL ORIGEN (ya escalado) y apoyarlo en el piso */
+      v.position.set(0, 0, 0); v.updateWorldMatrix(true, true);
+      const nb = new T.Box3().setFromObject(v);
+      const a = ARC.rnd(0, 6.28), rr = ARC.rnd(9, ARENA - 5);
+      v.position.set(Math.cos(a) * rr, -nb.min.y, Math.sin(a) * rr); v.rotation.y = ARC.rnd(0, 6.28);
+      scene.add(v); idx++; }
+  } catch (e) { console.warn('veh', e); }
+  // VIEWMODEL: manos + arma
   try {
     const wg = await ARC.loadGLB(MDL.gun); const gun = wg.scene;
     const gb = new T.Box3().setFromObject(gun); const gs = gb.getSize(new T.Vector3());
-    const gk = 0.62 / (Math.max(gs.x, gs.y, gs.z) || 1); gun.scale.setScalar(gk);
-    gun.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.renderOrder = 20; if (o.material) { o.material.depthTest = false; o.material.fog = false; } } });
-    gun.position.set(.2, -.26, -.5); gun.rotation.set(.05, Math.PI + .1, 0); cam.add(gun); vm = gun;
+    const gk = 0.6 / (Math.max(gs.x, gs.y, gs.z) || 1); gun.scale.setScalar(gk);
+    gun.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.renderOrder = 22; if (o.material) { o.material.depthTest = false; o.material.fog = false; } } });
+    gun.position.set(.2, -.27, -.52); gun.rotation.set(.04, Math.PI + .08, 0); cam.add(gun); vm = gun;
+    const fill = new T.PointLight(0xffd8a8, 1.1, 2.2); fill.position.set(.05, .12, -.25); cam.add(fill);
   } catch (e) { console.warn('vm', e); }
   scene.add(cam);
   // fogonazo
@@ -260,7 +277,7 @@ function draw2d(g) {
 
 /* ---- menú vivo: la cámara gira sola sobre la arena ---- */
 let menuA = 0;
-function attract3d(dt) { menuA += dt * .15; if (cam) { cam.position.set(Math.cos(menuA) * 6, 4, Math.sin(menuA) * 6); cam.lookAt(0, 1, 0); } }
+function attract3d(dt) { menuA += dt * .5; if (cam) { cam.position.set(Math.cos(menuA) * 9, 3.4 + Math.sin(menuA * .7) * 1.2, Math.sin(menuA) * 9); cam.lookAt(0, 1.4, 0); } }
 
 /* ---- input ---- */
 function look(dx, dy) { yaw -= dx * .0032; pitch = ARC.clamp(pitch - dy * .0032, -1.2, 1.2); }
