@@ -12,7 +12,23 @@ const META = {
       veh: ['assets/fp/cdn/7463a5d5-c4f5-4c85-8059-d58c4026d137.glb', 'assets/fp/cdn/00dbd02b-db37-442c-924b-327899e5b05a.glb',
         'assets/fp/cdn/101f89a4-08af-433a-8756-b7bc7050c77d.glb', 'assets/fp/cdn/282959d6-0a49-4e1e-85b5-0dc2bc8e7f15.glb',
         'assets/fp/cdn/5701504c-5afd-494a-b052-258853b27c87.glb', 'assets/fp/cdn/4582a91c-a517-4d50-bc9b-5359177e5463.glb'] },
-    tex: { sky: 'assets/g3/sky-horda.jpg', ground: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp', roof: 'assets/fp/tex/roof.webp' } }
+    tex: { sky: 'assets/g3/sky-horda.jpg', ground: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp', roof: 'assets/fp/tex/roof.webp' } },
+  nudillos: { name: 'NUDILLOS', sub: 'combo tras combo', sky: '#241826', acc: '#ffb04d', char: true,
+    mdl: { char: 'assets/hyper/char.glb', aIdle: 'assets/hyper/anim-idle.glb', aRun: 'assets/hyper/anim-run.glb',
+      aP1: 'assets/hyper/anim-punch1.glb', aP2: 'assets/hyper/anim-punch2.glb', aBat: 'assets/hyper/anim-bat.glb',
+      bat: 'assets/hyper/w-bat.glb', enemy: 'assets/arcade/m-arena-atk.glb', crate: 'assets/hyper/p-crate.glb' },
+    tex: { sky: 'assets/g3/sky-horda.jpg', ground: 'assets/fp/tex/brick.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp' } },
+  furia: { name: 'FURIA', sub: 'derby de destrucción', sky: '#c8b088', acc: '#ffd23f',
+    mdl: { me: 'assets/fp/cdn/101f89a4-08af-433a-8756-b7bc7050c77d.glb',
+      foes: ['assets/fp/cdn/4582a91c-a517-4d50-bc9b-5359177e5463.glb', 'assets/fp/cdn/282959d6-0a49-4e1e-85b5-0dc2bc8e7f15.glb',
+        'assets/fp/cdn/5701504c-5afd-494a-b052-258853b27c87.glb', 'assets/fp/cdn/00dbd02b-db37-442c-924b-327899e5b05a.glb'] },
+    tex: { sky: 'assets/g3/sky-furia.jpg', ground: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp' } },
+  vertigo: { name: 'VÉRTIGO', sub: 'cruzá las puertas', sky: '#c8b998', acc: '#2bd97e',
+    mdl: { me: 'assets/fp/cdn/4582a91c-a517-4d50-bc9b-5359177e5463.glb' },
+    tex: { sky: 'assets/g3/sky-furia.jpg', ground: 'assets/fp/tex/stucco.webp', brick: 'assets/fp/tex/brick.webp', facade: 'assets/fp/tex/facade.webp', roof: 'assets/fp/tex/roof.webp' } },
+  alas: { name: 'ALAS', sub: 'volá entre anillos', sky: '#e8c890', acc: '#35e0c0',
+    mdl: { ship: 'assets/arcade/m-orbita-nave.glb' },
+    tex: { sky: 'assets/g3/sky-alas.jpg' } }
 };
 const SFXN = ['shoot', 'boom', 'coin', 'win', 'lose', 'power', 'swipe'];
 

@@ -1,0 +1,161 @@
+/* ===== ALAS — vuelo entre anillos sobre las nubes ==========================
+   Pilotás una nave por un mar de nubes doradas cruzando ANILLOS. Cada anillo
+   suma tiempo; las rachas multiplican. Arrastrá (o flechas/WASD) para
+   inclinar la nave. Relajado pero contrarreloj. */
+window.GAME = (function () {
+let T, scene, cam, ren;
+let ship, sx, sy, sz, yaw, pitch, v, ring, timeLeft, score, streak, dead, tPlay;
+let keys = {}, drag = null, clouds = [];
+
+async function init3d(THREE) {
+  T = THREE; scene = ARC.scene; cam = ARC.cam; ren = ARC.renderer;
+  const tl = new T.TextureLoader();
+  const sky = tl.load(TEX.sky); sky.mapping = T.EquirectangularReflectionMapping; sky.colorSpace = T.SRGBColorSpace;
+  scene.background = sky; scene.environment = sky;
+  scene.fog = new T.Fog(0xf2d9a8, 90, 320);
+  scene.add(new T.HemisphereLight(0xfff2d0, 0xc89858, 1.7));
+  scene.add(new T.AmbientLight(0xffffff, .5));
+  const sun = new T.DirectionalLight(0xffe8c0, 2.4); sun.position.set(-30, 14, -40); scene.add(sun);
+  ren.toneMappingExposure = 1.15;
+  // nubes: planos blancos suaves esparcidos (impostores baratos)
+  const cmat = new T.MeshBasicMaterial({ color: 0xfff4e0, transparent: true, opacity: .32, depthWrite: false });
+  for (let i = 0; i < 40; i++) {
+    const w = ARC.rnd(20, 60);
+    const c = new T.Mesh(new T.PlaneGeometry(w, w * .4), cmat);
+    c.position.set(ARC.rnd(-260, 260), ARC.rnd(-30, -6), ARC.rnd(-260, 260));
+    c.rotation.x = -Math.PI / 2; c.rotation.z = ARC.rnd(0, 6.28);
+    scene.add(c); clouds.push(c);
+  }
+  // nave del repo
+  const g = await ARC.loadGLB(MDL.ship); const m = g.scene;
+  const box = new T.Box3().setFromObject(m); const szv = box.getSize(new T.Vector3());
+  m.scale.setScalar(3.2 / (Math.max(szv.x, szv.z) || 1));
+  m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; if (o.material) o.material.metalness = .3; } });
+  const ctr = new T.Box3().setFromObject(m).getCenter(new T.Vector3());
+  m.position.sub(ctr);
+  ship = new T.Group(); ship.add(m); scene.add(ship);
+  // estela
+  const trail = new T.PointLight(0xffc070, 1.2, 10); trail.position.set(0, 0, 3); ship.add(trail);
+  // anillo
+  ring = { grp: new T.Group(), x: 0, y: 0, z: 0, on: false };
+  const rmat = new T.MeshBasicMaterial({ color: 0x35e0c0 });
+  const torus = new T.Mesh(new T.TorusGeometry(6.5, .55, 10, 28), rmat);
+  ring.grp.add(torus); scene.add(ring.grp);
+}
+
+function placeRing() {
+  const a = yaw + ARC.rnd(-.7, .7);
+  const d = ARC.rnd(55, 85);
+  ring.x = sx + Math.sin(a) * d;
+  ring.z = sz + Math.cos(a) * d;
+  ring.y = ARC.clamp(sy + ARC.rnd(-12, 12), 6, 60);
+  const L = Math.hypot(ring.x, ring.z);
+  if (L > 240) { ring.x *= 240 / L; ring.z *= 240 / L; }
+  ring.on = true;
+  ring.grp.position.set(ring.x, ring.y, ring.z);
+  ring.grp.lookAt(sx, sy, sz);
+  ring.grp.visible = true;
+}
+
+function start() {
+  sx = 0; sy = 26; sz = 0; yaw = 0; pitch = 0; v = 24;
+  timeLeft = 45; score = 0; streak = 0; dead = false; tPlay = 0;
+  placeRing();
+}
+
+function worldToScreen(x, y, z) { const p = new T.Vector3(x, y, z).project(cam);
+  if (p.z > 1) return null; return { x: (p.x * .5 + .5) * ARC.W, y: (-p.y * .5 + .5) * ARC.H }; }
+
+function step(dt) {
+  if (dead) return; tPlay += dt;
+  timeLeft -= dt;
+  if (timeLeft <= 0) { timeLeft = 0; dead = true;
+    ARC.over({ win: score >= 600, score, title: score >= 600 ? '¡AS DEL CIELO!' : 'SIN TIEMPO', coins: (score / 30 | 0) }); return; }
+  let ix = 0, iy = 0;
+  if (keys.KeyA || keys.ArrowLeft) ix = -1; if (keys.KeyD || keys.ArrowRight) ix = 1;
+  if (keys.KeyW || keys.ArrowUp) iy = -1; if (keys.KeyS || keys.ArrowDown) iy = 1;
+  if (drag) { ix += drag.x; iy += drag.y; }
+  yaw -= ix * dt * 1.5;
+  pitch = ARC.clamp(pitch - iy * dt * 1.3, -.9, .9);
+  pitch *= (1 - dt * .4);                    // vuelve sola al nivel
+  sx += Math.sin(yaw) * Math.cos(pitch) * v * dt;
+  sz += Math.cos(yaw) * Math.cos(pitch) * v * dt;
+  sy += Math.sin(pitch) * v * dt * -1;
+  sy = ARC.clamp(sy, 4, 70);
+  const L = Math.hypot(sx, sz); if (L > 250) { sx *= 250 / L; sz *= 250 / L; }
+  ship.position.set(sx, sy, sz);
+  ship.rotation.set(0, 0, 0);
+  ship.rotateY(yaw + Math.PI);
+  ship.rotateX(-pitch * .8);
+  ship.rotateZ(ix * .5);
+  const cd = 9.6;
+  cam.position.set(sx - Math.sin(yaw) * cd, sy + 3.2, sz - Math.cos(yaw) * cd);
+  cam.lookAt(sx + Math.sin(yaw) * 6, sy, sz + Math.cos(yaw) * 6);
+  // anillo
+  if (ring.on) {
+    ring.grp.rotation.z += dt;
+    const d2 = (sx - ring.x) ** 2 + (sy - ring.y) ** 2 + (sz - ring.z) ** 2;
+    if (d2 < 42) {
+      streak++; const bonus = 4 + Math.min(3, streak * .5);
+      timeLeft += bonus; score += 50 * Math.min(4, streak);
+      const sp = worldToScreen(ring.x, ring.y, ring.z);
+      if (sp) { ARC.fx.ring(sp.x, sp.y, '#35e0c0', 14); ARC.fx.text(sp.x, sp.y - 30, '+' + bonus.toFixed(1) + 's', '#35e0c0'); }
+      ARC.sfx('coin', { vol: .6, rate: 1 + streak * .05 }); ARC.vib(20);
+      placeRing();
+    } else if (d2 < 240 && Math.abs(Math.sqrt(d2) - 6.5) < 2) {
+      // pasó cerca del aro sin entrar: nada, el jugador aprende
+    }
+  }
+}
+
+function draw2d(g) {
+  const W = ARC.W, H = ARC.H;
+  g.textAlign = 'center'; g.font = '900 34px system-ui';
+  g.fillStyle = timeLeft < 8 ? '#ff5470' : '#fff'; g.fillText(timeLeft.toFixed(1) + 's', W / 2, 44);
+  g.font = '900 20px system-ui'; g.fillStyle = '#35e0c0'; g.fillText('racha x' + Math.min(4, Math.max(1, streak)), W / 2, 70);
+  g.textAlign = 'left'; g.font = '900 26px system-ui'; g.fillStyle = '#fff'; g.fillText(score + '', 24, 42);
+  // flecha al anillo (3D proyectada o brújula)
+  if (ring.on) {
+    const sp = worldToScreen(ring.x, ring.y, ring.z);
+    if (sp && sp.x > 40 && sp.x < W - 40 && sp.y > 40 && sp.y < H - 40) {
+      g.strokeStyle = '#35e0c0'; g.lineWidth = 3;
+      g.beginPath(); g.arc(sp.x, sp.y, 20 + Math.sin(tPlay * 5) * 4, 0, 6.28); g.stroke();
+    } else {
+      const ang = Math.atan2(ring.x - sx, ring.z - sz) - yaw;
+      g.save(); g.translate(W / 2, 116); g.rotate(-ang);
+      g.fillStyle = '#35e0c0'; g.beginPath(); g.moveTo(0, -26); g.lineTo(14, 8); g.lineTo(-14, 8); g.closePath(); g.fill();
+      g.restore();
+    }
+  }
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(W - 52, 16, 36, 36); g.fillStyle = '#fff'; g.font = '900 18px system-ui'; g.textAlign = 'center'; g.fillText('❚❚', W - 34, 40);
+}
+
+let menuA = 0;
+function attract3d(dt) { menuA += dt * .5;
+  if (cam) { cam.position.set(Math.cos(menuA) * 14, 30 + Math.sin(menuA * .6) * 3, Math.sin(menuA) * 14); cam.lookAt(0, 26, 0); }
+  if (ship) { ship.position.set(0, 26, 0); ship.rotation.y += dt * .4; } }
+
+function down(p) { if (p.x > ARC.W - 60 && p.y < 56) { window.ARC_pause(); return; }
+  drag = { x0: p.x, y0: p.y, x: 0, y: 0 }; }
+function move(p) { if (!drag) return;
+  drag.x = ARC.clamp((p.x - drag.x0) / 120, -1, 1);
+  drag.y = ARC.clamp((p.y - drag.y0) / 120, -1, 1); }
+function up() { drag = null; }
+function key(code, dn) { keys[code] = dn; if (code === 'Escape' && dn) window.ARC_pause(); }
+
+return {
+  slug: 'alas', name: 'ALAS', sub: 'volá entre anillos', acc: '#35e0c0', three: true, sky: '#e8c890',
+  music: null, art: null, sfx: {}, best: 'PUNTOS',
+  init3d, start, step, draw2d, attract3d, resize() {}, down, move, up, look() {}, key,
+  dbg: {
+    state: () => ({ score, t: timeLeft == null ? 0 : +timeLeft.toFixed(1), streak, dead, y: sy | 0 }),
+    autoPlay() {
+      if (dead || !ring.on) { drag = null; return; }
+      const ty = Math.atan2(ring.x - sx, ring.z - sz);
+      let dy = ty - yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283;
+      const dv = ring.y - sy;
+      drag = { x0: 0, y0: 0, x: ARC.clamp(-dy * 2, -1, 1), y: ARC.clamp(-dv * .2, -1, 1) };
+    }
+  }
+};
+})();
