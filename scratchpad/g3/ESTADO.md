@@ -101,6 +101,60 @@ pantalla (LIFE.pad), portada+música generadas.
   juego con sombras. Correr con `run_in_background` y esperar por notificación;
   NO encadenar `grep` a un archivo (buffering: parece que no hay salida).
 
+## TORRE v2 — parkour vertical al cielo (juego estrella)
+`g_torre.js` reescrito: 222 m de altura, 76 plataformas en espiral sembradas con
+**mulberry32 propio** (SEED=20260804, layout reproducible). 4 biomas con
+materiales COMPARTIDOS: ruinas de piedra (brick) → andamios (t-wood) → rocas
+flotantes (t-concrete) → cristal y nubes (translúcido, sin mapa). Tipos de
+plataforma: estática, móvil (va y viene), giratoria (orbita), que se cae al
+pisarla (y reaparece), trampolín, viga fina, y GLB del repo (p-crate / obs-log /
+obs-totem) con una tabla arriba que hace de superficie. 7 checkpoints, gemas,
+meta con torus + haz, nubes sprite, y el cielo de MAREA (al mirar abajo se ve la
+laguna: vértigo gratis).
+
+### Trampas nuevas (importantes)
+- **El "corte de salto" de altura variable ROMPE el juego con toques cortos**:
+  `if(!held && vy>6.5) vy*=.55` hacía que un tap diera 1.3 m en vez de 4.25 m ⇒
+  ninguna plataforma alcanzable (y el piloto automático quedaba trabado en el
+  piso). En un juego de saltos por botón: **altura de salto FIJA**.
+- **El layout tiene que PROBAR que cada salto es posible**: el generador calcula
+  el alcance real (`v0² - 2·G·dy` → tiempo de vuelo → `SPD·t`) y si no da, baja
+  el escalón y acerca la plataforma. Incluye la amplitud de las móviles /
+  giratorias como estorbo. Sin esto había saltos con holgura NEGATIVA.
+- **Cámara de 3ª persona que no atraviesa nada, en 3 pasos**: (1) raycast desde
+  el jugador hacia la cámara; (2) si está tapado, subir el ángulo hasta +25°;
+  (3) si sigue tapado, **girar el yaw hacia AFUERA de la torre**
+  (`Math.atan2(px,pz)`), donde la línea de visión siempre está libre. Acercarse
+  es el último recurso y NUNCA vista cenital (subir el pitch a tope marea y no
+  se ve nada). `lookAt(camT.y + 1.55)` deja al jugador en el tercio bajo y se ve
+  el ascenso.
+- **char.glb sale BLANCO con cielo claro**: además del fix de emissive/specular,
+  con `scene.environment` = cielo diurno hay que bajar `scene.environmentIntensity`
+  (.42) y las luces (hemi .95 / amb .28), si no el personaje queda silueta blanca.
+- **Costura vertical del cielo equirectangular**: `sky.wrapS = RepeatWrapping`.
+- **Los adornos del piso se meten en la cámara**: los árboles de 5.2 m a radio
+  12-18 quedaban dentro de la copa; bajados a 3.4 m y radio 10.5-14.5.
+- **`shell.js` tiraba TypeError en cada `touchend`**: `pt(e)` leía `e.touches[0]`
+  y en touchend `touches` está vacío. Ahora cae a `changedTouches`. Afecta a
+  TODOS los juegos (en móvil real se veía en consola y `GAME.up` nunca corría).
+- **Multitáctil**: para joystick + SALTAR + cámara a la vez, TORRE registra sus
+  propios listeners `touchstart/move/end` (como `LIFE.pad`) y en
+  `GAME.down/move/up` ignora los eventos táctiles (`if (e && e.touches) return`),
+  dejando esos callbacks solo para el mouse.
+
+### Herramientas de verificación nuevas (en este dir)
+- `node _auto.js` → corre `GAME.step()` SIN render y verifica que el piloto
+  automático sube la torre entera (sube 222 m y gana en ~62 s de simulación).
+  Sirve para probar que un nivel es completable sin depender de los ~2.5 fps
+  del chromium del sandbox.
+- `node _lay.js` → volcado del layout + análisis de alcanzabilidad de cada
+  salto (holgura). Todas las holguras deben ser > 1.
+- `node _shottorre.js <indice> <salida.png>` → captura teletransportando a una
+  plataforma (para revisar biomas altos).
+- `node _fps.js <slug>` → fps + draw calls + triángulos. Referencia del sandbox:
+  ARENA 2.2 fps / 204k tri, TORRE 2.5 fps / 55k tri. Ojo: a 2.5 fps el shell
+  sólo simula 5 pasos por frame ⇒ el tiempo de juego avanza ~0.2× el real.
+
 ## Pendiente / notas
 - La sonda no corre el m4a (AAC): verificar música solo en dispositivo real.
 - dbg de horda tiene tp(x,z) y def(t) para tests rápidos de campaña.

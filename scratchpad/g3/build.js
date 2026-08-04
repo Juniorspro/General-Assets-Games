@@ -59,10 +59,12 @@ const META = {
     art: 'assets/g3/art-arena.jpg', music: 'assets/g3/mus-cripta.m4a', sky: '#2a2438', acc: '#b48aff',
     mdl: { hero: 'assets/hyper/char.glb', sword: 'assets/g3/mdl-sword.glb', enemy: 'assets/g3/mdl-skeleton.glb' },
     tex: { sky: 'assets/g3/sky-horda.jpg', wall: 'assets/g3/tex-dungeon-wall.jpg', floor: 'assets/g3/tex-dungeon-floor.jpg' } },
-  torre: { name: 'TORRE', sub: 'subi saltando',
+  torre: { name: 'TORRE', sub: 'parkour al cielo',
     art: 'assets/g3/art-torre.jpg', music: 'assets/g3/mus-torre.m4a', sky: '#bcd0e8', acc: '#ffd23f',
-    mdl: { hero: 'assets/hyper/char.glb' },
-    tex: { sky: 'assets/g3/sky-marea.jpg', wall: 'assets/fp/tex/brick.webp', floor: 'assets/fp/tex/stucco.webp' } }
+    mdl: { hero: 'assets/hyper/char.glb', crate: 'assets/hyper/p-crate.glb', log: 'assets/reliquia/obs-log.glb',
+      totem: 'assets/reliquia/obs-totem.glb', tree: 'assets/hyper/p-tree.glb' },
+    tex: { sky: 'assets/g3/sky-marea.jpg', wall: 'assets/fp/tex/brick.webp', floor: 'assets/fp/tex/stucco.webp',
+      wood: 'assets/hyper/t-wood.jpg', rock: 'assets/hyper/t-concrete.jpg' } }
 };
 const SFXN = ['shoot', 'boom', 'coin', 'win', 'lose', 'power', 'swipe'];
 
