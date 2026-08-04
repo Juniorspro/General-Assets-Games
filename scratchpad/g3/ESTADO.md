@@ -63,6 +63,23 @@ Portal: `assets/g3/index.html` con links RELATIVOS (quedan en githack, hash-agn�
 - Higgsfield: `generate_3d image_to_3d` DEFAULTEA `should_texture:false` → pasar
   `should_texture:true` para que el GLB traiga textura. `sonilo_music` sí acepta.
 
+## MAREA v4 (rivales/skins/circuitos) + CRIPTA (roguelike FP)
+- **MAREA**: piloto 3D sentado sobre la moto con 4 SKINS elegibles (menú), 4
+  RIVALES NPC que corren el circuito con puesto P1..P5, 3 CIRCUITOS
+  (laguna/atolón/bahía) y boyas blancas que marcan el canal. Agua de pileta:
+  arena + cáusticas aditivas animadas + ripple por bumpMap. Moto flota con
+  resorte y cabecea/rola según la pendiente de la olita.
+  OJO orientación: `craft.rotateY(yaw)` (sin +π) ⇒ la plantilla lleva `m.rotation.y = +PI/2`.
+- **CRIPTA** (`g_cripta.js`): roguelike 1ª persona. 10 salas, matás los golems y
+  se abre la puerta al norte; jefe cada 5 salas; mejoras al pasar (vida/daño/vel).
+  Espada y golem 3D generados (Higgsfield). Antorchas PointLight (2 castean sombra).
+  `ren.toneMappingExposure = 1.75` — sin eso la cripta se ve NEGRA.
+- **TRAMPA del menú**: el panel `#mOpts` tapaba el botón JUGAR ⇒ contenedor con
+  `pointer-events:none` y los chips con `pointer-events:auto`. Si agregás opciones,
+  mantené eso o la sonda falla en "el botón JUGAR recibe el toque".
+- Perf: el chromium del sandbox (swiftshader) sufre con muchos casters ⇒ sombra
+  512, rivales no castean, islas solo reciben. Las sondas tardan ~2-3 min.
+
 ## Pendiente / notas
 - La sonda no corre el m4a (AAC): verificar música solo en dispositivo real.
 - dbg de horda tiene tp(x,z) y def(t) para tests rápidos de campaña.

@@ -199,12 +199,12 @@ function step(dt) {
   if (keys.KeyA || keys.ArrowLeft) mx -= 1; if (keys.KeyD || keys.ArrowRight) mx += 1;
   if (joy) { mx += joy.dx; mz += -joy.dy; }
   if (dbgAuto) { // ir al enemigo más cercano (o a la puerta si está limpia)
-    let tx = 0, tz = -ROOM + 2;
-    if (enemies.length) { let best = 1e9; for (const e of enemies) { const d = (e.x - px) ** 2 + (e.z - pz) ** 2; if (d < best) { best = d; tx = e.x; tz = e.z; } } }
+    let tx = 0, tz = -ROOM + 2, bestD = 1e9;
+    if (enemies.length) { for (const e of enemies) { const d = (e.x - px) ** 2 + (e.z - pz) ** 2; if (d < bestD) { bestD = d; tx = e.x; tz = e.z; } } }
     const ty = Math.atan2(tx - px, tz - pz); let dy = ty - yaw;
     while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283;
-    yaw += ARC.clamp(dy, -2.5 * dt, 2.5 * dt) * 2; mz = 1; mx = 0;
-    if (enemies.length && Math.hypot(enemies[0].x - px, enemies[0].z - pz) < 3.2) attack();
+    yaw += ARC.clamp(dy, -3 * dt, 3 * dt) * 2.5; mz = 1; mx = 0;
+    if (enemies.length && Math.sqrt(bestD) < 3.4) attack();   // pega al MÁS CERCANO
   }
   const ml = Math.hypot(mx, mz);
   if (ml > 0) { mx /= ml; mz /= ml;
