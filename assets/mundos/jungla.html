@@ -1,0 +1,3572 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#0d1a0e"/>
+<title>JUNGLA</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;background:#0d1a0e;color:#f0eef8;
+    font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    overflow:hidden;touch-action:none;overscroll-behavior:none;user-select:none}
+  #gl{position:fixed;left:0;top:0;width:100%;height:100%;display:block}
+
+  /* ---------------- HUD ---------------- */
+  #hud{position:fixed;inset:0;z-index:4;pointer-events:none;display:none}
+  #hud.on{display:block}
+  #obj{position:absolute;left:50%;top:10px;transform:translateX(-50%);
+    background:rgba(14,10,26,.62);border:1px solid rgba(196,232,150,.25);border-radius:12px;
+    padding:7px 14px;text-align:center;backdrop-filter:blur(4px);max-width:86vw}
+  #objT{font-weight:800;font-size:13px;letter-spacing:.04em;color:#eef7e2}
+  #objD{font-size:11.5px;color:#b0a0d8;margin-top:1px}
+  #capCard{position:absolute;left:50%;top:32%;transform:translateX(-50%);text-align:center;
+    opacity:0;transition:opacity 1.1s;pointer-events:none;width:92vw}
+  #capCard.on{opacity:1}
+  #capN{font-size:13px;letter-spacing:.34em;color:#cdbcf4;font-weight:700}
+  #capT{font-size:30px;font-weight:900;letter-spacing:.06em;margin-top:4px;
+    text-shadow:0 2px 18px rgba(0,0,0,.65)}
+  #btns{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;
+    gap:9px;align-items:flex-end;pointer-events:auto}
+  .b{min-width:86px;text-align:center;padding:12px 15px;border-radius:14px;font-weight:800;
+    font-size:13px;background:rgba(20,14,36,.62);border:1.5px solid rgba(196,232,150,.4);
+    color:#eef7e2;pointer-events:auto;cursor:pointer;backdrop-filter:blur(3px)}
+  .b:active{transform:translateY(1px);filter:brightness(1.3)}
+  .b.usar{background:rgba(60,180,150,.78);border-color:#bff2a0;font-size:15px;display:none}
+  .b.usar.on{display:block}
+  .b.corre.on{background:rgba(60,180,150,.78)}
+  /* ayuda de controles de PC: sale sola al detectar mouse/teclado */
+  #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
+    font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
+    background:rgba(12,8,22,.5);border:1px solid rgba(190,230,180,.26);
+    border-radius:10px;padding:8px 10px;backdrop-filter:blur(4px);max-width:44vw}
+  body.pc #pcHelp{display:block}
+  #pcHelp b{display:block;font:800 9px/1 ui-sans-serif,system-ui,sans-serif;
+    letter-spacing:.16em;opacity:.6;margin-bottom:6px}
+  #pcHelp .row{margin-top:4px;white-space:nowrap}
+  #pcHelp kbd{display:inline-block;min-width:13px;text-align:center;padding:1px 5px;
+    margin-right:1px;border-radius:5px;font:700 10px ui-monospace,monospace;
+    background:rgba(190,230,180,.16);border:1px solid rgba(190,230,180,.3);color:#eef7e2}
+  #dlg{position:absolute;left:50%;bottom:8%;transform:translateX(-50%);width:min(560px,92vw);
+    background:rgba(12,8,22,.88);border:1px solid rgba(196,232,150,.35);border-radius:16px;
+    padding:16px 18px 13px;display:none;pointer-events:auto;backdrop-filter:blur(6px)}
+  #dlg.on{display:block}
+  #dlgT{font-weight:900;letter-spacing:.05em;color:#cdbcf4;font-size:13px;margin-bottom:6px}
+  #dlgB{font-size:14.5px;line-height:1.5;color:#f0eef8;white-space:pre-wrap}
+  #dlgGo{margin-top:12px;text-align:center;padding:11px;border-radius:11px;font-weight:800;
+    background:linear-gradient(180deg,#3f9a3a,#1c5424);border:1px solid #bff2a0;cursor:pointer}
+  #fps{position:absolute;left:10px;top:10px;font:10px ui-monospace,monospace;color:#9fd0c8;
+    background:rgba(12,8,22,.5);padding:3px 6px;border-radius:6px}
+  /* viñeta cinematográfica: oscurece apenas las esquinas, gratis (es CSS) */
+  #vig{position:fixed;inset:0;z-index:2;pointer-events:none;
+    background:radial-gradient(ellipse 78% 68% at 50% 46%,transparent 62%,rgba(0,0,10,.34) 100%)}
+
+  /* ---------------- CINEMÁTICAS: barras, subtítulo, saltear --------------- */
+  #cineTop,#cineBot{position:fixed;left:0;width:100%;height:0;background:#000;
+    z-index:6;transition:height .5s ease}
+  #cineTop{top:0}#cineBot{bottom:0}
+  body.cine #cineTop,body.cine #cineBot{height:11vh}
+  #cineTxt{position:fixed;left:50%;bottom:13vh;transform:translateX(-50%);z-index:7;
+    font-size:15.5px;font-weight:700;letter-spacing:.06em;color:#fff;
+    text-shadow:0 1px 12px #000,0 0 4px #000;opacity:0;transition:opacity .4s;
+    text-align:center;width:92vw;pointer-events:none}
+  body.cine #cineTxt{opacity:1}
+  #cineSkip{position:fixed;right:14px;top:13vh;z-index:7;display:none;
+    padding:8px 16px;border-radius:10px;background:rgba(0,0,0,.55);
+    border:1px solid rgba(255,255,255,.3);color:#fff;font-size:12px;
+    letter-spacing:.12em;cursor:pointer}
+  body.cine #cineSkip{display:block}
+
+  /* diálogo con PERSONAJE: la carita pintada + el nombre */
+  #dlgFila{display:flex;gap:12px;align-items:flex-start}
+  #dlgCara{width:64px;height:64px;border-radius:12px;flex:0 0 64px;display:none;
+    border:1.5px solid rgba(196,232,150,.4);background:#0006}
+  #dlgCara.on{display:block}
+
+  /* la TAREA del capítulo (contador, sin idioma: iconos y números) */
+  #tarea{font-size:13px;font-weight:900;letter-spacing:.06em;margin-top:2px;display:none}
+  #tarea.on{display:block}
+
+  /* medidor de supervivencia (oxígeno / calor) */
+  #medidor{position:absolute;left:12px;bottom:16px;width:150px;display:none;
+    pointer-events:none}
+  #medidor.on{display:block}
+  #medIco{font-size:14px;margin-bottom:3px;text-shadow:0 1px 6px #000}
+  #medBar{height:9px;border-radius:6px;background:rgba(0,0,0,.45);
+    border:1px solid rgba(255,255,255,.3);overflow:hidden}
+  #medFill{height:100%;width:100%;border-radius:6px;transition:width .3s linear;
+    background:linear-gradient(90deg,#7fd4ff,#cfefff)}
+  #medFill.rojo{background:linear-gradient(90deg,#ff5a4a,#ffb09a)}
+
+  /* fundido a negro para reaparecer */
+  #fundido{position:fixed;inset:0;z-index:8;background:#000;opacity:0;
+    pointer-events:none;transition:opacity .7s}
+
+  /* ---------------- MENÚ ---------------- */
+  /* el menú es un velo: DETRÁS se ve el valle en vivo (cámara cinemática) */
+  #menu{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;background:
+    linear-gradient(180deg,rgba(6,16,8,.16) 0%,rgba(6,16,8,.34) 55%,rgba(5,14,7,.74) 100%);
+    text-align:center;padding:16px;overflow-y:auto}
+  #menu h1{margin:0;font-size:54px;font-weight:900;letter-spacing:.22em;
+    background:linear-gradient(180deg,#f2fae6,#8fd06a);-webkit-background-clip:text;
+    background-clip:text;-webkit-text-fill-color:transparent}
+  #menu .sub{color:#a8c48c;font-size:13px;margin:6px 0 26px;letter-spacing:.08em}
+  .mbtn{display:block;width:min(320px,84vw);margin:7px auto;padding:15px;font-size:16px;
+    font-weight:800;letter-spacing:.06em;border-radius:14px;cursor:pointer;color:#eef7e2;
+    background:rgba(20,38,20,.82);border:1.5px solid rgba(196,232,150,.4)}
+  .mbtn.go{background:linear-gradient(180deg,#3f9a3a,#1c5424);border-color:#bff2a0}
+  /* portadas distintas por mundo: cada juego alinea su menú diferente */
+  #menu.m-izq{align-items:flex-start;text-align:left;padding-left:min(10vw,110px)}
+  #menu.m-izq .mbtn,#menu.m-izq #fLang,#menu.m-izq #fGfx{margin-left:0;margin-right:auto}
+  #menu.m-der{align-items:flex-end;text-align:right;padding-right:min(10vw,110px)}
+  #menu.m-der .mbtn,#menu.m-der #fLang,#menu.m-der #fGfx{margin-right:0;margin-left:auto}
+  #menu.m-abajo{justify-content:flex-end;padding-bottom:min(9vh,74px)}
+  #menu.m-arriba{justify-content:flex-start;padding-top:min(7vh,56px)}
+  #menu.m-grande h1{font-size:70px;letter-spacing:.3em}
+  #menu.m-compacto h1{font-size:40px;letter-spacing:.5em;font-weight:800}
+  #mCap{color:#8fd06a;font-size:12px;margin-top:14px;letter-spacing:.1em;
+    text-shadow:0 1px 8px rgba(0,0,0,.8)}
+  .fila{display:flex;gap:8px;justify-content:center;margin:10px 0 0;flex-wrap:wrap}
+  .filaT{font-size:10.5px;letter-spacing:.22em;color:#a8c48c;margin-top:16px;
+    text-shadow:0 1px 6px rgba(0,0,0,.8)}
+  .chip{padding:8px 16px;border-radius:20px;font-weight:800;font-size:12.5px;cursor:pointer;
+    background:rgba(16,32,16,.74);border:1.5px solid rgba(196,232,150,.35);color:#d2e6c0}
+  .chip.on{background:linear-gradient(180deg,#3f9a3a,#1c5424);border-color:#bff2a0;color:#f2fae6}
+  #cargando{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;
+    background:#0c081a;color:#a8c48c;font-size:13px;letter-spacing:.2em}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="vig"></div>
+<div id="cineTop"></div><div id="cineBot"></div>
+<div id="cineTxt"></div><div id="cineSkip">SALTEAR ▸▸</div>
+<div id="fundido"></div>
+
+<div id="hud">
+  <div id="obj"><div id="objT">…</div><div id="objD"></div><div id="tarea"></div></div>
+  <div id="capCard"><div id="capN"></div><div id="capT"></div></div>
+  <div id="fps"></div>
+  <div id="btns">
+    <div class="b usar" id="bUsar">◉ USAR</div>
+    <div class="b" id="bSon">🔊</div>
+    <div class="b corre" id="bCorre">CORRER</div>
+    <div class="b" id="bMenu">MENÚ</div>
+  </div>
+  <div id="dlg"><div id="dlgFila"><canvas id="dlgCara" width="96" height="96"></canvas><div style="flex:1;min-width:0"><div id="dlgT"></div><div id="dlgB"></div></div></div><div id="dlgGo">SEGUIR ▸</div></div>
+  <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
+  <div id="pcHelp"></div>
+</div>
+
+<div id="menu">
+  <h1>JUNGLA</h1>
+  <div class="sub">la selva que se tragó un templo · cuatro piedras, una puerta</div>
+  <div class="mbtn go" id="mJugar">EMPEZAR LA HISTORIA</div>
+  <div class="mbtn" id="mSeguir" style="display:none">CONTINUAR</div>
+  <div id="mCap"></div>
+  <div class="filaT" id="tLang">IDIOMA</div>
+  <div class="fila" id="fLang">
+    <div class="chip" data-l="es">ESPAÑOL</div>
+    <div class="chip" data-l="en">ENGLISH</div>
+    <div class="chip" data-l="pt">PORTUGUÊS</div>
+  </div>
+  <div class="filaT" id="tGfx">GRÁFICOS</div>
+  <div class="fila" id="fGfx">
+    <div class="chip" data-g="b">BAJOS</div>
+    <div class="chip" data-g="m">MEDIOS</div>
+    <div class="chip" data-g="a">ALTOS</div>
+  </div>
+</div>
+<div id="cargando">CARGANDO JUNGLA…</div>
+
+<script>
+/* ============================================================================
+   JUNGLA — selva húmeda al mediodía sobre el motor de SENDA. Un valle roto por
+   quebradas, una cascada que cae 30 m a una laguna de jade, y un TEMPLO
+   ESCALONADO cerrado con cuatro llaves de piedra.
+     · TERRENO DE CRESTAS (ruido "ridged"): lomos filosos, dos quebradas
+       talladas a lo largo de curvas, y una MESETA al norte con un escalón
+       vertical justo donde cae el agua
+     · el DOSEL: selva instanciada de 4 siluetas + palmeras y árboles GLB del
+       repo, helechos, lianas colgando, flores que brillan, y RAYOS DE LUZ
+       (conos aditivos) atravesando las hojas
+     · la CASCADA: sábana de agua tejida a mano entre el labio del acantilado
+       y la laguna, con dos capas que corren a distinta velocidad, bruma que
+       sube y su rugido posicional en el audio
+     · la laguna usa el shader de agua de SENDA (ruido azulejable, profundidad,
+       espuma que lame la orilla) en verde jade
+   HISTORIA (6 caps, ES/EN/PT): MIRA SOLÍS busca el templo que su padre no
+   llegó a abrir. MISIÓN: las CUATRO LLAVES DE PIEDRA y la puerta del templo.
+   ========================================================================== */
+(async () => {
+'use strict';
+const Q = new URLSearchParams(location.search);
+const LOC = Q.has('local');
+/* assets: los de los mundos (cielo/audio/npc) y CUALQUIERA del repo (los GLB
+   de g3/hyper/reliquia/arcade que sembramos por la selva). Un solo HASH para
+   los dos: se pisa después de commitear los assets. */
+const HASHR = '2fe4beb';
+const RAIZ = LOC ? '/assets/'
+  : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHR + '/assets/';
+const AX = f => RAIZ + 'mundos/' + f;
+const AR = f => RAIZ + f;
+const TRE = LOC ? '/_vthree/build/three.module.js'
+  : 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+/* importmap ANTES de cargar GLTFLoader (que importa 'three' por specifier) */
+{
+  const im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: { three: TRE } });
+  document.head.appendChild(im);
+}
+const T = await import(TRE);
+let GLTF = null;
+try {
+  const GLU = LOC ? '/_vthree/examples/jsm/loaders/GLTFLoader.js'
+    : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
+  GLTF = (await import(GLU)).GLTFLoader;
+} catch (e) {}
+const $ = i => document.getElementById(i);
+
+/* ---------------- azar reproducible: la selva es SIEMPRE la misma ---------- */
+let _s = 20260806;
+const rnd = () => { _s = (_s * 1664525 + 1013904223) >>> 0; return _s / 4294967296; };
+const rr = (a, b) => a + (b - a) * rnd();
+const cl = (v, a, b) => v < a ? a : (v > b ? b : v);
+/* rampa suave entre dos cotas (el escalón de la cascada la usa) */
+const ss = (a, b, t) => { const k = cl((t - a) / (b - a || 1e-6), 0, 1); return k * k * (3 - 2 * k); };
+
+/* ---------------- terreno: ruido de valor FBM + CRESTAS, determinista -------
+   El carácter de JUNGLA es el relieve QUEBRADO: en vez de colinas redondas
+   (senda/exo) el ruido va "ridged" (1-|2n-1|), que deja lomos filosos y
+   vallecitos entre ellos. Encima se talla todo lo demás a mano:
+     · una MESETA al norte 34 m más alta, con el escalón casi vertical justo
+       en la garganta de la cascada y una rampa mansa al este (por ahí sube
+       la senda)
+     · la CUENCA de la laguna al pie del salto
+     · DOS QUEBRADAS excavadas a lo largo de curvas (la grande baja al sureste
+       desde la laguna; la chica corta la meseta al este del templo)
+   ------------------------------------------------------------------------- */
+const MAPA = 900, MITAD = MAPA / 2;
+const AGUA_Y = -4.5;
+function hash2(i, j){
+  /* Math.imul, no `*`: con el producto float se pierden los bits bajos y el
+     ruido nunca pasa de ~0,36 (medido en exo: el bosque quedaba en 83 árboles) */
+  let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263)) ^ 20260806;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function vnoise(x, z){
+  const i = Math.floor(x), j = Math.floor(z);
+  const fx = x - i, fz = z - j;
+  const sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz);
+  const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+  return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
+}
+function fbm(x, z){
+  let v = 0, amp = .5, f = 1;
+  for (let o = 0; o < 4; o++){ v += amp * vnoise(x * f, z * f); amp *= .5; f *= 2.03; }
+  return v;
+}
+/* ruido de CRESTAS: los lomos de la selva */
+function ridge(x, z, f){
+  let v = 0, amp = .55, ff = f;
+  for (let o = 0; o < 4; o++){
+    const n = vnoise(x * ff + 37, z * ff + 91);
+    v += amp * (1 - Math.abs(n * 2 - 1));
+    amp *= .5; ff *= 2.07;
+  }
+  return v;
+}
+/* PUNTOS DE LA HISTORIA (fijos, el terreno se allana alrededor) */
+const POI = {
+  inicio:     { x:   60, z:  400 },
+  campamento: { x:  -80, z:  250 },
+  cascada:    { x: -150, z:   40 },   /* el mirador, orilla sur de la laguna */
+  laguna:     { x: -150, z:  -70 },   /* centro del agua (NO se allana) */
+  templo:     { x:  130, z: -250, r: 34 },   /* la pirámide necesita pad grande */
+  puerta:     { x:  104, z: -250, r: 19 },   /* el atrio, al pie de la cara oeste */
+  santuario:  { x:  186, z: -300, r: 15 },
+  llave1:     { x:   57, z:  126 },   /* fondo de la quebrada grande */
+  llave2:     { x: -232, z: -152 },   /* la cornisa detrás del salto */
+  llave3:     { x:  -66, z: -302 },   /* las ruinas de la meseta oeste */
+  llave4:     { x:  322, z: -166 }    /* el higuerón del este */
+};
+/* ------------------------- las QUEBRADAS ----------------------------------- */
+const QUEBRADA = [
+  { w: 34, prof: 26, pts: [[-54, 28], [10, 84], [104, 168], [206, 268], [300, 372]] },
+  { w: 22, prof: 17, pts: [[236, -186], [292, -258], [352, -344]] }
+];
+function distPoli(x, z, pts){
+  let best = 1e9;
+  for (let i = 1; i < pts.length; i++){
+    const ax = pts[i-1][0], az = pts[i-1][1], bx = pts[i][0], bz = pts[i][1];
+    const abx = bx - ax, abz = bz - az;
+    const t = cl(((x - ax) * abx + (z - az) * abz) / (abx * abx + abz * abz || 1), 0, 1);
+    const dx = x - (ax + abx * t), dz = z - (az + abz * t);
+    const d = Math.hypot(dx, dz);
+    if (d < best) best = d;
+  }
+  return best;
+}
+/* EL ESCALÓN: sube 34 m al norte. Cerca de la garganta (x≈-150) lo hace en
+   18 m — pared casi vertical, la que salta el agua — y lejos, al este, en
+   130 m: una rampa por la que se puede subir caminando al templo. */
+function escalon(x, z){
+  const cerca = Math.exp(-Math.pow((x - POI.laguna.x) / 122, 2));
+  const z0 = -118 - 34 * (1 - cerca);
+  const z1 = z0 - (13 + 121 * (1 - cerca));
+  return ss(z0, z1, z);
+}
+function alturaBase(x, z){
+  let h = -16 + ridge(x, z, .0053) * 50;          /* lomos quebrados */
+  h += fbm(x * .019 + 41, z * .019 + 77) * 6 - 2; /* detalle */
+  h += 34 * escalon(x, z);                        /* la meseta del norte */
+  /* cuenca de la laguna al pie del salto */
+  const dl = Math.hypot(x - POI.laguna.x, z - POI.laguna.z);
+  h -= 46 * Math.exp(-(dl * dl) / (122 * 122));
+  /* las quebradas: fondo hondo y paredes que caen rápido */
+  for (const q of QUEBRADA){
+    const d = distPoli(x, z, q.pts);
+    h -= q.prof * Math.exp(-Math.pow(d / q.w, 3));
+  }
+  /* CORREDOR SECO a lo largo de la senda que bordea la laguna: si el camino
+     se hunde bajo el agua no se puede llegar caminando (le pasó a senda/exo).
+     Donde va el jugador el suelo nunca baja de -2,2. */
+  for (const [a, b] of SECO){
+    const abx = b.x - a.x, abz = b.z - a.z;
+    const t = cl(((x - a.x) * abx + (z - a.z) * abz) / (abx * abx + abz * abz || 1), 0, 1);
+    const ds = Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t));
+    const w = Math.exp(-(ds * ds) / (18 * 18));
+    h = h * (1 - w) + Math.max(h, -2.2) * w;
+  }
+  return h;
+}
+function H(x, z){
+  let h = alturaBase(x, z);
+  /* allanar alrededor de cada punto de la historia (claro para construir) */
+  for (const k in POI){
+    if (k === 'laguna') continue;
+    const p = POI[k];
+    const d = Math.hypot(x - p.x, z - p.z);
+    const rp = p.r || 24;
+    const w = Math.exp(-(d * d) / (rp * rp));
+    h = h * (1 - w) + (p.h != null ? p.h : alturaBase(p.x, p.z)) * w;
+  }
+  return h;
+}
+/* HAY AGUA SÓLO EN LA LAGUNA: el resto del valle puede estar más bajo que la
+   cota del agua (el fondo de la quebrada lo está) y sigue siendo tierra seca. */
+function enAgua(x, z, margenY){
+  return Math.abs(x - POI.laguna.x) < 190 && Math.abs(z - POI.laguna.z) < 190 &&
+         H(x, z) < AGUA_Y + (margenY == null ? .5 : margenY);
+}
+/* la SENDA que une los puntos (pinta tierra en el splat y guía al jugador) */
+const SENDA = [POI.inicio, POI.campamento, POI.cascada, POI.templo];
+/* EL CAMINO ES CURVO y esa curva manda en todo: splat, plantado y suelo seco */
+const SENDA_PTS = [], PTS_SEG = [[]];
+for (let i = 1; i < SENDA.length; i++){
+  const a = SENDA[i - 1], b = SENDA[i];
+  const mx = (a.x + b.x) / 2 + (fbm(i * 5.3, i * 8.1) - .5) * 96;
+  const mz = (a.z + b.z) / 2 + (fbm(i * 2.9, i * 6.7) - .5) * 96;
+  const seg = [];
+  for (let k = 0; k <= 24; k++){
+    const t = k / 24, u = 1 - t;
+    const P = [u*u*a.x + 2*u*t*mx + t*t*b.x, u*u*a.z + 2*u*t*mz + t*t*b.z];
+    seg.push(P);
+    if (i === 1 || k > 0) SENDA_PTS.push(P);
+  }
+  PTS_SEG.push(seg);
+}
+/* los dos tramos que bordean la laguna se mantienen SECOS a lo largo de la curva */
+const SECO = [];
+for (const si of [2, 3])
+  for (let k = 1; k < PTS_SEG[si].length; k++)
+    SECO.push([{ x: PTS_SEG[si][k-1][0], z: PTS_SEG[si][k-1][1] },
+               { x: PTS_SEG[si][k][0],   z: PTS_SEG[si][k][1] }]);
+for (const k in POI) POI[k].h = alturaBase(POI[k].x, POI[k].z);
+POI.cascada.h = AGUA_Y + 1.2;                   /* el mirador nace a la orilla */
+POI.puerta.h = POI.templo.h;                    /* atrio y pirámide, mismo nivel */
+
+
+/* ==================== TEXTURAS (canvas + las generadas) =====================
+   Todo se PINTA al vuelo (ruido azulejable, el mismo del terreno) y arriba de
+   eso, cuando llegan, se enchufan las DOS texturas fotográficas generadas:
+   tex-jungla-1 (suelo de selva: musgo, barro, hojarasca) al musgo del terreno
+   y tex-jungla-2 (mampostería con musgo) a la roca del terreno y a TODA la
+   piedra del templo. Si no llegan, queda lo pintado y el mundo se ve igual. */
+const lienzo = (n, fn) => {
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  fn(c.getContext('2d'), n);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  t.colorSpace = T.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+};
+const valT = (x, y, per) => {
+  const i = Math.floor(x), j = Math.floor(y);
+  const fx = x - i, fy = y - j;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const h = (a, b) => hash2(((a % per) + per) % per + 101, ((b % per) + per) % per + 37);
+  const a = h(i, j), b = h(i + 1, j), c2 = h(i, j + 1), d = h(i + 1, j + 1);
+  return a + (b - a) * sx + (c2 - a) * sy + (a - b - c2 + d) * sx * sy;
+};
+const fbmT = (x, y, per, oct) => {
+  let v = 0, amp = .55, p = per;
+  for (let o = 0; o < oct; o++){ v += amp * valT(x * p, y * p, p); amp *= .5; p *= 2; }
+  return cl(v, 0, 1);
+};
+const mezC = (a, b, t) => [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+function texSuelo(n, colA, colB, pecas, brotes){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      const t = fbmT(x / n, y / n, 6, 4);
+      let c = mezC(colA, colB, t);
+      const r = hash2(x + 7, y + 13);
+      if (pecas && r > .964) c = mezC(c, [24, 16, 10], .6);        /* hojas secas */
+      else if (brotes && r < .010) c = [150, 206, 96];             /* brotes nuevos */
+      const gr = .9 + .2 * hash2(x + 91, y + 57);
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0] * gr; img.data[i4+1] = c[1] * gr; img.data[i4+2] = c[2] * gr;
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+/* corteza tropical: vetas verticales con musgo y liquen pegado */
+function texCorteza(n){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      const tw = fbmT(x / n, y / n, 4, 3);
+      const veta = .5 + .5 * Math.sin((x / n * 12 + tw * 3.4) * 6.283);
+      let c = mezC([44, 34, 24], [116, 94, 62], veta * .65 + tw * .35);
+      if (hash2(x + 3, y + 9) > .986) c = mezC(c, [72, 128, 54], .8);   /* musgo */
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0]; img.data[i4+1] = c[1]; img.data[i4+2] = c[2];
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+/* HOJAS DE SELVA con recorte alfa: hojas anchas y lanceoladas, con nervadura
+   clara y algún borde amarillento (lo que hace que el dosel no se vea liso) */
+function texHojas(n, base, punta, flor){
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, n, n);
+  for (let i = 0; i < 34; i++){
+    const cx = n * (.12 + rnd() * .76), cy = n * (.12 + rnd() * .76);
+    const a = rnd() * 6.283, L = n * (.10 + rnd() * .15), W2 = L * (.26 + rnd() * .22);
+    const d = g.createLinearGradient(cx - Math.cos(a) * L, cy - Math.sin(a) * L,
+                                     cx + Math.cos(a) * L, cy + Math.sin(a) * L);
+    d.addColorStop(0, 'rgb(' + base.join(',') + ')');
+    d.addColorStop(.7, 'rgb(' + mezC(base, punta, .6).map(Math.round).join(',') + ')');
+    d.addColorStop(1, 'rgb(' + punta.join(',') + ')');
+    g.fillStyle = d;
+    g.save();
+    g.translate(cx, cy); g.rotate(a);
+    g.beginPath(); g.ellipse(0, 0, L, W2, 0, 0, 6.284); g.fill();
+    /* nervadura */
+    g.strokeStyle = 'rgba(' + mezC(punta, [235, 245, 200], .5).map(Math.round).join(',') + ',.55)';
+    g.lineWidth = Math.max(1, n * .004);
+    g.beginPath(); g.moveTo(-L * .9, 0); g.lineTo(L * .9, 0); g.stroke();
+    g.restore();
+  }
+  if (flor) for (let i = 0; i < 14; i++){
+    g.fillStyle = 'rgba(' + flor.join(',') + ',.92)';
+    g.beginPath(); g.arc(rnd() * n, rnd() * n, n * (.012 + rnd() * .018), 0, 6.284); g.fill();
+  }
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+/* HELECHO: una fronda con foliolos, para el sotobosque */
+function texHelecho(n){
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, n, n);
+  for (let f = 0; f < 5; f++){
+    const bx = n * (.12 + f * .19), largo = n * (.55 + rnd() * .35);
+    const incl = -1.57 + rr(-.5, .5);
+    g.save();
+    g.translate(bx, n * .98); g.rotate(incl + 1.57);
+    g.strokeStyle = 'rgb(46,86,34)'; g.lineWidth = Math.max(1, n * .008);
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -largo); g.stroke();
+    for (let k = 1; k < 13; k++){
+      const t = k / 13, y = -largo * t, L = largo * .26 * (1 - t * .8);
+      for (const s of [-1, 1]){
+        g.fillStyle = 'rgb(' + mezC([40, 78, 30], [126, 178, 66], t).map(Math.round).join(',') + ')';
+        g.beginPath();
+        g.ellipse(s * L * .55, y, L * .55, largo * .035, s * .5, 0, 6.284);
+        g.fill();
+      }
+    }
+    g.restore();
+  }
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+/* AGUA DE LA CASCADA: rayas verticales de espuma que corren al desplazar la uv */
+function texSalto(n){
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(255,255,255,0)'; g.fillRect(0, 0, n, n);
+  for (let i = 0; i < 150; i++){
+    const x = rnd() * n, w = n * (.004 + rnd() * .022), y0 = rnd() * n, L = n * (.2 + rnd() * .8);
+    const d = g.createLinearGradient(0, y0, 0, y0 + L);
+    const al = .16 + rnd() * .5;
+    d.addColorStop(0, 'rgba(255,255,255,0)');
+    d.addColorStop(.4, 'rgba(238,252,255,' + al.toFixed(2) + ')');
+    d.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = d;
+    g.fillRect(x, y0, w, L);
+    if (y0 + L > n) g.fillRect(x, y0 - n, w, L);      /* empalma arriba */
+  }
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  t.colorSpace = T.SRGBColorSpace;
+  return t;
+}
+/* mancha suave, sirve de bruma, polen y rayo de luz */
+const texMancha = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const d = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  d.addColorStop(0, 'rgba(255,255,255,1)');
+  d.addColorStop(.45, 'rgba(255,255,255,.35)');
+  d.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = d; g.fillRect(0, 0, 64, 64);
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace;
+  return t;
+})();
+/* RAYO DE LUZ: la primera versión eran CONOS aditivos y se veían como cuñas
+   blancas con borde duro (se notaba la geometría, quedaba feo). Ahora los rayos
+   son PUNTOS: un cuadrado con una columna de luz pintada adentro, suave en los
+   cuatro lados, que siempre mira a la cámara. Un solo draw call para todos. */
+const texRayo = (() => {
+  const N2 = 128, c = document.createElement('canvas');
+  c.width = N2; c.height = N2 * 2;
+  const g = c.getContext('2d'), img = g.createImageData(N2, N2 * 2);
+  for (let y = 0; y < N2 * 2; y++) for (let x = 0; x < N2; x++){
+    const u = (x / (N2 - 1) - .5) * 2, v = y / (N2 * 2 - 1);
+    /* ancho: gaussiana angosta (la columna) · alto: entra fuerte arriba y se
+       apaga abajo, con los dos extremos en cero para que no se corte */
+    const an = Math.exp(-u * u * 7.5);
+    const al = Math.sin(Math.pow(v, .8) * 3.1416) * (1 - v * .55);
+    const a = Math.max(0, an * al);
+    const i4 = (y * N2 + x) * 4;
+    img.data[i4] = 255; img.data[i4+1] = 250; img.data[i4+2] = 224;
+    img.data[i4+3] = Math.round(cl(a, 0, 1) * 255);
+  }
+  g.putImageData(img, 0, 0);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.ClampToEdgeWrapping;
+  t.colorSpace = T.SRGBColorSpace;
+  return t;
+})();
+/* HAZ del templo: gradiente vertical liso para el cilindro de luz */
+const texHaz = (() => {
+  const c = document.createElement('canvas'); c.width = 8; c.height = 256;
+  const g = c.getContext('2d');
+  const d = g.createLinearGradient(0, 0, 0, 256);
+  d.addColorStop(0, 'rgba(210,255,200,0)');
+  d.addColorStop(.45, 'rgba(190,255,180,.55)');
+  d.addColorStop(1, 'rgba(160,255,170,.9)');
+  g.fillStyle = d; g.fillRect(0, 0, 8, 256);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.ClampToEdgeWrapping;
+  t.colorSpace = T.SRGBColorSpace;
+  return t;
+})();
+/* el CIELO pintado (respaldo si la foto generada no llega): mediodía húmedo,
+   azul lavado arriba, banda de calina jade en el horizonte y cúmulos */
+const cieloX = (() => {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const g = c.getContext('2d');
+  const d = g.createLinearGradient(0, 0, 0, 512);
+  d.addColorStop(0, '#2d6ea8');
+  d.addColorStop(.32, '#6ea8c8');
+  d.addColorStop(.46, '#b8d8c8');
+  d.addColorStop(.52, '#cfe0b4');
+  d.addColorStop(.62, '#8fae86');
+  d.addColorStop(1, '#3c5a3a');
+  g.fillStyle = d; g.fillRect(0, 0, 1024, 512);
+  /* cúmulos: montones de elipses claras apiladas */
+  for (let i = 0; i < 26; i++){
+    const cx = rnd() * 1024, cy = 60 + rnd() * 150, s = 40 + rnd() * 90;
+    for (let k = 0; k < 12; k++){
+      g.fillStyle = 'rgba(255,255,255,' + (.05 + rnd() * .10).toFixed(3) + ')';
+      g.beginPath();
+      g.ellipse(cx + rr(-s, s), cy + rr(-s * .35, s * .35), s * rr(.3, .7),
+        s * rr(.16, .34), 0, 0, 6.284);
+      g.fill();
+    }
+  }
+  /* la calina: velo claro sobre el horizonte */
+  const hz = g.createLinearGradient(0, 210, 0, 300);
+  hz.addColorStop(0, 'rgba(226,238,206,0)');
+  hz.addColorStop(.5, 'rgba(226,238,206,.5)');
+  hz.addColorStop(1, 'rgba(200,220,180,0)');
+  g.fillStyle = hz; g.fillRect(0, 210, 1024, 90);
+  const t = new T.CanvasTexture(c);
+  t.mapping = T.EquirectangularReflectionMapping;
+  t.wrapS = T.RepeatWrapping;
+  t.colorSpace = T.SRGBColorSpace;
+  return t;
+})();
+const TX = {
+  musgo:     texSuelo(256, [40, 68, 32], [96, 134, 54], true, true),
+  tierra:    texSuelo(256, [72, 54, 36], [128, 100, 64], true, false),
+  hojarasca: texSuelo(256, [58, 52, 26], [112, 94, 46], true, false),
+  roca:      texSuelo(256, [78, 86, 70], [140, 148, 128], true, false),
+  corteza:   texCorteza(256),
+  madera:    texSuelo(128, [58, 42, 26], [96, 72, 44], true, false),
+  hojas1:    texHojas(256, [22, 52, 24], [96, 168, 62]),                 /* dosel */
+  hojas2:    texHojas(256, [34, 66, 24], [164, 202, 88], [246, 214, 86]), /* copa clara + flores */
+  helecho:   texHelecho(256),
+  salto:     texSalto(256),
+  cielo:     cieloX
+};
+/* las dos texturas GENERADAS: llegan tarde y se enchufan donde toca */
+const TEXGEN = { suelo: [], piedra: [] };
+function cargaTexGen(){
+  const car = (f, lista, uni) => new T.TextureLoader().load(AX(f), t => {
+    t.wrapS = t.wrapT = T.RepeatWrapping;
+    t.colorSpace = T.SRGBColorSpace;
+    t.anisotropy = 4;
+    for (const m of lista){ m.map = t; m.needsUpdate = true; }
+    if (uni) uni.value = t;
+    window.__TEXGEN = (window.__TEXGEN || 0) + 1;
+  }, undefined, () => {});
+  car('tex-jungla-1.jpg', TEXGEN.suelo, null);
+  /* OJO: la mampostería NO va al terreno. La primera versión la enchufaba en
+     uniTerr.tRoca y las laderas empinadas quedaban de LADRILLOS: la cuenca de
+     la laguna parecía una pileta de natación. Sólo va a la piedra construida. */
+  car('tex-jungla-2.jpg', TEXGEN.piedra, null);
+}
+
+/* ================================ ESCENA =================================== */
+const ren = new T.WebGLRenderer({ canvas: $('gl'), antialias: false,
+  powerPreference: 'high-performance' });
+ren.outputColorSpace = T.SRGBColorSpace;
+/* tone mapping FÍLMICO (ACES) + sombras suaves (PCF). La exposición la maneja
+   el ciclo del día, capítulo a capítulo. */
+ren.toneMapping = T.ACESFilmicToneMapping;
+ren.toneMappingExposure = 1.1;
+ren.shadowMap.enabled = true;
+ren.shadowMap.type = T.PCFSoftShadowMap;
+const scene = new T.Scene();
+scene.background = TX.cielo;
+scene.backgroundIntensity = 1;
+const pm = new T.PMREMGenerator(ren);
+scene.environment = pm.fromEquirectangular(TX.cielo).texture;
+/* NIEBLA HÚMEDA y cerrada: en la selva no se ve a 400 m, se ve a 260 y el
+   resto es vapor verde. Es la mitad del carácter del mundo. */
+scene.fog = new T.Fog(new T.Color('#87a67e'), 34, 300);
+const cam = new T.PerspectiveCamera(72, 1, .1, 1200);
+cam.rotation.order = 'YXZ';
+
+/* luz: UNA direccional (el sol de mediodía, ALTO, para que los rayos entren
+   entre las hojas) + hemisferio. La caja de sombra viaja pegada al jugador. */
+const SOLD = new T.Vector3(.32, .82, .26).normalize();
+const sol = new T.DirectionalLight(0xfff0cf, 2.5);
+sol.position.copy(SOLD).multiplyScalar(420);
+{
+  const sc = sol.shadow.camera;
+  sc.left = sc.bottom = -78; sc.right = sc.top = 78;
+  sc.near = 40; sc.far = 760;
+  sol.shadow.mapSize.set(1024, 1024);
+  sol.shadow.bias = -0.0006;
+  sol.shadow.normalBias = 1.6;
+}
+scene.add(sol); scene.add(sol.target);
+const hemi = new T.HemisphereLight(0x9fc4d8, 0x2c4c22, 1.05);
+scene.add(hemi);
+/* LUZ DE RELLENO (sin sombra) desde el lado opuesto al sol: en la selva TODO lo
+   que no recibe sol directo es sombra de dosel, y sin relleno el templo y las
+   caras oeste salían NEGRAS (se veía en la captura de la puerta). Barata: una
+   direccional más, sin mapa de sombra. */
+const relleno = new T.DirectionalLight(0xcfe4d8, .75);
+relleno.position.set(-320, 210, -260);
+scene.add(relleno);
+/* el DESTELLO del sol: sprite aditivo donde apunta SOLD */
+const glare = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const d = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  d.addColorStop(0, 'rgba(255,252,238,1)');
+  d.addColorStop(.12, 'rgba(255,244,206,.85)');
+  d.addColorStop(.4, 'rgba(248,236,170,.2)');
+  d.addColorStop(1, 'rgba(230,240,170,0)');
+  g.fillStyle = d; g.fillRect(0, 0, 128, 128);
+  const s = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c),
+    transparent: true, blending: T.AdditiveBlending, depthWrite: false, fog: false }));
+  s.scale.set(300, 300, 1);
+  scene.add(s);
+  return s;
+})();
+/* la boca del templo VUELCA luz verde cuando la puerta se abre (pasoLuz la
+   sube sola al oscurecer, igual que la ventana de la cabaña en senda) */
+const focoCasa = new T.PointLight(0x7cff9a, 0, 30, 1.8);
+scene.add(focoCasa);
+/* JUNGLA no tiene lunas: el motor recorre esta lista en el bucle y queda vacía */
+const LUNAS = [];
+/* ---------------------------- PÁJAROS LEJANOS ------------------------------
+   Tres bandadas de puntos que dan vueltas altas sobre el valle: barato y
+   hace que el cielo no esté muerto. */
+const AVES = [];
+{
+  const mat = new T.PointsMaterial({ size: 2.6, map: texMancha, color: 0x20301c,
+    transparent: true, opacity: .55, depthWrite: false, sizeAttenuation: true, fog: false });
+  for (let b = 0; b < 3; b++){
+    const N = 14, P = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++){
+      P[i*3] = rr(-30, 30); P[i*3+1] = rr(-4, 4); P[i*3+2] = rr(-30, 30);
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(P, 3));
+    const pt = new T.Points(g, mat);
+    pt.userData = { r: rr(160, 300), a: rr(0, 6.28), v: rr(.03, .06), y: rr(70, 110),
+      cx: rr(-150, 150), cz: rr(-150, 150) };
+    scene.add(pt); AVES.push(pt);
+  }
+}
+
+/* --------------------------- SPLAT DE CONTROL ------------------------------
+   R = barro pisado del sendero · G = hojarasca bajo el dosel. Se pinta UNA vez
+   en un canvas de 512: el sendero como trazo gordo curvo entre los puntos de
+   la historia, la hojarasca como manchas de ruido donde después va la selva,
+   y claros de tierra en el campamento, el templo y cada llave. */
+const SPL = document.createElement('canvas'); SPL.width = SPL.height = 512;
+const wx2u = x => (x + MITAD) / MAPA * 512;
+const wz2u = z => (z + MITAD) / MAPA * 512;
+{
+  const g = SPL.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 512, 512);
+  /* hojarasca: manchas grandes, la selva tapa casi todo el suelo */
+  g.fillStyle = '#004200';
+  for (let i = 0; i < 1300; i++){
+    const x = rnd() * 512, y = rnd() * 512, r = 7 + rnd() * 26;
+    if (vnoise(x * .02, y * .02) < .44) continue;
+    g.beginPath(); g.arc(x, y, r, 0, 6.284); g.fill();
+  }
+  g.filter = 'blur(6px)';
+  g.drawImage(SPL, 0, 0);
+  g.filter = 'none';
+  /* el sendero: R fuerte, con borde difuso */
+  for (const [w, c] of [[15, 'rgba(140,0,0,.5)'], [7, 'rgba(255,0,0,.85)']]){
+    g.strokeStyle = c; g.lineWidth = w; g.lineCap = g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(wx2u(SENDA_PTS[0][0]), wz2u(SENDA_PTS[0][1]));
+    for (const P of SENDA_PTS) g.lineTo(wx2u(P[0]), wz2u(P[1]));
+    g.stroke();
+  }
+  /* claros de tierra: campamento, templo, santuario y las cuatro llaves */
+  for (const [k, r] of [['campamento', 13], ['templo', 17], ['santuario', 11],
+                        ['llave1', 8], ['llave2', 8], ['llave3', 9], ['llave4', 9]]){
+    g.fillStyle = 'rgba(150,0,0,.45)';
+    g.beginPath(); g.arc(wx2u(POI[k].x), wz2u(POI[k].z), r, 0, 6.284); g.fill();
+  }
+}
+const splTex = new T.CanvasTexture(SPL);
+splTex.colorSpace = T.NoColorSpace;
+
+/* ----------------------------- MATERIAL DEL TERRENO ------------------------
+   Antes era un ShaderMaterial propio: sol+hemi calculados a mano, SIN sombras,
+   sin tone mapping y con la niebla sincronizada por uniformes. Ahora es un
+   Lambert con el SPLAT inyectado en map_fragment: el mismo mezclado de 4
+   texturas, pero con TODO el pipeline de three gratis — RECIBE las sombras del
+   sol, pasa por ACES, y la niebla y el colorspace son los del resto del mundo
+   (antes el terreno y los árboles se iluminaban por recetas distintas y había
+   que emparejarlos a ojo). La roca por pendiente se calcula en el VÉRTICE: la
+   malla del terreno no rota, así que la normal del objeto ES la del mundo. */
+const uniTerr = {
+  tTierra: { value: TX.tierra }, tHoja: { value: TX.hojarasca },
+  tRoca: { value: TX.roca }, tSplat: { value: splTex },
+  repite: { value: MAPA / 7 }
+};
+const matTerr = new T.MeshLambertMaterial({ map: TX.musgo });
+TEXGEN.suelo.push(matTerr);   /* la textura generada del suelo entra acá */
+matTerr.onBeforeCompile = sh => {
+  Object.assign(sh.uniforms, uniTerr);
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying float vRocoso;')
+    .replace('#include <begin_vertex>',
+      '#include <begin_vertex>\n  vRocoso = smoothstep(.82, .6, normal.y);');
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', `#include <common>
+      uniform sampler2D tTierra, tHoja, tRoca, tSplat;
+      uniform float repite;
+      varying float vRocoso;`)
+    .replace('#include <map_fragment>', `
+      vec2 uvT = vMapUv * repite;
+      vec3 spl = texture2D(tSplat, vMapUv).rgb;
+      vec3 c = texture2D(map, uvT).rgb;
+      c = mix(c, texture2D(tHoja, uvT*1.3).rgb, clamp(spl.g*1.5, 0., 1.));
+      c = mix(c, texture2D(tTierra, uvT*1.6).rgb, clamp(spl.r*1.35, 0., 1.));
+      c = mix(c, texture2D(tRoca, uvT*.9).rgb, vRocoso);
+      diffuseColor.rgb *= c;`);
+};
+
+/* ---------------------- malla del terreno en 36 trozos --------------------- */
+const CHN = 6, CVERT = 30;                    /* 6x6 trozos de 30x30 celdas */
+const terrChunks = [];
+{
+  const paso = MAPA / (CHN * CVERT);
+  for (let cj = 0; cj < CHN; cj++) for (let ci = 0; ci < CHN; ci++){
+    const g = new T.PlaneGeometry(MAPA / CHN, MAPA / CHN, CVERT, CVERT);
+    g.rotateX(-Math.PI / 2);
+    const ox = -MITAD + (ci + .5) * MAPA / CHN;
+    const oz = -MITAD + (cj + .5) * MAPA / CHN;
+    const P = g.attributes.position, UV = g.attributes.uv;
+    for (let i = 0; i < P.count; i++){
+      const x = P.getX(i) + ox, z = P.getZ(i) + oz;
+      P.setY(i, H(x, z));
+      /* uv GLOBAL del valle, para que el splat y el tileado sigan entre trozos */
+      UV.setXY(i, (x + MITAD) / MAPA, (z + MITAD) / MAPA);
+    }
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    /* los vértices son LOCALES al trozo; la posición del mesh los lleva al mundo.
+       (la primera versión además trasladaba la geometría: doble desplazamiento y
+       los 36 trozos caían apilados en el centro) */
+    const m = new T.Mesh(g, matTerr);
+    m.position.set(ox, 0, oz);
+    m.receiveShadow = true;
+    m.castShadow = true;          /* las lomas se sombrean entre sí al atardecer */
+    scene.add(m);
+    terrChunks.push(m);
+  }
+}
+
+/* falda del horizonte: tapa la parte BAJA de la foto del cielo (que es oscura)
+   con suelo que a esa distancia ya es color de niebla puro */
+{
+  const f = new T.Mesh(new T.CircleGeometry(1150, 24),
+    new T.MeshLambertMaterial({ color: 0x4c6a44 }));
+  f.rotation.x = -Math.PI / 2;
+  f.position.y = -46;
+  f.frustumCulled = false;
+  scene.add(f);
+  /* PARED DE LOMAS LEJANAS: una falda plana converge exactamente a la altura del
+     ojo, así que desde cualquier punto alto (la colina del roble, la cámara del
+     menú) se veía la franja oscura de la foto del cielo entre la falda y el
+     horizonte. Este anillo sube hasta +70 a 1.100 m: a esa distancia la niebla lo
+     pinta liso y se lee como una serranía en la bruma que CIERRA el horizonte. */
+  const pared = new T.Mesh(new T.CylinderGeometry(1100, 660, 122, 24, 1, true),
+    new T.MeshLambertMaterial({ color: 0x5c7a52, side: T.BackSide }));
+  pared.position.y = 15;         /* base -46 (debajo de la quebrada), borde +76 */
+  pared.frustumCulled = false;
+  scene.add(pared);
+}
+/* ------------------------------- EL LAGO ----------------------------------- */
+/* AGUA VIVA: plano con grilla (para el oleaje de vértices) + normal perturbada
+   por ondas que CORREN en el fragmento — el reflejo del cielo (PMREM) se mueve
+   con ellas, que es lo que hace que el agua se lea como agua y no como vidrio.
+   El plano es cuadrado a propósito: donde el terreno está más alto lo tapa la
+   prueba de profundidad, así que la orilla la dibuja el propio lago. */
+const AGUAU = { value: 0 };
+/* RUIDO AZULEJABLE para el agua: 3 octavas de ruido de valor con la retícula en
+   módulo (los bordes empalman). Es lo que mata el "se ve programado": los senos
+   puros hacen crestas RECTAS que se repiten; el ruido no se repite nunca a la
+   vista. Se genera una vez en un canvas de 256. */
+const RUIDO = (() => {
+  const N2 = 256, c = document.createElement('canvas');
+  c.width = c.height = N2;
+  const g = c.getContext('2d'), img = g.createImageData(N2, N2);
+  const val = (x, y, per) => {
+    const i = Math.floor(x), j = Math.floor(y);
+    const fx = x - i, fy = y - j;
+    const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    const h = (a, b) => hash2(((a % per) + per) % per + 101, ((b % per) + per) % per + 37);
+    const a = h(i, j), b = h(i + 1, j), c2 = h(i, j + 1), d = h(i + 1, j + 1);
+    return a + (b - a) * sx + (c2 - a) * sy + (a - b - c2 + d) * sx * sy;
+  };
+  for (let y = 0; y < N2; y++) for (let x = 0; x < N2; x++){
+    let v = 0, amp = .55, per = 8;
+    for (let o = 0; o < 3; o++){ v += amp * val(x / N2 * per, y / N2 * per, per); amp *= .5; per *= 2; }
+    const k = Math.round(cl(v, 0, 1) * 255), i4 = (y * N2 + x) * 4;
+    img.data[i4] = img.data[i4+1] = img.data[i4+2] = k; img.data[i4+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  return t;
+})();
+/* TEXTURA DE PROFUNDIDAD: el agua "no tenía masa" (dicho del jugador, y es
+   exacto) porque la orilla era el corte seco del polígono contra el terreno.
+   Se precalcula cuánto terreno hay DEBAJO de cada punto del agua (256x256 sobre
+   los 380x380 del plano) y con eso el shader hace lo que hace el agua real:
+   transparente y clara en el bajío, honda y oscura en el centro, espuma
+   lamiendo la orilla, y las olas se aplanan al llegar a la costa. */
+const PROF = (() => {
+  const N2 = 256, c = document.createElement('canvas');
+  c.width = c.height = N2;
+  const g = c.getContext('2d'), img = g.createImageData(N2, N2);
+  for (let j = 0; j < N2; j++) for (let i = 0; i < N2; i++){
+    const x = POI.laguna.x + (i / (N2 - 1) - .5) * 380;
+    const z = POI.laguna.z + (j / (N2 - 1) - .5) * 380;
+    const d = cl((AGUA_Y - H(x, z)) / 7, 0, 1);        /* 0 = orilla, 1 = hondo */
+    const k = Math.round(d * 255), i4 = (j * N2 + i) * 4;
+    img.data[i4] = img.data[i4+1] = img.data[i4+2] = k; img.data[i4+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.ClampToEdgeWrapping;
+  return t;
+})();
+/* MENOS ESPEJO: con metalness .9 la laguna reflejaba el cielo entero y se
+   veía BLANCA (la trampa conocida del agua clara). Con .45 y más rugosidad
+   manda el color propio del agua y el jade se lee de verdad. */
+const aguaMat = new T.MeshStandardMaterial({ color: 0x0d3d2a, metalness: .12,
+  roughness: .38, transparent: true, opacity: .95 });
+aguaMat.envMapIntensity = .22;
+aguaMat.onBeforeCompile = sh => {
+  sh.uniforms.uT = AGUAU;
+  sh.uniforms.tRuido = { value: RUIDO };
+  sh.uniforms.tProf = { value: PROF };
+  aguaMat.userData.sh = sh;
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nuniform float uT;uniform sampler2D tProf;varying vec2 vWp;varying float vD;varying float vAlt;varying float vProf;')
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      vWp = position.xy;
+      vProf = texture2D(tProf, position.xy / 380.0 + 0.5).r;
+      /* DOMINIO DEFORMADO: antes de calcular la ola, la posición se tuerce con
+         dos senos lentos. Las crestas dejan de ser líneas rectas: se curvan y
+         serpentean como en el mar de verdad. */
+      vec2 pw = position.xy + vec2(sin(position.y*.021 + uT*.33),
+                                   cos(position.x*.017 - uT*.27)) * 16.0;
+      float hh = sin(pw.x*.052 + uT*1.02)*.22
+               + cos(pw.y*.047 - uT*.83)*.18
+               + sin((pw.x + pw.y)*.093 + uT*1.61)*.11
+               + cos(pw.x*.019 - pw.y*.029 + uT*.47)*.15;
+      /* la ola se APLANA al entrar al bajío: si no, el borde del agua sube y
+         baja despegándose de la costa y se ve la lámina */
+      hh *= smoothstep(0.0, 0.22, vProf);
+      transformed.z += hh;
+      vAlt = hh;
+      vD = -(modelViewMatrix * vec4(transformed, 1.0)).z;`);
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform float uT;uniform sampler2D tRuido;varying vec2 vWp;varying float vD;varying float vAlt;varying float vProf;')
+    /* OJO CON EL ORDEN DEL PIPELINE: color_fragment y roughnessmap corren ANTES
+       que normal_fragment_begin. Todo el cálculo (ruido, espuma, gradiente) se
+       hace en color_fragment y la normal sólo CONSUME el gradiente después. */
+    .replace('#include <color_fragment>', `#include <color_fragment>
+      float espuma; vec2 aguaG; float n3;
+      {
+        /* TRES ESCALAS de rizado por ruido. La primera versión usaba capas de
+           ~90 m y ~23 m: en la pantalla del celular eran manchones lechosos sin
+           detalle (captura del jugador: "está horrible", y sí). Escalas nuevas:
+           oleaje ~20 m + olitas ~4,5 m + micro-rizado ~1,5 m. El detalle fino es
+           lo que hace que el agua se lea como agua a cualquier distancia. */
+        float lejos = clamp(1.0 - vD / 320.0, .3, 1.0);
+        vec2 uvA = vWp*.048 + vec2(uT*.020,  uT*.013);
+        vec2 uvB = vWp*.19  + vec2(-uT*.036, uT*.028);
+        vec2 uvC = vWp*.55  + vec2(uT*.05,  -uT*.041);
+        float e2 = .02;
+        float n1  = texture2D(tRuido, uvA).r;
+        float n2  = texture2D(tRuido, uvB).r;
+        n3  = texture2D(tRuido, uvC).r;
+        float gxA = texture2D(tRuido, uvA + vec2(e2, 0.)).r - n1;
+        float gyA = texture2D(tRuido, uvA + vec2(0., e2)).r - n1;
+        float gxB = texture2D(tRuido, uvB + vec2(e2, 0.)).r - n2;
+        float gyB = texture2D(tRuido, uvB + vec2(0., e2)).r - n2;
+        float gxC = texture2D(tRuido, uvC + vec2(e2, 0.)).r - n3;
+        float gyC = texture2D(tRuido, uvC + vec2(0., e2)).r - n3;
+        aguaG = vec2(gxA*2.4 + gxB*3.6 + gxC*2.2,
+                     gyA*2.4 + gyB*3.6 + gyC*2.2) * lejos;
+        /* ESPUMA ESCASA: vetas finas donde coinciden la cresta y las dos capas
+           chicas — no manchones. El micro-rizado la recorta en hilos. */
+        espuma = smoothstep(1.42, 1.62, n2*.9 + n3*.75 + max(vAlt, 0.)*.9)
+               * smoothstep(.35, .6, n3) * lejos;
+      }
+      /* MASA DEL AGUA: bajío claro y verdoso -> hondo oscuro. Es la señal de
+         volumen que le faltaba. */
+      diffuseColor.rgb = mix(vec3(.10, .40, .28), diffuseColor.rgb,
+                             smoothstep(0.0, 0.55, vProf));
+      /* espuma que LAME la orilla, ondulando con el ruido fino y el tiempo */
+      float lame = smoothstep(.065, .018, vProf + sin(uT*1.4 + vWp.x*.3 + vWp.y*.23)*.012);
+      espuma = max(espuma, lame * (.45 + .55 * n3));
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(.80, .93, .84), espuma * .5);
+      /* y el borde mismo se DESVANECE: nada de corte poligonal seco */
+      diffuseColor.a *= smoothstep(0.0, 0.05, vProf);`)
+    .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      roughnessFactor = mix(roughnessFactor, .85, espuma);`)
+    /* EL AGUA ES LA LÁMPARA: el bajío EMITE luz cian que late despacio */
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      totalEmissiveRadiance += vec3(.02, .08, .05) *
+        (1.0 - smoothstep(0.0, 0.5, vProf));`)
+    .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+      normal = normalize(normal + vec3(aguaG.x, aguaG.y, 0.0));`);
+};
+const agua = new T.Mesh(new T.PlaneGeometry(380, 380, 84, 84), aguaMat);
+agua.rotation.x = -Math.PI / 2;
+agua.position.set(POI.laguna.x, AGUA_Y, POI.laguna.z);
+scene.add(agua);
+
+/* ------------------------------- LA SELVA -----------------------------------
+   Cuatro capas, todas instanciadas (miles de plantas en un puñado de llamadas
+   de dibujo):
+     1. DOSEL: árboles altos de tronco flaco con ramas arriba (la luz llega al
+        suelo sólo por los huecos) + palmeras de tronco curvo
+     2. SOTOBOSQUE: helechos y matas, densísimo, tapa el piso
+     3. LIANAS colgando del dosel y flores que brillan en la penumbra
+     4. RAYOS DE LUZ: conos aditivos inclinados como el sol, y capas de vapor
+   Arriba de eso se siembran GLB del repo (palmeras, árboles, troncos caídos,
+   tótems) para romper la repetición de las siluetas pintadas.              */
+function fusiona(geos){
+  let nv = 0; for (const g of geos) nv += g.attributes.position.count;
+  const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2);
+  const I = [];
+  let off = 0;
+  for (const g of geos){
+    P.set(g.attributes.position.array, off * 3);
+    N.set(g.attributes.normal.array, off * 3);
+    if (g.attributes.uv) U.set(g.attributes.uv.array, off * 2);
+    const idx = g.index.array;
+    for (let k = 0; k < idx.length; k++) I.push(idx[k] + off);
+    off += g.attributes.position.count;
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P, 3));
+  g.setAttribute('normal', new T.BufferAttribute(N, 3));
+  g.setAttribute('uv', new T.BufferAttribute(U, 2));
+  g.setIndex(I);
+  return g;
+}
+function geoCopa(nq, radio, alto){
+  const geos = [];
+  for (let i = 0; i < nq; i++){
+    const g = new T.PlaneGeometry(radio * rr(1.5, 2.2), radio * rr(1.2, 1.8));
+    g.rotateX(rr(-0.6, 0.6)); g.rotateY(rr(0, 6.28)); g.rotateZ(rr(-0.5, 0.5));
+    const a = rr(0, 6.28), rd = rr(0, radio * .55);
+    g.translate(Math.cos(a) * rd, alto + rr(-radio * .35, radio * .5), Math.sin(a) * rd);
+    geos.push(g);
+  }
+  return fusiona(geos);
+}
+/* ÁRBOL DE SELVA: tronco alto y flaco con CONTRAFUERTES en la base, las ramas
+   sólo en el tercio de arriba (así el sotobosque queda abierto y se camina),
+   y la fronda en la punta de cada rama más la corona. */
+function geoArbol(altura, nRamas, rHojas){
+  const lena = [], puntas = [];
+  const tr = new T.CylinderGeometry(.22, .52, altura, 6, 1, true);
+  tr.translate(0, altura / 2, 0);
+  lena.push(tr);
+  /* contrafuertes: tres aletas de raíz en la base */
+  for (let i = 0; i < 3; i++){
+    const a = i / 3 * 6.284 + rr(-.3, .3);
+    const g = new T.ConeGeometry(.42, altura * .17, 4);
+    g.rotateZ(1.15); g.rotateY(-a);
+    g.translate(Math.cos(a) * .55, altura * .075, Math.sin(a) * .55);
+    lena.push(g);
+  }
+  for (let i = 0; i < nRamas; i++){
+    const hFrac = .66 + .3 * (i / Math.max(1, nRamas - 1)) + rr(-.03, .03);
+    const largo = altura * rr(.22, .34);
+    const inclina = rr(.75, 1.15);
+    const giro = i * 2.399 + rr(-.3, .3);
+    const g = new T.CylinderGeometry(.05, .14, largo, 4, 1, true);
+    g.translate(0, largo / 2, 0);
+    g.rotateZ(inclina); g.rotateY(giro);
+    const y0 = altura * hFrac;
+    g.translate(0, y0, 0);
+    lena.push(g);
+    const px2 = Math.cos(giro) * Math.sin(inclina) * largo;
+    const pz2 = -Math.sin(giro) * Math.sin(inclina) * largo;
+    puntas.push([px2, y0 + Math.cos(inclina) * largo, pz2]);
+  }
+  puntas.push([0, altura * 1.03, 0]);
+  const hojas = [];
+  for (const [qx, qy, qz] of puntas){
+    const esCorona = qy > altura;
+    const n = esCorona ? 5 : 3;
+    for (let k = 0; k < n; k++){
+      const r2 = rHojas * (esCorona ? 1.3 : 1.0) * rr(.85, 1.25);
+      const g = new T.PlaneGeometry(r2 * 2.2, r2 * 1.5);
+      g.rotateX(rr(-.7, .7)); g.rotateY(rr(0, 6.28)); g.rotateZ(rr(-.5, .5));
+      g.translate(qx + rr(-.6, .6), qy + rr(-.3, .6), qz + rr(-.6, .6));
+      hojas.push(g);
+    }
+  }
+  return { lena: fusiona(lena), hojas: fusiona(hojas) };
+}
+/* PALMERA: tronco en arco (anillado) y frondas radiales que cuelgan */
+function geoPalma(altura){
+  const lena = [], hojas = [];
+  const seg = 6, curva = rr(1.4, 3.6), dir = rr(0, 6.283);
+  let cx = 0, cz = 0;
+  for (let i = 0; i < seg; i++){
+    const t = i / seg, h = altura / seg;
+    const g = new T.CylinderGeometry(.2 - t * .07, .26 - t * .07, h * 1.06, 5, 1, true);
+    const dx = Math.cos(dir) * curva * t * t, dz = Math.sin(dir) * curva * t * t;
+    g.translate(dx, altura * t + h / 2, dz);
+    lena.push(g);
+    cx = dx; cz = dz;
+  }
+  const top = [cx, altura, cz];
+  for (let i = 0; i < 9; i++){
+    const a = i / 9 * 6.284 + rr(-.15, .15);
+    const L = rr(2.6, 4.2);
+    const g = new T.PlaneGeometry(L * 2, L * .62);
+    g.rotateZ(rr(-.5, -.15));
+    g.rotateY(a);
+    g.translate(top[0] + Math.cos(a) * L * .82, top[1] - rr(.1, 1.1), top[2] + Math.sin(a) * L * .82);
+    hojas.push(g);
+  }
+  return { lena: fusiona(lena), hojas: fusiona(hojas) };
+}
+/* VIENTO: las copas se mecen en el vertex shader; la fase sale de la posición
+   EN EL MUNDO (instanceMatrix), así cada planta va a su ritmo. */
+const VIENTO = { value: 0 };
+function conViento(mat, fuerza){
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uViento = {};
+    Object.defineProperty(sh.uniforms.uViento, 'value',
+      { get: () => VIENTO.value, set: () => {} });
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uViento;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          #ifdef USE_INSTANCING
+            vec4 wq = instanceMatrix * vec4(transformed, 1.0);
+          #else
+            vec4 wq = vec4(transformed, 1.0);
+          #endif
+          float sw = sin(uViento*1.5 + wq.x*.19 + wq.z*.15)
+                   + .5*sin(uViento*2.6 + wq.z*.31 + wq.x*.07)
+                   + .22*sin(uViento*5.6 + wq.x*1.2 + wq.y*.8);
+          float amp = ${fuerza.toFixed(2)} * max(transformed.y - .6, 0.0) * .07;
+          transformed.x += sw * amp;
+          transformed.z += .6 * sw * amp;
+        }`);
+  };
+  return mat;
+}
+const ARB = [];                                /* [x,z,r] choque */
+/* ¿está el punto encima del sendero o de un punto de la historia? */
+function molesta(x, z, margen){
+  for (const k in POI){ const p = POI[k];
+    /* el claro es del tamaño del sitio: la pirámide mide 38 m de base y con 15 m
+       fijos crecían árboles ADENTRO de la piedra (y su sombra la dejaba negra) */
+    if (k !== 'laguna' && Math.hypot(x - p.x, z - p.z) < (p.r ? p.r + 5 : 15)) return true; }
+  const m2 = margen * margen;
+  for (const P of SENDA_PTS){
+    const dx = x - P[0], dz = z - P[1];
+    if (dx * dx + dz * dz < m2) return true;
+  }
+  return false;
+}
+/* un punto libre alrededor de (cx,cz): ni en el agua, ni en el camino, ni en
+   una pendiente imposible. Devuelve null si no encontró en 60 intentos. */
+function puntoLibre(cx, cz, radio, margen, maxPend){
+  for (let i = 0; i < 60; i++){
+    const a = rr(0, 6.283), rd = radio * Math.sqrt(rnd());
+    const x = cl(cx + Math.cos(a) * rd, -MITAD + 12, MITAD - 12);
+    const z = cl(cz + Math.sin(a) * rd, -MITAD + 12, MITAD - 12);
+    if (enAgua(x, z, 1.2) || molesta(x, z, margen)) continue;
+    const y = H(x, z);
+    if (maxPend){
+      const pend = Math.max(Math.abs(H(x + 2, z) - y), Math.abs(H(x, z + 2) - y));
+      if (pend > maxPend) continue;
+    }
+    return [x, y, z];
+  }
+  return null;
+}
+const M4 = new T.Matrix4(), V3 = new T.Vector3(), Q4 = new T.Quaternion(), E3 = new T.Euler();
+/* ---- GLB del repo CLONADOS en masa (una carga, N clones) ------------------ */
+function propMuchos(url, lista, o){
+  if (!GLTF || !lista.length) return;
+  o = o || {};
+  new GLTF().load(AR(url), g => {
+    const base = g.scene;
+    base.traverse(n => { if (n.isMesh && n.material){
+      const mm = n.material;
+      /* algunos GLB del repo salen BLANCOS: traen emissive del glTF y
+         KHR_materials_specular. Se apagan los dos. */
+      if (mm.emissive) mm.emissive.setRGB(0, 0, 0);
+      if ('specularIntensity' in mm) mm.specularIntensity = 0;
+      if ('metalness' in mm) mm.metalness = 0;
+      if ('envMapIntensity' in mm) mm.envMapIntensity = .4;
+      if (o.tinte && mm.color) mm.color.multiplyScalar(o.tinte);
+    } });
+    base.updateWorldMatrix(true, true);
+    const caja = new T.Box3().setFromObject(base);
+    const abajo = caja.min.y, alto = caja.max.y - caja.min.y || 1;
+    for (const p of lista){
+      const m = base.clone(true);
+      const esc = (o.esc || 1) * (p[2] || 1) / alto * (o.altoObjetivo || alto);
+      m.scale.setScalar(esc);
+      m.rotation.set(o.rx || 0, p[3] != null ? p[3] : rr(0, 6.283), o.rz || 0);
+      m.position.set(p[0], H(p[0], p[1]) - abajo * esc + (o.y || 0), p[1]);
+      /* SÍ al recorte por frustum: son estáticos y su caja es correcta. Con
+         frustumCulled=false los 39 props se dibujaban siempre (medido: +200k
+         triángulos por cuadro estando del otro lado del valle). */
+      m.traverse(n => { if (n.isMesh){ n.castShadow = !!o.sombra; n.receiveShadow = true; } });
+      scene.add(m);
+      if (o.choque) ARB.push([p[0], p[1], o.choque]);
+      window.__PROPS = (window.__PROPS || 0) + 1;
+    }
+  }, undefined, () => {});
+}
+let RAYOS = null, VAPOR = [];
+function plantar(){
+  /* GRILLA TEMBLADA: celda de 16 m con jitter ±5.5 (separación mínima real) y
+     el ruido decide la DENSIDAD por zona: espesura cerrada y algún claro. */
+  const pos1 = [], pos2 = [], posP = [];
+  const PASO_A = 18;
+  const CTA = { tot: 0, dens: 0, agua: 0, camino: 0, ok: 0 };
+  window.__PLANTA = CTA;
+  for (let gz = -MITAD + 12; gz < MITAD - 12; gz += PASO_A)
+  for (let gx = -MITAD + 12; gx < MITAD - 12; gx += PASO_A){
+    CTA.tot++;
+    const x = gx + rr(-5.5, 5.5), z = gz + rr(-5.5, 5.5);
+    const dens = vnoise(x * .010 + 71, z * .010 + 29);
+    if (dens < .32){ CTA.dens++; continue; }
+    if (dens < .44 && rnd() > (dens - .30) * 7){ CTA.dens++; continue; }
+    const y = H(x, z);
+    if (enAgua(x, z, 1.2)){ CTA.agua++; continue; }
+    if (molesta(x, z, 13)){ CTA.camino++; continue; }
+    CTA.ok++;
+    const r = rnd();
+    (r < .48 ? pos1 : (r < .82 ? pos2 : posP)).push([x, y, z, rr(.8, 1.45)]);
+    ARB.push([x, z, .8]);
+  }
+  const matTr = conViento(new T.MeshLambertMaterial({ map: TX.corteza }), 1);
+  TX.corteza.repeat.set(1.5, 2.4);
+  /* seis siluetas de dosel + tres de palmera: el bosque no se ve estampado */
+  const esp1v = [geoArbol(19, 4, 3.8), geoArbol(23, 5, 4.2), geoArbol(15.5, 4, 3.4)];
+  const esp2v = [geoArbol(13, 4, 2.9), geoArbol(16.5, 4, 3.3), geoArbol(11, 3, 2.6)];
+  const espPv = [geoPalma(11), geoPalma(14), geoPalma(8.5)];
+  const matC1 = conViento(new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .18, side: T.DoubleSide }), 1);
+  const matC2 = conViento(new T.MeshLambertMaterial({ map: TX.hojas2, alphaTest: .18, side: T.DoubleSide }), 1);
+  const depthHojas = tex => new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking,
+    map: tex, alphaTest: .35, side: T.DoubleSide });
+  const dH1 = depthHojas(TX.hojas1), dH2 = depthHojas(TX.hojas2);
+  const arma = (posiciones, esp, matC, dC) => {
+    if (!posiciones.length) return;
+    const iT = new T.InstancedMesh(esp.lena, matTr, posiciones.length);
+    const iC = new T.InstancedMesh(esp.hojas, matC, posiciones.length);
+    for (let i = 0; i < posiciones.length; i++){
+      const [x, y, z, s] = posiciones[i];
+      Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+      M4.compose(V3.set(x, y - .3, z), Q4, new T.Vector3(s, s * rr(.9, 1.3), s));
+      iT.setMatrixAt(i, M4); iC.setMatrixAt(i, M4);
+    }
+    iT.frustumCulled = iC.frustumCulled = false;
+    iT.castShadow = iT.receiveShadow = true;
+    iC.castShadow = true;
+    iC.customDepthMaterial = dC;
+    scene.add(iT); scene.add(iC);
+  };
+  for (let v = 0; v < 3; v++){
+    arma(pos1.filter((_, i) => i % 3 === v), esp1v[v], matC1, dH1);
+    arma(pos2.filter((_, i) => i % 3 === v), esp2v[v], matC2, dH2);
+    arma(posP.filter((_, i) => i % 3 === v), espPv[v], matC2, dH2);
+  }
+  /* ---- SOTOBOSQUE: helechos y matas, MUY denso (es una selva) ------------- */
+  const domoHelecho = (() => {
+    const gs = [];
+    for (let k = 0; k < 5; k++){
+      const g = new T.PlaneGeometry(rr(1.8, 2.6), rr(1.4, 2.1));
+      g.rotateX(rr(-.25, .12)); g.rotateY(k / 5 * 6.28 + rr(-.35, .35)); g.rotateZ(rr(-.2, .2));
+      const a = k / 5 * 6.28, rd = rr(.1, .45);
+      g.translate(Math.cos(a) * rd, rr(.55, 1.0), Math.sin(a) * rd);
+      gs.push(g);
+    }
+    return fusiona(gs);
+  })();
+  const matHel = conViento(new T.MeshLambertMaterial({ map: TX.helecho, alphaTest: .2,
+    side: T.DoubleSide }), .7);
+  const hel = new T.InstancedMesh(domoHelecho, matHel, 1100);
+  let ph = 0, ith = 0;
+  while (ph < 1100 && ith < 70000){
+    ith++;
+    const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    if (vnoise(x * .010 + 71, z * .010 + 29) < .34) continue;
+    if (enAgua(x, z, 1) || molesta(x, z, 7)) continue;
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+    M4.compose(V3.set(x, H(x, z) - .15, z), Q4,
+      new T.Vector3(1, 1, 1).multiplyScalar(rr(.7, 1.6)));
+    hel.setMatrixAt(ph, M4);
+    ph++;
+  }
+  hel.count = ph;
+  hel.frustumCulled = false;
+  hel.receiveShadow = true;
+  scene.add(hel);
+  /* matas bajas de hoja ancha, tinte oscuro, para cerrar el piso */
+  const domoMata = (() => {
+    const gs = [];
+    for (let k = 0; k < 6; k++){
+      const g = new T.PlaneGeometry(rr(1.2, 1.9), rr(.9, 1.4));
+      g.rotateX(rr(-.4, .1)); g.rotateY(k / 6 * 6.28 + rr(-.3, .3)); g.rotateZ(rr(-.25, .25));
+      const a = k / 6 * 6.28, rd = rr(.15, .4);
+      g.translate(Math.cos(a) * rd, rr(.3, .8), Math.sin(a) * rd);
+      gs.push(g);
+    }
+    return fusiona(gs);
+  })();
+  const matMata = conViento(new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .18,
+    side: T.DoubleSide, color: 0x86a86e }), .6);
+  const mata = new T.InstancedMesh(domoMata, matMata, 700);
+  let pm2 = 0, itm = 0;
+  while (pm2 < 700 && itm < 50000){
+    itm++;
+    const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    if (vnoise(x * .010 + 71, z * .010 + 29) < .38) continue;
+    if (enAgua(x, z, 1) || molesta(x, z, 6)) continue;
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+    M4.compose(V3.set(x, H(x, z), z), Q4,
+      new T.Vector3(1, 1, 1).multiplyScalar(rr(.8, 1.8)));
+    mata.setMatrixAt(pm2, M4);
+    pm2++;
+  }
+  mata.count = pm2;
+  mata.frustumCulled = false;
+  scene.add(mata);
+  /* ---- LIANAS: cortinas verticales colgando del dosel -------------------- */
+  const geoLiana = (() => {
+    const gs = [];
+    for (let k = 0; k < 3; k++){
+      const g = new T.PlaneGeometry(rr(.7, 1.4), rr(5, 9));
+      g.rotateY(k / 3 * 3.1 + rr(-.2, .2));
+      g.translate(rr(-.5, .5), 0, rr(-.5, .5));
+      gs.push(g);
+    }
+    return fusiona(gs);
+  })();
+  const matLiana = conViento(new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .2,
+    side: T.DoubleSide, color: 0x9ab87a }), .35);
+  const todos = pos1.concat(pos2);
+  const lianas = new T.InstancedMesh(geoLiana, matLiana, 420);
+  let nl = 0;
+  for (const p of todos){
+    if (nl >= 420) break;
+    if (rnd() > .36) continue;
+    const s = rr(.8, 1.5);
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+    M4.compose(V3.set(p[0] + rr(-3, 3), p[1] + rr(7, 13), p[2] + rr(-3, 3)), Q4,
+      new T.Vector3(s, s, s));
+    lianas.setMatrixAt(nl, M4);
+    nl++;
+  }
+  lianas.count = nl;
+  lianas.frustumCulled = false;
+  scene.add(lianas);
+  /* ---- ROCAS musgosas: esfera deformada, achatada y ENTERRADA un cuarto -- */
+  const gr = new T.SphereGeometry(1, 9, 7);
+  { const P = gr.attributes.position, UV = gr.attributes.uv;
+    for (let i = 0; i < P.count; i++){
+      const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+      const k = .74 + .42 * vnoise(x * 1.9 + 9 + y * 1.1, z * 1.9 + 4);
+      P.setXYZ(i, x * k, y * k * .6, z * k);
+      UV.setXY(i, UV.getX(i) * 2, UV.getY(i) * 1.4);
+    }
+    gr.computeVertexNormals(); }
+  const matRoca = new T.MeshLambertMaterial({ map: TX.roca, color: 0xb6c4a4 });
+  TEXGEN.piedra.push(matRoca);
+  const roq = new T.InstancedMesh(gr, matRoca, 90);
+  let nr = 0;
+  for (let i = 0; i < 400 && nr < 90; i++){
+    const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    if (molesta(x, z, 13) || enAgua(x, z, 1)) continue;
+    const y = H(x, z);
+    const pend = Math.max(Math.abs(H(x + 2, z) - y), Math.abs(H(x, z + 2) - y));
+    if (pend > 1.3) continue;
+    const s = rr(.9, 3.4);
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+    M4.compose(V3.set(x, y - s * .18, z), Q4, new T.Vector3(s, s, s));
+    roq.setMatrixAt(nr, M4);
+    if (s > 1.7) ARB.push([x, z, s * .75]);
+    nr++;
+  }
+  roq.count = nr;
+  roq.frustumCulled = false;
+  roq.castShadow = roq.receiveShadow = true;
+  scene.add(roq);
+  /* ---- FLORES QUE BRILLAN en la penumbra (laten en el bucle) ------------- */
+  const gTallo = new T.CylinderGeometry(.05, .08, .8, 5, 1, true);
+  gTallo.translate(0, .4, 0);
+  const gFlor = new T.SphereGeometry(.3, 7, 5);
+  gFlor.scale(1, .7, 1);
+  gFlor.translate(0, .85, 0);
+  window.__HONGO_MAT = new T.MeshLambertMaterial({ color: 0x2a4a2c,
+    emissive: 0xe8ff7a, emissiveIntensity: .8 });
+  const matTallo = new T.MeshLambertMaterial({ color: 0x3a5a30 });
+  const iFlor = new T.InstancedMesh(gFlor, window.__HONGO_MAT, 170);
+  const iTallo = new T.InstancedMesh(gTallo, matTallo, 170);
+  let nf = 0, itf = 0;
+  while (nf < 170 && itf < 30000){
+    itf++;
+    const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    if (vnoise(x * .010 + 71, z * .010 + 29) < .42) continue;
+    if (enAgua(x, z, .6) || molesta(x, z, 6)) continue;
+    const sc = rr(.6, 1.5);
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), rr(-.1, .1)));
+    M4.compose(V3.set(x, H(x, z), z), Q4, new T.Vector3(sc, sc, sc));
+    iFlor.setMatrixAt(nf, M4); iTallo.setMatrixAt(nf, M4);
+    nf++;
+  }
+  iFlor.count = iTallo.count = nf;
+  iFlor.frustumCulled = iTallo.frustumCulled = false;
+  scene.add(iFlor); scene.add(iTallo);
+  /* ---- RAYOS DE LUZ entre las hojas: puntos gigantes con la columna
+     pintada (ver texRayo). Uno solo dibujo para los 120 y NUNCA se les ve el
+     borde, que era el problema de los conos. --------------------------------- */
+  {
+    const N2 = 120, P = new Float32Array(N2 * 3);
+    let n2 = 0, it2 = 0;
+    while (n2 < N2 && it2 < 30000){
+      it2++;
+      const x = rr(-MITAD + 20, MITAD - 20), z = rr(-MITAD + 20, MITAD - 20);
+      if (vnoise(x * .010 + 71, z * .010 + 29) < .36) continue;
+      P[n2*3] = x; P[n2*3+1] = H(x, z) + rr(9, 15); P[n2*3+2] = z;
+      n2++;
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(P.slice(0, n2 * 3), 3));
+    RAYOS = new T.Points(g, new T.PointsMaterial({ size: 26, map: texRayo,
+      color: 0xfff6dc, transparent: true, opacity: .3, depthWrite: false,
+      blending: T.AdditiveBlending, sizeAttenuation: true, fog: false }));
+    RAYOS.frustumCulled = false;
+    RAYOS.userData.n = n2;
+    scene.add(RAYOS);
+  }
+  /* ---- VAPOR: capas horizontales enormes y tenues a media altura --------- */
+  {
+    const mv = new T.MeshBasicMaterial({ map: texMancha, color: 0xd8ecc8,
+      transparent: true, opacity: .10, depthWrite: false, side: T.DoubleSide, fog: false });
+    for (let i = 0; i < 8; i++){
+      const p = new T.Mesh(new T.PlaneGeometry(rr(220, 420), rr(220, 420)), mv);
+      p.rotation.x = -Math.PI / 2;
+      p.position.set(rr(-300, 300), rr(6, 34), rr(-300, 300));
+      p.userData.y0 = p.position.y;
+      p.frustumCulled = false;
+      scene.add(p);
+      VAPOR.push(p);
+    }
+  }
+  window.__FLORA = pos1.length + pos2.length + posP.length + ph + pm2 + nf;
+}
+plantar();
+/* --------- GLB del repo sembrados por la selva (rompen la repetición) ------ */
+{
+  const lista = (n, cx, cz, radio, margen, pend) => {
+    const out = [];
+    for (let i = 0; i < n; i++){
+      const p = puntoLibre(cx, cz, radio, margen, pend);
+      if (p) out.push([p[0], p[2], rr(.8, 1.25)]);
+    }
+    return out;
+  };
+  /* palmeras generadas: en la orilla de la laguna y por el camino del sur */
+  /* las palmeras generadas son de 4 MB: MUY caras en triángulos. Van pocas y
+     bien puestas (la orilla de la laguna y el claro de llegada); el resto de
+     las palmeras del valle son las procedurales de geoPalma. */
+  propMuchos('g3/mdl-palm.glb', lista(2, POI.cascada.x, POI.cascada.z, 90, 11, 2.2)
+    .concat(lista(1, POI.inicio.x, POI.inicio.z, 90, 11, 2.2)),
+    { altoObjetivo: 13, sombra: false, choque: 1.1 });
+  /* árboles del repo: por todo el valle */
+  propMuchos('hyper/p-tree.glb', lista(14, 0, 60, 420, 14, 2.6),
+    { altoObjetivo: 15, sombra: true, choque: 1.2 });
+  /* el árbol hueco: en la penumbra de la meseta */
+  propMuchos('arcade/m-agujero-arbol.glb', lista(14, 60, -260, 320, 14, 2.2),
+    { altoObjetivo: 11, sombra: true, choque: 1.4 });
+  /* troncos caídos: en la quebrada y alrededor del campamento */
+  /* obs-log y obs-totem son de 30 mil triángulos CADA UNO: van dos y tres, sin
+     sombra propia. Lo demás lo llena la vegetación instanciada. */
+  propMuchos('reliquia/obs-log.glb', [[POI.llave1.x - 4, POI.llave1.z + 9, 1],
+    [POI.campamento.x + 9, POI.campamento.z + 11, 1.1]],
+    { altoObjetivo: 2.4, sombra: false });
+  /* tótems: jalonan el camino al templo y las ruinas del oeste */
+  propMuchos('reliquia/obs-totem.glb', [[POI.puerta.x - 9, POI.puerta.z + 11, 1],
+    [POI.puerta.x - 9, POI.puerta.z - 11, 1], [POI.llave3.x + 7, POI.llave3.z + 8, .9]],
+    { altoObjetivo: 4.6, sombra: false, choque: .9 });
+}
+
+/* =================== LO CONSTRUIDO: el templo, el salto, el campo ==========
+   Todo lo que no es vegetación: el TEMPLO ESCALONADO con su puerta de cuatro
+   huecos, la CASCADA (sábana tejida a mano entre el labio y la laguna), el
+   campamento de la expedición, los cuatro sitios de las llaves y el patio del
+   santuario. Los materiales de piedra se anotan en TEXGEN.piedra: cuando llega
+   la textura generada, TODA la piedra del mundo cambia de golpe. */
+const matPiedra = new T.MeshLambertMaterial({ map: TX.roca, color: 0xbcc2a8 });
+const matPiedraOsc = new T.MeshLambertMaterial({ map: TX.roca, color: 0x76806a });
+const matMadera = new T.MeshLambertMaterial({ map: TX.madera });
+TX.roca.repeat.set(3, 3);
+TEXGEN.piedra.push(matPiedra, matPiedraOsc);
+let runaMat = null, semillaMat = null, ventanaMat = null;
+const FUEGOS = [];                             /* sprites de llama que titilan */
+/* LLAMA. La primera versión era una elipse con degradado radial y con blending
+   aditivo se veía como un HUEVO blanco (captura de la puerta del templo). Ahora
+   es una LENGUA de fuego: bezier angosto y alto, degradado vertical, halo suave
+   aparte y mucho menos alfa. */
+function fuego(x, y, z, esc, luz){
+  const W2 = 64, H2 = 96;
+  const c = document.createElement('canvas'); c.width = W2; c.height = H2;
+  const g = c.getContext('2d');
+  const halo = g.createRadialGradient(32, 74, 1, 32, 68, 26);
+  halo.addColorStop(0, 'rgba(255,206,140,.42)');
+  halo.addColorStop(1, 'rgba(255,150,60,0)');
+  g.fillStyle = halo; g.fillRect(0, 0, W2, H2);
+  const gr = g.createLinearGradient(0, H2, 0, 4);
+  gr.addColorStop(0, 'rgba(255,250,226,.95)');
+  gr.addColorStop(.22, 'rgba(255,214,132,.8)');
+  gr.addColorStop(.55, 'rgba(248,146,50,.42)');
+  gr.addColorStop(1, 'rgba(200,70,20,0)');
+  g.fillStyle = gr;
+  g.beginPath();
+  g.moveTo(32, H2 - 2);
+  g.quadraticCurveTo(9, 62, 30, 6);
+  g.quadraticCurveTo(38, 34, 42, 46);
+  g.quadraticCurveTo(56, 66, 32, H2 - 2);
+  g.fill();
+  const s = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c),
+    transparent: true, blending: T.AdditiveBlending, depthWrite: false, fog: true }));
+  s.scale.set(esc * .55, esc * .95, 1);
+  s.position.set(x, y + esc * .42, z);
+  scene.add(s);
+  const L2 = luz ? new T.PointLight(0xffa54a, 5, 22, 1.8) : null;
+  if (L2){ L2.position.set(x, y + 1.4, z); scene.add(L2); }
+  FUEGOS.push({ s, L2, e: esc, f: rr(0, 6.28) });
+  return s;
+}
+/* ------------------------------- EL TEMPLO ---------------------------------
+   Pirámide de seis cuerpos con la escalinata al sur, el altar arriba y —al pie
+   de la cara OESTE— la PUERTA: una laja de seis metros con cuatro huecos, uno
+   por llave. Al abrirse baja al suelo y la boca vuelca luz verde. */
+const TEMPLO = { puerta: null, abierta: 0, huecos: [], haz: null, boca: null };
+{
+  const p = POI.templo, y = H(p.x, p.z);
+  const NT = 6, W0 = 38, HT = 3.6;
+  /* TODA la piedra de la pirámide se FUSIONA en dos mallas (una por material):
+     eran ~50 draw calls de cajas sueltas. */
+  const claro = [], oscuro = [];
+  const caja = (lista, w, h, d, x, yy, z, rx) => {
+    const g = new T.BoxGeometry(w, h, d);
+    if (rx) g.rotateX(rx);
+    g.translate(x, yy, z);
+    lista.push(g);
+  };
+  for (let i = 0; i < NT; i++){
+    const w = W0 - i * 5.4;
+    caja(i % 2 ? oscuro : claro, w, HT, w, p.x, y + HT / 2 + i * HT - .6, p.z);
+  }
+  /* la escalinata sur */
+  for (let k = 0; k < 18; k++)
+    caja(claro, 9.5, 1.3, 1.35, p.x, y + .65 + k * 1.2, p.z + 19.5 - k * 1.0);
+  /* barandas de la escalinata: dos serpientes de piedra */
+  for (const sx of [-1, 1])
+    caja(oscuro, 1.1, 1.4, 22, p.x + sx * 5.6, y + 11.6, p.z + 9.5, -Math.atan2(21.6, 18));
+  /* el altar de arriba: cuatro columnas, dintel y la boca oscura */
+  const yTop = y + NT * HT - .6;
+  for (const [sx, sz] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+    const g = new T.CylinderGeometry(.6, .7, 5.2, 7);
+    g.translate(p.x + sx * 3.4, yTop + 2.6, p.z + sz * 3.4);
+    claro.push(g);
+  }
+  caja(oscuro, 9.4, 1.5, 9.4, p.x, yTop + 6, p.z);
+  caja(claro, 3.2, 1.4, 3.2, p.x, yTop + .7, p.z);
+  /* el HAZ: sale del altar cuando el templo se abre */
+  const haz = new T.Mesh(new T.CylinderGeometry(2.0, 3.4, 120, 12, 1, true),
+    new T.MeshBasicMaterial({ map: texHaz, color: 0x8cff9a, transparent: true,
+      opacity: 0, blending: T.AdditiveBlending, depthWrite: false,
+      side: T.DoubleSide, fog: false }));
+  haz.position.set(p.x, yTop + 62, p.z);
+  haz.frustumCulled = false;
+  scene.add(haz);
+  TEMPLO.haz = haz;
+  /* ---- LA PUERTA, al pie de la cara oeste ---- */
+  const dx = p.x - W0 / 2 - .9;
+  const boca = new T.Mesh(new T.BoxGeometry(1.2, 6.4, 6.2),
+    new T.MeshBasicMaterial({ color: 0x05100a }));
+  boca.position.set(dx + .7, y + 3.2, p.z);
+  scene.add(boca);
+  TEMPLO.boca = boca;
+  /* el resplandor del interior (pasoLuz lo enciende al oscurecer). Va con la
+     mancha suave y aditivo: como plano de color liso se veía un CARTEL celeste
+     colgado en la puerta. */
+  ventanaMat = new T.MeshBasicMaterial({ map: texMancha, color: 0x1c4a28,
+    transparent: true, blending: T.AdditiveBlending, depthWrite: false, fog: false });
+  const ven = new T.Mesh(new T.PlaneGeometry(5.4, 5.8), ventanaMat);
+  ven.position.set(dx + .05, y + 3.1, p.z);
+  ven.rotation.y = -Math.PI / 2;
+  scene.add(ven);
+  focoCasa.position.set(dx - 2.5, y + 2.6, p.z);
+  /* jambas y dintel (van a la malla fusionada) */
+  for (const sz of [-1, 1]) caja(claro, 1.6, 7.6, 1.5, dx, y + 3.8, p.z + sz * 3.8);
+  caja(oscuro, 2.0, 1.6, 9.4, dx, y + 8.2, p.z);
+  /* la LAJA que cierra (se hunde al abrirse) */
+  const puerta = new T.Mesh(new T.BoxGeometry(1.1, 6.6, 6.0), matPiedraOsc);
+  puerta.position.set(dx - .1, y + 3.3, p.z);
+  puerta.castShadow = puerta.receiveShadow = true;
+  puerta.userData.y0 = puerta.position.y;
+  scene.add(puerta);
+  TEMPLO.puerta = puerta;
+  /* los CUATRO HUECOS: dos por jamba, con su glifo que se enciende al traer
+     la llave (runaMat late en el bucle) */
+  runaMat = new T.MeshBasicMaterial({ color: 0x9cff7a, transparent: true, opacity: .18 });
+  for (let i = 0; i < 4; i++){
+    const sz = i < 2 ? -1 : 1, sy = i % 2 ? 1 : -1;
+    const hx = dx - .62, hy = y + 3.4 + sy * 1.9, hz = p.z + sz * 3.8;
+    caja(oscuro, .5, 1.15, 1.0, hx, hy, hz);
+    const gl = new T.Mesh(new T.PlaneGeometry(.9, 1.05), runaMat);
+    gl.position.set(hx - .32, hy, hz);
+    gl.rotation.y = -Math.PI / 2;
+    gl.visible = false;
+    scene.add(gl);
+    TEMPLO.huecos.push(gl);
+  }
+  /* braseros a los lados de la puerta */
+  for (const sz of [-1, 1]){
+    const g = new T.CylinderGeometry(.9, .6, 1.5, 8);
+    g.translate(dx - 4.2, y + .75, p.z + sz * 6.5);
+    claro.push(g);
+    fuego(dx - 4.2, y + 1.5, p.z + sz * 6.5, 2.0, sz > 0);
+  }
+  /* las dos mallas fusionadas de la pirámide */
+  for (const [lista, mat] of [[claro, matPiedra], [oscuro, matPiedraOsc]]){
+    const m = new T.Mesh(fusiona(lista), mat);
+    m.castShadow = m.receiveShadow = true;
+    scene.add(m);
+  }
+  ARB.push([p.x, p.z, 21]);                    /* no se atraviesa la pirámide */
+  ARB.push([dx - 3.2, p.z, 2.0]);
+  window.__PARTES = 6;
+}
+/* ------------------------------ LA CASCADA ---------------------------------
+   La sábana se TEJE entre dos cotas que se buscan en el terreno: el labio (el
+   punto más al sur donde la meseta todavía está alta) y el pie (el primero que
+   ya está bajo el agua). Así el agua cae siempre pegada al acantilado, aunque
+   se toque la fórmula del terreno. */
+const CASCADA = { texA: null, texB: null, bruma: null, espuma: null, y0: 0, zPie: 0 };
+{
+  const XF = POI.laguna.x;
+  /* el LABIO: el punto más al sur donde la meseta todavía está alta. Con el
+     umbral en 9 m el labio caía DEMASIADO abajo (el salto medía 15 m en vez de
+     los 30 del guion): con 13 y seis metros más al norte, el agua sale de
+     arriba del escalón. */
+  let zLab = -158;
+  for (let z = -196; z < -104; z += .5) if (H(XF, z) > 13) zLab = z;
+  zLab -= 6;
+  let zPie = zLab + 12;
+  for (let z = zLab; z < -50; z += .5){ if (H(XF, z) < AGUA_Y - 1.5){ zPie = z; break; } }
+  const yLab = H(XF, zLab);
+  CASCADA.y0 = yLab; CASCADA.zPie = zPie;
+  const cols = 9, rows = 13;
+  /* la sábana se TEJE: una malla de 9x13 entre el labio y el pie, que se ensancha
+     al caer y se comba hacia adelante. La misma función hace el PAREDÓN de atrás
+     (más ancho y 2,5 m más al norte): sin él la sábana blanca flotaba sobre una
+     loma verde y no se leía como salto.
+     OJO: los vértices están en coordenadas del MUNDO, así que NO se puede
+     escalar la malla (escalar x movía todo 50 m al oeste: el paredón aparecía
+     corrido). El ancho se pasa por parámetro. */
+  const tejer = (wT, wB, dz) => {
+    const PA = [], UA = [], IA = [];
+    for (let r = 0; r <= rows; r++){
+      const t = r / rows;
+      const w = wT + (wB - wT) * t;
+      const zz = zLab + (zPie - zLab) * Math.pow(t, .8) + dz;
+      const yy = yLab + 1 + (AGUA_Y - 1.4 - yLab - 1) * Math.pow(t, 1.35);
+      for (let c = 0; c <= cols; c++){
+        const u = c / cols;
+        PA.push(XF + (u - .5) * w, yy, zz + Math.sin(u * 3.1416) * (1.2 + 2.6 * t));
+        UA.push(u * 2, t * 3.2);
+      }
+    }
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++){
+      const a = r * (cols + 1) + c, b = a + 1, d = a + cols + 1, e = d + 1;
+      IA.push(a, d, b, b, d, e);
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(new Float32Array(PA), 3));
+    g.setAttribute('uv', new T.BufferAttribute(new Float32Array(UA), 2));
+    g.setIndex(IA);
+    g.computeVertexNormals();
+    return g;
+  };
+  const gS = tejer(19, 31, 0);
+  const hoja = (tex, op, dz, blend) => {
+    const m = new T.Mesh(dz ? tejer(19, 31, dz) : gS,
+      new T.MeshBasicMaterial({ map: tex, transparent: true,
+        opacity: op, depthWrite: false, side: T.DoubleSide, blending: blend,
+        color: 0xe6f6ff }));
+    m.frustumCulled = false;
+    scene.add(m);
+    return m;
+  };
+  /* el PAREDÓN mojado, detrás del agua */
+  {
+    /* ANCHO: 54 m arriba contra los 19 del agua, así queda roca a los dos lados
+       del chorro. (La versión con MACIZOS de cajas apoyadas en H() quedaba con
+       bloques FLOTANDO sobre el acantilado: la pared tejida sigue la misma
+       curva que el agua y nunca despega.) */
+    const roca = new T.Mesh(tejer(54, 70, -3.0), new T.MeshLambertMaterial({ map: TX.roca,
+      color: 0x5a6252, side: T.DoubleSide }));
+    roca.frustumCulled = false;
+    roca.receiveShadow = true;
+    scene.add(roca);
+    TEXGEN.piedra.push(roca.material);
+  }
+  CASCADA.texA = TX.salto.clone(); CASCADA.texA.needsUpdate = true;
+  CASCADA.texB = TX.salto.clone(); CASCADA.texB.needsUpdate = true;
+  CASCADA.texB.repeat.set(1.7, 1.3);
+  hoja(CASCADA.texA, .96, 0, T.NormalBlending);
+  hoja(CASCADA.texB, .42, 1.1, T.AdditiveBlending);
+  /* ESPUMA DEL IMPACTO: un disco aditivo sobre el agua, en el pie del salto,
+     que late (es lo que dice "acá está cayendo el agua") */
+  {
+    const esp = new T.Mesh(new T.CircleGeometry(15, 20),
+      new T.MeshBasicMaterial({ map: texMancha, color: 0xf2fbff, transparent: true,
+        opacity: .5, blending: T.AdditiveBlending, depthWrite: false, fog: true }));
+    esp.rotation.x = -Math.PI / 2;
+    esp.position.set(XF, AGUA_Y + .18, zPie + 4);
+    scene.add(esp);
+    CASCADA.espuma = esp;
+  }
+  /* la BRUMA del pie: puntos que suben y vuelven a nacer */
+  {
+    const N2 = 190, P = new Float32Array(N2 * 3);
+    for (let i = 0; i < N2; i++){
+      P[i*3] = XF + rr(-16, 16);
+      P[i*3+1] = AGUA_Y + rnd() * 16;
+      P[i*3+2] = zPie + rr(-9, 9);
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(P, 3));
+    CASCADA.bruma = new T.Points(g, new T.PointsMaterial({ size: 5.5, map: texMancha,
+      color: 0xe8f6ea, transparent: true, opacity: .17, depthWrite: false,
+      blending: T.AdditiveBlending, sizeAttenuation: true }));
+    CASCADA.bruma.frustumCulled = false;
+    scene.add(CASCADA.bruma);
+  }
+  /* piedras mojadas en el pie del salto: SÓLO donde hay tierra seca (antes se
+     apoyaban sobre la cota del agua y quedaban flotando como manchas negras) y
+     bien enterradas */
+  {
+    const gs = [];
+    for (let i = 0; i < 22; i++){
+      const a = rr(0, 6.283), rd = rr(12, 42);
+      const x = XF + Math.cos(a) * rd, z = zPie + Math.sin(a) * rd * .7;
+      const yy = H(x, z);
+      if (yy < AGUA_Y + .4) continue;              /* está en el agua: no va */
+      const s = rr(1.2, 3.2);
+      const g2 = new T.SphereGeometry(s, 7, 5);
+      g2.scale(1, .55, 1);
+      g2.translate(x, yy - s * .38, z);
+      gs.push(g2);
+    }
+    if (gs.length){
+      const m = new T.Mesh(fusiona(gs), matPiedraOsc);
+      m.castShadow = m.receiveShadow = true;
+      scene.add(m);
+    }
+  }
+}
+/* ---------------------------- EL CAMPAMENTO --------------------------------
+   Lo que quedó de la expedición del padre de Mira: la carpa, los cajones, el
+   fogón todavía tibio y una mesa de campaña. */
+{
+  const _e0 = scene.children.length;
+  const p = POI.campamento, y = H(p.x, p.z);
+  /* carpa procedural (la tapa el GLB si llega) */
+  const matTela = new T.MeshLambertMaterial({ color: 0xc8a24a });
+  for (const s2 of [-1, 1]){
+    const lado = new T.Mesh(new T.PlaneGeometry(4.6, 3.4), matTela);
+    lado.position.set(p.x + s2 * .9, y + 1.1, p.z);
+    lado.rotation.set(0, Math.PI / 2, s2 * .5);
+    lado.castShadow = true;
+    scene.add(lado);
+  }
+  const cum = new T.Mesh(new T.CylinderGeometry(.06, .06, 5, 5), matMadera);
+  cum.position.set(p.x, y + 2.3, p.z);
+  cum.rotation.z = Math.PI / 2;
+  scene.add(cum);
+  /* mesa de campaña */
+  const mesa = new T.Mesh(new T.BoxGeometry(2.2, .12, 1.2), matMadera);
+  mesa.position.set(p.x + 5, y + .85, p.z + 3);
+  mesa.castShadow = true;
+  scene.add(mesa);
+  for (const [ax, az] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+    const pt = new T.Mesh(new T.CylinderGeometry(.06, .06, .85, 5), matMadera);
+    pt.position.set(p.x + 5 + ax, y + .42, p.z + 3 + az * .5);
+    scene.add(pt);
+  }
+  /* el fogón */
+  for (let i = 0; i < 9; i++){
+    const a = i / 9 * 6.283;
+    const pd = new T.Mesh(new T.SphereGeometry(rr(.22, .38), 6, 4), matPiedraOsc);
+    pd.position.set(p.x + 4 + Math.cos(a) * 1.5, y + .1, p.z - 3 + Math.sin(a) * 1.5);
+    pd.scale.y = .7;
+    scene.add(pd);
+  }
+  fuego(p.x + 4, y + .35, p.z - 3, 2.2, true);
+  ARB.push([p.x, p.z, 2.4]);
+  propGLB({ url: 'prop/carpa-hielo.glb', x: p.x, z: p.z, esc: 3.2, giro: .7,
+    ocultar: scene.children.slice(_e0, _e0 + 3) });
+  propMuchos('hyper/p-crate.glb', [[p.x + 3.4, p.z + 6, 1], [p.x + 5.2, p.z + 7.4, 1.1],
+    [p.x - 4.6, p.z + 4.2, .9], [p.x - 6.2, p.z - 2.6, 1], [p.x + 7, p.z - 1, .95],
+    [p.x - 2.4, p.z + 8, 1.05]], { altoObjetivo: 1.1, sombra: true });
+}
+/* --------------------- LOS CUATRO SITIOS DE LAS LLAVES ---------------------
+   Cada llave es una laja tallada sobre su pedestal, con un glifo que respira.
+   El sitio cambia: el fondo de la quebrada (con los restos del que bajó antes),
+   la cornisa detrás del salto, las ruinas de la meseta y el higuerón del este. */
+const LLAVES = [];
+{
+  const matGlifo = new T.MeshBasicMaterial({ color: 0xd8ff8a, transparent: true, opacity: .85 });
+  const halo = (() => new T.SpriteMaterial({ map: texMancha, color: 0xe8f0a0,
+    transparent: true, opacity: .5, blending: T.AdditiveBlending, depthWrite: false }))();
+  const arma = (k, i) => {
+    const p = POI[k], y = H(p.x, p.z);
+    const ped = new T.Mesh(new T.CylinderGeometry(.85, 1.15, 1.5, 8), matPiedra);
+    ped.position.set(p.x, y + .75, p.z);
+    ped.castShadow = ped.receiveShadow = true;
+    scene.add(ped);
+    const g = new T.Group();
+    const laja = new T.Mesh(new T.BoxGeometry(1.15, 1.7, .46), matPiedraOsc);
+    laja.castShadow = true;
+    g.add(laja);
+    const gl = new T.Mesh(new T.PlaneGeometry(.7, 1.05), matGlifo);
+    gl.position.z = .25;
+    g.add(gl);
+    const gl2 = gl.clone(); gl2.position.z = -.25; gl2.rotation.y = Math.PI;
+    g.add(gl2);
+    const sp = new T.Sprite(halo);
+    sp.scale.set(4.6, 4.6, 1);
+    g.add(sp);
+    g.position.set(p.x, y + 2.1, p.z);
+    scene.add(g);
+    LLAVES.push({ g, i, k, y0: y + 2.1 });
+    ARB.push([p.x, p.z, 1.1]);
+  };
+  ['llave1', 'llave2', 'llave3', 'llave4'].forEach(arma);
+  window.__LLAVES = LLAVES;
+  /* 1 · el fondo de la quebrada: los restos del último que bajó */
+  {
+    const p = POI.llave1;
+    propGLB({ url: 'g3/mdl-skeleton.glb', raiz: true, x: p.x + 3.4, z: p.z + 2.6,
+      altoObjetivo: 1.8, giro: 2.2 });
+    /* el tronco que cruza la quebrada, 9 m más arriba */
+    const tr = new T.Mesh(new T.CylinderGeometry(.9, 1.2, 46, 7), matMadera);
+    tr.position.set(p.x - 6, H(p.x, p.z) + 13, p.z + 6);
+    tr.rotation.set(.06, .9, Math.PI / 2);
+    tr.castShadow = true;
+    scene.add(tr);
+  }
+  /* 2 · la cornisa detrás del salto: piedras mojadas y bruma */
+  {
+    const p = POI.llave2;
+    for (let i = 0; i < 9; i++){
+      const a = rr(0, 6.283), rd = rr(4, 16);
+      const x = p.x + Math.cos(a) * rd, z = p.z + Math.sin(a) * rd;
+      const s = rr(1, 2.6);
+      const m = new T.Mesh(new T.SphereGeometry(s, 7, 5), matPiedraOsc);
+      m.position.set(x, H(x, z) - s * .3, z);
+      m.scale.y = .55;
+      m.receiveShadow = true;
+      scene.add(m);
+    }
+  }
+  /* 3 · las ruinas de la meseta oeste: muros partidos y una columna caída */
+  {
+    const p = POI.llave3, y = H(p.x, p.z);
+    for (let i = 0; i < 7; i++){
+      const a = i / 7 * 6.283 + .4, rd = rr(9, 15);
+      const x = p.x + Math.cos(a) * rd, z = p.z + Math.sin(a) * rd;
+      const m = new T.Mesh(new T.BoxGeometry(rr(2.5, 6), rr(1.4, 4.2), 1.3), matPiedra);
+      m.position.set(x, H(x, z) + m.geometry.parameters.height / 2 - .4, z);
+      m.rotation.set(rr(-.05, .05), a + rr(-.3, .3), rr(-.08, .08));
+      m.castShadow = m.receiveShadow = true;
+      scene.add(m);
+    }
+    const col = new T.Mesh(new T.CylinderGeometry(.7, .8, 9, 9), matPiedra);
+    col.position.set(p.x + 5, y + .8, p.z - 6);
+    col.rotation.set(0, .3, Math.PI / 2 + .1);
+    col.castShadow = true;
+    scene.add(col);
+  }
+  /* 4 · el HIGUERÓN: un árbol colosal con contrafuertes y copa enorme */
+  {
+    const p = POI.llave4, y = H(p.x, p.z);
+    const cortezaBig = TX.corteza.clone();
+    cortezaBig.needsUpdate = true;
+    cortezaBig.repeat.set(1.6, 3);               /* con 4x7 la veta hacía muaré */
+    const matTrM = new T.MeshLambertMaterial({ map: cortezaBig });
+    const tr = new T.Mesh(new T.CylinderGeometry(2.4, 4.6, 30, 10), matTrM);
+    tr.position.set(p.x + 8, y + 15, p.z - 7);
+    tr.castShadow = true;
+    scene.add(tr);
+    const raices = [];
+    for (let i = 0; i < 7; i++){
+      const a = i / 7 * 6.284;
+      const g = new T.ConeGeometry(1.2, 8, 5);
+      g.rotateZ(1.35); g.rotateY(-a);
+      g.translate(Math.cos(a) * 4.8, 1.1, Math.sin(a) * 4.8);
+      raices.push(g);
+    }
+    const mR = new T.Mesh(fusiona(raices), matTrM);
+    mR.position.set(p.x + 8, y, p.z - 7);
+    mR.castShadow = true;
+    scene.add(mR);
+    const copa = new T.Mesh(geoCopa(18, 12, 30),
+      new T.MeshLambertMaterial({ map: TX.hojas1, alphaTest: .18, side: T.DoubleSide }));
+    copa.position.set(p.x + 8, y, p.z - 7);
+    copa.frustumCulled = false;
+    copa.castShadow = true;
+    copa.customDepthMaterial = new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking,
+      map: TX.hojas1, alphaTest: .35, side: T.DoubleSide });
+    scene.add(copa);
+    ARB.push([p.x + 8, p.z - 7, 5.2]);
+  }
+}
+/* ---------------------------- EL SANTUARIO ---------------------------------
+   El patio de atrás del templo: ocho monolitos, el ÍDOLO de piedra (GLB del
+   repo) y el CORAZÓN, una piedra verde que respira sobre su plinto. */
+{
+  const p = POI.santuario, y = H(p.x, p.z);
+  for (let i = 0; i < 8; i++){
+    const a = i / 8 * 6.284;
+    const alto = rr(3.4, 5.2);
+    const m = new T.Mesh(new T.BoxGeometry(1.4, alto, .8), matPiedra);
+    m.position.set(p.x + Math.cos(a) * 9, y + alto / 2 - .3, p.z + Math.sin(a) * 9);
+    m.rotation.y = a;
+    m.rotation.z = .06;
+    m.castShadow = m.receiveShadow = true;
+    scene.add(m);
+  }
+  const plin = new T.Mesh(new T.BoxGeometry(3.4, 1.2, 3.4), matPiedraOsc);
+  plin.position.set(p.x, y + .6, p.z);
+  plin.castShadow = plin.receiveShadow = true;
+  scene.add(plin);
+  semillaMat = new T.MeshLambertMaterial({ color: 0x123a24,
+    emissive: 0x6cff8a, emissiveIntensity: .9 });
+  const cor = new T.Mesh(new T.OctahedronGeometry(.95, 1), semillaMat);
+  cor.position.set(p.x, y + 2.5, p.z);
+  scene.add(cor);
+  window.__CORAZON = cor;
+  propGLB({ url: 'g3/mdl-monster.glb', raiz: true, x: p.x - 1, z: p.z - 8,
+    altoObjetivo: 5.4, giro: .2, gris: true });
+  ARB.push([p.x, p.z, 2.4]);
+}
+/* -------- POLEN a la deriva (capítulos de las llaves) + marcador ----------- */
+let luci = null, luci0 = null;
+{
+  const NL = 190, P = new Float32Array(NL * 3), C = new Float32Array(NL * 3);
+  const c = new T.Color();
+  const a = POI.cascada, b = POI.templo;
+  for (let i = 0; i < NL; i++){
+    const t = i / NL;
+    const x = a.x + (b.x - a.x) * t + rr(-40, 40);
+    const z = a.z + (b.z - a.z) * t + rr(-40, 40);
+    P[i*3] = x; P[i*3+1] = H(x, z) + rr(1, 5); P[i*3+2] = z;
+    c.setHSL(.17 + rnd() * .08, .8, .72);
+    C[i*3] = c.r; C[i*3+1] = c.g; C[i*3+2] = c.b;
+  }
+  luci0 = Float32Array.from(P);
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P, 3));
+  g.setAttribute('color', new T.BufferAttribute(C, 3));
+  luci = new T.Points(g, new T.PointsMaterial({ size: .9, map: texMancha,
+    vertexColors: true, transparent: true, blending: T.AdditiveBlending,
+    depthWrite: false, sizeAttenuation: true }));
+  luci.visible = false;
+  scene.add(luci);
+}
+const marca3d = new T.Mesh(new T.OctahedronGeometry(1.1, 0),
+  new T.MeshBasicMaterial({ color: 0xe8ff9a, fog: false, transparent: true, opacity: .9 }));
+scene.add(marca3d);
+/* las texturas generadas se enchufan cuando llegan (ya existen los materiales) */
+cargaTexGen();
+
+/* ------------- lo que se mueve en JUNGLA, cuadro a cuadro ------------------ */
+function mundoTick(dt){
+  /* la cascada CORRE: dos capas a distinta velocidad = agua, no cartel */
+  if (CASCADA.texA){
+    CASCADA.texA.offset.y -= dt * 1.15;
+    CASCADA.texB.offset.y -= dt * 1.75;
+    CASCADA.texB.offset.x += dt * .05;
+  }
+  if (CASCADA.espuma){
+    const k = .42 + .16 * Math.sin(t0 * 1.9) + .06 * Math.sin(t0 * 5.3);
+    CASCADA.espuma.material.opacity = k;
+    CASCADA.espuma.scale.setScalar(.94 + .08 * Math.sin(t0 * 1.3));
+  }
+  /* la bruma sube y vuelve a nacer abajo */
+  if (CASCADA.bruma){
+    const P = CASCADA.bruma.geometry.attributes.position;
+    for (let i = 0; i < P.count; i++){
+      P.array[i*3+1] += dt * (1.4 + (i % 7) * .35);
+      P.array[i*3] += Math.sin(t0 * .7 + i) * dt * .8;
+      if (P.array[i*3+1] > AGUA_Y + 22){
+        P.array[i*3] = POI.laguna.x + rr(-16, 16);
+        P.array[i*3+1] = AGUA_Y - 1;
+        P.array[i*3+2] = CASCADA.zPie + rr(-9, 9);
+      }
+    }
+    P.needsUpdate = true;
+  }
+  /* el relleno acompaña al sol: de noche baja (si no, el bosque nocturno se
+     ve gris parejo y se pierde la luz verde del templo) */
+  relleno.intensity = .26 + .55 * cl(SOLD.y * 1.5, 0, 1);
+  /* los rayos de luz respiran (y se apagan si el sol se acuesta) */
+  if (RAYOS) RAYOS.material.opacity = cl((SOLD.y - .12) * 1.15, 0, 1) *
+    (.26 + .09 * Math.sin(t0 * .5));
+  /* las capas de vapor derivan despacio */
+  for (let i = 0; i < VAPOR.length; i++){
+    const v = VAPOR[i];
+    v.position.x += Math.sin(t0 * .05 + i) * dt * 1.6;
+    v.position.y = v.userData.y0 + Math.sin(t0 * .18 + i * 1.7) * 1.4;
+  }
+  /* llamas que titilan y su luz */
+  for (const f of FUEGOS){
+    const k = .85 + .3 * Math.sin(t0 * 7 + f.f) + .12 * Math.sin(t0 * 17 + f.f * 3);
+    f.s.scale.set(f.e * .55 * (.92 + .08 * k), f.e * .95 * k, 1);
+    if (f.L2) f.L2.intensity = 4 + 2.4 * k;
+  }
+  /* las llaves que todavía están en la selva giran y flotan */
+  for (const L2 of LLAVES){
+    if (L2.tomada) continue;
+    L2.g.rotation.y += dt * .7;
+    L2.g.position.y = L2.y0 + Math.sin(t0 * 1.5 + L2.i) * .28;
+  }
+  /* las bandadas dan vueltas altas */
+  for (const b of AVES){
+    const u = b.userData;
+    u.a += dt * u.v;
+    b.position.set(u.cx + Math.cos(u.a) * u.r, u.y + Math.sin(u.a * 2.3) * 6,
+      u.cz + Math.sin(u.a) * u.r);
+  }
+  /* la puerta del templo: baja hasta hundirse y la boca vuelca luz */
+  if (TEMPLO.abierta > 0 && TEMPLO.abierta < 1){
+    TEMPLO.abierta = Math.min(1, TEMPLO.abierta + dt / 4);
+    const k = TEMPLO.abierta;
+    TEMPLO.puerta.position.y = TEMPLO.puerta.userData.y0 - k * 6.8;
+    TEMPLO.haz.material.opacity = k * .5;
+  }
+}
+
+/* ================================ HISTORIA ================================= */
+/* ===== IDIOMAS. El texto ES la historia: va entero en los tres. ===== */
+const L = {
+es: { npc: {
+  taina: ['Vos sos la hija de Tomás. Tenés los mismos ojos\nde mirar lejos.\n\nYo lo subí hasta acá hace once años. Bajé sola.',
+    'La selva no se lo comió, nena. La selva lo guardó.\nEs distinto.\n\nSeguime, que el barro engaña.',
+    '(Taina mastica una hoja amarga y escupe.)\n\nCuatro piedras. Cuatro. Ni tres ni cinco.\nSi falta una, la puerta se ríe de vos.'],
+  dante: ['¡No la toques! …ah. Perdón. Creí que eras\nla otra cosa que camina de noche.\n\nDante Aguirre, topógrafo. El último que queda.',
+    'Tu padre midió la pirámide en tres días.\nY después dijo: "está cerrada por dentro".\n\nCuatro huecos en la jamba, nena. Cuatro llaves.',
+    'Una está abajo, en la quebrada, con Rufino.\nOtra atrás del agua. Otra en las ruinas de arriba.\nLa cuarta la tragó el higuerón del este.'],
+  canelo: ['¡Guau! ¡Guau guau!', '(Canelo te huele las botas y decide que sos de fiar.)',
+    '(Canelo mira la selva y gruñe bajito. Después\nte mira a vos y mueve la cola. Vamos.)'],
+  guardian: ['(La figura de piedra no se mueve. Pero algo\nadentro de ella suena como agua.)\n\n«…cuatro… en la jamba… cuatro…»',
+    '«…el que traiga tres, se queda afuera…»',
+    '«…adentro no hay oro, caminante.\nAdentro hay una raíz que no deja de crecer…»'] },
+ui: { sub: 'la selva que se tragó un templo · cuatro piedras, una puerta',
+  empezar: 'EMPEZAR LA HISTORIA', otra: 'JUGAR OTRA VEZ', denuevo: 'EMPEZAR DE NUEVO',
+  seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENÚ', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
+  idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAJOS', g_m: 'MEDIOS', g_a: 'ALTOS',
+  completa: (m2, mn) => 'HISTORIA COMPLETA · ' + m2 + ' m caminados · ' + mn + ' min',
+  introT: 'Once años después',
+  intro: 'La avioneta te dejó en el último claro con río.\nDe ahí en adelante no hay mapa: hay hojas.\n\nSos MIRA SOLÍS, cartógrafa. Tu padre subió esta\nselva hace once años buscando un templo del que\nnadie tenía foto, y no volvió.\n\nSu último informe traía tres palabras subrayadas:\n«ESTÁ CERRADA POR DENTRO».\n\nEl campamento viejo queda al norte. Empezá por ahí.' },
+caps: [
+  { n: 'CAPÍTULO 1', t: 'EL CAMPAMENTO', obj: 'campamento', objT: 'Encontrá el campamento de la expedición',
+    dT: 'El cuaderno', d: 'La carpa aguantó once años de lluvia porque\nalguien la remendó todos los inviernos.\n\nAdentro está el cuaderno de tu padre, seco,\nenvuelto en tela encerada. Última página:\n\n«La pirámide tiene cuatro huecos en la jamba.\nNo son adornos. Son cerraduras.»\n\nY abajo, con otra letra: «Volvé con las cuatro.»' },
+  { n: 'CAPÍTULO 2', t: 'LA GARGANTA', obj: 'cascada', objT: 'Bajá a la garganta hasta la cascada',
+    dT: 'El ruido', d: 'Se oye antes de verse: treinta metros de agua\ncayendo a una laguna del color del jade.\n\nEn el mirador hay un hombre flaco midiendo\nla nada con un teodolito roto. Dante.\n\nDice que la selva devuelve todo, menos a la gente.\nDice que sabe dónde están las cuatro piedras.' },
+  { n: 'CAPÍTULO 3', t: 'EL TEMPLO SELLADO', obj: 'puerta', objT: 'Subí a la meseta y encontrá el templo',
+    dT: 'La puerta', d: 'Sube por el este, donde el escalón se hace rampa,\ny arriba —entre el vapor— hay una montaña que\nno es montaña: seis cuerpos de piedra, una\nescalinata, y raíces cosiéndola al suelo.\n\nEn la cara oeste, al pie, la puerta.\nUna laja de seis metros. Cuatro huecos vacíos.\n\nY una figura de piedra que no estaba en el plano.' },
+  { n: 'CAPÍTULO 4', t: 'LAS CUATRO LLAVES', obj: 'llave1', objT: 'Buscá las 4 llaves de piedra en la selva',
+    dT: 'Las cuatro', d: 'Las cuatro piedras zumban juntas en tu mochila\ncomo abejas dentro de un frasco.\n\nUna estaba en el fondo de la quebrada, junto a\nlo que quedó de Rufino. Una detrás del agua.\nUna en las ruinas de arriba. Una en el higuerón.\n\nTu padre las escondió. Las escondió para que\nel que llegara tuviera que MERECERLAS.\n\nAl templo.' },
+  { n: 'CAPÍTULO 5', t: 'LA PUERTA', obj: 'puerta', objT: 'Poné las cuatro llaves y abrí el templo', usar: true,
+    dT: 'Adentro', d: 'Una. Dos. Tres. La cuarta entra sola, como si\nla jamba la tirara para adentro.\n\nLos glifos se encienden de abajo hacia arriba.\nLa laja no se abre: se HUNDE, y el aire que sale\nes fresco y huele a piedra mojada y a algo verde\nque nunca vio el sol.\n\nDel altar de arriba sale una columna de luz que\nse ve desde el otro lado del valle.\n\nDante llora. Taina no dice nada. Canelo entra primero.' },
+  { n: 'CAPÍTULO 6', t: 'EL CORAZÓN VERDE', obj: 'santuario', objT: 'Cruzá el templo hasta el patio del corazón',
+    dT: 'FIN', d: 'El pasillo cruza la pirámide entera y sale a un\npatio de ocho monolitos que nadie pisó en siglos.\n\nEn el plinto del centro late una piedra verde\ndel tamaño de un puño. No es un tesoro:\nes una semilla. La selva la estaba incubando.\n\nAl pie del ídolo hay un morral con una brújula\ny una libreta con tu nombre escrito 1.400 veces.\nÉl entró. Él cerró la puerta al salir.\nÉl la cerró para vos.\n\nEn la última hoja escribís: «Llegué, papá.»\n\nJUNGLA — fin de la historia.' }
+] },
+en: { npc: {
+  taina: ["You are Tomás's daughter. Same eyes, the kind\nthat look far away.\n\nI walked him up here eleven years ago.\nI came down alone.",
+    'The jungle did not eat him, girl. The jungle\nKEPT him. Not the same thing.\n\nFollow me, the mud lies.',
+    '(Taina chews a bitter leaf and spits.)\n\nFour stones. Four. Not three, not five.\nIf one is missing, the door laughs at you.'],
+  dante: ['Don\'t touch it! …oh. Sorry. I thought you were\nthe other thing that walks at night.\n\nDante Aguirre, surveyor. The last one left.',
+    'Your father measured the pyramid in three days.\nThen he said: "it is locked from the inside".\n\nFour sockets in the jamb, girl. Four keys.',
+    'One is down in the ravine, with Rufino.\nOne behind the water. One in the ruins up there.\nThe fourth was swallowed by the eastern fig tree.'],
+  canelo: ['Woof! Woof woof!', '(Canelo smells your boots and decides you are fine.)',
+    '(Canelo stares into the jungle and growls low.\nThen he looks at you and wags his tail. Come on.)'],
+  guardian: ['(The stone figure does not move. But something\ninside it sounds like running water.)\n\n"…four… in the jamb… four…"',
+    '"…whoever brings three stays outside…"',
+    '"…there is no gold inside, walker.\nInside there is a root that will not stop growing…"'] },
+ui: { sub: 'the jungle that swallowed a temple · four stones, one door',
+  empezar: 'START THE STORY', otra: 'PLAY AGAIN', denuevo: 'START OVER',
+  seguir: 'CONTINUE', correr: 'RUN', menu: 'MENU', usar: '◉ USE', dlgGo: 'CONTINUE ▸',
+  idioma: 'LANGUAGE', graficos: 'GRAPHICS', g_b: 'LOW', g_m: 'MEDIUM', g_a: 'HIGH',
+  completa: (m2, mn) => 'STORY COMPLETE · ' + m2 + ' m walked · ' + mn + ' min',
+  introT: 'Eleven years later',
+  intro: 'The floatplane left you at the last clearing with\na river. After that there is no map: there are leaves.\n\nYou are MIRA SOLÍS, cartographer. Your father walked\nup this jungle eleven years ago looking for a temple\nnobody had ever photographed, and never came back.\n\nHis last report had three words underlined:\n"IT IS LOCKED FROM THE INSIDE".\n\nThe old camp is north. Start there.' },
+caps: [
+  { n: 'CHAPTER 1', t: 'THE CAMP', obj: 'campamento', objT: 'Find the expedition camp',
+    dT: 'The notebook', d: 'The tent survived eleven years of rain because\nsomebody patched it every winter.\n\nInside is your father\'s notebook, dry, wrapped in\nwaxed cloth. Last page:\n\n"The pyramid has four sockets in the jamb.\nThey are not ornaments. They are locks."\n\nAnd below, in another hand: "Come back with all four."' },
+  { n: 'CHAPTER 2', t: 'THE GORGE', obj: 'cascada', objT: 'Go down the gorge to the waterfall',
+    dT: 'The noise', d: 'You hear it before you see it: thirty metres of\nwater falling into a jade-coloured pool.\n\nAt the overlook a thin man is measuring nothing\nwith a broken theodolite. Dante.\n\nHe says the jungle gives everything back except\npeople. He says he knows where the four stones are.' },
+  { n: 'CHAPTER 3', t: 'THE SEALED TEMPLE', obj: 'puerta', objT: 'Climb the plateau and find the temple',
+    dT: 'The door', d: 'Climb from the east, where the step becomes a ramp,\nand up there —through the vapour— stands a mountain\nthat is not a mountain: six bodies of stone, a\nstairway, and roots stitching it to the ground.\n\nOn the west face, at its foot, the door.\nA six-metre slab. Four empty sockets.\n\nAnd a stone figure that was not on the plan.' },
+  { n: 'CHAPTER 4', t: 'THE FOUR KEYS', obj: 'llave1', objT: 'Find the 4 stone keys in the jungle',
+    dT: 'All four', d: 'The four stones hum together in your pack like\nbees inside a jar.\n\nOne was at the bottom of the ravine, next to what\nwas left of Rufino. One behind the water. One in\nthe ruins above. One in the fig tree.\n\nYour father hid them. He hid them so that whoever\ngot here would have to DESERVE them.\n\nTo the temple.' },
+  { n: 'CHAPTER 5', t: 'THE DOOR', obj: 'puerta', objT: 'Set the four keys and open the temple', usar: true,
+    dT: 'Inside', d: 'One. Two. Three. The fourth slides in by itself,\nas if the jamb were pulling it.\n\nThe glyphs light up from the bottom to the top.\nThe slab does not swing open: it SINKS, and the air\nthat comes out is cool and smells of wet stone and\nof something green that never saw the sun.\n\nFrom the altar above, a column of light rises that\ncan be seen from the far side of the valley.\n\nDante cries. Taina says nothing. Canelo goes in first.' },
+  { n: 'CHAPTER 6', t: 'THE GREEN HEART', obj: 'santuario', objT: 'Cross the temple to the courtyard of the heart',
+    dT: 'THE END', d: 'The corridor crosses the whole pyramid and opens\ninto a courtyard of eight monoliths nobody has\nwalked in for centuries.\n\nOn the central plinth a green stone the size of a\nfist is beating. It is not a treasure: it is a seed.\nThe jungle was incubating it.\n\nAt the idol\'s feet there is a satchel with a compass\nand a notebook with your name written 1,400 times.\nHe got in. He closed the door on his way out.\nHe closed it for you.\n\nOn the last page you write: "I made it, dad."\n\nJUNGLA — end of the story.' }
+] },
+pt: { npc: {
+  taina: ['Você é a filha do Tomás. Tem os mesmos olhos\nde olhar longe.\n\nEu o subi até aqui há onze anos. Desci sozinha.',
+    'A selva não o comeu, menina. A selva o GUARDOU.\nÉ diferente.\n\nMe siga, que a lama engana.',
+    '(Taina mastiga uma folha amarga e cospe.)\n\nQuatro pedras. Quatro. Nem três nem cinco.\nSe falta uma, a porta ri de você.'],
+  dante: ['Não toque! …ah. Desculpa. Pensei que você era\na outra coisa que anda de noite.\n\nDante Aguirre, topógrafo. O último que sobrou.',
+    'Seu pai mediu a pirâmide em três dias.\nDepois disse: "está trancada por dentro".\n\nQuatro buracos na ombreira, menina. Quatro chaves.',
+    'Uma está lá embaixo, na ravina, com o Rufino.\nOutra atrás da água. Outra nas ruínas de cima.\nA quarta foi engolida pela figueira do leste.'],
+  canelo: ['Au au! Au!', '(Canelo cheira suas botas e decide que você presta.)',
+    '(Canelo olha a selva e rosna baixinho. Depois\nolha você e abana o rabo. Vamos.)'],
+  guardian: ['(A figura de pedra não se move. Mas algo dentro\ndela soa como água correndo.)\n\n«…quatro… na ombreira… quatro…»',
+    '«…quem trouxer três fica de fora…»',
+    '«…lá dentro não há ouro, caminhante.\nLá dentro há uma raiz que não para de crescer…»'] },
+ui: { sub: 'a selva que engoliu um templo · quatro pedras, uma porta',
+  empezar: 'COMEÇAR A HISTÓRIA', otra: 'JOGAR DE NOVO', denuevo: 'RECOMEÇAR',
+  seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENU', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
+  idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAIXOS', g_m: 'MÉDIOS', g_a: 'ALTOS',
+  completa: (m2, mn) => 'HISTÓRIA COMPLETA · ' + m2 + ' m caminhados · ' + mn + ' min',
+  introT: 'Onze anos depois',
+  intro: 'O hidroavião te deixou na última clareira com rio.\nDali para frente não há mapa: há folhas.\n\nVocê é MIRA SOLÍS, cartógrafa. Seu pai subiu esta\nselva há onze anos procurando um templo do qual\nninguém tinha foto, e não voltou.\n\nSeu último relatório trazia três palavras sublinhadas:\n«ESTÁ TRANCADA POR DENTRO».\n\nO acampamento velho fica ao norte. Comece por lá.' },
+caps: [
+  { n: 'CAPÍTULO 1', t: 'O ACAMPAMENTO', obj: 'campamento', objT: 'Encontre o acampamento da expedição',
+    dT: 'O caderno', d: 'A barraca aguentou onze anos de chuva porque\nalguém a remendou todos os invernos.\n\nDentro está o caderno do seu pai, seco, embrulhado\nem tecido encerado. Última página:\n\n«A pirâmide tem quatro buracos na ombreira.\nNão são enfeites. São fechaduras.»\n\nE embaixo, com outra letra: «Volte com as quatro.»' },
+  { n: 'CAPÍTULO 2', t: 'A GARGANTA', obj: 'cascada', objT: 'Desça a garganta até a cachoeira',
+    dT: 'O barulho', d: 'Ouve-se antes de ver: trinta metros de água\ncaindo numa lagoa da cor do jade.\n\nNo mirante há um homem magro medindo o nada\ncom um teodolito quebrado. Dante.\n\nDiz que a selva devolve tudo, menos as pessoas.\nDiz que sabe onde estão as quatro pedras.' },
+  { n: 'CAPÍTULO 3', t: 'O TEMPLO SELADO', obj: 'puerta', objT: 'Suba ao planalto e encontre o templo',
+    dT: 'A porta', d: 'Suba pelo leste, onde o degrau vira rampa, e lá\nem cima —entre o vapor— há uma montanha que não\né montanha: seis corpos de pedra, uma escadaria,\ne raízes costurando tudo ao chão.\n\nNa face oeste, no pé, a porta.\nUma laje de seis metros. Quatro buracos vazios.\n\nE uma figura de pedra que não estava na planta.' },
+  { n: 'CAPÍTULO 4', t: 'AS QUATRO CHAVES', obj: 'llave1', objT: 'Ache as 4 chaves de pedra na selva',
+    dT: 'As quatro', d: 'As quatro pedras zumbem juntas na sua mochila\ncomo abelhas dentro de um vidro.\n\nUma estava no fundo da ravina, junto do que sobrou\ndo Rufino. Uma atrás da água. Uma nas ruínas de\ncima. Uma na figueira.\n\nSeu pai as escondeu. Escondeu para que quem\nchegasse tivesse que MERECÊ-LAS.\n\nAo templo.' },
+  { n: 'CAPÍTULO 5', t: 'A PORTA', obj: 'puerta', objT: 'Coloque as quatro chaves e abra o templo', usar: true,
+    dT: 'Dentro', d: 'Uma. Duas. Três. A quarta entra sozinha, como se\na ombreira a puxasse para dentro.\n\nOs glifos acendem de baixo para cima.\nA laje não abre: AFUNDA, e o ar que sai é fresco\ne tem cheiro de pedra molhada e de algo verde\nque nunca viu o sol.\n\nDo altar de cima sai uma coluna de luz que se vê\ndo outro lado do vale.\n\nDante chora. Taina não diz nada. Canelo entra primeiro.' },
+  { n: 'CAPÍTULO 6', t: 'O CORAÇÃO VERDE', obj: 'santuario', objT: 'Atravesse o templo até o pátio do coração',
+    dT: 'FIM', d: 'O corredor cruza a pirâmide inteira e sai num\npátio de oito monólitos que ninguém pisou em séculos.\n\nNo plinto do centro pulsa uma pedra verde do\ntamanho de um punho. Não é um tesouro: é uma\nsemente. A selva a estava incubando.\n\nAo pé do ídolo há uma bolsa com uma bússola e uma\ncaderneta com o seu nome escrito 1.400 vezes.\nEle entrou. Ele fechou a porta ao sair.\nEle a fechou para você.\n\nNa última folha você escreve: «Cheguei, pai.»\n\nJUNGLA — fim da história.' }
+] } };
+let LANG = 'es';
+try { LANG = localStorage.getItem('jungla_lang') || 'es'; } catch(e){}
+if (!L[LANG]) LANG = 'es';
+let CAPS = L[LANG].caps;
+const Tx = k => L[LANG].ui[k];
+const LUZCAP = [
+  /* la selva de la mañana: neblina cerrada, sol bajo del este, todo lavado */
+  { sol: [.55, .48, .42], solI: 2.0, bg: .95, fog: '#a2b898', fogFar: 240, hemiI: 1.05, exp: 1.12 },
+  /* media mañana: se abre, el vapor sube de la garganta */
+  { sol: [.35, .72, .30], solI: 2.4, bg: 1.0,  fog: '#8fae86', fogFar: 290, hemiI: .98, exp: 1.10 },
+  /* MEDIODÍA en la meseta: el sol casi vertical, los rayos entran a pleno */
+  { sol: [-.34, .90, .16], solI: 2.9, bg: 1.06, fog: '#96b48a', fogFar: 330, hemiI: 1.05, exp: 1.08 },
+  /* tarde: la luz cruza de costado y las sombras del dosel se alargan */
+  { sol: [-.45, .70, .22], solI: 2.5, bg: 1.0, fog: '#8caa7e', fogFar: 300, hemiI: .92, exp: 1.10 },
+  /* hora dorada: la puerta se abre con el sol acostándose sobre la selva */
+  { sol: [-.78, .34, .10], solI: 2.0, bg: .9,  fog: '#b8a06a', fogFar: 265, hemiI: .8, exp: 1.18 },
+  /* anochecer verde: el templo encendido es lo más claro del valle */
+  { sol: [-.86, .20, -.12], solI: 1.35, bg: .76, fog: '#5c7a5e', fogFar: 250, hemiI: .95, exp: 1.3 }
+];
+let cap = 0, enDlg = false, fase = 'menu';
+let luzDe = LUZCAP[0], luzA = LUZCAP[0], luzK = 1;
+function guardar(){ try { localStorage.setItem('jungla1', JSON.stringify({ cap, t: stats.t, dist: stats.dist })); } catch(e){} }
+function cargar(){ try { return JSON.parse(localStorage.getItem('jungla1') || 'null'); } catch(e){ return null; } }
+function ponCap(n, silencio){
+  cap = cl(n, 0, CAPS.length - 1);
+  const C = CAPS[cap];
+  $('objT').textContent = C.objT;
+  luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;
+  luci.visible = cap === 3 || cap === 4;
+  MISION.alCap(cap);
+  if (!silencio){
+    $('capN').textContent = C.n;
+    $('capT').textContent = C.t;
+    $('capCard').classList.add('on');
+    clearTimeout(ponCap._t);
+    ponCap._t = setTimeout(() => $('capCard').classList.remove('on'), 3400);
+    /* la CINEMÁTICA del capítulo: la cámara te muestra adónde vas */
+    cineObjetivo(C);
+  }
+  guardar();
+}
+function mezclaLuz(){
+  /* estado ACTUAL de la luz (para arrancar la transición desde donde está) */
+  return { sol: [SOLD.x, SOLD.y, SOLD.z],
+    solI: sol.intensity, bg: scene.backgroundIntensity,
+    fog: '#' + scene.fog.color.getHexString(), fogFar: scene.fog.far,
+    hemiI: hemi.intensity, exp: ren.toneMappingExposure };
+}
+function pasoLuz(dt){
+  if (luzK >= 1) return;
+  luzK = Math.min(1, luzK + dt / 7);           /* la transición dura ~7 s */
+  const k = luzK * luzK * (3 - 2 * luzK);
+  const A2 = luzDe, B2 = luzA;
+  /* la DIRECCIÓN del sol se mezcla acá; su POSICIÓN la pone el bucle cada
+     cuadro, pegada al jugador, para que la caja de sombra lo siga */
+  SOLD.set(A2.sol[0] + (B2.sol[0] - A2.sol[0]) * k,
+           A2.sol[1] + (B2.sol[1] - A2.sol[1]) * k,
+           A2.sol[2] + (B2.sol[2] - A2.sol[2]) * k).normalize();
+  sol.intensity = A2.solI + (B2.solI - A2.solI) * k;
+  hemi.intensity = A2.hemiI + (B2.hemiI - A2.hemiI) * k;
+  scene.backgroundIntensity = A2.bg + (B2.bg - A2.bg) * k;
+  scene.fog.color.set(A2.fog).lerp(new T.Color(B2.fog), k);
+  scene.fog.far = (A2.fogFar + (B2.fogFar - A2.fogFar) * k) * GFXQ[GFX].fogK;
+  const eA = A2.exp != null ? A2.exp : 1.12, eB = B2.exp != null ? B2.exp : 1.12;
+  ren.toneMappingExposure = eA + (eB - eA) * k;
+  /* la ventana de la cabaña se enciende sola cuando oscurece, y VUELCA luz */
+  if (ventanaMat){
+    const osc = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+    ventanaMat.color.setRGB(.16 + .3 * osc, .3 + .68 * osc, .27 + .6 * osc);
+    focoCasa.intensity = osc * osc * 60 * (TEMPLO ? TEMPLO.abierta : 0);
+  }
+}
+function dialogo(titulo, cuerpo, alCerrar, cara){
+  enDlg = true;
+  $('dlgT').textContent = titulo;
+  $('dlgB').textContent = cuerpo;
+  /* si habla un PERSONAJE, su retrato se pinta al vuelo (canvas) */
+  const cv = $('dlgCara');
+  if (cara){
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, 96, 96);
+    cara(g, 96);
+    cv.classList.add('on');
+  } else cv.classList.remove('on');
+  $('dlg').classList.add('on');
+  $('dlgGo').onclick = () => {
+    $('dlg').classList.remove('on');
+    enDlg = false;
+    if (alCerrar) alCerrar();
+  };
+}
+function llegaObjetivo(){
+  const C = CAPS[cap];
+  dialogo(C.dT, C.d, () => {
+    if (cap >= CAPS.length - 1){ finDeHistoria(); return; }
+    ponCap(cap + 1);
+  });
+}
+function finDeHistoria(){
+  fase = 'fin';
+  guardarFin();
+  $('menu').style.display = 'flex';
+  $('hud').classList.remove('on');
+  $('mCap').textContent = Tx('completa')(Math.round(stats.dist), Math.round(stats.t / 60));
+  $('mJugar').textContent = Tx('otra');
+  $('mSeguir').style.display = 'none';
+}
+function guardarFin(){ try { localStorage.removeItem('jungla1'); } catch(e){} }
+
+/* ================= AUDIO GENERADO (Higgsfield) ============================
+   Ambiente + música + pasos por mundo, cargados SOBRE el sintetizado: cuando
+   decodifican lo apagan; si una URL falla (offline o el navegador no decodifica
+   AAC) el sintetizado sigue solo. Vive acá (motor compartido) y no en la
+   sección AMB, que cada mundo reescribe. Los mk_*.py pisan MUNDO_AUDIO. */
+const MUNDO_AUDIO = { amb: 'amb-jungla.m4a', mus: 'mus-jungla.m4a',
+  paso: 'pasos-musgo.mp3', pasoRate: 1.35 };
+/* CIELO fotográfico generado (equirectangular). Vacío = deja el cielo actual
+   (senda ya trae su foto). Los mk_*.py lo pisan con el de cada mundo. Se carga
+   y reemplaza el fondo pintado; si falla, queda el pintado. */
+const MUNDO_CIELO = 'cielo-jungla.jpg';
+/* disposición del MENÚ por mundo (clases en #menu): cada juego arma su portada
+   distinta. '' = centrado (senda). Los mk_*.py lo pisan. */
+const MUNDO_MENU = 'm-abajo';
+/* PROPS 3D generados (Tripo, estáticos): edificios/vehículos de cada mundo.
+   Se colocan en su POI, se apoyan en el terreno y OCULTAN la estructura
+   procedural (que pasa como grupo en `ocultar`). Si el GLB no llega, queda la
+   procedural. Los mk_*.py llaman propGLB en su bloque de estructura. */
+function propGLB(o){
+  if (!GLTF){ return; }
+  new GLTF().load(o.raiz ? AR(o.url) : AX(o.url), g => {
+    const m = g.scene;
+    m.scale.setScalar(o.esc || 1);
+    m.rotation.set(o.rx || 0, o.giro || 0, o.rz || 0);
+    m.position.set(o.x, 0, o.z);
+    m.traverse(n => { if (n.isMesh){ n.castShadow = true; n.receiveShadow = true;
+      n.frustumCulled = !o.sinCull;      /* estáticos: que los recorte el frustum */
+      const mm = n.material;
+      if (mm){
+        /* varios GLB del repo salen BLANCOS: traen emissive del glTF y
+           KHR_materials_specular. Se apagan los dos. */
+        mm.metalness = 0;
+        if (mm.emissive) mm.emissive.setRGB(0, 0, 0);
+        if ('specularIntensity' in mm) mm.specularIntensity = 0;
+        if ('envMapIntensity' in mm) mm.envMapIntensity = .4;
+        if (o.gris && mm.color){
+          const l = mm.color.r * .3 + mm.color.g * .6 + mm.color.b * .1;
+          mm.color.setRGB(l * .86, l * .92, l * .8);
+        }
+      } } });
+    /* AUTO-APOYO: el punto más bajo del modelo se posa en el suelo + o.y */
+    m.updateWorldMatrix(true, true);
+    let caja = new T.Box3().setFromObject(m);
+    /* ALTO OBJETIVO: reescala el modelo para que mida lo que pide el mundo */
+    if (o.altoObjetivo){
+      const alto = caja.max.y - caja.min.y || 1;
+      m.scale.multiplyScalar(o.altoObjetivo / alto);
+      m.updateWorldMatrix(true, true);
+      caja = new T.Box3().setFromObject(m);
+    }
+    m.position.y = H(o.x, o.z) + (o.y || 0) - caja.min.y;
+    scene.add(m);
+    if (o.ocultar){ const a = Array.isArray(o.ocultar) ? o.ocultar : [o.ocultar];
+      for (const x of a) x.visible = false; }         /* apagar la procedural */
+    window.__PROPS = (window.__PROPS || 0) + 1;
+  }, undefined, () => {});
+}
+function cargarCieloFoto(){
+  if (!MUNDO_CIELO) return;
+  new T.TextureLoader().load(AX(MUNDO_CIELO), tex => {
+    tex.mapping = T.EquirectangularReflectionMapping;
+    tex.colorSpace = T.SRGBColorSpace;
+    scene.background = tex;
+    /* HIELO dibuja el cielo en un DOMO; los demás usan scene.background */
+    if (typeof DOMO !== 'undefined' && DOMO){ DOMO.material.map = tex; DOMO.material.needsUpdate = true; }
+  }, undefined, () => {});
+}
+function cargarAudioReal(){
+  const A2 = AMB.ctx; if (!A2 || AMB._cargado) return;
+  AMB._cargado = true;
+  const carga = async url => A2.decodeAudioData(await (await fetch(url)).arrayBuffer());
+  /* música y pasos en PARALELO e independientes: si el m4a no decodifica (AAC),
+     los pasos no lo esperan. El AMBIENTE viene del sintetizado del motor (viento
+     limpio + voces de cada mundo): la pista de ambiente generada traía golpes y
+     jadeos que sonaban raro al estar quieto, así que no se usa. */
+  carga(AX(MUNDO_AUDIO.mus)).then(bm => {
+    const nm = A2.createBufferSource(); nm.buffer = bm; nm.loop = true;
+    AMB.musGain = A2.createGain(); AMB.musGain.gain.value = .3;
+    nm.connect(AMB.musGain); AMB.musGain.connect(AMB.master); nm.start();
+  }).catch(() => {});
+  carga(AX(MUNDO_AUDIO.paso)).then(bp => {
+    AMB.pasoSrc = A2.createBufferSource(); AMB.pasoSrc.buffer = bp; AMB.pasoSrc.loop = true;
+    AMB.pasoSrc.playbackRate.value = MUNDO_AUDIO.pasoRate || 1.4;
+    AMB.pasoGain = A2.createGain(); AMB.pasoGain.gain.value = 0;
+    AMB.pasoSrc.connect(AMB.pasoGain); AMB.pasoGain.connect(AMB.master); AMB.pasoSrc.start();
+  }).catch(() => {});
+}
+
+/* ========================= CINEMÁTICAS =====================================
+   Cámara sobre rieles: cada paso vuela de `de` a `a` mirando a `mira`, con
+   subtítulo y letterbox. Se saltea con un toque. El sol (y su caja de sombra)
+   siguen a la cámara mientras dura. */
+const CINE = { on: false, i: 0, t: 0, pasos: null, fin: null };
+const _cv1 = new T.Vector3(), _cv2 = new T.Vector3(), _cv3 = new T.Vector3();
+function cinematica(pasos, fin){
+  CINE.on = true; CINE.pasos = pasos; CINE.i = 0; CINE.t = 0; CINE.fin = fin || null;
+  fase = 'cine';
+  $('hud').classList.remove('on');
+  document.body.classList.add('cine');
+}
+function terminaCine(){
+  if (!CINE.on) return;
+  CINE.on = false;
+  document.body.classList.remove('cine');
+  $('cineTxt').textContent = '';
+  fase = 'juego';
+  $('hud').classList.add('on');
+  cam.fov = 72; cam.updateProjectionMatrix();
+  if (CINE.fin){ const f = CINE.fin; CINE.fin = null; f(); }
+}
+function pasoCine(dt){
+  const p = CINE.pasos[CINE.i];
+  if (!p){ terminaCine(); return; }
+  CINE.t = Math.min(1, CINE.t + dt / (p.dur || 3));
+  const k = CINE.t * CINE.t * (3 - 2 * CINE.t);
+  _cv1.set(p.de[0], p.de[1], p.de[2]);
+  _cv2.set(p.a[0], p.a[1], p.a[2]);
+  cam.position.lerpVectors(_cv1, _cv2, k);
+  _cv3.set(p.mira[0], p.mira[1], p.mira[2]);
+  cam.lookAt(_cv3);
+  cam.fov = p.fov || 58; cam.updateProjectionMatrix();
+  $('cineTxt').textContent = p.txt || '';
+  if (CINE.t >= 1){ CINE.i++; CINE.t = 0;
+    if (CINE.i >= CINE.pasos.length) terminaCine(); }
+}
+$('cineSkip').addEventListener('pointerdown', e => { e.preventDefault(); terminaCine(); });
+/* la cine de CAPÍTULO: dos tomas que muestran adónde hay que ir */
+function cineObjetivo(C){
+  const o = POI[C.obj], oy = H(o.x, o.z), py = H(px, pz);
+  const dx2 = o.x - px, dz2 = o.z - pz, dd = Math.hypot(dx2, dz2) || 1;
+  const ux = dx2 / dd, uz = dz2 / dd;
+  cinematica([
+    { de: [px - ux * 7, py + 3.5, pz - uz * 7], a: [px + ux * 8, py + 15, pz + uz * 8],
+      mira: [o.x, oy + 6, o.z], dur: 2.7, txt: C.n + ' · ' + C.t },
+    { de: [o.x - ux * 44 + uz * 12, oy + 19, o.z - uz * 44 - ux * 12],
+      a: [o.x - ux * 15, oy + 6, o.z - uz * 15],
+      mira: [o.x, oy + 3.5, o.z], dur: 2.7, txt: C.objT }
+  ]);
+}
+
+/* ========================= PERSONAJES Y CRIATURAS ==========================
+   Figuras 100% procedurales con partes animables (userData.lim): humanos con
+   brazos y piernas en péndulo, perro con cola, dron con rotores, criatura
+   que late. npcTick las hace CAMINAR detrás del jugador si `sigue`. */
+const NPCS = [];
+function figHumano(colTraje, colCasco){
+  const g = new T.Group();
+  const mT = new T.MeshLambertMaterial({ color: colTraje });
+  const mC = new T.MeshLambertMaterial({ color: colCasco || 0xd8dde2 });
+  const torso = new T.Mesh(new T.CapsuleGeometry(.32, .55, 4, 8), mT);
+  torso.position.y = 1.08; g.add(torso);
+  const cabeza = new T.Mesh(new T.SphereGeometry(.25, 10, 8), mC);
+  cabeza.position.y = 1.78; g.add(cabeza);
+  const visor = new T.Mesh(new T.SphereGeometry(.19, 8, 6),
+    new T.MeshLambertMaterial({ color: 0x18242f }));
+  visor.position.set(0, 1.79, .13); visor.scale.set(.92, .68, .6); g.add(visor);
+  const lim = {};
+  for (const [k, sx] of [['bI', -.44], ['bD', .44]]){
+    const b = new T.Mesh(new T.CapsuleGeometry(.085, .5, 3, 6), mT);
+    b.geometry.translate(0, -.3, 0);
+    b.position.set(sx, 1.46, 0); g.add(b); lim[k] = b;
+  }
+  for (const [k, sx] of [['pI', -.16], ['pD', .16]]){
+    const p2 = new T.Mesh(new T.CapsuleGeometry(.105, .5, 3, 6), mT);
+    p2.geometry.translate(0, -.32, 0);
+    p2.position.set(sx, .74, 0); g.add(p2); lim[k] = p2;
+  }
+  const mochi = new T.Mesh(new T.BoxGeometry(.4, .5, .2), mC);
+  mochi.position.set(0, 1.22, -.3); g.add(mochi);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.lim = lim;
+  return g;
+}
+function figPerro(col){
+  const g = new T.Group();
+  const m = new T.MeshLambertMaterial({ color: col });
+  const mOsc = new T.MeshLambertMaterial({ color: 0x2a1e14 });
+  const cuerpo = new T.Mesh(new T.BoxGeometry(.62, .3, .27), m);
+  cuerpo.position.y = .46; g.add(cuerpo);
+  const cabeza = new T.Mesh(new T.BoxGeometry(.24, .22, .2), m);
+  cabeza.position.set(.4, .6, 0); g.add(cabeza);
+  const hocico = new T.Mesh(new T.BoxGeometry(.12, .1, .12), mOsc);
+  hocico.position.set(.54, .55, 0); g.add(hocico);
+  for (const sz of [-1, 1]){
+    const oreja = new T.Mesh(new T.BoxGeometry(.05, .12, .06), mOsc);
+    oreja.position.set(.36, .76, sz * .07); g.add(oreja);
+  }
+  const lim = {};
+  let pi = 0;
+  for (const sx of [-.22, .22]) for (const sz of [-.09, .09]){
+    const pata = new T.Mesh(new T.CylinderGeometry(.045, .04, .34, 5), m);
+    pata.geometry.translate(0, -.17, 0);
+    pata.position.set(sx, .34, sz); g.add(pata);
+    lim['p' + (++pi)] = pata;
+  }
+  const cola = new T.Mesh(new T.CylinderGeometry(.03, .015, .3, 5), m);
+  cola.geometry.translate(0, .15, 0);
+  cola.position.set(-.32, .52, 0);
+  cola.rotation.x = .0; cola.rotation.z = .8;
+  g.add(cola); lim.cola = cola;
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.lim = lim;
+  return g;
+}
+function figDron(col){
+  const g = new T.Group();
+  const m = new T.MeshLambertMaterial({ color: col });
+  const cuerpo = new T.Mesh(new T.SphereGeometry(.3, 10, 8), m);
+  cuerpo.scale.y = .6; g.add(cuerpo);
+  const ojo = new T.Mesh(new T.SphereGeometry(.08, 8, 6),
+    new T.MeshBasicMaterial({ color: 0x7fe8ff }));
+  ojo.position.set(0, 0, .27); g.add(ojo);
+  const lim = { rot: [] };
+  for (const [sx, sz] of [[-.34, -.34], [.34, -.34], [-.34, .34], [.34, .34]]){
+    const brazo = new T.Mesh(new T.BoxGeometry(.2, .03, .05), m);
+    brazo.position.set(sx * .7, .12, sz * .7);
+    brazo.rotation.y = Math.atan2(sz, sx);
+    g.add(brazo);
+    const rotor = new T.Mesh(new T.CylinderGeometry(.16, .16, .02, 8),
+      new T.MeshLambertMaterial({ color: 0x333a40, transparent: true, opacity: .6 }));
+    rotor.position.set(sx, .18, sz);
+    g.add(rotor); lim.rot.push(rotor);
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.lim = lim;
+  return g;
+}
+function figCriatura(col){
+  const g = new T.Group();
+  const domo = new T.Mesh(new T.SphereGeometry(.3, 10, 8),
+    new T.MeshLambertMaterial({ color: 0x10201c, emissive: col,
+      emissiveIntensity: .8, transparent: true, opacity: .92 }));
+  domo.position.y = .42; domo.scale.y = 1.15; g.add(domo);
+  const lim = {};
+  let pi = 0;
+  for (const a of [.6, 2.2, 4.0, 5.6]){
+    const pata = new T.Mesh(new T.CylinderGeometry(.02, .015, .3, 4),
+      new T.MeshLambertMaterial({ color: 0x1a2a26 }));
+    pata.geometry.translate(0, -.15, 0);
+    pata.position.set(Math.cos(a) * .18, .3, Math.sin(a) * .18);
+    pata.rotation.z = Math.cos(a) * .4; pata.rotation.x = -Math.sin(a) * .4;
+    g.add(pata); lim['p' + (++pi)] = pata;
+  }
+  for (const sz of [-1, 1]){
+    const ojo = new T.Mesh(new T.SphereGeometry(.045, 6, 5),
+      new T.MeshBasicMaterial({ color: 0xffffff }));
+    ojo.position.set(sz * .1, .48, .26); g.add(ojo);
+  }
+  g.userData.lim = lim;
+  g.userData.late = domo.material;
+  return g;
+}
+const MIXERS = [];
+/* carga un personaje 3D generado y lo cuelga del Group del NPC, apagando la
+   figura procedural; si falla, la procedural se queda. Reproduce su clip. */
+function ponerModelo(npc){
+  if (!GLTF || !npc.glb) return;
+  new GLTF().load(AX(npc.glb), g => {
+    const m = g.scene;
+    m.scale.setScalar(npc.glbEsc || 1);
+    m.position.y = npc.glbY || 0;
+    m.rotation.y = npc.glbGiro || 0;
+    m.traverse(o => { if (o.isMesh){ o.castShadow = true; o.frustumCulled = false;
+      if (o.material){ o.material.metalness = 0; } } });
+    /* apagar la figura procedural (queda de respaldo si el modelo no llegó) */
+    npc.fig.traverse(o => { if (o.isMesh) o.visible = false; });
+    npc.fig.add(m);
+    npc.modelo = m;
+    if (g.animations && g.animations.length){
+      const mix = new T.AnimationMixer(m);
+      mix.clipAction(g.animations[0]).play();
+      npc.mixer = mix; MIXERS.push(mix);
+      /* si el clip es de CAMINAR (Meshy sube las dos manos a la vez), le
+         manejamos los brazos a mano igual que al cuerpo en 1ª persona */
+      if (/walk|camin/i.test(g.animations[0].name || '')){
+        const arm = {};
+        m.traverse(o => { if (o.isBone){
+          if (o.name === 'LeftArm') arm.la = o; else if (o.name === 'RightArm') arm.ra = o;
+          else if (o.name === 'LeftForeArm') arm.lf = o;
+          else if (o.name === 'RightForeArm') arm.rf = o; } });
+        for (const k in arm) arm[k].userData.bindQ = arm[k].quaternion.clone();
+        npc.arms = arm; npc.armPh = 0;
+      }
+    }
+    npc.cargado = true;
+  }, undefined, () => {});
+}
+function nuevoNPC(o){
+  o.fig.position.set(o.x, H(o.x, o.z) + (o.vuela ? (o.alto || 2.2) : 0), o.z);
+  o.fig.rotation.y = o.giro || 0;
+  scene.add(o.fig);
+  o.fase = rr(0, 6.28); o.li = 0;
+  NPCS.push(o);
+  ponerModelo(o);
+  return o;
+}
+function npcTick(dt){
+  for (const mix of MIXERS) mix.update(dt);
+  for (const npc of NPCS){
+    /* el modelo 3D generado ya trae su propia orientación: si el clip es de
+       caminar, no le sumamos el balanceo procedural de las extremidades */
+    const f = npc.fig;
+    const d = Math.hypot(px - f.position.x, pz - f.position.z);
+    let anda = 0;
+    if (npc.sigue){
+      if (d > 40){                       /* nunca se queda atrás de verdad */
+        f.position.x = px - Math.sin(yaw) * -3 + 1.5;
+        f.position.z = pz - Math.cos(yaw) * -3 + 1.5;
+      } else if (d > 3.4){
+        const vel2 = (corre ? 10.8 : 5.8) * dt;
+        f.rotation.y = Math.atan2(px - f.position.x, pz - f.position.z);
+        f.position.x += (px - f.position.x) / d * Math.min(vel2, d - 3.2);
+        f.position.z += (pz - f.position.z) / d * Math.min(vel2, d - 3.2);
+        anda = 1;
+      }
+    } else if (d < 11){
+      const objY = Math.atan2(px - f.position.x, pz - f.position.z);
+      let dy = objY - f.rotation.y;
+      while (dy > Math.PI) dy -= 6.283;
+      while (dy < -Math.PI) dy += 6.283;
+      f.rotation.y += dy * Math.min(1, dt * 3);
+    }
+    const suelo = H(f.position.x, f.position.z);
+    f.position.y = npc.vuela
+      ? suelo + (npc.alto || 2.2) + Math.sin(t0 * 1.7 + npc.fase) * .25
+      : suelo;
+    const L2 = f.userData.lim || {};
+    const sw = anda ? Math.sin(t0 * 9) * .55 : Math.sin(t0 * 1.4 + npc.fase) * .06;
+    if (L2.bI){ L2.bI.rotation.x = sw; L2.bD.rotation.x = -sw;
+      /* hay figuras con brazos pero sin piernas (el pingüino aletea) */
+      if (L2.pI){ L2.pI.rotation.x = -sw; L2.pD.rotation.x = sw; } }
+    if (L2.p1 && !L2.bI){ const s2 = anda ? Math.sin(t0 * 11) * .6 : 0;
+      L2.p1.rotation.x = s2; L2.p4.rotation.x = s2;
+      L2.p2.rotation.x = -s2; L2.p3.rotation.x = -s2; }
+    if (L2.cola) L2.cola.rotation.x = Math.sin(t0 * (anda ? 13 : 6) + npc.fase) * .4;
+    if (L2.rot) for (const r of L2.rot) r.rotation.y += dt * 28;
+    if (f.userData.late)
+      f.userData.late.emissiveIntensity = .6 + .35 * Math.sin(t0 * 2.2 + npc.fase);
+    /* brazos del modelo 3D con clip de caminar: colgando + vaivén al andar
+       (pisa lo que dejó el mixer, que subía las dos manos a la vez) */
+    if (npc.arms){
+      npc.armPh += dt * (anda ? (corre ? 9 : 6.2) : 0);
+      const swA = Math.sin(npc.armPh) * (anda ? 0.42 : 0)
+        + Math.sin(t0 * 1.3 + npc.fase) * 0.03 * (anda ? 0 : 1);
+      apuntarBrazos(npc.arms, swA);
+    }
+  }
+}
+function npcCerca(){
+  let mejor = null, md = 4.4;
+  for (const npc of NPCS){
+    if (!npc.clave) continue;
+    const d = Math.hypot(px - npc.fig.position.x, pz - npc.fig.position.z);
+    if (d < md){ md = d; mejor = npc; }
+  }
+  return mejor;
+}
+function hablaNPC(npc){
+  const lineas = (L[LANG].npc && L[LANG].npc[npc.clave]) || [];
+  if (!lineas.length) return;
+  const txt = lineas[npc.li % lineas.length];
+  npc.li++;
+  dialogo(npc.nombre, txt, npc.alHablar || null, npc.cara);
+}
+
+/* ========================= ITEMS USABLES ================================== */
+const ITEMS = [];
+function nuevoItem(o){ o.activo = true; ITEMS.push(o); return o; }
+function itemCerca(){
+  for (const it of ITEMS){
+    if (!it.activo) continue;
+    if (Math.hypot(px - it.x, pz - it.z) < (it.r || 3.5)) return it;
+  }
+  return null;
+}
+/* ¿qué haría el botón USAR ahora mismo? El capítulo manda, después los
+   items, después charlar con quien esté cerca. */
+function accionUsable(){
+  const C = CAPS[cap];
+  const p = POI[C.obj];
+  if (C.usar && Math.hypot(px - p.x, pz - p.z) < 7 && MISION.lista(cap))
+    return { tipo: 'cap' };
+  const it = itemCerca();
+  if (it) return { tipo: 'item', it };
+  const npc = npcCerca();
+  if (npc) return { tipo: 'npc', npc };
+  return null;
+}
+function usarAccion(){
+  if (enDlg) return;
+  const acc = accionUsable();
+  if (!acc) return;
+  if (acc.tipo === 'cap') llegaObjetivo();
+  else if (acc.tipo === 'item'){ acc.it.activo = false; acc.it.fn(acc.it); }
+  else hablaNPC(acc.npc);
+}
+
+/* ================== MEDIDOR DE SUPERVIVENCIA + FUNDIDO ===================== */
+const MED = { on: false, v: 1 };
+function medidor(on, icono){
+  MED.on = on;
+  $('medIco').textContent = icono || '';
+  $('medidor').classList.toggle('on', on);
+}
+function medPon(v){
+  MED.v = cl(v, 0, 1);
+  $('medFill').style.width = (MED.v * 100).toFixed(1) + '%';
+  $('medFill').classList.toggle('rojo', MED.v < .28);
+}
+function fundido(fn){
+  $('fundido').style.opacity = 1;
+  setTimeout(() => { fn(); $('fundido').style.opacity = 0; }, 800);
+}
+
+/* ===================== EL CUERPO EN PRIMERA PERSONA ========================
+   Como en los juegos de parkour: MANOS y antebrazos siempre a la vista
+   (viewmodel colgado de la cámara) que bombean al caminar y se aprietan al
+   correr; PIERNAS de verdad con rodilla al mirar hacia abajo; y un torso y
+   cabeza que NO se dibujan (colorWrite=false) pero SÍ proyectan: tu propia
+   sombra camina entera por el suelo. Colores por mundo en MUNDO_CUERPO. */
+const MUNDO_CUERPO = { mangas: 0x8a7a4a, guantes: 0xc9976b, pantalon: 0x4a5230,
+  botas: 0x2a1e12, glb: 'npc/cuerpo-senda.glb' };  /* MIRA: caqui de expedición */
+const CUERPO = {};
+{
+  const mM = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.mangas });
+  const mG = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.guantes });
+  const mPa = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.pantalon });
+  const mB = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.botas });
+  /* material FANTASMA: invisible a la cámara, visible para el sol */
+  const mF = new T.MeshLambertMaterial({ color: 0x000000 });
+  mF.colorWrite = false; mF.depthWrite = false;
+
+  /* --- viewmodel: dos antebrazos con puño, hijos de la CÁMARA --- */
+  scene.add(cam);                 /* la cámara entra a la escena para tener hijos */
+  const vm = new T.Group();
+  const brazoVM = s2 => {
+    const g = new T.Group();
+    const puno = new T.Mesh(new T.BoxGeometry(.09, .08, .11), mG);
+    puno.rotation.z = s2 * .18;
+    g.add(puno);
+    const pulgar = new T.Mesh(new T.BoxGeometry(.028, .03, .05), mG);
+    pulgar.position.set(-s2 * .052, .012, .012);
+    g.add(pulgar);
+    const ante = new T.Mesh(new T.CapsuleGeometry(.05, .3, 3, 8), mM);
+    ante.position.set(s2 * .07, -.16, .15);
+    ante.rotation.x = .95;
+    ante.rotation.z = -s2 * .3;
+    g.add(ante);
+    g.position.set(s2 * .23, -.26, -.46);
+    vm.add(g);
+    return g;
+  };
+  CUERPO.bI = brazoVM(-1);
+  CUERPO.bD = brazoVM(1);
+  cam.add(vm);
+  CUERPO.vm = vm;
+
+  /* --- el cuerpo en el mundo: piernas visibles + resto sólo-sombra --- */
+  const root = new T.Group();
+  const pierna = s2 => {
+    const cad = new T.Group();
+    cad.position.set(s2 * .115, .98, .03);
+    const muslo = new T.Mesh(new T.CapsuleGeometry(.075, .3, 3, 8), mPa);
+    muslo.geometry.translate(0, -.21, 0);
+    muslo.castShadow = true;
+    cad.add(muslo);
+    const rodilla = new T.Group();
+    rodilla.position.set(0, -.46, 0);
+    const canilla = new T.Mesh(new T.CapsuleGeometry(.06, .28, 3, 8), mPa);
+    canilla.geometry.translate(0, -.19, 0);
+    canilla.castShadow = true;
+    rodilla.add(canilla);
+    const bota = new T.Mesh(new T.BoxGeometry(.11, .09, .24), mB);
+    bota.position.set(0, -.42, .05);
+    bota.castShadow = true;
+    rodilla.add(bota);
+    cad.add(rodilla);
+    root.add(cad);
+    return { cad, rodilla };
+  };
+  const pI = pierna(-1), pD = pierna(1);
+  CUERPO.pI = pI.cad; CUERPO.rI = pI.rodilla;
+  CUERPO.pD = pD.cad; CUERPO.rD = pD.rodilla;
+  /* torso, cabeza y brazos FANTASMA: sólo existen en la sombra */
+  const torso = new T.Mesh(new T.CapsuleGeometry(.17, .5, 4, 8), mF);
+  torso.position.y = 1.28; torso.castShadow = true; root.add(torso);
+  const cabeza = new T.Mesh(new T.SphereGeometry(.12, 8, 6), mF);
+  cabeza.position.y = 1.72; cabeza.castShadow = true; root.add(cabeza);
+  CUERPO.bsI = new T.Mesh(new T.CapsuleGeometry(.05, .55, 3, 6), mF);
+  CUERPO.bsI.geometry.translate(0, -.3, 0);
+  CUERPO.bsI.position.set(-.28, 1.5, 0); CUERPO.bsI.castShadow = true;
+  root.add(CUERPO.bsI);
+  CUERPO.bsD = CUERPO.bsI.clone();
+  CUERPO.bsD.position.x = .28;
+  root.add(CUERPO.bsD);
+  root.visible = false;
+  vm.visible = false;
+  scene.add(root);
+  CUERPO.root = root;
+}
+/* CUERPO 3D generado (riggeado + caminar) en PRIMERA PERSONA: se cuelga del
+   mismo Group que sigue al jugador; se apaga el cuerpo procedural; se ENCOGE
+   el hueso de la cabeza para no tapar la cámara; el clip de caminar avanza a
+   la velocidad del paso. Si el GLB no llega, queda el procedural. */
+function cargarCuerpoGLB(){
+  if (!GLTF || !MUNDO_CUERPO.glb) return;
+  new GLTF().load(AX(MUNDO_CUERPO.glb), g => {
+    const m = g.scene;
+    m.rotation.y = Math.PI;                 /* de frente a la marcha */
+    const arm = {};
+    m.traverse(o => { if (o.isMesh){ o.castShadow = true; o.frustumCulled = false;
+      if (o.material) o.material.metalness = 0; }
+      if (o.isBone && /head|cabeza|neck/i.test(o.name) && !CUERPO.headBone)
+        CUERPO.headBone = o;
+      /* brazos: los manejamos a mano porque el clip de Meshy sube las dos manos
+         a la vez (quedaban "arriba" al estar quieto). Los dejamos colgando. */
+      if (o.isBone){
+        if (o.name === 'LeftArm') arm.la = o;
+        else if (o.name === 'RightArm') arm.ra = o;
+        else if (o.name === 'LeftForeArm') arm.lf = o;
+        else if (o.name === 'RightForeArm') arm.rf = o;
+      } });
+    for (const k in arm) arm[k].userData.bindQ = arm[k].quaternion.clone();
+    CUERPO.arms = arm;
+    CUERPO.root.add(m);
+    CUERPO.glb = m;
+    /* apagar el cuerpo procedural (piernas + fantasma + viewmodel) */
+    CUERPO.root.traverse(o => { if (o.isMesh && o !== m && !m.getObjectById(o.id)) o.visible = false; });
+    CUERPO.pI.visible = CUERPO.pD.visible = false;
+    CUERPO.bsI.visible = CUERPO.bsD.visible = false;
+    if (g.animations && g.animations.length){
+      CUERPO.mixer = new T.AnimationMixer(m);
+      CUERPO.accion = CUERPO.mixer.clipAction(g.animations[0]);
+      CUERPO.accion.play();
+    }
+  }, undefined, () => {});
+}
+cargarCuerpoGLB();
+cargarCieloFoto();
+/* apunta los brazos de un modelo Meshy SIN depender de su pose de bind (que
+   varía por modelo): orienta cada hombro para que el brazo señale HACIA ABAJO
+   en el mundo (algo adelante y afuera), con `sw` de vaivén. Así quedan colgando
+   normales en los 5 cuerpos y en los NPC, sin importar cómo vino riggeado. */
+const _brAim = new T.Vector3(), _brTgt = new T.Vector3(), _brPw = new T.Quaternion();
+function apuntarBrazos(A, sw, outX, fwdZ, forebend){
+  outX = outX == null ? 0.17 : outX;
+  fwdZ = fwdZ == null ? 0.12 : fwdZ;
+  forebend = forebend == null ? 0.28 : forebend;
+  const aim = (up, fore, side, s) => {
+    if (!up || !fore) return;
+    _brAim.copy(fore.position).normalize();
+    _brTgt.set(side * outX, -1, fwdZ + s).normalize();
+    up.parent.getWorldQuaternion(_brPw);
+    _brTgt.applyQuaternion(_brPw.invert());
+    up.quaternion.setFromUnitVectors(_brAim, _brTgt);
+  };
+  aim(A.la, A.lf, 1, sw);
+  aim(A.ra, A.rf, -1, -sw);
+  if (A.lf && A.lf.userData.bindQ){ A.lf.quaternion.copy(A.lf.userData.bindQ); A.lf.rotateX(forebend); }
+  if (A.rf && A.rf.userData.bindQ){ A.rf.quaternion.copy(A.rf.userData.bindQ); A.rf.rotateX(forebend); }
+}
+function cuerpoTick(dt){
+  const enJuego = fase === 'juego';
+  CUERPO.root.visible = enJuego;
+  CUERPO.vm.visible = enJuego && !enDlg && !CUERPO.glb;   /* con GLB no hay viewmodel */
+  if (!enJuego) return;
+  CUERPO.root.position.set(px, H(px, pz), pz);
+  CUERPO.root.rotation.y = yaw;
+  const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
+  /* --- rama del CUERPO 3D generado --- */
+  if (CUERPO.glb){
+    if (CUERPO.mixer){
+      /* el clip avanza con la velocidad: parado se congela, corriendo vuela.
+         Las PIERNAS y el torso los mueve el clip; los brazos los pisamos abajo. */
+      CUERPO.mixer.timeScale = v * (corre ? 2.4 : 1.4);
+      CUERPO.mixer.update(dt);
+    }
+    /* brazos apuntados HACIA ABAJO (independiente del bind de cada modelo),
+       con vaivén al caminar y respiración mínima al estar quieto */
+    if (CUERPO.arms){
+      const sw = Math.sin(bobF) * v * (corre ? 0.5 : 0.34) + Math.sin(t0 * 1.4) * 0.03 * (1 - v);
+      apuntarBrazos(CUERPO.arms, sw);
+    }
+    /* achicar la cabeza CADA cuadro (el mixer la reescribe) para no taparte */
+    if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02);
+    return;
+  }
+  const sw = Math.sin(bobF) * (corre ? .95 : .62) * v;
+  /* piernas: péndulo desde la cadera, rodilla que se dobla al recoger */
+  CUERPO.pI.rotation.x = sw;
+  CUERPO.pD.rotation.x = -sw;
+  CUERPO.rI.rotation.x = Math.max(0, -sw) * 1.25;
+  CUERPO.rD.rotation.x = Math.max(0, sw) * 1.25;
+  /* brazos de la sombra, en contrafase con las piernas */
+  CUERPO.bsI.rotation.x = -sw * .8;
+  CUERPO.bsD.rotation.x = sw * .8;
+  /* el viewmodel BOMBEA: quieto respira, caminando alterna, corriendo los
+     puños se juntan y suben (parkour) */
+  const pump = Math.sin(bobF) * v;
+  const amp = corre ? .10 : .06;
+  const baseX = corre ? .17 : .23;
+  const baseY = -.26 + (corre ? .035 : 0);   /* corriendo los puños SUBEN */
+  const resp = Math.sin(t0 * 1.3) * .006;
+  CUERPO.bD.position.set(baseX, baseY + pump * amp + resp, -.46 + Math.cos(bobF) * .05 * v);
+  CUERPO.bI.position.set(-baseX, baseY - pump * amp + resp, -.46 - Math.cos(bobF) * .05 * v);
+  CUERPO.bD.rotation.z = -.06 + pump * .16;
+  CUERPO.bI.rotation.z = .06 + pump * .16;
+  CUERPO.bD.rotation.x = -.12 + pump * .14;
+  CUERPO.bI.rotation.x = -.12 - pump * .14;
+}
+
+/* ========================= AMBIENTE SONORO ================================
+   SINTETIZADO con WebAudio. Cuatro voces de Umbra:
+     · VIENTO bajo entre la flora (ruido rosa, pasabajos)
+     · el CORO del lago: dos senos desafinados batiendo — sube al acercarse
+       al agua que brilla (fuente POSICIONAL)
+     · ULULATOS: llamadas lejanas de algo que nadie vio, glissando abajo
+     · CHIRRIDO nocturno: un enjambre agudo que despierta con la oscuridad
+   ========================================================================== */
+const AMB = { ctx: null, master: null, on: true, viento: null, pos: null,
+  noche: null, tBlip: 7 };
+try { AMB.on = localStorage.getItem('jungla_son') !== '0'; } catch(e){}
+function ambienteOn(){
+  if (AMB.ctx){ if (AMB.ctx.state === 'suspended') AMB.ctx.resume(); return; }
+  try { AMB.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return; }
+  const A2 = AMB.ctx;
+  AMB.master = A2.createGain();
+  AMB.master.gain.value = AMB.on ? 1 : 0;
+  AMB.master.connect(A2.destination);
+  const buf = A2.createBuffer(1, A2.sampleRate * 3, A2.sampleRate);
+  const d = buf.getChannelData(0); let l = 0;
+  for (let i = 0; i < d.length; i++){ const w = Math.random() * 2 - 1;
+    l = l * .97 + w * .03; d[i] = l * 3.0; }
+  const nv = A2.createBufferSource(); nv.buffer = buf; nv.loop = true;
+  const fv = A2.createBiquadFilter(); fv.type = 'lowpass'; fv.frequency.value = 320;
+  AMB.viento = A2.createGain(); AMB.viento.gain.value = .06;
+  nv.connect(fv); fv.connect(AMB.viento); AMB.viento.connect(AMB.master); nv.start();
+  /* el RUGIDO de la cascada: ruido por pasabajos anchísimo, fuente POSICIONAL
+     (sube al acercarse al pie del salto). Es el sonido que define el valle. */
+  const nr2 = A2.createBufferSource(); nr2.buffer = buf; nr2.loop = true;
+  nr2.playbackRate.value = 1.35;
+  const fr2 = A2.createBiquadFilter(); fr2.type = 'lowpass';
+  fr2.frequency.value = 900; fr2.Q.value = .6;
+  const fr3 = A2.createBiquadFilter(); fr3.type = 'highpass'; fr3.frequency.value = 120;
+  AMB.pos = A2.createGain(); AMB.pos.gain.value = 0;
+  nr2.connect(fr2); fr2.connect(fr3); fr3.connect(AMB.pos);
+  AMB.pos.connect(AMB.master); nr2.start();
+  /* chirrido nocturno: enjambre por pasabanda agudo */
+  const ne = A2.createBufferSource(); ne.buffer = buf; ne.loop = true;
+  ne.playbackRate.value = 2.6;
+  const fe = A2.createBiquadFilter(); fe.type = 'bandpass';
+  fe.frequency.value = 3600; fe.Q.value = 3.5;
+  AMB.noche = A2.createGain(); AMB.noche.gain.value = 0;
+  ne.connect(fe); fe.connect(AMB.noche); AMB.noche.connect(AMB.master); ne.start();
+}
+/* el ululato: una llamada que cae en glissando, lejos */
+function ululato(){
+  const A2 = AMB.ctx; if (!A2) return;
+  const o = A2.createOscillator(), g = A2.createGain();
+  const t = A2.currentTime;
+  /* grito de pájaro: dos notas cortas que SUBEN (en la selva nada baja) */
+  const f0 = 620 + Math.random() * 520;
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(f0 * 1.5, t + .16);
+  o.frequency.setValueAtTime(f0 * 1.15, t + .26);
+  o.frequency.exponentialRampToValueAtTime(f0 * 1.9, t + .44);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(.03, t + .05);
+  g.gain.setValueAtTime(.028, t + .22);
+  g.gain.exponentialRampToValueAtTime(.0001, t + .62);
+  o.connect(g); g.connect(AMB.master); o.start(t); o.stop(t + .7);
+}
+function ambTick(dt){
+  if (!AMB.ctx || fase !== 'juego') return;
+  AMB.viento.gain.value = .045 + .045 * Math.abs(Math.sin(t0 * .07));
+  /* el rugido vive en el pie del salto y se oye a 260 m */
+  const dl = Math.hypot(px - POI.laguna.x, pz - (CASCADA.zPie || POI.laguna.z));
+  AMB.pos.gain.value = Math.pow(cl(1 - dl / 260, 0, 1), 1.6) * .5;
+  /* el enjambre de insectos NO se calla nunca en la selva: baja de día y
+     sube al anochecer, pero siempre está */
+  const osc = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+  AMB.noche.gain.value = .022 + osc * .07;
+  AMB.tBlip -= dt;
+  if (AMB.tBlip <= 0){ AMB.tBlip = 5 + Math.random() * 9; ululato(); }
+}
+$('bSon').addEventListener('pointerdown', e => {
+  e.preventDefault();
+  AMB.on = !AMB.on;
+  try { localStorage.setItem('jungla_son', AMB.on ? '1' : '0'); } catch(e2){}
+  if (AMB.master) AMB.master.gain.value = AMB.on ? 1 : 0;
+  $('bSon').textContent = AMB.on ? '🔊' : '🔇';
+});
+$('bSon').textContent = AMB.on ? '🔊' : '🔇';
+
+/* =================== EL MUNDO PROPIO: misión, personajes ===================
+   JUNGLA es el mundo de la BÚSQUEDA: las CUATRO LLAVES DE PIEDRA están
+   repartidas por la selva (el fondo de la quebrada, la cornisa detrás del
+   salto, las ruinas de la meseta, el higuerón del este). Cada una se levanta
+   con USAR y enciende su glifo en la jamba del templo. Con las cuatro, y sólo
+   con las cuatro, la puerta se hunde. */
+const TXLL = {
+  es: { t: 'La llave', v: [
+    'La laja está tibia y pesa como un ladrillo mojado.\nEn la cara tallada hay una espiral que sigue\ngirando cuando cerrás los ojos.',
+    'Detrás de la cortina de agua el aire es puro\nrocío. La piedra estaba en un nicho seco,\ncomo si alguien la hubiera dejado a mano.',
+    'La encontrás bajo una pared partida, apoyada\ncontra un tótem. Alguien la puso ahí de pie,\nde propósito, hace mucho.',
+    'El higuerón se la había tragado: la corteza\ncreció alrededor y la sostuvo once años\ncomo una mano cerrada.'] },
+  en: { t: 'The key', v: [
+    'The slab is warm and heavy as a wet brick.\nOn the carved face there is a spiral that keeps\nturning when you close your eyes.',
+    'Behind the curtain of water the air is pure\nspray. The stone sat in a dry niche, as if\nsomeone had left it within reach.',
+    'You find it under a broken wall, leaning against\na totem. Someone stood it there on purpose,\na long time ago.',
+    'The fig tree had swallowed it: the bark grew\naround it and held it for eleven years\nlike a closed hand.'] },
+  pt: { t: 'A chave', v: [
+    'A laje está tíbia e pesa como um tijolo molhado.\nNa face entalhada há uma espiral que continua\ngirando quando você fecha os olhos.',
+    'Atrás da cortina de água o ar é puro sereno.\nA pedra estava num nicho seco, como se alguém\na tivesse deixado à mão.',
+    'Você a acha sob uma parede partida, apoiada num\ntotem. Alguém a deixou de pé ali, de propósito,\nhá muito tempo.',
+    'A figueira a havia engolido: a casca cresceu ao\nredor e a segurou onze anos como uma mão\nfechada.'] }
+};
+const MISION = (() => {
+  let llaves = 0;
+  const pinta = () => {
+    $('tarea').textContent = '🗝 ' + llaves + '/4' + (llaves >= 4 ? ' ✓' : '');
+  };
+  for (const L2 of LLAVES){
+    nuevoItem({ x: POI[L2.k].x, z: POI[L2.k].z, r: 4.8, ll: L2,
+      fn(it){
+        const L3 = it.ll;
+        L3.tomada = true;
+        L3.g.visible = false;
+        llaves++;
+        pinta();
+        if (TEMPLO.huecos[L3.i]) TEMPLO.huecos[L3.i].visible = true;
+        const tx = TXLL[LANG] || TXLL.es;
+        dialogo(tx.t + ' ' + (L3.i + 1) + '/4', tx.v[L3.i] + '\n\n🗝 ' + llaves + '/4');
+      } });
+  }
+  return {
+    /* los capítulos de las llaves NO se cierran hasta tener las cuatro */
+    lista(c){ return (c === 3 || c === 4) ? llaves >= 4 : true; },
+    alCap(c){
+      $('tarea').classList.toggle('on', c === 3 || c === 4);
+      if (c === 3 || c === 4) pinta();
+      if (c >= 1 && window.__TAINA) window.__TAINA.sigue = true;
+      if (c >= 2 && window.__CANELO) window.__CANELO.sigue = true;
+      /* al entrar al capítulo 6 la puerta ya está hundiéndose */
+      if (c >= 5 && TEMPLO.abierta === 0) TEMPLO.abierta = .001;
+    },
+    tick(dt){
+      /* el marcador del capítulo de las llaves apunta a la MÁS CERCANA que
+         falte (si no, el jugador tiene una sola flecha para cuatro piedras) */
+      if (cap === 3){
+        let mejor = null, md = 1e9;
+        for (const L2 of LLAVES){
+          if (L2.tomada) continue;
+          const d = Math.hypot(px - POI[L2.k].x, pz - POI[L2.k].z);
+          if (d < md){ md = d; mejor = L2.k; }
+        }
+        if (mejor) CAPS[3].obj = mejor;
+      }
+    },
+    estado(){ return { tipo: 'llaves', llaves, meta: 4,
+      puerta: +TEMPLO.abierta.toFixed(2) }; }
+  };
+})();
+window.__MISION = MISION;
+/* --------------------------- LAS CARITAS ----------------------------------- */
+const caraTaina = (g, n2) => {
+  g.fillStyle = '#16240f'; g.fillRect(0, 0, n2, n2);
+  g.fillStyle = '#8a5a34';
+  g.beginPath(); g.ellipse(n2*.5, n2*.56, n2*.26, n2*.31, 0, 0, 6.29); g.fill();
+  g.fillStyle = '#1a1208';                                  /* pelo atado */
+  g.beginPath(); g.ellipse(n2*.5, n2*.3, n2*.28, n2*.16, 0, 0, 6.29); g.fill();
+  g.fillStyle = '#c8a24a';                                  /* pañuelo */
+  g.fillRect(n2*.28, n2*.74, n2*.44, n2*.09);
+  g.fillStyle = '#fff';
+  g.beginPath(); g.arc(n2*.41, n2*.53, n2*.045, 0, 6.29); g.fill();
+  g.beginPath(); g.arc(n2*.59, n2*.53, n2*.045, 0, 6.29); g.fill();
+  g.fillStyle = '#20140a';
+  g.beginPath(); g.arc(n2*.41, n2*.53, n2*.02, 0, 6.29); g.fill();
+  g.beginPath(); g.arc(n2*.59, n2*.53, n2*.02, 0, 6.29); g.fill();
+};
+const caraDante = (g, n2) => {
+  g.fillStyle = '#101c14'; g.fillRect(0, 0, n2, n2);
+  g.fillStyle = '#c69a72';
+  g.beginPath(); g.ellipse(n2*.5, n2*.55, n2*.22, n2*.29, 0, 0, 6.29); g.fill();
+  g.fillStyle = '#8a8a80';                                  /* barba gris */
+  g.beginPath(); g.ellipse(n2*.5, n2*.74, n2*.17, n2*.13, 0, 0, 6.29); g.fill();
+  g.fillStyle = '#5a6a4a';                                  /* gorro raído */
+  g.fillRect(n2*.26, n2*.26, n2*.48, n2*.10);
+  g.fillStyle = '#fff';
+  g.beginPath(); g.arc(n2*.42, n2*.52, n2*.05, 0, 6.29); g.fill();
+  g.beginPath(); g.arc(n2*.58, n2*.52, n2*.05, 0, 6.29); g.fill();
+  g.fillStyle = '#12200f';
+  g.beginPath(); g.arc(n2*.42, n2*.53, n2*.022, 0, 6.29); g.fill();
+  g.beginPath(); g.arc(n2*.58, n2*.53, n2*.022, 0, 6.29); g.fill();
+};
+const caraCanelo = (g, n2) => {
+  g.fillStyle = '#1a2412'; g.fillRect(0, 0, n2, n2);
+  g.fillStyle = '#b07a3a';
+  g.beginPath(); g.ellipse(n2*.5, n2*.58, n2*.24, n2*.22, 0, 0, 6.29); g.fill();
+  g.fillStyle = '#8a5a26';
+  for (const sx of [-1, 1]){
+    g.beginPath(); g.ellipse(n2*(.5 + sx*.24), n2*.44, n2*.07, n2*.15, sx*.3, 0, 6.29); g.fill();
+  }
+  g.fillStyle = '#2a1a0e';
+  g.beginPath(); g.ellipse(n2*.5, n2*.72, n2*.08, n2*.06, 0, 0, 6.29); g.fill();
+  g.fillStyle = '#fff';
+  g.beginPath(); g.arc(n2*.41, n2*.54, n2*.04, 0, 6.29); g.fill();
+  g.beginPath(); g.arc(n2*.59, n2*.54, n2*.04, 0, 6.29); g.fill();
+  g.fillStyle = '#000';
+  g.beginPath(); g.arc(n2*.41, n2*.54, n2*.018, 0, 6.29); g.fill();
+  g.beginPath(); g.arc(n2*.59, n2*.54, n2*.018, 0, 6.29); g.fill();
+};
+const caraGuardian = (g, n2) => {
+  g.fillStyle = '#0e1610'; g.fillRect(0, 0, n2, n2);
+  g.fillStyle = '#8a9280';
+  g.fillRect(n2*.26, n2*.24, n2*.48, n2*.62);
+  g.strokeStyle = '#5a6450'; g.lineWidth = 3;
+  for (let i = 1; i < 4; i++){
+    g.beginPath(); g.moveTo(n2*.26, n2*(.24 + i*.155)); g.lineTo(n2*.74, n2*(.24 + i*.155)); g.stroke();
+  }
+  g.fillStyle = '#9cff7a';
+  g.fillRect(n2*.36, n2*.46, n2*.09, n2*.05);
+  g.fillRect(n2*.55, n2*.46, n2*.09, n2*.05);
+  g.strokeStyle = '#9cff7a'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(n2*.42, n2*.68); g.lineTo(n2*.58, n2*.68); g.stroke();
+};
+/* ------------------------- TAINA, DANTE, CANELO, EL GUARDIÁN --------------- */
+{
+  const cp = POI.campamento;
+  window.__TAINA = nuevoNPC({ fig: figHumano(0x7a6a3a, 0x2a1c10),
+    x: cp.x - 5.5, z: cp.z + 4.5, nombre: 'TAINA', clave: 'taina',
+    cara: caraTaina, giro: 2.4, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: Math.PI,
+    alHablar(){ if (cap >= 1) window.__TAINA.sigue = true; } });
+  window.__CANELO = nuevoNPC({ fig: figPerro(0xb07a3a),
+    x: cp.x + 6.5, z: cp.z - 6, nombre: 'CANELO', clave: 'canelo',
+    cara: caraCanelo, giro: 1.8, glb: 'npc/canelo.glb', glbEsc: .85,
+    glbGiro: -Math.PI / 2, glbY: .34,
+    alHablar(){ window.__CANELO.sigue = true; } });
+  const cs = POI.cascada;
+  nuevoNPC({ fig: figHumano(0x4a5a3a, 0xb8b0a0),
+    x: cs.x + 4.5, z: cs.z + 3.5, nombre: 'DANTE', clave: 'dante',
+    cara: caraDante, giro: 3.0, glb: 'npc/dante.glb', glbGiro: Math.PI });
+  const pu = POI.puerta;
+  nuevoNPC({ fig: figHumano(0x8a9280, 0x6a7466),
+    x: pu.x + 3.5, z: pu.z - 7.5, nombre: 'EL GUARDIÁN', clave: 'guardian',
+    cara: caraGuardian, giro: -1.2, glb: 'npc/muro.glb', glbGiro: Math.PI });
+}
+
+/* ================================ JUGADOR ================================== */
+const stats = { t: 0, dist: 0 };
+let px = POI.inicio.x, pz = POI.inicio.z, yaw = 0, pitch = -.03;
+let pvx = 0, pvz = 0, bobF = 0, corre = false;
+const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
+const DED = { mov: null, mira: null };
+let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
+function fisica(dt){
+  yaw -= keyL.x * 2.2 * dt;
+  pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+  let mx = movV.x + keyV.x, my = movV.y + keyV.y;
+  const m = Math.hypot(mx, my);
+  if (m > 1){ mx /= m; my /= m; }
+  const sp = corre ? VEL_CORRE : VEL;
+  const sy = Math.sin(yaw), cy = Math.cos(yaw);
+  pvx = (-sy * -my + cy * mx) * sp;
+  pvz = (-cy * -my - sy * mx) * sp;
+  let nx = cl(px + pvx * dt, -MITAD + 6, MITAD - 6);
+  let nz = cl(pz + pvz * dt, -MITAD + 6, MITAD - 6);
+  /* ni por el agua ni a través de los troncos */
+  if (enAgua(nx, nz)){ nx = px; nz = pz; }
+  for (const a of ARB){
+    const dx = nx - a[0], dz = nz - a[1], d = Math.hypot(dx, dz), rq = a[2] + .5;
+    if (d < rq && d > 1e-4){ nx = a[0] + dx / d * rq; nz = a[1] + dz / d * rq; }
+  }
+  stats.dist += Math.hypot(nx - px, nz - pz);
+  px = nx; pz = nz;
+  bobF += dt * (2 + 8 * Math.min(1, Math.hypot(pvx, pvz) / VEL));
+  stats.t += dt;
+}
+function ponCam(){
+  const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
+  let ex = px, ez = pz;
+  /* con CUERPO 3D: el ojo va a la altura de la frente y un pelo ADELANTE del
+     cuello, así al mirar abajo ves el pecho y las piernas sin el agujero del
+     cuello, y la cabeza colapsada queda detrás del lente */
+  if (CUERPO.glb){ ex = px + Math.sin(yaw) * -.16; ez = pz + Math.cos(yaw) * -.16; }
+  cam.position.set(ex, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, ez);
+  cam.rotation.y = yaw;
+  cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
+  cam.fov = 72 + (corre ? 5 : 0);
+  cam.updateProjectionMatrix();
+}
+
+/* -------- objetivo: marcador 3D + distancia + botón USAR ------------------- */
+function pasoObjetivo(){
+  const C = CAPS[cap];
+  const p = POI[C.obj];
+  const d = Math.hypot(px - p.x, pz - p.z);
+  $('objD').textContent = Math.round(d) + ' m';
+  marca3d.position.set(p.x, H(p.x, p.z) + 6.5 + Math.sin(t0 * 2) * .5, p.z);
+  marca3d.rotation.y = t0 * 1.4;
+  marca3d.visible = !enDlg;
+  const cerca = d < (C.usar ? 7 : 10);
+  /* los capítulos automáticos también esperan a que la MISIÓN esté lista */
+  if (!C.usar && cerca && !enDlg && MISION.lista(cap)){
+    llegaObjetivo();
+    return;
+  }
+  const acc = accionUsable();
+  $('bUsar').classList.toggle('on', !!acc && !enDlg);
+  if (window.__autoUsar && acc && acc.tipo === 'cap' && !enDlg) llegaObjetivo();
+}
+$('bUsar').addEventListener('pointerdown', e => { e.preventDefault(); usarAccion(); });
+$('bCorre').addEventListener('pointerdown', e => { e.preventDefault();
+  corre = !corre; $('bCorre').classList.toggle('on', corre); });
+$('bMenu').addEventListener('pointerdown', e => { e.preventDefault();
+  fase = 'menu'; $('menu').style.display = 'flex'; $('hud').classList.remove('on');
+  $('mJugar').textContent = Tx('denuevo');
+  const sv = cargar();
+  if (sv && sv.cap > 0){ $('mSeguir').style.display = 'block';
+    $('mCap').textContent = CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t; }
+});
+
+/* -------------------------- entrada táctil / teclado ----------------------- */
+const cv = $('gl');
+cv.addEventListener('pointerdown', e => {
+  if (fase !== 'juego' || enDlg) return;
+  const x = e.clientX, y = e.clientY;
+  if (x < innerWidth * .5 && !DED.mov) DED.mov = { id: e.pointerId, x0: x, y0: y };
+  else if (!DED.mira) DED.mira = { id: e.pointerId, x, y };
+});
+cv.addEventListener('pointermove', e => {
+  if (DED.mov && DED.mov.id === e.pointerId){
+    const R = Math.max(34, innerHeight * .12);
+    const dx = e.clientX - DED.mov.x0, dy = e.clientY - DED.mov.y0;
+    const d = Math.hypot(dx, dy), k = d > R ? R / d : 1;
+    movV.x = dx * k / R; movV.y = dy * k / R;
+  } else if (DED.mira && DED.mira.id === e.pointerId){
+    yaw -= (e.clientX - DED.mira.x) * .005;
+    pitch = cl(pitch - (e.clientY - DED.mira.y) * .005, -1.2, 1.2);
+    DED.mira.x = e.clientX; DED.mira.y = e.clientY;
+  }
+});
+const sueltaDedo = e => {
+  if (DED.mov && DED.mov.id === e.pointerId){ DED.mov = null; movV.x = movV.y = 0; }
+  if (DED.mira && DED.mira.id === e.pointerId) DED.mira = null;
+};
+cv.addEventListener('pointerup', sueltaDedo);
+cv.addEventListener('pointercancel', sueltaDedo);
+addEventListener('keydown', e => {
+  const c = e.code;
+  if (c === 'KeyW') keyV.y = -1; if (c === 'KeyS') keyV.y = 1;
+  if (c === 'KeyA') keyV.x = -1; if (c === 'KeyD') keyV.x = 1;
+  if (c === 'ArrowLeft') keyL.x = -1; if (c === 'ArrowRight') keyL.x = 1;
+  if (c === 'ArrowUp') keyL.y = -1; if (c === 'ArrowDown') keyL.y = 1;
+  if (c === 'ShiftLeft') { corre = true; $('bCorre').classList.add('on'); }
+  if (c === 'KeyE') usarAccion();
+  if (c === 'Enter' && enDlg) $('dlgGo').onclick();
+});
+addEventListener('keyup', e => {
+  const c = e.code;
+  if (c === 'KeyW' || c === 'KeyS') keyV.y = 0;
+  if (c === 'KeyA' || c === 'KeyD') keyV.x = 0;
+  if (c === 'ArrowLeft' || c === 'ArrowRight') keyL.x = 0;
+  if (c === 'ArrowUp' || c === 'ArrowDown') keyL.y = 0;
+  if (c === 'ShiftLeft') { corre = false; $('bCorre').classList.remove('on'); }
+});
+
+/* -------- detección PC (mouse/teclado) + ayuda de controles al costado ----- */
+const PCH = {
+  es: { t: 'CONTROLES PC', mov: 'moverse', mir: 'mirar', cor: 'correr', usa: 'usar', dlg: 'seguir' },
+  en: { t: 'PC CONTROLS', mov: 'move', mir: 'look', cor: 'run', usa: 'use', dlg: 'next' },
+  pt: { t: 'CONTROLES PC', mov: 'mover', mir: 'olhar', cor: 'correr', usa: 'usar', dlg: 'seguir' }
+};
+function pintaPCHelp(){
+  const d = PCH[LANG] || PCH.es;
+  $('pcHelp').innerHTML =
+    '<b>' + d.t + '</b>' +
+    '<div class="row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ' + d.mov + '</div>' +
+    '<div class="row"><kbd>🖱</kbd> / <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> ' + d.mir + '</div>' +
+    '<div class="row"><kbd>Shift</kbd> ' + d.cor + ' · <kbd>E</kbd> ' + d.usa + '</div>' +
+    '<div class="row"><kbd>Enter</kbd> ' + d.dlg + '</div>';
+}
+let esPC = false;
+function activaPC(){ if (esPC) return; esPC = true; document.body.classList.add('pc'); pintaPCHelp(); }
+function desactivaPC(){ if (!esPC) return; esPC = false; document.body.classList.remove('pc'); }
+addEventListener('keydown', e => {
+  if (/^(Key|Arrow|Shift|Enter|Space)/.test(e.code)) activaPC(); }, true);
+addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') activaPC(); }, true);
+addEventListener('touchstart', desactivaPC, { passive: true, capture: true });
+try {
+  if (window.matchMedia && matchMedia('(pointer:fine)').matches
+      && !matchMedia('(pointer:coarse)').matches) activaPC();
+} catch(e){}
+
+/* ------------------------ resolución adaptativa ---------------------------- */
+/* som = lado del mapa de sombra (0 = sin sombras, para la gama baja) */
+const GFXQ = { b: { dpr: .7, fogK: .78, som: 0 },
+               m: { dpr: 1.15, fogK: 1, som: 1024 },
+               a: { dpr: 2, fogK: 1.25, som: 2048 } };
+let SOMBRAS = true;
+const FOCO = { x: 0, z: 0 };
+let GFX = 'm';
+try { GFX = localStorage.getItem('jungla_gfx') || 'm'; } catch(e){}
+if (!GFXQ[GFX]) GFX = 'm';
+let rs = 1, rsVotos = 0, tRS = 0, fps = 60;
+function aplicaRS(){
+  const dpr = Math.min(window.devicePixelRatio || 1, GFXQ[GFX].dpr);
+  ren.setPixelRatio(dpr * rs);
+  ren.setSize(innerWidth, innerHeight, false);
+  cam.aspect = innerWidth / innerHeight;
+  cam.updateProjectionMatrix();
+}
+addEventListener('resize', aplicaRS);
+aplicaRS();
+function rsTick(dt){
+  tRS += dt;
+  if (tRS < .8) return;
+  tRS = 0;
+  const quiere = fps < 34 ? -1 : (fps > 55 ? 1 : 0);
+  if (quiere === 0 || (rsVotos !== 0 && Math.sign(rsVotos) !== quiere)){ rsVotos = 0; return; }
+  rsVotos += quiere;
+  if (Math.abs(rsVotos) < 2) return;
+  rsVotos = 0;
+  if (quiere < 0 && rs > .5){ rs = Math.max(.5, rs - .1); aplicaRS(); }
+  else if (quiere > 0 && rs < 1){ rs = Math.min(1, rs + .08); aplicaRS(); }
+}
+
+/* ================================ BUCLE ==================================== */
+let t0 = 0, tPrev = performance.now(), msAcum = 0, nCuadros = 0;
+function bucle(t){
+  requestAnimationFrame(bucle);
+  const dt = Math.min(.05, (t - tPrev) / 1000) || .016;
+  tPrev = t; t0 += dt;
+  msAcum += dt; nCuadros++;
+  if (msAcum > .5){ fps = fps * .3 + (nCuadros / msAcum) * .7; msAcum = 0; nCuadros = 0;
+    $('fps').textContent = fps.toFixed(0) + ' fps · ' + (rs * 100 | 0) + '% · ' +
+      ren.info.render.calls + ' dib · ' + (ren.info.render.triangles / 1000).toFixed(0) + 'k tri'; }
+  if (fase === 'cine'){
+    pasoCine(dt);
+    pasoLuz(dt);
+    npcTick(dt);
+    MISION.tick(dt);
+    FOCO.x = cam.position.x; FOCO.z = cam.position.z;
+  } else if (fase !== 'juego'){
+    /* MENÚ: el valle se ve DETRÁS, con una cámara que orbita despacio entre la
+       cabaña y el lago (el pedido: que el fondo del menú sea el mapa) */
+    const cx2 = (POI.templo.x + POI.laguna.x) / 2, cz2 = (POI.templo.z + POI.laguna.z) / 2;
+    const a = t0 * .04 + 2.2;
+    cam.position.set(cx2 + Math.cos(a) * 215, 78 + Math.sin(t0 * .1) * 9,
+                     cz2 + Math.sin(a) * 215);
+    cam.lookAt(cx2, 0, cz2);
+    cam.fov = 62; cam.updateProjectionMatrix();
+    pasoLuz(dt);
+    FOCO.x = cx2; FOCO.z = cz2;
+  } else if (fase === 'juego'){ FOCO.x = px; FOCO.z = pz; }
+  /* el sol (y su caja de sombra) viajan con el foco de la cámara; con el sol
+     casi acostado la sombra direccional se apaga (rayos horizontales barren
+     el mapa entero y el resultado es puro artefacto, no una sombra) */
+  sol.target.position.set(FOCO.x, 0, FOCO.z);
+  sol.position.set(FOCO.x + SOLD.x * 420, SOLD.y * 420, FOCO.z + SOLD.z * 420);
+  sol.castShadow = SOMBRAS && SOLD.y > .12;
+  glare.position.set(cam.position.x + SOLD.x * 950, cam.position.y + SOLD.y * 950,
+                     cam.position.z + SOLD.z * 950);
+  glare.material.opacity = cl((sol.intensity - .6) / 1.6, 0, 1);
+  if (fase === 'juego'){
+    if (!enDlg) fisica(dt);
+    pasoLuz(dt);
+    pasoObjetivo();
+    rsTick(dt);
+    ambTick(dt);
+    npcTick(dt);
+    MISION.tick(dt);
+    /* luciérnagas ondulando */
+    if (luci.visible){
+      const P = luci.geometry.attributes.position;
+      for (let i = 0; i < P.count; i++){
+        P.array[i*3+1] = luci0[i*3+1] + Math.sin(t0 * .9 + i * 1.7) * .5;
+      }
+      P.needsUpdate = true;
+    }
+  }
+  cuerpoTick(dt);
+  /* los PASOS suenan mientras caminás, más rápido al correr */
+  if (AMB.pasoGain){
+    const cam2 = fase === 'juego' ? Math.min(1, Math.hypot(pvx, pvz) / VEL) : 0;
+    AMB.pasoGain.gain.value = cam2 * (corre ? .5 : .34);
+    if (AMB.pasoSrc) AMB.pasoSrc.playbackRate.value = (MUNDO_AUDIO.pasoRate || 1.4) * (corre ? 1.5 : 1);
+  }
+  VIENTO.value = t0;
+  AGUAU.value = t0;
+  mundoTick(dt);              /* cascada, bruma, rayos, llamas, puerta, aves */
+  /* las lunas pegadas al cielo de la cámara; hongos, runas y semilla LATEN */
+  for (const lu of LUNAS){
+    lu.position.set(cam.position.x + lu.userData.dir.x * 900,
+      cam.position.y + lu.userData.dir.y * 900,
+      cam.position.z + lu.userData.dir.z * 900);
+  }
+  if (window.__HONGO_MAT)
+    window.__HONGO_MAT.emissiveIntensity = .75 + .35 * Math.sin(t0 * 1.3);
+  if (runaMat) runaMat.opacity = .55 + .45 * (.5 + .5 * Math.sin(t0 * 1.7));
+  if (semillaMat) semillaMat.emissiveIntensity = .6 + .4 * Math.sin(t0 * 2.4);
+  if (fase === 'juego') ponCam();
+  ren.render(scene, cam);
+}
+requestAnimationFrame(bucle);
+
+/* ================================ MENÚ ===================================== */
+function entrar(desde){
+  fase = 'juego';
+  ambienteOn();
+  cargarAudioReal();
+  $('menu').style.display = 'none';
+  $('hud').classList.add('on');
+  try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch (e) {}
+  try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
+  if (desde === 0){
+    px = POI.inicio.x; pz = POI.inicio.z; yaw = 0; pitch = -.03;   /* mirando al valle, no al borde */
+    stats.t = 0; stats.dist = 0;
+    ponCap(0, true);
+    /* la CINE DE APERTURA: el mundo primero, el destino después, y la cámara
+       baja hasta tus ojos. Al final, la primera página de la historia. */
+    const o = POI[CAPS[0].obj], oy = H(o.x, o.z), py = H(px, pz);
+    cinematica([
+      { de: [o.x + 70, oy + 60, o.z + 90], a: [o.x - 34, oy + 22, o.z + 38],
+        mira: [o.x, oy + 4, o.z], dur: 3.6, txt: Tx('sub') },
+      { de: [px + 34, py + 34, pz + 64], a: [px, py + 2.4, pz + 7],
+        mira: [px, py + 1.6, pz], dur: 3.4, txt: CAPS[0].objT }
+    ], () => dialogo(Tx('introT'), Tx('intro'), null));
+  } else {
+    const sv = cargar();
+    const c2 = sv ? sv.cap : 0;
+    if (sv){ stats.t = sv.t || 0; stats.dist = sv.dist || 0; }
+    const p = POI[c2 === 0 ? 'inicio' : CAPS[Math.max(0, c2 - 1)].obj];
+    px = p.x + 8; pz = p.z + 8;
+    ponCap(c2, true);
+  }
+}
+/* ---------- idioma ---------- */
+function aplicaIdioma(){
+  CAPS = L[LANG].caps;
+  document.querySelector('#menu .sub').textContent = Tx('sub');
+  if (!/OTRA|AGAIN|DE NOVO|DE NUEVO|OVER|RECOME/.test($('mJugar').textContent))
+    $('mJugar').textContent = Tx('empezar');
+  $('mSeguir').textContent = Tx('seguir');
+  $('tLang').textContent = Tx('idioma');
+  $('tGfx').textContent = Tx('graficos');
+  const g = { b: 'g_b', m: 'g_m', a: 'g_a' };
+  document.querySelectorAll('#fGfx .chip').forEach(ch => ch.textContent = Tx(g[ch.dataset.g]));
+  $('bCorre').textContent = Tx('correr');
+  $('bMenu').textContent = Tx('menu');
+  $('bUsar').textContent = Tx('usar');
+  $('dlgGo').textContent = Tx('dlgGo');
+  if (esPC) pintaPCHelp();
+  document.querySelectorAll('#fLang .chip').forEach(ch =>
+    ch.classList.toggle('on', ch.dataset.l === LANG));
+  if (fase === 'juego') ponCap(cap, true);
+  const sv = cargar();
+  if (sv && sv.cap > 0 && fase === 'menu')
+    $('mCap').textContent = CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t;
+}
+function setLang(l){
+  if (!L[l]) return;
+  LANG = l;
+  try { localStorage.setItem('jungla_lang', l); } catch(e){}
+  aplicaIdioma();
+}
+document.querySelectorAll('#fLang .chip').forEach(ch =>
+  ch.addEventListener('pointerdown', e => { e.preventDefault(); setLang(ch.dataset.l); }));
+
+/* ---------- calidad gráfica: tope de resolución y alcance de la niebla ------ */
+function setGfx(g){
+  if (!GFXQ[g]) return;
+  GFX = g;
+  try { localStorage.setItem('jungla_gfx', g); } catch(e){}
+  document.querySelectorAll('#fGfx .chip').forEach(ch =>
+    ch.classList.toggle('on', ch.dataset.g === GFX));
+  rs = 1; aplicaRS();
+  /* sombras por calidad: apagadas en BAJOS, 1k en MEDIOS, 2k en ALTOS.
+     Cambiar el tamaño exige tirar el mapa viejo para que three lo recree. */
+  const s = GFXQ[g].som;
+  SOMBRAS = s > 0;
+  if (s > 0 && sol.shadow.mapSize.x !== s){
+    sol.shadow.mapSize.set(s, s);
+    if (sol.shadow.map){ sol.shadow.map.dispose(); sol.shadow.map = null; }
+  }
+  luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;   /* re-apunta la niebla */
+}
+document.querySelectorAll('#fGfx .chip').forEach(ch =>
+  ch.addEventListener('pointerdown', e => { e.preventDefault(); setGfx(ch.dataset.g); }));
+
+{
+  const sv = cargar();
+  if (sv && sv.cap > 0){
+    $('mSeguir').style.display = 'block';
+    $('mCap').textContent = sv ? (CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t) : '';
+  }
+}
+aplicaIdioma();
+setGfx(GFX);
+if (MUNDO_MENU) MUNDO_MENU.split(/\s+/).forEach(c => c && $('menu').classList.add(c));
+$('mJugar').onclick = () => entrar(0);
+$('mSeguir').onclick = () => entrar(1);
+$('cargando').style.display = 'none';
+
+/* =========================== GANCHOS DE PRUEBA ============================= */
+window.__S = {
+  T, scene, ren, cam, POI, CAPS, H, AGUA_Y,
+  get(){ return { fase, cap, enDlg, px: +px.toFixed(1), pz: +pz.toFixed(1),
+    yaw: +yaw.toFixed(2), fps: +fps.toFixed(1), rs,
+    dib: ren.info.render.calls, tri: ren.info.render.triangles,
+    dist: Math.round(stats.dist), obj: CAPS[cap].obj,
+    dObj: Math.round(Math.hypot(px - POI[CAPS[cap].obj].x, pz - POI[CAPS[cap].obj].z)),
+    solY: +sol.position.y.toFixed(0), bg: +scene.backgroundIntensity.toFixed(2),
+    luci: luci.visible, usar: $('bUsar').classList.contains('on'),
+    save: (() => { try { return JSON.parse(localStorage.getItem('jungla1') || 'null'); } catch(e){ return null; } })() };
+  },
+  entrar, tp(x, z){ px = x; pz = z; },
+  aguaT(){ return AGUAU.value; }, vientoT(){ return VIENTO.value; },
+  lang(){ return LANG; }, setLang, gfx(){ return GFX; }, setGfx,
+  amb(){ return AMB.ctx ? { estado: AMB.ctx.state, master: AMB.master.gain.value,
+    viento: +AMB.viento.gain.value.toFixed(3), pos: +AMB.pos.gain.value.toFixed(3),
+    noche: +AMB.noche.gain.value.toFixed(3) } : null; },
+  pr(){ return ren.getPixelRatio(); },
+  sombras(){ return { on: SOMBRAS, sol: sol.castShadow, mapa: sol.shadow.mapSize.x,
+    tipo: ren.shadowMap.type, tone: ren.toneMapping, exp: +ren.toneMappingExposure.toFixed(2),
+    terr: terrChunks[0].receiveShadow, solY: +SOLD.y.toFixed(2),
+    foco: +focoCasa.intensity.toFixed(1) }; },
+  sendaPts(){ return SENDA_PTS; }, arboles(){ return ARB; },
+  llaves(){ return LLAVES.map(l => ({ k: l.k, i: l.i, tomada: !!l.tomada })); },
+  tomaLlave(i){ const it = ITEMS.find(x => x.activo && x.ll && x.ll.i === i);
+    if (it){ it.activo = false; it.fn(it); return true; } return false; },
+  templo(){ return { abierta: +TEMPLO.abierta.toFixed(2),
+    puertaY: +TEMPLO.puerta.position.y.toFixed(2),
+    huecos: TEMPLO.huecos.filter(h => h.visible).length }; },
+  cascada(){ return { y0: +CASCADA.y0.toFixed(1), zPie: +CASCADA.zPie.toFixed(1),
+    off: +CASCADA.texA.offset.y.toFixed(2) }; },
+  texgen(){ return window.__TEXGEN || 0; },
+  rayos(){ return RAYOS ? { n: RAYOS.count, op: +RAYOS.material.opacity.toFixed(2) } : null; },
+  partes(){ return window.__PARTES || 0; },
+  flora(){ return window.__FLORA || 0; },
+  props(){ return window.__PROPS || 0; },
+  bodyDur(){ return CUERPO.accion ? CUERPO.accion.getClip().duration : 0; },
+  bodyTime(t){ if (CUERPO.accion){ CUERPO.mixer.timeScale = 0; CUERPO.accion.time = t;
+    CUERPO.mixer.update(0); if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02); } },
+  armCal(outX, fwdZ, swing, forebend){ if (!CUERPO.glb || !CUERPO.arms) return;
+    CUERPO.mixer && (CUERPO.mixer.timeScale = 0); CUERPO.mixer && CUERPO.mixer.update(0);
+    apuntarBrazos(CUERPO.arms, swing || 0, outX, fwdZ, forebend);
+    if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02); },
+  mira(y, p){ yaw = y; if (p != null) pitch = p; },
+  dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
+  usar(){ usarAccion(); },
+  cap(n){ ponCap(n, true); },
+  corre(v){ corre = !!v; },
+  cine(){ return { on: CINE.on, paso: CINE.i }; },
+  cineSkip(){ terminaCine(); },
+  npcs(){ return NPCS.map(x => ({ nombre: x.nombre, clave: x.clave || null,
+    sigue: !!x.sigue, x: +x.fig.position.x.toFixed(1), z: +x.fig.position.z.toFixed(1) })); },
+  items(){ return ITEMS.filter(i => i.activo).map(i => ({ x: +i.x.toFixed(1), z: +i.z.toFixed(1) })); },
+  mision(){ return MISION.estado(); },
+  med(){ return { on: MED.on, v: +MED.v.toFixed(3) }; },
+  medSet(v){ medPon(v); },
+  accion(){ const a = accionUsable(); return a ? a.tipo : null; },
+  cuerpo(){ return { visible: CUERPO.root.visible, vm: CUERPO.vm.visible,
+    pierna: +CUERPO.pD.rotation.x.toFixed(3), brazoY: +CUERPO.bD.position.y.toFixed(3) }; },
+  audio(){ return { amb: !!AMB.ambReal, mus: !!AMB.musGain, paso: !!AMB.pasoGain,
+    pasoVol: AMB.pasoGain ? +AMB.pasoGain.gain.value.toFixed(2) : null }; },
+  modelos(){ let sk = 0, mx = MIXERS.length;
+    scene.traverse(o => { if (o.isSkinnedMesh) sk++; });
+    return { skinned: sk, mixers: mx, glb: !!GLTF,
+      cargados: NPCS.filter(n => n.cargado).map(n => n.clave || n.nombre) }; },
+  cuerpoGLB(){ return CUERPO.glb ? { cargado: true, mixer: !!CUERPO.mixer,
+    cabeza: !!CUERPO.headBone } : null; },
+  luzYa(){ luzK = .999; pasoLuz(1); },
+  pix(){
+    ren.render(scene, cam);
+    const gl = ren.getContext();
+    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    const b = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b);
+    const at = (fx, fy) => { const x = Math.floor(fx*(w-1)), y = Math.floor((1-fy)*(h-1));
+      const i = (y*w + x)*4; return [b[i], b[i+1], b[i+2]]; };
+    const set = new Set(); let neg = 0, n = 0;
+    for (let i = 0; i < b.length; i += 4*41){
+      set.add((b[i]>>4)+','+(b[i+1]>>4)+','+(b[i+2]>>4));
+      if (b[i]+b[i+1]+b[i+2] < 14) neg++;
+      n++;
+    }
+    return { w, h, colores: set.size, negro: +(neg/n).toFixed(3),
+      arriba: at(.5,.08), centro: at(.5,.5), abajo: at(.5,.92) };
+  }
+};
+})().catch(e => {
+  document.body.insertAdjacentHTML('beforeend',
+    '<pre style="position:fixed;left:8px;top:8px;z-index:99;color:#f88;background:#000c;' +
+    'padding:10px;max-width:92vw;white-space:pre-wrap">SE ROMPIÓ:\n' +
+    ((e && (e.stack || e.message)) || e) + '</pre>');
+  window.__SERR = '' + (e && (e.stack || e.message) || e);
+});
+</script>
+</body>
+</html>
