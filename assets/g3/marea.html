@@ -103,7 +103,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:no
 
   <div id="toast"></div>
 </div>
-<script>const SLUG="marea";const TRE="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js";const GLTFURL="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js";const R=p=>(location.search.indexOf('local')>=0?'/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d60b293/')+p;const _map=m=>{const o={};for(const k in m)o[k]=Array.isArray(m[k])?m[k].map(R):R(m[k]);return o};const MDL=_map({"craft":"assets/g3/mdl-marea.glb","palm":"assets/g3/mdl-palm.glb","island":"assets/g3/mdl-island.glb"});const TEX=_map({"sky":"assets/g3/sky-marea.jpg","sand":"assets/g3/tex-sand.jpg","caustics":"assets/g3/tex-caustics.jpg"});const SFX={shoot:R('assets/g3/sfx-shoot.mp3'),boom:R('assets/g3/sfx-boom.mp3'),coin:R('assets/g3/sfx-coin.mp3'),win:R('assets/g3/sfx-win.mp3'),lose:R('assets/g3/sfx-lose.mp3'),power:R('assets/g3/sfx-power.mp3'),swipe:R('assets/g3/sfx-swipe.mp3')};</script><script>/* ===== PROPS — sembrado denso de accesorios reutilizando modelos del repo ===
+<script>const SLUG="marea";const TRE="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js";const GLTFURL="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js";const R=p=>(location.search.indexOf('local')>=0?'/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@a76edb7/')+p;const _map=m=>{const o={};for(const k in m)o[k]=Array.isArray(m[k])?m[k].map(R):R(m[k]);return o};const MDL=_map({"craft":"assets/g3/mdl-marea.glb","palm":"assets/g3/mdl-palm.glb","island":"assets/g3/mdl-island.glb","rider":"assets/g3/mdl-rider.glb"});const TEX=_map({"sky":"assets/g3/sky-marea.jpg","sand":"assets/g3/tex-sand.jpg","caustics":"assets/g3/tex-caustics.jpg"});const SFX={shoot:R('assets/g3/sfx-shoot.mp3'),boom:R('assets/g3/sfx-boom.mp3'),coin:R('assets/g3/sfx-coin.mp3'),win:R('assets/g3/sfx-win.mp3'),lose:R('assets/g3/sfx-lose.mp3'),power:R('assets/g3/sfx-power.mp3'),swipe:R('assets/g3/sfx-swipe.mp3')};</script><script>/* ===== PROPS — sembrado denso de accesorios reutilizando modelos del repo ===
    Carga varios GLB una vez y los CLONA muchas veces por la escena para que los
    mundos no se vean vacíos. Cada def: {url, h(alto objetivo), weight, tag, y}. */
 window.PROPS = (function () {
@@ -296,8 +296,19 @@ function buildCircuit() { GATES = []; const p = cfg.pista;
     else r = 155 * (.82 + .26 * Math.sin(a * 3 + .6));
     GATES.push({ x: Math.cos(a) * r, z: Math.sin(a) * r }); } }
 
-/* piloto sentado con casco (skin) */
+/* piloto: modelo GLB real (generado). Cada skin le tiñe el traje. */
+let riderTpl = null;
 function makeRider(sk) {
+  if (riderTpl) {
+    const g = riderTpl.clone(true);
+    g.traverse(o => { if (o.isMesh && o.material) { o.material = o.material.clone();
+      o.material.color = new T.Color(sk.outfit).lerp(new T.Color(0xffffff), .45); o.castShadow = true; } });
+    g.position.set(0, 1.02, -.30); return g;
+  }
+  return makeRiderProc(sk);
+}
+/* respaldo procedural si el GLB no carga */
+function makeRiderProc(sk) {
   const g = new T.Group(); const M = c => new T.MeshStandardMaterial({ color: c, roughness: .62 });
   const torso = new T.Mesh(new T.CapsuleGeometry(.26, .55, 4, 8), M(sk.outfit)); torso.position.set(0, 1.0, -.05); torso.rotation.x = .5; g.add(torso);
   const head = new T.Mesh(new T.SphereGeometry(.23, 10, 10), M(sk.helmet)); head.position.set(0, 1.42, .22); g.add(head);
@@ -330,13 +341,13 @@ async function init3d(THREE) {
   { const c = sun.shadow.camera; c.left = -70; c.right = 70; c.top = 70; c.bottom = -70; c.near = 1; c.far = 200; sun.shadow.bias = -0.0009; } scene.add(sun);
   ren.toneMappingExposure = 1.16;
   const rep = (u, n) => { const t = tl.load(u); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(n, n); t.colorSpace = T.SRGBColorSpace; return t; };
-  const sand = new T.Mesh(new T.PlaneGeometry(1300, 1300), new T.MeshStandardMaterial({ map: rep(TEX.sand, 34), color: 0xcdeef2, roughness: 1 }));
-  sand.rotation.x = -Math.PI / 2; sand.position.y = -4; sand.receiveShadow = true; scene.add(sand);
+  const sand = new T.Mesh(new T.PlaneGeometry(1300, 1300), new T.MeshStandardMaterial({ map: rep(TEX.sand, 34), color: 0x9ec3b8, roughness: 1 }));
+  sand.rotation.x = -Math.PI / 2; sand.position.y = -6; sand.receiveShadow = true; scene.add(sand);
   const cauMat = (n, o) => new T.MeshBasicMaterial({ map: rep(TEX.caustics, n), transparent: true, blending: T.AdditiveBlending, depthWrite: false, opacity: o });
-  caus1 = new T.Mesh(new T.PlaneGeometry(1300, 1300), cauMat(16, .55)); caus1.rotation.x = -Math.PI / 2; caus1.position.y = -3.7; scene.add(caus1);
-  caus2 = new T.Mesh(new T.PlaneGeometry(1300, 1300), cauMat(11, .4)); caus2.rotation.x = -Math.PI / 2; caus2.position.y = -3.55; scene.add(caus2);
+  caus1 = new T.Mesh(new T.PlaneGeometry(1300, 1300), cauMat(16, .3)); caus1.rotation.x = -Math.PI / 2; caus1.position.y = -5.7; scene.add(caus1);
+  caus2 = new T.Mesh(new T.PlaneGeometry(1300, 1300), cauMat(11, .2)); caus2.rotation.x = -Math.PI / 2; caus2.position.y = -5.55; scene.add(caus2);
   const bump = rep(TEX.caustics, 60);
-  water = new T.Mesh(new T.PlaneGeometry(1300, 1300, 1, 1), new T.MeshStandardMaterial({ color: 0x37cfe6, transparent: true, opacity: .5, roughness: .12, metalness: .05, envMap: sky, envMapIntensity: .55, bumpMap: bump, bumpScale: .16, depthWrite: false }));
+  water = new T.Mesh(new T.PlaneGeometry(1300, 1300, 1, 1), new T.MeshStandardMaterial({ color: 0x0a86c4, transparent: true, opacity: .74, roughness: .1, metalness: .06, envMap: sky, envMapIntensity: .45, bumpMap: bump, bumpScale: .16, depthWrite: false }));
   water.rotation.x = -Math.PI / 2; water.receiveShadow = true; scene.add(water);
   // plantilla de moto (orientación CORREGIDA: proa adelante)
   try { const g = await ARC.loadGLB(MDL.craft); const m = g.scene;
@@ -346,6 +357,15 @@ async function init3d(THREE) {
     const ctr = new T.Box3().setFromObject(m).getCenter(new T.Vector3()); m.position.sub(ctr);
     m.rotation.y = Math.PI / 2; m.updateWorldMatrix(true, true); m.position.y -= new T.Box3().setFromObject(m).min.y; craftTpl = m;
   } catch (e) { craftTpl = null; }
+  // PILOTO GLB real (generado): escalado a ~1.5 y apoyado en el asiento
+  try { const rg = await ARC.loadGLB(MDL.rider); const r = rg.scene;
+    const rb = new T.Box3().setFromObject(r); const rs = rb.getSize(new T.Vector3());
+    r.scale.setScalar(1.75 / (rs.y || 1)); r.updateWorldMatrix(true, true);
+    const nb2 = new T.Box3().setFromObject(r); const ctr2 = nb2.getCenter(new T.Vector3());
+    r.position.x -= ctr2.x; r.position.z -= ctr2.z; r.position.y -= nb2.min.y;
+    r.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; if (o.material) o.material.envMapIntensity = .5; } });
+    riderTpl = r;
+  } catch (e) { riderTpl = null; }
   craft = buildSki(+cfg.skin || 0); scene.add(craft);
   rivals = []; for (let i = 0; i < RN; i++) { const grp = buildSki(i + 1);
     grp.traverse(o => { if (o.isMesh) o.castShadow = false; });   // rivales no castean (perf)
@@ -357,11 +377,19 @@ async function init3d(THREE) {
     const top = new T.Mesh(new T.SphereGeometry(.5, 8, 8), new T.MeshBasicMaterial({ color: col })); top.position.y = 2.3; gg.add(top); gg.position.x = dx; return gg; };
   gGroups = [];
   for (let i = 0; i < NG; i++) { const grp = new T.Group();
-    grp.add(buoy(0xff4455, -5.5)); grp.add(buoy(0x35e0c0, 5.5));
-    const arcm = new T.Mesh(new T.TorusGeometry(5.5, .28, 8, 24, Math.PI), new T.MeshBasicMaterial({ color: 0xffe6a0 })); arcm.position.y = 3.4; arcm.rotation.z = Math.PI; grp.add(arcm);
+    grp.add(buoy(0xff4455, -10.6)); grp.add(buoy(0x35e0c0, 10.6));
+    const arcm = new T.Mesh(new T.TorusGeometry(10.6, .3, 8, 28, Math.PI), new T.MeshBasicMaterial({ color: 0xffe6a0 })); arcm.position.y = 3.4; arcm.rotation.z = Math.PI; grp.add(arcm);
     scene.add(grp); gGroups.push(grp); }
-  const laneMat = new T.MeshStandardMaterial({ color: 0xffffff, roughness: .5, emissive: 0x88bbcc, emissiveIntensity: .25 });
-  for (let i = 0; i < NG * 2; i++) { const bu = new T.Mesh(new T.CylinderGeometry(.42, .52, 1.5, 8), laneMat); scene.add(bu); LANE.push({ m: bu, x: 0, z: 0 }); }
+  // CINTAS AZULES: dos bordes continuos que delimitan la pista (no puntos)
+  const tapeMat = new T.MeshBasicMaterial({ color: 0x1f6fe0, transparent: true, opacity: .95, side: T.DoubleSide });
+  const tapeMat2 = new T.MeshBasicMaterial({ color: 0x0d3f96, transparent: true, opacity: .8, side: T.DoubleSide });
+  LANE = [];
+  for (let side = 0; side < 2; side++) {
+    const seg = NG * 8;                                  // subdividido: curvas suaves
+    const geo = new T.PlaneGeometry(1, 1, seg, 1);        // se deforma en layoutTrack
+    const m = new T.Mesh(geo, side ? tapeMat2 : tapeMat);
+    m.frustumCulled = false; scene.add(m); LANE.push({ m, geo, seg, side });
+  }
   mark = new T.Mesh(new T.OctahedronGeometry(1.4), new T.MeshBasicMaterial({ color: 0x2fd1e0 })); scene.add(mark);
   layoutTrack();
   // islas + gente + pájaros
@@ -383,11 +411,29 @@ async function init3d(THREE) {
   setupMenu();
 }
 
-function layoutTrack() {          // ubica boyas de puerta + canal según GATES
+/* punto de la pista interpolado suave (Catmull-Rom cerrada sobre GATES) */
+function trackPt(u) {
+  const n = NG, f = u * n, i = Math.floor(f), t = f - i;
+  const p0 = GATES[(i - 1 + n) % n], p1 = GATES[i % n], p2 = GATES[(i + 1) % n], p3 = GATES[(i + 2) % n];
+  const cr = (a, b, c, d) => .5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
+  return { x: cr(p0.x, p1.x, p2.x, p3.x), z: cr(p0.z, p1.z, p2.z, p3.z) };
+}
+const TAPE_W = 11;                 // media anchura de la pista (borde a borde = 22)
+function layoutTrack() {           // puertas + CINTAS azules continuas
   for (let i = 0; i < NG; i++) { const nx = GATES[(i + 1) % NG]; gGroups[i].position.set(GATES[i].x, 0, GATES[i].z); gGroups[i].lookAt(nx.x, 0, nx.z); gGroups[i].visible = true; }
-  for (let i = 0; i < NG; i++) { const a = GATES[i], b = GATES[(i + 1) % NG]; const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
-    const dx = b.x - a.x, dz = b.z - a.z, dl = Math.hypot(dx, dz) || 1, px = -dz / dl, pz = dx / dl;
-    [-1, 1].forEach((sgn, k) => { const L = LANE[i * 2 + k]; L.x = mx + px * sgn * 8; L.z = mz + pz * sgn * 8; L.m.position.set(L.x, .3, L.z); }); }
+  for (const L of LANE) {
+    const pos = L.geo.attributes.position, seg = L.seg, sgn = L.side ? 1 : -1;
+    for (let k = 0; k <= seg; k++) {
+      const u = k / seg, a = trackPt(u), b = trackPt((u + 1 / seg / 2) % 1);
+      const dx = b.x - a.x, dz = b.z - a.z, dl = Math.hypot(dx, dz) || 1;
+      const nx2 = -dz / dl * sgn * TAPE_W, nz2 = dx / dl * sgn * TAPE_W;
+      const cx = a.x + nx2, cz = a.z + nz2;
+      pos.setXYZ(k, cx, 1.15, cz);              // borde alto de la cinta
+      pos.setXYZ(seg + 1 + k, cx, .05, cz);     // borde bajo (al agua)
+    }
+    pos.needsUpdate = true; L.geo.computeVertexNormals();
+    L.m.position.set(0, 0, 0); L.m.rotation.set(0, 0, 0);
+  }
 }
 
 const LABELS = { modo: 'MODO', dif: 'DIFICULTAD', pista: 'CIRCUITO', skin: 'PILOTO' };
@@ -440,7 +486,6 @@ function step(dt) {
   if (cfg.modo !== 'libre') { timeLeft -= dt;
     if (timeLeft <= 0) { timeLeft = 0; dead = true; ARC.over({ win: false, score, title: 'SE ACABÓ', sub: 'P' + place + '/' + (RN + 1), coins: (score / 30 | 0) }); return; } }
   caus1.material.map.offset.set(t * .012, t * .009); caus2.material.map.offset.set(-t * .009, t * .013); water.material.bumpMap.offset.set(t * .02, t * .016);
-  for (const l of LANE) l.m.position.y = .3 + waveH(l.x, l.z, t);
   let ix = pad ? pad.steer : 0;
   if (keys.KeyA || keys.ArrowLeft) ix = -1; if (keys.KeyD || keys.ArrowRight) ix = 1;
   if (autoIx != null) ix = autoIx;
