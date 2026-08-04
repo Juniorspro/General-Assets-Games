@@ -12,23 +12,27 @@ let enemies = [], tmplEnemy = null, walls = [], torches = [];
 let keys = {}, joy = null, look = null, atkHeld = false, hurtFlash = 0;
 let dbgAuto = false;
 
-const ROOM = 26, WALLH = 7;
+const ROOM = 26, WALLH = 9;
 
 async function init3d(THREE) {
   T = THREE; scene = ARC.scene; cam = ARC.cam; ren = ARC.renderer;
-  scene.background = new T.Color(0x0a0810);
-  scene.fog = new T.Fog(0x171226, 16, 72);
-  scene.add(new T.HemisphereLight(0x9fb0d8, 0x3a2c40, 1.5));
-  scene.add(new T.AmbientLight(0xbfd0f0, .85));
-  ren.toneMappingExposure = 1.75;
+  scene.background = new T.Color(0x1d1730);
+  scene.fog = new T.Fog(0x241c3a, 24, 90);
+  scene.add(new T.HemisphereLight(0xcfd8f5, 0x4a3a52, 2.4));
+  scene.add(new T.AmbientLight(0xdce6ff, 1.35));
+  const key = new T.DirectionalLight(0xffe9c8, 1.5); key.position.set(12, 30, 8);
+  key.castShadow = true; key.shadow.mapSize.set(1024, 1024);
+  { const c = key.shadow.camera; c.left = -32; c.right = 32; c.top = 32; c.bottom = -32; c.near = 1; c.far = 70; key.shadow.bias = -0.0008; }
+  scene.add(key);
+  ren.toneMappingExposure = 1.55;
   const tl = new T.TextureLoader();
   const rep = (u, n, m) => { const t = tl.load(u); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(n, m || n); t.colorSpace = T.SRGBColorSpace; return t; };
-  const matWall = new T.MeshStandardMaterial({ map: rep(TEX.wall, 4, 2), roughness: .9, color: 0xe8e2f0 });
-  const matFloor = new T.MeshStandardMaterial({ map: rep(TEX.floor, 7), roughness: .92, color: 0xd8d2e0 });
+  const matWall = new T.MeshStandardMaterial({ map: rep(TEX.wall, 4, 2), roughness: .88, color: 0xffffff });
+  const matFloor = new T.MeshStandardMaterial({ map: rep(TEX.floor, 7), roughness: .9, color: 0xf2eef8 });
   // piso + techo
   const floor = new T.Mesh(new T.PlaneGeometry(ROOM * 2, ROOM * 2), matFloor);
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
-  const ceil = new T.Mesh(new T.PlaneGeometry(ROOM * 2, ROOM * 2), new T.MeshStandardMaterial({ map: rep(TEX.wall, 6), roughness: 1, color: 0x4a4652 }));
+  const ceil = new T.Mesh(new T.PlaneGeometry(ROOM * 2, ROOM * 2), new T.MeshStandardMaterial({ map: rep(TEX.wall, 8), roughness: 1, color: 0x6a6478, emissive: 0x14101c, emissiveIntensity: 1 }));
   ceil.rotation.x = Math.PI / 2; ceil.position.y = WALLH; scene.add(ceil);
   // 4 paredes con hueco de puerta al norte
   walls = [];
@@ -59,7 +63,7 @@ async function init3d(THREE) {
     holder.position.set(p[0], 3, p[1]); scene.add(holder);
     const fl = new T.Mesh(new T.ConeGeometry(.28, .7, 7), new T.MeshBasicMaterial({ color: 0xffa646 }));
     fl.position.set(p[0], 4.1, p[1]); scene.add(fl);
-    const li = new T.PointLight(0xffb060, 5.5, 60);
+    const li = new T.PointLight(0xffb468, 7.5, 70);
     li.position.set(p[0], 4.3, p[1]);
     if (i < 1) { li.castShadow = true; li.shadow.mapSize.set(512, 512); li.shadow.bias = -0.004; li.shadow.camera.far = 40; }
     scene.add(li); torches.push({ li, fl, ph: Math.random() * 6.28 });
@@ -192,7 +196,7 @@ function step(dt) {
   if (atkCD > 0) atkCD -= dt; if (swingT > 0) swingT -= dt; if (hurtFlash > 0) hurtFlash -= dt;
   // antorchas titilan
   for (const t of torches) { const f = .8 + Math.sin(tPlay * 9 + t.ph) * .12 + Math.random() * .06;
-    t.li.intensity = 5.5 * f; t.fl.scale.setScalar(.9 + f * .18); }
+    t.li.intensity = 7.5 * f; t.fl.scale.setScalar(.9 + f * .18); }
   // caminar
   let mx = 0, mz = 0;
   if (keys.KeyW || keys.ArrowUp) mz += 1; if (keys.KeyS || keys.ArrowDown) mz -= 1;
@@ -271,7 +275,7 @@ let menuA = 0;
 function attract3d(dt) { menuA += dt * .35;
   if (cam) { cam.position.set(Math.cos(menuA) * 12, 3.4, Math.sin(menuA) * 12);
     cam.rotation.set(0, 0, 0); cam.rotateY(Math.atan2(-cam.position.x, -cam.position.z)); }
-  for (const t of torches) { t.li.intensity = 5.5 * (.85 + Math.sin(menuA * 8 + t.ph) * .15); }
+  for (const t of torches) { t.li.intensity = 7.5 * (.85 + Math.sin(menuA * 8 + t.ph) * .15); }
 }
 
 /* ---- entrada táctil: izq = joystick, der = mirar, botón = atacar ---- */
