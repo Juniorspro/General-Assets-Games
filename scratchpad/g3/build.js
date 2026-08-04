@@ -38,7 +38,11 @@ const META = {
   marea: { name: 'MAREA', sub: 'laguna tropical',
     art: 'assets/g3/art-marea.jpg', music: 'assets/g3/mus-marea.m4a',  sky: '#3fb9c9', acc: '#2fd1e0',
     mdl: { craft: 'assets/g3/mdl-marea.glb', palm: 'assets/g3/mdl-palm.glb', island: 'assets/g3/mdl-island.glb' },
-    tex: { sky: 'assets/g3/sky-marea.jpg', sand: 'assets/g3/tex-sand.jpg', caustics: 'assets/g3/tex-caustics.jpg' } }
+    tex: { sky: 'assets/g3/sky-marea.jpg', sand: 'assets/g3/tex-sand.jpg', caustics: 'assets/g3/tex-caustics.jpg' } },
+  cripta: { name: 'CRIPTA', sub: 'roguelike de mazmorra',
+    art: 'assets/g3/art-cripta.jpg', music: 'assets/g3/mus-cripta.m4a', sky: '#0a0810', acc: '#e0a33a',
+    mdl: { sword: 'assets/g3/mdl-sword.glb', monster: 'assets/g3/mdl-monster.glb' },
+    tex: { wall: 'assets/g3/tex-dungeon-wall.jpg', floor: 'assets/g3/tex-dungeon-floor.jpg' } }
 };
 const SFXN = ['shoot', 'boom', 'coin', 'win', 'lose', 'power', 'swipe'];
 
