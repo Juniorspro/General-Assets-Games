@@ -103,7 +103,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:no
 
   <div id="toast"></div>
 </div>
-<script>const SLUG="marea";const TRE="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js";const GLTFURL="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js";const R=p=>(location.search.indexOf('local')>=0?'/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@2f3cb28/')+p;const _map=m=>{const o={};for(const k in m)o[k]=Array.isArray(m[k])?m[k].map(R):R(m[k]);return o};const MDL=_map({"craft":"assets/g3/mdl-marea.glb","palm":"assets/g3/mdl-palm.glb","island":"assets/g3/mdl-island.glb"});const TEX=_map({"sky":"assets/g3/sky-marea.jpg","sand":"assets/g3/tex-sand.jpg","caustics":"assets/g3/tex-caustics.jpg"});const SFX={shoot:R('assets/g3/sfx-shoot.mp3'),boom:R('assets/g3/sfx-boom.mp3'),coin:R('assets/g3/sfx-coin.mp3'),win:R('assets/g3/sfx-win.mp3'),lose:R('assets/g3/sfx-lose.mp3'),power:R('assets/g3/sfx-power.mp3'),swipe:R('assets/g3/sfx-swipe.mp3')};</script><script>/* ===== PROPS — sembrado denso de accesorios reutilizando modelos del repo ===
+<script>const SLUG="marea";const TRE="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js";const GLTFURL="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js";const R=p=>(location.search.indexOf('local')>=0?'/':'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d60b293/')+p;const _map=m=>{const o={};for(const k in m)o[k]=Array.isArray(m[k])?m[k].map(R):R(m[k]);return o};const MDL=_map({"craft":"assets/g3/mdl-marea.glb","palm":"assets/g3/mdl-palm.glb","island":"assets/g3/mdl-island.glb"});const TEX=_map({"sky":"assets/g3/sky-marea.jpg","sand":"assets/g3/tex-sand.jpg","caustics":"assets/g3/tex-caustics.jpg"});const SFX={shoot:R('assets/g3/sfx-shoot.mp3'),boom:R('assets/g3/sfx-boom.mp3'),coin:R('assets/g3/sfx-coin.mp3'),win:R('assets/g3/sfx-win.mp3'),lose:R('assets/g3/sfx-lose.mp3'),power:R('assets/g3/sfx-power.mp3'),swipe:R('assets/g3/sfx-swipe.mp3')};</script><script>/* ===== PROPS — sembrado denso de accesorios reutilizando modelos del repo ===
    Carga varios GLB una vez y los CLONA muchas veces por la escena para que los
    mundos no se vean vacíos. Cada def: {url, h(alto objetivo), weight, tag, y}. */
 window.PROPS = (function () {
@@ -265,30 +265,58 @@ window.LIFE = (function () {
   return { setup, palmTemplate, npc, island, flock, update, pad };
 })();
 </script><script>/* ===== MAREA — moto de agua (laguna tropical cristalina) ===================
-   Agua tipo pileta: CRISTALINA, se ve la ARENA del fondo con CÁUSTICAS que
-   titilan, olitas chiquitas y muchas, reflejo del cielo y SOMBRAS en tiempo
-   real. La moto flota con físicas. Circuito de boyas · 3 modos. */
+   Agua de pileta (arena + cáusticas), sombras en tiempo real, PILOTO real sobre
+   la moto, SKINS de piloto, RIVALES NPC para competir (posición de carrera) y
+   3 CIRCUITOS reales con boyas de canal. Física de flotación. */
 window.GAME = (function () {
 let T, scene, cam, ren;
-let craft, sx, sz, yaw, v, bank, timeLeft, score, streak, dead, tPlay, won;
+let craft, craftTpl = null, sx, sz, yaw, v, bank, timeLeft, score, streak, dead, tPlay, won;
 let craftY, cvy, pitchP, rollP;
 let keys = {}, water = null, caus1 = null, caus2 = null, sprayT = 0;
-let GATES = [], gGroups = [], gi = 0, laps = 0, mark = null;
+let GATES = [], gGroups = [], gi = 0, laps = 0, mark = null, LANE = [];
 let pad = null, ISL = [], vCruise = 18, vMax = 34, autoIx = null, autoBoost = false;
+let rivals = [], place = 1;
 
-const cfg = { modo: 'circuito', dif: 'normal' };
-try { cfg.modo = localStorage.getItem('marea_modo') || 'circuito'; cfg.dif = localStorage.getItem('marea_dif') || 'normal'; } catch (e) {}
+const cfg = { modo: 'circuito', dif: 'normal', pista: 'laguna', skin: '0' };
+try { for (const k in cfg) cfg[k] = localStorage.getItem('marea_' + k) || cfg[k]; } catch (e) {}
 const DIF = { chill: { v: 25, t: 45, laps: 2 }, normal: { v: 31, t: 38, laps: 3 }, pro: { v: 39, t: 32, laps: 3 } };
-const NG = 12;
+const SKINS = [{ name: 'ROJO', outfit: 0xff4455, helmet: 0xffffff }, { name: 'AZUL', outfit: 0x3a7bd5, helmet: 0xffe14d },
+  { name: 'VERDE', outfit: 0x2fbf6b, helmet: 0x0a2e1b }, { name: 'FUCSIA', outfit: 0xff2f9e, helmet: 0x22113a }];
+const NG = 14, RN = 4;
 
-/* olitas: muchas y chiquitas (agua de pileta, casi plana) */
 function waveH(x, z, t) {
   return Math.sin(x * .18 + t * 1.6) * .14 + Math.sin(z * .16 - t * 1.3) * .15
        + Math.sin((x + z) * .30 + t * 2.4) * .07 + Math.sin((x * 1.1 - z * .7) * .5 + t * 3.4) * .04;
 }
 
-function buildCircuit() { GATES = [];
-  for (let i = 0; i < NG; i++) { const a = i / NG * 6.283; const r = 155 * (.82 + .26 * Math.sin(a * 3 + .6)); GATES.push({ x: Math.cos(a) * r, z: Math.sin(a) * r }); } }
+function buildCircuit() { GATES = []; const p = cfg.pista;
+  for (let i = 0; i < NG; i++) { const a = i / NG * 6.283; let r;
+    if (p === 'atolon') r = 180 * (.92 + .1 * Math.sin(a * 2));
+    else if (p === 'bahia') r = 150 * (.72 + .4 * Math.sin(a * 2 + .4)) * (1 + .16 * Math.sin(a * 5));
+    else r = 155 * (.82 + .26 * Math.sin(a * 3 + .6));
+    GATES.push({ x: Math.cos(a) * r, z: Math.sin(a) * r }); } }
+
+/* piloto sentado con casco (skin) */
+function makeRider(sk) {
+  const g = new T.Group(); const M = c => new T.MeshStandardMaterial({ color: c, roughness: .62 });
+  const torso = new T.Mesh(new T.CapsuleGeometry(.26, .55, 4, 8), M(sk.outfit)); torso.position.set(0, 1.0, -.05); torso.rotation.x = .5; g.add(torso);
+  const head = new T.Mesh(new T.SphereGeometry(.23, 10, 10), M(sk.helmet)); head.position.set(0, 1.42, .22); g.add(head);
+  const vis = new T.Mesh(new T.BoxGeometry(.34, .13, .16), M(0x0e1622)); vis.position.set(0, 1.4, .4); g.add(vis);
+  const arm = a => { const r = new T.Mesh(new T.CapsuleGeometry(.075, .5, 4, 6), M(sk.outfit)); r.position.set(a * .22, 1.08, .3); r.rotation.x = 1.15; return r; };
+  g.add(arm(1)); g.add(arm(-1));
+  const leg = a => { const r = new T.Mesh(new T.CapsuleGeometry(.1, .5, 4, 6), M(0x1c2733)); r.position.set(a * .16, .58, .08); r.rotation.x = -.35; return r; };
+  g.add(leg(1)); g.add(leg(-1));
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.position.set(0, .18, -.35); return g;   // sobre el asiento, mirando adelante (+Z local)
+}
+function buildSki(skIdx) {
+  const grp = new T.Group();
+  let m;
+  if (craftTpl) m = craftTpl.clone(true);
+  else { m = new T.Group(); const hull = new T.Mesh(new T.BoxGeometry(1.5, .7, 3.6), new T.MeshStandardMaterial({ color: 0xd83a3a, roughness: .5 })); hull.geometry.translate(0, .35, 0); hull.castShadow = true; m.add(hull);
+    const nose = new T.Mesh(new T.ConeGeometry(.7, 1.3, 4), new T.MeshStandardMaterial({ color: 0xf0f0f0 })); nose.rotation.x = Math.PI / 2; nose.position.set(0, .55, 2.1); m.add(nose); }
+  grp.add(m); grp.add(makeRider(SKINS[skIdx % SKINS.length])); return grp;
+}
 
 async function init3d(THREE) {
   T = THREE; scene = ARC.scene; cam = ARC.cam; ren = ARC.renderer;
@@ -296,56 +324,51 @@ async function init3d(THREE) {
   const sky = tl.load(TEX.sky); sky.mapping = T.EquirectangularReflectionMapping; sky.colorSpace = T.SRGBColorSpace;
   scene.background = sky; scene.environment = sky;
   scene.fog = new T.Fog(0xbfe8f0, 220, 620);
-  scene.add(new T.HemisphereLight(0xffffff, 0x3aa0c0, 1.2));
-  scene.add(new T.AmbientLight(0xffffff, .3));
+  scene.add(new T.HemisphereLight(0xffffff, 0x3aa0c0, 1.2)); scene.add(new T.AmbientLight(0xffffff, .3));
   const sun = new T.DirectionalLight(0xfff6e6, 2.6); sun.position.set(-50, 95, -35);
-  sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
-  const sc = sun.shadow.camera; sc.left = -130; sc.right = 130; sc.top = 130; sc.bottom = -130; sc.near = 1; sc.far = 220; sun.shadow.bias = -0.0006;
-  scene.add(sun);
+  sun.castShadow = true; sun.shadow.mapSize.set(512, 512); sun.shadow.autoUpdate = true;
+  { const c = sun.shadow.camera; c.left = -70; c.right = 70; c.top = 70; c.bottom = -70; c.near = 1; c.far = 200; sun.shadow.bias = -0.0009; } scene.add(sun);
   ren.toneMappingExposure = 1.16;
   const rep = (u, n) => { const t = tl.load(u); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(n, n); t.colorSpace = T.SRGBColorSpace; return t; };
-  // FONDO de arena (se ve a través del agua) — recibe sombras
   const sand = new T.Mesh(new T.PlaneGeometry(1300, 1300), new T.MeshStandardMaterial({ map: rep(TEX.sand, 34), color: 0xcdeef2, roughness: 1 }));
   sand.rotation.x = -Math.PI / 2; sand.position.y = -4; sand.receiveShadow = true; scene.add(sand);
-  // CÁUSTICAS: dos capas aditivas que se desplazan → titilan sobre la arena
   const cauMat = (n, o) => new T.MeshBasicMaterial({ map: rep(TEX.caustics, n), transparent: true, blending: T.AdditiveBlending, depthWrite: false, opacity: o });
   caus1 = new T.Mesh(new T.PlaneGeometry(1300, 1300), cauMat(16, .55)); caus1.rotation.x = -Math.PI / 2; caus1.position.y = -3.7; scene.add(caus1);
   caus2 = new T.Mesh(new T.PlaneGeometry(1300, 1300), cauMat(11, .4)); caus2.rotation.x = -Math.PI / 2; caus2.position.y = -3.55; scene.add(caus2);
-  // AGUA cristalina (transparente, refleja el cielo, ripple por bumpMap animado)
   const bump = rep(TEX.caustics, 60);
-  water = new T.Mesh(new T.PlaneGeometry(1300, 1300, 1, 1), new T.MeshStandardMaterial({
-    color: 0x37cfe6, transparent: true, opacity: .5, roughness: .12, metalness: .05,
-    envMap: sky, envMapIntensity: .55, bumpMap: bump, bumpScale: .16, depthWrite: false }));
-  water.rotation.x = -Math.PI / 2; water.position.y = 0; water.receiveShadow = true; scene.add(water);
-  // MOTO DE AGUA
-  let m = null;
-  try { const g = await ARC.loadGLB(MDL.craft); m = g.scene;
+  water = new T.Mesh(new T.PlaneGeometry(1300, 1300, 1, 1), new T.MeshStandardMaterial({ color: 0x37cfe6, transparent: true, opacity: .5, roughness: .12, metalness: .05, envMap: sky, envMapIntensity: .55, bumpMap: bump, bumpScale: .16, depthWrite: false }));
+  water.rotation.x = -Math.PI / 2; water.receiveShadow = true; scene.add(water);
+  // plantilla de moto (orientación CORREGIDA: proa adelante)
+  try { const g = await ARC.loadGLB(MDL.craft); const m = g.scene;
     const b = new T.Box3().setFromObject(m); const s = b.getSize(new T.Vector3());
     m.scale.setScalar(3.6 / (Math.max(s.x, s.z) || 1));
     m.traverse(o => { if (o.isMesh) { o.frustumCulled = false; o.castShadow = true; if (o.material) { o.material.metalness = Math.min(o.material.metalness || 0, .4); o.material.envMapIntensity = .6; } } });
     const ctr = new T.Box3().setFromObject(m).getCenter(new T.Vector3()); m.position.sub(ctr);
-    m.rotation.y = Math.PI / 2; m.updateWorldMatrix(true, true); m.position.y -= new T.Box3().setFromObject(m).min.y;
-  } catch (e) {}
-  if (!m) { m = new T.Group();
-    const hull = new T.Mesh(new T.BoxGeometry(1.5, .7, 3.6), new T.MeshStandardMaterial({ color: 0xd83a3a, roughness: .5, metalness: .2 })); hull.geometry.translate(0, .35, 0); hull.castShadow = true; m.add(hull);
-    const nose = new T.Mesh(new T.ConeGeometry(.7, 1.3, 4), new T.MeshStandardMaterial({ color: 0xf0f0f0, roughness: .4 })); nose.rotation.x = Math.PI / 2; nose.position.set(0, .55, 2.1); m.add(nose); }
-  craft = new T.Group(); craft.add(m); scene.add(craft);
-  // CIRCUITO de boyas
+    m.rotation.y = Math.PI / 2; m.updateWorldMatrix(true, true); m.position.y -= new T.Box3().setFromObject(m).min.y; craftTpl = m;
+  } catch (e) { craftTpl = null; }
+  craft = buildSki(+cfg.skin || 0); scene.add(craft);
+  rivals = []; for (let i = 0; i < RN; i++) { const grp = buildSki(i + 1);
+    grp.traverse(o => { if (o.isMesh) o.castShadow = false; });   // rivales no castean (perf)
+    scene.add(grp); rivals.push({ grp, x: 0, z: 0, yaw: 0, v: 0, gi: 1, laps: 0 }); }
+  // circuito + boyas de canal (pool reutilizable)
   buildCircuit();
   const buoy = (col, dx) => { const gg = new T.Group();
-    const body = new T.Mesh(new T.CylinderGeometry(.9, 1.1, 2.2, 10), new T.MeshStandardMaterial({ color: col, roughness: .5, emissive: col, emissiveIntensity: .4 })); body.position.y = 1; body.castShadow = true; gg.add(body);
+    const body = new T.Mesh(new T.CylinderGeometry(.9, 1.1, 2.2, 10), new T.MeshStandardMaterial({ color: col, roughness: .5, emissive: col, emissiveIntensity: .4 })); body.position.y = 1; gg.add(body);
     const top = new T.Mesh(new T.SphereGeometry(.5, 8, 8), new T.MeshBasicMaterial({ color: col })); top.position.y = 2.3; gg.add(top); gg.position.x = dx; return gg; };
   gGroups = [];
   for (let i = 0; i < NG; i++) { const grp = new T.Group();
     grp.add(buoy(0xff4455, -5.5)); grp.add(buoy(0x35e0c0, 5.5));
     const arcm = new T.Mesh(new T.TorusGeometry(5.5, .28, 8, 24, Math.PI), new T.MeshBasicMaterial({ color: 0xffe6a0 })); arcm.position.y = 3.4; arcm.rotation.z = Math.PI; grp.add(arcm);
-    const nx = GATES[(i + 1) % NG], cur = GATES[i]; grp.position.set(cur.x, 0, cur.z); grp.lookAt(nx.x, 0, nx.z); scene.add(grp); gGroups.push(grp); }
+    scene.add(grp); gGroups.push(grp); }
+  const laneMat = new T.MeshStandardMaterial({ color: 0xffffff, roughness: .5, emissive: 0x88bbcc, emissiveIntensity: .25 });
+  for (let i = 0; i < NG * 2; i++) { const bu = new T.Mesh(new T.CylinderGeometry(.42, .52, 1.5, 8), laneMat); scene.add(bu); LANE.push({ m: bu, x: 0, z: 0 }); }
   mark = new T.Mesh(new T.OctahedronGeometry(1.4), new T.MeshBasicMaterial({ color: 0x2fd1e0 })); scene.add(mark);
-  // ISLAS GRANDES (GLB) con sombras + gente + pájaros
+  layoutTrack();
+  // islas + gente + pájaros
   LIFE.setup(T);
   let palmRoot = null; try { const pg = await ARC.loadGLB(MDL.palm); palmRoot = pg.scene; } catch (e) {}
   const mkPalm = LIFE.palmTemplate(palmRoot);
-  let islTpl = null; try { const ig = await ARC.loadGLB(MDL.island); islTpl = ig.scene; islTpl.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; if (o.material) o.material.metalness = 0; } }); } catch (e) {}
+  let islTpl = null; try { const ig = await ARC.loadGLB(MDL.island); islTpl = ig.scene; islTpl.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; if (o.material) o.material.metalness = 0; } }); } catch (e) {}
   ISL = [{ x: 0, z: 0, r: 40 }, { x: -84, z: 62, r: 30 }, { x: 74, z: -64, r: 30 }, { x: 44, z: 96, r: 26 }, { x: -96, z: -84, r: 28 },
     { x: 290, z: 90, r: 78 }, { x: -310, z: -60, r: 82 }, { x: 96, z: 330, r: 76 }, { x: -160, z: -330, r: 80 }];
   for (const s of ISL) {
@@ -360,23 +383,33 @@ async function init3d(THREE) {
   setupMenu();
 }
 
+function layoutTrack() {          // ubica boyas de puerta + canal según GATES
+  for (let i = 0; i < NG; i++) { const nx = GATES[(i + 1) % NG]; gGroups[i].position.set(GATES[i].x, 0, GATES[i].z); gGroups[i].lookAt(nx.x, 0, nx.z); gGroups[i].visible = true; }
+  for (let i = 0; i < NG; i++) { const a = GATES[i], b = GATES[(i + 1) % NG]; const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+    const dx = b.x - a.x, dz = b.z - a.z, dl = Math.hypot(dx, dz) || 1, px = -dz / dl, pz = dx / dl;
+    [-1, 1].forEach((sgn, k) => { const L = LANE[i * 2 + k]; L.x = mx + px * sgn * 8; L.z = mz + pz * sgn * 8; L.m.position.set(L.x, .3, L.z); }); }
+}
+
+const LABELS = { modo: 'MODO', dif: 'DIFICULTAD', pista: 'CIRCUITO', skin: 'PILOTO' };
 function setupMenu() {
   const menu = document.getElementById('menu'); if (!menu || document.getElementById('mOpts')) return;
   const st = document.createElement('style'); st.textContent =
-    '#mOpts{position:absolute;left:0;right:0;top:46%;z-index:4;display:flex;flex-direction:column;gap:2.2vmin;align-items:center;padding:0 4%}' +
-    '#mOpts .lab{font-size:2.2vmin;font-weight:800;letter-spacing:.18em;color:#bfe9f2;opacity:.9}' +
-    '#mOpts .row{display:flex;gap:1.6vmin;flex-wrap:wrap;justify-content:center}' +
-    '#mOpts .op{padding:1.5vmin 3.2vmin;border-radius:2.4vmin;font-size:2.5vmin;font-weight:800;color:#dff6fb;background:rgba(0,0,0,.4);border:.4vmin solid rgba(255,255,255,.18);cursor:pointer;backdrop-filter:blur(3px)}' +
+    '#mOpts{position:absolute;left:0;right:0;top:30%;z-index:4;pointer-events:none;display:flex;flex-direction:column;gap:1.6vmin;align-items:center;padding:0 4%}' +
+    '#mOpts .lab{font-size:2vmin;font-weight:800;letter-spacing:.18em;color:#bfe9f2;opacity:.9}' +
+    '#mOpts .row{display:flex;gap:1.4vmin;flex-wrap:wrap;justify-content:center}' +
+    '#mOpts .op{padding:1.2vmin 2.8vmin;border-radius:2.2vmin;font-size:2.3vmin;font-weight:800;color:#dff6fb;background:rgba(0,0,0,.4);border:.4vmin solid rgba(255,255,255,.18);cursor:pointer;pointer-events:auto;backdrop-filter:blur(3px)}' +
     '#mOpts .op.on{background:#2fd1e0;color:#052027;border-color:#fff;box-shadow:0 0 22px #2fd1e0}';
   document.head.appendChild(st);
   const box = document.createElement('div'); box.id = 'mOpts';
-  const mk = (key, opts) => { const lab = document.createElement('div'); lab.className = 'lab'; lab.textContent = key === 'modo' ? 'MODO' : 'DIFICULTAD'; box.appendChild(lab);
+  const mk = (key, opts) => { const lab = document.createElement('div'); lab.className = 'lab'; lab.textContent = LABELS[key]; box.appendChild(lab);
     const row = document.createElement('div'); row.className = 'row';
     opts.forEach(([val, txt]) => { const b = document.createElement('div'); b.className = 'op' + (cfg[key] === val ? ' on' : ''); b.textContent = txt;
       b.addEventListener('click', ev => { ev.stopPropagation(); cfg[key] = val; try { localStorage.setItem('marea_' + key, val); } catch (e) {} row.querySelectorAll('.op').forEach(o => o.classList.remove('on')); b.classList.add('on'); }); row.appendChild(b); });
     box.appendChild(row); };
-  mk('modo', [['circuito', '🏁 CIRCUITO'], ['contra', '⏱️ CONTRARRELOJ'], ['libre', '🌅 LIBRE']]);
+  mk('modo', [['circuito', '🏁 CIRCUITO'], ['contra', '⏱️ CONTRA'], ['libre', '🌅 LIBRE']]);
+  mk('pista', [['laguna', '🏝️ LAGUNA'], ['atolon', '🌀 ATOLÓN'], ['bahia', '⚓ BAHÍA']]);
   mk('dif', [['chill', 'CHILL'], ['normal', 'NORMAL'], ['pro', 'PRO']]);
+  mk('skin', [['0', '🔴'], ['1', '🔵'], ['2', '🟢'], ['3', '🟣']]);
   menu.appendChild(box);
 }
 
@@ -385,27 +418,29 @@ function placeGateAhead() { const a = yaw + ARC.rnd(-.6, .6), d = ARC.rnd(58, 88
   GATES[gi] = { x: L > 300 ? x * 300 / L : x, z: L > 300 ? z * 300 / L : z }; gGroups[gi].position.set(GATES[gi].x, 0, GATES[gi].z); gGroups[gi].lookAt(sx, 0, sz); }
 
 function start() {
-  const d = DIF[cfg.dif] || DIF.normal; buildCircuit();
+  const d = DIF[cfg.dif] || DIF.normal;
+  if (craft) scene.remove(craft); craft = buildSki(+cfg.skin || 0); scene.add(craft);   // aplica skin elegido
+  buildCircuit(); layoutTrack();
   won = false; dead = false; score = 0; streak = 0; tPlay = 0; laps = 0; bank = 0;
   vCruise = d.v * .6; vMax = d.v * 1.18; v = vCruise; cvy = 0; pitchP = 0; rollP = 0;
-  gGroups.forEach((g, i) => { g.visible = true; g.position.set(GATES[i].x, 0, GATES[i].z); const nx = GATES[(i + 1) % NG]; g.lookAt(nx.x, 0, nx.z); });
+  const showRiv = cfg.modo !== 'contra';
   if (cfg.modo === 'contra') { sx = 0; sz = 0; yaw = 0; gi = 0; for (let i = 1; i < NG; i++) gGroups[i].visible = false; timeLeft = d.t; placeGateAhead(); }
   else { sx = GATES[0].x; sz = GATES[0].z; yaw = Math.atan2(GATES[1].x - GATES[0].x, GATES[1].z - GATES[0].z); gi = 1; timeLeft = cfg.modo === 'libre' ? 999 : d.t; }
-  craftY = waveH(sx, sz, 0) + .25;
+  rivals.forEach((r, i) => { r.gi = 1; r.laps = 0; r.v = vCruise * (.96 + i * .05);
+    const off = (i - (RN - 1) / 2) * 6; r.x = GATES[0].x + off; r.z = GATES[0].z; r.yaw = yaw; r.grp.visible = showRiv; });
+  place = 1; craftY = waveH(sx, sz, 0) + .25;
 }
 
 function worldToScreen(x, y, z) { const p = new T.Vector3(x, y, z).project(cam); if (p.z > 1) return null; return { x: (p.x * .5 + .5) * ARC.W, y: (-p.y * .5 + .5) * ARC.H }; }
-function endWin() { won = true; dead = true; const bonus = Math.round(timeLeft * 6); ARC.over({ win: true, score: score + bonus, title: '¡CAMPEÓN!', sub: laps + ' vueltas · +' + bonus + ' por tiempo', coins: ((score + bonus) / 30 | 0) }); }
+function endWin() { won = true; dead = true; const bonus = Math.round(timeLeft * 6) + (RN + 1 - place) * 120;
+  ARC.over({ win: place <= 1, score: score + bonus, title: place <= 1 ? '¡1º · CAMPEÓN!' : place + 'º PUESTO', sub: laps + ' vueltas · P' + place + '/' + (RN + 1), coins: ((score + bonus) / 30 | 0) }); }
 
 function step(dt) {
-  if (dead) return; tPlay += dt;
+  if (dead) return; tPlay += dt; const t = tPlay;
   if (cfg.modo !== 'libre') { timeLeft -= dt;
-    if (timeLeft <= 0) { timeLeft = 0; dead = true; ARC.over({ win: score >= 500, score, title: score >= 500 ? '¡BUENA!' : 'SE ACABÓ', coins: (score / 30 | 0) }); return; } }
-  // agua: cáusticas + ripple se desplazan (titilan) — sin tocar vértices (barato)
-  const t = tPlay;
-  caus1.material.map.offset.set(t * .012, t * .009); caus2.material.map.offset.set(-t * .009, t * .013);
-  water.material.bumpMap.offset.set(t * .02, t * .016);
-  // dirección + acelerador
+    if (timeLeft <= 0) { timeLeft = 0; dead = true; ARC.over({ win: false, score, title: 'SE ACABÓ', sub: 'P' + place + '/' + (RN + 1), coins: (score / 30 | 0) }); return; } }
+  caus1.material.map.offset.set(t * .012, t * .009); caus2.material.map.offset.set(-t * .009, t * .013); water.material.bumpMap.offset.set(t * .02, t * .016);
+  for (const l of LANE) l.m.position.y = .3 + waveH(l.x, l.z, t);
   let ix = pad ? pad.steer : 0;
   if (keys.KeyA || keys.ArrowLeft) ix = -1; if (keys.KeyD || keys.ArrowRight) ix = 1;
   if (autoIx != null) ix = autoIx;
@@ -416,17 +451,23 @@ function step(dt) {
   const L = Math.hypot(sx, sz); if (L > 300) { sx *= 300 / L; sz *= 300 / L; }
   for (const s of ISL) { const dx = sx - s.x, dz = sz - s.z, dd = Math.hypot(dx, dz), rr = s.r + 2.5;
     if (dd < rr && dd > .001) { sx = s.x + dx / dd * rr; sz = s.z + dz / dd * rr; v *= .55; ARC.shake(4); } }
-  // FÍSICA en el agua: flota (resorte), cabecea/rola con las olitas
   const wy = waveH(sx, sz, t), tgt = wy + .22, preVy = cvy;
   cvy += (tgt - craftY) * dt * 42 - cvy * dt * 6.5; craftY += cvy * dt;
   const e = 2.2, hx = waveH(sx + e, sz, t) - waveH(sx - e, sz, t), hz = waveH(sx, sz + e, t) - waveH(sx, sz - e, t);
-  const fx = Math.sin(yaw), fz = Math.cos(yaw);
-  const slopeF = (hx * fx + hz * fz) / (2 * e), slopeS = (hx * fz - hz * fx) / (2 * e);
+  const fx = Math.sin(yaw), fz = Math.cos(yaw), slopeF = (hx * fx + hz * fz) / (2 * e), slopeS = (hx * fz - hz * fx) / (2 * e);
   pitchP += (ARC.clamp(slopeF * 2.4, -.4, .4) - pitchP) * Math.min(1, dt * 5); rollP += (ARC.clamp(-slopeS * 2.4, -.4, .4) - rollP) * Math.min(1, dt * 5);
-  craft.position.set(sx, craftY, sz);
-  craft.rotation.set(0, 0, 0); craft.rotateY(yaw + Math.PI); craft.rotateZ(-bank + rollP); craft.rotateX(-pitchP - .04);
-  const cd = 10; cam.position.set(sx - Math.sin(yaw) * cd, craftY + 4.2, sz - Math.cos(yaw) * cd);
-  cam.lookAt(sx + Math.sin(yaw) * 8, craftY + 1.2, sz + Math.cos(yaw) * 8);
+  craft.position.set(sx, craftY, sz); craft.rotation.set(0, 0, 0); craft.rotateY(yaw); craft.rotateZ(-bank + rollP); craft.rotateX(-pitchP - .04);
+  const cd = 10; cam.position.set(sx - Math.sin(yaw) * cd, craftY + 4.2, sz - Math.cos(yaw) * cd); cam.lookAt(sx + Math.sin(yaw) * 8, craftY + 1.2, sz + Math.cos(yaw) * 8);
+  // rivales
+  if (cfg.modo !== 'contra') { for (const r of rivals) {
+      const g2 = GATES[r.gi]; const ty = Math.atan2(g2.x - r.x, g2.z - r.z); let dy = ty - r.yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283;
+      r.yaw += ARC.clamp(dy, -1, 1) * dt * 2; r.x += Math.sin(r.yaw) * r.v * dt; r.z += Math.cos(r.yaw) * r.v * dt;
+      const ry = waveH(r.x, r.z, t); r.grp.position.set(r.x, ry + .22, r.z); r.grp.rotation.set(0, 0, 0); r.grp.rotateY(r.yaw);
+      if ((r.x - g2.x) ** 2 + (r.z - g2.z) ** 2 < 42) { r.gi = (r.gi + 1) % NG; if (r.gi === 0) r.laps++; } }
+    const prog = e2 => e2.laps * 1000 + e2.gi * 20 - Math.hypot(GATES[e2.gi].x - e2.x, GATES[e2.gi].z - e2.z) * .01;
+    const me = laps * 1000 + gi * 20 - Math.hypot(GATES[gi].x - sx, GATES[gi].z - sz) * .01;
+    place = 1; for (const r of rivals) if (prog(r) > me) place++;
+  }
   for (let i = 0; i < NG; i++) if (gGroups[i].visible) gGroups[i].position.y = waveH(GATES[i].x, GATES[i].z, t);
   const g = GATES[gi], gy = waveH(g.x, g.z, t);
   mark.position.set(g.x, gy + 5 + Math.sin(t * 3) * .4, g.z); mark.rotation.y += dt * 2;
@@ -441,7 +482,7 @@ function step(dt) {
     if (sp) { ARC.fx.ring(sp.x, sp.y, '#ffe6a0', 16); ARC.fx.text(sp.x, sp.y - 26, cfg.modo === 'libre' ? '+' + (40 * Math.min(4, streak)) : '+' + bonus.toFixed(1) + 's', '#2fd1e0'); }
     ARC.sfx('coin', { vol: .6, rate: 1 + streak * .05 }); ARC.vib(20); ARC.shake(2);
     if (cfg.modo === 'contra') { gGroups[gi].visible = false; placeGateAhead(); gGroups[gi].visible = true; }
-    else { gi = (gi + 1) % NG; if (gi === 0) { laps++; ARC.toast('VUELTA ' + laps); const d = DIF[cfg.dif] || DIF.normal; if (cfg.modo === 'circuito' && laps >= d.laps) { endWin(); return; } } }
+    else { gi = (gi + 1) % NG; if (gi === 0) { laps++; ARC.toast('VUELTA ' + laps + ' · P' + place); const d = DIF[cfg.dif] || DIF.normal; if (cfg.modo === 'circuito' && laps >= d.laps) { endWin(); return; } } }
   }
 }
 
@@ -454,15 +495,17 @@ function draw2d(g) {
   else g.fillText('racha x' + Math.min(4, Math.max(1, streak)), W / 2, 68);
   g.textAlign = 'left'; g.font = '900 26px system-ui'; g.fillStyle = '#fff'; g.fillText(score + '', 24, 42);
   g.font = '900 13px system-ui'; g.fillStyle = 'rgba(255,255,255,.6)'; g.fillText((v * 3.6 | 0) + ' km/h', 24, 62);
+  if (cfg.modo !== 'contra') { g.font = '900 24px system-ui'; g.fillStyle = place <= 1 ? '#ffe6a0' : '#fff'; g.fillText('P' + place + '/' + (RN + 1), 24, 96); }
   const gg = GATES[gi], gy = waveH(gg.x, gg.z, tPlay) + 3, sp = worldToScreen(gg.x, gy, gg.z);
   if (sp && sp.x > 40 && sp.x < W - 40 && sp.y > 40 && sp.y < H - 40) { g.strokeStyle = '#ffe6a0'; g.lineWidth = 3; g.beginPath(); g.arc(sp.x, sp.y, 22 + Math.sin(tPlay * 5) * 4, 0, 6.28); g.stroke(); }
-  else { const ang = Math.atan2(gg.x - sx, gg.z - sz) - yaw; g.save(); g.translate(W / 2, 116); g.rotate(-ang); g.fillStyle = '#ffe6a0'; g.beginPath(); g.moveTo(0, -26); g.lineTo(14, 8); g.lineTo(-14, 8); g.closePath(); g.fill(); g.restore(); }
+  else { const ang = Math.atan2(gg.x - sx, gg.z - sz) - yaw; g.save(); g.translate(W / 2, 130); g.rotate(-ang); g.fillStyle = '#ffe6a0'; g.beginPath(); g.moveTo(0, -26); g.lineTo(14, 8); g.lineTo(-14, 8); g.closePath(); g.fill(); g.restore(); }
   if (cfg.modo !== 'contra') {
     const cxp = W - 66, cyp = 116, R = 44, k = R / 210;
     g.fillStyle = 'rgba(6,20,28,.55)'; g.beginPath(); g.arc(cxp, cyp, R + 8, 0, 6.28); g.fill();
     g.strokeStyle = 'rgba(120,220,240,.5)'; g.lineWidth = 2; g.beginPath();
     for (let i = 0; i <= NG; i++) { const q = GATES[i % NG]; const mx = cxp + q.x * k, my = cyp + q.z * k; i ? g.lineTo(mx, my) : g.moveTo(mx, my); } g.closePath(); g.stroke();
-    for (let i = 0; i < NG; i++) { const q = GATES[i]; g.fillStyle = i === gi ? '#ffe6a0' : 'rgba(180,230,245,.5)'; g.beginPath(); g.arc(cxp + q.x * k, cyp + q.z * k, i === gi ? 4 : 2.4, 0, 6.28); g.fill(); }
+    for (const r of rivals) { g.fillStyle = 'rgba(255,90,110,.9)'; g.beginPath(); g.arc(cxp + r.x * k, cyp + r.z * k, 2.4, 0, 6.28); g.fill(); }
+    g.fillStyle = '#ffe6a0'; g.beginPath(); g.arc(cxp + GATES[gi].x * k, cyp + GATES[gi].z * k, 4, 0, 6.28); g.fill();
     g.fillStyle = '#fff'; g.beginPath(); g.arc(cxp + sx * k, cyp + sz * k, 3.4, 0, 6.28); g.fill();
   }
   if (pad) pad.draw(g, '#2fd1e0');
@@ -473,7 +516,7 @@ let menuA = 0;
 function attract3d(dt) { menuA += dt * .4; tPlay = (tPlay || 0) + dt;
   if (caus1) { caus1.material.map.offset.set(tPlay * .012, tPlay * .009); caus2.material.map.offset.set(-tPlay * .009, tPlay * .013); water.material.bumpMap.offset.set(tPlay * .02, tPlay * .016); }
   if (craft) { const wy = waveH(0, 0, tPlay); craft.position.set(0, wy + .22, 0); craft.rotation.set(0, menuA, 0); }
-  if (cam) { cam.position.set(Math.cos(menuA) * 13, 4.6 + Math.sin(menuA * .7) * 1.2, Math.sin(menuA) * 13); cam.lookAt(0, 1.2, 0); }
+  if (cam) { cam.position.set(Math.cos(menuA) * 12, 4.4 + Math.sin(menuA * .7) * 1.1, Math.sin(menuA) * 12); cam.lookAt(0, 1.1, 0); }
   if (window.LIFE) LIFE.update(dt);
 }
 
@@ -484,7 +527,7 @@ return {
   slug: 'marea', name: 'MAREA', sub: 'laguna tropical', acc: '#2fd1e0', three: true, sky: '#3fb9c9', best: 'PUNTOS',
   init3d, start, step, draw2d, attract3d, resize() {}, down, move, up, look() {}, key,
   dbg: {
-    state: () => ({ score, t: timeLeft == null ? 0 : +timeLeft.toFixed(1), laps, gi, dead, won, x: sx | 0, z: sz | 0 }),
+    state: () => ({ score, t: timeLeft == null ? 0 : +timeLeft.toFixed(1), laps, gi, place, dead, won, x: sx | 0, z: sz | 0 }),
     autoPlay() { if (dead) { autoIx = 0; autoBoost = false; return; } const g = GATES[gi]; const ty = Math.atan2(g.x - sx, g.z - sz);
       let dy = ty - yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283; autoIx = ARC.clamp(-dy * 2.2, -1, 1); autoBoost = true; }
   }
