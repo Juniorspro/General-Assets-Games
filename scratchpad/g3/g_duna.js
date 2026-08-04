@@ -5,9 +5,13 @@
 window.GAME = (function () {
 let T, scene, cam, ren, sun = null;
 let car, cx, cz, cy, yaw, v, vy, air, timeLeft, score, cps, dead, won, tPlay;
-let camY = 0, camYaw = 0, shk = 0;            // cámara suavizada + sacudón propio (ARC.shake no mueve el 3D)
+let camY = 0, camYaw = 0, shk = 0, bordeT = -9;           // cámara suavizada + sacudón propio (ARC.shake no mueve el 3D)
 let keys = {}, pad = null, terr = null, CP = [], ci = 0, flags = [], autoIx = null, autoBoost = false;
 const MAPA = 260, NCP = 10, TAU = 6.2831853;
+// La malla es MUCHO más grande que el disco jugable: con la malla de 520 se veía
+// el BORDE DEL MUNDO (línea recta de horizonte, sin niebla) al llegar al tope.
+// A 1300 el borde queda a >=400 u del jugador => 100% de niebla y tapado por dunas.
+const MESH = 1300, RJUEGO = MAPA - 10;
 const BONUS = 3, CPR2 = 64;                   // +3 s por bandera, radio de captura 8 u
 let runN = 0;                                 // varía el circuito sin perder reproducibilidad
 
@@ -69,9 +73,11 @@ async function init3d(THREE) {
   scene.add(sun);
   ren.toneMappingExposure = 1.12;
   // TERRENO de dunas
-  const mapT = cvTex(512, sand); mapT.repeat.set(18, 18); mapT.colorSpace = T.SRGBColorSpace;
+  const mapT = cvTex(512, sand); mapT.repeat.set(45, 45); mapT.colorSpace = T.SRGBColorSpace;   // ~29 u por tile
   const bumpT = mapT.clone(); bumpT.colorSpace = T.NoColorSpace; bumpT.needsUpdate = true;
-  const geo = new T.PlaneGeometry(MAPA * 2, MAPA * 2, 120, 120); geo.rotateX(-Math.PI / 2);
+  // 10 u por cuadro: h() no tiene nada más corto que ~74 u de onda, así que la duna
+  // se ve igual de suave con menos triángulos que antes por unidad de superficie.
+  const geo = new T.PlaneGeometry(MESH, MESH, 130, 130); geo.rotateX(-Math.PI / 2);
   const p = geo.attributes.position;
   for (let i = 0; i < p.count; i++) p.setY(i, h(p.getX(i), p.getZ(i)));
   geo.computeVertexNormals();
@@ -140,7 +146,7 @@ function start() {
   // OTRA VEZ entra directo por begin() (sin pasar por attract3d): hay que dejar
   // el auto y la cámara en el suelo o arranca cayendo desde la altura de la muerte.
   if (car) { car.position.set(cx, cy, cz); car.rotation.set(0, 0, 0); }
-  camY = cy + 4.6; camYaw = yaw; shk = 0;
+  camY = cy + 4.6; camYaw = yaw; shk = 0; bordeT = -9;
   autoIx = null; autoBoost = false; keys = {};
   timeLeft = d.t; score = 0; cps = 0; ci = 0; dead = false; won = false; tPlay = 0;
 }
@@ -158,7 +164,11 @@ function step(dt) {
   v += ((gas ? d.v * 1.25 : d.v * .55) - v) * Math.min(1, dt * 1.8);
   yaw -= ix * dt * (air > 0 ? .5 : 2.1);
   cx += Math.sin(yaw) * v * dt; cz += Math.cos(yaw) * v * dt;
-  const L = Math.hypot(cx, cz); if (L > MAPA - 10) { cx *= (MAPA - 10) / L; cz *= (MAPA - 10) / L; v *= .6; }
+  // borde del circuito: arena blanda. Antes era `v *= .6` POR FRAME, o sea que
+  // apoyado contra el borde el buggy quedaba clavado a 6 km/h (muro invisible).
+  const L = Math.hypot(cx, cz);
+  if (L > RJUEGO) { cx *= RJUEGO / L; cz *= RJUEGO / L; v = Math.min(v, d.v * .5);
+    if (tPlay - bordeT > 3) { bordeT = tPlay; ARC.toast('ARENA BLANDA — VOLVÉ'); } }
   // suspensión/salto: sigue el terreno y despega en las crestas
   const gy = h(cx, cz);
   vy -= 26 * dt; let y = cy + vy * dt;
