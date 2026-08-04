@@ -61,7 +61,7 @@ async function init3d(THREE) {
     fl.position.set(p[0], 4.1, p[1]); scene.add(fl);
     const li = new T.PointLight(0xffb060, 5.5, 60);
     li.position.set(p[0], 4.3, p[1]);
-    if (i < 2) { li.castShadow = true; li.shadow.mapSize.set(512, 512); li.shadow.bias = -0.004; li.shadow.camera.far = 40; }
+    if (i < 1) { li.castShadow = true; li.shadow.mapSize.set(512, 512); li.shadow.bias = -0.004; li.shadow.camera.far = 40; }
     scene.add(li); torches.push({ li, fl, ph: Math.random() * 6.28 });
   });
   // ESPADA en primera persona (modelo generado) enganchada a la cámara
@@ -126,9 +126,9 @@ function spawnWave() {
   killNeed = boss ? 1 : Math.min(3 + Math.floor(sala * .8), 8);
   for (let i = 0; i < killNeed; i++) {
     const e = tmplEnemy.clone(true);
-    const a = Math.random() * 6.28, r = ROOM * .55 + Math.random() * 6;
+    const a = Math.random() * 6.28, r = ROOM * .3 + Math.random() * 5;
     let ex = Math.cos(a) * r, ez = Math.sin(a) * r;
-    if (Math.hypot(ex - px, ez - pz) < 12) { ex = -ex; ez = -ez; }
+    if (Math.hypot(ex - px, ez - pz) < 7) { ex = -ex; ez = -ez; }
     e.position.set(ex, 0, ez);
     if (boss) e.scale.multiplyScalar(1.85);
     scene.add(e);
@@ -295,7 +295,8 @@ return {
   slug: 'cripta', name: 'CRIPTA', sub: 'roguelike de mazmorra', acc: '#e0a33a', three: true, sky: '#0a0810', best: 'PUNTOS',
   init3d, start, step, draw2d, attract3d, resize() {}, down, move, up, look: lookFn, key,
   dbg: {
-    state: () => ({ score, hp: Math.ceil(hp), sala, kills, enemies: enemies.length, puerta: puertaOpen, dead, won }),
+    state: () => ({ score, hp: Math.ceil(hp), sala, kills, enemies: enemies.length, puerta: puertaOpen, dead, won,
+      x: Math.round(px), z: Math.round(pz), t: +(tPlay || 0).toFixed(1) }),
     autoPlay() { dbgAuto = true; },
     tp(x, z) { px = x; pz = z; },
     matar() { for (const e of enemies) { scene.remove(e.m); e.dead = true; kills++; } enemies = [];
