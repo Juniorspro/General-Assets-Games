@@ -80,6 +80,27 @@ Portal: `assets/g3/index.html` con links RELATIVOS (quedan en githack, hash-agn�
 - Perf: el chromium del sandbox (swiftshader) sufre con muchos casters ⇒ sombra
   512, rivales no castean, islas solo reciben. Las sondas tardan ~2-3 min.
 
+## Pack completo: 12 juegos (sonda 20/20 en todos los del hub)
+MAREA v5 · CRIPTA · DUNA · ÓRBITA · CIMA · ARENA · TORRE (+ ALAS, y los 4 viejos
+fuera del hub). Todos: sombras en tiempo real, menú con dificultad, controles en
+pantalla (LIFE.pad), portada+música generadas.
+
+### Trampas aprendidas (no repetir)
+- **char.glb sale BLANCO**: el glTF trae emissive blanco + KHR_materials_specular.
+  Hay que hacer `mm.emissive.setRGB(0,0,0)`, `mm.specularIntensity = 0`,
+  `mm.envMapIntensity = .4` al recorrer las mallas (ARENA y TORRE lo hacen).
+- **Agua que se ve blanca**: no es el agua, es el fondo de arena claro + reflejo
+  del cielo. Bajar el color de la arena y subir la saturación/opacidad del agua.
+- **Modelos image_to_3d vienen de perfil**: casi siempre hay que rotarlos
+  (`rotation.y = ±PI/2`) y apoyarlos con `position.y -= box.min.y`.
+- **Pose de los modelos generados**: si la imagen fuente está agachada, el GLB
+  queda agachado (el primer golem gateaba). Pedir "standing upright, full body".
+- **#mOpts tapa el botón JUGAR** si no lleva `pointer-events:none` en el
+  contenedor y `auto` en los chips.
+- **Sondas lentas**: el chromium del sandbox (swiftshader) tarda ~2-3 min por
+  juego con sombras. Correr con `run_in_background` y esperar por notificación;
+  NO encadenar `grep` a un archivo (buffering: parece que no hay salida).
+
 ## Pendiente / notas
 - La sonda no corre el m4a (AAC): verificar música solo en dispositivo real.
 - dbg de horda tiene tp(x,z) y def(t) para tests rápidos de campaña.
