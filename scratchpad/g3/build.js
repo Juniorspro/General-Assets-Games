@@ -42,7 +42,27 @@ const META = {
   cripta: { name: 'CRIPTA', sub: 'roguelike de mazmorra',
     art: 'assets/g3/art-cripta.jpg', music: 'assets/g3/mus-cripta.m4a', sky: '#0a0810', acc: '#e0a33a',
     mdl: { sword: 'assets/g3/mdl-sword.glb', monster: 'assets/g3/mdl-skeleton.glb' },
-    tex: { wall: 'assets/g3/tex-dungeon-wall.jpg', floor: 'assets/g3/tex-dungeon-floor.jpg' } }
+    tex: { wall: 'assets/g3/tex-dungeon-wall.jpg', floor: 'assets/g3/tex-dungeon-floor.jpg' } },
+  duna: { name: 'DUNA', sub: 'rally de dunas',
+    art: 'assets/g3/art-duna.jpg', music: 'assets/g3/mus-duna.m4a', sky: '#e8c98e', acc: '#ffa62b',
+    mdl: { car: 'assets/fp/cdn/4582a91c-a517-4d50-bc9b-5359177e5463.glb', palm: 'assets/g3/mdl-palm.glb' },
+    tex: { sky: 'assets/g3/sky-furia.jpg', arena: 'assets/g3/tex-sand.jpg' } },
+  orbita: { name: 'ORBITA', sub: 'combate espacial',
+    art: 'assets/g3/art-orbita.jpg', music: 'assets/g3/mus-orbita.m4a', sky: '#0a1030', acc: '#5ab0ff',
+    mdl: { ship: 'assets/arcade/m-orbita-nave.glb', foe: 'assets/arcade/m-orbita-nave.glb' },
+    tex: { sky: 'assets/g3/sky-orbita.jpg' } },
+  cima: { name: 'CIMA', sub: 'descenso en tabla',
+    art: 'assets/g3/art-cima.jpg', music: 'assets/g3/mus-cima.m4a', sky: '#cfe6f5', acc: '#59c2ff',
+    mdl: { rider: 'assets/g3/mdl-rider.glb' },
+    tex: { sky: 'assets/g3/sky-cima.jpg' } },
+  arena: { name: 'ARENA', sub: 'oleadas sin fin',
+    art: 'assets/g3/art-arena.jpg', music: 'assets/g3/mus-cripta.m4a', sky: '#2a2438', acc: '#b48aff',
+    mdl: { hero: 'assets/hyper/char.glb', sword: 'assets/g3/mdl-sword.glb', enemy: 'assets/g3/mdl-skeleton.glb' },
+    tex: { sky: 'assets/g3/sky-horda.jpg', wall: 'assets/g3/tex-dungeon-wall.jpg', floor: 'assets/g3/tex-dungeon-floor.jpg' } },
+  torre: { name: 'TORRE', sub: 'subi saltando',
+    art: 'assets/g3/art-torre.jpg', music: 'assets/g3/mus-torre.m4a', sky: '#bcd0e8', acc: '#ffd23f',
+    mdl: { hero: 'assets/hyper/char.glb' },
+    tex: { sky: 'assets/g3/sky-marea.jpg', wall: 'assets/fp/tex/brick.webp', floor: 'assets/fp/tex/stucco.webp' } }
 };
 const SFXN = ['shoot', 'boom', 'coin', 'win', 'lose', 'power', 'swipe'];
 
