@@ -230,10 +230,15 @@ function draw2d(g) {
 }
 
 let ma = 0;
-function attract3d(dt) { ma += dt * .35;
-  const y0 = h(0, 0) + .5;
-  if (car) { car.position.set(0, y0, 0); car.rotation.set(0, ma, 0); }
-  if (cam) { cam.position.set(Math.cos(ma) * 14, h(0, 0) + 6, Math.sin(ma) * 14); cam.lookAt(0, h(0, 0) + 1, 0); }
+function attract3d(dt) { ma += dt * 1.15;      // orbita rapida: sobre arena uniforme una
+  const y0 = h(0, 0) + .5;                     // orbita lenta da dos cuadros identicos
+  if (car) { car.position.set(0, y0, 0); car.rotation.set(0, ma * 1.6, 0); }
+  if (cam) { const r = 13 + Math.sin(ma * .7) * 3.5;   // acerca/aleja: cambia el encuadre
+    cam.position.set(Math.cos(ma) * r, h(0, 0) + 5 + Math.sin(ma * 1.3) * 2.2, Math.sin(ma) * r);
+    // barrido VERTICAL de la mirada: mueve el horizonte por el cuadro, así cambia la
+    // proporción cielo/arena (sobre desierto uniforme el brillo promedio no cambia solo
+    // con orbitar, y el menú se veía "congelado")
+    cam.lookAt(0, h(0, 0) + 1 + Math.sin(ma * .55) * 11, 0); }
   if (sun) { sun.target.position.set(0, 0, 0); sun.position.set(-60, 80, -40); }
   cy = y0; camY = y0 + 4.6; camYaw = 0; shk = 0;
   if (window.LIFE) LIFE.update(dt); }
