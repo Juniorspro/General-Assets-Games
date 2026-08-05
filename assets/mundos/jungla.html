@@ -1304,7 +1304,10 @@ function plantar(){
     if (dens < .44 && rnd() > (dens - .30) * 7){ CTA.dens++; continue; }
     const y = H(x, z);
     if (enAgua(x, z, 1.2)){ CTA.agua++; continue; }
-    if (molesta(x, z, 13)){ CTA.camino++; continue; }
+    /* 40 m, no 13: a menos de eso van los ARBOLES GLB, que son los que se
+       ven de cerca. Este relleno instanciado llena el fondo, donde su silueta
+       alcanza y su costo no. */
+    if (molesta(x, z, 40)){ CTA.camino++; continue; }
     CTA.ok++;
     const r = rnd();
     (r < .48 ? pos1 : (r < .82 ? pos2 : posP)).push([x, y, z, rr(.8, 1.45)]);
@@ -1357,8 +1360,9 @@ function plantar(){
      capa se conservan SOLO LOS TRONCOS, que dan la profundidad del bosque
      lejano sin costar nada, y solo en el tercio mas lejano. */
   for (let v = 0; v < 3; v++){
-    armaTroncos(pos1.filter((_, i) => i % 3 === v), esp1v[v]);
-    armaTroncos(pos2.filter((_, i) => i % 3 === v), esp2v[v]);
+    arma(pos1.filter((_, i) => i % 3 === v), esp1v[v], matC1, dH1);
+    arma(pos2.filter((_, i) => i % 3 === v), esp2v[v], matC2, dH2);
+    arma(posP.filter((_, i) => i % 3 === v), espPv[v], matC2, dH2);
   }
   /* ---- SOTOBOSQUE: helechos y matas, MUY denso (es una selva) ------------- */
   const domoHelecho = (() => {
@@ -3331,21 +3335,20 @@ window.__RECOL = RECOL;
     }
     return null;
   }
+  /* triangulos por modelo, medidos del propio GLB: sin esto es facil clonar
+     cuarenta veces una malla de treinta mil y fundir el telefono */
+  const TRIM = { "g3/mdl-palm.glb": 28763, "reliquia/tree1.glb": 30498, "reliquia/tree2.glb": 29945, "reliquia/tree3.glb": 29657, "hyper/p-tree.glb": 5020, "arcade/m-agujero-arbol.glb": 1306, "aero/tree.glb": 26288, "aero/bush.glb": 30867, "reliquia/bush.glb": 30648, "reliquia/obs-log.glb": 30824, "reliquia/obs-totem.glb": 30373 };
   const bosque = (url, n, alto, sombra, choque, margen) => {
     const l = [];
     for (let i = 0; i < n; i++){ const p = sitioA(margen); if (p) l.push(p); }
     propMuchos(url, l, { altoObjetivo: alto, sombra,
       choque: choque > 0 ? choque : 0 });
     window.__ARBOLES = (window.__ARBOLES || 0) + l.length;
+    window.__TRI_ARB = (window.__TRI_ARB || 0) + l.length * (TRIM[url] || 0);
   };
-  bosque('hyper/p-tree.glb', 46, 19.0, true, 1.3, 8.55);   /* selva */
-  bosque('reliquia/tree2.glb', 30, 16.0, true, 1.2, 7.2);   /* arbol2 */
-  bosque('reliquia/tree1.glb', 26, 14.0, true, 1.2, 6.3);   /* arbol1 */
-  bosque('arcade/m-agujero-arbol.glb', 14, 12.0, true, 1.4, 5.4);   /* hueco */
-  bosque('g3/mdl-palm.glb', 22, 11.0, true, 1.0, 4.95);   /* palmera */
-  bosque('reliquia/bush.glb', 120, 2.4, false, 0.0, 3.0);   /* matorral */
-  bosque('aero/bush.glb', 130, 2.0, false, 0.0, 3.0);   /* mata */
-  bosque('reliquia/obs-log.glb', 10, 2.4, false, 1.0, 3.0);   /* tronco */
+  bosque('hyper/p-tree.glb', 66, 19.0, true, 1.3, 8.55);   /* selva */
+  bosque('arcade/m-agujero-arbol.glb', 44, 11.0, true, 1.4, 4.95);   /* hueco */
+  bosque('g3/mdl-palm.glb', 4, 12.0, true, 1.0, 5.4);   /* palmera */
 }
 
 /* --------------------------- LAS CARITAS ----------------------------------- */

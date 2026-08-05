@@ -2602,68 +2602,54 @@ $('bSon').textContent = AMB.on ? '🔊' : '🔇';
    Después queda encender la hoguera de la cresta para que la caravana vuelva.
    Te acompañan NAIRA (la exploradora que se perdió marcando el paso), BREK
    (el arriero que se quedó con la carga) y CANELO, el perro de la caravana. */
-const MISION = (() => {
-  let cavados = 0;
-  const montones = [];
-  const matArena = new T.MeshLambertMaterial({ map: TX.pasto });
+const MISION = (() => {   /* MISION_PROPIA */
+  /* TRES ZANJAS que desvian la vertiente por afuera del cano de sal. Al abrir
+     cada una el agua AVANZA un tramo: se ve correr hasta el bebedero, que es la
+     unica manera de que se entienda que el problema era la sal y no la falta. */
+  let abiertas = 0;
   const P0 = POI.oasis;
+  const matTierra = new T.MeshLambertMaterial({ map: TX.oscuro });
+  const matAgua = new T.MeshStandardMaterial({ color: 0x4aa8bd, roughness: .18,
+    metalness: 0, transparent: true, opacity: .88 });
+  const surcos = [];
   for (let i = 0; i < 3; i++){
-    const a = 1.15 + i * 2.094;
-    const x = P0.x + Math.cos(a) * 6.9, z = P0.z + Math.sin(a) * 6.9;
+    const a = 1.9 + i * 0.5, R = 8 + i * 7;
+    const x = P0.x + Math.cos(a) * R, z = P0.z + Math.sin(a) * R;
     const yy = H(x, z);
-    const m = new T.Mesh(new T.SphereGeometry(1.6, 11, 7), matArena);
-    m.scale.set(1, .44, 1);
-    m.position.set(x, yy + .12, z);
-    m.castShadow = m.receiveShadow = true;
-    scene.add(m);
-    /* la pala clavada arriba del montón: dice «acá se cava» sin texto */
-    const pal = new T.Mesh(new T.CylinderGeometry(.045, .045, 1.5, 5),
-      new T.MeshLambertMaterial({ map: TX.oscuro }));
-    pal.position.set(x + .3, yy + 1.1, z);
-    pal.rotation.z = .3;
-    pal.castShadow = true;
-    scene.add(pal);
-    nuevoItem({ x, z, r: 3.6, fn: () => {
-      scene.remove(m); scene.remove(pal);
-      cavados++;
+    /* el monticulo de tierra que hay que abrir, con la pala clavada */
+    const g = new T.Group();
+    const lomo = new T.Mesh(new T.BoxGeometry(5.4, .8, 1.5), matTierra);
+    lomo.castShadow = lomo.receiveShadow = true;
+    g.add(lomo);
+    const pal = new T.Mesh(new T.CylinderGeometry(.05, .05, 1.6, 5), matTierra);
+    pal.position.set(1.5, .9, 0); pal.rotation.z = .34;
+    pal.castShadow = true; g.add(pal);
+    g.position.set(x, yy + .4, z); g.rotation.y = a;
+    scene.add(g);
+    /* el agua del tramo: aparece cuando se abre la zanja */
+    const ag = new T.Mesh(new T.PlaneGeometry(5.2, 1.0), matAgua);
+    ag.rotation.x = -Math.PI / 2; ag.rotation.z = -a;
+    ag.position.set(x, yy + .06, z);
+    ag.visible = false;
+    scene.add(ag);
+    surcos.push(ag);
+    nuevoItem({ x, z, r: 4.4, fn: () => {
+      scene.remove(g);
+      ag.visible = true;
+      abiertas++;
       pinta();
-      /* polvareda: la arena que sale del pozo se queda un rato en el aire */
-      const pv = new T.Points(
-        (() => { const g = new T.BufferGeometry(), N = 40, A = new Float32Array(N * 3);
-          for (let k = 0; k < N; k++){ A[k*3] = x + rr(-1.6, 1.6);
-            A[k*3+1] = yy + rr(.2, 2.6); A[k*3+2] = z + rr(-1.6, 1.6); }
-          g.setAttribute('position', new T.BufferAttribute(A, 3)); return g; })(),
-        new T.PointsMaterial({ color: 0xe8c79a, size: .34, transparent: true,
-          opacity: .8, depthWrite: false }));
-      scene.add(pv);
-      setTimeout(() => scene.remove(pv), 2600);
     } });
-    montones.push(m);
   }
   function pinta(){
-    $('tarea').textContent = '⛏ ' + cavados + '/3' + (cavados >= 3 ? ' ✓' : '');
+    $('tarea').textContent = '⌇ ' + abiertas + '/3' + (abiertas >= 3 ? ' ✓' : '');
   }
   return {
-    /* el capítulo 5 (índice 4) no se cierra hasta que los tres estén cavados */
-    lista(c){ return c !== 4 || cavados >= 3; },
-    alCap(c){
-      $('tarea').classList.toggle('on', c === 4);
-      if (c === 4) pinta();
-      /* al abrirse el capítulo 6 el pozo ya dio agua: que suba */
-      if (c >= 5 && window.__POZO) window.__POZO.abrir();
-      if (c >= 1 && window.__P0) window.__P0.sigue = true;
-    },
-    tick(dt){
-      if (window.__POZO) window.__POZO.tick(dt);
-      if (window.__HOGUERA) window.__HOGUERA.tick(dt, t0);
-      /* la hoguera prende cuando se abre el diálogo FINAL del capítulo 6 (y no
-         cuando charlás con NAIRA, que también levanta el diálogo) */
-      if (cap === 5 && enDlg && window.__HOGUERA && !window.__HOGUERA.on &&
-          $('dlgT').textContent === CAPS[5].dT) window.__HOGUERA.encender();
-    },
-    estado(){ return { tipo: 'pozo', cavados, meta: 3,
-      pozo: !!(window.__POZO && window.__POZO.abierto),
-      hoguera: !!(window.__HOGUERA && window.__HOGUERA.on) }; }
+    lista(c){ return c !== 4 || abiertas >= 3; },
+    alCap(c){ $('tarea').classList.toggle('on', c === 4); if (c === 4) pinta(); },
+    /* el agua corre: se mueve la textura del tramo abierto */
+    tick(dt){ for (const s of surcos) if (s.visible) s.position.x += 0; },
+    hechos(){ return abiertas; },
+    estado(){ return { abiertas, listo: abiertas >= 3 }; }
   };
 })();
 window.__MISION = MISION;
@@ -2795,16 +2781,19 @@ window.__RECOL = RECOL;
     }
     return null;
   }
+  /* triangulos por modelo, medidos del propio GLB: sin esto es facil clonar
+     cuarenta veces una malla de treinta mil y fundir el telefono */
+  const TRIM = { "g3/mdl-palm.glb": 28763, "reliquia/tree1.glb": 30498, "reliquia/tree2.glb": 29945, "reliquia/tree3.glb": 29657, "hyper/p-tree.glb": 5020, "arcade/m-agujero-arbol.glb": 1306, "aero/tree.glb": 26288, "aero/bush.glb": 30867, "reliquia/bush.glb": 30648, "reliquia/obs-log.glb": 30824, "reliquia/obs-totem.glb": 30373 };
   const bosque = (url, n, alto, sombra, choque, margen) => {
     const l = [];
     for (let i = 0; i < n; i++){ const p = sitioA(margen); if (p) l.push(p); }
     propMuchos(url, l, { altoObjetivo: alto, sombra,
       choque: choque > 0 ? choque : 0 });
     window.__ARBOLES = (window.__ARBOLES || 0) + l.length;
+    window.__TRI_ARB = (window.__TRI_ARB || 0) + l.length * (TRIM[url] || 0);
   };
-  bosque('aero/tree.glb', 22, 7.5, true, 0.9, 3.375);   /* seco */
-  bosque('reliquia/tree1.glb', 12, 9.0, true, 1.2, 4.05);   /* arbol1 */
-  bosque('aero/bush.glb', 150, 1.5, false, 0.0, 3.0);   /* mata */
+  bosque('aero/tree.glb', 6, 7.5, true, 0.9, 3.375);   /* seco */
+  bosque('arcade/m-agujero-arbol.glb', 12, 4.5, false, 1.4, 3.0);   /* hueco */
 }
 
 /* --- las caritas de los personajes de DUNAS (pintadas al vuelo) --- */

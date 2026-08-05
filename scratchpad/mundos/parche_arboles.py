@@ -33,34 +33,31 @@ ARB_GLB = {
 
 # por mundo: [(especie, cuantos, alto, sombra)] — el alto pisa el de la tabla
 PLAN = {
- 'dunas': [                      # oasis de palmeras GLB + matas secas
-   ('palmera', 26, 12.0, True), ('seco', 16, 7.0, True), ('mata', 60, 1.7, False),
+ # (especie, cuantos, alto, sombra). El comentario de cada mundo lleva el
+ # presupuesto en triangulos, que es lo que decide cuantos entran de cada uno.
+ 'dunas': [                       # el oasis son las palmeras: ~403k tri
+   ('palmera', 10, 12.0, True), ('seco', 4, 7.0, True), ('hueco', 8, 4.5, False),
  ],
- 'jungla': [                      # selva cerrada: mucho arbol alto y sotobosque
-   ('selva', 46, 19.0, True), ('arbol2', 30, 16.0, True), ('arbol1', 26, 14.0, True),
-   ('hueco', 14, 12.0, True), ('palmera', 22, 11.0, True),
-   ('matorral', 120, 2.4, False), ('mata', 130, 2.0, False), ('tronco', 10, 2.4, False),
+ 'jungla': [                      # selva cerrada, con el liviano de base: ~502k
+   ('selva', 66, 19.0, True), ('hueco', 44, 11.0, True), ('palmera', 4, 12.0, True),
  ],
- 'volcan': [                      # lo que aguanta la ceniza: seco y ralo
-   ('seco', 26, 7.5, True), ('mata', 60, 1.7, False), ('tronco', 8, 2.3, False),
+ 'volcan': [                      # el volcan tiene que estar pelado: ~181k
+   ('seco', 6, 7.5, True), ('hueco', 18, 6.0, False),
  ],
- 'pantano': [                      # cipreses y juncos: arbol alto + mucha mata
-   ('arbol3', 34, 14.0, True), ('selva', 20, 17.0, True),
-   ('matorral', 130, 2.5, False), ('tronco', 12, 2.4, False),
+ 'pantano': [                     # cipreses altos y mucho tronco: ~320k
+   ('selva', 40, 15.0, True), ('arbol3', 3, 14.0, True), ('hueco', 24, 8.0, True),
  ],
- 'canon': [                       # olivos y arbustos en las terrazas
-   ('arbol1', 24, 8.5, True), ('seco', 18, 7.0, True),
-   ('matorral', 70, 2.2, False), ('mata', 60, 1.7, False),
+ 'canon': [                       # ralo, en las terrazas: ~264k
+   ('selva', 22, 9.0, True), ('seco', 5, 7.0, True), ('hueco', 18, 5.0, False),
  ],
- 'estepa': [                      # casi nada de arbol: la inmensidad es el tema
-   ('seco', 22, 7.5, True), ('arbol1', 12, 9.0, True), ('mata', 150, 1.5, False),
+ 'estepa': [                      # la inmensidad es el tema, casi sin arbol: ~174k
+   ('seco', 6, 7.5, True), ('hueco', 12, 4.5, False),
  ],
- 'acropolis': [                   # olivar del santuario
-   ('arbol3', 40, 6.5, True), ('mata', 90, 1.8, False), ('totem', 14, 5.0, True),
+ 'acropolis': [                   # olivar retorcido del santuario: ~255k
+   ('arbol3', 8, 6.5, True), ('hueco', 14, 4.0, False),
  ],
- 'secuoya': [                     # bosque de gigantes: los mas altos del juego
-   ('selva', 44, 30.0, True), ('arbol2', 34, 24.0, True), ('arbol1', 26, 20.0, True),
-   ('hueco', 12, 14.0, True), ('matorral', 140, 2.4, False), ('tronco', 14, 2.4, False),
+ 'secuoya': [                     # los mas altos del juego: ~399k
+   ('selva', 60, 30.0, True), ('hueco', 30, 14.0, True), ('arbol2', 2, 26.0, True),
  ],
 }
 
@@ -93,12 +90,16 @@ JS = """
     }
     return null;
   }
+  /* triangulos por modelo, medidos del propio GLB: sin esto es facil clonar
+     cuarenta veces una malla de treinta mil y fundir el telefono */
+  const TRIM = { "g3/mdl-palm.glb": 28763, "reliquia/tree1.glb": 30498, "reliquia/tree2.glb": 29945, "reliquia/tree3.glb": 29657, "hyper/p-tree.glb": 5020, "arcade/m-agujero-arbol.glb": 1306, "aero/tree.glb": 26288, "aero/bush.glb": 30867, "reliquia/bush.glb": 30648, "reliquia/obs-log.glb": 30824, "reliquia/obs-totem.glb": 30373 };
   const bosque = (url, n, alto, sombra, choque, margen) => {
     const l = [];
     for (let i = 0; i < n; i++){ const p = sitioA(margen); if (p) l.push(p); }
     propMuchos(url, l, { altoObjetivo: alto, sombra,
       choque: choque > 0 ? choque : 0 });
     window.__ARBOLES = (window.__ARBOLES || 0) + l.length;
+    window.__TRI_ARB = (window.__TRI_ARB || 0) + l.length * (TRIM[url] || 0);
   };
 @SIEMBRA@
 }
