@@ -748,6 +748,9 @@ const uniTerr = {
 const matTerr = new T.MeshLambertMaterial({ map: TX.barro });
 matTerr.onBeforeCompile = sh => {
   Object.assign(sh.uniforms, uniTerr);
+  /* en BAJOS el suelo va a un solo tap: cuatro muestras a pantalla llena es
+     relleno de pixeles, que es justo lo que mata a un telefono de gama baja. */
+  if (GFX === 'b') sh.defines = Object.assign({}, sh.defines, { SUELO_BARATO: '' });
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nvarying float vRocoso;varying float vSeco;')
     .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -764,16 +767,47 @@ matTerr.onBeforeCompile = sh => {
          a escalas que no son multiplos, una girada 90 grados, con una mascara
          de ruido suave: los dos patrones no coinciden en ningun punto. */
       float h21_(vec2 p){ return fract(sin(dot(p, vec2(41.31, 289.07))) * 43758.5453); }
+      vec2 h22_(vec2 p){ return fract(sin(vec2(dot(p, vec2(127.1, 311.7)),
+                                               dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
       float ruido_(vec2 p){
         vec2 i = floor(p), f = fract(p);
         f = f * f * (3.0 - 2.0 * f);
         return mix(mix(h21_(i), h21_(i + vec2(1.0, 0.0)), f.x),
                    mix(h21_(i + vec2(0.0, 1.0)), h21_(i + vec2(1.0, 1.0)), f.x), f.y);
       }
+      /* ---- teselado ESTOCASTICO: cada celda con su origen y su angulo ----
+         Antes se cruzaban dos muestras alineadas a los ejes con una mascara de
+         frecuencia 3 sobre 900 m: constante en pantalla, o sea una sola muestra
+         alineada, o sea la rejilla. Aqui cada celda del parche se lee con un
+         desplazamiento y un giro sacados de su propia posicion, y las cuatro
+         vecinas se cruzan con pesos bilineales al cubo. Sin periodo no hay
+         rejilla que encontrar. */
       vec3 sinGrilla_(sampler2D t, vec2 uv, vec2 uvw){
-        vec3 a = texture2D(t, uv).rgb;
-        vec3 b = texture2D(t, vec2(-uv.y, uv.x) * 0.37 + vec2(0.31, 0.67)).rgb;
-        return mix(a, b, smoothstep(0.34, 0.66, ruido_(uvw * 3.1)));
+        vec2 cel = floor(uv), f = fract(uv);
+        #if defined(SUELO_BARATO)
+          /* un solo tap: la celda le da el giro y el origen. No borra el patron
+             tan bien como cuatro, pero lo desalinea, que es lo que se ve. */
+          vec2 h = h22_(cel);
+          float a = h.x * 6.2831853;
+          mat2 R = mat2(cos(a), -sin(a), sin(a), cos(a));
+          return texture2D(t, R * (uv - cel - 0.5) + h).rgb;
+        #else
+          vec3 acc = vec3(0.0);
+          float ws = 0.0;
+          for (int j = 0; j < 2; j++){
+            for (int i = 0; i < 2; i++){
+              vec2 c = cel + vec2(float(i), float(j));
+              vec2 h = h22_(c);
+              float a = h.x * 6.2831853;
+              mat2 R = mat2(cos(a), -sin(a), sin(a), cos(a));
+              float w = (1.0 - abs(f.x - float(i))) * (1.0 - abs(f.y - float(j)));
+              w = w * w * w;
+              acc += texture2D(t, R * (uv - c) + h).rgb * w;
+              ws += w;
+            }
+          }
+          return acc / max(ws, 1e-4);
+        #endif
       }`)
     .replace('#include <map_fragment>', `
       vec2 uvT = vMapUv * repite;
@@ -784,7 +818,9 @@ matTerr.onBeforeCompile = sh => {
       c = mix(c, sinGrilla_(tRoca, uvT * .85, vMapUv + 0.77), vRocoso * .8);
       /* la luz del suelo varia de a manchones grandes: sin esto, incluso sin
          cuadricula, todo el terreno se lee con el mismo brillo */
-      c *= 0.87 + 0.26 * ruido_(vMapUv * 5.7);
+      /* dos frecuencias: manchones grandes de luz Y variacion cercana. A 5,7 sobre
+         el mapa entero era UN solo manchon y no rompia nada de lo que se ve. */
+      c *= 0.86 + 0.20 * ruido_(vMapUv * 6.3) + 0.14 * ruido_(vMapUv * 71.0);
       /* película de alga y barro NEGRO en la lámina de agua */
       c *= mix(vec3(.46, .60, .50), vec3(1.), vSeco);
       /* la franja de la pasarela: barro pisado, más oscuro y mojado */
@@ -3956,6 +3992,27 @@ window.__S = {
   cineSkip(){ terminaCine(); },
   /* diagnostico por personaje: a cuanto quedo de encarar al jugador, que
      clips tiene atados y con que peso. */
+  /* pose REAL de cada personaje: el giro del modelo en el mundo y el angulo de los
+     huesos clave contra su propio reposo. Una inclinacion se ve como grados, no
+     como impresion. */
+  npcPose(){ const V = new T.Vector3(1,0,0), Q = new T.Quaternion(), E = new T.Euler();
+    return NPCS.filter(n => n.modelo).map(n => {
+      const m = n.modelo; m.updateMatrixWorld(true);
+      m.getWorldQuaternion(Q); E.setFromQuaternion(Q, 'YXZ');
+      const hue = {};
+      m.traverse(o => { if (!o.isBone) return;
+        if (!/^(Hips|Spine|Spine01|Spine02|neck|Head)$/.test(o.name)) return;
+        const bq = o.userData._bind || (o.userData._bind = null);
+        hue[o.name] = [+o.quaternion.x.toFixed(3), +o.quaternion.y.toFixed(3),
+                       +o.quaternion.z.toFixed(3), +o.quaternion.w.toFixed(3)];
+      });
+      /* arriba del modelo en el mundo: si no apunta a +Y, esta inclinado */
+      const up = new T.Vector3(0,1,0).applyQuaternion(Q);
+      return { nombre: n.nombre, glb: (n.glb||'').split('/').pop(),
+        modeloRotXZ: [+(E.x*57.3).toFixed(1), +(E.z*57.3).toFixed(1)],
+        inclinaGrados: +(Math.acos(Math.max(-1,Math.min(1,up.y)))*57.3).toFixed(1),
+        anim: n.estAnim || '?', vel: +(n.vel||0).toFixed(2), huesos: hue };
+    }); },
   npcDiag(){ return NPCS.map(n => {
     const f = n.fig;
     const rumbo = Math.atan2(px - f.position.x, pz - f.position.z);
