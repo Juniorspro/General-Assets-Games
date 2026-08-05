@@ -60,7 +60,7 @@ const {MOD} = (() => {{
     if (aireY <= 0){{ aireY = 0; aireV = 0; enAire = false; return true; }}
     return false;
   }};
-  A.est = () => ({{ modo: A.modo, vel: +A.vel.toFixed(2), aire: enAire,
+  A.est = () => ({{ modo: A.modo, vel: +A.vel.toFixed(2), aire: enAire, porque: A.porque,
     nPaso: A.nPaso, tSim: +A.tSim.toFixed(2),
     nVuelo: A.nVuelo, altMax: +A.altMax.toFixed(2),
     hd: +A.hd.toFixed(2), y: +(H(px, pz) + aireY).toFixed(2),
@@ -220,7 +220,10 @@ def engancha(s, mod, tipo, js, css_col, err, cede_fisica=True):
           "  palanca(x, y){ movV.x = x; movV.y = y; },\n"
           "  %(t)s(){ return %(M)s.est(); },\n"
           "  %(t)sIr(k){ const P = %(M)s.PUE[k]; if (!P) return null;\n"
-          "    px = P.x; pz = P.z; ojoY = H(px, pz); aireY = 0; enAire = false;\n"
+          "    /* al sitio desde DONDE SE USA, que no siempre es donde esta la cosa:\n"
+          "       la liana cuelga en el medio de la quebrada y se agarra del borde. */\n"
+          "    px = P.gx != null ? P.gx : P.x; pz = P.gz != null ? P.gz : P.z;\n"
+          "    ojoY = H(px, pz); aireY = 0; enAire = false;\n"
           "    return %(M)s.est(); },\n" % {'M': mod, 't': tipo}) + VA
     if s.count(VA) == 1:
         s = s.replace(VA, VN, 1)

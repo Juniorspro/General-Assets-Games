@@ -105,7 +105,8 @@ if (ult.modo){
 await p.evaluate(() => { try { window.__S.palanca(0, 1); } catch (e) {} });
 await p.waitForTimeout(6000);
 const fin = await p.evaluate(g => Object.assign(window.__S[g](), { g: window.__S.get() }), gan);
-console.log('  frenando: modo=' + fin.modo + ' vel=' + fin.vel + ' · tSim ' + fin.tSim);
+console.log('  frenando: modo=' + fin.modo + ' vel=' + fin.vel + ' · tSim ' + fin.tSim +
+  (fin.porque ? ' · salio: ' + fin.porque : ''));
 console.log('  errores: ' + (errs.length ? JSON.stringify([...new Set(errs)].slice(0, 5)) : 'ninguno'));
 await p.screenshot({ path: SHOT + 'tras-' + mundo + '.png' });
 await b.close(); server.close();

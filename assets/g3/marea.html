@@ -656,7 +656,7 @@ function step(dt) {
       yaw += ARC.clamp(dy, -1, 1) * dt * 3; }   // MÁS que el giro del jugador: nunca queda clavado
     if (!hitI) { hitI = true; streak = 0; ARC.shake(4); ARC.sfx('hit', { vol: .5 }); ARC.vib(30); }
     hitT += dt;
-    if (hitT > 2.5 && cfg.modo === 'contra') { hitT = 0; placeGateAhead(); ARC.toast('PUERTA MÁS CERCA'); }
+    if (hitT > 2.5 && cfg.modo === 'contra') { hitT = 0; placeGateAhead(); ARC.toast(UT('puerta')); }
   } else { hitI = false; hitT = 0; }
   const wy = waveH(sx, sz, t), tgt = wy + .22, preVy = cvy;
   cvy += (tgt - craftY) * dt * 42 - cvy * dt * 11.7; craftY += cvy * dt;   // resorte amortiguado (ζ≈0.9)
@@ -711,7 +711,7 @@ function step(dt) {
     ARC.sfx('coin', { vol: .6, rate: 1 + streak * .05 }); ARC.vib(20);
     if (cfg.modo === 'contra') { gGroups[gi].visible = false; placeGateAhead(); gGroups[gi].visible = true; }
     else { gi = (gi + 1) % NG;
-      if (gi === 0) { laps++; ARC.toast('VUELTA ' + laps + ' · P' + place);
+      if (gi === 0) { laps++; ARC.toast(UT('vuelta') + ' ' + laps + ' · P' + place);
         if (cfg.modo === 'circuito' && laps >= d.laps) { endRace(); return; } } }
   }
 }
@@ -891,7 +891,8 @@ const ARC = window.ARC = {
 
 function endGame(o) { o = o || {}; if (o.coins) ARC.addCoins(o.coins);
   const sc = o.score || 0; let rec = false; if (sc > (SAVE.best || 0)) { SAVE.best = sc; rec = true; persist(); }
-  $('ovTitle').textContent = o.title || (o.win ? '¡GANASTE!' : 'FIN'); $('ovSub').textContent = o.sub || (rec ? '¡NUEVO RÉCORD!' : '');
+  $('ovTitle').textContent = o.title || (o.win ? UT('gano') : UT('fin'));
+  $('ovSub').textContent = o.sub || (rec ? UT('rec') : '');
   $('ovScore').textContent = sc; $('ovBest').textContent = (GAME.best || 'RÉCORD') + ': ' + (SAVE.best || 0);
   sfx(o.win ? 'win' : 'lose'); if (document.exitPointerLock) try { document.exitPointerLock(); } catch (e) {} show('over'); }
 
@@ -942,6 +943,35 @@ function goFull() { const el = document.documentElement; const r = el.requestFul
 function begin() { audioInit(); acc = 0; PS.length = 0; shakeM = 0; try { GAME.start(); } catch (e) { console.error(e); }
   if (GAME.music) music(GAME.music); show('game'); }
 
+
+/* -------- el MENU en su idioma --------
+   Estaba escrito en espanol en el HTML y `GAME.lang` —a quien se le pedia el
+   repintado— no existe en marea, asi que poner LANG = 'en' no cambiaba una sola
+   palabra de la portada. Va una tabla chica y una funcion que la aplica. */
+const UIL = {
+  es: { sub: 'laguna tropical', jugar: 'JUGAR', jugarGo: 'JUGAR \u25b8', pausa: 'PAUSA',
+        seguir: 'SEGUIR', menu: 'MEN\u00da', otra: 'OTRA VEZ', fin: 'FIN',
+        gano: '\u00a1GANASTE!', rec: '\u00a1NUEVO R\u00c9CORD!',
+        puerta: 'PUERTA M\u00c1S CERCA', vuelta: 'VUELTA' },
+  en: { sub: 'tropical lagoon', jugar: 'PLAY', jugarGo: 'PLAY \u25b8', pausa: 'PAUSED',
+        seguir: 'RESUME', menu: 'MENU', otra: 'PLAY AGAIN', fin: 'THE END',
+        gano: 'YOU WIN!', rec: 'NEW RECORD!',
+        puerta: 'GATE MOVED CLOSER', vuelta: 'LAP' },
+  pt: { sub: 'lagoa tropical', jugar: 'JOGAR', jugarGo: 'JOGAR \u25b8', pausa: 'PAUSA',
+        seguir: 'CONTINUAR', menu: 'MENU', otra: 'DE NOVO', fin: 'FIM',
+        gano: 'VOC\u00ca GANHOU!', rec: 'NOVO RECORDE!',
+        puerta: 'PORTA MAIS PERTO', vuelta: 'VOLTA' }
+};
+const UT = k => (UIL[window.LANG] || UIL.en)[k];
+function pintaUI(){
+  const q = (i, v) => { const e = document.getElementById(i); if (e) e.textContent = v; };
+  q('ldS', UT('sub')); q('ldGo', UT('jugarGo')); q('bPlay', UT('jugar'));
+  q('pReanudar', UT('seguir')); q('pMenu', UT('menu'));
+  q('oOtra', UT('otra')); q('oMenu', UT('menu'));
+  const t = document.querySelector('#mTitle .s'); if (t) t.textContent = UT('sub');
+  const pa = document.querySelector('#pause .big'); if (pa) pa.textContent = UT('pausa');
+}
+
 /* -------- botones -------- */
 function bind() {
   const go = () => { audioInit(); goFull(); $('load').classList.remove('on'); show('menu'); };
@@ -953,10 +983,10 @@ function bind() {
    el idioma al arrancar, igual que cuando se toca el selector, y ademas se marca
    el chip correcto para que se vea cual esta activo. */
 try {
-  if (typeof GAME !== 'undefined' && GAME.lang) GAME.lang(LANG);
+  pintaUI();
   document.querySelectorAll('[data-l]').forEach(c =>
     c.classList.toggle('on', c.dataset.l === LANG));
-} catch (e) {} if (GAME.lang) try { GAME.lang(LANG); } catch (e) {} }));
+} catch (e) {} pintaUI(); }));
   const play = e => { if (e) e.preventDefault(); goFull(); begin(); };
   $('bPlay').addEventListener('click', play); $('bPlay').addEventListener('touchstart', play, { passive: false });
   $('pReanudar').addEventListener('click', () => { if (state === 'pause') { last = 0; show('game'); } });
@@ -992,6 +1022,7 @@ function loadArt() {
 }
 async function boot() {
   document.querySelectorAll('#ldLang .chip').forEach(c => c.classList.toggle('on', c.dataset.l === LANG));
+  pintaUI();
   bind(); loadArt();
   try {
     THREE = await import(TRE);
