@@ -2293,10 +2293,18 @@ function retargetClip(clip, restDon, modelo){
     const rd = restDon[nom], rt = restDst[nom];
     if (!rd || !rt) continue;
     if (prop === 'quaternion'){
-      _rtCorr.copy(rt.q).multiply(_rtQd.copy(rd.q).invert());
+      /* El movimiento del clip se compone en el espacio del PADRE, no en el del propio
+         hueso: la desviacion respecto del reposo es  q * inv(reposo), y eso se aplica
+         al reposo del destino POR DERECHA. Premultiplicando —como estaba— el eje del
+         giro se mapeaba al marco equivocado, y como los dos rigs tienen los mismos 26
+         nombres de hueso pero sus reposos de cadera y columna difieren CIEN GRADOS
+         (medido: 134,9 contra 34,5), eso es exactamente la inclinacion que se veia.
+         Con la multiplicacion del lado correcto los once personajes quedan de pie y no
+         hace falta generar animacion por modelo. */
+      _rtCorr.copy(_rtQd.copy(rd.q).invert()).multiply(rt.q);
       for (let k = 0; k < tr.values.length; k += 4){
         _rtQ.set(tr.values[k], tr.values[k + 1], tr.values[k + 2], tr.values[k + 3]);
-        _rtQ.premultiply(_rtCorr);
+        _rtQ.multiply(_rtCorr);
         tr.values[k] = _rtQ.x; tr.values[k + 1] = _rtQ.y;
         tr.values[k + 2] = _rtQ.z; tr.values[k + 3] = _rtQ.w;
       }
