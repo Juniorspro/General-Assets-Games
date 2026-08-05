@@ -33,8 +33,10 @@
     flex-direction:row;gap:8px;align-items:flex-start;pointer-events:auto}
   #btns .b{width:46px;height:46px;min-width:0;padding:0;display:grid;place-items:center;
     text-align:center;border-radius:12px;font-size:15px}
-  /* USAR es de accion: se queda abajo, donde esta el pulgar */
-  #btns .b.usar{position:absolute;right:calc(20px + min(84px,19vw));bottom:max(16px,5vh);
+  /* USAR es de accion: se queda abajo, donde esta el pulgar. position:FIXED y no
+     absolute: al subir #btns arriba, un hijo absolute cuelga de EL y el boton se
+     iba al borde superior, cortado. */
+  #btns .b.usar{position:fixed;right:calc(20px + min(84px,19vw));bottom:max(16px,5vh);
     width:auto;height:auto;padding:13px 20px;font-size:15px;border-radius:14px}
   .b{min-width:86px;text-align:center;padding:12px 15px;border-radius:14px;font-weight:800;
     font-size:13px;background:rgba(12,22,32,.62);border:1.5px solid rgba(180,220,255,.4);
@@ -697,6 +699,10 @@ const uniTerr = {
 const matTerr = new T.MeshLambertMaterial({ map: TX.pasto });
 matTerr.onBeforeCompile = sh => {
   Object.assign(sh.uniforms, uniTerr);
+  /* en calidad baja, un solo tap: cuatro muestras a pantalla llena es relleno de
+     pixeles, que es lo que mata a un telefono de gama baja. */
+  try { if (typeof GFX !== 'undefined' && (GFX === 'b' || GFX === 'bajos'))
+    sh.defines = Object.assign({}, sh.defines, { SUELO_BARATO: '' }); } catch(e){}
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nvarying float vRocoso;')
     .replace('#include <begin_vertex>',
@@ -705,14 +711,53 @@ matTerr.onBeforeCompile = sh => {
     .replace('#include <common>', `#include <common>
       uniform sampler2D tTierra, tHoja, tRoca, tSplat;
       uniform float repite;
-      varying float vRocoso;`)
+      varying float vRocoso;
+      /* ---- SUELO SIN REJILLA: teselado estocastico ----
+         Una sola muestra a escala fija repite el mismo parche decenas de veces
+         ALINEADO, y a media distancia el ojo encuentra las filas enseguida: es la
+         cuadricula que se veia. Aca cada celda del parche se lee con un
+         desplazamiento Y un giro sacados de su propia posicion, y las cuatro celdas
+         vecinas se cruzan con pesos bilineales al cubo. Sin periodo no hay rejilla. */
+      float h21_(vec2 p){ return fract(sin(dot(p, vec2(41.31, 289.07))) * 43758.5453); }
+      vec2 h22_(vec2 p){ return fract(sin(vec2(dot(p, vec2(127.1, 311.7)),
+                                               dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+      float ruido_(vec2 p){
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h21_(i), h21_(i + vec2(1.0, 0.0)), f.x),
+                   mix(h21_(i + vec2(0.0, 1.0)), h21_(i + vec2(1.0, 1.0)), f.x), f.y);
+      }
+      vec3 sinGrilla_(sampler2D t, vec2 uv){
+        vec2 cel = floor(uv), f = fract(uv);
+        #if defined(SUELO_BARATO)
+          vec2 h = h22_(cel);
+          float a = h.x * 6.2831853;
+          mat2 R = mat2(cos(a), -sin(a), sin(a), cos(a));
+          return texture2D(t, R * (uv - cel - 0.5) + h).rgb;
+        #else
+          vec3 acc = vec3(0.0); float ws = 0.0;
+          for (int j = 0; j < 2; j++){ for (int i = 0; i < 2; i++){
+            vec2 c = cel + vec2(float(i), float(j));
+            vec2 h = h22_(c);
+            float a = h.x * 6.2831853;
+            mat2 R = mat2(cos(a), -sin(a), sin(a), cos(a));
+            float w = (1.0 - abs(f.x - float(i))) * (1.0 - abs(f.y - float(j)));
+            w = w * w * w;
+            acc += texture2D(t, R * (uv - c) + h).rgb * w; ws += w;
+          } }
+          return acc / max(ws, 1e-4);
+        #endif
+      }`)
     .replace('#include <map_fragment>', `
       vec2 uvT = vMapUv * repite;
       vec3 spl = texture2D(tSplat, vMapUv).rgb;
-      vec3 c = texture2D(map, uvT).rgb;
-      c = mix(c, texture2D(tHoja, uvT*1.3).rgb, clamp(spl.g*1.5, 0., 1.));
+      vec3 c = sinGrilla_(map, uvT);
+      c = mix(c, sinGrilla_(tHoja, uvT*1.3), clamp(spl.g*1.5, 0., 1.));
       c = mix(c, texture2D(tTierra, uvT*1.6).rgb, clamp(spl.r*1.35, 0., 1.));
-      c = mix(c, texture2D(tRoca, uvT*.9).rgb, vRocoso);
+      c = mix(c, sinGrilla_(tRoca, uvT*.9), vRocoso);
+      /* la luz del suelo varia en dos frecuencias: manchones grandes y grano cercano.
+         Sin esto, incluso sin rejilla, todo el terreno se lee con el mismo brillo. */
+      c *= 0.86 + 0.20 * ruido_(vMapUv * 6.3) + 0.14 * ruido_(vMapUv * 71.0);
       diffuseColor.rgb *= c;`);
 };
 
