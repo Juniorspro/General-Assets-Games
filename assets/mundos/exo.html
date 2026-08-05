@@ -33,11 +33,19 @@
     flex-direction:row;gap:8px;align-items:flex-start;pointer-events:auto}
   #btns .b{width:46px;height:46px;min-width:0;padding:0;display:grid;place-items:center;
     text-align:center;border-radius:12px;font-size:15px}
-  /* USAR es de accion: se queda abajo, donde esta el pulgar. position:FIXED y no
-     absolute: al subir #btns arriba, un hijo absolute cuelga de EL y el boton se
-     iba al borde superior, cortado. */
-  #btns .b.usar{position:fixed;right:calc(20px + min(84px,19vw));bottom:max(16px,5vh);
-    width:auto;height:auto;padding:13px 20px;font-size:15px;border-radius:14px}
+  /* USAR: REDONDO, abajo, al lado del salto. Dos motivos.
+     Sitio: position FIXED y no absolute. #btns se subio arriba a la derecha y es
+     absolute, asi que un hijo absolute dejaba de colgar de la pantalla y colgaba de
+     EL: su "bottom" se medía desde la caja de arriba y el boton aparecia arriba.
+     Forma: es el unico boton de accion que se toca en medio del juego, con el pulgar
+     y sin mirar; una pastilla alargada al lado de un salto redondo se toca peor y se
+     ve peor. Mismo diametro que el salto, a su izquierda. */
+  #btns .b.usar{position:fixed;right:calc(max(14px,3.5vw) + min(84px,19vw) + 12px);
+    bottom:max(16px,5vh);width:min(72px,16vw);height:min(72px,16vw);
+    aspect-ratio:1;border-radius:50%;padding:0;display:none;place-items:center;
+    font-size:clamp(10px,2.6vw,13px);line-height:1.05;text-align:center;
+    letter-spacing:.04em}
+  #btns .b.usar.on{display:grid}
   .b{min-width:86px;text-align:center;padding:12px 15px;border-radius:14px;font-weight:800;
     font-size:13px;background:rgba(20,14,36,.62);border:1.5px solid rgba(190,170,255,.4);
     color:#ece4ff;pointer-events:auto;cursor:pointer;backdrop-filter:blur(3px)}
@@ -46,6 +54,8 @@
   .b.usar.on{display:block}
   .b.corre.on{background:rgba(60,180,150,.78)}
   /* ayuda de controles de PC: sale sola al detectar mouse/teclado */
+  /* en un aparato sin tactil no se dibujan los controles de dedo */
+  body.sinTactil #joy,body.sinTactil #bSalta{display:none}
   #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
     font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
     background:rgba(12,8,22,.5);border:1px solid rgba(190,230,180,.26);
@@ -2493,6 +2503,14 @@ addEventListener('keydown', e => {
   if (/^(Key|Arrow|Shift|Enter|Space)/.test(e.code)) activaPC(); }, true);
 addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') activaPC(); }, true);
 addEventListener('touchstart', desactivaPC, { passive: true, capture: true });
+/* SIN TACTIL: se marca UNA vez, mirando de que es capaz el aparato y no con que se lo
+   esta usando ahora. Es lo que decide si se dibuja la palanca y el boton de salto: sin
+   esta marca, un PC de escritorio se quedaba con los dos encima del paisaje. */
+try {
+  if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0))
+    document.body.classList.add('sinTactil');
+} catch(e){ }
+
 try {
   if (window.matchMedia && matchMedia('(pointer:fine)').matches
       && !matchMedia('(pointer:coarse)').matches) activaPC();
