@@ -737,7 +737,7 @@ splTex.colorSpace = T.NoColorSpace;
    así que la normal y la posición del objeto son las del mundo. */
 const uniTerr = {
   tMusgo: { value: TX.musgo }, tRoca: { value: TX.roca },
-  tSplat: { value: splTex }, repite: { value: MAPA / 7 }
+  tSplat: { value: splTex }, repite: { value: MAPA / 5 }   /* parche de 5 m, no de 7 */
 };
 const matTerr = new T.MeshLambertMaterial({ map: TX.barro });
 matTerr.onBeforeCompile = sh => {
@@ -751,14 +751,34 @@ matTerr.onBeforeCompile = sh => {
     .replace('#include <common>', `#include <common>
       uniform sampler2D tMusgo, tRoca, tSplat;
       uniform float repite;
-      varying float vRocoso;varying float vSeco;`)
+      varying float vRocoso;varying float vSeco;
+      /* ------------------- SUELO SIN CUADRICULA -------------------------
+         Con una sola muestra a escala fija el mismo parche se repite 128 veces
+         ALINEADO y a media distancia se ven las bandas. Se mezclan DOS muestras
+         a escalas que no son multiplos, una girada 90 grados, con una mascara
+         de ruido suave: los dos patrones no coinciden en ningun punto. */
+      float h21_(vec2 p){ return fract(sin(dot(p, vec2(41.31, 289.07))) * 43758.5453); }
+      float ruido_(vec2 p){
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h21_(i), h21_(i + vec2(1.0, 0.0)), f.x),
+                   mix(h21_(i + vec2(0.0, 1.0)), h21_(i + vec2(1.0, 1.0)), f.x), f.y);
+      }
+      vec3 sinGrilla_(sampler2D t, vec2 uv, vec2 uvw){
+        vec3 a = texture2D(t, uv).rgb;
+        vec3 b = texture2D(t, vec2(-uv.y, uv.x) * 0.37 + vec2(0.31, 0.67)).rgb;
+        return mix(a, b, smoothstep(0.34, 0.66, ruido_(uvw * 3.1)));
+      }`)
     .replace('#include <map_fragment>', `
       vec2 uvT = vMapUv * repite;
       vec3 spl = texture2D(tSplat, vMapUv).rgb;
-      vec3 c = texture2D(map, uvT).rgb;                       /* barro de ciénaga */
+      vec3 c = sinGrilla_(map, uvT, vMapUv);                  /* barro de ciénaga */
       float musgo = clamp(vSeco * .85 + spl.g * 1.4, 0., 1.);
-      c = mix(c, texture2D(tMusgo, uvT * 1.25).rgb, musgo);
-      c = mix(c, texture2D(tRoca, uvT * .85).rgb, vRocoso * .8);
+      c = mix(c, sinGrilla_(tMusgo, uvT * 1.25, vMapUv + 0.41), musgo);
+      c = mix(c, sinGrilla_(tRoca, uvT * .85, vMapUv + 0.77), vRocoso * .8);
+      /* la luz del suelo varia de a manchones grandes: sin esto, incluso sin
+         cuadricula, todo el terreno se lee con el mismo brillo */
+      c *= 0.87 + 0.26 * ruido_(vMapUv * 5.7);
       /* película de alga y barro NEGRO en la lámina de agua */
       c *= mix(vec3(.46, .60, .50), vec3(1.), vSeco);
       /* la franja de la pasarela: barro pisado, más oscuro y mojado */

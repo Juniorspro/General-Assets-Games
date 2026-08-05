@@ -900,7 +900,7 @@ splTex.colorSpace = T.NoColorSpace;
 const uniTerr = {
   tTierra: { value: TX.tierra }, tHoja: { value: TX.hojarasca },
   tRoca: { value: TX.roca }, tSplat: { value: splTex },
-  repite: { value: MAPA / 7 },
+  repite: { value: MAPA / 5 }   /* parche de 5 m, no de 7 */,
   /* la ceniza volcánica REAL es casi negra (la foto del suelo mide ~40,36,32):
      tal cual, la mitad de abajo de la pantalla quedaba una mancha negra sin
      lectura y la bruma del horizonte se leía como una franja clara pegada.
@@ -918,15 +918,37 @@ matTerr.onBeforeCompile = sh => {
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', `#include <common>
       uniform sampler2D tTierra, tHoja, tRoca, tSplat;
-      uniform float repite, brillo;
-      varying float vRocoso;`)
+      uniform float repite;
+      varying float vRocoso;
+      /* ------------------- SUELO SIN CUADRICULA -------------------------
+         Con una sola muestra a escala fija el mismo parche de 7 m se repite
+         128 veces ALINEADO, y a media distancia se ven las bandas. Se mezclan
+         DOS muestras a escalas que no son multiplos (1 y 0,37), una girada 90
+         grados, con una mascara de ruido suave: el patron de una no coincide
+         con el de la otra en ningun punto y la cuadricula deja de existir.
+         Es la misma idea del «stochastic tiling», sin texturas de mas. */
+      float h21_(vec2 p){ return fract(sin(dot(p, vec2(41.31, 289.07))) * 43758.5453); }
+      float ruido_(vec2 p){
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h21_(i), h21_(i + vec2(1.0, 0.0)), f.x),
+                   mix(h21_(i + vec2(0.0, 1.0)), h21_(i + vec2(1.0, 1.0)), f.x), f.y);
+      }
+      vec3 sinGrilla_(sampler2D t, vec2 uv, vec2 uvw){
+        vec3 a = texture2D(t, uv).rgb;
+        vec3 b = texture2D(t, vec2(-uv.y, uv.x) * 0.37 + vec2(0.31, 0.67)).rgb;
+        return mix(a, b, smoothstep(0.34, 0.66, ruido_(uvw * 3.1)));
+      }`)
     .replace('#include <map_fragment>', `
       vec2 uvT = vMapUv * repite;
       vec3 spl = texture2D(tSplat, vMapUv).rgb;
-      vec3 c = texture2D(map, uvT).rgb;
-      c = mix(c, texture2D(tHoja, uvT*1.3).rgb, clamp(spl.g*1.5, 0., 1.));
-      c = mix(c, texture2D(tTierra, uvT*1.6).rgb, clamp(spl.r*1.35, 0., 1.));
-      c = mix(c, texture2D(tRoca, uvT*.9).rgb, vRocoso);
+      vec3 c = sinGrilla_(map, uvT, vMapUv);
+      c = mix(c, sinGrilla_(tHoja, uvT * 1.3, vMapUv + 0.41), clamp(spl.g * 1.5, 0., 1.));
+      c = mix(c, texture2D(tTierra, uvT * 1.6).rgb, clamp(spl.r * 1.35, 0., 1.));
+      c = mix(c, sinGrilla_(tRoca, uvT * .9, vMapUv + 0.77), vRocoso);
+      /* la luz del suelo varia de a manchones grandes: sin esto, incluso sin
+         cuadricula, todo el terreno se lee con el mismo brillo y parece mosaico */
+      c *= 0.87 + 0.26 * ruido_(vMapUv * 5.7);
       diffuseColor.rgb *= c * brillo;`);
 };
 
