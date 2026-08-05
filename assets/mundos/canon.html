@@ -446,6 +446,31 @@ function crestaDuna(x, z){
   return s < .72 ? Math.pow(s / .72, 1.75) : 1 - (s - .72) / .28;
 }
 function alturaBaseRef(x, z){ return fbm(x * .003 + 11, z * .003 + 23) * 26; }
+/* CUANTO MANDA LA HUELLA EN ESTE PUNTO: 1 encima del camino, 0 a treinta metros.
+   Se llama desde `alturaBase`, que corre unas 150.000 veces al armar el terreno,
+   asi que primero descarta con dos comparaciones (la caja) y solo despues mide la
+   distancia. `SENDA_PTS` se construye MAS ABAJO que esta funcion, y esta bien: no
+   se usa hasta que el terreno se arma, y mientras no exista el corredor vale 0 y
+   el terreno es el de siempre. */
+function pesoSenda(x, z){
+  const P = (typeof SENDA_PTS !== 'undefined') && SENDA_PTS;
+  if (!P || !P.length) return 0;
+  let d2 = 1e9;
+  for (let i = 0; i < P.length; i++){
+    const dx = x - P[i][0];
+    if (dx > 30 || dx < -30) continue;
+    const dz = z - P[i][1];
+    if (dz > 30 || dz < -30) continue;
+    const q = dx * dx + dz * dz;
+    if (q < d2) d2 = q;
+  }
+  if (d2 > 900) return 0;
+  const d = Math.sqrt(d2);
+  /* suave entre 10 y 30 m: el borde de la repisa no puede ser un escalon nuevo */
+  const t = (30 - d) / 20;
+  const u = t < 0 ? 0 : (t > 1 ? 1 : t);
+  return u * u * (3 - 2 * u);
+}
 function alturaBase(x, z){
   let h = 26 + fbm(x * .0026 + 13, z * .0026 + 51) * 16;        /* la meseta alta */
   /* EL CAÑÓN: una garganta que cruza el mapa; el fondo es casi plano (el río) */
@@ -454,8 +479,27 @@ function alturaBase(x, z){
   const corte = Math.exp(-g * g * 2.4);
   h -= 52 * corte;
   h += fbm(x * .011 + 71, z * .011 + 5) * 5.5 * (1 - corte * .7); /* escalones */
-  /* terrazas: la roca sedimentaria sube en peldaños */
+  /* TERRAZAS: la roca sedimentaria sube en peldaños de 6,5 m con la contrahuella
+     casi vertical. Es el carácter del mundo y se queda.
+     ...PERO NO DONDE SE CAMINA. Medido sobre la huella cada metro y medio: diez
+     sitios pedían una pendiente de hasta 4,5 contra un tope de 1,9, y el salto
+     sube 1,53 m, así que no se pasaban ni saltando —dos de ellos entre las ruinas
+     y el oasis, que es el «no puedo subir arriba»—. Ningún tope de pendiente
+     arregla un escalón de seis metros y medio, y subir el tope haría trepable
+     cualquier pared del cañón, que es justo lo que le da sentido a buscar el paso.
+     Así que la huella se TALLA: dentro de su corredor el terreno vuelve al perfil
+     LISO (éste, el de antes de escalonar) y afuera sigue en peldaños. Lo que se ve
+     es una repisa cortada en la roca bajando por la garganta.
+     Funciona porque el perfil liso ya es caminable: la pared del cañón sin
+     terrazas es 52·exp(-g²·2,4), cuya pendiente máxima es 0,72, por debajo del
+     0,80 de a pie. No hay que inventar nada: hay que dejar de escalonar donde se
+     camina. */
+  const hLiso = h;
   h = Math.floor(h / 6.5) * 6.5 + (h % 6.5) * .35;
+  {
+    const w = pesoSenda(x, z);
+    if (w > 0) h = h * (1 - w) + hLiso * w;
+  }
   /* arcos y agujas cerca de las ruinas */
   const dR = Math.hypot(x - POI.ruinas.x, z - POI.ruinas.z);
   h += 16 * Math.exp(-(dR * dR) / (70 * 70));
@@ -4096,9 +4140,9 @@ addEventListener('keyup', e => {
 
 /* -------- detección PC (mouse/teclado) + ayuda de controles al costado ----- */
 const PCH = {
-  es: { t: 'CONTROLES PC', mov: 'moverse', mir: 'mirar', cor: 'correr', usa: 'usar', sal: 'saltar', bsalto: 'SALTO', dlg: 'seguir' },
-  en: { t: 'PC CONTROLS', mov: 'move', mir: 'look', cor: 'run', usa: 'use', sal: 'jump', bsalto: 'JUMP', dlg: 'next' },
-  pt: { t: 'CONTROLES PC', mov: 'mover', mir: 'olhar', cor: 'correr', usa: 'usar', sal: 'saltar', bsalto: 'SALTO', dlg: 'seguir' }
+  es: { t: 'CONTROLES PC', mov: 'moverse', mir: 'mirar', cor: 'correr', usa: 'usar', sal: 'saltar', bsalto: 'SALTO', dlg: 'seguir' , kEsp: 'Espacio', kEnt: 'Enter' },
+  en: { t: 'PC CONTROLS', mov: 'move', mir: 'look', cor: 'run', usa: 'use', sal: 'jump', bsalto: 'JUMP', dlg: 'next' , kEsp: 'Space', kEnt: 'Enter' },
+  pt: { t: 'CONTROLES PC', mov: 'mover', mir: 'olhar', cor: 'correr', usa: 'usar', sal: 'saltar', bsalto: 'SALTO', dlg: 'seguir' , kEsp: 'Espa\u00e7o', kEnt: 'Enter' }
 };
 /* el rotulo del boton de SALTO tambien tiene idioma */
 function pintaSalto(){ const e = $('bSaltaT');
@@ -4113,8 +4157,8 @@ function pintaPCHelp(){
     '<div class="row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ' + d.mov + '</div>' +
     '<div class="row"><kbd>🖱</kbd> / <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> ' + d.mir + '</div>' +
     '<div class="row"><kbd>Shift</kbd> ' + d.cor + ' · <kbd>E</kbd> ' + d.usa + '</div>' +
-    '<div class="row"><kbd>Espacio</kbd> ' + (d.sal || 'saltar') + '</div>' +
-    '<div class="row"><kbd>Enter</kbd> ' + d.dlg + '</div>';
+    '<div class="row"><kbd>' + (d.kEsp || 'Space') + '</kbd> ' + (d.sal || 'jump') + '</div>' +
+    '<div class="row"><kbd>' + (d.kEnt || 'Enter') + '</kbd> ' + d.dlg + '</div>';
 }
 let esPC = false;
 function activaPC(){ if (esPC) return; esPC = true; document.body.classList.add('pc'); pintaPCHelp(); }
@@ -4408,8 +4452,13 @@ window.__S = {
   rapelIr(k){ const P = RAPEL.PUE[k]; if (!P) return null;
     px = P.x; pz = P.z; ojoY = H(px, pz); aireY = 0; enAire = false;
     return RAPEL.est(); },
+  /* los numeros de la fisica, para poder comprobar de afuera si la huella es
+     subible: el tope de pendiente de un punto y cuanto sube el salto. */
+  pend(x, z){ return typeof pendMax === 'function' ? pendMax(x, z) : PEND_MAX; },
+  saltoAlto(){ return typeof SALTO_V !== 'undefined' ? SALTO_V * SALTO_V / (2 * GRAV) : null; },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
   dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
+  saltar(){ saltar(); },
   usar(){ usarAccion(); },
   cap(n){ ponCap(n, true); },
   corre(v){ corre = !!v; },

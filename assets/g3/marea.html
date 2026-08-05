@@ -635,7 +635,7 @@ function offTrack() {   // distancia al corredor (a la poligonal de waypoints)
 function step(dt) {
   if (dead) return; tPlay += dt; const t = tPlay; const d = DIF[cfg.dif] || DIF.normal;
   if (cfg.modo !== 'libre') { timeLeft -= dt;
-    if (timeLeft <= 0) { timeLeft = 0; dead = true; ARC.over({ win: false, score, title: 'SE ACABÓ', sub: 'P' + place + '/' + (RN + 1), coins: (score / 30 | 0) }); return; } }
+    if (timeLeft <= 0) { timeLeft = 0; dead = true; ARC.over({ win: false, score, title: UT('fin2'), sub: 'P' + place + '/' + (RN + 1), coins: (score / 30 | 0) }); return; } }
   caus1.material.map.offset.set(t * .012, t * .009); caus2.material.map.offset.set(-t * .009, t * .013); water.material.bumpMap.offset.set(t * .02, t * .016);
   let ix = pad ? pad.steer : 0;
   if (keys.KeyA || keys.ArrowLeft) ix = -1; if (keys.KeyD || keys.ArrowRight) ix = 1;
@@ -721,9 +721,9 @@ function draw2d(g) {
   if (cfg.modo !== 'libre') { g.font = '900 34px system-ui'; g.fillStyle = timeLeft < 8 ? '#ff5470' : '#fff'; g.fillText(timeLeft.toFixed(1) + 's', W / 2, 44); }
   else { g.font = '900 22px system-ui'; g.fillStyle = '#bfe9f2'; g.fillText('LIBRE', W / 2, 40); }
   g.font = '900 18px system-ui'; g.fillStyle = '#2fd1e0';
-  if (cfg.modo === 'circuito') { const d = DIF[cfg.dif] || DIF.normal; g.fillText('vuelta ' + Math.min(laps + 1, d.laps) + '/' + d.laps, W / 2, 68); }
+  if (cfg.modo === 'circuito') { const d = DIF[cfg.dif] || DIF.normal; g.fillText(UT('vuelta').toLowerCase() + ' ' + Math.min(laps + 1, d.laps) + '/' + d.laps, W / 2, 68); }
   else g.fillText('racha x' + Math.min(4, Math.max(1, streak)), W / 2, 68);
-  if (offT > .35) { g.font = '900 20px system-ui'; g.fillStyle = '#ffd23f'; g.fillText('¡VOLVÉ A LA PISTA!', W / 2, 96); }
+  if (offT > .35) { g.font = '900 20px system-ui'; g.fillStyle = '#ffd23f'; g.fillText(UT('pista'), W / 2, 96); }
   g.textAlign = 'left'; g.font = '900 26px system-ui'; g.fillStyle = '#fff'; g.fillText(score + '', 24, 42);
   g.font = '900 13px system-ui'; g.fillStyle = 'rgba(255,255,255,.6)'; g.fillText((v * 3.6 | 0) + ' km/h', 24, 62);
   if (cfg.modo !== 'contra') { g.font = '900 24px system-ui'; g.fillStyle = place <= 1 ? '#ffe6a0' : '#fff'; g.fillText('P' + place + '/' + (RN + 1), 24, 96); }
@@ -739,8 +739,39 @@ function draw2d(g) {
     g.fillStyle = '#ffe6a0'; g.beginPath(); g.arc(cxp + GATES[gi].x * k, cyp + GATES[gi].z * k, 4, 0, 6.28); g.fill();
     g.fillStyle = '#fff'; g.beginPath(); g.arc(cxp + sx * k, cyp + sz * k, 3.4, 0, 6.28); g.fill();
   }
-  if (pad) pad.draw(g, '#2fd1e0');
+  /* EN PC no se dibujan los botones tactiles —no se pueden tocar y tapan el
+     agua— y en su lugar va el cartel de teclas, que es la unica manera de
+     enterarse de que el teclado sirve. */
+  try {
+    if (pad && !window.__ESPC) pad.draw(g, '#2fd1e0');
+    else if (window.__ESPC) teclasPC(g);
+  } catch (e){ window.__HUDERR = '' + (e && (e.message || e)); }
   g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(W - 52, 16, 36, 36); g.fillStyle = '#fff'; g.font = '900 18px system-ui'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillText('❚❚', W - 34, 40);
+}
+
+
+/* el cartel de teclas de PC: mismo canvas y mismas coordenadas logicas de
+   960x540 que el resto del HUD, asi que aguanta el giro de pantalla y el
+   escalado igual que los botones que reemplaza. Se traduce con la misma tabla. */
+const TEC = { es: ['A D  o  \u2190 \u2192   girar', 'W / ESPACIO   gas', 'ESC / \u275a\u275a   pausa'],
+              en: ['A D  or  \u2190 \u2192   steer', 'W / SPACE   throttle', 'ESC / \u275a\u275a   pause'],
+              pt: ['A D  ou  \u2190 \u2192   virar', 'W / ESPA\u00c7O   acelerador', 'ESC / \u275a\u275a   pausa'] };
+function teclasPC(g){
+  const L = TEC[window.LANG] || TEC.en;
+  const x = 34, y = 430, w = 260, h = 92;
+  g.fillStyle = 'rgba(6,20,28,.5)';
+  g.strokeStyle = 'rgba(120,220,240,.34)';
+  g.lineWidth = 2;
+  g.beginPath();
+  const r = 12;
+  g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r);
+  g.fill(); g.stroke();
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillStyle = '#cfeaf2';
+  g.font = '800 17px system-ui';
+  for (let i = 0; i < L.length; i++) g.fillText(L[i], x + 16, y + 24 + i * 24);
+  g.textBaseline = 'alphabetic';
 }
 
 let menuA = 0;
@@ -931,7 +962,10 @@ gl.addEventListener('mousedown', onDown); addEventListener('mousemove', e => {
   if (state === 'game' && document.pointerLockElement) { const d = delt(e.movementX, e.movementY); if (GAME.look) GAME.look(d.x, d.y); if (GAME.aimMove) GAME.aimMove(); }
   onMove(e); });
 addEventListener('mouseup', onUp);
-addEventListener('keydown', e => { if (GAME.key) GAME.key(e.code, true); });
+addEventListener('keydown', e => { if (GAME.key) GAME.key(e.code, true);
+  /* en PC la pausa es ESC: el boton de pausa esta arriba a la derecha y con
+     raton hay que ir a buscarlo en medio de una carrera */
+  if (e.code === 'Escape' && window.ARC_pause) window.ARC_pause(); });
 addEventListener('keyup', e => { if (GAME.key) GAME.key(e.code, false); });
 
 /* -------- pantalla completa + orientación -------- */
@@ -952,17 +986,23 @@ const UIL = {
   es: { sub: 'laguna tropical', jugar: 'JUGAR', jugarGo: 'JUGAR \u25b8', pausa: 'PAUSA',
         seguir: 'SEGUIR', menu: 'MEN\u00da', otra: 'OTRA VEZ', fin: 'FIN',
         gano: '\u00a1GANASTE!', rec: '\u00a1NUEVO R\u00c9CORD!',
-        puerta: 'PUERTA M\u00c1S CERCA', vuelta: 'VUELTA' },
+        puerta: 'PUERTA M\u00c1S CERCA', vuelta: 'VUELTA',
+        pista: '\u00a1VOLV\u00c9 A LA PISTA!', fin2: 'SE ACAB\u00d3' },
   en: { sub: 'tropical lagoon', jugar: 'PLAY', jugarGo: 'PLAY \u25b8', pausa: 'PAUSED',
         seguir: 'RESUME', menu: 'MENU', otra: 'PLAY AGAIN', fin: 'THE END',
         gano: 'YOU WIN!', rec: 'NEW RECORD!',
-        puerta: 'GATE MOVED CLOSER', vuelta: 'LAP' },
+        puerta: 'GATE MOVED CLOSER', vuelta: 'LAP',
+        pista: 'GET BACK ON TRACK!', fin2: "TIME'S UP" },
   pt: { sub: 'lagoa tropical', jugar: 'JOGAR', jugarGo: 'JOGAR \u25b8', pausa: 'PAUSA',
         seguir: 'CONTINUAR', menu: 'MENU', otra: 'DE NOVO', fin: 'FIM',
         gano: 'VOC\u00ca GANHOU!', rec: 'NOVO RECORDE!',
-        puerta: 'PORTA MAIS PERTO', vuelta: 'VOLTA' }
+        puerta: 'PORTA MAIS PERTO', vuelta: 'VOLTA',
+        pista: 'VOLTA \u00c0 PISTA!', fin2: 'ACABOU O TEMPO' }
 };
-const UT = k => (UIL[window.LANG] || UIL.en)[k];
+/* EN `window`, no `const`: a `UT` la llaman el HUD y el fin de partida, que
+   viven en OTRO <script> con su propio IIFE. Como const, ahi no existia y la
+   excepcion se comia el HUD entero desde la linea de la vuelta para abajo. */
+window.UT = k => (UIL[window.LANG] || UIL.en)[k];
 function pintaUI(){
   const q = (i, v) => { const e = document.getElementById(i); if (e) e.textContent = v; };
   q('ldS', UT('sub')); q('ldGo', UT('jugarGo')); q('bPlay', UT('jugar'));
@@ -971,6 +1011,27 @@ function pintaUI(){
   const t = document.querySelector('#mTitle .s'); if (t) t.textContent = UT('sub');
   const pa = document.querySelector('#pause .big'); if (pa) pa.textContent = UT('pausa');
 }
+
+
+/* -------- PC o dedo: se detecta, no se supone --------
+   El juego ya andaba con teclado y raton; lo que faltaba era darse cuenta para
+   no dibujar los botones tactiles encima del agua y para decir que teclas hay.
+   La marca de "sin tactil" se decide por lo que el aparato PUEDE hacer, una sola
+   vez, y no por lo que se acabo de usar. */
+/* EN `window` a proposito: marea son cinco <script> y dos estan envueltos en su
+   propio IIFE. El HUD vive en uno y esta deteccion en el otro, asi que una
+   variable suelta no se ve del otro lado: el HUD se cortaba en esa linea y no
+   dibujaba ni el cartel de teclas ni el boton de pausa que viene despues. */
+window.__ESPC = false;
+function modoPC(v){ window.__ESPC = !!v; }
+try {
+  if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) modoPC(true);
+  if (window.matchMedia && matchMedia('(pointer:fine)').matches
+      && !matchMedia('(pointer:coarse)').matches) modoPC(true);
+} catch (e) {}
+addEventListener('keydown', e => { if (/^(Key|Arrow|Shift|Space|Enter)/.test(e.code)) modoPC(true); }, true);
+addEventListener('mousedown', e => { if (e.pointerType !== 'touch') modoPC(true); }, true);
+addEventListener('touchstart', () => modoPC(false), { passive: true, capture: true });
 
 /* -------- botones -------- */
 function bind() {

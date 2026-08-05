@@ -261,6 +261,20 @@ try {
     : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
   GLTF = (await import(GLU)).GLTFLoader;
 } catch (e) {}
+/* Reflector para el REFLEJO REAL del agua: es una segunda pasada de render de la
+   escena desde la camara espejada, o sea que devuelve TODO lo que hay y no solo
+   la luz del cielo. Se resuelve igual que GLTFLoader (disco con ?local, CDN si
+   no) y por el MISMO importmap, asi que su `import from "three"` cae en el modulo
+   ya cargado y no baja three dos veces. Si no llega, el espejo queda en null y el
+   agua se queda con el reflejo de cielo por PMREM que tenia: se degrada. */
+let Reflector = null;
+try {
+  const RFU = LOC ? '/_vthree/examples/jsm/objects/Reflector.js'
+    : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/objects/Reflector.js';
+  Reflector = (await import(RFU)).Reflector;
+} catch (e) {}
+const ESPEJO_BAJOS = false;
+
 const $ = i => document.getElementById(i);
 
 /* ---------------- azar reproducible: el valle es SIEMPRE el mismo ---------- */
@@ -923,6 +937,47 @@ const agua = new T.Mesh(new T.PlaneGeometry(380, 380, 84, 84), aguaMat);
 agua.rotation.x = -Math.PI / 2;
 agua.position.set(POI.lagoluz.x, AGUA_Y, POI.lagoluz.z);
 scene.add(agua);
+
+/* ===================== EL ESPEJO DEL AGUA (tiempo real) =====================
+   El plano tintado devuelve la luz del cielo (PMREM) pero no devuelve los
+   arboles, ni lo construido, ni vos: se ve como una chapa de color. Este
+   Reflector es una SEGUNDA PASADA DE RENDER de la escena desde la camara
+   espejada, y por eso devuelve todo lo que hay, en tiempo real.
+
+   Se paga con cinco reglas, porque esto corre en un telefono: resolucion topada
+   (512/384/256 segun calidad y nunca mas), multisample 0 (el MSAA del reflejo se
+   paga cuatro veces y debajo de los rizos no se nota), apagado si el agua no esta
+   a la vista, apagado de lejos, y el plano del agua ENCIMA con menos opacidad —al
+   0,93 que tenia, tapaba el espejo entero—.
+
+   El plano del agua no se toca: el espejo va cuatro centimetros por debajo, asi
+   que las olas, las causticas y el sombreador siguen igual que estaban. */
+const ESPEJO = { m: null, lejos: 150, res: 384, on: false, opac: 0.58 };
+if (Reflector){
+  ESPEJO.m = new Reflector(new T.PlaneGeometry(380, 380), {
+    textureWidth: 384, textureHeight: 384, multisample: 0,
+    color: 0x9fb0ae, clipBias: .0035 });
+  ESPEJO.m.rotation.x = -Math.PI / 2;
+  ESPEJO.m.position.set(agua.position.x, agua.position.y - .04, agua.position.z);
+  scene.add(ESPEJO.m);
+  aguaMat.transparent = true;
+  aguaMat.opacity = ESPEJO.opac;
+  ESPEJO.on = true;
+}
+ESPEJO.calidad = g => {
+  if (!ESPEJO.m) return;
+  ESPEJO.res = g === 'b' ? 256 : (g === 'a' ? 512 : 384);
+  ESPEJO.on = ESPEJO_BAJOS || g !== 'b';
+  const rt = ESPEJO.m.getRenderTarget();
+  if (rt.width !== ESPEJO.res) rt.setSize(ESPEJO.res, ESPEJO.res);
+  aguaMat.opacity = ESPEJO.on ? ESPEJO.opac : .93;
+};
+ESPEJO.tick = () => {
+  if (!ESPEJO.m) return;
+  const d = Math.hypot(px - agua.position.x, pz - agua.position.z);
+  ESPEJO.m.visible = ESPEJO.on && agua.visible && d < ESPEJO.lejos;
+};
+window.__ESPEJO = ESPEJO;
 
 /* ------------------------------ LOS ÁRBOLES --------------------------------
    Tronco: cilindro con corteza fotográfica. Copa: 7 tarjetas con hojas reales
@@ -2687,9 +2742,9 @@ addEventListener('keyup', e => {
 
 /* -------- detección PC (mouse/teclado) + ayuda de controles al costado ----- */
 const PCH = {
-  es: { t: 'CONTROLES PC', mov: 'moverse', mir: 'mirar', cor: 'correr', usa: 'usar', dlg: 'seguir' },
-  en: { t: 'PC CONTROLS', mov: 'move', mir: 'look', cor: 'run', usa: 'use', dlg: 'next' },
-  pt: { t: 'CONTROLES PC', mov: 'mover', mir: 'olhar', cor: 'correr', usa: 'usar', dlg: 'seguir' }
+  es: { t: 'CONTROLES PC', mov: 'moverse', mir: 'mirar', cor: 'correr', usa: 'usar', dlg: 'seguir' , kEsp: 'Espacio', kEnt: 'Enter' },
+  en: { t: 'PC CONTROLS', mov: 'move', mir: 'look', cor: 'run', usa: 'use', dlg: 'next' , kEsp: 'Space', kEnt: 'Enter' },
+  pt: { t: 'CONTROLES PC', mov: 'mover', mir: 'olhar', cor: 'correr', usa: 'usar', dlg: 'seguir' , kEsp: 'Espa\u00e7o', kEnt: 'Enter' }
 };
 function pintaPCHelp(){
   const d = PCH[LANG] || PCH.es;
@@ -2698,7 +2753,7 @@ function pintaPCHelp(){
     '<div class="row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ' + d.mov + '</div>' +
     '<div class="row"><kbd>🖱</kbd> / <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> ' + d.mir + '</div>' +
     '<div class="row"><kbd>Shift</kbd> ' + d.cor + ' · <kbd>E</kbd> ' + d.usa + '</div>' +
-    '<div class="row"><kbd>Enter</kbd> ' + d.dlg + '</div>';
+    '<div class="row"><kbd>' + (d.kEnt || 'Enter') + '</kbd> ' + d.dlg + '</div>';
 }
 let esPC = false;
 function activaPC(){ if (esPC) return; esPC = true; document.body.classList.add('pc'); pintaPCHelp(); }
@@ -2792,6 +2847,8 @@ function bucle(t){
   glare.material.opacity = cl((sol.intensity - .6) / 1.6, 0, 1);
   if (fase === 'juego'){
     if (!enDlg) fisica(dt);
+    /* el espejo del agua: sigue al plano y se apaga de lejos o si no se ve */
+    if (window.__ESPEJO) window.__ESPEJO.tick();
     pasoLuz(dt);
     pasoObjetivo();
     rsTick(dt);
@@ -2896,6 +2953,9 @@ document.querySelectorAll('#fLang .chip').forEach(ch =>
 
 /* ---------- calidad gráfica: tope de resolución y alcance de la niebla ------ */
 function setGfx(g){
+  /* el espejo cuesta una pasada de render entera: su resolucion baja con la
+     calidad, y en BAJOS se apaga y el agua vuelve al plano tintado */
+  if (window.__ESPEJO && window.__ESPEJO.calidad) window.__ESPEJO.calidad(g);
   if (!GFXQ[g]) return;
   GFX = g;
   try { localStorage.setItem('exo_gfx', g); } catch(e){}

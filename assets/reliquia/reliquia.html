@@ -35,6 +35,16 @@
   #dist{ position:absolute; top:8px; left:50%; transform:translateX(-50%); font:900 30px system-ui; text-shadow:0 2px 10px #000; }
   #mult{ position:absolute; top:44px; left:50%; transform:translateX(-50%); font:900 14px system-ui; color:#7dff8a; text-shadow:0 1px 6px #000; }
   #runCoins{ position:absolute; top:10px; right:14px; font:900 18px system-ui; color:#ffd85e; text-shadow:0 2px 8px #000; }
+  /* CARTEL DE TECLAS: solo en PC. Este juego era 100% gesto y en una computadora
+     no habia manera de saber que ahora hay teclado. */
+  #pcTec{ position:fixed; left:12px; bottom:12px; z-index:40; display:none;
+    padding:9px 12px; border-radius:12px; background:rgba(10,14,8,.62);
+    border:1px solid rgba(255,216,94,.34); color:#ffe9a8;
+    font:800 12px/1.5 system-ui,sans-serif; letter-spacing:.04em;
+    text-shadow:0 1px 6px rgba(0,0,0,.7); pointer-events:none; }
+  body.pc #pcTec{ display:block; }
+  body.pc.cine #pcTec, body.pc #pcTec.hide{ display:none; }
+  #pcTec b{ color:#fff; }
   #bPause{ position:absolute; top:8px; left:12px; width:44px; height:44px; border-radius:12px; background:rgba(10,14,8,.55);
     border:2px solid rgba(255,255,255,.4); font:900 18px system-ui; display:flex; align-items:center; justify-content:center; pointer-events:auto; }
   #pups{ position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; gap:10px; }
@@ -123,6 +133,7 @@
   <div id="hud" class="hide">
     <div id="dist">0 m</div><div id="mult"></div><div id="runCoins">🪙 0</div>
     <div id="bPause">⏸</div>
+    <div id="pcTec"></div>
     <div id="pups"></div>
     <div id="tut">⬅️➡️ deslizá para cambiar de carril<br>⬆️ saltá &nbsp;·&nbsp; ⬇️ barrida</div>
     <div id="big"></div><div id="flash"></div>
@@ -882,6 +893,70 @@ addEventListener('pointerup',e=>{ if(e.pointerId!==swId)return; swId=null;
   if(adx>ady){ const nl=THREE.MathUtils.clamp(R.lane+(dx>0?1:-1),-1,1); if(nl!==R.lane)S.swipe(); R.lane=nl; }
   else if(dy<0)doJump(); else doSlide(); },{passive:false});
 
+
+/* ================= PC: TECLADO Y DETECCION =================
+   El juego era SOLO gesto: un swipe de 18 px con pointerdown/pointerup y ni una
+   tecla (el unico keydown que habia desbloqueaba el audio). Con raton eso obliga a
+   ARRASTRAR para cambiar de carril, en un juego donde la decision dura dos
+   decimas. Las teclas entran por las MISMAS puertas que el gesto —doJump() y
+   doSlide() ya existian— asi que no hay dos caminos que puedan desincronizarse. */
+const TECR = {
+  es: ['<b>&#8592; &#8594;</b> o <b>A D</b> — carril',
+       '<b>&#8593;</b> / <b>W</b> / <b>ESPACIO</b> — saltar',
+       '<b>&#8595;</b> / <b>S</b> — deslizarse',
+       '<b>ESC</b> — pausa'],
+  en: ['<b>&#8592; &#8594;</b> or <b>A D</b> — lane',
+       '<b>&#8593;</b> / <b>W</b> / <b>SPACE</b> — jump',
+       '<b>&#8595;</b> / <b>S</b> — slide',
+       '<b>ESC</b> — pause'],
+  pt: ['<b>&#8592; &#8594;</b> ou <b>A D</b> — pista',
+       '<b>&#8593;</b> / <b>W</b> / <b>ESPA&#199;O</b> — saltar',
+       '<b>&#8595;</b> / <b>S</b> — deslizar',
+       '<b>ESC</b> — pausa']
+};
+let ESPC = false;
+function pintaTec(){
+  const e = $id('pcTec');
+  if (e) e.innerHTML = (TECR[LANG] || TECR.en).join('<br>');
+}
+function modoPC(v){
+  if (ESPC === v) return;
+  ESPC = v;
+  document.body.classList.toggle('pc', v);
+  if (v) pintaTec();
+}
+try {
+  /* una vez, por lo que el aparato PUEDE hacer */
+  if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0)) modoPC(true);
+  if (window.matchMedia && matchMedia('(pointer:fine)').matches
+      && !matchMedia('(pointer:coarse)').matches) modoPC(true);
+} catch (e) {}
+addEventListener('mousedown', e => { if (e.pointerType !== 'touch') modoPC(true); }, true);
+addEventListener('touchstart', () => modoPC(false), { passive: true, capture: true });
+addEventListener('keydown', e => {
+  const c = e.code;
+  if (/^(Key|Arrow|Space|Enter|Escape|Shift)/.test(c)) modoPC(true);
+  if (APP === 'cine'){
+    if (c === 'Space' || c === 'Enter' || c === 'Escape'){ cineT = Math.max(cineT, 3.9); e.preventDefault(); }
+    return;
+  }
+  if (APP === 'pause'){
+    if (c === 'Escape'){ APP = 'run'; $id('pauseScr').classList.add('hide'); e.preventDefault(); }
+    return;
+  }
+  if (APP !== 'run') return;
+  const carril = d => {
+    const nl = THREE.MathUtils.clamp(R.lane + d, -1, 1);
+    if (nl !== R.lane) S.swipe();
+    R.lane = nl;
+  };
+  if (c === 'ArrowLeft' || c === 'KeyA'){ carril(-1); e.preventDefault(); }
+  else if (c === 'ArrowRight' || c === 'KeyD'){ carril(1); e.preventDefault(); }
+  else if (c === 'ArrowUp' || c === 'KeyW' || c === 'Space'){ doJump(); e.preventDefault(); }
+  else if (c === 'ArrowDown' || c === 'KeyS'){ doSlide(); e.preventDefault(); }
+  else if (c === 'Escape'){ APP = 'pause'; $id('pauseScr').classList.remove('hide'); e.preventDefault(); }
+});
+
 /* ================= HUD power-ups ================= */
 const puEl={};
 (function(){ const box=$id('pups');
@@ -1270,6 +1345,8 @@ function applyLang(){ document.documentElement.lang=LANG;
   $id('shTitle').textContent=T('shop');
   const q=(s,t)=>{ const e=document.querySelector(s); if(e)e.textContent=t; };
   q('#pauseScr h2',T('pauseT')); q('#misScr h2',T('mis')); q('#logScr h2',T('log')); q('#setScr h2',T('set')); q('#endScr h2',T('endT'));
+  /* el cartel de teclas de PC tambien tiene idioma */
+  if(typeof pintaTec==='function')pintaTec();
   if(typeof syncTogs==='function')syncTogs(); }
 
 /* ================= PRECARGA de TODOS los assets (cachea para después) ================= */

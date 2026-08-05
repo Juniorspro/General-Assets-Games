@@ -49,5 +49,13 @@ console.log('texto: "' + d.txt + '"');
 const esp = /TU NOMBRE|JUGAR|IDIOMA|GRÁFICOS|SONIDO|VOLVER|TOCÁ/.test(d.txt);
 const ing = /YOUR NAME|PLAY|LANGUAGE|GRAPHICS|SOUND|BACK|TAP/i.test(d.txt);
 console.log(ing && !esp ? 'INGLES OK' : (esp ? 'sale en ESPANOL' : '?'));
+/* modo PC: la clase en el body y el cartel de teclas */
+const pc = await p.evaluate(() => ({
+  clase: document.body.classList.contains('pc'),
+  cartel: (document.getElementById('pcTec') || {}).innerHTML || '',
+  visible: (() => { const e = document.getElementById('pcTec');
+    return e ? getComputedStyle(e).display : 'no hay'; })() }));
+console.log('PC:', pc.clase, '· cartel visible:', pc.visible,
+  '·', pc.cartel.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 110));
 console.log('errores:', errs.length ? [...new Set(errs)].slice(0, 3) : 'ninguno');
 await b.close(); server.close();
