@@ -2169,6 +2169,78 @@ function figCriatura(col){
 const MIXERS = [];
 /* carga un personaje 3D generado y lo cuelga del Group del NPC, apagando la
    figura procedural; si falla, la procedural se queda. Reproduce su clip. */
+/* ====================== BIBLIOTECA DE CLIPS PRESTADOS =====================
+   Los personajes del repo salieron todos del mismo tipo de rig: comparten los
+   NUEVE huesos estandar (Hips, Spine, LeftArm, RightArm, LeftForeArm,
+   RightForeArm, LeftUpLeg, RightUpLeg, Head). El AnimationMixer de three ata
+   las pistas de un clip POR NOMBRE DE NODO, asi que un clip de un modelo anda
+   igual en otro. Por eso no hace falta generar animacion para cada personaje:
+   se PRESTA la que ya existe en el repo.
+     viajera.glb / dante.glb  ->  solo traen Idle (patinaban sin mover la pierna)
+     hyper/char.glb           ->  Casual_Walk
+     reliquia/hero.glb        ->  RunFast
+     aero/hero-idle.glb       ->  Idle
+   Se cargan los tres donantes UNA sola vez y se reparten a todos. */
+const CLIPS = { quieto: null, andar: null, correr: null, listos: 0, cola: [] };
+{
+  const DON = [['andar', 'hyper/char.glb'], ['correr', 'reliquia/hero.glb'],
+               ['quieto', 'aero/hero-idle.glb']];
+  const fin = () => {
+    CLIPS.listos++;
+    if (CLIPS.listos < DON.length) return;
+    /* los personajes que cargaron antes que la biblioteca esperan en la cola */
+    for (const npc of CLIPS.cola.splice(0)) armarAcciones(npc);
+  };
+  for (const [k, u] of DON){
+    if (!GLTF){ fin(); continue; }
+    new GLTF().load(AG(u), g => {
+      if (g.animations && g.animations.length) CLIPS[k] = g.animations[0];
+      fin();
+    }, undefined, fin);
+  }
+}
+/* le arma a un personaje las tres acciones, con lo propio primero y lo prestado
+   despues: si el GLB ya trae un clip de caminar, ese gana. */
+function armarAcciones(npc){
+  const m = npc.modelo;
+  if (!m) return;
+  if (CLIPS.listos < 3){ if (CLIPS.cola.indexOf(npc) < 0) CLIPS.cola.push(npc); return; }
+  const propios = npc.clipsPropios || [];
+  const buscar = rx => propios.find(c => rx.test(c.name || '')) || null;
+  const cQuieto = buscar(/idle|quiet/i) || CLIPS.quieto;
+  const cAndar  = buscar(/walk|camin/i) || CLIPS.andar;
+  const cCorrer = buscar(/run|corr/i)   || CLIPS.correr || cAndar;
+  if (!cQuieto && !cAndar) return;
+  const mix = npc.mixer || new T.AnimationMixer(m);
+  if (!npc.mixer){ npc.mixer = mix; MIXERS.push(mix); }
+  const A = npc.acc = {};
+  for (const par of [['quieto', cQuieto], ['andar', cAndar], ['correr', cCorrer]]){
+    if (!par[1]) continue;
+    let a;
+    try { a = mix.clipAction(par[1]); } catch(e){ continue; }
+    a.enabled = true;
+    a.setEffectiveWeight(par[0] === 'quieto' ? 1 : 0);
+    a.play();
+    A[par[0]] = a;
+  }
+}
+/* la MEZCLA: los pesos siguen a la velocidad de verdad del personaje, asi que
+   nadie patina ni corre en el lugar. */
+function mezclaAcciones(npc, vel, dt){
+  const A = npc.acc;
+  if (!A) return;
+  /* vel en metros por segundo; caminar ~2, correr ~6 */
+  const wCor = cl((vel - 3.4) / 3.0, 0, 1);
+  const wAnd = cl((vel - 0.25) / 1.6, 0, 1) * (1 - wCor);
+  const wQui = 1 - wAnd - wCor;
+  const k = Math.min(1, dt * 7);
+  const pon = (a, w) => { if (a) a.setEffectiveWeight(
+    a.getEffectiveWeight() + (w - a.getEffectiveWeight()) * k); };
+  pon(A.quieto, wQui); pon(A.andar, wAnd); pon(A.correr, wCor);
+  /* el clip avanza al ritmo del paso: si no, se arrastra o patina */
+  if (A.andar) A.andar.timeScale = cl(vel / 1.9, .55, 2.1);
+  if (A.correr) A.correr.timeScale = cl(vel / 5.4, .6, 1.9);
+}
 function ponerModelo(npc){
   if (!GLTF || !npc.glb) return;
   new GLTF().load(AX(npc.glb), g => {
@@ -2182,10 +2254,14 @@ function ponerModelo(npc){
     npc.fig.traverse(o => { if (o.isMesh) o.visible = false; });
     npc.fig.add(m);
     npc.modelo = m;
+    /* los clips PROPIOS se guardan y se mezclan con los prestados: antes se
+       reproducia animations[0] a ciegas, y para viajera.glb y dante.glb eso es
+       `Idle`, asi que patinaban por el suelo sin mover una pierna. */
+    npc.clipsPropios = g.animations || [];
+    armarAcciones(npc);
     if (g.animations && g.animations.length){
-      const mix = new T.AnimationMixer(m);
-      mix.clipAction(g.animations[0]).play();
-      npc.mixer = mix; MIXERS.push(mix);
+      const mix = npc.mixer || new T.AnimationMixer(m);
+      if (!npc.mixer){ npc.mixer = mix; MIXERS.push(mix); }
       /* si el clip es de CAMINAR (Meshy sube las dos manos a la vez), le
          manejamos los brazos a mano igual que al cuerpo en 1ª persona */
       if (/walk|camin/i.test(g.animations[0].name || '')){
@@ -2220,16 +2296,32 @@ function npcTick(dt){
     const f = npc.fig;
     const d = Math.hypot(px - f.position.x, pz - f.position.z);
     let anda = 0;
+    /* de donde salio este cuadro: sirve para saber a que velocidad va de verdad
+       y para saber hacia donde esta caminando */
+    const _x0 = f.position.x, _z0 = f.position.z;
     if (npc.sigue){
       if (d > 40){                       /* nunca se queda atrás de verdad */
         f.position.x = px - Math.sin(yaw) * -3 + 1.5;
         f.position.z = pz - Math.cos(yaw) * -3 + 1.5;
       } else if (d > 3.4){
         const vel2 = (corre ? 10.8 : 5.8) * dt;
-        f.rotation.y = Math.atan2(px - f.position.x, pz - f.position.z);
         f.position.x += (px - f.position.x) / d * Math.min(vel2, d - 3.2);
         f.position.z += (pz - f.position.z) / d * Math.min(vel2, d - 3.2);
         anda = 1;
+      }
+      /* MIRA A DONDE CAMINA. Antes, con el jugador a menos de 3,4 m no se le
+         tocaba ni la rotacion ni la animacion: quedaba clavado en el angulo del
+         spawn —casi siempre de espaldas— y quieto. Y como suele mantener el
+         paso, eso era casi todo el tiempo. Parado, encara al jugador. */
+      {
+        const mvx = f.position.x - _x0, mvz = f.position.z - _z0;
+        const objY = (mvx * mvx + mvz * mvz > 1e-6)
+          ? Math.atan2(mvx, mvz)
+          : Math.atan2(px - f.position.x, pz - f.position.z);
+        let dy = objY - f.rotation.y;
+        while (dy > Math.PI) dy -= 6.283;
+        while (dy < -Math.PI) dy += 6.283;
+        f.rotation.y += dy * Math.min(1, dt * 8);
       }
     } else if (d < 11){
       const objY = Math.atan2(px - f.position.x, pz - f.position.z);
@@ -2242,6 +2334,10 @@ function npcTick(dt){
     f.position.y = npc.vuela
       ? suelo + (npc.alto || 2.2) + Math.sin(t0 * 1.7 + npc.fase) * .25
       : suelo;
+    /* la velocidad DE VERDAD del personaje (metros por segundo): con esto la
+       mezcla de clips no depende de banderas sino de cuanto se movio */
+    npc.vel = dt > 0 ? Math.hypot(f.position.x - _x0, f.position.z - _z0) / dt : 0;
+    mezclaAcciones(npc, npc.vel, dt);
     const L2 = f.userData.lim || {};
     const sw = anda ? Math.sin(t0 * 9) * .55 : Math.sin(t0 * 1.4 + npc.fase) * .06;
     if (L2.bI){ L2.bI.rotation.x = sw; L2.bD.rotation.x = -sw;
