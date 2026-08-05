@@ -29,15 +29,30 @@
     text-shadow:0 2px 18px rgba(0,0,0,.65)}
   /* la columna de botones se corre para dejarle el rincon del pulgar derecho
      al SALTO, que antes la tapaba entera */
-  #btns{position:absolute;right:calc(24px + min(84px,19vw));bottom:12px;display:flex;
-    flex-direction:column;gap:9px;align-items:flex-end;pointer-events:auto}
-  .b{min-width:86px;text-align:center;padding:12px 15px;border-radius:14px;font-weight:800;
-    font-size:13px;background:rgba(32,13,8,.62);border:1.5px solid rgba(255,195,150,.4);
+  /* ---------------------------- HUD DE ARRIBA -----------------------------
+     MENU y SONIDO se tocan una vez cada tanto, no en medio de la accion: van
+     ARRIBA a la derecha y CUADRADOS. Antes estaban abajo, alargados y apretados
+     contra el boton de salto, o sea justo donde apoya el pulgar con el que se
+     juega. */
+  #btns{position:absolute;right:max(10px,2.5vw);top:max(10px,2.5vh);display:flex;
+    flex-direction:row;gap:8px;align-items:flex-start;pointer-events:auto}
+  .b{width:46px;height:46px;min-width:0;padding:0;display:grid;place-items:center;
+    text-align:center;border-radius:12px;font-weight:800;font-size:16px;
+    background:rgba(32,13,8,.62);border:1.5px solid rgba(255,195,150,.4);
     color:#ffe9d6;pointer-events:auto;cursor:pointer;backdrop-filter:blur(3px)}
   .b:active{transform:translateY(1px);filter:brightness(1.3)}
-  .b.usar{background:rgba(160,72,30,.78);border-color:#ffd2a0;font-size:15px;display:none}
-  .b.usar.on{display:block}
-  .b.corre.on{background:rgba(160,72,30,.78)}
+  /* USAR sigue abajo: es de accion, tiene que estar donde esta el pulgar */
+  .b.usar{position:absolute;right:calc(20px + min(84px,19vw));bottom:max(16px,5vh);
+    width:auto;height:auto;padding:13px 20px;font-size:15px;border-radius:14px;
+    background:rgba(160,72,30,.78);border-color:#ffd2a0;display:none}
+  .b.usar.on{display:grid}
+  /* CORRER ya no es un boton: es un indicador chiquito al lado del contador */
+  .b.corre{display:none}
+  #corriendo{position:absolute;left:12px;top:calc(10px + 2.3em);pointer-events:none;
+    display:none;font:800 11px/1 ui-sans-serif,system-ui,sans-serif;
+    letter-spacing:.14em;padding:5px 8px;border-radius:7px;
+    background:rgba(32,13,8,.62);border:1px solid rgba(255,195,150,.4);color:#ffe9d6}
+  #corriendo.on{display:block}
   /* ------------------------ JOYSTICK Y SALTO (TACTIL) ---------------------
      Antes el medio izquierdo de la pantalla era una zona invisible de arrastre:
      nadie sabia donde tocar. Ahora hay una PALANCA dibujada, con el estilo del
@@ -218,12 +233,13 @@
     <div class="b usar" id="bUsar">◉ USAR</div>
     <div class="b" id="bSon">🔊</div>
     <div class="b corre" id="bCorre">CORRER</div>
-    <div class="b" id="bMenu">MENÚ</div>
+    <div class="b" id="bMenu" aria-label="menu">II</div>
   </div>
   <div id="dlg"><img id="dlgFoto" alt=""><canvas id="dlgCara" width="192" height="256"></canvas><div id="dlgGlobo"><div id="dlgT"></div><div id="dlgB"></div><div id="dlgPie"><div id="dlgPag"></div><div id="dlgGo">SIGUIENTE &#9656;</div></div></div></div>
   <div id="joy"><canvas width="300" height="300"></canvas></div>
   <div id="bSalta"><span>⤒</span><b id="bSaltaT">SALTO</b></div>
   <div id="recol"></div>
+  <div id="corriendo"></div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
   <div id="pcHelp"></div>
 </div>
@@ -774,7 +790,7 @@ const terrChunks = [];
    con suelo que a esa distancia ya es color de niebla puro */
 {
   const f = new T.Mesh(new T.CircleGeometry(1150, 24),
-    new T.MeshLambertMaterial({ color: 0xc99560 }));
+    new T.MeshLambertMaterial({ color: 0xa4b4a9 }));   /* color de NIEBLA, no de arena */
   f.rotation.x = -Math.PI / 2;
   f.position.y = -10;
   f.frustumCulled = false;
@@ -785,7 +801,7 @@ const terrChunks = [];
      horizonte. Este anillo sube hasta +70 a 1.100 m: a esa distancia la niebla lo
      pinta liso y se lee como una serranía en la bruma que CIERRA el horizonte. */
   const pared = new T.Mesh(new T.CylinderGeometry(1100, 660, 78, 24, 1, true),
-    new T.MeshLambertMaterial({ color: 0xb98a56, side: T.BackSide }));
+    new T.MeshLambertMaterial({ color: 0x9fb0a4, side: T.BackSide }));
   pared.position.y = 31;         /* base -8, borde +70 */
   pared.frustumCulled = false;
   scene.add(pared);
@@ -2306,12 +2322,14 @@ function npcTick(dt){
         while (dy < -Math.PI) dy += 6.283;
         f.rotation.y += dy * Math.min(1, dt * 8);
       }
-    } else if (d < 11){
+    } else if (d < 26){
+      /* 26 m, no 11: a 12 m ya te daban la espalda sin girar nunca. Y mas
+         rapido: con dt*3 tardaban casi un segundo en encararte. */
       const objY = Math.atan2(px - f.position.x, pz - f.position.z);
       let dy = objY - f.rotation.y;
       while (dy > Math.PI) dy -= 6.283;
       while (dy < -Math.PI) dy += 6.283;
-      f.rotation.y += dy * Math.min(1, dt * 3);
+      f.rotation.y += dy * Math.min(1, dt * 6);
     }
     const suelo = H(f.position.x, f.position.z);
     f.position.y = npc.vuela
@@ -2340,7 +2358,11 @@ function npcTick(dt){
       f.userData.late.emissiveIntensity = .6 + .35 * Math.sin(t0 * 2.2 + npc.fase);
     /* brazos del modelo 3D con clip de caminar: colgando + vaivén al andar
        (pisa lo que dejó el mixer, que subía las dos manos a la vez) */
-    if (npc.arms){
+    /* los brazos los maneja el CLIP cuando hay uno de verdad: apuntarBrazos
+       los forzaba colgando todos los cuadros, y con el clip de caminar prestado
+       las piernas se movian y los brazos quedaban clavados. El apano solo hace
+       falta cuando el unico clip que hay sube las dos manos a la vez. */
+    if (npc.arms && !npc.acc){
       npc.armPh += dt * (anda ? (corre ? 9 : 6.2) : 0);
       const swA = Math.sin(npc.armPh) * (anda ? 0.42 : 0)
         + Math.sin(t0 * 1.3 + npc.fase) * 0.03 * (anda ? 0 : 1);
@@ -3056,6 +3078,7 @@ function fisica(dt){
   bobF += dt * (2 + 8 * Math.min(1, Math.hypot(pvx, pvz) / VEL));
   stats.t += dt;
 }
+let fovSuave = 72, dt0 = .016;   /* el dt del cuadro, que ponCam no recibe */
 function ponCam(){
   const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
   let ex = px, ez = pz;
@@ -3066,7 +3089,13 @@ function ponCam(){
   cam.position.set(ex, (ojoY != null ? ojoY : H(px, pz)) + aireY + OJO + Math.abs(Math.sin(bobF)) * .06 * v, ez);
   cam.rotation.y = yaw;
   cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
-  cam.fov = 72 + (corre ? 5 : 0);
+  /* EL CAMPO SE ABRE DE A POCO. Antes saltaba de 72 a 77 en el cuadro en que
+     empezabas a correr, y volvia de golpe al soltar: se veia como un tiron de
+     la imagen. Ahora persigue a la velocidad REAL, asi que se abre y se cierra
+     solo, y de paso vale igual para el auto-correr de la palanca. */
+  const fovObj = 72 + 6 * cl((Math.hypot(pvx, pvz) - VEL * .96) / (VEL_CORRE - VEL), 0, 1);
+  fovSuave += (fovObj - fovSuave) * Math.min(1, dt0 * 3.2);
+  cam.fov = fovSuave;
   cam.updateProjectionMatrix();
 }
 
@@ -3228,6 +3257,8 @@ joyDibuja();
     const arriba = -dy, lateral = Math.abs(dx);
     corre = arriba > .80 && lateral < .62;
     $('bCorre').classList.toggle('on', corre);
+    $('corriendo').classList.toggle('on', corre);
+  $('corriendo').classList.toggle('on', corre);
     joyDibuja();
   };
   JOY.el.addEventListener('pointerdown', e => {
@@ -3242,6 +3273,7 @@ joyDibuja();
     if (!JOY.act || e.pointerId !== JOY.id) return;
     JOY.act = false; JOY.id = -1; JOY.x = JOY.y = 0; movV.x = movV.y = 0;
     corre = false; $('bCorre').classList.remove('on');
+    $('corriendo').classList.remove('on');
     JOY.el.style.opacity = '.9'; joyDibuja();
   };
   JOY.el.addEventListener('pointerup', suelta);
@@ -3282,7 +3314,7 @@ addEventListener('keydown', e => {
   if (c === 'KeyA') keyV.x = -1; if (c === 'KeyD') keyV.x = 1;
   if (c === 'ArrowLeft') keyL.x = -1; if (c === 'ArrowRight') keyL.x = 1;
   if (c === 'ArrowUp') keyL.y = -1; if (c === 'ArrowDown') keyL.y = 1;
-  if (c === 'ShiftLeft') { corre = true; $('bCorre').classList.add('on'); }
+  if (c === 'ShiftLeft') { corre = true; $('bCorre').classList.add('on'); $('corriendo').classList.add('on'); }
   if (c === 'Space' && fase === 'juego' && !enDlg){ e.preventDefault(); saltar(); }
   if (c === 'KeyE') usarAccion();
   if (c === 'Enter' && enDlg) $('dlgGo').onclick();
@@ -3293,7 +3325,7 @@ addEventListener('keyup', e => {
   if (c === 'KeyA' || c === 'KeyD') keyV.x = 0;
   if (c === 'ArrowLeft' || c === 'ArrowRight') keyL.x = 0;
   if (c === 'ArrowUp' || c === 'ArrowDown') keyL.y = 0;
-  if (c === 'ShiftLeft') { corre = false; $('bCorre').classList.remove('on'); }
+  if (c === 'ShiftLeft') { corre = false; $('bCorre').classList.remove('on'); $('corriendo').classList.remove('on'); }
 });
 
 /* -------- detección PC (mouse/teclado) + ayuda de controles al costado ----- */
@@ -3405,6 +3437,7 @@ function bucle(t){
                      cam.position.z + SOLD.z * 950);
   glare.material.opacity = cl((sol.intensity - .6) / 1.6, 0, 1);
   if (fase === 'juego'){
+    dt0 = dt;
     if (!enDlg) fisica(dt);
     pasoLuz(dt);
     pasoObjetivo();
@@ -3497,7 +3530,8 @@ function aplicaIdioma(){
   const g = { b: 'g_b', m: 'g_m', a: 'g_a' };
   document.querySelectorAll('#fGfx .chip').forEach(ch => ch.textContent = Tx(g[ch.dataset.g]));
   $('bCorre').textContent = Tx('correr');
-  $('bMenu').textContent = Tx('menu');
+  $('corriendo').textContent = '» ' + Tx('correr');
+
   $('bUsar').textContent = Tx('usar');
   $('dlgGo').textContent = Tx('dlgGo');
   if (esPC) pintaPCHelp();
