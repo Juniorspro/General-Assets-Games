@@ -167,10 +167,15 @@ def parche(t, slug):
                    % ((" retrato: AX('retrato/%s.jpg')," % retr) if retr else ''))
         lin.append("    giro: %s, glb: '%s', glbEsc: 1, glbGiro: Math.PI });" % (giro, glb))
     lin.append('}')
-    a = 'window.__RECOL = RECOL;'
-    if a not in t:
+    # OJO con el LUGAR: tiene que ir DESPUES del bloque de personajes original,
+    # porque usa los `const caraXxx`. Puesto antes caia en su zona muerta y el
+    # ReferenceError se lo tragaba el IIFE asincrono: el mundo quedaba en CARGANDO
+    # sin ningun error a la vista.
+    ult = t.rfind('nuevoNPC({')
+    if ult < 0:
         return t, 'npc[%s] (sin ancla)' % '+'.join(msgs)
-    t = t.replace(a, '\n'.join(lin) + '\n' + a, 1)
+    fin = t.index('\n}\n', ult) + 3
+    t = t[:fin] + '\n'.join(lin).lstrip('\n') + '\n' + t[fin:]
     msgs.append('gente%d' % len(GENTE[slug]))
     return t, 'npc[' + '+'.join(msgs) + ']'
 
