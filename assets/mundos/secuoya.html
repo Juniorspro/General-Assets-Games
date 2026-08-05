@@ -68,8 +68,12 @@
      igual: tener las dos cosas a la vez no molesta. */
   body.sinTactil #joy,body.sinTactil #bSalta{display:none}
   /* con dialogo abierto no se camina: la palanca y el salto estorban */
+  /* con dialogo abierto los controles SE VAN de la pantalla, no solo se
+     transparentan: quedaban encima del globo y tapaban el texto. */
   body.hablando #joy,body.hablando #bSalta{opacity:0;pointer-events:none;
-    transition:opacity .18s}
+    transform:translateY(140%);transition:opacity .18s,transform .22s}
+  /* y el globo se apoya abajo, que es el lugar que quedo libre */
+  body.hablando #dlg{bottom:max(10px,2vh)}
   /* el boton USAR tambien se aparta: pegado abajo a la derecha, se le ponia
      encima del globo y tapaba el final de cada linea */
   body.hablando .b.usar{opacity:0;pointer-events:none}
@@ -82,6 +86,17 @@
     box-shadow:0 6px 20px rgba(0,0,0,.45);backdrop-filter:blur(3px)}
   #bSalta:active{transform:translateY(2px) scale(.96);filter:brightness(1.35)}
   #bSalta span{display:block;font-size:24px;line-height:1}
+
+  /* ---------------------- BARRA DE ARRIBA: PAUSA Y SONIDO -------------------
+     Estaban abajo a la derecha, alargados y peleando lugar con el salto. Van
+     ARRIBA y CUADRADOS, que es donde no molestan al pulgar ni al dialogo. */
+  #hudTop{position:absolute;right:max(10px,2.5vw);top:max(10px,2vh);display:flex;
+    gap:8px;pointer-events:auto;z-index:6}
+  #hudTop .bt{width:44px;height:44px;border-radius:12px;display:grid;
+    place-items:center;font-size:19px;line-height:1;cursor:pointer;
+    background:rgba(0,0,0,.46);border:1.5px solid rgba(255,195,150,.35);color:#f2c9a4;
+    backdrop-filter:blur(4px)}
+  #hudTop .bt:active{transform:translateY(1px);filter:brightness(1.35)}
   /* ayuda de controles de PC: sale sola al detectar mouse/teclado */
   #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
     font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
@@ -242,13 +257,12 @@
 <div id="fundido"></div>
 
 <div id="hud">
+  <div id="hudTop"><div class="bt" id="bSon">🔊</div><div class="bt" id="bMenu">☰</div></div>
   <div id="obj"><div id="objT">…</div><div id="objD"></div><div id="tarea"></div></div>
   <div id="capCard"><div id="capN"></div><div id="capT"></div></div>
   <div id="fps"></div>
   <div id="btns">
     <div class="b usar" id="bUsar">◉ USAR</div>
-    <div class="b" id="bSon">🔊</div>
-    <div class="b corre" id="bCorre">CORRER</div>
     <div class="b" id="bMenu" aria-label="menu">II</div>
   </div>
   <div id="dlg"><img id="dlgFoto" alt=""><canvas id="dlgCara" width="192" height="256"></canvas><div id="dlgGlobo"><div id="dlgT"></div><div id="dlgB"></div><div id="dlgPie"><div id="dlgPag"></div><div id="dlgGo">SIGUIENTE &#9656;</div></div></div></div>
@@ -363,6 +377,18 @@ try {
     : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/objects/Reflector.js';
   REFLECTOR = (await import(RFU)).Reflector;
 } catch (e) {}
+/* Reflector para el REFLEJO REAL del agua. Se resuelve igual que GLTFLoader
+   (disco con ?local, CDN si no) y por el MISMO importmap, asi que su
+   `import from "three"` cae en el modulo ya cargado y no baja three dos veces.
+   Si no llega, el espejo queda en null y el agua se queda con el reflejo de
+   cielo por PMREM que tenia: se degrada, no se rompe. */
+let Reflector = null;
+try {
+  const RFU = LOC ? '/_vthree/examples/jsm/objects/Reflector.js'
+    : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/objects/Reflector.js';
+  Reflector = (await import(RFU)).Reflector;
+} catch (e) {}
+const ESPEJO_BAJOS = false;
 const $ = i => document.getElementById(i);
 
 /* ---------------- azar reproducible: el mar de dunas es SIEMPRE el mismo --- */
@@ -779,7 +805,13 @@ const uniTerr = {
   tRoca: { value: TX.roca }, tSplat: { value: splTex },
   repite: { value: MAPA / 5 }   /* parche de 5 m, no de 7 */
 };
-const matTerr = new T.MeshLambertMaterial({ map: TX.pasto });
+/* MeshSTANDARD, no Lambert: Lambert no tiene normalMap ni roughnessMap, y por
+   eso los suelos se veian planos —peor que las texturas procedurales— aunque la
+   foto de base fuera buena. Con Standard el relieve del normal agarra la luz del
+   sol y el roughness decide donde brilla. El splat de cuatro capas no cambia: se
+   inyecta en el mismo `map_fragment`, que existe igual en Standard. */
+const matTerr = new T.MeshStandardMaterial({ map: TX.pasto,
+  roughness: .92, metalness: 0 });
 matTerr.onBeforeCompile = sh => {
   Object.assign(sh.uniforms, uniTerr);
   /* en BAJOS el suelo va a un solo tap: cuatro muestras a pantalla llena es
@@ -1499,6 +1531,46 @@ const ESPEJO = { malla: null, usar: true, cada: 2, base: 2, res: 512, dmax: 130 
   aguaMesh.rotation.x = -Math.PI / 2;
   aguaMesh.position.set(p.x, NIVEL, p.z);
   scene.add(aguaMesh);
+  /* EL ESPEJO DEL AGUA. Un disco tintado no devuelve lo que hay alrededor: se ve
+     como una chapa. Un Reflector si, pero es una SEGUNDA PASADA DE RENDER de la
+     escena entera, y esto tiene que correr a 60 en un celular. Por eso se paga
+     con cuatro reglas: resolucion 512 en ALTOS / 384 en MEDIOS / 256 en BAJOS y
+     nunca mas; multisample 0 (el MSAA del reflejo se paga cuatro veces y abajo
+     de los rizos no se nota); apagado mientras el agua no esta a la vista; y
+     apagado a mas de ESPEJO.lejos metros, que es casi todo el mapa.
+     El disco tintado queda ENCIMA con menos opacidad: el espejo pone lo que hay
+     alrededor y el disco pone el color y el movimiento. */
+  const ESPEJO = { m: null, lejos: 78, res: 384, on: false };
+  if (Reflector && aguaMesh){
+    ESPEJO.m = new Reflector(new T.CircleGeometry(9, 40), {
+      textureWidth: 384, textureHeight: 384, multisample: 0,
+      color: 0x8fa3a0, clipBias: .003 });
+    ESPEJO.m.rotation.x = -Math.PI / 2;
+    ESPEJO.m.visible = false;
+    scene.add(ESPEJO.m);
+    /* con espejo debajo el disco tiene que dejar ver: al 0,93 lo tapaba entero */
+    aguaMat.opacity = .52;
+    ESPEJO.on = true;
+  }
+  ESPEJO.calidad = g => {
+    if (!ESPEJO.m) return;
+    ESPEJO.res = g === 'b' ? 256 : (g === 'a' ? 512 : 384);
+    ESPEJO.on = ESPEJO_BAJOS || g !== 'b';
+    const rt = ESPEJO.m.getRenderTarget();
+    if (rt.width !== ESPEJO.res) rt.setSize(ESPEJO.res, ESPEJO.res);
+    aguaMat.opacity = ESPEJO.on ? .52 : .93;
+  };
+  ESPEJO.tick = () => {
+    if (!ESPEJO.m) return;
+    /* el espejo sigue al disco y solo se dibuja si el agua esta a la vista y
+       cerca: de lejos la segunda pasada se paga sin que se note */
+    ESPEJO.m.position.set(aguaMesh.position.x, aguaMesh.position.y - .04,
+                          aguaMesh.position.z);
+    const d = Math.hypot(px - aguaMesh.position.x, pz - aguaMesh.position.z);
+    ESPEJO.m.visible = ESPEJO.on && aguaMesh.visible && d < ESPEJO.lejos;
+  };
+  window.__ESPEJO = ESPEJO;
+
   /* ----------------------- EL REFLEJO DE VERDAD -----------------------------
      Un Reflector: se vuelve a dibujar la escena desde una cámara espejada bajo
      el agua y el resultado se muestrea proyectado. Sobre el shader de fábrica
@@ -2096,7 +2168,8 @@ const MUNDO_CIELO = 'cielo-secuoya.jpg';
 /* TEXTURAS fotográficas generadas del suelo: la arena fina (map del terreno) y
    la arena parda de sotavento (el canal G del splat). Pasan por el MISMO AX()
    que todo lo demás y caen de pie si no llegan: abajo queda lo pintado. */
-const MUNDO_TEX = { arena: 'tex-secuoya-1.jpg', sotavento: 'tex-secuoya-2.jpg' };
+const MUNDO_TEX = { arena: 'tex-secuoya-1.jpg', sotavento: 'tex-secuoya-2.jpg',
+  nrm: 'pbr/secuoya-nrm.jpg', rgh: 'pbr/secuoya-rgh.jpg' };
 /* disposición del MENÚ por mundo (clases en #menu) */
 const MUNDO_MENU = 'm-der m-abajo';
 /* PROPS 3D generados (Tripo, estáticos): edificios/vehículos de cada mundo.
@@ -2173,6 +2246,20 @@ function cargarTexFoto(){
     matTerr.map = t; matTerr.needsUpdate = true; });
   if (MUNDO_TEX.sotavento) car(MUNDO_TEX.sotavento, t => {
     uniTerr.tHoja.value = t; });
+  /* NORMAL y ROUGHNESS del pack PBR: es lo que le da relieve al suelo. Van con
+     el MISMO tileado que el color (repite/MAPA), si no el relieve flota. */
+  if (MUNDO_TEX.nrm) car(MUNDO_TEX.nrm, t => {
+    t.colorSpace = T.NoColorSpace;
+    t.repeat.set(uniTerr.repite.value, uniTerr.repite.value);
+    matTerr.normalMap = t;
+    matTerr.normalScale.set(.85, .85);
+    matTerr.needsUpdate = true;
+  });
+  if (MUNDO_TEX.rgh) car(MUNDO_TEX.rgh, t => {
+    t.colorSpace = T.NoColorSpace;
+    t.repeat.set(uniTerr.repite.value, uniTerr.repite.value);
+    matTerr.roughnessMap = t; matTerr.needsUpdate = true;
+  });
 }
 function cargarCieloFoto(){
   if (!MUNDO_CIELO) return;
@@ -2271,7 +2358,7 @@ function cineObjetivo(C){
    Figuras 100% procedurales con partes animables (userData.lim): humanos con
    brazos y piernas en péndulo, perro con cola, dron con rotores, criatura
    que late. npcTick las hace CAMINAR detrás del jugador si `sigue`. */
-const NPCS = [];
+const NPCS = [];   /* SKIN UNICA */
 function figHumano(colTraje, colCasco){
   const g = new T.Group();
   const mT = new T.MeshLambertMaterial({ color: colTraje });
@@ -2403,7 +2490,9 @@ const CLIPS = { quieto: null, andar: null, correr: null, listos: 0, cola: [] };
      mallas, sin skins, sin texturas): 39 y 85 KB, sin ninguna extension.
      Ver scratchpad/mundos/extrae_clip.py. */
   const DON = [['andar', AX('anim/andar.glb')], ['correr', AX('anim/correr.glb')],
-               ['quieto', AX('anim/quieto.glb')]];
+               ['quieto', AX('anim/quieto2.glb')]   /* Idle, no Idle_02: el 02 es el de
+                 MIRAR A LOS COSTADOS, que molesta y encima pelea con el de
+                 caminar cada vez que se cambia de clip */];
   const fin = () => {
     CLIPS.listos++;
     if (CLIPS.listos < DON.length) return;
@@ -2795,7 +2884,12 @@ function npcTick(dt){
        parpadeaba entre caminar y quieto. Con un seguimiento exponencial la
        animacion no tiembla. */
     const vIns = dt > 0 ? Math.hypot(f.position.x - _x0, f.position.z - _z0) / dt : 0;
+    /* PARADO DE VERDAD: si el personaje no se movio nada en el cuadro, su
+       velocidad es CERO y no «casi cero». Sin esto el suavizado exponencial
+       deja una cola de 0,2 m/s para siempre, el estado se queda en `andar` y el
+       robot de ACROPOLIS caminaba eternamente parado en el mismo lugar. */
     npc.vel = npc.vel == null ? vIns : npc.vel + (vIns - npc.vel) * Math.min(1, dt * 4.5);
+    if (vIns < 0.02 && npc.vel < 0.30) npc.vel = 0;
     mezclaAcciones(npc, npc.vel, dt);
     /* el PERRO no tiene huesos: su GLB es una sola pieza, asi que ningun clip lo
        puede mover. Se lo balancea a mano mientras trota, que a esa escala se lee
@@ -2842,6 +2936,11 @@ function npcCerca(){
   return mejor;
 }
 function hablaNPC(npc){
+  /* ENCARA DE UNA al jugador. Con el giro suave de 3 rad/s el personaje se
+     pasaba la conversacion entera de perfil, porque el dialogo pausa el mundo y
+     el giro nunca llegaba a terminar. */
+  if (npc.fig) npc.fig.rotation.y =
+    Math.atan2(px - npc.fig.position.x, pz - npc.fig.position.z);
   const lineas = (L[LANG].npc && L[LANG].npc[npc.clave]) || [];
   if (!lineas.length) return;
   const txt = lineas[npc.li % lineas.length];
@@ -2912,7 +3011,7 @@ function fundido(fn){
    correr; PIERNAS de verdad con rodilla al mirar hacia abajo; y un torso y
    cabeza que NO se dibujan (colorWrite=false) pero SÍ proyectan: tu propia
    sombra camina entera por el suelo. Colores por mundo en MUNDO_CUERPO. */
-const MUNDO_CUERPO = { mangas: 0x6f7d63, guantes: 0x5a4326, pantalon: 0x4a4b3c, botas: 0x2e2a20, glb: 'npc/cuerpo-senda.glb' };
+const MUNDO_CUERPO = { mangas: 0x6f7d63, guantes: 0x5a4326, pantalon: 0x4a4b3c, botas: 0x2e2a20, glb: 'per/secuoya-botanica.glb' };
 const CUERPO = {};
 {
   const mM = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.mangas });
@@ -3479,11 +3578,11 @@ const caraCanelo = (g, n2) => {
   window.__P0 = nuevoNPC({ fig: figHumano(0x8a5a3a, 0xd8c49a),
     x: POI.campamento.x + -5, z: POI.campamento.z + 6.5, nombre: 'MILLARAY', clave: 'millaray',
     cara: caraNaira, retrato: AX('retrato/secuoya.jpg'),
-    giro: 1.1, glb: 'per/secuoya-botanica.glb', glbEsc: 1, glbGiro: 0 });
+    giro: 1.1, glb: 'npc/dante.glb', glbEsc: 1, glbGiro: 0 });
   nuevoNPC({ fig: figHumano(0x9a6a42, 0xdcc89e),
     x: POI.quemado.x + 5.0, z: POI.quemado.z + -4.5, nombre: 'ANKA', clave: 'anka',
     cara: caraNaira, retrato: AX('retrato/viejo.jpg'),
-    giro: 2.4, glb: 'per/secuoya-botanica.glb', glbEsc: 1, glbGiro: 0 });
+    giro: 2.4, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: 0 });
   nuevoNPC({ fig: figPerro(0xc8925a),
     x: POI.campamento.x + 5.0, z: POI.campamento.z + 4.0, nombre: 'NAHUEL', clave: 'nahuel',
     cara: caraCanelo,
@@ -3491,11 +3590,11 @@ const caraCanelo = (g, n2) => {
   nuevoNPC({ fig: figHumano(0xba8a52, 0xe4d0a6),
     x: POI.nido.x + -4.0, z: POI.nido.z + 5.0, nombre: 'KUYEN', clave: 'kuyen',
     cara: caraNaira, retrato: AX('retrato/joven.jpg'),
-    giro: 0.5, glb: 'per/jungla-explorador.glb', glbEsc: 1, glbGiro: 0 });
+    giro: 0.5, glb: 'npc/cuerpo-senda.glb', glbEsc: 1, glbGiro: 0 });
   nuevoNPC({ fig: figHumano(0xca9a5a, 0xe8d4aa),
     x: POI.tronco.x + 4.0, z: POI.tronco.z + -4.0, nombre: 'RAYEN', clave: 'rayen',
     cara: caraNaira,
-    giro: 3.0, glb: 'per/jungla-explorador.glb', glbEsc: 1, glbGiro: 0 });
+    giro: 3.0, glb: 'hyper/char.glb', glbEsc: 1, glbGiro: 0 });
 }
 
 /* ==================== LA RUTA DE LAS COPAS: EL TRASLADO ====================
@@ -3833,6 +3932,22 @@ const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
 const DED = { mov: null, mira: null };
 let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
 const PEND_MAX = 0.80;   /* ~39 grados: mas empinado que esto no se sube */
+/* ...SALVO EN EL CORREDOR DE LA SENDA. La senda une los puntos de la historia,
+   y si un tramo es mas empinado que el tope general el mundo queda sin terminar
+   (en CAÑON no se llegaba arriba por esto). Dentro de 15 m de la huella el tope
+   sube a 1,9 (~62 grados), que es lo que hace falta para una escalera tallada o
+   una cuesta de acantilado; fuera de ella sigue en 0,80, porque poder trepar
+   cualquier pared le saca sentido a buscar el paso. */
+const SENDA_R2 = 15 * 15;
+function pendMax(x, z){
+  const P = (typeof SENDA_PTS !== 'undefined') && SENDA_PTS;
+  if (!P || !P.length) return PEND_MAX;
+  for (let i = 0; i < P.length; i++){
+    const dx = x - P[i][0], dz = z - P[i][1];
+    if (dx * dx + dz * dz < SENDA_R2) return 1.9;
+  }
+  return PEND_MAX;
+}
 let ojoY = null;         /* altura del ojo interpolada (sin saltos) */
 /* SALTO: altura fija (los saltos de altura variable dejaban repisas
    inalcanzables), gravedad fuerte para que no se sienta lunar. */
@@ -3869,7 +3984,7 @@ function fisica(dt){
   if (!COPAS.sop) {
     const h0 = H(px, pz), h1 = H(nx, nz);
     const dl = Math.hypot(nx - px, nz - pz);
-    if (dl > 1e-5 && (h1 - h0) / dl > PEND_MAX){
+    if (dl > 1e-5 && (h1 - h0) / dl > pendMax(px, pz)){
       /* gradiente del terreno por diferencias finitas */
       const e = 1.2;
       const gx = H(px + e, pz) - H(px - e, pz), gz = H(px, pz + e) - H(px, pz - e);
@@ -3880,7 +3995,7 @@ function fisica(dt){
       nx = px + (dvx - ux * proy) * .92;             /* se lo saca: queda el roce */
       nz = pz + (dvz - uz * proy) * .92;
       const h2 = H(nx, nz);
-      if ((h2 - h0) / (Math.hypot(nx - px, nz - pz) || 1) > PEND_MAX){ nx = px; nz = pz; }
+      if ((h2 - h0) / (Math.hypot(nx - px, nz - pz) || 1) > pendMax(px, pz)){ nx = px; nz = pz; }
     }
   }
   /* a través de las rocas y las máquinas, no */
@@ -3931,7 +4046,9 @@ function ponCam(){
      la imagen. Ahora persigue a la velocidad REAL, asi que se abre y se cierra
      solo, y de paso vale igual para el auto-correr de la palanca. */
   const fovObj = 72 + 6 * cl((Math.hypot(pvx, pvz) - VEL * .96) / (VEL_CORRE - VEL), 0, 1);
-  fovSuave += (fovObj - fovSuave) * Math.min(1, dt0 * 3.2);
+  /* dt0*2.1 = constante de tiempo de medio segundo, que es lo que se pidio:
+     antes con 3.2 se abria en tres decimas y se notaba el tiron. */
+  fovSuave += (fovObj - fovSuave) * Math.min(1, dt0 * 2.1);
   cam.fov = fovSuave;
   cam.updateProjectionMatrix();
 }
@@ -3965,8 +4082,7 @@ function pasoObjetivo(){
   if (window.__autoUsar && acc && acc.tipo === 'cap' && !enDlg) llegaObjetivo();
 }
 $('bUsar').addEventListener('pointerdown', e => { e.preventDefault(); usarAccion(); });
-$('bCorre').addEventListener('pointerdown', e => { e.preventDefault();
-  corre = !corre; $('bCorre').classList.toggle('on', corre); });
+
 $('bMenu').addEventListener('pointerdown', e => { e.preventDefault();
   fase = 'menu'; $('menu').style.display = 'flex'; $('hud').classList.remove('on');
   $('mJugar').textContent = Tx('denuevo');
@@ -4102,7 +4218,7 @@ joyDibuja();
     /* AUTO-CORRER: palanca del todo hacia ARRIBA (y con poco desvio lateral) */
     const arriba = -dy, lateral = Math.abs(dx);
     corre = arriba > .80 && lateral < .62;
-    $('bCorre').classList.toggle('on', corre);
+    /* el boton CORRER ya no existe: lo decide la palanca o Shift */
     $('corriendo').classList.toggle('on', corre);
   $('corriendo').classList.toggle('on', corre);
     joyDibuja();
@@ -4118,7 +4234,7 @@ joyDibuja();
   const suelta = e => {
     if (!JOY.act || e.pointerId !== JOY.id) return;
     JOY.act = false; JOY.id = -1; JOY.x = JOY.y = 0; movV.x = movV.y = 0;
-    corre = false; $('bCorre').classList.remove('on');
+    corre = false; 
     $('corriendo').classList.remove('on');
     JOY.el.style.opacity = '.9'; joyDibuja();
   };
@@ -4160,7 +4276,7 @@ addEventListener('keydown', e => {
   if (c === 'KeyA') keyV.x = -1; if (c === 'KeyD') keyV.x = 1;
   if (c === 'ArrowLeft') keyL.x = -1; if (c === 'ArrowRight') keyL.x = 1;
   if (c === 'ArrowUp') keyL.y = -1; if (c === 'ArrowDown') keyL.y = 1;
-  if (c === 'ShiftLeft') { corre = true; $('bCorre').classList.add('on'); $('corriendo').classList.add('on'); }
+  if (c === 'ShiftLeft') { corre = true;  $('corriendo').classList.add('on'); }
   if (c === 'Space' && fase === 'juego' && !enDlg){ e.preventDefault(); saltar(); }
   if (c === 'KeyE') usarAccion();
   if (c === 'Enter' && enDlg) $('dlgGo').onclick();
@@ -4171,7 +4287,7 @@ addEventListener('keyup', e => {
   if (c === 'KeyA' || c === 'KeyD') keyV.x = 0;
   if (c === 'ArrowLeft' || c === 'ArrowRight') keyL.x = 0;
   if (c === 'ArrowUp' || c === 'ArrowDown') keyL.y = 0;
-  if (c === 'ShiftLeft') { corre = false; $('bCorre').classList.remove('on'); $('corriendo').classList.remove('on'); }
+  if (c === 'ShiftLeft') { corre = false;  $('corriendo').classList.remove('on'); }
 });
 
 /* -------- detección PC (mouse/teclado) + ayuda de controles al costado ----- */
@@ -4382,8 +4498,7 @@ function aplicaIdioma(){
   $('tGfx').textContent = Tx('graficos');
   const g = { b: 'g_b', m: 'g_m', a: 'g_a' };
   document.querySelectorAll('#fGfx .chip').forEach(ch => ch.textContent = Tx(g[ch.dataset.g]));
-  $('bCorre').textContent = Tx('correr');
-  $('corriendo').textContent = '» ' + Tx('correr');
+    $('corriendo').textContent = '» ' + Tx('correr');
 
   $('bUsar').textContent = Tx('usar');
   $('dlgGo').textContent = Tx('dlgGo');
@@ -4407,6 +4522,7 @@ document.querySelectorAll('#fLang .chip').forEach(ch =>
 
 /* ---------- calidad gráfica: tope de resolución y alcance de la niebla ------ */
 function setGfx(g){
+  if (window.__ESPEJO && window.__ESPEJO.calidad) window.__ESPEJO.calidad(g);
   if (!GFXQ[g]) return;
   GFX = g;
   try { localStorage.setItem('dunas_gfx', g); } catch(e){}

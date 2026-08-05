@@ -4,7 +4,7 @@
 que rompe un parche (comillas, llaves, saltos de linea metidos en un literal)."""
 import re, subprocess, sys, tempfile, os
 
-M = '/home/user/mundos/assets/mundos/'
+M = '/home/user/General-Assets-Games/assets/mundos/'
 SLUGS = ['dunas', 'jungla', 'volcan', 'pantano', 'canon', 'estepa', 'acropolis', 'secuoya']
 
 mal = 0
