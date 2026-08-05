@@ -43,7 +43,13 @@
   #joy{position:absolute;left:max(14px,3.5vw);bottom:max(16px,5vh);
     width:min(150px,32vw);aspect-ratio:1;pointer-events:auto;touch-action:none;
     opacity:.9;transition:opacity .25s}
-  body.pc #joy,body.pc #bSalta{display:none}
+  /* La palanca y el salto se esconden SOLO si el aparato no tiene tactil.
+     Antes se escondian al detectar mouse/teclado (body.pc), y en un portatil
+     tactil o en un celular que se declara «pointer:fine» el jugador se quedaba
+     sin ningun control: el joystick recien aparecia DESPUES del primer toque,
+     y ese primer toque no hacia nada. La ayuda de teclado sigue saliendo
+     igual: tener las dos cosas a la vez no molesta. */
+  body.sinTactil #joy,body.sinTactil #bSalta{display:none}
   #joy canvas{width:100%;height:100%;display:block}
   #bSalta{position:absolute;right:max(14px,3.5vw);bottom:max(16px,5vh);
     width:min(84px,19vw);aspect-ratio:1;border-radius:50%;pointer-events:auto;
@@ -3184,6 +3190,12 @@ addEventListener('keydown', e => {
   if (/^(Key|Arrow|Shift|Enter|Space)/.test(e.code)) activaPC(); }, true);
 addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') activaPC(); }, true);
 addEventListener('touchstart', desactivaPC, { passive: true, capture: true });
+/* SIN TACTIL: se marca una sola vez, mirando de que es capaz el aparato y no
+   con que se lo esta usando ahora. Es lo que decide si hay palanca en pantalla. */
+try {
+  if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0))
+    document.body.classList.add('sinTactil');
+} catch(e){ }
 try {
   if (window.matchMedia && matchMedia('(pointer:fine)').matches
       && !matchMedia('(pointer:coarse)').matches) activaPC();
