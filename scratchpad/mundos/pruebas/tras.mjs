@@ -71,12 +71,13 @@ console.log('  al montar: modo=' + mont.modo + ' vel=' + mont.vel);
 
 /* palanca a fondo hacia adelante hasta juntar TSIM segundos DE MUNDO */
 const t0 = mont.tSim || 0, d0 = await p.evaluate(() => window.__S.get().dist);
-let vmax = 0, aires = 0, muestras = 0, ult = mont, reloj = 0;
+let vmax = 0, aires = 0, muestras = 0, ult = mont, reloj = 0, altoMax = 0;
 while ((ult.tSim - t0) < TSIM && reloj < 240){
   await p.evaluate(() => { try { window.__S.palanca(0, -1); } catch (e) {} });
   await p.waitForTimeout(500); reloj += .5;
   ult = await p.evaluate(g => Object.assign(window.__S[g](), { g: window.__S.get() }), gan);
   vmax = Math.max(vmax, ult.vel || 0);
+  if (ult.alto != null) altoMax = Math.max(altoMax, ult.alto);
   if (ult.aire) aires++;
   muestras++;
   if (!ult.modo) break;
@@ -85,6 +86,7 @@ const d1 = ult.g ? ult.g.dist : null;
 console.log('  ' + (ult.tSim - t0).toFixed(1) + ' s de mundo en ' + reloj + ' s de reloj · ' +
   'punta ' + vmax.toFixed(1) + ' m/s · metros ' + (d1 - d0) +
   ' · despegues ' + (ult.nVuelo || 0) + ' (alto max ' + (ult.altMax || 0) + ' m)' +
+  (altoMax ? ' · alto sobre el suelo ' + altoMax.toFixed(1) + ' m' : '') +
   ' · sigue montado: ' + !!ult.modo);
 await p.screenshot({ path: SHOT + 'tras-' + mundo + '-va.png' });
 /* SEGUNDA VUELTA: girando. Es lo que prueba que la palanca manda de verdad y,

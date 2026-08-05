@@ -56,6 +56,18 @@
   /* ayuda de controles de PC: sale sola al detectar mouse/teclado */
   /* en un aparato sin tactil no se dibujan los controles de dedo */
   body.sinTactil #joy,body.sinTactil #bSalta{display:none}
+  /* AVISO DEL TRASLADO: una linea corta, centrada, por encima del boton USAR y
+     de la palanca para no tapar ni una cosa ni la otra. Es todo el tutorial que
+     tiene el traslado: aparece cuando estas donde se usa y se va cuando no. */
+  #aviso{position:fixed;left:50%;bottom:max(96px,20vh);transform:translateX(-50%);
+    display:none;pointer-events:none;text-align:center;max-width:80vw;z-index:4;
+    font:800 11.5px/1.35 ui-sans-serif,system-ui,sans-serif;letter-spacing:.07em;
+    padding:7px 13px;border-radius:10px;background:rgba(14,16,26,.68);
+    border:1px solid rgba(190,200,230,.34);color:#e6ecff;backdrop-filter:blur(4px);
+    text-shadow:0 1px 6px rgba(0,0,0,.7)}
+  #aviso.on{display:block}
+  body.hablando #aviso{display:none}
+  @media (max-height:430px){ #aviso{bottom:max(84px,26vh);font-size:10.5px} }
   #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
     font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
     background:rgba(8,10,14,.5);border:1px solid rgba(190,230,180,.26);
@@ -176,6 +188,7 @@
   </div>
   <div id="dlg"><div id="dlgFila"><canvas id="dlgCara" width="96" height="96"></canvas><div style="flex:1;min-width:0"><div id="dlgT"></div><div id="dlgB"></div></div></div><div id="dlgGo">SEGUIR ▸</div></div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
+  <div id="aviso"></div>
   <div id="pcHelp"></div>
 </div>
 
@@ -1659,8 +1672,18 @@ function itemCerca(){
 function accionUsable(){
   const C = CAPS[cap];
   const p = POI[C.obj];
+  /* DENTRO DEL TRASLADO manda el traslado y nada mas: si no, llegar al objetivo
+     encima de la mecanica dispararia el capitulo a toda velocidad —y el dialogo
+     congela la fisica— y ademas no habria como salirse, porque salirse es el
+     mismo boton. */
+  if (BOTE.modo){
+    const t2 = BOTE.accion();
+    return t2 ? { tipo: 'bote', tr: t2 } : null;
+  }
   if (C.usar && Math.hypot(px - p.x, pz - p.z) < 7 && MISION.lista(cap))
     return { tipo: 'cap' };
+  const tr = BOTE.accion();
+  if (tr) return { tipo: 'bote', tr };
   const it = itemCerca();
   if (it) return { tipo: 'item', it };
   const npc = npcCerca();
@@ -1671,7 +1694,8 @@ function usarAccion(){
   if (enDlg) return;
   const acc = accionUsable();
   if (!acc) return;
-  if (acc.tipo === 'cap') llegaObjetivo();
+  if (acc.tipo === 'bote') BOTE.usar(acc.tr);
+  else if (acc.tipo === 'cap') llegaObjetivo();
   else if (acc.tipo === 'item'){ acc.it.activo = false; acc.it.fn(acc.it); }
   else hablaNPC(acc.npc);
 }
@@ -2052,9 +2076,15 @@ const stats = { t: 0, dist: 0 };
 let px = POI.inicio.x, pz = POI.inicio.z, yaw = 0, pitch = -.03;
 let pvx = 0, pvz = 0, bobF = 0, corre = false;
 const OJO = 1.7, VEL = 5.4, VEL_CORRE = 10.0;   /* paso lunar, más flotado */
+/* ALTURA DE MAS DEL OJO. La pone el traslado del mundo: sentado en un rover
+   el ojo va a la altura del asiento, y volando va donde este el vuelo. En cero
+   —o sea a pie— la camara queda exactamente como estaba. */
+let altExtra = 0;
 const DED = { mov: null, mira: null };
 let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
 function fisica(dt){
+  /* dentro del traslado no se camina: tiene su propio paso */
+  if (BOTE.modo){ BOTE.paso(dt); return; }
   yaw -= keyL.x * 2.2 * dt;
   pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
   let mx = movV.x + keyV.x, my = movV.y + keyV.y;
@@ -2083,7 +2113,7 @@ function ponCam(){
      cuello, así al mirar abajo ves el pecho y las piernas sin el agujero del
      cuello, y la cabeza colapsada queda detrás del lente */
   if (CUERPO.glb){ ex = px + Math.sin(yaw) * -.16; ez = pz + Math.cos(yaw) * -.16; }
-  cam.position.set(ex, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .11 * v, ez);
+  cam.position.set(ex, H(px, pz) + OJO + altExtra + Math.abs(Math.sin(bobF)) * .11 * v, ez);
   cam.rotation.y = yaw;
   cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
   /* FOV PROGRESIVO: antes saltaba de 72 a 77 en un cuadro al empezar a correr y se
@@ -2101,6 +2131,183 @@ function ponCam(){
   cam.updateProjectionMatrix();
 }
 
+/* ================= EL BOTE LUNAR: EL TRASLADO PROPIO DE LA LUNA =================
+   EL BOTE LUNAR. La Luna es el unico mundo del grupo donde la GRAVEDAD es el
+   personaje —el mundo entero esta construido sobre eso— y hasta ahora se caminaba
+   igual que en la Tierra, a 5,4 m/s, con la gravedad de adorno.
+
+   HAY DOS MOCHILAS DE SALTO, en el modulo y en el radiotelescopio: los dos sitios
+   del guion donde hay equipo de la mision. Puesta, no se camina: se REBOTA. La
+   mochila devuelve el envion sola en cada aterrizaje —no hay que apretar nada— y
+   con 3,1 m/s² de gravedad cada rebote dura casi cinco segundos y cruza sesenta
+   metros. Encadenar es la mecanica: la velocidad horizontal se CONSERVA porque no
+   hay aire, asi que cada rebote es una decision de rumbo y no de tiempo.
+
+   Y LA ALTURA ES SOBRE EL TERRENO DE ACA, no sobre el de donde saltaste: un
+   crater te deja mas alto y una loma te corta el vuelo. Sin esa linea, volar
+   sobre relieve no se sentia en absoluto —era una parabola sobre un plano—, que
+   es justo lo contrario de lo que este mundo tiene para mostrar. Por encima de
+   metro y medio tampoco chocas con las piedras, que es la otra mitad del bote.
+   ========================================================================== */
+const BOTE = (() => {
+  const A = { modo: null, vel: 0, hd: 0, act: null, PUE: [], nPaso: 0, tSim: 0 };
+  const TT = {
+    es: { toma: 'MOCHILA DE SALTO · ◉ USAR para ponertela',
+          va:   'PALANCA para el rumbo · cada rebote va mas lejos · ◉ USAR en el suelo para sacartela',
+          baja: '◉ USAR para sacartela' },
+    en: { toma: 'JUMP PACK · ◉ USE to strap in',
+          va:   'STICK to steer · each bound goes further · ◉ USE on the ground to unstrap',
+          baja: '◉ USE to unstrap' },
+    pt: { toma: 'MOCHILA DE SALTO · ◉ USAR para vestir',
+          va:   'ALAVANCA para o rumo · cada salto vai mais longe · ◉ USAR no chao para tirar',
+          baja: '◉ USAR para tirar' }
+  };
+  const tx = k => ((TT[LANG] || TT.en)[k] || '');
+
+  const RTOMA = 8;
+  const G_LUNA = 3.1;      /* la gravedad de la Luna, redonda: 1/6 de la de acá */
+  const IMP = 7.6;         /* el envion de cada rebote */
+  const V_MAX = 17;
+  const ACEL = 4.2;
+  const GIRO = 1.4;
+  let alt = 0, vy = 0, rebotes = 0;
+
+  /* --------------------- donde estan las mochilas -------------------------- */
+  /* DOS, en el modulo y en el radiotelescopio: los dos sitios del guion donde hay
+     equipo de la mision, o sea los dos donde tendria sentido que hubiera una. */
+  for (const k of ['modulo', 'radiotelescopio']){
+    const p = POI[k];
+    if (!p) continue;
+    const a = k.length * .9;
+    A.PUE.push({ x: p.x + Math.sin(a) * 13, z: p.z + Math.cos(a) * 13,
+      hd: a + Math.PI, lib: true });
+  }
+
+  /* ------------------------------ la mochila ------------------------------- */
+  const mBla = new T.MeshLambertMaterial({ color: 0xe8e6e0 });
+  const mTob = new T.MeshLambertMaterial({ color: 0xb8bcc4 });
+  const mFue = new T.MeshLambertMaterial({ color: 0x9fd8ff });
+  function armaMochila(){
+    const g = new T.Group();
+    const cu = new T.Mesh(new T.BoxGeometry(.62, .78, .34), mBla);
+    cu.position.y = .55; g.add(cu);
+    for (const s of [-1, 1]){
+      const to = new T.Mesh(new T.CylinderGeometry(.09, .12, .5, 6), mTob);
+      to.position.set(s * .22, .18, .05); g.add(to);
+    }
+    const ar = new T.Mesh(new T.TorusGeometry(.2, .04, 4, 8), mTob);
+    ar.rotation.x = Math.PI / 2; ar.position.y = 1.02; g.add(ar);
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    return g;
+  }
+  /* la llama de los toberas, que solo se ve mientras rebotas */
+  const llama = new T.Mesh(new T.ConeGeometry(.28, 1.1, 6), mFue);
+  llama.rotation.x = Math.PI;
+  llama.visible = false;
+  scene.add(llama);
+  for (const P of A.PUE){
+    P.g = armaMochila();
+    P.g.position.set(P.x, H(P.x, P.z), P.z);
+    P.g.rotation.y = P.hd;
+    scene.add(P.g);
+  }
+
+  /* ---------------------------- lo que se hace ---------------------------- */
+  A.accion = () => {
+    if (A.modo) return alt < .6 ? { baja: true } : null;
+    for (const P of A.PUE)
+      if (P.lib && Math.hypot(px - P.x, pz - P.z) < RTOMA) return { P };
+    return null;
+  };
+  A.usar = c => {
+    if (c.baja){ A.suelta(); return; }
+    const P = c.P;
+    P.lib = false; P.g.visible = false; A.act = P;
+    A.modo = 'bote'; A.vel = 3; A.hd = yaw;
+    alt = 0; vy = IMP; rebotes = 0;
+    altExtra = 0;
+    llama.visible = true;
+  };
+  A.suelta = () => {
+    if (!A.modo) return;
+    const P = A.act;
+    A.modo = null; A.vel = 0; altExtra = 0; alt = 0; vy = 0;
+    llama.visible = false;
+    if (P){
+      P.x = px + Math.cos(A.hd) * 1.3; P.z = pz - Math.sin(A.hd) * 1.3;
+      P.lib = true;
+      P.g.position.set(P.x, H(P.x, P.z), P.z);
+      P.g.rotation.y = A.hd;
+      P.g.visible = true;
+    }
+    pvx = 0; pvz = 0;
+  };
+
+  A.paso = dt => {
+    A.nPaso++; A.tSim += dt;
+    pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+    const mx = cl(movV.x + keyV.x, -1, 1), my = cl(movV.y + keyV.y, -1, 1);
+    /* EN EL AIRE SE GIRA IGUAL, y no es un descuido: acá no hay aire contra el
+       que girar, pero tampoco hay aire que te frene, y un traje con toberas gira
+       porque para eso están. Lo que NO se puede es frenar en seco. */
+    A.hd -= mx * GIRO * dt;
+    yaw = A.hd;
+    const obj = my < -.1 ? V_MAX * (-my) : (my > .2 ? 0 : A.vel);
+    A.vel += cl(obj - A.vel, -ACEL * dt * (alt > .5 ? .35 : 1), ACEL * dt);
+    A.vel = cl(A.vel, 0, V_MAX);
+    const ux = -Math.sin(A.hd), uz = -Math.cos(A.hd);
+    let nx = cl(px + ux * A.vel * dt, -MITAD + 6, MITAD - 6);
+    let nz = cl(pz + uz * A.vel * dt, -MITAD + 6, MITAD - 6);
+    /* volando se pasa POR ENCIMA de las piedras: es media razón de ser del bote */
+    if (alt < 1.4){
+      for (const o of ARB){
+        const bx = nx - o[0], bz = nz - o[1], d = Math.hypot(bx, bz), rq = o[2] + .6;
+        if (o[2] > 0 && d < rq && d > 1e-4){
+          nx = o[0] + bx / d * rq; nz = o[1] + bz / d * rq; A.vel *= .6;
+        }
+      }
+    }
+    stats.dist += Math.hypot(nx - px, nz - pz);
+    /* la vertical, con la gravedad de la Luna: a 3,1 m/s² cada rebote dura casi
+       cinco segundos y cruza sesenta metros. Es la misma cuenta de siempre, pero
+       con el número del sitio donde estás, y por eso se siente el sitio. */
+    const h0 = H(px, pz);
+    px = nx; pz = nz;
+    vy -= G_LUNA * dt;
+    alt += vy * dt;
+    /* el suelo se mueve debajo mientras volás: la altura es sobre EL TERRENO DE
+       ACÁ, no sobre el de donde saltaste, así que un cráter te deja más alto y
+       una loma te corta el vuelo. Sin esto, volar sobre relieve no se sentía. */
+    alt += h0 - H(px, pz);
+    if (alt <= 0){
+      alt = 0;
+      /* REBOTE. No hay que apretar nada: la mochila devuelve el envión sola, y
+         cada rebote es una decisión de rumbo, no de tiempo. Encadenar es lo que
+         hace la mecánica: la velocidad se conserva porque no hay aire. */
+      vy = IMP;
+      rebotes++;
+    }
+    altExtra = alt;
+    pvx = ux * A.vel; pvz = uz * A.vel;
+    bobF += dt * (1.2 + A.vel * .1);
+    llama.position.set(px, H(px, pz) + alt + .35, pz);
+    llama.scale.y = cl(.3 + Math.max(0, vy) / IMP, .25, 1.3);
+    stats.t += dt;
+  };
+  A.aviso = acc => {
+    if (A.modo) return alt < .6 ? tx('baja') : tx('va');
+    if (acc && acc.tipo === 'bote') return tx('toma');
+    return '';
+  };
+  A.rebotes = () => rebotes;
+
+  A.est = () => ({ modo: A.modo, vel: +A.vel.toFixed(2), porque: A.porque,
+    nPaso: A.nPaso, tSim: +A.tSim.toFixed(2), alto: +altExtra.toFixed(2),
+    hd: +A.hd.toFixed(2),
+    pue: A.PUE.map(P => ({ x: Math.round(P.x), z: Math.round(P.z), lib: P.lib })) });
+  return A;
+})();
+
 /* -------- objetivo: marcador 3D + distancia + botón USAR ------------------- */
 function pasoObjetivo(){
   const C = CAPS[cap];
@@ -2112,12 +2319,17 @@ function pasoObjetivo(){
   marca3d.visible = !enDlg;
   const cerca = d < (C.usar ? 7 : 10);
   /* los capítulos automáticos también esperan a que la MISIÓN esté lista */
-  if (!C.usar && cerca && !enDlg && MISION.lista(cap)){
+  /* el capitulo automatico NO se dispara dentro del traslado: el dialogo congela
+     la fisica y te dejaria clavado a media mecanica. Se dispara al salirte. */
+  if (!C.usar && cerca && !enDlg && !BOTE.modo && MISION.lista(cap)){
     llegaObjetivo();
     return;
   }
   const acc = accionUsable();
   $('bUsar').classList.toggle('on', !!acc && !enDlg);
+  const av = BOTE.aviso(acc);
+  $('aviso').textContent = av;
+  $('aviso').classList.toggle('on', !!av && !enDlg);
   if (window.__autoUsar && acc && acc.tipo === 'cap' && !enDlg) llegaObjetivo();
 }
 $('bUsar').addEventListener('pointerdown', e => { e.preventDefault(); usarAccion(); });
@@ -2452,6 +2664,12 @@ window.__S = {
     CUERPO.mixer && (CUERPO.mixer.timeScale = 0); CUERPO.mixer && CUERPO.mixer.update(0);
     apuntarBrazos(CUERPO.arms, swing || 0, outX, fwdZ, forebend);
     if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02); },
+  /* la palanca a mano y el sitio del traslado, para probarlo sin un dedo */
+  palanca(x, y){ movV.x = x; movV.y = y; },
+  bote(){ return BOTE.est(); },
+  boteIr(k){ const P = BOTE.PUE[k]; if (!P) return null;
+    px = P.gx != null ? P.gx : P.x; pz = P.gz != null ? P.gz : P.z;
+    return BOTE.est(); },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
   dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
   usar(){ usarAccion(); },

@@ -56,6 +56,18 @@
   /* ayuda de controles de PC: sale sola al detectar mouse/teclado */
   /* en un aparato sin tactil no se dibujan los controles de dedo */
   body.sinTactil #joy,body.sinTactil #bSalta{display:none}
+  /* AVISO DEL TRASLADO: una linea corta, centrada, por encima del boton USAR y
+     de la palanca para no tapar ni una cosa ni la otra. Es todo el tutorial que
+     tiene el traslado: aparece cuando estas donde se usa y se va cuando no. */
+  #aviso{position:fixed;left:50%;bottom:max(96px,20vh);transform:translateX(-50%);
+    display:none;pointer-events:none;text-align:center;max-width:80vw;z-index:4;
+    font:800 11.5px/1.35 ui-sans-serif,system-ui,sans-serif;letter-spacing:.07em;
+    padding:7px 13px;border-radius:10px;background:rgba(18,12,32,.68);
+    border:1px solid rgba(170,240,210,.34);color:#dcfff2;backdrop-filter:blur(4px);
+    text-shadow:0 1px 6px rgba(0,0,0,.7)}
+  #aviso.on{display:block}
+  body.hablando #aviso{display:none}
+  @media (max-height:430px){ #aviso{bottom:max(84px,26vh);font-size:10.5px} }
   #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
     font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
     background:rgba(12,8,22,.5);border:1px solid rgba(190,230,180,.26);
@@ -176,6 +188,7 @@
   </div>
   <div id="dlg"><div id="dlgFila"><canvas id="dlgCara" width="96" height="96"></canvas><div style="flex:1;min-width:0"><div id="dlgT"></div><div id="dlgB"></div></div></div><div id="dlgGo">SEGUIR ▸</div></div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
+  <div id="aviso"></div>
   <div id="pcHelp"></div>
 </div>
 
@@ -1952,8 +1965,18 @@ function itemCerca(){
 function accionUsable(){
   const C = CAPS[cap];
   const p = POI[C.obj];
+  /* DENTRO DEL TRASLADO manda el traslado y nada mas: si no, llegar al objetivo
+     encima de la mecanica dispararia el capitulo a toda velocidad —y el dialogo
+     congela la fisica— y ademas no habria como salirse, porque salirse es el
+     mismo boton. */
+  if (ESPORA.modo){
+    const t2 = ESPORA.accion();
+    return t2 ? { tipo: 'espora', tr: t2 } : null;
+  }
   if (C.usar && Math.hypot(px - p.x, pz - p.z) < 7 && MISION.lista(cap))
     return { tipo: 'cap' };
+  const tr = ESPORA.accion();
+  if (tr) return { tipo: 'espora', tr };
   const it = itemCerca();
   if (it) return { tipo: 'item', it };
   const npc = npcCerca();
@@ -1964,7 +1987,8 @@ function usarAccion(){
   if (enDlg) return;
   const acc = accionUsable();
   if (!acc) return;
-  if (acc.tipo === 'cap') llegaObjetivo();
+  if (acc.tipo === 'espora') ESPORA.usar(acc.tr);
+  else if (acc.tipo === 'cap') llegaObjetivo();
   else if (acc.tipo === 'item'){ acc.it.activo = false; acc.it.fn(acc.it); }
   else hablaNPC(acc.npc);
 }
@@ -2356,9 +2380,15 @@ const stats = { t: 0, dist: 0 };
 let px = POI.inicio.x, pz = POI.inicio.z, yaw = 0, pitch = -.03;
 let pvx = 0, pvz = 0, bobF = 0, corre = false;
 const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
+/* ALTURA DE MAS DEL OJO. La pone el traslado del mundo: sentado en un rover
+   el ojo va a la altura del asiento, y volando va donde este el vuelo. En cero
+   —o sea a pie— la camara queda exactamente como estaba. */
+let altExtra = 0;
 const DED = { mov: null, mira: null };
 let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
 function fisica(dt){
+  /* dentro del traslado no se camina: tiene su propio paso */
+  if (ESPORA.modo){ ESPORA.paso(dt); return; }
   yaw -= keyL.x * 2.2 * dt;
   pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
   let mx = movV.x + keyV.x, my = movV.y + keyV.y;
@@ -2388,7 +2418,7 @@ function ponCam(){
      cuello, así al mirar abajo ves el pecho y las piernas sin el agujero del
      cuello, y la cabeza colapsada queda detrás del lente */
   if (CUERPO.glb){ ex = px + Math.sin(yaw) * -.16; ez = pz + Math.cos(yaw) * -.16; }
-  cam.position.set(ex, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, ez);
+  cam.position.set(ex, H(px, pz) + OJO + altExtra + Math.abs(Math.sin(bobF)) * .06 * v, ez);
   cam.rotation.y = yaw;
   cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
   /* FOV PROGRESIVO: antes saltaba de 72 a 77 en un cuadro al empezar a correr y se
@@ -2406,6 +2436,175 @@ function ponCam(){
   cam.updateProjectionMatrix();
 }
 
+/* ================= LAS ESPORAS: EL TRASLADO PROPIO DE EXO =================
+   LAS ESPORAS DE EXO. Este es el bosque que respira: colinas grandes, copas cian
+   y magenta, un lago de luz. Todo eso se veia de abajo, siempre, desde la altura
+   de los ojos.
+
+   HAY UNA ESPORA EN CADA PARADA DEL GUION —corrida al costado— y una mas en el
+   medio de cada tramo largo, asi la ruta existe de punta a punta. Cada una es un
+   bulbo con un CHORRO translucido de 38 m, que es lo unico que se ve de lejos y lo
+   que dice "por aca se sube" antes de saber que la mecanica existe.
+
+   Y LO QUE LA HACE UNA RUTA Y NO SEIS ASCENSORES: dentro del chorro subis, VENGAS
+   DE DONDE VENGAS. Pasar planeando por encima de otra espora te vuelve a
+   levantar, asi que se encadena y se puede cruzar el bosque sin tocar el suelo.
+   Planear cambia altura por distancia —un metro de caida cada 4,7 de avance—, la
+   palanca adelante alarga el planeo y atras lo acorta, y al tocar el suelo se
+   termina solo.
+
+   Igual que en la Luna, la altura es sobre el terreno DE ACA: una colina te corta
+   el planeo y un valle te lo alarga. Es la unica linea que hace que planear sea
+   leer el mapa en vez de mirar una parabola.
+   ========================================================================== */
+const ESPORA = (() => {
+  const A = { modo: null, vel: 0, hd: 0, act: null, PUE: [], nPaso: 0, tSim: 0 };
+  const TT = {
+    es: { toma: 'ESPORA · ◉ USAR para que te levante',
+          va:   'PALANCA para planear · te vuelve a levantar cualquier espora que pises',
+          baja: '◉ USAR para dejarte caer' },
+    en: { toma: 'SPORE VENT · ◉ USE to be lifted',
+          va:   'STICK to glide · any vent you pass over lifts you again',
+          baja: '◉ USE to drop' },
+    pt: { toma: 'ESPORO · ◉ USAR para ser levantado',
+          va:   'ALAVANCA para planar · qualquer esporo por onde passes levanta-te',
+          baja: '◉ USAR para cair' }
+  };
+  const tx = k => ((TT[LANG] || TT.en)[k] || '');
+
+  const RTOMA = 7;
+  const R_CHORRO = 9;      /* radio del chorro de esporas */
+  const ALTO = 38;         /* hasta donde te sube */
+  const V_SUBE = 13;
+  const V_PLAN = 15;       /* planeando */
+  const CAE = 3.2;         /* lo que baja planeando: 1 m cada 4,7 de avance */
+  const GIRO = 1.15;
+
+  /* -------------------- donde estan las esporas --------------------------- */
+  /* UNA EN CADA PARADA DEL GUION, corrida al costado, mas una en el medio de cada
+     tramo largo: asi la ruta de las copas existe de punta a punta y se puede
+     encadenar sin tocar el suelo, que es de lo que vive la mecanica. */
+  {
+    const ks = Object.keys(POI);
+    const pon = (x, z) => {
+      for (const P of A.PUE) if (Math.hypot(P.x - x, P.z - z) < 60) return;
+      if (Math.abs(x) > MITAD - 40 || Math.abs(z) > MITAD - 40) return;
+      A.PUE.push({ x, z, lib: true });
+    };
+    for (const k of ks){ const p = POI[k]; if (p) pon(p.x + 18, p.z + 12); }
+    for (let i = 1; i < ks.length; i++){
+      const a = POI[ks[i - 1]], b = POI[ks[i]];
+      if (!a || !b) continue;
+      if (Math.hypot(b.x - a.x, b.z - a.z) > 150) pon((a.x + b.x) / 2, (a.z + b.z) / 2);
+    }
+  }
+
+  /* ------------------------------ las esporas ------------------------------ */
+  const mBul = new T.MeshLambertMaterial({ color: 0x6a4a8e });
+  const mLuz = new T.MeshLambertMaterial({ color: 0xbff5e0, transparent: true,
+    opacity: .5, depthWrite: false });
+  for (const P of A.PUE){
+    P.y = H(P.x, P.z);
+    /* el bulbo: una bola achatada de la que sale el chorro, con tres lobulos */
+    const g = [];
+    for (let k = 0; k < 3; k++){
+      const s = new T.SphereGeometry(2.4 - k * .4, 7, 5);
+      s.scale(1, .62, 1);
+      s.translate(P.x + Math.sin(k * 2.1) * 1.7, P.y + .9 + k * .5,
+                  P.z + Math.cos(k * 2.1) * 1.7);
+      g.push(s);
+    }
+    const bu = new T.Mesh(fusiona(g), mBul);
+    bu.castShadow = true;
+    scene.add(bu);
+    /* EL CHORRO: un cono largo y translucido. Es lo unico que se ve de lejos y lo
+       que dice "por aca se sube" antes de saber que existe la mecanica. */
+    const ch = new T.Mesh(new T.CylinderGeometry(R_CHORRO * .35, R_CHORRO * .9, ALTO, 10, 1, true), mLuz);
+    ch.position.set(P.x, P.y + ALTO / 2, P.z);
+    scene.add(ch);
+    P.chorro = ch;
+  }
+
+  /* ---------------------------- lo que se hace ---------------------------- */
+  let alt = 0, sube = null;
+  const esporaBajo = () => {
+    for (const P of A.PUE) if (Math.hypot(px - P.x, pz - P.z) < R_CHORRO) return P;
+    return null;
+  };
+  A.accion = () => {
+    if (A.modo) return { baja: true };
+    const P = esporaBajo();
+    if (P && Math.hypot(px - P.x, pz - P.z) < RTOMA + R_CHORRO) return { P };
+    return null;
+  };
+  A.usar = c => {
+    if (c.baja){ A.suelta(); return; }
+    A.modo = 'espora'; sube = c.P; A.act = c.P;
+    A.hd = yaw; A.vel = 0; alt = Math.max(alt, .5);
+  };
+  A.suelta = () => {
+    if (!A.modo) return;
+    A.modo = null; A.vel = 0; alt = 0; altExtra = 0; sube = null;
+    pvx = 0; pvz = 0;
+  };
+
+  A.paso = dt => {
+    A.nPaso++; A.tSim += dt;
+    pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+    const mx = cl(movV.x + keyV.x, -1, 1), my = cl(movV.y + keyV.y, -1, 1);
+    A.hd -= mx * GIRO * dt;
+    yaw = A.hd;
+    /* ¿estás dentro de un chorro? Entonces subís, venga de donde vengas: pasar
+       planeando por encima de una espora te vuelve a levantar, y eso es lo que
+       convierte seis esporas en una ruta y no en seis ascensores. */
+    const dentro = esporaBajo();
+    if (dentro && alt < ALTO){
+      sube = dentro;
+      alt += V_SUBE * dt * (1 - .75 * cl(alt / ALTO, 0, 1));
+      A.vel += (cl(-my, 0, 1) * V_PLAN * .5 - A.vel) * Math.min(1, dt * 2);
+    } else {
+      sube = null;
+      /* PLANEANDO: se cambia altura por distancia, 1 m de caída cada 4,7 de
+         avance. La palanca adelante alarga el planeo y atrás lo acorta. */
+      A.vel += (V_PLAN * (my < -.1 ? -my : .45) - A.vel) * Math.min(1, dt * 1.6);
+      alt -= CAE * dt * (my > .2 ? 2.2 : 1);
+    }
+    A.vel = cl(A.vel, 0, V_PLAN);
+    const ux = -Math.sin(A.hd), uz = -Math.cos(A.hd);
+    const h0 = H(px, pz);
+    let nx = cl(px + ux * A.vel * dt, -MITAD + 6, MITAD - 6);
+    let nz = cl(pz + uz * A.vel * dt, -MITAD + 6, MITAD - 6);
+    if (alt < 2){
+      for (const o of ARB){
+        const bx = nx - o[0], bz = nz - o[1], d = Math.hypot(bx, bz), rq = o[2] + .6;
+        if (o[2] > 0 && d < rq && d > 1e-4){ nx = o[0] + bx / d * rq; nz = o[1] + bz / d * rq; }
+      }
+    }
+    stats.dist += Math.hypot(nx - px, nz - pz);
+    px = nx; pz = nz;
+    /* la altura es sobre el terreno de ACÁ: una colina te corta el planeo y un
+       valle te lo alarga, que es lo único que hace que planear sea leer el mapa */
+    alt += h0 - H(px, pz);
+    if (alt <= 0){ A.suelta(); return; }
+    altExtra = alt;
+    pvx = ux * A.vel; pvz = uz * A.vel;
+    bobF += dt * (1.1 + A.vel * .08);
+    stats.t += dt;
+  };
+  A.aviso = acc => {
+    if (A.modo) return sube ? tx('va') : tx('va');
+    if (acc && acc.tipo === 'espora') return tx('toma');
+    return '';
+  };
+  A.alto = () => +alt.toFixed(1);
+
+  A.est = () => ({ modo: A.modo, vel: +A.vel.toFixed(2), porque: A.porque,
+    nPaso: A.nPaso, tSim: +A.tSim.toFixed(2), alto: +altExtra.toFixed(2),
+    hd: +A.hd.toFixed(2),
+    pue: A.PUE.map(P => ({ x: Math.round(P.x), z: Math.round(P.z), lib: P.lib })) });
+  return A;
+})();
+
 /* -------- objetivo: marcador 3D + distancia + botón USAR ------------------- */
 function pasoObjetivo(){
   const C = CAPS[cap];
@@ -2417,12 +2616,17 @@ function pasoObjetivo(){
   marca3d.visible = !enDlg;
   const cerca = d < (C.usar ? 7 : 10);
   /* los capítulos automáticos también esperan a que la MISIÓN esté lista */
-  if (!C.usar && cerca && !enDlg && MISION.lista(cap)){
+  /* el capitulo automatico NO se dispara dentro del traslado: el dialogo congela
+     la fisica y te dejaria clavado a media mecanica. Se dispara al salirte. */
+  if (!C.usar && cerca && !enDlg && !ESPORA.modo && MISION.lista(cap)){
     llegaObjetivo();
     return;
   }
   const acc = accionUsable();
   $('bUsar').classList.toggle('on', !!acc && !enDlg);
+  const av = ESPORA.aviso(acc);
+  $('aviso').textContent = av;
+  $('aviso').classList.toggle('on', !!av && !enDlg);
   if (window.__autoUsar && acc && acc.tipo === 'cap' && !enDlg) llegaObjetivo();
 }
 $('bUsar').addEventListener('pointerdown', e => { e.preventDefault(); usarAccion(); });
@@ -2759,6 +2963,12 @@ window.__S = {
     CUERPO.mixer && (CUERPO.mixer.timeScale = 0); CUERPO.mixer && CUERPO.mixer.update(0);
     apuntarBrazos(CUERPO.arms, swing || 0, outX, fwdZ, forebend);
     if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02); },
+  /* la palanca a mano y el sitio del traslado, para probarlo sin un dedo */
+  palanca(x, y){ movV.x = x; movV.y = y; },
+  espora(){ return ESPORA.est(); },
+  esporaIr(k){ const P = ESPORA.PUE[k]; if (!P) return null;
+    px = P.gx != null ? P.gx : P.x; pz = P.gz != null ? P.gz : P.z;
+    return ESPORA.est(); },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
   dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
   usar(){ usarAccion(); },

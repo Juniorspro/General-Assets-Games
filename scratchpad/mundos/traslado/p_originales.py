@@ -76,12 +76,13 @@ def aplica(rel, mod, tipo, titulo, razon, tt, cuerpo, css_col):
                  "   el ojo va a la altura del asiento, y volando va donde este el vuelo. En cero\n"
                  "   —o sea a pie— la camara queda exactamente como estaba. */\n"
                  "let altExtra = 0;\n" + s[j + 1:])
-        A2 = "cam.position.set(ex, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, ez);"
-        B2 = "cam.position.set(ex, H(px, pz) + OJO + altExtra + Math.abs(Math.sin(bobF)) * .06 * v, ez);"
-        if s.count(A2) == 1:
-            s = s.replace(A2, B2, 1)
+        # el balanceo del paso no vale lo mismo en todos: LUNA lo tiene en .11
+        # porque el paso lunar flota mas. Se busca por el prefijo, no literal.
+        m2 = re.search(r"cam\.position\.set\(ex, H\(px, pz\) \+ OJO \+ (Math\.abs)", s)
+        if m2:
+            s = s[:m2.start(1)] + 'altExtra + ' + s[m2.start(1):]
         else:
-            err.append('la camara aparece %d veces' % s.count(A2))
+            err.append('no encuentro la linea de la camara')
 
     # 2) el modulo
     anc = "/* -------- objetivo: marcador 3D + distancia + botón USAR"
@@ -561,11 +562,14 @@ RAZON_H = """   EL TRINEO DE HIELO. Este mundo tiene un lago CONGELADO caminable
    con un trapo, porque un trineo tirado en la nieve es una raya blanca sobre
    blanco y no se encuentra desde la loma anterior."""
 
+# Al importarlo desde otro parche NO se aplica nada: sin esta guarda, importar
+# `aplica` volvia a correr los dos mundos de aca desde cero.
 ok = True
-ok &= aplica('mundos/marte.html', 'ROVER', 'rover',
+if __name__ == '__main__':
+  ok &= aplica('mundos/marte.html', 'ROVER', 'rover',
              'EL ROVER: EL TRASLADO PROPIO DE MARTE', RAZON_M, TT_M, CUERPO_M,
              ('40,18,12', '240,150,110', '#ffe0d0'))
-ok &= aplica('mundos/hielo.html', 'TRINEO', 'trineo',
+  ok &= aplica('mundos/hielo.html', 'TRINEO', 'trineo',
              'EL TRINEO: EL TRASLADO PROPIO DE HIELO', RAZON_H, TT_H, CUERPO_H,
              ('10,22,34', '150,200,240', '#dcecff'))
-sys.exit(0 if ok else 1)
+  sys.exit(0 if ok else 1)
