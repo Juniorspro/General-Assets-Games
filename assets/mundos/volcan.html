@@ -70,6 +70,9 @@
   /* con dialogo abierto no se camina: la palanca y el salto estorban */
   body.hablando #joy,body.hablando #bSalta{opacity:0;pointer-events:none;
     transition:opacity .18s}
+  /* el boton USAR tambien se aparta: pegado abajo a la derecha, se le ponia
+     encima del globo y tapaba el final de cada linea */
+  body.hablando .b.usar{opacity:0;pointer-events:none}
   #joy canvas{width:100%;height:100%;display:block}
   #bSalta{position:absolute;right:max(14px,3.5vw);bottom:max(16px,5vh);
     width:min(84px,19vw);aspect-ratio:1;border-radius:50%;pointer-events:auto;
@@ -99,7 +102,7 @@
      la caja tiene alto FIJO y chico, pegada abajo: no salta entre paginas y
      deja ver el paisaje, que es de lo que se trata. */
   #dlg{position:absolute;left:50%;bottom:max(12px,3vh);transform:translateX(-50%);
-    width:min(720px,94vw);display:none;pointer-events:auto;align-items:flex-end;gap:0}
+    width:min(720px,94vw);display:none;pointer-events:auto;align-items:flex-end;gap:0;z-index:5}
   #dlg.on{display:flex}
   #dlgFoto,#dlgCara{width:min(104px,17vw);aspect-ratio:3/4;flex:0 0 auto;
     border-radius:10px 10px 4px 4px;border:1.5px solid rgba(255,168,104,.36);background:rgba(24,11,8,.9);
@@ -2316,6 +2319,13 @@ function armarAcciones(npc){
   const cAndar  = pAndar  || retargetClip(CLIPS.andar,  CLIPS.andarRest,  m);
   const cCorrer = pCorrer || retargetClip(CLIPS.correr, CLIPS.correrRest, m) || cAndar;
   if (!cQuieto && !cAndar) return;
+  /* Sin HUESOS no se ata nada. El perro es una sola pieza: se le ataban las tres
+     acciones igual, npc.acc quedaba definido, y el balanceo a mano —lo unico que
+     puede moverlo— no corria nunca porque su condicion es justamente !npc.acc.
+     Estaba congelado desde el primer dia. */
+  let _hue = false;
+  m.traverse(o => { if (o.isBone) _hue = true; });
+  if (!_hue) return;
   const mix = npc.mixer || new T.AnimationMixer(m);
   if (!npc.mixer){ npc.mixer = mix; MIXERS.push(mix); }
   const A = npc.acc = {};
@@ -2326,25 +2336,46 @@ function armarAcciones(npc){
     a.enabled = true;
     a.setEffectiveWeight(par[0] === 'quieto' ? 1 : 0);
     a.play();
+    /* desfase propio: sin esto los seis personajes de un mundo respiran y giran
+       la cabeza en el mismo fotograma, y se ve a un coro, no a gente */
+    a.time = Math.random() * (a.getClip().duration || 1);
     A[par[0]] = a;
   }
+  npc.estAnim = 'quieto';
 }
 /* la MEZCLA: los pesos siguen a la velocidad de verdad del personaje, asi que
    nadie patina ni corre en el lugar. */
 function mezclaAcciones(npc, vel, dt){
   const A = npc.acc;
   if (!A) return;
-  /* vel en metros por segundo; caminar ~2, correr ~6 */
-  const wCor = cl((vel - 3.4) / 3.0, 0, 1);
-  const wAnd = cl((vel - 0.25) / 1.6, 0, 1) * (1 - wCor);
-  const wQui = 1 - wAnd - wCor;
-  const k = Math.min(1, dt * 7);
-  const pon = (a, w) => { if (a) a.setEffectiveWeight(
-    a.getEffectiveWeight() + (w - a.getEffectiveWeight()) * k); };
-  pon(A.quieto, wQui); pon(A.andar, wAnd); pon(A.correr, wCor);
+  /* UN SOLO CLIP A LA VEZ. Mezclar por peso parece lo elegante y es lo que
+     rompia todo: el mixer acumula los cuaterniones de cada pista y los normaliza,
+     y con el Idle mirando a un costado y el Casual_Walk al frente, el hueso Hips
+     interpolaba por el camino largo y ACOSTABA al personaje en el aire. Los
+     torsos retorcidos con la cabeza en el pecho eran lo mismo, mas suave.
+     Con histeresis: elegir por un umbral seco hace que a velocidad de frontera
+     el personaje parpadee entre quieto y caminando cada cuadro. */
+  const est = npc.estAnim || 'quieto';
+  let q = est;
+  if (est === 'quieto')      q = vel > 0.55 ? (vel > 4.2 ? 'correr' : 'andar') : 'quieto';
+  else if (est === 'andar')  q = vel < 0.30 ? 'quieto' : (vel > 4.2 ? 'correr' : 'andar');
+  else                       q = vel < 3.4 ? (vel < 0.30 ? 'quieto' : 'andar') : 'correr';
+  if (!A[q]) q = A.andar ? 'andar' : 'quieto';
+  if (q !== est){
+    npc.estAnim = q;
+    for (const k in A){
+      const a = A[k];
+      a.setEffectiveWeight(k === q ? 1 : 0);
+      if (k === q){ a.paused = false; a.enabled = true; }
+    }
+  }
   /* el clip avanza al ritmo del paso: si no, se arrastra o patina */
   if (A.andar) A.andar.timeScale = cl(vel / 1.9, .55, 2.1);
   if (A.correr) A.correr.timeScale = cl(vel / 5.4, .6, 1.9);
+  /* el Idle de Meshy mira a los costados. La queja no era que mire: era que lo
+     hace rapido, sin parar y todos a la vez. A 0,42 el MISMO clip se lee como
+     respirar, y el desfase por personaje rompe el coro. */
+  if (A.quieto) A.quieto.timeScale = 0.42;
 }
 function ponerModelo(npc){
   if (!GLTF || !npc.glb) return;
