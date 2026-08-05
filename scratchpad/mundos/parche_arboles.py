@@ -33,31 +33,36 @@ ARB_GLB = {
 
 # por mundo: [(especie, cuantos, alto, sombra)] — el alto pisa el de la tabla
 PLAN = {
- # (especie, cuantos, alto, sombra). El comentario de cada mundo lleva el
- # presupuesto en triangulos, que es lo que decide cuantos entran de cada uno.
- 'dunas': [                       # el oasis son las palmeras: ~403k tri
-   ('palmera', 10, 12.0, True), ('seco', 4, 7.0, True), ('hueco', 8, 4.5, False),
+ # (especie, cuantos, alto, sombra). Presupuesto en triangulos Y en DIBUJADOS:
+ # cada clon GLB es su propio dibujado, asi que la cantidad tambien se paga ahi.
+ #
+ # 'hueco' (arcade/m-agujero-arbol) NO SE USA: es de baja resolucion y se veia
+ # como un globo verde. La vegetacion baja la pone el matorral GLB en poca
+ # cantidad (pesa 30 mil triangulos por copia) mas la maleza instanciada que ya
+ # trae cada mundo, que es barata y no tiene ese problema de silueta.
+ 'dunas': [                       # el oasis son las palmeras
+   ('palmera', 12, 12.0, True), ('seco', 5, 7.0, True), ('matorral', 6, 2.2, False),
  ],
- 'jungla': [                      # selva cerrada, con el liviano de base: ~502k
-   ('selva', 66, 19.0, True), ('hueco', 44, 11.0, True), ('palmera', 4, 12.0, True),
+ 'jungla': [                      # selva cerrada; el fondo lo llena el relleno
+   ('selva', 62, 19.0, True), ('palmera', 5, 12.0, True), ('matorral', 8, 2.6, False),
  ],
- 'volcan': [                      # el volcan tiene que estar pelado: ~181k
-   ('seco', 6, 7.5, True), ('hueco', 18, 6.0, False),
+ 'volcan': [                      # el volcan tiene que estar pelado
+   ('seco', 7, 7.5, True), ('matorral', 6, 2.0, False),
  ],
- 'pantano': [                     # cipreses altos y mucho tronco: ~320k
-   ('selva', 40, 15.0, True), ('arbol3', 3, 14.0, True), ('hueco', 24, 8.0, True),
+ 'pantano': [                     # cipreses altos
+   ('selva', 44, 15.0, True), ('arbol3', 3, 14.0, True), ('matorral', 8, 2.4, False),
  ],
- 'canon': [                       # ralo, en las terrazas: ~264k
-   ('selva', 22, 9.0, True), ('seco', 5, 7.0, True), ('hueco', 18, 5.0, False),
+ 'canon': [                       # ralo, en las terrazas
+   ('selva', 26, 9.0, True), ('seco', 6, 7.0, True), ('matorral', 6, 2.2, False),
  ],
- 'estepa': [                      # la inmensidad es el tema, casi sin arbol: ~174k
-   ('seco', 6, 7.5, True), ('hueco', 12, 4.5, False),
+ 'estepa': [                      # la inmensidad es el tema, casi sin arbol
+   ('seco', 8, 7.5, True), ('matorral', 8, 1.9, False),
  ],
- 'acropolis': [                   # olivar retorcido del santuario: ~255k
-   ('arbol3', 8, 6.5, True), ('hueco', 14, 4.0, False),
+ 'acropolis': [                   # olivar retorcido del santuario
+   ('arbol3', 9, 6.5, True), ('matorral', 7, 2.1, False),
  ],
- 'secuoya': [                     # los mas altos del juego: ~399k
-   ('selva', 60, 30.0, True), ('hueco', 30, 14.0, True), ('arbol2', 2, 26.0, True),
+ 'secuoya': [                     # los mas altos del juego
+   ('selva', 52, 30.0, True), ('arbol2', 3, 26.0, True), ('matorral', 8, 2.4, False),
  ],
 }
 
