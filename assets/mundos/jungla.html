@@ -36,6 +36,23 @@
   .b.usar{background:rgba(60,180,150,.78);border-color:#bff2a0;font-size:15px;display:none}
   .b.usar.on{display:block}
   .b.corre.on{background:rgba(60,180,150,.78)}
+  /* ------------------------ JOYSTICK Y SALTO (TACTIL) ---------------------
+     Antes el medio izquierdo de la pantalla era una zona invisible de arrastre:
+     nadie sabia donde tocar. Ahora hay una PALANCA dibujada, con el estilo del
+     mundo, y un boton de SALTO. La palanca del todo hacia ARRIBA = correr. */
+  #joy{position:absolute;left:max(14px,3.5vw);bottom:max(16px,5vh);
+    width:min(150px,32vw);aspect-ratio:1;pointer-events:auto;touch-action:none;
+    opacity:.9;transition:opacity .25s}
+  body.pc #joy,body.pc #bSalta{display:none}
+  #joy canvas{width:100%;height:100%;display:block}
+  #bSalta{position:absolute;right:max(14px,3.5vw);bottom:max(16px,5vh);
+    width:min(84px,19vw);aspect-ratio:1;border-radius:50%;pointer-events:auto;
+    touch-action:none;display:grid;place-items:center;font-weight:900;
+    font-size:11px;letter-spacing:.1em;cursor:pointer;
+    background:rgba(0,0,0,.42);border:2px solid #a8e07a;color:#e6ffd0;
+    box-shadow:0 6px 20px rgba(0,0,0,.45);backdrop-filter:blur(3px)}
+  #bSalta:active{transform:translateY(2px) scale(.96);filter:brightness(1.35)}
+  #bSalta span{display:block;font-size:24px;line-height:1}
   /* ayuda de controles de PC: sale sola al detectar mouse/teclado */
   #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
     font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
@@ -48,14 +65,48 @@
   #pcHelp kbd{display:inline-block;min-width:13px;text-align:center;padding:1px 5px;
     margin-right:1px;border-radius:5px;font:700 10px ui-monospace,monospace;
     background:rgba(190,230,180,.16);border:1px solid rgba(190,230,180,.3);color:#eef7e2}
-  #dlg{position:absolute;left:50%;bottom:8%;transform:translateX(-50%);width:min(560px,92vw);
-    background:rgba(12,8,22,.88);border:1px solid rgba(196,232,150,.35);border-radius:16px;
-    padding:16px 18px 13px;display:none;pointer-events:auto;backdrop-filter:blur(6px)}
-  #dlg.on{display:block}
-  #dlgT{font-weight:900;letter-spacing:.05em;color:#cdbcf4;font-size:13px;margin-bottom:6px}
-  #dlgB{font-size:14.5px;line-height:1.5;color:#f0eef8;white-space:pre-wrap}
-  #dlgGo{margin-top:12px;text-align:center;padding:11px;border-radius:11px;font-weight:800;
+  /* ------------------------- DIALOGO CON RETRATO --------------------------
+     El RETRATO GENERADO va a la IZQUIERDA, pegado al piso de la pantalla, y de
+     el sale un GLOBO CUADRADO con lo que dice el personaje. En apaisado van
+     lado a lado; en pantallas angostas el globo se mete abajo del retrato pero
+     el pico sigue apuntando a la cara. */
+  #dlg{position:absolute;left:50%;bottom:5.5%;transform:translateX(-50%);
+    width:min(700px,95vw);display:none;pointer-events:auto;
+    align-items:flex-end;gap:0}
+  #dlg.on{display:flex}
+  /* el retrato: imagen generada, recortada de abajo con un degrade para que
+     no quede el corte duro del PNG contra el paisaje */
+  #dlgFoto{width:min(150px,26vw);aspect-ratio:3/4;flex:0 0 auto;object-fit:cover;
+    object-position:50% 12%;border-radius:14px 14px 6px 6px;
+    border:1.5px solid rgba(196,232,150,.35);
+    box-shadow:0 10px 28px rgba(0,0,0,.6);background:rgba(12,8,22,.88);display:none}
+  #dlgFoto.on{display:block}
+  #dlgCara{width:min(150px,26vw);aspect-ratio:3/4;flex:0 0 auto;border-radius:14px 14px 6px 6px;
+    border:1.5px solid rgba(196,232,150,.35);background:rgba(12,8,22,.88);display:none;
+    box-shadow:0 10px 28px rgba(0,0,0,.6);object-fit:cover}
+  #dlgCara.on{display:block}
+  /* EL GLOBO: cuadrado, con el pico apuntando al retrato */
+  #dlgGlobo{position:relative;flex:1 1 auto;min-width:0;margin-left:14px;
+    background:rgba(12,8,22,.88);border:1.6px solid rgba(196,232,150,.35);
+    border-radius:4px;padding:13px 15px 11px;backdrop-filter:blur(7px);
+    box-shadow:0 10px 30px rgba(0,0,0,.55)}
+  /* el pico: dos triangulos superpuestos (borde + relleno) */
+  #dlgGlobo::before,#dlgGlobo::after{content:'';position:absolute;left:-11px;top:22px;
+    width:0;height:0;border:11px solid transparent}
+  #dlgGlobo::before{border-right-color:rgba(196,232,150,.35)}
+  #dlgGlobo::after{left:-9px;border-right-color:rgba(12,8,22,.88)}
+  #dlgT{font-weight:900;letter-spacing:.06em;color:#cdbcf4;font-size:12.5px;margin-bottom:6px}
+  #dlgB{font-size:14.5px;line-height:1.5;color:#f0eef8;white-space:pre-wrap;min-height:3.6em}
+  #dlgGo{margin-top:10px;margin-left:auto;width:fit-content;padding:9px 20px;border-radius:8px;
+    font-weight:800;font-size:12.5px;letter-spacing:.08em;
     background:linear-gradient(180deg,#3f9a3a,#1c5424);border:1px solid #bff2a0;cursor:pointer}
+  @media (max-aspect-ratio:1/1){
+    #dlg{flex-wrap:wrap;width:min(560px,96vw)}
+    #dlgGlobo{flex-basis:100%;margin:-6px 0 0 22px}
+    #dlgGlobo::before,#dlgGlobo::after{left:26px;top:-11px;border-right-color:transparent}
+    #dlgGlobo::before{border-bottom-color:rgba(196,232,150,.35)}
+    #dlgGlobo::after{left:28px;top:-9px;border-bottom-color:rgba(12,8,22,.88)}
+  }
   #fps{position:absolute;left:10px;top:10px;font:10px ui-monospace,monospace;color:#9fd0c8;
     background:rgba(12,8,22,.5);padding:3px 6px;border-radius:6px}
   /* viñeta cinematográfica: oscurece apenas las esquinas, gratis (es CSS) */
@@ -155,7 +206,9 @@
     <div class="b corre" id="bCorre">CORRER</div>
     <div class="b" id="bMenu">MENÚ</div>
   </div>
-  <div id="dlg"><div id="dlgFila"><canvas id="dlgCara" width="96" height="96"></canvas><div style="flex:1;min-width:0"><div id="dlgT"></div><div id="dlgB"></div></div></div><div id="dlgGo">SEGUIR ▸</div></div>
+  <div id="dlg"><img id="dlgFoto" alt=""><canvas id="dlgCara" width="192" height="256"></canvas><div id="dlgGlobo"><div id="dlgT"></div><div id="dlgB"></div><div id="dlgGo">SIGUIENTE ▸</div></div></div>
+  <div id="joy"><canvas width="300" height="300"></canvas></div>
+  <div id="bSalta"><span>⤒</span>SALTO</div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
   <div id="pcHelp"></div>
 </div>
@@ -2231,20 +2284,40 @@ function pasoLuz(dt){
     focoCasa.intensity = osc * osc * 60 * (TEMPLO ? TEMPLO.abierta : 0);
   }
 }
-function dialogo(titulo, cuerpo, alCerrar, cara){
+/* el texto se escribe LETRA POR LETRA; el boton, si todavia esta escribiendo,
+   lo completa de golpe en vez de cerrar (asi nadie se pierde una linea). */
+let _dlgTim = null, _dlgFull = '';
+function dialogo(titulo, cuerpo, alCerrar, cara, retrato){
   enDlg = true;
   $('dlgT').textContent = titulo;
-  $('dlgB').textContent = cuerpo;
-  /* si habla un PERSONAJE, su retrato se pinta al vuelo (canvas) */
-  const cv = $('dlgCara');
-  if (cara){
+  /* RETRATO: si el personaje tiene imagen generada va esa; si no, la carita
+     pintada a mano en canvas (los bichos y los perros no tienen retrato) */
+  const img = $('dlgFoto'), cv = $('dlgCara');
+  if (retrato){
+    img.src = retrato; img.classList.add('on'); cv.classList.remove('on');
+  } else if (cara){
     const g = cv.getContext('2d');
-    g.clearRect(0, 0, 96, 96);
-    cara(g, 96);
-    cv.classList.add('on');
-  } else cv.classList.remove('on');
+    g.clearRect(0, 0, 192, 256);
+    /* la carita se pinto para un cuadrado: se centra arriba en el retrato 3:4 */
+    g.save(); g.translate(0, 24); cara(g, 192); g.restore();
+    cv.classList.add('on'); img.classList.remove('on');
+  } else { cv.classList.remove('on'); img.classList.remove('on'); }
+  /* maquina de escribir */
+  if (_dlgTim) clearInterval(_dlgTim);
+  _dlgFull = cuerpo; let i = 0;
+  $('dlgB').textContent = '';
+  _dlgTim = setInterval(() => {
+    i += 2;
+    $('dlgB').textContent = _dlgFull.slice(0, i);
+    if (i >= _dlgFull.length){ clearInterval(_dlgTim); _dlgTim = null; }
+  }, 18);
   $('dlg').classList.add('on');
   $('dlgGo').onclick = () => {
+    if (_dlgTim){                                  /* todavia escribiendo: completar */
+      clearInterval(_dlgTim); _dlgTim = null;
+      $('dlgB').textContent = _dlgFull;
+      return;
+    }
     $('dlg').classList.remove('on');
     enDlg = false;
     if (alCerrar) alCerrar();
@@ -2547,7 +2620,9 @@ function ponerModelo(npc){
         m.traverse(o => { if (o.isBone){
           if (o.name === 'LeftArm') arm.la = o; else if (o.name === 'RightArm') arm.ra = o;
           else if (o.name === 'LeftForeArm') arm.lf = o;
-          else if (o.name === 'RightForeArm') arm.rf = o; } });
+          else if (o.name === 'RightForeArm') arm.rf = o;
+          else if (o.name === 'LeftHand') arm.lh = o;
+          else if (o.name === 'RightHand') arm.rh = o; } });
         for (const k in arm) arm[k].userData.bindQ = arm[k].quaternion.clone();
         npc.arms = arm; npc.armPh = 0;
       }
@@ -2630,7 +2705,7 @@ function hablaNPC(npc){
   if (!lineas.length) return;
   const txt = lineas[npc.li % lineas.length];
   npc.li++;
-  dialogo(npc.nombre, txt, npc.alHablar || null, npc.cara);
+  dialogo(npc.nombre, txt, npc.alHablar || null, npc.cara, npc.retrato);
 }
 
 /* ========================= ITEMS USABLES ================================== */
@@ -2789,6 +2864,8 @@ function cargarCuerpoGLB(){
         else if (o.name === 'RightArm') arm.ra = o;
         else if (o.name === 'LeftForeArm') arm.lf = o;
         else if (o.name === 'RightForeArm') arm.rf = o;
+        else if (o.name === 'LeftHand') arm.lh = o;
+        else if (o.name === 'RightHand') arm.rh = o;
       } });
     for (const k in arm) arm[k].userData.bindQ = arm[k].quaternion.clone();
     CUERPO.arms = arm;
@@ -2811,10 +2888,11 @@ cargarCieloFoto();
    varía por modelo): orienta cada hombro para que el brazo señale HACIA ABAJO
    en el mundo (algo adelante y afuera), con `sw` de vaivén. Así quedan colgando
    normales en los 5 cuerpos y en los NPC, sin importar cómo vino riggeado. */
+const ROLL_PALMA = 1.35;   /* ~77 grados: palma de adelante a adentro */
 const _brAim = new T.Vector3(), _brTgt = new T.Vector3(), _brPw = new T.Quaternion();
 function apuntarBrazos(A, sw, outX, fwdZ, forebend){
-  outX = outX == null ? 0.17 : outX;
-  fwdZ = fwdZ == null ? 0.12 : fwdZ;
+  outX = outX == null ? 0.26 : outX;
+  fwdZ = fwdZ == null ? 0.16 : fwdZ;
   forebend = forebend == null ? 0.28 : forebend;
   const aim = (up, fore, side, s) => {
     if (!up || !fore) return;
@@ -2826,15 +2904,26 @@ function apuntarBrazos(A, sw, outX, fwdZ, forebend){
   };
   aim(A.la, A.lf, 1, sw);
   aim(A.ra, A.rf, -1, -sw);
-  if (A.lf && A.lf.userData.bindQ){ A.lf.quaternion.copy(A.lf.userData.bindQ); A.lf.rotateX(forebend); }
-  if (A.rf && A.rf.userData.bindQ){ A.rf.quaternion.copy(A.rf.userData.bindQ); A.rf.rotateX(forebend); }
+  /* ROLL_PALMA: el rig viene en A-pose con la PALMA HACIA ADELANTE y los dedos
+     abiertos; con el brazo colgando eso se ve como una mano de zombi. Rolamos el
+     antebrazo sobre su propio eje (Y del hueso apunta a la mano en estos rigs)
+     para que la palma quede mirando al cuerpo, que es como cuelga una mano. */
+  if (A.lf && A.lf.userData.bindQ){ A.lf.quaternion.copy(A.lf.userData.bindQ);
+    A.lf.rotateX(forebend); A.lf.rotateY(-ROLL_PALMA); }
+  if (A.rf && A.rf.userData.bindQ){ A.rf.quaternion.copy(A.rf.userData.bindQ);
+    A.rf.rotateX(forebend); A.rf.rotateY(ROLL_PALMA); }
+  /* la muneca: se relaja el gesto abierto del bind y se cierra un poco */
+  if (A.lh && A.lh.userData.bindQ){ A.lh.quaternion.copy(A.lh.userData.bindQ);
+    A.lh.rotateZ(-0.22); A.lh.rotateY(-0.30); }
+  if (A.rh && A.rh.userData.bindQ){ A.rh.quaternion.copy(A.rh.userData.bindQ);
+    A.rh.rotateZ(0.22); A.rh.rotateY(0.30); }
 }
 function cuerpoTick(dt){
   const enJuego = fase === 'juego';
   CUERPO.root.visible = enJuego;
   CUERPO.vm.visible = enJuego && !enDlg && !CUERPO.glb;   /* con GLB no hay viewmodel */
   if (!enJuego) return;
-  CUERPO.root.position.set(px, H(px, pz), pz);
+  CUERPO.root.position.set(px, (ojoY != null ? ojoY : H(px, pz)) + aireY, pz);
   CUERPO.root.rotation.y = yaw;
   const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
   /* --- rama del CUERPO 3D generado --- */
@@ -3099,7 +3188,7 @@ const caraGuardian = (g, n2) => {
 {
   const cp = POI.campamento;
   window.__TAINA = nuevoNPC({ fig: figHumano(0x7a6a3a, 0x2a1c10),
-    x: cp.x - 5.5, z: cp.z + 4.5, nombre: 'TAINA', clave: 'taina',
+    x: cp.x - 5.5, z: cp.z + 4.5, nombre: 'TAINA', clave: 'taina', retrato: AX('retrato/jungla.jpg'),
     cara: caraTaina, giro: 2.4, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: Math.PI,
     alHablar(){ if (cap >= 1) window.__TAINA.sigue = true; } });
   window.__CANELO = nuevoNPC({ fig: figPerro(0xb07a3a),
@@ -3109,7 +3198,7 @@ const caraGuardian = (g, n2) => {
     alHablar(){ window.__CANELO.sigue = true; } });
   const cs = POI.cascada;
   nuevoNPC({ fig: figHumano(0x4a5a3a, 0xb8b0a0),
-    x: cs.x + 4.5, z: cs.z + 3.5, nombre: 'DANTE', clave: 'dante',
+    x: cs.x + 4.5, z: cs.z + 3.5, nombre: 'DANTE', clave: 'dante', retrato: AX('retrato/joven.jpg'),
     cara: caraDante, giro: 3.0, glb: 'npc/dante.glb', glbGiro: Math.PI });
   const pu = POI.puerta;
   nuevoNPC({ fig: figHumano(0x8a9280, 0x6a7466),
@@ -3124,6 +3213,13 @@ let pvx = 0, pvz = 0, bobF = 0, corre = false;
 const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
 const DED = { mov: null, mira: null };
 let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
+const PEND_MAX = 0.80;   /* ~39 grados: mas empinado que esto no se sube */
+let ojoY = null;         /* altura del ojo interpolada (sin saltos) */
+/* SALTO: altura fija (los saltos de altura variable dejaban repisas
+   inalcanzables), gravedad fuerte para que no se sienta lunar. */
+const GRAV = 22, SALTO_V = 8.2;
+let aireY = 0, aireV = 0, enAire = false;
+function saltar(){ if (enAire) return; enAire = true; aireV = SALTO_V; }
 function fisica(dt){
   yaw -= keyL.x * 2.2 * dt;
   pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
@@ -3136,6 +3232,28 @@ function fisica(dt){
   pvz = (-cy * -my - sy * mx) * sp;
   let nx = cl(px + pvx * dt, -MITAD + 6, MITAD - 6);
   let nz = cl(pz + pvz * dt, -MITAD + 6, MITAD - 6);
+  /* TOPE DE PENDIENTE: antes la altura se fijaba directo al terreno, asi que
+     caminar contra una ladera te SUBIA de golpe (parecia teletransporte). Si el
+     escalon es mas empinado que PEND_MAX no se sube: se DESLIZA por la ladera
+     (se proyecta el movimiento sobre la curva de nivel), que es lo que hace un
+     personaje de verdad. */
+  {
+    const h0 = H(px, pz), h1 = H(nx, nz);
+    const dl = Math.hypot(nx - px, nz - pz);
+    if (dl > 1e-5 && (h1 - h0) / dl > PEND_MAX){
+      /* gradiente del terreno por diferencias finitas */
+      const e = 1.2;
+      const gx = H(px + e, pz) - H(px - e, pz), gz = H(px, pz + e) - H(px, pz - e);
+      const gl = Math.hypot(gx, gz) || 1;
+      const ux = gx / gl, uz = gz / gl;              /* cuesta arriba */
+      const dvx = nx - px, dvz = nz - pz;
+      const proy = dvx * ux + dvz * uz;              /* cuanto va cuesta arriba */
+      nx = px + (dvx - ux * proy) * .92;             /* se lo saca: queda el roce */
+      nz = pz + (dvz - uz * proy) * .92;
+      const h2 = H(nx, nz);
+      if ((h2 - h0) / (Math.hypot(nx - px, nz - pz) || 1) > PEND_MAX){ nx = px; nz = pz; }
+    }
+  }
   /* ni por el agua ni a través de los troncos */
   if (enAgua(nx, nz)){ nx = px; nz = pz; }
   for (const a of ARB){
@@ -3144,6 +3262,19 @@ function fisica(dt){
   }
   stats.dist += Math.hypot(nx - px, nz - pz);
   px = nx; pz = nz;
+  /* la altura del ojo PERSIGUE al suelo en vez de pegarse a el: sin esto, cada
+     bache era un tironcito vertical, y una ladera un teletransporte. */
+  {
+    const hs = H(px, pz);
+    ojoY = ojoY == null ? hs : ojoY + (hs - ojoY) * Math.min(1, dt * 9);
+    if (Math.abs(hs - ojoY) > 3) ojoY = hs;   /* teleport de guion: sin arrastre */
+  }
+  /* el SALTO vive sobre la altura del suelo: se integra aparte y se suma, asi
+     el tope de pendiente y el suavizado del ojo siguen valiendo. */
+  if (enAire){
+    aireV -= GRAV * dt; aireY += aireV * dt;
+    if (aireY <= 0){ aireY = 0; aireV = 0; enAire = false; }
+  }
   bobF += dt * (2 + 8 * Math.min(1, Math.hypot(pvx, pvz) / VEL));
   stats.t += dt;
 }
@@ -3154,7 +3285,7 @@ function ponCam(){
      cuello, así al mirar abajo ves el pecho y las piernas sin el agujero del
      cuello, y la cabeza colapsada queda detrás del lente */
   if (CUERPO.glb){ ex = px + Math.sin(yaw) * -.16; ez = pz + Math.cos(yaw) * -.16; }
-  cam.position.set(ex, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, ez);
+  cam.position.set(ex, (ojoY != null ? ojoY : H(px, pz)) + aireY + OJO + Math.abs(Math.sin(bobF)) * .06 * v, ez);
   cam.rotation.y = yaw;
   cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
   cam.fov = 72 + (corre ? 5 : 0);
@@ -3192,6 +3323,150 @@ $('bMenu').addEventListener('pointerdown', e => { e.preventDefault();
 });
 
 /* -------------------------- entrada táctil / teclado ----------------------- */
+/* ========================= JOYSTICK DIBUJADO =============================
+   Se dibuja en un canvas propio (no en el del juego) para no tocar el render:
+   solo se repinta cuando la palanca se mueve. El estilo lo pone cada mundo. */
+const JOY = { el: $('joy'), cv: null, g: null, x: 0, y: 0, act: false, id: -1,
+  aro: '#a8e07a', pal: '#e6ffd0', glifo: '❦', trama: 'hoja' };
+JOY.cv = JOY.el.querySelector('canvas'); JOY.g = JOY.cv.getContext('2d');
+function joyDibuja(){
+  const g = JOY.g, N = 300, c = N / 2, R = N * .42;
+  g.clearRect(0, 0, N, N);
+  /* el aro: doble trazo con la trama del mundo por dentro */
+  g.save();
+  g.beginPath(); g.arc(c, c, R, 0, 6.2832);
+  g.fillStyle = 'rgba(0,0,0,.34)'; g.fill();
+  g.clip();
+  joyTrama(g, N, c, R);
+  g.restore();
+  g.lineWidth = 6; g.strokeStyle = JOY.aro; g.globalAlpha = .78;
+  g.beginPath(); g.arc(c, c, R, 0, 6.2832); g.stroke();
+  g.lineWidth = 1.5; g.globalAlpha = .34;
+  g.beginPath(); g.arc(c, c, R - 12, 0, 6.2832); g.stroke();
+  g.globalAlpha = 1;
+  /* la marca de AUTO-CORRER arriba: se prende cuando la palanca llega */
+  const autoOn = JOY.act && -JOY.y > .80;
+  g.save();
+  g.globalAlpha = autoOn ? 1 : .3;
+  g.strokeStyle = autoOn ? JOY.pal : JOY.aro; g.lineWidth = autoOn ? 7 : 4;
+  g.beginPath(); g.arc(c, c, R - 3, -2.36, -0.78); g.stroke();
+  g.restore();
+  /* la palanca */
+  const kx = c + JOY.x * (R - 34), ky = c + JOY.y * (R - 34), r = N * .155;
+  g.beginPath(); g.arc(kx, ky + 4, r, 0, 6.2832);
+  g.fillStyle = 'rgba(0,0,0,.4)'; g.fill();
+  const grd = g.createRadialGradient(kx - r * .3, ky - r * .4, r * .1, kx, ky, r);
+  grd.addColorStop(0, JOY.pal); grd.addColorStop(1, JOY.aro);
+  g.beginPath(); g.arc(kx, ky, r, 0, 6.2832); g.fillStyle = grd; g.fill();
+  g.lineWidth = 2.5; g.strokeStyle = 'rgba(0,0,0,.45)'; g.stroke();
+  /* el glifo del mundo en la palanca */
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.font = '900 ' + Math.round(r * 1.05) + 'px system-ui';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(JOY.glifo, kx, ky + 1);
+}
+/* la TRAMA del fondo del aro: cada mundo tiene la suya */
+function joyTrama(g, N, c, R){
+  g.globalAlpha = .26; g.strokeStyle = JOY.aro; g.fillStyle = JOY.aro;
+  const T = JOY.trama;
+  if (T === 'arena' || T === 'viento'){                 /* rayas / rafagas */
+    g.lineWidth = T === 'viento' ? 2 : 3.5;
+    for (let i = -6; i <= 6; i++){
+      g.beginPath();
+      for (let k = 0; k <= 20; k++){
+        const x = c - R + (k / 20) * R * 2;
+        const y = c + i * 22 + Math.sin(k * .6 + i) * (T === 'viento' ? 9 : 4);
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  } else if (T === 'hoja'){                             /* nervaduras */
+    g.lineWidth = 2.5;
+    for (let i = 0; i < 9; i++){
+      const a = i / 9 * 6.2832;
+      g.beginPath(); g.moveTo(c, c);
+      g.quadraticCurveTo(c + Math.cos(a) * R * .5 - Math.sin(a) * 26,
+                         c + Math.sin(a) * R * .5 + Math.cos(a) * 26,
+                         c + Math.cos(a) * R, c + Math.sin(a) * R);
+      g.stroke();
+    }
+  } else if (T === 'lava'){                             /* grietas */
+    g.lineWidth = 3;
+    for (let i = 0; i < 7; i++){
+      const a = i / 7 * 6.2832;
+      g.beginPath(); g.moveTo(c, c);
+      let x = c, y = c;
+      for (let k = 0; k < 5; k++){
+        x += Math.cos(a + Math.sin(k * 2.3 + i) * .7) * R / 5;
+        y += Math.sin(a + Math.sin(k * 2.3 + i) * .7) * R / 5;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  } else if (T === 'junco'){                            /* burbujas */
+    for (let i = 0; i < 26; i++){
+      const a = i * 2.399, rr = R * Math.sqrt(i / 26) * .93;
+      g.beginPath(); g.arc(c + Math.cos(a) * rr, c + Math.sin(a) * rr,
+        3 + (i % 4) * 2.2, 0, 6.2832); g.fill();
+    }
+  } else if (T === 'roca' || T === 'marmol'){           /* estratos / venas */
+    g.lineWidth = T === 'marmol' ? 1.8 : 5;
+    for (let i = -5; i <= 5; i++){
+      g.beginPath();
+      for (let k = 0; k <= 24; k++){
+        const x = c - R + (k / 24) * R * 2;
+        const y = c + i * 25 + (T === 'marmol'
+          ? Math.sin(k * 1.1 + i * 2) * 14 : Math.sin(k * .35 + i) * 3);
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  } else {                                              /* anillos de tronco */
+    g.lineWidth = 2.4;
+    for (let i = 1; i <= 8; i++){
+      g.beginPath();
+      for (let k = 0; k <= 40; k++){
+        const a = k / 40 * 6.2832, rr = R * i / 8.6 * (1 + Math.sin(a * 3 + i) * .06);
+        const x = c + Math.cos(a) * rr, y = c + Math.sin(a) * rr;
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  }
+  g.globalAlpha = 1;
+}
+joyDibuja();
+{
+  const R = () => JOY.el.getBoundingClientRect();
+  const mueve = e => {
+    const b = R(), c = b.width / 2;
+    let dx = (e.clientX - b.left - c) / (c * .78), dy = (e.clientY - b.top - c) / (c * .78);
+    const d = Math.hypot(dx, dy); if (d > 1){ dx /= d; dy /= d; }
+    JOY.x = dx; JOY.y = dy;
+    movV.x = dx; movV.y = dy;
+    /* AUTO-CORRER: palanca del todo hacia ARRIBA (y con poco desvio lateral) */
+    const arriba = -dy, lateral = Math.abs(dx);
+    corre = arriba > .80 && lateral < .62;
+    $('bCorre').classList.toggle('on', corre);
+    joyDibuja();
+  };
+  JOY.el.addEventListener('pointerdown', e => {
+    e.preventDefault(); JOY.act = true; JOY.id = e.pointerId;
+    JOY.el.setPointerCapture(e.pointerId); JOY.el.style.opacity = '1'; mueve(e);
+  });
+  JOY.el.addEventListener('pointermove', e => { if (JOY.act && e.pointerId === JOY.id) mueve(e); });
+  const suelta = e => {
+    if (!JOY.act || e.pointerId !== JOY.id) return;
+    JOY.act = false; JOY.id = -1; JOY.x = JOY.y = 0; movV.x = movV.y = 0;
+    corre = false; $('bCorre').classList.remove('on');
+    JOY.el.style.opacity = '.9'; joyDibuja();
+  };
+  JOY.el.addEventListener('pointerup', suelta);
+  JOY.el.addEventListener('pointercancel', suelta);
+  /* SALTO: tactil y con la barra espaciadora */
+  const salta = e => { if (e) e.preventDefault(); if (fase === 'juego' && !enDlg) saltar(); };
+  $('bSalta').addEventListener('pointerdown', salta);
+}
+
 const cv = $('gl');
 cv.addEventListener('pointerdown', e => {
   if (fase !== 'juego' || enDlg) return;
@@ -3224,6 +3499,7 @@ addEventListener('keydown', e => {
   if (c === 'ArrowLeft') keyL.x = -1; if (c === 'ArrowRight') keyL.x = 1;
   if (c === 'ArrowUp') keyL.y = -1; if (c === 'ArrowDown') keyL.y = 1;
   if (c === 'ShiftLeft') { corre = true; $('bCorre').classList.add('on'); }
+  if (c === 'Space' && fase === 'juego' && !enDlg){ e.preventDefault(); saltar(); }
   if (c === 'KeyE') usarAccion();
   if (c === 'Enter' && enDlg) $('dlgGo').onclick();
 });
@@ -3238,9 +3514,9 @@ addEventListener('keyup', e => {
 
 /* -------- detección PC (mouse/teclado) + ayuda de controles al costado ----- */
 const PCH = {
-  es: { t: 'CONTROLES PC', mov: 'moverse', mir: 'mirar', cor: 'correr', usa: 'usar', dlg: 'seguir' },
-  en: { t: 'PC CONTROLS', mov: 'move', mir: 'look', cor: 'run', usa: 'use', dlg: 'next' },
-  pt: { t: 'CONTROLES PC', mov: 'mover', mir: 'olhar', cor: 'correr', usa: 'usar', dlg: 'seguir' }
+  es: { t: 'CONTROLES PC', mov: 'moverse', mir: 'mirar', cor: 'correr', usa: 'usar', sal: 'saltar', dlg: 'seguir' },
+  en: { t: 'PC CONTROLS', mov: 'move', mir: 'look', cor: 'run', usa: 'use', sal: 'jump', dlg: 'next' },
+  pt: { t: 'CONTROLES PC', mov: 'mover', mir: 'olhar', cor: 'correr', usa: 'usar', sal: 'saltar', dlg: 'seguir' }
 };
 function pintaPCHelp(){
   const d = PCH[LANG] || PCH.es;
@@ -3249,6 +3525,7 @@ function pintaPCHelp(){
     '<div class="row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ' + d.mov + '</div>' +
     '<div class="row"><kbd>🖱</kbd> / <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> ' + d.mir + '</div>' +
     '<div class="row"><kbd>Shift</kbd> ' + d.cor + ' · <kbd>E</kbd> ' + d.usa + '</div>' +
+    '<div class="row"><kbd>Espacio</kbd> ' + (d.sal || 'saltar') + '</div>' +
     '<div class="row"><kbd>Enter</kbd> ' + d.dlg + '</div>';
 }
 let esPC = false;
