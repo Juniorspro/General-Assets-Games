@@ -165,6 +165,9 @@ joyDibuja();
   const R = () => JOY.el.getBoundingClientRect();
   const mueve = e => {
     const b = R(), c = b.width / 2;
+    /* si la palanca esta oculta (modo PC) el rectangulo mide 0 y las divisiones
+       de abajo dan NaN, que se propaga a movV y deja al jugador clavado */
+    if (!(c > 0)) return;
     let dx = (e.clientX - b.left - c) / (c * .78), dy = (e.clientY - b.top - c) / (c * .78);
     const d = Math.hypot(dx, dy); if (d > 1){ dx /= d; dy /= d; }
     JOY.x = dx; JOY.y = dy;
@@ -177,7 +180,10 @@ joyDibuja();
   };
   JOY.el.addEventListener('pointerdown', e => {
     e.preventDefault(); JOY.act = true; JOY.id = e.pointerId;
-    JOY.el.setPointerCapture(e.pointerId); JOY.el.style.opacity = '1'; mueve(e);
+    /* la captura del puntero no esta en todos los navegadores y tira si el
+       evento es sintetico: no puede tumbar al resto del control */
+    try { JOY.el.setPointerCapture(e.pointerId); } catch(e2){}
+    JOY.el.style.opacity = '1'; mueve(e);
   });
   JOY.el.addEventListener('pointermove', e => { if (JOY.act && e.pointerId === JOY.id) mueve(e); });
   const suelta = e => {

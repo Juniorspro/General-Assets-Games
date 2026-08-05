@@ -135,6 +135,14 @@
     border:1.5px solid rgba(255,195,150,.4);background:#0006}
   #dlgCara.on{display:block}
 
+  /* contador de RECOLECCION: va debajo del objetivo, con su propio icono */
+  #recol{position:absolute;left:12px;top:calc(10px + 4.6em);pointer-events:none;
+    display:none;font:800 12.5px/1 ui-sans-serif,system-ui,sans-serif;
+    padding:6px 9px;border-radius:9px;letter-spacing:.05em;
+    background:rgba(0,0,0,.42);border:1px solid rgba(255,195,150,.35);color:#f2c9a4;
+    backdrop-filter:blur(4px)}
+  #recol.on{display:block}
+  #recol.lleno{border-color:#f2c9a4;box-shadow:0 0 14px -2px #f2c9a4}
   /* la TAREA del capítulo (contador, sin idioma: iconos y números) */
   #tarea{font-size:13px;font-weight:900;letter-spacing:.06em;margin-top:2px;display:none}
   #tarea.on{display:block}
@@ -209,6 +217,7 @@
   <div id="dlg"><img id="dlgFoto" alt=""><canvas id="dlgCara" width="192" height="256"></canvas><div id="dlgGlobo"><div id="dlgT"></div><div id="dlgB"></div><div id="dlgGo">SIGUIENTE ▸</div></div></div>
   <div id="joy"><canvas width="300" height="300"></canvas></div>
   <div id="bSalta"><span>⤒</span>SALTO</div>
+  <div id="recol"></div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
   <div id="pcHelp"></div>
 </div>
@@ -334,12 +343,19 @@ function fbm(x, z){
 /* PUNTOS DE LA HISTORIA (fijos, la arena se allana alrededor).
    `pr` = radio de la explanada que el terreno abre en ese punto. */
 const POI = {
-  inicio:     { x: 25,   z: 392, pr: 22 },
-  mojon:      { x: -95,  z: 250, pr: 20 },
-  campamento: { x: 172,  z: 118, pr: 30 },
-  ruinas:     { x: 55,   z: -70, pr: 34 },
-  oasis:      { x: -70,  z: -215, pr: 40 },
-  cresta:     { x: -215, z: -332, pr: 24 }
+  /* LUGARES PROPIOS de este mundo: el recorrido no se parece al de
+     los hermanos. Las seis primeras claves son las del guion; las de abajo
+     son lugares de mas, para que haya adonde desviarse. */
+  inicio:     { x:   -40, z:  -348, pr: 20 },
+  mojon:      { x:    96, z:  -250, pr: 18 },
+  campamento: { x:   232, z:   -96, pr: 26 },
+  ruinas:     { x:   150, z:    62, pr: 32 },
+  oasis:      { x:   -46, z:   118, pr: 36 },
+  cresta:     { x:  -268, z:    24, pr: 24 },
+  teatro:     { x:  -160, z:  -190, pr: 24 },   /* el teatro tallado */
+  cisterna:   { x:   300, z:   150, pr: 16 },   /* la cisterna */
+  faro:       { x:    44, z:   236, pr: 20 },   /* el faro del borde */
+  cantera:    { x:  -320, z:  -300, pr: 22 }   /* la cantera de mármol */
 };
 /* EL VIENTO manda en este mundo: fija el rumbo de las crestas (perpendicular),
    la dirección de los velos de arena y hacia dónde miran las caras de sotavento. */
@@ -1572,91 +1588,94 @@ scene.add(marca3d);
 /* ===== IDIOMAS. El texto ES la historia: va entero en los tres. ===== */
 const L = {
 es: { npc: {
-  naira: ['Me adelanté para marcar el paso y me perdí igual.\nEl viento borra las huellas en media hora.\n\nVoy con vos. Dos ojos ven más señales que uno.',
-    'Mi abuela decía: en la duna no se camina\nderecho, se camina donde la arena deja.',
-    'Si encontramos agua, ¿me dejás tirar\nla primera piedra al pozo? Es tradición.\nBueno… es MI tradición.'],
-  brek: ['Se me partió el eje a media jornada.\nAmmar dijo «te alcanzamos al volver».\nEso fue hace cuatro días.',
-    'No abandono la carga. Son mantas, sal y\nsemillas: media aldea come de esto.\nSi encontrás el pozo, volvé a buscarme.'],
-  canelo: ['*guau*\nCANELO te olfatea las manos y sale trotando\ndos pasos hacia el sur. Vuelve. Insiste.',
-    'CANELO cava en la arena, mira el agujero,\nte mira, y vuelve a cavar.\nEl perro sabe algo que vos todavía no.'] },
-ui: { sub: 'el santuario sobre el mar · levantar las cinco columnas',
+  hieron: ['Ochenta años y una mano. La otra la dejé\nen un bloque en el año del cometa.\n\nPor eso ahora enseño en vez de tallar.',
+    'Una columna no se levanta con fuerza. Se\nlevanta con el momento justo y con ocho\npersonas contando igual.\n\nLa fuerza sobra siempre. El momento no.'],
+  thalia: ['Yo hago la cal. Piedra al horno tres días y\nsale polvo que muerde.\n\nSi te salpica, agua, mucha agua, y no te\nfrotes los ojos.'],
+  nikias: ['Talló el friso del lado del mar mi bisabuelo.\nSe cayó entero con el temblor.\n\nJunto los pedazos. Alguna vez alguien va a\nsaber cómo iba.'],
+  argos: ['*mueve la cola*\nEl perro del campamento te sigue hasta el\nborde del acantilado y ahí frena en seco.',
+    'ARGOS duerme arriba de la lona de las\nherramientas y no la deja tocar a nadie\nque no sea del gremio.'],
+  phoibe: ['Subo el agua desde la fuente en dos cántaros.\nCatorce viajes por día.\n\nCuando la pila está tapada de hojas, veinte.']
+},
+ui: { recolFin: 'Están todas. Caben en las dos manos y pesan\nmenos de lo que parecía.\n\nGuardadas así, juntas, por fin se entiende\nqué eran: no restos. Un inventario.',
+  sub: 'el santuario sobre el mar · levantar las cinco columnas antes de la fiesta',
   empezar: 'EMPEZAR LA TRAVESÍA', otra: 'JUGAR OTRA VEZ', denuevo: 'EMPEZAR DE NUEVO',
   seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENÚ', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
   idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAJOS', g_m: 'MEDIOS', g_a: 'ALTOS',
   completa: (m2, mn) => 'TRAVESÍA COMPLETA · ' + m2 + ' m recorridos · ' + mn + ' min',
-  introT: 'Novena jornada',
-  intro: 'Sos SIRA, la zahorí de la caravana de Ammar:\nla que escucha el agua debajo de la arena.\n\nTe quedaste atrás cavando un pozo seco.\nCuando levantaste la cabeza, la caravana\nya no estaba y el viento había borrado todo.\n\nQueda una cosa: las señales. Las dejamos\nnosotros, de mojón en mojón, para no\nperdernos nunca.\n\nSeguilas hasta el oasis. Y destapá el pozo.' },
-caps: [
-  { n: 'CAPÍTULO 1', t: 'LA PRIMERA SEÑAL', obj: 'mojon', objT: 'Llegá al mojón de piedras',
-    dT: 'Piedras y un trapo', d: 'Siete piedras apiladas y un jirón de lona\natado al mástil: la señal de Ammar.\n\nApunta al sudeste. Y a los pies del mojón,\nun odre vacío: alguien tuvo mucha sed acá.\n\n— «Seguimos. El agua está donde siempre.»' },
-  { n: 'CAPÍTULO 2', t: 'EL CAMPAMENTO SIN NADIE', obj: 'campamento', objT: 'Encontrá el campamento de la caravana',
-    dT: 'Lona y ceniza', d: 'Tres tiendas a medio enterrar, el carro con\nel eje partido y un fogón todavía tibio.\n\nBREK se quedó con la carga. Dice que la\ncaravana siguió hacia las ruinas al amanecer,\ncon los odres ya vacíos.\n\nSi el oasis está seco, no llegan a mañana.' },
-  { n: 'CAPÍTULO 3', t: 'LAS RUINAS ENTERRADAS', obj: 'ruinas', objT: 'Cruzá las ruinas por la vaguada',
-    dT: 'La ciudad de abajo', d: 'Columnas en dos hileras, un dintel que ya no\nes puerta de nada y una cabeza de piedra\nenorme mirando al cielo desde hace mil años.\n\nEsta gente tenía agua. Tanta agua que\nlevantaron todo esto alrededor.\n\nEl viento silba entre las columnas como si\ntodavía hubiera alguien contestando.' },
-  { n: 'CAPÍTULO 4', t: 'EL OASIS SECO', obj: 'oasis', objT: 'Bajá a la hoya del oasis',
-    dT: 'Palmeras y nada', d: 'La hoya está donde tenía que estar.\nLas palmeras siguen en pie, en corro,\ncomo esperando.\n\nPero abajo no hay agua: hay ARENA. La\ntormenta tapó la boca del pozo y la caravana\npasó de largo creyendo que se había secado.\n\nNo se secó. Está tapado. Que no es lo mismo.' },
-  { n: 'CAPÍTULO 5', t: 'EL POZO', obj: 'oasis', objT: 'Destapá los 3 montones y girá la manivela', usar: true,
-    dT: 'Agua', d: 'Cavás con las manos, con el balde, con lo que\nhaya. La arena sale, sale, sale.\n\nY entonces la manivela cede, la cuerda baja\nmás de lo que debería… y sube mojada.\n\nEl agua tarda medio minuto en subir. Nadie\nla mira: todos escuchan.' },
-  { n: 'CAPÍTULO 6', t: 'LA HOGUERA', obj: 'cresta', objT: 'Subí a la duna madre y encendé la hoguera', usar: true,
-    dT: 'FIN', d: 'La pira prende de una. En el mar de dunas\nuna luz se ve desde media jornada.\n\nY allá abajo, chiquitas, aparecen las otras:\nfaroles en fila, moviéndose hacia acá.\n\nNAIRA no dice nada. Te aprieta la muñeca.\n\n«Escuchaste el agua antes que nadie, SIRA.\nComo siempre.»\n\nDUNAS — fin de la historia.' }
+  introT: 'Doce días para la fiesta',
+  intro: 'Sos KLEIO y sos aprendiza de cantero, que\nes una manera fina de decir que acarreás.\n\nEl temblor de la primavera tiró cinco\ncolumnas del pórtico del santuario y las\ndejó tendidas como leña.\n\nEn doce días sube la procesión. Si el pórtico\nno está en pie, la ciudad va a pensar que\nel dios se fue.\n\nTu maestro tiene ochenta años y una mano.\nVos tenés dos y el sendero de sal empieza acá.' },caps: [
+  { n: 'CAPÍTULO 1', t: 'EL HITO DE MÁRMOL', obj: 'mojon', objT: 'Subí al hito de mármol del sendero',
+    dT: 'Una letra y una flecha', d: 'Un bloque de mármol a media cuesta con una\nletra y una flecha, gastadas por las sandalias\nde doscientos años de procesiones.\n\nLa flecha no va derecho al santuario. Rodea.\n\nDerecho es más corto y más resbaloso. Con\nun tambor de columna encima, importa.' },
+  { n: 'CAPÍTULO 2', t: 'EL CAMPAMENTO DE LOS OBREROS', obj: 'campamento', objT: 'Encontrá el campamento de los obreros',
+    dT: 'Ocho hombres y ninguna grúa', d: 'Toldos de lino, un horno de cal y ocho\nhombres esperando desde hace cuatro días.\n\nHIERON, tu maestro, está sentado mirando las\ncolumnas caídas como si fueran una cuenta\nque no le cierra.\n\n«Los tambores están. Faltan las cuñas y\nfaltan las manos. Vos sos las manos.»' },
+  { n: 'CAPÍTULO 3', t: 'EL SANTUARIO', obj: 'ruinas', objT: 'Llegá a la explanada del santuario',
+    dT: 'Cinco caídas, once en pie', d: 'Once columnas siguen paradas, blancas, con la\nluz del mar pegándoles de abajo.\n\nLas otras cinco están tendidas en el suelo,\npartidas en tambores limpios, como si alguien\nlas hubiera desarmado con cuidado.\n\nEl temblor fue prolijo. Eso ayuda.' },
+  { n: 'CAPÍTULO 4', t: 'LA FUENTE SAGRADA', obj: 'oasis', objT: 'Bajá a la fuente sagrada',
+    dT: 'Agua para la cal', d: 'La fuente sale de la roca en un chorro fino y\ncae en una pila tallada con delfines.\n\nNo es para beber: es para la CAL. Sin agua no\nhay mortero y sin mortero los tambores no\nse asientan.\n\nDoce días. Y la pila está tapada de hojas.' },
+  { n: 'CAPÍTULO 5', t: 'LAS CINCO COLUMNAS', obj: 'ruinas', objT: 'Levantá las 5 columnas del pórtico', usar: true,
+    dT: 'De pie', d: 'Cuña, palanca, cuerda, cantar todos juntos\npara empujar en el mismo momento.\n\nUna. Dos. La tercera se resiste medio día.\nCuatro. Cinco.\n\nHIERON no dice nada. Pasa la mano buena por\nel fuste, de abajo hacia arriba, como se\ntoca a un animal que se portó bien.' },
+  { n: 'CAPÍTULO 6', t: 'EL PROMONTORIO', obj: 'cresta', objT: 'Subí al promontorio y encendé el pebetero', usar: true,
+    dT: 'FIN', d: 'El pebetero del promontorio se ve desde el\npuerto, desde las islas y desde los barcos\nque vienen de noche.\n\nLo encendés con el aceite de la primera\nprensa. Prende alto, derecho, sin humo.\n\nAbajo, en la ciudad, empiezan a encenderse\nlos otros. Uno por casa.\n\n«Ya sabés levantar una columna», dice HIERON.\n«Ahora aprendé a tallar una.»\n\nACRÓPOLIS — fin de la historia.' }
 ] },
 en: { npc: {
-  naira: ['I went ahead to mark the trail and got lost anyway.\nThe wind erases footprints in half an hour.\n\nI’m coming with you. Two pairs of eyes see more signs.',
-    'My grandmother used to say: in the dunes you\ndon’t walk straight, you walk where the sand lets you.',
-    'If we find water, can I throw the first stone\ninto the well? It’s tradition.\nAll right… it’s MY tradition.'],
-  brek: ['My axle snapped half a day out.\nAmmar said “we’ll pick you up on the way back”.\nThat was four days ago.',
-    'I will not leave the load. Blankets, salt and\nseed: half a village eats from this.\nIf you find the well, come back for me.'],
-  canelo: ['*woof*\nCANELO sniffs your hands and trots two steps\nsouth. Comes back. Insists.',
-    'CANELO digs in the sand, looks at the hole,\nlooks at you, and digs again.\nThe dog knows something you don’t yet.'] },
-ui: { sub: 'the sea of dunes · a lost caravan and a buried well',
+  hieron: ['Eighty years and one hand. I left the other\nin a block the year of the comet.\n\nThat is why I teach now instead of cutting.',
+    'A column is not raised with strength. It is\nraised with the right moment and eight people\ncounting the same.\n\nStrength is always spare. The moment is not.'],
+  thalia: ['I make the lime. Stone in the kiln three days\nand out comes a powder that bites.\n\nIf it splashes you: water, a lot of water,\nand do not rub your eyes.'],
+  nikias: ['My great-grandfather cut the seaward frieze.\nIt came down whole in the tremor.\n\nI am collecting the pieces. Some day someone\nwill work out how it went.'],
+  argos: ['*wags*\nThe camp dog follows you to the cliff edge and\nstops dead there.',
+    'ARGOS sleeps on top of the tool canvas and will\nnot let anyone who is not guild touch it.'],
+  phoibe: ['I carry the water up from the spring in two\njars. Fourteen trips a day.\n\nWhen the basin is choked with leaves, twenty.']
+},
+ui: { recolFin: 'That’s all of them. They fit in two hands and\nweigh less than they looked.\n\nKept together like this you finally see what\nthey were: not remains. An inventory.',
+  sub: 'the sanctuary above the sea · raise the five columns before the feast',
   empezar: 'BEGIN THE CROSSING', otra: 'PLAY AGAIN', denuevo: 'START OVER',
   seguir: 'CONTINUE', correr: 'RUN', menu: 'MENU', usar: '◉ USE', dlgGo: 'CONTINUE ▸',
   idioma: 'LANGUAGE', graficos: 'GRAPHICS', g_b: 'LOW', g_m: 'MEDIUM', g_a: 'HIGH',
   completa: (m2, mn) => 'CROSSING COMPLETE · ' + m2 + ' m traveled · ' + mn + ' min',
-  introT: 'Ninth day',
-  intro: 'You are SIRA, water finder of Ammar’s caravan:\nthe one who hears water under the sand.\n\nYou fell behind digging a dry well.\nWhen you looked up the caravan was gone and\nthe wind had erased everything.\n\nOne thing is left: the signs. We set them\nourselves, cairn after cairn, so that we\nwould never be lost.\n\nFollow them to the oasis. And open the well.' },
-caps: [
-  { n: 'CHAPTER 1', t: 'THE FIRST SIGN', obj: 'mojon', objT: 'Reach the stone cairn',
-    dT: 'Stones and a rag', d: 'Seven stacked stones and a strip of canvas\ntied to the mast: Ammar’s sign.\n\nIt points southeast. At the foot of the cairn,\nan empty waterskin: someone was very thirsty here.\n\n— “Moving on. The water is where it always was.”' },
-  { n: 'CHAPTER 2', t: 'THE EMPTY CAMP', obj: 'campamento', objT: 'Find the caravan camp',
-    dT: 'Canvas and ash', d: 'Three half-buried tents, the cart with a\nsnapped axle, and a fire pit still warm.\n\nBREK stayed with the load. He says the caravan\nleft for the ruins at dawn, with the waterskins\nalready empty.\n\nIf the oasis is dry, they don’t last till morning.' },
-  { n: 'CHAPTER 3', t: 'THE BURIED RUINS', obj: 'ruinas', objT: 'Cross the ruins along the hollow',
-    dT: 'The city below', d: 'Two rows of columns, a lintel that is no longer\na door to anything, and a huge stone head\nstaring at the sky for a thousand years.\n\nThese people had water. So much water they\nraised all of this around it.\n\nThe wind whistles between the columns as if\nsomeone were still answering.' },
-  { n: 'CHAPTER 4', t: 'THE DRY OASIS', obj: 'oasis', objT: 'Go down into the oasis hollow',
-    dT: 'Palms and nothing', d: 'The hollow is exactly where it should be.\nThe palms are still standing in a ring,\nas if waiting.\n\nBut down there is no water: there is SAND. The\nstorm buried the mouth of the well and the\ncaravan walked past believing it had dried up.\n\nIt did not dry up. It is buried. Not the same thing.' },
-  { n: 'CHAPTER 5', t: 'THE WELL', obj: 'oasis', objT: 'Clear the 3 sand mounds and turn the crank', usar: true,
-    dT: 'Water', d: 'You dig with your hands, with the bucket, with\nwhatever there is. Sand comes out, and out, and out.\n\nAnd then the crank gives, the rope runs deeper\nthan it should… and comes up wet.\n\nThe water takes half a minute to rise. Nobody\nwatches it: everybody listens.' },
-  { n: 'CHAPTER 6', t: 'THE BEACON FIRE', obj: 'cresta', objT: 'Climb the mother dune and light the beacon', usar: true,
-    dT: 'THE END', d: 'The pyre catches at once. In a sea of dunes\na single light is seen half a day away.\n\nAnd down there, tiny, the others appear:\nlanterns in a line, moving this way.\n\nNAIRA says nothing. She grips your wrist.\n\n“You heard the water before anyone, SIRA.\nLike always.”\n\nDUNES — end of the story.' }
+  introT: 'Twelve days to the feast',
+  intro: 'You are KLEIO, a stonemason’s apprentice,\nwhich is a polite way of saying you carry.\n\nThe spring tremor threw down five columns of\nthe sanctuary portico and left them lying\nthere like firewood.\n\nIn twelve days the procession climbs up. If\nthe portico is not standing, the city will\nthink the god has left.\n\nYour master is eighty and has one working hand.\nYou have two, and the salt path starts here.' },caps: [
+  { n: 'CHAPTER 1', t: 'THE MARBLE MARKER', obj: 'mojon', objT: 'Climb to the marble marker on the path',
+    dT: 'A letter and an arrow', d: 'A marble block halfway up with a letter and an\narrow on it, worn smooth by two hundred years\nof sandals.\n\nThe arrow does not go straight to the sanctuary.\nIt goes around.\n\nStraight is shorter and more slippery. With a\ncolumn drum on your back, that matters.' },
+  { n: 'CHAPTER 2', t: 'THE WORKERS’ CAMP', obj: 'campamento', objT: 'Find the workers’ camp',
+    dT: 'Eight men and no crane', d: 'Linen awnings, a lime kiln and eight men who\nhave been waiting four days.\n\nHIERON, your master, sits looking at the fallen\ncolumns like an account that will not balance.\n\n“The drums are here. What is missing is wedges\nand hands. You are the hands.”' },
+  { n: 'CHAPTER 3', t: 'THE SANCTUARY', obj: 'ruinas', objT: 'Reach the sanctuary terrace',
+    dT: 'Five down, eleven standing', d: 'Eleven columns are still up, white, with the\nlight off the sea hitting them from below.\n\nThe other five lie on the ground, broken into\nclean drums, as if someone had taken them\napart carefully.\n\nThe tremor was tidy. That helps.' },
+  { n: 'CHAPTER 4', t: 'THE SACRED SPRING', obj: 'oasis', objT: 'Go down to the sacred spring',
+    dT: 'Water for the lime', d: 'The spring comes out of the rock in a thin jet\nand falls into a basin carved with dolphins.\n\nIt is not for drinking: it is for LIME. No water,\nno mortar; no mortar, the drums will not seat.\n\nTwelve days. And the basin is choked with leaves.' },
+  { n: 'CHAPTER 5', t: 'THE FIVE COLUMNS', obj: 'ruinas', objT: 'Raise the 5 columns of the portico', usar: true,
+    dT: 'Standing', d: 'Wedge, lever, rope, and everyone singing\ntogether so they push on the same beat.\n\nOne. Two. The third fights for half a day.\nFour. Five.\n\nHIERON says nothing. He runs his good hand up\nthe shaft, bottom to top, the way you touch\nan animal that behaved well.' },
+  { n: 'CHAPTER 6', t: 'THE HEADLAND', obj: 'cresta', objT: 'Climb the headland and light the brazier', usar: true,
+    dT: 'THE END', d: 'The headland brazier can be seen from the\nharbour, from the islands, and from ships\ncoming in at night.\n\nYou light it with oil from the first pressing.\nIt burns high, straight, no smoke.\n\nBelow, in the city, the others start coming on.\nOne per house.\n\n“So you can raise a column,” says HIERON.\n“Now learn to cut one.”\n\nACROPOLIS — end of the story.' }
 ] },
 pt: { npc: {
-  naira: ['Fui na frente marcar o caminho e me perdi igual.\nO vento apaga as pegadas em meia hora.\n\nVou com você. Dois olhos veem mais sinais que um.',
-    'Minha avó dizia: na duna não se anda\nreto, se anda onde a areia deixa.',
-    'Se acharmos água, posso jogar a primeira\npedra no poço? É tradição.\nBom… é MINHA tradição.'],
-  brek: ['Meu eixo quebrou a meia jornada.\nAmmar disse «pegamos você na volta».\nIsso foi há quatro dias.',
-    'Não abandono a carga. São mantas, sal e\nsementes: meia aldeia come disso.\nSe achar o poço, volte para me buscar.'],
-  canelo: ['*au au*\nCANELO fareja suas mãos e trota dois passos\npara o sul. Volta. Insiste.',
-    'CANELO cava na areia, olha o buraco,\nolha você, e cava de novo.\nO cachorro sabe algo que você ainda não.'] },
-ui: { sub: 'o mar de dunas · uma caravana perdida e um poço soterrado',
+  hieron: ['Oitenta anos e uma mão. A outra deixei num\nbloco no ano do cometa.\n\nPor isso agora ensino em vez de esculpir.',
+    'Uma coluna não se levanta com força. Levanta-se\ncom o momento certo e com oito pessoas\ncontando igual.\n\nForça sempre sobra. O momento não.'],
+  thalia: ['Eu faço a cal. Pedra no forno três dias e sai\num pó que morde.\n\nSe te espirrar: água, muita água, e não\nesfregue os olhos.'],
+  nikias: ['Meu bisavô esculpiu o friso do lado do mar.\nCaiu inteiro com o tremor.\n\nJunto os pedaços. Algum dia alguém vai saber\ncomo era.'],
+  argos: ['*abana o rabo*\nO cão do acampamento te segue até a borda do\npenhasco e ali freia seco.',
+    'ARGOS dorme em cima da lona das ferramentas e\nnão deixa ninguém que não seja do ofício\ntocar nela.'],
+  phoibe: ['Subo a água da fonte em dois cântaros.\nCatorze viagens por dia.\n\nQuando a pia está entupida de folhas, vinte.']
+},
+ui: { recolFin: 'Estão todas. Cabem nas duas mãos e pesam\nmenos do que parecia.\n\nGuardadas assim, juntas, finalmente se\nentende o que eram: não restos. Um inventário.',
+  sub: 'o santuário sobre o mar · levantar as cinco colunas antes da festa',
   empezar: 'COMEÇAR A TRAVESSIA', otra: 'JOGAR DE NOVO', denuevo: 'RECOMEÇAR',
   seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENU', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
   idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAIXOS', g_m: 'MÉDIOS', g_a: 'ALTOS',
   completa: (m2, mn) => 'TRAVESSIA COMPLETA · ' + m2 + ' m percorridos · ' + mn + ' min',
-  introT: 'Nona jornada',
-  intro: 'Você é SIRA, a rabdomante da caravana de Ammar:\na que escuta a água debaixo da areia.\n\nVocê ficou atrás cavando um poço seco.\nQuando levantou a cabeça, a caravana já não\nestava e o vento tinha apagado tudo.\n\nResta uma coisa: os sinais. Nós mesmos os\ndeixamos, de marco em marco, para nunca\nnos perdermos.\n\nSiga-os até o oásis. E destape o poço.' },
-caps: [
-  { n: 'CAPÍTULO 1', t: 'O PRIMEIRO SINAL', obj: 'mojon', objT: 'Chegue ao marco de pedras',
-    dT: 'Pedras e um trapo', d: 'Sete pedras empilhadas e um pedaço de lona\namarrado ao mastro: o sinal de Ammar.\n\nAponta para sudeste. Aos pés do marco,\num odre vazio: alguém teve muita sede aqui.\n\n— «Seguimos. A água está onde sempre.»' },
-  { n: 'CAPÍTULO 2', t: 'O ACAMPAMENTO VAZIO', obj: 'campamento', objT: 'Encontre o acampamento da caravana',
-    dT: 'Lona e cinza', d: 'Três tendas meio soterradas, o carro com o\neixo partido e uma fogueira ainda morna.\n\nBREK ficou com a carga. Diz que a caravana\nseguiu para as ruínas ao amanhecer, com os\nodres já vazios.\n\nSe o oásis estiver seco, não chegam a amanhã.' },
-  { n: 'CAPÍTULO 3', t: 'AS RUÍNAS SOTERRADAS', obj: 'ruinas', objT: 'Atravesse as ruínas pela vala',
-    dT: 'A cidade de baixo', d: 'Colunas em duas fileiras, um dintel que já não\né porta de nada e uma cabeça de pedra enorme\nolhando o céu há mil anos.\n\nEssa gente tinha água. Tanta água que\nlevantaram tudo isto em volta.\n\nO vento assobia entre as colunas como se\nainda houvesse alguém respondendo.' },
-  { n: 'CAPÍTULO 4', t: 'O OÁSIS SECO', obj: 'oasis', objT: 'Desça à cova do oásis',
-    dT: 'Palmeiras e nada', d: 'A cova está onde devia estar.\nAs palmeiras seguem de pé, em roda,\ncomo esperando.\n\nMas embaixo não há água: há AREIA. A\ntempestade tapou a boca do poço e a caravana\npassou direto acreditando que tinha secado.\n\nNão secou. Está tapado. Que não é o mesmo.' },
-  { n: 'CAPÍTULO 5', t: 'O POÇO', obj: 'oasis', objT: 'Destape os 3 montes e gire a manivela', usar: true,
-    dT: 'Água', d: 'Você cava com as mãos, com o balde, com o que\nhouver. A areia sai, sai, sai.\n\nE então a manivela cede, a corda desce mais\ndo que deveria… e sobe molhada.\n\nA água leva meio minuto para subir. Ninguém\nolha: todos escutam.' },
-  { n: 'CAPÍTULO 6', t: 'A FOGUEIRA', obj: 'cresta', objT: 'Suba a duna mãe e acenda a fogueira', usar: true,
-    dT: 'FIM', d: 'A pira pega de primeira. No mar de dunas\numa luz se vê a meia jornada de distância.\n\nE lá embaixo, pequenininhas, aparecem as\noutras: lanternas em fila, vindo para cá.\n\nNAIRA não diz nada. Aperta seu punho.\n\n«Você escutou a água antes de todos, SIRA.\nComo sempre.»\n\nDUNAS — fim da história.' }
+  introT: 'Doze dias para a festa',
+  intro: 'Você é KLEIO, aprendiz de canteiro, que é um\njeito fino de dizer que carrega.\n\nO tremor da primavera derrubou cinco colunas\ndo pórtico do santuário e as deixou deitadas\ncomo lenha.\n\nEm doze dias sobe a procissão. Se o pórtico\nnão estiver de pé, a cidade vai pensar que\no deus foi embora.\n\nSeu mestre tem oitenta anos e uma mão.\nVocê tem duas, e a trilha do sal começa aqui.' },caps: [
+  { n: 'CAPÍTULO 1', t: 'O MARCO DE MÁRMORE', obj: 'mojon', objT: 'Suba ao marco de mármore da trilha',
+    dT: 'Uma letra e uma flecha', d: 'Um bloco de mármore no meio da subida com uma\nletra e uma flecha, gastas pelas sandálias\nde duzentos anos de procissões.\n\nA flecha não vai direto ao santuário. Rodeia.\n\nDireto é mais curto e mais escorregadio. Com\num tambor de coluna nas costas, isso importa.' },
+  { n: 'CAPÍTULO 2', t: 'O ACAMPAMENTO DOS OPERÁRIOS', obj: 'campamento', objT: 'Ache o acampamento dos operários',
+    dT: 'Oito homens e nenhuma grua', d: 'Toldos de linho, um forno de cal e oito homens\nesperando há quatro dias.\n\nHIERON, seu mestre, está sentado olhando as\ncolunas caídas como uma conta que não fecha.\n\n«Os tambores estão. Faltam as cunhas e faltam\nas mãos. Você é as mãos.»' },
+  { n: 'CAPÍTULO 3', t: 'O SANTUÁRIO', obj: 'ruinas', objT: 'Chegue à esplanada do santuário',
+    dT: 'Cinco caídas, onze de pé', d: 'Onze colunas seguem de pé, brancas, com a luz\ndo mar batendo nelas de baixo.\n\nAs outras cinco estão deitadas no chão,\npartidas em tambores limpos, como se alguém\nas tivesse desmontado com cuidado.\n\nO tremor foi caprichoso. Isso ajuda.' },
+  { n: 'CAPÍTULO 4', t: 'A FONTE SAGRADA', obj: 'oasis', objT: 'Desça à fonte sagrada',
+    dT: 'Água para a cal', d: 'A fonte sai da rocha num jato fino e cai numa\npia esculpida com delfins.\n\nNão é para beber: é para a CAL. Sem água não\nhá argamassa e sem argamassa os tambores\nnão assentam.\n\nDoze dias. E a pia está entupida de folhas.' },
+  { n: 'CAPÍTULO 5', t: 'AS CINCO COLUNAS', obj: 'ruinas', objT: 'Levante as 5 colunas do pórtico', usar: true,
+    dT: 'De pé', d: 'Cunha, alavanca, corda, e cantar todos juntos\npara empurrar no mesmo momento.\n\nUma. Duas. A terceira resiste meio dia.\nQuatro. Cinco.\n\nHIERON não diz nada. Passa a mão boa pelo\nfuste, de baixo para cima, como se toca um\nanimal que se comportou bem.' },
+  { n: 'CAPÍTULO 6', t: 'O PROMONTÓRIO', obj: 'cresta', objT: 'Suba ao promontório e acenda o braseiro', usar: true,
+    dT: 'FIM', d: 'O braseiro do promontório se vê do porto, das\nilhas e dos navios que chegam de noite.\n\nVocê o acende com o azeite da primeira prensa.\nPega alto, reto, sem fumaça.\n\nEmbaixo, na cidade, começam a acender os\noutros. Um por casa.\n\n«Já sabe levantar uma coluna», diz HIERON.\n«Agora aprenda a esculpir uma.»\n\nACRÓPOLE — fim da história.' }
 ] } };
 let LANG = 'es';
 try { LANG = localStorage.getItem('dunas_lang') || 'es'; } catch(e){}
@@ -1898,6 +1917,7 @@ function terminaCine(){
   $('cineTxt').textContent = '';
   fase = 'juego';
   $('hud').classList.add('on');
+  $('recol').classList.add('on'); RECOL.pinta();
   cam.fov = 72; cam.updateProjectionMatrix();
   if (CINE.fin){ const f = CINE.fin; CINE.fin = null; f(); }
 }
@@ -2560,7 +2580,7 @@ const MISION = (() => {
       if (c === 4) pinta();
       /* al abrirse el capítulo 6 el pozo ya dio agua: que suba */
       if (c >= 5 && window.__POZO) window.__POZO.abrir();
-      if (c >= 1 && window.__NAIRA) window.__NAIRA.sigue = true;
+      if (c >= 1 && window.__P0) window.__P0.sigue = true;
     },
     tick(dt){
       if (window.__POZO) window.__POZO.tick(dt);
@@ -2576,6 +2596,106 @@ const MISION = (() => {
   };
 })();
 window.__MISION = MISION;
+/* =========================== RECOLECCION ==================================
+   esquirlas del friso que se cayó al mar. Se juntan pasando cerca (radio generoso, sin boton: la recoleccion
+   tiene que ser un premio por curiosear, no una tarea). Se siembran alrededor
+   de TODOS los lugares del mundo con un azar DETERMINISTA, asi todos los que
+   juegan encuentran las mismas y el mapa se puede aprender. */
+const RECOL = (() => {
+  const TOT = 14, ICO = '◈';
+  const NOM = { es: 'FRISOS', en: 'FRIEZES', pt: 'FRISOS' };
+  let junt = 0;
+  const piezas = [];
+  const mat = new T.MeshLambertMaterial({ color: 0xf0e8d4, emissive: 0x6a6250,
+    emissiveIntensity: .75 });
+  const geo = (() => {
+    const F = 'losa', s = 1.1;
+    if (F === 'aguja')  return new T.ConeGeometry(.16 * s, .95 * s, 5);
+    if (F === 'flor')   return new T.TorusGeometry(.26 * s, .13 * s, 5, 9);
+    if (F === 'gota')   return new T.OctahedronGeometry(.32 * s, 0);
+    if (F === 'esfera') return new T.SphereGeometry(.27 * s, 10, 7);
+    if (F === 'losa')   return new T.BoxGeometry(.52 * s, .09 * s, .38 * s);
+    if (F === 'campana')return new T.CylinderGeometry(.09 * s, .27 * s, .42 * s, 8, 1, true);
+    return new T.IcosahedronGeometry(.28 * s, 0);          /* pina */
+  })();
+  /* el halo: un plano que siempre mira a la camara. Sin esto una pieza chica en
+     un paisaje grande es invisible, y buscar a ciegas no es divertido. */
+  const halo = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const rg = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+    rg.addColorStop(0, 'rgba(255,255,255,.95)');
+    rg.addColorStop(.35, 'rgba(255,255,255,.35)');
+    rg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = rg; g.fillRect(0, 0, 64, 64);
+    return new T.SpriteMaterial({ map: new T.CanvasTexture(c), color: 0xf0e8d4,
+      transparent: true, depthWrite: false, opacity: .55 });
+  })();
+  /* azar determinista: mismo mundo, mismas piezas, siempre */
+  let sem = 10770;
+  const az = () => { sem = (sem * 1103515245 + 12345) & 0x7fffffff; return sem / 0x7fffffff; };
+  const LUG = Object.keys(POI);
+  for (let i = 0; i < TOT; i++){
+    const L = POI[LUG[i % LUG.length]];
+    const a = az() * 6.2832, d = (L.pr || 24) * (.55 + az() * 1.5);
+    const x = cl(L.x + Math.cos(a) * d, -MITAD + 14, MITAD - 14);
+    const z = cl(L.z + Math.sin(a) * d, -MITAD + 14, MITAD - 14);
+    const y = H(x, z);
+    const fig = new T.Group();
+    const m = new T.Mesh(geo, mat);
+    m.position.y = .55; m.castShadow = true;
+    fig.add(m);
+    const sp = new T.Sprite(halo);
+    sp.scale.setScalar(1.7); sp.position.y = .58;
+    fig.add(sp);
+    fig.position.set(x, y, z);
+    scene.add(fig);
+    piezas.push({ fig, m, x, z, tomada: false, fase: az() * 6.2832 });
+  }
+  function pinta(){
+    const el = $('recol');
+    el.textContent = ICO + ' ' + (NOM[LANG] || NOM.es) + '  ' + junt + '/' + TOT
+      + (junt >= TOT ? '  ✓' : '');
+    el.classList.toggle('lleno', junt >= TOT);
+  }
+  return {
+    total: TOT, get juntadas(){ return junt; },
+    pinta,
+    tick(dt){
+      for (const p of piezas){
+        if (p.tomada) continue;
+        p.fig.rotation.y += dt * 1.5;
+        p.fig.children[0].position.y = .55 + Math.sin(t0 * 2 + p.fase) * .11;
+        if (Math.hypot(px - p.x, pz - p.z) < 3.2){
+          p.tomada = true;
+          scene.remove(p.fig);
+          junt++; pinta();
+          blipRecol(junt >= TOT);
+          if (junt >= TOT) setTimeout(() => { if (!enDlg)
+            dialogo((NOM[LANG] || NOM.es) + '  ' + ICO,
+              Tx('recolFin'), null, null, null); }, 700);
+        }
+      }
+    }
+  };
+})();
+/* el tilin de juntar: una nota corta, mas alta al completar */
+function blipRecol(fin){
+  if (!AMB.ctx || !AMB.on) return;
+  try {
+    const o = AMB.ctx.createOscillator(), g = AMB.ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(fin ? 880 : 1320, AMB.ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(fin ? 1760 : 1980, AMB.ctx.currentTime + .12);
+    g.gain.setValueAtTime(.0001, AMB.ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.09, AMB.ctx.currentTime + .015);
+    g.gain.exponentialRampToValueAtTime(.0001, AMB.ctx.currentTime + (fin ? .5 : .22));
+    o.connect(g); g.connect(AMB.master);
+    o.start(); o.stop(AMB.ctx.currentTime + (fin ? .55 : .26));
+  } catch(e){}
+}
+
+window.__RECOL = RECOL;
 /* --- las caritas de los personajes de DUNAS (pintadas al vuelo) --- */
 const caraNaira = (g, n2) => {
   g.fillStyle = '#3a2412'; g.fillRect(0, 0, n2, n2);
@@ -2617,18 +2737,29 @@ const caraCanelo = (g, n2) => {
   g.beginPath(); g.arc(n2*.59, n2*.55, n2*.032, 0, 6.29); g.fill();
 };
 {
-  const mj = POI.mojon, cp = POI.campamento;
-  window.__NAIRA = nuevoNPC({ fig: figHumano(0x8a5a3a, 0xe6d7b0),
-    x: mj.x + 4.5, z: mj.z + 5, nombre: 'NAIRA', clave: 'naira', retrato: AX('retrato/acropolis.jpg'), cara: caraNaira,
-    giro: 2.4, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: Math.PI,
-    alHablar(){ window.__NAIRA.hablado = true;
-      if (cap >= 1) window.__NAIRA.sigue = true; } });
-  nuevoNPC({ fig: figHumano(0x6a4a28, 0xd8c49a),
-    x: cp.x - 5, z: cp.z + 6.5, nombre: 'BREK', clave: 'brek', retrato: AX('retrato/viejo.jpg'), cara: caraBrek,
+  /* GENTE PROPIA de este mundo: cinco personajes repartidos por lugares
+     distintos (no todos amontonados en el campamento como venia del clon),
+     asi hay alguien con quien hablar en casi cada desvio. */
+  window.__P0 = nuevoNPC({ fig: figHumano(0x8a5a3a, 0xd8c49a),
+    x: POI.campamento.x + -5, z: POI.campamento.z + 6.5, nombre: 'HIERON', clave: 'hieron',
+    cara: caraNaira, retrato: AX('retrato/acropolis.jpg'),
     giro: 1.1, glb: 'npc/muro.glb', glbEsc: 1, glbGiro: Math.PI });
+  nuevoNPC({ fig: figHumano(0x9a6a42, 0xdcc89e),
+    x: POI.campamento.x + 6.0, z: POI.campamento.z + -5.0, nombre: 'THALIA', clave: 'thalia',
+    cara: caraNaira,
+    giro: 2.5, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: Math.PI });
   nuevoNPC({ fig: figPerro(0xc8925a),
-    x: cp.x + 4.5, z: cp.z + 4, nombre: 'CANELO', clave: 'canelo', cara: caraCanelo,
+    x: POI.campamento.x + 4.5, z: POI.campamento.z + 4.0, nombre: 'ARGOS', clave: 'argos',
+    cara: caraCanelo,
     giro: 2.2, glb: 'npc/canelo.glb', glbEsc: .85, glbGiro: -Math.PI/2, glbY: .34 });
+  nuevoNPC({ fig: figHumano(0xba8a52, 0xe4d0a6),
+    x: POI.teatro.x + -4.5, z: POI.teatro.z + 4.0, nombre: 'NIKIAS', clave: 'nikias',
+    cara: caraNaira, retrato: AX('retrato/viejo.jpg'),
+    giro: 0.6, glb: 'npc/muro.glb', glbEsc: 1, glbGiro: Math.PI });
+  nuevoNPC({ fig: figHumano(0xca9a5a, 0xe8d4aa),
+    x: POI.cisterna.x + 3.5, z: POI.cisterna.z + -4.5, nombre: 'PHOIBE', clave: 'phoibe',
+    cara: caraNaira, retrato: AX('retrato/joven.jpg'),
+    giro: 3.2, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: Math.PI });
 }
 
 /* ================================ JUGADOR ================================== */
@@ -3012,6 +3143,7 @@ function bucle(t){
     pasoLuz(dt);
     npcTick(dt);
     MISION.tick(dt);
+    RECOL.tick(dt);
     FOCO.x = cam.position.x; FOCO.z = cam.position.z;
   } else if (fase !== 'juego'){
     /* MENÚ: el valle se ve DETRÁS, con una cámara que orbita despacio entre la
