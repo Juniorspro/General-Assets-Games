@@ -5,7 +5,7 @@ const b = await chromium.launch({ args:['--use-gl=swiftshader','--enable-unsafe-
 const p = await b.newPage({ viewport:{ width:1280, height:600 }, hasTouch:true });
 p.on('pageerror',e=>console.log('PAGEERROR',e.message.slice(0,150)));
 await p.goto(base+'assets/mundos/pantano.html?local',{waitUntil:'domcontentloaded',timeout:120000});
-await p.waitForFunction(()=>{const c=document.querySelector('canvas');return c&&c.width>0;},{timeout:120000});
+await p.waitForFunction(()=>{const c=document.querySelector('canvas');return c&&c.width>0;}, null, { timeout:120000});
 await p.waitForTimeout(2500);
 await p.evaluate(()=>document.getElementById('mJugar').click());
 await p.waitForTimeout(1800);

@@ -17,7 +17,7 @@ const errs = [];
 p.on('pageerror', e => errs.push('ERR ' + e.message.slice(0, 200)));
 p.on('console', m => { if (m.type() === 'error') errs.push('con: ' + m.text().slice(0, 180)); });
 await p.goto(base + 'assets/mundos/secuoya.html?local', { waitUntil: 'domcontentloaded', timeout: 120000 });
-await p.waitForFunction(() => { const c = document.querySelector('canvas'); return c && c.width > 0; }, { timeout: 120000 });
+await p.waitForFunction(() => { const c = document.querySelector('canvas'); return c && c.width > 0; }, null, { timeout: 120000 });
 await p.waitForTimeout(2500);
 await p.evaluate(g => { try { window.__S.setGfx(g); } catch (e) {} }, gfx);
 await p.evaluate(() => document.getElementById('mJugar').click());

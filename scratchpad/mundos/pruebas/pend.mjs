@@ -30,7 +30,7 @@ for (const mundo of LISTA){
     'canon', 'estepa', 'acropolis', 'secuoya', 'senda']) localStorage.setItem(k + '_gfx', 'b'); } catch (e) {} });
   try {
     await p.goto(base + 'assets/' + RUTA + '?local', { waitUntil: 'domcontentloaded', timeout: 180000 });
-    await p.waitForFunction(() => window.__S, { timeout: 180000 });
+    await p.waitForFunction(() => window.__S, null, { timeout: 180000 });
   } catch (e) {
     console.log(mundo.padEnd(10) + ' NO ARRANCA: ' + (errs[0] || e.message.slice(0, 90)));
     await p.close(); continue;

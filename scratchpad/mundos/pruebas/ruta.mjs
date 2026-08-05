@@ -28,7 +28,7 @@ await p.addInitScript(() => { try { for (const k of ['dunas', 'jungla', 'volcan'
   localStorage.setItem(k + '_gfx', 'b'); } catch (e) {} });
 await p.goto(base + 'assets/' + RUTA + '?local', { waitUntil: 'domcontentloaded', timeout: 180000 });
 await p.waitForFunction(() => window.__S && document.querySelector('canvas') &&
-  document.querySelector('canvas').width > 0, { timeout: 180000 });
+  document.querySelector('canvas').width > 0, null, { timeout: 180000 });
 await p.waitForTimeout(2600);
 await p.evaluate(() => { const j = document.getElementById('mJugar'); if (j) j.click(); });
 await p.waitForTimeout(1500);

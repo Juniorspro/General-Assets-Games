@@ -17,7 +17,7 @@ for (const [n,f] of F){
   p.on('console',m=>{if(m.type()==='error'&&!/404|Failed to load/.test(m.text()))errs.push('con:'+m.text().slice(0,120));});
   try{
     await p.goto(base+'assets/'+f+'?local',{waitUntil:'domcontentloaded',timeout:180000});
-    await p.waitForFunction(()=>window.__S,{timeout:180000});
+    await p.waitForFunction(()=>window.__S, null, { timeout:180000});
     await p.waitForTimeout(2200);
     await p.evaluate(()=>{const j=document.getElementById('mJugar'); if(j)j.click();});
     await p.waitForTimeout(2500);

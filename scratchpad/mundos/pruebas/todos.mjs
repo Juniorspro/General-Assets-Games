@@ -43,7 +43,7 @@ let mal = 0;
 for (const [n, f, tipo] of JUEGOS){
   const fila = [];
   for (const tactil of [false, true]){
-    const p = await b.newPage({ viewport: { width: 900, height: 460 }, hasTouch: tactil });
+    const p = await b.newPage({ viewport: { width: 640, height: 360 }, hasTouch: tactil });
     const errs = [];
     p.on('pageerror', e => errs.push(e.message.slice(0, 90)));
     await p.addInitScript(() => { try { for (const k of ['dunas','jungla','volcan','pantano','canon',
@@ -52,63 +52,38 @@ for (const [n, f, tipo] of JUEGOS){
     if (tipo !== 'mundo') await ruta(p);
     const url = base + 'assets/' + f + (tipo === 'mundo' ? '?local' : '');
     try {
-      await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 180000 });
-      /* SE ESPERA A QUE EL JUEGO ESTE VIVO, no un rato fijo. Con 6,5 s el VOLCAN
-         —el mundo mas pesado— todavia no habia corrido su modulo, asi que se leia el
-         HTML CRUDO: portada en espanol y palanca a la vista, y la prueba lo daba por
-         roto cuando lo unico lento era el emulador. */
-      if (tipo === 'mundo'){
+      await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 240000 });
+      /* SE ESPERA A QUE EL JUEGO ESTE VIVO, no un rato fijo: con un rato fijo se leia
+         el HTML crudo del volcan —portada en espanol y palanca a la vista— y la
+         prueba lo daba por roto cuando lo unico lento era el emulador.
+         Ojo: en waitForFunction el SEGUNDO parametro es el argumento, no las
+         opciones; sin el `null` del medio la espera se queda en los 30 s de fabrica. */
+      if (tipo === 'mundo')
         await p.waitForFunction(() => window.__S && document.getElementById('mJugar'),
-          { timeout: 180000 });
-        await p.waitForTimeout(1200);
-      } else if (tipo === 'marea'){
+          null, { timeout: 240000 });
+      else if (tipo === 'marea')
         await p.waitForFunction(() => window.UT && document.getElementById('ldGo'),
-          { timeout: 180000 });
-        await p.waitForTimeout(1200);
-      } else {
+          null, { timeout: 240000 });
+      else
         await p.waitForFunction(() => document.getElementById('pcTec')
-          && document.getElementById('pcTec').innerHTML.length > 0, { timeout: 180000 });
-        await p.waitForTimeout(800);
-      }
-      /* EL IDIOMA SE LEE EN LA PORTADA. Dentro del juego el menu ya no esta —solo
-         queda el HUD— y ninguna de las palabras que se buscan aparece: la primera
-         version daba "ni ingles ni espanol" en los trece mundos. */
-      const txt0 = await p.evaluate(() => document.body.innerText.replace(/\s+/g, ' '));
-      /* MUNDO: hay que ENTRAR, porque el HUD esta oculto en la portada */
-      if (tipo === 'mundo'){
-        await p.evaluate(() => { const j = document.getElementById('mJugar'); if (j) j.click(); });
-        await p.waitForTimeout(2200);
-        await p.evaluate(() => { try { window.__S.cineSkip(); } catch (e) {} });
-        await p.waitForTimeout(700);
-      } else if (tipo === 'marea'){
-        await p.evaluate(() => { const g = document.getElementById('ldGo'); if (g) g.click(); });
-        await p.waitForTimeout(1400);
-        await p.evaluate(() => { const g = document.getElementById('bPlay'); if (g) g.click(); });
-        await p.waitForTimeout(3200);
-      } else {
-        await p.evaluate(() => { const q = document.querySelector('#langScr [data-lang="en"]'); if (q) q.click(); });
-        await p.waitForTimeout(1200);
-      }
+          && document.getElementById('pcTec').innerHTML.length > 0, null, { timeout: 240000 });
+      await p.waitForTimeout(1500);
       const d = await p.evaluate(t => {
-        const vis = i => { const e = document.getElementById(i);
-          return e ? getComputedStyle(e).display !== 'none' : null; };
-        const out = {};
-        if (t === 'mundo'){ out.pc = document.body.classList.contains('pc');
-          out.teclas = vis('pcHelp'); out.joy = vis('joy'); }
-        else if (t === 'marea'){ out.pc = !!window.__ESPC; out.teclas = null; out.joy = null; }
-        else { out.pc = document.body.classList.contains('pc'); out.teclas = vis('pcTec'); out.joy = null; }
-        return out;
+        const txt = document.body.innerText.replace(/\s+/g, ' ');
+        const cl = c => document.body.classList.contains(c);
+        const o = { txt: txt.slice(0, 260) };
+        /* NO SE ENTRA AL JUEGO: la deteccion deja su resultado en el body, y son esas
+           dos clases las que mandan en el CSS sobre el cartel de teclas y la palanca. */
+        if (t === 'marea'){ o.pc = !!window.__ESPC; o.sinTactil = !!window.__ESPC; }
+        else { o.pc = cl('pc'); o.sinTactil = t === 'reliquia' ? cl('pc') : cl('sinTactil'); }
+        return o;
       }, tipo);
-      const esp = /EMPEZAR|JUGAR|IDIOMA|GR[ÁA]FICOS|SONIDO|VOLVER|TOC[ÁA]|TU NOMBRE|SEGUIR/.test(txt0);
-      const hayIng = /START|PLAY|LANGUAGE|GRAPHICS|SOUND|BACK|TAP|YOUR NAME|RESUME/i.test(txt0);
-      const ing = hayIng && !esp;
-      d.portada = txt0.slice(0, 90);
-      let ctrl;
-      if (tipo === 'mundo') ctrl = tactil ? (!d.pc && d.joy !== false) : (d.pc && d.teclas === true && d.joy !== true);
-      else if (tipo === 'marea') ctrl = tactil ? !d.pc : d.pc;
-      else ctrl = tactil ? (!d.pc && d.teclas === false) : (d.pc && d.teclas === true);
-      fila.push((tactil ? 'tactil' : 'pc') + ':' + (ing ? 'ING' : 'esp') + '/' + (ctrl ? 'OK' : 'MAL'));
-      if (!ing || !ctrl || errs.length){ mal++;
+      /* NO buscar ingles: buscar que NO haya espanol. */
+      const esp = /EMPEZAR|JUGAR|IDIOMA|GR[ÁA]FICOS|SONIDO|VOLVER|TOC[ÁA]|TU NOMBRE|SEGUIR|TRAVES[ÍI]A|HISTORIA|MISI[ÓO]N|EXPEDICI[ÓO]N|CONTINUAR|SALIR|AJUSTES|SIGUIENTE/.test(d.txt);
+      const okIng = !esp && d.txt.length > 20;
+      const okCtrl = tactil ? (!d.pc && !d.sinTactil) : (d.pc && d.sinTactil);
+      fila.push((tactil ? 'tactil' : 'pc') + ':' + (okIng ? 'ING' : 'esp') + '/' + (okCtrl ? 'OK' : 'MAL'));
+      if (!okIng || !okCtrl || errs.length){ mal++;
         fila.push(JSON.stringify(d) + (errs.length ? ' ERR ' + errs[0] : '')); }
     } catch (e){ mal++; fila.push((tactil ? 'tactil' : 'pc') + ':NO ARRANCA ' + (errs[0] || e.message.slice(0, 60))); }
     await p.close();

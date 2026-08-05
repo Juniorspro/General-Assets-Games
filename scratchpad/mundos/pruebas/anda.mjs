@@ -65,7 +65,7 @@ const p = await b.newPage({ viewport: { width: 760, height: 480 }, hasTouch: tru
 const errs = [];
 p.on('pageerror', e => errs.push(e.message.slice(0, 160)));
 await p.goto(base + PAG + '?local', { waitUntil: 'domcontentloaded', timeout: 120000 });
-await p.waitForFunction(() => { const c = document.querySelector('canvas'); return c && c.width > 0; }, { timeout: 120000 });
+await p.waitForFunction(() => { const c = document.querySelector('canvas'); return c && c.width > 0; }, null, { timeout: 120000 });
 await p.waitForTimeout(2000);
 await p.evaluate(() => document.getElementById('mJugar').click());
 await p.waitForTimeout(1200);

@@ -13,7 +13,7 @@ const errs=[]; p.on('pageerror',e=>errs.push(e.message.slice(0,160)));
 p.on('console',m=>{if(m.type()==='error')errs.push('con: '+m.text().slice(0,140));});
 p.on('response',r=>{if(r.status()>=400)errs.push('HTTP '+r.status()+' '+r.url().split('/').pop());});
 await p.goto(base + 'assets/mundos/' + mundo + '.html?local', { waitUntil:'domcontentloaded', timeout:120000 });
-await p.waitForFunction(()=>{const c=document.querySelector('canvas');return c&&c.width>0;},{timeout:120000});
+await p.waitForFunction(()=>{const c=document.querySelector('canvas');return c&&c.width>0;}, null, { timeout:120000});
 await p.waitForTimeout(seg*1000);
 const d = await p.evaluate(() => {
   const fps = [...document.querySelectorAll('*')].map(e=>e.textContent||'')

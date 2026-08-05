@@ -16,7 +16,7 @@ const errs=[]; p.on('pageerror',e=>errs.push(e.message.slice(0,160)));
 p.on('response',r=>{if(r.status()>=400)errs.push('HTTP '+r.status()+' '+r.url().split('/').pop());});
 await p.goto(base + 'assets/mundos/' + mundo + '.html?local', { waitUntil:'domcontentloaded', timeout:120000 });
 await p.waitForFunction(()=>window.__S && document.querySelector('canvas') &&
-  document.querySelector('canvas').width>0, { timeout:120000 });
+  document.querySelector('canvas').width>0, null, { timeout:120000 });
 await p.evaluate(()=>{ try{ window.__S.entrar(); }catch(e){} });
 await p.waitForTimeout(10000);
 /* el HUD tapa el horizonte en las capturas: se esconde */

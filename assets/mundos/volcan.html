@@ -331,7 +331,7 @@ const Q = new URLSearchParams(location.search);
 const LOC = Q.has('local');
 /* SELLO DE VERSION: sale en la linea de fps. Sirve para saber si el
    telefono esta sirviendo el HTML de ahora o uno cacheado. */
-const BUILD = '5ac87d6';
+const BUILD = 'PENDIENTE';
 /* CERO descargas de assets: todas las texturas se pintan al vuelo.
    Lo único que llega de la red es three.js. */
 /* assets compartidos de los mundos hermanos (cielos, modelos 3D, audio). Se
@@ -1071,6 +1071,19 @@ const terrChunks = [];
 
 /* falda del horizonte: tapa la parte BAJA de la foto del cielo (que es oscura)
    con suelo que a esa distancia ya es color de niebla puro */
+/* EL SUELO MAS BAJO DEL MUNDO. Se mide una vez, barriendo el mapa cada 12 m: unas
+   5.000 llamadas a H, imperceptible al lado de las que cuesta el terreno. Hace
+   falta porque la falda del horizonte estaba clavada en -10 y en varios mundos el
+   suelo baja mas: los metros de abajo quedaban tapados por una chapa lisa. */
+const SUELO_MIN = (() => {
+  let m = 1e9;
+  for (let x = -MITAD; x <= MITAD; x += 12)
+    for (let z = -MITAD; z <= MITAD; z += 12){
+      const h = H(x, z);
+      if (h < m) m = h;
+    }
+  return m;
+})();
 {
   /* EL MAR DE ÍGNEA. Con 1.150 m de radio, desde el balcón (ojo a 80 m) el borde
      de la falda caía 4,5° por debajo del horizonte y la pared que lo tapaba se
@@ -1089,19 +1102,6 @@ const terrChunks = [];
      último grado de cielo que le queda al mar y, sobre todo, le da al horizonte
      un perfil que no es una regla: se lee como los roques de la isla vecina.
      Bajo (+22, no +70) a propósito: alto era la losa que tapaba el mar. */
-/* EL SUELO MAS BAJO DEL MUNDO. Se mide una vez, barriendo el mapa cada 12 m: unas
-   5.000 llamadas a H, imperceptible al lado de las que cuesta el terreno. Hace
-   falta porque la falda del horizonte estaba clavada en -10 y en varios mundos el
-   suelo baja mas: los metros de abajo quedaban tapados por una chapa lisa. */
-const SUELO_MIN = (() => {
-  let m = 1e9;
-  for (let x = -MITAD; x <= MITAD; x += 12)
-    for (let z = -MITAD; z <= MITAD; z += 12){
-      const h = H(x, z);
-      if (h < m) m = h;
-    }
-  return m;
-})();
   const pared = new T.Mesh(new T.CylinderGeometry(1050, 700, 34, 26, 1, true),
     new T.MeshLambertMaterial({ color: 0x4c3428, side: T.BackSide }));
   pared.position.y = 5 + Math.min(0, SUELO_MIN - 8 + 6);     /* base -12, borde +22 */

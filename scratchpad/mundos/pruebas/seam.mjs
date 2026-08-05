@@ -13,7 +13,7 @@ const mundos = process.argv.slice(2);
 for (const m of (mundos.length ? mundos : ['estepa'])) {
   await p.goto(base + 'scratchpad/mundos/pruebas/seam.html?t=/assets/mundos/cielo-' + m + '.jpg',
     { waitUntil:'domcontentloaded', timeout:60000 });
-  await p.waitForFunction(() => window.__listo === 1, { timeout:60000 });
+  await p.waitForFunction(() => window.__listo === 1, null, { timeout:60000 });
   const r = await p.evaluate(() => {
     const out = {};
     for (const modo of [0, 1]){

@@ -8,7 +8,7 @@ const b = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsaf
 const p = await b.newPage({ viewport: { width: 480, height: 320 }, hasTouch: true });
 p.on('pageerror', e => console.log('PAGEERROR', e.message.slice(0, 200)));
 await p.goto(base + PAG + '?local', { waitUntil: 'domcontentloaded', timeout: 120000 });
-await p.waitForFunction(() => { const c = document.querySelector('canvas'); return c && c.width > 0; }, { timeout: 120000 });
+await p.waitForFunction(() => { const c = document.querySelector('canvas'); return c && c.width > 0; }, null, { timeout: 120000 });
 await p.waitForTimeout(2000);
 await p.evaluate(() => document.getElementById('mJugar').click());
 await p.waitForTimeout(1200);
