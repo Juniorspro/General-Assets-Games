@@ -333,7 +333,7 @@ const Q = new URLSearchParams(location.search);
 const LOC = Q.has('local');
 /* SELLO DE VERSION: sale en la linea de fps. Sirve para saber si el
    telefono esta sirviendo el HTML de ahora o uno cacheado. */
-const BUILD = 'ef09c1c';
+const BUILD = 'PENDIENTE';
 /* CERO descargas de assets: todas las texturas se pintan al vuelo.
    Lo único que llega de la red es three.js. */
 /* assets compartidos de los mundos hermanos (cielos, modelos 3D, audio). Se
@@ -988,6 +988,145 @@ const SUELO_MIN = (() => {
   pared.frustumCulled = false;
   scene.add(pared);
 }
+
+/* ======================== EL RIO DEL FONDO DE LA GARGANTA ===================
+   El guion de este mundo habla del rio todo el tiempo —«bajar al rio y encontrar
+   el paso», «el rio sube de noche y baja al mediodia», «este año el rio se comio
+   el escalon de abajo»— y el rio no existia: la unica agua era la poza del pozo,
+   que aparece en el capitulo 5. El fondo de la garganta era roca seca.
+
+   EL CAUCE SALE DEL TERRENO. La garganta se talla sobre `eje = .78x + .62z`, asi
+   que el rio va por `eje = 0` y su direccion es la perpendicular al gradiente,
+   normalizada: si mañana se mueve el cañon, el rio se mueve con el.
+
+   LA MALLA SE ARMA EN COORDENADAS DE MUNDO, sin rotaciones. Un plano girado dos
+   veces —una para acostarlo, otra para orientarlo al eje— vuelve ilegible que eje
+   es cual dentro del sombreador; asi `position.xz` ES el mundo. */
+const RIO = (() => {
+  const gl = Math.hypot(.78, .62);
+  const ux = .62 / gl, uz = -.78 / gl;     /* a lo largo del cauce */
+  const nx = .78 / gl, nz = .62 / gl;      /* de orilla a orilla */
+  const LAR = 1300, ANC = 38, NL = 150, NA = 8;
+
+  /* EL NIVEL SE MIDE, ESTACION POR ESTACION. Con un plano horizontal de punta a
+     punta el agua salia por encima de la roca en medio recorrido: la garganta no es
+     horizontal. Y con el minimo de una ventana LARGA pasaba lo contrario —medido:
+     en el punto mas bajo del cañon la superficie quedaba cinco metros DEBAJO de la
+     roca, o sea invisible salvo en los huecos mas hondos—. El nivel sale del lecho
+     LOCAL: el minimo de orilla a orilla en esa estacion, mas 1,2 m. */
+  const LECHO = new Float32Array(NL + 1), NIV = new Float32Array(NL + 1);
+  for (let i = 0; i <= NL; i++){
+    const t = (i / NL - .5) * LAR;
+    let m = 1e9;
+    for (let sv = -ANC * .5; sv <= ANC * .5; sv += 4)
+      m = Math.min(m, H(ux * t + nx * sv, uz * t + nz * sv));
+    LECHO[i] = m;
+    NIV[i] = m + 1.2;
+  }
+  /* UNA sola pasada de suavizado —un rio no escalona cada ocho metros— y despues un
+     PISO: la superficie nunca puede quedar por debajo del lecho de su estacion, que
+     es justo lo que rompia la version anterior. */
+  for (let i = 1; i < NL; i++) NIV[i] = (NIV[i - 1] + NIV[i] * 2 + NIV[i + 1]) * .25;
+  for (let i = 0; i <= NL; i++) NIV[i] = Math.max(NIV[i], LECHO[i] + .55);
+
+  const V = [], PR = [], IX = [];
+  for (let i = 0; i <= NL; i++){
+    const t = (i / NL - .5) * LAR;
+    for (let j = 0; j <= NA; j++){
+      const sv = (j / NA - .5) * ANC;
+      const x = ux * t + nx * sv, z = uz * t + nz * sv;
+      V.push(x, NIV[i], z);
+      /* PROFUNDIDAD POR VERTICE: de aca salen el color de barro del bajio, la ola
+         que se aplana en la orilla y el alfa que se desvanece en la ribera. */
+      PR.push(cl((NIV[i] - H(x, z)) / 2.6, 0, 1));
+    }
+  }
+  for (let i = 0; i < NL; i++)
+    for (let j = 0; j < NA; j++){
+      const a = i * (NA + 1) + j, b = a + NA + 1;
+      IX.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.Float32BufferAttribute(V, 3));
+  g.setAttribute('aProf', new T.Float32BufferAttribute(PR, 1));
+  g.setIndex(IX);
+  g.computeVertexNormals();
+
+  const RU = { value: 0 };
+  /* MARRON DE BARRO en la orilla —un rio de cañon rojo arrastra tierra— y verde
+     oscuro en el hondo, que es el «pozo verde» del guion. */
+  /* DoubleSide: la malla se enhebra a mano y con FrontSide la superficie solo
+     existia desde ABAJO —desde dentro de la roca—, asi que el agua no se veia ni
+     desde la orilla ni metido en el cauce. Y ademas el agua vista desde abajo es
+     una vista legitima: te metes en el rio y mirás para arriba. */
+  const mat = new T.MeshStandardMaterial({ color: 0x14251b, roughness: .22,
+    metalness: .6, transparent: true, opacity: .95, envMapIntensity: .5,
+    side: T.DoubleSide });
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uT = RU;
+    sh.uniforms.tOla = { value: TX.agua };
+    mat.userData.sh = sh;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uT;attribute float aProf;varying vec2 vWp;varying float vD;varying float vProf;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vWp = position.xz;
+        vProf = aProf;
+        /* dominio deformado: las crestas serpentean en vez de ser rectas */
+        vec2 pw = position.xz + vec2(sin(position.z * .13 + uT * .31),
+                                     cos(position.x * .11 - uT * .24)) * 3.2;
+        float hh = sin(pw.x * .36 + uT * 1.15) * .34
+                 + cos(pw.y * .31 - uT * .92) * .27
+                 + sin((pw.x + pw.y) * .68 + uT * 1.7) * .16;
+        transformed.y += hh * .085 * smoothstep(0.0, 0.35, vProf);
+        vD = -(modelViewMatrix * vec4(transformed, 1.0)).z;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uT;uniform sampler2D tOla;varying vec2 vWp;varying float vD;varying float vProf;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 aguaG;
+        {
+          float lejos = clamp(1.0 - vD / 190.0, .35, 1.0);
+          vec2 uvA = vWp * .075 + vec2(uT * .022,  uT * .016);
+          vec2 uvB = vWp * .24  + vec2(-uT * .034, uT * .028);
+          vec2 uvC = vWp * .66  + vec2(uT * .052, -uT * .041);
+          float e2 = .02;
+          float n1 = texture2D(tOla, uvA).r, n2 = texture2D(tOla, uvB).r, n3 = texture2D(tOla, uvC).r;
+          aguaG = vec2(
+            (texture2D(tOla, uvA + vec2(e2, 0.)).r - n1) * 2.2 +
+            (texture2D(tOla, uvB + vec2(e2, 0.)).r - n2) * 2.7 +
+            (texture2D(tOla, uvC + vec2(e2, 0.)).r - n3) * 1.6,
+            (texture2D(tOla, uvA + vec2(0., e2)).r - n1) * 2.2 +
+            (texture2D(tOla, uvB + vec2(0., e2)).r - n2) * 2.7 +
+            (texture2D(tOla, uvC + vec2(0., e2)).r - n3) * 1.6) * lejos;
+        }
+        /* barro en la orilla -> verde hondo en el medio */
+        diffuseColor.rgb = mix(vec3(.335, .215, .135), vec3(.075, .145, .105),
+                               smoothstep(0.0, 0.58, vProf));
+        /* la ribera se desvanece: nada de canto de poligono */
+        diffuseColor.a *= smoothstep(0.0, 0.20, vProf);`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        /* en el bajio hay barro y espuma, no espejo */
+        roughnessFactor = mix(.88, roughnessFactor, smoothstep(0.0, 0.45, vProf));`)
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+        normal = normalize(normal + vec3(aguaG.x, aguaG.y, 0.0));`);
+  };
+  const malla = new T.Mesh(g, mat);
+  malla.frustumCulled = false;      /* cruza el mapa entero */
+  malla.renderOrder = 1;
+  scene.add(malla);
+
+  /* la altura del agua donde estas, para que el espejo se apoye en ella */
+  const nivelEn = (x, z) => {
+    const t = x * ux + z * uz;
+    const i = Math.round((t / LAR + .5) * NL);
+    return NIV[Math.max(0, Math.min(NL, i))];
+  };
+  /* a que distancia del eje del cauce estas */
+  const fuera = (x, z) => Math.abs(x * nx + z * nz);
+  return { malla, mat, reloj: RU, nivelEn, fuera, ANC,
+           tick: dt => { RU.value += dt; } };
+})();
+window.__RIO = RIO;
+
 /* --------------------------- REMOLINOS DE ARENA ----------------------------
    Cuatro torbellinos que vagan por la llanura en círculos lentos: conos
    translúcidos con vetas verticales pintadas, girando rápido sobre sí mismos.
@@ -1666,12 +1805,23 @@ const POZO = { abierto: false, k: 0 };
   };
   ESPEJO.tick = () => {
     if (!ESPEJO.m) return;
-    /* el espejo sigue al disco y solo se dibuja si el agua esta a la vista y
-       cerca: de lejos la segunda pasada se paga sin que se note */
-    ESPEJO.m.position.set(aguaMesh.position.x, aguaMesh.position.y - .04,
-                          aguaMesh.position.z);
-    const d = Math.hypot(px - aguaMesh.position.x, pz - aguaMesh.position.z);
-    ESPEJO.m.visible = ESPEJO.on && aguaMesh.visible && d < ESPEJO.lejos;
+    /* EL ESPEJO ELIGE. Hay dos aguas —la poza del pozo y el rio del fondo— y una
+       segunda pasada de render entera no se paga dos veces: el mismo espejo se
+       apoya en la superficie MAS CERCANA. En el rio ademas viaja con el jugador,
+       porque el rio cruza el mapa entero y su centro no dice nada.
+       Y de lejos se apaga: la pasada se paga sin que se note. */
+    const dPoza = aguaMesh.visible
+      ? Math.hypot(px - aguaMesh.position.x, pz - aguaMesh.position.z) : 1e9;
+    const R = window.__RIO;
+    const dRio = R ? Math.max(0, R.fuera(px, pz) - R.ANC * .5) : 1e9;
+    if (dRio < dPoza && dRio < ESPEJO.lejos){
+      ESPEJO.m.position.set(px, R.nivelEn(px, pz) - .04, pz);
+      ESPEJO.m.visible = ESPEJO.on;
+    } else {
+      ESPEJO.m.position.set(aguaMesh.position.x, aguaMesh.position.y - .04,
+                            aguaMesh.position.z);
+      ESPEJO.m.visible = ESPEJO.on && aguaMesh.visible && dPoza < ESPEJO.lejos;
+    }
   };
   window.__ESPEJO = ESPEJO;
 
@@ -1686,6 +1836,7 @@ const POZO = { abierto: false, k: 0 };
     /* el reloj de la ola. La textura ya no se corre a mano: la mueve el
        sombreador, en tres capas y a tres velocidades. */
     if (window.__AGUAU) window.__AGUAU.value += dt;
+    if (window.__RIO) window.__RIO.tick(dt);
     if (!POZO.abierto) return;
     POZO.k = Math.min(1, POZO.k + dt / 6);
     const k = POZO.k * POZO.k * (3 - 2 * POZO.k);
@@ -4316,6 +4467,10 @@ function bucle(t){
     pasoCine(dt);
     pasoLuz(dt);
     npcTick(dt);
+    /* EL POZO: no se estaba llamando. dunas, acropolis y secuoya si lo llaman;
+       aca se quedo afuera al templar el mundo, y con eso el espejo del agua no se
+       recolocaba nunca, la manivela no giraba y el reloj de la ola no avanzaba. */
+    if (window.__POZO && window.__POZO.tick) window.__POZO.tick(dt);
     MISION.tick(dt);
     RECOL.tick(dt);
     FOCO.x = cam.position.x; FOCO.z = cam.position.z;
@@ -4524,6 +4679,10 @@ window.__S = {
   sembrados(){ return window.__SEMBRADOS || 0; },
   cajas(){ return window.__CAJAS || null; },
   planta(){ return window.__PLANTA || null; },
+  rio(){ const R = window.__RIO; if (!R) return null;
+    return { nivel: +R.nivelEn(px, pz).toFixed(2), fuera: +R.fuera(px, pz).toFixed(1),
+      suelo: +H(px, pz).toFixed(2), tri: R.malla.geometry.index.count / 3,
+      espejo: window.__ESPEJO ? window.__ESPEJO.m.visible : null }; },
   pozo(){ return { abierto: POZO.abierto, k: +POZO.k.toFixed(2),
     aguaY: +aguaMesh.position.y.toFixed(2), visible: aguaMesh.visible }; },
   hoguera(){ return { on: HOGUERA.on, opacidad: +beaconMat.opacity.toFixed(2),
