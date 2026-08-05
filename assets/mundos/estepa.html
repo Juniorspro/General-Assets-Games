@@ -389,11 +389,17 @@ function alturaBase(x, z){
   h += 26 * Math.exp(-(dC * dC) / (190 * 190));
   return h;
 }
+/* Solo los lugares del GUION allanan el terreno: ahi se apoya lo construido.
+   Los lugares extra son referencias del paisaje y no necesitan explanada, y
+   meterlos aca encarecia H() —que corre por vertice del terreno y varias veces
+   por frame— sin que se notara la diferencia. */
+const POI_LLANO = ['inicio', 'mojon', 'campamento', 'ruinas', 'oasis', 'cresta']
+  .filter(k => POI[k]);
 function H(x, z){
   let h = alturaBase(x, z);
   /* allanar alrededor de cada punto de la historia (mezcla suave): en la arena
      nada se apoya derecho si el suelo ondula bajo los cimientos */
-  for (const k in POI){
+  for (const k of POI_LLANO){
     const p = POI[k], R = p.pr || 26;
     const d = Math.hypot(x - p.x, z - p.z);
     const w = Math.exp(-(d * d) / (R * R));
@@ -2761,7 +2767,12 @@ const VEG = (() => {
     const mat = new T.MeshLambertMaterial({ map: tex, alphaTest: .42,
       side: T.DoubleSide });
     const im = new T.InstancedMesh(CRUCE, mat, n);
-    im.castShadow = SOMBRAS && alto > 6;      /* la hojarasca no proyecta */
+    /* castShadow sin consultar SOMBRAS: esa variable se declara con `let` mas
+       ABAJO en el archivo y leerla aca cae en su zona muerta, lo que tiraba un
+       ReferenceError que el IIFE asincrono del motor se tragaba en silencio (el
+       mundo se quedaba en CARGANDO para siempre). El interruptor global de
+       sombras ya decide si se dibujan; los demas props hacen lo mismo. */
+    im.castShadow = alto > 6;                 /* la hojarasca no proyecta */
     im.receiveShadow = true;
     im.frustumCulled = false;                 /* el volumen abarca el mapa */
     const M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler();
@@ -2791,7 +2802,7 @@ const VEG = (() => {
     const geo = new T.CylinderGeometry(radio * .62, radio, alto, 11, 1, true);
     geo.translate(0, alto / 2, 0);
     const im = new T.InstancedMesh(geo, mat, n);
-    im.castShadow = SOMBRAS; im.receiveShadow = true;
+    im.castShadow = true; im.receiveShadow = true;
     im.frustumCulled = false;
     const M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler();
     const V = new T.Vector3(), S = new T.Vector3();

@@ -108,7 +108,12 @@ const VEG = (() => {
     const mat = new T.MeshLambertMaterial({ map: tex, alphaTest: .42,
       side: T.DoubleSide });
     const im = new T.InstancedMesh(CRUCE, mat, n);
-    im.castShadow = SOMBRAS && alto > 6;      /* la hojarasca no proyecta */
+    /* castShadow sin consultar SOMBRAS: esa variable se declara con `let` mas
+       ABAJO en el archivo y leerla aca cae en su zona muerta, lo que tiraba un
+       ReferenceError que el IIFE asincrono del motor se tragaba en silencio (el
+       mundo se quedaba en CARGANDO para siempre). El interruptor global de
+       sombras ya decide si se dibujan; los demas props hacen lo mismo. */
+    im.castShadow = alto > 6;                 /* la hojarasca no proyecta */
     im.receiveShadow = true;
     im.frustumCulled = false;                 /* el volumen abarca el mapa */
     const M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler();
@@ -138,7 +143,7 @@ const VEG = (() => {
     const geo = new T.CylinderGeometry(radio * .62, radio, alto, 11, 1, true);
     geo.translate(0, alto / 2, 0);
     const im = new T.InstancedMesh(geo, mat, n);
-    im.castShadow = SOMBRAS; im.receiveShadow = true;
+    im.castShadow = true; im.receiveShadow = true;
     im.frustumCulled = false;
     const M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler();
     const V = new T.Vector3(), S = new T.Vector3();

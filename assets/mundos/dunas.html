@@ -354,7 +354,12 @@ const POI = {
   campamento: { x: 172,  z: 118, pr: 30 },
   ruinas:     { x: 55,   z: -70, pr: 34 },
   oasis:      { x: -70,  z: -215, pr: 40 },
-  cresta:     { x: -215, z: -332, pr: 24 }
+  cresta:     { x: -215, z: -332, pr: 24 },
+  /* LUGARES NUEVOS: el mapa tenia seis paradas y entre una y otra no
+     habia nada ni nadie. Estos tres son para desviarse. */
+  esqueleto:  { x:   250, z:   300, pr: 18 },   /* el esqueleto del camello */
+  roquedal:   { x:  -280, z:    60, pr: 20 },   /* el roquedal de sombra */
+  salina:     { x:   130, z:  -300, pr: 24 }   /* la salina */
 };
 /* EL VIENTO manda en este mundo: fija el rumbo de las crestas (perpendicular),
    la dirección de los velos de arena y hacia dónde miran las caras de sotavento. */
@@ -384,11 +389,17 @@ function alturaBase(x, z){
   h -= 7 * Math.exp(-(dR * dR) / (85 * 85));
   return h;
 }
+/* Solo los lugares del GUION allanan el terreno: ahi se apoya lo construido.
+   Los lugares extra son referencias del paisaje y no necesitan explanada, y
+   meterlos aca encarecia H() —que corre por vertice del terreno y varias veces
+   por frame— sin que se notara la diferencia. */
+const POI_LLANO = ['inicio', 'mojon', 'campamento', 'ruinas', 'oasis', 'cresta']
+  .filter(k => POI[k]);
 function H(x, z){
   let h = alturaBase(x, z);
   /* allanar alrededor de cada punto de la historia (mezcla suave): en la arena
      nada se apoya derecho si el suelo ondula bajo los cimientos */
-  for (const k in POI){
+  for (const k of POI_LLANO){
     const p = POI[k], R = p.pr || 26;
     const d = Math.hypot(x - p.x, z - p.z);
     const w = Math.exp(-(d * d) / (R * R));
@@ -1587,6 +1598,12 @@ scene.add(marca3d);
 /* ===== IDIOMAS. El texto ES la historia: va entero en los tres. ===== */
 const L = {
 es: { npc: {
+  yuma: ['Este camello se llamaba TORMENTA y era de mi\npadre. Se echó acá hace dos años y no se\nlevantó más.',
+    'Le dejo agua igual. Sé que es al reves.\nPero le dejo agua igual.'],
+  hassan: ['A esta hora no se camina. Se espera.\nSentate a la sombra y andá cuando la piedra\nse pueda tocar.',
+    'Cuarenta años cruzando y sigo vivo por una\nsola cosa: nunca discutí con el mediodía.'],
+  mira: ['Junto sal. Cuatro días de raspar para llenar\nun saco, y el saco vale un mes de comida\nen el pueblo.',
+    'Acá abajo hubo un lago. Toda esta sal es lo\nque quedó cuando se fue.\n\nPensá el tamaño del lago.'],
   naira: ['Me adelanté para marcar el paso y me perdí igual.\nEl viento borra las huellas en media hora.\n\nVoy con vos. Dos ojos ven más señales que uno.',
     'Mi abuela decía: en la duna no se camina\nderecho, se camina donde la arena deja.',
     'Si encontramos agua, ¿me dejás tirar\nla primera piedra al pozo? Es tradición.\nBueno… es MI tradición.'],
@@ -1617,6 +1634,12 @@ caps: [
     dT: 'FIN', d: 'La pira prende de una. En el mar de dunas\nuna luz se ve desde media jornada.\n\nY allá abajo, chiquitas, aparecen las otras:\nfaroles en fila, moviéndose hacia acá.\n\nNAIRA no dice nada. Te aprieta la muñeca.\n\n«Escuchaste el agua antes que nadie, SIRA.\nComo siempre.»\n\nDUNAS — fin de la historia.' }
 ] },
 en: { npc: {
+  yuma: ['This camel was called STORM and it was my\nfather’s. It lay down here two years ago and\nnever got up.',
+    'I still leave water for him. I know it makes\nno sense. But I leave it anyway.'],
+  hassan: ['You do not walk at this hour. You wait.\nSit in the shade and go when you can touch\nthe stone.',
+    'Forty years crossing and I am alive for one\nreason only: I never argued with noon.'],
+  mira: ['I gather salt. Four days of scraping to fill\none sack, and one sack is worth a month of\nfood in the village.',
+    'There was a lake down here. All this salt is\nwhat was left when it went.\n\nThink about the size of the lake.'],
   naira: ['I went ahead to mark the trail and got lost anyway.\nThe wind erases footprints in half an hour.\n\nI’m coming with you. Two pairs of eyes see more signs.',
     'My grandmother used to say: in the dunes you\ndon’t walk straight, you walk where the sand lets you.',
     'If we find water, can I throw the first stone\ninto the well? It’s tradition.\nAll right… it’s MY tradition.'],
@@ -1647,6 +1670,12 @@ caps: [
     dT: 'THE END', d: 'The pyre catches at once. In a sea of dunes\na single light is seen half a day away.\n\nAnd down there, tiny, the others appear:\nlanterns in a line, moving this way.\n\nNAIRA says nothing. She grips your wrist.\n\n“You heard the water before anyone, SIRA.\nLike always.”\n\nDUNES — end of the story.' }
 ] },
 pt: { npc: {
+  yuma: ['Este camelo se chamava TORMENTA e era do meu\npai. Deitou-se aqui há dois anos e não se\nlevantou mais.',
+    'Deixo água para ele mesmo assim. Sei que é ao\ncontrário. Mas deixo água mesmo assim.'],
+  hassan: ['A esta hora não se caminha. Espera-se.\nSente-se na sombra e vá quando a pedra puder\nser tocada.',
+    'Quarenta anos atravessando e sigo vivo por uma\nsó coisa: nunca discuti com o meio-dia.'],
+  mira: ['Junto sal. Quatro dias raspando para encher\num saco, e o saco vale um mês de comida\nna aldeia.',
+    'Aqui embaixo houve um lago. Todo este sal é o\nque sobrou quando ele foi.\n\nPense no tamanho do lago.'],
   naira: ['Fui na frente marcar o caminho e me perdi igual.\nO vento apaga as pegadas em meia hora.\n\nVou com você. Dois olhos veem mais sinais que um.',
     'Minha avó dizia: na duna não se anda\nreto, se anda onde a areia deixa.',
     'Se acharmos água, posso jogar a primeira\npedra no poço? É tradição.\nBom… é MINHA tradição.'],
@@ -2694,6 +2723,23 @@ function blipRecol(fin){
   } catch(e){}
 }
 
+
+/* MAS GENTE: los tres de arriba estaban todos en el campamento y el resto
+   del mapa quedaba desierto. Estos van a lugares que no tenian a nadie. */
+{
+  nuevoNPC({ fig: figHumano(0x7a5a3a, 0xd2c09a),
+    x: POI.esqueleto.x + 4.5, z: POI.esqueleto.z + 5.0, nombre: 'YUMA', clave: 'yuma',
+    cara: caraNaira, retrato: AX('retrato/joven.jpg'),
+    giro: 2.3, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: Math.PI });
+  nuevoNPC({ fig: figHumano(0x7a5a3a, 0xd2c09a),
+    x: POI.roquedal.x + -4.0, z: POI.roquedal.z + 4.5, nombre: 'HASSAN', clave: 'hassan',
+    cara: caraNaira, retrato: AX('retrato/viejo.jpg'),
+    giro: 0.6, glb: 'npc/muro.glb', glbEsc: 1, glbGiro: Math.PI });
+  nuevoNPC({ fig: figHumano(0x7a5a3a, 0xd2c09a),
+    x: POI.salina.x + 3.5, z: POI.salina.z + -4.5, nombre: 'MIRA', clave: 'mira',
+    cara: caraNaira,
+    giro: 3.2, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: Math.PI });
+}
 window.__RECOL = RECOL;
 /* --- las caritas de los personajes de DUNAS (pintadas al vuelo) --- */
 const caraNaira = (g, n2) => {

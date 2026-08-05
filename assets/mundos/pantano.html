@@ -1700,6 +1700,12 @@ scene.add(marca3d);
 /* ===== IDIOMAS. El texto ES la historia: va entero en los tres. ===== */
 const L = {
 es: { npc: {
+  taru: ['El cruce se pasa por las tablas, no por el\nbarro. El barro de acá agarra el pie y no\nlo suelta.',
+    'Perdí una bota el año pasado. Todavía debe\nestar parada ahí abajo, esperándome.'],
+  oquén: ['Este ciprés tiene las raíces afuera del agua\ny el tronco dentro. Al revés de todo.',
+    'Lleva cuatrocientos años haciéndolo mal y\nsigue vivo.\n\nHay algo ahí.'],
+  imá: ['Cazo luces. Las de verdad, las que flotan\nsobre el agua a la madrugada.',
+    'Se meten al frasco solas si lo dejás abierto\ny quieto. Después las suelto.\n\nNo es para tenerlas. Es para verlas de cerca\nuna vez.'],
   dante: ['El pantano no odia a nadie.\nSólo se queda con lo que deja de moverse.',
     'Mi padre encendió estos faroles cuarenta años.\nYo llevo treinta y uno. Ahora te toca a vos.',
     'Si la mecha se te apaga, no corras.\nLa luz siempre está atrás, nunca adelante.'],
@@ -1732,6 +1738,12 @@ caps: [
     dT: 'FIN', d: 'El fanal agarra la llama y la ciénaga entera\naparece de golpe: el agua, los cipreses, el camino.\n\nSira baja al muelle sin mirar atrás, como se debe.\nAtrás, muy despacio, el cielo se pone gris.\n\nPANTANO — fin de la historia.\nGracias por encenderla.', usar: true }
 ] },
 en: { npc: {
+  taru: ['You cross on the boards, not through the mud.\nThe mud here grabs a foot and does not let go.',
+    'I lost a boot last year. It is probably still\nstanding down there, waiting for me.'],
+  oquén: ['This cypress has its roots out of the water\nand its trunk in it. Backwards from everything.',
+    'It has been doing it wrong for four hundred\nyears and it is still alive.\n\nThere is something in that.'],
+  imá: ['I catch lights. The real ones, the ones that\nfloat over the water before dawn.',
+    'They go into the jar by themselves if you leave\nit open and still. Then I let them out.\n\nIt is not to keep them. It is to see one up\nclose, once.'],
   dante: ['The swamp hates nobody.\nIt just keeps whatever stops moving.',
     'My father lit these lanterns for forty years.\nI have done thirty-one. Now it is your turn.',
     'If your wick goes out, do not run.\nThe light is always behind you, never ahead.'],
@@ -1764,6 +1776,12 @@ caps: [
     dT: 'THE END', d: 'The great lantern takes the flame and the whole marsh\nappears at once: the water, the cypresses, the road.\n\nSira walks down to the landing without looking back,\nas it should be. Behind her, very slowly, the sky turns grey.\n\nPANTANO — end of the story.\nThank you for lighting it.', usar: true }
 ] },
 pt: { npc: {
+  taru: ['A passagem se faz pelas tábuas, não pelo lodo.\nO lodo daqui agarra o pé e não solta.',
+    'Perdi uma bota no ano passado. Deve estar\nainda de pé lá embaixo, me esperando.'],
+  oquén: ['Este cipreste tem as raízes fora da água e o\ntronco dentro. Ao contrário de tudo.',
+    'Faz quatrocentos anos que faz errado e segue\nvivo.\n\nHá algo aí.'],
+  imá: ['Caço luzes. As de verdade, as que flutuam\nsobre a água ao amanhecer.',
+    'Entram no frasco sozinhas se você o deixa\naberto e quieto. Depois eu as solto.\n\nNão é para tê-las. É para ver de perto\numa vez.'],
   dante: ['O pântano não odeia ninguém.\nEle só fica com o que para de se mexer.',
     'Meu pai acendeu estes lampiões quarenta anos.\nEu já fiz trinta e um. Agora é a sua vez.',
     'Se o seu pavio apagar, não corra.\nA luz está sempre atrás, nunca à frente.'],
@@ -2844,6 +2862,23 @@ function blipRecol(fin){
   } catch(e){}
 }
 
+
+/* MAS GENTE: los tres de arriba estaban todos en el campamento y el resto
+   del mapa quedaba desierto. Estos van a lugares que no tenian a nadie. */
+{
+  nuevoNPC({ fig: figHumano(0x7a5a3a, 0xd2c09a),
+    x: POI.cruce.x + 5.0, z: POI.cruce.z + 4.5, nombre: 'TARU', clave: 'taru',
+    cara: caraNaira, retrato: AX('retrato/joven.jpg'),
+    giro: 2.4, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: Math.PI });
+  nuevoNPC({ fig: figHumano(0x7a5a3a, 0xd2c09a),
+    x: POI.cipres.x + -4.5, z: POI.cipres.z + 4.5, nombre: 'OQUÉN', clave: 'oquén',
+    cara: caraNaira, retrato: AX('retrato/viejo.jpg'),
+    giro: 0.7, glb: 'npc/muro.glb', glbEsc: 1, glbGiro: Math.PI });
+  nuevoNPC({ fig: figHumano(0x7a5a3a, 0xd2c09a),
+    x: POI.casilla.x + 5.5, z: POI.casilla.z + -4.5, nombre: 'IMÁ', clave: 'imá',
+    cara: caraNaira,
+    giro: 3.2, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: Math.PI });
+}
 window.__RECOL = RECOL;
 /* ======================= VEGETACION CON VOLUMEN ===========================
    Antes este mundo no tenia un solo arbol de verdad: solo el ruido del terreno.
@@ -2906,7 +2941,12 @@ const VEG = (() => {
     const mat = new T.MeshLambertMaterial({ map: tex, alphaTest: .42,
       side: T.DoubleSide });
     const im = new T.InstancedMesh(CRUCE, mat, n);
-    im.castShadow = SOMBRAS && alto > 6;      /* la hojarasca no proyecta */
+    /* castShadow sin consultar SOMBRAS: esa variable se declara con `let` mas
+       ABAJO en el archivo y leerla aca cae en su zona muerta, lo que tiraba un
+       ReferenceError que el IIFE asincrono del motor se tragaba en silencio (el
+       mundo se quedaba en CARGANDO para siempre). El interruptor global de
+       sombras ya decide si se dibujan; los demas props hacen lo mismo. */
+    im.castShadow = alto > 6;                 /* la hojarasca no proyecta */
     im.receiveShadow = true;
     im.frustumCulled = false;                 /* el volumen abarca el mapa */
     const M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler();
@@ -2936,7 +2976,7 @@ const VEG = (() => {
     const geo = new T.CylinderGeometry(radio * .62, radio, alto, 11, 1, true);
     geo.translate(0, alto / 2, 0);
     const im = new T.InstancedMesh(geo, mat, n);
-    im.castShadow = SOMBRAS; im.receiveShadow = true;
+    im.castShadow = true; im.receiveShadow = true;
     im.frustumCulled = false;
     const M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler();
     const V = new T.Vector3(), S = new T.Vector3();
