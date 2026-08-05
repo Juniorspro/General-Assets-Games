@@ -288,7 +288,7 @@ const HASHAX = 'a40d6aa';       /* assets COMPARTIDOS, ya publicados */
    arriba: se sirven por rama. Al publicar, cambia esto por el hash corto del
    commit y quedan clavados como el resto. */
 const HASHMIO = 'a40d6aa';
-const MIOS = /^(cielo|mus|amb|tex)-secuoya|^retrato\/|^img\/secuoya|^prop\/secuoya|^veg\//;
+const MIOS = /^(cielo|mus|amb|tex)-secuoya|^retrato\/|^img\/secuoya|^prop\/secuoya|^veg\/|^anim\//;
 const AX = f => (LOC ? '/assets/mundos/'
   : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'
     + (MIOS.test(f) ? HASHMIO : HASHAX) + '/assets/mundos/') + f;
@@ -2156,8 +2156,14 @@ const MIXERS = [];
    Se cargan los tres donantes UNA sola vez y se reparten a todos. */
 const CLIPS = { quieto: null, andar: null, correr: null, listos: 0, cola: [] };
 {
-  const DON = [['andar', 'hyper/char.glb'], ['correr', 'reliquia/hero.glb'],
-               ['quieto', 'aero/hero-idle.glb']];
+  /* reliquia/hero.glb y aero/hero-idle.glb piden KHR_draco_mesh_compression
+     como extension REQUERIDA, asi que el GLTFLoader los rechaza enteros y no
+     cargaban. DRACO comprime solo la GEOMETRIA: las pistas de animacion son
+     accesores normales. Asi que se extrajeron a GLB de SOLO ANIMACION (sin
+     mallas, sin skins, sin texturas): 39 y 85 KB, sin ninguna extension.
+     Ver scratchpad/mundos/extrae_clip.py. */
+  const DON = [['andar', AX('anim/andar.glb')], ['correr', AX('anim/correr.glb')],
+               ['quieto', AX('anim/quieto.glb')]];
   const fin = () => {
     CLIPS.listos++;
     if (CLIPS.listos < DON.length) return;
@@ -2166,7 +2172,7 @@ const CLIPS = { quieto: null, andar: null, correr: null, listos: 0, cola: [] };
   };
   for (const [k, u] of DON){
     if (!GLTF){ fin(); continue; }
-    new GLTF().load(AG(u), g => {
+    new GLTF().load(u, g => {
       if (g.animations && g.animations.length) CLIPS[k] = g.animations[0];
       fin();
     }, undefined, fin);
@@ -2313,7 +2319,12 @@ function npcTick(dt){
       : suelo;
     /* la velocidad DE VERDAD del personaje (metros por segundo): con esto la
        mezcla de clips no depende de banderas sino de cuanto se movio */
-    npc.vel = dt > 0 ? Math.hypot(f.position.x - _x0, f.position.z - _z0) / dt : 0;
+    /* SUAVIZADA: el que te sigue entra y sale del radio de 3,4 m, asi que su
+       velocidad instantanea salta entre 6 y 0 de un cuadro al otro y la mezcla
+       parpadeaba entre caminar y quieto. Con un seguimiento exponencial la
+       animacion no tiembla. */
+    const vIns = dt > 0 ? Math.hypot(f.position.x - _x0, f.position.z - _z0) / dt : 0;
+    npc.vel = npc.vel == null ? vIns : npc.vel + (vIns - npc.vel) * Math.min(1, dt * 4.5);
     mezclaAcciones(npc, npc.vel, dt);
     const L2 = f.userData.lim || {};
     const sw = anda ? Math.sin(t0 * 9) * .55 : Math.sin(t0 * 1.4 + npc.fase) * .06;
@@ -3595,6 +3606,13 @@ window.__S = {
   corre(v){ corre = !!v; },
   cine(){ return { on: CINE.on, paso: CINE.i }; },
   cineSkip(){ terminaCine(); },
+  clips(){ return { listos: CLIPS.listos, cola: CLIPS.cola.length,
+    quieto: CLIPS.quieto && CLIPS.quieto.name, andar: CLIPS.andar && CLIPS.andar.name,
+    correr: CLIPS.correr && CLIPS.correr.name }; },
+  /* pesos de las acciones de cada personaje, para ver si de verdad animan */
+  npcAnim(){ return NPCS.filter(n => n.acc).map(n => ({ nombre: n.nombre,
+    vel: +(n.vel || 0).toFixed(2),
+    w: Object.keys(n.acc).map(k => k[0] + ':' + n.acc[k].getEffectiveWeight().toFixed(2)).join(' ') })); },
   npcs(){ return NPCS.map(x => ({ nombre: x.nombre, clave: x.clave || null,
     sigue: !!x.sigue, x: +x.fig.position.x.toFixed(1), z: +x.fig.position.z.toFixed(1) })); },
   items(){ return ITEMS.filter(i => i.activo).map(i => ({ x: +i.x.toFixed(1), z: +i.z.toFixed(1) })); },
