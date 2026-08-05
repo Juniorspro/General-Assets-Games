@@ -346,7 +346,7 @@ const Q = new URLSearchParams(location.search);
 const LOC = Q.has('local');
 /* SELLO DE VERSION: sale en la linea de fps. Sirve para saber si el
    telefono esta sirviendo el HTML de ahora o uno cacheado. */
-const BUILD = '3fd69f4';
+const BUILD = 'PENDIENTE';
 /* ASSETS: los de los mundos (cielo/audio/npc/prop de este juego), los del
    bosque de SENDA (madera, corteza, roca, hojas) y CUALQUIER GLB del repo
    (hyper/reliquia/arcade que sembramos por la ciénaga). Un solo HASH para
@@ -1070,9 +1070,12 @@ scene.add(agua);
 
    El plano del agua no se toca: el espejo va cuatro centimetros por debajo, asi
    que las olas, las causticas y el sombreador siguen igual que estaban. */
-const ESPEJO = { m: null, lejos: 130, res: 384, on: false, opac: 0.58 };
+/* `lejos` no se usa aca: el agua es el mapa entero. Ver el tick. */
+const ESPEJO = { m: null, lejos: 1e9, res: 384, on: false, opac: 0.58, sigue: true };
 if (Reflector){
-  ESPEJO.m = new Reflector(new T.PlaneGeometry(AGUA_TAM, AGUA_TAM), {
+  /* 220 m y no el mapa entero: el espejo VIAJA con el jugador (ver el tick), y un
+     plano de 940 m obliga al recorte del reflejo a trabajar sobre todo el mapa. */
+  ESPEJO.m = new Reflector(new T.PlaneGeometry(220, 220), {
     textureWidth: 384, textureHeight: 384, multisample: 0,
     color: 0x9fb0ae, clipBias: .0035 });
   ESPEJO.m.rotation.x = -Math.PI / 2;
@@ -1092,8 +1095,12 @@ ESPEJO.calidad = g => {
 };
 ESPEJO.tick = () => {
   if (!ESPEJO.m) return;
-  const d = Math.hypot(px - agua.position.x, pz - agua.position.z);
-  ESPEJO.m.visible = ESPEJO.on && agua.visible && d < ESPEJO.lejos;
+  /* EL PARCHE SIGUE AL JUGADOR. En los otros mundos el agua es una laguna y
+     apagar el espejo por distancia a su centro es lo correcto; aca el agua ES el
+     mapa, y medido desde el cruce —a 148 m del centro— el espejo se apagaba con la
+     cienaga a los pies. Se lo mueve debajo de vos y listo. */
+  ESPEJO.m.position.set(px, agua.position.y - .04, pz);
+  ESPEJO.m.visible = ESPEJO.on && agua.visible;
 };
 window.__ESPEJO = ESPEJO;
 
