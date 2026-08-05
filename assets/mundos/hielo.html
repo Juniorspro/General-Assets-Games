@@ -56,6 +56,18 @@
   /* ayuda de controles de PC: sale sola al detectar mouse/teclado */
   /* en un aparato sin tactil no se dibujan los controles de dedo */
   body.sinTactil #joy,body.sinTactil #bSalta{display:none}
+  /* AVISO DEL TRASLADO: una linea corta, centrada, por encima del boton USAR y
+     de la palanca para no tapar ni una cosa ni la otra. Es todo el tutorial que
+     tiene el traslado: aparece cuando estas donde se usa y se va cuando no. */
+  #aviso{position:fixed;left:50%;bottom:max(96px,20vh);transform:translateX(-50%);
+    display:none;pointer-events:none;text-align:center;max-width:80vw;z-index:4;
+    font:800 11.5px/1.35 ui-sans-serif,system-ui,sans-serif;letter-spacing:.07em;
+    padding:7px 13px;border-radius:10px;background:rgba(10,22,34,.68);
+    border:1px solid rgba(150,200,240,.34);color:#dcecff;backdrop-filter:blur(4px);
+    text-shadow:0 1px 6px rgba(0,0,0,.7)}
+  #aviso.on{display:block}
+  body.hablando #aviso{display:none}
+  @media (max-height:430px){ #aviso{bottom:max(84px,26vh);font-size:10.5px} }
   #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
     font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
     background:rgba(7,14,22,.5);border:1px solid rgba(190,230,180,.26);
@@ -176,6 +188,7 @@
   </div>
   <div id="dlg"><div id="dlgFila"><canvas id="dlgCara" width="96" height="96"></canvas><div style="flex:1;min-width:0"><div id="dlgT"></div><div id="dlgB"></div></div></div><div id="dlgGo">SEGUIR ▸</div></div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
+  <div id="aviso"></div>
   <div id="pcHelp"></div>
 </div>
 
@@ -1770,8 +1783,18 @@ function itemCerca(){
 function accionUsable(){
   const C = CAPS[cap];
   const p = POI[C.obj];
+  /* DENTRO DEL TRASLADO manda el traslado y nada mas: si no, llegar al objetivo
+     encima de la mecanica dispararia el capitulo a toda velocidad —y el dialogo
+     congela la fisica— y ademas no habria como salirse, porque salirse es el
+     mismo boton. */
+  if (TRINEO.modo){
+    const t2 = TRINEO.accion();
+    return t2 ? { tipo: 'trineo', tr: t2 } : null;
+  }
   if (C.usar && Math.hypot(px - p.x, pz - p.z) < 7 && MISION.lista(cap))
     return { tipo: 'cap' };
+  const tr = TRINEO.accion();
+  if (tr) return { tipo: 'trineo', tr };
   const it = itemCerca();
   if (it) return { tipo: 'item', it };
   const npc = npcCerca();
@@ -1782,7 +1805,8 @@ function usarAccion(){
   if (enDlg) return;
   const acc = accionUsable();
   if (!acc) return;
-  if (acc.tipo === 'cap') llegaObjetivo();
+  if (acc.tipo === 'trineo') TRINEO.usar(acc.tr);
+  else if (acc.tipo === 'cap') llegaObjetivo();
   else if (acc.tipo === 'item'){ acc.it.activo = false; acc.it.fn(acc.it); }
   else hablaNPC(acc.npc);
 }
@@ -2261,9 +2285,15 @@ const stats = { t: 0, dist: 0 };
 let px = POI.inicio.x, pz = POI.inicio.z, yaw = 0, pitch = -.03;
 let pvx = 0, pvz = 0, bobF = 0, corre = false;
 const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
+/* ALTURA DE MAS DEL OJO. La pone el traslado del mundo: sentado en un rover
+   el ojo va a la altura del asiento, y volando va donde este el vuelo. En cero
+   —o sea a pie— la camara queda exactamente como estaba. */
+let altExtra = 0;
 const DED = { mov: null, mira: null };
 let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
 function fisica(dt){
+  /* dentro del traslado no se camina: tiene su propio paso */
+  if (TRINEO.modo){ TRINEO.paso(dt); return; }
   yaw -= keyL.x * 2.2 * dt;
   pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
   let mx = movV.x + keyV.x, my = movV.y + keyV.y;
@@ -2292,7 +2322,7 @@ function ponCam(){
      cuello, así al mirar abajo ves el pecho y las piernas sin el agujero del
      cuello, y la cabeza colapsada queda detrás del lente */
   if (CUERPO.glb){ ex = px + Math.sin(yaw) * -.16; ez = pz + Math.cos(yaw) * -.16; }
-  cam.position.set(ex, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, ez);
+  cam.position.set(ex, H(px, pz) + OJO + altExtra + Math.abs(Math.sin(bobF)) * .06 * v, ez);
   cam.rotation.y = yaw;
   cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
   /* FOV PROGRESIVO: antes saltaba de 72 a 77 en un cuadro al empezar a correr y se
@@ -2310,6 +2340,202 @@ function ponCam(){
   cam.updateProjectionMatrix();
 }
 
+/* ================= EL TRINEO: EL TRASLADO PROPIO DE HIELO =================
+   EL TRINEO DE HIELO. Este mundo tiene un lago CONGELADO caminable y lomas
+   nevadas alrededor, y hasta ahora las lomas eran una molestia: se subian y se
+   bajaban a pie.
+
+   EL HIELO CASI NO ROZA, y eso es todo el caracter de la mecanica. La pendiente
+   manda igual que en la tabla de DUNAS, pero en la arena el llano te frena en
+   veinte metros y aca no te frena: lo que alla era una bajada corta, aca es un
+   cruce de punta a punta del lago. Frenar es arrastrar los talones (palanca
+   atras) y girar es apoyar el canto de los patines.
+
+   Los trineos se ponen ARRIBA de la bajada de cada tramo del guion, y la bajada
+   se BUSCA: se barre un disco de 70 m alrededor del punto medio del tramo y se
+   elige donde mas baja EN EL RUMBO del tramo, asi el trineo siempre te deja mas
+   cerca del objetivo, aunque mañana se toque el terreno. Cada uno lleva una vara
+   con un trapo, porque un trineo tirado en la nieve es una raya blanca sobre
+   blanco y no se encuentra desde la loma anterior.
+   ========================================================================== */
+const TRINEO = (() => {
+  const A = { modo: null, vel: 0, hd: 0, act: null, PUE: [], nPaso: 0, tSim: 0 };
+  const TT = {
+    es: { toma: 'TRINEO · ◉ USAR para subirte',
+          va:   'PALANCA para el canto · atras frena con los talones',
+          baja: '◉ USAR para bajarte' },
+    en: { toma: 'SLED · ◉ USE to ride',
+          va:   'STICK to carve · pull back to drag your heels',
+          baja: '◉ USE to step off' },
+    pt: { toma: 'TRENO · ◉ USAR para subir',
+          va:   'ALAVANCA para a borda · atras freia com os calcanhares',
+          baja: '◉ USAR para descer' }
+  };
+  const tx = k => ((TT[LANG] || TT.en)[k] || '');
+
+  const RTOMA = 7;
+  /* GRAV_T: cuanto empuja un metro de pendiente. Con 24 la punta quedaba en
+     13,1 m/s y correr ya da 11,5: el trineo no se sentia distinto. Las lomas de
+     HIELO son mas mansas que las dunas, asi que hace falta mas empuje y menos
+     roce para que la mecanica exista. */
+  const GRAV_T = 30;
+  const GIRO = 1.7;
+  const VMAX = 26;
+  const V_BAJA = .9;
+  const E = 1.5;
+  let carve = 0, tSol = 0;
+
+  const pendEn = (x, z, ux, uz) =>
+    ((H(x + E, z) - H(x - E, z)) * ux + (H(x, z + E) - H(x, z - E)) * uz) / (2 * E);
+
+  /* ------------------------- donde estan los trineos ---------------------- */
+  /* ARRIBA DE LA BAJADA de cada tramo del guion, y la bajada se BUSCA: se barre
+     un disco de 70 m alrededor del punto medio del tramo y se elige donde mas
+     baja EN EL RUMBO del tramo, asi el trineo siempre te deja mas cerca. */
+  {
+    const ks = Object.keys(POI);
+    for (let i = 1; i < ks.length; i++){
+      const P1 = POI[ks[i - 1]], P2 = POI[ks[i]];
+      const dx = P2.x - P1.x, dz = P2.z - P1.z, dl = Math.hypot(dx, dz) || 1;
+      const ux = dx / dl, uz = dz / dl;
+      const cx = (P1.x + P2.x) / 2, cz = (P1.z + P2.z) / 2;
+      let bx = cx, bz = cz, mej = 0;
+      for (let sx = -70; sx <= 70; sx += 7) for (let sz = -70; sz <= 70; sz += 7){
+        if (sx * sx + sz * sz > 70 * 70) continue;
+        const x = cx + sx, z = cz + sz;
+        if (Math.abs(x) > MITAD - 60 || Math.abs(z) > MITAD - 60) continue;
+        const q = pendEn(x, z, ux, uz);
+        if (q < mej){ mej = q; bx = x; bz = z; }
+      }
+      if (mej < -.13) A.PUE.push({ x: bx, z: bz, hd: Math.atan2(-ux, -uz), lib: true });
+    }
+  }
+
+  /* ------------------------------- el trineo ------------------------------ */
+  const mMad = new T.MeshLambertMaterial({ color: 0x8a6a44 });
+  const mPat = new T.MeshLambertMaterial({ color: 0xb9c6cf });
+  const GEO = (() => {
+    const g = [];
+    const t = new T.BoxGeometry(.72, .12, 1.7); t.translate(0, .34, 0); g.push(t);
+    for (const s of [-1, 1]){
+      const pa = new T.BoxGeometry(.09, .1, 1.9); pa.translate(s * .32, .1, 0); g.push(pa);
+      const cu = new T.BoxGeometry(.09, .34, .1); cu.translate(s * .32, .24, -.92); g.push(cu);
+    }
+    return fusiona(g);
+  })();
+  for (const P of A.PUE){
+    P.y = H(P.x, P.z);
+    const m = new T.Mesh(GEO, mMad);
+    m.rotation.order = 'YXZ';
+    m.position.set(P.x, P.y, P.z);
+    m.rotation.set(0, P.hd, 0);
+    m.castShadow = true;
+    scene.add(m);
+    P.malla = m;
+    /* una vara con un trapo: un trineo tirado en la nieve es una raya blanca
+       sobre blanco y no se encuentra desde la loma anterior */
+    const g2 = [];
+    const va = new T.CylinderGeometry(.05, .06, 2.6, 5); va.translate(P.x, P.y + 1.3, P.z);
+    g2.push(va);
+    const tr = new T.BoxGeometry(.55, .3, .03); tr.translate(P.x + .3, P.y + 2.3, P.z);
+    g2.push(tr);
+    const ba = new T.Mesh(fusiona(g2), mPat);
+    ba.castShadow = true;
+    scene.add(ba);
+  }
+  const tri = new T.Mesh(GEO, mMad);
+  tri.rotation.order = 'YXZ';
+  tri.visible = false;
+  scene.add(tri);
+
+  /* ---------------------------- lo que se hace ---------------------------- */
+  A.accion = () => {
+    if (A.modo) return A.vel < 4 ? { baja: true } : null;
+    for (const P of A.PUE)
+      if (P.lib && Math.hypot(px - P.x, pz - P.z) < RTOMA) return { P };
+    return null;
+  };
+  A.usar = c => {
+    if (c.baja){ A.suelta(); return; }
+    const P = c.P;
+    P.lib = false; P.malla.visible = false; A.act = P;
+    A.modo = 'trineo'; A.vel = 5.5; A.hd = P.hd; carve = 0; tSol = -1;
+    yaw = P.hd;
+    px = P.x; pz = P.z;
+    altExtra = -.85;              /* sentado, el ojo baja casi un metro */
+    tri.visible = true;
+  };
+  A.suelta = () => {
+    if (!A.modo) return;
+    const P = A.act;
+    A.modo = null; A.vel = 0; altExtra = 0;
+    tri.visible = false;
+    if (P){
+      P.x = cl(px - Math.sin(A.hd) * 1.5, -MITAD + 8, MITAD - 8);
+      P.z = cl(pz - Math.cos(A.hd) * 1.5, -MITAD + 8, MITAD - 8);
+      P.y = H(P.x, P.z); P.hd = A.hd; P.lib = true;
+      P.malla.position.set(P.x, P.y, P.z);
+      P.malla.rotation.set(0, P.hd, 0);
+      P.malla.visible = true;
+    }
+    pvx = 0; pvz = 0;
+  };
+
+  A.paso = dt => {
+    A.nPaso++; A.tSim += dt;
+    pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+    const mx = cl(movV.x + keyV.x, -1, 1), my = cl(movV.y + keyV.y, -1, 1);
+    const fv = cl(A.vel / 6, .18, 1);
+    A.hd -= mx * GIRO * dt * fv;
+    carve += (mx - carve) * Math.min(1, dt * 6);
+    const ux = -Math.sin(A.hd), uz = -Math.cos(A.hd);
+    const rx = Math.cos(A.hd), rz = -Math.sin(A.hd);
+    const gx = (H(px + E, pz) - H(px - E, pz)) / (2 * E);
+    const gz = (H(px, pz + E) - H(px, pz - E)) / (2 * E);
+    const dh = gx * ux + gz * uz;
+    const dl = gx * rx + gz * rz;
+    /* la linea de maxima pendiente lleva al trineo, igual que a una tabla */
+    A.hd += cl(dl, -.5, .5) * 1.5 * dt * fv;
+    A.vel += -dh * GRAV_T * dt;
+    /* EL HIELO CASI NO ROZA, y eso es todo el caracter de esta mecanica: en la
+       arena el llano te frena en veinte metros, aca el llano no te frena. Lo que
+       en DUNAS era una bajada corta aca es un cruce de punta a punta del lago. */
+    const fren = Math.max(0, my) * 7 + Math.abs(carve) * .7 + .07;
+    A.vel -= (fren + A.vel * A.vel * .0022) * dt;
+    A.vel = cl(A.vel, 0, VMAX);
+    let nx = cl(px + ux * A.vel * dt, -MITAD + 6, MITAD - 6);
+    let nz = cl(pz + uz * A.vel * dt, -MITAD + 6, MITAD - 6);
+    for (const o of ARB){
+      const bx = nx - o[0], bz = nz - o[1], d = Math.hypot(bx, bz), rq = o[2] + .6;
+      if (o[2] > 0 && d < rq && d > 1e-4){
+        nx = o[0] + bx / d * rq; nz = o[1] + bz / d * rq; A.vel *= .4;
+      }
+    }
+    stats.dist += Math.hypot(nx - px, nz - pz);
+    px = nx; pz = nz;
+    yaw = A.hd;
+    pvx = ux * A.vel; pvz = uz * A.vel;
+    bobF += dt * (2 + 2.5 * Math.min(1, A.vel / VMAX));
+    /* cuesta arriba y sin envion, te bajas: quedarse clavado no es una decision */
+    if (A.vel < V_BAJA && dh > -.02){ tSol += dt; if (tSol > .6){ A.suelta(); return; } }
+    else tSol = Math.min(tSol, 0);
+    tri.position.set(px + ux * .35, H(px, pz) + .06, pz + uz * .35);
+    tri.rotation.set(Math.asin(cl(dh, -.9, .9)), A.hd, -carve * .3);
+    stats.t += dt;
+  };
+  A.aviso = acc => {
+    if (A.modo) return A.vel < 4 ? tx('baja') : tx('va');
+    if (acc && acc.tipo === 'trineo') return tx('toma');
+    return '';
+  };
+
+  A.est = () => ({ modo: A.modo, vel: +A.vel.toFixed(2), porque: A.porque,
+    nPaso: A.nPaso, tSim: +A.tSim.toFixed(2), alto: +altExtra.toFixed(2),
+    hd: +A.hd.toFixed(2),
+    pue: A.PUE.map(P => ({ x: Math.round(P.x), z: Math.round(P.z), lib: P.lib })) });
+  return A;
+})();
+
 /* -------- objetivo: marcador 3D + distancia + botón USAR ------------------- */
 function pasoObjetivo(){
   const C = CAPS[cap];
@@ -2321,12 +2547,17 @@ function pasoObjetivo(){
   marca3d.visible = !enDlg;
   const cerca = d < (C.usar ? 7 : 10);
   /* los capítulos automáticos también esperan a que la MISIÓN esté lista */
-  if (!C.usar && cerca && !enDlg && MISION.lista(cap)){
+  /* el capitulo automatico NO se dispara dentro del traslado: el dialogo congela
+     la fisica y te dejaria clavado a media mecanica. Se dispara al salirte. */
+  if (!C.usar && cerca && !enDlg && !TRINEO.modo && MISION.lista(cap)){
     llegaObjetivo();
     return;
   }
   const acc = accionUsable();
   $('bUsar').classList.toggle('on', !!acc && !enDlg);
+  const av = TRINEO.aviso(acc);
+  $('aviso').textContent = av;
+  $('aviso').classList.toggle('on', !!av && !enDlg);
   if (window.__autoUsar && acc && acc.tipo === 'cap' && !enDlg) llegaObjetivo();
 }
 $('bUsar').addEventListener('pointerdown', e => { e.preventDefault(); usarAccion(); });
@@ -2669,6 +2900,12 @@ window.__S = {
     CUERPO.mixer && (CUERPO.mixer.timeScale = 0); CUERPO.mixer && CUERPO.mixer.update(0);
     apuntarBrazos(CUERPO.arms, swing || 0, outX, fwdZ, forebend);
     if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02); },
+  /* la palanca a mano y el sitio del traslado, para probarlo sin un dedo */
+  palanca(x, y){ movV.x = x; movV.y = y; },
+  trineo(){ return TRINEO.est(); },
+  trineoIr(k){ const P = TRINEO.PUE[k]; if (!P) return null;
+    px = P.gx != null ? P.gx : P.x; pz = P.gz != null ? P.gz : P.z;
+    return TRINEO.est(); },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
   dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
   usar(){ usarAccion(); },

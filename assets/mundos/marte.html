@@ -56,6 +56,18 @@
   /* ayuda de controles de PC: sale sola al detectar mouse/teclado */
   /* en un aparato sin tactil no se dibujan los controles de dedo */
   body.sinTactil #joy,body.sinTactil #bSalta{display:none}
+  /* AVISO DEL TRASLADO: una linea corta, centrada, por encima del boton USAR y
+     de la palanca para no tapar ni una cosa ni la otra. Es todo el tutorial que
+     tiene el traslado: aparece cuando estas donde se usa y se va cuando no. */
+  #aviso{position:fixed;left:50%;bottom:max(96px,20vh);transform:translateX(-50%);
+    display:none;pointer-events:none;text-align:center;max-width:80vw;z-index:4;
+    font:800 11.5px/1.35 ui-sans-serif,system-ui,sans-serif;letter-spacing:.07em;
+    padding:7px 13px;border-radius:10px;background:rgba(40,18,12,.68);
+    border:1px solid rgba(240,150,110,.34);color:#ffe0d0;backdrop-filter:blur(4px);
+    text-shadow:0 1px 6px rgba(0,0,0,.7)}
+  #aviso.on{display:block}
+  body.hablando #aviso{display:none}
+  @media (max-height:430px){ #aviso{bottom:max(84px,26vh);font-size:10.5px} }
   #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
     font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
     background:rgba(24,10,6,.5);border:1px solid rgba(190,230,180,.26);
@@ -176,6 +188,7 @@
   </div>
   <div id="dlg"><div id="dlgFila"><canvas id="dlgCara" width="96" height="96"></canvas><div style="flex:1;min-width:0"><div id="dlgT"></div><div id="dlgB"></div></div></div><div id="dlgGo">SEGUIR ▸</div></div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
+  <div id="aviso"></div>
   <div id="pcHelp"></div>
 </div>
 
@@ -1643,8 +1656,18 @@ function itemCerca(){
 function accionUsable(){
   const C = CAPS[cap];
   const p = POI[C.obj];
+  /* DENTRO DEL TRASLADO manda el traslado y nada mas: si no, llegar al objetivo
+     encima de la mecanica dispararia el capitulo a toda velocidad —y el dialogo
+     congela la fisica— y ademas no habria como salirse, porque salirse es el
+     mismo boton. */
+  if (ROVER.modo){
+    const t2 = ROVER.accion();
+    return t2 ? { tipo: 'rover', tr: t2 } : null;
+  }
   if (C.usar && Math.hypot(px - p.x, pz - p.z) < 7 && MISION.lista(cap))
     return { tipo: 'cap' };
+  const tr = ROVER.accion();
+  if (tr) return { tipo: 'rover', tr };
   const it = itemCerca();
   if (it) return { tipo: 'item', it };
   const npc = npcCerca();
@@ -1655,7 +1678,8 @@ function usarAccion(){
   if (enDlg) return;
   const acc = accionUsable();
   if (!acc) return;
-  if (acc.tipo === 'cap') llegaObjetivo();
+  if (acc.tipo === 'rover') ROVER.usar(acc.tr);
+  else if (acc.tipo === 'cap') llegaObjetivo();
   else if (acc.tipo === 'item'){ acc.it.activo = false; acc.it.fn(acc.it); }
   else hablaNPC(acc.npc);
 }
@@ -2022,9 +2046,15 @@ const stats = { t: 0, dist: 0 };
 let px = POI.inicio.x, pz = POI.inicio.z, yaw = 0, pitch = -.03;
 let pvx = 0, pvz = 0, bobF = 0, corre = false;
 const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
+/* ALTURA DE MAS DEL OJO. La pone el traslado del mundo: sentado en un rover
+   el ojo va a la altura del asiento, y volando va donde este el vuelo. En cero
+   —o sea a pie— la camara queda exactamente como estaba. */
+let altExtra = 0;
 const DED = { mov: null, mira: null };
 let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
 function fisica(dt){
+  /* dentro del traslado no se camina: tiene su propio paso */
+  if (ROVER.modo){ ROVER.paso(dt); return; }
   yaw -= keyL.x * 2.2 * dt;
   pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
   let mx = movV.x + keyV.x, my = movV.y + keyV.y;
@@ -2053,7 +2083,7 @@ function ponCam(){
      cuello, así al mirar abajo ves el pecho y las piernas sin el agujero del
      cuello, y la cabeza colapsada queda detrás del lente */
   if (CUERPO.glb){ ex = px + Math.sin(yaw) * -.16; ez = pz + Math.cos(yaw) * -.16; }
-  cam.position.set(ex, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, ez);
+  cam.position.set(ex, H(px, pz) + OJO + altExtra + Math.abs(Math.sin(bobF)) * .06 * v, ez);
   cam.rotation.y = yaw;
   cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
   /* FOV PROGRESIVO: antes saltaba de 72 a 77 en un cuadro al empezar a correr y se
@@ -2071,6 +2101,191 @@ function ponCam(){
   cam.updateProjectionMatrix();
 }
 
+/* ================= EL ROVER: EL TRASLADO PROPIO DE MARTE =================
+   EL ROVER DE MARTE. Un planeta de 900 m, vacio a proposito, y seis paradas de
+   guion separadas por doscientos metros de piedra: entre una y otra el mundo no
+   pide nada, solo tiempo. Correr son 11,5 m/s; el rover va a 24.
+
+   Y NO ES UN BOTON DE CORRER. Gira con la velocidad —seis ruedas no pivotan— asi
+   que hay que elegir la linea antes; y TREPA MENOS QUE UN CAMINANTE (0,55 de
+   pendiente contra 0,80), o sea que las laderas empinadas siguen siendo un lugar
+   al que se va a pie. Distancia a cambio de libertad, que es el trato de
+   cualquier vehiculo.
+
+   HAY DOS, uno en cada parada mas apartada, y quedan donde los dejaste. Se apoya
+   solo en `altExtra` (el ojo pasa a la altura del asiento) porque este mundo no
+   tiene salto ni altura de aire: es "donde estas" y nada mas.
+   ========================================================================== */
+const ROVER = (() => {
+  const A = { modo: null, vel: 0, hd: 0, act: null, PUE: [], nPaso: 0, tSim: 0 };
+  const TT = {
+    es: { toma: 'ROVER · ◉ USAR para subir',
+          va:   'PALANCA acelera y dirige · atras frena',
+          baja: '◉ USAR para bajar' },
+    en: { toma: 'ROVER · ◉ USE to board',
+          va:   'STICK to drive and steer · pull back to brake',
+          baja: '◉ USE to step out' },
+    pt: { toma: 'ROVER · ◉ USAR para subir',
+          va:   'ALAVANCA acelera e guia · atras freia',
+          baja: '◉ USAR para descer' }
+  };
+  const tx = k => ((TT[LANG] || TT.en)[k] || '');
+
+  const RTOMA = 8;
+  const V_MAX = 24;         /* mas del doble que correr */
+  const ACEL = 5.5, FREN = 11, ROCE = 1.4;
+  const GIRO = 1.5;         /* seis ruedas no pivotan */
+  const PEND_R = .55;       /* menos que a pie: la cuesta fuerte es de a pie */
+  const ALTO_A = 1.15;      /* el asiento */
+  const E = 1.4;
+
+  /* --------------------- donde estan los rovers --------------------------- */
+  /* DOS, en las dos paradas de guion mas separadas del resto. El rover no es un
+     atajo del guion: es lo que hace que los doscientos metros de piedra entre
+     parada y parada dejen de ser una caminata. */
+  {
+    const ks = Object.keys(POI);
+    for (const k of [ks[1], ks[3]]){
+      const p = POI[k];
+      if (!p) continue;
+      const a = k.length * 1.1;
+      A.PUE.push({ x: p.x + Math.sin(a) * 16, z: p.z + Math.cos(a) * 16,
+        hd: a + Math.PI, lib: true });
+    }
+  }
+
+  /* ------------------------------- el rover ------------------------------- */
+  const mCha = new T.MeshLambertMaterial({ color: 0xcfc3ae });
+  const mRue = new T.MeshLambertMaterial({ color: 0x2b2b2f });
+  const mVid = new T.MeshLambertMaterial({ color: 0x8fd0e0 });
+  function armaRover(){
+    const g = new T.Group();
+    const ch = new T.Mesh(new T.BoxGeometry(1.9, .5, 3.1), mCha);
+    ch.position.y = .78; g.add(ch);
+    const ca = new T.Mesh(new T.BoxGeometry(1.5, .62, 1.2), mCha);
+    ca.position.set(0, 1.32, -.5); g.add(ca);
+    const vi = new T.Mesh(new T.BoxGeometry(1.3, .42, .06), mVid);
+    vi.position.set(0, 1.36, -1.09); g.add(vi);
+    /* el panel solar atras: es lo que lo hace un rover y no una camioneta */
+    const pa = new T.Mesh(new T.BoxGeometry(1.8, .06, 1.3), mVid);
+    pa.position.set(0, 1.16, 1.05); pa.rotation.x = -.14; g.add(pa);
+    g.ruedas = [];
+    for (let i = 0; i < 6; i++){
+      const rx = (i % 2 ? .98 : -.98), rz = -1.1 + Math.floor(i / 2) * 1.1;
+      const r = new T.Mesh(new T.CylinderGeometry(.46, .46, .3, 8), mRue);
+      r.rotation.z = Math.PI / 2;
+      r.position.set(rx, .46, rz);
+      g.add(r); g.ruedas.push(r);
+    }
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    return g;
+  }
+  for (const P of A.PUE){
+    P.g = armaRover();
+    P.g.position.set(P.x, H(P.x, P.z), P.z);
+    P.g.rotation.y = P.hd;
+    scene.add(P.g);
+    ARB.push([P.x, P.z, 1.6]);
+    P.arb = ARB[ARB.length - 1];
+  }
+
+  /* ---------------------------- lo que se hace ---------------------------- */
+  let mio = null;
+  A.accion = () => {
+    if (A.modo) return A.vel < 5 ? { baja: true } : null;
+    for (const P of A.PUE)
+      if (P.lib && Math.hypot(px - P.x, pz - P.z) < RTOMA) return { P };
+    return null;
+  };
+  A.usar = c => {
+    if (c.baja){ A.suelta(); return; }
+    const P = c.P;
+    P.lib = false; A.act = P; mio = P.g;
+    if (P.arb) P.arb[2] = 0;
+    A.modo = 'rover'; A.vel = 0; A.hd = P.hd;
+    yaw = P.hd;
+    px = P.x; pz = P.z;
+    altExtra = ALTO_A;
+  };
+  A.suelta = () => {
+    if (!A.modo) return;
+    const P = A.act;
+    A.modo = null; A.vel = 0; altExtra = 0;
+    if (P){
+      P.x = px + Math.cos(A.hd) * 2.2; P.z = pz - Math.sin(A.hd) * 2.2;
+      P.hd = A.hd; P.lib = true;
+      P.g.position.set(P.x, H(P.x, P.z), P.z);
+      P.g.rotation.set(0, A.hd, 0);
+      if (P.arb){ P.arb[0] = P.x; P.arb[1] = P.z; P.arb[2] = 1.6; }
+    }
+    mio = null; pvx = 0; pvz = 0;
+  };
+
+  A.paso = dt => {
+    A.nPaso++; A.tSim += dt;
+    pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+    const mx = cl(movV.x + keyV.x, -1, 1), my = cl(movV.y + keyV.y, -1, 1);
+    /* seis ruedas no pivotan: cuanto mas rapido, menos gira */
+    A.hd -= mx * GIRO * dt * (1 - .5 * cl(A.vel / V_MAX, 0, 1));
+    yaw = A.hd;
+    const obj = my < -.1 ? V_MAX * (-my) : 0;
+    A.vel += (obj > A.vel ? ACEL : -(my > .2 ? FREN : ROCE)) * dt;
+    A.vel = cl(A.vel, 0, V_MAX);
+    const ux = -Math.sin(A.hd), uz = -Math.cos(A.hd);
+    /* LA CUESTA FUERTE ES DE A PIE. El rover trepa MENOS que un caminante (0,55
+       contra 0,80): es distancia a cambio de libertad, que es el trato de
+       cualquier vehiculo, y de paso los rincones empinados siguen siendo un
+       lugar al que hay que ir caminando. */
+    let nx = cl(px + ux * A.vel * dt, -MITAD + 6, MITAD - 6);
+    let nz = cl(pz + uz * A.vel * dt, -MITAD + 6, MITAD - 6);
+    {
+      const h0 = H(px, pz), h1 = H(nx, nz);
+      const dl = Math.hypot(nx - px, nz - pz);
+      if (dl > 1e-5 && (h1 - h0) / dl > PEND_R){
+        const gx = H(px + E, pz) - H(px - E, pz), gz = H(px, pz + E) - H(px, pz - E);
+        const gl = Math.hypot(gx, gz) || 1;
+        const vx = gx / gl, vz = gz / gl;
+        const dvx = nx - px, dvz = nz - pz;
+        const pr = dvx * vx + dvz * vz;
+        nx = px + (dvx - vx * pr) * .88; nz = pz + (dvz - vz * pr) * .88;
+        A.vel *= .93;
+      }
+    }
+    for (const o of ARB){
+      const bx = nx - o[0], bz = nz - o[1], d = Math.hypot(bx, bz), rq = o[2] + 1;
+      if (o[2] > 0 && d < rq && d > 1e-4){
+        nx = o[0] + bx / d * rq; nz = o[1] + bz / d * rq; A.vel *= .5;
+      }
+    }
+    stats.dist += Math.hypot(nx - px, nz - pz);
+    px = nx; pz = nz;
+    pvx = ux * A.vel; pvz = uz * A.vel;
+    bobF += dt * (1.5 + A.vel * .12);
+    if (mio){
+      /* el rover se inclina con el terreno: se lee la altura en las cuatro
+         esquinas, que es mas barato que una fisica de suspension y se ve igual */
+      const hf = H(px + ux * 1.5, pz + uz * 1.5), hb = H(px - ux * 1.5, pz - uz * 1.5);
+      const rx2 = Math.cos(A.hd), rz2 = -Math.sin(A.hd);
+      const hi = H(px - rx2, pz - rz2), hd2 = H(px + rx2, pz + rz2);
+      mio.position.set(px, (H(px, pz) + hf + hb) / 3, pz);
+      mio.rotation.set(Math.atan2(hf - hb, 3) * -1, A.hd, Math.atan2(hd2 - hi, 2));
+      for (const r of mio.ruedas) r.rotation.x -= A.vel * dt / .46;
+    }
+    stats.t += dt;
+  };
+  A.aviso = acc => {
+    if (A.modo) return A.vel < 5 ? tx('baja') : tx('va');
+    if (acc && acc.tipo === 'rover') return tx('toma');
+    return '';
+  };
+
+  A.est = () => ({ modo: A.modo, vel: +A.vel.toFixed(2), porque: A.porque,
+    nPaso: A.nPaso, tSim: +A.tSim.toFixed(2), alto: +altExtra.toFixed(2),
+    hd: +A.hd.toFixed(2),
+    pue: A.PUE.map(P => ({ x: Math.round(P.x), z: Math.round(P.z), lib: P.lib })) });
+  return A;
+})();
+
 /* -------- objetivo: marcador 3D + distancia + botón USAR ------------------- */
 function pasoObjetivo(){
   const C = CAPS[cap];
@@ -2082,12 +2297,17 @@ function pasoObjetivo(){
   marca3d.visible = !enDlg;
   const cerca = d < (C.usar ? 7 : 10);
   /* los capítulos automáticos también esperan a que la MISIÓN esté lista */
-  if (!C.usar && cerca && !enDlg && MISION.lista(cap)){
+  /* el capitulo automatico NO se dispara dentro del traslado: el dialogo congela
+     la fisica y te dejaria clavado a media mecanica. Se dispara al salirte. */
+  if (!C.usar && cerca && !enDlg && !ROVER.modo && MISION.lista(cap)){
     llegaObjetivo();
     return;
   }
   const acc = accionUsable();
   $('bUsar').classList.toggle('on', !!acc && !enDlg);
+  const av = ROVER.aviso(acc);
+  $('aviso').textContent = av;
+  $('aviso').classList.toggle('on', !!av && !enDlg);
   if (window.__autoUsar && acc && acc.tipo === 'cap' && !enDlg) llegaObjetivo();
 }
 $('bUsar').addEventListener('pointerdown', e => { e.preventDefault(); usarAccion(); });
@@ -2422,6 +2642,12 @@ window.__S = {
     CUERPO.mixer && (CUERPO.mixer.timeScale = 0); CUERPO.mixer && CUERPO.mixer.update(0);
     apuntarBrazos(CUERPO.arms, swing || 0, outX, fwdZ, forebend);
     if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02); },
+  /* la palanca a mano y el sitio del traslado, para probarlo sin un dedo */
+  palanca(x, y){ movV.x = x; movV.y = y; },
+  rover(){ return ROVER.est(); },
+  roverIr(k){ const P = ROVER.PUE[k]; if (!P) return null;
+    px = P.gx != null ? P.gx : P.x; pz = P.gz != null ? P.gz : P.z;
+    return ROVER.est(); },
   mira(y, p){ yaw = y; if (p != null) pitch = p; },
   dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
   usar(){ usarAccion(); },
