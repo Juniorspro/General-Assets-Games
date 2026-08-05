@@ -2359,6 +2359,50 @@ function npcTick(dt){
       : suelo;
     /* la velocidad DE VERDAD del personaje (metros por segundo): con esto la
        mezcla de clips no depende de banderas sino de cuanto se movio */
+    /* ---------------------- LA RONDA ------------------------------------
+       Los personajes se plantaban en su sitio para siempre: la animacion que
+       corria era la de estar quieto (bien) y el mundo quedaba lleno de estatuas.
+       El que no te acompaña hace una ronda corta alrededor de su puesto —tres
+       paradas a menos de nueve metros— y se queda un rato en cada una. Asi el
+       clip de caminar corre de verdad.
+       Si te acercas a menos de siete metros se DETIENE y te encara: hablar con
+       alguien no puede ser perseguirlo. */
+    if (!npc.sigue && !npc.vuela && !npc.quieto){
+      if (!npc.ronda){
+        const bx = f.position.x, bz = f.position.z;
+        npc.ronda = [];
+        for (let k = 0; k < 3; k++){
+          const a = npc.fase + k * 2.094;
+          const r = 4.5 + (k % 2) * 4.0;
+          npc.ronda.push([bx + Math.cos(a) * r, bz + Math.sin(a) * r]);
+        }
+        npc.ri = 0; npc.espera = rr(1.5, 5.0);
+      }
+      if (d < 7){
+        /* cerca del jugador: quieto y encarandolo */
+        npc.espera = Math.max(npc.espera, .6);
+      } else if (npc.espera > 0){
+        npc.espera -= dt;
+      } else {
+        const P = npc.ronda[npc.ri];
+        const dx = P[0] - f.position.x, dz = P[1] - f.position.z;
+        const dd = Math.hypot(dx, dz);
+        if (dd < .8){
+          npc.ri = (npc.ri + 1) % npc.ronda.length;
+          npc.espera = rr(2.0, 6.5);
+        } else {
+          const paso = 1.35 * dt;                 /* paso de paseo, no de marcha */
+          f.position.x += dx / dd * Math.min(paso, dd);
+          f.position.z += dz / dd * Math.min(paso, dd);
+          const objY = Math.atan2(dx, dz);
+          let dy2 = objY - f.rotation.y;
+          while (dy2 > Math.PI) dy2 -= 6.283;
+          while (dy2 < -Math.PI) dy2 += 6.283;
+          f.rotation.y += dy2 * Math.min(1, dt * 4);
+          anda = 1;
+        }
+      }
+    }
     /* SUAVIZADA: el que te sigue entra y sale del radio de 3,4 m, asi que su
        velocidad instantanea salta entre 6 y 0 de un cuadro al otro y la mezcla
        parpadeaba entre caminar y quieto. Con un seguimiento exponencial la
@@ -2366,6 +2410,15 @@ function npcTick(dt){
     const vIns = dt > 0 ? Math.hypot(f.position.x - _x0, f.position.z - _z0) / dt : 0;
     npc.vel = npc.vel == null ? vIns : npc.vel + (vIns - npc.vel) * Math.min(1, dt * 4.5);
     mezclaAcciones(npc, npc.vel, dt);
+    /* el PERRO no tiene huesos: su GLB es una sola pieza, asi que ningun clip lo
+       puede mover. Se lo balancea a mano mientras trota, que a esa escala se lee
+       como paso, y se le da un cabeceo al estar quieto para que respire. */
+    if (npc.modelo && !npc.acc){
+      const v2 = npc.vel || 0;
+      npc.balPh = (npc.balPh || 0) + dt * (2.2 + v2 * 2.6);
+      npc.modelo.rotation.z = Math.sin(npc.balPh) * (v2 > .3 ? .09 : .012);
+      npc.modelo.position.y = (npc.glbY || 0) + Math.abs(Math.sin(npc.balPh)) * (v2 > .3 ? .07 : .012);
+    }
     const L2 = f.userData.lim || {};
     const sw = anda ? Math.sin(t0 * 9) * .55 : Math.sin(t0 * 1.4 + npc.fase) * .06;
     if (L2.bI){ L2.bI.rotation.x = sw; L2.bD.rotation.x = -sw;
@@ -3662,6 +3715,22 @@ window.__S = {
   corre(v){ corre = !!v; },
   cine(){ return { on: CINE.on, paso: CINE.i }; },
   cineSkip(){ terminaCine(); },
+  /* diagnostico por personaje: a cuanto quedo de encarar al jugador, que
+     clips tiene atados y con que peso. */
+  npcDiag(){ return NPCS.map(n => {
+    const f = n.fig;
+    const rumbo = Math.atan2(px - f.position.x, pz - f.position.z);
+    let e = rumbo - f.rotation.y;
+    while (e > Math.PI) e -= 6.283;
+    while (e < -Math.PI) e += 6.283;
+    return { nombre: n.nombre, glb: (n.glb || '').split('/').pop(),
+      d: +Math.hypot(px - f.position.x, pz - f.position.z).toFixed(1),
+      errGrados: Math.round(Math.abs(e) * 57.3),
+      sigue: !!n.sigue, vel: +(n.vel || 0).toFixed(2),
+      acc: n.acc ? Object.keys(n.acc).map(k =>
+        k[0] + n.acc[k].getEffectiveWeight().toFixed(2)).join(' ') : 'SIN ACCIONES',
+      propios: (n.clipsPropios || []).map(c => (c.name||'').split('|')[1] || '?').join(',') };
+  }); },
   clips(){ return { listos: CLIPS.listos, cola: CLIPS.cola.length,
     quieto: CLIPS.quieto && CLIPS.quieto.name, andar: CLIPS.andar && CLIPS.andar.name,
     correr: CLIPS.correr && CLIPS.correr.name }; },
