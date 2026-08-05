@@ -913,16 +913,32 @@ const terrChunks = [];
 /* CIERRE DEL HORIZONTE: la ciénaga no se termina, se pierde en la bruma. Una
    falda de agua negra hasta 1.150 m y un anillo bajo de cañaveral que tapa la
    franja oscura de la foto del cielo desde cualquier punto de vista. */
+/* EL SUELO MAS BAJO DEL MUNDO. Se mide una vez, barriendo el mapa cada 12 m: unas
+   5.000 llamadas a H, imperceptible al lado de las que cuesta el terreno. Hace
+   falta porque la falda del horizonte estaba clavada en -10 y en varios mundos el
+   suelo baja mas: los metros de abajo quedaban tapados por una chapa lisa. */
+const SUELO_MIN = (() => {
+  let m = 1e9;
+  for (let x = -MITAD; x <= MITAD; x += 12)
+    for (let z = -MITAD; z <= MITAD; z += 12){
+      const h = H(x, z);
+      if (h < m) m = h;
+    }
+  return m;
+})();
 {
   const f = new T.Mesh(new T.CircleGeometry(1150, 24),
     new T.MeshLambertMaterial({ color: 0x1e2c33 }));   /* color de NIEBLA, no de arena */
   f.rotation.x = -Math.PI / 2;
-  f.position.y = AGUA_Y - .35;
+  /* DEBAJO DEL BARRO, no debajo del agua: estaba en AGUA_Y-0,35 = -2,95 y el suelo
+     baja a -9,8, asi que a traves del agua translucida se veia la chapa de la falda
+     en vez del fondo, y la hondura de la cienaga se leia plana. */
+  f.position.y = Math.min(AGUA_Y - .35, SUELO_MIN - 8);
   f.frustumCulled = false;
   scene.add(f);
   const pared = new T.Mesh(new T.CylinderGeometry(1100, 700, 26, 24, 1, true),
     new T.MeshLambertMaterial({ color: 0x101f26, side: T.BackSide }));
-  pared.position.y = 7;          /* base -6, borde +20: una banca lejana */
+  pared.position.y = 7 + Math.min(0, SUELO_MIN - 8 + 6);     /* base -6, borde +20 */
   pared.frustumCulled = false;
   scene.add(pared);
 }

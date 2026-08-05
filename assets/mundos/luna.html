@@ -761,11 +761,28 @@ const terrChunks = [];
 
 /* falda del horizonte: tapa la parte BAJA de la foto del cielo (que es oscura)
    con suelo que a esa distancia ya es color de niebla puro */
+/* EL SUELO MAS BAJO DEL MUNDO. Se mide una vez, barriendo el mapa cada 12 m: unas
+   5.000 llamadas a H, imperceptible al lado de las que cuesta el terreno. Hace
+   falta porque la falda del horizonte estaba clavada en -10 y en varios mundos el
+   suelo baja mas: los metros de abajo quedaban tapados por una chapa lisa. */
+const SUELO_MIN = (() => {
+  let m = 1e9;
+  for (let x = -MITAD; x <= MITAD; x += 12)
+    for (let z = -MITAD; z <= MITAD; z += 12){
+      const h = H(x, z);
+      if (h < m) m = h;
+    }
+  return m;
+})();
 {
   const f = new T.Mesh(new T.CircleGeometry(1150, 24),
     new T.MeshLambertMaterial({ color: 0x4a4a4c }));
   f.rotation.x = -Math.PI / 2;
-  f.position.y = -10;
+  /* DEBAJO del suelo mas bajo, no en -10 a mano: con -10 la falda enterraba los
+     crateres, las hoyas y el fondo de las gargantas, y se veia como una mancha
+     lisa con el canto recto. A 1.150 m, veinte metros son un grado de
+     horizonte: no se nota, y el fondo del mundo aparece. */
+  f.position.y = Math.min(-10, SUELO_MIN - 8);
   f.frustumCulled = false;
   scene.add(f);
   /* PARED DE LOMAS LEJANAS: una falda plana converge exactamente a la altura del
@@ -775,7 +792,9 @@ const terrChunks = [];
      pinta liso y se lee como una serranía en la bruma que CIERRA el horizonte. */
   const pared = new T.Mesh(new T.CylinderGeometry(1100, 660, 78, 24, 1, true),
     new T.MeshLambertMaterial({ color: 0x3c3c40, side: T.BackSide }));
-  pared.position.y = 31;         /* base -8, borde +70 */
+  /* la pared baja LO MISMO que la falda: si no, queda una ranura entre las dos
+     por donde se ve la franja oscura de la foto del cielo. */
+  pared.position.y = 31 + Math.min(0, SUELO_MIN - 8 + 10);
   pared.frustumCulled = false;
   scene.add(pared);
 }

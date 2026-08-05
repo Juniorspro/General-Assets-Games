@@ -1080,16 +1080,31 @@ const terrChunks = [];
   const f = new T.Mesh(new T.CircleGeometry(5000, 48),
     new T.MeshLambertMaterial({ color: 0x564034 }));   /* color de NIEBLA, no de arena */
   f.rotation.x = -Math.PI / 2;
-  f.position.y = -6;
+  /* el minimo con SUELO_MIN: este mundo ya la tenia por debajo de su suelo, pero
+     asi no hay que acordarse si mañana se cava mas hondo. */
+  f.position.y = Math.min(-6, SUELO_MIN - 8);
   f.frustumCulled = false;
   scene.add(f);
   /* ISLOTES EN LA BRUMA: un anillo BAJO justo detrás de la costa. Cierra el
      último grado de cielo que le queda al mar y, sobre todo, le da al horizonte
      un perfil que no es una regla: se lee como los roques de la isla vecina.
      Bajo (+22, no +70) a propósito: alto era la losa que tapaba el mar. */
+/* EL SUELO MAS BAJO DEL MUNDO. Se mide una vez, barriendo el mapa cada 12 m: unas
+   5.000 llamadas a H, imperceptible al lado de las que cuesta el terreno. Hace
+   falta porque la falda del horizonte estaba clavada en -10 y en varios mundos el
+   suelo baja mas: los metros de abajo quedaban tapados por una chapa lisa. */
+const SUELO_MIN = (() => {
+  let m = 1e9;
+  for (let x = -MITAD; x <= MITAD; x += 12)
+    for (let z = -MITAD; z <= MITAD; z += 12){
+      const h = H(x, z);
+      if (h < m) m = h;
+    }
+  return m;
+})();
   const pared = new T.Mesh(new T.CylinderGeometry(1050, 700, 34, 26, 1, true),
     new T.MeshLambertMaterial({ color: 0x4c3428, side: T.BackSide }));
-  pared.position.y = 5;          /* base -12, borde +22 */
+  pared.position.y = 5 + Math.min(0, SUELO_MIN - 8 + 6);     /* base -12, borde +22 */
   /* el borde de arriba ondula: sin esto el horizonte era un filo recto */
   {
     const P = pared.geometry.attributes.position;

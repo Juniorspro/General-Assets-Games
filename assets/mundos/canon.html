@@ -949,13 +949,30 @@ const terrChunks = [];
   }
 }
 
+/* EL SUELO MAS BAJO DEL MUNDO. Se mide una vez, barriendo el mapa cada 12 m: unas
+   5.000 llamadas a H, imperceptible al lado de las 150.000 que cuesta el terreno.
+   Hace falta porque la falda del horizonte estaba clavada en -10 y en este mundo
+   el suelo baja mas: los metros de abajo quedaban tapados por una chapa lisa. */
+const SUELO_MIN = (() => {
+  let m = 1e9;
+  for (let x = -MITAD; x <= MITAD; x += 12)
+    for (let z = -MITAD; z <= MITAD; z += 12){
+      const h = H(x, z);
+      if (h < m) m = h;
+    }
+  return m;
+})();
 /* falda del horizonte: tapa la parte BAJA de la foto del cielo (que es oscura)
    con suelo que a esa distancia ya es color de niebla puro */
 {
   const f = new T.Mesh(new T.CircleGeometry(1150, 24),
     new T.MeshLambertMaterial({ color: 0xdba781 }));   /* color de NIEBLA, no de arena */
   f.rotation.x = -Math.PI / 2;
-  f.position.y = -10;
+  /* DEBAJO del suelo mas bajo, no en -10 a mano: con -10 la falda enterraba
+     15 m de la garganta del cañon y 27 m de acropolis, y se veia como una
+     mancha lisa con el canto recto. A 1.150 m, veinte metros de diferencia
+     son un grado de horizonte: no se nota, y el fondo del mundo aparece. */
+  f.position.y = Math.min(-10, SUELO_MIN - 8);
   f.frustumCulled = false;
   scene.add(f);
   /* PARED DE LOMAS LEJANAS: una falda plana converge exactamente a la altura del
@@ -965,7 +982,9 @@ const terrChunks = [];
      pinta liso y se lee como una serranía en la bruma que CIERRA el horizonte. */
   const pared = new T.Mesh(new T.CylinderGeometry(1100, 660, 78, 24, 1, true),
     new T.MeshLambertMaterial({ color: 0xd9a279, side: T.BackSide }));
-  pared.position.y = 31;         /* base -8, borde +70 */
+  /* la pared baja LO MISMO que la falda: si no, queda una ranura entre las dos
+     por donde se ve la franja negra de la foto del cielo. */
+  pared.position.y = 31 + Math.min(0, SUELO_MIN - 8 + 10);
   pared.frustumCulled = false;
   scene.add(pared);
 }
@@ -1537,11 +1556,81 @@ const POZO = { abierto: false, k: 0 };
   /* EL AGUA. OJO: con roughness bajo y envMapIntensity alto sale BLANCA (refleja
      el cielo dorado entero); el brillo del reflejo lo maneja el bucle según la
      luz del capítulo. */
-  aguaMat = new T.MeshStandardMaterial({ color: 0x1d5f66, roughness: .26,
-    metalness: .06, map: TX.agua, transparent: true, opacity: .93,
-    envMapIntensity: .55 });
-  aguaMat.map.repeat.set(9, 9);
-  aguaMesh = new T.Mesh(new T.CircleGeometry(22, 44), aguaMat);
+  /* ================== EL AGUA, CON OLA Y ORILLA ==================
+     Antes era un disco con la textura corriendose: `CircleGeometry` + map.offset.
+     Eso no puede tener olas —un CircleGeometry es un abanico, un vertice en el
+     centro y el resto en el borde: no hay vertices por dentro que puedan moverse—
+     ni bajio ni orilla, y el canto era un poligono seco. Este es el mismo
+     tratamiento del agua del PANTANO con la paleta de ESTE sitio.
+     La geometria pasa a PlaneGeometry de 40x40 porque la ola necesita vertices
+     por dentro; el borde circular lo da ahora el desvanecido de alfa, que ademas
+     no tiene canto. */
+  const AGUAU = { value: 0 };
+  window.__AGUAU = AGUAU;
+  const R_AGUA = 22.0;
+  aguaMat = new T.MeshStandardMaterial({ color: 0x0e1d15, roughness: 0.30,
+    metalness: .55, map: TX.agua, transparent: true, opacity: .96,
+    envMapIntensity: .5 });
+  aguaMat.map.repeat.set(7, 7);
+  aguaMat.onBeforeCompile = sh => {
+    sh.uniforms.uT = AGUAU;
+    sh.uniforms.tOla = { value: TX.agua };
+    aguaMat.userData.sh = sh;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uT;varying vec2 vWp;varying float vD;varying float vProf;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vWp = position.xy;
+        /* PROFUNDIDAD por radio: 0 en la orilla, 1 en el medio. Sin mapa de
+           profundidad porque esto es una poza, no un mapa de agua. */
+        vProf = smoothstep(1.0, 0.55, length(position.xy) / ${R_AGUA.toFixed(1)});
+        /* DOMINIO DEFORMADO: la posicion se tuerce con dos senos lentos antes de
+           calcular la ola, asi las crestas serpentean en vez de ser rectas. */
+        vec2 pw = position.xy + vec2(sin(position.y * .21 + uT * .27),
+                                     cos(position.x * .17 - uT * .21)) * 2.4;
+        float hh = sin(pw.x * .52 + uT * .95) * .34
+                 + cos(pw.y * .44 - uT * .78) * .28
+                 + sin((pw.x + pw.y) * .95 + uT * 1.4) * .17;
+        hh *= 0.085 * smoothstep(0.0, 0.35, vProf);   /* se aplana en la orilla */
+        transformed.z += hh;
+        vD = -(modelViewMatrix * vec4(transformed, 1.0)).z;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uT;uniform sampler2D tOla;varying vec2 vWp;varying float vD;varying float vProf;')
+      /* OJO CON EL ORDEN: color_fragment y roughnessmap corren ANTES que
+         normal_fragment_begin. Todo el calculo se hace aca y la normal solo
+         CONSUME el gradiente despues. */
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 aguaG;
+        {
+          /* tres capas de rizo a distinta escala y velocidad; la normal sale de su
+             GRADIENTE, que es lo que rompe el reflejo en vez de teñirlo */
+          float lejos = clamp(1.0 - vD / 140.0, .35, 1.0);
+          vec2 uvA = vWp * .085 + vec2(uT * .016,  uT * .011);
+          vec2 uvB = vWp * .27  + vec2(-uT * .026, uT * .021);
+          vec2 uvC = vWp * .74  + vec2(uT * .038, -uT * .031);
+          float e2 = .02;
+          float n1 = texture2D(tOla, uvA).r, n2 = texture2D(tOla, uvB).r, n3 = texture2D(tOla, uvC).r;
+          aguaG = vec2(
+            (texture2D(tOla, uvA + vec2(e2, 0.)).r - n1) * 2.1 +
+            (texture2D(tOla, uvB + vec2(e2, 0.)).r - n2) * 2.6 +
+            (texture2D(tOla, uvC + vec2(e2, 0.)).r - n3) * 1.5,
+            (texture2D(tOla, uvA + vec2(0., e2)).r - n1) * 2.1 +
+            (texture2D(tOla, uvB + vec2(0., e2)).r - n2) * 2.6 +
+            (texture2D(tOla, uvC + vec2(0., e2)).r - n3) * 1.5) * lejos;
+        }
+        /* MASA: color de bajio en el canto -> color de hondo en el medio */
+        diffuseColor.rgb = mix(vec3(.30,.20,.125), vec3(.055,.115,.085),
+                               smoothstep(0.0, 0.62, vProf));
+        /* y la ORILLA se desvanece: nada de corte poligonal seco */
+        diffuseColor.a *= smoothstep(0.0, 0.16, vProf);`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        /* en el bajio el agua es mas mate: hay barro y espuma, no espejo */
+        roughnessFactor = mix(.86, roughnessFactor, smoothstep(0.0, 0.5, vProf));`)
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+        normal = normalize(normal + vec3(aguaG.x, aguaG.y, 0.0));`);
+  };
+  /* PlaneGeometry y no CircleGeometry: la ola vive en los vertices y un
+     abanico no tiene vertices por dentro. El borde circular lo da el alfa. */
+  aguaMesh = new T.Mesh(new T.PlaneGeometry(R_AGUA * 2, R_AGUA * 2, 40, 40), aguaMat);
   aguaMesh.rotation.x = -Math.PI / 2;
   aguaMesh.position.set(p.x, NIVEL - 4, p.z);
   aguaMesh.visible = false;
@@ -1594,7 +1683,9 @@ const POZO = { abierto: false, k: 0 };
   POZO.tick = dt => {
     if (ESPEJO.tick) ESPEJO.tick();
     if (manivela && POZO.abierto && POZO.k < 1) manivela.rotation.y += dt * 2.2;
-    if (aguaMat.map){ aguaMat.map.offset.x += dt * .013; aguaMat.map.offset.y += dt * .009; }
+    /* el reloj de la ola. La textura ya no se corre a mano: la mueve el
+       sombreador, en tres capas y a tres velocidades. */
+    if (window.__AGUAU) window.__AGUAU.value += dt;
     if (!POZO.abierto) return;
     POZO.k = Math.min(1, POZO.k + dt / 6);
     const k = POZO.k * POZO.k * (3 - 2 * POZO.k);
