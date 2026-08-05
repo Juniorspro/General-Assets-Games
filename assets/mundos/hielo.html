@@ -68,6 +68,29 @@
   #aviso.on{display:block}
   body.hablando #aviso{display:none}
   @media (max-height:430px){ #aviso{bottom:max(84px,26vh);font-size:10.5px} }
+  /* ---- PALANCA DIBUJADA, igual que en los ocho mundos nuevos. Antes este mundo
+       se movia arrastrando el dedo por la mitad izquierda de la pantalla, sin
+       nada que lo dijera. ---- */
+  #joy{position:absolute;left:max(14px,3.5vw);bottom:max(16px,5vh);
+    width:min(150px,32vw);aspect-ratio:1;pointer-events:auto;touch-action:none;
+    opacity:.9;transition:opacity .25s}
+  #joy canvas{width:100%;height:100%;display:block}
+  /* se esconde SOLO si el aparato no tiene tactil: escondiendola al detectar
+     raton, un portatil tactil se quedaba sin ningun control a la vista. */
+  body.sinTactil #joy{display:none}
+  body.hablando #joy{opacity:0;pointer-events:none}
+  /* ---- LA BARRA DE ARRIBA: sonido, correr y pausa. Estaban apilados en la
+       columna de la derecha; arriba es donde se pidieron y donde no estorban al
+       pulgar que juega. Abajo queda solo el boton de accion. ---- */
+  #hudTop{position:absolute;right:max(10px,2.5vw);top:max(10px,2vh);display:flex;
+    gap:8px;pointer-events:auto;z-index:6}
+  #hudTop .bt{min-width:44px;height:44px;padding:0 10px;border-radius:12px;display:grid;
+    place-items:center;font:900 15px/1 ui-sans-serif,system-ui,sans-serif;
+    letter-spacing:.04em;cursor:pointer;background:rgba(0,0,0,.46);
+    border:1.5px solid rgba(255,255,255,.28);color:#eaf2ff;backdrop-filter:blur(4px)}
+  #hudTop .bt.ico{font-size:19px;padding:0}
+  #hudTop .bt:active{transform:translateY(1px);filter:brightness(1.35)}
+  #hudTop .bt.on{background:rgba(120,190,255,.32);border-color:rgba(255,255,255,.6);color:#fff}
   #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
     font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
     background:rgba(7,14,22,.5);border:1px solid rgba(190,230,180,.26);
@@ -180,12 +203,15 @@
   <div id="obj"><div id="objT">…</div><div id="objD"></div><div id="tarea"></div></div>
   <div id="capCard"><div id="capN"></div><div id="capT"></div></div>
   <div id="fps"></div>
+  <div id="hudTop">
+    <div class="bt ico" id="bSon">🔊</div>
+    <div class="bt" id="bCorre">RUN</div>
+    <div class="bt ico" id="bMenu">☰</div>
+  </div>
   <div id="btns">
     <div class="b usar" id="bUsar">◉ USAR</div>
-    <div class="b" id="bSon">🔊</div>
-    <div class="b corre" id="bCorre">CORRER</div>
-    <div class="b" id="bMenu">MENÚ</div>
   </div>
+  <div id="joy"><canvas width="300" height="300"></canvas></div>
   <div id="dlg"><div id="dlgFila"><canvas id="dlgCara" width="96" height="96"></canvas><div style="flex:1;min-width:0"><div id="dlgT"></div><div id="dlgB"></div></div></div><div id="dlgGo">SEGUIR ▸</div></div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
   <div id="aviso"></div>
@@ -2591,6 +2617,165 @@ $('bMenu').addEventListener('pointerdown', e => { e.preventDefault();
 });
 
 /* -------------------------- entrada táctil / teclado ----------------------- */
+/* CORRER se pinta en el boton de arriba: estos cinco no tienen el indicador
+   `#corriendo` que tienen los ocho nuevos, y la palanca necesita avisar de algun
+   modo que ya estas corriendo. */
+function marcaCorre(){
+  const e = document.getElementById('bCorre');
+  if (e) e.classList.toggle('on', !!corre);
+}
+
+/* ========================= JOYSTICK DIBUJADO =============================
+   Se dibuja en un canvas propio (no en el del juego) para no tocar el render:
+   solo se repinta cuando la palanca se mueve. El estilo lo pone cada mundo. */
+const JOY = { el: $('joy'), cv: null, g: null, x: 0, y: 0, act: false, id: -1,
+  aro: '#f0c088', pal: '#ffe6c4', glifo: '≈', trama: 'arena' };
+JOY.cv = JOY.el.querySelector('canvas'); JOY.g = JOY.cv.getContext('2d');
+function joyDibuja(){
+  const g = JOY.g, N = 300, c = N / 2, R = N * .42;
+  g.clearRect(0, 0, N, N);
+  /* el aro: doble trazo con la trama del mundo por dentro */
+  g.save();
+  g.beginPath(); g.arc(c, c, R, 0, 6.2832);
+  g.fillStyle = 'rgba(0,0,0,.34)'; g.fill();
+  g.clip();
+  joyTrama(g, N, c, R);
+  g.restore();
+  g.lineWidth = 6; g.strokeStyle = JOY.aro; g.globalAlpha = .78;
+  g.beginPath(); g.arc(c, c, R, 0, 6.2832); g.stroke();
+  g.lineWidth = 1.5; g.globalAlpha = .34;
+  g.beginPath(); g.arc(c, c, R - 12, 0, 6.2832); g.stroke();
+  g.globalAlpha = 1;
+  /* la marca de AUTO-CORRER arriba: se prende cuando la palanca llega */
+  const autoOn = JOY.act && -JOY.y > .80;
+  g.save();
+  g.globalAlpha = autoOn ? 1 : .3;
+  g.strokeStyle = autoOn ? JOY.pal : JOY.aro; g.lineWidth = autoOn ? 7 : 4;
+  g.beginPath(); g.arc(c, c, R - 3, -2.36, -0.78); g.stroke();
+  g.restore();
+  /* la palanca */
+  const kx = c + JOY.x * (R - 34), ky = c + JOY.y * (R - 34), r = N * .155;
+  g.beginPath(); g.arc(kx, ky + 4, r, 0, 6.2832);
+  g.fillStyle = 'rgba(0,0,0,.4)'; g.fill();
+  const grd = g.createRadialGradient(kx - r * .3, ky - r * .4, r * .1, kx, ky, r);
+  grd.addColorStop(0, JOY.pal); grd.addColorStop(1, JOY.aro);
+  g.beginPath(); g.arc(kx, ky, r, 0, 6.2832); g.fillStyle = grd; g.fill();
+  g.lineWidth = 2.5; g.strokeStyle = 'rgba(0,0,0,.45)'; g.stroke();
+  /* el glifo del mundo en la palanca */
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.font = '900 ' + Math.round(r * 1.05) + 'px system-ui';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(JOY.glifo, kx, ky + 1);
+}
+/* la TRAMA del fondo del aro: cada mundo tiene la suya */
+function joyTrama(g, N, c, R){
+  g.globalAlpha = .26; g.strokeStyle = JOY.aro; g.fillStyle = JOY.aro;
+  const T = JOY.trama;
+  if (T === 'arena' || T === 'viento'){                 /* rayas / rafagas */
+    g.lineWidth = T === 'viento' ? 2 : 3.5;
+    for (let i = -6; i <= 6; i++){
+      g.beginPath();
+      for (let k = 0; k <= 20; k++){
+        const x = c - R + (k / 20) * R * 2;
+        const y = c + i * 22 + Math.sin(k * .6 + i) * (T === 'viento' ? 9 : 4);
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  } else if (T === 'hoja'){                             /* nervaduras */
+    g.lineWidth = 2.5;
+    for (let i = 0; i < 9; i++){
+      const a = i / 9 * 6.2832;
+      g.beginPath(); g.moveTo(c, c);
+      g.quadraticCurveTo(c + Math.cos(a) * R * .5 - Math.sin(a) * 26,
+                         c + Math.sin(a) * R * .5 + Math.cos(a) * 26,
+                         c + Math.cos(a) * R, c + Math.sin(a) * R);
+      g.stroke();
+    }
+  } else if (T === 'lava'){                             /* grietas */
+    g.lineWidth = 3;
+    for (let i = 0; i < 7; i++){
+      const a = i / 7 * 6.2832;
+      g.beginPath(); g.moveTo(c, c);
+      let x = c, y = c;
+      for (let k = 0; k < 5; k++){
+        x += Math.cos(a + Math.sin(k * 2.3 + i) * .7) * R / 5;
+        y += Math.sin(a + Math.sin(k * 2.3 + i) * .7) * R / 5;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  } else if (T === 'junco'){                            /* burbujas */
+    for (let i = 0; i < 26; i++){
+      const a = i * 2.399, rr = R * Math.sqrt(i / 26) * .93;
+      g.beginPath(); g.arc(c + Math.cos(a) * rr, c + Math.sin(a) * rr,
+        3 + (i % 4) * 2.2, 0, 6.2832); g.fill();
+    }
+  } else if (T === 'roca' || T === 'marmol'){           /* estratos / venas */
+    g.lineWidth = T === 'marmol' ? 1.8 : 5;
+    for (let i = -5; i <= 5; i++){
+      g.beginPath();
+      for (let k = 0; k <= 24; k++){
+        const x = c - R + (k / 24) * R * 2;
+        const y = c + i * 25 + (T === 'marmol'
+          ? Math.sin(k * 1.1 + i * 2) * 14 : Math.sin(k * .35 + i) * 3);
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  } else {                                              /* anillos de tronco */
+    g.lineWidth = 2.4;
+    for (let i = 1; i <= 8; i++){
+      g.beginPath();
+      for (let k = 0; k <= 40; k++){
+        const a = k / 40 * 6.2832, rr = R * i / 8.6 * (1 + Math.sin(a * 3 + i) * .06);
+        const x = c + Math.cos(a) * rr, y = c + Math.sin(a) * rr;
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  }
+  g.globalAlpha = 1;
+}
+joyDibuja();
+{
+  const R = () => JOY.el.getBoundingClientRect();
+  const mueve = e => {
+    const b = R(), c = b.width / 2;
+    /* si la palanca esta oculta (modo PC) el rectangulo mide 0 y las divisiones
+       de abajo dan NaN, que se propaga a movV y deja al jugador clavado */
+    if (!(c > 0)) return;
+    let dx = (e.clientX - b.left - c) / (c * .78), dy = (e.clientY - b.top - c) / (c * .78);
+    const d = Math.hypot(dx, dy); if (d > 1){ dx /= d; dy /= d; }
+    JOY.x = dx; JOY.y = dy;
+    movV.x = dx; movV.y = dy;
+    /* AUTO-CORRER: palanca del todo hacia ARRIBA (y con poco desvio lateral) */
+    const arriba = -dy, lateral = Math.abs(dx);
+    corre = arriba > .80 && lateral < .62;
+    /* CORRER lo decide la palanca (o Shift): el boton de arriba solo se pinta */
+    marcaCorre();
+    joyDibuja();
+  };
+  JOY.el.addEventListener('pointerdown', e => {
+    e.preventDefault(); JOY.act = true; JOY.id = e.pointerId;
+    /* la captura del puntero no esta en todos los navegadores y tira si el
+       evento es sintetico: no puede tumbar al resto del control */
+    try { JOY.el.setPointerCapture(e.pointerId); } catch(e2){}
+    JOY.el.style.opacity = '1'; mueve(e);
+  });
+  JOY.el.addEventListener('pointermove', e => { if (JOY.act && e.pointerId === JOY.id) mueve(e); });
+  const suelta = e => {
+    if (!JOY.act || e.pointerId !== JOY.id) return;
+    JOY.act = false; JOY.id = -1; JOY.x = JOY.y = 0; movV.x = movV.y = 0;
+    corre = false;
+    marcaCorre();
+    JOY.el.style.opacity = '.9'; joyDibuja();
+  };
+  JOY.el.addEventListener('pointerup', suelta);
+  JOY.el.addEventListener('pointercancel', suelta);
+}
+JOY.aro = '#a8d8f0'; JOY.pal = '#e0f4ff'; JOY.glifo = '❄'; JOY.trama = 'marmol';
+joyDibuja();
+
 const cv = $('gl');
 cv.addEventListener('pointerdown', e => {
   if (fase !== 'juego' || enDlg) return;
@@ -2704,6 +2889,10 @@ function rsTick(dt){
 }
 
 /* ================================ BUCLE ==================================== */
+/* SELLO DE BUILD. La linea de abajo dice con que version estas jugando, y es
+   lo unico que distingue «no entro el cambio» de «el navegador te dio la copia
+   vieja». Los ocho mundos nuevos lo tenian y estos cinco no. */
+const BUILD = 'PENDIENTE';
 let t0 = 0, tPrev = performance.now(), msAcum = 0, nCuadros = 0;
 function bucle(t){
   requestAnimationFrame(bucle);
@@ -2712,7 +2901,7 @@ function bucle(t){
   msAcum += dt; nCuadros++;
   if (msAcum > .5){ fps = fps * .3 + (nCuadros / msAcum) * .7; msAcum = 0; nCuadros = 0;
     $('fps').textContent = fps.toFixed(0) + ' fps · ' + (rs * 100 | 0) + '% · ' +
-      ren.info.render.calls + ' dib · ' + (ren.info.render.triangles / 1000).toFixed(0) + 'k tri'; }
+      ren.info.render.calls + ' dib · ' + (ren.info.render.triangles / 1000).toFixed(0) + 'k tri' + ' · b' + BUILD; }
   if (fase === 'cine'){
     pasoCine(dt);
     pasoLuz(dt);
