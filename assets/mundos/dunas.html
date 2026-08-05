@@ -307,7 +307,7 @@ const HASHAX = '23a6b87';       /* assets COMPARTIDOS, ya publicados */
    arriba: se sirven por rama. Al publicar, cambia esto por el hash corto del
    commit y quedan clavados como el resto. */
 const HASHMIO = '23a6b87';
-const MIOS = /^(cielo|mus|amb|tex)-dunas|^retrato\/|^img\/dunas|^prop\/dunas|^anim\//;
+const MIOS = /^(cielo|mus|amb|tex)-dunas|^retrato\/|^img\/dunas|^prop\/dunas|^anim\/|^per\//;
 const AX = f => (LOC ? '/assets/mundos/'
   : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'
     + (MIOS.test(f) ? HASHMIO : HASHAX) + '/assets/mundos/') + f;
@@ -2220,10 +2220,64 @@ const CLIPS = { quieto: null, andar: null, correr: null, listos: 0, cola: [] };
   for (const [k, u] of DON){
     if (!GLTF){ fin(); continue; }
     new GLTF().load(u, g => {
-      if (g.animations && g.animations.length) CLIPS[k] = g.animations[0];
+      if (g.animations && g.animations.length){
+        CLIPS[k] = g.animations[0];
+        /* la POSE DE REPOSO del donante: sin esto no se puede retargetear */
+        CLIPS[k + 'Rest'] = reposoDe(g.scene);
+      }
       fin();
     }, undefined, fin);
   }
+}
+/* ======================== RETARGET DE LOS CLIPS ===========================
+   Una pista de glTF guarda la rotacion LOCAL ABSOLUTA del hueso, no un delta
+   respecto de su reposo. Los personajes comparten los nombres de hueso pero NO
+   la pose de reposo (el rig se ajusta a cada malla), asi que aplicar el clip tal
+   cual le reemplaza la pose de reposo por la del donante y la deformacion se
+   suma dos veces: los codos se van para afuera y los antebrazos se doblan.
+   Se convierte el clip al reposo del destino:
+       delta   = inv(reposoDonante) * clip
+       destino = reposoDestino * delta
+   La pose de reposo del donante viaja dentro del propio GLB de solo-animacion,
+   asi que no hace falta ningun archivo de mas. */
+const _rtQd = new T.Quaternion(), _rtCorr = new T.Quaternion(), _rtQ = new T.Quaternion();
+function reposoDe(raiz){
+  const R = {};
+  raiz.traverse(o => {
+    if (o.isBone || o.type === 'Bone' || R[o.name] === undefined)
+      R[o.name] = { q: o.quaternion.clone(), p: o.position.clone() };
+  });
+  return R;
+}
+function retargetClip(clip, restDon, modelo){
+  if (!clip || !restDon) return clip;
+  const restDst = reposoDe(modelo);
+  const c2 = clip.clone();
+  for (const tr of c2.tracks){
+    const i = tr.name.lastIndexOf('.');
+    if (i < 0) continue;
+    const nom = tr.name.slice(0, i), prop = tr.name.slice(i + 1);
+    const rd = restDon[nom], rt = restDst[nom];
+    if (!rd || !rt) continue;
+    if (prop === 'quaternion'){
+      _rtCorr.copy(rt.q).multiply(_rtQd.copy(rd.q).invert());
+      for (let k = 0; k < tr.values.length; k += 4){
+        _rtQ.set(tr.values[k], tr.values[k + 1], tr.values[k + 2], tr.values[k + 3]);
+        _rtQ.premultiply(_rtCorr);
+        tr.values[k] = _rtQ.x; tr.values[k + 1] = _rtQ.y;
+        tr.values[k + 2] = _rtQ.z; tr.values[k + 3] = _rtQ.w;
+      }
+    } else if (prop === 'position'){
+      /* en delta: si no, la cadera del donante lleva al destino a SU altura y
+         el personaje flota o se hunde en el suelo */
+      for (let k = 0; k < tr.values.length; k += 3){
+        tr.values[k]     += rt.p.x - rd.p.x;
+        tr.values[k + 1] += rt.p.y - rd.p.y;
+        tr.values[k + 2] += rt.p.z - rd.p.z;
+      }
+    }
+  }
+  return c2;
 }
 /* le arma a un personaje las tres acciones, con lo propio primero y lo prestado
    despues: si el GLB ya trae un clip de caminar, ese gana. */
@@ -2233,9 +2287,13 @@ function armarAcciones(npc){
   if (CLIPS.listos < 3){ if (CLIPS.cola.indexOf(npc) < 0) CLIPS.cola.push(npc); return; }
   const propios = npc.clipsPropios || [];
   const buscar = rx => propios.find(c => rx.test(c.name || '')) || null;
-  const cQuieto = buscar(/idle|quiet/i) || CLIPS.quieto;
-  const cAndar  = buscar(/walk|camin/i) || CLIPS.andar;
-  const cCorrer = buscar(/run|corr/i)   || CLIPS.correr || cAndar;
+  /* lo PROPIO ya viene en su propio reposo: no se toca. Lo PRESTADO se
+     retargetea al reposo de este modelo. */
+  const pQuieto = buscar(/idle|quiet/i), pAndar = buscar(/walk|camin/i),
+        pCorrer = buscar(/run|corr/i);
+  const cQuieto = pQuieto || retargetClip(CLIPS.quieto, CLIPS.quietoRest, m);
+  const cAndar  = pAndar  || retargetClip(CLIPS.andar,  CLIPS.andarRest,  m);
+  const cCorrer = pCorrer || retargetClip(CLIPS.correr, CLIPS.correrRest, m) || cAndar;
   if (!cQuieto && !cAndar) return;
   const mix = npc.mixer || new T.AnimationMixer(m);
   if (!npc.mixer){ npc.mixer = mix; MIXERS.push(mix); }
@@ -3076,12 +3134,12 @@ const caraCanelo = (g, n2) => {
   const mj = POI.mojon, cp = POI.campamento;
   window.__NAIRA = nuevoNPC({ fig: figHumano(0x8a5a3a, 0xe6d7b0),
     x: mj.x + 4.5, z: mj.z + 5, nombre: 'NAIRA', clave: 'naira', retrato: AX('retrato/dunas.jpg'), cara: caraNaira,
-    giro: 2.4, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: 0,
+    giro: 2.4, glb: 'per/dunas-arriero.glb', glbEsc: 1, glbGiro: 0,
     alHablar(){ window.__NAIRA.hablado = true;
       if (cap >= 1) window.__NAIRA.sigue = true; } });
   nuevoNPC({ fig: figHumano(0x6a4a28, 0xd8c49a),
     x: cp.x - 5, z: cp.z + 6.5, nombre: 'BREK', clave: 'brek', retrato: AX('retrato/viejo.jpg'), cara: caraBrek,
-    giro: 1.1, glb: 'npc/dante.glb', glbEsc: 1, glbGiro: 0 });
+    giro: 1.1, glb: 'per/dunas-arriero.glb', glbEsc: 1, glbGiro: 0 });
   nuevoNPC({ fig: figPerro(0xc8925a),
     x: cp.x + 4.5, z: cp.z + 4, nombre: 'CANELO', clave: 'canelo', cara: caraCanelo,
     giro: 2.2, glb: 'npc/canelo.glb', glbEsc: .85, glbGiro: -Math.PI/2, glbY: .34 });
@@ -3092,15 +3150,15 @@ const caraCanelo = (g, n2) => {
   nuevoNPC({ fig: figHumano(0x7a5a3a, 0xd2c09a),
     x: POI.esqueleto.x + 4.5, z: POI.esqueleto.z + 5.0, nombre: 'YUMA', clave: 'yuma',
     cara: caraNaira, retrato: AX('retrato/joven.jpg'),
-    giro: 2.3, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: 0 });
+    giro: 2.3, glb: 'per/dunas-arriero.glb', glbEsc: 1, glbGiro: 0 });
   nuevoNPC({ fig: figHumano(0x7a5a3a, 0xd2c09a),
     x: POI.roquedal.x + -4.0, z: POI.roquedal.z + 4.5, nombre: 'HASSAN', clave: 'hassan',
     cara: caraNaira, retrato: AX('retrato/viejo.jpg'),
-    giro: 0.6, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: 0 });
+    giro: 0.6, glb: 'per/canon-cuerdas.glb', glbEsc: 1, glbGiro: 0 });
   nuevoNPC({ fig: figHumano(0x7a5a3a, 0xd2c09a),
     x: POI.salina.x + 3.5, z: POI.salina.z + -4.5, nombre: 'MIRA', clave: 'mira',
     cara: caraNaira,
-    giro: 3.2, glb: 'npc/viajera.glb', glbEsc: 1, glbGiro: 0 });
+    giro: 3.2, glb: 'per/canon-cuerdas.glb', glbEsc: 1, glbGiro: 0 });
 }
 
 /* ================================ JUGADOR ================================== */
