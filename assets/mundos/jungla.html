@@ -319,7 +319,7 @@ const BUILD = '64b61b4';
 /* assets: los de los mundos (cielo/audio/npc) y CUALQUIERA del repo (los GLB
    de g3/hyper/reliquia/arcade que sembramos por la selva). Un solo HASH para
    los dos: se pisa después de commitear los assets. */
-const HASHR = '35fda38';
+const HASHR = '447bc4b';
 const RAIZ = LOC ? '/assets/'
   : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHR + '/assets/';
 const AX = f => RAIZ + 'mundos/' + f;
@@ -764,6 +764,21 @@ function cargaTexGen(){
      uniTerr.tRoca y las laderas empinadas quedaban de LADRILLOS: la cuenca de
      la laguna parecía una pileta de natación. Sólo va a la piedra construida. */
   car('tex-jungla-2.jpg', TEXGEN.piedra, null);
+  /* NORMAL y ROUGHNESS del pack PBR para el terreno: JUNGLA no usa MUNDO_TEX
+     sino este cargador propio, asi que el relieve se engancha aca. Con el mismo
+     tileado que el color, si no el relieve flota sobre la textura. */
+  for (const [f, aplica] of [
+      ['pbr/jungla-nrm.jpg', t => { t.colorSpace = T.NoColorSpace;
+        t.repeat.set(uniTerr.repite.value, uniTerr.repite.value);
+        matTerr.normalMap = t; matTerr.normalScale.set(.85, .85);
+        matTerr.needsUpdate = true; }],
+      ['pbr/jungla-rgh.jpg', t => { t.colorSpace = T.NoColorSpace;
+        t.repeat.set(uniTerr.repite.value, uniTerr.repite.value);
+        matTerr.roughnessMap = t; matTerr.needsUpdate = true; }]]){
+    new T.TextureLoader().load(AX(f), t => {
+      t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 4; aplica(t);
+    }, undefined, () => {});
+  }
 }
 
 /* ================================ ESCENA =================================== */
@@ -3065,7 +3080,12 @@ function mezclaAcciones(npc, vel, dt){
 }
 function ponerModelo(npc){
   if (!GLTF || !npc.glb) return;
-  new GLTF().load(AX(npc.glb), g => {
+  /* FUERA_DE_MUNDOS: los modelos que NO viven en assets/mundos (hyper/char.glb,
+     arcade/m-arena-heroe.glb...) no se resuelven con AX(), que prefija
+     `mundos/`: quedaban en 404 y el personaje se quedaba con la figura
+     procedural. Se elige el resolvedor por el prefijo de la ruta. */
+  const _url = /^(hyper|arcade|aero|reliquia|g3|frutiger|rl|sandbox|blox|vr|ngp|fp|senda|drift-yard)\//.test(npc.glb) ? AR(npc.glb) : AX(npc.glb);
+  new GLTF().load(_url, g => {
     const m = g.scene;
     m.scale.setScalar(npc.glbEsc || 1);
     m.position.y = npc.glbY || 0;

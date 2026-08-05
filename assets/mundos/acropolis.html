@@ -337,13 +337,13 @@ const BUILD = '64b61b4';
 /* assets compartidos de los mundos hermanos (cielos, modelos 3D, audio). Se
    define acá arriba —antes del armado del mundo— porque los mk_*.py insertan
    propGLB()/AX() en el cuerpo del build, que corre mucho antes. */
-const HASHAX = '35fda38';       /* assets COMPARTIDOS, ya publicados */
+const HASHAX = '447bc4b';       /* assets COMPARTIDOS, ya publicados */
 /* los assets NUEVOS de DUNAS (cielo, musica, ambiente, texturas del suelo) se
    commitean junto con este HTML, asi que todavia no existen en el hash de
    arriba: se sirven por rama. Al publicar, cambia esto por el hash corto del
    commit y quedan clavados como el resto. */
-const HASHMIO = '35fda38';
-const MIOS = /^(cielo|mus|amb|tex)-acropolis|^retrato\/|^img\/acropolis|^prop\/acropolis|^veg\/|^anim\/|^per\//;
+const HASHMIO = '447bc4b';
+const MIOS = /^(cielo|mus|amb|tex)-acropolis|^retrato\/|^img\/acropolis|^prop\/acropolis|^veg\/|^anim\/|^per\/|^pbr\//;
 const AX = f => (LOC ? '/assets/mundos/'
   : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'
     + (MIOS.test(f) ? HASHMIO : HASHAX) + '/assets/mundos/') + f;
@@ -1806,6 +1806,7 @@ const POZO = { abierto: false, k: 0 };
     /* sin espejo, el disco vuelve a ser el agua opaca de antes */
     aguaMat.opacity = ESPEJO.on ? .52 : .93;
   };
+  window.__ESPEJO = ESPEJO;   /* para poder verificarlo desde la sonda */
   POZO.abrir = () => {
     if (POZO.abierto) return;
     POZO.abierto = true;
@@ -2911,7 +2912,12 @@ function mezclaAcciones(npc, vel, dt){
 }
 function ponerModelo(npc){
   if (!GLTF || !npc.glb) return;
-  new GLTF().load(AX(npc.glb), g => {
+  /* FUERA_DE_MUNDOS: los modelos que NO viven en assets/mundos (hyper/char.glb,
+     arcade/m-arena-heroe.glb...) no se resuelven con AX(), que prefija
+     `mundos/`: quedaban en 404 y el personaje se quedaba con la figura
+     procedural. Se elige el resolvedor por el prefijo de la ruta. */
+  const _url = /^(hyper|arcade|aero|reliquia|g3|frutiger|rl|sandbox|blox|vr|ngp|fp|senda|drift-yard)\//.test(npc.glb) ? AG(npc.glb) : AX(npc.glb);
+  new GLTF().load(_url, g => {
     const m = g.scene;
     m.scale.setScalar(npc.glbEsc || 1);
     m.position.y = npc.glbY || 0;

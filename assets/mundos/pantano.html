@@ -338,7 +338,7 @@ const BUILD = '64b61b4';
    bosque de SENDA (madera, corteza, roca, hojas) y CUALQUIER GLB del repo
    (hyper/reliquia/arcade que sembramos por la ciénaga). Un solo HASH para
    todos: se pisa después de commitear los assets. */
-const HASHR = '35fda38';
+const HASHR = '447bc4b';
 const RAIZ = LOC ? '/assets/'
   : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHR + '/assets/';
 const AX = f => RAIZ + 'mundos/' + f;      /* mundos/: cielo, audio, npc, prop */
@@ -2621,7 +2621,12 @@ function mezclaAcciones(npc, vel, dt){
 }
 function ponerModelo(npc){
   if (!GLTF || !npc.glb) return;
-  new GLTF().load(AX(npc.glb), g => {
+  /* FUERA_DE_MUNDOS: los modelos que NO viven en assets/mundos (hyper/char.glb,
+     arcade/m-arena-heroe.glb...) no se resuelven con AX(), que prefija
+     `mundos/`: quedaban en 404 y el personaje se quedaba con la figura
+     procedural. Se elige el resolvedor por el prefijo de la ruta. */
+  const _url = /^(hyper|arcade|aero|reliquia|g3|frutiger|rl|sandbox|blox|vr|ngp|fp|senda|drift-yard)\//.test(npc.glb) ? AR(npc.glb) : AX(npc.glb);
+  new GLTF().load(_url, g => {
     const m = g.scene;
     m.scale.setScalar(npc.glbEsc || 1);
     m.position.y = npc.glbY || 0;
