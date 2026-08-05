@@ -305,6 +305,12 @@ function conoAltura(x, z){
   }
   const dg = Math.hypot(x - 185, z - 95);
   h += 13 * Math.exp(-(dg * dg) / (150 * 150));            /* la loma de toba */
+  /* EL BALCÓN: un espolón de basalto que sale del flanco. Sin él, el mirador
+     caía a media ladera y el capítulo 4 —"desde el balcón, la isla entera"—
+     daba de frente contra la cuesta: la pantalla entera era ceniza. Subido 34 m
+     sobre su entorno, el suelo se abre solo y los tres ríos entran en cuadro. */
+  const db = Math.hypot(x - 150, z + 180);
+  h += 34 * Math.exp(-(db * db) / (38 * 38));
   return h;
 }
 /* LAS COLADAS: tres ríos que bajan del cráter. Cada punto guarda el ancho del
@@ -438,11 +444,13 @@ function texMetal(n){
     const img = g.createImageData(n, n);
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
       const px2 = x % 64, py = y % 48;
-      let c = mezC([196, 202, 206], [166, 174, 181], fbmT(x / n, y / n, 5, 3));
-      if (px2 < 2 || py < 2) c = [118, 126, 133];
-      if ((px2 - 7) * (px2 - 7) + (py - 7) * (py - 7) < 4) c = [108, 116, 123];
-      c = mezC(c, [152, 96, 58], .4 * fbmT(x / n + .3, y / n + .7, 7, 3) *
-        fbmT(x / n, y / n, 3, 2));
+      /* CHAPA SUCIA, no aluminio pulido: con el gris claro original el cano y
+         los tanques salian blancos como tubo de neon contra la ceniza negra. */
+      let c = mezC([104, 104, 102], [82, 82, 82], fbmT(x / n, y / n, 5, 3));
+      if (px2 < 2 || py < 2) c = [62, 63, 64];
+      if ((px2 - 7) * (px2 - 7) + (py - 7) * (py - 7) < 4) c = [55, 56, 57];
+      c = mezC(c, [104, 62, 34], .55 * fbmT(x / n + .3, y / n + .7, 7, 3) *
+        fbmT(x / n, y / n, 3, 2));                 /* oxido y ceniza pegada */
       const i4 = (y * n + x) * 4;
       img.data[i4] = c[0]; img.data[i4+1] = c[1]; img.data[i4+2] = c[2];
       img.data[i4+3] = 255;
@@ -477,11 +485,14 @@ function texLava(n){
       const v = fbmT(x / n + .37, y / n + .81, 3, 4);
       let c = mezC([14, 9, 8], [52, 30, 24], t);            /* la corteza */
       const gr = Math.abs(v - .5);                          /* la red de grietas */
-      if (gr < .085){
-        const k = 1 - gr / .085;
-        c = mezC(c, mezC([200, 54, 8], [255, 242, 176], k * k * k), Math.pow(k, .55));
+      if (gr < .108){                    /* ancha: a 200 m una grieta fina se
+                                            comia el mip y el rio quedaba una raya */
+        const k = 1 - gr / .108;
+        /* el corazón de la grieta llega a AMARILLO, no a blanco: multiplicado
+           por el emisivo naranja da roca fundida y no un tubo de neón */
+        c = mezC(c, mezC([206, 58, 8], [255, 226, 146], k * k * k), Math.pow(k, .55));
       }
-      if (hash2(x + 31, y + 17) > .996) c = [255, 216, 124];  /* chispas */
+      if (hash2(x + 31, y + 17) > .996) c = [255, 196, 104];  /* chispas */
       const i4 = (y * n + x) * 4;
       img.data[i4] = c[0]; img.data[i4+1] = c[1]; img.data[i4+2] = c[2];
       img.data[i4+3] = 255;
@@ -588,7 +599,10 @@ sol.position.copy(SOLD).multiplyScalar(420);
   sol.shadow.normalBias = 1.6;      /* sin esto el terreno de quads de 5 m se acnea */
 }
 scene.add(sol); scene.add(sol.target);
-const hemi = new T.HemisphereLight(0xa89482, 0x2e2320, .9);
+/* el relleno hace el trabajo pesado: subir solo el realce plano del terreno
+   blanqueaba la ladera que da al sol. El rebote de abajo va CALIDO, que es la
+   luz que la lava tira sobre la ceniza. */
+const hemi = new T.HemisphereLight(0xbaa08d, 0x40291d, 1.22);
 scene.add(hemi);
 /* el DESTELLO del sol: un sprite aditivo donde apunta SOLD. Con niebla y ACES
    es lo que hace que mirar contra el sol "queme" como en un juego grande. */
@@ -802,7 +816,13 @@ splTex.colorSpace = T.NoColorSpace;
 const uniTerr = {
   tTierra: { value: TX.tierra }, tHoja: { value: TX.hojarasca },
   tRoca: { value: TX.roca }, tSplat: { value: splTex },
-  repite: { value: MAPA / 7 }
+  repite: { value: MAPA / 7 },
+  /* la ceniza volcánica REAL es casi negra (la foto del suelo mide ~40,36,32):
+     tal cual, la mitad de abajo de la pantalla quedaba una mancha negra sin
+     lectura y la bruma del horizonte se leía como una franja clara pegada.
+     Este realce la sube a un gris basalto donde el grano SE VE, sin tocar el
+     cielo (que va por backgroundIntensity) ni la lava (que es emisiva). */
+  brillo: { value: 1.34 }
 };
 const matTerr = new T.MeshLambertMaterial({ map: TX.pasto });
 matTerr.onBeforeCompile = sh => {
@@ -814,7 +834,7 @@ matTerr.onBeforeCompile = sh => {
   sh.fragmentShader = sh.fragmentShader
     .replace('#include <common>', `#include <common>
       uniform sampler2D tTierra, tHoja, tRoca, tSplat;
-      uniform float repite;
+      uniform float repite, brillo;
       varying float vRocoso;`)
     .replace('#include <map_fragment>', `
       vec2 uvT = vMapUv * repite;
@@ -823,7 +843,7 @@ matTerr.onBeforeCompile = sh => {
       c = mix(c, texture2D(tHoja, uvT*1.3).rgb, clamp(spl.g*1.5, 0., 1.));
       c = mix(c, texture2D(tTierra, uvT*1.6).rgb, clamp(spl.r*1.35, 0., 1.));
       c = mix(c, texture2D(tRoca, uvT*.9).rgb, vRocoso);
-      diffuseColor.rgb *= c;`);
+      diffuseColor.rgb *= c * brillo;`);
 };
 
 /* ---------------------- malla del terreno en 36 trozos --------------------- */
@@ -860,20 +880,32 @@ const terrChunks = [];
 /* falda del horizonte: tapa la parte BAJA de la foto del cielo (que es oscura)
    con suelo que a esa distancia ya es color de niebla puro */
 {
-  const f = new T.Mesh(new T.CircleGeometry(1150, 24),
-    new T.MeshLambertMaterial({ color: 0x2b201c }));
+  /* EL MAR DE ÍGNEA. Con 1.150 m de radio, desde el balcón (ojo a 80 m) el borde
+     de la falda caía 4,5° por debajo del horizonte y la pared que lo tapaba se
+     leía como una LOSA gris plana comiéndose un cuarto de la pantalla. A 5.000 m
+     el borde queda a 1°: la niebla lo aplasta contra el horizonte y lo que se ve
+     es una línea de bruma sobre el mar, que es lo que corresponde a una isla. */
+  const f = new T.Mesh(new T.CircleGeometry(5000, 48),
+    new T.MeshLambertMaterial({ color: 0x1d1519 }));
   f.rotation.x = -Math.PI / 2;
-  f.position.y = -10;
+  f.position.y = -6;
   f.frustumCulled = false;
   scene.add(f);
-  /* PARED DE LOMAS LEJANAS: una falda plana converge exactamente a la altura del
-     ojo, así que desde cualquier punto alto (la colina del roble, la cámara del
-     menú) se veía la franja oscura de la foto del cielo entre la falda y el
-     horizonte. Este anillo sube hasta +70 a 1.100 m: a esa distancia la niebla lo
-     pinta liso y se lee como una serranía en la bruma que CIERRA el horizonte. */
-  const pared = new T.Mesh(new T.CylinderGeometry(1100, 660, 78, 24, 1, true),
-    new T.MeshLambertMaterial({ color: 0x33241f, side: T.BackSide }));
-  pared.position.y = 31;         /* base -8, borde +70 */
+  /* ISLOTES EN LA BRUMA: un anillo BAJO justo detrás de la costa. Cierra el
+     último grado de cielo que le queda al mar y, sobre todo, le da al horizonte
+     un perfil que no es una regla: se lee como los roques de la isla vecina.
+     Bajo (+22, no +70) a propósito: alto era la losa que tapaba el mar. */
+  const pared = new T.Mesh(new T.CylinderGeometry(1050, 700, 34, 26, 1, true),
+    new T.MeshLambertMaterial({ color: 0x241a19, side: T.BackSide }));
+  pared.position.y = 5;          /* base -12, borde +22 */
+  /* el borde de arriba ondula: sin esto el horizonte era un filo recto */
+  {
+    const P = pared.geometry.attributes.position;
+    for (let i = 0; i < P.count; i++){
+      if (P.getY(i) > 0) P.setY(i, P.getY(i) + (fbm(P.getX(i) * .004, P.getZ(i) * .004) - .5) * 26);
+    }
+    pared.geometry.computeVertexNormals();
+  }
   pared.frustumCulled = false;
   scene.add(pared);
 }
@@ -991,6 +1023,16 @@ function sembrarGLB(url, puntos, o){
       mm.metalness = 0;
       mm.envMapIntensity = .4;
       if (o.tinte && mm.color) mm.color.multiplyScalar(o.tinte);
+      /* CENIZA: oscurecer con `tinte` no alcanza para el follaje de p-tree —
+         un verde oscuro sigue siendo verde y en una isla de ceniza negra
+         cantaba. Esto lo LLEVA hacia el color del polvo volcánico, así que
+         las plantas quedan como matas grises tapadas de ceniza. */
+      if (o.ceniza && mm.color) mm.color.lerp(new T.Color(o.ceniza[1]), o.ceniza[0]);
+      /* SIN MAPA: el follaje de p-tree trae su verde en la TEXTURA, así que
+         teñir `color` (que three multiplica por el mapa) lo oscurecía pero lo
+         dejaba verde igual, y en una isla de ceniza cantaba a un kilómetro.
+         Soltando el mapa quedan siluetas de mata gris tapada de ceniza. */
+      if (o.sinMapa){ mm.map = null; mm.needsUpdate = true; }
       n.castShadow = !!o.sombra;
       n.receiveShadow = false;
       n.frustumCulled = false;
@@ -1131,10 +1173,16 @@ function plantar(){
       [POI.vado.x + 6, POI.vado.z + 7, .8],
       [POI.mirador.x - 7, POI.mirador.z + 6, .95],
       [POI.crater.x - 11, POI.crater.z + 9, .85]]) cajones.push(c);
-  sembrarGLB(AG('arcade/m-arena-pua.glb'), puas, { sombra: true, tinte: .3 });
-  sembrarGLB(AG('arcade/m-agujero-arbol.glb'), quemados, { sombra: true, tinte: .32 });
-  sembrarGLB(AG('hyper/p-tree.glb'), vivos, { sombra: true, tinte: .34 });
-  sembrarGLB(AG('hyper/p-crate.glb'), cajones, { sombra: true });
+  /* los tres van SIN MAPA: los tres glTF traen verde de follaje en la textura y
+     en la isla de ceniza saltaban a la vista incluso oscurecidos */
+  sembrarGLB(AG('arcade/m-arena-pua.glb'), puas, { sombra: true, sinMapa: true,
+    ceniza: [1, 0x322a26] });                         /* púas de escoria */
+  sembrarGLB(AG('arcade/m-agujero-arbol.glb'), quemados, { sombra: true, sinMapa: true,
+    ceniza: [1, 0x241d1a] });                         /* troncos carbonizados */
+  sembrarGLB(AG('hyper/p-tree.glb'), vivos, { sombra: true, sinMapa: true,
+    ceniza: [1, 0x4a4136] });                         /* matas grises de ceniza */
+  sembrarGLB(AG('hyper/p-crate.glb'), cajones, { sombra: true, tinte: .62,
+    ceniza: [.3, 0x2e2622] });
 }
 plantar();
 
@@ -1171,7 +1219,8 @@ const GEISERES = [];
     }
     GEISERES.push({ x, z, y: y + r0 * .8, col, f: rr(0, 6.28), alto: rr(10, 22) });
   }
-  propGLB({ url: 'prop/rover-marte.glb', x: p.x - 13, z: p.z + 12, esc: 3.2, giro: .9 });
+  propGLB({ url: 'prop/rover-marte.glb', x: p.x - 13, z: p.z + 12, esc: 3.2, giro: .9,
+    tinte: .74, ceniza: [.34, 0x342a25] });   /* el todoterreno de ASHA, cubierto de ceniza */
   ARB.push([p.x - 13, p.z + 12, 2.6]);
   ARB.push([p.x, p.z, 1.2]);
   window.__ROVER = GEISERES.length;
@@ -1251,7 +1300,7 @@ let ventanaMat = null;
   ARB.push([p.x, p.z, 3.6]);
   ARB.push([p.x + 4.6, p.z - 3.4, .7]);
   propGLB({ url: 'prop/hab-marte.glb', x: p.x, z: p.z, esc: 4.4, giro: .5,
-    ocultar: [cuerpo, techo] });
+    ocultar: [cuerpo, techo] , tinte: .8, ceniza: [.26, 0x38302a] });
   window.__PARTES = 5;
 }
 /* ---------------- LOS TRES RÍOS DE LAVA -------------------------------------
@@ -1262,8 +1311,12 @@ let ventanaMat = null;
    corteza queda apagada y sólo las grietas encienden — y como es un material
    del pipeline de three, la lava lejana se va en la niebla como todo lo demás.
    Por la lava NO se camina: cada punto del cauce empuja al jugador (ARB). */
+/* el color del EMISIVO es naranja, no blanco: con ACES un emisivo blanco por
+   encima de 1 se va derecho al blanco de papel y los ríos se leían como cintas
+   de tubo fluorescente. Tiñéndolo, el mismo brillo satura hacia el naranja de
+   la roca fundida y sólo el corazón de la grieta llega a amarillo. */
 const matLava = new T.MeshLambertMaterial({ map: TX.lava, emissiveMap: TX.lava,
-  emissive: 0xffffff, emissiveIntensity: 2.4, color: 0x22140f,
+  emissive: 0xff6a1c, emissiveIntensity: 2.15, color: 0x22140f,
   side: T.DoubleSide });
 TX.lava.repeat.set(1, 1);
 /* todas las texturas de lava del mundo: el bucle les corre el offset */
@@ -1323,7 +1376,7 @@ const VAPOR_SELLO = [];
   texLago.repeat.set(4, 4);
   LAVAS_TEX.push(texLago);
   const matLago = new T.MeshLambertMaterial({ map: texLago, emissiveMap: texLago,
-    emissive: 0xffffff, emissiveIntensity: 2.0, color: 0x22140f });
+    emissive: 0xff7326, emissiveIntensity: 1.95, color: 0x22140f });
   const lx = p.x + 27, lz = p.z - 9;
   const lago = new T.Mesh(new T.CircleGeometry(18, 30), matLago);
   lago.rotation.x = -Math.PI / 2;
@@ -1338,8 +1391,9 @@ const VAPOR_SELLO = [];
   scene.add(luzLago);
   LUCES_LAVA.push(luzLago);
   /* LA FISURA: una cinta angosta que sigue el suelo del cráter */
+  /* la fisura es lo MÁS caliente del mundo: su naranja tira a amarillo */
   fisuraMat = new T.MeshLambertMaterial({ map: TX.lava, emissiveMap: TX.lava,
-    emissive: 0xffffff, emissiveIntensity: 2.9, color: 0x1a0f0c,
+    emissive: 0xffa440, emissiveIntensity: 2.7, color: 0x1a0f0c,
     side: T.DoubleSide });
   {
     const pos = [], uv = [], idx = [];
@@ -1377,7 +1431,7 @@ const VAPOR_SELLO = [];
   cano.castShadow = true;
   scene.add(cano);
   propGLB({ url: 'prop/modulo-luna.glb', x: p.x - 9, z: p.z - 8, esc: 3.4,
-    giro: 2.2, ocultar: [cuerpoSel] });
+    giro: 2.2, ocultar: [cuerpoSel], tinte: .58, ceniza: [.46, 0x2c2521] });
   const tab = new T.Mesh(new T.BoxGeometry(.9, 1.2, .4), matMet);
   tab.position.set(p.x - 5.4, y + .6, p.z - 9.4);
   tab.rotation.y = .5;
@@ -1699,8 +1753,20 @@ function propGLB(o){
     m.scale.setScalar(o.esc || 1);
     m.rotation.set(o.rx || 0, o.giro || 0, o.rz || 0);
     m.position.set(o.x, 0, o.z);
-    m.traverse(n => { if (n.isMesh){ n.castShadow = true; n.receiveShadow = true;
-      n.frustumCulled = false; if (n.material) n.material.metalness = 0; } });
+    m.traverse(n => { if (n.isMesh && n.material){
+      const mm = n.material;
+      /* los glTF de prop/ traen emissive y KHR_materials_specular: sin apagarlos
+         el módulo del cráter salía como una lámina de oro autoiluminada, ajena
+         al mundo. Apagados + `tinte`/`ceniza`, se leen como maquinaria de campo
+         tapada de ceniza volcánica, que es lo que son en esta isla. */
+      if (mm.emissive) mm.emissive.setRGB(0, 0, 0);
+      mm.specularIntensity = 0;
+      mm.metalness = 0;
+      mm.envMapIntensity = .4;
+      if (o.tinte && mm.color) mm.color.multiplyScalar(o.tinte);
+      if (o.ceniza && mm.color) mm.color.lerp(new T.Color(o.ceniza[1]), o.ceniza[0]);
+      n.castShadow = true; n.receiveShadow = true; n.frustumCulled = false;
+    } });
     /* AUTO-APOYO: el punto más bajo del modelo se posa en el suelo + o.y */
     m.updateWorldMatrix(true, true);
     const caja = new T.Box3().setFromObject(m);
@@ -2829,8 +2895,8 @@ function bucle(t){
      ese sentido) y el brillo late apenas, como el rescoldo de una fragua */
   const pulso = 1 + .09 * Math.sin(t0 * 1.25);
   for (const tl of LAVAS_TEX) tl.offset.y -= dt * .05;
-  matLava.emissiveIntensity = 2.4 * pulso;
-  if (fisuraMat && tSello < 0) fisuraMat.emissiveIntensity = 2.9 * pulso;
+  matLava.emissiveIntensity = 2.15 * pulso;
+  if (fisuraMat && tSello < 0) fisuraMat.emissiveIntensity = 2.7 * pulso;
   /* la luna de cobre sólo vive de noche, pegada al cielo de la cámara */
   const nocheK = cl(1 - (SOLD.y * 420) / 160, 0, 1);
   /* la columna del cráter y su resplandor (que la noche enciende) */

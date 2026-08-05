@@ -1529,10 +1529,13 @@ function lucesTick(p1){
 /* ===================== GLB DEL REPO SEMBRADOS POR LA CIÉNAGA ===============
    Troncos caídos, árboles con hueco, arbolitos y hasta un par de esqueletos
    medio hundidos: es lo que llena el fondo entre los cipreses. */
-sembrarGLB('reliquia/obs-log.glb', 44, 1.3, () => puntoLibre(AGUA_Y - 1.2, AGUA_Y + 2.4, 6), true);
-sembrarGLB('arcade/m-agujero-arbol.glb', 22, 9.5, () => puntoLibre(AGUA_Y - .8, 9, 9), true);
-sembrarGLB('hyper/p-tree.glb', 58, 6.5, () => puntoLibre(AGUA_Y + .4, 9, 8), true, 0x33502e);
-sembrarGLB('g3/mdl-skeleton.glb', 3, 1.9, () => puntoLibre(AGUA_Y - .9, AGUA_Y + .9, 14), true, 0x6a6a5e);
+/* TINTE OBLIGATORIO en todos: estos GLB vienen de mundos con SOL. Sin apagarlos
+   al tono de la ciénaga, el arbolito verde manzana y el árbol gris claro se
+   leían como un error de carga en medio de una noche azul (se vio en captura). */
+sembrarGLB('reliquia/obs-log.glb', 44, 1.3, () => puntoLibre(AGUA_Y - 1.2, AGUA_Y + 2.4, 6), true, 0x4a4438);
+sembrarGLB('arcade/m-agujero-arbol.glb', 22, 9.5, () => puntoLibre(AGUA_Y - .8, 9, 9), true, 0x2b3228);
+sembrarGLB('hyper/p-tree.glb', 58, 6.5, () => puntoLibre(AGUA_Y + .4, 9, 8), true, 0x18240f);
+sembrarGLB('g3/mdl-skeleton.glb', 3, 1.9, () => puntoLibre(AGUA_Y - .9, AGUA_Y + .9, 14), true, 0x5a5a50);
 /* la carpa de la viajera, en el cruce de las tres pasarelas */
 sembrarGLB('prop/carpa-hielo.glb', 1, 2.6,
   () => ({ x: POI.cruce.x + 7.5, z: POI.cruce.z + 6.5, giro: 2.1 }));
@@ -1584,13 +1587,19 @@ let luci = null, luci0 = null;
    fases (menú, cinemática y juego). */
 const NIEBLA = [];
 {
-  /* MeshBASIC y ADITIVA. Con Lambert la luna pegaba de lleno sobre un plano
-     horizontal y las sábanas salían casi blancas: vistas de canto tapaban el
-     agua y el horizonte con una lámina gris (se vio en la primera captura).
-     Sumando luz en vez de cubrir, la bruma se lee como bruma. */
-  const mat = new T.MeshBasicMaterial({ map: TX.bruma, color: 0x354d54,
-    transparent: true, opacity: .6, depthWrite: false, side: T.DoubleSide,
-    blending: T.AdditiveBlending });
+  /* MeshBASIC (no Lambert: con Lambert la luna pegaba de lleno sobre un plano
+     horizontal y las sábanas salían casi blancas) y NORMAL, no aditiva.
+     OJO, ESTO YA SE ROMPIÓ UNA VEZ: son 22 sábanas HORIZONTALES de 130-210 m
+     con DoubleSide, y desde la pasarela —a un metro del agua— se las ve casi
+     DE CANTO, así que se pisan entre ellas por decenas. Sumando luz, esos
+     solapamientos se acumulaban hasta saturar y la ciénaga entera quedaba de
+     un turquesa fosforescente (medido: el píxel del centro en 97,208,243).
+     Con blending NORMAL el resultado nunca pasa del color de la bruma, así que
+     el agua sigue NEGRA y la niebla se lee como niebla. Bonus: 22 planos
+     grandes traslúcidos sin acumular costaban caro (28 fps -> 47 fps). */
+  const mat = new T.MeshBasicMaterial({ map: TX.bruma, color: 0x27373e,
+    transparent: true, opacity: .32, depthWrite: false, side: T.DoubleSide,
+    blending: T.NormalBlending });
   for (let i = 0; i < 22; i++){
     const m = new T.Mesh(new T.PlaneGeometry(rr(130, 210), rr(130, 210)), mat);
     m.rotation.order = 'YXZ';
@@ -2550,10 +2559,11 @@ const MISION = (() => {
     if (F.prendido) return;
     F.prendido = true; prendidos++;
     F.llama.visible = true; F.sprite.visible = true;
-    F.luz.intensity = 36;
+    /* la LUZ no vive en el farol: la reparte el POZO DE LUCES (lucesTick) entre
+       los cuatro fuegos encendidos más cercanos, mirando F.prendido. Tocar un
+       F.luz acá tiraba TypeError y rompía la misión al primer farol. */
     ultimo = { x: F.x, z: F.z };
     mecha = 1; medPon(1);
-    F.luz = { intensity: 36 };            /* sólo para el gancho de prueba */
     pinta();
   }
   /* cada farol es un ITEM usable: alcanza con acercarse y tocar USAR. Al
@@ -2698,6 +2708,7 @@ let pvx = 0, pvz = 0, bobF = 0, corre = false;
 const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
 const DED = { mov: null, mira: null };
 let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
+const DBG = { n:0, dt:0, agua:0, arb:0 };
 function fisica(dt){
   yaw -= keyL.x * 2.2 * dt;
   pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
@@ -2711,10 +2722,11 @@ function fisica(dt){
   let nx = cl(px + pvx * dt, -MITAD + 6, MITAD - 6);
   let nz = cl(pz + pvz * dt, -MITAD + 6, MITAD - 6);
   /* ni por el agua ni a través de los troncos */
-  if (enAgua(nx, nz)){ nx = px; nz = pz; }
+  DBG.n++; DBG.dt += dt;
+  if (enAgua(nx, nz)){ nx = px; nz = pz; DBG.agua++; }
   for (const a of ARB){
     const dx = nx - a[0], dz = nz - a[1], d = Math.hypot(dx, dz), rq = a[2] + .5;
-    if (d < rq && d > 1e-4){ nx = a[0] + dx / d * rq; nz = a[1] + dz / d * rq; }
+    if (d < rq && d > 1e-4){ nx = a[0] + dx / d * rq; nz = a[1] + dz / d * rq; DBG.arb++; }
   }
   stats.dist += Math.hypot(nx - px, nz - pz);
   px = nx; pz = nz;
@@ -3096,6 +3108,11 @@ window.__S = {
   enPasarela(s){ return enPasarela(s); },
   niebla(){ return NIEBLA.length; },
   med(){ return { on: MED.on, v: +MED.v.toFixed(3) }; },
+  /* qué está leyendo la física: sirve para saber por qué NO caminás */
+  entrada(){ return { movV: { x: +movV.x.toFixed(3), y: +movV.y.toFixed(3) },
+    keyV: { x: keyV.x, y: keyV.y }, corre, vel: corre ? VEL_CORRE : VEL,
+    v: +Math.hypot(pvx, pvz).toFixed(2), dedo: !!DED.mov,
+    dbg: { n: DBG.n, dt: +DBG.dt.toFixed(2), agua: DBG.agua, arb: DBG.arb } }; },
   medSet(v){ medPon(v); },
   accion(){ const a = accionUsable(); return a ? a.tipo : null; },
   cuerpo(){ return { visible: CUERPO.root.visible, vm: CUERPO.vm.visible,
