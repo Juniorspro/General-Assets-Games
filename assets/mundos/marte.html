@@ -27,8 +27,15 @@
   #capN{font-size:13px;letter-spacing:.34em;color:#f2c9a4;font-weight:700}
   #capT{font-size:30px;font-weight:900;letter-spacing:.06em;margin-top:4px;
     text-shadow:0 2px 18px rgba(0,0,0,.65)}
-  #btns{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;
-    gap:9px;align-items:flex-end;pointer-events:auto}
+  /* MENU, SONIDO y CORRER ARRIBA a la derecha y cuadrados. Abajo quedaban alargados
+     y apretados contra el pulgar con el que se juega, que es justo donde estorban. */
+  #btns{position:absolute;right:max(10px,2.5vw);top:max(10px,2.5vh);display:flex;
+    flex-direction:row;gap:8px;align-items:flex-start;pointer-events:auto}
+  #btns .b{width:46px;height:46px;min-width:0;padding:0;display:grid;place-items:center;
+    text-align:center;border-radius:12px;font-size:15px}
+  /* USAR es de accion: se queda abajo, donde esta el pulgar */
+  #btns .b.usar{position:absolute;right:calc(20px + min(84px,19vw));bottom:max(16px,5vh);
+    width:auto;height:auto;padding:13px 20px;font-size:15px;border-radius:14px}
   .b{min-width:86px;text-align:center;padding:12px 15px;border-radius:14px;font-weight:800;
     font-size:13px;background:rgba(32,13,8,.62);border:1.5px solid rgba(255,195,150,.4);
     color:#ffe9d6;pointer-events:auto;cursor:pointer;backdrop-filter:blur(3px)}
@@ -1994,7 +2001,18 @@ function ponCam(){
   cam.position.set(ex, H(px, pz) + OJO + Math.abs(Math.sin(bobF)) * .06 * v, ez);
   cam.rotation.y = yaw;
   cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
-  cam.fov = 72 + (corre ? 5 : 0);
+  /* FOV PROGRESIVO: antes saltaba de 72 a 77 en un cuadro al empezar a correr y se
+     sentia un tironazo. Ahora persigue el objetivo y llega en medio segundo (el
+     factor 6 da el 95% en 0,5 s). El reloj se saca aca porque esta funcion no
+     recibe dt. */
+  {
+    const _n = performance.now();
+    const _d = Math.min(.1, (_n - (window.__fovT || _n)) / 1000);
+    window.__fovT = _n;
+    const _obj = 72 + (corre ? 5 : 0);
+    window.__fovS = (window.__fovS == null ? _obj : window.__fovS + (_obj - window.__fovS) * Math.min(1, _d * 6));
+    cam.fov = window.__fovS;
+  }
   cam.updateProjectionMatrix();
 }
 

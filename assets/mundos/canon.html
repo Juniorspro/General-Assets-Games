@@ -3235,6 +3235,18 @@ const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
 const DED = { mov: null, mira: null };
 let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
 const PEND_MAX = 0.80;   /* ~39 grados: mas empinado que esto no se sube */
+/* ...salvo en la ESCALERA TALLADA, que sube pegada a la pared y por eso era mas
+   empinada que el tope general: con 0,80 no se podia subir y el final del mundo
+   quedaba inalcanzable. El tope sube a 1,9 (~62 grados) SOLO dentro del corredor de
+   la escalera; en el resto del canon sigue en 0,80, porque poder trepar cualquier
+   pared rompe el sentido de un mundo que trata de encontrar el paso. */
+const ESC_R = 26;        /* radio del corredor de la escalera, en metros */
+const PEND_ESC = 1.9;
+function pendMax(x, z){
+  const e = (typeof POI !== 'undefined') && (POI.oasis || POI.escalera || null);
+  if (!e) return PEND_MAX;
+  return Math.hypot(x - e.x, z - e.z) < ESC_R ? PEND_ESC : PEND_MAX;
+}
 let ojoY = null;         /* altura del ojo interpolada (sin saltos) */
 /* SALTO: altura fija (los saltos de altura variable dejaban repisas
    inalcanzables), gravedad fuerte para que no se sienta lunar. */
@@ -3261,7 +3273,7 @@ function fisica(dt){
   {
     const h0 = H(px, pz), h1 = H(nx, nz);
     const dl = Math.hypot(nx - px, nz - pz);
-    if (dl > 1e-5 && (h1 - h0) / dl > PEND_MAX){
+    if (dl > 1e-5 && (h1 - h0) / dl > pendMax(px, pz)){
       /* gradiente del terreno por diferencias finitas */
       const e = 1.2;
       const gx = H(px + e, pz) - H(px - e, pz), gz = H(px, pz + e) - H(px, pz - e);
@@ -3272,7 +3284,7 @@ function fisica(dt){
       nx = px + (dvx - ux * proy) * .92;             /* se lo saca: queda el roce */
       nz = pz + (dvz - uz * proy) * .92;
       const h2 = H(nx, nz);
-      if ((h2 - h0) / (Math.hypot(nx - px, nz - pz) || 1) > PEND_MAX){ nx = px; nz = pz; }
+      if ((h2 - h0) / (Math.hypot(nx - px, nz - pz) || 1) > pendMax(px, pz)){ nx = px; nz = pz; }
     }
   }
   /* a través de las rocas y las máquinas, no */
