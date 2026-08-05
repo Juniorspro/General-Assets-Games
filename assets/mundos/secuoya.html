@@ -282,12 +282,12 @@ const LOC = Q.has('local');
 /* assets compartidos de los mundos hermanos (cielos, modelos 3D, audio). Se
    define acá arriba —antes del armado del mundo— porque los mk_*.py insertan
    propGLB()/AX() en el cuerpo del build, que corre mucho antes. */
-const HASHAX = 'fb644fc';       /* assets COMPARTIDOS, ya publicados */
+const HASHAX = 'a40d6aa';       /* assets COMPARTIDOS, ya publicados */
 /* los assets NUEVOS de DUNAS (cielo, musica, ambiente, texturas del suelo) se
    commitean junto con este HTML, asi que todavia no existen en el hash de
    arriba: se sirven por rama. Al publicar, cambia esto por el hash corto del
    commit y quedan clavados como el resto. */
-const HASHMIO = 'ef3e6e9';
+const HASHMIO = 'a40d6aa';
 const MIOS = /^(cielo|mus|amb|tex)-secuoya|^retrato\/|^img\/secuoya|^prop\/secuoya|^veg\//;
 const AX = f => (LOC ? '/assets/mundos/'
   : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@'
@@ -1401,20 +1401,22 @@ const HOGUERA = { on: false };
     m.castShadow = m.receiveShadow = true;
     scene.add(m);
   }
-  for (let i = 0; i < 9; i++){
-    const a = i / 9 * 6.283;
-    const l = new T.Mesh(new T.CylinderGeometry(.11, .15, 3.1, 5), matMad);
-    l.position.set(p.x + Math.cos(a) * .55, y + 1.3, p.z + Math.sin(a) * .55);
-    l.rotation.set(Math.sin(a) * .42, 0, -Math.cos(a) * .42);
-    l.castShadow = true;
-    scene.add(l);
+  /* el TRONCO del arbol madre, en lugar de la pira de lenas */
+  {
+    const tr = new T.Mesh(new T.CylinderGeometry(1.75, 2.4, 34, 16, 1, true), matMad);
+    tr.position.set(p.x, y + 17, p.z);
+    tr.castShadow = tr.receiveShadow = true;
+    scene.add(tr);
   }
-  beaconMat = new T.MeshBasicMaterial({ color: 0xffc058, transparent: true,
+  /* LA MARCA AZUL, no una hoguera: prender fuego en el bosque que estas
+     tratando de salvar seria al reves de todo. Es una banda de pintura a la
+     altura del pecho, del lado del camino, que es lo que respeta el aserradero. */
+  beaconMat = new T.MeshBasicMaterial({ color: 0x3a6ad4, transparent: true,
     opacity: 0, fog: false, depthWrite: false });
-  const lla = new T.Mesh(new T.ConeGeometry(1.5, 5.2, 8), beaconMat);
-  lla.position.set(p.x, y + 2.9, p.z);
+  const lla = new T.Mesh(new T.CylinderGeometry(2.05, 2.05, 1.15, 18, 1, true), beaconMat);
+  lla.position.set(p.x, y + 1.45, p.z);
   scene.add(lla);
-  focoHog = new T.PointLight(0xffa64a, 0, 60, 1.7);
+  focoHog = new T.PointLight(0x6f9cff, 0, 34, 1.9);   /* luz fria: es pintura */
   focoHog.position.set(p.x, y + 3.2, p.z);
   scene.add(focoHog);
   ARB.push([p.x, p.z, 2.4]);
@@ -1424,9 +1426,9 @@ const HOGUERA = { on: false };
     const cn = document.createElement('canvas'); cn.width = cn.height = 32;
     const g2 = cn.getContext('2d');
     const d = g2.createRadialGradient(16, 16, 0, 16, 16, 16);
-    d.addColorStop(0, 'rgba(255,240,200,1)');
-    d.addColorStop(.5, 'rgba(255,190,110,.55)');
-    d.addColorStop(1, 'rgba(255,170,80,0)');
+    d.addColorStop(0, 'rgba(214,255,206,1)');
+    d.addColorStop(.5, 'rgba(150,230,140,.5)');
+    d.addColorStop(1, 'rgba(120,210,110,0)');
     g2.fillStyle = d; g2.fillRect(0, 0, 32, 32);
     const tx = new T.CanvasTexture(cn);
     for (let i = 0; i < 10; i++){
@@ -1434,7 +1436,7 @@ const HOGUERA = { on: false };
       const z = p.z + 96 - i * 5 + rr(-6, 6);
       const s = new T.Sprite(new T.SpriteMaterial({ map: tx, transparent: true,
         opacity: 0, depthWrite: false, blending: T.AdditiveBlending, fog: false }));
-      s.scale.set(2.6, 2.6, 1);
+      s.scale.set(1.5, 1.5, 1);
       s.position.set(x, H(x, z) + 1.7, z);
       s.userData.f = i * .7;
       scene.add(s);
@@ -1445,7 +1447,7 @@ const HOGUERA = { on: false };
   HOGUERA.tick = (dt, t) => {
     if (!HOGUERA.on) return;
     beaconMat.opacity = Math.min(.95, beaconMat.opacity + dt * .8);
-    focoHog.intensity = Math.min(120, focoHog.intensity + dt * 90) *
+    focoHog.intensity = Math.min(42, focoHog.intensity + dt * 30) *
       (.85 + .15 * Math.sin(t * 9.3));
     for (const s of CARAVANA)
       s.material.opacity = Math.min(.95, s.material.opacity + dt * .18) *
