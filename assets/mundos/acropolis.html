@@ -53,6 +53,16 @@
     letter-spacing:.14em;padding:5px 8px;border-radius:7px;
     background:rgba(32,13,8,.62);border:1px solid rgba(255,195,150,.4);color:#ffe9d6}
   #corriendo.on{display:block}
+  /* AVISO de la obra: el cartelito corto que explica el andamio y la polea sin
+     tutorial. Centrado y por encima del boton USAR, que es el que hay que
+     apretar; asi el ojo va del texto al boton sin buscar. */
+  #pista{position:absolute;left:50%;transform:translateX(-50%);
+    bottom:calc(max(16px,5vh) + 62px);pointer-events:none;opacity:0;
+    transition:opacity .25s;max-width:min(72vw,460px);text-align:center;
+    font:800 12.5px/1.45 ui-sans-serif,system-ui,sans-serif;letter-spacing:.09em;
+    padding:8px 14px;border-radius:11px;background:rgba(20,9,5,.66);
+    border:1px solid rgba(255,195,150,.4);color:#ffe9d6;backdrop-filter:blur(4px)}
+  #pista.on{opacity:1}
   /* ------------------------ JOYSTICK Y SALTO (TACTIL) ---------------------
      Antes el medio izquierdo de la pantalla era una zona invisible de arrastre:
      nadie sabia donde tocar. Ahora hay una PALANCA dibujada, con el estilo del
@@ -243,6 +253,7 @@
   <div id="bSalta"><span>⤒</span><b id="bSaltaT">SALTO</b></div>
   <div id="recol"></div>
   <div id="corriendo"></div>
+  <div id="pista"></div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
   <div id="pcHelp"></div>
 </div>
@@ -338,6 +349,24 @@ try {
     : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
   GLTF = (await import(GLU)).GLTFLoader;
 } catch (e) {}
+/* Reflector para el REFLEJO REAL del agua de la fuente. Se resuelve igual que
+   GLTFLoader (disco con ?local, CDN si no) y por el MISMO importmap, asi que su
+   `import from "three"` cae en el modulo ya cargado y no baja three dos veces.
+   Si no llega, ESPEJO queda null y el agua se queda con el reflejo de cielo por
+   PMREM que tenia antes: se degrada, no se rompe. */
+let Reflector = null;
+try {
+  const RFU = LOC ? '/_vthree/examples/jsm/objects/Reflector.js'
+    : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/objects/Reflector.js';
+  Reflector = (await import(RFU)).Reflector;
+} catch (e) {}
+/* ¿el espejo del agua sigue prendido en calidad BAJOS? La regla del proyecto es
+   que en BAJOS no puede costar mas de un 15% de fps. MEDIDO en este mundo con
+   pruebas/mide.mjs, mirando la fuente de cerca con el pozo abierto (ver el
+   informe): en BAJOS la segunda pasada a 256 se lleva mucho mas que eso, asi que
+   en BAJOS el agua se queda como estaba —tinte, rizos y reflejo de cielo por
+   PMREM— y el espejo solo vive en MEDIOS y ALTOS. */
+const ESPEJO_BAJOS = false;
 const $ = i => document.getElementById(i);
 
 /* ---------------- azar reproducible: el mar de dunas es SIEMPRE el mismo --- */
@@ -619,6 +648,11 @@ scene.environment = pm.fromEquirectangular(TX.cielo).texture;
 scene.fog = new T.Fog(new T.Color('#bfe0e8'), 70, 500);
 const cam = new T.PerspectiveCamera(72, 1, .1, 1200);
 cam.rotation.order = 'YXZ';
+/* CAPA 1: lo que la camara del jugador ve pero el ESPEJO DEL AGUA no. El
+   Reflector es una segunda pasada de render de la escena entera, asi que lo que
+   no aporta al reflejo se saca de esa pasada y el espejo pasa a ser barato. */
+const NOREFLEJO = 1;
+cam.layers.enable(NOREFLEJO);
 
 /* luz: UNA direccional (el sol) + hemisferio. Lambert por fragmento.
    El sol PROYECTA SOMBRA: su caja de sombra (±78 m) viaja pegada al jugador —
@@ -635,6 +669,10 @@ sol.position.copy(SOLD).multiplyScalar(420);
   sol.shadow.bias = -0.0006;
   sol.shadow.normalBias = 1.6;      /* sin esto el terreno de quads de 5 m se acnea */
 }
+/* el sol tiene que VER la capa 1: three elige los objetos que proyectan sombra
+   comparando object.layers con light.layers, y sin esto las dunas dejarian de
+   sombrearse entre si al atardecer. */
+sol.layers.enable(NOREFLEJO);
 scene.add(sol); scene.add(sol.target);
 const hemi = new T.HemisphereLight(0xbfe4f0, 0xa89a80, 1.05);
 scene.add(hemi);
@@ -844,6 +882,15 @@ const terrChunks = [];
     m.position.set(ox, 0, oz);
     m.receiveShadow = true;
     m.castShadow = true;          /* las lomas se sombrean entre sí al atardecer */
+    /* CAPA 1 = "esto NO va al espejo del agua". Los 36 trozos de terreno son casi
+       todos los triangulos del mundo, y una segunda pasada de render que los
+       vuelva a dibujar es lo que hacia impagable el reflejo. El agua devuelve el
+       cielo, el brocal, la horca, las palmeras y las columnas —que es lo que se
+       queria ver— pero no las dunas, que ademas quedan casi todas por debajo del
+       plano del agua y las recorta el clip del propio Reflector.
+       La camara principal y el sol SI ven la capa 1 (el sol, para que las lomas
+       se sigan sombreando entre si). */
+    m.layers.set(NOREFLEJO);
     scene.add(m);
     terrChunks.push(m);
   }
@@ -1377,6 +1424,247 @@ let fuegoMat = null;
   }
   window.__RUINAS = 14;
 }
+/* ===================== LA OBRA: ANDAMIOS Y POLEA DE CANASTO ==================
+   POR QUE ESTA ESTO. Hasta aca el mundo se caminaba en dos dimensiones: el
+   terreno y nada mas. Un mundo que trata de LEVANTAR CINCO COLUMNAS y no tiene
+   una sola tabla por la que trepar es raro, y ademas los quince mundos se movian
+   todos igual. Acá la obra da el eje que faltaba: SE SUBE.
+
+   TRES PIEZAS, y las tres se usan con los controles que ya hay:
+     1. EL ANDAMIO. Ocho tablones en espiral alrededor de la torre, 1,3 m de
+        subida y ~2,3 m de salto entre uno y el siguiente. Los numeros no son al
+        azar: con SALTO_V 8,2 y GRAV 22 el salto sube 1,53 m y a paso normal
+        cruza ~2,7 m antes de volver a bajar de 1,3 m, asi que cada tabla se
+        alcanza con margen pero ninguna se alcanza caminando. Se usa con SALTO
+        (espacio en PC, el boton ⤒ en tactil): nada nuevo que aprender.
+     2. EL ARQUITRABE. La plataforma de marmol a 10,4 m: el nivel al que hay que
+        subir los tambores. Desde ahi arranca una PASARELA de tablones que cruza
+        POR ENCIMA de la columnata (pasa entre dos columnas en pie y por arriba de
+        los capiteles) con un hueco de 2,1 m en el medio que hay que saltar, y
+        muere en un descansillo asomado al santuario. Ese es el premio: ves la
+        obra desde donde la ve el que la construye.
+     3. LA POLEA DE CANASTO. Dos canastos colgados de la misma cuerda sobre dos
+        motones: uno abajo, otro arriba, contrapesados como la de verdad. USAR
+        (E en PC, el boton ◉ USAR en tactil) sube el que tengas al lado y baja el
+        otro, asi que el MISMO gesto sirve para subir y para bajar. Es el atajo
+        para el que no quiere trepar, y la unica forma comoda de bajar.
+
+   LO QUE NO HACE, a proposito:
+     · no toca la historia ni la mision. Los capitulos siguen disparandose por
+       cercania a su POI (10 m, o 7 m con USAR) y las cinco columnas siguen
+       necesitando USAR a menos de 5 m EN EL SUELO. El descansillo de la pasarela
+       queda a 17 m del centro del santuario: mirás, no disparás. No se saltea
+       ningun capitulo desde arriba.
+     · no estorba a ningun objetivo. La obra esta al noroeste del santuario, del
+       lado OPUESTO al que se llega desde el campamento, asi que no se le pone
+       delante al marcador 3D del objetivo; y a 26 m del centro, fuera del radio
+       de todos los disparadores. Las cinco columnas tendidas estan en el arco
+       este: la pasarela no pasa por encima de ninguna.
+     · no sirve para salirse del mapa: sube 10,4 m en un sitio, el tope de
+       coordenadas del jugador sigue siendo el de siempre y no hay nada al lado a
+       lo que se pueda pasar desde arriba.
+   El costo de dibujado es geometria opaca chica (unas cuarenta cajas y cilindros
+   de pocos lados, un material compartido por familia), no relleno de pixeles:
+   no hace falta degradarla en BAJOS. */
+/* TABLAS: las superficies por las que se puede caminar que NO son el terreno.
+   Cajas alineadas a los ejes con el ALTO ABSOLUTO de su cara de arriba; el
+   jugador las consulta en soporte(). Son una docena: la busqueda es lineal y a
+   ojo del perfilador no existe. */
+const TABLAS = [];
+const OBRA = { x: 133, z: 84, alto: 10.4, y0: 0 };
+{
+  const p = OBRA, y0 = H(p.x, p.z);
+  p.y0 = y0;
+  /* TRES MATERIALES Y TRES DIBUJADAS. El mundo entero va en unas sesenta llamadas
+     de dibujado; un andamio hecho de sesenta cajas sueltas las DUPLICABA, y eso
+     en un celular se paga en el bucle, no en el relleno. Asi que toda la madera
+     estatica de la obra son tres InstancedMesh de una caja: barras, tablones y
+     marmol. Lo unico con malla propia son los dos canastos, que se mueven. */
+  const FAM = { mad: [], tab: [], mar: [] };
+  const _e = new T.Euler(0, 0, 0, 'YXZ'), _q = new T.Quaternion(),
+        _v = new T.Vector3(), _s = new T.Vector3();
+  /* pon(): una caja de la obra. Las barras se hacen LARGAS EN Z (sz), asi que
+     para inclinarlas hay que girar sobre X —sobre Z una barra larga en Z solo
+     gira sobre su propio eje y no se ve nada—, y el orden YXZ deja que la
+     inclinacion vaya primero, en el marco de la barra, y el giro ry despues. */
+  const pon = (fam, x, y, z, sx, sy, sz, ry, rx) => {
+    _e.set(rx || 0, ry || 0, 0);
+    FAM[fam].push(new T.Matrix4().compose(_v.set(x, y, z),
+      _q.setFromEuler(_e), _s.set(sx, sy, sz)));
+  };
+  /* tabla(): registra una superficie PISABLE y le pone su caja encima. `y` es la
+     cara de arriba, la que se pisa; el registro lo consulta soporte(). */
+  const tabla = (fam, x, z, sx, sz, y, gr) => {
+    const g = gr || .18;
+    pon(fam, x, y - g / 2, z, sx * 2, g, sz * 2, 0, 0);
+    const t = { x, z, sx, sz, y };
+    TABLAS.push(t);
+    return t;
+  };
+  /* ---- 1) LA TORRE DE ANDAMIO -----------------------------------------------
+     Cuatro postes, anillos de travesaños, riostras en cruz y OCHO TABLONES en
+     espiral de radio 3, arrancando del lado del santuario y dando tres cuartos
+     de vuelta. Los numeros salen de la fisica que ya estaba: con SALTO_V 8,2 y
+     GRAV 22 el salto llega a 1,53 m, asi que un escalon de 1,3 m se alcanza con
+     23 cm de margen y NO se alcanza caminando (el escalon gratis son 45 cm).
+     El salto cruza ~2,7 m a paso normal antes de bajar de 1,3 m, y entre tablon
+     y tablon hay 2,3 m: entra caminando, sin obligar a correr.
+     Los postes van AFUERA de la espiral (radio 5,4) para que su choque de ARB no
+     le coma el borde a ningun tablon. */
+  const R = 3.0, PASO = 1.3, LADO = 3.82;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]){
+    pon('mad', p.x + sx * LADO, y0 + (OBRA.alto + 1.2) / 2, p.z + sz * LADO,
+        .3, OBRA.alto + 1.2, .3);
+    ARB.push([p.x + sx * LADO, p.z + sz * LADO, .25]);
+  }
+  for (let c = 0; c < 4; c++){
+    const ax = Math.cos(c * Math.PI / 2), az = Math.sin(c * Math.PI / 2);
+    const cx = p.x + ax * LADO, cz = p.z + az * LADO, ry = c * Math.PI / 2;
+    for (let k = 0; k < 4; k++)      /* anillos: el andamio necesita horizontales */
+      pon('mad', cx, y0 + 2.6 + k * 2.6, cz, .11, .11, LADO * 2 + .3, ry, 0);
+    /* una riostra por vano y por cara, en zigzag. La inclinacion NO es a gusto:
+       el vano mide 7,64 de ancho por 2,6 de alto, asi que la diagonal va a
+       atan(2,6/7,64) = 0,33 rad y mide 8,07. Con cualquier otro numero la barra
+       se sale de la cara y se ve que es un adorno pegado. */
+    for (let k = 0; k < 4; k++)
+      pon('mad', cx, y0 + 1.3 + k * 2.6, cz, .1, .1, 8.07, ry,
+          (k % 2 ? -1 : 1) * 0.33);
+  }
+  for (let i = 0; i < 8; i++){
+    const a = -3 * Math.PI / 4 + i * Math.PI / 4;
+    const x = p.x + Math.sin(a) * R, z = p.z + Math.cos(a) * R;
+    const y = y0 + PASO * (i + 1);
+    tabla('tab', x, z, .9, .9, y, .16);
+    pon('mad', x, y0 + (y - y0) / 2, z, .15, y - y0, .15);   /* la pata del tablon */
+  }
+  /* ---- 2) EL ARQUITRABE y la PASARELA sobre la columnata --------------------
+     La plataforma de marmol a 10,4 m es el nivel al que hay que subir los
+     tambores. De ahi sale una pasarela de tablones que cruza POR ENCIMA de la
+     columnata —pasa por el pasillo entre las columnas de x=130 y x=137 y por
+     arriba de los capiteles, que llegan a 47,7— con un HUECO de 2,1 m en el
+     medio, y muere en un descansillo asomado al santuario a 17 m de su centro:
+     lo justo para mirar y no lo suficiente para disparar un capitulo. */
+  const YA = y0 + OBRA.alto;
+  tabla('mar', p.x, p.z - 6, 3.2, 3.2, YA, .34);
+  /* las cuatro patas de piedra de la plataforma NO van a ARB. El choque de ARB es
+     un cilindro infinito en altura: metiendolas le abriria cuatro agujeros de
+     ochenta centimetros en el medio de la plataforma, y andar chocando contra
+     postes invisibles a diez metros del suelo es peor que poder atravesar una
+     pata al ras del suelo. Lo mismo vale para los pies de la pasarela. */
+  for (const sx of [-1, 1]) for (const sz of [-1, 1])
+    pon('mar', p.x + sx * 2.8, y0 + OBRA.alto / 2, p.z - 6 + sz * 2.8, .5, OBRA.alto, .5);
+  tabla('tab', p.x, p.z - 12.5, 1.0, 3.4, YA, .16);
+  tabla('tab', p.x, p.z - 19.6, 1.0, 1.6, YA, .16);
+  tabla('mar', p.x, p.z - 23.4, 2.2, 2.2, YA, .3);
+  /* pies de la pasarela: fuera de ARB por lo de arriba, y ademas porque le
+     estrangularian el ancho pisable a un puente de dos metros de ancho. */
+  for (const dz of [-12.5, -19.6]) for (const sx of [-1, 1])
+    pon('mad', p.x + sx * 1.35, y0 + OBRA.alto / 2, p.z + dz, .24, OBRA.alto, .24);
+  /* una sola cuerda de baranda a un costado: no choca, pero desde abajo le dice
+     al ojo por donde va el camino de arriba */
+  pon('mad', p.x - 1.05, YA + .95, p.z - 16.4, .07, .07, 15.2, 0, 0);
+  /* ---- 3) LA POLEA DE CANASTO ----------------------------------------------
+     DOS canastos de la MISMA cuerda sobre dos motones, contrapesados como la de
+     verdad: cuando uno sube el otro baja. Por eso USAR sirve para subir y para
+     bajar sin un segundo boton — siempre subis el canasto que estas pisando.
+     El eje va pegado al borde este del arquitrabe, asi que arriba se sale del
+     canasto a la plataforma sin hueco. */
+  const PX = p.x + 4.2, ZA = p.z - 7.4, ZB = p.z - 4.6;
+  for (const z of [p.z - 9.4, p.z - 2.6]){
+    pon('mad', PX, y0 + (OBRA.alto + 2.2) / 2, z, .34, OBRA.alto + 2.2, .34);
+    ARB.push([PX, z, .27]);
+  }
+  pon('mad', PX, y0 + OBRA.alto + 2.0, p.z - 6, .24, .24, 7.2, 0, 0);
+  const matMad = new T.MeshLambertMaterial({ color: 0x6d5334 });
+  const matTab = new T.MeshLambertMaterial({ map: TX.hojarasca });
+  const matMar = new T.MeshLambertMaterial({ color: 0xe8e0cc });
+  const matSog = new T.MeshLambertMaterial({ color: 0xbfa477 });
+  const gMoton = new T.TorusGeometry(.3, .085, 5, 10);
+  const CAN = [];
+  for (let i = 0; i < 2; i++){
+    const z = i === 0 ? ZA : ZB;
+    const mo = new T.Mesh(gMoton, matMad);
+    mo.position.set(PX, y0 + OBRA.alto + 1.78, z);
+    mo.rotation.y = Math.PI / 2;
+    scene.add(mo);
+    const g = new T.Group();
+    const aro = new T.Mesh(new T.CylinderGeometry(1.02, .86, .95, 12, 1, true), matTab);
+    aro.position.y = .6; aro.castShadow = true; g.add(aro);
+    const piso = new T.Mesh(new T.CylinderGeometry(.88, .88, .14, 12), matMad);
+    piso.position.y = .07; piso.receiveShadow = true; g.add(piso);
+    const sog = new T.Mesh(new T.CylinderGeometry(.035, .035, 1, 4), matSog);
+    g.add(sog);                                  /* se estira sola en el tick */
+    scene.add(g);
+    /* el piso pisable del canasto es una TABLA que se mueve: el jugador la
+       consulta igual que cualquier otra, no hay un caso especial en la fisica.
+       sx llega hasta el borde del arquitrabe para que no quede hueco arriba. */
+    const t = { x: PX, z, sx: 1.1, sz: .88, y: y0 + .14, canasto: true };
+    TABLAS.push(t);
+    CAN.push({ g, sog, mo, tab: t });
+  }
+  /* k = 0: el canasto A abajo y el B arriba. k = 1: al revés. Arranca en 1 para
+     que el primero que te encontras al llegar por el suelo sea el B, el de abajo. */
+  const POL = { k: 1, obj: 1, montado: null, x: PX, za: ZA, zb: ZB };
+  const ponPolea = () => {
+    const yA = y0 + .14 + POL.k * OBRA.alto;
+    const yB = y0 + .14 + (1 - POL.k) * OBRA.alto;
+    for (let i = 0; i < 2; i++){
+      const c = CAN[i], y = i === 0 ? yA : yB;
+      c.tab.y = y;
+      c.g.position.set(PX, y - .14, c.tab.z);
+      /* la cuerda va del moton al aro: se estira con el canasto, si no queda
+         colgando en el aire y se ve el truco */
+      const largo = Math.max(.25, (y0 + OBRA.alto + 1.78) - (y - .14 + 1.07));
+      c.sog.scale.y = largo;
+      c.sog.position.y = 1.07 + largo / 2;
+      c.mo.rotation.z = (i === 0 ? 1 : -1) * POL.k * 9;
+    }
+  };
+  ponPolea();
+  POL.tick = dt => {
+    if (POL.k === POL.obj) return;
+    /* 4,4 s de punta a punta: rapido para que valga como atajo, lento para que
+       se entienda que te esta subiendo una maquina y no un ascensor */
+    const d = Math.sign(POL.obj - POL.k) * dt / 4.4;
+    POL.k = Math.abs(POL.obj - POL.k) <= Math.abs(d) ? POL.obj : POL.k + d;
+    ponPolea();
+    if (POL.k === POL.obj) POL.montado = null;      /* llegaste: te suelta */
+  };
+  /* ¿hay un canasto al alcance de la mano Y a la altura de los pies? El segundo
+     requisito es lo que evita que USAR llame al canasto desde el arquitrabe
+     cuando el canasto esta abajo: hay que estar EN la estacion, no arriba de ella. */
+  POL.cerca = (x, z, pies) => {
+    if (POL.montado) return null;
+    for (const c of CAN)
+      if (Math.hypot(x - c.tab.x, z - c.tab.z) < 2.3 && Math.abs(pies - c.tab.y) < 1.4)
+        return c;
+    return null;
+  };
+  POL.montar = c => {
+    if (!c || POL.montado || POL.k !== POL.obj) return false;
+    POL.montado = c;
+    POL.obj = POL.k > .5 ? 0 : 1;   /* el canasto que pisas va al otro extremo */
+    return true;
+  };
+  /* las TRES dibujadas de la obra. computeBoundingSphere() no es opcional: el
+     recorte por frustum de three usa object.boundingSphere si el objeto tiene una
+     —InstancedMesh la tiene— y arranca en null, asi que sin esta llamada la
+     calcula una vez y despues no se entera de nada. Con ella, la obra entera se
+     recorta bien cuando le das la espalda: tres llamadas de dibujado y ninguna
+     cuando no se ve. */
+  for (const [fam, mat] of [['mad', matMad], ['tab', matTab], ['mar', matMar]]){
+    const arr = FAM[fam];
+    const im = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), mat, arr.length);
+    for (let i = 0; i < arr.length; i++) im.setMatrixAt(i, arr[i]);
+    im.instanceMatrix.needsUpdate = true;
+    im.castShadow = im.receiveShadow = true;
+    im.computeBoundingSphere();
+    scene.add(im);
+  }
+  OBRA.POL = POL;
+  OBRA.piezas = FAM.mad.length + FAM.tab.length + FAM.mar.length;
+  window.__OBRA = OBRA;
+}
 /* ---------------- EL OASIS Y EL POZO ----------------------------------------
    La hoya: un cuenco de arena con las palmeras en corro y, en el fondo, la boca
    del pozo tapada por la arena. El pozo se levanta sobre una PLATAFORMA de
@@ -1446,6 +1734,50 @@ const POZO = { abierto: false, k: 0 };
   aguaMesh.position.set(p.x, NIVEL - 4, p.z);
   aguaMesh.visible = false;
   scene.add(aguaMesh);
+  /* ---- REFLEJO DE VERDAD -----------------------------------------------------
+     Antes el agua solo devolvia el CIELO (envMap PMREM), asi que el brocal, la
+     horca, las palmeras y las columnas que estan al borde no aparecian: se veia
+     una chapa dorada, no una pila de agua. Un Reflector si los devuelve, pero es
+     una SEGUNDA PASADA DE RENDER de la escena entera, y esto tiene que correr a
+     60 en un celular. Por eso el espejo se paga con cuatro reglas:
+       · resolucion 512 en ALTOS, 384 en MEDIOS, 256 en BAJOS. Nunca mas de 512;
+       · multisample 0: el MSAA del blanco de reflejo se paga cuatro veces y en
+         una lamina de agua con rizos encima no se nota;
+       · APAGADO mientras el pozo esta tapado (que es la mitad de la partida);
+       · APAGADO a mas de ESPEJO.lejos metros, que es casi todo el mapa. El
+         reflejo solo existe cuando estas mirando el agua de cerca.
+     El disco tintado con los rizos queda ENCIMA con menos opacidad: el espejo
+     pone lo que hay alrededor y el disco pone el color del agua y el movimiento
+     (un Reflector solo no tiene ni tinte ni rizos). */
+  const ESPEJO = { m: null, lejos: 78, res: 384, on: false };
+  if (Reflector){
+    ESPEJO.m = new Reflector(new T.CircleGeometry(21.4, 40), {
+      textureWidth: 384, textureHeight: 384, multisample: 0,
+      color: 0x8fa3a0, clipBias: .003 });
+    ESPEJO.m.rotation.x = -Math.PI / 2;
+    ESPEJO.m.position.set(p.x, NIVEL - 4 - .04, p.z);   /* justo abajo del disco */
+    ESPEJO.m.visible = false;
+    scene.add(ESPEJO.m);
+    /* con espejo debajo, el disco de arriba tiene que dejar ver: al 0,93 que
+       tenia lo tapaba entero. Y el reflejo de cielo por PMREM baja, porque si no
+       se suman dos reflejos y el agua vuelve a salir blanca. */
+    aguaMat.opacity = .52;
+    ESPEJO.on = true;
+  }
+  /* la resolucion del espejo la manda la calidad grafica, y en BAJOS se puede
+     apagar del todo: aca solo se guarda el enganche, decide setGfx. */
+  ESPEJO.calidad = g => {
+    if (!ESPEJO.m) return;
+    /* 512 solo en ALTOS. En MEDIOS 384: la mitad de los pixeles del espejo, y en
+       una lamina de agua con rizos encima no se le nota la diferencia. En BAJOS
+       256 si algun dia se prende, pero por lo medido va apagado. */
+    ESPEJO.res = g === 'b' ? 256 : (g === 'a' ? 512 : 384);
+    ESPEJO.on = ESPEJO_BAJOS || g !== 'b';
+    const rt = ESPEJO.m.getRenderTarget();
+    if (rt.width !== ESPEJO.res) rt.setSize(ESPEJO.res, ESPEJO.res);
+    /* sin espejo, el disco vuelve a ser el agua opaca de antes */
+    aguaMat.opacity = ESPEJO.on ? .52 : .93;
+  };
   POZO.abrir = () => {
     if (POZO.abierto) return;
     POZO.abierto = true;
@@ -1458,7 +1790,33 @@ const POZO = { abierto: false, k: 0 };
     POZO.k = Math.min(1, POZO.k + dt / 6);
     const k = POZO.k * POZO.k * (3 - 2 * POZO.k);
     aguaMesh.position.y = NIVEL - 4 + k * 4;
+    if (ESPEJO.m){
+      ESPEJO.m.position.y = aguaMesh.position.y - .04;
+      /* la pasada de espejo SOLO si hay agua, esta encendida y estas cerca */
+      const d = Math.hypot(px - p.x, pz - p.z);
+      const vis = ESPEJO.on && POZO.k > .02 && d < ESPEJO.lejos;
+      ESPEJO.m.visible = vis;
+      /* y el disco de arriba se OPACA cuando el espejo se apaga: al 0,52 que usa
+         con espejo, sin espejo se ve la arena del fondo a traves del agua. El
+         cruce se hace en los ultimos 8 m del alcance para que no salte de un
+         cuadro al otro justo en el borde. */
+      aguaMat.opacity = vis ? .93 - .41 * cl((ESPEJO.lejos - d) / 8, 0, 1) : .93;
+    }
   };
+  /* gancho de PRUEBA: prender/apagar el espejo a mano para medir su costo en fps
+     sin tocar la calidad grafica (que cambia diez cosas mas a la vez) */
+  POZO.espejoForzar = (v, res) => {
+    if (!ESPEJO.m) return;
+    ESPEJO.on = !!v;
+    aguaMat.opacity = v ? .52 : .93;
+    if (res){ ESPEJO.res = res; ESPEJO.m.getRenderTarget().setSize(res, res); }
+  };
+  /* el bucle de dibujado pregunta esto CADA CUADRO: tiene que ser un booleano y
+     no un objeto nuevo, que en el celular se paga en recolecciones de basura. */
+  POZO.espejoVisible = () => !!(ESPEJO.m && ESPEJO.m.visible);
+  POZO.espejo = () => ({ hay: !!ESPEJO.m, on: ESPEJO.on, res: ESPEJO.res,
+    visible: !!(ESPEJO.m && ESPEJO.m.visible), opacidad: +aguaMat.opacity.toFixed(2) });
+  POZO.espejoCalidad = ESPEJO.calidad;
   window.__POZO = POZO;
 }
 /* ---------------- LA CRESTA: la hoguera de la señal -------------------------
@@ -1693,6 +2051,10 @@ ui: { recolFin: 'Están todas. Caben en las dos manos y pesan\nmenos de lo que p
   empezar: 'EMPEZAR LA TRAVESÍA', otra: 'JUGAR OTRA VEZ', denuevo: 'EMPEZAR DE NUEVO',
   seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENÚ', usar: '◉ USAR', dlgGo: 'CERRAR ▸', dlgMas: 'SIGUIENTE ▸',
   idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAJOS', g_m: 'MEDIOS', g_a: 'ALTOS',
+    /* la obra: tres avisos cortos, sin tutorial */
+  obraAviso: 'ANDAMIOS DE LA OBRA · saltá de tablón en tablón hasta el arquitrabe',
+  polUsar: 'POLEA DE CANASTO · ◉ USAR para subir o bajar',
+  polViaje: 'la cuerda cede y el canasto arranca…',
   completa: (m2, mn) => 'TRAVESÍA COMPLETA · ' + m2 + ' m recorridos · ' + mn + ' min',
   introT: 'Doce días para la fiesta',
   intro: 'Sos KLEIO y sos aprendiza de cantero, que\nes una manera fina de decir que acarreás.\n\nEl temblor de la primavera tiró cinco\ncolumnas del pórtico del santuario y las\ndejó tendidas como leña.\n\nEn doce días sube la procesión. Si el pórtico\nno está en pie, la ciudad va a pensar que\nel dios se fue.\n\nTu maestro tiene ochenta años y una mano.\nVos tenés dos y el sendero de sal empieza acá.' },caps: [
@@ -1723,6 +2085,9 @@ ui: { recolFin: 'That’s all of them. They fit in two hands and\nweigh less tha
   empezar: 'BEGIN THE CROSSING', otra: 'PLAY AGAIN', denuevo: 'START OVER',
   seguir: 'CONTINUE', correr: 'RUN', menu: 'MENU', usar: '◉ USE', dlgGo: 'CLOSE ▸', dlgMas: 'NEXT ▸',
   idioma: 'LANGUAGE', graficos: 'GRAPHICS', g_b: 'LOW', g_m: 'MEDIUM', g_a: 'HIGH',
+    obraAviso: 'WORKS SCAFFOLD · jump plank to plank up to the architrave',
+  polUsar: 'BASKET HOIST · ◉ USE to ride up or down',
+  polViaje: 'the rope gives and the basket starts to move…',
   completa: (m2, mn) => 'CROSSING COMPLETE · ' + m2 + ' m traveled · ' + mn + ' min',
   introT: 'Twelve days to the feast',
   intro: 'You are KLEIO, a stonemason’s apprentice,\nwhich is a polite way of saying you carry.\n\nThe spring tremor threw down five columns of\nthe sanctuary portico and left them lying\nthere like firewood.\n\nIn twelve days the procession climbs up. If\nthe portico is not standing, the city will\nthink the god has left.\n\nYour master is eighty and has one working hand.\nYou have two, and the salt path starts here.' },caps: [
@@ -1753,6 +2118,9 @@ ui: { recolFin: 'Estão todas. Cabem nas duas mãos e pesam\nmenos do que pareci
   empezar: 'COMEÇAR A TRAVESSIA', otra: 'JOGAR DE NOVO', denuevo: 'RECOMEÇAR',
   seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENU', usar: '◉ USAR', dlgGo: 'FECHAR ▸', dlgMas: 'SEGUINTE ▸',
   idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAIXOS', g_m: 'MÉDIOS', g_a: 'ALTOS',
+    obraAviso: 'ANDAIMES DA OBRA · salte de tábua em tábua até o arquitrave',
+  polUsar: 'ROLDANA DE CESTO · ◉ USAR para subir ou descer',
+  polViaje: 'a corda cede e o cesto arranca…',
   completa: (m2, mn) => 'TRAVESSIA COMPLETA · ' + m2 + ' m percorridos · ' + mn + ' min',
   introT: 'Doze dias para a festa',
   intro: 'Você é KLEIO, aprendiz de canteiro, que é um\njeito fino de dizer que carrega.\n\nO tremor da primavera derrubou cinco colunas\ndo pórtico do santuário e as deixou deitadas\ncomo lenha.\n\nEm doze dias sobe a procissão. Se o pórtico\nnão estiver de pé, a cidade vai pensar que\no deus foi embora.\n\nSeu mestre tem oitenta anos e uma mão.\nVocê tem duas, e a trilha do sal começa aqui.' },caps: [
@@ -1796,6 +2164,16 @@ function ponCap(n, silencio){
   luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;
   luci.visible = cap >= 2 && cap <= 4;
   MISION.alCap(cap);
+  /* LA FUENTE SAGRADA. El capitulo 4 es bajar a la fuente y encontrar la pila
+     tapada de hojas; el 5 ya es amasar la cal, o sea que el agua tiene que estar.
+     POZO.abrir() no lo llamaba NADIE, asi que la pila del oasis se quedaba seca
+     toda la partida y el agua de este mundo no se veia nunca. Se ata al guion:
+     al pasar al capitulo 5 el agua sube a la vista; si la partida se retoma
+     desde un save ya avanzado, sube de golpe (no hay nada que mostrar). */
+  if (cap >= 4 && POZO.abrir){
+    POZO.abrir();
+    if (silencio) POZO.k = 1;
+  }
   if (!silencio){
     $('capN').textContent = C.n;
     $('capT').textContent = C.t;
@@ -2260,59 +2638,149 @@ const CLIPS = { quieto: null, andar: null, correr: null, listos: 0, cola: [] };
   }
 }
 /* ======================== RETARGET DE LOS CLIPS ===========================
-   Una pista de glTF guarda la rotacion LOCAL ABSOLUTA del hueso, no un delta
-   respecto de su reposo. Los personajes comparten los nombres de hueso pero NO
-   la pose de reposo (el rig se ajusta a cada malla), asi que aplicar el clip tal
-   cual le reemplaza la pose de reposo por la del donante y la deformacion se
-   suma dos veces: los codos se van para afuera y los antebrazos se doblan.
-   Se convierte el clip al reposo del destino:
-       delta   = inv(reposoDonante) * clip
-       destino = reposoDestino * delta
-   La pose de reposo del donante viaja dentro del propio GLB de solo-animacion,
-   asi que no hace falta ningun archivo de mas. */
-const _rtQd = new T.Quaternion(), _rtCorr = new T.Quaternion(), _rtQ = new T.Quaternion();
+   Los 11 personajes de per/*.glb no traen animacion y se les presta uno de los
+   tres clips de anim/*.glb. Comparten los MISMOS 26 nombres de hueso, pero NO la
+   pose de reposo: el rig sale ajustado a cada malla y los marcos de cada
+   articulacion quedan girados de cualquier manera. Medido sobre los GLB, la
+   rotacion local de reposo de Hips va de 2,4 grados en canon-cuerdas a 133,5 en
+   volcan-obrero, y la de Spine02 de 6,0 a 133,5.
+
+   POR QUE NO ALCANZA UNA CORRECCION FIJA POR HUESO (lo que habia antes)
+   Se hacia  q_donante * inv(reposoDonante) * reposoDestino , o sea una constante
+   por hueso. Eso puede acertar UN fotograma pero no todos: la rotacion local se
+   compone en el marco del PADRE, y ese marco cambia en cada fotograma cuando el
+   padre se mueve. Con las caderas a cien grados de diferencia una constante no
+   puede ser correcta a la vez para el reposo y para el movimiento, y por eso el
+   personaje quedaba derecho quieto pero encorvado al caminar.
+
+   LO QUE SE HACE AHORA: espacio de MUNDO, que es donde "girar el brazo treinta
+   grados hacia adelante" significa lo mismo en los dos rigs. Por hueso b y
+   fotograma f:
+       delta   = mundoAnimadoDonante(b) * inv(mundoReposoDonante(b))
+       mundoDestino(b) = delta * mundoReposoDestino(b)
+       localDestino(b) = inv(mundoDestino(padre)) * mundoDestino(b)
+   El pase va de padre a hijo porque mundoDestino(padre) es el resultado YA
+   corregido: ahi esta justamente la parte que una constante no puede reproducir.
+
+   El cero del donante viaja dentro del propio GLB: mk_anim.py le dejo como pose
+   de reposo de los nodos la POSE NEUTRA del clip (el promedio de sus fotogramas),
+   asi que aca no hay que promediar nada. Eso importa porque los clips de la
+   libreria vienen con un sesgo constante grande (Idle tiene la cadera 40 grados
+   fuera de su bind, Run_02 la columna 27) y si se tomara ese sesgo como cero se
+   le sumaria al personaje, que es la joroba que se veia.
+
+   Costo: 26 huesos x ~70-127 fotogramas x 3 clips por personaje, una sola vez al
+   cargarlo. Son unos pocos milisegundos y no toca el bucle de dibujado, asi que
+   no depende de GFX. */
+const _rtQ = new T.Quaternion(), _rtI = new T.Quaternion(),
+      _rtD = new T.Quaternion(), _rtL = new T.Quaternion();
+/* El rig de un GLB por NOMBRE de hueso: rotacion y posicion locales de reposo
+   mas el nombre del PADRE. El padre hace falta porque el retarget pasa por
+   mundo; la version anterior solo guardaba q y p y por eso no podia hacerlo. */
 function reposoDe(raiz){
   const R = {};
   raiz.traverse(o => {
-    if (o.isBone || o.type === 'Bone' || R[o.name] === undefined)
-      R[o.name] = { q: o.quaternion.clone(), p: o.position.clone() };
+    if (!o.name || R[o.name] !== undefined) return;
+    const pa = o.parent;
+    R[o.name] = { q: o.quaternion.clone(), p: o.position.clone(),
+                  padre: (pa && pa.name && R[pa.name]) ? pa.name : null };
   });
   return R;
 }
-function retargetClip(clip, restDon, modelo){
-  if (!clip || !restDon) return clip;
-  const restDst = reposoDe(modelo);
+/* rotaciones de mundo de la pose de reposo, mas el orden padre-antes-que-hijo */
+function mundoDe(rig){
+  const W = {}, orden = [];
+  const sube = nom => {
+    if (W[nom]) return W[nom];
+    const h = rig[nom];
+    W[nom] = (h.padre && rig[h.padre]) ? sube(h.padre).clone().multiply(h.q)
+                                       : h.q.clone();
+    orden.push(nom);
+    return W[nom];
+  };
+  for (const nom in rig) sube(nom);
+  return { W, orden };
+}
+function retargetClip(clip, rigDon, modelo){
+  if (!clip || !rigDon) return clip;
+  /* el reposo se lee UNA vez y se guarda: si un personaje ya tiene acciones
+     sonando, sus huesos no estan en reposo y leerlos daria un cero falso */
+  const rigDst = modelo.userData._rig || (modelo.userData._rig = reposoDe(modelo));
+  const A = mundoDe(rigDon), B = mundoDe(rigDst);
   const c2 = clip.clone();
+  const rot = {}, pos = [];
   for (const tr of c2.tracks){
     const i = tr.name.lastIndexOf('.');
     if (i < 0) continue;
     const nom = tr.name.slice(0, i), prop = tr.name.slice(i + 1);
-    const rd = restDon[nom], rt = restDst[nom];
-    if (!rd || !rt) continue;
-    if (prop === 'quaternion'){
-      /* El movimiento del clip se compone en el espacio del PADRE, no en el del propio
-         hueso: la desviacion respecto del reposo es  q * inv(reposo), y eso se aplica
-         al reposo del destino POR DERECHA. Premultiplicando —como estaba— el eje del
-         giro se mapeaba al marco equivocado, y como los dos rigs tienen los mismos 26
-         nombres de hueso pero sus reposos de cadera y columna difieren CIEN GRADOS
-         (medido: 134,9 contra 34,5), eso es exactamente la inclinacion que se veia.
-         Con la multiplicacion del lado correcto los once personajes quedan de pie y no
-         hace falta generar animacion por modelo. */
-      _rtCorr.copy(_rtQd.copy(rd.q).invert()).multiply(rt.q);
-      for (let k = 0; k < tr.values.length; k += 4){
-        _rtQ.set(tr.values[k], tr.values[k + 1], tr.values[k + 2], tr.values[k + 3]);
-        _rtQ.multiply(_rtCorr);
-        tr.values[k] = _rtQ.x; tr.values[k + 1] = _rtQ.y;
-        tr.values[k + 2] = _rtQ.z; tr.values[k + 3] = _rtQ.w;
+    if (prop === 'quaternion' && rigDon[nom] && rigDst[nom]) rot[nom] = tr;
+    else if (prop === 'position') pos.push([nom, tr]);
+  }
+  /* mk_anim.py deja todas las pistas con el MISMO reloj, asi que se recorre por
+     indice de fotograma. Si alguna vez no fuera asi, mejor devolver el clip sin
+     tocar que escribir cualquier cosa. */
+  let nf = -1, mezcla = false;
+  for (const n in rot){
+    const c = rot[n].values.length / 4;
+    if (nf < 0) nf = c; else if (c !== nf) mezcla = true;
+  }
+  if (nf <= 0 || mezcla) return c2;
+
+  const orden = A.orden.filter(n => rigDst[n]);
+  const Wd = {}, Wt = {}, prev = {};
+  for (const n of orden){ Wd[n] = new T.Quaternion(); Wt[n] = new T.Quaternion(); }
+  for (let f = 0; f < nf; f++){
+    // 1) pose del donante, de local a mundo
+    for (const n of orden){
+      const tr = rot[n];
+      if (tr){ const k = f * 4;
+        _rtQ.set(tr.values[k], tr.values[k+1], tr.values[k+2], tr.values[k+3]); }
+      else _rtQ.copy(rigDon[n].q);
+      const pa = rigDon[n].padre;
+      if (pa && Wd[pa]) Wd[n].copy(Wd[pa]).multiply(_rtQ); else Wd[n].copy(_rtQ);
+    }
+    // 2) el giro de mundo del donante, aplicado al reposo del destino
+    for (const n of orden){
+      if (rot[n]){
+        _rtD.copy(Wd[n]).multiply(_rtI.copy(A.W[n]).invert());
+        Wt[n].copy(_rtD).multiply(B.W[n]);
+      } else {
+        const pa = rigDst[n].padre;
+        if (pa && Wt[pa]) Wt[n].copy(Wt[pa]).multiply(rigDst[n].q);
+        else Wt[n].copy(B.W[n]);
       }
-    } else if (prop === 'position'){
-      /* en delta: si no, la cadera del donante lleva al destino a SU altura y
-         el personaje flota o se hunde en el suelo */
-      for (let k = 0; k < tr.values.length; k += 3){
-        tr.values[k]     += rt.p.x - rd.p.x;
-        tr.values[k + 1] += rt.p.y - rd.p.y;
-        tr.values[k + 2] += rt.p.z - rd.p.z;
+    }
+    // 3) de vuelta a local, que es lo que consume el AnimationMixer
+    for (const n of orden){
+      const tr = rot[n]; if (!tr) continue;
+      const pa = rigDst[n].padre;
+      if (pa && Wt[pa]) _rtL.copy(_rtI.copy(Wt[pa]).invert()).multiply(Wt[n]);
+      else _rtL.copy(Wt[n]);
+      /* continuidad de signo: dos cuaterniones opuestos son la misma rotacion
+         pero interpolados dan la vuelta larga, y se ve un tironeo */
+      const p = prev[n];
+      if (p && (p[0]*_rtL.x + p[1]*_rtL.y + p[2]*_rtL.z + p[3]*_rtL.w) < 0){
+        _rtL.set(-_rtL.x, -_rtL.y, -_rtL.z, -_rtL.w);
       }
+      const k = f * 4;
+      tr.values[k] = _rtL.x; tr.values[k+1] = _rtL.y;
+      tr.values[k+2] = _rtL.z; tr.values[k+3] = _rtL.w;
+      prev[n] = [_rtL.x, _rtL.y, _rtL.z, _rtL.w];
+    }
+  }
+  /* Solo la cadera trae traslacion: mk_anim.py tiro las otras 23, que eran
+     constantes y llevaban los LARGOS DE HUESO del donante (aplicadas al
+     personaje le pisaban sus proporciones y le estiraban la malla). Va en delta
+     y escalada por la relacion de alturas de cadera, si no un personaje bajo
+     flota y uno alto se hunde. */
+  for (const par of pos){
+    const h = rigDon[par[0]], hd = rigDst[par[0]];
+    if (!h || !hd) continue;
+    const tr = par[1], k = h.p.y ? (hd.p.y / h.p.y) : 1;
+    for (let i = 0; i < tr.values.length; i += 3){
+      tr.values[i]     = hd.p.x + (tr.values[i]     - h.p.x) * k;
+      tr.values[i + 1] = hd.p.y + (tr.values[i + 1] - h.p.y) * k;
+      tr.values[i + 2] = hd.p.z + (tr.values[i + 2] - h.p.z) * k;
     }
   }
   return c2;
@@ -2386,10 +2854,11 @@ function mezclaAcciones(npc, vel, dt){
   /* el clip avanza al ritmo del paso: si no, se arrastra o patina */
   if (A.andar) A.andar.timeScale = cl(vel / 1.9, .55, 2.1);
   if (A.correr) A.correr.timeScale = cl(vel / 5.4, .6, 1.9);
-  /* el Idle de Meshy mira a los costados. La queja no era que mire: era que lo
-     hace rapido, sin parar y todos a la vez. A 0,42 el MISMO clip se lee como
-     respirar, y el desfase por personaje rompe el coro. */
-  if (A.quieto) A.quieto.timeScale = 0.42;
+  /* el 0,42 de antes domaba el Idle viejo, que giraba la cabeza 123 grados y por eso
+     habia que frenarlo. El clip nuevo (Idle_02) ya es un parado sobrio —5 grados de
+     amplitud maxima— asi que frenarlo tanto lo dejaba como una estatua. A 0,9 respira
+     a ritmo humano, y el desfase por personaje sigue rompiendo el coro. */
+  if (A.quieto) A.quieto.timeScale = 0.9;
 }
 function ponerModelo(npc){
   if (!GLTF || !npc.glb) return;
@@ -2612,6 +3081,14 @@ function accionUsable(){
   const p = POI[C.obj];
   if (C.usar && Math.hypot(px - p.x, pz - p.z) < 7 && MISION.lista(cap))
     return { tipo: 'cap' };
+  /* LA POLEA. Va antes de los items y de charlar porque en la estacion del
+     canasto no hay ni items ni gente, y porque es lo unico que se puede usar
+     estando a diez metros del suelo. `cerca` exige estar al lado Y a la altura:
+     desde el arquitrabe no se llama al canasto que quedo abajo. */
+  if (OBRA.POL && !OBRA.POL.montado){
+    const c = OBRA.POL.cerca(px, pz, (ojoY != null ? ojoY : H(px, pz)) + aireY);
+    if (c) return { tipo: 'polea', c };
+  }
   const it = itemCerca();
   if (it) return { tipo: 'item', it };
   const npc = npcCerca();
@@ -2623,6 +3100,7 @@ function usarAccion(){
   const acc = accionUsable();
   if (!acc) return;
   if (acc.tipo === 'cap') llegaObjetivo();
+  else if (acc.tipo === 'polea') OBRA.POL.montar(acc.c);
   else if (acc.tipo === 'item'){ acc.it.activo = false; acc.it.fn(acc.it); }
   else hablaNPC(acc.npc);
 }
@@ -3067,6 +3545,9 @@ const RECOL = (() => {
   }
   return {
     total: TOT, get juntadas(){ return junt; },
+    /* donde quedo sembrada cada pieza: sirve para comprobar que ninguna cayo
+       debajo de una tabla de la obra (se juntaria caminando por arriba) */
+    pos(){ return piezas.map(q => [+q.x.toFixed(1), +q.z.toFixed(1), q.tomada]); },
     pinta,
     tick(dt){
       for (const p of piezas){
@@ -3225,8 +3706,41 @@ let ojoY = null;         /* altura del ojo interpolada (sin saltos) */
    inalcanzables), gravedad fuerte para que no se sienta lunar. */
 const GRAV = 22, SALTO_V = 8.2;
 let aireY = 0, aireV = 0, enAire = false;
+/* enTabla: el cuadro pasado el jugador estaba parado en una tabla de la obra y no
+   en la arena. Se usa para saltear el TOPE DE PENDIENTE, que mira el terreno: a
+   diez metros de altura la ladera de abajo no tiene nada que ver con si podes
+   caminar por el tablon. */
+let enTabla = false;
 function saltar(){ if (enAire) return; enAire = true; aireV = SALTO_V; }
+/* SOPORTE: sobre que estas parado. Por omision el terreno; si hay una tabla de la
+   obra debajo de los pies, la tabla. La condicion `t.y <= yPies + hol` es la que
+   hace que caminar POR DEBAJO del andamio no te suba de golpe a la tabla de
+   arriba: solo cuenta lo que ya tenes a la altura del pie. `hol` es el escalon
+   gratis (45 cm parado, 0 en el aire, para que subir siempre cueste un salto). */
+function soporte(x, z, yPies, hol){
+  let y = H(x, z);
+  for (const t of TABLAS){
+    if (t.y <= y || t.y > yPies + hol) continue;
+    if (Math.abs(x - t.x) > t.sx || Math.abs(z - t.z) > t.sz) continue;
+    if (t.y > y) y = t.y;
+  }
+  return y;
+}
 function fisica(dt){
+  /* EN EL CANASTO no se camina: te lleva la polea. Se le pisa al jugador la
+     posicion y el piso y se sale antes que todo lo demas; asi no hay que meter un
+     caso especial en el tope de pendiente, en el choque ni en el salto. Mirar
+     alrededor si se puede, que es la mitad de la gracia de subir. */
+  const cesta = OBRA.POL && OBRA.POL.montado;
+  if (cesta){
+    yaw -= keyL.x * 2.2 * dt;
+    pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+    pvx = pvz = 0;
+    px = cesta.tab.x; pz = cesta.tab.z;
+    ojoY = cesta.tab.y; aireY = 0; aireV = 0; enAire = false; enTabla = true;
+    stats.t += dt;
+    return;
+  }
   yaw -= keyL.x * 2.2 * dt;
   pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
   let mx = movV.x + keyV.x, my = movV.y + keyV.y;
@@ -3243,7 +3757,7 @@ function fisica(dt){
      escalon es mas empinado que PEND_MAX no se sube: se DESLIZA por la ladera
      (se proyecta el movimiento sobre la curva de nivel), que es lo que hace un
      personaje de verdad. */
-  {
+  if (!enTabla) {
     const h0 = H(px, pz), h1 = H(nx, nz);
     const dl = Math.hypot(nx - px, nz - pz);
     if (dl > 1e-5 && (h1 - h0) / dl > PEND_MAX){
@@ -3268,11 +3782,33 @@ function fisica(dt){
   stats.dist += Math.hypot(nx - px, nz - pz);
   px = nx; pz = nz;
   /* la altura del ojo PERSIGUE al suelo en vez de pegarse a el: sin esto, cada
-     bache era un tironcito vertical, y una ladera un teletransporte. */
+     bache era un tironcito vertical, y una ladera un teletransporte.
+     Con la obra el "suelo" ya no es solo el terreno, y ahi aparece un problema
+     nuevo: el piso puede CAMBIAR DE GOLPE (de la arena a un tablon a 10 m, o al
+     revés cuando te pasas del borde). Interpolar eso da un tiron de camara y
+     dejaria caminar por el aire. Se resuelve en dos ramas:
+       · cambio chico (baches, laderas): el ojo persigue al suelo como siempre;
+       · cambio de golpe: el piso se PEGA al nuevo alto y la diferencia se le pasa
+         al salto, asi que los PIES no se mueven ni un centimetro en ese cuadro.
+         Si quedaron por encima del piso nuevo, la gravedad se encarga: eso es
+         exactamente caerse del andamio.
+     El tope de 13 m es para no confundir un teletransporte de guion (o el tp de
+     las pruebas) con un borde: mas alto que eso no hay nada en la obra. */
   {
-    const hs = H(px, pz);
-    ojoY = ojoY == null ? hs : ojoY + (hs - ojoY) * Math.min(1, dt * 9);
-    if (Math.abs(hs - ojoY) > 3) ojoY = hs;   /* teleport de guion: sin arrastre */
+    const antes = ojoY == null ? H(px, pz) : ojoY;
+    const pies = antes + aireY;
+    const hs = soporte(px, pz, pies, enAire ? 0 : .45);
+    const salto = hs - antes;
+    if (ojoY == null) ojoY = hs;
+    else if (Math.abs(salto) > 13){ ojoY = hs; aireY = 0; aireV = 0; enAire = false; }
+    else if (Math.abs(salto) > .6){
+      ojoY = hs;
+      aireY = Math.max(0, pies - hs);
+      if (aireY > .02) enAire = true; else { aireY = 0; aireV = 0; enAire = false; }
+    } else {
+      ojoY = antes + salto * Math.min(1, dt * 9);
+    }
+    enTabla = hs > H(px, pz) + .01;
   }
   /* el SALTO vive sobre la altura del suelo: se integra aparte y se suma, asi
      el tope de pendiente y el suavizado del ojo siguen valiendo. */
@@ -3322,6 +3858,18 @@ function pasoObjetivo(){
   const acc = accionUsable();
   $('bUsar').classList.toggle('on', !!acc && !enDlg);
   if (window.__autoUsar && acc && acc.tipo === 'cap' && !enDlg) llegaObjetivo();
+  /* EL AVISO DE LA OBRA. La regla es la del boton USAR: aparece solo donde sirve
+     y dice una sola cosa. Primero el canasto (que es lo que se aprieta), y si no,
+     el cartel del andamio mientras estas en el patio de la obra —y solo ahi, a la
+     altura del suelo, porque una vez que estas trepando ya lo entendiste. */
+  let pis = '';
+  if (OBRA.POL && OBRA.POL.montado) pis = Tx('polViaje');
+  else if (acc && acc.tipo === 'polea') pis = Tx('polUsar');
+  else if (Math.hypot(px - OBRA.x, pz - OBRA.z) < 13 &&
+           (ojoY == null || ojoY < OBRA.y0 + 1.2)) pis = Tx('obraAviso');
+  const elP = $('pista');
+  if (elP.textContent !== pis) elP.textContent = pis;
+  elP.classList.toggle('on', !!pis && !enDlg);
 }
 $('bUsar').addEventListener('pointerdown', e => { e.preventDefault(); usarAccion(); });
 $('bCorre').addEventListener('pointerdown', e => { e.preventDefault();
@@ -3590,7 +4138,12 @@ function aplicaRS(){
 }
 addEventListener('resize', aplicaRS);
 aplicaRS();
+/* con RS_FIJA puesta, la resolucion dinamica no toca nada. Es SOLO para medir:
+   comparar dos versiones mientras el propio motor cambia el numero de pixeles da
+   numeros que no quieren decir nada. En juego vale null y todo sigue igual. */
+let RS_FIJA = null;
 function rsTick(dt){
+  if (RS_FIJA != null) return;
   tRS += dt;
   if (tRS < .8) return;
   tRS = 0;
@@ -3643,7 +4196,10 @@ function bucle(t){
   glare.material.opacity = cl((sol.intensity - .6) / 1.6, 0, 1);
   if (fase === 'juego'){
     dt0 = dt;
-    if (!enDlg) fisica(dt);
+    /* la polea antes de la fisica: si no, el jugador va un cuadro atras del piso
+       del canasto y se ve un temblor mientras sube. Con dialogo abierto se
+       congela con todo lo demas, asi nadie se queda a mitad de camino. */
+    if (!enDlg){ if (OBRA.POL) OBRA.POL.tick(dt); fisica(dt); }
     pasoLuz(dt);
     pasoObjetivo();
     rsTick(dt);
@@ -3668,6 +4224,10 @@ function bucle(t){
   }
   pasoTolvas(t0);
   pasoBanderas(t0);
+  /* el POZO: nadie lo llamaba, asi que la manivela no giraba, el agua no subia
+     nunca y los rizos estaban congelados. Va aca —fuera del if de 'juego'— para
+     que el agua se mueva tambien en las cinematicas y en el fondo del menu. */
+  if (POZO.tick) POZO.tick(dt);
   /* la llama del fogón nunca queda quieta */
   if (fuegoMat){
     fuegoMat.opacity = .62 + .3 * (.5 + .5 * Math.sin(t0 * 7.3 + Math.sin(t0 * 3.1)));
@@ -3676,8 +4236,12 @@ function bucle(t){
      cielo dorado a pleno y no se apaga solo, así que de noche el charco salía
      BLANCO como leche. Se ata al brillo del fondo. */
   if (aguaMat){
-    aguaMat.envMapIntensity = .1 + .5 * scene.backgroundIntensity *
-      (1 + .12 * Math.sin(t0 * .7));
+    /* con el ESPEJO prendido el reflejo de verdad ya trae el cielo: si ademas se
+       le deja el PMREM a pleno, los dos se suman y el agua sale blanca (que es
+       justo el problema que este bloque arreglaba antes). Se baja a un tercio. */
+    const kEsp = POZO.espejoVisible && POZO.espejoVisible() ? .34 : 1;
+    aguaMat.envMapIntensity = kEsp * (.1 + .5 * scene.backgroundIntensity *
+      (1 + .12 * Math.sin(t0 * .7)));
   }
   /* las lunas y la Tierra solo viven de noche, pegadas al cielo de la cámara */
   const nocheK = cl(1 - (SOLD.y * 420) / 160, 0, 1);
@@ -3774,6 +4338,8 @@ function setGfx(g){
     if (sol.shadow.map){ sol.shadow.map.dispose(); sol.shadow.map = null; }
   }
   luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;   /* re-apunta la niebla */
+  /* el espejo del agua tambien es calidad: 512 arriba, 256 en BAJOS (o apagado) */
+  if (POZO.espejoCalidad) POZO.espejoCalidad(g);
 }
 document.querySelectorAll('#fGfx .chip').forEach(ch =>
   ch.addEventListener('pointerdown', e => { e.preventDefault(); setGfx(ch.dataset.g); }));
@@ -3814,6 +4380,29 @@ window.__S = {
     viento: +AMB.viento.gain.value.toFixed(3), pos: +AMB.pos.gain.value.toFixed(3),
     noche: +AMB.noche.gain.value.toFixed(3) } : null; },
   pr(){ return ren.getPixelRatio(); },
+  rsFija(v){ RS_FIJA = v; if (v != null){ rs = v; aplicaRS(); } },
+  /* la OBRA: donde esta, a que altura estan sus tablas y en que anda la polea.
+     Sirve para probar el parkour sin tener que jugarlo a mano. */
+  obra(){ const P = OBRA.POL; return { x: OBRA.x, z: OBRA.z, y0: +OBRA.y0.toFixed(2),
+    alto: OBRA.alto, piezas: OBRA.piezas, tablas: TABLAS.length,
+    polea: { k: +P.k.toFixed(2), obj: P.obj, montado: !!P.montado,
+      canastoY: TABLAS.filter(t => t.canasto).map(t => +t.y.toFixed(2)) },
+    pies: +((ojoY != null ? ojoY : H(px, pz)) + aireY).toFixed(2),
+    enTabla, enAire, pista: $('pista').textContent }; },
+  tablas(){ return TABLAS.map(t => ({ x: +t.x.toFixed(1), z: +t.z.toFixed(1),
+    y: +t.y.toFixed(2), sx: t.sx, sz: t.sz, canasto: !!t.canasto })); },
+  /* PRUEBA DEL PARKOUR SIN DIBUJAR. Corre la fisica (y la polea) N veces con un dt
+     fijo. Hace falta porque en una maquina sin GPU la pagina va a un cuadro por
+     segundo, y un salto que dura 0,75 s no se puede probar con esperas de reloj:
+     saldria un cuadro por salto. Con esto el salto se simula igual que en el
+     juego, con el mismo codigo, y el resultado no depende de la maquina. */
+  paso(n, dt){ const d = dt || .016;
+    for (let i = 0; i < (n || 1); i++){ if (OBRA.POL) OBRA.POL.tick(d); fisica(d); }
+    return this.obra(); },
+  tecla(k, v){ const q = v ? 1 : 0;
+    if (k === 'w') keyV.y = -q; else if (k === 's') keyV.y = q;
+    else if (k === 'a') keyV.x = -q; else if (k === 'd') keyV.x = q; },
+  salta(){ saltar(); },
   sombras(){ return { on: SOMBRAS, sol: sol.castShadow, mapa: sol.shadow.mapSize.x,
     tipo: ren.shadowMap.type, tone: ren.toneMapping, exp: +ren.toneMappingExposure.toFixed(2),
     terr: terrChunks[0].receiveShadow, solY: +SOLD.y.toFixed(2),

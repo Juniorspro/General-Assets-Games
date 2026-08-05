@@ -1,0 +1,47 @@
+<!doctype html><html><head><meta charset="utf-8"><title>seam</title>
+<style>body{margin:0;background:#000}canvas{display:block}</style></head><body>
+<script type="importmap">{"imports":{"three":"/_vthree/build/three.module.js"}}</script>
+<script type="module">
+/* BANCO DE PRUEBA de la costura: dibuja el MISMO equirect como scene.background
+   con dos configuraciones de filtro y devuelve el perfil de una fila, para poder
+   medir si la linea vertical la produce el asset o el muestreo de mipmaps. */
+import * as T from 'three';
+const ren = new T.WebGLRenderer({ antialias:false });
+ren.setSize(512, 256, false);
+ren.outputColorSpace = T.SRGBColorSpace;
+document.body.appendChild(ren.domElement);
+const scene = new T.Scene();
+const cam = new T.PerspectiveCamera(72, 2, .1, 1000);
+cam.rotation.order = 'YXZ';
+const url = new URL(location.href).searchParams.get('t') || '/assets/mundos/cielo-estepa.jpg';
+
+window.__listo = 0;
+new T.TextureLoader().load(url, tex => {
+  window.__tex = tex;
+  window.__listo = 1;
+});
+/* modo: 0 = como esta hoy (mipmaps por defecto) · 1 = sin mipmaps
+   Devuelve el perfil de brillo de una fila horizontal del render, ya que un
+   pico aislado en la derivada de esa fila ES la costura. */
+window.__mide = (modo, yaw, pitch) => {
+  const tex = window.__tex;
+  tex.mapping = T.EquirectangularReflectionMapping;
+  tex.colorSpace = T.SRGBColorSpace;
+  tex.wrapS = T.RepeatWrapping;
+  tex.wrapT = T.ClampToEdgeWrapping;
+  if (modo === 1){ tex.minFilter = T.LinearFilter; tex.generateMipmaps = false; }
+  else { tex.minFilter = T.LinearMipmapLinearFilter; tex.generateMipmaps = true; }
+  tex.dispose();                 /* forzar re-subida con el filtro nuevo */
+  tex.needsUpdate = true;
+  scene.background = tex;
+  cam.rotation.set(pitch, yaw, 0);
+  ren.render(scene, cam);
+  const gl = ren.getContext();
+  const w = 512, h = 256, y = h >> 1;
+  const buf = new Uint8Array(w * 4);
+  gl.readPixels(0, y, w, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+  const fila = [];
+  for (let x = 0; x < w; x++) fila.push((buf[x*4] + buf[x*4+1] + buf[x*4+2]) / 3);
+  return fila;
+};
+</script></body></html>

@@ -1,0 +1,74 @@
+<!doctype html><meta charset=utf-8><title>retarget: personaje animado</title>
+<style>html,body{margin:0;background:#8a8f99;height:100%}canvas{display:block}
+#n{position:fixed;left:8px;top:6px;font:700 13px system-ui;color:#fff;text-shadow:0 1px 2px #000}</style>
+<div id=n></div>
+<script type="importmap">{"imports":{"three":"/_vthree/build/three.module.js"}}</script>
+<script type="module">
+/* Prueba el retarget REAL, el mismo fichero que se le mete a los mundos: se baja
+   scratchpad/mundos/retarget_js.js y se evalua con T inyectado. Asi lo que se ve
+   aca es exactamente lo que va a correr en el juego, no una reimplementacion.
+
+   Muestra el personaje en varias fases del clip, de frente y de perfil, con luz
+   plana y una rejilla: si esta encorvado se ve al instante contra las lineas. */
+import * as T from 'three';
+import { GLTFLoader } from '/_vthree/examples/jsm/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const per = q.get('per') || 'per/pantano-guia.glb';
+const cual = q.get('clip') || 'andar';
+const perfil = q.get('perfil') === '1';
+const NF = 4;                                  /* cuantas fases se muestran */
+
+const src = await (await fetch('/scratchpad/mundos/retarget_js.js')).text();
+const API = new Function('T', src + '\nreturn { retargetClip, reposoDe, mundoDe };')(T);
+
+const ren = new T.WebGLRenderer({ antialias: true });
+ren.setSize(innerWidth, innerHeight); document.body.appendChild(ren.domElement);
+const sc = new T.Scene(); sc.background = new T.Color(0x8a8f99);
+sc.add(new T.HemisphereLight(0xffffff, 0x556070, 2.4));
+const dl = new T.DirectionalLight(0xffffff, 1.5); dl.position.set(3, 6, 4); sc.add(dl);
+const cam = new T.PerspectiveCamera(32, innerWidth / innerHeight, .1, 100);
+
+const carga = u => new Promise((ok, mal) => new GLTFLoader().load(u, ok, undefined, mal));
+const gDon = await carga('/assets/mundos/anim/' + cual + '.glb');
+const rigDon = API.reposoDe(gDon.scene);
+const clipDon = gDon.animations[0];
+
+const mixers = [], modelos = [];
+for (let i = 0; i < NF; i++) {
+  const g = await carga('/assets/mundos/' + per);
+  const m = g.scene;
+  m.position.x = (i - (NF - 1) / 2) * 1.15;
+  sc.add(m); modelos.push(m);
+  const c2 = API.retargetClip(clipDon, rigDon, m);
+  const mx = new T.AnimationMixer(m);
+  const a = mx.clipAction(c2); a.play();
+  a.time = (i / NF) * (c2.duration || 1);
+  mx.update(0);
+  mixers.push(mx);
+}
+/* inclinacion de la espina medida en el propio navegador: cadera -> cabeza
+   contra la vertical. Es la medida que no depende de la pose de reposo. */
+function espina(m) {
+  let hip = null, head = null;
+  m.updateMatrixWorld(true);
+  m.traverse(o => { if (o.name === 'Hips') hip = o; if (o.name === 'Head') head = o; });
+  if (!hip || !head) return null;
+  const a = new T.Vector3(), c = new T.Vector3();
+  hip.getWorldPosition(a); head.getWorldPosition(c);
+  const v = c.sub(a).normalize();
+  return +(Math.acos(Math.max(-1, Math.min(1, v.y))) * 57.3).toFixed(1);
+}
+const caja = new T.Box3().setFromObject(modelos[0]);
+const alto = caja.max.y - caja.min.y, cy = (caja.max.y + caja.min.y) / 2;
+if (perfil) { cam.position.set(alto * 2.6, cy, 0.001); }
+else { cam.position.set(0, cy, alto * 2.6); }
+cam.lookAt(0, cy, 0);
+const g2 = new T.GridHelper(8, 16, 0x333a44, 0x5a626e); sc.add(g2);
+ren.render(sc, cam);
+const esp = modelos.map(espina);
+document.getElementById('n').textContent =
+  per + '  clip ' + cual + (perfil ? '  (perfil)' : '  (frente)') +
+  '   espina: ' + esp.join(' / ') + ' grados';
+window.__LISTO = { clip: clipDon.name, espina: esp, alto: +alto.toFixed(2),
+  pistas: clipDon.tracks.length };
+</script>

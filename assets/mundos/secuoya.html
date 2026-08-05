@@ -171,6 +171,19 @@
   #tarea{font-size:13px;font-weight:900;letter-spacing:.06em;margin-top:2px;display:none}
   #tarea.on{display:block}
 
+  /* AVISO del traslado (la ruta de las copas): una línea corta, centrada y por
+     encima del botón USAR y de la palanca, para que no tape ni una cosa ni la
+     otra. Aparece sola cuando estás en el sitio donde se usa. */
+  #aviso{position:absolute;left:50%;bottom:max(96px,20vh);transform:translateX(-50%);
+    display:none;pointer-events:none;text-align:center;max-width:80vw;
+    font:800 11.5px/1.35 ui-sans-serif,system-ui,sans-serif;letter-spacing:.07em;
+    padding:7px 13px;border-radius:10px;background:rgba(24,10,6,.66);
+    border:1px solid rgba(190,230,180,.34);color:#e8f2dc;backdrop-filter:blur(4px);
+    text-shadow:0 1px 6px rgba(0,0,0,.7)}
+  #aviso.on{display:block}
+  body.hablando #aviso{display:none}
+  @media (max-height:430px){ #aviso{bottom:max(84px,26vh);font-size:10.5px} }
+
   /* medidor de supervivencia (oxígeno / calor) */
   #medidor{position:absolute;left:12px;bottom:16px;width:150px;display:none;
     pointer-events:none}
@@ -242,6 +255,7 @@
   <div id="joy"><canvas width="300" height="300"></canvas></div>
   <div id="bSalta"><span>⤒</span><b id="bSaltaT">SALTO</b></div>
   <div id="recol"></div>
+  <div id="aviso"></div>
   <div id="corriendo"></div>
   <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
   <div id="pcHelp"></div>
@@ -338,6 +352,17 @@ try {
     : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
   GLTF = (await import(GLU)).GLTFLoader;
 } catch (e) {}
+/* REFLECTOR: el espejo del remanso. Es una SEGUNDA PASADA de render (la escena
+   entera vista desde debajo del agua), asi que se paga caro y por eso lo maneja
+   ESPEJO mas abajo: resolucion chica, uno de cada N cuadros, apagado de lejos y
+   apagado en BAJOS. Si el modulo no llega, el agua se queda con el reflejo
+   barato del PMREM y no se rompe nada. */
+let REFLECTOR = null;
+try {
+  const RFU = LOC ? '/_vthree/examples/jsm/objects/Reflector.js'
+    : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/objects/Reflector.js';
+  REFLECTOR = (await import(RFU)).Reflector;
+} catch (e) {}
 const $ = i => document.getElementById(i);
 
 /* ---------------- azar reproducible: el mar de dunas es SIEMPRE el mismo --- */
@@ -412,6 +437,15 @@ function alturaBase(x, z){
   h = h * (1 - wR * .8) + alturaBaseRef(POI.ruinas.x, POI.ruinas.z) * (wR * .8);
   const dC = Math.hypot(x - POI.cresta.x, z - POI.cresta.z);
   h += 18 * Math.exp(-(dC * dC) / (140 * 140));                  /* la loma alta */
+  /* LA HOYA DEL REMANSO. El capitulo 4 dice «baja al remanso del arroyo» y el
+     sitio era una explanada PLANA: el disco de agua quedaba como una sabana
+     tendida por encima del musgo, con el borde al aire y el ojo del jugador a
+     veinte centimetros de la superficie. Cavando un cuenco, el aplanado de POI
+     —que mezcla hacia alturaBase del CENTRO— hereda este fondo, la orilla cae
+     sola donde el terreno cruza el nivel del agua y no hay que dibujar ningun
+     borde. Va DESPUES del aplanado del claro para que el cuenco no se rellene. */
+  const dA = Math.hypot(x - POI.oasis.x, z - POI.oasis.z);
+  h -= 5.0 * Math.exp(-(dA * dA) / (20 * 20));
   return h;
 }
 /* Solo los lugares del GUION allanan el terreno: ahi se apoya lo construido.
@@ -620,6 +654,14 @@ scene.environment = pm.fromEquirectangular(TX.cielo).texture;
 scene.fog = new T.Fog(new T.Color('#9fb0a4'), 70, 500);
 const cam = new T.PerspectiveCamera(72, 1, .1, 1200);
 cam.rotation.order = 'YXZ';
+/* CAPA 2 = «esto NO entra al reflejo». La ve la cámara del jugador y no la
+   cámara espejada del remanso, que vuelve a dibujar la escena entera. Van acá
+   dos cosas: el viewmodel (cuelga de la cámara, y en el reflejo salían dos
+   antebrazos flotando en medio del agua) y las matas y los guijarros del suelo
+   —medido: 104.000 de los 182.000 triángulos que agregaba la segunda pasada—,
+   que en un reflejo rizado a veinte metros no se distinguen de todos modos. */
+const CAPA_NOESP = 2;
+cam.layers.enable(CAPA_NOESP);
 
 /* luz: UNA direccional (el sol) + hemisferio. Lambert por fragmento.
    El sol PROYECTA SOMBRA: su caja de sombra (±78 m) viaja pegada al jugador —
@@ -1032,6 +1074,7 @@ function plantar(){
       im.setMatrixAt(i, M4);
     }
     im.frustumCulled = false;
+    im.layers.set(CAPA_NOESP);     /* fuera del reflejo: ver CAPA_NOESP */
     scene.add(im);                 /* sin sombra: son mil y no se notaría */
   }
   const matRoca = new T.MeshLambertMaterial({ map: TX.roca });
@@ -1075,6 +1118,7 @@ function plantar(){
     chico.setMatrixAt(i, M4);
   }
   chico.frustumCulled = false;
+  chico.layers.set(CAPA_NOESP);    /* fuera del reflejo: ver CAPA_NOESP */
   scene.add(chico);
   /* LO QUE SE FUE CAYENDO del carro: cántaros rotos y tablas medio enterradas
      a los costados de la huella. Cuentan la historia sin hablar. */
@@ -1378,15 +1422,21 @@ let fuegoMat = null;
   }
   window.__RUINAS = 14;
 }
-/* ---------------- EL OASIS Y EL POZO ----------------------------------------
-   La hoya: un cuenco de arena con las palmeras en corro y, en el fondo, la boca
-   del pozo tapada por la arena. El pozo se levanta sobre una PLATAFORMA de
-   piedra (yb) para que el agua no se lo coma; cuando la manivela cede, el AGUA
-   SUBE 4 m hasta 55 cm por encima del fondo de la hoya: el terreno recorta el
-   disco solo, así que la orilla queda donde tiene que quedar, con bancos de
-   arena asomando. El agua refleja el cielo por PMREM. */
+/* ---------------- EL REMANSO DEL ARROYO -------------------------------------
+   La hoya del capítulo 4: el cuenco cavado en alturaBase, el corro de troncos
+   alrededor y, en el medio, la plataforma de piedra con el torno de madera que
+   dejó la partida para medir el calado. El agua está a 55 cm del fondo del
+   cuenco y el terreno recorta el disco solo, así que la orilla cae donde tiene
+   que caer sin dibujar ningún borde.
+   EL AGUA ESTABA MUERTA: venía del pozo de DUNAS, arrancaba invisible y sólo
+   aparecía si alguien llamaba a POZO.abrir() — y la misión de SECUOYA son las
+   piñas de los tres árboles, o sea que nadie lo llamaba NUNCA. El remanso del
+   capítulo 4 era musgo seco. Ahora el agua está desde el principio (es un
+   remanso de arroyo, no un pozo tapado) y refleja de verdad: ver ESPEJO. */
 let aguaMesh = null, aguaMat = null, manivela = null;
-const POZO = { abierto: false, k: 0 };
+const POZO = { abierto: true, k: 1 };
+/* EL ESPEJO: el Reflector del remanso y sus tres perillas de costo. */
+const ESPEJO = { malla: null, usar: true, cada: 2, base: 2, res: 512, dmax: 130 };
 {
   const p = POI.oasis, y = H(p.x, p.z);
   const yb = y + .62;                       /* la plataforma seca del pozo */
@@ -1435,32 +1485,142 @@ const POZO = { abierto: false, k: 0 };
   cue.position.set(p.x, yb + 3.3, p.z);
   scene.add(cue);
   ARB.push([p.x, p.z, 5.2]);
-  /* EL AGUA. OJO: con roughness bajo y envMapIntensity alto sale BLANCA (refleja
-     el cielo dorado entero); el brillo del reflejo lo maneja el bucle según la
-     luz del capítulo. */
-  aguaMat = new T.MeshStandardMaterial({ color: 0x1d5f66, roughness: .26,
-    metalness: .06, map: TX.agua, transparent: true, opacity: .93,
+  /* EL AGUA BARATA: la que se ve de lejos y en BAJOS. Refleja sólo el cielo por
+     PMREM. OJO: con roughness bajo y envMapIntensity alto sale BLANCA (refleja
+     el cielo entero); el brillo lo maneja el bucle según la luz del capítulo.
+     El radio bajó de 22 a RAD m: con la hoya cavada, a esa distancia el terreno
+     ya subió por encima del nivel y se come el canto del disco. */
+  const RAD = 21.0;
+  aguaMat = new T.MeshStandardMaterial({ color: 0x1b4f47, roughness: .3,
+    metalness: .06, map: TX.agua, transparent: true, opacity: .95,
     envMapIntensity: .55 });
-  aguaMat.map.repeat.set(9, 9);
-  aguaMesh = new T.Mesh(new T.CircleGeometry(22, 44), aguaMat);
+  aguaMat.map.repeat.set(6, 6);
+  aguaMesh = new T.Mesh(new T.CircleGeometry(RAD, 40), aguaMat);
   aguaMesh.rotation.x = -Math.PI / 2;
-  aguaMesh.position.set(p.x, NIVEL - 4, p.z);
-  aguaMesh.visible = false;
+  aguaMesh.position.set(p.x, NIVEL, p.z);
   scene.add(aguaMesh);
-  POZO.abrir = () => {
-    if (POZO.abierto) return;
-    POZO.abierto = true;
-    aguaMesh.visible = true;
+  /* ----------------------- EL REFLEJO DE VERDAD -----------------------------
+     Un Reflector: se vuelve a dibujar la escena desde una cámara espejada bajo
+     el agua y el resultado se muestrea proyectado. Sobre el shader de fábrica
+     hay dos cambios que son los que hacen que se lea como AGUA y no como un
+     espejo tirado en el suelo:
+       · los RIZOS de TX.agua corren el punto de muestreo (un espejo perfecto en
+         un bosque canta a vidrio);
+       · FRESNEL: mirando a pico se ve el fondo oscuro del remanso y de canto se
+         ve el reflejo. Sin esto el agua es igual de espejada desde todos lados.
+     Es OPACO a propósito: mezcla el color del agua adentro del shader, así no
+     entra en la cola de transparencias ni necesita depthWrite falso. */
+  const shAgua = {
+    name: 'AguaRemanso',
+    uniforms: { color: { value: null }, tDiffuse: { value: null },
+      textureMatrix: { value: null }, tRizo: { value: TX.agua },
+      desliza: { value: new T.Vector2(0, 0) }, brillo: { value: 1 } },
+    vertexShader: [
+      'uniform mat4 textureMatrix;',
+      'varying vec4 vUv;',
+      'varying vec3 vMun;',
+      'varying vec2 vRz;',
+      'void main(){',
+      '  vUv = textureMatrix * vec4(position, 1.0);',
+      '  vec4 mp = modelMatrix * vec4(position, 1.0);',
+      '  vMun = mp.xyz;',
+      '  vRz = uv;',
+      '  gl_Position = projectionMatrix * viewMatrix * mp;',
+      '}'].join('\n'),
+    fragmentShader: [
+      'uniform vec3 color;',
+      'uniform sampler2D tDiffuse;',
+      'uniform sampler2D tRizo;',
+      'uniform vec2 desliza;',
+      'uniform float brillo;',
+      'varying vec4 vUv;',
+      'varying vec3 vMun;',
+      'varying vec2 vRz;',
+      'void main(){',
+      '  vec2 rz = texture2D(tRizo, vRz * 6.0 + desliza).rg - 0.5;',
+      '  vec2 uv = vUv.xy / max(vUv.w, 0.0001) + rz * 0.045;',
+      '  vec3 esp = texture2D(tDiffuse, clamp(uv, 0.002, 0.998)).rgb;',
+      '  vec3 V = normalize(cameraPosition - vMun);',
+      '  float f = pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);',
+      '  f = clamp(0.09 + 0.91 * f, 0.0, 1.0) * brillo;',
+      '  gl_FragColor = vec4(mix(color, esp, f), 1.0);',
+      '  #include <tonemapping_fragment>',
+      '  #include <colorspace_fragment>',
+      '}'].join('\n')
   };
-  POZO.tick = dt => {
-    if (manivela && POZO.abierto && POZO.k < 1) manivela.rotation.y += dt * 2.2;
+  if (REFLECTOR){
+    const esp = new REFLECTOR(new T.CircleGeometry(RAD, 40), {
+      color: 0x17453d, textureWidth: ESPEJO.res, textureHeight: ESPEJO.res,
+      clipBias: .004, multisample: 0, shader: shAgua });
+    esp.rotation.x = -Math.PI / 2;
+    esp.position.set(p.x, NIVEL + .01, p.z);   /* un centimetro sobre el barato */
+    esp.visible = false;
+    scene.add(esp);
+    /* EL REFLEJO NO SE RECALCULA TODOS LOS CUADROS. El agua se mueve despacio y
+       la textura del cuadro anterior sirve: pagar la segunda pasada 1 de cada
+       ESPEJO.cada es lo que lo hace barato de verdad. */
+    const antes = esp.onBeforeRender;
+    let nq = 0;
+    esp.onBeforeRender = function (r, s, c){
+      if ((nq++ % ESPEJO.cada) !== 0) return;
+      antes.call(this, r, s, c);
+    };
+    ESPEJO.malla = esp;
+    /* la calidad manda: en BAJOS no hay espejo (medido: se lleva mas del 15% de
+       los fps) y en MEDIOS va a media resolucion y uno de cada dos cuadros. */
+    ESPEJO.aplica = g => {
+      ESPEJO.usar = g !== 'b';
+      ESPEJO.base = g === 'a' ? 1 : 2;
+      ESPEJO.cada = ESPEJO.base;
+      const r2 = g === 'a' ? 512 : 384;
+      const rt = esp.getRenderTarget();
+      if (rt.width !== r2) rt.setSize(r2, r2);
+      if (!ESPEJO.usar){ esp.visible = false; aguaMesh.visible = true; }
+    };
+  }
+  /* LAS PIÑAS QUE FLOTAN: el capítulo dice que las vacías flotan y las fértiles
+     se hunden. Doce en la superficie, cabeceando: es la única pista visual de
+     por qué este charco importa. Instanciadas = un dibujado. */
+  const nP = 12;
+  const iPin = new T.InstancedMesh(new T.IcosahedronGeometry(.2, 0),
+    new T.MeshLambertMaterial({ color: 0x6b4522 }), nP);
+  const V3b = new T.Vector3();   /* compose() pide posicion y escala a la vez */
+  const pinF = [];
+  for (let i = 0; i < nP; i++){
+    const a = rr(0, 6.283), d = Math.sqrt(rnd()) * (RAD - 2.5);
+    pinF.push([p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, rr(0, 6.283)]);
+  }
+  iPin.frustumCulled = false;
+  scene.add(iPin);
+  POZO.tick = (dt, t) => {
     if (aguaMat.map){ aguaMat.map.offset.x += dt * .013; aguaMat.map.offset.y += dt * .009; }
-    if (!POZO.abierto) return;
-    POZO.k = Math.min(1, POZO.k + dt / 6);
-    const k = POZO.k * POZO.k * (3 - 2 * POZO.k);
-    aguaMesh.position.y = NIVEL - 4 + k * 4;
+    /* el espejo cuesta una segunda pasada: sólo de cerca y nunca en BAJOS.
+       Y CUANTO MÁS LEJOS, MENOS SEGUIDO se recalcula: desde la copa de la ruta
+       de las copas, a 26 m de altura, la cámara ve medio bosque y la segunda
+       pasada pasaba de 78.000 triángulos a más de 400.000. Con el charco a esa
+       distancia ocupando cuatro píxeles, refrescarlo uno de cada cuatro cuadros
+       no se nota y devuelve los fps. */
+    if (ESPEJO.malla){
+      const d = Math.hypot(cam.position.x - p.x, cam.position.z - p.z);
+      const on = ESPEJO.usar && d < ESPEJO.dmax;
+      ESPEJO.malla.visible = on;
+      aguaMesh.visible = !on;
+      if (on){
+        ESPEJO.cada = ESPEJO.base * (d < 45 ? 1 : (d < 85 ? 2 : 3));
+        ESPEJO.malla.material.uniforms.desliza.value.set(t * .013, t * .009);
+      }
+    }
+    for (let i = 0; i < nP; i++){
+      const f = pinF[i];
+      Q4.setFromEuler(E3.set(Math.sin(t * 1.3 + i) * .18, f[2], Math.cos(t * .9 + i) * .18));
+      M4.compose(V3.set(f[0], NIVEL + .04 + Math.sin(t * 1.6 + i * 2.1) * .045, f[1]),
+        Q4, V3b.set(1, .55, 1));
+      iPin.setMatrixAt(i, M4);
+    }
+    iPin.instanceMatrix.needsUpdate = true;
   };
   window.__POZO = POZO;
+  window.__ESPEJO = ESPEJO;
 }
 /* ---------------- LA CRESTA: la hoguera de la señal -------------------------
    La duna madre. Arriba, una pira de leños sobre un anillo de piedras: encendida
@@ -2263,59 +2423,149 @@ const CLIPS = { quieto: null, andar: null, correr: null, listos: 0, cola: [] };
   }
 }
 /* ======================== RETARGET DE LOS CLIPS ===========================
-   Una pista de glTF guarda la rotacion LOCAL ABSOLUTA del hueso, no un delta
-   respecto de su reposo. Los personajes comparten los nombres de hueso pero NO
-   la pose de reposo (el rig se ajusta a cada malla), asi que aplicar el clip tal
-   cual le reemplaza la pose de reposo por la del donante y la deformacion se
-   suma dos veces: los codos se van para afuera y los antebrazos se doblan.
-   Se convierte el clip al reposo del destino:
-       delta   = inv(reposoDonante) * clip
-       destino = reposoDestino * delta
-   La pose de reposo del donante viaja dentro del propio GLB de solo-animacion,
-   asi que no hace falta ningun archivo de mas. */
-const _rtQd = new T.Quaternion(), _rtCorr = new T.Quaternion(), _rtQ = new T.Quaternion();
+   Los 11 personajes de per/*.glb no traen animacion y se les presta uno de los
+   tres clips de anim/*.glb. Comparten los MISMOS 26 nombres de hueso, pero NO la
+   pose de reposo: el rig sale ajustado a cada malla y los marcos de cada
+   articulacion quedan girados de cualquier manera. Medido sobre los GLB, la
+   rotacion local de reposo de Hips va de 2,4 grados en canon-cuerdas a 133,5 en
+   volcan-obrero, y la de Spine02 de 6,0 a 133,5.
+
+   POR QUE NO ALCANZA UNA CORRECCION FIJA POR HUESO (lo que habia antes)
+   Se hacia  q_donante * inv(reposoDonante) * reposoDestino , o sea una constante
+   por hueso. Eso puede acertar UN fotograma pero no todos: la rotacion local se
+   compone en el marco del PADRE, y ese marco cambia en cada fotograma cuando el
+   padre se mueve. Con las caderas a cien grados de diferencia una constante no
+   puede ser correcta a la vez para el reposo y para el movimiento, y por eso el
+   personaje quedaba derecho quieto pero encorvado al caminar.
+
+   LO QUE SE HACE AHORA: espacio de MUNDO, que es donde "girar el brazo treinta
+   grados hacia adelante" significa lo mismo en los dos rigs. Por hueso b y
+   fotograma f:
+       delta   = mundoAnimadoDonante(b) * inv(mundoReposoDonante(b))
+       mundoDestino(b) = delta * mundoReposoDestino(b)
+       localDestino(b) = inv(mundoDestino(padre)) * mundoDestino(b)
+   El pase va de padre a hijo porque mundoDestino(padre) es el resultado YA
+   corregido: ahi esta justamente la parte que una constante no puede reproducir.
+
+   El cero del donante viaja dentro del propio GLB: mk_anim.py le dejo como pose
+   de reposo de los nodos la POSE NEUTRA del clip (el promedio de sus fotogramas),
+   asi que aca no hay que promediar nada. Eso importa porque los clips de la
+   libreria vienen con un sesgo constante grande (Idle tiene la cadera 40 grados
+   fuera de su bind, Run_02 la columna 27) y si se tomara ese sesgo como cero se
+   le sumaria al personaje, que es la joroba que se veia.
+
+   Costo: 26 huesos x ~70-127 fotogramas x 3 clips por personaje, una sola vez al
+   cargarlo. Son unos pocos milisegundos y no toca el bucle de dibujado, asi que
+   no depende de GFX. */
+const _rtQ = new T.Quaternion(), _rtI = new T.Quaternion(),
+      _rtD = new T.Quaternion(), _rtL = new T.Quaternion();
+/* El rig de un GLB por NOMBRE de hueso: rotacion y posicion locales de reposo
+   mas el nombre del PADRE. El padre hace falta porque el retarget pasa por
+   mundo; la version anterior solo guardaba q y p y por eso no podia hacerlo. */
 function reposoDe(raiz){
   const R = {};
   raiz.traverse(o => {
-    if (o.isBone || o.type === 'Bone' || R[o.name] === undefined)
-      R[o.name] = { q: o.quaternion.clone(), p: o.position.clone() };
+    if (!o.name || R[o.name] !== undefined) return;
+    const pa = o.parent;
+    R[o.name] = { q: o.quaternion.clone(), p: o.position.clone(),
+                  padre: (pa && pa.name && R[pa.name]) ? pa.name : null };
   });
   return R;
 }
-function retargetClip(clip, restDon, modelo){
-  if (!clip || !restDon) return clip;
-  const restDst = reposoDe(modelo);
+/* rotaciones de mundo de la pose de reposo, mas el orden padre-antes-que-hijo */
+function mundoDe(rig){
+  const W = {}, orden = [];
+  const sube = nom => {
+    if (W[nom]) return W[nom];
+    const h = rig[nom];
+    W[nom] = (h.padre && rig[h.padre]) ? sube(h.padre).clone().multiply(h.q)
+                                       : h.q.clone();
+    orden.push(nom);
+    return W[nom];
+  };
+  for (const nom in rig) sube(nom);
+  return { W, orden };
+}
+function retargetClip(clip, rigDon, modelo){
+  if (!clip || !rigDon) return clip;
+  /* el reposo se lee UNA vez y se guarda: si un personaje ya tiene acciones
+     sonando, sus huesos no estan en reposo y leerlos daria un cero falso */
+  const rigDst = modelo.userData._rig || (modelo.userData._rig = reposoDe(modelo));
+  const A = mundoDe(rigDon), B = mundoDe(rigDst);
   const c2 = clip.clone();
+  const rot = {}, pos = [];
   for (const tr of c2.tracks){
     const i = tr.name.lastIndexOf('.');
     if (i < 0) continue;
     const nom = tr.name.slice(0, i), prop = tr.name.slice(i + 1);
-    const rd = restDon[nom], rt = restDst[nom];
-    if (!rd || !rt) continue;
-    if (prop === 'quaternion'){
-      /* El movimiento del clip se compone en el espacio del PADRE, no en el del propio
-         hueso: la desviacion respecto del reposo es  q * inv(reposo), y eso se aplica
-         al reposo del destino POR DERECHA. Premultiplicando —como estaba— el eje del
-         giro se mapeaba al marco equivocado, y como los dos rigs tienen los mismos 26
-         nombres de hueso pero sus reposos de cadera y columna difieren CIEN GRADOS
-         (medido: 134,9 contra 34,5), eso es exactamente la inclinacion que se veia.
-         Con la multiplicacion del lado correcto los once personajes quedan de pie y no
-         hace falta generar animacion por modelo. */
-      _rtCorr.copy(_rtQd.copy(rd.q).invert()).multiply(rt.q);
-      for (let k = 0; k < tr.values.length; k += 4){
-        _rtQ.set(tr.values[k], tr.values[k + 1], tr.values[k + 2], tr.values[k + 3]);
-        _rtQ.multiply(_rtCorr);
-        tr.values[k] = _rtQ.x; tr.values[k + 1] = _rtQ.y;
-        tr.values[k + 2] = _rtQ.z; tr.values[k + 3] = _rtQ.w;
+    if (prop === 'quaternion' && rigDon[nom] && rigDst[nom]) rot[nom] = tr;
+    else if (prop === 'position') pos.push([nom, tr]);
+  }
+  /* mk_anim.py deja todas las pistas con el MISMO reloj, asi que se recorre por
+     indice de fotograma. Si alguna vez no fuera asi, mejor devolver el clip sin
+     tocar que escribir cualquier cosa. */
+  let nf = -1, mezcla = false;
+  for (const n in rot){
+    const c = rot[n].values.length / 4;
+    if (nf < 0) nf = c; else if (c !== nf) mezcla = true;
+  }
+  if (nf <= 0 || mezcla) return c2;
+
+  const orden = A.orden.filter(n => rigDst[n]);
+  const Wd = {}, Wt = {}, prev = {};
+  for (const n of orden){ Wd[n] = new T.Quaternion(); Wt[n] = new T.Quaternion(); }
+  for (let f = 0; f < nf; f++){
+    // 1) pose del donante, de local a mundo
+    for (const n of orden){
+      const tr = rot[n];
+      if (tr){ const k = f * 4;
+        _rtQ.set(tr.values[k], tr.values[k+1], tr.values[k+2], tr.values[k+3]); }
+      else _rtQ.copy(rigDon[n].q);
+      const pa = rigDon[n].padre;
+      if (pa && Wd[pa]) Wd[n].copy(Wd[pa]).multiply(_rtQ); else Wd[n].copy(_rtQ);
+    }
+    // 2) el giro de mundo del donante, aplicado al reposo del destino
+    for (const n of orden){
+      if (rot[n]){
+        _rtD.copy(Wd[n]).multiply(_rtI.copy(A.W[n]).invert());
+        Wt[n].copy(_rtD).multiply(B.W[n]);
+      } else {
+        const pa = rigDst[n].padre;
+        if (pa && Wt[pa]) Wt[n].copy(Wt[pa]).multiply(rigDst[n].q);
+        else Wt[n].copy(B.W[n]);
       }
-    } else if (prop === 'position'){
-      /* en delta: si no, la cadera del donante lleva al destino a SU altura y
-         el personaje flota o se hunde en el suelo */
-      for (let k = 0; k < tr.values.length; k += 3){
-        tr.values[k]     += rt.p.x - rd.p.x;
-        tr.values[k + 1] += rt.p.y - rd.p.y;
-        tr.values[k + 2] += rt.p.z - rd.p.z;
+    }
+    // 3) de vuelta a local, que es lo que consume el AnimationMixer
+    for (const n of orden){
+      const tr = rot[n]; if (!tr) continue;
+      const pa = rigDst[n].padre;
+      if (pa && Wt[pa]) _rtL.copy(_rtI.copy(Wt[pa]).invert()).multiply(Wt[n]);
+      else _rtL.copy(Wt[n]);
+      /* continuidad de signo: dos cuaterniones opuestos son la misma rotacion
+         pero interpolados dan la vuelta larga, y se ve un tironeo */
+      const p = prev[n];
+      if (p && (p[0]*_rtL.x + p[1]*_rtL.y + p[2]*_rtL.z + p[3]*_rtL.w) < 0){
+        _rtL.set(-_rtL.x, -_rtL.y, -_rtL.z, -_rtL.w);
       }
+      const k = f * 4;
+      tr.values[k] = _rtL.x; tr.values[k+1] = _rtL.y;
+      tr.values[k+2] = _rtL.z; tr.values[k+3] = _rtL.w;
+      prev[n] = [_rtL.x, _rtL.y, _rtL.z, _rtL.w];
+    }
+  }
+  /* Solo la cadera trae traslacion: mk_anim.py tiro las otras 23, que eran
+     constantes y llevaban los LARGOS DE HUESO del donante (aplicadas al
+     personaje le pisaban sus proporciones y le estiraban la malla). Va en delta
+     y escalada por la relacion de alturas de cadera, si no un personaje bajo
+     flota y uno alto se hunde. */
+  for (const par of pos){
+    const h = rigDon[par[0]], hd = rigDst[par[0]];
+    if (!h || !hd) continue;
+    const tr = par[1], k = h.p.y ? (hd.p.y / h.p.y) : 1;
+    for (let i = 0; i < tr.values.length; i += 3){
+      tr.values[i]     = hd.p.x + (tr.values[i]     - h.p.x) * k;
+      tr.values[i + 1] = hd.p.y + (tr.values[i + 1] - h.p.y) * k;
+      tr.values[i + 2] = hd.p.z + (tr.values[i + 2] - h.p.z) * k;
     }
   }
   return c2;
@@ -2389,10 +2639,11 @@ function mezclaAcciones(npc, vel, dt){
   /* el clip avanza al ritmo del paso: si no, se arrastra o patina */
   if (A.andar) A.andar.timeScale = cl(vel / 1.9, .55, 2.1);
   if (A.correr) A.correr.timeScale = cl(vel / 5.4, .6, 1.9);
-  /* el Idle de Meshy mira a los costados. La queja no era que mire: era que lo
-     hace rapido, sin parar y todos a la vez. A 0,42 el MISMO clip se lee como
-     respirar, y el desfase por personaje rompe el coro. */
-  if (A.quieto) A.quieto.timeScale = 0.42;
+  /* El 0,42 domaba el Idle VIEJO, que giraba la cabeza 123 grados y parecia un
+     tic nervioso. El clip de ahora (Idle_02) tiene 5 grados de amplitud maxima:
+     ya ES una respiracion, y frenarlo a 0,42 lo dejaba casi congelado. A ritmo
+     natural respira, y el desfase por personaje sigue rompiendo el coro. */
+  if (A.quieto) A.quieto.timeScale = 1.0;
 }
 function ponerModelo(npc){
   if (!GLTF || !npc.glb) return;
@@ -2611,10 +2862,17 @@ function itemCerca(){
 /* ¿qué haría el botón USAR ahora mismo? El capítulo manda, después los
    items, después charlar con quien esté cerca. */
 function accionUsable(){
+  /* trepando o colgado del cable no se usa NADA más: si no, el botón USAR se
+     encendía en pleno vuelo con lo que hubiera abajo y te abría un diálogo. */
+  if (COPAS.modo) return null;
   const C = CAPS[cap];
   const p = POI[C.obj];
   if (C.usar && Math.hypot(px - p.x, pz - p.z) < 7 && MISION.lista(cap))
     return { tipo: 'cap' };
+  /* la ruta de las copas: sale por el mismo botón USAR y con el mismo aviso que
+     todo lo demás, así que no necesita tutorial */
+  const cp = COPAS.accion();
+  if (cp) return { tipo: 'copas', cp };
   const it = itemCerca();
   if (it) return { tipo: 'item', it };
   const npc = npcCerca();
@@ -2626,6 +2884,7 @@ function usarAccion(){
   const acc = accionUsable();
   if (!acc) return;
   if (acc.tipo === 'cap') llegaObjetivo();
+  else if (acc.tipo === 'copas') COPAS.usar(acc.cp);
   else if (acc.tipo === 'item'){ acc.it.activo = false; acc.it.fn(acc.it); }
   else hablaNPC(acc.npc);
 }
@@ -2688,6 +2947,10 @@ const CUERPO = {};
   CUERPO.bD = brazoVM(1);
   cam.add(vm);
   CUERPO.vm = vm;
+  /* fuera del reflejo (ver CAPA_NOESP): los antebrazos cuelgan de la cámara y
+     aparecían flotando en medio del agua, a la altura de la cara. Las piernas y
+     el cuerpo del mundo SÍ quedan en el reflejo, que es lo que uno espera ver. */
+  vm.traverse(o => o.layers.set(CAPA_NOESP));
 
   /* --- el cuerpo en el mundo: piernas visibles + resto sólo-sombra --- */
   const root = new T.Group();
@@ -2900,6 +3163,15 @@ function ambienteOn(){
   const fe = A2.createBiquadFilter(); fe.type = 'highpass'; fe.frequency.value = 2600;
   AMB.noche = A2.createGain(); AMB.noche.gain.value = 0;
   ne.connect(fe); fe.connect(AMB.noche); AMB.noche.connect(AMB.master); ne.start();
+  /* EL ZUMBIDO DE LA POLEA sobre el cable: diente de sierra grave por un
+     pasabajos. Es lo único que le avisa al oído de que te estás moviendo a
+     veinte metros del suelo, porque ahí arriba no hay pasos que suenen. */
+  const oz = A2.createOscillator(); oz.type = 'sawtooth'; oz.frequency.value = 54;
+  const fz = A2.createBiquadFilter(); fz.type = 'lowpass';
+  fz.frequency.value = 760; fz.Q.value = .8;
+  AMB.tiro = A2.createGain(); AMB.tiro.gain.value = 0;
+  oz.connect(fz); fz.connect(AMB.tiro); AMB.tiro.connect(AMB.master); oz.start();
+  AMB.tiroOsc = oz;
 }
 /* la campanilla de bronce que llevan las mulas: dos notas que se apagan largo */
 function blip(){
@@ -2927,6 +3199,14 @@ function ambTick(dt){
   AMB.pos.gain.value = cl(1 - dh / 46, 0, 1) * .3 * abierto;
   /* la arena que corre bajo las botas */
   AMB.noche.gain.value = Math.min(1, Math.hypot(pvx, pvz) / VEL) * .05;
+  /* la polea: más fuerte y más aguda cuanto más rápido bajás por el cable, y se
+     apaga sola al soltarte (perseguido, no cortado: un corte seco se oye) */
+  if (AMB.tiro){
+    const vz = COPAS.modo === 'vuela' ? COPAS.vel : 0;
+    const obj = vz > 0 ? cl(vz / 25, .12, 1) * .09 : 0;
+    AMB.tiro.gain.value += (obj - AMB.tiro.gain.value) * Math.min(1, dt * 7);
+    if (AMB.tiroOsc) AMB.tiroOsc.frequency.value = 48 + vz * 5.2;
+  }
   AMB.tBlip -= dt;
   if (AMB.tBlip <= 0){ AMB.tBlip = 9 + Math.random() * 13;
     if (SOLD.y < .45) blip(); }
@@ -3218,6 +3498,333 @@ const caraCanelo = (g, n2) => {
     giro: 3.0, glb: 'per/jungla-explorador.glb', glbEsc: 1, glbGiro: 0 });
 }
 
+/* ==================== LA RUTA DE LAS COPAS: EL TRASLADO ====================
+   El pedido era que este mundo se recorra distinto: acá se sube por ESCALONES
+   TALLADOS en un tronco y se baja en TIROLESA de una copa a la siguiente.
+
+   POR QUÉ ACÁ Y NO EN OTRA PARTE. Las tres torres caen sobre la recta que va del
+   claro del árbol madre al remanso, que es el tramo más largo del guion (214 m a
+   pie contra 211 m de cable). La primera arranca a 55 m del claro: fuera de la
+   explanada y lejos de los tres árboles que hay que probar, así que no le estorba
+   a ningún objetivo. Y el último cable cruza el remanso POR ENCIMA — es el único
+   sitio del mundo desde donde se ve el reflejo del agua entero.
+
+   POR QUÉ NO ROMPE LA HISTORIA. Va en una sola dirección y siempre cuesta abajo,
+   y no lleva a ningún capítulo que no estuviera ya abierto: los capítulos se
+   disparan por su POI y en orden, así que llegar antes al remanso no adelanta
+   nada. Tampoco sirve para salirse del mapa: las cuatro estaciones están a más
+   de 340 m del borde y el vuelo termina en el suelo, no en el aire.
+
+   CÓMO ENCAJA EN LA FÍSICA QUE YA HABÍA. `aireY` es «cuánto estás por encima del
+   suelo», así que una repisa a 26 m no necesita física nueva: se le fija aireY a
+   la diferencia y el salto y la caída de siempre siguen valiendo tal cual. Al
+   salirse del disco de la plataforma se suelta el soporte y cae. Los dos modos
+   (trepar y volar) cortan `fisica` antes del suelo, porque ninguno de los dos lo
+   usa; y no hay controles nuevos: palanca/WASD para subir y bajar los escalones,
+   USAR/E para engancharse, SALTO para soltarse.
+   ========================================================================== */
+const COPAS = (() => {
+  const RDECK = 5.2;     /* radio de la plataforma */
+  const RCAE = 5.0;      /* pasado esto te caés (un poco menos que el tablón) */
+  const RHEL = 2.9;      /* radio de la hélice de escalones, pegada al tronco */
+  const RANC = 4.6;      /* dónde se ata el cable, en el canto */
+  const SAG = 2.6;       /* panza del cable en el medio */
+  const EST = [
+    { x: -79, z:  44, sub: 24 },        /* A: la que se trepa, junto al claro */
+    { x: -60, z: -17, baja: 9.8 },      /* B: sobre el fondo de la vaguada */
+    { x: -64, z: -84, baja: 9.0 }       /* C: la última copa, al borde del agua */
+  ];
+  const SUELO = { x: 0, z: -132 };      /* donde te deja el último cable */
+  const matCor = new T.MeshLambertMaterial({ map: TX.oscuro, color: 0xc08a5e });
+  const matTab = new T.MeshLambertMaterial({ map: TX.oscuro, color: 0xd8b98a });
+  const matHer = new T.MeshLambertMaterial({ color: 0x322a22 });
+  const matHoj = new T.MeshLambertMaterial({ color: 0x3d5c30 });
+  const az = (dx, dz) => Math.atan2(dx, dz);   /* azimut: (sin,cos) es el rumbo */
+
+  /* ------------------------- lo que se ve ---------------------------------- */
+  for (let i = 0; i < EST.length; i++){
+    const E = EST[i];
+    E.g = H(E.x, E.z);
+    E.y = E.sub != null ? E.g + E.sub : EST[i - 1].y - E.baja;
+    const alto = E.y - E.g + 3.4;
+    const tro = new T.Mesh(new T.CylinderGeometry(1.5, 2.4, alto, 9), matCor);
+    tro.position.set(E.x, E.g + alto / 2, E.z);
+    tro.castShadow = tro.receiveShadow = true;
+    scene.add(tro);
+    ARB.push([E.x, E.z, 2.4]);
+    /* LA COPA: tres masas achatadas por encima de la plataforma. No es adorno —
+       es lo que te tapa el cielo y hace que estar arriba se sienta ADENTRO del
+       árbol y no en un poste. */
+    const gc = [];
+    for (let k = 0; k < 3; k++){
+      const s = new T.SphereGeometry(6.8 - k * 1.2, 7, 5);
+      s.scale(1, .5, 1);
+      s.translate(rr(-2.4, 2.4), E.y + 4.6 + k * 2.5, rr(-2.4, 2.4));
+      gc.push(s);
+    }
+    const cop = new T.Mesh(fusiona(gc), matHoj);
+    cop.position.set(E.x, 0, E.z);
+    cop.castShadow = true;
+    scene.add(cop);
+    /* LA PLATAFORMA: el tablón en anillo, cuatro puntales por debajo (se ven al
+       pasar volando) y seis tocones de baranda. Todo fusionado: un dibujado. */
+    const gp = [];
+    const d1 = new T.CylinderGeometry(RDECK, RDECK, .3, 16);
+    d1.translate(0, E.y - .15, 0);
+    gp.push(d1);
+    for (let k = 0; k < 4; k++){
+      const st = new T.BoxGeometry(.2, 3.8, .2);
+      st.translate(0, -1.6, 0);
+      st.rotateX(.78);
+      st.translate(0, E.y - .4, RDECK - .6);
+      st.rotateY(k * 1.5708 + .7);
+      gp.push(st);
+    }
+    for (let k = 0; k < 6; k++){
+      const po = new T.BoxGeometry(.16, .78, .16);
+      po.translate(0, E.y + .25, RDECK - .45);
+      po.rotateY(k * 1.047 + .35);
+      gp.push(po);
+    }
+    E.deck = new T.Mesh(fusiona(gp), matTab);
+    E.deck.position.set(E.x, 0, E.z);
+    E.deck.castShadow = E.deck.receiveShadow = true;
+    scene.add(E.deck);
+  }
+  /* ---------------------- los escalones del tronco A ----------------------- */
+  {
+    const E = EST[0];
+    /* la hélice arranca mirando al claro: quien viene del claro se la encuentra
+       de frente y no tiene que rodear el tronco para verla */
+    E.helA = az(POI.ruinas.x - E.x, POI.ruinas.z - E.z);
+    E.helG = 2.25 * 6.2832;
+    E.altEsc = E.y - E.g - .6;
+    E.pieX = E.x + Math.sin(E.helA) * 3.4;
+    E.pieZ = E.z + Math.cos(E.helA) * 3.4;
+    E.escX = E.x + Math.sin(E.helA + E.helG) * RHEL;
+    E.escZ = E.z + Math.cos(E.helA + E.helG) * RHEL;
+    const gs = [];
+    const N = 46;
+    for (let k = 0; k < N; k++){
+      const t = k / (N - 1);
+      const b = new T.BoxGeometry(.8, .22, 2.0);
+      b.translate(0, E.g + .6 + t * E.altEsc, RHEL);
+      b.rotateY(E.helA + t * E.helG);
+      gs.push(b);
+    }
+    const esc = new T.Mesh(fusiona(gs), matTab);
+    esc.position.set(E.x, 0, E.z);
+    esc.castShadow = esc.receiveShadow = true;
+    scene.add(esc);
+    /* una lona clavada al pie: de lejos es lo único que dice «acá hay algo» */
+    bandera(E.pieX, E.g + 2.4, E.pieZ, 1.4, .9, E.helA + 1.57);
+    const mast = new T.Mesh(new T.CylinderGeometry(.07, .09, 3, 6), matHer);
+    mast.position.set(E.pieX, E.g + 1.5, E.pieZ);
+    mast.castShadow = true;
+    scene.add(mast);
+  }
+  /* ------------------------------ los cables ------------------------------- */
+  const CABLES = [];
+  const puntoCable = (C, u) => {
+    /* bezier cuadrática: con el punto de control 2·SAG por debajo del medio, la
+       curva pasa justo a SAG de panza, que es como cuelga un cable de verdad */
+    const w = 1 - u;
+    return { x: w * w * C.a.x + 2 * w * u * C.cx + u * u * C.b.x,
+             y: w * w * C.a.y + 2 * w * u * C.cy + u * u * C.b.y,
+             z: w * w * C.a.z + 2 * w * u * C.cz + u * u * C.b.z };
+  };
+  for (let i = 0; i < EST.length; i++){
+    const E = EST[i], N2 = EST[i + 1];
+    const dx = (N2 ? N2.x : SUELO.x) - E.x, dz = (N2 ? N2.z : SUELO.z) - E.z;
+    const r = az(dx, dz);
+    E.ancX = E.x + Math.sin(r) * RANC;
+    E.ancZ = E.z + Math.cos(r) * RANC;
+    const a = { x: E.ancX, y: E.y + 2.25, z: E.ancZ };
+    const b = N2 ? { x: N2.x - Math.sin(r) * RANC, y: N2.y + 2.25,
+                     z: N2.z - Math.cos(r) * RANC }
+                 : { x: SUELO.x, y: H(SUELO.x, SUELO.z) + 1.8, z: SUELO.z };
+    const C = { a, b, dest: N2 || null, rumbo: r,
+      largo: Math.hypot(b.x - a.x, b.z - a.z) + Math.abs(b.y - a.y) * .2,
+      cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 - SAG * 2, cz: (a.z + b.z) / 2 };
+    E.cable = C;
+    CABLES.push(C);
+    /* el poste donde se ata, y el cable como tubo (un Line no se ve a contraluz
+       ni proyecta, y este cable hay que VERLO desde lejos para entenderlo) */
+    const pos = new T.Mesh(new T.CylinderGeometry(.13, .16, 2.5, 6), matHer);
+    pos.position.set(a.x, E.y + 1.1, a.z);
+    pos.castShadow = true;
+    scene.add(pos);
+    const cur = new T.QuadraticBezierCurve3(new T.Vector3(a.x, a.y, a.z),
+      new T.Vector3(C.cx, C.cy, C.cz), new T.Vector3(b.x, b.y, b.z));
+    const tub = new T.Mesh(new T.TubeGeometry(cur, 18, .055, 4, false), matHer);
+    tub.castShadow = false;
+    scene.add(tub);
+    if (!N2){
+      /* el palo de llegada: sin esto el cable muere en el aire y no se sabe
+         donde vas a caer */
+      const ll = new T.Mesh(new T.CylinderGeometry(.14, .18, 2.6, 6), matHer);
+      ll.position.set(b.x, H(b.x, b.z) + 1.3, b.z);
+      ll.castShadow = true;
+      scene.add(ll);
+      ARB.push([b.x, b.z, .5]);
+    }
+    /* LA POLEA: aparcada en el nudo cuando nadie la usa y colgando de vos
+       mientras volás. Es la pieza que explica el mecanismo sin una palabra. */
+    const pol = new T.Group();
+    const rd = new T.Mesh(new T.TorusGeometry(.22, .07, 5, 10), matHer);
+    rd.rotation.y = 1.5708;
+    pol.add(rd);
+    const brr = new T.Mesh(new T.CylinderGeometry(.045, .045, 1.05, 5), matHer);
+    brr.position.y = -.55;
+    pol.add(brr);
+    const asa = new T.Mesh(new T.CylinderGeometry(.05, .05, .5, 5), matHer);
+    asa.rotation.z = 1.5708;
+    asa.position.y = -1.05;
+    pol.add(asa);
+    pol.position.set(a.x, a.y - .3, a.z);
+    scene.add(pol);
+    C.pol = pol;
+  }
+
+  /* ------------------------- lo que se juega ------------------------------- */
+  const AV = {
+    es: { sube: '⤒ ESCALONES TALLADOS · USAR para subir a la copa',
+          baja: '⤓ ESCALONES · USAR para bajar al suelo',
+          tiro: '⇥ TIROLESA · USAR para lanzarte a la copa siguiente',
+          trep: 'adelante subís · atrás bajás · SALTO te suelta',
+          vuel: 'SALTO te suelta del cable' },
+    en: { sube: '⤒ CARVED STEPS · USE to climb to the canopy',
+          baja: '⤓ CARVED STEPS · USE to climb down',
+          tiro: '⇥ ZIP LINE · USE to launch to the next canopy',
+          trep: 'forward to climb · back to descend · JUMP lets go',
+          vuel: 'JUMP lets go of the cable' },
+    pt: { sube: '⤒ DEGRAUS TALHADOS · USAR para subir à copa',
+          baja: '⤓ DEGRAUS · USAR para descer ao chão',
+          tiro: '⇥ TIROLESA · USAR para se lançar à copa seguinte',
+          trep: 'à frente sobe · atrás desce · SALTO solta',
+          vuel: 'SALTO solta o cabo' }
+  };
+  const API = { modo: null, sop: null, s: 0, u: 0, vel: 0, cable: null };
+  /* el eje «adelante» de los DOS controles que ya existen, sin inventar ninguno */
+  const avance = () => cl(-(movV.y + keyV.y), -1, 1);
+
+  API.accion = () => {
+    if (API.modo || enDlg) return null;
+    const E0 = EST[0];
+    if (!API.sop){
+      if (aireY < 1.8 && Math.hypot(px - E0.pieX, pz - E0.pieZ) < 3.4)
+        return { que: 'sube' };
+      return null;
+    }
+    const E = API.sop;
+    if (E.cable && Math.hypot(px - E.ancX, pz - E.ancZ) < 3.0) return { que: 'tiro' };
+    if (E === E0 && Math.hypot(px - E0.escX, pz - E0.escZ) < 3.0) return { que: 'baja' };
+    return null;
+  };
+  /* el AVISO: una línea corta y sola, con el idioma del mundo. Es todo el
+     tutorial que hay, igual que el botón USAR. */
+  API.aviso = acc => {
+    const t = AV[LANG] || AV.es;
+    if (API.modo === 'trepa') return t.trep;
+    if (API.modo === 'vuela') return t.vuel;
+    return acc && acc.tipo === 'copas' ? t[acc.cp.que] : '';
+  };
+  API.usar = cp => {
+    const E = EST[0];
+    if (cp.que === 'tiro'){
+      const C = API.sop.cable;
+      API.modo = 'vuela'; API.cable = C; API.u = 0; API.vel = 6.5;
+      API.sop = null; enAire = false; aireV = 0;
+      /* de cara al viaje: el primer segundo del vuelo es el que enseña qué
+         está pasando, y mirando para atrás no se entiende nada */
+      yaw = Math.atan2(-(C.b.x - C.a.x), -(C.b.z - C.a.z));
+      blip();
+      return;
+    }
+    API.modo = 'trepa';
+    API.s = cp.que === 'sube' ? 0 : 1;
+    API.sop = null; enAire = false; aireV = 0;
+    /* de cara a la tangente de la hélice: subiendo de frente al tronco no se
+       ve el siguiente escalón */
+    yaw = E.helA + API.s * E.helG + (cp.que === 'sube' ? 1.5708 : -1.5708);
+  };
+  /* SOLTARSE: la salida de emergencia, y lo que evita que la tirolesa sea un
+     pasillo del que no se puede salir. Cae con la gravedad de siempre. */
+  API.suelta = () => {
+    if (!API.modo) return;
+    API.modo = null; API.sop = null;
+    enAire = true; aireV = 0;
+  };
+  /* ¿te salís del tablón? Entonces te caés: es la única penalización de la ruta
+     y basta, porque volver a subir cuesta el minuto que cuesta. */
+  API.fuera = (x, z) => !API.sop ||
+    Math.hypot(x - API.sop.x, z - API.sop.z) > RCAE;
+  /* la altura del piso sobre el TERRENO: es lo que hace que una repisa a 26 m
+     no necesite física propia. */
+  API.piso = () => API.sop
+    ? API.sop.y - (ojoY != null ? ojoY : H(px, pz)) : 0;
+
+  function trepa(dt){
+    const E = EST[0];
+    const v = (corre ? 4.4 : 2.6) / E.altEsc;
+    API.s = cl(API.s + avance() * v * dt, 0, 1);
+    const a = E.helA + API.s * E.helG;
+    px = E.x + Math.sin(a) * RHEL;
+    pz = E.z + Math.cos(a) * RHEL;
+    ojoY = H(px, pz);
+    aireY = E.g + .6 + API.s * E.altEsc - ojoY;
+    if (API.s >= 1){                       /* llegaste: te apoyás en el tablón */
+      API.modo = null; API.sop = E;
+      px = E.x + Math.sin(a) * 3.6; pz = E.z + Math.cos(a) * 3.6;
+    } else if (API.s <= 0){                /* de vuelta al suelo */
+      API.modo = null; aireY = 0; enAire = false; aireV = 0;
+    }
+  }
+  function vuela(dt){
+    const C = API.cable;
+    /* la velocidad la pone la PENDIENTE del cable, con rozamiento: acelera al
+       bajar y se planta sola. Sin esto o quedás colgado en el medio o llegás
+       a la copa siguiente a ochenta por hora. */
+    const pend = (C.a.y - C.b.y) / C.largo;
+    API.vel = cl(API.vel + (GRAV * pend * .82 - API.vel * .05) * dt, 3, 25);
+    API.u += API.vel * dt / C.largo;
+    const P = puntoCable(C, Math.min(1, API.u));
+    stats.dist += Math.hypot(P.x - px, P.z - pz);
+    px = P.x; pz = P.z;
+    ojoY = H(px, pz);
+    aireY = P.y - 1.35 - ojoY;             /* colgás por debajo de la polea */
+    C.pol.position.set(P.x, P.y - .3, P.z);
+    if (API.u < 1) return;
+    C.pol.position.set(C.a.x, C.a.y - .3, C.a.z);   /* la polea vuelve al nudo */
+    API.modo = null;
+    if (C.dest){
+      API.sop = C.dest;
+      px = C.dest.x - Math.sin(C.rumbo) * 3.6;
+      pz = C.dest.z - Math.cos(C.rumbo) * 3.6;
+      enAire = false; aireV = 0;
+      aireY = C.dest.y - (ojoY != null ? ojoY : H(px, pz));
+    } else {
+      /* el último cable te suelta a un metro y medio del suelo: cae la última
+         nada con la gravedad de siempre */
+      API.sop = null; enAire = true; aireV = 0;
+    }
+    blip();
+  }
+  API.paso = dt => {
+    if (API.modo === 'trepa') trepa(dt);
+    else if (API.modo === 'vuela') vuela(dt);
+    pvx = pvz = 0;         /* ni pasos ni cabeceo: no estás caminando */
+    stats.t += dt;
+  };
+  API.EST = EST;
+  API.est = () => ({ modo: API.modo, s: +API.s.toFixed(2), u: +API.u.toFixed(2),
+    vel: +API.vel.toFixed(1), sop: API.sop ? EST.indexOf(API.sop) : -1,
+    alturas: EST.map(e => +e.y.toFixed(1)),
+    cables: CABLES.map(c => Math.round(c.largo)) });
+  window.__COPAS = API;
+  return API;
+})();
+
 /* ================================ JUGADOR ================================== */
 const stats = { t: 0, dist: 0 };
 let px = POI.inicio.x, pz = POI.inicio.z, yaw = 0, pitch = -.03;
@@ -3231,10 +3838,18 @@ let ojoY = null;         /* altura del ojo interpolada (sin saltos) */
    inalcanzables), gravedad fuerte para que no se sienta lunar. */
 const GRAV = 22, SALTO_V = 8.2;
 let aireY = 0, aireV = 0, enAire = false;
-function saltar(){ if (enAire) return; enAire = true; aireV = SALTO_V; }
+function saltar(){
+  /* colgado del cable o en los escalones, SALTO te SUELTA: es la salida de la
+     ruta de las copas y lo que evita que la tirolesa sea un pasillo cerrado. */
+  if (COPAS.modo){ COPAS.suelta(); return; }
+  if (enAire) return; enAire = true; aireV = SALTO_V;
+}
 function fisica(dt){
   yaw -= keyL.x * 2.2 * dt;
   pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+  /* LA RUTA DE LAS COPAS mueve al jugador de otra manera y no toca el suelo:
+     mirar sigue funcionando (va arriba), lo demás se corta acá. */
+  if (COPAS.modo){ COPAS.paso(dt); return; }
   let mx = movV.x + keyV.x, my = movV.y + keyV.y;
   const m = Math.hypot(mx, my);
   if (m > 1){ mx /= m; my /= m; }
@@ -3248,8 +3863,10 @@ function fisica(dt){
      caminar contra una ladera te SUBIA de golpe (parecia teletransporte). Si el
      escalon es mas empinado que PEND_MAX no se sube: se DESLIZA por la ladera
      (se proyecta el movimiento sobre la curva de nivel), que es lo que hace un
-     personaje de verdad. */
-  {
+     personaje de verdad.
+     NO VALE SOBRE UNA PLATAFORMA: allá arriba el terreno de abajo puede ser un
+     barranco, y el tope te dejaba clavado en el tablón sin poder caminar. */
+  if (!COPAS.sop) {
     const h0 = H(px, pz), h1 = H(nx, nz);
     const dl = Math.hypot(nx - px, nz - pz);
     if (dl > 1e-5 && (h1 - h0) / dl > PEND_MAX){
@@ -3280,11 +3897,20 @@ function fisica(dt){
     ojoY = ojoY == null ? hs : ojoY + (hs - ojoY) * Math.min(1, dt * 9);
     if (Math.abs(hs - ojoY) > 3) ojoY = hs;   /* teleport de guion: sin arrastre */
   }
+  /* LA PLATAFORMA DE LA COPA. Como aireY es «cuánto estás por encima del suelo»,
+     una repisa a 26 m es sólo un piso distinto: se fija aireY a la diferencia y
+     no hace falta física nueva. Y al salirse del tablón se suelta el soporte, el
+     piso vuelve a ser 0 y la gravedad de siempre te baja los 26 m. */
+  if (COPAS.sop){
+    if (COPAS.fuera(px, pz)){ COPAS.sop = null; enAire = true; aireV = 0; }
+    else if (!enAire) aireY = COPAS.piso();   /* de pie: el tablón manda */
+  }
   /* el SALTO vive sobre la altura del suelo: se integra aparte y se suma, asi
      el tope de pendiente y el suavizado del ojo siguen valiendo. */
   if (enAire){
     aireV -= GRAV * dt; aireY += aireV * dt;
-    if (aireY <= 0){ aireY = 0; aireV = 0; enAire = false; }
+    const piso = COPAS.piso();
+    if (aireY <= piso){ aireY = piso; aireV = 0; enAire = false; }
   }
   bobF += dt * (2 + 8 * Math.min(1, Math.hypot(pvx, pvz) / VEL));
   stats.t += dt;
@@ -3320,13 +3946,22 @@ function pasoObjetivo(){
   marca3d.rotation.y = t0 * 1.4;
   marca3d.visible = !enDlg;
   const cerca = d < (C.usar ? 7 : 10);
-  /* los capítulos automáticos también esperan a que la MISIÓN esté lista */
-  if (!C.usar && cerca && !enDlg && MISION.lista(cap)){
+  /* los capítulos automáticos también esperan a que la MISIÓN esté lista.
+     Y NO SE DISPARAN EN PLENO VUELO: el último cable de la ruta de las copas
+     cruza justo por encima del remanso, y el diálogo del capítulo congela la
+     física (fisica sólo corre si !enDlg), o sea que te dejaba colgado en el aire
+     a mitad del cable. Se dispara al aterrizar y llegar caminando. */
+  if (!C.usar && cerca && !enDlg && !COPAS.modo && MISION.lista(cap)){
     llegaObjetivo();
     return;
   }
   const acc = accionUsable();
   $('bUsar').classList.toggle('on', !!acc && !enDlg);
+  /* EL AVISO: una línea corta que dice qué se puede hacer acá. Es todo el
+     tutorial que tiene el traslado, y sale y se va con el botón USAR. */
+  const av = COPAS.aviso(acc);
+  $('aviso').textContent = av;
+  $('aviso').classList.toggle('on', !!av && !enDlg);
   if (window.__autoUsar && acc && acc.tipo === 'cap' && !enDlg) llegaObjetivo();
 }
 $('bUsar').addEventListener('pointerdown', e => { e.preventDefault(); usarAccion(); });
@@ -3685,6 +4320,13 @@ function bucle(t){
     aguaMat.envMapIntensity = .1 + .5 * scene.backgroundIntensity *
       (1 + .12 * Math.sin(t0 * .7));
   }
+  /* EL REMANSO: rizos, piñas cabeceando y el encendido del espejo por distancia.
+     ANTES NO SE LLAMABA DESDE NINGUNA PARTE (venía del pozo de DUNAS), así que
+     ni el agua se movía ni había con qué encender nada. */
+  if (POZO.tick) POZO.tick(dt, t0);
+  if (ESPEJO.malla && ESPEJO.malla.visible)
+    ESPEJO.malla.material.uniforms.brillo.value =
+      cl(.35 + .75 * scene.backgroundIntensity, .3, 1.25);
   /* las lunas y la Tierra solo viven de noche, pegadas al cielo de la cámara */
   const nocheK = cl(1 - (SOLD.y * 420) / 160, 0, 1);
   for (const lu of LUNAS){
@@ -3780,6 +4422,8 @@ function setGfx(g){
     if (sol.shadow.map){ sol.shadow.map.dispose(); sol.shadow.map = null; }
   }
   luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;   /* re-apunta la niebla */
+  /* el espejo del remanso también es cosa de calidad: en BAJOS no va */
+  if (ESPEJO.aplica) ESPEJO.aplica(g);
 }
 document.querySelectorAll('#fGfx .chip').forEach(ch =>
   ch.addEventListener('pointerdown', e => { e.preventDefault(); setGfx(ch.dataset.g); }));
@@ -3833,6 +4477,12 @@ window.__S = {
   planta(){ return window.__PLANTA || null; },
   pozo(){ return { abierto: POZO.abierto, k: +POZO.k.toFixed(2),
     aguaY: +aguaMesh.position.y.toFixed(2), visible: aguaMesh.visible }; },
+  /* la ruta de las copas: en que modo esta, en que estacion y a que velocidad */
+  copas(){ return COPAS.est(); },
+  copasIr(k){ const E = COPAS.EST[k]; px = E.x + 3.6; pz = E.z; COPAS.sop = E;
+    ojoY = H(px, pz); aireY = E.y - ojoY; enAire = false; aireV = 0; },
+  copasPie(){ const E = COPAS.EST[0]; px = E.pieX; pz = E.pieZ;
+    COPAS.sop = null; COPAS.modo = null; ojoY = H(px, pz); aireY = 0; enAire = false; },
   hoguera(){ return { on: HOGUERA.on, opacidad: +beaconMat.opacity.toFixed(2),
     foco: +focoHog.intensity.toFixed(0) }; },
   banderas(){ return BANDERAS.length; },
