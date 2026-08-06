@@ -67,7 +67,9 @@ for (const mundo of MUNDOS){
         return { cap: g.cap, guia: guia ? [Math.round(guia.x), Math.round(guia.z)] : null,
                  obj: guia ? 'guía de misión' : ((falta && items.length) ? 'cosa pendiente' : C.obj),
                  usarDecl: !!C.usar, quedan: items.length,
-                 mis0: (() => { try { return JSON.stringify(S.mision()); } catch (e) { return null; } })() };
+                 mis0: (() => { try { const m = S.mision();
+                   return Object.keys(m || {}).filter(k => Number.isInteger(m[k]))
+                     .map(k => k + '=' + m[k]).join(','); } catch (e) { return null; } })() };
       });
       if (g0.fin){ console.log('  ✔ historia terminada (fase ' + g0.fase + ')'); break; }
 
@@ -94,7 +96,14 @@ for (const mundo of MUNDOS){
         /* levantar una cosa TAMBIÉN es avanzar: es lo que hay que hacer para
            desbloquear el capítulo */
         if (g0.quedan != null && g.n != null && g.n < g0.quedan){ avanzo = true; levanto = true; break; }
-        if (g0.mis0 && g.mis && JSON.stringify(g.mis) !== g0.mis0){ avanzo = true; levanto = true; break; }
+        /* OJO: NO se compara el estado entero de la misión. Varios mundos meten
+           ahí un número que cambia solo (hielo el `calor`, que baja cada cuadro),
+           y entonces «cambió la misión» era cierto siempre: la sonda cantaba
+           progreso sin que pasara nada y nunca terminaba el capítulo. Se miran
+           sólo los contadores enteros, que son los que cuentan de verdad. */
+        const ent = o => Object.keys(o || {}).filter(k => Number.isInteger(o[k]))
+          .map(k => k + '=' + o[k]).join(',');
+        if (g0.mis0 && g.mis && ent(g.mis) !== g0.mis0){ avanzo = true; levanto = true; break; }
         /* que la guía apunte a otro lado TAMBIÉN es avanzar: en exo quiere decir
            que la criatura ya te sigue y ahora hay que llevarla al anillo */
         if (g0.guia && g.guia && String(g.guia) !== String(g0.guia)){ avanzo = true; levanto = true; break; }
