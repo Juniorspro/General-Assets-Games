@@ -1,0 +1,4601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>IMPOSSIBLE OBBY</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;background:#0a1e3a;color:#fff;font-family:'Inter','Segoe UI',system-ui,sans-serif;overflow:hidden;user-select:none;touch-action:none;position:fixed;inset:0}
+  canvas{display:block;position:fixed!important;inset:0!important;width:100%!important;height:100%!important;z-index:0}
+  
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  #height-display{position:absolute;top:14px;left:50%;transform:translateX(-50%);text-align:center;text-shadow:0 0 14px rgba(0,0,0,0.95),0 3px 6px rgba(0,0,0,0.95)}
+  #height-display .lbl{font-size:11px;letter-spacing:4px;color:#aaccdd;font-weight:600}
+  #height-display .val{font-size:36px;font-weight:800;color:#fff;letter-spacing:2px;margin-top:2px}
+  #height-display .val .unit{font-size:16px;color:#88aabb;margin-left:4px}
+  
+  #info{position:absolute;top:14px;left:18px;text-shadow:0 2px 6px rgba(0,0,0,0.95);font-size:12px;letter-spacing:2px;line-height:1.7}
+  #info .l{color:#aabbcc;font-weight:500}
+  #info .v{color:#fff;font-weight:800;margin-left:6px}
+  
+  #status{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);font-size:13px;letter-spacing:3px;color:#fff;text-shadow:0 0 12px rgba(0,0,0,0.95),0 2px 4px rgba(0,0,0,0.9);text-align:center;max-width:80vw}
+  
+  #lobby-banner{position:absolute;top:34%;left:50%;transform:translate(-50%,-50%);font-size:clamp(22px,5vw,42px);font-weight:800;letter-spacing:4px;color:#fff;text-shadow:0 0 24px rgba(120,180,220,0.9),0 4px 8px rgba(0,0,0,0.95);text-align:center;opacity:0;pointer-events:none;transition:opacity .5s}
+  #lobby-banner.show{opacity:1}
+  #lobby-banner .sub{font-size:0.45em;letter-spacing:5px;color:#bdf;margin-top:10px}
+  
+  #joystick{position:fixed;bottom:42px;left:32px;width:128px;height:128px;border-radius:50%;background:rgba(255,255,255,0.08);border:2px solid rgba(255,255,255,0.18);pointer-events:auto;touch-action:none;display:none;backdrop-filter:blur(6px);z-index:20}
+  #joystick .knob{position:absolute;width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,0.85);left:37px;top:37px;box-shadow:0 4px 16px rgba(0,0,0,0.6)}
+  #jump-btn{position:fixed;bottom:62px;right:30px;width:88px;height:88px;border-radius:50%;background:rgba(120,180,220,0.25);border:2px solid rgba(180,220,240,0.5);pointer-events:auto;display:none;align-items:center;justify-content:center;font-size:11px;letter-spacing:2px;color:#fff;font-weight:700;touch-action:none;backdrop-filter:blur(8px);text-shadow:0 2px 4px rgba(0,0,0,0.7);z-index:20}
+  #jump-btn:active{background:rgba(120,180,220,0.45);transform:scale(0.95)}
+  #use-btn{position:fixed;bottom:170px;right:42px;width:64px;height:64px;border-radius:50%;background:rgba(220,80,80,0.35);border:2px solid rgba(240,140,140,0.7);pointer-events:auto;display:none;align-items:center;justify-content:center;font-size:10px;letter-spacing:2px;color:#fff;font-weight:700;touch-action:none;backdrop-filter:blur(8px);text-shadow:0 2px 4px rgba(0,0,0,0.7);z-index:20}
+  #use-btn.show{display:flex}
+  #use-btn:active{background:rgba(240,120,120,0.55);transform:scale(0.95)}
+  
+  /* crosshair for first person */
+  #crosshair{position:fixed;top:50%;left:50%;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.7);transform:translate(-50%,-50%);pointer-events:none;z-index:9;display:none;box-shadow:0 0 8px rgba(0,0,0,0.5)}
+  
+  /* === TUTORIAL: barra arriba sin difuminar el ambiente === */
+  #tutorial{position:fixed;inset:0;z-index:90;display:none;pointer-events:none}
+  #tutorial.show{display:block}
+  .tut-bg{display:none}
+  .tut-card-i{position:absolute;top:18px;left:50%;transform:translateX(-50%);width:92%;max-width:440px;padding:14px 20px;background:rgba(8,18,32,0.78);border:1px solid rgba(140,200,232,0.4);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,0.6),0 0 30px rgba(80,160,220,0.2),inset 0 1px 0 rgba(255,255,255,0.08);text-align:center;pointer-events:auto;animation:tutIn .5s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes tutIn{from{opacity:0;transform:translateX(-50%) translateY(-16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  .tut-step{font-size:9px;letter-spacing:4px;color:#88ccff;font-weight:800;margin-bottom:8px;opacity:0.9}
+  .tut-icon{font-size:32px;margin-bottom:6px;filter:drop-shadow(0 4px 10px rgba(80,170,230,0.5));animation:tutFloat 2s ease-in-out infinite;line-height:1}
+  @keyframes tutFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+  .tut-title-i{font-size:16px;letter-spacing:1.5px;font-weight:900;color:#fff;margin-bottom:6px;text-shadow:0 0 14px rgba(180,220,240,0.4)}
+  .tut-hint-i{font-size:11px;line-height:1.4;color:#bdd6ec;letter-spacing:0.5px;margin-bottom:12px;opacity:0.9}
+  .tut-progress{height:4px;background:rgba(80,140,200,0.2);border-radius:4px;overflow:hidden;margin-bottom:12px}
+  .tut-fill{height:100%;background:linear-gradient(90deg,#88ccff,#bde0ff);width:0;transition:width .4s cubic-bezier(.4,1.5,.6,1);box-shadow:0 0 10px rgba(140,210,240,0.6);border-radius:4px}
+  .tut-buttons{display:flex;gap:8px;justify-content:center}
+  .tut-skip{padding:8px 16px;background:rgba(180,60,60,0.25);border:1.5px solid rgba(255,120,120,0.5);border-radius:7px;color:#fff;font-size:10px;letter-spacing:2px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s}
+  .tut-skip:active{background:rgba(220,80,80,0.5);transform:scale(0.96)}
+  .tut-go{padding:8px 20px;background:linear-gradient(135deg,rgba(80,200,120,0.85),rgba(40,140,80,0.85));border:1.5px solid rgba(140,255,180,0.75);border-radius:7px;color:#fff;font-size:12px;letter-spacing:2px;font-weight:900;cursor:pointer;font-family:inherit;transition:all .2s;box-shadow:0 4px 18px rgba(60,200,120,0.4)}
+  .tut-go:active{transform:scale(0.96)}
+  
+  /* === MENÚ NUEVO (rediseñado, fondo mundo renderizado) === */
+  #menu{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;background:linear-gradient(180deg,rgba(8,20,40,0.55) 0%,rgba(4,15,30,0.7) 60%,rgba(2,8,18,0.85) 100%);overflow:hidden;transition:opacity 0.7s}
+  #menu.hide{opacity:0;pointer-events:none}
+  /* Grid de fondo sutil */
+  .menu-bg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(100,180,230,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(100,180,230,0.04) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse at center,#000 30%,transparent 75%);-webkit-mask-image:radial-gradient(ellipse at center,#000 30%,transparent 75%);animation:gridFloat 18s linear infinite;pointer-events:none}
+  @keyframes gridFloat{from{background-position:0 0,0 0}to{background-position:60px 60px,60px 60px}}
+  /* Vignette decorativa en las esquinas */
+  .menu-water{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 110%,rgba(60,140,210,0.25) 0%,transparent 50%),radial-gradient(ellipse at 50% -10%,rgba(40,80,140,0.2) 0%,transparent 50%);pointer-events:none}
+  
+  .menu-content{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:60px;animation:menuIn 1s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes menuIn{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+  
+  .menu-title-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .menu-eyebrow{font-size:10px;letter-spacing:8px;color:#90cce8;font-weight:700;opacity:0.85;text-transform:uppercase}
+  .menu-title{font-size:clamp(38px,10vw,96px);letter-spacing:clamp(1px,0.6vw,5px);font-weight:900;line-height:0.92;background:linear-gradient(180deg,#ffffff 0%,#cce8ff 35%,#5da4d0 70%,#1a5080 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 12px 40px rgba(0,0,0,0.95)) drop-shadow(0 0 80px rgba(100,200,255,0.5));font-family:'Bebas Neue','Oswald',Impact,sans-serif;text-transform:uppercase}
+  .menu-title-amp{display:inline-block;color:#5096c8;-webkit-text-fill-color:#5096c8;font-weight:300;margin:0 0.1em;transform:translateY(-0.05em)}
+  .menu-subtitle{font-size:13px;letter-spacing:2px;color:rgba(180,220,240,0.65);max-width:340px;line-height:1.5;font-weight:500}
+  
+  .menu-buttons{display:flex;flex-direction:column;gap:18px;align-items:center;width:100%;max-width:340px}
+  .menu-play{width:100%;padding:22px 30px;font-family:inherit;font-size:18px;letter-spacing:6px;font-weight:900;color:#fff;background:linear-gradient(135deg,rgba(40,120,200,0.95),rgba(15,55,110,0.95));border:1.5px solid rgba(160,220,240,0.55);border-radius:6px;cursor:pointer;box-shadow:0 16px 50px rgba(0,0,0,0.7),0 0 60px rgba(80,180,255,0.35),inset 0 1px 0 rgba(255,255,255,0.2);transition:all .25s cubic-bezier(.4,1.5,.6,1);display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;position:relative;overflow:hidden}
+  .menu-play::before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 0%,rgba(220,240,255,0.3) 50%,transparent 100%);transform:translateX(-100%);transition:transform .9s}
+  .menu-play:hover::before,.menu-play:active::before{transform:translateX(100%)}
+  .menu-play:hover,.menu-play:active{transform:translateY(-2px);border-color:rgba(220,240,255,0.95);box-shadow:0 22px 70px rgba(0,0,0,0.85),0 0 80px rgba(140,210,255,0.6)}
+  .menu-play-icon{color:#bde0ff;font-size:18px;filter:drop-shadow(0 0 12px rgba(140,210,240,0.85));justify-self:start}
+  .menu-play-label{text-align:center;justify-self:center}
+  .menu-play-arrow{color:rgba(220,240,255,0.4);font-size:18px;justify-self:end;transition:transform .25s}
+  .menu-play:hover .menu-play-arrow,.menu-play:active .menu-play-arrow{transform:translateX(6px);color:#fff}
+  
+  .menu-lang{display:flex;gap:8px;justify-content:center}
+  .menu-lang-btn{padding:9px 18px;font-family:inherit;font-size:11px;letter-spacing:3px;font-weight:700;color:rgba(180,210,235,0.7);background:rgba(20,40,70,0.5);border:1px solid rgba(140,200,232,0.25);border-radius:5px;cursor:pointer;backdrop-filter:blur(8px);transition:all .2s}
+  .menu-lang-btn:hover{background:rgba(40,80,130,0.6);color:#fff}
+  .menu-lang-btn.active{background:linear-gradient(135deg,rgba(60,140,210,0.9),rgba(30,80,150,0.9));color:#fff;border-color:rgba(180,220,240,0.85);box-shadow:0 0 22px rgba(80,160,220,0.5)}
+  
+  .menu-footer-bar{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);font-size:10px;letter-spacing:4px;color:rgba(160,200,232,0.45);display:flex;align-items:center;gap:14px;z-index:2}
+  .menu-footer-dot{font-size:6px;color:#5da4d0}
+  
+  #death,#win{position:fixed;inset:0;backdrop-filter:blur(6px);z-index:90;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}
+  #death{background:rgba(10,30,50,0.85)}
+  #death.show,#win.show{display:flex}
+  #death h2{font-size:54px;letter-spacing:8px;color:#fff;text-shadow:0 0 30px rgba(80,160,220,0.9),0 4px 10px rgba(0,0,0,0.95);margin-bottom:16px;font-weight:900}
+  #death .info{font-size:14px;color:#bde0ff;letter-spacing:3px;margin-bottom:30px}
+  #win{background:radial-gradient(ellipse at center,rgba(80,180,140,0.55) 0%,rgba(10,40,30,0.9) 100%)}
+  #win h2{font-size:64px;letter-spacing:8px;color:#fff;text-shadow:0 0 40px rgba(255,220,80,0.95),0 4px 10px rgba(0,0,0,0.95);margin-bottom:18px;font-weight:900}
+  #win .info{font-size:14px;color:#dff5e0;letter-spacing:3px;margin-bottom:30px}
+  
+  #location-tag{position:absolute;bottom:14px;right:18px;font-size:11px;letter-spacing:3px;color:#cce8ff;text-shadow:0 2px 4px rgba(0,0,0,0.9);font-weight:600}
+  #use-prompt{position:absolute;top:55%;left:50%;transform:translate(-50%,-50%);font-size:14px;letter-spacing:3px;color:#fff;text-shadow:0 0 12px rgba(0,0,0,0.95),0 2px 4px rgba(0,0,0,0.9);font-weight:700;pointer-events:none;display:none;background:rgba(180,40,40,0.4);padding:8px 18px;border-radius:6px;backdrop-filter:blur(4px);border:1px solid rgba(255,120,120,0.5)}
+  #use-prompt.show{display:block}
+  
+  /* === BOTONES TOP (pausa / mute / tutorial) === */
+  .topBtnFO {
+    position: fixed; top: 14px;
+    z-index: 70;
+    width: 38px; height: 38px;
+    background: rgba(8,20,40,0.6);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(120,200,255,0.3);
+    border-radius: 10px;
+    color: #cce8ff;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.06s, background 0.06s;
+  }
+  .topBtnFO:active { transform: scale(0.92); background: rgba(40,80,140,0.6); }
+  #foPauseBtn { right: 14px; }
+  #foMuteBtn  { right: 60px; }
+  #foTutBtn   { right: 106px; }
+  
+  /* Ocultar HUD durante menú principal */
+  body.in-menu-fo .topBtnFO,
+  body.in-menu-fo #hud,
+  body.in-menu-fo #crosshair,
+  body.in-menu-fo .control,
+  body.in-menu-fo #joystick {
+    display: none !important;
+  }
+  
+  /* === MENÚ PAUSA === */
+  #foPauseMenu {
+    position: fixed; inset: 0; z-index: 80;
+    display: none;
+    align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px;
+    background: rgba(4,15,30,0.78);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    padding: 20px;
+  }
+  #foPauseMenu.show { display: flex; }
+  #foPauseMenu .pTitle {
+    color: #5bb8ff;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 8px;
+    margin-bottom: 6px;
+    text-shadow: 0 0 18px rgba(91,184,255,0.5);
+  }
+  .pBtnFO {
+    color: #e8f4ff; font-weight: 500;
+    font-size: 13px; letter-spacing: 2.5px;
+    background: rgba(20,40,70,0.55);
+    border: 1px solid rgba(120,200,255,0.3);
+    padding: 13px 32px;
+    cursor: pointer;
+    border-radius: 8px;
+    min-width: 240px;
+    text-transform: uppercase;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    transition: transform 0.06s, background 0.06s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pBtnFO:active { transform: scale(0.96); background: rgba(60,120,180,0.55); }
+  .pBtnFO.primary {
+    background: linear-gradient(180deg, #4a9dd6 0%, #2a6cb0 100%);
+    border-color: rgba(120,200,255,0.7);
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+  
+  #pauseGfxFO {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    justify-content: center; max-width: 280px;
+    margin-top: 6px;
+  }
+  #pauseGfxLabelFO {
+    width: 100%; text-align: center;
+    font-size: 10px; letter-spacing: 4px;
+    color: rgba(180,220,255,0.5);
+    margin-bottom: 4px;
+  }
+  .gfxBtnFO {
+    padding: 6px 12px;
+    background: rgba(20,40,70,0.45);
+    color: rgba(220,235,255,0.7);
+    font-size: 10px; letter-spacing: 2px;
+    border: 1px solid rgba(120,200,255,0.2);
+    border-radius: 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .gfxBtnFO.active {
+    background: rgba(91,184,255,0.3);
+    color: #d8eeff;
+    border-color: rgba(91,184,255,0.7);
+  }
+  
+  /* === MODAL CONFIRMAR TUTORIAL === */
+  #foConfirmModal {
+    position: fixed; inset: 0; z-index: 85;
+    display: none;
+    align-items: center; justify-content: center;
+    background: rgba(4,15,30,0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 20px;
+  }
+  #foConfirmModal.show { display: flex; }
+  #foConfirmModal .box {
+    background: rgba(10,25,45,0.96);
+    border: 1px solid rgba(120,200,255,0.4);
+    border-radius: 14px;
+    padding: 22px 26px;
+    text-align: center;
+    max-width: 320px;
+    box-shadow: 0 14px 40px rgba(0,0,0,0.6);
+  }
+  #foConfirmModal .ttl {
+    color: #5bb8ff;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+  #foConfirmModal .msg {
+    color: rgba(220,235,255,0.85);
+    font-size: 12.5px;
+    margin-bottom: 18px;
+    line-height: 1.5;
+  }
+  #foConfirmModal .row {
+    display: flex; gap: 10px; justify-content: center;
+  }
+  .cBtnFO {
+    color: #fff;
+    font-size: 11px; letter-spacing: 2px;
+    padding: 10px 22px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.06);
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .cBtnFO.confirm {
+    background: linear-gradient(180deg, #4a9dd6 0%, #2a6cb0 100%);
+    border-color: rgba(120,200,255,0.6);
+  }
+  .cBtnFO.cancel {
+    background: rgba(140,40,40,0.4);
+    border-color: rgba(220,80,80,0.5);
+  }
+  .cBtnFO:active { transform: scale(0.96); }
+  
+  /* Selector gfx en menú principal */
+  #mainGfxRowFO {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 6px;
+    margin-top: 12px;
+  }
+  #mainGfxLabelFO {
+    font-size: 10px; letter-spacing: 4px;
+    color: rgba(180,220,255,0.5);
+  }
+  #mainGfxBtnsFO {
+    display: flex; gap: 6px;
+  }
+  .gfxBtnMainFO {
+    padding: 7px 14px;
+    background: rgba(20,40,70,0.55);
+    color: rgba(220,235,255,0.7);
+    font-size: 10px; letter-spacing: 2px;
+    border: 1px solid rgba(120,200,255,0.2);
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .gfxBtnMainFO.active {
+    background: rgba(91,184,255,0.35);
+    color: #e8f4ff;
+    border-color: rgba(91,184,255,0.75);
+  }
+  .gfxBtnMainFO:active { transform: scale(0.94); }
+
+  /* === Detección de plataforma: UI táctil solo en móvil === */
+  body.platform-pc #joystick,
+  body.platform-pc #jump-btn,
+  body.platform-pc #use-btn { display: none !important; }
+  body.platform-mobile:not(.in-menu-fo) #joystick { display: block; }
+  body.platform-mobile:not(.in-menu-fo) #jump-btn { display: flex; }
+
+  /* Pista de controles de PC en el menú */
+  #foCtrlHint {
+    position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+    z-index: 2; display: none; text-align: center; max-width: 92%;
+    font-size: 12px; letter-spacing: 0.5px; line-height: 1.8;
+    color: rgba(200,225,245,0.9);
+    background: rgba(8,20,40,0.5); border: 1px solid rgba(120,200,255,0.25);
+    border-radius: 12px; padding: 10px 16px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  body.platform-pc #foCtrlHint { display: block; }
+  #foCtrlHint kbd, #foKbdLegend kbd {
+    display: inline-block; background: rgba(160,215,255,0.95); color: #08111f;
+    border-radius: 5px; padding: 1px 7px; margin: 0 1px;
+    font-family: inherit; font-size: 11px; font-weight: 800;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.35);
+  }
+  /* Leyenda de teclas en juego (PC), se desvanece a los 5s */
+  #foKbdLegend {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    z-index: 12; display: none; gap: 12px; align-items: center;
+    color: #dbeeff; font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+    background: rgba(8,20,40,0.6); border: 1px solid rgba(120,200,255,0.3);
+    border-radius: 12px; padding: 8px 16px; white-space: nowrap;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+    opacity: 0; transition: opacity 0.6s; pointer-events: none;
+  }
+  body.platform-pc #foKbdLegend.show { display: flex; opacity: 1; }
+  body.in-menu-fo #foKbdLegend { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <div class="menu-bg-grid"></div>
+  <div class="menu-water"></div>
+  <div class="menu-content">
+    <div class="menu-title-wrap">
+      <div class="menu-eyebrow" id="menu-eyebrow">SURVIVAL CLIMBER</div>
+      <h1 class="menu-title">IMPOSSIBLE<span class="menu-title-amp">·</span>OBBY</h1>
+      <div class="menu-subtitle" id="menu-subtitle">Climb to the shelter before the water claims you</div>
+    </div>
+    <div class="menu-buttons">
+      <button class="menu-play" id="play-btn">
+        <span class="menu-play-icon">▶</span>
+        <span class="menu-play-label" id="play-label">PLAY</span>
+        <span class="menu-play-arrow">→</span>
+      </button>
+      <div class="menu-lang">
+        <button class="menu-lang-btn" id="lang-es" data-lang="es">🇪🇸 ES</button>
+        <button class="menu-lang-btn active" id="lang-en" data-lang="en">🇬🇧 EN</button>
+      </div>
+      <div id="mainGfxRowFO">
+        <div id="mainGfxLabelFO">GRAPHICS</div>
+        <div id="mainGfxBtnsFO">
+          <button class="gfxBtnMainFO" data-gfx="low">LOW</button>
+          <button class="gfxBtnMainFO active" data-gfx="medium">MED</button>
+          <button class="gfxBtnMainFO" data-gfx="high">HIGH</button>
+          <button class="gfxBtnMainFO" data-gfx="ultra">ULTRA</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="foCtrlHint"></div>
+  <div class="menu-footer-bar">
+    <span>WEBGL · v4</span>
+    <span class="menu-footer-dot">●</span>
+    <span id="menu-tip">TAP TO START</span>
+  </div>
+</div>
+
+<!-- BOTONES TOP -->
+<button class="topBtnFO" id="foPauseBtn" aria-label="Pause">⏸</button>
+<button class="topBtnFO" id="foMuteBtn" aria-label="Mute">🔊</button>
+<button class="topBtnFO" id="foTutBtn" aria-label="Tutorial">📖</button>
+
+<!-- MENÚ PAUSA -->
+<div id="foPauseMenu">
+  <div class="pTitle" id="foPauseTitle">PAUSED</div>
+  <button class="pBtnFO primary" id="foResumeBtn">RESUME</button>
+  <button class="pBtnFO" id="foRestartBtn">RESTART</button>
+  <button class="pBtnFO" id="foExitBtn">MAIN MENU</button>
+  <div id="pauseGfxFO">
+    <div id="pauseGfxLabelFO">GRAPHICS</div>
+    <button class="gfxBtnFO" data-gfx="low">LOW</button>
+    <button class="gfxBtnFO active" data-gfx="medium">MED</button>
+    <button class="gfxBtnFO" data-gfx="high">HIGH</button>
+    <button class="gfxBtnFO" data-gfx="ultra">ULTRA</button>
+  </div>
+</div>
+
+<!-- MODAL TUTORIAL -->
+<div id="foConfirmModal">
+  <div class="box">
+    <div class="ttl" id="foConfirmTitle">REDO TUTORIAL?</div>
+    <div class="msg" id="foConfirmMsg">Want to do the tutorial again? Your run will restart.</div>
+    <div class="row">
+      <button class="cBtnFO cancel" id="foConfirmCancelBtn">CANCEL</button>
+      <button class="cBtnFO confirm" id="foConfirmYesBtn">YES</button>
+    </div>
+  </div>
+</div>
+
+<div id="tutorial">
+  <div class="tut-bg"></div>
+  <div class="tut-card-i">
+    <div class="tut-step" id="tut-step">STEP 1/7</div>
+    <div class="tut-icon" id="tut-icon">🕹️</div>
+    <div class="tut-title-i" id="tut-title">MOVE</div>
+    <div class="tut-hint-i" id="tut-hint">Drag the joystick to walk</div>
+    <div class="tut-progress"><div class="tut-fill" id="tut-fill"></div></div>
+    <div class="tut-buttons">
+      <button class="tut-skip" id="tut-skip">SKIP</button>
+      <button class="tut-go" id="tut-go" style="display:none">▶ START</button>
+    </div>
+  </div>
+</div>
+
+<div id="crosshair"></div>
+<div id="foKbdLegend"></div>
+
+<div id="hud" style="display:none">
+  <div id="height-display">
+    <div class="lbl" id="height-lbl">ALTURA</div>
+    <div class="val"><span id="height-val">0</span><span class="unit">m</span></div>
+  </div>
+  <div id="info">
+    <div><span class="l" id="round-lbl">RONDA</span><span class="v" id="round-val">1</span></div>
+    <div><span class="l" id="time-lbl">TIEMPO</span><span class="v" id="time-val">0:00</span></div>
+    <div><span class="l" id="alive-lbl">VIVOS</span><span class="v" id="alive-val">13</span></div>
+  </div>
+  <div id="status">—</div>
+  <div id="lobby-banner"><div id="banner-msg">¡BIENVENIDO!</div><div class="sub" id="banner-sub">La ronda empieza pronto</div></div>
+  <div id="location-tag">🏠 LOBBY</div>
+  <div id="use-prompt"><span id="use-text">Presiona E para activar el botón</span></div>
+</div>
+
+<div id="joystick"><div class="knob"></div></div>
+<div id="jump-btn"><span id="jump-label">SALTO</span></div>
+<div id="use-btn"><span id="use-btn-label">USAR</span></div>
+
+<div id="death">
+  <h2 id="death-title">TE AHOGASTE</h2>
+  <div class="info"><span id="death-info-1">Llegaste a </span><span id="death-height">0</span><span id="death-info-2">m</span></div>
+  <div class="info" style="margin-top:-20px;opacity:0.7"><span id="death-wait">Espera el final de la ronda...</span></div>
+  <button id="death-restart" style="margin-top:30px;padding:14px 36px;font-size:13px;letter-spacing:4px;background:rgba(40,80,130,0.95);color:#cce8ff;border:1px solid rgba(180,220,240,0.5);border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit;display:none">VOLVER AL LOBBY</button>
+</div>
+
+<div id="win">
+  <h2 id="win-title">¡SOBREVIVISTE!</h2>
+  <div class="info"><span id="win-info">Ganaste en </span><span id="win-time">0:00</span></div>
+  <div class="info" id="win-survivors" style="margin-top:-10px;opacity:0.8">Sobrevivientes: <span id="win-survivors-count">0</span></div>
+  <button id="win-restart" style="margin-top:30px;padding:14px 36px;font-size:13px;letter-spacing:4px;background:rgba(80,130,90,0.95);color:#dff5e0;border:1px solid rgba(180,232,180,0.6);border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">VOLVER AL LOBBY</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// ========== I18N ==========
+let LANG = 'es';
+const TEXTS = {
+  es: {
+    height: 'ALTURA', round: 'RONDA', time: 'TIEMPO', alive: 'VIVOS',
+    jump: 'SALTO', use: 'USAR', lobby_tag: '🏠 LOBBY', game_tag: '🌊 INUNDACIÓN',
+    welcome: '¡BIENVENIDO AL LOBBY!', welcome_sub: 'La inundación empieza en ',
+    secs: 's',
+    round_start: '¡RONDA EMPIEZA!', round_start_sub: 'Sube la torre. ¡El agua viene!',
+    status_lobby: 'Esperando inundación... ',
+    status_climb: 'Trepa rápido, el agua sube',
+    status_button: 'Algún jugador apretó un botón',
+    status_close: '¡Casi en el refugio! Sigue',
+    you_drowned: 'TE AHOGASTE',
+    reached: 'Llegaste a ', m_height: 'm',
+    wait_next: 'Espera la próxima ronda...',
+    survived: '¡SOBREVIVISTE!',
+    win_info: 'Ganaste en ',
+    tag_default: 'CLIMB · SURVIVE',
+    tag_es: 'TREPA O AHÓGATE', tag_en: 'CLIMB OR DROWN',
+    press_button: 'Presiona E para activar el botón',
+    press_button_mobile: 'Toca el botón para activar',
+    paused: 'PAUSA',
+    resume: 'CONTINUAR',
+    restart: 'REINICIAR',
+    mainMenu: 'MENÚ PRINCIPAL',
+    graphics: 'GRÁFICOS',
+    tutAgainTitle: '¿REHACER TUTORIAL?',
+    tutAgainMsg: '¿Quieres rehacer el tutorial? Tu partida se reiniciará.',
+    cancel: 'CANCELAR',
+    yes: 'SÍ'
+  },
+  en: {
+    height: 'HEIGHT', round: 'ROUND', time: 'TIME', alive: 'ALIVE',
+    jump: 'JUMP', use: 'USE', lobby_tag: '🏠 LOBBY', game_tag: '🌊 FLOOD',
+    welcome: 'WELCOME TO THE LOBBY!', welcome_sub: 'Flood starts in ',
+    secs: 's',
+    round_start: 'ROUND STARTING!', round_start_sub: 'Climb the tower. Water is coming!',
+    status_lobby: 'Waiting for flood... ',
+    status_climb: 'Climb fast, water is rising',
+    status_button: 'Someone pressed a button',
+    status_close: 'Almost at the shelter! Keep going',
+    you_drowned: 'YOU DROWNED',
+    reached: 'You reached ', m_height: 'm',
+    wait_next: 'Wait for the next round...',
+    survived: 'YOU SURVIVED!',
+    win_info: 'You won in ',
+    tag_default: 'CLIMB · SURVIVE',
+    tag_es: 'TREPA O AHÓGATE', tag_en: 'CLIMB OR DROWN',
+    press_button: 'Press E to activate the button',
+    press_button_mobile: 'Tap the button to activate',
+    paused: 'PAUSED',
+    resume: 'RESUME',
+    restart: 'RESTART',
+    mainMenu: 'MAIN MENU',
+    graphics: 'GRAPHICS',
+    tutAgainTitle: 'REDO TUTORIAL?',
+    tutAgainMsg: 'Want to do the tutorial again? Your run will restart.',
+    cancel: 'CANCEL',
+    yes: 'YES'
+  }
+};
+function T(k){ return TEXTS[LANG][k] || k; }
+
+// ========== AUDIO SYSTEM (8-bit retro) ==========
+let audioCtx = null;
+let masterGain = null;
+let musicGain = null;
+let sfxGain = null;
+let musicPlaying = false;
+
+function initAudio(){
+  if(audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.5;
+    masterGain.connect(audioCtx.destination);
+    musicGain = audioCtx.createGain();
+    musicGain.gain.value = 0.4;
+    musicGain.connect(masterGain);
+    sfxGain = audioCtx.createGain();
+    sfxGain.gain.value = 0.7;
+    sfxGain.connect(masterGain);
+  } catch(e){ console.warn('Audio failed:', e); }
+}
+
+// Sonido 8-bit: oscilador con envelope
+function playTone(freq, duration, type = 'square', volume = 0.3, attack = 0.005, release = 0.05){
+  if(!audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + attack);
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime + duration - release);
+    gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(sfxGain);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch(e){}
+}
+
+// Sweep: frecuencia que cambia
+function playSweep(freqStart, freqEnd, duration, type = 'square', volume = 0.3){
+  if(!audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freqStart, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(freqEnd, audioCtx.currentTime + duration);
+    gain.gain.setValueAtTime(0, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + 0.005);
+    gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(sfxGain);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch(e){}
+}
+
+// Ruido (white noise) para efectos como aterrizaje, agua, muerte
+function playNoise(duration, volume = 0.15, freqFilter = 2000){
+  if(!audioCtx) return;
+  try {
+    const bufferSize = audioCtx.sampleRate * duration;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i = 0; i < bufferSize; i++){
+      data[i] = (Math.random() * 2 - 1) * 0.5;
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = freqFilter;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(sfxGain);
+    noise.start();
+    noise.stop(audioCtx.currentTime + duration);
+  } catch(e){}
+}
+
+// === SFX (Sound Effects) ===
+const SFX = {
+  jump: () => playSweep(440, 660, 0.12, 'square', 0.18),
+  land: () => { playNoise(0.05, 0.1, 1500); playTone(120, 0.06, 'sine', 0.15); },
+  button: () => { 
+    playTone(800, 0.05, 'square', 0.2); 
+    setTimeout(() => playTone(1200, 0.1, 'square', 0.25), 50);
+    setTimeout(() => playTone(1600, 0.15, 'square', 0.3), 150);
+  },
+  death: () => {
+    playSweep(440, 80, 0.6, 'sawtooth', 0.3);
+    playNoise(0.4, 0.2, 800);
+  },
+  win: () => {
+    // Acordes ascendentes
+    const notes = [523, 659, 784, 1047, 1319];
+    notes.forEach((n, i) => {
+      setTimeout(() => playTone(n, 0.18, 'square', 0.25), i * 100);
+    });
+    setTimeout(() => {
+      playTone(1568, 0.3, 'square', 0.3);
+      playTone(1976, 0.3, 'square', 0.25);
+    }, 600);
+  },
+  water: () => { playNoise(0.3, 0.05, 600); },
+  countdown: () => playTone(880, 0.1, 'square', 0.2),
+  start: () => {
+    playTone(523, 0.1, 'square', 0.25);
+    setTimeout(() => playTone(784, 0.1, 'square', 0.25), 100);
+    setTimeout(() => playTone(1047, 0.2, 'square', 0.3), 200);
+  },
+  step: () => playTone(180 + Math.random() * 40, 0.03, 'square', 0.05),
+  hover: () => playTone(880, 0.04, 'sine', 0.1),
+  click: () => { playTone(660, 0.04, 'square', 0.15); playTone(440, 0.04, 'square', 0.15); },
+  kill: () => {
+    playSweep(900, 200, 0.3, 'sawtooth', 0.25);
+    playNoise(0.2, 0.15, 1200);
+  }
+};
+
+// === MÚSICA DE FONDO 8-BIT ===
+// Música procedural con loop
+let musicNodes = [];
+function playMusic(type = 'obby'){
+  if(!audioCtx) return;
+  stopMusic();
+  musicPlaying = true;
+  
+  // ====== CHIPTUNE 8-BIT GAME SOUNDTRACK ======
+  // Notas en Hz (escala C menor / Am pentatónica para sentir aventura)
+  // C=261 D=293 E=329 F=349 G=392 A=440 B=493
+  // C5=523 D5=587 E5=659 F5=698 G5=784 A5=880 B5=987
+  // C6=1046
+  
+  // === MELODÍA PRINCIPAL (lead square wave) ===
+  // Loop heroico/aventura tipo Mario / Zelda
+  const leadMelody = [
+    // Frase A — intro motiva
+    [523, 1], [659, 1], [784, 1], [1046, 2], [784, 1], [880, 2],
+    [698, 1], [659, 2], [587, 1], [523, 2],
+    [0, 1],
+    // Frase B — variación arriba
+    [659, 1], [784, 1], [880, 1], [1046, 2], [987, 1], [880, 2],
+    [784, 1], [698, 2], [659, 1], [587, 2],
+    [0, 1],
+    // Frase C — climax
+    [1046, 1], [987, 1], [880, 1], [784, 2], [880, 1], [987, 2],
+    [1046, 1], [880, 1], [784, 1], [659, 1], [523, 3],
+    [0, 1],
+    // Frase D — resolución
+    [523, 0.5], [587, 0.5], [659, 1], [784, 1], [880, 2], [784, 2],
+    [659, 1], [587, 1], [523, 4],
+    [0, 2]
+  ];
+  
+  // === HARMONY (square arpeggios) — segunda voz una tercera abajo ===
+  const harmony = [
+    [392, 1], [523, 1], [587, 1], [784, 2], [587, 1], [659, 2],
+    [523, 1], [493, 2], [440, 1], [392, 2],
+    [0, 1],
+    [523, 1], [587, 1], [659, 1], [784, 2], [740, 1], [659, 2],
+    [587, 1], [523, 2], [493, 1], [440, 2],
+    [0, 1],
+    [784, 1], [740, 1], [659, 1], [587, 2], [659, 1], [740, 2],
+    [784, 1], [659, 1], [587, 1], [493, 1], [392, 3],
+    [0, 1],
+    [392, 0.5], [440, 0.5], [493, 1], [587, 1], [659, 2], [587, 2],
+    [493, 1], [440, 1], [392, 4],
+    [0, 2]
+  ];
+  
+  // === BASS (triangle wave) — patrón fuerte de aventura ===
+  const bassLine = [
+    [130, 0.5], [130, 0.5], [130, 1], [196, 0.5], [196, 0.5], [196, 1],
+    [174, 0.5], [174, 0.5], [174, 1], [220, 0.5], [220, 0.5], [220, 1],
+    [130, 0.5], [130, 0.5], [130, 1], [196, 0.5], [196, 0.5], [196, 1],
+    [174, 0.5], [174, 0.5], [174, 1], [220, 0.5], [220, 0.5], [220, 1],
+    [130, 0.5], [130, 0.5], [130, 1], [196, 0.5], [196, 0.5], [196, 1],
+    [174, 0.5], [174, 0.5], [174, 1], [220, 0.5], [220, 0.5], [220, 1],
+    [130, 0.5], [196, 0.5], [174, 0.5], [220, 0.5], [130, 0.5], [196, 0.5], [174, 0.5], [220, 0.5],
+    [130, 2], [0, 2]
+  ];
+  
+  // === DRUMS (noise burst) ===
+  // 1 = kick (low), 2 = snare (noise), 0 = silence
+  const drumPattern = [
+    1, 0, 2, 0, 1, 1, 2, 0,
+    1, 0, 2, 0, 1, 0, 2, 0,
+    1, 0, 2, 0, 1, 1, 2, 0,
+    1, 0, 2, 0, 1, 1, 2, 2,
+    1, 0, 2, 0, 1, 1, 2, 0,
+    1, 0, 2, 0, 1, 0, 2, 0,
+    1, 1, 2, 1, 1, 1, 2, 2,
+    1, 0, 0, 0, 0, 0, 0, 0
+  ];
+  
+  const tempo = 140; // ms por beat — chiptune bien rápido y vivo
+  const beatDur = tempo / 1000;
+  
+  let melodyTime = audioCtx.currentTime + 0.2;
+  let harmonyTime = audioCtx.currentTime + 0.2;
+  let bassTime = audioCtx.currentTime + 0.2;
+  let drumTime = audioCtx.currentTime + 0.2;
+  
+  // === SCHEDULER MELODÍA (square wave bright) ===
+  function scheduleLead(){
+    if (!musicPlaying) return;
+    for (let i = 0; i < leadMelody.length; i++){
+      const [freq, dur] = leadMelody[i];
+      const noteDur = dur * beatDur;
+      if (freq > 0){
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        // Volumen + envelope típico 8-bit (attack rápido, sustain plano, release corto)
+        gain.gain.setValueAtTime(0, melodyTime);
+        gain.gain.linearRampToValueAtTime(0.08, melodyTime + 0.01);
+        gain.gain.setValueAtTime(0.08, melodyTime + noteDur * 0.85);
+        gain.gain.linearRampToValueAtTime(0, melodyTime + noteDur);
+        osc.connect(gain);
+        gain.connect(musicGain);
+        osc.start(melodyTime);
+        osc.stop(melodyTime + noteDur);
+        musicNodes.push(osc);
+      }
+      melodyTime += noteDur;
+    }
+    const totalDur = leadMelody.reduce((s, [_, d]) => s + d, 0) * beatDur;
+    setTimeout(scheduleLead, totalDur * 1000 - 200);
+  }
+  
+  // === SCHEDULER HARMONY (square wave segunda voz, más bajo de vol) ===
+  function scheduleHarmony(){
+    if (!musicPlaying) return;
+    for (let i = 0; i < harmony.length; i++){
+      const [freq, dur] = harmony[i];
+      const noteDur = dur * beatDur;
+      if (freq > 0){
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, harmonyTime);
+        gain.gain.linearRampToValueAtTime(0.04, harmonyTime + 0.01);
+        gain.gain.setValueAtTime(0.04, harmonyTime + noteDur * 0.85);
+        gain.gain.linearRampToValueAtTime(0, harmonyTime + noteDur);
+        osc.connect(gain);
+        gain.connect(musicGain);
+        osc.start(harmonyTime);
+        osc.stop(harmonyTime + noteDur);
+        musicNodes.push(osc);
+      }
+      harmonyTime += noteDur;
+    }
+    const totalDur = harmony.reduce((s, [_, d]) => s + d, 0) * beatDur;
+    setTimeout(scheduleHarmony, totalDur * 1000 - 200);
+  }
+  
+  // === SCHEDULER BASS (triangle wave) ===
+  function scheduleBass(){
+    if (!musicPlaying) return;
+    for (let i = 0; i < bassLine.length; i++){
+      const [freq, dur] = bassLine[i];
+      const noteDur = dur * beatDur;
+      if (freq > 0){
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, bassTime);
+        gain.gain.linearRampToValueAtTime(0.16, bassTime + 0.01);
+        gain.gain.setValueAtTime(0.16, bassTime + noteDur * 0.85);
+        gain.gain.linearRampToValueAtTime(0, bassTime + noteDur);
+        osc.connect(gain);
+        gain.connect(musicGain);
+        osc.start(bassTime);
+        osc.stop(bassTime + noteDur);
+        musicNodes.push(osc);
+      }
+      bassTime += noteDur;
+    }
+    const totalDur = bassLine.reduce((s, [_, d]) => s + d, 0) * beatDur;
+    setTimeout(scheduleBass, totalDur * 1000 - 200);
+  }
+  
+  // === DRUMS (noise burst) ===
+  function makeKick(time){
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(100, time);
+    osc.frequency.exponentialRampToValueAtTime(40, time + 0.08);
+    gain.gain.setValueAtTime(0.25, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+    osc.connect(gain);
+    gain.connect(musicGain);
+    osc.start(time);
+    osc.stop(time + 0.15);
+    musicNodes.push(osc);
+  }
+  
+  function makeSnare(time){
+    // Noise burst
+    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.1, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 1500;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.18, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(musicGain);
+    noise.start(time);
+    noise.stop(time + 0.1);
+    musicNodes.push(noise);
+  }
+  
+  function scheduleDrums(){
+    if (!musicPlaying) return;
+    const beatLen = beatDur * 0.5; // doble velocidad para drums (16th notes feel)
+    for (let i = 0; i < drumPattern.length; i++){
+      const v = drumPattern[i];
+      const time = drumTime + i * beatLen;
+      if (v === 1) makeKick(time);
+      else if (v === 2) makeSnare(time);
+    }
+    drumTime += drumPattern.length * beatLen;
+    setTimeout(scheduleDrums, drumPattern.length * beatLen * 1000 - 200);
+  }
+  
+  scheduleLead();
+  scheduleHarmony();
+  scheduleBass();
+  scheduleDrums();
+}
+
+function stopMusic(){
+  musicPlaying = false;
+  for(const n of musicNodes){
+    try { n.stop(); } catch(e){}
+  }
+  musicNodes = [];
+}
+
+// ========== ENGINE ==========
+// Detección de plataforma según spec: MÓVIL solo si táctil Y puntero grueso
+function detectPlatform(){
+  const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const touch  = (navigator.maxTouchPoints || 0) > 0;
+  return (touch && coarse) ? 'mobile' : 'pc';
+}
+let platform = detectPlatform();
+let isMobile = (platform === 'mobile');
+function foApplyPlatformClass(){
+  document.body.classList.toggle('platform-pc', platform === 'pc');
+  document.body.classList.toggle('platform-mobile', platform === 'mobile');
+}
+function foSetPlatform(p){
+  if (p === platform) return;
+  platform = p; isMobile = (p === 'mobile');
+  foApplyPlatformClass();
+  if (typeof foRefreshPlatformText === 'function') foRefreshPlatformText();
+}
+foApplyPlatformClass();
+// Hot-swap por tipo de puntero real
+window.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') foSetPlatform('mobile');
+  else if (e.pointerType === 'mouse' || e.pointerType === 'pen') foSetPlatform('pc');
+}, { passive: true });
+window.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') foSetPlatform('pc'); }, { passive: true });
+window.addEventListener('keydown', () => foSetPlatform('pc'));
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0xb8d8ee, 0.005); // niebla suave azul cielo
+scene.background = new THREE.Color(0x88bbee);
+
+const camera = new THREE.PerspectiveCamera(78, window.innerWidth/window.innerHeight, 0.1, 700);
+camera.position.set(0, 8, 12);
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
+const RENDER_SCALE = 1.0;
+renderer.setSize(window.innerWidth * RENDER_SCALE, window.innerHeight * RENDER_SCALE, false);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.domElement.style.width = '100%';
+renderer.domElement.style.height = '100%';
+renderer.domElement.style.position = 'fixed';
+renderer.domElement.style.inset = '0';
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+document.body.appendChild(renderer.domElement);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth * RENDER_SCALE, window.innerHeight * RENDER_SCALE, false);
+  composer.setSize(window.innerWidth * RENDER_SCALE, window.innerHeight * RENDER_SCALE);
+});
+
+// Skybox con gradiente lindo de día
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: { uTopColor: { value: new THREE.Color(0x4a9be8) }, uBotColor: { value: new THREE.Color(0xeaf4ff) } },
+  vertexShader: 'varying vec3 vW; void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vW = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }',
+  fragmentShader: 'varying vec3 vW; uniform vec3 uTopColor; uniform vec3 uBotColor; void main(){ float t = clamp((normalize(vW).y + 0.05) * 1.3, 0.0, 1.0); gl_FragColor = vec4(mix(uBotColor, uTopColor, t), 1.0); }',
+  side: THREE.BackSide, depthWrite: false
+});
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(350, 16, 12), skyMat));
+
+// === NUBES en el cielo ===
+const cloudGroup = new THREE.Group();
+const cloudCanvas = document.createElement('canvas');
+cloudCanvas.width = 256; cloudCanvas.height = 128;
+const ctx = cloudCanvas.getContext('2d');
+const grad = ctx.createRadialGradient(128, 64, 10, 128, 64, 110);
+grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+grad.addColorStop(0.4, 'rgba(255,255,255,0.7)');
+grad.addColorStop(0.8, 'rgba(255,255,255,0.2)');
+grad.addColorStop(1, 'rgba(255,255,255,0)');
+ctx.fillStyle = grad;
+ctx.fillRect(0, 0, 256, 128);
+// agregar bumps
+for (let i = 0; i < 8; i++){
+  const g2 = ctx.createRadialGradient(40 + i * 30, 40 + (i % 2) * 30, 5, 40 + i * 30, 40 + (i % 2) * 30, 40);
+  g2.addColorStop(0, 'rgba(255,255,255,0.8)');
+  g2.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g2;
+  ctx.fillRect(0, 0, 256, 128);
+}
+const cloudTex = new THREE.CanvasTexture(cloudCanvas);
+for (let i = 0; i < 28; i++){
+  const cloud = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, transparent: true, depthWrite: false, opacity: 0.85 }));
+  cloud.scale.set(35 + Math.random() * 25, 14 + Math.random() * 8, 1);
+  const angle = Math.random() * Math.PI * 2;
+  const dist = 80 + Math.random() * 180;
+  cloud.position.set(Math.cos(angle) * dist, 70 + Math.random() * 40, Math.sin(angle) * dist);
+  cloud.userData.speed = 0.3 + Math.random() * 0.5;
+  cloud.userData.angle = angle;
+  cloudGroup.add(cloud);
+}
+scene.add(cloudGroup);
+
+// === ILUMINACIÓN MEJORADA ===
+const sun = new THREE.DirectionalLight(0xfff0c8, 2.2); // más cálido y brillante
+sun.position.set(60, 200, 80);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); // sombras más nítidas
+sun.shadow.camera.left = -80; sun.shadow.camera.right = 80;
+sun.shadow.camera.top = 200; sun.shadow.camera.bottom = -20;
+sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 400;
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.04;
+scene.add(sun);
+
+// Luz ambiente cálida
+scene.add(new THREE.AmbientLight(0xb0d4e8, 0.55));
+
+// Hemisphere: cielo cálido / piso azul oscuro
+scene.add(new THREE.HemisphereLight(0xffe4b8, 0x2a4a6a, 0.85));
+
+// Luz rim trasera para hacer pop a los personajes/plataformas
+const rimLight = new THREE.DirectionalLight(0xa8c8ff, 0.6);
+rimLight.position.set(-50, 120, -80);
+scene.add(rimLight);
+
+// Tone mapping más cálido
+renderer.toneMappingExposure = 1.25;
+
+const composer = new EffectComposer(renderer);
+composer.setSize(window.innerWidth * RENDER_SCALE, window.innerHeight * RENDER_SCALE);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.7, 0.5, 0.75));
+composer.addPass(new OutputPass());
+
+// ========== TEXTURES ==========
+function makeWoodTex(){
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  x.fillStyle = '#8a5a2a'; x.fillRect(0,0,128,128);
+  for(let i=0; i<60; i++){
+    x.strokeStyle = `rgba(${40+Math.random()*40},${20+Math.random()*30},10,${0.3+Math.random()*0.3})`;
+    x.lineWidth = 0.5 + Math.random()*1.5;
+    x.beginPath();
+    x.moveTo(0, Math.random()*128);
+    x.bezierCurveTo(40, Math.random()*128, 80, Math.random()*128, 128, Math.random()*128);
+    x.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+function makeStoneTex(){
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  x.fillStyle = '#888'; x.fillRect(0,0,128,128);
+  for(let i=0; i<200; i++){
+    x.fillStyle = `rgba(${80+Math.random()*60},${80+Math.random()*60},${80+Math.random()*60},${0.4+Math.random()*0.4})`;
+    x.beginPath();
+    x.arc(Math.random()*128, Math.random()*128, 1+Math.random()*3, 0, Math.PI*2);
+    x.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+function makeCarpetTex(){
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  x.fillStyle = '#6a3838'; x.fillRect(0,0,128,128);
+  for(let i=0; i<400; i++){
+    x.fillStyle = `rgba(${80+Math.random()*40},${30+Math.random()*20},${30+Math.random()*20},${0.3+Math.random()*0.3})`;
+    x.fillRect(Math.random()*128, Math.random()*128, 1.5, 1.5);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(4,4);
+  return t;
+}
+const woodTex = makeWoodTex();
+const stoneTex = makeStoneTex();
+const carpetTex = makeCarpetTex();
+
+// ========== CHARACTER (R6 style) ==========
+function makeChar(skinColor, shirtColor, pantsColor){
+  const g = new THREE.Group();
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.1, 0.55),
+    new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.7 }));
+  torso.position.y = 1.7; torso.castShadow = true;
+  g.add(torso);
+  const headPivot = new THREE.Group();
+  headPivot.position.set(0, 2.45, 0);
+  g.add(headPivot);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.65, 0.65),
+    new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.5 }));
+  head.position.y = 0.35; head.castShadow = true;
+  headPivot.add(head);
+  for(const ex of [-0.13, 0.13]){
+    const eye = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 0.12),
+      new THREE.MeshBasicMaterial({ color: 0x111111 }));
+    eye.position.set(ex, 0.36, 0.331);
+    headPivot.add(eye);
+  }
+  const armMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.5 });
+  const lArm = new THREE.Group();
+  lArm.position.set(-0.65, 2.2, 0);
+  const lArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.0, 0.35), armMat);
+  lArmMesh.position.y = -0.5; lArmMesh.castShadow = true;
+  lArm.add(lArmMesh); g.add(lArm);
+  const rArm = new THREE.Group();
+  rArm.position.set(0.65, 2.2, 0);
+  const rArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.0, 0.35), armMat);
+  rArmMesh.position.y = -0.5; rArmMesh.castShadow = true;
+  rArm.add(rArmMesh); g.add(rArm);
+  const legMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.7 });
+  const lLeg = new THREE.Group();
+  lLeg.position.set(-0.25, 1.15, 0);
+  const lLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.1, 0.45), legMat);
+  lLegMesh.position.y = -0.55; lLegMesh.castShadow = true;
+  lLeg.add(lLegMesh); g.add(lLeg);
+  const rLeg = new THREE.Group();
+  rLeg.position.set(0.25, 1.15, 0);
+  const rLegMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.1, 0.45), legMat);
+  rLegMesh.position.y = -0.55; rLegMesh.castShadow = true;
+  rLeg.add(rLegMesh); g.add(rLeg);
+  g.userData = { headPivot, lArm, rArm, lLeg, rLeg, torso };
+  return g;
+}
+
+function animateChar(ch, dt, moving, running, t, jumping){
+  const ud = ch.userData;
+  if(jumping){
+    ud.lLeg.rotation.x = -0.3; ud.rLeg.rotation.x = -0.3;
+    ud.lArm.rotation.x = -1.2; ud.rArm.rotation.x = -1.2;
+    return;
+  }
+  if(moving){
+    const speed = running ? 11 : 7.5;
+    const cycle = t * speed + (ud.cycleOffset || 0);
+    const amp = running ? 1.0 : 0.7;
+    ud.lLeg.rotation.x = Math.sin(cycle) * amp;
+    ud.rLeg.rotation.x = -Math.sin(cycle) * amp;
+    ud.lArm.rotation.x = -Math.sin(cycle) * (amp * 0.7);
+    ud.rArm.rotation.x = Math.sin(cycle) * (amp * 0.7);
+    ud.torso.rotation.z = Math.sin(cycle*2) * 0.05;
+  } else {
+    ud.lLeg.rotation.x *= 0.85;
+    ud.rLeg.rotation.x *= 0.85;
+    ud.lArm.rotation.x *= 0.85;
+    ud.rArm.rotation.x *= 0.85;
+    ud.torso.rotation.z *= 0.85;
+    ud.torso.position.y = 1.7 + Math.sin(t * 1.5) * 0.02;
+  }
+}
+
+const player = makeChar(0xeecc88, 0x1b3a5e, 0x222244);
+scene.add(player);
+
+const playerState = {
+  vel: new THREE.Vector3(),
+  onGround: false,
+  alive: true,
+  inLobby: true,
+  firstPerson: true,
+  inShelter: false,
+  speed: 8, runSpeed: 12, jumpPower: 14.5,
+  radius: 0.5, height: 2.6,
+  groundPlatform: null,
+  visibleInThirdPerson: false
+};
+
+// ========== PLATFORMS ==========
+const platforms = [];
+const lobbyMeshes = [];
+const obbyMeshes = [];
+
+function makePlatform(opts){
+  const w = opts.w || 3;
+  const d = opts.d || 3;
+  const h = opts.h || 0.5;
+  const x = opts.x || 0, y = opts.y || 0, z = opts.z || 0;
+  const rot = opts.rot || 0;
+  const type = opts.type || 'normal';
+  const moving = opts.moving || null;
+  const collection = opts.collection || 'obby';
+  const noCollision = opts.noCollision || false;
+  const locked = opts.locked || false;  // empieza inactiva, esperando botón
+  const unlockGroup = opts.unlockGroup || -1;  // ID del grupo que esta plataforma desbloquea
+  
+  let color, tex = null, emissive = 0x000000, ei = 0;
+  if(type === 'checkpoint'){ color = 0x88ddaa; emissive = 0x224422; ei = 0.5; }
+  else if(type === 'slippery'){ color = 0xaaccdd; emissive = 0x334455; ei = 0.2; }
+  else if(type === 'small'){ color = 0x8a5a2a; tex = woodTex; }
+  else if(type === 'moving'){ color = 0xddaa44; emissive = 0x332211; ei = 0.15; }
+  else if(type === 'shelter'){ color = 0xffd068; emissive = 0x885511; ei = 0.55; }
+  else if(type === 'wood'){ color = 0x8a5a2a; tex = woodTex; }
+  else if(type === 'wall'){ color = opts.color || 0x886a4a; tex = opts.tex || null; }
+  else if(type === 'floor_carpet'){ color = 0x6a3838; tex = carpetTex; }
+  else if(type === 'floor_stone'){ color = 0x666666; tex = stoneTex; }
+  else if(type === 'button_path'){ color = 0x8866cc; emissive = 0x442266; ei = 0.3; }
+  else { color = 0x666666; tex = stoneTex; }
+  
+  if(opts.color !== undefined) color = opts.color;
+  if(opts.tex !== undefined) tex = opts.tex;
+  
+  const mat = new THREE.MeshStandardMaterial({ 
+    color, roughness: 0.75, metalness: 0.05, map: tex,
+    emissive, emissiveIntensity: ei,
+    transparent: locked, opacity: locked ? 0.3 : 1.0
+  });
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  mesh.position.set(x, y, z);
+  mesh.rotation.y = rot;
+  if(!locked){
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+  }
+  scene.add(mesh);
+  
+  const p = { 
+    mesh, w, d, h, type, baseX: x, baseY: y, baseZ: z, rot, moving, 
+    movePhase: Math.random() * Math.PI * 2, 
+    collection, noCollision,
+    locked, unlockGroup
+  };
+  if(!noCollision && !locked) platforms.push(p);
+  if(collection === 'lobby') lobbyMeshes.push(p);
+  else obbyMeshes.push(p);
+  return p;
+}
+
+// ========== LOBBY (PRIMERA PERSONA) ==========
+const LOBBY_OFFSET = -150;
+const LOBBY_Y = 0;
+const LOBBY_SIZE = 28;
+
+function buildLobby(){
+  // Suelo
+  makePlatform({ x: LOBBY_OFFSET, y: LOBBY_Y - 0.25, z: 0, w: LOBBY_SIZE, d: LOBBY_SIZE, h: 0.5, type: 'floor_carpet', collection: 'lobby' });
+  
+  const wallH = 8;
+  const wallColor = 0x886a4a;
+  const halfL = LOBBY_SIZE/2;
+  // Paredes
+  makePlatform({ x: LOBBY_OFFSET, y: LOBBY_Y + wallH/2, z: -halfL, w: LOBBY_SIZE, d: 0.4, h: wallH, type: 'wall', color: wallColor, tex: woodTex, collection: 'lobby', noCollision: true });
+  makePlatform({ x: LOBBY_OFFSET, y: LOBBY_Y + wallH/2, z: halfL, w: LOBBY_SIZE, d: 0.4, h: wallH, type: 'wall', color: wallColor, tex: woodTex, collection: 'lobby', noCollision: true });
+  makePlatform({ x: LOBBY_OFFSET - halfL, y: LOBBY_Y + wallH/2, z: 0, w: 0.4, d: LOBBY_SIZE, h: wallH, type: 'wall', color: wallColor, tex: woodTex, collection: 'lobby', noCollision: true });
+  makePlatform({ x: LOBBY_OFFSET + halfL, y: LOBBY_Y + wallH/2, z: 0, w: 0.4, d: LOBBY_SIZE, h: wallH, type: 'wall', color: wallColor, tex: woodTex, collection: 'lobby', noCollision: true });
+  // Techo
+  makePlatform({ x: LOBBY_OFFSET, y: LOBBY_Y + wallH, z: 0, w: LOBBY_SIZE, d: LOBBY_SIZE, h: 0.3, type: 'wall', color: 0x554433, collection: 'lobby', noCollision: true });
+  
+  // Mesa central
+  makePlatform({ x: LOBBY_OFFSET, y: LOBBY_Y + 0.85, z: 0, w: 6, d: 3, h: 0.25, type: 'wood', collection: 'lobby' });
+  for(const [px, pz] of [[-2.6, -1.2], [2.6, -1.2], [-2.6, 1.2], [2.6, 1.2]]){
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.85, 0.2),
+      new THREE.MeshStandardMaterial({ color: 0x5a3818, map: woodTex }));
+    leg.position.set(LOBBY_OFFSET + px, LOBBY_Y + 0.42, pz);
+    leg.castShadow = true;
+    scene.add(leg);
+  }
+  
+  // Lámparas colgantes
+  for(const [lx, lz] of [[-8, -8], [8, -8], [-8, 8], [8, 8], [0, 0]]){
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 8),
+      new THREE.MeshStandardMaterial({ color: 0xffeeaa, emissive: 0xffaa44, emissiveIntensity: 1.8 }));
+    lamp.position.set(LOBBY_OFFSET + lx, LOBBY_Y + wallH - 0.8, lz);
+    scene.add(lamp);
+    const light = new THREE.PointLight(0xffcc77, 0.6, 14);
+    light.position.copy(lamp.position);
+    scene.add(light);
+  }
+  
+  // Banco/sofá largo en una pared
+  makePlatform({ x: LOBBY_OFFSET + halfL - 1, y: LOBBY_Y + 0.5, z: 0, w: 1.5, d: 8, h: 1, type: 'wood', color: 0x5a3a2a, collection: 'lobby' });
+  // Banco opuesto
+  makePlatform({ x: LOBBY_OFFSET - halfL + 1, y: LOBBY_Y + 0.5, z: 0, w: 1.5, d: 8, h: 1, type: 'wood', color: 0x5a3a2a, collection: 'lobby' });
+  
+  // Cuadros decorativos
+  for(let i=0; i<4; i++){
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.0, 0.1),
+      new THREE.MeshStandardMaterial({ color: 0x442211 }));
+    frame.position.set(LOBBY_OFFSET + (i-1.5)*5, LOBBY_Y + 4, -halfL + 0.3);
+    scene.add(frame);
+    const art = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.8),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(i*0.2, 0.5, 0.5) }));
+    art.position.set(LOBBY_OFFSET + (i-1.5)*5, LOBBY_Y + 4, -halfL + 0.36);
+    scene.add(art);
+  }
+  
+  // Portal grande hacia el obby
+  const portalSign = new THREE.Group();
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a4a6a, metalness: 0.5, roughness: 0.3 });
+  const top = new THREE.Mesh(new THREE.BoxGeometry(6, 0.4, 0.4), frameMat);
+  top.position.y = 4.5; portalSign.add(top);
+  const left = new THREE.Mesh(new THREE.BoxGeometry(0.4, 4.5, 0.4), frameMat);
+  left.position.set(-2.8, 2.25, 0); portalSign.add(left);
+  const right = new THREE.Mesh(new THREE.BoxGeometry(0.4, 4.5, 0.4), frameMat);
+  right.position.set(2.8, 2.25, 0); portalSign.add(right);
+  const portalGlow = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 4),
+    new THREE.MeshBasicMaterial({ color: 0x4488cc, transparent: true, opacity: 0.4, side: THREE.DoubleSide }));
+  portalGlow.position.y = 2.25; portalSign.add(portalGlow);
+  portalSign.position.set(LOBBY_OFFSET, LOBBY_Y, halfL - 0.5);
+  scene.add(portalSign);
+  window.portalGlow = portalGlow;
+}
+
+// ========== OBBY (TORRE GIGANTE) ==========
+const OBBY_OFFSET = 0;
+const TOWER_SIZE = 80;  // habitación gigante 80x80
+const SHELTER_HEIGHT = 100;  // 100m de altura
+
+// Sistema de botones
+// Cada botón tiene: { mesh, panelMesh, position, pressed, group, isButtonObj: true }
+const buttons = [];
+const lockedPlatformsByGroup = {};  // grupo -> [plataformas que se desbloquean]
+let obbyShelterX = 0, obbyShelterZ = 0;
+
+function makeButton(x, y, z, group){
+  const grp = new THREE.Group();
+  // Panel/base del botón
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 0.4, 16),
+    new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.5, roughness: 0.5 }));
+  base.position.y = 0.2;
+  base.castShadow = true;
+  grp.add(base);
+  // Botón rojo arriba
+  const btnMat = new THREE.MeshStandardMaterial({ color: 0xcc2222, emissive: 0xaa1111, emissiveIntensity: 0.6, metalness: 0.3, roughness: 0.4 });
+  const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 0.2, 16), btnMat);
+  btn.position.y = 0.5;
+  btn.castShadow = true;
+  grp.add(btn);
+  // Luz pulsante alrededor
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 32),
+    new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI/2;
+  ring.position.y = 0.61;
+  grp.add(ring);
+  
+  grp.position.set(x, y, z);
+  scene.add(grp);
+  
+  const btnObj = {
+    group: grp, btn, ring, mat: btnMat,
+    position: new THREE.Vector3(x, y, z),
+    pressed: false,
+    unlockGroup: group,
+    pulsePhase: Math.random() * Math.PI * 2,
+    isButtonObj: true
+  };
+  buttons.push(btnObj);
+  return btnObj;
+}
+
+function pressButton(btnObj){
+  if(btnObj.pressed) return;
+  btnObj.pressed = true;
+  SFX.button();  // sonido de botón apretado
+  // Cambiar a verde
+  btnObj.mat.color.set(0x22cc66);
+  btnObj.mat.emissive.set(0x118844);
+  btnObj.ring.material.color.set(0x44ff88);
+  // Hundir el botón visualmente
+  btnObj.btn.position.y = 0.4;
+  // Desbloquear plataformas del grupo
+  const platsToUnlock = lockedPlatformsByGroup[btnObj.unlockGroup] || [];
+  for(const p of platsToUnlock){
+    p.locked = false;
+    p.mesh.material.transparent = false;
+    p.mesh.material.opacity = 1.0;
+    p.mesh.castShadow = true;
+    p.mesh.receiveShadow = true;
+    // Agregar a las plataformas con colisión
+    if(!platforms.includes(p)) platforms.push(p);
+  }
+  setStatus(T('status_button'));
+}
+
+// ===== BOSQUE INFRANQUEABLE =====
+function buildForestRing(centerX, half){
+  const forestPlats = []; // refs por si necesitamos limpieza
+  
+  // Materiales reutilizables (eficiencia)
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a3a20, roughness: 0.9 });
+  const trunkMatDark = new THREE.MeshStandardMaterial({ color: 0x3a2a18, roughness: 0.95 });
+  const leafColors = [0x2a7a3a, 0x3a8a45, 0x357040, 0x4a9050, 0x265a35, 0x408a50, 0x2a6a35];
+  const leafMats = leafColors.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, emissive: c, emissiveIntensity: 0.05 }));
+  
+  // Geometrías compartidas
+  const trunkGeoms = [
+    new THREE.CylinderGeometry(0.4, 0.55, 4, 7),
+    new THREE.CylinderGeometry(0.5, 0.7, 5, 7),
+    new THREE.CylinderGeometry(0.35, 0.5, 3.5, 6),
+    new THREE.CylinderGeometry(0.6, 0.8, 6, 8)
+  ];
+  const leafGeoms = [
+    new THREE.IcosahedronGeometry(2.2, 0),
+    new THREE.IcosahedronGeometry(2.8, 0),
+    new THREE.IcosahedronGeometry(1.8, 0),
+    new THREE.IcosahedronGeometry(3.2, 0),
+    new THREE.SphereGeometry(2.5, 6, 5)
+  ];
+  
+  // === PARED INVISIBLE (collision) — anillo de 4 lados ===
+  // wall thickness 1, alta para que no puedan saltarla
+  const wallH = 30;
+  const invisMat = new THREE.MeshBasicMaterial({ visible: false });
+  
+  function addInvisWall(x, z, w, d){
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, d), invisMat);
+    wall.position.set(x, wallH/2, z);
+    scene.add(wall);
+    platforms.push({
+      mesh: wall, w: w, d: d, h: wallH,
+      type: 'wall', collection: 'obby',
+      noCollision: false,
+      baseX: x, baseY: wallH/2, baseZ: z,
+      rot: 0, locked: false
+    });
+  }
+  
+  // 4 paredes invisibles
+  addInvisWall(centerX, -half - 1, half * 2 + 4, 1);   // norte
+  addInvisWall(centerX, half + 1, half * 2 + 4, 1);    // sur
+  addInvisWall(centerX - half - 1, 0, 1, half * 2);    // oeste
+  addInvisWall(centerX + half + 1, 0, 1, half * 2);    // este
+  
+  // === ÁRBOLES DECORATIVOS ===
+  // 3 anillos de árboles (interior, medio, exterior) para que sea muy denso
+  const ringConfigs = [
+    { offset: 2, count: 60, scale: [1, 1.3] },
+    { offset: 6, count: 80, scale: [1.1, 1.5] },
+    { offset: 12, count: 100, scale: [1.2, 1.8] },
+    { offset: 20, count: 120, scale: [1.3, 2.0] }
+  ];
+  
+  for (const ring of ringConfigs){
+    const ringHalf = half + ring.offset;
+    for (let i = 0; i < ring.count; i++){
+      // Posición aleatoria en el perímetro
+      const side = i % 4;
+      let tx, tz;
+      const t = Math.random();
+      if (side === 0){
+        tx = centerX - ringHalf + t * (ringHalf * 2);
+        tz = -ringHalf - Math.random() * 3;
+      } else if (side === 1){
+        tx = centerX - ringHalf + t * (ringHalf * 2);
+        tz = ringHalf + Math.random() * 3;
+      } else if (side === 2){
+        tx = centerX - ringHalf - Math.random() * 3;
+        tz = -ringHalf + t * (ringHalf * 2);
+      } else {
+        tx = centerX + ringHalf + Math.random() * 3;
+        tz = -ringHalf + t * (ringHalf * 2);
+      }
+      
+      const treeGroup = new THREE.Group();
+      const scale = ring.scale[0] + Math.random() * (ring.scale[1] - ring.scale[0]);
+      
+      // Tronco
+      const trunk = new THREE.Mesh(
+        trunkGeoms[Math.floor(Math.random() * trunkGeoms.length)],
+        Math.random() < 0.4 ? trunkMatDark : trunkMat
+      );
+      const trunkH = trunk.geometry.parameters.height;
+      trunk.position.y = trunkH / 2;
+      trunk.castShadow = true;
+      treeGroup.add(trunk);
+      
+      // Copa (1-3 esferas apiladas)
+      const leafCount = 1 + Math.floor(Math.random() * 3);
+      for (let l = 0; l < leafCount; l++){
+        const leafMesh = new THREE.Mesh(
+          leafGeoms[Math.floor(Math.random() * leafGeoms.length)],
+          leafMats[Math.floor(Math.random() * leafMats.length)]
+        );
+        leafMesh.position.set(
+          (Math.random() - 0.5) * 1.5,
+          trunkH + l * 1.4 + Math.random() * 0.5,
+          (Math.random() - 0.5) * 1.5
+        );
+        leafMesh.scale.setScalar(0.8 + Math.random() * 0.4);
+        leafMesh.castShadow = true;
+        treeGroup.add(leafMesh);
+      }
+      
+      treeGroup.position.set(tx, 0, tz);
+      treeGroup.scale.setScalar(scale);
+      treeGroup.rotation.y = Math.random() * Math.PI * 2;
+      scene.add(treeGroup);
+      forestPlats.push(treeGroup);
+    }
+  }
+  
+  // === FLORES Y ARBUSTOS pequeños dispersos cerca del borde interior ===
+  const bushMats = [
+    new THREE.MeshStandardMaterial({ color: 0xff6688, roughness: 0.7, emissive: 0xaa2244, emissiveIntensity: 0.1 }),
+    new THREE.MeshStandardMaterial({ color: 0xffcc44, roughness: 0.7, emissive: 0xaa8822, emissiveIntensity: 0.1 }),
+    new THREE.MeshStandardMaterial({ color: 0xaaeeff, roughness: 0.7, emissive: 0x4488aa, emissiveIntensity: 0.1 }),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 })
+  ];
+  
+  for (let i = 0; i < 80; i++){
+    const angle = Math.random() * Math.PI * 2;
+    const r = half - 1 + Math.random() * 3;
+    const fx = centerX + Math.cos(angle) * r;
+    const fz = Math.sin(angle) * r;
+    
+    const flower = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.25 + Math.random() * 0.2, 0),
+      bushMats[Math.floor(Math.random() * bushMats.length)]
+    );
+    flower.position.set(fx, 0.2, fz);
+    flower.castShadow = true;
+    scene.add(flower);
+  }
+}
+
+
+function buildObby(){
+  const startY = 0;
+  const half = TOWER_SIZE/2;
+  
+  // Suelo verde tipo césped (más grande que el tower size para que se vea infinito)
+  const groundMat = new THREE.MeshStandardMaterial({ 
+    color: 0x6abc52, 
+    roughness: 0.9,
+    metalness: 0
+  });
+  const groundMesh = new THREE.Mesh(new THREE.BoxGeometry(TOWER_SIZE + 80, 1, TOWER_SIZE + 80), groundMat);
+  groundMesh.position.set(OBBY_OFFSET, startY - 0.25, 0);
+  groundMesh.receiveShadow = true;
+  scene.add(groundMesh);
+  // Plataforma de colisión propia
+  platforms.push({
+    mesh: groundMesh,
+    w: TOWER_SIZE + 80, d: TOWER_SIZE + 80, h: 1,
+    type: 'normal',
+    collection: 'obby',
+    noCollision: false,
+    baseX: OBBY_OFFSET, baseY: startY - 0.25, baseZ: 0,
+    rot: 0, locked: false
+  });
+  
+  // ===== BOSQUE INFRANQUEABLE: anillo denso de árboles rodeando el mapa =====
+  buildForestRing(OBBY_OFFSET, half);
+  
+  // ===== KILL BRICKS EN EL SUELO (rojos, matan al tocar) =====
+  window.killBricks = [];
+  // Disposición: barras rojas distribuidas en el suelo
+  const killBrickPositions = [
+    { x: -15, z: -10, w: 8, d: 1.5 },
+    { x: 12, z: -5, w: 1.5, d: 7 },
+    { x: -8, z: 12, w: 6, d: 1.5 },
+    { x: 18, z: 15, w: 1.5, d: 6 },
+    { x: -20, z: 5, w: 1.5, d: 5 },
+    { x: 5, z: 18, w: 5, d: 1.5 },
+    { x: 22, z: -12, w: 1.5, d: 4 },
+  ];
+  for(const kb of killBrickPositions){
+    const mat = new THREE.MeshStandardMaterial({ 
+      color: 0xcc1a1a, emissive: 0x661111, emissiveIntensity: 0.8, 
+      roughness: 0.4, metalness: 0.1 
+    });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(kb.w, 0.15, kb.d), mat);
+    mesh.position.set(OBBY_OFFSET + kb.x, 0.32, kb.z);
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    window.killBricks.push({
+      mesh, x: OBBY_OFFSET + kb.x, z: kb.z, w: kb.w, d: kb.d, y: 0.32,
+      pulsePhase: Math.random() * Math.PI * 2, mat
+    });
+  }
+  
+  // ===== OBBY EN ZIGZAG: se extiende a lados y sube =====
+  window.obbyPath = [];
+  
+  let curY = startY + 0.5;
+  let groupId = 0;
+  
+  function addToPath(x, y, z, w, d, type, opts = {}){
+    const fullOpts = Object.assign({
+      x: OBBY_OFFSET + x, y, z,
+      w, d, type, rot: 0,
+      collection: 'obby'
+    }, opts);
+    const p = makePlatform(fullOpts);
+    window.obbyPath.push(p);
+    return p;
+  }
+  
+  // Función para generar un tramo de plataformas en línea/zigzag
+  // direction: { dx, dz } = vector unitario de dirección
+  // count: cuántas plataformas
+  // riseEach: cuánto sube cada plataforma
+  // jumpDist: distancia entre plataformas
+  // startPos: { x, z } posición inicial (la última del segmento anterior)
+  function buildLine(startPos, direction, count, riseEach, jumpDist, opts = {}){
+    let lastX = startPos.x, lastZ = startPos.z;
+    for(let i = 0; i < count; i++){
+      curY += riseEach;
+      lastX += direction.dx * jumpDist;
+      lastZ += direction.dz * jumpDist;
+      
+      // Clamp dentro de la sala
+      const r = Math.hypot(lastX, lastZ);
+      const maxR = TOWER_SIZE/2 - 5;
+      if(r > maxR){ lastX *= maxR/r; lastZ *= maxR/r; }
+      
+      let type = 'normal';
+      let pW = 2.5, pD = 2.5;
+      
+      // Variar tipos
+      if(opts.checkpointEvery && (i+1) % opts.checkpointEvery === 0){
+        type = 'checkpoint'; pW = 3.2; pD = 3.2;
+      } else if(opts.includeMoving && i >= 2 && i % 4 === 0){
+        type = 'moving'; pW = 2.3; pD = 2.3;
+      } else if(opts.includeSmall && i % 5 === 3){
+        type = 'small'; pW = 1.6; pD = 1.6;
+      } else if(opts.includeSlippery && i % 6 === 4){
+        type = 'slippery'; pW = 2.4; pD = 2.4;
+      }
+      
+      let moving = null;
+      if(type === 'moving'){
+        // movimiento perpendicular a la dirección
+        moving = { 
+          axis: Math.abs(direction.dx) > Math.abs(direction.dz) ? 'z' : 'x',
+          range: 1.8, speed: 0.6 
+        };
+      }
+      
+      const platOpts = { moving };
+      if(opts.locked){ platOpts.locked = true; platOpts.unlockGroup = opts.unlockGroup; }
+      
+      const p = addToPath(lastX, curY, lastZ, pW, pD, type, platOpts);
+      
+      // OBSTÁCULOS al lado de la plataforma (kill bricks que esquivar)
+      if(opts.deadlyEvery && (i+1) % opts.deadlyEvery === 0){
+        // Spike rojo al lado de la plataforma (no encima)
+        // Se coloca a un lado para que los bots tengan que pasarlo o esquivarlo
+        const spikeOffsetAngle = Math.atan2(direction.dz, direction.dx) + Math.PI/2;
+        const spikeX = lastX + Math.cos(spikeOffsetAngle) * (pW/2 + 0.8);
+        const spikeZ = lastZ + Math.sin(spikeOffsetAngle) * (pD/2 + 0.8);
+        const spikeMat = new THREE.MeshStandardMaterial({ 
+          color: 0xff2222, emissive: 0x881111, emissiveIntensity: 1.0,
+          roughness: 0.3
+        });
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1.2, 6), spikeMat);
+        spike.position.set(OBBY_OFFSET + spikeX, curY + 0.4 + 0.6, spikeZ);
+        spike.castShadow = true;
+        scene.add(spike);
+        window.killBricks.push({
+          mesh: spike, x: OBBY_OFFSET + spikeX, z: spikeZ, 
+          w: 0.6, d: 0.6, y: curY + 0.4,
+          pulsePhase: Math.random() * Math.PI * 2, mat: spikeMat
+        });
+      }
+      
+      if(opts.locked) lockedPlatformsByGroup[opts.unlockGroup].push(p);
+    }
+    return { x: lastX, z: lastZ };
+  }
+  
+  // Función helper: parkour pequeño + botón
+  function buildButtonBranch(startPos, branchAngle, group){
+    const dir = { dx: Math.cos(branchAngle), dz: Math.sin(branchAngle) };
+    let bX = startPos.x, bZ = startPos.z, bY = curY + 0.3;
+    for(let j = 0; j < 3; j++){
+      bY += 0.8;
+      bX += dir.dx * 2.8;
+      bZ += dir.dz * 2.8;
+      const r = Math.hypot(bX, bZ);
+      if(r > TOWER_SIZE/2 - 4){ const k = (TOWER_SIZE/2-4)/r; bX *= k; bZ *= k; }
+      addToPath(bX, bY, bZ, 2.0, 2.0, 'button_path');
+    }
+    bY += 0.8;
+    bX += dir.dx * 2.5;
+    bZ += dir.dz * 2.5;
+    const r = Math.hypot(bX, bZ);
+    if(r > TOWER_SIZE/2 - 4){ const k = (TOWER_SIZE/2-4)/r; bX *= k; bZ *= k; }
+    addToPath(bX, bY, bZ, 3.2, 3.2, 'button_path');
+    makeButton(OBBY_OFFSET + bX, bY + 0.25, bZ, group);
+    return { x: bX, z: bZ };
+  }
+  
+  // ===== PLATAFORMA DE INICIO GIGANTE (cabe los 13 jugadores) =====
+  curY = startY + 1.5;
+  let pos = { x: 0, z: 8 };
+  addToPath(pos.x, curY, pos.z, 8, 8, 'checkpoint');  // mucho más grande
+  
+  // ===== SEGMENTO 1: línea hacia +X (lado derecho) =====
+  // Va hacia el lado derecho, sube 8 plataformas
+  pos = buildLine(pos, { dx: 1, dz: -0.2 }, 8, 1.5, 3.5, { 
+    checkpointEvery: 5, includeMoving: true 
+  });
+  
+  // ===== SEGMENTO 2: gira hacia -Z (frente) =====
+  pos = buildLine(pos, { dx: -0.2, dz: -1 }, 6, 1.5, 3.5, { 
+    includeSmall: true, deadlyEvery: 4
+  });
+  
+  // ===== BOTÓN #1 (a la izquierda) =====
+  groupId = 1;
+  // Ángulo perpendicular: si veníamos hacia -Z, ramificar hacia -X
+  const branch1Angle = Math.PI;  // -X
+  const b1Pos = buildButtonBranch(pos, branch1Angle, groupId);
+  pos = b1Pos;
+  
+  // ===== SEGMENTO 3 (OPACO): zigzag hacia el otro lado =====
+  lockedPlatformsByGroup[groupId] = [];
+  pos = buildLine(pos, { dx: -1, dz: 0.2 }, 6, 1.6, 3.5, {
+    locked: true, unlockGroup: groupId, checkpointEvery: 4, includeMoving: true
+  });
+  pos = buildLine(pos, { dx: 0.2, dz: 1 }, 5, 1.6, 3.5, {
+    locked: true, unlockGroup: groupId, includeSmall: true, deadlyEvery: 3
+  });
+  
+  // ===== BOTÓN #2 (hacia +X) =====
+  groupId = 2;
+  const branch2Angle = 0;  // +X
+  pos = buildButtonBranch(pos, branch2Angle, groupId);
+  
+  // ===== SEGMENTO 4 (OPACO): zigzag complicado con kill bricks =====
+  lockedPlatformsByGroup[groupId] = [];
+  pos = buildLine(pos, { dx: 1, dz: 0.3 }, 5, 1.7, 3.5, {
+    locked: true, unlockGroup: groupId, includeMoving: true, includeSlippery: true
+  });
+  pos = buildLine(pos, { dx: -0.3, dz: 1 }, 5, 1.7, 3.5, {
+    locked: true, unlockGroup: groupId, deadlyEvery: 2, checkpointEvery: 4
+  });
+  pos = buildLine(pos, { dx: -1, dz: -0.3 }, 4, 1.7, 3.5, {
+    locked: true, unlockGroup: groupId, includeSmall: true
+  });
+  
+  // ===== BOTÓN #3 =====
+  groupId = 3;
+  const branch3Angle = -Math.PI/2;  // -Z
+  pos = buildButtonBranch(pos, branch3Angle, groupId);
+  
+  // ===== SEGMENTO 5 (OPACO): hacia el refugio =====
+  lockedPlatformsByGroup[groupId] = [];
+  // Subir más vertical, espiral suave hacia el centro
+  pos = buildLine(pos, { dx: 0.5, dz: -0.8 }, 4, 1.8, 3.3, {
+    locked: true, unlockGroup: groupId, includeMoving: true
+  });
+  pos = buildLine(pos, { dx: 0.8, dz: 0.5 }, 4, 1.8, 3.3, {
+    locked: true, unlockGroup: groupId, deadlyEvery: 3
+  });
+  // Final: dirigir al centro
+  // Plataformas puente al refugio
+  curY += 2;
+  obbyShelterX = OBBY_OFFSET;
+  obbyShelterZ = 0;
+  const shelterY = curY + 1;
+  
+  // Generar puente desde pos hasta el refugio
+  const dxR = 0 - pos.x;
+  const dzR = 0 - pos.z;
+  const distR = Math.hypot(dxR, dzR);
+  const bridgeSteps = Math.max(3, Math.floor(distR / 3.5));
+  for(let i = 1; i <= bridgeSteps; i++){
+    const t = i / (bridgeSteps + 1);
+    const bx = pos.x + dxR * t;
+    const bz = pos.z + dzR * t;
+    const by = curY + (t * 0.5);
+    const bridgePlat = makePlatform({
+      x: OBBY_OFFSET + bx, y: by, z: bz,
+      w: 2.6, d: 2.6, type: 'normal', rot: 0,
+      collection: 'obby',
+      locked: true, unlockGroup: 3
+    });
+    lockedPlatformsByGroup[3].push(bridgePlat);
+    window.obbyPath.push(bridgePlat);
+  }
+  
+  // REFUGIO
+  const shelter = makePlatform({
+    x: obbyShelterX, y: shelterY, z: obbyShelterZ,
+    w: 16, d: 16, h: 0.6, type: 'shelter',
+    collection: 'obby',
+    locked: true, unlockGroup: 3
+  });
+  lockedPlatformsByGroup[3].push(shelter);
+  window.obbyPath.push(shelter);
+  
+  // Bandera del refugio
+  const fp = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 6, 8),
+    new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.6 }));
+  fp.position.set(obbyShelterX, shelterY + 3.3, obbyShelterZ);
+  scene.add(fp);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 1.5),
+    new THREE.MeshStandardMaterial({ color: 0xff4444, emissive: 0xaa1111, emissiveIntensity: 0.5, side: THREE.DoubleSide }));
+  flag.position.set(obbyShelterX + 1.25, shelterY + 5.5, obbyShelterZ);
+  scene.add(flag);
+  
+  // ===== LÍNEA DE META =====
+  // Arco con luces y patrón cuadriculado al borde del refugio
+  const goalArc = new THREE.Group();
+  // Postes
+  const postMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xaa8800, emissiveIntensity: 1.0, metalness: 0.7, roughness: 0.3 });
+  const postL = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 5, 8), postMat);
+  postL.position.set(-3.5, 2.5, 0);
+  goalArc.add(postL);
+  const postR = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 5, 8), postMat);
+  postR.position.set(3.5, 2.5, 0);
+  goalArc.add(postR);
+  // Travesaño con cartel
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.4, 0.4), postMat);
+  beam.position.set(0, 5, 0);
+  goalArc.add(beam);
+  // Cartel META
+  const goalCanvas = document.createElement('canvas');
+  goalCanvas.width = 256; goalCanvas.height = 64;
+  const gctx = goalCanvas.getContext('2d');
+  // Patrón cuadriculado blanco/negro
+  gctx.fillStyle = '#fff';
+  gctx.fillRect(0, 0, 256, 64);
+  for(let y = 0; y < 4; y++){
+    for(let x = 0; x < 16; x++){
+      if((x + y) % 2 === 0){
+        gctx.fillStyle = '#111';
+        gctx.fillRect(x * 16, y * 16, 16, 16);
+      }
+    }
+  }
+  // Texto META
+  gctx.fillStyle = '#ff2222';
+  gctx.font = 'bold 36px Arial';
+  gctx.textAlign = 'center';
+  gctx.textBaseline = 'middle';
+  gctx.shadowColor = 'rgba(0,0,0,0.8)';
+  gctx.shadowBlur = 4;
+  gctx.fillText('META · FINISH', 128, 32);
+  const goalTex = new THREE.CanvasTexture(goalCanvas);
+  const goalSign = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.5),
+    new THREE.MeshBasicMaterial({ map: goalTex, side: THREE.DoubleSide }));
+  goalSign.position.set(0, 5.7, 0);
+  goalArc.add(goalSign);
+  
+  // Patrón cuadriculado en el suelo de la meta
+  const checkerMat = new THREE.MeshStandardMaterial({ 
+    map: (() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 128;
+      const x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0, 0, 128, 128);
+      x.fillStyle = '#111';
+      for(let i = 0; i < 8; i++){
+        for(let j = 0; j < 8; j++){
+          if((i + j) % 2 === 0) x.fillRect(i*16, j*16, 16, 16);
+        }
+      }
+      const t = new THREE.CanvasTexture(c);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(2, 2);
+      return t;
+    })(),
+    roughness: 0.7
+  });
+  const checkerFloor = new THREE.Mesh(new THREE.PlaneGeometry(6, 2), checkerMat);
+  checkerFloor.rotation.x = -Math.PI/2;
+  checkerFloor.position.set(0, 0.32, 0);
+  goalArc.add(checkerFloor);
+  
+  // Posicionar el arco en el borde del refugio (lado de entrada)
+  goalArc.position.set(obbyShelterX, shelterY, obbyShelterZ - 6);
+  scene.add(goalArc);
+  window.goalArc = goalArc;
+  // Luces parpadeantes en la meta
+  const goalLight1 = new THREE.PointLight(0xffdd66, 1.5, 12);
+  goalLight1.position.set(obbyShelterX - 3.5, shelterY + 5, obbyShelterZ - 6);
+  scene.add(goalLight1);
+  const goalLight2 = new THREE.PointLight(0xffdd66, 1.5, 12);
+  goalLight2.position.set(obbyShelterX + 3.5, shelterY + 5, obbyShelterZ - 6);
+  scene.add(goalLight2);
+  window.goalLights = [goalLight1, goalLight2];
+  
+  window.shelterHeight = shelterY;
+  
+  // Marcadores cada 10m
+  for(let y = 10; y < shelterY; y += 10){
+    const marker = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.6, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffdd66, transparent: true, opacity: 0.65, side: THREE.DoubleSide }));
+    marker.rotation.x = Math.PI/2;
+    marker.position.set(OBBY_OFFSET - half + 1.5, y, 0);
+    scene.add(marker);
+  }
+}
+
+
+// ========== WATER ==========
+const waterGeo = new THREE.PlaneGeometry(400, 400);
+const waterMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(0x2a5588) }, uColor2: { value: new THREE.Color(0x4488bb) } },
+  vertexShader: 'varying vec3 vW; void main(){ vec4 wp = modelMatrix * vec4(position, 1.0); vW = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }',
+  fragmentShader: `
+    uniform float uTime;
+    uniform vec3 uColor;
+    uniform vec3 uColor2;
+    varying vec3 vW;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float noise(vec2 p){
+      vec2 i = floor(p); vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1,0)), u.x), mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), u.x), u.y);
+    }
+    void main(){
+      vec2 uv = vW.xz * 0.1;
+      float n = noise(uv + uTime * 0.2);
+      n += noise(uv * 2.0 - uTime * 0.15) * 0.5;
+      n += noise(uv * 4.0 + uTime * 0.3) * 0.25;
+      vec3 col = mix(uColor, uColor2, n * 0.7);
+      float foam = smoothstep(0.7, 0.95, n);
+      col = mix(col, vec3(0.9, 0.95, 1.0), foam * 0.6);
+      gl_FragColor = vec4(col, 0.85);
+    }
+  `,
+  transparent: true
+});
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.rotation.x = -Math.PI / 2;
+water.position.y = -50;
+scene.add(water);
+
+// ========== BOTS GOTY ==========
+const BOT_NAMES = ['Alex','Jamie','Riley','Casey','Quinn','Avery','Drew','Sage','Skyler','Phoenix','River','Blake'];
+const BOT_COLORS = [
+  { skin: 0xeecc88, shirt: 0xcc4444, pants: 0x222244 },
+  { skin: 0xd0a070, shirt: 0x44cc88, pants: 0x333322 },
+  { skin: 0xeeccaa, shirt: 0xcc88cc, pants: 0x444466 },
+  { skin: 0xccaa88, shirt: 0x4488cc, pants: 0x222244 },
+  { skin: 0xeebb99, shirt: 0xccaa44, pants: 0x333344 },
+  { skin: 0xd5a575, shirt: 0x66aa66, pants: 0x442222 },
+  { skin: 0xddbb88, shirt: 0xaa66cc, pants: 0x222255 },
+  { skin: 0xeecc99, shirt: 0xcc6644, pants: 0x333366 },
+  { skin: 0xc89878, shirt: 0x4488aa, pants: 0x442233 },
+  { skin: 0xeeccaa, shirt: 0xaaaa44, pants: 0x224422 },
+  { skin: 0xd5a880, shirt: 0xcc4488, pants: 0x222244 },
+  { skin: 0xeebb88, shirt: 0x44aacc, pants: 0x442255 }
+];
+
+const bots = [];
+function createBots(){
+  // 0 NPCs: jugador solo
+  return;
+  for(let i=0; i<12; i++){
+    const c = BOT_COLORS[i % BOT_COLORS.length];
+    const ch = makeChar(c.skin, c.shirt, c.pants);
+    ch.userData.cycleOffset = Math.random() * Math.PI * 2;
+    scene.add(ch);
+    bots.push({
+      char: ch,
+      name: BOT_NAMES[i],
+      pos: new THREE.Vector3(),
+      vel: new THREE.Vector3(),
+      targetX: 0, targetZ: 0,
+      lobbyHomeX: 0, lobbyHomeZ: 0,
+      changeTargetCD: 0,
+      alive: true,
+      onGround: false,
+      // === IA del obby ===
+      aiState: 'climb',
+      currentTargetPlat: null,
+      targetButton: null,
+      pathIndex: -1,  // índice actual en window.obbyPath (-1 = no en path)
+      stuckOnPlatformTime: 0,  // tiempo sin avanzar
+      jumpCD: 0,
+      reasoningCD: 0,
+      moving: false, running: false, jumping: false,
+      fallCD: 0,
+      skill: 0.55 + Math.random() * 0.45,  // 0.55-1.0 (algunos casi perfectos, otros fallan a veces)
+      personality: ['cautious', 'aggressive', 'cooperative', 'random'][i % 4],
+      personalitySpeed: 0.9 + Math.random() * 0.3,
+      // Offset personal: cada bot apunta a una posición ligeramente distinta
+      // dentro de la plataforma para no chocarse
+      targetOffsetX: (Math.random() - 0.5) * 1.4,
+      targetOffsetZ: (Math.random() - 0.5) * 1.4,
+      lastY: 0,
+      stuckTime: 0,
+      diedAt: 0,
+      hasWon: false
+    });
+  }
+}
+
+function placeBotsLobby(){
+  for(let i=0; i<bots.length; i++){
+    const b = bots[i];
+    const ang = (i / 12) * Math.PI * 2 + Math.random() * 0.4;
+    const r = 5 + Math.random() * 7;
+    const x = LOBBY_OFFSET + Math.cos(ang) * r;
+    const z = Math.sin(ang) * r;
+    b.char.position.set(x, LOBBY_Y, z);
+    b.pos.set(x, LOBBY_Y, z);
+    b.lobbyHomeX = x; b.lobbyHomeZ = z;
+    b.targetX = x; b.targetZ = z;
+    b.char.rotation.y = Math.random() * Math.PI * 2;
+    b.alive = true;
+    b.onGround = true;
+    b.vel.set(0,0,0);
+    b.char.visible = true;
+  }
+}
+
+function placeBotsObby(){
+  // Posición de la primera plataforma del path (plataforma inicial gigante)
+  const startPlat = window.obbyPath && window.obbyPath.length > 0 ? window.obbyPath[0] : null;
+  const baseX = startPlat ? startPlat.mesh.position.x : OBBY_OFFSET;
+  const baseY = startPlat ? startPlat.mesh.position.y + 1 : 2;
+  const baseZ = startPlat ? startPlat.mesh.position.z : 0;
+  
+  for(let i=0; i<bots.length; i++){
+    const b = bots[i];
+    // Distribuir alrededor del centro de la plataforma en círculo + jitter
+    const ang = (i / 12) * Math.PI * 2 + Math.random() * 0.3;
+    const r = 1.5 + Math.random() * 2;
+    const x = baseX + Math.cos(ang) * r;
+    const z = baseZ + Math.sin(ang) * r;
+    b.char.position.set(x, baseY, z);
+    b.pos.set(x, baseY, z);
+    b.targetX = x; b.targetZ = z;
+    b.alive = true;
+    b.onGround = false;
+    b.vel.set(0,0,0);
+    b.currentTargetPlat = null;
+    b.targetButton = null;
+    b.pathIndex = 0;  // ya están en la plataforma 0
+    b.stuckOnPlatformTime = 0;
+    b.lastCheckX = x;
+    b.lastCheckZ = z;
+    b.lastCheckTime = 0;
+    b.aiState = 'climb';
+    b.jumpCD = 0;
+    b.reasoningCD = i * 0.05;  // staggered start (no toman decisión al mismo tiempo)
+    b.fallCD = 0;
+    b.lastY = baseY;
+    b.stuckTime = 0;
+    b.hasWon = false;
+    b.char.visible = true;
+  }
+}
+
+// Lobby bots: pasean por el lobby
+function updateBotsLobby(dt, t){
+  for(const b of bots){
+    b.changeTargetCD -= dt;
+    
+    if(b.changeTargetCD <= 0){
+      b.changeTargetCD = 4 + Math.random() * 5;
+      // Movimiento random dentro del lobby
+      const homeRange = 8;
+      b.targetX = b.lobbyHomeX + (Math.random() - 0.5) * homeRange;
+      b.targetZ = b.lobbyHomeZ + (Math.random() - 0.5) * homeRange;
+      const halfL = LOBBY_SIZE/2 - 2;
+      b.targetX = Math.max(LOBBY_OFFSET - halfL, Math.min(LOBBY_OFFSET + halfL, b.targetX));
+      b.targetZ = Math.max(-halfL, Math.min(halfL, b.targetZ));
+    }
+    
+    const dx = b.targetX - b.char.position.x;
+    const dz = b.targetZ - b.char.position.z;
+    const dist = Math.hypot(dx, dz);
+    
+    if(dist > 0.3){
+      const speed = 3 * b.personalitySpeed;
+      b.char.position.x += (dx / dist) * speed * dt;
+      b.char.position.z += (dz / dist) * speed * dt;
+      const targetRot = Math.atan2(dx, dz);
+      let diff = targetRot - b.char.rotation.y;
+      while(diff > Math.PI) diff -= Math.PI*2;
+      while(diff < -Math.PI) diff += Math.PI*2;
+      b.char.rotation.y += diff * Math.min(1, dt * 5);
+      b.moving = true;
+      b.running = false;
+    } else {
+      b.moving = false;
+    }
+    b.char.position.y = LOBBY_Y;
+    
+    animateChar(b.char, dt, b.moving, b.running, t, false);
+  }
+}
+
+// ===== IA GOTY DEL OBBY =====
+// Cada bot tiene un estado: climb, gotoButton, pressButton, wait
+// - Si hay un botón rojo accesible para él, va a apretarlo
+// - Si no, busca la próxima plataforma más alta DESBLOQUEADA
+// - Si una sección está locked, espera que alguien apriete el botón
+// - Saltan con skill, a veces fallan según su skill personal
+
+function findNearestAccessibleButton(b){
+  let best = null;
+  let bestDist = Infinity;
+  for(const btn of buttons){
+    if(btn.pressed) continue;
+    const dx = btn.position.x - b.char.position.x;
+    const dy = btn.position.y - b.char.position.y;
+    const dz = btn.position.z - b.char.position.z;
+    const horiz = Math.hypot(dx, dz);
+    // El botón debe estar relativamente accesible (no demasiado arriba ni lejos)
+    if(dy > 6) continue;  // muy arriba
+    if(dy < -3) continue;  // muy abajo
+    const score = horiz + Math.abs(dy) * 0.5;
+    if(score < bestDist){
+      bestDist = score;
+      best = btn;
+    }
+  }
+  return best;
+}
+
+function findNextPlatformUp(b){
+  // Usa el path predefinido del obby. Encuentra el índice de la plataforma actual
+  // del bot en el path y devuelve la siguiente.
+  if(!window.obbyPath || window.obbyPath.length === 0) return null;
+  
+  const myX = b.char.position.x, myY = b.char.position.y, myZ = b.char.position.z;
+  
+  // Buscar el índice actual: la plataforma más cercana DEBAJO o cerca del bot
+  // (la que probablemente está pisando o donde estuvo)
+  let curIdx = -1;
+  let bestDistSq = Infinity;
+  for(let i = 0; i < window.obbyPath.length; i++){
+    const p = window.obbyPath[i];
+    const dx = p.mesh.position.x - myX;
+    const dz = p.mesh.position.z - myZ;
+    const dy = p.mesh.position.y - myY;
+    // La plataforma debe estar cerca y a una altura razonable
+    if(Math.abs(dy) > 3) continue;
+    const distSq = dx*dx + dz*dz + dy*dy*2;
+    if(distSq < bestDistSq){
+      bestDistSq = distSq;
+      curIdx = i;
+    }
+  }
+  
+  // Si no encontró nada cerca, intentar la plataforma más baja por arriba
+  if(curIdx < 0){
+    for(let i = 0; i < window.obbyPath.length; i++){
+      const p = window.obbyPath[i];
+      if(p.locked) continue;
+      if(p.mesh.position.y > myY){
+        return p;
+      }
+    }
+    return null;
+  }
+  
+  // Buscar siguiente plataforma DESBLOQUEADA en el path
+  for(let i = curIdx + 1; i < window.obbyPath.length; i++){
+    const p = window.obbyPath[i];
+    if(p.locked) {
+      // Si la siguiente está locked, retornar null para que vaya al botón
+      return null;
+    }
+    // Verificar que es más alta (no retroceder)
+    if(p.mesh.position.y > myY - 0.5){
+      return p;
+    }
+  }
+  return null;
+}
+
+function platformBelow(b){
+  // Plataforma actual donde está parado
+  const myX = b.char.position.x, myY = b.char.position.y, myZ = b.char.position.z;
+  let bestY = -Infinity;
+  let bestPlat = null;
+  for(const p of platforms){
+    if(p.noCollision) continue;
+    const cosR = Math.cos(p.mesh.rotation.y);
+    const sinR = Math.sin(p.mesh.rotation.y);
+    const dx = myX - p.mesh.position.x;
+    const dz = myZ - p.mesh.position.z;
+    const lx = dx * cosR + dz * sinR;
+    const lz = -dx * sinR + dz * cosR;
+    if(Math.abs(lx) > p.w/2 + 0.1 || Math.abs(lz) > p.d/2 + 0.1) continue;
+    const top = p.mesh.position.y + p.h/2;
+    if(top > bestY && top < myY + 0.5){
+      bestY = top;
+      bestPlat = p;
+    }
+  }
+  return bestPlat;
+}
+
+function updateBotsObby(dt, t){
+  for(const b of bots){
+    if(!b.alive) continue;
+    if(b.hasWon){
+      // Bot ganador queda en idle en el refugio
+      b.moving = false; b.running = false;
+      b.vel.x *= 0.8; b.vel.z *= 0.8;
+      // Aplicar gravedad mínima por si está flotando
+      b.vel.y -= 30 * dt;
+      const newY = b.char.position.y + b.vel.y * dt;
+      const ground = getPlatformGround(b.char.position.x, newY, b.char.position.z, b.char.position.y);
+      if(b.vel.y <= 0 && ground.y > -Infinity){
+        b.char.position.y = ground.y;
+        b.vel.y = 0;
+      } else {
+        b.char.position.y = newY;
+      }
+      animateChar(b.char, dt, false, false, t, false);
+      continue;
+    }
+    
+    // Gravedad
+    b.vel.y -= 30 * dt;
+    if(b.vel.y < -20) b.vel.y = -20;
+    
+    b.jumpCD -= dt;
+    b.fallCD -= dt;
+    b.reasoningCD -= dt;
+    
+    // ===== SI EL BOT ESTÁ EN PATH: avanzar al siguiente =====
+    // Cada vez que está parado en una plataforma del path, avanzamos su pathIndex
+    if(b.onGround && b.fallCD <= 0){
+      // ¿En qué plataforma estoy parado actualmente?
+      const myX = b.char.position.x, myY = b.char.position.y, myZ = b.char.position.z;
+      // Buscar la plataforma del path más cercana (en altura) bajo el bot
+      let standingIdx = -1;
+      let standingScore = Infinity;
+      for(let i = 0; i < window.obbyPath.length; i++){
+        const p = window.obbyPath[i];
+        const dy = p.mesh.position.y - myY;
+        // Debe estar a la altura del bot (Y muy cercana) y dentro del XZ
+        if(Math.abs(dy) > 0.5) continue;
+        const dx = p.mesh.position.x - myX;
+        const dz = p.mesh.position.z - myZ;
+        if(Math.abs(dx) > p.w/2 + 0.3 || Math.abs(dz) > p.d/2 + 0.3) continue;
+        const score = dx*dx + dz*dz;
+        if(score < standingScore){
+          standingScore = score;
+          standingIdx = i;
+        }
+      }
+      if(standingIdx >= 0){
+        // Actualizar pathIndex si avanzó
+        if(standingIdx > b.pathIndex){
+          b.pathIndex = standingIdx;
+          b.stuckOnPlatformTime = 0;
+        }
+      }
+    }
+    
+    // ===== DECIDIR PRÓXIMO TARGET =====
+    let decisionDone = false;
+    const onObbyFloor = b.char.position.y < 1.5;
+    if(b.reasoningCD <= 0 && b.fallCD <= 0){
+      b.reasoningCD = 0.2 + Math.random() * 0.2;
+      if(onObbyFloor){
+        let bestNear = null;
+        let bestScore = Infinity;
+        let bestIdx = -1;
+        for(let i = 0; i < window.obbyPath.length; i++){
+          const p = window.obbyPath[i];
+          if(p.locked) continue;
+          const py = p.mesh.position.y;
+          const dy = py - b.char.position.y;
+          if(dy < 0 || dy > 3.5) continue;
+          const dx = p.mesh.position.x - b.char.position.x;
+          const dz = p.mesh.position.z - b.char.position.z;
+          const horiz = Math.hypot(dx, dz);
+          const score = horiz + dy * 0.3;
+          if(score < bestScore){
+            bestScore = score;
+            bestNear = p;
+            bestIdx = i;
+          }
+        }
+        if(bestNear){
+          b.aiState = 'climb';
+          b.currentTargetPlat = bestNear;
+          b.targetButton = null;
+          b.pathIndex = bestIdx - 1;
+          decisionDone = true;
+        }
+      }
+    }
+    
+    // El resto del decision solo si no se decidió ya
+    if(!decisionDone && b.fallCD <= 0){
+      // ===== NUEVA LÓGICA: buscar la plataforma del path MÁS ADELANTE alcanzable =====
+      // El bot busca la plataforma con mayor pathIndex que pueda alcanzar
+      // (skip ahead - no pasa una por una)
+      let bestPlat = null;
+      let bestPlatIdx = -1;
+      
+      // Definir qué es "alcanzable" según la altura y distancia
+      // Altura max alcanzable con salto: ~3.5m
+      // Distancia horizontal max con salto: ~6m
+      const MAX_REACH_HEIGHT = 3.5;
+      const MAX_REACH_HORIZ = 6.5;
+      const MAX_DROP = 3;  // puede bajar máximo 3m
+      
+      // Buscar desde el siguiente al final del path
+      for(let i = b.pathIndex + 1; i < window.obbyPath.length; i++){
+        const p = window.obbyPath[i];
+        if(p.locked) continue;
+        const py = p.mesh.position.y;
+        const dy = py - b.char.position.y;
+        // Alcanzable verticalmente
+        if(dy > MAX_REACH_HEIGHT) continue;
+        if(dy < -MAX_DROP) continue;
+        const dx = p.mesh.position.x - b.char.position.x;
+        const dz = p.mesh.position.z - b.char.position.z;
+        const horiz = Math.hypot(dx, dz);
+        if(horiz > MAX_REACH_HORIZ) continue;
+        // Es alcanzable! Preferir el de MAYOR pathIndex (más adelante en el camino)
+        if(i > bestPlatIdx){
+          bestPlatIdx = i;
+          bestPlat = p;
+        }
+      }
+      
+      let nextPlat = bestPlat;
+      let nextPlatIdx = b.pathIndex + 1;
+      
+      // Si encontramos una más adelante, actualizar pathIndex
+      if(bestPlat && bestPlatIdx > b.pathIndex + 1){
+        // Skip ahead: actualizar pathIndex al de la nueva plataforma - 1
+        // (no marcar como "ya alcanzada" hasta que efectivamente esté ahí)
+      }
+      
+      // Si no encontramos nada cerca pero queremos un target, ir al SIGUIENTE del path
+      // (aunque esté muy lejos, para forzar al bot a moverse en esa dirección)
+      if(!nextPlat && nextPlatIdx < window.obbyPath.length){
+        const candidate = window.obbyPath[nextPlatIdx];
+        if(!candidate.locked){
+          nextPlat = candidate;
+        }
+      }
+      
+      // Si el siguiente está locked, buscar el botón que lo desbloquea
+      let mustGoToButton = null;
+      if(!nextPlat && nextPlatIdx < window.obbyPath.length){
+        const blockedPlat = window.obbyPath[nextPlatIdx];
+        const unlockGroup = blockedPlat.unlockGroup;
+        // Buscar botón de ese grupo
+        for(const btn of buttons){
+          if(!btn.pressed && btn.unlockGroup === unlockGroup){
+            mustGoToButton = btn;
+            break;
+          }
+        }
+      }
+      
+      // PERSONALIDAD: cooperative va a botones aunque no sea necesario
+      const accessibleBtn = findNearestAccessibleButton(b);
+      let optionalButton = null;
+      if(accessibleBtn && !mustGoToButton){
+        let chance = 0.0;
+        if(b.personality === 'cooperative') chance = 0.5;
+        if(b.personality === 'random') chance = 0.2;
+        if(Math.random() < chance) optionalButton = accessibleBtn;
+      }
+      
+      if(mustGoToButton){
+        b.aiState = 'gotoButton';
+        b.targetButton = mustGoToButton;
+        b.currentTargetPlat = null;
+      } else if(optionalButton){
+        b.aiState = 'gotoButton';
+        b.targetButton = optionalButton;
+        b.currentTargetPlat = null;
+      } else if(nextPlat){
+        b.aiState = 'climb';
+        b.currentTargetPlat = nextPlat;
+        b.targetButton = null;
+      } else {
+        // FALLBACK: no encontró nada cerca. Buscar la plataforma del path
+        // más BAJA accesible aunque esté lejos (camina hacia ella)
+        let fallbackPlat = null;
+        let fallbackScore = Infinity;
+        let fallbackIdx = -1;
+        for(let i = 0; i < window.obbyPath.length; i++){
+          const p = window.obbyPath[i];
+          if(p.locked) continue;
+          const py = p.mesh.position.y;
+          const dy = py - b.char.position.y;
+          // No demasiado arriba (saltable o cercano)
+          if(dy > 6) continue;
+          const dx = p.mesh.position.x - b.char.position.x;
+          const dz = p.mesh.position.z - b.char.position.z;
+          const horiz = Math.hypot(dx, dz);
+          // Prefiere la más cercana, después la más baja
+          const score = horiz + Math.max(0, dy) * 0.5 + Math.abs(dy) * 0.2;
+          if(score < fallbackScore){
+            fallbackScore = score;
+            fallbackPlat = p;
+            fallbackIdx = i;
+          }
+        }
+        if(fallbackPlat){
+          b.aiState = 'climb';
+          b.currentTargetPlat = fallbackPlat;
+          b.targetButton = null;
+          b.pathIndex = fallbackIdx - 1;
+        } else {
+          b.aiState = 'wait';
+          b.currentTargetPlat = null;
+          b.targetButton = null;
+        }
+      }
+    }
+    
+    // ===== EJECUTAR ACCIÓN =====
+    let targetX = b.char.position.x, targetZ = b.char.position.z;
+    let targetY = b.char.position.y;
+    let goalIsHigher = false;
+    let goalHeightDiff = 0;
+    let goalDist = Infinity;
+    
+    if(b.aiState === 'gotoButton' && b.targetButton){
+      if(b.targetButton.pressed){
+        // El botón ya está apretado, replanear
+        b.aiState = 'climb';
+        b.targetButton = null;
+        b.reasoningCD = 0;
+      } else {
+        targetX = b.targetButton.position.x;
+        targetZ = b.targetButton.position.z;
+        targetY = b.targetButton.position.y;
+        goalHeightDiff = targetY - b.char.position.y;
+        goalIsHigher = goalHeightDiff > 0.4;
+        goalDist = Math.hypot(targetX - b.char.position.x, targetZ - b.char.position.z);
+        if(goalDist < 1.5 && Math.abs(goalHeightDiff) < 1.8){
+          pressButton(b.targetButton);
+          b.targetButton = null;
+          b.aiState = 'climb';
+          b.reasoningCD = 0.2;
+        }
+      }
+    } else if(b.aiState === 'climb' && b.currentTargetPlat){
+      const tp = b.currentTargetPlat.mesh.position;
+      // Aplicar offset personal para que cada bot apunte a un lugar distinto dentro de la plataforma
+      const halfW = b.currentTargetPlat.w / 2 - 0.5;
+      const halfD = b.currentTargetPlat.d / 2 - 0.5;
+      const offX = Math.max(-halfW, Math.min(halfW, b.targetOffsetX));
+      const offZ = Math.max(-halfD, Math.min(halfD, b.targetOffsetZ));
+      targetX = tp.x + offX;
+      targetZ = tp.z + offZ;
+      targetY = tp.y;
+      goalHeightDiff = tp.y - b.char.position.y;
+      goalIsHigher = goalHeightDiff > 0.4;
+      goalDist = Math.hypot(targetX - b.char.position.x, targetZ - b.char.position.z);
+      // Si llegué arriba o muy cerca, replanear
+      if(b.onGround && b.char.position.y >= tp.y - 0.3 && goalDist < 2.5){
+        b.currentTargetPlat = null;
+        b.reasoningCD = 0;
+        // Randomize offset para la próxima plataforma
+        b.targetOffsetX = (Math.random() - 0.5) * 1.4;
+        b.targetOffsetZ = (Math.random() - 0.5) * 1.4;
+      }
+    }
+    
+    // ===== MOVIMIENTO HORIZONTAL =====
+    if(b.aiState !== 'wait'){
+      let dx = targetX - b.char.position.x;
+      let dz = targetZ - b.char.position.z;
+      const dist = Math.hypot(dx, dz);
+      
+      // ===== SEPARACIÓN ENTRE BOTS (no se amontonan) =====
+      // Si otro bot está cerca, empujar dirección al lado opuesto
+      let sepX = 0, sepZ = 0;
+      for(const other of bots){
+        if(other === b) continue;
+        if(!other.alive) continue;
+        const odx = b.char.position.x - other.char.position.x;
+        const ody = b.char.position.y - other.char.position.y;
+        const odz = b.char.position.z - other.char.position.z;
+        // Solo si están a similar altura
+        if(Math.abs(ody) > 1.8) continue;
+        const odist = Math.hypot(odx, odz);
+        // Zona de separación: 2m (más grande)
+        if(odist > 2.0 || odist < 0.001) continue;
+        // Vector de empuje (mucho más fuerte)
+        const strength = (2.0 - odist) / 2.0 * 8;  // 8 en lugar de 4
+        sepX += (odx / odist) * strength;
+        sepZ += (odz / odist) * strength;
+      }
+      dx += sepX;
+      dz += sepZ;
+      
+      // ===== AIR CONTROL: si está en el aire cayendo, buscar plataforma cerca =====
+      if(!b.onGround && b.vel.y < -2){
+        let bestRescue = null;
+        let bestRescueDist = Infinity;
+        for(const p of window.obbyPath){
+          if(p.locked) continue;
+          const dyy = p.mesh.position.y - b.char.position.y;
+          if(dyy > 0.5) continue;
+          if(dyy < -10) continue;
+          const pdx = p.mesh.position.x - b.char.position.x;
+          const pdz = p.mesh.position.z - b.char.position.z;
+          const ph = Math.hypot(pdx, pdz);
+          if(ph > 5) continue;
+          const score = ph - dyy * 0.2;
+          if(score < bestRescueDist){
+            bestRescueDist = score;
+            bestRescue = p;
+          }
+        }
+        if(bestRescue){
+          dx = bestRescue.mesh.position.x - b.char.position.x;
+          dz = bestRescue.mesh.position.z - b.char.position.z;
+        }
+      }
+      
+      // ===== EVITAR KILL BRICKS =====
+      // Si el bot está en el suelo (o cerca), modificar dirección para evitar killbricks
+      if(b.char.position.y < 2.5 && window.killBricks && dist > 0.5){
+        const myX = b.char.position.x, myZ = b.char.position.z;
+        // Para cada kill brick cercano, calcular vector de repulsión
+        let pushX = 0, pushZ = 0;
+        for(const kb of window.killBricks){
+          // Solo killbricks a similar altura (los del suelo)
+          if(Math.abs(kb.y - b.char.position.y) > 2) continue;
+          // Distancia con margen de seguridad
+          const safeMarginX = kb.w/2 + 1.5;
+          const safeMarginZ = kb.d/2 + 1.5;
+          const kdx = myX - kb.x;
+          const kdz = myZ - kb.z;
+          // ¿Está dentro de la zona de peligro?
+          if(Math.abs(kdx) < safeMarginX && Math.abs(kdz) < safeMarginZ){
+            // Repulsión inversamente proporcional a distancia
+            const overlapX = safeMarginX - Math.abs(kdx);
+            const overlapZ = safeMarginZ - Math.abs(kdz);
+            // Empujar en el eje donde tiene menos overlap (más rápido salir)
+            if(overlapX < overlapZ){
+              pushX += Math.sign(kdx) * overlapX * 2.5;
+            } else {
+              pushZ += Math.sign(kdz) * overlapZ * 2.5;
+            }
+          }
+          // También chequear si la TRAYECTORIA al target pasa sobre el brick
+          // Trayectoria: desde (myX, myZ) hacia (myX + dx, myZ + dz)
+          // Punto medio:
+          const tMid = 0.5;
+          const midX = myX + dx * tMid;
+          const midZ = myZ + dz * tMid;
+          const tMargin = kb.w/2 + 1.0;
+          const tMarginZ = kb.d/2 + 1.0;
+          const tdx = midX - kb.x;
+          const tdz = midZ - kb.z;
+          if(Math.abs(tdx) < tMargin && Math.abs(tdz) < tMarginZ){
+            // La trayectoria pasa cerca, desviar
+            // Calcular vector perpendicular al movimiento
+            const perpX = -dz / dist;
+            const perpZ = dx / dist;
+            // Lado al que desviar: el que se aleja del brick
+            const sideSign = (tdx * perpX + tdz * perpZ) > 0 ? 1 : -1;
+            pushX += perpX * sideSign * 2.0;
+            pushZ += perpZ * sideSign * 2.0;
+          }
+        }
+        // Aplicar la repulsión a la dirección
+        dx += pushX;
+        dz += pushZ;
+      }
+      
+      const newDist = Math.hypot(dx, dz);
+      
+      if(newDist > 0.2){
+        let speed = 9 * b.personalitySpeed;
+        if(b.personality === 'cautious') speed *= 0.9;
+        if(b.personality === 'aggressive') speed *= 1.15;
+        const desiredX = (dx / newDist) * speed;
+        const desiredZ = (dz / newDist) * speed;
+        // Suavizar transición de velocidad (más natural)
+        if(b.onGround){
+          b.vel.x = desiredX;
+          b.vel.z = desiredZ;
+        } else {
+          // En el aire: aire control parcial
+          b.vel.x += (desiredX - b.vel.x) * Math.min(1, dt * 6);
+          b.vel.z += (desiredZ - b.vel.z) * Math.min(1, dt * 6);
+        }
+        b.moving = true;
+        b.running = true;
+        const targetRot = Math.atan2(dx, dz);
+        let diff = targetRot - b.char.rotation.y;
+        while(diff > Math.PI) diff -= Math.PI*2;
+        while(diff < -Math.PI) diff += Math.PI*2;
+        b.char.rotation.y += diff * Math.min(1, dt * 12);
+      } else {
+        b.vel.x *= 0.5;
+        b.vel.z *= 0.5;
+        b.moving = false;
+        b.running = false;
+      }
+      
+      // Mantener las variables originales para la lógica de salto
+      const origDx = targetX - b.char.position.x;
+      const origDz = targetZ - b.char.position.z;
+      const origDist = Math.hypot(origDx, origDz);
+      
+      // ===== SALTAR (siempre que tenga sentido) =====
+      if(b.onGround && b.jumpCD <= 0){
+        let shouldJump = false;
+        let jumpForce = 14.5;
+        
+        if(goalIsHigher && origDist < 6){
+          // Salta cuando hay target más alto y cerca
+          if(goalHeightDiff <= 3.5){
+            // Salto normal alcanzable
+            shouldJump = true;
+            if(goalHeightDiff > 2) jumpForce = 15.5;
+            if(goalHeightDiff > 2.8) jumpForce = 17;
+          } else if(goalHeightDiff <= 6){
+            // Demasiado alto para un salto, pero si está cerca igual intenta
+            // (al menos se acerca verticalmente)
+            if(origDist < 3) {
+              shouldJump = true;
+              jumpForce = 17;
+            }
+          }
+        } else if(!goalIsHigher && origDist > 2.5 && origDist < 5.5){
+          // Saltar para cubrir gap horizontal
+          shouldJump = true;
+        }
+        
+        // ANTI-KILLBRICK
+        if(shouldJump && window.killBricks && origDist > 0.1){
+          const airTime = (2 * jumpForce) / 30;
+          const landX = b.char.position.x + (origDx / origDist) * 8 * airTime;
+          const landZ = b.char.position.z + (origDz / origDist) * 8 * airTime;
+          for(const kb of window.killBricks){
+            if(Math.abs(kb.y - b.char.position.y) > 3) continue;
+            if(Math.abs(landX - kb.x) < kb.w/2 + 0.6 && Math.abs(landZ - kb.z) < kb.d/2 + 0.6){
+              shouldJump = false;
+              break;
+            }
+          }
+        }
+        
+        if(shouldJump){
+          let actualForce = jumpForce;
+          // Skill afecta: si skill < 1, hay chance de salto débil
+          if(Math.random() > b.skill){
+            actualForce *= 0.75 + Math.random() * 0.15;  // salto débil, posible caída
+          }
+          b.vel.y = actualForce;
+          if(origDist > 0.1){
+            const speed_h = 9 * b.personalitySpeed;
+            const useDx = (newDist > 0.1 ? dx : origDx);
+            const useDz = (newDist > 0.1 ? dz : origDz);
+            const useDist = Math.hypot(useDx, useDz);
+            b.vel.x = (useDx / useDist) * speed_h;
+            b.vel.z = (useDz / useDist) * speed_h;
+          }
+          b.onGround = false;
+          b.jumpCD = 0.4;
+          b.jumping = true;
+        }
+      }
+    } else {
+      // Wait state: detenerse
+      b.vel.x *= 0.85;
+      b.vel.z *= 0.85;
+      b.moving = false;
+      b.running = false;
+    }
+    
+    // ===== APLICAR MOVIMIENTO =====
+    let newX = b.char.position.x + b.vel.x * dt;
+    let newY = b.char.position.y + b.vel.y * dt;
+    let newZ = b.char.position.z + b.vel.z * dt;
+    
+    const lat = resolveLateralCollisionBot(newX, newZ, newY, b);
+    newX = lat.x;
+    newZ = lat.z;
+    
+    const ground = getPlatformGround(newX, newY, newZ, b.char.position.y);
+    if(b.vel.y <= 0 && ground.y > -Infinity){
+      newY = ground.y;
+      b.vel.y = 0;
+      b.onGround = true;
+      b.jumping = false;
+    } else {
+      b.onGround = false;
+      // Mantener apoyo si estoy MUY cerca
+      if(b.vel.y <= 0){
+        const stillCheck = getPlatformGround(newX, newY - 0.15, newZ, newY - 0.05);
+        if(stillCheck.y > -Infinity && Math.abs(newY - stillCheck.y) < 0.25){
+          newY = stillCheck.y;
+          b.vel.y = 0;
+          b.onGround = true;
+          b.jumping = false;
+        }
+      }
+    }
+    
+    // HEAD collision: bot subiendo pega cabeza contra bottom de plataforma
+    if(b.vel.y > 0){
+      const headLimit = checkHeadCollision(newX, newY, newZ, b.char.position.y, 2.6);
+      if(headLimit > -Infinity && newY > headLimit){
+        newY = headLimit;
+        b.vel.y = -1;
+      }
+    }
+    
+    // Detectar caída grave → buscar plataforma del path MÁS BAJA cerca
+    if(b.lastY - newY > 3.5 && b.fallCD <= 0){
+      b.fallCD = 0.4;  // recuperación rápida
+      b.reasoningCD = 0.1;
+      
+      // Buscar la plataforma del path más cercana que esté BAJO o a la altura del bot
+      let bestIdx = -1;
+      let bestScore = Infinity;
+      for(let i = 0; i < window.obbyPath.length; i++){
+        const p = window.obbyPath[i];
+        if(p.locked) continue;
+        const py = p.mesh.position.y;
+        if(py > newY + 0.5) continue;
+        const dx = p.mesh.position.x - newX;
+        const dz = p.mesh.position.z - newZ;
+        const horiz = Math.hypot(dx, dz);
+        const heightDiff = newY - py;
+        const score = horiz + heightDiff * 0.3;
+        if(score < bestScore){
+          bestScore = score;
+          bestIdx = i;
+        }
+      }
+      
+      if(bestIdx >= 0){
+        b.pathIndex = bestIdx - 1;
+        b.currentTargetPlat = window.obbyPath[bestIdx];
+        b.aiState = 'climb';
+        b.targetButton = null;
+      } else {
+        b.pathIndex = Math.max(-1, b.pathIndex - 2);
+      }
+    }
+    b.lastY = newY;
+    
+    // RESET AGRESIVO: si el bot está en el suelo del obby pero su pathIndex es alto,
+    // significa que cayó y no se recuperó. Forzar reset.
+    if(b.onGround && newY < 1.5){
+      // Si su pathIndex sugiere que estaba más arriba, resetear
+      // O si simplemente está en el suelo y no encuentra qué hacer
+      if(b.pathIndex >= 0 || b.aiState === 'wait'){
+        // Buscar plataforma más cercana arriba (alcanzable)
+        let bestRescueIdx = -1;
+        let bestRescueScore = Infinity;
+        for(let i = 0; i < window.obbyPath.length; i++){
+          const p = window.obbyPath[i];
+          if(p.locked) continue;
+          const py = p.mesh.position.y;
+          const dy = py - newY;
+          if(dy < 0 || dy > 3.5) continue;  // alcanzable de un salto
+          const dx = p.mesh.position.x - newX;
+          const dz = p.mesh.position.z - newZ;
+          const horiz = Math.hypot(dx, dz);
+          if(horiz > 8) continue;
+          const score = horiz + dy * 0.2;
+          if(score < bestRescueScore){
+            bestRescueScore = score;
+            bestRescueIdx = i;
+          }
+        }
+        if(bestRescueIdx >= 0){
+          // Resetear pathIndex y atacar de nuevo
+          b.pathIndex = bestRescueIdx - 1;
+          b.currentTargetPlat = window.obbyPath[bestRescueIdx];
+          b.aiState = 'climb';
+          b.targetButton = null;
+          b.reasoningCD = 0.1;
+          b.fallCD = 0;  // ya no está confundido
+        }
+      }
+    }
+    
+    // Stuck check: si no se desplazó suficiente en 1.5s, hacer algo
+    b.lastCheckTime += dt;
+    if(b.lastCheckTime > 1.5){
+      const moved = Math.hypot(newX - (b.lastCheckX || newX), newZ - (b.lastCheckZ || newZ));
+      if(moved < 1.0 && b.onGround){
+        // Atorado: salto random
+        b.vel.y = 14 + Math.random() * 4;
+        const randAng = Math.random() * Math.PI * 2;
+        b.vel.x = Math.cos(randAng) * 7;
+        b.vel.z = Math.sin(randAng) * 7;
+        b.onGround = false;
+        b.jumping = true;
+        b.jumpCD = 0.3;
+        b.currentTargetPlat = null;
+        b.reasoningCD = 0;
+      }
+      b.lastCheckX = newX;
+      b.lastCheckZ = newZ;
+      b.lastCheckTime = 0;
+    }
+    
+    // Muerte por agua
+    if(newY < gameState.waterLevel - 0.5){
+      b.alive = false;
+      b.diedAt = b.char.position.y;
+      newY = gameState.waterLevel - 1.5;
+    }
+    
+    // Muerte por kill brick (estricto: solo si REALMENTE encima)
+    if(b.alive && window.killBricks){
+      for(const kb of window.killBricks){
+        const dx2 = newX - kb.x;
+        const dz2 = newZ - kb.z;
+        const dy2 = newY - kb.y;
+        // Padding pequeño: solo si está REALMENTE sobre el brick
+        if(Math.abs(dx2) < kb.w/2 + 0.2 && Math.abs(dz2) < kb.d/2 + 0.2 && dy2 > -0.5 && dy2 < 1.2){
+          b.alive = false;
+          b.diedAt = b.char.position.y;
+          break;
+        }
+      }
+    }
+    
+    // Bounds
+    const halfT = TOWER_SIZE/2 - 1;
+    newX = Math.max(OBBY_OFFSET - halfT, Math.min(OBBY_OFFSET + halfT, newX));
+    newZ = Math.max(-halfT, Math.min(halfT, newZ));
+    
+    b.char.position.set(newX, newY, newZ);
+    animateChar(b.char, dt, b.moving, b.running, t, b.jumping);
+    
+    // Check llegada al refugio - sobreviviente
+    const shelterY = window.shelterHeight || SHELTER_HEIGHT;
+    if(newY >= shelterY - 0.5){
+      const dx2 = newX - obbyShelterX;
+      const dz2 = newZ - obbyShelterZ;
+      if(Math.hypot(dx2, dz2) < 8){
+        if(!b.hasWon){
+          b.hasWon = true;
+          // El bot está a salvo, no termina el juego aún
+          checkEndRound();
+        }
+      }
+    }
+  }
+}
+
+// Verifica si la ronda debe terminar:
+// - Todos los vivos llegaron al refugio (victoria de equipo)
+// - O todos murieron
+function checkEndRound(){
+  if(gameState.finalWinner) return;  // ya terminó
+  
+  let alive = 0;
+  let safe = 0;
+  let dead = 0;
+  
+  // Contar player
+  if(playerState.alive){
+    alive++;
+    if(playerState.inShelter) safe++;
+  } else {
+    dead++;
+  }
+  
+  // Contar bots
+  for(const b of bots){
+    if(!b.alive) { dead++; continue; }
+    alive++;
+    if(b.hasWon) safe++;
+  }
+  
+  // Si todos los vivos están a salvo Y al menos uno está vivo, GANARON EN EQUIPO
+  if(alive > 0 && safe === alive){
+    teamWin();
+  }
+  // Si todos murieron, perdieron en equipo
+  else if(alive === 0){
+    teamLose();
+  }
+}
+
+
+// Bot collision lateral (más permisiva que la del player)
+function resolveLateralCollisionBot(newX, newZ, botY, self){
+  let outX = newX, outZ = newZ;
+  const phase = gameState.phase;
+  for(const p of platforms){
+    if(p.noCollision) continue;
+    if(p.collection !== phase) continue;
+    const cosR = Math.cos(p.mesh.rotation.y);
+    const sinR = Math.sin(p.mesh.rotation.y);
+    const dx = outX - p.mesh.position.x;
+    const dz = outZ - p.mesh.position.z;
+    const lx = dx * cosR + dz * sinR;
+    const lz = -dx * sinR + dz * cosR;
+    const halfW = p.w/2 + 0.5;
+    const halfD = p.d/2 + 0.5;
+    const top = p.mesh.position.y + p.h/2;
+    const bottom = p.mesh.position.y - p.h/2;
+    if(botY + 2.6 < bottom || botY > top - 0.1) continue;
+    if(Math.abs(lx) >= halfW || Math.abs(lz) >= halfD) continue;
+    const exX = halfW - Math.abs(lx);
+    const exZ = halfD - Math.abs(lz);
+    if(exX < exZ){
+      const lp = (lx >= 0 ? 1 : -1) * exX;
+      outX += lp * cosR;
+      outZ += lp * sinR;
+    } else {
+      const lp = (lz >= 0 ? 1 : -1) * exZ;
+      outX += -lp * sinR;
+      outZ += lp * cosR;
+    }
+  }
+  // === COLISIÓN BOT-BOT (no se atraviesan) ===
+  if(self){
+    for(const other of bots){
+      if(other === self) continue;
+      if(!other.alive) continue;
+      const ody = other.char.position.y - botY;
+      if(Math.abs(ody) > 1.8) continue;
+      const odx = outX - other.char.position.x;
+      const odz = outZ - other.char.position.z;
+      const odist = Math.hypot(odx, odz);
+      const minDist = 1.0;  // radio de colisión
+      if(odist > 0.001 && odist < minDist){
+        // Empujar fuera del otro bot
+        const push = (minDist - odist);
+        outX += (odx / odist) * push;
+        outZ += (odz / odist) * push;
+      }
+    }
+  }
+  return { x: outX, z: outZ };
+}
+
+// ========== COLLISIONS (player) ==========
+function getPlatformGround(px, py, pz, prevY){
+  // py = posición Y NUEVA del jugador (después del movimiento)
+  // prevY = posición Y previa (antes del movimiento)
+  // SOLO aterriza si la plataforma se atravesó verticalmente entre prev y new
+  let bestY = -Infinity;
+  let bestPlat = null;
+  const phase = gameState.phase;
+  const checkPrev = (prevY !== undefined) ? prevY : py + 0.1;
+  
+  for(const p of platforms){
+    if(p.noCollision) continue;
+    if(!p.tutorial && p.collection !== phase) continue;
+    
+    // Convertir player a coords locales de la plataforma (con su rotación)
+    const cosR = Math.cos(p.mesh.rotation.y);
+    const sinR = Math.sin(p.mesh.rotation.y);
+    const dx = px - p.mesh.position.x;
+    const dz = pz - p.mesh.position.z;
+    const lx = dx * cosR + dz * sinR;
+    const lz = -dx * sinR + dz * cosR;
+    
+    if(Math.abs(lx) > p.w/2 + 0.1 || Math.abs(lz) > p.d/2 + 0.1) continue;
+    
+    const top = p.mesh.position.y + p.h/2;
+    
+    // CCD: Si prev estaba en o arriba del top y py terminó debajo de top → cruzaste
+    // (sin importar qué tan abajo) → aterrizas en el top.
+    if(checkPrev >= top - 0.01 && py < top + 0.05 && top > bestY){
+      bestY = top;
+      bestPlat = p;
+    }
+  }
+  return { y: bestY, plat: bestPlat };
+}
+
+// Detecta colisión con el bottom de una plataforma (cabeza pegando)
+// Devuelve la Y donde el jugador debe detenerse, o -Infinity si no hay colisión
+function checkHeadCollision(px, py, pz, prevY, charHeight){
+  // py = nueva Y del jugador
+  // charHeight = altura del personaje (~2.6)
+  const phase = gameState.phase;
+  const headY = py + charHeight;
+  const prevHeadY = prevY + charHeight;
+  let lowestBottom = Infinity;
+  
+  for(const p of platforms){
+    if(p.noCollision) continue;
+    if(!p.tutorial && p.collection !== phase) continue;
+    
+    const cosR = Math.cos(p.mesh.rotation.y);
+    const sinR = Math.sin(p.mesh.rotation.y);
+    const dx = px - p.mesh.position.x;
+    const dz = pz - p.mesh.position.z;
+    const lx = dx * cosR + dz * sinR;
+    const lz = -dx * sinR + dz * cosR;
+    
+    if(Math.abs(lx) > p.w/2 + 0.1 || Math.abs(lz) > p.d/2 + 0.1) continue;
+    
+    const bottom = p.mesh.position.y - p.h/2;
+    const top = p.mesh.position.y + p.h/2;
+    
+    // ¿La cabeza estaba abajo del bottom y ahora está dentro/arriba de la plataforma?
+    // = cruzó el bottom subiendo
+    if(prevHeadY <= bottom + 0.01 && headY > bottom){
+      // Player debe quedar con la cabeza JUSTO en el bottom
+      const limitY = bottom - charHeight;
+      if(limitY < lowestBottom) lowestBottom = limitY;
+    }
+  }
+  
+  return lowestBottom === Infinity ? -Infinity : lowestBottom;
+}
+
+function resolveLateralCollision(newX, newZ, playerY){
+  let outX = newX, outZ = newZ;
+  const phase = gameState.phase;
+  for(const p of platforms){
+    if(p.noCollision) continue;
+    if(!p.tutorial && p.collection !== phase) continue;
+    const cosR = Math.cos(p.mesh.rotation.y);
+    const sinR = Math.sin(p.mesh.rotation.y);
+    const dx = outX - p.mesh.position.x;
+    const dz = outZ - p.mesh.position.z;
+    const lx = dx * cosR + dz * sinR;
+    const lz = -dx * sinR + dz * cosR;
+    const halfW = p.w/2 + playerState.radius;
+    const halfD = p.d/2 + playerState.radius;
+    const top = p.mesh.position.y + p.h/2;
+    const bottom = p.mesh.position.y - p.h/2;
+    if(playerY + playerState.height < bottom || playerY > top - 0.1) continue;
+    if(Math.abs(lx) >= halfW || Math.abs(lz) >= halfD) continue;
+    const exX = halfW - Math.abs(lx);
+    const exZ = halfD - Math.abs(lz);
+    if(exX < exZ){
+      const lp = (lx >= 0 ? 1 : -1) * exX;
+      outX += lp * cosR;
+      outZ += lp * sinR;
+    } else {
+      const lp = (lz >= 0 ? 1 : -1) * exZ;
+      outX += -lp * sinR;
+      outZ += lp * cosR;
+    }
+  }
+  return { x: outX, z: outZ };
+}
+
+// ========== INPUT ==========
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if(e.code === 'Space'){ 
+    if (typeof tutorialState !== 'undefined' && tutorialState.active) tutorialState.jumped = true;
+    if(playerState.onGround){ input.jump = true; }
+  }
+  if(e.code === 'KeyE'){ input.usePressed = true; }
+  if(e.code === 'Escape' && gameState.started){
+    if (typeof foPaused !== 'undefined'){
+      if (foPaused){ if (typeof foHidePauseMenu === 'function') foHidePauseMenu(); }
+      else { if (typeof foShowPauseMenu === 'function') foShowPauseMenu(); }
+    }
+  }
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+const input = { forward: 0, right: 0, jump: false, usePressed: false, run: false };
+const camState = { yaw: 0, pitch: 0.0 };
+
+let mouseDown = false, lastMx = 0, lastMy = 0;
+renderer.domElement.addEventListener('mousedown', e => { mouseDown = true; lastMx = e.clientX; lastMy = e.clientY; });
+window.addEventListener('mouseup', () => mouseDown = false);
+window.addEventListener('mousemove', e => {
+  if(!mouseDown) return;
+  const dx = e.clientX - lastMx, dy = e.clientY - lastMy;
+  lastMx = e.clientX; lastMy = e.clientY;
+  camState.yaw -= dx * 0.003;
+  camState.pitch -= dy * 0.003;
+  camState.pitch = Math.max(-1.2, Math.min(1.2, camState.pitch));
+  if (typeof tutorialState !== 'undefined' && tutorialState.active && (Math.abs(dx) > 1 || Math.abs(dy) > 1)){
+    tutorialState.cameraSwiped = true;
+  }
+});
+
+{
+  // Controles táctiles (joystick, salto, usar, cámara): SIEMPRE registrados.
+  // La visibilidad la decide el CSS según la plataforma activa (permite hot-swap).
+  const stick = document.getElementById('joystick');
+  const knob = stick.querySelector('.knob');
+  let stickId = -1, sCx = 0, sCy = 0;
+  
+  stick.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    const r = stick.getBoundingClientRect();
+    sCx = r.left + r.width/2;
+    sCy = r.top + r.height/2;
+    stickId = t.identifier;
+  }, { passive: false });
+  
+  window.addEventListener('touchmove', e => {
+    for(const t of e.changedTouches){
+      if(t.identifier === stickId){
+        let dx = t.clientX - sCx;
+        let dy = t.clientY - sCy;
+        const m = Math.hypot(dx, dy);
+        const max = 50;
+        if(m > max){ dx = (dx/m) * max; dy = (dy/m) * max; }
+        knob.style.left = (37 + dx) + 'px';
+        knob.style.top = (37 + dy) + 'px';
+        input.right = dx / max;
+        input.forward = -dy / max;
+      }
+    }
+  }, { passive: false });
+  
+  window.addEventListener('touchend', e => {
+    for(const t of e.changedTouches){
+      if(t.identifier === stickId){
+        stickId = -1;
+        knob.style.left = '37px';
+        knob.style.top = '37px';
+        input.right = 0;
+        input.forward = 0;
+      }
+    }
+  });
+  
+  const jumpBtn = document.getElementById('jump-btn');
+  jumpBtn.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (typeof tutorialState !== 'undefined' && tutorialState.active) tutorialState.jumped = true;
+    if(playerState.onGround){ input.jump = true; }
+  }, { passive: false });
+  
+  const useBtn = document.getElementById('use-btn');
+  useBtn.addEventListener('touchstart', e => {
+    e.preventDefault();
+    input.usePressed = true;
+  }, { passive: false });
+  
+  let camTouchId = -1, lastTx = 0, lastTy = 0;
+  window.addEventListener('touchstart', e => {
+    for(const t of e.changedTouches){
+      if(t.identifier === stickId) continue;
+      const tg = e.target;
+      if(tg === stick || tg === knob || tg === jumpBtn || tg === useBtn || tg.id === 'jump-label' || tg.id === 'use-btn-label') continue;
+      if(tg.closest && (tg.closest('#tutorial') || tg.closest('#menu'))) continue;
+      if(camTouchId < 0){
+        camTouchId = t.identifier;
+        lastTx = t.clientX; lastTy = t.clientY;
+      }
+    }
+  });
+  window.addEventListener('touchmove', e => {
+    for(const t of e.changedTouches){
+      if(t.identifier === camTouchId){
+        const dx = t.clientX - lastTx, dy = t.clientY - lastTy;
+        lastTx = t.clientX; lastTy = t.clientY;
+        camState.yaw -= dx * 0.005;
+        camState.pitch -= dy * 0.005;
+        camState.pitch = Math.max(-1.2, Math.min(1.2, camState.pitch));
+        if (typeof tutorialState !== 'undefined' && tutorialState.active && (Math.abs(dx) > 1 || Math.abs(dy) > 1)){
+          tutorialState.cameraSwiped = true;
+        }
+      }
+    }
+  });
+  window.addEventListener('touchend', e => {
+    for(const t of e.changedTouches){
+      if(t.identifier === camTouchId) camTouchId = -1;
+    }
+  });
+}
+
+// ========== GAME STATE ==========
+const gameState = {
+  started: false,
+  phase: 'lobby',
+  phaseTime: 0,
+  round: 1,
+  waterLevel: -50,
+  waterRiseRate: 0.35,
+  startTime: 0,
+  gameOver: false,
+  won: false
+};
+
+function setStatus(msg){ document.getElementById('status').textContent = msg; }
+function setLocation(msg){ document.getElementById('location-tag').textContent = msg; }
+
+function showBanner(msg, sub){
+  document.getElementById('banner-msg').textContent = msg;
+  document.getElementById('banner-sub').textContent = sub;
+  document.getElementById('lobby-banner').classList.add('show');
+  setTimeout(() => document.getElementById('lobby-banner').classList.remove('show'), 3000);
+}
+
+function applyTranslations(){
+  document.getElementById('height-lbl').textContent = T('height');
+  document.getElementById('round-lbl').textContent = T('round') + ' ';
+  document.getElementById('time-lbl').textContent = T('time') + ' ';
+  document.getElementById('alive-lbl').textContent = T('alive') + ' ';
+  document.getElementById('jump-label').textContent = T('jump');
+  document.getElementById('use-btn-label').textContent = T('use');
+  document.getElementById('death-title').textContent = T('you_drowned');
+  document.getElementById('death-info-1').textContent = T('reached');
+  document.getElementById('death-info-2').textContent = T('m_height');
+  document.getElementById('death-wait').textContent = T('wait_next');
+  document.getElementById('win-title').textContent = T('survived');
+  document.getElementById('win-info').textContent = T('win_info');
+  document.getElementById('use-text').textContent = isMobile ? T('press_button_mobile') : T('press_button');
+}
+
+function startGame(lang){
+  LANG = lang;
+  initAudio();
+  SFX.start();
+  applyTranslations();
+  document.getElementById('menu').classList.add('hide');
+  setTimeout(() => { document.getElementById('menu').style.display = 'none'; }, 800);
+  document.getElementById('hud').style.display = 'block';
+  document.getElementById('crosshair').style.display = 'block';
+  
+  buildObby();
+  createBots();
+  
+  enterObby();  // directo al obby (sin lobby)
+  gameState.started = true;
+}
+
+function enterLobby(){
+  gameState.phase = 'lobby';
+  gameState.phaseTime = 20;
+  playerState.inLobby = true;
+  playerState.firstPerson = true;
+  playerState.alive = true;
+  playerState.inShelter = false;
+  player.position.set(LOBBY_OFFSET + 5, LOBBY_Y + 1.5, 5);
+  playerState.vel.set(0,0,0);
+  playerState.onGround = false;
+  placeBotsLobby();
+  setStatus(T('status_lobby') + '20' + T('secs'));
+  setLocation(T('lobby_tag'));
+  showBanner(T('welcome'), T('welcome_sub') + '20' + T('secs'));
+  gameState.waterLevel = -50;
+  gameState.gameOver = false;
+  gameState.won = false;
+  gameState.finalWinner = null;
+  // Reset bots
+  for(const b of bots){
+    b.hasWon = false;
+  }
+  for(const btn of buttons){
+    btn.pressed = false;
+    btn.mat.color.set(0xcc2222);
+    btn.mat.emissive.set(0xaa1111);
+    btn.ring.material.color.set(0xff4444);
+    btn.btn.position.y = 0.5;
+  }
+  for(const groupId in lockedPlatformsByGroup){
+    for(const p of lockedPlatformsByGroup[groupId]){
+      p.locked = true;
+      p.mesh.material.transparent = true;
+      p.mesh.material.opacity = 0.3;
+      const idx = platforms.indexOf(p);
+      if(idx >= 0) platforms.splice(idx, 1);
+    }
+  }
+  playMusic('lobby');
+}
+
+function enterObby(){
+  gameState.phase = 'obby';
+  gameState.startTime = performance.now();
+  playerState.inLobby = false;
+  playerState.firstPerson = false;
+  playerState.alive = true;
+  playerState.inShelter = false;
+  // Spawn al lado de la plataforma inicial
+  const startPlat = window.obbyPath && window.obbyPath.length > 0 ? window.obbyPath[0] : null;
+  if(startPlat){
+    player.position.set(startPlat.mesh.position.x - 2, startPlat.mesh.position.y + 1, startPlat.mesh.position.z - 2);
+  } else {
+    player.position.set(OBBY_OFFSET, 2, 0);
+  }
+  playerState.vel.set(0,0,0);
+  playerState.onGround = false;
+  camState.pitch = 0.35;
+  placeBotsObby();
+  setStatus(T('status_climb'));
+  setLocation(T('game_tag'));
+  showBanner(T('round_start'), T('round_start_sub'));
+  gameState.waterLevel = -8;
+  gameState.waterRiseRate = 0.32;
+  gameState.gameOver = false;
+  gameState.won = false;
+  gameState.finalWinner = null;
+  // Reset eventos
+  if (typeof eventState !== 'undefined'){
+    if (eventState.tornadoMesh){ scene.remove(eventState.tornadoMesh); eventState.tornadoMesh = null; }
+    if (eventState.current === 'storm' || eventState.current === 'fog'){
+      if (scene.fog && eventState.savedFogDensity !== null){
+        scene.fog.density = eventState.savedFogDensity;
+        scene.fog.color.setHex(eventState.savedFogColor);
+      }
+      scene.background.setHex(0x88bbee);
+    }
+    eventState.current = null;
+    eventState.nextTime = clock.getElapsedTime() + 12;
+    for (const r of lavaRocks) scene.remove(r.mesh); lavaRocks.length = 0;
+    for (const m of meteors) scene.remove(m.mesh); meteors.length = 0;
+    for (const l of lightnings){ scene.remove(l.mesh); scene.remove(l.light); } lightnings.length = 0;
+  }
+  // Música de obby
+  playMusic('obby');
+  SFX.start();
+}
+
+function loseGame(){
+  // El JUGADOR murió, pero el juego sigue mientras haya bots vivos
+  if(!playerState.alive) return;
+  playerState.alive = false;
+  SFX.death();
+  const heightReached = Math.max(0, Math.floor(player.position.y));
+  document.getElementById('death-height').textContent = heightReached;
+  document.getElementById('death').classList.add('show');
+  // Mostrar botón para abandonar
+  setTimeout(() => {
+    document.getElementById('death-restart').style.display = 'inline-block';
+  }, 3000);
+  // Verificar si la ronda termina
+  checkEndRound();
+}
+
+function winGame(){
+  // El jugador llegó al refugio - está a salvo, esperar al resto
+  if(gameState.won) return;
+  gameState.won = true;
+  playerState.inShelter = true;
+  SFX.win();
+  // Mostrar feedback pero NO termina el juego
+  setStatus(LANG === 'es' ? '¡Estás a salvo! Esperando al resto...' : 'You are safe! Waiting for others...');
+  // Verificar si la ronda termina
+  checkEndRound();
+}
+
+function teamWin(){
+  // TODOS los sobrevivientes llegaron al refugio
+  if(gameState.finalWinner) return;
+  gameState.finalWinner = 'team';
+  gameState.gameOver = true;
+  SFX.win();
+  stopMusic();
+  const elapsed = (performance.now() - gameState.startTime) / 1000;
+  const mins = Math.floor(elapsed / 60);
+  const secs = Math.floor(elapsed % 60);
+  document.getElementById('win-time').textContent = `${mins}:${String(secs).padStart(2, '0')}`;
+  
+  // Contar sobrevivientes
+  let survivors = playerState.alive ? 1 : 0;
+  let total = 1;
+  for(const b of bots){
+    total++;
+    if(b.alive) survivors++;
+  }
+  
+  const title = LANG === 'es' ? '¡SOBREVIVIERON!' : 'SURVIVED!';
+  document.getElementById('win-title').textContent = title;
+  document.getElementById('win-survivors-count').textContent = survivors + ' / ' + total;
+  document.getElementById('win').classList.add('show');
+  document.getElementById('win-restart').style.display = 'inline-block';
+  
+  // Esconder pantalla de muerte si estaba
+  document.getElementById('death').classList.remove('show');
+}
+
+function teamLose(){
+  // Todos murieron
+  if(gameState.finalWinner) return;
+  gameState.finalWinner = 'none';
+  gameState.gameOver = true;
+  stopMusic();
+  
+  const elapsed = (performance.now() - gameState.startTime) / 1000;
+  const mins = Math.floor(elapsed / 60);
+  const secs = Math.floor(elapsed % 60);
+  document.getElementById('win-time').textContent = `${mins}:${String(secs).padStart(2, '0')}`;
+  
+  // Pantalla de derrota total
+  const title = LANG === 'es' ? 'TODOS MURIERON' : 'EVERYONE DIED';
+  document.getElementById('win-title').textContent = title;
+  document.getElementById('win-survivors-count').textContent = '0';
+  document.getElementById('win').classList.add('show');
+  document.getElementById('win-restart').style.display = 'inline-block';
+  
+  document.getElementById('death').classList.remove('show');
+}
+
+function botWinsGame(bot){
+  // Bot llegó - solo lo marca como safe, no termina el juego
+  bot.hasWon = true;
+  checkEndRound();
+}
+
+// ========== TUTORIAL INTERACTIVO EN ESPACIO BLANCO ==========
+const TUT_STEPS = {
+  es: [
+    { id: 'move', icon: '🕹️', title: 'MUEVE EL JOYSTICK', hint: 'Arrastra el joystick (abajo izquierda) para caminar' },
+    { id: 'camera', icon: '👆', title: 'GIRA LA CÁMARA', hint: 'Desliza el dedo por la pantalla para mirar alrededor' },
+    { id: 'jump', icon: '⤴️', title: 'SALTAR', hint: 'Toca el botón azul para saltar entre plataformas' },
+    { id: 'climb', icon: '🧗', title: 'TREPA MÁS ALTO', hint: 'Salta a las plataformas de arriba — sube 4 metros' },
+    { id: 'flood', icon: '🌊', title: 'EL AGUA SUBE', hint: 'Cuando empiece el juego, el agua subirá rápido. ¡No te dejes alcanzar!' },
+    { id: 'disasters', icon: '⚠️', title: 'PELIGROS', hint: 'Trampas rojas, terremotos, tifones, volcán, tornado, meteoros... ¡cuidado!' },
+    { id: 'done', icon: '🏆', title: '¡LISTO!', hint: 'Llega al refugio dorado de la cima para sobrevivir.' }
+  ],
+  en: [
+    { id: 'move', icon: '🕹️', title: 'MOVE THE JOYSTICK', hint: 'Drag the joystick (bottom-left) to walk' },
+    { id: 'camera', icon: '👆', title: 'ROTATE CAMERA', hint: 'Drag your finger on screen to look around' },
+    { id: 'jump', icon: '⤴️', title: 'JUMP', hint: 'Tap the blue button to jump between platforms' },
+    { id: 'climb', icon: '🧗', title: 'CLIMB HIGHER', hint: 'Jump up the platforms — climb 4 meters' },
+    { id: 'flood', icon: '🌊', title: 'WATER RISES', hint: 'When the game starts, water rises fast. Do not let it catch you!' },
+    { id: 'disasters', icon: '⚠️', title: 'HAZARDS', hint: 'Red traps, earthquakes, typhoons, volcano, tornado, meteors... watch out!' },
+    { id: 'done', icon: '🏆', title: 'READY!', hint: 'Reach the golden shelter at the top to survive.' }
+  ]
+};
+
+const tutorialState = {
+  active: false,
+  step: 0,
+  lang: 'en',
+  meshes: [],
+  moveDist: 0,
+  jumped: false,
+  cameraSwiped: false,
+  waitStartT: 0,
+  spawnY: 0,
+  savedFog: null,
+  savedBg: null,
+  savedFogColor: null
+};
+
+const TUT_BASE_X = 0;
+const TUT_BASE_Y = 0;
+const TUT_BASE_Z = 0;
+
+let tutCurrentLang = 'en';
+
+function showTutorial(lang){
+  tutorialState.active = true;
+  tutorialState.step = 0;
+  tutorialState.lang = lang;
+  tutorialState.moveDist = 0;
+  tutorialState.jumped = false;
+  tutorialState.cameraSwiped = false;
+  tutorialState.waitStartT = 0;
+  tutCurrentLang = lang;
+  LANG = lang;
+  
+  // Mostrar HUD/controles (mundo ya construido al cargar)
+  if (!gameState.started){
+    initAudio();
+    applyTranslations();
+    document.getElementById('hud').style.display = 'block';
+    document.getElementById('crosshair').style.display = 'block';
+    // joystick / jump-btn: visibilidad controlada por CSS según plataforma
+    // NO buildObby (ya está construido al cargar para el fondo del menú)
+    // NO createBots (0 NPCs)
+    gameState.started = true;
+    // Música chiptune arranca con el tutorial
+    playMusic('obby');
+  }
+  
+  // Entrar al obby pero con el agua pausada
+  gameState.phase = 'obby';
+  gameState.phaseTime = 0;
+  gameState.gameOver = false;
+  gameState.won = false;
+  gameState.waterLevel = -200; // agua MUY lejos durante tutorial
+  gameState.startTime = performance.now();
+  
+  // Spawn en la primera plataforma del obby
+  const startPlat = window.obbyPath && window.obbyPath.length > 0 ? window.obbyPath[0] : null;
+  if (startPlat){
+    player.position.set(startPlat.mesh.position.x, startPlat.mesh.position.y + 1.5, startPlat.mesh.position.z);
+  } else {
+    player.position.set(0, 3, 0);
+  }
+  playerState.vel.set(0, 0, 0);
+  playerState.alive = true;
+  playerState.firstPerson = false;
+  playerState.inLobby = false;
+  playerState.inShelter = false;
+  playerState.onGround = false;
+  tutorialState.spawnY = player.position.y;
+  camState.pitch = 0.3;
+  
+  // Cerrar menú
+  document.getElementById('menu').classList.add('hide');
+  setTimeout(() => { document.getElementById('menu').style.display = 'none'; }, 700);
+  document.getElementById('tutorial').classList.add('show');
+  
+  setStatus(lang === 'es' ? 'TUTORIAL — sigue los pasos' : 'TUTORIAL — follow the steps');
+  
+  updateTutorialUI();
+}
+
+// Overrides de tutorial para PC (teclado/mouse) en los pasos de control
+const TUT_PC = {
+  es: {
+    move:   { icon:'⌨️', title:'MUÉVETE',        hint:'Usa W A S D o las flechas para caminar' },
+    camera: { icon:'🖱️', title:'MIRA ALREDEDOR', hint:'Mantén clic y mueve el mouse para girar la cámara' },
+    jump:   { icon:'⤴️', title:'SALTAR',          hint:'Pulsa Espacio para saltar entre plataformas' }
+  },
+  en: {
+    move:   { icon:'⌨️', title:'MOVE',       hint:'Use W A S D or the arrow keys to walk' },
+    camera: { icon:'🖱️', title:'LOOK AROUND', hint:'Hold click and move the mouse to turn the camera' },
+    jump:   { icon:'⤴️', title:'JUMP',        hint:'Press Space to jump between platforms' }
+  }
+};
+function updateTutorialUI(){
+  const steps = TUT_STEPS[tutorialState.lang] || TUT_STEPS.en;
+  const cur = steps[tutorialState.step];
+  if (!cur) return;
+  // En PC, sustituir icono/título/pista de los pasos de control
+  let icon = cur.icon, title = cur.title, hint = cur.hint;
+  if (platform === 'pc'){
+    const ov = TUT_PC[tutorialState.lang] && TUT_PC[tutorialState.lang][cur.id];
+    if (ov){ icon = ov.icon; title = ov.title; hint = ov.hint; }
+  }
+  const stepLabel = tutorialState.lang === 'es' ? 'PASO ' : 'STEP ';
+  document.getElementById('tut-step').textContent = stepLabel + (tutorialState.step + 1) + '/' + steps.length;
+  document.getElementById('tut-icon').textContent = icon;
+  document.getElementById('tut-title').textContent = title;
+  document.getElementById('tut-hint').textContent = hint;
+  document.getElementById('tut-fill').style.width = ((tutorialState.step + 1) / steps.length * 100) + '%';
+  document.getElementById('tut-go').style.display = (cur.id === 'done') ? 'inline-block' : 'none';
+}
+
+function advanceTutorial(){
+  tutorialState.step++;
+  const steps = TUT_STEPS[tutorialState.lang] || TUT_STEPS.en;
+  if (tutorialState.step >= steps.length) tutorialState.step = steps.length - 1;
+  updateTutorialUI();
+  const cur = steps[tutorialState.step];
+  if (cur && (cur.id === 'flood' || cur.id === 'disasters')){
+    tutorialState.waitStartT = performance.now();
+  }
+  if (typeof SFX !== 'undefined' && SFX.click) SFX.click();
+}
+
+function updateTutorialProgress(){
+  if (!tutorialState.active) return;
+  const steps = TUT_STEPS[tutorialState.lang] || TUT_STEPS.en;
+  const cur = steps[tutorialState.step];
+  if (!cur) return;
+  
+  if (cur.id === 'move'){
+    const mag = Math.sqrt((input.right || 0) * (input.right || 0) + (input.forward || 0) * (input.forward || 0));
+    if (mag > 0.3) tutorialState.moveDist += mag * 0.05;
+    if (tutorialState.moveDist > 1.5) advanceTutorial();
+  } else if (cur.id === 'camera'){
+    if (tutorialState.cameraSwiped) advanceTutorial();
+  } else if (cur.id === 'jump'){
+    if (tutorialState.jumped) advanceTutorial();
+  } else if (cur.id === 'climb'){
+    if (player.position.y - tutorialState.spawnY > 3) advanceTutorial();
+  } else if (cur.id === 'flood' || cur.id === 'disasters'){
+    if (tutorialState.waitStartT > 0 && performance.now() - tutorialState.waitStartT > 4500){
+      advanceTutorial();
+    }
+  }
+}
+
+function endTutorial(){
+  if (!tutorialState.active) return;
+  
+  document.getElementById('tutorial').classList.remove('show');
+  tutorialState.active = false;
+  
+  // El player ya está en el obby — solo activar el agua
+  gameState.waterLevel = -8;
+  gameState.waterRiseRate = 0.32;
+  gameState.startTime = performance.now();
+  
+  setStatus(LANG === 'es' ? '¡Sube al refugio antes que el agua te alcance!' : 'Climb to the shelter before the water catches you!');
+  foShowKbdLegend();
+}
+
+function closeTutorialAndStart(){
+  endTutorial();
+}
+
+// Listeners nuevo menú: PLAY botón + lang como toggle
+let menuLang = 'en';
+document.getElementById('play-btn').addEventListener('click', () => {
+  initAudio();
+  SFX.click();
+  showTutorial(menuLang);
+});
+document.getElementById('lang-es').addEventListener('click', e => {
+  e.stopPropagation();
+  menuLang = 'es';
+  document.querySelectorAll('.menu-lang-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('lang-es').classList.add('active');
+  document.getElementById('play-label').textContent = 'JUGAR';
+  document.getElementById('menu-eyebrow').textContent = 'ESCALADA DE SUPERVIVENCIA';
+  document.getElementById('menu-subtitle').textContent = 'Sube al refugio antes que el agua te alcance';
+  document.getElementById('menu-tip').textContent = 'TOCA PARA EMPEZAR';
+  foRefreshPlatformText();
+  initAudio();
+  SFX.click();
+});
+document.getElementById('lang-en').addEventListener('click', e => {
+  e.stopPropagation();
+  menuLang = 'en';
+  document.querySelectorAll('.menu-lang-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('lang-en').classList.add('active');
+  document.getElementById('play-label').textContent = 'PLAY';
+  document.getElementById('menu-eyebrow').textContent = 'SURVIVAL CLIMBER';
+  document.getElementById('menu-subtitle').textContent = 'Climb to the shelter before the water claims you';
+  document.getElementById('menu-tip').textContent = 'TAP TO START';
+  foRefreshPlatformText();
+  initAudio();
+  SFX.click();
+});
+
+// Textos e indicadores dependientes de la plataforma
+const FO_CTRL = {
+  es: 'Muévete con <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · mantén clic y mueve el <b>mouse</b> para mirar · <kbd>Espacio</kbd> saltar · <kbd>E</kbd> usar · <kbd>Esc</kbd> pausa',
+  en: 'Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · hold click and move the <b>mouse</b> to look · <kbd>Space</kbd> jump · <kbd>E</kbd> use · <kbd>Esc</kbd> pause'
+};
+const FO_LEGEND = {
+  es: '<span><kbd>WASD</kbd> mover</span><span>🖱️ mirar</span><span><kbd>Espacio</kbd> saltar</span><span><kbd>E</kbd> usar</span><span><kbd>Esc</kbd> pausa</span>',
+  en: '<span><kbd>WASD</kbd> move</span><span>🖱️ look</span><span><kbd>Space</kbd> jump</span><span><kbd>E</kbd> use</span><span><kbd>Esc</kbd> pause</span>'
+};
+function foRefreshPlatformText(){
+  const lang = (typeof menuLang !== 'undefined' ? menuLang : 'en');
+  const ch = document.getElementById('foCtrlHint');
+  if (ch) ch.innerHTML = FO_CTRL[lang] || FO_CTRL.en;
+  const kl = document.getElementById('foKbdLegend');
+  if (kl) kl.innerHTML = FO_LEGEND[(typeof LANG !== 'undefined' ? LANG : 'en')] || FO_LEGEND.en;
+  const tip = document.getElementById('menu-tip');
+  if (tip && platform === 'pc') tip.textContent = (lang === 'es' ? 'CLIC PARA EMPEZAR' : 'CLICK TO START');
+  const ut = document.getElementById('use-text');
+  if (ut && typeof T === 'function') ut.textContent = isMobile ? T('press_button_mobile') : T('press_button');
+  if (typeof tutorialState !== 'undefined' && tutorialState.active) updateTutorialUI();
+}
+let foLegendTimer = null;
+function foShowKbdLegend(){
+  if (platform !== 'pc') return;
+  const kl = document.getElementById('foKbdLegend');
+  if (!kl) return;
+  foRefreshPlatformText();
+  kl.classList.add('show');
+  if (foLegendTimer) clearTimeout(foLegendTimer);
+  foLegendTimer = setTimeout(() => kl.classList.remove('show'), 5000);
+}
+
+// Tutorial: botones skip y go (start)
+document.getElementById('tut-skip').addEventListener('click', () => {
+  SFX.click();
+  endTutorial();
+});
+document.getElementById('tut-go').addEventListener('click', () => {
+  SFX.click();
+  endTutorial();
+});
+
+// Botones de volver al lobby
+function returnToLobby(){
+  SFX.click();
+  document.getElementById('win').classList.remove('show');
+  document.getElementById('death').classList.remove('show');
+  document.getElementById('win-restart').style.display = 'none';
+  document.getElementById('death-restart').style.display = 'none';
+  gameState.round++;
+  enterObby();
+}
+document.getElementById('win-restart').addEventListener('click', returnToLobby);
+document.getElementById('death-restart').addEventListener('click', returnToLobby);
+
+// =====================================================
+// SISTEMA DE EVENTOS (terremoto, tifón, volcán, tornado, tormenta, meteoros, viento, niebla)
+// =====================================================
+const EVENT_LIST = ['earthquake', 'typhoon', 'volcano', 'tornado', 'storm', 'meteor', 'lightning', 'fog'];
+const EVENT_TEXTS = {
+  en: {
+    earthquake: { name: 'EARTHQUAKE', sub: 'The ground is shaking!' },
+    typhoon: { name: 'TYPHOON', sub: 'Strong winds blowing!' },
+    volcano: { name: 'VOLCANO', sub: 'Lava rocks falling from the sky!' },
+    tornado: { name: 'TORNADO', sub: 'Avoid the spinning vortex!' },
+    storm: { name: 'STORM', sub: 'Heavy rain reduces visibility' },
+    meteor: { name: 'METEOR SHOWER', sub: 'Meteors crashing down!' },
+    lightning: { name: 'LIGHTNING STRIKES', sub: 'Bolts from the sky!' },
+    fog: { name: 'THICK FOG', sub: 'Can\'t see far away!' }
+  },
+  es: {
+    earthquake: { name: 'TERREMOTO', sub: '¡El suelo tiembla!' },
+    typhoon: { name: 'TIFÓN', sub: '¡Vientos fuertes!' },
+    volcano: { name: 'VOLCÁN', sub: '¡Caen rocas de lava!' },
+    tornado: { name: 'TORNADO', sub: '¡Evita el vórtice!' },
+    storm: { name: 'TORMENTA', sub: 'Lluvia limita visión' },
+    meteor: { name: 'LLUVIA DE METEOROS', sub: '¡Meteoros cayendo!' },
+    lightning: { name: 'RAYOS', sub: '¡Cuidado con los rayos!' },
+    fog: { name: 'NIEBLA DENSA', sub: '¡No se ve lejos!' }
+  }
+};
+
+const eventState = {
+  current: null,
+  endTime: 0,
+  nextTime: 0,
+  windAngle: 0,
+  tornadoX: 0, tornadoZ: 0,
+  tornadoMesh: null,
+  rockSpawnTimer: 0,
+  meteorTimer: 0,
+  lightningTimer: 0,
+  savedFogDensity: null,
+  savedFogColor: null
+};
+
+const lavaRocks = [];
+const meteors = [];
+const lightnings = [];
+
+function spawnLavaRock(){
+  const rock = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.5 + Math.random() * 0.7, 0),
+    new THREE.MeshStandardMaterial({ color: 0xff3300, emissive: 0xff5500, emissiveIntensity: 0.9, roughness: 0.6 })
+  );
+  rock.position.set(player.position.x + (Math.random() - 0.5) * 24, player.position.y + 30 + Math.random() * 15, player.position.z + (Math.random() - 0.5) * 24);
+  rock.castShadow = true;
+  scene.add(rock);
+  lavaRocks.push({ mesh: rock, vx: (Math.random() - 0.5) * 3, vy: -10, vz: (Math.random() - 0.5) * 3, life: 4 });
+}
+
+function updateLavaRocks(dt){
+  for (let i = lavaRocks.length - 1; i >= 0; i--){
+    const r = lavaRocks[i];
+    r.mesh.position.x += r.vx * dt;
+    r.mesh.position.y += r.vy * dt;
+    r.mesh.position.z += r.vz * dt;
+    r.vy -= 30 * dt;
+    r.mesh.rotation.x += dt * 4;
+    r.mesh.rotation.z += dt * 3;
+    r.life -= dt;
+    const dd = Math.hypot(r.mesh.position.x - player.position.x, r.mesh.position.z - player.position.z);
+    if (dd < 1.3 && Math.abs(r.mesh.position.y - player.position.y) < 1.8 && playerState.alive){
+      loseGame();
+    }
+    if (r.life <= 0 || r.mesh.position.y < -20){
+      scene.remove(r.mesh);
+      lavaRocks.splice(i, 1);
+    }
+  }
+}
+
+function spawnMeteor(){
+  // Meteoro grande con cola
+  const meteorGroup = new THREE.Group();
+  const head = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.9, 0),
+    new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xffaa22, emissiveIntensity: 1.5, roughness: 0.5 })
+  );
+  meteorGroup.add(head);
+  // Cola
+  const tail = new THREE.Mesh(
+    new THREE.ConeGeometry(0.7, 4, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0.7 })
+  );
+  tail.rotation.x = -Math.PI / 2;
+  tail.position.z = -2;
+  meteorGroup.add(tail);
+  
+  const dir = Math.random() * Math.PI * 2;
+  const dist = 18;
+  meteorGroup.position.set(player.position.x + Math.cos(dir) * dist, player.position.y + 35, player.position.z + Math.sin(dir) * dist);
+  meteorGroup.lookAt(player.position.x, 0, player.position.z);
+  scene.add(meteorGroup);
+  meteors.push({ mesh: meteorGroup, life: 3, vy: -14, dirX: Math.cos(dir + Math.PI) * 3, dirZ: Math.sin(dir + Math.PI) * 3 });
+}
+
+function updateMeteors(dt){
+  for (let i = meteors.length - 1; i >= 0; i--){
+    const m = meteors[i];
+    m.mesh.position.x += m.dirX * dt;
+    m.mesh.position.y += m.vy * dt;
+    m.mesh.position.z += m.dirZ * dt;
+    m.vy -= 8 * dt;
+    m.life -= dt;
+    const dd = Math.hypot(m.mesh.position.x - player.position.x, m.mesh.position.z - player.position.z);
+    if (dd < 2 && Math.abs(m.mesh.position.y - player.position.y) < 2 && playerState.alive){
+      loseGame();
+    }
+    if (m.life <= 0 || m.mesh.position.y < -20){
+      scene.remove(m.mesh);
+      meteors.splice(i, 1);
+    }
+  }
+}
+
+function spawnLightning(){
+  // Rayo: línea blanca brillante de arriba al suelo cerca del player
+  const angle = Math.random() * Math.PI * 2;
+  const dist = 4 + Math.random() * 12;
+  const tx = player.position.x + Math.cos(angle) * dist;
+  const tz = player.position.z + Math.sin(angle) * dist;
+  
+  const boltGeom = new THREE.BoxGeometry(0.4, 50, 0.4);
+  const boltMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
+  const bolt = new THREE.Mesh(boltGeom, boltMat);
+  bolt.position.set(tx, 25, tz);
+  scene.add(bolt);
+  
+  // Flash de luz
+  const flashLight = new THREE.PointLight(0xddeeff, 8, 30);
+  flashLight.position.set(tx, 5, tz);
+  scene.add(flashLight);
+  
+  lightnings.push({ mesh: bolt, light: flashLight, life: 0.5, tx, tz });
+  
+  // Daño si está cerca
+  const dd = Math.hypot(tx - player.position.x, tz - player.position.z);
+  if (dd < 2 && playerState.alive){
+    loseGame();
+  }
+}
+
+function updateLightnings(dt){
+  for (let i = lightnings.length - 1; i >= 0; i--){
+    const l = lightnings[i];
+    l.life -= dt;
+    l.mesh.material.opacity = Math.max(0, l.life / 0.5);
+    l.light.intensity = 8 * (l.life / 0.5);
+    if (l.life <= 0){
+      scene.remove(l.mesh);
+      scene.remove(l.light);
+      lightnings.splice(i, 1);
+    }
+  }
+}
+
+function spawnTornado(){
+  const angle = Math.random() * Math.PI * 2;
+  const dist = 10 + Math.random() * 12;
+  eventState.tornadoX = player.position.x + Math.cos(angle) * dist;
+  eventState.tornadoZ = player.position.z + Math.sin(angle) * dist;
+  
+  const tGeom = new THREE.ConeGeometry(3.5, 30, 14, 12, true);
+  const tMat = new THREE.MeshBasicMaterial({ color: 0x666666, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
+  eventState.tornadoMesh = new THREE.Mesh(tGeom, tMat);
+  eventState.tornadoMesh.position.set(eventState.tornadoX, 10, eventState.tornadoZ);
+  scene.add(eventState.tornadoMesh);
+}
+
+function updateTornado(dt){
+  if (!eventState.tornadoMesh) return;
+  eventState.tornadoMesh.rotation.y += dt * 5;
+  const angle = clock.getElapsedTime() * 0.4;
+  eventState.tornadoX += Math.cos(angle) * 2 * dt;
+  eventState.tornadoZ += Math.sin(angle) * 2 * dt;
+  eventState.tornadoMesh.position.set(eventState.tornadoX, 10, eventState.tornadoZ);
+  
+  // Atraer al player
+  const ddx = eventState.tornadoX - player.position.x;
+  const ddz = eventState.tornadoZ - player.position.z;
+  const dlen = Math.sqrt(ddx*ddx + ddz*ddz) || 1;
+  if (dlen < 20){
+    const pull = (20 - dlen) / 20 * 5;
+    playerState.vel.x += (ddx / dlen) * pull * dt * 60;
+    playerState.vel.z += (ddz / dlen) * pull * dt * 60;
+  }
+  if (dlen < 2.5 && playerState.alive){
+    loseGame();
+  }
+}
+
+function showEventBanner(name, sub){
+  const banner = document.getElementById('event-banner');
+  if (!banner){
+    // Crear si no existe
+    const b = document.createElement('div');
+    b.id = 'event-banner';
+    b.style.cssText = 'position:fixed;top:38%;left:50%;transform:translate(-50%,-50%);padding:18px 36px;font-size:26px;font-weight:900;letter-spacing:5px;text-align:center;opacity:0;pointer-events:none;transition:opacity 0.4s,transform 0.4s;background:rgba(180,40,40,0.7);border:2px solid rgba(255,160,160,0.7);border-radius:16px;backdrop-filter:blur(12px);box-shadow:0 0 60px rgba(255,80,80,0.55),0 10px 40px rgba(0,0,0,0.6);color:#fff;text-shadow:0 4px 16px rgba(0,0,0,0.85);max-width:90%;z-index:50;font-family:inherit';
+    b.innerHTML = '<div id="event-name"></div><div id="event-sub" style="font-size:11px;letter-spacing:3px;margin-top:8px;color:#ffd0d0;font-weight:600;opacity:0.9"></div>';
+    document.body.appendChild(b);
+  }
+  const banner2 = document.getElementById('event-banner');
+  document.getElementById('event-name').textContent = name;
+  document.getElementById('event-sub').textContent = sub;
+  banner2.style.opacity = '1';
+  banner2.style.transform = 'translate(-50%, -50%) scale(1.05)';
+  setTimeout(() => {
+    banner2.style.opacity = '0';
+    banner2.style.transform = 'translate(-50%, -50%) scale(1)';
+  }, 2500);
+}
+
+function startEvent(type){
+  eventState.current = type;
+  eventState.endTime = clock.getElapsedTime() + (type === 'tornado' ? 14 : 10);
+  
+  if (type === 'earthquake'){
+    // Solo sacudir cámara
+  } else if (type === 'typhoon'){
+    eventState.windAngle = Math.random() * Math.PI * 2;
+  } else if (type === 'volcano'){
+    eventState.rockSpawnTimer = 0;
+  } else if (type === 'tornado'){
+    spawnTornado();
+  } else if (type === 'storm'){
+    if (scene.fog){
+      eventState.savedFogDensity = scene.fog.density;
+      eventState.savedFogColor = scene.fog.color.getHex();
+      scene.fog.density = 0.04;
+      scene.fog.color.setHex(0x444a55);
+    }
+    scene.background.setHex(0x3a4050);
+  } else if (type === 'meteor'){
+    eventState.meteorTimer = 0;
+  } else if (type === 'lightning'){
+    eventState.lightningTimer = 0;
+  } else if (type === 'fog'){
+    if (scene.fog){
+      eventState.savedFogDensity = scene.fog.density;
+      eventState.savedFogColor = scene.fog.color.getHex();
+      scene.fog.density = 0.06;
+      scene.fog.color.setHex(0xccccdd);
+    }
+  }
+  
+  const lang = LANG === 'es' ? 'es' : 'en';
+  const text = EVENT_TEXTS[lang][type] || EVENT_TEXTS.en[type];
+  showEventBanner(text.name, text.sub);
+}
+
+function endEvent(){
+  if (eventState.current === 'storm' || eventState.current === 'fog'){
+    if (scene.fog && eventState.savedFogDensity !== null){
+      scene.fog.density = eventState.savedFogDensity;
+      scene.fog.color.setHex(eventState.savedFogColor);
+    }
+    scene.background.setHex(0x88bbee);
+  }
+  if (eventState.current === 'tornado' && eventState.tornadoMesh){
+    scene.remove(eventState.tornadoMesh);
+    eventState.tornadoMesh = null;
+  }
+  eventState.current = null;
+  eventState.nextTime = clock.getElapsedTime() + 10 + Math.random() * 10;
+}
+
+function updateEvents(dt, t){
+  // Disparar nuevo evento si no hay uno activo
+  if (!eventState.current && t > eventState.nextTime){
+    const type = EVENT_LIST[Math.floor(Math.random() * EVENT_LIST.length)];
+    startEvent(type);
+  }
+  
+  if (eventState.current){
+    if (t > eventState.endTime){
+      endEvent();
+    } else {
+      // Tick específico
+      if (eventState.current === 'earthquake'){
+        // Sacudir cámara (la cámara se sacude — el suelo es estático para no romper colisiones)
+        camera.position.x += (Math.random() - 0.5) * 0.18;
+        camera.position.y += (Math.random() - 0.5) * 0.12;
+        camera.position.z += (Math.random() - 0.5) * 0.18;
+      } else if (eventState.current === 'typhoon'){
+        // Empujar al player
+        playerState.vel.x += Math.cos(eventState.windAngle) * 2.5 * dt * 60;
+        playerState.vel.z += Math.sin(eventState.windAngle) * 2.5 * dt * 60;
+      } else if (eventState.current === 'volcano'){
+        eventState.rockSpawnTimer -= dt;
+        if (eventState.rockSpawnTimer <= 0){
+          spawnLavaRock();
+          eventState.rockSpawnTimer = 0.3 + Math.random() * 0.4;
+        }
+      } else if (eventState.current === 'tornado'){
+        updateTornado(dt);
+      } else if (eventState.current === 'meteor'){
+        eventState.meteorTimer -= dt;
+        if (eventState.meteorTimer <= 0){
+          spawnMeteor();
+          eventState.meteorTimer = 1.2 + Math.random() * 1.0;
+        }
+      } else if (eventState.current === 'lightning'){
+        eventState.lightningTimer -= dt;
+        if (eventState.lightningTimer <= 0){
+          spawnLightning();
+          eventState.lightningTimer = 1.5 + Math.random() * 1.5;
+        }
+      }
+      // earthquake/fog/storm/typhoon no necesitan tick adicional
+    }
+  }
+  
+  // Update projectiles siempre
+  updateLavaRocks(dt);
+  updateMeteors(dt);
+  updateLightnings(dt);
+}
+
+// ========== MAIN LOOP ==========
+const clock = new THREE.Clock();
+let lastT = performance.now();
+
+function animate(){
+  requestAnimationFrame(animate);
+  
+  // PAUSA: solo render, sin lógica
+  if (typeof foPaused !== 'undefined' && foPaused){
+    try {
+      if (typeof composer !== 'undefined' && composer) composer.render();
+      else renderer.render(scene, camera);
+    } catch(e){}
+    lastT = performance.now();
+    return;
+  }
+  
+  const now = performance.now();
+  const dt = Math.min((now - lastT) / 1000, 0.025);
+  lastT = now;
+  const t = clock.getElapsedTime();
+  
+  waterMat.uniforms.uTime.value = t;
+  
+  // Animar nubes
+  if (cloudGroup){
+    for (const c of cloudGroup.children){
+      c.userData.angle += c.userData.speed * dt * 0.01;
+      const dist = Math.hypot(c.position.x, c.position.z);
+      c.position.x = Math.cos(c.userData.angle) * dist;
+      c.position.z = Math.sin(c.userData.angle) * dist;
+    }
+  }
+  
+  // Tutorial: check progress
+  if (typeof tutorialState !== 'undefined' && tutorialState.active){
+    updateTutorialProgress();
+    // Safety net: si cae mucho durante tutorial, respawn
+    if (player.position.y < -15){
+      const startPlat = window.obbyPath && window.obbyPath.length > 0 ? window.obbyPath[0] : null;
+      if (startPlat){
+        player.position.set(startPlat.mesh.position.x, startPlat.mesh.position.y + 2, startPlat.mesh.position.z);
+      } else {
+        player.position.set(0, 3, 0);
+      }
+      playerState.vel.set(0, 0, 0);
+    }
+    gameState.gameOver = false;
+    gameState.won = false;
+    playerState.alive = true;
+  }
+  
+  if(!gameState.started){
+    // Cámara orbital cinemática alrededor del mundo (fondo del menú)
+    const orbitR = 55;
+    const orbitH = 18 + Math.sin(t * 0.3) * 4;
+    camera.position.set(
+      OBBY_OFFSET + Math.cos(t * 0.12) * orbitR,
+      orbitH,
+      Math.sin(t * 0.12) * orbitR
+    );
+    camera.lookAt(OBBY_OFFSET, 12, 0);
+    composer.render();
+    return;
+  }
+  
+  // ===== PHASE UPDATE =====
+  gameState.phaseTime -= dt;
+  if(gameState.phase === 'lobby' && gameState.phaseTime <= 0){
+    enterObby();
+  }
+  
+  // ===== WATER (solo en obby) =====
+  if(gameState.phase === 'obby' && !gameState.gameOver && !gameState.won){
+    const elapsed = (performance.now() - gameState.startTime) / 1000;
+    gameState.waterRiseRate = 0.32 + Math.min(elapsed / 120, 1) * 0.45;
+    gameState.waterLevel += gameState.waterRiseRate * dt;
+  }
+  water.position.y = gameState.waterLevel;
+  
+  // ===== EVENTOS (terremoto, tifón, etc) =====
+  if (gameState.phase === 'obby' && !tutorialState.active && !gameState.gameOver && !gameState.won){
+    updateEvents(dt, t);
+  }
+  
+  // ===== MOVING PLATFORMS =====
+  for(const p of platforms){
+    if(p.moving){
+      p.movePhase += p.moving.speed * dt;
+      const offset = Math.sin(p.movePhase) * p.moving.range;
+      if(p.moving.axis === 'x') p.mesh.position.x = p.baseX + offset;
+      else p.mesh.position.z = p.baseZ + offset;
+    }
+  }
+  
+  // ===== PORTAL GLOW =====
+  if(window.portalGlow){
+    window.portalGlow.material.opacity = 0.3 + Math.sin(t * 2) * 0.15;
+  }
+  
+  // ===== META LIGHTS PULSE =====
+  if(window.goalLights){
+    const pulse = 1.0 + Math.sin(t * 3) * 0.5;
+    window.goalLights[0].intensity = pulse;
+    window.goalLights[1].intensity = pulse * 0.9;
+  }
+  
+  // ===== BUTTON PULSE =====
+  for(const btn of buttons){
+    if(!btn.pressed){
+      const pulse = 0.5 + Math.sin(t * 4 + btn.pulsePhase) * 0.3;
+      btn.ring.material.opacity = pulse;
+    }
+  }
+  
+  // ===== KEYBOARD INPUT =====
+  if(!isMobile){
+    const targetFwd = (keys['KeyW']?1:0) - (keys['KeyS']?1:0);
+    const targetRgt = (keys['KeyD']?1:0) - (keys['KeyA']?1:0);
+    input.forward += (targetFwd - input.forward) * Math.min(1, dt * 15);
+    input.right += (targetRgt - input.right) * Math.min(1, dt * 15);
+    input.run = !!keys['ShiftLeft'];
+  }
+  
+  // ===== PLAYER MOVEMENT =====
+  if(playerState.alive && !gameState.gameOver && !gameState.won){
+    const stickMag = Math.min(1, Math.hypot(input.forward, input.right));
+    const speed = stickMag > 0.85 ? playerState.runSpeed : playerState.speed * stickMag;
+    
+    const fwd = new THREE.Vector3(-Math.sin(camState.yaw), 0, -Math.cos(camState.yaw));
+    const rgt = new THREE.Vector3(Math.cos(camState.yaw), 0, -Math.sin(camState.yaw));
+    
+    let moveX = 0, moveZ = 0;
+    if(stickMag > 0.01){
+      const rawX = fwd.x * input.forward + rgt.x * input.right;
+      const rawZ = fwd.z * input.forward + rgt.z * input.right;
+      const rawMag = Math.hypot(rawX, rawZ);
+      moveX = (rawX / rawMag) * speed;
+      moveZ = (rawZ / rawMag) * speed;
+    }
+    
+    const isOnSlippery = playerState.groundPlatform && playerState.groundPlatform.type === 'slippery';
+    if(isOnSlippery){
+      playerState.vel.x += (moveX - playerState.vel.x) * Math.min(1, dt * 2);
+      playerState.vel.z += (moveZ - playerState.vel.z) * Math.min(1, dt * 2);
+    } else {
+      playerState.vel.x = moveX;
+      playerState.vel.z = moveZ;
+    }
+    
+    playerState.vel.y -= 30 * dt;
+    if(playerState.vel.y < -20) playerState.vel.y = -20;
+    
+    if(input.jump && playerState.onGround){
+      playerState.vel.y = playerState.jumpPower;
+      playerState.onGround = false;
+      SFX.jump();
+    }
+    input.jump = false;
+    
+    let newX = player.position.x + playerState.vel.x * dt;
+    let newY = player.position.y + playerState.vel.y * dt;
+    let newZ = player.position.z + playerState.vel.z * dt;
+    
+    const lat = resolveLateralCollision(newX, newZ, newY);
+    newX = lat.x;
+    newZ = lat.z;
+    
+    // Ground check: SOLO aterriza si REALMENTE pasaste por arriba (no imán)
+    const wasOnGround = playerState.onGround;
+    const ground = getPlatformGround(newX, newY, newZ, player.position.y);
+    if(playerState.vel.y <= 0 && ground.y > -Infinity){
+      newY = ground.y;
+      // SFX land si venía cayendo
+      if(!wasOnGround && playerState.vel.y < -3){
+        SFX.land();
+      }
+      playerState.vel.y = 0;
+      playerState.onGround = true;
+      playerState.groundPlatform = ground.plat;
+    } else {
+      playerState.onGround = false;
+      playerState.groundPlatform = null;
+      if(playerState.vel.y <= 0){
+        const stillCheck = getPlatformGround(newX, newY - 0.15, newZ, newY - 0.05);
+        if(stillCheck.y > -Infinity && Math.abs(newY - stillCheck.y) < 0.25){
+          newY = stillCheck.y;
+          playerState.vel.y = 0;
+          playerState.onGround = true;
+          playerState.groundPlatform = stillCheck.plat;
+        }
+      }
+    }
+    
+    // HEAD collision: si vel.y > 0 (subiendo) y la cabeza pega contra el bottom
+    // de una plataforma, detener vel.y (rebote leve hacia abajo)
+    if(playerState.vel.y > 0){
+      const headLimit = checkHeadCollision(newX, newY, newZ, player.position.y, playerState.height);
+      if(headLimit > -Infinity && newY > headLimit){
+        newY = headLimit;
+        playerState.vel.y = -1;  // rebote leve hacia abajo
+      }
+    }
+    
+    if(gameState.phase === 'obby' && newY < gameState.waterLevel - 1){
+      newY = gameState.waterLevel - 1;
+      playerState.vel.y = 0;
+    }
+    
+    // FALLBACK: si por alguna razón el player cayó por debajo del suelo, restaurar
+    if(gameState.phase === 'lobby' && newY < LOBBY_Y - 0.5){
+      newY = LOBBY_Y;
+      playerState.vel.y = 0;
+      playerState.onGround = true;
+    } else if(gameState.phase === 'obby' && newY < -2){
+      // Por debajo del suelo del obby (Y=0): teletransporte arriba si no hay agua aún
+      if(newY < gameState.waterLevel - 1){
+        // ya cubierto arriba
+      } else {
+        newY = 0.5;
+        playerState.vel.y = 0;
+        playerState.onGround = true;
+      }
+    }
+    
+    if(gameState.phase === 'lobby'){
+      const halfL = LOBBY_SIZE/2 - 1;
+      newX = Math.max(LOBBY_OFFSET - halfL, Math.min(LOBBY_OFFSET + halfL, newX));
+      newZ = Math.max(-halfL, Math.min(halfL, newZ));
+    } else {
+      const halfT = TOWER_SIZE/2 - 1;
+      newX = Math.max(OBBY_OFFSET - halfT, Math.min(OBBY_OFFSET + halfT, newX));
+      newZ = Math.max(-halfT, Math.min(halfT, newZ));
+    }
+    
+    player.position.set(newX, newY, newZ);
+    
+    const moving = stickMag > 0.1;
+    if(moving && !playerState.firstPerson){
+      const targetRot = Math.atan2(playerState.vel.x, playerState.vel.z);
+      let diff = targetRot - player.rotation.y;
+      while(diff > Math.PI) diff -= Math.PI * 2;
+      while(diff < -Math.PI) diff += Math.PI * 2;
+      player.rotation.y += diff * Math.min(1, dt * 12);
+    } else if(playerState.firstPerson){
+      // En primera persona, rotación = cámara
+      player.rotation.y = camState.yaw;
+    }
+    
+    animateChar(player, dt, moving && playerState.onGround, stickMag > 0.85, t, !playerState.onGround);
+    
+    // ===== BUTTON INTERACTION =====
+    // Detectar si está cerca de algún botón
+    let nearestBtn = null;
+    let nearestDist = Infinity;
+    for(const btn of buttons){
+      if(btn.pressed) continue;
+      const dx = btn.position.x - player.position.x;
+      const dy = btn.position.y - player.position.y;
+      const dz = btn.position.z - player.position.z;
+      const dist = Math.hypot(dx, dz);
+      if(dist < 2 && Math.abs(dy) < 2){
+        if(dist < nearestDist){
+          nearestDist = dist;
+          nearestBtn = btn;
+        }
+      }
+    }
+    
+    if(nearestBtn){
+      document.getElementById('use-prompt').classList.add('show');
+      if(isMobile) document.getElementById('use-btn').classList.add('show');
+      if(input.usePressed){
+        pressButton(nearestBtn);
+        input.usePressed = false;
+      }
+    } else {
+      document.getElementById('use-prompt').classList.remove('show');
+      document.getElementById('use-btn').classList.remove('show');
+      input.usePressed = false;
+    }
+    
+    // Check muerte por agua
+    if(gameState.phase === 'obby' && player.position.y < gameState.waterLevel - 0.5){
+      loseGame();
+    }
+    
+    // Check muerte por kill brick (suelo rojo)
+    if(gameState.phase === 'obby' && window.killBricks){
+      for(const kb of window.killBricks){
+        const dx = player.position.x - kb.x;
+        const dz = player.position.z - kb.z;
+        const dy = player.position.y - kb.y;
+        if(Math.abs(dx) < kb.w/2 + 0.2 && Math.abs(dz) < kb.d/2 + 0.2 && dy > -0.5 && dy < 1.2){
+          loseGame();
+          break;
+        }
+      }
+    }
+    
+    // Check llegada al refugio del player
+    if(gameState.phase === 'obby' && !playerState.inShelter){
+      const shY = window.shelterHeight || SHELTER_HEIGHT;
+      if(player.position.y >= shY - 0.5){
+        const dx = player.position.x - obbyShelterX;
+        const dz = player.position.z - obbyShelterZ;
+        if(Math.hypot(dx, dz) < 8){
+          winGame();
+        }
+      }
+    }
+  }
+  
+  // ===== UPDATE BOTS =====
+  if(gameState.phase === 'lobby'){
+    updateBotsLobby(dt, t);
+  } else {
+    updateBotsObby(dt, t);
+  }
+  
+  // ===== CAMERA =====
+  if(playerState.firstPerson){
+    // Primera persona: cámara en la cabeza
+    const eyePos = new THREE.Vector3(player.position.x, player.position.y + 2.4, player.position.z);
+    camera.position.copy(eyePos);
+    // Calcular dirección de la mirada
+    const lookDir = new THREE.Vector3(
+      -Math.sin(camState.yaw) * Math.cos(camState.pitch),
+      Math.sin(camState.pitch),
+      -Math.cos(camState.yaw) * Math.cos(camState.pitch)
+    );
+    camera.lookAt(eyePos.clone().add(lookDir));
+    // Ocultar player en 1ra persona
+    player.visible = false;
+    document.getElementById('crosshair').style.display = 'block';
+  } else {
+    // Tercera persona
+    const dist = 9;
+    const camTarget = new THREE.Vector3(player.position.x, player.position.y + 1.6, player.position.z);
+    const camOffset = new THREE.Vector3(
+      Math.sin(camState.yaw) * Math.cos(camState.pitch) * dist,
+      -Math.sin(camState.pitch) * dist + 2.5,
+      Math.cos(camState.yaw) * Math.cos(camState.pitch) * dist
+    );
+    const desiredCamPos = camTarget.clone().add(camOffset);
+    camera.position.lerp(desiredCamPos, Math.min(1, dt * 10));
+    camera.lookAt(camTarget);
+    player.visible = true;
+    document.getElementById('crosshair').style.display = 'none';
+  }
+  
+  // ===== HUD =====
+  const heightVal = Math.max(0, Math.floor(player.position.y));
+  document.getElementById('height-val').textContent = heightVal;
+  document.getElementById('round-val').textContent = gameState.round;
+  
+  let elapsed = 0;
+  if(gameState.phase === 'obby') elapsed = (performance.now() - gameState.startTime) / 1000;
+  const mins = Math.floor(elapsed / 60);
+  const secs = Math.floor(elapsed % 60);
+  document.getElementById('time-val').textContent = `${mins}:${String(secs).padStart(2, '0')}`;
+  
+  let alive = playerState.alive ? 1 : 0;
+  for(const b of bots) if(b.alive) alive++;
+  document.getElementById('alive-val').textContent = alive;
+  
+  if(gameState.phase === 'lobby' && !gameState.gameOver){
+    const t_secs = Math.ceil(gameState.phaseTime);
+    setStatus(T('status_lobby') + t_secs + T('secs'));
+  } else if(gameState.phase === 'obby' && !gameState.gameOver && !gameState.won){
+    if(heightVal > SHELTER_HEIGHT * 0.75){
+      setStatus(T('status_close'));
+    } else if(heightVal > 5){
+      setStatus(T('status_climb'));
+    }
+  }
+  
+  composer.render();
+}
+
+// =====================================================
+// PAUSA + MUTE + TUTORIAL CONFIRM + GFX PRESETS
+// =====================================================
+let foPaused = false;
+let foMuted = false;
+let currentGfxFO = 'medium';
+
+const foPauseMenuEl = document.getElementById('foPauseMenu');
+const foConfirmModalEl = document.getElementById('foConfirmModal');
+const foPauseBtnEl = document.getElementById('foPauseBtn');
+const foMuteBtnEl = document.getElementById('foMuteBtn');
+const foTutBtnEl = document.getElementById('foTutBtn');
+
+// Presets gráficos
+const FO_GFX_PRESETS = {
+  low: {
+    pixelRatio: 0.6,
+    shadows: false,
+    shadowMapSize: 512,
+    fogDensity: 0.04,
+    fogFar: 80,
+    bloom: false
+  },
+  medium: {
+    pixelRatio: 0.85,
+    shadows: true,
+    shadowMapSize: 1024,
+    fogDensity: 0.018,
+    fogFar: 180,
+    bloom: false
+  },
+  high: {
+    pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+    shadows: true,
+    shadowMapSize: 2048,
+    fogDensity: 0.012,
+    fogFar: 280,
+    bloom: true
+  },
+  ultra: {
+    pixelRatio: Math.min(window.devicePixelRatio || 1, 2.5),
+    shadows: true,
+    shadowMapSize: 4096,
+    fogDensity: 0.008,
+    fogFar: 400,
+    bloom: true
+  }
+};
+
+function foApplyGfx(presetName){
+  const p = FO_GFX_PRESETS[presetName];
+  if (!p) return;
+  currentGfxFO = presetName;
+  try {
+    // 1) Pixel ratio
+    renderer.setPixelRatio(p.pixelRatio);
+    
+    // 2) Sombras
+    renderer.shadowMap.enabled = p.shadows;
+    if (typeof sun !== 'undefined' && sun && sun.shadow){
+      sun.castShadow = p.shadows;
+      if (sun.shadow.mapSize.x !== p.shadowMapSize){
+        sun.shadow.mapSize.set(p.shadowMapSize, p.shadowMapSize);
+        if (sun.shadow.map){
+          sun.shadow.map.dispose();
+          sun.shadow.map = null;
+        }
+      }
+    }
+    
+    // 3) Fog
+    if (scene.fog){
+      if ('density' in scene.fog) scene.fog.density = p.fogDensity;
+      if ('far' in scene.fog) scene.fog.far = p.fogFar;
+    }
+    
+    // 4) Bloom (postprocessing)
+    if (typeof composer !== 'undefined' && composer && composer.passes){
+      for (const pass of composer.passes){
+        if (pass instanceof UnrealBloomPass){
+          pass.enabled = p.bloom;
+        }
+      }
+    }
+    
+    // Sincronizar TODOS los botones gfx (menú principal + pausa)
+    document.querySelectorAll('.gfxBtnFO, .gfxBtnMainFO').forEach(b => {
+      b.classList.toggle('active', b.dataset.gfx === presetName);
+    });
+  } catch(e){ console.warn('gfx err', e); }
+}
+
+// Aplicar preset inicial
+foApplyGfx('medium');
+
+// Helper: detectar si se puede pausar
+function foCanPause(){
+  // No pausar si está el menú principal abierto
+  const menuEl = document.getElementById('menu');
+  if (menuEl && !menuEl.classList.contains('hide')) return false;
+  // No pausar si está el tutorial
+  if (typeof tutorialState !== 'undefined' && tutorialState.active) return false;
+  // No pausar si game over
+  if (gameState && gameState.gameOver) return false;
+  return true;
+}
+
+function foShowPauseMenu(){
+  if (!foCanPause()) return;
+  foPaused = true;
+  foPauseMenuEl.classList.add('show');
+  // Sincronizar gfx
+  document.querySelectorAll('.gfxBtnFO').forEach(b => {
+    b.classList.toggle('active', b.dataset.gfx === currentGfxFO);
+  });
+  // Aplicar i18n a botones del menú pausa
+  document.getElementById('foPauseTitle').textContent = T('paused');
+  document.getElementById('foResumeBtn').textContent = T('resume');
+  document.getElementById('foRestartBtn').textContent = T('restart');
+  document.getElementById('foExitBtn').textContent = T('mainMenu');
+  document.getElementById('pauseGfxLabelFO').textContent = T('graphics');
+}
+function foHidePauseMenu(){
+  foPaused = false;
+  foPauseMenuEl.classList.remove('show');
+}
+
+function foToggleMute(){
+  foMuted = !foMuted;
+  foMuteBtnEl.textContent = foMuted ? '🔇' : '🔊';
+  if (audioCtx && masterGain){
+    masterGain.gain.setValueAtTime(foMuted ? 0 : 0.5, audioCtx.currentTime);
+  }
+}
+
+function foRestartGame(){
+  foHidePauseMenu();
+  if (typeof SFX !== 'undefined' && SFX.click) SFX.click();
+  // Volver al inicio del obby con bots/agua reseteados
+  if (typeof enterObby === 'function'){
+    enterObby();
+  }
+}
+
+function foExitToMenu(){
+  foHidePauseMenu();
+  // Mostrar menú principal y aplicar in-menu
+  const menuEl = document.getElementById('menu');
+  menuEl.style.display = '';
+  menuEl.classList.remove('hide');
+  document.body.classList.add('in-menu-fo');
+  // Detener música
+  if (typeof stopMusic === 'function') stopMusic();
+  // Ocultar HUD
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('crosshair').style.display = 'none';
+  // Reset tutorial state si está activo
+  if (typeof tutorialState !== 'undefined') tutorialState.active = false;
+  // Reset game state
+  gameState.started = false;
+  gameState.phase = 'lobby';
+  gameState.gameOver = false;
+}
+
+function foAskTutorialAgain(){
+  if (!foCanPause()) return;
+  foPaused = true;
+  foConfirmModalEl.classList.add('show');
+  // Aplicar i18n
+  document.getElementById('foConfirmTitle').textContent = T('tutAgainTitle');
+  document.getElementById('foConfirmMsg').textContent = T('tutAgainMsg');
+  document.getElementById('foConfirmCancelBtn').textContent = T('cancel');
+  document.getElementById('foConfirmYesBtn').textContent = T('yes');
+}
+
+function foConfirmTutorial(){
+  foConfirmModalEl.classList.remove('show');
+  foPaused = false;
+  foHidePauseMenu();
+  if (typeof showTutorial === 'function'){
+    showTutorial(LANG);
+  }
+}
+
+function foCancelTutorial(){
+  foConfirmModalEl.classList.remove('show');
+  foPaused = false;
+}
+
+// Listeners botones top
+foPauseBtnEl.addEventListener('click', e => {
+  e.stopPropagation();
+  if (foPaused) foHidePauseMenu(); else foShowPauseMenu();
+});
+foMuteBtnEl.addEventListener('click', e => {
+  e.stopPropagation();
+  foToggleMute();
+});
+foTutBtnEl.addEventListener('click', e => {
+  e.stopPropagation();
+  foAskTutorialAgain();
+});
+
+// Listeners menú pausa
+document.getElementById('foResumeBtn').addEventListener('click', e => { e.stopPropagation(); foHidePauseMenu(); });
+document.getElementById('foRestartBtn').addEventListener('click', e => { e.stopPropagation(); foRestartGame(); });
+document.getElementById('foExitBtn').addEventListener('click', e => { e.stopPropagation(); foExitToMenu(); });
+
+document.getElementById('foConfirmYesBtn').addEventListener('click', e => { e.stopPropagation(); foConfirmTutorial(); });
+document.getElementById('foConfirmCancelBtn').addEventListener('click', e => { e.stopPropagation(); foCancelTutorial(); });
+
+// Gfx buttons (menú principal Y pausa)
+document.querySelectorAll('.gfxBtnFO, .gfxBtnMainFO').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    foApplyGfx(btn.dataset.gfx);
+  });
+});
+
+// in-menu class
+document.body.classList.add('in-menu-fo');
+document.getElementById('play-btn').addEventListener('click', () => {
+  document.body.classList.remove('in-menu-fo');
+});
+
+// Construir el mundo del juego ANTES del menú para mostrarlo como fondo
+buildObby();
+
+foRefreshPlatformText();
+animate();
+
+</script>
+</body>
+</html>
