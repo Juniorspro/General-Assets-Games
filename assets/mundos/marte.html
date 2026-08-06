@@ -148,6 +148,12 @@
   /* la TAREA del capítulo (contador, sin idioma: iconos y números) */
   #tarea{font-size:13px;font-weight:900;letter-spacing:.06em;margin-top:2px;display:none}
   #tarea.on{display:block}
+  /* PISTA: que hace el boton USAR ahora mismo. Sin esto el boton se prendia y
+     listo, y en PC ni siquiera hay boton a la vista: estabas encima de la cosa
+     sin una sola pista de que se podia levantar ni con que tecla. */
+  #pistaUso{font-size:12px;font-weight:900;letter-spacing:.08em;margin-top:3px;
+    display:none;color:#ffe9a8;text-shadow:0 1px 3px rgba(0,0,0,.75)}
+  #pistaUso.on{display:block}
 
   /* medidor de supervivencia (oxígeno / calor) */
   #medidor{position:absolute;left:12px;bottom:16px;width:150px;display:none;
@@ -207,7 +213,7 @@
 <div id="fundido"></div>
 
 <div id="hud">
-  <div id="obj"><div id="objT">…</div><div id="objD"></div><div id="tarea"></div></div>
+  <div id="obj"><div id="objT">…</div><div id="objD"></div><div id="tarea"></div><div id="pistaUso"></div></div>
   <div id="capCard"><div id="capN"></div><div id="capT"></div></div>
   <div id="fps"></div>
   <div id="hudTop">
@@ -1582,6 +1588,270 @@ function figCriatura(col){
   return g;
 }
 const MIXERS = [];
+
+/* ====================== BIBLIOTECA DE CLIPS PRESTADOS =====================
+   Los personajes del repo salieron todos del mismo tipo de rig: comparten los
+   NUEVE huesos estandar (Hips, Spine, LeftArm, RightArm, LeftForeArm,
+   RightForeArm, LeftUpLeg, RightUpLeg, Head). El AnimationMixer de three ata
+   las pistas de un clip POR NOMBRE DE NODO, asi que un clip de un modelo anda
+   igual en otro. Por eso no hace falta generar animacion para cada personaje:
+   se PRESTA la que ya existe en el repo.
+     viajera.glb / dante.glb  ->  solo traen Idle (patinaban sin mover la pierna)
+     hyper/char.glb           ->  Casual_Walk
+     reliquia/hero.glb        ->  RunFast
+     aero/hero-idle.glb       ->  Idle
+   Se cargan los tres donantes UNA sola vez y se reparten a todos. */
+const CLIPS = { quieto: null, andar: null, correr: null, listos: 0, cola: [] };
+{
+  /* reliquia/hero.glb y aero/hero-idle.glb piden KHR_draco_mesh_compression
+     como extension REQUERIDA, asi que el GLTFLoader los rechaza enteros y no
+     cargaban. DRACO comprime solo la GEOMETRIA: las pistas de animacion son
+     accesores normales. Asi que se extrajeron a GLB de SOLO ANIMACION (sin
+     mallas, sin skins, sin texturas): 39 y 85 KB, sin ninguna extension.
+     Ver scratchpad/mundos/extrae_clip.py. */
+  const DON = [['andar', AX('anim/andar.glb')], ['correr', AX('anim/correr.glb')],
+               ['quieto', AX('anim/quieto2.glb')]   /* Idle, no Idle_02: el 02 es el de
+                 MIRAR A LOS COSTADOS, que molesta y encima pelea con el de
+                 caminar cada vez que se cambia de clip */];
+  const fin = () => {
+    CLIPS.listos++;
+    if (CLIPS.listos < DON.length) return;
+    /* los personajes que cargaron antes que la biblioteca esperan en la cola */
+    for (const npc of CLIPS.cola.splice(0)) armarAcciones(npc);
+  };
+  for (const [k, u] of DON){
+    if (!GLTF){ fin(); continue; }
+    new GLTF().load(u, g => {
+      if (g.animations && g.animations.length){
+        CLIPS[k] = g.animations[0];
+        /* la POSE DE REPOSO del donante: sin esto no se puede retargetear */
+        CLIPS[k + 'Rest'] = reposoDe(g.scene);
+      }
+      fin();
+    }, undefined, fin);
+  }
+}
+/* ======================== RETARGET DE LOS CLIPS ===========================
+   Los 11 personajes de per/*.glb no traen animacion y se les presta uno de los
+   tres clips de anim/*.glb. Comparten los MISMOS 26 nombres de hueso, pero NO la
+   pose de reposo: el rig sale ajustado a cada malla y los marcos de cada
+   articulacion quedan girados de cualquier manera. Medido sobre los GLB, la
+   rotacion local de reposo de Hips va de 2,4 grados en canon-cuerdas a 133,5 en
+   volcan-obrero, y la de Spine02 de 6,0 a 133,5.
+
+   POR QUE NO ALCANZA UNA CORRECCION FIJA POR HUESO (lo que habia antes)
+   Se hacia  q_donante * inv(reposoDonante) * reposoDestino , o sea una constante
+   por hueso. Eso puede acertar UN fotograma pero no todos: la rotacion local se
+   compone en el marco del PADRE, y ese marco cambia en cada fotograma cuando el
+   padre se mueve. Con las caderas a cien grados de diferencia una constante no
+   puede ser correcta a la vez para el reposo y para el movimiento, y por eso el
+   personaje quedaba derecho quieto pero encorvado al caminar.
+
+   LO QUE SE HACE AHORA: espacio de MUNDO, que es donde "girar el brazo treinta
+   grados hacia adelante" significa lo mismo en los dos rigs. Por hueso b y
+   fotograma f:
+       delta   = mundoAnimadoDonante(b) * inv(mundoReposoDonante(b))
+       mundoDestino(b) = delta * mundoReposoDestino(b)
+       localDestino(b) = inv(mundoDestino(padre)) * mundoDestino(b)
+   El pase va de padre a hijo porque mundoDestino(padre) es el resultado YA
+   corregido: ahi esta justamente la parte que una constante no puede reproducir.
+
+   El cero del donante viaja dentro del propio GLB: mk_anim.py le dejo como pose
+   de reposo de los nodos la POSE NEUTRA del clip (el promedio de sus fotogramas),
+   asi que aca no hay que promediar nada. Eso importa porque los clips de la
+   libreria vienen con un sesgo constante grande (Idle tiene la cadera 40 grados
+   fuera de su bind, Run_02 la columna 27) y si se tomara ese sesgo como cero se
+   le sumaria al personaje, que es la joroba que se veia.
+
+   Costo: 26 huesos x ~70-127 fotogramas x 3 clips por personaje, una sola vez al
+   cargarlo. Son unos pocos milisegundos y no toca el bucle de dibujado, asi que
+   no depende de GFX. */
+const _rtQ = new T.Quaternion(), _rtI = new T.Quaternion(),
+      _rtD = new T.Quaternion(), _rtL = new T.Quaternion();
+/* El rig de un GLB por NOMBRE de hueso: rotacion y posicion locales de reposo
+   mas el nombre del PADRE. El padre hace falta porque el retarget pasa por
+   mundo; la version anterior solo guardaba q y p y por eso no podia hacerlo. */
+function reposoDe(raiz){
+  const R = {};
+  raiz.traverse(o => {
+    if (!o.name || R[o.name] !== undefined) return;
+    const pa = o.parent;
+    R[o.name] = { q: o.quaternion.clone(), p: o.position.clone(),
+                  padre: (pa && pa.name && R[pa.name]) ? pa.name : null };
+  });
+  return R;
+}
+/* rotaciones de mundo de la pose de reposo, mas el orden padre-antes-que-hijo */
+function mundoDe(rig){
+  const W = {}, orden = [];
+  const sube = nom => {
+    if (W[nom]) return W[nom];
+    const h = rig[nom];
+    W[nom] = (h.padre && rig[h.padre]) ? sube(h.padre).clone().multiply(h.q)
+                                       : h.q.clone();
+    orden.push(nom);
+    return W[nom];
+  };
+  for (const nom in rig) sube(nom);
+  return { W, orden };
+}
+function retargetClip(clip, rigDon, modelo){
+  if (!clip || !rigDon) return clip;
+  /* el reposo se lee UNA vez y se guarda: si un personaje ya tiene acciones
+     sonando, sus huesos no estan en reposo y leerlos daria un cero falso */
+  const rigDst = modelo.userData._rig || (modelo.userData._rig = reposoDe(modelo));
+  const A = mundoDe(rigDon), B = mundoDe(rigDst);
+  const c2 = clip.clone();
+  const rot = {}, pos = [];
+  for (const tr of c2.tracks){
+    const i = tr.name.lastIndexOf('.');
+    if (i < 0) continue;
+    const nom = tr.name.slice(0, i), prop = tr.name.slice(i + 1);
+    if (prop === 'quaternion' && rigDon[nom] && rigDst[nom]) rot[nom] = tr;
+    else if (prop === 'position') pos.push([nom, tr]);
+  }
+  /* mk_anim.py deja todas las pistas con el MISMO reloj, asi que se recorre por
+     indice de fotograma. Si alguna vez no fuera asi, mejor devolver el clip sin
+     tocar que escribir cualquier cosa. */
+  let nf = -1, mezcla = false;
+  for (const n in rot){
+    const c = rot[n].values.length / 4;
+    if (nf < 0) nf = c; else if (c !== nf) mezcla = true;
+  }
+  if (nf <= 0 || mezcla) return c2;
+
+  const orden = A.orden.filter(n => rigDst[n]);
+  const Wd = {}, Wt = {}, prev = {};
+  for (const n of orden){ Wd[n] = new T.Quaternion(); Wt[n] = new T.Quaternion(); }
+  for (let f = 0; f < nf; f++){
+    // 1) pose del donante, de local a mundo
+    for (const n of orden){
+      const tr = rot[n];
+      if (tr){ const k = f * 4;
+        _rtQ.set(tr.values[k], tr.values[k+1], tr.values[k+2], tr.values[k+3]); }
+      else _rtQ.copy(rigDon[n].q);
+      const pa = rigDon[n].padre;
+      if (pa && Wd[pa]) Wd[n].copy(Wd[pa]).multiply(_rtQ); else Wd[n].copy(_rtQ);
+    }
+    // 2) el giro de mundo del donante, aplicado al reposo del destino
+    for (const n of orden){
+      if (rot[n]){
+        _rtD.copy(Wd[n]).multiply(_rtI.copy(A.W[n]).invert());
+        Wt[n].copy(_rtD).multiply(B.W[n]);
+      } else {
+        const pa = rigDst[n].padre;
+        if (pa && Wt[pa]) Wt[n].copy(Wt[pa]).multiply(rigDst[n].q);
+        else Wt[n].copy(B.W[n]);
+      }
+    }
+    // 3) de vuelta a local, que es lo que consume el AnimationMixer
+    for (const n of orden){
+      const tr = rot[n]; if (!tr) continue;
+      const pa = rigDst[n].padre;
+      if (pa && Wt[pa]) _rtL.copy(_rtI.copy(Wt[pa]).invert()).multiply(Wt[n]);
+      else _rtL.copy(Wt[n]);
+      /* continuidad de signo: dos cuaterniones opuestos son la misma rotacion
+         pero interpolados dan la vuelta larga, y se ve un tironeo */
+      const p = prev[n];
+      if (p && (p[0]*_rtL.x + p[1]*_rtL.y + p[2]*_rtL.z + p[3]*_rtL.w) < 0){
+        _rtL.set(-_rtL.x, -_rtL.y, -_rtL.z, -_rtL.w);
+      }
+      const k = f * 4;
+      tr.values[k] = _rtL.x; tr.values[k+1] = _rtL.y;
+      tr.values[k+2] = _rtL.z; tr.values[k+3] = _rtL.w;
+      prev[n] = [_rtL.x, _rtL.y, _rtL.z, _rtL.w];
+    }
+  }
+  /* Solo la cadera trae traslacion: mk_anim.py tiro las otras 23, que eran
+     constantes y llevaban los LARGOS DE HUESO del donante (aplicadas al
+     personaje le pisaban sus proporciones y le estiraban la malla). Va en delta
+     y escalada por la relacion de alturas de cadera, si no un personaje bajo
+     flota y uno alto se hunde. */
+  for (const par of pos){
+    const h = rigDon[par[0]], hd = rigDst[par[0]];
+    if (!h || !hd) continue;
+    const tr = par[1], k = h.p.y ? (hd.p.y / h.p.y) : 1;
+    for (let i = 0; i < tr.values.length; i += 3){
+      tr.values[i]     = hd.p.x + (tr.values[i]     - h.p.x) * k;
+      tr.values[i + 1] = hd.p.y + (tr.values[i + 1] - h.p.y) * k;
+      tr.values[i + 2] = hd.p.z + (tr.values[i + 2] - h.p.z) * k;
+    }
+  }
+  return c2;
+}
+/* le arma a un personaje las tres acciones, con lo propio primero y lo prestado
+   despues: si el GLB ya trae un clip de caminar, ese gana. */function armarAcciones(npc){
+  const m = npc.modelo;
+  if (!m) return;
+  if (CLIPS.listos < 3){ if (CLIPS.cola.indexOf(npc) < 0) CLIPS.cola.push(npc); return; }
+  const propios = npc.clipsPropios || [];
+  const buscar = rx => propios.find(c => rx.test(c.name || '')) || null;
+  /* lo PROPIO ya viene en su propio reposo: no se toca. Lo PRESTADO se
+     retargetea al reposo de este modelo. */
+  const pQuieto = buscar(/idle|quiet/i), pAndar = buscar(/walk|camin/i),
+        pCorrer = buscar(/run|corr/i);
+  const cQuieto = pQuieto || retargetClip(CLIPS.quieto, CLIPS.quietoRest, m);
+  const cAndar  = pAndar  || retargetClip(CLIPS.andar,  CLIPS.andarRest,  m);
+  const cCorrer = pCorrer || retargetClip(CLIPS.correr, CLIPS.correrRest, m) || cAndar;
+  if (!cQuieto && !cAndar) return;
+  /* Sin HUESOS no se ata nada. El perro es una sola pieza: se le ataban las tres
+     acciones igual, npc.acc quedaba definido, y el balanceo a mano —lo unico que
+     puede moverlo— no corria nunca porque su condicion es justamente !npc.acc.
+     Estaba congelado desde el primer dia. */
+  let _hue = false;
+  m.traverse(o => { if (o.isBone) _hue = true; });
+  if (!_hue) return;
+  const mix = npc.mixer || new T.AnimationMixer(m);
+  if (!npc.mixer){ npc.mixer = mix; MIXERS.push(mix); }
+  const A = npc.acc = {};
+  for (const par of [['quieto', cQuieto], ['andar', cAndar], ['correr', cCorrer]]){
+    if (!par[1]) continue;
+    let a;
+    try { a = mix.clipAction(par[1]); } catch(e){ continue; }
+    a.enabled = true;
+    a.setEffectiveWeight(par[0] === 'quieto' ? 1 : 0);
+    a.play();
+    /* desfase propio: sin esto los seis personajes de un mundo respiran y giran
+       la cabeza en el mismo fotograma, y se ve a un coro, no a gente */
+    a.time = Math.random() * (a.getClip().duration || 1);
+    A[par[0]] = a;
+  }
+  npc.estAnim = 'quieto';
+}
+/* la MEZCLA: los pesos siguen a la velocidad de verdad del personaje, asi que
+   nadie patina ni corre en el lugar. */
+function mezclaAcciones(npc, vel, dt){
+  const A = npc.acc;
+  if (!A) return;
+  /* UN SOLO CLIP A LA VEZ. Mezclar por peso parece lo elegante y es lo que
+     rompia todo: el mixer acumula los cuaterniones de cada pista y los normaliza,
+     y con el Idle mirando a un costado y el Casual_Walk al frente, el hueso Hips
+     interpolaba por el camino largo y ACOSTABA al personaje en el aire. Los
+     torsos retorcidos con la cabeza en el pecho eran lo mismo, mas suave.
+     Con histeresis: elegir por un umbral seco hace que a velocidad de frontera
+     el personaje parpadee entre quieto y caminando cada cuadro. */
+  const est = npc.estAnim || 'quieto';
+  let q = est;
+  if (est === 'quieto')      q = vel > 0.55 ? (vel > 4.2 ? 'correr' : 'andar') : 'quieto';
+  else if (est === 'andar')  q = vel < 0.30 ? 'quieto' : (vel > 4.2 ? 'correr' : 'andar');
+  else                       q = vel < 3.4 ? (vel < 0.30 ? 'quieto' : 'andar') : 'correr';
+  if (!A[q]) q = A.andar ? 'andar' : 'quieto';
+  if (q !== est){
+    npc.estAnim = q;
+    for (const k in A){
+      const a = A[k];
+      a.setEffectiveWeight(k === q ? 1 : 0);
+      if (k === q){ a.paused = false; a.enabled = true; }
+    }
+  }
+  /* el clip avanza al ritmo del paso: si no, se arrastra o patina */
+  if (A.andar) A.andar.timeScale = cl(vel / 1.9, .55, 2.1);
+  if (A.correr) A.correr.timeScale = cl(vel / 5.4, .6, 1.9);
+  /* el Idle de Meshy mira a los costados. La queja no era que mire: era que lo
+     hace rapido, sin parar y todos a la vez. A 0,42 el MISMO clip se lee como
+     respirar, y el desfase por personaje rompe el coro. */
+  if (A.quieto) A.quieto.timeScale = 0.42;
+}
 /* carga un personaje 3D generado y lo cuelga del Group del NPC, apagando la
    figura procedural; si falla, la procedural se queda. Reproduce su clip. */
 function ponerModelo(npc){
@@ -1598,8 +1868,15 @@ function ponerModelo(npc){
     npc.fig.add(m);
     npc.modelo = m;
     if (g.animations && g.animations.length){
-      const mix = new T.AnimationMixer(m);
-      mix.clipAction(g.animations[0]).play();
+      /* LOS CLIPS QUE CORRESPONDEN, NO EL PRIMERO DEL ARCHIVO. Antes esto era
+         `mix.clipAction(g.animations[0]).play()`, y para los modelos que solo
+         traen `Idle` eso es la animacion de ESTAR QUIETO puesta encima de un
+         personaje que camina: patinaba sin mover una pierna. `armarAcciones` usa
+         los clips propios si los hay y presta los compartidos si no. */
+      npc.clipsPropios = g.animations || [];
+      armarAcciones(npc);
+      const mix = npc.mixer || new T.AnimationMixer(m);
+      if (!npc.acc) mix.clipAction(g.animations[0]).play();
       npc.mixer = mix; MIXERS.push(mix);
       /* si el clip es de CAMINAR (Meshy sube las dos manos a la vez), le
          manejamos los brazos a mano igual que al cuerpo en 1ª persona */
@@ -1651,6 +1928,9 @@ function npcTick(dt){
       while (dy < -Math.PI) dy += 6.283;
       f.rotation.y += dy * Math.min(1, dt * 3);
     }
+    /* la mezcla de animacion, con la velocidad de verdad de este personaje:
+       `anda` ya lo calculo el bloque de arriba para moverlo. */
+    if (npc.acc) mezclaAcciones(npc, anda ? (corre ? 10.8 : 5.8) : 0, dt);
     const suelo = H(f.position.x, f.position.z);
     f.position.y = npc.vuela
       ? suelo + (npc.alto || 2.2) + Math.sin(t0 * 1.7 + npc.fase) * .25
@@ -1865,6 +2145,13 @@ function cargarCuerpoGLB(){
     CUERPO.arms = arm;
     CUERPO.root.add(m);
     CUERPO.glb = m;
+    /* LOS CLIPS PRESTADOS, IGUAL QUE UN PERSONAJE. Este GLB no trae animaciones
+       propias: sin esto el cuerpo es una estatua que se desliza, que es lo que
+       se reporto como «la pose al moverse es rara». `armarAcciones` le presta
+       quieto/andar/correr retargeteados a su esqueleto, y si los clips todavia
+       no cargaron lo deja en la cola y lo arma solo cuando lleguen. */
+    CUERPO.npc = { modelo: m, clipsPropios: (g.animations || []) };
+    armarAcciones(CUERPO.npc);
     /* apagar el cuerpo procedural (piernas + fantasma + viewmodel) */
     CUERPO.root.traverse(o => { if (o.isMesh && o !== m && !m.getObjectById(o.id)) o.visible = false; });
     CUERPO.pI.visible = CUERPO.pD.visible = false;
@@ -1910,17 +2197,24 @@ function cuerpoTick(dt){
   const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
   /* --- rama del CUERPO 3D generado --- */
   if (CUERPO.glb){
-    if (CUERPO.mixer){
-      /* el clip avanza con la velocidad: parado se congela, corriendo vuela.
-         Las PIERNAS y el torso los mueve el clip; los brazos los pisamos abajo. */
-      CUERPO.mixer.timeScale = v * (corre ? 2.4 : 1.4);
-      CUERPO.mixer.update(dt);
-    }
-    /* brazos apuntados HACIA ABAJO (independiente del bind de cada modelo),
-       con vaivén al caminar y respiración mínima al estar quieto */
-    if (CUERPO.arms){
-      const sw = Math.sin(bobF) * v * (corre ? 0.5 : 0.34) + Math.sin(t0 * 1.4) * 0.03 * (1 - v);
-      apuntarBrazos(CUERPO.arms, sw);
+    /* PRIMERO, LOS CLIPS. Si los prestados llegaron, el cuerpo camina y corre
+       como cualquier personaje del mundo, con la mezcla que sigue a la velocidad
+       de verdad: es lo que arregla la pose. El mixer lo actualiza `npcTick`
+       junto con los demas, asi que aca solo se elige el clip. */
+    if (CUERPO.npc && !CUERPO.npc.acc) armarAcciones(CUERPO.npc);
+    if (CUERPO.npc && CUERPO.npc.acc){
+      mezclaAcciones(CUERPO.npc, Math.hypot(pvx, pvz), dt);
+    } else {
+      /* RESPALDO, para el caso de que los clips no lleguen: lo de antes, que es
+         mejor que una estatua con los brazos en cruz. */
+      if (CUERPO.mixer){
+        CUERPO.mixer.timeScale = v * (corre ? 2.4 : 1.4);
+        CUERPO.mixer.update(dt);
+      }
+      if (CUERPO.arms){
+        const sw = Math.sin(bobF) * v * (corre ? 0.5 : 0.34) + Math.sin(t0 * 1.4) * 0.03 * (1 - v);
+        apuntarBrazos(CUERPO.arms, sw);
+      }
     }
     /* achicar la cabeza CADA cuadro (el mixer la reescribe) para no taparte */
     if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02);
@@ -2340,11 +2634,72 @@ const ROVER = (() => {
 })();
 
 /* -------- objetivo: marcador 3D + distancia + botón USAR ------------------- */
+/* ================= LO QUE FALTA, Y COMO SE AGARRA =========================
+   Los trece mundos se trababan en el capitulo que pide juntar N cosas: el
+   mecanismo andaba, pero el mojon apuntaba al sitio del capitulo y no a las
+   cosas, y ningun renglon de la pantalla decia que existieran ni con que boton
+   se levantan. Estas tres piezas son lo que lo arregla, y son iguales en los
+   trece. */
+const VERBO = {
+  es: { item: 'RECOGER', npc: 'HABLAR', cap: 'SEGUIR',
+        junta: 'Junta lo que falta', quedan: n => '◈ faltan ' + n },
+  en: { item: 'PICK UP', npc: 'TALK',   cap: 'CONTINUE',
+        junta: 'Collect what you need', quedan: n => '◈ ' + n + ' to go' },
+  pt: { item: 'PEGAR',   npc: 'FALAR',  cap: 'SEGUIR',
+        junta: 'Pega o que falta', quedan: n => '◈ faltam ' + n }
+};
+/* la cosa pendiente mas cercana: lo unico que los trece mundos tienen igual es
+   la lista ITEMS, asi que la guia se arma con eso y no con la mision de cada uno */
+function itemPendiente(){
+  let mej = null, dm = 1e9;
+  for (const it of ITEMS){
+    if (!it.activo) continue;
+    const d = Math.hypot(px - it.x, pz - it.z);
+    if (d < dm){ dm = d; mej = it; }
+  }
+  return mej;
+}
+function pistaAccion(acc){
+  const e = document.getElementById('pistaUso');
+  if (!e) return;
+  const V = VERBO[LANG] || VERBO.en;
+  const tecla = document.body.classList.contains('sinTactil') ? 'E' : '◉';
+  const t = (acc && V[acc.tipo]) ? tecla + ' · ' + V[acc.tipo] : '';
+  e.textContent = t;
+  e.classList.toggle('on', !!t && !enDlg);
+}
 function pasoObjetivo(){
   const C = CAPS[cap];
-  const p = POI[C.obj];
+  const V = VERBO[LANG] || VERBO.en;
+  /* EL MOJON APUNTA A LO QUE FALTA. Mientras la mision del capitulo no este
+     lista el capitulo no se cierra, asi que apuntar al sitio del capitulo es
+     mandar al jugador a un lugar donde no va a pasar nada —y era exactamente lo
+     que pasaba: se trababan los trece—. Con la mision pendiente, la marca y los
+     metros van a la cosa mas cercana que quede. Es seguro: `pend` solo existe
+     cuando `MISION.lista(cap)` es falso, que es justo cuando el disparo
+     automatico y la accion 'cap' ya estan apagados. */
+  /* Si la MISION sabe a donde hay que ir, manda ella: hay mundos donde lo que
+     falta no son objetos que se levantan (en exo son tres criaturas que hay que
+     ir a buscar y llevar al anillo). Si no lo sabe, se usa la cosa mas cercana. */
+  const pend = (MISION && MISION.lista && !MISION.lista(cap))
+    ? ((MISION.guia && MISION.guia()) || itemPendiente()) : null;
+  const p = pend || POI[C.obj];
   const d = Math.hypot(px - p.x, pz - p.z);
   $('objD').textContent = Math.round(d) + ' m';
+  {
+    const oT = $('objT');
+    if (pend){
+      if (!oT.dataset.orig) oT.dataset.orig = oT.textContent;
+      oT.textContent = V.junta;
+      const q = ITEMS.filter(i => i.activo).length;
+      const ta = $('tarea');
+      if (!ta.textContent) ta.textContent = V.quedan(q);
+      ta.classList.add('on');
+    } else if (oT.dataset.orig){
+      oT.textContent = oT.dataset.orig;
+      delete oT.dataset.orig;
+    }
+  }
   marca3d.position.set(p.x, H(p.x, p.z) + 6.5 + Math.sin(t0 * 2) * .5, p.z);
   marca3d.rotation.y = t0 * 1.4;
   marca3d.visible = !enDlg;
@@ -2358,6 +2713,7 @@ function pasoObjetivo(){
   }
   const acc = accionUsable();
   $('bUsar').classList.toggle('on', !!acc && !enDlg);
+  pistaAccion(acc);
   const av = ROVER.aviso(acc);
   $('aviso').textContent = av;
   $('aviso').classList.toggle('on', !!av && !enDlg);

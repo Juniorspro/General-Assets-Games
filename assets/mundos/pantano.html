@@ -212,6 +212,12 @@
   /* la TAREA del capítulo (contador, sin idioma: iconos y números) */
   #tarea{font-size:13px;font-weight:900;letter-spacing:.06em;margin-top:2px;display:none}
   #tarea.on{display:block}
+  /* PISTA: que hace el boton USAR ahora mismo. Sin esto el boton se prendia y
+     listo, y en PC ni siquiera hay boton a la vista: estabas encima de la cosa
+     sin una sola pista de que se podia levantar ni con que tecla. */
+  #pistaUso{font-size:12px;font-weight:900;letter-spacing:.08em;margin-top:3px;
+    display:none;color:#ffe9a8;text-shadow:0 1px 3px rgba(0,0,0,.75)}
+  #pistaUso.on{display:block}
 
   /* medidor de supervivencia (oxígeno / calor) */
   #medidor{position:absolute;left:12px;bottom:16px;width:150px;display:none;
@@ -272,7 +278,7 @@
 
 <div id="hud">
   <div id="hudTop"><div class="bt" id="bSon">🔊</div><div class="bt" id="bMenu">☰</div></div>
-  <div id="obj"><div id="objT">…</div><div id="objD"></div><div id="tarea"></div></div>
+  <div id="obj"><div id="objT">…</div><div id="objD"></div><div id="tarea"></div><div id="pistaUso"></div></div>
   <div id="capCard"><div id="capN"></div><div id="capT"></div></div>
   <div id="fps"></div>
   <div id="btns">
@@ -3112,6 +3118,13 @@ function cargarCuerpoGLB(){
     CUERPO.arms = arm;
     CUERPO.root.add(m);
     CUERPO.glb = m;
+    /* LOS CLIPS PRESTADOS, IGUAL QUE UN PERSONAJE. Este GLB no trae animaciones
+       propias: sin esto el cuerpo es una estatua que se desliza, que es lo que
+       se reporto como «la pose al moverse es rara». `armarAcciones` le presta
+       quieto/andar/correr retargeteados a su esqueleto, y si los clips todavia
+       no cargaron lo deja en la cola y lo arma solo cuando lleguen. */
+    CUERPO.npc = { modelo: m, clipsPropios: (g.animations || []) };
+    armarAcciones(CUERPO.npc);
     /* apagar el cuerpo procedural (piernas + fantasma + viewmodel) */
     CUERPO.root.traverse(o => { if (o.isMesh && o !== m && !m.getObjectById(o.id)) o.visible = false; });
     CUERPO.pI.visible = CUERPO.pD.visible = false;
@@ -3169,17 +3182,24 @@ function cuerpoTick(dt){
   const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
   /* --- rama del CUERPO 3D generado --- */
   if (CUERPO.glb){
-    if (CUERPO.mixer){
-      /* el clip avanza con la velocidad: parado se congela, corriendo vuela.
-         Las PIERNAS y el torso los mueve el clip; los brazos los pisamos abajo. */
-      CUERPO.mixer.timeScale = v * (corre ? 2.4 : 1.4);
-      CUERPO.mixer.update(dt);
-    }
-    /* brazos apuntados HACIA ABAJO (independiente del bind de cada modelo),
-       con vaivén al caminar y respiración mínima al estar quieto */
-    if (CUERPO.arms){
-      const sw = Math.sin(bobF) * v * (corre ? 0.5 : 0.34) + Math.sin(t0 * 1.4) * 0.03 * (1 - v);
-      apuntarBrazos(CUERPO.arms, sw);
+    /* PRIMERO, LOS CLIPS. Si los prestados llegaron, el cuerpo camina y corre
+       como cualquier personaje del mundo, con la mezcla que sigue a la velocidad
+       de verdad: es lo que arregla la pose. El mixer lo actualiza `npcTick`
+       junto con los demas, asi que aca solo se elige el clip. */
+    if (CUERPO.npc && !CUERPO.npc.acc) armarAcciones(CUERPO.npc);
+    if (CUERPO.npc && CUERPO.npc.acc){
+      mezclaAcciones(CUERPO.npc, Math.hypot(pvx, pvz), dt);
+    } else {
+      /* RESPALDO, para el caso de que los clips no lleguen: lo de antes, que es
+         mejor que una estatua con los brazos en cruz. */
+      if (CUERPO.mixer){
+        CUERPO.mixer.timeScale = v * (corre ? 2.4 : 1.4);
+        CUERPO.mixer.update(dt);
+      }
+      if (CUERPO.arms){
+        const sw = Math.sin(bobF) * v * (corre ? 0.5 : 0.34) + Math.sin(t0 * 1.4) * 0.03 * (1 - v);
+        apuntarBrazos(CUERPO.arms, sw);
+      }
     }
     /* achicar la cabeza CADA cuadro (el mixer la reescribe) para no taparte */
     if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02);
@@ -4034,11 +4054,72 @@ const CANOA = (() => {
 })();
 
 /* -------- objetivo: marcador 3D + distancia + botón USAR ------------------- */
+/* ================= LO QUE FALTA, Y COMO SE AGARRA =========================
+   Los trece mundos se trababan en el capitulo que pide juntar N cosas: el
+   mecanismo andaba, pero el mojon apuntaba al sitio del capitulo y no a las
+   cosas, y ningun renglon de la pantalla decia que existieran ni con que boton
+   se levantan. Estas tres piezas son lo que lo arregla, y son iguales en los
+   trece. */
+const VERBO = {
+  es: { item: 'RECOGER', npc: 'HABLAR', cap: 'SEGUIR',
+        junta: 'Junta lo que falta', quedan: n => '◈ faltan ' + n },
+  en: { item: 'PICK UP', npc: 'TALK',   cap: 'CONTINUE',
+        junta: 'Collect what you need', quedan: n => '◈ ' + n + ' to go' },
+  pt: { item: 'PEGAR',   npc: 'FALAR',  cap: 'SEGUIR',
+        junta: 'Pega o que falta', quedan: n => '◈ faltam ' + n }
+};
+/* la cosa pendiente mas cercana: lo unico que los trece mundos tienen igual es
+   la lista ITEMS, asi que la guia se arma con eso y no con la mision de cada uno */
+function itemPendiente(){
+  let mej = null, dm = 1e9;
+  for (const it of ITEMS){
+    if (!it.activo) continue;
+    const d = Math.hypot(px - it.x, pz - it.z);
+    if (d < dm){ dm = d; mej = it; }
+  }
+  return mej;
+}
+function pistaAccion(acc){
+  const e = document.getElementById('pistaUso');
+  if (!e) return;
+  const V = VERBO[LANG] || VERBO.en;
+  const tecla = document.body.classList.contains('sinTactil') ? 'E' : '◉';
+  const t = (acc && V[acc.tipo]) ? tecla + ' · ' + V[acc.tipo] : '';
+  e.textContent = t;
+  e.classList.toggle('on', !!t && !enDlg);
+}
 function pasoObjetivo(){
   const C = CAPS[cap];
-  const p = POI[C.obj];
+  const V = VERBO[LANG] || VERBO.en;
+  /* EL MOJON APUNTA A LO QUE FALTA. Mientras la mision del capitulo no este
+     lista el capitulo no se cierra, asi que apuntar al sitio del capitulo es
+     mandar al jugador a un lugar donde no va a pasar nada —y era exactamente lo
+     que pasaba: se trababan los trece—. Con la mision pendiente, la marca y los
+     metros van a la cosa mas cercana que quede. Es seguro: `pend` solo existe
+     cuando `MISION.lista(cap)` es falso, que es justo cuando el disparo
+     automatico y la accion 'cap' ya estan apagados. */
+  /* Si la MISION sabe a donde hay que ir, manda ella: hay mundos donde lo que
+     falta no son objetos que se levantan (en exo son tres criaturas que hay que
+     ir a buscar y llevar al anillo). Si no lo sabe, se usa la cosa mas cercana. */
+  const pend = (MISION && MISION.lista && !MISION.lista(cap))
+    ? ((MISION.guia && MISION.guia()) || itemPendiente()) : null;
+  const p = pend || POI[C.obj];
   const d = Math.hypot(px - p.x, pz - p.z);
   $('objD').textContent = Math.round(d) + ' m';
+  {
+    const oT = $('objT');
+    if (pend){
+      if (!oT.dataset.orig) oT.dataset.orig = oT.textContent;
+      oT.textContent = V.junta;
+      const q = ITEMS.filter(i => i.activo).length;
+      const ta = $('tarea');
+      if (!ta.textContent) ta.textContent = V.quedan(q);
+      ta.classList.add('on');
+    } else if (oT.dataset.orig){
+      oT.textContent = oT.dataset.orig;
+      delete oT.dataset.orig;
+    }
+  }
   marca3d.position.set(p.x, H(p.x, p.z) + 6.5 + Math.sin(t0 * 2) * .5, p.z);
   marca3d.rotation.y = t0 * 1.4;
   marca3d.visible = !enDlg;
@@ -4053,6 +4134,7 @@ function pasoObjetivo(){
   }
   const acc = accionUsable();
   $('bUsar').classList.toggle('on', !!acc && !enDlg);
+  pistaAccion(acc);
   const av = CANOA.aviso(acc);
   $('aviso').textContent = av;
   $('aviso').classList.toggle('on', !!av && !enDlg);

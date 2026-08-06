@@ -45,6 +45,9 @@
   body.pc #pcTec{ display:block; }
   body.pc.cine #pcTec, body.pc #pcTec.hide{ display:none; }
   #pcTec b{ color:#fff; }
+  #mSello{ position:fixed; left:0; right:0; bottom:6px; z-index:41;
+    text-align:center; color:rgba(255,233,168,.55); pointer-events:none;
+    font:800 11px system-ui,sans-serif; letter-spacing:.09em; }
   #bPause{ position:absolute; top:8px; left:12px; width:44px; height:44px; border-radius:12px; background:rgba(10,14,8,.55);
     border:2px solid rgba(255,255,255,.4); font:900 18px system-ui; display:flex; align-items:center; justify-content:center; pointer-events:auto; }
   #pups{ position:absolute; bottom:12px; left:50%; transform:translateX(-50%); display:flex; gap:10px; }
@@ -129,11 +132,15 @@
       <div class="tBtn" id="bSet">⚙️ AJUSTES</div>
     </div>
   </div>
+  <!-- TECLAS DE PC: fuera del HUD a proposito. Adentro solo se veia
+       corriendo, y la portada —que es donde uno se pregunta como se
+       juega— no decia nada. -->
+  <div id="pcTec"></div>
+  <div id="mSello"></div>
   <!-- HUD -->
   <div id="hud" class="hide">
     <div id="dist">0 m</div><div id="mult"></div><div id="runCoins">🪙 0</div>
     <div id="bPause">⏸</div>
-    <div id="pcTec"></div>
     <div id="pups"></div>
     <div id="tut">⬅️➡️ deslizá para cambiar de carril<br>⬆️ saltá &nbsp;·&nbsp; ⬇️ barrida</div>
     <div id="big"></div><div id="flash"></div>
@@ -914,16 +921,30 @@ const TECR = {
        '<b>&#8595;</b> / <b>S</b> — deslizar',
        '<b>ESC</b> — pausa']
 };
+/* SELLO DE BUILD: es lo unico que distingue «no entro el cambio» de «el
+   navegador te dio la copia vieja». Los otros catorce ya lo tenian. */
+const BUILD = 'PENDIENTE';
 let ESPC = false;
 function pintaTec(){
   const e = $id('pcTec');
-  if (e) e.innerHTML = (TECR[LANG] || TECR.en).join('<br>');
+  if (!e) return;
+  /* OJO: esto corre al DETECTAR el aparato, y `let LANG` se declara cuatrocientas
+     lineas mas abajo: en un modulo eso es la zona muerta temporal y leerlo aca
+     tira ReferenceError. Antes la excepcion se la comia el try de la deteccion y
+     el cartel quedaba vacio. Si todavia no existe, ingles: `applyLang()` lo
+     vuelve a pintar en cuanto se sepa el idioma. */
+  let L = 'en';
+  try { L = LANG || 'en'; } catch (err) {}
+  e.innerHTML = (TECR[L] || TECR.en).join('<br>');
 }
 function modoPC(v){
   if (ESPC === v) return;
   ESPC = v;
   document.body.classList.toggle('pc', v);
-  if (v) pintaTec();
+  pintaTec();
+  /* el renglon del tutorial cambia con el modo: si pasas de dedo a teclado a
+     mitad de partida, deja de decirte que deslices */
+  try { if (typeof applyLang === 'function') applyLang(); } catch (err) {}
 }
 try {
   /* una vez, por lo que el aparato PUEDE hacer */
@@ -1283,9 +1304,9 @@ else $id('title').style.background='radial-gradient(circle at 50% 20%, #2c4a1c 0
 
 /* ================= i18n (en/es/pt) — textos principales ================= */
 const I18N={
- es:{name:'TU NOMBRE',play:'JUGAR',tap:'▶  TOCÁ PARA CORRER',shop:'🛒 TIENDA',mis:'📜 MISIONES',log:'🏅 LOGROS',set:'⚙️ AJUSTES',
+ es:{name:'TU NOMBRE',play:'JUGAR',tap:'▶  TOCÁ PARA CORRER',tapPC:'▶  ESPACIO PARA CORRER',shop:'🛒 TIENDA',mis:'📜 MISIONES',log:'🏅 LOGROS',set:'⚙️ AJUSTES',
   loading:'Cargando… ',ready:'¡LISTO!',lb:'🏆 CLASIFICACIÓN',lbTop:'🏆 TOP 5',you:'VOS',dist:'m',revive:'💖 REVIVIR',reviveSub:'100 🪙 · sigue tu carrera',
-  endc:'🏁 TERMINAR',retry:'⟲ OTRA VEZ',menu:'✖ MENÚ',caught:'💀 ¡TE ATRAPÓ!',tut:'⬅️➡️ deslizá para cambiar de carril<br>⬆️ saltá · ⬇️ barrida',
+  endc:'🏁 TERMINAR',retry:'⟲ OTRA VEZ',menu:'✖ MENÚ',caught:'💀 ¡TE ATRAPÓ!',tut:'⬅️➡️ deslizá para cambiar de carril<br>⬆️ saltá · ⬇️ barrida',tutPC:'← → o A D para cambiar de carril<br>↑ / ESPACIO saltá · ↓ barrida',
   online:'🌐 EN LÍNEA',players:'jugadores',skip:'TOCÁ PARA SALTAR ▶▶',
   free:'gratis',buy:'COMPRAR',use:'USAR',inUse:'EN USO',max:'MÁX',done:'✔ LISTO',upsTitle:'MEJORAS DE POWER-UPS',level:'nivel',lasts:'dura',
   pauseT:'PAUSA',resume:'▶ SEGUIR',restart:'⟲ REINICIAR',
@@ -1296,9 +1317,9 @@ const I18N={
   sk0:'Explorador',sk1:'Dorado',sk2:'Sombra',sk3:'Esmeralda',sk4:'Rubí',
   mDist:'Corré {x} m en una carrera',mCoins:'Juntá {x} monedas en una carrera',mSlide:'Hacé {x} barridas',mJump:'Saltá {x} veces',mPow:'Agarrá {x} power-ups',mNear:'Esquivá {x} obstáculos',
   lgN_run1:'Primera expedición',lgD_run1:'Completá tu primera carrera',lgN_m500:'Maratonista',lgD_m500:'Llegá a 500 m',lgN_m1000:'Leyenda del templo',lgD_m1000:'Llegá a 1000 m',lgN_m2500:'Imparable',lgD_m2500:'Llegá a 2500 m',lgN_c100:'Buscatesoros',lgD_c100:'100 monedas en una carrera',lgN_skin:'Estrenando pinta',lgD_skin:'Comprá una skin',lgN_rev:'Segunda vida',lgD_rev:'Reviví una vez',lgN_pow10:'Coleccionista',lgD_pow10:'Agarrá 10 power-ups en total',lgN_mis5:'Cazamisiones',lgD_mis5:'Completá 5 misiones'},
- en:{name:'YOUR NAME',play:'PLAY',tap:'▶  TAP TO RUN',shop:'🛒 SHOP',mis:'📜 QUESTS',log:'🏅 AWARDS',set:'⚙️ SETTINGS',
+ en:{name:'YOUR NAME',play:'PLAY',tap:'▶  TAP TO RUN',tapPC:'▶  PRESS SPACE TO RUN',shop:'🛒 SHOP',mis:'📜 QUESTS',log:'🏅 AWARDS',set:'⚙️ SETTINGS',
   loading:'Loading… ',ready:'READY!',lb:'🏆 LEADERBOARD',lbTop:'🏆 TOP 5',you:'YOU',dist:'m',revive:'💖 REVIVE',reviveSub:'100 🪙 · continue your run',
-  endc:'🏁 END',retry:'⟲ AGAIN',menu:'✖ MENU',caught:'💀 CAUGHT!',tut:'⬅️➡️ swipe to change lane<br>⬆️ jump · ⬇️ slide',
+  endc:'🏁 END',retry:'⟲ AGAIN',menu:'✖ MENU',caught:'💀 CAUGHT!',tut:'⬅️➡️ swipe to change lane<br>⬆️ jump · ⬇️ slide',tutPC:'← → or A D to change lane<br>↑ / SPACE jump · ↓ slide',
   online:'🌐 ONLINE',players:'players',skip:'TAP TO SKIP ▶▶',
   free:'free',buy:'BUY',use:'USE',inUse:'IN USE',max:'MAX',done:'✔ DONE',upsTitle:'POWER-UP UPGRADES',level:'level',lasts:'lasts',
   pauseT:'PAUSED',resume:'▶ RESUME',restart:'⟲ RESTART',
@@ -1309,9 +1330,9 @@ const I18N={
   sk0:'Explorer',sk1:'Golden',sk2:'Shadow',sk3:'Emerald',sk4:'Ruby',
   mDist:'Run {x} m in one run',mCoins:'Collect {x} coins in one run',mSlide:'Do {x} slides',mJump:'Jump {x} times',mPow:'Grab {x} power-ups',mNear:'Dodge {x} obstacles',
   lgN_run1:'First expedition',lgD_run1:'Finish your first run',lgN_m500:'Marathoner',lgD_m500:'Reach 500 m',lgN_m1000:'Temple legend',lgD_m1000:'Reach 1000 m',lgN_m2500:'Unstoppable',lgD_m2500:'Reach 2500 m',lgN_c100:'Treasure hunter',lgD_c100:'100 coins in one run',lgN_skin:'New look',lgD_skin:'Buy a skin',lgN_rev:'Second life',lgD_rev:'Revive once',lgN_pow10:'Collector',lgD_pow10:'Grab 10 power-ups total',lgN_mis5:'Quest hunter',lgD_mis5:'Finish 5 quests'},
- pt:{name:'SEU NOME',play:'JOGAR',tap:'▶  TOQUE PARA CORRER',shop:'🛒 LOJA',mis:'📜 MISSÕES',log:'🏅 CONQUISTAS',set:'⚙️ AJUSTES',
+ pt:{name:'SEU NOME',play:'JOGAR',tap:'▶  TOQUE PARA CORRER',tapPC:'▶  ESPAÇO PARA CORRER',shop:'🛒 LOJA',mis:'📜 MISSÕES',log:'🏅 CONQUISTAS',set:'⚙️ AJUSTES',
   loading:'Carregando… ',ready:'PRONTO!',lb:'🏆 CLASSIFICAÇÃO',lbTop:'🏆 TOP 5',you:'VOCÊ',dist:'m',revive:'💖 REVIVER',reviveSub:'100 🪙 · continue sua corrida',
-  endc:'🏁 TERMINAR',retry:'⟲ DE NOVO',menu:'✖ MENU',caught:'💀 PEGOU VOCÊ!',tut:'⬅️➡️ deslize para mudar de pista<br>⬆️ pule · ⬇️ deslize',
+  endc:'🏁 TERMINAR',retry:'⟲ DE NOVO',menu:'✖ MENU',caught:'💀 PEGOU VOCÊ!',tut:'⬅️➡️ deslize para mudar de pista<br>⬆️ pule · ⬇️ deslize',tutPC:'← → ou A D para mudar de pista<br>↑ / ESPAÇO pule · ↓ deslize',
   online:'🌐 ONLINE',players:'jogadores',skip:'TOQUE PARA PULAR ▶▶',
   free:'grátis',buy:'COMPRAR',use:'USAR',inUse:'EM USO',max:'MÁX',done:'✔ PRONTO',upsTitle:'MELHORIAS DE POWER-UPS',level:'nível',lasts:'dura',
   pauseT:'PAUSA',resume:'▶ CONTINUAR',restart:'⟲ REINICIAR',
@@ -1331,11 +1352,11 @@ function misName(m){ return T('m'+_cap(m.k)).replace('{x}',m.x); }   // nombre d
 function puName(k){ return T('pu'+_cap(k)); }
 function skinName(i){ return T('sk'+i); }
 function applyLang(){ document.documentElement.lang=LANG;
-  $id('tapGo').innerHTML=T('tap'); $id('bShop').textContent=T('shop'); $id('bMis').textContent=T('mis');
+  $id('tapGo').innerHTML=T(ESPC?'tapPC':'tap');   /* con teclado no se «toca»: se aprieta espacio */ $id('bShop').textContent=T('shop'); $id('bMis').textContent=T('mis');
   $id('bLog').textContent=T('log'); $id('bSet').textContent=T('set'); $id('nameTitle').textContent=T('name');
   $id('nameGoTx').textContent=T('play'); $id('dTitle').textContent=T('caught');
   $id('revBtn').firstChild.textContent=T('revive'); $id('revSub').textContent=T('reviveSub');
-  $id('dEnd').textContent=T('endc'); $id('eRetry').textContent=T('retry'); $id('eMenu').textContent=T('menu'); $id('tut').innerHTML=T('tut');
+  $id('dEnd').textContent=T('endc'); $id('eRetry').textContent=T('retry'); $id('eMenu').textContent=T('menu'); $id('tut').innerHTML=T(ESPC?'tutPC':'tut');   /* con teclado, el renglon del tutorial no puede decir «deslizá» */
   $id('skipCine').textContent=T('skip');
   // pausa / ajustes / cerrar paneles / títulos de paneles
   $id('pCont').textContent=T('resume'); $id('pRetry').textContent=T('restart'); $id('pMenu').textContent=T('menu');
@@ -1388,6 +1409,7 @@ function audioUnlock(){ const c=acx(); if(!c)return;
     loadAudio(); }
   if(c.state==='suspended')c.resume().catch(()=>{});
   if(CFG.mus&&!musK&&wantMus)music(wantMus); }
+{ const e = $id('mSello'); if (e) e.textContent = 'build b' + BUILD; }
 ['pointerdown','touchend','click','keydown'].forEach(ev=>addEventListener(ev,audioUnlock,{passive:true}));
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&ACX&&ACX.state==='suspended')ACX.resume().catch(()=>{}); });
 applyLang(); boot();
