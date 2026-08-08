@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Fumikiri — Cruce de Trenes (Cel-Shading)</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0c0f14;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#fff}
+  canvas{display:block}
+  #err{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;color:#fff;font:12px monospace;padding:10px;white-space:pre-wrap;max-height:45vh;overflow:auto}
+
+  /* HUD */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  #cross{position:fixed;left:50%;top:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;
+    background:rgba(255,255,255,.65);box-shadow:0 0 6px rgba(0,0,0,.6);z-index:9;display:none}
+  #state{position:fixed;top:14px;left:50%;transform:translateX(-50%);text-align:center;text-shadow:0 2px 6px rgba(0,0,0,.8)}
+  #state .lbl{font-size:11px;letter-spacing:3px;color:#ffd27a;font-weight:700}
+  #state .val{font-size:22px;font-weight:800;letter-spacing:1px}
+  #state .cd{font-size:12px;color:#bcd;letter-spacing:1px;margin-top:2px}
+  #inv{position:fixed;top:14px;right:16px;font-size:13px;letter-spacing:1px;background:rgba(0,0,0,.35);
+    padding:8px 12px;border-radius:10px;backdrop-filter:blur(6px)}
+  #inv b{color:#7fe0a0}
+  #prompt{position:fixed;left:50%;top:58%;transform:translateX(-50%);z-index:11;display:none;
+    background:rgba(180,40,40,.42);border:1px solid rgba(255,140,140,.5);padding:9px 16px;border-radius:10px;
+    font-size:14px;letter-spacing:1px;font-weight:700;backdrop-filter:blur(4px);text-shadow:0 2px 4px rgba(0,0,0,.8)}
+  #prompt kbd{background:#fff;color:#111;border-radius:5px;padding:1px 7px;font-weight:800;margin-right:4px}
+  #toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:11;background:rgba(0,0,0,.5);
+    padding:8px 16px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .3s}
+  #legend{position:fixed;left:16px;bottom:14px;font-size:12px;color:#cdd;line-height:1.7;text-shadow:0 2px 4px rgba(0,0,0,.8)}
+  #legend kbd{background:rgba(255,255,255,.9);color:#111;border-radius:4px;padding:0 6px;font-weight:800;font-size:11px}
+
+  /* Menú */
+  #menu{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:18px;text-align:center;background:radial-gradient(60% 60% at 50% 40%,rgba(30,40,55,.5),rgba(8,10,14,.85));backdrop-filter:blur(3px)}
+  #menu.hide{display:none}
+  #menu .eyebrow{font-size:11px;letter-spacing:8px;color:#ffb36b;font-weight:700}
+  #menu h1{font-size:clamp(30px,7vw,64px);font-weight:900;letter-spacing:1px;
+    background:linear-gradient(180deg,#fff,#ffd7a0 55%,#e8894a);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  #menu p{color:#aeb9c4;max-width:520px;font-size:14px;line-height:1.6}
+  #menu .play{margin-top:6px;pointer-events:auto;cursor:pointer;font:inherit;font-weight:800;letter-spacing:3px;
+    padding:16px 40px;border-radius:12px;border:1.5px solid rgba(255,180,110,.6);color:#fff;
+    background:linear-gradient(135deg,rgba(232,137,74,.95),rgba(150,70,30,.95));box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  #menu .play:active{transform:scale(.97)}
+  #menu .row{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;color:#9fb0bd;font-size:12px}
+  #menu .row b{color:#fff}
+</style>
+</head>
+<body>
+<div id="err"></div>
+<script>
+ window.addEventListener('error',e=>{const b=document.getElementById('err');b.style.display='block';b.textContent+=`[${(e.filename||'').split('/').pop()}:${e.lineno}] ${e.message}\n`;});
+ window.addEventListener('unhandledrejection',e=>{const b=document.getElementById('err');b.style.display='block';b.textContent+='PROMISE: '+((e.reason&&e.reason.message)||e.reason)+'\n';});
+</script>
+
+<div id="hud">
+  <div id="state"><div class="lbl">CRUCE</div><div class="val" id="stVal">—</div><div class="cd" id="stCd"></div></div>
+  <div id="inv">🥤 Latas: <b id="cans">0</b></div>
+  <div id="prompt"><kbd>E</kbd><span id="promptTxt">Comprar bebida</span></div>
+  <div id="toast"></div>
+  <div id="legend"><kbd>W A S D</kbd> mover · <kbd>Espacio</kbd> saltar · 🖱️ mirar · <kbd>E</kbd> interactuar · <kbd>T</kbd> llamar tren · <kbd>Esc</kbd> pausa</div>
+</div>
+<div id="cross"></div>
+
+<div id="menu">
+  <div class="eyebrow">FUMIKIRI · 踏切</div>
+  <h1>Cruce de Trenes</h1>
+  <p>Primera persona · Cel-shading anime. Explora el cruce japonés, compra una bebida en las máquinas expendedoras y observa pasar el tren cuando bajan las barreras. Pulsa <b>T</b> para llamar al tren.</p>
+  <button class="play" id="playBtn">▶ JUGAR</button>
+  <div class="row"><span><b>WASD</b> mover</span><span><b>Mouse</b> mirar</span><span><b>E</b> interactuar</span><span><b>T</b> tren</span></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+/* ============================================================
+   RENDERER / SCENE / LUZ (tarde soleada de primavera)
+============================================================ */
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbfe3ff);
+scene.fog = new THREE.Fog(0xd8ecff, 60, 200);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.05, 500);
+
+// Sol cálido de tarde
+const sun = new THREE.DirectionalLight(0xffe6bf, 2.1);
+sun.position.set(-28, 34, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+const sc = sun.shadow.camera;
+sc.left=-45; sc.right=45; sc.top=45; sc.bottom=-45; sc.near=1; sc.far=140;
+sun.shadow.bias = -0.0004;
+scene.add(sun, sun.target);
+scene.add(new THREE.HemisphereLight(0xffe9c8, 0x5a6b57, 0.75));
+scene.add(new THREE.AmbientLight(0xffffff, 0.18));
+
+/* ============================================================
+   CEL-SHADING: rampa toon + rim light + contorno inverted-hull
+============================================================ */
+// Rampa de 3 niveles planos (hard steps)
+function toonRamp(steps){
+  const data = new Uint8Array(steps.length*4);
+  steps.forEach((v,i)=>{const c=Math.round(v*255);data[i*4]=c;data[i*4+1]=c;data[i*4+2]=c;data[i*4+3]=255;});
+  const t = new THREE.DataTexture(data, steps.length, 1, THREE.RGBAFormat);
+  t.magFilter = t.minFilter = THREE.NearestFilter; t.needsUpdate = true; return t;
+}
+const RAMP = toonRamp([0.32, 0.62, 1.0]);
+
+// Material toon + Rim Light (fresnel) inyectado
+function celMat(color, {rim=0.55, emissive=0x000000, emissiveIntensity=0}={}){
+  const m = new THREE.MeshToonMaterial({ color, gradientMap:RAMP, emissive, emissiveIntensity });
+  m.userData.rim = rim;
+  m.onBeforeCompile = (sh)=>{
+    sh.uniforms.uRimColor = { value:new THREE.Color(0xfff0d0) };
+    sh.uniforms.uRimPow   = { value:3.2 };
+    sh.uniforms.uRimStr   = { value:rim };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>','#include <common>\nvarying vec3 vRimN;varying vec3 vRimV;')
+      .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nvRimN=normalize(mat3(modelViewMatrix)*objectNormal);\nvRimV=normalize(-(modelViewMatrix*vec4(transformed,1.0)).xyz);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>','#include <common>\nvarying vec3 vRimN;varying vec3 vRimV;uniform vec3 uRimColor;uniform float uRimPow;uniform float uRimStr;')
+      .replace('#include <dithering_fragment>','float rim=pow(1.0-clamp(dot(normalize(vRimN),normalize(vRimV)),0.0,1.0),uRimPow);\ngl_FragColor.rgb+=uRimColor*rim*uRimStr;\n#include <dithering_fragment>');
+  };
+  return m;
+}
+// Contorno: inverted hull (back-face extruida a lo largo de la normal)
+const OUTLINE_COLOR = new THREE.Color(0x14100c);
+function outlineMat(thickness){
+  return new THREE.ShaderMaterial({
+    uniforms:{ uT:{value:thickness}, uC:{value:OUTLINE_COLOR} },
+    vertexShader:`uniform float uT; void main(){ vec3 p=position+normal*uT; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);} `,
+    fragmentShader:`uniform vec3 uC; void main(){ gl_FragColor=vec4(uC,1.0);} `,
+    side:THREE.BackSide
+  });
+}
+function outline(mesh, thickness=0.03){
+  const o = new THREE.Mesh(mesh.geometry, outlineMat(thickness));
+  o.castShadow=false; o.receiveShadow=false; o.frustumCulled=false;
+  mesh.add(o); return o;
+}
+// Helper: mesh cel-shaded con contorno
+function cel(geo, color, opt={}){
+  const m = new THREE.Mesh(geo, celMat(color, opt));
+  m.castShadow = opt.cast!==false; m.receiveShadow = opt.receive!==false;
+  if(opt.thickness!==0) outline(m, opt.thickness||0.03);
+  return m;
+}
+
+/* ============================================================
+   SUELO + MARCAS VIALES (textura canvas)
+============================================================ */
+function asphaltTex(){
+  // Solo ruido de asfalto; se repite en mosaico fino (las marcas van aparte, a escala real)
+  const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');
+  x.fillStyle='#3b3f45';x.fillRect(0,0,256,256);
+  for(let i=0;i<2600;i++){x.fillStyle=`rgba(${180+Math.random()*40|0},${180+Math.random()*40|0},${185+Math.random()*40|0},${Math.random()*0.07})`;x.fillRect(Math.random()*256,Math.random()*256,2,2);}
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(64,64);
+  return t;
+}
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshToonMaterial({map:asphaltTex(),gradientMap:RAMP}));
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+
+// Marcas viales a ESCALA REAL, como calcomanía transparente sobre el asfalto (junto al cruce)
+function roadMarkingsTex(Wx, Lz, ppm){
+  const c=document.createElement('canvas'); c.width=Math.round(Wx*ppm); c.height=Math.round(Lz*ppm);
+  const x=c.getContext('2d'); x.clearRect(0,0,c.width,c.height);
+  const X=mx=> c.width/2 + mx*ppm;      // metros (x, ancho) -> px
+  const Z=mz=> c.height/2 - mz*ppm;     // metros (z, largo) -> px
+  // Línea central amarilla discontinua a lo largo del camino (cortada sobre la vía)
+  x.fillStyle='#f2c14e';
+  const dashLen=1.7, gap=1.5, w=0.18;
+  for(let z=-Lz/2+1; z<Lz/2-1; z+=dashLen+gap){
+    if(Math.abs(z)<2.4) continue;       // no pintar encima de los rieles
+    x.fillRect(X(-w/2), Z(z+dashLen), w*ppm, dashLen*ppm);
+  }
+  // Líneas de parada blancas a ambos lados del cruce
+  x.fillStyle='#e9edf0';
+  const stopW=0.45;
+  [-3.4, 3.4].forEach(z=>{ x.fillRect(X(-Wx/2+0.8), Z(z+stopW/2), (Wx-1.6)*ppm, stopW*ppm); });
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
+}
+{
+  const Wx=13, Lz=48;
+  const decal=new THREE.Mesh(new THREE.PlaneGeometry(Wx,Lz),
+    new THREE.MeshBasicMaterial({map:roadMarkingsTex(Wx,Lz,48), transparent:true, depthWrite:false}));
+  decal.rotation.x=-Math.PI/2; decal.position.set(0,0.02,0); scene.add(decal);
+}
+
+// Aceras
+for(const sx of [-9.5, 9.5]){
+  const kerb = cel(new THREE.BoxGeometry(3,0.35,200), 0xb9bec6, {thickness:0.02});
+  kerb.position.set(sx*2.0,0.17,0); scene.add(kerb);
+}
+
+/* ============================================================
+   VÍAS DEL TREN (corren en X; el jugador cruza en Z)
+============================================================ */
+const trackGroup = new THREE.Group(); scene.add(trackGroup);
+const railMat = celMat(0x8a8f98,{rim:0.3});
+for(const rz of [-0.75, 0.75]){
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(190,0.18,0.16), railMat);
+  rail.position.set(0,0.19,rz); rail.castShadow=true; trackGroup.add(rail);
+}
+for(let x=-92;x<=92;x+=2){ // durmientes
+  const tie = cel(new THREE.BoxGeometry(0.4,0.12,2.4), 0x5a4632,{thickness:0.02,cast:false});
+  tie.position.set(x,0.08,0); trackGroup.add(tie);
+}
+const ballast = new THREE.Mesh(new THREE.BoxGeometry(190,0.1,3.4), new THREE.MeshToonMaterial({color:0x6b7079,gradientMap:RAMP}));
+ballast.position.set(0,0.04,0); ballast.receiveShadow=true; trackGroup.add(ballast);
+
+/* ============================================================
+   POSTES DE CRUCE: luces rojas + campana + señal 踏切
+============================================================ */
+function crossingPost(px, pz){
+  const g = new THREE.Group(); g.position.set(px,0,pz); scene.add(g);
+  const pole = cel(new THREE.CylinderGeometry(0.12,0.14,4.2,10), 0x2b2f36,{thickness:0.02});
+  pole.position.y=2.1; g.add(pole);
+  // Panel de 2 luces
+  const panel = cel(new THREE.BoxGeometry(1.5,0.7,0.2), 0x222222,{thickness:0.02});
+  panel.position.set(0,3.7,0); g.add(panel);
+  const lights=[];
+  for(const lx of [-0.38,0.38]){
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.22,20), new THREE.MeshBasicMaterial({color:0x5a0000}));
+    lens.position.set(lx,3.7,0.12); g.add(lens);
+    const halo = new THREE.PointLight(0xff2222, 0, 6); halo.position.set(lx,3.7,0.3); g.add(halo);
+    lights.push({lens,halo});
+  }
+  // Señal triangular 踏切
+  const sign = cel(new THREE.CylinderGeometry(0.5,0.5,0.08,3), 0xffcf33,{thickness:0.02});
+  sign.rotation.x=Math.PI/2; sign.rotation.z=Math.PI; sign.position.set(0,3.0,0.16); g.add(sign);
+  // Aspa (X) señal de cruce
+  for(const rot of [Math.PI/4,-Math.PI/4]){
+    const bar = cel(new THREE.BoxGeometry(1.6,0.16,0.06), 0xffe14d,{thickness:0.015,cast:false});
+    bar.position.set(0,4.5,0.14); bar.rotation.z=rot; g.add(bar);
+  }
+  return {group:g, lights};
+}
+const postA = crossingPost(-4.5, -2.6);
+const postB = crossingPost( 4.5,  2.6);
+const allLights = [...postA.lights, ...postB.lights];
+
+/* Barreras (brazo amarillo/negro) que rotan 90->0 */
+function barrier(px,pz,dir){
+  const pivot = new THREE.Group(); pivot.position.set(px,1.2,pz); scene.add(pivot);
+  const arm = new THREE.Group(); pivot.add(arm);
+  const len=6.2;
+  const base = cel(new THREE.BoxGeometry(len,0.22,0.22), 0xf4d03f,{thickness:0.02,cast:true});
+  base.position.x = dir*len/2; arm.add(base);
+  for(let i=0;i<6;i++){ // franjas negras
+    const s = cel(new THREE.BoxGeometry(0.5,0.24,0.24), 0x1a1a1a,{thickness:0.01,cast:false});
+    s.position.x = dir*(0.5+i*1.05); arm.add(s);
+  }
+  // cuelga una lucecita en la punta
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.12,10,10), new THREE.MeshBasicMaterial({color:0xff3030}));
+  tip.position.x=dir*len; arm.add(tip);
+  arm.rotation.z = Math.PI/2; // 90° = abierta (vertical)
+  return {pivot, arm, dir};
+}
+const barrierA = barrier(-4.5,-2.6, 1);
+const barrierB = barrier( 4.5, 2.6,-1);
+const barriers=[barrierA,barrierB];
+
+/* ============================================================
+   TREN (serie E233-ish, 7 vagones) que se mueve en X
+============================================================ */
+function buildTrain(cars=7){
+  const g = new THREE.Group(); scene.add(g); g.visible=false;
+  const L=4.6, gap=0.35;
+  for(let i=0;i<cars;i++){
+    const body = cel(new THREE.BoxGeometry(L,2.5,2.2), 0xe8edf1,{thickness:0.04});
+    body.position.set(i*(L+gap),2.15,0); g.add(body);
+    // franja verde/naranja (E233 tipo Chūō = naranja)
+    const stripe = cel(new THREE.BoxGeometry(L+0.02,0.5,2.24), 0xef7d2a,{thickness:0,cast:false});
+    stripe.position.set(i*(L+gap),2.55,0); g.add(stripe);
+    // ventanas
+    for(const wz of [1.13,-1.13]) for(let w=0;w<4;w++){
+      const win = new THREE.Mesh(new THREE.PlaneGeometry(0.7,0.7), new THREE.MeshBasicMaterial({color:0x11304a}));
+      win.position.set(i*(L+gap)-1.5+w, 2.6, wz); win.rotation.y = wz>0?0:Math.PI; g.add(win);
+    }
+    // faldón inferior gris
+    const skirt = cel(new THREE.BoxGeometry(L,0.9,2.1),0x9aa1a8,{thickness:0,cast:false});
+    skirt.position.set(i*(L+gap),1.2,0); g.add(skirt);
+  }
+  const total = cars*(L+gap);
+  g.userData = { total, L:total };
+  return g;
+}
+const train = buildTrain(7);
+
+/* ============================================================
+   MÁQUINAS EXPENDEDORAS (raycast + dispensar lata)
+============================================================ */
+const interactables=[]; // {group, type, ...}
+const pickups=[];        // latas recogibles
+function vendingMachine(px,pz,ry, bodyColor, accent, label){
+  const g=new THREE.Group(); g.position.set(px,0,pz); g.rotation.y=ry; scene.add(g);
+  const body=cel(new THREE.BoxGeometry(1.5,2.5,1.0), bodyColor,{thickness:0.03}); body.position.y=1.25; g.add(body);
+  // Panel frontal (productos) — emisivo para "letrero iluminado"
+  const panel=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.4,0.06), new THREE.MeshBasicMaterial({color:accent}));
+  panel.position.set(-0.2,1.7,0.52); g.add(panel);
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++){
+    const can=new THREE.Mesh(new THREE.BoxGeometry(0.22,0.34,0.02), new THREE.MeshBasicMaterial({color:[0xff5555,0x55aaff,0xffdd55,0x66dd88][(r+c)%4]}));
+    can.position.set(-0.55+c*0.35,2.15-r*0.42,0.56); g.add(can);
+  }
+  // Letrero superior iluminado
+  const sign=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.4,1.02), new THREE.MeshBasicMaterial({color:accent}));
+  sign.position.set(0,2.55,0); g.add(sign);
+  // Bandeja de salida
+  const tray=cel(new THREE.BoxGeometry(1.0,0.3,0.3),0x111111,{thickness:0,cast:false}); tray.position.set(0.4,0.55,0.5); g.add(tray);
+  // Botonera
+  const btns=new THREE.Mesh(new THREE.BoxGeometry(0.5,1.2,0.06), new THREE.MeshToonMaterial({color:0x222831,gradientMap:RAMP}));
+  btns.position.set(0.55,1.7,0.52); g.add(btns);
+  const it={ group:g, type:'vending', label, accent, cooldown:0, sign, panel };
+  interactables.push(it);
+  return it;
+}
+const vmRed  = vendingMachine(-6.6,-8, Math.PI*0.5, 0xd62828, 0xffe08a, 'roja');
+const vmTeal = vendingMachine(-6.6,-4, Math.PI*0.5, 0x1fbfae, 0xd8fff6, 'turquesa');
+
+// Prefab lata
+function spawnCan(pos){
+  const g=new THREE.Group();
+  const body=cel(new THREE.CylinderGeometry(0.14,0.14,0.42,14), 0xef3d3d,{thickness:0.02});
+  const band=cel(new THREE.CylinderGeometry(0.145,0.145,0.12,14), 0xf5f5f5,{thickness:0,cast:false});
+  g.add(body); g.add(band);
+  g.position.copy(pos);
+  scene.add(g);
+  const p={group:g, t:0, taken:false, spawn:pos.clone()};
+  pickups.push(p); return p;
+}
+
+/* ============================================================
+   UTILERÍA: taxi retro, postes de luz + cables, árbol sakura
+============================================================ */
+function retroTaxi(px,pz,ry){
+  const g=new THREE.Group();g.position.set(px,0,pz);g.rotation.y=ry;scene.add(g);
+  const body=cel(new THREE.BoxGeometry(4.2,1.1,1.9),0xf6c700,{thickness:0.04}); body.position.y=0.85; g.add(body);
+  const cab=cel(new THREE.BoxGeometry(2.4,0.95,1.75),0xf6c700,{thickness:0.03}); cab.position.set(-0.2,1.7,0); g.add(cab);
+  for(const wx of [-1.2,1.2]) for(const wz of [0.9,-0.9]){
+    const wheel=cel(new THREE.CylinderGeometry(0.42,0.42,0.3,16),0x14151a,{thickness:0.02});
+    wheel.rotation.x=Math.PI/2; wheel.position.set(wx,0.42,wz); g.add(wheel);
+  }
+  const sign=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.28,0.5),new THREE.MeshBasicMaterial({color:0xff5a2a}));
+  sign.position.set(-0.2,2.3,0); g.add(sign);
+  const wsh=new THREE.Mesh(new THREE.PlaneGeometry(1.6,0.8),new THREE.MeshBasicMaterial({color:0x2a4a63}));
+  wsh.position.set(1.02,1.7,0); wsh.rotation.y=Math.PI/2; g.add(wsh);
+  return g;
+}
+retroTaxi(11,-14,Math.PI*0.5);
+retroTaxi(13,10,-Math.PI*0.5);
+
+function lightPole(px,pz){
+  const g=new THREE.Group();g.position.set(px,0,pz);scene.add(g);
+  const pole=cel(new THREE.CylinderGeometry(0.11,0.14,6.5,10),0x33383f,{thickness:0.02}); pole.position.y=3.25; g.add(g.pole=pole);
+  const arm=cel(new THREE.BoxGeometry(1.6,0.12,0.12),0x33383f,{thickness:0.015,cast:false}); arm.position.set(0.7,6.3,0); g.add(arm);
+  const lamp=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.18,0.3),new THREE.MeshBasicMaterial({color:0xfff3c0})); lamp.position.set(1.4,6.2,0); g.add(lamp);
+  g.userData.top=new THREE.Vector3(px,6.0,pz);
+  return g;
+}
+const poles=[lightPole(-16,-18),lightPole(-16,16),lightPole(16,-18),lightPole(16,16),lightPole(-16,0),lightPole(16,0)];
+// Cables de alta tensión: catenaria entre postes consecutivos
+function cable(a,b,sag){
+  const pts=[];const N=18;
+  for(let i=0;i<=N;i++){const t=i/N;const p=a.clone().lerp(b,t);p.y-=Math.sin(t*Math.PI)*sag;pts.push(p);}
+  const geo=new THREE.BufferGeometry().setFromPoints(pts);
+  return new THREE.Line(geo,new THREE.LineBasicMaterial({color:0x15181c}));
+}
+for(let i=0;i<poles.length-1;i++){
+  const a=poles[i].userData.top, b=poles[i+1].userData.top;
+  if(a.distanceTo(b)<40){ scene.add(cable(a,b,1.2)); scene.add(cable(a.clone().add(new THREE.Vector3(0,0.4,0)),b.clone().add(new THREE.Vector3(0,0.4,0)),1.0)); }
+}
+
+// Árboles sakura
+const petalSources=[];
+function sakuraTree(px,pz,s=1){
+  const g=new THREE.Group();g.position.set(px,0,pz);g.scale.setScalar(s);scene.add(g);
+  const trunk=cel(new THREE.CylinderGeometry(0.28,0.42,3.4,8),0x6b4a2f,{thickness:0.03}); trunk.position.y=1.7; g.add(trunk);
+  for(let i=0;i<5;i++){
+    const blob=cel(new THREE.IcosahedronGeometry(1.5+Math.random()*0.7,0),0xffc0d8,{thickness:0.03,cast:true});
+    blob.position.set((Math.random()-0.5)*2.4,3.4+Math.random()*1.4,(Math.random()-0.5)*2.4); g.add(blob);
+  }
+  petalSources.push(new THREE.Vector3(px,5.2*s,pz));
+  return g;
+}
+sakuraTree(-13,-9,1.2); sakuraTree(14,-6,1.0); sakuraTree(-12,12,1.1); sakuraTree(15,15,1.15);
+
+/* Pétalos de sakura: partículas con turbulencia + colisión suave al suelo */
+const PETALS=520;
+const petalGeo=new THREE.BufferGeometry();
+const pPos=new Float32Array(PETALS*3), pVel=new Float32Array(PETALS*3), pPhase=new Float32Array(PETALS);
+function seedPetal(i,fromTop){
+  const src=petalSources[(Math.random()*petalSources.length)|0];
+  pPos[i*3]=src.x+(Math.random()-0.5)*6;
+  pPos[i*3+1]=fromTop?(src.y+Math.random()*3):(Math.random()*8+1);
+  pPos[i*3+2]=src.z+(Math.random()-0.5)*6;
+  pVel[i*3]=(Math.random()-0.5)*0.3; pVel[i*3+1]=-(0.4+Math.random()*0.5); pVel[i*3+2]=(Math.random()-0.5)*0.3;
+  pPhase[i]=Math.random()*Math.PI*2;
+}
+for(let i=0;i<PETALS;i++) seedPetal(i,false);
+petalGeo.setAttribute('position',new THREE.BufferAttribute(pPos,3));
+function petalTex(){const c=document.createElement('canvas');c.width=c.height=32;const x=c.getContext('2d');
+  x.fillStyle='#ffd0e2';x.beginPath();x.ellipse(16,16,7,12,Math.PI/5,0,7);x.fill();
+  x.fillStyle='#ff9ec2';x.beginPath();x.ellipse(16,16,3,9,Math.PI/5,0,7);x.fill();return new THREE.CanvasTexture(c);}
+const petals=new THREE.Points(petalGeo,new THREE.PointsMaterial({size:0.5,map:petalTex(),transparent:true,depthWrite:false,alphaTest:0.25}));
+scene.add(petals);
+
+/* ============================================================
+   FSM DEL CRUCE (RailroadCrossingSystem)
+============================================================ */
+const easeInOutQuad = t => t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+const Crossing = {
+  state:'IDLE',
+  t:0,                 // tiempo en el estado
+  idleWait: 10,        // se randomiza 30-90 (test: más corto)
+  MIN_IDLE:30, MAX_IDLE:90,
+  blink:0, blinkOn:false,
+  trainSpeed: 60/3.6,  // 60 km/h -> m/s
+  trainX: 0,
+  closed:false,        // barrera cerrada (bloquea al jugador)
+  setState(s){ this.state=s; this.t=0; onStateChange(s); },
+  callTrain(){ if(this.state==='IDLE'){ this.idleWait = 0.01; } },
+  update(dt){
+    this.t+=dt;
+    // Luces parpadeando 2Hz mientras no está IDLE ni limpiando abierto
+    const blinking = (this.state==='WARNING'||this.state==='CLOSING'||this.state==='TRAIN_PASSING');
+    if(blinking){ this.blink+=dt; if(this.blink>=0.25){ this.blink=0; this.blinkOn=!this.blinkOn; setLights(this.blinkOn); if(this.blinkOn) Bell.ding(); } }
+    switch(this.state){
+      case 'IDLE':
+        setLights(false); this.closed=false;
+        if(this.t>=this.idleWait){ this.setState('WARNING'); }
+        break;
+      case 'WARNING': // 5s: campana + luces, IA se detiene
+        if(this.t>=5){ this.setState('CLOSING'); }
+        break;
+      case 'CLOSING':{ // 4s: barreras 90->0 (EaseInOutQuad), collider on
+        const k=Math.min(this.t/4,1), e=easeInOutQuad(k);
+        const ang=Math.PI/2*(1-e);           // 90° -> 0°
+        barriers.forEach(b=> b.arm.rotation.z = ang);
+        this.closed=true;
+        if(this.t>=4){ this.trainX=-(train.userData.total/2)-95; train.visible=true; this.setState('TRAIN_PASSING'); }
+        break; }
+      case 'TRAIN_PASSING':{
+        this.trainX += this.trainSpeed*dt;
+        train.position.set(this.trainX,0,0);
+        // ¿pasó el último vagón el trigger de salida?
+        if(this.trainX - train.userData.total/2 > 95){ train.visible=false; this.setState('OPENING'); }
+        break; }
+      case 'OPENING':{ // eleva barreras 0->90 en 3s, apaga luces/campana
+        setLights(false);
+        const k=Math.min(this.t/3,1), e=easeInOutQuad(k);
+        const ang=Math.PI/2*e;
+        barriers.forEach(b=> b.arm.rotation.z = ang);
+        if(this.t>=3){ this.closed=false; this.idleWait = this.MIN_IDLE + Math.random()*(this.MAX_IDLE-this.MIN_IDLE); this.setState('IDLE'); }
+        break; }
+    }
+  }
+};
+function setLights(on){
+  allLights.forEach((l,i)=>{
+    const active = on && (i%2===0) || (!on && (i%2===1)); // alterna izq/der
+    l.halo.intensity = active?2.6:0;
+    l.lens.material.color.setHex(active?0xff3b3b:0x5a0000);
+  });
+  if(!on){ /* al apagar, ambas off */ allLights.forEach(l=>{l.halo.intensity=0;l.lens.material.color.setHex(0x5a0000);}); }
+}
+
+/* Campana japonesa (WebAudio) ~120 BPM alternando tono */
+const Bell = {
+  ctx:null, tick:0,
+  init(){ if(!this.ctx) this.ctx=new (window.AudioContext||window.webkitAudioContext)(); },
+  ding(){ if(!this.ctx) return; const t=this.ctx.currentTime; const o=this.ctx.createOscillator(),g=this.ctx.createGain(),f=this.ctx.createBiquadFilter();
+    f.type='bandpass'; f.frequency.value=this.tick%2?1180:900; f.Q.value=6;
+    o.type='square'; o.frequency.value=this.tick%2?1180:900;
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.32,t+0.005); g.gain.exponentialRampToValueAtTime(0.0001,t+0.32);
+    o.connect(f).connect(g).connect(this.ctx.destination); o.start(t); o.stop(t+0.34); this.tick++; }
+};
+function coinSound(){ if(!Bell.ctx) return; const c=Bell.ctx,t=c.currentTime;
+  [1568,2093].forEach((fr,i)=>{const o=c.createOscillator(),g=c.createGain();o.type='square';o.frequency.value=fr;
+   g.gain.setValueAtTime(0.0001,t+i*0.06);g.gain.exponentialRampToValueAtTime(0.25,t+i*0.06+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+i*0.06+0.18);
+   o.connect(g).connect(c.destination);o.start(t+i*0.06);o.stop(t+i*0.06+0.2);}); }
+function pickSound(){ if(!Bell.ctx) return; const c=Bell.ctx,t=c.currentTime;const o=c.createOscillator(),g=c.createGain();
+  o.type='sine';o.frequency.setValueAtTime(520,t);o.frequency.exponentialRampToValueAtTime(880,t+0.12);
+  g.gain.setValueAtTime(0.2,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);o.connect(g).connect(c.destination);o.start(t);o.stop(t+0.2);}
+
+const stVal=document.getElementById('stVal'), stCd=document.getElementById('stCd');
+const STATE_ES={IDLE:'ABIERTO',WARNING:'¡ALERTA!',CLOSING:'CERRANDO',TRAIN_PASSING:'TREN PASANDO',OPENING:'ABRIENDO'};
+function onStateChange(s){ stVal.textContent=STATE_ES[s]||s; }
+
+/* ============================================================
+   CONTROLADOR PRIMERA PERSONA (WASD + salto + mouse look)
+============================================================ */
+const controls = new PointerLockControls(camera, renderer.domElement);
+scene.add(controls.getObject());
+controls.getObject().position.set(0,1.7,14);
+
+const keys={};
+addEventListener('keydown',e=>{ keys[e.code]=true;
+  if(e.code==='KeyT') Crossing.callTrain();
+  if(e.code==='KeyE') tryInteract();
+});
+addEventListener('keyup',e=>keys[e.code]=false);
+
+const vel=new THREE.Vector3(); let vy=0, onGround=true;
+const EYE=1.7, SPEED=6.2, JUMP=6.5, G=18;
+
+function updatePlayer(dt){
+  const obj=controls.getObject();
+  // dirección relativa a la cámara
+  const f=(keys['KeyW']?1:0)-(keys['KeyS']?1:0);
+  const r=(keys['KeyD']?1:0)-(keys['KeyA']?1:0);
+  const dir=new THREE.Vector3();
+  const fwd=new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y=0; fwd.normalize();
+  const right=new THREE.Vector3().crossVectors(fwd,new THREE.Vector3(0,1,0)).normalize().multiplyScalar(-1);
+  dir.addScaledVector(fwd,f).addScaledVector(right,r);
+  if(dir.lengthSq()>0) dir.normalize();
+  const nx=obj.position.x+dir.x*SPEED*dt;
+  const nz=obj.position.z+dir.z*SPEED*dt;
+  // Collider invisible: si el cruce está cerrado, no dejar entrar a la zona |z|<2.2
+  const inDanger = Math.abs(nz)<2.2;
+  const wasOutside = Math.abs(obj.position.z)>=2.2;
+  if(Crossing.closed && inDanger && wasOutside){
+    // bloquear el eje Z, permitir deslizar en X
+    obj.position.x=nx;
+  } else {
+    obj.position.x=nx; obj.position.z=nz;
+  }
+  // límites del mapa
+  obj.position.x=THREE.MathUtils.clamp(obj.position.x,-40,40);
+  obj.position.z=THREE.MathUtils.clamp(obj.position.z,-40,40);
+  // salto/gravedad
+  if(keys['Space']&&onGround){ vy=JUMP; onGround=false; }
+  vy-=G*dt; obj.position.y+=vy*dt;
+  if(obj.position.y<=EYE){ obj.position.y=EYE; vy=0; onGround=true; }
+}
+
+/* Interacción por raycast (2.5 m) */
+const ray=new THREE.Raycaster(); ray.far=2.5;
+const promptEl=document.getElementById('prompt'), promptTxt=document.getElementById('promptTxt');
+const crossEl=document.getElementById('cross');
+let aim=null;
+function updateAim(){
+  if(!controls.isLocked){ promptEl.style.display='none'; aim=null; return; }
+  ray.setFromCamera({x:0,y:0}, camera);
+  // máquinas
+  let best=null,bestD=Infinity;
+  for(const it of interactables){
+    const hit=ray.intersectObject(it.group,true);
+    if(hit.length&&hit[0].distance<bestD){bestD=hit[0].distance;best={kind:'vending',ref:it};}
+  }
+  for(const p of pickups){ if(p.taken)continue;
+    const hit=ray.intersectObject(p.group,true);
+    if(hit.length&&hit[0].distance<bestD){bestD=hit[0].distance;best={kind:'can',ref:p};}
+  }
+  aim=best;
+  if(best){ promptEl.style.display='block';
+    promptTxt.textContent = best.kind==='vending' ? `Comprar bebida (máquina ${best.ref.label})` : 'Recoger lata';
+  } else promptEl.style.display='none';
+}
+let cans=0; const cansEl=document.getElementById('cans');
+const toastEl=document.getElementById('toast'); let toastT=0;
+function toast(msg){ toastEl.textContent=msg; toastEl.style.opacity='1'; toastT=1.6; }
+function tryInteract(){
+  if(!aim) return;
+  if(aim.kind==='vending'){
+    const it=aim.ref; if(it.cooldown>0) return; it.cooldown=1.2;
+    coinSound();
+    // animación: destello del letrero + pequeño "empuje"
+    const base=it.accent; it.sign.material.color.setHex(0xffffff); it.panel.material.color.setHex(0xffffff);
+    setTimeout(()=>{ it.sign.material.color.setHex(base); it.panel.material.color.setHex(base); },140);
+    it.group.position.y=0.04; setTimeout(()=>it.group.position.y=0,90);
+    // dispensar lata en la bandeja
+    const trayWorld=new THREE.Vector3(0.4,0.62,0.62).applyEuler(it.group.rotation).add(it.group.position);
+    spawnCan(trayWorld);
+    toast('¡Clic! Cayó una lata en la bandeja.');
+  } else if(aim.kind==='can'){
+    aim.ref.taken=true; scene.remove(aim.ref.group); pickSound();
+    cans++; cansEl.textContent=cans; toast('🥤 Lata recogida');
+  }
+}
+
+/* ============================================================
+   MENÚ / POINTER LOCK / PAUSA
+============================================================ */
+const menu=document.getElementById('menu');
+document.getElementById('playBtn').addEventListener('click',()=>{ Bell.init(); controls.lock(); });
+controls.addEventListener('lock',()=>{ menu.classList.add('hide'); crossEl.style.display='block'; });
+controls.addEventListener('unlock',()=>{ menu.classList.remove('hide'); crossEl.style.display='none'; });
+
+/* ============================================================
+   LOOP
+============================================================ */
+const clock=new THREE.Clock();
+Crossing.idleWait = 8 + Math.random()*6; // primer tren pronto (test)
+onStateChange('IDLE');
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+  const running = controls.isLocked;
+
+  if(running){ updatePlayer(dt); Crossing.update(dt); }
+
+  // cooldowns máquinas
+  interactables.forEach(it=> it.cooldown=Math.max(0,it.cooldown-dt));
+  // latas: pequeño rebote/rotación
+  pickups.forEach(p=>{ if(p.taken)return; p.t+=dt; p.group.rotation.y+=dt*1.5; p.group.position.y=p.spawn.y+Math.sin(p.t*3)*0.03; });
+
+  // Pétalos con turbulencia + colisión suave al suelo
+  const time=clock.elapsedTime;
+  for(let i=0;i<PETALS;i++){
+    pPos[i*3]   += (pVel[i*3]   + Math.sin(time*1.3+pPhase[i])*0.4)*dt;
+    pPos[i*3+1] += pVel[i*3+1]*dt;
+    pPos[i*3+2] += (pVel[i*3+2] + Math.cos(time*1.1+pPhase[i])*0.4)*dt;
+    if(pPos[i*3+1]<=0.05){ // colisión leve con el suelo -> reaparece arriba
+      pPos[i*3+1]=0.05;
+      if(Math.random()<0.03*dt*60) seedPetal(i,true);
+    }
+  }
+  petalGeo.attributes.position.needsUpdate=true;
+
+  // Sol sigue al jugador (sombras estables)
+  const po=controls.getObject().position;
+  sun.position.set(po.x-28, 34, po.z+20); sun.target.position.copy(po); sun.target.updateMatrixWorld();
+
+  // Camera shake según proximidad al tren
+  if(Crossing.state==='TRAIN_PASSING'){
+    const d=Math.abs(Crossing.trainX-po.x)+Math.abs(po.z)*0.6;
+    const amp=THREE.MathUtils.clamp(1-d/40,0,1)*0.06;
+    controls.getObject().position.x+=(Math.random()-0.5)*amp;
+    controls.getObject().position.y+=(Math.random()-0.5)*amp;
+  }
+
+  // HUD: cuenta atrás / info de estado
+  if(Crossing.state==='IDLE'){ stCd.textContent='Próximo tren en '+Math.max(0,Math.ceil(Crossing.idleWait-Crossing.t))+'s  (T = llamar)'; }
+  else if(Crossing.state==='WARNING'){ stCd.textContent='¡Apártate! bajando barreras…'; }
+  else if(Crossing.state==='TRAIN_PASSING'){ stCd.textContent='Serie E233 · 60 km/h'; }
+  else stCd.textContent='';
+
+  if(toastT>0){ toastT-=dt; if(toastT<=0) toastEl.style.opacity='0'; }
+  updateAim();
+
+  renderer.render(scene,camera);
+}
+animate();
+
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+</script>
+</body>
+</html>

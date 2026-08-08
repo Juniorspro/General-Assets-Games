@@ -39,3 +39,29 @@ cada juego ya soportaba (ES/EN, y PT en el del bosque).
 - Cada archivo es autocontenido: se abre directamente en el navegador.
 - La lógica de detección reutilizable está documentada en la skill
   `.claude/skills/deteccion-plataforma`.
+
+---
+
+## `Fumikiri_Crossing.html` — demo de prueba (cruce de trenes, cel-shading)
+
+Juego de prueba en primera persona ambientado en un **paso a nivel japonés
+(踏切 *fumikiri*)** con estética **cel-shading (toon)**, hecho con Three.js.
+Implementa el sistema que pediste en HTML jugable:
+
+- **Cel-shading:** `MeshToonMaterial` con rampa de luz de 3 tonos +
+  **luz de borde (rim)** inyectada por shader (`onBeforeCompile`) y **contorno**
+  por *inverted hull* (casco invertido extruido por normales).
+- **Sistema del cruce (máquina de estados):** `ABIERTO → ¡ALERTA! (5 s) →
+  CERRANDO (4 s, barreras 90°→0° con EaseInOutQuad) → TREN PASANDO → ABRIENDO
+  (3 s)`, con **campana** (WebAudio) y **luces rojas parpadeantes** alternas.
+  Pulsa **T** para llamar al tren; las barreras bloquean el paso cuando está cerrado.
+- **Interacción en primera persona:** raycast de mira; **E** para comprar en la
+  **máquina expendedora** (suena moneda, cae una lata, la recoges y suma al contador).
+- **Ambiente:** dos expendedoras, postes de luz con **catenaria (cables)**, un
+  **taxi retro amarillo**, señales 踏切, árboles de sakura con **pétalos** en caída
+  con turbulencia, y un **tren serie E233** que cruza a ~60 km/h con *camera shake*.
+- **Controles:** `WASD` mover · `Espacio` saltar · **mouse** mirar (pointer lock) ·
+  `E` interactuar · `T` llamar tren · `Esc` pausa.
+
+Es autocontenido y carga three.js desde su CDN (necesita internet la primera vez).
+Se abre directamente en el navegador (en PC, haz clic en **JUGAR** para capturar el mouse).
