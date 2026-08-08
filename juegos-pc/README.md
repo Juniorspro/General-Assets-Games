@@ -60,8 +60,14 @@ Implementa el sistema que pediste en HTML jugable:
 - **Ambiente:** dos expendedoras, postes de luz con **catenaria (cables)**, un
   **taxi retro amarillo**, señales 踏切, árboles de sakura con **pétalos** en caída
   con turbulencia, y un **tren serie E233** que cruza a ~60 km/h con *camera shake*.
-- **Controles:** `WASD` mover · `Espacio` saltar · **mouse** mirar (pointer lock) ·
+- **Controles (PC):** `WASD` mover · `Espacio` saltar · **mouse** mirar (pointer lock) ·
   `E` interactuar · `T` llamar tren · `Esc` pausa.
+- **Controles (móvil):** detecta el móvil automáticamente (táctil + puntero grueso) y, al
+  tocar **JUGAR**, entra en **pantalla completa** y bloquea la orientación **horizontal**.
+  Joystick virtual (izquierda) para moverse, arrastre (derecha) para mirar y botones
+  **T (tren) · E (usar) · Salto**. El gesto «atrás» del sistema (salir de pantalla completa)
+  vuelve al menú. En móvil no se usa *pointer lock* (que no existe ahí y provocaba un error).
 
 Es autocontenido y carga three.js desde su CDN (necesita internet la primera vez).
-Se abre directamente en el navegador (en PC, haz clic en **JUGAR** para capturar el mouse).
+Se abre directamente en el navegador (en PC, clic en **JUGAR** para capturar el mouse;
+en móvil, toca **JUGAR** y se pone en horizontal a pantalla completa).
