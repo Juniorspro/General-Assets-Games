@@ -266,3 +266,40 @@ Toma de **38 s que se graba sola**: al pulsar **● GRABAR** entra y empieza a r
 
 Sobre negro puro hace falta **contraluz**: un cuerpo negro sobre fondo negro no se ve, así que
 la iluminación es una clave frontal más dos contras laterales que dibujan el borde de la figura.
+
+---
+
+## `Rezona_TV.html` — cabecera del programa (90s)
+
+Cabecera de canal en **4:3 siempre**: el lienzo vive dentro de un marco de proporción fija
+centrado en pantalla, con barras negras a los lados, así que se emite en 4:3 aunque el monitor
+sea panorámico o sea un móvil en vertical.
+
+### Guion (≈22 s)
+1. **La cabecera se construye por mosaico.** La placa generada aparece en teselas de 16×12 en
+   orden aleatorio, cada una entrando con un empujón de escala, mientras una línea de barrido
+   recorre la construcción. Al completarse: acorde, fallo de cinta y fogonazo blanco.
+2. **El dino cae al centro** desde arriba, con estirado en la caída y **aplastado con rebote
+   amortiguado** al tocar el suelo (golpe grave de sonido).
+3. **Gira acercándose**: el giro se dispara mientras avanza hacia cámara y crece, hasta que su
+   cuerpo llena el cuadro y **solo queda naranja**.
+4. **Del naranja se funde el plató**, ya con la cámara de estudio dentro.
+
+### Assets generados con Higgsfield
+- **La placa "REZONA TV"**: generada con `nano_banana_pro` pasándole **tu logo R y tu dino como
+  referencias** (subidos con `media_upload` + `media_confirm`), en estilo ident noventero:
+  lettering 3D biselado, confeti Memphis, zigzags y estrellas sobre negro.
+- **El dino 3D**: primero una vista limpia y simétrica del mascota sobre fondo plano (otra vez
+  usando tu imagen como referencia), y de ahí `image_to_3d`. El GLB pasó de **3,0 MB a 1,17 MB**
+  recomprimiendo su textura de 2048² (1,9 MB) a 512² JPEG (29 KB).
+- Todo va **incrustado como data URI**: el archivo es autocontenido.
+
+### El plató (hecho a mano en Three.js)
+Suelo oscuro con brillo, ciclorama curvo, **pantalla gigante con la propia cabecera**, tarima
+con canto naranja, mesa de presentador, estructura de focos con **haces visibles** (conos
+aditivos sobre bruma) y charcos de luz de colores en el suelo, dos **cámaras de estudio** sobre
+pedestal con su piloto rojo, y monitores a un lado. La cámara hace un travelling lento de
+acercamiento, como una grúa de estudio.
+
+El post es una cinta de emisión más limpia que la de los juegos de terror: sangrado de croma
+suave, scanlines, grano leve y viñeta, sin los fallos agresivos.
