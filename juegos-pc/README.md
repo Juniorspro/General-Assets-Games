@@ -120,3 +120,44 @@ video con un `MediaStreamDestination`. Al terminar se puede **descargar** o **co
   **CORRUPTO** (192p, mucho fallo).
 - **PC:** `WASD` mover · `Shift` correr · mouse mirar · `R` grabar · `C` cambiar cinta · `Esc` salir.
 - **Móvil:** joystick, arrastre para mirar, botón de correr; entra en pantalla completa horizontal.
+
+---
+
+## `Patio_Trasero.html` — el patio de la casa enorme
+
+Misma cámara de camcorder (ojo de pez + VHS + grabación limpia) que `Liminal_VHS.html`,
+pero en exteriores: apareces en el **patio trasero de una casa gigantesca**, al atardecer y
+encapotado. El patio mide **215 metros** y termina en alguna parte. Al fondo hay **algo muy
+alto que solo está ahí, quieto**.
+
+### Texturas generadas con Higgsfield
+Todo el material fotográfico está **generado con Higgsfield** (`nano_banana_pro`) e
+**incrustado en el propio HTML como data URI**, así que el archivo sigue siendo autocontenido
+y funciona sin conexión a los assets:
+
+- césped descuidado, losas de hormigón agrietado, tablas de valla envejecidas, seto,
+  revestimiento de madera pintada de la casa y tejas asfálticas — todas pedidas como
+  **texturas seamless tileables** con iluminación plana;
+- un **cielo encapotado de atardecer**, recompuesto en un canvas con un degradado que lo funde
+  con el color de la niebla, para que el horizonte no corte con una banda dura;
+- la **cara de la entidad**: una máscara pálida y demacrada con ojos hundidos y pelo enmarañado,
+  a la que se le calcula el **canal alfa a partir de la luminancia** para que el fondo negro
+  desaparezca y solo quede la cara y el pelo.
+
+### La entidad
+Construida con geometría (zancos larguísimos que se afilan, cadera acampanada, columna fina,
+brazos largos y quebrados) en negro mate, ~21 m de alto, con la cara generada como *billboard*
+que **siempre te mira**. Solo respira, muy despacio. Conforme te acercas:
+
+- sube un **zumbido subgrave** (dos senoidales a 41 y 57 Hz),
+- el **temblor de la cinta se multiplica**,
+- y el **año del OSD se corrompe** (la cinta recuerda mal la fecha).
+
+Con la niebla calibrada, desde la casa no se ve nada; a ~70 m es una mancha alta entre la
+bruma; a ~35 m ya se lee la silueta; y al llegar tienes que **levantar la vista** porque no
+cabe en el encuadre.
+
+### Escena
+Casa de 72 × 24 m con tejado a dos aguas, **36 ventanas** (dos encendidas) y la puerta trasera
+al final del camino de losas; vallas y setos a los lados, árboles secos, un columpio, un
+cobertizo y tendederos repartidos por los 215 m.
