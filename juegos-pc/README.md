@@ -315,3 +315,21 @@ cada cuadro hacia la cámara** con tope de giro. No parpadea: solo mira.
 El post es una cinta de emisión a **240p** con sangrado de croma, scanlines, grano y viñeta.
 Al pulsar **EMITIR** entra en **pantalla completa** (y bloquea horizontal en móvil), y el marco
 4:3 se recalcula solo tras el cambio de tamaño.
+
+---
+
+## `Rezona_Transmision.html` — la señal recuperada
+
+Página que aloja el vídeo de la sesión, con un mensaje arriba y otro abajo.
+
+- **Arriba, morse.** Un piloto parpadea el mensaje en código morse mientras va escribiendo los
+  puntos y rayas debajo; se puede activar el **tono** (oscilador a 620 Hz) y repetir. El
+  mensaje se codifica en el propio navegador desde el texto, con las duraciones estándar
+  (raya = 3 unidades, hueco de letra = 3, hueco de palabra = 7).
+- **En medio, el vídeo**, en un marco 4:3 con aspecto de monitor. Si no encuentra
+  `media/rezona_sesion.mp4` al lado, ofrece **abrirlo a mano** en vez de quedarse en negro.
+- **Abajo, un fragmento cifrado** en un alfabeto de 26 signos rúnicos (sustitución simple),
+  que aparece signo a signo. Es descifrable por frecuencias.
+
+> El vídeo va como archivo aparte en `media/` porque son 29 MB: incrustarlo en el HTML lo
+> dejaría en ~39 MB. Hay que mantener el HTML y la carpeta `media/` juntos.
