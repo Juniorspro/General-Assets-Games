@@ -159,5 +159,40 @@ cabe en el encuadre.
 
 ### Escena
 Casa de 72 × 24 m con tejado a dos aguas, **36 ventanas** (dos encendidas) y la puerta trasera
-al final del camino de losas; vallas y setos a los lados, árboles secos, un columpio, un
-cobertizo y tendederos repartidos por los 215 m.
+al final del camino de losas; vallas y setos a los lados, un columpio y un cobertizo.
+Los **árboles** son recortes generados con Higgsfield (uno seco y uno frondoso) montados como
+*billboards* en cruz de dos planos, con el alfa sacado de la luminancia; hay cinco secos dentro
+del patio y ocho frondosos detrás de la valla que sugieren bosque alrededor. Al ser solo dos
+texturas + una función, se reutilizan tal cual en cualquier otro juego del repo.
+
+### La entidad: modelo 3D generado
+La criatura es un **modelo 3D real generado con Higgsfield** (`image_to_3d`) a partir de una
+referencia hecha a medida: insecto palo erguido, torso de anillos segmentados, brazos como
+látigos, patas de aguja, cara pálida de máscara y pelo de alambre — con los hilos de marioneta
+incluidos. El GLB venía a 4,7 MB; se reempaquetó a **1,3 MB** conservando geometría y UVs y
+recomprimiendo la textura de 2048² (3,3 MB) a 512² JPEG (**31 KB**). Se conserva el mapa para que
+el cuerpo salga casi negro y **la cara, pálida**.
+
+> Nota de montaje: el ancla de la cabeza está al **82 %** de la altura, no arriba del todo,
+> porque el *bounding box* incluye los hilos de marioneta que suben por encima.
+
+### El final
+La entidad **no se ve durante el paseo**. Al cruzar el fondo del patio aparece delante de ti y
+arranca una cinemática de ~10,6 s en la que pierdes el control:
+
+1. **Aparece** con un fallo de cinta y un golpe de sonido.
+2. **Levantas la vista** siguiéndola hasta la cabeza, a 21 m de altura.
+3. **Se agacha**: se inclina y baja hasta ponerte la cara a la altura de los ojos, a unos 6 m.
+4. **Te mira** moviendo la cabeza a tirones, en pasos secos de stop-motion.
+5. **Corta con un glitch** y funde a negro.
+
+Y en negro aparece un **código morse** (punto de luz + pitido, 16,4 s) que dice
+*«ayuda, yo no pedí estar aquí»*. No se muestra el texto: hay que descifrarlo.
+
+### Grabación en 4:3 y MP4
+La grabación se hace sobre un **segundo lienzo de 960 × 720 (4:3)** en el que se recorta el
+centro de la imagen, aunque el juego se esté jugando en panorámico. Como es otro lienzo —y los
+controles son DOM— **no entra nada de la interfaz**. El OSD de cámara se dibuja dentro de la
+**zona segura 4:3** (marcada en pantalla con guías punteadas) para que no se pierda al recortar.
+El códec se pide como **MP4 primero** (`avc1`, luego `video/mp4`) y solo cae a WEBM si el
+navegador no ofrece MP4, avisándolo en el panel de la cinta.
