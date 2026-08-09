@@ -335,6 +335,86 @@ function rotW(b, axis, ang){
   const la = _v1.copy(axis).applyQuaternion(_q2.copy(_q1).invert()).normalize();
   b.quaternion.copy(_q3.setFromAxisAngle(la, ang)).multiply(restQ[b.uuid]);
 }
+// Apunta el hueso de modo que su eje "hacia el hijo" (+Y local) siga una dirección del mundo
+const _Y1 = new THREE.Vector3(0,1,0);
+function aimBoneY(b, worldDir){
+  if(!b) return;
+  b.parent.getWorldQuaternion(_q1);
+  const ld = _v1.copy(worldDir).applyQuaternion(_q2.copy(_q1).invert()).normalize();
+  b.quaternion.setFromUnitVectors(_Y1, ld);
+}
+// Ragdoll de brazos: cadena verlet de 2 tramos por brazo
+const ARM = { g:-24.0, damp:0.90, iters:3, ready:false, sides:[] };
+function armInit(){
+  ARM.sides = [];
+  for(const side of ['left','right']){
+    const a=BONE[side+'arm'], f=BONE[side+'forearm'], h=BONE[side+'hand'];
+    if(!a||!f||!h) continue;
+    const p0=new THREE.Vector3(), p1=new THREE.Vector3(), p2=new THREE.Vector3();
+    a.getWorldPosition(p0); f.getWorldPosition(p1); h.getWorldPosition(p2);
+    ARM.sides.push({ a, f, sign: side==='left'?1:-1,
+      L1:p0.distanceTo(p1), L2:p1.distanceTo(p2),
+      e:p1.clone(), ep:p1.clone(), w:p2.clone(), wp:p2.clone() });
+  }
+  ARM.ready = ARM.sides.length>0;
+}
+function armReset(){
+  for(const s of ARM.sides){
+    s.a.getWorldPosition(_v1);                       // hombro
+    s.e.set(_v1.x + s.sign*s.L1*0.28, _v1.y - s.L1*0.96, _v1.z);
+    s.w.set(s.e.x + s.sign*s.L2*0.18, s.e.y - s.L2*0.98, s.e.z);
+    s.ep.copy(s.e); s.wp.copy(s.w);
+  }
+}
+const _anchor=new THREE.Vector3(), _d=new THREE.Vector3(), _tmp=new THREE.Vector3();
+function armSim(dt){
+  if(!ARM.ready) return;
+  const h = Math.min(dt, 0.033);
+  for(const s of ARM.sides){
+    s.a.getWorldPosition(_anchor);
+    // integración verlet + gravedad y un empujoncito lateral para que no se peguen al cuerpo
+    for(const P of [['e','ep'],['w','wp']]){
+      const c=s[P[0]], pv=s[P[1]];
+      _tmp.copy(c);
+      c.x += (c.x-pv.x)*ARM.damp + s.sign*3.0*h*h;
+      c.y += (c.y-pv.y)*ARM.damp + ARM.g*h*h;
+      c.z += (c.z-pv.z)*ARM.damp;
+      pv.copy(_tmp);
+    }
+    for(let i=0;i<ARM.iters;i++){
+      _d.copy(s.e).sub(_anchor); const l1=_d.length()||1;
+      s.e.copy(_anchor).addScaledVector(_d, s.L1/l1);
+      _d.copy(s.w).sub(s.e); const l2=_d.length()||1;
+      s.w.copy(s.e).addScaledVector(_d, s.L2/l2);
+    }
+    aimBoneY(s.a, _d.copy(s.e).sub(_anchor).normalize());
+    entityRoot.updateMatrixWorld(true);
+    aimBoneY(s.f, _d.copy(s.w).sub(s.e).normalize());
+  }
+}
+// La cabeza gira sobre su eje para mirarte (con sesgo hacia arriba y tope de giro)
+const HEAD_UP = 0.34, HEAD_MAX = 1.25;
+const _face=new THREE.Vector3(), _hp=new THREE.Vector3(), _f0=new THREE.Vector3();
+function aimHead(target, jerk){
+  const b = BONE['head']; if(!b || !target) return;
+  const front = BONE['headfront'];
+  _face.copy(front ? front.position : _Y1).normalize();
+  if(!front) _face.set(0,0,1);
+  b.getWorldPosition(_hp);
+  _d.copy(target).sub(_hp);
+  _d.y += _d.length()*HEAD_UP;          // mira más arriba
+  _d.normalize();
+  if(jerk) _d.applyAxisAngle(_Y1, jerk);
+  b.parent.getWorldQuaternion(_q1);
+  const ld = _v1.copy(_d).applyQuaternion(_q2.copy(_q1).invert()).normalize();
+  _f0.copy(_face).applyQuaternion(restQ[b.uuid]).normalize();
+  let ang = Math.acos(THREE.MathUtils.clamp(_f0.dot(ld), -1, 1));
+  if(ang > HEAD_MAX){                    // no se descoyunta
+    _v2.copy(_f0).lerp(ld, HEAD_MAX/ang).normalize(); ld.copy(_v2);
+  }
+  b.quaternion.copy(_q3.setFromUnitVectors(_f0, ld)).multiply(restQ[b.uuid]);
+}
+
 function toeY(){
   if(!BONE['lefttoebase']) return 0;
   BONE['lefttoebase'].getWorldPosition(_v1);
@@ -386,6 +466,7 @@ new GLTFLoader().load(TEXDATA.locust, gltf=>{
     HIP_K = REST_TOE - toeY();
     BONE['hips'].position.copy(restHips); entityRoot.updateMatrixWorld(true);
   }
+  armInit(); armReset();
   entityReady = true;
 }, undefined, ()=>{
   const f = new THREE.Mesh(new THREE.BoxGeometry(1.2, ENT_H, 0.8),
@@ -396,7 +477,7 @@ new GLTFLoader().load(TEXDATA.locust, gltf=>{
 /* Pose procedural. k=0 de pie, k=1 agachada del todo.
    aim: cuánto inclina cuello y cabeza hacia ti · jerk: giro seco de la cabeza */
 const CROUCH = { thigh:-1.1, shin:1.9, foot:-2.3, spine:0.8 };
-function poseCreature(k, aim, jerk, t){
+function poseCreature(k, aim, jerk, t, dt){
   if(!entityReady || !BONE['hips']) return;
   const a1=CROUCH.thigh*k, a2=CROUCH.shin*k, a3=CROUCH.foot*k, a4=CROUCH.spine*k;
   const br = Math.sin(t*0.55)*0.014 + Math.sin(t*0.23)*0.008;   // respira
@@ -414,22 +495,25 @@ function poseCreature(k, aim, jerk, t){
   rotW(BONE['spine'],   AX_X, a4*0.24 + br*0.5);
   entityRoot.updateMatrixWorld(true);
 
-  rotW(BONE['leftarm'],  AX_Z, -0.30*k); rotW(BONE['rightarm'], AX_Z,  0.30*k);
-  rotW(BONE['leftforearm'],  AX_X, -0.50*k - 0.08);
-  rotW(BONE['rightforearm'], AX_X, -0.50*k - 0.08);
-  rotW(BONE['leftshoulder'],  AX_Z, -0.10*k); rotW(BONE['rightshoulder'], AX_Z, 0.10*k);
-
-  rotW(BONE['neck'], AX_X, aim*0.45 - a4*0.50 + br);
-  rotW(BONE['head'], AX_X, aim*0.55 - a4*0.50);
-  if(jerk){ rotW(BONE['head'], AX_Y, jerk); }
+  rotW(BONE['leftshoulder'],  AX_Z, -0.12*k); rotW(BONE['rightshoulder'], AX_Z, 0.12*k);
+  rotW(BONE['neck'], AX_X, aim*0.30 - a4*0.55 + br);
   entityRoot.updateMatrixWorld(true);
 
-  // Clavar los pies: la cadera baja lo que haga falta
+  // Clavar los pies antes de simular, para que el hombro ya esté en su sitio final
   for(let i=0;i<2;i++){
     BONE['hips'].position.y -= (toeY()-REST_TOE)/HIP_K;
     entityRoot.updateMatrixWorld(true);
   }
+
+  // Brazos: cuelgan por física, como una marioneta sin hilos
+  armSim(dt||0.016);
+  entityRoot.updateMatrixWorld(true);
+
+  // Cabeza: gira sobre su eje buscándote
+  aimHead(_headTarget, jerk);
+  entityRoot.updateMatrixWorld(true);
 }
+const _headTarget = new THREE.Vector3();
 function headWorld(v){
   if(headBone.ref) return headBone.ref.getWorldPosition(v);
   return v.set(entityRoot.position.x, ENT_H*0.8, entityRoot.position.z);
@@ -712,7 +796,9 @@ function startCine(){
   // Aparece justo delante, mirándote
   entityRoot.position.set(pos.x, 0, pos.z - 10.5);
   entityRoot.rotation.set(0,0,0);
-  poseCreature(0, 0, 0, clock.elapsedTime);
+  _headTarget.set(pos.x, pos.y, pos.z);
+  poseCreature(0, 0, 0, clock.elapsedTime, 0.016);
+  armReset();
   entityRoot.visible = true;
   glitch = 1.0; dateGlitch = 3.0; sting();
 }
@@ -1004,7 +1090,10 @@ function animate(){
     if(droneGain) droneGain.gain.value = Math.max(0, droneGain.gain.value - dt*0.12);
   }
 
-  if(entityRoot.visible) poseCreature(CINE.k, CINE.aim, CINE.jerk, t);
+  if(entityRoot.visible){
+    _headTarget.set(pos.x, pos.y+bob, pos.z);
+    poseCreature(CINE.k, CINE.aim, CINE.jerk, t, dt);
+  }
 
   camera.rotation.set(
     pitch+Math.sin(t*1.7)*0.006+Math.sin(walkPhase*2)*0.009,

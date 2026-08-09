@@ -188,6 +188,20 @@ float32 a byte normalizado (519 KB → 129 KB), sin tocar geometría, UVs ni esq
   cabeza**, no el cuerpo entero.
 - Respira siempre, con dos senoidales desfasadas sobre la columna.
 
+**Brazos con física (ragdoll).** Los brazos no se posan a mano: cada uno es una **cadena
+verlet de dos tramos** (hombro→codo→muñeca) que cae por gravedad, con amortiguación y un
+empujoncito lateral para que no se peguen al torso. Se integra, se imponen las longitudes de
+los huesos en 3 iteraciones, y luego se **orientan los huesos** para seguir la cadena
+(apuntando su eje «hacia el hijo» en la dirección del mundo que toque). Resultado: cuelgan
+sueltos y se balancean solos cuando la criatura se agacha o gira, como una marioneta.
+La simulación corre después de plantar los pies, para que el hombro ya esté en su sitio final.
+
+**La cabeza gira sobre su eje.** En vez de una rotación fija, se calcula la dirección real
+hacia ti y se orienta el eje frontal del hueso `Head` (que se saca del hueso `headfront`, no
+se supone) hacia ahí, con **sesgo hacia arriba** para que levante la cara en lugar de mirar al
+suelo, y un **tope de giro** para que no se descoyunte. Los tirones desvían esa dirección, así
+que te busca a trompicones en vez de girar el cuerpo entero.
+
 > Para escalar el personaje hay que calcular la caja **aplicando el skinning**
 > (`applyBoneTransform` sobre una muestra de vértices): la caja normal de la geometría da una
 > altura falsa, porque la malla vive en otro espacio que el esqueleto.
