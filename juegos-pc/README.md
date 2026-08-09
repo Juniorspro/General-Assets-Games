@@ -310,18 +310,40 @@ los dibuja la propia luz.
 La cámara primero hace una **revisión de lado a lado** del plató y después se sitúa **de frente
 a la mesa**, encuadrando la entrevista.
 
-**Voz robótica, en tres capas** para que siempre llegue el mensaje:
-1. **Síntesis del navegador en español**, con tono grave y ritmo lento. Se **despierta dentro
-   del propio clic** de EMITIR (`primeTTS`): los navegadores móviles ignoran `speechSynthesis`
-   si la llamada no va ligada a un gesto reciente, y las frases suenan 12 s después.
-   La voz se elige buscando una con `lang` que empiece por `es`.
-2. **Respaldo de zumbidos.** Si el aparato no tiene motor de voz —o no llega a arrancar en
-   700 ms— se sintetiza un habla robótica con WebAudio: una sílaba por golpe, con dos filtros
-   de banda haciendo de formantes y la frecuencia del formante cambiando según la vocal.
-3. **Rótulo en pantalla**, dibujado **dentro del cuadro** (como un subtítulo de emisión), así
-   que se lee aunque no suene nada, y además queda grabado si se captura la señal.
+**Voz de verdad, ya horneada en el archivo.** Se abandonó `speechSynthesis`: depende de que el
+aparato traiga motor de voz en español, y en la caja de pruebas daba **0 voces**, así que no
+sonaba nada. Ahora las siete locuciones se **generaron con Higgsfield** (`generate_audio`, voz
+*Arthur*, español) y viajan **dentro del HTML** como data URI. No hay red que consultar ni motor
+que falte: si el navegador sabe decodificar un WAV, se oye.
 
-Hay un botón **PROBAR VOZ** en el menú para comprobarla al instante en tu aparato.
+- Se generaron a 24 kHz estéreo (2,4 MB en total) y se pasaron a **mono, 11025 Hz, 8 bits** en
+  Python puro: **354 KB** para los siete clips. Es una voz de emisión pasada por cinta, la
+  pérdida juega a favor.
+- Al pulsar EMITIR se crea el `AudioContext` **y después** se decodifican los clips
+  (`decodeAudioData`). El orden importa: al revés, `loadVoices` salía sin hacer nada porque el
+  contexto todavía no existía.
+
+**Cadena robot/VHS** por la que pasa cada locución antes de sonar:
+- **Modulación en anillo** a 44 Hz (una portadora entrando por el `gain` de un nodo) — el timbre
+  metálico.
+- **Banda de teléfono**, 250–3400 Hz, con realce en 1700 Hz: suena a emisión vieja, no a estudio.
+- **Wow de cinta**: un LFO a 1,7 Hz sobre el `playbackRate`, más un 0,97 fijo para bajarla un pelo.
+- **Mezcla seca/húmeda** (0,45 / 0,75): sin algo de voz limpia, el anillo la vuelve ininteligible.
+
+Encima va el **rótulo dentro del cuadro** (como subtítulo de emisión), que también queda grabado.
+Hay un botón **PROBAR VOZ** en el menú para oírla al instante.
+
+### Grabación 4:3 en MP4
+Como el resto de la serie: un lienzo aparte de **960×720** recorta el centro del render cada
+cuadro, así que **la interfaz DOM nunca sale en la cinta**. El audio entra por un
+`MediaStreamAudioDestinationNode` colgado del `master`, con lo que la voz, los golpes y el
+ambiente del plató quedan **en la pista de sonido**. La grabación **arranca sola** 120 ms
+después de EMITIR, y la barra de abajo permite pararla; al parar sale el panel **CINTA
+RECUPERADA** con descarga y, si el aparato lo permite, compartir.
+
+Se prefiere `video/mp4;codecs=avc1.42E01E,mp4a.40.2` y se va bajando hasta WEBM; en un teléfono
+sale MP4/H.264. Verificado extrayendo fotogramas de la cinta grabada: 960×720 reales, sin
+interfaz, con la cabecera, el plató y el rótulo.
 
 **Público y el invitado.** Cuatro semicírculos de **sillas** rodean por detrás la butaca
 central, ocupadas por **figuras negras sentadas** (construidas con primitivas: torso, cuello,
