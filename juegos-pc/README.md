@@ -238,3 +238,29 @@ controles son DOM— **no entra nada de la interfaz**. El OSD de cámara se dibu
 **zona segura 4:3** (marcada en pantalla con guías punteadas) para que no se pierda al recortar.
 El códec se pide como **MP4 primero** (`avc1`, luego `video/mp4`) y solo cae a WEBM si el
 navegador no ofrece MP4, avisándolo en el panel de la cinta.
+
+---
+
+## `Sesion_Figura.html` — sesión de fotos en cuarto negro
+
+Toma de **38 s que se graba sola**: al pulsar **● GRABAR** entra y empieza a registrar en
+**4:3**, sin nada que tocar. La figura riggeada aparece sobre **negro puro** y va encadenando
+**poses aleatorias**, y en el tramo central se cuelan **los fotogramas encontrados**.
+
+- **Poses aleatorias:** cada 1,1–2,6 s se sortea una pose nueva (agachada o erguida, torsión y
+  ladeo de columna, giro y ladeo de cabeza). El 55 % de las veces entra de **golpe seco**
+  (stop-motion, con chasquido y fallo de cinta) y el resto en transición lenta.
+- **Brazos:** siguen con el **ragdoll** de la cadena verlet. Para las poses de brazos en alto
+  no se posan a mano: se **invierte la gravedad** de la simulación y suben solos, colgando.
+- **La cabeza** sigue buscando la cámara sobre su propio eje, con desvíos por pose.
+- **Encuadres:** la toma alterna plano entero, medio y primer plano, con órbita lenta y
+  temblor de mano.
+- **Insertos:** las **7 fotos** salen al menos una vez cada una entre el 30 % y el 78 % de la
+  toma, más 5 parpadeos de 1–2 cuadros (algunos invertidos o saturados). Se pintan **dentro
+  del lienzo**, a cuadro completo, así que **quedan grabados** y les cae encima el grano y las
+  scanlines de la cinta. Varias venían casi negras, así que se les sube el brillo al insertarlas.
+- Al llegar al final corta con un glitch, **para la grabación sola** y ofrece descargar el MP4.
+  **OTRA TOMA** genera una sesión distinta (las poses y los insertos se sortean cada vez).
+
+Sobre negro puro hace falta **contraluz**: un cuerpo negro sobre fondo negro no se ve, así que
+la iluminación es una clave frontal más dos contras laterales que dibujan el borde de la figura.
