@@ -295,11 +295,23 @@ sea panorámico o sea un móvil en vertical.
 - Todo va **incrustado como data URI**: el archivo es autocontenido.
 
 ### El plató (hecho a mano en Three.js)
-Suelo oscuro con brillo, ciclorama curvo, **pantalla gigante con la propia cabecera**, tarima
-con canto naranja, mesa de presentador, estructura de focos con **haces visibles** (conos
-aditivos sobre bruma) y charcos de luz de colores en el suelo, dos **cámaras de estudio** sobre
-pedestal con su piloto rojo, y monitores a un lado. La cámara hace un travelling lento de
-acercamiento, como una grúa de estudio.
+Suelo con brillo, ciclorama curvo, **pantalla gigante con la propia cabecera**, tarima con
+canto naranja, parrilla de focos, dos **cámaras de estudio** sobre pedestal con su piloto rojo
+y monitores a un lado. La cámara hace un travelling lento de acercamiento.
 
-El post es una cinta de emisión más limpia que la de los juegos de terror: sangrado de croma
-suave, scanlines, grano leve y viñeta, sin los fallos agresivos.
+**Iluminación real, no conos falsos.** Se quitaron los conos transparentes: ahora son
+`SpotLight` de verdad con **sombras** (`PCFSoftShadowMap`), con su ángulo y penumbra, tres de
+ellos proyectando sombra sobre la tarima. Los charcos de luz del suelo ya no están pintados:
+los dibuja la propia luz.
+
+**Público y el invitado.** Cuatro semicírculos de **sillas** rodean por detrás la butaca
+central, ocupadas por **figuras negras sentadas** (construidas con primitivas: torso, cuello,
+cabeza, muslos, pantorrillas, pies y brazos, en material negro mate), todas vueltas hacia la
+cámara. En el centro, sentada en su butaca, está **la entidad riggeada del patio**: se le posa
+la sentada con el mismo sistema de huesos (muslos al frente, rodillas abajo, tronco erguido,
+brazos caídos), se la baja hasta que la cadera apoya en el asiento, y **la cabeza se orienta
+cada cuadro hacia la cámara** con tope de giro. No parpadea: solo mira.
+
+El post es una cinta de emisión a **240p** con sangrado de croma, scanlines, grano y viñeta.
+Al pulsar **EMITIR** entra en **pantalla completa** (y bloquea horizontal en móvil), y el marco
+4:3 se recalcula solo tras el cambio de tamaño.
