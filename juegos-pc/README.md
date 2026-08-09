@@ -71,3 +71,52 @@ Implementa el sistema que pediste en HTML jugable:
 Es autocontenido y carga three.js desde su CDN (necesita internet la primera vez).
 Se abre directamente en el navegador (en PC, clic en **JUGAR** para capturar el mouse;
 en móvil, toca **JUGAR** y se pone en horizontal a pantalla completa).
+
+---
+
+## `Liminal_VHS.html` — mundo liminal con cámara VHS y grabación limpia
+
+Espacio liminal infinito (pasillos amarillos tipo *backrooms*) en primera persona,
+filmado con una **cámara de camcorder emulada**: ojo de pez, VHS y fallos de cinta.
+
+### La cadena de señal (por qué se ve "real")
+El realismo no viene de un filtro encima, sino de emular cómo degrada la señal una cinta:
+
+- **Croma bajo (color-under).** El VHS guarda la **luma a ~3 MHz** pero el **croma a ~0.4 MHz**.
+  Por eso se trabaja en **YIQ**: la luma se mantiene casi nítida y los canales **I/Q se
+  arrastran hacia la derecha** (sentido del barrido) sobre 5 muestras. Es el efecto que hace
+  que los tubos fluorescentes "sangren" color a un lado.
+- **Error de base de tiempo.** Cada línea de barrido se desplaza horizontalmente un poco
+  (ruido por línea + una onda lenta): es lo que da el temblor característico.
+- **Head switching.** La banda rota de los ~6 renglones inferiores, donde el cabezal conmuta.
+- **Dropouts.** Rayas blancas cortas de pérdida de señal.
+- **Ghosting.** Eco del cuadro anterior desplazado (arrastre de cabezal) → estelas al moverse.
+- **Grano, scanlines, entrelazado y viñeta**, más una gradación de cinta vieja
+  (negros levantados, saturación baja, tinte cálido).
+- **Resolución real de 240p** escalada a pantalla. Esto es lo que más engaña al ojo:
+  la falta de detalle impide juzgar si algo es CGI.
+
+### Ojo de pez
+No basta subir el FOV. Se renderiza con FOV alto y se **remapea con distorsión radial
+normalizada al radio de esquina**: el centro se magnifica y los bordes se comprimen, así las
+rectas se curvan como en una lente ancha **sin salirse del cuadro** ni perder imagen.
+
+### Grabación sin los controles en pantalla
+El botón **● GRABAR** usa `canvas.captureStream()` + `MediaRecorder`, es decir **captura solo
+el lienzo**. El joystick, los botones y los chips son **elementos DOM que viven por encima del
+canvas**, así que por definición **no entran en el video**. El OSD de cámara (● REC, contador
+de cinta, fecha y hora) sí se dibuja *dentro* del lienzo, por lo que sí queda grabado, como en
+una cinta real. El audio (zumbido de fluorescente, tono de sala, siseo, pasos) se mezcla al
+video con un `MediaStreamDestination`. Al terminar se puede **descargar** o **compartir**
+(`navigator.share`, útil para subirlo a TikTok desde el móvil).
+
+### Contenido y controles
+- Planta generada por celdas con hash determinista: pasillos infinitos que se reconstruyen
+  alrededor del jugador. A veces **la planta cambia detrás de ti**.
+- Una **figura** aparece a lo lejos y desaparece si te acercas o dejas de mirarla; al hacerlo
+  dispara un fallo de cinta y **la fecha del OSD se corrompe**.
+- Parpadeos de fluorescente, ráfagas de glitch y bamboleo de cámara en mano.
+- Tres cintas seleccionables: **VHS-C**, **HANDYCAM** (más ojo de pez, menos ruido) y
+  **CORRUPTO** (192p, mucho fallo).
+- **PC:** `WASD` mover · `Shift` correr · mouse mirar · `R` grabar · `C` cambiar cinta · `Esc` salir.
+- **Móvil:** joystick, arrastre para mirar, botón de correr; entra en pantalla completa horizontal.
