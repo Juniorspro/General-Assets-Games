@@ -310,9 +310,18 @@ los dibuja la propia luz.
 La cámara primero hace una **revisión de lado a lado** del plató y después se sitúa **de frente
 a la mesa**, encuadrando la entrevista.
 
-**Voz.** Una **voz robótica** (síntesis del navegador en español, tono grave y ritmo lento) suelta
-frases sueltas durante el programa: «Hoy estamos en Rezona TV, presentando anomalías cuánticas»,
-«Sí. Anomalías cuánticas», y algunas más que se sortean.
+**Voz robótica, en tres capas** para que siempre llegue el mensaje:
+1. **Síntesis del navegador en español**, con tono grave y ritmo lento. Se **despierta dentro
+   del propio clic** de EMITIR (`primeTTS`): los navegadores móviles ignoran `speechSynthesis`
+   si la llamada no va ligada a un gesto reciente, y las frases suenan 12 s después.
+   La voz se elige buscando una con `lang` que empiece por `es`.
+2. **Respaldo de zumbidos.** Si el aparato no tiene motor de voz —o no llega a arrancar en
+   700 ms— se sintetiza un habla robótica con WebAudio: una sílaba por golpe, con dos filtros
+   de banda haciendo de formantes y la frecuencia del formante cambiando según la vocal.
+3. **Rótulo en pantalla**, dibujado **dentro del cuadro** (como un subtítulo de emisión), así
+   que se lee aunque no suene nada, y además queda grabado si se captura la señal.
+
+Hay un botón **PROBAR VOZ** en el menú para comprobarla al instante en tu aparato.
 
 **Público y el invitado.** Cuatro semicírculos de **sillas** rodean por detrás la butaca
 central, ocupadas por **figuras negras sentadas** (construidas con primitivas: torso, cuello,
