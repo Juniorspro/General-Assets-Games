@@ -279,8 +279,10 @@ sea panorámico o sea un móvil en vertical.
 1. **La cabecera se construye por mosaico.** La placa generada aparece en teselas de 16×12 en
    orden aleatorio, cada una entrando con un empujón de escala, mientras una línea de barrido
    recorre la construcción. Al completarse: acorde, fallo de cinta y fogonazo blanco.
-2. **El dino cae al centro** desde arriba, con estirado en la caída y **aplastado con rebote
-   amortiguado** al tocar el suelo (golpe grave de sonido).
+2. **El dino cae al centro 3 s después** de completarse la cabecera, **sin quitarla de detrás**:
+   la placa no es una superposición sino un **plano en la escena 3D**, así que el modelo cae por
+   delante y la cabecera sigue viéndose entera. Estirado en la caída y **aplastado con rebote
+   amortiguado** al aterrizar.
 3. **Gira acercándose**: el giro se dispara mientras avanza hacia cámara y crece, hasta que su
    cuerpo llena el cuadro y **solo queda naranja**.
 4. **Del naranja se funde el plató**, ya con la cámara de estudio dentro.
@@ -303,6 +305,14 @@ y monitores a un lado. La cámara hace un travelling lento de acercamiento.
 `SpotLight` de verdad con **sombras** (`PCFSoftShadowMap`), con su ángulo y penumbra, tres de
 ellos proyectando sombra sobre la tarima. Los charcos de luz del suelo ya no están pintados:
 los dibuja la propia luz.
+
+**Mesa y entrevista.** Delante de la butaca hay una **mesa** con canto naranja y dos micrófonos.
+La cámara primero hace una **revisión de lado a lado** del plató y después se sitúa **de frente
+a la mesa**, encuadrando la entrevista.
+
+**Voz.** Una **voz robótica** (síntesis del navegador en español, tono grave y ritmo lento) suelta
+frases sueltas durante el programa: «Hoy estamos en Rezona TV, presentando anomalías cuánticas»,
+«Sí. Anomalías cuánticas», y algunas más que se sortean.
 
 **Público y el invitado.** Cuatro semicírculos de **sillas** rodean por detrás la butaca
 central, ocupadas por **figuras negras sentadas** (construidas con primitivas: torso, cuello,

@@ -89,6 +89,14 @@ const kA = new THREE.DirectionalLight(0xfff2e0, 2.4); kA.position.set(4,9,7); sc
 const rA = new THREE.DirectionalLight(0xff9a3c, 1.5); rA.position.set(-6,3,-5); sceneA.add(rA);
 const bA = new THREE.DirectionalLight(0x66d8ff, 0.9); bA.position.set(5,2,-6); sceneA.add(bA);
 
+// La cabecera vive como plano en la escena: así el dino cae POR DELANTE y no la tapa
+const titleCanvas=document.createElement('canvas'); titleCanvas.width=1024; titleCanvas.height=768;
+const titleCtx=titleCanvas.getContext('2d');
+const titleTex=new THREE.CanvasTexture(titleCanvas); titleTex.colorSpace=THREE.SRGBColorSpace;
+const titlePlane=new THREE.Mesh(new THREE.PlaneGeometry(14.0,10.5),
+  new THREE.MeshBasicMaterial({ map:titleTex, transparent:true }));
+titlePlane.position.set(0,1.9,-6.2); sceneA.add(titlePlane);
+
 const dino = new THREE.Group(); sceneA.add(dino);
 let dinoReady=false, DINO_H=3.9;
 new GLTFLoader().load(TVDATA.dino, g=>{
@@ -201,6 +209,32 @@ const MAT = {
     }
   }
   const hostChair = chair(0,-3.2,0,1.12);      // la butaca del invitado
+  // Mesa de entrevista, entre la cámara y el invitado
+  {
+    const top=new THREE.Mesh(new THREE.BoxGeometry(3.6,0.14,1.5),
+      new THREE.MeshStandardMaterial({color:0x4a5570,roughness:0.42,metalness:0.28}));
+    top.position.set(0,1.02,-1.45); top.castShadow=true; top.receiveShadow=true; sceneB.add(top);
+    const edge=new THREE.Mesh(new THREE.BoxGeometry(3.66,0.06,1.56),
+      new THREE.MeshBasicMaterial({color:0xff8a2a}));
+    edge.position.set(0,1.10,-1.45); sceneB.add(edge);
+    const front=new THREE.Mesh(new THREE.BoxGeometry(3.4,0.95,0.12),
+      new THREE.MeshStandardMaterial({color:0x2b3346,roughness:0.6,metalness:0.2}));
+    front.position.set(0,0.53,-0.78); front.castShadow=true; sceneB.add(front);
+    for(const sx of [-1.5,1.5]){
+      const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.95,10),
+        new THREE.MeshStandardMaterial({color:0x333c50,roughness:0.6,metalness:0.4}));
+      leg.position.set(sx,0.48,-2.05); leg.castShadow=true; sceneB.add(leg);
+    }
+    // Un par de micrófonos de sobremesa
+    for(const sx of [-0.95,0.95]){
+      const st=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.42,8),
+        new THREE.MeshStandardMaterial({color:0x11151d,roughness:0.5,metalness:0.6}));
+      st.position.set(sx,1.30,-1.30); sceneB.add(st);
+      const hd=new THREE.Mesh(new THREE.SphereGeometry(0.075,12,10),
+        new THREE.MeshStandardMaterial({color:0x0d1016,roughness:0.7}));
+      hd.position.set(sx,1.54,-1.28); sceneB.add(hd);
+    }
+  }
 
   /* ---- Parrilla ---- */
   for(const z of [-15,-8,-1]){
@@ -488,6 +522,35 @@ function thud(){
   const g2=AC.createGain(); g2.gain.setValueAtTime(0.16,t); g2.gain.exponentialRampToValueAtTime(0.0004,t+0.16);
   s.connect(f).connect(g2).connect(master); s.start(t); s.stop(t+0.2);
 }
+/* Voz de robot: síntesis del navegador, grave y lenta */
+const PHRASES=[
+ 'Hoy estamos en Rezona TV, presentando anomalías cuánticas.',
+ 'Sí. Anomalías cuánticas.',
+ 'El sujeto no ha parpadeado en catorce horas.',
+ 'Rezona no responde preguntas. Rezona las reescribe.',
+ 'El invitado accedió a la entrevista. Creemos.',
+ 'Continuamos con la emisión.',
+ 'La señal es estable. Por ahora.'
+];
+let voiceES=null;
+function pickVoice(){
+  if(!('speechSynthesis' in window)) return;
+  const vs=speechSynthesis.getVoices()||[];
+  voiceES = vs.find(v=>/^es/i.test(v.lang)) || vs.find(v=>/spanish|español/i.test(v.name)) || null;
+}
+if('speechSynthesis' in window){ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }
+function say(txt){
+  if(!('speechSynthesis' in window)) return;
+  try{
+    const u=new SpeechSynthesisUtterance(txt);
+    if(voiceES) u.voice=voiceES;
+    u.lang='es-ES'; u.rate=0.80; u.pitch=0.30; u.volume=1.0;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+let saidI=0;
+function sayNext(){ say(PHRASES[saidI % PHRASES.length]); saidI++; }
+
 let roomGain=null;
 function studioRoom(){
   if(!AC || roomGain) return;
@@ -501,15 +564,17 @@ function studioRoom(){
 /* ============================================================================
    GUION — tiempos de la cabecera
 ============================================================================ */
-const T = { build:0.5, built:2.6, hold:4.3, flash:4.45, jump:4.6, land:5.9,
-            spin:6.5, orange:9.3, studio:9.9, reveal:11.2, end:22 };
+const T = { build:0.5, built:2.6, jump:5.6, land:6.9,
+            spin:7.6, orange:10.4, studio:11.0, reveal:12.2,
+            front:18.0, end:34 };
 let show={ t:0, running:false, phase:'', fired:{} };
 const ease=(x)=>x<0.5?2*x*x:-1+(4-2*x)*x;
 const clamp01=x=>x<0?0:(x>1?1:x);
 function once(k,fn){ if(!show.fired[k]){ show.fired[k]=true; fn(); } }
 
 function startShow(){
-  show.t=0; show.running=true; show.fired={};
+  show.t=0; show.running=true; show.fired={}; saidI=0;
+  try{ speechSynthesis.cancel(); }catch(e){}
   makeTiles();
   dino.position.set(0,26,-1); dino.rotation.set(0,0,0); dino.scale.set(1,1,1);
   camA.position.set(0,1.9,7.6); camA.lookAt(0,1.9,0);
@@ -518,43 +583,43 @@ function startShow(){
 }
 
 let glitch=0;
+function drawTitle(){
+  const W=titleCanvas.width,H=titleCanvas.height,x=titleCtx;
+  const t=show.t;
+  x.clearRect(0,0,W,H);
+  if(t<T.build || !titleImg.complete || !titleImg.naturalWidth) return;
+  const p=clamp01((t-T.build)/(T.built-T.build));
+  const n=Math.floor(TILES.length*p);
+  for(let i=0;i<n;i++){
+    const T2=TILES[i];
+    const tw=W/T2.cols, th=H/T2.rows;
+    const sx=T2.c*titleImg.naturalWidth/T2.cols, sy=T2.r*titleImg.naturalHeight/T2.rows;
+    const sw=titleImg.naturalWidth/T2.cols, sh=titleImg.naturalHeight/T2.rows;
+    const age=clamp01((p*TILES.length-i)/2.2);
+    const k=1+(1-age)*0.35;
+    const dw=tw*k, dh=th*k;
+    x.globalAlpha=0.25+0.75*age;
+    x.drawImage(titleImg,sx,sy,sw,sh, T2.c*tw-(dw-tw)/2, T2.r*th-(dh-th)/2, dw, dh);
+  }
+  x.globalAlpha=1;
+  if(p<1){
+    const yy=H*p;
+    const g=x.createLinearGradient(0,yy-H*0.06,0,yy+H*0.02);
+    g.addColorStop(0,'rgba(255,180,90,0)'); g.addColorStop(1,'rgba(255,220,170,.55)');
+    x.fillStyle=g; x.fillRect(0,yy-H*0.06,W,H*0.08);
+  }
+  titleTex.needsUpdate=true;
+}
 function drawOverlay(){
   const W=ovC.width,H=ovC.height,x=ovX;
   x.clearRect(0,0,W,H);
   const t=show.t;
-
-  // 1 · La cabecera se construye por mosaico
-  if(t<T.flash && titleImg.complete && titleImg.naturalWidth){
-    const p=clamp01((t-T.build)/(T.built-T.build));
-    x.fillStyle='#000'; x.fillRect(0,0,W,H);
-    const n=Math.floor(TILES.length*p);
-    for(let i=0;i<n;i++){
-      const T2=TILES[i];
-      const tw=W/T2.cols, th=H/T2.rows;
-      const sx=T2.c*titleImg.naturalWidth/T2.cols, sy=T2.r*titleImg.naturalHeight/T2.rows;
-      const sw=titleImg.naturalWidth/T2.cols, sh=titleImg.naturalHeight/T2.rows;
-      // los últimos en llegar entran con un empujón
-      const age=clamp01((p*TILES.length-i)/2.2);
-      const k=1+(1-age)*0.35;
-      const dw=tw*k, dh=th*k;
-      x.globalAlpha=0.25+0.75*age;
-      x.drawImage(titleImg,sx,sy,sw,sh, T2.c*tw-(dw-tw)/2, T2.r*th-(dh-th)/2, dw, dh);
-    }
-    x.globalAlpha=1;
-    // barrido de línea que recorre la construcción
-    if(p<1){
-      const yy=H*p;
-      const g=x.createLinearGradient(0,yy-H*0.06,0,yy+H*0.02);
-      g.addColorStop(0,'rgba(255,180,90,0)'); g.addColorStop(1,'rgba(255,220,170,.55)');
-      x.fillStyle=g; x.fillRect(0,yy-H*0.06,W,H*0.08);
-    }
-  }
-  // 2 · Fogonazo blanco al terminar la cabecera
-  if(t>=T.flash && t<T.flash+0.45){
-    const a=1-clamp01((t-T.flash)/0.45);
+  // Fogonazo corto al completarse la cabecera (sin borrarla)
+  if(t>=T.built && t<T.built+0.30){
+    const a=(1-clamp01((t-T.built)/0.30))*0.75;
     x.fillStyle=`rgba(255,255,255,${a})`; x.fillRect(0,0,W,H);
   }
-  // 3 · Naranja total y fundido al plató
+  // Naranja total y fundido al plató
   if(t>=T.spin){
     let a=0;
     if(t<T.studio) a=clamp01((t-(T.orange-1.1))/1.1);
@@ -576,11 +641,15 @@ function animate(){
     once('a',()=>{});
     if(t>=T.build) once('riser',()=>riser(2.0));
     if(t>=T.built) once('chord',()=>{ chord(); glitch=0.5; });
-    if(t>=T.flash) once('flash',()=>{ glitch=0.9; whoosh(0.5,0.14); });
+    if(t>=T.jump-0.35) once('pre',()=>whoosh(0.5,0.12));
     if(t>=T.jump) once('jump',()=>whoosh(1.1,0.18));
     if(t>=T.land) once('land',()=>{ thud(); glitch=0.4; });
     if(t>=T.spin) once('spin',()=>whoosh(2.6,0.20));
     if(t>=T.studio) once('room',()=>{ studioRoom(); glitch=0.55; });
+    if(t>=T.studio+1.4) once('v1',()=>say(PHRASES[0]));
+    if(t>=T.studio+7.0) once('v2',()=>say(PHRASES[1]));
+    if(t>=T.front+1.2)  once('v3',()=>say(PHRASES[2]));
+    if(t>=T.front+7.5)  once('v4',()=>say(PHRASES[3+((Math.random()*4)|0)]));
     if(t>=T.end) once('end',()=>{ show.running=false;
       document.getElementById('replay').classList.add('on'); });
   }
@@ -611,6 +680,8 @@ function animate(){
       camA.position.z = 7.6 - e*1.8;
     }
     dino.visible = t>=T.jump && t<T.studio;
+    titlePlane.material.opacity = 1-clamp01((show.t-T.spin)/1.2);
+    titlePlane.visible = show.t < T.studio && titlePlane.material.opacity>0.01;
   }
 
   if(t>=T.spin) poseGuest(et);
@@ -618,11 +689,20 @@ function animate(){
   // --- cámara del plató: lento travelling de estudio ---
   {
     const p=clamp01((t-T.studio)/(T.end-T.studio));
-    // Plano del invitado: nos acercamos despacio a la butaca central
-    const a=0.24-p*0.20;
-    const d=11.6-p*3.4;
-    camB.position.set(Math.sin(a)*d, 3.35-p*0.55+Math.sin(t*0.25)*0.05, -3.2+Math.cos(a)*d);
-    camB.lookAt(0, 2.00, -3.6);
+    // Primero una revisión de lado a lado del plató; luego, de frente a la mesa.
+    if(t < T.front){
+      const q=clamp01((t-T.studio)/(T.front-T.studio));
+      const a=-0.95+q*1.90;
+      const d=11.2;
+      camB.position.set(Math.sin(a)*d, 3.5+Math.sin(t*0.3)*0.06, -3.2+Math.cos(a)*d);
+      camB.lookAt(0, 2.05, -3.4);
+    } else {
+      const q=ease(clamp01((t-T.front)/2.6));
+      const a=0.95*(1-q);
+      const d=11.2-q*5.0;
+      camB.position.set(Math.sin(a)*d, 3.5-q*1.25+Math.sin(t*0.3)*0.04, -3.2+Math.cos(a)*d);
+      camB.lookAt(0, 2.05-q*0.15, -3.4);
+    }
     camB.rotation.z += Math.sin(t*0.6)*0.004;
   }
 
@@ -630,6 +710,7 @@ function animate(){
   vhs.uniforms.uGlitch.value=glitch;
   vhs.uniforms.uTime.value=et;
 
+  drawTitle();
   drawOverlay();
 
   const useB = t>=T.studio;
@@ -667,6 +748,7 @@ document.getElementById('playBtn').addEventListener('click',()=>{
   startShow();
 });
 document.getElementById('replay').addEventListener('click',()=>{ startShow(); });
+addEventListener('beforeunload',()=>{ try{ speechSynthesis.cancel(); }catch(e){} });
 
 // Arranca cuando el dino y la cabecera estén listos.
 // Si ya se pulsó EMITIR, no volvemos a sacar el menú.
