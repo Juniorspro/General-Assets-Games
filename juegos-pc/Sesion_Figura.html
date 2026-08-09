@@ -408,20 +408,21 @@ function drawOSD(dt){
   const x=osdCtx, W=osdCanvas.width, H=osdCanvas.height;
   x.clearRect(0,0,W,H);
 
-  // Insertos: tapan todo el cuadro
+  // Insertos: las fotos son 4:3, así que se encajan EXACTAS en el área 4:3 que se graba
   if(flash.t>0){
     flash.t-=dt;
     const im=flash.img;
     if(im && im.complete && im.naturalWidth){
-      x.fillStyle='#000'; x.fillRect(0,0,W,H);
-      const s=Math.max(W/im.naturalWidth, H/im.naturalHeight);
-      const dw=im.naturalWidth*s, dh=im.naturalHeight*s;
+      const S=safeRect();
+      x.fillStyle='#000'; x.fillRect(0,0,W,H);          // negro fuera del encuadre grabado
+      const sc=Math.min(S.w/im.naturalWidth, S.h/im.naturalHeight);   // entera, sin recortar
+      const dw=im.naturalWidth*sc, dh=im.naturalHeight*sc;
       x.save();
       // Varias fotos vienen casi negras: sin subirles brillo no se registran en cinta
       if(flash.mode===1){ x.globalAlpha=0.9; x.filter='invert(1) brightness(1.25)'; }
       else if(flash.mode===2){ x.globalAlpha=0.95; x.filter='brightness(2.2) contrast(1.25) saturate(1.4)'; }
       else { x.filter='brightness(1.75) contrast(1.12)'; }
-      x.drawImage(im,(W-dw)/2,(H-dh)/2,dw,dh);
+      x.drawImage(im, S.x+(S.w-dw)/2, S.y+(S.h-dh)/2, dw, dh);
       x.restore(); x.filter='none'; x.globalAlpha=1;
     }
   }
