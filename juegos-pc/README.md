@@ -165,7 +165,34 @@ Los **árboles** son recortes generados con Higgsfield (uno seco y uno frondoso)
 del patio y ocho frondosos detrás de la valla que sugieren bosque alrededor. Al ser solo dos
 texturas + una función, se reutilizan tal cual en cualquier otro juego del repo.
 
-### La entidad: modelo 3D generado
+### La entidad: modelo 3D generado y **riggeado**, animado por código
+El personaje está **riggeado con Higgsfield** (`3d_rigging`) y sale con **24 huesos**:
+caderas, dos piernas completas (muslo, rodilla, pie y punta), columna de tres tramos,
+los dos hombros, brazos con antebrazo y mano, cuello y cabeza. Se le pidió una animación
+**Idle** solo para confirmar que el esqueleto salía bien, y **se descartó**: en el juego
+**toda la animación es procedural**.
+
+El GLB riggeado venía a **8,9 MB**; se reempaquetó a **1,49 MB** quitando la animación,
+recomprimiendo la textura (PNG de 7 MB → JPEG de 29 KB) y pasando los pesos de skinning de
+float32 a byte normalizado (519 KB → 129 KB), sin tocar geometría, UVs ni esqueleto.
+
+**Cómo se anima la sentadilla** (`poseCreature(k, aim, jerk, t)`):
+- Los huesos se giran alrededor de **ejes del mundo**, no de sus ejes locales, convirtiendo el
+  eje al espacio del padre. Así da igual cómo esté orientado cada hueso en el rig.
+- La sentadilla pliega muslo, rodilla y la punta larga con distinta intensidad (el pliegue
+  fuerte va en la punta, que es lo que le da el aire de insecto), más columna, hombros y brazos.
+- Los **pies quedan clavados en el suelo**: tras posar se baja el hueso de la cadera lo que
+  sobresalga la punta del pie. El factor de conversión cadera→pie **se mide en tiempo de carga**
+  moviendo la cadera una unidad, porque el nodo del esqueleto trae su propia escala.
+- La **cabeza** se orienta hacia ti por separado, y los tirones de «te mira» giran **solo la
+  cabeza**, no el cuerpo entero.
+- Respira siempre, con dos senoidales desfasadas sobre la columna.
+
+> Para escalar el personaje hay que calcular la caja **aplicando el skinning**
+> (`applyBoneTransform` sobre una muestra de vértices): la caja normal de la geometría da una
+> altura falsa, porque la malla vive en otro espacio que el esqueleto.
+
+### El modelo base
 La criatura es un **modelo 3D real generado con Higgsfield** (`image_to_3d`) a partir de una
 referencia hecha a medida: insecto palo erguido, torso de anillos segmentados, brazos como
 látigos, patas de aguja, cara pálida de máscara y pelo de alambre — con los hilos de marioneta
@@ -182,8 +209,9 @@ arranca una cinemática de ~10,6 s en la que pierdes el control:
 
 1. **Aparece** con un fallo de cinta y un golpe de sonido.
 2. **Levantas la vista** siguiéndola hasta la cabeza, a 21 m de altura.
-3. **Se agacha**: se inclina y baja hasta ponerte la cara a la altura de los ojos, a unos 6 m.
-4. **Te mira** moviendo la cabeza a tirones, en pasos secos de stop-motion.
+3. **Se agacha de verdad**: pliega las piernas por muslo, rodilla y punta, curva la columna y
+   baja la cabeza hasta dejártela encima, con los pies clavados en el suelo.
+4. **Te mira** girando **la cabeza** a tirones, en pasos secos de stop-motion.
 5. **Corta con un glitch** y funde a negro.
 
 Y en negro aparece un **código morse** (punto de luz + pitido, 16,4 s) que dice
