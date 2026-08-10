@@ -655,8 +655,41 @@ Construida a mano con las texturas de revestimiento y tejas que ya estaban en el
 columnas, chimenea, y **dos ventanas encendidas** con su luz puntual de verdad. Una valla de
 postes encauza la vista —y al jugador— hacia ella.
 
+### La casa y la puerta
+Granja blanca de tablas: cuerpo, tejado a dos aguas con alero, **buhardilla** al frente, esquinas
+y zócalo de moldura (que es lo que la hace leer como tablas y no como una caja), ventanas con
+marco y cruceta, chimenea de ladrillo y **porche** con columnas, barandilla y escalones. Dos
+ventanas encendidas con su luz puntual.
+
+La puerta cuelga de un **pivote a un lado**, así gira como una puerta y no se desplaza. Al llegar
+se abre sola y por el hueco entra una **luz blanca con bloom**: pasada de brillos por umbral, dos
+desenfoques separables y suma al final.
+
+### La cinemática de la puerta
+Se dispara a cuatro metros y quita el control:
+1. La puerta gira y la luz crece.
+2. Una **figura negra** sale de la casa y cruza el porche hasta la hierba.
+3. La cámara se pone **junto a su cabeza**, media cara en el borde del cuadro, mirando al campo.
+4. **Cambio de foco**: el plano enfocado viaja de la cara hasta el fondo. La cara se deshace y
+   aparece, nítida y lejísimos, **la entidad**.
+5. Golpe, fallo de cinta y fundido.
+
+El desenfoque es de verdad, no un truco de pantalla: el destino de render lleva su **textura de
+profundidad**, y el pase linealiza el z, calcula el círculo de confusión contra el plano enfocado
+y muestrea doce puntos en dos anillos. Por eso el cambio de foco funciona: sólo se mueve el número
+`uFocus`.
+
+### Los dos modelos y los sonidos
+- **La entidad** está hecha desde tus dos imágenes de referencia con `image_to_3d`. Como el GLB
+  viene sin textura, el color se resuelve **por altura en el sombreador**: negro en el cuerpo y
+  escaldado rojizo en la cabeza.
+- **La figura de la puerta** es otro `image_to_3d`, de una silueta negra de persona.
+- **Los sonidos son generados** con `mirelo_text_to_audio`: el crujido de la puerta, la
+  respiración enorme del fondo y el golpe final. Van incrustados y pasan por el mismo `master`,
+  así entran en la grabación.
+
 ### La cinta
-El mismo revelado que Rezona TV: se renderiza a **240p**, se pasa a YIQ para que el color sangre
+Se emite en **4:3**, como toda la serie, dentro de un marco fijo. El mismo revelado que Rezona TV: se renderiza a **240p**, se pasa a YIQ para que el color sangre
 hacia la derecha y la luminancia no, fantasma del fotograma anterior, grano, scanlines, viñeta y
 **banda de conmutación de cabezas** abajo. Los avisos del camino disparan un fallo de cinta.
 
