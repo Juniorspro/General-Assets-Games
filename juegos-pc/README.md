@@ -833,20 +833,42 @@ otra y así llegó hasta acá. Te tiene rencor, pero también aprecio, porque no
 `media/teypi/` guarda las fichas, pero los mundos son **geometría y texturas generadas en el
 navegador**: ni una imagen de fuera, así el archivo no engorda.
 
+Todo se **fusiona por material** antes de entrar a la escena, así un bosque de noventa y cinco
+árboles con sus piedras, troncos caídos, tocones y doscientas treinta matas de pasto sale en
+**cuatro llamadas de dibujo** y no en seiscientas. Dos cosas hubo que resolver para eso:
+
+- `mergeGeometries` devuelve **null en silencio** si se le mezclan geometrías indexadas con no
+  indexadas. Los conos vienen indexados y los icosaedros no, así que la bolsa de las hojas se
+  perdía entera: el bosque vivo salía con los árboles pelados. Ahora todo entra sin índice.
+- El temblor que le da forma a piedras y copas tiene que aplicarse **sobre la geometría
+  indexada**, o cada triángulo se mueve por su cuenta y la piedra se convierte en confeti.
+
 - **El pasillo** — el lugar especial, hecho para que sea la foto de referencia: damero gastado
   (ninguna baldosa igual a otra), paredes con moho que sube desde el zócalo, nueve pares de
   puertas con tres huecos negros, un tacho encendido que titila y un tubo agonizando al fondo.
-- **El bosque** — cúpula de cielo con degradado, cerros al fondo para que haya lejos, ciento
-  veinte árboles con follaje de cuatro verdes, arbustos, flores, el río y mariposas que abren y
-  cierran las alas de verdad (un ala dibujada, el otro plano la espeja).
-- **El bosque muerto** — el mismo mundo con el cielo rojo, los troncos pelados y torcidos, la
-  tierra agrietada, el cauce seco y, en la variante de fuego, **las mariposas ardiendo con su
-  propia luz**.
-- **El cyber** — seis gabinetes con monitores de fósforo verde, el damero, y un tubo fluorescente
-  que se corta a ritmo irregular. En las pantallas se lee `NATURA.EXE`, `ERROR 476` y un
-  `hola :)` repetido.
-- **El adentro de la máquina** — cuarenta y seis columnas de código cayendo en el vacío sobre una
-  rejilla verde.
+- **El bosque** — cúpula de cielo con degradado y nubes, nueve cerros al fondo para que haya
+  lejos, y noventa y cinco árboles de dos clases: **pinos** de cinco a siete capas irregulares y
+  **copudos** con tronco acodado, raíz ensanchada, cuatro ramas y una copa de bochas magulladas.
+  Debajo: piedras, troncos caídos con su corte anillado, tocones, doscientas treinta matas de
+  pasto en cruz con flores dibujadas, arbustos de hoja, juncos en la orilla, el río con su textura
+  corriendo y el **cartel de madera de `NATURA.EXE`** clavado en la tierra.
+- **El bosque muerto** — el mismo mundo con el cielo rojo, los troncos pelados y torcidos, veintiséis
+  tocones, la tierra agrietada con ceniza, el cauce seco con sus barrancas y piedras y, en la
+  variante de fuego, **las mariposas ardiendo con su propia luz** entre las pavesas que suben.
+- **Las mariposas** se dibujan con ala delantera y ala trasera por separado, con manchas, venas,
+  cuerpo y antena; vuelan en ocho, alabean al girar y baten las alas de verdad porque el segundo
+  plano espeja al primero. No las toca la niebla, así conservan su color contra el cielo rojo.
+- **El cyber** — seis puestos completos: gabinete con panel y disquetera, monitor de fósforo,
+  teclado con sus teclas, mouse, cables cayendo de la mesa y **silla de cinco patas** girada como
+  la dejaron. Más el mostrador, las cajas por el piso, el reloj, dos fluorescentes que se cortan a
+  destiempo y **el afiche de `NATURA · CUIDALA · 1988`** en la pared. En las pantallas se lee
+  `NATURA.EXE`, `ERROR 476`, un `hola :)` repetido y `mariposas: 0 vivas`.
+- **El pasillo** — además del damero y las puertas: marcos, picaportes, zócalo, **tres caños con
+  sus abrazaderas** cruzando el techo, un radiador, un matafuego, una silla tirada, escombro,
+  veinticuatro papeles por el suelo, el tacho con su llama y **dos tubos, uno vivo que parpadea y
+  otro muerto**, con polvo flotando en el haz.
+- **El adentro de la máquina** — cuarenta y seis columnas de código cayendo, treinta y cuatro
+  nodos de alambre girando y veintidós hilos de datos cruzando el vacío sobre una rejilla verde.
 
 ### Las fichas del archivo — `media/teypi/ficha_01..18.jpg`
 Dieciocho **fichas 9:16** con una tele CRT dibujada a mano y, adentro del tubo, una captura real
