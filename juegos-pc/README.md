@@ -661,8 +661,11 @@ y zócalo de moldura (que es lo que la hace leer como tablas y no como una caja)
 marco y cruceta, chimenea de ladrillo y **porche** con columnas, barandilla y escalones. Dos
 ventanas encendidas con su luz puntual.
 
-La puerta cuelga de un **pivote a un lado**, así gira como una puerta y no se desplaza. Al llegar
-se abre sola y por el hueco entra una **luz blanca con bloom**: pasada de brillos por umbral, dos
+La puerta cuelga de un **pivote a un lado**, así gira como una puerta y no se desplaza, y **abre
+hacia adentro**. Abría hacia el porche, o sea contra quien la empuja: el batiente barría el sitio
+donde estaba la figura y parecía que ella lo atravesaba. Medido, el canto de la puerta ahora se
+mete en la casa (de z −116,5 a −117,9) mientras el cuerpo se queda entre −116,0 y −115,6, siempre
+por delante del marco. Por el hueco entra una **luz blanca con bloom**: pasada de brillos por umbral, dos
 desenfoques separables y suma al final.
 
 ### La cinemática de la puerta
