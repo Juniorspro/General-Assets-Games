@@ -487,10 +487,30 @@ punto, así el disparo sale donde apunta la mira y no hay que reajustar fraccion
 cambia el dibujo.
 
 **El recorte no puede ceñirse al arma**: el fogonazo y las nubecitas de humo salen mucho más allá
-del cuerpo del arma y el cuadrado se los comía. Ahora el recuadro es la unión de dos cosas: el
-arma con un 30 % de aire, y la huella de **todos** los fotogramas medida por **cobertura de fila y
+del cuerpo del arma y el cuadrado se los comía. El recuadro es la unión de dos cosas: el arma con
+un 30 % de aire, y la huella de **todos** los fotogramas medida por **cobertura de fila y
 columna** en vez de por píxeles sueltos, que es lo que evita que cuatro motas de compresión
 obliguen a recortar el cuadro entero.
+
+Aun así seguía cortándose, y midiendo se vio por qué: **el humo llega al borde del propio vídeo**
+—un 33 % del borde de arriba en la ráfaga, un 50 % del de abajo en la recarga—, así que no había
+nada que recuperar recortando mejor. La solución es otra: se añade **margen transparente** y se
+**difumina el alfa** contra ese margen, de modo que el efecto se disipa en vez de cortarse en
+línea recta. Abajo no se difumina: ahí los brazos entran en cuadro y el corte es intencionado.
+
+### Tercera persona: un cartel 2.5D
+Con **V** en el teclado o el botón de la esquina se cambia entre primera y tercera persona. El
+personaje es un **cartel 2D dentro del mundo 3D**: un plano vertical que gira sobre su eje Y para
+mirar siempre a la cámara, con su sombra ovalada pintada en el suelo.
+
+Sus tres animaciones —reposo, caminata y disparo, **20 fotogramas cada una**— están dibujadas
+**de espaldas**, y con eso alcanza: como la cámara va siempre detrás del jugador, el ángulo
+relativo no cambia nunca, así que no hacen falta las ocho direcciones de un juego de sprites
+clásico. La caminata va atada al mismo reloj de paso que el balanceo de la cámara, igual que el
+arma en primera persona.
+
+La cámara se sitúa detrás, algo por encima y corrida al hombro, y el arma en pantalla se oculta
+mientras dura esa vista.
 
 ### Todo es una caricatura vieja
 El primer intento fue realista y no funcionaba: un dibujo plano en blanco y negro encima de un
