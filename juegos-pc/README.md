@@ -302,8 +302,12 @@ sea panorámico o sea un móvil en vertical.
     58 cm del suelo para que la silueta quede **contra el cielo** y no se pierda entre los árboles.
 12. **Sentada en el pasto**, con una mariposa posada en la cabeza, hablando de la paz: de la paz
     de los animales, y de que los humanos son el problema.
-13. **Cuatro segundos de silencio absoluto** sobre ella — se apagan los pájaros y el ambiente.
-14. **Corte a ruido puro** y fin de la emisión.
+13. **Cortes al bosque arrasado.** Mientras habla del bosque, la escena **salta a la versión
+    quemada durante 1 s** y vuelve: cielo rojo, arboleda gris de ceniza, suelo seco, sin flores,
+    y **mariposas en llamas revoloteando sobre su cabeza**. Cada salto entra y sale con un fallo
+    de cinta y un golpe.
+14. **Cuatro segundos de silencio absoluto** sobre ella — se apagan los pájaros y el ambiente.
+15. **Corte a ruido puro** y fin de la emisión.
 
 Los tiempos del final no están escritos a mano: se fijan **cuando la última locución termina**
 (`hushAt`, `cutAt`, `endAt`), así el silencio dura cuatro segundos de verdad aunque el aparato
@@ -322,6 +326,20 @@ Detalles que costaron:
   niebla usa el mismo color que el final del degradado.
 - Las matas y las flores dejan **libre el claro** donde se sienta y **la franja por donde camina**,
   si no le tapaban las piernas.
+
+### El parque arrasado (los cortes de 1 s)
+No es otra escena: **se intercambian materiales, cielo, niebla y luces** sobre la misma, que es
+instantáneo y no cuesta memoria. Se guarda una foto de los valores buenos la primera vez y se
+restauran al salir. Copas y troncos pasan a grises de ceniza, el suelo a tierra seca, las flores
+desaparecen, el sol se vuelve naranja quemado y la niebla se cierra a 26–190 m.
+
+Los cortes **no están escritos en tiempos absolutos**: cuando una frase sale de la cola se anotan
+sus fogonazos como desplazamientos desde ese instante (`FLASH_AT`), así siguen cayendo sobre la
+palabra correcta aunque el aparato vaya lento.
+
+Las alas están dibujadas como **un ala anclada al borde interior**, y el segundo plano va
+espejado (`scale.x=-1`). Dibujar una elipse entera en cada plano hacía que las dos juntas
+parecieran **un ojo**, que es exactamente lo que pasaba antes.
 
 ### Assets generados con Higgsfield
 - **La placa "REZONA TV"**: generada con `nano_banana_pro` pasándole **tu logo R y tu dino como
@@ -356,9 +374,10 @@ Las dieciocho locuciones se sintetizan con **eSpeak** (`meSpeak`, eSpeak compila
 robot de fábrica**. Se sintetizan aquí, no en el navegador, y viajan **dentro del HTML**:
 - El motor pesa 4,8 MB, así que **no se embarca**. Se usa sólo para hornear el audio.
 - Salen a 22050 Hz y se pasan a **mono, 8000 Hz, 8 bits**, con los silencios de los extremos
-  recortados: **658 KB** para los dieciocho clips (unos 80 s de habla). 8 kHz no pierde nada
+  recortados: **536 KB** para los dieciocho clips (unos 66 s de habla). 8 kHz no pierde nada
   audible porque la cadena filtra a 3400 Hz de todas formas.
-- Dos registros: el **locutor** de plató (rápido y agudo) y **la entidad** (lenta y grave).
+- Dos registros: el **locutor** de plató (152 palabras/min, tono agudo) y **la entidad** (146,
+  tono grave). Arrancó a 118 y se arrastraba demasiado en el parque.
 
 **Cadena robot/VHS** por la que pasa cada locución:
 - **Modulación en anillo** a 38 Hz — el timbre metálico.
