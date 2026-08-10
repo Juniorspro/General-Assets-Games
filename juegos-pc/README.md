@@ -697,9 +697,14 @@ y muestrea doce puntos en dos anillos. Por eso el cambio de foco funciona: sólo
 - **La figura de la puerta** es otro `image_to_3d`, con **textura** (la primera versión era una
   silueta sin rostro y en el primer plano no había cara que mostrar) y **riggeada** con
   `3d_rigging`: 24 huesos y un clip de `Long_Breathe_and_Look_Around` horneado.
-  - El clip riggeado mueve el acto 1. En el acto 2 el clip se congela y **el brazo va a la puerta
-    con los huesos**, rotando alrededor de ejes **de mundo**, que es lo que evita tener que saber
-    cómo está orientado cada hueso en su reposo.
+  - Lleva **tres clips**: `Long_Breathe_and_Look_Around` para el acto 1, `Casual_Walk` para
+    acercarse a la puerta y `Step_Forward_and_Push` para abrirla **él mismo**. La puerta gira
+    sincronizada con el empujón; antes se abría sola mientras la figura se deslizaba.
+  - Cada trabajo de riggeo hornea **una** animación, así que son tres GLB de ~6 MB cada uno. En
+    vez de embarcar los tres, **las animaciones se fusionan en uno solo**: se copian los
+    accesores y sus vistas al búfer del primero y se reasignan los canales **por nombre de nodo**,
+    no por índice, que es lo que evita que un clip acabe moviendo el hueso equivocado. Los dos
+    clips extra suman **139 KB**.
   - **Una malla con piel no se puede medir con `Box3`**: mide la geometría en reposo, no lo que
     los huesos dibujan, y al escalar por ahí el modelo salía gigante y la cámara acababa mirándole
     los zapatos. Se mide pasando los vértices por `applyBoneTransform`.
