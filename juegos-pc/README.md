@@ -892,6 +892,19 @@ compone antes del corrimiento de color, así que las letras y los botones sangra
 glitchean igual que el 3D. La voz de Teypi es la misma cadena robot/VHS de la serie (eSpeak
 horneado a 8 kHz, anillo a 38 Hz, banda telefónica y wow de cinta).
 
+### Los dos idiomas, elegidos con la mano
+Al terminar de caer el logo, **Teypi estira las dos manos y en cada palma aparece un cartel**:
+`ENGLISH` en una, `ESPAÑOL` en la otra. No son botones puestos en un sitio fijo de la pantalla:
+cada cuadro se **proyecta el hueso de la mano a coordenadas de pantalla** y el cartel se dibuja
+ahí, así que si la pose cambia el cartel la sigue. La primera versión los dejaba pisándose —las
+manos quedaban a treinta y tres centímetros una de otra—; se midieron los huesos y se abrieron los
+brazos hasta separarlas noventa y cinco.
+
+A partir de esa elección **todo** sale en ese idioma: la voz (dos juegos completos horneados con
+eSpeak, `es` y `en-us`, veintidós frases cada uno), la pregunta, los botones, los rótulos del
+relato, el mensaje en morse y hasta los renglones del volcado del reventón —incluido el que se le
+escapa a Teypi entre la basura hexadecimal—.
+
 **Este no graba y no tiene menú.** Se quitaron el botón de grabar, el reloj, el panel de la cinta
 recuperada y también la portada con el botón de entrar: **la cinta arranca sola** en cuanto el
 modelo termina de cargar, y mientras tanto la pantalla es ruido, que es lo que se ve cuando una
