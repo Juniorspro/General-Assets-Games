@@ -691,10 +691,24 @@ y muestrea doce puntos en dos anillos. Por eso el cambio de foco funciona: sólo
 ### Los dos modelos y los sonidos
 - **La entidad** está hecha desde tus dos imágenes de referencia con `image_to_3d`. Como el GLB
   viene sin textura, el color se resuelve **por altura en el sombreador**: negro en el cuerpo y
-  escaldado rojizo en la cabeza.
-- **La figura de la puerta** es otro `image_to_3d`, con **textura**: la primera versión era una
-  silueta sin rostro y en el primer plano no había cara que mostrar. Su GLB venía en 3,38 MB por
-  una textura de 2048²; recomprimida a 512 JPEG dentro del propio GLB queda en **1,55 MB**.
+  escaldado rojizo en la cabeza. Es más grande (12,5 m), está más cerca (24 m) y lleva **dos luces
+  propias**, una clave y un contra: es una columna negra contra un cielo oscuro y sin ellas no se
+  separaba del fondo.
+- **La figura de la puerta** es otro `image_to_3d`, con **textura** (la primera versión era una
+  silueta sin rostro y en el primer plano no había cara que mostrar) y **riggeada** con
+  `3d_rigging`: 24 huesos y un clip de `Long_Breathe_and_Look_Around` horneado.
+  - El clip riggeado mueve el acto 1. En el acto 2 el clip se congela y **el brazo va a la puerta
+    con los huesos**, rotando alrededor de ejes **de mundo**, que es lo que evita tener que saber
+    cómo está orientado cada hueso en su reposo.
+  - **Una malla con piel no se puede medir con `Box3`**: mide la geometría en reposo, no lo que
+    los huesos dibujan, y al escalar por ahí el modelo salía gigante y la cámara acababa mirándole
+    los zapatos. Se mide pasando los vértices por `applyBoneTransform`.
+  - El GLB riggeado llegó a 6,71 MB. Textura a 512 JPEG y **pesos de piel de float32 a byte
+    normalizado** (eran 593 KB de los 2,3 MB) lo dejan en **1,85 MB**.
+
+**La figura ya no atraviesa el suelo.** La tarima del porche está a 28 cm y la figura se plantaba
+siempre en `y=0`, así que mientras estaba en el porche quedaba hundida hasta los tobillos. Ahora
+hay una función de altura del terreno: tarima, rampa de escalones y hierba.
 - **Los sonidos son generados** con `mirelo_text_to_audio`: el crujido de la puerta y la
   respiración enorme del fondo. El golpe final se quitó: sonaba a trueno. Van incrustados y pasan por el mismo `master`,
   así entran en la grabación.
