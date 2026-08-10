@@ -666,13 +666,22 @@ se abre sola y por el hueco entra una **luz blanca con bloom**: pasada de brillo
 desenfoques separables y suma al final.
 
 ### La cinemática de la puerta
-Se dispara a cuatro metros y quita el control:
-1. La puerta gira y la luz crece.
-2. Una **figura negra** sale de la casa y cruza el porche hasta la hierba.
-3. La cámara se pone **junto a su cabeza**, media cara en el borde del cuadro, mirando al campo.
-4. **Cambio de foco**: el plano enfocado viaja de la cara hasta el fondo. La cara se deshace y
-   aparece, nítida y lejísimos, **la entidad**.
-5. Golpe, fallo de cinta y fundido.
+Se dispara a cuatro metros y quita el control. Tres actos:
+1. **De frente a él**, quieto ante la puerta, **mirando a los lados**. Sin esqueleto no se puede
+   girar sólo la cabeza, así que gira el cuerpo: en plano medio se lee igual.
+2. **Por detrás de él**, abriendo la puerta, hasta que la luz blanca se lo come.
+3. **Su cara pegada al borde derecho**, cortada por el cuadro, y el campo abriéndose a la
+   izquierda. Ahí el **foco viaja de la cara al fondo**: la cara se deshace y aparece **la
+   entidad**, con la cabeza roja.
+
+Dos detalles de oficio:
+- **El encuadre del acto 3 está calculado, no tanteado.** Para que la cara caiga al 70 % hacia el
+  borde derecho, el desplazamiento lateral de la cámara es `d·tan(32°)` con la mira de frente al
+  campo. Antes lo estimaba con giros a ojo y la cabeza se salía de cuadro.
+- **Hay una luz de relleno** que aparece sólo en ese plano. Toda la luz de la escena viene de
+  detrás, así que sin ella la media cara quedaba en negro puro.
+- En el acto 3 la figura sale del porche a la hierba, para que **las columnas queden detrás de la
+  cámara** y no se metan en el cuadro.
 
 El desenfoque es de verdad, no un truco de pantalla: el destino de render lleva su **textura de
 profundidad**, y el pase linealiza el z, calcula el círculo de confusión contra el plano enfocado
@@ -683,9 +692,11 @@ y muestrea doce puntos en dos anillos. Por eso el cambio de foco funciona: sólo
 - **La entidad** está hecha desde tus dos imágenes de referencia con `image_to_3d`. Como el GLB
   viene sin textura, el color se resuelve **por altura en el sombreador**: negro en el cuerpo y
   escaldado rojizo en la cabeza.
-- **La figura de la puerta** es otro `image_to_3d`, de una silueta negra de persona.
-- **Los sonidos son generados** con `mirelo_text_to_audio`: el crujido de la puerta, la
-  respiración enorme del fondo y el golpe final. Van incrustados y pasan por el mismo `master`,
+- **La figura de la puerta** es otro `image_to_3d`, con **textura**: la primera versión era una
+  silueta sin rostro y en el primer plano no había cara que mostrar. Su GLB venía en 3,38 MB por
+  una textura de 2048²; recomprimida a 512 JPEG dentro del propio GLB queda en **1,55 MB**.
+- **Los sonidos son generados** con `mirelo_text_to_audio`: el crujido de la puerta y la
+  respiración enorme del fondo. El golpe final se quitó: sonaba a trueno. Van incrustados y pasan por el mismo `master`,
   así entran en la grabación.
 
 ### La cinta
