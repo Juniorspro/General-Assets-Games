@@ -474,18 +474,34 @@ Experimento base: un mundo 3D de verdad (cielo 360, suelo gris, luces con sombra
 y las manos dibujadas como **sprites 2D planos** abajo a la derecha, al estilo del viewmodel de
 Counter-Strike.
 
-### Los sprites (generados con Higgsfield)
-Cinco fotogramas: **quieto**, **paso A**, **paso B**, **disparo** y **recarga**. El truco para
-que no salga un arma distinta en cada uno: se genera **primero el de quieto** y los otros cuatro
-se piden **pasándole ese como referencia**, con la instrucción de cambiar sólo la pose. Mismo
-fusil, mismos guantes, misma luz en los cinco.
+### Las animaciones (generadas con Higgsfield, como vídeo)
+**41 fotogramas** repartidos en tres animaciones: **caminata de 12**, **ráfaga de 12** y
+**recarga de 16**, más el fotograma de reposo.
 
-- Se piden sobre un **fondo magenta plano** (`#FF00FF`) y el recorte se hace acá, no con un
-  servicio: se mide la «magentitud» de cada píxel (`min(R,B) − G`), se saca un alfa suave de ahí,
-  y se aplica **desderrame** bajando R y B hacia G en el borde, que es lo que quita el fleco rosa.
-- El recuadro de recorte se calcula con **los cinco fotogramas a la vez**. Si se recorta cada uno
-  por su cuenta, el arma pega saltos al cambiar de fotograma.
-- Salen a WebP con alfa: **166 KB los cinco**.
+Cinco imágenes sueltas no son una animación, y pedirle doce imágenes a un modelo de imagen da
+doce armas distintas. Así que se generan **vídeos** (`seedance_2_0`, imagen de arranque = el
+sprite de reposo, 4:3, sin audio) y de ahí se sacan los fotogramas: un modelo de vídeo sí
+mantiene la coherencia entre un cuadro y el siguiente.
+
+De los vídeos a los sprites:
+- Se extraen todos los fotogramas con ffmpeg (~97 por clip a 24 fps).
+- **El bucle de la caminata se busca solo**: para cada periodo de 10 a 20 se compara el fotograma
+  `s` con el `s+N` y se elige el par que mejor cierra, premiando además que dentro del ciclo haya
+  movimiento de verdad. Salió inicio 17, periodo 12 — medio segundo, dos pasos por segundo.
+- **El fogonazo no se ve en el brillo medio** (el fondo magenta ocupa casi todo el cuadro y lo
+  aplana): se detecta con el **percentil 99,7**. Aparece cada ~2,7 fotogramas.
+- La recarga se muestrea entera, 16 fotogramas repartidos por el clip.
+
+Del magenta al alfa: se mide la «magentitud» de cada píxel (`min(R,B) − G`), se saca un alfa
+suave de ahí, y se aplica **desderrame** bajando R y B hacia G en el borde, que es lo que quita
+el fleco rosa. El **recuadro de recorte se calcula con los 41 fotogramas a la vez**: recortando
+cada animación por su cuenta, el arma pega saltos al cambiar de estado.
+
+Cada animación va en **una sola hoja de sprites** y se recorre moviendo el UV: cuatro texturas en
+vez de cuarenta y uno, y comprimen mucho mejor juntos (**512 KB** las cuatro en WebP con alfa).
+Las hojas se mantienen **por debajo de 2048 px** de lado, que es el límite de textura de algunos
+móviles viejos, y el UV lleva un margen de medio téxel para que el filtro lineal no cuele el
+fotograma vecino.
 
 ### El arma va dentro del render, no en el DOM
 El viewmodel se dibuja en una **escena ortográfica aparte** que se renderiza encima con
@@ -493,10 +509,22 @@ El viewmodel se dibuja en una **escena ortográfica aparte** que se renderiza en
 pero así el arma es parte de la imagen: entra en cualquier captura y se puede empujar con el
 retroceso como un viewmodel de verdad.
 
-Encima de los fotogramas hay animación procedural: **balanceo de paso** (el arma se mueve mucho
-más que la cámara), **respiración** cuando estás quieto, **retroceso** que empuja y gira el
-sprite, y un **hundido** durante la recarga. El puntero se abre con la dispersión y con la
-carrera.
+Cómo se elige el fotograma:
+- **Caminata**: el índice sale del **mismo reloj que el balanceo de la cámara**, así el paso del
+  sprite y el bamboleo caen juntos en vez de ir cada uno por su lado.
+- **Ráfaga**: mientras mantengas el gatillo, la animación se encadena y vuelve a empezar; un tiro
+  suelto corta al cuarto fotograma, que es donde termina el primer ciclo de fogonazo. Si no, un
+  solo disparo mostraría los cuatro fogonazos del clip.
+- **Recarga**: el índice es el progreso de la recarga, así los 16 fotogramas duran exactamente lo
+  que dura recargar.
+
+Encima queda un poco de animación procedural — **respiración** al estar quieto, **retroceso** y un
+**hundido** en la recarga — pero mucho menos que antes: el balanceo ya viene dibujado en los
+fotogramas y sumarle el procedural entero lo hacía marear. El puntero se abre con la dispersión
+y con la carrera.
+
+Los vídeos encuadran más lejos que la imagen original, así que el sprite se dibuja más grande en
+pantalla para que el arma vuelva a ocupar el cuarto de abajo a la derecha.
 
 ### El mundo
 - **Cielo 360**: el `HdrSkyMorning004` que ya estaba en el repo, como `EquirectangularReflectionMapping`.
