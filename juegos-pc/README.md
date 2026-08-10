@@ -498,16 +498,34 @@ nada que recuperar recortando mejor. La solución es otra: se añade **margen tr
 **difumina el alfa** contra ese margen, de modo que el efecto se disipa en vez de cortarse en
 línea recta. Abajo no se difumina: ahí los brazos entran en cuadro y el corte es intencionado.
 
-### Tercera persona: un cartel 2.5D
-Con **V** en el teclado o el botón de la esquina se cambia entre primera y tercera persona. El
-personaje es un **cartel 2D dentro del mundo 3D**: un plano vertical que gira sobre su eje Y para
-mirar siempre a la cámara, con su sombra ovalada pintada en el suelo.
+### Tercera persona: sprite de 8 direcciones
+Con **V** o el botón de la esquina se cambia entre primera y tercera persona, y con **C** o el
+botón **FIJA / LIBRE** se decide qué hace la cámara:
 
-Sus tres animaciones —reposo, caminata y disparo, **20 fotogramas cada una**— están dibujadas
-**de espaldas**, y con eso alcanza: como la cámara va siempre detrás del jugador, el ángulo
-relativo no cambia nunca, así que no hacen falta las ocho direcciones de un juego de sprites
-clásico. La caminata va atada al mismo reloj de paso que el balanceo de la cámara, igual que el
-arma en primera persona.
+- **FIJA**: la cámara va siempre detrás del hombro y el personaje siempre de espaldas.
+- **LIBRE**: el personaje se orienta hacia donde camina y la cámara puede rodearlo. Al ponerte
+  delante le ves la cara.
+
+El dibujo que toca sale del **ángulo del personaje menos el de la cámara**, redondeado a
+`π/4`: ocho direcciones (N, NE, E, SE, S, SO, O, NO) más una **cenital** que entra cuando la
+cámara pica más de 53° hacia abajo. Cada dirección tiene **las tres animaciones** —reposo,
+caminata y disparo, 12 fotogramas cada una— o sea **288 fotogramas** de personaje.
+
+Dos atajos que hacen esto viable:
+- **Sólo se generan cinco ángulos** (N, NO, O, SE, S) y los otros tres salen por **espejo**
+  (NE, E, SO). Es el truco de toda la vida en los juegos de sprites.
+- **Un solo vídeo por ángulo** con las tres animaciones seguidas, que luego se **segmenta solo**:
+  el disparo se localiza por el blanco puro del fogonazo, la caminata es la ventana con más
+  movimiento antes de eso, y el reposo la de menos. Los cinco clips cayeron con el disparo en el
+  mismo fotograma, así que el modelo respetó el guion.
+
+**El recorte va por dirección, no compartido.** Un recuadro común se lo comía una franja de basura
+en el borde de uno de los vídeos, y además cada ángulo ocupa un ancho distinto. Ahora cada
+dirección se recorta con su propia caja y todas se **alinean por el centro de los pies** dentro de
+un lienzo común, así el muñeco no pega saltos al girar.
+
+El arma se rehízo **baja y horizontal** a la altura de la cintura: antes apuntaba al cielo y de
+espaldas era lo único que se veía.
 
 La cámara se sitúa detrás, algo por encima y corrida al hombro, y el arma en pantalla se oculta
 mientras dura esa vista.
@@ -526,6 +544,10 @@ acompañaba**. Ahora el mundo entero está dibujado:
   parezca dibujado.
 - **Materiales planos** (`MeshLambert` y `MeshBasic`) y luz casi toda ambiental: en un dibujo no
   hay medios tonos.
+- **Cinta encima de la película.** Sobre el revelado de cine va una capa **VHS**: bandas de
+  seguimiento que desplazan trozos de imagen en horizontal, rayado de líneas, ruido de cinta en
+  tiras y la **banda de conmutación de cabezas** abajo del todo. Además de que pega con la serie,
+  disimula que los sprites son pequeños.
 - **Revelado de película** al final: mundo y arma se dibujan **en el mismo destino** y pasan
   **juntos** por el shader, así comparten grano, contraste y temblor — si el arma no pasara por
   ahí, volvería a verse pegada encima. El pase hace blanco y negro con curva dura, grano de
