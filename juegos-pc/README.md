@@ -474,12 +474,32 @@ Experimento base: un mundo 3D de verdad (cielo 360, suelo gris, luces con sombra
 y las manos dibujadas como **sprites 2D planos** abajo a la derecha, al estilo del viewmodel de
 Counter-Strike.
 
-### Las animaciones (generadas con Higgsfield, como vídeo)
-**41 fotogramas** repartidos en tres animaciones: **caminata de 12**, **ráfaga de 12** y
-**recarga de 16**, más el fotograma de reposo.
+### Todo es una caricatura vieja
+El primer intento fue realista y no funcionaba: un dibujo plano en blanco y negro encima de un
+mundo fotorrealista chirría, y lo que estaba mal no era el arma sino que **el mundo no la
+acompañaba**. Ahora el mundo entero está dibujado:
 
-Cinco imágenes sueltas no son una animación, y pedirle doce imágenes a un modelo de imagen da
-doce armas distintas. Así que se generan **vídeos** (`seedance_2_0`, imagen de arranque = el
+- **Cielo dibujado a mano** en un lienzo equirectangular: papel blanco y nubes de contorno grueso
+  hechas por unión de círculos (el racimo se pinta primero en negro y algo más grande, después en
+  blanco: el contorno sale solo). El HDRI fotográfico pasado a blanco y negro con contraste duro
+  quedaba **nocturno**, que es lo contrario de una caricatura.
+- **Contornos de tinta** en placas, postes y bloques, por casco invertido: una copia del objeto un
+  pelo más grande, vista por dentro y en negro. Es lo más barato que hay para que un objeto 3D
+  parezca dibujado.
+- **Materiales planos** (`MeshLambert` y `MeshBasic`) y luz casi toda ambiental: en un dibujo no
+  hay medios tonos.
+- **Revelado de película** al final: mundo y arma se dibujan **en el mismo destino** y pasan
+  **juntos** por el shader, así comparten grano, contraste y temblor — si el arma no pasara por
+  ahí, volvería a verse pegada encima. El pase hace blanco y negro con curva dura, grano de
+  emulsión, **rayas verticales** que van y vienen, motas de polvo, **temblor de puerta de
+  proyector** y parpadeo de lámpara.
+
+### Las animaciones (generadas con Higgsfield, como vídeo)
+**80 fotogramas** repartidos en cuatro animaciones de **20 cada una**: **reposo**, **caminata**,
+**ráfaga** y **recarga**. El reposo también respira: no es un fotograma fijo.
+
+Cinco imágenes sueltas no son una animación, y pedirle veinte imágenes a un modelo de imagen da
+veinte armas distintas. Así que se generan **vídeos** (`seedance_2_0`, imagen de arranque = el
 sprite de reposo, 4:3, sin audio) y de ahí se sacan los fotogramas: un modelo de vídeo sí
 mantiene la coherencia entre un cuadro y el siguiente.
 
@@ -488,8 +508,9 @@ De los vídeos a los sprites:
 - **El bucle de la caminata se busca solo**: para cada periodo de 10 a 20 se compara el fotograma
   `s` con el `s+N` y se elige el par que mejor cierra, premiando además que dentro del ciclo haya
   movimiento de verdad. Salió inicio 17, periodo 12 — medio segundo, dos pasos por segundo.
-- **El fogonazo no se ve en el brillo medio** (el fondo magenta ocupa casi todo el cuadro y lo
-  aplana): se detecta con el **percentil 99,7**. Aparece cada ~2,7 fotogramas.
+- **El fogonazo no se detecta por brillo.** El magenta ya es luminoso y aplana cualquier
+  percentil, y el fogonazo de dibujo es una **estrella blanca**, no un destello: se localiza
+  contando **cuánto blanco puro** hay en el cuadro. Sale uno cada ~23 fotogramas.
 - La recarga se muestrea entera, 16 fotogramas repartidos por el clip.
 
 Del magenta al alfa: se mide la «magentitud» de cada píxel (`min(R,B) − G`), se saca un alfa
@@ -497,8 +518,12 @@ suave de ahí, y se aplica **desderrame** bajando R y B hacia G en el borde, que
 el fleco rosa. El **recuadro de recorte se calcula con los 41 fotogramas a la vez**: recortando
 cada animación por su cuenta, el arma pega saltos al cambiar de estado.
 
+Al ser tinta plana, cada fotograma se **aplana a dos tonos** con un borde suave y el **alfa se
+endurece**: quita el ruido del vídeo, deja el filo limpio y baja mucho el peso, porque un
+contorno blando por todo el dibujo es lo que más ocupa en WebP.
+
 Cada animación va en **una sola hoja de sprites** y se recorre moviendo el UV: cuatro texturas en
-vez de cuarenta y uno, y comprimen mucho mejor juntos (**512 KB** las cuatro en WebP con alfa).
+vez de ochenta, y comprimen mucho mejor juntos (**816 KB** las cuatro en WebP con alfa).
 Las hojas se mantienen **por debajo de 2048 px** de lado, que es el límite de textura de algunos
 móviles viejos, y el UV lleva un margen de medio téxel para que el filtro lineal no cuele el
 fotograma vecino.
@@ -527,12 +552,16 @@ Los vídeos encuadran más lejos que la imagen original, así que el sprite se d
 pantalla para que el arma vuelva a ocupar el cuarto de abajo a la derecha.
 
 ### El mundo
-- **Cielo 360**: el `HdrSkyMorning004` que ya estaba en el repo, como `EquirectangularReflectionMapping`.
-  Venía con la mitad de abajo en negro (es un HDRI sólo de cielo), así que se le fundió un
-  degradado hacia el gris del suelo para que el horizonte no corte en seco.
-- **Suelo gris** con rejilla tenue, para que se lea el movimiento.
-- Doce placas de acero que **se abaten** al recibir el tiro, con marca en el suelo, chispa,
-  trazadora y sonido sintetizado (disparo, ping metálico, chasquidos de recarga, gatillo en seco).
+- **Suelo de papel** con la cuadrícula a tinta, para que se lea el movimiento.
+- Doce dianas de anillos concéntricos que **se abaten** al recibir el tiro, con marca en el suelo,
+  chispa, trazadora y sonido sintetizado (disparo, ping metálico, chasquidos de recarga, gatillo
+  en seco).
+
+### Interfaz
+Los tres botones táctiles van en **columna contra el borde derecho** y el contador de munición
+**arriba a la derecha**. Antes estaban en la esquina de abajo, que es justo donde vive el arma:
+en un móvil ancho la tapaban entera. El sprite se ancla **por su borde**, no por una fracción
+suelta, que era lo que lo sacaba de pantalla en pantallas muy alargadas.
 
 ### Un bug que valía la pena
 El rayo del disparo intersectaba **toda la escena**, y ahí adentro estaban los sprites de chispa.
