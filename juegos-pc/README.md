@@ -474,6 +474,24 @@ Experimento base: un mundo 3D de verdad (cielo 360, suelo gris, luces con sombra
 y las manos dibujadas como **sprites 2D planos** abajo a la derecha, al estilo del viewmodel de
 Counter-Strike.
 
+### La perspectiva del arma
+El primer dibujo tenía el arma **cruzada de costado**, que es como se ve en una ilustración pero
+no en un juego. Con la referencia de un battle royale móvil, se rehízo **vista desde atrás y
+apuntando hacia adentro de la pantalla**, en escorzo: la culata y el tambor grandes y cerca abajo
+a la derecha, y el cañón alejándose hasta una boca pequeña cerca del centro.
+
+El sprite ya no se coloca a ojo: el empaquetador **mide dónde está la boca del cañón** —usa el
+propio fogonazo, restando un fotograma con estrella menos uno sin ella y sacando el centroide del
+blanco que queda— y lo guarda como coordenada relativa. En pantalla el arma se ancla por ese
+punto, así el disparo sale donde apunta la mira y no hay que reajustar fracciones cada vez que
+cambia el dibujo.
+
+**El recorte no puede ceñirse al arma**: el fogonazo y las nubecitas de humo salen mucho más allá
+del cuerpo del arma y el cuadrado se los comía. Ahora el recuadro es la unión de dos cosas: el
+arma con un 30 % de aire, y la huella de **todos** los fotogramas medida por **cobertura de fila y
+columna** en vez de por píxeles sueltos, que es lo que evita que cuatro motas de compresión
+obliguen a recortar el cuadro entero.
+
 ### Todo es una caricatura vieja
 El primer intento fue realista y no funcionaba: un dibujo plano en blanco y negro encima de un
 mundo fotorrealista chirría, y lo que estaba mal no era el arma sino que **el mundo no la
