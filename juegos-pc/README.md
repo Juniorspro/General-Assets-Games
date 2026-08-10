@@ -628,3 +628,38 @@ El rayo del disparo intersectaba **toda la escena**, y ahí adentro estaban los 
 `Sprite.raycast` de Three.js necesita `raycaster.camera`, que en un raycaster creado a mano es
 `null`, así que reventaba con `Cannot read properties of null` en cuanto había una chispa viva.
 Ahora el rayo sólo mira una lista de objetos impactables, que además es mucho más rápido.
+
+
+---
+
+## `Rezona_Campo.html` — el campo y la casa
+
+Registro 02 de la serie: un campo abierto con mucho pasto, una casa al fondo y **la misma cinta
+VHS de Rezona TV**. Se camina en primera persona hasta la casa; el contador de arriba dice cuánto
+falta y por el camino van saltando frases.
+
+### El pasto
+Treinta y cuatro mil matas en un solo `InstancedMesh`, cada una una **cruz de dos planos** con
+recorte alfa. **El viento va en el vértice, no en la CPU**: el sombreador dobla sólo la parte de
+arriba de la mata (`uv.y²`, así la base no se despega del suelo) con dos senos desfasados por la
+posición en el mundo. Con esa cantidad de matas cualquier bucle en JavaScript sería inviable.
+
+Dos cosas que hubo que arreglar para que el campo no se viera a rayas:
+- El suelo repetía la textura 260 veces y a **240p eso hace muaré**. Bajó a 85 repeticiones.
+- El generador de posiciones era un congruente simple, y sus valores consecutivos caen en
+  planos: las matas quedaban **alineadas en filas**. Se cambió por uno que mezcla bits.
+
+### La casa
+Construida a mano con las texturas de revestimiento y tejas que ya estaban en el repo
+(recomprimidas a 512 JPEG): cuerpo, tejado a dos aguas con sus triángulos de hastial, porche con
+columnas, chimenea, y **dos ventanas encendidas** con su luz puntual de verdad. Una valla de
+postes encauza la vista —y al jugador— hacia ella.
+
+### La cinta
+El mismo revelado que Rezona TV: se renderiza a **240p**, se pasa a YIQ para que el color sangre
+hacia la derecha y la luminancia no, fantasma del fotograma anterior, grano, scanlines, viñeta y
+**banda de conmutación de cabezas** abajo. Los avisos del camino disparan un fallo de cinta.
+
+Graba en **4:3 MP4** como el resto de la serie, desde un lienzo aparte, así la interfaz nunca
+entra en la cinta. El audio —viento que respira con un LFO, grillos sueltos y pasos sintetizados—
+va por el mismo `master`, o sea que queda grabado.
