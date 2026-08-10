@@ -892,6 +892,28 @@ compone antes del corrimiento de color, así que las letras y los botones sangra
 glitchean igual que el 3D. La voz de Teypi es la misma cadena robot/VHS de la serie (eSpeak
 horneado a 8 kHz, anillo a 38 Hz, banda telefónica y wow de cinta).
 
-**Este no graba.** A diferencia del resto de la serie, acá se quitaron el botón de grabar, el reloj
-y el panel de la cinta recuperada: la pantalla queda limpia de punta a punta y no hay nada de HTML
-encima del lienzo.
+**Este no graba y no tiene menú.** Se quitaron el botón de grabar, el reloj, el panel de la cinta
+recuperada y también la portada con el botón de entrar: **la cinta arranca sola** en cuanto el
+modelo termina de cargar, y mientras tanto la pantalla es ruido, que es lo que se ve cuando una
+cinta busca el principio. No queda nada de HTML encima del lienzo.
+
+El audio no se puede encender sin que el usuario toque algo —lo prohíben los navegadores—, así que
+el contexto se crea igual al entrar y se despierta con el primer toque, sea donde sea.
+
+### El reventón
+La cinta no termina: **se cae**. Las tres salidas —sí, no y el morse— desembocan en el mismo sitio.
+Primero se desarma lo que quedaba en pantalla (fallo al máximo, color sangrando hasta treinta
+píxeles, la imagen rodando y bloques de hexadecimal tirados por encima), y después escupe un
+**volcado corrupto** con nueve líneas de memoria en hexadecimal y basura de alto rango, más una
+**firma distinta en cada partida** del tipo `0x476∆:AE20-4B99-F62B-C69B`. Entre el volcado se le
+escapa un renglón que no debería estar.
+
+Y entonces **se saca a sí mismo del medio**: mata el bucle, cierra el audio en seco, suelta la
+cámara si estaba abierta, tira el renderizador, arrasa el documento entero y deja sólo el volcado
+sobre negro con el cursor parpadeando. Después intenta cerrar la pestaña; si el navegador no lo
+deja —que es lo normal cuando la pestaña no la abrió un script—, la página queda muerta con el
+volcado, que a los efectos es lo mismo.
+
+Un detalle que costó: soltar el contexto de vídeo a la fuerza con `forceContextLoss()` hace que
+three lea registros de shaders que ya no existen y tire un `null.trim()` por consola. Alcanza con
+tirar el renderizador y sacar el lienzo.

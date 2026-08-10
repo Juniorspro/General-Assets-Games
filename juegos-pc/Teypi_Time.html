@@ -15,40 +15,18 @@
   #err{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#8e2b20;color:#fff;
     font:11px/1.5 ui-monospace,monospace;padding:8px;white-space:pre-wrap;max-height:40vh;overflow:auto}
 
-  #menu{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;
-    justify-content:center;gap:16px;text-align:center;padding:28px;
-    background:radial-gradient(70% 70% at 50% 40%,rgba(30,28,32,.88),rgba(3,3,5,.98))}
-  #menu.hide{display:none}
-  #menu .eyebrow{font-size:10px;letter-spacing:10px;color:#f5d90a}
-  #menu h1{font-size:clamp(28px,10vw,54px);font-weight:900;letter-spacing:2px;color:#f2eee6;
-    text-shadow:0 3px 0 #2a2418, 0 8px 22px rgba(0,0,0,.8)}
-  #menu p{color:#8f8a80;max-width:420px;font-size:12px;line-height:1.9}
-  #menu .play{margin-top:8px;pointer-events:auto;cursor:pointer;font:900 14px/1 ui-monospace,monospace;
-    letter-spacing:5px;padding:17px 44px;border-radius:5px;border:2px solid #c9a15e;color:#fff;
-    background:linear-gradient(180deg,#8a6c34,#4b3818);box-shadow:0 7px 0 #2b1f0c}
-  #menu .play:active{transform:translateY(3px);box-shadow:0 4px 0 #2b1f0c}
-  #load{position:fixed;left:0;right:0;bottom:26px;text-align:center;font-size:10px;letter-spacing:4px;
-    color:#8f8a80;z-index:101}
 </style>
 </head>
 <body>
 <div id="err"></div>
 <div id="stage"></div>
 
-<div id="menu">
-  <div class="eyebrow">REZONA · CINTA VERTICAL</div>
-  <h1>¡TEYPI TIME!</h1>
-  <p>Teypi te va a hacer una pregunta. Contestá con la verdad.<br><br>
-     Si elegís <b>NO</b>, la cinta te saca una foto: podés darle permiso a la cámara,
-     o dejar que use la de prueba.</p>
-  <button class="play" id="playBtn">▶ PONER LA CINTA</button>
-  <div id="load">CARGANDO…</div>
-</div>
-
 <video id="cam" playsinline muted style="position:fixed;left:-9999px;top:0;width:2px;height:2px"></video>
 
 <script>
-window.addEventListener('error',e=>{const b=document.getElementById('err');b.style.display='block';
+window.addEventListener('error',e=>{
+  const b=document.getElementById('err'); if(!b) return;   // después del reventón no hay dónde escribir
+  b.style.display='block';
   b.textContent+=(e.message||e.error)+'\n'+(e.filename||'')+':'+(e.lineno||'')+'\n';});
 </script>
 
@@ -1017,7 +995,7 @@ sombra.rotation.x=-Math.PI/2; sombra.position.y=0.006; sombra.visible=false; sce
 const teypi=new THREE.Group(); teypi.visible=false; scene.add(teypi);
 const PB={}, pRest={}, pBones=[];
 const hipRest=new THREE.Vector3();
-let listo=false, ALTURA=2.42;
+let listo=false, falloCarga=false, ALTURA=2.42;
 const _q1=new THREE.Quaternion(), _q2=new THREE.Quaternion(), _q3=new THREE.Quaternion();
 const _v1=new THREE.Vector3();
 const PX=new THREE.Vector3(1,0,0), PY=new THREE.Vector3(0,1,0), PZ=new THREE.Vector3(0,0,1);
@@ -1086,9 +1064,7 @@ new GLTFLoader().load(TDATA.teypi, gg=>{
   if(PB.hips) hipRest.copy(PB.hips.position);
   headBone=PB.head||null;
   listo=true;
-  const el=document.getElementById('load'); if(el) el.textContent='LISTO';
-  const pb=document.getElementById('playBtn'); if(pb) pb.removeAttribute('disabled');
-},undefined,e=>{ const el=document.getElementById('load'); if(el) el.textContent='NO CARGÓ EL MODELO'; });
+},undefined,e=>{ falloCarga=true; });
 
 /* --------------------------------------------------- poses escritas a mano */
 function breathe(t,amt){
@@ -1550,7 +1526,7 @@ function fotoDePrueba(q,S){
 /* ============================================================================
    ESTADOS
 ============================================================================ */
-const S={INTRO:0,VACIO:1,BRAZO:2,ENTRA:3,PREGUNTA:4,ESPERA:5,SI:6,NO:7,FOTO:8,CARTEL:9,FIN:10,RELATO:11};
+const S={INTRO:0,VACIO:1,BRAZO:2,ENTRA:3,PREGUNTA:4,ESPERA:5,SI:6,NO:7,FOTO:8,CARTEL:9,FIN:10,RELATO:11,CRASH:12};
 let st=S.INTRO, stT=0, T=0, respuesta=null, started=false;
 const ESPERA_MAX=45;
 function go(n){ st=n; stT=0; }
@@ -1575,14 +1551,31 @@ let logoSon=0;
 ============================================================================ */
 let last=performance.now();
 function loop(now){
+  if(muerto) return;
   requestAnimationFrame(loop);
   let dt=(now-last)/1000; last=now;
   if(dt>0.1) dt=0.1;
+  if(!started && listo){
+    started=true; T=0; stT=0;
+    U.uNoise.value=0.055; U.uGhost.value=0.26; U.uGlitch.value=0.5; U.uRoll.value=0;
+  }
   if(started){ T+=dt; stT+=dt; update(dt); }
+  else { esperando(dt); }
   render();
 }
 requestAnimationFrame(loop);
 
+/* Mientras carga: negro y ruido de cinta buscando el principio */
+function esperando(dt){
+  g.clearRect(0,0,UW,UH);
+  if(mundoActual){ scene.remove(mundoActual); mundoActual=null; mundoNombre=''; }
+  scene.background=BG_NEGRO.clone(); scene.fog=new THREE.Fog(0x000000,1,20);
+  U.uNoise.value=0.55; U.uGhost.value=0.06; U.uGlitch.value=0.25; U.uRoll.value=(performance.now()/1400)%1;
+  if(falloCarga){
+    U.uNoise.value=0.18;
+    say('NO SE PUDO LEER LA CINTA', UH*0.48, 20, '#f5d90a', true);
+  }
+}
 function render(){
   camera.aspect=RW/RH; camera.updateProjectionMatrix();
   renderer.setRenderTarget(rtScene); renderer.clear(); renderer.render(scene,camera);
@@ -1613,6 +1606,7 @@ function update(dt){
   else if(st===S.FOTO)                  escFoto();
   else if(st===S.CARTEL)                escCartel();
   else if(st===S.RELATO)                escRelato();
+  else if(st===S.CRASH)                 escCrash();
   else                                  escFin();
 
   ponerSombra();
@@ -1947,10 +1941,96 @@ function escFin(){
     return;
   }
   U.uNoise.value=0.55; U.uGlitch.value=0.22; U.uGhost.value=0.05;
-  if(t>2.8){ U.uNoise.value=0.055; U.uGlitch.value=0; U.uGhost.value=0.26; cerrarCinta(); }
+  if(t>2.2){ U.uNoise.value=0.055; U.uGhost.value=0.26; cerrarCinta(); }
 }
 let cerrada=false;
-function cerrarCinta(){ cerrada=true; }   // fin de la transmisión
+/* La cinta no termina: revienta. */
+function cerrarCinta(){ if(cerrada) return; cerrada=true; go(S.CRASH); }
+
+
+/* ============================================================================
+   EL REVENTÓN
+   El juego no se despide: se cae. Genera un volcado corrupto con una firma
+   distinta cada vez, la escupe por pantalla y se saca a sí mismo del medio.
+============================================================================ */
+let CODIGO='', VOLCADO=[], muerto=false;
+const HEX='0123456789ABCDEF';
+const BASURA='▓▒░█▚▞▟▙◤◥◣◢╪╫┼╬§¤×÷¬¦˜†‡¶∆Ω∑∏√∞≠≡≈⌐¡¿';
+function generarCorrupto(){
+  const b=(n)=>{ let r=''; for(let i=0;i<n;i++) r+=HEX[(Math.random()*16)|0]; return r; };
+  CODIGO='0x476∆:'+b(4)+'-'+b(4)+'-'+b(4)+'-'+b(4);
+  VOLCADO=[];
+  VOLCADO.push('*** EXCEPCIÓN NO CONTROLADA ***');
+  VOLCADO.push('');
+  VOLCADO.push('TEYPI.EXE  seg 476∆  hilo 5');
+  VOLCADO.push('violación de acceso en 0x00'+b(4));
+  VOLCADO.push('el proceso dejó de responder');
+  VOLCADO.push('');
+  for(let i=0;i<9;i++){
+    let l=b(4)+'  ';
+    for(let k=0;k<8;k++) l+=b(2)+' ';
+    l+=' ';
+    for(let k=0;k<10;k++) l+= Math.random()<0.72 ? BASURA[(Math.random()*BASURA.length)|0]
+                                                  : String.fromCharCode(33+((Math.random()*90)|0));
+    VOLCADO.push(l);
+  }
+  VOLCADO.push('');
+  VOLCADO.push('firma del volcado:');
+  VOLCADO.push(CODIGO);
+  VOLCADO.push('');
+  VOLCADO.push('todavia estoy aca');            // se le escapa
+  VOLCADO.push('');
+  VOLCADO.push('proceso terminado por el sistema');
+}
+function escCrash(){
+  const t=stT;
+  if(!CODIGO) generarCorrupto();
+  negro(); teypi.visible=false; cartel.visible=false;
+  g.clearRect(0,0,UW,UH);
+  if(t<1.0){                                     // se desarma lo último que quedaba
+    U.uGlitch.value=1.0; U.uChroma.value=6+Math.random()*24; U.uNoise.value=0.42;
+    U.uRoll.value=(t*3.1)%1; U.uSat.value=1+Math.random()*2.4; U.uCont.value=1.4;
+    g.font='700 20px ui-monospace, monospace'; g.textBaseline='top';
+    for(let i=0;i<26;i++){                       // bloques de basura por toda la pantalla
+      g.fillStyle=Math.random()<0.5?'rgba(220,230,225,.85)':'rgba(120,255,180,.75)';
+      let l=''; for(let k=0;k<12;k++) l+=HEX[(Math.random()*16)|0];
+      g.fillText(l, Math.random()*UW-40, Math.random()*UH);
+    }
+    if(Math.random()<0.5) noiseBurst(0.05,0.30,600+Math.random()*3000);
+    return;
+  }
+  U.uGlitch.value=0.06; U.uChroma.value=3.4; U.uNoise.value=0.10;
+  U.uRoll.value=0; U.uSat.value=1; U.uCont.value=1.1;
+  const n=Math.min(VOLCADO.length, Math.floor((t-1.0)*11));
+  g.font='700 17px ui-monospace, monospace'; g.textAlign='left'; g.textBaseline='top';
+  let y=UH*0.16;
+  for(let i=0;i<n;i++){
+    const l=VOLCADO[i];
+    g.fillStyle = (i===0) ? '#ff6a5a'
+                : (l===CODIGO) ? '#f5d90a'
+                : (l==='todavia estoy aca') ? '#8affc0' : 'rgba(214,222,216,.88)';
+    g.fillText(l, 26, y); y+=26;
+  }
+  if(n>=VOLCADO.length && t>1.0+VOLCADO.length/11+1.6) reventar();
+}
+/* Se saca a sí mismo del medio: mata el bucle, suelta el contexto de vídeo,
+   arrasa el documento y, si el navegador deja, cierra la pestaña. */
+function reventar(){
+  if(muerto) return; muerto=true;
+  try{ if(AC) AC.close(); }catch(e){}                      // el sonido se corta en seco
+  try{ if(camStream) camStream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  // Soltar el contexto a la fuerza hace que three lea registros de shaders que
+  // ya no existen; alcanza con tirar el renderizador y sacar el lienzo.
+  try{ renderer.dispose(); }catch(e){}
+  const dump=VOLCADO.join('\n');
+  document.body.innerHTML='';
+  document.body.style.cssText='margin:0;background:#000;color:#c9d2cc;'+
+    'font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;padding:18px;'+
+    'white-space:pre-wrap;word-break:break-all;height:100%;overflow:auto';
+  document.body.textContent=dump+'\n\n> _';
+  try{ window.close(); }catch(e){}
+  setTimeout(()=>{ try{ window.close(); }catch(e){} }, 400);
+}
 
 /* ============================================================================
    ENTRADA
@@ -1976,17 +2056,25 @@ renderer.domElement.addEventListener('touchstart',e=>{e.preventDefault();tap(e);
 /* ============================================================================
    ARRANQUE
 ============================================================================ */
-document.getElementById('playBtn').addEventListener('click',()=>{
-  initAudio();
+/* No hay menú: la cinta arranca sola en cuanto el modelo está cargado. Hasta
+   entonces la pantalla es ruido, que es lo que se ve mientras una cinta busca
+   el principio.
+   El audio no se puede encender sin que el usuario toque algo —lo prohíben los
+   navegadores—, así que el contexto se crea igual y se despierta con el primer
+   toque, sea donde sea. */
+initAudio();
+function despertar(){
   if(AC && AC.state==='suspended') AC.resume();
-  document.getElementById('menu').classList.add('hide');
-  started=true; T=0; stT=0; last=performance.now();
-});
+}
+for(const ev of ['pointerdown','touchstart','keydown'])
+  window.addEventListener(ev, despertar, {passive:true});
 window.__dbg={ S, get st(){return st;}, go, set t(v){stT=v;}, get t(){return stT;},
   get listo(){return listo;},
   fin(v){ respuesta=v; go(S.FIN); },
   resp(v){ respuesta=v; if(v==='si') go(S.SI); else { pedirCamara(); go(S.NO); } },
   bones(){ return Object.keys(PB); },
+  get codigo(){ return CODIGO; },
+  get muerto(){ return muerto; },
   tramo(i){ st=S.RELATO; stT=0; relIdx=i; entrarTramo(); relDur=999; },
   acortar(){ relDur=1.0; },
   mano2(){ const v=new THREE.Vector3(); PB['righthand'].getWorldPosition(v);
