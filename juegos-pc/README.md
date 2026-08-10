@@ -275,7 +275,7 @@ Cabecera de canal en **4:3 siempre**: el lienzo vive dentro de un marco de propo
 centrado en pantalla, con barras negras a los lados, así que se emite en 4:3 aunque el monitor
 sea panorámico o sea un móvil en vertical.
 
-### Guion (≈22 s)
+### Guion (≈1 min 45 s) — Parte 1 del programa
 1. **La cabecera se construye por mosaico.** La placa generada aparece en teselas de 16×12 en
    orden aleatorio, cada una entrando con un empujón de escala, mientras una línea de barrido
    recorre la construcción. Al completarse: acorde, fallo de cinta y fogonazo blanco.
@@ -286,6 +286,42 @@ sea panorámico o sea un móvil en vertical.
 3. **Gira acercándose**: el giro se dispara mientras avanza hacia cámara y crece, hasta que su
    cuerpo llena el cuadro y **solo queda naranja**.
 4. **Del naranja se funde el plató**, ya con la cámara de estudio dentro.
+5. **Revisión de lado a lado** del plató y luego **de frente a la mesa**, entrevistando al invitado.
+6. **La cámara se le va encima.** El acercamiento está **anclado al hueso de la cabeza**: la
+   posición frena a 3,6 m (antes de la mesa) y el resto lo hace la lente, que se cierra de 40° a
+   14°. Así el primerísimo plano es la calavera y no el canto de la mesa, que es lo que pasaba
+   cuando la cámara avanzaba de verdad y **la atravesaba**.
+7. **Giro descontrolado**: el balanceo se dispara al cuadrado, la pantalla se pone roja y el
+   ruido sube. El rojo aguanta bajo casi todo el giro y sólo cierra el cuadro al final, para que
+   la figura se siga leyendo mientras da vueltas.
+8. **Placa `AIRE LIBRE ANOMÁLICO`** (imagen tuya), a corte limpio con fogonazo.
+9. **Vuelve a caer el dino**, otra vez **por delante de la placa**, que sigue detrás.
+10. **Sobrevuelo del parque**: la cámara pasa por encima del bosque y baja al claro.
+11. **Plano bajo**, mirando un poco hacia arriba: la entidad **aparece por la derecha caminando
+    a lo lejos** y **gira la cabeza hacia nosotros a mitad del recorrido**. La cámara está a
+    58 cm del suelo para que la silueta quede **contra el cielo** y no se pierda entre los árboles.
+12. **Sentada en el pasto**, con una mariposa posada en la cabeza, hablando de la paz: de la paz
+    de los animales, y de que los humanos son el problema.
+13. **Cuatro segundos de silencio absoluto** sobre ella — se apagan los pájaros y el ambiente.
+14. **Corte a ruido puro** y fin de la emisión.
+
+Los tiempos del final no están escritos a mano: se fijan **cuando la última locución termina**
+(`hushAt`, `cutAt`, `endAt`), así el silencio dura cuatro segundos de verdad aunque el aparato
+vaya lento o falte algún clip.
+
+### El parque (hecho a mano en Three.js)
+Suelo de pasto, sendero de tierra, **130 árboles** de tronco y tres masas de copa con variación,
+arbustos, **1400 matas** de pasto alto en `InstancedMesh`, **1600 flores** en cinco colores,
+**hamacas que se mecen solas**, tobogán, subibaja, calesita, bancos y farolas. Y **ni una
+persona**. Mariposas revoloteando en órbitas propias, más la que se posa en la cabeza.
+
+Detalles que costaron:
+- **El pasto reciclado del patio era de noche** (media RGB 79/82/48), y por eso el parque salía
+  casi negro. Se le subió el nivel a 143/176/64.
+- **La niebla no coincidía con el cielo** y quedaba un cinturón gris en el horizonte; ahora la
+  niebla usa el mismo color que el final del degradado.
+- Las matas y las flores dejan **libre el claro** donde se sienta y **la franja por donde camina**,
+  si no le tapaban las piernas.
 
 ### Assets generados con Higgsfield
 - **La placa "REZONA TV"**: generada con `nano_banana_pro` pasándole **tu logo R y tu dino como
@@ -310,28 +346,32 @@ los dibuja la propia luz.
 La cámara primero hace una **revisión de lado a lado** del plató y después se sitúa **de frente
 a la mesa**, encuadrando la entrevista.
 
-**Voz de verdad, ya horneada en el archivo.** Se abandonó `speechSynthesis`: depende de que el
-aparato traiga motor de voz en español, y en la caja de pruebas daba **0 voces**, así que no
-sonaba nada. Ahora las siete locuciones se **generaron con Higgsfield** (`generate_audio`, voz
-*Arthur*, español) y viajan **dentro del HTML** como data URI. No hay red que consultar ni motor
-que falte: si el navegador sabe decodificar un WAV, se oye.
+**Voz de verdad, con un motor de verdad, y sin gastar créditos.** Se descartaron dos caminos
+antes de este: `speechSynthesis` depende de que el aparato traiga voz en español (la caja de
+pruebas reportaba **0 voces**), y generar las locuciones en la nube cuesta créditos por línea,
+que es justo lo que impide escribir un monólogo largo.
 
-- Se generaron a 24 kHz estéreo (2,4 MB en total) y se pasaron a **mono, 11025 Hz, 8 bits** en
-  Python puro: **354 KB** para los siete clips. Es una voz de emisión pasada por cinta, la
-  pérdida juega a favor.
-- Al pulsar EMITIR se crea el `AudioContext` **y después** se decodifican los clips
-  (`decodeAudioData`). El orden importa: al revés, `loadVoices` salía sin hacer nada porque el
-  contexto todavía no existía.
+Las dieciocho locuciones se sintetizan con **eSpeak** (`meSpeak`, eSpeak compilado a JS), un
+**sintetizador de formantes**: no imita una voz humana, la construye, y por eso **ya suena a
+robot de fábrica**. Se sintetizan aquí, no en el navegador, y viajan **dentro del HTML**:
+- El motor pesa 4,8 MB, así que **no se embarca**. Se usa sólo para hornear el audio.
+- Salen a 22050 Hz y se pasan a **mono, 8000 Hz, 8 bits**, con los silencios de los extremos
+  recortados: **658 KB** para los dieciocho clips (unos 80 s de habla). 8 kHz no pierde nada
+  audible porque la cadena filtra a 3400 Hz de todas formas.
+- Dos registros: el **locutor** de plató (rápido y agudo) y **la entidad** (lenta y grave).
 
-**Cadena robot/VHS** por la que pasa cada locución antes de sonar:
-- **Modulación en anillo** a 44 Hz (una portadora entrando por el `gain` de un nodo) — el timbre
-  metálico.
-- **Banda de teléfono**, 250–3400 Hz, con realce en 1700 Hz: suena a emisión vieja, no a estudio.
-- **Wow de cinta**: un LFO a 1,7 Hz sobre el `playbackRate`, más un 0,97 fijo para bajarla un pelo.
-- **Mezcla seca/húmeda** (0,45 / 0,75): sin algo de voz limpia, el anillo la vuelve ininteligible.
+**Cadena robot/VHS** por la que pasa cada locución:
+- **Modulación en anillo** a 38 Hz — el timbre metálico.
+- **Banda de teléfono**, 230–3400 Hz, con realce en 1700 Hz.
+- **Wow de cinta**: un LFO a 1,7 Hz sobre el `playbackRate`, más un 0,97 fijo.
+- **Mezcla seca/húmeda** 0,62 / 0,55: eSpeak ya es metálico, así que el anillo se dosifica.
 
-Encima va el **rótulo dentro del cuadro** (como subtítulo de emisión), que también queda grabado.
-Hay un botón **PROBAR VOZ** en el menú para oírla al instante.
+**Cola de voz: ya no se pisan.** Antes cada señal del guion arrancaba su clip al instante y dos
+frases podían sonar encimadas (se oía en «Sí, anomalías cuánticas»). Ahora las señales entran en
+una cola y **una locución sólo arranca cuando termina la anterior** (`onended`), y el **rótulo se
+escribe al desencolar**, no al programar, así el texto en pantalla siempre es el que suena. Si un
+clip faltara, la cola avanza igual con un temporizador y el rótulo se lee. El rótulo descuenta con
+el delta del cuadro, no con un `1/60` fijo.
 
 ### Grabación 4:3 en MP4
 Como el resto de la serie: un lienzo aparte de **960×720** recorta el centro del render cada
@@ -343,7 +383,22 @@ RECUPERADA** con descarga y, si el aparato lo permite, compartir.
 
 Se prefiere `video/mp4;codecs=avc1.42E01E,mp4a.40.2` y se va bajando hasta WEBM; en un teléfono
 sale MP4/H.264. Verificado extrayendo fotogramas de la cinta grabada: 960×720 reales, sin
-interfaz, con la cabecera, el plató y el rótulo.
+interfaz, con la cabecera, el plató y el rótulo. La grabación **se corta sola** al terminar la
+emisión.
+
+### Dónde vive
+Three.js se carga desde **jsDelivr**. El resto —placa, dino, entidad, pasto y las dieciocho
+locuciones— va **incrustado como data URI**, así que el archivo se abre solo.
+
+Para verlo como página, sin montar nada:
+
+```
+https://raw.githack.com/Juniorspro/General-Assets-Games/claude/billeteras-sin-registro-3z7uvz/juegos-pc/Rezona_TV.html
+```
+
+`cdn.jsdelivr.net/gh/...` **no sirve** para esto: devuelve el HTML como `text/plain` y el
+navegador muestra el código en vez de la página. Para los módulos de Three.js sí, que es para lo
+que se usa.
 
 **Público y el invitado.** Cuatro semicírculos de **sillas** rodean por detrás la butaca
 central, ocupadas por **figuras negras sentadas** (construidas con primitivas: torso, cuello,
