@@ -405,6 +405,21 @@ sale MP4/H.264. Verificado extrayendo fotogramas de la cinta grabada: 960×720 r
 interfaz, con la cabecera, el plató y el rótulo. La grabación **se corta sola** al terminar la
 emisión.
 
+### `Rezona_TV_EN.html` — la misma emisión en inglés
+Mismo motor, mismo guion, mismos tiempos. Cambia lo que se oye y lo que se lee:
+
+- **Las dieciocho locuciones, resintetizadas con eSpeak en inglés**, otra vez en dos registros:
+  el locutor con `en/en-us` (158 ppm, agudo) y la entidad con `en/en-rp` (148, grave). Son
+  **468 KB**, algo menos que el castellano porque el inglés dice lo mismo en menos tiempo.
+- **La placa está regenerada a partir de la tuya**, pasándosela como referencia y pidiendo que
+  cambie **sólo el texto**: `ANOMALOUS OPEN AIR`. El bicho, la pose, la mariposa y el prado
+  quedan iguales, que era el punto — no volver a generar una criatura distinta.
+- Menú, botones y panel de la cinta traducidos (`GO ON AIR`, `RECORD`, `TAPE RECOVERED`…).
+- El corte de línea del rótulo pasa de 26 a **28 caracteres**: el inglés tiene palabras más
+  largas por línea y con 26 partía feo.
+
+Los comentarios del código siguen en castellano a propósito.
+
 ### Dónde vive
 Three.js se carga desde **jsDelivr**. El resto —placa, dino, entidad, pasto y las dieciocho
 locuciones— va **incrustado como data URI**, así que el archivo se abre solo.
@@ -413,6 +428,7 @@ Para verlo como página, sin montar nada:
 
 ```
 https://raw.githack.com/Juniorspro/General-Assets-Games/claude/billeteras-sin-registro-3z7uvz/juegos-pc/Rezona_TV.html
+https://raw.githack.com/Juniorspro/General-Assets-Games/claude/billeteras-sin-registro-3z7uvz/juegos-pc/Rezona_TV_EN.html
 ```
 
 `cdn.jsdelivr.net/gh/...` **no sirve** para esto: devuelve el HTML como `text/plain` y el
