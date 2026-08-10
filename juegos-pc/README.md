@@ -464,3 +464,50 @@ Página que aloja el vídeo de la sesión, con un mensaje arriba y otro abajo.
 
 > El vídeo va como archivo aparte en `media/` porque son 29 MB: incrustarlo en el HTML lo
 > dejaría en ~39 MB. Hay que mantener el HTML y la carpeta `media/` juntos.
+
+
+---
+
+## `Poligono_Tiro.html` — sprites 2D de arma sobre un mundo 3D
+
+Experimento base: un mundo 3D de verdad (cielo 360, suelo gris, luces con sombras) con el arma
+y las manos dibujadas como **sprites 2D planos** abajo a la derecha, al estilo del viewmodel de
+Counter-Strike.
+
+### Los sprites (generados con Higgsfield)
+Cinco fotogramas: **quieto**, **paso A**, **paso B**, **disparo** y **recarga**. El truco para
+que no salga un arma distinta en cada uno: se genera **primero el de quieto** y los otros cuatro
+se piden **pasándole ese como referencia**, con la instrucción de cambiar sólo la pose. Mismo
+fusil, mismos guantes, misma luz en los cinco.
+
+- Se piden sobre un **fondo magenta plano** (`#FF00FF`) y el recorte se hace acá, no con un
+  servicio: se mide la «magentitud» de cada píxel (`min(R,B) − G`), se saca un alfa suave de ahí,
+  y se aplica **desderrame** bajando R y B hacia G en el borde, que es lo que quita el fleco rosa.
+- El recuadro de recorte se calcula con **los cinco fotogramas a la vez**. Si se recorta cada uno
+  por su cuenta, el arma pega saltos al cambiar de fotograma.
+- Salen a WebP con alfa: **166 KB los cinco**.
+
+### El arma va dentro del render, no en el DOM
+El viewmodel se dibuja en una **escena ortográfica aparte** que se renderiza encima con
+`autoClear=false` y `clearDepth()`. Es más trabajo que poner un `<img>` con `position:fixed`,
+pero así el arma es parte de la imagen: entra en cualquier captura y se puede empujar con el
+retroceso como un viewmodel de verdad.
+
+Encima de los fotogramas hay animación procedural: **balanceo de paso** (el arma se mueve mucho
+más que la cámara), **respiración** cuando estás quieto, **retroceso** que empuja y gira el
+sprite, y un **hundido** durante la recarga. El puntero se abre con la dispersión y con la
+carrera.
+
+### El mundo
+- **Cielo 360**: el `HdrSkyMorning004` que ya estaba en el repo, como `EquirectangularReflectionMapping`.
+  Venía con la mitad de abajo en negro (es un HDRI sólo de cielo), así que se le fundió un
+  degradado hacia el gris del suelo para que el horizonte no corte en seco.
+- **Suelo gris** con rejilla tenue, para que se lea el movimiento.
+- Doce placas de acero que **se abaten** al recibir el tiro, con marca en el suelo, chispa,
+  trazadora y sonido sintetizado (disparo, ping metálico, chasquidos de recarga, gatillo en seco).
+
+### Un bug que valía la pena
+El rayo del disparo intersectaba **toda la escena**, y ahí adentro estaban los sprites de chispa.
+`Sprite.raycast` de Three.js necesita `raycaster.camera`, que en un raycaster creado a mano es
+`null`, así que reventaba con `Cannot read properties of null` en cuanto había una chispa viva.
+Ahora el rayo sólo mira una lista de objetos impactables, que además es mucho más rápido.
