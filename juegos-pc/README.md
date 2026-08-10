@@ -741,3 +741,81 @@ hacia la derecha y la luminancia no, fantasma del fotograma anterior, grano, sca
 Graba en **4:3 MP4** como el resto de la serie, desde un lienzo aparte, así la interfaz nunca
 entra en la cinta. El audio —viento que respira con un LFO, grillos sueltos y pasos sintetizados—
 va por el mismo `master`, o sea que queda grabado.
+
+---
+
+## ¡Teypi Time! — `juegos-pc/Teypi_Time.html`
+
+Cinta **vertical 9:16**. Blanco vacío, Teypi y una pregunta. 2,08 MB.
+
+### Teypi es el modelo 3D, siempre
+No hay ni un dibujo del bicho: se usa el **GLB riggeado de la entidad de Rezona TV / Patio Trasero**
+(24 huesos, sin una sola animación dentro) y **todas las poses están escritas a mano** sobre el
+esqueleto. Lo único dibujado son las letras del logo, los botones y los rótulos, que viven en una
+capa aparte.
+
+Dos cosas hubo que arreglar del sistema de poses que venía de *El Campo*:
+
+- **`pRot` pisaba en vez de componer.** Estaba escrito `b.quaternion.copy(giro).multiply(reposo)`,
+  o sea que dos giros seguidos sobre el mismo hueso se sobrescribían y sólo sobrevivía el último:
+  el brazo del bicho jamás llegaba a donde se le mandaba. Ahora es `premultiply`, así que los
+  giros se acumulan. Se comprobó con sonda: la mano pasó de quedarse pegada al cuerpo
+  (x = 1,639 con el cuerpo en x = 1,62) a estirarse de verdad (x = 0,743).
+- **Los ejes de las poses van con la cara del bicho, no con el mundo.** `AXS` es hacia dónde mira
+  y `AXF = arriba × AXS` es el eje que levanta hacia adelante. La misma caminata sirve de frente,
+  de perfil o de espaldas.
+
+**La caminata es de zancuda.** Las patas miden metro y medio: con los ±0,52 rad que usaba la
+figura de *El Campo* quedaba haciendo el spagat. Van ±0,21 rad —sesenta centímetros de paso— y
+**la rodilla de este bicho es el hueso `Foot`**, que es el que lleva la caña larga de 65 unidades;
+`Leg` es un eslabón de tres. Sólo flexiona al recoger la pata.
+
+### Encuadres
+Cada escena tiene su distancia y se llega a ella suavizando, nunca de golpe: `ancho` para el logo
+cayendo (con aire arriba de la cabeza), `medio` para la pregunta (cabeza y puntas dentro de
+cuadro), `brazo`, `cerca` para el cartel en la mano y `abajo` para la orden, mirándola desde el
+suelo.
+
+**El brazo que se asoma** está calculado, no puesto a ojo: el cuerpo se planta en x = 1,32 —donde
+el pelo queda a 0,97 y el borde de cuadro a 0,865, o sea fuera— y el brazo estirado deja la mano
+en x ≈ 0,62. Entra la mano y el antebrazo, nada más.
+
+### El recorrido
+1. **Intro** — cae Teypi desde arriba con rebote y saluda, y detrás caen las letras de
+   *¡TEYPI TIME!* una por una, recortadas en papel (reborde blanco grueso, sombra y aplastón al
+   aterrizar).
+2. Blanco vacío. **Un brazo se asoma por la derecha**, tantea y se va.
+3. Teypi **entra caminando** hasta el centro y se gira hacia nosotros.
+4. **«¿Estás solo?»** con los botones (SÍ) y (NO).
+5. Las tres salidas:
+   - **(SÍ)** — «¡Qué bien! Espero que no me tengas miedo, hoy iremos a un lugar muy especial
+     para mí.»
+   - **(NO)** — el fondo se pone rojo, se la mira desde abajo, dice **«Elimínalos»**, la cinta se
+     corta un segundo, **fogonazo y foto**, y al segundo aparece con un **cartel negro de bordes
+     amarillos** en la mano: lo mira dos segundos, dice «Ah, me mentiste», **gira la foto hacia
+     nosotros** y nos mira.
+   - **Sin contestar en 45 s** — se le van la pregunta y las respuestas glitcheando tres segundos,
+     se apagan las luces y entra el **morse**: `SI SIGUES INTENTANDO ENTRAR, MAS SENTIRAS QUE TE
+     VAS, PERO DE ESTE MUNDO`. Lámpara que parpadea, pitido por punto y raya y los símbolos
+     imprimiéndose abajo.
+
+### La foto
+Se pide la cámara **al tocar (NO)**, cuatro segundos antes del fogonazo, así llega a tiempo. Sale
+en espejo y recortada 1:1. **Si no hay cámara o la niegan**, entra una foto de prueba dibujada al
+vuelo: un cuarto a oscuras y alguien sentado, lavado por el flash. En los dos casos se le mete el
+grano de la cinta antes de pegarla al cartel.
+
+Para incrustar una foto propia, se deja `foto.jpg` (o `.png`) en `/tmp/teypi/` y se vuelve a
+compilar: entra como `TDATA.foto`.
+
+### El corte final
+Las dos ramas con respuesta terminan en el vídeo que falta. Mientras `TDATA.videoFinal` esté
+vacío, **la cinta se corta en ruido**, que es lo que haría una cinta. Con dejar `final.mp4` en
+`/tmp/teypi/` y recompilar, se reproduce ahí.
+
+### La cinta
+El mismo revelado de Rezona TV pero vertical, y **la capa de dibujo entra en el revelado**: se
+compone antes del corrimiento de color, así que las letras y los botones sangran, se ondulan y se
+glitchean igual que el 3D —y por lo tanto **salen en la grabación**. Se graba **9:16 a 540×960**.
+La voz de Teypi es la misma cadena robot/VHS de la serie (eSpeak horneado a 8 kHz, anillo a 38 Hz,
+banda telefónica y wow de cinta).
