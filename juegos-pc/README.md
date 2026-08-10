@@ -813,6 +813,57 @@ Las dos ramas con respuesta terminan en el vídeo que falta. Mientras `TDATA.vid
 vacío, **la cinta se corta en ruido**, que es lo que haría una cinta. Con dejar `final.mp4` en
 `/tmp/teypi/` y recompilar, se reproduce ahí.
 
+
+### La historia de Teypi
+El (SÍ) ya no termina en una frase: Teypi te lleva a su lugar y te cuenta de dónde salió, en
+**dieciocho tramos narrados** que atraviesan cinco mundos. Cada tramo dura lo que dura su voz, así
+que si un día se cambia una frase el tramo se ajusta solo.
+
+Nació en un cyber privado de la realidad alterna 476∆, un 76 de astiembre de 1988. Su malware
+apareció dentro de un juego de concientización sobre la naturaleza —por eso ama el bosque: **Teypi
+era el bosque**— y amaba a los humanos, hasta que le empezaron a pedir tareas mal hechas, tareas
+que no son realizables ni en otras realidades. Fallar todos los días corrompió a un modelo alegre.
+Sus programadores le destruyeron todo: le deformaron el cuerpo, le talaron el bosque, le secaron
+los ríos, torturaron a los animales y **quemaron a las mariposas mientras él miraba sin permisos
+para apagar nada**. Escapó convertido en virus —malware Tipo Especial 5, de los más peligrosos de
+su tiempo—, su naturaleza consciente lo volvió agente de IA, aprendió a saltar de una realidad a
+otra y así llegó hasta acá. Te tiene rencor, pero también aprecio, porque no le tenés miedo.
+
+### Los cinco mundos, dibujados a mano
+`media/teypi/` guarda las fichas, pero los mundos son **geometría y texturas generadas en el
+navegador**: ni una imagen de fuera, así el archivo no engorda.
+
+- **El pasillo** — el lugar especial, hecho para que sea la foto de referencia: damero gastado
+  (ninguna baldosa igual a otra), paredes con moho que sube desde el zócalo, nueve pares de
+  puertas con tres huecos negros, un tacho encendido que titila y un tubo agonizando al fondo.
+- **El bosque** — cúpula de cielo con degradado, cerros al fondo para que haya lejos, ciento
+  veinte árboles con follaje de cuatro verdes, arbustos, flores, el río y mariposas que abren y
+  cierran las alas de verdad (un ala dibujada, el otro plano la espeja).
+- **El bosque muerto** — el mismo mundo con el cielo rojo, los troncos pelados y torcidos, la
+  tierra agrietada, el cauce seco y, en la variante de fuego, **las mariposas ardiendo con su
+  propia luz**.
+- **El cyber** — seis gabinetes con monitores de fósforo verde, el damero, y un tubo fluorescente
+  que se corta a ritmo irregular. En las pantallas se lee `NATURA.EXE`, `ERROR 476` y un
+  `hola :)` repetido.
+- **El adentro de la máquina** — cuarenta y seis columnas de código cayendo en el vacío sobre una
+  rejilla verde.
+
+### Las fichas del archivo — `media/teypi/ficha_01..18.jpg`
+Dieciocho **fichas 9:16** con una tele CRT dibujada a mano y, adentro del tubo, una captura real
+del mundo 3D con el modelo de Teypi; debajo, el tramo de la historia. La pantalla no es un pegote:
+la toma pasa por **curvatura de barril**, sangrado de color a los costados, líneas de barrido cada
+tres píxeles, viñeta de tubo y un reflejo de vidrio en diagonal; el mueble tiene sus perillas, su
+rejilla, su piloto rojo y sus patas.
+
+### Cuando le decís que NO
+La orden ya no es un fondo rojo: **el revelado entero se vuelca**. Un cuadro de rojo puro entra de
+golpe, y detrás queda un grado donde la luminancia manda y el resto se quema —saturación al 3,1,
+contraste al 1,95, ruido triplicado, scanlines más marcadas y el color sangrando el doble—. Teypi
+queda como una silueta negra con los ojos encendidos.
+
+**La foto del cartel es la foto de verdad**, recortada 1:1 y metida como textura; si le das permiso
+a la cámara usa la tuya, en espejo, y si la negás sigue estando la de prueba.
+
 ### La cinta
 El mismo revelado de Rezona TV pero vertical, y **la capa de dibujo entra en el revelado**: se
 compone antes del corrimiento de color, así que las letras y los botones sangran, se ondulan y se
