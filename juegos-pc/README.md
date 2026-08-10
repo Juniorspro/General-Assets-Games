@@ -697,14 +697,16 @@ y muestrea doce puntos en dos anillos. Por eso el cambio de foco funciona: sólo
 - **La figura de la puerta** es otro `image_to_3d`, con **textura** (la primera versión era una
   silueta sin rostro y en el primer plano no había cara que mostrar) y **riggeada** con
   `3d_rigging`: 24 huesos y un clip de `Long_Breathe_and_Look_Around` horneado.
-  - Lleva **tres clips**: `Long_Breathe_and_Look_Around` para el acto 1, `Casual_Walk` para
-    acercarse a la puerta y `Step_Forward_and_Push` para abrirla **él mismo**. La puerta gira
-    sincronizada con el empujón; antes se abría sola mientras la figura se deslizaba.
-  - Cada trabajo de riggeo hornea **una** animación, así que son tres GLB de ~6 MB cada uno. En
-    vez de embarcar los tres, **las animaciones se fusionan en uno solo**: se copian los
-    accesores y sus vistas al búfer del primero y se reasignan los canales **por nombre de nodo**,
-    no por índice, que es lo que evita que un clip acabe moviendo el hueso equivocado. Los dos
-    clips extra suman **139 KB**.
+  - **Del riggeo sólo se queda el esqueleto.** Las animaciones horneadas se tiraron del GLB —y
+    con ellas 270 KB— porque **las tres poses están escritas a mano** sobre los huesos:
+    - `animLook`: respiración, peso que pasa de una pierna a otra y un barrido de cabeza en cuatro
+      tramos (quieto, izquierda, quieto, derecha).
+    - `animWalk`: ciclo de paso con la rodilla que sólo flexiona hacia atrás, tronco y brazos en
+      oposición, y el bamboleo en la raíz, no en los huesos.
+    - `animPush`: anticipación corta hacia atrás, pierna que se adelanta, tronco que entra y brazo
+      derecho al picaporte. **La puerta gira sincronizada con ese empujón.**
+    Cada pose parte del reposo y rota huesos alrededor de ejes **de mundo**, actualizando la
+    matriz entre cadena y cadena porque cada hueso hereda del anterior.
   - **Una malla con piel no se puede medir con `Box3`**: mide la geometría en reposo, no lo que
     los huesos dibujan, y al escalar por ahí el modelo salía gigante y la cámara acababa mirándole
     los zapatos. Se mide pasando los vértices por `applyBoneTransform`.
@@ -717,6 +719,16 @@ hay una función de altura del terreno: tarima, rampa de escalones y hierba.
 - **Los sonidos son generados** con `mirelo_text_to_audio`: el crujido de la puerta y la
   respiración enorme del fondo. El golpe final se quitó: sonaba a trueno. Van incrustados y pasan por el mismo `master`,
   así entran en la grabación.
+
+### Rótulos y resplandor
+Los rótulos son **amarillos de televisión vieja** con reborde negro por los cuatro lados: sobre un
+cielo claro el blanco se perdía.
+
+**El resplandor sólo alcanza a lo que está cerca.** La pasada de brillos mide la profundidad y se
+apaga entre los 9 y los 16 metros, así la puerta sigue reventando de luz blanca pero **la cabeza
+de la entidad, a veinticuatro metros, ya no se convierte en una mancha**: se le distinguen los
+agujeros de los ojos y la boca. Su luz clave además es lateral y baja, para que la cabeza tenga
+sombra propia.
 
 ### La cinta
 Se emite en **4:3**, como toda la serie, dentro de un marco fijo. El mismo revelado que Rezona TV: se renderiza a **240p**, se pasa a YIQ para que el color sangre
