@@ -889,6 +889,9 @@ a la cámara usa la tuya, en espejo, y si la negás sigue estando la de prueba.
 ### La cinta
 El mismo revelado de Rezona TV pero vertical, y **la capa de dibujo entra en el revelado**: se
 compone antes del corrimiento de color, así que las letras y los botones sangran, se ondulan y se
-glitchean igual que el 3D —y por lo tanto **salen en la grabación**. Se graba **9:16 a 540×960**.
-La voz de Teypi es la misma cadena robot/VHS de la serie (eSpeak horneado a 8 kHz, anillo a 38 Hz,
-banda telefónica y wow de cinta).
+glitchean igual que el 3D. La voz de Teypi es la misma cadena robot/VHS de la serie (eSpeak
+horneado a 8 kHz, anillo a 38 Hz, banda telefónica y wow de cinta).
+
+**Este no graba.** A diferencia del resto de la serie, acá se quitaron el botón de grabar, el reloj
+y el panel de la cinta recuperada: la pantalla queda limpia de punta a punta y no hay nada de HTML
+encima del lienzo.
