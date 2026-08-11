@@ -813,10 +813,18 @@ cartel**, que es exactamente lo que Teypi te muestra al girarlo. La cámara se s
 instante en que se saca la foto.
 
 Se prueban tres configuraciones de cámara en cascada (720×720 ideal → sólo frontal → cualquiera),
-así no se cae en el teléfono que rechaza la primera. **Si la niegan, no hay cámara o la cinta está
-abierta como archivo suelto** —sin origen no hay a quién darle el permiso—, entra la foto de
-prueba y en un rincón de la foto queda escrito por qué: `SIN CÁMARA · FOTO DE PRUEBA` o
-`LA CÁMARA NECESITA HTTPS`. Para que haya cámara la cinta tiene que estar **servida por https**.
+así no se cae en el teléfono que rechaza la primera.
+
+**Y hay una segunda vía, que es la que salva el caso más común.** Con la cinta abierta como
+archivo suelto el navegador no pregunta nada: sin origen no hay a quién darle el permiso, y
+`getUserMedia` ni aparece. Entonces el corte negro no se rinde: muestra
+`TOCÁ PARA SACAR LA FOTO · se abre la cámara del teléfono` y un botón amarillo. Ese botón dispara
+un `<input type="file" accept="image/*" capture="user">`, que **abre la cámara del teléfono** —no
+pide permiso por API, lo pide la cámara misma— y la foto que sacás entra igual: se recorta 1:1, se
+le mete el grano de la cinta y se sube como textura del cartel. Cuarenta segundos para decidirte.
+
+Sólo si además de eso no sacás nada entra la foto de prueba, y en un rincón de la propia foto
+queda escrito por qué: `SIN CÁMARA · FOTO DE PRUEBA` o `LA CÁMARA NECESITA HTTPS`.
 
 Para cambiar la foto de prueba se deja `foto.jpg` (o `.png`) en `/tmp/teypi/` y se vuelve a
 compilar: entra como `TDATA.foto`.
