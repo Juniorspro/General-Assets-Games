@@ -1216,7 +1216,7 @@ function ponerSombra(){
 ============================================================================ */
 const cardCv=document.createElement('canvas'); cardCv.width=cardCv.height=320;
 const cardCtx=cardCv.getContext('2d');
-const fotoCv=document.createElement('canvas'); fotoCv.width=fotoCv.height=320;
+const fotoCv=document.createElement('canvas'); fotoCv.width=fotoCv.height=512;
 const fotoCtx=fotoCv.getContext('2d');
 function pintarDorso(){
   const q=cardCtx, S=320;
@@ -1494,38 +1494,85 @@ function morseAt(t){
 ============================================================================ */
 const camEl=document.getElementById('cam');
 let camStream=null, camPedida=false, fotoDef=null;
+/* 'nada' → 'pidiendo' → 'ok' | 'no'. La foto no se saca hasta que la cámara
+   entrega fotogramas de verdad: pedir el permiso puede tardar lo que el dedo
+   del que juega tarde en decir que sí. */
+let camEstado='nada', camMotivo='', usoCamara=false;
 if(FOTO_PRUEBA){ fotoDef=new Image(); fotoDef.src=FOTO_PRUEBA; }
 function pedirCamara(){
   if(camPedida) return; camPedida=true;
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) return;
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:640},audio:false})
-    .then(s=>{ camStream=s; camEl.srcObject=s; camEl.play().catch(()=>{}); }).catch(()=>{});
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    camEstado='no'; camMotivo = window.isSecureContext ? 'sinCam' : 'noSeguro'; return;
+  }
+  if(!window.isSecureContext && location.protocol!=='file:'){   // http:// no da cámara
+    camEstado='no'; camMotivo='noSeguro'; return;
+  }
+  camEstado='pidiendo';
+  const intentos=[ {video:{facingMode:'user', width:{ideal:720}, height:{ideal:720}}, audio:false},
+                   {video:{facingMode:'user'}, audio:false},
+                   {video:true, audio:false} ];
+  (function probar(i){
+    if(i>=intentos.length){
+      camEstado='no';
+      // Abierto como archivo suelto no hay origen al que darle el permiso:
+      // la cinta tiene que estar servida por https para que haya cámara.
+      camMotivo = (location.protocol==='file:') ? 'noSeguro' : 'sinCam';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia(intentos[i])
+      .then(st2=>{
+        camStream=st2; camEl.srcObject=st2;
+        camEl.play().catch(()=>{});
+        // no alcanza con tener el stream: hay que esperar a que pinte algo
+        const reloj=setInterval(()=>{
+          if(camEl.videoWidth>0 && camEl.readyState>=2){ clearInterval(reloj); camEstado='ok'; }
+        }, 90);
+        setTimeout(()=>{ clearInterval(reloj);
+          if(camEstado==='pidiendo'){ camEstado = camEl.videoWidth>0 ? 'ok' : 'no';
+            if(camEstado==='no') camMotivo='sinCam'; } }, 9000);
+      })
+      .catch(()=>probar(i+1));
+  })(0);
+}
+function soltarCamara(){
+  try{ soltarCamara(); }catch(e){}
+  camStream=null; camEl.srcObject=null;
 }
 function sacarFoto(){
-  const q=fotoCtx, S=320;
+  const q=fotoCtx, S=fotoCv.width;
   const vw=camEl.videoWidth||0, vh=camEl.videoHeight||0;
   q.setTransform(1,0,0,1,0,0); q.clearRect(0,0,S,S);
+  usoCamara=false;
   if(camStream && vw>0 && vh>0){
     const s=Math.min(vw,vh);
     q.translate(S,0); q.scale(-1,1);                   // espejo, como toda cámara frontal
     q.drawImage(camEl,(vw-s)/2,(vh-s)/2,s,s,0,0,S,S);
     q.setTransform(1,0,0,1,0,0);
+    usoCamara=true;
   }else if(fotoDef && fotoDef.width){
     q.drawImage(fotoDef,0,0,S,S);
   }else{
     fotoDePrueba(q,S);
   }
+  // el revelado de la cinta, sin tapar la cara: grano, no barro
   const d=q.getImageData(0,0,S,S), a=d.data;
   for(let i=0;i<a.length;i+=4){
-    const n=(Math.random()-0.5)*46;
-    a[i]  =Math.min(255,Math.max(0,a[i]  *0.92+n+8));
-    a[i+1]=Math.min(255,Math.max(0,a[i+1]*0.90+n+6));
-    a[i+2]=Math.min(255,Math.max(0,a[i+2]*0.86+n+10));
+    const n=(Math.random()-0.5)*30;
+    a[i]  =Math.min(255,Math.max(0,a[i]  *0.97+n+4));
+    a[i+1]=Math.min(255,Math.max(0,a[i+1]*0.95+n+3));
+    a[i+2]=Math.min(255,Math.max(0,a[i+2]*0.92+n+6));
   }
   q.putImageData(d,0,0);
-  q.lineWidth=22; q.strokeStyle='#f5d90a'; q.strokeRect(11,11,S-22,S-22);
-  q.font='700 13px ui-monospace, monospace'; q.fillStyle='rgba(255,255,255,.85)';
-  q.textAlign='right'; q.fillText(TX('foto'),S-30,S-32);
+  for(let y=0;y<S;y+=4){ q.fillStyle='rgba(0,0,0,.10)'; q.fillRect(0,y,S,1); }
+  q.lineWidth=S*0.068; q.strokeStyle='#f5d90a'; q.strokeRect(S*0.034,S*0.034,S*0.932,S*0.932);
+  q.font='700 '+Math.round(S*0.042)+'px ui-monospace, monospace';
+  q.fillStyle='rgba(255,255,255,.88)'; q.textAlign='right';
+  q.fillText(TX('foto'), S*0.90, S*0.895);
+  if(!usoCamara){
+    q.font='700 '+Math.round(S*0.034)+'px ui-monospace, monospace';
+    q.fillStyle='rgba(255,220,120,.9)'; q.textAlign='left';
+    q.fillText(TX(camMotivo||'sinCam'), S*0.10, S*0.135);
+  }
   cardTexB.needsUpdate=true;
 }
 /* Sin cámara: un cuarto a oscuras y alguien sentado. No es nadie. */
@@ -1562,6 +1609,8 @@ const L={
   morse:'SI SIGUES INTENTANDO ENTRAR, MAS SENTIRAS QUE TE VAS, PERO DE ESTE MUNDO',
   morseTag:'·  —  ·   MORSE   ·  —  ·',
   sinCinta:'NO SE PUDO LEER LA CINTA',
+  permiso:'DALE PERMISO A LA CÁMARA', permiso2:'Teypi te quiere sacar una foto',
+  sinCam:'SIN CÁMARA · FOTO DE PRUEBA', noSeguro:'LA CÁMARA NECESITA HTTPS',
   foto:'REZONA 1:1',
   crash:['*** EXCEPCIÓN NO CONTROLADA ***','TEYPI.EXE  seg 476∆  hilo 5',
          'violación de acceso en 0x00','el proceso dejó de responder',
@@ -1593,6 +1642,8 @@ const L={
   morse:'IF YOU KEEP TRYING TO GET IN, THE MORE YOU WILL FEEL YOURSELF LEAVING, BUT THIS WORLD',
   morseTag:'·  —  ·   MORSE   ·  —  ·',
   sinCinta:'COULD NOT READ THE TAPE',
+  permiso:'ALLOW THE CAMERA', permiso2:'Teypi wants to take your picture',
+  sinCam:'NO CAMERA · TEST PHOTO', noSeguro:'THE CAMERA NEEDS HTTPS',
   foto:'REZONA 1:1',
   crash:['*** UNHANDLED EXCEPTION ***','TEYPI.EXE  seg 476∆  thread 5',
          'access violation at 0x00','the process stopped responding',
@@ -1902,15 +1953,25 @@ function escNo(){
 }
 /* ------------------------------------------------------- 6c · CORTE Y FOTO */
 let fotoT=-1;
+const ESPERA_CAM=11;
 function escFoto(){
   const t=stT;
   teypi.visible=false; cartel.visible=false;
-  if(t<1.0){                                    // el juego se corta un segundo
-    negro(); U.uNoise.value=0.10; U.uGlitch.value=Math.max(U.uGlitch.value,0.10);
-    return;
+  if(fotoT<0){
+    // El corte negro dura un segundo, pero si la cámara todavía está pidiendo
+    // permiso se estira: la foto tiene que ser la de verdad.
+    const esperando = camEstado==='pidiendo' && t<1.0+ESPERA_CAM;
+    if(t<1.0 || esperando){
+      negro(); U.uNoise.value=0.10; U.uGlitch.value=Math.max(U.uGlitch.value,0.10);
+      if(t>1.2){
+        say(TX('permiso'),  UH*0.44, 21, '#f5d90a', true);
+        say(TX('permiso2'), UH*0.51, 15, 'rgba(240,230,190,.75)', true);
+      }
+      return;
+    }
   }
   U.uNoise.value=0.055;
-  if(fotoT<0){ fotoT=t; sacarFoto(); shutter(); noiseBurst(0.30,0.18,900); }
+  if(fotoT<0){ fotoT=t; sacarFoto(); soltarCamara(); shutter(); noiseBurst(0.30,0.18,900); }
   const f=t-fotoT;
   if(f<0.55){                                   // el fogonazo
     const a=Math.max(0,1-f/0.55);
@@ -2165,7 +2226,7 @@ function escCrash(){
 function reventar(){
   if(muerto) return; muerto=true;
   try{ if(AC) AC.close(); }catch(e){}                      // el sonido se corta en seco
-  try{ if(camStream) camStream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  try{ soltarCamara(); }catch(e){}
   // Soltar el contexto a la fuerza hace que three lea registros de shaders que
   // ya no existen; alcanza con tirar el renderizador y sacar el lienzo.
   try{ renderer.dispose(); }catch(e){}
@@ -2236,6 +2297,8 @@ window.__dbg={ S, get st(){return st;}, go, set t(v){stT=v;}, get t(){return stT
     return v.toArray().map(x=>+x.toFixed(3)); },
   set rod(v){ RODILLA=v; }, get rod(){ return RODILLA; },
   idioma(v){ elegirIdioma(v); }, get lang(){ return IDIOMA; },
+  get cam(){ return camEstado+'/'+(usoCamara?'foto real':'foto de prueba'); },
+  pedir(){ pedirCamara(); },
   get opciones(){ return opciones; },
   manos(){ const a=new THREE.Vector3(), b=new THREE.Vector3();
     PB['lefthand'].getWorldPosition(a); PB['righthand'].getWorldPosition(b);

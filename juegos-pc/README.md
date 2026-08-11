@@ -799,13 +799,26 @@ en x ≈ 0,62. Entra la mano y el antebrazo, nada más.
      VAS, PERO DE ESTE MUNDO`. Lámpara que parpadea, pitido por punto y raya y los símbolos
      imprimiéndose abajo.
 
-### La foto
-Se pide la cámara **al tocar (NO)**, cuatro segundos antes del fogonazo, así llega a tiempo. Sale
-en espejo y recortada 1:1. **Si no hay cámara o la niegan**, entra una foto de prueba dibujada al
-vuelo: un cuarto a oscuras y alguien sentado, lavado por el flash. En los dos casos se le mete el
-grano de la cinta antes de pegarla al cartel.
+### La foto es de verdad
+Al tocar **(NO)** se pide la cámara **de verdad**, con su permiso del navegador, y **el corte
+negro espera**: mientras el permiso está pendiente la pantalla se queda en negro con
+`DALE PERMISO A LA CÁMARA · Teypi te quiere sacar una foto`, hasta once segundos. La foto no se
+saca cuando toca por reloj: se saca **cuando la cámara entrega fotogramas de verdad** —tener el
+stream no alcanza, hay que esperar a que `videoWidth` deje de ser cero—, y recién ahí entra el
+fogonazo.
 
-Para incrustar una foto propia, se deja `foto.jpg` (o `.png`) en `/tmp/teypi/` y se vuelve a
+Lo que sale de la cámara se recorta 1:1, se espeja como toda cámara frontal, se le mete el grano
+y las líneas de la cinta —grano, no barro: la cara tiene que leerse— y **se sube como textura del
+cartel**, que es exactamente lo que Teypi te muestra al girarlo. La cámara se suelta en el mismo
+instante en que se saca la foto.
+
+Se prueban tres configuraciones de cámara en cascada (720×720 ideal → sólo frontal → cualquiera),
+así no se cae en el teléfono que rechaza la primera. **Si la niegan, no hay cámara o la cinta está
+abierta como archivo suelto** —sin origen no hay a quién darle el permiso—, entra la foto de
+prueba y en un rincón de la foto queda escrito por qué: `SIN CÁMARA · FOTO DE PRUEBA` o
+`LA CÁMARA NECESITA HTTPS`. Para que haya cámara la cinta tiene que estar **servida por https**.
+
+Para cambiar la foto de prueba se deja `foto.jpg` (o `.png`) en `/tmp/teypi/` y se vuelve a
 compilar: entra como `TDATA.foto`.
 
 ### El corte final
