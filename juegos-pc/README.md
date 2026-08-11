@@ -947,3 +947,55 @@ volcado, que a los efectos es lo mismo.
 Un detalle que costó: soltar el contexto de vídeo a la fuerza con `forceContextLoss()` hace que
 three lea registros de shaders que ya no existen y tire un `null.trim()` por consola. Alcanza con
 tirar el renderizador y sacar el lienzo.
+
+
+---
+
+## Escuela Rezona — `juegos-pc/Escuela_Rezona.html`
+
+Un pasillero de escuela en primera persona, de los que se grababan en cinta, **en 4:3**. Se juntan
+siete cuadernos, cada uno pide tres cuentas, y cada error apura a la que camina por los pasillos.
+1,98 MB.
+
+Es la base de lo que después va a arrancar cuando le digas que **sí** a Teypi. Por ahora se juega
+suelto, para probarlo.
+
+### La referencia, mirada de verdad
+Antes de dibujar nada se bajaron las **hojas de texturas del original** (The Textures Resource) y se
+midieron sus colores, uno por uno, con el fondo turquesa de la hoja descartado. De ahí salió la
+paleta: ladrillo `#D8DAD6`, granito tostado `#DDC293` con motas entre `#906C45` y `#FEFDDE`,
+alfombra `#001B39`, techo `#AAABA8`, madera `#BA651A`, casillero `#F90202`. También el reparto de
+puertas: **azul con número** para las aulas, **madera para «SOLO MAESTROS»**, verde para dirección
+y **doble amarilla con ventanitas** para el comedor. Ninguna textura del original entró al juego:
+están todas dibujadas acá con esos colores.
+
+### El mapa
+Una **reja de pasillos** —cuatro de lado a lado, cinco de arriba abajo— y los dieciséis huecos que
+quedan son los cuartos: **siete aulas** con su cuaderno y su pizarrón, cinco salas de maestros,
+dirección, comedor y dos depósitos. Cada cuarto elige su puerta entre los lados que dan a un
+pasillo. Casilleros rojos de a pares contra las paredes, afiches, tubos fluorescentes cada tres
+celdas y cuatro salidas en las esquinas de la reja.
+
+**El mapa se comprueba solo al arrancar**: una inundación desde donde nace el jugador tiene que
+alcanzar los siete cuadernos. La primera versión dejaba media escuela sin cuartos y sólo cuatro
+cuadernos; ahora son 600 celdas alcanzables y ningún cuaderno suelto.
+
+Todo se fusiona por material: paredes, pisos, techos, casilleros y tubos salen en cinco mallas.
+
+### Cómo se juega
+La cámara **sólo gira de lado**, como en el del celular: nunca mira arriba ni abajo. En el teléfono,
+palanca a la izquierda para caminar y arrastre a la derecha para girar; en la computadora, WASD y
+las flechas. Al tocar un cuaderno se abre la hoja con la cuenta y un teclado numérico: tres cuentas
+seguidas y el cuaderno es tuyo. Las cuentas se endurecen con cada cuaderno —suma, resta,
+multiplicación, división—.
+
+**Cada error la apura medio metro por segundo**, y cada cuaderno un poco más. Camina por los
+pasillos buscando el camino más corto —anchura primero sobre la cuadrícula, recalculado cada medio
+segundo— y el golpe de la regla suena más seguido cuanto más rápido va. Con los siete cuadernos hay
+que llegar a una salida.
+
+### La cinta
+Revelado de **VHS digital**: además del sangrado de color y el fantasma, tiene **macrobloques** que
+se congelan y **cuantización de color a 32 niveles**, que es lo que delata a una cinta pasada a
+digital. Se renderiza a 480×360 y se sube a 960×720. Graba en **4:3 MP4** desde un lienzo aparte, y
+como el marcador y las cuentas se dibujan dentro del lienzo, entran en la grabación.
