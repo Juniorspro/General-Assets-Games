@@ -982,6 +982,13 @@ cuadernos; ahora son 600 celdas alcanzables y ningún cuaderno suelto.
 
 Todo se fusiona por material: paredes, pisos, techos, casilleros y tubos salen en cinco mallas.
 
+### Se entra por la puerta
+Se arranca en el **zaguán**, con la escuela por delante y **las puertas de salida a la espalda**:
+batiente doble amarillo con ventanitas, cartel verde de `SALIDA` encima y, al costado, el plano de
+la escuela con su `ESTÁS ACÁ`. Es como empiezan estos juegos —en el original arrancás en un
+recibidor y las salidas se convierten en planos cuando las tocás—, así que el zaguán cuenta también
+como salida: son cinco en total, la de entrada y las cuatro de las esquinas de la reja.
+
 ### Cómo se juega
 La cámara **sólo gira de lado**, como en el del celular: nunca mira arriba ni abajo. En el teléfono,
 palanca a la izquierda para caminar y arrastre a la derecha para girar; en la computadora, WASD y
@@ -1006,6 +1013,15 @@ informa el navegador para un elemento rotado es el envolvente y miente—. Compr
 palanca en las dos orientaciones: el mismo arrastre da el mismo vector y camina lo mismo, 1,69 m.
 La palanca además responde al ratón, no sólo al dedo.
 
+### Los controles, que no andaban
+El dedo tocaba y no pasaba nada: faltaba **`touch-action: none`**. Sin eso el navegador se queda el
+gesto para desplazar la página y manda `pointercancel` apenas movés el dedo, así que la palanca
+nunca llegaba a empujar nada. Va en el lienzo, en la caja que gira y en el `body`, más
+`preventDefault` en los eventos de puntero —no pasivos— y en los de tacto por si acaso.
+
+Comprobado en un teléfono simulado con tacto de verdad: la palanca empuja a −0,96 y el jugador
+camina **1,50 m**; el arrastre de la derecha gira **1,489 rad**.
+
 ### La calidad y la cinta, separadas
 La primera versión se rendía a **480×360** y encima le metía macrobloques, cuantización de color,
 scanlines y grano: era ilegible. El motor no tenía la culpa —siempre fue three.js— la tenía el
@@ -1015,8 +1031,10 @@ revelado. Ahora hay **dos revelados y un botón para cambiarlos**:
   pantalla (ancho de la caja × densidad del aparato, con tope de 1440 y suelo de 640), con
   suavizado, filtro lineal y anisotropía 8. Las texturas pasaron de 128 a 256 px con cuatro veces
   más motas, y los detalles de puertas y casilleros se dibujan en proporción, no en píxeles fijos.
-- **Cinta**, con el botón `CINTA`: vuelven los macrobloques que se congelan, la cuantización a 32
-  niveles, las scanlines, la banda de conmutación y el grano. Para grabar, no para jugar.
+- **Cinta**, que ahora viene puesta: es **el mismo revelado de ¡Teypi Time!** —sangrado de color en
+  YIQ, fantasma del cuadro anterior, grano, líneas, ondulación de la cinta y la banda de
+  conmutación de cabezas abajo—. Los macrobloques y la cuantización se fueron: eran de otra
+  estética y ensuciaban. El botón `CINTA` lo saca, por si se quiere ver la escuela pelada.
 
 Graba en **4:3 MP4 a 1280×960** desde un lienzo aparte, y como el marcador y las cuentas se dibujan
 dentro del lienzo, entran en la grabación.

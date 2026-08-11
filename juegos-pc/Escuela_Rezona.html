@@ -6,16 +6,16 @@
 <title>ESCUELA REZONA · ¡TEYPI TIME!</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-tap-highlight-color:transparent}
-  html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#e8eaf0;
+  html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;background:#000;color:#e8eaf0;
     font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
   /* La cinta es 4:3 y va acostada. Si el teléfono está parado —o tiene el giro
      trabado, que es lo normal— se gira TODO noventa grados en vez de pedir
      pantalla completa: así la imagen ocupa el largo del teléfono y se juega
      poniéndolo de costado, sin que el navegador tenga que enterarse. */
   #rot{position:fixed;left:50%;top:50%;transform-origin:50% 50%;
-    transform:translate(-50%,-50%);background:#000}
-  #stage{position:absolute;inset:0;background:#000;overflow:hidden}
-  #stage canvas{display:block;width:100%;height:100%}
+    transform:translate(-50%,-50%);background:#000;touch-action:none}
+  #stage{position:absolute;inset:0;background:#000;overflow:hidden;touch-action:none}
+  #stage canvas{display:block;width:100%;height:100%;touch-action:none}
   #err{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#8e2b20;color:#fff;
     font:11px/1.5 ui-monospace,monospace;padding:8px;white-space:pre-wrap;max-height:40vh;overflow:auto}
 
@@ -232,6 +232,21 @@ function texSalida(){
   q.fillText('SALIDA', S/2, H/2);
   return c;
 }
+function texMapa(){                        // el plano de la escuela del zaguán
+  const S=256, c=cv(S,Math.round(S*0.82)), q=c.getContext('2d'); const H=c.height;
+  q.fillStyle='#e6e0cc'; q.fillRect(0,0,S,H);
+  q.strokeStyle='#2a2a24'; q.lineWidth=6; q.strokeRect(3,3,S-6,H-6);
+  q.fillStyle='#1b3a6b'; q.font='900 20px sans-serif'; q.textAlign='center';
+  q.fillText('ESCUELA REZONA', S/2, 28);
+  q.strokeStyle='#3a4a6a'; q.lineWidth=3;
+  for(let i=0;i<4;i++){ const y=44+i*22; q.beginPath(); q.moveTo(20,y); q.lineTo(S-20,y); q.stroke(); }
+  for(let i=0;i<5;i++){ const x=20+i*(S-40)/4; q.beginPath(); q.moveTo(x,44); q.lineTo(x,44+3*22); q.stroke(); }
+  q.fillStyle='#c02020';
+  q.beginPath(); q.arc(S/2, 44+3*22, 7, 0, 6.2832); q.fill();
+  q.fillStyle='#c02020'; q.font='700 15px ui-monospace, monospace';
+  q.fillText('ESTÁS ACÁ', S/2, H-16);
+  return c;
+}
 function texCuaderno(){
   const S=128, c=cv(S,S), q=c.getContext('2d');
   q.clearRect(0,0,S,S);
@@ -250,7 +265,7 @@ function texCuaderno(){
 /* ============================================================================
    EL MAPA  ·  pasillos en cuadrícula y aulas en los huecos, como corresponde
 ============================================================================ */
-const MW=35, MH=31;                        // celdas
+const MW=35, MH=35;                        // celdas
 const CELL=3.2, ALTO=3.2;
 const M=[];                                // 0 pared · 1 pasillo · 2 cuarto
 for(let y=0;y<MH;y++) M.push(new Array(MW).fill(0));
@@ -260,6 +275,11 @@ for(let y=0;y<MH;y++) M.push(new Array(MW).fill(0));
 const HY=[2,9,16,23,30], HX=[2,10,18,26,33];
 for(const y of HY) for(let x=HX[0];x<=HX[HX.length-1];x++) M[y][x]=1;
 for(const x of HX) for(let y=HY[0];y<=HY[HY.length-1];y++) M[y][x]=1;
+
+/* El zaguán: se entra por acá y las puertas de salida quedan a la espalda,
+   como en las escuelas de estos juegos. */
+const ENT={x:18, y0:31, y1:33};
+for(let y=ENT.y0;y<=ENT.y1;y++) for(let x=ENT.x-1;x<=ENT.x+1;x++) M[y][x]=1;
 
 const puertas=[], armarios=[], carteles=[], salidas=[], cuadernos=[], AULAS=[];
 function cuarto(x0,y0,x1,y1,tipo){
@@ -304,9 +324,10 @@ for(const a of AULAS){
   cuadernos.push({cx,cy, tomado:false});
   carteles.push({x:cx, y:a.y0, dx:0, dy:-1, tipo:'pizarron'});
 }
-/* Salidas: en las cuatro esquinas de la reja, mirando hacia afuera */
+/* Salidas: la del zaguán —por donde entraste— y las cuatro de las esquinas */
+salidas.push({x:ENT.x, y:ENT.y1, dx:0, dy:1, principal:true});
 for(const [x,y,dx,dy] of [[HX[0],HY[0],0,-1],[HX[HX.length-1],HY[0],0,-1],
-                          [HX[0],HY[HY.length-1],0,1],[HX[HX.length-1],HY[HY.length-1],0,1]])
+                          [HX[0],HY[HY.length-1],-1,0],[HX[HX.length-1],HY[HY.length-1],1,0]])
   salidas.push({x,y,dx,dy});
 /* Casilleros y afiches contra las paredes de los pasillos */
 for(let y=1;y<MH-1;y++) for(let x=1;x<MW-1;x++){
@@ -318,7 +339,7 @@ for(let y=1;y<MH-1;y++) for(let x=1;x<MW-1;x++){
     else if(d<0.36) carteles.push({x,y,dx,dy,tipo:'afiche'});
   }
 }
-const INI={x:HX[0], y:HY[HY.length-1]};
+const INI={x:ENT.x, y:ENT.y1-1};   // parado en el zaguán, con la salida a la espalda
 
 /* Comprobación: desde donde arranca el jugador se tiene que poder llegar a
    todos los cuadernos y a todas las salidas. Si no, no es un mapa, es un
@@ -471,11 +492,24 @@ for(const q of puertas){
 }
 {
   const matSal=new THREE.MeshBasicMaterial({map:TX(texSalida(),1,1)});
+  const matVai=new THREE.MeshBasicMaterial({map:TX(texVaiven(),1,1), side:THREE.DoubleSide});
+  const matMapa=new THREE.MeshBasicMaterial({map:TX(texMapa(),1,1)});
   for(const s of salidas){
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.8, CELL*0.4), matSal);
-    m.position.set(wx(s.x)+s.dx*(CELL/2-0.05), ALTO*0.62, wz(s.y)+s.dy*(CELL/2-0.05));
-    m.rotation.y = s.dx? s.dx*Math.PI/2 : (s.dy>0?Math.PI:0);
-    mundo.add(m);
+    const gy = s.dx? s.dx*Math.PI/2 : (s.dy>0?Math.PI:0);
+    // el batiente doble
+    const d=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.92, ALTO*0.80), matVai);
+    d.position.set(wx(s.x)+s.dx*(CELL/2-0.04), ALTO*0.40, wz(s.y)+s.dy*(CELL/2-0.04));
+    d.rotation.y=gy; mundo.add(d);
+    // el cartel encima
+    const c=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.56, CELL*0.17), matSal);
+    c.position.set(wx(s.x)+s.dx*(CELL/2-0.06), ALTO*0.875, wz(s.y)+s.dy*(CELL/2-0.06));
+    c.rotation.y=gy; mundo.add(c);
+    // y en el zaguán, el plano de la escuela al costado
+    if(s.principal){
+      const m2=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.72, CELL*0.60), matMapa);
+      m2.position.set(wx(s.x-1)-(CELL/2-0.05), ALTO*0.55, wz(s.y-1));
+      m2.rotation.y=Math.PI/2; mundo.add(m2);
+    }
   }
 }
 /* ---- cuadernos ---- */
@@ -524,62 +558,62 @@ const FRAG=`
 precision highp float;
 varying vec2 vUv;
 uniform sampler2D tScene,tPrev,tUI;
-uniform vec2 uRes; uniform float uTime,uGlitch,uChroma,uNoise,uGhost,uScan,uFade,uBloque,uQuant,uVineta;
+uniform vec2 uRes; uniform float uTime,uGlitch,uChroma,uNoise,uGhost,uScan,uFade,uRoll,uCinta;
 float hash21(vec2 p){ vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z); }
 vec3 rgb2yiq(vec3 c){ return vec3(dot(c,vec3(0.299,0.587,0.114)),dot(c,vec3(0.5959,-0.2746,-0.3213)),dot(c,vec3(0.2115,-0.5227,0.3112))); }
 vec3 yiq2rgb(vec3 c){ return vec3(dot(c,vec3(1.0,0.956,0.619)),dot(c,vec3(1.0,-0.272,-0.647)),dot(c,vec3(1.0,-1.106,1.703))); }
 void main(){
   vec2 suv=vUv;
-  suv.x+=sin(suv.y*130.0+uTime*2.6)*0.0009;
+  suv.y=fract(suv.y+uRoll);
+  suv.x+=sin(suv.y*150.0+uTime*3.0)*0.0011*uCinta;      // la cinta ondula
   if(uGlitch>0.001){
-    float band=floor(suv.y*22.0);
-    if(hash21(vec2(band,floor(uTime*14.0)))<uGlitch*0.55)
-      suv.x+=(hash21(vec2(band,3.0))-0.5)*0.10*uGlitch;
-  }
-  // macrobloques: lo que delata a una cinta pasada a digital
-  if(uBloque>0.001){
-    vec2 bl=floor(suv*vec2(48.0,36.0));
-    if(hash21(bl+floor(uTime*8.0))<uBloque*0.25) suv=(bl+0.5)/vec2(48.0,36.0);
+    float band=floor(suv.y*24.0);
+    if(hash21(vec2(band,floor(uTime*15.0)))<uGlitch*0.55)
+      suv.x+=(hash21(vec2(band,3.0))-0.5)*0.13*uGlitch;
   }
   vec4 uic=texture2D(tUI,vec2(suv.x,1.0-suv.y));
-  vec3 base=texture2D(tScene,suv).rgb; base=mix(base,uic.rgb,uic.a);
+  vec3 base=texture2D(tScene,suv).rgb;
+  base=mix(base,uic.rgb,uic.a);
   vec3 b1=texture2D(tScene,suv-vec2(uChroma/uRes.x,0.0)).rgb;
   vec4 u1=texture2D(tUI,vec2(suv.x-uChroma/uRes.x,1.0-suv.y)); b1=mix(b1,u1.rgb,u1.a);
-  vec3 a=rgb2yiq(base), b=rgb2yiq(b1);
-  vec3 col=yiq2rgb(vec3(a.x,(a.yz*0.62+b.yz*0.38)));
-  if(uQuant>0.5) col=floor(col*32.0+0.5)/32.0;   // cuantización, sólo en modo cinta
+  vec3 b2=texture2D(tScene,suv-vec2(uChroma*2.0/uRes.x,0.0)).rgb;
+  vec4 u2=texture2D(tUI,vec2(suv.x-uChroma*2.0/uRes.x,1.0-suv.y)); b2=mix(b2,u2.rgb,u2.a);
+  vec3 a=rgb2yiq(base), b=rgb2yiq(b1), c=rgb2yiq(b2);
+  vec3 col=yiq2rgb(vec3(a.x,(a.yz*0.5+b.yz*0.32+c.yz*0.18)));
   col*=uFade;
-  vec3 prev=texture2D(tPrev,vUv+vec2(0.0010,0.0)).rgb;
-  col=mix(col,max(col,prev*0.92),uGhost);
+  vec3 prev=texture2D(tPrev,vUv+vec2(0.0012,0.0)).rgb;
+  col=mix(col,max(col,prev*0.94),uGhost);
   col+=(hash21(vUv*uRes+fract(uTime)*137.0)-0.5)*uNoise;
   col*=1.0-uScan*0.5*(0.5+0.5*sin(vUv.y*uRes.y*3.14159));
-  if(uQuant>0.5 && vUv.y<0.020){ float k=(0.020-vUv.y)/0.020;
-    col=mix(col, vec3(hash21(vec2(vUv.x*220.0, floor(uTime*20.0)))), k*0.6); }
+  if(uCinta>0.5 && vUv.y<0.024){                        // conmutación de cabezas
+    float k=(0.024-vUv.y)/0.024;
+    col=mix(col, vec3(hash21(vec2(vUv.x*230.0, floor(uTime*20.0)))), k*0.70);
+  }
   vec2 vc=vUv-0.5;
-  col*=mix(1.0-uVineta,1.0,smoothstep(0.98,0.26,length(vc)*1.20));
-  col=col*1.06+vec3(0.012,0.010,0.008);
+  col*=mix(mix(0.94,0.80,uCinta),1.0,smoothstep(0.98,0.26,length(vc)*1.24));
+  col=col*1.09+vec3(0.014,0.012,0.009);
   gl_FragColor=vec4(clamp(col,0.0,1.0),1.0);
 }`;
 const COPY='precision mediump float; varying vec2 vUv; uniform sampler2D tCur;'+
            'void main(){ gl_FragColor=vec4(texture2D(tCur,vUv).rgb,1.0); }';
 const vhs=new THREE.ShaderMaterial({vertexShader:VERT,fragmentShader:FRAG,depthTest:false,depthWrite:false,
   uniforms:{tScene:{value:null},tPrev:{value:null},tUI:{value:uiTex},
-    uRes:{value:new THREE.Vector2(DW,DH)},uTime:{value:0},uGlitch:{value:0},uChroma:{value:0.6},
-    uNoise:{value:0.012},uGhost:{value:0.06},uScan:{value:0},uFade:{value:1},uBloque:{value:0},
-    uQuant:{value:0},uVineta:{value:0.10}}});
+    uRes:{value:new THREE.Vector2(DW,DH)},uTime:{value:0},uGlitch:{value:0},uChroma:{value:2.4},
+    uNoise:{value:0.055},uGhost:{value:0.26},uScan:{value:0.16},uFade:{value:1},
+    uRoll:{value:0},uCinta:{value:1}}});
 
-/* Dos revelados: el limpio, que es el de jugar, y el de cinta, que es el de
-   grabar. Se cambia con el botón, y arranca limpio porque a 480p con
-   macrobloques no se veía un pomo. */
-let MODO_CINTA=false;
+/* El mismo revelado que ¡Teypi Time!: sangrado de color en YIQ, fantasma del
+   cuadro anterior, grano, líneas y la banda de conmutación abajo. Viene puesto;
+   el botón lo saca por si se quiere ver la escuela pelada. */
+let MODO_CINTA=true;
 function ponerRevelado(){
   const u=vhs.uniforms;
   if(MODO_CINTA){
-    u.uChroma.value=2.0; u.uNoise.value=0.05; u.uGhost.value=0.22;
-    u.uScan.value=0.14;  u.uBloque.value=0.35; u.uQuant.value=1; u.uVineta.value=0.20;
+    u.uChroma.value=2.4; u.uNoise.value=0.055; u.uGhost.value=0.26;
+    u.uScan.value=0.16;  u.uCinta.value=1;
   }else{
-    u.uChroma.value=0.6; u.uNoise.value=0.012; u.uGhost.value=0.06;
-    u.uScan.value=0;     u.uBloque.value=0;   u.uQuant.value=0; u.uVineta.value=0.10;
+    u.uChroma.value=0.5; u.uNoise.value=0.010; u.uGhost.value=0.05;
+    u.uScan.value=0;     u.uCinta.value=0;
   }
 }
 const copyMat=new THREE.ShaderMaterial({vertexShader:VERT,fragmentShader:COPY,depthTest:false,depthWrite:false,
@@ -875,7 +909,7 @@ function actualizar(dt){
     golpeT-=dt;
     if(golpeT<=0){ golpeT=Math.max(0.35, 1.9-teypiVel*0.28); if(dj<26) regla(); }
     if(dj<1.15){ est=EST.PERDISTE; U.uGlitch.value=1.0; ruidito(0.5,0.4,300); }
-    U.uNoise.value=(MODO_CINTA?0.05:0.012)+Math.max(0,(12-dj))*(MODO_CINTA?0.011:0.004);
+    U.uNoise.value=(MODO_CINTA?0.055:0.010)+Math.max(0,(12-dj))*(MODO_CINTA?0.011:0.004);
   }
 }
 function render(){
@@ -913,6 +947,7 @@ function aUI(ev){
 }
 const lienzo=renderer.domElement;
 lienzo.addEventListener('pointerdown', ev=>{
+  ev.preventDefault();
   initAudio(); if(AC && AC.state==='suspended') AC.resume();
   const [x,y]=aUI(ev);
   for(const b of botones){
@@ -928,9 +963,10 @@ lienzo.addEventListener('pointerdown', ev=>{
   if(est!==EST.JUEGO) return;
   if(x<UW*0.42){ palanca.activa=true; palanca.id=ev.pointerId; palanca.ox=x; palanca.oy=y; palanca.x=0; palanca.y=0; }
   else{ giro.activa=true; giro.id=ev.pointerId; giro.x0=x; }
-  lienzo.setPointerCapture(ev.pointerId);
-});
+  try{ lienzo.setPointerCapture(ev.pointerId); }catch(e){}
+}, {passive:false});
 lienzo.addEventListener('pointermove', ev=>{
+  if(palanca.activa||giro.activa) ev.preventDefault();
   const [x,y]=aUI(ev);
   if(palanca.activa && ev.pointerId===palanca.id){
     const R=UH*0.16;
@@ -941,13 +977,17 @@ lienzo.addEventListener('pointermove', ev=>{
     P.yaw -= (x-giro.x0)*0.0055;               // sólo de lado, nunca hacia arriba
     giro.x0=x;
   }
-});
+}, {passive:false});
 function soltar(ev){
   if(palanca.activa && ev.pointerId===palanca.id){ palanca.activa=false; palanca.x=0; palanca.y=0; }
   if(giro.activa && ev.pointerId===giro.id) giro.activa=false;
 }
 lienzo.addEventListener('pointerup',soltar);
 lienzo.addEventListener('pointercancel',soltar);
+lienzo.addEventListener('lostpointercapture',soltar);
+/* Cinturón y tiradores: hay navegadores que igual intentan desplazar */
+for(const ev of ['touchstart','touchmove','touchend'])
+  lienzo.addEventListener(ev, e=>e.preventDefault(), {passive:false});
 lienzo.addEventListener('contextmenu',e=>e.preventDefault());
 
 /* ============================================================================
@@ -1012,6 +1052,7 @@ document.getElementById('btnVHS').addEventListener('click',e=>{
   e.target.style.color=MODO_CINTA?'#f5d90a':'#e6e6ee';
   e.target.textContent=MODO_CINTA?'CINTA ●':'CINTA';
 });
+{ const bv=document.getElementById('btnVHS'); bv.style.color='#f5d90a'; bv.textContent='CINTA ●'; }
 ponerRevelado();
 document.getElementById('tapeClose').addEventListener('click',()=>
   document.getElementById('tape').classList.remove('show'));
