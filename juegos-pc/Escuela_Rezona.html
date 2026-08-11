@@ -43,6 +43,7 @@
 <div id="rot">
 <div id="stage"></div>
 <div id="ctl">
+  <button class="ctlb" id="btnVHS">CINTA</button>
   <button class="ctlb rec" id="btnRec">● GRABAR</button>
   <span class="ctlb" id="recTime">00:00</span>
 </div>
@@ -81,9 +82,12 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
    Se juntan cuadernos, cada uno pide tres cuentas, y cada error apura a la que
    camina por los pasillos. La cámara sólo gira de lado, como en el del celular.
 ============================================================================ */
-const RW=480, RH=360;                    // render 4:3, bajo, que después se sube
-const DW=960, DH=720;                    // salida y grabación
-const UW=640, UH=480;                    // capa de dibujo (marcador, cuentas)
+/* La resolución la manda la pantalla, no un número fijo: se rinde a lo que da
+   el aparato (hasta 1440×1080) y recién ahí se le pone el revelado. */
+let RW=1280, RH=960;                     // render 4:3, se recalcula al acomodar
+const DW=1280, DH=960;                   // salida y grabación
+const UW=1280, UH=960;                   // capa de dibujo (marcador, cuentas)
+const TOPE=1440;
 
 /* --------------------------------------------------------------- semilla */
 let SEED=20260811;
@@ -98,8 +102,9 @@ function TX(c, rx, ry){
   const t=new THREE.CanvasTexture(c);
   t.colorSpace=THREE.SRGBColorSpace;
   t.wrapS=t.wrapT=THREE.RepeatWrapping;
-  t.magFilter=THREE.NearestFilter; t.minFilter=THREE.LinearMipmapLinearFilter;
-  t.repeat.set(rx||1, ry||1); t.anisotropy=2;
+  t.magFilter=THREE.LinearFilter; t.minFilter=THREE.LinearMipmapLinearFilter;
+  t.repeat.set(rx||1, ry||1);
+  t.anisotropy=Math.min(8, renderer.capabilities.getMaxAnisotropy());
   return t;
 }
 function moteado(q,W,H,n,cols,r0,r1){
@@ -110,7 +115,7 @@ function moteado(q,W,H,n,cols,r0,r1){
   }
 }
 function texPared(){                       // ladrillo blanco de escuela
-  const S=128, c=cv(S,S), q=c.getContext('2d');
+  const S=256, c=cv(S,S), q=c.getContext('2d');
   q.fillStyle='#b9bcb7'; q.fillRect(0,0,S,S);
   const fh=S/8, fw=S/4;
   for(let f=0;f<8;f++){
@@ -124,25 +129,25 @@ function texPared(){                       // ladrillo blanco de escuela
       q.fillStyle=g; q.fillRect(x,y,w,h);
     }
   }
-  moteado(q,S,S,260,['rgba(255,255,255,.22)','rgba(120,125,120,.18)'],0.4,1.3);
+  moteado(q,S,S,900,['rgba(255,255,255,.22)','rgba(120,125,120,.18)'],0.4,1.3);
   return c;
 }
 function texPiso(){                        // granito tostado, el de los pasillos
-  const S=128, c=cv(S,S), q=c.getContext('2d');
+  const S=256, c=cv(S,S), q=c.getContext('2d');
   q.fillStyle='#ddc293'; q.fillRect(0,0,S,S);
-  moteado(q,S,S,2600,['#906c45','#b89466','#fefdde','#e7d3a8','#7d5c38','#fff6d2'],0.5,2.0);
+  moteado(q,S,S,9000,['#906c45','#b89466','#fefdde','#e7d3a8','#7d5c38','#fff6d2'],0.5,2.0);
   return c;
 }
 function texAlfombra(){                    // la de las aulas: azul casi negra
-  const S=128, c=cv(S,S), q=c.getContext('2d');
+  const S=256, c=cv(S,S), q=c.getContext('2d');
   q.fillStyle='#001b39'; q.fillRect(0,0,S,S);
-  moteado(q,S,S,2200,['#002a56','#00102a','#0a3a6e','#001430'],0.5,1.8);
+  moteado(q,S,S,7500,['#002a56','#00102a','#0a3a6e','#001430'],0.5,1.8);
   return c;
 }
 function texTecho(){                       // gris granulado
-  const S=128, c=cv(S,S), q=c.getContext('2d');
+  const S=256, c=cv(S,S), q=c.getContext('2d');
   q.fillStyle='#aaaba8'; q.fillRect(0,0,S,S);
-  moteado(q,S,S,1500,['#a2a4a0','#b8bab6','#96988f','#c8cac6'],0.5,1.5);
+  moteado(q,S,S,5200,['#a2a4a0','#b8bab6','#96988f','#c8cac6'],0.5,1.5);
   return c;
 }
 function texLuz(){
@@ -152,42 +157,42 @@ function texLuz(){
   return c;
 }
 function texPuerta(col, txt, num){
-  const S=128, c=cv(S,S*2), q=c.getContext('2d'); const H=S*2;
+  const S=256, c=cv(S,S*2), q=c.getContext('2d'); const H=S*2;
   q.fillStyle=col; q.fillRect(0,0,S,H);
-  q.fillStyle='rgba(0,0,0,.22)'; q.fillRect(0,0,7,H); q.fillRect(S-7,0,7,H);
-  q.fillStyle='rgba(255,255,255,.16)'; q.fillRect(7,4,S-14,5);
+  q.fillStyle='rgba(0,0,0,.22)'; q.fillRect(0,0,S*0.055,H); q.fillRect(S-S*0.055,0,S*0.055,H);
+  q.fillStyle='rgba(255,255,255,.16)'; q.fillRect(S*0.055,S*0.03,S-S*0.11,S*0.04);
   if(txt){
-    q.fillStyle='rgba(0,0,0,.85)'; q.font='700 13px ui-monospace, monospace';
+    q.fillStyle='rgba(0,0,0,.85)'; q.font='700 '+Math.round(S*0.105)+'px ui-monospace, monospace';
     q.textAlign='center';
     const l=txt.split('\n');
-    for(let i=0;i<l.length;i++) q.fillText(l[i], S/2, H*0.30+i*17);
+    for(let i=0;i<l.length;i++) q.fillText(l[i], S/2, H*0.30+i*S*0.135);
   }
   if(num!==undefined){
-    q.fillStyle='rgba(0,0,0,.8)'; q.font='700 15px ui-monospace, monospace';
-    q.textAlign='center'; q.fillText(num, S/2, 26);
+    q.fillStyle='rgba(0,0,0,.8)'; q.font='700 '+Math.round(S*0.14)+'px ui-monospace, monospace';
+    q.textAlign='center'; q.fillText(num, S/2, S*0.22);
   }
   q.fillStyle='#e8c34a';                    // picaporte
-  q.beginPath(); q.arc(S-24, H*0.55, 6, 0, 6.2832); q.fill();
+  q.beginPath(); q.arc(S-S*0.19, H*0.55, S*0.05, 0, 6.2832); q.fill();
   return c;
 }
 function texVaiven(){                      // la doble amarilla con ventanitas
-  const S=128, c=cv(S,S*2), q=c.getContext('2d'); const H=S*2;
+  const S=256, c=cv(S,S*2), q=c.getContext('2d'); const H=S*2;
   q.fillStyle='#d9d106'; q.fillRect(0,0,S,H);
-  q.fillStyle='rgba(0,0,0,.30)'; q.fillRect(S/2-2,0,4,H);
+  q.fillStyle='rgba(0,0,0,.30)'; q.fillRect(S/2-S*0.016,0,S*0.032,H);
   q.fillStyle='#0a0a08';
   q.fillRect(S*0.16,H*0.20,S*0.20,H*0.14); q.fillRect(S*0.64,H*0.20,S*0.20,H*0.14);
-  q.fillStyle='rgba(0,0,0,.18)'; q.fillRect(0,0,6,H); q.fillRect(S-6,0,6,H);
+  q.fillStyle='rgba(0,0,0,.18)'; q.fillRect(0,0,S*0.05,H); q.fillRect(S-S*0.05,0,S*0.05,H);
   return c;
 }
 function texArmario(){                     // el casillero rojo
-  const S=64, c=cv(S,S*3), q=c.getContext('2d'); const H=S*3;
+  const S=128, c=cv(S,S*3), q=c.getContext('2d'); const H=S*3;
   q.fillStyle='#f90202'; q.fillRect(0,0,S,H);
-  q.fillStyle='rgba(0,0,0,.35)'; q.fillRect(0,0,4,H); q.fillRect(S-4,0,4,H);
-  q.fillStyle='rgba(255,255,255,.25)'; q.fillRect(4,3,S-8,3);
+  q.fillStyle='rgba(0,0,0,.35)'; q.fillRect(0,0,S*0.07,H); q.fillRect(S-S*0.07,0,S*0.07,H);
+  q.fillStyle='rgba(255,255,255,.25)'; q.fillRect(S*0.07,S*0.04,S-S*0.14,S*0.045);
   q.fillStyle='rgba(0,0,0,.45)';
-  for(let i=0;i<3;i++) q.fillRect(S*0.24, H*0.10+i*7, S*0.52, 3);   // rejilla
-  q.fillStyle='#3a0000'; q.fillRect(S*0.72, H*0.50, 6, 14);          // manija
-  q.fillStyle='rgba(0,0,0,.25)'; q.fillRect(0,H-6,S,6);
+  for(let i=0;i<3;i++) q.fillRect(S*0.24, H*0.10+i*S*0.11, S*0.52, S*0.045);   // rejilla
+  q.fillStyle='#3a0000'; q.fillRect(S*0.70, H*0.50, S*0.09, S*0.22);   // manija
+  q.fillStyle='rgba(0,0,0,.25)'; q.fillRect(0,H-S*0.09,S,S*0.09);
   return c;
 }
 function texPizarron(){
@@ -338,7 +343,7 @@ const INI={x:HX[0], y:HY[HY.length-1]};
 ============================================================================ */
 const rotEl=document.getElementById('rot');
 const stage=document.getElementById('stage');
-let ROT=false, CAJA={w:1,h:1};
+let ROT=false, CAJA={w:1,h:1}, rtListo=false;
 function acomodar(){
   const vw=innerWidth, vh=innerHeight;
   ROT = vh > vw*1.02;                      // parado: se acuesta la imagen
@@ -348,11 +353,16 @@ function acomodar(){
   CAJA.w=W; CAJA.h=H;
   rotEl.style.width=W+'px'; rotEl.style.height=H+'px';
   rotEl.style.transform='translate(-50%,-50%) rotate('+(ROT?90:0)+'deg)';
+  // se rinde a los píxeles que de verdad tiene la pantalla, con tope
+  const dpr=Math.min(devicePixelRatio||1, 2);
+  const nw=Math.min(TOPE, Math.max(640, Math.round(W*dpr)));
+  const nh=Math.round(nw*0.75);
+  if(nw!==RW){ RW=nw; RH=nh; if(rtListo) rtScene.setSize(RW,RH); }
 }
 acomodar();
 addEventListener('resize', acomodar);
 addEventListener('orientationchange', ()=>setTimeout(acomodar,120));
-const renderer=new THREE.WebGLRenderer({antialias:false, powerPreference:'high-performance'});
+const renderer=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
 renderer.setPixelRatio(1); renderer.setSize(DW,DH,false);
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 stage.appendChild(renderer.domElement);
@@ -503,6 +513,7 @@ new GLTFLoader().load(EDATA.teypi, g=>{
 const mkRT=(w,h)=>new THREE.WebGLRenderTarget(w,h,
   {minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true});
 let rtScene=mkRT(RW,RH), rtA=mkRT(DW,DH), rtB=mkRT(DW,DH);
+rtListo=true; acomodar();   // ahora sí, con los destinos ya creados
 const quadCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
 const quadScene=new THREE.Scene();
 const quadM=new THREE.Mesh(new THREE.PlaneGeometry(2,2)); quadScene.add(quadM);
@@ -513,7 +524,7 @@ const FRAG=`
 precision highp float;
 varying vec2 vUv;
 uniform sampler2D tScene,tPrev,tUI;
-uniform vec2 uRes; uniform float uTime,uGlitch,uChroma,uNoise,uGhost,uScan,uFade,uBloque;
+uniform vec2 uRes; uniform float uTime,uGlitch,uChroma,uNoise,uGhost,uScan,uFade,uBloque,uQuant,uVineta;
 float hash21(vec2 p){ vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z); }
 vec3 rgb2yiq(vec3 c){ return vec3(dot(c,vec3(0.299,0.587,0.114)),dot(c,vec3(0.5959,-0.2746,-0.3213)),dot(c,vec3(0.2115,-0.5227,0.3112))); }
 vec3 yiq2rgb(vec3 c){ return vec3(dot(c,vec3(1.0,0.956,0.619)),dot(c,vec3(1.0,-0.272,-0.647)),dot(c,vec3(1.0,-1.106,1.703))); }
@@ -536,16 +547,16 @@ void main(){
   vec4 u1=texture2D(tUI,vec2(suv.x-uChroma/uRes.x,1.0-suv.y)); b1=mix(b1,u1.rgb,u1.a);
   vec3 a=rgb2yiq(base), b=rgb2yiq(b1);
   vec3 col=yiq2rgb(vec3(a.x,(a.yz*0.62+b.yz*0.38)));
-  col=floor(col*32.0+0.5)/32.0;                 // cuantización de color
+  if(uQuant>0.5) col=floor(col*32.0+0.5)/32.0;   // cuantización, sólo en modo cinta
   col*=uFade;
   vec3 prev=texture2D(tPrev,vUv+vec2(0.0010,0.0)).rgb;
   col=mix(col,max(col,prev*0.92),uGhost);
   col+=(hash21(vUv*uRes+fract(uTime)*137.0)-0.5)*uNoise;
   col*=1.0-uScan*0.5*(0.5+0.5*sin(vUv.y*uRes.y*3.14159));
-  if(vUv.y<0.020){ float k=(0.020-vUv.y)/0.020;
+  if(uQuant>0.5 && vUv.y<0.020){ float k=(0.020-vUv.y)/0.020;
     col=mix(col, vec3(hash21(vec2(vUv.x*220.0, floor(uTime*20.0)))), k*0.6); }
   vec2 vc=vUv-0.5;
-  col*=mix(0.80,1.0,smoothstep(0.98,0.26,length(vc)*1.20));
+  col*=mix(1.0-uVineta,1.0,smoothstep(0.98,0.26,length(vc)*1.20));
   col=col*1.06+vec3(0.012,0.010,0.008);
   gl_FragColor=vec4(clamp(col,0.0,1.0),1.0);
 }`;
@@ -553,8 +564,24 @@ const COPY='precision mediump float; varying vec2 vUv; uniform sampler2D tCur;'+
            'void main(){ gl_FragColor=vec4(texture2D(tCur,vUv).rgb,1.0); }';
 const vhs=new THREE.ShaderMaterial({vertexShader:VERT,fragmentShader:FRAG,depthTest:false,depthWrite:false,
   uniforms:{tScene:{value:null},tPrev:{value:null},tUI:{value:uiTex},
-    uRes:{value:new THREE.Vector2(DW,DH)},uTime:{value:0},uGlitch:{value:0},uChroma:{value:2.0},
-    uNoise:{value:0.05},uGhost:{value:0.22},uScan:{value:0.14},uFade:{value:1},uBloque:{value:0.35}}});
+    uRes:{value:new THREE.Vector2(DW,DH)},uTime:{value:0},uGlitch:{value:0},uChroma:{value:0.6},
+    uNoise:{value:0.012},uGhost:{value:0.06},uScan:{value:0},uFade:{value:1},uBloque:{value:0},
+    uQuant:{value:0},uVineta:{value:0.10}}});
+
+/* Dos revelados: el limpio, que es el de jugar, y el de cinta, que es el de
+   grabar. Se cambia con el botón, y arranca limpio porque a 480p con
+   macrobloques no se veía un pomo. */
+let MODO_CINTA=false;
+function ponerRevelado(){
+  const u=vhs.uniforms;
+  if(MODO_CINTA){
+    u.uChroma.value=2.0; u.uNoise.value=0.05; u.uGhost.value=0.22;
+    u.uScan.value=0.14;  u.uBloque.value=0.35; u.uQuant.value=1; u.uVineta.value=0.20;
+  }else{
+    u.uChroma.value=0.6; u.uNoise.value=0.012; u.uGhost.value=0.06;
+    u.uScan.value=0;     u.uBloque.value=0;   u.uQuant.value=0; u.uVineta.value=0.10;
+  }
+}
 const copyMat=new THREE.ShaderMaterial({vertexShader:VERT,fragmentShader:COPY,depthTest:false,depthWrite:false,
   uniforms:{tCur:{value:null}}});
 const U=vhs.uniforms;
@@ -848,7 +875,7 @@ function actualizar(dt){
     golpeT-=dt;
     if(golpeT<=0){ golpeT=Math.max(0.35, 1.9-teypiVel*0.28); if(dj<26) regla(); }
     if(dj<1.15){ est=EST.PERDISTE; U.uGlitch.value=1.0; ruidito(0.5,0.4,300); }
-    U.uNoise.value=0.05+Math.max(0,(12-dj))*0.011;
+    U.uNoise.value=(MODO_CINTA?0.05:0.012)+Math.max(0,(12-dj))*(MODO_CINTA?0.011:0.004);
   }
 }
 function render(){
@@ -980,6 +1007,12 @@ function finishRec(){
   }catch(e){}
 }
 document.getElementById('btnRec').addEventListener('click',()=>{ recording?stopRec():startRec(); });
+document.getElementById('btnVHS').addEventListener('click',e=>{
+  MODO_CINTA=!MODO_CINTA; ponerRevelado();
+  e.target.style.color=MODO_CINTA?'#f5d90a':'#e6e6ee';
+  e.target.textContent=MODO_CINTA?'CINTA ●':'CINTA';
+});
+ponerRevelado();
 document.getElementById('tapeClose').addEventListener('click',()=>
   document.getElementById('tape').classList.remove('show'));
 

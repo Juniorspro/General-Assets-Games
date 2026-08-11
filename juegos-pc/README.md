@@ -1006,11 +1006,20 @@ informa el navegador para un elemento rotado es el envolvente y miente—. Compr
 palanca en las dos orientaciones: el mismo arrastre da el mismo vector y camina lo mismo, 1,69 m.
 La palanca además responde al ratón, no sólo al dedo.
 
-### La cinta
-Revelado de **VHS digital**: además del sangrado de color y el fantasma, tiene **macrobloques** que
-se congelan y **cuantización de color a 32 niveles**, que es lo que delata a una cinta pasada a
-digital. Se renderiza a 480×360 y se sube a 960×720. Graba en **4:3 MP4** desde un lienzo aparte, y
-como el marcador y las cuentas se dibujan dentro del lienzo, entran en la grabación.
+### La calidad y la cinta, separadas
+La primera versión se rendía a **480×360** y encima le metía macrobloques, cuantización de color,
+scanlines y grano: era ilegible. El motor no tenía la culpa —siempre fue three.js— la tenía el
+revelado. Ahora hay **dos revelados y un botón para cambiarlos**:
+
+- **Limpio**, el de jugar y el que viene puesto: se rinde a los píxeles que de verdad tiene la
+  pantalla (ancho de la caja × densidad del aparato, con tope de 1440 y suelo de 640), con
+  suavizado, filtro lineal y anisotropía 8. Las texturas pasaron de 128 a 256 px con cuatro veces
+  más motas, y los detalles de puertas y casilleros se dibujan en proporción, no en píxeles fijos.
+- **Cinta**, con el botón `CINTA`: vuelven los macrobloques que se congelan, la cuantización a 32
+  niveles, las scanlines, la banda de conmutación y el grano. Para grabar, no para jugar.
+
+Graba en **4:3 MP4 a 1280×960** desde un lienzo aparte, y como el marcador y las cuentas se dibujan
+dentro del lienzo, entran en la grabación.
 
 
 ### Pendiente
