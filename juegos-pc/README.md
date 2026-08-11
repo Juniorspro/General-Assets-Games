@@ -799,32 +799,28 @@ en x ≈ 0,62. Entra la mano y el antebrazo, nada más.
      VAS, PERO DE ESTE MUNDO`. Lámpara que parpadea, pitido por punto y raya y los símbolos
      imprimiéndose abajo.
 
-### La foto es de verdad
-Al tocar **(NO)** se pide la cámara **de verdad**, con su permiso del navegador, y **el corte
-negro espera**: mientras el permiso está pendiente la pantalla se queda en negro con
-`DALE PERMISO A LA CÁMARA · Teypi te quiere sacar una foto`, hasta once segundos. La foto no se
-saca cuando toca por reloj: se saca **cuando la cámara entrega fotogramas de verdad** —tener el
-stream no alcanza, hay que esperar a que `videoWidth` deje de ser cero—, y recién ahí entra el
-fogonazo.
+### La foto es de verdad, y sale sola
+**A Teypi no hay que pedirle nada.** La cámara se pide en el **primer toque del juego** —cuando
+elegís el idioma con la mano—, callada y sin cartel: es el único momento en que el navegador acepta
+el pedido, porque necesita un gesto de por medio. Si contestás que **sí**, la cámara se suelta y
+nunca se usa. Si contestás que **no**, ya está caliente: el corte negro dura su segundo, y la foto
+se saca **sola**, sin botón, sin mensaje y sin esperar a nadie.
 
-Lo que sale de la cámara se recorta 1:1, se espeja como toda cámara frontal, se le mete el grano
-y las líneas de la cinta —grano, no barro: la cara tiene que leerse— y **se sube como textura del
-cartel**, que es exactamente lo que Teypi te muestra al girarlo. La cámara se suelta en el mismo
-instante en que se saca la foto.
+La foto tampoco se saca por reloj: se saca **cuando la cámara entrega fotogramas de verdad**
+—tener el stream no alcanza, hay que esperar a que `videoWidth` deje de ser cero—. Si todavía está
+arrancando, el corte negro se estira como mucho tres segundos y medio; pasado eso sigue igual.
 
-Se prueban tres configuraciones de cámara en cascada (720×720 ideal → sólo frontal → cualquiera),
-así no se cae en el teléfono que rechaza la primera.
+Lo que sale se recorta 1:1, se espeja como toda cámara frontal, se le mete el grano y las líneas de
+la cinta —grano, no barro: la cara tiene que leerse— y **se sube como textura del cartel**, que es
+exactamente lo que Teypi te muestra al girarlo. La cámara se suelta en el mismo instante en que se
+saca la foto. Se prueban tres configuraciones en cascada (720×720 ideal → sólo frontal →
+cualquiera), así no se cae en el teléfono que rechaza la primera.
 
-**Y hay una segunda vía, que es la que salva el caso más común.** Con la cinta abierta como
-archivo suelto el navegador no pregunta nada: sin origen no hay a quién darle el permiso, y
-`getUserMedia` ni aparece. Entonces el corte negro no se rinde: muestra
-`TOCÁ PARA SACAR LA FOTO · se abre la cámara del teléfono` y un botón amarillo. Ese botón dispara
-un `<input type="file" accept="image/*" capture="user">`, que **abre la cámara del teléfono** —no
-pide permiso por API, lo pide la cámara misma— y la foto que sacás entra igual: se recorta 1:1, se
-le mete el grano de la cinta y se sube como textura del cartel. Cuarenta segundos para decidirte.
-
-Sólo si además de eso no sacás nada entra la foto de prueba, y en un rincón de la propia foto
-queda escrito por qué: `SIN CÁMARA · FOTO DE PRUEBA` o `LA CÁMARA NECESITA HTTPS`.
+**Lo único que no se puede saltear** es el cartel del propio navegador la primera vez: sin permiso
+concedido no hay cámara, y eso no lo decide el juego. Y con la cinta abierta como **archivo suelto**
+el navegador ni pregunta —sin origen no hay a quién darle el permiso—, así que ahí entra la foto de
+prueba, en silencio, con el motivo escrito en un rincón de la propia foto. **Para que la foto sea
+la tuya, la cinta tiene que estar servida por https.**
 
 Para cambiar la foto de prueba se deja `foto.jpg` (o `.png`) en `/tmp/teypi/` y se vuelve a
 compilar: entra como `TDATA.foto`.

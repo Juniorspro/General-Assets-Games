@@ -22,11 +22,6 @@
 <div id="stage"></div>
 
 <video id="cam" playsinline muted style="position:fixed;left:-9999px;top:0;width:2px;height:2px"></video>
-<!-- La otra vía para la foto: abre la cámara del teléfono. Funciona incluso con
-     la cinta abierta como archivo suelto, donde getUserMedia ni pregunta. -->
-<input id="cap" type="file" accept="image/*" capture="user"
-       style="position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0">
-
 <script>
 window.addEventListener('error',e=>{
   const b=document.getElementById('err'); if(!b) return;   // después del reventón no hay dónde escribir
@@ -1538,25 +1533,6 @@ function pedirCamara(){
       .catch(()=>probar(i+1));
   })(0);
 }
-/* Segunda vía: el input de archivo con captura. No pide permiso por API —lo
-   pide la cámara del teléfono, que es la que se abre— así que funciona donde
-   getUserMedia ni siquiera pregunta. */
-const capEl=document.getElementById('cap');
-let imgCap=null, capPedida=false, capCancelada=false;
-if(capEl) capEl.addEventListener('change', ()=>{
-  const f=capEl.files && capEl.files[0];
-  if(!f){ capCancelada=true; return; }
-  const url=URL.createObjectURL(f);
-  const im=new Image();
-  im.onload=()=>{ imgCap=im; URL.revokeObjectURL(url); };
-  im.onerror=()=>{ capCancelada=true; URL.revokeObjectURL(url); };
-  im.src=url;
-});
-function abrirCaptura(){
-  if(!capEl) { capCancelada=true; return; }
-  capPedida=true;
-  try{ capEl.value=''; capEl.click(); }catch(e){ capCancelada=true; }
-}
 function soltarCamara(){
   try{ soltarCamara(); }catch(e){}
   camStream=null; camEl.srcObject=null;
@@ -1571,10 +1547,6 @@ function sacarFoto(){
     q.translate(S,0); q.scale(-1,1);                   // espejo, como toda cámara frontal
     q.drawImage(camEl,(vw-s)/2,(vh-s)/2,s,s,0,0,S,S);
     q.setTransform(1,0,0,1,0,0);
-    usoCamara=true;
-  }else if(imgCap && imgCap.width){
-    const iw=imgCap.width, ih=imgCap.height, m=Math.min(iw,ih);
-    q.drawImage(imgCap,(iw-m)/2,(ih-m)/2,m,m,0,0,S,S);
     usoCamara=true;
   }else if(fotoDef && fotoDef.width){
     q.drawImage(fotoDef,0,0,S,S);
@@ -1636,10 +1608,7 @@ const L={
   morse:'SI SIGUES INTENTANDO ENTRAR, MAS SENTIRAS QUE TE VAS, PERO DE ESTE MUNDO',
   morseTag:'·  —  ·   MORSE   ·  —  ·',
   sinCinta:'NO SE PUDO LEER LA CINTA',
-  permiso:'DALE PERMISO A LA CÁMARA', permiso2:'Teypi te quiere sacar una foto',
   sinCam:'SIN CÁMARA · FOTO DE PRUEBA', noSeguro:'LA CÁMARA NECESITA HTTPS',
-  tocaFoto:'TOCÁ PARA SACAR LA FOTO', tocaFoto2:'se abre la cámara del teléfono',
-  botFoto:'SACAR FOTO',
   foto:'REZONA 1:1',
   crash:['*** EXCEPCIÓN NO CONTROLADA ***','TEYPI.EXE  seg 476∆  hilo 5',
          'violación de acceso en 0x00','el proceso dejó de responder',
@@ -1671,10 +1640,7 @@ const L={
   morse:'IF YOU KEEP TRYING TO GET IN, THE MORE YOU WILL FEEL YOURSELF LEAVING, BUT THIS WORLD',
   morseTag:'·  —  ·   MORSE   ·  —  ·',
   sinCinta:'COULD NOT READ THE TAPE',
-  permiso:'ALLOW THE CAMERA', permiso2:'Teypi wants to take your picture',
   sinCam:'NO CAMERA · TEST PHOTO', noSeguro:'THE CAMERA NEEDS HTTPS',
-  tocaFoto:'TAP TO TAKE THE PHOTO', tocaFoto2:'your phone camera will open',
-  botFoto:'TAKE PHOTO',
   foto:'REZONA 1:1',
   crash:['*** UNHANDLED EXCEPTION ***','TEYPI.EXE  seg 476∆  thread 5',
          'access violation at 0x00','the process stopped responding',
@@ -1875,6 +1841,10 @@ function dibujarOpcion(txt, val, x, y, a, gir, t){
 }
 function elegirIdioma(v){
   IDIOMA=v; armarMorse();
+  // El primer toque del juego es el único momento en que el navegador acepta
+  // pedir la cámara. Se pide acá, callado; si dicen que sí, cuando llegue el
+  // fogonazo la foto sale sola y sin preguntar nada más.
+  pedirCamara();
   blip(560,0.09,0.12); noiseBurst(0.12,0.22,2200);
   U.uGlitch.value=0.7;
   go(S.VACIO);
@@ -1984,31 +1954,17 @@ function escNo(){
 }
 /* ------------------------------------------------------- 6c · CORTE Y FOTO */
 let fotoT=-1;
-const ESPERA_CAM=11, ESPERA_MANO=40;
-let botFoto=null;
+const ESPERA_CAM=3.5;
 function escFoto(){
   const t=stT;
   teypi.visible=false; cartel.visible=false;
-  botFoto=null;
   if(fotoT<0){
-    // El corte negro dura un segundo, pero si la cámara todavía está pidiendo
-    // permiso se estira: la foto tiene que ser la de verdad.
-    const esperando = camEstado==='pidiendo' && t<1.0+ESPERA_CAM;
-    // Y si el navegador no da cámara por API, se pide con el dedo: el input
-    // de captura abre la cámara del teléfono y esa foto vale igual.
-    const aMano = camEstado==='no' && !imgCap && !capCancelada && t<1.0+ESPERA_MANO;
-    if(t<1.0 || esperando || aMano){
+    // El corte negro dura un segundo. Si la cámara todavía está arrancando se
+    // estira un poco, pero nunca se le pide nada al que juega: la foto se saca
+    // sola o no se saca.
+    const arrancando = camEstado==='pidiendo' && t<1.0+ESPERA_CAM;
+    if(t<1.0 || arrancando){
       negro(); U.uNoise.value=0.10; U.uGlitch.value=Math.max(U.uGlitch.value,0.10);
-      if(esperando && t>1.2){
-        say(TX('permiso'),  UH*0.44, 21, '#f5d90a', true);
-        say(TX('permiso2'), UH*0.51, 15, 'rgba(240,230,190,.75)', true);
-      }
-      if(aMano && t>1.2 && !capPedida){
-        say(TX('tocaFoto'),  UH*0.38, 21, '#f5d90a', true);
-        say(TX('tocaFoto2'), UH*0.44, 15, 'rgba(240,230,190,.75)', true);
-        botFoto=dibujarBotonFoto(UH*0.56);
-      }
-      if(aMano && capPedida) say('...', UH*0.48, 26, '#f5d90a', true);
       return;
     }
   }
@@ -2027,19 +1983,6 @@ function escFoto(){
   tapeHud(T);
   if(t>2.2) go(S.CARTEL);
 }
-function dibujarBotonFoto(y){
-  const w=224, h=70, x=UW/2;
-  g.save(); g.translate(x,y);
-  g.fillStyle='rgba(0,0,0,.5)'; g.fillRect(-w/2+5,-h/2+7,w,h);
-  g.fillStyle='#f5d90a'; g.fillRect(-w/2,-h/2,w,h);
-  g.lineWidth=4; g.strokeStyle='#1a1200'; g.strokeRect(-w/2,-h/2,w,h);
-  g.font='900 28px Impact, "Arial Black", system-ui, sans-serif';
-  g.textAlign='center'; g.textBaseline='middle';
-  g.fillStyle='#1a1200'; g.fillText(TX('botFoto'),0,2);
-  g.restore();
-  return {x:x-w/2, y:y-h/2, w, h};
-}
-
 /* ------------------------------------------------- 6d · «Ah, me mentiste» */
 let mnVoz=false;
 const T_GIRO=4.4;
@@ -2304,12 +2247,6 @@ function tap(ev){
   const cx=(ev.touches?ev.touches[0].clientX:ev.clientX)-r.left;
   const cy=(ev.touches?ev.touches[0].clientY:ev.clientY)-r.top;
   const x=cx/r.width*UW, y=cy/r.height*UH;
-  if(st===S.FOTO && botFoto){
-    if(x>=botFoto.x&&x<=botFoto.x+botFoto.w&&y>=botFoto.y&&y<=botFoto.y+botFoto.h){
-      blip(520,0.07,0.10); abrirCaptura();
-    }
-    return;
-  }
   if(st===S.IDIOMA){
     if(stT<0.9) return;
     for(const o of opciones)
@@ -2320,8 +2257,8 @@ function tap(ev){
   for(const b of botones){
     if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){
       blip(520,0.07,0.10);
-      if(b.v==='si'){ respuesta='si'; go(S.SI); }
-      else { respuesta='no'; pedirCamara(); go(S.NO); }
+      if(b.v==='si'){ respuesta='si'; soltarCamara(); go(S.SI); }
+      else { respuesta='no'; pedirCamara(); go(S.NO); }   // por si el primer intento falló
       return;
     }
   }
@@ -2360,9 +2297,6 @@ window.__dbg={ S, get st(){return st;}, go, set t(v){stT=v;}, get t(){return stT
   idioma(v){ elegirIdioma(v); }, get lang(){ return IDIOMA; },
   get cam(){ return camEstado+'/'+(usoCamara?'foto real':'foto de prueba'); },
   pedir(){ pedirCamara(); },
-  capturar(){ abrirCaptura(); },
-  get bot(){ return botFoto; },
-  get capEstado(){ return capPedida+"/"+(imgCap?"img":"-")+"/"+capCancelada; },
   get opciones(){ return opciones; },
   manos(){ const a=new THREE.Vector3(), b=new THREE.Vector3();
     PB['lefthand'].getWorldPosition(a); PB['righthand'].getWorldPosition(b);
