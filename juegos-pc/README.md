@@ -994,8 +994,26 @@ pasillos buscando el camino más corto —anchura primero sobre la cuadrícula, 
 segundo— y el golpe de la regla suena más seguido cuanto más rápido va. Con los siete cuadernos hay
 que llegar a una salida.
 
+### Acostada sin pedir permiso
+La cinta es 4:3 y va **acostada**. Con el teléfono parado —o con el giro trabado, que es lo
+normal— la caja entera del juego se **gira noventa grados por CSS** en vez de pedir pantalla
+completa ni depender de que el navegador se entere de que diste vuelta el aparato. En un teléfono
+de 390×844 eso pasa la imagen de 390×292 a **520×390**, que es el máximo que entra: casi el doble
+de superficie.
+
+El dedo llega en coordenadas de pantalla, así que **el giro se deshace a mano** —el rectángulo que
+informa el navegador para un elemento rotado es el envolvente y miente—. Comprobado moviendo la
+palanca en las dos orientaciones: el mismo arrastre da el mismo vector y camina lo mismo, 1,69 m.
+La palanca además responde al ratón, no sólo al dedo.
+
 ### La cinta
 Revelado de **VHS digital**: además del sangrado de color y el fantasma, tiene **macrobloques** que
 se congelan y **cuantización de color a 32 niveles**, que es lo que delata a una cinta pasada a
 digital. Se renderiza a 480×360 y se sube a 960×720. Graba en **4:3 MP4** desde un lienzo aparte, y
 como el marcador y las cuentas se dibujan dentro del lienzo, entran en la grabación.
+
+
+### Pendiente
+Queda anotada la referencia de **agua** para meter en algún juego: el WebGL Water de Evan Wallace
+portado a three.js por jeantimex —simulación de altura sobre una malla, reflejos y refracciones
+trazados, cáusticas de verdad y sombras blandas—. Cuando lo pidas.
