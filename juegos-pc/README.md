@@ -1307,6 +1307,30 @@ cada vértice trae en un atributo cuánto le toca balancearse según su altura s
 tronco queda quieto y las puntas se sacuden. Ciento dieciocho árboles, más helechos, pasto y piedras,
 fusionados en diez mallas.
 
+### Assets generados con Higgsfield
+Ya no está todo dibujado a mano: las texturas y el edificio se generaron con **Higgsfield** y viajan
+adentro del archivo.
+
+| qué | cómo |
+|---|---|
+| corteza | `nano_banana_pro`, escaneo plano de corteza de roble, 1024², pasado por un cruce de bordes para que repita sin junta |
+| hojas | `nano_banana_pro`, hojas reales sobre **negro puro**; el alfa sale de la luminancia |
+| suelo del bosque | `nano_banana_pro`, hojarasca, musgo y tierra húmeda, sin costura |
+| lecho del lago | `nano_banana_pro`, arena con ondas y cantos rodados, sin costura |
+| cielo 360° | `nano_banana_pro` en 16:9, recompuesto a una **equirectangular 2048×1024**: la foto va del cenit al horizonte, espejada para que cierre a la vuelta, y debajo una bruma desaturada |
+| edificio | `nano_banana_pro` para la vista de referencia y `image_to_3d` con texturas PBR; el GLB venía de 14 MB y se rebajó a 2 recomprimiendo sus cuatro texturas a 1024² |
+
+Las hojas se guardan como **dos JPEG —color y alfa— que se juntan en un lienzo al arrancar**: el PNG
+con alfa pesaba tres megas y así pesa doscientos kilos, y de paso salen las tres variantes de tono de
+una sola foto.
+
+### La ola que nunca para
+Aunque no le tires nada, el agua se mueve: cuatro trenes de seno cruzados que levantan **la geometría**
+—no la normal— en el vértice de la superficie, con su pendiente derivada a mano sumada a la normal en
+el fragmento. La misma fórmula corre en JS dentro de `alturaAgua`, así lo que flota sube y baja con
+ella en vez de quedarse clavado. El deslizador de oleaje maneja las dos cosas: la amplitud de esa ola
+y la amortiguación de la simulación.
+
 ### Controles
 Arrastre para orbitar, pellizco o rueda para acercar, y un toque sobre el agua hace olas. `TIRAR`
 —o la barra espaciadora— larga un objeto desde la cámara; `ESFERA` cambia el tipo; `LLUVIA` la
