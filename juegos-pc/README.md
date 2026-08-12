@@ -1096,10 +1096,12 @@ Van en **MP3**, no en AAC: un Chromium sin códecs propietarios no decodifica el
 quedaba vacío en silencio. El MP3 lo abre todo, Safari incluido. Comprobado: 27 clips de voz y 4
 efectos decodificados.
 
+El chirrido de puerta se fue con las puertas que giraban: ahora desaparecen y no suenan.
+
 **La voz es la de Rezona TV y ¡Teypi Time!**: meSpeak horneado con la voz española a velocidad 150 y
 tono 62, y encima la misma cadena de siempre —anillo a 38 Hz, banda de 230 a 3400, realce en 1700 y
-el bamboleo de la cinta sobre la velocidad de lectura—. Son veintisiete frases: las nueve del saludo,
-los dieciséis lamentos y las dos del final. Cada frase dura lo que dura su grabación, no un número
+el bamboleo de la cinta sobre la velocidad de lectura—. Son treinta frases: las nueve del saludo, los
+dieciséis lamentos, las dos del final y las tres del grito. Cada frase dura lo que dura su grabación, no un número
 inventado.
 
 ### Teypi con huesos
@@ -1116,17 +1118,30 @@ dice: sólo te pide, dos veces, que hagas bien **la segunda**. Después se mete 
 queda quieto hasta que la rompas.
 
 **La segunda cuenta del primer cuaderno es la imposible** (antes era la tercera): sale `▓ + █▒`, no
-tiene respuesta, y contestarla es lo que lo suelta. Se va al aula más lejos —medido, 88 m— y arranca
-con dos segundos y medio de ventaja.
+tiene respuesta, y contestarla **te mata**. No hay cacería larga: aparece en el pasillo a la vuelta y
+**embiste**. La velocidad se recalcula cada cuadro —lo que le queda de camino dividido lo que le
+queda de reloj— así que corras a donde corras llega en **cinco segundos**, y si el reloj llega a cero
+sin que te haya tocado, igual te alcanza. Mientras corre se sigue lamentando, cada dos segundos, y la
+cinta se va rompiendo con él: el glitch, el ruido, el sangrado de color y el rodillo suben con el
+cuadrado de lo que falta.
 
-**Mientras te persigue se lamenta.** Dieciséis frases barajadas, una cada cuatro a siete segundos,
-sin amenazas: «yo no escribí esta parte, te lo juro», «quise una casa y me salió una trampa», «corré,
-corré más rápido que yo, por favor». Se lo escucha por todo el pasillo, esté cerca o lejos.
+*(Dos arreglos del movimiento: la velocidad se saca del **largo real** de la polilínea que le queda,
+no de la cuenta de celdas; y en cada cuadro se consumen **todos** los puntos del camino que entren en
+el paso. Antes avanzaba de a un punto por cuadro, a esa velocidad se pasaba de largo y volvía, y se
+quedaba rebotando sin llegar nunca.)*
 
-### Cuando te agarra
-No hay cartel de derrota. Se escucha **«enserio perdoname»** temblando en el medio de la pantalla
-mientras el revelado se llena de sangre: un uniforme nuevo del sombreador se queda con el canal rojo,
-sube el contraste, mete latido y bandas de ruido, y la cinta empieza a rodar hacia arriba.
+### Cuando te agarra: el screamer
+No hay cartel de derrota. Se te planta a metro y medio de la cara, se abalanza con `poseGrito`
+—brazos abiertos, cabeza adelante, temblando a 42 Hz—, la cámara se sacude y el revelado se parte:
+glitch al máximo, sangrado de color de 1 a 15, rodillo suelto y ruido.
+
+El grito está **sintetizado**, no bajado: tres sierras que barren de 210 a 1750 Hz y caen, ruido
+blanco con la formante barrida de 700 a 4200 y de vuelta a 420, todo a través de un `WaveShaper` con
+`tanh(7.5x)` y un anillo a 53 Hz que lo vuelve máquina. Encima va la voz de Teypi gritando, pitcheada
+a 0,62.
+
+Recién después llega el rojo sangre y **«enserio perdoname»**, y a los cinco segundos y medio arranca
+la cinemática. El muelle se arma mientras la pantalla está rota, para que la toma no tironee.
 
 ### La cinemática del muelle
 A los cuatro segundos y medio la escuela se apaga y arranca otro recuerdo, en otra escena, con el
@@ -1150,8 +1165,16 @@ Está hecha con el método del **WebGL Water de Evan Wallace**, el que **jeantim
   en la misma coordenada de pantalla, se muestrea con el mismo UV, corrido por la normal.
 - **Refracción de verdad.** Otro render sin la superficie puesta, muestreado con un corrimiento mayor
   y con **absorción de Beer** sobre el camino bajo el agua: cuanto más hondo, menos rojo vuelve.
-- Fresnel de Schlick, sol partido en las crestas, espuma en las crestas y en la orilla, y un rizo de
-  viento encima de la ola grande que se apaga con la distancia para que no titile la cuadrícula.
+- Fresnel de Schlick, sol partido en las crestas, espuma en las crestas y en la orilla, y **dos capas
+  de movimiento** encima de la simulación: un oleaje largo y lento y el rizo fino del viento, que se
+  apaga con la distancia para que no titile la cuadrícula.
+
+**Los reflejos sucios** eran dos cosas. Una: en la pasada del reflejo entraba también todo lo que
+está **debajo** del agua —el fondo de arena, los pilotes hundidos, las piernas de Teypi—, así que el
+espejo mezclaba cielo con barro. Ahora se recorta en `y = 0`: los materiales comunes con el plano de
+corte del renderer, y el shader propio del suelo con un `uCorte` que descarta. La otra: el
+corrimiento del muestreo era fijo, y **de canto** un corrimiento chico ya barre metros de reflejo —de
+ahí los chorreados verticales—; ahora se achica con el coseno del ángulo de visión.
 
 Tres cosas que costaron encontrar y quedan anotadas:
 
@@ -1165,19 +1188,32 @@ Tres cosas que costaron encontrar y quedan anotadas:
    para abajo: máximo 0, ninguna cresta, ningún reflejo. Ahora la estela va en **dipolo** —hunde
    adelante y levanta atrás— y el volumen se conserva.
 
-#### El bosque, cerrado
+#### La bajada al agua, en tres tiempos
+No se mete de una: camina hasta la punta, **se sienta en el borde**, **baja una pierna** y tantea el
+agua con la punta del pie —cada toque deja su círculo—, y recién ahí **se descuelga** y queda parado
+en el fondo. Son poses nuevas escritas a mano sobre el mismo `pRot`: `poseSentado(k, t, pierna)` y
+`poseCorrer`.
+
+Sentado hubo que cambiar el anclaje: parado, la raíz del modelo está en los pies, pero sentado lo que
+se apoya es **la cadera**. Se mide la cadera en vivo con `getWorldPosition` y se corrige el grupo
+entero, así las piernas cuelgan donde tienen que colgar en vez de quedar el cuerpo flotando.
+
+#### El bosque, cerrado y saturado
 Un solo terreno manda: `tierra(x,z)` va de 0 (agua) a 1 (bosque) sumando la orilla de atrás, las de
 los costados y la del fondo, y el suelo se interpola entre el fondo del lago y el piso del bosque.
 La laguna queda como una ensenada, con playa de arena, y la orilla lejana cierra el horizonte sin
 necesidad de trucos. Los árboles se plantan **sólo donde el suelo está sobre los 0,72 m** —antes
 había un bosque entero parado adentro del agua—.
 
+Los verdes se subieron de saturación —hojas, helechos, pasto y musgo— y la luz se hizo más cálida y
+menos lavada, para que el follaje no se vaya a gris.
+
 Son **170 árboles** con tronco de anillos que se afinan y se tuercen, ramas con su propia curva y
 copas de 96 a 142 tarjetas de hojas con alfa en tres verdes distintos, más pinos, **cientos de matas,
 helechos, pasto alto y troncos caídos**: unas 158 000 caras en nueve mallas fusionadas.
 
-Cuarenta y seis mariposas con aleteo —el sprite se achata y se inclina—, polvo al sol, y cuatro
-planos de cámara: el muelle entero desde la orilla, un lateral por encima del agua, uno de frente
+Cuarenta y seis mariposas con aleteo —el sprite se achata y se inclina—, polvo al sol, y **cinco planos**: el muelle entero desde la orilla, un
+lateral mientras camina, uno desde el agua para verlo sentado y el pie entrando, uno de frente
 retrocediendo mientras se hunde, y uno que se va para arriba dejándolo solo.
 
 El bosque se arma mientras la pantalla está en rojo, no al empezar la toma, para que no haya tirón.
