@@ -1331,6 +1331,33 @@ el fragmento. La misma fórmula corre en JS dentro de `alturaAgua`, así lo que 
 ella en vez de quedarse clavado. El deslizador de oleaje maneja las dos cosas: la amplitud de esa ola
 y la amortiguación de la simulación.
 
+### Primera persona
+Un botón cambia entre la órbita y caminar. En primera persona hay **palanca** en el pulgar izquierdo
+—aparece donde apoyás el dedo—, **arrastre en la mitad derecha para mirar**, mira en el centro y un
+**botón LANZAR** que tira una bola desde el ojo hacia donde estás mirando. Con teclado: `WASD`,
+espacio para lanzar, `P` para cambiar de modo.
+
+El cuerpo se pega al terreno, se frena y se hunde al meterse al agua —la cámara baja con vos—, y al
+caminar dentro del estanque **cada paso rompe la superficie**: mete una gota en la simulación,
+salpica y suena. Parado en el agua, el cuerpo también desplaza con la pasada de esfera. La caminata
+va **subdividida**, igual que la física de los objetos: recortar el paso sin repetirlo hacía andar al
+treinta por ciento en un aparato lento.
+
+### Texturas PBR
+Las texturas se rehicieron pidiéndolas como **escaneo de fotogrametría** —DSLR macro, luz plana
+polarizada, sin sombras, «no ilustración, no pintado, no estilizado»—, que es lo que les saca el aire
+de dibujo. Y de cada albedo se derivan sus mapas: **normal** por Sobel sobre la luminancia
+—desenfocada primero, para que no salga ruido— y **rugosidad** por luminancia invertida. El suelo
+usa los tres en un shader propio: la normal del mapa se suma a la del terreno —como el suelo es casi
+horizontal alcanza con sumar la pendiente— y hay un especular Blinn-Phong cuyo exponente lo maneja la
+rugosidad. La corteza pasó a `MeshStandardMaterial` con normal y rugosidad de verdad.
+
+### Los rascacielos
+Dos torres generadas con `image_to_3d`, unos 29 000 y 27 500 triángulos con texturas PBR: una de
+vidrio y acero de sesenta pisos y otra art déco de piedra. Van lejos y grandes —78 y 62 metros,
+del otro lado del bosque— así que asoman por encima de las copas y se reflejan enteras en el
+estanque. Los GLB venían de 14 MB cada uno y se rebajaron a 1,5 recomprimiendo sus texturas.
+
 ### Controles
 Arrastre para orbitar, pellizco o rueda para acercar, y un toque sobre el agua hace olas. `TIRAR`
 —o la barra espaciadora— larga un objeto desde la cámara; `ESFERA` cambia el tipo; `LLUVIA` la
