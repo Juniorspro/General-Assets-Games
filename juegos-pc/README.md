@@ -1252,3 +1252,64 @@ Mientras la pantalla está negra —el morse y el cuelgue— **se deja de dibuja
 de no mover un polígono al pedo.
 
 El bosque se arma mientras la pantalla está en rojo, no al empezar la toma, para que no haya tirón.
+
+---
+
+## Agua · un visor — `juegos-pc/Agua_Viewer.html`
+
+Un archivo solo, 62 KB, sin más dependencia que three.js del CDN: todo lo demás —texturas, árboles,
+piedras, cielo, sonido— se dibuja y se sintetiza en el momento. Es un estanque en un claro, hecho
+para mirar el agua de cerca y para tirarle cosas adentro.
+
+### El agua
+La técnica es la del **WebGL Water de Evan Wallace**, en la versión que **jeantimex** portó a three.js
+(`jeantimex/threejs-water`):
+
+- **La ola corre en la GPU**, sobre una textura de **512 × 512** en ping-pong: R altura, G velocidad,
+  B y A la normal. Cinco pasadas de cuadrilátero a pantalla completa —gota, desplazamiento por
+  esfera, paso de la ecuación de ondas, normales— y ninguna vuelve a la CPU.
+- **Las cáusticas** salen de comparar el área de un haz antes y después de refractarse con Snell
+  sobre una malla de 260 × 260: donde la ola junta los rayos, la razón de áreas crece y aparece la
+  red de luz en la arena.
+- **El reflejo** es un render de verdad con la cámara espejada respecto de `y = 0`, recortando con el
+  plano del renderer todo lo que está bajo el agua, y muestreado **proyectivamente** con la matriz de
+  esa cámara —no con la coordenada de pantalla del fragmento, que sólo valdría si la superficie fuera
+  plana—.
+- **La refracción** es otro render sin la superficie, con **absorción de Beer** sobre el camino bajo
+  el agua: cuanto más hondo, menos rojo vuelve.
+- El borde del estanque **lo decide el terreno**, no la malla: el shader tiene la misma función de
+  cuenco que el JS y descarta el fragmento donde el suelo asoma. De ahí salen gratis la línea de
+  costa, la espuma de la orilla y la hondura exacta para la absorción.
+
+### Lo que se tira adentro
+Esferas, cajas, troncos y piedras. Cada uno tiene masa, volumen y densidad; la piedra se va al fondo
+y la madera flota. **El acople va para los dos lados**: el objeto corre agua con la pasada de esfera
+del original —suma el volumen que había en su posición vieja y resta el de la nueva, así el agua se
+desplaza en vez de inventarse— y el agua lo empuja de vuelta con Arquímedes sobre la fracción
+sumergida, más resistencia cuadrática y frenado angular.
+
+Para saber la altura del agua donde está cada objeto sin frenar la GPU con una lectura, corre un
+**espejo chico de la misma ecuación en CPU** (96 × 96) alimentado por los mismos golpes. Dos cosas
+que costaron: la física hay que **subdividirla** —recortar el paso sin repetirlo hacía que en un
+aparato lento todo cayera al treinta por ciento de velocidad, flotando— y la estela en el espejo de
+CPU tiene que ir **chica y con tope**, porque si no la altura local salta y la flotación se vuelve
+loca.
+
+Al entrar hay chapuzón: gota en la simulación, salpicadura de partículas que a su vez vuelven a picar
+el agua al caer, y un sonido sintetizado en el momento —ruido con la formante barrida más un plop
+grave—.
+
+### Los árboles
+Los del bosque anterior, un escalón más arriba: el tronco y las ramas son **tubos por recursión en
+tres niveles** —cada rama se abre en tres o cuatro, con su propia curva y su afinado—, la copa son
+tarjetas de hojas con alfa en tres verdes distintos, y **todo se mueve con el viento** en el shader:
+cada vértice trae en un atributo cuánto le toca balancearse según su altura sobre la base, así el
+tronco queda quieto y las puntas se sacuden. Ciento dieciocho árboles, más helechos, pasto y piedras,
+fusionados en diez mallas.
+
+### Controles
+Arrastre para orbitar, pellizco o rueda para acercar, y un toque sobre el agua hace olas. `TIRAR`
+—o la barra espaciadora— larga un objeto desde la cámara; `ESFERA` cambia el tipo; `LLUVIA` la
+prende; `VISTA` recorre cuatro encuadres, uno de ellos al ras del agua. En `AJUSTES` hay oleaje
+—que es la amortiguación de la ecuación—, viento, turbiedad, fuerza de las cáusticas, altura del sol
+(el cielo y la luz se recalculan) y peso del tiro.

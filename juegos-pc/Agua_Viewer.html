@@ -1,0 +1,1428 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>AGUA · visor</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;
+    background:#0a0d10;color:#e8eef5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  #lienzo{position:fixed;inset:0;display:block;touch-action:none}
+  #err{display:none;position:fixed;top:0;left:0;right:0;z-index:999;background:#8e2b20;color:#fff;
+    font:11px/1.5 ui-monospace,monospace;padding:8px;white-space:pre-wrap;max-height:40vh;overflow:auto}
+
+  /* ---- interfaz ---- */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+  .fila{position:absolute;display:flex;gap:8px;flex-wrap:wrap;pointer-events:auto}
+  #abajo{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));justify-content:center}
+  #arriba{left:12px;top:calc(12px + env(safe-area-inset-top));flex-direction:column;gap:6px}
+  .btn{cursor:pointer;font:700 11px/1 ui-monospace,monospace;letter-spacing:2px;
+    padding:12px 14px;border-radius:8px;border:1px solid rgba(150,190,220,.28);
+    color:#dfeaf4;background:rgba(12,20,28,.72);backdrop-filter:blur(6px);white-space:nowrap}
+  .btn:active{background:rgba(40,90,130,.8)}
+  .btn.on{border-color:#5fd0ff;color:#bfe9ff;background:rgba(20,60,90,.85)}
+  #panel{position:fixed;right:12px;top:calc(12px + env(safe-area-inset-top));z-index:11;
+    width:min(78vw,240px);padding:12px 13px;border-radius:10px;pointer-events:auto;
+    border:1px solid rgba(150,190,220,.22);background:rgba(10,16,23,.82);backdrop-filter:blur(8px);
+    display:none;flex-direction:column;gap:9px}
+  #panel.show{display:flex}
+  #panel h3{font-size:10px;letter-spacing:3px;color:#8fb6cf;font-weight:700}
+  .ctl{display:flex;flex-direction:column;gap:3px}
+  .ctl label{font-size:9.5px;letter-spacing:1.4px;color:#9db6c8;display:flex;justify-content:space-between}
+  .ctl label b{color:#cfe8fa;font-weight:700}
+  input[type=range]{-webkit-appearance:none;width:100%;height:20px;background:transparent}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:#2b4256}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;margin-top:-6px;
+    border-radius:50%;background:#7fd7ff;border:none}
+  input[type=range]::-moz-range-track{height:3px;border-radius:3px;background:#2b4256}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border:none;border-radius:50%;background:#7fd7ff}
+  #stats{position:fixed;left:12px;bottom:calc(64px + env(safe-area-inset-bottom));z-index:11;
+    font:10px/1.6 ui-monospace,monospace;color:#7f9bb0;letter-spacing:1px;pointer-events:none}
+  #carga{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+    background:#0a0d10;font:700 11px/1 ui-monospace,monospace;letter-spacing:5px;color:#5fd0ff}
+  #ayuda{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translateX(-50%);
+    z-index:12;font:10px/1.6 ui-monospace,monospace;color:#86a6bb;letter-spacing:1.6px;
+    text-align:center;pointer-events:none;transition:opacity .8s}
+</style>
+</head>
+<body>
+<div id="err"></div>
+<canvas id="lienzo"></canvas>
+<div id="carga">CARGANDO</div>
+<div id="ayuda">arrastrá para mirar · tocá el agua para hacer olas</div>
+<div id="stats"></div>
+<div id="hud">
+  <div class="fila" id="arriba">
+    <button class="btn" id="bPanel">AJUSTES</button>
+    <button class="btn" id="bVista">VISTA</button>
+  </div>
+  <div class="fila" id="abajo">
+    <button class="btn" id="bTirar">TIRAR ●</button>
+    <button class="btn" id="bTipo">ESFERA</button>
+    <button class="btn" id="bLluvia">LLUVIA</button>
+    <button class="btn" id="bLimpiar">LIMPIAR</button>
+  </div>
+</div>
+<div id="panel">
+  <h3>AGUA</h3>
+  <div class="ctl"><label>OLEAJE <b id="vOla">0.35</b></label>
+    <input type="range" id="sOla" min="0" max="1" step="0.01" value="0.35"></div>
+  <div class="ctl"><label>VIENTO <b id="vViento">0.30</b></label>
+    <input type="range" id="sViento" min="0" max="1" step="0.01" value="0.30"></div>
+  <div class="ctl"><label>TURBIEDAD <b id="vTurbio">0.30</b></label>
+    <input type="range" id="sTurbio" min="0" max="1" step="0.01" value="0.30"></div>
+  <div class="ctl"><label>CÁUSTICAS <b id="vCaus">1.00</b></label>
+    <input type="range" id="sCaus" min="0" max="2" step="0.02" value="1"></div>
+  <h3>ESCENA</h3>
+  <div class="ctl"><label>SOL <b id="vSol">0.55</b></label>
+    <input type="range" id="sSol" min="0.05" max="1" step="0.01" value="0.55"></div>
+  <div class="ctl"><label>PESO DEL TIRO <b id="vFuerza">0.55</b></label>
+    <input type="range" id="sFuerza" min="0.1" max="1" step="0.01" value="0.55"></div>
+</div>
+
+<script>
+window.addEventListener('error',e=>{const b=document.getElementById('err'); if(!b) return;
+  b.style.display='block';
+  b.textContent+=(e.message||e.error)+'\n'+(e.filename||'')+':'+(e.lineno||'')+'\n';});
+</script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* ============================================================================
+   AGUA · un visor
+   Un estanque en un claro, hecho para mirar el agua de cerca: la ola se
+   simula en la GPU sobre un mapa de altura, las cáusticas salen de comparar
+   el área de un haz antes y después de refractarse, el reflejo es un render
+   con la cámara espejada y la refracción otro render muestreado por detrás de
+   la superficie. Lo que se tira adentro desplaza agua de verdad y el agua lo
+   empuja de vuelta.
+
+   La técnica del agua es la del WebGL Water de Evan Wallace, en la versión
+   que jeantimex portó a three.js (jeantimex/threejs-water).
+============================================================================ */
+
+/* ---------------------------------------------------------------- constantes */
+const LADO=44;             // el estanque simulado, en metros
+const SIM=512;             // celdas de la simulación (se baja solo si hace falta)
+const MALLA=176;           // divisiones de la malla de la superficie
+const HONDO=2.35;           // profundidad máxima
+const CPU_N=96;            // espejo de la ola en CPU, para la flotación
+
+/* --------------------------------------------------------------- utilidades */
+let SEM=987654321;
+const rr=()=>{ SEM=(SEM*1664525+1013904223)>>>0; return SEM/4294967296; };
+const ri=(a,b)=>a+Math.floor(rr()*(b-a+1));
+const cv=(w,h)=>{ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; };
+const lerp=(a,b,t)=>a+(b-a)*t;
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const suave=(t)=>t*t*(3-2*t);
+
+/* ---------------------------------------------------------------- renderer */
+const lienzo=document.getElementById('lienzo');
+const renderer=new THREE.WebGLRenderer({canvas:lienzo, antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.30;
+const escena=new THREE.Scene();
+const camara=new THREE.PerspectiveCamera(52, 1, 0.05, 600);
+
+function TX(c, rx, ry){
+  const t=new THREE.CanvasTexture(c);
+  t.colorSpace=THREE.SRGBColorSpace;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.magFilter=THREE.LinearFilter; t.minFilter=THREE.LinearMipmapLinearFilter;
+  t.repeat.set(rx||1, ry||1);
+  t.anisotropy=Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return t;
+}
+function moteado(q,W,H,n,cols,r0,r1){
+  for(let i=0;i<n;i++){
+    q.fillStyle=cols[(Math.random()*cols.length)|0];
+    const r=r0+Math.random()*(r1-r0);
+    q.beginPath(); q.arc(Math.random()*W,Math.random()*H,r,0,6.2832); q.fill();
+  }
+}
+
+/* ============================================================================
+   EL SOL Y EL CIELO
+============================================================================ */
+const SOL=new THREE.Vector3();
+let solAlt=0.55;
+function ponerSol(a){
+  solAlt=a;
+  const el=lerp(0.06, 1.35, a);
+  SOL.set(Math.cos(el)*0.62, Math.sin(el), -Math.cos(el)*0.78).normalize();
+  luzSol.position.copy(SOL).multiplyScalar(80);
+  const calor=1-a;                                  // bajo, se pone naranja
+  luzSol.color.setRGB(1, 0.94-calor*0.22, 0.82-calor*0.42);
+  luzSol.intensity=lerp(1.6, 3.0, a);
+  hemi.intensity=lerp(0.55, 1.5, a);
+  cieloMat.uniforms.uSol.value.copy(SOL);
+  cieloMat.uniforms.uCalor.value=calor;
+  if(typeof matAgua!=='undefined'){ matAgua.uniforms.luz.value.copy(SOL); }
+  if(typeof matSuelo!=='undefined'){ matSuelo.uniforms.luz.value.copy(SOL); }
+  if(typeof caust!=='undefined' && caust) caust.mat.uniforms.luz.value.copy(SOL);
+  const nieb=new THREE.Color().setHSL(0.56, lerp(0.55,0.28,a), lerp(0.42,0.78,a));
+  escena.fog.color.copy(nieb);
+  if(typeof matAgua!=='undefined') matAgua.uniforms.uCielo.value.copy(nieb);
+  if(typeof matSuelo!=='undefined') matSuelo.uniforms.uFog.value.copy(nieb);
+}
+const cieloMat=new THREE.ShaderMaterial({
+  side:THREE.BackSide, depthWrite:false, fog:false,
+  uniforms:{ uSol:{value:new THREE.Vector3(0,1,0)}, uCalor:{value:0.4}, uT:{value:0} },
+  vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
+    gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vD; uniform vec3 uSol; uniform float uCalor, uT;
+    float h21(vec2 p){ vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z); }
+    float ruido(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+      return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x), f.y); }
+    float fbm(vec2 p){ float v=0.0, a=0.5;
+      for(int i=0;i<5;i++){ v+=a*ruido(p); p*=2.03; a*=0.5; } return v; }
+    void main(){
+      vec3 d=normalize(vD);
+      float up=clamp(d.y*0.5+0.5, 0.0, 1.0);
+      // el degradé del cielo: cenit, horizonte y el calor del sol bajo
+      vec3 cenit =mix(vec3(0.14,0.36,0.80), vec3(0.09,0.17,0.42), uCalor);
+      vec3 horiz =mix(vec3(0.82,0.92,1.00), vec3(1.00,0.70,0.42), uCalor);
+      vec3 col=mix(horiz, cenit, pow(up, 0.62));
+      // resplandor alrededor del sol
+      float ds=max(dot(d, normalize(uSol)), 0.0);
+      col+=mix(vec3(1.0,0.92,0.74), vec3(1.0,0.62,0.30), uCalor)*pow(ds, 6.0)*0.55;
+      col+=vec3(1.0,0.96,0.88)*pow(ds, 900.0)*6.0;          // el disco
+      // nubes: dos capas de fbm proyectadas en el plano del cielo
+      if(d.y>0.012){
+        vec2 uv=d.xz/max(d.y,0.012);
+        float n=fbm(uv*0.32+vec2(uT*0.006,uT*0.004));
+        n=smoothstep(0.46,0.92,n*0.72+fbm(uv*0.9-vec2(uT*0.012,0.0))*0.38);
+        float borde=smoothstep(0.0,0.16,d.y);
+        vec3 nube=mix(vec3(0.62,0.66,0.72), vec3(1.0,0.98,0.95), pow(ds,1.4)*0.7+0.35);
+        col=mix(col, nube, n*borde*0.82);
+      }
+      // bruma en el horizonte
+      col=mix(col, mix(vec3(0.86,0.92,0.99), vec3(1.00,0.80,0.60), uCalor),
+              pow(1.0-clamp(abs(d.y)*3.4,0.0,1.0), 3.0)*0.42);
+      gl_FragColor=vec4(col*1.45,1.0);
+    }`
+});
+const cielo=new THREE.Mesh(new THREE.SphereGeometry(400, 40, 26), cieloMat);
+cielo.frustumCulled=false; escena.add(cielo);
+escena.fog=new THREE.FogExp2(0xbfd8ea, 0.0075);
+
+const hemi=new THREE.HemisphereLight(0xdcecf8, 0x4a5c38, 1.2); escena.add(hemi);
+const luzSol=new THREE.DirectionalLight(0xfff2d8, 2.6); escena.add(luzSol);
+const relleno=new THREE.DirectionalLight(0x9fc0dc, 0.42);
+relleno.position.set(-30, 14, 26); escena.add(relleno);
+/* ============================================================================
+   EL TERRENO
+   Un cuenco: el fondo del estanque baja hasta HONDO en el medio y sube a la
+   orilla. Una sola función manda —la usa la malla, la flotación y el choque
+   de los objetos— así que nunca se pelean entre sí.
+============================================================================ */
+function ondaSuelo(x,z){
+  return Math.sin(x*0.21+z*0.13)*0.34 + Math.cos(x*0.11-z*0.27)*0.26
+       + Math.sin(x*0.052-z*0.041)*0.9;
+}
+/* 0 en el medio del estanque, 1 en tierra firme */
+function orilla(x,z){
+  const r=Math.sqrt(x*x*1.0 + z*z*1.28)/ (LADO*0.40);
+  const s=clamp((r-0.52)/0.46, 0, 1);
+  return suave(s);
+}
+function suelo(x,z){
+  const t=orilla(x,z);
+  const agua=-HONDO*(1-t*t*0.92);
+  const tierra=0.55+ondaSuelo(x,z);
+  return lerp(agua, tierra, t)+Math.sin(x*1.7+z*1.1)*0.045*(1-t);
+}
+const profEn=(x,z)=>Math.max(0, -suelo(x,z));
+
+/* --- texturas del fondo y de la tierra --- */
+function texArena(){
+  const S=512, c=cv(S,S), q=c.getContext('2d');
+  q.fillStyle='#c9b489'; q.fillRect(0,0,S,S);
+  moteado(q,S,S,26000,['#b39c6e','#dcc79a','#9c8757','#eddcb4','#7f6d45'],0.6,2.6);
+  for(let i=0;i<260;i++){
+    const x=Math.random()*S,y=Math.random()*S,r=2+Math.random()*7;
+    q.fillStyle=`rgba(${104+Math.random()*80|0},${98+Math.random()*70|0},${84+Math.random()*56|0},.9)`;
+    q.beginPath(); q.ellipse(x,y,r,r*0.72,Math.random()*3,0,6.2832); q.fill();
+    q.fillStyle='rgba(255,255,255,.16)';
+    q.beginPath(); q.ellipse(x-r*0.25,y-r*0.22,r*0.4,r*0.26,0,0,6.2832); q.fill();
+  }
+  // ondas de arena
+  q.globalAlpha=0.16;
+  for(let i=0;i<70;i++){
+    q.strokeStyle=i%2?'#8a7550':'#e6d4ae'; q.lineWidth=2+Math.random()*5;
+    q.beginPath();
+    let y=Math.random()*S;
+    q.moveTo(0,y);
+    for(let x=0;x<=S;x+=32) q.lineTo(x, y+Math.sin(x*0.03+i)*9);
+    q.stroke();
+  }
+  q.globalAlpha=1;
+  return c;
+}
+function texTierra(){
+  const S=512, c=cv(S,S), q=c.getContext('2d');
+  q.fillStyle='#3d3421'; q.fillRect(0,0,S,S);
+  moteado(q,S,S,22000,['#4a3f27','#2e2718','#5a4d2f','#241e12','#655637'],0.6,2.8);
+  for(let i=0;i<600;i++){
+    const x=Math.random()*S,y=Math.random()*S,r=2.5+Math.random()*5;
+    q.save(); q.translate(x,y); q.rotate(Math.random()*3.14);
+    q.fillStyle=`rgba(${92+Math.random()*80|0},${74+Math.random()*60|0},${28+Math.random()*34|0},.7)`;
+    q.beginPath(); q.ellipse(0,0,r,r*0.42,0,0,6.2832); q.fill(); q.restore();
+  }
+  for(let i=0;i<420;i++){
+    const x=Math.random()*S,y=Math.random()*S,r=3+Math.random()*11;
+    q.fillStyle=`rgba(${40+Math.random()*36|0},${104+Math.random()*58|0},${26+Math.random()*30|0},.34)`;
+    q.beginPath(); q.arc(x,y,r,0,6.2832); q.fill();
+  }
+  return c;
+}
+
+/* ============================================================================
+   LOS ÁRBOLES
+   Tronco de anillos que se afinan y se tuercen, ramas por recursión en tres
+   niveles, y la copa hecha de tarjetas de hojas con alfa. Todo se fusiona en
+   dos mallas y el follaje se mueve con el viento en el shader.
+============================================================================ */
+function texCorteza(){
+  const S=512, c=cv(S,S), q=c.getContext('2d');
+  q.fillStyle='#5a4a37'; q.fillRect(0,0,S,S);
+  for(let i=0;i<520;i++){
+    const x=Math.random()*S, w=1+Math.random()*7, a=0.05+Math.random()*0.34;
+    q.fillStyle = Math.random()<0.5 ? `rgba(24,16,9,${a})` : `rgba(162,140,108,${a*0.75})`;
+    let y=0;
+    while(y<S){ const h=10+Math.random()*60; q.fillRect(x+Math.sin(y*0.04)*3, y, w, h); y+=h+2+Math.random()*10; }
+  }
+  // placas de corteza
+  q.globalAlpha=0.22;
+  for(let i=0;i<90;i++){
+    const x=Math.random()*S,y=Math.random()*S,w=8+Math.random()*26,h=26+Math.random()*90;
+    q.fillStyle=Math.random()<0.5?'#1d130a':'#a08a68';
+    q.beginPath(); q.roundRect? q.roundRect(x,y,w,h,4) : q.rect(x,y,w,h); q.fill();
+  }
+  q.globalAlpha=1;
+  moteado(q,S,S,6000,['rgba(18,12,6,.35)','rgba(126,110,84,.26)','rgba(62,80,44,.2)'],0.5,2.4);
+  return c;
+}
+function texHojas(tono){
+  const S=512, c=cv(S,S), q=c.getContext('2d');
+  q.clearRect(0,0,S,S);
+  const paletas=[
+    ['#2f8a16','#46ad1e','#1f6d10','#5cc72a','#175208','#6fdb33','#3a9a1a'],
+    ['#4aa508','#66c41c','#2f7a05','#82dd2c','#215c04','#96ef3c','#57b312'],
+    ['#149046','#22b25c','#0c6b33','#31cc72','#085227','#43e086','#1aa055']
+  ];
+  const verdes=paletas[(tono||0)%3];
+  const hoja=(x,y,r,ang,col)=>{
+    q.save(); q.translate(x,y); q.rotate(ang);
+    q.fillStyle=col;
+    q.beginPath(); q.moveTo(0,-r);
+    q.bezierCurveTo(r*0.60,-r*0.44, r*0.52,r*0.50, 0,r);
+    q.bezierCurveTo(-r*0.52,r*0.50, -r*0.60,-r*0.44, 0,-r);
+    q.fill();
+    q.strokeStyle='rgba(10,52,6,.42)'; q.lineWidth=Math.max(1,r*0.06);
+    q.beginPath(); q.moveTo(0,-r*0.9); q.lineTo(0,r*0.85); q.stroke();
+    for(let n=-3;n<=3;n++){
+      q.beginPath(); q.moveTo(0, r*0.20*n);
+      q.lineTo(r*0.34*(n%2?1:-1), r*0.20*n+r*0.16); q.stroke();
+    }
+    q.restore();
+  };
+  for(let i=0;i<74;i++){
+    const x=S*0.5+(Math.random()-0.5)*S*0.9;
+    const y=S*0.5+(Math.random()-0.5)*S*0.9;
+    const d=Math.hypot(x-S/2,y-S/2)/(S*0.5);
+    if(Math.random()<d*0.46) continue;
+    hoja(x,y, 22+Math.random()*44, Math.random()*6.283, verdes[(Math.random()*verdes.length)|0]);
+  }
+  q.strokeStyle='rgba(58,44,28,.85)'; q.lineWidth=3.4;
+  for(let i=0;i<8;i++){
+    q.beginPath(); q.moveTo(S/2,S*0.94);
+    q.quadraticCurveTo(S/2+(Math.random()-0.5)*180, S*0.55,
+                       S*0.14+Math.random()*S*0.72, S*0.12+Math.random()*S*0.42);
+    q.stroke();
+  }
+  return c;
+}
+function texHelecho(){
+  const S=256, c=cv(S,S), q=c.getContext('2d');
+  q.clearRect(0,0,S,S);
+  for(let f=0;f<8;f++){
+    const ang=-1.57+(f-3.5)*0.28+(Math.random()-0.5)*0.12;
+    const largo=S*(0.42+Math.random()*0.46);
+    q.save(); q.translate(S*0.5, S*0.98); q.rotate(ang);
+    q.strokeStyle='#3f8c1c'; q.lineWidth=2.6;
+    q.beginPath(); q.moveTo(0,0); q.quadraticCurveTo(largo*0.35,-largo*0.10, largo,-largo*0.24); q.stroke();
+    for(let i=1;i<17;i++){
+      const u=i/17, px=largo*u, py=-largo*0.24*u*u-largo*0.02*u;
+      const h=largo*0.21*(1-u*0.76);
+      for(const sd of [-1,1]){
+        q.fillStyle=`rgba(${44+Math.random()*46|0},${140+Math.random()*72|0},${18+Math.random()*34|0},.96)`;
+        q.beginPath(); q.ellipse(px,py+sd*h*0.45, h*0.55, h*0.24, sd*0.5, 0, 6.2832); q.fill();
+      }
+    }
+    q.restore();
+  }
+  return c;
+}
+function texPasto(){
+  const S=256, c=cv(S,S), q=c.getContext('2d');
+  q.clearRect(0,0,S,S);
+  for(let i=0;i<34;i++){
+    const x=S*0.5+(Math.random()-0.5)*S*0.9, h=S*(0.36+Math.random()*0.6);
+    q.strokeStyle=`rgba(${58+Math.random()*54|0},${146+Math.random()*76|0},${22+Math.random()*36|0},.96)`;
+    q.lineWidth=1.6+Math.random()*2.6;
+    q.beginPath(); q.moveTo(x,S);
+    q.quadraticCurveTo(x+(Math.random()-0.5)*20, S-h*0.55, x+(Math.random()-0.5)*40, S-h);
+    q.stroke();
+  }
+  return c;
+}
+function texRoca(){
+  const S=256, c=cv(S,S), q=c.getContext('2d');
+  q.fillStyle='#6c6a63'; q.fillRect(0,0,S,S);
+  moteado(q,S,S,12000,['#5a5851','#7e7c74','#494740','#8f8d84','#3a3833'],0.6,3.0);
+  q.globalAlpha=0.3;
+  for(let i=0;i<40;i++){
+    q.strokeStyle=Math.random()<0.5?'#33322d':'#a5a39a'; q.lineWidth=1+Math.random()*3;
+    q.beginPath(); q.moveTo(Math.random()*S,Math.random()*S);
+    for(let k=0;k<4;k++) q.lineTo(Math.random()*S,Math.random()*S);
+    q.stroke();
+  }
+  q.globalAlpha=1;
+  return c;
+}
+
+/* --- tubo por polilínea, con radios --- */
+function tubo(bolsa, pts, radios, seg, faseBase){
+  const n=pts.length, pos=[], uvs=[], fases=[];
+  const tan=new THREE.Vector3(), nor=new THREE.Vector3(), bin=new THREE.Vector3();
+  const aros=[];
+  for(let i=0;i<n;i++){
+    if(i<n-1) tan.subVectors(pts[i+1],pts[i]).normalize();
+    else       tan.subVectors(pts[i],pts[i-1]).normalize();
+    nor.set(0,1,0); if(Math.abs(tan.y)>0.94) nor.set(1,0,0);
+    bin.crossVectors(tan,nor).normalize();
+    nor.crossVectors(bin,tan).normalize();
+    const aro=[];
+    for(let s=0;s<=seg;s++){
+      const a=s/seg*Math.PI*2;
+      aro.push(new THREE.Vector3(
+        pts[i].x+(Math.cos(a)*nor.x+Math.sin(a)*bin.x)*radios[i],
+        pts[i].y+(Math.cos(a)*nor.y+Math.sin(a)*bin.y)*radios[i],
+        pts[i].z+(Math.cos(a)*nor.z+Math.sin(a)*bin.z)*radios[i]));
+    }
+    aros.push(aro);
+  }
+  for(let i=0;i<n-1;i++) for(let s=0;s<seg;s++){
+    const a=aros[i][s], b=aros[i][s+1], c2=aros[i+1][s+1], d=aros[i+1][s];
+    const v0=i/(n-1)*3.4, v1=(i+1)/(n-1)*3.4, u0=s/seg*2, u1=(s+1)/seg*2;
+    pos.push(a.x,a.y,a.z, b.x,b.y,b.z, c2.x,c2.y,c2.z);
+    uvs.push(u0,v0, u1,v0, u1,v1);
+    pos.push(a.x,a.y,a.z, c2.x,c2.y,c2.z, d.x,d.y,d.z);
+    uvs.push(u0,v0, u1,v1, u0,v1);
+    // el balanceo crece con la altura del punto sobre la base del árbol
+    const f0=Math.max(0,(pts[i].y-faseBase))*0.05, f1=Math.max(0,(pts[i+1].y-faseBase))*0.05;
+    fases.push(f0,f0,f1, f0,f1,f1);
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs,2));
+  g.setAttribute('sway', new THREE.Float32BufferAttribute(fases,1));
+  bolsa.push(g);
+}
+const _q1=new THREE.Quaternion(), _e1=new THREE.Euler(), _p1=new THREE.Vector3(),
+      _s1=new THREE.Vector3(1,1,1), _m1=new THREE.Matrix4();
+function tarjeta(bolsa, x,y,z, w,h, rx,ry,rz, sway){
+  const g=new THREE.PlaneGeometry(w,h);
+  _p1.set(x,y,z); _q1.setFromEuler(_e1.set(rx,ry,rz));
+  g.applyMatrix4(_m1.compose(_p1,_q1,_s1));
+  const n=g.attributes.position.count, f=new Float32Array(n).fill(sway===undefined?0.5:sway);
+  g.setAttribute('sway', new THREE.BufferAttribute(f,1));
+  bolsa.push(g);
+}
+
+/* --- un árbol: tronco, ramas por recursión y copa --- */
+function rama(bT, bH, p0, dir, largo, radio, nivel, y0){
+  const N=nivel===0?9:5, pts=[], rad=[];
+  const d=dir.clone().normalize();
+  const lat=new THREE.Vector3(-d.z,0,d.x).normalize();
+  const curva=(rr()-0.5)*0.55;
+  for(let i=0;i<N;i++){
+    const u=i/(N-1);
+    pts.push(new THREE.Vector3(
+      p0.x + d.x*largo*u + lat.x*curva*largo*u*u,
+      p0.y + d.y*largo*u - (nivel?0.10:0.0)*largo*u*u,
+      p0.z + d.z*largo*u + lat.z*curva*largo*u*u));
+    rad.push(radio*(1-u*0.78)+0.008);
+  }
+  if(nivel===0){ rad[0]*=1.75; rad[1]*=1.25; }        // raíces
+  tubo(bT, pts, rad, nivel===0?10:6, y0);
+  if(nivel>=2){
+    // punta: manojo de hojas
+    const p=pts[N-1], s=largo*(0.55+rr()*0.45);
+    for(let k=0;k<3;k++)
+      tarjeta(bH, p.x+(rr()-0.5)*s*0.4, p.y+(rr()-0.2)*s*0.3, p.z+(rr()-0.5)*s*0.4,
+        s, s, (rr()-0.5)*1.4, rr()*6.283, (rr()-0.5)*1.4, Math.max(0,(p.y-y0))*0.05);
+    return;
+  }
+  const nH=nivel===0? 4+((rr()*3)|0) : 3+((rr()*2)|0);
+  for(let i=0;i<nH;i++){
+    const u=nivel===0? 0.42+rr()*0.56 : 0.35+rr()*0.62;
+    const k=Math.min(N-1,(u*(N-1))|0);
+    const base=pts[k];
+    const ang=i/nH*6.283+rr()*1.1;
+    const abre=nivel===0? 0.85+rr()*0.55 : 0.55+rr()*0.6;
+    const nd=new THREE.Vector3(
+      d.x*(1-abre*0.55)+Math.cos(ang)*abre,
+      d.y*(1-abre*0.30)+0.42+rr()*0.35,
+      d.z*(1-abre*0.55)+Math.sin(ang)*abre);
+    rama(bT,bH, base, nd, largo*(0.46+rr()*0.22), radio*(0.40+rr()*0.18), nivel+1, y0);
+  }
+}
+function arbol(bT, bH, x, z, y0, alt){
+  rama(bT, bH, new THREE.Vector3(x,y0,z), new THREE.Vector3((rr()-0.5)*0.16,1,(rr()-0.5)*0.16),
+       alt*0.62, alt*0.050, 0, y0);
+  // relleno de copa, para que no se vea el esqueleto
+  const cy=y0+alt*0.72, rc=alt*0.36;
+  for(let i=0;i<70;i++){
+    const a=rr()*6.283, b=Math.acos(1-rr()*1.4), r=rc*(0.55+rr()*0.55);
+    const px=x+Math.sin(b)*Math.cos(a)*r, py=cy+Math.cos(b)*rc*0.85, pz=z+Math.sin(b)*Math.sin(a)*r;
+    if(py<y0+alt*0.30) continue;
+    const s=alt*(0.085+rr()*0.085);
+    tarjeta(bH, px,py,pz, s,s, (rr()-0.5)*1.3, rr()*6.283, (rr()-0.5)*1.3, Math.max(0,(py-y0))*0.05);
+  }
+}
+
+
+/* ============================================================================
+   LA SIMULACIÓN DEL AGUA
+   Un mapa de altura en la GPU, en ping-pong. R altura, G velocidad, BA la
+   normal. Pasadas: gota, esfera, caja, paso y normales.
+============================================================================ */
+const VQ='varying vec2 coord; void main(){ coord=position.xy*0.5+0.5; gl_Position=vec4(position.xy,0.0,1.0); }';
+function crearSim(rend, N){
+  const flot = rend.capabilities.isWebGL2 && rend.extensions.has('EXT_color_buffer_float');
+  const op={ type: flot?THREE.FloatType:THREE.HalfFloatType,
+             minFilter:THREE.NearestFilter, magFilter:THREE.NearestFilter,
+             format:THREE.RGBAFormat, depthBuffer:false, stencilBuffer:false };
+  let A=new THREE.WebGLRenderTarget(N,N,op), B=new THREE.WebGLRenderTarget(N,N,op);
+  const esc=new THREE.Scene(), cam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+  const quad=new THREE.Mesh(new THREE.PlaneGeometry(2,2)); esc.add(quad);
+  const L=LADO.toFixed(1);
+
+  const matGota=new THREE.ShaderMaterial({ vertexShader:VQ, fragmentShader:`
+    precision highp float; varying vec2 coord;
+    uniform sampler2D tIn; uniform vec2 centro; uniform float radio, fuerza;
+    void main(){
+      vec4 info=texture2D(tIn,coord);
+      float d=max(0.0, 1.0 - length((coord-centro)*${L})/radio);
+      info.r += (0.5-cos(d*3.141592653589793)*0.5)*fuerza;
+      gl_FragColor=info;
+    }`,
+    uniforms:{tIn:{value:null}, centro:{value:new THREE.Vector2()}, radio:{value:1}, fuerza:{value:0}} });
+
+  /* Desplazamiento por esfera: se suma el volumen que había en la posición
+     vieja y se resta el de la nueva. El agua se corre, no se inventa. */
+  const matEsfera=new THREE.ShaderMaterial({ vertexShader:VQ, fragmentShader:`
+    precision highp float; varying vec2 coord;
+    uniform sampler2D tIn; uniform vec3 viejo, nuevo; uniform float radio, escala;
+    float volumen(vec3 c){
+      vec3 p=vec3((coord.x*2.0-1.0)*${(LADO/2).toFixed(2)}, 0.0, (coord.y*2.0-1.0)*${(LADO/2).toFixed(2)});
+      float t=length(p-c)/radio;
+      float dy=exp(-pow(t*1.5, 6.0))*radio;
+      float ymin=min(0.0, c.y-dy);
+      float ymax=min(max(0.0, c.y+dy), ymin+2.0*dy);
+      return (ymax-ymin)*0.09*escala;
+    }
+    void main(){
+      vec4 info=texture2D(tIn,coord);
+      info.r += volumen(viejo);
+      info.r -= volumen(nuevo);
+      gl_FragColor=info;
+    }`,
+    uniforms:{tIn:{value:null}, viejo:{value:new THREE.Vector3()}, nuevo:{value:new THREE.Vector3()},
+              radio:{value:1}, escala:{value:1}} });
+
+  const matPaso=new THREE.ShaderMaterial({ vertexShader:VQ, fragmentShader:`
+    precision highp float; varying vec2 coord;
+    uniform sampler2D tIn; uniform vec2 delta; uniform float amort;
+    void main(){
+      vec4 info=texture2D(tIn,coord);
+      vec2 dx=vec2(delta.x,0.0), dy=vec2(0.0,delta.y);
+      float d2x=texture2D(tIn,coord+dx).r+texture2D(tIn,coord-dx).r-2.0*info.r;
+      float d2z=texture2D(tIn,coord+dy).r+texture2D(tIn,coord-dy).r-2.0*info.r;
+      info.g += 0.5*(d2x+d2z);
+      info.g *= amort;
+      info.r += info.g;
+      // el borde se come la ola, si no rebota contra la nada y se nota
+      vec2 b=min(coord, 1.0-coord);
+      info.rg *= mix(0.90, 1.0, smoothstep(0.0, 0.055, min(b.x,b.y)));
+      gl_FragColor=info;
+    }`,
+    uniforms:{tIn:{value:null}, delta:{value:new THREE.Vector2(1/N,1/N)}, amort:{value:0.9958}} });
+
+  const matNorm=new THREE.ShaderMaterial({ vertexShader:VQ, fragmentShader:`
+    precision highp float; varying vec2 coord;
+    uniform sampler2D tIn; uniform vec2 delta; uniform float paso;
+    void main(){
+      vec4 info=texture2D(tIn,coord);
+      vec3 dx=vec3(paso, texture2D(tIn,vec2(coord.x+delta.x,coord.y)).r-info.r, 0.0);
+      vec3 dz=vec3(0.0, texture2D(tIn,vec2(coord.x,coord.y+delta.y)).r-info.r, paso);
+      info.ba=normalize(cross(dz,dx)).xz;
+      gl_FragColor=info;
+    }`,
+    uniforms:{tIn:{value:null}, delta:{value:new THREE.Vector2(1/N,1/N)}, paso:{value:LADO/N}} });
+
+  function correr(mat){
+    quad.material=mat; mat.uniforms.tIn.value=A.texture;
+    const ant=rend.getRenderTarget();
+    rend.setRenderTarget(B); rend.render(esc,cam); rend.setRenderTarget(ant);
+    const t=A; A=B; B=t;
+  }
+  { const ant=rend.getRenderTarget(), cc=new THREE.Color(); rend.getClearColor(cc);
+    const ca=rend.getClearAlpha(); rend.setClearColor(0x000000,0);
+    rend.setRenderTarget(A); rend.clear(); rend.setRenderTarget(B); rend.clear();
+    rend.setRenderTarget(ant); rend.setClearColor(cc,ca); }
+
+  const uv=(x,z)=>[x/LADO+0.5, z/LADO+0.5];
+  return {
+    N,
+    get tex(){ return A.texture; },
+    get rt(){ return A; },
+    gota(x,z,radio,fuerza){
+      const c=uv(x,z);
+      matGota.uniforms.centro.value.set(c[0],c[1]);
+      matGota.uniforms.radio.value=radio; matGota.uniforms.fuerza.value=fuerza;
+      correr(matGota);
+    },
+    esfera(vx,vy,vz, nx,ny,nz, radio, escala){
+      matEsfera.uniforms.viejo.value.set(vx,vy,vz);
+      matEsfera.uniforms.nuevo.value.set(nx,ny,nz);
+      matEsfera.uniforms.radio.value=radio;
+      matEsfera.uniforms.escala.value=escala===undefined?1:escala;
+      correr(matEsfera);
+    },
+    paso(amort){ matPaso.uniforms.amort.value=amort; correr(matPaso); },
+    normales(){ correr(matNorm); }
+  };
+}
+
+/* --- cáusticas: área del haz antes y después de refractarse --- */
+function crearCausticas(rend, sim){
+  const rt=new THREE.WebGLRenderTarget(1024,1024,
+    {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, depthBuffer:false});
+  const n=260;
+  const geo=new THREE.PlaneGeometry(2,2,n-1,n-1);
+  const mat=new THREE.ShaderMaterial({
+    uniforms:{ tAgua:{value:null}, luz:{value:new THREE.Vector3(0,1,0)}, prof:{value:HONDO} },
+    extensions:{derivatives:true},
+    vertexShader:`
+      const float N_AIRE=1.0, N_AGUA=1.333;
+      uniform sampler2D tAgua; uniform vec3 luz; uniform float prof;
+      varying vec3 vViejo, vNuevo;
+      vec3 aFondo(vec3 o, vec3 r){ return o + r*((-prof-o.y)/min(r.y,-0.05)); }
+      void main(){
+        vec4 info=texture2D(tAgua, position.xy*0.5+0.5);
+        vec2 p=clamp(info.ba*0.5, vec2(-0.999), vec2(0.999));
+        float l2=min(dot(p,p),0.999);
+        vec3 nor=normalize(vec3(p.x, sqrt(max(0.001,1.0-l2)), p.y));
+        vec3 luzRef=refract(-luz, vec3(0.0,1.0,0.0), N_AIRE/N_AGUA);
+        vec3 rayo =refract(-luz, nor, N_AIRE/N_AGUA);
+        vec3 base=vec3(position.x*${(LADO/2).toFixed(2)}, 0.0, position.y*${(LADO/2).toFixed(2)});
+        vViejo=aFondo(base, luzRef);
+        vNuevo=aFondo(base+vec3(0.0,info.r,0.0), rayo);
+        gl_Position=vec4(vNuevo.xz/${(LADO/2).toFixed(2)}, 0.0, 1.0);
+      }`,
+    fragmentShader:`
+      precision highp float;
+      varying vec3 vViejo, vNuevo;
+      void main(){
+        float a0=length(dFdx(vViejo))*length(dFdy(vViejo));
+        float a1=length(dFdx(vNuevo))*length(dFdy(vNuevo));
+        gl_FragColor=vec4(a0/max(a1,1e-6)*0.2, 1.0, 0.0, 1.0);
+      }`
+  });
+  const esc=new THREE.Scene(), cam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+  esc.add(new THREE.Mesh(geo,mat));
+  return { rt, mat, pintar(){
+    mat.uniforms.tAgua.value=sim.tex;
+    const ant=rend.getRenderTarget(), cc=new THREE.Color(); rend.getClearColor(cc);
+    const ca=rend.getClearAlpha();
+    rend.setRenderTarget(rt); rend.setClearColor(0x000000,1); rend.clear();
+    rend.render(esc,cam);
+    rend.setRenderTarget(ant); rend.setClearColor(cc,ca);
+  }};
+}
+
+/* ============================================================================
+   EL ESPEJO DE LA OLA EN CPU
+   La flotación necesita saber la altura del agua donde está cada objeto, y
+   leerla de la GPU cuesta un parate. Así que corre una copia chica de la
+   misma ecuación, alimentada por los mismos golpes.
+============================================================================ */
+const cpuA=new Float32Array(CPU_N*CPU_N), cpuB=new Float32Array(CPU_N*CPU_N);
+let cpuH=cpuA, cpuV=cpuB;
+function cpuGota(x,z,radio,fuerza){
+  const gx=(x/LADO+0.5)*(CPU_N-1), gz=(z/LADO+0.5)*(CPU_N-1);
+  const rg=radio/LADO*(CPU_N-1);
+  const i0=Math.max(1,Math.floor(gx-rg)), i1=Math.min(CPU_N-2,Math.ceil(gx+rg));
+  const j0=Math.max(1,Math.floor(gz-rg)), j1=Math.min(CPU_N-2,Math.ceil(gz+rg));
+  for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){
+    const d=Math.hypot(i-gx,j-gz)/Math.max(0.001,rg);
+    if(d>1) continue;
+    cpuH[j*CPU_N+i]+=fuerza*(0.5-Math.cos((1-d)*Math.PI)*0.5);
+  }
+}
+function cpuPaso(amort){
+  const N=CPU_N;
+  for(let j=1;j<N-1;j++){
+    const f=j*N;
+    for(let i=1;i<N-1;i++){
+      const k=f+i;
+      const lap=cpuH[k-1]+cpuH[k+1]+cpuH[k-N]+cpuH[k+N]-4*cpuH[k];
+      cpuV[k]=(cpuV[k]+0.5*lap)*amort;
+    }
+  }
+  for(let k=0;k<N*N;k++) cpuH[k]+=cpuV[k];
+  for(let i=0;i<N;i++){ cpuH[i]=0; cpuH[(N-1)*N+i]=0; cpuH[i*N]=0; cpuH[i*N+N-1]=0; }
+}
+function alturaAgua(x,z){
+  const gx=(x/LADO+0.5)*(CPU_N-1), gz=(z/LADO+0.5)*(CPU_N-1);
+  if(gx<1||gz<1||gx>CPU_N-2||gz>CPU_N-2) return 0;
+  const i=Math.floor(gx), j=Math.floor(gz), fx=gx-i, fz=gz-j;
+  const a=cpuH[j*CPU_N+i], b=cpuH[j*CPU_N+i+1];
+  const c=cpuH[(j+1)*CPU_N+i], d=cpuH[(j+1)*CPU_N+i+1];
+  return lerp(lerp(a,b,fx), lerp(c,d,fx), fz);
+}
+
+
+/* ============================================================================
+   ARMADO DE LA ESCENA
+============================================================================ */
+const sim=crearSim(renderer, SIM);
+const caust=crearCausticas(renderer, sim);
+
+/* ---- el suelo: arena bajo el agua, tierra afuera, cáusticas encima ---- */
+const matSuelo=new THREE.ShaderMaterial({
+  uniforms:{
+    tArena:{value:TX(texArena(),1,1)}, tTierra:{value:TX(texTierra(),1,1)},
+    tCaust:{value:caust.rt.texture}, luz:{value:SOL.clone()},
+    uFog:{value:new THREE.Color(0xbfd8ea)}, uFogD:{value:0.0075},
+    uCaus:{value:1.0}, uCorte:{value:-1e9}, uTurbio:{value:0.30}
+  },
+  vertexShader:`
+    varying vec3 vW; varying vec3 vN;
+    void main(){ vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz;
+      vN=normalize(mat3(modelMatrix)*normal);
+      gl_Position=projectionMatrix*viewMatrix*w; }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vW; varying vec3 vN;
+    uniform sampler2D tArena, tTierra, tCaust;
+    uniform vec3 luz, uFog; uniform float uFogD, uCaus, uCorte, uTurbio;
+    void main(){
+      if(vW.y<uCorte) discard;                 // pasada del reflejo: sólo lo de arriba
+      vec3 arena =texture2D(tArena,  vW.xz*0.10).rgb;
+      vec3 tierra=texture2D(tTierra, vW.xz*0.085).rgb;
+      float t=smoothstep(-0.05, 0.55, vW.y);
+      vec3 base=mix(arena, tierra, t);
+      vec2 cu=vec2(vW.x/${LADO.toFixed(1)}+0.5, vW.z/${LADO.toFixed(1)}+0.5);
+      float dentro=step(0.0,cu.x)*step(cu.x,1.0)*step(0.0,cu.y)*step(cu.y,1.0);
+      float bajoAgua=step(vW.y,-0.02);
+      float c=texture2D(tCaust, cu).r;
+      float caustica=mix(1.0, 0.52+c*2.9*uCaus, dentro*bajoAgua);
+      float lamb=0.42+0.58*max(dot(normalize(vN), luz),0.0);
+      vec3 col=base*lamb*caustica;
+      // el agua se come la luz con la hondura
+      float prof=clamp(-vW.y/${HONDO.toFixed(2)},0.0,1.0)*bajoAgua;
+      col*=vec3(1.0-prof*0.44, 1.0-prof*0.15, 1.0-prof*0.03);
+      col=mix(col, vec3(0.10,0.32,0.34), prof*uTurbio*0.55);
+      float d=length(vW-cameraPosition);
+      float f=1.0-exp(-uFogD*uFogD*d*d);
+      gl_FragColor=vec4(mix(col, uFog, clamp(f,0.0,1.0)), 1.0);
+    }`
+});
+const sueloMesh=new THREE.Mesh(new THREE.PlaneGeometry(230,230,200,200), matSuelo);
+sueloMesh.rotation.x=-Math.PI/2;
+{
+  const p=sueloMesh.geometry.attributes.position;
+  for(let i=0;i<p.count;i++) p.setZ(i, suelo(p.getX(i), -p.getY(i)));
+  sueloMesh.geometry.computeVertexNormals();
+}
+escena.add(sueloMesh);
+
+/* ---- vegetación ---- */
+const matCorteza=new THREE.MeshLambertMaterial({map:TX(texCorteza(),1,1)});
+const hojaTex=[0,1,2].map(i=>TX(texHojas(i),1,1));
+const matHoja=[0,1,2].map(i=>new THREE.MeshLambertMaterial({
+  map:hojaTex[i], transparent:true, alphaTest:0.40, side:THREE.DoubleSide}));
+const matHelecho=new THREE.MeshLambertMaterial({map:TX(texHelecho(),1,1),
+  transparent:true, alphaTest:0.42, side:THREE.DoubleSide});
+const matPasto=new THREE.MeshLambertMaterial({map:TX(texPasto(),1,1),
+  transparent:true, alphaTest:0.34, side:THREE.DoubleSide});
+const matRoca=new THREE.MeshLambertMaterial({map:TX(texRoca(),1,1)});
+
+/* el viento entra en el shader: cada vértice trae cuánto le toca moverse */
+const VIENTO={valor:{value:0.30}, t:{value:0}};
+function conViento(mat){
+  mat.onBeforeCompile=(sh)=>{
+    sh.uniforms.uViento=VIENTO.valor; sh.uniforms.uVT=VIENTO.t;
+    sh.vertexShader='attribute float sway;\nuniform float uViento, uVT;\n'+
+      sh.vertexShader.replace('#include <begin_vertex>',
+      `#include <begin_vertex>
+       {
+         vec4 wp=modelMatrix*vec4(transformed,1.0);
+         float f=sway*uViento;
+         float o=sin(uVT*1.35 + wp.x*0.28 + wp.z*0.21)
+               + 0.45*sin(uVT*2.70 + wp.x*0.62 - wp.z*0.44);
+         transformed.x += o*f*0.42;
+         transformed.z += cos(uVT*1.05 + wp.z*0.24)*f*0.30;
+         transformed.y -= abs(o)*f*0.07;
+       }`);
+  };
+  mat.customProgramCacheKey=()=>'viento';
+  return mat;
+}
+[matCorteza, ...matHoja, matHelecho, matPasto].forEach(conViento);
+
+const bT=[], bH=[[],[],[]], bHel=[], bPas=[], bRoc=[];
+SEM=20260812;
+const enTierra=(x,z,minAlt)=>suelo(x,z)>(minAlt===undefined?0.75:minAlt);
+let puestos=0;
+for(let i=0;i<2600 && puestos<118;i++){
+  const x=(rr()-0.5)*180, z=(rr()-0.5)*180;
+  if(Math.hypot(x,z)<27) continue;   // el claro queda libre para la cámara
+  if(!enTierra(x,z,0.85)) continue;
+  puestos++;
+  arbol(bT, bH[(rr()*3)|0], x, z, suelo(x,z)-0.2, 9.0+rr()*11.0);
+}
+for(let i=0;i<1500;i++){                                   // helechos
+  const x=(rr()-0.5)*150, z=(rr()-0.5)*150;
+  if(!enTierra(x,z,0.35)) continue;
+  const y=suelo(x,z), s=0.85+rr()*1.25;
+  tarjeta(bHel, x, y+s*0.45, z, s, s, 0, rr()*6.283, 0, 0.6);
+  tarjeta(bHel, x, y+s*0.45, z, s, s, 0, rr()*6.283+1.57, 0, 0.6);
+}
+for(let i=0;i<3200;i++){                                   // pasto hasta la orilla
+  const x=(rr()-0.5)*130, z=(rr()-0.5)*130;
+  if(!enTierra(x,z,0.02)) continue;
+  const y=suelo(x,z), s=0.5+rr()*0.7;
+  tarjeta(bPas, x, y+s*0.48, z, s*1.3, s, 0, rr()*6.283, 0, 0.8);
+  tarjeta(bPas, x, y+s*0.48, z, s*1.3, s, 0, rr()*6.283+1.57, 0, 0.8);
+}
+for(let i=0;i<300;i++){                                    // piedras, en grupos
+  const a=rr()*6.283;
+  // se juntan de a montones, con algún canto suelto lejos
+  const r=LADO*(rr()<0.72 ? (0.17+rr()*rr()*0.46) : (0.05+rr()*0.62));
+  const x=Math.cos(a)*r+(rr()-0.5)*2.6, z=Math.sin(a)*r*0.86+(rr()-0.5)*2.6;
+  const s=0.16+rr()*rr()*1.35;
+  const g=new THREE.IcosahedronGeometry(s, 1).toNonIndexed();
+  const pp=g.attributes.position;
+  for(let k=0;k<pp.count;k++){
+    pp.setXYZ(k, pp.getX(k)*(0.7+rr()*0.6), pp.getY(k)*(0.5+rr()*0.5), pp.getZ(k)*(0.7+rr()*0.6));
+  }
+  g.computeVertexNormals();
+  _p1.set(x, suelo(x,z)+s*0.30, z); _q1.setFromEuler(_e1.set(rr()*3,rr()*6,rr()*3));
+  bRoc.push(g.applyMatrix4(_m1.compose(_p1,_q1,_s1)));
+}
+function fundir(bolsa, mat, sway){
+  if(!bolsa.length) return null;
+  const gs=bolsa.map(g=>g.index?g.toNonIndexed():g);
+  for(const g of gs) if(!g.getAttribute('sway')){
+    const n=g.attributes.position.count;
+    g.setAttribute('sway', new THREE.BufferAttribute(new Float32Array(n).fill(sway||0),1));
+  }
+  const g=mergeGeometries(gs,false); if(!g) return null;
+  if(!bolsa[0].getAttribute('normal')) g.computeVertexNormals();
+  else g.computeVertexNormals();
+  const m=new THREE.Mesh(g,mat); m.frustumCulled=false; escena.add(m); return m;
+}
+fundir(bT, matCorteza);
+for(let i=0;i<3;i++) fundir(bH[i], matHoja[i]);
+fundir(bHel, matHelecho); fundir(bPas, matPasto);
+fundir(bRoc, matRoca, 0);
+
+/* ============================================================================
+   LA SUPERFICIE
+============================================================================ */
+const rtRefl=new THREE.WebGLRenderTarget(1,1,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
+const rtRefr=new THREE.WebGLRenderTarget(1,1,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter});
+const camRefl=new THREE.PerspectiveCamera(52,1,0.05,600);
+const PLANO=new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+
+const matAgua=new THREE.ShaderMaterial({
+  side:THREE.DoubleSide,
+  uniforms:{
+    tAgua:{value:null}, tRefl:{value:rtRefl.texture}, tRefr:{value:rtRefr.texture},
+    luz:{value:SOL.clone()}, uT:{value:0}, uOjo:{value:new THREE.Vector3()},
+    uReflVP:{value:new THREE.Matrix4()}, uVP:{value:new THREE.Matrix4()},
+    uCielo:{value:new THREE.Color(0xbfd8ea)}, uFogD:{value:0.0075},
+    uViento:{value:0.30}, uTurbio:{value:0.30}
+  },
+  vertexShader:`
+    uniform sampler2D tAgua;
+    varying vec3 vW; varying vec2 vSim;
+    void main(){
+      vSim=vec2(position.x/${LADO.toFixed(1)}+0.5, position.y/${LADO.toFixed(1)}+0.5);
+      vec4 info=texture2D(tAgua, vSim);
+      vW=vec3(position.x, info.r, position.y);
+      gl_Position=projectionMatrix*viewMatrix*vec4(vW,1.0);
+    }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vW; varying vec2 vSim;
+    uniform sampler2D tAgua, tRefl, tRefr;
+    uniform vec3 luz, uOjo, uCielo; uniform float uT, uFogD, uViento, uTurbio;
+    uniform mat4 uReflVP, uVP;
+
+      /* El mismo cuenco que en JS, para saber exactamente dónde hay agua y
+         cuánta. Así el borde del estanque lo dibuja el terreno y no el
+         cuadrado de la malla. */
+      float ondaSueloG(vec2 p){
+        return sin(p.x*0.21+p.y*0.13)*0.34 + cos(p.x*0.11-p.y*0.27)*0.26
+             + sin(p.x*0.052-p.y*0.041)*0.9;
+      }
+      float sueloG(vec2 p){
+        float r=sqrt(p.x*p.x + p.y*p.y*1.28)/${(LADO*0.40).toFixed(3)};
+        float s=clamp((r-0.52)/0.46, 0.0, 1.0); s=s*s*(3.0-2.0*s);
+        float agua=-${HONDO.toFixed(2)}*(1.0-s*s*0.92);
+        float tierra=0.55+ondaSueloG(p);
+        return mix(agua,tierra,s)+sin(p.x*1.7+p.y*1.1)*0.045*(1.0-s);
+      }
+    void main(){
+      float sy=sueloG(vW.xz);
+      if(sy > -0.012) discard;          // ahí ya es orilla
+
+      vec4 info=texture2D(tAgua, vSim);
+      vec2 s=clamp(info.ba, vec2(-0.999), vec2(0.999));
+      float l2=min(dot(s,s),0.999);
+      vec3 N=normalize(vec3(s.x, sqrt(max(0.002,1.0-l2)), s.y));
+      float dcam=length(uOjo-vW);
+      // oleaje largo y rizo de viento, encima de la simulación
+      vec2 mar=vec2(
+        cos(vW.x*0.21+vW.z*0.13+uT*0.44)*0.55+cos(vW.x*0.36-vW.z*0.27+uT*0.29)*0.32,
+        sin(vW.z*0.25-vW.x*0.11+uT*0.38)*0.55+sin(vW.z*0.41+vW.x*0.19+uT*0.33)*0.28);
+      vec2 riz=vec2(
+        sin(vW.x*3.4+vW.z*1.9+uT*1.5)*0.5+sin(vW.x*8.1-vW.z*4.6-uT*2.3)*0.26,
+        cos(vW.z*3.2-vW.x*1.5+uT*1.3)*0.5+cos(vW.z*7.4+vW.x*4.1+uT*2.1)*0.24);
+      N=normalize(N + vec3(mar.x,0.0,mar.y)*0.028
+                   + vec3(riz.x,0.0,riz.y)*(0.030+uViento*0.075)/(1.0+dcam*0.05));
+
+      vec3 V=normalize(uOjo-vW);
+      float fres=0.02+0.98*pow(1.0-max(dot(N,V),0.0),5.0);
+
+      /* Se proyecta el punto del mundo con la matriz de la cámara espejada:
+         usar la coordenada de pantalla del propio fragmento sólo vale para
+         puntos que estén exactamente sobre el plano, y acá hay ola. */
+      vec3 desv=vec3(N.x,0.0,N.z);
+      vec4 pr=uReflVP*vec4(vW+desv*0.75, 1.0);
+      vec2 uvR=(pr.xy/pr.w)*0.5+0.5;
+      vec4 pf=uVP*vec4(vW+desv*0.45, 1.0);
+      vec2 uvF=(pf.xy/pf.w)*0.5+0.5;
+
+      vec3 refl=texture2D(tRefl, clamp(uvR, vec2(0.002), vec2(0.998))).rgb;
+      vec3 refr=texture2D(tRefr, clamp(uvF, vec2(0.002), vec2(0.998))).rgb;
+
+      // absorción: el camino bajo el agua se come el rojo primero
+      float hondo=clamp(-sy, 0.02, ${HONDO.toFixed(2)});
+      float cam=hondo/max(0.22, dot(N,V));
+      refr*=exp(-cam*vec3(0.26+uTurbio*0.34, 0.065+uTurbio*0.10, 0.022+uTurbio*0.04));
+      refr=mix(refr, vec3(0.07,0.32,0.36), clamp(cam*(0.045+uTurbio*0.13),0.0,0.55));
+
+      vec3 col=mix(refr, refl, fres);
+      vec3 R=reflect(-V,N);
+      col+=vec3(1.0,0.96,0.86)*pow(max(dot(R,luz),0.0), 420.0)*1.15;   // el sol partido
+      float cresta=clamp((1.0-N.y)*26.0,0.0,1.0);
+      float orilla=1.0-smoothstep(0.02,0.30,hondo);
+      col=mix(col, vec3(0.95,0.98,1.0), cresta*0.30+orilla*0.20);
+
+      float f=1.0-exp(-uFogD*uFogD*dcam*dcam);
+      gl_FragColor=vec4(mix(col, uCielo, clamp(f,0.0,1.0)), 1.0);
+    }`
+});
+const superficie=new THREE.Mesh(new THREE.PlaneGeometry(LADO,LADO,MALLA,MALLA), matAgua);
+superficie.frustumCulled=false;
+escena.add(superficie);
+
+/* ============================================================================
+   LOS OBJETOS QUE SE TIRAN
+   Gravedad, empuje de Arquímedes con la altura local del agua, resistencia y
+   choque contra el fondo. Y de vuelta: cada uno corre el agua con la pasada
+   de esfera de la simulación.
+============================================================================ */
+const G=9.81, RHO=1000;
+const OBJ=[];
+const grupoObj=new THREE.Group(); escena.add(grupoObj);
+const TIPOS=['ESFERA','CAJA','TRONCO','PIEDRA'];
+let tipoSel=0;
+
+function nuevoMaterial(tipo){
+  const col=[0xd8492e, 0xe8b23a, 0x8a6b46, 0x77756d][tipo];
+  return new THREE.MeshStandardMaterial({
+    color:col, roughness:tipo===3?0.95:(tipo===2?0.85:0.42),
+    metalness:0.0, envMapIntensity:0.5
+  });
+}
+function tirar(px,py,pz, vx,vy,vz, tipo){
+  const t=(tipo===undefined?tipoSel:tipo);
+  const r=0.28+rr()*0.26;
+  let geo, radio=r, dens;
+  if(t===0){ geo=new THREE.SphereGeometry(r, 26, 18); dens=0.55+rr()*0.30; }
+  else if(t===1){ const a=r*1.7; geo=new THREE.BoxGeometry(a,a,a); radio=a*0.62; dens=0.42+rr()*0.28; }
+  else if(t===2){ geo=new THREE.CylinderGeometry(r*0.62,r*0.66,r*3.4,14); radio=r*1.35; dens=0.48+rr()*0.14; }
+  else { geo=new THREE.IcosahedronGeometry(r,1);
+    const pp=geo.attributes.position;
+    for(let k=0;k<pp.count;k++) pp.setXYZ(k, pp.getX(k)*(0.75+rr()*0.5), pp.getY(k)*(0.7+rr()*0.5), pp.getZ(k)*(0.75+rr()*0.5));
+    geo.computeVertexNormals(); dens=2.4; }
+  const m=new THREE.Mesh(geo, nuevoMaterial(t));
+  m.position.set(px,py,pz);
+  grupoObj.add(m);
+  const vol=(4/3)*Math.PI*radio*radio*radio;
+  OBJ.push({ m, r:radio, dens, masa:dens*RHO*vol, vol,
+    v:new THREE.Vector3(vx,vy,vz), w:new THREE.Vector3((rr()-0.5)*4,(rr()-0.5)*4,(rr()-0.5)*4),
+    ant:new THREE.Vector3(px,py,pz), mojado:0, entro:false, tipo:t });
+  if(OBJ.length>34) sacarObjeto(0);
+  return OBJ[OBJ.length-1];
+}
+function sacarObjeto(i){
+  const o=OBJ[i]; if(!o) return;
+  grupoObj.remove(o.m); o.m.geometry.dispose(); o.m.material.dispose();
+  OBJ.splice(i,1);
+}
+function limpiarObjetos(){ while(OBJ.length) sacarObjeto(0); }
+
+const _v1=new THREE.Vector3(), _v2=new THREE.Vector3(), _qq=new THREE.Quaternion();
+/* Se subdivide el paso: recortarlo sin repetir hacía que en un aparato lento
+   la física corriera al treinta por ciento y las cosas cayeran flotando. */
+function pasoObjetos(dt){
+  const n=Math.min(5, Math.max(1, Math.ceil(dt*60)));
+  for(let k=0;k<n;k++) pasoFisica(dt/n);
+}
+function pasoFisica(paso){
+  for(let i=OBJ.length-1;i>=0;i--){
+    const o=OBJ[i], p=o.m.position;
+    o.ant.copy(p);
+    const hAgua=alturaAgua(p.x,p.z);
+    const sum=clamp((hAgua-(p.y-o.r))/(2*o.r), 0, 1);      // fracción sumergida
+    // gravedad y empuje
+    let ay=-G;
+    if(sum>0){
+      ay += (RHO*G*o.vol*sum)/o.masa;
+      // resistencia: cuadrática en el agua, casi nada en el aire
+      const k=0.55*sum;
+      _v1.copy(o.v).multiplyScalar(-k*o.v.length()/Math.max(0.3,o.r));
+      o.v.addScaledVector(_v1, paso);
+      o.v.multiplyScalar(1-0.85*sum*paso);
+      o.v.y*=(1-1.5*sum*paso);   // se asienta en vez de rebotar eternamente
+      o.w.multiplyScalar(1-2.4*sum*paso);
+      o.mojado=1;
+      if(!o.entro && o.v.y<-0.8){                          // el chapuzón
+        o.entro=true;
+        const f=clamp(Math.abs(o.v.y)*0.055*o.r*3.2, 0.05, 0.9);
+        sim.gota(p.x,p.z, o.r*3.4+0.5, -f);
+        cpuGota(p.x,p.z, o.r*3.4+0.8, -clamp(f*0.45,0,0.16));
+        salpicar(p.x, hAgua, p.z, Math.abs(o.v.y), o.r);
+        chapoteo(clamp(Math.abs(o.v.y)*0.10,0.1,0.9));
+      }
+    } else { o.entro=false; o.mojado=Math.max(0, o.mojado-paso*0.25); }
+    o.v.y+=ay*paso;
+    p.addScaledVector(o.v, paso);
+    // el fondo
+    const piso=suelo(p.x,p.z)+o.r*0.85;
+    if(p.y<piso){
+      p.y=piso;
+      if(o.v.y<0){ o.v.y*=-0.28; }
+      o.v.x*=0.86; o.v.z*=0.86; o.w.multiplyScalar(0.8);
+    }
+    // no salirse del mundo
+    const R=Math.hypot(p.x,p.z);
+    if(R>LADO*0.62){ const k=LADO*0.62/R; p.x*=k; p.z*=k; o.v.x*=-0.4; o.v.z*=-0.4; }
+    // giro
+    _qq.setFromAxisAngle(_v2.copy(o.w).normalize(), o.w.length()*paso);
+    if(isFinite(_qq.x)) o.m.quaternion.premultiply(_qq);
+    // el objeto corre el agua: la pasada de esfera del original
+    if(sum>0.02 || o.ant.y-p.y!==0){
+      sim.esfera(o.ant.x, o.ant.y, o.ant.z, p.x, p.y, p.z, o.r*1.25, 1.0);
+      const dv=Math.hypot(p.x-o.ant.x, p.y-o.ant.y, p.z-o.ant.z);
+      // la estela en el espejo de CPU va chica: si no, la altura local salta
+      // y la flotación se vuelve loca
+      if(dv>0.004 && sum>0.02) cpuGota(p.x,p.z, o.r*2.4, -clamp(dv*0.12*sum,0,0.022));
+    }
+    // mojado: se ve más oscuro un rato
+    o.m.material.roughness = (o.tipo===3?0.95:(o.tipo===2?0.85:0.42))*(1-o.mojado*0.55);
+    o.m.material.color.multiplyScalar(1);
+  }
+  // choques entre objetos, sin refinar: separar e intercambiar algo de impulso
+  for(let a=0;a<OBJ.length;a++) for(let b=a+1;b<OBJ.length;b++){
+    const A=OBJ[a], B=OBJ[b];
+    _v1.subVectors(B.m.position, A.m.position);
+    const d=_v1.length(), min=A.r+B.r;
+    if(d>min || d<1e-5) continue;
+    _v1.multiplyScalar(1/d);
+    const corr=(min-d)*0.5;
+    A.m.position.addScaledVector(_v1, -corr);
+    B.m.position.addScaledVector(_v1,  corr);
+    const vn=_v2.subVectors(B.v, A.v).dot(_v1);
+    if(vn<0){
+      const j=-(1.35)*vn/(1/A.masa+1/B.masa);
+      A.v.addScaledVector(_v1, -j/A.masa);
+      B.v.addScaledVector(_v1,  j/B.masa);
+    }
+  }
+}
+
+/* --- salpicaduras: puntitos que salen y caen --- */
+const SALP=[];
+const texGota=(()=>{ const c=cv(64,64), q=c.getContext('2d');
+  const g=q.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(255,255,255,.95)'); g.addColorStop(0.4,'rgba(210,240,255,.5)');
+  g.addColorStop(1,'rgba(190,230,255,0)');
+  q.fillStyle=g; q.fillRect(0,0,64,64); return TX(c,1,1); })();
+const matSalp=new THREE.SpriteMaterial({map:texGota, transparent:true, depthWrite:false,
+  blending:THREE.AdditiveBlending, fog:false});
+const poolSalp=[];
+for(let i=0;i<220;i++){ const s=new THREE.Sprite(matSalp.clone()); s.visible=false; escena.add(s); poolSalp.push(s); }
+let salpIdx=0;
+function salpicar(x,y,z, fuerza, radio){
+  const n=Math.min(48, 8+Math.floor(fuerza*radio*26));
+  for(let i=0;i<n;i++){
+    const s=poolSalp[salpIdx++ % poolSalp.length];
+    const a=rr()*6.283, r=radio*(0.4+rr()*0.9);
+    s.visible=true;
+    const e=0.05+rr()*0.13; s.scale.set(e,e,1);
+    s.material.opacity=1;
+    s.position.set(x+Math.cos(a)*r, y+0.05, z+Math.sin(a)*r);
+    SALP.push({s, v:new THREE.Vector3(Math.cos(a)*(0.6+rr()*1.6)*radio*2.4,
+      (1.2+rr()*2.4)*Math.min(2.2,fuerza)*0.55, Math.sin(a)*(0.6+rr()*1.6)*radio*2.4), t:0});
+  }
+}
+function pasoSalpicaduras(dt){
+  for(let i=SALP.length-1;i>=0;i--){
+    const g=SALP[i];
+    g.t+=dt; g.v.y-=G*dt;
+    g.s.position.addScaledVector(g.v, dt);
+    g.s.material.opacity=Math.max(0, 1-g.t*1.5);
+    if(g.s.position.y<alturaAgua(g.s.position.x,g.s.position.z) || g.t>1.4){
+      if(g.t<1.35){ const f=0.006+rr()*0.010;
+        sim.gota(g.s.position.x, g.s.position.z, 0.30, -f); }
+      g.s.visible=false; SALP.splice(i,1);
+    }
+  }
+}
+
+
+/* ============================================================================
+   AUDIO  ·  chapoteos sintetizados, sin archivos
+============================================================================ */
+let AC=null, master=null;
+function initAudio(){
+  if(AC) return;
+  try{
+    AC=new (window.AudioContext||window.webkitAudioContext)();
+    master=AC.createGain(); master.gain.value=0.7; master.connect(AC.destination);
+  }catch(e){ AC=null; }
+}
+function chapoteo(f){
+  if(!AC) return;
+  const t0=AC.currentTime, dur=0.28+f*0.5;
+  const n=Math.floor(AC.sampleRate*dur), b=AC.createBuffer(1,n,AC.sampleRate), d=b.getChannelData(0);
+  for(let i=0;i<n;i++){ const u=i/n; d[i]=(Math.random()*2-1)*Math.pow(1-u, 1.6); }
+  const src=AC.createBufferSource(); src.buffer=b;
+  const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=0.9;
+  bp.frequency.setValueAtTime(300+f*900, t0);
+  bp.frequency.exponentialRampToValueAtTime(2400+f*2600, t0+dur*0.35);
+  bp.frequency.exponentialRampToValueAtTime(420, t0+dur);
+  const g=AC.createGain();
+  g.gain.setValueAtTime(0.0001,t0);
+  g.gain.linearRampToValueAtTime(0.30*f+0.05, t0+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+  src.connect(bp); bp.connect(g); g.connect(master); src.start(t0);
+  // el "plop" grave
+  const o=AC.createOscillator(); o.type='sine';
+  o.frequency.setValueAtTime(240+f*160,t0);
+  o.frequency.exponentialRampToValueAtTime(70, t0+0.16);
+  const og=AC.createGain();
+  og.gain.setValueAtTime(0.0001,t0);
+  og.gain.linearRampToValueAtTime(0.18*f+0.03,t0+0.01);
+  og.gain.exponentialRampToValueAtTime(0.0001,t0+0.20);
+  o.connect(og); og.connect(master); o.start(t0); o.stop(t0+0.24);
+}
+
+/* ============================================================================
+   CÁMARA  ·  órbita a dedo, con dos modos de altura
+============================================================================ */
+const CAM={ az:-0.6, el:0.30, dist:26, alto:0, objetivo:new THREE.Vector3(0,0,0) };
+let vista=0;
+const VISTAS=[
+  {az:-0.6, el:0.40, dist:23, alto:0.0},      // general
+  {az: 0.9, el:0.10, dist:11, alto:-0.2},     // al ras del agua
+  {az:-2.1, el:0.85, dist:19, alto:0.0},      // desde arriba
+  {az: 2.4, el:0.05, dist:6.5, alto:-0.9}     // casi adentro
+];
+function ponerVista(i){
+  const v=VISTAS[i%VISTAS.length];
+  CAM.az=v.az; CAM.el=v.el; CAM.dist=v.dist; CAM.alto=v.alto;
+}
+function acomodarCamara(){
+  const ce=Math.cos(CAM.el), se=Math.sin(CAM.el);
+  camara.position.set(
+    CAM.objetivo.x+Math.cos(CAM.az)*ce*CAM.dist,
+    CAM.objetivo.y+CAM.alto+1.6+se*CAM.dist,
+    CAM.objetivo.z+Math.sin(CAM.az)*ce*CAM.dist);
+  camara.lookAt(CAM.objetivo.x, CAM.objetivo.y+CAM.alto+0.4, CAM.objetivo.z);
+}
+
+/* ---- entrada ---- */
+const punteros=new Map();
+let arrastrando=false, pinchAnt=0, movio=0;
+lienzo.addEventListener('pointerdown', ev=>{
+  initAudio(); if(AC&&AC.state==='suspended') AC.resume();
+  lienzo.setPointerCapture(ev.pointerId);
+  punteros.set(ev.pointerId, {x:ev.clientX, y:ev.clientY});
+  arrastrando=true; movio=0;
+  esconderAyuda();
+});
+lienzo.addEventListener('pointermove', ev=>{
+  const p=punteros.get(ev.pointerId); if(!p) return;
+  const dx=ev.clientX-p.x, dy=ev.clientY-p.y;
+  p.x=ev.clientX; p.y=ev.clientY;
+  movio+=Math.abs(dx)+Math.abs(dy);
+  if(punteros.size===1){
+    CAM.az -= dx*0.006;
+    CAM.el  = clamp(CAM.el - dy*0.005, -0.12, 1.42);
+  }else if(punteros.size===2){
+    const it=[...punteros.values()];
+    const d=Math.hypot(it[0].x-it[1].x, it[0].y-it[1].y);
+    if(pinchAnt) CAM.dist=clamp(CAM.dist*(pinchAnt/d), 4.5, 34);
+    pinchAnt=d;
+  }
+});
+function soltar(ev){
+  const p=punteros.get(ev.pointerId);
+  punteros.delete(ev.pointerId);
+  if(punteros.size<2) pinchAnt=0;
+  if(punteros.size===0){
+    arrastrando=false;
+    if(movio<9 && p) tocarAgua(ev.clientX, ev.clientY);
+  }
+}
+lienzo.addEventListener('pointerup', soltar);
+lienzo.addEventListener('pointercancel', soltar);
+lienzo.addEventListener('wheel', ev=>{ ev.preventDefault();
+  CAM.dist=clamp(CAM.dist*(1+Math.sign(ev.deltaY)*0.10), 4.5, 34); }, {passive:false});
+lienzo.addEventListener('contextmenu', e=>e.preventDefault());
+
+/* toque sobre el agua: rayo contra el plano y=0 */
+const rayo=new THREE.Raycaster(), _pd=new THREE.Vector2();
+const planoAgua=new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+const _hit=new THREE.Vector3();
+function puntoAgua(cx,cy){
+  _pd.set(cx/innerWidth*2-1, -(cy/innerHeight*2-1));
+  rayo.setFromCamera(_pd, camara);
+  return rayo.ray.intersectPlane(planoAgua, _hit) ? _hit : null;
+}
+function tocarAgua(cx,cy){
+  const p=puntoAgua(cx,cy);
+  if(!p || Math.abs(p.x)>LADO/2 || Math.abs(p.z)>LADO/2) return;
+  sim.gota(p.x, p.z, 0.55, -0.14);
+  cpuGota(p.x, p.z, 0.55, -0.14);
+  salpicar(p.x, 0, p.z, 1.1, 0.22);
+  chapoteo(0.28);
+}
+
+/* ============================================================================
+   BUCLE
+============================================================================ */
+let T=0, ultimo=performance.now(), fps=0, cuadros=0, fpsT=0;
+let lluvia=false, viento=0.30, oleaje=0.35, turbio=0.30, fuerzaTiro=0.55;
+let ampAmort=0.9958;
+
+function pasadasAgua(){
+  const w=Math.max(320, Math.round(innerWidth*0.55)), h=Math.max(240, Math.round(innerHeight*0.55));
+  if(rtRefl.width!==w){ rtRefl.setSize(w,h); rtRefr.setSize(w,h); }
+  const ant=renderer.getRenderTarget();
+  superficie.visible=false; grupoObj.visible=true;
+  // refracción: la escena sin la superficie
+  renderer.setRenderTarget(rtRefr); renderer.clear(); renderer.render(escena, camara);
+  // reflejo: cámara espejada, y se recorta todo lo que está bajo el agua
+  renderer.clippingPlanes=[PLANO];
+  matSuelo.uniforms.uCorte.value=0.0;
+  camRefl.fov=camara.fov; camRefl.aspect=camara.aspect;
+  camRefl.near=camara.near; camRefl.far=camara.far;
+  camRefl.position.set(camara.position.x, -camara.position.y, camara.position.z);
+  camRefl.up.set(0,-1,0);
+  camRefl.lookAt(CAM.objetivo.x, -(CAM.objetivo.y+CAM.alto+0.4), CAM.objetivo.z);
+  camRefl.updateProjectionMatrix(); camRefl.updateMatrixWorld(true);
+  renderer.setRenderTarget(rtRefl); renderer.clear(); renderer.render(escena, camRefl);
+  renderer.clippingPlanes=[];
+  matSuelo.uniforms.uCorte.value=-1e9;
+  superficie.visible=true;
+  camara.updateMatrixWorld(true);
+  matAgua.uniforms.uReflVP.value.multiplyMatrices(camRefl.projectionMatrix, camRefl.matrixWorldInverse);
+  matAgua.uniforms.uVP.value.multiplyMatrices(camara.projectionMatrix, camara.matrixWorldInverse);
+  renderer.setRenderTarget(ant);
+}
+
+function acomodar(){
+  const w=innerWidth, h=innerHeight;
+  renderer.setSize(w,h,false);
+  camara.aspect=w/h; camara.updateProjectionMatrix();
+}
+addEventListener('resize', acomodar);
+
+let lluviaT=0, vientoT=0;
+function bucle(ahora){
+  requestAnimationFrame(bucle);
+  let dt=(ahora-ultimo)/1000; ultimo=ahora;
+  if(dt>0.08) dt=0.08;
+  T+=dt;
+  cuadros++; fpsT+=dt;
+  if(fpsT>0.5){ fps=Math.round(cuadros/fpsT); cuadros=0; fpsT=0; }
+
+  // viento: rizos sueltos por todo el estanque
+  VIENTO.t.value=T;
+  vientoT-=dt;
+  if(vientoT<=0 && viento>0.02){
+    vientoT=0.09/(0.2+viento);
+    const x=(rr()-0.5)*LADO*0.92, z=(rr()-0.5)*LADO*0.92;
+    const f=(0.004+rr()*0.010)*viento;
+    sim.gota(x,z, 0.9+rr()*1.8, -f);
+    cpuGota(x,z, 0.9+rr()*1.8, -f);
+  }
+  if(lluvia){
+    lluviaT-=dt;
+    if(lluviaT<=0){
+      lluviaT=0.035;
+      for(let i=0;i<3;i++){
+        const x=(rr()-0.5)*LADO*0.95, z=(rr()-0.5)*LADO*0.95;
+        sim.gota(x,z, 0.22+rr()*0.16, -0.045-rr()*0.05);
+        cpuGota(x,z, 0.30, -0.02);
+        if(rr()<0.22) salpicar(x, alturaAgua(x,z), z, 0.7, 0.10);
+      }
+      if(rr()<0.25) chapoteo(0.10);
+    }
+  }
+
+  pasoObjetos(dt);
+  pasoSalpicaduras(dt);
+
+  // la simulación: un paso por cuadro, y las normales al final
+  sim.paso(ampAmort);
+  sim.normales();
+  cpuPaso(ampAmort);
+  caust.pintar();
+
+  acomodarCamara();
+  matAgua.uniforms.tAgua.value=sim.tex;
+  matAgua.uniforms.uT.value=T;
+  matAgua.uniforms.uOjo.value.copy(camara.position);
+  cieloMat.uniforms.uT.value=T;
+  cielo.position.copy(camara.position);
+
+  pasadasAgua();
+  renderer.setRenderTarget(null);
+  renderer.render(escena, camara);
+
+  const st=document.getElementById('stats');
+  if(st) st.textContent=fps+' fps · '+OBJ.length+' objetos · sim '+sim.N+'² · malla '+MALLA+'²';
+}
+
+/* ============================================================================
+   INTERFAZ
+============================================================================ */
+function esconderAyuda(){
+  const a=document.getElementById('ayuda');
+  if(a && a.style.opacity!=='0'){ a.style.opacity='0'; }
+}
+const $=(id)=>document.getElementById(id);
+$('bPanel').onclick=()=>{ $('panel').classList.toggle('show'); $('bPanel').classList.toggle('on'); };
+$('bVista').onclick=()=>{ vista=(vista+1)%VISTAS.length; ponerVista(vista); esconderAyuda(); };
+$('bTipo').onclick=()=>{ tipoSel=(tipoSel+1)%TIPOS.length; $('bTipo').textContent=TIPOS[tipoSel]; };
+$('bLluvia').onclick=()=>{ lluvia=!lluvia; $('bLluvia').classList.toggle('on', lluvia); };
+$('bLimpiar').onclick=()=>{ limpiarObjetos(); };
+$('bTirar').onclick=()=>{
+  initAudio(); if(AC&&AC.state==='suspended') AC.resume();
+  esconderAyuda();
+  // sale de la cámara hacia donde se mira, con algo de dispersión
+  const dir=new THREE.Vector3();
+  camara.getWorldDirection(dir);
+  const p=camara.position.clone().addScaledVector(dir, 1.6);
+  p.x+=(rr()-0.5)*0.5; p.z+=(rr()-0.5)*0.5;
+  const vel=6+fuerzaTiro*16;
+  tirar(p.x, p.y, p.z, dir.x*vel+(rr()-0.5)*1.2, dir.y*vel+2.2, dir.z*vel+(rr()-0.5)*1.2);
+};
+function slider(id, vid, fn, fmt){
+  const s=$(id), v=$(vid);
+  const ap=()=>{ const x=parseFloat(s.value); v.textContent=(fmt||(n=>n.toFixed(2)))(x); fn(x); };
+  s.addEventListener('input', ap); ap();
+}
+slider('sOla','vOla', x=>{ oleaje=x; ampAmort=lerp(0.9990, 0.9895, x); });
+slider('sViento','vViento', x=>{ viento=x; VIENTO.valor.value=x; matAgua.uniforms.uViento.value=x; });
+slider('sTurbio','vTurbio', x=>{ turbio=x;
+  matAgua.uniforms.uTurbio.value=x; matSuelo.uniforms.uTurbio.value=x; });
+slider('sCaus','vCaus', x=>{ matSuelo.uniforms.uCaus.value=x; });
+slider('sSol','vSol', x=>{ ponerSol(x); });
+slider('sFuerza','vFuerza', x=>{ fuerzaTiro=x; });
+
+addEventListener('keydown', e=>{
+  const k=e.key.toLowerCase();
+  if(k===' '){ e.preventDefault(); $('bTirar').click(); }
+  if(k==='v') $('bVista').click();
+  if(k==='l') $('bLluvia').click();
+  if(k==='c') $('bLimpiar').click();
+});
+
+/* ---------------------------------------------------------------- arranque */
+acomodar();
+ponerVista(0);
+ponerSol(0.55);
+acomodarCamara();
+// unas olas para que no arranque como un vidrio
+for(let i=0;i<26;i++){
+  const x=(rr()-0.5)*LADO*0.8, z=(rr()-0.5)*LADO*0.8;
+  sim.gota(x,z, 1.2+rr()*2.4, -0.02-rr()*0.03);
+  cpuGota(x,z, 1.2+rr()*2.4, -0.02-rr()*0.03);
+}
+requestAnimationFrame(bucle);
+setTimeout(()=>{ const c=$('carga'); if(c) c.remove(); }, 260);
+setTimeout(esconderAyuda, 9000);
+
+window.__dbg={
+  get fps(){ return fps; },
+  get objetos(){ return OBJ.length; },
+  tirar(n,t){ for(let i=0;i<(n||1);i++) tirar((rr()-0.5)*8, 9+rr()*4, (rr()-0.5)*8,
+      (rr()-0.5)*2, -2, (rr()-0.5)*2, t===undefined?tipoSel:t); },
+  get alturas(){ let mx=0, mn=0;
+    for(let k=0;k<CPU_N*CPU_N;k++){ if(cpuH[k]>mx)mx=cpuH[k]; if(cpuH[k]<mn)mn=cpuH[k]; }
+    return {alto:+mx.toFixed(4), bajo:+mn.toFixed(4)}; },
+  get fisica(){ const o=OBJ[0]; if(!o) return null;
+    const p=o.m.position, h=alturaAgua(p.x,p.z);
+    const sum=clamp((h-(p.y-o.r))/(2*o.r),0,1);
+    return {y:+p.y.toFixed(3), r:+o.r.toFixed(3), h:+h.toFixed(4), sum:+sum.toFixed(3),
+      dens:+o.dens.toFixed(2), masa:+o.masa.toFixed(1), vol:+o.vol.toFixed(4),
+      empuje:+((1000*9.81*o.vol*sum)/o.masa).toFixed(2), vy:+o.v.y.toFixed(3),
+      piso:+(suelo(p.x,p.z)+o.r*0.85).toFixed(3)}; },
+  get flotan(){ return OBJ.map(o=>[o.tipo, +o.m.position.y.toFixed(2), +o.dens.toFixed(2)]); },
+  vista(i){ vista=i; ponerVista(i); },
+  camara(az,el,d,al){ CAM.az=az; CAM.el=el; CAM.dist=d; if(al!==undefined) CAM.alto=al; },
+  lluvia(v){ lluvia=!!v; },
+  get piezas(){ let n=0,tri=0; escena.traverse(o=>{ if(o.isMesh){ n++;
+    tri+=o.geometry.attributes.position.count/3; } }); return {mallas:n, tri:Math.round(tri)}; }
+};
+
+</script>
+</body>
+</html>
