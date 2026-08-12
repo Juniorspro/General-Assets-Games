@@ -1161,8 +1161,14 @@ Está hecha con el método del **WebGL Water de Evan Wallace**, el que **jeantim
   junta los rayos, la razón crece y aparece la red de luz sobre la arena. En el canal verde va la
   sombra blanda de las piernas, que corta la red.
 - **Reflejo de verdad.** Un render aparte con la cámara **espejada respecto del plano `y = 0`** —con
-  el `up` invertido, como hace el `Reflector` de three—. Como el punto reflejado y el original caen
-  en la misma coordenada de pantalla, se muestrea con el mismo UV, corrido por la normal.
+  el `up` invertido, como hace el `Reflector` de three—. El muestreo es **proyectivo**: se toma el
+  punto del mundo y se lo proyecta con `uReflVP = proyección × inversa del mundo` de la cámara
+  espejada. Usar la coordenada de pantalla del propio fragmento —que es lo que había antes— sólo vale
+  para puntos que estén exactamente sobre el plano, y acá la superficie está levantada por la ola: de
+  canto el reflejo se corría entero, que es el «según dónde mires está todo mal». Y la desviación de
+  la ola se aplica **en el mundo**, no en pantalla —se desplaza el punto 0,85 m a lo largo de la
+  normal y recién ahí se proyecta—, así se mueve como corresponde desde cualquier ángulo en vez de
+  quedarse quieto.
 - **Refracción de verdad.** Otro render sin la superficie puesta, muestreado con un corrimiento mayor
   y con **absorción de Beer** sobre el camino bajo el agua: cuanto más hondo, menos rojo vuelve.
 - Fresnel de Schlick, sol partido en las crestas, espuma en las crestas y en la orilla, y **dos capas
@@ -1188,32 +1194,19 @@ Tres cosas que costaron encontrar y quedan anotadas:
    para abajo: máximo 0, ninguna cresta, ningún reflejo. Ahora la estela va en **dipolo** —hunde
    adelante y levanta atrás— y el volumen se conserva.
 
-#### La bajada al agua, en tres tiempos
-No se mete de una: camina hasta la punta, **se sienta en el borde**, **baja una pierna** y tantea el
-agua con la punta del pie —cada toque deja su círculo—, y recién ahí **se descuelga** y queda parado
-en el fondo. Son poses nuevas escritas a mano sobre el mismo `pRot`: `poseSentado(k, t, pierna)` y
-`poseCorrer`.
+#### La escalera al agua
+Sentarlo en el borde era pelear contra el rig y se perdió esa pelea tres veces. Lo que pasa es que
+**el muslo de la malla mide mucho más que su hueso**: el vértice más adelantado salía a `z = −8,03`
+pesando 100 % de `LeftUpLeg`, o sea **1,35 m de muslo** colgando de una articulación que está a
+0,49 m. Sentado con el muslo horizontal —como se sienta cualquiera— esa malla salía más de un metro
+por delante de la punta del muelle y se veía un palo cruzando el aire.
 
-Sentado hubo que cambiar el anclaje: parado, la raíz del modelo está en los pies, pero sentado lo que
-se apoya es **la cadera**. Se mide la cadera en vivo con `getWorldPosition` y se corrige el grupo
-entero, así las piernas cuelgan donde tienen que colgar en vez de quedar el cuerpo flotando.
-
-Y hubo que encontrar dos cosas antes de que se sentara de verdad:
-
-1. **Los signos estaban al revés.** `pRot` gira alrededor de un eje de **mundo**, y con `AXF`
-   positivo el miembro va para **atrás**: los muslos con ángulo positivo se le metían adentro del
-   tablón. Van negativos.
-2. **El muslo de la malla mide mucho más que su hueso.** Se midió el vértice más adelantado y su
-   peso: salía a `z = −8,03` pesando 100 % de `LeftUpLeg`, o sea **1,35 m** de muslo colgando de un
-   hueso cuya articulación está a 0,49 m. Sentado con el muslo horizontal —como se sienta cualquiera—
-   esa malla salía un metro y pico por delante de la punta del muelle y se veía como un palo
-   atravesando el aire. Por eso ahora **se sienta con las piernas colgando casi rectas**, apenas
-   dobladas, que además es lo que uno hace en un muelle: el cuerpo entero ocupa 0,9 m de muelle
-   —de `z = −6,54` a `−7,44`, con la punta en −7,2— y los pies quedan a `y = −0,65`, adentro del agua.
-
-Para encontrarlo se agregó una **lupa de taller**: `__dbg.lupa(true)` pone un plano fijo de perfil
-sobre la punta del muelle, y `__dbg.cajaTeypi()` / `__dbg.puntaAdelante()` devuelven la caja de la
-malla con piel y el vértice más adelantado con los huesos que lo pesan.
+Así que el muelle ahora tiene **una escalera al agua**: seis escalones desde el tablón hasta el
+fondo, con largueros, patas y dos agarraderas arriba. Y Teypi la **baja caminando**, con paso corto,
+el tronco echado atrás y las manos abiertas a los costados. Caminar es lo único que este esqueleto
+hace bien, y bajando escalones no hay ninguna postura rara que lo delate. La altura del cuerpo la da
+`alturaEscalon(z)`, que devuelve la tapa del escalón que le toca, así que pisa cada uno. Desde el
+tercero para abajo ya está bajo el agua y cada paso rompe la superficie.
 
 #### El bosque, cerrado y saturado
 Un solo terreno manda: `tierra(x,z)` va de 0 (agua) a 1 (bosque) sumando la orilla de atrás, las de

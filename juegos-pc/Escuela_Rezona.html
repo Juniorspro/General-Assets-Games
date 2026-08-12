@@ -1984,46 +1984,6 @@ function poseCorrer(ph,t){
   pRot(PB['neck'],AXF,-0.18); pRot(PB['head'],AXF,-0.22); chain();
   return Math.abs(Math.sin(ph))*0.05;
 }
-/* Se sienta en el borde del muelle: k va de 0 (parado) a 1 (sentado).
-   OJO con el signo: pRot gira alrededor de un eje de MUNDO, y con AXF
-   positivo el miembro va para ATRÁS. Para sentarlo, los muslos van con
-   ángulo NEGATIVO —adelante— y la caña baja con POSITIVO. Con los signos
-   al revés las piernas se le metían adentro del tablón. */
-function poseSentado(k,t,pierna){
-  restAll(); const e=Math.min(1,Math.max(0,k));
-  breathe(t,0.010);
-  /* Este modelo tiene el muslo MUCHO más largo que su hueso: si se lo sienta
-     con el muslo horizontal, la malla del muslo sale un metro y pico por
-     delante de la punta del muelle y parece un palo. Así que se sienta con las
-     piernas colgando casi rectas, apenas dobladas, que es lo que hace
-     cualquiera sentado en un muelle con las piernas para abajo. */
-  pRot(PB['leftupleg'], AXF, -0.34*e);
-  pRot(PB['rightupleg'],AXF, -0.34*e); chain();
-  // rodilla doblada: los pies quedan recogidos, arriba del agua
-  pRot(PB['leftfoot'],  AXF, 1.02*e);
-  pRot(PB['rightfoot'], AXF, 1.02*e); chain();
-  pRot(PB['lefttoebase'],  AXF, -0.55*e);
-  pRot(PB['righttoebase'], AXF, -0.55*e); chain();
-  pRot(PB['leftupleg'], AXS,  0.12*e); pRot(PB['rightupleg'],AXS,-0.12*e); chain();
-  // el tronco apenas adelante, mirando el agua
-  pRot(PB['spine'],AXF,-0.10*e); pRot(PB['spine01'],AXF,-0.06*e); chain();
-  // las manos al costado de la cadera, apoyadas en el tablón
-  pRot(PB['leftarm'],AXS,-0.16-0.12*e); pRot(PB['rightarm'],AXS,0.16+0.12*e); chain();
-  pRot(PB['leftarm'],AXF, 0.40*e); pRot(PB['rightarm'],AXF, 0.40*e); chain();
-  pRot(PB['leftforearm'],AXF,-0.30-0.14*e); pRot(PB['rightforearm'],AXF,-0.30-0.14*e); chain();
-  pRot(PB['neck'],AXF, 0.10*e); chain();
-  pRot(PB['head'],AXF, 0.18*e+Math.sin(t*0.8)*0.03); chain();
-  // una pierna se estira y el pie entra al agua
-  const pp=Math.min(1,Math.max(0,pierna||0));
-  if(pp>0){
-    pRot(PB['rightfoot'], AXF, -1.02*pp); chain();
-    pRot(PB['rightupleg'],AXF, -0.16*pp); chain();
-    pRot(PB['righttoebase'],AXF, 0.42*pp); chain();
-    pRot(PB['spine'],AXF, -0.06*pp); chain();
-    pRot(PB['head'],AXF,  0.20*pp); chain();
-  }
-  return 0;
-}
 /* El grito en la cara: se abalanza, brazos abiertos, cabeza adelante */
 function poseGrito(k,t){
   restAll(); const e=Math.min(1,Math.max(0,k));
@@ -2667,6 +2627,28 @@ function crearCine(){
   caja(0.16,0.14, Z0-Z1,  MUELLE_W/2-0.08, MUELLE_Y+0.10, (Z0+Z1)/2);
   for(let z=Z0-0.6; z>Z1; z-=2.4)
     for(const s of [-1,1]) caja(0.26, 2.4, 0.26, s*(MUELLE_W/2-0.13), MUELLE_Y-1.15, z);
+  /* La escalera al agua: seis escalones desde la punta del tablón hasta el
+     fondo, con sus largueros y dos postes de agarre arriba. */
+  {
+    const paso=(ESC_Z0-ESC_Z1)/ESC_N;
+    for(let k=0;k<ESC_N;k++){
+      const y=ESC_YTOP+(ESC_YBOT-ESC_YTOP)*(k+1)/ESC_N;
+      const z=ESC_Z0-paso*(k+0.5);
+      caja(ESC_W, 0.11, paso*0.94, 0, y-0.055, z);              // el escalón
+      caja(0.14, 0.9, 0.14, -ESC_W/2+0.07, y-0.50, z-paso*0.36); // patas
+      caja(0.14, 0.9, 0.14,  ESC_W/2-0.07, y-0.50, z-paso*0.36);
+    }
+    // largueros a los costados, en diagonal no se puede con cajas: van a tramos
+    for(let k=0;k<ESC_N;k++){
+      const y=ESC_YTOP+(ESC_YBOT-ESC_YTOP)*(k+0.5)/ESC_N;
+      const z=ESC_Z0-paso*(k+0.5);
+      for(const sd of [-1,1]) caja(0.10, 0.34, paso*1.02, sd*(ESC_W/2+0.02), y+0.10, z);
+    }
+    for(const sd of [-1,1]){                                     // agarraderas
+      caja(0.12, 1.05, 0.12, sd*(ESC_W/2+0.02), ESC_YTOP+0.50, ESC_Z0-0.10);
+      caja(0.10, 0.10, 0.55, sd*(ESC_W/2+0.02), ESC_YTOP+1.00, ESC_Z0-0.28);
+    }
+  }
   {
     const gs=bM.map(g=>g.index?g.toNonIndexed():g);
     const g=mergeGeometries(gs,false);
@@ -2682,6 +2664,7 @@ function crearCine(){
       tCaust:{value:caust.rt.texture},
       luz:{value:SOL.clone()}, uRes:{value:new THREE.Vector2(1,1)}, uT:{value:0},
       uOjo:{value:new THREE.Vector3()},
+      uReflVP:{value:new THREE.Matrix4()}, uVP:{value:new THREE.Matrix4()},
       uCielo:{value:new THREE.Color(0xc2ddef)}, uFogD:{value:0.0052}
     },
     transparent:false,
@@ -2706,6 +2689,7 @@ function crearCine(){
       varying vec3 vW; varying vec4 vPant; varying vec2 vSim;
       uniform sampler2D tAgua, tRefl, tRefr, tCaust;
       uniform vec3 luz, uOjo, uCielo; uniform vec2 uRes; uniform float uT, uFogD;
+      uniform mat4 uReflVP, uVP;
       void main(){
         vec4 info=texture2D(tAgua, vSim);
         vec2 s=clamp(info.ba, vec2(-0.999), vec2(0.999));
@@ -2726,18 +2710,21 @@ function crearCine(){
         vec3 V=normalize(uOjo-vW);
         float fres=0.02+0.98*pow(1.0-max(dot(N,V),0.0),5.0);
 
-        vec2 uv=(vPant.xy/vPant.w)*0.5+0.5;
-        /* El corrimiento es de tamaño fijo en el mundo: en pantalla se achica
-           con la distancia. Y de canto se achica más todavía, porque ahí un
-           corrimiento chico ya barre metros de reflejo y quedan esos chorreados
-           verticales que se veían. */
-        float canto=max(dot(N,V),0.0);
-        float esc=clamp(0.62/(1.0+dcam*0.22), 0.02, 0.15)*mix(0.30,1.0,canto);
-        vec2 dRefl=N.xz*esc*1.5;
-        vec2 dRefr=N.xz*esc*2.6;
+        /* El reflejo NO se muestrea con la coordenada de pantalla de este
+           fragmento: eso sólo vale para puntos exactamente sobre el plano, y
+           acá la superficie está levantada por la ola, así que de canto se iba
+           todo. Se proyecta el punto del mundo con la matriz de la cámara
+           espejada, que es exacto haya ola o no. Y la desviación de la ola se
+           aplica EN EL MUNDO, no en pantalla: así se mueve como se tiene que
+           mover, mire uno de donde mire. */
+        vec3 desv=vec3(N.x, 0.0, N.z);
+        vec4 pr=uReflVP*vec4(vW+desv*0.85, 1.0);
+        vec2 uvR=(pr.xy/pr.w)*0.5+0.5;
+        vec4 pf=uVP*vec4(vW+desv*0.55, 1.0);
+        vec2 uvF=(pf.xy/pf.w)*0.5+0.5;
 
-        vec3 refl=texture2D(tRefl, clamp(uv+dRefl, vec2(0.002), vec2(0.998))).rgb;
-        vec3 refr=texture2D(tRefr, clamp(uv+dRefr, vec2(0.002), vec2(0.998))).rgb;
+        vec3 refl=texture2D(tRefl, clamp(uvR, vec2(0.002), vec2(0.998))).rgb;
+        vec3 refr=texture2D(tRefr, clamp(uvF, vec2(0.002), vec2(0.998))).rgb;
 
         // Beer: cuanto más hondo el rayo, menos rojo vuelve
         float hondo=min(${PROF_MAX.toFixed(2)}, 0.26+0.058*max(0.0, 6.0-vW.z));
@@ -2806,39 +2793,40 @@ function arrancarCine(){
   U.uGhost.value=0.34;
   const c=document.getElementById('ctl'); if(c) c.style.display='none';
 }
-/* La bajada al agua, por tiempos:
-     0.0 – 4.0   quieto al principio del muelle
-     4.0 – 10.5  camina hasta la punta
-    10.5 – 12.6  se sienta en el borde
-    12.6 – 15.2  baja una pierna y la mete en el agua
-    15.2 – 17.0  se descuelga y queda parado en el agua
-    17.0 – 27.0  camina lago adentro                                        */
-const T_CAMINA=[4.0,10.5], T_SIENTA=[10.5,12.6], T_PIERNA=[12.6,15.2],
-      T_BAJA=[15.2,17.0], T_VADEA=[17.0,27.0];
-/* Dónde se sienta: la rodilla —que en este bicho es el hueso del pie— queda
-   medio metro adelante de la cadera, así que la cadera va medio metro antes
-   de la punta del muelle. Más adentro y las cañas atraviesan el tablón; más
-   afuera y los muslos quedan colgando en el aire. */
-const Z_PUNTA=-6.98;
+/* La escalera del muelle, por tiempos:
+     0.0 – 4.0    quieto al principio del muelle
+     4.0 – 10.5   camina hasta la punta
+    10.5 – 16.2   baja los seis escalones y se mete al agua
+    16.2 – 27.0   camina lago adentro
+
+   Sentarlo era pelear contra el rig: el muslo de la malla mide 1,35 m
+   colgando de una articulación que está a 0,49, así que sentado le salía un
+   palo por delante del muelle. Bajando una escalera camina, que es lo único
+   que este esqueleto hace bien. */
+const ESC_N=6, ESC_Z0=-7.05, ESC_Z1=-10.55, ESC_W=1.7;
+const ESC_YTOP=0.67, ESC_YBOT=-1.24;
+const T_CAMINA=[4.0,10.5], T_ESCALERA=[10.5,16.2], T_VADEA=[16.2,27.0];
+const Z_PUNTA=-6.90;
+function alturaEscalon(z){
+  if(z>=ESC_Z0) return ESC_YTOP;
+  if(z<=ESC_Z1) return fondoLago(z);
+  const u=(ESC_Z0-z)/(ESC_Z0-ESC_Z1);
+  const k=Math.min(ESC_N-1, Math.floor(u*ESC_N));
+  return ESC_YTOP + (ESC_YBOT-ESC_YTOP)*(k+1)/ESC_N;
+}
 function suave(a,b,t){ const u=Math.min(1,Math.max(0,(t-a)/(b-a))); return u*u*(3-2*u); }
 function teypiEnT(t){
   if(t<T_CAMINA[0]) return 7.6;
   if(t<T_CAMINA[1]) return 7.6+(Z_PUNTA-7.6)*suave(T_CAMINA[0],T_CAMINA[1],t);
-  if(t<T_BAJA[0])   return Z_PUNTA;
-  if(t<T_BAJA[1])   return Z_PUNTA+(Z_PUNTA-1.6-Z_PUNTA)*suave(T_BAJA[0],T_BAJA[1],t);
-  return (Z_PUNTA-1.6)+((-17.0)-(Z_PUNTA-1.6))*suave(T_VADEA[0],T_VADEA[1],t);
+  if(t<T_ESCALERA[1]){
+    // baja los escalones a paso lento, sin suavizar las puntas: es una bajada
+    const u=(t-T_ESCALERA[0])/(T_ESCALERA[1]-T_ESCALERA[0]);
+    return Z_PUNTA+(ESC_Z1-0.4-Z_PUNTA)*u;
+  }
+  return (ESC_Z1-0.4)+((-18.5)-(ESC_Z1-0.4))*suave(T_VADEA[0],T_VADEA[1],t);
 }
 const _pies=new THREE.Vector3(), _ancla=new THREE.Vector3();
 let ALTO_CADERA=0;
-/* Parado, la raíz del modelo está en los pies. Sentado no: hay que apoyar la
-   CADERA en el tablón y dejar que las piernas cuelguen donde caigan. Se mide
-   en vivo y se corrige el grupo entero. */
-function anclarCadera(objetivoY){
-  if(!PB.hips) return;
-  teypi.updateMatrixWorld(true);
-  PB.hips.getWorldPosition(_ancla);
-  teypi.position.y += (objetivoY - _ancla.y);
-}
 function medirCadera(){
   if(!PB.hips || ALTO_CADERA) return;
   teypi.updateMatrixWorld(true);
@@ -2849,66 +2837,48 @@ function actualizarCine(dt){
   cineT+=dt;
   const C=CINE, t=cineT;
   const tz=teypiEnT(t);
-  const enMuelle = t < T_BAJA[1];
-  const hundido = enMuelle ? 0 : Math.min(1, profundidad(tz)/PROF_MAX);
+  const yPiso = t<T_ESCALERA[0] ? 0.67 : alturaEscalon(tz);
+  const enMuelle = yPiso > 0.02;
+  const hundido = Math.min(1, Math.max(0, -yPiso)/PROF_MAX);
 
-  // --- Teypi: camina, se sienta, prueba el agua con un pie y se descuelga ---
-  const kSienta=suave(T_SIENTA[0],T_SIENTA[1],t);
-  const kPierna=suave(T_PIERNA[0],T_PIERNA[1],t) - suave(T_BAJA[0],T_BAJA[1],t);
-  const kBaja  =suave(T_BAJA[0],T_BAJA[1],t);
-  const anda = t>=T_CAMINA[0] && t<T_CAMINA[1];
-  const vadea= t>=T_BAJA[1];
-  andarFase += dt*(anda? 2.9 : (vadea? 1.7 : 0))*1.0;
+  // --- Teypi: camina por el muelle, baja la escalera y se mete al agua ---
+  const enEscalera = t>=T_ESCALERA[0] && t<T_ESCALERA[1];
+  const anda = t>=T_CAMINA[0];
+  andarFase += dt*(enEscalera? 2.0 : (t<T_CAMINA[1]? 2.9 : 1.7))*(anda?1:0);
   teypi.rotation.y=Math.PI;
-  let bob, alturaPie;
-  if(t<T_CAMINA[0]){ bob=poseIdle(t, Math.sin(t*0.5)*0.3); alturaPie=C.MUELLE_Y+0.05; }
-  else if(anda){     bob=poseWalk(andarFase, t);           alturaPie=C.MUELLE_Y+0.05; }
-  else if(t<T_BAJA[0]){
-    // sentado en el borde, con una pierna que baja al agua
-    bob=poseSentado(kSienta, t, Math.max(0,kPierna));
-    alturaPie=null;
-  }
-  else if(t<T_BAJA[1]){
-    // se descuelga: el cuerpo pasa de sentado a parado mientras baja
-    bob=poseSentado(1-kBaja, t, Math.max(0,1-kBaja*1.4));
-    alturaPie=null;
+  let bob, piso;
+  if(!anda){ bob=poseIdle(t, Math.sin(t*0.5)*0.3); piso=0.67; }
+  else if(t<T_CAMINA[1]){ bob=poseWalk(andarFase, t); piso=0.67; }
+  else if(enEscalera){
+    // bajando: paso corto, tronco un poco atrás y una mano al pasamanos
+    bob=poseWalk(andarFase, t)*0.55;
+    pRot(PB['spine'],AXF, 0.10); chain();
+    pRot(PB['leftarm'],AXS,-0.42); pRot(PB['rightarm'],AXS,0.42); chain();
+    pRot(PB['leftforearm'],AXF,-0.55); pRot(PB['rightforearm'],AXF,-0.55); chain();
+    pRot(PB['head'],AXF, 0.24); chain();
+    piso=alturaEscalon(tz);
   }
   else{
     bob=poseWalk(andarFase, t)*0.4;
-    alturaPie=fondoLago(tz);
+    piso=fondoLago(tz);
     pRot(PB['leftarm'],AXS,-0.55*hundido); pRot(PB['rightarm'],AXS,0.55*hundido); chain();
     pRot(PB['leftforearm'],AXF,-0.35*hundido); pRot(PB['rightforearm'],AXF,-0.35*hundido); chain();
     pRot(PB['head'],AXF,0.10*hundido); chain();
   }
-  if(alturaPie===null){
-    // sentado o descolgándose: manda la cadera
-    teypi.position.set(0, 0, tz);
-    const caderaSentado=C.MUELLE_Y+0.09;
-    const caderaParado =fondoLago(tz)+ALTO_CADERA;
-    anclarCadera(caderaSentado*(1-kBaja) + caderaParado*kBaja + bob*0.4);
-  }else{
-    teypi.position.set(0, alturaPie+bob, tz);
-    medirCadera();
-  }
+  teypi.position.set(0, piso+bob, tz);
+  medirCadera();
 
   // --- el agua le responde ---
-  if(t>=T_PIERNA[0] && t<T_BAJA[0]){
-    // la punta del pie tantea el agua: círculos chiquitos, uno cada tanto
-    const b=PB['righttoebase']||PB['rightfoot'];
-    if(b){ b.getWorldPosition(_pies);
-      if(_pies.y<0.02){
-        pisadaT-=dt;
-        if(pisadaT<=0){ pisadaT=0.55;
-          C.agua.gota(_pies.x, _pies.z, 0.75, -0.085);
-          sonar('agua', 0.26, 1.25+rr()*0.3); }
-        C.agua.gota(_pies.x+Math.sin(t*3.1)*0.06, _pies.z, 0.42, -0.006);
-      }
+  if(enEscalera && !enMuelle){
+    // ya está pisando escalones hundidos: cada paso rompe el agua
+    if(!C.entro){ C.entro=true; sonar('agua', 0.85, 0.85); C.agua.gota(0, tz, 1.6, -0.14); }
+    pisadaT-=dt;
+    if(pisadaT<=0){
+      pisadaT=0.50;
+      const b=PB['leftfoot']||PB['hips'];
+      if(b){ b.getWorldPosition(_pies); C.agua.gota(_pies.x, _pies.z, 1.1, -0.15); }
+      sonar('agua', 0.45, 1.1+rr()*0.3);
     }
-  }
-  else if(t>=T_BAJA[0] && t<T_BAJA[1]){
-    // el cuerpo entra: un chapuzón grande
-    if(!C.entro){ C.entro=true; sonar('agua', 0.85, 0.8); }
-    C.agua.gota(0, tz, 1.5, -0.05);
   }
   else if(!enMuelle){
     pisadaT-=dt;
@@ -2952,9 +2922,9 @@ function actualizarCine(dt){
   // --- cámara: cinco planos, uno por tramo ---
   const cam=C.cam;
   if(MIRON){                                   // lupa de taller, plano fijo
-    cam.position.set(7.2, 1.05, tz+0.2);
-    _mira.set(0, 0.55, tz);
-    cam.lookAt(_mira); cam.fov=26; cam.aspect=RW/RH; cam.updateProjectionMatrix();
+    cam.position.set(11.0, 1.1, -8.9);
+    _mira.set(0, -0.25, -8.9);
+    cam.lookAt(_mira); cam.fov=30; cam.aspect=RW/RH; cam.updateProjectionMatrix();
     C.matAgua.uniforms.uOjo.value.copy(cam.position);
     if(t<1.2) U.uGlitch.value=Math.max(U.uGlitch.value,(1.2-t)*0.6);
     return;
@@ -2968,18 +2938,16 @@ function actualizarCine(dt){
     const u=(t-5.6)/5.0;
     cam.position.set(6.4-u*1.2, 1.62+Math.sin(t*0.9)*0.06, tz+2.2);
     _mira.set(0, 1.35, tz-0.2);
-  }else if(t<15.2){                             // 3) sentado: el pie y el agua
-    // por encima del tablón y desde el agua, si no la tarima tapa todo
-    // de perfil, para que se vea la pierna colgando
-    const u=(t-10.6)/4.6;
-    cam.position.set(5.9-u*1.1, 1.72-u*0.34, tz-2.0+u*0.6);
-    _mira.set(0, 0.72-u*0.20, tz-0.55);
-  }else if(t<20.0){                             // 4) de frente, retrocediendo
-    const u=(t-15.2)/4.8;
+  }else if(t<16.4){                             // 3) la escalera, de costado
+    const u=(t-10.6)/5.8;
+    cam.position.set(5.4-u*0.9, 1.30, tz-1.5);
+    _mira.set(0, 0.50, tz-0.15);
+  }else if(t<20.6){                             // 4) de frente, retrocediendo
+    const u=(t-16.4)/4.2;
     cam.position.set(-0.7+Math.sin(t*0.35)*0.45, 1.30-u*0.40, tz-6.0-u*2.6);
     _mira.set(0, 1.35-hundido*0.45, tz);
   }else{                                        // 5) arriba, se queda solo
-    const u=(t-20.0)/9.0;
+    const u=(t-20.6)/9.0;
     cam.position.set(7.5+u*8.0, 3.6+u*6.0, tz+9.0+u*12.0);
     _mira.set(0, 0.55, tz-2.0);
   }
@@ -3020,6 +2988,10 @@ function pasadasAgua(){
   renderer.clippingPlanes=[];
   C.matFondo.uniforms.uCorte.value=-1e9;
   C.superficie.visible=true;
+  // las matrices con las que se muestrea: la del espejo y la de la cámara real
+  cr.updateMatrixWorld(true); C.cam.updateMatrixWorld(true);
+  C.matAgua.uniforms.uReflVP.value.multiplyMatrices(cr.projectionMatrix, cr.matrixWorldInverse);
+  C.matAgua.uniforms.uVP.value.multiplyMatrices(C.cam.projectionMatrix, C.cam.matrixWorldInverse);
   renderer.setRenderTarget(ant);
 }
 
