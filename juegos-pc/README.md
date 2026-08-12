@@ -1198,6 +1198,12 @@ Sentado hubo que cambiar el anclaje: parado, la raíz del modelo está en los pi
 se apoya es **la cadera**. Se mide la cadera en vivo con `getWorldPosition` y se corrige el grupo
 entero, así las piernas cuelgan donde tienen que colgar en vez de quedar el cuerpo flotando.
 
+Y los signos estaban al revés. `pRot` gira alrededor de un eje de **mundo**, y con `AXF` positivo el
+miembro va para **atrás**: los muslos con ángulo positivo se le metían adentro del tablón, que es por
+qué parecía que lo atravesaba en vez de sentarse. Van negativos —adelante— y la caña baja con
+positivo. Medido con los huesos en la mano: cadera en `y = 0,76` (el tablón está en 0,72), rodilla en
+`z = −7,35` (la punta del muelle es −7,2) y el pie a `y = −0,36`, adentro del agua.
+
 #### El bosque, cerrado y saturado
 Un solo terreno manda: `tierra(x,z)` va de 0 (agua) a 1 (bosque) sumando la orilla de atrás, las de
 los costados y la del fondo, y el suelo se interpola entre el fondo del lago y el piso del bosque.
@@ -1215,5 +1221,14 @@ helechos, pasto alto y troncos caídos**: unas 158 000 caras en nueve mallas fus
 Cuarenta y seis mariposas con aleteo —el sprite se achata y se inclina—, polvo al sol, y **cinco planos**: el muelle entero desde la orilla, un
 lateral mientras camina, uno desde el agua para verlo sentado y el pie entrando, uno de frente
 retrocediendo mientras se hunde, y uno que se va para arriba dejándolo solo.
+
+#### El morse del final
+Cuando la toma se va a negro no termina: queda **una luz parpadeando**. Es morse, y dice
+
+> *Yo decidí dejar ese lugar también, cuándo podré salir? ya no hay esperanzas*
+
+Cuatrocientos diecinueve pulsos a 45 ms el punto —treinta y un segundos y medio— con su pitido, los
+símbolos acumulándose abajo y la frase revelada al final. El botón de volver a empezar aparece antes,
+por si no querés esperar a que termine de deletrear.
 
 El bosque se arma mientras la pantalla está en rojo, no al empezar la toma, para que no haya tirón.

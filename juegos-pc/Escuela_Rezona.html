@@ -1493,6 +1493,78 @@ function botonPuerta(){
   g2.restore();
   botones.push({x,y,w,h,v:'puerta'});
 }
+
+/* ============================================================================
+   EL MORSE DEL FINAL
+   Lo último que queda de la cinta: una luz que parpadea sobre el negro.
+============================================================================ */
+const MORSE={A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',
+K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',
+W:'.--',X:'-..-',Y:'-.--',Z:'--..','0':'-----','1':'.----','2':'..---','3':'...--','4':'....-',
+'5':'.....','6':'-....','7':'--...','8':'---..','9':'----.',
+',':'--..--','.':'.-.-.-','?':'..--..','!':'-.-.--'};
+const FRASE_FIN='Yo decidí dejar ese lugar también, cuándo podré salir? ya no hay esperanzas';
+const PUNTO=0.045;
+const MSEQ=[]; let MTOTAL=0;
+(function armarMorse(){
+  for(const crudo of FRASE_FIN.toUpperCase()){
+    const ch=crudo.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(ch===' '){ MSEQ.push({on:false,dur:PUNTO*7,sym:' '}); continue; }
+    const cod=MORSE[ch]; if(!cod) continue;
+    for(let i=0;i<cod.length;i++){
+      MSEQ.push({on:true, dur: cod[i]==='.'?PUNTO:PUNTO*3, sym:cod[i]});
+      MSEQ.push({on:false,dur:PUNTO, sym:''});
+    }
+    MSEQ.push({on:false,dur:PUNTO*2,sym:''});     // hasta tres, entre letras
+  }
+  for(const p of MSEQ) MTOTAL+=p.dur;
+})();
+let morseT=0, morseIdx=0, morseOn=false, morseTxt='', morseSono=-1;
+function reiniciarMorse(){ morseT=0; morseIdx=0; morseOn=false; morseTxt=''; morseSono=-1; }
+function correrMorse(dt){
+  if(morseIdx>=MSEQ.length) return true;
+  morseT+=dt;
+  let acum=0, i=0;
+  for(; i<MSEQ.length; i++){
+    if(morseT < acum+MSEQ[i].dur) break;
+    acum+=MSEQ[i].dur;
+  }
+  if(i>=MSEQ.length){ morseIdx=MSEQ.length; morseOn=false; return true; }
+  if(i!==morseIdx){
+    for(let k=morseIdx;k<i;k++) if(MSEQ[k].sym && MSEQ[k].sym!==' ') morseTxt+=MSEQ[k].sym;
+      else if(MSEQ[k].sym===' ') morseTxt+='  ';
+    morseIdx=i;
+  }
+  morseOn=MSEQ[i].on;
+  if(morseOn && morseSono!==i){ morseSono=i;
+    pip(620, MSEQ[i].dur*0.9, 0.075, 'sine'); }
+  return false;
+}
+function dibujarMorse(){
+  g2.fillStyle='#000'; g2.fillRect(0,0,UW,UH);
+  if(morseOn){
+    const g=g2.createRadialGradient(UW/2,UH*0.40,4, UW/2,UH*0.40, UH*0.34);
+    g.addColorStop(0,'rgba(255,253,240,1)');
+    g.addColorStop(0.26,'rgba(240,230,175,.62)');
+    g.addColorStop(1,'rgba(140,128,80,0)');
+    g2.fillStyle=g; g2.fillRect(0,0,UW,UH);
+    g2.fillStyle='#fffdf2';
+    g2.fillRect(UW/2-UW*0.075, UH*0.40-UH*0.028, UW*0.15, UH*0.056);
+  }
+  const linea=morseTxt.slice(-42);
+  g2.font='700 42px ui-monospace, monospace';
+  g2.textAlign='center'; g2.textBaseline='middle';
+  g2.fillStyle='rgba(238,232,196,.92)';
+  g2.fillText(linea, UW/2, UH*0.64);
+  if(morseIdx>=MSEQ.length){
+    const l=FRASE_FIN.split(' '); let a='', li=[];
+    for(const w of l){ if((a+' '+w).length>36){ li.push(a); a=w; } else a=(a?a+' ':'')+w; }
+    if(a) li.push(a);
+    for(let i=0;i<li.length;i++)
+      texto(li[i], UW/2, UH*0.30+i*UH*0.06, 26, 'rgba(232,228,212,.92)','center');
+  }
+}
+
 /* El final: primero lo que dice él, y después el recuerdo del muelle */
 function dibujarFinal(dt){
   if(est===EST.PERDISTE){
@@ -1505,18 +1577,22 @@ function dibujarFinal(dt){
     g2.restore();
     return;
   }
-  // cinemática
+  // cinemática: se va a negro y queda la luz parpadeando
   if(cineT>26.4){
     const a=Math.min(1,(cineT-26.4)*0.7);
     g2.fillStyle='rgba(0,0,0,'+(a*0.96).toFixed(3)+')'; g2.fillRect(0,0,UW,UH);
     if(cineT>28.0)
       texto('acá quería vivir', UW/2, UH*0.42, 34,
-            'rgba(226,224,210,'+Math.min(1,(cineT-28)*0.9).toFixed(2)+')','center');
+            'rgba(226,224,210,'+Math.min(1,Math.min(1,(cineT-28)*0.9)-Math.max(0,(cineT-31.0)*0.9)).toFixed(2)+')','center');
     if(cineT>28.7)
       texto('antes de agarrar el código de otro', UW/2, UH*0.50, 20,
-            'rgba(180,178,166,'+Math.min(1,(cineT-28.7)*0.9).toFixed(2)+')','center');
-    if(cineT>30.2)
-      botones.push(Object.assign(caja(UW*0.34,UH*0.62,UW*0.32,UH*0.11,'DE NUEVO',26,'#f5d90a'),{v:'reiniciar'}));
+            'rgba(180,178,166,'+Math.min(1,Math.min(1,(cineT-28.7)*0.9)-Math.max(0,(cineT-31.0)*0.9)).toFixed(2)+')','center');
+    if(cineT>32.0){
+      const fin=correrMorse(dt);
+      dibujarMorse();
+      if(fin || cineT>32.0+MTOTAL*0.35)
+        botones.push(Object.assign(caja(UW*0.34,UH*0.80,UW*0.32,UH*0.10,'DE NUEVO',26,'#f5d90a'),{v:'reiniciar'}));
+    }
   }
 }
 /* Mandos: palanca a la izquierda para caminar, arrastre a la derecha para girar */
@@ -1907,33 +1983,41 @@ function poseCorrer(ph,t){
   pRot(PB['neck'],AXF,-0.18); pRot(PB['head'],AXF,-0.22); chain();
   return Math.abs(Math.sin(ph))*0.05;
 }
-/* Se sienta en el borde del muelle: k va de 0 (parado) a 1 (sentado) */
+/* Se sienta en el borde del muelle: k va de 0 (parado) a 1 (sentado).
+   OJO con el signo: pRot gira alrededor de un eje de MUNDO, y con AXF
+   positivo el miembro va para ATRÁS. Para sentarlo, los muslos van con
+   ángulo NEGATIVO —adelante— y la caña baja con POSITIVO. Con los signos
+   al revés las piernas se le metían adentro del tablón. */
 function poseSentado(k,t,pierna){
   restAll(); const e=Math.min(1,Math.max(0,k));
   breathe(t,0.010);
-  // los muslos hacia adelante y la caña colgando: en este bicho la rodilla es
-  // el tobillo, así que la caña la baja el hueso del pie
-  pRot(PB['leftupleg'], AXF, 1.42*e);
-  pRot(PB['rightupleg'],AXF, 1.42*e); chain();
-  pRot(PB['leftfoot'],  AXF, -1.32*e);
-  pRot(PB['rightfoot'], AXF, -1.32*e); chain();
-  pRot(PB['leftupleg'], AXS,  0.10*e); pRot(PB['rightupleg'],AXS,-0.10*e); chain();
-  // las manos apoyadas atrás, el tronco un poco echado
-  pRot(PB['spine'],AXF,-0.10*e); chain();
-  pRot(PB['leftarm'],AXS,-0.34*e-0.14); pRot(PB['rightarm'],AXS,0.34*e+0.14); chain();
-  pRot(PB['leftarm'],AXF, 0.62*e); pRot(PB['rightarm'],AXF, 0.62*e); chain();
-  pRot(PB['leftforearm'],AXF,-0.20*e-0.20); pRot(PB['rightforearm'],AXF,-0.20*e-0.20); chain();
-  pRot(PB['head'],AXF, 0.24*e+Math.sin(t*0.8)*0.03); chain();
-  // una pierna se estira y baja al agua: p va de 0 a 1
+  // muslos adelante, horizontales
+  pRot(PB['leftupleg'], AXF, -1.45*e);
+  pRot(PB['rightupleg'],AXF, -1.45*e); chain();
+  // en este bicho la rodilla es el hueso del pie: baja la caña
+  pRot(PB['leftfoot'],  AXF, 1.36*e);
+  pRot(PB['rightfoot'], AXF, 1.36*e); chain();
+  pRot(PB['lefttoebase'],  AXF, 0.22*e);
+  pRot(PB['righttoebase'], AXF, 0.22*e); chain();
+  pRot(PB['leftupleg'], AXS,  0.11*e); pRot(PB['rightupleg'],AXS,-0.11*e); chain();
+  // las manos apoyadas atrás y el tronco un poco echado
+  pRot(PB['spine'],AXF, 0.13*e); chain();
+  pRot(PB['leftarm'],AXS,-0.30*e-0.14); pRot(PB['rightarm'],AXS,0.30*e+0.14); chain();
+  pRot(PB['leftarm'],AXF, 0.78*e); pRot(PB['rightarm'],AXF, 0.78*e); chain();
+  pRot(PB['leftforearm'],AXF,-0.16*e-0.20); pRot(PB['rightforearm'],AXF,-0.16*e-0.20); chain();
+  pRot(PB['neck'],AXF,-0.10*e); chain();
+  pRot(PB['head'],AXF,-0.16*e+Math.sin(t*0.8)*0.03); chain();
+  // una pierna se estira y baja al agua: pp de 0 a 1
   const pp=Math.min(1,Math.max(0,pierna||0));
   if(pp>0){
-    pRot(PB['rightupleg'],AXF, -0.52*pp); chain();
-    pRot(PB['rightfoot'], AXF,  1.06*pp); chain();
+    // la pierna deja de estar horizontal y cuelga: el pie entra al agua
+    pRot(PB['rightupleg'],AXF,  0.98*pp); chain();
+    pRot(PB['rightfoot'], AXF, -1.18*pp); chain();
     pRot(PB['righttoebase'],AXF, 0.30*pp); chain();
-    pRot(PB['spine'],AXF, 0.16*pp); chain();
-    pRot(PB['head'],AXF, 0.18*pp); chain();
+    pRot(PB['spine'],AXF, -0.14*pp); chain();        // se asoma a mirar
+    pRot(PB['head'],AXF,  0.30*pp); chain();
   }
-  return -0.30*e;        // baja el cuerpo al sentarse
+  return 0;
 }
 /* El grito en la cara: se abalanza, brazos abiertos, cabeza adelante */
 function poseGrito(k,t){
@@ -2868,9 +2952,10 @@ function actualizarCine(dt){
     _mira.set(0, 1.35, tz-0.2);
   }else if(t<15.2){                             // 3) sentado: el pie y el agua
     // por encima del tablón y desde el agua, si no la tarima tapa todo
+    // de perfil, para que se vea la pierna colgando
     const u=(t-10.6)/4.6;
-    cam.position.set(3.1-u*1.2, 2.15-u*0.62, tz-4.8+u*1.2);
-    _mira.set(0, 1.02-u*0.40, tz-0.15);
+    cam.position.set(5.9-u*1.1, 1.72-u*0.34, tz-2.0+u*0.6);
+    _mira.set(0, 0.72-u*0.20, tz-0.55);
   }else if(t<20.0){                             // 4) de frente, retrocediendo
     const u=(t-15.2)/4.8;
     cam.position.set(-0.7+Math.sin(t*0.35)*0.45, 1.30-u*0.40, tz-6.0-u*2.6);
@@ -2941,6 +3026,12 @@ window.__dbg={ get est(){return est;}, get juntados(){return juntados;},
   get fase(){ return {f:teypiFase, i:charlaIdx, txt:saludo, t:+saludoT.toFixed(2)}; },
   get huesos(){ const o={}; for(const k of ['leftupleg','rightupleg','rightarm','head','leftfoot'])
       if(PB[k]) o[k]=PB[k].quaternion.toArray().map(v=>+v.toFixed(4)); return o; },
+  huesosXYZ(){ const o={}, v=new THREE.Vector3();
+    for(const k of ['hips','leftupleg','leftleg','leftfoot','lefttoebase','head',
+                    'rightupleg','rightfoot','righttoebase']){
+      if(PB[k]){ PB[k].getWorldPosition(v);
+        o[k]=[+v.x.toFixed(2),+v.y.toFixed(2),+v.z.toFixed(2)]; } }
+    return o; },
   get teypiXYZ(){ return [+teypi.position.x.toFixed(3), +teypi.position.y.toFixed(3),
       +teypi.position.z.toFixed(3), +teypi.rotation.y.toFixed(3), teypi.visible]; },
   get portones(){ return PORTONES.map(q=>[q.tipo+(q.num||''), q.abierta, +q.tOpen.toFixed(2), q.eje.visible]); },
@@ -2953,6 +3044,8 @@ window.__dbg={ get est(){return est;}, get juntados(){return juntados;},
     return pasa(wx(a[0]),wz(a[1]), wx(q[0]),wz(q[1])); },
   morir(){ matar(); },
   get cineT(){ return +cineT.toFixed(2); },
+  get morse(){ return {total:+MTOTAL.toFixed(1), pasos:MSEQ.length,
+    idx:morseIdx, on:morseOn, txt:morseTxt.slice(0,40)}; },
   ponerCine(t){ if(est!==EST.CINE){ est=EST.CINE; arrancarCine(); } cineT=t; },
   get agua(){ return CINE? {sim:AGUA_SIM, lado:AGUA_LADO, malla:AGUA_MALLA} : null; },
   sonda(){
