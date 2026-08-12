@@ -1352,6 +1352,15 @@ usa los tres en un shader propio: la normal del mapa se suma a la del terreno �
 horizontal alcanza con sumar la pendiente— y hay un especular Blinn-Phong cuyo exponente lo maneja la
 rugosidad. La corteza pasó a `MeshStandardMaterial` con normal y rugosidad de verdad.
 
+### Que una textura no parezca papel pintado
+El problema más grande de una textura en un piso grande no es la foto: es **el repetido**. Una imagen
+repetida en cuadrícula se delata a los tres metros y el ojo la lee como papel pintado por buena que
+sea. El suelo ahora la muestrea **tres veces con giros y corrimientos distintos y las mezcla con un
+ruido suave**, así no hay grilla; le suma una **capa de detalle** a otra escala que sólo aparece
+cerca de la cámara —lo que se ve cuando estás parado encima— y **manchones de color en grande**,
+porque ningún suelo real es de un solo tono. La normal sigue el mismo camino, así el relieve tampoco
+repite.
+
 ### Los rascacielos
 Dos torres generadas con `image_to_3d`, unos 29 000 y 27 500 triángulos con texturas PBR: una de
 vidrio y acero de sesenta pisos y otra art déco de piedra. Van lejos y grandes —78 y 62 metros,

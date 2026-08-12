@@ -750,10 +750,34 @@ const matSuelo=new THREE.ShaderMaterial({
     uniform sampler2D tArena, tTierra, tCaust, nArena, nTierra, rArena, rTierra;
     uniform vec3 uOjo;
     uniform vec3 luz, uFog; uniform float uFogD, uCaus, uCorte, uTurbio;
+    /* --- muestreo sin repetido ---------------------------------------------
+       Una textura repetida en cuadrícula se delata a los tres metros: se ve la
+       grilla y el ojo la lee como papel pintado, por buena que sea la foto.
+       Se muestrea dos veces con giros y corrimientos distintos y se mezcla con
+       un ruido suave, más una capa de detalle a otra escala. Es lo que hace
+       que un material deje de parecer un dibujo pegado. */
+    float h21(vec2 p){ vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z); }
+    float ruido(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+      return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x), f.y); }
+    vec2 gira(vec2 p, float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c)*p; }
+    vec4 sinRepetir(sampler2D t, vec2 uv){
+      float m=ruido(uv*0.17);
+      vec4 a=texture2D(t, gira(uv, 0.0)  + vec2(0.0));
+      vec4 b=texture2D(t, gira(uv, 2.09) + vec2(0.37, 0.61));
+      vec4 c=texture2D(t, gira(uv, 4.19) + vec2(0.72, 0.19));
+      float w1=smoothstep(0.30,0.70,m), w2=smoothstep(0.55,0.95,m);
+      return mix(mix(a,b,w1), c, w2*0.55);
+    }
     void main(){
       if(vW.y<uCorte) discard;                 // pasada del reflejo: sólo lo de arriba
-      vec3 arena =texture2D(tArena,  vW.xz*0.10).rgb;
-      vec3 tierra=texture2D(tTierra, vW.xz*0.085).rgb;
+      vec3 arena =sinRepetir(tArena,  vW.xz*0.115).rgb;
+      vec3 tierra=sinRepetir(tTierra, vW.xz*0.095).rgb;
+      // capa de detalle: lo que se ve cuando estás parado encima
+      vec3 detA=texture2D(tArena,  vW.xz*0.92).rgb;
+      vec3 detT=texture2D(tTierra, vW.xz*0.78).rgb;
+      float cerca=1.0-smoothstep(2.0, 16.0, length(vW-uOjo));
+      arena =arena *mix(vec3(1.0), detA*1.9, cerca*0.42);
+      tierra=tierra*mix(vec3(1.0), detT*1.9, cerca*0.42);
       float t=smoothstep(-0.05, 0.55, vW.y);
       vec3 base=mix(arena, tierra, t);
       vec2 cu=vec2(vW.x/${LADO.toFixed(1)}+0.5, vW.z/${LADO.toFixed(1)}+0.5);
@@ -764,16 +788,22 @@ const matSuelo=new THREE.ShaderMaterial({
       /* La normal del mapa se mezcla con la del terreno. Como el suelo es
          casi horizontal, la tangente es X y la bitangente Z, así que alcanza
          con sumarle la pendiente del mapa. */
-      vec3 nA=texture2D(nArena,  vW.xz*0.10).rgb*2.0-1.0;
-      vec3 nT=texture2D(nTierra, vW.xz*0.085).rgb*2.0-1.0;
+      vec3 nA=sinRepetir(nArena,  vW.xz*0.115).rgb*2.0-1.0;
+      vec3 nT=sinRepetir(nTierra, vW.xz*0.095).rgb*2.0-1.0;
+      // el detalle también aporta relieve de cerca
+      nA+= (texture2D(nArena,  vW.xz*0.92).rgb*2.0-1.0)*cerca*0.85;
+      nT+= (texture2D(nTierra, vW.xz*0.78).rgb*2.0-1.0)*cerca*0.85;
       vec3 nm=mix(nA, nT, t);
       vec3 N=normalize(normalize(vN) + vec3(nm.x, 0.0, nm.y)*1.15);
-      float rug=mix(texture2D(rArena, vW.xz*0.10).r, texture2D(rTierra, vW.xz*0.085).r, t);
+      float rug=mix(sinRepetir(rArena, vW.xz*0.115).r, sinRepetir(rTierra, vW.xz*0.095).r, t);
       float lamb=0.38+0.62*max(dot(N, luz),0.0);
       // un brillo especular pobre, que es lo que le falta a una textura plana
       vec3 V=normalize(uOjo-vW);
       vec3 H=normalize(V+luz);
       float bri=pow(max(dot(N,H),0.0), mix(140.0, 12.0, rug))*(1.0-rug)*0.55;
+      // manchones de color en grande: ningún suelo real es de un solo tono
+      float manchon=ruido(vW.xz*0.045)*0.6+ruido(vW.xz*0.013)*0.4;
+      base*=mix(vec3(0.80,0.84,0.78), vec3(1.18,1.14,1.06), manchon);
       vec3 col=base*lamb*caustica + vec3(1.0,0.97,0.90)*bri*(1.0-bajoAgua*0.7);
       // el agua se come la luz con la hondura
       float prof=clamp(-vW.y/${HONDO.toFixed(2)},0.0,1.0)*bajoAgua;
