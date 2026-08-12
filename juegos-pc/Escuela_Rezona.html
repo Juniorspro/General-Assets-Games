@@ -1960,6 +1960,7 @@ ponerRevelado();
 document.getElementById('tapeClose').addEventListener('click',()=>
   document.getElementById('tape').classList.remove('show'));
 
+let MIRON=false;
 
 /* ============================================================================
    POSES PROPIAS DE LA ESCUELA
@@ -1991,31 +1992,35 @@ function poseCorrer(ph,t){
 function poseSentado(k,t,pierna){
   restAll(); const e=Math.min(1,Math.max(0,k));
   breathe(t,0.010);
-  // muslos adelante, horizontales
-  pRot(PB['leftupleg'], AXF, -1.45*e);
-  pRot(PB['rightupleg'],AXF, -1.45*e); chain();
-  // en este bicho la rodilla es el hueso del pie: baja la caña
-  pRot(PB['leftfoot'],  AXF, 1.36*e);
-  pRot(PB['rightfoot'], AXF, 1.36*e); chain();
-  pRot(PB['lefttoebase'],  AXF, 0.22*e);
-  pRot(PB['righttoebase'], AXF, 0.22*e); chain();
-  pRot(PB['leftupleg'], AXS,  0.11*e); pRot(PB['rightupleg'],AXS,-0.11*e); chain();
-  // las manos apoyadas atrás y el tronco un poco echado
-  pRot(PB['spine'],AXF, 0.13*e); chain();
-  pRot(PB['leftarm'],AXS,-0.30*e-0.14); pRot(PB['rightarm'],AXS,0.30*e+0.14); chain();
-  pRot(PB['leftarm'],AXF, 0.78*e); pRot(PB['rightarm'],AXF, 0.78*e); chain();
-  pRot(PB['leftforearm'],AXF,-0.16*e-0.20); pRot(PB['rightforearm'],AXF,-0.16*e-0.20); chain();
-  pRot(PB['neck'],AXF,-0.10*e); chain();
-  pRot(PB['head'],AXF,-0.16*e+Math.sin(t*0.8)*0.03); chain();
-  // una pierna se estira y baja al agua: pp de 0 a 1
+  /* Este modelo tiene el muslo MUCHO más largo que su hueso: si se lo sienta
+     con el muslo horizontal, la malla del muslo sale un metro y pico por
+     delante de la punta del muelle y parece un palo. Así que se sienta con las
+     piernas colgando casi rectas, apenas dobladas, que es lo que hace
+     cualquiera sentado en un muelle con las piernas para abajo. */
+  pRot(PB['leftupleg'], AXF, -0.34*e);
+  pRot(PB['rightupleg'],AXF, -0.34*e); chain();
+  // rodilla doblada: los pies quedan recogidos, arriba del agua
+  pRot(PB['leftfoot'],  AXF, 1.02*e);
+  pRot(PB['rightfoot'], AXF, 1.02*e); chain();
+  pRot(PB['lefttoebase'],  AXF, -0.55*e);
+  pRot(PB['righttoebase'], AXF, -0.55*e); chain();
+  pRot(PB['leftupleg'], AXS,  0.12*e); pRot(PB['rightupleg'],AXS,-0.12*e); chain();
+  // el tronco apenas adelante, mirando el agua
+  pRot(PB['spine'],AXF,-0.10*e); pRot(PB['spine01'],AXF,-0.06*e); chain();
+  // las manos al costado de la cadera, apoyadas en el tablón
+  pRot(PB['leftarm'],AXS,-0.16-0.12*e); pRot(PB['rightarm'],AXS,0.16+0.12*e); chain();
+  pRot(PB['leftarm'],AXF, 0.40*e); pRot(PB['rightarm'],AXF, 0.40*e); chain();
+  pRot(PB['leftforearm'],AXF,-0.30-0.14*e); pRot(PB['rightforearm'],AXF,-0.30-0.14*e); chain();
+  pRot(PB['neck'],AXF, 0.10*e); chain();
+  pRot(PB['head'],AXF, 0.18*e+Math.sin(t*0.8)*0.03); chain();
+  // una pierna se estira y el pie entra al agua
   const pp=Math.min(1,Math.max(0,pierna||0));
   if(pp>0){
-    // la pierna deja de estar horizontal y cuelga: el pie entra al agua
-    pRot(PB['rightupleg'],AXF,  0.98*pp); chain();
-    pRot(PB['rightfoot'], AXF, -1.18*pp); chain();
-    pRot(PB['righttoebase'],AXF, 0.30*pp); chain();
-    pRot(PB['spine'],AXF, -0.14*pp); chain();        // se asoma a mirar
-    pRot(PB['head'],AXF,  0.30*pp); chain();
+    pRot(PB['rightfoot'], AXF, -1.02*pp); chain();
+    pRot(PB['rightupleg'],AXF, -0.16*pp); chain();
+    pRot(PB['righttoebase'],AXF, 0.42*pp); chain();
+    pRot(PB['spine'],AXF, -0.06*pp); chain();
+    pRot(PB['head'],AXF,  0.20*pp); chain();
   }
   return 0;
 }
@@ -2810,7 +2815,11 @@ function arrancarCine(){
     17.0 – 27.0  camina lago adentro                                        */
 const T_CAMINA=[4.0,10.5], T_SIENTA=[10.5,12.6], T_PIERNA=[12.6,15.2],
       T_BAJA=[15.2,17.0], T_VADEA=[17.0,27.0];
-const Z_PUNTA=-6.95;
+/* Dónde se sienta: la rodilla —que en este bicho es el hueso del pie— queda
+   medio metro adelante de la cadera, así que la cadera va medio metro antes
+   de la punta del muelle. Más adentro y las cañas atraviesan el tablón; más
+   afuera y los muslos quedan colgando en el aire. */
+const Z_PUNTA=-6.98;
 function suave(a,b,t){ const u=Math.min(1,Math.max(0,(t-a)/(b-a))); return u*u*(3-2*u); }
 function teypiEnT(t){
   if(t<T_CAMINA[0]) return 7.6;
@@ -2874,7 +2883,7 @@ function actualizarCine(dt){
   if(alturaPie===null){
     // sentado o descolgándose: manda la cadera
     teypi.position.set(0, 0, tz);
-    const caderaSentado=C.MUELLE_Y+0.14;
+    const caderaSentado=C.MUELLE_Y+0.09;
     const caderaParado =fondoLago(tz)+ALTO_CADERA;
     anclarCadera(caderaSentado*(1-kBaja) + caderaParado*kBaja + bob*0.4);
   }else{
@@ -2942,6 +2951,15 @@ function actualizarCine(dt){
 
   // --- cámara: cinco planos, uno por tramo ---
   const cam=C.cam;
+  if(MIRON){                                   // lupa de taller, plano fijo
+    cam.position.set(7.2, 1.05, tz+0.2);
+    _mira.set(0, 0.55, tz);
+    cam.lookAt(_mira); cam.fov=26; cam.aspect=RW/RH; cam.updateProjectionMatrix();
+    C.matAgua.uniforms.uOjo.value.copy(cam.position);
+    if(t<1.2) U.uGlitch.value=Math.max(U.uGlitch.value,(1.2-t)*0.6);
+    return;
+  }
+  cam.fov=46;
   if(t<5.6){                                    // 1) el muelle entero
     const u=t/5.6;
     cam.position.set(-3.6+u*1.4, 3.7-u*0.5, 14.6-u*3.0);
@@ -3026,9 +3044,49 @@ window.__dbg={ get est(){return est;}, get juntados(){return juntados;},
   get fase(){ return {f:teypiFase, i:charlaIdx, txt:saludo, t:+saludoT.toFixed(2)}; },
   get huesos(){ const o={}; for(const k of ['leftupleg','rightupleg','rightarm','head','leftfoot'])
       if(PB[k]) o[k]=PB[k].quaternion.toArray().map(v=>+v.toFixed(4)); return o; },
+  cajaTeypi(){
+    let sk=null; teypi.traverse(o=>{ if(o.isSkinnedMesh && !sk) sk=o; });
+    if(!sk) return null;
+    teypi.updateMatrixWorld(true);
+    const pos=sk.geometry.attributes.position, v=new THREE.Vector3();
+    const bt=sk.applyBoneTransform?'applyBoneTransform':'boneTransform';
+    let lo=1e9,hi=-1e9,zl=1e9,zh=-1e9;
+    for(let i=0;i<pos.count;i+=3){
+      v.fromBufferAttribute(pos,i); sk[bt](i,v); sk.localToWorld(v);
+      if(v.y<lo)lo=v.y; if(v.y>hi)hi=v.y; if(v.z<zl)zl=v.z; if(v.z>zh)zh=v.z;
+    }
+    return {y:[+lo.toFixed(2),+hi.toFixed(2)], z:[+zl.toFixed(2),+zh.toFixed(2)]};
+  },
+  puntaAdelante(){
+    let sk=null; teypi.traverse(o=>{ if(o.isSkinnedMesh && !sk) sk=o; });
+    if(!sk) return null;
+    teypi.updateMatrixWorld(true);
+    const pos=sk.geometry.attributes.position, v=new THREE.Vector3();
+    const bt=sk.applyBoneTransform?'applyBoneTransform':'boneTransform';
+    let mz=1e9, mejor=null, idx=-1;
+    for(let i=0;i<pos.count;i++){
+      v.fromBufferAttribute(pos,i); sk[bt](i,v); sk.localToWorld(v);
+      if(v.z<mz){ mz=v.z; mejor=[+v.x.toFixed(2),+v.y.toFixed(2),+v.z.toFixed(2)]; idx=i; }
+    }
+    // a qué huesos pesa ese vértice
+    const si=sk.geometry.attributes.skinIndex, sw=sk.geometry.attributes.skinWeight;
+    const hs=[];
+    for(let k=0;k<4;k++){
+      const bi=si.getComponent(idx,k), w=sw.getComponent(idx,k);
+      if(w>0.01) hs.push([sk.skeleton.bones[bi]?sk.skeleton.bones[bi].name:'?', +w.toFixed(2)]);
+    }
+    return {punta:mejor, huesos:hs, verts:pos.count};
+  },
+  todosHuesos(){ const v=new THREE.Vector3(), out=[];
+    for(const b of pBones){ b.getWorldPosition(v);
+      out.push([b.name, +v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(2)]); }
+    out.sort((a,b)=>a[3]-b[3]);
+    return out; },
   huesosXYZ(){ const o={}, v=new THREE.Vector3();
-    for(const k of ['hips','leftupleg','leftleg','leftfoot','lefttoebase','head',
-                    'rightupleg','rightfoot','righttoebase']){
+    for(const k of ['hips','spine','head','leftupleg','leftleg','leftfoot','lefttoebase',
+                    'rightupleg','rightleg','rightfoot','righttoebase',
+                    'leftarm','leftforearm','lefthand','rightarm','rightforearm','righthand',
+                    'leftshoulder','rightshoulder','neck']){
       if(PB[k]){ PB[k].getWorldPosition(v);
         o[k]=[+v.x.toFixed(2),+v.y.toFixed(2),+v.z.toFixed(2)]; } }
     return o; },
@@ -3047,6 +3105,10 @@ window.__dbg={ get est(){return est;}, get juntados(){return juntados;},
   get morse(){ return {total:+MTOTAL.toFixed(1), pasos:MSEQ.length,
     idx:morseIdx, on:morseOn, txt:morseTxt.slice(0,40)}; },
   ponerCine(t){ if(est!==EST.CINE){ est=EST.CINE; arrancarCine(); } cineT=t; },
+  // plano fijo de perfil sobre la punta del muelle, para mirar la pose
+  lupa(on){ MIRON=!!on; },
+  verTeypi(v){ teypi.visible=!!v; },
+  verAgua(v){ if(CINE) CINE.superficie.visible=!!v; },
   get agua(){ return CINE? {sim:AGUA_SIM, lado:AGUA_LADO, malla:AGUA_MALLA} : null; },
   sonda(){
     if(!CINE) return null;

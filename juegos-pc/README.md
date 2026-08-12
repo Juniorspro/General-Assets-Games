@@ -1198,11 +1198,22 @@ Sentado hubo que cambiar el anclaje: parado, la raíz del modelo está en los pi
 se apoya es **la cadera**. Se mide la cadera en vivo con `getWorldPosition` y se corrige el grupo
 entero, así las piernas cuelgan donde tienen que colgar en vez de quedar el cuerpo flotando.
 
-Y los signos estaban al revés. `pRot` gira alrededor de un eje de **mundo**, y con `AXF` positivo el
-miembro va para **atrás**: los muslos con ángulo positivo se le metían adentro del tablón, que es por
-qué parecía que lo atravesaba en vez de sentarse. Van negativos —adelante— y la caña baja con
-positivo. Medido con los huesos en la mano: cadera en `y = 0,76` (el tablón está en 0,72), rodilla en
-`z = −7,35` (la punta del muelle es −7,2) y el pie a `y = −0,36`, adentro del agua.
+Y hubo que encontrar dos cosas antes de que se sentara de verdad:
+
+1. **Los signos estaban al revés.** `pRot` gira alrededor de un eje de **mundo**, y con `AXF`
+   positivo el miembro va para **atrás**: los muslos con ángulo positivo se le metían adentro del
+   tablón. Van negativos.
+2. **El muslo de la malla mide mucho más que su hueso.** Se midió el vértice más adelantado y su
+   peso: salía a `z = −8,03` pesando 100 % de `LeftUpLeg`, o sea **1,35 m** de muslo colgando de un
+   hueso cuya articulación está a 0,49 m. Sentado con el muslo horizontal —como se sienta cualquiera—
+   esa malla salía un metro y pico por delante de la punta del muelle y se veía como un palo
+   atravesando el aire. Por eso ahora **se sienta con las piernas colgando casi rectas**, apenas
+   dobladas, que además es lo que uno hace en un muelle: el cuerpo entero ocupa 0,9 m de muelle
+   —de `z = −6,54` a `−7,44`, con la punta en −7,2— y los pies quedan a `y = −0,65`, adentro del agua.
+
+Para encontrarlo se agregó una **lupa de taller**: `__dbg.lupa(true)` pone un plano fijo de perfil
+sobre la punta del muelle, y `__dbg.cajaTeypi()` / `__dbg.puntaAdelante()` devuelven la caja de la
+malla con piel y el vértice más adelantado con los huesos que lo pesan.
 
 #### El bosque, cerrado y saturado
 Un solo terreno manda: `tierra(x,z)` va de 0 (agua) a 1 (bosque) sumando la orilla de atrás, las de
