@@ -36,6 +36,15 @@
     letter-spacing:2px;padding:13px 20px;border-radius:4px;border:1px solid rgba(200,190,170,.35);
     color:#efe8d8;background:rgba(24,22,18,.9)}
   #tape .meta{font-size:10px;color:#8a8474;letter-spacing:1px;text-align:center;line-height:1.6}
+
+  #reventado{position:fixed;inset:0;z-index:80;background:#07070a;color:#c9c6bd;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:26px;
+    font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;text-align:center}
+  #reventado .cod{color:#ff4a3a;font-size:15px;letter-spacing:5px;font-weight:700}
+  #reventado .cod2{color:#7d7a72;font-size:11px;letter-spacing:2px}
+  #reventado pre{color:#e2ded2;background:#111116;border:1px solid #24242c;
+    padding:14px 16px;border-radius:4px;font-size:11px;line-height:1.8;white-space:pre-wrap;
+    max-width:min(92vw,520px);text-align:left}
 </style>
 </head>
 <body>
@@ -1414,6 +1423,7 @@ function caja(x,y,w,h,txt,size,fondo,tinta){
 function dibujarUI(dt){
   g2.clearRect(0,0,UW,UH);
   botones=[];
+  if(reventando===1){ dibujarReviente(dt); return; }
   if(est===EST.CUENTA){
     g2.fillStyle='rgba(6,8,10,.86)'; g2.fillRect(0,0,UW,UH);
     g2.fillStyle='#f3f0e2'; g2.fillRect(UW*0.10, UH*0.06, UW*0.80, UH*0.30);
@@ -1577,23 +1587,88 @@ function dibujarFinal(dt){
     g2.restore();
     return;
   }
-  // cinemática: se va a negro y queda la luz parpadeando
+  // cinemática: se va a negro y de ahí, sin cartel de por medio, al morse
   if(cineT>26.4){
-    const a=Math.min(1,(cineT-26.4)*0.7);
-    g2.fillStyle='rgba(0,0,0,'+(a*0.96).toFixed(3)+')'; g2.fillRect(0,0,UW,UH);
-    if(cineT>28.0)
-      texto('acá quería vivir', UW/2, UH*0.42, 34,
-            'rgba(226,224,210,'+Math.min(1,Math.min(1,(cineT-28)*0.9)-Math.max(0,(cineT-31.0)*0.9)).toFixed(2)+')','center');
-    if(cineT>28.7)
-      texto('antes de agarrar el código de otro', UW/2, UH*0.50, 20,
-            'rgba(180,178,166,'+Math.min(1,Math.min(1,(cineT-28.7)*0.9)-Math.max(0,(cineT-31.0)*0.9)).toFixed(2)+')','center');
-    if(cineT>32.0){
+    const a=Math.min(1,(cineT-26.4)*0.8);
+    g2.fillStyle='rgba(0,0,0,'+(a*0.99).toFixed(3)+')'; g2.fillRect(0,0,UW,UH);
+    if(cineT>27.6){
       const fin=correrMorse(dt);
       dibujarMorse();
-      if(fin || cineT>32.0+MTOTAL*0.35)
-        botones.push(Object.assign(caja(UW*0.34,UH*0.80,UW*0.32,UH*0.10,'DE NUEVO',26,'#f5d90a'),{v:'reiniciar'}));
+      if(fin) reventar();          // se dijo todo: ahora el juego se rompe
     }
   }
+}
+
+/* ============================================================================
+   EL CUELGUE
+   Cuando termina de deletrear no hay botón de volver a empezar: la cinta se
+   parte, el juego escupe un código corrupto y se cae. Si estabas grabando, la
+   grabación se corta un poco antes para que la cinta quede entera.
+============================================================================ */
+let reventando=0, CODIGO='';
+const hex4=()=>Math.floor(Math.random()*65536).toString(16).toUpperCase().padStart(4,'0');
+function reventar(){
+  if(reventando) return;
+  reventando=1; reventT=0;
+  CODIGO='0x476\u2206:'+[0,1,2,3].map(hex4).join('-');
+  MODO_CINTA=true;
+  U.uGlitch.value=1; U.uNoise.value=0.45; U.uChroma.value=22; U.uGhost.value=0.7;
+  callar();
+  ruidito(1.4,0.5,140);
+  const e=setInterval(()=>{ ruidito(0.12,0.35,120+Math.random()*3000); }, 110);
+  setTimeout(()=>clearInterval(e), 2600);
+  // primero se guarda la cinta, después se cae
+  setTimeout(()=>{ if(recording) stopRec(); }, 2300);
+  setTimeout(colgar, 3100);
+}
+/* La caja de la cinta vive adentro de #rot, que tiene transform y por lo tanto
+   arma su propio contexto de apilado: encima de la pantalla de error no
+   llegaba nunca. Se la saca afuera y se la pone a pantalla completa. */
+function sacarCinta(){
+  const t=document.getElementById('tape');
+  if(!t || t.parentNode===document.body) return;
+  t.style.position='fixed'; t.style.inset='0'; t.style.zIndex='200';
+  document.body.appendChild(t);
+}
+function colgar(){
+  reventando=2;
+  sacarCinta();
+  for(const id of ['stage','ctl']){ const n=document.getElementById(id); if(n) n.remove(); }
+  const d=document.createElement('div'); d.id='reventado';
+  d.innerHTML='<div class="cod">PROCESO TERMINADO</div>'+
+    '<div class="cod2">excepción no controlada en el módulo de escuela</div>'+
+    '<pre>'+CODIGO+'\nsegmento: PASILLO/CUADERNO[1]\n'+
+    'referencia: 476\u2206 · realidad no disponible\n'+
+    'el proceso no puede continuar</pre>'+
+    '<div class="cod2">cerrá la pestaña</div>';
+  document.body.appendChild(d);
+  try{ renderer.dispose(); }catch(e){}
+  setTimeout(()=>{ try{ window.close(); }catch(e){} }, 900);
+}
+let reventT=0;
+/* La basura que se ve mientras se rompe */
+function dibujarReviente(dt){
+  reventT+=dt;
+  g2.fillStyle='#000'; g2.fillRect(0,0,UW,UH);
+  for(let i=0;i<160;i++){
+    const y=Math.random()*UH, h=2+Math.random()*26;
+    g2.fillStyle='rgba('+(Math.random()*255|0)+','+(Math.random()*255|0)+','+(Math.random()*255|0)+',.55)';
+    g2.fillRect(Math.random()*UW-UW*0.2, y, UW*(0.1+Math.random()*0.9), h);
+  }
+  g2.font='700 26px ui-monospace, monospace'; g2.textAlign='left'; g2.textBaseline='top';
+  for(let f=0; f<26; f++){
+    let l='';
+    for(let i=0;i<52;i++) l+= Math.random()<0.16 ? ' '
+      : String.fromCharCode(33+((Math.random()*90)|0));
+    g2.fillStyle='rgba(220,'+(160+Math.random()*90|0)+',160,'+(0.25+Math.random()*0.5).toFixed(2)+')';
+    g2.fillText(l, -20+Math.random()*40, f*UH/26);
+  }
+  if(reventT>0.6){
+    texto(CODIGO, UW/2, UH*0.5, 44, '#ff4a3a','center');
+    texto('EXCEPCIÓN NO CONTROLADA', UW/2, UH*0.58, 24, 'rgba(255,220,210,.85)','center');
+  }
+  U.uGlitch.value=1; U.uNoise.value=0.42+Math.random()*0.2;
+  U.uRoll.value=Math.random();
 }
 /* Mandos: palanca a la izquierda para caminar, arrastre a la derecha para girar */
 let palanca={activa:false, id:-1, ox:0, oy:0, x:0, y:0};
@@ -1621,9 +1696,12 @@ function loop(now){
   if(dt>0.1) dt=0.1;
   T+=dt;
   U.uGlitch.value=Math.max(0, U.uGlitch.value-dt*0.85);
-  if(est===EST.JUEGO) actualizar(dt);
-  else if(est===EST.PERDISTE) actualizarMuerte(dt);
-  else if(est===EST.CINE && cineListo) actualizarCine(dt);
+  if(reventando===2) return;
+  if(reventando!==1){
+    if(est===EST.JUEGO) actualizar(dt);
+    else if(est===EST.PERDISTE) actualizarMuerte(dt);
+    else if(est===EST.CINE && cineListo) actualizarCine(dt);
+  }
   dibujarUI(dt);
   render();
   if(recording){
@@ -1809,6 +1887,20 @@ function moverTeypi(dt){
   if(cargaT<=0 || dj<1.25) matar();
 }
 function render(){
+  /* Con la pantalla ya en negro —el morse y el reviente— no tiene sentido
+     seguir dibujando el lago: se deja el último cuadro en el destino y se
+     dibuja nada más la capa de interfaz. */
+  const soloUI = reventando===1 || (est===EST.CINE && cineT>28.4);
+  if(soloUI){
+    uiTex.needsUpdate=true;
+    U.tScene.value=rtScene.texture; U.tPrev.value=rtB.texture; U.uTime.value=T;
+    quadM.material=vhs;
+    renderer.setRenderTarget(rtA); renderer.render(quadScene,quadCam);
+    copyMat.uniforms.tCur.value=rtA.texture; quadM.material=copyMat;
+    renderer.setRenderTarget(null); renderer.render(quadScene,quadCam);
+    const sw=rtA; rtA=rtB; rtB=sw;
+    return;
+  }
   const usaCine = est===EST.CINE && cineListo && CINE;
   const esc = usaCine? CINE.esc : scene;
   const cam = usaCine? CINE.cam : camera;
@@ -1939,6 +2031,7 @@ function finishRec(){
   v.src=lastUrl; dl.href=lastUrl; dl.download=name;
   document.getElementById('tapeMeta').innerHTML=
     (blob.size/1048576).toFixed(1)+' MB · '+DW+'×'+DH+' (4:3) · '+(isMp4?'MP4':'WEBM');
+  if(reventando) sacarCinta();
   document.getElementById('tape').classList.add('show');
   const sh=document.getElementById('tapeShare'); sh.style.display='none';
   try{
@@ -3074,6 +3167,9 @@ window.__dbg={ get est(){return est;}, get juntados(){return juntados;},
     return pasa(wx(a[0]),wz(a[1]), wx(q[0]),wz(q[1])); },
   morir(){ matar(); },
   get cineT(){ return +cineT.toFixed(2); },
+  saltarMorse(){ morseT=MTOTAL-0.6; },
+  get reventado(){ return {fase:reventando, cod:CODIGO,
+    grabando:recording, mime:pickMime()}; },
   get morse(){ return {total:+MTOTAL.toFixed(1), pasos:MSEQ.length,
     idx:morseIdx, on:morseOn, txt:morseTxt.slice(0,40)}; },
   ponerCine(t){ if(est!==EST.CINE){ est=EST.CINE; arrancarCine(); } cineT=t; },

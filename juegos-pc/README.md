@@ -1226,13 +1226,29 @@ Cuarenta y seis mariposas con aleteo —el sprite se achata y se inclina—, pol
 lateral mientras camina, uno desde el agua para verlo sentado y el pie entrando, uno de frente
 retrocediendo mientras se hunde, y uno que se va para arriba dejándolo solo.
 
-#### El morse del final
-Cuando la toma se va a negro no termina: queda **una luz parpadeando**. Es morse, y dice
+#### El morse y el cuelgue
+Cuando la toma se va a negro no hay cartel de nada: pasa **directo al morse**. Queda una luz
+parpadeando, y dice
 
 > *Yo decidí dejar ese lugar también, cuándo podré salir? ya no hay esperanzas*
 
 Cuatrocientos diecinueve pulsos a 45 ms el punto —treinta y un segundos y medio— con su pitido, los
-símbolos acumulándose abajo y la frase revelada al final. El botón de volver a empezar aparece antes,
-por si no querés esperar a que termine de deletrear.
+símbolos acumulándose abajo y la frase revelada al final.
+
+Y ahí **no hay botón de volver a empezar**: el juego se rompe. Dos segundos y medio de basura —bandas
+de color, volcado de caracteres, el rodillo suelto y ruido en cada cuadro— y después la pantalla de
+excepción con un código corrupto (`0x476∆:` y cuatro grupos de cuatro hexa), sin lienzo ni controles,
+y un intento de `window.close()`.
+
+**La grabación llega hasta el final.** El marcador y todo lo que se dibuja va dentro del lienzo, así
+que la persecución, el grito, el rojo, el muelle, el morse y la basura del cuelgue entran en la
+cinta; el `MediaRecorder` **se corta solo dos segundos antes de que el juego se caiga**, para que el
+archivo cierre bien, y la caja de la cinta se saca de `#rot` —que arma su propio contexto de apilado
+por el `transform`— y se pone a pantalla completa por encima de la pantalla de error, así se puede
+descargar igual.
+
+Mientras la pantalla está negra —el morse y el cuelgue— **se deja de dibujar el lago**: se conserva el
+último cuadro en el destino y se pasa sólo la capa de interfaz por el revelado. Son treinta segundos
+de no mover un polígono al pedo.
 
 El bosque se arma mientras la pantalla está en rojo, no al empezar la toma, para que no haya tirón.
