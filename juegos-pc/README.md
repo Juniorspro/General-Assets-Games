@@ -1064,28 +1064,43 @@ resolviendo con simulación de altura propia en la cinemática del muelle, acá 
 portado a three.js por jeantimex —simulación de altura sobre una malla, reflejos y refracciones
 trazados, cáusticas de verdad y sombras blandas—. Cuando lo pidas.
 
-### Las puertas cierran
-La hoja de la puerta flotaba en un agujero: la arista donde va la puerta era la única del mapa que
-**no dibujaba pared**, así que quedaba un hueco de 3,00 × 3,20 m con una hoja de 2,40 × 2,75 m
-adentro y treinta centímetros de ranura por cada costado. Ahora esa arista se rellena con **jambas y
-dintel** —del mismo ladrillo que la pared, con la UV en proporción para que no se estire— y el hueco
-mide exactamente lo que mide la hoja.
+### Las puertas: marco, botón y nada de ruido
+La hoja flotaba en un agujero: la arista donde va la puerta era la única del mapa que **no dibujaba
+pared**, así que quedaba un hueco de 3,00 × 3,20 m con una hoja de 2,40 × 2,75 m adentro y treinta
+centímetros de ranura por cada costado. Ahora esa arista se rellena con **jambas y dintel** —del
+mismo ladrillo, con la UV en proporción para que no se estire— y el hueco mide exactamente lo que
+mide la hoja.
 
-Además la hoja dejó de ser una calcomanía: la geometría se corre media hoja para que **el pivote
-quede en la bisagra**, y gira hasta 1,72 rad (unos cien grados) cuando el jugador —o Teypi— se acerca
-a menos de 2,6 m. Al alejarse vuelve sola, y suena el golpe.
+Y las puertas **no se abren solas ni suenan**: mientras la hoja está puesta **no se pasa**, y cuando
+te acercás a menos de 3,4 m aparece abajo a la derecha un **botón de dedo** —`ABRIR` / `CERRAR`, o la
+tecla `E`—. Al apretarlo la hoja **desaparece**, no gira; vuelve sola a los seis segundos, cuando ya
+te corriste. Teypi no usa el botón: la hoja se le corre sola y en silencio.
 
-### Sonidos de verdad
+De paso se corrigió el rumbo de todas las caras planas: se calculaban con `dx? dx*π/2 : (dy>0?π:0)`,
+que da vuelta las paredes en `x` y las de `y`. Por eso el número del aula se leía espejado y los
+pizarrones de las paredes laterales no se veían. Ahora es `atan2(dx, dy)` —o `atan2(-dx,-dy)` para lo
+que se mira desde adentro de la celda—.
+
+### Sonidos de verdad, y la voz de la serie
 No hay nada del juego original: son grabaciones de **Wikimedia Commons, todas de dominio público**,
-recortadas y pasadas a mono AAC 22 kHz para que entren en el archivo.
+recortadas y pasadas a mono.
 
 | en el juego | archivo de Commons | licencia |
 |---|---|---|
 | campana del recreo | `File:Old school bell 1.ogg` | dominio público |
-| puerta que se abre / se cierra | `File:Squeaky door.ogg` | dominio público |
-| golpe seco, regla y portazo | `File:Dull thud.ogg` | dominio público |
+| golpe seco (la regla, el impacto) | `File:Dull thud.ogg` | dominio público |
 | chapoteo del agua | `File:Bathtub water splashes.ogg` | dominio público |
 | bosque del muelle | `File:20090610 0 ambience.ogg` | dominio público |
+
+Van en **MP3**, no en AAC: un Chromium sin códecs propietarios no decodifica el AAC y el banco entero
+quedaba vacío en silencio. El MP3 lo abre todo, Safari incluido. Comprobado: 27 clips de voz y 4
+efectos decodificados.
+
+**La voz es la de Rezona TV y ¡Teypi Time!**: meSpeak horneado con la voz española a velocidad 150 y
+tono 62, y encima la misma cadena de siempre —anillo a 38 Hz, banda de 230 a 3400, realce en 1700 y
+el bamboleo de la cinta sobre la velocidad de lectura—. Son veintisiete frases: las nueve del saludo,
+los dieciséis lamentos y las dos del final. Cada frase dura lo que dura su grabación, no un número
+inventado.
 
 ### Teypi con huesos
 El bloque de poses de **¡Teypi Time!** viaja entero acá: la plantilla tiene un `/*__POSES__*/` y el
@@ -1115,26 +1130,54 @@ sube el contraste, mete latido y bandas de ruido, y la cinta empieza a rodar hac
 
 ### La cinemática del muelle
 A los cuatro segundos y medio la escuela se apaga y arranca otro recuerdo, en otra escena, con el
-mismo revelado de cinta: un **muelle de madera**, el bosque atrás, mariposas, y una laguna. Teypi
-camina por el muelle, baja al agua y **el agua le responde**.
+mismo revelado de cinta: un **muelle de madera**, el bosque cerrado atrás, mariposas, y una laguna.
+Teypi camina por el muelle, baja al agua y **el agua le responde**.
 
-- **El agua** es una malla de 120 × 120 con la ecuación de ondas corriendo encima a 60 pasos por
-  segundo (`h₁ = (2h₀ − h₁ + K·∇²h₀)·amortiguación`, K = 0,34). Cada pisada mete una gota en la
-  cuadrícula y el cuerpo empuja una estela continua. Las normales se sacan a mano de las diferencias
-  de altura, que sale más barato que recalcular la malla entera.
-  El sombreador hace Fresnel, reflejo de cielo y de bosque según hacia dónde apunta el rayo
-  reflejado, refracción del fondo deformada por la normal, cáusticas de dos rejillas de seno
-  cruzadas, absorción por hondura, espuma en las crestas y el rizo del viento —que se apaga con la
-  distancia, si no titila la cuadrícula—. La laguna se planta al metro y medio a propósito: se le
-  sigue viendo la arena, y Teypi camina en vez de nadar.
-  *(El primer intento se iba al infinito: el ping-pong copiaba los arreglos en vez de cambiar las
-  referencias y se perdía el cuadro anterior. Con la corrección la ola se queda en diez centímetros.)*
-- **Los árboles no son lowpoly.** El tronco es una sucesión de nueve anillos que se van afinando y
-  torciendo, cada rama es su propio tubo con curva, y la copa son entre 88 y 128 tarjetas de hojas
-  con alfa repartidas en cúpula y en las puntas de las ramas. Treinta y cuatro árboles y cuarenta
-  arbustos, todo fusionado en dos mallas.
-- Treinta y ocho mariposas con aleteo —el sprite se achata y se inclina—, polvo al sol, y cuatro
-  planos de cámara: el muelle entero desde la orilla, un lateral por encima del agua, uno de frente
-  retrocediendo mientras se hunde, y uno que se va para arriba dejándolo solo.
+#### El agua, con la técnica del repo
+Está hecha con el método del **WebGL Water de Evan Wallace**, el que **jeantimex** portó a three.js
+(`jeantimex/threejs-water`). Nada de una textura que se mueve:
+
+- **Simulación en la GPU.** Una textura de 256 × 256 en ping-pong guarda altura en R, velocidad en G
+  y las dos componentes de la normal en B y A. Tres pasadas de un cuadrilátero a pantalla completa:
+  la gota (perfil de coseno alzado, sin bordes duros), el paso de la ecuación de ondas
+  (`v += ½·∇²h ; v *= 0,9955 ; h += v`) y las normales por producto cruzado de las tangentes.
+- **Cáusticas por área.** Se dibuja una malla de 200 × 200 donde cada vértice se refracta con la ley
+  de Snell y se proyecta al fondo; el fragmento vale `área_plana / área_refractada`. Donde la ola
+  junta los rayos, la razón crece y aparece la red de luz sobre la arena. En el canal verde va la
+  sombra blanda de las piernas, que corta la red.
+- **Reflejo de verdad.** Un render aparte con la cámara **espejada respecto del plano `y = 0`** —con
+  el `up` invertido, como hace el `Reflector` de three—. Como el punto reflejado y el original caen
+  en la misma coordenada de pantalla, se muestrea con el mismo UV, corrido por la normal.
+- **Refracción de verdad.** Otro render sin la superficie puesta, muestreado con un corrimiento mayor
+  y con **absorción de Beer** sobre el camino bajo el agua: cuanto más hondo, menos rojo vuelve.
+- Fresnel de Schlick, sol partido en las crestas, espuma en las crestas y en la orilla, y un rizo de
+  viento encima de la ola grande que se apaga con la distancia para que no titile la cuadrícula.
+
+Tres cosas que costaron encontrar y quedan anotadas:
+
+1. **La superficie no se dibujaba.** La malla está en XY y el vértice la acuesta pasando `y → z`: eso
+   es un intercambio de ejes, tiene determinante −1 e invierte el sentido de las caras, así que la
+   superficie quedaba mirando al fondo y se descartaba. Lo que se veía era la chapa de agua lejana.
+2. **La ola cruzaba el lago en dos segundos.** El esquema discreto avanza ~0,7 celdas por paso; con
+   celdas de 0,31 m y dos pasos por cuadro daban 26 m/s. Un solo paso por cuadro y el dominio en 80 m
+   dejan la ola en una velocidad de agua.
+3. **El lago se hundía.** La estela metía altura negativa todos los cuadros y el nivel entero se iba
+   para abajo: máximo 0, ninguna cresta, ningún reflejo. Ahora la estela va en **dipolo** —hunde
+   adelante y levanta atrás— y el volumen se conserva.
+
+#### El bosque, cerrado
+Un solo terreno manda: `tierra(x,z)` va de 0 (agua) a 1 (bosque) sumando la orilla de atrás, las de
+los costados y la del fondo, y el suelo se interpola entre el fondo del lago y el piso del bosque.
+La laguna queda como una ensenada, con playa de arena, y la orilla lejana cierra el horizonte sin
+necesidad de trucos. Los árboles se plantan **sólo donde el suelo está sobre los 0,72 m** —antes
+había un bosque entero parado adentro del agua—.
+
+Son **170 árboles** con tronco de anillos que se afinan y se tuercen, ramas con su propia curva y
+copas de 96 a 142 tarjetas de hojas con alfa en tres verdes distintos, más pinos, **cientos de matas,
+helechos, pasto alto y troncos caídos**: unas 158 000 caras en nueve mallas fusionadas.
+
+Cuarenta y seis mariposas con aleteo —el sprite se achata y se inclina—, polvo al sol, y cuatro
+planos de cámara: el muelle entero desde la orilla, un lateral por encima del agua, uno de frente
+retrocediendo mientras se hunde, y uno que se va para arriba dejándolo solo.
 
 El bosque se arma mientras la pantalla está en rojo, no al empezar la toma, para que no haya tirón.
