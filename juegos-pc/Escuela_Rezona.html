@@ -265,99 +265,202 @@ function texCuaderno(){
 /* ============================================================================
    EL MAPA  ·  pasillos en cuadrícula y aulas en los huecos, como corresponde
 ============================================================================ */
-const MW=35, MH=35;                        // celdas
-const CELL=3.2, ALTO=3.2;
-const M=[];                                // 0 pared · 1 pasillo · 2 cuarto
-for(let y=0;y<MH;y++) M.push(new Array(MW).fill(0));
-
-/* Los pasillos son una reja: cuatro de lado a lado y cinco de arriba abajo.
-   Los dieciséis huecos que quedan son los cuartos. */
-const HY=[2,9,16,23,30], HX=[2,10,18,26,33];
-for(const y of HY) for(let x=HX[0];x<=HX[HX.length-1];x++) M[y][x]=1;
-for(const x of HX) for(let y=HY[0];y<=HY[HY.length-1];y++) M[y][x]=1;
-
-/* El zaguán: se entra por acá y las puertas de salida quedan a la espalda,
-   como en las escuelas de estos juegos. */
-const ENT={x:18, y0:31, y1:33};
-for(let y=ENT.y0;y<=ENT.y1;y++) for(let x=ENT.x-1;x<=ENT.x+1;x++) M[y][x]=1;
-
-const puertas=[], armarios=[], carteles=[], salidas=[], cuadernos=[], AULAS=[];
-function cuarto(x0,y0,x1,y1,tipo){
-  for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++) M[y][x]=2;
-  const lados=[];
-  for(let x=x0;x<=x1;x++){
-    if(M[y0-2] && M[y0-2][x]===1) lados.push([x,y0-1,0,-1]);
-    if(M[y1+2] && M[y1+2][x]===1) lados.push([x,y1+1,0, 1]);
+const PLANTA=[
+'...................................',
+'...........CCCCC...................',
+'...........CCCCC...................',
+'...........CCCCC...................',
+'......H....CCCCC...................',
+'......H.....CCC....................',
+'......HCCCCCCCCCCCCCHHHHHHHHH......',
+'......HCCCCCCCCCCCCCHAAAAAAAH......',
+'......HCCCCCCCCCCCCCHAAAAAAAH......',
+'......HCCCCCCCCCCCCCHAAAAAAAH......',
+'.AAAAAHCCCCCCCCCCCCCHAAAAAAAH......',
+'.AAAAAHCCCCCCCCCCCCCHAAAAAAAH......',
+'.AAAAAHCCCCCCCCCCCCCH.......H......',
+'.AAAAAHCCCCCCCCCCCCCH.......H......',
+'.AAAAAHCCCCCCCCCCCCCHFFFFFFFH......',
+'......HHHHHHHHHHHHHHHFFFFFFFH......',
+'......H...HAAAAA....HFFFFFFFH......',
+'......H...HAAAAA....HFFFFFFFH......',
+'.CCCC.H...HAAAAA....HFFFFFFFH......',
+'.CCCCHH...HAAAAA....H.......H.CCCC.',
+'.CCCCHH...HHHHHH....H.......HHCCCC.',
+'.CCCCHHFFFFFFF.HDDDDHAAAAAAAHHCCCC.',
+'.CCCC.HFFFFFFF.HDDDDHAAAAAAAHHCCCC.',
+'......HFFFFFFF.HDDDDHAAAAAAAH.CCCC.',
+'......HFFFFFFF.HDDDDHAAAAAAAH......',
+'......HFFFFFFF.HDDDDHAAAAAAAH......',
+'......HHHHHHHHHHHHHHHHHH....H......',
+'......H.....FFFFFHAAAAAH....H......',
+'......H.....FFFFFHAAAAAHFFFFH......',
+'......H.....FFFFFHAAAAAHFFFFH......',
+'......H.....FFFFFHAAAAAHFFFFH......',
+'......H.....FFFFFHAAAAAHFFFFH......',
+'......HFFFFFFFFFFH.....HFFFFH......',
+'......HFFFFFFFFFFH.....HFFFFH......',
+'......HFFFFF.....H.....H....H......',
+'......HFFFFFAAAAAHAAAAAH....H......',
+'......HFFFFFAAAAAHAAAAAHPH..H......',
+'......HFFFFFAAAAAHAAAAAH....H......',
+'......HFFFFFAAAAAHAAAAAH....H......',
+'......HHHHHHHHHHHHHHHHHHHHHHH......',
+'................HHH................',
+'...............CCCCC...............',
+'...............CCCCC...............',
+'...............CCCCC...............',
+'...............CCCCC...............',
+'...................................'
+];
+/* ============================================================================
+   LA PLANTA
+   Es la escuela de verdad: se sacó el plano del juego, se midió que el pasillo
+   mide dieciséis píxeles y se rasterizó a esa cuadrícula. H pasillo, A aula,
+   F sala de maestros, D depósito, P dirección, C comedor y salidas.
+============================================================================ */
+const MW=PLANTA[0].length, MH=PLANTA.length;
+const CELL=3.0, ALTO=3.2;
+const M=[], TIPO=[];
+for(let y=0;y<MH;y++){
+  M.push([]); TIPO.push([]);
+  for(let x=0;x<MW;x++){
+    const c=PLANTA[y][x];
+    M[y].push(c==='.'?0:1);
+    TIPO[y].push(c);
   }
-  for(let y=y0;y<=y1;y++){
-    if(M[y][x0-2]===1) lados.push([x0-1,y,-1,0]);
-    if(M[y][x1+2]===1) lados.push([x1+1,y, 1,0]);
-  }
-  if(!lados.length) return null;
-  const [px,py,dx,dy]=lados[(rr()*lados.length)|0];
-  M[py][px]=2;
-  const q={x:px,y:py,dx,dy,tipo};
-  puertas.push(q);
-  const cu={x0,y0,x1,y1,tipo,puerta:q};
-  if(tipo==='aula') AULAS.push(cu);
-  return cu;
 }
+/* Muros interiores: entre un cuarto y el pasillo hay pared, menos donde va la
+   puerta. Se guardan por arista, no por celda, así no se come un pasillo. */
+const MURO=new Set();
+const arista=(x,y,dx,dy)=> (dx>0||dy>0) ? (y*MW+x)+'|'+dx+','+dy : ((y+dy)*MW+(x+dx))+'|'+(-dx)+','+(-dy);
+function hayMuro(x,y,dx,dy){ return MURO.has(arista(x,y,dx,dy)); }
+
+/* Regiones: cada cuarto es una mancha del mismo color */
+const REG=[], regId=[];
+for(let y=0;y<MH;y++) regId.push(new Array(MW).fill(-1));
+for(let y=0;y<MH;y++) for(let x=0;x<MW;x++){
+  const t=TIPO[y][x];
+  if(t==='.'||regId[y][x]>=0) continue;
+  const id=REG.length, cel=[], q=[[x,y]];
+  regId[y][x]=id;
+  while(q.length){
+    const [cx,cy]=q.pop(); cel.push([cx,cy]);
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=cx+dx, ny=cy+dy;
+      if(nx<0||ny<0||nx>=MW||ny>=MH) continue;
+      if(TIPO[ny][nx]!==t || regId[ny][nx]>=0) continue;
+      regId[ny][nx]=id; q.push([nx,ny]);
+    }
+  }
+  let x0=1e9,y0=1e9,x1=-1,y1=-1;
+  for(const [cx,cy] of cel){ x0=Math.min(x0,cx); y0=Math.min(y0,cy); x1=Math.max(x1,cx); y1=Math.max(y1,cy); }
+  REG.push({id, t, cel, x0,y0,x1,y1, n:cel.length});
+}
+/* El comedor es la mancha cian grande; las chicas son las salidas */
+const SALIDAS=[], puertas=[], armarios=[], carteles=[], cuadernos=[], AULAS=[];
+for(const r of REG){
+  if(r.t==='C') r.clase = r.n>60 ? 'comedor' : 'salida';
+  else if(r.t==='A') r.clase='aula';
+  else if(r.t==='F') r.clase='maestros';
+  else if(r.t==='D') r.clase='deposito';
+  else if(r.t==='P') r.clase='direccion';
+  else r.clase='pasillo';
+  if(r.clase==='aula') AULAS.push(r);
+}
+/* Contactos entre regiones distintas: uno se abre como puerta, el resto va
+   emparedado. Los pasillos entre sí, y las salidas, quedan abiertos. */
+function contactos(r){
+  const out=[];
+  for(const [cx,cy] of r.cel)
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=cx+dx, ny=cy+dy;
+      if(nx<0||ny<0||nx>=MW||ny>=MH) continue;
+      if(TIPO[ny][nx]==='.') continue;
+      if(regId[ny][nx]===r.id) continue;
+      out.push([cx,cy,dx,dy, regId[ny][nx]]);
+    }
+  return out;
+}
+/* Busca en el recoveco la celda que mira a la calle en la dirección pedida */
+function puertaAfuera(r, dx, dy){
+  let mejor=null, punt=-1e9;
+  for(const [cx,cy] of r.cel){
+    const nx=cx+dx, ny=cy+dy;
+    if(nx<0||ny<0||nx>=MW||ny>=MH||M[ny][nx]) continue;
+    const pt=cx*dx+cy*dy;
+    if(pt>punt){ punt=pt; mejor={x:cx,y:cy,dx,dy,reg:r}; }
+  }
+  return mejor || {x:r.x0,y:r.y0,dx,dy,reg:r};
+}
+let numAula=0;
+for(const r of REG){
+  if(r.clase==='pasillo') continue;
+  const ct=contactos(r);
+  if(!ct.length) continue;
+  // los contactos con OTRO cuarto se emparedan siempre
+  const conPasillo=ct.filter(c=>REG[c[4]].clase==='pasillo' || REG[c[4]].clase==='comedor');
+  for(const c of ct) if(conPasillo.indexOf(c)<0) MURO.add(arista(c[0],c[1],c[2],c[3]));
+  if(!conPasillo.length) continue;
+  if(r.clase==='salida'){
+    // El recoveco queda abierto al pasillo: la puerta va del otro lado, en la
+    // pared que da a la calle, que es por donde se sale de verdad.
+    const c=conPasillo[Math.floor(conPasillo.length/2)];
+    SALIDAS.push(puertaAfuera(r, -c[2], -c[3]));
+    continue;
+  }
+  // puerta: el contacto del medio de la tirada más larga
+  const c=conPasillo[Math.floor(conPasillo.length/2)];
+  for(const o of conPasillo) if(o!==c) MURO.add(arista(o[0],o[1],o[2],o[3]));
+  const tipo = r.clase==='aula' ? 'aula' : r.clase;
+  puertas.push({x:c[0], y:c[1], dx:c[2], dy:c[3], tipo, num: tipo==='aula'? ++numAula : undefined});
+}
+/* El comedor se come el recoveco de arriba: ahí también hay una salida */
 {
-  const bloques=[];
-  for(let i=0;i<HX.length-1;i++) for(let j=0;j<HY.length-1;j++)
-    bloques.push([HX[i]+2, HY[j]+2, HX[i+1]-2, HY[j+1]-2]);
-  const tipos=[];
-  for(let i=0;i<7;i++) tipos.push('aula');
-  for(let i=0;i<5;i++) tipos.push('maestros');
-  tipos.push('direccion'); tipos.push('comedor');
-  while(tipos.length<bloques.length) tipos.push('deposito');
-  for(let i=tipos.length-1;i>0;i--){ const j=(rr()*(i+1))|0; const t=tipos[i]; tipos[i]=tipos[j]; tipos[j]=t; }
-  for(let i=0;i<bloques.length;i++){
-    const [x0,y0,x1,y1]=bloques[i];
-    if(x1<x0||y1<y0) continue;
-    cuarto(x0,y0,x1,y1,tipos[i]||'deposito');
+  const com=REG.find(r=>r.clase==='comedor');
+  if(com){
+    const sal=puertaAfuera(com, 0, -1);
+    if(sal) SALIDAS.push(sal);
   }
 }
-/* Un cuaderno en cada aula, y el pizarrón contra la pared del fondo */
+/* Un cuaderno en cada aula, y el pizarrón contra una pared */
 for(const a of AULAS){
   const cx=Math.round((a.x0+a.x1)/2), cy=Math.round((a.y0+a.y1)/2);
-  cuadernos.push({cx,cy, tomado:false});
+  cuadernos.push({cx,cy,tomado:false});
   carteles.push({x:cx, y:a.y0, dx:0, dy:-1, tipo:'pizarron'});
 }
-/* Salidas: la del zaguán —por donde entraste— y las cuatro de las esquinas */
-salidas.push({x:ENT.x, y:ENT.y1, dx:0, dy:1, principal:true});
-for(const [x,y,dx,dy] of [[HX[0],HY[0],0,-1],[HX[HX.length-1],HY[0],0,-1],
-                          [HX[0],HY[HY.length-1],-1,0],[HX[HX.length-1],HY[HY.length-1],1,0]])
-  salidas.push({x,y,dx,dy});
-/* Casilleros y afiches contra las paredes de los pasillos */
+/* Casilleros y afiches, sólo contra pared maciza de pasillo */
+let SEMB=99117;
 for(let y=1;y<MH-1;y++) for(let x=1;x<MW-1;x++){
-  if(M[y][x]!==1) continue;
+  if(TIPO[y][x]!=='H') continue;
   for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-    if(!M[y+dy] || M[y+dy][x+dx]!==0) continue;
+    if(TIPO[y+dy][x+dx]!=='.') continue;
     const d=rr();
-    if(d<0.30){ armarios.push({x,y,dx,dy,lado:-1}); armarios.push({x,y,dx,dy,lado:1}); }
-    else if(d<0.36) carteles.push({x,y,dx,dy,tipo:'afiche'});
+    if(d<0.34){ armarios.push({x,y,dx,dy,lado:-1}); armarios.push({x,y,dx,dy,lado:1}); }
+    else if(d<0.40) carteles.push({x,y,dx,dy,tipo:'afiche'});
   }
 }
-const INI={x:ENT.x, y:ENT.y1-1};   // parado en el zaguán, con la salida a la espalda
+/* Se arranca en la salida de abajo, que es por donde se entra */
+const ENTRADA = SALIDAS.reduce((a,b)=> (b.reg.y0>a.reg.y0? b : a), SALIDAS[0]);
+const INI={ x: ENTRADA.x - ENTRADA.dx, y: ENTRADA.y - ENTRADA.dy };
+const MIRA = ENTRADA.dy>0 ? 0 : (ENTRADA.dy<0 ? Math.PI : (ENTRADA.dx>0 ? Math.PI/2 : -Math.PI/2));
 
-/* Comprobación: desde donde arranca el jugador se tiene que poder llegar a
-   todos los cuadernos y a todas las salidas. Si no, no es un mapa, es un
-   adorno. */
+/* Comprobación: desde la entrada se tiene que llegar a los siete cuadernos */
 (function comprobar(){
-  const vis=new Set(), cola=[[INI.x,INI.y]];
-  vis.add(INI.y*MW+INI.x);
+  const vis=new Set([INI.y*MW+INI.x]), cola=[[INI.x,INI.y]];
   while(cola.length){
     const [x,y]=cola.pop();
     for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
       const nx=x+dx, ny=y+dy;
       if(nx<0||ny<0||nx>=MW||ny>=MH||!M[ny][nx]) continue;
+      if(hayMuro(x,y,dx,dy)) continue;
       const k=ny*MW+nx; if(vis.has(k)) continue;
       vis.add(k); cola.push([nx,ny]);
     }
   }
-  const faltan=cuadernos.filter(c=>!vis.has(c.cy*MW+c.cx)).length;
-  window.__mapaOK = {alcanzables: vis.size, cuadernosSueltos: faltan, aulas: AULAS.length};
+  window.__mapaOK={alcanzables:vis.size, aulas:AULAS.length,
+    cuadernosSueltos:cuadernos.filter(c=>!vis.has(c.cy*MW+c.cx)).length,
+    salidas:SALIDAS.length, puertas:puertas.length};
 })();
 /* ============================================================================
    ESCENA
@@ -409,20 +512,26 @@ function quad(bolsa, w, h, px,py,pz, rx,ry, uu,vv){
   bolsa.push(g.applyMatrix4(_m.compose(_p,_q,_s)));
 }
 for(let y=0;y<MH;y++) for(let x=0;x<MW;x++){
-  const t=M[y][x]; if(!t) continue;
-  const X=wx(x), Z=wz(y);
-  quad(t===2?bAlf:bPiso, CELL,CELL, X,0,Z, -Math.PI/2,0, 1,1);
+  if(!M[y][x]) continue;
+  const t=TIPO[y][x], X=wx(x), Z=wz(y);
+  const alfombra = (t==='A'||t==='F'||t==='P');
+  quad(alfombra?bAlf:bPiso, CELL,CELL, X,0,Z, -Math.PI/2,0, 1,1);
   quad(bTecho, CELL,CELL, X,ALTO,Z, Math.PI/2,0, 1,1);
-  // paredes hacia los vecinos macizos
-  if(!M[y][x+1])            quad(bPared, CELL,ALTO, X+CELL/2, ALTO/2, Z, 0, -Math.PI/2, 1,1);
-  if(!M[y][x-1])            quad(bPared, CELL,ALTO, X-CELL/2, ALTO/2, Z, 0,  Math.PI/2, 1,1);
-  if(!M[y+1]||!M[y+1][x])   quad(bPared, CELL,ALTO, X, ALTO/2, Z+CELL/2, 0, Math.PI, 1,1);
-  if(!M[y-1]||!M[y-1][x])   quad(bPared, CELL,ALTO, X, ALTO/2, Z-CELL/2, 0, 0, 1,1);
+  // pared contra el vacío, y también contra el cuarto vecino si hay muro
+  const lados=[[1,0, X+CELL/2, Z, 0, -Math.PI/2],
+               [-1,0, X-CELL/2, Z, 0,  Math.PI/2],
+               [0,1, X, Z+CELL/2, 0, Math.PI],
+               [0,-1, X, Z-CELL/2, 0, 0]];
+  for(const [dx,dy,px,pz,rx,ry] of lados){
+    const nx=x+dx, ny=y+dy;
+    const fuera = nx<0||ny<0||nx>=MW||ny>=MH||!M[ny][nx];
+    if(fuera || hayMuro(x,y,dx,dy)) quad(bPared, CELL,ALTO, px, ALTO/2, pz, rx, ry, 1,1);
+  }
 }
 /* Tubos de luz cada cuatro celdas de pasillo */
 const focos=[];
 for(let y=1;y<MH-1;y++) for(let x=1;x<MW-1;x++){
-  if(M[y][x]!==1) continue;
+  if(TIPO[y][x]!=='H' && TIPO[y][x]!=='C') continue;
   if((x+y)%3) continue;
   quad(bLuz, CELL*0.62, CELL*0.16, wx(x), ALTO-0.03, wz(y), Math.PI/2,0, 1,1);
   focos.push([wx(x), ALTO-0.4, wz(y)]);
@@ -442,28 +551,17 @@ fundir(bTecho,matTecho); fundir(bLuz,matLuz);
 
 /* ---- puertas, casilleros, carteles y salidas ---- */
 const COLPUERTA={aula:'#2b3fd8', maestros:'#ba651a', direccion:'#1e9e3a',
-                 comedor:'#d9d106', deposito:'#7a7a86'};
+                 comedor:'#d9d106', deposito:'#d9d106'};
 const matPuerta={};
-let numAula=0;
 for(const q of puertas){
-  const esComedor=q.tipo==='comedor';
-  let mat;
-  if(esComedor){
-    if(!matPuerta.vaiven) matPuerta.vaiven=new THREE.MeshBasicMaterial({map:TX(texVaiven(),1,1), side:THREE.DoubleSide});
-    mat=matPuerta.vaiven;
-  }else{
-    const clave=q.tipo+(q.tipo==='aula'?(++numAula):'');
-    if(!matPuerta[clave]) matPuerta[clave]=new THREE.MeshBasicMaterial({
-      map:TX(texPuerta(COLPUERTA[q.tipo]||'#7a7a86',
-        q.tipo==='maestros'?'SOLO\nMAESTROS':(q.tipo==='direccion'?'DIRECCIÓN':null),
-        q.tipo==='aula'?numAula:undefined),1,1), side:THREE.DoubleSide});
-    mat=matPuerta[clave];
-  }
-  const g=new THREE.PlaneGeometry(CELL*0.78, ALTO*0.86);
-  const m=new THREE.Mesh(g,mat);
-  m.position.set(wx(q.x), ALTO*0.43, wz(q.y));
-  m.rotation.y = q.dx ? Math.PI/2 : 0;
-  m.position.x += q.dx*0.02; m.position.z += q.dy*0.02;
+  const clave=q.tipo+(q.num||'');
+  if(!matPuerta[clave]) matPuerta[clave]=new THREE.MeshBasicMaterial({
+    map:TX(texPuerta(COLPUERTA[q.tipo]||'#7a7a86',
+      q.tipo==='maestros'?'SOLO\nMAESTROS':(q.tipo==='direccion'?'DIRECCIÓN':null),
+      q.num),1,1), side:THREE.DoubleSide});
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.80, ALTO*0.86), matPuerta[clave]);
+  m.position.set(wx(q.x)+q.dx*(CELL/2-0.02), ALTO*0.43, wz(q.y)+q.dy*(CELL/2-0.02));
+  m.rotation.y = q.dx ? q.dx*Math.PI/2 : (q.dy>0?Math.PI:0);
   mundo.add(m);
 }
 {
@@ -494,21 +592,23 @@ for(const q of puertas){
   const matSal=new THREE.MeshBasicMaterial({map:TX(texSalida(),1,1)});
   const matVai=new THREE.MeshBasicMaterial({map:TX(texVaiven(),1,1), side:THREE.DoubleSide});
   const matMapa=new THREE.MeshBasicMaterial({map:TX(texMapa(),1,1)});
-  for(const s of salidas){
+  for(const s of SALIDAS){
     const gy = s.dx? s.dx*Math.PI/2 : (s.dy>0?Math.PI:0);
-    // el batiente doble
     const d=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.92, ALTO*0.80), matVai);
     d.position.set(wx(s.x)+s.dx*(CELL/2-0.04), ALTO*0.40, wz(s.y)+s.dy*(CELL/2-0.04));
     d.rotation.y=gy; mundo.add(d);
-    // el cartel encima
     const c=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.56, CELL*0.17), matSal);
     c.position.set(wx(s.x)+s.dx*(CELL/2-0.06), ALTO*0.875, wz(s.y)+s.dy*(CELL/2-0.06));
     c.rotation.y=gy; mundo.add(c);
-    // y en el zaguán, el plano de la escuela al costado
-    if(s.principal){
-      const m2=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.72, CELL*0.60), matMapa);
-      m2.position.set(wx(s.x-1)-(CELL/2-0.05), ALTO*0.55, wz(s.y-1));
-      m2.rotation.y=Math.PI/2; mundo.add(m2);
+    // el plano de la escuela, contra una pared de la propia salida
+    const r=s.reg, mx=Math.round((r.x0+r.x1)/2), my=Math.round((r.y0+r.y1)/2);
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=mx+dx, ny=my+dy;
+      if(nx<0||ny<0||nx>=MW||ny>=MH||M[ny][nx]) continue;
+      const m2=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.66, CELL*0.54), matMapa);
+      m2.position.set(wx(mx)+dx*(CELL/2-0.05), ALTO*0.55, wz(my)+dy*(CELL/2-0.05));
+      m2.rotation.y = dx? dx*Math.PI/2 : (dy>0?Math.PI:0);
+      mundo.add(m2); break;
     }
   }
 }
@@ -664,17 +764,26 @@ const regla=()=>{ ruidito(0.05,0.34,900); setTimeout(()=>ruidito(0.06,0.22,420),
 /* ============================================================================
    JUGADOR
 ============================================================================ */
-const P={ x:wx(INI.x), z:wz(INI.y), yaw:0, vel:3.9 };
+const P={ x:wx(INI.x), z:wz(INI.y), yaw:MIRA, vel:4.2 };
 camera.position.set(P.x, 1.62, P.z);
+function cel(x,z){ return [Math.round(x/CELL+MW/2), Math.round(z/CELL+MH/2)]; }
 function solido(x,z){
-  const cx=Math.round(x/CELL+MW/2), cy=Math.round(z/CELL+MH/2);
+  const [cx,cy]=cel(x,z);
   if(cx<0||cy<0||cx>=MW||cy>=MH) return true;
   return M[cy][cx]===0;
 }
+/* Además del vacío, frenan los muros interiores: la pared que separa un aula
+   del pasillo no ocupa celda, es una arista. */
+function pasa(x0,z0,x1,z1){
+  if(solido(x1,z1)) return false;
+  const a=cel(x0,z0), b=cel(x1,z1);
+  if(a[0]===b[0] && a[1]===b[1]) return true;
+  return !hayMuro(a[0],a[1], b[0]-a[0], b[1]-a[1]);
+}
 function mover(dx,dz){
   const R=0.42;
-  if(!solido(P.x+dx+Math.sign(dx)*R, P.z)) P.x+=dx;
-  if(!solido(P.x, P.z+dz+Math.sign(dz)*R)) P.z+=dz;
+  if(pasa(P.x,P.z, P.x+dx+Math.sign(dx)*R, P.z)) P.x+=dx;
+  if(pasa(P.x,P.z, P.x, P.z+dz+Math.sign(dz)*R)) P.z+=dz;
 }
 
 /* ============================================================================
@@ -683,8 +792,44 @@ function mover(dx,dz){
 const EST={JUEGO:0, CUENTA:1, PERDISTE:2, GANASTE:3};
 let est=EST.JUEGO, T=0, juntados=0, errores=0;
 let cuadernoActual=null, preg=null, pregIdx=0, respuesta='', avisoT=0, aviso='';
-let teypiOn=false, teypiPos={x:wx(HX[2]), z:wz(HY[0])}, teypiVel=1.55, teypiRuta=[], rutaT=0, golpeT=0;
+let saludo='', saludoT=0, presentado=false;
+/* Como el de la escuela original: te espera en la primera aula, te saluda, y
+   recién se pone a caminar cuando la tercera cuenta del primer cuaderno —la
+   que no tiene respuesta— te sale mal. */
+const CUNA=(function(){
+  let mejor=null, d=1e9;
+  for(const a of AULAS){
+    const cx=Math.round((a.x0+a.x1)/2), cy=Math.round((a.y0+a.y1)/2);
+    const dd=Math.hypot(cx-INI.x, cy-INI.y);
+    if(dd<d){ d=dd; mejor={cx,cy}; }
+  }
+  return mejor||{cx:INI.x, cy:INI.y};
+})();
+const PRIMERA=cuadernos.reduce((a,b)=>
+  Math.hypot(b.cx-CUNA.cx,b.cy-CUNA.cy) < Math.hypot(a.cx-CUNA.cx,a.cy-CUNA.cy) ? b : a, cuadernos[0]);
+let graciaT=0;
+let teypiOn=false, teypiVisible=true, teypiPos={x:wx(PRIMERA?PRIMERA.cx:CUNA.cx), z:wz(PRIMERA?PRIMERA.cy:CUNA.cy)}, teypiVel=1.55, teypiRuta=[], rutaT=0, golpeT=0;
 
+/* La tercera del primer cuaderno no tiene respuesta: es la que lo despierta */
+function romper(){
+  errores++; teypiVel+=0.55;
+  U.uGlitch.value=1.0; ruidito(0.45,0.4,200);
+  aviso='MAL'; avisoT=1.6; respuesta='';
+  cuadernoActual.tomado=true; cuadernoActual.sprite.visible=false;
+  juntados++; est=EST.JUEGO; cuadernoActual=null;
+  // Se va de la primera aula y arranca desde lejos, como corresponde
+  let lej=null, d=-1;
+  for(const a of AULAS){
+    const cx=Math.round((a.x0+a.x1)/2), cy=Math.round((a.y0+a.y1)/2);
+    const dd=Math.hypot(wx(cx)-P.x, wz(cy)-P.z);
+    if(dd>d){ d=dd; lej={cx,cy}; }
+  }
+  if(lej){ teypiPos.x=wx(lej.cx); teypiPos.z=wz(lej.cy); }
+  teypiRuta=[]; rutaT=0; graciaT=2.5;
+  teypiOn=true; teypi.visible=true;
+  saludo=''; saludoT=0;
+  regla();
+}
 function nuevaCuenta(nivel){
   const dif=Math.min(3, nivel);
   if(dif===0){ const a=ri(1,9), b=ri(1,9); return {t:`${a} + ${b}`, r:a+b}; }
@@ -695,10 +840,17 @@ function nuevaCuenta(nivel){
 function abrirCuaderno(c){
   cuadernoActual=c; est=EST.CUENTA; pregIdx=0; respuesta='';
   preg=nuevaCuenta(juntados); pip(880,0.10,0.10,'sine');
+  if(!presentado && c===PRIMERA){
+    presentado=true;
+    saludo='¡Hola! Bienvenido a mi escuela. Juntá los siete cuadernos.';
+    saludoT=5.0;
+    pip(520,0.14,0.11,'sine'); setTimeout(()=>pip(700,0.16,0.11,'sine'),150);
+  }
 }
 function contestar(){
   if(respuesta==='') return;
   const bien = parseInt(respuesta,10)===preg.r;
+  if(preg.roto) return romper();
   if(bien){
     pip(1200,0.09,0.10,'sine');
     pregIdx++;
@@ -710,7 +862,12 @@ function contestar(){
       if(!teypiOn){ teypiOn=true; teypi.visible=true; }
       teypiVel+=0.12;
       if(juntados>=cuadernos.length){ aviso='¡SALÍ DE LA ESCUELA!'; avisoT=3.5; }
-    }else{ preg=nuevaCuenta(juntados); respuesta=''; }
+    }else{
+      preg = (cuadernoActual===PRIMERA && pregIdx===2)
+        ? {t:'▓ + █▒', r:NaN, roto:true}          // la que no se puede contestar
+        : nuevaCuenta(juntados);
+      respuesta='';
+    }
   }else{
     errores++; teypiVel+=0.55;
     U.uGlitch.value=0.8; ruidito(0.25,0.3,240);
@@ -724,7 +881,7 @@ function contestar(){
 }
 
 /* ---- ruta de Teypi: anchura primero sobre la cuadrícula ---- */
-function celda(x,z){ return [Math.round(x/CELL+MW/2), Math.round(z/CELL+MH/2)]; }
+function celda(x,z){ return cel(x,z); }
 function buscarRuta(a,b){
   const key=(x,y)=>y*MW+x;
   const prev=new Map(), vis=new Set([key(a[0],a[1])]);
@@ -740,6 +897,7 @@ function buscarRuta(a,b){
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
         const nx=x+dx, ny=y+dy;
         if(nx<0||ny<0||nx>=MW||ny>=MH||!M[ny][nx]) continue;
+        if(hayMuro(x,y,dx,dy)) continue;
         const k=key(nx,ny); if(vis.has(k)) continue;
         vis.add(k); prev.set(k,[x,y]); sig.push([nx,ny]);
       }
@@ -783,6 +941,12 @@ function dibujarUI(dt){
     g2.fillStyle='#1b3a8c';
     g2.fillText(respuesta||'?', UW*0.52, UH*0.29);
     texto('CUENTA '+(pregIdx+1)+' DE 3', UW*0.5, UH*0.42, 20, '#f5d90a','center');
+    if(saludoT>0){ saludoT-=dt;
+      const l=saludo.split(' '); let a='', li=[];
+      for(const w of l){ if((a+' '+w).length>34){ li.push(a); a=w; } else a=(a?a+' ':'')+w; }
+      if(a) li.push(a);
+      for(let i=0;i<li.length;i++) texto(li[i], UW/2, UH*0.905+i*UH*0.048, 22, '#f5d90a','center');
+    }
     // teclado
     const bw=UW*0.15, bh=UH*0.095, x0=UW*0.5-bw*1.5-8, y0=UH*0.46;
     for(let i=0;i<9;i++){
@@ -801,6 +965,12 @@ function dibujarUI(dt){
   const s=Math.floor(T), mm=String(Math.floor(s/60)).padStart(2,'0'), ss=String(s%60).padStart(2,'0');
   texto('0:'+mm+':'+ss, UW-14, 17, 17, 'rgba(255,255,255,.85)','right');
   if(avisoT>0){ avisoT-=dt; texto(aviso, UW/2, UH*0.30, 30, aviso==='MAL'?'#ff5a4a':'#f5d90a','center'); }
+  if(saludoT>0){ saludoT-=dt;
+    const l=saludo.split(' '); let a='', li=[];
+    for(const w of l){ if((a+' '+w).length>30){ li.push(a); a=w; } else a=(a?a+' ':'')+w; }
+    if(a) li.push(a);
+    for(let i=0;i<li.length;i++) texto(li[i], UW/2, UH*0.80+i*UH*0.055, 26, '#f5d90a','center');
+  }
   if(est===EST.PERDISTE){
     g2.fillStyle='rgba(20,0,0,.72)'; g2.fillRect(0,0,UW,UH);
     texto('TE AGARRÓ', UW/2, UH*0.42, 46, '#ff4a3a','center');
@@ -889,7 +1059,12 @@ function actualizar(dt){
       if(Math.hypot(wx(s.x)-P.x, wz(s.y)-P.z)<1.6){ est=EST.GANASTE; pip(520,0.3,0.1,'sine'); }
     }
   }
-  // Teypi
+  // Teypi: quieto en la primera aula hasta que lo despierten
+  if(teypiListo && !teypiOn){
+    teypi.visible=true;
+    teypi.position.set(teypiPos.x, 0, teypiPos.z);
+    teypi.lookAt(P.x, 0, P.z);
+  }
   if(teypiOn && teypiListo){
     rutaT-=dt;
     if(rutaT<=0){ rutaT=0.45;
@@ -908,7 +1083,8 @@ function actualizar(dt){
     const dj=Math.hypot(teypiPos.x-P.x, teypiPos.z-P.z);
     golpeT-=dt;
     if(golpeT<=0){ golpeT=Math.max(0.35, 1.9-teypiVel*0.28); if(dj<26) regla(); }
-    if(dj<1.15){ est=EST.PERDISTE; U.uGlitch.value=1.0; ruidito(0.5,0.4,300); }
+    if(graciaT>0) graciaT-=dt;
+    if(dj<1.15 && graciaT<=0){ est=EST.PERDISTE; U.uGlitch.value=1.0; ruidito(0.5,0.4,300); }
     U.uNoise.value=(MODO_CINTA?0.055:0.010)+Math.max(0,(12-dj))*(MODO_CINTA?0.011:0.004);
   }
 }
@@ -1069,7 +1245,8 @@ window.__dbg={ get est(){return est;}, get juntados(){return juntados;},
   responder(v){ respuesta=String(v); contestar(); },
   puertas(){ return puertas.map(q=>[q.x,q.y,q.dx,q.dy,q.tipo]); },
   get palanca(){ return {a:palanca.activa, x:+palanca.x.toFixed(2), y:+palanca.y.toFixed(2)}; },
-  get rot(){ return {ROT, caja:[CAJA.w,CAJA.h]}; } };
+  get rot(){ return {ROT, caja:[CAJA.w,CAJA.h]}; },
+  get primera(){ return {cx:PRIMERA.cx, cy:PRIMERA.cy}; } };
 </script>
 </body>
 </html>

@@ -969,16 +969,28 @@ puertas: **azul con número** para las aulas, **madera para «SOLO MAESTROS»**,
 y **doble amarilla con ventanitas** para el comedor. Ninguna textura del original entró al juego:
 están todas dibujadas acá con esos colores.
 
-### El mapa
-Una **reja de pasillos** —cuatro de lado a lado, cinco de arriba abajo— y los dieciséis huecos que
-quedan son los cuartos: **siete aulas** con su cuaderno y su pizarrón, cinco salas de maestros,
-dirección, comedor y dos depósitos. Cada cuarto elige su puerta entre los lados que dan a un
-pasillo. Casilleros rojos de a pares contra las paredes, afiches, tubos fluorescentes cada tres
-celdas y cuatro salidas en las esquinas de la reja.
+### El mapa es el de verdad
+No está inventado: se **sacó el plano del juego original** por la API del wiki (`File:MapClassic.png`,
+560×736), se midió que **el pasillo mide exactamente dieciséis píxeles** y se rasterizó el plano a
+esa cuadrícula. Salen **35×46 celdas**. Los colores del plano son los tipos de cuarto —blanco
+pasillo, verde aula, rojo maestros, cian comedor y salidas, amarillo depósito, naranja dirección—,
+así que la planta que se camina es, celda por celda, la del original.
 
-**El mapa se comprueba solo al arrancar**: una inundación desde donde nace el jugador tiene que
-alcanzar los siete cuadernos. La primera versión dejaba media escuela sin cuartos y sólo cuatro
-cuadernos; ahora son 600 celdas alcanzables y ningún cuaderno suelto.
+Hubo que limpiarla: el plano dibuja **iconitos blancos** dentro de los cuartos (los cuadernos y los
+objetos) y al rasterizar quedaban como pasillo en medio de un aula. Se barren con una regla simple:
+una celda blanca rodeada por tres del mismo cuarto es un icono, no un pasillo.
+
+Cuenta lo que tiene que contar: **siete aulas** con su cuaderno, salas de maestros, comedor,
+depósito, dirección y **cuatro salidas** —la de abajo por donde se entra, la del oeste, la del este
+y la que está dentro del comedor, igual que en el original—.
+
+**Las paredes interiores no ocupan celda.** El plano no dibuja las puertas, así que la pared entre
+un aula y el pasillo se guarda como **arista** entre dos celdas, no como celda maciza: de cada
+cuarto se abre un solo contacto —la puerta— y el resto se emparedan. Así los pasillos conservan su
+ancho de una celda, que es lo que hace que la escuela se sienta como se siente.
+
+**Se comprueba sola al arrancar**: la inundación desde la entrada alcanza 761 celdas y ningún
+cuaderno queda suelto.
 
 Todo se fusiona por material: paredes, pisos, techos, casilleros y tubos salen en cinco mallas.
 
@@ -995,6 +1007,12 @@ palanca a la izquierda para caminar y arrastre a la derecha para girar; en la co
 las flechas. Al tocar un cuaderno se abre la hoja con la cuenta y un teclado numérico: tres cuentas
 seguidas y el cuaderno es tuyo. Las cuentas se endurecen con cada cuaderno —suma, resta,
 multiplicación, división—.
+
+**Teypi hace lo que hace el de la escuela original.** Te espera **parada en la primera aula**, al
+lado del primer cuaderno. Cuando lo levantás te saluda —«¡Hola! Bienvenido a mi escuela. Juntá los
+siete cuadernos.»— y se queda quieta. La **tercera cuenta del primer cuaderno no tiene respuesta**:
+sale `▓ + █▒` y contestes lo que contestes está mal. Ahí se despierta, se va de esa aula, aparece
+lejos —para que no te agarre de una— y empieza a caminar.
 
 **Cada error la apura medio metro por segundo**, y cada cuaderno un poco más. Camina por los
 pasillos buscando el camino más corto —anchura primero sobre la cuadrícula, recalculado cada medio
