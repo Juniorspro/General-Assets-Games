@@ -1059,6 +1059,82 @@ dentro del lienzo, entran en la grabación.
 
 
 ### Pendiente
-Queda anotada la referencia de **agua** para meter en algún juego: el WebGL Water de Evan Wallace
+Ya está usada: la referencia de agua (WebGL Water de Evan Wallace, portado por jeantimex) se terminó
+resolviendo con simulación de altura propia en la cinemática del muelle, acá abajo.
 portado a three.js por jeantimex —simulación de altura sobre una malla, reflejos y refracciones
 trazados, cáusticas de verdad y sombras blandas—. Cuando lo pidas.
+
+### Las puertas cierran
+La hoja de la puerta flotaba en un agujero: la arista donde va la puerta era la única del mapa que
+**no dibujaba pared**, así que quedaba un hueco de 3,00 × 3,20 m con una hoja de 2,40 × 2,75 m
+adentro y treinta centímetros de ranura por cada costado. Ahora esa arista se rellena con **jambas y
+dintel** —del mismo ladrillo que la pared, con la UV en proporción para que no se estire— y el hueco
+mide exactamente lo que mide la hoja.
+
+Además la hoja dejó de ser una calcomanía: la geometría se corre media hoja para que **el pivote
+quede en la bisagra**, y gira hasta 1,72 rad (unos cien grados) cuando el jugador —o Teypi— se acerca
+a menos de 2,6 m. Al alejarse vuelve sola, y suena el golpe.
+
+### Sonidos de verdad
+No hay nada del juego original: son grabaciones de **Wikimedia Commons, todas de dominio público**,
+recortadas y pasadas a mono AAC 22 kHz para que entren en el archivo.
+
+| en el juego | archivo de Commons | licencia |
+|---|---|---|
+| campana del recreo | `File:Old school bell 1.ogg` | dominio público |
+| puerta que se abre / se cierra | `File:Squeaky door.ogg` | dominio público |
+| golpe seco, regla y portazo | `File:Dull thud.ogg` | dominio público |
+| chapoteo del agua | `File:Bathtub water splashes.ogg` | dominio público |
+| bosque del muelle | `File:20090610 0 ambience.ogg` | dominio público |
+
+### Teypi con huesos
+El bloque de poses de **¡Teypi Time!** viaja entero acá: la plantilla tiene un `/*__POSES__*/` y el
+armador lo saca del otro juego entre `/*<POSES>*/` y `/*</POSES>*/`. Son las mismas —`poseIdle`,
+`poseWalk`, `poseWave`, `poseTalk`— girando huesos alrededor de ejes de mundo con `pRot`, así que el
+mismo esqueleto sirve para las dos cosas.
+
+**El saludo pasa afuera del salón.** Teypi espera en el pasillo, del lado de afuera de la puerta del
+aula del primer cuaderno; cuando te ve a menos de 9,5 m levanta la mano y te cuenta cómo llegó: que
+agarró el código de un juego viejo para hacerse una casa, que se trajo los pasillos y las cuentas
+prestados, y que **si te traés el código también te traés las reglas**. Que va a matarte no te lo
+dice: sólo te pide, dos veces, que hagas bien **la segunda**. Después se mete al aula caminando y se
+queda quieto hasta que la rompas.
+
+**La segunda cuenta del primer cuaderno es la imposible** (antes era la tercera): sale `▓ + █▒`, no
+tiene respuesta, y contestarla es lo que lo suelta. Se va al aula más lejos —medido, 88 m— y arranca
+con dos segundos y medio de ventaja.
+
+**Mientras te persigue se lamenta.** Dieciséis frases barajadas, una cada cuatro a siete segundos,
+sin amenazas: «yo no escribí esta parte, te lo juro», «quise una casa y me salió una trampa», «corré,
+corré más rápido que yo, por favor». Se lo escucha por todo el pasillo, esté cerca o lejos.
+
+### Cuando te agarra
+No hay cartel de derrota. Se escucha **«enserio perdoname»** temblando en el medio de la pantalla
+mientras el revelado se llena de sangre: un uniforme nuevo del sombreador se queda con el canal rojo,
+sube el contraste, mete latido y bandas de ruido, y la cinta empieza a rodar hacia arriba.
+
+### La cinemática del muelle
+A los cuatro segundos y medio la escuela se apaga y arranca otro recuerdo, en otra escena, con el
+mismo revelado de cinta: un **muelle de madera**, el bosque atrás, mariposas, y una laguna. Teypi
+camina por el muelle, baja al agua y **el agua le responde**.
+
+- **El agua** es una malla de 120 × 120 con la ecuación de ondas corriendo encima a 60 pasos por
+  segundo (`h₁ = (2h₀ − h₁ + K·∇²h₀)·amortiguación`, K = 0,34). Cada pisada mete una gota en la
+  cuadrícula y el cuerpo empuja una estela continua. Las normales se sacan a mano de las diferencias
+  de altura, que sale más barato que recalcular la malla entera.
+  El sombreador hace Fresnel, reflejo de cielo y de bosque según hacia dónde apunta el rayo
+  reflejado, refracción del fondo deformada por la normal, cáusticas de dos rejillas de seno
+  cruzadas, absorción por hondura, espuma en las crestas y el rizo del viento —que se apaga con la
+  distancia, si no titila la cuadrícula—. La laguna se planta al metro y medio a propósito: se le
+  sigue viendo la arena, y Teypi camina en vez de nadar.
+  *(El primer intento se iba al infinito: el ping-pong copiaba los arreglos en vez de cambiar las
+  referencias y se perdía el cuadro anterior. Con la corrección la ola se queda en diez centímetros.)*
+- **Los árboles no son lowpoly.** El tronco es una sucesión de nueve anillos que se van afinando y
+  torciendo, cada rama es su propio tubo con curva, y la copa son entre 88 y 128 tarjetas de hojas
+  con alfa repartidas en cúpula y en las puntas de las ramas. Treinta y cuatro árboles y cuarenta
+  arbustos, todo fusionado en dos mallas.
+- Treinta y ocho mariposas con aleteo —el sprite se achata y se inclina—, polvo al sol, y cuatro
+  planos de cámara: el muelle entero desde la orilla, un lateral por encima del agua, uno de frente
+  retrocediendo mientras se hunde, y uno que se va para arriba dejándolo solo.
+
+El bosque se arma mientras la pantalla está en rojo, no al empezar la toma, para que no haya tirón.
