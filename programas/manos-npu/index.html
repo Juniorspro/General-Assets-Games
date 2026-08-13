@@ -143,8 +143,9 @@
   <div id="metricas">
     <div class="m"><span class="e">DIBUJO</span><span class="n fr" id="mFps">0</span><span class="u">fps</span></div>
     <div class="m"><span class="e">INFERENCIA</span><span class="n" id="mInf">0</span><span class="u">fps</span></div>
-    <div class="m"><span class="e">PALMA</span><span class="n" id="mPalma">0</span><span class="u">ms</span></div>
-    <div class="m"><span class="e">PUNTOS</span><span class="n" id="mPuntos">0</span><span class="u">ms</span></div>
+    <div class="m"><span class="e">LATENCIA</span><span class="n" id="mLat">0</span><span class="u">ms</span></div>
+    <div class="m"><span class="e">MODELO</span><span class="n" id="mPuntos">0</span><span class="u">ms</span></div>
+    <div class="m"><span class="e">PREPARAR</span><span class="n" id="mPrep">0</span><span class="u">ms</span></div>
   </div>
 
   <div id="abajo">
@@ -224,13 +225,15 @@ const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
    Los modelos viven en el repositorio y los sirve jsDelivr anclados al commit:
    una URL inmutable que el CDN cachea para siempre. El runtime viene del
    paquete oficial en npm, también clavado a una versión. */
-const MODELOS='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@32e1f456f4/mundo/manos/';
+const MODELOS='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@2cf6ea7c5f/mundo/manos/';
 const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
 const M={
   palma_int8:  MODELOS+'palm_detection_mediapipe_2023feb_int8.onnx',
   palma_f32:   MODELOS+'palm_detection_mediapipe_2023feb.onnx',
+  palma_fp16:  MODELOS+'palm_detection_mediapipe_2023feb_fp16.onnx',
   puntos_int8: MODELOS+'handpose_estimation_mediapipe_2023feb_int8.onnx',
-  puntos_f32:  MODELOS+'handpose_estimation_mediapipe_2023feb.onnx'
+  puntos_f32:  MODELOS+'handpose_estimation_mediapipe_2023feb.onnx',
+  puntos_fp16: MODELOS+'handpose_estimation_mediapipe_2023feb_fp16.onnx'
 };
 const PALMA_N=192, PUNTOS_N=224;
 const UMBRAL_PALMA=0.55, UMBRAL_NMS=0.3, UMBRAL_PUNTOS=0.55;
@@ -273,13 +276,14 @@ function cartel(txt, clase, seg){
    dos precisiones se prueban seguidas sin ensuciar nada, y `null` quiere decir
    exactamente eso. */
 const CADENA=[
-  ['npu','int8'], ['npu','f32'],
-  ['gpu','int8'], ['gpu','f32'],
-  ['webgpu',null], ['cpu',null]
+  ['npu','fp16'], ['npu','f32'],
+  ['gpu','fp16'], ['gpu','f32'],
+  ['webgpu','fp16'], ['webgpu','f32'],
+  ['cpu',null]
 ];
 const DISPOS=['npu','gpu','webgpu','cpu'];
 const clave=(d,p)=>d+(p?':'+p:'');
-const EP={ actual:null, pedido:'npu', preciso:'int8', sucio:false, forzado:false,
+const EP={ actual:null, pedido:'npu', preciso:'fp16', sucio:false, forzado:false,
            motivo:'', paso:0 };
 let sesPalma=null, sesPuntos=null;
 /* Dónde empieza esta carga. Viene por la dirección porque cambiar de proveedor
@@ -413,10 +417,19 @@ async function crearSesiones(dispositivo, soloPrec){
      limpio. Sin `soloPrec` se prueban las dos seguidas — en WebGPU el orden se
      invierte y va float32 primero, porque los operadores de cuantización
      todavía no están todos implementados ahí y el grafo INT8 termina cayendo a
-     CPU operador por operador, más caro que correr float32 derecho. */
-  const TODAS = dispositivo==='webgpu'
-    ? [['f32', M.palma_f32, M.puntos_f32], ['int8', M.palma_int8, M.puntos_int8]]
-    : [['int8', M.palma_int8, M.puntos_int8], ['f32', M.palma_f32, M.puntos_f32]];
+     CPU operador por operador, más caro que correr float32 derecho.
+
+     Y sobre el INT8 en WebNN: NO SE PUEDE, y no es opinión. Estos modelos
+     cuantizados usan QLinearConv, QLinearAdd, QGemm, QLinearSigmoid y
+     QLinearGlobalAveragePool, que son del dominio `com.microsoft` y no están
+     en el EP de WebNN —comprobado leyendo el bundle de ORT: esos nombres no
+     figuran—. Por eso la NPU va con FLOAT16, que es lo que de verdad digiere:
+     mitad de memoria que float32 y unidades nativas. Medido contra float32
+     sobre manos reales, los 21 puntos se corren 0,039 px de media. */
+  const FP16=['fp16', M.palma_fp16, M.puntos_fp16];
+  const F32 =['f32',  M.palma_f32,  M.puntos_f32 ];
+  const INT8=['int8', M.palma_int8, M.puntos_int8];
+  const TODAS = dispositivo==='cpu' ? [INT8, F32] : [FP16, F32];
   const intentos = soloPrec ? TODAS.filter(t=>t[0]===soloPrec) : TODAS;
   let ultimo=null;
   for(const [prec, up, ul] of intentos){
@@ -494,6 +507,7 @@ const tenPuntos=()=>new ort.Tensor('float32', bufPuntos, [1,PUNTOS_N,PUNTOS_N,3]
 /* La imagen entra en un cuadrado con bandas: se conserva la proporción y se
    rellena el resto. Sin esto la mano sale estirada y el modelo falla. */
 function prepararPalma(video){
+  const tp=performance.now();
   const w=video.videoWidth, h=video.videoHeight;
   const escala=PALMA_N/Math.max(w,h);
   const aw=Math.round(w*escala), ah=Math.round(h*escala);
@@ -504,6 +518,7 @@ function prepararPalma(video){
   for(let i=0,j=0;i<d.length;i+=4){
     bufPalma[j++]=LUT[d[i]]; bufPalma[j++]=LUT[d[i+1]]; bufPalma[j++]=LUT[d[i+2]];
   }
+  MET.msPrep=prom(MET.msPrep, performance.now()-tp);
   /* para volver a píxeles del video: multiplicar por el lado mayor y restar el
      margen, los dos en unidades del original */
   return { escalaSalida: Math.max(w,h), sesgoX: dx/escala, sesgoY: dy/escala };
@@ -524,7 +539,7 @@ async function detectarPalma(video){
   const enc=prepararPalma(video);
   const t0=performance.now();
   const sal=await sesPalma.run({ [sesPalma.inputNames[0]]: tenPalma() });
-  MET.msPalma=MET.msPalma*0.8+(performance.now()-t0)*0.2;
+  MET.msPalma=prom(MET.msPalma, performance.now()-t0);
   const nombres=sesPalma.outputNames;
   /* la salida de 18 canales son 4 de caja y 14 de siete puntos; la de 1 canal
      es la puntuación sin sigmoide */
@@ -644,6 +659,7 @@ function roiDePuntos(pts, ahora){
 const ADELANTO=0.045;                 // segundos de adelanto a velocidad medida
 
 function prepararPuntos(video, roi){
+  const tp=performance.now();
   const s=PUNTOS_N/roi.lado;
   ctxPuntos.save();
   ctxPuntos.fillStyle='#000'; ctxPuntos.fillRect(0,0,PUNTOS_N,PUNTOS_N);
@@ -657,12 +673,13 @@ function prepararPuntos(video, roi){
   for(let i=0,j=0;i<d.length;i+=4){
     bufPuntos[j++]=LUT[d[i]]; bufPuntos[j++]=LUT[d[i+1]]; bufPuntos[j++]=LUT[d[i+2]];
   }
+  MET.msPrep=prom(MET.msPrep, performance.now()-tp);
 }
 async function detectarPuntos(video, roi){
   prepararPuntos(video, roi);
   const t0=performance.now();
   const sal=await sesPuntos.run({ [sesPuntos.inputNames[0]]: tenPuntos() });
-  MET.msPuntos=MET.msPuntos*0.8+(performance.now()-t0)*0.2;
+  MET.msPuntos=prom(MET.msPuntos, performance.now()-t0);
   /* cuatro salidas: puntos de pantalla (63), confianza (1), lateralidad (1) y
      puntos del mundo (63). Se distinguen por su forma, no por su nombre, que
      cambia según cómo se haya exportado el modelo. */
@@ -759,12 +776,24 @@ function perderMano(){
   SEG.buscando=true; SEG.roi=null; SEG.conf=0; SEG.flojas=0;
   FIL_PTS.reiniciar(); FIL_MUN.reiniciar(); olvidarPrediccion();
 }
-const MET={ fps:0, inf:0, msPalma:0, msPuntos:0, fpsT:[], infT:[] };
+/* Cuatro relojes distintos, porque "va lento" no es un diagnóstico:
+   msPuntos = lo que tarda EL MODELO. Esto es lo que la NPU acelera.
+   msPrep   = pasar el cuadro de video a tensor: recortar, leer los píxeles y
+              normalizar. Corre en el hilo principal y la NPU NO lo toca; en
+              cuanto el modelo baja a un par de milisegundos, esto pasa a ser
+              el techo de todo.
+   lat      = de cuadro disponible a puntos listos. Es la que se siente.
+   inf      = ciclos completos por segundo. */
+const MET={ fps:0, inf:0, msPalma:0, msPuntos:0, msPrep:0, lat:0, fpsT:[], infT:[] };
+const prom=(v,x)=>v*0.85+x*0.15;
 
-async function unCiclo(video){
+async function unCiclo(video, tCuadro){
   if(SEG.enVuelo || !sesPalma || !sesPuntos) return;
   if(video.readyState<2 || !video.videoWidth) return;
   SEG.enVuelo=true;
+  /* cuándo estuvo disponible el cuadro: con requestVideoFrameCallback es el
+     dato real del navegador; si no, el ahora del disparo */
+  const tDisp = tCuadro || performance.now();
   try{
     let roi=SEG.roi;
     const ahora0=performance.now();
@@ -790,6 +819,7 @@ async function unCiclo(video){
       SEG.pts=FIL_PTS.aplicar(r.pts, t);
       SEG.mun=FIL_MUN.aplicar(r.mun, t);
       SEG.conf=r.conf; SEG.t=t;
+      MET.lat=prom(MET.lat, t-tDisp);
       SEG.flojas = r.conf<UMBRAL_FIRME ? SEG.flojas+1 : 0;
       if(SEG.flojas>=FLOJAS_MAX){ SEG.buscando=true; SEG.flojas=0; }
       else SEG.buscando=false;
@@ -816,7 +846,7 @@ async function abrirCamara(atras){
      que una cámara que no la cumple no abra nada */
   const pedido={ video:{ facingMode:{ideal: atras?'environment':'user'},
                          width:{ideal:1280}, height:{ideal:720},
-                         frameRate:{ideal:60} }, audio:false };
+                         frameRate:{ideal:120} }, audio:false };
   let flujo;
   try{ flujo=await navigator.mediaDevices.getUserMedia(pedido); }
   catch(e){ flujo=await navigator.mediaDevices.getUserMedia({video:true, audio:false}); }
@@ -916,7 +946,7 @@ let RVFC=false;
    inferir sobre uno ya procesado porque el dibujo va a 60 y la cámara a 30. */
 function engancharCuadros(v){
   if(typeof v.requestVideoFrameCallback!=='function') return false;
-  const paso=()=>{ v.requestVideoFrameCallback(paso); if(CAM.pista) unCiclo(v); };
+  const paso=(ahora)=>{ v.requestVideoFrameCallback(paso); if(CAM.pista) unCiclo(v, ahora); };
   v.requestVideoFrameCallback(paso);
   return true;
 }
@@ -937,12 +967,14 @@ function ciclo(ahora){
 }
 function pintarMetricas(){
   const c=v=>v>=100?'ok':(v>=45?'med':'mal');
+  const ms=(v,b,m)=>v<=b?'ok':(v<=m?'med':'mal');
   const f=$('mFps'); f.textContent=Math.round(MET.fps); f.className='n fr';
   const i=$('mInf'); i.textContent=Math.round(MET.inf); i.className='n '+c(MET.inf);
-  const p=$('mPalma'); p.textContent=MET.msPalma.toFixed(1);
-  p.className='n '+(MET.msPalma<=6?'ok':(MET.msPalma<=15?'med':'mal'));
+  const l=$('mLat'); l.textContent=MET.lat.toFixed(1); l.className='n '+ms(MET.lat,12,25);
   const q=$('mPuntos'); q.textContent=MET.msPuntos.toFixed(1);
-  q.className='n '+(MET.msPuntos<=6?'ok':(MET.msPuntos<=15?'med':'mal'));
+  q.className='n '+ms(MET.msPuntos,4,10);
+  const r=$('mPrep'); r.textContent=MET.msPrep.toFixed(1);
+  r.className='n '+ms(MET.msPrep,3,7);
 }
 
 /* ============================================================================
@@ -967,6 +999,14 @@ async function pintarSonda(){
   fila(ctxGPU==='sí'?'si':'medio', 'CONTEXTO GPU', ctxGPU);
   fila(EP.actual==='npu'?'si':(EP.actual?'medio':'no'), 'EJECUTANDO EN',
        EP.actual? EP.actual.toUpperCase()+' · '+EP.preciso.toUpperCase() : 'sin sesión');
+  /* el desglose: si MODELO está en 2 ms y PREPARAR en 12, el cuello no es la
+     NPU y no hay modelo que lo arregle */
+  fila(MET.msPuntos<=4?'si':(MET.msPuntos<=10?'medio':'no'), 'MODELO',
+       MET.msPuntos.toFixed(1)+' ms · palma '+MET.msPalma.toFixed(1)+' ms');
+  fila(MET.msPrep<=3?'si':(MET.msPrep<=7?'medio':'no'), 'PREPARAR CUADRO',
+       MET.msPrep.toFixed(1)+' ms · hilo principal, la NPU no lo toca');
+  fila(MET.lat<=12?'si':(MET.lat<=25?'medio':'no'), 'LATENCIA',
+       MET.lat.toFixed(1)+' ms de cuadro a puntos');
   fila(typeof navigator.gpu!=='undefined'?'si':'medio','WEBGPU',
        typeof navigator.gpu!=='undefined'?'presente':'ausente');
   /* por qué no fue la NPU, con el error tal cual lo tiró el runtime */

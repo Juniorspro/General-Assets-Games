@@ -370,6 +370,59 @@ Lo que **no** se pudo probar acá: la inferencia de verdad en un navegador. Este
 entorno no llega a jsDelivr desde Chromium (`ERR_CONNECTION_RESET` con y sin
 proxy), así que los modelos no se pueden bajar en una prueba automatizada.
 
+### INT8 en la NPU no se puede, y no es opinión
+
+Los modelos cuantizados de OpenCV Zoo usan `QLinearConv`, `QLinearAdd`,
+`QGemm`, `QLinearSigmoid` y `QLinearGlobalAveragePool`. Esos operadores son del
+dominio **`com.microsoft`**, no del ONNX estándar. Comprobado buscando cada
+nombre dentro del bundle de ORT-Web: **ninguno figura** en el EP de WebNN,
+mientras que todos los del modelo float32 (`Conv`, `PRelu`, `Resize`, `Pad`,
+`Gemm`, `Clip`, `GlobalAveragePool`, `Squeeze`, `Cast`) sí están.
+
+Así que pedir "INT8 en la NPU" con estos archivos era pedir algo imposible.
+
+### Lo que la NPU sí digiere: float16
+
+Una NPU es una máquina de fp16. Los modelos se convirtieron con
+`convert_float_to_float16(keep_io_types=True)`, que deja entrada y salida en
+float32 y mete los `Cast` —soportados— así que el JS no cambia nada.
+
+| | float32 | float16 |
+|---|---|---|
+| palma | 3814 KB | **1940 KB** |
+| puntos | 4003 KB | **2029 KB** |
+
+Verificado con el pipeline **entero** sobre manos reales, no con ruido:
+
+| | puntaje de palma | confianza | desvío de los 21 puntos |
+|---|---|---|---|
+| manoA | 0,9770 → 0,9770 | 0,9975 → 0,9975 | media **0,039 px**, máx 0,102 px |
+| manoB | 0,9784 → 0,9783 | 0,9962 → 0,9962 | media **0,024 px**, máx 0,054 px |
+
+Sobre manos de 240–270 px de ancho. Es una décima de píxel: invisible.
+
+Un detalle que decide dónde se usa: **en CPU el fp16 es más lento** (4,76 ms
+contra 2,89 ms medidos), porque una CPU no tiene unidades fp16 y los `Cast`
+se pagan sin ganar nada. Por eso la cadena usa fp16 en npu, gpu y webgpu, e
+INT8 en cpu:
+
+```
+npu/fp16 → npu/f32 → gpu/fp16 → gpu/f32 → webgpu/fp16 → webgpu/f32 → cpu
+```
+
+### Cuatro relojes, porque "va lento" no es un diagnóstico
+
+- **MODELO** — lo que tarda la inferencia. Esto es lo que la NPU acelera.
+- **PREPARAR** — pasar el cuadro a tensor: recortar, leer píxeles, normalizar.
+  Corre en el hilo principal y **la NPU no lo toca**. Cuando el modelo baja a
+  un par de milisegundos, esto pasa a ser el techo de todo.
+- **LATENCIA** — de cuadro disponible a puntos listos. Es la que se siente.
+  El momento del cuadro sale del propio `requestVideoFrameCallback`.
+- **INFERENCIA** — ciclos completos por segundo.
+
+Están en el panel y desglosados en la hoja MOTOR. Si MODELO marca 2 ms y
+PREPARAR marca 12, el cuello no es la NPU y no hay modelo que lo arregle.
+
 ### Precisión: el filtro One-Euro
 
 El problema de siempre con los puntos que salen de un modelo cuadro a cuadro es
