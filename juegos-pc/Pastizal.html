@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>PASTIZAL</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;
+    background:#0a1410;color:#e8f2ea;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  /* El juego es apaisado. Si el teléfono está parado —o tiene el giro trabado,
+     que es lo normal— se acuesta TODO noventa grados en vez de pedir pantalla
+     completa: la imagen ocupa el largo del teléfono y se juega de costado. */
+  #rot{position:fixed;left:50%;top:50%;transform-origin:50% 50%;
+    transform:translate(-50%,-50%);background:#0a1410;touch-action:none;overflow:hidden}
+  #stage{position:absolute;inset:0;overflow:hidden;touch-action:none}
+  #stage canvas{display:block;width:100%;height:100%;touch-action:none}
+  #mandos{position:absolute;inset:0;z-index:9;pointer-events:none;touch-action:none}
+  #err{display:none;position:fixed;top:0;left:0;right:0;z-index:999;background:#8e2b20;color:#fff;
+    font:11px/1.5 ui-monospace,monospace;padding:8px;white-space:pre-wrap;max-height:40vh;overflow:auto}
+  #hud{position:absolute;inset:0;pointer-events:none;z-index:10}
+  .fila{position:absolute;left:10px;top:10px;display:flex;gap:7px;flex-wrap:wrap;pointer-events:auto}
+  .btn{cursor:pointer;font:700 10px/1 ui-monospace,monospace;letter-spacing:2px;
+    padding:11px 12px;border-radius:7px;border:1px solid rgba(170,215,180,.32);
+    color:#e9f8ec;background:rgba(10,26,18,.60);backdrop-filter:blur(6px);white-space:nowrap}
+  .btn:active{background:rgba(40,100,60,.85)}
+  .btn.on{border-color:#8fe8a4;color:#dcffe4;background:rgba(24,80,46,.85)}
+  #panel{position:absolute;right:10px;top:10px;z-index:11;width:min(58%,236px);
+    padding:11px 12px;border-radius:10px;pointer-events:auto;
+    border:1px solid rgba(170,215,180,.22);background:rgba(8,18,13,.86);backdrop-filter:blur(8px);
+    display:none;flex-direction:column;gap:8px;max-height:calc(100% - 20px);overflow:auto}
+  #panel.show{display:flex}
+  #panel h3{font-size:9.5px;letter-spacing:3px;color:#9fd8ae;font-weight:700}
+  .ctl{display:flex;flex-direction:column;gap:2px}
+  .ctl label{font-size:9px;letter-spacing:1.3px;color:#aacab4;display:flex;justify-content:space-between}
+  .ctl label b{color:#dcf6e2;font-weight:700}
+  input[type=range]{-webkit-appearance:none;width:100%;height:19px;background:transparent}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:#2c4636}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;margin-top:-6px;
+    border-radius:50%;background:#8fe8a4;border:none}
+  input[type=range]::-moz-range-track{height:3px;border-radius:3px;background:#2c4636}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border:none;border-radius:50%;background:#8fe8a4}
+  #stats{position:absolute;left:10px;bottom:8px;z-index:11;
+    font:9.5px/1.6 ui-monospace,monospace;color:#8bb098;letter-spacing:1px;pointer-events:none}
+  #ayuda{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:12;
+    font:9.5px/1.6 ui-monospace,monospace;color:#94bda2;letter-spacing:1.5px;
+    text-align:center;pointer-events:none;transition:opacity .8s}
+</style>
+</head>
+<body>
+<div id="err"></div>
+<div id="rot">
+  <div id="stage"></div>
+  <canvas id="mandos"></canvas>
+  <div id="ayuda">pulgar izquierdo: caminar · derecho: mirar</div>
+  <div id="stats"></div>
+  <div id="hud"><div class="fila">
+    <button class="btn" id="bPanel">AJUSTES</button>
+    <button class="btn" id="bCorrer">CORRER</button>
+  </div></div>
+  <div id="panel">
+    <h3>PASTO</h3>
+    <div class="ctl"><label>DENSIDAD <b id="vDens">1.00</b></label>
+      <input type="range" id="sDens" min="0.1" max="1" step="0.02" value="1"></div>
+    <div class="ctl"><label>ALTURA <b id="vAlto">1.00</b></label>
+      <input type="range" id="sAlto" min="0.4" max="2" step="0.02" value="1"></div>
+    <div class="ctl"><label>VIENTO <b id="vViento">0.55</b></label>
+      <input type="range" id="sViento" min="0" max="1.4" step="0.02" value="0.55"></div>
+    <div class="ctl"><label>ARQUEO <b id="vArco">0.72</b></label>
+      <input type="range" id="sArco" min="0" max="1.2" step="0.02" value="0.72"></div>
+    <h3>IMAGEN</h3>
+    <div class="ctl"><label>SOL <b id="vSol">0.55</b></label>
+      <input type="range" id="sSol" min="0.06" max="1" step="0.01" value="0.55"></div>
+    <div class="ctl"><label>EXPOSICIÓN <b id="vExp">1.00</b></label>
+      <input type="range" id="sExp" min="0.4" max="2" step="0.02" value="1"></div>
+    <div class="ctl"><label>COLOR <b id="vSat">1.18</b></label>
+      <input type="range" id="sSat" min="0.6" max="1.6" step="0.02" value="1.18"></div>
+    <div class="ctl"><label>NITIDEZ <b id="vNit">0.35</b></label>
+      <input type="range" id="sNit" min="0" max="1.5" step="0.05" value="0.35"></div>
+    <div class="ctl"><label>NEBLINA <b id="vNiebla">0.22</b></label>
+      <input type="range" id="sNiebla" min="0" max="1.6" step="0.02" value="0.22"></div>
+  </div>
+</div>
+<script>
+window.addEventListener('error',e=>{const b=document.getElementById('err'); if(!b) return;
+  b.style.display='block'; b.textContent+=(e.message||e.error)+'\n'+(e.filename||'')+':'+(e.lineno||'')+'\n';});
+</script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================================
+   PASTIZAL · todo procedural, cero archivos
+
+   No hay una sola textura ni un solo modelo descargado: el suelo es un plano
+   verde y el pasto son BRIZNAS DE GEOMETRÍA, no tarjetas con una foto pegada.
+   Cada brizna es una cinta de unos pocos vértices que nace ancha, se afina
+   hasta la punta y se arquea; su alto, su giro, su curva, su tono y su fase de
+   viento salen de un hash de la celda donde le tocó caer.
+
+   Son doscientas mil briznas y ninguna se mueve nunca desde JavaScript. Cada
+   una tiene un índice fijo en una grilla y el shader calcula qué celda del
+   mundo le toca según dónde está parado el jugador:
+
+       celda = uBase + mod(indice - uBase, N)
+
+   Cuando el jugador cruza una celda, uBase cambia en uno y las briznas de una
+   sola columna reaparecen del otro lado. Todo el trabajo por cuadro es escribir
+   dos floats en un uniform.
+
+   Lo que hace que parezca pasto y no un cepillo:
+   · cada brizna se ARQUEA con su propia curva, y el arco decide también hacia
+     dónde mira su normal;
+   · la normal ABOMBA a lo ancho, como una cinta acanalada, así devuelve una
+     franja de brillo en vez de prenderse entera de golpe;
+   · a contraluz la hoja se PRENDE, que es lo que hace una de verdad;
+   · el viento sopla en RÁFAGAS que se ven cruzar el campo, no parejo;
+   · y hay manchones de altura y de tono en grande, porque ningún pastizal es
+     de un solo verde.
+============================================================================ */
+const MOVIL=matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+const FOV0=62, BORDE=900;
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+const rotEl=document.getElementById('rot'), stage=document.getElementById('stage');
+let ROT=false, CAJA={w:1,h:1};
+function acomodarCaja(){
+  const vw=innerWidth, vh=innerHeight;
+  ROT = vh > vw*1.02;
+  CAJA.w = ROT? vh : vw; CAJA.h = ROT? vw : vh;
+  rotEl.style.width=CAJA.w+'px'; rotEl.style.height=CAJA.h+'px';
+  rotEl.style.transform='translate(-50%,-50%) rotate('+(ROT?90:0)+'deg)';
+}
+acomodarCaja();
+const renderer=new THREE.WebGLRenderer({antialias:false, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1, MOVIL?1.6:2));
+renderer.setSize(CAJA.w, CAJA.h, false);
+/* Todo se dibuja en LINEAL sobre un buffer; el tono, el color y el paso a sRGB
+   los hace el pase de post, una sola vez y para todos. */
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.NoToneMapping;
+stage.appendChild(renderer.domElement);
+const escena=new THREE.Scene();
+const camara=new THREE.PerspectiveCamera(FOV0, CAJA.w/CAJA.h, 0.03, 2200);
+camara.rotation.order='YXZ';
+
+const SOL=new THREE.Vector3();
+const CIELO=new THREE.Color(0x6fb6e8), HORIZ=new THREE.Color(0xc8dfe6), SOLC=new THREE.Color(1,0.97,0.9);
+const MATS=[];
+let nieblaD=0.011;
+
+/* --------------------------------------------------------------- el ruido
+   Un solo hash y un valor interpolado alcanzan para los manchones: no hace
+   falta traer una textura para eso. */
+const RUIDO_GLSL=`
+  float h21(vec2 p){ vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33); return fract((q.x+q.y)*q.z); }
+  float ruido(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+    return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x), f.y); }
+  float fbm(vec2 p){ return ruido(p)*0.55+ruido(p*2.07+11.3)*0.28+ruido(p*4.13+5.7)*0.17; }`;
+const NIEBLA_GLSL=`
+  vec3 conNiebla(vec3 col, vec3 W, vec3 ojo, vec3 luz, vec3 hor, vec3 solc, float k){
+    vec3 dv=W-ojo; float d=length(dv); dv/=max(d,1e-4);
+    float f=1.0-exp(-k*d);
+    vec3 n=mix(hor, solc, pow(max(dot(dv,luz),0.0), 6.0)*0.55);
+    return mix(col, n, clamp(f,0.0,1.0));
+  }`;
+/* ============================================================================
+   EL CIELO Y EL SUELO
+   Los dos procedurales: el cielo es un degradado con el disco del sol y su
+   halo; el suelo, un plano verde con manchones de tono. Como el pasto lo tapa
+   casi entero, el suelo sólo tiene que dar el color de fondo correcto para que
+   los huecos no canten.
+============================================================================ */
+const cieloMat=new THREE.ShaderMaterial({
+  side:THREE.BackSide, depthWrite:false,
+  uniforms:{ luz:{value:SOL.clone()}, uCenit:{value:CIELO.clone()},
+             uHoriz:{value:HORIZ.clone()}, uSolC:{value:SOLC.clone()}, uT:{value:0} },
+  vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
+    gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vD; uniform vec3 luz,uCenit,uHoriz,uSolC; uniform float uT;
+    ${RUIDO_GLSL}
+    void main(){
+      vec3 d=normalize(vD);
+      float h=clamp(d.y,-1.0,1.0);
+      /* el degradado real del cielo no es lineal: se abre rápido cerca del
+         horizonte y se aplana arriba */
+      vec3 col=mix(uHoriz, uCenit, pow(clamp(h,0.0,1.0), 0.42));
+      col=mix(col, uHoriz*0.86, clamp(-h*3.0,0.0,1.0));       // por debajo
+      float ds=max(dot(d, luz), 0.0);
+      col+=uSolC*pow(ds, 5.0)*0.22;                            // halo ancho
+      col+=uSolC*pow(ds, 1400.0)*16.0;                         // el disco
+      /* nubes finas: dos capas de ruido estiradas y desplazadas, sólo arriba */
+      if(h>0.02){
+        vec2 p=d.xz/max(h,0.02);
+        float n=fbm(p*0.30+vec2(uT*0.004,uT*0.0025));
+        float n2=fbm(p*0.75-vec2(uT*0.007,0.0));
+        float nub=smoothstep(0.52,0.86,n*0.72+n2*0.28)*smoothstep(0.03,0.30,h);
+        col=mix(col, mix(vec3(0.92,0.95,0.99), uSolC*1.15, pow(ds,3.0)*0.5), nub*0.80);
+      }
+      gl_FragColor=vec4(col,1.0);
+    }`
+});
+MATS.push(cieloMat);
+const cielo=new THREE.Mesh(new THREE.SphereGeometry(1500,40,26), cieloMat);
+cielo.frustumCulled=false; escena.add(cielo);
+
+const matSuelo=new THREE.ShaderMaterial({
+  uniforms:{ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
+    uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
+    uFogD:{value:nieblaD} },
+  /* el plano sigue al jugador, así que la posición del mundo hay que sacarla de
+     la matriz del objeto y no del atributo, o los manchones viajarían con uno */
+  vertexShader:`varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.0);
+    vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vW; uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
+    ${RUIDO_GLSL}
+    ${NIEBLA_GLSL}
+    void main(){
+      /* el mismo campo de manchones que decide la altura del pasto, para que el
+         suelo y las briznas cuenten la misma historia */
+      float m=fbm(vW.xz*0.035);
+      float g=fbm(vW.xz*0.21+31.7);
+      vec3 col=mix(vec3(0.028,0.058,0.020), vec3(0.062,0.108,0.032), m);
+      col=mix(col, vec3(0.078,0.082,0.036), smoothstep(0.62,0.92,g)*0.35);
+      col*=0.82+0.36*ruido(vW.xz*1.7);
+      float lamb=0.30+0.70*max(luz.y,0.0);
+      col*=lamb*uSolC*1.35 + uCielo*0.22;
+      gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
+    }`
+});
+MATS.push(matSuelo);
+const suelo=new THREE.Mesh(new THREE.PlaneGeometry(4000,4000,1,1).rotateX(-Math.PI/2), matSuelo);
+suelo.frustumCulled=false; escena.add(suelo);
+
+/* ============================================================================
+   LAS BRIZNAS
+   Una cinta de S tramos: dos vértices por tramo y uno solo en la punta. Nace
+   ancha, se afina y se arquea. Todo lo demás —dónde cae, cuánto mide, hacia
+   dónde mira, cuánto se dobla— sale de un hash de su celda, adentro del shader.
+============================================================================ */
+const PASTO_U={
+  uT:{value:0}, uViento:{value:0.55}, uArco:{value:0.55}, uAltoK:{value:1.0},
+  uDens:{value:1.0}, uJug:{value:new THREE.Vector3()}, uRJug:{value:1.15},
+  uOjo:{value:new THREE.Vector3()}, luz:{value:SOL.clone()},
+  uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
+  uFogD:{value:nieblaD}
+};
+const CAMPOS=[];
+function crearCampo(o){
+  const N=o.N, S=o.segs;
+  /* la cinta: (-1,v) y (1,v) por tramo, y (0,1) de punta */
+  const pos=[], idx=[];
+  for(let k=0;k<S;k++){ const v=k/S; pos.push(-1,v,0, 1,v,0); }
+  pos.push(0,1,0);
+  for(let k=0;k<S-1;k++){ const a=k*2; idx.push(a,a+1,a+3, a,a+3,a+2); }
+  idx.push((S-1)*2, (S-1)*2+1, S*2);
+  const geo=new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  geo.setIndex(idx);
+  const ii=new Float32Array(N*N*2);
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){ const k=(j*N+i)*2; ii[k]=i; ii[k+1]=j; }
+  geo.setAttribute('iIdx', new THREE.InstancedBufferAttribute(ii,2));
+  geo.instanceCount=N*N;
+  geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e5);
+  const mat=new THREE.ShaderMaterial({
+    side:THREE.DoubleSide,
+    uniforms:Object.assign({ uBase:{value:new THREE.Vector2()}, uN:{value:N},
+      uCelda:{value:o.celda}, uAncho:{value:o.ancho}, uDist:{value:o.dist},
+      uCerca:{value:o.cerca||0}, uSem:{value:o.sem||0},
+      uAltoMin:{value:o.altoMin}, uAltoMax:{value:o.altoMax} }, PASTO_U),
+    vertexShader:`
+      precision highp float;
+      attribute vec2 iIdx;
+      uniform vec2 uBase; uniform float uN,uCelda,uAncho,uDist,uCerca,uSem;
+      uniform float uAltoMin,uAltoMax,uT,uViento,uArco,uAltoK,uDens,uRJug;
+      uniform vec3 uJug,uOjo;
+      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos;
+      ${RUIDO_GLSL}
+      void main(){
+        /* la celda del mundo que le toca a esta brizna */
+        vec2 g=uBase+mod(iIdx-uBase, vec2(uN));
+        vec2 s=g+vec2(uSem);
+        float r1=h21(s), r2=h21(s+vec2(17.3,5.1)), r3=h21(s+vec2(3.7,29.9));
+        float r4=h21(s+vec2(41.1,13.7)), r5=h21(s+vec2(7.9,53.3)), r6=h21(s+vec2(63.1,2.9));
+        vec2 P=(g+0.5)*uCelda+(vec2(r1,r2)-0.5)*uCelda*0.98;
+
+        /* manchones: el pastizal es más alto y más verde en unos lados */
+        float mancha=fbm(P*0.035);
+        float claro=smoothstep(0.10,0.34,fbm(P*0.011+7.3));   // algún pelado
+        float alto=(uAltoMin+r3*(uAltoMax-uAltoMin))*uAltoK*(0.55+mancha*0.95);
+        float vive=step(r5, uDens*claro);
+        alto*=vive;
+
+        float dcam=length(P-uOjo.xz);
+        alto*=1.0-smoothstep(uDist*0.80, uDist, dcam);
+        if(uCerca>0.0) alto*=smoothstep(uCerca*0.5, uCerca, dcam);
+        vLejos=dcam;
+
+        float v=position.y, lado=position.x;
+        /* el perfil: ancha en la base, fina en la punta */
+        float w=uAncho*(1.0-pow(v,1.4))*(0.72+r4*0.56)*0.5;
+        /* el arco propio de la brizna, y encima el viento en ráfagas */
+        float raf=max(0.05, 0.48+0.36*sin(P.x*0.13+P.y*0.10-uT*0.65)
+                                +0.20*sin(P.x*0.041-P.y*0.063-uT*0.33));
+        float osc=sin(uT*1.9+P.x*0.7+P.y*0.55+r4*6.283)+0.42*sin(uT*3.7+P.x*1.5-P.y*1.1);
+        float dob=(uArco*(0.35+r6*1.6) + uViento*raf*osc*0.60)*v*v;
+
+        float a=r4*6.2831853;
+        vec2 dir=vec2(cos(a), sin(a));            // hacia dónde se vuelca
+        vec2 late=vec2(-dir.y, dir.x);            // el ancho es perpendicular
+        /* la línea central de la cinta, ya arqueada */
+        vec3 eje=vec3(dir.x*dob*alto, (v-dob*dob*0.32)*alto, dir.y*dob*alto);
+        vec3 loc=eje+vec3(late.x,0.0,late.y)*lado*w*alto;
+
+        /* el jugador la aparta al pasar: ésta es la colisión que se ve */
+        vec3 W=vec3(P.x,0.0,P.y)+loc;
+        vec2 dj=W.xz-uJug.xz; float dd=length(dj);
+        float emp=1.0-smoothstep(uRJug*0.25, uRJug, dd);
+        loc.xz+=(dj/max(dd,0.0015))*emp*v*alto*0.9;
+        loc.y-=emp*v*alto*0.55;
+        W=vec3(P.x,0.0,P.y)+loc; vW=W;
+
+        /* La normal: perpendicular a la tangente de la cinta, y ABOMBADA a lo
+           ancho como una hoja acanalada. Sin eso la brizna se prende entera de
+           golpe y el pastizal titila. */
+        float dv=2.0*dob*v;                        // derivada del arco
+        vec3 tan=normalize(vec3(dir.x*dv, 1.0-dob*dob*0.64*v, dir.y*dv));
+        vec3 lat3=vec3(late.x,0.0,late.y);
+        vec3 nor=normalize(cross(lat3, tan));
+        vNor=normalize(nor + lat3*lado*0.55);
+        vV=v; vTono=0.80+r2*0.40; vSeco=smoothstep(0.72,1.0,r6);
+        gl_Position=projectionMatrix*viewMatrix*vec4(W,1.0);
+      }`,
+    fragmentShader:`
+      precision highp float;
+      uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
+      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos;
+      ${NIEBLA_GLSL}
+      void main(){
+        vec3 N=normalize(vNor);
+        vec3 E=normalize(uOjo-vW);
+        if(dot(N,E)<0.0) N=-N;                     // la cinta se ve de los dos lados
+        /* el color de una brizna: base fría y oscura, punta clara y dorada */
+        vec3 col=mix(vec3(0.030,0.082,0.020), vec3(0.190,0.430,0.070), pow(vV,0.80));
+        col=mix(col, vec3(0.360,0.320,0.095), vSeco*0.50);
+        col*=vTono;
+        float ndl=max(dot(N,luz),0.0);
+        float lamb=0.26+0.80*ndl;
+        /* translucidez: a contraluz la hoja se prende */
+        float atras=pow(max(dot(-E,luz),0.0),2.4)*0.85*vV;
+        /* brillo: la hoja es una cinta y devuelve una franja, no un punto */
+        vec3 H=normalize(E+luz);
+        float esp=pow(max(dot(N,H),0.0), 34.0)*0.55*vV;
+        float ao=mix(0.42,1.10,vV);                // la base del manojo, en sombra
+        col=col*lamb*ao*2.1
+          + vec3(0.55,1.00,0.32)*atras*col*3.2
+          + uSolC*esp*ndl;
+        col+=col*uCielo*0.35*vV;
+        gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
+      }`
+  });
+  MATS.push(mat);
+  const m=new THREE.Mesh(geo,mat);
+  m.frustumCulled=false; escena.add(m);
+  const c={malla:m, mat, N, celda:o.celda, base:mat.uniforms.uBase.value, briznas:N*N};
+  CAMPOS.push(c); return c;
+}
+/* Tres capas por distancia: cerca, briznas de cinco tramos bien finas; lejos,
+   menos y más gordas, porque a treinta metros una brizna de dos milímetros no
+   llega ni a un píxel y se paga igual. */
+const K=MOVIL?0.62:1.0;
+crearCampo({N:Math.round(300*K), celda:0.048, segs:5, ancho:0.034,
+            altoMin:0.15, altoMax:0.38, dist:9*K,  cerca:0,     sem:0});
+crearCampo({N:Math.round(300*K), celda:0.130, segs:4, ancho:0.052,
+            altoMin:0.20, altoMax:0.50, dist:26*K, cerca:6.0*K, sem:311});
+/* La lejana lleva pocas briznas por metro cuadrado, así que las suyas van más
+   anchas: a treinta metros nadie distingue una brizna de tres juntas, pero el
+   suelo pelado entre medio sí se ve, y desde arriba canta. */
+crearCampo({N:Math.round(260*K), celda:0.450, segs:2, ancho:0.145,
+            altoMin:0.28, altoMax:0.64, dist:80*K, cerca:21*K,  sem:977});
+function seguirPasto(x,z){
+  for(const c of CAMPOS)
+    c.base.set(Math.floor(x/c.celda)-(c.N>>1), Math.floor(z/c.celda)-(c.N>>1));
+}
+
+/* ============================================================================
+   POST · un solo pase al final
+   Brillo derramado, ACES, contraste, color, nitidez de contraste adaptativo y
+   el paso a sRGB. La escena entera se dibuja en lineal sobre un buffer.
+============================================================================ */
+const escPost=new THREE.Scene(), camPost=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+const mallaPost=new THREE.Mesh(new THREE.PlaneGeometry(2,2)); escPost.add(mallaPost);
+const VQ='varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }';
+const rtLin=(w,h,ms)=>new THREE.WebGLRenderTarget(w,h,{minFilter:THREE.LinearFilter,
+  magFilter:THREE.LinearFilter, type:THREE.HalfFloatType, colorSpace:THREE.NoColorSpace,
+  samples:ms||0, depthBuffer:true, stencilBuffer:false});
+const rtEsc=rtLin(2,2, MOVIL?0:4), rtBr=rtLin(2,2), rtB1=rtLin(2,2), rtB2=rtLin(2,2);
+const matBrillo=new THREE.ShaderMaterial({vertexShader:VQ, fragmentShader:`
+  precision highp float; varying vec2 vUv; uniform sampler2D t; uniform float uU,uS;
+  void main(){ vec3 c=texture2D(t,vUv).rgb; float l=max(max(c.r,c.g),c.b);
+    float k=clamp((l-uU)/max(uS,1e-4),0.0,1.0); gl_FragColor=vec4(c*k*k,1.0); }`,
+  uniforms:{t:{value:null},uU:{value:1.25},uS:{value:1.2}}});
+const matBorron=new THREE.ShaderMaterial({vertexShader:VQ, fragmentShader:`
+  precision highp float; varying vec2 vUv; uniform sampler2D t; uniform vec2 uD;
+  void main(){ vec3 s=texture2D(t,vUv).rgb*0.227027;
+    s+=texture2D(t,vUv+uD*1.3846).rgb*0.316216; s+=texture2D(t,vUv-uD*1.3846).rgb*0.316216;
+    s+=texture2D(t,vUv+uD*3.2308).rgb*0.070270; s+=texture2D(t,vUv-uD*3.2308).rgb*0.070270;
+    gl_FragColor=vec4(s,1.0); }`, uniforms:{t:{value:null},uD:{value:new THREE.Vector2()}}});
+const matGrado=new THREE.ShaderMaterial({vertexShader:VQ, fragmentShader:`
+  precision highp float; varying vec2 vUv;
+  uniform sampler2D tEsc,tBloom; uniform vec2 uPx;
+  uniform float uBloom,uExp,uCon,uSat,uVin,uNit;
+  vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
+  vec3 aSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,1e-5),vec3(0.4166667))-0.055,
+                                 step(0.0031308,c)); }
+  void main(){
+    vec3 c=texture2D(tEsc,vUv).rgb;
+    /* nitidez limitada por el vecindario: le devuelve el filo a la brizna sin
+       dejarle un halo blanco al lado */
+    if(uNit>0.001){
+      vec3 a=texture2D(tEsc,vUv+vec2(uPx.x,0)).rgb, b=texture2D(tEsc,vUv-vec2(uPx.x,0)).rgb;
+      vec3 d=texture2D(tEsc,vUv+vec2(0,uPx.y)).rgb, e=texture2D(tEsc,vUv-vec2(0,uPx.y)).rgb;
+      vec3 mn=min(min(a,b),min(d,e)), mx=max(max(a,b),max(d,e));
+      c=clamp(c+(c*4.0-(a+b+d+e))*0.25*uNit, min(mn,c), max(mx,c));
+    }
+    c+=texture2D(tBloom,vUv).rgb*uBloom;
+    c=aces(c*uExp);
+    c=(c-0.5)*uCon+0.5;
+    float l=dot(c,vec3(0.2126,0.7152,0.0722));
+    c=mix(vec3(l),c,uSat);
+    float dd=length((vUv-0.5)*vec2(1.30,1.0));
+    c*=1.0-uVin*dd*dd;
+    gl_FragColor=vec4(aSRGB(clamp(c,0.0,1.0)),1.0);
+  }`,
+  uniforms:{tEsc:{value:null},tBloom:{value:null},uPx:{value:new THREE.Vector2()},
+    uBloom:{value:0.24},uExp:{value:1.0},uCon:{value:1.06},uSat:{value:1.18},
+    uVin:{value:0.20},uNit:{value:0.35}}});
+let postBloom=true;
+function acomodarPost(w,h){
+  const d=renderer.getPixelRatio(), W=Math.round(w*d), H=Math.round(h*d);
+  if(rtEsc.width===W&&rtEsc.height===H) return;
+  rtEsc.setSize(W,H); matGrado.uniforms.uPx.value.set(1/W,1/H);
+  const w4=Math.max(4,W>>2), h4=Math.max(4,H>>2);
+  rtBr.setSize(w4,h4); rtB1.setSize(w4,h4); rtB2.setSize(w4,h4);
+}
+function pasar(m,d){ mallaPost.material=m; renderer.setRenderTarget(d); renderer.render(escPost,camPost); }
+const NEGRO=new THREE.DataTexture(new Uint8Array([0,0,0,255]),1,1); NEGRO.needsUpdate=true;
+function pintarPost(){
+  if(postBloom){
+    matBrillo.uniforms.t.value=rtEsc.texture; pasar(matBrillo,rtBr);
+    matBorron.uniforms.t.value=rtBr.texture;
+    matBorron.uniforms.uD.value.set(1.2/rtBr.width,0); pasar(matBorron,rtB1);
+    matBorron.uniforms.t.value=rtB1.texture;
+    matBorron.uniforms.uD.value.set(0,1.2/rtBr.height); pasar(matBorron,rtB2);
+  }
+  matGrado.uniforms.tEsc.value=rtEsc.texture;
+  matGrado.uniforms.tBloom.value=postBloom?rtB2.texture:NEGRO;
+  pasar(matGrado,null);
+}
+
+/* ============================================================================
+   EL JUGADOR, LOS MANDOS Y EL BUCLE
+============================================================================ */
+const PJ={x:0,z:0,y:0,vx:0,vz:0,vy:0,yaw:0.6,cabeceo:-0.06,altoOjo:1.66,
+          andando:0,paso:0,enSuelo:true,rapidez:0};
+const CAM={bobY:0,bobX:0,rol:0,hundir:0,vHundir:0,fov:FOV0,sacudir:0};
+let correr=false, yawAnt=PJ.yaw, giroVel=0;
+function moverJugador(dt){
+  const n=Math.min(5,Math.max(1,Math.ceil(dt*90)));
+  for(let k=0;k<n;k++) pasoJugador(dt/n);
+  ponerCamara(dt);
+}
+function pasoJugador(paso){
+  const fx=-Math.sin(PJ.yaw), fz=-Math.cos(PJ.yaw);
+  const dx=Math.cos(PJ.yaw), dz=-Math.sin(PJ.yaw);
+  let mx=0,mz=0;
+  if(palanca.activa){ mx=palanca.x; mz=palanca.y; }
+  if(teclas['w']||teclas['arrowup']) mz-=1;
+  if(teclas['s']||teclas['arrowdown']) mz+=1;
+  if(teclas['a']||teclas['arrowleft']) mx-=1;
+  if(teclas['d']||teclas['arrowright']) mx+=1;
+  const largo=Math.hypot(mx,mz);
+  let qx=0,qz=0,tope=0;
+  if(largo>0.06){
+    const k=Math.min(1,largo)/largo;
+    qx=(fx*(-mz)+dx*mx)*k; qz=(fz*(-mz)+dz*mx)*k;
+    tope=(correr||teclas['shift'])?6.2:3.35;
+  }
+  const acel=PJ.enSuelo?24:5, roza=PJ.enSuelo?(tope>0?3:13):0.6;
+  PJ.vx+=(qx*tope-PJ.vx)*Math.min(1,(tope>0?acel:roza)*paso);
+  PJ.vz+=(qz*tope-PJ.vz)*Math.min(1,(tope>0?acel:roza)*paso);
+  PJ.rapidez=Math.hypot(PJ.vx,PJ.vz);
+  PJ.x=clamp(PJ.x+PJ.vx*paso,-BORDE,BORDE);
+  PJ.z=clamp(PJ.z+PJ.vz*paso,-BORDE,BORDE);
+  PJ.andando+=(Math.min(1,PJ.rapidez/2.4)-PJ.andando)*Math.min(1,7*paso);
+  PJ.paso+=paso*PJ.rapidez*0.58;
+  if(PJ.paso>1){ PJ.paso-=1; CAM.vHundir-=0.5+PJ.rapidez*0.09; roce(0.5+PJ.rapidez*0.05); }
+  PJ.vy-=19.5*paso; PJ.y+=PJ.vy*paso;
+  if(PJ.y<0){
+    if(!PJ.enSuelo&&PJ.vy<-3){ CAM.vHundir-=Math.min(5.5,-PJ.vy*0.55);
+      CAM.sacudir=Math.min(0.5,-PJ.vy*0.045); roce(1.0,true); }
+    PJ.y=0; PJ.vy=0; PJ.enSuelo=true;
+  } else if(PJ.y>0.06) PJ.enSuelo=false;
+}
+function saltar(){ if(!PJ.enSuelo) return; PJ.vy=6.6; PJ.enSuelo=false; CAM.vHundir+=1.5; roce(0.5); }
+function ponerCamara(dt){
+  const dx=Math.cos(PJ.yaw), dz=-Math.sin(PJ.yaw);
+  const amp=PJ.andando*(0.028+PJ.rapidez*0.005);
+  CAM.bobY+=(Math.sin(PJ.paso*Math.PI*4)*amp-CAM.bobY)*Math.min(1,dt*22);
+  CAM.bobX+=(Math.sin(PJ.paso*Math.PI*2)*amp*1.35-CAM.bobX)*Math.min(1,dt*22);
+  CAM.vHundir+=(-CAM.hundir*46-CAM.vHundir*9.5)*dt;
+  CAM.hundir+=CAM.vHundir*dt; CAM.hundir=clamp(CAM.hundir,-0.55,0.30);
+  CAM.sacudir=Math.max(0,CAM.sacudir-dt*2.2);
+  const lat=(PJ.vx*dx+PJ.vz*dz)/Math.max(1,PJ.rapidez);
+  CAM.rol+=((-lat*PJ.andando*0.05-clamp(giroVel,-3,3)*0.028)-CAM.rol)*Math.min(1,dt*8);
+  const objFov=FOV0+Math.max(0,PJ.rapidez-3.4)*2.5;
+  if(Math.abs(objFov-CAM.fov)>0.01){ CAM.fov+=(objFov-CAM.fov)*Math.min(1,dt*4.5);
+    camara.fov=CAM.fov; camara.updateProjectionMatrix(); }
+  const s=CAM.sacudir;
+  camara.position.set(PJ.x+dx*CAM.bobX+(Math.random()-0.5)*s*0.08,
+                      PJ.y+PJ.altoOjo+CAM.hundir+CAM.bobY+(Math.random()-0.5)*s*0.08,
+                      PJ.z+dz*CAM.bobX+(Math.random()-0.5)*s*0.08);
+  camara.rotation.set(PJ.cabeceo+CAM.bobY*0.16, PJ.yaw, CAM.rol+CAM.bobX*0.1);
+}
+/* el roce del paso: ruido corto por un pasabanda alto, sintetizado */
+let AC=null, master=null;
+function initAudio(){ if(AC) return;
+  try{ AC=new (window.AudioContext||window.webkitAudioContext)();
+    master=AC.createGain(); master.gain.value=0.5; master.connect(AC.destination);
+  }catch(e){ AC=null; } }
+function roce(f,grave){
+  if(!AC) return;
+  const t0=AC.currentTime, dur=0.17+f*0.14;
+  const n=Math.floor(AC.sampleRate*dur), b=AC.createBuffer(1,n,AC.sampleRate), d=b.getChannelData(0);
+  for(let i=0;i<n;i++){ const u=i/n; d[i]=(Math.random()*2-1)*Math.pow(1-u,1.5); }
+  const src=AC.createBufferSource(); src.buffer=b;
+  const bp=AC.createBiquadFilter(); bp.type='bandpass';
+  bp.frequency.value=(grave?1100:2700)+Math.random()*2400; bp.Q.value=0.55;
+  const g=AC.createGain();
+  g.gain.setValueAtTime(0.0001,t0); g.gain.linearRampToValueAtTime(0.085*f,t0+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+  src.connect(bp); bp.connect(g); g.connect(master); src.start(t0);
+  const o=AC.createOscillator(); o.type='sine';
+  o.frequency.setValueAtTime((grave?92:118)+Math.random()*36,t0);
+  o.frequency.exponentialRampToValueAtTime(46,t0+0.10);
+  const og=AC.createGain();
+  og.gain.setValueAtTime(0.0001,t0); og.gain.linearRampToValueAtTime((grave?0.10:0.045)*f,t0+0.008);
+  og.gain.exponentialRampToValueAtTime(0.0001,t0+0.13);
+  o.connect(og); og.connect(master); o.start(t0); o.stop(t0+0.15);
+}
+const mandos=document.getElementById('mandos'), gm=mandos.getContext('2d');
+const palanca={activa:false,ox:0,oy:0,x:0,y:0}, mirada={activa:false,x:0,y:0}, teclas={};
+let bA={x:0,y:0,r:0}, bB={x:0,y:0,r:0}, pulsA=0, pulsB=0;
+function acomodarMandos(){
+  const d=Math.min(devicePixelRatio||1,2);
+  mandos.width=Math.round(CAJA.w*d); mandos.height=Math.round(CAJA.h*d);
+  mandos.style.width=CAJA.w+'px'; mandos.style.height=CAJA.h+'px';
+  gm.setTransform(d,0,0,d,0,0);
+  const m=Math.min(CAJA.w,CAJA.h);
+  bA.r=m*0.082; bA.x=CAJA.w-bA.r-m*0.055; bA.y=CAJA.h-bA.r-m*0.070;
+  bB.r=m*0.070; bB.x=bA.x-bA.r-bB.r*0.95; bB.y=bA.y-bA.r*0.62;
+}
+function boton(b,t,p,c){
+  const k=p>0?0.9:1;
+  gm.globalAlpha=0.28; gm.fillStyle='#08160f';
+  gm.beginPath(); gm.arc(b.x,b.y,b.r*k,0,6.2832); gm.fill();
+  gm.globalAlpha=p>0?0.95:0.6; gm.lineWidth=3; gm.strokeStyle=c;
+  gm.beginPath(); gm.arc(b.x,b.y,b.r*k,0,6.2832); gm.stroke();
+  gm.globalAlpha=0.88; gm.fillStyle=c;
+  gm.font='700 '+Math.round(b.r*0.28)+'px ui-monospace, monospace';
+  gm.textAlign='center'; gm.textBaseline='middle'; gm.fillText(t,b.x,b.y);
+}
+function dibujarMandos(){
+  gm.clearRect(0,0,CAJA.w,CAJA.h);
+  const m=Math.min(CAJA.w,CAJA.h), R=m*0.115;
+  const cx=palanca.activa?palanca.ox:m*0.155, cy=palanca.activa?palanca.oy:CAJA.h-m*0.155;
+  gm.globalAlpha=palanca.activa?0.55:0.26; gm.lineWidth=2.5; gm.strokeStyle='#dcfae6';
+  gm.beginPath(); gm.arc(cx,cy,R,0,6.2832); gm.stroke();
+  gm.globalAlpha=palanca.activa?0.62:0.30; gm.fillStyle='#eafff2';
+  gm.beginPath(); gm.arc(cx+palanca.x*R*0.55,cy+palanca.y*R*0.55,R*0.42,0,6.2832); gm.fill();
+  boton(bA,'SALTO',pulsA,'#b6ffce'); boton(bB,'CORRER',pulsB,'#9fe8cf');
+  gm.globalAlpha=0.38; gm.strokeStyle='#eafff2'; gm.lineWidth=1.5;
+  const mx=CAJA.w/2,my=CAJA.h/2,s=m*0.010;
+  gm.beginPath(); gm.moveTo(mx-s,my); gm.lineTo(mx-s*0.35,my);
+  gm.moveTo(mx+s*0.35,my); gm.lineTo(mx+s,my);
+  gm.moveTo(mx,my-s); gm.lineTo(mx,my-s*0.35);
+  gm.moveTo(mx,my+s*0.35); gm.lineTo(mx,my+s); gm.stroke();
+  gm.globalAlpha=1;
+}
+/* El dedo llega en coordenadas de pantalla; si la imagen está acostada hay que
+   deshacer el giro a mano, porque el rectángulo que informa el navegador es el
+   envolvente y miente. */
+function aUI(ev){
+  let dx=ev.clientX-innerWidth/2, dy=ev.clientY-innerHeight/2;
+  if(ROT){ const t=dx; dx=dy; dy=-t; }
+  return [dx+CAJA.w/2, dy+CAJA.h/2];
+}
+const lienzo=renderer.domElement, punteros=new Map();
+const dentro=(b,x,y)=>Math.hypot(x-b.x,y-b.y)<b.r*1.3;
+lienzo.addEventListener('pointerdown', ev=>{
+  ev.preventDefault(); initAudio(); if(AC&&AC.state==='suspended') AC.resume();
+  esconderAyuda();
+  const [x,y]=aUI(ev);
+  if(dentro(bA,x,y)){ pulsA=0.14; saltar(); punteros.set(ev.pointerId,{r:'A'}); return; }
+  if(dentro(bB,x,y)){ pulsB=0.14; correr=!correr;
+    document.getElementById('bCorrer').classList.toggle('on',correr);
+    punteros.set(ev.pointerId,{r:'B'}); return; }
+  if(x<CAJA.w*0.44 && !palanca.activa){
+    palanca.activa=true; palanca.ox=x; palanca.oy=y; palanca.x=0; palanca.y=0;
+    punteros.set(ev.pointerId,{r:'palanca'});
+  } else { mirada.activa=true; mirada.x=x; mirada.y=y; punteros.set(ev.pointerId,{r:'mirada'}); }
+  try{ lienzo.setPointerCapture(ev.pointerId); }catch(e){}
+},{passive:false});
+lienzo.addEventListener('pointermove', ev=>{
+  const r=punteros.get(ev.pointerId); if(!r) return;
+  ev.preventDefault();
+  const [x,y]=aUI(ev);
+  if(r.r==='palanca'){ const R=Math.min(CAJA.w,CAJA.h)*0.115;
+    palanca.x=clamp((x-palanca.ox)/R,-1,1); palanca.y=clamp((y-palanca.oy)/R,-1,1);
+  } else if(r.r==='mirada'){
+    PJ.yaw-=(x-mirada.x)*0.0042;
+    PJ.cabeceo=clamp(PJ.cabeceo-(y-mirada.y)*0.0036,-1.35,1.25);
+    mirada.x=x; mirada.y=y;
+  }
+},{passive:false});
+function soltar(ev){
+  const r=punteros.get(ev.pointerId); punteros.delete(ev.pointerId);
+  if(!r) return;
+  if(r.r==='palanca'){ palanca.activa=false; palanca.x=0; palanca.y=0; }
+  if(r.r==='mirada') mirada.activa=false;
+}
+lienzo.addEventListener('pointerup',soltar);
+lienzo.addEventListener('pointercancel',soltar);
+lienzo.addEventListener('lostpointercapture',soltar);
+for(const e of ['touchstart','touchmove','touchend'])
+  lienzo.addEventListener(e, ev=>ev.preventDefault(), {passive:false});
+lienzo.addEventListener('contextmenu', e=>e.preventDefault());
+addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); teclas[k]=true; initAudio();
+  if(k===' '){ e.preventDefault(); saltar(); }
+  if(k==='r'){ correr=!correr; document.getElementById('bCorrer').classList.toggle('on',correr); } });
+addEventListener('keyup', e=>{ teclas[e.key.toLowerCase()]=false; });
+
+let T=0, ultimo=performance.now(), fps=0, cuadros=0, fpsT=0;
+const NIVELES=[{p:[0.62,0.55,0.6], d:0.45, b:false},
+               {p:[0.82,0.78,0.8], d:0.75, b:true},
+               {p:[1.0,1.0,1.0],   d:1.0,  b:true}];
+let nivel=MOVIL?1:2, autoNivel=true, nivelT=0;
+const DIST0=[];
+function aplicarNivel(){
+  const n=NIVELES[nivel];
+  for(let i=0;i<CAMPOS.length;i++) CAMPOS[i].mat.uniforms.uDist.value=DIST0[i]*n.p[i];
+  PASTO_U.uDens.value=Math.min(parseFloat($('sDens').value), n.d);
+  postBloom=n.b;
+}
+function ponerSol(a){
+  const el=lerp(0.05,1.30,a);
+  SOL.set(Math.cos(el)*0.55, Math.sin(el), -Math.cos(el)*0.84).normalize();
+  const calor=Math.max(0,1-a*1.35);
+  SOLC.setRGB(1, 0.97-calor*0.22, 0.92-calor*0.48);
+  CIELO.setHSL(0.58, lerp(0.55,0.62,a), lerp(0.30,0.52,a));
+  HORIZ.setHSL(lerp(0.10,0.55,Math.min(1,a*1.5)), lerp(0.55,0.30,a), lerp(0.55,0.82,a));
+  for(const m of MATS){
+    if(m.uniforms.luz) m.uniforms.luz.value.copy(SOL);
+    if(m.uniforms.uSolC) m.uniforms.uSolC.value.copy(SOLC);
+    if(m.uniforms.uCielo) m.uniforms.uCielo.value.copy(CIELO);
+    if(m.uniforms.uCenit) m.uniforms.uCenit.value.copy(CIELO);
+    if(m.uniforms.uHoriz) m.uniforms.uHoriz.value.copy(HORIZ);
+  }
+}
+function ponerNiebla(d){ nieblaD=0.0004+d*0.0090;
+  for(const m of MATS) if(m.uniforms.uFogD) m.uniforms.uFogD.value=nieblaD; }
+function acomodar(){
+  acomodarCaja(); renderer.setSize(CAJA.w,CAJA.h,false);
+  camara.aspect=CAJA.w/CAJA.h; camara.updateProjectionMatrix();
+  acomodarPost(CAJA.w,CAJA.h); acomodarMandos();
+}
+addEventListener('resize',acomodar);
+addEventListener('orientationchange',()=>setTimeout(acomodar,120));
+function bucle(ahora){
+  requestAnimationFrame(bucle);
+  let dt=(ahora-ultimo)/1000; ultimo=ahora;
+  if(dt>0.08) dt=0.08;
+  T+=dt; cuadros++; fpsT+=dt;
+  if(fpsT>0.5){ fps=Math.round(cuadros/fpsT); cuadros=0; fpsT=0;
+    if(autoNivel){ nivelT+=0.5;
+      if(nivelT>2.0){
+        if(fps<28&&nivel>0){ nivel--; aplicarNivel(); nivelT=-2; }
+        else if(fps>54&&nivel<NIVELES.length-1){ nivel++; aplicarNivel(); nivelT=-2; }
+        else nivelT=0; } } }
+  giroVel=(PJ.yaw-yawAnt)/Math.max(dt,1e-3); yawAnt=PJ.yaw;
+  moverJugador(dt);
+  pulsA=Math.max(0,pulsA-dt); pulsB=Math.max(0,pulsB-dt);
+  seguirPasto(PJ.x,PJ.z);
+  PASTO_U.uT.value=T;
+  PASTO_U.uJug.value.set(PJ.x,PJ.y,PJ.z);
+  PASTO_U.uOjo.value.copy(camara.position);
+  matSuelo.uniforms.uOjo.value.copy(camara.position);
+  cieloMat.uniforms.uT.value=T;
+  cielo.position.copy(camara.position);
+  suelo.position.set(PJ.x,0,PJ.z);
+  renderer.setRenderTarget(rtEsc);
+  renderer.render(escena,camara);
+  pintarPost();
+  dibujarMandos();
+  const st=document.getElementById('stats');
+  if(st) st.textContent=fps+' fps · '+(BRIZNAS/1000).toFixed(0)+' mil briznas · calidad '+(nivel+1)+'/3';
+}
+function esconderAyuda(){ const a=document.getElementById('ayuda');
+  if(a&&a.style.opacity!=='0') a.style.opacity='0'; }
+const $=(id)=>document.getElementById(id);
+const BRIZNAS=CAMPOS.reduce((s,c)=>s+c.briznas,0);
+$('bPanel').onclick=()=>{ $('panel').classList.toggle('show'); $('bPanel').classList.toggle('on'); };
+$('bCorrer').onclick=()=>{ correr=!correr; $('bCorrer').classList.toggle('on',correr); };
+function slider(id,vid,fn){ const s=$(id), v=$(vid);
+  const ap=()=>{ const x=parseFloat(s.value); v.textContent=x.toFixed(2); fn(x); };
+  s.addEventListener('input',ap); ap(); }
+slider('sDens','vDens', x=>PASTO_U.uDens.value=Math.min(x,NIVELES[nivel].d));
+slider('sAlto','vAlto', x=>PASTO_U.uAltoK.value=x);
+slider('sViento','vViento', x=>PASTO_U.uViento.value=x);
+slider('sArco','vArco', x=>PASTO_U.uArco.value=x);
+slider('sSol','vSol', x=>ponerSol(x));
+slider('sExp','vExp', x=>matGrado.uniforms.uExp.value=x);
+slider('sSat','vSat', x=>matGrado.uniforms.uSat.value=x);
+slider('sNit','vNit', x=>matGrado.uniforms.uNit.value=x);
+slider('sNiebla','vNiebla', x=>ponerNiebla(x));
+acomodar();
+for(let i=0;i<CAMPOS.length;i++) DIST0[i]=CAMPOS[i].mat.uniforms.uDist.value;
+aplicarNivel();
+ponerSol(0.55); ponerNiebla(0.22);
+seguirPasto(PJ.x,PJ.z); ponerCamara(0.016);
+requestAnimationFrame(bucle);
+setTimeout(esconderAyuda, 11000);
+window.__dbg={
+  get fps(){ return fps; },
+  get jugador(){ return {x:+PJ.x.toFixed(2), z:+PJ.z.toFixed(2), y:+PJ.y.toFixed(2),
+    yaw:+PJ.yaw.toFixed(2), vel:+PJ.rapidez.toFixed(2)}; },
+  get campos(){ return CAMPOS.map(c=>({N:c.N, celda:c.celda, briznas:c.briznas,
+    dist:c.mat.uniforms.uDist.value})); },
+  get briznas(){ return BRIZNAS; },
+  get pantalla(){ return {ROT, caja:[CAJA.w,CAJA.h], rt:[rtEsc.width,rtEsc.height]}; },
+  poner(x,z){ PJ.x=x; PJ.z=z; PJ.vx=PJ.vz=0; seguirPasto(x,z); ponerCamara(0.016); },
+  mirar(y,c){ if(y!==undefined) PJ.yaw=y; if(c!==undefined) PJ.cabeceo=c; ponerCamara(0.016); },
+  ojo(h){ PJ.altoOjo=h; ponerCamara(0.016); },
+  palanca(x,y){ palanca.activa=(x||y)!==0; palanca.x=x||0; palanca.y=y||0; },
+  aparta(r){ PASTO_U.uRJug.value=r; },
+  calidad(n){ autoNivel=(n===undefined); if(n!==undefined){ nivel=n; aplicarNivel(); } return nivel; },
+  get piezas(){ let n=0,t=0; escena.traverse(o=>{ if(o.isMesh&&o.visible){ n++;
+    const g=o.geometry, ic=g.instanceCount||1;
+    t+=(g.index? g.index.count/3 : g.attributes.position.count/3)*ic; } });
+    return {mallas:n, tri:Math.round(t)}; }
+};
+
+</script>
+</body>
+</html>

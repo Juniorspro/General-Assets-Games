@@ -1639,3 +1639,150 @@ de vista despejada a la cumbre. Con teclado: `WASD`, espacio, `V` para volar,
 - No hay nieve propia ni hielo con material aparte: lo blanco es blanco porque la
   foto es blanca.
 - Falta el agua con simulación y objetos, que sí está en Pradera.
+
+---
+
+## Valle (`Valle.html`)
+
+El intento de mundo hecho a mano con **materiales PBR descargados** (AmbientCG,
+Poly Haven, todos CC0) servidos por jsDelivr desde `mundo/valle/`. El archivo son
+setenta y siete kilobytes y los treinta y cinco megas de texturas y modelos viven
+en el repositorio.
+
+Sirve como referencia de tres cosas que costaron encontrar:
+
+- **Choque de nombres de archivo.** El mapa ARM del pasto se llamaba `pasto_a.jpg`
+  y pisó al alfa del atlas de matas, que se llamaba igual. Resultado: todas las
+  matas dibujaban el fondo negro del atlas y el mundo entero se veía negro. Se
+  arregló renombrando el atlas a `matas_rgb.jpg` / `matas_a.jpg`. Cuando algo se
+  ve negro y el shader está bien, mirá los nombres antes que el código.
+- **La decimación por agrupamiento de vértices destruye los UV.** Fusionar
+  vértices cercanos junta puntos que están en zonas distintas del atlas, y la
+  planta escaneada sale negra. A las rocas se les puede aplicar; a nada que use
+  atlas.
+- **El lago plano.** El plano del agua estaba rotado con `mesh.rotation`, así que
+  dentro del shader `position.z` valía cero para todos los vértices y el lago
+  colapsaba a una línea. La rotación va en la geometría —`.rotateX(-Math.PI/2)`—,
+  no en el objeto, si el shader lee `position`.
+
+Quedó fuera de la línea principal porque el pedido cambió: nada de PBR
+descargado, todo procedural. De ahí sale lo que sigue.
+
+---
+
+## Pastizal (`Pastizal.html`)
+
+Un campo verde y **pasto de verdad**: geometría, no fotos pegadas en cartelitos.
+Treinta y ocho kilobytes, **cero archivos externos** —ni una imagen, ni un
+modelo, ni un sonido—. Lo único que baja de la red es three.js.
+
+**95.000 briznas** en pantalla, unos **633.000 triángulos**, y cada una es una
+cinta que se afina hasta la punta, se arquea, se dobla con el viento y se aparta
+cuando pasás caminando.
+
+### La brizna
+No es un plano con una textura de pasto: es una tira de dos a cinco tramos, dos
+vértices por tramo más uno solo en la punta, así el filo termina en punta de
+verdad en vez de en un rectángulo cortado.
+
+```
+w = uAncho · (1 − v^1.4)      ancho contra el largo: gordo abajo, cero arriba
+dob = arco · v²               el arco es parábola, no arco de círculo:
+                              la base sale vertical y la punta cae
+```
+
+La normal sale del producto cruz entre el lateral y la tangente de la curva, más
+un **abultamiento lateral** —`+ lat3 · lado · 0.55`— que le miente a la
+iluminación diciéndole que la brizna es una hoja curva y no una cinta plana. Sin
+eso, media brizna se apaga de golpe cuando cruza el ángulo del sol y el campo
+parpadea.
+
+En el fragmento van tres cosas que hacen la diferencia:
+
+- **Doble cara honesta**: `if(dot(N,E)<0.0) N=-N;` — mirando la brizna desde
+  atrás la normal apunta al revés y sale negra.
+- **Traslucidez** (`atras`): el pasto contra el sol se prende, no se apaga.
+  `pow(max(dot(-E,luz),0.0), 2.4)`, más fuerte cerca de la punta, donde la hoja
+  es más fina.
+- **Oclusión por altura**: la base de la brizna está metida entre las demás y
+  recibe menos cielo; el factor va de 0,42 abajo a 1,10 arriba. Es lo que le da
+  profundidad al pastizal cuando mirás para abajo.
+
+### Nada se mueve desde JavaScript
+La grilla es de N×N celdas y las instancias **jamás cambian de sitio**. Cuando el
+jugador cruza el borde de una celda sólo se actualiza un `vec2`:
+
+```glsl
+vec2 g = uBase + mod(iIdx - uBase, vec2(uN));
+```
+
+La instancia que quedó atrás reaparece del otro lado con otra semilla y otra
+altura. Cero copias de buffers, cero `needsUpdate`, cero picos de recolección de
+basura al caminar.
+
+### Tres capas por distancia
+| capa | celda | tramos | ancho | alcance |
+|---|---|---|---|---|
+| cerca | 4,8 cm | 5 | 3,4 cm | 9 m |
+| media | 13 cm | 4 | 5,2 cm | 26 m |
+| lejos | 45 cm | 2 | 14,5 cm | 80 m |
+
+Cada capa arranca donde termina la anterior (`cerca`) para no pagar dos veces el
+mismo metro cuadrado. La lejana lleva pocas briznas por metro, así que las suyas
+van más anchas: a treinta metros nadie distingue una brizna de tres juntas, pero
+el suelo pelado entre medio sí se ve, y desde arriba canta.
+
+### El viento tiene ráfagas
+Un seno solo da un pasto que vibra. Acá hay **dos trenes largos de baja
+frecuencia** que modulan la amplitud del temblor rápido:
+
+```glsl
+raf = 0.48 + 0.36·sin(P.x·0.13 + P.y·0.10 − t·0.65)
+           + 0.20·sin(P.x·0.041 − P.y·0.063 − t·0.33)
+```
+
+Se ve la ola cruzar el campo. Es lo que hace que parezca campo y no alfombra.
+
+### El jugador aparta el pasto
+No hay colisión: hay un empujón radial en el shader de vértices, con caída suave
+desde el centro y proporcional a la altura del vértice, más un aplastado hacia
+abajo. La brizna se abre y se agacha al pasar, y vuelve sola.
+
+```glsl
+emp = 1.0 − smoothstep(uRJug·0.25, uRJug, dd);
+loc.xz += (dj/dd) · emp · v · alto · 0.9;
+loc.y  -= emp · v · alto · 0.55;
+```
+
+### El suelo cuenta la misma historia
+El plano verde sigue al jugador, así que la posición del mundo hay que sacarla de
+`modelMatrix` y no del atributo — si no, los manchones de tono viajan con vos y
+se nota enseguida. Usa **el mismo campo de ruido** que decide la altura del
+pasto: donde el pasto es alto el suelo es más oscuro, donde ralea tira a paja. El
+suelo se dejó bien oscuro a propósito: si compite en brillo con las briznas, cada
+hueco entre briznas se convierte en un punto claro y el campo se ve sucio.
+
+### Pipeline lineal, una sola pasada de grado
+Todo se dibuja **lineal** sobre un render target HalfFloat con MSAA, y una única
+pasada final hace bloom, ACES (Narkowicz), contraste, saturación, **nitidez
+adaptativa** —acotada por el mínimo y el máximo de los cuatro vecinos, para que
+no aparezcan halos— viñeta y codificación sRGB.
+
+Esto no es un lujo: **un `ShaderMaterial` propio no codifica sRGB solo**. Escribir
+directo al framebuffer desde un shader a mano es la razón por la que todo lo
+anterior se veía apagado, y el diagnóstico costó bastante.
+
+### Calidad automática
+Tres niveles. Miden fps y ajustan **alcance** de cada capa y **densidad**; el
+nivel 0 además apaga el bloom. Cuando la densidad mata una brizna, su altura pasa
+a cero, los vértices colapsan en un punto y el triángulo se descarta antes de
+rasterizar: el costo de fragmentos desaparece del todo.
+
+### Controles
+Pulgar izquierdo palanca, derecho mirar, `SALTO` y `CORRER`. `AJUSTES` abre los
+deslizadores en vivo: densidad, altura, viento, arqueo, sol, exposición, color,
+nitidez y neblina. Con teclado, `WASD`, espacio y `R`.
+
+### Lo que no tiene
+Sin árboles, sin PBR, sin texturas, sin relieve: el suelo es plano a propósito.
+Era el pedido, y también deja ver el pasto sin que nada le robe cuadros.
