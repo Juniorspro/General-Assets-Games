@@ -1786,3 +1786,161 @@ nitidez y neblina. Con teclado, `WASD`, espacio y `R`.
 ### Lo que no tiene
 Sin árboles, sin PBR, sin texturas, sin relieve: el suelo es plano a propósito.
 Era el pedido, y también deja ver el pasto sin que nada le robe cuadros.
+
+---
+
+## Bosque de las diez arenas (`Bosque_Arenas.html`)
+
+El terreno de Pastizal —briznas de geometría, grilla envolvente, viento con
+ráfagas— pero adentro de un bosque, con un caminito de tierra que va de arena en
+arena. Diez arenas, cinco oleadas cada una, y los troncos que tapan la salida no
+se hunden hasta que cae la última.
+
+El HTML son noventa y cuatro kilobytes; los cinco megas de modelos viven en
+`mundo/bosque/` y los sirve jsDelivr anclados al commit.
+
+### Los ocho modelos
+Todos generados: imagen del objeto aislado con **FLUX.2 en su variante max**, y
+de ahí a malla texturizada con **Tripo H3.1**.
+
+| modelo | triángulos | para qué |
+|---|---|---|
+| roble | 11.142 | el árbol de copa maciza, 9,5 m |
+| pino | 9.504 | el conífero, 12 m |
+| abedul | 8.346 | el flaco, 8 m |
+| troncos | 7.541 | la barrera que traba las bocas |
+| caja | 1.817 | todo el parkour sale de acá |
+| duende de musgo | 5.588 | el bicho lento que viene de a muchos |
+| lobo | 7.858 | el que corre |
+| treant | 13.602 | el que aguanta |
+
+Lo que hay que saber para que esto funcione:
+
+- **Las texturas venían en 4096 por lado.** Ocho modelos así son seiscientos
+  megas de memoria de video: en un celular, pantalla negra o pestaña muerta. Un
+  script rearma el GLB con las imágenes rebajadas a mil y pico —recalculando los
+  `bufferViews` uno por uno y realineando el búfer a cuatro bytes—. El paquete
+  pasó de catorce megas y medio a cinco.
+- **El material del GLTF se tira y se pone uno propio.** Todo el juego se dibuja
+  en lineal y el paso a sRGB lo hace el pase final; un `MeshStandardMaterial`
+  codifica por su cuenta y saldría de otro color que el pasto. Con shader propio,
+  además, la niebla es una sola para todos y el follaje se prende a contraluz.
+- **Con instancias hay que multiplicar `instanceMatrix` a mano.** Un
+  `ShaderMaterial` crudo no trae los trozos que three le inyecta a los suyos.
+- **En GLSL un identificador no puede llevar `ñ`.** Un uniform `uDaño` tira
+  `'?' : syntax error` y el shader entero no compila. Costó encontrarlo porque el
+  error no menciona la letra.
+- **El arbusto no se pudo generar.** Una esfera de follaje perfectamente lisa no
+  le da geometría al reconstructor: salieron 8 triángulos la primera vez y 96 la
+  segunda. Quedó afuera.
+
+### El mapa sale de una cadena
+No hay una sola posición escrita a mano. Once claros encadenados —el de arranque
+más las diez arenas—, y de uno al siguiente un corredor recto cuyo ángulo gira al
+azar en cada tramo, así el camino serpentea y nunca se ve la arena que viene.
+
+Todo lo demás sale de **una sola función**, `holgura(x,z)`: la distancia al claro
+más cercano, negativa adentro y positiva en el bosque. La usan el color del
+suelo, la siembra de los árboles, el pasto, el choque del jugador y el de los
+bichos. Cambiar el ancho de un camino es cambiar un número.
+
+Para el shader esa función está horneada en una textura de 768 —rojo: cuán
+abierto; verde: cuánta tierra— porque veintiún tests de distancia por píxel es
+otra cosa.
+
+**El pasto se moría por esto.** La huella de tierra arrancaba con un radio de
+cinco metros y el umbral que mata el pasto estaba en 0,10: el resultado era un
+claro pelado a diez metros del camino a cada lado, que en la captura parecía un
+bug de instanciado. Eran dos números.
+
+### La pared del bosque no tiene colisión
+Diez mil novecientos árboles y ni uno tiene caja. El jugador no puede salir del
+claro porque `holgura` dice cuánto sobresale y el empujón va por su gradiente. Un
+test contra una función en vez de diez mil contra cajas, y de paso los bichos
+usan exactamente el mismo.
+
+### Los árboles de lejos se retratan a sí mismos
+Al arrancar, cada árbol se dibuja una vez con una cámara ortográfica contra fondo
+transparente, y ese render queda como textura. De ahí en más, todo lo que está a
+más de veinte metros es una **carta de dos triángulos** que gira en su eje para
+mirar a la cámara. Los cuarenta más cercanos sí son el modelo entero, y la lista
+se rehace tres veces por segundo ordenando por distancia: si te metés contra la
+pared del bosque, los que sobran caen a carta y el presupuesto no se desborda.
+
+El abedul quedó en el catorce por ciento del bosque: es finito y su carta sale
+moteada. El roble y el pino tienen copa maciza y aguantan el impostor.
+
+### Novecientos mil triángulos que no se veían
+La primera versión dibujaba **las diez arenas y las diecinueve barreras siempre**,
+estuvieras donde estuvieras: 472.000 triángulos de cajas más 430.000 de troncos
+por cuadro, para no mostrar nada. Ahora la madera es una malla instanciada **por
+arena** y se apaga a más de setenta y ocho metros. La colisión también: sólo
+contra la madera de la arena que estás pisando.
+
+### El parkour se genera y siempre cierra
+Cada arena se arma con su semilla: cajas sueltas por el piso, torres de dos o
+tres cajas apiladas con la de arriba corrida, y encima las plataformas. Las
+plataformas no caen al azar: **cada una se cuelga de una torre o de otra
+plataforma** a menos de 0,95 m de altura y menos de 2,0 m de distancia, que es
+exactamente lo que se salta con la gravedad y el impulso del juego. Por eso
+siempre se puede subir.
+
+Una plataforma es la misma caja generada, aplastada. Todo el parkour de las diez
+arenas es un modelo de 1.817 triángulos repetido 260 veces.
+
+El choque resuelve primero lo horizontal y después lo vertical, y lo vertical
+sólo si venías cayendo: al revés, caminar contra una caja te sube encima sola.
+Los escalones de menos de 42 cm se suben sin saltar.
+
+### Las oleadas
+Cinco por arena. La cuenta es `3 + oleada + arena·0,7`; la vida sube 26% por
+oleada y 30% por arena; la velocidad, mucho menos. La mezcla también cambia:
+puros duendes al principio, lobos a partir de la tercera, y el treant recién en
+la última oleada de la cuarta arena en adelante —y de a más a medida que avanzás.
+
+Los bichos no tienen esqueleto ni animación importada. **Se menean desde el
+shader**: el vértice se corre más cuanto más arriba está, con una fase propia por
+bicho, así el cuerpo bambolea al caminar y se estira al pegar. En primera persona
+alcanza, y cuesta cero.
+
+Se separan entre ellos con un empujón radial —si no, se apilan todos en el mismo
+punto— y no se meten en el bosque porque usan la misma `holgura` que el jugador.
+
+### La cinemática
+Al entrar bien adentro de la arena —no al pisar el borde: si los troncos cayeran
+con vos todavía en la boca, el empujón te podría dejar afuera con la puerta
+cerrada— la cámara gira sola hacia por donde entraste y ve caer la barrera. Cae
+con un rebote, porque el rebote es lo que la hace pesada. Barras negras arriba y
+abajo y el cartel de la arena.
+
+### El sonido no es un archivo
+Nada está grabado. Un bosque suena a viento entre las hojas, pájaros y madera que
+cruje, y las tres cosas salen del mismo ruido blanco por filtros distintos: el
+viento es paso-bajo con la banda paseándose, las hojas son un pasa-banda angosto
+en tres mil cuatrocientos, los pájaros son senoidales de setenta milisegundos.
+
+Los golpes son ataques de milisegundos sobre ese mismo ruido, con la frecuencia
+del filtro cayendo. El paso cambia según lo que pisás: sobre tierra es seco y
+grave, sobre pasto es un roce agudo.
+
+**La música es un bordón** de cuatro dientes de sierra apenas desafinados detrás
+de un paso-bajo. En silencio no se oye. Cuando arranca una oleada la ganancia
+sube, el filtro se abre, el viento se pone denso y los pájaros se callan. Es el
+mismo motor haciendo de banda sonora.
+
+### El contador de fps mentía
+Vale la pena anotarlo. El bucle recorta `dt` a 0,08 para que un tirón no
+descalabre la física, y el contador de cuadros sumaba **el `dt` recortado**: con
+el juego a un cuadro por segundo, el HUD informaba quince. Toda la tarde
+optimizando lo que no era. Ahora suma el tiempo real.
+
+El rasterizador por software con el que se probó esto corre a menos de un cuadro
+por segundo —Pastizal, con la mitad de cosas, corre igual de lento—, así que de
+acá no sale ninguna medición de rendimiento que valga. Lo que sí se pudo medir y
+arreglar es el trabajo que se mandaba a la GPU al pedo.
+
+### Controles
+Pulgar izquierdo palanca, derecho mirar, `GOLPE` y `SALTO` abajo a la derecha,
+`CORRER` arriba. Con teclado: `WASD`, espacio, `E` o `F` para pegar, `R` para
+correr. `AJUSTES` abre árboles, pasto, viento, sol, exposición, color, nitidez,
+neblina y volumen.
