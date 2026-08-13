@@ -173,7 +173,8 @@
   <div class="sep"></div>
   <div class="fila" style="margin-bottom:14px">
     <button class="b mini" id="bNPU">FORZAR NPU</button>
-    <button class="b mini" id="bGPU">GPU</button>
+    <button class="b mini" id="bGPU">GPU · WEBNN</button>
+    <button class="b mini" id="bWGPU">WEBGPU</button>
     <button class="b mini" id="bCPU">CPU</button>
   </div>
   <div class="txt" id="notaMotor"></div>
@@ -244,15 +245,30 @@ function cartel(txt, clase, seg){
    ORT-Web acepta el proveedor `webnn` con `deviceType` y `powerPreference`, y
    por dentro hace `navigator.ml.createContext({deviceType, powerPreference})`.
    Pedir 'npu' NO es una sugerencia: si el equipo no tiene NPU o el grafo no le
-   entra, la creación de la sesión FALLA. Acá esa falla no se tapa: se informa,
-   y bajar a GPU o CPU es una decisión explícita del usuario, con un botón.
+   entra, la creación de la sesión FALLA.
+
+   Esa falla NO deja el programa muerto. Se baja sola por la cadena
+   NPU → GPU(WebNN) → WEBGPU → CPU hasta que una ande, y el cartel dice dónde
+   terminó y por qué no fue la NPU. Forzar un proveedor con `?ep=` sigue siendo
+   posible y ahí sí manda la orden: si falla, falla y se informa, sin bajar.
+
+   (Antes esto avisaba y se quedaba quieto. En un Android sin WebNN eso era una
+   pantalla que dibujaba 60 fps y no detectaba una sola mano.)
 ============================================================================ */
-const EP={ actual:null, pedido:'npu', preciso:'int8', sucio:false };
+const CADENA=['npu','gpu','webgpu','cpu'];
+const EP={ actual:null, pedido:'npu', preciso:'int8', sucio:false, forzado:false, motivo:'' };
 let sesPalma=null, sesPuntos=null;
 /* Qué proveedor se pide en esta carga. Viene por la dirección porque cambiarlo
-   EN CALIENTE no es seguro: ver `cambiarProveedor` más abajo. */
-EP.pedido=(new URLSearchParams(location.search).get('ep')||'npu').toLowerCase();
-if(!['npu','gpu','cpu'].includes(EP.pedido)) EP.pedido='npu';
+   EN CALIENTE no es seguro: ver `cambiarProveedor` más abajo.
+   `auto=1` marca que llegamos acá por la cascada, no por elección de nadie. */
+{
+  const q=new URLSearchParams(location.search);
+  const pedido=(q.get('ep')||'').toLowerCase();
+  if(CADENA.includes(pedido)){
+    EP.pedido=pedido;
+    EP.forzado = q.get('auto')!=='1';   // con auto=1 la cadena sigue bajando
+  }
+}
 
 function opcionesEP(dispositivo){
   if(dispositivo==='npu' || dispositivo==='gpu'){
@@ -268,6 +284,13 @@ function opcionesEP(dispositivo){
       preferredOutputLocation:'cpu'
     };
   }
+  if(dispositivo==='webgpu'){
+    /* WebGPU es el proveedor propio de ORT, no pasa por WebNN. En Android es
+       el que hay cuando no existe navigator.ml, y va bastante más rápido que
+       el WASM. */
+    return { executionProviders:['webgpu'], graphOptimizationLevel:'all',
+             preferredOutputLocation:'cpu' };
+  }
   return { executionProviders:['wasm'], graphOptimizationLevel:'all' };
 }
 
@@ -277,24 +300,42 @@ function opcionesEP(dispositivo){
    registrada como si fuera de WebNN. Después, al enlazar la entrada, tira
    "There's no data transfer registered for copying tensors" y no hay forma de
    limpiarlo desde afuera. Recargar con el proveedor en la dirección arranca el
-   módulo desde cero y es la única salida confiable. */
-function cambiarProveedor(dev){
+   módulo desde cero y es la única salida confiable.
+
+   `auto` distingue las dos recargas: la que pidió el usuario con un botón
+   (manda, no baja más) y la que hace la cascada sola (sigue bajando si hace
+   falta). Como la cadena avanza siempre hacia adelante y CPU nunca ensucia el
+   estado, esto no puede quedar recargando en círculos. */
+function cambiarProveedor(dev, auto){
   const u=new URL(location.href);
   u.searchParams.set('ep', dev);
+  if(auto) u.searchParams.set('auto','1'); else u.searchParams.delete('auto');
   location.replace(u.toString());
 }
 
 async function crearSesiones(dispositivo){
   ponerChapa('cargando', 'ARMANDO '+dispositivo.toUpperCase());
+  /* Arranca limpio: `sucio` sólo se enciende cuando de verdad se tocó ORT con
+     un proveedor de WebNN. Mientras siga apagado, el que llama puede probar
+     otro dispositivo en la misma carga, sin recargar. */
+  EP.sucio=false;
   /* Se pregunta ANTES de intentar: si el equipo no entrega contexto para ese
      dispositivo, se corta acá y no se ensucia el estado de ORT. */
-  if(dispositivo!=='cpu'){
+  if(dispositivo==='npu' || dispositivo==='gpu'){
     if(!navigator.ml)
       throw new Error('Este navegador no expone WebNN (navigator.ml).\n'
         +'En Chrome/Edge de escritorio: chrome://flags/#web-machine-learning-neural-network');
     try{ await navigator.ml.createContext({deviceType:dispositivo}); }
     catch(e){ throw new Error('El equipo no entrega un contexto WebNN de tipo "'
         +dispositivo+'".\nNo hay '+dispositivo.toUpperCase()+' accesible desde el navegador.'); }
+  }
+  if(dispositivo==='webgpu'){
+    if(!navigator.gpu) throw new Error('Este navegador no expone WebGPU (navigator.gpu).');
+    /* pedir el adaptador es la única prueba real: la API puede estar y el
+       equipo no darte ninguno */
+    let ad=null;
+    try{ ad=await navigator.gpu.requestAdapter(); }catch(e){}
+    if(!ad) throw new Error('WebGPU no entrega adaptador en este equipo.');
   }
   /* el WASM del runtime sale del mismo CDN */
   ort.env.wasm.wasmPaths=ORT_CDN;
@@ -307,14 +348,18 @@ async function crearSesiones(dispositivo){
   const op=opcionesEP(dispositivo);
   /* INT8 primero, que es lo que la NPU digiere nativamente. Si el controlador
      rechaza el grafo cuantizado, se reintenta el mismo dispositivo en float32
-     antes de rendirse: bajar de dispositivo es la última opción, no la primera. */
-  const intentos = dispositivo==='cpu'
-    ? [['int8', M.palma_int8, M.puntos_int8], ['f32', M.palma_f32, M.puntos_f32]]
+     antes de rendirse: bajar de dispositivo es la última opción, no la primera.
+     En WebGPU se invierte el orden: los operadores de cuantización todavía no
+     están todos implementados ahí y el grafo INT8 termina cayendo a CPU
+     operador por operador, que sale más caro que correr float32 derecho. */
+  const intentos = dispositivo==='webgpu'
+    ? [['f32', M.palma_f32, M.puntos_f32], ['int8', M.palma_int8, M.puntos_int8]]
     : [['int8', M.palma_int8, M.puntos_int8], ['f32', M.palma_f32, M.puntos_f32]];
   let ultimo=null;
   for(const [prec, up, ul] of intentos){
     try{
-      EP.sucio=(dispositivo!=='cpu');       // desde acá, si falla, hay que recargar
+      /* sólo WebNN deja el estado del módulo tocado; wasm y webgpu no */
+      EP.sucio=(dispositivo==='npu'||dispositivo==='gpu');
       const a=await ort.InferenceSession.create(up, op);
       const b=await ort.InferenceSession.create(ul, op);
       if(sesPalma) try{ await sesPalma.release(); }catch(e){}
@@ -333,7 +378,9 @@ async function crearSesiones(dispositivo){
 }
 function ponerChapa(estado, txt){
   const c=$('chapa');
-  c.className = estado==='npu'?'npu' : (estado==='gpu'||estado==='cpu'?'otro' : (estado==='err'?'err':''));
+  c.className = estado==='npu' ? 'npu'
+    : (estado==='gpu'||estado==='webgpu'||estado==='cpu' ? 'otro'
+    : (estado==='err' ? 'err' : ''));
   $('chapaTxt').textContent=txt;
 }
 
@@ -831,6 +878,10 @@ async function pintarSonda(){
        EP.actual? EP.actual.toUpperCase()+' · '+EP.preciso.toUpperCase() : 'sin sesión');
   fila(typeof navigator.gpu!=='undefined'?'si':'medio','WEBGPU',
        typeof navigator.gpu!=='undefined'?'presente':'ausente');
+  /* por qué no fue la NPU, con el error tal cual lo tiró el runtime */
+  if(EP.actual && EP.actual!=='npu')
+    fila('medio','POR QUÉ NO LA NPU',
+      (EP.motivo||'no hay contexto de NPU en este equipo').split('\n')[0]);
   fila(CAM.tieneFlash?'si':'medio','LINTERNA', CAM.tieneFlash?'la cámara la soporta':'no soportada');
   fila(ORI.hay?'si':'medio','GIROSCOPIO', ORI.hay?'entregando datos':(ORI.permiso?'sin datos':'sin permiso'));
   fila(isSecureContext?'si':'no','CONTEXTO SEGURO', isSecureContext?'HTTPS':'NO · sin cámara ni WebNN');
@@ -867,11 +918,12 @@ function cablear(){
          cartel('cámara '+(CAM.atras?'trasera':'frontal')+' · '+s.width+'×'+s.height,'',2.5);
          SEG.buscando=true; SEG.roi=null; }
     catch(e){ cartel('no se pudo cambiar de cámara','mal',4); } });
-  for(const [id,dev] of [['bNPU','npu'],['bGPU','gpu'],['bCPU','cpu']])
+  for(const [id,dev] of [['bNPU','npu'],['bGPU','gpu'],['bWGPU','webgpu'],['bCPU','cpu']])
     $(id).addEventListener('click', async ()=>{
       /* si ya hubo un intento con WebNN, el estado de ORT quedó tocado y hay
-         que arrancar de nuevo; si no, se puede cambiar en caliente */
-      if(EP.sucio || EP.actual!==null){ cambiarProveedor(dev); return; }
+         que arrancar de nuevo; si no, se puede cambiar en caliente.
+         Elegido a mano: manda, y si falla no se baja solo. */
+      if(EP.sucio || EP.actual!==null){ cambiarProveedor(dev, false); return; }
       $('hojaMotor').classList.remove('ver');
       try{ await crearSesiones(dev); }
       catch(e){ ponerChapa('err','FALLÓ '+dev.toUpperCase());
@@ -881,6 +933,14 @@ function cablear(){
     });
   if(!isSecureContext)
     $('portadaNota').textContent='ATENCIÓN: esto no es HTTPS · la cámara y WebNN no van a funcionar';
+  /* Si venimos de una recarga de la cascada, la portada lo explica en vez de
+     hacer creer que arrancamos de cero por gusto. */
+  else if(!EP.forzado && EP.pedido!=='npu')
+    $('portadaNota').textContent='La NPU no pudo con el modelo · reintentando en '
+      +EP.pedido.toUpperCase()+' · tocá ENTRAR';
+  else if(EP.forzado)
+    $('portadaNota').textContent='Motor forzado a '+EP.pedido.toUpperCase()
+      +' · si falla no baja a otro';
 }
 
 async function entrar(){
@@ -900,14 +960,64 @@ async function entrar(){
   }
   $('portada').classList.add('ir');
   setTimeout(()=>$('portada').remove(), 600);
-  /* 3 · las sesiones, en el proveedor que pida la dirección (NPU por defecto) */
-  try{
-    await crearSesiones(EP.pedido);
-  }catch(e){
-    ponerChapa('err', EP.pedido.toUpperCase()+' NO DISPONIBLE');
-    cartel('No se pudo ejecutar en '+EP.pedido.toUpperCase()+':\n'+(e.message||e)
-          +'\n\nAbrí MOTOR para ver por qué y elegir otro.','mal',0);
+  /* 3 · el motor */
+  await arrancarMotor();
+}
+
+/* ----------------------------------------------------------------------------
+   LA CASCADA
+
+   Se empieza donde diga la dirección y se baja por CADENA hasta que una sesión
+   quede armada. Dos maneras de bajar, y la diferencia importa:
+
+   · el intento falló ANTES de tocar ORT (no hay navigator.ml, no hay adaptador
+     de WebGPU): el estado está limpio y se sigue con el próximo en la misma
+     carga, sin recargar y sin que se note;
+   · el intento falló creando la sesión de WebNN: ORT quedó con su contexto ML
+     colgado y la única salida es recargar con el próximo en la dirección.
+
+   Un `?ep=` puesto a mano (sin `auto=1`) manda: si falla, se informa y no se
+   baja. Para eso está el botón FORZAR NPU.
+---------------------------------------------------------------------------- */
+async function arrancarMotor(){
+  const desde=CADENA.indexOf(EP.pedido);
+  const cola = EP.forzado ? [EP.pedido] : CADENA.slice(desde<0?0:desde);
+  let ultimo=null, saltados=[];
+
+  for(const dev of cola){
+    try{
+      await crearSesiones(dev);
+      /* Anduvo. Si no fue la NPU, se dice por qué, una sola vez y sin drama. */
+      if(dev!=='npu' && (saltados.length || EP.pedido!=='npu')){
+        EP.motivo=(ultimo&&(ultimo.message||String(ultimo)))||'';
+        setTimeout(()=>cartel('La NPU no estaba disponible acá.\n'
+          +'Corriendo en '+dev.toUpperCase()+' · modelos '+EP.preciso.toUpperCase()
+          +'\n\nAbrí MOTOR para ver el detalle.','',7), 3600);
+      }
+      return true;
+    }catch(e){
+      ultimo=e; saltados.push(dev);
+      if(EP.sucio){
+        /* estado de ORT tocado: hay que arrancar de cero en el próximo */
+        const prox=CADENA[CADENA.indexOf(dev)+1];
+        if(prox && !EP.forzado){
+          ponerChapa('cargando','REINTENTANDO EN '+prox.toUpperCase());
+          cartel(dev.toUpperCase()+' no pudo armar la sesión.\n'
+                +'Reintentando en '+prox.toUpperCase()+'…','',0);
+          cambiarProveedor(prox, true);
+          return false;                     // la página se está recargando
+        }
+        break;
+      }
+      /* limpio: se sigue con el próximo sin recargar */
+    }
   }
+
+  ponerChapa('err','SIN MOTOR');
+  cartel('No se pudo armar el detector en ninguno de: '+saltados.join(', ').toUpperCase()
+        +'\n\nÚltimo error:\n'+((ultimo&&(ultimo.message||ultimo))||'—')
+        +'\n\nAbrí MOTOR para ver el detalle.','mal',0);
+  return false;
 }
 
 armar3D();

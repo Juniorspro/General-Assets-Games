@@ -297,6 +297,49 @@ así que no cuesta nada.
 - El dibujo **nunca espera** a la inferencia: se lanza un ciclo cuando el anterior
   terminó y mientras tanto se sigue pintando el último resultado.
 
+### La cascada de motores
+
+Al principio esto avisaba que no había NPU y se quedaba quieto: era la idea, la
+NPU se pedía "sí o sí". En un Android sin WebNN el resultado era una pantalla
+que dibujaba a 60 fps y no detectaba una sola mano — el contador de INFERENCIA
+clavado en 0. Estaba mal.
+
+Ahora baja sola por `npu → gpu(WebNN) → webgpu → cpu(wasm)`, y hay dos formas
+de bajar, que no son lo mismo:
+
+- **Falló antes de tocar ORT** (no hay `navigator.ml`, no hay adaptador de
+  WebGPU): el estado está limpio, se sigue con el próximo en la misma carga.
+  No se recarga y no se nota.
+- **Falló creando la sesión de WebNN**: ORT quedó con su contexto ML colgado y
+  la única salida es recargar con el próximo en la dirección — de ahí el
+  `?ep=<dev>&auto=1`. Como la cadena avanza siempre hacia adelante y CPU nunca
+  ensucia nada, no puede quedar recargando en círculos.
+
+Un `?ep=` puesto a mano (sin `auto=1`) **manda**: si falla, se informa y no
+baja. Para eso está FORZAR NPU.
+
+En WebGPU el orden de precisión se invierte y va **f32 primero**: los
+operadores de cuantización todavía no están todos implementados ahí y el grafo
+INT8 termina cayendo a CPU operador por operador, más caro que correr float32
+derecho.
+
+**Verificado** con la lógica extraída del propio HTML y un equipo falso
+alrededor, siete casos:
+
+| Caso | Termina en |
+|---|---|
+| sin WebNN ni WebGPU | `cpu / int8` |
+| sin WebNN, con WebGPU | `webgpu / f32` |
+| WebNN presente pero sin NPU | `gpu / int8` |
+| NPU da contexto y la sesión revienta | recarga a `?ep=gpu&auto=1` |
+| NPU anda | `npu / int8` |
+| `?ep=npu` forzado y no hay NPU | informa, no baja |
+| `?ep=webgpu&auto=1` | sigue desde webgpu |
+
+Lo que **no** se pudo probar acá: la inferencia de verdad en un navegador. Este
+entorno no llega a jsDelivr desde Chromium (`ERR_CONNECTION_RESET` con y sin
+proxy), así que los modelos no se pueden bajar en una prueba automatizada.
+
 ### Para que la NPU aparezca
 En Chrome o Edge de escritorio hay que habilitar
 `chrome://flags/#web-machine-learning-neural-network` y reiniciar. En Android
