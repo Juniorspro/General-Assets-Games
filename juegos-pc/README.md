@@ -1402,10 +1402,25 @@ salir de ahí**. Así que la fórmula del terreno está escrita dos veces —`su
 es la que camina el jugador, y `sueloT()` en GLSL, que es la que planta el pasto— y si no dieran
 exactamente lo mismo el pasto flotaría. Hay una prueba que lo verifica de verdad: `__dbg.probarSuelo()`
 corre la versión GLSL sobre una grilla, la lee de vuelta de la GPU y la compara con la de JavaScript
-punto por punto. El peor caso medido sobre 300×300 metros es **1,3 milímetros**.
+punto por punto. El peor caso medido sobre 520×520 metros es **1,8 milímetros**.
 
-De cada celda salen también, por hash, el corrimiento dentro de la celda, el giro, la altura, el tono
-y **cuál de las dieciséis matas del atlas** le toca. Nada de eso vive en memoria.
+De cada celda salen también, por hash, el corrimiento dentro de la celda, el giro, la altura, el
+arco, el tono y **cuál de las dieciséis matas del atlas** le toca. Nada de eso vive en memoria.
+
+### Que parezca pasto y no cartones verdes
+Cuatro cosas, y ninguna cuesta casi nada:
+
+- **El arco.** Cada mata se vuelca para su lado con su propia curva (`hh²`). Sin esto el pastizal es
+  un cepillo de cerdas parejas, que es exactamente como se ve el pasto malo.
+- **Ráfagas.** El viento no sopla parejo: dos trenes largos cruzan el campo modulando la amplitud, y
+  se ven las olas pasar por encima del pastizal. Es el detalle que más lo vuelve vivo.
+- **La normal gira a lo ancho de la hoja.** Una brizna es una cinta acanalada, no un plano: si se le
+  pone la normal del plano se prende entera de golpe. Con la normal girada devuelve una franja de
+  brillo, que es lo que hace un pastizal a contraluz.
+- **Translucidez.** A contraluz la hoja se enciende. Sin eso todo pasto parece de plástico.
+
+Encima va un degradado vertical —base fría y oscura, punta clara y dorada—, algún manojo seco suelto
+y oclusión en la base del manojo.
 
 ### Tres capas, no una
 Una sola capa densa es un desperdicio: a treinta metros una mata de veinte centímetros no llega ni a
@@ -1414,34 +1429,65 @@ mismo en pantalla:
 
 | capa | celda | alcance | matas (PC) | geometría |
 |---|---|---|---|---|
-| manto corto | 0,40 m | 0 – 15 m | 5 476 | 3 planos cruzados × 2 tramos |
-| manojos medios | 0,95 m | 4,5 – 36 m | 5 776 | 2 planos × 1 tramo |
-| matas grandes | 2,20 m | 30 – 118 m | 9 216 | 2 planos × 1 tramo |
+| manto corto | 0,34 m | 0 – 15 m | 8 464 | 3 planos cruzados × 3 tramos |
+| manojos medios | 0,80 m | 4,5 – 36 m | 8 464 | 2 planos × 2 tramos |
+| matas grandes | 1,85 m | 30 – 125 m | 17 424 | 2 planos × 1 tramo |
 
-En total unas 20 000 matas y 126 000 triángulos; en teléfono baja a 13 000 y 60 000. El pasto no
-crece adentro del agua ni en la roca parada —lo decide la pendiente, calculada por diferencias
-finitas en el mismo shader.
+La tarjeta se **afina hacia arriba** —la punta ocupa la mitad que la base— así se pintan menos
+píxeles transparentes y el contorno deja de ser un rectángulo.
 
 ### La colisión con el pasto
 No hay colisión por hoja, que sería un disparate: hay **respuesta**. En el vértice, cada brizna que
 cae cerca del jugador se aparta radialmente y se aplasta, proporcional a lo alto que esté sobre su
 base, así que se abre un claro que te sigue y las puntas se doblan hacia afuera mientras la base
 queda quieta. El terreno, los troncos y las piedras grandes sí tienen colisión dura, con un empuje
-hacia afuera del círculo; y no se trepan las paredes: si el paso sube más de lo razonable, no se da.
+hacia afuera del círculo.
 
-### El campo se mide solo
-No hay forma de saber de antemano qué aguanta el aparato de cada uno, así que se mide: si el cuadro
-no llega a 26 fps se recorta el alcance del pasto, la densidad y la resolución del reflejo; si sobran
-más de 52, se devuelven. Tres niveles, y el que está puesto se ve abajo a la izquierda.
+### La caminata
+Se mueve por velocidad, no por teletransporte: hay aceleración, rozamiento y peso. **La cuesta arriba
+frena y la cuesta abajo empuja**, proyectando el gradiente del terreno sobre la dirección de marcha.
+Y la cámara hace todo lo que hace un cuerpo:
 
-### El agua, otra vez
-Es la misma del visor: mapa de altura en ping-pong sobre la GPU, cáusticas por diferencia de área del
-haz refractado, reflejo con cámara espejada y muestreo proyectivo, absorción de Beer. Se le agregó
-una cosa que importa cuando el lago es una parte chica de un mundo grande: **si el lago no entra en
-cuadro no se paga nada**. Un `Frustum.intersectsSphere` contra la esfera del lago decide, y caminando
-por las lomas eso es la mitad del trabajo del cuadro. En las dos pasadas del agua, además, las capas
-de pasto cercanas se apagan y la lejana se recorta: en un espejo movido no se nota, y se gana la
-mitad de lo que queda.
+- **bamboleo en ocho** —el vaivén lateral va a la mitad de frecuencia que el vertical, que es la
+  figura que dibuja la cabeza al caminar—, con amplitud según la velocidad;
+- **inclinación con el terreno**: cabecea con la pendiente que tiene adelante y se ladea con la que
+  tiene al costado, sólo mientras camina y con topes chicos, así se siente el desnivel sin marear;
+- **ladeo al doblar y al andar de costado**, proporcional a la velocidad de giro;
+- un **resorte de hundida** que junta las pisadas, el salto y el aterrizaje en una sola variable:
+  cada paso hunde el ojo un toque y caer de alto lo flexiona de golpe;
+- el **campo de visión se abre al correr** y se cierra al meterse al agua.
+
+Todo resortea con la constante del cuadro; nada salta.
+
+### El terreno son lomas, no montañas
+Suma de senos con dos escalas: la corta ondula el campo cercano y la larga —sólo dos frecuencias,
+anchas y redondeadas— levanta las lomas de lejos hasta unos 35 metros. No hay pared de cierre; el
+horizonte se funde en la neblina, que es del color del cielo bajo y no gris, así el mundo no se corta.
+El terreno es de 520 metros con 460 divisiones por lado: unos 423 000 triángulos, estáticos.
+
+### El pase de post y la paleta
+Antes cada shader propio escribía directo a la pantalla **sin codificar a sRGB**, que es por qué todo
+se veía apagado y había que ir subiéndole el brillo a cada material a mano. Ahora la escena entera se
+dibuja **en lineal** sobre un buffer en coma flotante —con multimuestreo, que el lienzo directo ya no
+da— y al final se hace una sola vez lo que hay que hacer una sola vez:
+
+1. **bright-pass** con rodilla suave y desenfoque separable a un cuarto de resolución;
+2. **ACES** en su versión ajustada de Narkowicz, que tiene el hombro que evita que el cielo se queme
+   en blanco plano;
+3. contraste, saturación, **sombras al cian y luces a lo cálido**, y una viñeta apenas;
+4. codificación a sRGB.
+
+Eso es la paleta: cian saturado, verdes vivos, brillo derramado en los bordes. Los reflejos del agua
+también van en coma flotante, porque en ocho bits el cielo se recortaría a blanco antes de llegar a
+la superficie.
+
+### Los árboles
+Tronco de tubo que se afina, se tuerce y **se ensancha en la base**; ramas por recursión; y la copa
+son tarjetas de un atlas de nueve manojos de hojas de arce fotografiados sobre negro. Dos detalles
+hacen casi toda la diferencia con un montón de cartones: las tarjetas llevan la **normal apuntando
+hacia afuera del centro de la copa** —así se sombrea como una bola, no como planos sueltos— y el
+follaje **se prende a contraluz**. Hay tres especies: roble ancho, álamo alto y angosto, y una copa
+abierta y caída.
 
 ### El follaje no es transparente, es recortado
 Los árboles bajaron el cuadro a cero hasta que se encontró por qué: las hojas estaban con
@@ -1449,14 +1495,35 @@ Los árboles bajaron el cuadro a cero hasta que se encontró por qué: las hojas
 se dibuja diez veces encima de sí mismo. Con `alphaTest` sola —`transparent: false`— se descarta el
 píxel y listo: de 0 a 32 fps con la misma imagen.
 
+### El agua
+La del visor: mapa de altura en ping-pong sobre la GPU, cáusticas por diferencia de área del haz
+refractado, reflejo con cámara espejada y muestreo proyectivo, absorción de Beer. Acá va a **1024²
+de simulación, 320 divisiones de malla y 430² de haces para las cáusticas** en computadora, la mitad
+en teléfono. Y se le agregó algo que importa cuando el lago es una parte chica de un mundo grande:
+**si el lago no entra en cuadro no se paga nada**. Un `Frustum.intersectsSphere` contra la esfera del
+lago decide, y caminando por las lomas eso es la mitad del trabajo del cuadro. En las dos pasadas del
+agua, además, las capas de pasto cercanas se apagan y la lejana se recorta: en un espejo movido no se
+nota, y se gana la mitad de lo que queda.
+
+### El campo se mide solo
+No hay forma de saber de antemano qué aguanta el aparato de cada uno, así que se mide: si el cuadro
+no llega a 26 fps se recortan el alcance del pasto, la densidad, la resolución del reflejo y el
+brillo derramado; si sobran más de 52, se devuelven. Tres niveles, y el que está puesto se ve abajo
+a la izquierda.
+
 ### Las texturas
-Generadas en Higgsfield como escaneos de fotogrametría: pasto verde tupido, pasto seco con tierra a
-la vista y roca de granito, cada una con su normal por Sobel y su rugosidad por luminancia invertida.
-El terreno las reparte por altura y pendiente y las muestrea tres veces giradas para que no se vea la
-grilla. Las matas salieron de una lámina de dieciséis manojos sobre negro puro: el alfa se saca del
-brillo, el color se des-premultiplica para recuperar el borde, cada manojo se recorta a su contenido
-y se reempaqueta en un atlas de 4×4. El cielo es una panorámica que se envuelve en equirectangular
-—espejada para que no se note la costura— y se funde a la neblina por debajo del horizonte.
+Generadas en Higgsfield como escaneos de fotogrametría: césped esmeralda, pasto seco con tierra a la
+vista, arena de orilla y corteza de haya, cada una con su normal por Sobel sobre la luminancia
+desenfocada y su rugosidad por luminancia invertida. El terreno las reparte por altura, pendiente y
+manchones en tres escalas, y las muestrea tres veces giradas para que no se vea la grilla.
+
+Las matas salieron de una lámina de manojos sobre negro puro: el alfa se saca del brillo, el color se
+des-premultiplica para recuperar el borde, y como venían **acostados y todos iguales** se toma uno
+solo y se arman dieciséis variantes girándolo y espejándolo con ángulos distintos, más seis de otra
+lámina. Si no, el campo entero repetiría la misma mata. El cielo es una panorámica de mediodía que se
+envuelve en equirectangular —espejada para que no se note la costura— y se funde a la neblina por
+debajo del horizonte. Ojo con el cenit: es la fila de **arriba** de la foto, y con `flipY` eso es
+`v=1`; sin ese menos uno ve el suelo por encima de la cabeza.
 
 ### El giro de noventa grados
 Igual que en Escuela Rezona: si el teléfono está parado se acuesta **todo** —lienzo, mandos y
@@ -1468,4 +1535,4 @@ navegador es el envolvente y miente.
 Pulgar izquierdo: palanca, aparece donde apoyás el dedo. Derecho: mirar. `SALTO` y `TIRAR` son los
 dos botones redondos de abajo a la derecha. Con teclado: `WASD`, espacio para saltar, `F` para tirar,
 `R` para correr. En `AJUSTES` van densidad y altura del pasto, viento —que mueve pasto, hojas y
-rizos del agua a la vez—, altura del sol, niebla y oleaje.
+rizos del agua a la vez—, altura del sol, niebla, oleaje, brillo derramado y color.
