@@ -1547,3 +1547,95 @@ Pulgar izquierdo: palanca, aparece donde apoyás el dedo. Derecho: mirar. `SALTO
 dos botones redondos de abajo a la derecha. Con teclado: `WASD`, espacio para saltar, `F` para tirar,
 `R` para correr. En `AJUSTES` van densidad y altura del pasto, viento —que mueve pasto, hojas y
 rizos del agua a la vez—, altura del sol, niebla, oleaje, brillo derramado y color.
+
+---
+
+## Fitz Roy (`Fitz_Roy.html`) · beta
+
+Un pedazo real del planeta, explorable: **diez por diez kilómetros del macizo del
+Cerro Fitz Roy**, en El Chaltén, Santa Cruz. Centro en −49,2900 / −73,0000. Nada
+del relieve está inventado.
+
+A diferencia de todo lo anterior, **este archivo no lleva nada adentro**: son
+sesenta kilobytes y los treinta y cinco megas del mundo los sirve **jsDelivr**
+desde este mismo repositorio (`mundo/fitzroy/`), anclados al commit para que la
+URL sea inmutable y el CDN la cachee para siempre.
+
+### De dónde sale cada cosa
+| dato | fuente | resolución |
+|---|---|---|
+| altura del terreno | tiles *terrarium* de AWS (SRTM + Copernicus) | 6,2 m/px remuestreado a 2048² |
+| color del suelo, 10 km | ESRI World Imagery | 2,4 m/px, 4096² |
+| color del suelo, 4 km | ESRI World Imagery | 0,98 m/px, 4096² |
+| cielo | Poly Haven, CC0 | panorámica HDR 4K |
+
+Todo se remuestrea a una **grilla métrica regular**: el juego trabaja en metros,
+no en Mercator, así que la ortofoto y el relieve encajan exactamente y el mapeo
+de coordenadas es una resta y una división.
+
+### La luz está horneada
+Esto es lo que separa un mundo real de una foto pegada sobre un molde. Antes de
+empaquetar, un script barre el propio mapa de alturas:
+
+- **hacia el sol**, 420 pasos: si algo se levanta por encima de la recta que sube
+  con la pendiente del sol, ese punto está a la sombra. Las aristas de granito
+  proyectan sombras largas sobre el glaciar de al lado.
+- **en dieciséis direcciones**, buscando el ángulo del horizonte: cuanto más alto
+  el horizonte, menos cielo ve el punto. El fondo de los valles queda apagado y
+  las cumbres, abiertas.
+
+Las dos van en un PNG —rojo la sombra, verde la oclusión— y el shader las lee
+como quien lee una textura. Calcularlas cuesta seis segundos una vez; hacerlo en
+tiempo real con sombras dinámicas sobre dos millones de triángulos no daría.
+
+### El pasto y el bosque le preguntan al satélite
+Las instancias siguen sin moverse desde JavaScript (misma grilla envolvente que
+en Pradera), pero acá la mata además **mira el píxel de la ortofoto donde le tocó
+caer**: si el verdor no llega al umbral, o está por encima del límite del bosque,
+o la máscara dice que ahí hay agua, no crece. Por eso la vegetación termina justo
+donde termina en la realidad y el bosque de lenga aparece exactamente en la
+ladera donde el satélite lo ve, sin que nadie lo haya colocado.
+
+La altura la resuelve el shader con una bilineal a mano sobre la textura de
+relieve —a propósito con filtro *nearest*, porque interpolar bytes de una altura
+codificada daría saltos de mil metros al cruzar de 255 a 0—. La misma bilineal
+está escrita en JavaScript para que camine el jugador, y `__dbg.probarAltura()`
+compara las dos leyendo la GPU de vuelta: **6,7 milímetros de peor caso** sobre
+los diez kilómetros.
+
+### Los filtros
+La escena entera se dibuja en lineal sobre un buffer en coma flotante con
+multimuestreo, y al final va un solo pase: brillo derramado, ACES, contraste,
+color, **nitidez de contraste adaptativo** y viñeta. La nitidez es la que más se
+nota en un mundo hecho de fotos —realza sólo lo que ya tiene filo y se limita con
+el mínimo y el máximo del vecindario, así no aparecen halos—. Todo se puede tocar
+en vivo desde `AJUSTES`.
+
+A eso se le suma, en el terreno, una capa de **detalle a escala de metros**: a un
+metro por píxel la ortofoto sola se ve como un cuadro borroso, y multiplicarla
+por un grano fino centrado en 0,5 —que además entra por la normal, no sólo por el
+color— la devuelve a la realidad.
+
+### Lagunas
+Salen de una máscara horneada: dónde el relieve está plano y la ortofoto es
+turquesa glaciar o muy oscura. Comparten la malla del terreno —cero geometría
+extra— y se descarta el píxel donde no hay agua. El agua de deshielo casi no deja
+ver el fondo, así que el shader es fresnel contra el cielo HDR más un color
+propio, sin refracción.
+
+### Controles
+Pulgar izquierdo: palanca. Derecho: mirar. `SALTO` y `VOLAR` abajo a la derecha
+—con el mundo a esta escala, a pie se tarda media hora en cruzarlo—. `MIRADOR`
+vuelve al punto de partida, que tampoco se eligió a ojo: se buscó sobre los datos
+el lugar con más verdor, pendiente caminable, entre 450 y 1050 metros y con línea
+de vista despejada a la cumbre. Con teclado: `WASD`, espacio, `V` para volar,
+`R` para correr.
+
+### Qué le falta a la beta
+- La ortofoto de ESRI tiene términos de uso propios: sirve para probar, pero para
+  publicar habría que pasar a Sentinel-2, que es abierta aunque llega a 10 m/px.
+- El relieve viene de un modelo de 30 metros: las agujas de granito del Fitz Roy
+  salen redondeadas y la cumbre marca 2866 m en vez de 3405.
+- No hay nieve propia ni hielo con material aparte: lo blanco es blanco porque la
+  foto es blanca.
+- Falta el agua con simulación y objetos, que sí está en Pradera.
