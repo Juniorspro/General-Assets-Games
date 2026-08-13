@@ -76,6 +76,27 @@ Player Me y los `Bip01` viejos; si falta algún hueso clave, lo dice y no rompe.
 El modelo conserva su tamaño; lo que se escala es el desplazamiento del sujeto,
 para que un personaje de dos metros no camine pasos de uno setenta.
 
+### La interfaz
+Cinco tarjetas en una columna y **sólo una abierta a la vez**. No es adorno: con
+todo desplegado, en un teléfono, la mitad de los controles quedan fuera de vista
+y no se entiende qué va primero. Cada tarjeta plegada resume su estado a la
+derecha —`prueba`, `120 cuadros`, `suave 0.20 · pies 0.30`— y las que todavía no
+corresponden están apagadas y no se pueden tocar.
+
+La pantalla **se mueve sola**: al cargar el video se marca el paso 1 y se abre el
+2; al terminar el análisis se marca el 2, se destraban el 3 y el 5, y se abre el
+3. El número del paso se pone verde cuando está hecho.
+
+**El visor queda pegado arriba** mientras se hace scroll. Eso es lo que hace
+usable el ajuste en un teléfono: se toca un deslizador abajo y se ve el cambio
+arriba, sin ir y volver. En pantalla ancha pasa a dos columnas, cada una con su
+propio scroll.
+
+Cada deslizador dice debajo, en una línea, qué hace y qué pasa si se lo mueve
+—porque «suavizado 0.55» no le dice nada a nadie—. Y las marcas naranjas de la
+barra de tiempo señalan los cuadros donde hay un pie apoyado: mirándolas se
+entiende de un vistazo si la caminata va a patinar.
+
 ### Exporta
 - **BVH** — texto plano, lo lee Blender, Unity y medio mundo. Se escribe la
   jerarquía canónica, no la del `.glb` cargado: así el archivo lo entiende

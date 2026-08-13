@@ -7,195 +7,372 @@
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   :root{
-    --fondo:#0b0f14; --panel:#121822; --panel2:#182130; --borde:#26344a;
-    --texto:#dce7f5; --tenue:#7f93ad; --acento:#54d6a8; --acento2:#ffb45c; --malo:#e2645c;
+    --fondo:#080b10; --panel:#121a25; --panel2:#182231; --borde:#26344a; --borde2:#1b2531;
+    --texto:#e2ecf7; --tenue:#8497ad; --tenue2:#5c6d82;
+    --acento:#54d6a8; --acento2:#ffb45c; --malo:#e2645c;
+    --sombra:0 10px 34px rgba(0,0,0,.55);
   }
-  html,body{height:100%;background:var(--fondo);color:var(--texto);
-    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overscroll-behavior:none}
-  body{display:flex;flex-direction:column;overflow:hidden}
+  html{height:100%}
+  body{min-height:100%;background:var(--fondo);color:var(--texto);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    overscroll-behavior-y:none;-webkit-font-smoothing:antialiased}
+  /* Un resplandor muy suave arriba, para que el fondo no sea una plancha negra */
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(120% 60% at 50% -10%, rgba(84,214,168,.09), transparent 60%)}
   #err{display:none;background:#8e2b20;color:#fff;font:11px/1.5 ui-monospace,monospace;
-    padding:8px;white-space:pre-wrap;max-height:26vh;overflow:auto;flex:0 0 auto}
+    padding:9px;white-space:pre-wrap;max-height:26vh;overflow:auto;position:relative;z-index:60}
 
-  header{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:9px 12px;
-    border-bottom:1px solid var(--borde);background:var(--panel)}
-  header h1{font-size:11px;letter-spacing:4px;font-weight:700;color:var(--acento);white-space:nowrap}
-  header .sub{font-size:9px;letter-spacing:1.6px;color:var(--tenue);white-space:nowrap;
+  /* ------------------------------------------------------------- cabecera */
+  header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:11px;
+    padding:11px 14px;border-bottom:1px solid var(--borde2);
+    background:rgba(10,14,20,.86);backdrop-filter:blur(14px)}
+  header .logo{width:26px;height:26px;border-radius:9px;flex:0 0 auto;display:grid;place-items:center;
+    background:linear-gradient(150deg,#7bf0c4,#2f9e7c);color:#04231a;font-size:14px;
+    box-shadow:0 3px 12px rgba(84,214,168,.35)}
+  header h1{font-size:12px;letter-spacing:4.5px;font-weight:700}
+  header .sub{font-size:9px;letter-spacing:1.6px;color:var(--tenue2);white-space:nowrap;
     overflow:hidden;text-overflow:ellipsis}
-  header .der{margin-left:auto;display:flex;gap:6px}
+  header .der{margin-left:auto;display:flex;gap:7px;flex:0 0 auto}
 
-  main{flex:1 1 auto;display:flex;min-height:0;flex-direction:column}
-  @media (min-width:860px){ main{flex-direction:row} }
-  #izq{flex:0 0 auto;display:flex;flex-direction:column;gap:8px;padding:10px;
-    border-bottom:1px solid var(--borde);min-height:0}
-  @media (min-width:860px){ #izq{width:340px;border-bottom:none;border-right:1px solid var(--borde);
-    overflow:auto} }
-  #der{flex:1 1 auto;position:relative;min-height:0;background:#070a0e}
+  /* ------------------------------------------------------- disposición
+     En el teléfono la página entera hace scroll y el visor queda PEGADO arriba:
+     así se ven los cambios mientras se tocan los deslizadores de más abajo.
+     En pantalla ancha pasa a dos columnas y cada una maneja su propio scroll. */
+  main{position:relative;z-index:1}
+  #der{position:sticky;top:48px;z-index:10;height:44vh;min-height:230px;
+    background:#060910;border-bottom:1px solid var(--borde2);overflow:hidden}
   #lienzo3d{position:absolute;inset:0}
   #lienzo3d canvas{display:block;width:100%;height:100%}
+  #izq{padding:14px 14px 60px;display:flex;flex-direction:column;gap:11px;max-width:720px;margin:0 auto}
+  @media (min-width:900px){
+    html,body{height:100%;overflow:hidden}
+    main{display:grid;grid-template-columns:400px 1fr;height:calc(100% - 49px)}
+    header{position:relative}
+    #izq{order:1;overflow-y:auto;height:100%;max-width:none;margin:0;padding:14px 14px 40px}
+    #der{order:2;position:relative;top:0;height:100%;border-bottom:none;border-left:1px solid var(--borde2)}
+  }
 
-  .caja{background:var(--panel);border:1px solid var(--borde);border-radius:9px;padding:10px}
-  .caja h2{font-size:9px;letter-spacing:2.6px;color:var(--tenue);margin-bottom:8px;font-weight:700}
-  .fila{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  .btn{cursor:pointer;font:700 9.5px/1 ui-monospace,monospace;letter-spacing:1.8px;
-    padding:10px 11px;border-radius:7px;border:1px solid var(--borde);
-    color:var(--texto);background:var(--panel2);white-space:nowrap;transition:.12s}
-  .btn:hover{border-color:var(--acento)}
-  .btn:active{transform:translateY(1px)}
-  .btn.pri{background:var(--acento);color:#06231a;border-color:var(--acento)}
-  .btn.pri:disabled{background:#2a3a44;color:#5e7387;border-color:var(--borde);cursor:default}
-  .btn:disabled{opacity:.45;cursor:default}
-  .btn.on{border-color:var(--acento);color:var(--acento)}
+  /* --------------------------------------------------------------- botones */
+  .b{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    min-height:46px;padding:0 15px;border-radius:13px;cursor:pointer;user-select:none;
+    font:700 10.5px/1 ui-monospace,monospace;letter-spacing:2.2px;color:var(--texto);
+    border:1px solid var(--borde);
+    background:linear-gradient(180deg,#1e2937,#141d29);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.055), 0 2px 0 rgba(0,0,0,.4);
+    transition:transform .08s, box-shadow .16s, border-color .16s, color .16s}
+  .b:hover{border-color:#3b5570}
+  .b:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+  .b .ic{font-size:14px;line-height:1;opacity:.95}
+  .b.pri{color:#03231a;border-color:transparent;
+    background:linear-gradient(180deg,#88f3cd,#35bb91);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.5), 0 3px 0 #1d6b53, 0 8px 22px rgba(84,214,168,.3)}
+  .b.pri:active{box-shadow:inset 0 1px 0 rgba(255,255,255,.45), 0 1px 0 #1d6b53}
+  .b.on{border-color:rgba(84,214,168,.55);color:var(--acento);
+    background:linear-gradient(180deg,rgba(84,214,168,.22),rgba(84,214,168,.06));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 0 18px rgba(84,214,168,.16)}
+  .b.chico{min-height:38px;padding:0 12px;border-radius:11px;font-size:9.5px;letter-spacing:1.8px}
+  .b.ancho{width:100%}
+  .b:disabled{opacity:.32;pointer-events:none;box-shadow:none}
+  .b.rojo.on{border-color:rgba(226,100,92,.6);color:var(--malo);
+    background:linear-gradient(180deg,rgba(226,100,92,.2),rgba(226,100,92,.05));
+    box-shadow:0 0 18px rgba(226,100,92,.15)}
+  .fila{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .fila.parte>*{flex:1 1 0;min-width:0}
 
-  #suelta{border:1.5px dashed var(--borde);border-radius:9px;padding:16px 12px;text-align:center;
-    cursor:pointer;transition:.15s;background:var(--panel)}
-  #suelta.sobre{border-color:var(--acento);background:#14251f}
-  #suelta b{display:block;font-size:10.5px;letter-spacing:2px;margin-bottom:5px}
-  #suelta span{font-size:9px;color:var(--tenue);letter-spacing:1.2px;line-height:1.7}
+  /* ----------------------------------------------------------- los pasos */
+  .paso{border:1px solid var(--borde2);border-radius:17px;overflow:hidden;
+    background:linear-gradient(180deg,#131b27,#101722);transition:border-color .2s, box-shadow .2s}
+  .paso.activo{border-color:rgba(84,214,168,.34);box-shadow:0 0 0 1px rgba(84,214,168,.08), var(--sombra)}
+  .paso.bloq{opacity:.42;pointer-events:none}
+  .cab{display:flex;align-items:center;gap:11px;padding:14px;cursor:pointer;user-select:none}
+  .num{width:23px;height:23px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+    font:700 10px/1 ui-monospace,monospace;background:#22303f;color:var(--tenue);
+    border:1px solid var(--borde);transition:.2s}
+  .paso.hecho .num{background:linear-gradient(180deg,#7bf0c4,#35bb91);color:#03231a;border-color:transparent;
+    box-shadow:0 0 14px rgba(84,214,168,.4)}
+  .paso.activo .num{border-color:rgba(84,214,168,.5);color:var(--acento)}
+  .cab h2{font-size:10.5px;letter-spacing:2.8px;font-weight:700;white-space:nowrap}
+  .cab .res{font-size:8.5px;letter-spacing:1.2px;color:var(--tenue2);margin-left:auto;
+    text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:48%}
+  .cab .flecha{flex:0 0 auto;color:var(--tenue2);font-size:11px;transition:transform .22s;margin-left:6px}
+  .paso.plegado .flecha{transform:rotate(-90deg)}
+  .cuerpo{padding:0 14px 15px;display:flex;flex-direction:column;gap:11px}
+  .paso.plegado .cuerpo{display:none}
+  .paso.plegado .cab .res{margin-left:auto}
 
-  .prev{position:relative;border-radius:8px;overflow:hidden;background:#000;
-    aspect-ratio:16/9;display:none}
+  /* ------------------------------------------------------- soltar el video */
+  #suelta{border:1.5px dashed #2e3f57;border-radius:14px;padding:22px 14px;text-align:center;
+    cursor:pointer;transition:.18s;background:rgba(255,255,255,.012)}
+  #suelta:hover{border-color:#3f5b7a}
+  #suelta.sobre{border-color:var(--acento);background:rgba(84,214,168,.07)}
+  #suelta .gr{font-size:26px;line-height:1;margin-bottom:9px;opacity:.85}
+  #suelta b{display:block;font-size:11px;letter-spacing:2.2px;margin-bottom:6px}
+  #suelta span{font-size:9px;color:var(--tenue2);letter-spacing:1.2px;line-height:1.9}
+
+  .prev{position:relative;border-radius:13px;overflow:hidden;background:#000;
+    aspect-ratio:16/9;display:none;border:1px solid var(--borde2)}
   .prev.hay{display:block}
   .prev video{width:100%;height:100%;object-fit:contain;display:block}
   .prev canvas{position:absolute;inset:0;width:100%;height:100%}
 
-  .ctl{display:flex;flex-direction:column;gap:3px;margin-bottom:7px}
-  .ctl label{font-size:8.5px;letter-spacing:1.2px;color:var(--tenue);
-    display:flex;justify-content:space-between;gap:8px}
-  .ctl label b{color:var(--texto);font-weight:700}
-  input[type=range]{-webkit-appearance:none;width:100%;height:18px;background:transparent}
-  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:#28374d}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5.5px;
-    border-radius:50%;background:var(--acento);border:none}
-  input[type=range]::-moz-range-track{height:3px;border-radius:3px;background:#28374d}
-  input[type=range]::-moz-range-thumb{width:14px;height:14px;border:none;border-radius:50%;background:var(--acento)}
-  select{background:var(--panel2);color:var(--texto);border:1px solid var(--borde);border-radius:6px;
-    padding:7px 8px;font:9.5px ui-monospace,monospace;letter-spacing:1px;flex:1 1 auto;min-width:0}
+  /* ------------------------------------------------------------ controles */
+  .ctl{display:flex;flex-direction:column;gap:6px}
+  .ctl .lin{display:flex;align-items:baseline;gap:9px}
+  .ctl .nom{font-size:9.5px;letter-spacing:1.6px;color:var(--texto);font-weight:700}
+  .ctl .val{margin-left:auto;font-size:9.5px;font-weight:700;color:var(--acento);
+    background:rgba(84,214,168,.10);border:1px solid rgba(84,214,168,.22);
+    padding:3px 7px;border-radius:7px;min-width:44px;text-align:center}
+  .ctl .pie{font-size:8px;letter-spacing:.9px;color:var(--tenue2);line-height:1.6}
+  input[type=range]{-webkit-appearance:none;width:100%;height:26px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:5px;
+    background:linear-gradient(90deg,#2c4054,#22303f)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;margin-top:-7.5px;
+    border-radius:50%;background:linear-gradient(180deg,#9df7d5,#3fc79b);border:none;
+    box-shadow:0 2px 8px rgba(0,0,0,.5), 0 0 0 3px rgba(84,214,168,.14)}
+  input[type=range]::-moz-range-track{height:5px;border-radius:5px;background:#2c4054}
+  input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-radius:50%;
+    background:linear-gradient(180deg,#9df7d5,#3fc79b);box-shadow:0 2px 8px rgba(0,0,0,.5)}
+  select{background:linear-gradient(180deg,#1e2937,#141d29);color:var(--texto);
+    border:1px solid var(--borde);border-radius:12px;padding:13px 12px;width:100%;
+    font:700 10px ui-monospace,monospace;letter-spacing:1.6px;cursor:pointer;
+    appearance:none;-webkit-appearance:none;
+    background-image:linear-gradient(180deg,#1e2937,#141d29),
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='11' height='7'><path d='M1 1l4.5 4.5L10 1' stroke='%238497ad' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat:no-repeat,no-repeat;
+    background-position:0 0, right 13px center;background-size:100% 100%, 11px 7px}
+  .campo{display:flex;flex-direction:column;gap:5px}
+  .campo .et{font-size:8.5px;letter-spacing:1.6px;color:var(--tenue2)}
 
-  #progreso{height:3px;background:#1b2634;border-radius:3px;overflow:hidden;margin-top:8px;display:none}
+  #progreso{height:6px;background:#1a2431;border-radius:6px;overflow:hidden;display:none;
+    border:1px solid var(--borde2)}
   #progreso.va{display:block}
-  #progreso i{display:block;height:100%;width:0;background:var(--acento);transition:width .1s}
-  #estado{font-size:8.5px;letter-spacing:1.2px;color:var(--tenue);margin-top:6px;line-height:1.6;
-    min-height:14px;white-space:pre-wrap}
-  .aviso{color:var(--acento2)}
-  .error{color:var(--malo)}
+  #progreso i{display:block;height:100%;width:0;border-radius:6px;
+    background:linear-gradient(90deg,#35bb91,#8ef7d0);transition:width .12s;
+    box-shadow:0 0 12px rgba(84,214,168,.55)}
+  .nota{font-size:9px;letter-spacing:1.1px;color:var(--tenue);line-height:1.8;white-space:pre-wrap}
+  .nota.aviso{color:var(--acento2)}
+  .nota.error{color:var(--malo)}
+  .nota.ok{color:var(--acento)}
 
   /* --------------------------------------------------- la barra de tiempo */
-  #reproductor{position:absolute;left:0;right:0;bottom:0;z-index:5;padding:9px 11px;
-    background:linear-gradient(0deg,rgba(7,10,14,.96),rgba(7,10,14,.75) 70%,transparent);
-    display:none;gap:8px;align-items:center}
+  #reproductor{position:absolute;left:0;right:0;bottom:0;z-index:6;padding:11px 12px 12px;
+    background:linear-gradient(0deg,rgba(6,9,16,.97) 30%,rgba(6,9,16,.7) 75%,transparent);
+    display:none;gap:9px;align-items:center}
   #reproductor.hay{display:flex}
-  #reproductor .t{font:9px ui-monospace,monospace;color:var(--tenue);letter-spacing:1px;
-    white-space:nowrap;min-width:74px;text-align:right}
-  #linea{flex:1 1 auto;height:22px;position:relative;cursor:pointer}
-  #linea .riel{position:absolute;left:0;right:0;top:9px;height:4px;border-radius:4px;background:#243146}
-  #linea .lleno{position:absolute;left:0;top:9px;height:4px;border-radius:4px;background:var(--acento)}
-  #linea .aguja{position:absolute;top:3px;width:3px;height:16px;border-radius:2px;background:#fff;
-    margin-left:-1.5px;pointer-events:none}
-  #linea .pisa{position:absolute;top:0;height:5px;width:2px;background:var(--acento2);opacity:.75}
+  #reproductor .b{min-height:40px;padding:0 12px;border-radius:11px}
+  #reproductor .t{font:9.5px ui-monospace,monospace;color:var(--tenue);letter-spacing:.8px;
+    white-space:nowrap;min-width:80px;text-align:right}
+  #linea{flex:1 1 auto;height:28px;position:relative;cursor:pointer;touch-action:none}
+  #linea .riel{position:absolute;left:0;right:0;top:11px;height:6px;border-radius:6px;
+    background:#1e2b3c;border:1px solid #263548}
+  #linea .lleno{position:absolute;left:0;top:11px;height:6px;border-radius:6px;
+    background:linear-gradient(90deg,#2f9e7c,#7bf0c4)}
+  #linea .aguja{position:absolute;top:5px;width:3px;height:18px;border-radius:3px;background:#fff;
+    margin-left:-1.5px;pointer-events:none;box-shadow:0 0 8px rgba(255,255,255,.6)}
+  #linea .pisa{position:absolute;top:1px;height:6px;width:2px;background:var(--acento2);opacity:.8;
+    border-radius:2px}
 
-  #hud3d{position:absolute;left:10px;top:10px;z-index:4;font:9px/1.7 ui-monospace,monospace;
-    color:#6f88a4;letter-spacing:1.1px;pointer-events:none;text-shadow:0 1px 4px #000}
-  #vacio{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    text-align:center;font:9.5px/2 ui-monospace,monospace;color:#3f5064;letter-spacing:2px;padding:20px}
+  #hud3d{position:absolute;left:12px;top:11px;z-index:4;font:9px/1.75 ui-monospace,monospace;
+    color:#7e97b2;letter-spacing:1px;pointer-events:none;text-shadow:0 1px 5px #000}
+  /* El cartel de "todavía no hay nada" va ABAJO y chiquito: en el medio le
+     tapaba la cara al maniquí, que es justo lo que uno quiere estar mirando. */
+  #vacio{position:absolute;left:0;right:0;bottom:13px;display:flex;justify-content:center;
+    pointer-events:none;padding:0 14px}
+  #vacio p{font:9px/1.75 ui-monospace,monospace;color:#7b90a8;letter-spacing:1.5px;
+    text-align:center;padding:9px 14px;border-radius:11px;
+    background:rgba(10,15,22,.82);border:1px solid var(--borde2);backdrop-filter:blur(8px)}
+
+  /* ------------------------------------------------------------- la ayuda */
+  #velo{position:fixed;inset:0;z-index:50;background:rgba(4,7,11,.78);backdrop-filter:blur(7px);
+    display:none;align-items:center;justify-content:center;padding:18px}
+  #velo.ver{display:flex}
+  #ayuda{max-width:520px;width:100%;max-height:82vh;overflow:auto;border-radius:19px;
+    border:1px solid var(--borde);background:linear-gradient(180deg,#141d29,#0f1620);
+    box-shadow:var(--sombra);padding:20px}
+  #ayuda h3{font-size:11px;letter-spacing:3.4px;color:var(--acento);margin-bottom:14px}
+  #ayuda ol{list-style:none;display:flex;flex-direction:column;gap:13px;margin-bottom:16px}
+  #ayuda li{display:flex;gap:11px;font:9.5px/1.85 ui-monospace,monospace;color:var(--tenue)}
+  #ayuda li b{flex:0 0 auto;width:21px;height:21px;border-radius:50%;display:grid;place-items:center;
+    background:#22303f;color:var(--acento);font-size:9.5px}
+  #ayuda li span b{all:unset;color:var(--texto);font-weight:700}
+  #ayuda .pie{font:9px/1.9 ui-monospace,monospace;color:var(--tenue2);letter-spacing:1.1px;
+    border-top:1px solid var(--borde2);padding-top:13px}
+
+  /* ---------------------------------------------------------- la carga
+     Mientras baja el detector, que son varios megas la primera vez. */
+  #cargando{position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(24px);
+    z-index:45;display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:14px;
+    border:1px solid var(--borde);background:rgba(18,26,37,.96);backdrop-filter:blur(10px);
+    box-shadow:var(--sombra);font:9.5px ui-monospace,monospace;letter-spacing:1.4px;
+    color:var(--texto);white-space:nowrap;
+    /* apagado de verdad, no sólo corrido: con transform solo asomaba por abajo */
+    opacity:0;visibility:hidden;pointer-events:none;
+    transition:transform .28s, opacity .28s, visibility .28s}
+  #cargando.ver{transform:translateX(-50%) translateY(0);opacity:1;visibility:visible}
+  #cargando .giro{width:14px;height:14px;border-radius:50%;flex:0 0 auto;
+    border:2px solid rgba(84,214,168,.22);border-top-color:var(--acento);
+    animation:girar .8s linear infinite}
+  @keyframes girar{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 <div id="err"></div>
 <header>
-  <h1>MOVIMIENTO</h1>
-  <div class="sub" id="cabecera">video → huesos → modelo 3D</div>
+  <div class="logo">◈</div>
+  <div>
+    <h1>MOVIMIENTO</h1>
+    <div class="sub" id="cabecera">video → huesos → modelo 3D</div>
+  </div>
   <div class="der">
-    <button class="btn" id="bAyuda">?</button>
+    <button class="b chico" id="bAyuda"><span class="ic">?</span>CÓMO VA</button>
   </div>
 </header>
+
 <main>
-  <div id="izq">
-    <div id="suelta">
-      <b>SOLTÁ UN VIDEO ACÁ</b>
-      <span>o tocá para elegirlo · mp4, mov, webm<br>una sola persona, cuerpo entero</span>
-    </div>
-    <input type="file" id="fVideo" accept="video/*" hidden>
-    <input type="file" id="fModelo" accept=".glb,.gltf" hidden>
-    <div class="prev" id="prev">
-      <video id="video" playsinline muted preload="auto"></video>
-      <canvas id="huesos2d"></canvas>
-    </div>
-
-    <div class="caja">
-      <h2>ANÁLISIS</h2>
-      <div class="fila" style="margin-bottom:8px">
-        <select id="sModelo">
-          <option value="lite">detector liviano · rápido</option>
-          <option value="full" selected>detector normal · preciso</option>
-        </select>
-      </div>
-      <div class="fila" style="margin-bottom:8px">
-        <select id="sFps">
-          <option value="15">15 cuadros por segundo</option>
-          <option value="24">24 cuadros por segundo</option>
-          <option value="30" selected>30 cuadros por segundo</option>
-          <option value="60">60 cuadros por segundo</option>
-        </select>
-      </div>
-      <div class="fila">
-        <button class="btn pri" id="bAnalizar" disabled>ANALIZAR</button>
-        <button class="btn" id="bCortar" disabled>CORTAR</button>
-        <button class="btn on" id="bEspejo">ESPEJO</button>
-      </div>
-      <div id="progreso"><i></i></div>
-      <div id="estado">esperando un video</div>
-    </div>
-
-    <div class="caja">
-      <h2>MOVIMIENTO NATURAL</h2>
-      <div class="ctl"><label>SUAVIZADO <b id="vSuave">0.55</b></label>
-        <input type="range" id="sSuave" min="0" max="1" step="0.01" value="0.55"></div>
-      <div class="ctl"><label>HUESOS FIRMES <b id="vFirme">0.85</b></label>
-        <input type="range" id="sFirme" min="0" max="1" step="0.01" value="0.85"></div>
-      <div class="ctl"><label>PIES CLAVADOS <b id="vPies">0.80</b></label>
-        <input type="range" id="sPies" min="0" max="1" step="0.01" value="0.80"></div>
-      <div class="ctl"><label>DESPLAZAMIENTO <b id="vRaiz">1.00</b></label>
-        <input type="range" id="sRaiz" min="0" max="1.5" step="0.02" value="1"></div>
-      <div class="fila">
-        <button class="btn on" id="bPiso">PISO</button>
-        <button class="btn" id="bCrudo">CRUDO</button>
-      </div>
-    </div>
-
-    <div class="caja">
-      <h2>EL MODELO</h2>
-      <div class="fila" style="margin-bottom:8px">
-        <button class="btn on" id="bManiqui">MANIQUÍ</button>
-        <button class="btn" id="bCargarGLB">CARGAR .GLB</button>
-      </div>
-      <div id="infoModelo" style="font-size:8.5px;letter-spacing:1.1px;color:var(--tenue);line-height:1.7">
-        maniquí de fábrica · esqueleto tipo Mixamo
-      </div>
-    </div>
-
-    <div class="caja">
-      <h2>EXPORTAR</h2>
-      <div class="fila">
-        <button class="btn" id="bBVH" disabled>BVH</button>
-        <button class="btn" id="bGLB" disabled>GLB</button>
-        <button class="btn" id="bJSON" disabled>JSON</button>
-      </div>
-      <div id="estadoExp" style="font-size:8.5px;letter-spacing:1.1px;color:var(--tenue);margin-top:7px"></div>
-    </div>
-  </div>
-
-  <div id="der">
+  <section id="der">
     <div id="lienzo3d"></div>
     <div id="hud3d"></div>
-    <div id="vacio">cargá un video y dale ANALIZAR</div>
+    <div id="vacio"><p>cargá un video y dale ANALIZAR · acá se ve el resultado</p></div>
     <div id="reproductor">
-      <button class="btn" id="bPlay">▶</button>
+      <button class="b" id="bPlay"><span class="ic">▶</span></button>
       <div id="linea"><div class="riel"></div><div class="lleno"></div><div class="aguja"></div></div>
       <div class="t" id="tiempo">0.00 / 0.00</div>
-      <button class="btn on" id="bLoop">↻</button>
+      <button class="b on" id="bLoop"><span class="ic">↻</span></button>
     </div>
-  </div>
+  </section>
+
+  <section id="izq">
+
+    <article class="paso activo" id="paso1">
+      <div class="cab"><span class="num">1</span><h2>EL VIDEO</h2>
+        <span class="res" id="res1">ninguno</span><span class="flecha">▾</span></div>
+      <div class="cuerpo">
+        <div id="suelta">
+          <div class="gr">⇪</div>
+          <b>SOLTÁ UN VIDEO ACÁ</b>
+          <span>o tocá para elegirlo · mp4, mov, webm<br>
+                una sola persona, de cuerpo entero y bien iluminada</span>
+        </div>
+        <input type="file" id="fVideo" accept="video/*" hidden>
+        <input type="file" id="fModelo" accept=".glb,.gltf" hidden>
+        <div class="prev" id="prev">
+          <video id="video" playsinline muted preload="auto"></video>
+          <canvas id="huesos2d"></canvas>
+        </div>
+      </div>
+    </article>
+
+    <article class="paso plegado bloq" id="paso2">
+      <div class="cab"><span class="num">2</span><h2>SACAR LOS HUESOS</h2>
+        <span class="res" id="res2">falta el video</span><span class="flecha">▾</span></div>
+      <div class="cuerpo">
+        <div class="fila parte">
+          <div class="campo"><span class="et">DETECTOR</span>
+            <select id="sModelo">
+              <option value="lite">liviano · rápido</option>
+              <option value="full" selected>normal · preciso</option>
+            </select></div>
+          <div class="campo"><span class="et">CUADROS POR SEGUNDO</span>
+            <select id="sFps">
+              <option value="15">15 · borrador</option>
+              <option value="24">24 · cine</option>
+              <option value="30" selected>30 · normal</option>
+              <option value="60">60 · fino</option>
+            </select></div>
+        </div>
+        <div class="fila parte">
+          <button class="b pri" id="bAnalizar" disabled><span class="ic">◉</span>ANALIZAR</button>
+          <button class="b rojo" id="bCortar" disabled><span class="ic">■</span>CORTAR</button>
+        </div>
+        <div id="progreso"><i></i></div>
+        <div class="nota" id="estado">esperando un video</div>
+      </div>
+    </article>
+
+    <article class="paso plegado bloq" id="paso3">
+      <div class="cab"><span class="num">3</span><h2>MOVIMIENTO NATURAL</h2>
+        <span class="res" id="res3">falta analizar</span><span class="flecha">▾</span></div>
+      <div class="cuerpo">
+        <div class="ctl">
+          <div class="lin"><span class="nom">SUAVIZADO</span><span class="val" id="vSuave">0.55</span></div>
+          <input type="range" id="sSuave" min="0" max="1" step="0.01" value="0.55">
+          <div class="pie">saca el tembleque sin dejarlo pastoso: afloja solo cuando el movimiento es rápido</div>
+        </div>
+        <div class="ctl">
+          <div class="lin"><span class="nom">HUESOS FIRMES</span><span class="val" id="vFirme">0.85</span></div>
+          <input type="range" id="sFirme" min="0" max="1" step="0.01" value="0.85">
+          <div class="pie">le fija a cada hueso su largo, que el detector le cambia cuadro a cuadro</div>
+        </div>
+        <div class="ctl">
+          <div class="lin"><span class="nom">PIES CLAVADOS</span><span class="val" id="vPies">0.80</span></div>
+          <input type="range" id="sPies" min="0" max="1" step="0.01" value="0.80">
+          <div class="pie">cuánto se pega el pie al piso cuando apoya · las marcas naranjas de la barra
+            de tiempo muestran dónde</div>
+        </div>
+        <div class="ctl">
+          <div class="lin"><span class="nom">DESPLAZAMIENTO</span><span class="val" id="vRaiz">1.00</span></div>
+          <input type="range" id="sRaiz" min="0" max="1.5" step="0.02" value="1">
+          <div class="pie">en cero camina en el lugar · en uno avanza como en el video</div>
+        </div>
+        <div class="fila parte">
+          <button class="b on" id="bPiso"><span class="ic">▁</span>PISO</button>
+          <button class="b" id="bCrudo"><span class="ic">◌</span>CRUDO</button>
+          <button class="b on" id="bEspejo"><span class="ic">⇄</span>ESPEJO</button>
+        </div>
+        <div class="nota">CRUDO apaga los tres arreglos y muestra lo que salió del detector.</div>
+      </div>
+    </article>
+
+    <article class="paso plegado" id="paso4">
+      <div class="cab"><span class="num">4</span><h2>EL MODELO</h2>
+        <span class="res" id="res4">maniquí</span><span class="flecha">▾</span></div>
+      <div class="cuerpo">
+        <div class="fila parte">
+          <button class="b on" id="bManiqui"><span class="ic">☗</span>MANIQUÍ</button>
+          <button class="b" id="bCargarGLB"><span class="ic">↧</span>CARGAR .GLB</button>
+        </div>
+        <div class="nota" id="infoModelo">maniquí de fábrica · esqueleto tipo Mixamo</div>
+      </div>
+    </article>
+
+    <article class="paso plegado bloq" id="paso5">
+      <div class="cab"><span class="num">5</span><h2>LLEVARSE LA ANIMACIÓN</h2>
+        <span class="res" id="res5">falta analizar</span><span class="flecha">▾</span></div>
+      <div class="cuerpo">
+        <div class="fila parte">
+          <button class="b" id="bBVH" disabled><span class="ic">⇩</span>BVH</button>
+          <button class="b" id="bGLB" disabled><span class="ic">⇩</span>GLB</button>
+          <button class="b" id="bJSON" disabled><span class="ic">⇩</span>JSON</button>
+        </div>
+        <div class="nota" id="estadoExp">BVH para Blender y Unity · GLB para el motor · JSON para hacer cuentas propias</div>
+      </div>
+    </article>
+
+  </section>
 </main>
+
+<div id="velo">
+  <div id="ayuda">
+    <h3>CÓMO VA ESTO</h3>
+    <ol>
+      <li><b>1</b><span>Soltá un video con <b>una sola persona</b>, de cuerpo entero,
+        con luz pareja y sin nada tapándola.</span></li>
+      <li><b>2</b><span>Dale <b>ANALIZAR</b>. Un detector mira el video cuadro por cuadro y saca
+        treinta y tres puntos del cuerpo. La primera vez baja unos megas.</span></li>
+      <li><b>3</b><span>Los deslizadores arreglan lo que el detector hace mal: el tembleque,
+        el largo de los huesos que le cambia solo, y los pies que patinan.</span></li>
+      <li><b>4</b><span>Podés dejar el maniquí o <b>cargar tu .glb</b>. Reconoce esqueletos de
+        Mixamo, Blender, VRoid y Ready Player Me.</span></li>
+      <li><b>5</b><span>Te llevás <b>BVH</b> para Blender, <b>GLB</b> para el motor o
+        <b>JSON</b> con los números.</span></li>
+    </ol>
+    <div class="pie">Un dedo gira la cámara, dos la acercan.<br>
+      El video no sale de tu máquina: todo pasa acá adentro.</div>
+    <div style="margin-top:15px"><button class="b pri ancho" id="bCerrarAyuda">ENTENDIDO</button></div>
+  </div>
+</div>
+
+<div id="cargando"><div class="giro"></div><span id="cargandoTxt">bajando el detector…</span></div>
 
 <script>
 window.addEventListener('error',e=>{const b=document.getElementById('err'); if(!b) return;
@@ -257,8 +434,14 @@ const RECURSOS='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d4fb
 
 function decir(txt, clase){
   const e=$('estado');
-  e.className=clase||'';
+  e.className='nota '+(clase||'');
   e.textContent=txt;
+}
+/* el cartelito de abajo, para lo que tarda y no tiene barra propia */
+function trabajando(txt){
+  const c=$('cargando');
+  if(txt){ $('cargandoTxt').textContent=txt; c.classList.add('ver'); }
+  else c.classList.remove('ver');
 }
 /* ============================================================================
    EL DETECTOR DE HUESOS
@@ -351,8 +534,13 @@ function ponerVideo(archivo){
       acomodarHuesos2D();
       v.currentTime=Math.min(0.05, v.duration*0.1);
       $('bAnalizar').disabled=false;
-      decir(TOMA.nombre+'\n'+v.videoWidth+'×'+v.videoHeight+' · '
-            +v.duration.toFixed(2)+' s\nlisto para analizar');
+      decir(v.videoWidth+'×'+v.videoHeight+' · '+v.duration.toFixed(2)+' s\n'
+            +'listo para analizar', 'ok');
+      /* la pantalla se mueve sola al paso que sigue: es media pantalla de
+         teléfono y sin esto uno no se entera de que ya puede analizar */
+      marcarHecho(1, TOMA.nombre.slice(0,20));
+      desbloquear(2, Math.round(v.duration*30)+' cuadros aprox');
+      abrirPaso(2);
       ok();
     };
     v.onerror=()=>{ clearTimeout(plazo);
@@ -414,10 +602,14 @@ async function analizar(){
   $('bAnalizar').disabled=true; $('bCortar').disabled=false;
   $('progreso').classList.add('va');
   decir('trayendo el detector '+tipo+'…');
+  trabajando(DETECTOR_TIPO===tipo? 'preparando el detector…'
+                                 : 'bajando el detector '+tipo+'…');
   let det;
   try{
     det=await armarDetector(tipo);
+    trabajando(null);
   }catch(e){
+    trabajando(null);
     decir('no se pudo cargar el detector:\n'+(e.message||e),'error');
     $('bAnalizar').disabled=false; $('bCortar').disabled=true;
     $('progreso').classList.remove('va');
@@ -457,6 +649,7 @@ async function analizar(){
       const falta=seg/Math.max(1e-3,p)*(1-p);
       decir('analizando '+(i+1)+' / '+N+' cuadros\n'
             +(p*100).toFixed(0)+'% · faltan '+falta.toFixed(0)+' s');
+      resumen(2, (p*100).toFixed(0)+'%');
       if(c.hay) dibujarHuesos2D(c.img, c.vis);
       await new Promise(r=>setTimeout(r,0));
     }
@@ -466,7 +659,10 @@ async function analizar(){
   const n=TOMA.cuadros.length;
   const conPose=TOMA.cuadros.filter(c=>c.hay).length;
   if(conPose<4){
-    decir('no se encontró a nadie en el video.\nprobá con el detector pesado, con más luz\no con el cuerpo entero en cuadro.','error');
+    decir('no se encontró a nadie en el video.\n'
+         +'probá con el detector normal, con más luz\n'
+         +'o con el cuerpo entero adentro del cuadro.','error');
+    resumen(2,'sin persona');
     return;
   }
   rellenarHuecos();
@@ -475,7 +671,7 @@ async function analizar(){
   decir(n+' cuadros en '+seg.toFixed(1)+' s\n'
         +conPose+' con persona ('+(conPose/n*100).toFixed(0)+'%)'
         +(vacios? '\n'+vacios+' cuadros sin nadie, rellenados':''),
-        vacios>n*0.25?'aviso':'');
+        vacios>n*0.25?'aviso':'ok');
   procesarToma();
 }
 /* Los cuadros donde el detector no vio a nadie se rellenan interpolando entre
@@ -1438,8 +1634,45 @@ function armarJSON(){
   });
 }
 
+/* ============================================================== LOS PASOS
+   La pantalla es una sola columna de cinco tarjetas y sólo una está abierta a la
+   vez. No es adorno: con todo desplegado a la vez, en un teléfono, la mitad de
+   los controles quedan fuera de vista y no se entiende qué va primero. Cada
+   tarjeta, plegada, resume su estado a la derecha. */
+function paso(n){ return $('paso'+n); }
+function abrirPaso(n, cerrarOtros){
+  const p=paso(n); if(!p || p.classList.contains('bloq')) return;
+  if(cerrarOtros!==false)
+    for(let i=1;i<=5;i++) if(i!==n) paso(i).classList.add('plegado');
+  p.classList.remove('plegado');
+  for(let i=1;i<=5;i++) paso(i).classList.toggle('activo', i===n);
+  /* que la tarjeta abierta quede a la vista, debajo del visor pegado */
+  setTimeout(()=>{ try{ p.scrollIntoView({behavior:'smooth', block:'nearest'}); }catch(e){} }, 60);
+}
+function desbloquear(n, resumen){
+  const p=paso(n); if(!p) return;
+  p.classList.remove('bloq');
+  if(resumen!==undefined) $('res'+n).textContent=resumen;
+}
+function marcarHecho(n, resumen){
+  const p=paso(n); if(!p) return;
+  p.classList.add('hecho');
+  if(resumen!==undefined) $('res'+n).textContent=resumen;
+}
+function resumen(n, txt){ const e=$('res'+n); if(e) e.textContent=txt; }
+function cablearPasos(){
+  for(let i=1;i<=5;i++){
+    const p=paso(i); if(!p) continue;
+    p.querySelector('.cab').addEventListener('click', ()=>{
+      if(p.classList.contains('plegado')) abrirPaso(i);
+      else { p.classList.add('plegado'); p.classList.remove('activo'); }
+    });
+  }
+}
+
 /* ================================================================ BOTONES */
 function cablear(){
+  cablearPasos();
   const suelta=$('suelta'), fv=$('fVideo');
   suelta.addEventListener('click', ()=>fv.click());
   fv.addEventListener('change', async e=>{
@@ -1460,9 +1693,9 @@ function cablear(){
 
   $('bAnalizar').addEventListener('click', ()=>analizar().then(listoParaExportar));
   $('bCortar').addEventListener('click', ()=>{ cortando=true; });
-  $('bEspejo').addEventListener('click', e=>{
+  $('bEspejo').addEventListener('click', ()=>{
     AJUSTES.espejo=!AJUSTES.espejo;
-    e.target.classList.toggle('on', AJUSTES.espejo);
+    $('bEspejo').classList.toggle('on', AJUSTES.espejo);
     reprocesar();
   });
   $('bEspejo').classList.toggle('on', AJUSTES.espejo);
@@ -1472,22 +1705,24 @@ function cablear(){
     const ap=()=>{ const x=parseFloat(s.value); v.textContent=x.toFixed(dec===undefined?2:dec);
                    AJUSTES[campo]=x; };
     s.addEventListener('input', ap);
-    s.addEventListener('change', ()=>{ ap(); reprocesar(); });
+    s.addEventListener('change', ()=>{ ap(); reprocesar(); resumenAjustes(); });
     ap();
   };
   desl('sSuave','vSuave','suave');
   desl('sFirme','vFirme','firme');
   desl('sPies','vPies','pies');
   desl('sRaiz','vRaiz','raiz');
-  $('bPiso').addEventListener('click', e=>{ AJUSTES.piso=!AJUSTES.piso;
-    e.target.classList.toggle('on',AJUSTES.piso); reprocesar(); });
-  $('bCrudo').addEventListener('click', e=>{ AJUSTES.crudo=!AJUSTES.crudo;
-    e.target.classList.toggle('on',AJUSTES.crudo); reprocesar(); });
+  $('bPiso').addEventListener('click', ()=>{ AJUSTES.piso=!AJUSTES.piso;
+    $('bPiso').classList.toggle('on',AJUSTES.piso); reprocesar(); });
+  $('bCrudo').addEventListener('click', ()=>{ AJUSTES.crudo=!AJUSTES.crudo;
+    $('bCrudo').classList.toggle('on',AJUSTES.crudo); reprocesar(); resumenAjustes(); });
 
   $('bManiqui').addEventListener('click', ()=>{
     ponerRig(armarManiqui());
     $('bManiqui').classList.add('on'); $('bCargarGLB').classList.remove('on');
+    $('infoModelo').className='nota';
     $('infoModelo').textContent='maniquí de fábrica · esqueleto tipo Mixamo';
+    resumen(4,'maniquí');
     if(PROC.listo) aplicarCuadro(VIS.t);
   });
   $('bCargarGLB').addEventListener('click', ()=>$('fModelo').click());
@@ -1498,29 +1733,33 @@ function cablear(){
       URL.revokeObjectURL(u);
       const rig=rigDeGLTF(g);
       if(rig.faltan.length){
-        $('infoModelo').innerHTML='<span class="error">no se reconoció el esqueleto</span><br>'+
-          'faltan: '+rig.faltan.join(', ')+'<br>'+rig.total+' nodos, '+rig.encontrados+' huesos ubicados'+
-          '<br>probá con un modelo de Mixamo';
+        $('infoModelo').className='nota error';
+        $('infoModelo').textContent='no se reconoció el esqueleto de ese modelo.\n'+
+          'faltan: '+rig.faltan.join(', ')+'\n'+rig.total+' nodos, '+rig.encontrados+
+          ' huesos ubicados.\nprobá con uno de Mixamo.';
         return;
       }
       ponerRig(rig);
       $('bCargarGLB').classList.add('on'); $('bManiqui').classList.remove('on');
+      $('infoModelo').className='nota ok';
       $('infoModelo').textContent=f.name+'\n'+rig.encontrados+' huesos ubicados de '+rig.total+
         ' nodos\naltura '+rig.alto.toFixed(2)+' m';
+      resumen(4, f.name.replace(/\.[^.]+$/,'').slice(0,18));
       if(PROC.listo) aplicarCuadro(VIS.t);
     }, undefined, err=>{
       URL.revokeObjectURL(u);
-      $('infoModelo').innerHTML='<span class="error">no se pudo leer el .glb</span>';
+      $('infoModelo').className='nota error';
+      $('infoModelo').textContent='no se pudo leer ese .glb';
     });
   });
 
   $('bPlay').addEventListener('click', ()=>{
     if(!PROC.listo) return;
     VIS.reproduciendo=!VIS.reproduciendo;
-    $('bPlay').textContent=VIS.reproduciendo?'❚❚':'▶';
+    $('bPlay').innerHTML='<span class="ic">'+(VIS.reproduciendo?'❚❚':'▶')+'</span>';
   });
-  $('bLoop').addEventListener('click', e=>{ VIS.bucle=!VIS.bucle;
-    e.target.classList.toggle('on',VIS.bucle); });
+  $('bLoop').addEventListener('click', ()=>{ VIS.bucle=!VIS.bucle;
+    $('bLoop').classList.toggle('on',VIS.bucle); });
   const linea=$('linea');
   const buscar=ev=>{
     if(!PROC.listo) return;
@@ -1529,40 +1768,48 @@ function cablear(){
     aplicarCuadro(u*PROC.cuadros.length/TOMA.fps);
   };
   linea.addEventListener('pointerdown', ev=>{ linea.setPointerCapture(ev.pointerId);
-    VIS.tocando=true; VIS.reproduciendo=false; $('bPlay').textContent='▶'; buscar(ev); });
+    VIS.tocando=true; VIS.reproduciendo=false;
+    $('bPlay').innerHTML='<span class="ic">▶</span>'; buscar(ev); });
   linea.addEventListener('pointermove', ev=>{ if(VIS.tocando) buscar(ev); });
   linea.addEventListener('pointerup', ()=>{ VIS.tocando=false; });
 
   $('bBVH').addEventListener('click', ()=>{
-    $('estadoExp').textContent='armando el BVH…';
+    $('estadoExp').className='nota'; $('estadoExp').textContent='armando el BVH…';
     setTimeout(()=>{
       const t=armarBVH();
-      if(!t){ $('estadoExp').innerHTML='<span class="error">sin esqueleto</span>'; return; }
+      if(!t){ $('estadoExp').className='nota error'; $('estadoExp').textContent='sin esqueleto'; return; }
       bajarArchivo((TOMA.nombre||'captura')+'.bvh', t, 'text/plain');
+      $('estadoExp').className='nota ok';
       $('estadoExp').textContent='BVH listo · '+PROC.cuadros.length+' cuadros';
+      resumen(5,'BVH bajado');
     },30);
   });
   $('bGLB').addEventListener('click', async ()=>{
-    $('estadoExp').textContent='armando el GLB…';
+    $('estadoExp').className='nota'; $('estadoExp').textContent='armando el GLB…';
     try{
       const r=await exportarGLB();
       bajarArchivo((TOMA.nombre||'captura')+'.glb', new Blob([r],{type:'model/gltf-binary'}));
+      $('estadoExp').className='nota ok';
       $('estadoExp').textContent='GLB listo · '+(r.byteLength/1024).toFixed(0)+' KB';
-    }catch(e){ $('estadoExp').innerHTML='<span class="error">'+(e.message||e)+'</span>'; }
+      resumen(5,'GLB bajado');
+    }catch(e){ $('estadoExp').className='nota error'; $('estadoExp').textContent=String(e.message||e); }
   });
   $('bJSON').addEventListener('click', ()=>{
     bajarArchivo((TOMA.nombre||'captura')+'.json', armarJSON(), 'application/json');
+    $('estadoExp').className='nota ok';
     $('estadoExp').textContent='JSON listo';
+    resumen(5,'JSON bajado');
   });
 
-  $('bAyuda').addEventListener('click', ()=>{
-    decir('1 · soltá un video con UNA persona de cuerpo entero\n'
-         +'2 · ANALIZAR: el detector saca 33 puntos por cuadro\n'
-         +'3 · los deslizadores arreglan tembleque, largo de huesos y pies\n'
-         +'4 · CARGAR .GLB para verlo en tu personaje\n'
-         +'5 · BVH para Blender, GLB para el motor\n\n'
-         +'el video no sale de tu máquina: todo pasa acá');
-  });
+  const velo=$('velo');
+  $('bAyuda').addEventListener('click', ()=>velo.classList.add('ver'));
+  $('bCerrarAyuda').addEventListener('click', ()=>velo.classList.remove('ver'));
+  velo.addEventListener('click', e=>{ if(e.target===velo) velo.classList.remove('ver'); });
+  addEventListener('keydown', e=>{ if(e.key==='Escape') velo.classList.remove('ver'); });
+}
+function resumenAjustes(){
+  resumen(3, AJUSTES.crudo? 'crudo'
+    : 'suave '+AJUSTES.suave.toFixed(2)+' · pies '+AJUSTES.pies.toFixed(2));
 }
 function reprocesar(){
   if(!TOMA.listo) return;
@@ -1579,7 +1826,11 @@ function listoParaExportar(){
   recalcularEscala();
   marcarApoyos();
   aplicarCuadro(0);
-  VIS.reproduciendo=true; $('bPlay').textContent='❚❚';
+  VIS.reproduciendo=true; $('bPlay').innerHTML='<span class="ic">❚❚</span>';
+  marcarHecho(2, PROC.cuadros.length+' cuadros');
+  desbloquear(3, 'listo para ajustar');
+  desbloquear(5, 'BVH · GLB · JSON');
+  abrirPaso(3);
 }
 
 /* ================================================================ ARRANQUE */
@@ -1614,7 +1865,10 @@ window.__dbg={
     return new Promise(ok=>{ v.onloadedmetadata=()=>{ TOMA.dur=v.duration; TOMA.ancho=v.videoWidth;
       TOMA.alto=v.videoHeight; TOMA.nombre='prueba'; $('prev').classList.add('hay');
       $('prev').style.aspectRatio=(v.videoWidth/v.videoHeight).toFixed(4);
-      acomodarHuesos2D(); $('bAnalizar').disabled=false; ok(); }; }); },
+      acomodarHuesos2D(); $('bAnalizar').disabled=false;
+      decir(v.videoWidth+'×'+v.videoHeight+' · '+v.duration.toFixed(2)+' s\nlisto para analizar','ok');
+      marcarHecho(1,'prueba'); desbloquear(2, Math.round(v.duration*30)+' cuadros aprox');
+      abrirPaso(2); ok(); }; }); },
   TOMA, PROC, VIS, AJUSTES
 };
 
