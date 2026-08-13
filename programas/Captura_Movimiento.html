@@ -1,0 +1,1623 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CAPTURA DE MOVIMIENTO</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{
+    --fondo:#0b0f14; --panel:#121822; --panel2:#182130; --borde:#26344a;
+    --texto:#dce7f5; --tenue:#7f93ad; --acento:#54d6a8; --acento2:#ffb45c; --malo:#e2645c;
+  }
+  html,body{height:100%;background:var(--fondo);color:var(--texto);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overscroll-behavior:none}
+  body{display:flex;flex-direction:column;overflow:hidden}
+  #err{display:none;background:#8e2b20;color:#fff;font:11px/1.5 ui-monospace,monospace;
+    padding:8px;white-space:pre-wrap;max-height:26vh;overflow:auto;flex:0 0 auto}
+
+  header{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:9px 12px;
+    border-bottom:1px solid var(--borde);background:var(--panel)}
+  header h1{font-size:11px;letter-spacing:4px;font-weight:700;color:var(--acento);white-space:nowrap}
+  header .sub{font-size:9px;letter-spacing:1.6px;color:var(--tenue);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  header .der{margin-left:auto;display:flex;gap:6px}
+
+  main{flex:1 1 auto;display:flex;min-height:0;flex-direction:column}
+  @media (min-width:860px){ main{flex-direction:row} }
+  #izq{flex:0 0 auto;display:flex;flex-direction:column;gap:8px;padding:10px;
+    border-bottom:1px solid var(--borde);min-height:0}
+  @media (min-width:860px){ #izq{width:340px;border-bottom:none;border-right:1px solid var(--borde);
+    overflow:auto} }
+  #der{flex:1 1 auto;position:relative;min-height:0;background:#070a0e}
+  #lienzo3d{position:absolute;inset:0}
+  #lienzo3d canvas{display:block;width:100%;height:100%}
+
+  .caja{background:var(--panel);border:1px solid var(--borde);border-radius:9px;padding:10px}
+  .caja h2{font-size:9px;letter-spacing:2.6px;color:var(--tenue);margin-bottom:8px;font-weight:700}
+  .fila{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .btn{cursor:pointer;font:700 9.5px/1 ui-monospace,monospace;letter-spacing:1.8px;
+    padding:10px 11px;border-radius:7px;border:1px solid var(--borde);
+    color:var(--texto);background:var(--panel2);white-space:nowrap;transition:.12s}
+  .btn:hover{border-color:var(--acento)}
+  .btn:active{transform:translateY(1px)}
+  .btn.pri{background:var(--acento);color:#06231a;border-color:var(--acento)}
+  .btn.pri:disabled{background:#2a3a44;color:#5e7387;border-color:var(--borde);cursor:default}
+  .btn:disabled{opacity:.45;cursor:default}
+  .btn.on{border-color:var(--acento);color:var(--acento)}
+
+  #suelta{border:1.5px dashed var(--borde);border-radius:9px;padding:16px 12px;text-align:center;
+    cursor:pointer;transition:.15s;background:var(--panel)}
+  #suelta.sobre{border-color:var(--acento);background:#14251f}
+  #suelta b{display:block;font-size:10.5px;letter-spacing:2px;margin-bottom:5px}
+  #suelta span{font-size:9px;color:var(--tenue);letter-spacing:1.2px;line-height:1.7}
+
+  .prev{position:relative;border-radius:8px;overflow:hidden;background:#000;
+    aspect-ratio:16/9;display:none}
+  .prev.hay{display:block}
+  .prev video{width:100%;height:100%;object-fit:contain;display:block}
+  .prev canvas{position:absolute;inset:0;width:100%;height:100%}
+
+  .ctl{display:flex;flex-direction:column;gap:3px;margin-bottom:7px}
+  .ctl label{font-size:8.5px;letter-spacing:1.2px;color:var(--tenue);
+    display:flex;justify-content:space-between;gap:8px}
+  .ctl label b{color:var(--texto);font-weight:700}
+  input[type=range]{-webkit-appearance:none;width:100%;height:18px;background:transparent}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:#28374d}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5.5px;
+    border-radius:50%;background:var(--acento);border:none}
+  input[type=range]::-moz-range-track{height:3px;border-radius:3px;background:#28374d}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border:none;border-radius:50%;background:var(--acento)}
+  select{background:var(--panel2);color:var(--texto);border:1px solid var(--borde);border-radius:6px;
+    padding:7px 8px;font:9.5px ui-monospace,monospace;letter-spacing:1px;flex:1 1 auto;min-width:0}
+
+  #progreso{height:3px;background:#1b2634;border-radius:3px;overflow:hidden;margin-top:8px;display:none}
+  #progreso.va{display:block}
+  #progreso i{display:block;height:100%;width:0;background:var(--acento);transition:width .1s}
+  #estado{font-size:8.5px;letter-spacing:1.2px;color:var(--tenue);margin-top:6px;line-height:1.6;
+    min-height:14px;white-space:pre-wrap}
+  .aviso{color:var(--acento2)}
+  .error{color:var(--malo)}
+
+  /* --------------------------------------------------- la barra de tiempo */
+  #reproductor{position:absolute;left:0;right:0;bottom:0;z-index:5;padding:9px 11px;
+    background:linear-gradient(0deg,rgba(7,10,14,.96),rgba(7,10,14,.75) 70%,transparent);
+    display:none;gap:8px;align-items:center}
+  #reproductor.hay{display:flex}
+  #reproductor .t{font:9px ui-monospace,monospace;color:var(--tenue);letter-spacing:1px;
+    white-space:nowrap;min-width:74px;text-align:right}
+  #linea{flex:1 1 auto;height:22px;position:relative;cursor:pointer}
+  #linea .riel{position:absolute;left:0;right:0;top:9px;height:4px;border-radius:4px;background:#243146}
+  #linea .lleno{position:absolute;left:0;top:9px;height:4px;border-radius:4px;background:var(--acento)}
+  #linea .aguja{position:absolute;top:3px;width:3px;height:16px;border-radius:2px;background:#fff;
+    margin-left:-1.5px;pointer-events:none}
+  #linea .pisa{position:absolute;top:0;height:5px;width:2px;background:var(--acento2);opacity:.75}
+
+  #hud3d{position:absolute;left:10px;top:10px;z-index:4;font:9px/1.7 ui-monospace,monospace;
+    color:#6f88a4;letter-spacing:1.1px;pointer-events:none;text-shadow:0 1px 4px #000}
+  #vacio{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    text-align:center;font:9.5px/2 ui-monospace,monospace;color:#3f5064;letter-spacing:2px;padding:20px}
+</style>
+</head>
+<body>
+<div id="err"></div>
+<header>
+  <h1>MOVIMIENTO</h1>
+  <div class="sub" id="cabecera">video → huesos → modelo 3D</div>
+  <div class="der">
+    <button class="btn" id="bAyuda">?</button>
+  </div>
+</header>
+<main>
+  <div id="izq">
+    <div id="suelta">
+      <b>SOLTÁ UN VIDEO ACÁ</b>
+      <span>o tocá para elegirlo · mp4, mov, webm<br>una sola persona, cuerpo entero</span>
+    </div>
+    <input type="file" id="fVideo" accept="video/*" hidden>
+    <input type="file" id="fModelo" accept=".glb,.gltf" hidden>
+    <div class="prev" id="prev">
+      <video id="video" playsinline muted preload="auto"></video>
+      <canvas id="huesos2d"></canvas>
+    </div>
+
+    <div class="caja">
+      <h2>ANÁLISIS</h2>
+      <div class="fila" style="margin-bottom:8px">
+        <select id="sModelo">
+          <option value="lite">detector liviano · rápido</option>
+          <option value="full" selected>detector normal · preciso</option>
+        </select>
+      </div>
+      <div class="fila" style="margin-bottom:8px">
+        <select id="sFps">
+          <option value="15">15 cuadros por segundo</option>
+          <option value="24">24 cuadros por segundo</option>
+          <option value="30" selected>30 cuadros por segundo</option>
+          <option value="60">60 cuadros por segundo</option>
+        </select>
+      </div>
+      <div class="fila">
+        <button class="btn pri" id="bAnalizar" disabled>ANALIZAR</button>
+        <button class="btn" id="bCortar" disabled>CORTAR</button>
+        <button class="btn on" id="bEspejo">ESPEJO</button>
+      </div>
+      <div id="progreso"><i></i></div>
+      <div id="estado">esperando un video</div>
+    </div>
+
+    <div class="caja">
+      <h2>MOVIMIENTO NATURAL</h2>
+      <div class="ctl"><label>SUAVIZADO <b id="vSuave">0.55</b></label>
+        <input type="range" id="sSuave" min="0" max="1" step="0.01" value="0.55"></div>
+      <div class="ctl"><label>HUESOS FIRMES <b id="vFirme">0.85</b></label>
+        <input type="range" id="sFirme" min="0" max="1" step="0.01" value="0.85"></div>
+      <div class="ctl"><label>PIES CLAVADOS <b id="vPies">0.80</b></label>
+        <input type="range" id="sPies" min="0" max="1" step="0.01" value="0.80"></div>
+      <div class="ctl"><label>DESPLAZAMIENTO <b id="vRaiz">1.00</b></label>
+        <input type="range" id="sRaiz" min="0" max="1.5" step="0.02" value="1"></div>
+      <div class="fila">
+        <button class="btn on" id="bPiso">PISO</button>
+        <button class="btn" id="bCrudo">CRUDO</button>
+      </div>
+    </div>
+
+    <div class="caja">
+      <h2>EL MODELO</h2>
+      <div class="fila" style="margin-bottom:8px">
+        <button class="btn on" id="bManiqui">MANIQUÍ</button>
+        <button class="btn" id="bCargarGLB">CARGAR .GLB</button>
+      </div>
+      <div id="infoModelo" style="font-size:8.5px;letter-spacing:1.1px;color:var(--tenue);line-height:1.7">
+        maniquí de fábrica · esqueleto tipo Mixamo
+      </div>
+    </div>
+
+    <div class="caja">
+      <h2>EXPORTAR</h2>
+      <div class="fila">
+        <button class="btn" id="bBVH" disabled>BVH</button>
+        <button class="btn" id="bGLB" disabled>GLB</button>
+        <button class="btn" id="bJSON" disabled>JSON</button>
+      </div>
+      <div id="estadoExp" style="font-size:8.5px;letter-spacing:1.1px;color:var(--tenue);margin-top:7px"></div>
+    </div>
+  </div>
+
+  <div id="der">
+    <div id="lienzo3d"></div>
+    <div id="hud3d"></div>
+    <div id="vacio">cargá un video y dale ANALIZAR</div>
+    <div id="reproductor">
+      <button class="btn" id="bPlay">▶</button>
+      <div id="linea"><div class="riel"></div><div class="lleno"></div><div class="aguja"></div></div>
+      <div class="t" id="tiempo">0.00 / 0.00</div>
+      <button class="btn on" id="bLoop">↻</button>
+    </div>
+  </div>
+</main>
+
+<script>
+window.addEventListener('error',e=>{const b=document.getElementById('err'); if(!b) return;
+  b.style.display='block'; b.textContent+=(e.message||e.error)+'\n'+(e.filename||'')+':'+(e.lineno||'')+'\n';});
+window.addEventListener('unhandledrejection',e=>{const b=document.getElementById('err'); if(!b) return;
+  b.style.display='block'; b.textContent+='promesa: '+(e.reason&&e.reason.message||e.reason)+'\n';});
+</script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+/* ============================================================================
+   MOVIMIENTO · de un video a una animación 3D
+
+   Tres etapas, y la del medio es la que decide si el resultado se ve vivo o se
+   ve como un muñeco con epilepsia:
+
+   1. DETECTAR. Un detector de huesos —MediaPipe Pose Landmarker— mira el video
+      cuadro por cuadro y devuelve treinta y tres puntos del cuerpo. Devuelve dos
+      juegos: los de la imagen, en píxeles, y los del MUNDO, en metros y con el
+      origen entre las caderas. Los que sirven para animar son los segundos.
+
+   2. ARREGLAR. Lo que sale del detector no se puede usar tal cual:
+      · tiembla, y hay que filtrarlo sin que quede pastoso —de ahí el filtro de
+        un euro, que suaviza cuando el punto va lento y se suelta cuando va
+        rápido;
+      · los huesos le cambian de largo entre cuadro y cuadro, así que hay que
+        fijarles el largo y reproyectar cada articulación;
+      · no tiene desplazamiento: como el origen son las caderas, el sujeto camina
+        en el lugar. El desplazamiento se saca al revés, de los pies: cuando un
+        pie está apoyado, el mundo no se puede mover debajo de él.
+
+   3. PASAR AL MODELO. Cada hueso del esqueleto se orienta para que apunte a
+      donde apunta su par de puntos. Se hace de padre a hijo, en mundo, y recién
+      al final se pasa a local, que es la única manera de que la cadena no se
+      desarme.
+
+   Todo pasa en el navegador. El video no sale de la máquina.
+============================================================================ */
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+/* El detector viene en dos partes y cada una de un lado a propósito:
+   · el código y el WASM, del paquete oficial en npm, clavado a una versión —son
+     veintitrés megas y jsDelivr no deja pasar archivos de más de veinte, así que
+     no podrían vivir en el repositorio aunque uno quisiera;
+   · los MODELOS, del repositorio, anclados al commit, porque una URL de terceros
+     que se cae deja el programa inservible y estos sí entran bajo el límite.
+   El modelo pesado (30 MB) queda afuera por el mismo límite. */
+const CDN_MP='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/';
+const RECURSOS='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@d4fb613241/mundo/mocap/';
+
+function decir(txt, clase){
+  const e=$('estado');
+  e.className=clase||'';
+  e.textContent=txt;
+}
+/* ============================================================================
+   EL DETECTOR DE HUESOS
+
+   MediaPipe Pose Landmarker. Devuelve treinta y tres puntos por cuadro, en dos
+   juegos que conviene no confundir:
+
+   · `landmarks`      → coordenadas de la IMAGEN, de cero a uno. Sirven para
+                        dibujar el esqueleto encima del video y para saber dónde
+                        está el sujeto en el encuadre.
+   · `worldLandmarks` → METROS, con el origen entre las caderas y sin
+                        desplazamiento. Estos son los que animan.
+
+   El video no se reproduce: se lo va posicionando cuadro por cuadro con
+   `currentTime` y se espera el `seeked`. Es más lento que mirarlo pasar, pero
+   es EXACTO —no se saltea ni repite cuadros— y no depende de que la máquina
+   llegue a tiempo.
+============================================================================ */
+const PUNTOS={
+  NARIZ:0, OJO_I:2, OJO_D:5, OREJA_I:7, OREJA_D:8,
+  HOMBRO_I:11, HOMBRO_D:12, CODO_I:13, CODO_D:14, MUNECA_I:15, MUNECA_D:16,
+  MENIQUE_I:17, MENIQUE_D:18, INDICE_I:19, INDICE_D:20, PULGAR_I:21, PULGAR_D:22,
+  CADERA_I:23, CADERA_D:24, RODILLA_I:25, RODILLA_D:26, TOBILLO_I:27, TOBILLO_D:28,
+  TALON_I:29, TALON_D:30, PUNTA_I:31, PUNTA_D:32
+};
+/* los pares que se dibujan encima del video */
+const HUESOS_2D=[
+  [11,12],[11,23],[12,24],[23,24],
+  [11,13],[13,15],[15,17],[15,19],[15,21],[17,19],
+  [12,14],[14,16],[16,18],[16,20],[16,22],[18,20],
+  [23,25],[25,27],[27,29],[27,31],[29,31],
+  [24,26],[26,28],[28,30],[28,32],[30,32],
+  [0,2],[0,5],[2,7],[5,8]
+];
+
+let VISION=null, DETECTOR=null, DETECTOR_TIPO=null;
+async function traerVision(){
+  if(VISION) return VISION;
+  VISION=await import(CDN_MP+'vision_bundle.mjs');
+  return VISION;
+}
+async function armarDetector(tipo){
+  if(DETECTOR && DETECTOR_TIPO===tipo) return DETECTOR;
+  const v=await traerVision();
+  if(DETECTOR){ try{ DETECTOR.close(); }catch(e){} DETECTOR=null; }
+  const fs=await v.FilesetResolver.forVisionTasks(CDN_MP+'wasm');
+  const opciones={
+    baseOptions:{ modelAssetPath: RECURSOS+'pose_landmarker_'+tipo+'.task', delegate:'GPU' },
+    runningMode:'VIDEO', numPoses:1,
+    minPoseDetectionConfidence:0.5, minPosePresenceConfidence:0.5, minTrackingConfidence:0.5,
+    outputSegmentationMasks:false
+  };
+  try{
+    DETECTOR=await v.PoseLandmarker.createFromOptions(fs, opciones);
+  }catch(e){
+    /* sin GPU disponible el creador tira; con CPU anda igual, más lento */
+    opciones.baseOptions.delegate='CPU';
+    DETECTOR=await v.PoseLandmarker.createFromOptions(fs, opciones);
+  }
+  DETECTOR_TIPO=tipo;
+  return DETECTOR;
+}
+
+/* --------------------------------------------------------------- la toma */
+const TOMA={
+  cuadros:[],        // {t, mundo:Float32Array(33*3), img:Float32Array(33*3), vis:Float32Array(33)}
+  fps:30, dur:0, ancho:0, alto:0, nombre:'', espejo:true, listo:false
+};
+let cortando=false;
+
+function ponerVideo(archivo){
+  const v=$('video');
+  if(v.src) URL.revokeObjectURL(v.src);
+  v.src=URL.createObjectURL(archivo);
+  TOMA.nombre=archivo.name.replace(/\.[^.]+$/,'');
+  TOMA.listo=false; TOMA.cuadros.length=0;
+  $('prev').classList.add('hay');
+  return new Promise((ok,mal)=>{
+    /* Un navegador que no tiene el códec no siempre avisa: se queda callado
+       para siempre. Sin este plazo la pantalla queda esperando y el usuario no
+       se entera de nada. */
+    const plazo=setTimeout(()=>{
+      decir('el navegador no pudo abrir ese video.\nprobá pasarlo a mp4 (H.264) o a webm.','error');
+      mal(new Error('sin códec'));
+    }, 12000);
+    v.onloadedmetadata=()=>{
+      clearTimeout(plazo);
+      TOMA.dur=v.duration; TOMA.ancho=v.videoWidth; TOMA.alto=v.videoHeight;
+      $('prev').style.aspectRatio=(v.videoWidth/v.videoHeight).toFixed(4);
+      acomodarHuesos2D();
+      v.currentTime=Math.min(0.05, v.duration*0.1);
+      $('bAnalizar').disabled=false;
+      decir(TOMA.nombre+'\n'+v.videoWidth+'×'+v.videoHeight+' · '
+            +v.duration.toFixed(2)+' s\nlisto para analizar');
+      ok();
+    };
+    v.onerror=()=>{ clearTimeout(plazo);
+      decir('el navegador no puede leer ese video','error'); mal(new Error('video')); };
+  });
+}
+function acomodarHuesos2D(){
+  const c=$('huesos2d'), v=$('video');
+  const r=$('prev').getBoundingClientRect();
+  c.width=Math.max(2,Math.round(r.width)); c.height=Math.max(2,Math.round(r.height));
+}
+/* El video va con `object-fit:contain`, así que adentro del recuadro sobra
+   franja arriba o al costado. Sin esta cuenta el esqueleto queda corrido. */
+function encuadre(){
+  const c=$('huesos2d');
+  const ar=TOMA.ancho/Math.max(1,TOMA.alto), arc=c.width/Math.max(1,c.height);
+  let w,h;
+  if(ar>arc){ w=c.width; h=c.width/ar; } else { h=c.height; w=c.height*ar; }
+  return {x:(c.width-w)/2, y:(c.height-h)/2, w, h};
+}
+function dibujarHuesos2D(img, vis){
+  const c=$('huesos2d'), g=c.getContext('2d');
+  g.clearRect(0,0,c.width,c.height);
+  if(!img) return;
+  const e=encuadre();
+  const X=i=>e.x+img[i*3]*e.w, Y=i=>e.y+img[i*3+1]*e.h;
+  g.lineWidth=Math.max(1.5, c.width*0.006);
+  g.strokeStyle='rgba(84,214,168,.92)';
+  g.beginPath();
+  for(const [a,b] of HUESOS_2D){
+    if(vis[a]<0.3||vis[b]<0.3) continue;
+    g.moveTo(X(a),Y(a)); g.lineTo(X(b),Y(b));
+  }
+  g.stroke();
+  g.fillStyle='#ffb45c';
+  const r=Math.max(1.6, c.width*0.008);
+  for(let i=0;i<33;i++){
+    if(vis[i]<0.3) continue;
+    g.beginPath(); g.arc(X(i),Y(i),r,0,6.2832); g.fill();
+  }
+}
+
+async function irA(v, t){
+  if(Math.abs(v.currentTime-t)<1e-4) return;
+  v.currentTime=t;
+  await new Promise(r=>{
+    let hecho=false;
+    const fin=()=>{ if(hecho) return; hecho=true; v.removeEventListener('seeked',fin); r(); };
+    v.addEventListener('seeked',fin,{once:true});
+    setTimeout(fin, 900);            // por si el contenedor no avisa
+  });
+}
+
+async function analizar(){
+  const v=$('video');
+  if(!v.src) return;
+  const tipo=$('sModelo').value, fps=parseInt($('sFps').value,10);
+  cortando=false;
+  $('bAnalizar').disabled=true; $('bCortar').disabled=false;
+  $('progreso').classList.add('va');
+  decir('trayendo el detector '+tipo+'…');
+  let det;
+  try{
+    det=await armarDetector(tipo);
+  }catch(e){
+    decir('no se pudo cargar el detector:\n'+(e.message||e),'error');
+    $('bAnalizar').disabled=false; $('bCortar').disabled=true;
+    $('progreso').classList.remove('va');
+    return;
+  }
+  const N=Math.max(2, Math.floor(v.duration*fps));
+  TOMA.cuadros.length=0; TOMA.fps=fps; TOMA.listo=false;
+  let vacios=0, t0=performance.now();
+  for(let i=0;i<N;i++){
+    if(cortando) break;
+    const t=Math.min(v.duration-1e-3, i/fps);
+    await irA(v,t);
+    let r=null;
+    try{ r=det.detectForVideo(v, Math.round(t*1000)+i); }catch(e){ /* cuadro roto, se sigue */ }
+    const c={t, mundo:new Float32Array(99), img:new Float32Array(99), vis:new Float32Array(33)};
+    const lm=r&&r.landmarks&&r.landmarks[0], wl=r&&r.worldLandmarks&&r.worldLandmarks[0];
+    if(lm&&wl){
+      for(let k=0;k<33;k++){
+        const a=lm[k], b=wl[k];
+        c.img[k*3]=a.x; c.img[k*3+1]=a.y; c.img[k*3+2]=a.z;
+        /* De la terna del detector —x a la derecha, y hacia ABAJO, z alejándose
+           de la cámara, la de OpenCV— a la de three: y hacia arriba y z hacia
+           el que mira. Se dan vuelta LAS DOS, que es girar media vuelta sobre
+           X. Dar vuelta una sola espeja el mundo y el sujeto sale zurdo sin que
+           se note hasta que levanta una mano. */
+        c.mundo[k*3]=b.x; c.mundo[k*3+1]=-b.y; c.mundo[k*3+2]=-b.z;
+        const vv=(a.visibility!==undefined? a.visibility : (b.visibility!==undefined? b.visibility:1));
+        c.vis[k]=vv;
+      }
+      c.hay=1;
+    }else{ c.hay=0; vacios++; }
+    TOMA.cuadros.push(c);
+    if((i&3)===0 || i===N-1){
+      const p=(i+1)/N;
+      $('progreso').firstElementChild.style.width=(p*100).toFixed(1)+'%';
+      const seg=(performance.now()-t0)/1000;
+      const falta=seg/Math.max(1e-3,p)*(1-p);
+      decir('analizando '+(i+1)+' / '+N+' cuadros\n'
+            +(p*100).toFixed(0)+'% · faltan '+falta.toFixed(0)+' s');
+      if(c.hay) dibujarHuesos2D(c.img, c.vis);
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
+  $('progreso').classList.remove('va');
+  $('bCortar').disabled=true; $('bAnalizar').disabled=false;
+  const n=TOMA.cuadros.length;
+  const conPose=TOMA.cuadros.filter(c=>c.hay).length;
+  if(conPose<4){
+    decir('no se encontró a nadie en el video.\nprobá con el detector pesado, con más luz\no con el cuerpo entero en cuadro.','error');
+    return;
+  }
+  rellenarHuecos();
+  TOMA.listo=true;
+  const seg=((performance.now()-t0)/1000);
+  decir(n+' cuadros en '+seg.toFixed(1)+' s\n'
+        +conPose+' con persona ('+(conPose/n*100).toFixed(0)+'%)'
+        +(vacios? '\n'+vacios+' cuadros sin nadie, rellenados':''),
+        vacios>n*0.25?'aviso':'');
+  procesarToma();
+}
+/* Los cuadros donde el detector no vio a nadie se rellenan interpolando entre
+   el anterior y el siguiente que sí. Un hueco corto no se nota; uno largo sí,
+   y por eso se avisa cuántos hubo. */
+function rellenarHuecos(){
+  const C=TOMA.cuadros, n=C.length;
+  let primero=C.findIndex(c=>c.hay);
+  if(primero<0) return;
+  for(let i=0;i<primero;i++){ C[i].mundo.set(C[primero].mundo); C[i].img.set(C[primero].img);
+                              C[i].vis.set(C[primero].vis); C[i].relleno=1; }
+  let ultimo=primero;
+  for(let i=primero+1;i<n;i++){
+    if(C[i].hay){
+      if(i>ultimo+1){
+        const a=C[ultimo], b=C[i];
+        for(let k=ultimo+1;k<i;k++){
+          const u=(k-ultimo)/(i-ultimo), c=C[k];
+          for(let j=0;j<99;j++){
+            c.mundo[j]=lerp(a.mundo[j], b.mundo[j], u);
+            c.img[j]=lerp(a.img[j], b.img[j], u);
+          }
+          for(let j=0;j<33;j++) c.vis[j]=lerp(a.vis[j], b.vis[j], u)*0.6;
+          c.relleno=1;
+        }
+      }
+      ultimo=i;
+    }
+  }
+  for(let i=ultimo+1;i<n;i++){ C[i].mundo.set(C[ultimo].mundo); C[i].img.set(C[ultimo].img);
+                               C[i].vis.set(C[ultimo].vis); C[i].relleno=1; }
+}
+
+/* ============================================================================
+   ARREGLAR LO QUE SALE DEL DETECTOR
+
+   Esta es la parte que decide si el resultado se ve vivo o se ve como un muñeco
+   con epilepsia. Lo que devuelve el detector no se puede usar tal cual:
+
+   · TIEMBLA. Un promedio corriente lo calma pero deja todo pastoso y con
+     retraso. Acá va un FILTRO DE UN EURO: mira qué tan rápido se mueve el punto
+     y afloja el suavizado cuando el movimiento es rápido. Quieto queda firme,
+     en movimiento no arrastra.
+
+   · LOS HUESOS CAMBIAN DE LARGO. El detector estima cada punto por separado, así
+     que el antebrazo mide dieciocho centímetros en un cuadro y veintiséis en el
+     siguiente. Se le fija a cada hueso su largo mediano de toda la toma y se
+     reproyecta cada articulación sobre la dirección que ya tenía. Esto solo
+     limpia más que cualquier filtro.
+
+   · NO HAY DESPLAZAMIENTO. Como el origen son las caderas, el sujeto camina en
+     el lugar para siempre. El desplazamiento se saca AL REVÉS, de los pies:
+     cuando un pie está apoyado, el mundo no se puede mover debajo de él, así que
+     lo que se movió el pie es —cambiado de signo— lo que se movió el cuerpo.
+============================================================================ */
+
+/* la cadena de huesos, para fijar largos: [padre, hijo] */
+const CADENA=[
+  [PUNTOS.CADERA_I, PUNTOS.RODILLA_I], [PUNTOS.RODILLA_I, PUNTOS.TOBILLO_I],
+  [PUNTOS.TOBILLO_I, PUNTOS.TALON_I],  [PUNTOS.TALON_I,  PUNTOS.PUNTA_I],
+  [PUNTOS.CADERA_D, PUNTOS.RODILLA_D], [PUNTOS.RODILLA_D, PUNTOS.TOBILLO_D],
+  [PUNTOS.TOBILLO_D, PUNTOS.TALON_D],  [PUNTOS.TALON_D,  PUNTOS.PUNTA_D],
+  [PUNTOS.HOMBRO_I, PUNTOS.CODO_I],    [PUNTOS.CODO_I,   PUNTOS.MUNECA_I],
+  [PUNTOS.MUNECA_I, PUNTOS.INDICE_I],  [PUNTOS.MUNECA_I, PUNTOS.MENIQUE_I],
+  [PUNTOS.HOMBRO_D, PUNTOS.CODO_D],    [PUNTOS.CODO_D,   PUNTOS.MUNECA_D],
+  [PUNTOS.MUNECA_D, PUNTOS.INDICE_D],  [PUNTOS.MUNECA_D, PUNTOS.MENIQUE_D],
+  [PUNTOS.HOMBRO_I, PUNTOS.HOMBRO_D],  [PUNTOS.CADERA_I, PUNTOS.CADERA_D],
+  [PUNTOS.HOMBRO_I, PUNTOS.CADERA_I],  [PUNTOS.HOMBRO_D, PUNTOS.CADERA_D],
+  [PUNTOS.HOMBRO_I, PUNTOS.NARIZ],     [PUNTOS.HOMBRO_D, PUNTOS.NARIZ]
+];
+/* el orden en que se reproyecta, desde el centro del cuerpo hacia afuera */
+const ORDEN_FIJAR=[
+  [PUNTOS.CADERA_I, PUNTOS.RODILLA_I], [PUNTOS.RODILLA_I, PUNTOS.TOBILLO_I],
+  [PUNTOS.TOBILLO_I, PUNTOS.TALON_I],  [PUNTOS.TALON_I,  PUNTOS.PUNTA_I],
+  [PUNTOS.CADERA_D, PUNTOS.RODILLA_D], [PUNTOS.RODILLA_D, PUNTOS.TOBILLO_D],
+  [PUNTOS.TOBILLO_D, PUNTOS.TALON_D],  [PUNTOS.TALON_D,  PUNTOS.PUNTA_D],
+  [PUNTOS.HOMBRO_I, PUNTOS.CODO_I],    [PUNTOS.CODO_I,   PUNTOS.MUNECA_I],
+  [PUNTOS.MUNECA_I, PUNTOS.INDICE_I],  [PUNTOS.MUNECA_I, PUNTOS.MENIQUE_I],
+  [PUNTOS.HOMBRO_D, PUNTOS.CODO_D],    [PUNTOS.CODO_D,   PUNTOS.MUNECA_D],
+  [PUNTOS.MUNECA_D, PUNTOS.INDICE_D],  [PUNTOS.MUNECA_D, PUNTOS.MENIQUE_D]
+];
+/* al espejar hay que canjear izquierda por derecha, o el sujeto queda zurdo */
+const CANJE=[[1,4],[2,5],[3,6],[7,8],[9,10],[11,12],[13,14],[15,16],
+             [17,18],[19,20],[21,22],[23,24],[25,26],[27,28],[29,30],[31,32]];
+
+/* ------------------------------------------------------- filtro de un euro */
+function alfa(corte, dt){ const tau=1/(6.283185307*corte); return 1/(1+tau/dt); }
+class UnEuro{
+  constructor(corte, beta, corteD){
+    this.corte=corte; this.beta=beta; this.corteD=corteD||1.0;
+    this.x=null; this.dx=0;
+  }
+  paso(v, dt){
+    if(this.x===null){ this.x=v; this.dx=0; return v; }
+    const dv=(v-this.x)/dt;
+    this.dx = alfa(this.corteD,dt)*dv + (1-alfa(this.corteD,dt))*this.dx;
+    /* acá está la gracia: el corte SUBE con la velocidad, así que un punto
+       quieto se filtra fuerte y uno que vuela casi no se toca */
+    const c=this.corte + this.beta*Math.abs(this.dx);
+    const a=alfa(c,dt);
+    this.x = a*v + (1-a)*this.x;
+    return this.x;
+  }
+}
+
+const AJUSTES={suave:0.55, firme:0.85, pies:0.80, raiz:1.0, piso:true, crudo:false, espejo:false};
+const PROC={cuadros:[], largos:null, alturaSujeto:1.7, listo:false};
+
+function mediana(a){
+  if(!a.length) return 0;
+  const b=Float64Array.from(a).sort();
+  const m=b.length>>1;
+  return b.length%2? b[m] : (b[m-1]+b[m])*0.5;
+}
+
+/* ------------------------------------------------------- el proceso entero */
+function procesarToma(){
+  const C=TOMA.cuadros;
+  if(!C.length){ PROC.listo=false; return; }
+  const n=C.length, dt=1/TOMA.fps;
+
+  /* 1 · copia de trabajo, espejada si hace falta */
+  const P=[];
+  for(let i=0;i<n;i++){
+    const src=C[i].mundo, dst=new Float32Array(99);
+    dst.set(src);
+    if(AJUSTES.espejo){
+      for(let k=0;k<33;k++) dst[k*3]=-dst[k*3];
+      for(const [a,b] of CANJE)
+        for(let j=0;j<3;j++){ const t=dst[a*3+j]; dst[a*3+j]=dst[b*3+j]; dst[b*3+j]=t; }
+    }
+    P.push(dst);
+  }
+
+  /* 2 · mediana de tres en el tiempo: mata el punto suelto que se fue a China
+         sin tocar el movimiento de verdad */
+  if(!AJUSTES.crudo && n>=3){
+    const Q=P.map(a=>Float32Array.from(a));
+    for(let i=1;i<n-1;i++)
+      for(let j=0;j<99;j++){
+        const a=P[i-1][j], b=P[i][j], c=P[i+1][j];
+        Q[i][j] = a<b ? (b<c? b : (a<c? c : a)) : (a<c? a : (b<c? c : b));
+      }
+    for(let i=0;i<n;i++) P[i]=Q[i];
+  }
+
+  /* 3 · filtro de un euro, coordenada por coordenada */
+  if(!AJUSTES.crudo && AJUSTES.suave>0.001){
+    const corte=lerp(7.0, 0.55, AJUSTES.suave);
+    const beta=lerp(0.010, 0.090, AJUSTES.suave);
+    const f=[]; for(let j=0;j<99;j++) f.push(new UnEuro(corte, beta));
+    for(let i=0;i<n;i++)
+      for(let j=0;j<99;j++) P[i][j]=f[j].paso(P[i][j], dt);
+  }
+
+  /* 4 · largo de cada hueso: la mediana de toda la toma */
+  const largos={};
+  for(const [a,b] of CADENA){
+    const L=[];
+    for(let i=0;i<n;i++){
+      if(!C[i].hay) continue;
+      const dx=P[i][b*3]-P[i][a*3], dy=P[i][b*3+1]-P[i][a*3+1], dz=P[i][b*3+2]-P[i][a*3+2];
+      L.push(Math.hypot(dx,dy,dz));
+    }
+    largos[a+'-'+b]=mediana(L);
+  }
+  PROC.largos=largos;
+
+  /* 5 · se reproyecta cada articulación al largo que le toca, de adentro hacia
+         afuera. El peso lo da el deslizador: en cero no toca nada. */
+  if(!AJUSTES.crudo && AJUSTES.firme>0.001){
+    const k=AJUSTES.firme;
+    for(let i=0;i<n;i++){
+      const p=P[i];
+      for(const [a,b] of ORDEN_FIJAR){
+        const L=largos[a+'-'+b]; if(!(L>1e-4)) continue;
+        let dx=p[b*3]-p[a*3], dy=p[b*3+1]-p[a*3+1], dz=p[b*3+2]-p[a*3+2];
+        const d=Math.hypot(dx,dy,dz); if(d<1e-5) continue;
+        const f=lerp(1, L/d, k);
+        p[b*3]  =p[a*3]  +dx*f;
+        p[b*3+1]=p[a*3+1]+dy*f;
+        p[b*3+2]=p[a*3+2]+dz*f;
+      }
+    }
+  }
+
+  /* 6 · la altura del sujeto, para poder escalar el modelo después */
+  {
+    const H=[];
+    for(let i=0;i<n;i++){
+      if(!C[i].hay) continue;
+      const p=P[i];
+      const cabeza=p[PUNTOS.NARIZ*3+1];
+      const pie=Math.min(p[PUNTOS.PUNTA_I*3+1], p[PUNTOS.PUNTA_D*3+1],
+                         p[PUNTOS.TALON_I*3+1], p[PUNTOS.TALON_D*3+1]);
+      H.push((cabeza-pie)*1.10);          // de la nariz a la coronilla hay un diez por ciento más
+    }
+    PROC.alturaSujeto=clamp(mediana(H), 0.9, 2.4) || 1.7;
+  }
+
+  /* 7 · el piso y el desplazamiento. Acá aparece la caminata. */
+  const raices=calcularRaiz(P, dt);
+
+  PROC.cuadros=[];
+  for(let i=0;i<n;i++)
+    PROC.cuadros.push({t:C[i].t, p:P[i], raiz:raices.pos[i], apoyo:raices.apoyo[i]});
+  PROC.listo=true;
+}
+
+/* --------------------------------------------------------- pies y raíz */
+const PIES_I=[PUNTOS.TOBILLO_I, PUNTOS.TALON_I, PUNTOS.PUNTA_I];
+const PIES_D=[PUNTOS.TOBILLO_D, PUNTOS.TALON_D, PUNTOS.PUNTA_D];
+function bajoDe(p, idx){
+  let y=1e9; for(const k of idx) y=Math.min(y, p[k*3+1]); return y;
+}
+function centroPie(p, idx, out){
+  out[0]=out[1]=out[2]=0;
+  for(const k of idx){ out[0]+=p[k*3]; out[1]+=p[k*3+1]; out[2]+=p[k*3+2]; }
+  out[0]/=idx.length; out[1]/=idx.length; out[2]/=idx.length;
+  return out;
+}
+function calcularRaiz(P, dt){
+  const n=P.length;
+  const pos=[], apoyo=[];
+  const ci=[0,0,0], cd=[0,0,0], ci0=[0,0,0], cd0=[0,0,0];
+
+  /* altura: se apoya el punto más bajo del cuerpo sobre el cero. Con esto el
+     personaje pisa siempre el piso —lo correcto al caminar, y lo incorrecto al
+     saltar—, por eso se puede apagar. */
+  const alturas=new Float64Array(n);
+  for(let i=0;i<n;i++){
+    const y=Math.min(bajoDe(P[i],PIES_I), bajoDe(P[i],PIES_D));
+    alturas[i]=-y;
+  }
+  if(AJUSTES.piso){
+    /* un suavizado corto para que no salte de un pie al otro */
+    const s=new Float64Array(n);
+    const R=Math.max(1, Math.round(TOMA.fps*0.10));
+    for(let i=0;i<n;i++){
+      let a=0,c=0;
+      for(let k=-R;k<=R;k++){ const j=i+k; if(j<0||j>=n) continue; a+=alturas[j]; c++; }
+      s[i]=a/c;
+    }
+    alturas.set(s);
+  }else{
+    const base=mediana(Array.from(alturas));
+    alturas.fill(base);
+  }
+
+  /* apoyo: un pie está clavado si casi no se mueve y está cerca del piso */
+  const umbralVel=lerp(0.60, 0.035, AJUSTES.pies)*Math.max(dt,1e-3)/0.0333;
+  const umbralAlt=lerp(0.02, 0.16, AJUSTES.pies);
+  let vx=0, vz=0;
+  let X=0, Z=0;
+  for(let i=0;i<n;i++){
+    centroPie(P[i], PIES_I, ci); centroPie(P[i], PIES_D, cd);
+    const yPiso=-alturas[i];
+    let ai=0, ad=0;
+    if(i>0){
+      centroPie(P[i-1], PIES_I, ci0); centroPie(P[i-1], PIES_D, cd0);
+      const di=Math.hypot(ci[0]-ci0[0], ci[2]-ci0[2]);
+      const dd=Math.hypot(cd[0]-cd0[0], cd[2]-cd0[2]);
+      const bi=bajoDe(P[i],PIES_I)-yPiso, bd=bajoDe(P[i],PIES_D)-yPiso;
+      ai=(di<umbralVel && bi<umbralAlt)?1:0;
+      ad=(dd<umbralVel && bd<umbralAlt)?1:0;
+      /* si ninguno califica, se clava el que esté más abajo: siempre hay uno
+         que sostiene, y sin esto el personaje flota y patina */
+      if(!ai && !ad){ if(bi<bd) ai=1; else ad=1; }
+
+      let mx=0, mz=0, c=0;
+      if(ai){ mx+=ci[0]-ci0[0]; mz+=ci[2]-ci0[2]; c++; }
+      if(ad){ mx+=cd[0]-cd0[0]; mz+=cd[2]-cd0[2]; c++; }
+      if(c){ mx/=c; mz/=c;
+        /* el pie apoyado no se mueve en el mundo: lo que se movió es el cuerpo,
+           al revés */
+        const nx=-mx, nz=-mz;
+        vx=lerp(vx, nx, 0.55); vz=lerp(vz, nz, 0.55);
+      }else{ vx*=0.85; vz*=0.85; }
+      X+=vx*AJUSTES.raiz; Z+=vz*AJUSTES.raiz;
+    }
+    pos.push([X, alturas[i], Z]);
+    apoyo.push([ai, ad]);
+  }
+  /* que el clip arranque en el origen */
+  if(pos.length){
+    const x0=pos[0][0], z0=pos[0][2];
+    for(const p of pos){ p[0]-=x0; p[2]-=z0; }
+  }
+  return {pos, apoyo};
+}
+
+/* ============================================================================
+   EL ESQUELETO Y EL PASE AL MODELO
+
+   El maniquí de fábrica se arma a mano en pose de T, con nombres de hueso al
+   estilo Mixamo. Eso no es decorativo: es lo que permite que el MISMO código
+   maneje un .glb que traiga el usuario, porque casi todo lo riggeado que anda
+   dando vueltas usa esos nombres o alguno parecido.
+
+   El pase de los puntos al esqueleto va así, y el orden importa:
+
+   1. La CADERA recibe una orientación completa, sacada de una terna: el eje que
+      va de una cadera a la otra, el que va de la cadera al hombro, y el producto
+      cruz de los dos.
+   2. El PECHO recibe otra terna, la de los hombros. Entre cadera y pecho se
+      interpolan las vértebras, y de ahí sale la torsión del torso, que es lo
+      primero que se nota cuando falta.
+   3. Los BRAZOS y las PIERNAS reciben sólo el giro mínimo que lleva al hueso
+      desde donde apunta en reposo hasta donde apunta ahora.
+
+   Cada hueso se calcula contra su propio reposo EN MUNDO, y recién al final se
+   convierte a local dividiendo por el mundo del padre. Si se hace al revés
+   —acumulando de padre a hijo— cualquier error de la cadera se multiplica por
+   toda la cadena y la mano termina a un metro de donde va.
+============================================================================ */
+const ESQ=[
+  ['Hips',null,            0,      0.95,  0],
+  ['Spine','Hips',         0,      0.09,  0],
+  ['Spine1','Spine',       0,      0.12,  0],
+  ['Spine2','Spine1',      0,      0.12,  0],
+  ['Neck','Spine2',        0,      0.11,  0],
+  ['Head','Neck',          0,      0.09,  0],
+  ['HeadTop_End','Head',   0,      0.19,  0],
+
+  ['LeftShoulder','Spine2',    0.05, 0.09, 0],
+  ['LeftArm','LeftShoulder',   0.13, 0,    0],
+  ['LeftForeArm','LeftArm',    0.27, 0,    0],
+  ['LeftHand','LeftForeArm',   0.25, 0,    0],
+  ['LeftHand_End','LeftHand',  0.09, 0,    0],
+  ['RightShoulder','Spine2',  -0.05, 0.09, 0],
+  ['RightArm','RightShoulder',-0.13, 0,    0],
+  ['RightForeArm','RightArm', -0.27, 0,    0],
+  ['RightHand','RightForeArm',-0.25, 0,    0],
+  ['RightHand_End','RightHand',-0.09,0,    0],
+
+  ['LeftUpLeg','Hips',         0.09,-0.06, 0],
+  ['LeftLeg','LeftUpLeg',      0,   -0.43, 0],
+  ['LeftFoot','LeftLeg',       0,   -0.43, 0],
+  ['LeftToeBase','LeftFoot',   0,   -0.03, 0.14],
+  ['LeftToe_End','LeftToeBase',0,    0,    0.07],
+  ['RightUpLeg','Hips',       -0.09,-0.06, 0],
+  ['RightLeg','RightUpLeg',    0,   -0.43, 0],
+  ['RightFoot','RightLeg',     0,   -0.43, 0],
+  ['RightToeBase','RightFoot', 0,   -0.03, 0.14],
+  ['RightToe_End','RightToeBase',0,  0,    0.07]
+];
+/* Qué mira cada hueso. `terna` usa tres ejes; `mira` sólo la dirección.
+   Los índices son los del detector; las palabras son puntos inventados
+   —el medio de las caderas, el medio de los hombros— que no existen ahí. */
+const MAPA=[
+  {h:'Hips',          terna:'cadera'},
+  {h:'Spine',         mezcla:0.34},
+  {h:'Spine1',        mezcla:0.67},
+  {h:'Spine2',        terna:'pecho'},
+  {h:'Neck',          mira:['hombroC','cabezaC']},
+  {h:'Head',          terna:'cabeza'},
+  {h:'LeftShoulder',  mira:['hombroC', PUNTOS.HOMBRO_I]},
+  {h:'LeftArm',       mira:[PUNTOS.HOMBRO_I, PUNTOS.CODO_I]},
+  {h:'LeftForeArm',   mira:[PUNTOS.CODO_I, PUNTOS.MUNECA_I]},
+  {h:'LeftHand',      mira:[PUNTOS.MUNECA_I, PUNTOS.INDICE_I]},
+  {h:'RightShoulder', mira:['hombroC', PUNTOS.HOMBRO_D]},
+  {h:'RightArm',      mira:[PUNTOS.HOMBRO_D, PUNTOS.CODO_D]},
+  {h:'RightForeArm',  mira:[PUNTOS.CODO_D, PUNTOS.MUNECA_D]},
+  {h:'RightHand',     mira:[PUNTOS.MUNECA_D, PUNTOS.INDICE_D]},
+  {h:'LeftUpLeg',     mira:[PUNTOS.CADERA_I, PUNTOS.RODILLA_I]},
+  {h:'LeftLeg',       mira:[PUNTOS.RODILLA_I, PUNTOS.TOBILLO_I]},
+  {h:'LeftFoot',      mira:[PUNTOS.TOBILLO_I, PUNTOS.PUNTA_I]},
+  {h:'RightUpLeg',    mira:[PUNTOS.CADERA_D, PUNTOS.RODILLA_D]},
+  {h:'RightLeg',      mira:[PUNTOS.RODILLA_D, PUNTOS.TOBILLO_D]},
+  {h:'RightFoot',     mira:[PUNTOS.TOBILLO_D, PUNTOS.PUNTA_D]}
+];
+/* Alias de nombres: lo que trae un .glb de Mixamo, de Blender, de VRoid o de
+   Ready Player Me. Se compara en minúsculas y sin puntuación. */
+const ALIAS={
+  Hips:['hips','pelvis','bip01pelvis','j_bip_c_hips','root','cadera'],
+  Spine:['spine','spine0','bip01spine','j_bip_c_spine'],
+  Spine1:['spine1','spine01','chest','bip01spine1','j_bip_c_chest'],
+  Spine2:['spine2','spine02','upperchest','bip01spine2','j_bip_c_upperchest'],
+  Neck:['neck','bip01neck','j_bip_c_neck'],
+  Head:['head','bip01head','j_bip_c_head'],
+  LeftShoulder:['leftshoulder','shoulderl','lshoulder','bip01lclavicle','j_bip_l_shoulder','clavicle_l'],
+  LeftArm:['leftarm','upperarml','armlefl','lupperarm','bip01lupperarm','j_bip_l_upperarm','upperarm_l','leftupperarm'],
+  LeftForeArm:['leftforearm','lowerarml','llowerarm','bip01lforearm','j_bip_l_lowerarm','lowerarm_l','leftlowerarm'],
+  LeftHand:['lefthand','handl','lhand','bip01lhand','j_bip_l_hand','hand_l'],
+  RightShoulder:['rightshoulder','shoulderr','rshoulder','bip01rclavicle','j_bip_r_shoulder','clavicle_r'],
+  RightArm:['rightarm','upperarmr','rupperarm','bip01rupperarm','j_bip_r_upperarm','upperarm_r','rightupperarm'],
+  RightForeArm:['rightforearm','lowerarmr','rlowerarm','bip01rforearm','j_bip_r_lowerarm','lowerarm_r','rightlowerarm'],
+  RightHand:['righthand','handr','rhand','bip01rhand','j_bip_r_hand','hand_r'],
+  LeftUpLeg:['leftupleg','upperlegl','lupperleg','bip01lthigh','j_bip_l_upperleg','thigh_l','leftupperleg'],
+  LeftLeg:['leftleg','lowerlegl','llowerleg','bip01lcalf','j_bip_l_lowerleg','calf_l','leftlowerleg'],
+  LeftFoot:['leftfoot','footl','lfoot','bip01lfoot','j_bip_l_foot','foot_l'],
+  LeftToeBase:['lefttoebase','toel','ltoe','bip01ltoe0','j_bip_l_toes','ball_l','lefttoes'],
+  RightUpLeg:['rightupleg','upperlegr','rupperleg','bip01rthigh','j_bip_r_upperleg','thigh_r','rightupperleg'],
+  RightLeg:['rightleg','lowerlegr','rlowerleg','bip01rcalf','j_bip_r_lowerleg','calf_r','rightlowerleg'],
+  RightFoot:['rightfoot','footr','rfoot','bip01rfoot','j_bip_r_foot','foot_r'],
+  RightToeBase:['righttoebase','toer','rtoe','bip01rtoe0','j_bip_r_toes','ball_r','righttoes']
+};
+const limpiar=s=>String(s).toLowerCase().replace(/^mixamorig/,'').replace(/[:_.\-\s]/g,'');
+
+/* ---------------------------------------------------------- el maniquí */
+const MAT_HUESO=new THREE.MeshStandardMaterial({color:0xb9c6d6, roughness:0.55, metalness:0.05});
+const MAT_ARTIC=new THREE.MeshStandardMaterial({color:0x54d6a8, roughness:0.35, metalness:0.1});
+function armarManiqui(){
+  const raiz=new THREE.Group();
+  const huesos={};
+  for(const [n,p,x,y,z] of ESQ){
+    const b=new THREE.Bone(); b.name=n; b.position.set(x,y,z);
+    huesos[n]=b;
+    if(p) huesos[p].add(b); else raiz.add(b);
+  }
+  /* la carne: una caja por hueso, colgada del padre y estirada hasta el hijo.
+     Sin skinning: para ver el movimiento alcanza, y así el mismo código anima
+     esto y un personaje con piel. */
+  for(const [n,p,x,y,z] of ESQ){
+    if(!p) continue;
+    const L=Math.hypot(x,y,z); if(L<0.01) continue;
+    const gordo=n.indexOf('Hand')>=0||n.indexOf('Toe')>=0 ? 0.035
+              : n.indexOf('Fore')>=0||n.indexOf('Leg')>=0&&n.indexOf('Up')<0 ? 0.055
+              : n.indexOf('Spine')>=0||n==='Neck'||n==='Head' ? 0.10 : 0.070;
+    const g=new THREE.BoxGeometry(gordo, L, gordo);
+    g.translate(0, L*0.5, 0);
+    /* la caja nace en +Y y se la lleva a la dirección del hijo */
+    const m=new THREE.Mesh(g, MAT_HUESO);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),
+      new THREE.Vector3(x,y,z).normalize());
+    huesos[p].add(m);
+    const a=new THREE.Mesh(new THREE.SphereGeometry(gordo*0.72, 10, 8), MAT_ARTIC);
+    huesos[p].add(a);
+  }
+  {
+    const c=new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), MAT_HUESO);
+    c.position.y=0.10; huesos['Head'].add(c);
+  }
+  raiz.updateMatrixWorld(true);
+  return {raiz, huesos, propio:true};
+}
+
+/* ------------------------------------------------- reposo y ataduras
+   Se guarda, para cada hueso: su cuaternión en MUNDO en reposo y hacia dónde
+   apunta en MUNDO en reposo. Contra eso se compara todo después. */
+function medirReposo(rig){
+  const H=rig.huesos;
+  rig.raiz.updateMatrixWorld(true);
+  const reposo={};
+  for(const m of MAPA){
+    const b=H[m.h]; if(!b) continue;
+    const q=new THREE.Quaternion(), p=new THREE.Vector3(), e=new THREE.Vector3();
+    b.matrixWorld.decompose(p,q,e);
+    let dir=null;
+    /* la dirección de reposo es hacia el primer hijo que sea hueso */
+    const hijo=b.children.find(c=>c.isBone);
+    if(hijo){
+      const ph=new THREE.Vector3().setFromMatrixPosition(hijo.matrixWorld);
+      dir=ph.sub(p).normalize();
+    }
+    reposo[m.h]={q:q.clone(), dir, pos:p.clone()};
+  }
+  const cad=H['Hips'];
+  const pc=new THREE.Vector3().setFromMatrixPosition(cad.matrixWorld);
+  let alto=0;
+  for(const n of ['HeadTop_End','Head','Neck']){
+    if(H[n]){ alto=new THREE.Vector3().setFromMatrixPosition(H[n].matrixWorld).y; break; }
+  }
+  let piso=1e9;
+  for(const n of ['LeftToe_End','LeftToeBase','LeftFoot']){
+    if(H[n]){ piso=new THREE.Vector3().setFromMatrixPosition(H[n].matrixWorld).y; break; }
+  }
+  if(piso>1e8) piso=0;
+  rig.reposo=reposo;
+  rig.alto=Math.max(0.3, alto-piso);
+  rig.caderaY=pc.y;
+  rig.piso=piso;
+  return rig;
+}
+
+/* ------------------------------------------------------- leer un .glb */
+function rigDeGLTF(gltf){
+  const huesos={};
+  const sueltos=[];
+  gltf.scene.traverse(o=>{ if(o.isBone||o.type==='Bone') sueltos.push(o); });
+  if(!sueltos.length) gltf.scene.traverse(o=>{ if(o.isObject3D && o.name) sueltos.push(o); });
+  const porNombre=new Map();
+  for(const b of sueltos) porNombre.set(limpiar(b.name), b);
+  for(const clave in ALIAS){
+    for(const a of ALIAS[clave]){
+      const b=porNombre.get(a);
+      if(b){ huesos[clave]=b; break; }
+    }
+  }
+  const faltan=['Hips','Spine','Head','LeftArm','RightArm','LeftUpLeg','RightUpLeg']
+    .filter(k=>!huesos[k]);
+  return {raiz:gltf.scene, huesos, propio:false, faltan,
+          encontrados:Object.keys(huesos).length, total:sueltos.length};
+}
+
+/* ============================================================== EL PASE */
+const _v=new THREE.Vector3(), _v2=new THREE.Vector3(), _v3b=new THREE.Vector3();
+const _q=new THREE.Quaternion(), _q2=new THREE.Quaternion();
+const _m=new THREE.Matrix4();
+function punto(p, i, out){
+  if(typeof i==='number'){ out.set(p[i*3], p[i*3+1], p[i*3+2]); return out; }
+  if(i==='caderaC') return medio(p, PUNTOS.CADERA_I, PUNTOS.CADERA_D, out);
+  if(i==='hombroC') return medio(p, PUNTOS.HOMBRO_I, PUNTOS.HOMBRO_D, out);
+  if(i==='cabezaC') return medio(p, PUNTOS.OREJA_I, PUNTOS.OREJA_D, out);
+  return out.set(0,0,0);
+}
+function medio(p,a,b,out){
+  out.set((p[a*3]+p[b*3])*0.5, (p[a*3+1]+p[b*3+1])*0.5, (p[a*3+2]+p[b*3+2])*0.5);
+  return out;
+}
+/* Una terna a partir de un eje "derecha" y un eje "arriba": se ortogonaliza el
+   arriba contra la derecha, y el tercero sale del producto cruz. Es la única
+   forma de que dos ejes ruidosos den una rotación limpia. */
+function terna(der, arr, out){
+  const x=_v.copy(der).normalize();
+  const y=_v2.copy(arr);
+  y.addScaledVector(x, -y.dot(x)).normalize();
+  const z=_v3b.copy(x).cross(y);
+  out.makeBasis(x,y,z);
+  return out;
+}
+const TERNA_REPOSO={};
+function ternaObjetivo(cual, p, out){
+  if(cual==='cadera'){
+    punto(p, PUNTOS.CADERA_D, _v); punto(p, PUNTOS.CADERA_I, _v2);
+    const der=new THREE.Vector3().subVectors(_v,_v2);     // de la izquierda a la derecha
+    punto(p,'hombroC',_v); punto(p,'caderaC',_v2);
+    const arr=new THREE.Vector3().subVectors(_v,_v2);
+    return terna(der, arr, out);
+  }
+  if(cual==='pecho'){
+    punto(p, PUNTOS.HOMBRO_D, _v); punto(p, PUNTOS.HOMBRO_I, _v2);
+    const der=new THREE.Vector3().subVectors(_v,_v2);
+    punto(p,'hombroC',_v); punto(p,'caderaC',_v2);
+    const arr=new THREE.Vector3().subVectors(_v,_v2);
+    return terna(der, arr, out);
+  }
+  if(cual==='cabeza'){
+    punto(p, PUNTOS.OREJA_D, _v); punto(p, PUNTOS.OREJA_I, _v2);
+    const der=new THREE.Vector3().subVectors(_v,_v2);
+    punto(p,'cabezaC',_v); punto(p,'hombroC',_v2);
+    const arr=new THREE.Vector3().subVectors(_v,_v2);
+    return terna(der, arr, out);
+  }
+  return out.identity();
+}
+/* la misma terna, pero armada con el esqueleto en reposo */
+function medirTernasReposo(rig){
+  const H=rig.huesos;
+  rig.raiz.updateMatrixWorld(true);
+  const dePar=(a,b,c,d)=>{
+    const pa=new THREE.Vector3().setFromMatrixPosition(H[a].matrixWorld);
+    const pb=new THREE.Vector3().setFromMatrixPosition(H[b].matrixWorld);
+    const pc=new THREE.Vector3().setFromMatrixPosition(H[c].matrixWorld);
+    const pd=new THREE.Vector3().setFromMatrixPosition(H[d].matrixWorld);
+    const m=new THREE.Matrix4();
+    terna(pb.sub(pa), pd.sub(pc), m);
+    return m;
+  };
+  const T={};
+  if(H.LeftUpLeg&&H.RightUpLeg&&H.Hips&&H.Spine2)
+    T.cadera=dePar('LeftUpLeg','RightUpLeg','Hips','Spine2');
+  if(H.LeftArm&&H.RightArm&&H.Hips&&H.Spine2)
+    T.pecho=dePar('LeftArm','RightArm','Hips','Spine2');
+  if(H.Head&&H.Neck){
+    /* la cabeza en reposo mira al frente y su "derecha" es la del pecho */
+    T.cabeza=(T.pecho||new THREE.Matrix4()).clone();
+  }
+  rig.ternas=T;
+  return T;
+}
+
+function prepararRig(rig){
+  medirReposo(rig);
+  medirTernasReposo(rig);
+  return rig;
+}
+
+/* Pone el esqueleto en la pose del cuadro `k`. Devuelve la posición de la raíz
+   ya escalada al tamaño del modelo. */
+const _mq=new THREE.Matrix4(), _mr=new THREE.Matrix4();
+function posar(rig, cuadro, escala){
+  const H=rig.huesos, R=rig.reposo, p=cuadro.p;
+  if(!H.Hips) return;
+  /* La raíz. `cuadro.raiz` trae el desplazamiento del cuerpo en el mundo más la
+     altura que hay que levantarlo para que el pie más bajo toque el cero; a eso
+     se le suma dónde quedó la cadera dentro de los propios datos, porque los
+     filtros la corren un poco. Todo por la escala del modelo. */
+  punto(p,'caderaC',_v);
+  H.Hips.position.set((cuadro.raiz[0]+_v.x)*escala,
+                      (cuadro.raiz[1]+_v.y)*escala,
+                      (cuadro.raiz[2]+_v.z)*escala);
+
+  const mundo={};
+  /* 1 · cadera y pecho, con terna completa */
+  const qCad=new THREE.Quaternion(), qPec=new THREE.Quaternion();
+  ternaObjetivo('cadera', p, _mq);
+  qCad.setFromRotationMatrix(_mq);
+  if(rig.ternas.cadera){ _q2.setFromRotationMatrix(rig.ternas.cadera); qCad.multiply(_q2.invert()); }
+  ternaObjetivo('pecho', p, _mq);
+  qPec.setFromRotationMatrix(_mq);
+  if(rig.ternas.pecho){ _q2.setFromRotationMatrix(rig.ternas.pecho); qPec.multiply(_q2.invert()); }
+
+  for(const m of MAPA){
+    const b=H[m.h]; if(!b) continue;
+    const rep=R[m.h]; if(!rep) continue;
+    let qm;
+    if(m.terna==='cadera') qm=qCad.clone();
+    else if(m.terna==='pecho') qm=qPec.clone();
+    else if(m.terna==='cabeza'){
+      ternaObjetivo('cabeza', p, _mq);
+      qm=new THREE.Quaternion().setFromRotationMatrix(_mq);
+      if(rig.ternas.cabeza){ _q2.setFromRotationMatrix(rig.ternas.cabeza); qm.multiply(_q2.invert()); }
+    }
+    else if(m.mezcla!==undefined) qm=qCad.clone().slerp(qPec, m.mezcla);
+    else if(m.mira){
+      if(!rep.dir) continue;
+      punto(p, m.mira[0], _v); punto(p, m.mira[1], _v2);
+      _v2.sub(_v);
+      if(_v2.lengthSq()<1e-8) continue;
+      _v2.normalize();
+      /* el giro mínimo que lleva al hueso desde donde apunta en reposo hasta
+         donde apunta ahora, aplicado sobre su cuaternión de reposo */
+      _q.setFromUnitVectors(rep.dir, _v2);
+      qm=_q.clone().multiply(rep.q);
+    }
+    else continue;
+    /* las ternas dan un giro RELATIVO al reposo: hay que componerlo con él */
+    if(m.terna || m.mezcla!==undefined) qm.multiply(rep.q);
+    mundo[m.h]=qm;
+  }
+  /* 2 · De mundo a local, de la raíz hacia afuera. ESQ ya viene en ese orden,
+     así que cuando le toca a un hueso su padre ya quedó puesto: alcanza con
+     dividir por el mundo del padre. Acá está la diferencia entre una cadena que
+     cierra y una mano a un metro de donde va. */
+  for(const [n] of ESQ){
+    const b=H[n]; if(!b) continue;
+    const qm=mundo[n];
+    if(qm && b.parent){
+      b.parent.updateWorldMatrix(true, false);
+      b.parent.matrixWorld.decompose(_v, _q2, _v3b);
+      b.quaternion.copy(_q2.invert().multiply(qm));
+    }
+    b.updateWorldMatrix(true, false);
+  }
+  rig.raiz.updateMatrixWorld(true);
+}
+
+/* ============================================================================
+   EL VISOR
+   Piso con grilla, luz suave, órbita a dedo y una barra de tiempo que marca en
+   naranja los cuadros donde hay un pie apoyado: mirando esas marcas se entiende
+   de un vistazo si la caminata quedó bien o si el personaje va a patinar.
+============================================================================ */
+const VIS={renderer:null, escena:null, camara:null, rig:null, escala:1,
+           t:0, tocando:false, bucle:true, listo:false};
+let orbita={r:3.4, ang:0.6, alt:0.30, mira:new THREE.Vector3(0,0.9,0)};
+
+function armarVisor(){
+  const caja=$('lienzo3d');
+  const r=new THREE.WebGLRenderer({antialias:true});
+  r.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  r.outputColorSpace=THREE.SRGBColorSpace;
+  r.toneMapping=THREE.ACESFilmicToneMapping;
+  r.toneMappingExposure=1.05;
+  caja.appendChild(r.domElement);
+  const e=new THREE.Scene();
+  e.background=new THREE.Color(0x0a0e13);
+  e.fog=new THREE.Fog(0x0a0e13, 9, 34);
+  const c=new THREE.PerspectiveCamera(42, 1, 0.05, 200);
+
+  e.add(new THREE.HemisphereLight(0x9fc4e8, 0x1a2230, 1.15));
+  const sol=new THREE.DirectionalLight(0xffffff, 1.9);
+  sol.position.set(3.2, 6.5, 4.2); e.add(sol);
+  const relleno=new THREE.DirectionalLight(0x86a8d0, 0.55);
+  relleno.position.set(-4, 2.5, -3.5); e.add(relleno);
+
+  const g=new THREE.GridHelper(40, 40, 0x2a3a52, 0x18222f);
+  g.material.transparent=true; g.material.opacity=0.65; e.add(g);
+  const piso=new THREE.Mesh(new THREE.PlaneGeometry(60,60).rotateX(-Math.PI/2),
+    new THREE.MeshStandardMaterial({color:0x0d131a, roughness:1}));
+  piso.position.y=-0.002; e.add(piso);
+  /* dos flechas: adelante es +Z y la derecha del personaje es −X */
+  const eje=new THREE.AxesHelper(0.5); eje.position.y=0.003; e.add(eje);
+
+  VIS.renderer=r; VIS.escena=e; VIS.camara=c;
+  acomodarVisor();
+  addEventListener('resize', acomodarVisor);
+  mandosVisor(r.domElement);
+  r.setAnimationLoop(pintar);
+}
+function acomodarVisor(){
+  if(!VIS.renderer) return;
+  const caja=$('lienzo3d'), w=caja.clientWidth||2, h=caja.clientHeight||2;
+  VIS.renderer.setSize(w,h,false);
+  VIS.camara.aspect=w/Math.max(1,h); VIS.camara.updateProjectionMatrix();
+  acomodarHuesos2D();
+  if(TOMA.cuadros.length){
+    const c=TOMA.cuadros[Math.min(TOMA.cuadros.length-1, Math.round(VIS.t*TOMA.fps))];
+    if(c) dibujarHuesos2D(c.img, c.vis);
+  }
+}
+/* órbita: un dedo gira, dos acercan */
+function mandosVisor(el){
+  const p=new Map();
+  let d0=0, r0=0;
+  el.style.touchAction='none';
+  el.addEventListener('pointerdown', ev=>{
+    el.setPointerCapture(ev.pointerId);
+    p.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
+    if(p.size===2){ const [a,b]=[...p.values()];
+      d0=Math.hypot(a.x-b.x,a.y-b.y); r0=orbita.r; }
+  });
+  el.addEventListener('pointermove', ev=>{
+    const q=p.get(ev.pointerId); if(!q) return;
+    if(p.size===1){
+      orbita.ang-=(ev.clientX-q.x)*0.008;
+      orbita.alt=clamp(orbita.alt+(ev.clientY-q.y)*0.006, -0.35, 1.25);
+    }else if(p.size===2){
+      q.x=ev.clientX; q.y=ev.clientY;
+      const [a,b]=[...p.values()];
+      const d=Math.hypot(a.x-b.x,a.y-b.y);
+      if(d0>1) orbita.r=clamp(r0*d0/d, 0.8, 22);
+    }
+    q.x=ev.clientX; q.y=ev.clientY;
+  });
+  const suelta=ev=>p.delete(ev.pointerId);
+  el.addEventListener('pointerup',suelta); el.addEventListener('pointercancel',suelta);
+  el.addEventListener('wheel', ev=>{ ev.preventDefault();
+    orbita.r=clamp(orbita.r*(1+Math.sign(ev.deltaY)*0.12), 0.8, 22); }, {passive:false});
+}
+
+function ponerRig(rig){
+  if(VIS.rig && VIS.rig.raiz.parent) VIS.escena.remove(VIS.rig.raiz);
+  VIS.rig=rig;
+  VIS.escena.add(rig.raiz);
+  prepararRig(rig);
+  recalcularEscala();
+}
+function recalcularEscala(){
+  if(!VIS.rig) return;
+  /* el modelo se queda con SU tamaño; lo que se escala es el desplazamiento del
+     sujeto, para que un personaje de dos metros no camine pasos de uno setenta */
+  VIS.escala = VIS.rig.alto / Math.max(0.5, PROC.alturaSujeto);
+}
+
+function aplicarCuadro(t){
+  if(!PROC.listo || !VIS.rig) return;
+  const C=PROC.cuadros, n=C.length;
+  const dur=n/TOMA.fps;
+  VIS.t=clamp(t, 0, Math.max(0.0001,dur));
+  const k=clamp(Math.round(VIS.t*TOMA.fps), 0, n-1);
+  posar(VIS.rig, C[k], VIS.escala);
+  const raw=TOMA.cuadros[k];
+  if(raw) dibujarHuesos2D(raw.img, raw.vis);
+  const v=$('video');
+  if(v.src && Math.abs(v.currentTime-VIS.t)>0.06 && !VIS.buscando){
+    VIS.buscando=true;
+    v.currentTime=Math.min(v.duration-1e-3, VIS.t);
+    v.addEventListener('seeked',()=>{VIS.buscando=false;},{once:true});
+  }
+  const ap=C[k].apoyo;
+  $('hud3d').textContent =
+    'cuadro '+(k+1)+' / '+n+'\n'+
+    'sujeto '+PROC.alturaSujeto.toFixed(2)+' m · modelo '+VIS.rig.alto.toFixed(2)+' m\n'+
+    'apoyo: '+(ap[0]?'IZQ ':'—   ')+(ap[1]?'DER':'—')+'\n'+
+    'raíz  '+C[k].raiz[0].toFixed(2)+', '+C[k].raiz[1].toFixed(2)+', '+C[k].raiz[2].toFixed(2);
+  ponerAguja(VIS.t/Math.max(1e-4,dur));
+  $('tiempo').textContent=VIS.t.toFixed(2)+' / '+dur.toFixed(2);
+}
+function ponerAguja(u){
+  $('linea').querySelector('.aguja').style.left=(u*100)+'%';
+  $('linea').querySelector('.lleno').style.width=(u*100)+'%';
+}
+function marcarApoyos(){
+  const l=$('linea');
+  l.querySelectorAll('.pisa').forEach(e=>e.remove());
+  if(!PROC.listo) return;
+  const n=PROC.cuadros.length;
+  const paso=Math.max(1, Math.round(n/220));
+  for(let i=0;i<n;i+=paso){
+    const a=PROC.cuadros[i].apoyo;
+    if(!a[0]&&!a[1]) continue;
+    const d=document.createElement('div');
+    d.className='pisa';
+    d.style.left=(i/(n-1)*100)+'%';
+    d.style.top=(a[0]&&a[1])?'0':(a[0]?'0':'17px');
+    if(a[0]&&a[1]) d.style.height='22px';
+    l.appendChild(d);
+  }
+}
+
+let ultimoT=performance.now();
+function pintar(){
+  const ahora=performance.now();
+  const dt=Math.min(0.06,(ahora-ultimoT)/1000); ultimoT=ahora;
+  if(VIS.reproduciendo && PROC.listo){
+    const dur=PROC.cuadros.length/TOMA.fps;
+    let t=VIS.t+dt;
+    if(t>=dur){ if(VIS.bucle) t=0; else { t=dur; VIS.reproduciendo=false; $('bPlay').textContent='▶'; } }
+    aplicarCuadro(t);
+  }
+  const c=VIS.camara;
+  const y=orbita.mira.y;
+  c.position.set(orbita.mira.x+Math.sin(orbita.ang)*Math.cos(orbita.alt)*orbita.r,
+                 y+Math.sin(orbita.alt)*orbita.r+0.25,
+                 orbita.mira.z+Math.cos(orbita.ang)*Math.cos(orbita.alt)*orbita.r);
+  c.lookAt(orbita.mira);
+  /* la cámara sigue de lejos a la cadera, sin pegarse */
+  if(VIS.rig&&VIS.rig.huesos.Hips){
+    const h=VIS.rig.huesos.Hips;
+    orbita.mira.x=lerp(orbita.mira.x, h.position.x, 0.05);
+    orbita.mira.z=lerp(orbita.mira.z, h.position.z, 0.05);
+    orbita.mira.y=lerp(orbita.mira.y, Math.max(0.5,h.position.y*0.92), 0.05);
+  }
+  VIS.renderer.render(VIS.escena, VIS.camara);
+}
+
+/* ============================================================================
+   EXPORTAR Y CABLEAR LOS BOTONES
+
+   Tres salidas:
+   · BVH  — texto plano, lo lee Blender, Unity, MotionBuilder y medio mundo. Es
+            el formato de intercambio de captura de toda la vida. Se escribe la
+            jerarquía con los desplazamientos del reposo y después una línea por
+            cuadro con los ángulos en grados, en orden Z X Y, que es el que
+            espera el formato.
+   · GLB  — el modelo con la animación adentro, listo para tirar en un motor.
+   · JSON — los puntos crudos y los procesados, por si alguien quiere hacer sus
+            propias cuentas.
+============================================================================ */
+function bajarArchivo(nombre, datos, tipo){
+  const b=(datos instanceof Blob)? datos : new Blob([datos],{type:tipo||'text/plain'});
+  const u=URL.createObjectURL(b);
+  const a=document.createElement('a');
+  a.href=u; a.download=nombre;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(u); a.remove(); }, 4000);
+}
+const g3=n=>(n*57.29577951308232);
+
+/* ------------------------------------------------------------------ BVH */
+function armarBVH(){
+  const rig=VIS.rig, H=rig.huesos;
+  if(!H.Hips) return null;
+  /* Se exporta SIEMPRE la jerarquía canónica, no la del .glb que trajo el
+     usuario: un BVH con nombres de Mixamo lo entiende cualquiera, y los huesos
+     que ese modelo no tenga se rellenan con su reposo. */
+  const hijos={};
+  for(const [n,p] of ESQ){ if(p){ (hijos[p]=hijos[p]||[]).push(n); } }
+  const off={};
+  for(const [n,p,x,y,z] of ESQ) off[n]=[x,y,z];
+
+  const L=[];
+  const escalaBVH=100;                       // el BVH se acostumbra en centímetros
+  function escribir(n, prof, raiz){
+    const t='  '.repeat(prof);
+    const o=off[n];
+    if(raiz){
+      L.push('HIERARCHY'); L.push('ROOT '+n); L.push('{');
+      L.push('  OFFSET '+(0).toFixed(4)+' '+(0).toFixed(4)+' '+(0).toFixed(4));
+      L.push('  CHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation');
+    }else{
+      L.push(t+'JOINT '+n); L.push(t+'{');
+      L.push(t+'  OFFSET '+(o[0]*escalaBVH).toFixed(4)+' '+(o[1]*escalaBVH).toFixed(4)+' '+(o[2]*escalaBVH).toFixed(4));
+      L.push(t+'  CHANNELS 3 Zrotation Xrotation Yrotation');
+    }
+    const hs=hijos[n]||[];
+    if(!hs.length){
+      L.push(t+'  End Site'); L.push(t+'  {');
+      L.push(t+'    OFFSET 0.0000 '+(5).toFixed(4)+' 0.0000');
+      L.push(t+'  }');
+    }
+    for(const h of hs) escribir(h, prof+1, false);
+    L.push(t+'}');
+  }
+  escribir('Hips', 0, true);
+
+  const n=PROC.cuadros.length, dt=1/TOMA.fps;
+  L.push('MOTION');
+  L.push('Frames: '+n);
+  L.push('Frame Time: '+dt.toFixed(6));
+
+  const e=new THREE.Euler(), q=new THREE.Quaternion();
+  const orden=[]; (function rec(x){ orden.push(x); for(const h of (hijos[x]||[])) rec(h); })('Hips');
+
+  for(let i=0;i<n;i++){
+    posar(rig, PROC.cuadros[i], VIS.escala);
+    const fila=[];
+    for(const nom of orden){
+      const b=H[nom];
+      if(nom==='Hips'){
+        const p=b? b.position : {x:0,y:0,z:0};
+        fila.push((p.x*escalaBVH).toFixed(4), (p.y*escalaBVH).toFixed(4), (p.z*escalaBVH).toFixed(4));
+      }
+      q.copy(b? b.quaternion : new THREE.Quaternion());
+      /* el BVH aplica Z, después X, después Y, así que el euler se saca en ZXY
+         y se escribe en ese mismo orden */
+      e.setFromQuaternion(q, 'ZXY');
+      fila.push(g3(e.z).toFixed(4), g3(e.x).toFixed(4), g3(e.y).toFixed(4));
+    }
+    L.push(fila.join(' '));
+  }
+  aplicarCuadro(VIS.t);
+  return L.join('\n')+'\n';
+}
+
+/* ------------------------------------------------------------------ GLB */
+function armarClip(){
+  const rig=VIS.rig, H=rig.huesos;
+  const n=PROC.cuadros.length, dt=1/TOMA.fps;
+  const tiempos=new Float32Array(n);
+  for(let i=0;i<n;i++) tiempos[i]=i*dt;
+  const canales={};
+  const nombres=ESQ.map(a=>a[0]).filter(x=>H[x]);
+  for(const nom of nombres) canales[nom]=new Float32Array(n*4);
+  const posRaiz=new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    posar(rig, PROC.cuadros[i], VIS.escala);
+    for(const nom of nombres){
+      const q=H[nom].quaternion, k=i*4;
+      canales[nom][k]=q.x; canales[nom][k+1]=q.y; canales[nom][k+2]=q.z; canales[nom][k+3]=q.w;
+    }
+    const p=H.Hips.position;
+    posRaiz[i*3]=p.x; posRaiz[i*3+1]=p.y; posRaiz[i*3+2]=p.z;
+  }
+  aplicarCuadro(VIS.t);
+  const pistas=[new THREE.VectorKeyframeTrack(H.Hips.name+'.position', tiempos, posRaiz)];
+  for(const nom of nombres)
+    pistas.push(new THREE.QuaternionKeyframeTrack(H[nom].name+'.quaternion', tiempos, canales[nom]));
+  return new THREE.AnimationClip((TOMA.nombre||'captura'), n*dt, pistas);
+}
+async function exportarGLB(){
+  const clip=armarClip();
+  const exp=new GLTFExporter();
+  return await new Promise((ok,mal)=>{
+    exp.parse(VIS.rig.raiz, r=>ok(r), e=>mal(e),
+      {binary:true, animations:[clip], onlyVisible:false, trs:true});
+  });
+}
+
+/* ----------------------------------------------------------------- JSON */
+function armarJSON(){
+  const n=PROC.cuadros.length;
+  const crudo=[], listo=[], raices=[], apoyos=[];
+  for(let i=0;i<n;i++){
+    crudo.push(Array.from(TOMA.cuadros[i].mundo, v=>+v.toFixed(5)));
+    listo.push(Array.from(PROC.cuadros[i].p, v=>+v.toFixed(5)));
+    raices.push(PROC.cuadros[i].raiz.map(v=>+v.toFixed(5)));
+    apoyos.push(PROC.cuadros[i].apoyo);
+  }
+  return JSON.stringify({
+    programa:'MOVIMIENTO', version:1,
+    video:{nombre:TOMA.nombre, ancho:TOMA.ancho, alto:TOMA.alto, dur:TOMA.dur},
+    fps:TOMA.fps, cuadros:n,
+    alturaSujeto:+PROC.alturaSujeto.toFixed(4),
+    ajustes:Object.assign({}, AJUSTES),
+    puntos:Object.keys(PUNTOS),
+    crudo, listo, raices, apoyos
+  });
+}
+
+/* ================================================================ BOTONES */
+function cablear(){
+  const suelta=$('suelta'), fv=$('fVideo');
+  suelta.addEventListener('click', ()=>fv.click());
+  fv.addEventListener('change', async e=>{
+    const f=e.target.files&&e.target.files[0]; if(!f) return;
+    await ponerVideo(f);
+  });
+  for(const ev of ['dragenter','dragover']) suelta.addEventListener(ev, e=>{
+    e.preventDefault(); suelta.classList.add('sobre'); });
+  for(const ev of ['dragleave','drop']) suelta.addEventListener(ev, e=>{
+    e.preventDefault(); suelta.classList.remove('sobre'); });
+  suelta.addEventListener('drop', async e=>{
+    const f=e.dataTransfer.files&&e.dataTransfer.files[0];
+    if(f && /^video\//.test(f.type)) await ponerVideo(f);
+    else decir('eso no es un video','error');
+  });
+  addEventListener('drop', e=>e.preventDefault());
+  addEventListener('dragover', e=>e.preventDefault());
+
+  $('bAnalizar').addEventListener('click', ()=>analizar().then(listoParaExportar));
+  $('bCortar').addEventListener('click', ()=>{ cortando=true; });
+  $('bEspejo').addEventListener('click', e=>{
+    AJUSTES.espejo=!AJUSTES.espejo;
+    e.target.classList.toggle('on', AJUSTES.espejo);
+    reprocesar();
+  });
+  $('bEspejo').classList.toggle('on', AJUSTES.espejo);
+
+  const desl=(id,vid,campo,dec)=>{
+    const s=$(id), v=$(vid);
+    const ap=()=>{ const x=parseFloat(s.value); v.textContent=x.toFixed(dec===undefined?2:dec);
+                   AJUSTES[campo]=x; };
+    s.addEventListener('input', ap);
+    s.addEventListener('change', ()=>{ ap(); reprocesar(); });
+    ap();
+  };
+  desl('sSuave','vSuave','suave');
+  desl('sFirme','vFirme','firme');
+  desl('sPies','vPies','pies');
+  desl('sRaiz','vRaiz','raiz');
+  $('bPiso').addEventListener('click', e=>{ AJUSTES.piso=!AJUSTES.piso;
+    e.target.classList.toggle('on',AJUSTES.piso); reprocesar(); });
+  $('bCrudo').addEventListener('click', e=>{ AJUSTES.crudo=!AJUSTES.crudo;
+    e.target.classList.toggle('on',AJUSTES.crudo); reprocesar(); });
+
+  $('bManiqui').addEventListener('click', ()=>{
+    ponerRig(armarManiqui());
+    $('bManiqui').classList.add('on'); $('bCargarGLB').classList.remove('on');
+    $('infoModelo').textContent='maniquí de fábrica · esqueleto tipo Mixamo';
+    if(PROC.listo) aplicarCuadro(VIS.t);
+  });
+  $('bCargarGLB').addEventListener('click', ()=>$('fModelo').click());
+  $('fModelo').addEventListener('change', e=>{
+    const f=e.target.files&&e.target.files[0]; if(!f) return;
+    const u=URL.createObjectURL(f);
+    new GLTFLoader().load(u, g=>{
+      URL.revokeObjectURL(u);
+      const rig=rigDeGLTF(g);
+      if(rig.faltan.length){
+        $('infoModelo').innerHTML='<span class="error">no se reconoció el esqueleto</span><br>'+
+          'faltan: '+rig.faltan.join(', ')+'<br>'+rig.total+' nodos, '+rig.encontrados+' huesos ubicados'+
+          '<br>probá con un modelo de Mixamo';
+        return;
+      }
+      ponerRig(rig);
+      $('bCargarGLB').classList.add('on'); $('bManiqui').classList.remove('on');
+      $('infoModelo').textContent=f.name+'\n'+rig.encontrados+' huesos ubicados de '+rig.total+
+        ' nodos\naltura '+rig.alto.toFixed(2)+' m';
+      if(PROC.listo) aplicarCuadro(VIS.t);
+    }, undefined, err=>{
+      URL.revokeObjectURL(u);
+      $('infoModelo').innerHTML='<span class="error">no se pudo leer el .glb</span>';
+    });
+  });
+
+  $('bPlay').addEventListener('click', ()=>{
+    if(!PROC.listo) return;
+    VIS.reproduciendo=!VIS.reproduciendo;
+    $('bPlay').textContent=VIS.reproduciendo?'❚❚':'▶';
+  });
+  $('bLoop').addEventListener('click', e=>{ VIS.bucle=!VIS.bucle;
+    e.target.classList.toggle('on',VIS.bucle); });
+  const linea=$('linea');
+  const buscar=ev=>{
+    if(!PROC.listo) return;
+    const r=linea.getBoundingClientRect();
+    const u=clamp((ev.clientX-r.left)/Math.max(1,r.width),0,1);
+    aplicarCuadro(u*PROC.cuadros.length/TOMA.fps);
+  };
+  linea.addEventListener('pointerdown', ev=>{ linea.setPointerCapture(ev.pointerId);
+    VIS.tocando=true; VIS.reproduciendo=false; $('bPlay').textContent='▶'; buscar(ev); });
+  linea.addEventListener('pointermove', ev=>{ if(VIS.tocando) buscar(ev); });
+  linea.addEventListener('pointerup', ()=>{ VIS.tocando=false; });
+
+  $('bBVH').addEventListener('click', ()=>{
+    $('estadoExp').textContent='armando el BVH…';
+    setTimeout(()=>{
+      const t=armarBVH();
+      if(!t){ $('estadoExp').innerHTML='<span class="error">sin esqueleto</span>'; return; }
+      bajarArchivo((TOMA.nombre||'captura')+'.bvh', t, 'text/plain');
+      $('estadoExp').textContent='BVH listo · '+PROC.cuadros.length+' cuadros';
+    },30);
+  });
+  $('bGLB').addEventListener('click', async ()=>{
+    $('estadoExp').textContent='armando el GLB…';
+    try{
+      const r=await exportarGLB();
+      bajarArchivo((TOMA.nombre||'captura')+'.glb', new Blob([r],{type:'model/gltf-binary'}));
+      $('estadoExp').textContent='GLB listo · '+(r.byteLength/1024).toFixed(0)+' KB';
+    }catch(e){ $('estadoExp').innerHTML='<span class="error">'+(e.message||e)+'</span>'; }
+  });
+  $('bJSON').addEventListener('click', ()=>{
+    bajarArchivo((TOMA.nombre||'captura')+'.json', armarJSON(), 'application/json');
+    $('estadoExp').textContent='JSON listo';
+  });
+
+  $('bAyuda').addEventListener('click', ()=>{
+    decir('1 · soltá un video con UNA persona de cuerpo entero\n'
+         +'2 · ANALIZAR: el detector saca 33 puntos por cuadro\n'
+         +'3 · los deslizadores arreglan tembleque, largo de huesos y pies\n'
+         +'4 · CARGAR .GLB para verlo en tu personaje\n'
+         +'5 · BVH para Blender, GLB para el motor\n\n'
+         +'el video no sale de tu máquina: todo pasa acá');
+  });
+}
+function reprocesar(){
+  if(!TOMA.listo) return;
+  procesarToma();
+  recalcularEscala();
+  marcarApoyos();
+  aplicarCuadro(VIS.t);
+}
+function listoParaExportar(){
+  if(!PROC.listo) return;
+  $('vacio').style.display='none';
+  $('reproductor').classList.add('hay');
+  $('bBVH').disabled=false; $('bGLB').disabled=false; $('bJSON').disabled=false;
+  recalcularEscala();
+  marcarApoyos();
+  aplicarCuadro(0);
+  VIS.reproduciendo=true; $('bPlay').textContent='❚❚';
+}
+
+/* ================================================================ ARRANQUE */
+armarVisor();
+ponerRig(armarManiqui());
+cablear();
+VIS.listo=true;
+
+window.__dbg={
+  get toma(){ return {cuadros:TOMA.cuadros.length, fps:TOMA.fps, dur:+TOMA.dur.toFixed(2),
+    ancho:TOMA.ancho, alto:TOMA.alto, listo:TOMA.listo,
+    conPose:TOMA.cuadros.filter(c=>c.hay).length}; },
+  get proc(){ return {listo:PROC.listo, cuadros:PROC.cuadros.length,
+    alturaSujeto:+PROC.alturaSujeto.toFixed(3),
+    raizFin: PROC.cuadros.length? PROC.cuadros[PROC.cuadros.length-1].raiz.map(v=>+v.toFixed(3)):null,
+    apoyos: PROC.cuadros.filter(c=>c.apoyo[0]||c.apoyo[1]).length}; },
+  get rig(){ const r=VIS.rig; if(!r) return null;
+    return {propio:r.propio, alto:+r.alto.toFixed(3), escala:+VIS.escala.toFixed(3),
+      huesos:Object.keys(r.huesos).length}; },
+  get ajustes(){ return Object.assign({}, AJUSTES); },
+  ponerAjuste(k,v){ AJUSTES[k]=v; reprocesar(); return AJUSTES; },
+  ir(t){ aplicarCuadro(t); return VIS.t; },
+  cam(ang,alt,r){ orbita.ang=ang; orbita.alt=alt; if(r) orbita.r=r; },
+  hueso(n){ const b=VIS.rig&&VIS.rig.huesos[n]; if(!b) return null;
+    const p=new THREE.Vector3(); b.updateWorldMatrix(true,false);
+    p.setFromMatrixPosition(b.matrixWorld);
+    return {x:+p.x.toFixed(3), y:+p.y.toFixed(3), z:+p.z.toFixed(3)}; },
+  bvh(){ return armarBVH(); },
+  json(){ return armarJSON(); },
+  analizar(){ return analizar().then(listoParaExportar); },
+  ponerVideoURL(u){ const v=$('video'); v.src=u;
+    return new Promise(ok=>{ v.onloadedmetadata=()=>{ TOMA.dur=v.duration; TOMA.ancho=v.videoWidth;
+      TOMA.alto=v.videoHeight; TOMA.nombre='prueba'; $('prev').classList.add('hay');
+      $('prev').style.aspectRatio=(v.videoWidth/v.videoHeight).toFixed(4);
+      acomodarHuesos2D(); $('bAnalizar').disabled=false; ok(); }; }); },
+  TOMA, PROC, VIS, AJUSTES
+};
+
+</script>
+</body>
+</html>
