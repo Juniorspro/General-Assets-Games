@@ -304,8 +304,25 @@ NPU se pedía "sí o sí". En un Android sin WebNN el resultado era una pantalla
 que dibujaba a 60 fps y no detectaba una sola mano — el contador de INFERENCIA
 clavado en 0. Estaba mal.
 
-Ahora baja sola por `npu → gpu(WebNN) → webgpu → cpu(wasm)`, y hay dos formas
-de bajar, que no son lo mismo:
+Y el segundo error fue peor: forzar con `?ep=` **apagaba** la cascada. En un
+equipo cuyo WebNN entrega contexto de NPU pero no puede construir el grafo
+(`Can't create a session. ERROR_CODE: 0`, sin mensaje), entrar con `?ep=npu`
+dejaba el programa sin motor y sin salida. Ahora `?ep=` sólo dice **por dónde
+empezar**; nunca apaga nada.
+
+La cadena son **pares dispositivo+precisión**, no dispositivos sueltos:
+
+```
+npu/int8 → npu/f32 → gpu/int8 → gpu/f32 → webgpu → cpu
+```
+
+La razón es fina. Un intento fallido de WebNN deja el estado de ORT tocado, así
+que probar INT8 y después float32 sobre la NPU **en la misma carga** hacía que
+el segundo nunca tuviera una chance justa: fallaba por el estado sucio que dejó
+el primero, no porque la NPU no pudiera con float32. Por eso cada par de WebNN
+se prueba en su propia carga. En webgpu y cpu no hace falta.
+
+Baja sola, y hay dos formas de bajar, que no son lo mismo:
 
 - **Falló antes de tocar ORT** (no hay `navigator.ml`, no hay adaptador de
   WebGPU): el estado está limpio, se sigue con el próximo en la misma carga.
@@ -315,26 +332,39 @@ de bajar, que no son lo mismo:
   `?ep=<dev>&auto=1`. Como la cadena avanza siempre hacia adelante y CPU nunca
   ensucia nada, no puede quedar recargando en círculos.
 
-Un `?ep=` puesto a mano (sin `auto=1`) **manda**: si falla, se informa y no
-baja. Para eso está FORZAR NPU.
+Las recargas **no piden otro toque**: queda una marca en `sessionStorage`, la
+página arranca sola y sigue por donde iba. Todo lo que toca almacenamiento va
+envuelto en `try` — Safari en privado tira excepción con sólo mirarlo, y eso
+no puede llevarse puesto al detector.
 
 En WebGPU el orden de precisión se invierte y va **f32 primero**: los
 operadores de cuantización todavía no están todos implementados ahí y el grafo
 INT8 termina cayendo a CPU operador por operador, más caro que correr float32
 derecho.
 
-**Verificado** con la lógica extraída del propio HTML y un equipo falso
-alrededor, siete casos:
+### La cascada se paga una sola vez
 
-| Caso | Termina en |
-|---|---|
-| sin WebNN ni WebGPU | `cpu / int8` |
-| sin WebNN, con WebGPU | `webgpu / f32` |
-| WebNN presente pero sin NPU | `gpu / int8` |
-| NPU da contexto y la sesión revienta | recarga a `?ep=gpu&auto=1` |
-| NPU anda | `npu / int8` |
-| `?ep=npu` forzado y no hay NPU | informa, no baja |
-| `?ep=webgpu&auto=1` | sigue desde webgpu |
+El que gana queda anotado en `localStorage`. La visita siguiente entra
+**directo** ahí, sin recargas. FORZAR NPU borra la anotación y vuelve a medir
+desde arriba.
+
+**Verificado** con la lógica extraída del propio HTML y equipos falsos
+alrededor, siguiendo cada recarga hasta que el viaje se asienta:
+
+| Equipo | Recorrido | Termina en |
+|---|---|---|
+| WebNN da contexto de NPU pero no arma el grafo | 4 recargas automáticas | `webgpu / f32` |
+| …y la segunda visita | directo | `webgpu / f32` |
+| …entrando con `?ep=npu` | 4 recargas automáticas | `webgpu / f32` |
+| …y si WebGPU tampoco pudiera | 4 recargas automáticas | `cpu / int8` |
+| NPU que sólo puede con float32 | 1 recarga | `npu / f32` |
+| NPU que anda entera | directo | `npu / int8` |
+| sin WebNN ni WebGPU | directo | `cpu / int8` |
+| sin WebNN, con WebGPU | directo | `webgpu / f32` |
+| WebNN presente pero sin NPU | directo | `gpu / int8` |
+
+El caso `npu / f32` en una recarga es el que antes era **imposible**: el intento
+en float32 nunca arrancaba limpio.
 
 Lo que **no** se pudo probar acá: la inferencia de verdad en un navegador. Este
 entorno no llega a jsDelivr desde Chromium (`ERR_CONNECTION_RESET` con y sin

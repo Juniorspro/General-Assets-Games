@@ -255,18 +255,52 @@ function cartel(txt, clase, seg){
    (Antes esto avisaba y se quedaba quieto. En un Android sin WebNN eso era una
    pantalla que dibujaba 60 fps y no detectaba una sola mano.)
 ============================================================================ */
-const CADENA=['npu','gpu','webgpu','cpu'];
-const EP={ actual:null, pedido:'npu', preciso:'int8', sucio:false, forzado:false, motivo:'' };
+/* La cadena son PARES dispositivo+precisión, no dispositivos sueltos, y la
+   razón es fina: un intento fallido de WebNN deja el estado de ORT tocado, así
+   que si en la misma carga se prueba INT8 y después float32 sobre la NPU, el
+   segundo intento NUNCA tuvo una chance justa — falla por el estado sucio que
+   dejó el primero, no porque la NPU no pueda con float32. Por eso cada par de
+   WebNN se prueba en su propia carga. En webgpu y cpu no hace falta: ahí las
+   dos precisiones se prueban seguidas sin ensuciar nada, y `null` quiere decir
+   exactamente eso. */
+const CADENA=[
+  ['npu','int8'], ['npu','f32'],
+  ['gpu','int8'], ['gpu','f32'],
+  ['webgpu',null], ['cpu',null]
+];
+const DISPOS=['npu','gpu','webgpu','cpu'];
+const clave=(d,p)=>d+(p?':'+p:'');
+const EP={ actual:null, pedido:'npu', preciso:'int8', sucio:false, forzado:false,
+           motivo:'', paso:0 };
 let sesPalma=null, sesPuntos=null;
-/* Qué proveedor se pide en esta carga. Viene por la dirección porque cambiarlo
-   EN CALIENTE no es seguro: ver `cambiarProveedor` más abajo.
-   `auto=1` marca que llegamos acá por la cascada, no por elección de nadie. */
+/* Dónde empieza esta carga. Viene por la dirección porque cambiar de proveedor
+   EN CALIENTE no es seguro: ver `cambiarProveedor` más abajo. `auto=1` marca
+   que llegamos acá por la cascada y no por elección de nadie. */
+const LL_MOTOR='manos:motor';           // el que ganó la última vez, en este equipo
+function recordarMotor(k){ try{ localStorage.setItem(LL_MOTOR,k); }catch(e){} }
+function motorRecordado(){ try{ return localStorage.getItem(LL_MOTOR); }catch(e){ return null; } }
+function olvidarMotor(){ try{ localStorage.removeItem(LL_MOTOR); }catch(e){} }
+
 {
   const q=new URLSearchParams(location.search);
   const pedido=(q.get('ep')||'').toLowerCase();
-  if(CADENA.includes(pedido)){
+  const prec=(q.get('pr')||'').toLowerCase();
+  const buscar=(d,p)=>CADENA.findIndex(([cd,cp])=> cd===d && (!p || cp===p || cp===null));
+  if(DISPOS.includes(pedido)){
     EP.pedido=pedido;
-    EP.forzado = q.get('auto')!=='1';   // con auto=1 la cadena sigue bajando
+    EP.forzado = q.get('auto')!=='1';
+    const i=buscar(pedido, prec);
+    EP.paso = i<0 ? 0 : i;
+  }else{
+    /* Nadie pidió nada: si en este equipo ya se supo cuál anda, se arranca
+       DIRECTO ahí. La cascada (que puede costar varias recargas) se paga una
+       sola vez por teléfono, no en cada visita. FORZAR NPU la vuelve a probar
+       desde arriba. */
+    const rec=(motorRecordado()||'').split(':');
+    if(rec[0] && DISPOS.includes(rec[0])){
+      const i=buscar(rec[0], rec[1]);
+      if(i>=0){ EP.paso=i; EP.pedido=rec[0]; EP.recordado=true; }
+    }
   }
 }
 
@@ -306,15 +340,33 @@ function opcionesEP(dispositivo){
    (manda, no baja más) y la que hace la cascada sola (sigue bajando si hace
    falta). Como la cadena avanza siempre hacia adelante y CPU nunca ensucia el
    estado, esto no puede quedar recargando en círculos. */
-function cambiarProveedor(dev, auto){
+function cambiarProveedor(dev, auto, prec){
   const u=new URL(location.href);
   u.searchParams.set('ep', dev);
+  if(prec) u.searchParams.set('pr', prec); else u.searchParams.delete('pr');
   if(auto) u.searchParams.set('auto','1'); else u.searchParams.delete('auto');
   location.replace(u.toString());
 }
 
-async function crearSesiones(dispositivo){
-  ponerChapa('cargando', 'ARMANDO '+dispositivo.toUpperCase());
+/* Memoria de la cascada entre recargas. Vive en sessionStorage y no en la
+   dirección para que el usuario no tenga que ver ni entender nada de esto:
+   la página se recarga sola, arranca sola, y sigue por donde iba. */
+const LL_SEGUIR='manos:seguir', LL_PROBADOS='manos:probados', LL_MOTIVO='manos:motivo';
+/* Envuelto en try SIEMPRE: Safari en privado y algunos iframes tiran excepción
+   con sólo tocar sessionStorage. Que la memoria de la cascada no ande es un
+   detalle; que se lleve puesto al detector, no. */
+function memLeer(k){ try{ return sessionStorage.getItem(k); }catch(e){ return null; } }
+function memPoner(k,v){ try{ sessionStorage.setItem(k,v); }catch(e){} }
+function olvidarCascada(){
+  try{ sessionStorage.removeItem(LL_SEGUIR); sessionStorage.removeItem(LL_PROBADOS); }
+  catch(e){}
+}
+/* ¿esta carga es la continuación de una cascada, o alguien abrió la página? */
+const SIGUIENDO = memLeer(LL_SEGUIR)==='1';
+
+async function crearSesiones(dispositivo, soloPrec){
+  ponerChapa('cargando', 'ARMANDO '+dispositivo.toUpperCase()
+             +(soloPrec?' · '+soloPrec.toUpperCase():''));
   /* Arranca limpio: `sucio` sólo se enciende cuando de verdad se tocó ORT con
      un proveedor de WebNN. Mientras siga apagado, el que llama puede probar
      otro dispositivo en la misma carga, sin recargar. */
@@ -346,15 +398,17 @@ async function crearSesiones(dispositivo){
   ort.env.logLevel='error';
 
   const op=opcionesEP(dispositivo);
-  /* INT8 primero, que es lo que la NPU digiere nativamente. Si el controlador
-     rechaza el grafo cuantizado, se reintenta el mismo dispositivo en float32
-     antes de rendirse: bajar de dispositivo es la última opción, no la primera.
-     En WebGPU se invierte el orden: los operadores de cuantización todavía no
-     están todos implementados ahí y el grafo INT8 termina cayendo a CPU
-     operador por operador, que sale más caro que correr float32 derecho. */
-  const intentos = dispositivo==='webgpu'
+  /* Qué precisiones se prueban EN ESTA CARGA. Cuando el que llama pide una
+     concreta (`soloPrec`) se prueba nada más que ésa: es lo que hace la cadena
+     con los dispositivos de WebNN, para que cada intento arranque de un estado
+     limpio. Sin `soloPrec` se prueban las dos seguidas — en WebGPU el orden se
+     invierte y va float32 primero, porque los operadores de cuantización
+     todavía no están todos implementados ahí y el grafo INT8 termina cayendo a
+     CPU operador por operador, más caro que correr float32 derecho. */
+  const TODAS = dispositivo==='webgpu'
     ? [['f32', M.palma_f32, M.puntos_f32], ['int8', M.palma_int8, M.puntos_int8]]
     : [['int8', M.palma_int8, M.puntos_int8], ['f32', M.palma_f32, M.puntos_f32]];
+  const intentos = soloPrec ? TODAS.filter(t=>t[0]===soloPrec) : TODAS;
   let ultimo=null;
   for(const [prec, up, ul] of intentos){
     try{
@@ -920,9 +974,11 @@ function cablear(){
     catch(e){ cartel('no se pudo cambiar de cámara','mal',4); } });
   for(const [id,dev] of [['bNPU','npu'],['bGPU','gpu'],['bWGPU','webgpu'],['bCPU','cpu']])
     $(id).addEventListener('click', async ()=>{
-      /* si ya hubo un intento con WebNN, el estado de ORT quedó tocado y hay
-         que arrancar de nuevo; si no, se puede cambiar en caliente.
-         Elegido a mano: manda, y si falla no se baja solo. */
+      /* Elegido a mano: se borra lo que estuviera anotado, así el equipo se
+         vuelve a medir desde este punto en vez de arrancar con la memoria
+         vieja. Si ya hubo un intento con WebNN el estado de ORT quedó tocado y
+         hay que recargar; si no, se puede cambiar en caliente. */
+      olvidarMotor();
       if(EP.sucio || EP.actual!==null){ cambiarProveedor(dev, false); return; }
       $('hojaMotor').classList.remove('ver');
       try{ await crearSesiones(dev); }
@@ -935,12 +991,15 @@ function cablear(){
     $('portadaNota').textContent='ATENCIÓN: esto no es HTTPS · la cámara y WebNN no van a funcionar';
   /* Si venimos de una recarga de la cascada, la portada lo explica en vez de
      hacer creer que arrancamos de cero por gusto. */
-  else if(!EP.forzado && EP.pedido!=='npu')
-    $('portadaNota').textContent='La NPU no pudo con el modelo · reintentando en '
-      +EP.pedido.toUpperCase()+' · tocá ENTRAR';
+  else if(SIGUIENDO)
+    $('portadaNota').textContent='La NPU no pudo con el modelo · reintentando solo en '
+      +EP.pedido.toUpperCase()+'…';
   else if(EP.forzado)
-    $('portadaNota').textContent='Motor forzado a '+EP.pedido.toUpperCase()
-      +' · si falla no baja a otro';
+    $('portadaNota').textContent='Empieza probando '+EP.pedido.toUpperCase()
+      +' · si no puede, sigue bajando';
+  else if(EP.recordado)
+    $('portadaNota').textContent='Ya se midió este equipo · entra directo en '
+      +EP.pedido.toUpperCase()+' · FORZAR NPU lo vuelve a probar';
 }
 
 async function entrar(){
@@ -980,43 +1039,63 @@ async function entrar(){
    baja. Para eso está el botón FORZAR NPU.
 ---------------------------------------------------------------------------- */
 async function arrancarMotor(){
-  const desde=CADENA.indexOf(EP.pedido);
-  const cola = EP.forzado ? [EP.pedido] : CADENA.slice(desde<0?0:desde);
-  let ultimo=null, saltados=[];
+  /* `?ep=` sólo dice POR DÓNDE EMPEZAR. Nunca apaga la cascada: si el forzado
+     falla, se sigue bajando igual. (Al revés era una trampa: entrar con
+     `?ep=npu` en un equipo cuyo WebNN da contexto pero no arma el grafo dejaba
+     el programa sin motor y sin salida.) */
+  const cola=CADENA.slice(EP.paso);
+  let ultimo=null;
+  /* los pares que ya se probaron en cargas anteriores de esta misma cascada */
+  const previos=(memLeer(LL_PROBADOS)||'').split(',').filter(Boolean);
+  const saltados=previos.slice();
 
-  for(const dev of cola){
+  for(const [dev, prec] of cola){
     try{
-      await crearSesiones(dev);
+      await crearSesiones(dev, prec);
+      olvidarCascada();
+      /* queda anotado para la próxima visita: se entra derecho acá */
+      recordarMotor(clave(dev, EP.preciso));
       /* Anduvo. Si no fue la NPU, se dice por qué, una sola vez y sin drama. */
-      if(dev!=='npu' && (saltados.length || EP.pedido!=='npu')){
-        EP.motivo=(ultimo&&(ultimo.message||String(ultimo)))||'';
-        setTimeout(()=>cartel('La NPU no estaba disponible acá.\n'
+      if(dev!=='npu'){
+        EP.motivo=(ultimo&&(ultimo.message||String(ultimo)))
+                 ||memLeer(LL_MOTIVO)||'';
+        if(saltados.length) setTimeout(()=>cartel(
+           'La NPU no pudo con el modelo en este equipo.\n'
           +'Corriendo en '+dev.toUpperCase()+' · modelos '+EP.preciso.toUpperCase()
-          +'\n\nAbrí MOTOR para ver el detalle.','',7), 3600);
+          +'\n\nAbrí MOTOR para ver por qué.','',7), 3600);
       }
       return true;
     }catch(e){
-      ultimo=e; saltados.push(dev);
+      ultimo=e; saltados.push(clave(dev,prec));
       if(EP.sucio){
-        /* estado de ORT tocado: hay que arrancar de cero en el próximo */
-        const prox=CADENA[CADENA.indexOf(dev)+1];
-        if(prox && !EP.forzado){
-          ponerChapa('cargando','REINTENTANDO EN '+prox.toUpperCase());
-          cartel(dev.toUpperCase()+' no pudo armar la sesión.\n'
-                +'Reintentando en '+prox.toUpperCase()+'…','',0);
-          cambiarProveedor(prox, true);
+        /* El estado de ORT quedó tocado por WebNN y ninguna sesión posterior
+           sirve en esta carga: hay que arrancar el módulo de cero. Se recuerda
+           lo andado para que después de recargar siga desde el próximo par y
+           sin pedirle otro toque a nadie. */
+        const i=CADENA.findIndex(([d,p])=> d===dev && p===prec);
+        const prox=CADENA[i+1];
+        if(prox){
+          memPoner(LL_PROBADOS, saltados.join(','));
+          memPoner(LL_MOTIVO, (ultimo&&(ultimo.message||String(ultimo)))||'');
+          memPoner(LL_SEGUIR, '1');
+          ponerChapa('cargando','REINTENTANDO EN '+clave(prox[0],prox[1]).toUpperCase());
+          cartel(clave(dev,prec).toUpperCase()+' no pudo armar la sesión.\n'
+                +'Reintentando solo en '+clave(prox[0],prox[1]).toUpperCase()+'…','',0);
+          cambiarProveedor(prox[0], true, prox[1]);
           return false;                     // la página se está recargando
         }
         break;
       }
-      /* limpio: se sigue con el próximo sin recargar */
+      /* limpio: se sigue con el próximo sin recargar y sin que se note */
     }
   }
 
+  olvidarCascada();
   ponerChapa('err','SIN MOTOR');
   cartel('No se pudo armar el detector en ninguno de: '+saltados.join(', ').toUpperCase()
-        +'\n\nÚltimo error:\n'+((ultimo&&(ultimo.message||ultimo))||'—')
-        +'\n\nAbrí MOTOR para ver el detalle.','mal',0);
+        +'\n\nÚltimo error:\n'+((ultimo&&(ultimo.message||ultimo))||'—'),'mal',0);
+  /* la hoja MOTOR se abre sola: ahí están los botones para probar a mano */
+  $('hojaMotor').classList.add('ver'); pintarSonda();
   return false;
 }
 
@@ -1024,6 +1103,10 @@ armar3D();
 cablear();
 requestAnimationFrame(ciclo);
 $('bEntrar').addEventListener('click', entrar, {once:false});
+/* Continuación de una cascada: no se le pide otro toque a nadie. El permiso de
+   cámara ya está dado para este origen, así que getUserMedia sale sin gesto; si
+   igual fallara, `entrar` deja el botón en REINTENTAR y no se pierde nada. */
+if(SIGUIENDO) entrar();
 
 /* para inspección desde la consola */
 window.__app={ EP, SEG, MET, CAM, ORI, T3, ANCLAS,
