@@ -1517,10 +1517,21 @@ vista, arena de orilla y corteza de haya, cada una con su normal por Sobel sobre
 desenfocada y su rugosidad por luminancia invertida. El terreno las reparte por altura, pendiente y
 manchones en tres escalas, y las muestrea tres veces giradas para que no se vea la grilla.
 
-Las matas salieron de una lámina de manojos sobre negro puro: el alfa se saca del brillo, el color se
-des-premultiplica para recuperar el borde, y como venían **acostados y todos iguales** se toma uno
-solo y se arman dieciséis variantes girándolo y espejándolo con ángulos distintos, más seis de otra
-lámina. Si no, el campo entero repetiría la misma mata. El cielo es una panorámica de mediodía que se
+Las matas son **fotos de plantas de verdad**, y costó pedirlas bien. Los primeros intentos salían
+dibujados o acostados —el modelo entendía «tuft» como un manojo cortado apoyado de costado— y hubo que
+decirle la orientación con todas las letras: *base y raíz tocando el borde de abajo de su cuadrado,
+hojas creciendo hacia arriba, como crece el pasto en un césped*. Con eso salieron dos láminas de
+dieciséis matas distintas a 2K, todas diferentes entre sí: una de césped corto y lustroso y otra de
+pastizal alto con espigas.
+
+El procesado: el alfa sale del brillo sobre el negro, el color se des-premultiplica para recuperar el
+borde, cada mata se recorta a su contenido y se reempaqueta apoyada en la base de su celda. Y una cosa
+más: la foto trae el **cepellón** —los pelos marrones de la raíz colgando abajo—, que en el juego no
+va porque la mata sale del suelo. Se corta subiendo desde el borde inferior mientras la fila siga
+siendo tierra, y se para en la primera fila que ya es mayoritariamente verde.
+
+El césped corto se usa en las dos capas de cerca; el pastizal alto queda sólo para el fondo, porque de
+cerca convierte la pradera en un juncal y de lejos es justo lo que le faltaba al horizonte. El cielo es una panorámica de mediodía que se
 envuelve en equirectangular —espejada para que no se note la costura— y se funde a la neblina por
 debajo del horizonte. Ojo con el cenit: es la fila de **arriba** de la foto, y con `flipY` eso es
 `v=1`; sin ese menos uno ve el suelo por encima de la cabeza.
