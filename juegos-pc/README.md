@@ -1373,3 +1373,99 @@ Arrastre para orbitar, pellizco o rueda para acercar, y un toque sobre el agua h
 prende; `VISTA` recorre cuatro encuadres, uno de ellos al ras del agua. En `AJUSTES` hay oleaje
 —que es la amortiguación de la ecuación—, viento, turbiedad, fuerza de las cáusticas, altura del sol
 (el cielo y la luz se recalculan) y peso del tiro.
+
+---
+
+## Pradera (`Pradera.html`)
+
+Un mundo en primera persona con lomas, un lago que se simula de verdad y **pasto**. Pasto en serio:
+un manto que tapa el terreno entero, no unas matas puestas acá y allá. Se juega con el teléfono de
+costado —la pantalla se acuesta sola— con palanca en el pulgar izquierdo y la mirada en el derecho.
+
+### El truco del pasto: las instancias no se mueven nunca
+La forma obvia de hacer un campo infinito es mover las matas cuando el jugador camina, y es la que no
+escala: reescribir treinta mil matrices y subirlas a la GPU cada vez que cruzás medio metro son
+megabytes por segundo. Acá **ninguna instancia se toca jamás**. Cada una tiene un índice fijo `(i,j)`
+en una grilla de N×N, y el propio shader calcula qué celda del mundo le toca según dónde está parado
+el jugador:
+
+```glsl
+vec2 g = uBase + mod(iIdx - uBase, vec2(uN));   // celda del mundo
+```
+
+`uBase` es la celda del jugador menos N/2. Cuando cruza una celda, `uBase` cambia en uno y las matas
+de **una sola columna** reaparecen del otro lado del campo. Todo el trabajo por cuadro es escribir dos
+floats en un uniform. Por eso se pueden poner treinta mil matas y que igual corra en un teléfono.
+
+El precio de decidir la posición adentro del shader es que **la altura del suelo también tiene que
+salir de ahí**. Así que la fórmula del terreno está escrita dos veces —`suelo()` en JavaScript, que
+es la que camina el jugador, y `sueloT()` en GLSL, que es la que planta el pasto— y si no dieran
+exactamente lo mismo el pasto flotaría. Hay una prueba que lo verifica de verdad: `__dbg.probarSuelo()`
+corre la versión GLSL sobre una grilla, la lee de vuelta de la GPU y la compara con la de JavaScript
+punto por punto. El peor caso medido sobre 300×300 metros es **1,3 milímetros**.
+
+De cada celda salen también, por hash, el corrimiento dentro de la celda, el giro, la altura, el tono
+y **cuál de las dieciséis matas del atlas** le toca. Nada de eso vive en memoria.
+
+### Tres capas, no una
+Una sola capa densa es un desperdicio: a treinta metros una mata de veinte centímetros no llega ni a
+un píxel y se paga igual. Van tres, cada una para su distancia, y cada una cuesta más o menos lo
+mismo en pantalla:
+
+| capa | celda | alcance | matas (PC) | geometría |
+|---|---|---|---|---|
+| manto corto | 0,40 m | 0 – 15 m | 5 476 | 3 planos cruzados × 2 tramos |
+| manojos medios | 0,95 m | 4,5 – 36 m | 5 776 | 2 planos × 1 tramo |
+| matas grandes | 2,20 m | 30 – 118 m | 9 216 | 2 planos × 1 tramo |
+
+En total unas 20 000 matas y 126 000 triángulos; en teléfono baja a 13 000 y 60 000. El pasto no
+crece adentro del agua ni en la roca parada —lo decide la pendiente, calculada por diferencias
+finitas en el mismo shader.
+
+### La colisión con el pasto
+No hay colisión por hoja, que sería un disparate: hay **respuesta**. En el vértice, cada brizna que
+cae cerca del jugador se aparta radialmente y se aplasta, proporcional a lo alto que esté sobre su
+base, así que se abre un claro que te sigue y las puntas se doblan hacia afuera mientras la base
+queda quieta. El terreno, los troncos y las piedras grandes sí tienen colisión dura, con un empuje
+hacia afuera del círculo; y no se trepan las paredes: si el paso sube más de lo razonable, no se da.
+
+### El campo se mide solo
+No hay forma de saber de antemano qué aguanta el aparato de cada uno, así que se mide: si el cuadro
+no llega a 26 fps se recorta el alcance del pasto, la densidad y la resolución del reflejo; si sobran
+más de 52, se devuelven. Tres niveles, y el que está puesto se ve abajo a la izquierda.
+
+### El agua, otra vez
+Es la misma del visor: mapa de altura en ping-pong sobre la GPU, cáusticas por diferencia de área del
+haz refractado, reflejo con cámara espejada y muestreo proyectivo, absorción de Beer. Se le agregó
+una cosa que importa cuando el lago es una parte chica de un mundo grande: **si el lago no entra en
+cuadro no se paga nada**. Un `Frustum.intersectsSphere` contra la esfera del lago decide, y caminando
+por las lomas eso es la mitad del trabajo del cuadro. En las dos pasadas del agua, además, las capas
+de pasto cercanas se apagan y la lejana se recorta: en un espejo movido no se nota, y se gana la
+mitad de lo que queda.
+
+### El follaje no es transparente, es recortado
+Los árboles bajaron el cuadro a cero hasta que se encontró por qué: las hojas estaban con
+`transparent: true`. Eso las manda a la pasada de mezcla, dejan de escribir profundidad y el follaje
+se dibuja diez veces encima de sí mismo. Con `alphaTest` sola —`transparent: false`— se descarta el
+píxel y listo: de 0 a 32 fps con la misma imagen.
+
+### Las texturas
+Generadas en Higgsfield como escaneos de fotogrametría: pasto verde tupido, pasto seco con tierra a
+la vista y roca de granito, cada una con su normal por Sobel y su rugosidad por luminancia invertida.
+El terreno las reparte por altura y pendiente y las muestrea tres veces giradas para que no se vea la
+grilla. Las matas salieron de una lámina de dieciséis manojos sobre negro puro: el alfa se saca del
+brillo, el color se des-premultiplica para recuperar el borde, cada manojo se recorta a su contenido
+y se reempaqueta en un atlas de 4×4. El cielo es una panorámica que se envuelve en equirectangular
+—espejada para que no se note la costura— y se funde a la neblina por debajo del horizonte.
+
+### El giro de noventa grados
+Igual que en Escuela Rezona: si el teléfono está parado se acuesta **todo** —lienzo, mandos y
+botones— con un `rotate(90deg)` sobre un envoltorio, en vez de pedir pantalla completa. El dedo llega
+en coordenadas de pantalla y hay que deshacer el giro a mano, porque el rectángulo que informa el
+navegador es el envolvente y miente.
+
+### Controles
+Pulgar izquierdo: palanca, aparece donde apoyás el dedo. Derecho: mirar. `SALTO` y `TIRAR` son los
+dos botones redondos de abajo a la derecha. Con teclado: `WASD`, espacio para saltar, `F` para tirar,
+`R` para correr. En `AJUSTES` van densidad y altura del pasto, viento —que mueve pasto, hojas y
+rizos del agua a la vez—, altura del sol, niebla y oleaje.
