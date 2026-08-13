@@ -23,7 +23,6 @@
      1) el video de la cámara     2) la escena 3D transparente
      3) los puntos de la mano     4) la interfaz                          */
   #cam   {position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;background:#000}
-  #tres  {position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
   #marcas{position:fixed;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}
   #ui    {position:fixed;inset:0;z-index:3;pointer-events:none}
   #ui > *{pointer-events:auto}
@@ -103,6 +102,12 @@
   .sonda.no .l{background:var(--malo)}
   .sonda.medio .l{background:var(--alerta);box-shadow:0 0 12px var(--alerta)}
   .sonda .n{font-size:9.5px;letter-spacing:1.5px;font-weight:700}
+.ctl{margin:12px 0}
+  .ctl label{display:flex;justify-content:space-between;font-size:9px;letter-spacing:1.6px;
+    font-weight:700;color:var(--tenue);margin-bottom:7px}
+  .ctl label span{color:var(--azul)}
+  .ctl input[type=range]{width:100%;height:26px;accent-color:#5ce1ff;background:transparent}
+  .ctl .pie{font-size:8px;letter-spacing:.7px;color:var(--tenue2);margin-top:4px;line-height:1.7}
   .sonda .d{margin-left:auto;font-size:8.5px;color:var(--tenue2);text-align:right;max-width:58%;letter-spacing:.8px}
   .txt{font:9px/1.85 ui-monospace,monospace;letter-spacing:1px;color:var(--tenue);white-space:pre-wrap}
   .txt.mal{color:var(--malo)} .txt.ok{color:var(--npu)} .txt.av{color:var(--alerta)}
@@ -124,9 +129,7 @@
 
 <!-- ===================== 1 · VIDEO DE LA CÁMARA (fondo) ==================== -->
 <video id="cam" playsinline muted autoplay></video>
-<!-- ===================== 2 · ESCENA 3D TRANSPARENTE ======================= -->
-<canvas id="tres"></canvas>
-<!-- ===================== 3 · PUNTOS Y ESQUELETO DE LA MANO ================ -->
+<!-- ===================== 2 · PUNTOS Y ESQUELETO DE LA MANO ================ -->
 <canvas id="marcas"></canvas>
 <!-- ===================== 4 · INTERFAZ ===================================== -->
 <div id="ui">
@@ -146,8 +149,6 @@
 
   <div id="abajo">
     <button class="b" id="bFlash"><span>✦</span>FLASH</button>
-    <button class="b on" id="b3d"><span>◈</span>FONDO 3D</button>
-    <button class="b on" id="bGiro"><span>⟳</span>GIRO</button>
     <button class="b mini" id="bCambiar">↺</button>
   </div>
 </div>
@@ -160,7 +161,7 @@
   <h1>MANOS · NPU</h1>
   <p>Detección de manos en 3D ejecutada en la <b>NPU</b> del equipo mediante
      <b>WebNN</b>, con modelos <b>INT8</b>.<br><br>
-     Al entrar se piden permisos de <b>cámara</b> y de <b>giroscopio</b>.<br>
+     Al entrar se pide permiso de <b>cámara</b>.<br>
      Nada sale del dispositivo.</p>
   <button class="b pri" id="bEntrar">ENTRAR</button>
   <p style="font-size:9px;color:#4a5c70" id="portadaNota">requiere HTTPS</p>
@@ -177,20 +178,28 @@
     <button class="b mini" id="bWGPU">WEBGPU</button>
     <button class="b mini" id="bCPU">CPU</button>
   </div>
+  <div class="sep"></div>
+  <div class="ctl">
+    <label>SUAVIZADO<span id="vSuave">1.00</span></label>
+    <input type="range" id="sSuave" min="0.15" max="3" step="0.05" value="1">
+    <div class="pie">Bajo: sigue cada temblor. Alto: más quieto, un pelo atrás.</div>
+  </div>
+  <div class="ctl">
+    <label>ADELANTO<span id="vAdel">1.00</span></label>
+    <input type="range" id="sAdel" min="0" max="2.5" step="0.05" value="1">
+    <div class="pie">Cuánto se adelanta el recorte a la velocidad de la mano.</div>
+  </div>
+  <div class="sep"></div>
   <div class="txt" id="notaMotor"></div>
 </div></div>
 
-<script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
-</script>
 <script type="module">
-import * as THREE from 'three';
 import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.all.bundle.min.mjs';
 
 /* ============================================================================
    MANOS · NPU
-   Detección de manos en tiempo real ejecutada en la NPU vía WebNN, sobre un
-   fondo 3D que responde al giroscopio.
+   Detección de manos en tiempo real ejecutada en la NPU vía WebNN. Sin fondo
+   3D, sin nada de adorno: todo el presupuesto de cada cuadro va al seguimiento.
 
    EL PIPELINE ES EL DE MEDIAPIPE, EN DOS ETAPAS:
 
@@ -467,6 +476,11 @@ const cvPalma=document.createElement('canvas'); cvPalma.width=cvPalma.height=PAL
 const ctxPalma=cvPalma.getContext('2d',{willReadFrequently:true});
 const cvPuntos=document.createElement('canvas'); cvPuntos.width=cvPuntos.height=PUNTOS_N;
 const ctxPuntos=cvPuntos.getContext('2d',{willReadFrequently:true});
+/* El recorte de la mano se achica de ~300 px a 224. Con el filtrado bueno los
+   bordes de los dedos llegan limpios al modelo en vez de aliaseados, y los
+   puntos salen más finos. Cuesta nada: lo hace la GPU al dibujar. */
+ctxPalma.imageSmoothingEnabled=true;  ctxPalma.imageSmoothingQuality='high';
+ctxPuntos.imageSmoothingEnabled=true; ctxPuntos.imageSmoothingQuality='high';
 const bufPalma=new Float32Array(PALMA_N*PALMA_N*3);
 const bufPuntos=new Float32Array(PUNTOS_N*PUNTOS_N*3);
 /* El tensor se arma en CADA corrida. Parece un desperdicio y no lo es: el
@@ -488,13 +502,23 @@ function prepararPalma(video){
   ctxPalma.drawImage(video, dx, dy, aw, ah);
   const d=ctxPalma.getImageData(0,0,PALMA_N,PALMA_N).data;
   for(let i=0,j=0;i<d.length;i+=4){
-    bufPalma[j++]=d[i]/255; bufPalma[j++]=d[i+1]/255; bufPalma[j++]=d[i+2]/255;
+    bufPalma[j++]=LUT[d[i]]; bufPalma[j++]=LUT[d[i+1]]; bufPalma[j++]=LUT[d[i+2]];
   }
   /* para volver a píxeles del video: multiplicar por el lado mayor y restar el
      margen, los dos en unidades del original */
   return { escalaSalida: Math.max(w,h), sesgoX: dx/escala, sesgoY: dy/escala };
 }
 const sig=x=>1/(1+Math.exp(-x));
+/* Normalizar a [0,1] son 150.000 divisiones por cuadro entre los dos recortes.
+   Con 256 valores precalculados se vuelven 150.000 lecturas de un array chico
+   que entra entero en caché. Es de las pocas micro-optimizaciones que se miden
+   de verdad en un teléfono. */
+const LUT=new Float32Array(256);
+for(let i=0;i<256;i++) LUT[i]=i/255;
+/* La puntuación de la palma viene SIN sigmoide. Comparar contra el umbral ya
+   pasado a logit ahorra 2016 llamadas a Math.exp por detección: la sigmoide se
+   calcula sólo en las poquitas anclas que sobreviven. */
+const LOGIT_PALMA=Math.log(UMBRAL_PALMA/(1-UMBRAL_PALMA));
 
 async function detectarPalma(video){
   const enc=prepararPalma(video);
@@ -513,8 +537,8 @@ async function detectarPalma(video){
 
   const cand=[];
   for(let i=0;i<2016;i++){
+    if(puntajes[i]<LOGIT_PALMA) continue;      // sin exp(): sólo una comparación
     const s=sig(puntajes[i]);
-    if(s<UMBRAL_PALMA) continue;
     const o=i*18, ax=ANCLAS[i*2], ay=ANCLAS[i*2+1];
     const cx=cajas[o]/PALMA_N+ax, cy=cajas[o+1]/PALMA_N+ay;
     const bw=cajas[o+2]/PALMA_N, bh=cajas[o+3]/PALMA_N;
@@ -584,7 +608,9 @@ function roiDePalma(p){
 }
 /* con la mano ya seguida, la región del cuadro siguiente sale de los propios
    puntos: no hace falta volver a buscar la palma */
-function roiDePuntos(pts){
+const PRED={ hay:false, cx:0, cy:0, vx:0, vy:0, t:0 };
+function olvidarPrediccion(){ PRED.hay=false; PRED.vx=PRED.vy=0; }
+function roiDePuntos(pts, ahora){
   let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
   for(let i=0;i<21;i++){
     const x=pts[i*3], y=pts[i*3+1];
@@ -594,8 +620,28 @@ function roiDePuntos(pts){
   const cx=(x1+x2)/2, cy=(y1+y2)/2 - 0.1*h;
   /* muñeca (0) y base del dedo medio (9) dan el eje de la mano */
   const ang=Math.PI/2-Math.atan2(-(pts[9*3+1]-pts[1]), pts[9*3]-pts[0]);
-  return { cx, cy, lado:Math.max(w,h)*1.65, ang };
+
+  /* El recorte tiene que ir A DONDE VA A ESTAR la mano, no a donde estuvo:
+     entre que se saca el cuadro y sale el resultado pasan decenas de
+     milisegundos, y con la mano en movimiento eso alcanza para que los dedos
+     queden contra el borde del recorte —y ahí los puntos se ensucian—. Se mide
+     la velocidad del centro, se suaviza (si no, el adelanto tiembla) y se
+     adelanta. Además el recorte se ABRE con la velocidad: quieto va ajustado,
+     que es donde se gana resolución; rápido va holgado, que es donde se gana
+     no perder la mano. */
+  let vx=0, vy=0;
+  if(PRED.hay){
+    const dt=Math.min(0.2, Math.max(0.008,(ahora-PRED.t)/1000));
+    vx=PRED.vx*0.55+((cx-PRED.cx)/dt)*0.45;
+    vy=PRED.vy*0.55+((cy-PRED.cy)/dt)*0.45;
+  }
+  PRED.hay=true; PRED.cx=cx; PRED.cy=cy; PRED.vx=vx; PRED.vy=vy; PRED.t=ahora;
+  const vel=Math.sqrt(vx*vx+vy*vy);
+  const ad=ADELANTO*AJ.adelanto;
+  return { cx: cx+vx*ad, cy: cy+vy*ad, ang,
+           lado: Math.max(w,h)*(1.58+Math.min(0.92, vel*0.0016)) };
 }
+const ADELANTO=0.045;                 // segundos de adelanto a velocidad medida
 
 function prepararPuntos(video, roi){
   const s=PUNTOS_N/roi.lado;
@@ -609,7 +655,7 @@ function prepararPuntos(video, roi){
   ctxPuntos.restore();
   const d=ctxPuntos.getImageData(0,0,PUNTOS_N,PUNTOS_N).data;
   for(let i=0,j=0;i<d.length;i+=4){
-    bufPuntos[j++]=d[i]/255; bufPuntos[j++]=d[i+1]/255; bufPuntos[j++]=d[i+2]/255;
+    bufPuntos[j++]=LUT[d[i]]; bufPuntos[j++]=LUT[d[i+1]]; bufPuntos[j++]=LUT[d[i+2]];
   }
 }
 async function detectarPuntos(video, roi){
@@ -653,11 +699,66 @@ async function detectarPuntos(video, roi){
 }
 
 /* ============================================================================
+   3b · EL FILTRO ONE-EURO
+
+   El problema de siempre: un pasabajos fijo o tiembla o arrastra, hay que
+   elegir. Éste no obliga a elegir porque el corte SUBE CON LA VELOCIDAD
+   MEDIDA: con la mano quieta filtra fuerte y los puntos quedan clavados; con
+   la mano moviéndose el corte se dispara y el filtro casi desaparece, así que
+   no queda atrás. Es exactamente lo que hace falta para que siga la mano al
+   pie de la letra en vez de ir flotando detrás.
+============================================================================ */
+function filtroEuro(n, minCorte, beta, dCorte){
+  const x=new Float32Array(n), dsuave=new Float32Array(n);
+  let listo=false, tPrev=0;
+  return {
+    par(mc, b){ minCorte=mc; beta=b; },
+    reiniciar(){ listo=false; dsuave.fill(0); },
+    aplicar(v, t){
+      if(!listo){ x.set(v); listo=true; tPrev=t; return x; }
+      const dt=Math.min(0.2, Math.max(0.001,(t-tPrev)/1000)); tPrev=t;
+      const rd=2*Math.PI*dCorte*dt, ad=rd/(rd+1);
+      const k=2*Math.PI*dt;
+      for(let i=0;i<n;i++){
+        const d=(v[i]-x[i])/dt;                 // velocidad instantánea
+        const ds=dsuave[i]=ad*d+(1-ad)*dsuave[i];
+        const c=minCorte+beta*(ds<0?-ds:ds);    // el corte sube con la velocidad
+        const r=k*c, a=r/(r+1);
+        x[i]=a*v[i]+(1-a)*x[i];
+      }
+      return x;
+    }
+  };
+}
+/* Los de pantalla van en píxeles del video (velocidades de cientos por segundo)
+   y los del mundo en unidades de la mano (centésimas): por eso beta cambia tres
+   órdenes de magnitud entre uno y otro. */
+const AJ={ suave:1, adelanto:1 };
+const FIL_PTS=filtroEuro(63, 1.7, 0.012, 1.2);
+const FIL_MUN=filtroEuro(63, 1.5, 6.0,  1.2);
+function ajustarFiltros(){
+  const k=Math.max(0.05, AJ.suave);
+  FIL_PTS.par(1.7/k, 0.012*k);
+  FIL_MUN.par(1.5/k, 6.0*k);
+}
+
+/* ============================================================================
    4 · EL SEGUIMIENTO
    Mientras la confianza aguanta, sólo se ejecuta la etapa B. Cuando cae, se
    vuelve a buscar la palma. Es lo que baja de dos inferencias por cuadro a una.
 ============================================================================ */
-const SEG={ roi:null, pts:null, mun:null, conf:0, t:0, buscando:true, enVuelo:false };
+const SEG={ roi:null, pts:null, mun:null, conf:0, t:0, buscando:true, enVuelo:false,
+            flojas:0, anclado:0 };
+/* Dos umbrales, no uno. UMBRAL_PUNTOS es "perdí la mano"; UMBRAL_FIRME es
+   "la sigo teniendo pero cada vez peor". Cuando la confianza pasa varios
+   cuadros seguidos por debajo del segundo, la región viene derivando y hay que
+   volver a anclarla con el detector de palma ANTES de perderla del todo: si se
+   espera al primer umbral, la mano ya se fue. */
+const UMBRAL_FIRME=0.82, FLOJAS_MAX=8, REANCLAR_MS=5000;
+function perderMano(){
+  SEG.buscando=true; SEG.roi=null; SEG.conf=0; SEG.flojas=0;
+  FIL_PTS.reiniciar(); FIL_MUN.reiniciar(); olvidarPrediccion();
+}
 const MET={ fps:0, inf:0, msPalma:0, msPuntos:0, fpsT:[], infT:[] };
 
 async function unCiclo(video){
@@ -666,18 +767,32 @@ async function unCiclo(video){
   SEG.enVuelo=true;
   try{
     let roi=SEG.roi;
+    const ahora0=performance.now();
+    /* re-anclaje periódico: aunque la confianza esté alta, la región seguida
+       deriva de a poco y sin esto la mano termina descentrada en el recorte */
+    if(!SEG.buscando && roi && ahora0-SEG.anclado>REANCLAR_MS) SEG.buscando=true;
     if(SEG.buscando || !roi){
       const palma=await detectarPalma(video);
-      if(!palma){ SEG.roi=null; SEG.conf=0; SEG.enVuelo=false; return; }
+      if(!palma){ perderMano(); SEG.enVuelo=false; return; }
       roi=roiDePalma(palma);
+      SEG.anclado=ahora0;
+      olvidarPrediccion();
     }
     const r=await detectarPuntos(video, roi);
     if(!r || r.conf<UMBRAL_PUNTOS){
-      SEG.buscando=true; SEG.roi=null; SEG.conf=0;
+      perderMano();
     }else{
-      SEG.pts=r.pts; SEG.mun=r.mun; SEG.conf=r.conf; SEG.t=performance.now();
-      SEG.roi=roiDePuntos(r.pts);
-      SEG.buscando=false;
+      const t=performance.now();
+      /* La región del cuadro siguiente sale de los puntos CRUDOS: filtrarlos
+         antes metería el retraso del filtro dentro del lazo de seguimiento y
+         el recorte iría atrasado. Lo que se DIBUJA sí va filtrado. */
+      SEG.roi=roiDePuntos(r.pts, t);
+      SEG.pts=FIL_PTS.aplicar(r.pts, t);
+      SEG.mun=FIL_MUN.aplicar(r.mun, t);
+      SEG.conf=r.conf; SEG.t=t;
+      SEG.flojas = r.conf<UMBRAL_FIRME ? SEG.flojas+1 : 0;
+      if(SEG.flojas>=FLOJAS_MAX){ SEG.buscando=true; SEG.flojas=0; }
+      else SEG.buscando=false;
       const ah=performance.now();
       MET.infT.push(ah);
       while(MET.infT.length && ah-MET.infT[0]>1000) MET.infT.shift();
@@ -686,97 +801,13 @@ async function unCiclo(video){
   }catch(e){
     ponerChapa('err','ERROR');
     cartel('inferencia: '+(e.message||e), 'mal', 6);
-    SEG.buscando=true;
+    perderMano();
   }
   SEG.enVuelo=false;
 }
 
 /* ============================================================================
-   5 · FONDO 3D CON GIROSCOPIO
-   Una malla de alambre y un campo de partículas, sobre fondo transparente para
-   que se vea la cámara detrás. La cámara 3D gira con el teléfono.
-============================================================================ */
-const T3={ ren:null, esc:null, cam:null, grupo:null, activo:true, giro:true };
-const ORI={ alfa:0, beta:0, gamma:0, hay:false, permiso:false };
-
-function armar3D(){
-  const ren=new THREE.WebGLRenderer({canvas:$('tres'), antialias:true, alpha:true});
-  ren.setPixelRatio(Math.min(devicePixelRatio||1,2));
-  ren.setClearColor(0x000000, 0);                 // transparente: se ve la cámara
-  const esc=new THREE.Scene();
-  const cam=new THREE.PerspectiveCamera(70, 1, 0.1, 120);
-  cam.position.set(0,0,0.01);
-
-  const grupo=new THREE.Group(); esc.add(grupo);
-  /* cúpula de alambre */
-  for(let i=0;i<3;i++){
-    const g=new THREE.IcosahedronGeometry(16+i*9, 2);
-    const m=new THREE.MeshBasicMaterial({color:[0x5ce1ff,0x7cf3c0,0x2b6f8f][i],
-      wireframe:true, transparent:true, opacity:[0.20,0.13,0.08][i]});
-    const o=new THREE.Mesh(g,m); o.rotation.set(i*0.5, i*0.9, 0); grupo.add(o);
-  }
-  /* partículas */
-  const N=1400, pos=new Float32Array(N*3), col=new Float32Array(N*3);
-  const c1=new THREE.Color(0x5ce1ff), c2=new THREE.Color(0x7cf3c0);
-  for(let i=0;i<N;i++){
-    const r=10+Math.random()*38, th=Math.random()*Math.PI*2, ph=Math.acos(2*Math.random()-1);
-    pos[i*3]=r*Math.sin(ph)*Math.cos(th);
-    pos[i*3+1]=r*Math.cos(ph);
-    pos[i*3+2]=r*Math.sin(ph)*Math.sin(th);
-    const c=Math.random()<0.5?c1:c2;
-    col[i*3]=c.r; col[i*3+1]=c.g; col[i*3+2]=c.b;
-  }
-  const gp=new THREE.BufferGeometry();
-  gp.setAttribute('position', new THREE.BufferAttribute(pos,3));
-  gp.setAttribute('color', new THREE.BufferAttribute(col,3));
-  grupo.add(new THREE.Points(gp, new THREE.PointsMaterial({size:0.34, vertexColors:true,
-    transparent:true, opacity:0.75, depthWrite:false, blending:THREE.AdditiveBlending})));
-
-  T3.ren=ren; T3.esc=esc; T3.cam=cam; T3.grupo=grupo;
-  acomodar();
-}
-/* Orientación del dispositivo → rotación de la cámara. Se arma la rotación en
-   el orden que manda la especificación: Z (alfa), X (beta), Y (gamma), y al
-   final media vuelta sobre X para que el "frente" sea la pantalla. */
-const _e=new THREE.Euler(), _q=new THREE.Quaternion(), _q2=new THREE.Quaternion();
-const _ejeX=new THREE.Vector3(1,0,0);
-function orientarCamara(){
-  if(!ORI.hay || !T3.giro){
-    T3.cam.quaternion.slerp(new THREE.Quaternion(), 0.05);
-    return;
-  }
-  const a=THREE.MathUtils.degToRad(ORI.alfa||0);
-  const b=THREE.MathUtils.degToRad(ORI.beta||0);
-  const g=THREE.MathUtils.degToRad(ORI.gamma||0);
-  const o=THREE.MathUtils.degToRad(screen.orientation? -screen.orientation.angle : 0);
-  _e.set(b, a, -g, 'YXZ');
-  _q.setFromEuler(_e);
-  _q.multiply(_q2.setFromAxisAngle(new THREE.Vector3(0,0,1), o));
-  _q.multiply(_q2.setFromAxisAngle(_ejeX, -Math.PI/2));
-  T3.cam.quaternion.slerp(_q, 0.22);            // suavizado: el giroscopio tiembla
-}
-async function pedirGiroscopio(){
-  /* iOS 13+ exige pedirlo DENTRO de un gesto del usuario, si no falla en silencio */
-  try{
-    if(typeof DeviceOrientationEvent!=='undefined' &&
-       typeof DeviceOrientationEvent.requestPermission==='function'){
-      const r=await DeviceOrientationEvent.requestPermission();
-      ORI.permiso=(r==='granted');
-      if(!ORI.permiso){ cartel('giroscopio denegado · el fondo no va a girar','av',5); return false; }
-    }else ORI.permiso=true;
-  }catch(e){ ORI.permiso=false; return false; }
-  const usar=ev=>{
-    if(ev.alpha===null && ev.beta===null && ev.gamma===null) return;
-    ORI.alfa=ev.alpha; ORI.beta=ev.beta; ORI.gamma=ev.gamma; ORI.hay=true;
-  };
-  /* el absoluto da rumbo real; si no está, el relativo alcanza */
-  window.addEventListener('deviceorientationabsolute', usar, true);
-  window.addEventListener('deviceorientation', usar, true);
-  return true;
-}
-
-/* ============================================================================
-   6 · CÁMARA Y LINTERNA
+   5 · CÁMARA Y LINTERNA
 ============================================================================ */
 const CAM={ flujo:null, pista:null, tieneFlash:false, flash:false, atras:true };
 async function abrirCamara(atras){
@@ -799,6 +830,8 @@ async function abrirCamara(atras){
   $('bFlash').disabled=!CAM.tieneFlash;
   $('bFlash').classList.remove('on','fuego');
   if(!CAM.tieneFlash) $('bFlash').title='esta cámara no tiene linterna';
+  RVFC=engancharCuadros(v);      // inferencia atada al cuadro nuevo, si se puede
+  perderMano();                  // cámara nueva: la mano anterior no vale nada
   acomodar();
   return CAM.pista.getSettings();
 }
@@ -831,7 +864,6 @@ function acomodar(){
   cM.width=Math.round(w*dpr); cM.height=Math.round(h*dpr);
   cM.style.width=w+'px'; cM.style.height=h+'px';
   ctxM.setTransform(dpr,0,0,dpr,0,0);
-  if(T3.ren){ T3.ren.setSize(w,h,false); T3.cam.aspect=w/h; T3.cam.updateProjectionMatrix(); }
 }
 addEventListener('resize', acomodar);
 addEventListener('orientationchange', ()=>setTimeout(acomodar,120));
@@ -878,23 +910,28 @@ function pintarMarcas(){
    un ciclo de inferencia cuando el anterior terminó, y mientras tanto se sigue
    pintando el último resultado. Ahí está la baja latencia.
 ============================================================================ */
-let ultimo=performance.now();
+let RVFC=false;
+/* requestVideoFrameCallback entrega el cuadro nuevo apenas está, con su marca
+   de tiempo. Es la diferencia entre inferir sobre cuadros frescos y volver a
+   inferir sobre uno ya procesado porque el dibujo va a 60 y la cámara a 30. */
+function engancharCuadros(v){
+  if(typeof v.requestVideoFrameCallback!=='function') return false;
+  const paso=()=>{ v.requestVideoFrameCallback(paso); if(CAM.pista) unCiclo(v); };
+  v.requestVideoFrameCallback(paso);
+  return true;
+}
 function ciclo(ahora){
   requestAnimationFrame(ciclo);
   MET.fpsT.push(ahora);
   while(MET.fpsT.length && ahora-MET.fpsT[0]>1000) MET.fpsT.shift();
   MET.fps=MET.fpsT.length;
 
-  if(CAM.pista) unCiclo($('cam'));          // no se espera: corre por su cuenta
+  /* Si el navegador avisa cuándo hay CUADRO NUEVO de cámara, la inferencia se
+     dispara desde ahí y no desde el dibujo: no se procesa dos veces el mismo
+     cuadro ni se desperdicia una inferencia entera. Sólo cuando no existe esa
+     API se cae a lanzarla desde acá. */
+  if(!RVFC && CAM.pista) unCiclo($('cam'));
 
-  if(T3.activo && T3.ren){
-    const dt=(ahora-ultimo)/1000;
-    T3.grupo.rotation.y+=dt*0.035;
-    T3.grupo.rotation.x+=dt*0.012;
-    orientarCamara();
-    T3.ren.render(T3.esc, T3.cam);
-  }
-  ultimo=ahora;
   pintarMarcas();
   pintarMetricas();
 }
@@ -937,7 +974,6 @@ async function pintarSonda(){
     fila('medio','POR QUÉ NO LA NPU',
       (EP.motivo||'no hay contexto de NPU en este equipo').split('\n')[0]);
   fila(CAM.tieneFlash?'si':'medio','LINTERNA', CAM.tieneFlash?'la cámara la soporta':'no soportada');
-  fila(ORI.hay?'si':'medio','GIROSCOPIO', ORI.hay?'entregando datos':(ORI.permiso?'sin datos':'sin permiso'));
   fila(isSecureContext?'si':'no','CONTEXTO SEGURO', isSecureContext?'HTTPS':'NO · sin cámara ni WebNN');
 
   $('notaMotor').textContent=
@@ -962,11 +998,13 @@ function cablear(){
   $('hojaMotor').addEventListener('click', e=>{
     if(e.target===$('hojaMotor')) $('hojaMotor').classList.remove('ver'); });
   $('bFlash').addEventListener('click', alternarFlash);
-  $('b3d').addEventListener('click', ()=>{
-    T3.activo=!T3.activo; $('b3d').classList.toggle('on',T3.activo);
-    $('tres').style.display=T3.activo?'block':'none'; });
-  $('bGiro').addEventListener('click', ()=>{
-    T3.giro=!T3.giro; $('bGiro').classList.toggle('on',T3.giro); });
+  const desliz=(id, vid, fn)=>{
+    const e=$(id), t=$(vid);
+    const ap=()=>{ const x=parseFloat(e.value); t.textContent=x.toFixed(2); fn(x); };
+    e.addEventListener('input', ap); ap();
+  };
+  desliz('sSuave','vSuave', x=>{ AJ.suave=x; ajustarFiltros(); });
+  desliz('sAdel','vAdel',  x=>{ AJ.adelanto=x; });
   $('bCambiar').addEventListener('click', async ()=>{
     try{ const s=await abrirCamara(!CAM.atras);
          cartel('cámara '+(CAM.atras?'trasera':'frontal')+' · '+s.width+'×'+s.height,'',2.5);
@@ -1005,9 +1043,7 @@ function cablear(){
 async function entrar(){
   $('bEntrar').disabled=true;
   $('bEntrar').textContent='ARRANCANDO…';
-  /* 1 · giroscopio: tiene que ir DENTRO del gesto, sobre todo en iOS */
-  await pedirGiroscopio();
-  /* 2 · cámara */
+  /* 1 · cámara */
   try{
     const s=await abrirCamara(true);
     cartel('cámara '+s.width+'×'+s.height+' @ '+(s.frameRate||'?')+' fps','',2.5);
@@ -1099,7 +1135,7 @@ async function arrancarMotor(){
   return false;
 }
 
-armar3D();
+acomodar();
 cablear();
 requestAnimationFrame(ciclo);
 $('bEntrar').addEventListener('click', entrar, {once:false});
@@ -1109,7 +1145,7 @@ $('bEntrar').addEventListener('click', entrar, {once:false});
 if(SIGUIENDO) entrar();
 
 /* para inspección desde la consola */
-window.__app={ EP, SEG, MET, CAM, ORI, T3, ANCLAS,
+window.__app={ EP, SEG, MET, CAM, ANCLAS, AJ, PRED, filtros:{FIL_PTS, FIL_MUN},
   sesiones:()=>({palma:!!sesPalma, puntos:!!sesPuntos}),
   probar:async d=>crearSesiones(d) };
 </script>

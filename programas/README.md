@@ -370,6 +370,69 @@ Lo que **no** se pudo probar acá: la inferencia de verdad en un navegador. Este
 entorno no llega a jsDelivr desde Chromium (`ERR_CONNECTION_RESET` con y sin
 proxy), así que los modelos no se pueden bajar en una prueba automatizada.
 
+### Precisión: el filtro One-Euro
+
+El problema de siempre con los puntos que salen de un modelo cuadro a cuadro es
+que tiemblan. Un pasabajos fijo lo arregla y rompe otra cosa: o tiembla o
+arrastra, hay que elegir. El One-Euro no obliga a elegir porque **el corte sube
+con la velocidad medida**: mano quieta, filtra fuerte; mano moviéndose, el
+corte se dispara y el filtro casi desaparece.
+
+Medido a 30 cuadros por segundo con ruido de ±1,5 px:
+
+| Filtro | Mano quieta · temblor/cuadro | Mano a 600 px/s · retraso |
+|---|---|---|
+| crudo | 0,94 px | 0 |
+| fijo α=0,5 | 0,41 px | 20 px |
+| fijo α=0,15 | 0,12 px | **113 px** |
+| **One-Euro** | **0,20 px** | **8 px** |
+
+El pasabajos fijo que iguala la quietud del One-Euro va 113 px atrás de la
+mano. Ése es todo el argumento.
+
+Los puntos de pantalla van en píxeles del video y los del mundo en unidades de
+la mano, así que `beta` cambia tres órdenes de magnitud entre uno y otro
+(0,012 contra 6,0).
+
+### Precisión: el recorte se adelanta
+
+Entre que se saca el cuadro y sale el resultado pasan decenas de milisegundos.
+Con la mano en movimiento eso alcanza para que los dedos queden contra el borde
+del recorte, y ahí los puntos se ensucian. Se mide la velocidad del centro, se
+suaviza y se adelanta 45 ms. Verificado: con la mano a 600 px/s el recorte va
+**27 px adelante**, que es exactamente `600 × 0,045`.
+
+Además el recorte **se abre con la velocidad**: 88 px de lado con la mano
+quieta, 140 px a 600 px/s. Quieto va ajustado, que es donde se gana resolución;
+rápido va holgado, que es donde se gana no perder la mano.
+
+La región del cuadro siguiente sale de los puntos **crudos**, no de los
+filtrados: filtrarlos antes metería el retraso del filtro dentro del lazo de
+seguimiento. Lo que se dibuja sí va filtrado.
+
+### Precisión: dos umbrales, no uno
+
+`UMBRAL_PUNTOS` (0,55) es "perdí la mano". `UMBRAL_FIRME` (0,82) es "la sigo
+teniendo pero cada vez peor". Cuando la confianza pasa ocho cuadros seguidos por
+debajo del segundo, la región viene derivando y se vuelve a anclar con el
+detector de palma **antes** de perderla. Esperar al primer umbral es esperar
+demasiado. Y cada 5 s se re-ancla igual, porque la región seguida deriva de a
+poco aunque la confianza esté alta.
+
+### Optimización
+
+- **Fuera el fondo 3D**: se van three.js entero (unos 600 KB por la red) y el
+  render por cuadro. Con él se fueron el giroscopio y sus permisos.
+- **`requestVideoFrameCallback`**: la inferencia se dispara con el cuadro nuevo
+  de cámara, no con el dibujo. Antes, con el dibujo a 60 y la cámara a 30, se
+  volvía a inferir sobre el mismo cuadro.
+- **Tabla de 256 valores** en vez de dividir por 255: son 150.000 divisiones por
+  cuadro entre los dos recortes, y la tabla entra entera en caché.
+- **Umbral en logit**: la puntuación de la palma viene sin sigmoide, así que se
+  compara contra `log(t/(1-t))` y se ahorran 2016 `Math.exp` por detección.
+- **`imageSmoothingQuality:'high'`** en los dos recortes: los bordes de los
+  dedos llegan limpios al modelo en vez de aliaseados. Lo hace la GPU, no cuesta.
+
 ### Para que la NPU aparezca
 En Chrome o Edge de escritorio hay que habilitar
 `chrome://flags/#web-machine-learning-neural-network` y reiniciar. En Android
