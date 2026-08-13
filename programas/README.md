@@ -3,6 +3,27 @@
 Herramientas, no juegos. Mismo criterio que `juegos-pc/`: un solo HTML que se
 abre y anda, sin instalar nada.
 
+## Dónde está publicado
+
+**https://manos-npu.higgsfield.app** — un Worker de Cloudflare, HTTPS propio.
+
+| Dirección | Qué sirve |
+|---|---|
+| `/` | portada con una sonda que mide el equipo de quien entra |
+| `/manos/` | `manos-npu/index.html` |
+| `/mocap/` | `Captura_Movimiento.html` |
+| `/juegos/<Nombre>.html` | los juegos que se generan solos al abrirse |
+
+Los HTML van como **archivos estáticos** en `app/public/`, así Cloudflare los
+entrega desde el borde sin pasar por el Worker. Eso importa: el Worker de la
+plantilla puede poner `Permissions-Policy: camera=()`, que mataría la cámara.
+Sirviéndolos como estáticos las únicas cabeceras son las de la plataforma
+(`frame-ancestors`), y ni la cámara, ni el giroscopio, ni jsDelivr quedan
+bloqueados — verificado con `curl -D -` sobre el sitio ya publicado.
+
+Un sitio recién desplegado responde **401 `{"error":"unauthenticated"}`** hasta
+que se publica; recién ahí queda accesible desde afuera.
+
 ---
 
 ## Captura de movimiento (`Captura_Movimiento.html`) · beta
