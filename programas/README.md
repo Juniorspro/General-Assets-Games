@@ -1,4 +1,4 @@
-# Programas
+# Programas · proyecto WWA
 
 Herramientas, no juegos. Mismo criterio que `juegos-pc/`: un solo HTML que se
 abre y anda, sin instalar nada.
@@ -160,3 +160,125 @@ Van anotadas porque ninguna se ve mirando el código:
   hay que invertir **y y z**, que es girar media vuelta sobre X. Invirtiendo sólo
   la y el resultado se ve bien hasta que el sujeto levanta una mano y resulta que
   es zurdo.
+
+
+---
+
+## Manos en la NPU (`manos-npu/index.html`)
+
+Detección de manos en 3D corriendo en la **NPU** por **WebNN**, sobre un fondo 3D
+que gira con el giroscopio y la cámara de fondo. Un solo archivo de cuarenta y
+cinco kilobytes; se sube a cualquier servidor HTTPS y anda.
+
+### Qué se puede y qué no, con nombre y apellido
+Esto hay que decirlo primero porque cambia todo el diseño:
+
+| vía | ¿llega a la NPU? |
+|---|---|
+| TFLite / LiteRT + delegado QNN, NNAPI, Eden, NeuroPilot, DirectML, OpenVINO, EdgeTPU | **sí**, y es lo normal — pero son librerías **nativas** |
+| MediaPipe Tasks en el navegador | **no**: su `delegate` acepta `GPU` o `CPU` y nada más |
+| TensorFlow.js | **no**: no hay backend WebNN publicado en npm |
+| **ONNX Runtime Web + WebNN** | **sí**, es la única puerta web, y es la que usa este programa |
+
+Verificado leyendo el código: el bundle de MediaPipe tiene
+`"delegate" in e && ("GPU" === e.delegate ? … : …)`, sin tercera rama; y
+`@tensorflow/tfjs-backend-webnn` no existe en el registro.
+
+### Cómo se pide la NPU
+```js
+executionProviders: [{ name:'webnn', deviceType:'npu',
+                       powerPreference:'low-power' }]
+```
+ORT traduce eso a `navigator.ml.createContext({deviceType, powerPreference})`.
+Pedir `npu` **no es una sugerencia**: si el equipo no tiene NPU o el grafo no le
+entra, la sesión falla. Acá esa falla no se tapa — se informa y bajar a GPU o CPU
+es una decisión con un botón.
+
+Los modelos son **INT8**, que es el formato que una NPU procesa nativamente. Si
+el controlador rechaza el grafo cuantizado se reintenta float32 **en el mismo
+dispositivo** antes de bajar de dispositivo.
+
+### El pipeline, en dos etapas
+Es el de MediaPipe, reimplementado a mano sobre los ONNX del OpenCV Zoo:
+
+1. **Detector de palma** · 192×192 · 2016 anclas · devuelve caja y 7 puntos.
+2. **Regresor** · 224×224 · devuelve 21 puntos en pantalla y 21 en el mundo.
+
+Y el truco que hace que corra: **el detector de palma no se ejecuta todos los
+cuadros**. Sólo cuando se pierde la mano. Mientras hay seguimiento, la región del
+cuadro siguiente sale de los propios puntos del anterior y se ejecuta sólo la
+etapa 2. Es la diferencia entre dos inferencias por cuadro y una.
+
+### Las anclas, que son la trampa
+El modelo devuelve 2016 predicciones ancladas a posiciones fijas que **no vienen
+en el archivo**: hay que regenerarlas igual que MediaPipe al entrenar, o todo
+sale corrido. Y la segunda capa confunde: no son tres capas de dos anclas a paso
+16, es **una capa de seis anclas por celda**.
+
+```
+paso  8 → rejilla 24×24 × 2 anclas = 1152
+paso 16 → rejilla 12×12 × 6 anclas =  864     total 2016
+```
+
+Generadas así coinciden con la tabla de referencia con un error de 7·10⁻⁹.
+
+### La región de interés
+Se calcula sobre los **siete puntos de la palma**, no sobre la caja del detector:
+la caja trae margen y deja la mano contra el borde del recorte. Se giran los siete
+puntos para medir la mano derecha, se corre el centro medio alto de la palma hacia
+los dedos y se agranda 2,7 veces. Medido: con la caja quedaba hasta un 6% del
+recorte vacío; así queda en 0% y la confianza sube de 0,995 a 0,999.
+
+El recorte girado se hace con una transformación del lienzo —operación de GPU—,
+no con matemática de píxeles.
+
+### Verificado
+Primero se replicó el pipeline entero en Python con onnxruntime y se comprobó
+sobre dos fotos de manos: palma detectada con 0,978 y 0,958, puntos con **0,999**
+de confianza, y el esqueleto cae exacto sobre cada nudillo. Después se corrió el
+mismo pipeline en el navegador contra un video de una mano: **0,999**, muñeca y
+yemas en su lugar, y el seguimiento enganchado —o sea, saltándose el detector de
+palma—.
+
+### Un error de ORT que costó encontrar
+Cuando la creación de una sesión WebNN **falla**, ORT-Web deja su contexto ML
+colgado en el estado del módulo. La sesión siguiente —aunque se pida en CPU—
+queda registrada como si fuera de WebNN, y al enlazar la entrada tira:
+
+```
+Can't bind input[0]. ERROR_MESSAGE: There's no data transfer registered
+for copying tensors
+```
+
+No se puede limpiar desde afuera. Por eso **cambiar de proveedor recarga la
+página** con `?ep=gpu` o `?ep=cpu`: arranca el módulo desde cero. Y antes de
+intentar una sesión se pregunta `navigator.ml.createContext({deviceType})`, así
+el caso común —un equipo sin NPU— ni siquiera ensucia el estado.
+
+De paso: **el tensor de entrada se arma en cada corrida**. Reutilizar el mismo
+objeto entre sesiones de proveedores distintos deja el enlace viejo adentro y
+produce el mismo error. El constructor sólo envuelve el arreglo que ya existe,
+así que no cuesta nada.
+
+### Lo demás
+- **Cámara trasera** por omisión, con botón para cambiar. Todas las restricciones
+  van con `ideal`: `min` es una restricción dura y hace que una cámara que no la
+  cumple no abra nada.
+- **Linterna** con `applyConstraints({advanced:[{torch}]})`, y antes se pregunta
+  `getCapabilities().torch`; si no está, el botón queda apagado en vez de romper
+  el flujo.
+- **Giroscopio** con `DeviceOrientationEvent.requestPermission()` para iOS 13+,
+  pedido **dentro del gesto** del botón ENTRAR, que si no falla en silencio. La
+  rotación se arma en el orden de la especificación —Z, X, Y— más el ángulo de
+  la pantalla, y se interpola para que no tiemble.
+- **Capas**, en este orden: video de la cámara, escena 3D transparente, puntos de
+  la mano, interfaz.
+- El dibujo **nunca espera** a la inferencia: se lanza un ciclo cuando el anterior
+  terminó y mientras tanto se sigue pintando el último resultado.
+
+### Para que la NPU aparezca
+En Chrome o Edge de escritorio hay que habilitar
+`chrome://flags/#web-machine-learning-neural-network` y reiniciar. En Android
+todavía no está en canales estables. La hoja **MOTOR** dice exactamente qué
+expone el equipo: si WebNN está, si entrega contexto de NPU, y en qué se está
+ejecutando.
