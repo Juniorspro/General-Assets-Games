@@ -167,6 +167,35 @@ const NIEBLA_GLSL=`
     vec3 n=mix(hor, solc, pow(max(dot(dv,luz),0.0), 6.0)*0.55);
     return mix(col, n, clamp(f,0.0,1.0));
   }`;
+/* ------------------------------------------------------------- las huellas
+   Donde hay un edificio no puede haber pasto. Cada construccion deja uno o
+   varios circulos y el shader de las briznas las mata adentro, con un borde
+   suave: un corte limpio se ve peor que no hacer nada. El suelo, en el mismo
+   sitio, se pela y se pone tierra pisada. Van como uniforme compartido porque
+   los miran tres materiales distintos. */
+const HUELLA_MAX=20;
+const HUELLAS=[];
+const HUELLA_U={
+  uHue:{value:Array.from({length:HUELLA_MAX},()=>new THREE.Vector3(0,0,-1))},
+  uHueN:{value:0}
+};
+function volcarHuellas(){
+  const a=HUELLA_U.uHue.value, n=Math.min(HUELLA_MAX,HUELLAS.length);
+  for(let i=0;i<n;i++) a[i].set(HUELLAS[i].x, HUELLAS[i].z, HUELLAS[i].r);
+  HUELLA_U.uHueN.value=n;
+}
+const HUELLA_GLSL=`
+  uniform vec3 uHue[20]; uniform int uHueN;
+  /* distancia al edificio mas cercano; negativa quiere decir adentro */
+  float distEdificio(vec2 P){
+    float d=1e9;
+    for(int i=0;i<20;i++){
+      if(i>=uHueN) break;
+      d=min(d, length(P-uHue[i].xy)-uHue[i].z);
+    }
+    return d;
+  }`;
+
 /* ============================================================================
    EL CIELO Y EL SUELO
    Los dos procedurales: el cielo es un degradado con el disco del sol y su
@@ -210,9 +239,9 @@ const cielo=new THREE.Mesh(new THREE.SphereGeometry(1500,40,26), cieloMat);
 cielo.frustumCulled=false; escena.add(cielo);
 
 const matSuelo=new THREE.ShaderMaterial({
-  uniforms:{ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
+  uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
     uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
-    uFogD:{value:nieblaD} },
+    uFogD:{value:nieblaD} }, HUELLA_U),
   /* el plano sigue al jugador, así que la posición del mundo hay que sacarla de
      la matriz del objeto y no del atributo, o los manchones viajarían con uno */
   vertexShader:`varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.0);
@@ -221,6 +250,7 @@ const matSuelo=new THREE.ShaderMaterial({
     precision highp float;
     varying vec3 vW; uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
     ${RUIDO_GLSL}
+    ${HUELLA_GLSL}
     ${NIEBLA_GLSL}
     void main(){
       /* el mismo campo de manchones que decide la altura del pasto, para que el
@@ -230,6 +260,13 @@ const matSuelo=new THREE.ShaderMaterial({
       vec3 col=mix(vec3(0.028,0.058,0.020), vec3(0.062,0.108,0.032), m);
       col=mix(col, vec3(0.078,0.082,0.036), smoothstep(0.62,0.92,g)*0.35);
       col*=0.82+0.36*ruido(vW.xz*1.7);
+      /* tierra pisada alrededor de lo construido, y un oscurecido de contacto
+         pegado a las paredes que hace las veces de sombra propia */
+      float dE=distEdificio(vW.xz);
+      float pisado=1.0-smoothstep(-0.5,2.6,dE);
+      vec3 tierra=vec3(0.115,0.088,0.055)*(0.82+0.36*ruido(vW.xz*2.6));
+      col=mix(col, tierra, pisado*0.94);
+      col*=1.0-0.50*(1.0-smoothstep(-0.7,1.1,dE));
       float lamb=0.30+0.70*max(luz.y,0.0);
       col*=lamb*uSolC*1.35 + uCielo*0.22;
       gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
@@ -274,7 +311,7 @@ function crearCampo(o){
     uniforms:Object.assign({ uBase:{value:new THREE.Vector2()}, uN:{value:N},
       uCelda:{value:o.celda}, uAncho:{value:o.ancho}, uDist:{value:o.dist},
       uCerca:{value:o.cerca||0}, uSem:{value:o.sem||0},
-      uAltoMin:{value:o.altoMin}, uAltoMax:{value:o.altoMax} }, PASTO_U),
+      uAltoMin:{value:o.altoMin}, uAltoMax:{value:o.altoMax} }, PASTO_U, HUELLA_U),
     vertexShader:`
       precision highp float;
       attribute vec2 iIdx;
@@ -283,6 +320,7 @@ function crearCampo(o){
       uniform vec3 uJug,uOjo;
       varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos;
       ${RUIDO_GLSL}
+      ${HUELLA_GLSL}
       void main(){
         /* la celda del mundo que le toca a esta brizna */
         vec2 g=uBase+mod(iIdx-uBase, vec2(uN));
@@ -297,6 +335,8 @@ function crearCampo(o){
         float alto=(uAltoMin+r3*(uAltoMax-uAltoMin))*uAltoK*(0.55+mancha*0.95);
         float vive=step(r5, uDens*claro);
         alto*=vive;
+        /* nada crece bajo un techo: se apaga hacia adentro y con borde suave */
+        alto*=smoothstep(-0.20,1.40, distEdificio(P));
 
         float dcam=length(P-uOjo.xz);
         alto*=1.0-smoothstep(uDist*0.80, uDist, dcam);
@@ -389,6 +429,539 @@ function seguirPasto(x,z){
   for(const c of CAMPOS)
     c.base.set(Math.floor(x/c.celda)-(c.N>>1), Math.floor(z/c.celda)-(c.N>>1));
 }
+
+
+/* ============================================================================
+   LOS EDIFICIOS
+   Un casco de estancia en medio del pastizal: la casa, el galpon, dos silos,
+   el molino y el alambrado. Todo procedural, como el resto: no entra ni un
+   archivo de modelo ni una textura.
+
+   Tres cosas hacen que no queden pegoteados encima del pasto:
+
+   1) Comparten el sol y la niebla. El material se anota en MATS, asi que
+      cuando se mueve el sol o se cierra la niebla, los edificios acompanian.
+      Un material propio con luz fija cantaria a la legua.
+   2) El pasto no los atraviesa. Cada edificio deja su HUELLA —un par de
+      circulos— y el shader de las briznas mata las que caen adentro, con un
+      borde suave para que no quede un corte de cuchillo. El suelo, en el
+      mismo lugar, se pela y se pone tierra.
+   3) Se chocan. Las paredes son cajas orientadas de verdad y el jugador se
+      frena contra ellas; las puertas son huecos reales, se entra caminando.
+
+   La textura es de shader y en metros del mundo: la chapa acanalada, los
+   tablones, las hiladas de ladrillo y las tejas salen de la posicion, asi que
+   dos paredes distintas nunca repiten el mismo dibujo.
+============================================================================ */
+const V=[], NR=[], CL=[], TP=[], UV=[];   /* posicion, normal, color, tipo, uv */
+const CHOQUES=[];                          /* cajas orientadas para el jugador */
+/* tipos de superficie que entiende el shader */
+const T_REVOQUE=0, T_CHAPA=1, T_MADERA=2, T_LADRILLO=3, T_VIDRIO=4, T_TEJA=5, T_HIERRO=6;
+
+function vert(x,y,z, nx,ny,nz, c, t, u,v){
+  V.push(x,y,z); NR.push(nx,ny,nz); CL.push(c[0],c[1],c[2]); TP.push(t); UV.push(u,v);
+}
+/* Una cara de cuatro esquinas. Las uv van EN METROS y se calculan de los
+   propios lados, asi el acanalado de la chapa mide siempre lo mismo aunque la
+   pared sea larga o corta. */
+function cara(a,b,c,d, col, tipo, giroUV){
+  const ux=b[0]-a[0], uy=b[1]-a[1], uz=b[2]-a[2];
+  const vx=d[0]-a[0], vy=d[1]-a[1], vz=d[2]-a[2];
+  let nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+  const L=Math.hypot(nx,ny,nz)||1; nx/=L; ny/=L; nz/=L;
+  const su=Math.hypot(ux,uy,uz), sv=Math.hypot(vx,vy,vz);
+  const U=giroUV? [[0,0],[0,su],[sv,su],[sv,0]] : [[0,0],[su,0],[su,sv],[0,sv]];
+  const P=[a,b,c,d];
+  for(const k of [0,1,2, 0,2,3])
+    vert(P[k][0],P[k][1],P[k][2], nx,ny,nz, col, tipo, U[k][0],U[k][1]);
+}
+function tri(a,b,c, col, tipo){
+  const ux=b[0]-a[0], uy=b[1]-a[1], uz=b[2]-a[2];
+  const vx=c[0]-a[0], vy=c[1]-a[1], vz=c[2]-a[2];
+  let nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+  const L=Math.hypot(nx,ny,nz)||1; nx/=L; ny/=L; nz/=L;
+  const P=[a,b,c];
+  for(let k=0;k<3;k++) vert(P[k][0],P[k][1],P[k][2], nx,ny,nz, col, tipo, P[k][0], P[k][1]);
+}
+/* caja con centro en (x,y+sy/2,z), girada sobre Y */
+function caja(x,y,z, sx,sy,sz, rot, col, tipo, choca){
+  const c=Math.cos(rot), s=Math.sin(rot);
+  const g=(lx,ly,lz)=>[x+lx*c-lz*s, y+ly, z+lx*s+lz*c];
+  const hx=sx/2, hz=sz/2;
+  const p000=g(-hx,0,-hz), p100=g(hx,0,-hz), p110=g(hx,0,hz), p010=g(-hx,0,hz);
+  const q000=g(-hx,sy,-hz), q100=g(hx,sy,-hz), q110=g(hx,sy,hz), q010=g(-hx,sy,hz);
+  cara(p000,p100,q100,q000, col,tipo);       // frente
+  cara(p110,p010,q010,q110, col,tipo);       // fondo
+  cara(p100,p110,q110,q100, col,tipo);       // derecha
+  cara(p010,p000,q000,q010, col,tipo);       // izquierda
+  cara(q000,q100,q110,q010, col,tipo);       // arriba
+  cara(p010,p110,p100,p000, col,tipo);       // abajo
+  if(choca!==false) CHOQUES.push({x,z,hx,hz,rot,alto:y+sy});
+  return {x,y,z,sx,sy,sz,rot};
+}
+function cilindro(x,y,z, r, h, seg, col, tipo, tapa){
+  for(let i=0;i<seg;i++){
+    const a0=i/seg*Math.PI*2, a1=(i+1)/seg*Math.PI*2;
+    const x0=x+Math.cos(a0)*r, z0=z+Math.sin(a0)*r;
+    const x1=x+Math.cos(a1)*r, z1=z+Math.sin(a1)*r;
+    /* la normal de un cilindro es radial, no la de la cara plana: si se deja
+       la de la cara se ven las facetas como gajos */
+    const n0=[Math.cos(a0),0,Math.sin(a0)], n1=[Math.cos(a1),0,Math.sin(a1)];
+    const u0=a0*r, u1=a1*r;
+    vert(x0,y,z0,   n0[0],0,n0[2], col,tipo, u0,0);
+    vert(x1,y,z1,   n1[0],0,n1[2], col,tipo, u1,0);
+    vert(x1,y+h,z1, n1[0],0,n1[2], col,tipo, u1,h);
+    vert(x0,y,z0,   n0[0],0,n0[2], col,tipo, u0,0);
+    vert(x1,y+h,z1, n1[0],0,n1[2], col,tipo, u1,h);
+    vert(x0,y+h,z0, n0[0],0,n0[2], col,tipo, u0,h);
+  }
+  if(tapa) for(let i=0;i<seg;i++){
+    const a0=i/seg*Math.PI*2, a1=(i+1)/seg*Math.PI*2;
+    tri([x,y+h,z], [x+Math.cos(a1)*r,y+h,z+Math.sin(a1)*r],
+        [x+Math.cos(a0)*r,y+h,z+Math.sin(a0)*r], col, tipo);
+  }
+}
+function cono(x,y,z, r, h, seg, col, tipo){
+  for(let i=0;i<seg;i++){
+    const a0=i/seg*Math.PI*2, a1=(i+1)/seg*Math.PI*2;
+    tri([x+Math.cos(a0)*r,y,z+Math.sin(a0)*r],
+        [x+Math.cos(a1)*r,y,z+Math.sin(a1)*r], [x,y+h,z], col, tipo);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   LA PARED CON ABERTURAS
+   Esto es lo que separa un edificio de una caja. La pared va de A a B y lleva
+   una lista de huecos (a que distancia del arranque, a que altura, cuanto mide
+   cada uno). Se emite como pedazos: los machones entre huecos van del piso al
+   techo, y sobre cada hueco queda el dintel, y debajo el antepecho si la
+   ventana no llega al piso. Asi la puerta es un agujero de verdad y se entra
+   caminando, y las ventanas tienen jamba con espesor.
+-------------------------------------------------------------------------- */
+function pared(ax,az, bx,bz, alto, grosor, col, tipo, huecos, marco){
+  const dx=bx-ax, dz=bz-az, largo=Math.hypot(dx,dz);
+  const rot=Math.atan2(dz,dx);
+  const cx=(ax+bx)/2, cz=(az+bz)/2;
+  const co=Math.cos(rot), si=Math.sin(rot);
+  /* de coordenada a lo largo de la pared (u desde A) a mundo */
+  const aMundo=(u,off)=>[ax+co*u-si*(off||0), az+si*u+co*(off||0)];
+  const H=(huecos||[]).slice().sort((p,q)=>p.u-q.u);
+  let u0=0;
+  const trozo=(ua,ub,y,h,ch)=>{
+    if(ub-ua<0.008 || h<0.008) return;
+    const [mx,mz]=aMundo((ua+ub)/2,0);
+    caja(mx,y,mz, ub-ua, h, grosor, rot, col, tipo, ch);
+  };
+  for(const hu of H){
+    const a=hu.u-hu.w/2, b=hu.u+hu.w/2;
+    trozo(u0, a, 0, alto, true);                       // machon lleno
+    if(hu.y>0.01)      trozo(a, b, 0, hu.y, true);     // antepecho
+    if(hu.y+hu.h<alto) trozo(a, b, hu.y+hu.h, alto-(hu.y+hu.h), false); // dintel
+    /* marco de la abertura y, si es ventana, el vidrio */
+    if(marco!==false){
+      const gm=grosor*0.55, e=0.055;
+      const [pa]=[aMundo(a,0)], [pb]=[aMundo(b,0)];
+      caja(pa[0],hu.y,pa[1], e, hu.h, gm, rot, COL.marco, T_MADERA, false);
+      caja(pb[0],hu.y,pb[1], e, hu.h, gm, rot, COL.marco, T_MADERA, false);
+      const [px,pz]=aMundo(hu.u,0);
+      caja(px,hu.y+hu.h, pz, hu.w+e, e, gm, rot, COL.marco, T_MADERA, false);
+      if(hu.y>0.01){
+        caja(px,hu.y-e, pz, hu.w+e*2, e, gm*1.5, rot, COL.marco, T_MADERA, false);
+        caja(px,hu.y+0.02, pz, hu.w-e, hu.h-0.04, grosor*0.16, rot, COL.vidrio, T_VIDRIO, false);
+        /* el travesano de la ventana: sin el, el vidrio parece un agujero */
+        caja(px,hu.y+hu.h*0.5, pz, hu.w-e, e*0.7, gm, rot, COL.marco, T_MADERA, false);
+      }
+    }
+    u0=b;
+  }
+  trozo(u0, largo, 0, alto, true);
+  return {rot, largo, cx, cz};
+}
+
+/* Techo a dos aguas. Lleva la MISMA rotacion que las paredes: cuando no la
+   llevaba, la casa quedaba con el techo cruzado en diagonal, que es de las
+   cosas que sin una captura no se ven nunca. */
+function techoDosAguas(x,y,z, ancho, fondo, alturaCumbrera, alero, col, tipo, colFrente, rot){
+  rot=rot||0;
+  const co=Math.cos(rot), si=Math.sin(rot);
+  const P=(lx,ly,lz)=>[x+lx*co-lz*si, ly, z+lx*si+lz*co];
+  const A=ancho/2+alero, F=fondo/2+alero, cum=y+alturaCumbrera, gr=0.10;
+  /* La cumbrera corre a lo LARGO de la planta, no a lo ancho: las dos faldas
+     caen hacia los lados largos. Al reves, una casa de trece metros por ocho
+     quedaba con el techo cruzado como una carpa. */
+  const faldon=(sig)=>{
+    const p1=P(-A, y, sig*F), p2=P(A, y, sig*F);
+    const p3=P(A, cum, 0),    p4=P(-A, cum, 0);
+    cara(p1,p2,p3,p4, col, tipo, true);
+    /* el canto del alero, para que tenga espesor visto desde abajo */
+    cara(P(A,y-gr,sig*F), P(-A,y-gr,sig*F), p1, p2, col, tipo);
+  };
+  faldon(1); faldon(-1);
+  /* la cumbrera, que tapa la junta de las dos faldas */
+  cara(P(-A,cum+0.04,-0.17), P(A,cum+0.04,-0.17), P(A,cum+0.04,0.17), P(-A,cum+0.04,0.17),
+       col, tipo);
+  /* los dos frontones triangulares que cierran las puntas */
+  const cf=colFrente||col, tf=colFrente? T_REVOQUE : tipo;
+  tri(P(-A,y,-F), P(-A,y,F), P(-A,cum,0), cf, tf);
+  tri(P(A,y,F),  P(A,y,-F), P(A,cum,0),  cf, tf);
+}
+
+const COL={
+  cal:[0.90,0.88,0.83], calSombra:[0.80,0.78,0.72], zocalo:[0.42,0.36,0.31],
+  chapa:[0.62,0.64,0.66], chapaVieja:[0.55,0.50,0.46], teja:[0.55,0.24,0.16],
+  madera:[0.44,0.31,0.19], maderaClara:[0.62,0.48,0.31], marco:[0.28,0.30,0.34],
+  vidrio:[0.10,0.14,0.18], hierro:[0.30,0.31,0.33], ladrillo:[0.52,0.28,0.20],
+  silo:[0.72,0.73,0.74], poste:[0.38,0.28,0.18]
+};
+
+/* ---------------------------------------------------------- la casa grande */
+function casco(X,Z,rot){
+  const A=13.5, F=8.4, alto=3.2, gr=0.34;
+  const R=(lx,lz)=>[X+lx*Math.cos(rot)-lz*Math.sin(rot), Z+lx*Math.sin(rot)+lz*Math.cos(rot)];
+  const e1=R(-A/2,-F/2), e2=R(A/2,-F/2), e3=R(A/2,F/2), e4=R(-A/2,F/2);
+  /* plinto de ladrillo: las casas de campo se levantan del suelo */
+  caja(X,-0.02,Z, A+0.5, 0.42, F+0.5, rot, COL.ladrillo, T_LADRILLO, false);
+  /* frente, con la puerta al medio y dos ventanas grandes */
+  pared(e1[0],e1[1], e2[0],e2[1], alto, gr, COL.cal, T_REVOQUE, [
+    {u:A/2,     y:0,    w:1.30, h:2.30},
+    {u:A/2-3.6, y:0.95, w:1.35, h:1.35},
+    {u:A/2+3.6, y:0.95, w:1.35, h:1.35},
+    {u:1.9,     y:0.95, w:1.10, h:1.30},
+    {u:A-1.9,   y:0.95, w:1.10, h:1.30}
+  ]);
+  pared(e3[0],e3[1], e4[0],e4[1], alto, gr, COL.cal, T_REVOQUE, [
+    {u:A/2, y:0, w:1.20, h:2.25},
+    {u:3.2, y:1.0, w:1.10, h:1.25}, {u:A-3.2, y:1.0, w:1.10, h:1.25}
+  ]);
+  pared(e2[0],e2[1], e3[0],e3[1], alto, gr, COL.cal, T_REVOQUE,
+        [{u:F/2, y:1.0, w:1.15, h:1.25}]);
+  pared(e4[0],e4[1], e1[0],e1[1], alto, gr, COL.cal, T_REVOQUE,
+        [{u:F/2, y:1.0, w:1.15, h:1.25}]);
+  /* piso de adentro, para que al entrar no se vea el pasto por abajo */
+  const pc=R(0,0);
+  caja(pc[0],0.36,pc[1], A-gr, 0.06, F-gr, rot, COL.maderaClara, T_MADERA, false);
+  /* la galeria del frente: seis columnas y su techito. Es lo que hace que una
+     caja blanca se lea como casa de campo */
+  const gz=-F/2-2.5;
+  for(let i=0;i<6;i++){
+    const p=R(-A/2+0.7+i*(A-1.4)/5, gz);
+    caja(p[0],0.30,p[1], 0.26,2.72,0.26, rot, COL.cal, T_REVOQUE, true);
+  }
+  const pg=R(0,(gz-F/2)/2 - 0.1);
+  caja(pg[0],-0.02,pg[1], A+0.4, 0.34, 2.7, rot, COL.ladrillo, T_LADRILLO, false);
+  const ptg=R(0,gz+1.25);
+  caja(ptg[0],3.02,ptg[1], A+0.8, 0.16, 2.9, rot, COL.chapa, T_CHAPA, false);
+  /* el techo grande y la chimenea */
+  const c=R(0,0);
+  techoDosAguas(c[0],alto,c[1], A, F, 1.85, 0.55, COL.teja, T_TEJA, COL.cal, rot);
+  const ch=R(A/2-2.2, -0.7);
+  caja(ch[0],alto+0.6,ch[1], 0.72,1.85,0.72, rot, COL.ladrillo, T_LADRILLO, false);
+  caja(ch[0],alto+2.45,ch[1], 0.95,0.14,0.95, rot, COL.ladrillo, T_LADRILLO, false);
+  HUELLAS.push({x:X,z:Z,r:Math.max(A,F)*0.62});
+}
+
+/* -------------------------------------------------------------- el galpon */
+function galpon(X,Z,rot){
+  const A=16.0, F=9.0, alto=4.2, gr=0.22;
+  const R=(lx,lz)=>[X+lx*Math.cos(rot)-lz*Math.sin(rot), Z+lx*Math.sin(rot)+lz*Math.cos(rot)];
+  const e1=R(-A/2,-F/2), e2=R(A/2,-F/2), e3=R(A/2,F/2), e4=R(-A/2,F/2);
+  /* el porton grande: 5 metros de hueco, se entra y se sale */
+  pared(e1[0],e1[1], e2[0],e2[1], alto, gr, COL.chapa, T_CHAPA,
+        [{u:A/2, y:0, w:5.0, h:3.6}], false);
+  pared(e3[0],e3[1], e4[0],e4[1], alto, gr, COL.chapa, T_CHAPA,
+        [{u:A/2, y:0, w:3.0, h:3.2}], false);
+  pared(e2[0],e2[1], e3[0],e3[1], alto, gr, COL.chapa, T_CHAPA, [], false);
+  pared(e4[0],e4[1], e1[0],e1[1], alto, gr, COL.chapa, T_CHAPA, [], false);
+  const c=R(0,0);
+  techoDosAguas(c[0],alto,c[1], A, F, 1.5, 0.45, COL.chapaVieja, T_CHAPA, null, rot);
+  /* las columnas de hierro y las cabriadas, que se ven desde adentro */
+  for(let i=0;i<5;i++){
+    const u=-A/2+1.0+i*(A-2.0)/4;
+    for(const lz of [-F/2+0.3, F/2-0.3]){
+      const p=R(u,lz); caja(p[0],0,p[1], 0.16,alto,0.16, rot, COL.hierro, T_HIERRO, false);
+    }
+    const p1=R(u,-F/2+0.3), p2=R(u,F/2-0.3);
+    caja((p1[0]+p2[0])/2, alto, (p1[1]+p2[1])/2, 0.14, 0.14, F-0.6, rot, COL.hierro, T_HIERRO, false);
+  }
+  caja(X,0.0,Z, A-0.4, 0.05, F-0.4, rot, COL.zocalo, T_LADRILLO, false);
+  HUELLAS.push({x:X,z:Z,r:A*0.52});
+  HUELLAS.push({x:R(-A*0.28,0)[0],z:R(-A*0.28,0)[1],r:F*0.6});
+  HUELLAS.push({x:R( A*0.28,0)[0],z:R( A*0.28,0)[1],r:F*0.6});
+}
+
+/* ---------------------------------------------------------------- el silo */
+function silo(X,Z,r,h){
+  cilindro(X,0.15,Z, r, h, 26, COL.silo, T_CHAPA, false);
+  cono(X,0.15+h,Z, r*1.06, r*0.62, 26, COL.chapaVieja, T_CHAPA);
+  caja(X,-0.02,Z, r*2.3, 0.3, r*2.3, 0, COL.zocalo, T_LADRILLO, false);
+  /* la escalera lateral: barrotes finos, se lee la escala del silo */
+  for(let i=0;i<Math.floor(h/0.35);i++)
+    caja(X+r+0.10, 0.5+i*0.35, Z, 0.42,0.05,0.05, 0, COL.hierro, T_HIERRO, false);
+  for(const s of [-1,1])
+    caja(X+r+0.10, 0.5, Z+s*0.19, 0.05, h-0.4, 0.05, 0, COL.hierro, T_HIERRO, false);
+  /* el cilindro se choca como un cuadrado inscripto: nadie lo nota y sale gratis */
+  CHOQUES.push({x:X,z:Z,hx:r*0.92,hz:r*0.92,rot:0,alto:h});
+  HUELLAS.push({x:X,z:Z,r:r*1.9});
+}
+
+/* --------------------------------------------------------------- el molino
+   El de verdad: torre de perfiles cruzados que se afina hacia arriba, rueda de
+   aspas, veleta de cola y el tanque australiano al lado. La rueda gira. */
+function molino(X,Z){
+  const H=9.5, b0=1.5, b1=0.42;
+  const enY=(y)=>b0+(b1-b0)*(y/H);
+  for(const [sx,sz] of [[-1,-1],[1,-1],[1,1],[-1,1]]){
+    const N=9;
+    for(let i=0;i<N;i++){
+      const y0=i*H/N, y1=(i+1)*H/N;
+      const r0=enY(y0)/2, r1=enY(y1)/2;
+      const a=[X+sx*r0,y0,Z+sz*r0], b=[X+sx*r1,y1,Z+sz*r1];
+      /* cada tramo de pata es una cajita alineada a mano entre dos puntos */
+      const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2, mz=(a[2]+b[2])/2;
+      const L=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]);
+      caja(mx,my-L/2,mz, 0.10, L, 0.10, 0, COL.hierro, T_HIERRO, false);
+    }
+  }
+  for(let i=1;i<=5;i++){            // arriostramientos horizontales
+    const y=i*H/6, r=enY(y)/2;
+    for(const [ax,az,bx,bz] of [[-1,-1,1,-1],[1,-1,1,1],[1,1,-1,1],[-1,1,-1,-1]]){
+      const p=[X+ax*r,Z+az*r], q=[X+bx*r,Z+bz*r];
+      const L=Math.hypot(q[0]-p[0],q[1]-p[1]);
+      caja((p[0]+q[0])/2, y, (p[1]+q[1])/2, L, 0.06, 0.06,
+           Math.atan2(q[1]-p[1],q[0]-p[0]), COL.hierro, T_HIERRO, false);
+    }
+  }
+  CHOQUES.push({x:X,z:Z,hx:0.75,hz:0.75,rot:0,alto:H});
+  HUELLAS.push({x:X,z:Z,r:3.4});
+  /* el tanque australiano */
+  cilindro(X+4.6,0.1,Z, 2.2, 1.6, 20, COL.chapa, T_CHAPA, false);
+  cilindro(X+4.6,1.62,Z, 2.28, 0.10, 20, COL.hierro, T_HIERRO, false);   // el brocal
+  cilindro(X+4.6,0.12,Z, 2.14, 0.04, 20, [0.10,0.20,0.22], T_VIDRIO, true); // el agua
+  CHOQUES.push({x:X+4.6,z:Z,hx:2.0,hz:2.0,rot:0,alto:1.7});
+  HUELLAS.push({x:X+4.6,z:Z,r:3.0});
+}
+/* La rueda va aparte porque gira: se arma en su propia geometria, en el plano
+   XY, y se cuelga de un objeto que el bucle rota sobre Z. Las aspas se emiten
+   como cuadrilateros a mano: una por sector, con las dos aristas corridas en Z
+   en sentidos opuestos, que es lo que les da el paso y hace que la rueda se
+   lea como una rueda y no como un disco. */
+const RUEDAS=[];
+function ruedaDelMolino(X,Z,H){
+  const guarda={V:V.slice(),NR:NR.slice(),CL:CL.slice(),TP:TP.slice(),UV:UV.slice()};
+  V.length=0; NR.length=0; CL.length=0; TP.length=0; UV.length=0;
+  const NA=18, r0=0.45, r1=1.95, paso=0.10;
+  for(let i=0;i<NA;i++){
+    const a0=(i+0.06)/NA*Math.PI*2, a1=(i+0.94)/NA*Math.PI*2;
+    const P=(r,a,z)=>[Math.cos(a)*r, Math.sin(a)*r, z];
+    const A=P(r0,a0,-paso), B=P(r1,a0,-paso), C=P(r1,a1,paso), D=P(r0,a1,paso);
+    cara(A,B,C,D, COL.chapa, T_CHAPA);
+    cara(D,C,B,A, COL.chapaVieja, T_CHAPA);   // el reverso, mas apagado
+  }
+  cilindro(0,-0.24,0, 0.30, 0.48, 12, COL.hierro, T_HIERRO, true);
+  for(let i=0;i<6;i++){                        // los tensores del centro
+    const a=i/6*Math.PI*2;
+    const A=[Math.cos(a)*0.28, Math.sin(a)*0.28, 0.02];
+    const B=[Math.cos(a)*r1*0.95, Math.sin(a)*r1*0.95, 0.02];
+    const C=[Math.cos(a)*r1*0.95, Math.sin(a)*r1*0.95, -0.02];
+    const D=[Math.cos(a)*0.28, Math.sin(a)*0.28, -0.02];
+    cara(A,B,C,D, COL.hierro, T_HIERRO);
+  }
+  const geo=geometriaDe();
+  V.length=0; NR.length=0; CL.length=0; TP.length=0; UV.length=0;
+  V.push(...guarda.V); NR.push(...guarda.NR); CL.push(...guarda.CL);
+  TP.push(...guarda.TP); UV.push(...guarda.UV);
+  const g=new THREE.Group();
+  const m=new THREE.Mesh(geo, matEdificio); m.frustumCulled=false; g.add(m);
+  g.position.set(X, H-0.7, Z+0.95);
+  escena.add(g); RUEDAS.push(g);
+  /* la veleta de cola, que no gira con la rueda */
+  const gv=new THREE.Group();
+  const guarda2={V:V.slice(),NR:NR.slice(),CL:CL.slice(),TP:TP.slice(),UV:UV.slice()};
+  V.length=0; NR.length=0; CL.length=0; TP.length=0; UV.length=0;
+  caja(0,-0.05,-1.75, 0.06,0.10,3.2, 0, COL.hierro, T_HIERRO, false);
+  caja(0,-0.35,-3.30, 0.05,1.15,1.05, 0, COL.chapaVieja, T_CHAPA, false);
+  const geo2=geometriaDe();
+  V.length=0; NR.length=0; CL.length=0; TP.length=0; UV.length=0;
+  V.push(...guarda2.V); NR.push(...guarda2.NR); CL.push(...guarda2.CL);
+  TP.push(...guarda2.TP); UV.push(...guarda2.UV);
+  const m2=new THREE.Mesh(geo2, matEdificio); m2.frustumCulled=false; gv.add(m2);
+  gv.position.set(X, H-0.7, Z+0.95); escena.add(gv);
+  return g;
+}
+
+/* ------------------------------------------------------- alambrado y tranquera */
+function alambrado(x1,z1,x2,z2,n){
+  const dx=(x2-x1)/n, dz=(z2-z1)/n;
+  for(let i=0;i<=n;i++){
+    const x=x1+dx*i, z=z1+dz*i;
+    caja(x,0,z, 0.11, 1.28, 0.11, 0, COL.poste, T_MADERA, false);
+    if(i===0||i===n) CHOQUES.push({x,z,hx:0.16,hz:0.16,rot:0,alto:1.28});
+  }
+  const rot=Math.atan2(z2-z1,x2-x1), L=Math.hypot(x2-x1,z2-z1);
+  for(const y of [0.42,0.72,1.02,1.22])
+    caja((x1+x2)/2, y, (z1+z2)/2, L, 0.022, 0.022, rot, COL.hierro, T_HIERRO, false);
+}
+
+function geometriaDe(){
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(V.slice(),3));
+  g.setAttribute('normal',   new THREE.Float32BufferAttribute(NR.slice(),3));
+  g.setAttribute('color',    new THREE.Float32BufferAttribute(CL.slice(),3));
+  g.setAttribute('tipo',     new THREE.Float32BufferAttribute(TP.slice(),1));
+  g.setAttribute('uvm',      new THREE.Float32BufferAttribute(UV.slice(),2));
+  g.computeBoundingSphere();
+  return g;
+}
+
+/* --------------------------------------------------------------- material */
+const matEdificio=new THREE.ShaderMaterial({
+  uniforms:{ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
+             uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()},
+             uHoriz:{value:HORIZ.clone()}, uFogD:{value:nieblaD} },
+  vertexShader:`
+    precision highp float;
+    attribute float tipo; attribute vec2 uvm;
+    varying vec3 vW,vN,vC; varying float vT; varying vec2 vU;
+    void main(){
+      vec4 w=modelMatrix*vec4(position,1.0);
+      vW=w.xyz; vN=normalize(mat3(modelMatrix)*normal); vC=color; vT=tipo; vU=uvm;
+      gl_Position=projectionMatrix*viewMatrix*w;
+    }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vW,vN,vC; varying float vT; varying vec2 vU;
+    uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
+    ${RUIDO_GLSL}
+    ${NIEBLA_GLSL}
+    void main(){
+      /* Con DoubleSide la cara de atras trae la normal al reves y se ilumina
+         como si le pegara el sol desde adentro. Se da vuelta y listo: asi
+         ningun triangulo mal ordenado arruina la luz. */
+      vec3 N=normalize(vN)*(gl_FrontFacing? 1.0 : -1.0);
+      vec3 col=vC;
+      float brillo=0.0, aspero=1.0;
+      float t=vT;
+
+      /* REVOQUE: manchas de cal, y suciedad que sube del piso por capilaridad,
+         que es lo que de verdad se ve en una pared blanca de campo */
+      if(t<0.5){
+        col*=0.90+0.20*fbm(vW.xz*2.3+vW.y*1.7);
+        float humedad=smoothstep(0.75,0.0,vW.y)*0.55*(0.4+0.6*fbm(vW.xz*3.1));
+        col=mix(col, vec3(0.42,0.40,0.34), humedad);
+        col*=1.0-0.10*smoothstep(0.55,0.95,fbm(vW.xz*9.0));
+      }
+      /* CHAPA ACANALADA: la onda no se modela, se pone en la normal. Cuesta
+         una linea y da todo el relieve. */
+      else if(t<1.5){
+        float onda=sin(vU.x*(6.2831/0.115));
+        vec3 tg=normalize(abs(N.y)>0.9? vec3(1,0,0) : normalize(cross(N,vec3(0,1,0))));
+        N=normalize(N+tg*onda*0.55);
+        col*=0.86+0.22*onda*0.5;
+        float ox=fract(vU.x/0.115);
+        col*=1.0-0.25*smoothstep(0.92,1.0,ox);
+        /* oxido: manchas anaranjadas que bajan */
+        float ox2=smoothstep(0.55,0.95,fbm(vW.xz*1.6+vec2(0.0,vW.y*0.8)));
+        col=mix(col, vec3(0.42,0.24,0.13), ox2*0.45*smoothstep(4.0,0.5,vW.y));
+        brillo=0.35; aspero=0.35;
+      }
+      /* MADERA: tablones y veta */
+      else if(t<2.5){
+        float tab=fract(vU.y/0.145);
+        col*=0.88+0.16*fbm(vec2(vU.x*0.7, vU.y*22.0));
+        col*=1.0-0.35*smoothstep(0.94,1.0,tab);
+        col*=0.94+0.12*h21(floor(vec2(vU.y/0.145, 0.0)));
+      }
+      /* LADRILLO: hiladas trabadas */
+      else if(t<3.5){
+        float fila=floor(vU.y/0.075);
+        float desf=mod(fila,2.0)*0.5;
+        float u=fract(vU.x/0.24+desf), v=fract(vU.y/0.075);
+        float junta=smoothstep(0.0,0.06,u)*smoothstep(1.0,0.94,u)
+                   *smoothstep(0.0,0.16,v)*smoothstep(1.0,0.84,v);
+        col=mix(vec3(0.62,0.60,0.55), col, junta);
+        col*=0.86+0.28*h21(vec2(floor(vU.x/0.24+desf), fila));
+      }
+      /* VIDRIO: refleja el cielo segun el angulo y no tiene textura */
+      else if(t<4.5){
+        float f=pow(1.0-abs(dot(N, normalize(uOjo-vW))), 3.0);
+        col=mix(vec3(0.05,0.07,0.09), uCielo*0.9, 0.25+f*0.7);
+        brillo=1.0; aspero=0.06;
+      }
+      /* TEJA: hiladas de canales redondeados */
+      else if(t<5.5){
+        float canal=sin(vU.x*(6.2831/0.16));
+        vec3 tg=normalize(abs(N.y)>0.9? vec3(1,0,0) : normalize(cross(N,vec3(0,1,0))));
+        N=normalize(N+tg*canal*0.30);
+        col*=0.88+0.22*canal*0.5;
+        col*=0.90+0.24*h21(floor(vU*vec2(1.0/0.16, 1.0/0.33)));
+        float musgo=smoothstep(0.68,0.95,fbm(vW.xz*0.9));
+        col=mix(col, vec3(0.20,0.26,0.13), musgo*0.35);
+      }
+      /* HIERRO */
+      else { col*=0.9+0.2*fbm(vW.xz*4.0+vW.y*3.0); brillo=0.45; aspero=0.25; }
+
+      /* Luz: el mismo criterio que el pasto y el suelo, para que peguen.
+         Difusa del sol, rebote del cielo por arriba y del suelo por abajo. */
+      float lamb=max(dot(N,luz),0.0);
+      float sombraSuave=0.30+0.70*lamb;
+      vec3 amb=uCielo*(0.28+0.22*max(N.y,0.0))+vec3(0.05,0.06,0.03)*max(-N.y,0.0);
+      vec3 lum=uSolC*sombraSuave*1.25+amb;
+      col*=lum;
+      if(brillo>0.0){
+        vec3 vdir=normalize(uOjo-vW);
+        vec3 hv=normalize(vdir+luz);
+        col+=uSolC*brillo*pow(max(dot(N,hv),0.0), mix(6.0,120.0,1.0-aspero))*max(lamb,0.0);
+      }
+      gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
+    }`,
+  vertexColors:true, side:THREE.DoubleSide
+});
+MATS.push(matEdificio);
+
+/* ------------------------------------------------------------- el pueblito
+   Cinco sitios, no uno: el casco con su galeria mirando al camino, el galpon
+   cruzado, los silos al lado del galpon, el molino separado —que es como se
+   ponen, lejos de los arboles y de los techos— y un rancho solo, chico, bien
+   lejos, para que caminando aparezca algo cuando ya no se ve el casco. */
+casco(58, -34, 0.28);
+galpon(78, -18, 1.95);
+silo(92, -30, 2.5, 8.4);
+silo(98.5, -31.5, 2.5, 8.4);
+molino(46, -14);
+ruedaDelMolino(46, -14, 9.5);
+
+/* el rancho lejano */
+(function rancho(X,Z,rot){
+  const A=6.2, F=4.6, alto=2.5, gr=0.28;
+  const R=(lx,lz)=>[X+lx*Math.cos(rot)-lz*Math.sin(rot), Z+lx*Math.sin(rot)+lz*Math.cos(rot)];
+  const e1=R(-A/2,-F/2), e2=R(A/2,-F/2), e3=R(A/2,F/2), e4=R(-A/2,F/2);
+  caja(X,-0.02,Z, A+0.35, 0.3, F+0.35, rot, COL.ladrillo, T_LADRILLO, false);
+  pared(e1[0],e1[1], e2[0],e2[1], alto, gr, COL.calSombra, T_REVOQUE,
+        [{u:A/2, y:0, w:1.05, h:2.05}, {u:1.4, y:1.0, w:0.85, h:0.95}]);
+  pared(e3[0],e3[1], e4[0],e4[1], alto, gr, COL.calSombra, T_REVOQUE,
+        [{u:A/2, y:1.0, w:0.85, h:0.95}]);
+  pared(e2[0],e2[1], e3[0],e3[1], alto, gr, COL.calSombra, T_REVOQUE, []);
+  pared(e4[0],e4[1], e1[0],e1[1], alto, gr, COL.calSombra, T_REVOQUE, []);
+  const c=R(0,0);
+  caja(c[0],0.26,c[1], A-gr, 0.05, F-gr, rot, COL.madera, T_MADERA, false);
+  techoDosAguas(c[0],alto,c[1], A, F, 1.05, 0.42, COL.chapaVieja, T_CHAPA, COL.calSombra, rot);
+  HUELLAS.push({x:X,z:Z,r:A*0.72});
+})(-96, 74, -0.6);
+molino(-88, 66);
+ruedaDelMolino(-88, 66, 9.5);
+
+/* el alambrado que ata el casco con el galpon, y el corral */
+alambrado(40,-46, 96,-46, 24);
+alambrado(96,-46, 96,-8, 16);
+alambrado(-104,60, -104,86, 11);
+alambrado(-104,86, -80,86, 10);
+
+const mallaEdificios=new THREE.Mesh(geometriaDe(), matEdificio);
+mallaEdificios.frustumCulled=false;
+escena.add(mallaEdificios);
+/* las huellas ya estan todas: se vuelcan a los uniformes que miran el pasto
+   y el suelo, y de ahi en mas el pastizal sabe que hay algo encima */
+volcarHuellas();
 
 /* ============================================================================
    POST · un solo pase al final
@@ -499,6 +1072,7 @@ function pasoJugador(paso){
   PJ.rapidez=Math.hypot(PJ.vx,PJ.vz);
   PJ.x=clamp(PJ.x+PJ.vx*paso,-BORDE,BORDE);
   PJ.z=clamp(PJ.z+PJ.vz*paso,-BORDE,BORDE);
+  frenarContraEdificios();
   PJ.andando+=(Math.min(1,PJ.rapidez/2.4)-PJ.andando)*Math.min(1,7*paso);
   PJ.paso+=paso*PJ.rapidez*0.58;
   if(PJ.paso>1){ PJ.paso-=1; CAM.vHundir-=0.5+PJ.rapidez*0.09; roce(0.5+PJ.rapidez*0.05); }
@@ -508,6 +1082,30 @@ function pasoJugador(paso){
       CAM.sacudir=Math.min(0.5,-PJ.vy*0.045); roce(1.0,true); }
     PJ.y=0; PJ.vy=0; PJ.enSuelo=true;
   } else if(PJ.y>0.06) PJ.enSuelo=false;
+}
+/* Se resuelve contra cajas orientadas: se pasa el jugador al sistema de cada
+   caja, y si esta adentro se lo saca por el lado del que menos hundido esta.
+   Sacarlo por el otro eje lo teletransportaria a la vuelta de la pared.
+   Las cajas bajas —el alambrado— dejan de contar si uno viene saltando. */
+const RADIO_PJ=0.34;
+function frenarContraEdificios(){
+  let x=PJ.x, z=PJ.z;
+  for(let i=0;i<CHOQUES.length;i++){
+    const c=CHOQUES[i];
+    if(PJ.y > c.alto-0.05) continue;
+    const co=Math.cos(c.rot), si=Math.sin(c.rot);
+    const dx=x-c.x, dz=z-c.z;
+    let lx=dx*co+dz*si, lz=-dx*si+dz*co;
+    const ex=c.hx+RADIO_PJ, ez=c.hz+RADIO_PJ;
+    const ax=Math.abs(lx), az=Math.abs(lz);
+    if(ax<ex && az<ez){
+      if(ex-ax < ez-az){ lx = lx>=0? ex : -ex; PJ.vx*=0.25; }
+      else             { lz = lz>=0? ez : -ez; PJ.vz*=0.25; }
+      x=c.x + lx*co - lz*si;
+      z=c.z + lx*si + lz*co;
+    }
+  }
+  PJ.x=x; PJ.z=z;
 }
 function saltar(){ if(!PJ.enSuelo) return; PJ.vy=6.6; PJ.enSuelo=false; CAM.vHundir+=1.5; roce(0.5); }
 function ponerCamara(dt){
@@ -702,6 +1300,8 @@ function bucle(ahora){
   PASTO_U.uJug.value.set(PJ.x,PJ.y,PJ.z);
   PASTO_U.uOjo.value.copy(camara.position);
   matSuelo.uniforms.uOjo.value.copy(camara.position);
+  matEdificio.uniforms.uOjo.value.copy(camara.position);
+  for(let i=0;i<RUEDAS.length;i++) RUEDAS[i].rotation.z-=dt*(0.85+i*0.13);
   cieloMat.uniforms.uT.value=T;
   cielo.position.copy(camara.position);
   suelo.position.set(PJ.x,0,PJ.z);
@@ -739,6 +1339,8 @@ requestAnimationFrame(bucle);
 setTimeout(esconderAyuda, 11000);
 window.__dbg={
   get fps(){ return fps; },
+  get edificios(){ return {choques:CHOQUES.length, huellas:HUELLAS.length,
+    ruedas:RUEDAS.length, triangulos:mallaEdificios.geometry.attributes.position.count/3}; },
   get jugador(){ return {x:+PJ.x.toFixed(2), z:+PJ.z.toFixed(2), y:+PJ.y.toFixed(2),
     yaw:+PJ.yaw.toFixed(2), vel:+PJ.rapidez.toFixed(2)}; },
   get campos(){ return CAMPOS.map(c=>({N:c.N, celda:c.celda, briznas:c.briznas,
@@ -750,6 +1352,7 @@ window.__dbg={
   ojo(h){ PJ.altoOjo=h; ponerCamara(0.016); },
   palanca(x,y){ palanca.activa=(x||y)!==0; palanca.x=x||0; palanca.y=y||0; },
   aparta(r){ PASTO_U.uRJug.value=r; },
+  pasto(v){ for(const c of CAMPOS) c.malla.visible=v!==false; },
   calidad(n){ autoNivel=(n===undefined); if(n!==undefined){ nivel=n; aplicarNivel(); } return nivel; },
   get piezas(){ let n=0,t=0; escena.traverse(o=>{ if(o.isMesh&&o.visible){ n++;
     const g=o.geometry, ic=g.instanceCount||1;

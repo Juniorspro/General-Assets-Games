@@ -1673,8 +1673,52 @@ descargado, todo procedural. De ahí sale lo que sigue.
 ## Pastizal (`Pastizal.html`)
 
 Un campo verde y **pasto de verdad**: geometría, no fotos pegadas en cartelitos.
-Treinta y ocho kilobytes, **cero archivos externos** —ni una imagen, ni un
-modelo, ni un sonido—. Lo único que baja de la red es three.js.
+**Cero archivos externos** —ni una imagen, ni un modelo, ni un sonido—. Lo único
+que baja de la red es three.js. Ahora también hay **un casco de estancia**, y
+sigue sin bajar un solo archivo.
+
+### Los edificios
+
+Casa grande con galería, galpón, dos silos, dos molinos, un rancho lejano y
+alambrado. **5.248 triángulos** para todo, un solo material y una sola malla.
+
+No son cajas: la pared se emite **con aberturas de verdad**. Se le pasa de dónde
+a dónde va y una lista de huecos, y sale como machones entre huecos, dinteles
+arriba y antepechos abajo, más el marco con espesor y el vidrio. Por eso la
+puerta es un agujero real y **se entra caminando**.
+
+Tres cosas hacen que no queden pegoteados encima del pasto:
+
+1. **Comparten el sol y la niebla.** El material se anota en `MATS`, así que
+   cuando se mueve el sol o se cierra la niebla, los edificios acompañan. Un
+   material con luz propia cantaría a la legua.
+2. **El pasto no los atraviesa.** Cada edificio deja su *huella* —uno o varios
+   círculos— en un uniforme que miran los tres materiales del pasto y el del
+   suelo. Las briznas de adentro mueren con borde suave, y el suelo en ese
+   sitio se pela y se pone tierra pisada, con un oscurecido de contacto contra
+   las paredes que hace las veces de sombra propia.
+3. **Se chocan.** Cada trozo de pared deja una caja orientada. El jugador se
+   resuelve pasándolo al sistema de cada caja y sacándolo **por el lado del que
+   menos hundido está**: sacarlo por el otro eje lo teletransportaría a la
+   vuelta de la pared. Las cajas bajas —el alambrado— dejan de contar si venís
+   saltando, así que el alambrado se salta.
+
+La textura es de shader y **en metros del mundo**: el acanalado de la chapa, los
+tablones, las hiladas trabadas del ladrillo y los canales de la teja salen de la
+posición, así que dos paredes nunca repiten el mismo dibujo. La chapa no modela
+la onda: la mete en la normal, una línea, y da todo el relieve.
+
+**Dos errores que sólo se ven con una captura**, y por eso se corrió en un
+navegador de verdad antes de subir:
+
+- El techo no llevaba la rotación de las paredes. La casa quedaba con el techo
+  cruzado en diagonal. En el código se leía perfecto.
+- La cumbrera corría a lo ancho en vez de a lo largo, así que una casa de trece
+  por ocho quedaba con el techo como una carpa.
+
+El material va con `DoubleSide` y la normal invertida en las caras traseras
+(`gl_FrontFacing`), que blinda cualquier triángulo mal ordenado: sin eso, una
+cara al revés se ilumina como si el sol le pegara desde adentro.
 
 **95.000 briznas** en pantalla, unos **633.000 triángulos**, y cada una es una
 cinta que se afina hasta la punta, se arquea, se dobla con el viento y se aparta
