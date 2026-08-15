@@ -86,7 +86,10 @@ window.addEventListener('error',e=>{const b=document.getElementById('err'); if(!
   b.style.display='block'; b.textContent+=(e.message||e.error)+'\n'+(e.filename||'')+':'+(e.lineno||'')+'\n';});
 </script>
 <script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
 </script>
 <script type="module">
 import * as THREE from 'three';
@@ -718,12 +721,54 @@ function techoDosAguas(x,y,z, ancho, fondo, alturaCumbrera, alero, col, tipo, co
   tri(P(A,y,F),  P(A,y,-F), P(A,cum,0),  cf, tf);
 }
 
+/* Los detalles que separan "una caja con agujeros" de una casa: el postigo de
+   madera al costado de cada ventana, la puerta con sus paneles hundidos, la
+   canaleta bajo el alero con su bajada, y el escalon de entrada. */
+function postigos(ax,az,bx,bz, hu, gr){
+  const rot=Math.atan2(bz-az,bx-ax), co=Math.cos(rot), si=Math.sin(rot);
+  const M=(u,off)=>[ax+co*u-si*off, az+si*u+co*off];
+  for(const lado of [-1,1]){
+    const u=hu.u+lado*(hu.w/2+hu.w*0.24);
+    const p=M(u, -gr*0.62);
+    caja(p[0],hu.y,p[1], hu.w*0.46, hu.h, 0.045, rot, COL.postigo, T_MADERA, false);
+    /* las tablillas: tres listones apenas salidos, que es lo que da la lectura */
+    for(let i=0;i<3;i++){
+      const q=M(u, -gr*0.62-0.028);
+      caja(q[0], hu.y+hu.h*(0.18+i*0.30), q[1], hu.w*0.42, hu.h*0.20, 0.022,
+           rot, COL.postigoOsc, T_MADERA, false);
+    }
+  }
+}
+function puertaPanel(ax,az,bx,bz, hu, gr){
+  const rot=Math.atan2(bz-az,bx-ax), co=Math.cos(rot), si=Math.sin(rot);
+  const M=(u,off)=>[ax+co*u-si*off, az+si*u+co*off];
+  const p=M(hu.u, -gr*0.30);
+  caja(p[0],hu.y+0.02,p[1], hu.w-0.09, hu.h-0.04, 0.055, rot, COL.puerta, T_MADERA, false);
+  for(let i=0;i<2;i++){
+    const q=M(hu.u, -gr*0.30-0.032);
+    caja(q[0], hu.y+0.22+i*(hu.h*0.46), q[1], hu.w*0.58, hu.h*0.34, 0.02,
+         rot, COL.puertaOsc, T_MADERA, false);
+  }
+  const m=M(hu.u+hu.w*0.32, -gr*0.30-0.05);   // el picaporte
+  caja(m[0], hu.y+1.02, m[1], 0.10,0.045,0.045, rot, COL.hierro, T_HIERRO, false);
+}
+function canaleta(x,y,z, largo, rot, lado){
+  const co=Math.cos(rot), si=Math.sin(rot);
+  const px=x-si*lado, pz=z+co*lado;
+  caja(px,y,pz, largo, 0.10, 0.13, rot, COL.chapa, T_CHAPA, false);
+  /* la bajada, en una punta */
+  const bx=px+co*(largo/2-0.3), bz2=pz+si*(largo/2-0.3);
+  caja(bx, 0, bz2, 0.09, y, 0.09, rot, COL.chapa, T_CHAPA, false);
+}
+
 const COL={
   cal:[0.90,0.88,0.83], calSombra:[0.80,0.78,0.72], zocalo:[0.42,0.36,0.31],
   chapa:[0.62,0.64,0.66], chapaVieja:[0.55,0.50,0.46], teja:[0.55,0.24,0.16],
   madera:[0.44,0.31,0.19], maderaClara:[0.62,0.48,0.31], marco:[0.28,0.30,0.34],
   vidrio:[0.10,0.14,0.18], hierro:[0.30,0.31,0.33], ladrillo:[0.52,0.28,0.20],
-  silo:[0.72,0.73,0.74], poste:[0.38,0.28,0.18]
+  silo:[0.72,0.73,0.74], poste:[0.38,0.28,0.18],
+  postigo:[0.24,0.34,0.30], postigoOsc:[0.18,0.27,0.24],
+  puerta:[0.36,0.22,0.13], puertaOsc:[0.28,0.17,0.10]
 };
 
 /* ---------------------------------------------------------- la casa grande */
@@ -734,13 +779,26 @@ function casco(X,Z,rot){
   /* plinto de ladrillo: las casas de campo se levantan del suelo */
   caja(X,-0.02,Z, A+0.5, 0.42, F+0.5, rot, COL.ladrillo, T_LADRILLO, false);
   /* frente, con la puerta al medio y dos ventanas grandes */
-  pared(e1[0],e1[1], e2[0],e2[1], alto, gr, COL.cal, T_REVOQUE, [
+  const frente=[
     {u:A/2,     y:0,    w:1.30, h:2.30},
     {u:A/2-3.6, y:0.95, w:1.35, h:1.35},
     {u:A/2+3.6, y:0.95, w:1.35, h:1.35},
     {u:1.9,     y:0.95, w:1.10, h:1.30},
     {u:A-1.9,   y:0.95, w:1.10, h:1.30}
-  ]);
+  ];
+  pared(e1[0],e1[1], e2[0],e2[1], alto, gr, COL.cal, T_REVOQUE, frente);
+  for(const hu of frente){
+    if(hu.y>0.01) postigos(e1[0],e1[1], e2[0],e2[1], hu, gr);
+    else          puertaPanel(e1[0],e1[1], e2[0],e2[1], hu, gr);
+  }
+  /* el escalon de la entrada */
+  {
+    const rot2=Math.atan2(e2[1]-e1[1], e2[0]-e1[0]);
+    const px=e1[0]+Math.cos(rot2)*(A/2)-Math.sin(rot2)*(-0.55);
+    const pz=e1[1]+Math.sin(rot2)*(A/2)+Math.cos(rot2)*(-0.55);
+    caja(px,0.0,pz, 1.9, 0.20, 0.62, rot2, COL.ladrillo, T_LADRILLO, false);
+    caja(px,0.20,pz, 1.6, 0.18, 0.46, rot2, COL.ladrillo, T_LADRILLO, false);
+  }
   pared(e3[0],e3[1], e4[0],e4[1], alto, gr, COL.cal, T_REVOQUE, [
     {u:A/2, y:0, w:1.20, h:2.25},
     {u:3.2, y:1.0, w:1.10, h:1.25}, {u:A-3.2, y:1.0, w:1.10, h:1.25}
@@ -766,6 +824,9 @@ function casco(X,Z,rot){
   /* el techo grande y la chimenea */
   const c=R(0,0);
   techoDosAguas(c[0],alto,c[1], A, F, 1.85, 0.55, COL.teja, T_TEJA, COL.cal, rot);
+  /* canaletas bajo los dos aleros */
+  canaleta(c[0], alto-0.06, c[1], A+1.0, rot,  F/2+0.52);
+  canaleta(c[0], alto-0.06, c[1], A+1.0, rot, -(F/2+0.52));
   const ch=R(A/2-2.2, -0.7);
   caja(ch[0],alto+0.6,ch[1], 0.72,1.85,0.72, rot, COL.ladrillo, T_LADRILLO, false);
   caja(ch[0],alto+2.45,ch[1], 0.95,0.14,0.95, rot, COL.ladrillo, T_LADRILLO, false);
@@ -1115,6 +1176,195 @@ escena.add(mallaEdificios);
    y el suelo, y de ahi en mas el pastizal sabe que hay algo encima */
 volcarHuellas();
 
+const PJ_URL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@237dfb6586/mundo/pj/soldado.glb';
+
+/* ============================================================================
+   EL PERSONAJE EN PRIMERA PERSONA
+
+   Un cuerpo riggeado de verdad, con esqueleto Mixamo (51 huesos), que se
+   mueve con vos: mirás para abajo y ahí están tu pecho, tus brazos y tus
+   piernas, caminando o corriendo segun lo rapido que vayas.
+
+   Tres decisiones que hacen que esto funcione y no sea un chiste:
+
+   1) LA CABEZA SE ESCONDE. La camara esta a la altura de los ojos, o sea
+      DENTRO del craneo. Si no se achica el hueso de la cabeza a cero, lo que
+      se ve es el interior de la cara. Se achica despues de que el mixer
+      escribio las poses, no antes, porque si no la animacion lo pisa.
+   2) EL CUERPO NO SIGUE A LA CAMARA EN VERTICAL. Es tentador colgar la camara
+      del hueso de la cabeza para que el cabeceo sea "real", pero entonces al
+      mirar los pies se ven patinar contra el piso, porque el mundo se mueve
+      con tu cabeza. El cuerpo se queda plantado donde esta el jugador y la
+      camara hace su propio cabeceo, que es lo que hacen los juegos.
+   3) EL SALTO SE FABRICA. El modelo trae Idle, Walk y Run y NO trae salto. En
+      vez de cambiar de modelo o de meter uno de robot, se arma la animacion a
+      mano: son rotaciones sobre nueve huesos en cuatro tiempos. Impulso,
+      encogida en el aire, estirada para caer y vuelta a lo normal.
+============================================================================ */
+const PJ3={ listo:false, raiz:null, mezcla:null, acc:{}, huesos:{}, saltando:0,
+           alto:1.0, activo:true };
+/* El campo entero se dibuja con materiales propios que resuelven la luz a
+   mano, asi que la escena no tiene ni una luz. El cuerpo, en cambio, viene del
+   glb con MeshStandardMaterial y SIN luces se dibuja negro —literalmente una
+   silueta—. Se agregan dos, y solo las mira el. Cuestan nada y se mantienen
+   pegadas al mismo sol que todo lo demas, asi el cuerpo no queda iluminado de
+   otra hora del dia que el paisaje. */
+const luzSol=new THREE.DirectionalLight(0xffffff, 2.7);
+const luzCielo=new THREE.HemisphereLight(0x9fc6e8, 0x2a3a18, 1.05);
+escena.add(luzSol); escena.add(luzCielo);
+function ponerLucesPersonaje(){
+  luzSol.position.copy(SOL).multiplyScalar(50);
+  luzSol.color.copy(SOLC);
+  luzSol.intensity=2.7*Math.max(0.10, SOL.y);
+  luzCielo.color.copy(CIELO);
+  luzCielo.intensity=0.55+0.55*Math.max(0.0, SOL.y);
+}
+const _vw=new THREE.Vector3();
+
+/* ---------------------------------------------------------- el salto a mano
+   Cada hueso lleva sus cuatro cuaterniones. Los angulos estan en grados y en
+   el eje que corresponde: la pierna se dobla en X, el brazo se abre en Z. */
+function clipDeSalto(){
+  const T=[0.0, 0.16, 0.42, 0.72];
+  const q=(gx,gy,gz)=>{
+    const e=new THREE.Euler(gx*Math.PI/180, gy*Math.PI/180, gz*Math.PI/180, 'XYZ');
+    return new THREE.Quaternion().setFromEuler(e);
+  };
+  /* [neutro, impulso, en el aire, cayendo] */
+  const POSES={
+    'mixamorig:Spine':      [q(0,0,0), q(-14,0,0), q(-8,0,0),  q(10,0,0)],
+    'mixamorig:Spine1':     [q(0,0,0), q(-8,0,0),  q(-5,0,0),  q(6,0,0)],
+    'mixamorig:LeftUpLeg':  [q(0,0,0), q(28,0,0),  q(-52,0,0), q(16,0,0)],
+    'mixamorig:RightUpLeg': [q(0,0,0), q(28,0,0),  q(-46,0,0), q(20,0,0)],
+    'mixamorig:LeftLeg':    [q(0,0,0), q(-55,0,0), q(78,0,0),  q(-30,0,0)],
+    'mixamorig:RightLeg':   [q(0,0,0), q(-55,0,0), q(70,0,0),  q(-34,0,0)],
+    'mixamorig:LeftFoot':   [q(0,0,0), q(24,0,0),  q(-26,0,0), q(14,0,0)],
+    'mixamorig:RightFoot':  [q(0,0,0), q(24,0,0),  q(-22,0,0), q(16,0,0)],
+    /* los brazos suben al impulso: es lo que se ve desde adentro */
+    'mixamorig:LeftArm':    [q(0,0,0), q(-38,0,14), q(-62,0,22), q(-18,0,8)],
+    'mixamorig:RightArm':   [q(0,0,0), q(-38,0,-14),q(-62,0,-22),q(-18,0,-8)],
+    'mixamorig:LeftForeArm':[q(0,0,0), q(-20,0,0), q(-34,0,0), q(-10,0,0)],
+    'mixamorig:RightForeArm':[q(0,0,0),q(-20,0,0), q(-34,0,0), q(-10,0,0)]
+  };
+  const pistas=[];
+  for(const [hueso, poses] of Object.entries(POSES)){
+    const vals=[];
+    for(const p of poses) vals.push(p.x,p.y,p.z,p.w);
+    pistas.push(new THREE.QuaternionKeyframeTrack(hueso+'.quaternion', T, vals));
+  }
+  return new THREE.AnimationClip('Salto', T[T.length-1], pistas);
+}
+
+/* ------------------------------------------------------------------ cargar */
+async function cargarPersonaje(){
+  let GLTFLoader;
+  try{ ({GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js')); }
+  catch(e){ console.warn('sin GLTFLoader:', e); return; }
+  const gltf=await new Promise((ok,mal)=>
+    new GLTFLoader().load(PJ_URL, ok, undefined, mal)).catch(e=>{
+      console.warn('no se pudo cargar el personaje:', e); return null; });
+  if(!gltf) return;
+
+  const raiz=gltf.scene;
+  /* Se mide y se escala para que la cabeza quede a la altura de los ojos.
+     El modelo puede venir en centimetros o con otra estatura; medirlo es mas
+     confiable que confiar en un numero. */
+  raiz.traverse(o=>{ if(o.isBone) PJ3.huesos[o.name]=o; });
+  /* La escala se saca del HUESO DE LA CABEZA, no de la caja del modelo. Lo que
+     tiene que coincidir con la altura de los ojos es la cabeza; si se usa la
+     caja, la coronilla queda a 1.66 y los ojos quedan hundidos en el pecho, que
+     es exactamente lo que pasaba: se veia una silueta tapando media pantalla. */
+  raiz.updateMatrixWorld(true);
+  const cab=PJ3.huesos['mixamorig:Head'];
+  let k=1;
+  if(cab){ cab.getWorldPosition(_vw); k=PJ.altoOjo/Math.max(_vw.y,0.001); }
+  else {
+    const caja=new THREE.Box3().setFromObject(raiz);
+    k=(PJ.altoOjo+0.14)/Math.max(caja.max.y-caja.min.y,0.001);
+  }
+  raiz.scale.setScalar(k);
+  raiz.updateMatrixWorld(true);
+  const caja2=new THREE.Box3().setFromObject(raiz);
+  PJ3.alto=caja2.max.y-caja2.min.y;
+
+  raiz.traverse(o=>{
+    if(o.isMesh){
+      o.frustumCulled=false;
+      o.castShadow=false; o.receiveShadow=false;
+      /* el material que trae el glb es MeshStandard y no conoce nuestra
+         niebla ni nuestro sol; se le empareja el tono a mano para que el
+         cuerpo no se vea de otro mundo que el resto */
+      if(o.material){ o.material.envMapIntensity=0.6; o.material.roughness=0.85; }
+    }
+    if(o.isBone) PJ3.huesos[o.name]=o;
+  });
+
+  const mez=new THREE.AnimationMixer(raiz);
+  const buscar=n=>gltf.animations.find(a=>a.name===n);
+  for(const n of ['Idle','Walk','Run']){
+    const c=buscar(n); if(!c) continue;
+    const a=mez.clipAction(c); a.play(); a.setEffectiveWeight(n==='Idle'?1:0);
+    PJ3.acc[n]=a;
+  }
+  const salto=mez.clipAction(clipDeSalto());
+  salto.setLoop(THREE.LoopOnce, 1); salto.clampWhenFinished=true;
+  salto.setEffectiveWeight(0);
+  PJ3.acc.Salto=salto;
+
+  escena.add(raiz);
+  PJ3.raiz=raiz; PJ3.mezcla=mez; PJ3.listo=true;
+  /* la cabeza no se dibuja: la camara esta adentro */
+  PJ3.cabeza=PJ3.huesos['mixamorig:Head']||null;
+}
+
+/* ------------------------------------------------------------ cada cuadro */
+const CAMINA=3.35, CORRE=6.2;
+function moverPersonaje(dt){
+  if(!PJ3.listo) return;
+  const R=PJ3.raiz;
+  R.visible=PJ3.activo;
+  if(!PJ3.activo) return;
+
+  /* Plantado en el jugador. El modelo mira a +Z de fabrica y nuestro adelante
+     es (-sin yaw, -cos yaw), asi que hay que darle media vuelta. */
+  /* Corrido un poco hacia atras: la camara esta donde estaba la cabeza, y sin
+     este retroceso el cuello y el pecho cruzan el plano cercano y se ve el
+     cuerpo por dentro. Catorce centimetros alcanzan. */
+  const fx=-Math.sin(PJ.yaw), fz=-Math.cos(PJ.yaw);
+  R.position.set(PJ.x-fx*0.15, PJ.y, PJ.z-fz*0.15);
+  R.rotation.y=PJ.yaw+Math.PI;
+
+  /* mezcla por velocidad: quieto, caminando, corriendo. Los pesos se cruzan
+     de a poco para que no haya saltos entre una animacion y la otra */
+  const v=PJ.rapidez;
+  let wI=0, wW=0, wR=0;
+  if(v<0.15) wI=1;
+  else if(v<CAMINA){ const t=Math.min(1,(v-0.15)/(CAMINA-0.15)); wI=1-t; wW=t; }
+  else { const t=Math.min(1,(v-CAMINA)/(CORRE-CAMINA)); wW=1-t; wR=t; }
+  const suave=(a,w)=>{ if(!a) return;
+    a.setEffectiveWeight(a.getEffectiveWeight()+(w-a.getEffectiveWeight())*Math.min(1,dt*10)); };
+  suave(PJ3.acc.Idle, wI); suave(PJ3.acc.Walk, wW); suave(PJ3.acc.Run, wR);
+  /* El paso se acelera con la velocidad. Sin esto los pies patinan: la
+     animacion avanza a ritmo fijo mientras el cuerpo se mueve a otro. */
+  if(PJ3.acc.Walk) PJ3.acc.Walk.timeScale=Math.max(0.45, v/CAMINA*1.05);
+  if(PJ3.acc.Run)  PJ3.acc.Run.timeScale =Math.max(0.65, v/CORRE*1.10);
+
+  PJ3.mezcla.update(dt);
+
+  /* La cabeza SE ACHICA DESPUES del mixer: si se hiciera antes, la animacion
+     le vuelve a escribir la escala y se ve el interior del craneo. */
+  if(PJ3.cabeza) PJ3.cabeza.scale.setScalar(0.001);
+}
+function saltoPersonaje(){
+  if(!PJ3.listo || !PJ3.acc.Salto) return;
+  const a=PJ3.acc.Salto;
+  a.reset(); a.setEffectiveWeight(1); a.fadeIn(0.06); a.play();
+}
+function caidaPersonaje(){
+  if(!PJ3.listo || !PJ3.acc.Salto) return;
+  PJ3.acc.Salto.fadeOut(0.18);
+}
+
 /* ============================================================================
    POST · un solo pase al final
    Brillo derramado, ACES, contraste, color, nitidez de contraste adaptativo y
@@ -1238,7 +1488,7 @@ function pasoJugador(paso){
     if(!PJ.enSuelo&&PJ.vy<-3){ CAM.vHundir-=Math.min(5.5,-PJ.vy*0.55);
       CAM.sacudir=Math.min(0.5,-PJ.vy*0.045); roce(1.0,true);
       /* al caer de un salto se aplasta mucho mas y mas ancho */
-      pisar(PJ.x, PJ.z, 1.0, 0.85); }
+      pisar(PJ.x, PJ.z, 1.0, 0.85); caidaPersonaje(); }
     PJ.y=0; PJ.vy=0; PJ.enSuelo=true;
   } else if(PJ.y>0.06) PJ.enSuelo=false;
 }
@@ -1266,7 +1516,8 @@ function frenarContraEdificios(){
   }
   PJ.x=x; PJ.z=z;
 }
-function saltar(){ if(!PJ.enSuelo) return; PJ.vy=6.6; PJ.enSuelo=false; CAM.vHundir+=1.5; roce(0.5); }
+function saltar(){ if(!PJ.enSuelo) return; PJ.vy=6.6; PJ.enSuelo=false; CAM.vHundir+=1.5;
+  roce(0.5); saltoPersonaje(); }
 function ponerCamara(dt){
   const dx=Math.cos(PJ.yaw), dz=-Math.sin(PJ.yaw);
   const amp=PJ.andando*(0.028+PJ.rapidez*0.005);
@@ -1423,6 +1674,7 @@ function ponerSol(a){
   SOLC.setRGB(1, 0.97-calor*0.22, 0.92-calor*0.48);
   CIELO.setHSL(0.58, lerp(0.55,0.62,a), lerp(0.30,0.52,a));
   HORIZ.setHSL(lerp(0.10,0.55,Math.min(1,a*1.5)), lerp(0.55,0.30,a), lerp(0.55,0.82,a));
+  ponerLucesPersonaje();
   for(const m of MATS){
     if(m.uniforms.luz) m.uniforms.luz.value.copy(SOL);
     if(m.uniforms.uSolC) m.uniforms.uSolC.value.copy(SOLC);
@@ -1457,6 +1709,7 @@ function bucle(ahora){
   seguirPasto(PJ.x,PJ.z);
   recentrarPisadas(PJ.x,PJ.z);
   levantarPasto(dt);
+  moverPersonaje(dt);
   PASTO_U.uT.value=T;
   PASTO_U.uJug.value.set(PJ.x,PJ.y,PJ.z);
   PASTO_U.uOjo.value.copy(camara.position);
@@ -1498,6 +1751,9 @@ ponerSol(0.55); ponerNiebla(0.22);
 seguirPasto(PJ.x,PJ.z); ponerCamara(0.016);
 requestAnimationFrame(bucle);
 setTimeout(esconderAyuda, 11000);
+/* El cuerpo se baja en segundo plano: son dos megas y el campo tiene que
+   andar desde el primer cuadro. Si no llega, no pasa nada — se juega igual. */
+cargarPersonaje();
 window.__dbg={
   get fps(){ return fps; },
   get edificios(){ return {choques:CHOQUES.length, huellas:HUELLAS.length,
@@ -1515,6 +1771,11 @@ window.__dbg={
   aparta(r){ PASTO_U.uRJug.value=r; },
   pasto(v){ for(const c of CAMPOS) c.malla.visible=v!==false; },
   pisar(x,z,f,r){ pisar(x,z,f===undefined?0.95:f, r===undefined?0.34:r); },
+  get pj(){ return {listo:PJ3.listo, alto:+PJ3.alto.toFixed(2), activo:PJ3.activo,
+    acciones:Object.keys(PJ3.acc), huesos:Object.keys(PJ3.huesos).length,
+    pesos:Object.fromEntries(Object.entries(PJ3.acc).map(([k,a])=>[k,+a.getEffectiveWeight().toFixed(2)]))}; },
+  cuerpo(v){ PJ3.activo=v!==false; },
+  saltar(){ saltar(); },
   calidad(n){ autoNivel=(n===undefined); if(n!==undefined){ nivel=n; aplicarNivel(); } return nivel; },
   get piezas(){ let n=0,t=0; escena.traverse(o=>{ if(o.isMesh&&o.visible){ n++;
     const g=o.geometry, ic=g.instanceCount||1;
