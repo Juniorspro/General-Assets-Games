@@ -1716,6 +1716,92 @@ navegador de verdad antes de subir:
 - La cumbrera corría a lo ancho en vez de a lo largo, así que una casa de trece
   por ocho quedaba con el techo como una carpa.
 
+### PBR de verdad
+
+La iluminación pasó de una difusa con un brillo puestos a ojo a
+**Cook-Torrance**: GGX para la distribución, Smith para el sombreado
+geométrico, Schlick para el Fresnel. Lo que separa una superficie de otra no es
+el color: es **cuánto se abre el reflejo** (rugosidad) y si el reflejo se tiñe
+del color propio (metal) o queda blanco (dieléctrico). Con eso, el mismo gris
+es zinc o es revoque.
+
+| Material | Rugosidad | Metal |
+|---|---|---|
+| revoque a la cal | 0,94 | 0 |
+| chapa de zinc | 0,38 → 0,82 con óxido | 0,70 |
+| teja | 0,62 → 0,92 con musgo | 0 |
+| madera | 0,78 | 0 |
+| ladrillo | 0,90 | 0 |
+| vidrio | 0,045 | 0 |
+| hierro | 0,40 | 0,92 |
+
+Todo procedural: no hay un solo archivo de textura. El acanalado, las hiladas y
+los canales de la teja salen de la posición en metros del mundo, y la onda de
+la chapa se mete en la normal en vez de modelarse.
+
+**Un tercer error que costó otra captura:** con Lambert crudo, todo lo que no
+mira al sol se queda sólo con el cielo, y el cielo es azul saturado — así que
+la casa, los silos y el techo se pusieron **azules**. Se arregló con **difusa
+envolvente** (se corre el coseno medio grado y se renormaliza, porque al aire
+libre el sol rebota y sigue llegando algo) y **desaturando el cielo antes de
+usarlo como luz**: como color del cielo está bien saturado, como iluminación
+tiñe todo y las paredes blancas dejan de ser blancas.
+
+### Sombras sin mapa de sombras
+
+El suelo es un plano en y=0 y cada edificio es un bulto de altura conocida, así
+que la sombra sale por geometría: se corre la huella en sentido contrario al
+sol una distancia `alto/tan(elevación)` y se la estira en esa dirección. Para
+un bulto redondo sobre un plano es **exacta**, y —a diferencia de un shadow
+map— **la reciben también las briznas**, que son cientos de miles y se dibujan
+por instancia. El borde se difumina cuanto más larga es la sombra, porque con
+sol rasante una sombra no tiene filo.
+
+### El pasto se aplasta donde caminás
+
+Una textura de un canal cubre una ventana de 140 m alrededor del jugador. Cada
+pisada estampa un disco; el buffer se **corre en texeles enteros** cuando te
+alejás del centro, así la huella queda anclada al mundo y no a vos. El shader
+de las briznas la lee y las acuesta —volcándolas hacia su propio lado al azar,
+que es como queda el pasto pisoteado de verdad, no todo peinado para el mismo
+lado— y el suelo debajo se oscurece. Se levanta solo en unos 35 segundos. Al
+caer de un salto se aplasta más y más ancho.
+
+Un arreglo de uniformes no servía: se queda corto a los pocos metros de rastro.
+
+### El personaje en primera persona
+
+Cuerpo riggeado de verdad, esqueleto Mixamo de 49 huesos, mezclando
+**Idle / Walk / Run** por velocidad, con el paso acelerado según lo rápido que
+vayas — si no, los pies patinan contra el piso.
+
+Tres decisiones que lo hacen funcionar:
+
+1. **La cabeza se esconde**, achicando su hueso **después** de que el mixer
+   escribió las poses; antes, la animación lo vuelve a pisar. La cámara está
+   dentro del cráneo: sin esto se ve el interior de la cara.
+2. **La escala sale del hueso de la cabeza, no de la caja del modelo.** Con la
+   caja, la coronilla queda a la altura de los ojos y los ojos terminan
+   hundidos en el pecho: se veía una silueta tapando media pantalla.
+3. **El cuerpo no cuelga de la cámara.** Es tentador colgarla del hueso de la
+   cabeza para que el cabeceo sea "real", pero entonces al mirarte los pies se
+   ven patinar, porque el mundo se mueve con tu cabeza. El cuerpo se queda
+   plantado y va 15 cm atrás, para que el cuello no cruce el plano cercano.
+
+**El salto no venía en el modelo** —trae Idle, Walk y Run y nada más—. En vez
+de cambiar a un modelo de robot, se fabrica: rotaciones sobre doce huesos en
+cuatro tiempos (impulso, encogida en el aire, estirada para caer, vuelta a lo
+normal) armadas como un `AnimationClip` en tiempo de ejecución.
+
+Y una que sólo se ve corriendo el juego: **el cuerpo se dibujaba negro**. Todo
+el campo usa materiales propios que resuelven la luz a mano, así que la escena
+no tenía ni una luz; el glb viene con `MeshStandardMaterial` y sin luces es una
+silueta. Se agregaron una direccional y una hemisférica pegadas al mismo sol
+que el resto — y sólo las mira el personaje.
+
+El modelo son 2 MB y se baja **en segundo plano**: el campo anda desde el
+primer cuadro y si el cuerpo no llega, se juega igual.
+
 El material va con `DoubleSide` y la normal invertida en las caras traseras
 (`gl_FrontFacing`), que blinda cualquier triángulo mal ordenado: sin eso, una
 cara al revés se ilumina como si el sol le pegara desde adentro.
