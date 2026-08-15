@@ -173,19 +173,89 @@ const NIEBLA_GLSL=`
    suave: un corte limpio se ve peor que no hacer nada. El suelo, en el mismo
    sitio, se pela y se pone tierra pisada. Van como uniforme compartido porque
    los miran tres materiales distintos. */
+/* ------------------------------------------------------------- las pisadas
+   Por donde caminaste el pasto queda acostado, y se levanta solo al rato.
+   Se lleva en una textura de un canal que cubre una ventana de 140 m alrededor
+   del jugador: cuando uno se aleja del centro, el buffer se corre en texeles
+   enteros —no se borra— asi la huella queda anclada al mundo y no al jugador.
+   Es lo unico que puede guardar un rastro largo: un arreglo de uniformes se
+   queda corto a los pocos metros. */
+const PIS_N=256, PIS_LADO=140, PIS_ESC=PIS_N/PIS_LADO;
+const pisBuf=new Uint8Array(PIS_N*PIS_N);
+const pisTex=new THREE.DataTexture(pisBuf, PIS_N, PIS_N, THREE.RedFormat);
+pisTex.minFilter=THREE.LinearFilter; pisTex.magFilter=THREE.LinearFilter;
+pisTex.wrapS=THREE.ClampToEdgeWrapping; pisTex.wrapT=THREE.ClampToEdgeWrapping;
+pisTex.needsUpdate=true;
+const PIS_U={ uPis:{value:pisTex}, uPisCen:{value:new THREE.Vector2()},
+              uPisEsc:{value:PIS_ESC}, uPisN:{value:PIS_N} };
+const PIS_GLSL=`
+  uniform sampler2D uPis; uniform vec2 uPisCen; uniform float uPisEsc, uPisN;
+  float pisadoEn(vec2 P){
+    vec2 t=((P-uPisCen)*uPisEsc+uPisN*0.5)/uPisN;
+    if(t.x<0.0||t.x>1.0||t.y<0.0||t.y>1.0) return 0.0;
+    return texture2D(uPis, t).r;
+  }`;
+function recentrarPisadas(x,z){
+  const m=PIS_LADO*0.26;
+  const dx=x-PIS_U.uPisCen.value.x, dz=z-PIS_U.uPisCen.value.y;
+  if(Math.abs(dx)<m && Math.abs(dz)<m) return;
+  const tx=Math.round(dx*PIS_ESC), tz=Math.round(dz*PIS_ESC);
+  const copia=pisBuf.slice();
+  pisBuf.fill(0);
+  for(let j=0;j<PIS_N;j++){
+    const sj=j+tz; if(sj<0||sj>=PIS_N) continue;
+    const fd=j*PIS_N, fo=sj*PIS_N;
+    for(let i=0;i<PIS_N;i++){
+      const si=i+tx; if(si<0||si>=PIS_N) continue;
+      pisBuf[fd+i]=copia[fo+si];
+    }
+  }
+  PIS_U.uPisCen.value.x+=tx/PIS_ESC; PIS_U.uPisCen.value.y+=tz/PIS_ESC;
+  pisTex.needsUpdate=true;
+}
+function pisar(x,z,fuerza,radio){
+  const cx=(x-PIS_U.uPisCen.value.x)*PIS_ESC+PIS_N*0.5;
+  const cz=(z-PIS_U.uPisCen.value.y)*PIS_ESC+PIS_N*0.5;
+  const r=Math.max(1.1, radio*PIS_ESC);
+  const i0=Math.max(0,Math.floor(cx-r)), i1=Math.min(PIS_N-1,Math.ceil(cx+r));
+  const j0=Math.max(0,Math.floor(cz-r)), j1=Math.min(PIS_N-1,Math.ceil(cz+r));
+  for(let j=j0;j<=j1;j++){
+    const dz2=(j-cz)*(j-cz), fila=j*PIS_N;
+    for(let i=i0;i<=i1;i++){
+      const d2=((i-cx)*(i-cx)+dz2)/(r*r);
+      if(d2>1) continue;
+      const v=(255*fuerza*(1-d2*d2))|0;
+      if(v>pisBuf[fila+i]) pisBuf[fila+i]=v;
+    }
+  }
+  pisTex.needsUpdate=true;
+}
+/* el pasto se levanta solo: un roce lento y parejo sobre todo el buffer */
+let pisT=0;
+function levantarPasto(dt){
+  pisT+=dt;
+  if(pisT<0.14) return;
+  pisT=0;
+  for(let k=0;k<pisBuf.length;k++){
+    const v=pisBuf[k];
+    if(v) pisBuf[k]= v>2 ? (v*0.982)|0 : 0;
+  }
+  pisTex.needsUpdate=true;
+}
+
 const HUELLA_MAX=20;
 const HUELLAS=[];
 const HUELLA_U={
-  uHue:{value:Array.from({length:HUELLA_MAX},()=>new THREE.Vector3(0,0,-1))},
+  uHue:{value:Array.from({length:HUELLA_MAX},()=>new THREE.Vector4(0,0,-1,0))},
   uHueN:{value:0}
 };
 function volcarHuellas(){
   const a=HUELLA_U.uHue.value, n=Math.min(HUELLA_MAX,HUELLAS.length);
-  for(let i=0;i<n;i++) a[i].set(HUELLAS[i].x, HUELLAS[i].z, HUELLAS[i].r);
+  for(let i=0;i<n;i++) a[i].set(HUELLAS[i].x, HUELLAS[i].z, HUELLAS[i].r, HUELLAS[i].alto||4.0);
   HUELLA_U.uHueN.value=n;
 }
 const HUELLA_GLSL=`
-  uniform vec3 uHue[20]; uniform int uHueN;
+  uniform vec4 uHue[20]; uniform int uHueN;
   /* distancia al edificio mas cercano; negativa quiere decir adentro */
   float distEdificio(vec2 P){
     float d=1e9;
@@ -194,6 +264,32 @@ const HUELLA_GLSL=`
       d=min(d, length(P-uHue[i].xy)-uHue[i].z);
     }
     return d;
+  }
+  /* LA SOMBRA, sin mapa de sombras.
+     El suelo es un plano en y=0 y cada edificio es un bulto de altura conocida,
+     asi que la sombra sale por geometria: se corre la huella en el sentido
+     contrario al sol una distancia alto/tan(elevacion) y se la estira en esa
+     misma direccion. Para un bulto redondo sobre un plano es EXACTA, cuesta
+     unas lineas, y —a diferencia de un shadow map— la reciben tambien las
+     briznas, que son cientos de miles y se dibujan por instancia. */
+  float sombraSol(vec2 P, vec3 luz){
+    float el=max(luz.y, 0.06);
+    vec2 dir=normalize(luz.xz+vec2(1e-5));
+    float som=0.0;
+    for(int i=0;i<20;i++){
+      if(i>=uHueN) break;
+      float largo=uHue[i].w/el;
+      vec2 c=uHue[i].xy - dir*largo*0.5;
+      vec2 q=P-c;
+      vec2 l=vec2(dot(q,dir), dot(q,vec2(-dir.y,dir.x)));
+      float a=uHue[i].z+largo*0.5, b=uHue[i].z;
+      float d=length(vec2(l.x/a, l.y/b));
+      /* cuanto mas larga la sombra, mas difuso el borde: con sol rasante una
+         sombra no tiene filo */
+      float suave=mix(0.12, 0.60, clamp(largo/26.0,0.0,1.0));
+      som=max(som, 1.0-smoothstep(1.0-suave, 1.0+suave*0.6, d));
+    }
+    return som*smoothstep(0.02,0.20,luz.y);
   }`;
 
 /* ============================================================================
@@ -241,7 +337,7 @@ cielo.frustumCulled=false; escena.add(cielo);
 const matSuelo=new THREE.ShaderMaterial({
   uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
     uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
-    uFogD:{value:nieblaD} }, HUELLA_U),
+    uFogD:{value:nieblaD} }, HUELLA_U, PIS_U),
   /* el plano sigue al jugador, así que la posición del mundo hay que sacarla de
      la matriz del objeto y no del atributo, o los manchones viajarían con uno */
   vertexShader:`varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.0);
@@ -251,6 +347,7 @@ const matSuelo=new THREE.ShaderMaterial({
     varying vec3 vW; uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
     ${RUIDO_GLSL}
     ${HUELLA_GLSL}
+    ${PIS_GLSL}
     ${NIEBLA_GLSL}
     void main(){
       /* el mismo campo de manchones que decide la altura del pasto, para que el
@@ -267,8 +364,13 @@ const matSuelo=new THREE.ShaderMaterial({
       vec3 tierra=vec3(0.115,0.088,0.055)*(0.82+0.36*ruido(vW.xz*2.6));
       col=mix(col, tierra, pisado*0.94);
       col*=1.0-0.50*(1.0-smoothstep(-0.7,1.1,dE));
-      float lamb=0.30+0.70*max(luz.y,0.0);
-      col*=lamb*uSolC*1.35 + uCielo*0.22;
+      /* la tierra pisada donde caminaste, mas oscura y sin briznas */
+      float pis=pisadoEn(vW.xz);
+      col=mix(col, col*vec3(0.70,0.66,0.58), pis*0.55);
+      /* la sombra que tira el edificio sobre el campo */
+      float som=sombraSol(vW.xz, luz);
+      float lamb=0.30+0.70*max(luz.y,0.0)*(1.0-som*0.82);
+      col*=lamb*uSolC*1.35 + uCielo*(0.22+som*0.10);
       gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
     }`
 });
@@ -311,16 +413,18 @@ function crearCampo(o){
     uniforms:Object.assign({ uBase:{value:new THREE.Vector2()}, uN:{value:N},
       uCelda:{value:o.celda}, uAncho:{value:o.ancho}, uDist:{value:o.dist},
       uCerca:{value:o.cerca||0}, uSem:{value:o.sem||0},
-      uAltoMin:{value:o.altoMin}, uAltoMax:{value:o.altoMax} }, PASTO_U, HUELLA_U),
+      uAltoMin:{value:o.altoMin}, uAltoMax:{value:o.altoMax} }, PASTO_U, HUELLA_U, PIS_U),
     vertexShader:`
       precision highp float;
       attribute vec2 iIdx;
       uniform vec2 uBase; uniform float uN,uCelda,uAncho,uDist,uCerca,uSem;
       uniform float uAltoMin,uAltoMax,uT,uViento,uArco,uAltoK,uDens,uRJug;
       uniform vec3 uJug,uOjo;
-      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos;
+      uniform vec3 luz;              // la necesita sombraSol, que corre por brizna
+      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom;
       ${RUIDO_GLSL}
       ${HUELLA_GLSL}
+      ${PIS_GLSL}
       void main(){
         /* la celda del mundo que le toca a esta brizna */
         vec2 g=uBase+mod(iIdx-uBase, vec2(uN));
@@ -351,6 +455,12 @@ function crearCampo(o){
                                 +0.20*sin(P.x*0.041-P.y*0.063-uT*0.33));
         float osc=sin(uT*1.9+P.x*0.7+P.y*0.55+r4*6.283)+0.42*sin(uT*3.7+P.x*1.5-P.y*1.1);
         float dob=(uArco*(0.35+r6*1.6) + uViento*raf*osc*0.60)*v*v;
+        /* lo pisado: la brizna se acuesta y se achica. Se vuelca hacia su
+           propio lado al azar, que es como queda el pasto pisoteado de verdad
+           —no todo peinado para el mismo lado—. */
+        float pis=pisadoEn(P);
+        dob+=pis*(3.1+r3*1.3)*v*v;
+        alto*=1.0-0.66*pis;
 
         float a=r4*6.2831853;
         vec2 dir=vec2(cos(a), sin(a));            // hacia dónde se vuelca
@@ -376,12 +486,14 @@ function crearCampo(o){
         vec3 nor=normalize(cross(lat3, tan));
         vNor=normalize(nor + lat3*lado*0.55);
         vV=v; vTono=0.80+r2*0.40; vSeco=smoothstep(0.72,1.0,r6);
+        vSom=sombraSol(P, luz);          // la sombra se calcula una vez por brizna
+        vTono*=1.0-0.28*pis;             // lo pisado se ve mas apagado y seco
         gl_Position=projectionMatrix*viewMatrix*vec4(W,1.0);
       }`,
     fragmentShader:`
       precision highp float;
       uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
-      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos;
+      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom;
       ${NIEBLA_GLSL}
       void main(){
         vec3 N=normalize(vNor);
@@ -391,7 +503,7 @@ function crearCampo(o){
         vec3 col=mix(vec3(0.030,0.082,0.020), vec3(0.190,0.430,0.070), pow(vV,0.80));
         col=mix(col, vec3(0.360,0.320,0.095), vSeco*0.50);
         col*=vTono;
-        float ndl=max(dot(N,luz),0.0);
+        float ndl=max(dot(N,luz),0.0)*(1.0-vSom*0.85);
         float lamb=0.26+0.80*ndl;
         /* translucidez: a contraluz la hoja se prende */
         float atras=pow(max(dot(-E,luz),0.0),2.4)*0.85*vV;
@@ -839,7 +951,9 @@ const matEdificio=new THREE.ShaderMaterial({
          ningun triangulo mal ordenado arruina la luz. */
       vec3 N=normalize(vN)*(gl_FrontFacing? 1.0 : -1.0);
       vec3 col=vC;
-      float brillo=0.0, aspero=1.0;
+      /* rugosidad y metalicidad por tipo: son los dos numeros que de verdad
+         separan un material de otro */
+      float rug=0.9, met=0.0;
       float t=vT;
 
       /* REVOQUE: manchas de cal, y suciedad que sube del piso por capilaridad,
@@ -849,6 +963,7 @@ const matEdificio=new THREE.ShaderMaterial({
         float humedad=smoothstep(0.75,0.0,vW.y)*0.55*(0.4+0.6*fbm(vW.xz*3.1));
         col=mix(col, vec3(0.42,0.40,0.34), humedad);
         col*=1.0-0.10*smoothstep(0.55,0.95,fbm(vW.xz*9.0));
+        rug=0.94; met=0.0;                     // cal: aspera y sin reflejo propio
       }
       /* CHAPA ACANALADA: la onda no se modela, se pone en la normal. Cuesta
          una linea y da todo el relieve. */
@@ -862,7 +977,8 @@ const matEdificio=new THREE.ShaderMaterial({
         /* oxido: manchas anaranjadas que bajan */
         float ox2=smoothstep(0.55,0.95,fbm(vW.xz*1.6+vec2(0.0,vW.y*0.8)));
         col=mix(col, vec3(0.42,0.24,0.13), ox2*0.45*smoothstep(4.0,0.5,vW.y));
-        brillo=0.35; aspero=0.35;
+        /* zinc: metal, y la rugosidad sube donde hay oxido */
+        met=0.70; rug=mix(0.38, 0.82, ox2);   // zinc viejo, no un espejo
       }
       /* MADERA: tablones y veta */
       else if(t<2.5){
@@ -870,6 +986,7 @@ const matEdificio=new THREE.ShaderMaterial({
         col*=0.88+0.16*fbm(vec2(vU.x*0.7, vU.y*22.0));
         col*=1.0-0.35*smoothstep(0.94,1.0,tab);
         col*=0.94+0.12*h21(floor(vec2(vU.y/0.145, 0.0)));
+        rug=0.78; met=0.0;
       }
       /* LADRILLO: hiladas trabadas */
       else if(t<3.5){
@@ -880,12 +997,13 @@ const matEdificio=new THREE.ShaderMaterial({
                    *smoothstep(0.0,0.16,v)*smoothstep(1.0,0.84,v);
         col=mix(vec3(0.62,0.60,0.55), col, junta);
         col*=0.86+0.28*h21(vec2(floor(vU.x/0.24+desf), fila));
+        rug=0.90; met=0.0;
       }
       /* VIDRIO: refleja el cielo segun el angulo y no tiene textura */
       else if(t<4.5){
         float f=pow(1.0-abs(dot(N, normalize(uOjo-vW))), 3.0);
         col=mix(vec3(0.05,0.07,0.09), uCielo*0.9, 0.25+f*0.7);
-        brillo=1.0; aspero=0.06;
+        rug=0.045; met=0.0;
       }
       /* TEJA: hiladas de canales redondeados */
       else if(t<5.5){
@@ -896,22 +1014,56 @@ const matEdificio=new THREE.ShaderMaterial({
         col*=0.90+0.24*h21(floor(vU*vec2(1.0/0.16, 1.0/0.33)));
         float musgo=smoothstep(0.68,0.95,fbm(vW.xz*0.9));
         col=mix(col, vec3(0.20,0.26,0.13), musgo*0.35);
+        rug=mix(0.62, 0.92, musgo); met=0.0;   // la teja vieja con musgo no brilla
       }
       /* HIERRO */
-      else { col*=0.9+0.2*fbm(vW.xz*4.0+vW.y*3.0); brillo=0.45; aspero=0.25; }
+      else { col*=0.9+0.2*fbm(vW.xz*4.0+vW.y*3.0); met=0.92; rug=0.40; }
 
-      /* Luz: el mismo criterio que el pasto y el suelo, para que peguen.
-         Difusa del sol, rebote del cielo por arriba y del suelo por abajo. */
-      float lamb=max(dot(N,luz),0.0);
-      float sombraSuave=0.30+0.70*lamb;
-      vec3 amb=uCielo*(0.28+0.22*max(N.y,0.0))+vec3(0.05,0.06,0.03)*max(-N.y,0.0);
-      vec3 lum=uSolC*sombraSuave*1.25+amb;
-      col*=lum;
-      if(brillo>0.0){
-        vec3 vdir=normalize(uOjo-vW);
-        vec3 hv=normalize(vdir+luz);
-        col+=uSolC*brillo*pow(max(dot(N,hv),0.0), mix(6.0,120.0,1.0-aspero))*max(lamb,0.0);
-      }
+      /* ------------------------------------------------------------------
+         PBR de verdad: Cook-Torrance con GGX, Smith y Fresnel de Schlick.
+         Antes esto era una difusa y un brillo puestos a ojo, y por eso la
+         chapa y el vidrio se veian del mismo material con distinto color. Lo
+         que cambia una superficie de otra no es el color: es CUANTO SE ABRE
+         el reflejo (rugosidad) y si el reflejo se tine del color propio
+         (metal) o queda blanco (dielectrico). Con eso, el mismo gris es zinc
+         o es revoque.
+         ------------------------------------------------------------------ */
+      vec3 Vv=normalize(uOjo-vW);
+      vec3 Lv=luz;
+      vec3 Hv=normalize(Vv+Lv);
+      float NdL=max(dot(N,Lv),0.0), NdV=max(dot(N,Vv),1e-4);
+      float NdH=max(dot(N,Hv),0.0), VdH=max(dot(Vv,Hv),0.0);
+
+      float a=max(rug*rug, 0.002), a2=a*a;
+      float den=NdH*NdH*(a2-1.0)+1.0;
+      float D=a2/(3.14159265*den*den);                 // distribucion GGX
+      float kg=(rug+1.0)*(rug+1.0)*0.125;              // Smith, aproximacion IBL-directa
+      float G=(NdL/(NdL*(1.0-kg)+kg))*(NdV/(NdV*(1.0-kg)+kg));
+      vec3 F0=mix(vec3(0.04), col, met);               // dielectrico 4%, metal su color
+      vec3 F=F0+(1.0-F0)*pow(1.0-VdH,5.0);
+      vec3 espec=(D*G)*F/(4.0*NdL*NdV+1e-4);   // sin la luz todavia
+      vec3 kd=(1.0-F)*(1.0-met);                       // lo que no se refleja, difunde
+
+      /* DIFUSA ENVOLVENTE. Un Lambert crudo deja en cero todo lo que no mira
+         al sol, y entonces esas caras se quedan SOLO con el cielo: azules. Al
+         aire libre eso no pasa, porque el sol rebota en la atmosfera y en el
+         suelo y sigue llegando algo. Se corre el coseno medio grado y se
+         renormaliza: es barato y saca de un plumazo el tinte azul de todo lo
+         que esta de espaldas. El especular NO se envuelve, ese si es directo. */
+      float NdLw=max((dot(N,Lv)+0.34)/1.34, 0.0);
+      vec3 difusa=kd*col/3.14159265*uSolC*3.2*NdLw;
+      vec3 brilloSol=espec*uSolC*3.2*NdL;
+
+      /* Ambiente en dos mitades: arriba el cielo, abajo el rebote verde del
+         pastizal. El cielo se desatura antes de usarlo como luz: como color
+         del cielo esta bien saturado, pero como ILUMINACION tine todo de azul
+         y las paredes blancas dejan de ser blancas. */
+      vec3 cieloLuz=mix(uCielo, vec3(dot(uCielo, vec3(0.30,0.59,0.11))), 0.55);
+      vec3 irr=mix(vec3(0.070,0.095,0.045), cieloLuz, 0.5+0.5*N.y);
+      vec3 Fr=F0+(max(vec3(1.0-rug),F0)-F0)*pow(1.0-NdV,5.0);
+      vec3 ambiente=kd*col*irr*0.62 + Fr*irr*0.32*(1.0-rug*0.75);
+
+      col=difusa+brilloSol+ambiente;
       gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
     }`,
   vertexColors:true, side:THREE.DoubleSide
@@ -1075,11 +1227,18 @@ function pasoJugador(paso){
   frenarContraEdificios();
   PJ.andando+=(Math.min(1,PJ.rapidez/2.4)-PJ.andando)*Math.min(1,7*paso);
   PJ.paso+=paso*PJ.rapidez*0.58;
-  if(PJ.paso>1){ PJ.paso-=1; CAM.vHundir-=0.5+PJ.rapidez*0.09; roce(0.5+PJ.rapidez*0.05); }
+  if(PJ.paso>1){ PJ.paso-=1; CAM.vHundir-=0.5+PJ.rapidez*0.09; roce(0.5+PJ.rapidez*0.05);
+    /* la pisada de verdad, con el pie: fuerte y chica */
+    pisar(PJ.x, PJ.z, 0.95, 0.34); }
+  /* y un rastro continuo mientras se camina, para que entre pisada y pisada
+     el surco no quede cortado */
+  if(PJ.enSuelo && PJ.rapidez>0.5) pisar(PJ.x, PJ.z, 0.55, 0.30);
   PJ.vy-=19.5*paso; PJ.y+=PJ.vy*paso;
   if(PJ.y<0){
     if(!PJ.enSuelo&&PJ.vy<-3){ CAM.vHundir-=Math.min(5.5,-PJ.vy*0.55);
-      CAM.sacudir=Math.min(0.5,-PJ.vy*0.045); roce(1.0,true); }
+      CAM.sacudir=Math.min(0.5,-PJ.vy*0.045); roce(1.0,true);
+      /* al caer de un salto se aplasta mucho mas y mas ancho */
+      pisar(PJ.x, PJ.z, 1.0, 0.85); }
     PJ.y=0; PJ.vy=0; PJ.enSuelo=true;
   } else if(PJ.y>0.06) PJ.enSuelo=false;
 }
@@ -1296,6 +1455,8 @@ function bucle(ahora){
   moverJugador(dt);
   pulsA=Math.max(0,pulsA-dt); pulsB=Math.max(0,pulsB-dt);
   seguirPasto(PJ.x,PJ.z);
+  recentrarPisadas(PJ.x,PJ.z);
+  levantarPasto(dt);
   PASTO_U.uT.value=T;
   PASTO_U.uJug.value.set(PJ.x,PJ.y,PJ.z);
   PASTO_U.uOjo.value.copy(camara.position);
@@ -1353,6 +1514,7 @@ window.__dbg={
   palanca(x,y){ palanca.activa=(x||y)!==0; palanca.x=x||0; palanca.y=y||0; },
   aparta(r){ PASTO_U.uRJug.value=r; },
   pasto(v){ for(const c of CAMPOS) c.malla.visible=v!==false; },
+  pisar(x,z,f,r){ pisar(x,z,f===undefined?0.95:f, r===undefined?0.34:r); },
   calidad(n){ autoNivel=(n===undefined); if(n!==undefined){ nivel=n; aplicarNivel(); } return nivel; },
   get piezas(){ let n=0,t=0; escena.traverse(o=>{ if(o.isMesh&&o.visible){ n++;
     const g=o.geometry, ic=g.instanceCount||1;
