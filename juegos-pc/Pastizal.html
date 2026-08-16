@@ -490,7 +490,10 @@ const NUBES_GLSL=`
     float h=clamp((P.y-${900}.0)/${1700}.0, 0.0, 1.0);
     /* perfil: base plana, panza redonda, corona deshilachada */
     float perfil=smoothstep(0.0,0.16,h)*smoothstep(1.0,0.42,h);
-    float d=(cob-cobMin)*perfil*2.6;
+    /* La cobertura promedia 0,5: con el umbral en 0,5 medio cielo era nube y
+       con el multiplicador alto quedaba un techo lechoso opaco. Umbral mas
+       arriba y densidad mas baja = nubes sueltas con cielo entre medio. */
+    float d=(cob-cobMin)*perfil*1.45;
     if(d<=0.0) return 0.0;
     if(detalle>0){
       /* la erosion se come los bordes y deja los coliflores */
@@ -531,10 +534,10 @@ const cieloMat=new THREE.ShaderMaterial({
   side:THREE.BackSide, depthWrite:false,
   uniforms:{ luz:{value:SOL.clone()}, uCenit:{value:CIELO.clone()},
              uHoriz:{value:HORIZ.clone()}, uSolC:{value:SOLC.clone()}, uT:{value:0},
-             uPano:{value:texCielo}, uPanoK:{value:0.30},
+             uPano:{value:texCielo}, uPanoK:{value:0.20},
              uOjoC:{value:new THREE.Vector3()},
              uPasosNube:{value:MOVIL?16:34}, uPasosLuz:{value:MOVIL?2:4},
-             uCobNube:{value:0.50}, uVolNube:{value:1.0} },
+             uCobNube:{value:0.615}, uVolNube:{value:1.0} },
   vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
     gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
@@ -595,8 +598,8 @@ const cieloMat=new THREE.ShaderMaterial({
           sombra+=densNube(Q, t, uCobNube, 0);
         }
         float luzN=exp(-sombra*1.35)+0.28*exp(-sombra*0.22);
-        vec3 col=solc*luzN*fase*3.4 + uCenit*0.55*(0.35+0.65*dens);
-        float ext=exp(-dens*dt*0.0026);
+        vec3 col=solc*luzN*fase*2.1 + uCenit*0.30*(0.35+0.65*dens);
+        float ext=exp(-dens*dt*0.0011);
         acc+=trans*(1.0-ext)*col;
         trans*=ext;
       }
@@ -2544,6 +2547,10 @@ let nivel=MOVIL?1:2, autoNivel=true, nivelT=0;
 const DIST0=[];
 function aplicarNivel(){
   const n=NIVELES[nivel];
+  /* la marcha de nubes acompana la calidad: es lo mas caro del cuadro cuando
+     se mira al cielo, asi que si el equipo sufre, lo primero que baja es esto */
+  cieloMat.uniforms.uPasosNube.value=[10,20,34][nivel];
+  cieloMat.uniforms.uPasosLuz.value=[2,3,4][nivel];
   for(let i=0;i<CAMPOS.length;i++) CAMPOS[i].mat.uniforms.uDist.value=DIST0[i]*n.p[i];
   PASTO_U.uDens.value=Math.min(parseFloat($('sDens').value), n.d);
   postBloom=n.b;
