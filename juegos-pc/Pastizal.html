@@ -351,6 +351,59 @@ const INT_GLSL=`
     return mejor;
   }`;
 
+/* ============================================================================
+   LA OCLUSION AMBIENTAL, A MANO Y SIN PANTALLA
+   Un SSAO cuesta un pase entero, muestrea la profundidad veinte veces por pixel
+   y se equivoca en todo lo que no esta en pantalla. Aca no hace falta: las
+   unicas esquinas que importan ya estan descriptas en datos que el shader tiene
+   —la huella dice donde esta el bulto y hasta que altura llega; el interior
+   dice donde estan sus cuatro paredes y su techo—. Con eso salen las tres
+   cosas que de verdad se ven y que sin ellas dejan todo pegoteado: el rincon
+   contra el piso, la franja bajo el alero y el encuentro pared-techo de
+   adentro. Cuesta dos bucles cortos y ni un byte de textura.
+   Se necesita HUELLA_GLSL y INT_GLSL antes.
+============================================================================ */
+const AO_GLSL=`
+  float aoEdificio(vec3 W, vec3 N){
+    float vert=1.0-abs(N.y);                      // cuanto de PARED tiene la cara
+    /* contra el piso, una pared ve la mitad del cielo que ve a dos metros */
+    float ao=mix(1.0-0.45*vert, 1.0, smoothstep(0.0, 1.10, W.y));
+    for(int i=0;i<20;i++){
+      if(i>=uHueN) break;
+      /* pegado al contorno del bulto Y a la altura de su alero: ahi el techo
+         que vuela le tapa el cielo a la pared, y esa franja oscura es lo que
+         hace que un alero se lea como alero */
+      float d=abs(length(W.xz-uHue[i].xy)-uHue[i].z);
+      float h=uHue[i].w;
+      float cerca=1.0-smoothstep(0.0, 2.0, d);
+      float alero=smoothstep(h-2.4, h-0.35, W.y)*(1.0-smoothstep(h-0.30, h+0.5, W.y));
+      ao=min(ao, 1.0-cerca*alero*0.50*vert);
+    }
+    return ao;
+  }
+  float aoInterior(vec3 W){
+    float ao=1.0;
+    for(int i=0;i<${INT_MAX};i++){
+      if(i>=uIntN) break;
+      float a=-uIntRA[i].x, c=cos(a), s=sin(a);
+      vec2 q=W.xz-uInt[i].xy;
+      vec2 l=vec2(q.x*c-q.y*s, q.x*s+q.y*c);
+      vec2 e=uInt[i].zw;
+      float dx=e.x-abs(l.x), dz=e.y-abs(l.y);
+      if(dx<-0.5||dz<-0.5) continue;
+      float alt=uIntRA[i].y;
+      /* Las cuatro contribuciones por separado, no la menor de todas: una
+         ESQUINA tapa mas que una pared sola, y si se toma solo la distancia
+         mas corta los rincones salen igual de claros que el medio de un muro. */
+      float k=(1.0-smoothstep(0.0,1.30,max(min(dx,dz),0.0)))*0.42
+             +(1.0-smoothstep(0.0,0.90,max(W.y,0.0)))*0.34
+             +(1.0-smoothstep(0.0,0.90,max(alt-W.y,0.0)))*0.30
+             +(1.0-smoothstep(0.0,1.10,max(dx,0.0)))*(1.0-smoothstep(0.0,1.10,max(dz,0.0)))*0.30;
+      ao=min(ao, 1.0-clamp(k,0.0,0.78));
+    }
+    return ao;
+  }`;
+
 /* la curva del cauce, declarada temprano porque la consultan el pasto y el
    suelo, que se crean antes que el rio */
 const RIO_X=-34.0, RIO_A=13.0, RIO_K=0.0165, RIO_ANCHO=7.6, RIO_ORILLA=4.2;
@@ -987,7 +1040,16 @@ const matSuelo=new THREE.ShaderMaterial({
       float hZ=ruido((vW.xz+vec2(0.0,e))*8.0+5.1)+0.45*ruido((vW.xz+vec2(0.0,e))*26.0);
       vec3 Nt=normalize(vec3(-(hX-hC)/e*0.16, 1.0, -(hZ-hC)/e*0.16));
       vec3 Ns=mix(vec3(0.0,1.0,0.0), Nt, tie*det);
-      col*=1.0-0.50*(1.0-smoothstep(-0.7,1.1,dE));
+      /* OCLUSION AMBIENTAL DEL PISO. Dos cosas le tapan el cielo: la pared que
+         tiene al lado y el propio pastizal. La pared es un rincon y se apaga en
+         un metro; el pastizal es un techo de briznas y se apaga en cuatro.
+         Sin esto el pasto corta contra el zocalo con una linea de navaja y con
+         el mismo brillo que el pasto abierto, que es lo que mas delata que
+         estan solo apoyados uno al lado del otro. */
+      float aoPared=mix(0.42, 1.0, smoothstep(-0.7, 1.1, dE))
+                   *mix(0.74, 1.0, smoothstep(0.0, 4.2, dE));
+      float aoPasto=mix(1.0, 0.48, (1.0-tie)*smoothstep(0.05,0.55,m));
+      col*=aoPared*aoPasto;
       /* la tierra pisada donde caminaste, mas oscura (pis ya se calculo arriba,
          porque decide cuanta tierra hay) */
       col=mix(col, col*vec3(0.70,0.66,0.58), pis*0.42);
@@ -1053,7 +1115,7 @@ function crearCampo(o){
       uniform float uAltoMin,uAltoMax,uT,uViento,uArco,uAltoK,uDens,uRJug;
       uniform vec3 uJug,uOjo;
       uniform vec3 luz;              // la necesita sombraSol, que corre por brizna
-      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom,vNub;
+      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom,vNub,vDE;
       ${RUIDO_GLSL}
       ${HUELLA_GLSL}
       ${SOM_GLSL}
@@ -1075,7 +1137,9 @@ function crearCampo(o){
         float vive=step(r5, uDens*claro);
         alto*=vive;
         /* nada crece bajo un techo: se apaga hacia adentro y con borde suave */
-        alto*=smoothstep(-0.20,1.40, distEdificio(P));
+        float dE=distEdificio(P);
+        alto*=smoothstep(-0.20,1.40, dE);
+        vDE=dE;
         /* en el agua y en la barranca no crece pasto */
         alto*=fueraDelRio(P);
 
@@ -1135,7 +1199,7 @@ function crearCampo(o){
     fragmentShader:`
       precision highp float;
       uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
-      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom,vNub;
+      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom,vNub,vDE;
       ${ATMOS_GLSL}
       ${NIEBLA_GLSL}
       void main(){
@@ -1149,11 +1213,22 @@ function crearCampo(o){
         float ndl=max(dot(N,luz),0.0)*(1.0-vSom*0.85)*(1.0-vNub*0.58);
         float lamb=0.26+0.80*ndl;
         /* translucidez: a contraluz la hoja se prende */
-        float atras=pow(max(dot(-E,luz),0.0),2.4)*0.85*vV;
+        /* a contraluz la hoja se prende, PERO no si esta en sombra: era lo
+           unico del pasto que no miraba la sombra y por eso el pastizal seguia
+           encendido dentro de la sombra de la casa */
+        float atras=pow(max(dot(-E,luz),0.0),2.4)*0.85*vV
+                    *(1.0-vSom*0.90)*(1.0-vNub*0.60);
         /* brillo: la hoja es una cinta y devuelve una franja, no un punto */
         vec3 H=normalize(E+luz);
         float esp=pow(max(dot(N,H),0.0), 34.0)*0.55*vV;
-        float ao=mix(0.42,1.10,vV);                // la base del manojo, en sombra
+        /* OCLUSION ENTRE BRIZNAS. Abajo, en el manojo, no entra el cielo; a la
+           punta le entra entero. Con la potencia el apagon se concentra en los
+           primeros centimetros, que es donde de verdad esta cerrado —lineal
+           dejaba media brizna en penumbra y el pastizal se veia sucio—. */
+        float ao=mix(0.26,1.10,pow(vV,0.65));
+        /* y el rincon contra la pared: el pasto pegado al zocalo esta en
+           penumbra, no con el mismo brillo que el del campo abierto */
+        ao*=mix(0.38, 1.0, smoothstep(0.0, 2.6, vDE));
         col=col*lamb*ao*2.1
           + vec3(0.55,1.00,0.32)*atras*col*3.2
           + uSolC*esp*ndl;
@@ -1656,6 +1731,7 @@ const matEdificio=new THREE.ShaderMaterial({
     ${HUELLA_GLSL}
     ${SOM_GLSL}
     ${INT_GLSL}
+    ${AO_GLSL}
     ${RIO_GLSL}
     ${ATMOS_GLSL}
     ${NUBES_GLSL}
@@ -1777,7 +1853,12 @@ const matEdificio=new THREE.ShaderMaterial({
       vec3 cieloLuz=mix(uCielo, vec3(dot(uCielo, vec3(0.30,0.59,0.11))), 0.55);
       vec3 irr=mix(vec3(0.070,0.095,0.045), cieloLuz, 0.5+0.5*N.y);
       vec3 Fr=F0+(max(vec3(1.0-rug),F0)-F0)*pow(1.0-NdV,5.0);
-      vec3 ambiente=kd*col*irr*0.62 + Fr*irr*0.32*(1.0-rug*0.75);
+      /* La AO va SOBRE EL AMBIENTE y no sobre el sol: el sol viene de un solo
+         lado y ya lo resuelve el mapa de sombras; lo que un rincon se pierde es
+         el cielo, que viene de todas partes. Multiplicar tambien la directa
+         seria oscurecer dos veces la misma cosa. */
+      float ao=aoEdificio(vW, N);
+      vec3 ambiente=(kd*col*irr*0.62 + Fr*irr*0.32*(1.0-rug*0.75))*ao;
 
       /* la nube que pasa tambien apaga los edificios: si no, la casa queda a
          pleno sol mientras el campo alrededor esta en sombra */
@@ -1808,7 +1889,10 @@ const matEdificio=new THREE.ShaderMaterial({
         vec3 luzInt = uSolC*haz*max(dot(N,luz),0.0)*2.7            // el pano de sol
                     + cieloLuz*dif*0.42*(0.45+0.55*max(N.y,0.0))   // cielo por la abertura
                     + rebote*3.0;                                  // rebote de las paredes
-        col=mix(col, luzInt, dentro);
+        /* adentro la AO cambia de dueno: no manda el alero sino el rincon
+           pared-piso, el pared-techo y las cuatro esquinas, que es lo unico que
+           hace que un cuarto se lea como un cuarto y no como un cubo pintado */
+        col=mix(col, luzInt*aoInterior(vW), dentro);
       }
       col=aereo(col, vW, uOjo, luz, uSolC, uFogD);
       gl_FragColor=vec4(col,1.0);
