@@ -1504,7 +1504,7 @@ const matBrillo=mkMat(`
     float k=clamp((l-uU+uS)/max(2.0*uS,1e-4),0.0,1.0);
     k=k*k*(l>0.0?1.0:0.0);
     gl_FragColor=vec4(c*k*min(l,12.0)/max(l,1e-4),1.0);
-  }`,{t:{value:null},uU:{value:1.05},uS:{value:0.55},uExp:{value:1.0}});
+  }`,{t:{value:null},uU:{value:1.35},uS:{value:0.50},uExp:{value:1.0}});
 
 /* 2 · borron separable ------------------------------------------------------ */
 const matBorron=mkMat(`
@@ -1518,7 +1518,7 @@ const matBorron=mkMat(`
 const matSubir=mkMat(`
   precision highp float; varying vec2 vUv; uniform sampler2D t,tGrande; uniform float uK;
   void main(){ gl_FragColor=vec4(texture2D(t,vUv).rgb+texture2D(tGrande,vUv).rgb*uK,1.0); }`,
-  {t:{value:null},tGrande:{value:null},uK:{value:0.72}});
+  {t:{value:null},tGrande:{value:null},uK:{value:0.55}});
 
 /* 4 · rayos crepusculares ---------------------------------------------------- */
 const matRayos=mkMat(`
@@ -1673,7 +1673,10 @@ const matGrado=mkMat(`
     /* --- SENSOR --- */
     /* exposicion automatica: se apunta a una luminancia media y se limita */
     float lm=max(texture2D(tExp,vec2(0.5)).r, 1e-4);
-    float autoE=mix(1.0, clamp(0.36/lm, 0.25, 3.2), uAdapta);
+    /* Limites estrechos a proposito: una autoexposicion suelta te lava la
+       imagen entera en cuanto el promedio baja un poco. Esto corrige, no
+       reinventa la escena. */
+    float autoE=mix(1.0, clamp(0.30/lm, 0.55, 1.8), uAdapta);
     c*=uExpM*autoE;
 
     /* balance de blancos, antes del tono */
@@ -1713,10 +1716,10 @@ const matGrado=mkMat(`
   }`,
   {tEsc:{value:null},tBloom:{value:null},tRayos:{value:null},tExp:{value:null},
    uPx:{value:new THREE.Vector2()},uSol:{value:new THREE.Vector2(0.5,0.5)},
-   uBloom:{value:0.30},uExpM:{value:1.0},uCon:{value:1.06},uSat:{value:1.20},
-   uVin:{value:0.55},uNit:{value:0.35},uRayos:{value:0.55},uT:{value:0},
-   uAber:{value:0.55},uBarril:{value:0.045},uGrano:{value:0.028},uHalo:{value:0.05},
-   uSucio:{value:0.5},uAnam:{value:0.30},uDest:{value:0.16},uAdapta:{value:1.0},
+   uBloom:{value:0.085},uExpM:{value:1.0},uCon:{value:1.06},uSat:{value:1.18},
+   uVin:{value:0.42},uNit:{value:0.35},uRayos:{value:0.20},uT:{value:0},
+   uAber:{value:0.16},uBarril:{value:0.018},uGrano:{value:0.020},uHalo:{value:0.022},
+   uSucio:{value:0.45},uAnam:{value:0.12},uDest:{value:0.06},uAdapta:{value:0.85},
    uBalance:{value:new THREE.Vector3(1.0,1.0,1.0)},
    uLevanta:{value:new THREE.Vector3(0.004,0.006,0.010)},
    uGanancia:{value:new THREE.Vector3(1.02,1.00,0.98)},
@@ -1802,9 +1805,11 @@ function pintarPost(dt){
   if(postMov){
     matMov.uniforms.t.value=rtEsc.texture;
     /* el giro de camara pasado a corrimiento en pantalla */
+    /* Corto y clavado: un desenfoque de movimiento largo se ve a vaselina, no
+       a movimiento. Dos por ciento de pantalla como maximo. */
     matMov.uniforms.uVel.value.set(
-      clamp(giroVel*0.010, -0.06, 0.06),
-      clamp(-(PJ.cabeceo-cabeceoAnt)/Math.max(dt,1e-3)*0.010, -0.06, 0.06));
+      clamp(giroVel*0.0042, -0.020, 0.020),
+      clamp(-(PJ.cabeceo-cabeceoAnt)/Math.max(dt,1e-3)*0.0042, -0.020, 0.020));
     pasar(matMov, rtMov);
     fuente=rtMov.texture;
   }
