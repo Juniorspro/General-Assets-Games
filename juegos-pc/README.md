@@ -2146,6 +2146,27 @@ cachea por texto, así que se lo vacía (`GLOBO.texto=''`) para forzarlo—.
 Mientras el menú está arriba, `moverMision()` sale temprano: la órbita pasa cerca
 de los espíritus y si no, la historia arrancaba antes de tocar `PLAY`.
 
+### Las nubes: salto de vacío y sombra reusada
+Las nubes volumétricas son lo más caro del cuadro cuando se mira al horizonte, y
+en un teléfono eran **el** cuello. Tres cortes, ninguno visible:
+
+1. **Salto de vacío.** Un rayo rasante cruza cuatro kilómetros y medio de banco y
+   la mayor parte de eso es **aire entre cúmulos**. Antes se pagaba el paso
+   completo en cada uno de esos pasos vacíos para multiplicarlo por cero. Ahora,
+   mientras no hay nada, se avanza al **doble y pico**. El borde de entrada queda
+   cuantizado a un paso fino — que es exactamente lo que el jitter ya estaba
+   desordenando, así que no se ve.
+2. **La sombra hacia el sol se recalcula un paso sí y uno no.** Es la mitad de la
+   marcha de luz. Dentro de un cúmulo la sombra cambia despacio: un paso de
+   retraso en un degradado suave no se ve, y son catorce muestras del campo menos
+   por cada paso salteado.
+3. **No se erosiona el núcleo.** La erosión va pesada por `(1-d)`: donde la
+   densidad ya es 1 el término vale cero de todas formas, así que calcular dos
+   fbm para multiplicarlos por cero es trabajo puro. Con el corte en `d>0.92` se
+   saltea uno de cada cinco pasos dentro de nube sin que cambie un píxel.
+
+Contando muestras del campo de ruido por píxel de cielo: de ~490 a ~240.
+
 ### El cierre de la escena
 Cuando los dos aparceros hacen las paces, el campo **no vuelve a como estaba**.
 Es la idea de las dos últimas fases de *Nullscapes* llevada a un campo: ahí el
@@ -2153,6 +2174,10 @@ nivel termina con el sol del fondo estallando en furia fundida, todo minimalista
 y el cuadro se va apagando. Acá el astro no estalla del todo —el jugador se queda
 caminando debajo— pero el gesto es el mismo: **una cosa enorme, blanca y
 silenciosa que se come el horizonte**.
+
+> Reescrito: ahora esto es la segunda mitad de **una sola cinemática de 34
+> segundos**, ver más abajo. La tabla queda como referencia de los tiempos
+> relativos al destello.
 
 | segundos | qué pasa |
 |---|---|
@@ -2401,3 +2426,76 @@ Pulgar izquierdo palanca, derecho mirar, `GOLPE` y `SALTO` abajo a la derecha,
 `CORRER` arriba. Con teclado: `WASD`, espacio, `E` o `F` para pegar, `R` para
 correr. `AJUSTES` abre árboles, pasto, viento, sol, exposición, color, nitidez,
 neblina y volumen.
+
+
+### La cinemática de 34 segundos
+
+Una sola secuencia, con reloj propio, que encadena las tres cosas que antes eran
+piezas sueltas. Dura exactamente lo que dura la música.
+
+| segundos | qué pasa |
+|---|---|
+| 0,0 – 7,8 | **El reencuentro.** Cámara suelta alrededor del molino mientras los dos espíritus convergen y se funden |
+| 7,8 – 9,6 | **La cámara vuelve.** Vuelo continuo del molino al jugador; no hay corte |
+| 9,6 – 15,0 | **La ascensión.** Él se eleva y se va hacia atrás mirando el cielo; el suelo se quiebra, el pasto se desprende, los edificios se desarman |
+| 15,0 | **El destello.** Blanco pleno |
+| 15,0 – 34,0 | **El astro.** Aparece, crece, se contrae y dispara. Cartel y fin |
+
+#### Nada de patrones
+El problema de un recorrido con puntos y suavizado es que **se nota que es un
+recorrido**: la cámara acelera y frena en los mismos sitios, siempre. Encima del
+recorrido va una **mano**: tres senos de períodos inconmensurables por eje —el
+ciclo común no existe, así que nunca vuelve a la misma combinación—, más una
+deriva del punto al que mira y un balanceo del horizonte. Es lo mismo que separa
+una cámara en mano de una en un riel.
+
+```js
+function manoCine(t, s){
+  return Math.sin(t*0.731+s)*0.55 + Math.sin(t*1.373+s*2.13)*0.29
+       + Math.sin(t*2.617+s*3.71)*0.16;
+}
+```
+La amplitud baja en la ascensión —ahí la cámara está apoyada— y sube al final,
+cuando ya no hay nada que sostenga el encuadre.
+
+#### El desarme
+**Un solo uniforme que miran cuatro shaders a la vez.** Cada celda del mundo
+tiene su hora de romperse, sacada de su distancia al centro —la onda avanza hacia
+afuera— más un desorden por celda, para que el borde no sea un círculo perfecto:
+
+```glsl
+float horaRotura(vec2 P, float tam){
+  vec2 c=floor(P/tam);
+  float h=fract(sin(dot(c,vec2(12.9898,78.233)))*43758.5453);
+  return 0.06 + clamp(length((c+0.5)*tam-uDesCen)/78.0,0.0,1.0)*0.62 + h*0.26;
+}
+```
+
+Que la hora salga del **mismo hash** para todos es lo que hace que la losa que cae
+salga del agujero exacto que dejó el suelo, y no al lado.
+
+- **El suelo** se descarta por celda. Por el agujero se ve el cielo de abajo, que
+  de noche es tinta.
+- **Las losas** son una grilla aparte de 26×26 de cinco metros que vive apagada
+  todo el juego: el suelo del juego es un plano de cuatro kilómetros con cuatro
+  vértices, ahí no hay nada que romper. Caen con gravedad, se inclinan y giran.
+- **El pasto** se suelta y sube girando. La primera versión subía todas las
+  briznas de la misma celda igual y armaba una **pared** que tapaba la pantalla y
+  al personaje con ella; ahora cada una sale para su lado, más lejos que arriba,
+  y **se achica hasta desaparecer**.
+- **Los edificios** se parten en ladrillos de 1,4 m. No hay atributo de pieza —son
+  cajas fundidas en una sola malla—, así que la pieza sale de la propia posición
+  redondeada a una rejilla: todos los vértices del mismo cubo reciben el mismo
+  empujón y viajan juntos, y los que quedan a caballo de dos cubos se separan,
+  que es exactamente lo que hace algo al romperse.
+
+#### El corte
+El destello es **el único corte de toda la cinemática**, y por eso pega. Detrás
+del blanco el mundo se rearma —el campo tiene que estar entero para lo que viene,
+y para que después se pueda seguir caminando— y la hora salta a noche cerrada.
+Nada de eso se ve.
+
+#### El botón
+En el menú de pausa hay un **▶ CINEMÁTICA**. Es la única forma de pulirla sin
+jugar diez minutos cada vez. El click además destraba el audio, que los
+navegadores no dejan sonar sin un gesto del usuario.
