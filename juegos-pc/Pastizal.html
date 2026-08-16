@@ -2314,7 +2314,10 @@ const matAgua=new THREE.ShaderMaterial({
 
       vec3 V=normalize(uOjo-vW);
       float NdV=max(dot(N,V),1e-3);
-      float F=0.02+0.98*pow(1.0-NdV,5.0);
+      /* Fresnel de Schlick, pero con techo: de canto el agua es un espejo casi
+         perfecto y el rio entero se volvia un plano gris cielo. Dejar un 12% de
+         color propio conserva que sea AGUA y no un espejo. */
+      float F=min(0.02+0.98*pow(1.0-NdV,5.0), 0.88);
 
       /* REFLEJO PLANAR, muestreado proyectivamente y corrido por la normal:
          ese corrimiento es lo que hace que el reflejo se rompa con la onda en
@@ -2344,10 +2347,14 @@ const matAgua=new THREE.ShaderMaterial({
       vec3 col=mix(trans, refl, clamp(F,0.0,1.0));
 
       /* ESPUMA donde la onda se comprime y contra la orilla */
+      /* La espuma de cresta iba con N.y*0.5+0.5, que en agua plana vale UNO:
+         daba espuma en toda la superficie y el rio salia blanco como un camino.
+         Va con la ALTURA de la ola sobre el nivel de reposo, que es donde la
+         espuma existe de verdad: solo en las crestas mas altas. */
       float borde=1.0-smoothstep(0.74,1.0, distRio(P)/${RIO_ANCHO.toFixed(2)});
-      float cresta=smoothstep(0.55,0.95, N.y*0.5+0.5+ (vW.y-(${NIVEL_AGUA.toFixed(2)}))*3.5);
-      float espuma=max((1.0-borde)*0.75, cresta*0.35*vProf);
-      col=mix(col, vec3(0.80,0.85,0.85), clamp(espuma,0.0,1.0)*0.5);
+      float cresta=smoothstep(0.030, 0.075, vW.y-(${NIVEL_AGUA.toFixed(2)}));
+      float espuma=max((1.0-borde)*0.55, cresta*0.45*vProf);
+      col=mix(col, vec3(0.82,0.86,0.86), clamp(espuma,0.0,1.0)*0.42);
 
       col=aereo(col, vW, uOjo, luz, uSolC, uHoriz, uFogD);
       /* casi transparente en la orilla, opaca en el medio */
