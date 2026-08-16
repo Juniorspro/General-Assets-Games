@@ -2318,13 +2318,23 @@ function pintarPost(dt){
 
   /* --- desenfoque de movimiento --- */
   if(postMov){
+    /* La diferencia de yaw de UN cuadro no es la velocidad de la camara. Un
+       tiron, un teleport o volver a la pestana daban giroVel de decenas de
+       rad/s y ese cuadro salia con el encuadre entero barrido —no se veia una
+       brizna—. Tres cosas lo arreglan: se descarta el cuadro raro (lo que una
+       muneca no puede hacer no es un giro, es un salto), se filtra la
+       velocidad en vez de creerle al ultimo cuadro, y el corrimiento se escala
+       con el TIEMPO DE EXPOSICION, que es lo unico que un desenfoque de
+       movimiento representa: un cuadro corto borronea poco. */
+    const cabVel=-(PJ.cabeceo-cabeceoAnt)/Math.max(dt,1e-3);
+    if(dt>0.05 || Math.abs(giroVel)>8.0 || Math.abs(cabVel)>8.0){ giroSuave=0; cabSuave=0; }
+    else { const k=Math.min(1,dt*12);
+           giroSuave+=(giroVel-giroSuave)*k; cabSuave+=(cabVel-cabSuave)*k; }
+    const expo=Math.min(dt,1/60)*60;
     matMov.uniforms.t.value=rtEsc.texture;
-    /* el giro de camara pasado a corrimiento en pantalla */
-    /* Corto y clavado: un desenfoque de movimiento largo se ve a vaselina, no
-       a movimiento. Dos por ciento de pantalla como maximo. */
     matMov.uniforms.uVel.value.set(
-      clamp(giroVel*0.0042, -0.020, 0.020),
-      clamp(-(PJ.cabeceo-cabeceoAnt)/Math.max(dt,1e-3)*0.0042, -0.020, 0.020));
+      clamp(giroSuave*0.0042*expo, -0.014, 0.014),
+      clamp(cabSuave *0.0042*expo, -0.014, 0.014));
     pasar(matMov, rtMov);
     fuente=rtMov.texture;
   }
@@ -2335,7 +2345,7 @@ function pintarPost(dt){
   matGrado.uniforms.uT.value=T;
   pasar(matGrado,null);
 }
-let cabeceoAnt=0;
+let cabeceoAnt=0, giroSuave=0, cabSuave=0;
 
 /* ============================================================================
    EL JUGADOR, LOS MANDOS Y EL BUCLE
