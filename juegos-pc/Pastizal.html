@@ -415,6 +415,126 @@ const HUELLA_GLSL=`
     return som*smoothstep(0.02,0.20,luz.y);
   }`;
 
+/* ============================================================================
+   EL MAPA DE SOMBRAS
+   La elipse analitica de arriba es exacta para un bulto redondo sobre un plano
+   y cuesta cuatro lineas, pero no sabe nada de lo que no sea eso: la casa no se
+   sombrea a si misma, el galpon no cae en la sombra de la casa, el alero no
+   marca el suelo y el jugador no tiene sombra. Todo eso lo tira un mapa de
+   profundidad, y es lo que mas separa esta escena de una foto.
+
+   Tres decisiones que hacen que ande y no cueste una fortuna:
+
+   1) EL RECORTE SIGUE AL JUGADOR Y SE AJUSTA A LOS TEXELES. Noventa metros de
+      semiancho sobre 2048 texeles dan menos de nueve centimetros por texel, que
+      alcanza para el filo de una canaleta. Pero si el recorte se corre una
+      fraccion de texel por cuadro, cada borde de sombra se recalcula contra
+      otra celda y la sombra HIERVE al caminar —es el defecto que mas canta de
+      todos—. Por eso el centro se lleva siempre al texel entero mas cercano.
+
+   2) EL PASTO NO PROYECTA. Son doscientas cincuenta mil briznas por cuadro y no
+      entran en ningun presupuesto; ademas una brizna de dos milimetros no tira
+      una sombra que se vea. Proyectan los edificios, las barrancas, las ruedas
+      de los molinos y el personaje, y nada mas.
+
+   3) EL MAPA MANDA DONDE LLEGA, Y LA ELIPSE DONDE NO. Si se sumaran las dos,
+      cada edificio tiraria DOS sombras encimadas y se veria el doble borde. El
+      muestreo devuelve tambien cuanto se le puede creer —cero fuera del
+      recorte— y con eso se mezcla, asi que a mas de noventa metros la elipse
+      sigue siendo lo unico que hay y la transicion no se ve.
+============================================================================ */
+const SOM_N=MOVIL?1024:2048;
+const SOM_R=90;                       // semiancho del recorte, en metros
+const SOM_CERCA=-260, SOM_LEJOS=260;  // con el sol rasante el recorte se estira mucho
+const SOM_HAY=renderer.capabilities.isWebGL2;
+const texProf=new THREE.DepthTexture(SOM_N,SOM_N);
+texProf.type=THREE.UnsignedIntType;
+texProf.minFilter=THREE.NearestFilter; texProf.magFilter=THREE.NearestFilter;
+const rtSombra=new THREE.WebGLRenderTarget(SOM_N,SOM_N,{
+  minFilter:THREE.NearestFilter, magFilter:THREE.NearestFilter,
+  depthTexture:texProf, stencilBuffer:false });
+const camSombra=new THREE.OrthographicCamera(-SOM_R,SOM_R,SOM_R,-SOM_R,SOM_CERCA,SOM_LEJOS);
+/* el 'arriba' de la camara del sol va en Z y no en Y: mirando casi desde el
+   cenit —el sol llega a 74 grados— el eje Y queda casi paralelo a la vista y el
+   encuadre se vuelve inestable */
+camSombra.up.set(0,0,1);
+/* MeshDepthMaterial y no un shader propio: es el unico que ya sabe deformar por
+   esqueleto, y el personaje es un SkinnedMesh de 51 huesos */
+const matProf=new THREE.MeshDepthMaterial({side:THREE.DoubleSide});
+const NO_PROYECTA=[];                 // el cielo, el suelo, el agua y el pasto
+const SOM_U={ uSomTex:{value:texProf}, uSomMat:{value:new THREE.Matrix4()},
+              uSomPx:{value:1/SOM_N}, uSomRango:{value:SOM_LEJOS-SOM_CERCA},
+              uSomOn:{value:SOM_HAY?1.0:0.0} };
+const SOM_GLSL=`
+  uniform sampler2D uSomTex; uniform mat4 uSomMat;
+  uniform float uSomPx, uSomRango, uSomOn;
+  /* SESGO SEGUN LA PENDIENTE. Una cara casi de canto al sol se aleja del plano
+     del mapa medio texel por texel, asi que compararla con la profundidad
+     guardada la deja sombreandose a si misma en rayas —el acne—. El sesgo va en
+     METROS y se pasa a profundidad al final: en metros uno sabe lo que esta
+     pidiendo (cinco centimetros de piso, sesenta con el sol rasante), en
+     unidades del recorte no. */
+  float sesgoSom(float ndl){ return (0.05+0.60*(1.0-ndl))/uSomRango; }
+  /* peso: cuanto se le puede creer al mapa. Cero fuera del recorte, para que
+     ahi siga mandando la elipse analitica; y se apaga contra el borde, porque
+     un corte duro se lee como un cuadrado dibujado en el pasto. */
+  float pesoSom(vec3 s){
+    if(s.z<0.0||s.z>1.0) return 0.0;
+    vec2 b=min(s.xy, 1.0-s.xy);
+    return smoothstep(0.0, 0.05, min(b.x,b.y));
+  }
+  /* nueve muestras, para el suelo, los edificios y el agua */
+  float sombraMapa(vec3 W, float ndl, out float peso){
+    peso=0.0;
+    if(uSomOn<0.5) return 0.0;
+    vec3 s=(uSomMat*vec4(W,1.0)).xyz;    // ortogonal: w vale 1
+    peso=pesoSom(s);
+    if(peso<=0.0) return 0.0;
+    float z=s.z-sesgoSom(ndl), som=0.0;
+    for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++)
+      som+=step(texture2D(uSomTex, s.xy+vec2(float(i),float(j))*uSomPx).r, z);
+    return som/9.0;
+  }
+  /* una sola muestra, para las briznas: son doscientas cincuenta mil y esto
+     corre en el vertex. A una brizna no le falta suavizado en el borde de la
+     sombra —le falta ancho—, asi que las nueve muestras no se notarian. */
+  float sombraMapa1(vec3 W, float ndl, out float peso){
+    peso=0.0;
+    if(uSomOn<0.5) return 0.0;
+    vec3 s=(uSomMat*vec4(W,1.0)).xyz;
+    peso=pesoSom(s);
+    if(peso<=0.0) return 0.0;
+    return step(texture2D(uSomTex, s.xy).r, s.z-sesgoSom(ndl));
+  }`;
+const _somBias=new THREE.Matrix4().set(0.5,0,0,0.5, 0,0.5,0,0.5, 0,0,0.5,0.5, 0,0,0,1);
+const _somV=new THREE.Vector3();
+const _somGuarda=[];
+function pintarSombras(){
+  if(!SOM_HAY) return;
+  /* La camara mira EN CONTRA del sol desde el origen del mundo. Dejando la
+     rotacion fija y moviendo solo el recorte, los ejes del mapa no giran con el
+     jugador —si giraran, el ajuste a texeles de abajo no querria decir nada—. */
+  camSombra.position.set(0,0,0);
+  camSombra.lookAt(-SOL.x,-SOL.y,-SOL.z);
+  camSombra.updateMatrixWorld(true);
+  _somV.set(PJ.x,0,PJ.z).applyMatrix4(camSombra.matrixWorldInverse);
+  const tex=2*SOM_R/SOM_N;
+  const cx=Math.round(_somV.x/tex)*tex, cy=Math.round(_somV.y/tex)*tex;
+  camSombra.left=cx-SOM_R; camSombra.right=cx+SOM_R;
+  camSombra.bottom=cy-SOM_R; camSombra.top=cy+SOM_R;
+  camSombra.updateProjectionMatrix();
+  SOM_U.uSomMat.value.copy(_somBias).multiply(camSombra.projectionMatrix)
+       .multiply(camSombra.matrixWorldInverse);
+  _somGuarda.length=0;
+  for(const o of NO_PROYECTA){ _somGuarda.push(o.visible); o.visible=false; }
+  escena.overrideMaterial=matProf;
+  const antes=renderer.getRenderTarget();
+  renderer.setRenderTarget(rtSombra);
+  renderer.render(escena,camSombra);
+  escena.overrideMaterial=null;
+  renderer.setRenderTarget(antes);
+  for(let i=0;i<NO_PROYECTA.length;i++) NO_PROYECTA[i].visible=_somGuarda[i];
+}
 
 /* ============================================================================
    ATMOSFERA Y NUBES
@@ -784,13 +904,14 @@ cielo.frustumCulled=false;
    de profundidad prendido, solo marchan los pixeles que de verdad son cielo.
    Es la optimizacion que paga las nubes volumetricas. */
 cielo.renderOrder=900;
+NO_PROYECTA.push(cielo);
 cieloMat.depthTest=true; cieloMat.depthWrite=false;
 escena.add(cielo);
 
 const matSuelo=new THREE.ShaderMaterial({
   uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
     uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
-    uFogD:{value:nieblaD}, uT:{value:0} }, HUELLA_U, PIS_U, INT_U),
+    uFogD:{value:nieblaD}, uT:{value:0} }, HUELLA_U, PIS_U, INT_U, SOM_U),
   /* el plano sigue al jugador, así que la posición del mundo hay que sacarla de
      la matriz del objeto y no del atributo, o los manchones viajarían con uno */
   vertexShader:`varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.0);
@@ -800,6 +921,7 @@ const matSuelo=new THREE.ShaderMaterial({
     varying vec3 vW; uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD,uT;
     ${RUIDO_GLSL}
     ${HUELLA_GLSL}
+    ${SOM_GLSL}
     ${PIS_GLSL}
     ${INT_GLSL}
     ${RIO_GLSL}
@@ -869,10 +991,14 @@ const matSuelo=new THREE.ShaderMaterial({
       /* la tierra pisada donde caminaste, mas oscura (pis ya se calculo arriba,
          porque decide cuanta tierra hay) */
       col=mix(col, col*vec3(0.70,0.66,0.58), pis*0.42);
-      /* la sombra que tira el edificio sobre el campo */
-      float som=sombraSol(vW.xz, luz);
-      float nub=sombraNube(vW.xz, uT, luz);
+      /* LA SOMBRA QUE TIRA EL EDIFICIO SOBRE EL CAMPO. Donde llega el mapa
+         manda el mapa; mas alla de los noventa metros del recorte vuelve la
+         elipse analitica, que es lo unico que hay. Sumarlas seria dibujar dos
+         sombras encimadas y se veria el doble borde. */
       float ndl=max(dot(Ns,luz),0.0);
+      float pesoS; float somM=sombraMapa(vW, ndl, pesoS);
+      float som=mix(sombraSol(vW.xz, luz), somM, pesoS);
+      float nub=sombraNube(vW.xz, uT, luz);
       float lamb=0.30+0.70*mix(max(luz.y,0.0), ndl, tie*det)
                  *(1.0-som*0.82)*(1.0-nub*0.55);
       col*=lamb*uSolC*1.35 + uCielo*(0.22+som*0.10+nub*0.06);
@@ -882,7 +1008,7 @@ const matSuelo=new THREE.ShaderMaterial({
 });
 MATS.push(matSuelo);
 const suelo=new THREE.Mesh(new THREE.PlaneGeometry(4000,4000,1,1).rotateX(-Math.PI/2), matSuelo);
-suelo.frustumCulled=false; escena.add(suelo);
+suelo.frustumCulled=false; escena.add(suelo); NO_PROYECTA.push(suelo);
 
 /* ============================================================================
    LAS BRIZNAS
@@ -919,7 +1045,7 @@ function crearCampo(o){
     uniforms:Object.assign({ uBase:{value:new THREE.Vector2()}, uN:{value:N},
       uCelda:{value:o.celda}, uAncho:{value:o.ancho}, uDist:{value:o.dist},
       uCerca:{value:o.cerca||0}, uSem:{value:o.sem||0},
-      uAltoMin:{value:o.altoMin}, uAltoMax:{value:o.altoMax} }, PASTO_U, HUELLA_U, PIS_U),
+      uAltoMin:{value:o.altoMin}, uAltoMax:{value:o.altoMax} }, PASTO_U, HUELLA_U, PIS_U, SOM_U),
     vertexShader:`
       precision highp float;
       attribute vec2 iIdx;
@@ -930,6 +1056,7 @@ function crearCampo(o){
       varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom,vNub;
       ${RUIDO_GLSL}
       ${HUELLA_GLSL}
+      ${SOM_GLSL}
       ${PIS_GLSL}
       ${NUBES_GLSL}
       ${RIO_GLSL}
@@ -996,7 +1123,11 @@ function crearCampo(o){
         vec3 nor=normalize(cross(lat3, tan));
         vNor=normalize(nor + lat3*lado*0.55);
         vV=v; vTono=0.80+r2*0.40; vSeco=smoothstep(0.72,1.0,r6);
-        vSom=sombraSol(P, luz);          // la sombra se calcula una vez por brizna
+        /* La brizna se muestrea en su PROPIA posicion, no en la del suelo: asi
+           la punta que asoma del borde de la sombra se prende y la base sigue
+           apagada, que es lo que pasa contra una pared. */
+        float pesoS; float somM=sombraMapa1(W, max(luz.y,0.05), pesoS);
+        vSom=mix(sombraSol(P, luz), somM, pesoS);
         vNub=sombraNube(P, uT, luz);     // y la nube que pasa por encima
         vTono*=1.0-0.28*pis;             // lo pisado se ve mas apagado y seco
         gl_Position=projectionMatrix*viewMatrix*vec4(W,1.0);
@@ -1032,7 +1163,7 @@ function crearCampo(o){
   });
   MATS.push(mat);
   const m=new THREE.Mesh(geo,mat);
-  m.frustumCulled=false; escena.add(m);
+  m.frustumCulled=false; escena.add(m); NO_PROYECTA.push(m);
   const c={malla:m, mat, N, celda:o.celda, base:mat.uniforms.uBase.value, briznas:N*N};
   CAMPOS.push(c); return c;
 }
@@ -1507,7 +1638,7 @@ const matEdificio=new THREE.ShaderMaterial({
   uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
              uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()},
              uHoriz:{value:HORIZ.clone()}, uFogD:{value:nieblaD},
-             uT:{value:0} }, HUELLA_U, INT_U),
+             uT:{value:0} }, HUELLA_U, INT_U, SOM_U),
   vertexShader:`
     precision highp float;
     attribute float tipo; attribute vec2 uvm;
@@ -1523,6 +1654,7 @@ const matEdificio=new THREE.ShaderMaterial({
     uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD,uT;
     ${RUIDO_GLSL}
     ${HUELLA_GLSL}
+    ${SOM_GLSL}
     ${INT_GLSL}
     ${RIO_GLSL}
     ${ATMOS_GLSL}
@@ -1650,7 +1782,16 @@ const matEdificio=new THREE.ShaderMaterial({
       /* la nube que pasa tambien apaga los edificios: si no, la casa queda a
          pleno sol mientras el campo alrededor esta en sombra */
       float nub=sombraNube(vW.xz, uT, luz);
-      col=difusa*(1.0-nub*0.55)+brilloSol*(1.0-nub*0.75)+ambiente*(1.0-nub*0.12);
+      /* AUTO-SOMBRA. Hasta ahora ningun edificio se sombreaba: la casa nunca se
+         tapaba a si misma, el galpon nunca caia en la sombra de la casa y la
+         pared del contrasol salia igual de clara que la del sol. Aca NO se
+         mezcla con la elipse analitica: esa esta pensada para un bulto sobre el
+         plano del suelo y aplicada a una pared a tres metros de altura da
+         cualquier cosa. Fuera del recorte, sin sombra, que es lo que habia. */
+      float pesoS; float somE=sombraMapa(vW, NdL, pesoS)*pesoS;
+      col=difusa*(1.0-nub*0.55)*(1.0-somE*0.92)
+         +brilloSol*(1.0-nub*0.75)*(1.0-somE)
+         +ambiente*(1.0-nub*0.12)*(1.0-somE*0.15);
 
       /* ------------------------------- ADENTRO -------------------------------
          Se corta el sol y casi todo el cielo, y se reemplazan por lo que de
@@ -1800,6 +1941,7 @@ function construirRio(){
   geoAgua.computeBoundingSphere();
   const mAgua=new THREE.Mesh(geoAgua, matAgua);
   mAgua.frustumCulled=false; mAgua.renderOrder=2; escena.add(mAgua);
+  NO_PROYECTA.push(mAgua);
   return mAgua;
 }
 
@@ -1807,7 +1949,7 @@ function construirRio(){
 const matAgua=new THREE.ShaderMaterial({
   uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
     uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
-    uFogD:{value:nieblaD}, uT:{value:0} }, {}),
+    uFogD:{value:nieblaD}, uT:{value:0} }, SOM_U),
   transparent:true, depthWrite:true,
   vertexShader:`
     precision highp float;
@@ -1819,6 +1961,7 @@ const matAgua=new THREE.ShaderMaterial({
     varying vec3 vW;
     uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD,uT;
     ${RUIDO_GLSL}
+    ${SOM_GLSL}
     ${ATMOS_GLSL}
     ${RIO_GLSL}
 
@@ -1867,7 +2010,11 @@ const matAgua=new THREE.ShaderMaterial({
       /* absorcion tipo Beer: el rojo se va primero */
       trans*=exp(-vec3(0.55,0.22,0.16)*hondo*2.6);
 
-      vec3 col=mix(trans, refl, clamp(F,0.0,1.0));
+      /* la barranca tambien se refleja en el agua que tapa: sin esto el rio
+         brilla a pleno sol justo debajo del talud que le da la sombra */
+      float pesoS; float somA=sombraMapa(vW, max(luz.y,0.05), pesoS)*pesoS;
+      refl-=uSolC*esp*22.0*smoothstep(0.0,0.15,luz.y)*somA;
+      vec3 col=mix(trans, refl, clamp(F,0.0,1.0))*(1.0-somA*0.35);
 
       /* ESPUMA contra las orillas y donde la ola pega mas fuerte */
       float borde=1.0-smoothstep(0.72,1.0, distRio(P)/${RIO_ANCHO.toFixed(2)});
@@ -2752,6 +2899,9 @@ function bucle(ahora){
   cieloMat.uniforms.uT.value=T;
   cielo.position.copy(camara.position);
   suelo.position.set(PJ.x,0,PJ.z);
+  /* EL MAPA DE SOMBRAS PRIMERO. Tiene que ir despues de moverPersonaje —el
+     esqueleto ya acomodado— y antes del cuadro, porque el cuadro lo lee. */
+  pintarSombras();
   renderer.setRenderTarget(rtEsc);
   renderer.render(escena,camara);
   pintarPost(dt);
