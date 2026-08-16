@@ -4592,6 +4592,82 @@ function arrancarJuego(){
 }
 
 /* ============================================================================
+   LAS ESQUIRLAS
+   En la referencia, alrededor del haz flotan fragmentos triangulares oscuros,
+   como si algo se hubiera roto y estuviera subiendo. Son lo que le da escala al
+   rayo: sin nada delante, un haz de luz podria medir un metro o un kilometro.
+
+   Ciento cincuenta triangulos instanciados, uno por esquirla, colocados en una
+   losa de aire DELANTE de la camara y en la direccion del astro, para que
+   siempre esten donde esta el haz. Suben despacio, dan vueltas sobre si mismas
+   y encaran a la camara. El cuerpo es casi negro; el filo de arriba agarra un
+   poco de luz fria, que es lo unico que las separa del cielo.
+   Ciento cincuenta triangulos: al lado de las trescientas mil briznas, nada.
+============================================================================ */
+const ESQ_N=150;
+const esqGeo=new THREE.InstancedBufferGeometry();
+esqGeo.setAttribute('position', new THREE.Float32BufferAttribute(
+  [-0.52,-0.30,0,  0.58,-0.12,0,  -0.06,0.62,0], 3));
+{
+  const a=new Float32Array(ESQ_N*4);
+  for(let i=0;i<ESQ_N;i++){
+    const k=i*4;
+    /* nada de Math.random: un hash del indice da lo mismo y es reproducible */
+    const h=(n)=>{ const x=Math.sin(i*12.9898+n*78.233)*43758.5453; return x-Math.floor(x); };
+    a[k]=h(1); a[k+1]=h(2); a[k+2]=h(3); a[k+3]=h(4);
+  }
+  esqGeo.setAttribute('iSem', new THREE.InstancedBufferAttribute(a,4));
+}
+esqGeo.instanceCount=ESQ_N;
+esqGeo.boundingSphere=new THREE.Sphere(new THREE.Vector3(),1e5);
+const matEsq=new THREE.ShaderMaterial({
+  transparent:true, depthWrite:false, side:THREE.DoubleSide,
+  uniforms:{ uT:{value:0}, uCen:{value:new THREE.Vector3()},
+             uEje:{value:new THREE.Vector3(0,0,-1)}, uVis:{value:0.0} },
+  vertexShader:`
+    precision highp float;
+    attribute vec4 iSem;
+    uniform float uT, uVis; uniform vec3 uCen, uEje;
+    varying float vB, vLejos;
+    void main(){
+      /* el marco: adelante en la direccion del astro, a la derecha y arriba */
+      vec3 f=normalize(vec3(uEje.x, 0.0, uEje.z));
+      vec3 r=vec3(f.z, 0.0, -f.x);
+      /* donde le toca a esta esquirla, y su subida lenta y ciclica */
+      float sub=mod(uT*1.15 + iSem.w*70.0, 78.0);
+      vec3 P=uCen
+        + f*(30.0 + iSem.x*190.0)
+        + r*((iSem.y-0.5)*170.0)
+        + vec3(0.0, 2.0 + iSem.z*46.0 + sub, 0.0);
+      /* encara a la camara, y da vueltas sobre si misma */
+      vec3 cr=vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+      vec3 cu=vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+      float g=uT*(0.20+iSem.x*0.45)+iSem.y*6.283;
+      float c=cos(g), s=sin(g);
+      vec2 q=vec2(position.x*c-position.y*s, position.x*s+position.y*c);
+      float esc=(0.9+iSem.z*3.4)*uVis;
+      vec3 W=P + (cr*q.x + cu*q.y)*esc;
+      vB=position.y;                     // el filo de arriba agarra la luz
+      vLejos=length(W-uCen);
+      gl_Position=projectionMatrix*viewMatrix*vec4(W,1.0);
+    }`,
+  fragmentShader:`
+    precision highp float;
+    uniform float uVis; varying float vB, vLejos;
+    void main(){
+      /* cuerpo casi negro, filo frio. Y se desvanecen de lejos para que no
+         queden confetis duros clavados sobre el horizonte. */
+      float filo=smoothstep(0.10, 0.60, vB);
+      vec3 c=mix(vec3(0.010,0.014,0.026), vec3(0.42,0.54,0.74), filo*filo);
+      float a=uVis*(1.0-smoothstep(140.0, 235.0, vLejos));
+      gl_FragColor=vec4(c, a);
+    }`
+});
+const esquirlas=new THREE.Mesh(esqGeo, matEsq);
+esquirlas.frustumCulled=false; esquirlas.renderOrder=880; esquirlas.visible=false;
+escena.add(esquirlas); NO_PROYECTA.push(esquirlas);
+
+/* ============================================================================
    EL CIERRE DE LA ESCENA
    Cuando los dos aparceros hacen las paces, el campo no vuelve a como estaba:
    el sol se pone, la noche sube, y del horizonte se levanta un SOL BLANCO
@@ -4685,6 +4761,14 @@ function moverFinal(dt){
   if(disparo>0){
     matGrado.uniforms.uBloom.value=lerp(BLOOM0, BLOOM0*2.6, disparo);
   }
+
+  /* las esquirlas aparecen con la contraccion y se quedan */
+  const vis=ramp(16.5,20.5);
+  esquirlas.visible=vis>0.01;
+  matEsq.uniforms.uVis.value=vis;
+  matEsq.uniforms.uT.value=T;
+  matEsq.uniforms.uCen.value.copy(camara.position);
+  matEsq.uniforms.uEje.value.copy(cieloMat.uniforms.uAstroDir.value);
 
   /* 5 · fogonazo y cartel, montados sobre el disparo */
   if(t>20.0 && !FIN.flash){
