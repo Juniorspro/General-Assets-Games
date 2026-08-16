@@ -490,15 +490,22 @@ const NUBES_GLSL=`
     float h=clamp((P.y-${900}.0)/${1700}.0, 0.0, 1.0);
     /* perfil: base plana, panza redonda, corona deshilachada */
     float perfil=smoothstep(0.0,0.16,h)*smoothstep(1.0,0.42,h);
-    /* La cobertura promedia 0,5: con el umbral en 0,5 medio cielo era nube y
-       con el multiplicador alto quedaba un techo lechoso opaco. Umbral mas
-       arriba y densidad mas baja = nubes sueltas con cielo entre medio. */
-    float d=(cob-cobMin)*perfil*1.45;
+    /* La cobertura promedia 0,5 y su maximo es 0,86: restarle el umbral a secas
+       y escalar por 1,45 dejaba la densidad mas gorda del cielo en 0,35, o sea
+       que ni la nube mas espesa era opaca. Se NORMALIZA por lo que queda arriba
+       del umbral, asi el nucleo de un banco llega a 1 y el borde a 0. */
+    float d=(cob-cobMin)/max(1.0-cobMin,1e-3)*perfil;
     if(d<=0.0) return 0.0;
     if(detalle>0){
       /* la erosion se come los bordes y deja los coliflores */
       float er=fbm(P.xz*0.0075+vec2(t*0.02,0.0))*0.6+fbm(vec3(P.xz*0.019,0.0).xy+P.y*0.004)*0.4;
-      d-=(1.0-d)*er*0.55;
+      /* RESTAR la erosion borraba las nubes enteras: restaba 0,26 de media a una
+         densidad cuya media era 0,07 —tres veces y media toda la senal— y el
+         clamp mandaba a cero el 99% del banco. Se REMAPEA en vez de restar: lo
+         que estaba por debajo del ruido desaparece y el resto se reescala hasta
+         1, que es morder el borde sin tocar el nucleo. */
+      float k=er*0.45;
+      d=(d-k)/max(1.0-k,1e-3);
     }
     return clamp(d,0.0,1.0);
   }
@@ -537,7 +544,10 @@ const cieloMat=new THREE.ShaderMaterial({
              uPano:{value:texCielo}, uPanoK:{value:0.20},
              uOjoC:{value:new THREE.Vector3()},
              uPasosNube:{value:MOVIL?16:34}, uPasosLuz:{value:MOVIL?2:4},
-             uCobNube:{value:0.615}, uVolNube:{value:1.0} },
+             /* 0,615 dejaba solo el 19% del cielo por encima del umbral, y de
+                ese 19% casi nada sobrevivia; 0,55 deja el 42% y da un cielo de
+                cumulos sueltos en vez de uno pelado */
+             uCobNube:{value:0.55}, uVolNube:{value:1.0} },
   vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
     gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
@@ -599,7 +609,10 @@ const cieloMat=new THREE.ShaderMaterial({
         }
         float luzN=exp(-sombra*1.35)+0.28*exp(-sombra*0.22);
         vec3 col=solc*luzN*fase*2.1 + uCenit*0.30*(0.35+0.65*dens);
-        float ext=exp(-dens*dt*0.0011);
+        /* la extincion estaba tan floja que ni con densidad 1 en TODO el banco
+           una columna al cenit pasaba de 0,85 de opacidad; con la densidad real
+           daba 0,05. Al triple, un nucleo tapa el cielo y un borde no. */
+        float ext=exp(-dens*dt*0.0022);
         acc+=trans*(1.0-ext)*col;
         trans*=ext;
       }
