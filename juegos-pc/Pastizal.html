@@ -472,18 +472,40 @@ const ATMOS_GLSL=`
   }`;
 
 const NUBES_GLSL=`
-  /* SOMBRAS DE NUBES. Es de los efectos que mas realismo dan por lo poco que
-     cuestan: manchones que cruzan el campo con el viento y le apagan la luz al
-     pasar. Sin esto un campo abierto se ve siempre igual de plano.
-     Se muestrea el campo de nubes EN EL PLANO DE LAS NUBES, o sea proyectando
-     el punto del suelo hacia el sol: por eso al atardecer las sombras se
-     estiran kilometros, como pasa de verdad. */
+  /* ------------------------------------------------------------------------
+     UN SOLO CAMPO DE NUBES para todo. La cobertura que se marcha en el cielo
+     es la MISMA que apaga el pasto: si fueran dos, verias una sombra en el
+     suelo sin nube arriba, y eso rompe la ilusion mas rapido que cualquier
+     otra cosa.
+     ------------------------------------------------------------------------ */
+  vec2 vientoNube(float t){ return vec2(t*0.0075, t*0.0042); }
+  float coberturaNube(vec2 q, float t){
+    vec2 p=q*0.0016+vientoNube(t);
+    return fbm(p)*0.62+fbm(p*2.7+13.1)*0.38;
+  }
+  /* densidad dentro del banco: la cobertura, tallada por el perfil de altura y
+     erosionada por un detalle mas fino en los bordes */
+  float densNube(vec3 P, float t, float cobMin, int detalle){
+    float cob=coberturaNube(P.xz, t);
+    float h=clamp((P.y-${900}.0)/${1700}.0, 0.0, 1.0);
+    /* perfil: base plana, panza redonda, corona deshilachada */
+    float perfil=smoothstep(0.0,0.16,h)*smoothstep(1.0,0.42,h);
+    float d=(cob-cobMin)*perfil*2.6;
+    if(d<=0.0) return 0.0;
+    if(detalle>0){
+      /* la erosion se come los bordes y deja los coliflores */
+      float er=fbm(P.xz*0.0075+vec2(t*0.02,0.0))*0.6+fbm(vec3(P.xz*0.019,0.0).xy+P.y*0.004)*0.4;
+      d-=(1.0-d)*er*0.55;
+    }
+    return clamp(d,0.0,1.0);
+  }
+  /* SOMBRAS DE NUBES. Se muestrea el campo EN EL PLANO DE LAS NUBES, o sea
+     proyectando el punto del suelo hacia el sol: por eso al atardecer las
+     sombras se estiran kilometros, como pasa de verdad. Y como sale de la
+     misma cobertura que se marcha arriba, la sombra cae donde esta la nube. */
   float sombraNube(vec2 P, float t, vec3 sol){
-    vec2 q=P + sol.xz/max(sol.y,0.12)*900.0;   // proyeccion al plano de nubes
-    q=q*0.0016 + vec2(t*0.0075, t*0.0042);     // el viento
-    float n=fbm(q)*0.62+fbm(q*2.7+13.1)*0.38;
-    float s=smoothstep(0.44,0.72,n);
-    return s;
+    vec2 q=P + sol.xz/max(sol.y,0.12)*1500.0;
+    return smoothstep(0.44,0.72, coberturaNube(q, t));
   }`;
 
 /* ============================================================================
@@ -509,15 +531,78 @@ const cieloMat=new THREE.ShaderMaterial({
   side:THREE.BackSide, depthWrite:false,
   uniforms:{ luz:{value:SOL.clone()}, uCenit:{value:CIELO.clone()},
              uHoriz:{value:HORIZ.clone()}, uSolC:{value:SOLC.clone()}, uT:{value:0},
-             uPano:{value:texCielo}, uPanoK:{value:0.85} },
+             uPano:{value:texCielo}, uPanoK:{value:0.30},
+             uOjoC:{value:new THREE.Vector3()},
+             uPasosNube:{value:MOVIL?16:34}, uPasosLuz:{value:MOVIL?2:4},
+             uCobNube:{value:0.50}, uVolNube:{value:1} },
   vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
     gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
     precision highp float;
     varying vec3 vD; uniform vec3 luz,uCenit,uHoriz,uSolC; uniform float uT,uPanoK;
-    uniform sampler2D uPano;
+    uniform sampler2D uPano; uniform vec3 uOjoC;
+    uniform int uPasosNube,uPasosLuz,uVolNube; uniform float uCobNube;
     ${RUIDO_GLSL}
     ${ATMOS_GLSL}
+    ${NUBES_GLSL}
+
+    /* ------------------------------------------------------------------------
+       NUBES VOLUMETRICAS
+       Se marcha el rayo por el banco de nubes acumulando densidad. En cada paso
+       se dan unos pocos pasos MAS hacia el sol para saber cuanta nube hay entre
+       ese punto y la luz: eso es lo que da el interior oscuro y el borde
+       encendido, y es la diferencia entre una nube y una mancha blanca.
+
+       Beer-Lambert para la extincion, Henyey-Greenstein para la fase —por eso
+       mirando a contraluz aparece el filo de plata— y una segunda exponencial
+       mas suave sumada a la primera, que es el truco viejo para que la nube no
+       se ponga negra por dentro como pasa con Beer puro.
+       ------------------------------------------------------------------------ */
+    float faseHG(float mu, float g){
+      float g2=g*g;
+      return (1.0-g2)/(12.566370*pow(max(1.0+g2-2.0*g*mu,1e-4),1.5));
+    }
+    vec4 marcharNubes(vec3 ori, vec3 dir, vec3 sol, vec3 solc, float t){
+      if(dir.y<0.020) return vec4(0.0,0.0,0.0,1.0);
+      float y0=900.0, y1=2600.0;
+      float t0=(y0-ori.y)/dir.y, t1=(y1-ori.y)/dir.y;
+      t0=max(t0,0.0);
+      if(t1<=t0) return vec4(0.0,0.0,0.0,1.0);
+      /* mirando bajo, el camino dentro del banco es larguisimo: se recorta o
+         cada pixel del horizonte cuesta lo que toda la pantalla */
+      t1=min(t1, t0+9000.0);
+      int PASOS=uPasosNube;
+      float dt=(t1-t0)/float(PASOS);
+      float mu=dot(dir,sol);
+      float fase=faseHG(mu,0.72)*0.75+faseHG(mu,-0.15)*0.25;
+
+      vec3 acc=vec3(0.0);
+      float trans=1.0;
+      /* el arranque se corre un poco al azar por pixel: sin esto se ven los
+         escalones de la marcha como anillos */
+      float jitter=h21(gl_FragCoord.xy*0.37);
+      for(int i=0;i<48;i++){
+        if(i>=PASOS) break;
+        if(trans<0.02) break;
+        vec3 P=ori+dir*(t0+(float(i)+jitter)*dt);
+        float dens=densNube(P, t, uCobNube, 1);
+        if(dens<=0.001) continue;
+        /* cuanta nube hay entre este punto y el sol */
+        float sombra=0.0;
+        for(int j=1;j<=4;j++){
+          if(j>uPasosLuz) break;
+          vec3 Q=P+sol*(float(j)*140.0);
+          sombra+=densNube(Q, t, uCobNube, 0);
+        }
+        float luzN=exp(-sombra*1.35)+0.28*exp(-sombra*0.22);
+        vec3 col=solc*luzN*fase*3.4 + uCenit*0.55*(0.35+0.65*dens);
+        float ext=exp(-dens*dt*0.0026);
+        acc+=trans*(1.0-ext)*col;
+        trans*=ext;
+      }
+      return vec4(acc, trans);
+    }
+
     void main(){
       vec3 d=normalize(vD);
       float h=clamp(d.y,-1.0,1.0);
@@ -538,6 +623,11 @@ const cieloMat=new THREE.ShaderMaterial({
       float disco=smoothstep(0.99960, 0.99990, ds);
       float limbo=sqrt(max(1.0-pow(clamp((1.0-ds)/0.0004,0.0,1.0),2.0),0.0));
       col+=uSolC*disco*(0.50+0.50*limbo)*18.0;
+      /* --- las nubes volumetricas, sobre todo lo demas --- */
+      if(uVolNube>0.5){
+        vec4 n=marcharNubes(uOjoC, d, luz, uSolC, uT);
+        col=col*n.w + n.rgb;
+      }
       /* LA PANORAMICA 360, en coordenadas equirectangulares: la longitud sale
          del angulo alrededor del eje vertical y la latitud del angulo con el
          horizonte. Se desplaza despacio, que es el viento en altura. */
@@ -563,7 +653,15 @@ const cieloMat=new THREE.ShaderMaterial({
 });
 MATS.push(cieloMat);
 const cielo=new THREE.Mesh(new THREE.SphereGeometry(1500,40,26), cieloMat);
-cielo.frustumCulled=false; escena.add(cielo);
+cielo.frustumCulled=false;
+/* EL CIELO VA ULTIMO. Antes se dibujaba primero y cada pixel marchaba las
+   nubes aunque despues lo tapara el pasto: con doscientas mil briznas encima,
+   eso es marchar la pantalla entera al pepe. Dibujandolo al final y con el test
+   de profundidad prendido, solo marchan los pixeles que de verdad son cielo.
+   Es la optimizacion que paga las nubes volumetricas. */
+cielo.renderOrder=900;
+cieloMat.depthTest=true; cieloMat.depthWrite=false;
+escena.add(cielo);
 
 const matSuelo=new THREE.ShaderMaterial({
   uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
@@ -2500,6 +2598,8 @@ function bucle(ahora){
   matEdificio.uniforms.uOjo.value.copy(camara.position);
   matEdificio.uniforms.uT.value=T;
   matSuelo.uniforms.uT.value=T;
+  cieloMat.uniforms.uT.value=T;
+  cieloMat.uniforms.uOjoC.value.copy(camara.position);
   matAgua.uniforms.uT.value=T;
   matAgua.uniforms.uOjo.value.copy(camara.position);
   for(let i=0;i<RUEDAS.length;i++) RUEDAS[i].rotation.z-=dt*(0.85+i*0.13);
