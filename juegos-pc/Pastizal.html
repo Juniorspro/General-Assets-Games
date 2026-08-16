@@ -125,6 +125,7 @@ import * as THREE from 'three';
 ============================================================================ */
 const MOVIL=matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
 const FOV0=62, BORDE=900;
+const CIELO_URL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@4528dad985/mundo/cielo/cielo360.jpg';
 const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
 const lerp=(a,b,t)=>a+(b-a)*t;
 
@@ -492,15 +493,29 @@ const NUBES_GLSL=`
    casi entero, el suelo sólo tiene que dar el color de fondo correcto para que
    los huecos no canten.
 ============================================================================ */
+/* La panoramica 360 va COMO CAPA DE NUBES sobre el cielo calculado, no en su
+   lugar. Es a proposito: la foto trae la estructura de nube que ninguna cuenta
+   te da, pero el degradado, el color de la hora y el sol tienen que seguir
+   saliendo de la dispersion, porque son los mismos que iluminan el pasto. Si se
+   pegara la foto entera, al mover el sol el cielo se quedaria quieto mientras
+   el campo cambia, y eso canta de lejos. */
+const texCielo=new THREE.TextureLoader().load(CIELO_URL);
+texCielo.colorSpace=THREE.SRGBColorSpace;
+texCielo.wrapS=THREE.RepeatWrapping; texCielo.wrapT=THREE.ClampToEdgeWrapping;
+texCielo.minFilter=THREE.LinearMipmapLinearFilter; texCielo.magFilter=THREE.LinearFilter;
+texCielo.anisotropy=8;
+
 const cieloMat=new THREE.ShaderMaterial({
   side:THREE.BackSide, depthWrite:false,
   uniforms:{ luz:{value:SOL.clone()}, uCenit:{value:CIELO.clone()},
-             uHoriz:{value:HORIZ.clone()}, uSolC:{value:SOLC.clone()}, uT:{value:0} },
+             uHoriz:{value:HORIZ.clone()}, uSolC:{value:SOLC.clone()}, uT:{value:0},
+             uPano:{value:texCielo}, uPanoK:{value:0.85} },
   vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
     gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
     precision highp float;
-    varying vec3 vD; uniform vec3 luz,uCenit,uHoriz,uSolC; uniform float uT;
+    varying vec3 vD; uniform vec3 luz,uCenit,uHoriz,uSolC; uniform float uT,uPanoK;
+    uniform sampler2D uPano;
     ${RUIDO_GLSL}
     ${ATMOS_GLSL}
     void main(){
@@ -523,13 +538,25 @@ const cieloMat=new THREE.ShaderMaterial({
       float disco=smoothstep(0.99960, 0.99990, ds);
       float limbo=sqrt(max(1.0-pow(clamp((1.0-ds)/0.0004,0.0,1.0),2.0),0.0));
       col+=uSolC*disco*(0.50+0.50*limbo)*18.0;
-      /* nubes finas: dos capas de ruido estiradas y desplazadas, sólo arriba */
-      if(h>0.02){
-        vec2 p=d.xz/max(h,0.02);
-        float n=fbm(p*0.30+vec2(uT*0.004,uT*0.0025));
-        float n2=fbm(p*0.75-vec2(uT*0.007,0.0));
-        float nub=smoothstep(0.52,0.86,n*0.72+n2*0.28)*smoothstep(0.03,0.30,h);
-        col=mix(col, mix(vec3(0.92,0.95,0.99), uSolC*1.15, pow(ds,3.0)*0.5), nub*0.80);
+      /* LA PANORAMICA 360, en coordenadas equirectangulares: la longitud sale
+         del angulo alrededor del eje vertical y la latitud del angulo con el
+         horizonte. Se desplaza despacio, que es el viento en altura. */
+      if(h>-0.02){
+        vec2 uvp=vec2(atan(d.z,d.x)/6.2831853+0.5+uT*0.0016,
+                      1.0-(asin(clamp(d.y,-1.0,1.0))/3.14159265+0.5));
+        vec3 foto=texture2D(uPano, uvp).rgb;
+        foto*=foto;                                  // a lineal, aproximado
+        /* De la foto se toma SOLO la nube: se compara contra su propio cielo de
+           fondo, y lo que sobresale es nube. Asi la panoramica no impone su
+           color —que es de otra hora— sino su forma. */
+        float lum=dot(foto, vec3(0.2126,0.7152,0.0722));
+        float base=0.10+0.30*max(d.y,0.0);
+        float nube=clamp((lum-base)*2.6, 0.0, 1.0);
+        nube*=smoothstep(-0.02,0.16,h);              // se apaga contra el horizonte
+        /* la nube se ilumina con el sol de la escena, no con el de la foto */
+        vec3 tono=mix(vec3(0.86,0.88,0.93), uSolC*1.18, pow(ds,3.0)*0.55);
+        vec3 nubeCol=tono*(0.55+0.75*lum);
+        col=mix(col, nubeCol, nube*uPanoK);
       }
       gl_FragColor=vec4(col,1.0);
     }`
