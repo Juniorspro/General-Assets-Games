@@ -395,10 +395,14 @@ const AO_GLSL=`
       /* Las cuatro contribuciones por separado, no la menor de todas: una
          ESQUINA tapa mas que una pared sola, y si se toma solo la distancia
          mas corta los rincones salen igual de claros que el medio de un muro. */
-      float k=(1.0-smoothstep(0.0,1.30,max(min(dx,dz),0.0)))*0.42
-             +(1.0-smoothstep(0.0,0.90,max(W.y,0.0)))*0.34
-             +(1.0-smoothstep(0.0,0.90,max(alt-W.y,0.0)))*0.30
-             +(1.0-smoothstep(0.0,1.10,max(dx,0.0)))*(1.0-smoothstep(0.0,1.10,max(dz,0.0)))*0.30;
+      /* las distancias van en METROS de cuarto: con noventa centimetros el
+         rincon se apagaba antes de que el ojo lo viera y el cuarto seguia
+         pareciendo un cubo pintado. Un metro y medio a dos es lo que ocupa de
+         verdad la penumbra de una esquina. */
+      float k=(1.0-smoothstep(0.0,2.10,max(min(dx,dz),0.0)))*0.42
+             +(1.0-smoothstep(0.0,1.30,max(W.y,0.0)))*0.34
+             +(1.0-smoothstep(0.0,1.30,max(alt-W.y,0.0)))*0.30
+             +(1.0-smoothstep(0.0,1.70,max(dx,0.0)))*(1.0-smoothstep(0.0,1.70,max(dz,0.0)))*0.30;
       ao=min(ao, 1.0-clamp(k,0.0,0.78));
     }
     return ao;
@@ -1886,13 +1890,17 @@ const matEdificio=new THREE.ShaderMaterial({
         float haz=solPorVentana(vW+N*0.02, luz);
         float dif=cieloPorVentana(vW);
         vec3 rebote=vec3(0.055,0.048,0.040)*(kd*col0+vec3(0.02));
+        /* La AO va sobre el cielo y el rebote, NO sobre el pano de sol: el sol
+           que entra por la ventana es luz directa y un rincon no se la come
+           —lo que un rincon se pierde es lo que llega de todas partes—. */
+        float aoI=aoInterior(vW);
         vec3 luzInt = uSolC*haz*max(dot(N,luz),0.0)*2.7            // el pano de sol
-                    + cieloLuz*dif*0.42*(0.45+0.55*max(N.y,0.0))   // cielo por la abertura
-                    + rebote*3.0;                                  // rebote de las paredes
+                    + (cieloLuz*dif*0.42*(0.45+0.55*max(N.y,0.0))  // cielo por la abertura
+                    +  rebote*3.0)*aoI;                            // rebote de las paredes
         /* adentro la AO cambia de dueno: no manda el alero sino el rincon
            pared-piso, el pared-techo y las cuatro esquinas, que es lo unico que
            hace que un cuarto se lea como un cuarto y no como un cubo pintado */
-        col=mix(col, luzInt*aoInterior(vW), dentro);
+        col=mix(col, luzInt, dentro);
       }
       col=aereo(col, vW, uOjo, luz, uSolC, uFogD);
       gl_FragColor=vec4(col,1.0);
