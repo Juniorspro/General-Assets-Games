@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -45,6 +45,49 @@
   #ayuda{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:12;
     font:9.5px/1.6 ui-monospace,monospace;color:#94bda2;letter-spacing:1.5px;
     text-align:center;pointer-events:none;transition:opacity .8s}
+  /* ---------------------------------------------------------- menú de inicio
+     Va ENCIMA del juego, que ya está corriendo detrás con la cámara paseando
+     sola: así el menú no es una pantalla de carga disfrazada sino la primera
+     postal del mundo. */
+  #menu{position:absolute;inset:0;z-index:40;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:16px;padding:18px;
+    background:radial-gradient(120% 90% at 50% 42%, rgba(4,10,8,.30), rgba(3,7,6,.86) 74%);
+    backdrop-filter:blur(2px);transition:opacity .9s ease}
+  #menu.ida{opacity:0;pointer-events:none}
+  #menu h1{font:300 clamp(22px,5.2vw,44px)/1.05 ui-monospace,monospace;
+    letter-spacing:clamp(4px,1.3vw,12px);color:#f2fbf3;text-align:center;
+    text-transform:uppercase;text-shadow:0 0 34px rgba(150,230,175,.30)}
+  #menu .sub{font:9.5px/1.7 ui-monospace,monospace;letter-spacing:4px;
+    color:#8fbb9d;text-transform:uppercase;text-align:center}
+  #menu .caja{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:flex-end}
+  #menu .campo{display:flex;flex-direction:column;gap:5px}
+  #menu .campo span{font:8.5px/1 ui-monospace,monospace;letter-spacing:2.4px;color:#7fa78d}
+  #menu select{-webkit-appearance:none;appearance:none;cursor:pointer;
+    font:700 10px/1 ui-monospace,monospace;letter-spacing:1.6px;color:#e9f8ec;
+    padding:10px 26px 10px 11px;border-radius:7px;
+    border:1px solid rgba(170,215,180,.30);background:rgba(9,22,15,.80);
+    background-image:linear-gradient(45deg,transparent 50%,#8fe8a4 50%),
+                     linear-gradient(135deg,#8fe8a4 50%,transparent 50%);
+    background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;
+    background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+  #menu select option{background:#0b1a12;color:#e9f8ec}
+  #bJugar{cursor:pointer;font:700 12px/1 ui-monospace,monospace;letter-spacing:6px;
+    padding:15px 40px;border-radius:8px;border:1px solid #8fe8a4;color:#08150e;
+    background:#8fe8a4;box-shadow:0 0 30px rgba(143,232,164,.28)}
+  #bJugar:active{background:#6fd087}
+  #menu .pie{font:8.5px/1.7 ui-monospace,monospace;letter-spacing:2px;color:#5e7d69;text-align:center}
+  /* ------------------------------------------------------- el cierre de escena
+     El fogonazo del astro y el cartel de fin. Dos capas, las dos fuera del
+     canvas: un flash de pantalla completa no necesita pasar por el shader. */
+  #flash{position:absolute;inset:0;z-index:30;background:#fff;opacity:0;
+    pointer-events:none;transition:opacity .35s linear}
+  #cartel{position:absolute;inset:0;z-index:31;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:12px;opacity:0;pointer-events:none;
+    transition:opacity 1.6s ease;background:rgba(2,5,4,.55)}
+  #cartel .t{font:300 clamp(16px,3.6vw,30px)/1.2 ui-monospace,monospace;
+    letter-spacing:clamp(3px,1vw,10px);color:#f4fdf5;text-transform:uppercase;text-align:center}
+  #cartel .s{font:9px/1.7 ui-monospace,monospace;letter-spacing:4px;color:#93bfa1;
+    text-transform:uppercase;text-align:center}
 </style>
 </head>
 <body>
@@ -52,7 +95,7 @@
 <div id="rot">
   <div id="stage"></div>
   <canvas id="mandos"></canvas>
-  <div id="ayuda">pulgar izquierdo: caminar · derecho: mirar</div>
+  <div id="ayuda"></div>
   <div id="stats"></div>
   <div id="hud"><div class="fila">
     <button class="btn" id="bPanel">AJUSTES</button>
@@ -66,8 +109,8 @@
       <input type="range" id="sAlto" min="0.4" max="2" step="0.02" value="1"></div>
     <div class="ctl"><label>VIENTO <b id="vViento">0.55</b></label>
       <input type="range" id="sViento" min="0" max="1.4" step="0.02" value="0.55"></div>
-    <div class="ctl"><label>ARQUEO <b id="vArco">0.72</b></label>
-      <input type="range" id="sArco" min="0" max="1.2" step="0.02" value="0.72"></div>
+    <div class="ctl"><label>INCLINACIÓN <b id="vArco">0.35</b></label>
+      <input type="range" id="sArco" min="0" max="1.2" step="0.02" value="0.35"></div>
     <h3>IMAGEN</h3>
     <div class="ctl"><label>SOL <b id="vSol">0.55</b></label>
       <input type="range" id="sSol" min="0.06" max="1" step="0.01" value="0.32"></div>
@@ -79,6 +122,20 @@
       <input type="range" id="sNit" min="0" max="1.5" step="0.05" value="0.35"></div>
     <div class="ctl"><label>NEBLINA <b id="vNiebla">0.22</b></label>
       <input type="range" id="sNiebla" min="0" max="1.6" step="0.02" value="0.12"></div>
+  </div>
+  <div id="flash"></div>
+  <div id="cartel"><div class="t" id="cartelT"></div><div class="s" id="cartelS"></div></div>
+  <div id="menu">
+    <div class="sub" id="mSobre">an open field, two ghosts, one river</div>
+    <h1 id="mTitulo">Journey to the Unknown</h1>
+    <div class="caja">
+      <label class="campo"><span id="mIdioma">LANGUAGE</span>
+        <select id="selIdioma"></select></label>
+      <label class="campo"><span id="mGraficos">GRAPHICS</span>
+        <select id="selGraficos"></select></label>
+    </div>
+    <button id="bJugar">PLAY</button>
+    <div class="pie" id="mPie">left thumb walks · right thumb looks</div>
   </div>
 </div>
 <script>
@@ -861,7 +918,12 @@ const cieloMat=new THREE.ShaderMaterial({
                 24% del cielo con nube maciza y el 50% de azul limpio entre
                 medio. Bajarlo a 0,55 tapaba el 68% —eso ya es un dia nublado,
                 no cumulos sueltos. */
-             uCobNube:{value:COB_NUBE}, uVolNube:{value:1.0} },
+             uCobNube:{value:COB_NUBE}, uVolNube:{value:1.0},
+             /* EL FINAL. uNoche apaga el cielo y prende las estrellas; uAstro
+                saca del horizonte el sol blanco gigante. Los dos en cero
+                mientras se juega: no cuestan nada porque el if los saltea. */
+             uNoche:{value:0.0}, uAstro:{value:0.0},
+             uAstroR:{value:0.30}, uAstroDir:{value:new THREE.Vector3(0,0,-1)} },
   vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
     gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
@@ -869,6 +931,7 @@ const cieloMat=new THREE.ShaderMaterial({
     varying vec3 vD; uniform vec3 luz,uCenit,uHoriz,uSolC; uniform float uT,uPanoK;
     uniform sampler2D uPano; uniform vec3 uOjoC;
     uniform int uPasosNube,uPasosLuz; uniform float uCobNube,uVolNube;
+    uniform float uNoche,uAstro,uAstroR; uniform vec3 uAstroDir;
     ${RUIDO_GLSL}
     ${ATMOS_GLSL}
     ${NUBES_GLSL}
@@ -996,6 +1059,55 @@ const cieloMat=new THREE.ShaderMaterial({
       float disco=smoothstep(0.99960, 0.99990, ds);
       float limbo=sqrt(max(1.0-pow(clamp((1.0-ds)/0.0004,0.0,1.0),2.0),0.0));
       col+=uSolC*disco*(0.50+0.50*limbo)*18.0;
+
+      /* ----------------------------------------------------------- LA NOCHE
+         No es bajarle el brillo al cielo de dia: un cielo nocturno tiene otro
+         color —azul de tinta, casi sin degradado— y tiene estrellas. Se cruza
+         encima con uNoche para que la transicion sea continua. */
+      if(uNoche>0.001){
+        vec3 noc=mix(vec3(0.016,0.026,0.052), vec3(0.005,0.009,0.024),
+                     smoothstep(0.0,0.55,h));
+        /* Las estrellas salen de una grilla en la ESFERA: se parte la
+           direccion en celdas, cada celda tira un dado y la que gana pone una
+           estrella en un punto propio de la celda. Es el truco de siempre y es
+           el unico que no cuesta ni una textura. */
+        vec3 sd=d*190.0;
+        vec3 ce=floor(sd);
+        float a1=fract(sin(dot(ce,vec3(12.9898,78.233,37.719)))*43758.5453);
+        float a2=fract(sin(dot(ce,vec3(93.9898,67.345,11.135)))*24634.6345);
+        float a3=fract(sin(dot(ce,vec3(41.1234,29.877,83.155)))*15731.7431);
+        vec3 pe=ce+vec3(a1,a2,a3);
+        float de=length(sd-pe);
+        float est=smoothstep(0.34,0.0,de)*step(0.983,a3);
+        /* titilan: es el aire, y sin eso el campo de estrellas queda de carton */
+        est*=0.55+0.45*sin(uT*(1.6+a1*3.0)+a2*30.0);
+        noc+=mix(vec3(1.0,0.96,0.88), vec3(0.72,0.82,1.0), a2)
+             *est*3.2*smoothstep(-0.03,0.14,h);
+        col=mix(col, noc, uNoche);
+      }
+
+      /* ---------------------------------------------------------- EL ASTRO
+         El sol blanco gigante que se levanta del horizonte para cerrar la
+         escena. No es el sol de la escena —ese ya se puso—: es otra cosa, mas
+         grande que cualquier cosa que deberia haber ahi, y por eso funciona.
+         Va DEBAJO de las nubes marchadas a proposito: que una nube le pase por
+         delante es lo que le da la escala. */
+      if(uAstro>0.001){
+        float ang=acos(clamp(dot(d, uAstroDir),-1.0,1.0));
+        float R=uAstroR;
+        /* el borde se afina con el tamaño: un disco enorme con el mismo borde
+           relativo se ve gomoso */
+        float b=0.006+R*0.012;
+        float disc=1.0-smoothstep(R-b, R+b, ang);
+        /* corona: cae exponencial con la distancia al borde. Es lo que hace
+           que un cuerpo asi QUEME el cielo alrededor en vez de recortarse
+           contra el como una calcomania. */
+        float cor=exp(-max(ang-R,0.0)*(3.6/max(R,0.05)));
+        vec3 blanco=vec3(1.0,0.988,0.965);
+        col=mix(col, blanco*7.0, disc*uAstro);
+        col+=blanco*cor*(1.0-disc)*1.15*uAstro;
+      }
+
       /* --- las nubes volumetricas, sobre todo lo demas --- */
       float libre=1.0;                 // cuanto cielo queda sin tapar por la nube marchada
       if(uVolNube>0.5){
@@ -1178,29 +1290,35 @@ suelo.frustumCulled=false; escena.add(suelo); NO_PROYECTA.push(suelo);
 
 /* ============================================================================
    LAS BRIZNAS
-   Una cinta de S tramos: dos vértices por tramo y uno solo en la punta. Nace
-   ancha, se afina y se arquea. Todo lo demás —dónde cae, cuánto mide, hacia
-   dónde mira, cuánto se dobla— sale de un hash de su celda, adentro del shader.
+   Un triángulo por brizna: (-1,0) (1,0) (0,1). Nace ancha, se afina sola hacia
+   la punta y se inclina ENTERA con el viento, rígida, sin arquearse. Todo lo
+   demás —dónde cae, cuánto mide, hacia dónde mira, cuánto se vuelca— sale de
+   un hash de su celda, adentro del shader.
 ============================================================================ */
 const PASTO_U={
-  uT:{value:0}, uViento:{value:0.55}, uArco:{value:0.55}, uAltoK:{value:1.0},
+  uT:{value:0}, uViento:{value:0.55}, uArco:{value:0.35}, uAltoK:{value:1.0},
   uDens:{value:1.0}, uJug:{value:new THREE.Vector3()}, uRJug:{value:1.15},
-  uOjo:{value:new THREE.Vector3()}, luz:{value:SOL.clone()},
+  uOjo:{value:new THREE.Vector3()}, uMira:{value:new THREE.Vector3(0,0,-1)},
+  luz:{value:SOL.clone()},
   uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
   uFogD:{value:nieblaD}
 };
 const CAMPOS=[];
 function crearCampo(o){
-  const N=o.N, S=o.segs;
-  /* la cinta: (-1,v) y (1,v) por tramo, y (0,1) de punta */
-  const pos=[], idx=[];
-  for(let k=0;k<S;k++){ const v=k/S; pos.push(-1,v,0, 1,v,0); }
-  pos.push(0,1,0);
-  for(let k=0;k<S-1;k++){ const a=k*2; idx.push(a,a+1,a+3, a,a+3,a+2); }
-  idx.push((S-1)*2, (S-1)*2+1, S*2);
+  const N=o.N;
+  /* UN TRIANGULO POR BRIZNA — el pasto de Roblox.
+     Antes cada brizna era una cinta de S tramos: 2 vertices por tramo mas la
+     punta, o sea 11 vertices y 9 triangulos con S=5. Eso son 810 mil
+     triangulos solo en el campo cercano, y todo ese trabajo existia para UNA
+     cosa: poder arquear la brizna a lo largo. Sacado el arco, la cinta no
+     tiene nada que hacer.
+     Queda el triangulo: (-1,0) (1,0) (0,1). El afinado hacia la punta sale
+     GRATIS de la forma —el vertice de arriba ya esta en el eje—, no hace
+     falta ni el pow(v) del ancho ni indices. Nueve triangulos pasan a uno, y
+     con lo que se ahorra entran casi el doble de briznas. */
   const geo=new THREE.InstancedBufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
-  geo.setIndex(idx);
+  geo.setAttribute('position',
+    new THREE.Float32BufferAttribute([-1,0,0,  1,0,0,  0,1,0],3));
   const ii=new Float32Array(N*N*2);
   for(let j=0;j<N;j++) for(let i=0;i<N;i++){ const k=(j*N+i)*2; ii[k]=i; ii[k+1]=j; }
   geo.setAttribute('iIdx', new THREE.InstancedBufferAttribute(ii,2));
@@ -1217,7 +1335,7 @@ function crearCampo(o){
       attribute vec2 iIdx;
       uniform vec2 uBase; uniform float uN,uCelda,uAncho,uDist,uCerca,uSem;
       uniform float uAltoMin,uAltoMax,uT,uViento,uArco,uAltoK,uDens,uRJug;
-      uniform vec3 uJug,uOjo;
+      uniform vec3 uJug,uOjo,uMira;
       uniform vec3 luz;              // la necesita sombraSol, que corre por brizna
       varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom,vNub,vDE;
       ${RUIDO_GLSL}
@@ -1233,6 +1351,28 @@ function crearCampo(o){
         float r1=h21(s), r2=h21(s+vec2(17.3,5.1)), r3=h21(s+vec2(3.7,29.9));
         float r4=h21(s+vec2(41.1,13.7)), r5=h21(s+vec2(7.9,53.3)), r6=h21(s+vec2(63.1,2.9));
         vec2 P=(g+0.5)*uCelda+(vec2(r1,r2)-0.5)*uCelda*0.98;
+
+        /* ---------------------------------------------- DESCARTE TEMPRANO
+           Lo primero que se hacia en este shader eran DOS fbm, la distancia a
+           cada edificio, el rio, el mapa de sombras y la sombra de las nubes.
+           Todo eso corria igual para una brizna que estaba detras de la nuca
+           del jugador o a ochenta metros del borde del campo, y despues se
+           multiplicaba por cero.
+           La grilla es un CUADRADO y lo que se dibuja es un CIRCULO adentro,
+           asi que las esquinas nunca se ven: son un cuarto de las briznas. Y
+           de las que quedan, la mitad larga esta detras de la camara.
+           Se prueban las dos cosas antes que nada y se manda el triangulo
+           afuera del volumen de vista: cuesta dos restas y un producto
+           escalar, y salva el 60% del trabajo del campo.
+           Sirve porque el pasto tiene UNA sola camara: no entra ni en el mapa
+           de sombras (esta en NO_PROYECTA) ni en el reflejo (ahi se apaga la
+           malla entera). */
+        vec2 rel=P-uOjo.xz;
+        float dcam=length(rel);
+        float atras=dot(rel, uMira.xz);
+        if(dcam>uDist || atras<-3.0){
+          gl_Position=vec4(2.0,2.0,2.0,1.0); return;
+        }
 
         /* manchones: el pastizal es más alto y más verde en unos lados */
         float mancha=fbm(P*0.035);
@@ -1258,25 +1398,33 @@ function crearCampo(o){
         vLejos=dcam;
 
         float v=position.y, lado=position.x;
-        /* el perfil: ancha en la base, fina en la punta */
-        float w=uAncho*(1.0-pow(v,1.4))*(0.72+r4*0.56)*0.5;
-        /* el arco propio de la brizna, y encima el viento en ráfagas */
+        /* el ancho ya no necesita perfil: el triangulo se afina solo */
+        float w=uAncho*(0.72+r4*0.56)*0.5;
+        /* el viento en ráfagas */
         float raf=max(0.05, 0.48+0.36*sin(P.x*0.13+P.y*0.10-uT*0.65)
                                 +0.20*sin(P.x*0.041-P.y*0.063-uT*0.33));
         float osc=sin(uT*1.9+P.x*0.7+P.y*0.55+r4*6.283)+0.42*sin(uT*3.7+P.x*1.5-P.y*1.1);
-        float dob=(uArco*(0.35+r6*1.6) + uViento*raf*osc*0.60)*v*v;
+        /* SIN ARCO. La brizna es una hoja RIGIDA que se inclina entera sobre
+           su base, como una aguja clavada que el viento vuelca. No se curva:
+           no hay v*v, no hay derivada del arco, no hay normal que cambie a lo
+           largo de la hoja. Es exactamente la diferencia entre el pasto de
+           cinta y el de Roblox, y ademas es lo que permite que sea un solo
+           triangulo. */
+        float incl=uArco*(0.06+r6*0.10) + uViento*raf*osc*0.30;
         /* lo pisado: la brizna se acuesta y se achica. Se vuelca hacia su
            propio lado al azar, que es como queda el pasto pisoteado de verdad
            —no todo peinado para el mismo lado—. */
         float pis=pisadoEn(P);
-        dob+=pis*(3.1+r3*1.3)*v*v;
+        incl+=pis*(1.15+r3*0.30);
+        incl=clamp(incl, -1.40, 1.40);
         alto*=1.0-0.66*pis;
 
         float a=r4*6.2831853;
         vec2 dir=vec2(cos(a), sin(a));            // hacia dónde se vuelca
         vec2 late=vec2(-dir.y, dir.x);            // el ancho es perpendicular
-        /* la línea central de la cinta, ya arqueada */
-        vec3 eje=vec3(dir.x*dob*alto, (v-dob*dob*0.32)*alto, dir.y*dob*alto);
+        /* el eje de la hoja: una rotacion rigida, sin curvatura */
+        float ci=cos(incl), si=sin(incl);
+        vec3 eje=vec3(dir.x*si, ci, dir.y*si)*(v*alto);
         vec3 loc=eje+vec3(late.x,0.0,late.y)*lado*w*alto;
 
         /* el jugador la aparta al pasar: ésta es la colisión que se ve */
@@ -1290,8 +1438,7 @@ function crearCampo(o){
         /* La normal: perpendicular a la tangente de la cinta, y ABOMBADA a lo
            ancho como una hoja acanalada. Sin eso la brizna se prende entera de
            golpe y el pastizal titila. */
-        float dv=2.0*dob*v;                        // derivada del arco
-        vec3 tan=normalize(vec3(dir.x*dv, 1.0-dob*dob*0.64*v, dir.y*dv));
+        vec3 tan=vec3(dir.x*si, ci, dir.y*si);     // la hoja es recta: es SU eje
         vec3 lat3=vec3(late.x,0.0,late.y);
         vec3 nor=normalize(cross(lat3, tan));
         vNor=normalize(nor + lat3*lado*0.55);
@@ -1371,19 +1518,23 @@ function crearCampo(o){
   const c={malla:m, mat, N, celda:o.celda, base:mat.uniforms.uBase.value, briznas:N*N};
   CAMPOS.push(c); return c;
 }
-/* Tres capas por distancia: cerca, briznas de cinco tramos bien finas; lejos,
-   menos y más gordas, porque a treinta metros una brizna de dos milímetros no
-   llega ni a un píxel y se paga igual. */
+/* Tres capas por distancia. Con un triangulo por brizna en vez de nueve, el
+   presupuesto alcanza para casi el DOBLE de briznas y aun asi el campo cuesta
+   la cuarta parte:
+       antes  300²·9 + 300²·7 + 260²·3 = 1.64 M triangulos, 248 mil briznas
+       ahora  430²   + 400²   + 340²   = 0.46 M triangulos, 460 mil briznas
+   Y son mas anchas: la hoja pasa de 9 mm a 27 mm en el campo cercano, que es
+   lo que hace que se lea como hoja y no como pelo. */
 const K=MOVIL?0.62:1.0;
-crearCampo({N:Math.round(300*K), celda:0.048, segs:5, ancho:0.034,
-            altoMin:0.15, altoMax:0.38, dist:9*K,  cerca:0,     sem:0});
-crearCampo({N:Math.round(300*K), celda:0.130, segs:4, ancho:0.052,
-            altoMin:0.20, altoMax:0.50, dist:26*K, cerca:6.0*K, sem:311});
+crearCampo({N:Math.round(430*K), celda:0.052, ancho:0.190,
+            altoMin:0.17, altoMax:0.42, dist:11*K, cerca:0,     sem:0});
+crearCampo({N:Math.round(400*K), celda:0.140, ancho:0.240,
+            altoMin:0.24, altoMax:0.56, dist:30*K, cerca:7.0*K, sem:311});
 /* La lejana lleva pocas briznas por metro cuadrado, así que las suyas van más
    anchas: a treinta metros nadie distingue una brizna de tres juntas, pero el
    suelo pelado entre medio sí se ve, y desde arriba canta. */
-crearCampo({N:Math.round(260*K), celda:0.450, segs:2, ancho:0.145,
-            altoMin:0.28, altoMax:0.64, dist:80*K, cerca:21*K,  sem:977});
+crearCampo({N:Math.round(340*K), celda:0.460, ancho:0.420,
+            altoMin:0.32, altoMax:0.70, dist:88*K, cerca:23*K,  sem:977});
 function seguirPasto(x,z){
   for(const c of CAMPOS)
     c.base.set(Math.floor(x/c.celda)-(c.N>>1), Math.floor(z/c.celda)-(c.N>>1));
@@ -2598,6 +2749,40 @@ function ponerLucesPersonaje(){
 }
 const _vw=new THREE.Vector3();
 
+/* ------------------------------------------------ el recorte de cerca (PJ3)
+   EL PROBLEMA DE FONDO DE CUALQUIER CUERPO EN PRIMERA PERSONA.
+   La camara esta donde estan los ojos, o sea DENTRO de la cabeza y a un palmo
+   del cuello y de los hombros. El plano cercano de la camara son tres
+   centimetros, asi que todo eso entra en cuadro: mirabas para abajo y se veia
+   el interior del torso —caras de atras, sin luz, negras— tapando media
+   pantalla en forma de herradura, y un brazo cruzado por delante.
+   Esconder huesos no alcanza: el hombro y el trapecio siguen ahi, y ademas la
+   malla esta pesada a varios huesos, asi que achicar uno deforma al de al
+   lado.
+   La solucion que usan los juegos es un plano cercano propio para el cuerpo.
+   Aca sale mas barato hacerlo en el fragmento: se descarta todo lo que este a
+   menos de 30 cm del ojo. Nada de lo que uno QUIERE ver —el pecho mirando
+   abajo esta a 45 cm, las piernas a 90— cae dentro de ese radio, y todo lo
+   que se veia por dentro si.
+   Se hace con onBeforeCompile porque el material lo trae el glb y es un
+   MeshStandardMaterial de three, no uno nuestro. */
+const RECORTE_PJ=0.30;
+function recortarCerca(mat){
+  mat.onBeforeCompile=(sh)=>{
+    sh.uniforms.uRecorte={value:RECORTE_PJ};
+    sh.vertexShader=sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vProf;')
+      .replace('#include <project_vertex>',
+               '#include <project_vertex>\nvProf=-mvPosition.z;');
+    sh.fragmentShader=sh.fragmentShader
+      .replace('#include <common>',
+               '#include <common>\nvarying float vProf;\nuniform float uRecorte;')
+      .replace('void main() {',
+               'void main() {\n  if(vProf<uRecorte) discard;');
+  };
+  mat.needsUpdate=true;
+}
+
 /* ---------------------------------------------------------- el salto a mano
    Cada hueso lleva sus cuatro cuaterniones. Los angulos estan en grados y en
    el eje que corresponde: la pierna se dobla en X, el brazo se abre en Z. */
@@ -2654,7 +2839,12 @@ async function cargarPersonaje(){
   raiz.updateMatrixWorld(true);
   const cab=PJ3.huesos['mixamorig:Head'];
   let k=1;
-  if(cab){ cab.getWorldPosition(_vw); k=PJ.altoOjo/Math.max(_vw.y,0.001); }
+  /* El hueso Head de Mixamo no esta en los ojos: esta en la BASE DEL CRANEO,
+     unos once centimetros mas abajo. Igualarlo a la altura de los ojos hacia
+     un cuerpo un 7% mas grande de la cuenta y, peor, dejaba la camara metida
+     en el hueco del cuello: lo que se veia mirando abajo era el interior del
+     torso —esa herradura negra que tapaba media pantalla—. */
+  if(cab){ cab.getWorldPosition(_vw); k=(PJ.altoOjo-0.11)/Math.max(_vw.y,0.001); }
   else {
     const caja=new THREE.Box3().setFromObject(raiz);
     k=(PJ.altoOjo+0.14)/Math.max(caja.max.y-caja.min.y,0.001);
@@ -2671,7 +2861,8 @@ async function cargarPersonaje(){
       /* el material que trae el glb es MeshStandard y no conoce nuestra
          niebla ni nuestro sol; se le empareja el tono a mano para que el
          cuerpo no se vea de otro mundo que el resto */
-      if(o.material){ o.material.envMapIntensity=0.6; o.material.roughness=0.85; }
+      if(o.material){ o.material.envMapIntensity=0.6; o.material.roughness=0.85;
+                      recortarCerca(o.material); }
     }
     if(o.isBone) PJ3.huesos[o.name]=o;
   });
@@ -2690,8 +2881,11 @@ async function cargarPersonaje(){
 
   escena.add(raiz);
   PJ3.raiz=raiz; PJ3.mezcla=mez; PJ3.listo=true;
-  /* la cabeza no se dibuja: la camara esta adentro */
-  PJ3.cabeza=PJ3.huesos['mixamorig:Head']||null;
+  /* NI CABEZA NI CUELLO se dibujan: la camara esta adentro de los dos. Con
+     solo la cabeza achicada quedaba el cuello asomando justo delante del
+     objetivo, que es la mitad de la herradura negra. */
+  PJ3.ocultos=['mixamorig:Head','mixamorig:HeadTop_End','mixamorig:Neck']
+    .map(n=>PJ3.huesos[n]).filter(Boolean);
 }
 
 /* ------------------------------------------------------------ cada cuadro */
@@ -2707,8 +2901,12 @@ function moverPersonaje(dt){
   /* Corrido un poco hacia atras: la camara esta donde estaba la cabeza, y sin
      este retroceso el cuello y el pecho cruzan el plano cercano y se ve el
      cuerpo por dentro. Catorce centimetros alcanzan. */
+  /* Treinta centimetros, no catorce: el hombro tiene quince de ancho y con
+     catorce quedaba pegado al objetivo. Con treinta el pecho cae completo
+     dentro de campo cuando uno mira abajo, y nada del torso entra en el radio
+     de recorte por delante. */
   const fx=-Math.sin(PJ.yaw), fz=-Math.cos(PJ.yaw);
-  R.position.set(PJ.x-fx*0.15, PJ.y, PJ.z-fz*0.15);
+  R.position.set(PJ.x-fx*0.30, PJ.y, PJ.z-fz*0.30);
   /* El modelo mira a +Z de fabrica y nuestro adelante es (-sin yaw, -cos yaw),
      que a yaw=0 es -Z. Le habia sumado media vuelta de mas: caminabas para
      adelante y el cuerpo iba de espaldas. */
@@ -2733,7 +2931,7 @@ function moverPersonaje(dt){
 
   /* La cabeza SE ACHICA DESPUES del mixer: si se hiciera antes, la animacion
      le vuelve a escribir la escala y se ve el interior del craneo. */
-  if(PJ3.cabeza) PJ3.cabeza.scale.setScalar(0.001);
+  if(PJ3.ocultos) for(const h of PJ3.ocultos) h.scale.setScalar(0.001);
 }
 function saltoPersonaje(){
   if(!PJ3.listo || !PJ3.acc.Salto) return;
@@ -2853,6 +3051,15 @@ const matLum=mkMat(`
        el centro —que es lo que uno esta mirando— y descartando el borde
        superior, que casi siempre es cielo, el medidor deja de saltar con cada
        giro de cabeza. */
+    /* EL SOL NO ES LA ESCENA.
+       El disco del sol y su bloom valen decenas en lineal —el resto del campo
+       anda por 0.2—. Puesto en el centro del cuadro, y encima con el peso
+       central de arriba, esos pocos texeles se llevaban la media geometrica
+       ellos solos: mirabas de frente al sol y la exposicion se desplomaba,
+       dejando el pastizal, la casa y el rio en silueta negra.
+       Un fotometro de verdad tiene un tope de escala. Se le pone uno: el
+       medidor se entera de que hay algo muy brillante, pero no de CUANTO. */
+    l=min(l, 2.2);
     vec2 q=(vUv-vec2(0.5,0.42))*vec2(1.0,1.25);
     float peso=exp(-dot(q,q)*3.2)+0.16;
     l*=peso;
@@ -3005,8 +3212,21 @@ const matGrado=mkMat(`
        margen de arriba era el que lavaba la escena en cuanto entraba una nube. */
     /* Limites mas estrechos todavia: la autoexposicion esta para CORREGIR,
        no para reinterpretar la escena en cada giro. */
-    float autoE=mix(1.0, clamp(0.20/lm, 0.78, 1.28), uAdapta);
+    /* COMPENSACION A CONTRALUZ, la de cualquier camara con un boton.
+       Con el sol en cuadro la mitad del encuadre es cielo quemado y la otra
+       mitad esta de espaldas a la luz. Un promedio, por mas acotado que este,
+       expone para el cielo y manda el motivo a negro. El ojo no hace eso: se
+       queda con el motivo y deja que el cielo se vaya. Cuanto mas de frente al
+       sol se mira, mas se sube el objetivo. */
+    float contra=smoothstep(0.25, 0.97, uSolDot);
+    float autoE=mix(1.0, clamp(0.20/lm, 0.86, 1.26), uAdapta)*(1.0+contra*0.40);
     c*=uExpM*autoE;
+    /* Y una pizca de luz de relleno del color del sol, solo a contraluz: es el
+       aire que hay entre el ojo y todo lo demas, que dispersa el sol hacia
+       adelante. Es lo que hace que una foto a contraluz salga velada y no
+       negra. Va sobre la escena lineal, antes del tono, para que la levante de
+       verdad y no sea un velo pintado encima. */
+    c+=uSolTinte*contra*0.030*(0.35+0.65*(1.0-r2));
 
     /* balance de blancos, antes del tono */
     c*=uBalance;
@@ -3366,7 +3586,7 @@ function dibujarMandos(){
   gm.beginPath(); gm.arc(cx,cy,R,0,6.2832); gm.stroke();
   gm.globalAlpha=palanca.activa?0.62:0.30; gm.fillStyle='#eafff2';
   gm.beginPath(); gm.arc(cx+palanca.x*R*0.55,cy+palanca.y*R*0.55,R*0.42,0,6.2832); gm.fill();
-  boton(bA,'SALTO',pulsA,'#b6ffce'); boton(bB,'CORRER',pulsB,'#9fe8cf');
+  boton(bA,L.salto,pulsA,'#b6ffce'); boton(bB,L.correr,pulsB,'#9fe8cf');
   gm.globalAlpha=0.38; gm.strokeStyle='#eafff2'; gm.lineWidth=1.5;
   const mx=CAJA.w/2,my=CAJA.h/2,s=m*0.010;
   gm.beginPath(); gm.moveTo(mx-s,my); gm.lineTo(mx-s*0.35,my);
@@ -3493,16 +3713,28 @@ function bucle(ahora){
         else if(fps>54&&nivel<NIVELES.length-1){ nivel++; aplicarNivel(); nivelT=-2; }
         else nivelT=0; } } }
   giroVel=(PJ.yaw-yawAnt)/Math.max(dt,1e-3); yawAnt=PJ.yaw;
-  /* durante la cinematica el jugador no maneja: la camara la lleva la escena */
-  if(!CINE) moverJugador(dt);
+  /* ni en la cinematica ni en el menu maneja el jugador: la camara la lleva
+     la escena */
+  moverMenu(dt);
+  moverFinal(dt);
+  if(!CINE && !MENU.activo) moverJugador(dt);
+  if(MENU.activo) ponerCamara(dt);
   pulsA=Math.max(0,pulsA-dt); pulsB=Math.max(0,pulsB-dt);
-  seguirPasto(PJ.x,PJ.z);
+  /* EL PASTO SIGUE A LA CAMARA, NO AL JUGADOR.
+     Los tres campos son grillas finitas que se recentran alrededor de un
+     punto; el mas denso cubre 22 m de lado. Mientras uno juega da igual cual
+     de los dos puntos se use, porque la camara esta en la cabeza del jugador.
+     Pero en la cinematica el jugador queda CLAVADO y la camara se va volando
+     quince metros: la grilla se quedaba centrada en el muñeco y alrededor de
+     la camara no habia una sola brizna. Por eso desaparecia el pasto. */
+  seguirPasto(camara.position.x, camara.position.z);
   recentrarPisadas(PJ.x,PJ.z);
   levantarPasto(dt);
   moverPersonaje(dt);
   PASTO_U.uT.value=T;
   PASTO_U.uJug.value.set(PJ.x,PJ.y,PJ.z);
   PASTO_U.uOjo.value.copy(camara.position);
+  camara.getWorldDirection(PASTO_U.uMira.value);
   matSuelo.uniforms.uOjo.value.copy(camara.position);
   matEdificio.uniforms.uOjo.value.copy(camara.position);
   matEdificio.uniforms.uT.value=T;
@@ -3530,7 +3762,7 @@ function bucle(ahora){
   cabeceoAnt=PJ.cabeceo;
   dibujarMandos();
   const st=document.getElementById('stats');
-  if(st) st.textContent=fps+' fps · '+(BRIZNAS/1000).toFixed(0)+' mil briznas · calidad '+(nivel+1)+'/3';
+  if(st) st.textContent=L.stats(fps, (BRIZNAS/1000).toFixed(0), nivel+1);
 }
 function esconderAyuda(){ const a=document.getElementById('ayuda');
   if(a&&a.style.opacity!=='0') a.style.opacity='0'; }
@@ -3566,9 +3798,9 @@ aplicarNivel();
    contrario. 0.12 deja la perspectiva aerea —que es la que funde el campo con
    el horizonte— sin tapar lo que hay a media distancia. */
 ponerSol(0.44); ponerNiebla(0.12);
-seguirPasto(PJ.x,PJ.z); ponerCamara(0.016);
+ponerCamara(0.016); seguirPasto(camara.position.x, camara.position.z);
 requestAnimationFrame(bucle);
-setTimeout(esconderAyuda, 11000);
+/* la ayuda no se muestra hasta que se toca JUGAR: la pone arrancarJuego */
 /* El cuerpo se baja en segundo plano: son dos megas y el campo tiene que
    andar desde el primer cuadro. Si no llega, no pasa nada — se juega igual. */
 cargarPersonaje();
@@ -3719,23 +3951,17 @@ const MISION={
 const GLOBO=crearGlobo();
 let CINE=null;
 
-const GUION=[
-  /* 0 */ {quien:'A', txt:'Che… vos podés verme. Hace años que nadie me ve. Soy Elías, y ese campo de allá lo sembramos con Rosa, cuando éramos socios.'},
-  /* 1 */ {quien:'A', txt:'Nos peleamos por el agua y por dónde iba el alambrado. Ninguno de los dos aflojó. Si querés ayudarme, juntame cinco espigas del trigo que plantamos juntos.'},
-  /* 2 */ {quien:'A', txt:'Ahí están las cinco. Todavía huelen a aquel año. Llevaselas a Rosa, está allá al oeste, pasando el río. Pero te aviso: no te va a querer escuchar.'},
-  /* 3 */ {quien:'B', txt:'Trigo. Me manda trigo, el muy porfiado. Yo no quería trigo: quería el agua que me cortó. Traeme tres jarras del río y después hablamos.'},
-  /* 4 */ {quien:'B', txt:'…está fresca. Igual que la del arroyo viejo. Decile que lo espero en el molino. Y decile que la culpa también fue mía.'},
-  /* 5 */ {quien:'A', txt:'¿Que dijo que la culpa fue de ella? Rosa nunca dijo eso en cincuenta años. Vamos al molino, entonces. Vamos ya.'},
-];
+/* Quien habla en cada paso. El TEXTO vive en el diccionario de idiomas, mas
+   abajo; aca queda solo la estructura, que no cambia con el idioma. */
+const QUIEN=['A','A','A','B','B','A'];
 function textoActual(){
-  const g=GUION[Math.min(MISION.paso, GUION.length-1)];
-  if(MISION.paso===1) return 'Juntame cinco espigas del trigo que plantamos juntos. Llevás '+MISION.espigas+' de '+MISION.ESPIGAS+'.';
-  if(MISION.paso===3) return 'Traeme tres jarras del río y después hablamos. Llevás '+MISION.jarras+' de '+MISION.JARRAS+'.';
-  return g.txt;
+  const i=Math.min(MISION.paso, QUIEN.length-1);
+  if(MISION.paso===1) return L.espigas(MISION.espigas, MISION.ESPIGAS);
+  if(MISION.paso===3) return L.jarras(MISION.jarras, MISION.JARRAS);
+  return L.guion[i];
 }
 function quienHabla(){
-  const g=GUION[Math.min(MISION.paso, GUION.length-1)];
-  return g.quien==='A'? ESP_A : ESP_B;
+  return QUIEN[Math.min(MISION.paso, QUIEN.length-1)]==='A'? ESP_A : ESP_B;
 }
 
 function sembrarEspigas(){
@@ -3804,13 +4030,15 @@ function moverCine(dt){
     ESP_A.grupo.visible=false; ESP_B.grupo.visible=false;
     CINE=null; MISION.paso=7;
     avisoFinal();
+    /* y ahi empieza el cierre: el sol se pone y sube el astro */
+    arrancarFinal();
     return true;
   }
   return false;
 }
 function avisoFinal(){
   const d=document.getElementById('ayuda');
-  if(d){ d.textContent='hicieron las paces'; d.style.opacity='1';
+  if(d){ d.textContent=L.paces; d.style.opacity='1';
          setTimeout(()=>{ d.style.opacity='0'; }, 6000); }
 }
 
@@ -3819,6 +4047,9 @@ function moverMision(dt){
   MISION.t+=dt;
   ESP_A.mat.uniforms.uT.value=MISION.t;
   ESP_B.mat.uniforms.uT.value=MISION.t;
+  /* en el menu la camara pasea sola y pasa cerca de los espiritus: sin esto
+     la historia arrancaria antes de que el jugador toque JUGAR */
+  if(MENU.activo) return;
   if(CINE){ moverCine(dt); return; }
   if(MISION.paso>=7) return;
 
@@ -3864,6 +4095,248 @@ function moverMision(dt){
 crearEspiritu(ESP_A);
 crearEspiritu(ESP_B);
 
+/* ============================================================================
+   EL IDIOMA
+   Todo el texto que ve el jugador vive acá y en ningún otro lado. No hay
+   librería: es un diccionario y una función que repinta el DOM. Lo único que
+   hay que cuidar es que el globo de diálogo y los botones del lienzo se
+   repinten también, porque esos no son HTML.
+   El predeterminado es INGLÉS.
+============================================================================ */
+const IDIOMAS={
+  en:{ nom:'English',
+    titulo:'Journey to the Unknown', sobre:'an open field · two ghosts · one river',
+    idioma:'LANGUAGE', graficos:'GRAPHICS', jugar:'PLAY',
+    pie:'left thumb walks · right thumb looks · tap RUN to sprint',
+    ayuda:'left thumb walks · right thumb looks',
+    ajustes:'SETTINGS', correr:'RUN', salto:'JUMP',
+    hPasto:'GRASS', hImagen:'IMAGE',
+    densidad:'DENSITY', altura:'HEIGHT', viento:'WIND', arco:'LEAN',
+    sol:'SUN', exposicion:'EXPOSURE', color:'COLOR', nitidez:'SHARPNESS', neblina:'HAZE',
+    calAuto:'Auto', calBaja:'Low', calMedia:'Medium', calAlta:'High',
+    stats:(f,b,n)=>f+' fps · '+b+'k blades · quality '+n+'/3',
+    paces:'they made their peace',
+    finT:'Scene I · The Field', finS:'the road goes on',
+    espA:'ELIAS', espB:'ROSA',
+    guion:[
+     'You can see me. Nobody has seen me in years. I am Elias, and that field over there we sowed together with Rosa, back when we were partners.',
+     'We fell out over the water and over where the fence should run. Neither of us gave an inch. If you want to help me, gather five ears of the wheat we planted together.',
+     'There they are, all five. They still smell of that year. Take them to Rosa — she is west, past the river. Fair warning: she will not want to hear it.',
+     'Wheat. He sends me wheat, the stubborn old fool. I never wanted wheat: I wanted the water he cut off from me. Bring me three jars from the river and then we will talk.',
+     '…it is cool. Just like the old creek. Tell him I will wait for him at the mill. And tell him the fault was mine too.',
+     'She said the fault was hers? Rosa has not said that in fifty years. To the mill, then. Right now.'],
+    espigas:(a,b)=>'Gather five ears of the wheat we planted together. You have '+a+' of '+b+'.',
+    jarras:(a,b)=>'Bring me three jars from the river and then we will talk. You have '+a+' of '+b+'.' },
+  es:{ nom:'Español',
+    titulo:'Viaje a lo Desconocido', sobre:'un campo abierto · dos espíritus · un río',
+    idioma:'IDIOMA', graficos:'GRÁFICOS', jugar:'JUGAR',
+    pie:'pulgar izquierdo: caminar · derecho: mirar · CORRER para apurarse',
+    ayuda:'pulgar izquierdo: caminar · derecho: mirar',
+    ajustes:'AJUSTES', correr:'CORRER', salto:'SALTO',
+    hPasto:'PASTO', hImagen:'IMAGEN',
+    densidad:'DENSIDAD', altura:'ALTURA', viento:'VIENTO', arco:'INCLINACIÓN',
+    sol:'SOL', exposicion:'EXPOSICIÓN', color:'COLOR', nitidez:'NITIDEZ', neblina:'NEBLINA',
+    calAuto:'Auto', calBaja:'Baja', calMedia:'Media', calAlta:'Alta',
+    stats:(f,b,n)=>f+' fps · '+b+' mil briznas · calidad '+n+'/3',
+    paces:'hicieron las paces',
+    finT:'Escena I · El Campo', finS:'el camino sigue',
+    espA:'DON ELÍAS', espB:'DOÑA ROSA',
+    guion:[
+     'Che… vos podés verme. Hace años que nadie me ve. Soy Elías, y ese campo de allá lo sembramos con Rosa, cuando éramos socios.',
+     'Nos peleamos por el agua y por dónde iba el alambrado. Ninguno de los dos aflojó. Si querés ayudarme, juntame cinco espigas del trigo que plantamos juntos.',
+     'Ahí están las cinco. Todavía huelen a aquel año. Llevaselas a Rosa, está allá al oeste, pasando el río. Pero te aviso: no te va a querer escuchar.',
+     'Trigo. Me manda trigo, el muy porfiado. Yo no quería trigo: quería el agua que me cortó. Traeme tres jarras del río y después hablamos.',
+     '…está fresca. Igual que la del arroyo viejo. Decile que lo espero en el molino. Y decile que la culpa también fue mía.',
+     '¿Que dijo que la culpa fue de ella? Rosa nunca dijo eso en cincuenta años. Vamos al molino, entonces. Vamos ya.'],
+    espigas:(a,b)=>'Juntame cinco espigas del trigo que plantamos juntos. Llevás '+a+' de '+b+'.',
+    jarras:(a,b)=>'Traeme tres jarras del río y después hablamos. Llevás '+a+' de '+b+'.' },
+  pt:{ nom:'Português',
+    titulo:'Viagem ao Desconhecido', sobre:'um campo aberto · dois espíritos · um rio',
+    idioma:'IDIOMA', graficos:'GRÁFICOS', jugar:'JOGAR',
+    pie:'polegar esquerdo: andar · direito: olhar · CORRER para apressar',
+    ayuda:'polegar esquerdo: andar · direito: olhar',
+    ajustes:'AJUSTES', correr:'CORRER', salto:'PULO',
+    hPasto:'CAPIM', hImagen:'IMAGEM',
+    densidad:'DENSIDADE', altura:'ALTURA', viento:'VENTO', arco:'INCLINAÇÃO',
+    sol:'SOL', exposicion:'EXPOSIÇÃO', color:'COR', nitidez:'NITIDEZ', neblina:'NÉVOA',
+    calAuto:'Auto', calBaja:'Baixa', calMedia:'Média', calAlta:'Alta',
+    stats:(f,b,n)=>f+' fps · '+b+' mil folhas · qualidade '+n+'/3',
+    paces:'fizeram as pazes',
+    finT:'Cena I · O Campo', finS:'a estrada continua',
+    espA:'SEU ELIAS', espB:'DONA ROSA',
+    guion:[
+     'Ei… você consegue me ver. Faz anos que ninguém me vê. Sou o Elias, e aquele campo ali a gente semeou com a Rosa, quando éramos sócios.',
+     'Brigamos pela água e por onde ia a cerca. Nenhum dos dois cedeu. Se quiser me ajudar, junte cinco espigas do trigo que plantamos juntos.',
+     'Aí estão as cinco. Ainda cheiram àquele ano. Leve para a Rosa, ela está lá no oeste, do outro lado do rio. Mas te aviso: ela não vai querer escutar.',
+     'Trigo. Ele me manda trigo, o teimoso. Eu não queria trigo: queria a água que ele me cortou. Traga três jarras do rio e depois a gente conversa.',
+     '…está fresca. Igualzinha à do córrego velho. Diga que eu espero por ele no moinho. E diga que a culpa também foi minha.',
+     'Ela disse que a culpa foi dela? A Rosa não diz isso há cinquenta anos. Ao moinho, então. Agora mesmo.'],
+    espigas:(a,b)=>'Junte cinco espigas do trigo que plantamos juntos. Você tem '+a+' de '+b+'.',
+    jarras:(a,b)=>'Traga três jarras do rio e depois a gente conversa. Você tem '+a+' de '+b+'.' }
+};
+let IDI='en', L=IDIOMAS.en;
+function aplicarIdioma(cod){
+  IDI=IDIOMAS[cod]? cod : 'en'; L=IDIOMAS[IDI];
+  document.documentElement.lang=IDI;
+  const p=(id,t)=>{ const e=$(id); if(e) e.textContent=t; };
+  p('mTitulo',L.titulo); p('mSobre',L.sobre); p('mIdioma',L.idioma);
+  p('mGraficos',L.graficos); p('bJugar',L.jugar); p('mPie',L.pie);
+  p('bPanel',L.ajustes); p('bCorrer',L.correr);
+  const et=(sel,t)=>{ const e=document.querySelector(sel); if(e) e.firstChild.textContent=t+' '; };
+  const hs=document.querySelectorAll('#panel h3');
+  if(hs[0]) hs[0].textContent=L.hPasto;
+  if(hs[1]) hs[1].textContent=L.hImagen;
+  const ETQ=[['vDens',L.densidad],['vAlto',L.altura],['vViento',L.viento],['vArco',L.arco],
+             ['vSol',L.sol],['vExp',L.exposicion],['vSat',L.color],['vNit',L.nitidez],
+             ['vNiebla',L.neblina]];
+  for(const [id,t] of ETQ){ const b=$(id); if(b&&b.parentNode) b.parentNode.firstChild.textContent=t+' '; }
+  ESP_A.nombre=L.espA; ESP_B.nombre=L.espB;
+  const a=$('ayuda'); if(a && a.style.opacity!=='0') a.textContent=L.ayuda;
+  /* los botones del lienzo y el globo no son DOM: hay que repintarlos */
+  GLOBO.texto='';
+  const sg=$('selGraficos');
+  if(sg){ const v=sg.value;
+    sg.innerHTML='<option value="a">'+L.calAuto+'</option><option value="0">'+L.calBaja
+                +'</option><option value="1">'+L.calMedia+'</option><option value="2">'+L.calAlta+'</option>';
+    sg.value=v||'a'; }
+  const ct=$('cartelT'), cs=$('cartelS');
+  if(ct) ct.textContent=L.finT; if(cs) cs.textContent=L.finS;
+  try{ localStorage.setItem('pastizal.idioma', IDI); }catch(e){}
+}
+
+/* ============================================================================
+   EL MENÚ DE INICIO
+   No es una pantalla aparte: el mundo ya está corriendo detrás y la cámara
+   pasea sola alrededor del casco. Se elige idioma y calidad, se toca JUGAR y
+   la cámara vuelve a las manos del jugador con un fundido de un segundo.
+============================================================================ */
+const MENU={activo:true, t:0, cen:{x:16,z:-16}};
+function moverMenu(dt){
+  if(!MENU.activo) return;
+  MENU.t+=dt;
+  /* órbita lenta y alta: es una postal, no una cámara de juego */
+  const a=MENU.t*0.055+2.1, r=34;
+  PJ.x=MENU.cen.x+Math.cos(a)*r; PJ.z=MENU.cen.z+Math.sin(a)*r;
+  PJ.vx=PJ.vz=0; PJ.rapidez=0;
+  PJ.yaw=Math.atan2(-(MENU.cen.x-PJ.x), -(MENU.cen.z-PJ.z));
+  PJ.cabeceo=-0.06+Math.sin(MENU.t*0.19)*0.035;
+}
+function arrancarJuego(){
+  if(!MENU.activo) return;
+  MENU.activo=false;
+  const m=$('menu'); if(m){ m.classList.add('ida'); setTimeout(()=>{ m.style.display='none'; }, 1000); }
+  PJ.x=0; PJ.z=0; PJ.vx=PJ.vz=0; PJ.yaw=0.6; PJ.cabeceo=-0.06;
+  ponerCamara(0.016); seguirPasto(camara.position.x, camara.position.z);
+  const a=$('ayuda'); if(a){ a.textContent=L.ayuda; a.style.opacity='1'; }
+  setTimeout(esconderAyuda, 11000);
+}
+
+/* ============================================================================
+   EL CIERRE DE LA ESCENA
+   Cuando los dos aparceros hacen las paces, el campo no vuelve a como estaba:
+   el sol se pone, la noche sube, y del horizonte se levanta un SOL BLANCO
+   GIGANTE que no debería estar ahí. Después un fogonazo, el cartel, y el mundo
+   queda en esa noche.
+
+   Es la idea de las dos últimas fases de Nullscapes llevada a un campo: el
+   nivel termina con el sol del fondo estallando, todo minimalista, y el cuadro
+   se va apagando. Acá el astro no estalla del todo —el jugador se queda
+   caminando debajo— pero el gesto es el mismo: una cosa enorme, blanca y
+   silenciosa que se come el horizonte.
+
+   TIEMPOS (en segundos desde que arranca)
+      0 – 20   el sol de la escena baja hasta rasante
+     10 – 40   la noche sube y salen las estrellas
+     16 – 46   el astro asoma y crece hasta cubrir el horizonte
+     46 – 52   el astro se enciende: la corona quema el cielo
+     52 – 55   fogonazo blanco y cartel
+============================================================================ */
+const FIN={activo:false, t:0, sol0:0.44};
+const _fdir=new THREE.Vector3();
+function arrancarFinal(){
+  if(FIN.activo) return;
+  FIN.activo=true; FIN.t=0; FIN.sol0=parseFloat($('sSol').value)||0.44;
+  /* el astro sale por donde se puso el sol: la escena ya viene mirando ahí */
+  _fdir.set(SOL.x, 0, SOL.z);
+  if(_fdir.lengthSq()<1e-6) _fdir.set(0,0,-1);
+  _fdir.normalize();
+  cieloMat.uniforms.uAstroDir.value.copy(_fdir);
+}
+function moverFinal(dt){
+  if(!FIN.activo) return;
+  FIN.t+=dt;
+  const t=FIN.t;
+  const ramp=(a,b)=>{ const u=clamp((t-a)/(b-a),0,1); return u*u*(3-2*u); };
+
+  /* 1 · el sol se pone */
+  const cae=ramp(0,20);
+  if(cae<1 || t<21) ponerSol(lerp(FIN.sol0, 0.055, cae));
+
+  /* 2 · la noche */
+  const noche=ramp(10,40)*0.86;
+  cieloMat.uniforms.uNoche.value=noche;
+  /* la niebla se cierra un poco: de noche el campo no se ve hasta el fondo */
+  if(noche>0) ponerNiebla(lerp(0.12, 0.30, noche/0.86));
+
+  /* 3 · el astro. Sube y crece a la vez: nace como una uña sobre la línea del
+     campo y termina ocupando cincuenta grados. Se lo mantiene APENAS por
+     debajo del horizonte para que lo corte el suelo, que es lo que le da el
+     tamaño —un disco entero flotando parece una luna, medio disco cortado por
+     el campo parece que se te viene encima—. */
+  const sube=ramp(16,46);
+  const R=lerp(0.06, 0.46, sube);
+  cieloMat.uniforms.uAstroR.value=R;
+  cieloMat.uniforms.uAstro.value=Math.min(1, ramp(16,26)+0.0);
+  _fdir.set(cieloMat.uniforms.uAstroDir.value.x, 0, cieloMat.uniforms.uAstroDir.value.z).normalize();
+  /* el centro va bajando a medida que crece: el borde de arriba sube, el de
+     abajo se hunde en el campo */
+  const yc=lerp(-0.02, -R*0.42, sube);
+  cieloMat.uniforms.uAstroDir.value.set(_fdir.x, yc, _fdir.z).normalize();
+
+  /* 4 · se enciende. Sube el velo y el bloom: es la corona comiéndose el
+     cielo, no un filtro. */
+  const arde=ramp(46,52);
+  if(arde>0){
+    matGrado.uniforms.uVelo.value=lerp(VELO0, VELO0*7.0, arde);
+    matGrado.uniforms.uBloom.value=lerp(BLOOM0, BLOOM0*3.4, arde);
+  }
+
+  /* 5 · fogonazo y cartel */
+  if(t>52 && !FIN.flash){
+    FIN.flash=true;
+    const f=$('flash');
+    if(f){ f.style.transition='opacity .28s linear'; f.style.opacity='1';
+      setTimeout(()=>{ f.style.transition='opacity 2.6s ease'; f.style.opacity='0'; }, 320); }
+    const c=$('cartel');
+    if(c){ setTimeout(()=>{ c.style.opacity='1'; }, 340);
+           setTimeout(()=>{ c.style.opacity='0'; }, 8000); }
+    /* el cielo queda en la noche con el astro puesto, y la imagen vuelve a su
+       grado normal: lo que arde es el astro, no la cámara */
+    setTimeout(()=>{ matGrado.uniforms.uVelo.value=VELO0*2.1;
+                     matGrado.uniforms.uBloom.value=BLOOM0*1.5; }, 900);
+  }
+  if(t>60) FIN.activo=false;      // ya está: el mundo se queda así
+}
+const VELO0=matGrado.uniforms.uVelo.value, BLOOM0=matGrado.uniforms.uBloom.value;
+
+/* ------------------------------------------------------------- el cableado */
+(function armarMenu(){
+  const si=$('selIdioma');
+  si.innerHTML=Object.entries(IDIOMAS).map(([k,v])=>'<option value="'+k+'">'+v.nom+'</option>').join('');
+  let g='en';
+  try{ g=localStorage.getItem('pastizal.idioma')||'en'; }catch(e){}
+  si.value=IDIOMAS[g]? g : 'en';
+  aplicarIdioma(si.value);
+  si.onchange=()=>aplicarIdioma(si.value);
+  const sg=$('selGraficos');
+  sg.value=MOVIL?'a':'2';
+  const ap=()=>{ const v=sg.value;
+    if(v==='a'){ autoNivel=true; }
+    else { autoNivel=false; nivel=parseInt(v,10); aplicarNivel(); } };
+  sg.onchange=ap; ap();
+  $('bJugar').onclick=arrancarJuego;
+})();
+
 window.__dbg={
   get fps(){ return fps; },
   get edificios(){ return {choques:CHOQUES.length, huellas:HUELLAS.length,
@@ -3874,7 +4347,8 @@ window.__dbg={
     dist:c.mat.uniforms.uDist.value})); },
   get briznas(){ return BRIZNAS; },
   get pantalla(){ return {ROT, caja:[CAJA.w,CAJA.h], rt:[rtEsc.width,rtEsc.height]}; },
-  poner(x,z){ PJ.x=x; PJ.z=z; PJ.vx=PJ.vz=0; seguirPasto(x,z); ponerCamara(0.016); },
+  poner(x,z){ PJ.x=x; PJ.z=z; PJ.vx=PJ.vz=0; ponerCamara(0.016);
+           seguirPasto(camara.position.x, camara.position.z); },
   mirar(y,c){ if(y!==undefined) PJ.yaw=y; if(c!==undefined) PJ.cabeceo=c; ponerCamara(0.016); },
   ojo(h){ PJ.altoOjo=h; ponerCamara(0.016); },
   palanca(x,y){ palanca.activa=(x||y)!==0; palanca.x=x||0; palanca.y=y||0; },
