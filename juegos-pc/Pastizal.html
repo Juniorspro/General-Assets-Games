@@ -78,7 +78,7 @@
     <div class="ctl"><label>NITIDEZ <b id="vNit">0.35</b></label>
       <input type="range" id="sNit" min="0" max="1.5" step="0.05" value="0.35"></div>
     <div class="ctl"><label>NEBLINA <b id="vNiebla">0.22</b></label>
-      <input type="range" id="sNiebla" min="0" max="1.6" step="0.02" value="0.22"></div>
+      <input type="range" id="sNiebla" min="0" max="1.6" step="0.02" value="0.12"></div>
   </div>
 </div>
 <script>
@@ -630,7 +630,11 @@ const ATMOS_GLSL=`
     float mu=dot(dir,sol);
     float mv=masaAire(dir.y), ms=masaAire(sol.y);
     vec3 rr=BETA_R/BETA_R.g;                       // (0.43, 1.0, 2.45)
-    vec3 ext=exp(-rr*ms*0.17);                     // el camino del sol
+    /* 0.11 y no 0.17: con 0.17 el sol a 26 grados ya le sacaba la mitad del
+       azul a TODO el cielo, y eso mas el halo dejaba la boveda entera en un
+       gris de (176,175,174) medido. El enrojecimiento del camino del sol tiene
+       que llegar cuando el sol esta en el horizonte, no a media tarde. */
+    vec3 ext=exp(-rr*ms*0.11);                     // el camino del sol
     /* MENOS MIE. La fase de Mie con g=0.76 vale 2.8 apuntando al sol contra los
        0.25 del Rayleigh: pesada al 14% seguia siendo el TRIPLE del azul, y por
        eso mirando hacia el sol el cielo entero se volvia una lechada blanca en
@@ -953,7 +957,12 @@ const cieloMat=new THREE.ShaderMaterial({
       grad=mix(grad, uHoriz*0.86, clamp(-h*3.0,0.0,1.0));
       vec3 col=mix(grad, fis, 0.60);
       float ds=max(dot(d, luz), 0.0);
-      col+=uSolC*pow(ds, 5.0)*0.16;                            // halo ancho
+      /* HALO, no lechada. Con potencia 5 el halo del sol todavia valia un tercio
+         a cuarenta grados del disco: o sea que la mitad del cielo estaba
+         blanqueada y mirando hacia el sol no se leia ni una nube. Potencia 16
+         lo deja en los quince grados que ocupa de verdad, y como se concentra
+         se le puede subir el brillo sin lavar nada. */
+      col+=uSolC*pow(ds, 26.0)*0.34;
       /* el disco con OSCURECIMIENTO DE LIMBO: un sol real no es un plato
          parejo, se apaga hacia el borde */
       float disco=smoothstep(0.99960, 0.99990, ds);
@@ -1280,12 +1289,18 @@ function crearCampo(o){
         col*=vTono;
         float ndl=max(dot(N,luz),0.0)*(1.0-vSom*0.90)*(1.0-vNub*0.62);
         /* la base tambien baja en sombra: era una constante y hacia de piso */
-        float lamb=0.24*(1.0-vSom*0.45)+0.86*ndl;
+        float lamb=0.24*(1.0-vSom*0.62)+0.86*ndl;
         /* translucidez: a contraluz la hoja se prende */
         /* a contraluz la hoja se prende, PERO no si esta en sombra: era lo
            unico del pasto que no miraba la sombra y por eso el pastizal seguia
            encendido dentro de la sombra de la casa */
-        float atras=pow(max(dot(-E,luz),0.0),2.4)*0.85*vV
+        /* MENOS Y MAS ANGOSTA. Con potencia 2.4 al 85% y multiplicada por 3.2
+           mas abajo, la translucidez valia MAS que la luz directa: mirando a
+           contraluz el pastizal entero se iba a (132,172,89) —amarillo verdoso
+           lavado, con el negro mas profundo del cuadro en 42— y se comia todo
+           el contraste que el resto del grado gana. Una hoja se prende cuando
+           el sol le pega CASI de atras, no en medio cielo. */
+        float atras=pow(max(dot(-E,luz),0.0),3.6)*0.50*vV
                     *(1.0-vSom*0.90)*(1.0-vNub*0.60);
         /* brillo: la hoja es una cinta y devuelve una franja, no un punto */
         vec3 H=normalize(E+luz);
@@ -1300,7 +1315,7 @@ function crearCampo(o){
         ao*=mix(0.38, 1.0, smoothstep(0.0, 2.6, vDE));
         vec3 alb=col;
         col=alb*lamb*ao*2.2
-          + vec3(0.55,1.00,0.32)*atras*alb*3.2
+          + vec3(0.55,1.00,0.32)*atras*alb*2.5
           + uSolC*esp*ndl
           /* EL CIELO, sumado aparte. Antes el unico ambiente de la brizna era
              col*uCielo*0.35*vV, calculado sobre el col YA iluminado: o sea un
@@ -1310,7 +1325,7 @@ function crearCampo(o){
              arriba daba (77,106,114). La luz del cielo le llega a la hoja
              haya sol o no: por eso va sobre el ALBEDO y sumada, y por eso la
              sombra queda en penumbra fria en vez de en negro. */
-          + alb*uCielo*(1.15+1.10*vV)*mix(ao,1.0,0.45)*(1.0-vNub*0.35);
+          + alb*uCielo*(0.90+1.00*vV)*mix(ao,1.0,0.30)*(1.0-vNub*0.35);
         gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
       }`
   });
@@ -3133,7 +3148,11 @@ aplicarNivel();
    0.32 el sol esta a 26 grados y tira doce metros y medio, y ahi si cruza el
    encuadre. Ademas 'calor' en ponerSol crece cuando la hora baja, asi que
    la misma cuenta que alarga la sombra pone la luz mas dorada. */
-ponerSol(0.32); ponerNiebla(0.19);
+/* Y MENOS BRUMA. Con 0.19 el aire se comia un quinto del contraste a cien
+   metros: el casco entero vivia detras de un velo gris y la referencia pide lo
+   contrario. 0.12 deja la perspectiva aerea —que es la que funde el campo con
+   el horizonte— sin tapar lo que hay a media distancia. */
+ponerSol(0.32); ponerNiebla(0.12);
 seguirPasto(PJ.x,PJ.z); ponerCamara(0.016);
 requestAnimationFrame(bucle);
 setTimeout(esconderAyuda, 11000);
