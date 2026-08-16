@@ -1708,12 +1708,21 @@ function crearCampo(o){
         if(uDesarme>0.001){
           float u=sueltoDesde(P, ${LOSA_TAM.toFixed(1)});
           if(u>0.0){
+            /* SE DISPERSA, NO SE AMONTONA. La primera version subia todas las
+               briznas de la misma celda igual y a la misma altura: se armaba
+               una PARED de pasto que tapaba la pantalla y al personaje con
+               ella. Ahora cada brizna sale para su propio lado y bastante mas
+               lejos que arriba, y sobre todo SE ACHICA hasta desaparecer: lo
+               que se ve es una nube que se abre y se deshace, no un muro que
+               sube. */
             float g=u*(2.2+r6*5.0);
             float c2=cos(g), s2=sin(g);
             vec3 rr=loc;
             loc=vec3(rr.x*c2-rr.y*s2, rr.x*s2+rr.y*c2, rr.z);
-            loc.y+=u*u*26.0 - u*u*u*9.0;
-            loc.xz+=dir*(u*u*11.0);
+            loc.y+=u*u*13.0 - u*u*u*5.0;
+            loc.xz+=dir*(u*u*30.0)+late*(u*u*18.0*(r3-0.5));
+            /* y se apaga: sin esto, cuanto mas se sube mas pasto hay en cuadro */
+            loc*=1.0-smoothstep(0.30, 0.78, u);
           }
         }
         W=vec3(P.x,0.0,P.y)+loc; vW=W;
@@ -4548,32 +4557,49 @@ function moverCine(dt){
   }
   /* -------------------------------------------------- 3 · LA ASCENSION */
   else if(t<CINE_FLASH){
-    const u=suave((t-9.6)/5.4);          // 0 al empezar, 1 en el destello
-    const lin=(t-9.6)/5.4;
+    const lin=Math.max(0,Math.min(1,(t-9.6)/5.4));
+    /* EL CENTRO DEL DESARME SE CLAVA DONDE EMPEZO. Se fija en el primer cuadro
+       en que todavia no hay nada roto —asi tambien funciona si se entra a esta
+       fase por el medio, que es lo que hace el boton de repetir—. Y la camara
+       se clava con el: que ella se quede es lo que hace que EL se aleje. */
+    if(DES_U.uDesarme.value<0.02){
+      DES_U.uDesCen.value.set(PJ.x, PJ.z);
+      CINE.anc={x:PJ.x, z:PJ.z, yaw:PJ.yaw};
+    }
+    const A=CINE.anc||{x:PJ.x,z:PJ.z,yaw:PJ.yaw};
+    const atX=-Math.sin(A.yaw), atZ=-Math.cos(A.yaw);
     /* el se eleva y se va hacia atras, mirando el cielo */
-    const atX=-Math.sin(PJ.yaw), atZ=-Math.cos(PJ.yaw);
-    PJ.x-= atX*dt*(1.0+lin*4.5);
-    PJ.z-= atZ*dt*(1.0+lin*4.5);
-    PJ.y = u*u*17.0;
-    PJ.cabeceo = -0.05 + u*1.15;          // la cabeza se va al cielo
+    PJ.x-= atX*dt*(0.9+lin*2.6);
+    PJ.z-= atZ*dt*(0.9+lin*2.6);
+    /* Adelantada a proposito: con u*u no despegaba hasta la mitad de la fase y
+       lo unico que se veia era un tipo parado mientras el mundo se rompia. */
+    PJ.y = Math.pow(lin,1.35)*21.0;
+    PJ.cabeceo = -0.05 + Math.pow(lin,0.75)*1.20;   // la cabeza se va al cielo
     PJ.rapidez = 0;
-    /* el mundo se desarma alrededor de el */
-    DES_U.uDesarme.value=Math.pow(lin,1.35);
-    if(lin<0.04) DES_U.uDesCen.value.set(PJ.x, PJ.z);   // el centro se fija al empezar
+    DES_U.uDesarme.value=Math.pow(lin,1.15);
     losas.visible=true;
     matLosa.uniforms.uOjo.value.copy(camara.position);
-    /* la camara queda abajo y adelante, y se va quedando: el sube, ella no */
-    _ce.set(PJ.x+atX*-3.6-1.2, 1.4+u*5.5, PJ.z+atZ*-3.6+1.0);
-    _cm.set(PJ.x, PJ.y+1.0, PJ.z);
+    /* LA CAMARA SE PLANTA DELANTE Y NO SE MUEVE. El se va hacia atras y hacia
+       arriba, o sea que se aleja de ella en las dos direcciones a la vez: eso
+       es lo que hace la toma. Y no lo encuadra a el solo sino a un punto entre
+       el y el suelo, para que en el mismo cuadro se vea como el sube y como el
+       campo se rompe debajo. */
+    _ce.set(A.x+atX*7.0+1.2, 2.2+lin*1.8, A.z+atZ*7.0-0.9);
+    _cm.set(lerp(A.x,PJ.x,0.60), lerp(1.6,PJ.y+1.2,0.66), lerp(A.z,PJ.z,0.60));
   }
   /* --------------------------------------------- 4 · EL DESTELLO Y EL ASTRO */
   else {
     if(!CINE.flash){
       CINE.flash=true;
       dispararFlash();
-      /* detras del blanco ya es de noche cerrada y el astro esta por salir */
+      /* DETRAS DEL BLANCO YA ES OTRA COSA. El mundo se rearma —el campo tiene
+         que estar entero para lo que viene, y para que despues se pueda seguir
+         caminando— y la hora salta a noche cerrada. Nada de eso se ve: para eso
+         esta el destello. Es el unico corte de toda la cinematica y por eso
+         pega. */
       entrarEnNoche();
-      DES_U.uDesarme.value=1.0;
+      DES_U.uDesarme.value=0.0; losas.visible=false;
+      PJ.y=0; PJ.vy=0;
       PJ3.activo=false;                   // el cuerpo ya no esta
     }
     const tf=t-CINE_FLASH;                // 0 .. 19
