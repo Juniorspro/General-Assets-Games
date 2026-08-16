@@ -5421,7 +5421,12 @@ const PIL_GLSL=`
       float r=length(d); d/=max(r,0.001);
       /* caida cuadratica con un piso, y el tubo es una franja: no cae tan
          rapido a lo largo como a lo ancho */
-      float at=on/(1.0+r*r*0.055);
+      /* CAE MUCHO MAS RAPIDO. Con 0,055 un tubo alumbraba treinta metros y
+         todas las bahias se pisaban entre si: no quedaba un solo rincon oscuro,
+         que es justo lo que el sitio necesita. Con 0,19 la luz muere a los ocho
+         metros y el salon pasa a ser lo que tiene que ser: salas encendidas al
+         lado de agujeros negros. */
+      float at=on/(1.0+r*r*0.19);
       float dif=max(dot(N,d),0.0);
       vec3 h=normalize(d+E);
       float esp=pow(max(dot(N,h),0.0), 96.0)*bril;
@@ -5473,15 +5478,23 @@ const matPileta=new THREE.ShaderMaterial({
       /* al techo le rebota el agua y el piso entero, asi que recibe mas del
          doble que una pared: sin eso salia gris plomo y la sala parecia un
          sotano en vez de un lugar de azulejo blanco */
-      float reb=(vT>1.5&&vT<2.5)? 2.45 : 1.0;
-      col+=alb*vec3(0.168,0.190,0.196)*reb*(0.10+0.90*uEnc);
+      /* EL REBOTE, UNA CUARTA PARTE. Con 0,168 la sala entera tenia un piso de
+         luz que ninguna pared bajaba de ahi: no habia sombra posible. El rebote
+         existe, pero vale poco y muere rapido; lo que ilumina de verdad es el
+         agua y el tubo que tengas encima. */
+      float reb=(vT>1.5&&vT<2.5)? 1.9 : 1.0;
+      col+=alb*vec3(0.040,0.048,0.050)*reb*(0.08+0.92*uEnc);
 
       /* EL AGUA DEVUELVE SU PROPIA LUZ. Es la firma del sitio: el verde
          azulado no esta en los azulejos, esta en el REBOTE, y por eso la pared
          se pone verde cerca del agua y vuelve a ser blanca a dos metros. */
       float hAgua=vW.y-uAguaY;
       float cerca=exp(-max(hAgua,0.0)*0.55);
-      col+=vec3(0.16,0.52,0.50)*alb*cerca*(0.30+0.55*uEnc);
+      /* Y EL AGUA ES LO QUE ILUMINA. En las referencias el agua es la cosa mas
+         clara del cuadro y la pared se prende cerca de ella y se apaga a dos
+         metros: ese gradiente ES el sitio. Ahora que el resto bajo, este
+         termino manda. */
+      col+=vec3(0.20,0.62,0.59)*alb*cerca*(0.30+0.85*uEnc);
 
       /* y le tira las causticas encima, hasta metro y medio por arriba */
       float ca=caustica(vW.xz*1.35, uTp);
@@ -5499,18 +5512,26 @@ const matPileta=new THREE.ShaderMaterial({
          carton. Solo mira la altura: en una caja alcanza. */
       float esq=1.0;
       if(abs(N.y)<0.5){
-        esq*=mix(0.62,1.0,smoothstep(0.0,1.35,vW.y-uAguaY+0.42));
-        esq*=mix(0.74,1.0,smoothstep(0.0,1.10,uAlto-vW.y));
-      }
+        esq*=mix(0.30,1.0,smoothstep(0.0,1.9,vW.y-uAguaY+0.42));
+        esq*=mix(0.42,1.0,smoothstep(0.0,1.7,uAlto-vW.y));
+      } else if(N.y<-0.5) esq*=0.62;      // el techo, salvo justo debajo de un tubo
       col*=esq;
 
       /* LA BRUMA. Es lo que le da profundidad y los rincones que se pierden,
          pero con 0,0165 y un gris azulado oscuro se comia la sala a quince
          metros y la dejaba de color pantano. Mas palida, mas clara y la mitad
          de densa: a treinta metros todavia se distingue un arco. */
+      /* LA BRUMA SE VA A NEGRO, y este fue mi error de bulto.
+         La habia puesto PALIDA, y una bruma palida LEVANTA el fondo: a veinte
+         metros todo se iba a gris claro y la sala quedaba plana y
+         sobreexpuesta. En las referencias del sitio pasa exactamente lo
+         contrario —la profundidad se va a NEGRO, y lo que hay a treinta metros
+         no es un arco desvaido sino un agujero oscuro—. Una bruma casi negra no
+         borra: OCULTA. Y eso es lo que separa un sitio que da un poco de miedo
+         de un natatorio municipal. */
       float d=length(vW-uOjo);
-      float f=1.0-exp(-d*0.0052);
-      col=mix(col, vec3(0.315,0.400,0.408)*(0.20+0.80*uEnc), clamp(f,0.0,1.0)*0.88);
+      float f=1.0-exp(-d*0.0135);
+      col=mix(col, vec3(0.014,0.028,0.027), clamp(f,0.0,1.0)*0.96);
       gl_FragColor=vec4(col,1.0);
     }`
 });
@@ -5534,7 +5555,7 @@ const matPanel=new THREE.ShaderMaterial({
       }
       vec3 c=vec3(1.0,0.985,0.945)*(0.06+on*5.5);
       float d=length(vW-uOjo);
-      c=mix(c, vec3(0.315,0.400,0.408), clamp(1.0-exp(-d*0.0052),0.0,1.0)*0.45);
+      c=mix(c, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.0135),0.0,1.0)*0.55);
       gl_FragColor=vec4(c,1.0);
     }`
 });
@@ -5617,8 +5638,7 @@ const matAguaPil=new THREE.ShaderMaterial({
       col+=luzTubos(vW, N, E, 1.0, uTp)*0.30;
 
       float d=length(vW-uOjo);
-      col=mix(col, vec3(0.315,0.400,0.408)*(0.20+0.80*uEnc),
-              clamp(1.0-exp(-d*0.0052),0.0,1.0)*0.88);
+      col=mix(col, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.0135),0.0,1.0)*0.90);
       gl_FragColor=vec4(col,1.0);
     }`
 });
