@@ -1454,9 +1454,24 @@ function caidaPersonaje(){
 }
 
 /* ============================================================================
-   POST · un solo pase al final
-   Brillo derramado, ACES, contraste, color, nitidez de contraste adaptativo y
-   el paso a sRGB. La escena entera se dibuja en lineal sobre un buffer.
+   POST · la cadena larga
+
+   La escena entera se dibuja en LINEAL sobre un buffer de media precision y
+   despues pasa por una cadena de etapas. El orden importa: todo lo que imita a
+   la ESCENA (rayos, exposicion, bloom) va antes del mapeo de tono, y todo lo
+   que imita a la LENTE y al SENSOR (aberracion, distorsion, suciedad, grano)
+   va despues, porque asi es el orden fisico real.
+
+   ETAPAS
+     1  extraccion de brillo con rodilla suave
+     2  bloom en cinco escalas, cada una borrosa en cruz
+     3  reconstruccion del bloom subiendo escalas (mas ancho y sin bandas)
+     4  rayos crepusculares por marcha radial desde el sol
+     5  luminancia logaritmica a 64x64
+     6  reduccion a 8x8 y a 1x1
+     7  adaptacion temporal del ojo (ping-pong de un texel)
+     8  desenfoque de movimiento direccional por giro de camara
+     9  el grado final, con todo lo de sensor y lente
 ============================================================================ */
 const escPost=new THREE.Scene(), camPost=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
 const mallaPost=new THREE.Mesh(new THREE.PlaneGeometry(2,2)); escPost.add(mallaPost);
@@ -1464,69 +1479,343 @@ const VQ='varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.
 const rtLin=(w,h,ms)=>new THREE.WebGLRenderTarget(w,h,{minFilter:THREE.LinearFilter,
   magFilter:THREE.LinearFilter, type:THREE.HalfFloatType, colorSpace:THREE.NoColorSpace,
   samples:ms||0, depthBuffer:true, stencilBuffer:false});
-const rtEsc=rtLin(2,2, MOVIL?0:4), rtBr=rtLin(2,2), rtB1=rtLin(2,2), rtB2=rtLin(2,2);
-const matBrillo=new THREE.ShaderMaterial({vertexShader:VQ, fragmentShader:`
-  precision highp float; varying vec2 vUv; uniform sampler2D t; uniform float uU,uS;
-  void main(){ vec3 c=texture2D(t,vUv).rgb; float l=max(max(c.r,c.g),c.b);
-    float k=clamp((l-uU)/max(uS,1e-4),0.0,1.0); gl_FragColor=vec4(c*k*k,1.0); }`,
-  uniforms:{t:{value:null},uU:{value:1.25},uS:{value:1.2}}});
-const matBorron=new THREE.ShaderMaterial({vertexShader:VQ, fragmentShader:`
+const rtEsc=rtLin(2,2, MOVIL?0:4);
+const rtBr=rtLin(2,2);
+/* cinco escalas de bloom: cada una es la mitad de la anterior */
+const NB=MOVIL?4:5;
+const rtBloomA=[], rtBloomB=[];
+for(let i=0;i<NB;i++){ rtBloomA.push(rtLin(2,2)); rtBloomB.push(rtLin(2,2)); }
+const rtRayos=rtLin(2,2);
+const rtMov=rtLin(2,2);
+const rtL0=rtLin(64,64), rtL1=rtLin(8,8), rtL2=rtLin(1,1);
+const rtExp=[rtLin(1,1), rtLin(1,1)];
+let expPing=0;
+
+const mkMat=(frag,uni)=>new THREE.ShaderMaterial({vertexShader:VQ, fragmentShader:frag, uniforms:uni});
+
+/* 1 · brillo con rodilla suave --------------------------------------------- */
+const matBrillo=mkMat(`
+  precision highp float; varying vec2 vUv; uniform sampler2D t; uniform float uU,uS,uExp;
+  void main(){
+    vec3 c=texture2D(t,vUv).rgb*uExp;
+    float l=dot(c,vec3(0.2126,0.7152,0.0722));
+    /* rodilla suave en vez de un corte: un umbral duro deja el bloom con un
+       borde que parpadea cuando algo cruza el umbral */
+    float k=clamp((l-uU+uS)/max(2.0*uS,1e-4),0.0,1.0);
+    k=k*k*(l>0.0?1.0:0.0);
+    gl_FragColor=vec4(c*k*min(l,12.0)/max(l,1e-4),1.0);
+  }`,{t:{value:null},uU:{value:1.05},uS:{value:0.55},uExp:{value:1.0}});
+
+/* 2 · borron separable ------------------------------------------------------ */
+const matBorron=mkMat(`
   precision highp float; varying vec2 vUv; uniform sampler2D t; uniform vec2 uD;
   void main(){ vec3 s=texture2D(t,vUv).rgb*0.227027;
     s+=texture2D(t,vUv+uD*1.3846).rgb*0.316216; s+=texture2D(t,vUv-uD*1.3846).rgb*0.316216;
     s+=texture2D(t,vUv+uD*3.2308).rgb*0.070270; s+=texture2D(t,vUv-uD*3.2308).rgb*0.070270;
-    gl_FragColor=vec4(s,1.0); }`, uniforms:{t:{value:null},uD:{value:new THREE.Vector2()}}});
-const matGrado=new THREE.ShaderMaterial({vertexShader:VQ, fragmentShader:`
+    gl_FragColor=vec4(s,1.0); }`,{t:{value:null},uD:{value:new THREE.Vector2()}});
+
+/* 3 · subir escala sumando --------------------------------------------------- */
+const matSubir=mkMat(`
+  precision highp float; varying vec2 vUv; uniform sampler2D t,tGrande; uniform float uK;
+  void main(){ gl_FragColor=vec4(texture2D(t,vUv).rgb+texture2D(tGrande,vUv).rgb*uK,1.0); }`,
+  {t:{value:null},tGrande:{value:null},uK:{value:0.72}});
+
+/* 4 · rayos crepusculares ---------------------------------------------------- */
+const matRayos=mkMat(`
   precision highp float; varying vec2 vUv;
-  uniform sampler2D tEsc,tBloom; uniform vec2 uPx;
-  uniform float uBloom,uExp,uCon,uSat,uVin,uNit;
-  vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
+  uniform sampler2D t; uniform vec2 uSol; uniform float uPeso,uDecai,uDens,uVisible;
+  void main(){
+    /* Marcha radial desde el sol en pantalla: se acumula el brillo que hay en
+       el camino y se lo derrama. Es como se hacen los rayos de sol desde que
+       existen los shaders, y sigue siendo lo mejor por lo que cuesta. */
+    vec2 d=(vUv-uSol)*uDens/24.0;
+    vec2 uv=vUv;
+    vec3 acc=vec3(0.0);
+    float ilum=1.0;
+    for(int i=0;i<24;i++){
+      uv-=d;
+      vec3 s=texture2D(t,clamp(uv,0.0,1.0)).rgb;
+      acc+=s*ilum;
+      ilum*=uDecai;
+    }
+    gl_FragColor=vec4(acc*(uPeso/24.0)*uVisible,1.0);
+  }`,{t:{value:null},uSol:{value:new THREE.Vector2(0.5,0.5)},uPeso:{value:2.4},
+     uDecai:{value:0.955},uDens:{value:1.0},uVisible:{value:0.0}});
+
+/* 5-6 · luminancia y reduccion ---------------------------------------------- */
+const matLum=mkMat(`
+  precision highp float; varying vec2 vUv; uniform sampler2D t; uniform vec2 uPx;
+  void main(){
+    vec3 c=texture2D(t,vUv).rgb+texture2D(t,vUv+uPx).rgb
+          +texture2D(t,vUv-uPx).rgb+texture2D(t,vUv+vec2(uPx.x,-uPx.y)).rgb;
+    float l=dot(c*0.25,vec3(0.2126,0.7152,0.0722));
+    gl_FragColor=vec4(vec3(log(max(l,1e-4))),1.0);   // en log: la media es geometrica
+  }`,{t:{value:null},uPx:{value:new THREE.Vector2()}});
+const matReduce=mkMat(`
+  precision highp float; varying vec2 vUv; uniform sampler2D t; uniform vec2 uPx;
+  void main(){
+    float s=0.0;
+    for(int j=0;j<8;j++) for(int i=0;i<8;i++)
+      s+=texture2D(t, vUv+(vec2(float(i),float(j))-3.5)*uPx).r;
+    gl_FragColor=vec4(vec3(s/64.0),1.0);
+  }`,{t:{value:null},uPx:{value:new THREE.Vector2()}});
+
+/* 7 · adaptacion del ojo ----------------------------------------------------- */
+const matAdapta=mkMat(`
+  precision highp float; varying vec2 vUv; uniform sampler2D tNuevo,tViejo;
+  uniform float uDt,uSube,uBaja;
+  void main(){
+    float objetivo=exp(texture2D(tNuevo,vec2(0.5)).r);
+    float ant=texture2D(tViejo,vec2(0.5)).r;
+    if(ant<=0.0) ant=objetivo;
+    /* El ojo se adapta MAS RAPIDO a la luz que a la oscuridad; darle la misma
+       velocidad a las dos se nota falso enseguida. */
+    float k=objetivo>ant? uSube : uBaja;
+    float v=ant+(objetivo-ant)*(1.0-exp(-uDt*k));
+    gl_FragColor=vec4(vec3(v),1.0);
+  }`,{tNuevo:{value:null},tViejo:{value:null},uDt:{value:0.016},
+     uSube:{value:2.2},uBaja:{value:0.9}});
+
+/* 8 · desenfoque de movimiento ---------------------------------------------- */
+const matMov=mkMat(`
+  precision highp float; varying vec2 vUv; uniform sampler2D t;
+  uniform vec2 uVel; uniform float uFuerza;
+  void main(){
+    /* La velocidad viene del GIRO DE LA CAMARA, no de un buffer de velocidades:
+       en primera persona el 90% del movimiento en pantalla es girar la cabeza,
+       y esto lo captura entero por una fraccion del costo. */
+    vec2 v=uVel*uFuerza;
+    float l=length(v);
+    if(l<0.0004){ gl_FragColor=texture2D(t,vUv); return; }
+    vec3 s=vec3(0.0); float w=0.0;
+    for(int i=0;i<9;i++){
+      float f=(float(i)/8.0-0.5);
+      float pe=1.0-abs(f)*1.2;
+      s+=texture2D(t, clamp(vUv+v*f,0.0,1.0)).rgb*pe; w+=pe;
+    }
+    gl_FragColor=vec4(s/w,1.0);
+  }`,{t:{value:null},uVel:{value:new THREE.Vector2()},uFuerza:{value:1.0}});
+
+/* 9 · el grado final --------------------------------------------------------- */
+const matGrado=mkMat(`
+  precision highp float; varying vec2 vUv;
+  uniform sampler2D tEsc,tBloom,tRayos,tExp; uniform vec2 uPx,uSol;
+  uniform float uBloom,uExpM,uCon,uSat,uVin,uNit,uRayos,uT;
+  uniform float uAber,uBarril,uGrano,uHalo,uSucio,uAnam,uDest,uAdapta;
+  uniform vec3 uBalance,uLevanta,uGanancia,uTinteSombra,uTinteLuz;
+
+  vec3 aces(vec3 x){
+    /* ajuste de Narkowicz a la curva RRT+ODT de ACES */
+    return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0);
+  }
   vec3 aSRGB(vec3 c){ return mix(c*12.92, 1.055*pow(max(c,1e-5),vec3(0.4166667))-0.055,
                                  step(0.0031308,c)); }
+  float h21(vec2 p){ vec3 q=fract(vec3(p.xyx)*0.1031); q+=dot(q,q.yzx+33.33);
+                     return fract((q.x+q.y)*q.z); }
+
   void main(){
-    vec3 c=texture2D(tEsc,vUv).rgb;
+    /* --- LENTE: la distorsion de barril va primero, porque deforma lo que
+       la lente ve, no lo que el sensor ya grabo --- */
+    vec2 uv=vUv;
+    vec2 q=uv-0.5;
+    float r2=dot(q,q);
+    uv=0.5+q*(1.0+uBarril*r2);
+
+    /* --- ABERRACION CROMATICA: los tres canales no enfocan en el mismo plano,
+       y la separacion crece hacia el borde --- */
+    vec2 ab=q*uAber*r2;
+    vec3 c;
+    c.r=texture2D(tEsc, clamp(uv+ab,0.0,1.0)).r;
+    c.g=texture2D(tEsc, clamp(uv,0.0,1.0)).g;
+    c.b=texture2D(tEsc, clamp(uv-ab,0.0,1.0)).b;
+
     /* nitidez limitada por el vecindario: le devuelve el filo a la brizna sin
        dejarle un halo blanco al lado */
     if(uNit>0.001){
-      vec3 a=texture2D(tEsc,vUv+vec2(uPx.x,0)).rgb, b=texture2D(tEsc,vUv-vec2(uPx.x,0)).rgb;
-      vec3 d=texture2D(tEsc,vUv+vec2(0,uPx.y)).rgb, e=texture2D(tEsc,vUv-vec2(0,uPx.y)).rgb;
+      vec3 a=texture2D(tEsc,uv+vec2(uPx.x,0)).rgb, b=texture2D(tEsc,uv-vec2(uPx.x,0)).rgb;
+      vec3 d=texture2D(tEsc,uv+vec2(0,uPx.y)).rgb, e=texture2D(tEsc,uv-vec2(0,uPx.y)).rgb;
       vec3 mn=min(min(a,b),min(d,e)), mx=max(max(a,b),max(d,e));
       c=clamp(c+(c*4.0-(a+b+d+e))*0.25*uNit, min(mn,c), max(mx,c));
     }
-    c+=texture2D(tBloom,vUv).rgb*uBloom;
-    c=aces(c*uExp);
+
+    vec3 bl=texture2D(tBloom,uv).rgb;
+    /* SUCIEDAD DE LENTE: el bloom se ve mas donde el vidrio esta sucio. Es lo
+       que hace que una luz fuerte "ensucie" la imagen en vez de florecer
+       limpia y pareja. */
+    float sucio=0.55+0.45*h21(floor(uv*vec2(37.0,21.0)));
+    sucio=mix(1.0, sucio, uSucio);
+    c+=bl*uBloom*sucio;
+    /* ESTIRAMIENTO ANAMORFICO: el bloom se alarga en horizontal, como en una
+       lente de cine */
+    if(uAnam>0.001){
+      vec3 an=vec3(0.0);
+      for(int i=-4;i<=4;i++) an+=texture2D(tBloom, clamp(uv+vec2(float(i)*uPx.x*7.0,0.0),0.0,1.0)).rgb;
+      c+=an/9.0*uBloom*uAnam*vec3(0.55,0.72,1.0);
+    }
+    /* HALACION: el rojo se derrama mas que el resto, porque en pelicula la luz
+       roja atraviesa la emulsion y rebota en el soporte */
+    c+=bl*vec3(uHalo,uHalo*0.30,uHalo*0.12);
+
+    /* RAYOS CREPUSCULARES */
+    c+=texture2D(tRayos,uv).rgb*uRayos;
+
+    /* DESTELLOS FANTASMA: copias del sol invertidas respecto del centro, que
+       es exactamente lo que hacen los rebotes entre elementos de la lente */
+    if(uDest>0.001){
+      vec2 dv=(uSol-0.5);
+      for(int i=1;i<=3;i++){
+        vec2 p=0.5-dv*(float(i)*0.62);
+        float m=max(0.0,1.0-length(uv-p)*(4.0+float(i)*2.5));
+        c+=texture2D(tBloom,clamp(p,0.0,1.0)).rgb*m*m*uDest*(1.0/float(i));
+      }
+    }
+
+    /* --- SENSOR --- */
+    /* exposicion automatica: se apunta a una luminancia media y se limita */
+    float lm=max(texture2D(tExp,vec2(0.5)).r, 1e-4);
+    float autoE=mix(1.0, clamp(0.36/lm, 0.25, 3.2), uAdapta);
+    c*=uExpM*autoE;
+
+    /* balance de blancos, antes del tono */
+    c*=uBalance;
+
+    c=aces(c);
+
+    /* levante / ganancia (lift-gain), el par de siempre del colorista */
+    c=c*uGanancia+uLevanta;
+
+    /* tinte separado de sombras y luces */
+    float lum=dot(c,vec3(0.2126,0.7152,0.0722));
+    c*=mix(uTinteSombra, uTinteLuz, smoothstep(0.15,0.85,lum));
+
     c=(c-0.5)*uCon+0.5;
-    float l=dot(c,vec3(0.2126,0.7152,0.0722));
-    c=mix(vec3(l),c,uSat);
-    float dd=length((vUv-0.5)*vec2(1.30,1.0));
-    c*=1.0-uVin*dd*dd;
-    gl_FragColor=vec4(aSRGB(clamp(c,0.0,1.0)),1.0);
+
+    /* VIBRANZA: sube lo apagado y no toca lo que ya esta saturado, que es lo
+       que separa una imagen viva de una imagen chillona */
+    float mx=max(max(c.r,c.g),c.b), mn=min(min(c.r,c.g),c.b);
+    float sat=mx-mn;
+    c=mix(vec3(lum), c, 1.0+(uSat-1.0)*(1.0-sat));
+
+    /* VINETEO natural: la caida cos^4 de cualquier lente */
+    float cosT=1.0/sqrt(1.0+r2*3.1);
+    c*=mix(1.0, pow(cosT,4.0), uVin);
+
+    /* GRANO: mas visible en los medios y casi nulo en las luces, como el de
+       verdad; se mueve con el tiempo asi que no queda un patron fijo */
+    float g=h21(vUv*vec2(1024.0,640.0)+fract(uT)*vec2(37.7,91.3))-0.5;
+    c+=g*uGrano*(0.25+0.75*(1.0-abs(lum*2.0-1.0)));
+
+    /* TRAMADO ordenado antes de los 8 bits: sin esto los degradados del cielo
+       salen a bandas, y eso solo ya delata que la imagen es sintetica */
+    float tr=(h21(vUv*vec2(853.0,491.0))-0.5)/255.0;
+
+    gl_FragColor=vec4(aSRGB(clamp(c,0.0,1.0))+tr,1.0);
   }`,
-  uniforms:{tEsc:{value:null},tBloom:{value:null},uPx:{value:new THREE.Vector2()},
-    uBloom:{value:0.24},uExp:{value:1.0},uCon:{value:1.06},uSat:{value:1.18},
-    uVin:{value:0.20},uNit:{value:0.35}}});
-let postBloom=true;
+  {tEsc:{value:null},tBloom:{value:null},tRayos:{value:null},tExp:{value:null},
+   uPx:{value:new THREE.Vector2()},uSol:{value:new THREE.Vector2(0.5,0.5)},
+   uBloom:{value:0.30},uExpM:{value:1.0},uCon:{value:1.06},uSat:{value:1.20},
+   uVin:{value:0.55},uNit:{value:0.35},uRayos:{value:0.55},uT:{value:0},
+   uAber:{value:0.55},uBarril:{value:0.045},uGrano:{value:0.028},uHalo:{value:0.05},
+   uSucio:{value:0.5},uAnam:{value:0.30},uDest:{value:0.16},uAdapta:{value:1.0},
+   uBalance:{value:new THREE.Vector3(1.0,1.0,1.0)},
+   uLevanta:{value:new THREE.Vector3(0.004,0.006,0.010)},
+   uGanancia:{value:new THREE.Vector3(1.02,1.00,0.98)},
+   uTinteSombra:{value:new THREE.Vector3(0.94,0.98,1.08)},
+   uTinteLuz:{value:new THREE.Vector3(1.05,1.01,0.95)}});
+
+let postBloom=true, postRayos=true, postMov=true;
 function acomodarPost(w,h){
   const d=renderer.getPixelRatio(), W=Math.round(w*d), H=Math.round(h*d);
   if(rtEsc.width===W&&rtEsc.height===H) return;
-  rtEsc.setSize(W,H); matGrado.uniforms.uPx.value.set(1/W,1/H);
-  const w4=Math.max(4,W>>2), h4=Math.max(4,H>>2);
-  rtBr.setSize(w4,h4); rtB1.setSize(w4,h4); rtB2.setSize(w4,h4);
+  rtEsc.setSize(W,H); rtMov.setSize(W,H);
+  matGrado.uniforms.uPx.value.set(1/W,1/H);
+  let bw=Math.max(4,W>>1), bh=Math.max(4,H>>1);
+  rtBr.setSize(bw,bh);
+  for(let i=0;i<NB;i++){
+    bw=Math.max(4,bw>>1); bh=Math.max(4,bh>>1);
+    rtBloomA[i].setSize(bw,bh); rtBloomB[i].setSize(bw,bh);
+  }
+  rtRayos.setSize(Math.max(8,W>>2), Math.max(8,H>>2));
+  matLum.uniforms.uPx.value.set(1/W,1/H);
 }
 function pasar(m,d){ mallaPost.material=m; renderer.setRenderTarget(d); renderer.render(escPost,camPost); }
 const NEGRO=new THREE.DataTexture(new Uint8Array([0,0,0,255]),1,1); NEGRO.needsUpdate=true;
-function pintarPost(){
+
+/* posicion del sol en pantalla, y si esta a la vista */
+const _solV=new THREE.Vector3();
+function solEnPantalla(){
+  _solV.copy(SOL).multiplyScalar(900).add(camara.position).project(camara);
+  const x=_solV.x*0.5+0.5, y=_solV.y*0.5+0.5;
+  const delante=_solV.z<1.0;
+  const dentro=x>-0.35&&x<1.35&&y>-0.35&&y<1.35;
+  return {x, y, ver: (delante&&dentro)?1.0:0.0};
+}
+
+function pintarPost(dt){
+  const sp=solEnPantalla();
+  matGrado.uniforms.uSol.value.set(sp.x, sp.y);
+  matRayos.uniforms.uSol.value.set(sp.x, sp.y);
+  matRayos.uniforms.uVisible.value=sp.ver;
+
+  /* --- exposicion: 64x64 log, 8x8, 1x1, y adaptacion --- */
+  matLum.uniforms.t.value=rtEsc.texture; pasar(matLum, rtL0);
+  matReduce.uniforms.t.value=rtL0.texture;
+  matReduce.uniforms.uPx.value.set(1/64,1/64); pasar(matReduce, rtL1);
+  matReduce.uniforms.t.value=rtL1.texture;
+  matReduce.uniforms.uPx.value.set(1/8,1/8); pasar(matReduce, rtL2);
+  matAdapta.uniforms.tNuevo.value=rtL2.texture;
+  matAdapta.uniforms.tViejo.value=rtExp[expPing].texture;
+  matAdapta.uniforms.uDt.value=Math.min(dt,0.1);
+  expPing=1-expPing;
+  pasar(matAdapta, rtExp[expPing]);
+  matGrado.uniforms.tExp.value=rtExp[expPing].texture;
+
+  /* --- bloom en cinco escalas --- */
+  let fuente=rtEsc.texture;
   if(postBloom){
-    matBrillo.uniforms.t.value=rtEsc.texture; pasar(matBrillo,rtBr);
-    matBorron.uniforms.t.value=rtBr.texture;
-    matBorron.uniforms.uD.value.set(1.2/rtBr.width,0); pasar(matBorron,rtB1);
-    matBorron.uniforms.t.value=rtB1.texture;
-    matBorron.uniforms.uD.value.set(0,1.2/rtBr.height); pasar(matBorron,rtB2);
+    matBrillo.uniforms.t.value=rtEsc.texture; pasar(matBrillo, rtBr);
+    let ent=rtBr.texture;
+    for(let i=0;i<NB;i++){
+      matBorron.uniforms.t.value=ent;
+      matBorron.uniforms.uD.value.set(1.15/rtBloomA[i].width,0); pasar(matBorron, rtBloomA[i]);
+      matBorron.uniforms.t.value=rtBloomA[i].texture;
+      matBorron.uniforms.uD.value.set(0,1.15/rtBloomA[i].height); pasar(matBorron, rtBloomB[i]);
+      ent=rtBloomB[i].texture;
+    }
+    /* se reconstruye de la escala mas chica hacia arriba: asi el halo grande
+       no queda con escalones */
+    for(let i=NB-2;i>=0;i--){
+      matSubir.uniforms.t.value=rtBloomB[i].texture;
+      matSubir.uniforms.tGrande.value=rtBloomA[i+1].texture;
+      pasar(matSubir, rtBloomA[i]);
+    }
   }
-  matGrado.uniforms.tEsc.value=rtEsc.texture;
-  matGrado.uniforms.tBloom.value=postBloom?rtB2.texture:NEGRO;
+  const texBloom=postBloom? rtBloomA[0].texture : NEGRO;
+
+  /* --- rayos, sobre el mismo mapa de brillo --- */
+  if(postRayos && sp.ver>0.5){
+    matRayos.uniforms.t.value=texBloom;
+    pasar(matRayos, rtRayos);
+  }
+
+  /* --- desenfoque de movimiento --- */
+  if(postMov){
+    matMov.uniforms.t.value=rtEsc.texture;
+    /* el giro de camara pasado a corrimiento en pantalla */
+    matMov.uniforms.uVel.value.set(
+      clamp(giroVel*0.010, -0.06, 0.06),
+      clamp(-(PJ.cabeceo-cabeceoAnt)/Math.max(dt,1e-3)*0.010, -0.06, 0.06));
+    pasar(matMov, rtMov);
+    fuente=rtMov.texture;
+  }
+
+  matGrado.uniforms.tEsc.value=fuente;
+  matGrado.uniforms.tBloom.value=texBloom;
+  matGrado.uniforms.tRayos.value=(postRayos&&sp.ver>0.5)? rtRayos.texture : NEGRO;
+  matGrado.uniforms.uT.value=T;
   pasar(matGrado,null);
 }
+let cabeceoAnt=0;
 
 /* ============================================================================
    EL JUGADOR, LOS MANDOS Y EL BUCLE
@@ -1811,7 +2100,8 @@ function bucle(ahora){
   suelo.position.set(PJ.x,0,PJ.z);
   renderer.setRenderTarget(rtEsc);
   renderer.render(escena,camara);
-  pintarPost();
+  pintarPost(dt);
+  cabeceoAnt=PJ.cabeceo;
   dibujarMandos();
   const st=document.getElementById('stats');
   if(st) st.textContent=fps+' fps · '+(BRIZNAS/1000).toFixed(0)+' mil briznas · calidad '+(nivel+1)+'/3';
