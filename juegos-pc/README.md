@@ -2088,6 +2088,47 @@ nivel 0 además apaga el bloom. Cuando la densidad mata una brizna, su altura pa
 a cero, los vértices colapsan en un punto y el triángulo se descarta antes de
 rasterizar: el costo de fragmentos desaparece del todo.
 
+### La optimización, y qué NO la resolvió
+En un teléfono de gama media el juego apenas pasaba de 30 fps. Dos cosas que
+parecían candidatas y no lo eran:
+
+- **WebAssembly no aporta nada acá.** Acelera trabajo de CPU en JavaScript, y
+  este juego casi no hace: las 322.600 briznas no se mueven nunca desde JS —cada
+  una resuelve su posición, su viento y su sombra dentro del shader— y por
+  cuadro JS escribe unos veinte uniformes y llama a dibujar. El cuello está en
+  la GPU, en **fragmentos**, y WASM no toca la GPU.
+- **No hay SSAO que sacar.** La oclusión ambiental del pasto y de los edificios
+  es analítica desde el principio: sale de la altura de la brizna y de la
+  distancia a la pared, adentro del shader, sin ningún pase de pantalla.
+
+Lo que sí lo movió:
+
+| | antes | ahora |
+|---|---|---|
+| resolución interna (calidad media) | 1,55 | **1,15** — 45% menos píxeles |
+| briznas (móvil) | 177.000 | **97.000** |
+| desenfoque de movimiento | todos los cuadros | **sólo al girar** |
+| reflejo planar del río | siempre | **sólo a <95 m del cauce** |
+| nubes dentro del reflejo | 24 pasos | **4** |
+
+**La resolución interna es la palanca más grande que hay**, y por eso va primero.
+Todo el costo de este juego escala con el ÁREA: el pastizal sobredibuja, el cielo
+marcha nubes por píxel y la cadena de post pasa seis veces por la pantalla
+entera. Bajar de 1,55 a 1,15 saca el 45% de los píxeles y con ellos el 45% de
+todo lo anterior, sin tocar un solo efecto. La nitidez que se pierde la devuelve
+el pase de nitidez, que ya estaba.
+
+El **desenfoque de movimiento** tenía el corte adentro del shader
+(`if(l<0.0004) devolvé el píxel tal cual`) y eso **no ahorra nada**: el pase
+corría igual, leía la pantalla entera y la escribía otra vez. Nueve lecturas por
+píxel a resolución completa es el pase más caro de la cadena y la cámara está
+quieta la mayor parte del tiempo. Decidirlo en JavaScript lo saltea de verdad.
+
+Y una trampa que sólo aparece al hacer configurable la calidad: **la marcha
+radial de los rayos solares decaía por MUESTRA**, no por distancia. Bajar de 24 a
+16 pasos hacía los rayos *más largos y más fuertes*, que es lo contrario de lo
+que se buscaba. El factor va elevado a `24/pasos`.
+
 ### El menú de inicio
 No es una pantalla aparte: el mundo ya está corriendo detrás y **la cámara pasea
 sola** alrededor del casco de estancia, a 54 m de radio y 3,4 m de alto. Así el
@@ -2115,13 +2156,46 @@ silenciosa que se come el horizonte**.
 
 | segundos | qué pasa |
 |---|---|
-| 0 – 20 | el sol de la escena baja hasta rasante |
-| 10 – 40 | sube la noche y salen las estrellas |
-| 16 – 46 | el astro asoma del horizonte y crece |
-| 46 – 52 | se enciende: velo ×7 y bloom ×3,4 |
-| 52 – 55 | fogonazo blanco y cartel de fin de escena |
+| 0 – 9 | el sol de la escena baja hasta rasante |
+| 2 – 11 | sube la noche y salen las estrellas |
+| 4 – 15 | el astro asoma del horizonte y crece hasta cubrirlo |
+| 16 – 19 | el núcleo junta luz: se lo ve latir |
+| 17 – 19 | **se contrae** a una cúpula chica y densa |
+| 19 – 20 | **dispara**: el haz sale al cenit |
+| 20 – … | fogonazo, cartel, y queda encendido con un pulso lento |
 
-Tres detalles que lo hacen funcionar:
+**Crece, se aprieta, dispara.** La contracción es lo que convierte una postal en
+un gesto: si el sol dispara sin apretarse, el rayo parece un adorno; si se
+aprieta primero, parece que juntó fuerza.
+
+El **haz** vive en un marco 2D pegado a la dirección del astro —dos vectores
+tangentes y una coordenada polar—, y por eso la estrella gira, los anillos salen
+y el haz tiembla sin que cueste prácticamente nada. Lo que lo hace leer como rayo
+y no como una franja pintada son tres cosas: un núcleo casi puntual de ocho
+milirradianes que satura de blanco, un halo seis veces más ancho que le da el
+cuerpo, y que los dos se apaguen hacia arriba pero **no del todo**, porque un haz
+que termina dentro del cuadro deja de leerse como infinito.
+
+Alrededor flotan **150 esquirlas**: triángulos oscuros instanciados que suben
+despacio, giran sobre sí mismos y encaran a la cámara, con el filo de arriba
+agarrando luz fría. Son lo que le da escala al rayo — sin nada delante, un haz de
+luz podría medir un metro o un kilómetro.
+
+#### Lo que lavaba el cierre
+La primera versión salía crema, no negra con un sol blanco. Medido sobre la media
+del cuadro, se iba de 63 a 225 justo cuando el astro se hacía grande. Tres causas:
+
+1. **Los rayos de pantalla sembraban desde el astro.** La marcha radial siembra
+   desde todo lo muy brillante que hay en cuadro; con un disco de sesenta grados
+   valiendo 7 en lineal, regaba la pantalla entera. Son rayos del sol de la
+   tarde, y ese sol ya se puso: se apagan con `uAstro`.
+2. **El decaimiento por muestra**, ya explicado más arriba.
+3. **La noche llegaba tarde.** Mientras `uNoche` no llega a uno, el velo cálido de
+   la lente y la compensación a contraluz siguen medio encendidos; si para
+   entonces el astro ya es grande, el cuadro entero sale crema. Ahora la noche
+   termina a los once y el astro a los quince.
+
+Tres detalles más:
 
 - **El astro sale por donde se puso el sol.** La escena ya viene mirando ahí.
 - **Se lo mantiene apenas por debajo del horizonte** (`y = −R·0.30`) para que lo
@@ -2138,11 +2212,33 @@ La noche no es bajarle el brillo al cielo de día: es otro color —azul de tint
 casi sin degradado— más un campo de estrellas sacado de una grilla sobre la
 esfera, una estrella por celda que gana el dado, titilando con su propia fase.
 
+### PC o teléfono, decidido por lo que toca el jugador
+No se pregunta ni se adivina por el user-agent —que miente, y que además no sabe
+si hay un teclado enchufado—. **Se espera.** El primer teclado o el primer mouse
+de verdad dice que esto es una PC, y ahí el juego se convierte en un juego de PC:
+se van la palanca, los botones y el contador, queda la mira sola, la calidad sube
+a alta y el mouse toma la cámara con bloqueo de puntero. Si en cambio llega un
+dedo, no pasa nada. Es la única detección que no se equivoca nunca, porque no
+infiere: ve.
+
+### Los mandos
+Los botones cuadrados con la palabra adentro se fueron. Ahora son **vidrio con
+iconos dibujados a trazos**: un disco con degradado radial, un aro que se
+enciende al tocar, un brillo de arco arriba —que es lo que lo hace parecer vidrio
+y no un círculo— y el icono encima. `»` para correr, que se queda prendido
+mientras esté enganchado, y `↑` para saltar. El de pausa es un círculo con dos
+barras, arriba a la izquierda.
+
+Van dibujados y no generados a propósito: un PNG de icono pesa cientos de
+kilobytes, hay que bajarlo y a 3× de densidad se ve blando. Estas tres funciones
+pesan cero bytes y salen nítidas en cualquier pantalla.
+
+El menú de **pausa** junta seguir, idioma, calidad y los deslizadores. En
+teléfono se llega por el botón redondo; en PC, con `Escape`.
+
 ### Controles
-Pulgar izquierdo palanca, derecho mirar, `SALTO`/`JUMP` y `CORRER`/`RUN`.
-`AJUSTES`/`SETTINGS` abre los deslizadores en vivo: densidad, altura, viento,
-inclinación, sol, exposición, color, nitidez y neblina. Con teclado, `WASD`,
-espacio y `R`.
+Teléfono: pulgar izquierdo palanca, derecho mirar, `↑` saltar, `»` correr, `‖`
+pausa. PC: `WASD`, mouse para mirar, `ESPACIO` saltar, `R` correr, `ESC` menú.
 
 ### Lo que no tiene
 Sin árboles y sin relieve: el suelo es plano a propósito. Era el pedido, y
