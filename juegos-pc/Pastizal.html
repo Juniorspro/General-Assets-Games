@@ -4532,28 +4532,66 @@ function anguloHacia(a, b, k){
   return a+d*k;
 }
 /* ------------------------------------------------------------- EL HOMBRO
-   El plano sobre el hombro derecho: la camara se apoya al lado de la mejilla,
-   apenas por encima de la oreja y un pelo por delante del plano de la cara —por
-   eso se le ve MEDIA CARA y no la nuca—, y mira a donde el mira.
+   El plano sobre el hombro derecho. La geometria tiene una tension que hay que
+   resolver a mano y no se puede esquivar: para verle LA CARA hay que ponerse de
+   costado, y para ver LO QUE EL VE hay que ponerse detras. Los dos a la vez no
+   existen; lo que existe es el punto donde las dos cosas entran juntas.
 
-   Los tres numeros que importan:
-   · 0,38 a la derecha: menos y la cabeza tapa el centro del cuadro; mas y deja
-     de ser sobre el hombro y pasa a ser un plano lateral.
-   · 0,10 hacia adelante del centro de la cabeza: es lo que decide si se ve el
-     perfil o la nuca. Es el numero mas sensible de los tres.
-   · el punto al que mira va LEJOS (doce metros) y no a la cara: si mirara a la
-     cara, la cabeza quedaria en el centro y no se veria nada de lo que el ve. */
-function hombro(ojo, mira, k){
+   La primera version puso la camara SEIS CENTIMETROS DELANTE del plano de la
+   cara: la cabeza quedaba literalmente detras del objetivo y no se veia nada de
+   el. El error es facil de cometer y de no notar, porque el encuadre "funciona"
+   —hay cielo, hay sol— solo que sin el personaje.
+
+   Los cuatro numeros, y que decide cada uno:
+   · 0,62 a su derecha y 0,95 detras → la cabeza queda a 33 grados del eje en el
+     que el mira. Ese angulo ES cuanta cara se ve: de frente cero, a noventa el
+     perfil entero. Treinta y tres da la mejilla y la linea de la mandibula.
+   · la mira girada 0,21 rad a la izquierda → con eso la cabeza cae a 21 grados
+     del centro del cuadro, o sea a media distancia del borde: entra completa y
+     deja las tres cuartas partes de la pantalla para lo que el esta mirando.
+   · 0,22 mas arriba → se lo mira un poco desde arriba, y el cielo se abre.
+   A 1,14 m la cabeza ocupa como un decimo del ancho: chica, pero es la unica
+   cosa solida del cuadro y por eso se lee.  */
+function hombro(ojo, mira){
   const fx=-Math.sin(PJ.yaw), fz=-Math.cos(PJ.yaw);
   const rx=-fz, rz=fx;                       // su derecha
   const cab=PJ.y+PJ.altoOjo;                 // la altura de los ojos
-  ojo.set(PJ.x + rx*0.44 + fx*0.06,
-          cab + 0.17,
-          PJ.z + rz*0.44 + fz*0.06);
-  const cp=Math.cos(PJ.cabeceo), sp=Math.sin(PJ.cabeceo);
-  mira.set(ojo.x + fx*12.0*cp - rx*0.55,
-           ojo.y + sp*12.0 + 0.35,
-           ojo.z + fz*12.0*cp - rz*0.55);
+  ojo.set(PJ.x + rx*0.50 - fx*0.72,
+          cab + 0.05,
+          PJ.z + rz*0.50 - fz*0.72);
+  /* EL PUNTO LEJANO: lo que el esta mirando. Si el astro ya salio, es el astro;
+     si no, la direccion en la que mira. */
+  let px, py, pz;
+  const A=cieloMat.uniforms.uAstroDir.value;
+  if(cieloMat.uniforms.uAstro.value>0.01){
+    px=PJ.x+A.x*40.0; py=cab+A.y*40.0+7.0; pz=PJ.z+A.z*40.0;
+  } else {
+    const g=0.26, cg=Math.cos(g), sg=Math.sin(g);
+    const dx=fx*cg-rx*sg, dz=fz*cg-rz*sg;
+    const cp=Math.cos(PJ.cabeceo), sp=Math.sin(PJ.cabeceo);
+    px=ojo.x+dx*14.0*cp; py=ojo.y+sp*14.0; pz=ojo.z+dz*14.0*cp;
+  }
+  /* SE MEZCLAN DIRECCIONES, NO PUNTOS. Esto es lo unico que hay que entender
+     de este encuadre y lo primero que sale mal: la cabeza esta a NOVENTA
+     CENTIMETROS y el astro a CUARENTA METROS, asi que interpolar entre los dos
+     PUNTOS al 72% deja el objetivo practicamente encima del astro y la cabeza
+     afuera del cuadro. Lo que importa no es la distancia sino el ANGULO: se
+     normalizan las dos direcciones y se mezclan esas, y ahi el 70% significa
+     de verdad el 70% del angulo que las separa.
+     Son 35 grados entre una y otra; al 70% el eje queda a 24 de la cabeza y a
+     10 del astro: la cabeza a media distancia del borde izquierdo, el astro
+     apenas corrido a la derecha del centro, y los dos completos. */
+  let hx=PJ.x-ojo.x, hy=cab-ojo.y, hz=PJ.z-ojo.z;
+  const hl=Math.hypot(hx,hy,hz)||1; hx/=hl; hy/=hl; hz/=hl;
+  let ax=px-ojo.x, ay=py-ojo.y, az=pz-ojo.z;
+  const al=Math.hypot(ax,ay,az)||1; ax/=al; ay/=al; az/=al;
+  /* 0,62 y no 0,70: con 0,70 la cabeza quedaba pegada al borde de abajo. Este
+     numero y el 0,50/0,72 de la posicion son los tres que gobiernan el plano
+     entero; subirlo acerca el eje al astro, bajarlo lo acerca a la cabeza. */
+  const k=0.62;
+  let mx=hx*(1-k)+ax*k, my=hy*(1-k)+ay*k, mz=hz*(1-k)+az*k;
+  const ml=Math.hypot(mx,my,mz)||1;
+  mira.set(ojo.x+mx/ml*30.0, ojo.y+my/ml*30.0, ojo.z+mz/ml*30.0);
 }
 function arrancarCine(){
   const C=MOLINO_ENC;
@@ -4648,8 +4686,8 @@ function moverCine(dt){
     /* mientras se acerca, el se da vuelta hacia donde va a salir el astro */
     const yObj=Math.atan2(-SOL.x, -SOL.z);
     PJ.yaw=anguloHacia(PJ.yaw, yObj, cerca);
-    PJ.cabeceo=lerp(-0.05+Math.pow(lin,0.75)*1.20, 0.34, cerca);
-    hombro(_ce, _cm, 1.0);
+    PJ.cabeceo=lerp(-0.05+Math.pow(lin,0.75)*1.20, 0.12, cerca);
+    hombro(_ce, _cm);
     if(cerca<0.999){
       _cq.set(A.x+atX*15.0+1.8, 2.6+lin*1.2, A.z+atZ*15.0-1.3);
       _ce.lerpVectors(_cq, _ce, cerca);
@@ -4679,7 +4717,7 @@ function moverCine(dt){
       /* EL SIGUE AHI, Y SIGUE MIRANDO. Antes el cuerpo desaparecia con el
          destello y el final quedaba siendo un paisaje bonito; el final tiene
          que ser el mirandolo. */
-      PJ.yaw=Math.atan2(-SOL.x, -SOL.z); PJ.cabeceo=0.30;
+      PJ.yaw=Math.atan2(-SOL.x, -SOL.z); PJ.cabeceo=0.12;
     }
     const tf=t-CINE_FLASH;                // 0 .. 19
     moverAstro(tf, dt);
@@ -4695,7 +4733,7 @@ function moverCine(dt){
        va para atras, que es cuando el cuadro deja de ser de el y pasa a ser del
        cielo. */
     const abre=suave((tf-8.6)/4.2);
-    hombro(_ce, _cm, 1.0);
+    hombro(_ce, _cm);
     if(abre>0.001){
       const d=cieloMat.uniforms.uAstroDir.value;
       _cq.set(PJ.x-d.x*13.0, PJ.y+3.4+abre*3.0, PJ.z-d.z*13.0);
@@ -5202,6 +5240,19 @@ function moverAstro(tf, dt){
   cieloMat.uniforms.uRayo.value=Math.max(carga*0.30, disparo*pulso);
   matGrado.uniforms.uBloom.value=lerp(BLOOM0, BLOOM0*2.6, disparo);
 
+  /* EL ASTRO ES LA UNICA LUZ QUE QUEDA. El sol de la escena ya se puso, asi
+     que la direccional del cuerpo pasa a colgar del astro: sin esto el
+     personaje era una mancha negra en la esquina y el plano sobre el hombro no
+     tenia nada que mostrar. Lo agarra de frente —el lo esta mirando— asi que
+     desde la camara se le ve el borde encendido y el resto en penumbra, que es
+     exactamente lo que hay que ver. */
+  const dA=cieloMat.uniforms.uAstroDir.value;
+  luzSol.position.set(dA.x*60.0, dA.y*60.0+18.0, dA.z*60.0).add(camara.position);
+  luzSol.color.setRGB(1.0, 0.985, 0.955);
+  luzSol.intensity=0.6+3.4*cieloMat.uniforms.uAstro.value;
+  luzCielo.color.setRGB(0.16, 0.21, 0.34);
+  luzCielo.intensity=0.55;
+
   /* las esquirlas aparecen con la contraccion y se quedan */
   const vis=ramp(8.8, 12.6);
   esquirlas.visible=vis>0.01;
@@ -5327,9 +5378,15 @@ window.__dbg={
   cine(){ arrancarCine(); },
   cineEn(t){ if(!CINE) arrancarCine();
              callarCine();
+             /* Tiene que hacer EXACTAMENTE lo mismo que la rama real del
+                destello. Cuando no lo hacia —escondia el cuerpo, que es lo que
+                hacia la version vieja— todas las capturas del tramo del astro
+                salian sin personaje, y estuve corrigiendo un encuadre que en el
+                juego ya funcionaba. Una ruta de depuracion que no espeja a la
+                de verdad no prueba nada: prueba a la ruta de depuracion. */
              if(t>=CINE_FLASH && !CINE.flash){
                CINE.flash=true; entrarEnNoche();
-               PJ.y=0; PJ3.activo=false;
+               PJ.yaw=Math.atan2(-SOL.x,-SOL.z); PJ.cabeceo=0.12;
                const f=$('flash'); if(f){ f.style.transition='none'; f.style.opacity='0'; }
              }
              CINE.t=t; },
