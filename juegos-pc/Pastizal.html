@@ -1416,6 +1416,10 @@ const V=[], NR=[], CL=[], TP=[], UV=[];   /* posicion, normal, color, tipo, uv *
 const CHOQUES=[];                          /* cajas orientadas para el jugador */
 /* tipos de superficie que entiende el shader */
 const T_REVOQUE=0, T_CHAPA=1, T_MADERA=2, T_LADRILLO=3, T_VIDRIO=4, T_TEJA=5, T_HIERRO=6;
+/* El lecho y las barrancas usaban T_LADRILLO —el tipo que dibuja hiladas
+   trabadas— asi que el fondo del rio salia literalmente empedrado de ladrillos.
+   Tienen su tipo propio: barro con canto rodado. */
+const T_LECHO=7;
 
 /* Los vidrios y las puertas NO pueden vivir en la malla opaca: el vidrio tiene
    que ser transparente y la puerta tiene que girar sobre su eje. Asi que el
@@ -1976,7 +1980,21 @@ const matEdificio=new THREE.ShaderMaterial({
         rug=mix(0.62, 0.92, musgo); met=0.0;   // la teja vieja con musgo no brilla
       }
       /* HIERRO */
-      else { col*=0.9+0.2*fbm(vW.xz*4.0+vW.y*3.0); met=0.92; rug=0.40; }
+      else if(t<6.5){ col*=0.9+0.2*fbm(vW.xz*4.0+vW.y*3.0); met=0.92; rug=0.40; }
+      /* LECHO DE RIO: barro con canto rodado. Las piedras salen de un ruido
+         umbralado a dos escalas, y el barro entre medio lleva la veta que deja
+         la corriente, estirada a lo largo del cauce. */
+      else {
+        float veta=ruido(vec2(vW.x*3.4, vW.z*0.42));
+        col*=0.80+0.40*veta;
+        float p1=ruido(vW.xz*5.5+3.1), p2=ruido(vW.xz*13.0+7.7);
+        float canto=smoothstep(0.72,0.88,p1)*0.7+smoothstep(0.80,0.93,p2)*0.5;
+        col=mix(col, vec3(0.28,0.26,0.23)*(0.7+0.6*p2), clamp(canto,0.0,1.0));
+        /* mojado: lo que esta bajo el nivel del agua se ve mas oscuro y brilla */
+        float mojado=1.0-smoothstep(-0.14, 0.06, vW.y);
+        col*=mix(1.0, 0.62, mojado);
+        rug=mix(0.92, 0.34, mojado); met=0.0;
+      }
 
       /* ------------------------------------------------------------------
          PBR de verdad: Cook-Torrance con GGX, Smith y Fresnel de Schlick.
@@ -2255,13 +2273,13 @@ function construirRio(){
       const ax0=c0+lado*RIO_ANCHO*0.96,        ax1=c1+lado*RIO_ANCHO*0.96;
       /* barranca: del campo (y=0) al fondo */
       cara([bx0,0.02,z],[bx1,0.02,z+PASO],[ax1,-RIO_HONDO,z+PASO],[ax0,-RIO_HONDO,z],
-           [0.20,0.155,0.10], T_LADRILLO);
+           [0.20,0.155,0.10], T_LECHO);
     }
     /* el lecho */
     const a0=c0-RIO_ANCHO*0.96, a1=c1-RIO_ANCHO*0.96;
     const b0=c0+RIO_ANCHO*0.96, b1=c1+RIO_ANCHO*0.96;
     cara([a0,-RIO_HONDO,z],[a1,-RIO_HONDO,z+PASO],[b1,-RIO_HONDO,z+PASO],[b0,-RIO_HONDO,z],
-         [0.16,0.135,0.10], T_LADRILLO);
+         [0.16,0.135,0.10], T_LECHO);
   }
   const geoOrilla=geometriaDe();
   V.length=0; NR.length=0; CL.length=0; TP.length=0; UV.length=0;
@@ -2679,7 +2697,10 @@ function moverPersonaje(dt){
      cuerpo por dentro. Catorce centimetros alcanzan. */
   const fx=-Math.sin(PJ.yaw), fz=-Math.cos(PJ.yaw);
   R.position.set(PJ.x-fx*0.15, PJ.y, PJ.z-fz*0.15);
-  R.rotation.y=PJ.yaw+Math.PI;
+  /* El modelo mira a +Z de fabrica y nuestro adelante es (-sin yaw, -cos yaw),
+     que a yaw=0 es -Z. Le habia sumado media vuelta de mas: caminabas para
+     adelante y el cuerpo iba de espaldas. */
+  R.rotation.y=PJ.yaw;
 
   /* mezcla por velocidad: quieto, caminando, corriendo. Los pesos se cruzan
      de a poco para que no haya saltos entre una animacion y la otra */
@@ -2993,7 +3014,19 @@ const matGrado=mkMat(`
        que separa una imagen viva de una imagen chillona */
     float mx=max(max(c.r,c.g),c.b), mn=min(min(c.r,c.g),c.b);
     float sat=mx-mn;
-    c=mix(vec3(lum), c, 1.0+(uSat-1.0)*(1.0-sat));
+    /* VIBRANZA SIN NEGROS.
+       Esto era mix(gris, color, k) con k MAYOR QUE UNO, o sea extrapolacion:
+       para un color oscuro y poco saturado —el suelo entre las briznas— el
+       resultado se iba por debajo de cero y el clamp lo mandaba a negro puro.
+       Por eso al subir la saturacion el piso se apagaba de golpe.
+       Ahora se satura respetando el piso: se separa el color de su gris, se
+       escala esa diferencia, y se limita el factor a lo que el canal mas
+       oscuro aguanta sin cruzar el cero. */
+    float k=1.0+(uSat-1.0)*(1.0-sat);
+    vec3 dif=c-vec3(lum);
+    float mnd=min(min(dif.r,dif.g),dif.b);
+    float tope=(mnd<-1e-4)? (lum/max(-mnd,1e-4)) : 1e9;
+    c=vec3(lum)+dif*min(k, max(tope,1.0));
 
     /* VINETEO natural: la caida cos^4 de cualquier lente */
     float cosT=1.0/sqrt(1.0+r2*3.1);
