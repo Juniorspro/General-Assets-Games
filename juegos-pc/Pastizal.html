@@ -1227,7 +1227,12 @@ function crearCampo(o){
         alto*=fueraDelRio(P);
 
         float dcam=length(P-uOjo.xz);
-        alto*=1.0-smoothstep(uDist*0.80, uDist, dcam);
+        /* Se apaga ANTES y mas largo. A distancia media la brizna mide menos
+           de un pixel y su patron de instancias bate contra la grilla del
+           pixel: es el enrejado en cruz que se veia sobre el pasto y sobre el
+           agua. Fundir el ultimo tercio del campo lo saca sin que se note el
+           borde. */
+        alto*=1.0-smoothstep(uDist*0.58, uDist*0.98, dcam);
         if(uCerca>0.0) alto*=smoothstep(uCerca*0.5, uCerca, dcam);
         vLejos=dcam;
 
@@ -2660,6 +2665,16 @@ const matLum=mkMat(`
     vec3 c=texture2D(t,vUv).rgb+texture2D(t,vUv+uPx).rgb
           +texture2D(t,vUv-uPx).rgb+texture2D(t,vUv+vec2(uPx.x,-uPx.y)).rgb;
     float l=dot(c*0.25,vec3(0.2126,0.7152,0.0722));
+    /* MEDICION CENTRADA, como la de una camara de verdad.
+       Con promedio plano pasaba esto: mirando al sol la media se dispara, la
+       exposicion baja y los colores quedan ricos; te girabas, la media caia,
+       la exposicion subia y lavaba todo. Ese salto es el que se veia. Pesando
+       el centro —que es lo que uno esta mirando— y descartando el borde
+       superior, que casi siempre es cielo, el medidor deja de saltar con cada
+       giro de cabeza. */
+    vec2 q=(vUv-vec2(0.5,0.42))*vec2(1.0,1.25);
+    float peso=exp(-dot(q,q)*3.2)+0.16;
+    l*=peso;
     gl_FragColor=vec4(vec3(log(max(l,1e-4))),1.0);   // en log: la media es geometrica
   }`,{t:{value:null},uPx:{value:new THREE.Vector2()}});
 const matReduce=mkMat(`
@@ -2797,7 +2812,9 @@ const matGrado=mkMat(`
        cae donde tiene que caer y el cielo se va arriba, que es lo que hace una
        diapositiva de campo. Y el techo baja de 1.8 a 1.5 porque justamente ese
        margen de arriba era el que lavaba la escena en cuanto entraba una nube. */
-    float autoE=mix(1.0, clamp(0.22/lm, 0.62, 1.5), uAdapta);
+    /* Limites mas estrechos todavia: la autoexposicion esta para CORREGIR,
+       no para reinterpretar la escena en cada giro. */
+    float autoE=mix(1.0, clamp(0.20/lm, 0.78, 1.28), uAdapta);
     c*=uExpM*autoE;
 
     /* balance de blancos, antes del tono */
@@ -2845,9 +2862,9 @@ const matGrado=mkMat(`
       uAber baja a 0.006: doce milesimas de pantalla son diez pixeles de franja
       de color en el borde, y eso se lee como un error, no como una lente. */
    uBloom:{value:0.062},uExpM:{value:1.0},uCon:{value:1.11},uSat:{value:1.14},
-   uVin:{value:0.40},uNit:{value:0.36},uRayos:{value:0.18},uT:{value:0},
+   uVin:{value:0.40},uNit:{value:0.24},uRayos:{value:0.18},uT:{value:0},
    uAber:{value:0.006},uBarril:{value:0.012},uGrano:{value:0.018},uHalo:{value:0.020},
-   uSucio:{value:0.40},uAnam:{value:0.10},uDest:{value:0.05},uAdapta:{value:0.55},
+   uSucio:{value:0.40},uAnam:{value:0.10},uDest:{value:0.05},uAdapta:{value:0.42},
    uBalance:{value:new THREE.Vector3(1.0,1.0,1.0)},
    /* LEVANTE casi cero. Ese (0.004,0.006,0.010) era el culpable directo de los
       dos defectos mas grandes: sumaba piso a TODO —de ahi que nada llegara a
