@@ -471,6 +471,24 @@ const ATMOS_GLSL=`
     return col*trans+disp;
   }`;
 
+/* Los dos numeros del banco, en JS y no sueltos en el shader, porque los usan
+   TRES cosas que tienen que estar de acuerdo: el umbral del cielo, el umbral de
+   la sombra en el suelo y el uniforme. Cuando estaban por separado, el cielo se
+   marchaba con 0,55 y la sombra del pasto con 0,44: se veian sombras corriendo
+   por el campo sin ninguna nube arriba, que es justo lo que el comentario de
+   abajo dice que no puede pasar. */
+const COB_NUBE=0.61;   // arriba de esto hay nube
+const COB_TOPE=0.82;   // y aca el nucleo ya es opaco
+/* LA FORMA DEL BANCO, y es lo que decidia si el cielo se veia bien o a barras.
+   Con la base a 900 m, 1700 m de espesor y un campo cuyo grano media 300 m, cada
+   nube era SEIS VECES MAS ALTA QUE ANCHA. Una capa de nubes se mira siempre de
+   canto, asi que esos husos verticales se leian como cortinas colgando —y no
+   habia paso de marcha ni filtro que lo arreglara, porque el artefacto era la
+   forma, no el muestreo—. Un cumulo de verdad tiene la base cerca de los mil
+   metros, unos mil de espesor y entre quinientos y dos mil de ancho: mas ancho
+   que alto. Con eso, y solo con eso, el cielo se acomoda. */
+const NUBE_BASE=950, NUBE_ESP=1050;   // metros
+const NUBE_ESC=0.00055;               // 1/1818 m: el periodo de la octava mas gorda
 const NUBES_GLSL=`
   /* ------------------------------------------------------------------------
      UN SOLO CAMPO DE NUBES para todo. La cobertura que se marcha en el cielo
@@ -479,32 +497,69 @@ const NUBES_GLSL=`
      otra cosa.
      ------------------------------------------------------------------------ */
   vec2 vientoNube(float t){ return vec2(t*0.0075, t*0.0042); }
-  float coberturaNube(vec2 q, float t){
-    vec2 p=q*0.0016+vientoNube(t);
-    return fbm(p)*0.62+fbm(p*2.7+13.1)*0.38;
+  /* ------------------------------------------------------------------------
+     EL CAMPO SE FILTRA SEGUN EL PASO DE LA MARCHA, octava por octava.
+     Este fue el artefacto mas caro de encontrar: el cielo salia con cortinas
+     verticales de tres pixeles de ancho colgando de cada nube. No era el
+     jitter, ni el bloom, ni los rayos —se probaron los tres apagados—. Es
+     geometria: una capa de nubes plana vista casi de canto hace que UNA COLUMNA
+     de pantalla recorra siempre la MISMA recta del plano, solo que a distintas
+     distancias. Si el campo tiene detalle de cincuenta metros y la marcha da
+     pasos de doscientos, que un banco caiga o no dentro de un paso decide la
+     columna entera: eso es la cortina.
+     La unica salida barata es no muestrear lo que no se puede: cada octava
+     entra solo si su periodo le entra al paso, igual que un mipmap. Y como
+     apagarlas achica el contraste —y un cumulo a diez kilometros sigue siendo
+     blanco, no gris—, se reexpande por la desviacion que queda.
+     ------------------------------------------------------------------------ */
+  float octNube(float per, float paso){ return clamp(per/max(paso*1.25,1.0)-0.60, 0.0, 1.0); }
+  float coberturaNube(vec2 q, float t, float paso){
+    vec2 p=q*${NUBE_ESC}+vientoNube(t);
+    /* CADA OCTAVA GIRADA UN ANGULO DISTINTO. El ruido de valor vive sobre una
+       rejilla alineada a los ejes; si todas las octavas comparten esa rejilla,
+       los cuadrados se suman y el banco sale a bloques con los cantos rectos.
+       De frente casi no se nota, pero una capa de nubes se mira SIEMPRE de
+       canto, y ahi los cantos se leen como barras verticales. */
+    mat2 R1=mat2(0.80,-0.60,0.60,0.80), R2=mat2(0.28,-0.96,0.96,0.28);
+    /* los periodos en METROS de cada octava: 1818/escala, con q en metros */
+    float w1=0.341;
+    float w2=0.174*octNube(878.0,paso), w3=0.105*octNube(440.0,paso);
+    float w4=0.209*octNube(673.0,paso), w5=0.106*octNube(325.0,paso);
+    float w6=0.065*octNube(163.0,paso);
+    float c=(ruido(p                 )-0.5)*w1+(ruido(R1*p*2.07+11.3)-0.5)*w2
+           +(ruido(R2*p*4.13 + 5.7   )-0.5)*w3+(ruido(R2*p*2.70+13.1)-0.5)*w4
+           +(ruido(R1*p*5.59 +29.6   )-0.5)*w5+(ruido(R1*p*11.15+15.4)-0.5)*w6;
+    float v=w1*w1+w2*w2+w3*w3+w4*w4+w5*w5+w6*w6;
+    return 0.5+c*0.4655/max(sqrt(v),1e-4);
   }
   /* densidad dentro del banco: la cobertura, tallada por el perfil de altura y
      erosionada por un detalle mas fino en los bordes */
-  float densNube(vec3 P, float t, float cobMin, int detalle){
-    float cob=coberturaNube(P.xz, t);
-    float h=clamp((P.y-${900}.0)/${1700}.0, 0.0, 1.0);
+  float densNube(vec3 P, float t, float cobMin, int detalle, float paso){
+    float cob=coberturaNube(P.xz, t, paso);
+    float h=clamp((P.y-${NUBE_BASE}.0)/${NUBE_ESP}.0, 0.0, 1.0);
     /* perfil: base plana, panza redonda, corona deshilachada */
     float perfil=smoothstep(0.0,0.16,h)*smoothstep(1.0,0.42,h);
-    /* La cobertura promedia 0,5 y su maximo es 0,86: restarle el umbral a secas
-       y escalar por 1,45 dejaba la densidad mas gorda del cielo en 0,35, o sea
-       que ni la nube mas espesa era opaca. Se NORMALIZA por lo que queda arriba
-       del umbral, asi el nucleo de un banco llega a 1 y el borde a 0. */
-    float d=(cob-cobMin)/max(1.0-cobMin,1e-3)*perfil;
+    /* NORMALIZAR POR LO QUE HAY, no por lo que podria haber. Dividir por
+       (1-umbral) suponia que la cobertura llega a 1, y no llega nunca: su
+       maximo medido en todo el campo es 0,863 y su excedente MEDIO sobre el
+       umbral es 0,15. Con eso el nucleo de un banco daba densidad 0,15 y el
+       cielo salia pelado por mas extincion que se le pusiera. Se divide por el
+       excedente que de verdad existe (${COB_TOPE.toFixed(2)}), asi el nucleo llega a 1 y solo
+       el borde queda por el medio. */
+    float d=(cob-cobMin)/max(${COB_TOPE.toFixed(2)}-cobMin,1e-3)*perfil;
     if(d<=0.0) return 0.0;
-    if(detalle>0){
-      /* la erosion se come los bordes y deja los coliflores */
-      float er=fbm(P.xz*0.0075+vec2(t*0.02,0.0))*0.6+fbm(vec3(P.xz*0.019,0.0).xy+P.y*0.004)*0.4;
-      /* RESTAR la erosion borraba las nubes enteras: restaba 0,26 de media a una
-         densidad cuya media era 0,07 —tres veces y media toda la senal— y el
-         clamp mandaba a cero el 99% del banco. Se REMAPEA en vez de restar: lo
-         que estaba por debajo del ruido desaparece y el resto se reescala hasta
-         1, que es morder el borde sin tocar el nucleo. */
-      float k=er*0.45;
+    d=min(d,1.0);                    // el nucleo no puede pasarse, y (1-d) de abajo se iria negativo
+    /* la erosion tiene periodo de 133 y 53 m: por debajo del paso es ruido, y
+       por eso tambien se apaga con la distancia */
+    float fino=octNube(385.0,paso);
+    if(detalle>0 && fino>0.001){
+      float er=fbm(P.xz*0.0026+vec2(t*0.02,0.0))*0.6+fbm(vec3(P.xz*0.0065,0.0).xy+P.y*0.004)*0.4;
+      /* LA EROSION MUERDE EL BORDE, NO EL NUCLEO. Restar (o remapear) el ruido
+         parejo se lleva puesta la nube entera: el ruido vale lo mismo en el
+         medio del cumulo que en el fleco. Se pesa por (1-d), o sea que donde la
+         densidad ya es 1 la erosion vale cero y donde es fina se la come.
+         Eso es lo que deja la panza maciza y la corona deshilachada. */
+      float k=er*0.30*(1.0-d)*fino;
       d=(d-k)/max(1.0-k,1e-3);
     }
     return clamp(d,0.0,1.0);
@@ -515,7 +570,9 @@ const NUBES_GLSL=`
      misma cobertura que se marcha arriba, la sombra cae donde esta la nube. */
   float sombraNube(vec2 P, float t, vec3 sol){
     vec2 q=P + sol.xz/max(sol.y,0.12)*1500.0;
-    return smoothstep(0.44,0.72, coberturaNube(q, t));
+    /* EL MISMO UMBRAL QUE EL CIELO. Antes eran 0,44 y 0,72 a mano, mas bajos
+       que el del banco: la sombra empezaba donde todavia no habia nube. */
+    return smoothstep(${COB_NUBE.toFixed(2)}, ${(COB_NUBE+0.14).toFixed(2)}, coberturaNube(q, t, 30.0));
   }`;
 
 /* ============================================================================
@@ -544,10 +601,12 @@ const cieloMat=new THREE.ShaderMaterial({
              uPano:{value:texCielo}, uPanoK:{value:0.20},
              uOjoC:{value:new THREE.Vector3()},
              uPasosNube:{value:MOVIL?16:34}, uPasosLuz:{value:MOVIL?2:4},
-             /* 0,615 dejaba solo el 19% del cielo por encima del umbral, y de
-                ese 19% casi nada sobrevivia; 0,55 deja el 42% y da un cielo de
-                cumulos sueltos en vez de uno pelado */
-             uCobNube:{value:0.55}, uVolNube:{value:1.0} },
+             /* Con la densidad ya normalizada por el excedente real, el umbral
+                vuelve a mandar: medido sobre la marcha completa, 0,61 deja el
+                24% del cielo con nube maciza y el 50% de azul limpio entre
+                medio. Bajarlo a 0,55 tapaba el 68% —eso ya es un dia nublado,
+                no cumulos sueltos. */
+             uCobNube:{value:COB_NUBE}, uVolNube:{value:1.0} },
   vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
     gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
@@ -577,42 +636,64 @@ const cieloMat=new THREE.ShaderMaterial({
     }
     vec4 marcharNubes(vec3 ori, vec3 dir, vec3 sol, vec3 solc, float t){
       if(dir.y<0.020) return vec4(0.0,0.0,0.0,1.0);
-      float y0=900.0, y1=2600.0;
+      float y0=${NUBE_BASE}.0, y1=${NUBE_BASE+NUBE_ESP}.0;
       float t0=(y0-ori.y)/dir.y, t1=(y1-ori.y)/dir.y;
       t0=max(t0,0.0);
       if(t1<=t0) return vec4(0.0,0.0,0.0,1.0);
       /* mirando bajo, el camino dentro del banco es larguisimo: se recorta o
          cada pixel del horizonte cuesta lo que toda la pantalla */
-      t1=min(t1, t0+9000.0);
+      t1=min(t1, t0+4500.0);
       int PASOS=uPasosNube;
       float dt=(t1-t0)/float(PASOS);
       float mu=dot(dir,sol);
-      float fase=faseHG(mu,0.72)*0.75+faseHG(mu,-0.15)*0.25;
+      /* LA FASE ESTABA SIN NORMALIZAR y por eso el cielo era o blanco cegador o
+         negro: faseHG devuelve la densidad de probabilidad, cuya MEDIA sobre la
+         esfera es 1/4pi=0,08, asi que a noventa grados del sol la nube valia
+         0,03 —negra— y de frente 1,8 —cincuenta veces mas—. Un cumulo de verdad
+         no cambia cincuenta veces de brillo segun donde uno se para. Se
+         multiplica por 4pi para que la media valga 1 y despues se la aplasta a
+         la mitad: queda el filo de plata a contraluz (x4) sin que el resto del
+         cielo se apague. */
+      float fase=(faseHG(mu,0.62)*0.62+faseHG(mu,-0.22)*0.38)*12.566370;
+      fase=mix(1.0, fase, 0.55);
 
       vec3 acc=vec3(0.0);
       float trans=1.0;
-      /* el arranque se corre un poco al azar por pixel: sin esto se ven los
-         escalones de la marcha como anillos */
-      float jitter=h21(gl_FragCoord.xy*0.37);
+      /* EL ARRANQUE SE CORRE AL AZAR POR PIXEL, si no se ven los escalones de
+         la marcha como anillos. Pero h21() no sirve para esto y era la causa de
+         las cortinas verticales que tapaban medio cielo: adentro hace
+         fract(vec3(p.xyx)*0.1031), o sea que la primera y la tercera componente
+         son LA MISMA, el hash degenera, y con la coordenada de pantalla por
+         0,37 el patron se repite cada veintiseis pixeles. Eso no es ruido, es
+         una rejilla. Se usa ruido de gradiente entrelazado, que es lo que se usa
+         para esto: no repite y su grano queda parejo. */
+      float jitter=fract(52.9829189*fract(dot(gl_FragCoord.xy, vec2(0.06711056,0.00583715))));
       for(int i=0;i<48;i++){
         if(i>=PASOS) break;
         if(trans<0.02) break;
         vec3 P=ori+dir*(t0+(float(i)+jitter)*dt);
-        float dens=densNube(P, t, uCobNube, 1);
+        float dens=densNube(P, t, uCobNube, 1, dt);
         if(dens<=0.001) continue;
         /* cuanta nube hay entre este punto y el sol */
         float sombra=0.0;
         for(int j=1;j<=4;j++){
           if(j>uPasosLuz) break;
-          vec3 Q=P+sol*(float(j)*140.0);
-          sombra+=densNube(Q, t, uCobNube, 0);
+          /* pasos de 160 m sobre un banco de mil: con cuatro se cruza medio
+             cumulo, que es lo que hace falta para que el nucleo se entere de que
+             esta tapado. La panza gris sale de ACA. */
+          vec3 Q=P+sol*(float(j)*160.0);
+          sombra+=densNube(Q, t, uCobNube, 0, 200.0);
         }
         float luzN=exp(-sombra*1.35)+0.28*exp(-sombra*0.22);
-        vec3 col=solc*luzN*fase*2.1 + uCenit*0.30*(0.35+0.65*dens);
+        /* El cielo que entra de costado tambien lo tapa la nube de arriba: si
+           el ambiente se sumaba parejo —y peor, CRECIENDO con la densidad, que
+           era lo que habia— la panza salia igual de clara que la corona y el
+           cumulo quedaba en mancha blanca. Se lo apaga con la misma sombra. */
+        vec3 col=solc*luzN*fase*0.78 + uCenit*0.32*(0.28+0.72*exp(-sombra*0.55));
         /* la extincion estaba tan floja que ni con densidad 1 en TODO el banco
            una columna al cenit pasaba de 0,85 de opacidad; con la densidad real
-           daba 0,05. Al triple, un nucleo tapa el cielo y un borde no. */
-        float ext=exp(-dens*dt*0.0022);
+           daba 0,05. A 0,008 un nucleo tapa el cielo y un fleco no. */
+        float ext=exp(-dens*dt*0.0030);
         acc+=trans*(1.0-ext)*col;
         trans*=ext;
       }
@@ -640,9 +721,11 @@ const cieloMat=new THREE.ShaderMaterial({
       float limbo=sqrt(max(1.0-pow(clamp((1.0-ds)/0.0004,0.0,1.0),2.0),0.0));
       col+=uSolC*disco*(0.50+0.50*limbo)*18.0;
       /* --- las nubes volumetricas, sobre todo lo demas --- */
+      float libre=1.0;                 // cuanto cielo queda sin tapar por la nube marchada
       if(uVolNube>0.5){
         vec4 n=marcharNubes(uOjoC, d, luz, uSolC, uT);
         col=col*n.w + n.rgb;
+        libre=n.w;
       }
       /* LA PANORAMICA 360, en coordenadas equirectangulares: la longitud sale
          del angulo alrededor del eje vertical y la latitud del angulo con el
@@ -662,7 +745,13 @@ const cieloMat=new THREE.ShaderMaterial({
         /* la nube se ilumina con el sol de la escena, no con el de la foto */
         vec3 tono=mix(vec3(0.86,0.88,0.93), uSolC*1.18, pow(ds,3.0)*0.55);
         vec3 nubeCol=tono*(0.55+0.75*lum);
-        col=mix(col, nubeCol, nube*uPanoK);
+        /* SOLO DONDE NO HAY NUBE MARCHADA. La foto se pintaba encima de todo,
+           asi que sobre un cumulo con panza gris le encajaba una mancha clara
+           plana y le borraba el volumen que acababa de costar treinta pasos.
+           Multiplicada por lo que queda libre, la panoramica cumple su papel
+           —cirros y estructura alta donde el cielo esta vacio— y se calla donde
+           la nube de verdad ya dijo algo. */
+        col=mix(col, nubeCol, nube*uPanoK*libre);
       }
       gl_FragColor=vec4(col,1.0);
     }`
@@ -2046,6 +2135,11 @@ const matRayos=mkMat(`
     for(int i=0;i<24;i++){
       uv-=d;
       vec3 s=texture2D(t,clamp(uv,0.0,1.0)).rgb;
+      /* SOLO LO MUY BRILLANTE SIEMBRA UN RAYO. Con las nubes ya visibles, el
+         mapa de brillo entero se derramaba y medio cielo quedaba tapado por
+         cortinas verticales: un cumulo iluminado es brillante, pero no es el
+         sol. Se pide el doble del umbral del bloom para entrar. */
+      s*=smoothstep(1.6, 4.0, dot(s,vec3(0.2126,0.7152,0.0722)));
       acc+=s*ilum;
       ilum*=uDecai;
     }
@@ -2572,7 +2666,10 @@ function aplicarNivel(){
   const n=NIVELES[nivel];
   /* la marcha de nubes acompana la calidad: es lo mas caro del cuadro cuando
      se mira al cielo, asi que si el equipo sufre, lo primero que baja es esto */
-  cieloMat.uniforms.uPasosNube.value=[10,20,34][nivel];
+  /* Diez pasos sobre nueve kilometros de banco es un paso cada 900 m: con la
+     densidad ya sana eso se ve a bandas. Dieciseis es el piso donde el jitter
+     todavia alcanza a disimular el escalon. */
+  cieloMat.uniforms.uPasosNube.value=[16,24,34][nivel];
   cieloMat.uniforms.uPasosLuz.value=[2,3,4][nivel];
   for(let i=0;i<CAMPOS.length;i++) CAMPOS[i].mat.uniforms.uDist.value=DIST0[i]*n.p[i];
   PASTO_U.uDens.value=Math.min(parseFloat($('sDens').value), n.d);
@@ -2693,6 +2790,14 @@ window.__dbg={
     acciones:Object.keys(PJ3.acc), huesos:Object.keys(PJ3.huesos).length,
     pesos:Object.fromEntries(Object.entries(PJ3.acc).map(([k,a])=>[k,+a.getEffectiveWeight().toFixed(2)]))}; },
   cuerpo(v){ PJ3.activo=v!==false; },
+  /* interruptores para aislar de donde sale un artefacto: sin ellos hay que
+     adivinar si una mancha la puso la nube, el bloom o los rayos */
+  post(o){ if(o.bloom!==undefined) postBloom=o.bloom;
+           if(o.rayos!==undefined) postRayos=o.rayos;
+           if(o.mov!==undefined) postMov=o.mov;
+           return {bloom:postBloom, rayos:postRayos, mov:postMov}; },
+  nubes(v){ cieloMat.uniforms.uVolNube.value=(v===false)?0.0:1.0; },
+  pano(k){ cieloMat.uniforms.uPanoK.value=k; },
   saltar(){ saltar(); },
   calidad(n){ autoNivel=(n===undefined); if(n!==undefined){ nivel=n; aplicarNivel(); } return nivel; },
   get piezas(){ let n=0,t=0; escena.traverse(o=>{ if(o.isMesh&&o.visible){ n++;
