@@ -1396,9 +1396,30 @@ const CHOQUES=[];                          /* cajas orientadas para el jugador *
 /* tipos de superficie que entiende el shader */
 const T_REVOQUE=0, T_CHAPA=1, T_MADERA=2, T_LADRILLO=3, T_VIDRIO=4, T_TEJA=5, T_HIERRO=6;
 
+/* Los vidrios y las puertas NO pueden vivir en la malla opaca: el vidrio tiene
+   que ser transparente y la puerta tiene que girar sobre su eje. Asi que el
+   emisor de vertices se puede DESVIAR a otro juego de arrays sin tocar ninguna
+   de las funciones que dibujan —caja, cara, pared siguen igual—. */
+let DEST=null;
 function vert(x,y,z, nx,ny,nz, c, t, u,v){
+  const D=DEST;
+  if(D){ D.V.push(x,y,z); D.NR.push(nx,ny,nz); D.CL.push(c[0],c[1],c[2]);
+         D.TP.push(t); D.UV.push(u,v); return; }
   V.push(x,y,z); NR.push(nx,ny,nz); CL.push(c[0],c[1],c[2]); TP.push(t); UV.push(u,v);
 }
+const nuevoDest=()=>({V:[],NR:[],CL:[],TP:[],UV:[]});
+function geometriaDeDest(D){
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(D.V,3));
+  g.setAttribute('normal',   new THREE.Float32BufferAttribute(D.NR,3));
+  g.setAttribute('color',    new THREE.Float32BufferAttribute(D.CL,3));
+  g.setAttribute('tipo',     new THREE.Float32BufferAttribute(D.TP,1));
+  g.setAttribute('uvm',      new THREE.Float32BufferAttribute(D.UV,2));
+  g.computeBoundingSphere();
+  return g;
+}
+const VIDRIOS=nuevoDest();
+const PUERTAS=[];
 /* Una cara de cuatro esquinas. Las uv van EN METROS y se calculan de los
    propios lados, asi el acanalado de la chapa mide siempre lo mismo aunque la
    pared sea larga o corta. */
@@ -1505,7 +1526,9 @@ function pared(ax,az, bx,bz, alto, grosor, col, tipo, huecos, marco){
       caja(px,hu.y+hu.h, pz, hu.w+e, e, gm, rot, COL.marco, T_MADERA, false);
       if(hu.y>0.01){
         caja(px,hu.y-e, pz, hu.w+e*2, e, gm*1.5, rot, COL.marco, T_MADERA, false);
-        caja(px,hu.y+0.02, pz, hu.w-e, hu.h-0.04, grosor*0.16, rot, COL.vidrio, T_VIDRIO, false);
+        DEST=VIDRIOS;
+        caja(px,hu.y+0.02, pz, hu.w-e, hu.h-0.04, grosor*0.10, rot, COL.vidrio, T_VIDRIO, false);
+        DEST=null;
         /* el travesano de la ventana: sin el, el vidrio parece un agujero */
         caja(px,hu.y+hu.h*0.5, pz, hu.w-e, e*0.7, gm, rot, COL.marco, T_MADERA, false);
       }
@@ -1562,9 +1585,17 @@ function postigos(ax,az,bx,bz, hu, gr){
     }
   }
 }
+/* La puerta ya no se emite dentro de la malla: se ANOTA con su bisagra, su
+   ancho y su orientacion, y despues se arma como objeto propio que gira. Una
+   puerta pegada a la pared no es una puerta. */
 function puertaPanel(ax,az,bx,bz, hu, gr){
   const rot=Math.atan2(bz-az,bx-ax), co=Math.cos(rot), si=Math.sin(rot);
   const M=(u,off)=>[ax+co*u-si*off, az+si*u+co*off];
+  const bis=M(hu.u-hu.w/2+0.05, -gr*0.22);      // el eje, en el borde
+  PUERTAS.push({x:bis[0], z:bis[1], rot, ancho:hu.w-0.10, alto:hu.h-0.04,
+                grosor:0.055, ang:0, vel:0});
+  return;
+  /* eslint-disable no-unreachable */
   const p=M(hu.u, -gr*0.30);
   caja(p[0],hu.y+0.02,p[1], hu.w-0.09, hu.h-0.04, 0.055, rot, COL.puerta, T_MADERA, false);
   for(let i=0;i<2;i++){
@@ -2067,6 +2098,97 @@ alambrado(96,-46, 96,-8, 16);
 alambrado(-104,60, -104,86, 11);
 alambrado(-104,86, -80,86, 10);
 
+/* ============================================================================
+   VIDRIOS Y PUERTAS
+============================================================================ */
+/* El vidrio es transparente de verdad: se ve el cuarto detras, y encima lleva
+   el reflejo del cielo con Fresnel —de frente casi no refleja, de canto se
+   vuelve un espejo— mas el destello duro del sol. Eso, y no el color, es lo
+   que hace que un panel se lea como vidrio. */
+const matVidrio=new THREE.ShaderMaterial({
+  uniforms:{ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
+    uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()},
+    uHoriz:{value:HORIZ.clone()}, uFogD:{value:nieblaD} },
+  transparent:true, depthWrite:false, side:THREE.DoubleSide, vertexColors:true,
+  vertexShader:`
+    precision highp float;
+    attribute float tipo; attribute vec2 uvm;
+    varying vec3 vW,vN;
+    void main(){ vec4 w=modelMatrix*vec4(position,1.0);
+      vW=w.xyz; vN=normalize(mat3(modelMatrix)*normal);
+      gl_Position=projectionMatrix*viewMatrix*w; }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vW,vN;
+    uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
+    ${RUIDO_GLSL}
+    ${ATMOS_GLSL}
+    void main(){
+      vec3 N=normalize(vN)*(gl_FrontFacing?1.0:-1.0);
+      vec3 V=normalize(uOjo-vW);
+      float NdV=max(dot(N,V),1e-3);
+      float F=0.04+0.96*pow(1.0-NdV,5.0);
+      vec3 R=reflect(-V,N);
+      vec3 refl=atmosfera(R, luz, uSolC)*1.15;
+      /* el destello duro del sol sobre el panel */
+      vec3 H=normalize(V+luz);
+      refl+=uSolC*pow(max(dot(N,H),0.0), 900.0)*30.0;
+      /* la suciedad del vidrio: casi nada, pero sin esto parece un agujero */
+      float mugre=0.06*fbm(vW.xz*7.0+vW.y*5.0);
+      vec3 col=refl+vec3(0.012,0.016,0.020)+mugre;
+      col=aereo(col, vW, uOjo, luz, uSolC, uHoriz, uFogD);
+      gl_FragColor=vec4(col, clamp(0.16+F*0.80+mugre*2.0, 0.0, 0.95));
+    }`
+});
+MATS.push(matVidrio);
+
+/* Las puertas: cada una es un objeto con su eje en la bisagra, y gira. */
+const OBJ_PUERTAS=[];
+function armarPuertas(){
+  for(const p of PUERTAS){
+    const D=nuevoDest(); DEST=D;
+    /* el panel se dibuja DESPLAZADO del origen: el origen es la bisagra, y por
+       eso al rotar el objeto la hoja barre como una puerta y no como una
+       hélice */
+    caja(p.ancho/2, 0, 0, p.ancho, p.alto, p.grosor, 0, COL.puerta, T_MADERA, false);
+    caja(p.ancho/2, p.alto*0.30, 0, p.ancho*0.62, p.alto*0.30, p.grosor*1.5, 0,
+         COL.puertaOsc, T_MADERA, false);
+    caja(p.ancho-0.10, 1.02, p.grosor*1.6, 0.09,0.05,0.05, 0, COL.hierro, T_HIERRO, false);
+    DEST=null;
+    const g=new THREE.Group();
+    const m=new THREE.Mesh(geometriaDeDest(D), matEdificio);
+    m.frustumCulled=false; g.add(m);
+    g.position.set(p.x, 0, p.z);
+    g.rotation.y=p.rot;
+    escena.add(g);
+    OBJ_PUERTAS.push({g, d:p, base:p.rot});
+  }
+}
+/* La fisica: la hoja tiene inercia, roce, y un resorte muy flojo que la lleva
+   de vuelta al marco. El jugador la empuja cuando la cruza, con la componente
+   de su velocidad perpendicular a la hoja: por eso si entras de costado la
+   abris despacio y si entras de frente la abris de golpe. */
+function moverPuertas(dt){
+  for(const o of OBJ_PUERTAS){
+    const d=o.d;
+    const co=Math.cos(d.rot), si=Math.sin(d.rot);
+    /* al sistema de la puerta: u a lo largo de la hoja cerrada, w perpendicular */
+    const dx=PJ.x-d.x, dz=PJ.z-d.z;
+    const u=dx*co+dz*si, w=-dx*si+dz*co;
+    if(u>-0.35 && u<d.ancho+0.35 && Math.abs(w)<0.75 && PJ.y<d.alto){
+      const emp=(-PJ.vx*si+PJ.vz*co);          // la velocidad perpendicular
+      const brazo=Math.max(0.25, Math.min(1.0, u/Math.max(d.ancho,0.01)));
+      d.vel+=emp*brazo*2.6*dt*(1.0-Math.min(1,Math.abs(w)/0.75));
+    }
+    d.vel-=d.ang*0.55*dt;                      // el resorte al marco
+    d.vel*=Math.exp(-2.1*dt);                  // el roce del gozne
+    d.ang+=d.vel*dt;
+    if(d.ang>1.85){ d.ang=1.85; d.vel*=-0.25; }   // el tope
+    if(d.ang<-1.85){ d.ang=-1.85; d.vel*=-0.25; }
+    o.g.rotation.y=o.base+d.ang;
+  }
+}
+
 const mallaEdificios=new THREE.Mesh(geometriaDe(), matEdificio);
 mallaEdificios.frustumCulled=false;
 escena.add(mallaEdificios);
@@ -2074,6 +2196,11 @@ escena.add(mallaEdificios);
    y el suelo, y de ahi en mas el pastizal sabe que hay algo encima */
 volcarHuellas();
 volcarInteriores();
+armarPuertas();
+{
+  const mv=new THREE.Mesh(geometriaDeDest(VIDRIOS), matVidrio);
+  mv.frustumCulled=false; mv.renderOrder=3; escena.add(mv);
+}
 
 /* ============================================================================
    EL RIO
@@ -3301,6 +3428,8 @@ function bucle(ahora){
   matAgua.uniforms.uT.value=T;
   matAgua.uniforms.uOjo.value.copy(camara.position);
   moverRipples(dt);
+  moverPuertas(dt);
+  matVidrio.uniforms.uOjo.value.copy(camara.position);
   /* el reflejo se dibuja ANTES que la escena: necesita el buffer listo */
   if(reflejoOn) pintarReflejo();
   for(let i=0;i<RUEDAS.length;i++) RUEDAS[i].rotation.z-=dt*(0.85+i*0.13);
