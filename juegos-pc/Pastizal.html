@@ -137,6 +137,9 @@
      canvas: un flash de pantalla completa no necesita pasar por el shader. */
   #flash{position:absolute;inset:0;z-index:30;background:#fff;opacity:0;
     pointer-events:none;transition:opacity .35s linear}
+  /* el apagon entre escenas: negro pleno, y despues el mundo se prende solo */
+  #negro{position:absolute;inset:0;z-index:29;background:#000;opacity:0;
+    pointer-events:none;transition:opacity 1.4s ease}
   #cartel{position:absolute;inset:0;z-index:31;display:flex;flex-direction:column;
     align-items:center;justify-content:center;gap:12px;opacity:0;pointer-events:none;
     transition:opacity 1.6s ease;background:rgba(2,5,4,.55)}
@@ -193,6 +196,7 @@
     <button id="bAvanzado">ADVANCED</button>
     <div class="fps" id="pFps"></div>
   </div>
+  <div id="negro"></div>
   <div id="flash"></div>
   <div id="cartel"><div class="t" id="cartelT"></div><div class="s" id="cartelS"></div></div>
   <div id="menu">
@@ -4222,7 +4226,8 @@ function bucle(ahora){
   /* ni en la cinematica ni en el menu maneja el jugador: la camara la lleva
      la escena */
   moverMenu(dt);
-  if(PAUSA) dt=0;                             // en pausa el mundo se queda quieto
+  if(PAUSA) dt=0;
+  moverPileta(dt);                             // en pausa el mundo se queda quieto
   if(!CINE && !MENU.activo && !PAUSA) moverJugador(dt);
   if(MENU.activo) ponerCamara(dt);
   pulsA=Math.max(0,pulsA-dt); pulsB=Math.max(0,pulsB-dt);
@@ -4786,6 +4791,23 @@ function moverCine(dt){
   }
   return false;
 }
+/* EL PASAJE A LA ESCENA II.
+   Se apaga en negro, se cambia de mundo DETRAS del negro, y se vuelve a prender
+   ya adentro de la sala. Los tiempos importan mas de lo que parece: el negro
+   tiene que quedarse quieto un segundo largo antes de levantar, porque el
+   silencio en negro es lo que hace que lo que sigue sea OTRO lugar y no el
+   mismo con otra luz. */
+function pasarAPileta(){
+  const n=$('negro');
+  if(n){ n.style.transition='opacity 1.6s ease'; n.style.opacity='1'; }
+  callarCine();
+  setTimeout(()=>{
+    entrarPileta();
+    const c=$('cartel'); if(c) c.style.opacity='0';
+    /* y ahora si, el negro se levanta despacio mientras los tubos arrancan */
+    setTimeout(()=>{ if(n){ n.style.transition='opacity 3.4s ease'; n.style.opacity='0'; } }, 1100);
+  }, 1750);
+}
 function terminarCine(){
   CINE=null; MISION.paso=7;
   PJ3.tercera=false; PJ3.activo=true;
@@ -4794,7 +4816,7 @@ function terminarCine(){
   DES_U.uDesarme.value=0.0; losas.visible=false;
   PJ.y=0; PJ.vy=0; PJ.cabeceo=-0.05;
   avisoFinal();
-  callarCine();
+  pasarAPileta();
 }
 function avisoFinal(){
   const d=document.getElementById('ayuda');
@@ -5310,6 +5332,456 @@ function callarCine(){ try{ audioCine.pause(); }catch(e){} }
   $('bAvanzado').onclick=()=>$('panel').classList.toggle('show');
 })();
 
+
+/* ============================================================================
+   LAS POOLROOMS · la escena II
+
+   Cuando termina la primera escena la pantalla se apaga en negro y se vuelve a
+   prender —despacio, tubo por tubo— adentro de un salon de azulejo blanco con
+   agua hasta los tobillos. Es el Nivel 37 del Backrooms, y las cinco cosas que
+   lo definen estan todas acá porque sin cualquiera de ellas no se reconoce:
+
+     · TODO es azulejo ceramico blanco, impecable, todos iguales, sin una sola
+       marca en su superficie brillante;
+     · el agua es verde azulada, tibia, y ondula sin parar aunque nadie la toque;
+     · hay PILARES DE MAS —"mucho mas en cantidad de lo practico"— saliendo del
+       agua;
+     · arcos, y salas que se conectan entre si sin que ninguna tenga un uso
+       identificable;
+     · la luz llega "desde angulos irregulares": salas encendidas al lado de
+       rincones sin una sola luz.
+
+   Y no hay una sola textura ni un solo archivo: el azulejo, la junta, el brillo,
+   las causticas, el reflejo del techo y la refraccion del piso salen todos de
+   cuentas, igual que el resto del juego.
+============================================================================ */
+const PIL_CEN={x:600, z:600};          // lejos del campo, adentro del borde
+const PIL_MAXLUZ=14;
+const PIL={ grupo:null, hecho:false, activo:false,
+            BAHIA:10.0, N:5, ALTO:6.4, AGUA:0.42,
+            luces:[], enc:0, t:0 };
+
+/* ------------------------------------------------------------- el azulejo
+   La coordenada sale de la POSICION EN EL MUNDO proyectada sobre los dos ejes
+   que no son la normal: asi el azulejo cruza de una pared a la de al lado sin
+   costura y sin desplegar nada. Junta de 9 mm, azulejo de 16 cm, y una
+   variacion minima por pieza —dos milesimas— porque un azulejo real nunca es
+   exactamente igual al de al lado ni siquiera cuando lo parece. */
+const PIL_GLSL=`
+  uniform vec3 uLuz[${PIL_MAXLUZ}]; uniform int uNLuz;
+  uniform float uEnc, uTp, uAguaY, uAlto;
+  float h21p(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+  /* cuanto esta encendido el tubo i: se prenden EN ORDEN, con su parpadeo */
+  float encendido(int i, float t){
+    float f=float(i);
+    float u=clamp((uEnc*(float(uNLuz)+2.5) - f)*1.35, 0.0, 1.0);
+    /* el titileo del arranque: un tubo no se prende, tartamudea */
+    float p=step(0.35, u)*step(u, 0.92);
+    float ti=sin(t*47.0+f*13.7)*sin(t*23.0+f*7.1);
+    return clamp(u*(1.0 - p*0.55*step(0.0, ti)), 0.0, 1.0);
+  }
+  /* la trama de azulejo: devuelve (junta, tono de la pieza) */
+  vec2 azulejo(vec2 q){
+    const float TAM=0.205, J=0.011;
+    vec2 c=floor(q/TAM);
+    vec2 f=fract(q/TAM)*TAM;
+    vec2 d=min(f, TAM-f);
+    /* LA JUNTA SE APAGA CUANDO YA NO LE ENTRA AL PIXEL.
+       Sin esto, a diez metros el azulejo tiene dos pixeles y la junta bate
+       contra la grilla de la pantalla: sale un hormigueo de puntos de colores
+       —y la aberracion cromatica y el pase de nitidez lo multiplican—. Midiendo
+       cuanto avanza la coordenada de un pixel al de al lado se sabe cuando la
+       junta ya no se puede dibujar, y se la funde en vez de dibujarla mal. Es
+       lo mismo que hace un mipmap, pero para una trama que no es una textura. */
+    float px=fwidth(q.x)+fwidth(q.y)+1e-6;
+    float nit=1.0-smoothstep(J*1.2, TAM*0.55, px);
+    float junta=(1.0-smoothstep(J*0.35, J*1.15+px*0.5, min(d.x,d.y)))*nit;
+    return vec2(junta, 0.985+h21p(c)*0.026);
+  }
+  /* CAUSTICAS. Tres octavas de senos cruzados: la malla de luz que el agua
+     dibuja en el fondo y trepa por la pared. Es lo unico de esta sala que se
+     mueve, y por eso es lo que la hace estar viva. */
+  float caustica(vec2 p, float t){
+    vec2 q=p*0.9; float k=0.0, a=1.0;
+    for(int i=0;i<3;i++){
+      q=q*1.72+vec2(t*0.10,-t*0.065);
+      k+=a*sin(q.x*1.9+sin(q.y*1.35+t*0.55))*sin(q.y*2.05+sin(q.x*1.7-t*0.47));
+      a*=0.62;
+    }
+    return pow(max(k*0.34+0.5,0.0), 5.0);
+  }
+  /* lo que aportan los tubos en un punto con una normal */
+  vec3 luzTubos(vec3 P, vec3 N, vec3 E, float bril, float t){
+    vec3 c=vec3(0.0);
+    for(int i=0;i<${PIL_MAXLUZ};i++){
+      if(i>=uNLuz) break;
+      float on=encendido(i,t);
+      if(on<=0.002) continue;
+      vec3 d=uLuz[i]-P;
+      float r=length(d); d/=max(r,0.001);
+      /* caida cuadratica con un piso, y el tubo es una franja: no cae tan
+         rapido a lo largo como a lo ancho */
+      float at=on/(1.0+r*r*0.055);
+      float dif=max(dot(N,d),0.0);
+      vec3 h=normalize(d+E);
+      float esp=pow(max(dot(N,h),0.0), 96.0)*bril;
+      c+=vec3(1.0,0.985,0.94)*at*(dif*1.55+esp*2.2);
+    }
+    return c;
+  }`;
+
+/* el material de todo el azulejo: paredes, piso, techo y pilares */
+const matPileta=new THREE.ShaderMaterial({
+  uniforms:{ uLuz:{value:new Array(PIL_MAXLUZ).fill(0).map(()=>new THREE.Vector3(0,-999,0))},
+             uNLuz:{value:0}, uEnc:{value:0}, uTp:{value:0},
+             uAguaY:{value:0.42}, uAlto:{value:6.4},
+             uOjo:{value:new THREE.Vector3()} },
+  vertexShader:`
+    precision highp float;
+    attribute float tipo;
+    varying vec3 vW,vN; varying float vT;
+    void main(){
+      vW=position; vN=normal; vT=tipo;
+      gl_Position=projectionMatrix*viewMatrix*vec4(position,1.0);
+    }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vW,vN; varying float vT;
+    uniform vec3 uOjo;
+    ${PIL_GLSL}
+    void main(){
+      vec3 N=normalize(vN), E=normalize(uOjo-vW);
+      /* la trama, sobre los dos ejes que no son la normal */
+      vec2 q = abs(N.y)>0.5 ? vW.xz : (abs(N.x)>0.5 ? vW.zy : vW.xy);
+      vec2 az=azulejo(q);
+      /* ceramica blanca: casi blanca pero no blanca, y la junta un punto mas
+         gris y mas mate */
+      vec3 alb=mix(vec3(0.905,0.925,0.918)*az.y, vec3(0.640,0.672,0.665), az.x);
+      float bril=mix(1.0, 0.12, az.x);          // la junta no brilla
+      vec3 col=luzTubos(vW, N, E, bril, uTp)*alb;
+      /* EL SALON SE ILUMINA A SI MISMO. Todo es azulejo blanco: la luz que sale
+         de un tubo rebota diez veces antes de morirse, y por eso una sala asi
+         NO tiene sombras duras ni rincones negros debajo de un tubo encendido.
+         Sin este termino el techo salia gris plomo y la sala parecia un sotano.
+         El techo recibe mas porque le rebota el agua y el piso entero. */
+      float reb=(vT>1.5&&vT<2.5)? 1.55 : 1.0;
+      col+=alb*vec3(0.235,0.262,0.268)*reb*(0.10+0.90*uEnc);
+
+      /* EL AGUA DEVUELVE SU PROPIA LUZ. Es la firma del sitio: el verde
+         azulado no esta en los azulejos, esta en el REBOTE, y por eso la pared
+         se pone verde cerca del agua y vuelve a ser blanca a dos metros. */
+      float hAgua=vW.y-uAguaY;
+      float cerca=exp(-max(hAgua,0.0)*0.55);
+      col+=vec3(0.16,0.52,0.50)*alb*cerca*(0.30+0.55*uEnc);
+
+      /* y le tira las causticas encima, hasta metro y medio por arriba */
+      float ca=caustica(vW.xz*1.35, uTp);
+      float sub=step(vW.y, uAguaY);
+      float trepa=sub>0.5? 1.0 : exp(-max(hAgua,0.0)*1.35);
+      col+=vec3(0.55,0.95,0.92)*ca*trepa*(0.30+0.85*uEnc)*(0.35+0.65*max(N.y,0.0));
+
+      /* ambiente: el salon entero es blanco y se ilumina a si mismo */
+
+
+      /* LA BRUMA. Sin ella el salon se lee como una maqueta: es lo que le da
+         los "rincones sin luz" y la profundidad. Muy leve y muy palida. */
+      /* LA BRUMA. Es lo que le da profundidad y los rincones que se pierden,
+         pero con 0,0165 y un gris azulado oscuro se comia la sala a quince
+         metros y la dejaba de color pantano. Mas palida, mas clara y la mitad
+         de densa: a treinta metros todavia se distingue un arco. */
+      float d=length(vW-uOjo);
+      float f=1.0-exp(-d*0.0088);
+      col=mix(col, vec3(0.315,0.400,0.408)*(0.20+0.80*uEnc), clamp(f,0.0,1.0)*0.88);
+      gl_FragColor=vec4(col,1.0);
+    }`
+});
+MATS.push(matPileta);
+
+/* los tubos, vistos de frente */
+const matPanel=new THREE.ShaderMaterial({
+  uniforms:matPileta.uniforms,
+  vertexShader:`precision highp float; varying vec3 vW;
+    void main(){ vW=position; gl_Position=projectionMatrix*viewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    precision highp float; varying vec3 vW; uniform vec3 uOjo;
+    ${PIL_GLSL}
+    void main(){
+      /* cual de los tubos es este: el mas cercano */
+      float on=0.0; float mejor=1e9;
+      for(int i=0;i<${PIL_MAXLUZ};i++){
+        if(i>=uNLuz) break;
+        float r=length(uLuz[i]-vW);
+        if(r<mejor){ mejor=r; on=encendido(i,uTp); }
+      }
+      vec3 c=vec3(1.0,0.985,0.945)*(0.06+on*5.5);
+      float d=length(vW-uOjo);
+      c=mix(c, vec3(0.315,0.400,0.408), clamp(1.0-exp(-d*0.0088),0.0,1.0)*0.45);
+      gl_FragColor=vec4(c,1.0);
+    }`
+});
+MATS.push(matPanel);
+
+/* ------------------------------------------------------------------ el agua
+   Es un plano, pero se resuelve como agua de verdad porque la sala es una CAJA
+   y eso permite trazar los dos rayos a mano:
+     · el que baja se refracta y pega en el piso, a y=0 → se evalua ahi el
+       azulejo y sus causticas, y se lo tiñe con la absorcion del agua;
+     · el que sube se refleja y pega en el techo, a y=uAlto → se evalua ahi el
+       azulejo y los tubos.
+   Un reflejo planar de verdad costaria un segundo dibujo de la escena; esto
+   cuesta dos intersecciones con un plano y sale igual, porque en una caja de
+   azulejo el reflejo ES el techo. */
+const matAguaPil=new THREE.ShaderMaterial({
+  uniforms:matPileta.uniforms,
+  vertexShader:`precision highp float; varying vec3 vW;
+    void main(){ vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz;
+      gl_Position=projectionMatrix*viewMatrix*w; }`,
+  fragmentShader:`
+    precision highp float; varying vec3 vW; uniform vec3 uOjo;
+    ${PIL_GLSL}
+    void main(){
+      vec3 E=normalize(uOjo-vW);
+      /* ONDULACION MINIMA Y CONSTANTE, aunque nadie la toque: cuatro trenes
+         cruzados de amplitud chica. Es literalmente lo que dice el nivel, y es
+         lo que hace que el agua no parezca un vidrio verde. */
+      vec2 p=vW.xz;
+      float o1=sin(p.x*2.10+uTp*0.90)+sin(p.y*1.70-uTp*0.75);
+      float o2=sin(p.x*4.30-uTp*1.35)*0.55+sin(p.y*3.90+uTp*1.15)*0.55;
+      float o3=sin((p.x+p.y)*7.10+uTp*2.10)*0.22;
+      vec3 N=normalize(vec3(
+        (cos(p.x*2.10+uTp*0.90)*2.10 + cos(p.x*4.30-uTp*1.35)*4.30*0.55
+         + cos((p.x+p.y)*7.10+uTp*2.10)*7.10*0.22)*0.0135,
+        1.0,
+        (cos(p.y*1.70-uTp*0.75)*1.70 + cos(p.y*3.90+uTp*1.15)*3.90*0.55
+         + cos((p.x+p.y)*7.10+uTp*2.10)*7.10*0.22)*0.0135));
+
+      /* --- lo que se ve ABAJO: el piso, refractado --- */
+      vec3 R=refract(-E, N, 1.0/1.333);
+      if(R.y>-0.02) R=vec3(R.x,-0.02,R.z);
+      float tF=(0.0-vW.y)/R.y;
+      vec3 PF=vW+R*tF;
+      vec2 azF=azulejo(PF.xz);
+      vec3 fondo=mix(vec3(0.905,0.925,0.918)*azF.y, vec3(0.640,0.672,0.665), azF.x);
+      fondo*=0.30+luzTubos(PF, vec3(0.0,1.0,0.0), vec3(0.0,1.0,0.0), 0.0, uTp).g*0.9;
+      fondo+=vec3(0.55,0.95,0.92)*caustica(PF.xz*1.35, uTp)*(0.55+1.35*uEnc);
+      /* absorcion: el agua se come el rojo primero, y de ahi sale el verde
+         azulado. Camino = lo que recorrio adentro. */
+      float cam=length(PF-vW);
+      vec3 abs3=exp(-vec3(1.55,0.30,0.36)*cam);
+      vec3 col=fondo*abs3 + vec3(0.055,0.185,0.180)*(1.0-abs3.g)*(0.25+0.85*uEnc);
+
+      /* --- lo que se ve ARRIBA: el techo, reflejado --- */
+      vec3 RR=reflect(-E, N);
+      if(RR.y>0.02){
+        float tC=(uAlto-vW.y)/RR.y;
+        vec3 PC=vW+RR*tC;
+        vec2 azC=azulejo(PC.xz);
+        vec3 techo=mix(vec3(0.905,0.925,0.918)*azC.y, vec3(0.640,0.672,0.665), azC.x);
+        techo*=0.22+luzTubos(PC, vec3(0.0,-1.0,0.0), vec3(0.0,-1.0,0.0), 0.0, uTp).g*0.75;
+        /* y el tubo mismo, que es lo que de verdad se ve reflejado en el agua */
+        for(int i=0;i<${PIL_MAXLUZ};i++){
+          if(i>=uNLuz) break;
+          vec2 dd=abs(PC.xz-uLuz[i].xz);
+          float dentro=step(dd.x,1.85)*step(dd.y,0.62);
+          techo+=vec3(1.0,0.985,0.945)*dentro*encendido(i,uTp)*3.6;
+        }
+        float fr=0.020+0.980*pow(1.0-max(dot(N,E),0.0), 5.0);
+        col=mix(col, techo, clamp(fr,0.0,1.0));
+      }
+      /* el brillo directo de los tubos sobre la superficie */
+      col+=luzTubos(vW, N, E, 1.0, uTp)*0.30;
+
+      float d=length(vW-uOjo);
+      col=mix(col, vec3(0.315,0.400,0.408)*(0.20+0.80*uEnc),
+              clamp(1.0-exp(-d*0.0088),0.0,1.0)*0.88);
+      gl_FragColor=vec4(col,1.0);
+    }`
+});
+MATS.push(matAguaPil);
+
+/* ------------------------------------------------------- la sala, construida
+   Un solo buffer para todo el azulejo: una malla y una llamada de dibujo, igual
+   que el casco de estancia. */
+function cajasPileta(){
+  const pos=[], nor=[], tip=[];
+  function caja(cx,cy,cz, sx,sy,sz, t){
+    const h=[sx*0.5, sy*0.5, sz*0.5];
+    const C=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+    for(const n of C){
+      const q=[];
+      for(const [a,b] of [[-1,-1],[1,-1],[1,1],[-1,1]]){
+        let x=cx+n[0]*h[0], y=cy+n[1]*h[1], z=cz+n[2]*h[2];
+        if(n[0]!==0){ y+=a*h[1]; z+=b*h[2]; }
+        else if(n[1]!==0){ x+=a*h[0]; z+=b*h[2]; }
+        else { x+=a*h[0]; y+=b*h[1]; }
+        q.push([x,y,z]);
+      }
+      /* el orden de los dos triangulos depende del signo de la normal, si no
+         la mitad de las caras quedan del reves */
+      const orden = (n[0]+n[1]+n[2]>0)? [0,1,2, 0,2,3] : [0,2,1, 0,3,2];
+      for(const i of orden){
+        pos.push(q[i][0],q[i][1],q[i][2]); nor.push(n[0],n[1],n[2]); tip.push(t);
+      }
+    }
+  }
+  return {pos,nor,tip,caja};
+}
+
+function construirPileta(){
+  if(PIL.hecho) return;
+  PIL.hecho=true;
+  const B=PIL.BAHIA, N=PIL.N, H=PIL.ALTO, L=B*N, O=PIL_CEN;
+  const G=cajasPileta();
+  const T_PARED=0, T_PISO=1, T_TECHO=2, T_PILAR=3;
+
+  G.caja(O.x, -0.30, O.z, L+2.4, 0.6, L+2.4, T_PISO);
+  G.caja(O.x, H+0.30, O.z, L+2.4, 0.6, L+2.4, T_TECHO);
+  for(let i=0;i<4;i++){
+    const a=i*Math.PI/2, ex=Math.round(Math.cos(a)), ez=Math.round(Math.sin(a));
+    G.caja(O.x+ex*(L/2+0.3), H/2, O.z+ez*(L/2+0.3),
+           ex? 0.6 : L+1.2, H, ez? 0.6 : L+1.2, T_PARED);
+  }
+  /* LOS PILARES DE MAS: en cada cruce de bahias, y uno suelto en medio de una
+     de cada tres. "Mucho mas en cantidad de lo practico" es textual del nivel,
+     y es lo que hace que la sala no se lea como una pileta sino como otra cosa. */
+  for(let j=0;j<=N;j++) for(let i=0;i<=N;i++){
+    const x=O.x-L/2+i*B, z=O.z-L/2+j*B;
+    G.caja(x, H/2, z, 1.05, H, 1.05, T_PILAR);
+    CHOQUES.push({x, z, hx:0.60, hz:0.60, rot:0, alto:H});
+    if((i*7+j*11)%3===0 && i<N && j<N){
+      const x2=x+B*0.5, z2=z+B*0.5;
+      G.caja(x2, H/2, z2, 0.72, H, 0.72, T_PILAR);
+      CHOQUES.push({x:x2, z:z2, hx:0.44, hz:0.44, rot:0, alto:H});
+    }
+  }
+  /* LOS TABIQUES CON ARCO. El hueco es de medio punto y esta hecho con DOVELAS
+     —doce cajitas sobre la semicircunferencia—, que es como se construye un
+     arco de verdad y ademas es la unica forma barata de tener el hueco curvo
+     sin agujerear la malla. */
+  const RA=2.55, YA=3.0;
+  function tabique(x,z,horiz){
+    const dx=horiz?1:0, dz=horiz?0:1;
+    const largo=B/2-RA;
+    for(const sg of [-1,1]){
+      if(largo>0.15){
+        const px=x+dx*(RA+largo*0.5)*sg, pz=z+dz*(RA+largo*0.5)*sg;
+        G.caja(px, H/2, pz, horiz?largo:0.42, H, horiz?0.42:largo, T_PARED);
+        CHOQUES.push({x:px, z:pz, hx:horiz?largo*0.5:0.24, hz:horiz?0.24:largo*0.5,
+                      rot:0, alto:H});
+      }
+      const jx=x+dx*RA*sg, jz=z+dz*RA*sg;
+      G.caja(jx, YA*0.5, jz, horiz?0.34:0.42, YA, horiz?0.42:0.34, T_PARED);
+      CHOQUES.push({x:jx, z:jz, hx:horiz?0.17:0.24, hz:horiz?0.24:0.17, rot:0, alto:YA});
+    }
+    const D=12;
+    for(let k=0;k<D;k++){
+      const a=Math.PI*(k+0.5)/D;
+      const px=x+dx*Math.cos(a)*RA, py=YA+Math.sin(a)*RA, pz=z+dz*Math.cos(a)*RA;
+      const w=Math.PI*RA/D*1.30;
+      G.caja(px, py, pz, horiz?w:0.42, w, horiz?0.42:w, T_PARED);
+    }
+    const yT=YA+RA, alt=H-yT;
+    if(alt>0.15) G.caja(x, yT+alt*0.5, z, horiz?RA*2:0.42, alt, horiz?0.42:RA*2, T_PARED);
+  }
+  for(let j=0;j<N;j++) for(let i=1;i<N;i++)
+    if((i*5+j*3)%3===0) tabique(O.x-L/2+i*B, O.z-L/2+j*B+B/2, false);
+  for(let j=1;j<N;j++) for(let i=0;i<N;i++)
+    if((i*3+j*7)%3===1) tabique(O.x-L/2+i*B+B/2, O.z-L/2+j*B, true);
+
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(G.pos,3));
+  geo.setAttribute('normal',   new THREE.Float32BufferAttribute(G.nor,3));
+  geo.setAttribute('tipo',     new THREE.Float32BufferAttribute(G.tip,1));
+  geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(O.x,H*0.5,O.z), L);
+
+  /* LOS TUBOS. Una bahia si y una no, y las que quedan sin tubo son los
+     "rincones sin luz" que el nivel nombra: no es un descuido, es el nivel. */
+  PIL.luces.length=0;
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+    if((i+j*2)%3===2) continue;
+    if(PIL.luces.length>=PIL_MAXLUZ) continue;
+    PIL.luces.push(new THREE.Vector3(O.x-L/2+B*(i+0.5), H-0.10, O.z-L/2+B*(j+0.5)));
+  }
+  const arr=matPileta.uniforms.uLuz.value;
+  for(let i=0;i<PIL_MAXLUZ;i++){
+    if(PIL.luces[i]) arr[i].copy(PIL.luces[i]); else arr[i].set(0,-999,0);
+  }
+  matPileta.uniforms.uNLuz.value=PIL.luces.length;
+  matPileta.uniforms.uAguaY.value=PIL.AGUA;
+  matPileta.uniforms.uAlto.value=H;
+
+  const malla=new THREE.Mesh(geo, matPileta);
+  malla.frustumCulled=false;
+
+  const pg=[];
+  for(const l of PIL.luces){
+    const w=3.7, d=1.15, y=H-0.05;
+    pg.push(l.x-w/2,y,l.z-d/2, l.x+w/2,y,l.z+d/2, l.x+w/2,y,l.z-d/2,
+            l.x-w/2,y,l.z-d/2, l.x-w/2,y,l.z+d/2, l.x+w/2,y,l.z+d/2);
+  }
+  const gp=new THREE.BufferGeometry();
+  gp.setAttribute('position', new THREE.Float32BufferAttribute(pg,3));
+  gp.boundingSphere=geo.boundingSphere;
+  const paneles=new THREE.Mesh(gp, matPanel);
+  paneles.frustumCulled=false;
+
+  const agua=new THREE.Mesh(new THREE.PlaneGeometry(L+2, L+2, 1, 1).rotateX(-Math.PI/2),
+                            matAguaPil);
+  agua.position.set(O.x, PIL.AGUA, O.z);
+  agua.frustumCulled=false; agua.renderOrder=20;
+
+  PIL.grupo=new THREE.Group();
+  PIL.grupo.add(malla, paneles, agua);
+  PIL.grupo.visible=false;
+  escena.add(PIL.grupo);
+  NO_PROYECTA.push(malla, paneles, agua);
+}
+
+/* ---------------------------------------------------------------- el pasaje
+   Se apaga en negro, se cambia de mundo detras del negro, y se prende de nuevo
+   —tubo por tubo— ya adentro de la sala. */
+function entrarPileta(){
+  construirPileta();
+  /* se guarda que estaba visible del campo y se apaga TODO menos la sala: es
+     mas seguro que ir nombrando objetos, porque no se olvida de ninguno */
+  PIL.guardado=[];
+  for(const o of escena.children){
+    if(o===PIL.grupo) continue;
+    PIL.guardado.push([o, o.visible]);
+    o.visible=false;
+  }
+  PIL.grupo.visible=true;
+  PIL.activo=true; PIL.enc=0; PIL.t=0;
+  /* EN EL CENTRO DE UNA BAHIA. Los pilares estan en los cruces, o sea en
+     multiplos exactos de la bahia: arrancar ahi metia al jugador adentro de un
+     pilar y lo unico que se veia era azulejo a un palmo de la cara. */
+  const cb=PIL.BAHIA;
+  PJ.x=PIL_CEN.x-cb*(PIL.N*0.5)+cb*1.5; PJ.z=PIL_CEN.z-cb*(PIL.N*0.5)+cb*3.5;
+  PJ.y=0; PJ.vx=PJ.vz=PJ.vy=0; PJ.yaw=-2.35; PJ.cabeceo=-0.02;
+  PJ3.tercera=false; PJ3.activo=true;
+  /* el grado cambia de escena: menos vineteo, menos grano y mas frio. Esto no
+     es un campo al sol, es una sala de azulejo. */
+  matGrado.uniforms.uNocheG.value=0.0;
+  matGrado.uniforms.uVin.value=0.22;
+  matGrado.uniforms.uGrano.value=0.010;
+  matGrado.uniforms.uSat.value=1.02;
+  matGrado.uniforms.uCon.value=1.06;
+  matGrado.uniforms.uRayos.value=0.0;
+  matGrado.uniforms.uVelo.value=0.0;
+  matGrado.uniforms.uBloom.value=BLOOM0*1.15;
+  ponerCamara(0.016);
+}
+function moverPileta(dt){
+  if(!PIL.activo) return;
+  PIL.t+=dt;
+  /* SE PRENDE PROGRESIVAMENTE: seis segundos y medio para que arranquen los
+     catorce tubos, uno detras del otro y tartamudeando. */
+  PIL.enc=Math.min(1, PIL.enc+dt/6.5);
+  matPileta.uniforms.uEnc.value=PIL.enc;
+  matPileta.uniforms.uTp.value=PIL.t;
+  matPileta.uniforms.uOjo.value.copy(camara.position);
+}
+
 window.__dbg={
   get fps(){ return fps; },
   get edificios(){ return {choques:CHOQUES.length, huellas:HUELLAS.length,
@@ -5391,6 +5863,10 @@ window.__dbg={
              }
              CINE.t=t; },
   desarme(v){ DES_U.uDesarme.value=v; DES_U.uDesCen.value.set(PJ.x,PJ.z); },
+  pileta(){ entrarPileta(); return {luces:PIL.luces.length}; },
+  piletaEnc(v){ PIL.enc=v; matPileta.uniforms.uEnc.value=v; },
+  get sala(){ return {activo:PIL.activo, enc:+PIL.enc.toFixed(2),
+    luces:PIL.luces.length, choques:CHOQUES.length}; },
   get fin(){ return {cine:CINE? +CINE.t.toFixed(1) : null,
     noche:+cieloMat.uniforms.uNoche.value.toFixed(3),
     astro:+cieloMat.uniforms.uAstro.value.toFixed(3),
