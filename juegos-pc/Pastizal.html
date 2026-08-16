@@ -2088,7 +2088,7 @@ volcarInteriores();
 ============================================================================ */
 /* --------------------------------------------------------- la geometria */
 function construirRio(){
-  const Z0=-320, Z1=320, PASO=6.0;
+  const Z0=-320, Z1=320, PASO=6.0, PASO_AGUA=2.4;
   const centro=z=>RIO_X+RIO_A*Math.sin(z*RIO_K);
   const V2=[], N2=[], C2=[], T2=[], U2=[];
   const guarda={V:V.slice(),NR:NR.slice(),CL:CL.slice(),TP:TP.slice(),UV:UV.slice()};
@@ -2120,15 +2120,18 @@ function construirRio(){
   /* la lamina de agua, subdividida a lo ancho para que el reflejo no se
      interpole a saltos entre dos vertices lejanos */
   const pos=[], idx=[]; let n=0;
-  const NX=6;
-  for(let z=Z0; z<=Z1; z+=PASO){
+  /* la lámina va MUCHO más subdividida que las barrancas: las olas de Gerstner
+     desplazan vértices de verdad, y con seis por ancho las crestas salían
+     poligonales */
+  const NX=16;
+  for(let z=Z0; z<=Z1; z+=PASO_AGUA){
     const c=centro(z);
     for(let i=0;i<=NX;i++){
       const t=i/NX*2-1;
-      pos.push(c+t*RIO_ANCHO, -0.10, z);
+      pos.push(c+t*RIO_ANCHO, NIVEL_AGUA, z);
     }
   }
-  const filas=Math.floor((Z1-Z0)/PASO)+1;
+  const filas=Math.floor((Z1-Z0)/PASO_AGUA)+1;
   for(let j=0;j<filas-1;j++) for(let i=0;i<NX;i++){
     const a=j*(NX+1)+i, b=a+1, c2=a+NX+1, d=c2+1;
     idx.push(a,c2,b, b,c2,d);
@@ -2144,85 +2147,212 @@ function construirRio(){
   return mAgua;
 }
 
-/* ------------------------------------------------------------- el material */
+/* ============================================================================
+   EL AGUA · versión 2
+
+   Lo que cambia respecto de la anterior, y por qué:
+
+   1) ONDAS DE GERSTNER en vez de ruido. La diferencia no es cosmética: en una
+      onda de Gerstner cada partícula describe una ORBITA CIRCULAR, así que la
+      superficie se desplaza también EN HORIZONTAL, no sólo en altura. Eso es
+      lo que hace que las crestas se afilen y los valles se abran —una suma de
+      senos da lomos redondos y siempre iguales, y el ojo la lee como patrón—.
+      Además la normal sale de la DERIVADA ANALITICA de la onda, no de
+      diferencias finitas: es exacta y gratis.
+
+   2) DIRIGIDAS POR EL VIENTO. Seis ondas con direcciones repartidas alrededor
+      del viento (±38°), longitudes de 11 m a 0.9 m y amplitud cayendo con la
+      longitud. Al no ser múltiplos entre sí, el conjunto no se repite en un
+      período que se pueda ver.
+
+   3) REFLEJO PLANAR DE VERDAD. Se vuelve a dibujar la escena con la cámara
+      espejada bajo el agua, en un buffer chico, y se muestrea PROYECTIVAMENTE.
+      La casa, el molino y las nubes se reflejan de verdad, no aproximados.
+      El pasto se oculta en ese pase: son 250 mil briznas y en el reflejo,
+      deformado y a media resolución, no se distinguen.
+
+   4) CASI TRANSPARENTE. El alfa sale de la profundidad de la columna de agua,
+      así que en la orilla se ve el fondo y en el medio no.
+
+   5) FISICA AL PISARLA. Cada pisada dentro del agua deja un anillo que se
+      expande y se apaga, y el jugador se frena y se hunde.
+============================================================================ */
+const NIVEL_AGUA=-0.10;
+
+/* --- el reflejo planar --- */
+const rtRefl=new THREE.WebGLRenderTarget(MOVIL?480:768, MOVIL?270:432,
+  {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter,
+   type:THREE.HalfFloatType, colorSpace:THREE.NoColorSpace, depthBuffer:true});
+const camRefl=new THREE.PerspectiveCamera();
+camRefl.matrixAutoUpdate=false;
+/* espejo sobre el plano y = NIVEL_AGUA */
+const matEspejo=new THREE.Matrix4().set(
+  1, 0, 0, 0,
+  0,-1, 0, 2*NIVEL_AGUA,
+  0, 0, 1, 0,
+  0, 0, 0, 1);
+const matReflVP=new THREE.Matrix4();
+function pintarReflejo(){
+  camRefl.matrixWorld.multiplyMatrices(matEspejo, camara.matrixWorld);
+  camRefl.matrixWorldInverse.copy(camRefl.matrixWorld).invert();
+  camRefl.projectionMatrix.copy(camara.projectionMatrix);
+  matReflVP.multiplyMatrices(camRefl.projectionMatrix, camRefl.matrixWorldInverse);
+  matAgua.uniforms.uMatRefl.value.copy(matReflVP);
+  /* fuera lo caro y lo que no puede reflejarse a sí mismo */
+  for(const c of CAMPOS) c.malla.visible=false;
+  mallaAgua.visible=false;
+  const antes=renderer.getRenderTarget();
+  renderer.setRenderTarget(rtRefl);
+  renderer.clear(true,true,false);
+  renderer.render(escena, camRefl);
+  renderer.setRenderTarget(antes);
+  for(const c of CAMPOS) c.malla.visible=true;
+  mallaAgua.visible=true;
+}
+
+/* --- los anillos que deja el que camina adentro --- */
+const RIP_MAX=8;
+const RIPPLES=[];
+const RIP_U={ uRip:{value:Array.from({length:RIP_MAX},()=>new THREE.Vector4(0,0,-1,0))} };
+function salpicar(x,z,fuerza){
+  RIPPLES.push({x,z,t:0,f:fuerza});
+  if(RIPPLES.length>RIP_MAX) RIPPLES.shift();
+}
+function moverRipples(dt){
+  const a=RIP_U.uRip.value;
+  for(let i=RIPPLES.length-1;i>=0;i--){
+    RIPPLES[i].t+=dt;
+    if(RIPPLES[i].t>2.6) RIPPLES.splice(i,1);
+  }
+  for(let i=0;i<RIP_MAX;i++){
+    const r=RIPPLES[i];
+    if(r) a[i].set(r.x, r.z, r.t, r.f); else a[i].set(0,0,-1,0);
+  }
+}
+
+/* --- las ondas, compartidas por el vértice y el fragmento --- */
+const GERSTNER_GLSL=`
+  /* Seis ondas repartidas alrededor del viento. steep controla cuánto se afila
+     la cresta; pasado de 1/(w*A*N) la onda se muerde a sí misma y aparecen
+     lazos, así que se mantiene por debajo. */
+  const int NOLAS=6;
+  vec3 gerstner(vec2 P, float t, float vientoAng, float esc, out vec3 nor){
+    vec3 desp=vec3(0.0);
+    vec3 tanX=vec3(1.0,0.0,0.0), tanZ=vec3(0.0,0.0,1.0);
+    float largo=11.0, amp=0.062*esc, fase=0.0;
+    for(int i=0;i<NOLAS;i++){
+      float fi=float(i);
+      float ang=vientoAng + (fract(sin(fi*12.9898)*43758.5453)-0.5)*1.33;
+      vec2 d=vec2(cos(ang), sin(ang));
+      float w=6.2831853/largo;
+      float c=sqrt(9.81/w);                 // dispersión de aguas profundas
+      float f=w*dot(d,P) - c*w*t*0.55 + fase;
+      float sn=sin(f), cs=cos(f);
+      float Q=0.62/(w*amp*float(NOLAS));    // acotado: sin lazos
+      desp.xz += Q*amp*d*cs;
+      desp.y  += amp*sn;
+      float wa=w*amp;
+      tanX += vec3(-Q*wa*d.x*d.x*sn, d.x*wa*cs, -Q*wa*d.x*d.y*sn);
+      tanZ += vec3(-Q*wa*d.x*d.y*sn, d.y*wa*cs, -Q*wa*d.y*d.y*sn);
+      largo*=0.63; amp*=0.72; fase+=1.7;
+    }
+    nor=normalize(cross(tanZ, tanX));
+    return desp;
+  }`;
+
 const matAgua=new THREE.ShaderMaterial({
   uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
     uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
-    uFogD:{value:nieblaD}, uT:{value:0} }, SOM_U),
-  transparent:true, depthWrite:true,
+    uFogD:{value:nieblaD}, uT:{value:0},
+    uRefl:{value:rtRefl.texture}, uMatRefl:{value:new THREE.Matrix4()},
+    uViento:{value:0.9}, uEsc:{value:1.0} }, RIP_U),
+  transparent:true, depthWrite:true, side:THREE.DoubleSide,
   vertexShader:`
     precision highp float;
-    varying vec3 vW;
-    void main(){ vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz;
-      gl_Position=projectionMatrix*viewMatrix*w; }`,
+    varying vec3 vW, vNolas; varying float vProf;
+    uniform float uT, uViento, uEsc;
+    ${GERSTNER_GLSL}
+    ${RIO_GLSL}
+    void main(){
+      vec4 w=modelMatrix*vec4(position,1.0);
+      /* contra la orilla el agua casi no se mueve: si no, las ondas se meten
+         en la barranca y se ve el borde flotando */
+      float centro=1.0-smoothstep(0.30,1.0, distRio(w.xz)/${RIO_ANCHO.toFixed(2)});
+      vec3 nor;
+      vec3 d=gerstner(w.xz, uT, uViento, uEsc*mix(0.18,1.0,centro), nor);
+      w.xyz+=d;
+      vW=w.xyz; vNolas=nor; vProf=centro;
+      gl_Position=projectionMatrix*viewMatrix*w;
+    }`,
   fragmentShader:`
     precision highp float;
-    varying vec3 vW;
+    varying vec3 vW, vNolas; varying float vProf;
     uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD,uT;
+    uniform sampler2D uRefl; uniform mat4 uMatRefl;
+    uniform vec4 uRip[${RIP_MAX}];
     ${RUIDO_GLSL}
-    ${SOM_GLSL}
     ${ATMOS_GLSL}
     ${RIO_GLSL}
-
-    /* Tres capas de olas que corren rio abajo a distinta velocidad y escala.
-       La normal sale de las DERIVADAS del campo de alturas, no de una textura:
-       asi no hay repeticion visible por mas que uno mire un kilometro de rio. */
-    float ola(vec2 p, float t){
-      float h =ruido(p*0.55+vec2(0.0,-t*0.55))*0.55;
-            h+=ruido(p*1.70+vec2(t*0.22,-t*1.05))*0.30;
-            h+=ruido(p*4.30+vec2(-t*0.35,-t*1.90))*0.15;
-      return h;
-    }
     void main(){
       vec2 P=vW.xz;
-      float e=0.10;
-      float h0=ola(P,uT), hx=ola(P+vec2(e,0.0),uT), hz=ola(P+vec2(0.0,e),uT);
-      /* mas quieta contra la orilla: el agua pegada al borde casi no ondula */
-      float centro=1.0-smoothstep(0.35,1.0, distRio(P)/${RIO_ANCHO.toFixed(2)});
-      float amp=0.55*mix(0.25,1.0,centro);
-      vec3 N=normalize(vec3(-(hx-h0)/e*amp, 1.0, -(hz-h0)/e*amp));
+      vec3 N=normalize(vNolas);
+
+      /* ANILLOS: el que camina adentro deja ondas que se expanden y se apagan.
+         Se suman a la normal como un seno radial con envolvente. */
+      for(int i=0;i<${RIP_MAX};i++){
+        if(uRip[i].z<0.0) continue;
+        float t=uRip[i].z;
+        vec2 dv=P-uRip[i].xy;
+        float r=length(dv);
+        float radio=t*1.9;
+        float env=exp(-t*1.25)*exp(-abs(r-radio)*1.7)*uRip[i].w;
+        if(env<0.002) continue;
+        float dh=cos((r-radio)*7.5)*env*0.55;
+        N.xz-=normalize(dv+1e-5)*dh;
+      }
+      N=normalize(N);
 
       vec3 V=normalize(uOjo-vW);
       float NdV=max(dot(N,V),1e-3);
-
-      /* FRESNEL: de frente se ve el fondo, de canto se ve el cielo. Es lo que
-         mas dice "agua" de todo lo que hay aca. */
       float F=0.02+0.98*pow(1.0-NdV,5.0);
 
-      /* el cielo reflejado, con la MISMA dispersion que el cielo de verdad */
-      vec3 R=reflect(-V,N);
-      R.y=abs(R.y);
-      vec3 refl=atmosfera(R, luz, uSolC)*1.25;
-      /* el sol roto en destellos sobre las crestas */
+      /* REFLEJO PLANAR, muestreado proyectivamente y corrido por la normal:
+         ese corrimiento es lo que hace que el reflejo se rompa con la onda en
+         vez de quedar pegado como una calcomanía. */
+      vec4 pr=uMatRefl*vec4(vW,1.0);
+      vec2 uvR=pr.xy/max(pr.w,1e-4)*0.5+0.5;
+      uvR+=N.xz*0.055*vProf;
+      vec3 refl=texture2D(uRefl, clamp(uvR,0.002,0.998)).rgb;
+      /* si el reflejo se sale de cuadro, cae al cielo calculado */
+      vec2 fuera=abs(uvR-0.5);
+      float valido=1.0-smoothstep(0.46,0.5,max(fuera.x,fuera.y));
+      vec3 R=reflect(-V,N); R.y=abs(R.y);
+      refl=mix(atmosfera(R, luz, uSolC)*1.25, refl, valido);
+
+      /* el sol roto sobre las crestas */
       vec3 H=normalize(V+luz);
-      float esp=pow(max(dot(N,H),0.0), 420.0);
-      refl+=uSolC*esp*22.0*smoothstep(0.0,0.15,luz.y);
+      refl+=uSolC*pow(max(dot(N,H),0.0), 640.0)*26.0*smoothstep(0.0,0.15,luz.y);
 
-      /* PROFUNDIDAD: hondo en el medio, casi nada contra la orilla, y el color
-         se va del verde al verde oscuro segun cuanta agua hay arriba del lecho */
-      float hondo=mix(0.10, 1.0, centro);
+      /* PROFUNDIDAD: en la orilla se ve el lecho, en el medio no */
+      float hondo=mix(0.06, 1.0, vProf);
       vec3 fondo=vec3(0.16,0.135,0.10);
-      vec3 agua=mix(vec3(0.075,0.135,0.115), vec3(0.020,0.052,0.055), hondo);
-      /* refraccion: el fondo se ve movido por la propia ola */
-      float mov=(h0-0.5)*0.35*hondo;
-      vec3 trans=mix(fondo*(0.75+0.5*ruido(P*2.2+mov*4.0)), agua, hondo);
-      /* absorcion tipo Beer: el rojo se va primero */
-      trans*=exp(-vec3(0.55,0.22,0.16)*hondo*2.6);
+      float mov=(N.x+N.z)*0.35;
+      vec3 trans=fondo*(0.78+0.44*ruido(P*2.2+mov));
+      trans*=exp(-vec3(0.62,0.24,0.17)*hondo*3.0);   // Beer: el rojo se va primero
+      trans=mix(trans, vec3(0.030,0.075,0.070), hondo*0.72);
 
-      /* la barranca tambien se refleja en el agua que tapa: sin esto el rio
-         brilla a pleno sol justo debajo del talud que le da la sombra */
-      float pesoS; float somA=sombraMapa(vW, max(luz.y,0.05), pesoS)*pesoS;
-      refl-=uSolC*esp*22.0*smoothstep(0.0,0.15,luz.y)*somA;
-      vec3 col=mix(trans, refl, clamp(F,0.0,1.0))*(1.0-somA*0.35);
+      vec3 col=mix(trans, refl, clamp(F,0.0,1.0));
 
-      /* ESPUMA contra las orillas y donde la ola pega mas fuerte */
-      float borde=1.0-smoothstep(0.72,1.0, distRio(P)/${RIO_ANCHO.toFixed(2)});
-      float espuma=smoothstep(0.62,0.95, h0+0.35*(1.0-borde));
-      espuma*=1.0-borde*0.55;
-      col=mix(col, vec3(0.72,0.78,0.78), clamp(espuma,0.0,1.0)*0.55);
+      /* ESPUMA donde la onda se comprime y contra la orilla */
+      float borde=1.0-smoothstep(0.74,1.0, distRio(P)/${RIO_ANCHO.toFixed(2)});
+      float cresta=smoothstep(0.55,0.95, N.y*0.5+0.5+ (vW.y-${NIVEL_AGUA})*3.5);
+      float espuma=max((1.0-borde)*0.75, cresta*0.35*vProf);
+      col=mix(col, vec3(0.80,0.85,0.85), clamp(espuma,0.0,1.0)*0.5);
 
-      col=aereo(col, vW, uOjo, luz, uSolC, uHoriz, uFogD);
-      gl_FragColor=vec4(col, 1.0);
+      col=aereo(col, vW, uOjo, luz, uSolC, uFogD);
+      /* casi transparente en la orilla, opaca en el medio */
+      float alfa=clamp(0.30+0.70*hondo+F*0.5, 0.0, 1.0);
+      gl_FragColor=vec4(col, alfa);
     }`
 });
 MATS.push(matAgua);
@@ -2719,7 +2849,7 @@ const matGrado=mkMat(`
    uTinteSombra:{value:new THREE.Vector3(0.93,0.975,1.075)},
    uTinteLuz:{value:new THREE.Vector3(1.10,1.02,0.88)}});
 
-let postBloom=true, postRayos=true, postMov=true;
+let postBloom=true, postRayos=true, postMov=true, reflejoOn=true;
 function acomodarPost(w,h){
   const d=renderer.getPixelRatio(), W=Math.round(w*d), H=Math.round(h*d);
   if(rtEsc.width===W&&rtEsc.height===H) return;
@@ -2853,7 +2983,12 @@ function pasoJugador(paso){
     qx=(fx*(-mz)+dx*mx)*k; qz=(fz*(-mz)+dz*mx)*k;
     tope=(correr||teclas['shift'])?6.2:3.35;
   }
-  const acel=PJ.enSuelo?24:5, roza=PJ.enSuelo?(tope>0?3:13):0.6;
+  /* EL AGUA FRENA. No es un detalle: caminar en un río y caminar en el pasto a
+     la misma velocidad rompe la escena entera. Se pierde tope y se gana roce,
+     que es exactamente lo que hace el agua. */
+  const hundido=PJ.enSuelo? profundidadAgua(PJ.x,PJ.z) : 0.0;
+  if(hundido>0.02) tope*=1.0-0.52*Math.min(1.0,hundido/0.45);
+  const acel=PJ.enSuelo?(24-14*Math.min(1,hundido/0.45)):5, roza=PJ.enSuelo?(tope>0?3:13):0.6;
   PJ.vx+=(qx*tope-PJ.vx)*Math.min(1,(tope>0?acel:roza)*paso);
   PJ.vz+=(qz*tope-PJ.vz)*Math.min(1,(tope>0?acel:roza)*paso);
   PJ.rapidez=Math.hypot(PJ.vx,PJ.vz);
@@ -2863,8 +2998,11 @@ function pasoJugador(paso){
   PJ.andando+=(Math.min(1,PJ.rapidez/2.4)-PJ.andando)*Math.min(1,7*paso);
   PJ.paso+=paso*PJ.rapidez*0.58;
   if(PJ.paso>1){ PJ.paso-=1; CAM.vHundir-=0.5+PJ.rapidez*0.09; roce(0.5+PJ.rapidez*0.05);
-    /* la pisada de verdad, con el pie: fuerte y chica */
-    pisar(PJ.x, PJ.z, 0.95, 0.34); }
+    if(enElAgua(PJ.x,PJ.z)){
+      /* cada paso adentro del agua tira un anillo que se expande */
+      salpicar(PJ.x, PJ.z, 0.75+Math.min(0.6,PJ.rapidez*0.11));
+      roce(0.35+PJ.rapidez*0.04);
+    } else pisar(PJ.x, PJ.z, 0.95, 0.34); }
   /* y un rastro continuo mientras se camina, para que entre pisada y pisada
      el surco no quede cortado */
   if(PJ.enSuelo && PJ.rapidez>0.5) pisar(PJ.x, PJ.z, 0.55, 0.30);
@@ -2901,9 +3039,21 @@ function frenarContraEdificios(){
   }
   PJ.x=x; PJ.z=z;
 }
+/* cuánta columna de agua hay bajo los pies, 0 en el campo */
+function profundidadAgua(x,z){
+  const cx=RIO_X+RIO_A*Math.sin(z*RIO_K);
+  const d=Math.abs(x-cx);
+  if(d>RIO_ANCHO*0.96) return 0;
+  const centro=1-Math.min(1, d/(RIO_ANCHO*0.96));
+  return (NIVEL_AGUA+RIO_HONDO)*Math.max(0, centro);
+}
+function enElAgua(x,z){ return profundidadAgua(x,z)>0.03; }
 function saltar(){ if(!PJ.enSuelo) return; PJ.vy=6.6; PJ.enSuelo=false; CAM.vHundir+=1.5;
   roce(0.5); saltoPersonaje(); }
 function ponerCamara(dt){
+  /* el ojo baja con lo que uno se hunde: sin esto se camina sobre el agua */
+  const hh=profundidadAgua(PJ.x,PJ.z);
+  CAM.agua=(CAM.agua||0)+((hh>0.02? -hh*0.72 : 0)-(CAM.agua||0))*Math.min(1,dt*6);
   const dx=Math.cos(PJ.yaw), dz=-Math.sin(PJ.yaw);
   const amp=PJ.andando*(0.028+PJ.rapidez*0.005);
   CAM.bobY+=(Math.sin(PJ.paso*Math.PI*4)*amp-CAM.bobY)*Math.min(1,dt*22);
@@ -2918,7 +3068,7 @@ function ponerCamara(dt){
     camara.fov=CAM.fov; camara.updateProjectionMatrix(); }
   const s=CAM.sacudir;
   camara.position.set(PJ.x+dx*CAM.bobX+(Math.random()-0.5)*s*0.08,
-                      PJ.y+PJ.altoOjo+CAM.hundir+CAM.bobY+(Math.random()-0.5)*s*0.08,
+                      PJ.y+PJ.altoOjo+CAM.hundir+CAM.bobY+(CAM.agua||0)+(Math.random()-0.5)*s*0.08,
                       PJ.z+dz*CAM.bobX+(Math.random()-0.5)*s*0.08);
   camara.rotation.set(PJ.cabeceo+CAM.bobY*0.16, PJ.yaw, CAM.rol+CAM.bobX*0.1);
 }
@@ -3119,6 +3269,9 @@ function bucle(ahora){
   cieloMat.uniforms.uOjoC.value.copy(camara.position);
   matAgua.uniforms.uT.value=T;
   matAgua.uniforms.uOjo.value.copy(camara.position);
+  moverRipples(dt);
+  /* el reflejo se dibuja ANTES que la escena: necesita el buffer listo */
+  if(reflejoOn) pintarReflejo();
   for(let i=0;i<RUEDAS.length;i++) RUEDAS[i].rotation.z-=dt*(0.85+i*0.13);
   cieloMat.uniforms.uT.value=T;
   cielo.position.copy(camara.position);
@@ -3191,6 +3344,10 @@ window.__dbg={
   aparta(r){ PASTO_U.uRJug.value=r; },
   pasto(v){ for(const c of CAMPOS) c.malla.visible=v!==false; },
   pisar(x,z,f,r){ pisar(x,z,f===undefined?0.95:f, r===undefined?0.34:r); },
+  salpicar(x,z,f){ salpicar(x,z,f===undefined?0.9:f); },
+  agua(x,z){ return {prof:+profundidadAgua(x===undefined?PJ.x:x, z===undefined?PJ.z:z).toFixed(3),
+                     ripples:RIPPLES.length, reflejo:reflejoOn}; },
+  reflejo(v){ reflejoOn=v!==false; },
   get pj(){ return {listo:PJ3.listo, alto:+PJ3.alto.toFixed(2), activo:PJ3.activo,
     acciones:Object.keys(PJ3.acc), huesos:Object.keys(PJ3.huesos).length,
     pesos:Object.fromEntries(Object.entries(PJ3.acc).map(([k,a])=>[k,+a.getEffectiveWeight().toFixed(2)]))}; },
