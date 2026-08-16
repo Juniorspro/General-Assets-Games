@@ -1994,6 +1994,18 @@ const matEdificio=new THREE.ShaderMaterial({
         float mojado=1.0-smoothstep(-0.14, 0.06, vW.y);
         col*=mix(1.0, 0.62, mojado);
         rug=mix(0.92, 0.34, mojado); met=0.0;
+        /* CAUSTICAS. La superficie ondulada del agua ENFOCA la luz del sol en
+           una red de lineas brillantes sobre el fondo. Dos ruidos plegados
+           —el pliegue es lo que hace la linea fina— multiplicados y elevados
+           dan ese dibujo, y corren con el agua. Es de lo poco que delata al
+           ojo que arriba hay agua y no vidrio. */
+        if(mojado>0.02){
+          vec2 cp=vW.xz*1.75+vec2(uT*0.14,-uT*0.10);
+          float k1=1.0-abs(ruido(cp)*2.0-1.0);
+          float k2=1.0-abs(ruido(cp*1.63+31.0)*2.0-1.0);
+          float caus=pow(max(k1*k2,0.0), 4.5)*3.6;
+          col+=uSolC*caus*mojado*max(luz.y,0.0)*0.55;
+        }
       }
 
       /* ------------------------------------------------------------------
@@ -3481,7 +3493,8 @@ function bucle(ahora){
         else if(fps>54&&nivel<NIVELES.length-1){ nivel++; aplicarNivel(); nivelT=-2; }
         else nivelT=0; } } }
   giroVel=(PJ.yaw-yawAnt)/Math.max(dt,1e-3); yawAnt=PJ.yaw;
-  moverJugador(dt);
+  /* durante la cinematica el jugador no maneja: la camara la lleva la escena */
+  if(!CINE) moverJugador(dt);
   pulsA=Math.max(0,pulsA-dt); pulsB=Math.max(0,pulsB-dt);
   seguirPasto(PJ.x,PJ.z);
   recentrarPisadas(PJ.x,PJ.z);
@@ -3500,6 +3513,7 @@ function bucle(ahora){
   matAgua.uniforms.uOjo.value.copy(camara.position);
   moverRipples(dt);
   moverPuertas(dt);
+  moverMision(dt);
   matVidrio.uniforms.uOjo.value.copy(camara.position);
   /* el reflejo se dibuja ANTES que la escena: necesita el buffer listo */
   if(reflejoOn) pintarReflejo();
@@ -3558,6 +3572,298 @@ setTimeout(esconderAyuda, 11000);
 /* El cuerpo se baja en segundo plano: son dos megas y el campo tiene que
    andar desde el primer cuadro. Si no llega, no pasa nada — se juega igual. */
 cargarPersonaje();
+
+/* ============================================================================
+   LOS DOS APARCEROS
+   Una historia de unos diez minutos, contada sin una sola linea de interfaz:
+   dos espiritus de luz que fueron socios, se pelearon por el agua y el
+   alambrado, y no se hablan. Hay que darle la razon a los dos.
+
+   Todo es procedural: los espiritus son particulas, los globos de dialogo se
+   dibujan en un lienzo, y las cinematicas son movimientos de camara de verdad
+   —recorridos con suavizado, no cortes ni fundidos a negro—.
+============================================================================ */
+const ESP_A={x:52, z:-30, nombre:'DON ELIAS', color:new THREE.Color(0.55,0.78,1.0)};
+const ESP_B={x:-92, z:70,  nombre:'DONA ROSA', color:new THREE.Color(1.0,0.72,0.38)};
+const MOLINO_ENC={x:46, z:-14};
+
+/* ------------------------------------------------------- el cuerpo de luz */
+function crearEspiritu(E){
+  const N=260;
+  const pos=new Float32Array(N*3), sem=new Float32Array(N);
+  for(let i=0;i<N;i++){
+    const a=Math.random()*Math.PI*2, r=Math.pow(Math.random(),0.6)*0.42;
+    pos[i*3]=Math.cos(a)*r; pos[i*3+1]=Math.random()*1.9; pos[i*3+2]=Math.sin(a)*r;
+    sem[i]=Math.random();
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('sem', new THREE.Float32BufferAttribute(sem,1));
+  g.boundingSphere=new THREE.Sphere(new THREE.Vector3(0,1,0), 4);
+  const m=new THREE.ShaderMaterial({
+    uniforms:{ uT:{value:0}, uCol:{value:E.color.clone()}, uFuerza:{value:1.0} },
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    vertexShader:`
+      precision highp float;
+      attribute float sem; uniform float uT,uFuerza; varying float vA;
+      void main(){
+        vec3 p=position;
+        /* la columna gira despacio y respira: cada particula con su propia
+           fase, si no se ve el conjunto rotando como un disco */
+        float a=uT*0.55+sem*6.2831;
+        float r=0.16+0.34*sin(sem*9.7+uT*0.7);
+        p.x+=cos(a)*r; p.z+=sin(a)*r;
+        p.y+=sin(uT*1.3+sem*8.1)*0.16 + fract(sem*7.3+uT*0.09)*0.5;
+        vec4 mv=modelViewMatrix*vec4(p,1.0);
+        float d=-mv.z;
+        gl_PointSize=(58.0*uFuerza)/max(d,0.5)*(0.55+0.75*sem);
+        vA=(0.35+0.65*sem)*uFuerza*(1.0-smoothstep(0.0,1.0,p.y/2.4));
+        gl_Position=projectionMatrix*mv;
+      }`,
+    fragmentShader:`
+      precision highp float; uniform vec3 uCol; varying float vA;
+      void main(){
+        vec2 d=gl_PointCoord-0.5;
+        float r=length(d)*2.0;
+        float a=exp(-r*r*3.4)*vA;
+        if(a<0.004) discard;
+        gl_FragColor=vec4(uCol*(1.0+1.4*(1.0-r)), a);
+      }`
+  });
+  const pts=new THREE.Points(g,m);
+  const grupo=new THREE.Group();
+  grupo.add(pts);
+  grupo.position.set(E.x, 0, E.z);
+  escena.add(grupo);
+  E.grupo=grupo; E.mat=m;
+  return grupo;
+}
+
+/* ------------------------------------------------------------- el globo */
+function crearGlobo(){
+  const c=document.createElement('canvas');
+  c.width=768; c.height=320;
+  const tx=new THREE.CanvasTexture(c);
+  tx.colorSpace=THREE.SRGBColorSpace;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tx, transparent:true,
+    depthWrite:false, depthTest:false}));
+  sp.renderOrder=950; sp.visible=false; sp.scale.set(3.6,1.5,1);
+  escena.add(sp);
+  return {lienzo:c, ctx:c.getContext('2d'), tex:tx, sprite:sp, texto:''};
+}
+function pintarGlobo(G, texto, nombre, color){
+  if(G.texto===texto) return;
+  G.texto=texto;
+  const x=G.ctx, W=G.lienzo.width, H=G.lienzo.height;
+  x.clearRect(0,0,W,H);
+  /* el globo: rectangulo redondeado con la colita abajo */
+  const r=34, m=16, hc=H-54;
+  x.beginPath();
+  x.moveTo(m+r, m);
+  x.lineTo(W-m-r, m); x.quadraticCurveTo(W-m, m, W-m, m+r);
+  x.lineTo(W-m, hc-r); x.quadraticCurveTo(W-m, hc, W-m-r, hc);
+  x.lineTo(W/2+34, hc); x.lineTo(W/2, H-10); x.lineTo(W/2-34, hc);
+  x.lineTo(m+r, hc); x.quadraticCurveTo(m, hc, m, hc-r);
+  x.lineTo(m, m+r); x.quadraticCurveTo(m, m, m+r, m);
+  x.closePath();
+  x.fillStyle='rgba(10,16,22,0.86)'; x.fill();
+  x.strokeStyle=color; x.lineWidth=4; x.stroke();
+  /* el nombre */
+  x.font='700 34px ui-monospace, monospace';
+  x.fillStyle=color; x.textAlign='center';
+  x.fillText(nombre, W/2, 74);
+  /* el texto, cortado a mano por palabras */
+  x.font='30px ui-monospace, monospace';
+  x.fillStyle='#e6f0fa';
+  const pal=texto.split(' ');
+  let ln='', y=126;
+  for(const p of pal){
+    const pr=ln? ln+' '+p : p;
+    if(x.measureText(pr).width>W-110 && ln){ x.fillText(ln, W/2, y); ln=p; y+=40; }
+    else ln=pr;
+  }
+  if(ln) x.fillText(ln, W/2, y);
+  G.tex.needsUpdate=true;
+}
+
+/* ---------------------------------------------------------- lo que se junta */
+function crearMota(x,z,color,alto){
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0],3));
+  const m=new THREE.ShaderMaterial({
+    uniforms:{uT:{value:0}, uCol:{value:color.clone()}},
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    vertexShader:`precision highp float; uniform float uT;
+      void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0);
+        gl_PointSize=520.0/max(-mv.z,0.6)*(0.85+0.15*sin(uT*3.1));
+        gl_Position=projectionMatrix*mv; }`,
+    fragmentShader:`precision highp float; uniform vec3 uCol;
+      void main(){ vec2 d=gl_PointCoord-0.5; float r=length(d)*2.0;
+        float a=exp(-r*r*3.0); if(a<0.01) discard;
+        gl_FragColor=vec4(uCol*(1.2+1.8*(1.0-r)), a); }`
+  });
+  const p=new THREE.Points(g,m);
+  p.position.set(x, alto||0.75, z);
+  p.frustumCulled=false;
+  escena.add(p);
+  return {obj:p, mat:m, x, z, viva:true};
+}
+
+/* ============================================================================
+   LA HISTORIA
+============================================================================ */
+const MISION={
+  paso:0, espigas:0, jarras:0, motas:[], t:0,
+  ESPIGAS:5, JARRAS:3
+};
+const GLOBO=crearGlobo();
+let CINE=null;
+
+const GUION=[
+  /* 0 */ {quien:'A', txt:'Che... vos podes verme. Hace anios que nadie me ve. Soy Elias, y ese campo de alla lo sembramos con Rosa, cuando eramos socios.'},
+  /* 1 */ {quien:'A', txt:'Nos peleamos por el agua y por donde iba el alambrado. Ninguno de los dos aflojo. Si querés ayudarme, juntame cinco espigas del trigo que plantamos juntos.'},
+  /* 2 */ {quien:'A', txt:'Ahi estan las cinco. Todavia huelen a aquel anio. Llevaselas a Rosa, esta alla al oeste, pasando el rio. Pero te aviso: no te va a querer escuchar.'},
+  /* 3 */ {quien:'B', txt:'Trigo. Me manda trigo el muy porfiado. Yo no queria trigo, queria el agua que me corto. Traeme tres jarras del rio y despues hablamos.'},
+  /* 4 */ {quien:'B', txt:'...esta fresca. Igual que la del arroyo viejo. Deciles que lo espero en el molino. Y deciles que la culpa tambien fue mia.'},
+  /* 5 */ {quien:'A', txt:'Que dijo que la culpa fue de ella? Rosa nunca dijo eso en cincuenta anios. Vamos al molino, entonces. Vamos ya.'},
+];
+function textoActual(){
+  const g=GUION[Math.min(MISION.paso, GUION.length-1)];
+  if(MISION.paso===1) return 'Juntame cinco espigas del trigo que plantamos juntos. Llevas '+MISION.espigas+' de '+MISION.ESPIGAS+'.';
+  if(MISION.paso===3) return 'Traeme tres jarras del rio y despues hablamos. Llevas '+MISION.jarras+' de '+MISION.JARRAS+'.';
+  return g.txt;
+}
+function quienHabla(){
+  const g=GUION[Math.min(MISION.paso, GUION.length-1)];
+  return g.quien==='A'? ESP_A : ESP_B;
+}
+
+function sembrarEspigas(){
+  for(let i=0;i<MISION.ESPIGAS;i++){
+    const a=i/MISION.ESPIGAS*Math.PI*2+0.4;
+    const r=16+i*4.5;
+    MISION.motas.push(crearMota(ESP_A.x+Math.cos(a)*r, ESP_A.z+Math.sin(a)*r,
+                                new THREE.Color(1.0,0.92,0.55), 0.85));
+  }
+}
+function sembrarJarras(){
+  for(let i=0;i<MISION.JARRAS;i++){
+    const z=-30+i*34;
+    const cx=RIO_X+RIO_A*Math.sin(z*RIO_K);
+    MISION.motas.push(crearMota(cx, z, new THREE.Color(0.55,0.9,1.0), 0.55));
+  }
+}
+
+/* ------------------------------------------------------------ la cinematica
+   Camara propia con recorrido suavizado. No hay cortes, ni fundidos, ni
+   recuadros: la camara se va de las manos del jugador, hace el viaje, y se las
+   devuelve. Es la unica forma de que una escena se sienta parte del mundo. */
+function arrancarCine(){
+  const C={x:MOLINO_ENC.x, z:MOLINO_ENC.z};
+  CINE={ t:0, dur:26,
+    puntos:[
+      {t:0,   ojo:[C.x+13, 2.1, C.z+13], mira:[C.x, 2.2, C.z]},
+      {t:7,   ojo:[C.x+7,  1.4, C.z+9],  mira:[C.x, 1.6, C.z]},
+      {t:14,  ojo:[C.x-6,  2.6, C.z+7],  mira:[C.x, 2.4, C.z]},
+      {t:20,  ojo:[C.x-3,  6.5, C.z-6],  mira:[C.x, 3.0, C.z]},
+      {t:26,  ojo:[C.x+2,  11.0,C.z-12], mira:[C.x, 4.5, C.z]},
+    ]};
+  GLOBO.sprite.visible=false;
+}
+const _ce=new THREE.Vector3(), _cm=new THREE.Vector3();
+function moverCine(dt){
+  if(!CINE) return true;
+  CINE.t+=dt;
+  const P=CINE.puntos;
+  let i=0; while(i<P.length-2 && CINE.t>P[i+1].t) i++;
+  const a=P[i], b=P[i+1];
+  let u=(CINE.t-a.t)/Math.max(b.t-a.t,1e-3);
+  u=Math.max(0,Math.min(1,u));
+  u=u*u*(3-2*u);                                  // suavizado en los extremos
+  _ce.set(a.ojo[0]+(b.ojo[0]-a.ojo[0])*u, a.ojo[1]+(b.ojo[1]-a.ojo[1])*u,
+          a.ojo[2]+(b.ojo[2]-a.ojo[2])*u);
+  _cm.set(a.mira[0]+(b.mira[0]-a.mira[0])*u, a.mira[1]+(b.mira[1]-a.mira[1])*u,
+          a.mira[2]+(b.mira[2]-a.mira[2])*u);
+  camara.position.copy(_ce);
+  camara.lookAt(_cm);
+
+  /* los dos espiritus se acercan al molino y se funden */
+  const k=Math.min(1, CINE.t/17);
+  const s=k*k*(3-2*k);
+  ESP_A.grupo.position.set(ESP_A.x+(MOLINO_ENC.x-1.4-ESP_A.x)*s, 0,
+                           ESP_A.z+(MOLINO_ENC.z-ESP_A.z)*s);
+  ESP_B.grupo.position.set(ESP_B.x+(MOLINO_ENC.x+1.4-ESP_B.x)*s, 0,
+                           ESP_B.z+(MOLINO_ENC.z-ESP_B.z)*s);
+  /* al encontrarse, la luz crece y el molino se embala */
+  const enc=Math.max(0, (CINE.t-17)/6);
+  ESP_A.mat.uniforms.uFuerza.value=1.0+enc*3.2;
+  ESP_B.mat.uniforms.uFuerza.value=1.0+enc*3.2;
+  for(const r of RUEDAS) r.rotation.z-=dt*(0.9+enc*7.0);
+  if(CINE.t>CINE.dur){
+    /* se deshacen en motas que se van por el campo */
+    ESP_A.grupo.visible=false; ESP_B.grupo.visible=false;
+    CINE=null; MISION.paso=7;
+    avisoFinal();
+    return true;
+  }
+  return false;
+}
+function avisoFinal(){
+  const d=document.getElementById('ayuda');
+  if(d){ d.textContent='hicieron las paces'; d.style.opacity='1';
+         setTimeout(()=>{ d.style.opacity='0'; }, 6000); }
+}
+
+/* ------------------------------------------------------------- cada cuadro */
+function moverMision(dt){
+  MISION.t+=dt;
+  ESP_A.mat.uniforms.uT.value=MISION.t;
+  ESP_B.mat.uniforms.uT.value=MISION.t;
+  if(CINE){ moverCine(dt); return; }
+  if(MISION.paso>=7) return;
+
+  /* recoger lo que haya sembrado */
+  for(const m of MISION.motas){
+    if(!m.viva) continue;
+    m.mat.uniforms.uT.value=MISION.t;
+    m.obj.position.y=0.75+Math.sin(MISION.t*1.7+m.x)*0.12;
+    const d=Math.hypot(PJ.x-m.x, PJ.z-m.z);
+    if(d<1.5){
+      m.viva=false; escena.remove(m.obj);
+      if(MISION.paso===1) MISION.espigas++; else MISION.jarras++;
+      roce(0.8);
+    }
+  }
+
+  /* el globo aparece al acercarse */
+  const E=quienHabla();
+  const d=Math.hypot(PJ.x-E.grupo.position.x, PJ.z-E.grupo.position.z);
+  const cerca=d<7.5;
+  GLOBO.sprite.visible=cerca;
+  if(cerca){
+    pintarGlobo(GLOBO, textoActual(), E.nombre,
+      '#'+E.color.getHexString());
+    GLOBO.sprite.position.set(E.grupo.position.x, 3.1, E.grupo.position.z);
+    /* el globo crece con la distancia para que se lea siempre igual */
+    const k=Math.max(1, d*0.28);
+    GLOBO.sprite.scale.set(3.6*k, 1.5*k, 1);
+  }
+
+  /* avanzar la historia */
+  if(!cerca) return;
+  if(MISION.paso===0 && MISION.t>2.5){ MISION.paso=1; sembrarEspigas(); }
+  else if(MISION.paso===1 && MISION.espigas>=MISION.ESPIGAS) MISION.paso=2;
+  else if(MISION.paso===2 && d<4.5) MISION.paso=3;
+  else if(MISION.paso===3 && MISION.jarras===0 && MISION.motas.filter(m=>m.viva).length===0)
+    sembrarJarras();
+  else if(MISION.paso===3 && MISION.jarras>=MISION.JARRAS) MISION.paso=4;
+  else if(MISION.paso===4 && d<4.5) MISION.paso=5;
+  else if(MISION.paso===5 && d<4.5 && MISION.t>3){ MISION.paso=6; arrancarCine(); }
+}
+
+crearEspiritu(ESP_A);
+crearEspiritu(ESP_B);
+
 window.__dbg={
   get fps(){ return fps; },
   get edificios(){ return {choques:CHOQUES.length, huellas:HUELLAS.length,
@@ -3579,6 +3885,9 @@ window.__dbg={
   agua(x,z){ return {prof:+profundidadAgua(x===undefined?PJ.x:x, z===undefined?PJ.z:z).toFixed(3),
                      ripples:RIPPLES.length, reflejo:reflejoOn}; },
   reflejo(v){ reflejoOn=v!==false; },
+  get mision(){ return {paso:MISION.paso, espigas:MISION.espigas, jarras:MISION.jarras,
+    motas:MISION.motas.filter(m=>m.viva).length, cine:!!CINE}; },
+  saltarA(p){ MISION.paso=p; if(p===6) arrancarCine(); },
   get pj(){ return {listo:PJ3.listo, alto:+PJ3.alto.toFixed(2), activo:PJ3.activo,
     acciones:Object.keys(PJ3.acc), huesos:Object.keys(PJ3.huesos).length,
     pesos:Object.fromEntries(Object.entries(PJ3.acc).map(([k,a])=>[k,+a.getEffectiveWeight().toFixed(2)]))}; },
