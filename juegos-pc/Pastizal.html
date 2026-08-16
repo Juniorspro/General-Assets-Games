@@ -4597,18 +4597,22 @@ function moverCine(dt){
     if(!CINE.flash){
       CINE.flash=true;
       dispararFlash();
-      /* DETRAS DEL BLANCO YA ES OTRA COSA. El mundo se rearma —el campo tiene
-         que estar entero para lo que viene, y para que despues se pueda seguir
-         caminando— y la hora salta a noche cerrada. Nada de eso se ve: para eso
-         esta el destello. Es el unico corte de toda la cinematica y por eso
-         pega. */
+      /* DETRAS DEL BLANCO YA ES OTRA HORA. La escena salta a noche cerrada sin
+         que se vea el salto: para eso esta el destello, y es el unico corte de
+         toda la cinematica.
+         El mundo, en cambio, SIGUE ROTO. Los pedazos flotando recortados contra
+         el sol blanco son la mejor imagen que da la secuencia, y ademas son los
+         que le dan escala al astro. Se rearma recien sobre el final. */
       entrarEnNoche();
-      DES_U.uDesarme.value=0.0; losas.visible=false;
       PJ.y=0; PJ.vy=0;
       PJ3.activo=false;                   // el cuerpo ya no esta
     }
     const tf=t-CINE_FLASH;                // 0 .. 19
     moverAstro(tf, dt);
+    /* el mundo se rearma en los ultimos cuatro segundos, debajo del haz */
+    DES_U.uDesarme.value=1.0-suave((t-29.5)/4.5);
+    losas.visible=DES_U.uDesarme.value>0.01;
+    matLosa.uniforms.uOjo.value.copy(camara.position);
     /* la camara se queda mirando al astro, quieta y a la deriva */
     const d=cieloMat.uniforms.uAstroDir.value;
     _ce.set(PJ.x, 2.6+Math.min(tf,6.0)*0.16, PJ.z);
@@ -5238,8 +5242,8 @@ window.__dbg={
   cineEn(t){ if(!CINE) arrancarCine();
              callarCine();
              if(t>=CINE_FLASH && !CINE.flash){
-               CINE.flash=true; dispararFlash(); entrarEnNoche();
-               DES_U.uDesarme.value=1.0; PJ3.activo=false;
+               CINE.flash=true; entrarEnNoche();
+               PJ.y=0; PJ3.activo=false;
                const f=$('flash'); if(f){ f.style.transition='none'; f.style.opacity='0'; }
              }
              CINE.t=t; },
