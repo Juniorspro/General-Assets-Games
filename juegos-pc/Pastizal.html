@@ -444,20 +444,59 @@ const matSuelo=new THREE.ShaderMaterial({
       vec3 col=mix(vec3(0.028,0.058,0.020), vec3(0.062,0.108,0.032), m);
       col=mix(col, vec3(0.078,0.082,0.036), smoothstep(0.62,0.92,g)*0.35);
       col*=0.82+0.36*ruido(vW.xz*1.7);
-      /* tierra pisada alrededor de lo construido, y un oscurecido de contacto
-         pegado a las paredes que hace las veces de sombra propia */
+
+      /* DETALLE POR DISTANCIA.
+         El problema del suelo de antes era que su frecuencia mas alta media
+         sesenta centimetros: a medio metro del ojo eso es un manchon marron y
+         nada mas. Se le agregan octavas finas, PERO solo cerca: mantenerlas a
+         lo lejos no aporta nada y alias contra el pixel, que es peor que no
+         tenerlas. */
+      float dOjo=length(vW.xz-uOjo.xz);
+      float det=1.0-smoothstep(2.5,22.0,dOjo);
+      float det2=1.0-smoothstep(0.8,7.0,dOjo);
+
+      /* tierra pisada alrededor de lo construido */
       float dE=distEdificio(vW.xz);
       float pisado=1.0-smoothstep(-0.5,2.6,dE);
-      vec3 tierra=vec3(0.115,0.088,0.055)*(0.82+0.36*ruido(vW.xz*2.6));
-      col=mix(col, tierra, pisado*0.94);
+      float pis=pisadoEn(vW.xz);
+      float tie=clamp(pisado*0.94+pis*0.55,0.0,1.0);
+
+      /* La tierra, ahora con cuatro escalas y granos sueltos. La mezcla entre
+         terrones claros y oscuros la decide un ruido de escala media, asi que
+         no queda un marron parejo sino un piso con manchas y polvo. */
+      vec3 t1=vec3(0.128,0.098,0.061), t2=vec3(0.086,0.062,0.038);
+      float tm=ruido(vW.xz*0.9)*0.55+ruido(vW.xz*3.3)*0.45;
+      vec3 tierra=mix(t2,t1,tm);
+      tierra*=0.86+0.28*ruido(vW.xz*8.0+5.1)*det;
+      tierra*=0.92+0.18*ruido(vW.xz*26.0)*det;
+      /* pedregullo: puntos claros dispersos, casi nada pero se nota al caminar */
+      float piedra=smoothstep(0.80,0.94,ruido(vW.xz*47.0+2.7))*det2;
+      tierra=mix(tierra, vec3(0.30,0.27,0.23), piedra*0.55);
+      /* grietas de barro seco */
+      float gr=ruido(vW.xz*5.5+11.0);
+      float grieta=smoothstep(0.47,0.50,gr)*smoothstep(0.53,0.50,gr);
+      tierra*=1.0-grieta*0.45*det;
+      col=mix(col, tierra, tie);
+
+      /* RELIEVE: la tierra deja de ser un plano pintado. La normal sale de las
+         derivadas del propio ruido, asi que los terrones se prenden y se apagan
+         segun de donde venga el sol. */
+      float e=0.06;
+      float hC=ruido(vW.xz*8.0+5.1)+0.45*ruido(vW.xz*26.0);
+      float hX=ruido((vW.xz+vec2(e,0.0))*8.0+5.1)+0.45*ruido((vW.xz+vec2(e,0.0))*26.0);
+      float hZ=ruido((vW.xz+vec2(0.0,e))*8.0+5.1)+0.45*ruido((vW.xz+vec2(0.0,e))*26.0);
+      vec3 Nt=normalize(vec3(-(hX-hC)/e*0.16, 1.0, -(hZ-hC)/e*0.16));
+      vec3 Ns=mix(vec3(0.0,1.0,0.0), Nt, tie*det);
       col*=1.0-0.50*(1.0-smoothstep(-0.7,1.1,dE));
       /* la tierra pisada donde caminaste, mas oscura y sin briznas */
       float pis=pisadoEn(vW.xz);
-      col=mix(col, col*vec3(0.70,0.66,0.58), pis*0.55);
+      col=mix(col, col*vec3(0.70,0.66,0.58), pis*0.42);
       /* la sombra que tira el edificio sobre el campo */
       float som=sombraSol(vW.xz, luz);
       float nub=sombraNube(vW.xz, uT, luz);
-      float lamb=0.30+0.70*max(luz.y,0.0)*(1.0-som*0.82)*(1.0-nub*0.55);
+      float ndl=max(dot(Ns,luz),0.0);
+      float lamb=0.30+0.70*mix(max(luz.y,0.0), ndl, tie*det)
+                 *(1.0-som*0.82)*(1.0-nub*0.55);
       col*=lamb*uSolC*1.35 + uCielo*(0.22+som*0.10+nub*0.06);
       col=aereo(col, vW, uOjo, luz, uSolC, uFogD);
       gl_FragColor=vec4(col,1.0);
