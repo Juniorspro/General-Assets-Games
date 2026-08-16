@@ -301,18 +301,28 @@ const INT_GLSL=`
   uniform vec4 uInt[${INT_MAX}]; uniform vec2 uIntRA[${INT_MAX}]; uniform int uIntN;
   uniform vec4 uVent[${VENT_MAX}]; uniform vec2 uVentHW[${VENT_MAX}]; uniform int uVentN;
 
-  /* 1 adentro, 0 afuera, con un borde suave de medio metro en las aberturas */
-  float dentroCasa(vec3 W){
+  /* 1 adentro, 0 afuera.
+     La caja terminaba 3,4 cm ANTES de la cara interna del muro, asi que la
+     pared, la puerta y el vidrio VISTOS DESDE EL CUARTO quedaban fuera del
+     volumen y se iluminaban como exterior con la normal dada vuelta: negro
+     puro (medido, 1 de 255). El arreglo no es agrandar la caja y listo —eso
+     meteria adentro tambien la cara de AFUERA del muro y la casa se veria mal
+     por fuera—. La regla correcta es geometrica: una superficie es interior si
+     esta en la cascara del edificio Y SU NORMAL MIRA AL CENTRO DEL CUARTO. El
+     piso y el cielorraso, con normal vertical, entran siempre. */
+  float dentroCasa(vec3 W, vec3 N){
     float d=0.0;
     for(int i=0;i<${INT_MAX};i++){
       if(i>=uIntN) break;
       float a=-uIntRA[i].x, c=cos(a), s=sin(a);
       vec2 q=W.xz-uInt[i].xy;
       vec2 l=vec2(q.x*c-q.y*s, q.x*s+q.y*c);
-      vec2 e=uInt[i].zw;
+      vec2 e=uInt[i].zw+vec2(0.46);        // hasta pasar el espesor del muro
       float dentro=min(e.x-abs(l.x), e.y-abs(l.y));
-      float techo=1.0-smoothstep(uIntRA[i].y-0.15, uIntRA[i].y+0.35, W.y);
-      d=max(d, clamp(dentro/0.55,0.0,1.0)*techo*step(-0.05,W.y));
+      float techo=1.0-smoothstep(uIntRA[i].y+0.05, uIntRA[i].y+0.45, W.y);
+      vec2 haciaC=normalize(uInt[i].xy-W.xz+vec2(1e-4));
+      float mira=clamp(dot(N.xz, haciaC)*3.5 + abs(N.y)*2.5, 0.0, 1.0);
+      d=max(d, clamp(dentro/0.55,0.0,1.0)*techo*mira*step(-0.05,W.y));
     }
     return d;
   }
@@ -1618,6 +1628,11 @@ function casco(X,Z,rot){
   /* piso de adentro, para que al entrar no se vea el pasto por abajo */
   const pc=R(0,0);
   caja(pc[0],0.36,pc[1], A-gr, 0.06, F-gr, rot, COL.maderaClara, T_MADERA, false);
+  /* CIELORRASO. Sin esto, desde adentro se ve la cara de abajo de la teja: el
+     albedo de teja es rojo saturado y ademas el rebote se tine con ese mismo
+     albedo, asi que la saturacion se multiplica por si misma y el techo queda
+     rojo fluor. Una casa de campo tiene cielorraso, no teja a la vista. */
+  caja(pc[0],alto-0.08,pc[1], A-gr, 0.08, F-gr, rot, COL.cal, T_REVOQUE, false);
   /* la galeria del frente: seis columnas y su techito. Es lo que hace que una
      caja blanca se lea como casa de campo */
   const gz=-F/2-2.5;
@@ -1977,7 +1992,7 @@ const matEdificio=new THREE.ShaderMaterial({
          oscuro" es justamente esta: el contraste se da vuelta —el piso junto a
          la ventana queda mas claro que la pared del fondo— y eso es lo que hace
          que se lea como interior. */
-      float dentro=dentroCasa(vW);
+      float dentro=dentroCasa(vW, N);
       if(dentro>0.001){
         float haz=solPorVentana(vW+N*0.02, luz);
         float dif=cieloPorVentana(vW);
