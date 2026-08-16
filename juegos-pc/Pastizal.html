@@ -25,6 +25,51 @@
     color:#e9f8ec;background:rgba(10,26,18,.60);backdrop-filter:blur(6px);white-space:nowrap}
   .btn:active{background:rgba(40,100,60,.85)}
   .btn.on{border-color:#8fe8a4;color:#dcffe4;background:rgba(24,80,46,.85)}
+  /* ------------------------------------------------- el botón redondo de pausa
+     Un cuadrado con la palabra AJUSTES adentro es una barra de herramientas, no
+     un juego. Un círculo de vidrio con dos barras se entiende sin leer nada y
+     en cualquier idioma. */
+  #bMenu{position:absolute;left:12px;top:12px;z-index:12;pointer-events:auto;
+    width:42px;height:42px;border-radius:50%;cursor:pointer;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    border:1px solid rgba(190,235,205,.34);background:rgba(9,22,15,.46);
+    backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);
+    box-shadow:0 2px 14px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12);
+    transition:transform .12s ease, background .12s ease}
+  #bMenu svg{width:17px;height:17px;fill:#dff6e6;opacity:.92}
+  #bMenu:active{transform:scale(.9);background:rgba(40,110,66,.72)}
+  /* En PC se va TODO menos la mira: el lienzo de mandos se queda —es donde
+     se dibuja la mira— pero dibujarMandos() no pinta ni palanca ni botones. */
+  body.pc #bMenu, body.pc #stats{display:none}
+  body.enMenu #bMenu{opacity:0;pointer-events:none}
+  /* ------------------------------------------------------------ menú de pausa */
+  #pausa{position:absolute;inset:0;z-index:36;display:none;flex-direction:column;
+    align-items:center;justify-content:center;gap:14px;padding:18px;
+    background:radial-gradient(120% 90% at 50% 45%, rgba(4,10,8,.42), rgba(3,7,6,.88) 76%);
+    backdrop-filter:blur(3px)}
+  #pausa.show{display:flex}
+  #pausa h2{font:300 clamp(15px,3.4vw,26px)/1.1 ui-monospace,monospace;
+    letter-spacing:clamp(4px,1.2vw,11px);color:#f2fbf3;text-transform:uppercase}
+  #pausa .caja{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:flex-end}
+  #pausa .campo{display:flex;flex-direction:column;gap:5px}
+  #pausa .campo span{font:8.5px/1 ui-monospace,monospace;letter-spacing:2.4px;color:#a9cdb6}
+  #pausa select{-webkit-appearance:none;appearance:none;cursor:pointer;
+    font:700 10px/1 ui-monospace,monospace;letter-spacing:1.6px;color:#e9f8ec;
+    padding:10px 26px 10px 11px;border-radius:7px;
+    border:1px solid rgba(170,215,180,.30);background:rgba(9,22,15,.80);
+    background-image:linear-gradient(45deg,transparent 50%,#8fe8a4 50%),
+                     linear-gradient(135deg,#8fe8a4 50%,transparent 50%);
+    background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;
+    background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+  #pausa select option{background:#0b1a12;color:#e9f8ec}
+  #bSeguir{cursor:pointer;font:700 11px/1 ui-monospace,monospace;letter-spacing:5px;
+    padding:14px 34px;border-radius:8px;border:1px solid #8fe8a4;color:#08150e;
+    background:#8fe8a4;box-shadow:0 0 26px rgba(143,232,164,.26)}
+  #bSeguir:active{background:#6fd087}
+  #bAvanzado{cursor:pointer;font:700 9px/1 ui-monospace,monospace;letter-spacing:3px;
+    padding:10px 18px;border-radius:7px;color:#bde3c9;
+    border:1px solid rgba(170,215,180,.28);background:rgba(10,26,18,.55)}
+  #pausa .fps{font:8.5px/1.6 ui-monospace,monospace;letter-spacing:2px;color:#6f9a7e}
   #panel{position:absolute;right:10px;top:10px;z-index:11;width:min(58%,236px);
     padding:11px 12px;border-radius:10px;pointer-events:auto;
     border:1px solid rgba(170,215,180,.22);background:rgba(8,18,13,.86);backdrop-filter:blur(8px);
@@ -40,7 +85,7 @@
     border-radius:50%;background:#8fe8a4;border:none}
   input[type=range]::-moz-range-track{height:3px;border-radius:3px;background:#2c4636}
   input[type=range]::-moz-range-thumb{width:15px;height:15px;border:none;border-radius:50%;background:#8fe8a4}
-  #stats{position:absolute;left:10px;bottom:8px;z-index:11;
+  #stats{position:absolute;left:60px;bottom:8px;z-index:11;
     font:9.5px/1.6 ui-monospace,monospace;color:#8bb098;letter-spacing:1px;pointer-events:none}
   #ayuda{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:12;
     font:9.5px/1.6 ui-monospace,monospace;color:#94bda2;letter-spacing:1.5px;
@@ -104,10 +149,11 @@
   <canvas id="mandos"></canvas>
   <div id="ayuda"></div>
   <div id="stats"></div>
-  <div id="hud"><div class="fila">
-    <button class="btn" id="bPanel">AJUSTES</button>
-    <button class="btn" id="bCorrer">CORRER</button>
-  </div></div>
+  <div id="hud">
+    <button id="bMenu" aria-label="menu"><svg viewBox="0 0 24 24">
+      <rect x="7.6" y="4.6" width="3.4" height="14.8" rx="1.5"></rect>
+      <rect x="13" y="4.6" width="3.4" height="14.8" rx="1.5"></rect></svg></button>
+  </div>
   <div id="panel">
     <h3>PASTO</h3>
     <div class="ctl"><label>DENSIDAD <b id="vDens">1.00</b></label>
@@ -129,6 +175,18 @@
       <input type="range" id="sNit" min="0" max="1.5" step="0.05" value="0.35"></div>
     <div class="ctl"><label>NEBLINA <b id="vNiebla">0.22</b></label>
       <input type="range" id="sNiebla" min="0" max="1.6" step="0.02" value="0.12"></div>
+  </div>
+  <div id="pausa">
+    <h2 id="pTitulo">PAUSED</h2>
+    <div class="caja">
+      <label class="campo"><span id="pIdioma">LANGUAGE</span>
+        <select id="selIdioma2"></select></label>
+      <label class="campo"><span id="pGraficos">GRAPHICS</span>
+        <select id="selGraficos2"></select></label>
+    </div>
+    <button id="bSeguir">RESUME</button>
+    <button id="bAvanzado">ADVANCED</button>
+    <div class="fps" id="pFps"></div>
   </div>
   <div id="flash"></div>
   <div id="cartel"><div class="t" id="cartelT"></div><div class="s" id="cartelS"></div></div>
@@ -929,7 +987,7 @@ const cieloMat=new THREE.ShaderMaterial({
              /* EL FINAL. uNoche apaga el cielo y prende las estrellas; uAstro
                 saca del horizonte el sol blanco gigante. Los dos en cero
                 mientras se juega: no cuestan nada porque el if los saltea. */
-             uNoche:{value:0.0}, uAstro:{value:0.0},
+             uNoche:{value:0.0}, uAstro:{value:0.0}, uRayo:{value:0.0},
              uAstroR:{value:0.30}, uAstroDir:{value:new THREE.Vector3(0,0,-1)} },
   vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
     gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
@@ -938,7 +996,7 @@ const cieloMat=new THREE.ShaderMaterial({
     varying vec3 vD; uniform vec3 luz,uCenit,uHoriz,uSolC; uniform float uT,uPanoK;
     uniform sampler2D uPano; uniform vec3 uOjoC;
     uniform int uPasosNube,uPasosLuz; uniform float uCobNube,uVolNube;
-    uniform float uNoche,uAstro,uAstroR; uniform vec3 uAstroDir;
+    uniform float uNoche,uAstro,uAstroR,uRayo; uniform vec3 uAstroDir;
     ${RUIDO_GLSL}
     ${ATMOS_GLSL}
     ${NUBES_GLSL}
@@ -1117,6 +1175,49 @@ const cieloMat=new THREE.ShaderMaterial({
         vec3 blanco=vec3(1.0,0.992,0.975);
         col=mix(col, blanco*7.0, disc*uAstro);
         col+=blanco*cor*(1.0-disc)*0.34*uAstro;
+      }
+
+      /* ----------------------------------------------------------- EL RAYO
+         Cuando el astro termino de crecer, DISPARA. Es el gesto final de
+         Nullscapes —el sol del fondo estallando— y todo pasa en un marco 2D
+         pegado a la direccion del astro: dos vectores tangentes y una
+         coordenada polar. Eso es lo que permite que la estrella gire, que los
+         anillos salgan y que la columna palpite sin que cueste nada: son
+         cuatro senos sobre dos numeros que ya estaban calculados. */
+      if(uRayo>0.001){
+        vec3 A=normalize(uAstroDir);
+        vec3 ex=normalize(cross(vec3(0.0,1.0,0.0), A));
+        vec3 ey=normalize(cross(A, ex));
+        if(ey.y<0.0) ey=-ey;                       // que "arriba" sea arriba
+        vec2 q=vec2(dot(d,ex), dot(d,ey));
+        float r=length(q);
+        float th=atan(q.y,q.x);
+        float e=0.0;
+
+        /* 1 · LA COLUMNA AL CENIT. Angosta, de filo difuso, y late: el ancho
+           respira con el tiempo, que es lo que separa un haz vivo de un
+           triangulo blanco pegado en el cielo. */
+        float anc=0.028+0.018*sin(uT*3.1)+0.010*sin(uT*7.7+1.3);
+        float col1=exp(-abs(q.x)/anc)*smoothstep(-0.03,0.20,q.y);
+        col1*=exp(-max(q.y-1.15,0.0)*2.4);
+        /* y unas vetas que suben por dentro de la columna */
+        col1*=0.72+0.28*sin(q.y*22.0-uT*5.5)*sin(q.y*7.0-uT*2.1);
+        e+=col1*2.1;
+
+        /* 2 · LA ESTRELLA DE RAYOS, girando. Dos familias a distinta velocidad
+           y distinto grosor: una sola da una rueda de carro. */
+        float rayos=pow(abs(sin(th*9.0+uT*0.50)), 13.0)
+                  + pow(abs(sin(th*18.0-uT*0.85)), 30.0)*0.55;
+        e+=rayos*exp(-max(r-uAstroR,0.0)*3.2)*1.35;
+
+        /* 3 · LOS ANILLOS que salen del centro y se abren */
+        float on=sin((r-uT*0.40)*24.0);
+        e+=pow(max(on,0.0), 10.0)*exp(-max(r-uAstroR*0.6,0.0)*2.2)*0.60;
+
+        /* 4 · EL NUCLEO, de donde sale todo */
+        e+=exp(-r*r*26.0)*3.4;
+
+        col+=vec3(1.0,0.985,0.945)*e*uRayo;
       }
 
       /* --- las nubes volumetricas, sobre todo lo demas --- */
@@ -1536,15 +1637,24 @@ function crearCampo(o){
        ahora  430²   + 400²   + 340²   = 0.46 M triangulos, 460 mil briznas
    Y son mas anchas: la hoja pasa de 9 mm a 27 mm en el campo cercano, que es
    lo que hace que se lea como hoja y no como pelo. */
-const K=MOVIL?0.62:1.0;
-crearCampo({N:Math.round(430*K), celda:0.052, ancho:0.190,
+/* MENOS BRIZNAS Y MAS GORDAS. Con 460 mil el telefono no llegaba a treinta
+   cuadros, y el costo del pasto no esta en los triangulos —ya son uno por
+   brizna— sino en el SOBREDIBUJO: cada brizna pinta sus pixeles y encima de
+   ella pasan otras diez. Bajar la cuenta baja el sobredibujo linealmente;
+   ensanchar un poco la hoja devuelve la sensacion de campo lleno sin devolver
+   el costo, porque el area total pintada sube mucho menos de lo que baja al
+   sacar briznas.
+       antes  430/400/340 → 460.500 briznas   (mobil 177.000)
+       ahora  360/330/290 → 322.600 briznas   (mobil  97.300) */
+const K=MOVIL?0.55:1.0;
+crearCampo({N:Math.round(360*K), celda:0.062, ancho:0.215,
             altoMin:0.17, altoMax:0.42, dist:11*K, cerca:0,     sem:0});
-crearCampo({N:Math.round(400*K), celda:0.140, ancho:0.240,
+crearCampo({N:Math.round(330*K), celda:0.170, ancho:0.270,
             altoMin:0.24, altoMax:0.56, dist:30*K, cerca:7.0*K, sem:311});
 /* La lejana lleva pocas briznas por metro cuadrado, así que las suyas van más
    anchas: a treinta metros nadie distingue una brizna de tres juntas, pero el
    suelo pelado entre medio sí se ve, y desde arriba canta. */
-crearCampo({N:Math.round(340*K), celda:0.460, ancho:0.420,
+crearCampo({N:Math.round(290*K), celda:0.540, ancho:0.470,
             altoMin:0.32, altoMax:0.70, dist:88*K, cerca:23*K,  sem:977});
 function seguirPasto(x,z){
   for(const c of CAMPOS)
@@ -2537,7 +2647,24 @@ const matEspejo=new THREE.Matrix4().set(
   0, 0, 1, 0,
   0, 0, 0, 1);
 const matReflVP=new THREE.Matrix4();
+/* EL REFLEJO ES UN SEGUNDO DIBUJO DE LA ESCENA ENTERA — cielo con marcha de
+   nubes incluido. Pagarlo parado en el casco de estancia, a noventa metros del
+   rio y sin una gota de agua en cuadro, es tirar medio cuadro a la basura.
+   Dos cortes:
+   · si la camara esta lejos del cauce, no se dibuja;
+   · y mientras se dibuja, la marcha de nubes baja a cuatro pasos. La superficie
+     esta ondulada y deformada por las olas: nadie cuenta los pasos de una nube
+     reflejada, pero se ven las nubes, que es lo unico que importa. */
+function aguaALaVista(){
+  const cz=camara.position.z;
+  const cx=RIO_X+RIO_A*Math.sin(cz*RIO_K);
+  return Math.abs(camara.position.x-cx) < 95.0;
+}
 function pintarReflejo(){
+  const nubeAntes=cieloMat.uniforms.uPasosNube.value;
+  const luzAntes=cieloMat.uniforms.uPasosLuz.value;
+  cieloMat.uniforms.uPasosNube.value=Math.min(nubeAntes, 4);
+  cieloMat.uniforms.uPasosLuz.value=1;
   camRefl.matrixWorld.multiplyMatrices(matEspejo, camara.matrixWorld);
   camRefl.matrixWorldInverse.copy(camRefl.matrixWorld).invert();
   camRefl.projectionMatrix.copy(camara.projectionMatrix);
@@ -2553,6 +2680,8 @@ function pintarReflejo(){
   renderer.setRenderTarget(antes);
   for(const c of CAMPOS) c.malla.visible=true;
   mallaAgua.visible=true;
+  cieloMat.uniforms.uPasosNube.value=nubeAntes;
+  cieloMat.uniforms.uPasosLuz.value=luzAntes;
 }
 
 /* --- los anillos que deja el que camina adentro --- */
@@ -3025,15 +3154,21 @@ const matSubir=mkMat(`
 const matRayos=mkMat(`
   precision highp float; varying vec2 vUv;
   uniform sampler2D t; uniform vec2 uSol; uniform float uPeso,uDecai,uDens,uVisible;
+  uniform int uPasos;
   void main(){
     /* Marcha radial desde el sol en pantalla: se acumula el brillo que hay en
        el camino y se lo derrama. Es como se hacen los rayos de sol desde que
        existen los shaders, y sigue siendo lo mejor por lo que cuesta. */
-    vec2 d=(vUv-uSol)*uDens/24.0;
+    /* LOS PASOS SALEN DE LA CALIDAD. Veinticuatro muestras por pixel a un
+       cuarto de resolucion son un millon largo de lecturas por cuadro; con doce
+       el rayo sigue leyendose porque lo que se acumula es un degradado suave,
+       no un detalle. */
+    vec2 d=(vUv-uSol)*uDens/float(uPasos);
     vec2 uv=vUv;
     vec3 acc=vec3(0.0);
     float ilum=1.0;
     for(int i=0;i<24;i++){
+      if(i>=uPasos) break;
       uv-=d;
       vec3 s=texture2D(t,clamp(uv,0.0,1.0)).rgb;
       /* SOLO LO MUY BRILLANTE SIEMBRA UN RAYO. Con las nubes ya visibles, el
@@ -3044,9 +3179,9 @@ const matRayos=mkMat(`
       acc+=s*ilum;
       ilum*=uDecai;
     }
-    gl_FragColor=vec4(acc*(uPeso/24.0)*uVisible,1.0);
+    gl_FragColor=vec4(acc*(uPeso/float(uPasos))*uVisible,1.0);
   }`,{t:{value:null},uSol:{value:new THREE.Vector2(0.5,0.5)},uPeso:{value:2.4},
-     uDecai:{value:0.955},uDens:{value:1.0},uVisible:{value:0.0}});
+     uDecai:{value:0.955},uDens:{value:1.0},uVisible:{value:0.0},uPasos:{value:24}});
 
 /* 5-6 · luminancia y reduccion ---------------------------------------------- */
 const matLum=mkMat(`
@@ -3418,12 +3553,21 @@ function pintarPost(dt){
     else { const k=Math.min(1,dt*12);
            giroSuave+=(giroVel-giroSuave)*k; cabSuave+=(cabVel-cabSuave)*k; }
     const expo=Math.min(dt,1/60)*60;
-    matMov.uniforms.t.value=rtEsc.texture;
-    matMov.uniforms.uVel.value.set(
-      clamp(giroSuave*0.0042*expo, -0.014, 0.014),
-      clamp(cabSuave *0.0042*expo, -0.014, 0.014));
-    pasar(matMov, rtMov);
-    fuente=rtMov.texture;
+    const vx=clamp(giroSuave*0.0042*expo, -0.014, 0.014);
+    const vy=clamp(cabSuave *0.0042*expo, -0.014, 0.014);
+    /* EL PASE SE SALTEA SI NO HAY NADA QUE BORRONEAR.
+       El shader ya tenia el corte adentro (`if(l<0.0004) devolve el pixel tal
+       cual`) pero eso NO ahorra nada: el pase igual corre, igual lee la
+       pantalla entera y igual la escribe otra vez. Nueve lecturas por pixel a
+       resolucion completa es el pase mas caro de toda la cadena, y la camara
+       esta quieta la mayor parte del tiempo. Decidirlo aca, en JavaScript, lo
+       saltea de verdad. */
+    if(Math.abs(vx)+Math.abs(vy) > 0.0006){
+      matMov.uniforms.t.value=rtEsc.texture;
+      matMov.uniforms.uVel.value.set(vx,vy);
+      pasar(matMov, rtMov);
+      fuente=rtMov.texture;
+    }
   }
 
   matGrado.uniforms.tEsc.value=fuente;
@@ -3589,26 +3733,93 @@ function acomodarMandos(){
   bA.r=m*0.082; bA.x=CAJA.w-bA.r-m*0.055; bA.y=CAJA.h-bA.r-m*0.070;
   bB.r=m*0.070; bB.x=bA.x-bA.r-bB.r*0.95; bB.y=bA.y-bA.r*0.62;
 }
-function boton(b,t,p,c){
-  const k=p>0?0.9:1;
-  gm.globalAlpha=0.28; gm.fillStyle='#08160f';
-  gm.beginPath(); gm.arc(b.x,b.y,b.r*k,0,6.2832); gm.fill();
-  gm.globalAlpha=p>0?0.95:0.6; gm.lineWidth=3; gm.strokeStyle=c;
-  gm.beginPath(); gm.arc(b.x,b.y,b.r*k,0,6.2832); gm.stroke();
-  gm.globalAlpha=0.88; gm.fillStyle=c;
-  gm.font='700 '+Math.round(b.r*0.28)+'px ui-monospace, monospace';
-  gm.textAlign='center'; gm.textBaseline='middle'; gm.fillText(t,b.x,b.y);
+/* ---------------------------------------------------------------- LOS ICONOS
+   Dibujados con trazos, no con imagenes. Un PNG generado pesa cientos de
+   kilobytes, hay que bajarlo y a 3x de densidad se ve blando; estas tres
+   funciones pesan cero, salen nitidas en cualquier pantalla y se pintan del
+   color que haga falta. Van centradas en (x,y) y escaladas por s. */
+function icoSalto(x,y,s){
+  gm.lineWidth=s*0.19; gm.lineCap='round'; gm.lineJoin='round';
+  gm.beginPath();                                  // la punta de flecha
+  gm.moveTo(x-s*0.52, y-s*0.02); gm.lineTo(x, y-s*0.56); gm.lineTo(x+s*0.52, y-s*0.02);
+  gm.stroke();
+  gm.beginPath();                                  // el asta
+  gm.moveTo(x, y-s*0.48); gm.lineTo(x, y+s*0.32); gm.stroke();
+  gm.beginPath();                                  // el piso del que despega
+  gm.moveTo(x-s*0.46, y+s*0.60); gm.lineTo(x+s*0.46, y+s*0.60); gm.stroke();
+}
+function icoCorrer(x,y,s){
+  gm.lineWidth=s*0.19; gm.lineCap='round'; gm.lineJoin='round';
+  /* dos cheurones que apuntan adelante, y las rayas de velocidad detras */
+  gm.beginPath();
+  gm.moveTo(x-s*0.06, y-s*0.46); gm.lineTo(x+s*0.40, y); gm.lineTo(x-s*0.06, y+s*0.46);
+  gm.stroke();
+  gm.beginPath();
+  gm.moveTo(x-s*0.46, y-s*0.46); gm.lineTo(x, y); gm.lineTo(x-s*0.46, y+s*0.46);
+  gm.stroke();
+  gm.globalAlpha*=0.55;
+  gm.lineWidth=s*0.13;
+  gm.beginPath();
+  gm.moveTo(x-s*0.95, y-s*0.24); gm.lineTo(x-s*0.62, y-s*0.24);
+  gm.moveTo(x-s*1.02, y);        gm.lineTo(x-s*0.66, y);
+  gm.moveTo(x-s*0.95, y+s*0.24); gm.lineTo(x-s*0.62, y+s*0.24);
+  gm.stroke();
+  gm.globalAlpha/=0.55;
+}
+/* Un boton: disco de vidrio, aro, icono. Se hunde y se prende al tocarlo, y si
+   esta ENGANCHADO —correr— se queda prendido: sin eso no hay forma de saber si
+   vas caminando o corriendo sin mirarte los pies. */
+function boton(b,ico,p,c,fijo){
+  const k=p>0?0.90:1;
+  const r=b.r*k;
+  /* el vidrio */
+  const g=gm.createRadialGradient(b.x, b.y-r*0.35, r*0.1, b.x, b.y, r);
+  g.addColorStop(0, fijo? 'rgba(60,150,95,.60)' : 'rgba(235,255,242,.16)');
+  g.addColorStop(1, fijo? 'rgba(20,70,44,.52)'  : 'rgba(8,22,15,.34)');
+  gm.globalAlpha=1; gm.fillStyle=g;
+  gm.beginPath(); gm.arc(b.x,b.y,r,0,6.2832); gm.fill();
+  /* el aro, mas fuerte al tocar */
+  gm.globalAlpha=(p>0||fijo)?0.98:0.55; gm.lineWidth=r*0.055+1.4; gm.strokeStyle=c;
+  gm.beginPath(); gm.arc(b.x,b.y,r,0,6.2832); gm.stroke();
+  /* el brillo de arriba, que es lo que lo hace parecer vidrio y no un circulo */
+  gm.globalAlpha=0.20; gm.lineWidth=r*0.05; gm.strokeStyle='#ffffff';
+  gm.beginPath(); gm.arc(b.x,b.y,r*0.93,-2.5,-0.9); gm.stroke();
+  /* el icono */
+  gm.globalAlpha=(p>0||fijo)?1.0:0.80; gm.strokeStyle=c; gm.fillStyle=c;
+  ico(b.x, b.y, r*0.46);
+  gm.globalAlpha=1;
 }
 function dibujarMandos(){
   gm.clearRect(0,0,CAJA.w,CAJA.h);
-  const m=Math.min(CAJA.w,CAJA.h), R=m*0.115;
-  const cx=palanca.activa?palanca.ox:m*0.155, cy=palanca.activa?palanca.oy:CAJA.h-m*0.155;
-  gm.globalAlpha=palanca.activa?0.55:0.26; gm.lineWidth=2.5; gm.strokeStyle='#dcfae6';
-  gm.beginPath(); gm.arc(cx,cy,R,0,6.2832); gm.stroke();
-  gm.globalAlpha=palanca.activa?0.62:0.30; gm.fillStyle='#eafff2';
-  gm.beginPath(); gm.arc(cx+palanca.x*R*0.55,cy+palanca.y*R*0.55,R*0.42,0,6.2832); gm.fill();
-  boton(bA,L.salto,pulsA,'#b6ffce'); boton(bB,L.correr,pulsB,'#9fe8cf');
-  gm.globalAlpha=0.38; gm.strokeStyle='#eafff2'; gm.lineWidth=1.5;
+  const m=Math.min(CAJA.w,CAJA.h);
+  /* EN PC NO HAY MANDOS. Solo la mira, y chiquita: el resto es el juego. */
+  if(!ESPC){
+    const R=m*0.115;
+    const cx=palanca.activa?palanca.ox:m*0.155, cy=palanca.activa?palanca.oy:CAJA.h-m*0.155;
+    /* la base: un disco de vidrio, no un aro pelado */
+    const g=gm.createRadialGradient(cx,cy,R*0.1,cx,cy,R);
+    g.addColorStop(0,'rgba(235,255,242,.10)'); g.addColorStop(1,'rgba(8,22,15,.26)');
+    gm.globalAlpha=palanca.activa?1:0.72; gm.fillStyle=g;
+    gm.beginPath(); gm.arc(cx,cy,R,0,6.2832); gm.fill();
+    gm.globalAlpha=palanca.activa?0.72:0.30; gm.lineWidth=2.2; gm.strokeStyle='#dcfae6';
+    gm.beginPath(); gm.arc(cx,cy,R,0,6.2832); gm.stroke();
+    /* las cuatro marcas de direccion: le dicen al pulgar que esto se empuja */
+    gm.globalAlpha=palanca.activa?0.42:0.20; gm.lineWidth=1.6;
+    for(let i=0;i<4;i++){ const a=i*1.5708;
+      gm.beginPath();
+      gm.moveTo(cx+Math.cos(a)*R*0.70, cy+Math.sin(a)*R*0.70);
+      gm.lineTo(cx+Math.cos(a)*R*0.84, cy+Math.sin(a)*R*0.84); gm.stroke(); }
+    /* el pulgar */
+    const kx=cx+palanca.x*R*0.55, ky=cy+palanca.y*R*0.55;
+    const g2=gm.createRadialGradient(kx,ky-R*0.16,R*0.05,kx,ky,R*0.44);
+    g2.addColorStop(0,'rgba(255,255,255,.92)'); g2.addColorStop(1,'rgba(160,230,185,.55)');
+    gm.globalAlpha=palanca.activa?0.95:0.60; gm.fillStyle=g2;
+    gm.beginPath(); gm.arc(kx,ky,R*0.42,0,6.2832); gm.fill();
+    boton(bA, icoSalto,  pulsA, '#b6ffce', false);
+    boton(bB, icoCorrer, pulsB, '#9fe8cf', correr);
+  }
+  /* la mira, en los dos casos */
+  gm.globalAlpha=ESPC?0.30:0.38; gm.strokeStyle='#eafff2'; gm.lineWidth=1.5;
   const mx=CAJA.w/2,my=CAJA.h/2,s=m*0.010;
   gm.beginPath(); gm.moveTo(mx-s,my); gm.lineTo(mx-s*0.35,my);
   gm.moveTo(mx+s*0.35,my); gm.lineTo(mx+s,my);
@@ -3629,10 +3840,10 @@ const dentro=(b,x,y)=>Math.hypot(x-b.x,y-b.y)<b.r*1.3;
 lienzo.addEventListener('pointerdown', ev=>{
   ev.preventDefault(); initAudio(); if(AC&&AC.state==='suspended') AC.resume();
   esconderAyuda();
+  if(ESPC){ pedirPuntero(); return; }        // en PC la camara va con el mouse
   const [x,y]=aUI(ev);
   if(dentro(bA,x,y)){ pulsA=0.14; saltar(); punteros.set(ev.pointerId,{r:'A'}); return; }
   if(dentro(bB,x,y)){ pulsB=0.14; correr=!correr;
-    document.getElementById('bCorrer').classList.toggle('on',correr);
     punteros.set(ev.pointerId,{r:'B'}); return; }
   if(x<CAJA.w*0.44 && !palanca.activa){
     palanca.activa=true; palanca.ox=x; palanca.oy=y; palanca.x=0; palanca.y=0;
@@ -3666,13 +3877,23 @@ for(const e of ['touchstart','touchmove','touchend'])
 lienzo.addEventListener('contextmenu', e=>e.preventDefault());
 addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); teclas[k]=true; initAudio();
   if(k===' '){ e.preventDefault(); saltar(); }
-  if(k==='r'){ correr=!correr; document.getElementById('bCorrer').classList.toggle('on',correr); } });
+  if(k==='r'){ correr=!correr; } });
 addEventListener('keyup', e=>{ teclas[e.key.toLowerCase()]=false; });
 
 let T=0, ultimo=performance.now(), fps=0, cuadros=0, fpsT=0;
-const NIVELES=[{p:[0.62,0.55,0.6], d:0.45, b:false},
-               {p:[0.82,0.78,0.8], d:0.75, b:true},
-               {p:[1.0,1.0,1.0],   d:1.0,  b:true}];
+/* p = alcance de cada capa de pasto · d = densidad · b = bloom
+   r = RESOLUCION INTERNA, y es la palanca mas grande que hay.
+   Todo el costo de este juego es de FRAGMENTOS: el pastizal sobredibuja, el
+   cielo marcha nubes por pixel y la cadena de post pasa seis veces por la
+   pantalla entera. Todo eso escala con el area, o sea con el CUADRADO de la
+   resolucion: bajar de 1,55 a 1,15 en un telefono saca el 45% de los pixeles
+   —y con ellos el 45% de TODO lo anterior— sin tocar un solo efecto.
+   La nitidez que se pierde la devuelve el pase de nitidez, que ya estaba.
+   rayos = muestras de la marcha radial · nube/luz = pasos del cielo */
+const ANAM0=matGrado.uniforms.uAnam.value, DEST0=matGrado.uniforms.uDest.value;
+const NIVELES=[{p:[0.62,0.55,0.6], d:0.45, b:false, r:0.85, rayos:10, nube:11, luz:1},
+               {p:[0.82,0.78,0.8], d:0.75, b:true,  r:1.15, rayos:16, nube:18, luz:2},
+               {p:[1.0,1.0,1.0],   d:1.0,  b:true,  r:2.00, rayos:24, nube:30, luz:3}];
 let nivel=MOVIL?1:2, autoNivel=true, nivelT=0;
 const DIST0=[];
 function aplicarNivel(){
@@ -3682,14 +3903,34 @@ function aplicarNivel(){
   /* Diez pasos sobre nueve kilometros de banco es un paso cada 900 m: con la
      densidad ya sana eso se ve a bandas. Dieciseis es el piso donde el jitter
      todavia alcanza a disimular el escalon. */
-  cieloMat.uniforms.uPasosNube.value=[16,24,34][nivel];
-  cieloMat.uniforms.uPasosLuz.value=[2,3,4][nivel];
+  cieloMat.uniforms.uPasosNube.value=n.nube;
+  cieloMat.uniforms.uPasosLuz.value=n.luz;
+  matRayos.uniforms.uPasos.value=n.rayos;
+  /* el brillo anamorfico y los fantasmas son nueve y tres lecturas mas por
+     pixel de pantalla: en el nivel bajo se apagan y no los extrana nadie */
+  matGrado.uniforms.uAnam.value=(nivel>0)? ANAM0 : 0.0;
+  matGrado.uniforms.uDest.value=(nivel>0)? DEST0 : 0.0;
+  /* Y LA RESOLUCION. Va al final porque redimensiona los buffers. */
+  ponerEscala(n.r);
   /* el reflejo planar es UN SEGUNDO DIBUJO DE LA ESCENA: en el nivel mas bajo
      se apaga y el agua cae al cielo calculado, que sale casi igual de lejos */
   reflejoOn=(nivel>=1);
   for(let i=0;i<CAMPOS.length;i++) CAMPOS[i].mat.uniforms.uDist.value=DIST0[i]*n.p[i];
   PASTO_U.uDens.value=Math.min(parseFloat($('sDens').value), n.d);
   postBloom=n.b;
+}
+/* La resolucion interna. setPixelRatio cambia el tamano del lienzo de dibujo
+   sin tocar el tamano en pantalla; acomodarPost redimensiona detras todos los
+   destinos de la cadena porque lee getPixelRatio(). */
+const DPR_TOPE=Math.min(devicePixelRatio||1, MOVIL?1.55:2.0);
+let escalaAct=-1;
+function ponerEscala(r){
+  const d=Math.min(DPR_TOPE, r);
+  if(Math.abs(d-escalaAct)<0.01) return;
+  escalaAct=d;
+  renderer.setPixelRatio(d);
+  renderer.setSize(CAJA.w, CAJA.h, false);
+  acomodarPost(CAJA.w, CAJA.h);
 }
 function ponerSol(a){
   const el=lerp(0.05,1.30,a);
@@ -3730,15 +3971,20 @@ function bucle(ahora){
   if(fpsT>0.5){ fps=Math.round(cuadros/fpsT); cuadros=0; fpsT=0;
     if(autoNivel){ nivelT+=0.5;
       if(nivelT>2.0){
+        /* Subir de nivel ahora tambien SUBE LA RESOLUCION, o sea que casi
+           duplica el costo del cuadro: con el umbral en 54 el juego trepaba,
+           se caia a 30 y bajaba otra vez, en un vaiven visible. Con 58 solo
+           trepa el que de verdad tiene margen. */
         if(fps<28&&nivel>0){ nivel--; aplicarNivel(); nivelT=-2; }
-        else if(fps>54&&nivel<NIVELES.length-1){ nivel++; aplicarNivel(); nivelT=-2; }
+        else if(fps>58&&nivel<NIVELES.length-1){ nivel++; aplicarNivel(); nivelT=-2; }
         else nivelT=0; } } }
   giroVel=(PJ.yaw-yawAnt)/Math.max(dt,1e-3); yawAnt=PJ.yaw;
   /* ni en la cinematica ni en el menu maneja el jugador: la camara la lleva
      la escena */
   moverMenu(dt);
+  if(PAUSA) dt=0;                             // en pausa el mundo se queda quieto
   moverFinal(dt);
-  if(!CINE && !MENU.activo) moverJugador(dt);
+  if(!CINE && !MENU.activo && !PAUSA) moverJugador(dt);
   if(MENU.activo) ponerCamara(dt);
   pulsA=Math.max(0,pulsA-dt); pulsB=Math.max(0,pulsB-dt);
   /* EL PASTO SIGUE A LA CAMARA, NO AL JUGADOR.
@@ -3769,7 +4015,7 @@ function bucle(ahora){
   moverMision(dt);
   matVidrio.uniforms.uOjo.value.copy(camara.position);
   /* el reflejo se dibuja ANTES que la escena: necesita el buffer listo */
-  if(reflejoOn) pintarReflejo();
+  if(reflejoOn && aguaALaVista()) pintarReflejo();
   for(let i=0;i<RUEDAS.length;i++) RUEDAS[i].rotation.z-=dt*(0.85+i*0.13);
   cieloMat.uniforms.uT.value=T;
   cielo.position.copy(camara.position);
@@ -3789,8 +4035,7 @@ function esconderAyuda(){ const a=document.getElementById('ayuda');
   if(a&&a.style.opacity!=='0') a.style.opacity='0'; }
 const $=(id)=>document.getElementById(id);
 const BRIZNAS=CAMPOS.reduce((s,c)=>s+c.briznas,0);
-$('bPanel').onclick=()=>{ $('panel').classList.toggle('show'); $('bPanel').classList.toggle('on'); };
-$('bCorrer').onclick=()=>{ correr=!correr; $('bCorrer').classList.toggle('on',correr); };
+$('bMenu').onclick=()=>abrirPausa(true);
 function slider(id,vid,fn){ const s=$(id), v=$(vid);
   const ap=()=>{ const x=parseFloat(s.value); v.textContent=x.toFixed(2); fn(x); };
   s.addEventListener('input',ap); ap(); }
@@ -4117,6 +4362,70 @@ crearEspiritu(ESP_A);
 crearEspiritu(ESP_B);
 
 /* ============================================================================
+   PC O TELEFONO, DECIDIDO POR LO QUE TOCA EL JUGADOR
+
+   No se pregunta ni se adivina por el user-agent —que miente y que ademas no
+   sabe si hay un teclado enchufado—. Se espera: el primer TECLADO o el primer
+   MOUSE de verdad que aparezca dice que esto es una PC, y ahi el juego se
+   convierte en un juego de PC: se van la palanca, los botones y el contador,
+   queda la mira sola, la calidad sube a alta y el mouse toma la camara con
+   bloqueo de puntero. Si en cambio llega un dedo, no pasa nada y se queda como
+   estaba. Es la unica deteccion que no se equivoca nunca, porque no infiere: ve.
+============================================================================ */
+let ESPC=false;
+function pasarAPC(){
+  if(ESPC) return;
+  ESPC=true;
+  document.body.classList.add('pc');
+  /* graficos altos, como pidio: una PC aguanta */
+  autoNivel=false; nivel=NIVELES.length-1; aplicarNivel();
+  const sg=$('selGraficos'), sg2=$('selGraficos2');
+  if(sg) sg.value=String(nivel); if(sg2) sg2.value=String(nivel);
+  const a=$('ayuda'); if(a){ a.textContent=L.ayudaPC; a.style.opacity='1';
+    setTimeout(esconderAyuda, 9000); }
+}
+addEventListener('keydown', ()=>pasarAPC(), true);
+addEventListener('pointerdown', ev=>{ if(ev.pointerType==='mouse') pasarAPC(); }, true);
+
+/* --------------------------------------------------------- bloqueo de puntero
+   En PC la camara va con el mouse sin arrastrar, que es lo que espera cualquiera
+   que haya jugado un shooter. Se pide al hacer click y se suelta con Escape, que
+   es tambien lo que abre la pausa. */
+function pedirPuntero(){
+  if(!ESPC || MENU.activo || document.pointerLockElement) return;
+  const el=renderer.domElement;
+  if(el.requestPointerLock) el.requestPointerLock();
+}
+addEventListener('mousemove', ev=>{
+  if(!ESPC || document.pointerLockElement!==renderer.domElement) return;
+  let dx=ev.movementX||0, dy=ev.movementY||0;
+  if(ROT){ const t=dx; dx=dy; dy=-t; }        // la imagen puede estar acostada
+  PJ.yaw-=dx*0.0022;
+  PJ.cabeceo=clamp(PJ.cabeceo-dy*0.0019, -1.35, 1.25);
+});
+
+/* ============================================================================
+   LA PAUSA
+   Un solo sitio para seguir, cambiar idioma, cambiar calidad y abrir los
+   deslizadores. En telefono se llega por el boton redondo; en PC, con Escape.
+============================================================================ */
+let PAUSA=false;
+function abrirPausa(v){
+  PAUSA=(v!==false);
+  $('pausa').classList.toggle('show', PAUSA);
+  if(PAUSA){
+    if(document.pointerLockElement) document.exitPointerLock();
+    const f=$('pFps'); if(f) f.textContent=L.stats(fps,(BRIZNAS/1000).toFixed(0),nivel+1);
+  } else {
+    $('panel').classList.remove('show');
+    if(ESPC) setTimeout(pedirPuntero, 60);
+  }
+}
+addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ e.preventDefault(); if(!MENU.activo) abrirPausa(!PAUSA); }
+});
+
+/* ============================================================================
    EL IDIOMA
    Todo el texto que ve el jugador vive acá y en ningún otro lado. No hay
    librería: es un diccionario y una función que repinta el DOM. Lo único que
@@ -4130,6 +4439,8 @@ const IDIOMAS={
     idioma:'LANGUAGE', graficos:'GRAPHICS', jugar:'PLAY',
     pie:'left thumb walks · right thumb looks · tap RUN to sprint',
     ayuda:'left thumb walks · right thumb looks',
+    ayudaPC:'WASD move · mouse look · SPACE jump · R run · ESC menu',
+    pausa:'PAUSED', seguir:'RESUME', avanzado:'ADVANCED',
     ajustes:'SETTINGS', correr:'RUN', salto:'JUMP',
     hPasto:'GRASS', hImagen:'IMAGE',
     densidad:'DENSITY', altura:'HEIGHT', viento:'WIND', arco:'LEAN',
@@ -4153,6 +4464,8 @@ const IDIOMAS={
     idioma:'IDIOMA', graficos:'GRÁFICOS', jugar:'JUGAR',
     pie:'pulgar izquierdo: caminar · derecho: mirar · CORRER para apurarse',
     ayuda:'pulgar izquierdo: caminar · derecho: mirar',
+    ayudaPC:'WASD mover · mouse mirar · ESPACIO saltar · R correr · ESC menú',
+    pausa:'EN PAUSA', seguir:'SEGUIR', avanzado:'AVANZADO',
     ajustes:'AJUSTES', correr:'CORRER', salto:'SALTO',
     hPasto:'PASTO', hImagen:'IMAGEN',
     densidad:'DENSIDAD', altura:'ALTURA', viento:'VIENTO', arco:'INCLINACIÓN',
@@ -4176,6 +4489,8 @@ const IDIOMAS={
     idioma:'IDIOMA', graficos:'GRÁFICOS', jugar:'JOGAR',
     pie:'polegar esquerdo: andar · direito: olhar · CORRER para apressar',
     ayuda:'polegar esquerdo: andar · direito: olhar',
+    ayudaPC:'WASD mover · mouse olhar · ESPAÇO pular · R correr · ESC menu',
+    pausa:'EM PAUSA', seguir:'CONTINUAR', avanzado:'AVANÇADO',
     ajustes:'AJUSTES', correr:'CORRER', salto:'PULO',
     hPasto:'CAPIM', hImagen:'IMAGEM',
     densidad:'DENSIDADE', altura:'ALTURA', viento:'VENTO', arco:'INCLINAÇÃO',
@@ -4202,7 +4517,8 @@ function aplicarIdioma(cod){
   const p=(id,t)=>{ const e=$(id); if(e) e.textContent=t; };
   p('mTitulo',L.titulo); p('mSobre',L.sobre); p('mIdioma',L.idioma);
   p('mGraficos',L.graficos); p('bJugar',L.jugar); p('mPie',L.pie);
-  p('bPanel',L.ajustes); p('bCorrer',L.correr);
+  p('bSeguir',L.seguir); p('bAvanzado',L.avanzado); p('pTitulo',L.pausa);
+  p('pIdioma',L.idioma); p('pGraficos',L.graficos);
   const hs=document.querySelectorAll('#panel h3');
   if(hs[0]) hs[0].textContent=L.hPasto;
   if(hs[1]) hs[1].textContent=L.hImagen;
@@ -4214,11 +4530,12 @@ function aplicarIdioma(cod){
   const a=$('ayuda'); if(a && a.style.opacity!=='0') a.textContent=L.ayuda;
   /* los botones del lienzo y el globo no son DOM: hay que repintarlos */
   GLOBO.texto='';
-  const sg=$('selGraficos');
-  if(sg){ const v=sg.value;
-    sg.innerHTML='<option value="a">'+L.calAuto+'</option><option value="0">'+L.calBaja
-                +'</option><option value="1">'+L.calMedia+'</option><option value="2">'+L.calAlta+'</option>';
-    sg.value=v||'a'; }
+  const OPG='<option value="a">'+L.calAuto+'</option><option value="0">'+L.calBaja
+           +'</option><option value="1">'+L.calMedia+'</option><option value="2">'+L.calAlta+'</option>';
+  for(const id of ['selGraficos','selGraficos2']){
+    const sg=$(id); if(!sg) continue;
+    const v=sg.value; sg.innerHTML=OPG; sg.value=v||'a';
+  }
   const ct=$('cartelT'), cs=$('cartelS');
   if(ct) ct.textContent=L.finT; if(cs) cs.textContent=L.finS;
   try{ localStorage.setItem('pastizal.idioma', IDI); }catch(e){}
@@ -4291,65 +4608,61 @@ function arrancarFinal(){
 }
 function moverFinal(dt){
   if(!FIN.activo) return;
-  FIN.t+=dt;
+  if(!FIN.congelado) FIN.t+=dt;
   const t=FIN.t;
   const ramp=(a,b)=>{ const u=clamp((t-a)/(b-a),0,1); return u*u*(3-2*u); };
 
-  /* 1 · el sol se pone. Se llama SIEMPRE mientras dura el cierre, no solo
-     mientras la rampa sube: si se saltea (por ejemplo entrando al final por la
-     mitad) el sol se queda donde estaba y la noche no cierra. */
-  const cae=ramp(0,20);
-  ponerSol(lerp(FIN.sol0, 0.055, cae));
+  /* 1 · el sol se pone, y rapido */
+  ponerSol(lerp(FIN.sol0, 0.055, ramp(0,9)));
 
   /* 2 · la noche */
-  const noche=ramp(10,40)*0.86;
+  const noche=ramp(3,15)*0.86;
   cieloMat.uniforms.uNoche.value=noche;
   matGrado.uniforms.uNocheG.value=noche/0.86;
   /* la niebla se cierra un poco: de noche el campo no se ve hasta el fondo */
-  if(noche>0) ponerNiebla(lerp(0.12, 0.30, noche/0.86));
+  ponerNiebla(lerp(0.12, 0.30, noche/0.86));
 
-  /* 3 · el astro. Sube y crece a la vez: nace como una uña sobre la línea del
-     campo y termina ocupando cincuenta grados. Se lo mantiene APENAS por
-     debajo del horizonte para que lo corte el suelo, que es lo que le da el
-     tamaño —un disco entero flotando parece una luna, medio disco cortado por
-     el campo parece que se te viene encima—. */
-  const sube=ramp(16,46);
-  /* 0.55 rad de radio son 63 grados de disco: mas ancho que el alto entero de
-     la pantalla. Es la unica forma de que se lea como "cubre el horizonte" y
-     no como una luna grande. */
-  const R=lerp(0.06, 0.55, sube);
+  /* 3 · el astro. Asoma casi enseguida y CRECE a la vista, que es la parte que
+     hay que ver: nace como una uña sobre la línea del campo y termina ocupando
+     sesenta y tres grados. Se lo mantiene APENAS por debajo del horizonte para
+     que lo corte el suelo — un disco entero flotando parece una luna; medio
+     disco cortado por el campo parece que se te viene encima. */
+  const sube=ramp(4,17);
+  const R=lerp(0.05, 0.55, sube);
   cieloMat.uniforms.uAstroR.value=R;
-  cieloMat.uniforms.uAstro.value=ramp(16,26);
-  _fdir.set(cieloMat.uniforms.uAstroDir.value.x, 0, cieloMat.uniforms.uAstroDir.value.z).normalize();
-  /* el centro va bajando a medida que crece: el borde de arriba sube, el de
-     abajo se hunde en el campo */
+  cieloMat.uniforms.uAstro.value=ramp(4,8);
+  _fdir.set(cieloMat.uniforms.uAstroDir.value.x, 0,
+            cieloMat.uniforms.uAstroDir.value.z).normalize();
   const yc=lerp(-0.02, -R*0.30, sube);
   cieloMat.uniforms.uAstroDir.value.set(_fdir.x, yc, _fdir.z).normalize();
 
-  /* 4 · se enciende. Sube el velo y el bloom: es la corona comiéndose el
-     cielo, no un filtro. */
-  const arde=ramp(46,52);
-  if(arde>0){
-    /* Solo el BLOOM. Subir el velo de la lente pintaba la pantalla entera de
-       crema y se comia la noche entera: lo que tiene que arder es el astro,
-       no la camara. */
-    matGrado.uniforms.uBloom.value=lerp(BLOOM0, BLOOM0*2.4, arde);
+  /* 4 · CARGA Y DISPARO.
+     Terminado de crecer, el nucleo junta luz cuatro segundos —se ve latir— y
+     despues sale el rayo de golpe: la subida dura un segundo y pico contra los
+     cuatro de la carga, y ese contraste ES el disparo. Despues queda encendido
+     con un pulso lento, porque un final que se apaga enseguida no es un final. */
+  const carga=ramp(15,19.5);
+  const disparo=ramp(19.5,20.8);
+  const pulso=0.86+0.14*Math.sin(t*2.3)+0.06*Math.sin(t*5.9);
+  cieloMat.uniforms.uRayo.value=Math.max(carga*0.30, disparo*pulso);
+  if(disparo>0){
+    matGrado.uniforms.uBloom.value=lerp(BLOOM0, BLOOM0*2.6, disparo);
   }
 
-  /* 5 · fogonazo y cartel */
-  if(t>52 && !FIN.flash){
+  /* 5 · fogonazo y cartel, montados sobre el disparo */
+  if(t>20.6 && !FIN.flash){
     FIN.flash=true;
     const f=$('flash');
-    if(f){ f.style.transition='opacity .28s linear'; f.style.opacity='1';
-      setTimeout(()=>{ f.style.transition='opacity 2.6s ease'; f.style.opacity='0'; }, 320); }
+    if(f){ f.style.transition='opacity .22s linear'; f.style.opacity='1';
+      setTimeout(()=>{ f.style.transition='opacity 2.8s ease'; f.style.opacity='0'; }, 260); }
     const c=$('cartel');
-    if(c){ setTimeout(()=>{ c.style.opacity='1'; }, 340);
-           setTimeout(()=>{ c.style.opacity='0'; }, 12000); }
-    /* el cielo queda en la noche con el astro puesto, y la imagen vuelve a su
-       grado normal: lo que arde es el astro, no la cámara */
-    setTimeout(()=>{ matGrado.uniforms.uBloom.value=BLOOM0*1.35; }, 900);
+    if(c){ setTimeout(()=>{ c.style.opacity='1'; }, 700);
+           setTimeout(()=>{ c.style.opacity='0'; }, 13000); }
+    setTimeout(()=>{ matGrado.uniforms.uBloom.value=BLOOM0*1.5; }, 1400);
   }
-  if(t>60) FIN.activo=false;      // ya está: el mundo se queda así
+  /* Nunca se apaga del todo: el mundo queda en esa noche, con el astro puesto
+     y la columna de luz arriba. Solo se deja de calcular la rampa. */
+  if(t>32) FIN.activo=false;
 }
 const BLOOM0=matGrado.uniforms.uBloom.value;
 
@@ -4372,6 +4685,16 @@ const BLOOM0=matGrado.uniforms.uBloom.value;
     else { autoNivel=false; nivel=parseInt(v,10); aplicarNivel(); } };
   sg.onchange=ap; ap();
   $('bJugar').onclick=arrancarJuego;
+  /* los mismos dos selectores dentro de la pausa, atados a los de la portada:
+     cambiar uno cambia el otro, asi no hay dos verdades */
+  const si2=$('selIdioma2'), sg2=$('selGraficos2');
+  si2.innerHTML=si.innerHTML; si2.value=si.value;
+  si2.onchange=()=>{ si.value=si2.value; aplicarIdioma(si2.value); };
+  si.onchange=()=>{ si2.value=si.value; aplicarIdioma(si.value); };
+  sg2.onchange=()=>{ sg.value=sg2.value; ap(); };
+  sg.onchange=()=>{ sg2.value=sg.value; ap(); };
+  $('bSeguir').onclick=()=>abrirPausa(false);
+  $('bAvanzado').onclick=()=>$('panel').classList.toggle('show');
 })();
 
 window.__dbg={
@@ -4438,10 +4761,15 @@ window.__dbg={
   idioma(c){ aplicarIdioma(c); return IDI; },
   get menu(){ return {activo:MENU.activo, t:+MENU.t.toFixed(1), idioma:IDI}; },
   final(t){ arrancarFinal(); if(t!==undefined) FIN.t=t; },
+  /* congelado: el banco de pruebas necesita mirar UN instante del cierre sin
+     que el reloj se le escape mientras saca la captura */
+  finFijo(t){ arrancarFinal(); FIN.t=t; FIN.congelado=true; },
+  finSuelto(){ FIN.congelado=false; },
   get fin(){ return {activo:FIN.activo, t:+FIN.t.toFixed(1),
     noche:+cieloMat.uniforms.uNoche.value.toFixed(3),
     astro:+cieloMat.uniforms.uAstro.value.toFixed(3),
     R:+cieloMat.uniforms.uAstroR.value.toFixed(3),
+    rayo:+cieloMat.uniforms.uRayo.value.toFixed(3),
     dir:cieloMat.uniforms.uAstroDir.value.toArray().map(v=>+v.toFixed(3))}; },
   get solDir(){ return [+SOL.x.toFixed(3),+SOL.y.toFixed(3),+SOL.z.toFixed(3)]; },
   get piezas(){ let n=0,t=0; escena.traverse(o=>{ if(o.isMesh&&o.visible){ n++;
