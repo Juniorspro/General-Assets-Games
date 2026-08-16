@@ -350,6 +350,21 @@ const INT_GLSL=`
     return mejor;
   }`;
 
+/* la curva del cauce, declarada temprano porque la consultan el pasto y el
+   suelo, que se crean antes que el rio */
+const RIO_X=-34.0, RIO_A=13.0, RIO_K=0.0165, RIO_ANCHO=7.6, RIO_ORILLA=4.2;
+const RIO_HONDO=0.55;
+const RIO_GLSL=`
+  float rioCentro(float z){ return ${'$'}{RIO_X.toFixed(2)} + ${'$'}{RIO_A.toFixed(2)}*sin(z*${'$'}{RIO_K}); }
+  float distRio(vec2 P){
+    float cx=rioCentro(P.y);
+    float dz=${'$'}{(RIO_A*RIO_K).toFixed(5)}*cos(P.y*${'$'}{RIO_K});
+    return abs(P.x-cx)/sqrt(1.0+dz*dz);
+  }
+  float fueraDelRio(vec2 P){
+    return smoothstep(${'$'}{RIO_ANCHO.toFixed(2)}, ${'$'}{(RIO_ANCHO+RIO_ORILLA).toFixed(2)}, distRio(P));
+  }`;
+
 const HUELLA_MAX=20;
 const HUELLAS=[];
 const HUELLA_U={
@@ -538,6 +553,7 @@ const matSuelo=new THREE.ShaderMaterial({
     ${HUELLA_GLSL}
     ${PIS_GLSL}
     ${INT_GLSL}
+    ${RIO_GLSL}
     ${ATMOS_GLSL}
     ${NUBES_GLSL}
     ${NIEBLA_GLSL}
@@ -556,6 +572,8 @@ const matSuelo=new THREE.ShaderMaterial({
          nada mas. Se le agregan octavas finas, PERO solo cerca: mantenerlas a
          lo lejos no aporta nada y alias contra el pixel, que es peor que no
          tenerlas. */
+      /* la barranca y el lecho: tierra humeda, mas oscura */
+      float fr=fueraDelRio(vW.xz);
       float dOjo=length(vW.xz-uOjo.xz);
       float det=1.0-smoothstep(2.5,22.0,dOjo);
       float det2=1.0-smoothstep(0.8,7.0,dOjo);
@@ -581,7 +599,9 @@ const matSuelo=new THREE.ShaderMaterial({
       float gr=ruido(vW.xz*5.5+11.0);
       float grieta=smoothstep(0.47,0.50,gr)*smoothstep(0.53,0.50,gr);
       tierra*=1.0-grieta*0.45*det;
+      tie=clamp(tie+(1.0-fr)*0.95, 0.0, 1.0);
       col=mix(col, tierra, tie);
+      col=mix(col*vec3(0.62,0.66,0.60), col, fr);   // humedad junto al agua
 
       /* RELIEVE: la tierra deja de ser un plano pintado. La normal sale de las
          derivadas del propio ruido, asi que los terrones se prenden y se apagan
@@ -659,6 +679,7 @@ function crearCampo(o){
       ${HUELLA_GLSL}
       ${PIS_GLSL}
       ${NUBES_GLSL}
+      ${RIO_GLSL}
       void main(){
         /* la celda del mundo que le toca a esta brizna */
         vec2 g=uBase+mod(iIdx-uBase, vec2(uN));
@@ -675,6 +696,8 @@ function crearCampo(o){
         alto*=vive;
         /* nada crece bajo un techo: se apaga hacia adentro y con borde suave */
         alto*=smoothstep(-0.20,1.40, distEdificio(P));
+        /* en el agua y en la barranca no crece pasto */
+        alto*=fueraDelRio(P);
 
         float dcam=length(P-uOjo.xz);
         alto*=1.0-smoothstep(uDist*0.80, uDist, dcam);
@@ -1248,6 +1271,7 @@ const matEdificio=new THREE.ShaderMaterial({
     ${RUIDO_GLSL}
     ${HUELLA_GLSL}
     ${INT_GLSL}
+    ${RIO_GLSL}
     ${ATMOS_GLSL}
     ${NUBES_GLSL}
     ${NIEBLA_GLSL}
@@ -1452,6 +1476,159 @@ escena.add(mallaEdificios);
    y el suelo, y de ahi en mas el pastizal sabe que hay algo encima */
 volcarHuellas();
 volcarInteriores();
+
+/* ============================================================================
+   EL RIO
+
+   La linea del cauce es ANALITICA: una senoide. Eso importa mucho mas de lo que
+   parece, porque asi el pasto, el suelo, la geometria de las barrancas y el
+   agua consultan todos la MISMA curva con una sola linea de cuenta, en vez de
+   pasarse una lista de puntos y buscar el mas cercano. Un rio con curvas sale
+   gratis y siempre coinciden entre si.
+
+   El agua es un solo plano de banda con su propio shader: no hay simulacion de
+   fluidos —eso no entra en un cuadro— pero si estan las cosas que hacen que el
+   ojo lea "agua": la normal sale de tres capas de olas que corren rio abajo, el
+   reflejo del cielo se calcula con la MISMA funcion de dispersion que el resto
+   del mundo, el color se oscurece con la profundidad, el sol se rompe en
+   destellos sobre las crestas y hay espuma contra las orillas.
+============================================================================ */
+/* --------------------------------------------------------- la geometria */
+function construirRio(){
+  const Z0=-320, Z1=320, PASO=6.0;
+  const centro=z=>RIO_X+RIO_A*Math.sin(z*RIO_K);
+  const V2=[], N2=[], C2=[], T2=[], U2=[];
+  const guarda={V:V.slice(),NR:NR.slice(),CL:CL.slice(),TP:TP.slice(),UV:UV.slice()};
+  V.length=0; NR.length=0; CL.length=0; TP.length=0; UV.length=0;
+
+  /* las barrancas: de la altura del campo bajan al fondo del cauce */
+  for(let z=Z0; z<Z1; z+=PASO){
+    const c0=centro(z), c1=centro(z+PASO);
+    for(const lado of [-1,1]){
+      const bx0=c0+lado*(RIO_ANCHO+RIO_ORILLA), bx1=c1+lado*(RIO_ANCHO+RIO_ORILLA);
+      const ax0=c0+lado*RIO_ANCHO*0.96,        ax1=c1+lado*RIO_ANCHO*0.96;
+      /* barranca: del campo (y=0) al fondo */
+      cara([bx0,0.02,z],[bx1,0.02,z+PASO],[ax1,-RIO_HONDO,z+PASO],[ax0,-RIO_HONDO,z],
+           [0.20,0.155,0.10], T_LADRILLO);
+    }
+    /* el lecho */
+    const a0=c0-RIO_ANCHO*0.96, a1=c1-RIO_ANCHO*0.96;
+    const b0=c0+RIO_ANCHO*0.96, b1=c1+RIO_ANCHO*0.96;
+    cara([a0,-RIO_HONDO,z],[a1,-RIO_HONDO,z+PASO],[b1,-RIO_HONDO,z+PASO],[b0,-RIO_HONDO,z],
+         [0.16,0.135,0.10], T_LADRILLO);
+  }
+  const geoOrilla=geometriaDe();
+  V.length=0; NR.length=0; CL.length=0; TP.length=0; UV.length=0;
+  V.push(...guarda.V); NR.push(...guarda.NR); CL.push(...guarda.CL);
+  TP.push(...guarda.TP); UV.push(...guarda.UV);
+  const mOrilla=new THREE.Mesh(geoOrilla, matEdificio);
+  mOrilla.frustumCulled=false; escena.add(mOrilla);
+
+  /* la lamina de agua, subdividida a lo ancho para que el reflejo no se
+     interpole a saltos entre dos vertices lejanos */
+  const pos=[], idx=[]; let n=0;
+  const NX=6;
+  for(let z=Z0; z<=Z1; z+=PASO){
+    const c=centro(z);
+    for(let i=0;i<=NX;i++){
+      const t=i/NX*2-1;
+      pos.push(c+t*RIO_ANCHO, -0.10, z);
+    }
+  }
+  const filas=Math.floor((Z1-Z0)/PASO)+1;
+  for(let j=0;j<filas-1;j++) for(let i=0;i<NX;i++){
+    const a=j*(NX+1)+i, b=a+1, c2=a+NX+1, d=c2+1;
+    idx.push(a,c2,b, b,c2,d);
+  }
+  const geoAgua=new THREE.BufferGeometry();
+  geoAgua.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  geoAgua.setIndex(idx);
+  geoAgua.computeVertexNormals();
+  geoAgua.computeBoundingSphere();
+  const mAgua=new THREE.Mesh(geoAgua, matAgua);
+  mAgua.frustumCulled=false; mAgua.renderOrder=2; escena.add(mAgua);
+  return mAgua;
+}
+
+/* ------------------------------------------------------------- el material */
+const matAgua=new THREE.ShaderMaterial({
+  uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
+    uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
+    uFogD:{value:nieblaD}, uT:{value:0} }, {}),
+  transparent:true, depthWrite:true,
+  vertexShader:`
+    precision highp float;
+    varying vec3 vW;
+    void main(){ vec4 w=modelMatrix*vec4(position,1.0); vW=w.xyz;
+      gl_Position=projectionMatrix*viewMatrix*w; }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vW;
+    uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD,uT;
+    ${RUIDO_GLSL}
+    ${ATMOS_GLSL}
+    ${RIO_GLSL}
+
+    /* Tres capas de olas que corren rio abajo a distinta velocidad y escala.
+       La normal sale de las DERIVADAS del campo de alturas, no de una textura:
+       asi no hay repeticion visible por mas que uno mire un kilometro de rio. */
+    float ola(vec2 p, float t){
+      float h =ruido(p*0.55+vec2(0.0,-t*0.55))*0.55;
+            h+=ruido(p*1.70+vec2(t*0.22,-t*1.05))*0.30;
+            h+=ruido(p*4.30+vec2(-t*0.35,-t*1.90))*0.15;
+      return h;
+    }
+    void main(){
+      vec2 P=vW.xz;
+      float e=0.10;
+      float h0=ola(P,uT), hx=ola(P+vec2(e,0.0),uT), hz=ola(P+vec2(0.0,e),uT);
+      /* mas quieta contra la orilla: el agua pegada al borde casi no ondula */
+      float centro=1.0-smoothstep(0.35,1.0, distRio(P)/${RIO_ANCHO.toFixed(2)});
+      float amp=0.55*mix(0.25,1.0,centro);
+      vec3 N=normalize(vec3(-(hx-h0)/e*amp, 1.0, -(hz-h0)/e*amp));
+
+      vec3 V=normalize(uOjo-vW);
+      float NdV=max(dot(N,V),1e-3);
+
+      /* FRESNEL: de frente se ve el fondo, de canto se ve el cielo. Es lo que
+         mas dice "agua" de todo lo que hay aca. */
+      float F=0.02+0.98*pow(1.0-NdV,5.0);
+
+      /* el cielo reflejado, con la MISMA dispersion que el cielo de verdad */
+      vec3 R=reflect(-V,N);
+      R.y=abs(R.y);
+      vec3 refl=atmosfera(R, luz, uSolC)*1.25;
+      /* el sol roto en destellos sobre las crestas */
+      vec3 H=normalize(V+luz);
+      float esp=pow(max(dot(N,H),0.0), 420.0);
+      refl+=uSolC*esp*22.0*smoothstep(0.0,0.15,luz.y);
+
+      /* PROFUNDIDAD: hondo en el medio, casi nada contra la orilla, y el color
+         se va del verde al verde oscuro segun cuanta agua hay arriba del lecho */
+      float hondo=mix(0.10, 1.0, centro);
+      vec3 fondo=vec3(0.16,0.135,0.10);
+      vec3 agua=mix(vec3(0.075,0.135,0.115), vec3(0.020,0.052,0.055), hondo);
+      /* refraccion: el fondo se ve movido por la propia ola */
+      float mov=(h0-0.5)*0.35*hondo;
+      vec3 trans=mix(fondo*(0.75+0.5*ruido(P*2.2+mov*4.0)), agua, hondo);
+      /* absorcion tipo Beer: el rojo se va primero */
+      trans*=exp(-vec3(0.55,0.22,0.16)*hondo*2.6);
+
+      vec3 col=mix(trans, refl, clamp(F,0.0,1.0));
+
+      /* ESPUMA contra las orillas y donde la ola pega mas fuerte */
+      float borde=1.0-smoothstep(0.72,1.0, distRio(P)/${RIO_ANCHO.toFixed(2)});
+      float espuma=smoothstep(0.62,0.95, h0+0.35*(1.0-borde));
+      espuma*=1.0-borde*0.55;
+      col=mix(col, vec3(0.72,0.78,0.78), clamp(espuma,0.0,1.0)*0.55);
+
+      col=aereo(col, vW, uOjo, luz, uSolC, uFogD);
+      gl_FragColor=vec4(col, 1.0);
+    }`
+});
+MATS.push(matAgua);
+const mallaAgua=construirRio();
+
 
 const PJ_URL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@237dfb6586/mundo/pj/soldado.glb';
 
@@ -2292,6 +2469,8 @@ function bucle(ahora){
   matEdificio.uniforms.uOjo.value.copy(camara.position);
   matEdificio.uniforms.uT.value=T;
   matSuelo.uniforms.uT.value=T;
+  matAgua.uniforms.uT.value=T;
+  matAgua.uniforms.uOjo.value.copy(camara.position);
   for(let i=0;i<RUEDAS.length;i++) RUEDAS[i].rotation.z-=dt*(0.85+i*0.13);
   cieloMat.uniforms.uT.value=T;
   cielo.position.copy(camara.position);
