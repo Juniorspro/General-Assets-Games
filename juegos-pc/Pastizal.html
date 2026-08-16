@@ -62,10 +62,12 @@
     letter-spacing:clamp(4px,1.3vw,12px);color:#f2fbf3;text-align:center;
     text-transform:uppercase;text-shadow:0 0 34px rgba(150,230,175,.30)}
   #menu .sub{font:9.5px/1.7 ui-monospace,monospace;letter-spacing:4px;
-    color:#8fbb9d;text-transform:uppercase;text-align:center}
+    color:#bfe0ca;text-transform:uppercase;text-align:center;
+    text-shadow:0 1px 10px rgba(0,0,0,.9)}
   #menu .caja{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:flex-end}
   #menu .campo{display:flex;flex-direction:column;gap:5px}
-  #menu .campo span{font:8.5px/1 ui-monospace,monospace;letter-spacing:2.4px;color:#7fa78d}
+  #menu .campo span{font:8.5px/1 ui-monospace,monospace;letter-spacing:2.4px;
+    color:#a9cdb6;text-shadow:0 1px 10px rgba(0,0,0,.9)}
   #menu select{-webkit-appearance:none;appearance:none;cursor:pointer;
     font:700 10px/1 ui-monospace,monospace;letter-spacing:1.6px;color:#e9f8ec;
     padding:10px 26px 10px 11px;border-radius:7px;
@@ -79,7 +81,8 @@
     padding:15px 40px;border-radius:8px;border:1px solid #8fe8a4;color:#08150e;
     background:#8fe8a4;box-shadow:0 0 30px rgba(143,232,164,.28)}
   #bJugar:active{background:#6fd087}
-  #menu .pie{font:8.5px/1.7 ui-monospace,monospace;letter-spacing:2px;color:#5e7d69;text-align:center}
+  #menu .pie{font:8.5px/1.7 ui-monospace,monospace;letter-spacing:2px;
+    color:#9dbbaa;text-align:center;text-shadow:0 1px 10px rgba(0,0,0,.9)}
   /* ------------------------------------------------------- el cierre de escena
      El fogonazo del astro y el cartel de fin. Dos capas, las dos fuera del
      canvas: un flash de pantalla completa no necesita pasar por el shader. */
@@ -1106,10 +1109,14 @@ const cieloMat=new THREE.ShaderMaterial({
         /* corona: cae exponencial con la distancia al borde. Es lo que hace
            que un cuerpo asi QUEME el cielo alrededor en vez de recortarse
            contra el como una calcomania. */
-        float cor=exp(-max(ang-R,0.0)*(3.6/max(R,0.05)));
-        vec3 blanco=vec3(1.0,0.988,0.965);
+        /* La corona tiene que ser CORTA. Con caida 3.6/R el halo llegaba a
+           cuarenta grados del borde y el cielo entero quedaba crema: la noche
+           desaparecia y el astro dejaba de recortarse. Con 9/R el halo vive en
+           los pocos grados pegados al filo, que es donde de verdad quema. */
+        float cor=exp(-max(ang-R,0.0)*(9.0/max(R,0.05)));
+        vec3 blanco=vec3(1.0,0.992,0.975);
         col=mix(col, blanco*7.0, disc*uAstro);
-        col+=blanco*cor*(1.0-disc)*1.15*uAstro;
+        col+=blanco*cor*(1.0-disc)*0.34*uAstro;
       }
 
       /* --- las nubes volumetricas, sobre todo lo demas --- */
@@ -3120,7 +3127,7 @@ const matGrado=mkMat(`
   uniform sampler2D tEsc,tBloom,tRayos,tExp; uniform vec2 uPx,uSol;
   uniform float uBloom,uExpM,uCon,uSat,uVin,uNit,uRayos,uT;
   uniform float uAber,uBarril,uGrano,uHalo,uSucio,uAnam,uDest,uAdapta;
-  uniform float uSolDot,uVelo; uniform vec3 uSolTinte;
+  uniform float uSolDot,uVelo,uNocheG; uniform vec3 uSolTinte;
   uniform vec3 uBalance,uLevanta,uGanancia,uTinteSombra,uTinteLuz;
 
   vec3 aces(vec3 x){
@@ -3188,7 +3195,10 @@ const matGrado=mkMat(`
        cuando el sol salía de cuadro y por eso "se iba ese color tan lindo".
        Ahora cae SUAVE con el ángulo al sol y nunca llega a cero mientras el
        sol esté sobre el horizonte. */
-    float velo=0.20+0.80*smoothstep(-0.55, 0.95, uSolDot);
+    /* Y DE NOCHE NO HAY SOL QUE VELAR. Sin esto, en el cierre el velo calido
+       seguia pintando la pantalla entera de crema y la noche no llegaba
+       nunca. */
+    float velo=(0.20+0.80*smoothstep(-0.55, 0.95, uSolDot))*(1.0-uNocheG*0.94);
     c+=uSolTinte*uVelo*velo*(0.55+0.45*(1.0-r2));
 
     /* DESTELLOS FANTASMA: copias del sol invertidas respecto del centro, que
@@ -3222,7 +3232,7 @@ const matGrado=mkMat(`
        expone para el cielo y manda el motivo a negro. El ojo no hace eso: se
        queda con el motivo y deja que el cielo se vaya. Cuanto mas de frente al
        sol se mira, mas se sube el objetivo. */
-    float contra=smoothstep(0.25, 0.97, uSolDot);
+    float contra=smoothstep(0.25, 0.97, uSolDot)*(1.0-uNocheG);
     float autoE=mix(1.0, clamp(0.20/lm, 0.86, 1.26), uAdapta)*(1.0+contra*0.40);
     c*=uExpM*autoE;
     /* Y una pizca de luz de relleno del color del sol, solo a contraluz: es el
@@ -3231,6 +3241,13 @@ const matGrado=mkMat(`
        negra. Va sobre la escena lineal, antes del tono, para que la levante de
        verdad y no sea un velo pintado encima. */
     c+=uSolTinte*contra*0.030*(0.35+0.65*(1.0-r2));
+    /* LA NOCHE, en el grado. El ojo con poca luz pierde color y se corre al
+       azul —es el efecto Purkinje— y sin eso una escena nocturna no se lee
+       como noche, se lee como una escena de dia con la exposicion baja. */
+    if(uNocheG>0.001){
+      float lg=dot(c,vec3(0.2126,0.7152,0.0722));
+      c=mix(c, mix(vec3(lg), vec3(lg)*vec3(0.70,0.85,1.24), 0.72), uNocheG*0.82);
+    }
 
     /* balance de blancos, antes del tono */
     c*=uBalance;
@@ -3292,7 +3309,7 @@ const matGrado=mkMat(`
    uVin:{value:0.40},uNit:{value:0.24},uRayos:{value:0.18},uT:{value:0},
    uAber:{value:0.006},uBarril:{value:0.012},uGrano:{value:0.018},uHalo:{value:0.020},
    uSucio:{value:0.40},uAnam:{value:0.10},uDest:{value:0.05},uAdapta:{value:0.30},
-   uSolDot:{value:0.0},uVelo:{value:0.055},
+   uSolDot:{value:0.0},uVelo:{value:0.055},uNocheG:{value:0.0},
    uSolTinte:{value:new THREE.Vector3(1.0,0.86,0.62)},
    uBalance:{value:new THREE.Vector3(1.0,1.0,1.0)},
    /* LEVANTE casi cero. Ese (0.004,0.006,0.010) era el culpable directo de los
@@ -4285,6 +4302,7 @@ function moverFinal(dt){
   /* 2 · la noche */
   const noche=ramp(10,40)*0.86;
   cieloMat.uniforms.uNoche.value=noche;
+  matGrado.uniforms.uNocheG.value=noche/0.86;
   /* la niebla se cierra un poco: de noche el campo no se ve hasta el fondo */
   if(noche>0) ponerNiebla(lerp(0.12, 0.30, noche/0.86));
 
@@ -4310,8 +4328,10 @@ function moverFinal(dt){
      cielo, no un filtro. */
   const arde=ramp(46,52);
   if(arde>0){
-    matGrado.uniforms.uVelo.value=lerp(VELO0, VELO0*7.0, arde);
-    matGrado.uniforms.uBloom.value=lerp(BLOOM0, BLOOM0*3.4, arde);
+    /* Solo el BLOOM. Subir el velo de la lente pintaba la pantalla entera de
+       crema y se comia la noche entera: lo que tiene que arder es el astro,
+       no la camara. */
+    matGrado.uniforms.uBloom.value=lerp(BLOOM0, BLOOM0*2.4, arde);
   }
 
   /* 5 · fogonazo y cartel */
@@ -4325,12 +4345,11 @@ function moverFinal(dt){
            setTimeout(()=>{ c.style.opacity='0'; }, 8000); }
     /* el cielo queda en la noche con el astro puesto, y la imagen vuelve a su
        grado normal: lo que arde es el astro, no la cámara */
-    setTimeout(()=>{ matGrado.uniforms.uVelo.value=VELO0*2.1;
-                     matGrado.uniforms.uBloom.value=BLOOM0*1.5; }, 900);
+    setTimeout(()=>{ matGrado.uniforms.uBloom.value=BLOOM0*1.35; }, 900);
   }
   if(t>60) FIN.activo=false;      // ya está: el mundo se queda así
 }
-const VELO0=matGrado.uniforms.uVelo.value, BLOOM0=matGrado.uniforms.uBloom.value;
+const BLOOM0=matGrado.uniforms.uBloom.value;
 
 /* ------------------------------------------------------------- el cableado */
 (function armarMenu(){
@@ -4342,8 +4361,10 @@ const VELO0=matGrado.uniforms.uVelo.value, BLOOM0=matGrado.uniforms.uBloom.value
   aplicarIdioma(si.value);
   si.onchange=()=>aplicarIdioma(si.value);
   document.body.classList.add('enMenu');
+  /* AUTO por defecto en todos lados. Fijar "alta" en escritorio dejaba sin red
+     a cualquier maquina floja: el nivel automatico mide fps y baja solo. */
   const sg=$('selGraficos');
-  sg.value=MOVIL?'a':'2';
+  sg.value='a';
   const ap=()=>{ const v=sg.value;
     if(v==='a'){ autoNivel=true; }
     else { autoNivel=false; nivel=parseInt(v,10); aplicarNivel(); } };
