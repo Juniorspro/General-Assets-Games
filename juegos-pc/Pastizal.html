@@ -3063,6 +3063,26 @@ window.__dbg={
   nubes(v){ cieloMat.uniforms.uVolNube.value=(v===false)?0.0:1.0; },
   pano(k){ cieloMat.uniforms.uPanoK.value=k; },
   saltar(){ saltar(); },
+  /* la hora del sol desde afuera: el banco de pruebas necesita poder pedir el
+     sol rasante sin tocar el deslizador de la interfaz */
+  sol(a){ ponerSol(a); $('sSol').value=a; return {luz:[+SOL.x.toFixed(3),+SOL.y.toFixed(3),+SOL.z.toFixed(3)]}; },
+  somDbg(pts){ pintarSombras();
+    const n=SOM_N, px=new Uint8Array(n*n*4);
+    renderer.readRenderTargetPixels(rtSombra,0,0,n,n,px);
+    let mn=999,mx=-1,fondo=0;
+    for(let i=0;i<n*n;i++){ const v=px[i*4];
+      if(v<mn)mn=v; if(v>mx)mx=v; if(v>=254)fondo++; }
+    const M=SOM_U.uSomMat.value, e=M.elements;
+    const q=(pts||[]).map(p=>{
+      const sx=e[0]*p[0]+e[4]*p[1]+e[8]*p[2]+e[12];
+      const sy=e[1]*p[0]+e[5]*p[1]+e[9]*p[2]+e[13];
+      const sz=e[2]*p[0]+e[6]*p[1]+e[10]*p[2]+e[14];
+      const ix=Math.min(n-1,Math.max(0,Math.round(sx*n))), iy=Math.min(n-1,Math.max(0,Math.round(sy*n)));
+      const col=px[(iy*n+ix)*4]/255;
+      return {s:[+sx.toFixed(4),+sy.toFixed(4),+sz.toFixed(4)], guardZ:+(1-col).toFixed(4), col};
+    });
+    return {mn,mx,fondoPct:+(100*fondo/(n*n)).toFixed(2),
+            mat:Array.from(e).map(v=>+v.toFixed(5)), on:SOM_U.uSomOn.value, q}; },
   calidad(n){ autoNivel=(n===undefined); if(n!==undefined){ nivel=n; aplicarNivel(); } return nivel; },
   get piezas(){ let n=0,t=0; escena.traverse(o=>{ if(o.isMesh&&o.visible){ n++;
     const g=o.geometry, ic=g.instanceCount||1;
