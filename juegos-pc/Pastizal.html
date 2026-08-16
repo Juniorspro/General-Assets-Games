@@ -5357,6 +5357,17 @@ function callarCine(){ try{ audioCine.pause(); }catch(e){} }
 ============================================================================ */
 const PIL_CEN={x:600, z:600};          // lejos del campo, adentro del borde
 const PIL_MAXLUZ=14;
+const PIL_MAXVENT=6;
+/* EL SOL DE AFUERA. Rasante y de atardecer: entra casi horizontal por la pared
+   del este, que es lo que hace la mancha larga en el piso. La direccion es la
+   que VIAJA la luz, no la que apunta al sol. */
+/* MAS INCLINADO DE LO QUE PARECIA. Con el sol casi horizontal la mancha de luz
+   caia a veintidos metros de la ventana —o sea del otro lado de la sala y ya
+   tragada por la bruma— y no se veia una sola. Con esta pendiente la mancha
+   apoya a seis metros del vano: se ve el charco de luz al pie de la ventana,
+   que es exactamente lo que hay en la referencia. */
+const PIL_SOL=new THREE.Vector3(-0.700, -0.660, -0.272).normalize();
+const PIL_SOLC=new THREE.Color(1.00, 0.585, 0.290);
 const PIL={ grupo:null, hecho:false, activo:false,
             BAHIA:10.0, N:5, ALTO:6.4, AGUA:0.42,
             luces:[], enc:0, t:0 };
@@ -5370,6 +5381,58 @@ const PIL={ grupo:null, hecho:false, activo:false,
 const PIL_GLSL=`
   uniform vec3 uLuz[${PIL_MAXLUZ}]; uniform int uNLuz;
   uniform float uEnc, uTp, uAguaY, uAlto;
+  /* LAS VENTANAS. Cada una es (eje, coord, cu, cy) y (hu, hh, ., .):
+     eje 0 = el vano esta en el plano x=coord y se extiende en z
+     eje 1 = el vano esta en el plano z=coord y se extiende en x
+     El sol de afuera entra rasante y de atardecer. */
+  uniform vec4 uVent[${PIL_MAXVENT}]; uniform vec4 uVentT[${PIL_MAXVENT}];
+  uniform int uNVent; uniform vec3 uSolPil, uSolPilC;
+
+  /* SI EL SOL LLEGA O NO, resuelto de verdad y no con una mancha pintada.
+     Desde el punto se tira un rayo hacia el sol; se busca donde cruza el plano
+     de cada ventana; si ese cruce cae DENTRO del rectangulo del vano, el sol
+     llega. Es la unica forma de que la mancha de luz en el piso tenga la forma
+     de la ventana, se deforme con el angulo, y que un pilar en el medio deje su
+     sombra sin que haya un mapa de sombras. */
+  float solPorVentana(vec3 P){
+    float k=0.0;
+    for(int i=0;i<${PIL_MAXVENT};i++){
+      if(i>=uNVent) break;
+      vec4 v=uVent[i]; vec4 w=uVentT[i];
+      /* HACIA EL SOL, no hacia donde va la luz. uSolPil es la direccion que
+         VIAJA la luz —hacia adentro de la sala—, asi que para preguntar "veo el
+         sol desde aca" hay que caminar al reves. Con el signo cambiado el
+         parametro salia siempre negativo y el descarte se comia TODOS los
+         puntos: no habia una sola mancha de luz en el piso y la sala parecia no
+         tener ventanas aunque se las viera brillar en la pared. */
+      float pc = (v.x<0.5)? P.x : P.z;
+      float d  = v.y-pc;
+      float dl = -((v.x<0.5)? uSolPil.x : uSolPil.z);
+      if(abs(dl)<1e-4) continue;
+      float t=d/dl;
+      if(t<0.0) continue;                       // la ventana esta atras
+      vec3 Q=P-uSolPil*t;
+      float qu = (v.x<0.5)? Q.z : Q.x;
+      /* borde suave: el vano tiene canto y la luz no corta con navaja */
+      float bu=1.0-smoothstep(w.x-0.10, w.x+0.10, abs(qu-v.z));
+      float bv=1.0-smoothstep(w.y-0.10, w.y+0.10, abs(Q.y-v.w));
+      k=max(k, bu*bv);
+    }
+    return k;
+  }
+  /* y lo que aporta el vano como fuente de area, para lo que NO ve el sol
+     directo: cerca de una ventana igual hay luz, aunque no le de el rayo */
+  vec3 luzVentanas(vec3 P, vec3 N){
+    vec3 c=vec3(0.0);
+    for(int i=0;i<${PIL_MAXVENT};i++){
+      if(i>=uNVent) break;
+      vec4 v=uVent[i];
+      vec3 C = (v.x<0.5)? vec3(v.y, v.w, v.z) : vec3(v.z, v.w, v.y);
+      vec3 d=C-P; float r=length(d); d/=max(r,0.001);
+      c+=uSolPilC*(max(dot(N,d),0.0)*0.55+0.14)/(1.0+r*r*0.055);
+    }
+    return c;
+  }
   float h21p(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
   /* cuanto esta encendido el tubo i: se prenden EN ORDEN, con su parpadeo */
   float encendido(int i, float t){
@@ -5436,7 +5499,7 @@ const PIL_GLSL=`
          devuelve toda entre sus propias caras— y lo que hay que cuidar no es
          que llegue sino que NO SATURE, porque la trama vive en el ultimo
          quince por ciento del rango. */
-      c+=vec3(1.0,0.985,0.94)*at*(dif*0.52+esp*1.30);
+      c+=vec3(1.0,0.985,0.94)*at*(dif*0.34+esp*1.05);
     }
     return c;
   }`;
@@ -5446,6 +5509,10 @@ const matPileta=new THREE.ShaderMaterial({
   uniforms:{ uLuz:{value:new Array(PIL_MAXLUZ).fill(0).map(()=>new THREE.Vector3(0,-999,0))},
              uNLuz:{value:0}, uEnc:{value:0}, uTp:{value:0},
              uAguaY:{value:0.42}, uAlto:{value:6.4},
+             uVent:{value:new Array(PIL_MAXVENT).fill(0).map(()=>new THREE.Vector4())},
+             uVentT:{value:new Array(PIL_MAXVENT).fill(0).map(()=>new THREE.Vector4())},
+             uNVent:{value:0}, uSolPil:{value:PIL_SOL.clone()},
+             uSolPilC:{value:new THREE.Vector3(PIL_SOLC.r,PIL_SOLC.g,PIL_SOLC.b)},
              uOjo:{value:new THREE.Vector3()} },
   vertexShader:`
     precision highp float;
@@ -5470,6 +5537,18 @@ const matPileta=new THREE.ShaderMaterial({
       vec3 alb=mix(vec3(0.905,0.925,0.918)*az.y, vec3(0.470,0.512,0.508), az.x);
       float bril=mix(1.0, 0.12, az.x);          // la junta no brilla
       vec3 col=luzTubos(vW, N, E, bril, uTp)*alb;
+
+      /* EL SOL DE ATARDECER, POR LAS VENTANAS. Es la luz principal de la sala:
+         entra rasante, se recorta con la forma del vano y deja la mancha
+         caliente en el piso y en el agua. Todo lo demas es relleno. */
+      float ndl=max(dot(N,uSolPil*-1.0),0.0);
+      float sv=solPorVentana(vW);
+      col+=uSolPilC*alb*ndl*sv*4.30*uEnc;
+      /* el brillo especular del mismo sol sobre la ceramica */
+      vec3 hv=normalize(-uSolPil+E);
+      col+=uSolPilC*pow(max(dot(N,hv),0.0),74.0)*bril*sv*1.35*uEnc;
+      /* y la luz de area del vano, que llega aunque el rayo no */
+      col+=luzVentanas(vW,N)*alb*0.55*uEnc;
       /* EL SALON SE ILUMINA A SI MISMO. Todo es azulejo blanco: la luz que sale
          de un tubo rebota diez veces antes de morirse, y por eso una sala asi
          NO tiene sombras duras ni rincones negros debajo de un tubo encendido.
@@ -5530,7 +5609,7 @@ const matPileta=new THREE.ShaderMaterial({
          borra: OCULTA. Y eso es lo que separa un sitio que da un poco de miedo
          de un natatorio municipal. */
       float d=length(vW-uOjo);
-      float f=1.0-exp(-d*0.046);
+      float f=1.0-exp(-d*0.0295);
       col=mix(col, vec3(0.014,0.028,0.027), clamp(f,0.0,1.0)*0.96);
       gl_FragColor=vec4(col,1.0);
     }`
@@ -5553,9 +5632,9 @@ const matPanel=new THREE.ShaderMaterial({
         float r=length(uLuz[i]-vW);
         if(r<mejor){ mejor=r; on=encendido(i,uTp); }
       }
-      vec3 c=vec3(1.0,0.985,0.945)*(0.06+on*5.5);
+      vec3 c=vec3(1.0,0.985,0.945)*(0.06+on*4.2);
       float d=length(vW-uOjo);
-      c=mix(c, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.046),0.0,1.0)*0.70);
+      c=mix(c, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.0295),0.0,1.0)*0.55);
       gl_FragColor=vec4(c,1.0);
     }`
 });
@@ -5636,13 +5715,45 @@ const matAguaPil=new THREE.ShaderMaterial({
       }
       /* el brillo directo de los tubos sobre la superficie */
       col+=luzTubos(vW, N, E, 1.0, uTp)*0.30;
+      /* Y EL SOL DE LA VENTANA SOBRE EL AGUA, que es de donde salen los dos
+         reflejos largos que se ven en cualquier pileta al atardecer: uno ancho
+         y difuso sobre la ondulacion, y el filo brillante donde la ola encara
+         justo al sol. */
+      float svA=solPorVentana(vW);
+      vec3 hA=normalize(-uSolPil+E);
+      col+=uSolPilC*pow(max(dot(N,hA),0.0), 320.0)*svA*7.5*uEnc;
+      col+=uSolPilC*pow(max(dot(N,hA),0.0), 26.0)*svA*0.55*uEnc;
+      /* y lo que atraviesa y prende el fondo */
+      col+=uSolPilC*svA*0.30*uEnc*abs3;
 
       float d=length(vW-uOjo);
-      col=mix(col, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.046),0.0,1.0)*0.94);
+      col=mix(col, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.0295),0.0,1.0)*0.92);
       gl_FragColor=vec4(col,1.0);
     }`
 });
 MATS.push(matAguaPil);
+
+/* Lo que se ve por la ventana: no hay afuera, hay LUZ. Un degradado vertical
+   sobrexpuesto que se abre hacia abajo, que es como se ve una ventana a
+   contraluz cuando el interior esta oscuro — no se distingue nada, solo el
+   resplandor. Va bien fuerte a proposito: es lo que alimenta el bloom y hace
+   que el vano "queme" el borde del azulejo. */
+const matVano=new THREE.ShaderMaterial({
+  uniforms:matPileta.uniforms,
+  side:THREE.DoubleSide,
+  vertexShader:`precision highp float; varying vec3 vW;
+    void main(){ vW=position; gl_Position=projectionMatrix*viewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    precision highp float; varying vec3 vW;
+    uniform float uEnc, uAlto; uniform vec3 uSolPilC;
+    void main(){
+      float h=clamp(vW.y/uAlto, 0.0, 1.0);
+      vec3 c=mix(uSolPilC*9.5, uSolPilC*3.4, smoothstep(0.05,0.85,h));
+      c=mix(c, vec3(1.0,0.86,0.66)*7.0, 0.30);
+      gl_FragColor=vec4(c*(0.04+0.96*uEnc), 1.0);
+    }`
+});
+MATS.push(matVano);
 
 /* ------------------------------------------------------- la sala, construida
    Un solo buffer para todo el azulejo: una malla y una llamada de dibujo, igual
@@ -5681,10 +5792,44 @@ function construirPileta(){
 
   G.caja(O.x, -0.30, O.z, L+2.4, 0.6, L+2.4, T_PISO);
   G.caja(O.x, H+0.30, O.z, L+2.4, 0.6, L+2.4, T_TECHO);
+  /* LAS PAREDES. Tres macizas y la del este con ventanas: es por ahi por donde
+     entra el sol, asi que es la unica que tiene sentido agujerear.
+     Y las cuatro llevan choque de pared entera, ventanas incluidas: el vano
+     ilumina pero no se atraviesa. */
+  const VENT=[], vanos=[];
+  const SILL=0.80, DINT=4.75;                 // alfeizar y alto del vano
+  const CENZ=[-16.5, -5.5, 5.5, 16.5], ANCHO=3.05;  // cuatro ventanales
   for(let i=0;i<4;i++){
     const a=i*Math.PI/2, ex=Math.round(Math.cos(a)), ez=Math.round(Math.sin(a));
-    G.caja(O.x+ex*(L/2+0.3), H/2, O.z+ez*(L/2+0.3),
-           ex? 0.6 : L+1.2, H, ez? 0.6 : L+1.2, T_PARED);
+    const cx=O.x+ex*(L/2+0.3), cz=O.z+ez*(L/2+0.3);
+    if(ex===1){
+      /* la pared del este, en tiras alrededor de los vanos */
+      const zi=O.z-L/2-0.6, zf=O.z+L/2+0.6, largo=zf-zi;
+      G.caja(cx, SILL*0.5, O.z, 0.6, SILL, largo, T_PARED);                    // antepecho
+      const yT=SILL+DINT;
+      G.caja(cx, yT+(H-yT)*0.5, O.z, 0.6, H-yT, largo, T_PARED);               // dintel
+      /* los machones entre ventana y ventana */
+      const bordes=[zi];
+      for(const c of CENZ){ bordes.push(O.z+c-ANCHO*0.5, O.z+c+ANCHO*0.5); }
+      bordes.push(zf);
+      for(let k=0;k<bordes.length;k+=2){
+        const z0=bordes[k], z1=bordes[k+1], w=z1-z0;
+        if(w>0.05) G.caja(cx, SILL+DINT*0.5, (z0+z1)*0.5, 0.6, DINT, w, T_PARED);
+      }
+      /* el vano: un rectangulo de pura luz en la cara de afuera */
+      for(const c of CENZ){
+        const zc=O.z+c, y0=SILL, y1=SILL+DINT, xq=cx+0.32;
+        const hw=ANCHO*0.5;
+        vanos.push(xq,y0,zc-hw,  xq,y1,zc+hw,  xq,y1,zc-hw,
+                   xq,y0,zc-hw,  xq,y0,zc+hw,  xq,y1,zc+hw);
+        /* y se registra para el recorte del sol: eje 0 = plano x */
+        VENT.push({v:[0, cx, zc, (y0+y1)*0.5], t:[hw, DINT*0.5, 0, 0]});
+      }
+    } else {
+      G.caja(cx, H/2, cz, ex? 0.6 : L+1.2, H, ez? 0.6 : L+1.2, T_PARED);
+    }
+    CHOQUES.push({x:cx, z:cz, rot:0, alto:H,
+                  hx: ex? 0.35 : (L+1.2)*0.5, hz: ez? 0.35 : (L+1.2)*0.5});
   }
   /* LOS PILARES DE MAS: en cada cruce de bahias, y uno suelto en medio de una
      de cada tres. "Mucho mas en cantidad de lo practico" es textual del nivel,
@@ -5755,6 +5900,12 @@ function construirPileta(){
   matPileta.uniforms.uNLuz.value=PIL.luces.length;
   matPileta.uniforms.uAguaY.value=PIL.AGUA;
   matPileta.uniforms.uAlto.value=H;
+  const uv=matPileta.uniforms.uVent.value, ut=matPileta.uniforms.uVentT.value;
+  for(let i=0;i<PIL_MAXVENT;i++){
+    if(VENT[i]){ uv[i].fromArray(VENT[i].v); ut[i].fromArray(VENT[i].t); }
+    else { uv[i].set(0,-9999,0,0); ut[i].set(0,0,0,0); }
+  }
+  matPileta.uniforms.uNVent.value=Math.min(VENT.length, PIL_MAXVENT);
 
   const malla=new THREE.Mesh(geo, matPileta);
   malla.frustumCulled=false;
@@ -5776,11 +5927,17 @@ function construirPileta(){
   agua.position.set(O.x, PIL.AGUA, O.z);
   agua.frustumCulled=false; agua.renderOrder=20;
 
+  const gv=new THREE.BufferGeometry();
+  gv.setAttribute('position', new THREE.Float32BufferAttribute(vanos,3));
+  gv.boundingSphere=geo.boundingSphere;
+  const ventanas=new THREE.Mesh(gv, matVano);
+  ventanas.frustumCulled=false;
+
   PIL.grupo=new THREE.Group();
-  PIL.grupo.add(malla, paneles, agua);
+  PIL.grupo.add(malla, paneles, agua, ventanas);
   PIL.grupo.visible=false;
   escena.add(PIL.grupo);
-  NO_PROYECTA.push(malla, paneles, agua);
+  NO_PROYECTA.push(malla, paneles, agua, ventanas);
 }
 
 /* ---------------------------------------------------------------- el pasaje
