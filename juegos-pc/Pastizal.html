@@ -317,13 +317,18 @@ const ATMOS_GLSL=`
   /* espesor de aire mirando en una direccion: crece muchisimo hacia el horizonte */
   float masaAire(float y){ return 1.0/(max(y,0.0)+0.14); }
 
+  /* Los coeficientes de arriba estan en las unidades de la atmosfera de
+     verdad —por METRO, del orden de 1e-6— y aca las distancias son de juego.
+     Usarlos tal cual lava la imagen entera de cian: pasa a sumarse luz
+     dispersada del orden de 3 en lineal a cincuenta metros. Asi que de ellos
+     se toma solo la PROPORCION entre canales, que es lo que da el color, y la
+     densidad la pone el deslizador de niebla. */
   vec3 atmosfera(vec3 dir, vec3 sol, vec3 solc){
     float mu=dot(dir,sol);
     float mv=masaAire(dir.y), ms=masaAire(sol.y);
-    /* lo que le queda al sol despues de cruzar la atmosfera hasta ese punto:
-       es lo que pone el horizonte naranja al atardecer, sin trucos */
-    vec3 ext=exp(-(BETA_R+BETA_M)*ms*0.42);
-    vec3 disp=(BETA_R*faseR(mu)+BETA_M*faseM(mu,0.76))*mv*2.9;
+    vec3 rr=BETA_R/BETA_R.g;                       // (0.43, 1.0, 2.45)
+    vec3 ext=exp(-rr*ms*0.17);                     // el camino del sol
+    vec3 disp=(rr*faseR(mu)*0.86+vec3(faseM(mu,0.76))*0.14)*mv*0.40;
     vec3 col=disp*ext*solc;
     /* el ozono le come un poco el naranja al cenit y deja el azul mas limpio */
     col*=mix(vec3(1.0), vec3(0.92,0.97,1.06), clamp(dir.y*1.3,0.0,1.0));
@@ -335,10 +340,14 @@ const ATMOS_GLSL=`
   vec3 aereo(vec3 col, vec3 W, vec3 ojo, vec3 sol, vec3 solc, float k){
     vec3 dv=W-ojo; float d=length(dv); dv/=max(d,1e-4);
     float mu=dot(dv,sol);
-    vec3 tau=(BETA_R+BETA_M)*k*d*0.55;
+    vec3 rr=BETA_R/BETA_R.g;
+    vec3 tau=(rr*0.74+vec3(0.26))*k*d;
     vec3 trans=exp(-tau);
-    vec3 disp=(BETA_R*faseR(mu)+BETA_M*faseM(mu,0.72))*d*k*2.1*solc
-              *(0.35+0.65*max(sol.y,0.0));
+    /* La luz que se mete en el camino va con (1 - transmitancia), NO con la
+       distancia suelta: asi esta acotada y a mil metros satura en vez de
+       crecer sin freno. Es la forma correcta y ademas la que no explota. */
+    vec3 fac=rr*faseR(mu)*0.74+vec3(faseM(mu,0.72))*0.26;
+    vec3 disp=fac*(1.0-trans)*solc*(0.35+0.65*max(sol.y,0.0))*1.45;
     return col*trans+disp;
   }`;
 
@@ -450,7 +459,7 @@ const matSuelo=new THREE.ShaderMaterial({
       float nub=sombraNube(vW.xz, uT, luz);
       float lamb=0.30+0.70*max(luz.y,0.0)*(1.0-som*0.82)*(1.0-nub*0.55);
       col*=lamb*uSolC*1.35 + uCielo*(0.22+som*0.10+nub*0.06);
-      col=aereo(col, vW, uOjo, luz, uSolC, uFogD*95.0);
+      col=aereo(col, vW, uOjo, luz, uSolC, uFogD);
       gl_FragColor=vec4(col,1.0);
     }`
 });
@@ -1212,7 +1221,7 @@ const matEdificio=new THREE.ShaderMaterial({
          pleno sol mientras el campo alrededor esta en sombra */
       float nub=sombraNube(vW.xz, uT, luz);
       col=difusa*(1.0-nub*0.55)+brilloSol*(1.0-nub*0.75)+ambiente*(1.0-nub*0.12);
-      col=aereo(col, vW, uOjo, luz, uSolC, uFogD*95.0);
+      col=aereo(col, vW, uOjo, luz, uSolC, uFogD);
       gl_FragColor=vec4(col,1.0);
     }`,
   vertexColors:true, side:THREE.DoubleSide
@@ -1717,8 +1726,8 @@ const matGrado=mkMat(`
   {tEsc:{value:null},tBloom:{value:null},tRayos:{value:null},tExp:{value:null},
    uPx:{value:new THREE.Vector2()},uSol:{value:new THREE.Vector2(0.5,0.5)},
    uBloom:{value:0.085},uExpM:{value:1.0},uCon:{value:1.06},uSat:{value:1.18},
-   uVin:{value:0.42},uNit:{value:0.35},uRayos:{value:0.20},uT:{value:0},
-   uAber:{value:0.16},uBarril:{value:0.018},uGrano:{value:0.020},uHalo:{value:0.022},
+   uVin:{value:0.42},uNit:{value:0.26},uRayos:{value:0.20},uT:{value:0},
+   uAber:{value:0.10},uBarril:{value:0.018},uGrano:{value:0.020},uHalo:{value:0.022},
    uSucio:{value:0.45},uAnam:{value:0.12},uDest:{value:0.06},uAdapta:{value:0.85},
    uBalance:{value:new THREE.Vector3(1.0,1.0,1.0)},
    uLevanta:{value:new THREE.Vector3(0.004,0.006,0.010)},
