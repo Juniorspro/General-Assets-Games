@@ -737,6 +737,14 @@ const NUBES_GLSL=`
   float octNube(float per, float paso){ return clamp(per/max(paso*1.25,1.0)-0.60, 0.0, 1.0); }
   float coberturaNube(vec2 q, float t, float paso){
     vec2 p=q*${NUBE_ESC}+vientoNube(t);
+    /* CADA OCTAVA CON SU PROPIA DERIVA. Si todas se corren con el mismo
+       viento, el banco entero desfila rígido y las nubes son siempre las
+       mismas, sólo que más allá. Dándole a cada octava una dirección y una
+       velocidad distintas, la suma nunca vuelve a la misma forma: las nubes se
+       deforman solas mientras avanzan. */
+    vec2 d1=vec2( t*0.0016,  t*0.0009);
+    vec2 d2=vec2(-t*0.0031,  t*0.0013);
+    vec2 d3=vec2( t*0.0007, -t*0.0026);
     /* CADA OCTAVA GIRADA UN ANGULO DISTINTO. El ruido de valor vive sobre una
        rejilla alineada a los ejes; si todas las octavas comparten esa rejilla,
        los cuadrados se suman y el banco sale a bloques con los cantos rectos.
@@ -748,11 +756,17 @@ const NUBES_GLSL=`
     float w2=0.174*octNube(878.0,paso), w3=0.105*octNube(440.0,paso);
     float w4=0.209*octNube(673.0,paso), w5=0.106*octNube(325.0,paso);
     float w6=0.065*octNube(163.0,paso);
-    float c=(ruido(p                 )-0.5)*w1+(ruido(R1*p*2.07+11.3)-0.5)*w2
-           +(ruido(R2*p*4.13 + 5.7   )-0.5)*w3+(ruido(R2*p*2.70+13.1)-0.5)*w4
-           +(ruido(R1*p*5.59 +29.6   )-0.5)*w5+(ruido(R1*p*11.15+15.4)-0.5)*w6;
+    float c=(ruido(p                       )-0.5)*w1+(ruido(R1*p*2.07+11.3+d1)-0.5)*w2
+           +(ruido(R2*p*4.13 + 5.7 +d2      )-0.5)*w3+(ruido(R2*p*2.70+13.1+d1)-0.5)*w4
+           +(ruido(R1*p*5.59 +29.6 +d3      )-0.5)*w5+(ruido(R1*p*11.15+15.4+d2)-0.5)*w6;
     float v=w1*w1+w2*w2+w3*w3+w4*w4+w5*w5+w6*w6;
-    return 0.5+c*0.4655/max(sqrt(v),1e-4);
+    float cob=0.5+c*0.4655/max(sqrt(v),1e-4);
+    /* NACIMIENTO Y MUERTE. Un campo muy grande y muy lento sube y baja el
+       umbral local: donde crece, la nube engorda hasta aparecer; donde cae, se
+       adelgaza hasta deshacerse. Es lo que hace que el cielo no sea siempre el
+       mismo cielo corrido de lugar. */
+    float vida=ruido(q*0.00021+vec2(t*0.0021,-t*0.0014)+71.3);
+    return cob+(vida-0.5)*0.30;
   }
   /* densidad dentro del banco: la cobertura, tallada por el perfil de altura y
      erosionada por un detalle mas fino en los bordes */
@@ -822,6 +836,10 @@ const NUBES_GLSL=`
    saliendo de la dispersion, porque son los mismos que iluminan el pasto. Si se
    pegara la foto entera, al mover el sol el cielo se quedaria quieto mientras
    el campo cambia, y eso canta de lejos. */
+/* La panorámica queda cargada pero en peso CERO: el cielo es puramente la
+   dispersión de Rayleigh y Mie, que es azul de verdad y —a diferencia de una
+   foto— acompaña al sol cuando se mueve. El deslizador de MOTOR la puede
+   volver a subir si algún día hace falta. */
 const texCielo=new THREE.TextureLoader().load(CIELO_URL);
 texCielo.colorSpace=THREE.SRGBColorSpace;
 texCielo.wrapS=THREE.RepeatWrapping; texCielo.wrapT=THREE.ClampToEdgeWrapping;
@@ -835,7 +853,7 @@ const cieloMat=new THREE.ShaderMaterial({
              /* La panoramica bajo de 0,20 a 0,12: con las nubes marchadas andando de
                 verdad, la foto ya no tiene que inventar el cielo. Se queda con
                 lo unico que aporta y la cuenta no da: los cirros de arriba. */
-             uPano:{value:texCielo}, uPanoK:{value:0.12},
+             uPano:{value:texCielo}, uPanoK:{value:0.0},
              uOjoC:{value:new THREE.Vector3()},
              uPasosNube:{value:MOVIL?16:34}, uPasosLuz:{value:MOVIL?2:4},
              /* Con la densidad ya normalizada por el excedente real, el umbral
@@ -1052,7 +1070,10 @@ const matSuelo=new THREE.ShaderMaterial({
          suelo y las briznas cuenten la misma historia */
       float m=fbm(vW.xz*0.035);
       float g=fbm(vW.xz*0.21+31.7);
-      vec3 col=mix(vec3(0.028,0.058,0.020), vec3(0.062,0.108,0.032), m);
+      /* Estaba demasiado oscuro: entre las briznas se veían huecos casi negros
+         y el pastizal se leía sucio. La tierra bajo un pastizal tiene hojarasca
+         y raíz seca, que es marrón claro, no negro. */
+      vec3 col=mix(vec3(0.070,0.098,0.048), vec3(0.118,0.150,0.066), m);
       col=mix(col, vec3(0.078,0.082,0.036), smoothstep(0.62,0.92,g)*0.35);
       col*=0.82+0.36*ruido(vW.xz*1.7);
 
@@ -2855,6 +2876,7 @@ const matGrado=mkMat(`
   uniform sampler2D tEsc,tBloom,tRayos,tExp; uniform vec2 uPx,uSol;
   uniform float uBloom,uExpM,uCon,uSat,uVin,uNit,uRayos,uT;
   uniform float uAber,uBarril,uGrano,uHalo,uSucio,uAnam,uDest,uAdapta;
+  uniform float uSolDot,uVelo; uniform vec3 uSolTinte;
   uniform vec3 uBalance,uLevanta,uGanancia,uTinteSombra,uTinteLuz;
 
   vec3 aces(vec3 x){
@@ -2915,6 +2937,15 @@ const matGrado=mkMat(`
 
     /* RAYOS CREPUSCULARES */
     c+=texture2D(tRayos,uv).rgb*uRayos;
+
+    /* VELO DE LUZ. Un sol fuerte no deja de existir porque uno mire para otro
+       lado: la luz sigue entrando de canto en la lente y en el ojo, y levanta
+       un velo cálido sobre toda la imagen. Antes esto se cortaba de golpe
+       cuando el sol salía de cuadro y por eso "se iba ese color tan lindo".
+       Ahora cae SUAVE con el ángulo al sol y nunca llega a cero mientras el
+       sol esté sobre el horizonte. */
+    float velo=0.20+0.80*smoothstep(-0.55, 0.95, uSolDot);
+    c+=uSolTinte*uVelo*velo*(0.55+0.45*(1.0-r2));
 
     /* DESTELLOS FANTASMA: copias del sol invertidas respecto del centro, que
        es exactamente lo que hacen los rebotes entre elementos de la lente */
@@ -2991,7 +3022,9 @@ const matGrado=mkMat(`
    uBloom:{value:0.062},uExpM:{value:1.0},uCon:{value:1.11},uSat:{value:1.14},
    uVin:{value:0.40},uNit:{value:0.24},uRayos:{value:0.18},uT:{value:0},
    uAber:{value:0.006},uBarril:{value:0.012},uGrano:{value:0.018},uHalo:{value:0.020},
-   uSucio:{value:0.40},uAnam:{value:0.10},uDest:{value:0.05},uAdapta:{value:0.42},
+   uSucio:{value:0.40},uAnam:{value:0.10},uDest:{value:0.05},uAdapta:{value:0.30},
+   uSolDot:{value:0.0},uVelo:{value:0.055},
+   uSolTinte:{value:new THREE.Vector3(1.0,0.86,0.62)},
    uBalance:{value:new THREE.Vector3(1.0,1.0,1.0)},
    /* LEVANTE casi cero. Ese (0.004,0.006,0.010) era el culpable directo de los
       dos defectos mas grandes: sumaba piso a TODO —de ahi que nada llegara a
@@ -3023,7 +3056,7 @@ function pasar(m,d){ mallaPost.material=m; renderer.setRenderTarget(d); renderer
 const NEGRO=new THREE.DataTexture(new Uint8Array([0,0,0,255]),1,1); NEGRO.needsUpdate=true;
 
 /* posicion del sol en pantalla, y si esta a la vista */
-const _solV=new THREE.Vector3();
+const _solV=new THREE.Vector3(), _dirCam=new THREE.Vector3();
 function solEnPantalla(){
   _solV.copy(SOL).multiplyScalar(900).add(camara.position).project(camara);
   const x=_solV.x*0.5+0.5, y=_solV.y*0.5+0.5;
@@ -3037,6 +3070,11 @@ function pintarPost(dt){
   matGrado.uniforms.uSol.value.set(sp.x, sp.y);
   matRayos.uniforms.uSol.value.set(sp.x, sp.y);
   matRayos.uniforms.uVisible.value=sp.ver;
+  /* cuánto mira la cámara al sol, para el velo: -1 de espaldas, 1 de frente */
+  _solV.copy(SOL);
+  camara.getWorldDirection(_dirCam);
+  matGrado.uniforms.uSolDot.value=_dirCam.dot(_solV);
+  matGrado.uniforms.uSolTinte.value.set(SOLC.r, SOLC.g*0.92, SOLC.b*0.72);
 
   /* --- exposicion: 64x64 log, 8x8, 1x1, y adaptacion --- */
   matLum.uniforms.t.value=rtEsc.texture; pasar(matLum, rtL0);
