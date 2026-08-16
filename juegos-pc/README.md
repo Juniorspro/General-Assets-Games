@@ -1775,18 +1775,46 @@ Cuerpo riggeado de verdad, esqueleto Mixamo de 49 huesos, mezclando
 **Idle / Walk / Run** por velocidad, con el paso acelerado según lo rápido que
 vayas — si no, los pies patinan contra el piso.
 
-Tres decisiones que lo hacen funcionar:
+Cuatro decisiones que lo hacen funcionar:
 
-1. **La cabeza se esconde**, achicando su hueso **después** de que el mixer
-   escribió las poses; antes, la animación lo vuelve a pisar. La cámara está
-   dentro del cráneo: sin esto se ve el interior de la cara.
-2. **La escala sale del hueso de la cabeza, no de la caja del modelo.** Con la
-   caja, la coronilla queda a la altura de los ojos y los ojos terminan
-   hundidos en el pecho: se veía una silueta tapando media pantalla.
+1. **La cabeza y el cuello se esconden**, achicando sus huesos **después** de
+   que el mixer escribió las poses; antes, la animación los vuelve a pisar. La
+   cámara está dentro del cráneo: sin esto se ve el interior de la cara.
+2. **La escala sale del hueso de la cabeza, no de la caja del modelo** — pero
+   con los once centímetros de descuento que hay entre ese hueso y los ojos.
 3. **El cuerpo no cuelga de la cámara.** Es tentador colgarla del hueso de la
    cabeza para que el cabeceo sea "real", pero entonces al mirarte los pies se
    ven patinar, porque el mundo se mueve con tu cabeza. El cuerpo se queda
-   plantado y va 15 cm atrás, para que el cuello no cruce el plano cercano.
+   plantado y va 30 cm atrás.
+4. **Plano cercano propio para el cuerpo**, hecho en el fragmento.
+
+#### La herradura negra
+Esto tardó tres vueltas en salir bien, y las tres se vieron sólo mirando
+capturas. Mirando para abajo aparecía **una herradura negra gigante** tapando
+media pantalla, más un brazo cruzado por delante.
+
+El motivo de fondo: el hueso `mixamorig:Head` **no está en los ojos**, está en
+la base del cráneo, unos once centímetros más abajo. Igualarlo a `altoOjo`
+hacía un cuerpo un 7% más grande de la cuenta y, peor, dejaba la cámara metida
+en el hueco del cuello. Lo que se veía era el **interior del torso**: caras de
+atrás, que no reciben luz, o sea negras.
+
+Esconder huesos no alcanza —el hombro y el trapecio siguen ahí, y la malla está
+pesada a varios huesos, así que achicar uno deforma al de al lado—. La solución
+que usan los juegos es un plano cercano propio para el cuerpo; acá sale más
+barato hacerlo en el fragmento, con `onBeforeCompile` sobre el material que trae
+el glb:
+
+```glsl
+// vértice
+vProf = -mvPosition.z;
+// fragmento
+if(vProf < 0.30) discard;
+```
+
+Treinta centímetros. Nada de lo que uno **quiere** ver cae adentro de ese radio
+—el pecho mirando abajo está a 45 cm, las piernas a 90— y todo lo que se veía
+por dentro sí.
 
 **El salto no venía en el modelo** —trae Idle, Walk y Run y nada más—. En vez
 de cambiar a un modelo de robot, se fabrica: rotaciones sobre doce huesos en
@@ -1901,26 +1929,80 @@ El material va con `DoubleSide` y la normal invertida en las caras traseras
 (`gl_FrontFacing`), que blinda cualquier triángulo mal ordenado: sin eso, una
 cara al revés se ilumina como si el sol le pegara desde adentro.
 
-**95.000 briznas** en pantalla, unos **633.000 triángulos**, y cada una es una
-cinta que se afina hasta la punta, se arquea, se dobla con el viento y se aparta
-cuando pasás caminando.
+**460.500 briznas** en pantalla, **460.500 triángulos** —uno por brizna— y cada
+una es una hoja rígida que se afina hasta la punta, se inclina entera con el
+viento y se aparta cuando pasás caminando.
 
-### La brizna
-No es un plano con una textura de pasto: es una tira de dos a cinco tramos, dos
-vértices por tramo más uno solo en la punta, así el filo termina en punta de
-verdad en vez de en un rectángulo cortado.
+### La brizna: un triángulo, y por qué
+Antes cada brizna era una cinta de S tramos: dos vértices por tramo más uno de
+punta, o sea **once vértices y nueve triángulos** con S=5. La capa cercana sola
+eran 810.000 triángulos, y toda esa geometría existía para **una** cosa: poder
+arquear la hoja a lo largo. Sacado el arco, la cinta no tiene nada que hacer.
+
+Queda el triángulo pelado:
 
 ```
-w = uAncho · (1 − v^1.4)      ancho contra el largo: gordo abajo, cero arriba
-dob = arco · v²               el arco es parábola, no arco de círculo:
-                              la base sale vertical y la punta cae
+posición = (-1,0,0)  (1,0,0)  (0,1,0)
 ```
 
-La normal sale del producto cruz entre el lateral y la tangente de la curva, más
-un **abultamiento lateral** —`+ lat3 · lado · 0.55`— que le miente a la
-iluminación diciéndole que la brizna es una hoja curva y no una cinta plana. Sin
-eso, media brizna se apaga de golpe cuando cruza el ángulo del sol y el campo
+El afinado hacia la punta sale **gratis de la forma** —el vértice de arriba ya
+está sobre el eje—, así que no hace falta ni el `pow(v)` del ancho ni índices.
+
+| | antes | ahora |
+|---|---|---|
+| triángulos por brizna | 9 / 7 / 3 | 1 |
+| triángulos del campo | 1.640.000 | 460.500 |
+| briznas | 248.000 | 460.500 |
+| ancho de la hoja cercana | 9 mm | 27 mm |
+
+O sea: **la cuarta parte de la geometría, casi el doble de pasto** y hojas tres
+veces más anchas, que es lo que hace que se lean como hoja y no como pelo. Es el
+pasto de Roblox, y no es una concesión: a esa distancia una cinta arqueada de
+nueve triángulos y un triángulo del mismo ancho dan la misma silueta.
+
+### Sin arco: la hoja es rígida
+El arco se fue del todo. La brizna se inclina **entera** sobre su base, como una
+aguja clavada que el viento vuelca:
+
+```glsl
+float incl = uArco*(0.06+r6*0.10) + uViento*raf*osc*0.30;
+incl += pisado*(1.15+r3*0.30);
+float ci=cos(incl), si=sin(incl);
+vec3 eje = vec3(dir.x*si, ci, dir.y*si) * (v*alto);
+```
+
+No hay `v*v`, no hay derivada del arco y no hay normal que cambie a lo largo de
+la hoja: la tangente **es** el eje. Eso es lo que permite que sea un solo
+triángulo, porque un triángulo no puede curvarse.
+
+La normal sale del producto cruz entre el lateral y ese eje, más un
+**abultamiento lateral** —`+ lat3 · lado · 0.55`— que le miente a la iluminación
+diciéndole que la brizna es una hoja acanalada y no un triángulo plano. Sin eso,
+media brizna se apaga de golpe cuando cruza el ángulo del sol y el campo
 parpadea.
+
+### El descarte temprano
+Lo primero que hacía el shader de briznas eran **dos fbm**, la distancia a cada
+edificio, el río, el mapa de sombras y la sombra de las nubes. Todo eso corría
+igual para una brizna que estaba detrás de la nuca del jugador, y después se
+multiplicaba por cero.
+
+La grilla es un **cuadrado** y lo que se dibuja es un **círculo** adentro: las
+esquinas son un cuarto de las briznas y no se ven nunca. Y de las que quedan, la
+mitad larga está detrás de la cámara.
+
+```glsl
+vec2 rel = P - uOjo.xz;
+float dcam = length(rel);
+float atras = dot(rel, uMira.xz);
+if(dcam > uDist || atras < -3.0){ gl_Position = vec4(2.0,2.0,2.0,1.0); return; }
+```
+
+Dos restas y un producto escalar, antes de tocar nada, y se va cerca del **60%
+del trabajo del campo**. Funciona porque el pasto tiene **una sola cámara**: no
+entra en el mapa de sombras (está en `NO_PROYECTA`) ni en el reflejo planar (ahí
+se apaga la malla entera). Si algún día se dibujara desde otro punto de vista,
+esto hay que apagarlo.
 
 En el fragmento van tres cosas que hacen la diferencia:
 
@@ -1946,11 +2028,14 @@ altura. Cero copias de buffers, cero `needsUpdate`, cero picos de recolección d
 basura al caminar.
 
 ### Tres capas por distancia
-| capa | celda | tramos | ancho | alcance |
-|---|---|---|---|---|
-| cerca | 4,8 cm | 5 | 3,4 cm | 9 m |
-| media | 13 cm | 4 | 5,2 cm | 26 m |
-| lejos | 45 cm | 2 | 14,5 cm | 80 m |
+| capa | N | celda | ancho | alcance | briznas |
+|---|---|---|---|---|---|
+| cerca | 430 | 5,2 cm | 0,19 × alto | 11 m | 184.900 |
+| media | 400 | 14 cm | 0,24 × alto | 30 m | 160.000 |
+| lejos | 340 | 46 cm | 0,42 × alto | 88 m | 115.600 |
+
+El ancho va **relativo al alto**, no en metros: una hoja de 0,19 mide un quinto
+de lo que mide de alto, que es la proporción que se lee como hoja.
 
 Cada capa arranca donde termina la anterior (`cerca`) para no pagar dos veces el
 mismo metro cuadrado. La lejana lleva pocas briznas por metro, así que las suyas
@@ -2003,14 +2088,65 @@ nivel 0 además apaga el bloom. Cuando la densidad mata una brizna, su altura pa
 a cero, los vértices colapsan en un punto y el triángulo se descarta antes de
 rasterizar: el costo de fragmentos desaparece del todo.
 
+### El menú de inicio
+No es una pantalla aparte: el mundo ya está corriendo detrás y **la cámara pasea
+sola** alrededor del casco de estancia, a 54 m de radio y 3,4 m de alto. Así el
+menú no es una pantalla de carga disfrazada, es la primera postal.
+
+Trae tres cosas y nada más: **idioma** (inglés por defecto, español y portugués),
+**gráficos** (auto / baja / media / alta) y `PLAY`. Al tocar jugar, el menú se
+funde en un segundo y la cámara vuelve a las manos del jugador en el origen.
+
+El diccionario de idiomas vive entero en un objeto y `aplicarIdioma()` repinta el
+DOM. Dos cosas hay que acordarse de repintar a mano porque **no son DOM**: los
+botones que se dibujan en el lienzo de mandos, y el globo de diálogo —que
+cachea por texto, así que se lo vacía (`GLOBO.texto=''`) para forzarlo—.
+
+Mientras el menú está arriba, `moverMision()` sale temprano: la órbita pasa cerca
+de los espíritus y si no, la historia arrancaba antes de tocar `PLAY`.
+
+### El cierre de la escena
+Cuando los dos aparceros hacen las paces, el campo **no vuelve a como estaba**.
+Es la idea de las dos últimas fases de *Nullscapes* llevada a un campo: ahí el
+nivel termina con el sol del fondo estallando en furia fundida, todo minimalista,
+y el cuadro se va apagando. Acá el astro no estalla del todo —el jugador se queda
+caminando debajo— pero el gesto es el mismo: **una cosa enorme, blanca y
+silenciosa que se come el horizonte**.
+
+| segundos | qué pasa |
+|---|---|
+| 0 – 20 | el sol de la escena baja hasta rasante |
+| 10 – 40 | sube la noche y salen las estrellas |
+| 16 – 46 | el astro asoma del horizonte y crece |
+| 46 – 52 | se enciende: velo ×7 y bloom ×3,4 |
+| 52 – 55 | fogonazo blanco y cartel de fin de escena |
+
+Tres detalles que lo hacen funcionar:
+
+- **El astro sale por donde se puso el sol.** La escena ya viene mirando ahí.
+- **Se lo mantiene apenas por debajo del horizonte** (`y = −R·0.30`) para que lo
+  corte el suelo. Un disco entero flotando parece una luna; **medio** disco
+  cortado por el campo parece que se te viene encima.
+- **Va debajo de las nubes marchadas**, a propósito: que una nube le pase por
+  delante es lo que le da la escala.
+
+El radio final son 0,55 rad — **63 grados de disco**, más ancho que el alto
+entero de la pantalla. Es la única forma de que se lea como "cubre el horizonte"
+y no como una luna grande.
+
+La noche no es bajarle el brillo al cielo de día: es otro color —azul de tinta,
+casi sin degradado— más un campo de estrellas sacado de una grilla sobre la
+esfera, una estrella por celda que gana el dado, titilando con su propia fase.
+
 ### Controles
-Pulgar izquierdo palanca, derecho mirar, `SALTO` y `CORRER`. `AJUSTES` abre los
-deslizadores en vivo: densidad, altura, viento, arqueo, sol, exposición, color,
-nitidez y neblina. Con teclado, `WASD`, espacio y `R`.
+Pulgar izquierdo palanca, derecho mirar, `SALTO`/`JUMP` y `CORRER`/`RUN`.
+`AJUSTES`/`SETTINGS` abre los deslizadores en vivo: densidad, altura, viento,
+inclinación, sol, exposición, color, nitidez y neblina. Con teclado, `WASD`,
+espacio y `R`.
 
 ### Lo que no tiene
-Sin árboles, sin PBR, sin texturas, sin relieve: el suelo es plano a propósito.
-Era el pedido, y también deja ver el pasto sin que nada le robe cuadros.
+Sin árboles y sin relieve: el suelo es plano a propósito. Era el pedido, y
+también deja ver el pasto sin que nada le robe cuadros.
 
 ---
 

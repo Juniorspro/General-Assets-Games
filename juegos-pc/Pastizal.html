@@ -4182,7 +4182,6 @@ function aplicarIdioma(cod){
   p('mTitulo',L.titulo); p('mSobre',L.sobre); p('mIdioma',L.idioma);
   p('mGraficos',L.graficos); p('bJugar',L.jugar); p('mPie',L.pie);
   p('bPanel',L.ajustes); p('bCorrer',L.correr);
-  const et=(sel,t)=>{ const e=document.querySelector(sel); if(e) e.firstChild.textContent=t+' '; };
   const hs=document.querySelectorAll('#panel h3');
   if(hs[0]) hs[0].textContent=L.hPasto;
   if(hs[1]) hs[1].textContent=L.hImagen;
@@ -4210,22 +4209,28 @@ function aplicarIdioma(cod){
    pasea sola alrededor del casco. Se elige idioma y calidad, se toca JUGAR y
    la cámara vuelve a las manos del jugador con un fundido de un segundo.
 ============================================================================ */
-const MENU={activo:true, t:0, cen:{x:16,z:-16}};
+/* El casco de estancia está entre (46,-14) y (98,-31): la órbita se centra ahí
+   para que la postal tenga la casa, el galpón, los silos y el molino, y no un
+   pastizal vacío. */
+const MENU={activo:true, t:0, cen:{x:70,z:-26}};
 function moverMenu(dt){
   if(!MENU.activo) return;
   MENU.t+=dt;
-  /* órbita lenta y alta: es una postal, no una cámara de juego */
-  const a=MENU.t*0.055+2.1, r=34;
+  /* órbita lenta y algo elevada: es una postal, no una cámara de juego */
+  const a=MENU.t*0.045+2.35, r=54;
   PJ.x=MENU.cen.x+Math.cos(a)*r; PJ.z=MENU.cen.z+Math.sin(a)*r;
-  PJ.vx=PJ.vz=0; PJ.rapidez=0;
+  PJ.y=3.4; PJ.vx=PJ.vz=PJ.vy=0; PJ.rapidez=0;
   PJ.yaw=Math.atan2(-(MENU.cen.x-PJ.x), -(MENU.cen.z-PJ.z));
-  PJ.cabeceo=-0.06+Math.sin(MENU.t*0.19)*0.035;
+  PJ.cabeceo=-0.10+Math.sin(MENU.t*0.19)*0.030;
+  /* el cuerpo no se dibuja mientras la cámara pasea: iría flotando */
+  if(PJ3.listo) PJ3.activo=false;
 }
 function arrancarJuego(){
   if(!MENU.activo) return;
   MENU.activo=false;
   const m=$('menu'); if(m){ m.classList.add('ida'); setTimeout(()=>{ m.style.display='none'; }, 1000); }
-  PJ.x=0; PJ.z=0; PJ.vx=PJ.vz=0; PJ.yaw=0.6; PJ.cabeceo=-0.06;
+  PJ.x=0; PJ.z=0; PJ.y=0; PJ.vx=PJ.vz=PJ.vy=0; PJ.yaw=0.6; PJ.cabeceo=-0.06;
+  PJ3.activo=true;
   ponerCamara(0.016); seguirPasto(camara.position.x, camara.position.z);
   const a=$('ayuda'); if(a){ a.textContent=L.ayuda; a.style.opacity='1'; }
   setTimeout(esconderAyuda, 11000);
@@ -4284,13 +4289,16 @@ function moverFinal(dt){
      tamaño —un disco entero flotando parece una luna, medio disco cortado por
      el campo parece que se te viene encima—. */
   const sube=ramp(16,46);
-  const R=lerp(0.06, 0.46, sube);
+  /* 0.55 rad de radio son 63 grados de disco: mas ancho que el alto entero de
+     la pantalla. Es la unica forma de que se lea como "cubre el horizonte" y
+     no como una luna grande. */
+  const R=lerp(0.06, 0.55, sube);
   cieloMat.uniforms.uAstroR.value=R;
-  cieloMat.uniforms.uAstro.value=Math.min(1, ramp(16,26)+0.0);
+  cieloMat.uniforms.uAstro.value=ramp(16,26);
   _fdir.set(cieloMat.uniforms.uAstroDir.value.x, 0, cieloMat.uniforms.uAstroDir.value.z).normalize();
   /* el centro va bajando a medida que crece: el borde de arriba sube, el de
      abajo se hunde en el campo */
-  const yc=lerp(-0.02, -R*0.42, sube);
+  const yc=lerp(-0.02, -R*0.30, sube);
   cieloMat.uniforms.uAstroDir.value.set(_fdir.x, yc, _fdir.z).normalize();
 
   /* 4 · se enciende. Sube el velo y el bloom: es la corona comiéndose el
@@ -4396,6 +4404,17 @@ window.__dbg={
     return {mn,mx,fondoPct:+(100*fondo/(n*n)).toFixed(2),
             mat:Array.from(e).map(v=>+v.toFixed(5)), on:SOM_U.uSomOn.value, q}; },
   calidad(n){ autoNivel=(n===undefined); if(n!==undefined){ nivel=n; aplicarNivel(); } return nivel; },
+  /* menu, idioma y cierre de escena, para poder verlos sin jugar diez minutos */
+  jugar(){ arrancarJuego(); },
+  idioma(c){ aplicarIdioma(c); return IDI; },
+  get menu(){ return {activo:MENU.activo, t:+MENU.t.toFixed(1), idioma:IDI}; },
+  final(t){ arrancarFinal(); if(t!==undefined) FIN.t=t; },
+  get fin(){ return {activo:FIN.activo, t:+FIN.t.toFixed(1),
+    noche:+cieloMat.uniforms.uNoche.value.toFixed(3),
+    astro:+cieloMat.uniforms.uAstro.value.toFixed(3),
+    R:+cieloMat.uniforms.uAstroR.value.toFixed(3),
+    dir:cieloMat.uniforms.uAstroDir.value.toArray().map(v=>+v.toFixed(3))}; },
+  get solDir(){ return [+SOL.x.toFixed(3),+SOL.y.toFixed(3),+SOL.z.toFixed(3)]; },
   get piezas(){ let n=0,t=0; escena.traverse(o=>{ if(o.isMesh&&o.visible){ n++;
     const g=o.geometry, ic=g.instanceCount||1;
     t+=(g.index? g.index.count/3 : g.attributes.position.count/3)*ic; } });
