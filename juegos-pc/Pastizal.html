@@ -295,6 +295,68 @@ const HUELLA_GLSL=`
     return som*smoothstep(0.02,0.20,luz.y);
   }`;
 
+
+/* ============================================================================
+   ATMOSFERA Y NUBES
+   Lo que hace que un campo se vea real no son los objetos: es el AIRE que hay
+   entre uno y ellos, y la luz que se mueve por encima. Estas dos funciones las
+   comparten el cielo, el suelo, las briznas y los edificios, asi que todos
+   cuentan la misma historia del mismo dia.
+============================================================================ */
+const ATMOS_GLSL=`
+  /* Dispersion de Rayleigh (el azul del cielo) y de Mie (el halo blanco
+     alrededor del sol, que son las particulas grandes). Los coeficientes van
+     en las proporciones reales entre canales; la escala es de gusto. */
+  const vec3 BETA_R=vec3(5.8,13.5,33.1)*0.052;
+  const vec3 BETA_M=vec3(21.0,21.0,21.0)*0.0098;
+  float faseR(float mu){ return 0.0596831*(1.0+mu*mu); }
+  float faseM(float mu, float g){
+    float g2=g*g;
+    return 0.1193662*((1.0-g2)*(1.0+mu*mu))/((2.0+g2)*pow(max(1.0+g2-2.0*g*mu,1e-4),1.5));
+  }
+  /* espesor de aire mirando en una direccion: crece muchisimo hacia el horizonte */
+  float masaAire(float y){ return 1.0/(max(y,0.0)+0.14); }
+
+  vec3 atmosfera(vec3 dir, vec3 sol, vec3 solc){
+    float mu=dot(dir,sol);
+    float mv=masaAire(dir.y), ms=masaAire(sol.y);
+    /* lo que le queda al sol despues de cruzar la atmosfera hasta ese punto:
+       es lo que pone el horizonte naranja al atardecer, sin trucos */
+    vec3 ext=exp(-(BETA_R+BETA_M)*ms*0.42);
+    vec3 disp=(BETA_R*faseR(mu)+BETA_M*faseM(mu,0.76))*mv*2.9;
+    vec3 col=disp*ext*solc;
+    /* el ozono le come un poco el naranja al cenit y deja el azul mas limpio */
+    col*=mix(vec3(1.0), vec3(0.92,0.97,1.06), clamp(dir.y*1.3,0.0,1.0));
+    return col;
+  }
+  /* PERSPECTIVA AEREA: la misma cuenta, pero para lo que hay a media distancia.
+     No es una niebla gris: es aire azul con el sol dispersandose adentro, y por
+     eso lo lejano se aclara Y se tine hacia donde esta el sol. */
+  vec3 aereo(vec3 col, vec3 W, vec3 ojo, vec3 sol, vec3 solc, float k){
+    vec3 dv=W-ojo; float d=length(dv); dv/=max(d,1e-4);
+    float mu=dot(dv,sol);
+    vec3 tau=(BETA_R+BETA_M)*k*d*0.55;
+    vec3 trans=exp(-tau);
+    vec3 disp=(BETA_R*faseR(mu)+BETA_M*faseM(mu,0.72))*d*k*2.1*solc
+              *(0.35+0.65*max(sol.y,0.0));
+    return col*trans+disp;
+  }`;
+
+const NUBES_GLSL=`
+  /* SOMBRAS DE NUBES. Es de los efectos que mas realismo dan por lo poco que
+     cuestan: manchones que cruzan el campo con el viento y le apagan la luz al
+     pasar. Sin esto un campo abierto se ve siempre igual de plano.
+     Se muestrea el campo de nubes EN EL PLANO DE LAS NUBES, o sea proyectando
+     el punto del suelo hacia el sol: por eso al atardecer las sombras se
+     estiran kilometros, como pasa de verdad. */
+  float sombraNube(vec2 P, float t, vec3 sol){
+    vec2 q=P + sol.xz/max(sol.y,0.12)*900.0;   // proyeccion al plano de nubes
+    q=q*0.0016 + vec2(t*0.0075, t*0.0042);     // el viento
+    float n=fbm(q)*0.62+fbm(q*2.7+13.1)*0.38;
+    float s=smoothstep(0.44,0.72,n);
+    return s;
+  }`;
+
 /* ============================================================================
    EL CIELO Y EL SUELO
    Los dos procedurales: el cielo es un degradado con el disco del sol y su
@@ -312,16 +374,27 @@ const cieloMat=new THREE.ShaderMaterial({
     precision highp float;
     varying vec3 vD; uniform vec3 luz,uCenit,uHoriz,uSolC; uniform float uT;
     ${RUIDO_GLSL}
+    ${ATMOS_GLSL}
     void main(){
       vec3 d=normalize(vD);
       float h=clamp(d.y,-1.0,1.0);
       /* el degradado real del cielo no es lineal: se abre rápido cerca del
          horizonte y se aplana arriba */
-      vec3 col=mix(uHoriz, uCenit, pow(clamp(h,0.0,1.0), 0.42));
-      col=mix(col, uHoriz*0.86, clamp(-h*3.0,0.0,1.0));       // por debajo
+      /* El cielo sale de la DISPERSION, no de un degradado a mano: Rayleigh
+         para el azul, Mie para el halo, y la extincion del camino del sol para
+         el naranja del atardecer. Se mezcla con el degradado viejo para no
+         perder el control de los deslizadores. */
+      vec3 fis=atmosfera(d, luz, uSolC);
+      vec3 grad=mix(uHoriz, uCenit, pow(clamp(h,0.0,1.0), 0.42));
+      grad=mix(grad, uHoriz*0.86, clamp(-h*3.0,0.0,1.0));
+      vec3 col=mix(grad, fis, 0.60);
       float ds=max(dot(d, luz), 0.0);
-      col+=uSolC*pow(ds, 5.0)*0.22;                            // halo ancho
-      col+=uSolC*pow(ds, 1400.0)*16.0;                         // el disco
+      col+=uSolC*pow(ds, 5.0)*0.16;                            // halo ancho
+      /* el disco con OSCURECIMIENTO DE LIMBO: un sol real no es un plato
+         parejo, se apaga hacia el borde */
+      float disco=smoothstep(0.99960, 0.99990, ds);
+      float limbo=sqrt(max(1.0-pow(clamp((1.0-ds)/0.0004,0.0,1.0),2.0),0.0));
+      col+=uSolC*disco*(0.50+0.50*limbo)*18.0;
       /* nubes finas: dos capas de ruido estiradas y desplazadas, sólo arriba */
       if(h>0.02){
         vec2 p=d.xz/max(h,0.02);
@@ -340,17 +413,19 @@ cielo.frustumCulled=false; escena.add(cielo);
 const matSuelo=new THREE.ShaderMaterial({
   uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
     uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
-    uFogD:{value:nieblaD} }, HUELLA_U, PIS_U),
+    uFogD:{value:nieblaD}, uT:{value:0} }, HUELLA_U, PIS_U),
   /* el plano sigue al jugador, así que la posición del mundo hay que sacarla de
      la matriz del objeto y no del atributo, o los manchones viajarían con uno */
   vertexShader:`varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.0);
     vW=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`,
   fragmentShader:`
     precision highp float;
-    varying vec3 vW; uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
+    varying vec3 vW; uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD,uT;
     ${RUIDO_GLSL}
     ${HUELLA_GLSL}
     ${PIS_GLSL}
+    ${ATMOS_GLSL}
+    ${NUBES_GLSL}
     ${NIEBLA_GLSL}
     void main(){
       /* el mismo campo de manchones que decide la altura del pasto, para que el
@@ -372,9 +447,11 @@ const matSuelo=new THREE.ShaderMaterial({
       col=mix(col, col*vec3(0.70,0.66,0.58), pis*0.55);
       /* la sombra que tira el edificio sobre el campo */
       float som=sombraSol(vW.xz, luz);
-      float lamb=0.30+0.70*max(luz.y,0.0)*(1.0-som*0.82);
-      col*=lamb*uSolC*1.35 + uCielo*(0.22+som*0.10);
-      gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
+      float nub=sombraNube(vW.xz, uT, luz);
+      float lamb=0.30+0.70*max(luz.y,0.0)*(1.0-som*0.82)*(1.0-nub*0.55);
+      col*=lamb*uSolC*1.35 + uCielo*(0.22+som*0.10+nub*0.06);
+      col=aereo(col, vW, uOjo, luz, uSolC, uFogD*95.0);
+      gl_FragColor=vec4(col,1.0);
     }`
 });
 MATS.push(matSuelo);
@@ -424,10 +501,11 @@ function crearCampo(o){
       uniform float uAltoMin,uAltoMax,uT,uViento,uArco,uAltoK,uDens,uRJug;
       uniform vec3 uJug,uOjo;
       uniform vec3 luz;              // la necesita sombraSol, que corre por brizna
-      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom;
+      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom,vNub;
       ${RUIDO_GLSL}
       ${HUELLA_GLSL}
       ${PIS_GLSL}
+      ${NUBES_GLSL}
       void main(){
         /* la celda del mundo que le toca a esta brizna */
         vec2 g=uBase+mod(iIdx-uBase, vec2(uN));
@@ -490,13 +568,15 @@ function crearCampo(o){
         vNor=normalize(nor + lat3*lado*0.55);
         vV=v; vTono=0.80+r2*0.40; vSeco=smoothstep(0.72,1.0,r6);
         vSom=sombraSol(P, luz);          // la sombra se calcula una vez por brizna
+        vNub=sombraNube(P, uT, luz);     // y la nube que pasa por encima
         vTono*=1.0-0.28*pis;             // lo pisado se ve mas apagado y seco
         gl_Position=projectionMatrix*viewMatrix*vec4(W,1.0);
       }`,
     fragmentShader:`
       precision highp float;
       uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
-      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom;
+      varying vec3 vW,vNor; varying float vV,vTono,vSeco,vLejos,vSom,vNub;
+      ${ATMOS_GLSL}
       ${NIEBLA_GLSL}
       void main(){
         vec3 N=normalize(vNor);
@@ -506,7 +586,7 @@ function crearCampo(o){
         vec3 col=mix(vec3(0.030,0.082,0.020), vec3(0.190,0.430,0.070), pow(vV,0.80));
         col=mix(col, vec3(0.360,0.320,0.095), vSeco*0.50);
         col*=vTono;
-        float ndl=max(dot(N,luz),0.0)*(1.0-vSom*0.85);
+        float ndl=max(dot(N,luz),0.0)*(1.0-vSom*0.85)*(1.0-vNub*0.58);
         float lamb=0.26+0.80*ndl;
         /* translucidez: a contraluz la hoja se prende */
         float atras=pow(max(dot(-E,luz),0.0),2.4)*0.85*vV;
@@ -988,9 +1068,10 @@ function geometriaDe(){
 
 /* --------------------------------------------------------------- material */
 const matEdificio=new THREE.ShaderMaterial({
-  uniforms:{ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
+  uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
              uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()},
-             uHoriz:{value:HORIZ.clone()}, uFogD:{value:nieblaD} },
+             uHoriz:{value:HORIZ.clone()}, uFogD:{value:nieblaD},
+             uT:{value:0} }, HUELLA_U),
   vertexShader:`
     precision highp float;
     attribute float tipo; attribute vec2 uvm;
@@ -1003,8 +1084,11 @@ const matEdificio=new THREE.ShaderMaterial({
   fragmentShader:`
     precision highp float;
     varying vec3 vW,vN,vC; varying float vT; varying vec2 vU;
-    uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD;
+    uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD,uT;
     ${RUIDO_GLSL}
+    ${HUELLA_GLSL}
+    ${ATMOS_GLSL}
+    ${NUBES_GLSL}
     ${NIEBLA_GLSL}
     void main(){
       /* Con DoubleSide la cara de atras trae la normal al reves y se ilumina
@@ -1124,8 +1208,12 @@ const matEdificio=new THREE.ShaderMaterial({
       vec3 Fr=F0+(max(vec3(1.0-rug),F0)-F0)*pow(1.0-NdV,5.0);
       vec3 ambiente=kd*col*irr*0.62 + Fr*irr*0.32*(1.0-rug*0.75);
 
-      col=difusa+brilloSol+ambiente;
-      gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
+      /* la nube que pasa tambien apaga los edificios: si no, la casa queda a
+         pleno sol mientras el campo alrededor esta en sombra */
+      float nub=sombraNube(vW.xz, uT, luz);
+      col=difusa*(1.0-nub*0.55)+brilloSol*(1.0-nub*0.75)+ambiente*(1.0-nub*0.12);
+      col=aereo(col, vW, uOjo, luz, uSolC, uFogD*95.0);
+      gl_FragColor=vec4(col,1.0);
     }`,
   vertexColors:true, side:THREE.DoubleSide
 });
@@ -1715,6 +1803,8 @@ function bucle(ahora){
   PASTO_U.uOjo.value.copy(camara.position);
   matSuelo.uniforms.uOjo.value.copy(camara.position);
   matEdificio.uniforms.uOjo.value.copy(camara.position);
+  matEdificio.uniforms.uT.value=T;
+  matSuelo.uniforms.uT.value=T;
   for(let i=0;i<RUEDAS.length;i++) RUEDAS[i].rotation.z-=dt*(0.85+i*0.13);
   cieloMat.uniforms.uT.value=T;
   cielo.position.copy(camara.position);
