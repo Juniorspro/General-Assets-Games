@@ -246,6 +246,110 @@ function levantarPasto(dt){
   pisTex.needsUpdate=true;
 }
 
+
+/* ============================================================================
+   INTERIORES
+   Adentro de una casa la luz no es la de afuera bajada de volumen: es OTRA
+   luz. El sol directo no entra salvo por donde hay un hueco, y por ese hueco
+   entra un chorro que dibuja un rectangulo nitido en el piso y en la pared de
+   enfrente. El resto de lo que se ve es rebote: el cielo que entra difuso por
+   las aberturas y lo que rebota de las paredes.
+
+   Aca se resuelve con dos cosas, las dos exactas y baratas:
+
+   · UNA CAJA por interior. Si el punto esta adentro, el sol y el cielo se
+     cortan; queda el rebote calido, que es lo que se ve de verdad.
+   · UN TEST DE VISIBILIDAD POR ABERTURA. Desde el punto se tira el rayo hacia
+     el sol y se pregunta si cruza el rectangulo de alguna ventana o puerta. Si
+     lo cruza, ese punto ve el sol y se prende. Eso da el paño de luz en el
+     piso, movido segun la hora, sin ningun mapa de sombras.
+============================================================================ */
+const INT_MAX=4, VENT_MAX=10;
+const INTERIORES=[], VENTANAS=[];
+const INT_U={
+  uInt:{value:Array.from({length:INT_MAX},()=>new THREE.Vector4(0,0,-1,-1))},
+  uIntRA:{value:Array.from({length:INT_MAX},()=>new THREE.Vector2(0,0))},
+  uIntN:{value:0},
+  uVent:{value:Array.from({length:VENT_MAX},()=>new THREE.Vector4(0,0,0,0))},
+  uVentHW:{value:Array.from({length:VENT_MAX},()=>new THREE.Vector2(0,0))},
+  uVentN:{value:0}
+};
+function volcarInteriores(){
+  const n=Math.min(INT_MAX, INTERIORES.length);
+  for(let i=0;i<n;i++){
+    const c=INTERIORES[i];
+    INT_U.uInt.value[i].set(c.x, c.z, c.hx, c.hz);
+    INT_U.uIntRA.value[i].set(c.rot, c.alto);
+  }
+  INT_U.uIntN.value=n;
+  const m=Math.min(VENT_MAX, VENTANAS.length);
+  for(let i=0;i<m;i++){
+    const v=VENTANAS[i];
+    INT_U.uVent.value[i].set(v.x, v.y, v.z, v.rot);
+    INT_U.uVentHW.value[i].set(v.hw, v.hh);
+  }
+  INT_U.uVentN.value=m;
+}
+const INT_GLSL=`
+  uniform vec4 uInt[${INT_MAX}]; uniform vec2 uIntRA[${INT_MAX}]; uniform int uIntN;
+  uniform vec4 uVent[${VENT_MAX}]; uniform vec2 uVentHW[${VENT_MAX}]; uniform int uVentN;
+
+  /* 1 adentro, 0 afuera, con un borde suave de medio metro en las aberturas */
+  float dentroCasa(vec3 W){
+    float d=0.0;
+    for(int i=0;i<${INT_MAX};i++){
+      if(i>=uIntN) break;
+      float a=-uIntRA[i].x, c=cos(a), s=sin(a);
+      vec2 q=W.xz-uInt[i].xy;
+      vec2 l=vec2(q.x*c-q.y*s, q.x*s+q.y*c);
+      vec2 e=uInt[i].zw;
+      float dentro=min(e.x-abs(l.x), e.y-abs(l.y));
+      float techo=1.0-smoothstep(uIntRA[i].y-0.15, uIntRA[i].y+0.35, W.y);
+      d=max(d, clamp(dentro/0.55,0.0,1.0)*techo*step(-0.05,W.y));
+    }
+    return d;
+  }
+
+  /* Cuanto sol le llega a este punto a traves de las aberturas. Se tira el rayo
+     al sol y se busca si cruza el rectangulo de alguna: eso es exactamente lo
+     que hace una sombra, sin mapa de sombras y sin marchar nada. */
+  float solPorVentana(vec3 W, vec3 sol){
+    if(sol.y<=0.02) return 0.0;
+    float total=0.0;
+    for(int i=0;i<${VENT_MAX};i++){
+      if(i>=uVentN) break;
+      vec3 c=uVent[i].xyz;
+      float rot=uVent[i].w;
+      vec3 nor=vec3(-sin(rot), 0.0, cos(rot));     // normal del muro
+      float dn=dot(nor, sol);
+      if(abs(dn)<1e-3) continue;
+      float t=dot(nor, c-W)/dn;                    // hasta el plano del muro
+      if(t<=0.0) continue;
+      vec3 P=W+sol*t;
+      vec3 d=P-c;
+      float a=d.x*cos(rot)+d.z*sin(rot);           // a lo largo del muro
+      float b=d.y;                                 // altura
+      vec2 hw=uVentHW[i];
+      /* borde suave: una abertura real no da un filo perfecto, el marco tiene
+         espesor y el sol tiene medio grado de tamaño */
+      float fx=1.0-smoothstep(hw.x*0.78, hw.x, abs(a));
+      float fy=1.0-smoothstep(hw.y*0.78, hw.y, abs(b));
+      total=max(total, fx*fy);
+    }
+    return total;
+  }
+  /* Luz difusa del cielo entrando por las aberturas: cae con la distancia a la
+     abertura mas cercana. Es lo que ilumina el resto del cuarto. */
+  float cieloPorVentana(vec3 W){
+    float mejor=0.0;
+    for(int i=0;i<${VENT_MAX};i++){
+      if(i>=uVentN) break;
+      float d=length(W-uVent[i].xyz);
+      mejor=max(mejor, 1.0-smoothstep(0.6, 6.5, d));
+    }
+    return mejor;
+  }`;
+
 const HUELLA_MAX=20;
 const HUELLAS=[];
 const HUELLA_U={
@@ -422,7 +526,7 @@ cielo.frustumCulled=false; escena.add(cielo);
 const matSuelo=new THREE.ShaderMaterial({
   uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
     uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()}, uHoriz:{value:HORIZ.clone()},
-    uFogD:{value:nieblaD}, uT:{value:0} }, HUELLA_U, PIS_U),
+    uFogD:{value:nieblaD}, uT:{value:0} }, HUELLA_U, PIS_U, INT_U),
   /* el plano sigue al jugador, así que la posición del mundo hay que sacarla de
      la matriz del objeto y no del atributo, o los manchones viajarían con uno */
   vertexShader:`varying vec3 vW; void main(){ vec4 w=modelMatrix*vec4(position,1.0);
@@ -433,6 +537,7 @@ const matSuelo=new THREE.ShaderMaterial({
     ${RUIDO_GLSL}
     ${HUELLA_GLSL}
     ${PIS_GLSL}
+    ${INT_GLSL}
     ${ATMOS_GLSL}
     ${NUBES_GLSL}
     ${NIEBLA_GLSL}
@@ -958,7 +1063,14 @@ function casco(X,Z,rot){
   const ch=R(A/2-2.2, -0.7);
   caja(ch[0],alto+0.6,ch[1], 0.72,1.85,0.72, rot, COL.ladrillo, T_LADRILLO, false);
   caja(ch[0],alto+2.45,ch[1], 0.95,0.14,0.95, rot, COL.ladrillo, T_LADRILLO, false);
-  HUELLAS.push({x:X,z:Z,r:Math.max(A,F)*0.62});
+  HUELLAS.push({x:X,z:Z,r:Math.max(A,F)*0.62, alto:alto+1.85});
+  /* el volumen de adentro y cada abertura, para la luz interior */
+  INTERIORES.push({x:X,z:Z,hx:A/2-gr*0.6,hz:F/2-gr*0.6,rot,alto:alto+1.6});
+  for(const hu of frente){
+    const rot2=Math.atan2(e2[1]-e1[1], e2[0]-e1[0]);
+    const px=e1[0]+Math.cos(rot2)*hu.u, pz=e1[1]+Math.sin(rot2)*hu.u;
+    VENTANAS.push({x:px, y:hu.y+hu.h*0.5, z:pz, rot:rot2, hw:hu.w*0.5, hh:hu.h*0.5});
+  }
 }
 
 /* -------------------------------------------------------------- el galpon */
@@ -985,7 +1097,7 @@ function galpon(X,Z,rot){
     caja((p1[0]+p2[0])/2, alto, (p1[1]+p2[1])/2, 0.14, 0.14, F-0.6, rot, COL.hierro, T_HIERRO, false);
   }
   caja(X,0.0,Z, A-0.4, 0.05, F-0.4, rot, COL.zocalo, T_LADRILLO, false);
-  HUELLAS.push({x:X,z:Z,r:A*0.52});
+  HUELLAS.push({x:X,z:Z,r:A*0.52, alto:alto+1.5});
   HUELLAS.push({x:R(-A*0.28,0)[0],z:R(-A*0.28,0)[1],r:F*0.6});
   HUELLAS.push({x:R( A*0.28,0)[0],z:R( A*0.28,0)[1],r:F*0.6});
 }
@@ -1119,7 +1231,7 @@ const matEdificio=new THREE.ShaderMaterial({
   uniforms:Object.assign({ luz:{value:SOL.clone()}, uOjo:{value:new THREE.Vector3()},
              uSolC:{value:SOLC.clone()}, uCielo:{value:CIELO.clone()},
              uHoriz:{value:HORIZ.clone()}, uFogD:{value:nieblaD},
-             uT:{value:0} }, HUELLA_U),
+             uT:{value:0} }, HUELLA_U, INT_U),
   vertexShader:`
     precision highp float;
     attribute float tipo; attribute vec2 uvm;
@@ -1135,6 +1247,7 @@ const matEdificio=new THREE.ShaderMaterial({
     uniform vec3 luz,uOjo,uSolC,uCielo,uHoriz; uniform float uFogD,uT;
     ${RUIDO_GLSL}
     ${HUELLA_GLSL}
+    ${INT_GLSL}
     ${ATMOS_GLSL}
     ${NUBES_GLSL}
     ${NIEBLA_GLSL}
@@ -1244,6 +1357,7 @@ const matEdificio=new THREE.ShaderMaterial({
          renormaliza: es barato y saca de un plumazo el tinte azul de todo lo
          que esta de espaldas. El especular NO se envuelve, ese si es directo. */
       float NdLw=max((dot(N,Lv)+0.34)/1.34, 0.0);
+      vec3 col0=col;                       // el albedo, antes de iluminar
       vec3 difusa=kd*col/3.14159265*uSolC*3.2*NdLw;
       vec3 brilloSol=espec*uSolC*3.2*NdL;
 
@@ -1260,6 +1374,24 @@ const matEdificio=new THREE.ShaderMaterial({
          pleno sol mientras el campo alrededor esta en sombra */
       float nub=sombraNube(vW.xz, uT, luz);
       col=difusa*(1.0-nub*0.55)+brilloSol*(1.0-nub*0.75)+ambiente*(1.0-nub*0.12);
+
+      /* ------------------------------- ADENTRO -------------------------------
+         Se corta el sol y casi todo el cielo, y se reemplazan por lo que de
+         verdad ilumina un cuarto: el paño de luz que entra por las aberturas y
+         el rebote calido de las paredes. La diferencia con "lo mismo pero mas
+         oscuro" es justamente esta: el contraste se da vuelta —el piso junto a
+         la ventana queda mas claro que la pared del fondo— y eso es lo que hace
+         que se lea como interior. */
+      float dentro=dentroCasa(vW);
+      if(dentro>0.001){
+        float haz=solPorVentana(vW+N*0.02, luz);
+        float dif=cieloPorVentana(vW);
+        vec3 rebote=vec3(0.055,0.048,0.040)*(kd*col0+vec3(0.02));
+        vec3 luzInt = uSolC*haz*max(dot(N,luz),0.0)*2.7            // el pano de sol
+                    + cieloLuz*dif*0.42*(0.45+0.55*max(N.y,0.0))   // cielo por la abertura
+                    + rebote*3.0;                                  // rebote de las paredes
+        col=mix(col, luzInt, dentro);
+      }
       col=aereo(col, vW, uOjo, luz, uSolC, uFogD);
       gl_FragColor=vec4(col,1.0);
     }`,
@@ -1294,7 +1426,15 @@ ruedaDelMolino(46, -14, 9.5);
   const c=R(0,0);
   caja(c[0],0.26,c[1], A-gr, 0.05, F-gr, rot, COL.madera, T_MADERA, false);
   techoDosAguas(c[0],alto,c[1], A, F, 1.05, 0.42, COL.chapaVieja, T_CHAPA, COL.calSombra, rot);
-  HUELLAS.push({x:X,z:Z,r:A*0.72});
+  HUELLAS.push({x:X,z:Z,r:A*0.72, alto:alto+1.05});
+  INTERIORES.push({x:X,z:Z,hx:A/2-gr*0.6,hz:F/2-gr*0.6,rot,alto:alto+0.9});
+  {
+    const rot2=Math.atan2(e2[1]-e1[1], e2[0]-e1[0]);
+    for(const hu of [{u:A/2,y:0,w:1.05,h:2.05},{u:1.4,y:1.0,w:0.85,h:0.95}]){
+      const px=e1[0]+Math.cos(rot2)*hu.u, pz=e1[1]+Math.sin(rot2)*hu.u;
+      VENTANAS.push({x:px, y:hu.y+hu.h*0.5, z:pz, rot:rot2, hw:hu.w*0.5, hh:hu.h*0.5});
+    }
+  }
 })(-96, 74, -0.6);
 molino(-88, 66);
 ruedaDelMolino(-88, 66, 9.5);
@@ -1311,6 +1451,7 @@ escena.add(mallaEdificios);
 /* las huellas ya estan todas: se vuelcan a los uniformes que miran el pasto
    y el suelo, y de ahi en mas el pastizal sabe que hay algo encima */
 volcarHuellas();
+volcarInteriores();
 
 const PJ_URL='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@237dfb6586/mundo/pj/soldado.glb';
 
