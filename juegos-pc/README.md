@@ -1802,6 +1802,52 @@ que el resto — y sólo las mira el personaje.
 El modelo son 2 MB y se baja **en segundo plano**: el campo anda desde el
 primer cuadro y si el cuerpo no llega, se juega igual.
 
+### El cielo 360, el río y los interiores
+
+**La panorámica 360 va como CAPA DE NUBES sobre el cielo calculado, no en su
+lugar.** A propósito: la foto trae la estructura de nube que ninguna cuenta te
+da, pero el degradado, el color de la hora y el sol siguen saliendo de la
+dispersión, porque son los mismos que iluminan el pasto. Pegando la foto entera,
+al mover el sol el cielo se quedaría quieto mientras el campo cambia, y eso
+canta de lejos. De la foto se toma sólo lo que sobresale de su propio cielo de
+fondo —o sea la forma de la nube— y se la vuelve a iluminar con el sol de la
+escena. La costura se fundió a mano sobre 160 px antes de subirla.
+
+**El río tiene la línea del cauce ANALÍTICA**, una senoide. Eso importa más de
+lo que parece: el pasto, el suelo, la geometría de las barrancas y el agua
+consultan todos la misma curva con una línea de cuenta, en vez de pasarse una
+lista de puntos. Curvas gratis y siempre coinciden entre sí.
+
+El agua no es simulación de fluidos —eso no entra en un cuadro— pero sí tiene lo
+que hace que el ojo lea agua: normal de tres capas de olas corriendo río abajo,
+Fresnel (de frente se ve el fondo, de canto el cielo), reflejo calculado con la
+**misma función de dispersión** que el cielo real, absorción tipo Beer (el rojo
+se va primero con la profundidad), refracción del lecho movida por la propia
+ola, destellos del sol rotos sobre las crestas y espuma contra las orillas.
+
+**Un bug que sólo se ve mirando:** el suelo es un plano infinito a y=0 y el agua
+va más abajo, así que el plano tapaba el río entero. El suelo ahora descarta el
+canal.
+
+**Interiores.** Adentro de una casa la luz no es la de afuera bajada de volumen:
+es otra luz. Se resuelve con dos cosas exactas y baratas:
+
+- **Una caja por interior.** Si el punto está adentro, se cortan el sol y casi
+  todo el cielo; queda el rebote cálido.
+- **Un test de visibilidad por abertura.** Desde el punto se tira el rayo hacia
+  el sol y se pregunta si cruza el rectángulo de alguna ventana o puerta. Si lo
+  cruza, ese punto ve el sol. Eso da **el paño de luz en el piso**, movido según
+  la hora, sin ningún mapa de sombras.
+
+Lo que hace que se lea como interior no es que esté más oscuro: es que **el
+contraste se da vuelta** — el piso junto a la ventana queda más claro que la
+pared del fondo.
+
+**El suelo de tierra** pasó de una sola frecuencia de sesenta centímetros —un
+manchón marrón a medio metro del ojo— a cuatro escalas, con pedregullo, grietas
+de barro seco y relieve por derivadas del propio ruido, todo desvanecido con la
+distancia para que no aliasee.
+
 ### El render, efecto por efecto
 
 **Luz y materiales (28)** — dispersión de Rayleigh · dispersión de Mie ·
