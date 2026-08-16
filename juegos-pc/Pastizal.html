@@ -1178,12 +1178,15 @@ const cieloMat=new THREE.ShaderMaterial({
       }
 
       /* ----------------------------------------------------------- EL RAYO
-         Cuando el astro termino de crecer, DISPARA. Es el gesto final de
-         Nullscapes —el sol del fondo estallando— y todo pasa en un marco 2D
-         pegado a la direccion del astro: dos vectores tangentes y una
-         coordenada polar. Eso es lo que permite que la estrella gire, que los
-         anillos salgan y que la columna palpite sin que cueste nada: son
-         cuatro senos sobre dos numeros que ya estaban calculados. */
+         Un HAZ ANGOSTO Y BLANCO que sale del centro del astro y se va derecho
+         al cenit. Lo que lo hace leer como rayo y no como una franja pintada
+         son tres cosas: un nucleo casi puntual —diez milirradianes— que satura
+         de blanco, un halo cinco veces mas ancho que le da el cuerpo, y que los
+         dos se apaguen hacia arriba pero NO del todo, porque un haz que termina
+         en el borde del cuadro se sigue leyendo como infinito.
+         Todo vive en un marco 2D pegado a la direccion del astro: dos vectores
+         tangentes y una coordenada polar. Por eso la estrella gira, los anillos
+         salen y el haz tiembla sin que cueste practicamente nada. */
       if(uRayo>0.001){
         vec3 A=normalize(uAstroDir);
         vec3 ex=normalize(cross(vec3(0.0,1.0,0.0), A));
@@ -1194,30 +1197,34 @@ const cieloMat=new THREE.ShaderMaterial({
         float th=atan(q.y,q.x);
         float e=0.0;
 
-        /* 1 · LA COLUMNA AL CENIT. Angosta, de filo difuso, y late: el ancho
-           respira con el tiempo, que es lo que separa un haz vivo de un
-           triangulo blanco pegado en el cielo. */
-        float anc=0.028+0.018*sin(uT*3.1)+0.010*sin(uT*7.7+1.3);
-        float col1=exp(-abs(q.x)/anc)*smoothstep(-0.03,0.20,q.y);
-        col1*=exp(-max(q.y-1.15,0.0)*2.4);
-        /* y unas vetas que suben por dentro de la columna */
-        col1*=0.72+0.28*sin(q.y*22.0-uT*5.5)*sin(q.y*7.0-uT*2.1);
-        e+=col1*2.1;
+        /* 1 · EL HAZ. Nucleo + halo, y una turbulencia lenta que le corre el
+           eje unos milirradianes: sin eso es un rectangulo blanco. */
+        float on1=sin(q.y*3.1-uT*1.7)*0.004 + sin(q.y*9.3+uT*2.9)*0.0018;
+        float dx=abs(q.x-on1);
+        float arriba=smoothstep(-0.015, 0.075, q.y);
+        float largo=exp(-max(q.y-1.45,0.0)*1.6);
+        float nucleo=exp(-dx/0.0085);
+        float halo  =exp(-dx/0.052);
+        /* las vetas que suben por dentro, que es lo que lo hace parecer que
+           algo VIAJA hacia arriba y no que hay una luz encendida */
+        float veta=0.80+0.20*sin(q.y*30.0-uT*7.0)+0.10*sin(q.y*11.0-uT*2.6);
+        e+=(nucleo*7.5 + halo*1.25)*arriba*largo*veta;
 
-        /* 2 · LA ESTRELLA DE RAYOS, girando. Dos familias a distinta velocidad
+        /* 2 · LA BASE. Donde el haz sale del astro hay un nudo de luz: es de
+           donde nace todo y sin el, el haz parece apoyado y no disparado. */
+        e+=exp(-(dx*dx*900.0 + max(q.y,0.0)*max(q.y,0.0)*260.0))*5.0;
+
+        /* 3 · LA ESTRELLA DE RAYOS, girando. Dos familias a distinta velocidad
            y distinto grosor: una sola da una rueda de carro. */
         float rayos=pow(abs(sin(th*9.0+uT*0.50)), 13.0)
                   + pow(abs(sin(th*18.0-uT*0.85)), 30.0)*0.55;
-        e+=rayos*exp(-max(r-uAstroR,0.0)*3.2)*1.35;
+        e+=rayos*exp(-max(r-uAstroR,0.0)*4.2)*0.95;
 
-        /* 3 · LOS ANILLOS que salen del centro y se abren */
+        /* 4 · LOS ANILLOS que salen del centro y se abren */
         float on=sin((r-uT*0.40)*24.0);
-        e+=pow(max(on,0.0), 10.0)*exp(-max(r-uAstroR*0.6,0.0)*2.2)*0.60;
+        e+=pow(max(on,0.0), 10.0)*exp(-max(r-uAstroR*0.6,0.0)*2.6)*0.45;
 
-        /* 4 · EL NUCLEO, de donde sale todo */
-        e+=exp(-r*r*26.0)*3.4;
-
-        col+=vec3(1.0,0.985,0.945)*e*uRayo;
+        col+=vec3(1.0,0.990,0.960)*e*uRayo;
       }
 
       /* --- las nubes volumetricas, sobre todo lo demas --- */
@@ -3177,7 +3184,12 @@ const matRayos=mkMat(`
          sol. Se pide el doble del umbral del bloom para entrar. */
       s*=smoothstep(1.6, 4.0, dot(s,vec3(0.2126,0.7152,0.0722)));
       acc+=s*ilum;
-      ilum*=uDecai;
+      /* EL DECAIMIENTO SE NORMALIZA POR PASO. Con 0,955 por muestra, veinticuatro
+         pasos llegan al final valiendo 0,33 y dieciseis valiendo 0,48: bajar la
+         calidad hacia los rayos MAS LARGOS Y MAS FUERTES, que es lo contrario de
+         lo que se pedia. Elevar el factor a 24/pasos deja el mismo perfil de
+         caida a lo largo del rayo con cualquier cantidad de muestras. */
+      ilum*=pow(uDecai, 24.0/float(uPasos));
     }
     gl_FragColor=vec4(acc*(uPeso/float(uPasos))*uVisible,1.0);
   }`,{t:{value:null},uSol:{value:new THREE.Vector2(0.5,0.5)},uPeso:{value:2.4},
@@ -3730,8 +3742,12 @@ function acomodarMandos(){
   mandos.style.width=CAJA.w+'px'; mandos.style.height=CAJA.h+'px';
   gm.setTransform(d,0,0,d,0,0);
   const m=Math.min(CAJA.w,CAJA.h);
-  bA.r=m*0.082; bA.x=CAJA.w-bA.r-m*0.055; bA.y=CAJA.h-bA.r-m*0.070;
-  bB.r=m*0.070; bB.x=bA.x-bA.r-bB.r*0.95; bB.y=bA.y-bA.r*0.62;
+  /* MAS GRANDES. Con 0,082 del lado corto el boton medía veinticinco pixeles
+     en un telefono: la mitad de lo que ocupa un pulgar. El area de toque ya era
+     1,3 veces el radio, pero un boton que no se VE grande no se toca con
+     confianza aunque se acierte. */
+  bA.r=m*0.108; bA.x=CAJA.w-bA.r-m*0.060; bA.y=CAJA.h-bA.r-m*0.075;
+  bB.r=m*0.086; bB.x=bA.x-bA.r-bB.r*0.90; bB.y=bA.y-bA.r*0.58;
 }
 /* ---------------------------------------------------------------- LOS ICONOS
    Dibujados con trazos, no con imagenes. Un PNG generado pesa cientos de
@@ -4616,7 +4632,12 @@ function moverFinal(dt){
   ponerSol(lerp(FIN.sol0, 0.055, ramp(0,9)));
 
   /* 2 · la noche */
-  const noche=ramp(3,15)*0.86;
+  /* La noche va POR DELANTE del astro a proposito: mientras uNoche no llego a
+     uno, el velo calido de la lente y la compensacion a contraluz siguen medio
+     encendidos, y si para entonces el astro ya es grande el cuadro entero sale
+     crema. Terminando la noche a los once y el astro a los diecisiete, el disco
+     crece sobre un cielo que ya es de noche. */
+  const noche=ramp(2,11)*0.86;
   cieloMat.uniforms.uNoche.value=noche;
   matGrado.uniforms.uNocheG.value=noche/0.86;
   /* la niebla se cierra un poco: de noche el campo no se ve hasta el fondo */
@@ -4627,13 +4648,29 @@ function moverFinal(dt){
      sesenta y tres grados. Se lo mantiene APENAS por debajo del horizonte para
      que lo corte el suelo — un disco entero flotando parece una luna; medio
      disco cortado por el campo parece que se te viene encima. */
-  const sube=ramp(4,17);
-  const R=lerp(0.05, 0.55, sube);
+  /* LOS RAYOS DE PANTALLA SE APAGAN CON EL ASTRO. La marcha radial siembra
+     desde todo lo muy brillante que hay en cuadro: con un disco de sesenta
+     grados valiendo siete en lineal, sembraba la pantalla entera y el cierre
+     salia lavado en crema en vez de negro con un sol blanco. Son rayos del sol
+     de la tarde; cuando ese sol ya se puso, no tienen nada que hacer. */
+  matGrado.uniforms.uRayos.value=RAYOS0*(1.0-cieloMat.uniforms.uAstro.value);
+
+  /* CRECE, SE APRIETA, DISPARA.
+     Primero el astro sube y crece hasta cubrir el horizonte —sesenta y tres
+     grados de disco, mas ancho que el alto de la pantalla—. Despues, justo
+     antes de disparar, SE CONTRAE: toda esa luz se junta en una cupula chica y
+     densa sobre la linea del campo, y de ahi sale el haz. La contraccion es lo
+     que convierte una postal en un gesto: si el sol dispara sin apretarse, el
+     rayo parece un adorno; si se aprieta primero, parece que junto fuerza. */
+  const sube=ramp(4,15);
+  const aprieta=ramp(17.2,19.2);
+  const R=lerp(lerp(0.05, 0.55, sube), 0.155, aprieta);
   cieloMat.uniforms.uAstroR.value=R;
   cieloMat.uniforms.uAstro.value=ramp(4,8);
   _fdir.set(cieloMat.uniforms.uAstroDir.value.x, 0,
             cieloMat.uniforms.uAstroDir.value.z).normalize();
-  const yc=lerp(-0.02, -R*0.30, sube);
+  /* apenas hundido: se ve una cupula sobre el horizonte, no un disco flotando */
+  const yc=lerp(lerp(-0.02, -R*0.30, sube), -R*0.16, aprieta);
   cieloMat.uniforms.uAstroDir.value.set(_fdir.x, yc, _fdir.z).normalize();
 
   /* 4 · CARGA Y DISPARO.
@@ -4641,8 +4678,8 @@ function moverFinal(dt){
      despues sale el rayo de golpe: la subida dura un segundo y pico contra los
      cuatro de la carga, y ese contraste ES el disparo. Despues queda encendido
      con un pulso lento, porque un final que se apaga enseguida no es un final. */
-  const carga=ramp(15,19.5);
-  const disparo=ramp(19.5,20.8);
+  const carga=ramp(16,19.0);
+  const disparo=ramp(19.0,20.2);
   const pulso=0.86+0.14*Math.sin(t*2.3)+0.06*Math.sin(t*5.9);
   cieloMat.uniforms.uRayo.value=Math.max(carga*0.30, disparo*pulso);
   if(disparo>0){
@@ -4650,7 +4687,7 @@ function moverFinal(dt){
   }
 
   /* 5 · fogonazo y cartel, montados sobre el disparo */
-  if(t>20.6 && !FIN.flash){
+  if(t>20.0 && !FIN.flash){
     FIN.flash=true;
     const f=$('flash');
     if(f){ f.style.transition='opacity .22s linear'; f.style.opacity='1';
@@ -4664,7 +4701,7 @@ function moverFinal(dt){
      y la columna de luz arriba. Solo se deja de calcular la rampa. */
   if(t>32) FIN.activo=false;
 }
-const BLOOM0=matGrado.uniforms.uBloom.value;
+const BLOOM0=matGrado.uniforms.uBloom.value, RAYOS0=matGrado.uniforms.uRayos.value;
 
 /* ------------------------------------------------------------- el cableado */
 (function armarMenu(){
