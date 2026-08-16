@@ -598,7 +598,10 @@ const cieloMat=new THREE.ShaderMaterial({
   side:THREE.BackSide, depthWrite:false,
   uniforms:{ luz:{value:SOL.clone()}, uCenit:{value:CIELO.clone()},
              uHoriz:{value:HORIZ.clone()}, uSolC:{value:SOLC.clone()}, uT:{value:0},
-             uPano:{value:texCielo}, uPanoK:{value:0.20},
+             /* La panoramica bajo de 0,20 a 0,12: con las nubes marchadas andando de
+                verdad, la foto ya no tiene que inventar el cielo. Se queda con
+                lo unico que aporta y la cuenta no da: los cirros de arriba. */
+             uPano:{value:texCielo}, uPanoK:{value:0.12},
              uOjoC:{value:new THREE.Vector3()},
              uPasosNube:{value:MOVIL?16:34}, uPasosLuz:{value:MOVIL?2:4},
              /* Con la densidad ya normalizada por el excedente real, el umbral
@@ -678,13 +681,22 @@ const cieloMat=new THREE.ShaderMaterial({
         float sombra=0.0;
         for(int j=1;j<=4;j++){
           if(j>uPasosLuz) break;
-          /* pasos de 160 m sobre un banco de mil: con cuatro se cruza medio
-             cumulo, que es lo que hace falta para que el nucleo se entere de que
-             esta tapado. La panza gris sale de ACA. */
-          vec3 Q=P+sol*(float(j)*160.0);
-          sombra+=densNube(Q, t, uCobNube, 0, 200.0);
+          /* pasos de 260 m sobre un banco de mil: con cuatro se cruzan dos
+             cumulos enteros, que es lo que hace falta para que el nucleo se
+             entere de que esta tapado. */
+          vec3 Q=P+sol*(float(j)*260.0);
+          sombra+=densNube(Q, t, uCobNube, 0, 300.0);
         }
         float luzN=exp(-sombra*1.35)+0.28*exp(-sombra*0.22);
+        /* PANZA GRIS, CORONA ENCENDIDA. Los pasos hacia el sol dan la sombra
+           que una nube le tira a la de al lado, pero no la clave del cumulo: la
+           luz entra por ARRIBA y la base esta al fondo de mil metros de agua, o
+           sea que la panza vive del cielo y no del sol. Contarlo con mas pasos
+           costaria el doble; la altura dentro del banco ya lo dice y sale
+           gratis. Se le quita el sol a la base, NO el ambiente: por eso la
+           panza queda gris azulada y la corona blanca. */
+        float hN=clamp((P.y-${NUBE_BASE}.0)/${NUBE_ESP}.0, 0.0, 1.0);
+        luzN*=mix(0.22, 1.0, smoothstep(0.06, 0.62, hN));
         /* El cielo que entra de costado tambien lo tapa la nube de arriba: si
            el ambiente se sumaba parejo —y peor, CRECIENDO con la densidad, que
            era lo que habia— la panza salia igual de clara que la corona y el
@@ -697,6 +709,13 @@ const cieloMat=new THREE.ShaderMaterial({
         acc+=trans*(1.0-ext)*col;
         trans*=ext;
       }
+      /* LA BRUMA SE COME LAS NUBES DE LEJOS. Pegada al horizonte, una nube
+         esta a veinte kilometros y la atmosfera se le pone delante: sin esto
+         quedaban confetis blancos y duros clavados sobre la linea del campo,
+         mas contrastados que la casa que tenes a treinta metros. */
+      float bruma=1.0-smoothstep(0.020, 0.24, dir.y);
+      acc=mix(acc, uHoriz*(1.0-trans)*1.05, bruma*0.85);
+      trans=mix(trans, 1.0, bruma*0.55);
       return vec4(acc, trans);
     }
 
