@@ -1802,6 +1802,55 @@ que el resto — y sólo las mira el personaje.
 El modelo son 2 MB y se baja **en segundo plano**: el campo anda desde el
 primer cuadro y si el cuerpo no llega, se juega igual.
 
+### El render, efecto por efecto
+
+**Luz y materiales (28)** — dispersión de Rayleigh · dispersión de Mie ·
+absorción tipo ozono · extinción del camino del sol · disco solar con
+oscurecimiento de limbo · perspectiva aérea · sombras de nubes proyectadas al
+plano de nubes · sombras de edificios analíticas · penumbra que crece con la
+longitud de la sombra · oscurecimiento de contacto · GGX · Smith · Fresnel de
+Schlick · metalicidad y rugosidad por material · difusa envolvente ·
+irradiancia hemisférica del cielo · rebote verde del suelo · especular
+ambiental con Fresnel a rugosidad · translucidez de la brizna a contraluz ·
+especular de hoja en franja · normal abombada de la brizna · normal procedural
+de la chapa acanalada · normal procedural de la teja · óxido que sube la
+rugosidad · musgo que sube la rugosidad · humedad capilar en el revoque ·
+direccional y hemisférica para el personaje · pisadas que apagan el pasto.
+
+**Post (28 etapas)** — extracción de brillo con rodilla suave · bloom en cinco
+escalas · borrón separable en cruz · reconstrucción ascendente · rayos
+crepusculares por marcha radial · luminancia logarítmica · reducción 64→8→1 ·
+adaptación temporal asimétrica del ojo · exposición automática acotada ·
+desenfoque de movimiento direccional · distorsión de barril · aberración
+cromática radial · nitidez de contraste adaptativo · suciedad de lente ·
+estiramiento anamórfico · halación · destellos fantasma · ACES · balance de
+blancos · levante y ganancia · tinte separado de sombras y luces · contraste ·
+vibranza · viñeteo cos⁴ · grano animado por luminancia · tramado ordenado ·
+paso a sRGB · MSAA 4× en escritorio.
+
+El orden importa y es el orden físico: todo lo que imita a la **escena** (rayos,
+exposición, bloom) va antes del mapeo de tono; todo lo que imita a la **lente y
+al sensor** (aberración, distorsión, suciedad, grano) va después.
+
+**Tres errores de escala que sólo se ven con una captura:**
+
+1. Los coeficientes de dispersión están en unidades de la atmósfera real —por
+   metro, del orden de 1e-6— y las distancias acá son de juego. Usarlos tal
+   cual sumaba luz dispersada del orden de **3 en lineal a cincuenta metros**:
+   la imagen entera salía lavada de cian. De ellos se toma sólo la **proporción
+   entre canales**, que es lo que da el color, y la densidad la pone el
+   deslizador de niebla.
+2. La luz que entra en el camino va con `(1 − transmitancia)`, **no** con la
+   distancia suelta: así está acotada y a mil metros satura en vez de crecer
+   sin freno.
+3. La aberración cromática desplaza con `q · uAber · r²`, o sea **al cubo del
+   radio**. Con 0,10 los postes del alambrado salían con borde rojo de un lado
+   y cian del otro, de veinte píxeles. El valor útil es diez veces más chico.
+
+Y una de exposición: una autoexposición suelta (`clamp(0.36/L, 0.25, 3.2)`)
+lavaba la escena entera en cuanto el promedio bajaba. Los límites quedaron
+estrechos a propósito — esto corrige, no reinventa.
+
 El material va con `DoubleSide` y la normal invertida en las caras traseras
 (`gl_FrontFacing`), que blinda cualquier triángulo mal ordenado: sin eso, una
 cara al revés se ilumina como si el sol le pegara desde adentro.
