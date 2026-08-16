@@ -70,7 +70,7 @@
       <input type="range" id="sArco" min="0" max="1.2" step="0.02" value="0.72"></div>
     <h3>IMAGEN</h3>
     <div class="ctl"><label>SOL <b id="vSol">0.55</b></label>
-      <input type="range" id="sSol" min="0.06" max="1" step="0.01" value="0.40"></div>
+      <input type="range" id="sSol" min="0.06" max="1" step="0.01" value="0.32"></div>
     <div class="ctl"><label>EXPOSICIÓN <b id="vExp">1.00</b></label>
       <input type="range" id="sExp" min="0.4" max="2" step="0.02" value="1"></div>
     <div class="ctl"><label>COLOR <b id="vSat">1.18</b></label>
@@ -171,7 +171,10 @@ const NIEBLA_GLSL=`
   vec3 conNiebla(vec3 col, vec3 W, vec3 ojo, vec3 luz, vec3 hor, vec3 solc, float k){
     vec3 dv=W-ojo; float d=length(dv); dv/=max(d,1e-4);
     float f=1.0-exp(-k*d);
-    vec3 n=mix(hor, solc, pow(max(dot(dv,luz),0.0), 6.0)*0.55);
+    /* el aire se dora mirando a contraluz, pero en un cono ESTRECHO: con
+       potencia 6 al 55% medio pastizal se volvia crema en cuanto el sol
+       bajaba y entraba en el encuadre */
+    vec3 n=mix(hor, solc, pow(max(dot(dv,luz),0.0), 11.0)*0.38);
     return mix(col, n, clamp(f,0.0,1.0));
   }`;
 /* ------------------------------------------------------------- las huellas
@@ -628,7 +631,12 @@ const ATMOS_GLSL=`
     float mv=masaAire(dir.y), ms=masaAire(sol.y);
     vec3 rr=BETA_R/BETA_R.g;                       // (0.43, 1.0, 2.45)
     vec3 ext=exp(-rr*ms*0.17);                     // el camino del sol
-    vec3 disp=(rr*faseR(mu)*0.86+vec3(faseM(mu,0.76))*0.14)*mv*0.40;
+    /* MENOS MIE. La fase de Mie con g=0.76 vale 2.8 apuntando al sol contra los
+       0.25 del Rayleigh: pesada al 14% seguia siendo el TRIPLE del azul, y por
+       eso mirando hacia el sol el cielo entero se volvia una lechada blanca en
+       la que no se leia ni una nube. Es el mismo halo, solo que del tamano que
+       tiene de verdad. */
+    vec3 disp=(rr*faseR(mu)*0.92+vec3(faseM(mu,0.70))*0.08)*mv*0.40;
     vec3 col=disp*ext*solc;
     /* el ozono le come un poco el naranja al cenit y deja el azul mas limpio */
     col*=mix(vec3(1.0), vec3(0.92,0.97,1.06), clamp(dir.y*1.3,0.0,1.0));
@@ -663,7 +671,7 @@ const ATMOS_GLSL=`
     vec3 aire=hor*(0.75+2.6*fac)*(0.42+0.58*max(sol.y,0.0));
     /* y el resplandor del sol atravesando el aire, que es lo unico que de
        verdad tiene que sumar por encima del horizonte */
-    aire+=solc*pow(max(mu,0.0),7.0)*0.30;
+    aire+=solc*pow(max(mu,0.0),12.0)*0.12;
     return col*trans+aire*(1.0-trans);
   }`;
 
@@ -673,7 +681,11 @@ const ATMOS_GLSL=`
    marchaba con 0,55 y la sombra del pasto con 0,44: se veian sombras corriendo
    por el campo sin ninguna nube arriba, que es justo lo que el comentario de
    abajo dice que no puede pasar. */
-const COB_NUBE=0.61;   // arriba de esto hay nube
+/* 0.56 y no 0.61: atar el techo del banco a la cobertura hizo que los bancos
+   flacos se quedaran en panqueque, y con eso se perdio la mitad del cielo
+   cubierto. Bajar el umbral devuelve la cantidad de nubes SIN devolver la capa
+   pareja, porque los que entran nuevos entran bajos. */
+const COB_NUBE=0.56;   // arriba de esto hay nube
 const COB_TOPE=0.82;   // y aca el nucleo ya es opaco
 /* LA FORMA DEL BANCO, y es lo que decidia si el cielo se veia bien o a barras.
    Con la base a 900 m, 1700 m de espesor y un campo cuyo grano media 300 m, cada
@@ -733,8 +745,17 @@ const NUBES_GLSL=`
   float densNube(vec3 P, float t, float cobMin, int detalle, float paso){
     float cob=coberturaNube(P.xz, t, paso);
     float h=clamp((P.y-${NUBE_BASE}.0)/${NUBE_ESP}.0, 0.0, 1.0);
+    /* CADA BANCO LLEGA HASTA DONDE LE DA LA COBERTURA. Antes el perfil de
+       altura era el mismo para todos, asi que TODAS las nubes tenian el mismo
+       espesor y la misma silueta: una capa pareja recortada por un umbral, o
+       sea manchas de aerografo. Un cumulo crece hacia arriba donde hay
+       material —por eso la coliflor— y se queda en panqueque donde hay poco.
+       Atando el techo del banco a la cobertura, la misma cuenta que decide si
+       hay nube decide cuanto sube, y la silueta deja de ser plana. */
+    float espesor=mix(0.26, 1.0, clamp((cob-cobMin)/max(${COB_TOPE.toFixed(2)}-cobMin,1e-3), 0.0, 1.0));
+    float hh=clamp(h/espesor, 0.0, 1.0);
     /* perfil: base plana, panza redonda, corona deshilachada */
-    float perfil=smoothstep(0.0,0.16,h)*smoothstep(1.0,0.42,h);
+    float perfil=smoothstep(0.0,0.13,hh)*smoothstep(1.0,0.36,hh);
     /* NORMALIZAR POR LO QUE HAY, no por lo que podria haber. Dividir por
        (1-umbral) suponia que la cobertura llega a 1, y no llega nunca: su
        maximo medido en todo el campo es 0,863 y su excedente MEDIO sobre el
@@ -755,7 +776,10 @@ const NUBES_GLSL=`
          medio del cumulo que en el fleco. Se pesa por (1-d), o sea que donde la
          densidad ya es 1 la erosion vale cero y donde es fina se la come.
          Eso es lo que deja la panza maciza y la corona deshilachada. */
-      float k=er*0.30*(1.0-d)*fino;
+      /* 0.55 y no 0.30: con 0.30 el fleco seguia siendo un degradado suave y
+         el borde de la nube se leia como aerografo. Como va pesada por (1-d),
+         subirla NO adelgaza el nucleo —ahi vale cero— y si le come el borde. */
+      float k=er*0.55*(1.0-d)*fino;
       d=(d-k)/max(1.0-k,1e-3);
     }
     return clamp(d,0.0,1.0);
@@ -892,7 +916,7 @@ const cieloMat=new THREE.ShaderMaterial({
            gratis. Se le quita el sol a la base, NO el ambiente: por eso la
            panza queda gris azulada y la corona blanca. */
         float hN=clamp((P.y-${NUBE_BASE}.0)/${NUBE_ESP}.0, 0.0, 1.0);
-        luzN*=mix(0.22, 1.0, smoothstep(0.06, 0.62, hN));
+        luzN*=mix(0.16, 1.0, smoothstep(0.05, 0.58, hN));
         /* El cielo que entra de costado tambien lo tapa la nube de arriba: si
            el ambiente se sumaba parejo —y peor, CRECIENDO con la densidad, que
            era lo que habia— la panza salia igual de clara que la corona y el
@@ -1053,6 +1077,15 @@ const matSuelo=new THREE.ShaderMaterial({
       tie=clamp(tie+(1.0-fr)*0.95, 0.0, 1.0);
       col=mix(col, tierra, tie);
       col=mix(col*vec3(0.62,0.66,0.60), col, fr);   // humedad junto al agua
+      /* EL CAMPO LEJANO ES PASTIZAL, NO LA TIERRA DE ABAJO. Mas alla de donde
+         mueren las briznas queda este plano solo, y su verde es el del suelo
+         BAJO el manojo: la mitad de claro que el manojo visto de lejos. De ahi
+         el disco de pasto brillante centrado en el jugador con un escalon neto
+         al campo, que ademas se movia con el. Se lo lleva al color que tiene un
+         pastizal a cien metros, y el escalon desaparece porque las briznas se
+         van apagando justo en ese tramo. */
+      float manto=smoothstep(16.0, 56.0, dOjo)*(1.0-tie);
+      col=mix(col, mix(vec3(0.050,0.104,0.026), vec3(0.088,0.170,0.040), m), manto*0.90);
 
       /* RELIEVE: la tierra deja de ser un plano pintado. La normal sale de las
          derivadas del propio ruido, asi que los terrones se prenden y se apagan
@@ -1277,7 +1310,7 @@ function crearCampo(o){
              arriba daba (77,106,114). La luz del cielo le llega a la hoja
              haya sol o no: por eso va sobre el ALBEDO y sumada, y por eso la
              sombra queda en penumbra fria en vez de en negro. */
-          + alb*uCielo*(0.70+0.80*vV)*ao*(1.0-vNub*0.35);
+          + alb*uCielo*(1.15+1.10*vV)*mix(ao,1.0,0.45)*(1.0-vNub*0.35);
         gl_FragColor=vec4(conNiebla(col, vW, uOjo, luz, uHoriz, uSolC, uFogD),1.0);
       }`
   });
@@ -3093,11 +3126,14 @@ acomodar();
 for(let i=0;i<CAMPOS.length;i++) DIST0[i]=CAMPOS[i].mat.uniforms.uDist.value;
 aplicarNivel();
 /* LA HORA. A 0.55 el sol esta a 42 grados y una casa de seis metros tira seis
-   metros y medio de sombra: se esconde debajo del alero y no se ve. A 0.40 esta
-   a 33 y tira nueve y medio, que ya cruza el pasto y da la diagonal larga que
-   arma el cuadro. Ademas 'calor' en ponerSol crece cuando la hora baja, asi que
+   metros y medio de sombra: se esconde debajo del alero y no se ve. Medido en
+   el banco a 0.40 la sombra de la casa ocupaba QUINCE PIXELES de alto sobre
+   una pantalla de 430: existe —adentro el pasto da (1,18,0) y al costado
+   (19,102,4)— pero no se lee. El problema no era la fuerza sino el largo. A
+   0.32 el sol esta a 26 grados y tira doce metros y medio, y ahi si cruza el
+   encuadre. Ademas 'calor' en ponerSol crece cuando la hora baja, asi que
    la misma cuenta que alarga la sombra pone la luz mas dorada. */
-ponerSol(0.40); ponerNiebla(0.22);
+ponerSol(0.32); ponerNiebla(0.19);
 seguirPasto(PJ.x,PJ.z); ponerCamara(0.016);
 requestAnimationFrame(bucle);
 setTimeout(esconderAyuda, 11000);
