@@ -5436,7 +5436,7 @@ const PIL_GLSL=`
          devuelve toda entre sus propias caras— y lo que hay que cuidar no es
          que llegue sino que NO SATURE, porque la trama vive en el ultimo
          quince por ciento del rango. */
-      c+=vec3(1.0,0.985,0.94)*at*(dif*0.92+esp*1.65);
+      c+=vec3(1.0,0.985,0.94)*at*(dif*0.52+esp*1.30);
     }
     return c;
   }`;
@@ -5483,7 +5483,7 @@ const matPileta=new THREE.ShaderMaterial({
          existe, pero vale poco y muere rapido; lo que ilumina de verdad es el
          agua y el tubo que tengas encima. */
       float reb=(vT>1.5&&vT<2.5)? 1.9 : 1.0;
-      col+=alb*vec3(0.040,0.048,0.050)*reb*(0.08+0.92*uEnc);
+      col+=alb*vec3(0.026,0.032,0.034)*reb*(0.06+0.94*uEnc);
 
       /* EL AGUA DEVUELVE SU PROPIA LUZ. Es la firma del sitio: el verde
          azulado no esta en los azulejos, esta en el REBOTE, y por eso la pared
@@ -5494,7 +5494,7 @@ const matPileta=new THREE.ShaderMaterial({
          clara del cuadro y la pared se prende cerca de ella y se apaga a dos
          metros: ese gradiente ES el sitio. Ahora que el resto bajo, este
          termino manda. */
-      col+=vec3(0.20,0.62,0.59)*alb*cerca*(0.30+0.85*uEnc);
+      col+=vec3(0.13,0.40,0.38)*alb*cerca*(0.20+0.62*uEnc);
 
       /* y le tira las causticas encima, hasta metro y medio por arriba */
       float ca=caustica(vW.xz*1.35, uTp);
@@ -5530,7 +5530,7 @@ const matPileta=new THREE.ShaderMaterial({
          borra: OCULTA. Y eso es lo que separa un sitio que da un poco de miedo
          de un natatorio municipal. */
       float d=length(vW-uOjo);
-      float f=1.0-exp(-d*0.0135);
+      float f=1.0-exp(-d*0.046);
       col=mix(col, vec3(0.014,0.028,0.027), clamp(f,0.0,1.0)*0.96);
       gl_FragColor=vec4(col,1.0);
     }`
@@ -5555,7 +5555,7 @@ const matPanel=new THREE.ShaderMaterial({
       }
       vec3 c=vec3(1.0,0.985,0.945)*(0.06+on*5.5);
       float d=length(vW-uOjo);
-      c=mix(c, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.0135),0.0,1.0)*0.55);
+      c=mix(c, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.046),0.0,1.0)*0.70);
       gl_FragColor=vec4(c,1.0);
     }`
 });
@@ -5638,7 +5638,7 @@ const matAguaPil=new THREE.ShaderMaterial({
       col+=luzTubos(vW, N, E, 1.0, uTp)*0.30;
 
       float d=length(vW-uOjo);
-      col=mix(col, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.0135),0.0,1.0)*0.90);
+      col=mix(col, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.046),0.0,1.0)*0.94);
       gl_FragColor=vec4(col,1.0);
     }`
 });
@@ -5808,10 +5808,17 @@ function entrarPileta(){
   /* el grado cambia de escena: menos vineteo, menos grano y mas frio. Esto no
      es un campo al sol, es una sala de azulejo. */
   matGrado.uniforms.uNocheG.value=0.0;
-  matGrado.uniforms.uVin.value=0.22;
-  matGrado.uniforms.uGrano.value=0.010;
-  matGrado.uniforms.uSat.value=1.02;
-  matGrado.uniforms.uCon.value=1.06;
+  /* LA AUTOEXPOSICION SE APAGA. Es lo que me estaba devolviendo todo lo que
+     bajaba: cuanto mas oscura dejaba la sala, mas subia ella la exposicion y
+     mas clara volvia a salir. Una escena que TIENE que estar oscura no puede
+     tener un medidor decidiendo por ella. Con uAdapta en cero la exposicion es
+     la que yo pongo y nada mas. */
+  matGrado.uniforms.uAdapta.value=0.0;
+  matGrado.uniforms.uExpM.value=0.86;
+  matGrado.uniforms.uVin.value=0.62;      // el vineteo tira los bordes a negro
+  matGrado.uniforms.uGrano.value=0.014;
+  matGrado.uniforms.uSat.value=1.06;
+  matGrado.uniforms.uCon.value=1.16;
   matGrado.uniforms.uRayos.value=0.0;
   matGrado.uniforms.uVelo.value=0.0;
   matGrado.uniforms.uBloom.value=BLOOM0*1.15;
