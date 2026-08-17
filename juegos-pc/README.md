@@ -2502,112 +2502,110 @@ navegadores no dejan sonar sin un gesto del usuario.
 
 ---
 
-## `Campo_de_Tiro.html` — el campo de tiro con la primera persona del parkour
+## `Campo_de_Tiro.html` — juego nuevo: el personaje AGARRA el arma
 
-Es el juego de parkour multijugador (mismo motor, mismos personajes, mismas
-animaciones, mismo multijugador) con **un mundo nuevo**: una galería de tiro gris.
-Arranca directo ahí (el carrusel del menú igual deja entrar a todos los demás
-niveles).
+Toma el motor del parkour FP (mismo personaje, mismas animaciones, mismo multijugador) y lo convierte en **otro
+juego**: un solo mundo —una galería de tiro gris— **sin voltereta** y **sin los demás mapas** (se borraron ciudad,
+frutiger, cristal, dream core, backrooms, poolrooms, base espacial y el vacío: el archivo bajó de 278 KB a 210 KB).
+De la cintura para abajo el personaje es animación de verdad; de la cintura para arriba, código.
 
-### Por qué el arma no cuelga de la mano
-Lo obvio sería colgar el fusil del hueso `RightHand` y listo. No sirve: la mano
-va donde la manda la animación —al costado del cuerpo cuando estás quieto—, así
-que el arma apuntaría al piso y bailaría con cada paso.
+### La idea que hace que funcione (y por qué la primera versión no)
+La primera versión colgaba el arma **de la cámara** y los brazos iban a buscarla. Eso no es agarrar: si el cuerpo se
+mueve, los brazos se estiran hacia un objeto que flota en el aire.
 
-Acá va al revés: **el arma se coloca respecto a la cámara** (un *viewmodel*
-clásico) y **las manos van a buscarla** con IK de dos huesos sobre el mismo
-esqueleto del juego. Resultado: ves *tus* brazos, con *tu* skin, agarrando el
-fusil, y el arma queda siempre pegada a la retícula.
+Buscando cómo lo hacen los juegos (Dev_Unallocated · CryEngine · NeoFPS) aparece la respuesta: el arma no se pega a la
+mano **ni a la cámara**, va a un **"item bone"** — un socket que se anima y al que se le suman offsets — y las manos lo
+siguen por IK. Acá el socket es **el pecho del personaje**:
 
-### El número que define todo el agarre
-Antes de tocar una sola posición medí el rig en el propio juego:
+- la **posición** sale del hueso `Spine02`, o sea de la animación real: sube, baja, se tuerce al correr, se acuesta al
+  deslizarse;
+- la **orientación** sale del eje de puntería + los offsets procedurales (bob, respiración, retraso del caño, retroceso).
 
-- el hombro derecho está a **0,182 m a la derecha, 0,231 abajo y 0,10 detrás** del ojo
-- el brazo **alcanza 0,54 m** (0,267 de brazo + 0,273 de antebrazo)
+Así el fusil se mueve con el cuerpo y apunta a donde mirás. Es "agarrado" porque comparte el movimiento del torso.
 
-Con eso el agarre se cae solo: la mano derecha a ~0,30 m del hombro (codo bien
-doblado, como una empuñadura de verdad) y la izquierda a ~0,52 m (brazo casi
-estirado). Por eso **la mano de apoyo va sobre el cargador y no en la punta del
-guardamanos**: un guardamanos largo queda literalmente fuera del alcance del
-brazo, y el IK lo único que puede hacer ahí es estirar el brazo y dejar la mano
-colgando en el aire. Error medido mano→empuñadura: **8 mm**.
+### El torso encarado (esto es lo que faltaba para correr)
+Con el arma en el pecho, al **correr** la mano izquierda quedaba a **20 cm** del guardamanos: la animación de correr
+tuerce el tronco y los hombros dejan de mirar al arma. Se arregla como en la referencia (*upper body twist*): se mide
+el yaw real de la **línea de hombros**, se compara con el de la puntería y se reparte la diferencia (hasta 0,34 rad)
+entre tres vértebras, **aditivo** sobre la animación. Error medido después: **2,6 cm corriendo, 0,8 cm quieto**.
+El pitch también se reparte (`-pitch*0.13/0.17/0.19`): sin eso los brazos solos no llegan a apuntar arriba o abajo.
 
-El IK es el clásico de dos huesos con ley de cosenos:
+### El número que define el agarre
+Medido en el propio rig: el hombro está a **0,182 m a la derecha, 0,231 abajo y 0,10 detrás** del ojo, el pecho a
+**0,614 m debajo** del ojo, y el brazo **alcanza 0,54 m** (0,267 + 0,273). Con eso: mano derecha a ~0,30 m del hombro
+(codo bien doblado) e izquierda a ~0,52 m (casi estirada), así que **la mano de apoyo va sobre el cargador**, no en la
+punta del guardamanos — un guardamanos largo queda literalmente fuera del alcance del brazo.
 
-```js
-const ca=Math.acos((L1*L1+d*d-L2*L2)/(2*L1*d));
-_ikU.copy(_ikD).applyAxisAngle(_ikN,ca);   // dirección del hueso de arriba
-```
-El plano lo define un *pole* (una pista de hacia dónde apunta el codo): afuera y
-abajo a la derecha, abajo a la izquierda. El peso se interpola sobre la
-cuaternión **animada**, no la reemplaza, así que al deslizarse o rodar el brazo
-vuelve solo a la animación del parkour.
+### Cuatro cosas que se veían monstruosas, y qué eran de verdad
+Cada una se encontró **mirando capturas del juego corriendo**, no leyendo el código:
 
-### Los dedos
-El hueso de la mano **no tiene hijos**, así que su eje `+Y` local es el eje de los
-dedos (lo hereda de la cadena del brazo). En vez de adivinar ángulos de Euler,
-ese eje se **apunta** a una dirección del mundo: la derecha empuña (adelante y
-abajo), la izquierda abraza cruzando hacia la derecha. Ahí la mano dejó de ser un
-bulto pegado al arma y pasó a agarrarla.
+1. **Manos como garras con púas.** El juego ocultaba la cabeza con el **near plane** de la cámara (0,20 m). Medición:
+   la mano derecha queda a **0,196 m** del ojo quieto y a **0,147 m** al deslizarse. O sea que el mismo near plane que
+   tapaba la cabeza estaba **cortando las manos**, y una malla cortada por el near plane se ve exactamente así.
+2. **La cara y el pelo por dentro.** Al bajar el near a 0,05 aparecen las manos… y también la cabeza desde adentro.
+   Intento de colapsar el hueso de la cabeza: **el mixer reescribe la escala de los huesos en cada `update`**, así que
+   con un guard "si cambió" no se aplicaba nunca (`cabezaSc` medía 0,9999). Y aun aplicándolo cada frame no sirve: el
+   cuerpo es **una sola malla de 23.380 vértices con un solo material**, así que los vértices del cuello, pesados entre
+   cuello y cabeza, se estiran en láminas. Solución real: **descartar en el fragment shader según el peso de skinning**
+   — si el vértice pertenece a los huesos de la cabeza, no se dibuja. El corte cae en el cuello, no estira nada, y se
+   apaga solo en tercera persona.
+3. **Láminas de piel cruzando la pantalla al deslizarse.** Parecía culpa del IK. Un **test de control** —apagar todo mi
+   código con `__tiro.dbg({ik:0,col:0,mun:0,arma:0})`— mostró el mismo destrozo: era el **hombro a 5 cm de la lente**,
+   dibujado porque yo había bajado el near. El recorte propio del cuerpo tiene que estar en **0,20 m**, igual que el
+   near original; el near chico existe para el arma, no para el cuerpo.
+4. **Un giro de 180° del torso.** La contra-rotación del pecho mandaba el arma a 0,9 m: `atan2` con los signos
+   invertidos daba el ángulo opuesto. Con la línea de hombros bien medida, cierra.
 
-### Tres cosas que se veían mal y por qué
-- **El arma parecía chapa pulida blanca.** `scene.environment` es un
-  `RoomEnvironment` (un estudio con luces): con `metalness` alta el fusil reflejaba
-  todo eso y salía blanco. Gunmetal = metalness baja, roughness alta y
-  `envMapIntensity` 0,22.
-- **La culata tapaba la pantalla.** El modelo está corrido hacia adelante y con
-  culata corta: lo que queda detrás de 0,20 m lo recorta el near plane, igual que
-  en la vida real no ves la culata que tenés apoyada en el pómulo.
-- **El fogonazo no aparecía nunca.** Se descontaba el tiempo *antes* de decidir si
-  se dibuja, así que con `dt` grande (celular a 20 fps) moría en el mismo frame en
-  que nacía. Ahora se muestra en el frame del disparo y después se descuenta. Y el
-  plano liso se veía como un cuadrado blanco: ahora es una estrella con degradé
-  dibujada en un canvas.
+### La deslizada
+En primera persona la cámara va **en la cabeza**, y la animación de deslizarse tira la cabeza *adelante* de los
+hombros: los antebrazos pasan a 10 cm de la lente y el recorte los abre. Ninguna pose lo arregla, es geometría.
+Decisión: **al deslizarte la cámara sale a tercera persona** (`camTP`, ya existía para la vista de atrás), más cerca
+(66 % de la distancia normal), y vuelve sola al terminar. Se ve al personaje deslizarse con el fusil agarrado, la
+cabeza reaparece automáticamente, y no hay un solo triángulo roto.
+
+### Que las manos NUNCA se deformen
+Tres reglas, en este orden:
+
+1. **El arma se limita** para que los agarres queden adelante de los hombros (si quedan atrás el codo se invierte) y
+   dentro del alcance; si no llega, se acerca **el arma**, nunca se estira el brazo. Tres iteraciones.
+2. **Cada hueso tiene tope de desviación** respecto a la animación (brazo 1,45 rad, antebrazo 2,0, muñeca 0,95).
+   Limitar el ángulo es bajar el peso del slerp: `if(ang>max) w=min(w,max/ang)`.
+3. **Y al final el arma se acomoda a las manos**: el mango va *a* la mano derecha y un giro (limitado a 0,55 rad)
+   apunta el otro agarre a la izquierda. Si el brazo no pudo llegar, manda la mano — el fusil queda agarrado igual.
+
+### Movimiento procedural del arma
+Todo lo de la referencia, con las activaciones en 0..1 (`quieto = 1 - vel/1.2`, `mov = vel/RUN`):
+
+- **bob de zancada** en figura de ocho: horizontal a 1×, vertical a 2× (`sin(paso)`, `sin(2·paso)`), y el fusil se
+  hunde en el hombro con cada paso;
+- **respiración** sólo cuando estás casi quieto, y **micro-temblor** de dos frecuencias (11,3 y 7,1 Hz);
+- **retraso del caño**: el giro de mirada inyecta velocidad a un resorte (K=150, C=17,5) → primero atrasa y después
+  **adelanta**, que es lo que hace un tirador entrenado;
+- **alabeo** por velocidad lateral, **impulso de aterrizaje** por velocidad vertical, y poses por alpha (esprint,
+  deslizada, aire, recarga) — un solo offset mezclado, sin animaciones nuevas;
+- **retroceso pivotando en la empuñadura**: la boca sube y el mango se queda quieto en la mano.
 
 ### El galpón
-Hormigón gris con textura de canvas (cero descargas), **bafles inclinados en el
-techo** —que es lo que hace que una galería *parezca* una galería—, puestos con
-divisorias y mesada (el carril central queda libre para caminar), línea de fuego
-amarilla, carteles de distancia y tablero de puntaje en el fondo.
+Hormigón gris de canvas (cero descargas), bafles inclinados en el techo, puestos con divisoria y mesada dejando libre
+el carril central, línea de fuego, carteles de distancia y tablero de puntaje. El sol no entra —lo tapa el techo—, así
+que su shadow map está apagado acá y las sombras de contacto se **pintan**; la luz la dan las luminarias emisivas,
+ocho luces puntuales y un `HemisphereLight` **dentro del grupo del nivel** (three no recolecta luces de objetos
+invisibles, así que se apaga solo). `far` bajó a 320 m: el galpón mide 86.
 
-Adentro del galpón **el sol no entra**: el techo lo tapa, así que su shadow map
-sólo costaría fps. Se apaga en este mundo (`sun.castShadow=false`) y las sombras
-de contacto se **pintan**: un degradé radial en un plano bajo cada blanco y cada
-mesada. La luz la dan las luminarias emisivas, ocho luces puntuales y un
-`HemisphereLight` **que vive dentro del grupo del nivel** — three no recolecta
-luces de objetos invisibles, así que se apaga solo al cambiar de mundo y no toca
-a los otros niveles.
-
-### Los blancos
-- **Papel a 10, 25 y 45 m**: anillos concéntricos en canvas. El puntaje sale del
-  `uv` del raycast (distancia al centro → 10…3) multiplicado por la distancia, y
-  en el mismo `uv` se deja el **agujero** (un disco negro hijo del blanco, pool de 48).
-- **Acero a 15, 29 y 45 m**: se caen hacia atrás girando el pivote y se levantan
-  solos a los 3 s.
-- **Uno móvil a 34 m** sobre un riel, y vale más.
-
-### El disparo
-Raycast desde la cámara con dispersión mínima (más si corrés o estás en el aire),
-trazadora desde la boca del caño hasta el impacto, chispas en el acero, retroceso
-de arma **y** de cámara, cargador de 30 y recarga de 1,85 s.
-
-El sonido es **sintetizado con WebAudio**: ruido filtrado con barrido de paso bajo
-+ un golpe de graves para el disparo, dos senos para el *ping* del acero, y todo
-con un `ConvolverNode` de impulso propio para la reverb del galpón. Cero archivos
-nuevos.
+### Blancos y disparo
+Papel a 10/25/45 m (puntaje por el `uv` del raycast, y el agujero queda en el papel), acero a 15/29/45 m que se cae y
+se levanta a los 3 s, y uno móvil a 34 m. Trazadora, chispas, fogonazo en estrella, cargador de 30, recarga de 1,85 s
+y sonido sintetizado con WebAudio (disparo, ping del acero, recarga) con reverb de galpón.
 
 ### Controles
-- **Celular**: botón **FUEGO** (mantenerlo = automático) y **↺** para recargar.
-  Los dos se pueden reubicar con el editor de HUD del juego.
-- **PC**: en el modelo de dos dedos original mirar y disparar serían el mismo
-  gesto (arrastrar), así que al detectar teclado/mouse **WASD camina** (escribe el
-  mismo `joy` que el joystick), el mouse mira con **pointer lock** y el **click
-  izquierdo** queda libre para el gatillo. `R` recarga, espacio salta, shift
-  desliza. En celular no cambia nada.
+- **Celular**: **FUEGO** (mantener = automático) y **↺**; los dos se reubican con el editor de HUD.
+- **PC**: **WASD** camina (escribe el mismo `joy` que el joystick), el mouse mira con **pointer lock** y el **click
+  izquierdo** queda libre para el gatillo. `R` recarga, espacio salta, shift desliza.
 
 ### Gancho de consola
-`window.__tiro` para calibrar sin recompilar: `pos(x,z)`, `mira(yaw,pitch)`,
-`tirar()`, `auto(v)`, `off(x,y,z)`, `esc(v)`, `grip(...)`, `tors(a,b)`,
-`mundo(k)`, `est()`, `brazo()`, `manos()`, `aceros()`, `fx()`.
-`manos()` devuelve el error en metros entre cada mano y su empuñadura: es la forma
-de saber si el agarre cierra sin depender del ojo.
+`window.__tiro`: `pos`, `mira`, `tirar`, `auto`, `recargar`, `correr`, `deslizar`, `tp`, `frames(n)`, `dbg({...})`,
+`est`, `pose`, `brazo`, `manos`, `pecho`, `esq`, `nan`, `huesos`, `aceros`, `fx`, `vida`, `pecho2`, `ven`, `esc`.
+Los que más sirvieron: **`manos()`** (error en metros entre cada mano y su empuñadura), **`esq()`** (todo el esqueleto
+en el marco de la cámara: así se descubrió que las manos caían dentro del near plane), **`dbg()`** (apagar mi código
+para el test de control) y **`frames(n)`** (avanzar frames a mano: el navegador headless no corre `requestAnimationFrame`
+si nadie pide un cuadro, y sin esto las transiciones no se pueden ver).
