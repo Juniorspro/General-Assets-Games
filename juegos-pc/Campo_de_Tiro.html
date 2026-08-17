@@ -697,10 +697,28 @@ let gunRoot=null, gunFlash=null, gunFlash2=null, gunLight=null;
 // Medido en el propio rig: hombro a 0.182 der / 0.231 abajo / 0.10 detrás del ojo, y el brazo ALCANZA 0.54 m (0.267+0.273).
 // Todo el agarre se diseñó con ese número: la derecha a ~0.30 del hombro (codo bien doblado) y la izquierda a ~0.52 (brazo casi
 // estirado, como en un fusil de verdad). Por eso la mano de apoyo va sobre el cargador y no en la punta del guardamanos.
+// EL FUSIL SE ACORTÓ 0,167 de unidad local (=14,4 cm de mundo) y quedó una carabina/PDW. No es estética:
+// era la única forma honesta de que la mano de apoyo llegue al GUARDAMANOS. La cuenta: el hombro izquierdo
+// está 0,190 m a la izquierda y 0,002 m DETRÁS del ojo, el brazo alcanza 0,540 m y _limitarArma lo tope a
+// 0,92·0,54 = 0,497 m; con la separación lateral y vertical fijas, el avance máximo de la muñeca izquierda
+// es √(0,497² − 0,261² − 0,081²) = 0,415 m delante de la lente. El labio trasero del guardamanos viejo
+// estaba a 0,629 m: 21 cm fuera de alcance, y ningún torso lo salva (haría falta blandear el pecho 70°).
 const GUN_ESC=0.86;                                       // escala del arma (con 90° de FOV, a tamaño 1 se come media pantalla)
-const GUN_MUZZLE=new THREE.Vector3(0,0.014,-0.700);       // boca del caño (local)
-const GUN_GRIP_R=new THREE.Vector3(0.012,-0.072,0.130);   // empuñadura → mano DERECHA
-const GUN_GRIP_L=new THREE.Vector3(-0.064,-0.062,-0.105); // sobre el cargador, del lado de la cámara → mano IZQUIERDA (visible)
+const GUN_MUZZLE=new THREE.Vector3(0,0.014,-0.533);       // boca del caño (local)
+const GUN_GRIP_R=new THREE.Vector3(0.012,-0.045,0.135);   // empuñadura → mano DERECHA. y = borde SUPERIOR de
+// la caja del mango: el IK apunta la MUÑECA, y la muñeca va arriba del puño, no en su centro (sube la mano
+// 0,023 m sin mover el arma). x/z ligeramente adelante para sacarla del filo del recorte de cuerpo (0,20 m).
+// APUNTANDO MUY ARRIBA la mano de apoyo SE CORRE HACIA ATRÁS, sobre el cajón. No es un gusto: a pitch 1.3
+// la cámara está en la cabeza, así que rotar la vista 74° hacia arriba manda todo lo que está por debajo del
+// ojo DETRÁS de la lente — el hombro izquierdo se va a z=+0.191. Con el agarre en el guardamanos la cadena
+// hombro→agarre mide 0.500 m contra un alcance de 0.497: _limitarArma se activa y arrastra el fusil entero
+// hacia el jugador hasta dejar la muñeca DERECHA a 0.104 m de la lente, o sea 10 cm adentro del recorte.
+// Corriendo el agarre a z=+0.150 la cadena baja a 0.43 m, el limitador suelta y la derecha queda a ~0.26.
+const GUN_GRIP_L_ALTO=new THREE.Vector3(-0.052,-0.050,0.130);
+const _gL=new THREE.Vector3(-0.040,-0.062,-0.060);        // agarre izquierdo VIVO (el que usa todo el código)
+const GUN_GRIP_L=new THREE.Vector3(-0.040,-0.062,-0.060); // GUARDAMANOS (la palma cae en local −0,141, dentro
+// del tramo −0,053…−0,293 de la caja nueva). x adentro de la huella del cajón para que el arma le corte la
+// silueta a la manopla: sin huesos de dedos, que el arma TAPE la mano es lo que la hace leer como agarre.
 function buildGun(){ if(gunRoot)return;
   gunRoot=new THREE.Group(); gunRoot.visible=false; gunRoot.scale.setScalar(GUN_ESC); scene.add(gunRoot);
   // OJO: con scene.environment (RoomEnvironment) cualquier metalness alta convierte el arma en chapa pulida blanca.
@@ -712,21 +730,21 @@ function buildGun(){ if(gunRoot)return;
   box(0.072,0.112,0.40, 0,0,-0.02, negro);          // cajón de mecanismos
   box(0.052,0.100,0.12, 0,-0.004,0.235, negro);     // cajón trasero
   box(0.046,0.082,0.16, 0,-0.014,0.400, poli);      // culata corta (casi siempre recortada)
-  box(0.062,0.052,0.24, 0,0.004,-0.340, gris);      // guardamanos
-  const ba=new THREE.Mesh(new THREE.CylinderGeometry(0.0115,0.0115,0.19,10), metal); ba.rotation.x=Math.PI/2; ba.position.set(0,0.014,-0.545); gunRoot.add(ba);   // caño
-  const fh=new THREE.Mesh(new THREE.CylinderGeometry(0.019,0.019,0.05,10), negro); fh.rotation.x=Math.PI/2; fh.position.set(0,0.014,-0.665); gunRoot.add(fh);    // bocacha
+  box(0.062,0.052,0.24, 0,0.004,-0.173, gris);      // guardamanos (corrido 0.167 hacia atrás: ver GUN_GRIP_L)
+  const ba=new THREE.Mesh(new THREE.CylinderGeometry(0.0115,0.0115,0.19,10), metal); ba.rotation.x=Math.PI/2; ba.position.set(0,0.014,-0.378); gunRoot.add(ba);   // caño
+  const fh=new THREE.Mesh(new THREE.CylinderGeometry(0.019,0.019,0.05,10), negro); fh.rotation.x=Math.PI/2; fh.position.set(0,0.014,-0.498); gunRoot.add(fh);    // bocacha
   box(0.042,0.115,0.055, 0,-0.105,0.115, poli, 0.30);    // empuñadura
   box(0.048,0.185,0.072, 0,-0.150,-0.005, poli, -0.10);  // cargador
   box(0.028,0.022,0.055, 0,-0.058,0.055, negro);         // guardamonte
   box(0.038,0.014,0.36, 0,0.062,-0.10, negro);           // riel
   box(0.030,0.040,0.020, 0,0.086,0.02, negro);           // alza
-  box(0.026,0.046,0.018, 0,0.089,-0.44, negro);          // punto de mira
+  box(0.026,0.046,0.018, 0,0.089,-0.273, negro);         // punto de mira
   box(0.050,0.052,0.090, 0,0.098,-0.02, negro);          // mira réflex (tubo)
   const dot=new THREE.Mesh(new THREE.CircleGeometry(0.008,10), new THREE.MeshBasicMaterial({color:0xff3a2a,blending:THREE.AdditiveBlending,depthWrite:false}));
   dot.position.set(0,0.098,0.026); gunRoot.add(dot);                                  // punto rojo
   box(0.020,0.016,0.075, 0.041,0.050,0.10, metal);       // manija de carga (derecha)
   box(0.006,0.030,0.070, 0.037,0.014,-0.06, tiroMat(0x14171a,0.6,0.2));   // ventana de eyección
-  box(0.058,0.010,0.16, 0,-0.062,-0.30, negro);          // riel inferior del guardamanos
+  box(0.058,0.010,0.16, 0,-0.062,-0.133, negro);         // riel inferior del guardamanos
   // fogonazo: dos planos cruzados + luz puntual (viven 45 ms)
   // depthTest:false + renderOrder → el fogonazo nunca queda escondido dentro de la bocacha
   const fm=new THREE.MeshBasicMaterial({map:flashTex(),color:0xffe0a0,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false,depthTest:false,side:THREE.DoubleSide});
@@ -910,11 +928,7 @@ function tiroGrabBone(o){ const n=(o.name||'').toLowerCase().replace('mixamorig'
 const MSK_NOMBRES=['spine','spine01','spine02','neck','head','head_end','headfront',
   'leftshoulder','leftarm','leftforearm','lefthand',
   'rightshoulder','rightarm','rightforearm','righthand'];
-let mskBind=null, mskHips=null, mskSpine=null;
-// Casi rígido a propósito: el clip de deslizada es de costado (por eso el juego lo espejaba), así que lo
-// que se hereda de la cadera es un ALABEO, y con 17° ya alcanzaba para llevarse el hombro izquierdo contra
-// la lente. La inclinación que se ve en la deslizada la pone la pose procedural, no el clip.
-const MSK_CINT=0.12;   // tope de flexión de cintura respecto a la pose base (rad ≈ 7°)
+let mskBind=null, mskHips=null;
 function mskCapturar(raiz,clips){  // raiz = el rig LOCAL del jugador (nunca mpBodySrc ni un avatar remoto)
   if(mskBind||!raiz)return 0;
   const porNom=new Map(), lst=[]; let hips=null;
@@ -926,7 +940,7 @@ function mskCapturar(raiz,clips){  // raiz = el rig LOCAL del jugador (nunca mpB
     if(!(o.quaternion.lengthSq()>0.9))return;   // pose inválida → afuera (si no, NaN silencioso más tarde)
     const r={h:o,q:o.quaternion.clone(),p:o.position.clone(),e:o.scale.clone()};
     porNom.set(o.name,r);
-    if(enMask){ lst.push(r); if(n==='spine') mskSpine=r; } else hips=r;   // la cadera NO se restaura: es de las piernas
+    if(enMask) lst.push(r); else hips=r;   // la cadera NO se restaura: es de las piernas
   });
   mskHips=hips;
   const cl=(clips||[]).filter(c=>/^idle$/i.test(c.name||''))[0];
@@ -944,19 +958,49 @@ function mskCapturar(raiz,clips){  // raiz = el rig LOCAL del jugador (nunca mpB
 function mskAplicar(){ if(!mskBind)return;
   for(let i=0;i<mskBind.length;i++){ const r=mskBind[i];
     r.h.quaternion.copy(r.q); r.h.position.copy(r.p); r.h.scale.copy(r.e); } }
-/* TORSO ABSOLUTO: la cadera sigue 100% animada (las piernas la necesitan y el slide tiene que bajar de
-   verdad), pero el tronco NO hereda su vuelco. Devolver los locales a la pose base no alcanza: el torso
-   cuelga de Hips, así que al acostarse la cadera el torso rígido se iba de costado y los hombros
-   terminaban al lado de la lente (medido: hombro izquierdo 6 cm ARRIBA del ojo al deslizarse).
-   Fórmula: spineLocal = inv(caderaAhora) · caderaBase · spineBase → el tronco queda donde estaría si la
-   cadera nunca se hubiera movido. Con tope de flexión, que además regala un lean natural en la deslizada. */
-function mskTorso(){
-  if(!mskHips||!mskSpine)return;
-  _qa.copy(mskHips.h.quaternion).invert().multiply(mskHips.q).multiply(mskSpine.q);
-  _qb.copy(mskSpine.q);
-  const d=Math.min(1,Math.abs(_qb.dot(_qa))), ang=2*Math.acos(d);
-  if(ang>MSK_CINT){ _qb.slerp(_qa, MSK_CINT/ang); mskSpine.h.quaternion.copy(_qb); }
-  else mskSpine.h.quaternion.copy(_qa);
+/* TORSO EN ESPACIO MUNDO. De la cintura para arriba manda el código: para cada vértebra se COMPONE la
+   orientación MUNDIAL deseada y recién ahí se convierte a local. La cadera sigue 100% animada (las piernas
+   la necesitan y la deslizada tiene que bajar de verdad), pero el tronco sólo hereda la FRACCIÓN de su
+   vuelco que uno elija.
+
+   OJO CON EL ORDEN DE LA CADENA (medido en este GLB, NO es el que sugieren los nombres):
+       Hips → Spine02 → Spine01 → Spine → neck → Head       ({Left,Right}Shoulder cuelgan de 'Spine')
+   O sea 'Spine02' es la LUMBAR (hija de Hips) y 'Spine' es el PECHO. La versión anterior escribía
+   spineLocal = inv(caderaAhora)·caderaBase·spineBase sobre 'Spine', cuyo padre es 'Spine01' y no 'Hips':
+   la fórmula estaba en el marco equivocado además de topeada, así que no compensaba nada (corriendo
+   quedaban 58° de vuelco de tronco y al deslizarse la cabeza se iba 0,20 m del otro lado del pecho).
+
+   Fórmula, por vértebra i:
+       qDev  = qCaderaAhora · inv(qCaderaBase)                      (desvío de la pelvis, marco del padre)
+       qW[i] = qW(padreDeHips) · slerp(I,qDev,k[i]) · (qCaderaBase·qSpine02Base·…·qBase[i])
+       local = inv(qW(padre real de i)) · qW[i]
+   El marco del padre de Hips ya trae bodyRoot.rotation.y = faceYaw+π, así que encarar la mira sale gratis.
+   k[] es ACUMULATIVO en mundo: el doblez de cada articulación es la diferencia (1−k₁),(k₁−k₂),(k₂−k₃).
+   Con el pico medido de desvío de pelvis (64° corriendo) k=[0.40,0.22,0.10] reparte −38°/−12°/−8° y deja
+   el pecho a 6° del mundo. Con k=0 el corte entero cae en una sola articulación (no hay huesos de cintura
+   para repartirlo) y se pierde el bamboleo; con k>0.55 el pecho se lleva los hombros y el error de la mano
+   izquierda se triplica. */
+const TORSO_ORD=['spine02','spine01','spine'];   // lumbar → media → pecho (el orden REAL de la cadena)
+const TORSO_K=[0.40,0.22,0.10];
+let torsoR=null;
+function torsoInit(){ if(torsoR||!mskBind)return;
+  const f=n=>mskBind.filter(r=>(r.h.name||'').toLowerCase().replace('mixamorig','')===n)[0]||null;
+  torsoR=TORSO_ORD.map(f); }
+const _tP=new THREE.Quaternion(),_tD=new THREE.Quaternion(),_tC=new THREE.Quaternion(),
+      _tK=new THREE.Quaternion(),_tW=new THREE.Quaternion(),_tI=new THREE.Quaternion();
+function mskTorsoMundo(){
+  torsoInit(); if(!torsoR||!torsoR[0]||!mskHips||!mskHips.h.parent)return;
+  mskHips.h.parent.getWorldQuaternion(_tP);                                  // 'Armature': trae faceYaw
+  _tD.copy(mskHips.h.quaternion).multiply(_tI.copy(mskHips.q).invert());     // desvío de la cadera
+  _tC.copy(mskHips.q);                                                       // cadena base acumulada
+  for(let i=0;i<3;i++){ const r=torsoR[i]; if(!r)continue;
+    _tC.multiply(r.q);
+    _tK.set(0,0,0,1).slerp(_tD,TORSO_K[i]);          // fracción del vuelco de pelvis que se deja pasar
+    _tW.copy(_tP).multiply(_tK).multiply(_tC);       // ORIENTACIÓN MUNDIAL DESEADA de esta vértebra
+    // getWorldQuaternion() hace updateWorldMatrix(true,false): recompone la matriz local del padre desde
+    // el quaternion recién escrito, así que el hijo ya ve al padre corregido sin updateMatrixWorld(true).
+    r.h.parent.getWorldQuaternion(_tI); _tI.invert();
+    r.h.quaternion.copy(_tI).multiply(_tW); }
 }
 const _ikA=new THREE.Vector3(),_ikB=new THREE.Vector3(),_ikC=new THREE.Vector3(),_ikT=new THREE.Vector3(),
       _ikD=new THREE.Vector3(),_ikN=new THREE.Vector3(),_ikP=new THREE.Vector3(),_ikU=new THREE.Vector3(),
@@ -986,11 +1030,16 @@ function ikTwoBone(up,low,end,target,pole,w){
   _ikU.copy(_ikD).applyAxisAngle(_ikN,ca);                       // dirección deseada del hueso de arriba (codo hacia el "pole")
   _ikP.subVectors(_ikB,_ikA).normalize();                        // dirección actual
   _qa.setFromUnitVectors(_ikP,_ikU); up.getWorldQuaternion(_qb); _qb.premultiply(_qa);
-  _aimBone(up,_qb,w,1.45);   // el brazo no se aparta más de ~83° de la animación
+  // El tope existía porque en la deslizada vieja el torso quedaba acostado y el IK giraba el brazo ~180°
+  // respecto al hombro: la piel del deltoides se estiraba en láminas por toda la pantalla. Ahora la máscara
+  // devuelve el brazo a la pose de idle TODOS los frames, así que la desviación se mide contra una pose
+  // conocida y razonable, y 83° se quedaban cortos: el brazo izquierdo tiene que salir de "colgando" a
+  // "cruzado adelante", más de 90°, y el recorte del slerp lo dejaba a 7 cm del guardamanos al esprintar.
+  _aimBone(up,_qb,w,2.20);   // ~126° respecto a la pose de idle
   low.getWorldPosition(_ikB); end.getWorldPosition(_ikC);        // el antebrazo apunta la mano al objetivo
   _ikP.subVectors(_ikC,_ikB).normalize(); _ikU.subVectors(_ikT,_ikB).normalize();
   _qa.setFromUnitVectors(_ikP,_ikU); low.getWorldQuaternion(_qb); _qb.premultiply(_qa);
-  _aimBone(low,_qb,w,2.0);   // el antebrazo tiene más margen
+  _aimBone(low,_qb,w,2.60);   // el antebrazo tiene más margen
 }
 // La mano no tiene hijos, así que su eje +Y local es el de los dedos (viene heredado de la cadena del brazo).
 // En vez de adivinar Eulers, se APUNTA ese eje a una dirección del mundo: los dedos abrazan el arma en serio.
@@ -1020,17 +1069,38 @@ let prevYaw=null, prevPit=0;
 let aSpr=0, aSld=0, aAir=0, aRel=0;         // alphas de pose (esprint, deslizada, aire, recarga)
 let landK=0, _eraAire=false, _vyAnt=0;
 const _pecho=new THREE.Vector3(), _pechoS=new THREE.Vector3(), _vida=new THREE.Vector3(); let _pechoOk=false;
+// ancla de ojo compartida (ver tiroPostura): altura de mundo del hueso de la cabeza, con limitador de velocidad
+const OJO_H0_DEF=1.645, OJO_VMAX=4.0;   // m · m/s
+let _ojoH0=null, _ojoOff=0, tiroOjoY=null;
 const _qAim=new THREE.Quaternion(), _euAim=new THREE.Euler(0,0,0,'YXZ');
 const _gA=new THREE.Vector3(), _gB=new THREE.Vector3(), _ojo=new THREE.Vector3(), _hR=new THREE.Vector3(), _hL=new THREE.Vector3();
 // ventana permitida del arma respecto al ojo, en el marco de puntería: [xmin,xmax, ymin,ymax, zmin,zmax]
-const TIRO_VEN=[-0.08,0.34, -0.46,-0.07, 0.30,0.66];
+// zmin sube a 0.32: el agarre izquierdo está 0.086 m adelante de gunRoot, así que con zmin=0.30 la mano
+// quedaba a 0.195 m de la lente, JUSTO sobre el recorte de cuerpo de 0.20. ymax baja a −0.02 para no
+// pelear con la ley de pitch (+0.062·pitch, hasta +0.081 m mirando al cielo).
+const TIRO_VEN=[-0.08,0.34, -0.46,-0.02, 0.32,0.70];
+// tope de cuánto puede correrse el arma para seguir a la mano derecha cuando el IK no llegó (ver abajo)
+const GUN_CORREA=0.045;
 // cuánto del bamboleo del pecho se le pasa al arma (1 = todo; 0 = arma muerta). Es sólo la DESVIACIÓN
 // del pecho respecto a su promedio: la deriva de la animación no llega nunca al arma.
-let TIRO_VIDA=0.86;
+let TIRO_VIDA=0;
 // offsets base del arma respecto al OJO, en el marco de puntería (derecha / arriba / adelante).
 // Medido en el rig: así el fusil entra en cuadro abajo a la derecha y las manos quedan a 0,40-0,49 m
 // de la lente, o sea bien por delante del recorte propio del arma (0,17 m) y del near plane (0,05).
-const GUN_OJO=new THREE.Vector3(0.170,-0.215,0.335);
+// ENCUADRE, con la trigonometría explícita. PerspectiveCamera(90,…) → el FOV es VERTICAL: semiángulo
+// vertical 45° en TODA relación de aspecto (por eso el celular apaisado no cambiaba nada: sólo ensancha).
+// Para un punto (x,y,z) del marco de cámara, con d=−z: ndc.y = y/d y ndc.x = x/(d·aspect); está en cuadro
+// si atan(|y|/d) < 45°. Y el recorte de cuerpo NO es radial: el shader hace vProf=−mvPosition.z y descarta
+// con vProf<0.20, o sea la condición es sobre la PROFUNDIDAD DE VISTA, no sobre distanceTo(camera).
+// Con los valores viejos (0.170,−0.215,0.335) la muñeca derecha quedaba a d=0.196 (POR DEBAJO del recorte)
+// y a 54,2° del eje: 9,2° fuera de cuadro por abajo, o sea proyectando fuera de la pantalla.
+// Ahora: muñeca derecha a d≈0.26 / 30° y muñeca izquierda a d≈0.39 / 28°, con ~15° de margen contra los 45.
+//  z=0.420: el barrido satura en 0.44 (más allá, _limitarArma tira el arma hacia atrás y no gana nada).
+//  y=−0.115: por arriba de −0.105 la mira réflex se sube al centro y tapa la cruceta; por debajo de −0.130
+//            la mano vuelve a caerse del cuadro. No salir de esa banda.
+//  x=0.110 (era 0.170): aleja el fusil del borde derecho (ndc.x 0.45→0.25) y de paso libera presupuesto de
+//            alcance para el brazo izquierdo, que tiene que cruzar 0.183+x.
+const GUN_OJO=new THREE.Vector3(0.110,-0.115,0.420);
 function _spineAdd(b,rx,ry,rz,w){ if(!b)return; _euAim.set(rx*w,ry*w,rz*w,'XYZ'); _qw.setFromEuler(_euAim);
   b.quaternion.multiply(_qw); }   // aditivo sobre la pose de BIND (la máscara ya sacó la animación de acá)
 // alcance de cada brazo (constante: son huesos). Se mide una vez.
@@ -1040,6 +1110,10 @@ function _alcance(a,f,h){ const A=new THREE.Vector3(),B=new THREE.Vector3(),C=ne
 /* El arma se mueve para que las MANOS siempre lleguen bien: los targets tienen que quedar ADELANTE de los hombros
    (si quedan atrás, el codo se invierte y la piel del brazo se estira en láminas por toda la pantalla) y DENTRO del
    alcance (si no, el brazo se estira y la mano se deforma). Tres iteraciones alcanzan. */
+// 0.95 y no 0.92: el ikTwoBone ya tope la extensión en 0.975, así que el codo nunca se estira del todo, y
+// los 3 cm de diferencia son justo los que le faltaban a la mano de apoyo para no arrastrar el arma dentro
+// del recorte apuntando al cielo (muñeca izquierda 0.235 → 0.26 m de profundidad a pitch 1.3).
+const ALC_K=0.95;
 function _limitarArma(){
   if(!_alcR){ _alcR=_alcance(bRArm,bRFore,bRHand); _alcL=_alcance(bLArm,bLFore,bLHand); }
   for(let it=0;it<3;it++){
@@ -1048,25 +1122,26 @@ function _limitarArma(){
     bRArm.getWorldPosition(_gA); _gp.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
     let f=_gB.subVectors(_gp,_gA).dot(_cf);
     if(f<0.14){ gunRoot.position.addScaledVector(_cf,0.14-f); gunRoot.updateMatrixWorld(true); mov=true; }
-    bLArm.getWorldPosition(_gA); _gp2.copy(GUN_GRIP_L).applyMatrix4(gunRoot.matrixWorld);
+    bLArm.getWorldPosition(_gA); _gp2.copy(_gL).applyMatrix4(gunRoot.matrixWorld);
     f=_gB.subVectors(_gp2,_gA).dot(_cf);
     if(f<0.14){ gunRoot.position.addScaledVector(_cf,0.14-f); gunRoot.updateMatrixWorld(true); mov=true; }
     // 2) dentro del alcance (se acerca el ARMA, nunca se estira el brazo)
     bRArm.getWorldPosition(_gA); _gp.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
-    let d=_gA.distanceTo(_gp), al=_alcR*0.92;
+    let d=_gA.distanceTo(_gp), al=_alcR*ALC_K;
     if(d>al){ _gB.subVectors(_gp,_gA).normalize().multiplyScalar(-(d-al)); gunRoot.position.add(_gB); gunRoot.updateMatrixWorld(true); mov=true; }
-    bLArm.getWorldPosition(_gA); _gp2.copy(GUN_GRIP_L).applyMatrix4(gunRoot.matrixWorld);
-    d=_gA.distanceTo(_gp2); al=_alcL*0.92;
+    bLArm.getWorldPosition(_gA); _gp2.copy(_gL).applyMatrix4(gunRoot.matrixWorld);
+    d=_gA.distanceTo(_gp2); al=_alcL*ALC_K;
     if(d>al){ _gB.subVectors(_gp2,_gA).normalize().multiplyScalar(-(d-al)); gunRoot.position.add(_gB); gunRoot.updateMatrixWorld(true); mov=true; }
     if(!mov)break;
   }
 }
 const DBG={ik:1,col:1,mun:1,arma:1};   // interruptores para aislar (consola: __tiro.dbg({ik:0}))
 function tiroPostura(dt){
+  tiroOjoY=null;   // si esta función no llega a calcularlo, la cámara vuelve a leer el hueso directamente
   if(!bodyRoot||!gunRoot||!bRArm||!bSp02) return;
   prepararCuerpo();   // recortes del cuerpo (una sola vez, cuando el GLB ya está)
   mskAplicar();       // ← acá muere la animación de la cintura para arriba: de este punto en adelante manda el código
-  mskTorso();         // y el tronco se desacopla del vuelco de la cadera (con tope de cintura)
+  mskTorsoMundo();    // y el tronco se COMPONE en mundo: hereda sólo TORSO_K de lo que hace la cadera
   // la cabeza sólo vuelve en 3ª persona; en 1ª persona SIEMPRE se recorta (la cámara está adentro de la cabeza)
   if(_cabCut){ const v=(camView==='tp')?2.0:0.30; for(const u of _cabCut) u.value=v; }
   const spd=Math.hypot(player.vel.x,player.vel.z), sn=Math.min(1,spd/RUN);
@@ -1077,7 +1152,10 @@ function tiroPostura(dt){
   // ---- alphas de pose ----
   const wSpr=(player.onGround && spd>RUN*0.70 && !player.sliding)?1:0;
   aSpr+=(wSpr-aSpr)*Math.min(1,7*dt);
-  aSld+=((player.sliding?1:0)-aSld)*Math.min(1,12*dt);
+  // asimétrico a propósito: la ENTRADA tiene que ser rápida (el cuerpo ya se está yendo) y la SALIDA lenta
+  // (14/s = 63% en 4 frames; 5/s = 63% en 0,2 s). El tirón que se veía estaba en la salida.
+  aSld+=((player.sliding?1:0)-aSld)*Math.min(1,(player.sliding?14:5)*dt);
+  const sSld=aSld*aSld*(3-2*aSld);   // smoothstep: mitad de golpe en los 4 frames donde estaban los artefactos
   aAir+=((player.onGround?0:1)-aAir)*Math.min(1,6*dt);
   aRel+=(((tiroRel>0)?1:0)-aRel)*Math.min(1,8*dt);
   // ---- impulso de aterrizaje (la referencia lo mete por el mismo camino que el retroceso) ----
@@ -1097,12 +1175,14 @@ function tiroPostura(dt){
   // la puntería por construcción. Queda sólo lo que hay que AGREGAR: pitch repartido, pose y respiración.
   const pit=player.pitch;
   if(DBG.col){
-    // 1) el torso acompaña el pitch de puntería, repartido en tres vértebras (nadie apunta al cielo sólo con los brazos)
-    _spineAdd(bSp,  -pit*0.13,0,0, 1); _spineAdd(bSp01,-pit*0.17,0,0, 1); _spineAdd(bSp02,-pit*0.19,0,0, 1);
-    // 2) pose: al esprintar el tronco se va adelante; al deslizarse se acuesta un poco y rola hacia el arma.
-    //    (con la máscara el clip de deslizada ya no acuesta el torso: la inclinación la pone acá, medida)
-    const inc=aSpr*0.10 + aSld*0.30, rol=aSld*0.08;
-    _spineAdd(bSp,  inc*0.40,0,rol*0.40, 1); _spineAdd(bSp01, inc*0.30,0,rol*0.30, 1); _spineAdd(bSp02, inc*0.30,0,rol*0.30, 1);
+    // 1) el torso acompaña el pitch de puntería, repartido en tres vértebras (nadie apunta al cielo sólo con
+    //    los brazos). El reparto va de MENOS abajo a MÁS arriba: bSp02 es la LUMBAR y bSp el PECHO (ver
+    //    mskTorsoMundo). Antes estaba al revés y la curva de la columna salía invertida.
+    _spineAdd(bSp02,-pit*0.13,0,0, 1); _spineAdd(bSp01,-pit*0.17,0,0, 1); _spineAdd(bSp,  -pit*0.19,0,0, 1);
+    // 2) pose: al esprintar el tronco se va adelante; al deslizarse se va para ATRÁS (te reclinás), que es
+    //    lo contrario de lo que hacía el signo viejo. −0,22 rad repartido = 12,6° de reclinada.
+    const inc=aSpr*0.10 - sSld*0.22, rol=sSld*0.08*(player.slideRight?-1:1);
+    _spineAdd(bSp02, inc*0.30,0,rol*0.30, 1); _spineAdd(bSp01, inc*0.30,0,rol*0.30, 1); _spineAdd(bSp, inc*0.40,0,rol*0.40, 1);
     // 3) respiración del pecho cuando estás quieto (activación: cuanto más quieto, más se nota)
     _spineAdd(bSp02, Math.sin(resp)*0.022*quieto, 0, 0, 1);
     // 4) hombros hacia el arma: el derecho baja al fusil, el izquierdo cruza al guardamanos
@@ -1114,10 +1194,15 @@ function tiroPostura(dt){
   // acostaba el pecho (deslizada) o lo torcía (correr, wallrun espejado) el fusil se iba de cuadro o
   // aparecía de costado. Ahora el ancla es la vista, que es lo que hay que garantizar en 1ª persona, y del
   // pecho sólo se toma su DESVIACIÓN respecto a su propio promedio: el bamboleo entra, la deriva no.
-  bSp02.getWorldPosition(_pecho);
+  // …y el ancla se toma del PECHO real (bSp), no de la lumbar (bSp02) como antes. TIRO_VIDA arranca en 0:
+  // con el torso procedural el bamboleo del pecho lo genera este mismo código (bob + respiración +
+  // _spineAdd), así que reinyectarlo al arma era realimentación pura. Queda el mecanismo para calibrar
+  // desde consola (__tiro.vida(v)), y durante la deslizada se desatura (el pecho cae 0,76 m en 0,5 s y el
+  // promedio perseguidor quedaba 0,3 m atrás → _vida saturaba en el clamp los ~30 frames de la bajada).
+  (bSp||bSp02).getWorldPosition(_pecho);
   if(!_pechoOk){ _pechoS.copy(_pecho); _pechoOk=true; }
-  else _pechoS.lerp(_pecho, Math.min(1,4*dt));
-  _vida.subVectors(_pecho,_pechoS).multiplyScalar(TIRO_VIDA);
+  else _pechoS.lerp(_pecho, Math.min(1,(4+10*aSld)*dt));
+  _vida.subVectors(_pecho,_pechoS).multiplyScalar(TIRO_VIDA*(1-0.85*aSld));
   _vida.set(Math.max(-0.05,Math.min(0.05,_vida.x)), Math.max(-0.05,Math.min(0.05,_vida.y)), Math.max(-0.05,Math.min(0.05,_vida.z)));
   // ---- orientación: puntería + offsets procedurales ----
   const bobY=Math.sin(paso*2.0)*0.019*mov, bobX=Math.sin(paso)*0.015*mov, bobZ=-Math.abs(Math.sin(paso))*0.011*mov;
@@ -1128,9 +1213,11 @@ function tiroPostura(dt){
   // acostaba el torso, y eran grandes (0,52 / 0,26 / 0,34 rad). Con la máscara no hay nada que compensar:
   // si se dejan grandes, el fusil se para de costado y los brazos cruzan la lente. Ahora son sólo carácter.
   const pPit = pit + lagP*0.85 + Math.sin(paso*2.0+0.7)*0.013*mov + jit + recUp*0.9 + landK*1.6
-             + aSpr*0.22 + aSld*0.11 + aAir*0.10 - aRel*0.30;
-  const pYaw = player.yaw - lagY*0.95 + jit*0.7 + aSpr*0.20 + aSld*0.05 - aRel*0.22;
-  const pRol = -lagY*1.5 - latV*0.022 + Math.sin(paso)*0.020*mov + aSpr*0.16 + aSld*0.09 + aRel*0.30;
+             + aSpr*0.10 + sSld*0.08 + aAir*0.10 - aRel*0.30;   // 0.22 de esprint subía el arma 0,093 m
+  const pYaw = player.yaw - lagY*0.95 + jit*0.7 + aSpr*0.20 + sSld*0.04 - aRel*0.22;
+  // el alabeo de la deslizada va CON SIGNO: antes alabeaba siempre para el mismo lado sin importar hacia
+  // dónde te deslizabas (player.slideRight ya se calcula en startSlide y había quedado sin uso).
+  const pRol = -lagY*1.5 - latV*0.022 + Math.sin(paso)*0.020*mov + aSpr*0.16 + sSld*0.10*(player.slideRight?-1:1) + aRel*0.30;
   _euAim.set(pPit,pYaw,pRol,'YXZ'); _qAim.setFromEuler(_euAim);
   gunRoot.quaternion.copy(_qAim);
   _cr.set(1,0,0).applyQuaternion(_qAim); _cu.set(0,1,0).applyQuaternion(_qAim); _cf.set(0,0,-1).applyQuaternion(_qAim);
@@ -1138,14 +1225,38 @@ function tiroPostura(dt){
   // el ojo, con la MISMA fórmula que usa la cámara más abajo (cabeza + CAM_FWD/CAM_UP - camLow)
   if(bodyHead) bodyHead.getWorldPosition(_ojo);
   else _ojo.set(player.pos.x, player.pos.y+EYE, player.pos.z);
+  // ---- UN SOLO ANCLA DE OJO, compartida por la cámara y el arma ----
+  // Lo que se filtra es el OFFSET DE POSE (altura del hueso de la cabeza respecto a la de parado); la
+  // altura del jugador pasa CRUDA, si no el filtro se comería saltos y caídas. Un limitador de velocidad
+  // (no un pasabajos) deja pasar el movimiento real —el bamboleo de carrera son 0,04 m, la bajada de la
+  // deslizada 2,9 m/s— y corta sólo los saltos patológicos de un frame (el peor medido era 0,101 m = 3 m/s
+  // a la salida de la deslizada). tickBody corre ANTES que la cámara en el mismo frame, así que arma y
+  // vista nunca discrepan. _ojoH0 se auto-calibra con el personaje parado en el piso (medido 1,645 m).
+  if(_ojoH0===null && bodyHead && player.onGround && !player.sliding && spd<0.5) _ojoH0=_ojo.y-player.pos.y;
+  const _H0=(_ojoH0===null?OJO_H0_DEF:_ojoH0);
+  const _obj=Math.max(-0.95,Math.min(0.12,_ojo.y-(player.pos.y+_H0))), _lim=OJO_VMAX*dt;
+  _ojoOff+=Math.max(-_lim,Math.min(_lim,_obj-_ojoOff));
+  tiroOjoY=player.pos.y+_H0+_ojoOff;   // ← la cámara de base.html lee ESTO, no el hueso
+  _ojo.y=tiroOjoY;
   _ojo.x+=-Math.sin(player.yaw)*(CAM_FWD-player.camBack); _ojo.z+=-Math.cos(player.yaw)*(CAM_FWD-player.camBack);
   _ojo.y+=CAM_UP-player.camLow;
+  // LEY DE PITCH, sólo hacia ARRIBA. Medido: pitch NEGATIVO es mirar abajo y ahí el arma MEJORA (d 0.32,
+  // 27°); el que rompe es mirar arriba, porque a pitch 1.2 el hombro derecho se va a z=+0.204, o sea 20 cm
+  // DETRÁS de la lente, y la columna se arquea encima. Subir el arma 0.062·pitch recupera medio cuadro
+  // (ndc.y −2.03 → −1.51 en el barrido); tocar z lo empeoraba en las 12 combinaciones probadas.
+  const pUp=Math.max(0,pit);
+  // el agarre izquierdo se corre al cajón a medida que subís la puntería (ver GUN_GRIP_L_ALTO)
+  _gL.lerpVectors(GUN_GRIP_L, GUN_GRIP_L_ALTO, Math.max(0,Math.min(1,(pit-0.15)/0.70)));
   gunRoot.position.copy(_ojo).add(_vida)
-    .addScaledVector(_cr, GUN_OJO.x + bobX + respX + aSpr*0.028 + aSld*0.075)
-    // al deslizarse el arma BAJA 12 cm: no es estética, es lo que mantiene el brazo izquierdo por debajo
-    // de la lente (si el fusil queda a la altura de siempre, el antebrazo cruza el recorte y se ve en láminas)
-    .addScaledVector(_cu, GUN_OJO.y + bobY + respY - landK*0.55 + aSpr*(-0.030) + aSld*(-0.120) - aRel*0.075)
-    .addScaledVector(_cf, GUN_OJO.z + bobZ - recBack + aSpr*(-0.055) + aSld*(-0.030) - aRel*0.03);
+    .addScaledVector(_cr, GUN_OJO.x + bobX + respX + aSpr*0.028 + sSld*0.035)
+    // los −0.120 de la deslizada eran compensación pura de un torso caído (lo decía el comentario viejo:
+    // "es lo que mantiene el brazo izquierdo por debajo de la lente"). Con el torso erguido y el ojo
+    // bajando junto con los hombros, la geometría ojo→hombro es la misma que de pie: no hay nada que
+    // compensar y queda sólo carácter, del mismo orden que el −0.030 del esprint. Asentarse, no esconderse.
+    // esprint: −0.085 (era −0.030). El pitch de esprint gira el arma alrededor del OJO, así que cada rad
+    // sube el agarre 0,43 m; con GUN_OJO.y en −0.115 la mano izquierda terminaba sobre la cruceta.
+    .addScaledVector(_cu, GUN_OJO.y + bobY + respY + 0.062*pUp - landK*0.55 + aSpr*(-0.085) + sSld*(-0.030) - aRel*0.075)
+    .addScaledVector(_cf, GUN_OJO.z + bobZ - recBack + aSpr*(-0.055) + sSld*(-0.030) - aRel*0.03);
   // ---- VENTANA DE SEGURIDAD respecto al OJO (red de seguridad, no la regla principal) ----
   // Con el ancla en el ojo esto normalmente no toca nada; queda para el caso raro en que algún offset
   // (retroceso + aterrizaje + vida del pecho a la vez) empuje el arma detrás del near plane o fuera de cuadro.
@@ -1163,16 +1274,21 @@ function tiroPostura(dt){
   gunRoot.visible = (world==='tiro') && !!DBG.arma;
   // ---- MANOS: IK de los dos brazos a la empuñadura y al guardamanos ----
   _gp.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
-  _gp2.copy(GUN_GRIP_L).applyMatrix4(gunRoot.matrixWorld);
+  _gp2.copy(_gL).applyMatrix4(gunRoot.matrixWorld);
   _pol.copy(_gp).addScaledVector(_cr,1.7).addScaledVector(_cu,-1.9).addScaledVector(_cf,-0.30);    // codo derecho: afuera y abajo
   _pol2.copy(_gp2).addScaledVector(_cr,-0.55).addScaledVector(_cu,-1.9).addScaledVector(_cf,-0.15); // codo izquierdo: abajo
   if(DBG.ik){ ikTwoBone(bRArm,bRFore,bRHand,_gp,_pol,1);
     ikTwoBone(bLArm,bLFore,bLHand,_gp2,_pol2,1); }
   // ---- el ARMA se acomoda a las MANOS: así queda agarrada SIEMPRE, incluso cuando el brazo no pudo llegar ----
   bRHand.getWorldPosition(_hR); bLHand.getWorldPosition(_hL);
+  // …pero con CORREA CORTA. Esta línea era incondicional, y cuando el IK no llegaba (mirando muy arriba, o
+  // esprintando con los hombros bamboleando) arrastraba el fusil entero adentro del ojo detrás de una mano
+  // que había fracasado: es lo que ponía el arma diseñada a z=−0.42 en z=−0.18. El tope es ~medio ancho de
+  // manopla: alcanza para que se vea agarrada y no alcanza para meter el arma detrás del recorte.
   _gp.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
-  gunRoot.position.add(_gB.subVectors(_hR,_gp)); gunRoot.updateMatrixWorld(true);   // el mango va A la mano derecha
-  _gp2.copy(GUN_GRIP_L).applyMatrix4(gunRoot.matrixWorld);
+  _gB.subVectors(_hR,_gp); { const _L=_gB.length(); if(_L>GUN_CORREA) _gB.multiplyScalar(GUN_CORREA/_L); }
+  gunRoot.position.add(_gB); gunRoot.updateMatrixWorld(true);   // el mango va A la mano derecha
+  _gp2.copy(_gL).applyMatrix4(gunRoot.matrixWorld);
   _gA.subVectors(_gp2,_hR); _gB.subVectors(_hL,_hR);
   if(_gA.lengthSq()>1e-6 && _gB.lengthSq()>1e-6){ _gA.normalize(); _gB.normalize();
     const c=Math.max(-1,Math.min(1,_gA.dot(_gB))), ang=Math.acos(c);
@@ -1180,9 +1296,17 @@ function tiroPostura(dt){
       if(_ikN.lengthSq()>1e-9){ _ikN.normalize(); _qa.setFromAxisAngle(_ikN,Math.min(ang,0.55));   // giro limitado
         gunRoot.quaternion.premultiply(_qa); gunRoot.updateMatrixWorld(true);
         _gp.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
-        gunRoot.position.add(_gB.subVectors(_hR,_gp)); gunRoot.updateMatrixWorld(true); } } }
-  TIRO_DEDOS_R.copy(_cf).multiplyScalar(0.62).addScaledVector(_cu,-0.72).addScaledVector(_cr,-0.30).normalize();
-  TIRO_DEDOS_L.copy(_cr).multiplyScalar(0.86).addScaledVector(_cu,0.16).addScaledVector(_cf,0.46).normalize();
+        _gB.subVectors(_hR,_gp); { const _L=_gB.length(); if(_L>GUN_CORREA) _gB.multiplyScalar(GUN_CORREA/_L); }
+        gunRoot.position.add(_gB); gunRoot.updateMatrixWorld(true); } } }
+  // EJE DE LOS DEDOS. La caja de la empuñadura está en (0,−0.105,0.115) con rotation.x=+0.30, así que su eje
+  // arriba→abajo en local es (0,−0.955,−0.296), o sea −0.955·_cu + 0.296·_cf en mundo. El vector viejo
+  // (0.62·_cf − 0.72·_cu − 0.30·_cr) estaba 29,1° fuera de ese eje: los nudillos CORTABAN el mango de canto
+  // en vez de envolverlo. Éste queda a 7,2°, con el cruce justo para que los dedos lo rodeen.
+  TIRO_DEDOS_R.copy(_cf).multiplyScalar(0.30).addScaledVector(_cu,-0.95).addScaledVector(_cr,-0.12).normalize();
+  // La izquierda cruza el guardamanos por debajo: la muñeca queda abajo-izquierda y los nudillos SUBEN
+  // cruzando hacia la derecha (agarre C-clamp). El viejo (0.87,0.16,0.47) casi no subía y la mano salía de
+  // costado, al lado del fusil en vez de abrazándolo.
+  TIRO_DEDOS_L.copy(_cr).multiplyScalar(0.82).addScaledVector(_cu,0.42).addScaledVector(_cf,0.39).normalize();
   if(DBG.mun){ apuntarMano(bRHand,TIRO_DEDOS_R,1); torcerMano(bRHand,TIRO_TORS_R,1);
     apuntarMano(bLHand,TIRO_DEDOS_L,1); torcerMano(bLHand,TIRO_TORS_L,1); }
   // ---- fogonazo y efectos cortos ----
@@ -1304,7 +1428,7 @@ try{ window.__tiro={
   // ¿las manos llegan realmente a la empuñadura? (error en metros, medido después del IK)
   manos:()=>{ if(!bRHand||!gunRoot)return null; const A=new THREE.Vector3(),B=new THREE.Vector3();
     gunRoot.updateMatrixWorld(true); bRHand.getWorldPosition(A); B.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
-    const eR=+A.distanceTo(B).toFixed(3); bLHand.getWorldPosition(A); B.copy(GUN_GRIP_L).applyMatrix4(gunRoot.matrixWorld);
+    const eR=+A.distanceTo(B).toFixed(3); bLHand.getWorldPosition(A); B.copy(_gL).applyMatrix4(gunRoot.matrixWorld);
     const eL=+A.distanceTo(B).toFixed(3);
     bRHand.getWorldPosition(A); const dR=+A.distanceTo(camera.position).toFixed(3);
     bLHand.getWorldPosition(A); const dL=+A.distanceTo(camera.position).toFixed(3);
@@ -1323,7 +1447,7 @@ try{ window.__tiro={
   esq:()=>{ const q=camera.quaternion.clone().invert(), P=new THREE.Vector3(), o={};
     bodyRoot.updateMatrixWorld(true);
     const g=(n,b)=>{ if(!b)return; b.getWorldPosition(P); o[n]=P.clone().sub(camera.position).applyQuaternion(q).toArray().map(v=>+v.toFixed(3)); };
-    g('cabeza',bodyHead); g('pecho',bSp02); g('homD',bRArm); g('homI',bLArm); g('manoD',bRHand); g('manoI',bLHand); g('cadera',bodyHips);
+    g('cabeza',bodyHead); g('pecho',bSp); g('lumbar',bSp02); g('homD',bRArm); g('homI',bLArm); g('manoD',bRHand); g('manoI',bLHand); g('cadera',bodyHips);
     o.arma=gunRoot.position.clone().sub(camera.position).applyQuaternion(q).toArray().map(v=>+v.toFixed(3));
     o.near=camera.near; return o; },
   nan:()=>{ const mal=[]; let n=0; bodyInner.traverse(o=>{ n++;
@@ -1341,6 +1465,32 @@ try{ window.__tiro={
   vida:v=>{ TIRO_VIDA=v; }, pecho2:(x,y,z)=>GUN_OJO.set(x,y,z), ojo2:(x,y,z)=>GUN_OJO.set(x,y,z), ven:(...a)=>{ for(let i=0;i<6;i++)TIRO_VEN[i]=a[i]; },
   // cuantos huesos quedaron enmascarados (esperado 15) y con que pose de bind arrancan
   mask:()=>({ n:mskBind?mskBind.length:0, huesos:(mskBind||[]).map(r=>r.h.name) }),
+  torsoK:(a,b,c)=>{ TORSO_K[0]=a; TORSO_K[1]=b; TORSO_K[2]=c; },
+  // marco de cámara de las dos muñecas + la punta de los dedos (para el criterio de encuadre)
+  proy:()=>{ const q=camera.quaternion.clone().invert(), P=new THREE.Vector3(), W=new THREE.Vector3(), o={};
+    bodyRoot.updateMatrixWorld(true);
+    const g=(n,b,dir)=>{ if(!b)return; b.getWorldPosition(P); W.copy(P).addScaledVector(dir,0.085);
+      o[n]=P.clone().sub(camera.position).applyQuaternion(q).toArray().map(v=>+v.toFixed(4));
+      o[n+'_tip']=W.sub(camera.position).applyQuaternion(q).toArray().map(v=>+v.toFixed(4)); };
+    g('D',bRHand,TIRO_DEDOS_R); g('I',bLHand,TIRO_DEDOS_L);
+    o.arma=gunRoot.position.clone().sub(camera.position).applyQuaternion(q).toArray().map(v=>+v.toFixed(4));
+    o.boca=GUN_MUZZLE.clone().applyMatrix4(gunRoot.matrixWorld).sub(camera.position).applyQuaternion(q).toArray().map(v=>+v.toFixed(4));
+    o.aspect=+camera.aspect.toFixed(4); o.fov=camera.fov; return o; },
+  // ejes locales de cada mano en mundo: sirve para saber cuál es la normal de la palma y calibrar TIRO_TORS
+  palma:()=>{ const q=new THREE.Quaternion(), o={}; bodyRoot.updateMatrixWorld(true);
+    for(const [n,b] of [['D',bRHand],['I',bLHand]]){ if(!b)continue; b.getWorldQuaternion(q);
+      o[n]={ X:new THREE.Vector3(1,0,0).applyQuaternion(q).toArray().map(v=>+v.toFixed(3)),
+             Y:new THREE.Vector3(0,1,0).applyQuaternion(q).toArray().map(v=>+v.toFixed(3)),
+             Z:new THREE.Vector3(0,0,1).applyQuaternion(q).toArray().map(v=>+v.toFixed(3)) }; }
+    return o; },
+  // alturas de mundo (cadera / pies / cabeza): para la deslizada
+  pies:()=>{ const P=new THREE.Vector3(), o={}; bodyRoot.updateMatrixWorld(true);
+    const f=n=>{ let b=null; bodyInner.traverse(x=>{ if(x.isBone&&x.name===n)b=x; }); if(b){ b.getWorldPosition(P); o[n]=+P.y.toFixed(3); } };
+    ['Hips','Spine02','Spine','Head','LeftFoot','RightFoot'].forEach(f);
+    o.pj=+player.pos.y.toFixed(3); o.cam=+camera.position.y.toFixed(3); o.ojo=(tiroOjoY==null?null:+tiroOjoY.toFixed(3));
+    o.hipLocal=+bodyHips.position.y.toFixed(2); o.bind=+bodyHipsBind.y.toFixed(2); o.hipEsc=+bodyHips.scale.y.toFixed(3);
+    o.clip=curAnim; o.wSld=bodyActions.slide?+bodyActions.slide.getEffectiveWeight().toFixed(3):null;
+    o.tclip=bodyActions[curAnim]?+bodyActions[curAnim].time.toFixed(3):null; return o; },
   ojo:()=>{ if(!bodyHead)return null; const P=new THREE.Vector3(); bodyHead.getWorldPosition(P);
     P.x+=-Math.sin(player.yaw)*(CAM_FWD-player.camBack); P.z+=-Math.cos(player.yaw)*(CAM_FWD-player.camBack); P.y+=CAM_UP-player.camLow;
     const D=gunRoot.position.clone().sub(P); const q=camera.quaternion;
@@ -1529,9 +1679,12 @@ _gltf.load(EBASE+BODY_FILE, gl=>{ const inner=gl.scene;
 }, undefined, e=>console.warn('parkour.glb',e));
 function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
   const nx=bodyActions[name]; nx.reset(); nx.enabled=true; nx.setEffectiveWeight(1); nx.play();
-  if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones
+  if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim], (curAnim==='slide'||name==='slide')?0.30:0.16, true);   // transición suave (la deslizada, más larga)
   curAnim=name; }
+const SLD_DIP_MAX=0.80, SLD_T_HOLD=0.43, SLD_TS=0.85;   // m de bajada máxima · s del fotograma más bajo · timescale
 function tickBody(dt,gameState){ if(!bodyRoot)return; setAnim(gameState||'idle');
+  { const a=bodyActions.slide; if(a){ a.setEffectiveTimeScale(SLD_TS);
+      if(player.sliding && a.time>SLD_T_HOLD) a.time=SLD_T_HOLD; } }
   bodyRoot.position.set(player.pos.x,player.pos.y,player.pos.z); bodyRoot.rotation.y=player.faceYaw+Math.PI;
   // los clips slide_light / diagonal_wall_run están hechos para un lado (izquierda); se ESPEJAN cuando vas hacia la derecha
   // NADA de espejo en el cuerpo local: una escala negativa en un ancestro rompe getWorldQuaternion()
@@ -1540,7 +1693,13 @@ function tickBody(dt,gameState){ if(!bodyRoot)return; setAnim(gameState||'idle')
   bodyMixer.update(dt);
   // anular el root motion: las animaciones trasladan el Hips por el espacio → fijamos X/Z y limitamos Y
   if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHips.position.z=bodyHipsBind.z;
-    bodyHips.position.y=Math.max(bodyHipsBind.y-0.5,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }   // slide baja, wallrun no dispara la cámara
+    bodyHips.scale.set(1,1,1);   // el mixer le mete escala a la cadera en los crossfades: 14,6% = 0,098 m de tirón
+    // isRunning() es imprescindible: getEffectiveWeight() de una acción que NUNCA se reprodujo devuelve 1
+    // (el peso arranca en 1 aunque no esté en la lista activa del mixer), así que sin este test la puerta
+    // quedaba abierta SIEMPRE y la cadera bobeaba 0,12 m corriendo.
+    const _aS=bodyActions.slide, _wS=(_aS&&_aS.isRunning())?_aS.getEffectiveWeight():0;
+    const _lo=(_wS>0.001)? SLD_DIP_MAX/(bodyScale*0.01) : 0.5;   // ¡el clamp está en unidades de hueso!
+    bodyHips.position.y=Math.max(bodyHipsBind.y-_lo,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }
   // ---- POSTURA DEL ARMA: de la cintura para arriba manda el código; las piernas siguen siendo la animación ----
   try{ tiroPostura(dt); }catch(e){ if(!window.__posErr){ window.__posErr=1; console.warn('postura',e); } }
   // la cabeza se oculta con el near plane (la cámara está EN la cabeza): sin cortes, sin deformación, sin agujero
@@ -1700,7 +1859,8 @@ function update(dt){
   player.fov+=(targetFov-player.fov)*Math.min(1,6*dt); if(Math.abs(camera.fov-player.fov)>0.05){camera.fov=player.fov;camera.updateProjectionMatrix();}
   // ---- cámara FP: a la altura de la cabeza (bob vertical real del hueso) pero CENTRADA en el cuerpo ----
   // XZ estable (centro del cuerpo + un poco adelante) → quieto miras AL FRENTE, no al hombro; sólo la ALTURA viene del hueso de la cabeza
-  if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor); }     // la cámara va EN la cabeza (sigue su posición; la cabeza queda oculta por el near-plane)
+  if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor);
+    if(typeof tiroOjoY==='number' && isFinite(tiroOjoY)) _camAnchor.y=tiroOjoY; }   // ← la MISMA altura que usa el arma
   else { _camAnchor.set(player.pos.x, player.pos.y+EYE, player.pos.z); }         // roll/carga: altura estable → la vuelta de cámara queda limpia (no se traga el cuerpo)
   const fwH=_v.set(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
   // al deslizarse: baja un poquito y queda un poco ADELANTE de la cabeza — suave
