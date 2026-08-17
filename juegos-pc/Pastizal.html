@@ -4957,6 +4957,7 @@ const IDIOMAS={
     ayuda:'left thumb walks · right thumb looks',
     ayudaPC:'WASD move · mouse look · SPACE jump · R run · ESC menu',
     pausa:'PAUSED', seguir:'RESUME', avanzado:'ADVANCED', cine:'CINEMATIC',
+    salida:'you found the way out',
     ajustes:'SETTINGS', correr:'RUN', salto:'JUMP',
     hPasto:'GRASS', hImagen:'IMAGE',
     densidad:'DENSITY', altura:'HEIGHT', viento:'WIND', arco:'LEAN',
@@ -4982,6 +4983,7 @@ const IDIOMAS={
     ayuda:'pulgar izquierdo: caminar · derecho: mirar',
     ayudaPC:'WASD mover · mouse mirar · ESPACIO saltar · R correr · ESC menú',
     pausa:'EN PAUSA', seguir:'SEGUIR', avanzado:'AVANZADO', cine:'CINEMÁTICA',
+    salida:'encontraste la salida',
     ajustes:'AJUSTES', correr:'CORRER', salto:'SALTO',
     hPasto:'PASTO', hImagen:'IMAGEN',
     densidad:'DENSIDAD', altura:'ALTURA', viento:'VIENTO', arco:'INCLINACIÓN',
@@ -5007,6 +5009,7 @@ const IDIOMAS={
     ayuda:'polegar esquerdo: andar · direito: olhar',
     ayudaPC:'WASD mover · mouse olhar · ESPAÇO pular · R correr · ESC menu',
     pausa:'EM PAUSA', seguir:'CONTINUAR', avanzado:'AVANÇADO', cine:'CINEMÁTICA',
+    salida:'você achou a saída',
     ajustes:'AJUSTES', correr:'CORRER', salto:'PULO',
     hPasto:'CAPIM', hImagen:'IMAGEM',
     densidad:'DENSIDADE', altura:'ALTURA', viento:'VENTO', arco:'INCLINAÇÃO',
@@ -5429,7 +5432,10 @@ const PIL_GLSL=`
       vec4 v=uVent[i];
       vec3 C = (v.x<0.5)? vec3(v.y, v.w, v.z) : vec3(v.z, v.w, v.y);
       vec3 d=C-P; float r=length(d); d/=max(r,0.001);
-      c+=uSolPilC*(max(dot(N,d),0.0)*0.55+0.14)/(1.0+r*r*0.055);
+      /* el 0,38 de piso no es capricho: es la luz del vano que llega despues
+         de rebotar, y sin el las caras que le dan la espalda a la ventana
+         quedan a cero aunque esten a dos metros de ella */
+      c+=uSolPilC*(max(dot(N,d),0.0)*0.62+0.38)/(1.0+r*r*0.040);
     }
     return c;
   }
@@ -5557,12 +5563,19 @@ const matPileta=new THREE.ShaderMaterial({
       /* al techo le rebota el agua y el piso entero, asi que recibe mas del
          doble que una pared: sin eso salia gris plomo y la sala parecia un
          sotano en vez de un lugar de azulejo blanco */
-      /* EL REBOTE, UNA CUARTA PARTE. Con 0,168 la sala entera tenia un piso de
-         luz que ninguna pared bajaba de ahi: no habia sombra posible. El rebote
-         existe, pero vale poco y muere rapido; lo que ilumina de verdad es el
-         agua y el tubo que tengas encima. */
-      float reb=(vT>1.5&&vT<2.5)? 1.9 : 1.0;
-      col+=alb*vec3(0.026,0.032,0.034)*reb*(0.06+0.94*uEnc);
+      /* EL REBOTE, QUE ES LO QUE HACE QUE LA LUZ SEA PAREJA.
+         Lo habia dejado en 0,026 buscando oscuridad, y el resultado fue una
+         sala que se veia bien mirando hacia las ventanas y NEGRA mirando para
+         atras: la unica luz que quedaba dependia del angulo con el sol, asi que
+         cada cara que no lo miraba se caia a cero.
+         En un sitio de azulejo blanco eso no pasa nunca. La luz rebota diez
+         veces antes de morirse y llega a todas las caras por igual; lo que
+         cambia entre una pared iluminada y una en sombra es un factor de dos,
+         no de cincuenta. Este termino NO mira la normal a proposito: es la luz
+         que llega de todos lados, y es lo que hace que el sitio se lea igual
+         mires para donde mires. */
+      float reb=(vT>1.5&&vT<2.5)? 1.55 : 1.0;
+      col+=alb*vec3(0.115,0.138,0.142)*reb*(0.06+0.94*uEnc);
 
       /* EL AGUA DEVUELVE SU PROPIA LUZ. Es la firma del sitio: el verde
          azulado no esta en los azulejos, esta en el REBOTE, y por eso la pared
@@ -5573,7 +5586,7 @@ const matPileta=new THREE.ShaderMaterial({
          clara del cuadro y la pared se prende cerca de ella y se apaga a dos
          metros: ese gradiente ES el sitio. Ahora que el resto bajo, este
          termino manda. */
-      col+=vec3(0.13,0.40,0.38)*alb*cerca*(0.20+0.62*uEnc);
+      col+=vec3(0.155,0.455,0.435)*alb*cerca*(0.22+0.70*uEnc);
 
       /* y le tira las causticas encima, hasta metro y medio por arriba */
       float ca=caustica(vW.xz*1.35, uTp);
@@ -5610,7 +5623,10 @@ const matPileta=new THREE.ShaderMaterial({
          de un natatorio municipal. */
       float d=length(vW-uOjo);
       float f=1.0-exp(-d*0.0295);
-      col=mix(col, vec3(0.014,0.028,0.027), clamp(f,0.0,1.0)*0.96);
+      /* Y LA BRUMA NO SE VA A NEGRO PURO. A negro absoluto, girar la cabeza
+         era pasar de una sala a un pozo; con un teal apagado la profundidad
+         sigue ocultando pero deja ver que hay sala. */
+      col=mix(col, vec3(0.062,0.098,0.098), clamp(f,0.0,1.0)*0.94);
       gl_FragColor=vec4(col,1.0);
     }`
 });
@@ -5634,7 +5650,7 @@ const matPanel=new THREE.ShaderMaterial({
       }
       vec3 c=vec3(1.0,0.985,0.945)*(0.06+on*4.2);
       float d=length(vW-uOjo);
-      c=mix(c, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.0295),0.0,1.0)*0.55);
+      c=mix(c, vec3(0.062,0.098,0.098), clamp(1.0-exp(-d*0.0295),0.0,1.0)*0.55);
       gl_FragColor=vec4(c,1.0);
     }`
 });
@@ -5727,7 +5743,7 @@ const matAguaPil=new THREE.ShaderMaterial({
       col+=uSolPilC*svA*0.62*uEnc*abs3;
 
       float d=length(vW-uOjo);
-      col=mix(col, vec3(0.014,0.028,0.027), clamp(1.0-exp(-d*0.0295),0.0,1.0)*0.92);
+      col=mix(col, vec3(0.062,0.098,0.098), clamp(1.0-exp(-d*0.0295),0.0,1.0)*0.92);
       gl_FragColor=vec4(col,1.0);
     }`
 });
@@ -5754,6 +5770,23 @@ const matVano=new THREE.ShaderMaterial({
     }`
 });
 MATS.push(matVano);
+
+/* LA SALIDA. Luz blanca fria y pareja, no el ambar del atardecer: en una sala
+   donde todo tiene el mismo color, lo unico que se lee de lejos es algo de OTRO
+   color. Por eso se reconoce sin cartel ni flecha. */
+const matSalida=new THREE.ShaderMaterial({
+  uniforms:matPileta.uniforms, side:THREE.DoubleSide,
+  vertexShader:`precision highp float; varying vec3 vW;
+    void main(){ vW=position; gl_Position=projectionMatrix*viewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    precision highp float; varying vec3 vW; uniform float uEnc, uTp;
+    void main(){
+      /* late muy despacio: lo justo para que se note que esta viva */
+      float p=0.92+0.08*sin(uTp*1.15);
+      gl_FragColor=vec4(vec3(1.0,1.0,0.985)*7.5*p*(0.05+0.95*uEnc), 1.0);
+    }`
+});
+MATS.push(matSalida);
 
 /* ------------------------------------------------------- la sala, construida
    Un solo buffer para todo el azulejo: una malla y una llamada de dibujo, igual
@@ -5786,112 +5819,129 @@ function cajasPileta(){
 function construirPileta(){
   if(PIL.hecho) return;
   PIL.hecho=true;
-  const B=PIL.BAHIA, N=PIL.N, H=PIL.ALTO, L=B*N, O=PIL_CEN;
+  const B=PIL.BAHIA, N=PIL.N, H=PIL.ALTO;
+  const P=B*N;                       // EL PERIODO: cada P metros el mundo se repite
+  PIL.P=P;
   const G=cajasPileta();
   const T_PARED=0, T_PISO=1, T_TECHO=2, T_PILAR=3;
+  const VENT=[], vanos=[], salidas=[];
 
-  G.caja(O.x, -0.30, O.z, L+2.4, 0.6, L+2.4, T_PISO);
-  G.caja(O.x, H+0.30, O.z, L+2.4, 0.6, L+2.4, T_TECHO);
-  /* LAS PAREDES. Tres macizas y la del este con ventanas: es por ahi por donde
-     entra el sol, asi que es la unica que tiene sentido agujerear.
-     Y las cuatro llevan choque de pared entera, ventanas incluidas: el vano
-     ilumina pero no se atraviesa. */
-  const VENT=[], vanos=[];
-  const SILL=0.80, DINT=4.75;                 // alfeizar y alto del vano
-  const CENZ=[-16.5, -5.5, 5.5, 16.5], ANCHO=3.05;  // cuatro ventanales
-  for(let i=0;i<4;i++){
-    const a=i*Math.PI/2, ex=Math.round(Math.cos(a)), ez=Math.round(Math.sin(a));
-    const cx=O.x+ex*(L/2+0.3), cz=O.z+ez*(L/2+0.3);
-    if(ex===1){
-      /* la pared del este, en tiras alrededor de los vanos */
-      const zi=O.z-L/2-0.6, zf=O.z+L/2+0.6, largo=zf-zi;
-      G.caja(cx, SILL*0.5, O.z, 0.6, SILL, largo, T_PARED);                    // antepecho
-      const yT=SILL+DINT;
-      G.caja(cx, yT+(H-yT)*0.5, O.z, 0.6, H-yT, largo, T_PARED);               // dintel
-      /* los machones entre ventana y ventana */
-      const bordes=[zi];
-      for(const c of CENZ){ bordes.push(O.z+c-ANCHO*0.5, O.z+c+ANCHO*0.5); }
-      bordes.push(zf);
-      for(let k=0;k<bordes.length;k+=2){
-        const z0=bordes[k], z1=bordes[k+1], w=z1-z0;
-        if(w>0.05) G.caja(cx, SILL+DINT*0.5, (z0+z1)*0.5, 0.6, DINT, w, T_PARED);
-      }
-      /* el vano: un rectangulo de pura luz en la cara de afuera */
-      for(const c of CENZ){
-        const zc=O.z+c, y0=SILL, y1=SILL+DINT, xq=cx+0.32;
-        const hw=ANCHO*0.5;
-        vanos.push(xq,y0,zc-hw,  xq,y1,zc+hw,  xq,y1,zc-hw,
-                   xq,y0,zc-hw,  xq,y0,zc+hw,  xq,y1,zc+hw);
-        /* y se registra para el recorte del sol: eje 0 = plano x */
-        VENT.push({v:[0, cx, zc, (y0+y1)*0.5], t:[hw, DINT*0.5, 0, 0]});
-      }
-    } else {
-      G.caja(cx, H/2, cz, ex? 0.6 : L+1.2, H, ez? 0.6 : L+1.2, T_PARED);
-    }
-    CHOQUES.push({x:cx, z:cz, rot:0, alto:H,
-                  hx: ex? 0.35 : (L+1.2)*0.5, hz: ez? 0.35 : (L+1.2)*0.5});
-  }
-  /* LOS PILARES DE MAS: en cada cruce de bahias, y uno suelto en medio de una
-     de cada tres. "Mucho mas en cantidad de lo practico" es textual del nivel,
-     y es lo que hace que la sala no se lea como una pileta sino como otra cosa. */
-  for(let j=0;j<=N;j++) for(let i=0;i<=N;i++){
-    const x=O.x-L/2+i*B, z=O.z-L/2+j*B;
-    G.caja(x, H/2, z, 1.05, H, 1.05, T_PILAR);
-    CHOQUES.push({x, z, hx:0.60, hz:0.60, rot:0, alto:H});
-    if((i*7+j*11)%3===0 && i<N && j<N){
-      const x2=x+B*0.5, z2=z+B*0.5;
-      G.caja(x2, H/2, z2, 0.72, H, 0.72, T_PILAR);
-      CHOQUES.push({x:x2, z:z2, hx:0.44, hz:0.44, rot:0, alto:H});
-    }
-  }
-  /* LOS TABIQUES CON ARCO. El hueco es de medio punto y esta hecho con DOVELAS
-     —doce cajitas sobre la semicircunferencia—, que es como se construye un
-     arco de verdad y ademas es la unica forma barata de tener el hueco curvo
-     sin agujerear la malla. */
+  /* --------------------------------------------------------------------------
+     EL MUNDO ES INFINITO, y el truco es el mismo que usa el pastizal: no se
+     genera mundo nuevo, se hace el mundo PERIODICO y se corre al JUGADOR.
+     El bloque mide P x P y se dibuja nueve veces —3x3— alrededor del centro,
+     asi siempre hay sala hasta setenta y cinco metros, mucho mas alla de lo que
+     deja ver la bruma. Cuando el jugador cruza medio periodo, se lo teletrasnporta
+     UN PERIODO EXACTO hacia atras: como lo que tiene delante es identico a lo
+     que tenia, no hay nada que lo delate. Puede caminar para siempre.
+     Para que eso funcione, TODO tiene que ser periodico: los pilares van de 0 a
+     N-1 y no de 0 a N —si no, el del borde se duplicaria con el del bloque de
+     al lado—, y no hay paredes de perimetro, porque un perimetro es
+     justamente lo contrario de infinito.
+     -------------------------------------------------------------------------- */
+  const O=PIL_CEN;
   const RA=2.55, YA=3.0;
-  function tabique(x,z,horiz){
-    const dx=horiz?1:0, dz=horiz?0:1;
-    const largo=B/2-RA;
-    for(const sg of [-1,1]){
-      if(largo>0.15){
-        const px=x+dx*(RA+largo*0.5)*sg, pz=z+dz*(RA+largo*0.5)*sg;
-        G.caja(px, H/2, pz, horiz?largo:0.42, H, horiz?0.42:largo, T_PARED);
-        CHOQUES.push({x:px, z:pz, hx:horiz?largo*0.5:0.24, hz:horiz?0.24:largo*0.5,
-                      rot:0, alto:H});
+  const SILL=0.80, DINT=4.75, ANCHO=3.05;
+
+  function bloque(bx, bz){
+    /* los pilares de mas */
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+      const x=bx+i*B, z=bz+j*B;
+      G.caja(x, H/2, z, 1.05, H, 1.05, T_PILAR);
+      CHOQUES.push({x, z, hx:0.60, hz:0.60, rot:0, alto:H});
+      if((i*7+j*11)%3===0){
+        const x2=x+B*0.5, z2=z+B*0.5;
+        G.caja(x2, H/2, z2, 0.72, H, 0.72, T_PILAR);
+        CHOQUES.push({x:x2, z:z2, hx:0.44, hz:0.44, rot:0, alto:H});
       }
-      const jx=x+dx*RA*sg, jz=z+dz*RA*sg;
-      G.caja(jx, YA*0.5, jz, horiz?0.34:0.42, YA, horiz?0.42:0.34, T_PARED);
-      CHOQUES.push({x:jx, z:jz, hx:horiz?0.17:0.24, hz:horiz?0.24:0.17, rot:0, alto:YA});
     }
-    /* dieciocho dovelas y no doce: con doce el arco se leia escalonado */
-    const D=18;
-    for(let k=0;k<D;k++){
-      const a=Math.PI*(k+0.5)/D;
-      const px=x+dx*Math.cos(a)*RA, py=YA+Math.sin(a)*RA, pz=z+dz*Math.cos(a)*RA;
-      const w=Math.PI*RA/D*1.55;
-      G.caja(px, py, pz, horiz?w:0.42, w, horiz?0.42:w, T_PARED);
+    /* los tabiques con arco */
+    function tabique(x,z,horiz){
+      const dx=horiz?1:0, dz=horiz?0:1;
+      const largo=B/2-RA;
+      for(const sg of [-1,1]){
+        if(largo>0.15){
+          const px=x+dx*(RA+largo*0.5)*sg, pz=z+dz*(RA+largo*0.5)*sg;
+          G.caja(px, H/2, pz, horiz?largo:0.42, H, horiz?0.42:largo, T_PARED);
+          CHOQUES.push({x:px, z:pz, hx:horiz?largo*0.5:0.24, hz:horiz?0.24:largo*0.5,
+                        rot:0, alto:H});
+        }
+        const jx=x+dx*RA*sg, jz=z+dz*RA*sg;
+        G.caja(jx, YA*0.5, jz, horiz?0.34:0.42, YA, horiz?0.42:0.34, T_PARED);
+        CHOQUES.push({x:jx, z:jz, hx:horiz?0.17:0.24, hz:horiz?0.24:0.17, rot:0, alto:YA});
+      }
+      const D=18;
+      for(let k=0;k<D;k++){
+        const a=Math.PI*(k+0.5)/D;
+        const px=x+dx*Math.cos(a)*RA, py=YA+Math.sin(a)*RA, pz=z+dz*Math.cos(a)*RA;
+        const w=Math.PI*RA/D*1.55;
+        G.caja(px, py, pz, horiz?w:0.42, w, horiz?0.42:w, T_PARED);
+      }
+      const yT=YA+RA, alt=H-yT;
+      if(alt>0.15) G.caja(x, yT+alt*0.5, z, horiz?RA*2:0.42, alt, horiz?0.42:RA*2, T_PARED);
     }
-    const yT=YA+RA, alt=H-yT;
-    if(alt>0.15) G.caja(x, yT+alt*0.5, z, horiz?RA*2:0.42, alt, horiz?0.42:RA*2, T_PARED);
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++)
+      if((i*5+j*3)%3===0) tabique(bx+i*B, bz+j*B+B/2, false);
+    for(let j=0;j<N;j++) for(let i=0;i<N;i++)
+      if((i*3+j*7)%3===1) tabique(bx+i*B+B/2, bz+j*B, true);
+
+    /* --------------------------------------------- LA PARED DE LOS VENTANALES
+       Una por bloque, o sea una cada cincuenta metros: un paño largo de azulejo
+       con un ventanal por bahia, y UN ARCO en el medio para poder pasar. Los
+       ventanales son infranqueables —el choque cubre el paño entero— pero por
+       ahi entra el sol de atardecer, que es la luz principal del sitio. */
+    const zw=bz+B*0.5;
+    for(let i=0;i<N;i++){
+      const xc=bx+i*B+B*0.5;
+      if(i===2){ tabique(xc, zw, true); continue; }   // por acá se pasa
+      const zc=zw;
+      G.caja(xc, SILL*0.5, zc, B, SILL, 0.6, T_PARED);
+      const yT=SILL+DINT;
+      G.caja(xc, yT+(H-yT)*0.5, zc, B, H-yT, 0.6, T_PARED);
+      const lat=(B-ANCHO)*0.5;
+      for(const sg of [-1,1])
+        G.caja(xc+sg*(ANCHO+lat)*0.5, SILL+DINT*0.5, zc, lat, DINT, 0.6, T_PARED);
+      CHOQUES.push({x:xc, z:zc, hx:B*0.5, hz:0.35, rot:0, alto:H});
+      const y0=SILL, y1=SILL+DINT, zq=zc-0.32, hw=ANCHO*0.5;
+      vanos.push(xc-hw,y0,zq,  xc+hw,y1,zq,  xc+hw,y0,zq,
+                 xc-hw,y0,zq,  xc-hw,y1,zq,  xc+hw,y1,zq);
+      VENT.push({v:[1, zc, xc, (y0+y1)*0.5], t:[hw, DINT*0.5, 0, 0]});
+    }
+
+    /* ------------------------------------------------------------ LA SALIDA
+       Una por bloque. Es un vano angosto de luz BLANCA —no del atardecer, que
+       es el color de todo lo demas— en un tabique corto: se reconoce de lejos
+       justamente porque su luz es de otro color que el resto de la sala. */
+    const sx=bx+B*3.5, sz=bz+B*4.0;
+    G.caja(sx, H/2, sz, 5.2, H, 0.5, T_PARED);
+    G.caja(sx-2.0, 1.7, sz, 1.2, 3.4, 0.5, T_PARED);
+    G.caja(sx+2.0, 1.7, sz, 1.2, 3.4, 0.5, T_PARED);
+    G.caja(sx, 1.7+3.4*0.5+ (H-3.4)*0.5, sz, 5.2, H-3.4, 0.5, T_PARED);
+    CHOQUES.push({x:sx-2.0, z:sz, hx:0.6, hz:0.3, rot:0, alto:H});
+    CHOQUES.push({x:sx+2.0, z:sz, hx:0.6, hz:0.3, rot:0, alto:H});
+    salidas.push({x:sx, z:sz});
   }
-  for(let j=0;j<N;j++) for(let i=1;i<N;i++)
-    if((i*5+j*3)%3===0) tabique(O.x-L/2+i*B, O.z-L/2+j*B+B/2, false);
-  for(let j=1;j<N;j++) for(let i=0;i<N;i++)
-    if((i*3+j*7)%3===1) tabique(O.x-L/2+i*B+B/2, O.z-L/2+j*B, true);
+
+  for(let tz=-1;tz<=1;tz++) for(let tx=-1;tx<=1;tx++)
+    bloque(O.x-P*0.5+tx*P, O.z-P*0.5+tz*P);
+
+  /* piso, techo y agua: tres bloques de lado, y sin bordes a la vista */
+  const LG=P*3+4;
+  G.caja(O.x, -0.30, O.z, LG, 0.6, LG, T_PISO);
+  G.caja(O.x, H+0.30, O.z, LG, 0.6, LG, T_TECHO);
 
   const geo=new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(G.pos,3));
   geo.setAttribute('normal',   new THREE.Float32BufferAttribute(G.nor,3));
   geo.setAttribute('tipo',     new THREE.Float32BufferAttribute(G.tip,1));
-  geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(O.x,H*0.5,O.z), L);
+  geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(O.x,H*0.5,O.z), LG);
 
-  /* LOS TUBOS. Una bahia si y una no, y las que quedan sin tubo son los
-     "rincones sin luz" que el nivel nombra: no es un descuido, es el nivel. */
+  /* los tubos, tambien periodicos */
   PIL.luces.length=0;
   for(let j=0;j<N;j++) for(let i=0;i<N;i++){
     if((i+j*2)%3===2) continue;
     if(PIL.luces.length>=PIL_MAXLUZ) continue;
-    PIL.luces.push(new THREE.Vector3(O.x-L/2+B*(i+0.5), H-0.10, O.z-L/2+B*(j+0.5)));
+    PIL.luces.push(new THREE.Vector3(O.x-P*0.5+B*(i+0.5), H-0.10, O.z-P*0.5+B*(j+0.5)));
   }
   const arr=matPileta.uniforms.uLuz.value;
   for(let i=0;i<PIL_MAXLUZ;i++){
@@ -5900,12 +5950,16 @@ function construirPileta(){
   matPileta.uniforms.uNLuz.value=PIL.luces.length;
   matPileta.uniforms.uAguaY.value=PIL.AGUA;
   matPileta.uniforms.uAlto.value=H;
+  /* de las ventanas alcanza con las del bloque del medio: son las unicas cuyo
+     recorte de sol se puede ver desde donde esta siempre el jugador */
   const uv=matPileta.uniforms.uVent.value, ut=matPileta.uniforms.uVentT.value;
+  const cerca=VENT.filter(v=>Math.abs(v.v[1]-O.z)<P*0.75).slice(0,PIL_MAXVENT);
   for(let i=0;i<PIL_MAXVENT;i++){
-    if(VENT[i]){ uv[i].fromArray(VENT[i].v); ut[i].fromArray(VENT[i].t); }
+    if(cerca[i]){ uv[i].fromArray(cerca[i].v); ut[i].fromArray(cerca[i].t); }
     else { uv[i].set(0,-9999,0,0); ut[i].set(0,0,0,0); }
   }
-  matPileta.uniforms.uNVent.value=Math.min(VENT.length, PIL_MAXVENT);
+  matPileta.uniforms.uNVent.value=cerca.length;
+  PIL.salidas=salidas;
 
   const malla=new THREE.Mesh(geo, matPileta);
   malla.frustumCulled=false;
@@ -5913,8 +5967,11 @@ function construirPileta(){
   const pg=[];
   for(const l of PIL.luces){
     const w=3.7, d=1.15, y=H-0.05;
-    pg.push(l.x-w/2,y,l.z-d/2, l.x+w/2,y,l.z+d/2, l.x+w/2,y,l.z-d/2,
-            l.x-w/2,y,l.z-d/2, l.x-w/2,y,l.z+d/2, l.x+w/2,y,l.z+d/2);
+    for(let tz=-1;tz<=1;tz++) for(let tx=-1;tx<=1;tx++){
+      const lx=l.x+tx*P, lz=l.z+tz*P;
+      pg.push(lx-w/2,y,lz-d/2, lx+w/2,y,lz+d/2, lx+w/2,y,lz-d/2,
+              lx-w/2,y,lz-d/2, lx-w/2,y,lz+d/2, lx+w/2,y,lz+d/2);
+    }
   }
   const gp=new THREE.BufferGeometry();
   gp.setAttribute('position', new THREE.Float32BufferAttribute(pg,3));
@@ -5922,22 +5979,35 @@ function construirPileta(){
   const paneles=new THREE.Mesh(gp, matPanel);
   paneles.frustumCulled=false;
 
-  const agua=new THREE.Mesh(new THREE.PlaneGeometry(L+2, L+2, 1, 1).rotateX(-Math.PI/2),
-                            matAguaPil);
-  agua.position.set(O.x, PIL.AGUA, O.z);
-  agua.frustumCulled=false; agua.renderOrder=20;
-
   const gv=new THREE.BufferGeometry();
   gv.setAttribute('position', new THREE.Float32BufferAttribute(vanos,3));
   gv.boundingSphere=geo.boundingSphere;
   const ventanas=new THREE.Mesh(gv, matVano);
   ventanas.frustumCulled=false;
 
+  /* la salida: un rectangulo de luz blanca, de otro color que todo el resto */
+  const gs=[];
+  for(const q of salidas){
+    const hw=1.4, y0=0.10, y1=3.4, zq=q.z+0.28;
+    gs.push(q.x-hw,y0,zq,  q.x+hw,y1,zq,  q.x+hw,y0,zq,
+            q.x-hw,y0,zq,  q.x-hw,y1,zq,  q.x+hw,y1,zq);
+  }
+  const gsg=new THREE.BufferGeometry();
+  gsg.setAttribute('position', new THREE.Float32BufferAttribute(gs,3));
+  gsg.boundingSphere=geo.boundingSphere;
+  const puerta=new THREE.Mesh(gsg, matSalida);
+  puerta.frustumCulled=false;
+
+  const agua=new THREE.Mesh(new THREE.PlaneGeometry(LG, LG, 1, 1).rotateX(-Math.PI/2),
+                            matAguaPil);
+  agua.position.set(O.x, PIL.AGUA, O.z);
+  agua.frustumCulled=false; agua.renderOrder=20;
+
   PIL.grupo=new THREE.Group();
-  PIL.grupo.add(malla, paneles, agua, ventanas);
+  PIL.grupo.add(malla, paneles, agua, ventanas, puerta);
   PIL.grupo.visible=false;
   escena.add(PIL.grupo);
-  NO_PROYECTA.push(malla, paneles, agua, ventanas);
+  NO_PROYECTA.push(malla, paneles, agua, ventanas, puerta);
 }
 
 /* ---------------------------------------------------------------- el pasaje
@@ -5954,7 +6024,7 @@ function entrarPileta(){
     o.visible=false;
   }
   PIL.grupo.visible=true;
-  PIL.activo=true; PIL.enc=0; PIL.t=0;
+  PIL.activo=true; PIL.enc=0; PIL.t=0; PIL.saliendo=false;
   /* EN EL CENTRO DE UNA BAHIA. Los pilares estan en los cruces, o sea en
      multiplos exactos de la bahia: arrancar ahi metia al jugador adentro de un
      pilar y lo unico que se veia era azulejo a un palmo de la cara. */
@@ -5971,8 +6041,8 @@ function entrarPileta(){
      tener un medidor decidiendo por ella. Con uAdapta en cero la exposicion es
      la que yo pongo y nada mas. */
   matGrado.uniforms.uAdapta.value=0.0;
-  matGrado.uniforms.uExpM.value=0.86;
-  matGrado.uniforms.uVin.value=0.62;      // el vineteo tira los bordes a negro
+  matGrado.uniforms.uExpM.value=0.94;
+  matGrado.uniforms.uVin.value=0.34;
   matGrado.uniforms.uGrano.value=0.014;
   matGrado.uniforms.uSat.value=1.06;
   matGrado.uniforms.uCon.value=1.16;
@@ -5984,12 +6054,64 @@ function entrarPileta(){
 function moverPileta(dt){
   if(!PIL.activo) return;
   PIL.t+=dt;
+  /* ---------------------------------------------------------- EL INFINITO
+     El mundo es periodico cada P metros, asi que cuando el jugador cruza medio
+     periodo se lo corre UN PERIODO ENTERO hacia atras. Lo que tiene delante es
+     identico a lo que tenia, o sea que no hay nada que lo delate: ni un salto
+     de imagen, ni un borde, ni una costura. Camina para siempre.
+     Es el mismo truco que usa el pastizal para no tener fin, solo que ahi se
+     corre la grilla y aca se corre el jugador. */
+  const P=PIL.P||(PIL.N*PIL.BAHIA);
+  const dx=PJ.x-PIL_CEN.x, dz=PJ.z-PIL_CEN.z;
+  if(dx> P*0.5) PJ.x-=P; else if(dx<-P*0.5) PJ.x+=P;
+  if(dz> P*0.5) PJ.z-=P; else if(dz<-P*0.5) PJ.z+=P;
+  /* la salida: se cruza y se sale */
+  if(PIL.salidas && !PIL.saliendo){
+    for(const q of PIL.salidas){
+      if(Math.abs(PJ.x-q.x)<1.35 && Math.abs(PJ.z-q.z)<0.85){ salirPileta(); break; }
+    }
+  }
   /* SE PRENDE PROGRESIVAMENTE: seis segundos y medio para que arranquen los
      catorce tubos, uno detras del otro y tartamudeando. */
   PIL.enc=Math.min(1, PIL.enc+dt/6.5);
   matPileta.uniforms.uEnc.value=PIL.enc;
   matPileta.uniforms.uTp.value=PIL.t;
   matPileta.uniforms.uOjo.value.copy(camara.position);
+}
+
+/* --------------------------------------------------------------- LA SALIDA
+   Hay una, y lleva de vuelta al campo — al amanecer, con el mundo entero otra
+   vez armado. Es el unico sitio de la sala donde la luz es blanca y no ambar, y
+   por eso se encuentra: en un lugar donde todo es del mismo color, lo unico que
+   se lee de lejos es lo que no lo es. */
+function salirPileta(){
+  if(PIL.saliendo) return;
+  PIL.saliendo=true;
+  const f=$('flash');
+  if(f){ f.style.transition='opacity .5s linear'; f.style.opacity='1'; }
+  setTimeout(()=>{
+    PIL.activo=false;
+    PIL.grupo.visible=false;
+    if(PIL.guardado) for(const [o,v] of PIL.guardado) o.visible=v;
+    PIL.guardado=null;
+    /* el campo, al amanecer y entero */
+    reiniciarFinal();
+    ponerSol(0.13); ponerNiebla(0.20);
+    matGrado.uniforms.uAdapta.value=0.30;
+    matGrado.uniforms.uExpM.value=1.0;
+    matGrado.uniforms.uVin.value=0.40;
+    matGrado.uniforms.uGrano.value=0.018;
+    matGrado.uniforms.uSat.value=1.18;
+    matGrado.uniforms.uCon.value=1.11;
+    matGrado.uniforms.uVelo.value=0.055;
+    PJ.x=0; PJ.z=0; PJ.y=0; PJ.vx=PJ.vz=PJ.vy=0; PJ.yaw=0.6; PJ.cabeceo=0.04;
+    ponerCamara(0.016); seguirPasto(camara.position.x, camara.position.z);
+    PIL.saliendo=false;
+    if(f){ f.style.transition='opacity 2.8s ease'; f.style.opacity='0'; }
+    const a=$('ayuda');
+    if(a){ a.textContent=L.salida; a.style.opacity='1';
+           setTimeout(esconderAyuda, 8000); }
+  }, 620);
 }
 
 window.__dbg={
