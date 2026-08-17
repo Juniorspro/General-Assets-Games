@@ -2499,3 +2499,115 @@ Nada de eso se ve.
 En el menú de pausa hay un **▶ CINEMÁTICA**. Es la única forma de pulirla sin
 jugar diez minutos cada vez. El click además destraba el audio, que los
 navegadores no dejan sonar sin un gesto del usuario.
+
+---
+
+## `Campo_de_Tiro.html` — el campo de tiro con la primera persona del parkour
+
+Es el juego de parkour multijugador (mismo motor, mismos personajes, mismas
+animaciones, mismo multijugador) con **un mundo nuevo**: una galería de tiro gris.
+Arranca directo ahí (el carrusel del menú igual deja entrar a todos los demás
+niveles).
+
+### Por qué el arma no cuelga de la mano
+Lo obvio sería colgar el fusil del hueso `RightHand` y listo. No sirve: la mano
+va donde la manda la animación —al costado del cuerpo cuando estás quieto—, así
+que el arma apuntaría al piso y bailaría con cada paso.
+
+Acá va al revés: **el arma se coloca respecto a la cámara** (un *viewmodel*
+clásico) y **las manos van a buscarla** con IK de dos huesos sobre el mismo
+esqueleto del juego. Resultado: ves *tus* brazos, con *tu* skin, agarrando el
+fusil, y el arma queda siempre pegada a la retícula.
+
+### El número que define todo el agarre
+Antes de tocar una sola posición medí el rig en el propio juego:
+
+- el hombro derecho está a **0,182 m a la derecha, 0,231 abajo y 0,10 detrás** del ojo
+- el brazo **alcanza 0,54 m** (0,267 de brazo + 0,273 de antebrazo)
+
+Con eso el agarre se cae solo: la mano derecha a ~0,30 m del hombro (codo bien
+doblado, como una empuñadura de verdad) y la izquierda a ~0,52 m (brazo casi
+estirado). Por eso **la mano de apoyo va sobre el cargador y no en la punta del
+guardamanos**: un guardamanos largo queda literalmente fuera del alcance del
+brazo, y el IK lo único que puede hacer ahí es estirar el brazo y dejar la mano
+colgando en el aire. Error medido mano→empuñadura: **8 mm**.
+
+El IK es el clásico de dos huesos con ley de cosenos:
+
+```js
+const ca=Math.acos((L1*L1+d*d-L2*L2)/(2*L1*d));
+_ikU.copy(_ikD).applyAxisAngle(_ikN,ca);   // dirección del hueso de arriba
+```
+El plano lo define un *pole* (una pista de hacia dónde apunta el codo): afuera y
+abajo a la derecha, abajo a la izquierda. El peso se interpola sobre la
+cuaternión **animada**, no la reemplaza, así que al deslizarse o rodar el brazo
+vuelve solo a la animación del parkour.
+
+### Los dedos
+El hueso de la mano **no tiene hijos**, así que su eje `+Y` local es el eje de los
+dedos (lo hereda de la cadena del brazo). En vez de adivinar ángulos de Euler,
+ese eje se **apunta** a una dirección del mundo: la derecha empuña (adelante y
+abajo), la izquierda abraza cruzando hacia la derecha. Ahí la mano dejó de ser un
+bulto pegado al arma y pasó a agarrarla.
+
+### Tres cosas que se veían mal y por qué
+- **El arma parecía chapa pulida blanca.** `scene.environment` es un
+  `RoomEnvironment` (un estudio con luces): con `metalness` alta el fusil reflejaba
+  todo eso y salía blanco. Gunmetal = metalness baja, roughness alta y
+  `envMapIntensity` 0,22.
+- **La culata tapaba la pantalla.** El modelo está corrido hacia adelante y con
+  culata corta: lo que queda detrás de 0,20 m lo recorta el near plane, igual que
+  en la vida real no ves la culata que tenés apoyada en el pómulo.
+- **El fogonazo no aparecía nunca.** Se descontaba el tiempo *antes* de decidir si
+  se dibuja, así que con `dt` grande (celular a 20 fps) moría en el mismo frame en
+  que nacía. Ahora se muestra en el frame del disparo y después se descuenta. Y el
+  plano liso se veía como un cuadrado blanco: ahora es una estrella con degradé
+  dibujada en un canvas.
+
+### El galpón
+Hormigón gris con textura de canvas (cero descargas), **bafles inclinados en el
+techo** —que es lo que hace que una galería *parezca* una galería—, puestos con
+divisorias y mesada (el carril central queda libre para caminar), línea de fuego
+amarilla, carteles de distancia y tablero de puntaje en el fondo.
+
+Adentro del galpón **el sol no entra**: el techo lo tapa, así que su shadow map
+sólo costaría fps. Se apaga en este mundo (`sun.castShadow=false`) y las sombras
+de contacto se **pintan**: un degradé radial en un plano bajo cada blanco y cada
+mesada. La luz la dan las luminarias emisivas, ocho luces puntuales y un
+`HemisphereLight` **que vive dentro del grupo del nivel** — three no recolecta
+luces de objetos invisibles, así que se apaga solo al cambiar de mundo y no toca
+a los otros niveles.
+
+### Los blancos
+- **Papel a 10, 25 y 45 m**: anillos concéntricos en canvas. El puntaje sale del
+  `uv` del raycast (distancia al centro → 10…3) multiplicado por la distancia, y
+  en el mismo `uv` se deja el **agujero** (un disco negro hijo del blanco, pool de 48).
+- **Acero a 15, 29 y 45 m**: se caen hacia atrás girando el pivote y se levantan
+  solos a los 3 s.
+- **Uno móvil a 34 m** sobre un riel, y vale más.
+
+### El disparo
+Raycast desde la cámara con dispersión mínima (más si corrés o estás en el aire),
+trazadora desde la boca del caño hasta el impacto, chispas en el acero, retroceso
+de arma **y** de cámara, cargador de 30 y recarga de 1,85 s.
+
+El sonido es **sintetizado con WebAudio**: ruido filtrado con barrido de paso bajo
++ un golpe de graves para el disparo, dos senos para el *ping* del acero, y todo
+con un `ConvolverNode` de impulso propio para la reverb del galpón. Cero archivos
+nuevos.
+
+### Controles
+- **Celular**: botón **FUEGO** (mantenerlo = automático) y **↺** para recargar.
+  Los dos se pueden reubicar con el editor de HUD del juego.
+- **PC**: en el modelo de dos dedos original mirar y disparar serían el mismo
+  gesto (arrastrar), así que al detectar teclado/mouse **WASD camina** (escribe el
+  mismo `joy` que el joystick), el mouse mira con **pointer lock** y el **click
+  izquierdo** queda libre para el gatillo. `R` recarga, espacio salta, shift
+  desliza. En celular no cambia nada.
+
+### Gancho de consola
+`window.__tiro` para calibrar sin recompilar: `pos(x,z)`, `mira(yaw,pitch)`,
+`tirar()`, `auto(v)`, `off(x,y,z)`, `esc(v)`, `grip(...)`, `tors(a,b)`,
+`mundo(k)`, `est()`, `brazo()`, `manos()`, `aceros()`, `fx()`.
+`manos()` devuelve el error en metros entre cada mano y su empuñadura: es la forma
+de saber si el agarre cierra sin depender del ojo.

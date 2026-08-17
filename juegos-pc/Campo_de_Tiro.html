@@ -1313,8 +1313,16 @@ function enterTiro(){ if(world==='tiro')return; world='tiro'; grassMode=false; d
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
   lastSafe.copy(TIRO_START); portalDone=true;
   tiroAmmo=TIRO_MAG; tiroRel=0; tiroFire=false; tiroCd=0;
+  tiroReiniciar();
   setWorldHUD('tiro','q_tiro'); ambient('amb3'); tiroHUD(true);
 }
+
+function tiroReiniciar(){   // tanda nueva: puntaje a cero, papeles limpios y aceros de pie (el récord se guarda)
+  tiroScore=0; tiroHits=0; tiroShots=0;
+  for(const m of tiroMarks){ m.visible=false; if(m.parent)m.parent.remove(m); }
+  _markI=0;
+  for(const o of tiroTargets){ const u=o.userData; if(u.kind==='steel'){ u.down=false; u.t=0; u.piv.rotation.x=0; } }
+  tiroHUD(true); }
 
 /* ===================== ARMA: munición, disparo, retroceso ===================== */
 const TIRO_MAG=30, TIRO_RPM=640, TIRO_RELOAD=1.85;
@@ -1519,7 +1527,15 @@ function tiroSnd(k){ const c=tctx(); if(!c||!AUD.on)return; if(c.state==='suspen
   else if(k==='mag2'){ noise(0.05,3600,600,0.22,300); tono(240,120,0.05,0.10,'square'); }
 }
 
-/* ===================== controles del arma (móvil: botones · PC: mouse/teclado) ===================== */
+/* ===================== controles del arma (móvil: botones · PC: mouse/teclado) =====================
+   En PC el modelo de dos dedos no sirve para disparar: arrastrar para mirar y disparar serían el mismo gesto.
+   Solución: si detecto teclado/mouse, WASD camina (escribe el mismo `joy` que el joystick) y el mouse mira con
+   pointer lock, así el click izquierdo queda libre para el gatillo. En celular no cambia nada. */
+let _pc=false;
+const TCL={w:false,a:false,s:false,d:false};
+function tiroJoyTeclas(){ let x=(TCL.d?1:0)-(TCL.a?1:0), y=(TCL.s?1:0)-(TCL.w?1:0);
+  const l=Math.hypot(x,y); if(l>1){ x/=l; y/=l; }
+  joy.x=x; joy.y=y; if(knob) knob.style.transform='translate('+(x*38)+'px,'+(y*38)+'px)'; }
 function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
   try{ tiroBest=parseInt(localStorage.getItem('pf_tiro_best')||'0',10)||0; }catch(e){}
   const bf=document.getElementById('bFire'), br=document.getElementById('bReload');
@@ -1530,16 +1546,35 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
   addEventListener('pointerdown',e=>{ if(e.pointerType!=='mouse'||e.button!==0)return; if(world!=='tiro'||!gameplayActive())return; if(isBtn(e.target))return; audioStart(); tiroFire=true; },true);
   addEventListener('pointerup',e=>{ if(e.pointerType==='mouse')tiroFire=false; });
   addEventListener('blur',()=>{ tiroFire=false; });
-  addEventListener('keydown',e=>{ if(world!=='tiro'||!gameplayActive())return;
-    const k=(e.key||'').toLowerCase();
-    if(k==='r'){ e.preventDefault(); tiroReload(); }
-    else if(k===' '){ e.preventDefault(); jumpReq=true; }
-    else if(k==='f'){ e.preventDefault(); tiroFire=true; setTimeout(()=>{ tiroFire=false; },90); } });
+  // teclado (PC): WASD camina en cualquier mundo, R recarga y espacio salta
+  addEventListener('keydown',e=>{ if(e.ctrlKey||e.metaKey||e.altKey)return; _pc=true; if(!gameplayActive())return;
+    const k=(e.key||'').toLowerCase(); let m=true;
+    if(k==='w'||k==='arrowup')TCL.w=true; else if(k==='s'||k==='arrowdown')TCL.s=true;
+    else if(k==='a'||k==='arrowleft')TCL.a=true; else if(k==='d'||k==='arrowright')TCL.d=true;
+    else { m=false;
+      if(k===' '){ jumpReq=true; }
+      else if(k==='shift'){ startSlide(); }
+      else if(k==='r'&&world==='tiro'){ tiroReload(); }
+      else if(k==='f'&&world==='tiro'){ tiroFire=true; setTimeout(()=>{ tiroFire=false; },90); }
+      else return; }
+    e.preventDefault(); if(m)tiroJoyTeclas(); });
+  addEventListener('keyup',e=>{ const k=(e.key||'').toLowerCase();
+    if(k==='w'||k==='arrowup')TCL.w=false; else if(k==='s'||k==='arrowdown')TCL.s=false;
+    else if(k==='a'||k==='arrowleft')TCL.a=false; else if(k==='d'||k==='arrowright')TCL.d=false; else return;
+    tiroJoyTeclas(); });
+  // mouse (PC): pointer lock para mirar → el click izquierdo queda libre para el gatillo
+  const cv=renderer.domElement;
+  cv.addEventListener('click',()=>{ if(!_pc||world!=='tiro'||!gameplayActive())return;
+    if(!document.pointerLockElement && cv.requestPointerLock){ try{ cv.requestPointerLock(); }catch(e){} } });
+  addEventListener('mousemove',e=>{ if(document.pointerLockElement!==cv)return;
+    const lk=LOOK*sensMul*1.15; player.yaw-=(e.movementX||0)*lk;
+    player.pitch=Math.max(-0.9,Math.min(1.3,player.pitch-(e.movementY||0)*lk)); });
+  addEventListener('pointerdown',e=>{ if(e.pointerType==='mouse')_pc=true; },true);
 }
 
 /* ---- gancho de consola (para calibrar y para probar sin tocar el código) ---- */
 try{ window.__tiro={
-  ir:()=>enterTiro(), pos:(x,z,y)=>{ player.pos.set(x,(y==null?0:y),TIRO_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
+  ir:()=>enterTiro(), mundo:k=>startLevel(k), pos:(x,z,y)=>{ player.pos.set(x,(y==null?0:y),TIRO_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
   mira:(y,p)=>{ player.yaw=y; player.faceYaw=y; player.pitch=p||0; },
   tirar:()=>tiroShoot(), auto:v=>{ tiroFire=!!v; }, recargar:()=>tiroReload(),
   off:(x,y,z)=>GUN_OFF.set(x,y,z), esc:v=>gunRoot.scale.setScalar(v), grip:(a,b,c,d,e,f)=>{ GUN_GRIP_R.set(a,b,c); GUN_GRIP_L.set(d,e,f); },
@@ -1564,6 +1599,7 @@ try{ window.__tiro={
     huesos:!!(bRArm&&bRFore&&bRHand&&bLArm&&bLFore&&bLHand), arma:!!(gunRoot&&gunRoot.visible), blancos:tiroTargets.length,
     off:GUN_OFF.toArray(), cam:camera.position.toArray().map(v=>+v.toFixed(2)), pj:player.pos.toArray().map(v=>+v.toFixed(2)) }) };
 }catch(e){}
+try{ tiroWire(); }catch(e){}   // cablear también al arrancar (WASD/mouse sirven aunque empieces en otro mundo)
 
 /* ===================== BASE ESPACIAL (domo militar con varios obbys sobre LAVA; al salir, plataformas en el ESPACIO) ===================== */
 const SPACE_GZ=12000; const spaceGroup=new THREE.Group(); spaceGroup.visible=false; scene.add(spaceGroup);
