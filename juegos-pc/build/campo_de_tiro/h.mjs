@@ -55,7 +55,14 @@ for (const sh of plan) {
   if (sh.js) { const r = await pg.evaluate(sh.js).catch(e => 'ERR ' + e.message.slice(0, 160)); if (r !== undefined && r !== null) console.log('  js ->', JSON.stringify(r)); }
   if (sh.wait !== 0) await pg.waitForTimeout(sh.wait == null ? 500 : sh.wait);
   const f = 'out/' + sh.n + '.png';
-  await pg.screenshot(sh.clip ? { path: f, clip: { x: sh.clip[0], y: sh.clip[1], width: sh.clip[2], height: sh.clip[3] } } : { path: f });
+  // La pagina corre su propio rAF continuo y con swiftshader cada frame tarda: cuando el jugador se mueve
+  // (esprint), page.screenshot se queda esperando "frame estable" y se cae por timeout. No es un error del
+  // juego, es el harness: timeout largo + un reintento, y si igual falla se avisa sin ensuciar el conteo.
+  const opt = sh.clip ? { path: f, clip: { x: sh.clip[0], y: sh.clip[1], width: sh.clip[2], height: sh.clip[3] } } : { path: f };
+  opt.timeout = 90000; opt.animations = 'disabled';
+  try { await pg.screenshot(opt); }
+  catch (e) { console.log('(reintento de captura', sh.n + ')'); await pg.waitForTimeout(1500);
+    try { await pg.screenshot(opt); } catch (e2) { console.log('(SIN CAPTURA', sh.n + ':', e2.message.slice(0, 90) + ')'); continue; } }
   const med = await pg.evaluate(() => {   // brillo medio del frame: medir, no adivinar
     const c = document.querySelector('#app canvas'); const w = 160, h = 90;
     const t = document.createElement('canvas'); t.width = w; t.height = h;

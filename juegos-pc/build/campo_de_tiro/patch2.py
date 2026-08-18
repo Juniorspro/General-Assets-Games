@@ -102,8 +102,14 @@ rep("""  if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHip
     // (el peso arranca en 1 aunque no esté en la lista activa del mixer), así que sin este test la puerta
     // quedaba abierta SIEMPRE y la cadera bobeaba 0,12 m corriendo.
     const _aS=bodyActions.slide, _wS=(_aS&&_aS.isRunning())?_aS.getEffectiveWeight():0;
-    const _lo=(_wS>0.001)? SLD_DIP_MAX/(bodyScale*0.01) : 0.5;   // ¡el clamp está en unidades de hueso!
-    bodyHips.position.y=Math.max(bodyHipsBind.y-_lo,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }""")
+    // G6 (bug de unidades, la otra mitad). La rama de deslizada ya convertia metros -> unidades de hueso,
+    // pero la rama NORMAL usaba los literales 0.5 / 0.15 crudos, que en unidades de hueso son 5,4 mm y
+    // 1,6 mm de mundo: la cadera quedaba CLAVADA a altura de parado y no rebotaba nunca. Ahora las dos
+    // ramas hablan metros. NRM_DIP/NRM_UP son chicos a proposito: dejan pasar el rebote real de la
+    // zancada (~5 cm) y siguen cortando la deriva de 0,12 m que metia el crossfade.
+    const _u=1/(bodyScale*0.01);   // 1 m en unidades de hueso (Armature.scale=0.01 · bodyScale)
+    const _lo=(_wS>0.001? SLD_DIP_MAX : NRM_DIP)*_u, _up=NRM_UP*_u;
+    bodyHips.position.y=Math.max(bodyHipsBind.y-_lo,Math.min(bodyHipsBind.y+_up,bodyHips.position.y)); }""")
 
 # --- 2f) SOSTEN DE LA DESLIZADA: el clip se congela en su fotograma mas bajo -------------
 # La deslizada dura hasta 0,9 s pero el clip llega a su minimo (Hips 22.485) a t=0.433 y despues SUBE.
@@ -112,6 +118,7 @@ rep("""  if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHip
 # desvanece. SLD_TS=0.85 estira la entrada a 0,506 s de reloj.
 rep("""function tickBody(dt,gameState){ if(!bodyRoot)return; setAnim(gameState||'idle');""",
     """const SLD_DIP_MAX=0.80, SLD_T_HOLD=0.43, SLD_TS=0.85;   // m de bajada máxima · s del fotograma más bajo · timescale
+const NRM_DIP=0.050, NRM_UP=0.035;   // m: cuánto puede rebotar la cadera FUERA de la deslizada (ver 2e)
 function tickBody(dt,gameState){ if(!bodyRoot)return; setAnim(gameState||'idle');
   { const a=bodyActions.slide; if(a){ a.setEffectiveTimeScale(SLD_TS);
       if(player.sliding && a.time>SLD_T_HOLD) a.time=SLD_T_HOLD; } }""")
@@ -119,8 +126,44 @@ function tickBody(dt,gameState){ if(!bodyRoot)return; setAnim(gameState||'idle')
 # --- 2g) crossfade mas largo cuando la deslizada es origen O destino ---------------------
 # Con 0,16 s la vuelta de 0,75 m de cadera se hacia en ~10 frames (salto de 0,07 m/frame). Con 0,30 la
 # recuperacion es monotona y ningun frame se pasa de 0,06 m.
+rep("""function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;""",
+    """function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
+  // G5. El pop de salida de la deslizada (cadera 0,244 m EN UN FRAME, medido) no lo hacía el crossfade
+  // slide->walk: lo hacía el TERCER crossfade encima, walk->idle, tres frames después, con la deslizada
+  // todavía al 0,56 de peso. Tres acciones mezclándose y una recién reseteada = salto. Mientras la
+  // deslizada se está yendo NO se acepta ningún cambio más (salvo volver a deslizarse): la transición
+  // termina en un solo crossfade y después el estado real se aplica solo, en el frame siguiente.
+  { const _sa=bodyActions.slide;
+    if(name!=='slide' && curAnim!=='slide' && _sa && _sa.isRunning() && _sa.getEffectiveWeight()>0.02) return; }""")
+
 rep("""  if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones""",
-    """  if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim], (curAnim==='slide'||name==='slide')?0.30:0.16, true);   // transición suave (la deslizada, más larga)""")
+    """  if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim], (curAnim==='slide'||name==='slide')?0.42:0.16, true);   // transición suave (la deslizada, más larga)""")
+
+# --- 2j) G8: en 3a persona el arma NO puede quedar escondida dentro del torso ------------
+# Medido (__tiro.esq() en tp, parado): gunRoot cae a x=+0.078 del eje de camara y z=-3.507, o sea 0.456 m
+# DELANTE del pecho y sobre el eje. La camara 3a persona esta EXACTAMENTE detras y centrada, asi que el
+# fusil (0.062 m de ancho) proyecta en ndc.x [0.013,0.031] y el torso en [-0.064,0.061]: el arma queda
+# tapada entera. La cuenta de cuanto hay que correr la camara para destaparla: con el arma a 3.5 m y los
+# hombros a 3.05, la condicion (x_arma - L)/3.5 + 0.009 > (0.19 - L)/3.05 da L > 0.734 m.
+# Correr el ARMA en vez de la camara no sirve: para sacarla del torso hace falta GUN_OJO.x >= 0.25, y ahi
+# la cadena hombro izquierdo -> agarre pide 0.63 m contra 0.513 de alcance (el fusil quedaria de una mano).
+# Asi que la camara se va al HOMBRO (over-the-shoulder), que es lo que hace cualquier 3a persona con arma.
+# Solo en el campo de tiro, y con el mismo anti-clip de paredes que ya usa el retroceso.
+rep("""    camera.position.set(cx-bx*back, cy, cz-bz*back);                     // SIEMPRE a la altura de los hombros (nunca por debajo)""",
+    """    camera.position.set(cx-bx*back, cy, cz-bz*back);                     // SIEMPRE a la altura de los hombros (nunca por debajo)
+    if(world==='tiro'){                                                  // ← 3ª persona SOBRE EL HOMBRO (ver 2j)
+      const rx=Math.cos(_yv), rz=-Math.sin(_yv);                         // eje derecha de la cámara
+      const maxL=camClipDist(camera.position.x,cy,camera.position.z, rx,0,rz, TP_LAT+0.25);
+      const lat=Math.min(TP_LAT*player.camTP, Math.max(0, maxL-0.25));
+      camera.position.x+=rx*lat; camera.position.z+=rz*lat; }""")
+rep("""const TP_DIST=3.1;   // distancia de la cámara en 3ª persona""",
+    """const TP_DIST=3.1;   // distancia de la cámara en 3ª persona
+const TP_LAT=0.80;   // corrimiento lateral (hombro) en 3ª persona dentro del campo de tiro: ver 2j""")
+
+# --- 2i) G2: el tope de pitch del campo de tiro tambien para el tactil -------------------
+# Mismo clamp que el del mouse (block.js). pitMax() vive en el bloque, que se inserta arriba (linea 534).
+rep("""    const lk=LOOK*sensMul; player.yaw-=ddx*lk; player.pitch=Math.max(-0.9,Math.min(1.3,player.pitch-ddy*lk)); } });""",
+    """    const lk=LOOK*sensMul; player.yaw-=ddx*lk; player.pitch=Math.max(-0.9,Math.min(pitMax(),player.pitch-ddy*lk)); } });""")
 
 # --- 2h) UN SOLO ANCLA DE OJO, compartida por la camara y el arma ------------------------
 # tiroPostura ya calcula la altura del ojo (hueso de la cabeza + limitador de velocidad) y la deja en
