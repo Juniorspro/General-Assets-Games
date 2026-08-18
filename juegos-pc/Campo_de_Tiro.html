@@ -1012,6 +1012,7 @@ function _aimBone(bone,qWorldNuevo,w,maxAng){ bone.parent.getWorldQuaternion(_qc
   if(maxAng){ const d=Math.min(1,Math.abs(bone.quaternion.dot(_qd))), ang=2*Math.acos(d);
     if(ang>maxAng) w=Math.min(w,maxAng/ang); }
   bone.quaternion.slerp(_qd,w); bone.updateMatrixWorld(true); }
+let TIRO_IKMAX=1.65;
 function ikTwoBone(up,low,end,target,pole,w){
   if(!up||!low||!end)return;
   up.getWorldPosition(_ikA); _ikD.subVectors(target,_ikA);
@@ -1035,11 +1036,11 @@ function ikTwoBone(up,low,end,target,pole,w){
   // devuelve el brazo a la pose de idle TODOS los frames, así que la desviación se mide contra una pose
   // conocida y razonable, y 83° se quedaban cortos: el brazo izquierdo tiene que salir de "colgando" a
   // "cruzado adelante", más de 90°, y el recorte del slerp lo dejaba a 7 cm del guardamanos al esprintar.
-  _aimBone(up,_qb,w,2.20);   // ~126° respecto a la pose de idle
+  _aimBone(up,_qb,w,TIRO_IKMAX);
   low.getWorldPosition(_ikB); end.getWorldPosition(_ikC);        // el antebrazo apunta la mano al objetivo
   _ikP.subVectors(_ikC,_ikB).normalize(); _ikU.subVectors(_ikT,_ikB).normalize();
   _qa.setFromUnitVectors(_ikP,_ikU); low.getWorldQuaternion(_qb); _qb.premultiply(_qa);
-  _aimBone(low,_qb,w,2.60);   // el antebrazo tiene más margen
+  _aimBone(low,_qb,w,TIRO_IKMAX+1.15);   // el antebrazo tiene más margen (su piel no se estira)
 }
 // La mano no tiene hijos, así que su eje +Y local es el de los dedos (viene heredado de la cadena del brazo).
 // En vez de adivinar Eulers, se APUNTA ese eje a una dirección del mundo: los dedos abrazan el arma en serio.
@@ -1055,7 +1056,12 @@ function apuntarMano(bone,dir,w){ if(!bone)return;
 function torcerMano(bone,rad,w){ if(!bone||!rad)return; _ikU.set(0,1,0).applyQuaternion(bone.getWorldQuaternion(_qb));
   _qw.setFromAxisAngle(_ikU,rad); _qb.premultiply(_qw); _aimBone(bone,_qb,w); }   // giro de muñeca sobre el eje de los dedos
 const TIRO_DEDOS_R=new THREE.Vector3(), TIRO_DEDOS_L=new THREE.Vector3();
-let TIRO_TORS_R=0.55, TIRO_TORS_L=-0.35;
+// MEDIDOS, no adivinados (barrido de 16 ángulos con __tiro.palma(): para cada giro se proyecta el eje que
+// va de la muñeca al arma sobre los ejes locales X/Z de la mano y se busca el máximo).
+//  IZQUIERDA: el −Z local apunta al arma con |dot|=0.997 en −0.39 → la palma queda contra el guardamanos.
+//  DERECHA:   ningún eje pasa de |dot|=0.34 (desde la muñeca, el arma cae casi SOBRE el eje de los dedos),
+//             así que el giro está poco determinado; 0.59 es el máximo del eje Z, que es el que más manda.
+let TIRO_TORS_R=0.59, TIRO_TORS_L=-0.39;
 
 /* ===================== POSTURA: el personaje AGARRA el arma (torso procedural sobre piernas reales) =====================
    Referencia (Dev_Unallocated · CryEngine · NeoFPS): el arma NO se pega a la mano — va a un "item bone", un socket
@@ -1063,6 +1069,7 @@ let TIRO_TORS_R=0.55, TIRO_TORS_L=-0.35;
    la posición sale del hueso Spine02 (o sea, de la animación real: sube, baja, se tuerce, se acuesta al deslizarse)
    y la orientación sale del eje de puntería + offsets procedurales (bob, respiración, retraso del caño, retroceso).
    Resultado: las piernas y el cuerpo son animación de verdad, y de la cintura para arriba el fusil está AGARRADO. */
+let SPR_YAW=0.20;
 let paso=0, resp=0, tJit=0;                 // fases: zancada, respiración, micro-temblor
 let lagY=0, lagP=0, vlagY=0, vlagP=0;       // retraso/adelanto del caño al girar (resorte)
 let prevYaw=null, prevPit=0;
@@ -1181,7 +1188,7 @@ function tiroPostura(dt){
     _spineAdd(bSp02,-pit*0.13,0,0, 1); _spineAdd(bSp01,-pit*0.17,0,0, 1); _spineAdd(bSp,  -pit*0.19,0,0, 1);
     // 2) pose: al esprintar el tronco se va adelante; al deslizarse se va para ATRÁS (te reclinás), que es
     //    lo contrario de lo que hacía el signo viejo. −0,22 rad repartido = 12,6° de reclinada.
-    const inc=aSpr*0.10 - sSld*0.22, rol=sSld*0.08*(player.slideRight?-1:1);
+    const inc=aSpr*0.10 - sSld*0.14, rol=sSld*0.08*(player.slideRight?-1:1);
     _spineAdd(bSp02, inc*0.30,0,rol*0.30, 1); _spineAdd(bSp01, inc*0.30,0,rol*0.30, 1); _spineAdd(bSp, inc*0.40,0,rol*0.40, 1);
     // 3) respiración del pecho cuando estás quieto (activación: cuanto más quieto, más se nota)
     _spineAdd(bSp02, Math.sin(resp)*0.022*quieto, 0, 0, 1);
@@ -1214,7 +1221,7 @@ function tiroPostura(dt){
   // si se dejan grandes, el fusil se para de costado y los brazos cruzan la lente. Ahora son sólo carácter.
   const pPit = pit + lagP*0.85 + Math.sin(paso*2.0+0.7)*0.013*mov + jit + recUp*0.9 + landK*1.6
              + aSpr*0.10 + sSld*0.08 + aAir*0.10 - aRel*0.30;   // 0.22 de esprint subía el arma 0,093 m
-  const pYaw = player.yaw - lagY*0.95 + jit*0.7 + aSpr*0.20 + sSld*0.04 - aRel*0.22;
+  const pYaw = player.yaw - lagY*0.95 + jit*0.7 + aSpr*SPR_YAW + sSld*0.04 - aRel*0.22;
   // el alabeo de la deslizada va CON SIGNO: antes alabeaba siempre para el mismo lado sin importar hacia
   // dónde te deslizabas (player.slideRight ya se calcula en startSlide y había quedado sin uso).
   const pRol = -lagY*1.5 - latV*0.022 + Math.sin(paso)*0.020*mov + aSpr*0.16 + sSld*0.10*(player.slideRight?-1:1) + aRel*0.30;
@@ -1248,6 +1255,9 @@ function tiroPostura(dt){
   // el agarre izquierdo se corre al cajón a medida que subís la puntería (ver GUN_GRIP_L_ALTO)
   _gL.lerpVectors(GUN_GRIP_L, GUN_GRIP_L_ALTO, Math.max(0,Math.min(1,(pit-0.15)/0.70)));
   gunRoot.position.copy(_ojo).add(_vida)
+    // (probado y descartado: correr el arma a la derecha con el pitch. Cada cm hacia la derecha aleja el
+    //  agarre del hombro IZQUIERDO, _limitarArma tira el fusil hacia atrás y la profundidad de la muñeca
+    //  derecha cae de 0.265 a 0.217, o sea adentro del recorte. Medido con +0.100·pitch.)
     .addScaledVector(_cr, GUN_OJO.x + bobX + respX + aSpr*0.028 + sSld*0.035)
     // los −0.120 de la deslizada eran compensación pura de un torso caído (lo decía el comentario viejo:
     // "es lo que mantiene el brazo izquierdo por debajo de la lente"). Con el torso erguido y el ojo
@@ -1424,7 +1434,8 @@ try{ window.__tiro={
   mira:(y,p)=>{ player.yaw=y; player.faceYaw=y; player.pitch=p||0; },
   tirar:()=>tiroShoot(), auto:v=>{ tiroFire=!!v; }, recargar:()=>tiroReload(),
   esc:v=>gunRoot.scale.setScalar(v), grip:(a,b,c,d,e,f)=>{ GUN_GRIP_R.set(a,b,c); GUN_GRIP_L.set(d,e,f); },
-  tors:(a,b)=>{ TIRO_TORS_R=a; TIRO_TORS_L=b; }, fogonazo:t=>{ flashT=(t==null?0.05:t); },
+  tors:(a,b)=>{ TIRO_TORS_R=a; TIRO_TORS_L=b; }, ik:v=>{ TIRO_IKMAX=v; }, spryaw:v=>{ SPR_YAW=v; },
+  gripAlto:(x,y,z)=>GUN_GRIP_L_ALTO.set(x,y,z), fogonazo:t=>{ flashT=(t==null?0.05:t); },
   // ¿las manos llegan realmente a la empuñadura? (error en metros, medido después del IK)
   manos:()=>{ if(!bRHand||!gunRoot)return null; const A=new THREE.Vector3(),B=new THREE.Vector3();
     gunRoot.updateMatrixWorld(true); bRHand.getWorldPosition(A); B.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);

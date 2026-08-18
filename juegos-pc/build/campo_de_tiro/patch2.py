@@ -79,5 +79,57 @@ rep("""  if(bodyInner){ const mir=(curAnim==='wallrun'&&player.wallrun>0)||(curA
   // y con eso el IK de los brazos y la orientación del arma (el fusil salía de costado al deslizarse).
   if(bodyInner && bodyInner.scale.x!==bodyScale) bodyInner.scale.x=bodyScale;""")
 
+# --- 2e) LA CADERA BAJA DE VERDAD AL DESLIZARSE ------------------------------------------
+# HALLAZGO: el clamp de root motion estaba en UNIDADES DE HUESO, no en metros. parkour.glb tiene
+# Armature.scale=0.01 (las traslaciones de huesos vienen en centimetros) y bodyScale=1.0882, o sea
+# 1 unidad = 0.010882 m. Los "0.5 / 0.15" de siempre son 5,4 mm y 1,6 mm de MUNDO: la cadera estaba
+# clavada a altura de parado con +-5 mm de juego. Y el clip 'slide' SI baja la cadera: su track
+# Hips.translation va de 85.3 a 22.485 unidades (t=0.433 s), o sea quiere bajar 70 unidades = 0,762 m.
+# El clamp le comia el 99,3%: lo unico que sobrevivia era la rotacion, y por eso la deslizada se leia
+# como un tropezon (tronco doblado sobre una cadera a altura de parado, fusil vertical delante de la cara).
+# La FK del propio clip a t=0.433 ya trae la pose de piernas consistente con la cadera abajo: no hay que
+# inventar curva ninguna, hay que dejar de tirarla a la basura.
+# La puerta se abre por el PESO del crossfade y NO por curAnim: gateando con curAnim, en el frame en que
+# pasa a 'run' la cadera pega el salto entero de 0,93 m (medido).
+# Ademas: BUG DE ESCALA. En el crossfade run->walk->idle el mixer llevaba bodyHips.scale a 1.1456 y volvia,
+# en 9 frames: estiraba el esqueleto entero un 14,6% y subia el ojo de 1,765 a 1,863 (0,098 m de tiron, la
+# fuente mas grande de las dos). El cancel de root motion arreglaba la posicion pero nunca la escala.
+rep("""  if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHips.position.z=bodyHipsBind.z;
+    bodyHips.position.y=Math.max(bodyHipsBind.y-0.5,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }   // slide baja, wallrun no dispara la cámara""",
+    """  if(bodyHips&&bodyHipsBind){ bodyHips.position.x=bodyHipsBind.x; bodyHips.position.z=bodyHipsBind.z;
+    bodyHips.scale.set(1,1,1);   // el mixer le mete escala a la cadera en los crossfades: 14,6% = 0,098 m de tirón
+    // isRunning() es imprescindible: getEffectiveWeight() de una acción que NUNCA se reprodujo devuelve 1
+    // (el peso arranca en 1 aunque no esté en la lista activa del mixer), así que sin este test la puerta
+    // quedaba abierta SIEMPRE y la cadera bobeaba 0,12 m corriendo.
+    const _aS=bodyActions.slide, _wS=(_aS&&_aS.isRunning())?_aS.getEffectiveWeight():0;
+    const _lo=(_wS>0.001)? SLD_DIP_MAX/(bodyScale*0.01) : 0.5;   // ¡el clamp está en unidades de hueso!
+    bodyHips.position.y=Math.max(bodyHipsBind.y-_lo,Math.min(bodyHipsBind.y+0.15,bodyHips.position.y)); }""")
+
+# --- 2f) SOSTEN DE LA DESLIZADA: el clip se congela en su fotograma mas bajo -------------
+# La deslizada dura hasta 0,9 s pero el clip llega a su minimo (Hips 22.485) a t=0.433 y despues SUBE.
+# Sin congelar, a mitad de deslizada el personaje se vuelve a parar solo. El congelado se gatea por
+# player.sliding (no por curAnim), asi que el clip sale del sosten desde su pose mas baja mientras se
+# desvanece. SLD_TS=0.85 estira la entrada a 0,506 s de reloj.
+rep("""function tickBody(dt,gameState){ if(!bodyRoot)return; setAnim(gameState||'idle');""",
+    """const SLD_DIP_MAX=0.80, SLD_T_HOLD=0.43, SLD_TS=0.85;   // m de bajada máxima · s del fotograma más bajo · timescale
+function tickBody(dt,gameState){ if(!bodyRoot)return; setAnim(gameState||'idle');
+  { const a=bodyActions.slide; if(a){ a.setEffectiveTimeScale(SLD_TS);
+      if(player.sliding && a.time>SLD_T_HOLD) a.time=SLD_T_HOLD; } }""")
+
+# --- 2g) crossfade mas largo cuando la deslizada es origen O destino ---------------------
+# Con 0,16 s la vuelta de 0,75 m de cadera se hacia en ~10 frames (salto de 0,07 m/frame). Con 0,30 la
+# recuperacion es monotona y ningun frame se pasa de 0,06 m.
+rep("""  if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim],0.16,true);   // transición suave entre animaciones""",
+    """  if(curAnim&&bodyActions[curAnim]) nx.crossFadeFrom(bodyActions[curAnim], (curAnim==='slide'||name==='slide')?0.30:0.16, true);   // transición suave (la deslizada, más larga)""")
+
+# --- 2h) UN SOLO ANCLA DE OJO, compartida por la camara y el arma ------------------------
+# tiroPostura ya calcula la altura del ojo (hueso de la cabeza + limitador de velocidad) y la deja en
+# tiroOjoY; tickBody corre ANTES que la camara en el mismo frame, asi que leerla aca garantiza que vista
+# y arma no discrepen nunca. La altura del jugador pasa cruda por dentro de tiroOjoY: el filtro es sobre
+# el OFFSET DE POSE, no sobre player.pos.y (si no se comeria saltos y caidas).
+rep("""  if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor); }     // la cámara va EN la cabeza (sigue su posición; la cabeza queda oculta por el near-plane)""",
+    """  if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor);
+    if(typeof tiroOjoY==='number' && isFinite(tiroOjoY)) _camAnchor.y=tiroOjoY; }   // ← la MISMA altura que usa el arma""")
+
 open(DST, 'w', encoding='utf-8').write(s)
 print('ediciones:', N[0], '· bytes:', len(s), '→', DST)
