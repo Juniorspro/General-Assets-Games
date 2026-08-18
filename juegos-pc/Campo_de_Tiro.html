@@ -33,9 +33,22 @@
   /* APUNTAR: un FPS necesita su propio botón de mira, no alcanza con gatillo y recarga */
   #bAds{ right:210px; bottom:calc(148px + var(--safe-b)); width:66px; height:66px; font-size:10px; letter-spacing:.02em; }
   #bAds.on{ background:rgba(224,118,31,.72); border-color:rgba(255,220,180,.9); }
-  #cross{ width:26px; height:26px; margin:-13px; background:transparent; border:1.6px solid rgba(255,255,255,.8); }
+  /* CRUCETA: una CRUZ blanca de cuatro brazos con hueco en el medio y punto al centro (el círculo
+     de antes no marcaba el centro con precisión). Los cuatro brazos son cuatro degradados sobre el
+     mismo pseudo-elemento, así no hacen falta cuatro divs. */
+  #cross{ width:34px; height:34px; margin:-17px; background:transparent; border:0; border-radius:0;
+          transition:opacity .12s linear; }
+  #cross::before{ content:''; position:absolute; inset:0;
+    background:
+      linear-gradient(#fff,#fff) 50% 0    /2px 11px no-repeat,
+      linear-gradient(#fff,#fff) 50% 100% /2px 11px no-repeat,
+      linear-gradient(#fff,#fff) 0    50% /11px 2px no-repeat,
+      linear-gradient(#fff,#fff) 100% 50% /11px 2px no-repeat;
+    filter:drop-shadow(0 0 2px rgba(0,0,0,.95)); }
   #cross::after{ content:''; position:absolute; left:50%; top:50%; width:3px; height:3px; margin:-1.5px; border-radius:50%;
-            background:#fff; box-shadow:0 0 4px rgba(0,0,0,.85); }
+            background:#fff; box-shadow:0 0 3px rgba(0,0,0,.95); }
+  /* apuntando manda el punto rojo de la réflex: dos cruces superpuestas es ruido */
+  body.apuntando #cross{ opacity:0; }
   #tiroHUD{ position:fixed; right:calc(16px + var(--safe-t)); top:calc(106px + var(--safe-t)); z-index:11; pointer-events:none; text-align:right;
             font-family:'Segoe UI',system-ui,-apple-system,sans-serif; color:#fff; text-shadow:0 1px 6px rgba(0,0,0,.7),0 0 2px rgba(0,0,0,.5); }
   #tiroHUD>div:nth-child(1){ font-size:27px; font-weight:800; letter-spacing:.03em; line-height:1; }
@@ -862,6 +875,7 @@ function flashTex(){ if(_txFlash)return _txFlash; const S=128,c=document.createE
 /* ---- ARMA (viewmodel de cajas: se ve prolijo y no pesa nada) ---- */
 let gunRoot=null, gunFlash=null, gunFlash2=null, gunLight=null, gunMag=null, gunCH=null;
 let gunCruz=null;   // la cruz de la mira réflex: se apaga/entra en test de profundidad cuando la cámara sale del ojo
+let gunCulata=null; // la culata: en 1ª persona está detrás del pómulo y sólo deja una astilla en la lente
 // Medido en el propio rig: hombro a 0.182 der / 0.231 abajo / 0.10 detrás del ojo, y el brazo ALCANZA 0.54 m (0.267+0.273).
 // Todo el agarre se diseñó con ese número: la derecha a ~0.30 del hombro (codo bien doblado) y la izquierda a ~0.52 (brazo casi
 // estirado, como en un fusil de verdad). Por eso la mano de apoyo va sobre el cargador y no en la punta del guardamanos.
@@ -1035,21 +1049,26 @@ function buildGun(){ if(gunRoot)return;
   box(0.008,0.055,0.020, 0.036,0.020,0.086, metal, 0,0,0.25);   // palanca del selector
   gunCH=box(0.020,0.018,0.060, 0.040,0.030,0.055, metal); gunCH.userData.z0=0.055;
   box(0.006,0.026,0.055, 0.035,0.028,-0.010, negro);        // ventana de eyección
-  // --- culata de madera ---
-  box(0.046,0.062,0.075, 0,0.006,0.205, madera, -0.06);     // cuello de la culata
-  box(0.048,0.078,0.150, 0,-0.006,0.320, madera, -0.03);    // cuerpo
-  box(0.050,0.090,0.020, 0,-0.010,0.400, negro, -0.03);     // cantonera
+  /* --- culata de madera ---
+     Va en su propio grupo: en 1ª persona la culata está apoyada en el hombro, DETRÁS del pómulo, y
+     lo único que llega a la lente es una astilla de un píxel que además se dibuja por delante del
+     antebrazo (se veía como una rayita naranja bajando por el medio de la pantalla). Se apaga en 1ª
+     persona y vuelve en 3ª/menú, que es donde el fusil se ve entero. */
+  gunCulata=new THREE.Group(); gunRoot.add(gunCulata);
+  { const pieza=(w,h,d,x,y,z,m,rx)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+      me.position.set(x,y,z); if(rx)me.rotation.x=rx; gunCulata.add(me); return me; };
+    pieza(0.046,0.062,0.075, 0,0.006,0.205, madera, -0.06);   // cuello de la culata
+    pieza(0.048,0.078,0.150, 0,-0.006,0.320, madera, -0.03);  // cuerpo
+    pieza(0.050,0.090,0.020, 0,-0.010,0.400, negro, -0.03); } // cantonera
   // fogonazo: dos planos cruzados + luz puntual (viven 45 ms)
   const fm=new THREE.MeshBasicMaterial({map:flashTex(),color:0xffe0a0,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false,depthTest:false,side:THREE.DoubleSide});
   gunFlash=new THREE.Mesh(new THREE.PlaneGeometry(0.44,0.44),fm); gunFlash.position.copy(GUN_MUZZLE); gunFlash.position.z+=0.02; gunFlash.renderOrder=6; gunRoot.add(gunFlash);
   gunFlash2=new THREE.Mesh(new THREE.PlaneGeometry(0.44,0.44),fm); gunFlash2.position.copy(gunFlash.position); gunFlash2.rotation.z=Math.PI/2; gunFlash2.renderOrder=6; gunRoot.add(gunFlash2);
   gunFlash.visible=gunFlash2.visible=false;
   gunLight=new THREE.PointLight(0xffd9a0,0,7,2); gunLight.position.copy(GUN_MUZZLE); gunRoot.add(gunLight);
-  /* Recorte cercano del ARMA. Con la mira cerrada (FOV 48) la CANTONERA de la culata queda a 0,18 m
-     de la lente y proyectaba una plancha negra de 135 × 243 px abajo del cuadro. A 0,21 se corta la
-     cantonera y el final de la culata, que es exactamente lo que hace cualquier shooter: la culata
-     está apoyada en el hombro, no delante del ojo. */
-  recorteObj(gunRoot,0.21);
+  /* Recorte cercano del ARMA: red de seguridad para lo que se acerque demasiado a la lente. La
+     culata, que era lo único que llegaba tan cerca, ahora directamente no se dibuja en 1ª persona. */
+  recorteObj(gunRoot,0.17);
 }
 
 /* ---- construcción del nivel ---- */
@@ -1442,6 +1461,26 @@ let paso=0, resp=0, tJit=0;                 // fases: zancada, respiración, mic
 let lagY=0, lagP=0, vlagY=0, vlagP=0;       // retraso/adelanto del caño al girar (resorte)
 let prevYaw=null, prevPit=0;
 let aSpr=0, aSld=0, aAir=0, aRel=0;         // alphas de pose (esprint, deslizada, aire, recarga)
+/* ===================== REPOSO =====================
+   Quieto y sin apuntar, el fusil se ASIENTA: se corre hacia el centro de la pantalla y su eje
+   converge en la cruceta, así se ve que está mirando ahí y no colgando al costado. Mover la
+   cámara puede desacomodar brazos y arma todo lo que haga falta —eso es lo que le da peso—;
+   lo único que importa es que al frenar VUELVA solo, y por eso el reposo es un acumulador que
+   se pone en cero con cualquier cosa que hagas y vuelve a subir en cuanto soltás.
+   Y si te quedás quieto 4 s, el tirador se pone a mirar el arma (animación de idle). */
+let quietoT=0, aQui=0, idleT=-1, idleEsp=0;
+const IDLE_ESPERA=4.0, IDLE_DUR=2.30;       // 4 s quieto → 2,3 s de animación
+// y después NO cada 4 s: se repite cada 9, si no el tirador se pasa la vida mirando el fusil
+const IDLE_REPITE=9.0;
+// ancla del arma EN REPOSO: más al centro y un poco más lejos del ojo que la de andar.
+// La retícula de la réflex queda 6,8° abajo y 6,2° a la derecha de la cruceta: pegada, sin taparla.
+const GUN_OJO_QUIETO=new THREE.Vector3(0.055,-0.128,0.505);
+// CONVERGENCIA. Con el arma paralela a la vista el caño nunca cruza el eje: apunta al infinito.
+// Se lo inclina apenas para que la línea del ánima pase por la cruceta a 18 m, que es lo que hace
+// un fusil de verdad zerado. Son 0,18° y 0,42°: no se ven de golpe, pero el trazador sale de ahí.
+const CONV_D=18.0;
+const CONV_YAW=Math.atan( GUN_OJO_QUIETO.x/(CONV_D-GUN_OJO_QUIETO.z));
+const CONV_PIT=Math.atan(-GUN_OJO_QUIETO.y/(CONV_D-GUN_OJO_QUIETO.z));
 let landK=0, _eraAire=false, _vyAnt=0;
 const _pecho=new THREE.Vector3(), _pechoS=new THREE.Vector3(), _vida=new THREE.Vector3(); let _pechoOk=false;
 // ancla de ojo compartida (ver tiroPostura): altura de mundo del hueso de la cabeza, con limitador de velocidad
@@ -1525,6 +1564,7 @@ function adsTick(dt){
   const fov=FOV_CAD+(FOV_ADS-FOV_CAD)*adsW*(1-0.45*aRel);   // recargando la mira se abre un poco, no se pierde
   if(Math.abs(camera.fov-fov)>0.05){ camera.fov=fov; camera.updateProjectionMatrix(); }
   const b=document.getElementById('bAds'); if(b) b.classList.toggle('on', adsQ===1);
+  document.body.classList.toggle('apuntando', adsW>0.55);   // la cruceta se apaga y queda la réflex
 }
 function _spineAdd(b,rx,ry,rz,w){ if(!b)return; _euAim.set(rx*w,ry*w,rz*w,'XYZ'); _qw.setFromEuler(_euAim);
   b.quaternion.multiply(_qw); }   // aditivo sobre la pose de BIND (la máscara ya sacó la animación de acá)
@@ -1602,6 +1642,18 @@ function tiroPostura(dt){
   const K=150, C=17.5;
   vlagY += (-lagY*K - vlagY*C)*dt + dY*30.0; lagY += vlagY*dt; lagY=Math.max(-0.20,Math.min(0.20,lagY));
   vlagP += (-lagP*K - vlagP*C)*dt + dP*24.0; lagP += vlagP*dt; lagP=Math.max(-0.16,Math.min(0.16,lagP));
+  // ---- REPOSO: ¿está el jugador sin hacer NADA? ----
+  const _giro=(Math.abs(dY)+Math.abs(dP))/Math.max(dt,1e-4);          // rad/s de cámara
+  // (no hace falta mirar `paused`: en pausa no se llama a update, así que esto ni se evalúa)
+  const enReposo = (world==='tiro' && !menuPose && player.onGround && !player.sliding
+                    && spd<0.20 && !adsQ && adsW<0.02 && tiroRel<=0 && !tiroFire && recUp<0.02 && _giro<0.12);
+  if(enReposo){ quietoT+=dt; idleEsp+=dt; } else { quietoT=0; idleEsp=0; idleT=-1; }
+  // entrada lenta (asentarse cuesta), salida rápida (apenas te movés el arma ya no está centrada)
+  { const w=(quietoT>0.22)?1:0; aQui += (w-aQui)*Math.min(1,(w?2.6:14.0)*dt); }
+  if(idleT>=0){ idleT+=dt; if(idleT>=IDLE_DUR){ idleT=-1; idleEsp=IDLE_ESPERA-IDLE_REPITE; } }
+  else if(idleEsp>=IDLE_ESPERA){ idleT=0; }
+  // envolvente de la animación de idle: entra en 0,42 s, se queda y sale en 0,62 s
+  const idl = (idleT>=0)? kfRC(idleT,[[0,0],[0.42,1],[IDLE_DUR-0.62,1],[IDLE_DUR,0]]) : 0;
   // ---- POSE BASE DE FUSIL: se COMPONE sobre el bind (la animación ya no está acá arriba) ----
   // Antes había que MEDIR la línea de hombros para deshacer la torsión del clip de correr. Ya no: con la
   // máscara, la columna arranca en bind, y bodyRoot.rotation.y = faceYaw, o sea que los hombros ya encaran
@@ -1651,7 +1703,8 @@ function tiroPostura(dt){
   const TP_YAW=-0.55, TP_PIT=0.16;   // ver G8, abajo en pYaw
   const pPit = pit + lagP*0.85 + Math.sin(paso*2.0+0.7)*0.013*mov + jit + recUp*0.9 + landK*1.6
              + aSpr*0.05 + sSld*0.08 + aAir*0.10 - aRel*0.26 + RC.kick*0.13 + player.camTP*TP_PIT
-             + mnu*(-0.68 + Math.sin(menuT*0.55)*0.020);   // menú: 26° abajo, con la respiración del idle
+             + mnu*(-0.68 + Math.sin(menuT*0.55)*0.020)   // menú: 26° abajo, con la respiración del idle
+             + aQui*CONV_PIT + idl*(-0.085);               // reposo: converge en la cruceta; idle: la boca baja apenas
   // G8 · EN 3ª PERSONA EL FUSIL SE CRUZA HACIA AFUERA. Con el arma alineada con la mira (que es lo correcto
   // en 1ª persona) la cámara de 3ª queda EXACTAMENTE detrás del eje del caño y el fusil proyecta 0,062 m de
   // ancho a 3,5 m contra un torso de 0,38 m a 3,0 m: se esconde entero. Medido con __tiro.esq(): arma en
@@ -1662,14 +1715,16 @@ function tiroPostura(dt){
   // torso en 566): el fusil se ve entero, de punta a punta. Se aplica proporcional a camTP, así que en 1ª
   // persona vale exactamente 0 y no toca nada de lo verificado arriba.
   const pYaw = player.yaw - lagY*0.95 + jit*0.7 + aSpr*SPR_YAW + sSld*0.04 + aRel*0.12 + player.camTP*TP_YAW
-             + mnu*0.85;   // menú: el AK cruza al otro lado y se lee de costado (de punta proyectaba la mitad)
+             + mnu*0.85    // menú: el AK cruza al otro lado y se lee de costado (de punta proyectaba la mitad)
+             + aQui*CONV_YAW + idl*0.075;
   // el alabeo de la deslizada va CON SIGNO: antes alabeaba siempre para el mismo lado sin importar hacia
   // dónde te deslizabas (player.slideRight ya se calcula en startSlide y había quedado sin uso).
   // el alabeo de esprint era 0.16 rad: como el arma pivota en el OJO y el agarre izquierdo está a 0,22 m
   // del eje, cada rad de alabeo corre ese agarre 0,22 m. Con 0.16 la mano izquierda perdía el arma 38 mm
   // en el peor frame de la zancada. 0.08 = la mitad, y sigue leyéndose como "el arma se cruza al correr".
   const pRol = -lagY*1.5 - latV*0.022 + Math.sin(paso)*0.020*mov + aSpr*0.08 + sSld*0.10*(player.slideRight?-1:1) + aRel*0.38
-               + sSld*Math.sin(sldFase*31.0)*0.028 + mnu*(-0.14);
+               + sSld*Math.sin(sldFase*31.0)*0.028 + mnu*(-0.14)
+               + idl*0.52;   // idle: lo gira para mirarle el costado DERECHO (ventana de eyección y manija)
   _euAim.set(pPit,pYaw,pRol,'YXZ'); _qAim.setFromEuler(_euAim);
   gunRoot.quaternion.copy(_qAim);
   _cr.set(1,0,0).applyQuaternion(_qAim); _cu.set(0,1,0).applyQuaternion(_qAim); _cf.set(0,0,-1).applyQuaternion(_qAim);
@@ -1699,6 +1754,9 @@ function tiroPostura(dt){
   const pUp=Math.max(0,pit);
   _gOjo.lerpVectors(GUN_OJO, GUN_OJO_ADS, adsW*(1-aRel));   // apuntando el arma sube al eje de la vista
   if(mnu) _gOjo.copy(GUN_OJO_MENU).setY(GUN_OJO_MENU.y + Math.sin(menuT*0.55)*0.006);   // menú: listo bajo, respirando
+  else if(aQui>0.001) _gOjo.lerp(GUN_OJO_QUIETO, aQui*(1-adsW));   // quieto: el arma se centra sola
+  if(idl>0){ _gOjo.x += idl*(-0.012); _gOjo.z += idl*(-0.072);     // idle: se la acerca a la cara para mirarla
+    _gOjo.y += idl*0.016 + Math.sin(idleT*4.6)*0.005*idl; }
   // el agarre izquierdo se corre al cajón a medida que subís la puntería (ver GUN_GRIP_L_ALTO)
   _gL.lerpVectors(GUN_GRIP_L, GUN_GRIP_L_ALTO, Math.max(0,Math.min(1,(pit-0.15)/0.70)));
   gunRoot.position.copy(_ojo).add(_vida)
@@ -1754,6 +1812,7 @@ function tiroPostura(dt){
   gunRoot.visible = (world==='tiro') && !!DBG.arma;
   // La cruz se dibuja SIN test de profundidad para que ni el cristal ni el marco se la coman; eso está
   // bien mirando por el ojo, pero desde afuera (3ª persona, menú) atravesaba el brazo y el galpón.
+  if(gunCulata) gunCulata.visible=(mnu||player.camTP>0.30);   // la culata sólo en 3ª persona / menú
   if(gunCruz){ const fuera=(mnu||player.camTP>0.30);
     gunCruz.material.depthTest = !!fuera;
     gunCruz.material.opacity   = fuera?0.55:0.98; }
@@ -2083,7 +2142,8 @@ try{ window.__tiro={
     LFore:bLFore.quaternion.toArray().map(v=>+v.toFixed(3)), LHand:bLHand.quaternion.toArray().map(v=>+v.toFixed(3)),
     cabezaSc:bodyHead.scale.x }),
   pose:()=>({ paso:+paso.toFixed(2), spr:+aSpr.toFixed(2), sld:+aSld.toFixed(2), aire:+aAir.toFixed(2),
-    lagY:+lagY.toFixed(4), lagP:+lagP.toFixed(4), land:+landK.toFixed(3), vida:TIRO_VIDA }),
+    lagY:+lagY.toFixed(4), lagP:+lagP.toFixed(4), land:+landK.toFixed(3), vida:TIRO_VIDA,
+    quieto:+quietoT.toFixed(2), aQui:+aQui.toFixed(3), idleT:+idleT.toFixed(2), idleEsp:+idleEsp.toFixed(2) }),
   vida:v=>{ TIRO_VIDA=v; }, pecho2:(x,y,z)=>GUN_OJO.set(x,y,z), ojo2:(x,y,z)=>GUN_OJO.set(x,y,z), ven:(...a)=>{ for(let i=0;i<6;i++)TIRO_VEN[i]=a[i]; },
   // cuantos huesos quedaron enmascarados (esperado 15) y con que pose de bind arrancan
   mask:()=>({ n:mskBind?mskBind.length:0, huesos:(mskBind||[]).map(r=>r.h.name) }),
