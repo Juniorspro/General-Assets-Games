@@ -559,13 +559,14 @@ renderer.localClippingEnabled=true;   // para recortar la cabeza del cuerpo (só
    Todas comparten una sola THREE.Source por archivo: la misma imagen se sube UNA vez a la GPU
    aunque diez materiales la usen con repeticiones distintas (repeat es un uniform, no un
    parámetro de la textura de GL). */
-const HF_TEX='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@8218e5b/assets/fp/tex/';
+const HF_TEX='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@981a1ea/assets/fp/tex/';
 const HF_ANISO=Math.min(8, renderer.capabilities.getMaxAnisotropy()||1);
 const HF_TODAS=['pasto','corteza','copa','rama','hojas','hoja','helecho','tuft','fachada','asfalto','adoquin',
   'hormigon','alfombra','papel','azulejo','agua','vidrio','casco','acero','chapa','lava','nube','arena','madera',
   'palma','marmol','roca','tierra','pez','flor','ave','coral','alga','ferna',
   'pasto_n','corteza_n','hormigon_n','adoquin_n','azulejo_n','arena_n','madera_n','roca_n','asfalto_n',
-  'alfombra_n','tierra_n','chapa_n','casco_n','papel_n','marmol_n'];
+  'alfombra_n','tierra_n','chapa_n','casco_n','papel_n','marmol_n',
+  'estuco','estuco_n','teja','teja_n','oxido','oxido_n','losa','losa_n','hojasola','ramita'];
 const _hfFuente={}, _hfCola={}, _hfImg=new THREE.ImageLoader();
 function _hfHacer(n,rx,ry,esp){ const t=new THREE.Texture(); t.source=_hfFuente[n];
   t.colorSpace=esp||THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping;
@@ -1046,39 +1047,172 @@ function makeLeafTex(){ const S=256,c=document.createElement('canvas'); c.width=
 let orbMeshRef=null, orbGlass=null, orbGloss=null;   // refs para cambiar material según gráficos
 const shadowCasters=[];                              // ocluyen el sol → usado por la adaptación visual (eye adaptation)
 const crystalDoorPos=new THREE.Vector3(); let crystalDoorReady=false;   // puerta azul del árbol → obby de cristal
-// ÁRBOL PBR: tronco texturizado + ramas + copa de tarjetas de hojas con alpha (look frondoso real)
+
+/* ===================== ÁRBOL PROCEDURAL: ramas fusionadas + hojas instanciadas =====================
+   Antes el árbol era UN cilindro con tarjetas de follaje pegadas alrededor, y se notaba.
+   Ahora se genera un ESQUELETO recursivo: el tronco se abre en ramas, esas en ramas más finas,
+   cada tramo tiene su propia curvita (nada de palos rectos) y cada HOJA tiene su posición, su
+   giro y su tamaño propios. Para que eso no cueste cientos de draw calls:
+     · todas las ramas de TODOS los árboles se fusionan en UNA geometría  → 1 draw call
+     · todas las hojas de TODOS los árboles van en un InstancedMesh       → 1 draw call
+   O sea: un bosque de 40 árboles con ~55 tramos y 130 hojas cada uno son 2 llamadas de dibujo
+   en vez de 7.400. */
+const _arbV=new THREE.Vector3(), _arbV2=new THREE.Vector3(), _arbV3=new THREE.Vector3();
+const _arbM=new THREE.Matrix4(), _arbQ=new THREE.Quaternion();
+// esqueleto de un árbol: {ramas:[{a,b,ra,rb,nivel}], hojas:[{p,eje,esc,giro}]}
+function arbEsqueleto(op){
+  const o=Object.assign({alto:14,niveles:4,hojas:130,semilla:1234,hojaEsc:1,curva:0.26,radio:null},op||{});
+  let sd=(o.semilla|0)||1; const R=()=>{ sd=(sd*1103515245+12345)&0x7fffffff; return sd/0x7fffffff; };
+  const ramas=[], hojas=[];
+  const largo0=o.alto*0.40, radio0=o.radio||o.alto*0.052;
+  function tramos(p0,dir,largo,radio,nivel){         // una rama = 2-3 tramos con curvatura
+    const n=(nivel===0)?3:2;
+    let p=p0.clone(), d=dir.clone().normalize(), r=radio;
+    for(let t=0;t<n;t++){
+      const l=largo/n, r2=r*(1-0.30/n);
+      const p2=p.clone().addScaledVector(d,l);
+      ramas.push({a:p.clone(),b:p2,ra:r,rb:r2,nivel:nivel});
+      p=p2; r=r2;
+      d.x+=(R()-0.5)*o.curva; d.z+=(R()-0.5)*o.curva; d.y+=(nivel===0?0.02:-0.04); d.normalize();
+    }
+    return {p:p,d:d,r:r};
+  }
+  function crecer(p0,dir,largo,radio,nivel){
+    const fin=tramos(p0,dir,largo,radio,nivel);
+    if(nivel>=o.niveles || largo<0.35) return;
+    const n=(nivel===0)?3:(R()<0.32?3:2);
+    for(let i=0;i<n;i++){
+      const yaw=(i/n)*6.2831+R()*1.1+nivel*0.8, abre=0.40+R()*0.45;
+      const d2=fin.d.clone();
+      const perp=_arbV.set(Math.cos(yaw),0,Math.sin(yaw)).cross(d2);
+      if(perp.lengthSq()<1e-5) perp.set(1,0,0);
+      d2.applyAxisAngle(perp.normalize(),abre).normalize();
+      crecer(fin.p, d2, largo*(0.66+R()*0.16), fin.r*0.66, nivel+1);
+    }
+  }
+  crecer(new THREE.Vector3(0,0,0), new THREE.Vector3((R()-0.5)*0.08,1,(R()-0.5)*0.08), largo0, radio0, 0);
+  // HOJAS: repartidas sobre las ramas finas (las de los últimos dos niveles)
+  const finas=ramas.filter(r=>r.nivel>=Math.max(1,o.niveles-2));
+  const lista=finas.length?finas:ramas;
+  for(let i=0;i<o.hojas;i++){
+    const r=lista[(R()*lista.length)|0], t=0.15+R()*0.85;
+    const eje=r.b.clone().sub(r.a).normalize();
+    hojas.push({p:r.a.clone().lerp(r.b,t), eje:eje, esc:(0.72+R()*0.6)*o.hojaEsc, giro:R()*6.2831, sep:0.5+R()*0.9, off:0.10+R()*0.85});
+  }
+  return {ramas:ramas, hojas:hojas, alto:o.alto};
+}
+// acumulador: junta las ramas (como triángulos) y las hojas (como matrices) de varios árboles
+function arbAcum(){ return {P:[],N:[],U:[],H:[]}; }
+// UN tubo entre a y b, con radios ra/rb, en el acumulador (ya en coordenadas del grupo)
+function arbTubo(dst,a,b,ra,rb,segs,vEsc){
+  const dir=_arbV.copy(b).sub(a); const len=dir.length(); if(len<1e-4)return; dir.divideScalar(len);
+  const up=(Math.abs(dir.y)>0.9)?_arbV2.set(1,0,0):_arbV2.set(0,1,0);
+  const t1=up.clone().cross(dir).normalize(), t2=dir.clone().cross(t1).normalize();
+  const vR=Math.max(1,Math.round(len*vEsc));
+  const uR=Math.max(1,Math.round((ra+rb)*3.1416*vEsc));   // la corteza no se estira: tantos tiles como circunferencia
+  for(let i=0;i<segs;i++){
+    const c0=(i/segs)*6.2831, c1=((i+1)/segs)*6.2831;
+    const n0=t1.clone().multiplyScalar(Math.cos(c0)).addScaledVector(t2,Math.sin(c0));
+    const n1=t1.clone().multiplyScalar(Math.cos(c1)).addScaledVector(t2,Math.sin(c1));
+    const a0=a.clone().addScaledVector(n0,ra), a1=a.clone().addScaledVector(n1,ra);
+    const b0=b.clone().addScaledVector(n0,rb), b1=b.clone().addScaledVector(n1,rb);
+    const u0=(i/segs)*uR, u1=((i+1)/segs)*uR;
+    const V=[[a0,n0,u0,0],[a1,n1,u1,0],[b1,n1,u1,vR],[a0,n0,u0,0],[b1,n1,u1,vR],[b0,n0,u0,vR]];
+    for(const v of V){ dst.P.push(v[0].x,v[0].y,v[0].z); dst.N.push(v[1].x,v[1].y,v[1].z); dst.U.push(v[2],v[3]); }
+  }
+}
+// mete un esqueleto en el acumulador, plantado en (x,y,z), escalado y girado en Y
+function arbPlantar(dst,esq,x,y,z,esc,giroY,segs){
+  const cy=Math.cos(giroY||0), sy=Math.sin(giroY||0);
+  const tr=(v)=>new THREE.Vector3(x+(v.x*cy-v.z*sy)*esc, y+v.y*esc, z+(v.x*sy+v.z*cy)*esc);
+  for(const r of esq.ramas) arbTubo(dst, tr(r.a), tr(r.b), r.ra*esc, r.rb*esc, segs||5, 0.55);
+  for(const h of esq.hojas){
+    const p=tr(h.p);
+    const eje=new THREE.Vector3(h.eje.x*cy-h.eje.z*sy, h.eje.y, h.eje.x*sy+h.eje.z*cy).normalize();
+    // la hoja sale de la ramita: se abre 'sep' radianes respecto del eje y gira 'giro' sobre sí misma
+    const perp=_arbV3.set(Math.cos(h.giro),0.35,Math.sin(h.giro)).cross(eje);
+    if(perp.lengthSq()<1e-5) perp.set(1,0,0);
+    const dirH=eje.clone().applyAxisAngle(perp.normalize(),h.sep).normalize();
+    let nz=dirH.clone().cross(_arbV2.set(0,1,0));
+    if(nz.lengthSq()<1e-5) nz=dirH.clone().cross(_arbV2.set(1,0,0));
+    nz.normalize().applyAxisAngle(dirH,h.giro);
+    const nx=dirH.clone().cross(nz).normalize();
+    _arbM.makeBasis(nx,dirH,nz); _arbQ.setFromRotationMatrix(_arbM);
+    const e=h.esc*esc;
+    p.addScaledVector(dirH, (h.off||0)*e);        // la hoja sale hacia afuera, no pegada al palito
+    dst.H.push({p:p,q:_arbQ.clone(),e:e});
+  }
+}
+// cierra el acumulador: una malla de ramas + un InstancedMesh de hojas
+const _arbViento=[];
+function arbVientoMat(mat){
+  mat.userData.uT={value:0};
+  mat.onBeforeCompile=(sh)=>{ sh.uniforms.uT=mat.userData.uT;
+    sh.vertexShader='uniform float uT;\n'+sh.vertexShader.replace('#include <begin_vertex>',
+      ['#include <begin_vertex>',
+       '#ifdef USE_INSTANCING',
+       '  vec3 hIw = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);',
+       '  float hF = position.y;',                                  // la punta se mueve, la base no
+       '  float hW = sin(uT*1.7 + hIw.x*0.42 + hIw.z*0.31) + 0.5*sin(uT*2.7 + hIw.x*0.77);',
+       '  transformed.x += hW*0.16*hF; transformed.z += hW*0.10*hF;',
+       '#endif'].join('\n'));
+  };
+  _arbViento.push(mat); return mat;
+}
+function arbConstruir(dst,padre,matRama,matHoja,geoHoja){
+  let mallaR=null, mallaH=null;
+  if(dst.P.length){
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(dst.P,3));
+    g.setAttribute('normal',new THREE.Float32BufferAttribute(dst.N,3));
+    g.setAttribute('uv',new THREE.Float32BufferAttribute(dst.U,2));
+    g.computeBoundingSphere();
+    mallaR=new THREE.Mesh(g,matRama); mallaR.castShadow=true; mallaR.receiveShadow=true;
+    mallaR.matrixAutoUpdate=false; mallaR.updateMatrix(); padre.add(mallaR);
+  }
+  if(dst.H.length){
+    mallaH=new THREE.InstancedMesh(geoHoja,matHoja,dst.H.length);
+    const sc=new THREE.Vector3();
+    for(let i=0;i<dst.H.length;i++){ const h=dst.H[i];
+      sc.set(h.e*0.78,h.e,1); _arbM.compose(h.p,h.q,sc); mallaH.setMatrixAt(i,_arbM); }
+    mallaH.instanceMatrix.needsUpdate=true; mallaH.castShadow=true; mallaH.frustumCulled=false;
+    padre.add(mallaH);
+  }
+  return {ramas:mallaR, hojas:mallaH};
+}
+// materiales compartidos por TODOS los árboles (compartir = poder fusionar)
+let _matCorteza=null, _matHoja=null, _geoHoja=null;
+function arbMatCorteza(){ if(_matCorteza)return _matCorteza;
+  _matCorteza=new THREE.MeshStandardMaterial({map:makeBarkTex(),color:0x8a6038,roughness:0.95,metalness:0});
+  hfPoner(_matCorteza,'corteza',1,1,{rug:0.95,nrm:1.2});
+  return _matCorteza; }
+function arbMatHoja(){ if(_matHoja)return _matHoja;
+  _matHoja=new THREE.MeshStandardMaterial({map:makeLeafTex(),alphaTest:0.45,side:THREE.DoubleSide,roughness:0.72,metalness:0,transparent:false});
+  hfPoner(_matHoja,'ramita',1,1,{recorte:0.45,rug:0.72});
+  arbVientoMat(_matHoja);
+  return _matHoja; }
+function arbGeoHoja(){ if(_geoHoja)return _geoHoja;
+  _geoHoja=new THREE.PlaneGeometry(1,1); _geoHoja.translate(0,0.5,0);   // la hoja nace en la ramita
+  return _geoHoja; }
+
+// ÁRBOL del orbe: el mismo generador, con más niveles y más hojas (se ve de cerca)
 function buildTree(grp,groundY){
-  const TH=15;                                       // alto del tronco
-  const trunkMat=new THREE.MeshStandardMaterial({ map:makeBarkTex(), color:0x8a6038, roughness:0.92, metalness:0 });
-  hfPoner(trunkMat,'corteza',2,3,{rug:0.95,nrm:1.1});                                  // corteza fotográfica
-  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.55,1.15,TH,14), trunkMat);
-  trunk.position.set(0,groundY+TH/2,0); trunk.castShadow=true; trunk.receiveShadow=true; grp.add(trunk); shadowCasters.push(trunk);
+  const TH=15;                                       // alto de referencia del árbol
+  // ÁRBOL de verdad: esqueleto recursivo, ramas fusionadas en una malla y hojas instanciadas
+  const acu=arbAcum();
+  const esq=arbEsqueleto({alto:17.5, niveles:5, hojas:1700, semilla:20260818, hojaEsc:2.1, curva:0.22});
+  arbPlantar(acu, esq, 0, groundY, 0, 1, 0.4, 6);
+  const arb=arbConstruir(acu, grp, arbMatCorteza(), arbMatHoja(), arbGeoHoja());
+  if(arb.ramas) shadowCasters.push(arb.ramas);
   // PUERTA AZUL en el tronco → entra al obby de cristal (mira hacia -Z, por donde llega el jugador)
   const doorFrame=new THREE.Mesh(new THREE.BoxGeometry(2.0,3.3,0.3), new THREE.MeshStandardMaterial({color:0x12387a,emissive:0x123f9c,emissiveIntensity:0.7,roughness:0.4,metalness:0.3}));
   doorFrame.position.set(0,groundY+1.55,-1.05); grp.add(doorFrame);
   const doorGlow=new THREE.Mesh(new THREE.PlaneGeometry(1.5,2.7), new THREE.MeshBasicMaterial({color:0x6fb6ff,transparent:true,opacity:0.92,fog:false,side:THREE.DoubleSide}));
   doorGlow.position.set(0,groundY+1.55,-1.22); grp.add(doorGlow);
-  // ramas
-  for(let i=0;i<4;i++){ const a=i*1.7+0.4, br=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.4,6,8),trunkMat);
-    br.position.set(Math.cos(a)*1.6, groundY+TH-2+i*0.4, Math.sin(a)*1.6);
-    br.rotation.set(Math.cos(a)*0.5, 0, -Math.sin(a)*0.5-0.5*Math.cos(a)); br.castShadow=true; grp.add(br); }
-  // masa interna oscura (evita ver a través de la copa) — más chica que antes: ahora la silueta la hacen las fotos
+  // masa interna: una sola bocha verde oscura bien chica, para que la copa no se vea hueca
   const massMat=new THREE.MeshStandardMaterial({color:0x1d5a22,roughness:0.95});
-  const cy=groundY+TH+3.5;
-  for(const [mx,my,mz,r] of [[0,0,0,4.2],[-2.2,-1.4,0.9,3.0],[2.2,-0.9,-0.9,3.0],[0,2.6,0,2.9]]){
-    const m=new THREE.Mesh(new THREE.IcosahedronGeometry(r,1),massMat); m.position.set(mx,cy+my,mz); m.castShadow=true; grp.add(m); shadowCasters.push(m); }
-  // COPA: recortes fotográficos de follaje real (con alpha) en tarjetas repartidas sobre la esfera de
-  // la copa. Antes eran elipses dibujadas a mano y se veía "procedural"; ahora la silueta es una foto.
-  const leafMat=new THREE.MeshStandardMaterial({ map:makeLeafTex(), alphaTest:0.42, side:THREE.DoubleSide, roughness:0.72, metalness:0, transparent:false });
-  hfPoner(leafMat,'copa',1,1,{recorte:0.38,rug:0.78});
-  const ramaMat=new THREE.MeshStandardMaterial({ map:makeLeafTex(), alphaTest:0.42, side:THREE.DoubleSide, roughness:0.72, metalness:0, transparent:false });
-  hfPoner(ramaMat,'rama',1,1,{recorte:0.34,rug:0.76});
-  const cardGeo=new THREE.PlaneGeometry(7.5,7.5);
-  for(let i=0;i<30;i++){ const u=Math.random(), v=Math.random(), th=u*6.2831, ph=Math.acos(2*v-1), rr=4.2+Math.random()*2.6;
-    const px=rr*Math.sin(ph)*Math.cos(th), py=rr*Math.cos(ph)*0.95, pz=rr*Math.sin(ph)*Math.sin(th);
-    const card=new THREE.Mesh(cardGeo, (i%3===2)?ramaMat:leafMat); card.position.set(px, cy+py, pz);
-    card.lookAt(px*3, cy+py*3, pz*3); card.rotateZ(Math.random()*6.28); card.scale.setScalar((i%3===2?0.85:0.75)+Math.random()*0.7);
-    card.castShadow=true; grp.add(card); }
+  const mm=new THREE.Mesh(new THREE.IcosahedronGeometry(2.1,1),massMat);
+  mm.position.set(0,groundY+TH+1.6,0); mm.castShadow=true; grp.add(mm); shadowCasters.push(mm);
 }
 /* ===================== ARBOLEDA del mundo frutiger =====================
    Antes había UN árbol (el de la esfera) y el resto era pasto pelado hasta el horizonte.
@@ -1088,33 +1222,23 @@ function buildTree(grp,groundY){
 let arboledaLista=false;
 function buildArboleda(){
   if(arboledaLista) return; arboledaLista=true;
-  const N=54;
+  const N=42;
   const pos=[]; let sem=99173; const rnd=()=>{ sem=(sem*1103515245+12345)&0x7fffffff; return sem/0x7fffffff; };
   for(let i=0;i<N*4 && pos.length<N;i++){
     const a=rnd()*6.2831, r=34+rnd()*96;
     const x=7+Math.cos(a)*r, z=GRASS_GZ+46+Math.sin(a)*r;
     if(Math.hypot(x-7,z-(GRASS_GZ+46))<30) continue;                 // ni encima de la estructura
-    pos.push([x,z,3.6+rnd()*3.4, 0.72+rnd()*0.5, rnd()*6.2831]);     // x,z,alto,ancho,giro
+    pos.push([x,z,4.4+rnd()*4.6, rnd()*6.2831, (rnd()*4)|0]);        // x,z,alto,giro,forma
   }
-  const troncoMat=new THREE.MeshStandardMaterial({map:makeBarkTex(),color:0x8a6038,roughness:0.95,metalness:0});
-  hfPoner(troncoMat,'corteza',1,2,{rug:0.95});
-  const troncos=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16,0.30,1,6), troncoMat, pos.length);
-  const copaMat=new THREE.MeshStandardMaterial({map:makeLeafTex(),alphaTest:0.42,side:THREE.DoubleSide,roughness:0.78,metalness:0,transparent:false});
-  hfPoner(copaMat,'copa',1,1,{recorte:0.38,rug:0.8});
-  const copas=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1), copaMat, pos.length*3);
-  const m=new THREE.Matrix4(), q=new THREE.Quaternion(), e=new THREE.Euler(), v=new THREE.Vector3(), sc=new THREE.Vector3();
-  for(let i=0;i<pos.length;i++){
-    const [x,z,h,w,gi]=pos[i]; const gy=terrainH(x,z);
-    e.set(0,gi,0); q.setFromEuler(e);
-    v.set(x, gy+h*0.5, z); sc.set(w,h,w); m.compose(v,q,sc); troncos.setMatrixAt(i,m);
-    const cw=h*2.0, ch=h*1.8, cyy=gy+h*0.94;      // la copa MONTA sobre el tronco: no queda poste pelado
-    for(let k=0;k<3;k++){ e.set(0, gi+k*(Math.PI/3), 0); q.setFromEuler(e);
-      v.set(x, cyy, z); sc.set(cw*(k===2?0.86:1), ch*(k===2?0.9:1), 1); m.compose(v,q,sc); copas.setMatrixAt(i*3+k,m); }
-  }
-  troncos.instanceMatrix.needsUpdate=true; copas.instanceMatrix.needsUpdate=true;
-  troncos.castShadow=true; copas.castShadow=true;
-  troncos.frustumCulled=false; copas.frustumCulled=false;
-  grassGroup.add(troncos); grassGroup.add(copas);
+  // Cuatro esqueletos distintos (así no son 42 clones) y UN acumulador para todos: al final del
+  // bucle hay UNA malla con todas las ramas y UN InstancedMesh con todas las hojas del bosque.
+  const formas=[];
+  for(let f=0;f<4;f++) formas.push(arbEsqueleto({alto:8.5,niveles:4,hojas:330,semilla:5100+f*977,hojaEsc:1.62,curva:0.30}));
+  const acu=arbAcum();
+  for(const q of pos){ const gy=terrainH(q[0],q[1]);
+    arbPlantar(acu, formas[q[4]], q[0], gy, q[1], q[2]/8.5, q[3], 5); }
+  const arb=arbConstruir(acu, grassGroup, arbMatCorteza(), arbMatHoja(), arbGeoHoja());
+  if(arb.ramas) shadowCasters.push(arb.ramas);
 }
 function buildOrb(x,groundY,z){
   const grp=new THREE.Group(); grp.position.set(x,0,z);
@@ -1228,13 +1352,16 @@ function makeHouseTex(){ const c=document.createElement('canvas'); c.width=c.hei
   g.fillStyle='#d8cfb8'; for(let y=0;y<128;y+=16){ g.fillRect(0,y,128,1); }          // tablones
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; return t; }
 const _houseTex=makeHouseTex();
+const _matTeja=new THREE.MeshStandardMaterial({color:0x8a4a30,roughness:0.85});
+hfPoner(_matTeja,'teja',2,2,{color:0xffffff,rug:0.8,nrm:0.9});      // tejas de barro de verdad en los techos
 const dreamDoorPos=new THREE.Vector3(); let dreamDoorReady=false;   // casa con la PUERTA ABIERTA → backrooms
 function dreamHouse(x,z,w,d,h,rot,open){   // casa procedural: cuerpo beige + techo a dos aguas marrón + ventanas; con colisión
   const gy=terrainH(x,z); const grp=new THREE.Group(); grp.position.set(x,gy,z); grp.rotation.y=rot||0;
   const wallMat=new THREE.MeshStandardMaterial({map:_houseTex.clone(),color:0xe9e1d0,roughness:0.95}); wallMat.map.repeat.set(w/2,h/2);
+  hfPoner(wallMat,'estuco',Math.max(1,w/3),Math.max(1,h/3),{color:0xfdf6e6,rug:0.92,nrm:0.7});   // revoque fino
   const body=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),wallMat); body.position.y=h/2; body.castShadow=true; body.receiveShadow=true; grp.add(body);
   // techo a dos aguas (prisma triangular) marrón
-  const rh=Math.min(w,d)*0.55, roofMat=new THREE.MeshStandardMaterial({color:0x6b4a32,roughness:0.9});
+  const rh=Math.min(w,d)*0.55, roofMat=_matTeja;
   const sh=new THREE.Shape(); sh.moveTo(-w/2-0.3,0); sh.lineTo(w/2+0.3,0); sh.lineTo(0,rh); sh.closePath();
   const roof=new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:d+0.6,bevelEnabled:false}),roofMat);
   roof.rotation.y=0; roof.position.set(0,h,-(d+0.6)/2); roof.castShadow=true; grp.add(roof);
@@ -1253,14 +1380,26 @@ function dreamHouse(x,z,w,d,h,rot,open){   // casa procedural: cuerpo beige + te
   // collider (caja del cuerpo, en coords mundiales sin rotación → aprox AABB)
   const hw=Math.max(w,d)/2*1.05; colliders.push({minx:x-hw,maxx:x+hw,miny:gy,maxy:gy+h,minz:z-hw,maxz:z+hw,mesh:body});
 }
-function dreamFence(x0,z0,x1,z1){   // cerca blanca de estacas siguiendo el relieve
-  const n=Math.max(2,Math.round(Math.hypot(x1-x0,z1-z0)/0.6)); const m=new THREE.MeshStandardMaterial({color:0xf3f1ea,roughness:0.85});
+/* Una CAJA suelta metida en un acumulador de triángulos (para poder fusionar muchas en una malla).
+   La cerca del Dream Core eran 904 mallas de 24 vértices: 904 draw calls por unas estacas. */
+function cajaEn(dst,cx,cy,cz,sx,sy,sz,giroY){
+  const c=Math.cos(giroY||0), sn=Math.sin(giroY||0);
+  const hx=sx/2, hy=sy/2, hz=sz/2;
+  const V=[[-hx,-hy,-hz],[hx,-hy,-hz],[hx,hy,-hz],[-hx,hy,-hz],[-hx,-hy,hz],[hx,-hy,hz],[hx,hy,hz],[-hx,hy,hz]];
+  const P=V.map(v=>[cx+v[0]*c-v[2]*sn, cy+v[1], cz+v[0]*sn+v[2]*c]);
+  const CARAS=[[4,5,6,7,[0,0,1]],[1,0,3,2,[0,0,-1]],[5,1,2,6,[1,0,0]],[0,4,7,3,[-1,0,0]],[3,2,6,7,[0,1,0]],[4,5,1,0,[0,-1,0]]];
+  for(const f of CARAS){ const a=P[f[0]],b=P[f[1]],c2=P[f[2]],d=P[f[3]],nn=f[4];
+    const T=[[a,0,0],[b,1,0],[c2,1,1],[a,0,0],[c2,1,1],[d,0,1]];
+    for(const t of T){ dst.P.push(t[0][0],t[0][1],t[0][2]); dst.N.push(nn[0],nn[1],nn[2]); dst.U.push(t[1],t[2]); } }
+}
+const _cercaAcu=arbAcum();
+function dreamFence(x0,z0,x1,z1){   // cerca blanca de estacas siguiendo el relieve (se fusiona toda)
+  const n=Math.max(2,Math.round(Math.hypot(x1-x0,z1-z0)/0.75));
   for(let i=0;i<=n;i++){ const t=i/n, x=x0+(x1-x0)*t, z=z0+(z1-z0)*t, gy=terrainH(x,z);
-    const pk=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.9,0.12),m); pk.position.set(x,gy+0.45,z); pk.castShadow=true; dreamGroup.add(pk); }
-  // travesaños
+    cajaEn(_cercaAcu,x,gy+0.45,z,0.08,0.9,0.12,0); }
   for(let i=0;i<n;i++){ const t0=i/n,t1=(i+1)/n, ax=x0+(x1-x0)*t0,az=z0+(z1-z0)*t0,bx=x0+(x1-x0)*t1,bz=z0+(z1-z0)*t1;
     const gy=(terrainH(ax,az)+terrainH(bx,bz))/2, len=Math.hypot(bx-ax,bz-az);
-    const r=new THREE.Mesh(new THREE.BoxGeometry(len,0.08,0.06),m); r.position.set((ax+bx)/2,gy+0.6,(az+bz)/2); r.rotation.y=Math.atan2(-(bz-az),(bx-ax)); dreamGroup.add(r); }
+    cajaEn(_cercaAcu,(ax+bx)/2,gy+0.6,(az+bz)/2,len,0.08,0.06,Math.atan2(-(bz-az),(bx-ax))); }
 }
 function dreamPole(x,z){ const gy=terrainH(x,z), m=new THREE.MeshStandardMaterial({color:0x4a3b30,roughness:0.9});
   const p=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.14,7,6),m); p.position.set(x,gy+3.5,z); p.castShadow=true; dreamGroup.add(p);
@@ -1269,6 +1408,10 @@ function buildDream(){ if(dreamBuilt)return; dreamBuilt=true; const G=DREAM_GZ;
   const houses=[[-22,G-30,7,8,5,0.3],[30,G-10,9,9,7,0.5],[-8,G-55,6,6,4.5,0.1],[40,G+30,7,8,5,-0.4],[-34,G+20,8,8,6,0.6],[6,G+45,7,7,5,3.0],[-20,G+55,6,7,4.5,2.6],[16,G-38,7,8,5.5,0,true]];   // la última: PUERTA ABIERTA → backrooms
   for(const h of houses) dreamHouse(...h);
   dreamFence(-60,G-12,60,G-18); dreamFence(-50,G+25,20,G+40); dreamFence(20,G+38,70,G+10);
+  { const cm=new THREE.MeshStandardMaterial({color:0xf3f1ea,roughness:0.85});
+    hfPoner(cm,'estuco',1,1,{color:0xfdfaf2,rug:0.85});
+    const arb=arbConstruir(_cercaAcu, dreamGroup, cm, cm, arbGeoHoja());   // TODA la cerca: una sola malla
+    if(arb.hojas) arb.hojas.visible=false; }
   dreamPole(-2,G-20); dreamPole(22,G+5); dreamPole(-30,G+38); dreamPole(50,G-25);
 }
 function enterDream(){ if(world==='dream')return; world='dream'; grassMode=false; dreamMode=true; discover('dream');
@@ -1968,7 +2111,9 @@ function addSpaceBox(x,y,z,w,h,d,color,wall,vine){
   let smat;
   if(vine) smat=getMetalMat();
   else { smat=new THREE.MeshStandardMaterial({color:color||0x8a93a0,roughness:0.6,metalness:0.3});
-    hfPoner(smat,'casco',1,1,{color:color||0xdfe6ee,rug:0.5,metal:0.28,nrm:0.8}); }   // casco de nave
+    // una de cada tres cajas va oxidada: si todo es casco limpio, la base se ve de plástico
+    const oxid=(((x|0)+(z|0))%3===0);
+    hfPoner(smat, oxid?'oxido':'casco', 1,1, {color:color||(oxid?0xc8b8a8:0xdfe6ee), rug:oxid?0.75:0.5, metal:oxid?0.42:0.28, nrm:oxid?1.0:0.8}); }
   const m=new THREE.Mesh(uvCaja(new THREE.BoxGeometry(w,h,d),w,h,d,0.28), smat);
   m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; spaceGroup.add(m);
   if(vine) addVines(spaceGroup,x,y,z,w,h,d);   // lianas 3D colgando por las caras del cubo de metal
@@ -2068,15 +2213,31 @@ function nlCarta(k,x,y,z,ancho,alto,mat,giro){ const G=NL_GZ[k];
 /* MUCHAS cartas del mismo recorte en UN solo draw call. Sin esto, 16 corales + 18 algas +
    30 helechos son 64 llamadas de dibujo al GPU; instanciadas son 3. Las que no se mueven van
    todas acá; las animadas (peces, gaviotas) siguen sueltas porque cambian de matriz por frame. */
-function nlCartasInst(k,mat,items){
+function nlCartasInst(k,mat,items,unSoloPlano){
   if(!items.length) return null;
-  const im=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1), mat, items.length);
+  // Cada planta son DOS planos cruzados (salvo que se pida uno solo): un plano suelto se ve
+  // como una lámina y desaparece cuando lo mirás de canto, y eso era justo lo que se veía mal.
+  const porItem=unSoloPlano?1:2;
+  const im=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1), mat, items.length*porItem);
   const m=new THREE.Matrix4(), q=new THREE.Quaternion(), e=new THREE.Euler(), v=new THREE.Vector3(), sc=new THREE.Vector3();
   const G=NL_GZ[k];
   for(let i=0;i<items.length;i++){ const it=items[i];
-    e.set(0,it[5]||0,0); q.setFromEuler(e); v.set(it[0],it[1],it[2]+G); sc.set(it[3],it[4],1);
-    m.compose(v,q,sc); im.setMatrixAt(i,m); }
+    for(let c=0;c<porItem;c++){
+      e.set(0,(it[5]||0)+c*Math.PI/2,0); q.setFromEuler(e);
+      v.set(it[0],it[1],it[2]+G); sc.set(it[3]*(c?0.92:1),it[4]*(c?0.96:1),1);
+      m.compose(v,q,sc); im.setMatrixAt(i*porItem+c,m); } }
   im.instanceMatrix.needsUpdate=true; im.frustumCulled=false; nlGrupo(k).add(im); return im;
+}
+/* muchas ESFERAS del mismo material en un solo draw call (bancos de nubes, burbujas, matas) */
+function nlEsferasInst(k,mat,items,seg){
+  if(!items.length) return null;
+  const im=new THREE.InstancedMesh(new THREE.SphereGeometry(1,seg||10,seg?Math.round(seg*0.7):7), mat, items.length);
+  const m=new THREE.Matrix4(), q=new THREE.Quaternion(), v=new THREE.Vector3(), sc=new THREE.Vector3();
+  const G=NL_GZ[k];
+  for(let i=0;i<items.length;i++){ const it=items[i];
+    v.set(it[0],it[1],it[2]+G); sc.set(it[3],it[3]*(it[4]||0.85),it[3]);
+    m.compose(v,q,sc); im.setMatrixAt(i,m); }
+  im.instanceMatrix.needsUpdate=true; im.frustumCulled=false; im.castShadow=false; nlGrupo(k).add(im); return im;
 }
 /* isla decorativa de fondo (sin colisión): panza de roca + tapa de pasto + un árbol */
 function nlIslaLejana(k,x,y,z,r,matRoca,matPasto,matCopa){
@@ -2111,6 +2272,7 @@ function nlEntrar(k,cfg){
 }
 /* visibilidad, caída al vacío y plataformas móviles: una pasada por frame, sin tocar los enter* de los otros mundos */
 function nlVis(){ for(const k in nlGrupos){ const v=(world===k); if(nlGrupos[k].visible!==v)nlGrupos[k].visible=v; } }
+const _nlM4=new THREE.Matrix4(), _nlV3=new THREE.Vector3(), _nlQ0=new THREE.Quaternion(), _nlS3=new THREE.Vector3();
 function nlTick(dt){
   if(NL_GZ[world]===undefined)return;
   nlTickMeta(world);
@@ -2120,6 +2282,12 @@ function nlTick(dt){
     if(d.tipo==='x'){ const nx=d.x0+Math.sin(d.t)*d.amp; d.m.position.x=nx; if(d.col){ d.col.minx=nx-d.hw; d.col.maxx=nx+d.hw; } }
     else if(d.tipo==='y'){ const ny=d.y0+Math.sin(d.t)*d.amp; d.m.position.y=ny; if(d.col){ d.col.miny=ny-d.hh; d.col.maxy=ny+d.hh; } }
     else if(d.tipo==='burbuja'){ d.m.position.y+=dt*d.v*0.6; if(d.m.position.y>d.y1)d.m.position.y=d.y0; }
+    else if(d.tipo==='burbujas'){                                  // todas las burbujas, una pasada
+      const L=d.lista, m4=_nlM4, v3=_nlV3, q0=_nlQ0, s3=_nlS3;
+      for(let i=0;i<L.length;i++){ const b=L[i];
+        b.y+=dt*b.v*0.6; if(b.y>20) b.y=1;
+        v3.set(b.x,b.y,b.z+d.G); s3.set(b.r,b.r,b.r); m4.compose(v3,q0,s3); d.m.setMatrixAt(i,m4); }
+      d.m.instanceMatrix.needsUpdate=true; }
     else if(d.tipo==='pez'){                                  // cardumen: cruza el tanque y vuelve a entrar por el otro lado
       d.m.position.x += dt*d.v*d.dir;
       d.m.position.y = d.y0 + Math.sin(d.t*1.6)*0.5;
@@ -2167,14 +2335,16 @@ function nlBuildIslas(){ if(nlHecho.islas)return; nlHecho.islas=true; const k='i
                [-20,29,198,6.6],[44,31,208,5.2]];
   const arbFondo=[];
   for(const f of fondo){ nlIslaLejana(k,f[0],f[1],f[2],f[3],roca,pasto,null);
-    for(let c=0;c<2;c++) arbFondo.push([f[0]+f[3]*0.15, f[1]+2.0+f[3]*0.42, f[2], f[3]*1.5, f[3]*1.4, c*Math.PI/2]); }
-  // los árboles de las islas del recorrido: LEJOS de la línea que se camina (|x|>2.6) y nunca sobre el spawn
-  const arbCerca=[];
-  for(const t of [[3.6,7.3,4],[-4.6,7.9,11],[8.6,9.1,25],[-9.6,10.9,47],[9.6,12.7,70],[-5.4,14.5,92]])
-    for(let c=0;c<2;c++) arbCerca.push([t[0],t[1]+2.4,t[2],3.4,3.0,c*Math.PI/2]);
+    arbFondo.push([f[0]+f[3]*0.15, f[1]+2.0+f[3]*0.42, f[2], f[3]*1.5, f[3]*1.4, f[2]*0.7]); }
+  // Las plantas de las islas del recorrido salen de la MISMA lista P que las islas: así siempre
+  // caen sobre pasto y nunca flotando al lado (antes eran coordenadas puestas a ojo).
+  const arbCerca=[], florCerca=[];
+  for(let i=1;i<P.length;i++){ const q=P[i], r=q[3];
+    const yTapa=q[2]+0.45;                                     // la tapa de pasto está en y+0.1, alto 0.5
+    if(r>2.5 && i%2===1) arbCerca.push([q[0]+r*0.52, yTapa+2.3, q[1]-r*0.22, 3.4, 3.0, i*1.1]);
+    if(i%2===0) florCerca.push([q[0]-r*0.48, yTapa+0.45, q[1]+r*0.25, 1.1, 1.0, i*0.7]); }
   nlCartasInst(k,copaI,arbFondo.concat(arbCerca));                        // TODOS los árboles: un draw call
-  nlCartasInst(k,florI,[[2.6,7.1,6,1.1,1.0,0.4],[-3.1,7.8,13,1.0,0.9,1.9],[4.2,9.0,20,1.1,1.0,2.6],
-                        [-3.4,10.9,42,1.0,0.9,0.8],[3.0,12.7,64,1.1,1.0,2.1],[-4.0,14.9,94,1.0,0.9,1.2]]);
+  nlCartasInst(k,florI,florCerca);
   for(let i=0;i<6;i++){ const a=nlCarta(k,-40+i*16,17+((i*7)%9),20+i*30,2.6,1.4,aveI,0);
     nlDin.push({k:k,m:a,tipo:'ave',amp:9+((i*5)%7),v:0.22+i*0.03,t:i*0.9,x0:a.position.x,z0:a.position.z-NL_GZ.islas}); }
   const m1=nlCil(k,-7,9.4,29,2.0,1.6,0.5,pasto); nlMovil(k,m1,'y',1.6,0.7);   // dos islas que suben y bajan
@@ -2195,8 +2365,13 @@ function nlBuildAcuario(){ if(nlHecho.acuario)return; nlHecho.acuario=true; cons
            [-2,69,8.2,3.2,3.2],[-8,78,9.0,3.2,3.2],[-2,87,9.8,3.2,3.2],[4,96,10.6,3.2,3.2],[0,106,11.4,8,8]];
   for(const p of P){ nlCaja(k,p[0],p[2],p[1],p[3],0.45,p[4],piso); nlCaja(k,p[0],p[2]+0.32,p[1],p[3]+0.2,0.2,p[4]+0.2,vid,true,true); }
   for(const z of [19,51,87]){ nlCaja(k,-3.2,4.6,z,0.4,5.0,7,vid); nlCaja(k,3.2,4.6,z,0.4,5.0,7,vid); }   // paredes de vidrio para wall-run
-  for(let i=0;i<26;i++){ const b=nlEsfera(k,(Math.random()-0.5)*54,1+Math.random()*6,10+Math.random()*160,0.18+Math.random()*0.4,nlVidrio(0xeafcff,0.5),true);
-    nlDin.push({k:k,m:b,tipo:'burbuja',v:0.5+Math.random(),y0:1,y1:20,t:0,amp:0}); }
+  // BURBUJAS: eran 26 mallas con 26 materiales distintos (26 draw calls por unas burbujas).
+  // Ahora es UN InstancedMesh y las matrices se actualizan de una vez por frame.
+  { const matB=nlVidrio(0xeafcff,0.5); const items=[], burb=[];
+    for(let i=0;i<26;i++){ const x=(Math.random()-0.5)*54, y=1+Math.random()*6, z=10+Math.random()*160, r=0.18+Math.random()*0.4;
+      items.push([x,y,z,r,1]); burb.push({x:x,y:y,z:z,r:r,v:0.5+Math.random()}); }
+    const im=nlEsferasInst(k,matB,items,8);
+    if(im) nlDin.push({k:k,m:im,tipo:'burbujas',lista:burb,v:1,t:0,amp:0,G:NL_GZ[k]}); }
   /* DECORACIÓN: el tanque estaba vacío salvo burbujas. Ahora hay cardúmenes cruzando, corales
      en el fondo y algas que se mecen. Las cartas son fotos recortadas, no cubos verdes. */
   const pezA=nlRecorte('pez',0.32), coralA=nlRecorte('coral',0.34), algaA=nlRecorte('alga',0.30);
@@ -2233,13 +2408,14 @@ function nlBuildNubes(){ if(nlHecho.nubes)return; nlHecho.nubes=true; const k='n
   /* DECORACIÓN: bancos de nubes de fondo a varias alturas (dan profundidad y tapan el vacío),
      globos flotando y gaviotas. Nada de esto colisiona. */
   const aveN=nlRecorte('ave',0.30);
-  const banco=(x,y,z,r)=>{ nlEsfera(k,x,y,z,r,nube,true);
-    nlEsfera(k,x-r*0.8,y-r*0.2,z+r*0.3,r*0.72,nube,true); nlEsfera(k,x+r*0.85,y-r*0.15,z-r*0.35,r*0.66,nube,true);
-    nlEsfera(k,x+r*0.1,y+r*0.35,z+r*0.1,r*0.6,nube,true); };
+  const bolas=[];
+  const banco=(x,y,z,r)=>{ bolas.push([x,y,z,r,0.85],[x-r*0.8,y-r*0.2,z+r*0.3,r*0.72,0.85],
+                                      [x+r*0.85,y-r*0.15,z-r*0.35,r*0.66,0.85],[x+r*0.1,y+r*0.35,z+r*0.1,r*0.6,0.85]); };
   const B=[[-42,38,6,5.4],[46,41,24,6.4],[-54,45,48,7.2],[52,49,72,6.0],[-48,53,96,6.8],
            [40,57,118,5.2],[-34,60,138,6.0],[58,44,154,6.6],[-62,50,170,5.6],[36,63,186,4.8],
            [-26,66,202,7.0],[48,68,214,5.4],[0,30,-34,8.0],[-30,32,-52,6.2]];
   for(const b of B) banco(b[0],b[1],b[2],b[3]);
+  nlEsferasInst(k,nube,bolas,12);                                  // los 56 bollos de nube: un draw call
   const globos=[0xff7b7b,0x7bd0ff,0xffe07b,0x9fff9f,0xd79fff,0xffb37b];
   for(let i=0;i<6;i++){ const gx=-16+i*6.4, gz=14+i*30, gy=40+((i*5)%9);
     const gl=nlEsfera(k,gx,gy,gz,1.5,nlMat(globos[i],0.35,0,globos[i],0.35),true);
@@ -2284,8 +2460,13 @@ function nlBuildJardin(){ if(nlHecho.jardin)return; nlHecho.jardin=true; const k
     fer.push([x,1.1+rj()*0.4,z,2.0+rj()*1.4,2.2+rj()*1.6,rj()*3.14]); }
   for(let i=0;i<24;i++){ const x=(rj()<0.5?-1:1)*(9+rj()*19), z=-12+rj()*228;
     flo.push([x,0.8+rj()*0.3,z,1.3+rj()*0.8,1.2+rj()*0.7,rj()*3.14]); }
-  for(let i=0;i<14;i++){ const a=(i/14)*6.2831, r=34+((i*7)%18);          // enredaderas colgando de la cúpula
-    enr.push([Math.cos(a)*r*0.62, 16+((i*5)%9), 60+Math.sin(a)*r*0.92, 3.0, 6.0, a]); }
+  // ARCOS con plantas colgando: antes las enredaderas quedaban flotando en el aire a media
+  // altura de la cúpula (que ahí arriba está a 60 m), o sea colgadas de la nada. Ahora cuelgan
+  // de algo que se ve: cinco arcos de mármol cruzando el invernadero.
+  for(const az of [6,34,62,90,118]){
+    nlCil(k,-7.6,2.6,az,0.22,0.26,5.2,loza,true); nlCil(k,7.6,2.6,az,0.22,0.26,5.2,loza,true);
+    nlCaja(k,0,5.35,az,16.0,0.35,0.6,loza,true,true);
+    for(const ax of [-6.2,-3.4,3.4,6.2]) enr.push([ax,3.9,az,1.7,2.6,(ax>0?0.5:2.1)]); }
   for(const m of [[-11,8],[11,30],[-13,58],[12,84],[-10,110],[13,132]]){   // macetas con planta
     nlCil(k,m[0],0.55,m[1],0.7,0.5,1.1,loza,true);
     for(let c=0;c<2;c++) macet.push([m[0],2.3,m[1],3.0,2.8,c*Math.PI/2]); }
@@ -2335,11 +2516,11 @@ function nlBuildTarde(){ if(nlHecho.tarde)return; nlHecho.tarde=true; const k='t
   nlPonerMeta(k,0,12.2,114,0xffd08a,()=>enterVoid());                          // y de acá al vacío infinito
 }
 const NL_CFG={
-  islas:  {build:nlBuildIslas,  cielo:0x9fe0ff, niebla:0xd8f4ff, n0:40, n1:300, sol:2.7, solc:0xfffaf0, expo:1.12, domo:true,  amb:'amb2'},
-  acuario:{build:nlBuildAcuario,cielo:0x0f5f8a, niebla:0x1a86b8, n0:14, n1:130, sol:2.2, solc:0xdff4ff, expo:1.10, domo:false, amb:'amb5'},
-  nubes:  {build:nlBuildNubes,  cielo:0xbfe8ff, niebla:0xeaf8ff, n0:50, n1:340, sol:3.0, solc:0xffffff, expo:1.16, domo:true,  amb:'amb1'},
-  jardin: {build:nlBuildJardin, cielo:0xc8f0d8, niebla:0xdff6e8, n0:26, n1:200, sol:2.6, solc:0xfff6e0, expo:1.12, domo:true,  amb:'amb2'},
-  tarde:  {build:nlBuildTarde,  cielo:0xffb877, niebla:0xffcf9a, n0:34, n1:280, sol:2.4, solc:0xffc890, expo:1.14, domo:true,  amb:'amb3'},
+  islas:  {build:nlBuildIslas,  cielo:0x9fe0ff, niebla:0xd8f4ff, n0:40, n1:300, sol:2.7, solc:0xfffaf0, expo:1.12, domo:true,  amb:'nl_islas'},
+  acuario:{build:nlBuildAcuario,cielo:0x0f5f8a, niebla:0x1a86b8, n0:14, n1:130, sol:2.2, solc:0xdff4ff, expo:1.10, domo:false, amb:'nl_acuario'},
+  nubes:  {build:nlBuildNubes,  cielo:0xbfe8ff, niebla:0xeaf8ff, n0:50, n1:340, sol:3.0, solc:0xffffff, expo:1.16, domo:true,  amb:'nl_nubes'},
+  jardin: {build:nlBuildJardin, cielo:0xc8f0d8, niebla:0xdff6e8, n0:26, n1:200, sol:2.6, solc:0xfff6e0, expo:1.12, domo:true,  amb:'nl_jardin'},
+  tarde:  {build:nlBuildTarde,  cielo:0xffb877, niebla:0xffcf9a, n0:34, n1:280, sol:2.4, solc:0xffc890, expo:1.14, domo:true,  amb:'nl_tarde'},
 };
 function enterIslas(){ nlEntrar('islas',NL_CFG.islas); }
 function enterAcuario(){ nlEntrar('acuario',NL_CFG.acuario); }
@@ -2355,8 +2536,14 @@ const vBoardEl=document.getElementById('vBoard');
 // PRNG determinista (mulberry32): misma semilla + misma fase → MISMO nivel para todos los jugadores
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 function vColor(rng){ return new THREE.Color().setHSL(0.54+rng()*0.13, 0.32+rng()*0.22, 0.52+rng()*0.13).getHex(); }
+const _matVoid={};
+function voidMat(color){ let m=_matVoid[color];
+  if(!m){ m=new THREE.MeshStandardMaterial({color:color,roughness:0.75,metalness:0.05});
+    hfPoner(m,'losa',1,1,{color:color,rug:0.7,nrm:0.7});    // losas de verdad, teñidas con el color de la fase
+    _matVoid[color]=m; }
+  return m; }
 function addVoidBox(x,y,z,w,h,d,color,isWall){
-  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color:color,roughness:0.75,metalness:0.05}));
+  const m=new THREE.Mesh(uvCaja(new THREE.BoxGeometry(w,h,d),w,h,d,0.3), voidMat(color));
   m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; voidGroup.add(m); voidMeshes.push(m);
   const col={minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,minz:z-d/2,maxz:z+d/2,mesh:m}; colliders.push(col); voidCols.push(col); if(isWall)wallMeshes.push(m);
   return col;
@@ -3008,11 +3195,17 @@ function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
 
 /* ===================== AUDIO (SFX + música ambiente por nivel) ===================== */
 const SFX_BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@eabd0b0/assets/fp/sfx/';
-const SND={ jump:'sfx_jump.mp3', jump_grass:'sfx_jump_grass.mp3', slide:'sfx_slide.mp3', slide_grass:'sfx_slide_grass.mp3', run:'sfx_run.mp3', run_grass:'sfx_run_grass.mp3', btn:'sfx_btn.mp3', wrong:'sfx_wrong.mp3', spawn:'sfx_spawn.mp3', menu:'sfx_menu.mp3', play:'sfx_play.mp3', amb1:'amb1.mp3', amb2:'amb2.mp3', amb3:'amb3.mp3', amb4:'amb4.mp3', amb5:'amb5.mp3' };
+// Los cinco mundos nuevos tenían prestada la música de los otros. Ahora cada uno tiene SU canción,
+// generada con Higgsfield pidiéndole el clima de cada mundo. Son loops de 62 s con fundido de
+// entrada y salida (así el loop del <audio> no hace clic), mono 64 kbps: 485 KB cada una.
+const MUS_BASE='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@c108fb6/assets/fp/mus/';
+const SND={ jump:'sfx_jump.mp3', jump_grass:'sfx_jump_grass.mp3', slide:'sfx_slide.mp3', slide_grass:'sfx_slide_grass.mp3', run:'sfx_run.mp3', run_grass:'sfx_run_grass.mp3', btn:'sfx_btn.mp3', wrong:'sfx_wrong.mp3', spawn:'sfx_spawn.mp3', menu:'sfx_menu.mp3', play:'sfx_play.mp3', amb1:'amb1.mp3', amb2:'amb2.mp3', amb3:'amb3.mp3', amb4:'amb4.mp3', amb5:'amb5.mp3',
+  nl_islas:'nl_islas.mp3', nl_acuario:'nl_acuario.mp3', nl_nubes:'nl_nubes.mp3', nl_jardin:'nl_jardin.mp3', nl_tarde:'nl_tarde.mp3' };
 const AUD={ on:false, el:{}, amb:null, ambKey:null, run:null, runKey:null };
-function aGet(k){ let a=AUD.el[k]; if(!a){ a=new Audio(SFX_BASE+SND[k]); a.preload='auto'; AUD.el[k]=a; } return a; }
+function sndUrl(k){ return (k.slice(0,3)==='nl_'? MUS_BASE : SFX_BASE)+SND[k]; }
+function aGet(k){ let a=AUD.el[k]; if(!a){ a=new Audio(sndUrl(k)); a.preload='auto'; AUD.el[k]=a; } return a; }
 function sfx(k,vol){ if(!AUD.on||!SND[k])return; try{ const a=aGet(k); a.volume=(vol==null?0.9:vol); a.currentTime=0; const p=a.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){} }   // efecto puntual
-function ambient(k){ if(!AUD.on||!SND[k]||AUD.ambKey===k)return; AUD.ambKey=k; try{ if(!AUD.amb){ AUD.amb=new Audio(); AUD.amb.loop=true; } AUD.amb.volume=0.3; AUD.amb.src=SFX_BASE+SND[k]; const p=AUD.amb.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){} }   // música del nivel (loop, cambia al cambiar de mundo)
+function ambient(k){ if(!AUD.on||!SND[k]||AUD.ambKey===k)return; AUD.ambKey=k; try{ if(!AUD.amb){ AUD.amb=new Audio(); AUD.amb.loop=true; } AUD.amb.volume=0.3; AUD.amb.src=sndUrl(k); const p=AUD.amb.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){} }   // música del nivel (loop, cambia al cambiar de mundo)
 function runLoop(on,grass){ if(!AUD.on)return; if(on){ const k=grass?'run_grass':'run'; if(AUD.runKey!==k){ if(AUD.run)AUD.run.pause(); AUD.run=aGet(k); AUD.run.loop=true; AUD.run.volume=0.22; AUD.runKey=k; const p=AUD.run.play(); if(p&&p.catch)p.catch(()=>{}); } } else if(AUD.run){ AUD.run.pause(); AUD.run=null; AUD.runKey=null; } }   // pasos en bucle mientras corrés (pasto / fuera del pasto)
 function audioStart(){ AUD.on=true; }   // se habilita con el primer gesto del usuario (móvil)
 const VOID_TRACKS=['amb3','amb4','amb5'];   // varias músicas para el VACÍO (rotan para dar variedad)
@@ -3128,7 +3321,7 @@ function menuCam(dt){ menuT+=dt; const cx=7, cz=GRASS_GZ+46, gy=terrainH(cx,cz);
 
 let paused=false;
 // ---- rendimiento: medir y ajustar solo ----
-let _frame=0, _drsAcc=0, _drsN=0, _fpsAcc=0, _fpsN=0, _fpsTxt='', perfEl=null;
+let _frame=0, _drsAcc=0, _drsN=0, _fpsAcc=0, _fpsN=0, _fpsTxt='', perfEl=null, _tViento=0;
 // Los mundos que NO se ven quedan CONGELADOS: three recorre igual todos los hijos para recomponer matrices
 // (1300 mallas en la escena, ~140 visibles). Apagando matrixWorldAutoUpdate del grupo, se saltea el subárbol entero.
 function registrarMundo(g){ if(g && _mundosCong.indexOf(g)<0) _mundosCong.push(g); return g; }
@@ -3171,6 +3364,7 @@ function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getD
   try{ tiroVis(); }catch(e){}    // visibilidad del campo de tiro (mundo/arma/HUD): también vale en el menú y en pausa
   try{ nlVis(); }catch(e){}      // los grupos de los cinco mundos nuevos se prenden solos según el mundo activo
   try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player) — sigue latiendo aunque esté en pausa
+  _tViento+=dt; for(let i=0;i<_arbViento.length;i++) _arbViento[i].userData.uT.value=_tViento;   // viento de las hojas
   congelarMundos();
   renderer.render(scene,camera);
   drsTick(dt); perfTick(dt); }
@@ -3501,7 +3695,7 @@ const MUNDOS_PRE=[
 ];
 function preloadAll(onp){
   const urls=[ SKY_URL, SPACE_SKY_URL, EBASE+BODY_FILE, METAL_BASE+'metal_col.jpg', METAL_BASE+'metal_nrm.jpg', METAL_BASE+'metal_rough.jpg', METAL_BASE+'metal_met.jpg' ];
-  for(const k in SND) urls.push(SFX_BASE+SND[k]);   // todos los sonidos y la música
+  for(const k in SND) urls.push(sndUrl(k));   // todos los sonidos y TODAS las canciones
   const total=urls.length+3+HF_TODAS.length+MUNDOS_PRE.length; let done=0;
   const step=()=>{ done++; if(onp)onp(Math.min(done,total),total); };
   const tasks=urls.map(u=> fetch(u).then(r=>r.blob()).then(step).catch(step) );   // baja TODOS los bytes (modelo, sonidos, música, cielos)
