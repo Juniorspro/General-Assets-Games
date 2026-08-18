@@ -559,11 +559,13 @@ renderer.localClippingEnabled=true;   // para recortar la cabeza del cuerpo (só
    Todas comparten una sola THREE.Source por archivo: la misma imagen se sube UNA vez a la GPU
    aunque diez materiales la usen con repeticiones distintas (repeat es un uniform, no un
    parámetro de la textura de GL). */
-const HF_TEX='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@0df71f0/assets/fp/tex/';
+const HF_TEX='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@8218e5b/assets/fp/tex/';
 const HF_ANISO=Math.min(8, renderer.capabilities.getMaxAnisotropy()||1);
 const HF_TODAS=['pasto','corteza','copa','rama','hojas','hoja','helecho','tuft','fachada','asfalto','adoquin',
   'hormigon','alfombra','papel','azulejo','agua','vidrio','casco','acero','chapa','lava','nube','arena','madera',
-  'palma','marmol','roca','tierra'];
+  'palma','marmol','roca','tierra','pez','flor','ave','coral','alga','ferna',
+  'pasto_n','corteza_n','hormigon_n','adoquin_n','azulejo_n','arena_n','madera_n','roca_n','asfalto_n',
+  'alfombra_n','tierra_n','chapa_n','casco_n','papel_n','marmol_n'];
 const _hfFuente={}, _hfCola={}, _hfImg=new THREE.ImageLoader();
 function _hfHacer(n,rx,ry,esp){ const t=new THREE.Texture(); t.source=_hfFuente[n];
   t.colorSpace=esp||THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping;
@@ -597,6 +599,10 @@ function hfPoner(mat,n,rx,ry,op){ op=op||{};
     if(op.recorte!=null){ mat.transparent=false; mat.alphaTest=op.recorte; }
     if(op.emis!=null && mat.emissiveMap!==undefined){ mat.emissiveMap=t; mat.emissiveIntensity=op.emis; }
     mat.needsUpdate=true; });
+  // RELIEVE: el mapa de normales va aparte (mismo nombre + _n) y con la MISMA repetición, si no
+  // el relieve no calza con el color. Sin él la foto queda plana: la luz le resbala por encima.
+  if(op.nrm && mat.normalScale!==undefined)
+    hfTex(n+'_n',rx,ry,t=>{ mat.normalMap=t; mat.normalScale.set(op.nrm,op.nrm); mat.needsUpdate=true; }, THREE.NoColorSpace);
   return mat; }
 // idem para un uniform de ShaderMaterial (el pasto lejano usa uMap)
 function hfUniforme(mat,uni,n,rx,ry){ hfTex(n,rx,ry,t=>{ mat.uniforms[uni].value=t; }); return mat; }
@@ -625,7 +631,7 @@ const ground=null;       // ya no hay piso infinito: el mundo son techos de edif
 const _matCache={};
 function mat(color,rough){ const k=color+'_'+(rough||0.9);
   if(!_matCache[k]){ const m=new THREE.MeshStandardMaterial({color,roughness:rough||0.9,metalness:0});
-    hfPoner(m,'hormigon',1,1,{color:color});   // hormigón fotográfico TEÑIDO con el color del nivel (se mantiene el código de colores del obby)
+    hfPoner(m,'hormigon',1,1,{color:color,nrm:0.85});   // hormigón fotográfico TEÑIDO con el color del nivel (se mantiene el código de colores del obby)
     _matCache[k]=m; }
   return _matCache[k]; }
 function addBox(x,y,z,w,h,d,color,rough,noWall){   // (x,y,z)=centro
@@ -797,11 +803,12 @@ for(let i=0;i<18;i++){ const a=i*2.39; cloud(15+Math.cos(a)*(50+i*11), -16-(i%4)
   const rc=document.createElement('canvas'); rc.width=64; rc.height=256; const rg=rc.getContext('2d');
   rg.fillStyle='#26282c'; rg.fillRect(0,0,64,256); rg.fillStyle='#c9c19c'; for(let y=8;y<256;y+=40) rg.fillRect(30,y,4,22); rg.fillStyle='#8f8b82'; rg.fillRect(3,0,3,256); rg.fillRect(58,0,3,256);
   const rt=new THREE.CanvasTexture(rc); rt.colorSpace=THREE.SRGBColorSpace; rt.wrapS=rt.wrapT=THREE.RepeatWrapping; rt.repeat.set(2,42);
-  const grdMat=new THREE.MeshStandardMaterial({color:0x34383e,roughness:1}); hfPoner(grdMat,'adoquin',110,190,{color:0xbfc4cc});   // vereda de piedra
+  const grdMat=new THREE.MeshStandardMaterial({color:0x34383e,roughness:1}); hfPoner(grdMat,'adoquin',110,190,{color:0xbfc4cc,nrm:0.9});   // vereda de piedra
   const grd=new THREE.Mesh(new THREE.PlaneGeometry(440,760), grdMat); grd.rotation.x=-Math.PI/2; grd.position.set(0,RY,80); scene.add(grd);   // suelo de ciudad
   const roadMat=new THREE.MeshStandardMaterial({map:rt,roughness:0.95});
   const road=new THREE.Mesh(new THREE.PlaneGeometry(24,620), roadMat); road.rotation.x=-Math.PI/2; road.position.set(0,RY+0.06,80); scene.add(road);   // carretera abajo
-  hfTex('asfalto',6,155,t=>{ roadMat.map=t; roadMat.needsUpdate=true; });   // asfalto real (la línea central la sigue pintando el canvas de abajo)
+  hfTex('asfalto',6,155,t=>{ roadMat.map=t; roadMat.needsUpdate=true; });
+  hfTex('asfalto_n',6,155,t=>{ roadMat.normalMap=t; roadMat.normalScale.set(0.8,0.8); roadMat.needsUpdate=true; }, THREE.NoColorSpace);   // asfalto real (la línea central la sigue pintando el canvas de abajo)
   // rascacielos decorativos (sin colisión) a ambos lados, mucho más altos que el obby
   // Antes: 30 torres x 6 materiales de caja = 180 draw calls (y 30 clones de la misma textura).
   // Ahora las 30 se FUSIONAN en dos mallas (paredes + techos): el color de cada torre viaja en los vértices
@@ -828,7 +835,7 @@ for(let i=0;i<18;i++){ const a=i*2.39; cloud(15+Math.cos(a)*(50+i*11), -16-(i%4)
     g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2)); if(C) g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
     const m=new THREE.Mesh(g,mat); m.matrixAutoUpdate=false; m.updateMatrix(); scene.add(m); return m; }
   const paredMat=new THREE.MeshStandardMaterial({map:_facadeBase,roughness:1,vertexColors:true});
-  hfPoner(paredMat,'fachada',1,1,{color:0xffffff,rug:0.35,metal:0.25});   // fachada de vidrio real (las UV ya vienen repetidas por torre)
+  hfPoner(paredMat,'fachada',1,1,{color:0xffffff,rug:0.35,metal:0.25,nrm:0.5});   // fachada de vidrio real (las UV ya vienen repetidas por torre)
   fundir(_wP,_wN,_wU,_wC, paredMat);
   fundir(_tP,_tN,_tU,null, new THREE.MeshStandardMaterial({color:0x20242a,roughness:1}));
 })();
@@ -867,7 +874,7 @@ function makeGroundTex(){ const S=128,c=document.createElement('canvas'); c.widt
     g.beginPath(); g.moveTo(x,y); g.lineTo(x+(Math.random()-0.5)*2,y-h); g.stroke(); }
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(60,60); t.anisotropy=4; return t; }
 const terrainMat=new THREE.MeshStandardMaterial({color:0x6fbf4c,map:makeGroundTex(),roughness:1,metalness:0});
-hfPoner(terrainMat,'pasto',34,34,{color:0xcfe3b0,rug:0.95});   // pasto REAL bajo las briznas 3D (teñido un toque frutiger)
+hfPoner(terrainMat,'pasto',34,34,{color:0xcfe3b0,rug:0.95,nrm:0.7});   // pasto REAL bajo las briznas 3D (teñido un toque frutiger)
 const terrainMesh=new THREE.Mesh(terrGeo,terrainMat);
 terrainMesh.receiveShadow=true; grassGroup.add(terrainMesh);
 let terrSnap=new THREE.Vector2(1e9,1e9);
@@ -1043,7 +1050,7 @@ const crystalDoorPos=new THREE.Vector3(); let crystalDoorReady=false;   // puert
 function buildTree(grp,groundY){
   const TH=15;                                       // alto del tronco
   const trunkMat=new THREE.MeshStandardMaterial({ map:makeBarkTex(), color:0x8a6038, roughness:0.92, metalness:0 });
-  hfPoner(trunkMat,'corteza',2,3,{rug:0.95});                                  // corteza fotográfica
+  hfPoner(trunkMat,'corteza',2,3,{rug:0.95,nrm:1.1});                                  // corteza fotográfica
   const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.55,1.15,TH,14), trunkMat);
   trunk.position.set(0,groundY+TH/2,0); trunk.castShadow=true; trunk.receiveShadow=true; grp.add(trunk); shadowCasters.push(trunk);
   // PUERTA AZUL en el tronco → entra al obby de cristal (mira hacia -Z, por donde llega el jugador)
@@ -1286,14 +1293,14 @@ let backBuilt=false; const backStart=new THREE.Vector3(0,24,BACK_GZ-4);
 let backGoal=null, backDone=false;
 function addYellow(x,y,z,w,h,d,wall){   // plataforma/pared amarilla emisiva (colisiona)
   const mm=new THREE.MeshStandardMaterial({color:0xd8c247,emissive:0x7a6614,emissiveIntensity:0.7,roughness:0.7,metalness:0});
-  hfPoner(mm,'alfombra',1,1,{color:0xe4d68f,rug:0.95});          // alfombra de oficina (la de verdad de las backrooms)
+  hfPoner(mm,'alfombra',1,1,{color:0xe4d68f,rug:0.95,nrm:0.6});          // alfombra de oficina (la de verdad de las backrooms)
   const m=new THREE.Mesh(uvCaja(new THREE.BoxGeometry(w,h,d),w,h,d,0.5), mm);
   m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; backGroup.add(m);
   colliders.push({minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,minz:z-d/2,maxz:z+d/2,mesh:m}); if(wall)wallMeshes.push(m); return m; }
 function buildBackrooms(){ if(backBuilt)return; backBuilt=true; const G=BACK_GZ;
   // habitación amarillenta oscura (decorativa, sin colisión): paredes + techo + piso lejano (vacío)
   const room=new THREE.MeshStandardMaterial({color:0xb6a23f,emissive:0x161202,emissiveIntensity:0.25,roughness:0.95,side:THREE.BackSide});
-  hfPoner(room,'papel',26,12,{color:0xcbb765,rug:0.95});          // papel de pared amarillento y manchado
+  hfPoner(room,'papel',26,12,{color:0xcbb765,rug:0.95,nrm:0.5});          // papel de pared amarillento y manchado
   const box=new THREE.Mesh(new THREE.BoxGeometry(120,60,150),room); box.position.set(0,8,G+55); backGroup.add(box);   // cuarto enorme
   // OBBY DE PRECISIÓN: plataformas amarillas chicas con saltos y GIROS de 90° (distinto a los anteriores: nada de mover/flotar)
   const S=[ [0,20,G-4,7,7], [4,19.2,G+3,2.4,2.4],[8,18.4,G+9,2.2,2.2],[8,17.6,G+16,2.2,2.2],   // baja y gira a la derecha
@@ -1336,7 +1343,7 @@ function makePoolTex(){ const S=128,c=document.createElement('canvas'); c.width=
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; return t; }
 const _poolTex=makePoolTex();
 function addTile(x,y,z,w,h,d,wall){ const mt=new THREE.MeshStandardMaterial({map:_poolTex.clone(),color:0xffffff,roughness:0.25,metalness:0}); mt.map.repeat.set(Math.max(1,w/2),Math.max(1,d/2));
-  hfPoner(mt,'azulejo',1,1,{color:0xffffff,rug:0.16,metal:0.04});   // azulejo de pileta fotográfico
+  hfPoner(mt,'azulejo',1,1,{color:0xffffff,rug:0.16,metal:0.04,nrm:0.7});   // azulejo de pileta fotográfico
   const m=new THREE.Mesh(uvCaja(new THREE.BoxGeometry(w,h,d),w,h,d,0.5),mt); m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; poolGroup.add(m);
   colliders.push({minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,minz:z-d/2,maxz:z+d/2,mesh:m}); if(wall)wallMeshes.push(m); return m; }
 function buildPoolrooms(){ if(poolBuilt)return; poolBuilt=true; const G=POOL_GZ;
@@ -1961,7 +1968,7 @@ function addSpaceBox(x,y,z,w,h,d,color,wall,vine){
   let smat;
   if(vine) smat=getMetalMat();
   else { smat=new THREE.MeshStandardMaterial({color:color||0x8a93a0,roughness:0.6,metalness:0.3});
-    hfPoner(smat,'casco',1,1,{color:color||0xdfe6ee,rug:0.5,metal:0.28}); }   // casco de nave
+    hfPoner(smat,'casco',1,1,{color:color||0xdfe6ee,rug:0.5,metal:0.28,nrm:0.8}); }   // casco de nave
   const m=new THREE.Mesh(uvCaja(new THREE.BoxGeometry(w,h,d),w,h,d,0.28), smat);
   m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; spaceGroup.add(m);
   if(vine) addVines(spaceGroup,x,y,z,w,h,d);   // lianas 3D colgando por las caras del cubo de metal
@@ -2053,6 +2060,30 @@ function nlFronda(k,x,y,z,largo,ancho,an,caida,mat){ const G=NL_GZ[k];
   const g=new THREE.PlaneGeometry(largo,ancho); g.rotateX(-Math.PI/2); g.translate(largo/2,0,0);
   const me=new THREE.Mesh(g,mat); me.position.set(x,y,z+G);
   me.rotation.set(0,-an,-(caida==null?0.34:caida)); me.castShadow=true; nlGrupo(k).add(me); return me; }
+/* UNA carta suelta (un plano con un recorte fotográfico): cardumen, gaviota, flor, coral, alga.
+   Devuelve la malla para poder animarla. Sin colisión: es decoración. */
+function nlCarta(k,x,y,z,ancho,alto,mat,giro){ const G=NL_GZ[k];
+  const me=new THREE.Mesh(new THREE.PlaneGeometry(ancho,alto),mat);
+  me.position.set(x,y,z+G); me.rotation.y=giro||0; nlGrupo(k).add(me); return me; }
+/* MUCHAS cartas del mismo recorte en UN solo draw call. Sin esto, 16 corales + 18 algas +
+   30 helechos son 64 llamadas de dibujo al GPU; instanciadas son 3. Las que no se mueven van
+   todas acá; las animadas (peces, gaviotas) siguen sueltas porque cambian de matriz por frame. */
+function nlCartasInst(k,mat,items){
+  if(!items.length) return null;
+  const im=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1), mat, items.length);
+  const m=new THREE.Matrix4(), q=new THREE.Quaternion(), e=new THREE.Euler(), v=new THREE.Vector3(), sc=new THREE.Vector3();
+  const G=NL_GZ[k];
+  for(let i=0;i<items.length;i++){ const it=items[i];
+    e.set(0,it[5]||0,0); q.setFromEuler(e); v.set(it[0],it[1],it[2]+G); sc.set(it[3],it[4],1);
+    m.compose(v,q,sc); im.setMatrixAt(i,m); }
+  im.instanceMatrix.needsUpdate=true; im.frustumCulled=false; nlGrupo(k).add(im); return im;
+}
+/* isla decorativa de fondo (sin colisión): panza de roca + tapa de pasto + un árbol */
+function nlIslaLejana(k,x,y,z,r,matRoca,matPasto,matCopa){
+  nlCil(k,x,y-1.1,z,r,r*0.55,2.2,matRoca,true);
+  nlCil(k,x,y+0.15,z,r*1.02,r*1.02,0.45,matPasto,true);
+  if(matCopa && r>2.2) nlCopa(k,x+r*0.1,y+1.9+r*0.35,z,r*1.5,r*1.4,matCopa);
+}
 /* meta giratoria: al tocarla salta al mundo siguiente */
 function nlPonerMeta(k,x,y,z,color,siguiente){
   const G=NL_GZ[k];
@@ -2089,6 +2120,17 @@ function nlTick(dt){
     if(d.tipo==='x'){ const nx=d.x0+Math.sin(d.t)*d.amp; d.m.position.x=nx; if(d.col){ d.col.minx=nx-d.hw; d.col.maxx=nx+d.hw; } }
     else if(d.tipo==='y'){ const ny=d.y0+Math.sin(d.t)*d.amp; d.m.position.y=ny; if(d.col){ d.col.miny=ny-d.hh; d.col.maxy=ny+d.hh; } }
     else if(d.tipo==='burbuja'){ d.m.position.y+=dt*d.v*0.6; if(d.m.position.y>d.y1)d.m.position.y=d.y0; }
+    else if(d.tipo==='pez'){                                  // cardumen: cruza el tanque y vuelve a entrar por el otro lado
+      d.m.position.x += dt*d.v*d.dir;
+      d.m.position.y = d.y0 + Math.sin(d.t*1.6)*0.5;
+      if(d.dir>0 && d.m.position.x>d.amp){ d.m.position.x=-d.amp; }
+      else if(d.dir<0 && d.m.position.x<-d.amp){ d.m.position.x=d.amp; } }
+    else if(d.tipo==='ave'){                                  // gaviota: vuelta lenta y aleteo (la carta se estira/achica)
+      d.m.position.x = d.x0 + Math.cos(d.t)*d.amp;
+      d.m.position.z = d.z0 + Math.sin(d.t)*d.amp;
+      d.m.rotation.y = -d.t + Math.PI/2;
+      d.m.scale.y = 0.82 + Math.abs(Math.sin(d.t*5))*0.34; }
+    else if(d.tipo==='vaiven'){ d.m.rotation.z = Math.sin(d.t)*d.amp; }   // algas y hojas que se mecen
   }
 }
 function nlMovil(k,me,tipo,amp,vel){   // plataforma que se mueve (el collider la sigue)
@@ -2101,8 +2143,8 @@ function nlMovil(k,me,tipo,amp,vel){   // plataforma que se mueve (el collider l
 nlInicio.islas=new THREE.Vector3(0,6.75,NL_GZ.islas-4);
 function nlBuildIslas(){ if(nlHecho.islas)return; nlHecho.islas=true; const k='islas';
   const roca=nlMat(0x8a7f6e,0.92), pasto=nlMat(0x5fbf46,0.78), pastoC=nlMat(0x7ed957,0.72);
-  hfPoner(roca,'roca',2,1,{color:0xe4dccc,rug:0.95});          // la panza de las islas: roca con líquenes (aclarada, si no queda negra)
-  hfPoner(pasto,'pasto',3,3,{color:0xc9e8a8,rug:0.85});        // la tapa que se pisa es pasto de verdad
+  hfPoner(roca,'roca',2,1,{color:0xe4dccc,rug:0.95,nrm:1.1});          // la panza de las islas: roca con líquenes (aclarada, si no queda negra)
+  hfPoner(pasto,'pasto',3,3,{color:0xc9e8a8,rug:0.85,nrm:0.7});        // la tapa que se pisa es pasto de verdad
   pastoC.map=makeLeafTex(); pastoC.side=THREE.DoubleSide; pastoC.alphaTest=0.42;
   hfPoner(pastoC,'copa',1,1,{recorte:0.38,rug:0.8});           // los matorrales: tarjetas de follaje recortado
   nlAgua(k,0,0.2,60,420,420,0x2fb8c8,0.78);
@@ -2117,6 +2159,24 @@ function nlBuildIslas(){ if(nlHecho.islas)return; nlHecho.islas=true; const k='i
     nlCaja(k,a[0]-2.2,a[2],a[1],0.35,3.4,0.35,nlVidrio(0x9fe8ff,0.42),true,true);
     nlCaja(k,a[0]+2.2,a[2],a[1],0.35,3.4,0.35,nlVidrio(0x9fe8ff,0.42),true,true);
     nlCaja(k,a[0],a[2]+1.85,a[1],4.7,0.35,0.35,nlVidrio(0x9fe8ff,0.42),true,true); }
+  /* DECORACIÓN: el mapa era una fila de islas y mar vacío. Ahora hay un archipiélago de fondo
+     con árboles, gaviotas dando vueltas y flores en las islas grandes. Todo sin colisión. */
+  const copaI=nlRecorte('copa',0.38), aveI=nlRecorte('ave',0.30), florI=nlRecorte('flor',0.36);
+  const fondo=[[-38,7,14,5.2],[42,9,30,6.0],[-50,12,56,7.0],[48,14,82,5.6],[-42,17,106,6.4],
+               [34,20,126,4.8],[-28,23,144,5.4],[56,11,152,6.2],[-60,15,168,5.0],[30,26,178,4.4],
+               [-20,29,198,6.6],[44,31,208,5.2]];
+  const arbFondo=[];
+  for(const f of fondo){ nlIslaLejana(k,f[0],f[1],f[2],f[3],roca,pasto,null);
+    for(let c=0;c<2;c++) arbFondo.push([f[0]+f[3]*0.15, f[1]+2.0+f[3]*0.42, f[2], f[3]*1.5, f[3]*1.4, c*Math.PI/2]); }
+  // los árboles de las islas del recorrido: LEJOS de la línea que se camina (|x|>2.6) y nunca sobre el spawn
+  const arbCerca=[];
+  for(const t of [[3.6,7.3,4],[-4.6,7.9,11],[8.6,9.1,25],[-9.6,10.9,47],[9.6,12.7,70],[-5.4,14.5,92]])
+    for(let c=0;c<2;c++) arbCerca.push([t[0],t[1]+2.4,t[2],3.4,3.0,c*Math.PI/2]);
+  nlCartasInst(k,copaI,arbFondo.concat(arbCerca));                        // TODOS los árboles: un draw call
+  nlCartasInst(k,florI,[[2.6,7.1,6,1.1,1.0,0.4],[-3.1,7.8,13,1.0,0.9,1.9],[4.2,9.0,20,1.1,1.0,2.6],
+                        [-3.4,10.9,42,1.0,0.9,0.8],[3.0,12.7,64,1.1,1.0,2.1],[-4.0,14.9,94,1.0,0.9,1.2]]);
+  for(let i=0;i<6;i++){ const a=nlCarta(k,-40+i*16,17+((i*7)%9),20+i*30,2.6,1.4,aveI,0);
+    nlDin.push({k:k,m:a,tipo:'ave',amp:9+((i*5)%7),v:0.22+i*0.03,t:i*0.9,x0:a.position.x,z0:a.position.z-NL_GZ.islas}); }
   const m1=nlCil(k,-7,9.4,29,2.0,1.6,0.5,pasto); nlMovil(k,m1,'y',1.6,0.7);   // dos islas que suben y bajan
   const m2=nlCil(k,7,11.0,58,2.0,1.6,0.5,pasto); nlMovil(k,m2,'y',1.9,0.55);
   nlPonerMeta(k,0,15.2,95,0x7ef0a8,()=>nlEntrar('acuario',NL_CFG.acuario));
@@ -2125,7 +2185,7 @@ function nlBuildIslas(){ if(nlHecho.islas)return; nlHecho.islas=true; const k='i
 nlInicio.acuario=new THREE.Vector3(0,3.55,NL_GZ.acuario-4);
 function nlBuildAcuario(){ if(nlHecho.acuario)return; nlHecho.acuario=true; const k='acuario';
   const vid=nlVidrio(0xbfeeff,0.30), piso=nlMat(0xdff4ff,0.18,0.1), borde=nlMat(0x2aa8ff,0.35,0.4);
-  hfPoner(piso,'azulejo',1,1,{color:0xf0fcff,rug:0.14,metal:0.06});   // pasillos de azulejo mojado
+  hfPoner(piso,'azulejo',1,1,{color:0xf0fcff,rug:0.14,metal:0.06,nrm:0.6});   // pasillos de azulejo mojado
   hfPoner(vid,'vidrio',1,1,{color:0xdff6ff,rug:0.06});                // el vidrio del tanque, con sus marcas
   const caja=new THREE.Mesh(new THREE.BoxGeometry(70,34,190), new THREE.MeshStandardMaterial({color:0x1a86b8,roughness:0.25,metalness:0.2,side:THREE.BackSide}));
   caja.position.set(0,11,NL_GZ.acuario+70); nlGrupo(k).add(caja);
@@ -2137,6 +2197,22 @@ function nlBuildAcuario(){ if(nlHecho.acuario)return; nlHecho.acuario=true; cons
   for(const z of [19,51,87]){ nlCaja(k,-3.2,4.6,z,0.4,5.0,7,vid); nlCaja(k,3.2,4.6,z,0.4,5.0,7,vid); }   // paredes de vidrio para wall-run
   for(let i=0;i<26;i++){ const b=nlEsfera(k,(Math.random()-0.5)*54,1+Math.random()*6,10+Math.random()*160,0.18+Math.random()*0.4,nlVidrio(0xeafcff,0.5),true);
     nlDin.push({k:k,m:b,tipo:'burbuja',v:0.5+Math.random(),y0:1,y1:20,t:0,amp:0}); }
+  /* DECORACIÓN: el tanque estaba vacío salvo burbujas. Ahora hay cardúmenes cruzando, corales
+     en el fondo y algas que se mecen. Las cartas son fotos recortadas, no cubos verdes. */
+  const pezA=nlRecorte('pez',0.32), coralA=nlRecorte('coral',0.34), algaA=nlRecorte('alga',0.30);
+  let sa=8123; const ra=()=>{ sa=(sa*1103515245+12345)&0x7fffffff; return sa/0x7fffffff; };
+  for(let i=0;i<14;i++){                                                  // cardumen: 14 peces sueltos (se mueven)
+    const z=10+ra()*176, y=1.6+ra()*10, dir=(i%2)?1:-1;
+    const pz=nlCarta(k,(ra()-0.5)*40, y, z, 1.5+ra()*1.1, 0.8+ra()*0.6, pezA, dir>0?0:Math.PI);
+    nlDin.push({k:k,m:pz,tipo:'pez',dir:dir,amp:31,v:1.6+ra()*2.2,t:ra()*6.28,y0:y}); }
+  const cor=[], alg=[];
+  for(let i=0;i<16;i++){ const x=(ra()<0.5?-1:1)*(9+ra()*22), h=2.4+ra()*1.6;   // fuera del pasillo central
+    cor.push([x,-5.9+h/2,6+ra()*184,2.6+ra()*1.8,h,ra()*3.14]); }              // apoyados en el piso del tanque (y=-6)
+  for(let i=0;i<18;i++){ const x=(ra()<0.5?-1:1)*(8+ra()*23), h=3.6+ra()*2.4;
+    alg.push([x,-5.9+h/2,6+ra()*184,1.9+ra()*1.2,h,ra()*3.14]); }
+  nlCartasInst(k,coralA,cor); nlCartasInst(k,algaA,alg);                   // dos draw calls para 34 cartas
+  for(let i=0;i<5;i++){ const al=nlCarta(k,(i%2?1:-1)*(10+i*3),-3.6,24+i*34,2.2,4.6,algaA,ra()*3.14);
+    nlDin.push({k:k,m:al,tipo:'vaiven',amp:0.12,v:0.5+i*0.08,t:i*1.3}); }  // unas pocas que se mecen
   const m1=nlCaja(k,0,5.1,23,3.2,0.45,3.2,piso); nlMovil(k,m1,'x',5.5,0.6);
   const m2=nlCaja(k,0,7.0,74,3.2,0.45,3.2,piso); nlMovil(k,m2,'x',7.0,0.75);
   nlCil(k,0,17,70,1.2,1.2,20,borde,true);                                     // columna central decorativa
@@ -2154,6 +2230,23 @@ function nlBuildNubes(){ if(nlHecho.nubes)return; nlHecho.nubes=true; const k='n
   for(const p of P) nb(p[0],p[1],p[2],p[3]);
   const cols=[0xff6b6b,0xffb36b,0xffe66b,0x7ef07e,0x6bc8ff,0x9f6bff];         // arcoíris de fondo, sin colisión
   for(let i=0;i<cols.length;i++) nlCaja(k,0,58+i*1.1,64,120,0.9,0.9,arco(cols[i]),true,true);
+  /* DECORACIÓN: bancos de nubes de fondo a varias alturas (dan profundidad y tapan el vacío),
+     globos flotando y gaviotas. Nada de esto colisiona. */
+  const aveN=nlRecorte('ave',0.30);
+  const banco=(x,y,z,r)=>{ nlEsfera(k,x,y,z,r,nube,true);
+    nlEsfera(k,x-r*0.8,y-r*0.2,z+r*0.3,r*0.72,nube,true); nlEsfera(k,x+r*0.85,y-r*0.15,z-r*0.35,r*0.66,nube,true);
+    nlEsfera(k,x+r*0.1,y+r*0.35,z+r*0.1,r*0.6,nube,true); };
+  const B=[[-42,38,6,5.4],[46,41,24,6.4],[-54,45,48,7.2],[52,49,72,6.0],[-48,53,96,6.8],
+           [40,57,118,5.2],[-34,60,138,6.0],[58,44,154,6.6],[-62,50,170,5.6],[36,63,186,4.8],
+           [-26,66,202,7.0],[48,68,214,5.4],[0,30,-34,8.0],[-30,32,-52,6.2]];
+  for(const b of B) banco(b[0],b[1],b[2],b[3]);
+  const globos=[0xff7b7b,0x7bd0ff,0xffe07b,0x9fff9f,0xd79fff,0xffb37b];
+  for(let i=0;i<6;i++){ const gx=-16+i*6.4, gz=14+i*30, gy=40+((i*5)%9);
+    const gl=nlEsfera(k,gx,gy,gz,1.5,nlMat(globos[i],0.35,0,globos[i],0.35),true);
+    nlCil(k,gx,gy-2.3,gz,0.04,0.04,3.0,nlMat(0xd8e8f0,0.6),true);
+    nlDin.push({k:k,m:gl,tipo:'y',amp:1.6,v:0.35+i*0.05,t:i,y0:gy,hh:0}); }
+  for(let i=0;i<6;i++){ const a=nlCarta(k,-26+i*11,43+((i*7)%10),24+i*32,3.0,1.6,aveN,0);
+    nlDin.push({k:k,m:a,tipo:'ave',amp:11+((i*4)%6),v:0.20+i*0.04,t:i*1.3,x0:a.position.x,z0:a.position.z-NL_GZ.nubes}); }
   const m1=nlCil(k,0,44.2,33,2.2,1.9,0.7,nube); nlMovil(k,m1,'x',6.5,0.65);
   const m2=nlCil(k,0,47.4,58,2.2,1.9,0.7,nube); nlMovil(k,m2,'x',8.0,0.8);
   const m3=nlCil(k,-8,49.0,84,2.2,1.9,0.7,nube); nlMovil(k,m3,'y',2.2,0.6);
@@ -2167,7 +2260,7 @@ function nlBuildJardin(){ if(nlHecho.jardin)return; nlHecho.jardin=true; const k
   hfPoner(hoja,'helecho',1,1,{color:0xd0e8b8,rug:0.75});       // las hojas gigantes que se pisan: follaje real
   hfPoner(hoja2,'helecho',2,2,{color:0xe0f4c8,rug:0.72});
   hfPoner(tronco,'corteza',1,2,{rug:0.95});                    // tallos con corteza
-  hfPoner(loza,'marmol',1,1,{color:0xf4faf0,rug:0.35,metal:0.04});   // piso de mármol del invernadero
+  hfPoner(loza,'marmol',1,1,{color:0xf4faf0,rug:0.35,metal:0.04,nrm:0.35});   // piso de mármol del invernadero
   hfPoner(vid,'vidrio',1,1,{color:0xeafaff,rug:0.05});
   const domo=new THREE.Mesh(new THREE.SphereGeometry(72,26,18,0,Math.PI*2,0,Math.PI*0.55), vid.clone());
   domo.position.set(0,0,NL_GZ.jardin+60); nlGrupo(k).add(domo);
@@ -2182,6 +2275,22 @@ function nlBuildJardin(){ if(nlHecho.jardin)return; nlHecho.jardin=true; const k
   for(const t of [[-12,20],[12,44],[-14,72],[13,96]]){                         // árboles decorativos (tarjetas de follaje real)
     nlCil(k,t[0],4,t[1],0.6,0.8,8,tronco,true);
     nlCopa(k,t[0],8.4,t[1],9.0,8.0,copaJ); nlCopa(k,t[0]+1.8,6.6,t[1]+1.3,5.2,4.6,copaJ); }
+  /* DECORACIÓN: el invernadero era piso de mármol y hojas. Ahora hay helechos y flores por el
+     piso, macetas con plantas y enredaderas colgando de la cúpula. */
+  const fernJ=nlRecorte('ferna',0.34), florJ=nlRecorte('flor',0.36), copaJ2=nlRecorte('copa',0.38);
+  let sj=4711; const rj=()=>{ sj=(sj*1103515245+12345)&0x7fffffff; return sj/0x7fffffff; };
+  const fer=[], flo=[], enr=[], macet=[];
+  for(let i=0;i<34;i++){ const x=(rj()<0.5?-1:1)*(10+rj()*20), z=-14+rj()*230;   // siempre fuera del pasillo
+    fer.push([x,1.1+rj()*0.4,z,2.0+rj()*1.4,2.2+rj()*1.6,rj()*3.14]); }
+  for(let i=0;i<24;i++){ const x=(rj()<0.5?-1:1)*(9+rj()*19), z=-12+rj()*228;
+    flo.push([x,0.8+rj()*0.3,z,1.3+rj()*0.8,1.2+rj()*0.7,rj()*3.14]); }
+  for(let i=0;i<14;i++){ const a=(i/14)*6.2831, r=34+((i*7)%18);          // enredaderas colgando de la cúpula
+    enr.push([Math.cos(a)*r*0.62, 16+((i*5)%9), 60+Math.sin(a)*r*0.92, 3.0, 6.0, a]); }
+  for(const m of [[-11,8],[11,30],[-13,58],[12,84],[-10,110],[13,132]]){   // macetas con planta
+    nlCil(k,m[0],0.55,m[1],0.7,0.5,1.1,loza,true);
+    for(let c=0;c<2;c++) macet.push([m[0],2.3,m[1],3.0,2.8,c*Math.PI/2]); }
+  nlCartasInst(k,fernJ,fer); nlCartasInst(k,florJ,flo);
+  nlCartasInst(k,copaJ2,enr.concat(macet));                               // 84 cartas en tres draw calls
   const m1=nlCaja(k,0,4.2,26,3.4,0.4,3.4,hoja); nlMovil(k,m1,'x',6.0,0.6);
   const m2=nlCaja(k,0,7.0,62,3.4,0.4,3.4,hoja); nlMovil(k,m2,'y',1.8,0.7);
   nlPonerMeta(k,0,12.9,114,0x9fff9f,()=>nlEntrar('tarde',NL_CFG.tarde));
@@ -2191,8 +2300,8 @@ nlInicio.tarde=new THREE.Vector3(0,2.65,NL_GZ.tarde-4);
 function nlBuildTarde(){ if(nlHecho.tarde)return; nlHecho.tarde=true; const k='tarde';
   const arena=nlMat(0xe8c98a,0.9), arena2=nlMat(0xd8b070,0.92), palma=nlMat(0x8a6a45,0.9),
         palmaH=nlMat(0x4fa83f,0.75), roca=nlMat(0x9a8f80,0.95);
-  hfPoner(arena,'arena',2,2,{color:0xffe8c0,rug:0.95});        // arena de playa fotográfica
-  hfPoner(arena2,'madera',1,1,{color:0xf0d0a0,rug:0.9});       // los tramos oscuros pasan a ser tablones de deck
+  hfPoner(arena,'arena',2,2,{color:0xffe8c0,rug:0.95,nrm:0.9});        // arena de playa fotográfica
+  hfPoner(arena2,'madera',1,1,{color:0xf0d0a0,rug:0.9,nrm:0.8});       // los tramos oscuros pasan a ser tablones de deck
   hfPoner(palma,'corteza',1,3,{color:0xd8c0a0,rug:0.95});      // tronco de palmera
   hfPoner(palmaH,'palma',1,1,{color:0xffffff,recorte:0.35,rug:0.75});   // hojas de palmera recortadas de una foto
   hfPoner(roca,'roca',1,1,{color:0xd8d0c4,rug:0.95});
@@ -2208,6 +2317,19 @@ function nlBuildTarde(){ if(nlHecho.tarde)return; nlHecho.tarde=true; const k='t
     for(let a=0;a<7;a++){ const an=a*0.897+(t[1]%3)*0.2;
       nlFronda(k,t[0],9.0,t[1],5.4,2.1,an,0.30+((a%3)*0.12),frondaT); } }
   for(const t of [[-16,34],[15,62],[-18,90]]) nlCopa(k,t[0],5.2,t[1],7.0,6.2,copaT);   // arbustos costeros de fondo
+  /* DECORACIÓN: la playa era plataformas y agua. Ahora hay sombrillas, botes fondeados,
+     gaviotas, arbustos costeros y más palmeras a los costados. */
+  const aveT=nlRecorte('ave',0.30), florT=nlRecorte('flor',0.36);
+  const lonaT=nlMat(0xff8a5a,0.6,0,0xff8a5a,0.18);
+  for(const u of [[-9,12],[10,38],[-11,66],[12,94]]){                      // sombrillas (afuera del paso)
+    nlCil(k,u[0],1.4,u[1],0.05,0.05,2.8,palma,true);
+    nlCil(k,u[0],2.9,u[1],0.08,1.5,0.35,lonaT,true); }
+  for(const bt of [[-15,24],[16,58],[-17,102]]){                           // botes fondeados
+    nlCaja(k,bt[0],0.75,bt[1],1.5,0.7,4.2,arena2,true,true);
+    nlCaja(k,bt[0],1.5,bt[1]-0.6,0.12,1.9,0.12,palma,true,true); }
+  for(let i=0;i<8;i++){ const a=nlCarta(k,-22+i*7,7+((i*5)%8),12+i*24,3.0,1.6,aveT,0);
+    nlDin.push({k:k,m:a,tipo:'ave',amp:8+((i*3)%6),v:0.22+i*0.03,t:i*1.1,x0:a.position.x,z0:a.position.z-NL_GZ.tarde}); }
+  nlCartasInst(k,florT,[[-12,1.1,16,1.5,1.4,0.6],[13,1.1,44,1.5,1.4,2.2],[-14,1.1,74,1.5,1.4,1.1],[12,1.1,108,1.5,1.4,2.7]]);
   const m1=nlCaja(k,0,3.8,26,3.4,0.5,3.4,arena); nlMovil(k,m1,'x',6.5,0.6);
   const m2=nlCaja(k,0,6.6,62,3.4,0.5,3.4,arena); nlMovil(k,m2,'x',8.0,0.7);
   nlPonerMeta(k,0,12.2,114,0xffd08a,()=>enterVoid());                          // y de acá al vacío infinito
