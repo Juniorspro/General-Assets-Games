@@ -172,7 +172,7 @@ let gunRoot=null, gunFlash=null, gunFlash2=null, gunLight=null;
 // 0,92·0,54 = 0,497 m; con la separación lateral y vertical fijas, el avance máximo de la muñeca izquierda
 // es √(0,497² − 0,261² − 0,081²) = 0,415 m delante de la lente. El labio trasero del guardamanos viejo
 // estaba a 0,629 m: 21 cm fuera de alcance, y ningún torso lo salva (haría falta blandear el pecho 70°).
-const GUN_ESC=0.86;                                       // escala del arma (con 90° de FOV, a tamaño 1 se come media pantalla)
+const GUN_ESC=0.72;   // con FOV vertical 90 todo lo cercano se agranda: a 0.86 el fusil se comía el cuadro
 const GUN_MUZZLE=new THREE.Vector3(0,0.014,-0.533);       // boca del caño (local)
 // AGARRES SOBRE LA SUPERFICIE (G1). El criterio viejo era "errDer=0.000" = la muñeca está donde le
 // dijimos; nunca preguntaba DÓNDE le dijimos. El viejo GUN_GRIP_R (0.012,-0.045,0.135) caía 9,5 mm
@@ -181,7 +181,7 @@ const GUN_MUZZLE=new THREE.Vector3(0,0.014,-0.533);       // boca del caño (loc
 // su normal": medio espesor de muñeca, para que la mano quede APOYADA y no clavada. Verificable en vivo
 // con __tiro.solido(x,y,z) y __tiro.tocando(), que leen la geometría real de gunRoot.
 //   R  → cara TRASERA de la empuñadura (el backstrap, donde apoya la palma), tercio superior.
-const GUN_GRIP_R=new THREE.Vector3(0.006,-0.0874,0.1597); // empuñadura → mano DERECHA. y = borde SUPERIOR de
+const GUN_GRIP_R=new THREE.Vector3(0.000,-0.098,0.1175);  // CENTRO de la empuñadura: el puño la envuelve
 // la caja del mango: el IK apunta la MUÑECA, y la muñeca va arriba del puño, no en su centro (sube la mano
 // 0,023 m sin mover el arma). x/z ligeramente adelante para sacarla del filo del recorte de cuerpo (0,20 m).
 // APUNTANDO MUY ARRIBA la mano de apoyo SE CORRE HACIA ATRÁS, sobre el cajón. No es un gusto: a pitch 1.3
@@ -190,9 +190,9 @@ const GUN_GRIP_R=new THREE.Vector3(0.006,-0.0874,0.1597); // empuñadura → man
 // hombro→agarre mide 0.500 m contra un alcance de 0.497: _limitarArma se activa y arrastra el fusil entero
 // hacia el jugador hasta dejar la muñeca DERECHA a 0.104 m de la lente, o sea 10 cm adentro del recorte.
 // Corriendo el agarre a z=+0.150 la cadena baja a 0.43 m, el limitador suelta y la derecha queda a ~0.26.
-const GUN_GRIP_L_ALTO=new THREE.Vector3(-0.046,-0.030,0.130);   // flanco IZQUIERDO del cajón (cara plana, no arista)
+const GUN_GRIP_L_ALTO=new THREE.Vector3(0.000,0.004,-0.0200);   // idem, más atrás, al apuntar muy arriba
 const _gL=new THREE.Vector3(-0.041,-0.1052,-0.0095);      // agarre izquierdo VIVO (el que usa todo el código)
-const GUN_GRIP_L=new THREE.Vector3(-0.041,-0.1052,-0.0095);   // cara IZQUIERDA de la boca de cargador.
+const GUN_GRIP_L=new THREE.Vector3(0.000, 0.004,-0.0200);  // guardamanos por atrás: 0,556 m desde el hombro contra 0,577 de alcance
 // PROBADO Y DESCARTADO subir el agarre a y=-0.075 "para acortar la cadena": el peor errIzq esprintando
 // EMPEORA (0.092 -> 0.103) y el peor de la palma también (38 -> 45 mm). El brazo izquierdo no está limitado
 // por DISTANCIA sino por ÁNGULO (TIRO_IKMAX topa cuánto se aparta el húmero de la pose de reposo, que es
@@ -533,11 +533,11 @@ function ikTwoBone(up,low,end,target,pole,w){
   // devuelve el brazo a la pose de idle TODOS los frames, así que la desviación se mide contra una pose
   // conocida y razonable, y 83° se quedaban cortos: el brazo izquierdo tiene que salir de "colgando" a
   // "cruzado adelante", más de 90°, y el recorte del slerp lo dejaba a 7 cm del guardamanos al esprintar.
-  _aimBone(up,_qb,w,TIRO_IKMAX);
+  _aimBone(up,_qb,w);    // sin tope: el tope existía para que no se estirara la piel, y ya no hay piel
   low.getWorldPosition(_ikB); end.getWorldPosition(_ikC);        // el antebrazo apunta la mano al objetivo
   _ikP.subVectors(_ikC,_ikB).normalize(); _ikU.subVectors(_ikT,_ikB).normalize();
   _qa.setFromUnitVectors(_ikP,_ikU); low.getWorldQuaternion(_qb); _qb.premultiply(_qa);
-  _aimBone(low,_qb,w,TIRO_IKMAX+1.15);   // el antebrazo tiene más margen (su piel no se estira)
+  _aimBone(low,_qb,w);
 }
 // La mano no tiene hijos, así que su eje +Y local es el de los dedos (viene heredado de la cadena del brazo).
 // En vez de adivinar Eulers, se APUNTA ese eje a una dirección del mundo: los dedos abrazan el arma en serio.
@@ -553,6 +553,16 @@ function apuntarMano(bone,dir,w){ if(!bone)return;
 function torcerMano(bone,rad,w){ if(!bone||!rad)return; _ikU.set(0,1,0).applyQuaternion(bone.getWorldQuaternion(_qb));
   _qw.setFromAxisAngle(_ikU,rad); _qb.premultiply(_qw); _aimBone(bone,_qb,w); }   // giro de muñeca sobre el eje de los dedos
 const TIRO_DEDOS_R=new THREE.Vector3(), TIRO_DEDOS_L=new THREE.Vector3();
+const _ejeR=new THREE.Vector3(), _ejeL=new THREE.Vector3(), _m4=new THREE.Matrix4();
+/* Alinea el puño: X local = eje del agarre, Z local ≈ referencia (queda perpendicular). Con piezas rígidas
+   se puede clavar la orientación exacta sin miedo: no hay piel que se estire. */
+function cuOrientarMano(bone,ejeX,ref,w){ if(!bone)return;
+  _ikU.copy(ejeX).normalize();
+  _ikN.copy(ref).projectOnPlane(_ikU);
+  if(_ikN.lengthSq()<1e-6) _ikN.set(0,1,0).projectOnPlane(_ikU);
+  _ikN.normalize(); _ikP.crossVectors(_ikN,_ikU).normalize();
+  _m4.makeBasis(_ikU,_ikP,_ikN); _qa.setFromRotationMatrix(_m4);
+  _aimBone(bone,_qa,w); }
 // MEDIDOS, no adivinados (barrido de 16 ángulos con __tiro.palma(): para cada giro se proyecta el eje que
 // va de la muñeca al arma sobre los ejes locales X/Z de la mano y se busca el máximo).
 //  IZQUIERDA: el −Z local apunta al arma con |dot|=0.997 en −0.39 → la palma queda contra el guardamanos.
@@ -612,7 +622,7 @@ let TIRO_VIDA=0;
 //            alcance para el brazo izquierdo, que tiene que cruzar 0.183+x.
 //  x=0.080 (era 0.110): con el agarre izquierdo en el magwell la cadena da 0.489 m contra 0.513 de
 //            alcance útil (24 mm de sobra para el bamboleo). Con 0.110 sobran 9 mm: cierra, pero al filo.
-const GUN_OJO=new THREE.Vector3(0.080,-0.118,0.420);
+const GUN_OJO=new THREE.Vector3(0.115,-0.175,0.460);   // más abajo: con el puño envolviendo, a -0,13 la mano quedaba en el centro del cuadro
 function _spineAdd(b,rx,ry,rz,w){ if(!b)return; _euAim.set(rx*w,ry*w,rz*w,'XYZ'); _qw.setFromEuler(_euAim);
   b.quaternion.multiply(_qw); }   // aditivo sobre la pose de BIND (la máscara ya sacó la animación de acá)
 // alcance de cada brazo (constante: son huesos). Se mide una vez.
@@ -655,7 +665,11 @@ function tiroPostura(dt){
   mskAplicar();       // ← acá muere la animación de la cintura para arriba: de este punto en adelante manda el código
   mskTorsoMundo();    // y el tronco se COMPONE en mundo: hereda sólo TORSO_K de lo que hace la cadera
   // la cabeza sólo vuelve en 3ª persona; en 1ª persona SIEMPRE se recorta (la cámara está adentro de la cabeza)
-  if(_cabCut){ const v=(camView==='tp')?2.0:0.30; for(const u of _cabCut) u.value=v; }
+  // 1ª persona: se ocultan las piezas que sólo tapan la lente (cabeza, cuello, pecho). Con el cuerpo hecho de
+  // piezas sueltas esto es una línea; con el modelo skinned hacía falta descartar por peso en el fragment shader.
+  { const enTP=(camView==='tp'||player.camTP>0.30);
+    if(cuCabezaG&&cuCabezaG.visible!==enTP) cuCabezaG.visible=enTP;
+    if(cuSoloTP.length&&cuSoloTP[0].visible!==enTP) for(const m of cuSoloTP) m.visible=enTP; }
   const spd=Math.hypot(player.vel.x,player.vel.z), sn=Math.min(1,spd/RUN);
   const mov=sn, quieto=Math.max(0,1-spd/1.2);      // función de activación (0..1) como en la referencia
   // ---- fases ----
@@ -852,15 +866,16 @@ function tiroPostura(dt){
             gunRoot.quaternion.premultiply(_qa); gunRoot.updateMatrixWorld(true); } } } } }
   // EJE DE LOS DEDOS. La caja de la empuñadura está en (0,−0.105,0.115) con rotation.x=+0.30, así que su eje
   // arriba→abajo en local es (0,−0.955,−0.296), o sea −0.955·_cu + 0.296·_cf en mundo. El vector viejo
-  // (0.62·_cf − 0.72·_cu − 0.30·_cr) estaba 29,1° fuera de ese eje: los nudillos CORTABAN el mango de canto
-  // en vez de envolverlo. Éste queda a 7,2°, con el cruce justo para que los dedos lo rodeen.
-  TIRO_DEDOS_R.copy(_cf).multiplyScalar(0.30).addScaledVector(_cu,-0.95).addScaledVector(_cr,-0.12).normalize();
-  // La izquierda cruza el guardamanos por debajo: la muñeca queda abajo-izquierda y los nudillos SUBEN
-  // cruzando hacia la derecha (agarre C-clamp). El viejo (0.87,0.16,0.47) casi no subía y la mano salía de
-  // costado, al lado del fusil en vez de abrazándolo.
-  TIRO_DEDOS_L.copy(_cr).multiplyScalar(0.82).addScaledVector(_cu,0.42).addScaledVector(_cf,0.39).normalize();
-  if(DBG.mun){ apuntarMano(bRHand,TIRO_DEDOS_R,1); torcerMano(bRHand,TIRO_TORS_R,1);
-    apuntarMano(bLHand,TIRO_DEDOS_L,1); torcerMano(bLHand,TIRO_TORS_L,1); }
+  // MANOS: con el cuerpo procedural el puño se construyó CENTRADO en el hueso y con el agujero a lo largo
+  // de su eje X local (ver cuMano). Así que orientar la mano es alinear ese eje con el eje del agarre: el mango
+  // (inclinado 0,30 rad) para la derecha y el guardamanos (eje Z del arma) para la izquierda. Sin dedos
+  // articulados no hay cierre, pero el arma queda ADENTRO del puño, que es lo que se ve.
+  if(DBG.mun){
+    _ejeR.set(0,Math.cos(0.30),Math.sin(0.30)).applyQuaternion(gunRoot.quaternion);
+    _ejeL.set(0,0,1).applyQuaternion(gunRoot.quaternion);
+    cuOrientarMano(bRHand,_ejeR,_cf,1);
+    cuOrientarMano(bLHand,_ejeL,_cu,1);
+  }
   // ---- fogonazo y efectos cortos ----
   if(flashT>0){ gunFlash.visible=gunFlash2.visible=true;
     const es=0.72+Math.random()*0.7; gunFlash.scale.setScalar(es); gunFlash2.scale.setScalar(es*0.8); gunFlash.rotation.z=Math.random()*3.14;
@@ -938,7 +953,7 @@ function tiroSnd(k){ const c=tctx(); if(!c||!AUD.on)return; if(c.state==='suspen
 // Además el agarre izquierdo (magwell) sólo se sostiene hasta +0.30 (palma a 12,5 mm; a +0.40 ya son 24).
 // No cuesta juego: los blancos son papel a 10/25/45 m y acero a 15/29/34 m, todos en o bajo el horizonte.
 // El tope es SÓLO del campo de tiro: el parkour sigue con 1.3 (necesita mirar cornisas).
-const TIRO_PIT_MAX=0.25;
+const TIRO_PIT_MAX=1.30;   // rango completo: el tope de 0.25 era un parche por las púas del skinning
 function pitMax(){ return (world==='tiro')?TIRO_PIT_MAX:1.3; }
 let _pc=false;
 const TCL={w:false,a:false,s:false,d:false};

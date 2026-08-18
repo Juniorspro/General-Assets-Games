@@ -16,6 +16,10 @@ MARK = '/*__BLOQUE_TIRO__*/\n'
 
 s   = open(SRC, encoding='utf-8').read()
 blk = open(BLK, encoding='utf-8').read()
+# esqueleto + pistas de cadera/piernas extraidas del GLB (extraer.py) y el cuerpo procedural que las usa
+DAT = open(os.path.join(HERE,'cuerpo_datos.json'), encoding='utf-8').read().strip()
+CUE = open(os.path.join(HERE,'cuerpo.js'), encoding='utf-8').read()
+blk = ('const CUERPO_DATOS=' + DAT + ';\n') + blk.rstrip() + '\n' + CUE
 N   = [0]
 
 
@@ -51,12 +55,19 @@ rep("""  const tpTarget=(camView==='tp'||player.sliding)?1:0;   // deslizada →
 rep("""    const want=TP_DIST*(player.sliding?0.66:1)*player.camTP;   // en la deslizada, la cámara va más cerca""",
     """    const want=TP_DIST*player.camTP;""")
 
-# --- 2b) CAPTURA DE LA POSE DE REPOSO DEL TREN SUPERIOR ----------------------------------
-# Tiene que correr con la jerarquia ya armada y ANTES del primer bodyMixer.update(): el callback
-# del GLTFLoader es exactamente ese momento. Se captura del rig LOCAL, no de mpBodySrc.
-rep("""  bodyHipsBind=bodyHips?bodyHips.position.clone():null;""",
-    """  try{ mskCapturar(inner, gl.animations); }catch(e){ console.warn('mascara',e); }   // pose de reposo del tren superior (15 huesos)
-  bodyHipsBind=bodyHips?bodyHips.position.clone():null;""")
+# --- 2b) FUERA EL GLB: EL CUERPO SE ARMA POR CODIGO ---------------------------------------
+# El modelo skinned era la fuente de los tres bugs que no se pudieron cerrar en tres rondas (puas de piel por el
+# skinning, mano que atravesaba el arma por falta de huesos de dedos, cabeza tapando la lente). Se conserva su
+# esqueleto y sus animaciones de piernas: three bindea las pistas por NOMBRE de nodo, asi que los mismos clips
+# corren sobre un esqueleto hecho por codigo. Ver el bloque "CUERPO PROCEDURAL" en cuerpo.js.
+i0 = s.find("const _gltf=new GLTFLoader();")
+i1 = s.find("function setAnim(name){")
+if i0 < 0 or i1 <= i0:
+    print('FALLA: no encuentro el bloque de carga del GLB'); sys.exit(1)
+s = s[:i0] + """/* El cuerpo ya no se descarga: se construye en construirCuerpo() (bloque CUERPO PROCEDURAL).
+   parkour.glb pesaba 1,26 MB; sus pistas de cadera+piernas pesan 101 KB y van embebidas en este archivo. */
+""" + s[i1:]
+N[0] += 1
 
 # --- 2c) LA CAMARA YA NO BAJA 20 CM AL DESLIZARSE ----------------------------------------
 # Ese bajon existia porque el clip acostaba el torso y habia que seguirlo. Ahora el torso queda erguido
@@ -77,7 +88,9 @@ rep("""  const targetLow = player.sliding ? 0.2 : 0;""",
 rep("""  if(bodyInner){ const mir=(curAnim==='wallrun'&&player.wallrun>0)||(curAnim==='slide'&&player.slideRight); bodyInner.scale.x=mir?-bodyScale:bodyScale; }""",
     """  // NADA de espejo en el cuerpo local: una escala negativa en un ancestro rompe getWorldQuaternion()
   // y con eso el IK de los brazos y la orientación del arma (el fusil salía de costado al deslizarse).
-  if(bodyInner && bodyInner.scale.x!==bodyScale) bodyInner.scale.x=bodyScale;""")
+  // OJO: el cuerpo procedural vive en unidades de hueso y su grupo raíz lleva la escala CU_ESC (0.010882).
+  // Forzar acá bodyScale (1.0882) estiraba el cuerpo 100× en X: la mano terminaba a 25 m de la cámara.
+  if(bodyInner && bodyInner.scale.x!==CU_ESC) bodyInner.scale.x=CU_ESC;""")
 
 # --- 2e) LA CADERA BAJA DE VERDAD AL DESLIZARSE ------------------------------------------
 # HALLAZGO: el clamp de root motion estaba en UNIDADES DE HUESO, no en metros. parkour.glb tiene
