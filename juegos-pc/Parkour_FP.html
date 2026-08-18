@@ -110,6 +110,11 @@
   #mLevels .mOpt{ flex:0 0 auto; min-width:44%; scroll-snap-align:center; white-space:nowrap; }
   #mLevels::-webkit-scrollbar{ height:4px; } #mLevels::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.35); border-radius:2px; }
   #sSens{ flex:1; accent-color:#2ea3ff; height:26px; }
+  /* contador de rendimiento (se prende en Ajustes): arriba a la izquierda, chico y sin tapar nada */
+  #perf{ position:fixed; left:8px; top:8px; z-index:36; display:none; padding:4px 8px; border-radius:9px; font:700 11px/1.25 ui-monospace,monospace;
+         color:#dff2ff; background:rgba(8,26,44,.52); border:1px solid rgba(150,220,255,.35); backdrop-filter:blur(6px); pointer-events:none; white-space:pre; }
+  body.perf #perf{ display:block; }
+  body.sinhud #perf{ display:none; }
   #sSensV{ min-width:48px; text-align:right; font-weight:800; color:#0c4675; }
   .lvN{ display:inline-block; margin-left:5px; padding:1px 7px; border-radius:9px; font-size:10.5px; font-weight:800; background:rgba(10,40,70,.16); color:#0c4675; opacity:.55; vertical-align:1px; }
   .lvN.on{ opacity:1; background:#1d9e57; color:#eafff2; box-shadow:0 0 8px rgba(40,220,120,.45); }
@@ -344,11 +349,14 @@
     <button class="pBtn" id="pBoardBtn" data-i18n="clasif_btn">🏆 Clasificación</button>
     <button class="pBtn danger" id="pExit" data-i18n="salir">✖ Salir</button>
   </div></div>
+  <div id="perf"></div>
   <!-- pestaña AJUSTES (se abre aparte) -->
   <div id="settingsPanel" class="ovl"><div class="ovlPanel">
     <h2 data-i18n="ajustes2">⚙ Ajustes</h2>
     <div class="mLabel" data-i18n="gfx">GRÁFICOS</div>
     <div class="mRow" id="sQual"><button class="mOpt" data-q="low" data-i18n="low">Bajo</button><button class="mOpt sel" data-q="med" data-i18n="med">Medio</button><button class="mOpt" data-q="high" data-i18n="high">Alto</button></div>
+    <div class="mLabel" data-i18n="rend">RENDIMIENTO</div>
+    <div class="mRow" id="sPerf"><button class="mOpt sel" data-drs="1" data-i18n="drs_on">Resolución auto</button><button class="mOpt" data-drs="0" data-i18n="drs_off">Resolución fija</button><button class="mOpt" data-fps="t" data-i18n="fps">FPS</button></div>
     <div class="mLabel" data-i18n="idioma">IDIOMA</div>
     <div class="mRow" id="sLang"><button class="mOpt sel" data-lang="es">ES</button><button class="mOpt" data-lang="en">EN</button><button class="mOpt" data-lang="pt">PT</button></div>
     <div class="mLabel" data-i18n="sens">SENSIBILIDAD</div>
@@ -465,6 +473,10 @@ Object.assign(LANG.en,{ tiro:'Shooting Range', q_tiro:'Drop the targets: paper a
   fire:'FIRE', reload:'RELOAD', t_hits:'HITS', t_acc:'ACCURACY', t_best:'BEST', t_reloading:'RELOADING…' });
 Object.assign(LANG.pt,{ tiro:'Campo de Tiro', q_tiro:'Derrube os alvos: papel a 10/25/45 m e aço a 15/29/34 m',
   fire:'FOGO', reload:'RECARREGAR', t_hits:'ACERTOS', t_acc:'PRECISÃO', t_best:'RECORDE', t_reloading:'RECARREGANDO…' });
+// ajustes de rendimiento
+Object.assign(LANG.es,{ rend:'RENDIMIENTO', drs_on:'Resolución auto', drs_off:'Resolución fija', fps:'FPS' });
+Object.assign(LANG.en,{ rend:'PERFORMANCE', drs_on:'Auto resolution', drs_off:'Fixed resolution', fps:'FPS' });
+Object.assign(LANG.pt,{ rend:'DESEMPENHO', drs_on:'Resolução auto', drs_off:'Resolução fixa', fps:'FPS' });
 // nombres y misiones de los cinco mundos nuevos
 Object.assign(LANG.es,{ islas:'Islas Flotantes', acuario:'Acuario', nubes:'Sobre las Nubes', jardin:'Jardín de Vidrio', tarde:'Atardecer',
   q_islas:'Saltá de isla en isla hasta la meta', q_acuario:'Cruzá el tanque por los pasillos de vidrio',
@@ -494,7 +506,10 @@ function applyLang(l){ lang=l; try{ localStorage.setItem('pf_lang',l); }catch(e)
 let camView='fp';   // 'fp' = primera persona · 'tp' = tercera persona (cámara detrás)
 const app=document.getElementById('app');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+// RESOLUCIÓN: prBase la fija el preset de GRÁFICOS y prDyn la ajusta sola según los fps medidos (ver drsTick).
+let prBase=Math.min(devicePixelRatio,2), prDyn=1, drsOn=true, perfOn=false;
+function aplicarPR(){ renderer.setPixelRatio(Math.max(0.4, prBase*prDyn)); }
+aplicarPR();
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFShadowMap;
 renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
 renderer.localClippingEnabled=true;   // para recortar la cabeza del cuerpo (sólo en el material del cuerpo)
@@ -513,6 +528,7 @@ scene.add(camera);
 const sun=new THREE.DirectionalLight(0xfff2e0,2.3); sun.position.set(-40,80,-50); sun.castShadow=true;
 sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=110;   // distancia de sombra reducida → más barato y nítido cerca
 sun.shadow.camera.left=-42; sun.shadow.camera.right=42; sun.shadow.camera.top=42; sun.shadow.camera.bottom=-42; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
+sun.shadow.autoUpdate=false;   // el mapa de sombras NO se redibuja todos los frames: animate lo pide cada 2 (mitad de costo)
 scene.add(sun); scene.add(sun.target);
 scene.add(new THREE.HemisphereLight(0xdfeeff,0x9aa6b2,0.9));
 
@@ -694,12 +710,32 @@ for(let i=0;i<18;i++){ const a=i*2.39; cloud(15+Math.cos(a)*(50+i*11), -16-(i%4)
   const grd=new THREE.Mesh(new THREE.PlaneGeometry(440,760), new THREE.MeshStandardMaterial({color:0x34383e,roughness:1})); grd.rotation.x=-Math.PI/2; grd.position.set(0,RY,80); scene.add(grd);   // suelo de ciudad
   const road=new THREE.Mesh(new THREE.PlaneGeometry(24,620), new THREE.MeshStandardMaterial({map:rt,roughness:0.95})); road.rotation.x=-Math.PI/2; road.position.set(0,RY+0.06,80); scene.add(road);   // carretera abajo
   // rascacielos decorativos (sin colisión) a ambos lados, mucho más altos que el obby
-  function tower(x,z,w,d,h,col){ const tex=_facadeBase.clone(); tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(Math.max(2,Math.round(w/4)), Math.max(6,Math.round(h/5)));
-    const side=new THREE.MeshStandardMaterial({map:tex,roughness:1,color:col}), top=new THREE.MeshStandardMaterial({color:0x20242a,roughness:1});
-    const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),[side,side,top,side,side,side]); m.position.set(x,RY+h/2,z); scene.add(m); }   // sin sombras (decoración lejana)
+  // Antes: 30 torres x 6 materiales de caja = 180 draw calls (y 30 clones de la misma textura).
+  // Ahora las 30 se FUSIONAN en dos mallas (paredes + techos): el color de cada torre viaja en los vértices
+  // y la repetición de la fachada va horneada en las UV. Resultado: 2 draw calls y una sola textura.
+  const _wP=[],_wN=[],_wU=[],_wC=[], _tP=[],_tN=[],_tU=[]; const _tc=new THREE.Color();
+  function quad(P,N,U,C, cx,cy,cz, ax,ay,az, bx,by,bz, nx,ny,nz, ru,rv){
+    const q=[[-1,-1,0,0],[1,-1,ru,0],[1,1,ru,rv],[-1,-1,0,0],[1,1,ru,rv],[-1,1,0,rv]];
+    for(let i=0;i<6;i++){ const s=q[i][0], t=q[i][1];
+      P.push(cx+ax*s+bx*t, cy+ay*s+by*t, cz+az*s+bz*t); N.push(nx,ny,nz); U.push(q[i][2],q[i][3]);
+      if(C) C.push(_tc.r,_tc.g,_tc.b); } }
+  function tower(x,z,w,d,h,col){ const hw=w/2, hd=d/2, hh=h/2, cy=RY+hh;
+    const ru=Math.max(2,Math.round(w/4)), rd=Math.max(2,Math.round(d/4)), rv=Math.max(6,Math.round(h/5));
+    _tc.setHex(col);
+    quad(_wP,_wN,_wU,_wC, x,cy,z+hd,   hw,0,0,  0,hh,0,  0,0,1,   ru,rv);
+    quad(_wP,_wN,_wU,_wC, x,cy,z-hd,  -hw,0,0,  0,hh,0,  0,0,-1,  ru,rv);
+    quad(_wP,_wN,_wU,_wC, x+hw,cy,z,   0,0,-hd, 0,hh,0,  1,0,0,   rd,rv);
+    quad(_wP,_wN,_wU,_wC, x-hw,cy,z,   0,0,hd,  0,hh,0, -1,0,0,   rd,rv);
+    quad(_tP,_tN,_tU,null, x,RY+h,z,   hw,0,0,  0,0,-hd, 0,1,0,   1,1); }   // sin piso (nunca se ve) ni sombras: decoración lejana
   let seed=20240629; const rnd=()=>{ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; };
   for(let i=0;i<30;i++){ const side=i%2?1:-1; const x=side*(38+rnd()*78); const z=-40+rnd()*250; const w=14+rnd()*18, d=14+rnd()*18; const h=80+rnd()*120;
     const col=new THREE.Color().setHSL(0.58,0.04+rnd()*0.06,0.5+rnd()*0.22).getHex(); tower(x,z,w,d,h,col); }
+  function fundir(P,N,U,C,mat){ const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(P,3)); g.setAttribute('normal',new THREE.Float32BufferAttribute(N,3));
+    g.setAttribute('uv',new THREE.Float32BufferAttribute(U,2)); if(C) g.setAttribute('color',new THREE.Float32BufferAttribute(C,3));
+    const m=new THREE.Mesh(g,mat); m.matrixAutoUpdate=false; m.updateMatrix(); scene.add(m); return m; }
+  fundir(_wP,_wN,_wU,_wC, new THREE.MeshStandardMaterial({map:_facadeBase,roughness:1,vertexColors:true}));
+  fundir(_tP,_tN,_tU,null, new THREE.MeshStandardMaterial({color:0x20242a,roughness:1}));
 })();
 
 /* ===================== MUNDO FRUTIGER AERO — colinas verdes + césped procedural (al cruzar el portal) ===================== */
@@ -786,13 +822,16 @@ function makeTileGeo(){
   g.setIndex([0,1,2, 2,1,3, 2,3,4]);
   const per=Math.round(TILE/BLADE_SP), n=per*per;
   const off=new Float32Array(n*2), rnd=new Float32Array(n); let k=0;
+  const ord=new Int32Array(n); for(let i=0;i<n;i++) ord[i]=i;
+  for(let i=n-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=ord[i]; ord[i]=ord[j]; ord[j]=t; }   // orden BARAJADO: cualquier prefijo de briznas cubre todo el tile por igual
   for(let i=0;i<per;i++)for(let j=0;j<per;j++){
-    off[k*2]   = i*BLADE_SP + (Math.random()-0.5)*BLADE_SP;
-    off[k*2+1] = j*BLADE_SP + (Math.random()-0.5)*BLADE_SP;
-    rnd[k]=Math.random(); k++; }
+    const o=ord[k];
+    off[o*2]   = i*BLADE_SP + (Math.random()-0.5)*BLADE_SP;
+    off[o*2+1] = j*BLADE_SP + (Math.random()-0.5)*BLADE_SP;
+    rnd[o]=Math.random(); k++; }
   g.setAttribute('aOffset',new THREE.InstancedBufferAttribute(off,2));
   g.setAttribute('aRand',new THREE.InstancedBufferAttribute(rnd,1));
-  g.instanceCount=n;
+  g.instanceCount=n; g.userData.nMax=n;   // el LOD por anillo baja instanceCount (ver lodTiles): las briznas lejanas no valen su costo
   // esfera envolvente AJUSTADA (su centro Y se fija al relieve del tile en relocateTiles) → culling efectivo
   g.boundingSphere=new THREE.Sphere(new THREE.Vector3(TILE/2,0,TILE/2), Math.hypot(TILE/2,TILE/2)+6);
   return g;
@@ -815,6 +854,17 @@ function relocateTiles(px,pz){   // recicla los tiles para que siempre rodeen al
     const t=free.pop(); if(!t) continue; t.gx=gx; t.gz=gz; t.mesh.position.set(gx*TILE,0,gz*TILE);
     t.mesh.geometry.boundingSphere.center.y = terrainH(gx*TILE+TILE/2, gz*TILE+TILE/2);   // centra la esfera al relieve del tile → culling preciso
   }
+  lodTiles(pcx,pcz);
+}
+// LOD: los tiles lejanos dibujan MENOS briznas (a 20 m una brizna no llega a un píxel). Se recalcula
+// sólo cuando el jugador cruza de celda, y como el orden de las briznas está barajado, recortar
+// instanceCount adelgaza el tile de forma uniforme en vez de dejar media baldosa pelada.
+const LOD_ANILLO=[1, 0.55, 0.26, 0.15];
+function lodTiles(pcx,pcz){
+  for(const t of grassTiles){ const g=t.mesh.geometry; const n=g.userData.nMax; if(!n) continue;
+    const a=Math.max(Math.abs(t.gx-pcx), Math.abs(t.gz-pcz));
+    const f=LOD_ANILLO[Math.min(a,LOD_ANILLO.length-1)];
+    g.instanceCount=Math.max(96, Math.round(n*f)); }
 }
 // --- PASTO LEJANO: billboards (cards que miran a la cámara) ESTÁTICOS que cubren las zonas lejanas → no se ve pelado (medio/alto) ---
 function makeTuftTex(){ const S=64,c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d'); g.clearRect(0,0,S,S);
@@ -2593,7 +2643,8 @@ const QUAL={ low:{pr:1.0,shadow:0,glass:false,adapt:false,sp:0.20,r:2,scale:0.5,
 let quality='med';
 function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
   BLADE_SP=Q.sp; TILES_R=Q.r;   // densidad/cobertura del césped según calidad (se aplica antes de construir los tiles)
-  renderer.setPixelRatio(Math.max(0.4, Math.min(devicePixelRatio, Q.pr, devicePixelRatio*(Q.scale||1))));   // BAJO = 50% de la resolución nativa (y nunca más que pr)
+  prBase=Math.max(0.4, Math.min(devicePixelRatio, Q.pr, devicePixelRatio*(Q.scale||1)));   // BAJO = 50% de la resolución nativa (y nunca más que pr)
+  prDyn=1; aplicarPR();
   camera.far=Q.far||1200; camera.updateProjectionMatrix();   // BAJO: plano lejano corto → recorta geometría lejana (distancia de render)
   const wantShadow=Q.shadow>0;
   if(renderer.shadowMap.enabled!==wantShadow){ renderer.shadowMap.enabled=wantShadow; renderer.shadowMap.needsUpdate=true; }
@@ -2666,6 +2717,18 @@ document.getElementById('bClose').addEventListener('click',()=>{ sfx('menu'); cl
 document.getElementById('mBoardBtn').addEventListener('click',()=>{ sfx('menu'); openBoard(); });
 document.querySelectorAll('#sQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); document.querySelectorAll('#sQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; applyQuality(b.dataset.q); }));   // gráficos en vivo
 document.querySelectorAll('#sLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); applyLang(b.dataset.lang); }));
+// RENDIMIENTO: resolución auto/fija y contador de fps (se guarda la elección)
+(function(){ const row=document.getElementById('sPerf'); if(!row)return;
+  try{ if(localStorage.getItem('pf_drs')==='0') drsOn=false; if(localStorage.getItem('pf_fps')==='1') perfOn=true; }catch(e){}
+  function pintar(){ row.querySelectorAll('[data-drs]').forEach(x=>x.classList.toggle('sel', (x.dataset.drs==='1')===drsOn));
+    const f=row.querySelector('[data-fps]'); if(f)f.classList.toggle('sel',perfOn);
+    document.body.classList.toggle('perf',perfOn); }
+  row.querySelectorAll('[data-drs]').forEach(b=>b.addEventListener('click',()=>{ sfx('menu'); drsOn=(b.dataset.drs==='1');
+    if(!drsOn){ prDyn=1; aplicarPR(); } try{ localStorage.setItem('pf_drs',drsOn?'1':'0'); }catch(e){} pintar(); }));
+  const f=row.querySelector('[data-fps]'); if(f) f.addEventListener('click',()=>{ sfx('menu'); perfOn=!perfOn;
+    try{ localStorage.setItem('pf_fps',perfOn?'1':'0'); }catch(e){} pintar(); });
+  pintar();
+})();
 // --- MOVER CONTROLES (un solo botón): arrastrá la HUD a donde quieras (se guarda) ---
 let editHUD=false;
 const MOVABLE=['joy','bJump','bSlide','bRoll','bFire','bReload','bChat','bVoice','bPack','bNames','btnMenu'];
@@ -2716,14 +2779,50 @@ function menuCam(dt){ menuT+=dt; const cx=7, cz=GRASS_GZ+46, gy=terrainH(cx,cz);
 }
 
 let paused=false;
+// ---- rendimiento: medir y ajustar solo ----
+let _frame=0, _drsAcc=0, _drsN=0, _fpsAcc=0, _fpsN=0, _fpsTxt='', perfEl=null;
+// Los mundos que NO se ven quedan CONGELADOS: three recorre igual todos los hijos para recomponer matrices
+// (1300 mallas en la escena, ~140 visibles). Apagando matrixWorldAutoUpdate del grupo, se saltea el subárbol entero.
+function congelarMundos(){
+  const hijos=scene.children;
+  for(let i=0;i<hijos.length;i++){ const g=hijos[i]; if(!g.isGroup) continue;
+    const on=g.visible;
+    if(g.matrixWorldAutoUpdate!==on){ g.matrixWorldAutoUpdate=on; if(on) g.updateMatrixWorld(true); } }
+}
+// RESOLUCIÓN DINÁMICA: si el frame tarda mucho, baja la resolución interna (el juego sigue fluido y el HUD
+// queda nítido porque es HTML); si sobra tiempo, la devuelve. Nunca toca el preset elegido, sólo lo escala.
+function drsTick(dt){
+  if(!drsOn || menuMode || paused){ return; }
+  _drsAcc+=dt; _drsN++;
+  if(_drsN<30) return;
+  const ms=_drsAcc/_drsN*1000; _drsAcc=0; _drsN=0;
+  const antes=prDyn;
+  if(ms>23 && prDyn>0.60) prDyn=Math.max(0.60, prDyn-0.10);        // < 43 fps → menos píxeles
+  else if(ms<15.5 && prDyn<1) prDyn=Math.min(1, prDyn+0.05);        // > 64 fps → devolver resolución
+  if(prDyn!==antes) aplicarPR();
+}
+function perfTick(dt){
+  if(!perfOn) return;
+  _fpsAcc+=dt; _fpsN++;
+  if(_fpsAcc<0.5) return;
+  const fps=_fpsN/_fpsAcc, i=renderer.info;
+  _fpsTxt=Math.round(fps)+' fps · '+i.render.calls+' llamadas · '+(i.render.triangles/1000).toFixed(0)+'k tri · '+(prBase*prDyn).toFixed(2)+'x';
+  _fpsAcc=0; _fpsN=0;
+  if(!perfEl) perfEl=document.getElementById('perf');
+  if(perfEl) perfEl.textContent=_fpsTxt;
+}
 function animate(){ requestAnimationFrame(animate); const dt=Math.min(clock.getDelta(),0.05);
+  _frame++;
   if(menuMode) menuCam(dt); else if(!paused) update(dt);   // pausa: el mundo se congela
   if(scene.fog){ if(_lastWorld!==world){ _lastWorld=world; _worldFog=scene.fog.far; }   // captura la niebla base al entrar a cada mundo
     const wf=(quality==='low')?Math.min(_worldFog,camera.far):_worldFog; if(scene.fog.far!==wf)scene.fog.far=wf; }   // BAJO: niebla tapa justo en el corte del plano lejano; medio/alto restauran la base
   try{ tiroVis(); }catch(e){}    // visibilidad del campo de tiro (mundo/arma/HUD): también vale en el menú y en pausa
   try{ nlVis(); }catch(e){}      // los grupos de los cinco mundos nuevos se prenden solos según el mundo activo
   try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player) — sigue latiendo aunque esté en pausa
-  renderer.render(scene,camera); }
+  congelarMundos();
+  if(renderer.shadowMap.enabled && (_frame&1)===0) sun.shadow.needsUpdate=true;   // el mapa de sombras se refresca cada 2 frames: el sol sigue al jugador, el desfase de un frame no se ve
+  renderer.render(scene,camera);
+  drsTick(dt); perfTick(dt); }
 
 /* ===================== MULTIJUGADOR (MQTT, sin backend; relay vía broker público) ===================== */
 const NS='frutigerfp_v1_';   // prefijo único de este juego → no choca con otros
@@ -3066,10 +3165,11 @@ try{
 catch(err){ console.error('Init',err); if(loaderEl) loaderEl.classList.add('hide'); }
 // música del nivel 1 en el MENÚ: arranca con el primer toque (los móviles bloquean el autoplay)
 /* gancho para sacar las VISTAS PREVIAS de verdad (y para depurar): __pk.nivel/pos/mira/frames/cuerpo/hud/est */
-try{ window.__pk={ nivel:k=>startLevel(k), pos:(x,y,z)=>{ player.pos.set(x,y,z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
+try{ window.__pk={ nivel:(k,q)=>{ menuMode=false; try{ menuEl.classList.add('hide'); document.body.classList.remove('menu-open'); }catch(e){} applyQuality(q||quality); startLevel(k); return world; }, pos:(x,y,z)=>{ player.pos.set(x,y,z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
   mira:(y,p)=>{ player.yaw=y; player.faceYaw=y; player.pitch=p||0; },
-  frames:(n,dt)=>{ for(let i=0;i<(n||8);i++) update(dt||0.033); renderer.render(scene,camera); return world; },
+  frames:(n,dt)=>{ for(let i=0;i<(n||8);i++){ update(dt||0.033); try{tiroVis();}catch(e){} try{nlVis();}catch(e){} congelarMundos(); } renderer.render(scene,camera); return world; },
   cuerpo:v=>{ if(bodyRoot)bodyRoot.visible=!!v; }, hud:v=>{ document.body.classList.toggle('sinhud',!v); },
+  ren:renderer, esc:scene, cam:camera,   // depuracion de rendimiento: draw calls / triangulos / texturas
   est:()=>({mundo:world, pj:player.pos.toArray().map(n=>+n.toFixed(1)), cam:camera.position.toArray().map(n=>+n.toFixed(1)), niveles:LEVELS.length}) };
 }catch(e){}
 window.addEventListener('pointerdown',()=>{ audioStart(); if(menuMode) ambient('amb1'); }, {once:true});
