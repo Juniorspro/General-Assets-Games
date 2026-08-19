@@ -5087,8 +5087,8 @@ try{ window.__tiro={
      lo empuja en las cuatro direcciones con update() de verdad y anota donde termina. Se equivoca
      mucho menos que cualquier modelo — descubrio que las pasarelas y el techo del penal, que la
      grilla daba por aislados, se suben caminando. Se corre por regiones para que sea barato. */
-  fisica:(x0,z0,x1,z1,sx,sz,sy,frames)=>{
-    const PZ=frames||22, W=Math.round(x1-x0)+1, H=Math.round(z1-z0)+1;
+  fisica:(x0,z0,x1,z1,sx,sz,sy,frames,tope)=>{
+    const TOPE=tope||26000, PZ=frames||22, W=Math.round(x1-x0)+1, H=Math.round(z1-z0)+1;
     const vis=new Map(), cola=[];
     const meter=(x,z,y)=>{ const i=Math.round(x-x0), j=Math.round(z-z0);
       if(i<0||j<0||i>=W||j>=H) return false;
@@ -5098,7 +5098,7 @@ try{ window.__tiro={
     player.pos.set(sx,(sy==null?alcH(sx,sz)+0.1:sy),ALC_GZ+sz); player.vel.set(0,0,0); player.vy=0;
     meter(sx,sz,player.pos.y);
     let cab=0, exp=0;
-    while(cab<cola.length && exp<26000){ const nodo=cola[cab++];
+    while(cab<cola.length && exp<TOPE){ const nodo=cola[cab++];
       for(let d=0;d<4;d++){ const dx=[1,-1,0,0][d], dz=[0,0,1,-1][d];
         player.pos.set(nodo[0],nodo[2],ALC_GZ+nodo[1]); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
         player.yaw=Math.atan2(-dx,-dz); player.faceYaw=player.yaw;
@@ -5109,7 +5109,7 @@ try{ window.__tiro={
         const nx=player.pos.x, nz=player.pos.z-ALC_GZ, ny=player.pos.y;
         if(Math.hypot(nx-nodo[0],nz-nodo[1])<0.3) continue;   // no se movio: hay algo
         meter(nx,nz,ny); } }
-    return {nodos:vis.size, empujes:exp, pts:[...vis.values()]}; },
+    return {nodos:vis.size, empujes:exp, corto:(exp>=TOPE), pts:[...vis.values()]}; },
   /* de todo lo que la fisica alcanzo, ¿hay algo parado cerca de este punto y a esta altura? */
   llega:(pts,x,z,y,rad)=>{ const R=rad||2.5; let mejor=null, d2=1e18;
     for(const q of pts){ const dx=q[0]-x, dz=q[1]-z;
