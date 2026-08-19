@@ -5373,6 +5373,9 @@ function tiroPostura(dt){
     gunRoot.rotateX(recUp*0.55); gunRoot.updateMatrixWorld(true);
     _gA.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
     gunRoot.position.add(_gB.sub(_gA)); gunRoot.updateMatrixWorld(true); }
+  /* ULTIMO PASO antes de mostrarla: sacar el arma de adentro del cuerpo. Va aca, despues del
+     retroceso y de la correccion de profundidad, porque los dos la mueven. */
+  armaSinCruce(); gunRoot.updateMatrixWorld(true);
   gunRoot.visible = enTiro() && !!DBG.arma;
   // La cruz se dibuja SIN test de profundidad para que ni el cristal ni el marco se la coman; eso está
   // bien mirando por el ojo, pero desde afuera (3ª persona, menú) atravesaba el brazo y el galpón.
@@ -5994,6 +5997,8 @@ try{ window.__tiro={
     RHand:bRHand.quaternion.toArray().map(v=>+v.toFixed(3)), cabCut:(_cabCut?_cabCut[0].value:null), LArm:bLArm.quaternion.toArray().map(v=>+v.toFixed(3)),
     LFore:bLFore.quaternion.toArray().map(v=>+v.toFixed(3)), LHand:bLHand.quaternion.toArray().map(v=>+v.toFixed(3)),
     cabezaSc:bodyHead.scale.x }),
+  cruce:()=>({ correccion:+_armaCorr.toFixed(4) }),
+  puno:(v)=>{ for(const g of cuManos) cuCerrar(g,v); return cuManos.length; },
   pose:()=>({ paso:+paso.toFixed(2), spr:+aSpr.toFixed(2), sld:+aSld.toFixed(2), aire:+aAir.toFixed(2),
     lagY:+lagY.toFixed(4), lagP:+lagP.toFixed(4), land:+landK.toFixed(3), vida:TIRO_VIDA,
     quieto:+quietoT.toFixed(2), aQui:+aQui.toFixed(3), idleT:+idleT.toFixed(2), idleEsp:+idleEsp.toFixed(2) }),
@@ -6069,6 +6074,7 @@ function cuMats(){
   CU_MAT.manga =M(0x565e65,0.62,0.08);   // antebrazos: son los que se ven en 1ª persona; claros tapaban como una pared
   CU_MAT.cara  =M(0x828b93,0.7,0.04);
 }
+const cuManos=[];   // los dos grupos de mano, para poder cerrar el puño
 const cuCaja=(w,h,d)=>new THREE.BoxGeometry(w*U,h*U,d*U);
 const cuCaps=(r,l)=>new THREE.CapsuleGeometry(r*U,Math.max(0.004,l-2*r)*U,4,10);
 const cuEsf =(r)=>new THREE.SphereGeometry(r*U,12,9);
@@ -6090,17 +6096,75 @@ function cuMano(hueso,lado){
   const g=new THREE.Group(); hueso.add(g);
   cuPieza(g,cuCaja(0.088,0.092,0.030), 0, 0, 0.036, CU_MAT.mano);          // palma
   cuPieza(g,cuCaja(0.088,0.026,0.030), 0, 0.030,-0.006, CU_MAT.mano);      // nudillos
-  const ANCHO=0.0185, PASO=0.0215, LARGO=[0.070,0.078,0.072,0.060];        // el mayor es el mas largo
-  for(let i=0;i<4;i++){
-    const x=(-1.5+i)*PASO, L=LARGO[i];
-    cuPieza(g,cuCaja(ANCHO,L,0.026), x, 0.006-(0.078-L)/2, -0.038, CU_MAT.mano);
-    cuPieza(g,cuCaja(ANCHO*0.92,0.020,0.024), x, 0.006-(0.078-L)/2-L/2-0.008, -0.040, CU_MAT.mano);  // falange
-  }
-  // pulgar: dos tramos, cruzando por el lado de la palma
-  cuPieza(g,cuCaja(0.026,0.044,0.028), lado*0.046, 0.012, 0.006, CU_MAT.mano);
-  cuPieza(g,cuCaja(0.023,0.036,0.026), lado*0.050,-0.020,-0.014, CU_MAT.mano);
   cuPieza(g,cuCaja(0.080,0.030,0.086), 0,-0.052, 0.000, CU_MAT.mano);      // canto/base de la palma
+
+  /* DEDOS CON HUESOS. Antes eran cajas pegadas a la mano: se veian cinco dedos pero no se doblaban,
+     asi que el agarre seguia siendo una pala apoyada contra el arma. Ahora cada dedo tiene DOS
+     huesos —falange proximal y distal— colgando del hueso de la mano, y cada uno lleva su prisma.
+     Doblar el dedo es girar sus huesos, y como el arma vive en el puño, los dedos se cierran de
+     verdad alrededor del guardamanos y de la empuñadura.
+     Ojo con las unidades: adentro del rig se trabaja en unidades de hueso, asi que toda medida en
+     metros se multiplica por U. */
+  const dedos=[];
+  const LARGO=[0.038,0.042,0.039,0.032], PASO=0.0215, ANCHO=0.0185;
+  for(let i=0;i<4;i++){
+    const x=(-1.5+i)*PASO, L1=LARGO[i], L2=L1*0.78;
+    const b1=new THREE.Bone(); b1.name='dedo'+i+'_1'+(lado>0?'R':'L');
+    b1.position.set(x*U, 0.030*U, -0.020*U); hueso.add(b1);
+    cuPieza(b1,cuCaja(ANCHO,0.026,L1), 0, 0, -L1/2, CU_MAT.mano);
+    const b2=new THREE.Bone(); b2.name='dedo'+i+'_2'+(lado>0?'R':'L');
+    b2.position.set(0,0,-L1*U); b1.add(b2);
+    cuPieza(b2,cuCaja(ANCHO*0.92,0.023,L2), 0, 0, -L2/2, CU_MAT.mano);
+    dedos.push([b1,b2]);
+  }
+  // pulgar: sale del costado de la palma y cierra contra los dedos
+  const t1=new THREE.Bone(); t1.name='pulgar1'+(lado>0?'R':'L');
+  t1.position.set(lado*0.040*U, 0.006*U, 0.014*U); hueso.add(t1);
+  cuPieza(t1,cuCaja(0.026,0.026,0.040), 0,0,-0.020, CU_MAT.mano);
+  const t2=new THREE.Bone(); t2.name='pulgar2'+(lado>0?'R':'L');
+  t2.position.set(0,0,-0.040*U); t1.add(t2);
+  cuPieza(t2,cuCaja(0.023,0.023,0.032), 0,0,-0.016, CU_MAT.mano);
+  dedos.push([t1,t2]);
+  g.userData.dedos=dedos; g.userData.lado=lado;
+  cuManos.push(g);
+  cuCerrar(g, 0.62);                    // pose de agarre por defecto
   return g;
+}
+/* EL ARMA NO SE ATRAVIESA CON EL CUERPO. El fusil se coloca por offsets y el IK lleva las manos a
+   sus agarres, asi que en poses cerradas —apuntando, recargando, deslizandose— el cajon terminaba
+   metido adentro del antebrazo o del pecho. Esto lo empuja: se mide la penetracion contra dos
+   cilindros simples, el del antebrazo izquierdo y el del torso, y se corre el arma lo justo para
+   sacarla. Es un empuje de centimetros, no una simulacion: alcanza para que no se vea el cruce. */
+const _armaP=new THREE.Vector3(), _armaQ=new THREE.Vector3(), _armaE=new THREE.Vector3();
+function armaSinCruce(){
+  if(!gunRoot||!bodyRoot) return;
+  const R_ANTE=0.075, R_TORSO=0.20;           // radios de choque, en metros
+  let corr=0;
+  const empuje=(hueso,rad)=>{
+    if(!hueso) return;
+    hueso.getWorldPosition(_armaQ);
+    _armaP.copy(gunRoot.position);
+    _armaE.subVectors(_armaP,_armaQ); _armaE.y*=0.6;         // el eje vertical importa menos
+    const d=_armaE.length();
+    if(d>1e-4 && d<rad){ _armaE.multiplyScalar((rad-d)/d); gunRoot.position.add(_armaE); corr+=rad-d; }
+  };
+  empuje(bLFore, R_ANTE);
+  empuje(bSp,    R_TORSO);
+  _armaCorr=corr;
+}
+let _armaCorr=0;
+/* cerrar el puño: 0 = mano abierta, 1 = puño cerrado del todo */
+function cuCerrar(g,v){
+  const d=g&&g.userData&&g.userData.dedos; if(!d)return;
+  const k=Math.max(0,Math.min(1,v)), lado=g.userData.lado||1;
+  for(let i=0;i<4;i++){
+    d[i][0].rotation.x =  k*1.15;       // el dedo se dobla hacia la palma
+    d[i][1].rotation.x =  k*1.35;
+  }
+  // el pulgar cierra cruzando, sobre el eje contrario
+  d[4][0].rotation.y = -lado*k*0.85;
+  d[4][0].rotation.x =  k*0.35;
+  d[4][1].rotation.y = -lado*k*0.75;
 }
 function cuLargo(h){                                   // largo del hueso = distancia a su primer hijo (metros)
   const c=h.children.filter(o=>o.isBone)[0];
@@ -6111,10 +6175,10 @@ function cuVestir(h){
   /* De CAPSULA a PRISMA. El cuerpo se veia redondeado y blando; la referencia es de bloques, todo
      caras planas. Se conserva la misma medida: el prisma tiene el lado igual al diametro. */
   const cap=(r)=>cuPieza(h,cuCaja(r*1.9,L,r*1.9),0,L/2,0);
-  const jun=(r,y)=>cuPieza(h,cuCaja(r*1.75,r*1.75,r*1.75),0,y,0,CU_MAT.junta);   // junta cubica: entre bloques, una esfera canta
-  if(n==='hips'){ cuPieza(h,cuCaja(0.30,0.19,0.23),0,0.04,0.005); jun(0.10,0); }
-  else if(n==='spine02'){ cuPieza(h,cuCaja(0.29,L+0.02,0.21),0,L/2,0.005); }
-  else if(n==='spine01'){ cuPieza(h,cuCaja(0.32,L+0.02,0.22),0,L/2,0.005); }
+  const jun=(r,y)=>cuPieza(h,cuCaja(r*1.75,r*1.75,r*1.75),0,y,0,CU_MAT.junta);   // junta cubica: devuelve la pieza, entre bloques una esfera canta
+  if(n==='hips'){ cuSoloTP.push(cuPieza(h,cuCaja(0.30,0.19,0.23),0,0.04,0.005)); cuSoloTP.push(jun(0.10,0)); }
+  else if(n==='spine02'){ cuSoloTP.push(cuPieza(h,cuCaja(0.29,L+0.02,0.21),0,L/2,0.005)); }
+  else if(n==='spine01'){ cuSoloTP.push(cuPieza(h,cuCaja(0.32,L+0.02,0.22),0,L/2,0.005)); }
   else if(n==='spine'){   cuSoloTP.push(cuPieza(h,cuCaja(0.375,0.215,0.245),0,0.055,0.005));   // pecho
                           cuSoloTP.push(cuPieza(h,cuCaja(0.30,0.075,0.20),0,0.155,0.005)); }    // trapecio
   else if(n==='neck'){ cuSoloTP.push(cap(0.048)); }
@@ -6126,10 +6190,10 @@ function cuVestir(h){
   else if(/(^|[^e])arm$/.test(n)){ cap(0.053); jun(0.056,L); }                   // brazo → codo
   else if(/forearm$/.test(n)){ cuPieza(h,cuCaja(0.080,L,0.080),0,L/2,0,CU_MAT.manga); jun(0.046,L); }                       // antebrazo → muñeca
   else if(/hand$/.test(n)){ cuMano(h, n[0]==='r'?1:-1); }
-  else if(/upleg$/.test(n)){ cap(0.086); jun(0.092,L); }
-  else if(/leg$/.test(n)){ cap(0.068); jun(0.072,L); }
-  else if(/foot$/.test(n)){ cuPieza(h,cuCaja(0.105,L+0.03,0.085),0,(L+0.03)/2,-0.012); }
-  else if(/toebase$/.test(n)){ cuPieza(h,cuCaja(0.10,0.055,0.075),0,0.025,-0.008); }
+  else if(/upleg$/.test(n)){ cuSoloTP.push(cap(0.086)); cuSoloTP.push(jun(0.092,L)); }
+  else if(/leg$/.test(n)){ cuSoloTP.push(cap(0.068)); cuSoloTP.push(jun(0.072,L)); }
+  else if(/foot$/.test(n)){ cuSoloTP.push(cuPieza(h,cuCaja(0.105,L+0.03,0.085),0,(L+0.03)/2,-0.012)); }
+  else if(/toebase$/.test(n)){ cuSoloTP.push(cuPieza(h,cuCaja(0.10,0.055,0.075),0,0.025,-0.008)); }
 }
 /* pistas → AnimationClip. Los nombres de track son '<Hueso>.quaternion' / '.position', que es como
    PropertyBinding los busca en el subárbol del mixer. */
