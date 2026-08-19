@@ -2337,6 +2337,37 @@ function alcRaster(T){
         h += (t.y-h)*s; }
       alcHM[j*ALC_NX+i]=h; } } }
 
+/* LOS CAMINOS SE EXCAVAN EN LA LADERA. Hasta acá el `camino` sólo apoyaba asfalto ENCIMA del
+   terreno, así que la cuesta seguía siendo la cuesta: medido con __tiro.pend, entre el muelle y la
+   loma hay una franja de 6 m con pendiente 1,0 a 1,9, muy por encima del tope de 0,97 que hace
+   infranqueable un acantilado — o sea que del muelle al penal NO SE PODÍA SUBIR. Un camino de
+   verdad es un CORTE en la ladera, así que ahora el trazado se estampa sobre el campo de alturas:
+   se toman las cotas del terreno en los vértices, se les alisa el perfil y se les limita la
+   pendiente a 0,30 (una cuesta empinada pero caminable), y recién ahí se aplana la franja. */
+function alcAplanar(x,z,r,h){
+  const i0=Math.max(0,Math.floor((x-r-ALC_X0)/ALC_CEL)), i1=Math.min(ALC_NX-1,Math.ceil((x+r-ALC_X0)/ALC_CEL));
+  const j0=Math.max(0,Math.floor((z-r-ALC_Z0)/ALC_CEL)), j1=Math.min(ALC_NZ-1,Math.ceil((z+r-ALC_Z0)/ALC_CEL));
+  for(let j=j0;j<=j1;j++) for(let i=i0;i<=i1;i++){
+    const dx=ALC_X0+i*ALC_CEL-x, dz=ALC_Z0+j*ALC_CEL-z, d=Math.hypot(dx,dz);
+    if(d>r) continue;
+    let w=1-(d-r*0.5)/(r*0.5); if(w>1)w=1; if(w<0)w=0; w=w*w*(3-2*w);
+    const o=j*ALC_NX+i; alcHM[o]+=(h-alcHM[o])*w; } }
+function alcExcavarCaminos(els){
+  for(let n=0;n<els.length;n++){ let e=els[n];
+    if(e.ref) e=alcDeRef(e);
+    if(e.t!=='camino'||!e.pts||e.pts.length<2) continue;
+    const P=e.pts, H=P.map(q=>alcH(q[0],q[1])), S=[0];
+    for(let k=1;k<P.length;k++) S.push(S[k-1]+Math.hypot(P[k][0]-P[k-1][0],P[k][1]-P[k-1][1]));
+    for(let it=0;it<3;it++) for(let k=1;k<H.length-1;k++) H[k]=(H[k-1]+2*H[k]+H[k+1])/4;   // alisar
+    for(let it=0;it<40;it++)                                                                // limitar la cuesta
+      for(let k=1;k<H.length;k++){ const ds=Math.max(0.5,S[k]-S[k-1]), ex=Math.abs(H[k]-H[k-1])-0.30*ds;
+        if(ex>0){ const g=Math.sign(H[k]-H[k-1])*ex*0.5; H[k]-=g; H[k-1]+=g; } }
+    const r=(e.w||4)/2+1.8;
+    for(let k=1;k<P.length;k++){
+      const L=Math.hypot(P[k][0]-P[k-1][0],P[k][1]-P[k-1][1]), m=Math.max(1,Math.ceil(L/1.5));
+      for(let i=0;i<=m;i++){ const t=i/m;
+        alcAplanar(P[k-1][0]+(P[k][0]-P[k-1][0])*t, P[k-1][1]+(P[k][1]-P[k-1][1])*t, r, H[k-1]+(H[k]-H[k-1])*t); } } } }
+
 function alcH(x,z){ if(!alcHM)return 0;
   let fx=(x-ALC_X0)/ALC_CEL, fz=(z-ALC_Z0)/ALC_CEL;
   if(fx<0)fx=0; else if(fx>ALC_NX-1.001)fx=ALC_NX-1.001;
@@ -2907,9 +2938,10 @@ function alcVegetacion(){
 function buildAlc(){ if(alcBuilt)return; alcBuilt=true;
   alcMats();
   alcRaster(ALC_DATOS.terreno);
-  alcTerreno();
   // el plano base + la capa de DETALLE, que se va llenando de a partes (ver ALC_DETALLE)
   const els=(ALC_DATOS.elementos||[]).concat(ALC_DETALLE||[]);
+  alcExcavarCaminos(els);          // los caminos cortan la ladera ANTES de armar la malla del suelo
+  alcTerreno();
   for(let i=0;i<els.length;i++){ try{ alcElem(els[i]); }catch(err){} }
   const veg=alcVegetacion();
   alcIndexar();
