@@ -1176,7 +1176,7 @@ function tiroReiniciar(){   // tanda nueva: puntaje a cero, papeles limpios y ac
    alinearlo con +X: por eso lo que las fuentes llaman NO (las industrias) acá cae al OESTE, y lo
    que llaman SE (el muelle, el parade ground) cae al ESTE. */
 const ALC_DATOS={
-  terreno:{cima:41.6,orilla:[[-247,-29],[-232,-47],[-206,-64],[-178,-84],[-150,-89],[-118,-91],[-92,-102],[-64,-99],[-30,-95],[2,-97],[46,-99],[66,-113],[110,-113],[140,-106],[172,-97],[206,-90],[232,-68],[247,-36],[238,-10],[214,8],[190,24],[164,36],[138,30],[108,35],[76,30],[40,34],[6,38],[-24,24],[-52,26],[-78,36],[-104,23],[-134,14],[-166,3],[-196,-6],[-224,-6],[-240,-18]],terrazas:[{y:3,borde:4,poly:[[44,-92],[100,-94],[144,-96],[146,-101],[112,-112],[68,-112],[50,-101],[46,-95]]},{y:9.2,borde:3,poly:[[-2,-95],[34,-96],[38,-76],[0,-75]]},{y:13.5,borde:6,poly:[[-238,-36],[-224,-52],[-198,-68],[-172,-83],[-146,-88],[-116,-80],[-110,-50],[-110,-22],[-118,-6],[-150,-4],[-196,-6],[-226,-9],[-238,-18]]},{y:18.8,borde:8,poly:[[108,-42],[152,-44],[196,-56],[220,-34],[216,-6],[190,8],[150,22],[116,10],[102,-24]]},{y:22.9,borde:5,poly:[[-148,-4],[-118,2],[-84,10],[-58,14],[-56,24],[-88,26],[-122,16],[-150,6]]},{y:29.5,borde:6,poly:[[-164,-50],[-132,-58],[-108,-50],[-102,-26],[-106,-10],[-140,-14],[-160,-30]]},{y:32.3,borde:3,poly:[[-54,-48],[-118,-52],[-118,-8],[-56,-12]]},{y:37,borde:3,poly:[[-60,-48],[-16,-44],[-12,-12],[-60,-16]]},{y:37.7,borde:4,poly:[[100,-46],[138,-42],[144,-16],[102,-20]]},{y:40.5,borde:4,poly:[[-26,-58],[74,-58],[92,-52],[94,-34],[90,-12],[60,4],[10,12],[-26,2]]}]},
+  terreno:{cima:41.6,orilla:[[-247,-27.1],[-232,-49.1],[-206,-70.0],[-178,-94.5],[-150,-100.6],[-118,-103.0],[-92,-116.5],[-64,-112.8],[-30,-107.9],[2,-110.4],[46,-112.8],[66,-130.0],[110,-130.0],[140,-121.4],[172,-110.4],[206,-101.8],[232,-74.9],[247,-35.7],[238,-3.8],[214,18.2],[190,37.8],[164,52.5],[138,45.2],[108,51.3],[76,45.2],[40,50.1],[6,55.0],[-24,37.8],[-52,40.3],[-78,52.5],[-104,36.6],[-134,25.6],[-166,12.1],[-196,1.1],[-224,1.1],[-240,-13.6]],terrazas:[{y:3,borde:5.0,poly:[[44,-92],[100,-94],[144,-96],[146,-101],[112,-112],[68,-112],[50,-101],[46,-95]]},{y:9.2,borde:3.8,poly:[[-2,-95],[34,-96],[38,-76],[0,-75]]},{y:13.5,borde:7.5,poly:[[-238,-36],[-224,-52],[-198,-68],[-172,-83],[-146,-88],[-116,-80],[-110,-50],[-110,-22],[-118,-6],[-150,-4],[-196,-6],[-226,-9],[-238,-18]]},{y:18.8,borde:10.0,poly:[[108,-42],[152,-44],[196,-56],[220,-34],[216,-6],[190,8],[150,22],[116,10],[102,-24]]},{y:22.9,borde:6.2,poly:[[-148,-4],[-118,2],[-84,10],[-58,14],[-56,24],[-88,26],[-122,16],[-150,6]]},{y:29.5,borde:7.5,poly:[[-164,-50],[-132,-58],[-108,-50],[-102,-26],[-106,-10],[-140,-14],[-160,-30]]},{y:32.3,borde:3.8,poly:[[-54,-48],[-118,-52],[-118,-8],[-56,-12]]},{y:37,borde:3.8,poly:[[-60,-48],[-16,-44],[-12,-12],[-60,-16]]},{y:37.7,borde:5.0,poly:[[100,-46],[138,-42],[144,-16],[102,-20]]},{y:40.5,borde:5.0,poly:[[-26,-58],[74,-58],[92,-52],[94,-34],[90,-12],[60,4],[10,12],[-26,2]]}]},
   elementos:[
   {t:'edificio',p:[15.39,48,-50.06],s:[65,15,0.5],ry:-0.14,m:'hormigonSucio',mTecho:'hormigon',pisos:3,techo:'plano',ventanas:{filas:2,cols:16,w:1.5,h:5.4,y0:4.6,caras:'largas'}},
   {t:'edificio',p:[8.61,48,-1.94],s:[65,15,0.5],ry:-0.14,m:'hormigonSucio',mTecho:'hormigon',pisos:3,techo:'plano',ventanas:{filas:2,cols:16,w:1.5,h:5.4,y0:4.6,caras:'largas'}},
@@ -2319,8 +2319,18 @@ function alcRaster(T){
       const d=alcSD(ori,x,z);
       let h;
       if(d<=0) h=Math.max(-16, d*0.55-0.5);
-      else { const orla=alcOrlaSector(x,z), pen=alcPendSector(x,z);
-             h=Math.min(cima, pen*Math.max(0,d-orla) + 0.25*Math.min(d,orla)); }
+      else {
+        /* EL ACANTILADO NO SUBE HASTA LA CUMBRE EN TODOS LADOS. Con el tope puesto en la cota máxima
+           de la isla, cualquier punto a más de ~34 m de la costa quedaba a 41,6 m: la isla entera
+           era una meseta y las terrazas sólo la agujereaban. El trazado lo dice explícito —"nunca
+           superar la cota de la terraza que domina ese sector"—, así que el tope es LOCAL: la
+           terraza más alta que haya a menos de 30 m. Donde no hay ninguna, la ladera se queda abajo. */
+        let techo=11;
+        for(let k=0;k<ter.length;k++){ const t=ter[k];
+          if(t.y<=techo) continue;
+          if(alcSD(t.poly,x,z) > -30) techo=t.y; }
+        const orla=alcOrlaSector(x,z), pen=alcPendSector(x,z);
+        h=Math.min(techo+1.5, Math.min(cima, pen*Math.max(0,d-orla) + 0.25*Math.min(d,orla))); }
       for(let k=0;k<ter.length;k++){ const t=ter[k], b=Math.max(1.5,t.borde||9);
         const dt=alcSD(t.poly,x,z); let s=(dt+b)/(2*b);
         if(s<=0)continue; if(s>1)s=1; s=s*s*(3-2*s);
@@ -2808,7 +2818,8 @@ function alcTerreno(){
   const pos=g.attributes.position, col=new Float32Array(pos.count*3);
   const cRoca=new THREE.Color(0x6f6a62), cTierra=new THREE.Color(0x8a7757),
         cPasto=new THREE.Color(0x6d7a41), cPasto2=new THREE.Color(0x7d8250),
-        cExplan=new THREE.Color(0x9ea2a7), cArena=new THREE.Color(0x9d9078);
+        cExplan=new THREE.Color(0x9ea2a7), cArena=new THREE.Color(0x9d9078),
+        cMatorral=new THREE.Color(0x55603a);
   for(let j=0;j<ALC_NZ;j++) for(let i=0;i<ALC_NX;i++){
     const k=j*ALC_NX+i, h=alcHM[k]; pos.setY(k,h);
     const x=ALC_X0+i*ALC_CEL, z=ALC_Z0+j*ALC_CEL, pd=alcPend(x,z);
@@ -2817,11 +2828,14 @@ function alcTerreno(){
     /* El trazado lo dice explícito: de 30 m para arriba las explanadas son roca y hormigón, no
        césped. Con la regla vieja la meseta de la cumbre salía verde y el piso del penal era pasto. */
     let c;
-    if(h<1.2) c=cArena;                          // la franja mojada al pie de la escollera
-    else if(pd>0.55) c=cRoca;                    // acantilado
-    else if(h>29 && pd<0.26) c=cExplan;          // explanadas altas: hormigón
-    else if(h>10 && pd<0.30) c=cPasto2;          // los jardines de las laderas
-    else if(h>4  && pd<0.42) c=cPasto;
+    /* Comparado con el escaneo del modelo de verdad: la isla está CUBIERTA de vegetación en las
+       laderas, y sólo la roca viva de los acantilados y las explanadas de arriba quedan peladas.
+       Lo anterior era una playa de arena de punta a punta. */
+    if(h<1.4) c=cArena;                          // la franja mojada al pie de la escollera
+    else if(pd>0.78) c=cRoca;                    // acantilado vivo
+    else if(h>29 && pd<0.10) c=cExplan;          // sólo lo REALMENTE llano de arriba es hormigón
+    else if(pd>0.50) c=cMatorral;                // ladera empinada, matorral
+    else if(h>3) c=(((i*13+j*7)%11)<7)? cPasto : cPasto2;   // el manto verde, en dos tonos
     else c=cTierra;
     // grano: con una trama regular se veía el damero de la grilla; se mezcla con dos senos
     // grano de decenas de metros, no por celda: a 2 m de celda cualquier frecuencia alta se
@@ -2865,6 +2879,31 @@ function alcTick(dt){ _alcT+=dt;
   if(alcAgua&&alcAgua.material.normalMap){ const o=alcAgua.material.normalMap.offset;
     o.set((_alcT*0.010)%1, (_alcT*0.0068)%1); } }
 
+/* VEGETACIÓN. En el escaneo del modelo de verdad la isla está TAPADA de verde: matorral, agaves y
+   eucaliptos por toda la ladera, y sólo el hormigón de las explanadas y la roca viva de los
+   acantilados quedan pelados. Con dieciocho árboles sueltos la isla parecía un banco de arena.
+   Se siembra por barrido de la grilla, con la posición como semilla —el mismo mapa sale siempre
+   igual— y descartando lo que caiga en roca, en explanada o en el agua. El matorral NO lleva
+   colisión: son cientos de arbustos y no se puede pagar una caja por cada uno. */
+function alcVegetacion(){
+  let n=0, ar=0;
+  for(let z=-128; z<=52; z+=6.5) for(let x=-244; x<=244; x+=6.5){
+    let sd=Math.abs(Math.sin(x*12.9898+z*78.233)*43758.5453); const rnd=()=>{ sd=(sd*1.618)%1; return sd; };
+    const jx=x+(rnd()-0.5)*6, jz=z+(rnd()-0.5)*6;
+    const h=alcH(jx,jz), pd=alcPend(jx,jz);
+    if(h<2.5||h>34) continue;
+    if(pd>0.80) continue;                       // en la roca viva no crece nada
+    if(pd<0.15 && h>12) continue;               // las explanadas están limpias
+    const r=rnd();
+    if(pd<0.30 && r>0.40) continue;             // menos densidad en lo llano
+    if(r<0.13){ alcArbol({p:[jx,h,jz], h:6+rnd()*8}); ar++; }
+    else { const R=0.65+rnd()*1.05, y=h+R*0.5;
+      const col=[0x4a5730,0x556237,0x5f6b3d,0x47542e][(sd*97|0)%4];
+      alcAddC('follaje',new THREE.SphereGeometry(R,5,4),jx,y,jz,0,col);
+      if(rnd()>0.5) alcAddC('follaje',new THREE.SphereGeometry(R*0.68,5,4),jx+R*0.9,y-R*0.25,jz+R*0.5,0,col);
+      n++; } }
+  return {matas:n, arboles:ar}; }
+
 function buildAlc(){ if(alcBuilt)return; alcBuilt=true;
   alcMats();
   alcRaster(ALC_DATOS.terreno);
@@ -2872,9 +2911,10 @@ function buildAlc(){ if(alcBuilt)return; alcBuilt=true;
   // el plano base + la capa de DETALLE, que se va llenando de a partes (ver ALC_DETALLE)
   const els=(ALC_DATOS.elementos||[]).concat(ALC_DETALLE||[]);
   for(let i=0;i<els.length;i++){ try{ alcElem(els[i]); }catch(err){} }
+  const veg=alcVegetacion();
   alcIndexar();
   const n=alcFundir();
-  try{ console.log('Alcatraz:',els.length,'elementos →',n,'mallas,',ALC_COL.length,'colisiones'); }catch(e){} }
+  try{ console.log('Alcatraz:',els.length,'elementos →',n,'mallas,',ALC_COL.length,'colisiones, vegetación',JSON.stringify(veg)); }catch(e){} }
 
 function enterAlc(){ if(world==='alcatraz')return; world='alcatraz'; grassMode=false; dreamMode=false; islaMode=true; discover('alcatraz');
   buildAlc(); tiroWire(); alcSol(true);
@@ -3793,6 +3833,17 @@ try{ window.__tiro={
     applyQuality(menuQ); enterAlc(); return world; },
   mundo:k=>startLevel(k),
   alt:(x,z)=>+alcH(x,z).toFixed(2), pend:(x,z)=>+alcPend(x,z).toFixed(3),
+  // caminar de verdad hacia un punto de la isla, con el mismo movimiento del juego (para probar
+  // que se puede llegar a pie de un lado al otro y no queda nada tapiado)
+  caminar:(tx,tz,n)=>{ const N=n||600;
+    for(let k=0;k<N;k++){
+      const dx=tx-player.pos.x, dz=(tz+ALC_GZ)-player.pos.z, L=Math.hypot(dx,dz);
+      if(L<2.5) break;
+      player.yaw=Math.atan2(-dx,-dz); player.faceYaw=player.yaw;
+      joy.x=0; joy.y=-1; update(0.0166); }
+    joy.x=0; joy.y=0;
+    return {x:+player.pos.x.toFixed(1), z:+(player.pos.z-ALC_GZ).toFixed(1), y:+player.pos.y.toFixed(1),
+            falta:+Math.hypot(tx-player.pos.x,(tz+ALC_GZ)-player.pos.z).toFixed(1)}; },
   posIsla:(x,z,y)=>{ player.pos.set(x,(y==null?alcH(x,z)+0.1:y),ALC_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; return +player.pos.y.toFixed(2); },
   islaEst:()=>({mundo:world, isla:islaMode, col:ALC_COL.length, mallas:alcGroup.children.length,
     pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ALC_GZ).toFixed(1)], suelo:+alcH(player.pos.x,player.pos.z-ALC_GZ).toFixed(2)}), pos:(x,z,y)=>{ player.pos.set(x,(y==null?0:y),TIRO_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
