@@ -6634,7 +6634,13 @@ function update(dt){
   camera.position.set(_camAnchor.x + fwH.x*fwd, _camAnchor.y + CAM_UP - player.camLow, _camAnchor.z + fwH.z*fwd);
   // ---- LEAN: la cámara se inclina hacia adelante al correr/deslizar (se mueve con el cuerpo, no queda dura) ----
   const moveAmt=Math.min(1,sp/RUN);
-  const targetLean = -0.17*moveAmt - (player.sliding?0.12:0);        // adelante (mirar un poco abajo) según velocidad
+  /* LA INCLINACION DE CAMARA SE APAGA CON LA MIRA PUESTA. Es lo que hacia que la mira "se fuera"
+     al caminar apuntando, y no era el arma: la camara se inclina hasta 0.17 rad segun la velocidad,
+     que sobre 600 px con FOV 48 son 122 px, mientras que la punteria del arma sigue el pitch del
+     jugador SIN esa inclinacion. Medido con alza(): 101 px de desvio con la palanca a fondo y 47
+     con la palanca al 35% — exactamente proporcional. De cadera se conserva entera, que es lo que
+     le da el peso al caminar. */
+  const targetLean = (-0.17*moveAmt - (player.sliding?0.12:0)) * (1-adsW);
   aSldCam += ((player.sliding?1:0)-aSldCam)*Math.min(1,(player.sliding?16:6)*dt);
   leanPitch += (targetLean-leanPitch)*Math.min(1,5*dt);
   player.bob += dt*(7*moveAmt+0.001);                               // cadencia de pasos
