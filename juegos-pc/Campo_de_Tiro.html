@@ -3413,12 +3413,25 @@ function alcParedVentanas(cx,cy,cz, largo,alto,esp, ry, m, V, puertas){
       if(c[2]<b) caja((c[0]+c[1])/2, c[2], c[1]-c[0], b-c[2]);      // dintel sobre la puerta
       u=Math.max(u,c[1]); }
     caja((u+largo/2)/2, a, largo/2-u, H); }
-  // machones entre ventanas + barrotes en el hueco
+  /* MACHONES. El paño entre dos ventanas es una caja maciza, y este bucle no descontaba los huecos
+     de puerta: con tres columnas la del medio cae justo sobre la puerta, y quedaba un bloque a 1,5 m
+     de altura cruzado en el vano. La puerta se veia abierta y no se podia pasar — medido con
+     __tiro.choque en la casa del pueblo: q=46, y=[13.50,14.75], con el piso en 12. Ahora el machon
+     se parte igual que el antepecho, y sobre la puerta queda su dintel. */
+  const machon=(x0,x1,yb,H)=>{
+    const cortes=puer.filter(q=>q.h>yb+0.02).map(q=>[q.o-q.w/2,q.o+q.w/2,q.h])
+                     .filter(c=>c[1]>x0+0.02 && c[0]<x1-0.02).sort((p,q)=>p[0]-q[0]);
+    let u=x0;
+    for(const c of cortes){
+      if(c[0]>u) caja((u+c[0])/2, yb, c[0]-u, H);
+      if(c[2]<yb+H) caja((Math.max(x0,c[0])+Math.min(x1,c[1]))/2, c[2], Math.min(x1,c[1])-Math.max(x0,c[0]), yb+H-c[2]);
+      u=Math.max(u,c[1]); }
+    if(u<x1) caja((u+x1)/2, yb, x1-u, H); };
   for(let f=0;f<filas;f++){ const yb=y0+paso*f;
     for(let c=0;c<=cols;c++){
       const xa=-largo/2+sep*c, ca=(c===0)? -largo/2 : xa-vw/2, cb=(c===cols)? largo/2 : xa+vw/2;
       const a0=(c===0)? -largo/2 : (-largo/2+sep*(c-1)+vw/2), b0=ca;
-      caja((a0+b0)/2, yb, b0-a0, vh); }
+      machon(a0, b0, yb, vh); }
     for(let c=0;c<cols;c++){ const xc=-largo/2+sep*(c+0.5);
       for(let k=0;k<4;k++){ const bx=xc-vw/2+vw*(k+0.5)/4;
         alcAdd('rejilla',new THREE.BoxGeometry(0.055,vh,0.055),cx+bx*cs,cy-alto/2+yb+vh/2,cz-bx*sn,ry); } } } }
