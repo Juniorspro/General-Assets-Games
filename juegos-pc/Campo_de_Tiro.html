@@ -2027,7 +2027,7 @@ const ALC_DATOS={
   {t:'bloque',p:[13.4,40.5,-36.1],ry:-0.14,celdas:29,pisos:3,lados:2,m:'hormigon'},
   {t:'bloque',p:[11.8,40.5,-24.8],ry:-0.14,celdas:29,pisos:3,lados:2,m:'hormigon'},
   {t:'bloque',p:[3.4,40.5,-15.3],ry:-0.14,celdas:20,pisos:3,lados:2,m:'hormigon'},
-  {t:'plano',p:[12,40.35,-26],s:[64,0.5,48.6],ry:-0.14,m:'hormigon'},
+  {t:'plano',p:[12,40.35,-26],s:[64,0.5,48.6],ry:-0.14,m:'hormigonSucio'},
   {t:'plano',p:[-37.6,36.85,-33],s:[34.8,0.5,19.6],ry:-0.14,m:'hormigon'},
   {t:'plano',p:[59.7,40.35,-19.3],s:[31,0.5,14.3],ry:-0.14,m:'hormigon'},
   {t:'luz',p:[-14,50.5,-30],r:30,i:30},
@@ -3589,8 +3589,8 @@ function alcTexHormigon(base,sucio){ const k='h'+base+sucio; if(_alcTx[k])return
   for(let i=0;i<8;i++){ const x=Math.random()*S, w=6+Math.random()*22, h=S*(0.3+Math.random()*0.7);
     const gr=g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'rgba(70,66,58,'+(sucio?0.20:0.10)+')');
     gr.addColorStop(1,'rgba(70,66,58,0)'); g.fillStyle=gr; g.fillRect(x,Math.random()*S*0.4,w,h); }
-  for(let i=0;i<12;i++){ g.fillStyle='rgba(0,0,0,'+(0.015+Math.random()*0.02)+')';
-    g.beginPath(); g.arc(Math.random()*S,Math.random()*S,10+Math.random()*30,0,6.283); g.fill(); }
+  for(let i=0;i<10;i++){ g.fillStyle='rgba(0,0,0,'+(0.006+Math.random()*0.010)+')';
+    g.beginPath(); g.arc(Math.random()*S,Math.random()*S,14+Math.random()*34,0,6.283); g.fill(); }
   return (_alcTx[k]=alcTexFin(c));}
 
 /* ladrillo a la vista: aparejo trabado de verdad, ladrillo de 20x6 cm con junta de 1 cm */
@@ -5409,6 +5409,17 @@ try{ window.__tiro={
     const l=[...peor.entries()].sort((a,b)=>b[1].h-a[1].h).slice(0,30)
       .map(([q,v])=>({q, alto:v.h, p:v.p}));
     return {elementos:peor.size, top:l}; },
+  // RAYO: que malla toca un rayo, a que distancia y de que MATERIAL. Los elementos con sinCol no
+  // tienen caja de colision, asi que ni choque() ni encimados() los ven: la unica forma de encontrar
+  // un panel gigante mal puesto es preguntarle a la geometria.
+  rayo:(px,py,pz, dx,dy,dz, lejos)=>{ const rc=new THREE.Raycaster();
+    rc.set(new THREE.Vector3(px,py,pz+ALC_GZ), new THREE.Vector3(dx,dy,dz).normalize());
+    rc.far=lejos||60;
+    const ms=[]; alcGroup.traverse(o=>{ if(o.isMesh) ms.push(o); });
+    const hs=rc.intersectObjects(ms,false).slice(0,4);
+    const nombre=m=>{ for(const k in ALC_M) if(ALC_M[k]===m) return k; return (m&&m.map)?'cartel/atlas':'?'; };
+    return hs.map(h=>({d:+h.distance.toFixed(2), m:nombre(h.object.material),
+      p:[+h.point.x.toFixed(2),+h.point.y.toFixed(2),+(h.point.z-ALC_GZ).toFixed(2)]})); },
   posIsla:(x,z,y)=>{ player.pos.set(x,(y==null?alcH(x,z)+0.1:y),ALC_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; return +player.pos.y.toFixed(2); },
   islaEst:()=>({mundo:world, isla:islaMode, col:ALC_COL.length, mallas:alcGroup.children.length,
     pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ALC_GZ).toFixed(1)], suelo:+alcH(player.pos.x,player.pos.z-ALC_GZ).toFixed(2)}), pos:(x,z,y)=>{ player.pos.set(x,(y==null?0:y),TIRO_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
