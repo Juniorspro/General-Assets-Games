@@ -1189,7 +1189,11 @@ const ALC_DATOS={
     {t:'edificio',p:[-150,27,-22],s:[92,10,20],m:'hormigon',mTecho:'techoChapa',pisos:2,ventanas:{filas:2,cols:16,w:1.4,h:2,y0:1.6,caras:'largas'},techo:'chapa'},
     {t:'edificio',p:[196,12,46],s:[46,12,18],m:'ladrillo',mTecho:'techoAlquitran',pisos:3,ventanas:{filas:3,cols:9,w:1.2,h:1.9,y0:1.4,caras:'todas'},techo:'plano'},
     {t:'muro',pts:[[-60,20],[-60,54],[30,54],[30,20]],y:34,h:6,e:0.6,m:'hormigonSucio'},
-    {t:'camino',pts:[[210,50],[170,44],[130,30],[90,22],[40,14],[0,6],[-20,-4]],w:5,m:'asfalto'}
+    {t:'camino',pts:[[210,50],[170,44],[130,30],[90,22],[40,14],[0,6],[-20,-4]],w:5,m:'asfalto'},
+    {t:'bloque',p:[10,34.0,-27],ry:0,celdas:30,pisos:3,m:'hormigon'},
+    {t:'bloque',p:[10,34.0,-9],ry:0,celdas:30,pisos:3,m:'hormigon'},
+    {t:'patio',p:[-30,34,42],s:[62,6.4,44],ry:0,gradas:5},
+    {t:'arbol',p:[100,41,30],h:11},{t:'arbol',p:[112,41,36],h:8},{t:'arbol',p:[88,40,38],h:13}
   ]
 };
 
@@ -1291,7 +1295,11 @@ function alcMats(){ if(ALC_M.hormigon)return ALC_M;
   ALC_M.rejilla      = M(0x5a6068,0.7,0.4);
   ALC_M.negro        = M(0x1a1c1f,0.9);
   ALC_M.faro         = M(0xf2efe6,0.85);
-  ALC_M.agua         = M(0x2e5468,0.16,0.1);
+  ALC_M.agua        = M(0x2e5468,0.16,0.1);
+  // el follaje lleva COLOR POR VÉRTICE: con una sola malla fundida para toda la isla es la única
+  // forma de que no queden doscientos árboles exactamente del mismo verde
+  ALC_M.follaje     = new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.93,metalness:0,vertexColors:true});
+  ALC_M.follaje.envMapIntensity=0.3;
   return ALC_M; }
 function alcMat(n){ alcMats(); return ALC_M[n]||ALC_M.hormigon; }
 
@@ -1299,6 +1307,15 @@ function alcMat(n){ alcMats(); return ALC_M[n]||ALC_M.hormigon; }
 const _alcB=new Map();
 const _alcM4=new THREE.Matrix4(), _alcQ=new THREE.Quaternion(), _alcV=new THREE.Vector3(),
       _alcS=new THREE.Vector3(1,1,1), _alcEjeY=new THREE.Vector3(0,1,0);
+/* variante con color por vértice: se usa para el follaje */
+const _alcCol=new THREE.Color();
+function alcAddC(matName, geo, x,y,z, ry, hex){
+  if(geo.index) geo=geo.toNonIndexed();
+  const n=geo.attributes.position.count, arr=new Float32Array(n*3);
+  _alcCol.setHex(hex);
+  for(let i=0;i<n;i++){ arr[i*3]=_alcCol.r; arr[i*3+1]=_alcCol.g; arr[i*3+2]=_alcCol.b; }
+  geo.setAttribute('color',new THREE.Float32BufferAttribute(arr,3));
+  alcAdd(matName,geo,x,y,z,ry); }
 function alcAdd(matName, geo, x,y,z, ry){
   // mergeGeometries exige que TODAS vengan igual: se pasa todo a no-indexado (y de paso las
   // normales del prisma quedan planas, que es como tiene que verse un techo a dos aguas).
@@ -1307,6 +1324,25 @@ function alcAdd(matName, geo, x,y,z, ry){
   _alcV.set(x,y,z+ALC_GZ);
   geo.applyMatrix4(_alcM4.compose(_alcV,_alcQ,_alcS));
   let a=_alcB.get(matName); if(!a){ a=[]; _alcB.set(matName,a); } a.push(geo); }
+/* BROADPHASE. Un solo bloque de celdas mete ~1.000 cajas de colisión; cuatro bloques más el resto
+   de la isla pasan de 4.000, y el bucle de colisión corre TRES veces por frame (X, Y, Z). Se indexan
+   una vez en una grilla de 16 m y cada paso mira sólo las nueve celdas de alrededor: de 4.000
+   pruebas por eje se baja a unas 40. Sin esto, entrar al penal costaba más que dibujarlo. */
+const ALC_REJ=new Map(); const ALC_REJC=16; let _alcSello=0;
+function alcIndexar(){ ALC_REJ.clear();
+  for(let n=0;n<ALC_COL.length;n++){ const c=ALC_COL[n];
+    const i0=Math.floor(c.minx/ALC_REJC), i1=Math.floor(c.maxx/ALC_REJC);
+    const j0=Math.floor((c.minz-ALC_GZ)/ALC_REJC), j1=Math.floor((c.maxz-ALC_GZ)/ALC_REJC);
+    for(let i=i0;i<=i1;i++) for(let j=j0;j<=j1;j++){ const k=i+'_'+j;
+      let a=ALC_REJ.get(k); if(!a){ a=[]; ALC_REJ.set(k,a); } a.push(c); } } }
+const _alcCand=[];
+function alcLista(){ if(!islaMode) return colliders;
+  _alcCand.length=0; _alcSello++;
+  const i=Math.floor(player.pos.x/ALC_REJC), j=Math.floor((player.pos.z-ALC_GZ)/ALC_REJC);
+  for(let a=-1;a<=1;a++) for(let b=-1;b<=1;b++){ const l=ALC_REJ.get((i+a)+'_'+(j+b)); if(!l)continue;
+    for(let k=0;k<l.length;k++){ const c=l[k]; if(c._s===_alcSello)continue; c._s=_alcSello; _alcCand.push(c); } }
+  return _alcCand; }
+
 /* colisión: la caja alineada que envuelve al bloque ya girado */
 function alcCol(x,y,z,w,h,d,ry){
   const c=Math.abs(Math.cos(ry||0)), s=Math.abs(Math.sin(ry||0));
@@ -1333,6 +1369,42 @@ function alcPrisma(x,y,z,w,h,d,m,ry,sinCol){
   alcAdd(m,g,x,y,z,ry);
   if(!sinCol) alcCol(x,y+ -h/4,z,w,h/2,d,ry); }
 
+/* PARED CON VENTANAS DE VERDAD. Las ventanas eran cajas oscuras PEGADAS sobre un muro macizo: de
+   afuera pasaban, pero adentro el edificio quedaba en tinieblas y no se veía nada hacia afuera. Acá
+   la ventana es un HUECO: la pared se arma por bandas (antepecho, dinteles, coronamiento) y por
+   machones entre hueco y hueco, y en el hueco van los barrotes. Entra la luz, se ve la bahía desde
+   la celda, y de paso el muro tiene el ritmo que le da una fachada de verdad. */
+function alcParedVentanas(cx,cy,cz, largo,alto,esp, ry, m, V, puertas){
+  const cs=Math.cos(ry), sn=Math.sin(ry);
+  const caja=(off,yy,L,H)=>{ if(L<0.04||H<0.04)return;
+    alcCaja(cx+off*cs, cy-alto/2+yy+H/2, cz-off*sn, L, H, esp, m, ry); };
+  const cols=Math.max(1,V.cols|0), filas=Math.max(1,V.filas|0);
+  const vw=Math.min(V.w||1.1, largo/cols*0.72), vh=V.h||1.8, y0=(V.y0==null?1.2:V.y0);
+  const paso=(alto-y0-0.5)/filas, sep=largo/cols;
+  const puer=(puertas||[]);
+  // antepecho corrido, con los huecos de puerta descontados
+  const bandas=[];
+  bandas.push([0,y0]);
+  for(let f=0;f<filas;f++){ const yb=y0+paso*f+vh; bandas.push([yb, Math.min(alto, y0+paso*(f+1))]); }
+  if(y0+paso*filas<alto) bandas.push([y0+paso*filas, alto]);
+  for(const [a,b] of bandas){ const H=b-a; if(H<0.04)continue;
+    const cortes=puer.filter(q=>q.h>a+0.02).map(q=>[q.o-q.w/2,q.o+q.w/2, Math.min(b,q.h)]);
+    if(!cortes.length){ caja(0,a,largo,H); continue; }
+    cortes.sort((p1,p2)=>p1[0]-p2[0]); let u=-largo/2;
+    for(const c of cortes){ caja((u+Math.max(u,c[0]))/2, a, Math.max(0,c[0]-u), H); 
+      if(c[2]<b) caja((c[0]+c[1])/2, c[2], c[1]-c[0], b-c[2]);      // dintel sobre la puerta
+      u=Math.max(u,c[1]); }
+    caja((u+largo/2)/2, a, largo/2-u, H); }
+  // machones entre ventanas + barrotes en el hueco
+  for(let f=0;f<filas;f++){ const yb=y0+paso*f;
+    for(let c=0;c<=cols;c++){
+      const xa=-largo/2+sep*c, ca=(c===0)? -largo/2 : xa-vw/2, cb=(c===cols)? largo/2 : xa+vw/2;
+      const a0=(c===0)? -largo/2 : (-largo/2+sep*(c-1)+vw/2), b0=ca;
+      caja((a0+b0)/2, yb, b0-a0, vh); }
+    for(let c=0;c<cols;c++){ const xc=-largo/2+sep*(c+0.5);
+      for(let k=0;k<4;k++){ const bx=xc-vw/2+vw*(k+0.5)/4;
+        alcAdd('rejilla',new THREE.BoxGeometry(0.055,vh,0.055),cx+bx*cs,cy-alto/2+yb+vh/2,cz-bx*sn,ry); } } } }
+
 /* Un muro con un HUECO de puerta: en vez de una caja, dos jambas y un dintel. Sin esto los
    edificios que se pueden recorrer por dentro no tienen por dónde entrar. */
 function alcParedHueca(cx,cy,cz, largo,alto,esp, ry, m, puertas){
@@ -1355,21 +1427,35 @@ function alcEdificio(e){
   const p=e.p||[0,0,0], s=e.s||[10,6,10], ry=e.ry||0;
   const w=s[0], h=s[1], d=s[2], x=p[0], y=p[1], z=p[2];
   const m=e.m||'hormigon', mt=e.mTecho||'techoAlquitran';
-  if(e.hueco){
-    const t=e.esp||0.5, cs=Math.cos(ry), sn=Math.sin(ry);
-    const pon=(lx,lz,largo,esp,ang,pu)=>alcParedHueca(x+lx*cs+lz*sn, y, z-lx*sn+lz*cs, largo, h, esp, ry+ang, m, pu);
-    const pu=c=>(e.puertas||[]).filter(q=>q.cara===c);
-    pon(0, -d/2+t/2, w, t, 0, pu('z-'));
-    pon(0,  d/2-t/2, w, t, 0, pu('z+'));
-    pon(-w/2+t/2, 0, d-2*t, t, Math.PI/2, pu('x-'));
-    pon( w/2-t/2, 0, d-2*t, t, Math.PI/2, pu('x+'));
-    alcCaja(x,y-h/2+0.25,z,w,0.5,d,e.mPiso||'hormigon',ry);   // piso
+  /* ENTRABLE POR DEFECTO. Si adentro cabe una persona, adentro se entra: nada de manzanas de cajas
+     macizas con ventanas pintadas. Sólo quedan sólidos los volúmenes chicos (garitas, casillas,
+     pilastras) y lo que se marque a mano con hueco:false. */
+  const hueco = (e.hueco!=null) ? !!e.hueco : (w>=7 && d>=5 && h>=3.4);
+  const V=e.ventanas, caras=(V&&V.caras)||'todas';
+  if(hueco){
+    const t=e.esp||0.45, cs=Math.cos(ry), sn=Math.sin(ry);
+    let pu=(e.puertas&&e.puertas.length)?e.puertas:null;
+    if(!pu){ pu=[{cara:'z+',o:0,w:2.3,h:2.8},{cara:'z-',o:0,w:2.3,h:2.8}];   // siempre hay por dónde entrar
+      if(w>45) pu.push({cara:'z+',o:-w*0.32,w:2.3,h:2.8},{cara:'z-',o:w*0.32,w:2.3,h:2.8}); }
+    const pared=(lx,lz,largo,ang,cara,conV)=>{
+      const gx=x+lx*cs+lz*sn, gz=z-lx*sn+lz*cs, puertas=pu.filter(q=>q.cara===cara);
+      if(conV && V && V.filas>0 && V.cols>0){
+        const cols=(cara==='z+'||cara==='z-')? V.cols : Math.max(1,Math.round((V.cols||6)*d/Math.max(1,w)));
+        alcParedVentanas(gx,y,gz,largo,h,t,ry+ang,m,{filas:V.filas,cols:cols,w:V.w,h:V.h,y0:V.y0},puertas);
+      } else alcParedHueca(gx,y,gz,largo,h,t,ry+ang,m,puertas); };
+    pared(0,-d/2+t/2, w, 0, 'z-', caras!=='cortas');
+    pared(0, d/2-t/2, w, 0, 'z+', caras!=='cortas');
+    pared(-w/2+t/2,0, d-2*t, Math.PI/2, 'x-', caras!=='largas');
+    pared( w/2-t/2,0, d-2*t, Math.PI/2, 'x+', caras!=='largas');
+    // el piso va POR DEBAJO del umbral, no por encima: si sobresale, la puerta queda con un escalón
+    // de 40 cm y como el movimiento horizontal no sube escalones, el edificio no se puede entrar
+    alcCaja(x,y-h/2-0.20,z,w,0.5,d,e.mPiso||'hormigon',ry);
+    alcCimiento(x,z,w,d,ry,y-h/2,e.mCim||'hormigonSucio');
   }
   else alcCaja(x,y,z,w,h,d,m,ry,e.sinCol);
-  // ventanas: planos oscuros hundidos 6 cm en las cuatro caras
-  const V=e.ventanas;
-  if(V && V.filas>0 && V.cols>0){
-    const vw=V.w||1.1, vh=V.h||1.8, y0=(V.y0==null?1.2:V.y0), caras=V.caras||'todas';
+  // ventanas PEGADAS: sólo para los volúmenes macizos (en los huecos ya son agujeros de verdad)
+  if(!hueco && V && V.filas>0 && V.cols>0){
+    const vw=V.w||1.1, vh=V.h||1.8, y0=(V.y0==null?1.2:V.y0);
     const pisoH=(h-y0-0.6)/Math.max(1,V.filas);
     const cs=Math.cos(ry), sn=Math.sin(ry);
     const pon=(lx,ly,lz,ang)=>{ const gx=x+lx*cs+lz*sn, gz=z-lx*sn+lz*cs;
@@ -1385,6 +1471,16 @@ function alcEdificio(e){
   if(tp==='dos-aguas'||tp==='chapa') alcPrisma(x,y+h/2+Math.min(4.5,w*0.11),z,w+0.7,Math.min(9,w*0.22),d+0.7,tp==='chapa'?'techoChapa':mt,ry,true);
   else { alcCaja(x,y+h/2+0.2,z,w+0.6,0.4,d+0.6,mt,ry,true);      // losa
          alcCaja(x,y+h/2+0.62,z,w+0.6,0.45,0.35,mt,ry,true); } }  // pretil (sólo un borde: el que se ve)
+
+/* CIMIENTO. La isla es un cerro aterrazado: cualquier cosa apoyada en una cota fija tiene una
+   pata en el aire apenas el terreno baja. En vez de confiar en que el plano venga perfecto, se
+   mide el terreno bajo las cuatro esquinas y, si hace falta, se rellena hasta el punto más bajo. */
+function alcCimiento(x,z,w,d,ry,yBase,m){
+  const cs=Math.cos(ry), sn=Math.sin(ry); let lo=1e9;
+  for(const [lx,lz] of [[-w/2,-d/2],[w/2,-d/2],[-w/2,d/2],[w/2,d/2],[0,0]]){
+    const gx=x+lx*cs+lz*sn, gz=z-lx*sn+lz*cs; const h=alcH(gx,gz); if(h<lo)lo=h; }
+  const caida=yBase-lo;
+  if(caida>0.45) alcCaja(x, lo-0.6+ (caida+0.6)/2, z, w-0.3, caida+0.6, d-0.3, m, ry); }
 
 /* muro que sigue una polilínea */
 function alcMuro(e){ const pts=e.pts||[], h=e.h||3, es=e.e||0.45, m=e.m||'hormigon', y=e.y||0;
@@ -1418,11 +1514,34 @@ function alcPoste(e){ const p=e.p||[0,0,0], h=e.h||5.5;
   alcAdd('metal',new THREE.BoxGeometry(0.9,0.1,0.22),p[0],p[1]+h,p[2],0);
   alcAdd('vidrio',new THREE.BoxGeometry(0.42,0.16,0.2),p[0]+0.35,p[1]+h-0.08,p[2],0);
   alcCol(p[0],p[1]+h/2,p[2],0.4,h,0.4,0); }
-function alcArbol(e){ const p=e.p||[0,0,0], h=e.h||7;
-  alcCil(p[0],p[1]+h*0.35,p[2],h*0.035,h*0.055,h*0.7,6,'maderaVieja',0,true);
-  alcAdd('pasto',new THREE.SphereGeometry(h*0.30,7,5),p[0],p[1]+h*0.80,p[2],0);
-  alcAdd('pasto',new THREE.SphereGeometry(h*0.22,7,5),p[0]+h*0.16,p[1]+h*0.66,p[2]-h*0.12,0);
-  alcCol(p[0],p[1]+h*0.35,p[2],0.6,h*0.7,0.6,0); }
+/* ÁRBOL. Dos esferas sobre un palo no es un árbol: se ve el palo. Este lleva tronco CÓNICO,
+   cuatro o cinco ramas que salen a distinta altura y en distinta dirección, y la copa hecha de
+   racimos superpuestos de tamaños distintos, cada uno con su verde. Los eucaliptos de Alcatraz son
+   altos y desgarbados; los cipreses, anchos y oscuros. El tipo se elige por la altura pedida.
+   La semilla sale de la POSICIÓN, así que el mismo árbol siempre se dibuja igual (nada de random:
+   dos llamadas seguidas tienen que dar lo mismo). */
+const VERDES=[0x5c6b39,0x66753f,0x718049,0x4f5d33,0x7a8a52,0x5a6a3c];
+function alcArbol(e){
+  const p=e.p||[0,0,0], h=e.h||8, x=p[0], y=p[1], z=p[2];
+  let sd=Math.abs(Math.sin(x*12.9898+z*78.233)*43758.5453); const rnd=()=>{ sd=(sd*1.618)%1; return sd; };
+  const ancho=(h<7)?1.35:0.85;                       // bajito = ciprés ancho; alto = eucalipto flaco
+  const rt=h*0.036;                                   // radio del tronco
+  alcAdd('maderaVieja',new THREE.CylinderGeometry(rt*0.55,rt*1.35,h*0.62,6),x,y+h*0.31,z,0);
+  alcCol(x,y+h*0.31,z,rt*2.4,h*0.62,rt*2.4,0);
+  const nr=3+((sd*7)|0)%3;
+  for(let i=0;i<nr;i++){                              // ramas
+    const a=rnd()*6.283, lr=h*(0.13+rnd()*0.10), yy=y+h*(0.52+rnd()*0.24);
+    const g=new THREE.CylinderGeometry(rt*0.20,rt*0.55,lr,5);
+    g.translate(0,lr*0.5,0); g.rotateZ(0.75+rnd()*0.45); g.rotateY(a);
+    alcAdd('maderaVieja',g,x,yy,z,0); }
+  const nc=4+((sd*11)|0)%3;
+  for(let i=0;i<nc;i++){                              // copa: racimos
+    const a=rnd()*6.283, r=h*(0.06+rnd()*0.19)*ancho;
+    const rr=h*(0.13+rnd()*0.13)*ancho;
+    const yy=y+h*(0.62+rnd()*0.34);
+    alcAddC('follaje',new THREE.SphereGeometry(rr,6,5),x+Math.cos(a)*r,yy,z+Math.sin(a)*r,0,
+            VERDES[((sd*97)|0+i)%VERDES.length]); }
+  alcAddC('follaje',new THREE.SphereGeometry(h*0.19*ancho,6,5),x,y+h*0.84,z,0,VERDES[((sd*31)|0)%VERDES.length]); }
 /* ruina: el mismo bloque pero mordido arriba, sin techo */
 function alcEscombro(e){ const p=e.p||[0,0,0], s=e.s||[4,3,4], ry=e.ry||0, m=e.m||'hormigonSucio';
   const n=Math.max(2,Math.round(s[0]/1.6));
@@ -1439,6 +1558,78 @@ function alcCartel(e){ const p=e.p||[0,0,0], w=e.w||3, h=e.h||1.2;
   const me=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tx,toneMapped:false}));
   me.position.set(p[0],p[1],p[2]+ALC_GZ); me.rotation.y=e.ry||0; alcGroup.add(me); }
 
+/* ===================== BLOQUE DE CELDAS =====================
+   El corazón de Alcatraz. Medidas reales: la celda es de 5 × 9 pies y 7 de alto — 1,52 × 2,74 ×
+   2,13 m — y los bloques B y C tienen TRES pisos de celdas espalda contra espalda, con la pasarela
+   de hierro corriendo por delante de los pisos altos y el pasillo (Broadway) entre bloque y bloque.
+   Se construye entero: el muro medianero, cada celda con sus tabiques, su reja con los barrotes, su
+   camastro y su lavatorio, la pasarela con baranda y las escaleras en la punta.
+   Una de cada cinco celdas queda ABIERTA (sin barrotes y sin colisión) para poder entrar. */
+function alcBloque(e){
+  const p=e.p||[0,0,0], ry=e.ry||0, m=e.m||'hormigon';
+  const nc=Math.max(2,e.celdas||14), np=Math.max(1,e.pisos||3);
+  const CW=e.ancho||1.52, CD=e.fondo||2.74, CH=e.alto||2.30;     // celda: ancho, fondo, alto libre
+  const ESP=0.14, MED=0.45;                                       // tabique y muro medianero
+  const largo=nc*CW, x=p[0], y=p[1], z=p[2];
+  const cs=Math.cos(ry), sn=Math.sin(ry);
+  const pon=(lx,ly,lz, w,h,d, mat, sinCol)=>alcCaja(x+lx*cs+lz*sn, y+ly, z-lx*sn+lz*cs, w,h,d, mat, ry, sinCol);
+  const alto=np*(CH+0.30);
+  pon(0, alto/2, 0, largo, alto, MED, m);                         // medianera
+  for(let t=0;t<np;t++){ const y0=t*(CH+0.30);
+    pon(0, y0+0.15, 0, largo, 0.30, CD*2+MED, m, true);           // losa del piso
+    for(let lado=-1; lado<=1; lado+=2){ const zc=lado*(MED/2+CD/2);
+      for(let i=0;i<nc;i++){ const xc=-largo/2+CW*(i+0.5);
+        const abierta=((i+t*2+(lado>0?1:0))%5===0);
+        pon(xc-CW/2, y0+0.30+CH/2, zc, ESP, CH, CD, m);            // tabiques
+        if(i===nc-1) pon(xc+CW/2, y0+0.30+CH/2, zc, ESP, CH, CD, m);
+        pon(xc, y0+0.42, zc-lado*0.05, CW-ESP, 0.24, 0.7, 'metal', true);        // camastro
+        pon(xc+CW*0.30, y0+1.10, zc-lado*(CD/2-0.35), 0.34, 0.26, 0.28, 'blanco', true); // lavatorio
+        if(!abierta){ const zf=zc+lado*(CD/2);
+          for(let b=0;b<5;b++) pon(xc-CW/2+0.14+b*(CW-0.28)/4, y0+0.30+CH/2, zf, 0.05, CH, 0.05, 'rejilla');
+          pon(xc, y0+0.34, zf, CW, 0.08, 0.09, 'rejilla', true);
+          pon(xc, y0+0.30+CH-0.04, zf, CW, 0.08, 0.09, 'rejilla', true); } } } }
+  // pasarelas de los pisos altos + baranda, y las escaleras en los dos extremos
+  for(let t=1;t<np;t++){ const y0=t*(CH+0.30);
+    for(let lado=-1; lado<=1; lado+=2){ const zp=lado*(MED/2+CD+0.62);
+      pon(0, y0+0.10, zp, largo, 0.20, 1.25, 'rejilla');
+      pon(0, y0+0.75, zp+lado*0.60, largo, 0.09, 0.09, 'metal', true);
+      for(let i=0;i<=nc;i+=2) pon(-largo/2+i*CW, y0+0.50, zp+lado*0.60, 0.07, 0.85, 0.07, 'metal', true); } }
+  for(let t=0;t<np-1;t++){ const y0=t*(CH+0.30);
+    for(const sx of [-1,1]) for(let lado=-1; lado<=1; lado+=2){
+      const px=sx*(largo/2+0.9), pz=lado*(MED/2+CD+0.62);
+      const n=8, ph=(CH+0.30)/n;
+      for(let k=0;k<n;k++) pon(px, y0+0.30+ph*(k+0.5)-ph/2, pz-lado*(0.55-k*1.1/n), 1.5, ph*(k+1), 1.1/n, m); } }
+  return largo; }
+
+/* ===================== PATIO DE RECREO =====================
+   El muro es el personaje: 6 m de hormigón liso cerrando el sur del penal, con la garita arriba y
+   las gradas escalonadas de un lado. Adentro no hay nada más que cemento, y eso es exactamente lo
+   que hay que reproducir. */
+function alcPatio(e){
+  const p=e.p||[0,0,0], s=e.s||[60,6,44], ry=e.ry||0, m=e.m||'hormigonSucio';
+  const w=s[0], h=s[1], d=s[2], x=p[0], y=p[1], z=p[2], t=e.esp||0.7;
+  const cs=Math.cos(ry), sn=Math.sin(ry);
+  const pon=(lx,ly,lz, ww,hh,dd, mat, ang, sinCol)=>alcCaja(x+lx*cs+lz*sn, y+ly, z-lx*sn+lz*cs, ww,hh,dd, mat, ry+(ang||0), sinCol);
+  pon(0,-0.20,0, w, 0.5, d, 'hormigon', 0);                        // losa del patio (enrasada)
+  alcCimiento(x,z,w,d,ry,y,'hormigonSucio');
+  const pu=e.puerta||{o:-w*0.30, w:3.2};
+  // tres lados cerrados y el cuarto (el que da al penal) con la reja de entrada
+  pon(0, h/2,  d/2-t/2, w, h, t, m, 0);
+  pon(-w/2+t/2, h/2, 0, t, h, d-2*t, m, Math.PI/2);
+  pon( w/2-t/2, h/2, 0, t, h, d-2*t, m, Math.PI/2);
+  { const a=pu.o-pu.w/2, b=pu.o+pu.w/2;
+    if(a>-w/2) pon((-w/2+a)/2, h/2, -d/2+t/2, a+w/2, h, t, m, 0);
+    if(b< w/2) pon((b+w/2)/2,  h/2, -d/2+t/2, w/2-b, h, t, m, 0);
+    pon((a+b)/2, h-0.9, -d/2+t/2, pu.w, 1.8, t, m, 0);             // dintel de la reja
+    for(let k=0;k<7;k++) pon(a+0.2+k*(pu.w-0.4)/6, (h-1.8)/2, -d/2+t/2, 0.06, h-1.8, 0.06, 'rejilla', 0); }
+  // gradas de hormigón del lado oeste
+  const ng=e.gradas||5, gw=Math.min(d*0.8, 16);
+  for(let k=0;k<ng;k++) pon(-w/2+t+0.9+k*0.95, 0.28*(k+1)/2, 0, 0.95, 0.28*(k+1), gw, 'hormigon', 0);
+  // pasarela del guardia arriba del muro + la garita en una esquina
+  pon(0, h+0.12, d/2-t/2, w, 0.24, 1.4, 'rejilla', 0);
+  pon(w/2-1.9, h+1.5, d/2-1.6, 2.6, 2.6, 2.6, 'metal', 0);
+  pon(w/2-1.9, h+3.1, d/2-1.6, 3.2, 0.25, 3.2, 'techoChapa', 0, true); }
+
 function alcElem(e){ if(!e||!e.t)return;
   switch(e.t){
     case 'edificio': alcEdificio(e); break;
@@ -1454,6 +1645,8 @@ function alcElem(e){ if(!e||!e.t)return;
     case 'arbol':    alcArbol(e); break;
     case 'escombro': alcEscombro(e); break;
     case 'cartel':   alcCartel(e); break;
+    case 'bloque':   alcBloque(e); break;
+    case 'patio':    alcPatio(e); break;
   } }
 
 /* fundir: cada material sale en UNA malla */
@@ -1534,6 +1727,7 @@ function buildAlc(){ if(alcBuilt)return; alcBuilt=true;
   alcTerreno();
   const els=ALC_DATOS.elementos||[];
   for(let i=0;i<els.length;i++){ try{ alcElem(els[i]); }catch(err){} }
+  alcIndexar();
   const n=alcFundir();
   try{ console.log('Alcatraz:',els.length,'elementos →',n,'mallas,',ALC_COL.length,'colisiones'); }catch(e){} }
 
@@ -3032,14 +3226,20 @@ let lastWall=null;   // collider de la última pared tocada en X/Z (para wallrun
    paso termina en algo más empinado que ~44° y para arriba, el paso no se da. Sin esto se trepan
    los acantilados de la isla caminando de frente. */
 const ALC_PEND_MAX=0.97;
+/* ESCALÓN. Antes cualquier caja frenaba de plano, y un umbral de 5 cm alcanzaba para que no se
+   pudiera entrar a un edificio. Ahora, estando en el piso, todo lo que tenga el techo a menos de
+   38 cm de los pies no frena: se lo pisa y moveY levanta al jugador en el mismo frame. Es lo que
+   hace transitables los umbrales, los cordones, las gradas del patio y las escaleras del bloque. */
+const PASO_ALTO=0.38;
+function alcEscalon(c){ return player.onGround && c.maxy>player.pos.y && (c.maxy-player.pos.y)<=PASO_ALTO; }
 function alcTrepa(nx,nz){ const x=nx, z=nz-ALC_GZ;
   return (alcPend(x,z)>ALC_PEND_MAX && alcH(x,z)>player.pos.y+0.35); }
 function moveX(d){ if(grassMode){ player.pos.x=Math.max(-GBND.x,Math.min(GBND.x,player.pos.x+d)); return; }
   if(islaMode && alcTrepa(player.pos.x+d, player.pos.z)) return;
-  player.pos.x+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
+  player.pos.x+=d; const a=pAABB(); for(const c of alcLista()){ if(alcEscalon(c))continue; if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
 function moveZ(d){ if(grassMode){ player.pos.z=Math.max(GBND.z0,Math.min(GBND.z1,player.pos.z+d)); return; }
   if(islaMode && alcTrepa(player.pos.x, player.pos.z+d)) return;
-  player.pos.z+=d; const a=pAABB(); for(const c of colliders){ if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
+  player.pos.z+=d; const a=pAABB(); for(const c of alcLista()){ if(alcEscalon(c))continue; if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
 /* ISLA: si ninguna caja te sostuvo, manda el campo de alturas. El orden importa — las cajas
    (edificios, muros, escaleras) ganan siempre, así se puede caminar por los techos y las gradas. */
 function alcPiso(){ const g=alcH(player.pos.x, player.pos.z-ALC_GZ);
@@ -3050,7 +3250,7 @@ function moveY(d){ if(grassMode||dreamMode){ player.pos.y+=d; const g=terrainH(p
     else if(player.vy<=0 && player.vy>-3.0 && player.pos.y-g<=0.9){ player.pos.y=g; player.vy=0; player.onGround=true; }   // PEGARSE al bajar pendientes suaves (evita el parpadeo de onGround). vy>0 (salto) y caídas rápidas quedan excluidas
     return; } player.pos.y+=d; const a=pAABB(); player.onGround=false;
   // sin piso infinito: si te caés del borde, caés al cielo y reaparecés (ver respawn)
-  for(const c of colliders){ if(c.locked)continue; if(overlap(a,c)){
+  for(const c of alcLista()){ if(c.locked)continue; if(overlap(a,c)){
     if(d<=0){ player.pos.y=c.maxy; player.vy=0; player.onGround=true; }   // caer sobre algo
     else { player.pos.y=c.miny-player.h; player.vy=0; }                    // pegar el techo
     a.miny=player.pos.y; a.maxy=player.pos.y+player.h; } }
