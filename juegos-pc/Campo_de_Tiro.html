@@ -2383,8 +2383,9 @@ const ALC_DETALLE=[
   {t:'cartel',ref:'penal',p:[-8,44.78,-12.98],txt:'B-181  AL CAPONE  AZ-85',w:0.72,h:0.15,ry:0,col:'#c8b048',sinCol:true},
   {t:'cartel',ref:'penal',p:[-6.45,44.78,-12.98],txt:'B-183',w:0.24,h:0.13,ry:0,col:'#d9d4c4',sinCol:true},
   {t:'cartel',ref:'penal',p:[-3.1,41.9,-7.12],txt:'FUGA DEL 11-12 DE JUNIO DE 1962',w:0.9,h:0.12,ry:0,col:'#b8b2a2',sinCol:true},
-  {t:'muro',pts:[[-31,6.6],[1.6,6.6]],y:40.5,h:9,e:0.35,m:'hormigon',ref:'penal'},
-  {t:'caja',ref:'penal',p:[-27.5,41.55,6.6],s:[1,2.1,0.45],ry:0,m:'metal'},
+  {t:'muro',pts:[[-31,6.6],[-28.3,6.6]],y:40.5,h:9,e:0.35,m:'hormigon',ref:'penal'},
+  {t:'muro',pts:[[-26.7,6.6],[1.6,6.6]],y:40.5,h:9,e:0.35,m:'hormigon',ref:'penal'},
+  {t:'caja',ref:'penal',p:[-28.6,41.55,7.15],s:[1,2.1,0.12],ry:1.571,m:'metal'},
   {t:'caja',ref:'penal',p:[-18,40.85,6.45],s:[0.26,0.16,0.08],ry:0,m:'rejilla',sinCol:true},
   {t:'muro',pts:[[-31,17.8],[-8,17.8]],y:40.5,h:9,e:0.3,m:'hormigon',ref:'penal'},
   {t:'camino',pts:[[-29,14.5],[0.6,14.5]],w:5.4,m:'hormigon',ref:'penal'},
@@ -3549,36 +3550,153 @@ function alcPend(x,z){ const e=1.4;
 
 /* ---------------- materiales de la isla (canvas, cero descargas) ---------------- */
 const ALC_M={};
+/* ===================== TEXTURAS DE LA ISLA =====================
+   Todas dibujadas en canvas (cero descargas) y pensadas para la UV a escala de mundo: una baldosa
+   de textura = ALC_TILE = 2,2 m. Asi el ladrillo mide 20 cm, la junta 1 cm y la chapa acanalada
+   tiene la onda cada 12 cm, como en la realidad. Antes habia UNA textura de hormigon para todo. */
+const _alcTx={};
+function alcLienzo(S){ const c=document.createElement('canvas'); c.width=c.height=S; return c; }
+function alcTexFin(c,aniso){ const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=aniso||8; return t; }
+function alcRuido(g,S,n,a,l1,l2){ for(let i=0;i<n;i++){ const l=l1+Math.random()*(l2-l1);
+  g.fillStyle='rgba('+(l|0)+','+(l|0)+','+((l*1.01)|0)+','+a+')';
+  g.fillRect(Math.random()*S,Math.random()*S,1+Math.random()*2,1+Math.random()*2); } }
+
+/* hormigon encofrado: grano fino, juntas de tabla cada 60 cm y chorreaduras verticales */
+function alcTexHormigon(base,sucio){ const k='h'+base+sucio; if(_alcTx[k])return _alcTx[k];
+  const S=512, c=alcLienzo(S), g=c.getContext('2d');
+  g.fillStyle=base; g.fillRect(0,0,S,S);
+  alcRuido(g,S,9000,0.22,150,215);
+  alcRuido(g,S,4000,0.16,90,140);
+  const paso=Math.round(S*0.6/2.2);                     // tabla de 60 cm
+  g.strokeStyle='rgba(0,0,0,.10)'; g.lineWidth=1.6;
+  for(let y=paso/2;y<S;y+=paso){ g.beginPath(); g.moveTo(0,y+Math.random()*2-1); g.lineTo(S,y+Math.random()*2-1); g.stroke(); }
+  g.strokeStyle='rgba(255,255,255,.05)';
+  for(let y=paso/2+2;y<S;y+=paso){ g.beginPath(); g.moveTo(0,y); g.lineTo(S,y); g.stroke(); }
+  for(let i=0;i<8;i++){ const x=Math.random()*S, w=6+Math.random()*22, h=S*(0.3+Math.random()*0.7);
+    const gr=g.createLinearGradient(0,0,0,h); gr.addColorStop(0,'rgba(70,66,58,'+(sucio?0.20:0.10)+')');
+    gr.addColorStop(1,'rgba(70,66,58,0)'); g.fillStyle=gr; g.fillRect(x,Math.random()*S*0.4,w,h); }
+  for(let i=0;i<12;i++){ g.fillStyle='rgba(0,0,0,'+(0.015+Math.random()*0.02)+')';
+    g.beginPath(); g.arc(Math.random()*S,Math.random()*S,10+Math.random()*30,0,6.283); g.fill(); }
+  return (_alcTx[k]=alcTexFin(c));}
+
+/* ladrillo a la vista: aparejo trabado de verdad, ladrillo de 20x6 cm con junta de 1 cm */
+function alcTexLadrillo(col,junta){ const k='l'+col; if(_alcTx[k])return _alcTx[k];
+  const S=512, c=alcLienzo(S), g=c.getContext('2d');
+  g.fillStyle=junta; g.fillRect(0,0,S,S);
+  const LH=Math.round(S*0.07/2.2), LW=Math.round(S*0.21/2.2), J=Math.max(1,Math.round(S*0.011/2.2));
+  const n=Math.ceil(S/LH)+1;
+  for(let f=0;f<n;f++){ const y=f*LH, off=(f%2)?-LW/2:0;
+    for(let x=off-LW;x<S+LW;x+=LW){
+      const v=(Math.random()*2-1)*16, cc=col.match(/\w\w/g).map(h=>Math.max(0,Math.min(255,parseInt(h,16)+v)));
+      g.fillStyle='rgb('+(cc[0]|0)+','+(cc[1]|0)+','+(cc[2]|0)+')';
+      g.fillRect(x+J,y+J,LW-J*2,LH-J*2); } }
+  alcRuido(g,S,5000,0.10,110,180);
+  for(let i=0;i<10;i++){ g.fillStyle='rgba(40,34,28,'+(0.04+Math.random()*0.06)+')';
+    g.beginPath(); g.arc(Math.random()*S,Math.random()*S,18+Math.random()*44,0,6.283); g.fill(); }
+  return (_alcTx[k]=alcTexFin(c));}
+
+/* roca: manchones grandes con grietas */
+function alcTexRoca(){ if(_alcTx.roca)return _alcTx.roca;
+  const S=512, c=alcLienzo(S), g=c.getContext('2d');
+  g.fillStyle='#6d6f72'; g.fillRect(0,0,S,S);
+  for(let i=0;i<220;i++){ const l=70+Math.random()*90;
+    g.fillStyle='rgba('+(l|0)+','+((l*0.99)|0)+','+((l*0.96)|0)+',0.5)';
+    g.beginPath(); g.ellipse(Math.random()*S,Math.random()*S,6+Math.random()*30,4+Math.random()*20,Math.random()*3.14,0,6.283); g.fill(); }
+  g.strokeStyle='rgba(20,20,22,.35)';
+  for(let i=0;i<26;i++){ g.lineWidth=0.6+Math.random()*1.6; g.beginPath();
+    let x=Math.random()*S,y=Math.random()*S; g.moveTo(x,y);
+    for(let k=0;k<5;k++){ x+=(Math.random()*2-1)*40; y+=(Math.random()*2-1)*40; g.lineTo(x,y); } g.stroke(); }
+  alcRuido(g,S,6000,0.18,80,150);
+  return (_alcTx.roca=alcTexFin(c));}
+
+/* madera: tablas con vena */
+function alcTexMadera(col,vieja){ const k='m'+col; if(_alcTx[k])return _alcTx[k];
+  const S=512, c=alcLienzo(S), g=c.getContext('2d');
+  g.fillStyle=col; g.fillRect(0,0,S,S);
+  const TW=Math.round(S*0.16/2.2);
+  for(let x=0;x<S;x+=TW){ const v=(Math.random()*2-1)*14;
+    const cc=col.match(/\w\w/g).map(h=>Math.max(0,Math.min(255,parseInt(h,16)+v)));
+    g.fillStyle='rgb('+(cc[0]|0)+','+(cc[1]|0)+','+(cc[2]|0)+')'; g.fillRect(x,0,TW-1,S);
+    g.fillStyle='rgba(0,0,0,.22)'; g.fillRect(x+TW-1,0,1.4,S);
+    g.strokeStyle='rgba(0,0,0,.10)'; g.lineWidth=0.8;
+    for(let i=0;i<9;i++){ const xx=x+2+Math.random()*(TW-4); g.beginPath(); g.moveTo(xx,0);
+      for(let y=0;y<S;y+=40) g.lineTo(xx+Math.sin(y*0.04+i)*1.6, y); g.stroke(); } }
+  if(vieja) alcRuido(g,S,5000,0.16,70,120);
+  return (_alcTx[k]=alcTexFin(c));}
+
+/* chapa acanalada: onda cada 12 cm */
+function alcTexChapa(){ if(_alcTx.chapa)return _alcTx.chapa;
+  const S=512, c=alcLienzo(S), g=c.getContext('2d');
+  g.fillStyle='#7d858c'; g.fillRect(0,0,S,S);
+  const P=Math.max(3,Math.round(S*0.12/2.2));
+  for(let x=0;x<S;x+=P){ const gr=g.createLinearGradient(x,0,x+P,0);
+    gr.addColorStop(0,'rgba(255,255,255,.16)'); gr.addColorStop(0.5,'rgba(0,0,0,.02)');
+    gr.addColorStop(1,'rgba(0,0,0,.20)'); g.fillStyle=gr; g.fillRect(x,0,P,S); }
+  alcRuido(g,S,2500,0.10,110,170);
+  for(let i=0;i<9;i++){ g.fillStyle='rgba(120,66,30,'+(0.05+Math.random()*0.10)+')';
+    g.beginPath(); g.arc(Math.random()*S,Math.random()*S,8+Math.random()*26,0,6.283); g.fill(); }
+  return (_alcTx.chapa=alcTexFin(c));}
+
+/* metal / oxido: chapa cepillada con manchas */
+function alcTexMetal(base,herrumbre){ const k='me'+base+herrumbre; if(_alcTx[k])return _alcTx[k];
+  const S=256, c=alcLienzo(S), g=c.getContext('2d');
+  g.fillStyle=base; g.fillRect(0,0,S,S);
+  g.strokeStyle='rgba(255,255,255,.06)'; g.lineWidth=1;
+  for(let i=0;i<200;i++){ const y=Math.random()*S; g.beginPath(); g.moveTo(0,y); g.lineTo(S,y+Math.random()*2-1); g.stroke(); }
+  if(herrumbre) for(let i=0;i<40;i++){ g.fillStyle='rgba(126,64,26,'+(0.10+Math.random()*0.25)+')';
+    g.beginPath(); g.arc(Math.random()*S,Math.random()*S,3+Math.random()*16,0,6.283); g.fill(); }
+  alcRuido(g,S,1800,0.10,100,170);
+  return (_alcTx[k]=alcTexFin(c));}
+
+/* rejilla de piso: trama de pletinas */
+function alcTexRejilla(){ if(_alcTx.rej)return _alcTx.rej;
+  const S=256, c=alcLienzo(S), g=c.getContext('2d');
+  g.fillStyle='#3d444b'; g.fillRect(0,0,S,S);
+  const P=Math.max(4,Math.round(S*0.04/2.2*2.2));
+  g.fillStyle='#6b737b';
+  for(let x=0;x<S;x+=P) g.fillRect(x,0,Math.max(2,P*0.42),S);
+  for(let y=0;y<S;y+=P*2) g.fillRect(0,y,S,Math.max(1,P*0.22));
+  alcRuido(g,S,900,0.10,90,150);
+  return (_alcTx.rej=alcTexFin(c));}
+
+/* asfalto / tierra / arena / pasto: grano grueso */
+function alcTexGrano(base,osc,gr){ const k='g'+base+gr; if(_alcTx[k])return _alcTx[k];
+  const S=256, c=alcLienzo(S), g=c.getContext('2d');
+  g.fillStyle=base; g.fillRect(0,0,S,S);
+  for(let i=0;i<(gr||2200);i++){ const l=osc?(40+Math.random()*70):(120+Math.random()*90);
+    g.fillStyle='rgba('+(l|0)+','+(l|0)+','+(l|0)+',0.28)';
+    g.fillRect(Math.random()*S,Math.random()*S,1+Math.random()*2.6,1+Math.random()*2.6); }
+  return (_alcTx[k]=alcTexFin(c));}
+
 function alcMats(){ if(ALC_M.hormigon)return ALC_M;
-  const T=(base,ruido,lin)=>tiroConcreteTex(base,ruido,lin);
-  const M=(c,r,m,tex,rep)=>{ const s=new THREE.MeshStandardMaterial({color:c,roughness:r==null?0.92:r,metalness:m||0});
-    if(tex){ s.map=tex.clone(); s.map.needsUpdate=true; s.map.wrapS=s.map.wrapT=THREE.RepeatWrapping; if(rep)s.map.repeat.set(rep[0],rep[1]); }
+  const M=(c,r,m,tex)=>{ const s=new THREE.MeshStandardMaterial({color:c,roughness:r==null?0.92:r,metalness:m||0});
+    if(tex){ s.map=tex; }
     s.envMapIntensity=0.35; return s; };
-  const txH=T('#b9b4a8',16,false), txL=T('#8e5b46',18,true), txR=T('#6d6f72',26,false);
-  ALC_M.hormigon     = M(0xc3bfb4,0.95,0,txH);
-  ALC_M.hormigonSucio= M(0x9d9789,0.97,0,txH);
-  ALC_M.blanco       = M(0xe6e3da,0.9,0,txH);
-  ALC_M.blancoSucio  = M(0xcfcabd,0.95,0,txH);
-  ALC_M.ladrillo     = M(0xa87458,0.95,0,txL);
-  ALC_M.ladrilloRojo = M(0x93493a,0.95,0,txL);
+  ALC_M.hormigon     = M(0xd6d3ca,0.95,0,alcTexHormigon('#b9b4a8',false));
+  ALC_M.hormigonSucio= M(0xb0aa9c,0.97,0,alcTexHormigon('#a49d8f',true));
+  ALC_M.blanco       = M(0xf0eee7,0.9,0,alcTexHormigon('#cfccc4',false));
+  ALC_M.blancoSucio  = M(0xdcd8cd,0.95,0,alcTexHormigon('#bdb8ac',true));
+  ALC_M.ladrillo     = M(0xbc8a6c,0.95,0,alcTexLadrillo('a8724f','#8d8377'));
+  ALC_M.ladrilloRojo = M(0xa9584a,0.95,0,alcTexLadrillo('8f4436','#7e7466'));
   ALC_M.ventana      = M(0x1b2530,0.35,0.15);
   ALC_M.vidrio       = M(0x9fc4d8,0.14,0.25);
-  ALC_M.techoRojo    = M(0x8d4b39,0.88);
-  ALC_M.techoChapa   = M(0x7d858c,0.62,0.35);
-  ALC_M.techoAlquitran=M(0x3a3d40,0.96);
-  ALC_M.metal        = M(0x8a9198,0.5,0.55);
-  ALC_M.oxido        = M(0x7a4a2c,0.9,0.2);
-  ALC_M.madera       = M(0x8a6a45,0.92);
-  ALC_M.maderaVieja  = M(0x6b5942,0.96);
-  ALC_M.roca         = M(0x77726b,0.98,0,txR);
-  ALC_M.tierra       = M(0x7d6b52,0.98);
-  ALC_M.pasto        = M(0x6f7c48,0.97);
-  ALC_M.arena        = M(0xb6a889,0.97);
-  ALC_M.asfalto      = M(0x4a4b4d,0.94);
-  ALC_M.rejilla      = M(0x5a6068,0.7,0.4);
+  ALC_M.techoRojo    = M(0x9c5541,0.88,0,alcTexGrano('#8d4b39',true,2600));
+  ALC_M.techoChapa   = M(0x9aa2a9,0.62,0.35,alcTexChapa());
+  ALC_M.techoAlquitran=M(0x44484c,0.96,0,alcTexGrano('#3a3d40',true,3000));
+  ALC_M.metal        = M(0xa2a9b0,0.5,0.55,alcTexMetal('#8a9198',false));
+  ALC_M.oxido        = M(0x94643f,0.9,0.2,alcTexMetal('#7a4a2c',true));
+  ALC_M.madera       = M(0xa07d52,0.92,0,alcTexMadera('8a6a45',false));
+  ALC_M.maderaVieja  = M(0x7d6a4e,0.96,0,alcTexMadera('6b5942',true));
+  ALC_M.roca         = M(0x8b867e,0.98,0,alcTexRoca());
+  ALC_M.tierra       = M(0x93805f,0.98,0,alcTexGrano('#7d6b52',false,2600));
+  ALC_M.pasto        = M(0x7f8d55,0.97,0,alcTexGrano('#6f7c48',false,3200));
+  ALC_M.arena        = M(0xc9baa0,0.97,0,alcTexGrano('#b6a889',false,2400));
+  ALC_M.asfalto      = M(0x5a5c5f,0.94,0,alcTexGrano('#4a4b4d',true,3000));
+  ALC_M.rejilla      = M(0x8d949c,0.7,0.4,alcTexRejilla());
   ALC_M.negro        = M(0x1a1c1f,0.9);
-  ALC_M.faro         = M(0xf2efe6,0.85);
-  ALC_M.agua        = M(0x2e5468,0.16,0.1);
+  ALC_M.faro         = M(0xf2efe6,0.85,0,alcTexHormigon('#e2ded2',false));
+  ALC_M.agua         = M(0x2e5468,0.16,0.1);
   // el follaje lleva COLOR POR VÉRTICE: con una sola malla fundida para toda la isla es la única
   // forma de que no queden doscientos árboles exactamente del mismo verde
   ALC_M.follaje     = new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.93,metalness:0,vertexColors:true});
@@ -3881,8 +3999,8 @@ function alcEscombro(e){ const p=e.p||[0,0,0], s=e.s||[4,3,4], ry=e.ry||0, m=e.m
 /* CARTELES EN UN SOLO ATLAS. Cada cartel era su propia malla con su propia CanvasTexture: 86
    carteles = 86 draw calls y 86 texturas, la mitad del costo de dibujar la isla. Ahora se juntan
    todos en un canvas grande (celdas de 256x64) y salen en UNA malla fundida con UNA textura. */
-const _alcCart=[];
-function alcCartel(e){ _alcCart.push(e); }
+const _alcCart=[], _alcCartInfo=[];
+function alcCartel(e){ _alcCart.push(e); _alcCartInfo.push(e); }
 function alcCartelesFundir(){ const N=_alcCart.length; if(!N)return 0;
   const CW=256, CH=64, COLS=8, ROWS=Math.ceil(N/COLS);
   const c=document.createElement('canvas'); c.width=CW*COLS; c.height=CH*ROWS;
@@ -5124,13 +5242,13 @@ try{ window.__tiro={
   // como haria un jugador. Sirve para probar de verdad que un recorrido de la isla se puede hacer a pie.
   ruta:(pts,n)=>{ const N=n||1800, log=[];
     for(let w=0;w<pts.length;w++){ const tx=pts[w][0], tz=pts[w][1];
-      let ult=1e9, quieto=0, desv=0, k=0;
+      let ult=1e9, quieto=0, desv=0, k=0, trabado=0;
       for(;k<N;k++){
         const dx=tx-player.pos.x, dz=(tz+ALC_GZ)-player.pos.z, L=Math.hypot(dx,dz);
         if(L<2.5) break;
         if(L>ult-0.02){ quieto++; } else { quieto=0; desv=0; }
         ult=Math.min(ult,L);
-        if(quieto>26){ desv=(desv===0)?0.7:(desv>0?-0.7:0); quieto=0; }
+        if(quieto>26){ desv=(desv===0)?0.45:(desv>0?-0.45:0); quieto=0; trabado+=26; if(trabado>170) break; }
         player.yaw=Math.atan2(-dx,-dz)+desv; player.faceYaw=player.yaw;
         joy.x=0; joy.y=-1; update(0.0166); }
       joy.x=0; joy.y=0;
@@ -5150,6 +5268,16 @@ try{ window.__tiro={
     return {pj:[+player.pos.x.toFixed(2),+y.toFixed(2),+(player.pos.z-ALC_GZ).toFixed(2)],
             suelo:+alcH(x,z-ALC_GZ).toFixed(2), pend:+alcPend(x,z-ALC_GZ).toFixed(3), tapan:out}; },
   elem:i=>{ const els=(ALC_DATOS.elementos||[]).concat(ALC_DETALLE||[]); return {i, e:els[i], n:els.length}; },
+  // carteles al aire: un cartel tiene que estar PEGADO a algo. Tira un rayo para atras y mide.
+  carteles:(tol)=>{ const T=tol==null?0.35:tol, rc=new THREE.Raycaster(), out=[];
+    const mallas=[]; alcGroup.traverse(o=>{ if(o.isMesh && !(o.material&&o.material.map&&o.geometry&&o.geometry.type==='PlaneGeometry')) mallas.push(o); });
+    for(const e of _alcCartInfo){ const p=e.p||[0,0,0], ry=e.ry||0;
+      const n=new THREE.Vector3(Math.sin(ry),0,Math.cos(ry));
+      const o=new THREE.Vector3(p[0],p[1],p[2]+ALC_GZ).addScaledVector(n,0.03);
+      rc.set(o,n.clone().multiplyScalar(-1)); rc.far=1.2;
+      const h=rc.intersectObjects(mallas,false)[0];
+      if(!h || h.distance>T) out.push({txt:(e.txt||'').slice(0,26), p:p.map(v=>+v.toFixed(1)), d:h?+h.distance.toFixed(2):null}); }
+    return {total:_alcCartInfo.length, sueltos:out.length, lista:out.slice(0,40)}; },
   posIsla:(x,z,y)=>{ player.pos.set(x,(y==null?alcH(x,z)+0.1:y),ALC_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; return +player.pos.y.toFixed(2); },
   islaEst:()=>({mundo:world, isla:islaMode, col:ALC_COL.length, mallas:alcGroup.children.length,
     pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ALC_GZ).toFixed(1)], suelo:+alcH(player.pos.x,player.pos.z-ALC_GZ).toFixed(2)}), pos:(x,z,y)=>{ player.pos.set(x,(y==null?0:y),TIRO_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
