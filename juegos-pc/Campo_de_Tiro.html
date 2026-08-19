@@ -5036,7 +5036,10 @@ const GUN_OJO=new THREE.Vector3(0.115,-0.175,0.460);   // más abajo: con el pu�
    resto de inclinacion se amplifica. 15 px sobre 600 con FOV 48 son 1.2 grados, y a esa distancia
    1.2 grados son 16 mm, asi que el arma sube esos 16 mm. Se deja la Z en 0.66: el fusil queda en el
    30% de abajo como en la referencia y el resto a corregir es la mitad. */
-const GUN_OJO_ADS=new THREE.Vector3(0.000,-AK_MIRA_Y*GUN_ESC+0.014,0.660);
+/* Medido con alza(), no a ojo: con +0.014 el alza quedaba 13 px ARRIBA del centro. 13 px sobre 300
+   a 0.648 m con FOV 48 son 12.5 mm, asi que el ajuste real es +0.0015 — o sea que el valor original
+   ya estaba bien y las dos correcciones que hice mirando la foto sobraban. */
+const GUN_OJO_ADS=new THREE.Vector3(0.000,-AK_MIRA_Y*GUN_ESC+0.0015,0.660);
 /* MENÚ (pantalla de operador). El fusil no se sostiene apuntando: cuelga en LISTO BAJO, cruzado
    sobre el pecho y con la boca abajo, que es como se para un operador en la pantalla de selección.
    Sale del MISMO ancla de ojo que todo lo demás, así las manos y el cuerpo lo siguen con el mismo IK. */
@@ -5119,7 +5122,11 @@ function tiroPostura(dt){
   paso += dt*(4.4+8.6*sn)*(player.onGround?1:0.22);
   resp += dt*1.22; tJit += dt;
   // ---- alphas de pose ----
-  const wSpr=(player.onGround && spd>RUN*0.70 && !player.sliding)?1:0;
+  /* APUNTANDO NO HAY POSE DE CARRERA. Medido con alza(): caminando con la mira puesta el alza se
+     iba a 100 px del centro sobre 600 de alto —un sexto de la pantalla— y la distancia a la lente
+     caia 55 mm. Los dos numeros son los terminos de aSpr (el arma se lleva atras y cruzada al
+     correr), que estaban entrando enteros con la mira puesta. Con la mira puesta no se corre. */
+  const wSpr=(player.onGround && spd>RUN*0.70 && !player.sliding && adsW<0.5)?1:0;
   aSpr+=(wSpr-aSpr)*Math.min(1,7*dt);
   // asimétrico a propósito: la ENTRADA tiene que ser rápida (el cuerpo ya se está yendo) y la SALIDA lenta
   // (14/s = 63% en 4 frames; 5/s = 63% en 0,2 s). El tirón que se veía estaba en la salida.
