@@ -5388,6 +5388,27 @@ try{ window.__tiro={
       .map(([par,v])=>{ const [i,j]=par.split(':').map(Number);
         return {v:+v.toFixed(2), a:i, b:j}; });
     return {pares:ac.size, top:out}; },
+  // OBJETOS QUE FLOTAN: para cada caja de colision se mira si abajo hay algo que la sostenga (otra
+  // caja o el terreno) a menos de 0.4 m. Se agrupa por elemento y se listan los peores.
+  flotan:(tol)=>{ const T=tol==null?0.4:tol, C=8, rej=new Map(), peor=new Map();
+    for(const c of ALC_COL){ const i0=Math.floor(c.minx/C), i1=Math.floor(c.maxx/C),
+      j0=Math.floor(c.minz/C), j1=Math.floor(c.maxz/C);
+      for(let i=i0;i<=i1;i++) for(let j=j0;j<=j1;j++){ const k=i+'_'+j; let a=rej.get(k); if(!a){a=[];rej.set(k,a);} a.push(c); } }
+    for(const c of ALC_COL){
+      if((c.maxy-c.miny)>6) continue;                       // los muros altos ya se apoyan solos
+      const cx=(c.minx+c.maxx)/2, cz=(c.minz+c.maxz)/2;
+      let apoyo=alcH(cx,cz-ALC_GZ);                          // el terreno cuenta como apoyo
+      const l=rej.get(Math.floor(cx/C)+'_'+Math.floor(cz/C))||[];
+      for(const o of l){ if(o===c||o.q===c.q)continue;
+        if(o.maxx<c.minx-0.05||o.minx>c.maxx+0.05||o.maxz<c.minz-0.05||o.minz>c.maxz+0.05)continue;
+        if(o.maxy<=c.miny+0.05){ if(o.maxy>apoyo) apoyo=o.maxy; }
+        else if(o.miny<c.maxy-0.05) apoyo=Math.max(apoyo,c.miny); }
+      const h=c.miny-apoyo;
+      if(h>T){ const v=peor.get(c.q); if(!v||h>v.h) peor.set(c.q,{h:+h.toFixed(2),
+        p:[+cx.toFixed(1),+c.miny.toFixed(1),+(cz-ALC_GZ).toFixed(1)]}); } }
+    const l=[...peor.entries()].sort((a,b)=>b[1].h-a[1].h).slice(0,30)
+      .map(([q,v])=>({q, alto:v.h, p:v.p}));
+    return {elementos:peor.size, top:l}; },
   posIsla:(x,z,y)=>{ player.pos.set(x,(y==null?alcH(x,z)+0.1:y),ALC_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; return +player.pos.y.toFixed(2); },
   islaEst:()=>({mundo:world, isla:islaMode, col:ALC_COL.length, mallas:alcGroup.children.length,
     pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ALC_GZ).toFixed(1)], suelo:+alcH(player.pos.x,player.pos.z-ALC_GZ).toFixed(2)}), pos:(x,z,y)=>{ player.pos.set(x,(y==null?0:y),TIRO_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
