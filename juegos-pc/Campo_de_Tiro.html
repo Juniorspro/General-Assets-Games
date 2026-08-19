@@ -19,19 +19,29 @@
         background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.18); backdrop-filter:blur(6px); touch-action:none; }
   #joyKnob{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%;
             background:radial-gradient(circle at 38% 34%,#dff0ff,#5aa0ff); box-shadow:0 4px 16px rgba(0,0,0,.45); }
-  .actBtn{ position:fixed; z-index:20; width:72px; height:72px; border-radius:50%; background:rgba(22,34,50,.62);
-           border:2px solid rgba(255,255,255,.5); color:#fff; font-size:13px; font-weight:800; letter-spacing:.04em; backdrop-filter:blur(6px); cursor:pointer;
-           box-shadow:0 4px 14px rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; transition:transform .1s,background .15s; }
-  .actBtn:active{ transform:scale(.92); background:rgba(90,160,255,.7); }
-  #bJump  { right:26px;  bottom:calc(40px + var(--safe-b)); }
-  #bSlide { right:110px; bottom:calc(66px + var(--safe-b)); width:62px; height:62px; }
+  /* BOTONES. Eran chicos y estaban encimados: el de deslizar media 62 px y caia pegado al de
+     saltar, asi que en el pulgar se sentia tosco. Ahora todos crecen, se separan, y el toque
+     responde al instante (60 ms en vez de 100/150) con un anillo que confirma el apretado. */
+  .actBtn{ position:fixed; z-index:20; width:84px; height:84px; border-radius:50%; background:rgba(22,34,50,.58);
+           border:2px solid rgba(255,255,255,.42); color:#fff; font-size:13px; font-weight:800; letter-spacing:.04em; backdrop-filter:blur(6px); cursor:pointer;
+           box-shadow:0 4px 14px rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;
+           transition:transform .06s ease-out, background .06s ease-out, box-shadow .06s ease-out;
+           -webkit-tap-highlight-color:transparent; touch-action:none; user-select:none; }
+  .actBtn:active{ transform:scale(.88); background:rgba(90,160,255,.78); box-shadow:0 0 0 6px rgba(120,180,255,.22),0 4px 14px rgba(0,0,0,.35); }
+  #bJump  { right:24px;  bottom:calc(36px + var(--safe-b)); }
+  /* DESLIZAR es el boton que mas se usa en movimiento: el mas grande de los tres y bien separado */
+  #bSlide { right:122px; bottom:calc(52px + var(--safe-b)); width:96px; height:96px; font-size:12px;
+            background:rgba(26,44,36,.62); border-color:rgba(170,255,210,.5); }
+  #bSlide:active{ background:rgba(80,220,150,.78); box-shadow:0 0 0 7px rgba(90,230,160,.25),0 4px 14px rgba(0,0,0,.35); }
+  /* mientras deslizás el boton queda encendido: se ve que el encadenado esta disponible */
+  body.deslizando #bSlide{ background:rgba(80,220,150,.55); border-color:rgba(190,255,225,.85); }
   /* ===== CAMPO DE TIRO: gatillo + recarga + HUD de puntaje ===== */
-  #bFire  { right:118px; bottom:calc(150px + var(--safe-b)); width:88px; height:88px; font-size:12px;
+  #bFire  { right:124px; bottom:calc(168px + var(--safe-b)); width:96px; height:96px; font-size:12px;
             background:rgba(58,26,26,.62); border-color:rgba(255,190,170,.55); }
   #bFire:active{ background:rgba(255,120,80,.72); }
-  #bReload{ right:216px; bottom:calc(74px + var(--safe-b)); width:56px; height:56px; font-size:20px; }
+  #bReload{ right:238px; bottom:calc(70px + var(--safe-b)); width:62px; height:62px; font-size:20px; }
   /* APUNTAR: un FPS necesita su propio botón de mira, no alcanza con gatillo y recarga */
-  #bAds{ right:210px; bottom:calc(148px + var(--safe-b)); width:66px; height:66px; font-size:10px; letter-spacing:.02em; }
+  #bAds{ right:236px; bottom:calc(172px + var(--safe-b)); width:78px; height:78px; font-size:10px; letter-spacing:.02em; }
   #bAds.on{ background:rgba(224,118,31,.72); border-color:rgba(255,220,180,.9); }
   /* CRUCETA: una CRUZ blanca de cuatro brazos con hueco en el medio y punto al centro (el círculo
      de antes no marcaba el centro con precisión). Los cuatro brazos son cuatro degradados sobre el
@@ -859,6 +869,30 @@ function recorteCabeza(m,idx){ if(!m||m.userData._cab)return; m.userData._cab=tr
       'void main() {\n  vCab=_esCab(skinIndex.x)*skinWeight.x+_esCab(skinIndex.y)*skinWeight.y+_esCab(skinIndex.z)*skinWeight.z+_esCab(skinIndex.w)*skinWeight.w;');
     sh.fragmentShader='uniform float uCut;\nvarying float vCab;\n'+sh.fragmentShader.replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\n  if(vCab>uCut) discard;'); };
   m.needsUpdate=true; }
+/* SOLO LOS BRAZOS EN PRIMERA PERSONA. La cabeza ya se recortaba por hueso en el shader; el torso,
+   la cadera y las piernas seguian ahi y se veian al mirar para abajo o al deslizarse. Este recorte
+   es el complementario: calcula cuanto pesa el vertice sobre los huesos de BRAZO/ANTEBRAZO/MANO y
+   descarta todo lo que no llegue al minimo. En tercera persona el minimo se pone en -1 y no descarta
+   nada, asi los demas jugadores te ven entero. */
+const BRZ_MAX=24;
+let _brzCut=null;
+function recorteBrazos(m,idx){ if(!m||m.userData._brz)return; m.userData._brz=true;
+  const lista=new Float32Array(BRZ_MAX); for(let i=0;i<BRZ_MAX;i++) lista[i]=(i<idx.length?idx[i]:-99);
+  const uKeep={value:0.5}, uN={value:Math.min(BRZ_MAX,idx.length)}, uL={value:lista};
+  m.userData.uBrz=uKeep; (_brzCut=_brzCut||[]).push(uKeep);
+  const prev=m.onBeforeCompile;
+  m.onBeforeCompile=sh=>{ if(prev)prev(sh);
+    sh.uniforms.uKeep=uKeep; sh.uniforms.uBrzN=uN; sh.uniforms.uBrzL=uL;
+    sh.vertexShader=sh.vertexShader.replace('void main() {',
+      'varying float vBrz;\nuniform float uBrzL['+BRZ_MAX+'];\nuniform float uBrzN;\n'+
+      'float _esBrz(float i){ for(int k=0;k<'+BRZ_MAX+';k++){ if(float(k)>=uBrzN) break; if(abs(i-uBrzL[k])<0.5) return 1.0; } return 0.0; }\n'+
+      'void main() {\n  vBrz=_esBrz(skinIndex.x)*skinWeight.x+_esBrz(skinIndex.y)*skinWeight.y+_esBrz(skinIndex.z)*skinWeight.z+_esBrz(skinIndex.w)*skinWeight.w;');
+    sh.fragmentShader='uniform float uKeep;\nvarying float vBrz;\n'+sh.fragmentShader.replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\n  if(uKeep>=0.0 && vBrz<uKeep) discard;'); };
+  m.needsUpdate=true; }
+/* en primera persona solo brazos; en tercera, el cuerpo entero */
+function soloBrazos(on){ if(!_brzCut)return; const v=on?0.5:-1;
+  for(const u of _brzCut) u.value=v; }
+
 let _cabListo=false;
 function prepararCuerpo(){ if(_cabListo||!bodySkinMeshes.length)return;
   const sk=bodySkinMeshes[0].skeleton; if(!sk)return;
@@ -866,10 +900,16 @@ function prepararCuerpo(){ if(_cabListo||!bodySkinMeshes.length)return;
   sk.bones.forEach((b,i)=>{ if(/^(head|head_end|headfront)$/i.test(b.name||'') && k<3) idx[k++]=i; });
   if(idx[0]<0)return;
   _cabListo=true;
+  /* los huesos que SI se ven en primera persona: brazo, antebrazo, mano y dedos. Nada de hombro,
+     que arrastra el pecho. */
+  const brz=[];
+  sk.bones.forEach((b,i)=>{ const n=(b.name||'');
+    if(/(fore)?arm|hand|thumb|index|middle|ring|pinky|finger/i.test(n) && !/shoulder|clavicle/i.test(n)) brz.push(i); });
   for(const o of bodySkinMeshes){ const ms=Array.isArray(o.material)?o.material:[o.material];
     // 0,20 m = el mismo corte que hacía el near plane original. Al deslizarse el hombro pasa a 5 cm de la lente:
     // con un recorte chico se dibujaban triángulos gigantes (láminas de piel) que tapaban la pantalla.
-    ms.forEach(m=>{ recorteCerca(m,0.20); recorteCabeza(m,idx); }); }
+    ms.forEach(m=>{ recorteCerca(m,0.20); recorteCabeza(m,idx); if(brz.length) recorteBrazos(m,brz); }); }
+  try{ console.log('cuerpo: huesos de brazo',brz.length); }catch(e){}
 }
 
 /* ---- fogonazo: estrella con degradé (un plano liso se ve como un cuadrado blanco) ---- */
@@ -5039,7 +5079,9 @@ const GUN_OJO=new THREE.Vector3(0.115,-0.175,0.460);   // más abajo: con el pu�
 /* Medido con alza(), no a ojo: con +0.014 el alza quedaba 13 px ARRIBA del centro. 13 px sobre 300
    a 0.648 m con FOV 48 son 12.5 mm, asi que el ajuste real es +0.0015 — o sea que el valor original
    ya estaba bien y las dos correcciones que hice mirando la foto sobraban. */
-const GUN_OJO_ADS=new THREE.Vector3(0.000,-AK_MIRA_Y*GUN_ESC+0.0015,0.660);
+/* El resto es un desvio CONSTANTE de 7 px hacia arriba en todo el rango de pitch: 7 px sobre 300 a
+   0.65 m con FOV 48 son 6.7 mm, asi que el arma baja esos 6.7 mm. */
+const GUN_OJO_ADS=new THREE.Vector3(0.000,-AK_MIRA_Y*GUN_ESC-0.0052,0.660);
 /* MENÚ (pantalla de operador). El fusil no se sostiene apuntando: cuelga en LISTO BAJO, cruzado
    sobre el pecho y con la boca abajo, que es como se para un operador en la pantalla de selección.
    Sale del MISMO ancla de ojo que todo lo demás, así las manos y el cuerpo lo siguen con el mismo IK. */
@@ -5115,7 +5157,9 @@ function tiroPostura(dt){
   // piezas sueltas esto es una línea; con el modelo skinned hacía falta descartar por peso en el fragment shader.
   { const enTP=(camView==='tp'||player.camTP>0.30);
     if(cuCabezaG&&cuCabezaG.visible!==enTP) cuCabezaG.visible=enTP;
-    if(cuSoloTP.length&&cuSoloTP[0].visible!==enTP) for(const m of cuSoloTP) m.visible=enTP; }
+    if(cuSoloTP.length&&cuSoloTP[0].visible!==enTP) for(const m of cuSoloTP) m.visible=enTP;
+    /* en 1ª persona se ven SOLO los brazos; en 3ª, el cuerpo entero (que es lo que ven los demas) */
+    if(_brzCut && _brzCut.length && (_brzCut[0].value>=0)!==!enTP) soloBrazos(!enTP); }
   const spd=Math.hypot(player.vel.x,player.vel.z), sn=Math.min(1,spd/RUN);
   const mov=sn, quieto=Math.max(0,1-spd/1.2);      // función de activación (0..1) como en la referencia
   // ---- fases ----
@@ -5265,6 +5309,10 @@ function tiroPostura(dt){
   // 27°); el que rompe es mirar arriba, porque a pitch 1.2 el hombro derecho se va a z=+0.204, o sea 20 cm
   // DETRÁS de la lente, y la columna se arquea encima. Subir el arma 0.062·pitch recupera medio cuadro
   // (ndc.y −2.03 → −1.51 en el barrido); tocar z lo empeoraba en las 12 combinaciones probadas.
+  /* pUp levanta el arma al mirar hacia arriba: 0.062 m por radian. De cadera esta bien —el fusil
+     acompaña el gesto— pero APUNTANDO saca la mira del centro justo cuando mas se nota. Medido con
+     alza(): mirando a 1.2 rad arriba el alza quedaba 84 px sobre el centro, y 0.062*1.2 = 74 mm a
+     0.65 m con FOV 48 son 84 px exactos. Apuntando se apaga, igual que el golpe de aterrizaje. */
   const pUp=Math.max(0,pit);
   _gOjo.lerpVectors(GUN_OJO, GUN_OJO_ADS, adsW*(1-aRel));   // apuntando el arma sube al eje de la vista
   if(mnu) _gOjo.copy(GUN_OJO_MENU).setY(GUN_OJO_MENU.y + Math.sin(menuT*0.55)*0.006);   // menú: listo bajo, respirando
@@ -5285,7 +5333,7 @@ function tiroPostura(dt){
     // compensar y queda sólo carácter, del mismo orden que el −0.030 del esprint. Asentarse, no esconderse.
     // esprint: −0.085 (era −0.030). El pitch de esprint gira el arma alrededor del OJO, así que cada rad
     // sube el agarre 0,43 m; con GUN_OJO.y en −0.115 la mano izquierda terminaba sobre la cruceta.
-    .addScaledVector(_cu, _gOjo.y + bobY*(1-0.95*adsW) + respY*(1-0.95*adsW) + 0.062*pUp - landK*0.55 + aSpr*(-0.043) + sSld*(-0.030) + aRel*0.050 + RC.kick*0.02
+    .addScaledVector(_cu, _gOjo.y + bobY*(1-0.95*adsW) + respY*(1-0.95*adsW) + 0.062*pUp*(1-adsW) - landK*0.55*(1-0.8*adsW) + aSpr*(-0.043) + sSld*(-0.030) + aRel*0.050 + RC.kick*0.02
                           + sSld*(Math.sin(sldFase*37.0)*0.0065 + Math.sin(sldFase*22.0)*0.0040))
     .addScaledVector(_cf, _gOjo.z + bobZ - recBack + aSpr*(-0.055) + sSld*(-0.030) - aRel*0.135
                           + sSld*Math.sin(sldFase*25.0)*0.0055);
@@ -6317,10 +6365,20 @@ addEventListener('pointerup',endTouch); addEventListener('pointercancel',endTouc
 function tapBtn(id,fn){ const el=document.getElementById(id); if(!el)return;   // sin el guarda, un id ausente cortaba el resto del cableado
   el.addEventListener('pointerdown',e=>{ if(editHUD)return; e.preventDefault();e.stopPropagation();fn();}); }
 tapBtn('bJump',()=>{ jumpReq=true; });
-tapBtn('bSlide',()=>{ startSlide(); });
+/* OJO: bSlide NO va por tapBtn. Su cableado propio (abajo) atiende touchstart y pointerdown, y si
+   ademas quedaba el tapBtn, cada toque llamaba a startSlide DOS veces — el segundo se comia la
+   ficha del encadenado en el mismo cuadro. */
 { const bs=document.getElementById('bSlide');   // mantener el botón alarga el deslizamiento mientras haya velocidad
-  if(bs){ const soltar=()=>{ sldHold=false; };
-    bs.addEventListener('pointerdown',()=>{ if(!editHUD) sldHold=true; });
+  if(bs){ const soltar=e=>{ if(e&&e.preventDefault)e.preventDefault(); sldHold=false; };
+    /* El toque tiene que disparar YA. Con touchstart y passive:false el deslizamiento arranca en el
+       mismo cuadro del dedo, sin esperar a que el navegador decida si era un scroll — que es de donde
+       venia la sensacion de tosco. pointerdown queda para mouse y lapiz. */
+    const apretar=e=>{ if(e&&e.preventDefault)e.preventDefault(); if(editHUD)return;
+      sldHold=true; startSlide(); };
+    bs.addEventListener('touchstart',apretar,{passive:false});
+    bs.addEventListener('touchend',soltar,{passive:false});
+    bs.addEventListener('touchcancel',soltar,{passive:false});
+    bs.addEventListener('pointerdown',e=>{ if(e.pointerType==='touch')return; apretar(e); });
     bs.addEventListener('pointerup',soltar); bs.addEventListener('pointercancel',soltar); bs.addEventListener('pointerleave',soltar); } }
 // (sin voltereta)
 /* DESLIZAMIENTO. Tres cosas nuevas:
