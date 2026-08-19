@@ -8011,7 +8011,7 @@ try{ window.__tiro={
       for(let a=0;a<cand.length;a++){ const h=cand[a];
         let ok=true;
         for(let k=0;k<tocan.length;k++){ const c=tocan[k];
-          if(c.maxy>h+0.14 && c.miny<h+ALTO){ ok=false; break; } }   // 0.14: la losa que te sostiene no se descarta a si misma
+          if(c.maxy>h+0.42 && c.miny<h+ALTO){ ok=false; break; } }   // lo que asoma menos de 42 cm es ESCALON, no techo: sin esto no se podia subir una escalera
         if(!ok) continue;
         let rep=false; for(let b=0;b<libres.length;b++) if(Math.abs(libres[b]-h)<0.3){ rep=true; break; }
         if(rep) continue;
@@ -8031,13 +8031,34 @@ try{ window.__tiro={
           const tope = (t && esT[n2][b]) ? PEND*C : PASO;      // terreno: pendiente; cajas: escalon
           if(dh>tope) continue; if(dh<-CAIDA) continue;
           meter(ni,nj,b); } } }
+    /* los nodos alcanzados, ya decodificados: para cada punto que NO se alcanza queremos saber
+       CUAL es el nodo pisable mas cercano al que si se llega -- ahi esta el corte. */
+    const llegan=[];
+    for(const k of vis.keys()){ const dp=k.indexOf(':'), o=+k.slice(0,dp), l=+k.slice(dp+1);
+      llegan.push([(o%NX)*C+X0, ((o-o%NX)/NX)*C+Z0, niv[o][l]]); }
     const res=(pois||[]).map(p=>{
       const i=Math.round((p.p[0]-X0)/C), j=Math.round((p.p[1]-Z0)/C);
       const L=niv[idx(i,j)]||[];
       let mejor=-1, dmin=1e9;
       for(let b=0;b<L.length;b++){ const d=(p.y==null)?0:Math.abs(L[b]-p.y); if(d<dmin){dmin=d;mejor=b;} }
-      return {n:p.n, p:p.p, y:(mejor>=0? +L[mejor].toFixed(2):null), pedida:p.y, niveles:L.length,
-              ok:(mejor>=0 && vis.has(idx(i,j)+':'+mejor)), dif:(mejor>=0?+dmin.toFixed(2):null)}; });
+      /* el punto de interes se busca en un entorno de 5x5 celdas: si el centro exacto cae sobre una
+         mesa o una maquina, el cuarto igual es accesible por al lado. */
+      let alc=false, yAlc=null, R=Math.ceil(2.5/C);
+      for(let di=-R;di<=R&&!alc;di++) for(let dj=-R;dj<=R&&!alc;dj++){
+        const ii=i+di, jj=j+dj; if(ii<0||jj<0||ii>=NX||jj>=NZ) continue;
+        const LL=niv[idx(ii,jj)]||[];
+        for(let b=0;b<LL.length;b++) if(vis.has(idx(ii,jj)+':'+b) && (p.y==null || Math.abs(LL[b]-p.y)<1.5)){ alc=true; yAlc=+LL[b].toFixed(2); break; } }
+      /* el corte: nodo alcanzado mas cercano al objetivo (distancia real en 3 dimensiones) */
+      let corte=null;
+      if(!alc){ const oy=(p.y==null? (mejor>=0?L[mejor]:0) : p.y);
+        let d2=1e18;
+        for(let a=0;a<llegan.length;a++){ const q=llegan[a];
+          const dx=q[0]-p.p[0], dz=q[1]-p.p[1], dy=q[2]-oy, d=dx*dx+dz*dz+dy*dy;
+          if(d<d2){ d2=d; corte=[+q[0].toFixed(1),+q[2].toFixed(2),+q[1].toFixed(1)]; } }
+        if(corte) corte={x:corte[0], y:corte[1], z:corte[2], dist:+Math.sqrt(d2).toFixed(2)}; }
+      return {n:p.n, p:p.p, y:(mejor>=0? +L[mejor].toFixed(2):null), yAlc, pedida:p.y, niveles:L.length,
+              ok:alc, dif:(mejor>=0?+dmin.toFixed(2):null), corte,
+              alturas:(mejor>=0? L.map(v=>+v.toFixed(2)).sort((a,b)=>a-b) : [])}; });
     let pis=0; for(let k=0;k<niv.length;k++) if(niv[k]&&niv[k].length) pis++;
     return {celda:C, celdas:NX*NZ, pisables:pis, nodos:vis.size, pois:res}; },
   posIsla:(x,z,y)=>{ player.pos.set(x,(y==null?alcH(x,z)+0.1:y),ALC_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; return +player.pos.y.toFixed(2); },
