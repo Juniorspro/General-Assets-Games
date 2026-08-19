@@ -1360,12 +1360,13 @@ let torsoR=null;
 function torsoInit(){ if(torsoR||!mskBind)return;
   const f=n=>mskBind.filter(r=>(r.h.name||'').toLowerCase().replace('mixamorig','')===n)[0]||null;
   torsoR=TORSO_ORD.map(f); }
+const _tU=new THREE.Quaternion(), _tV=new THREE.Vector3();
 const _tP=new THREE.Quaternion(),_tD=new THREE.Quaternion(),_tC=new THREE.Quaternion(),
       _tK=new THREE.Quaternion(),_tW=new THREE.Quaternion(),_tI=new THREE.Quaternion();
 function mskTorsoMundo(){
   torsoInit(); if(!torsoR||!torsoR[0]||!mskHips||!mskHips.h.parent)return;
   mskHips.h.parent.getWorldQuaternion(_tP);                                  // 'Armature': trae faceYaw
-  _tD.copy(mskHips.h.quaternion).multiply(_tI.copy(mskHips.q).invert());     // desvío de la cadera
+  _tD.copy(mskHips.h.quaternion).multiply(_tI.copy(mskHips.q).invert());     // desvío contra el reposo del CLIP
   _tC.copy(mskHips.q);                                                       // cadena base acumulada
   for(let i=0;i<3;i++){ const r=torsoR[i]; if(!r)continue;
     _tC.multiply(r.q);
@@ -1374,7 +1375,15 @@ function mskTorsoMundo(){
     // getWorldQuaternion() hace updateWorldMatrix(true,false): recompone la matriz local del padre desde
     // el quaternion recién escrito, así que el hijo ya ve al padre corregido sin updateMatrixWorld(true).
     r.h.parent.getWorldQuaternion(_tI); _tI.invert();
-    r.h.quaternion.copy(_tI).multiply(_tW); }
+    r.h.quaternion.copy(_tI).multiply(_tW);
+    /* Y TAMBIÉN LA POSICIÓN DEL ARRANQUE DEL TRONCO. Corregir sólo las orientaciones dejaba la primera
+       vértebra colgando de la cadera ANIMADA: su offset de bind se giraba con esos 130° de diferencia
+       entre los dos espacios y Spine02 terminaba 6 cm POR DEBAJO de la cadera. Se recoloca con el
+       mismo offset de bind pero girado por la cadera ERGUIDA; de ahí para arriba la cadena ya hereda
+       bien, porque cada vértebra cuelga de una orientación que acabamos de fijar. */
+    if(i===0){ _tU.copy(_tP).multiply(_tK).multiply(mskHips.q);       // cadera "erguida" (sin el vuelco de más) en mundo
+      _tV.copy(r.p).applyQuaternion(_tU);              // offset de bind, en MUNDO
+      r.h.position.copy(_tV.applyQuaternion(_tI)); } } // …y de vuelta al marco del padre
 }
 const _ikA=new THREE.Vector3(),_ikB=new THREE.Vector3(),_ikC=new THREE.Vector3(),_ikT=new THREE.Vector3(),
       _ikD=new THREE.Vector3(),_ikN=new THREE.Vector3(),_ikP=new THREE.Vector3(),_ikU=new THREE.Vector3(),
@@ -2269,9 +2278,16 @@ function cuVestir(h){
 function cuClips(){
   const out=[];
   for(const nm in CUERPO_DATOS.c){ const c=CUERPO_DATOS.c[nm], tk=[];
+    /* EL CUERPO NO SE ANIMABA. Las pistas horneadas guardan la rotación en `r` y la traslación en
+       `t` (cada una {t:[tiempos], v:[valores]}), y acá se buscaban `q` y `p`: NINGUNA de las dos
+       existe, así que los cinco clips se construían con CERO pistas. El personaje era un maniquí
+       clavado —ni idle, ni caminar, ni correr, ni deslizarse— y el mixer avanzaba en el vacío.
+       Medido antes del arreglo: cadera 1.007 m y pies 0.122/0.130 IDÉNTICOS parado, corriendo y
+       deslizándose. Se aceptan los dos nombres por si alguna vez se hornea con el otro. */
     for(const h in c.b){ const b=c.b[h];
-      if(b.q) tk.push(new THREE.QuaternionKeyframeTrack(h+'.quaternion', b.q.t, b.q.v));
-      if(b.p) tk.push(new THREE.VectorKeyframeTrack(h+'.position', b.p.t, b.p.v)); }
+      const R=b.r||b.q, T=b.t||b.p;
+      if(R) tk.push(new THREE.QuaternionKeyframeTrack(h+'.quaternion', R.t, R.v));
+      if(T) tk.push(new THREE.VectorKeyframeTrack(h+'.position', T.t, T.v)); }
     out.push(new THREE.AnimationClip(nm, c.d, tk)); }
   return out;
 }
@@ -2297,11 +2313,28 @@ function construirCuerpo(){
   for(const b of bs){ const n=b.name.toLowerCase();
     if(n==='head')bodyHead=b; else if(n==='neck')bodyNeck=b; else if(n==='hips')bodyHips=b;
     tiroGrabBone(b); }
-  bodyHipsBind=bodyHips?bodyHips.position.clone():null;
+  /* DOS ESPACIOS DISTINTOS EN EL MISMO RIG. Las poses de bind del array de huesos y las pistas
+     horneadas no comparten origen: la cadera del primer fotograma del idle está 130° girada respecto
+     a la del esqueleto. Las piernas están horneadas contra la cadera del CLIP (por eso quedan bien),
+     pero las vértebras están medidas contra la del ESQUELETO, así que colgadas de la cadera animada
+     se llevaban esos 130° puestos y el personaje quedaba doblado en dos (parado, la cabeza a 0,71 m
+     del piso, por DEBAJO de la cadera). Se corrige UNA VEZ en el hueso donde empieza el tronco: con
+     Spine02 pre-girado por (cadera_clip⁻¹ · cadera_esqueleto), el rig entero queda en el espacio del
+     clip y todo lo que cuelgue de ahí —incluidos los clones de los jugadores remotos— sale derecho. */
+  { const _ic=CUERPO_DATOS.c&&CUERPO_DATOS.c.idle, _hb=_ic&&_ic.b&&_ic.b.Hips, _hr=_hb&&(_hb.r||_hb.q);
+    const _v=_hr&&_hr.v;
+    if(_v&&_v.length>=4&&bodyHips){
+      const _qC=new THREE.Quaternion(_v[0],_v[1],_v[2],_v[3]).normalize();
+      const _fx=_qC.clone().invert().multiply(bodyHips.quaternion);     // clip → esqueleto
+      const _sp=bs.filter(b=>/^spine02$/i.test(b.name||''))[0];
+      if(_sp){ _sp.quaternion.premultiply(_fx); _sp.position.applyQuaternion(_fx); } } }
   const clips=cuClips();
   bodyMixer=new THREE.AnimationMixer(inner);
   clips.forEach(cl=>{ const a=bodyMixer.clipAction(cl); a.setLoop(THREE.LoopRepeat); a.clampWhenFinished=false; bodyActions[cl.name]=a; });
   try{ mskCapturar(inner, clips); }catch(e){ console.warn('mascara',e); }
+  // el tope de la cadera se mide contra el reposo de la ANIMACIÓN (primer fotograma del idle: y=90,0),
+  // no contra el del esqueleto (y=92,5): son espacios distintos y la diferencia son 27 mm de deriva.
+  bodyHipsBind=(mskHips&&mskHips.p)?mskHips.p.clone():(bodyHips?bodyHips.position.clone():null);
   setAnim('idle');
   try{ applySkin(equippedSkin); }catch(e){}
   mpBodySrc=inner; mpClips=clips;          // los avatares remotos clonan el mismo cuerpo
@@ -2446,13 +2479,29 @@ let sensMul=1; try{ const v=parseFloat(localStorage.getItem('pf_sens')); if(v>=0
 let lefty=false;   // modo zurdo: joystick a la derecha → cámara con la mitad izquierda
 function isRightSide(e){ const look = rot ? (e.clientY > innerHeight*0.5) : (e.clientX > innerWidth*0.5); return lefty ? !look : look; }
 function isBtn(t){ return !!(t&&t.closest&&(t.closest('.actBtn')||t.closest('button'))); }   // un botón real (saltar/deslizar/rodar/chat/micro/menú…) → se maneja solo
+/* BOTONES DE ACCIÓN: no se comen el dedo. Apretás FUEGO, APUNTAR, recargar, SALTAR o DESLIZAR y con
+   ESE MISMO dedo podés arrastrar para mover la cámara, como en cualquier shooter de celular. El
+   joystick es la excepción a propósito: ahí el arrastre ES el movimiento, y si además girara la
+   vista no se podría caminar derecho. Chat, micro y menú tampoco: son diálogos, no puntería. */
+const BOT_ACC=['bFire','bAds','bReload','bJump','bSlide'];
+function botonAccion(t){ const b=(t&&t.closest)?t.closest('.actBtn,button'):null;
+  return (b && BOT_ACC.indexOf(b.id)>=0) ? b : null; }
 function gameplayActive(){ if(menuMode||editHUD)return false;
   const pz=document.getElementById('pause'); if(pz&&pz.classList.contains('show'))return false;
   const kb=document.getElementById('kbd'); if(kb&&kb.classList.contains('show'))return false;
   if(document.querySelector('.ovl.show'))return false; return true; }
 let touchL=null, touchR=null;   // máximo un dedo por lado = 2 dedos en total mientras jugás
 function joyReset(){ joy.x=0; joy.y=0; knob.style.transform='translate(0,0)'; }
-addEventListener('pointerdown',e=>{ if(!gameplayActive())return; if(isBtn(e.target))return;   // botón → su propio handler (tap, cualquier lado)
+addEventListener('pointerdown',e=>{ if(!gameplayActive())return;
+  if(isBtn(e.target)){
+    const ba=botonAccion(e.target);
+    // botón de acción: el dedo hace las DOS cosas (la acción y la cámara). Nada de preventDefault
+    // acá: el botón tiene que recibir su propio pointerdown. Y se le da CAPTURA del puntero para
+    // que arrastrar afuera no dispare pointerleave (que es lo que soltaba la mira y la deslizada).
+    if(ba && !touchR && e.pointerType!=='mouse'){
+      touchR={id:e.pointerId,sx:e.clientX,sy:e.clientY,on:false,btn:true};
+      try{ ba.setPointerCapture(e.pointerId); }catch(err){} }
+    return; }                                                     // el resto de los botones: su propio handler
   if(isRightSide(e)){ if(touchR)return; touchR={id:e.pointerId,sx:e.clientX,sy:e.clientY,on:false}; }   // 2º dedo en el mismo lado se ignora
   else { if(touchL)return; touchL={id:e.pointerId,sx:e.clientX,sy:e.clientY,on:false}; joyR=(joyEl.clientWidth/2)||64; }
   e.preventDefault(); }, true);
@@ -3085,6 +3134,12 @@ function mpRig(r){
   if(!mpBodySrc||!mpClips){   // provisional (cápsula) hasta que cargue el GLB
     const cap=new THREE.Mesh(new THREE.CapsuleGeometry(0.32,1.0,6,12), new THREE.MeshStandardMaterial({color:r.color,roughness:0.55})); cap.position.y=0.85; cap.castShadow=true; r.avatar.add(cap); r.body=cap; r.rigged=false; return; }
   const cl=SkeletonUtils.clone(mpBodySrc);
+  // el clon hereda la pose EN CURSO del jugador local (tronco compuesto, brazos con IK puestos en el
+  // fusil). El mixer sólo pisa cadera y piernas, así que sin esto el remoto quedaba con el torso
+  // congelado en la última postura de tiro del jugador de acá.
+  if(mskBind) { const _pn=new Map(); mskBind.forEach(r=>_pn.set(r.h.name,r));
+    cl.traverse(o=>{ if(!o.isBone)return; const r=_pn.get(o.name); if(!r)return;
+      o.quaternion.copy(r.q); o.position.copy(r.p); o.scale.copy(r.e); }); }
   cl.visible=true;   // ¡OJO! si el jugador local tiene un personaje puesto, mpBodySrc está oculto y el clon hereda visible=false → remotos invisibles
   cl.traverse(o=>{ o.visible=true; if(o.isMesh){ o.castShadow=true; o.frustumCulled=false; const ms=(Array.isArray(o.material)?o.material:[o.material]).map(m=>m?m.clone():m); o.material=Array.isArray(o.material)?ms:ms[0]; ms.forEach(m=>{ if(m)m.side=THREE.DoubleSide; }); }   // materiales propios por avatar (la skin local no tiñe a los demás) + DoubleSide (cuerpo sólido)
     if(o.isBone && /^Hips$|pelvis|cadera/i.test(o.name)){ r.hips=o; r.hipsBind=o.position.clone(); } });
