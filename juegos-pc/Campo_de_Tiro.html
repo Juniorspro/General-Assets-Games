@@ -1194,7 +1194,9 @@ const ALC_DATOS={
     {t:'bloque',p:[10,34.0,-9],ry:0,celdas:30,pisos:3,m:'hormigon'},
     {t:'patio',p:[-30,34,42],s:[62,6.4,44],ry:0,gradas:5},
     {t:'arbol',p:[100,41,30],h:11},{t:'arbol',p:[112,41,36],h:8},{t:'arbol',p:[88,40,38],h:13},
-    {t:'torre',p:[196,14,64],h:13},{t:'barco',p:[224,0.2,52],ry:0.2,h:17}
+    {t:'torre',p:[196,14,64],h:13},{t:'barco',p:[224,0.2,52],ry:0.2,h:17},
+    {t:'luz',p:[-8,40,-18],r:30,i:34},{t:'luz',p:[10,40,-18],r:30,i:34},{t:'luz',p:[28,40,-18],r:30,i:34},
+    {t:'luz',p:[-8,40,-32],r:24,i:22},{t:'luz',p:[10,40,-4],r:24,i:22},{t:'luz',p:[62,40,-18],r:30,i:26}
   ]
 };
 
@@ -1664,6 +1666,18 @@ function alcBarco(e){
   for(const c of [-1,1]) alcCaja(x+c*1.55, y+2.6, z-L*0.10-L*0.16, 0.6, 0.9, 0.06, 'vidrio', ry, true);
   alcCil(x, y+4.6, z-L*0.10, 0.07,0.07, 1.9, 5, 'metal', 0, true); }
 
+/* LUZ INTERIOR. Adentro del penal el sol no entra más que por las ventanas altas y el techo queda
+   negro. Un puñado de lámparas colgadas de las cerchas lo arregla: se cuelgan del grupo de la isla,
+   así que se apagan solas al salir del mundo. Van contadas — cada luz puntual cuesta en el shader —
+   y por eso hay un tope duro. */
+let _alcNLuz=0;
+function alcLuz(e){ if(_alcNLuz>=8)return; _alcNLuz++;
+  const p=e.p||[0,0,0];
+  const L=new THREE.PointLight(e.c||0xffe6bd, e.i||10, e.r||26, 2.0);
+  L.position.set(p[0],p[1],p[2]+ALC_GZ); alcGroup.add(L);
+  alcAdd('metal',new THREE.CylinderGeometry(0.30,0.42,0.20,8),p[0],p[1]+0.22,p[2],0);   // la pantalla
+  alcAdd('metal',new THREE.BoxGeometry(0.05,0.9,0.05),p[0],p[1]+0.75,p[2],0); }
+
 function alcElem(e){ if(!e||!e.t)return;
   switch(e.t){
     case 'edificio': alcEdificio(e); break;
@@ -1683,6 +1697,7 @@ function alcElem(e){ if(!e||!e.t)return;
     case 'patio':    alcPatio(e); break;
     case 'torre':    alcTorre(e); break;
     case 'barco':    alcBarco(e); break;
+    case 'luz':      alcLuz(e); break;
   } }
 
 /* fundir: cada material sale en UNA malla */
