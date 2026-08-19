@@ -4957,6 +4957,7 @@ function torcerMano(bone,rad,w){ if(!bone||!rad)return; _ikU.set(0,1,0).applyQua
   _qw.setFromAxisAngle(_ikU,rad); _qb.premultiply(_qw); _aimBone(bone,_qb,w); }   // giro de muñeca sobre el eje de los dedos
 const TIRO_DEDOS_R=new THREE.Vector3(), TIRO_DEDOS_L=new THREE.Vector3();
 const _ejeR=new THREE.Vector3(), _ejeL=new THREE.Vector3(), _m4=new THREE.Matrix4();
+const _refL=new THREE.Vector3(), _ejeN=new THREE.Vector3();
 /* Alinea el puño: X local = eje del agarre, Z local ≈ referencia (queda perpendicular). Con piezas rígidas
    se puede clavar la orientación exacta sin miedo: no hay piel que se estire. */
 function cuOrientarMano(bone,ejeX,ref,w){ if(!bone)return;
@@ -5433,9 +5434,19 @@ function tiroPostura(dt){
   // articulados no hay cierre, pero el arma queda ADENTRO del puño, que es lo que se ve.
   if(DBG.mun){
     _ejeR.set(0,Math.cos(0.30),Math.sin(0.30)).applyQuaternion(gunRoot.quaternion);
-    _ejeL.set(0,0,1).applyQuaternion(gunRoot.quaternion);
     cuOrientarMano(bRHand,_ejeR,_cf,1);
-    cuOrientarMano(bLHand,_ejeL,_cu,1);
+    /* IZQUIERDA: no agarra el guardamanos —el brazo no llega, esta medido mas arriba— sino el POZO DEL
+       CARGADOR. Ahi el eje que rodean los dedos no es el del caño sino el TRANSVERSAL del arma, y la palma
+       tiene que MIRAR al pozo. Antes la referencia era el "arriba" de la camara y la mano quedaba de canto,
+       colgando detras del guardamanos sin tocar nada. Ahora se construye: X = eje transversal, y la
+       referencia se elige para que el lado de la palma (+Y local) apunte del puño al pozo. */
+    _ejeL.set(1,0,0).applyQuaternion(gunRoot.quaternion);
+    _gp.set(0,-0.062,0.020).applyMatrix4(gunRoot.matrixWorld);
+    bLHand.getWorldPosition(_gA);
+    _ejeN.copy(_gp).sub(_gA);
+    _refL.crossVectors(_ejeL,_ejeN);
+    if(_refL.lengthSq()<1e-8) _refL.copy(_cu);
+    cuOrientarMano(bLHand,_ejeL,_refL.normalize(),1);
   }
   // ---- fogonazo y efectos cortos ----
   if(flashT>0){ gunFlash.visible=gunFlash2.visible=true;
@@ -5587,6 +5598,9 @@ try{ window.__tiro={
   // gancho para depurar/capturar: entra al nivel, avanza frames a mano y esconde el HUD
   entrar:()=>{ menuMode=false; try{ menuEl.classList.add('hide'); document.body.classList.remove('menu-open'); }catch(e){}
     applyQuality(menuQ); enterTiro(); return world; },
+  // pintar SIN avanzar el mundo: frames() llama a update() y update() vuelve a colocar la camara,
+  // asi que para un primer plano hay que poder renderizar sin que nada la mueva
+  foto:()=>{ renderer.render(scene,camera); return 1; },
   frames:(n,dt)=>{ for(let i=0;i<(n||8);i++){ update(dt||0.0166); try{tiroVis();}catch(e){} } renderer.render(scene,camera); return world; },
   hud:v=>{ document.body.classList.toggle('sinhud',!v); },
   pausa:v=>{ paused=!!v; return paused; },
@@ -6006,6 +6020,19 @@ try{ window.__tiro={
   // listar los huesos, para saber como se llaman de verdad
   huesosLista:()=>{ const a=[]; if(bodyInner) bodyInner.traverse(o=>{ if(o.isBone) a.push(o.name); }); return a; },
   puno:(v)=>{ for(const g of cuManos) cuCerrar(g,v); return cuManos.length; },
+  // correr el hueco del puño en vivo, para calzar el mango sin recompilar
+  manoOff:(x,y,z,lado)=>{ const V=(lado<0?CU_HUECO_L:CU_HUECO_R); V.set(x,y,z);
+    for(const g of cuManoGrupos){ if(g.userData.hueco===V) g.position.set(-x*U,-y*U,-z*U); } return V.toArray(); },
+  /* MIRAR UNA PIEZA SOLA. Los primeros planos de la mano salian ilegibles: el antebrazo y el fusil
+     se metian delante y lo unico que se veia eran bloques verdes. Esto apaga todas las piezas del
+     cuerpo salvo las que cuelgan del hueso pedido, y opcionalmente esconde el arma. solo(null) devuelve todo. */
+  solo:(n,conArma)=>{ if(!bodyInner) return 0;
+    if(n===null||n===undefined){ for(const m of cuPiezas) m.visible=true; if(gunRoot)gunRoot.visible=true; return -1; }
+    const raiz=__tiro.hueso(n); if(!raiz) return 'sin hueso '+n;
+    const dentro=new Set(); raiz.traverse(o=>dentro.add(o));
+    let v=0; for(const m of cuPiezas){ const ok=dentro.has(m); m.visible=ok; if(ok)v++; }
+    if(gunRoot) gunRoot.visible=!!conArma;
+    return v; },
   pose:()=>({ paso:+paso.toFixed(2), spr:+aSpr.toFixed(2), sld:+aSld.toFixed(2), aire:+aAir.toFixed(2),
     lagY:+lagY.toFixed(4), lagP:+lagP.toFixed(4), land:+landK.toFixed(3), vida:TIRO_VIDA,
     quieto:+quietoT.toFixed(2), aQui:+aQui.toFixed(3), idleT:+idleT.toFixed(2), idleEsp:+idleEsp.toFixed(2) }),
@@ -6082,6 +6109,13 @@ function cuMats(){
   CU_MAT.cara  =M(0x828b93,0.7,0.04);
 }
 const cuManos=[];   // los dos grupos de mano, para poder cerrar el puño
+const cuManoGrupos=[];
+/* Centro del aro del puño, en metros y en local de la mano. Va por separado para cada mano porque lo que
+   agarra cada una es muy distinto: la derecha envuelve una empuñadura de 40 mm y la izquierda se apoya
+   sobre un guardamanos de 68x92, que no se puede rodear — ahi la mano abre mas y monta por el costado. */
+const CU_HUECO_R=new THREE.Vector3(0, 0.033, -0.024);
+const CU_HUECO_L=new THREE.Vector3(0,-0.030, -0.010);
+const CU_CIERRE_R=0.62, CU_CIERRE_L=0.52;
 const cuCaja=(w,h,d)=>new THREE.BoxGeometry(w*U,h*U,d*U);
 const cuCaps=(r,l)=>new THREE.CapsuleGeometry(r*U,Math.max(0.004,l-2*r)*U,4,10);
 const cuEsf =(r)=>new THREE.SphereGeometry(r*U,12,9);
@@ -6100,52 +6134,61 @@ function cuPieza(padre,geo,x,y,z,mat,rx){
    indice, mayor, anular y meñique— con su separacion, y el pulgar cruza por el otro lado. Es lo que
    permite cerrarlos sobre el guardamanos y sobre la empuñadura en vez de taparlos. */
 function cuMano(hueso,lado){
-  /* LA MANO ES UNA SOLA PIEZA HASTA LOS NUDILLOS. Antes la palma estaba a z=+0.036 y los dedos a
-     z=-0.020: quedaba un hueco de 4,5 cm entre las dos partes y los dedos se veian flotando al
-     costado, con el bloque de nudillos tapando a medias — ese era el "cubo arriba de los dedos".
-     Ahora la palma corre de la muñeca a los nudillos en un solo bloque y los dedos arrancan
-     EXACTAMENTE en su cara delantera, asi no hay ni hueco ni pieza suelta.
-     Eje local: +Z hacia la muñeca, -Z hacia la punta de los dedos. */
+  /* PROPORCIONES DE MANO, NO UN CUBO. El error anterior era el grosor: la palma medía 86x88x90 mm,
+     o sea un dado, y por eso se veía "un cubo arriba de los dedos". Una palma real tiene el ancho
+     de los cuatro nudillos (~85 mm) y el largo de la muñeca a los nudillos (~90 mm), pero apenas
+     28 mm de espesor. Con el grosor corregido los dedos dejan de parecer flecos pegados a una caja.
+     Eje local: +Z hacia la muñeca, -Z hacia la punta de los dedos, Y = espesor. */
   const g=new THREE.Group(); hueso.add(g);
-  const PALMA_W=0.086, PALMA_H=0.088, PALMA_Z0=0.050, PALMA_Z1=-0.040;   // frente de los nudillos
+  /* EL HUECO DEL PUÑO VA EN EL ORIGEN DEL HUESO. El IK lleva la muñeca al centro de la empuñadura,
+     asi que si la palma esta centrada ahi el mango queda DENTRO de la carne y los dedos cierran al aire.
+     Corriendo el grupo entero por -CU_HUECO, el aro que forman palma + dedos cerrados queda justo
+     sobre el origen: ahi es donde aparece el mango. */
+  const HU=(lado>0?CU_HUECO_R:CU_HUECO_L);
+  g.userData.hueco=HU;
+  g.position.set(-HU.x*U, -HU.y*U, -HU.z*U);
+  cuManoGrupos.push(g);
+  const PALMA_W=0.084, PALMA_H=0.028, PALMA_Z0=0.048, PALMA_Z1=-0.042;
   const CZ=(PALMA_Z0+PALMA_Z1)/2, LZ=PALMA_Z0-PALMA_Z1;
-  cuPieza(g,cuCaja(PALMA_W,PALMA_H,LZ), 0, 0, CZ, CU_MAT.mano);          // palma entera
-  cuPieza(g,cuCaja(PALMA_W*0.92,0.030,0.070), 0,-PALMA_H/2+0.010, CZ+0.010, CU_MAT.mano);  // canto
+  cuPieza(g,cuCaja(PALMA_W,PALMA_H,LZ), 0, 0, CZ, CU_MAT.mano);                       // palma, de la muñeca a los nudillos
+  cuPieza(g,cuCaja(0.026,PALMA_H*0.95,0.052), -lado*(PALMA_W/2-0.008), 0, CZ+0.020, CU_MAT.mano); // canto (borde del meñique)
+  cuPieza(g,cuCaja(0.030,PALMA_H*1.15,0.050),  lado*(PALMA_W/2-0.010), 0, CZ+0.016, CU_MAT.mano); // monte del pulgar
 
   const dedos=[];
-  const LARGO=[0.036,0.040,0.037,0.030], PASO=0.0205, ANCHO=0.0175, ALTO=0.0235;
+  const LARGO=[0.040,0.044,0.040,0.032], PASO=0.0205, ANCHO=0.0185, ALTO=0.0205;
   for(let i=0;i<4;i++){
-    const x=(-1.5+i)*PASO, L1=LARGO[i], L2=L1*0.76;
+    const x=lado*(1.5-i)*PASO, L1=LARGO[i], L2=L1*0.78;    // i=0 índice (lado del pulgar) … i=3 meñique
     const b1=new THREE.Bone(); b1.name='dedo'+i+'_1'+(lado>0?'R':'L');
-    b1.position.set(x*U, 0.012*U, PALMA_Z1*U); hueso.add(b1);          // justo en la cara de los nudillos
+    b1.position.set(x*U, 0.001*U, PALMA_Z1*U); g.add(b1);          // arrancan EN la cara de los nudillos
     cuPieza(b1,cuCaja(ANCHO,ALTO,L1), 0, 0, -L1/2, CU_MAT.mano);
     const b2=new THREE.Bone(); b2.name='dedo'+i+'_2'+(lado>0?'R':'L');
     b2.position.set(0,0,-L1*U); b1.add(b2);
-    cuPieza(b2,cuCaja(ANCHO*0.9,ALTO*0.9,L2), 0, 0, -L2/2, CU_MAT.mano);
+    cuPieza(b2,cuCaja(ANCHO*0.88,ALTO*0.88,L2), 0, 0, -L2/2, CU_MAT.mano);
     dedos.push([b1,b2]);
   }
-  /* el pulgar sale del COSTADO de la palma, a la altura de la muñeca, y cierra cruzando */
+  /* el pulgar nace del monte, cerca de la muñeca, y apunta hacia adelante y hacia afuera */
   const t1=new THREE.Bone(); t1.name='pulgar1'+(lado>0?'R':'L');
-  t1.position.set(lado*(PALMA_W/2)*U, -0.008*U, (PALMA_Z0-0.030)*U); hueso.add(t1);
-  cuPieza(t1,cuCaja(0.024,0.026,0.038), lado*0.012, 0, -0.019, CU_MAT.mano);
+  t1.position.set(lado*(PALMA_W/2)*U, 0, (PALMA_Z0-0.028)*U); t1.rotation.y=-lado*0.62; g.add(t1);
+  cuPieza(t1,cuCaja(0.023,0.024,0.040), 0, 0, -0.020, CU_MAT.mano);
   const t2=new THREE.Bone(); t2.name='pulgar2'+(lado>0?'R':'L');
-  t2.position.set(lado*0.012*U, 0, -0.038*U); t1.add(t2);
-  cuPieza(t2,cuCaja(0.021,0.023,0.030), 0, 0, -0.015, CU_MAT.mano);
+  t2.position.set(0,0,-0.040*U); t1.add(t2);
+  cuPieza(t2,cuCaja(0.020,0.021,0.032), 0, 0, -0.016, CU_MAT.mano);
   dedos.push([t1,t2]);
 
   g.userData.dedos=dedos; g.userData.lado=lado;
   cuManos.push(g);
-  cuCerrar(g, 0.55);
+  cuCerrar(g, lado>0?CU_CIERRE_R:CU_CIERRE_L);
   return g;
 }
-/* cerrar el puño: 0 = mano abierta, 1 = puño cerrado del todo */
+/* cerrar el puño: 0 = mano abierta, 1 = puño cerrado del todo.
+   El pulgar ya nace girado hacia afuera (rotation.y de bind), asi que aca se le SUMA el cierre en vez
+   de pisarle la pose: si se le asigna la rotacion a secas el pulgar se endereza y sale disparado al costado. */
 function cuCerrar(g,v){
   const d=g&&g.userData&&g.userData.dedos; if(!d)return;
   const k=Math.max(0,Math.min(1,v)), lado=g.userData.lado||1;
-  for(let i=0;i<4;i++){ d[i][0].rotation.x=k*1.20; d[i][1].rotation.x=k*1.30; }
-  d[4][0].rotation.y=-lado*k*0.80; d[4][0].rotation.x=k*0.30; d[4][1].rotation.y=-lado*k*0.70;
-}
-/* EL ARMA NO SE ATRAVIESA CON EL CUERPO. El fusil se coloca por offsets y el IK lleva las manos a
+  for(let i=0;i<4;i++){ d[i][0].rotation.x=k*1.15; d[i][1].rotation.x=k*1.35; }
+  d[4][0].rotation.y=-lado*(0.62+k*0.40); d[4][0].rotation.x=k*0.38; d[4][1].rotation.x=k*0.60;
+}/* EL ARMA NO SE ATRAVIESA CON EL CUERPO. El fusil se coloca por offsets y el IK lleva las manos a
    sus agarres, asi que en poses cerradas —apuntando, recargando, deslizandose— el cajon terminaba
    metido adentro del antebrazo o del pecho. Esto lo empuja: se mide la penetracion contra dos
    cilindros simples, el del antebrazo izquierdo y el del torso, y se corre el arma lo justo para
@@ -6168,19 +6211,6 @@ function armaSinCruce(){
   _armaCorr=corr;
 }
 let _armaCorr=0;
-/* cerrar el puño: 0 = mano abierta, 1 = puño cerrado del todo */
-function cuCerrar(g,v){
-  const d=g&&g.userData&&g.userData.dedos; if(!d)return;
-  const k=Math.max(0,Math.min(1,v)), lado=g.userData.lado||1;
-  for(let i=0;i<4;i++){
-    d[i][0].rotation.x =  k*1.15;       // el dedo se dobla hacia la palma
-    d[i][1].rotation.x =  k*1.35;
-  }
-  // el pulgar cierra cruzando, sobre el eje contrario
-  d[4][0].rotation.y = -lado*k*0.85;
-  d[4][0].rotation.x =  k*0.35;
-  d[4][1].rotation.y = -lado*k*0.75;
-}
 function cuLargo(h){                                   // largo del hueso = distancia a su primer hijo (metros)
   const c=h.children.filter(o=>o.isBone)[0];
   return c? c.position.length()*CU_ESC : 0.08;
