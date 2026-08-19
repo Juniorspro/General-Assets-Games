@@ -8542,8 +8542,16 @@ const ALC_PEND_MAX=0.97;
    hace transitables los umbrales, los cordones, las gradas del patio y las escaleras del bloque. */
 const PASO_ALTO=0.38;
 function alcEscalon(c){ return player.onGround && c.maxy>player.pos.y && (c.maxy-player.pos.y)<=PASO_ALTO; }
+/* Lo que frena es la CUESTA EN LA DIRECCION DEL PASO, no la pendiente total del terreno. Un camino
+   cavado en la ladera tiene 0,29 de subida a lo largo y 1,4 de caida de costado: midiendo el modulo,
+   el jugador no podia subir del muelle a la cumbre aunque el camino estuviera perfecto. */
 function alcTrepa(nx,nz){ const x=nx, z=nz-ALC_GZ;
-  return (alcPend(x,z)>ALC_PEND_MAX && alcH(x,z)>player.pos.y+0.35); }
+  if(alcH(x,z) <= player.pos.y+0.35) return false;              // no sube: nada que trepar
+  const dx=nx-player.pos.x, dz=nz-player.pos.z, L=Math.hypot(dx,dz);
+  if(L<1e-5) return false;
+  const px=player.pos.x, pz=player.pos.z-ALC_GZ;
+  const h0=alcH(px,pz), h1=alcH(px+dx/L, pz+dz/L);              // un metro adelante
+  return (h1-h0) > ALC_PEND_MAX; }
 function moveX(d){ if(grassMode){ player.pos.x=Math.max(-GBND.x,Math.min(GBND.x,player.pos.x+d)); return; }
   if(islaMode && alcTrepa(player.pos.x+d, player.pos.z)) return;
   player.pos.x+=d; const a=pAABB(); for(const c of alcLista()){ if(alcEscalon(c)||c.piso)continue; if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
