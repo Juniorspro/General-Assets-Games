@@ -6100,42 +6100,50 @@ function cuPieza(padre,geo,x,y,z,mat,rx){
    indice, mayor, anular y meñique— con su separacion, y el pulgar cruza por el otro lado. Es lo que
    permite cerrarlos sobre el guardamanos y sobre la empuñadura en vez de taparlos. */
 function cuMano(hueso,lado){
+  /* LA MANO ES UNA SOLA PIEZA HASTA LOS NUDILLOS. Antes la palma estaba a z=+0.036 y los dedos a
+     z=-0.020: quedaba un hueco de 4,5 cm entre las dos partes y los dedos se veian flotando al
+     costado, con el bloque de nudillos tapando a medias — ese era el "cubo arriba de los dedos".
+     Ahora la palma corre de la muñeca a los nudillos en un solo bloque y los dedos arrancan
+     EXACTAMENTE en su cara delantera, asi no hay ni hueco ni pieza suelta.
+     Eje local: +Z hacia la muñeca, -Z hacia la punta de los dedos. */
   const g=new THREE.Group(); hueso.add(g);
-  cuPieza(g,cuCaja(0.088,0.092,0.030), 0, 0, 0.036, CU_MAT.mano);          // palma
-  cuPieza(g,cuCaja(0.088,0.026,0.030), 0, 0.030,-0.006, CU_MAT.mano);      // nudillos
-  cuPieza(g,cuCaja(0.080,0.030,0.086), 0,-0.052, 0.000, CU_MAT.mano);      // canto/base de la palma
+  const PALMA_W=0.086, PALMA_H=0.088, PALMA_Z0=0.050, PALMA_Z1=-0.040;   // frente de los nudillos
+  const CZ=(PALMA_Z0+PALMA_Z1)/2, LZ=PALMA_Z0-PALMA_Z1;
+  cuPieza(g,cuCaja(PALMA_W,PALMA_H,LZ), 0, 0, CZ, CU_MAT.mano);          // palma entera
+  cuPieza(g,cuCaja(PALMA_W*0.92,0.030,0.070), 0,-PALMA_H/2+0.010, CZ+0.010, CU_MAT.mano);  // canto
 
-  /* DEDOS CON HUESOS. Antes eran cajas pegadas a la mano: se veian cinco dedos pero no se doblaban,
-     asi que el agarre seguia siendo una pala apoyada contra el arma. Ahora cada dedo tiene DOS
-     huesos —falange proximal y distal— colgando del hueso de la mano, y cada uno lleva su prisma.
-     Doblar el dedo es girar sus huesos, y como el arma vive en el puño, los dedos se cierran de
-     verdad alrededor del guardamanos y de la empuñadura.
-     Ojo con las unidades: adentro del rig se trabaja en unidades de hueso, asi que toda medida en
-     metros se multiplica por U. */
   const dedos=[];
-  const LARGO=[0.038,0.042,0.039,0.032], PASO=0.0215, ANCHO=0.0185;
+  const LARGO=[0.036,0.040,0.037,0.030], PASO=0.0205, ANCHO=0.0175, ALTO=0.0235;
   for(let i=0;i<4;i++){
-    const x=(-1.5+i)*PASO, L1=LARGO[i], L2=L1*0.78;
+    const x=(-1.5+i)*PASO, L1=LARGO[i], L2=L1*0.76;
     const b1=new THREE.Bone(); b1.name='dedo'+i+'_1'+(lado>0?'R':'L');
-    b1.position.set(x*U, 0.030*U, -0.020*U); hueso.add(b1);
-    cuPieza(b1,cuCaja(ANCHO,0.026,L1), 0, 0, -L1/2, CU_MAT.mano);
+    b1.position.set(x*U, 0.012*U, PALMA_Z1*U); hueso.add(b1);          // justo en la cara de los nudillos
+    cuPieza(b1,cuCaja(ANCHO,ALTO,L1), 0, 0, -L1/2, CU_MAT.mano);
     const b2=new THREE.Bone(); b2.name='dedo'+i+'_2'+(lado>0?'R':'L');
     b2.position.set(0,0,-L1*U); b1.add(b2);
-    cuPieza(b2,cuCaja(ANCHO*0.92,0.023,L2), 0, 0, -L2/2, CU_MAT.mano);
+    cuPieza(b2,cuCaja(ANCHO*0.9,ALTO*0.9,L2), 0, 0, -L2/2, CU_MAT.mano);
     dedos.push([b1,b2]);
   }
-  // pulgar: sale del costado de la palma y cierra contra los dedos
+  /* el pulgar sale del COSTADO de la palma, a la altura de la muñeca, y cierra cruzando */
   const t1=new THREE.Bone(); t1.name='pulgar1'+(lado>0?'R':'L');
-  t1.position.set(lado*0.040*U, 0.006*U, 0.014*U); hueso.add(t1);
-  cuPieza(t1,cuCaja(0.026,0.026,0.040), 0,0,-0.020, CU_MAT.mano);
+  t1.position.set(lado*(PALMA_W/2)*U, -0.008*U, (PALMA_Z0-0.030)*U); hueso.add(t1);
+  cuPieza(t1,cuCaja(0.024,0.026,0.038), lado*0.012, 0, -0.019, CU_MAT.mano);
   const t2=new THREE.Bone(); t2.name='pulgar2'+(lado>0?'R':'L');
-  t2.position.set(0,0,-0.040*U); t1.add(t2);
-  cuPieza(t2,cuCaja(0.023,0.023,0.032), 0,0,-0.016, CU_MAT.mano);
+  t2.position.set(lado*0.012*U, 0, -0.038*U); t1.add(t2);
+  cuPieza(t2,cuCaja(0.021,0.023,0.030), 0, 0, -0.015, CU_MAT.mano);
   dedos.push([t1,t2]);
+
   g.userData.dedos=dedos; g.userData.lado=lado;
   cuManos.push(g);
-  cuCerrar(g, 0.62);                    // pose de agarre por defecto
+  cuCerrar(g, 0.55);
   return g;
+}
+/* cerrar el puño: 0 = mano abierta, 1 = puño cerrado del todo */
+function cuCerrar(g,v){
+  const d=g&&g.userData&&g.userData.dedos; if(!d)return;
+  const k=Math.max(0,Math.min(1,v)), lado=g.userData.lado||1;
+  for(let i=0;i<4;i++){ d[i][0].rotation.x=k*1.20; d[i][1].rotation.x=k*1.30; }
+  d[4][0].rotation.y=-lado*k*0.80; d[4][0].rotation.x=k*0.30; d[4][1].rotation.y=-lado*k*0.70;
 }
 /* EL ARMA NO SE ATRAVIESA CON EL CUERPO. El fusil se coloca por offsets y el IK lleva las manos a
    sus agarres, asi que en poses cerradas —apuntando, recargando, deslizandose— el cajon terminaba
