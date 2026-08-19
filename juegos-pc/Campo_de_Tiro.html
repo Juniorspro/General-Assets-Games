@@ -3703,10 +3703,10 @@ function alcMats(){ if(ALC_M.hormigon)return ALC_M;
   const M=(c,r,m,tex)=>{ const s=new THREE.MeshStandardMaterial({color:c,roughness:r==null?0.92:r,metalness:m||0});
     if(tex){ s.map=tex; }
     s.envMapIntensity=0.35; return s; };
-  ALC_M.hormigon     = M(0xd6d3ca,0.95,0,alcTexHormigon('#b9b4a8',false));
-  ALC_M.hormigonSucio= M(0xb0aa9c,0.97,0,alcTexHormigon('#a49d8f',true));
-  ALC_M.blanco       = M(0xf0eee7,0.9,0,alcTexHormigon('#cfccc4',false));
-  ALC_M.blancoSucio  = M(0xdcd8cd,0.95,0,alcTexHormigon('#bdb8ac',true));
+  ALC_M.hormigon     = M(0xd3d3ce,0.95,0,alcTexHormigon('#b5b6b1',false));
+  ALC_M.hormigonSucio= M(0xaeaea8,0.97,0,alcTexHormigon('#a1a29b',true));
+  ALC_M.blanco       = M(0xefefe9,0.9,0,alcTexHormigon('#cdcec9',false));
+  ALC_M.blancoSucio  = M(0xdadbd4,0.95,0,alcTexHormigon('#bbbcb5',true));
   ALC_M.ladrillo     = M(0xbc8a6c,0.95,0,alcTexLadrillo('a8724f','#8d8377'));
   ALC_M.ladrilloRojo = M(0xa9584a,0.95,0,alcTexLadrillo('8f4436','#7e7466'));
   ALC_M.ventana      = M(0x8f9aa6,0.35,0.15,alcTexVentana());
@@ -3725,7 +3725,7 @@ function alcMats(){ if(ALC_M.hormigon)return ALC_M;
   ALC_M.asfalto      = M(0x5a5c5f,0.94,0,alcTexGrano('#4a4b4d',true,3000));
   ALC_M.rejilla      = M(0x8d949c,0.7,0.4,alcTexRejilla());
   ALC_M.negro        = M(0x1a1c1f,0.9);
-  ALC_M.faro         = M(0xf2efe6,0.85,0,alcTexHormigon('#e2ded2',false));
+  ALC_M.faro         = M(0xf4f3ee,0.85,0,alcTexHormigon('#e3e3dc',false));
   ALC_M.agua         = M(0x2e5468,0.16,0.1);
   // el follaje lleva COLOR POR VÉRTICE: con una sola malla fundida para toda la isla es la única
   // forma de que no queden doscientos árboles exactamente del mismo verde
@@ -5358,6 +5358,36 @@ try{ window.__tiro={
       const h=rc.intersectObjects(mallas,false)[0];
       if(!h || h.distance>T) out.push({txt:(e.txt||'').slice(0,26), p:p.map(v=>+v.toFixed(1)), d:h?+h.distance.toFixed(2):null}); }
     return {total:_alcCartInfo.length, sueltos:out.length, lista:out.slice(0,40)}; },
+  // el ultimo collider que empujo al jugador en X/Z (lastWall), con su elemento: para cazar
+  // expulsiones raras sin adivinar
+  ultima:()=>{ const c=lastWall; if(!c)return null;
+    return {q:c.q, piso:!!c.piso, x:[+c.minx.toFixed(2),+c.maxx.toFixed(2)],
+            z:[+(c.minz-ALC_GZ).toFixed(2),+(c.maxz-ALC_GZ).toFixed(2)],
+            y:[+c.miny.toFixed(2),+c.maxy.toFixed(2)]}; },
+  // OBJETOS ENTERRADOS: pares de elementos distintos cuyas cajas se pisan de verdad. Se agrupa por
+  // par de elementos y se ordena por volumen solapado; sirve para cazar la silla dentro de la pared.
+  encimados:(min)=>{ const MIN=min==null?0.35:min, ac=new Map();
+    const rej=new Map(), C=8;
+    for(const c of ALC_COL){ if(c.piso)continue;
+      const i0=Math.floor(c.minx/C), i1=Math.floor(c.maxx/C), j0=Math.floor(c.minz/C), j1=Math.floor(c.maxz/C);
+      for(let i=i0;i<=i1;i++) for(let j=j0;j<=j1;j++){ const k=i+'_'+j; let a=rej.get(k); if(!a){a=[];rej.set(k,a);} a.push(c); } }
+    const vistos=new Set();
+    for(const [k,l] of rej){ for(let a=0;a<l.length;a++) for(let b=a+1;b<l.length;b++){
+      const p=l[a], q=l[b]; if(p.q===q.q)continue;
+      const dx=Math.min(p.maxx,q.maxx)-Math.max(p.minx,q.minx); if(dx<=0.02)continue;
+      const dy=Math.min(p.maxy,q.maxy)-Math.max(p.miny,q.miny); if(dy<=0.02)continue;
+      const dz=Math.min(p.maxz,q.maxz)-Math.max(p.minz,q.minz); if(dz<=0.02)continue;
+      const v=dx*dy*dz, vp=(p.maxx-p.minx)*(p.maxy-p.miny)*(p.maxz-p.minz),
+            vq=(q.maxx-q.minx)*(q.maxy-q.miny)*(q.maxz-q.minz), vmin=Math.min(vp,vq);
+      if(v < MIN*vmin) continue;
+      const id=(p.q<q.q? p.q+':'+q.q : q.q+':'+p.q)+'@'+Math.round((p.minx+q.minx)/2)+'_'+Math.round((p.miny+q.miny)/2);
+      if(vistos.has(id))continue; vistos.add(id);
+      const par=(p.q<q.q? p.q+':'+q.q : q.q+':'+p.q);
+      ac.set(par,(ac.get(par)||0)+v); } }
+    const out=[...ac.entries()].sort((a,b)=>b[1]-a[1]).slice(0,30)
+      .map(([par,v])=>{ const [i,j]=par.split(':').map(Number);
+        return {v:+v.toFixed(2), a:i, b:j}; });
+    return {pares:ac.size, top:out}; },
   posIsla:(x,z,y)=>{ player.pos.set(x,(y==null?alcH(x,z)+0.1:y),ALC_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; return +player.pos.y.toFixed(2); },
   islaEst:()=>({mundo:world, isla:islaMode, col:ALC_COL.length, mallas:alcGroup.children.length,
     pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ALC_GZ).toFixed(1)], suelo:+alcH(player.pos.x,player.pos.z-ALC_GZ).toFixed(2)}), pos:(x,z,y)=>{ player.pos.set(x,(y==null?0:y),TIRO_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
