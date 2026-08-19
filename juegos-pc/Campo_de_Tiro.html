@@ -2749,7 +2749,26 @@ function alcLuz(e){ if(_alcNLuz>=8)return; _alcNLuz++;
   alcAdd('metal',new THREE.CylinderGeometry(0.30,0.42,0.20,8),p[0],p[1]+0.22,p[2],0);   // la pantalla
   alcAdd('metal',new THREE.BoxGeometry(0.05,0.9,0.05),p[0],p[1]+0.75,p[2],0); }
 
+/* MARCOS DE REFERENCIA POR EDIFICIO. El complejo del penal está girado −0,140 rad, y pedirle a
+   quien amuebla que haga la trigonometría a mano es pedir errores: una mesa mal rotada se clava en
+   una pared. Cada elemento puede venir con `ref`, y entonces su p es [a lo LARGO, altura ABSOLUTA,
+   a lo ANCHO] del edificio; acá se pasa a coordenadas de isla de una sola vez y para todos. */
+const ALC_REF={
+  penal:{x:12,z:-26,ry:-0.140},      comedor:{x:-37.6,z:-33,ry:-0.140},  admin:{x:59.7,z:-19.3,ry:-0.140},
+  patio:{x:-87,z:-30,ry:-0.140},     b64:{x:92,z:-74,ry:-0.140},         muelle:{x:100,z:-100,ry:0},
+  newind:{x:-166,z:-18,ry:0},        modind:{x:-198,z:-44,ry:0},         power:{x:-172,z:-62,ry:0},
+  sally:{x:14.5,z:-85,ry:-0.140},    faro:{x:94,z:-37,ry:0},             alcaide:{x:122,z:-31,ry:-0.140},
+  parade:{x:160,z:-18,ry:0}
+};
+function alcDeRef(e){ const R=ALC_REF[e.ref]; if(!R)return e;
+  const c=Math.cos(R.ry), sn=Math.sin(R.ry), o={};
+  for(const k in e) o[k]=e[k];
+  if(e.p) o.p=[R.x+e.p[0]*c+e.p[2]*sn, e.p[1], R.z-e.p[0]*sn+e.p[2]*c];
+  if(e.pts) o.pts=e.pts.map(q=>[R.x+q[0]*c+q[1]*sn, R.z-q[0]*sn+q[1]*c]);
+  o.ry=(e.ry||0)+R.ry; delete o.ref; return o; }
+
 function alcElem(e){ if(!e||!e.t)return;
+  if(e.ref) e=alcDeRef(e);
   switch(e.t){
     case 'edificio': alcEdificio(e); break;
     case 'caja':     { const p=e.p||[0,0,0], s=e.s||[2,2,2]; alcCaja(p[0],p[1],p[2],s[0],s[1],s[2],e.m||'hormigon',e.ry||0,e.sinCol); break; }
