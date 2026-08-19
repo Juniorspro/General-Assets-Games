@@ -5081,7 +5081,9 @@ const GUN_OJO=new THREE.Vector3(0.115,-0.175,0.460);   // más abajo: con el pu�
    ya estaba bien y las dos correcciones que hice mirando la foto sobraban. */
 /* El resto es un desvio CONSTANTE de 7 px hacia arriba en todo el rango de pitch: 7 px sobre 300 a
    0.65 m con FOV 48 son 6.7 mm, asi que el arma baja esos 6.7 mm. */
-const GUN_OJO_ADS=new THREE.Vector3(0.000,-AK_MIRA_Y*GUN_ESC-0.0052,0.660);
+const GUN_OJO_ADS=new THREE.Vector3(0.000,-AK_MIRA_Y*GUN_ESC-0.0016,0.660);
+/* La sensibilidad real medida es el doble de la que calculé: bajar el arma 6.7 mm movio el alza 15
+   px, no 7. Con ese numero el ajuste que centra es -0.0016. */
 /* MENÚ (pantalla de operador). El fusil no se sostiene apuntando: cuelga en LISTO BAJO, cruzado
    sobre el pecho y con la boca abajo, que es como se para un operador en la pantalla de selección.
    Sale del MISMO ancla de ojo que todo lo demás, así las manos y el cuerpo lo siguen con el mismo IK. */
@@ -6080,11 +6082,23 @@ function cuPieza(padre,geo,x,y,z,mat,rx){
 /* MANO QUE AGARRA. El puño se construye CENTRADO EN EL ORIGEN DEL HUESO: así, cuando el IK lleva la muñeca al
    punto de agarre, el arma queda literalmente DENTRO del puño. La ranura (palma ↔ dedos) corre en Z y el agujero
    del puño en X: el mango pasa por ahí. Sin dedos articulados no hay cierre real, pero sí hay envoltura real. */
+/* MANO DE CINCO DEDOS. Antes los cuatro dedos eran UN bloque macizo: la mano se apoyaba contra el
+   arma como una pala y no habia forma de moldear el agarre. Ahora cada dedo es su propio prisma —
+   indice, mayor, anular y meñique— con su separacion, y el pulgar cruza por el otro lado. Es lo que
+   permite cerrarlos sobre el guardamanos y sobre la empuñadura en vez de taparlos. */
 function cuMano(hueso,lado){
   const g=new THREE.Group(); hueso.add(g);
   cuPieza(g,cuCaja(0.088,0.092,0.030), 0, 0, 0.036, CU_MAT.mano);          // palma
-  cuPieza(g,cuCaja(0.086,0.078,0.028), 0, 0.006,-0.038, CU_MAT.mano);      // bloque de dedos (cierra la ranura)
-  cuPieza(g,cuCaja(0.026,0.052,0.030), lado*0.046, 0.010, 0.004, CU_MAT.mano); // pulgar, cruzando la ranura
+  cuPieza(g,cuCaja(0.088,0.026,0.030), 0, 0.030,-0.006, CU_MAT.mano);      // nudillos
+  const ANCHO=0.0185, PASO=0.0215, LARGO=[0.070,0.078,0.072,0.060];        // el mayor es el mas largo
+  for(let i=0;i<4;i++){
+    const x=(-1.5+i)*PASO, L=LARGO[i];
+    cuPieza(g,cuCaja(ANCHO,L,0.026), x, 0.006-(0.078-L)/2, -0.038, CU_MAT.mano);
+    cuPieza(g,cuCaja(ANCHO*0.92,0.020,0.024), x, 0.006-(0.078-L)/2-L/2-0.008, -0.040, CU_MAT.mano);  // falange
+  }
+  // pulgar: dos tramos, cruzando por el lado de la palma
+  cuPieza(g,cuCaja(0.026,0.044,0.028), lado*0.046, 0.012, 0.006, CU_MAT.mano);
+  cuPieza(g,cuCaja(0.023,0.036,0.026), lado*0.050,-0.020,-0.014, CU_MAT.mano);
   cuPieza(g,cuCaja(0.080,0.030,0.086), 0,-0.052, 0.000, CU_MAT.mano);      // canto/base de la palma
   return g;
 }
@@ -6094,8 +6108,10 @@ function cuLargo(h){                                   // largo del hueso = dist
 }
 function cuVestir(h){
   const n=(h.name||'').toLowerCase(), L=cuLargo(h);
-  const cap=(r)=>cuPieza(h,cuCaps(r,L),0,L/2,0);   // devuelve la pieza (algunas se ocultan en 1ª persona)
-  const jun=(r,y)=>cuPieza(h,cuEsf(r),0,y,0,CU_MAT.junta);
+  /* De CAPSULA a PRISMA. El cuerpo se veia redondeado y blando; la referencia es de bloques, todo
+     caras planas. Se conserva la misma medida: el prisma tiene el lado igual al diametro. */
+  const cap=(r)=>cuPieza(h,cuCaja(r*1.9,L,r*1.9),0,L/2,0);
+  const jun=(r,y)=>cuPieza(h,cuCaja(r*1.75,r*1.75,r*1.75),0,y,0,CU_MAT.junta);   // junta cubica: entre bloques, una esfera canta
   if(n==='hips'){ cuPieza(h,cuCaja(0.30,0.19,0.23),0,0.04,0.005); jun(0.10,0); }
   else if(n==='spine02'){ cuPieza(h,cuCaja(0.29,L+0.02,0.21),0,L/2,0.005); }
   else if(n==='spine01'){ cuPieza(h,cuCaja(0.32,L+0.02,0.22),0,L/2,0.005); }
@@ -6108,7 +6124,7 @@ function cuVestir(h){
     cuPieza(cuCabezaG,cuEsf(0.052),0,0.195,0.01,CU_MAT.junta); }
   else if(/shoulder$/.test(n)){ cap(0.055); jun(0.066,L); }
   else if(/(^|[^e])arm$/.test(n)){ cap(0.053); jun(0.056,L); }                   // brazo → codo
-  else if(/forearm$/.test(n)){ cuPieza(h,cuCaps(0.042,L),0,L/2,0,CU_MAT.manga); jun(0.046,L); }                       // antebrazo → muñeca
+  else if(/forearm$/.test(n)){ cuPieza(h,cuCaja(0.080,L,0.080),0,L/2,0,CU_MAT.manga); jun(0.046,L); }                       // antebrazo → muñeca
   else if(/hand$/.test(n)){ cuMano(h, n[0]==='r'?1:-1); }
   else if(/upleg$/.test(n)){ cap(0.086); jun(0.092,L); }
   else if(/leg$/.test(n)){ cap(0.068); jun(0.072,L); }
