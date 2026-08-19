@@ -1367,7 +1367,7 @@ const ALC_DATOS={
   {t:'caja',p:[23.52,11.85,-91.71],s:[1.6,5.3,1.6],ry:-0.14,m:'ladrillo'},
   {t:'muro',pts:[[3.79,-93.93],[27.26,-90.62],[25.21,-76.07],[1.74,-79.38],[3.79,-93.93]],y:14.5,h:1,e:0.4,m:'ladrillo'},
   {t:'escalera',p:[15.7,14.5,-93.52],ry:-0.14,w:1.8,pasos:17,alto:5.3,largo:5.1,m:'hormigonSucio'},
-  {t:'edificio',p:[14.5,18.3,-84],s:[16.3,7.6,8.7],ry:-0.14,m:'blancoSucio',mTecho:'techoRojo',techo:'dos-aguas',pisos:2,ventanas:{filas:2,cols:5,w:1.1,h:1.6,y0:1.1,caras:'todas'}},
+  {t:'edificio',p:[14.5,18.3,-84],sinCim:true,s:[16.3,7.6,8.7],ry:-0.14,m:'blancoSucio',mTecho:'techoRojo',techo:'dos-aguas',pisos:2,ventanas:{filas:2,cols:5,w:1.1,h:1.6,y0:1.1,caras:'todas'}},
   {t:'caja',p:[22.42,23.2,-82.88],s:[0.5,2.2,6.2],ry:-0.14,m:'blancoSucio'},
   {t:'caja',p:[6.58,23.05,-85.12],s:[0.5,1.9,6.2],ry:-0.14,m:'blancoSucio'},
   {t:'caja',p:[15.27,16,-89.5],s:[4.4,3,2.4],ry:-0.14,m:'blancoSucio'},
@@ -3644,12 +3644,13 @@ function alcCol(x,y,z,w,h,d,ry){
       ult=alcCol1(px,y,pz, largoEnX?paso:ancho, h, largoEnX?ancho:paso, ry); }
     return ult; }
   return alcCol1(x,y,z,w,h,d,ry); }
+let ALC_QUIEN=-1;   // indice del elemento que se esta construyendo (para depurar colisiones)
 function alcCol1(x,y,z,w,h,d,ry){
   const c=Math.abs(Math.cos(ry||0)), s=Math.abs(Math.sin(ry||0));
   const ew=(w*c+d*s)/2, ed=(w*s+d*c)/2;
   /* OJO con `mesh`: moveX/moveZ descartan el collider con `c.mesh===ground`, y `ground` vale null.
      Poniendo mesh:null la isla entera se saltaba la colisión. Se deja sin la propiedad. */
-  const col={minx:x-ew,maxx:x+ew,miny:y-h/2,maxy:y+h/2,minz:z+ALC_GZ-ed,maxz:z+ALC_GZ+ed,_isla:true,locked:true};
+  const col={minx:x-ew,maxx:x+ew,miny:y-h/2,maxy:y+h/2,minz:z+ALC_GZ-ed,maxz:z+ALC_GZ+ed,_isla:true,locked:true,q:ALC_QUIEN};
   ALC_COL.push(col); return col; }
 
 /* ---------------- primitivas del plano ---------------- */
@@ -3750,7 +3751,11 @@ function alcEdificio(e){
     // el piso va POR DEBAJO del umbral, no por encima: si sobresale, la puerta queda con un escalón
     // de 40 cm y como el movimiento horizontal no sube escalones, el edificio no se puede entrar
     alcCaja(x,y-h/2-0.20,z,w,0.5,d,e.mPiso||'hormigon',ry);
-    alcCimiento(x,z,w,d,ry,y-h/2,e.mCim||'hormigonSucio');
+    /* El cimiento rellena hasta el terreno, y eso está bien en una ladera... pero NO cuando el
+       edificio se apoya sobre otro edificio: el cuerpo alto del sally port tapaba con su cimiento
+       los 5,9 m del pasaje de 1857, que es por donde tiene que pasar el camino. Con sinCim no se
+       rellena nada. */
+    if(!e.sinCim) alcCimiento(x,z,w,d,ry,y-h/2,e.mCim||'hormigonSucio');
   }
   else alcCaja(x,y,z,w,h,d,m,ry,e.sinCol);
   // ventanas PEGADAS: sólo para los volúmenes macizos (en los huecos ya son agujeros de verdad)
@@ -4157,7 +4162,7 @@ function buildAlc(){ if(alcBuilt)return; alcBuilt=true;
   const els=(ALC_DATOS.elementos||[]).concat(ALC_DETALLE||[]);
   alcExcavarCaminos(els);          // los caminos cortan la ladera ANTES de armar la malla del suelo
   alcTerreno();
-  for(let i=0;i<els.length;i++){ try{ alcElem(els[i]); }catch(err){} }
+  for(let i=0;i<els.length;i++){ ALC_QUIEN=i; try{ alcElem(els[i]); }catch(err){} } ALC_QUIEN=-1;
   const veg=alcVegetacion();
   alcIndexar();
   const n=alcFundir()+alcCartelesFundir();
@@ -5116,10 +5121,11 @@ try{ window.__tiro={
     for(const c of ALC_COL){
       if(c.maxx<x-R||c.minx>x+R||c.maxz<z-R||c.minz>z+R) continue;
       if(c.maxy<=y+0.02||c.miny>=y+AL) continue;
-      out.push({x:[+c.minx.toFixed(2),+c.maxx.toFixed(2)], z:[+(c.minz-ALC_GZ).toFixed(2),+(c.maxz-ALC_GZ).toFixed(2)],
+      out.push({q:c.q, x:[+c.minx.toFixed(2),+c.maxx.toFixed(2)], z:[+(c.minz-ALC_GZ).toFixed(2),+(c.maxz-ALC_GZ).toFixed(2)],
                 y:[+c.miny.toFixed(2),+c.maxy.toFixed(2)], escalon:(c.maxy-y)<=0.38}); }
     return {pj:[+player.pos.x.toFixed(2),+y.toFixed(2),+(player.pos.z-ALC_GZ).toFixed(2)],
             suelo:+alcH(x,z-ALC_GZ).toFixed(2), pend:+alcPend(x,z-ALC_GZ).toFixed(3), tapan:out}; },
+  elem:i=>{ const els=(ALC_DATOS.elementos||[]).concat(ALC_DETALLE||[]); return {i, e:els[i], n:els.length}; },
   posIsla:(x,z,y)=>{ player.pos.set(x,(y==null?alcH(x,z)+0.1:y),ALC_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; return +player.pos.y.toFixed(2); },
   islaEst:()=>({mundo:world, isla:islaMode, col:ALC_COL.length, mallas:alcGroup.children.length,
     pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ALC_GZ).toFixed(1)], suelo:+alcH(player.pos.x,player.pos.z-ALC_GZ).toFixed(2)}), pos:(x,z,y)=>{ player.pos.set(x,(y==null?0:y),TIRO_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
