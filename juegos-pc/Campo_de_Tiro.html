@@ -5038,11 +5038,12 @@ const GUN_OJO_MENU=new THREE.Vector3(0.135,-0.385,0.330);
    va del cuadro sola, sin tocar el recorte cercano del arma. */
 const FOV_CAD=90, FOV_ADS=48;
 let adsQ=0, adsW=0;              // adsQ = pedido (0/1), adsW = suavizado
-/* Sello del ULTIMO toque al boton de apuntar, por corto que haya sido. Sirve para redirigir el
-   deslizamiento: alcanza con haber tocado apuntar, no hace falta seguir apuntando. */
-let adsUlt=-9;
-function adsTocado(){ adsUlt=performance.now()/1000; }
-function adsFresco(){ return adsQ===1 || adsW>0.02 || (performance.now()/1000-adsUlt)<1.3; }
+/* FICHA DE RE-DESLIZAMIENTO. Tocar apuntar —por corto que sea— habilita UN solo deslizamiento mas.
+   Se gasta al usarla: si querés otro, tocás apuntar otra vez. No es una ventana de tiempo (asi
+   estaba antes y vencia sola) ni un permiso permanente (asi quedo despues y encadenaba infinito). */
+let sldFicha=false;
+function adsTocado(){ sldFicha=true; }
+function adsFresco(){ return sldFicha; }
 // MIRA: mantener (como en un shooter de PC) o interruptor de un toque. Se guarda.
 let adsHold=true; try{ adsHold=(localStorage.getItem('ct_adshold')||'1')==='1'; }catch(e){}
 const _gOjo=new THREE.Vector3();
@@ -6319,12 +6320,11 @@ function slideDeseo(){
 }
 function startSlide(){ if(!player.onGround)return;
   if(player.sliding){
-    /* ENCADENADO SIN CONDICIONES. Antes el permiso para redirigir vencia 1,3 s despues de tocar
-       apuntar: te dejaba UN solo re-deslizamiento y el siguiente lo negaba hasta volver a tocar la
-       mira. Ahora cada toque encadena, y si la palanca pide una direccion el envion sale HACIA ALLA;
-       si no pide nada, sigue derecho. Ademas el reloj del deslizamiento vuelve a cero en cada
-       encadenado, asi que dura mientras lo sigas pidiendo y te quede velocidad. */
-    if(player.vel.length()>2.6){ player.slideT=0; sldSac=1;
+    /* Ya deslizando: solo se encadena SI HAY FICHA, y la ficha se gasta. O sea: deslizas, tocas
+       apuntar, y eso te habilita UN deslizamiento mas —hacia donde pida la palanca—. Para otro,
+       hay que volver a tocar apuntar. */
+    if(!sldFicha) return;
+    if(player.vel.length()>2.6){ sldFicha=false; player.slideT=0; sldSac=1;
       const w=slideDeseo();
       if(w) player.vel.set(w.x,0,w.z).multiplyScalar(Math.max(SLIDE_V, player.vel.length()*1.10));
       else player.vel.multiplyScalar(1.24);
@@ -6332,7 +6332,7 @@ function startSlide(){ if(!player.onGround)return;
         player.slideRight=(Math.cos(player.yaw)*d2.x - Math.sin(player.yaw)*d2.z)>0.15; }
       sfx(grassMode?'slide_grass':'slide', 0.22); }
     return; }
-  if(player.vel.length()<3)return; player.sliding=true; player.slideT=0; sldSac=1; sfx(grassMode?'slide_grass':'slide', 0.4);
+  if(player.vel.length()<3)return; sldFicha=false; player.sliding=true; player.slideT=0; sldSac=1; sfx(grassMode?'slide_grass':'slide', 0.4);
   const d=player.vel.length()>0.5?player.vel.clone().normalize():forward.clone(); player.vel.copy(d).multiplyScalar(SLIDE_V);
   // ¿deslizo hacia mi DERECHA? (respecto a donde miro) → se espeja la animación (por defecto va a la izquierda)
   player.slideRight = (Math.cos(player.yaw)*d.x - Math.sin(player.yaw)*d.z) > 0.15; }
