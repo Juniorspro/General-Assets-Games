@@ -2383,9 +2383,12 @@ const ALC_DETALLE=[
   {t:'cartel',ref:'penal',p:[-8,44.78,-12.98],txt:'B-181  AL CAPONE  AZ-85',w:0.72,h:0.15,ry:0,col:'#c8b048',sinCol:true},
   {t:'cartel',ref:'penal',p:[-6.45,44.78,-12.98],txt:'B-183',w:0.24,h:0.13,ry:0,col:'#d9d4c4',sinCol:true},
   {t:'cartel',ref:'penal',p:[-3.1,41.9,-7.12],txt:'FUGA DEL 11-12 DE JUNIO DE 1962',w:0.9,h:0.12,ry:0,col:'#b8b2a2',sinCol:true},
-  {t:'muro',pts:[[-31,6.6],[-28.3,6.6]],y:40.5,h:9,e:0.35,m:'hormigon',ref:'penal'},
-  {t:'muro',pts:[[-26.7,6.6],[1.6,6.6]],y:40.5,h:9,e:0.35,m:'hormigon',ref:'penal'},
-  {t:'caja',ref:'penal',p:[-28.6,41.55,7.15],s:[1,2.1,0.12],ry:1.571,m:'metal'},
+  /* el muro que separa el ala oeste (D-Block) del cuerpo principal corria A LO LARGO de Seedy
+     Street y la partia en dos mitades de 2,2 m: va CRUZANDO los pasillos, en la punta oeste, con
+     su puerta de 1,6 m sobre el eje del pasillo. */
+  {t:'muro',pts:[[-26.7,4],[-26.7,6.2]],y:40.5,h:9,e:0.35,m:'hormigon',ref:'penal'},
+  {t:'muro',pts:[[-26.7,7.8],[-26.7,18.2]],y:40.5,h:9,e:0.35,m:'hormigon',ref:'penal'},
+  {t:'caja',ref:'penal',p:[-27.2,41.55,8.4],s:[1,2.1,0.12],ry:0,m:'metal'},
   {t:'caja',ref:'penal',p:[-18,40.85,6.45],s:[0.26,0.16,0.08],ry:0,m:'rejilla',sinCol:true},
   {t:'muro',pts:[[-31,17.8],[-8,17.8]],y:40.5,h:9,e:0.3,m:'hormigon',ref:'penal'},
   {t:'camino',pts:[[-29,14.5],[0.6,14.5]],w:5.4,m:'hormigon',ref:'penal'},
@@ -3504,7 +3507,17 @@ function alcRaster(T){
         const dt=alcSD(t.poly,x,z); let s=(dt+b)/(2*b);
         if(s<=0)continue; if(s>1)s=1; s=s*s*(3-2*s);
         h += (t.y-h)*s; }
-      alcHM[j*ALC_NX+i]=h; } } }
+      alcHM[j*ALC_NX+i]=h; } }
+  /* ALISADO. Las terrazas entran con un borde suave, pero el techo LOCAL del acantilado (el tope por
+     terraza) mete escalones duros y desde el aire la isla parecia una escalera de Minecraft. Dos
+     pasadas de promedio 3x3 con peso al centro redondean el acantilado sin mover las explanadas
+     (una meseta promediada consigo misma no cambia) y sin tocar el borde del mapa. */
+  const tmp=new Float32Array(alcHM.length);
+  for(let it=0;it<2;it++){
+    tmp.set(alcHM);
+    for(let j=1;j<ALC_NZ-1;j++) for(let i=1;i<ALC_NX-1;i++){ const o=j*ALC_NX+i;
+      alcHM[o]=(tmp[o]*4 + tmp[o-1]+tmp[o+1]+tmp[o-ALC_NX]+tmp[o+ALC_NX]
+                + (tmp[o-ALC_NX-1]+tmp[o-ALC_NX+1]+tmp[o+ALC_NX-1]+tmp[o+ALC_NX+1])*0.5)/10; } } }
 
 /* LOS CAMINOS SE EXCAVAN EN LA LADERA. Hasta acá el `camino` sólo apoyaba asfalto ENCIMA del
    terreno, así que la cuesta seguía siendo la cuesta: medido con __tiro.pend, entre el muelle y la
@@ -3669,6 +3682,23 @@ function alcTexGrano(base,osc,gr){ const k='g'+base+gr; if(_alcTx[k])return _alc
     g.fillRect(Math.random()*S,Math.random()*S,1+Math.random()*2.6,1+Math.random()*2.6); }
   return (_alcTx[k]=alcTexFin(c));}
 
+/* ventanal industrial: paños chicos de 40 cm con perfileria de acero, que es lo que tiene Alcatraz.
+   Antes 'ventana' era una caja azul lisa y desde afuera el penal parecia una maqueta. */
+function alcTexVentana(){ if(_alcTx.vent)return _alcTx.vent;
+  const S=256, c=alcLienzo(S), g=c.getContext('2d');
+  const gr=g.createLinearGradient(0,0,0,S);
+  gr.addColorStop(0,'#243444'); gr.addColorStop(0.45,'#1b2734'); gr.addColorStop(1,'#141d27');
+  g.fillStyle=gr; g.fillRect(0,0,S,S);
+  for(let i=0;i<40;i++){ g.fillStyle='rgba(150,180,205,'+(0.03+Math.random()*0.06)+')';
+    g.fillRect(Math.random()*S,Math.random()*S,10+Math.random()*60,4+Math.random()*22); }
+  const P=Math.max(6,Math.round(S*0.40/2.2));            // paño de 40 cm
+  g.strokeStyle='#6d737a'; g.lineWidth=Math.max(1.4,S*0.022/2.2);
+  for(let x=P/2;x<S;x+=P){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,S); g.stroke(); }
+  for(let y=P/2;y<S;y+=P){ g.beginPath(); g.moveTo(0,y); g.lineTo(S,y); g.stroke(); }
+  g.strokeStyle='rgba(220,230,240,.18)'; g.lineWidth=1;
+  for(let x=P/2;x<S;x+=P){ g.beginPath(); g.moveTo(x-1.5,0); g.lineTo(x-1.5,S); g.stroke(); }
+  return (_alcTx.vent=alcTexFin(c,8)); }
+
 function alcMats(){ if(ALC_M.hormigon)return ALC_M;
   const M=(c,r,m,tex)=>{ const s=new THREE.MeshStandardMaterial({color:c,roughness:r==null?0.92:r,metalness:m||0});
     if(tex){ s.map=tex; }
@@ -3679,8 +3709,8 @@ function alcMats(){ if(ALC_M.hormigon)return ALC_M;
   ALC_M.blancoSucio  = M(0xdcd8cd,0.95,0,alcTexHormigon('#bdb8ac',true));
   ALC_M.ladrillo     = M(0xbc8a6c,0.95,0,alcTexLadrillo('a8724f','#8d8377'));
   ALC_M.ladrilloRojo = M(0xa9584a,0.95,0,alcTexLadrillo('8f4436','#7e7466'));
-  ALC_M.ventana      = M(0x1b2530,0.35,0.15);
-  ALC_M.vidrio       = M(0x9fc4d8,0.14,0.25);
+  ALC_M.ventana      = M(0x8f9aa6,0.35,0.15,alcTexVentana());
+  ALC_M.vidrio       = M(0xa8c8da,0.14,0.25,alcTexVentana());
   ALC_M.techoRojo    = M(0x9c5541,0.88,0,alcTexGrano('#8d4b39',true,2600));
   ALC_M.techoChapa   = M(0x9aa2a9,0.62,0.35,alcTexChapa());
   ALC_M.techoAlquitran=M(0x44484c,0.96,0,alcTexGrano('#3a3d40',true,3000));
@@ -3792,7 +3822,13 @@ function alcCol1(x,y,z,w,h,d,ry){
   const ew=(w*c+d*s)/2, ed=(w*s+d*c)/2;
   /* OJO con `mesh`: moveX/moveZ descartan el collider con `c.mesh===ground`, y `ground` vale null.
      Poniendo mesh:null la isla entera se saltaba la colisión. Se deja sin la propiedad. */
-  const col={minx:x-ew,maxx:x+ew,miny:y-h/2,maxy:y+h/2,minz:z+ALC_GZ-ed,maxz:z+ALC_GZ+ed,_isla:true,locked:true,q:ALC_QUIEN};
+  /* LOSAS. Una losa de piso grande y girada (la del penal mide 64 x 48,6) tiene una AABB inflada
+     6,8 m en X por la rotacion. Mientras el jugador camina encima no molesta, pero si baja un
+     centimetro y queda solapado, moveX lo EXPULSA de costado hasta 8 m de golpe: eso era el
+     "teletransporte" al salir de Broadway. Una losa no empuja de costado, sostiene: se marca como
+     piso y el movimiento horizontal la ignora. Vertical sigue igual, se camina encima. */
+  const esPiso = (h<=0.7 && Math.min(w,d)>=5);
+  const col={minx:x-ew,maxx:x+ew,miny:y-h/2,maxy:y+h/2,minz:z+ALC_GZ-ed,maxz:z+ALC_GZ+ed,_isla:true,locked:true,q:ALC_QUIEN,piso:esPiso};
   ALC_COL.push(col); return col; }
 
 /* ---------------- primitivas del plano ---------------- */
@@ -3968,27 +4004,49 @@ function alcPoste(e){ const p=e.p||[0,0,0], h=e.h||5.5;
    La semilla sale de la POSICIÓN, así que el mismo árbol siempre se dibuja igual (nada de random:
    dos llamadas seguidas tienen que dar lo mismo). */
 const VERDES=[0x5c6b39,0x66753f,0x718049,0x4f5d33,0x7a8a52,0x5a6a3c];
+/* ARBOLES DE LA ISLA. Alcatraz tiene cipreses de Monterey (copa densa, achatada y peinada por el
+   viento), eucaliptos flacos y altos, y matas de higuera de mar. Antes eran cuatro esferas sueltas
+   sobre un palo y se veian como brocoli. Ahora la copa se arma por CAPAS de racimos achatados, mas
+   densos abajo y mas claros arriba, con el tronco inclinado y en dos tramos. */
 function alcArbol(e){
   const p=e.p||[0,0,0], h=e.h||8, x=p[0], y=p[1], z=p[2];
   let sd=Math.abs(Math.sin(x*12.9898+z*78.233)*43758.5453); const rnd=()=>{ sd=(sd*1.618)%1; return sd; };
-  const ancho=(h<7)?1.35:0.85;                       // bajito = ciprés ancho; alto = eucalipto flaco
-  const rt=h*0.036;                                   // radio del tronco
-  alcAdd('maderaVieja',new THREE.CylinderGeometry(rt*0.55,rt*1.35,h*0.62,6),x,y+h*0.31,z,0);
-  alcCol(x,y+h*0.31,z,rt*2.4,h*0.62,rt*2.4,0);
+  const tipo=e.tipo || ((h<7.5)?'cipres':'eucalipto');
+  const flaco=(tipo==='eucalipto'||tipo==='palmera');
+  const ancho=flaco?0.80:1.30;
+  const rt=h*(flaco?0.026:0.042);
+  const lean=(rnd()-0.5)*0.16;                      // el viento del oeste los peina
+  // tronco en dos tramos, el de arriba inclinado
+  const t1=h*(flaco?0.52:0.34);
+  alcAdd('maderaVieja',new THREE.CylinderGeometry(rt*0.78,rt*1.45,t1,7),x,y+t1/2,z,0);
+  const g2=new THREE.CylinderGeometry(rt*0.45,rt*0.80,h*0.30,6);
+  g2.translate(0,h*0.15,0); g2.rotateZ(lean);
+  alcAdd('maderaVieja',g2,x,y+t1,z,rnd()*6.283);
+  alcCol(x,y+h*0.30,z,rt*2.6,h*0.60,rt*2.6,0);
+  const cx=x+Math.sin(lean)*h*0.22, cz=z+Math.cos(lean*1.7)*0.0;
+  // ramas gruesas visibles bajo la copa
   const nr=3+((sd*7)|0)%3;
-  for(let i=0;i<nr;i++){                              // ramas
-    const a=rnd()*6.283, lr=h*(0.13+rnd()*0.10), yy=y+h*(0.52+rnd()*0.24);
-    const g=new THREE.CylinderGeometry(rt*0.20,rt*0.55,lr,5);
-    g.translate(0,lr*0.5,0); g.rotateZ(0.75+rnd()*0.45); g.rotateY(a);
+  for(let i=0;i<nr;i++){ const a=rnd()*6.283, lr=h*(0.11+rnd()*0.10), yy=y+h*(0.46+rnd()*0.22);
+    const g=new THREE.CylinderGeometry(rt*0.18,rt*0.52,lr,5);
+    g.translate(0,lr*0.5,0); g.rotateZ(0.85+rnd()*0.40); g.rotateY(a);
     alcAdd('maderaVieja',g,x,yy,z,0); }
-  const nc=4+((sd*11)|0)%3;
-  for(let i=0;i<nc;i++){                              // copa: racimos
-    const a=rnd()*6.283, r=h*(0.06+rnd()*0.19)*ancho;
-    const rr=h*(0.13+rnd()*0.13)*ancho;
-    const yy=y+h*(0.62+rnd()*0.34);
-    alcAddC('follaje',new THREE.SphereGeometry(rr,6,5),x+Math.cos(a)*r,yy,z+Math.sin(a)*r,0,
-            VERDES[((sd*97)|0+i)%VERDES.length]); }
-  alcAddC('follaje',new THREE.SphereGeometry(h*0.19*ancho,6,5),x,y+h*0.84,z,0,VERDES[((sd*31)|0)%VERDES.length]); }
+  // copa por capas: cada capa mas chica y mas clara que la de abajo
+  const capas=flaco?3:4, base=flaco?0.60:0.48;
+  for(let c=0;c<capas;c++){
+    const f=c/(capas-1);                                   // 0 abajo, 1 arriba
+    const yy=y+h*(base+f*(flaco?0.34:0.44));
+    const rad=h*(flaco?0.13:0.20)*ancho*(1-0.35*f)*(0.85+rnd()*0.3);
+    const disp=h*(flaco?0.07:0.13)*ancho*(1-0.4*f);
+    const nc=(flaco?3:4)+((sd*13)|0)%2;
+    for(let i=0;i<nc;i++){
+      const a=(i/nc)*6.283+rnd()*1.1, r=disp*(0.4+rnd()*0.9);
+      const g=new THREE.SphereGeometry(rad*(0.72+rnd()*0.5),6,5);
+      g.scale(1,flaco?0.78:0.62,1);
+      const iv=Math.min(VERDES.length-1, ((sd*97)|0 + c*2 + i)%VERDES.length);
+      alcAddC('follaje',g, cx+Math.cos(a)*r, yy+(rnd()-0.5)*h*0.05, cz+Math.sin(a)*r, 0, VERDES[iv]); } }
+  // remate
+  const gr=new THREE.SphereGeometry(h*(flaco?0.10:0.15)*ancho,6,5); gr.scale(1,flaco?0.9:0.6,1);
+  alcAddC('follaje',gr,cx,y+h*(flaco?0.98:0.94),cz,0,VERDES[((sd*31)|0)%VERDES.length]); }
 /* ruina: el mismo bloque pero mordido arriba, sin techo */
 function alcEscombro(e){ const p=e.p||[0,0,0], s=e.s||[4,3,4], ry=e.ry||0, m=e.m||'hormigonSucio';
   const n=Math.max(2,Math.round(s[0]/1.6));
@@ -4236,7 +4294,14 @@ function alcTerreno(){
     const v=0.90+0.16*(0.5+0.5*Math.sin(x*0.055+z*0.031)*Math.cos(x*0.021-z*0.048));
     col[k*3]=c.r*v; col[k*3+1]=c.g*v; col[k*3+2]=c.b*v; }
   g.setAttribute('color',new THREE.Float32BufferAttribute(col,3)); g.computeVertexNormals();
-  alcSuelo=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.98,metalness:0}));
+  /* GRANO DEL SUELO. El color por vertice da los manchones grandes (roca, pasto, tierra) pero de
+     cerca y desde el aire el terreno seguia siendo plastico liso. Se le pone una UV en METROS
+     (una baldosa cada 6 m) y una textura de grano casi blanca que MULTIPLICA al color: agrega piedra
+     y pasto sin cambiar la paleta. */
+  { const uv=g.attributes.uv, pp=g.attributes.position;
+    for(let k=0;k<uv.count;k++) uv.setXY(k, (pp.getX(k))/6, (pp.getZ(k))/6);
+    uv.needsUpdate=true; }
+  alcSuelo=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.98,metalness:0,map:alcTexSuelo()}));
   alcSuelo.position.set((ALC_X0+ALC_X1)/2,0,(ALC_Z0+ALC_Z1)/2+ALC_GZ);
   alcSuelo.receiveShadow=true; alcSuelo.castShadow=false; alcSuelo.frustumCulled=false;
   alcGroup.add(alcSuelo);
@@ -4252,6 +4317,19 @@ function alcTerreno(){
   mAgua.normalMap.repeat.set(260,260); mAgua.envMapIntensity=0.9;
   alcAgua=new THREE.Mesh(ag,mAgua);
   alcAgua.position.set(0,0,ALC_GZ); alcAgua.receiveShadow=false; alcAgua.frustumCulled=false; alcGroup.add(alcAgua); }
+function alcTexSuelo(){ if(_alcTx.suelo)return _alcTx.suelo;
+  const S=256, c=alcLienzo(S), g=c.getContext('2d');
+  g.fillStyle='#f2f2f2'; g.fillRect(0,0,S,S);
+  for(let i=0;i<3000;i++){ const l=170+Math.random()*70;
+    g.fillStyle='rgba('+(l|0)+','+(l|0)+','+(l|0)+',0.5)';
+    g.fillRect(Math.random()*S,Math.random()*S,1+Math.random()*3,1+Math.random()*3); }
+  for(let i=0;i<260;i++){ const l=150+Math.random()*80;
+    g.fillStyle='rgba('+(l|0)+','+(l|0)+','+(l|0)+',0.45)';
+    g.beginPath(); g.ellipse(Math.random()*S,Math.random()*S,2+Math.random()*9,2+Math.random()*6,Math.random()*3.14,0,6.283); g.fill(); }
+  for(let i=0;i<40;i++){ g.strokeStyle='rgba(120,120,120,.25)'; g.lineWidth=0.7;
+    let x=Math.random()*S,y=Math.random()*S; g.beginPath(); g.moveTo(x,y);
+    for(let k=0;k<4;k++){ x+=(Math.random()*2-1)*30; y+=(Math.random()*2-1)*30; g.lineTo(x,y); } g.stroke(); }
+  return (_alcTx.suelo=alcTexFin(c,8)); }
 let _txOlas=null;
 function alcOlasTex(){ if(_txOlas)return _txOlas;
   const S=128, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
@@ -4290,10 +4368,12 @@ function alcVegetacion(){
     const r=rnd();
     if(pd<0.30 && r>0.40) continue;             // menos densidad en lo llano
     if(r<0.13){ alcArbol({p:[jx,h,jz], h:6+rnd()*8}); ar++; }
-    else { const R=0.65+rnd()*1.05, y=h+R*0.5;
-      const col=[0x4a5730,0x556237,0x5f6b3d,0x47542e][(sd*97|0)%4];
-      alcAddC('follaje',new THREE.SphereGeometry(R,5,4),jx,y,jz,0,col);
-      if(rnd()>0.5) alcAddC('follaje',new THREE.SphereGeometry(R*0.68,5,4),jx+R*0.9,y-R*0.25,jz+R*0.5,0,col);
+    else { const R=0.55+rnd()*0.95, col=[0x4a5730,0x556237,0x5f6b3d,0x47542e][(sd*97|0)%4];
+      /* la mata es un RACIMO bajo y achatado, no una pelota: tres a cinco lobulos que se pisan */
+      const nl=3+((sd*17)|0)%3;
+      for(let l=0;l<nl;l++){ const a=(l/nl)*6.283+rnd()*0.9, rr=R*(0.45+rnd()*0.75);
+        const g=new THREE.SphereGeometry(R*(0.55+rnd()*0.55),5,4); g.scale(1,0.55+rnd()*0.2,1);
+        alcAddC('follaje',g, jx+Math.cos(a)*R*0.55, h+rr*0.42, jz+Math.sin(a)*R*0.55, 0, col); }
       n++; } }
   return {matas:n, arboles:ar}; }
 
@@ -5866,10 +5946,10 @@ function alcTrepa(nx,nz){ const x=nx, z=nz-ALC_GZ;
   return (alcPend(x,z)>ALC_PEND_MAX && alcH(x,z)>player.pos.y+0.35); }
 function moveX(d){ if(grassMode){ player.pos.x=Math.max(-GBND.x,Math.min(GBND.x,player.pos.x+d)); return; }
   if(islaMode && alcTrepa(player.pos.x+d, player.pos.z)) return;
-  player.pos.x+=d; const a=pAABB(); for(const c of alcLista()){ if(alcEscalon(c))continue; if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
+  player.pos.x+=d; const a=pAABB(); for(const c of alcLista()){ if(alcEscalon(c)||c.piso)continue; if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
 function moveZ(d){ if(grassMode){ player.pos.z=Math.max(GBND.z0,Math.min(GBND.z1,player.pos.z+d)); return; }
   if(islaMode && alcTrepa(player.pos.x, player.pos.z+d)) return;
-  player.pos.z+=d; const a=pAABB(); for(const c of alcLista()){ if(alcEscalon(c))continue; if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
+  player.pos.z+=d; const a=pAABB(); for(const c of alcLista()){ if(alcEscalon(c)||c.piso)continue; if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
 /* ISLA: si ninguna caja te sostuvo, manda el campo de alturas. El orden importa — las cajas
    (edificios, muros, escaleras) ganan siempre, así se puede caminar por los techos y las gradas. */
 function alcPiso(){ const g=alcH(player.pos.x, player.pos.z-ALC_GZ);
