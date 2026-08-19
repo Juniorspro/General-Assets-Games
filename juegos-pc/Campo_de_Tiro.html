@@ -1193,7 +1193,8 @@ const ALC_DATOS={
     {t:'bloque',p:[10,34.0,-27],ry:0,celdas:30,pisos:3,m:'hormigon'},
     {t:'bloque',p:[10,34.0,-9],ry:0,celdas:30,pisos:3,m:'hormigon'},
     {t:'patio',p:[-30,34,42],s:[62,6.4,44],ry:0,gradas:5},
-    {t:'arbol',p:[100,41,30],h:11},{t:'arbol',p:[112,41,36],h:8},{t:'arbol',p:[88,40,38],h:13}
+    {t:'arbol',p:[100,41,30],h:11},{t:'arbol',p:[112,41,36],h:8},{t:'arbol',p:[88,40,38],h:13},
+    {t:'torre',p:[196,14,64],h:13},{t:'barco',p:[224,0.2,52],ry:0.2,h:17}
   ]
 };
 
@@ -1630,6 +1631,39 @@ function alcPatio(e){
   pon(w/2-1.9, h+1.5, d/2-1.6, 2.6, 2.6, 2.6, 'metal', 0);
   pon(w/2-1.9, h+3.1, d/2-1.6, 3.2, 0.25, 3.2, 'techoChapa', 0, true); }
 
+/* TORRE DE VIGILANCIA, y se SUBE. Una torre a la que no se puede subir es un poste con sombrero;
+   en Alcatraz las torres son el mejor mirador de la isla, así que llevan su escalera de caracol
+   alrededor del fuste y la garita vidriada arriba, con el piso abierto por donde se sale. */
+function alcTorre(e){
+  const p=e.p||[0,0,0], h=e.h||12, ry=e.ry||0, x=p[0], y=p[1], z=p[2];
+  const R=1.15, CAB=3.4;                      // radio del fuste, lado de la garita
+  for(const [ax,az] of [[-1,-1],[1,-1],[-1,1],[1,1]])
+    alcCaja(x+ax*R, y+h/2, z+az*R, 0.26, h, 0.26, 'metal', ry);
+  alcCaja(x, y+h*0.5, z, 2.1, 0.14, 2.1, 'rejilla', ry, true);
+  // escalera de caracol: 4 tramos por vuelta, pegados al fuste
+  // el peldano sube 0,30 m, NO 0,42: el limite de escalon del juego son 38 cm, y con 42 la escalera
+  // quedaba linda y no se podia subir
+  const PEL=0.30, n=Math.max(10, Math.round(h/PEL));
+  for(let i=0;i<n;i++){ const a=ry+i*0.52, rr=R+0.78;
+    alcCaja(x+Math.cos(a)*rr, y+PEL*(i+0.5), z+Math.sin(a)*rr, 1.25, 0.14, 0.85, 'rejilla', a); }
+  // garita: piso, cuatro parantes, vidrio y techo
+  alcCaja(x, y+h+0.12, z, CAB, 0.24, CAB, 'rejilla', ry);
+  for(const [ax,az] of [[-1,-1],[1,-1],[-1,1],[1,1]])
+    alcCaja(x+ax*(CAB/2-0.14), y+h+1.3, z+az*(CAB/2-0.14), 0.2, 2.2, 0.2, 'metal', ry);
+  for(const [dx,dz,ang] of [[0,-1,0],[0,1,0],[-1,0,Math.PI/2],[1,0,Math.PI/2]])
+    alcCaja(x+dx*(CAB/2-0.06), y+h+1.5, z+dz*(CAB/2-0.06), CAB-0.3, 1.5, 0.06, 'vidrio', ry+ang, true);
+  alcCaja(x, y+h+2.6, z, CAB+0.7, 0.22, CAB+0.7, 'techoChapa', ry, true); }
+
+/* la lancha del muelle: sin ella el muelle es un dedo de hormigón sin sentido */
+function alcBarco(e){
+  const p=e.p||[0,0,0], ry=e.ry||0, x=p[0], y=p[1], z=p[2], L=e.h||17;
+  alcCaja(x, y+0.9, z, 5.0, 1.9, L, 'blancoSucio', ry);
+  alcCaja(x, y+0.05, z, 4.4, 0.7, L-1.6, 'negro', ry, true);
+  alcCaja(x, y+2.6, z-L*0.10, 3.6, 1.7, L*0.34, 'blanco', ry);
+  alcCaja(x, y+3.55, z-L*0.10, 4.0, 0.2, L*0.36, 'techoChapa', ry, true);
+  for(const c of [-1,1]) alcCaja(x+c*1.55, y+2.6, z-L*0.10-L*0.16, 0.6, 0.9, 0.06, 'vidrio', ry, true);
+  alcCil(x, y+4.6, z-L*0.10, 0.07,0.07, 1.9, 5, 'metal', 0, true); }
+
 function alcElem(e){ if(!e||!e.t)return;
   switch(e.t){
     case 'edificio': alcEdificio(e); break;
@@ -1647,6 +1681,8 @@ function alcElem(e){ if(!e||!e.t)return;
     case 'cartel':   alcCartel(e); break;
     case 'bloque':   alcBloque(e); break;
     case 'patio':    alcPatio(e); break;
+    case 'torre':    alcTorre(e); break;
+    case 'barco':    alcBarco(e); break;
   } }
 
 /* fundir: cada material sale en UNA malla */
