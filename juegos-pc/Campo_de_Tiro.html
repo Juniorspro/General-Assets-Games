@@ -7827,6 +7827,8 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
 }
 
 /* ---- gancho de consola (para calibrar y para probar sin tocar el código) ---- */
+function ruta_(pts,n){ return window.__tiro.ruta(pts,n); }
+function choque_(dx,dz){ return window.__tiro.choque(dx,dz); }
 try{ window.__tiro={
   // gancho para depurar/capturar: entra al nivel, avanza frames a mano y esconde el HUD
   entrar:()=>{ menuMode=false; try{ menuEl.classList.add('hide'); document.body.classList.remove('menu-open'); }catch(e){}
@@ -7958,6 +7960,86 @@ try{ window.__tiro={
     const nombre=m=>{ for(const k in ALC_M) if(ALC_M[k]===m) return k; return (m&&m.map)?'cartel/atlas':'?'; };
     return hs.map(h=>({d:+h.distance.toFixed(2), m:nombre(h.object.material),
       p:[+h.point.x.toFixed(2),+h.point.y.toFixed(2),+(h.point.z-ALC_GZ).toFixed(2)]})); },
+  // AUDITORIA DE ACCESO: se camina de verdad, con la fisica del juego, desde un origen a una lista de
+  // destinos, y para cada fracaso se informa QUE collider tapo el paso y de que elemento salio. Es la
+  // entrada del workflow de bugs: nada de suponer, todo medido.
+  auditar:(origen, destinos, marco)=>{
+    const out=[]; const M=marco||'abs';
+    const aI=(p)=> (M==='penal') ? [12+p[0]*0.99022+p[1]*(-0.13954), -26+0.13954*p[0]+0.99022*p[1]] : p;
+    for(const d of destinos){
+      const o=aI(origen), t=aI(d.p||d);
+      player.pos.set(o[0], (d.y0!=null? d.y0 : alcH(o[0],o[1])+0.6), ALC_GZ+o[1]);
+      player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+      const r=ruta_([[t[0],t[1]]], 900);
+      const u=r[r.length-1];
+      const item={n:(d.n||''), de:[+o[0].toFixed(1),+o[1].toFixed(1)], a:[+t[0].toFixed(1),+t[1].toFixed(1)],
+                  falta:u.falta, y:u.y, x:u.x, z:u.z, ok:u.falta<4};
+      if(!item.ok){
+        const dx=Math.sign(t[0]-u.x)*0.45, dz=Math.sign(t[1]-u.z)*0.45;
+        const q=[];
+        for(const c of [choque_(dx,0), choque_(0,dz)])
+          for(const tp of c.tapan) if(q.length<4 && !q.some(v=>v.q===tp.q)) q.push({q:tp.q, y:tp.y, esc:tp.escalon});
+        item.tapan=q.map(v=>{ const els=(ALC_DATOS.elementos||[]).concat(ALC_DETALLE||[]);
+          return {q:v.q, y:v.y, esc:v.esc, e:els[v.q]}; });
+        item.suelo=+alcH(u.x+dx,u.z+dz).toFixed(2);
+        item.pendPaso=+((alcH(u.x+dx,u.z+dz)-alcH(u.x,u.z))/0.45).toFixed(2);
+      }
+      out.push(item); }
+    return {total:out.length, ok:out.filter(o=>o.ok).length, fallas:out.filter(o=>!o.ok)}; },
+  /* NAVEGACION: grilla de 1 m con TODOS los niveles pisables de cada celda (el terreno y el techo de
+     cada caja donde quepa una persona de 1.85) y una inundacion BFS desde el muelle. Dos reglas de
+     transito, las mismas que usa el motor: entre dos niveles de CAJA se sube 0.38 m (escalon), y sobre
+     TERRENO se sube lo que permita la pendiente (0.97 por metro). Sin la segunda, cualquier talud de
+     mas de 0.19 cortaba la inundacion y "no se llegaba" a ningun lado. */
+  navegar:(pois,celda)=>{
+    const C=celda||1, X0=-250, X1=250, Z0=-132, Z1=56;
+    const NX=Math.round((X1-X0)/C)+1, NZ=Math.round((Z1-Z0)/C)+1;
+    const ALTO=1.80, PASO=0.38, CAIDA=3.0, PEND=0.97;
+    const niv=new Array(NX*NZ), esT=new Array(NX*NZ);
+    const cand=[], tocan=[];
+    for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){
+      const x=X0+i*C, z=Z0+j*C, o=j*NX+i;
+      cand.length=0; tocan.length=0;
+      const h0=alcH(x,z);
+      if(h0>0.6) cand.push(h0);
+      const g=ALC_REJ.get(Math.floor(x/ALC_REJC)+'_'+Math.floor(z/ALC_REJC));
+      const zz=z+ALC_GZ;
+      if(g) for(let k=0;k<g.length;k++){ const c=g[k];
+        if(c.minx>x||c.maxx<x||c.minz>zz||c.maxz<zz) continue;
+        tocan.push(c); if(c.maxy>h0-0.05) cand.push(c.maxy); }   // el piso del penal esta a 10 cm del terreno: con +0.1 quedaba invisible
+      const libres=[], terr=[];
+      for(let a=0;a<cand.length;a++){ const h=cand[a];
+        let ok=true;
+        for(let k=0;k<tocan.length;k++){ const c=tocan[k];
+          if(c.maxy>h+0.14 && c.miny<h+ALTO){ ok=false; break; } }   // 0.14: la losa que te sostiene no se descarta a si misma
+        if(!ok) continue;
+        let rep=false; for(let b=0;b<libres.length;b++) if(Math.abs(libres[b]-h)<0.3){ rep=true; break; }
+        if(rep) continue;
+        libres.push(h); terr.push(Math.abs(h-h0)<0.12); }
+      niv[o]=libres; esT[o]=terr; }
+    const idx=(i,j)=>j*NX+i;
+    const vis=new Map(), cola=[];
+    const meter=(i,j,l)=>{ const k=idx(i,j)+':'+l; if(vis.has(k))return; vis.set(k,1); cola.push([i,j,l]); };
+    const ci=Math.round((ALC_START.x-X0)/C), cj=Math.round((ALC_START.z-ALC_GZ-Z0)/C);
+    const l0=niv[idx(ci,cj)]||[]; for(let a=0;a<l0.length;a++) meter(ci,cj,a);
+    let cab=0;
+    while(cab<cola.length){ const [i,j,l]=cola[cab++]; const o=idx(i,j), h=niv[o][l], t=esT[o][l];
+      for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const ni=i+di, nj=j+dj; if(ni<0||nj<0||ni>=NX||nj>=NZ) continue;
+        const n2=idx(ni,nj), L=niv[n2]; if(!L||!L.length) continue;
+        for(let b=0;b<L.length;b++){ const dh=L[b]-h;
+          const tope = (t && esT[n2][b]) ? PEND*C : PASO;      // terreno: pendiente; cajas: escalon
+          if(dh>tope) continue; if(dh<-CAIDA) continue;
+          meter(ni,nj,b); } } }
+    const res=(pois||[]).map(p=>{
+      const i=Math.round((p.p[0]-X0)/C), j=Math.round((p.p[1]-Z0)/C);
+      const L=niv[idx(i,j)]||[];
+      let mejor=-1, dmin=1e9;
+      for(let b=0;b<L.length;b++){ const d=(p.y==null)?0:Math.abs(L[b]-p.y); if(d<dmin){dmin=d;mejor=b;} }
+      return {n:p.n, p:p.p, y:(mejor>=0? +L[mejor].toFixed(2):null), pedida:p.y, niveles:L.length,
+              ok:(mejor>=0 && vis.has(idx(i,j)+':'+mejor)), dif:(mejor>=0?+dmin.toFixed(2):null)}; });
+    let pis=0; for(let k=0;k<niv.length;k++) if(niv[k]&&niv[k].length) pis++;
+    return {celda:C, celdas:NX*NZ, pisables:pis, nodos:vis.size, pois:res}; },
   posIsla:(x,z,y)=>{ player.pos.set(x,(y==null?alcH(x,z)+0.1:y),ALC_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; return +player.pos.y.toFixed(2); },
   islaEst:()=>({mundo:world, isla:islaMode, col:ALC_COL.length, mallas:alcGroup.children.length,
     pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ALC_GZ).toFixed(1)], suelo:+alcH(player.pos.x,player.pos.z-ALC_GZ).toFixed(2)}), pos:(x,z,y)=>{ player.pos.set(x,(y==null?0:y),TIRO_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
