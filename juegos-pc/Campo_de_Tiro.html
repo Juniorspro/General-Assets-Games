@@ -5904,6 +5904,17 @@ try{ window.__tiro={
   pecho:()=>{ if(!bSp02)return null; const P=new THREE.Vector3(); bodyRoot.updateMatrixWorld(true); bSp02.getWorldPosition(P);
     const E=P.clone().sub(camera.position).applyQuaternion(camera.quaternion.clone().invert());
     return { mundo:P.toArray().map(v=>+v.toFixed(3)), relCam:E.toArray().map(v=>+v.toFixed(3)) }; },
+  /* ¿DONDE CAE EL ALZA EN PANTALLA? La cruz del arma vive en el punto local (0, AK_MIRA_Y, 0.004).
+     Proyectarlo da el error de punteria en pixeles, que es lo unico que sirve para alinear la mira:
+     a ojo, sobre un render oscuro, no se distingue el alza del cargador. */
+  alza:()=>{ if(!gunRoot)return null; gunRoot.updateMatrixWorld(true);
+    const p=new THREE.Vector3(0,AK_MIRA_Y,0.004).applyMatrix4(gunRoot.matrixWorld);
+    const n=p.clone().project(camera);
+    const W=renderer.domElement.width, H=renderer.domElement.height;
+    const rel=p.clone().sub(camera.position).applyQuaternion(camera.quaternion.clone().invert());
+    return { ndc:[+n.x.toFixed(4),+n.y.toFixed(4)],
+             px:[Math.round((n.x*0.5+0.5)*W), Math.round((0.5-n.y*0.5)*H)], centro:[W/2,H/2],
+             dist:+(-rel.z).toFixed(3), fov:+camera.fov.toFixed(1), ads:+adsW.toFixed(2) }; },
   esq:()=>{ const q=camera.quaternion.clone().invert(), P=new THREE.Vector3(), o={};
     bodyRoot.updateMatrixWorld(true);
     const g=(n,b)=>{ if(!b)return; b.getWorldPosition(P); o[n]=P.clone().sub(camera.position).applyQuaternion(q).toArray().map(v=>+v.toFixed(3)); };
