@@ -7991,6 +7991,39 @@ try{ window.__tiro={
      transito, las mismas que usa el motor: entre dos niveles de CAJA se sube 0.38 m (escalon), y sobre
      TERRENO se sube lo que permita la pendiente (0.97 por metro). Sin la segunda, cualquier talud de
      mas de 0.19 cortaba la inundacion y "no se llegaba" a ningun lado. */
+  /* LA PRUEBA HONESTA. navegar() modela la fisica; esto la USA: siembra al jugador en un punto,
+     lo empuja en las cuatro direcciones con update() de verdad y anota donde termina. Se equivoca
+     mucho menos que cualquier modelo — descubrio que las pasarelas y el techo del penal, que la
+     grilla daba por aislados, se suben caminando. Se corre por regiones para que sea barato. */
+  fisica:(x0,z0,x1,z1,sx,sz,sy,frames)=>{
+    const PZ=frames||22, W=Math.round(x1-x0)+1, H=Math.round(z1-z0)+1;
+    const vis=new Map(), cola=[];
+    const meter=(x,z,y)=>{ const i=Math.round(x-x0), j=Math.round(z-z0);
+      if(i<0||j<0||i>=W||j>=H) return false;
+      const k=i+'_'+j+'_'+Math.round(y/0.6);
+      if(vis.has(k)) return false;
+      vis.set(k,[+x.toFixed(1),+z.toFixed(1),+y.toFixed(2)]); cola.push([x,z,y]); return true; };
+    player.pos.set(sx,(sy==null?alcH(sx,sz)+0.1:sy),ALC_GZ+sz); player.vel.set(0,0,0); player.vy=0;
+    meter(sx,sz,player.pos.y);
+    let cab=0, exp=0;
+    while(cab<cola.length && exp<26000){ const nodo=cola[cab++];
+      for(let d=0;d<4;d++){ const dx=[1,-1,0,0][d], dz=[0,0,1,-1][d];
+        player.pos.set(nodo[0],nodo[2],ALC_GZ+nodo[1]); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+        player.yaw=Math.atan2(-dx,-dz); player.faceYaw=player.yaw;
+        joy.x=0; joy.y=-1;
+        for(let f=0;f<PZ;f++) update(0.0166);
+        joy.x=0; joy.y=0;
+        exp++;
+        const nx=player.pos.x, nz=player.pos.z-ALC_GZ, ny=player.pos.y;
+        if(Math.hypot(nx-nodo[0],nz-nodo[1])<0.3) continue;   // no se movio: hay algo
+        meter(nx,nz,ny); } }
+    return {nodos:vis.size, empujes:exp, pts:[...vis.values()]}; },
+  /* de todo lo que la fisica alcanzo, ¿hay algo parado cerca de este punto y a esta altura? */
+  llega:(pts,x,z,y,rad)=>{ const R=rad||2.5; let mejor=null, d2=1e18;
+    for(const q of pts){ const dx=q[0]-x, dz=q[1]-z;
+      if(Math.abs(q[2]-y)>1.2) continue;
+      const d=dx*dx+dz*dz; if(d<d2){ d2=d; mejor=q; } }
+    return {ok:(mejor!=null && Math.sqrt(d2)<=R), cerca:mejor, dist:(mejor?+Math.sqrt(d2).toFixed(2):null)}; },
   navegar:(pois,celda)=>{
     const C=celda||1, X0=-250, X1=250, Z0=-132, Z1=56;
     const NX=Math.round((X1-X0)/C)+1, NZ=Math.round((Z1-Z0)/C)+1;
@@ -8008,13 +8041,22 @@ try{ window.__tiro={
         if(c.minx>x||c.maxx<x||c.minz>zz||c.maxz<zz) continue;
         tocan.push(c); if(c.maxy>h0-0.05) cand.push(c.maxy); }   // el piso del penal esta a 10 cm del terreno: con +0.1 quedaba invisible
       const libres=[], terr=[];
+      cand.sort((a,b)=>a-b);
       for(let a=0;a<cand.length;a++){ const h=cand[a];
+        /* Lo que estorba la cabeza es la CARA DE ABAJO de un cuerpo, no su altura total: una caja
+           apoyada en el piso nunca es un techo. Con el test viejo (maxy>h+0.42) cada peldaño de una
+           escalera hacia arriba tapaba al de abajo y NINGUNA escalera se podia subir — ni el piso al
+           pie de la escalera era pisable. */
         let ok=true;
         for(let k=0;k<tocan.length;k++){ const c=tocan[k];
-          if(c.maxy>h+0.42 && c.miny<h+ALTO){ ok=false; break; } }   // lo que asoma menos de 42 cm es ESCALON, no techo: sin esto no se podia subir una escalera
+          if(c.miny>h+0.05 && c.miny<h+ALTO){ ok=false; break; }     // algo flotando dentro del cuerpo
+          if(c.miny<=h+0.05 && c.maxy>h+PASO){ ok=false; break; } }  // un cuerpo macizo mas alto que un escalon
         if(!ok) continue;
-        let rep=false; for(let b=0;b<libres.length;b++) if(Math.abs(libres[b]-h)<0.3){ rep=true; break; }
+        /* tolerancia de 0.12 y no 0.3: en una escalera los peldaños estan a 0.19 uno de otro y
+           agrupandolos a 0.3 desaparecian los intermedios, que son justamente los que la hacen subible. */
+        let rep=false; for(let b=0;b<libres.length;b++) if(Math.abs(libres[b]-h)<0.12){ rep=true; break; }
         if(rep) continue;
+        if(libres.length>=14) break;
         libres.push(h); terr.push(Math.abs(h-h0)<0.12); }
       niv[o]=libres; esT[o]=terr; }
     const idx=(i,j)=>j*NX+i;
