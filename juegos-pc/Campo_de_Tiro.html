@@ -245,6 +245,33 @@
   .heAct button{ flex:1; font-size:12.5px; padding:9px 4px; }
   #heSave{ background:linear-gradient(180deg,#ffd76b,#e0a11f); color:#231703; border-color:#ffe9ad; }
   #heReset{ background:rgba(255,140,120,.18); border-color:rgba(255,170,150,.35); }
+  /* ===== VIDA Y MARCADOR DE PVP ===== */
+  #hpWrap{ position:fixed; left:26px; top:calc(86px + var(--safe-t)); z-index:20; width:172px; pointer-events:none;
+    font-family:'Segoe UI',system-ui,sans-serif; }
+  #hpBar{ height:13px; border-radius:7px; background:rgba(8,14,22,.62); border:1px solid rgba(255,255,255,.22); overflow:hidden; }
+  #hpBar>i{ display:block; height:100%; width:100%; border-radius:6px; background:linear-gradient(90deg,#6ff0a8,#31c46f);
+    transition:width .12s linear; }
+  body.herido #hpBar>i{ background:linear-gradient(90deg,#ffd166,#f0803a); }
+  body.critico #hpBar>i{ background:linear-gradient(90deg,#ff8a7a,#e0392a); }
+  #hpNum{ position:absolute; right:4px; top:-16px; font-size:11px; font-weight:800; color:#eaf2fb; text-shadow:0 1px 3px #000; }
+  #hpKD{ margin-top:3px; font-size:10.5px; font-weight:700; color:#bcd4ec; text-shadow:0 1px 3px #000; }
+  #golpeFlash{ position:fixed; inset:0; z-index:7; pointer-events:none; opacity:0;
+    background:radial-gradient(ellipse at center, rgba(255,40,20,0) 42%, rgba(255,30,16,.55) 100%); }
+  body.golpe #golpeFlash{ animation:golpeFx .34s ease-out; }
+  @keyframes golpeFx{ 0%{opacity:1} 100%{opacity:0} }
+  #hitMark{ position:fixed; left:50%; top:50%; width:26px; height:26px; margin:-13px; z-index:8; opacity:0; pointer-events:none;
+    background:
+      linear-gradient(to bottom right,transparent 44%,#fff 44%,#fff 56%,transparent 56%),
+      linear-gradient(to bottom left, transparent 44%,#fff 44%,#fff 56%,transparent 56%);
+    filter:drop-shadow(0 0 2px rgba(0,0,0,.8)); }
+  #hitMark.on{ animation:hitPop .28s ease-out; }
+  @keyframes hitPop{ 0%{opacity:1;transform:scale(.6)} 100%{opacity:0;transform:scale(1.5)} }
+  #muerte{ position:fixed; inset:0; z-index:46; display:none; align-items:center; justify-content:center; flex-direction:column; gap:8px;
+    background:rgba(70,10,10,.42); backdrop-filter:blur(3px); color:#ffe6e0; font-family:'Segoe UI',system-ui,sans-serif; }
+  body.muerto #muerte{ display:flex; }
+  #muerte b{ font-size:30px; font-weight:900; letter-spacing:.06em; text-shadow:0 3px 12px #000; }
+  #muerte span{ font-size:14px; font-weight:700; opacity:.9; }
+  body.muerto #joy, body.muerto .actBtn{ opacity:.30; pointer-events:none; }
   .drCat{ margin:9px 2px 4px; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7fd0ff; opacity:.85; }
   .heHint{ font-size:10.5px; font-weight:600; color:#9fb8d2; text-align:center; }
   /* PLEGADO. Desplegado el panel tapa justo el rincon donde hay que acomodar la palanca y el fuego,
@@ -443,6 +470,7 @@
   <button id="bFire"   class="actBtn">FUEGO</button>
   <button id="bReload" class="actBtn">↺</button>
   <button id="bAds" class="actBtn" data-i18n="ct_apuntar">APUNTAR</button>
+  <div id="hpWrap"><div id="hpBar"><i></i></div><div id="hpNum">100</div><div id="hpKD">0 / 0</div></div>
   <div id="tiroHUD"><div>0</div><div>0/0 · 0%</div><div>30 / 30</div></div>
   <div id="tiroMsg"></div>
   <div id="hudWrap"><div id="hud"></div><div id="hudMission"></div></div>
@@ -456,6 +484,9 @@
   <div id="vPack"></div>
   <div id="kbd"></div>
   <button id="btnMenu" title="Menú">☰</button>
+  <div id="golpeFlash"></div>
+  <div id="hitMark"></div>
+  <div id="muerte"><b>TE MATARON</b><span id="muerteQ">reapareciendo…</span></div>
   <div id="hudEdit">
     <div class="heRow" id="hePresets">
       <div class="heTab" data-pre="dos">Dos dedos</div>
@@ -5271,7 +5302,11 @@ function tiroShoot(){
   const hits=_shotRay.intersectObjects(tiroTargets,false);
   let hit=hits.length?hits[0]:null;
   if(hit && hit.object.userData.kind==='steel' && hit.object.userData.down) hit=null;   // ya está caído
+  /* ¿le pego a otro JUGADOR antes que a un blanco? El rayo tambien pregunta por las cajas de los
+     remotos, y si uno estaba mas cerca el impacto es el suyo. */
   let end=null;
+  { const pj=mpDisparo(_shotRay, hit?hit.distance:Infinity, AD.dmg||25);
+    if(pj){ hit=null; end=pj; } }
   if(hit){ tiroImpactoBlanco(hit); end=hit.point; }
   else { const hs=_shotRay.intersectObjects(tiroSolids,false); if(hs.length){ end=hs[0].point; tiroSnd('pared');
       const sp=tiroSpark(); sp.position.copy(hs[0].point); sp.userData.v=0.14; sp.visible=true; sp.scale.setScalar(0.7); } }
@@ -6004,6 +6039,7 @@ function tickAim(dt){
     if(tiroRel<=0){ tiroRel=0; RC.act=false; RC.ch=0; if(tiroAmmo<TIRO_MAG){ tiroAmmo=TIRO_MAG; tiroHUD(); } } }
   rcTick(dt);
   adsTick(dt);
+  try{ pvpTick(dt); }catch(e){}
   tiroCd-=dt; if(tiroFire && tiroCd<=0 && !paused && gameplayActive()) tiroShoot();
 }
 function tickTiro(dt){
@@ -6433,6 +6469,9 @@ try{ window.__tiro={
     return { id:d.id, n:d.n, cat:d.cat, mag:TIRO_MAG, rpm:TIRO_RPM, rec:TIRO_RELOAD, fov:FOV_ADS,
              mira:AK_MIRA_Y, esc:GUN_ESC, adsZ:GUN_OJO_ADS.z, piezas:gunCuerpo?gunCuerpo.children.length:0 }; },
   arsenal:()=>ARSENAL.map(o=>({id:o.id,n:o.n,cat:o.cat})),
+  // probar el daño y la muerte sin necesitar un segundo cliente
+  pvp:(d)=>{ if(d==null) return {vida:+PVP.vida.toFixed(1),muerto:PVP.muerto,bajas:PVP.bajas,muertes:PVP.muertes,cajas:_mpCajas.length};
+    pvpRecibir(d,'prueba',false); return {vida:+PVP.vida.toFixed(1),muerto:PVP.muerto}; },
   tirar:()=>tiroShoot(), auto:v=>{ tiroFire=!!v; }, recargar:()=>tiroReload(),
   escArma:v=>gunRoot.scale.setScalar(v), grip:(a,b,c,d,e,f)=>{ GUN_GRIP_R.set(a,b,c); GUN_GRIP_L.set(d,e,f); },   // ← se llamaba `esc` y pisaba en silencio a `esc:scene`
   tors:(a,b)=>{ TIRO_TORS_R=a; TIRO_TORS_L=b; }, ik:v=>{ TIRO_IKMAX=v; }, spryaw:v=>{ SPR_YAW=v; },
@@ -7571,6 +7610,7 @@ const HUD_PIEZAS=[
   {id:'bVoice',  nom:'Micrófono',   gr:'inf'},
   {id:'btnMenu', nom:'Menú',        gr:'inf'},
   {id:'tiroHUD', nom:'Munición',    gr:'inf'},
+  {id:'hpWrap',  nom:'Vida',        gr:'inf'},
   {id:'hudWrap', nom:'Misión',      gr:'inf'},
   {id:'vcMapa',  nom:'Mapa',        gr:'inf'},
 ];
@@ -7887,7 +7927,7 @@ function mpSwapBody(r,res){
 function mpRemote(id,name){ let r=MP.remotes.get(id);
   if(!r){ const av=new THREE.Group(); const tg=mpNameTag(name); tg.sprite.visible=showNames; av.add(tg.sprite); scene.add(av);
     r={ id,name,color:mpColor(id),world:null,anim:'idle',moving:false,mir:false,yaw:0, ch:-1, chApplied:-1, pos:new THREE.Vector3(), target:new THREE.Vector3(),
-      avatar:av, tag:tg.sprite, tagSet:tg.setTalk, talking:false, _talkShown:false, last:performance.now(), bob:0, init:false, rigged:false }; MP.remotes.set(id,r); mpRig(r);
+      avatar:av, tag:tg.sprite, tagSet:tg.setTalk, talking:false, _talkShown:false, last:performance.now(), bob:0, init:false, rigged:false }; MP.remotes.set(id,r); mpRig(r); mpCaja(r);
     mpChatIn('🟢', (name||'?')+' '+t('mp_join')); sfx('spawn'); if(VOICE.stream) voiceSend(id,'ready'); }   // aviso de que se unió + sonido de spawn + invitar a la voz
   return r; }
 function mpChatIn(name,text){ if(!text)return; const log=document.getElementById('mpChatLog'); if(!log)return;
@@ -7965,7 +8005,10 @@ function mpConnect(){
       r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now();
       if(world==='void') updateVoidBoard(); }
     else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); const r=MP.remotes.get(d.id); if(r) mpBubble(r, d.text||''); }   // panel de chat + burbuja sobre la cabeza
-    else if(topic.slice(-7)==='/action'){ /* eventos discretos (emotes/hits): aplicar localmente */ if(d.type==='hit_player' && d.targetId===MP.id){ /* este juego no tiene daño */ } }
+    else if(topic.slice(-7)==='/action'){
+      if(d.type==='hit' && d.to===MP.id) pvpRecibir(d.dmg, d.name||'alguien', d.cab);
+      else if(d.type==='kill'){ if(d.by===MP.name){ PVP.bajas++; pvpHUD(); }
+        mpChatIn('💀',(d.name||'?')+' cayó'+(d.by?(' · '+d.by):'')); } }
     else if(topic.slice(-4)==='/rtc'){ if(!d.to||d.to===MP.id) voiceSignal(d); }   // señalización del chat de voz (WebRTC)
   });
 }
@@ -7979,10 +8022,107 @@ function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.n
   const ch=hb||(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving||cur.mir!==l.mir||cur.chId!==l.chId||cur.vSeed!==l.vSeed||cur.vFase!==l.vFase||cur.vBest!==l.vBest||cur.vDead!==l.vDead||cur.talk!==l.talk;
   if(!ch)return; MP.lastPub=now; MP.last=cur; if(hb)MP.lastFull=now;
   MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving,mir:cur.mir,ch:cur.chId,vSeed:cur.vSeed,vFase:cur.vFase,vBest:cur.vBest,vDead:cur.vDead,talk:cur.talk}),{qos:0}); }
+/* ===================== TIROTEO ENTRE JUGADORES =====================
+   El multijugador ya mostraba a los demas y les hablaba, pero no habia daño: el manejador de /action
+   decia literalmente "este juego no tiene daño". Ahora si. El modelo es el mas simple que aguanta un
+   broker publico y sin servidor: el que DISPARA decide el impacto y avisa a quien le pego, y el que
+   RECIBE es el dueño de su propia vida. No hay validacion cruzada —es un broker abierto, no hay donde
+   validar— pero tampoco hace falta para jugar entre amigos, y evita el peor problema del modelo
+   contrario (que cada uno se cure solo y nadie muera nunca). */
+const PVP={ max:100, vida:100, muerto:false, tRes:0, bajas:0, muertes:0, ultimo:'' };
+const _mpCajas=[];        // cajas de impacto de los remotos (mismo orden que no importa: se leen por userData)
+function pvpHUD(){
+  const b=document.getElementById('hpBar'), n=document.getElementById('hpNum'), k=document.getElementById('hpKD');
+  const f=Math.max(0,Math.min(1,PVP.vida/PVP.max));
+  if(b&&b.firstElementChild) b.firstElementChild.style.width=(f*100).toFixed(0)+'%';
+  if(n) n.textContent=Math.max(0,Math.round(PVP.vida));
+  if(k) k.textContent=PVP.bajas+' / '+PVP.muertes;
+  document.body.classList.toggle('herido', f<0.6&&f>=0.28);
+  document.body.classList.toggle('critico', f<0.28);
+}
+function pvpMarca(){ const m=document.getElementById('hitMark'); if(!m)return;
+  m.classList.remove('on'); void m.offsetWidth; m.classList.add('on'); }
+/* Caja de impacto del remoto: una sola caja del tamaño de una persona, colgada del avatar. Con el
+   cuerpo hecho de piezas sueltas, apuntarle a las piezas daria huecos entre brazo y torso. */
+function mpCaja(r){
+  if(r.caja) return r.caja;
+  const g=new THREE.BoxGeometry(0.62,1.72,0.42);
+  const m=new THREE.MeshBasicMaterial({visible:false});
+  const me=new THREE.Mesh(g,m); me.position.y=0.86; me.userData.mpId=r.id; me.userData.mpRef=r;
+  me.frustumCulled=false; r.avatar.add(me); r.caja=me; _mpCajas.push(me); return me;
+}
+function mpSacarCaja(r){ if(!r||!r.caja)return; const i=_mpCajas.indexOf(r.caja); if(i>=0)_mpCajas.splice(i,1);
+  if(r.caja.geometry)r.caja.geometry.dispose(); r.caja=null; }
+/* ¿el rayo le pego a un jugador antes que a lo demas? Devuelve el punto de impacto o null. */
+function mpDisparo(ray, distTope, dmg){
+  if(!MP.on || !_mpCajas.length) return null;
+  const hs=ray.intersectObjects(_mpCajas,false);
+  if(!hs.length) return null;
+  const h=hs[0]; if(h.distance>=distTope) return null;
+  const r=h.object.userData.mpRef;
+  /* la cabeza vale doble: el tercio de arriba de la caja */
+  const local=h.point.clone(); r.avatar.worldToLocal(local);
+  const cabeza=(local.y>1.32);
+  mpPegar(h.object.userData.mpId, Math.round(dmg*(cabeza?2:1)), cabeza);
+  return h.point;
+}
+function mpPegar(id,dmg,cabeza){
+  if(!MP.on||!MP.client) return;
+  MP.client.publish(MP.room+'/action', JSON.stringify({id:MP.id,type:'hit',to:id,dmg:dmg,cab:!!cabeza,name:MP.name}),{qos:0});
+  pvpMarca(); sfx('btn', cabeza?0.85:0.45);
+}
+/* golpe cuerpo a cuerpo: mismo criterio pero con el alcance corto del arma */
+function mpGolpe(dir,alcance,dmg){
+  if(!MP.on||!_mpCajas.length) return;
+  const ray=new THREE.Raycaster(camera.position,dir,0.01,alcance);
+  const hs=ray.intersectObjects(_mpCajas,false);
+  if(hs.length) mpPegar(hs[0].object.userData.mpId, dmg, false);
+}
+function pvpRecibir(dmg,quien,cab){
+  if(PVP.muerto) return;
+  PVP.vida=Math.max(0,PVP.vida-(dmg||10));
+  PVP._sin=0;
+  PVP.ultimo=quien||'?';
+  document.body.classList.remove('golpe'); void document.body.offsetWidth; document.body.classList.add('golpe');
+  sfx('wrong',0.45);
+  if(PVP.vida<=0) pvpMorir();
+  pvpHUD();
+}
+function pvpMorir(){
+  PVP.muerto=true; PVP.muertes++; PVP.tRes=4.0;
+  document.body.classList.add('muerto');
+  const q=document.getElementById('muerteQ'); if(q) q.textContent='te mató '+PVP.ultimo+' · reapareciendo…';
+  if(MP.on&&MP.client) MP.client.publish(MP.room+'/action', JSON.stringify({id:MP.id,type:'kill',by:PVP.ultimo,name:MP.name}),{qos:0});
+  pvpHUD();
+}
+/* REAPARICION. En el valle cae en un punto al azar bien lejos del ultimo; en el campo de tiro, en la
+   linea de tiro. La vida vuelve entera: es un tiroteo de sala, no una partida con botiquines. */
+function pvpRevivir(){
+  PVP.muerto=false; PVP.vida=PVP.max; document.body.classList.remove('muerto');
+  tiroAmmo=TIRO_MAG; tiroRel=0;
+  try{
+    if(world==='valle'){ const a=Math.random()*6.283, R=60+Math.random()*90;
+      const x=Math.cos(a)*R, z=Math.sin(a)*R;
+      player.pos.set(x, (typeof alcH==='function'? alcH(x,z)+1.2 : 14), ALC_GZ+z); }
+    else player.pos.set((Math.random()-0.5)*6, 1.4, TIRO_GZ+8);
+  }catch(e){}
+  player.vel.set(0,0,0); player.vy=0; pvpHUD();
+}
+function pvpTick(dt){
+  if(PVP.muerto){ PVP.tRes-=dt;
+    joy.x=0; joy.y=0; tiroFire=false; adsQ=0;        // muerto no se mueve ni dispara
+    const q=document.getElementById('muerteQ');
+    if(q) q.textContent='te mató '+PVP.ultimo+' · reaparecés en '+Math.max(0,PVP.tRes).toFixed(1)+' s';
+    if(PVP.tRes<=0) pvpRevivir(); return; }
+  /* regeneracion lenta: 6 de vida por segundo despues de 4 s sin recibir nada */
+  PVP._sin=(PVP._sin||0)+dt;
+  if(PVP.vida<PVP.max && PVP._sin>4){ PVP.vida=Math.min(PVP.max,PVP.vida+6*dt); pvpHUD(); }
+}
+try{ pvpHUD(); }catch(e){}
 function mpTick(dt){
   const now=performance.now();
   if(mpStatusEl && mpStatusEl.dataset.s==='online') mpStatusEl.textContent=t('mp_online')+' · '+(MP.remotes.size+1)+'👥';   // nº de jugadores conectados (vos + remotos)
-  for(const [id,r] of MP.remotes){ if(now-r.last>6500){ scene.remove(r.avatar); MP.remotes.delete(id); voiceClose(id); continue; }   // timeout (con latido de 2.2s no se cae si sigue ahí)
+  for(const [id,r] of MP.remotes){ if(now-r.last>6500){ mpSacarCaja(r); scene.remove(r.avatar); MP.remotes.delete(id); voiceClose(id); continue; }   // timeout (con latido de 2.2s no se cae si sigue ahí)
     if(!r.rigged && mpBodySrc){ if(r.body)r.avatar.remove(r.body); mpRig(r); }                                       // al cargar el GLB, cambia la cápsula por la skin real
     if(r.rigged && r.ch!==r.chApplied){ const want=r.ch; r.chApplied=want;                                           // el remoto se cambió de personaje → ponerle SU skin de la tienda
       if(want<0) mpSwapBody(r,null);
