@@ -6571,6 +6571,23 @@ try{ window.__tiro={
   /* ¿A DONDE MIRA CADA PALMA? Devuelve el +Y local de cada mano expresado en el local del ARMA, que es
      donde se puede leer si la palma va contra el mango (z negativo para la derecha) o contra el pozo
      (y positivo para la izquierda). Es lo que faltaba para no discutir de memoria el giro del puño. */
+  /* ¿LOS DEDOS CIERRAN SOBRE ALGO? Devuelve, por cada dedo, la punta en LOCAL DEL ARMA y a que
+     distancia queda del solido mas cercano del arma. Es el criterio que faltaba: un puño esta bien
+     cerrado cuando las puntas caen del OTRO lado del mango y a pocos milimetros de su superficie. Si
+     dan 40 mm en el aire, la mano esta abierta en forma de pala, se vea como se vea en una foto. */
+  dedos:()=>{ if(!gunRoot||!bRHand||!bLHand)return null;
+    bodyRoot.updateMatrixWorld(true); gunRoot.updateMatrixWorld(true);
+    const inv=new THREE.Matrix4().copy(gunRoot.matrixWorld).invert(), W=new THREE.Vector3();
+    const lado=(g)=>{ const d=g&&g.userData&&g.userData.dedos; if(!d)return null;
+      return d.map((par,i)=>{ const b2=par[1];
+        // la punta: el extremo del hueso distal, o sea su origen mas el largo de su pieza
+        const m=b2.children.find(o=>o.isMesh);
+        W.set(0,0, m? (m.position.z*2) : -0.02).applyMatrix4(b2.matrixWorld).applyMatrix4(inv);
+        const q=__tiro.solido(W.x,W.y,W.z);
+        return { n:(i<4?('dedo'+i):'pulgar'), p:W.toArray().map(v=>+v.toFixed(3)), mm:q?q.mmLoc:null }; }); };
+    const gr=(cuManos[0]&&cuManos[0].userData.lado>0)?cuManos[0]:cuManos[1];
+    const gl=(gr===cuManos[0])?cuManos[1]:cuManos[0];
+    return { der:lado(gr), izq:lado(gl) }; },
   palmas:()=>{ if(!gunRoot||!bRHand||!bLHand)return null;
     bodyRoot.updateMatrixWorld(true); gunRoot.updateMatrixWorld(true);
     const q=new THREE.Quaternion(), qi=gunRoot.getWorldQuaternion(new THREE.Quaternion()).invert();
@@ -6682,7 +6699,10 @@ try{ window.__tiro={
     return r; },
   // listar los huesos, para saber como se llaman de verdad
   huesosLista:()=>{ const a=[]; if(bodyInner) bodyInner.traverse(o=>{ if(o.isBone) a.push(o.name); }); return a; },
-  puno:(v)=>{ for(const g of cuManos) cuCerrar(g,v); return cuManos.length; },
+  puno:(v,lado)=>{ for(const g of cuManos){ if(lado&&Math.sign(g.userData.lado||1)!==Math.sign(lado))continue; cuCerrar(g,v); } return cuManos.length; },
+  pulg:(a,b,c,d)=>{ CU_PULG[0]=a; CU_PULG[1]=b; CU_PULG[2]=c; CU_PULG[3]=d;
+    for(const g of cuManos) cuCerrar(g, g.userData.cierre==null?0.6:g.userData.cierre); return CU_PULG.slice(); },
+  curva:(a,b)=>{ CU_CURVA[0]=a; CU_CURVA[1]=b; for(const g of cuManos) cuCerrar(g, g.userData.cierre==null?0.6:g.userData.cierre); return CU_CURVA.slice(); },
   // correr el hueco del puño en vivo, para calzar el mango sin recompilar
   manoOff:(x,y,z,lado)=>{ const V=(lado<0?CU_HUECO_L:CU_HUECO_R); V.set(x,y,z);
     for(const g of cuManoGrupos){ if(g.userData.hueco===V) g.position.set(-x*U,-y*U,-z*U); } return V.toArray(); },
@@ -6776,13 +6796,18 @@ const cuManoGrupos=[];
 /* Centro del aro del puño, en metros y en local de la mano. Va por separado para cada mano porque lo que
    agarra cada una es muy distinto: la derecha envuelve una empuñadura de 40 mm y la izquierda se apoya
    sobre un guardamanos de 68x92, que no se puede rodear — ahi la mano abre mas y monta por el costado. */
-const CU_HUECO_R=new THREE.Vector3(0, 0.033, -0.024);
+/* HUECO DEL PUÑO DERECHO. Barrido de 36 combinaciones midiendo con dedos(): con el valor viejo
+   (0.033,-0.024) las cuatro puntas caian a 45-55 mm a la DERECHA de la linea del arma, o sea al
+   costado de un mango que mide 40 mm de ancho: el puño se cerraba al aire. Con (0.040,-0.042) y
+   cierre 0.84 las cuatro puntas quedan a menos de 5 mm de la superficie y en x=-0.02, que es
+   exactamente la cara opuesta del mango — el aro se cierra ALREDEDOR de la empuñadura. */
+const CU_HUECO_R=new THREE.Vector3(0, 0.040, -0.042);
 /* IZQUIERDA. El signo importa: el grupo se corre por -HUECO, asi que con y NEGATIVO la mano quedaba
    por ENCIMA de la muñeca, o sea metida adentro del cajon, y los dedos cerraban dentro del metal.
    Con y POSITIVA la palma queda 39 mm por debajo —justo apoyada en el piso del pozo del cargador— y
    los dedos suben envolviendolo, que es como se cuchara un pozo. */
-const CU_HUECO_L=new THREE.Vector3(0, 0.039, -0.010);
-const CU_CIERRE_R=0.62, CU_CIERRE_L=0.52;
+const CU_HUECO_L=new THREE.Vector3(0, 0.039, -0.026);
+const CU_CIERRE_R=0.84, CU_CIERRE_L=0.76;
 const cuCaja=(w,h,d)=>new THREE.BoxGeometry(w*U,h*U,d*U);
 const cuCaps=(r,l)=>new THREE.CapsuleGeometry(r*U,Math.max(0.004,l-2*r)*U,4,10);
 const cuEsf =(r)=>new THREE.SphereGeometry(r*U,12,9);
@@ -6850,11 +6875,21 @@ function cuMano(hueso,lado){
 /* cerrar el puño: 0 = mano abierta, 1 = puño cerrado del todo.
    El pulgar ya nace girado hacia afuera (rotation.y de bind), asi que aca se le SUMA el cierre en vez
    de pisarle la pose: si se le asigna la rotacion a secas el pulgar se endereza y sale disparado al costado. */
+const CU_CURVA=[1.55,1.75];   // cuanto gira cada falange a cierre pleno (barrido, ver cuCerrar)
+/* PULGAR. El giro base tenia el SIGNO al reves: abria hacia AFUERA de la palma en vez de cruzar
+   sobre los dedos. Medido con dedos(): el pulgar izquierdo quedaba a 69 mm de cualquier superficie,
+   flotando al costado. Con el signo corregido y barriendo apertura/flexion queda a -7 mm el izquierdo
+   y a 9 mm el derecho, o sea los dos apoyados sobre el arma. */
+const CU_PULG=[0.62,0.40,0.40,0.40];
 function cuCerrar(g,v){
   const d=g&&g.userData&&g.userData.dedos; if(!d)return;
   const k=Math.max(0,Math.min(1,v)), lado=g.userData.lado||1;
-  for(let i=0;i<4;i++){ d[i][0].rotation.x=k*1.15; d[i][1].rotation.x=k*1.35; }
-  d[4][0].rotation.y=-lado*(0.62+k*0.40); d[4][0].rotation.x=k*0.38; d[4][1].rotation.x=k*0.60;
+  /* 1.15 y 1.35 daban 89 grados de curvatura total: el dedo quedaba PERPENDICULAR a la palma, no
+     cerrado, y la punta terminaba en el aire por delante del mango en vez de volver sobre la palma.
+     Con 1.55/1.75 el dedo cierra 190 grados y la punta vuelve, que es lo que forma el aro del puño. */
+  for(let i=0;i<4;i++){ d[i][0].rotation.x=k*CU_CURVA[0]; d[i][1].rotation.x=k*CU_CURVA[1]; }
+  d[4][0].rotation.y=lado*(CU_PULG[0]+k*CU_PULG[1]); d[4][0].rotation.x=k*CU_PULG[2]; d[4][1].rotation.x=k*CU_PULG[3];
+  g.userData.cierre=k;
 }/* EL ARMA NO SE ATRAVIESA CON EL CUERPO. El fusil se coloca por offsets y el IK lleva las manos a
    sus agarres, asi que en poses cerradas —apuntando, recargando, deslizandose— el cajon terminaba
    metido adentro del antebrazo o del pecho. Esto lo empuja: se mide la penetracion contra dos
