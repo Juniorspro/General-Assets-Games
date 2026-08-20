@@ -830,7 +830,7 @@ function gpTick(dt){
   const lx=gpZona(ej[2]||0,z), ly=gpZona(ej[3]||0,z);
   if(lx||ly){ const k=2.35*(CFG.mandoSens||100)/100*sensMul*(1-0.45*adsW)*mirMul()*dt;
     player.yaw-=lx*k; player.faceYaw=player.yaw;
-    player.pitch=Math.max(-0.9,Math.min(pitMax(),player.pitch-ly*k*invMirY)); }
+    player.pitch=Math.max(-0.9,Math.min(pitMax(),player.pitch-ly*k*invMirY*sensRelY)); }
   const rt=Math.max(gpBoton(gp,7), (ej.length>5)?Math.max(0,ej[5]):0);
   const lt=Math.max(gpBoton(gp,6), (ej.length>4)?Math.max(0,ej[4]):0);
   if(enTiro()){ const q=rt>0.4;
@@ -865,7 +865,9 @@ const CFG_DEF={
   grafico:'med', sombras:1, fps:60, sangre:1, marca:1,
   sfx:1, musica:1, volSfx:90, volMus:35, vibrar:1,
   hudEsc:100, hudOpa:100, mano:'der', hudVer:1,
-  layout:'clasico', mando:0, mapa:'tiro', idioma:'es'
+  layout:'clasico', mando:0, mapa:'tiro', idioma:'es',
+  adsFp:1, sensRel:100, acel:'fija', acelFuerza:60,
+  giro:'no', sensGiro:100, sensGiroAds:70
 };
 const CFG=Object.assign({},CFG_DEF);
 try{ const g=JSON.parse(localStorage.getItem('pf_cfg')||'null');
@@ -877,6 +879,65 @@ let sensMiraMul=0.6;    // idem con mira telescopica
 let volSfx=0.9, volMus=0.35, sfxOn=true, musOn=true;
 let cfgSangre=true, cfgMarca=true, cfgVibrar=true, cfgSombras=true, cfgFps=60;
 let cfgTomarAuto=true;
+let adsFpForzado=true;  // apuntar SIEMPRE se ve en 1a persona, aunque juegues en 3a
+let sensRelY=1;         // relacion vertical/horizontal del giro
+let acelModo='fija', acelF=0.6;
+let giroModo='no', giroK=1, giroKAds=0.7;
+
+/* ===================== GIROSCOPIO =====================
+   Se lee la VELOCIDAD de rotacion (devicemotion.rotationRate, grados/s), no la orientacion
+   absoluta: la orientacion deriva sola y termina con la mira torcida despues de un minuto.
+   El aparato informa las velocidades en SUS ejes, asi que hay que rotarlas al marco de la
+   PANTALLA con screen.orientation.angle — si no, en horizontal el giro te mueve el cabeceo. */
+const GIRO={on:false, lig:false, rx:0, ry:0, ult:0, err:'', muestras:0};
+function giroEvento(e){
+  const r=e.rotationRate; if(!r) return;
+  const b=r.beta||0, g=r.gamma||0;                     // giro sobre el eje X y el eje Y del aparato
+  const ang=((screen.orientation&&screen.orientation.angle)||window.orientation||0)*Math.PI/180;
+  const c=Math.cos(ang), sn=Math.sin(ang);
+  GIRO.rx =  b*c + g*sn;    // sobre el eje HORIZONTAL de la pantalla → cabeceo
+  GIRO.ry = -b*sn + g*c;    // sobre el eje VERTICAL de la pantalla   → giro
+  GIRO.ult=performance.now(); GIRO.muestras++;
+}
+function giroActivar(){
+  if(giroModo==='no'){ GIRO.on=false; giroEstado(); return; }
+  const prender=()=>{ if(!GIRO.lig){ addEventListener('devicemotion',giroEvento); GIRO.lig=true; }
+    GIRO.on=true; GIRO.err=''; giroEstado(); };
+  try{
+    // iOS 13+ exige pedir permiso DESDE UN GESTO del usuario: por eso se llama al tocar la opcion
+    if(typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission){
+      DeviceMotionEvent.requestPermission().then(r=>{
+        if(r==='granted') prender();
+        else { GIRO.on=false; GIRO.err='permiso denegado'; giroEstado(); }
+      }).catch(err=>{ GIRO.on=false; GIRO.err=String(err&&err.message||err); giroEstado(); });
+    } else prender();
+  }catch(err){ GIRO.on=false; GIRO.err=String(err&&err.message||err); giroEstado(); }
+}
+function giroTick(dt){
+  if(giroModo==='no' || !GIRO.on) return;
+  if(giroModo==='ads' && adsW<0.25) return;
+  if(performance.now()-GIRO.ult>400) return;           // hace rato que no llega una lectura
+  const k=(adsW>0.35?giroKAds:giroK)*(Math.PI/180)*mirMul();
+  player.yaw   -= GIRO.ry*k*dt;  player.faceYaw=player.yaw;
+  player.pitch = Math.max(-0.9, Math.min(pitMax(), player.pitch - GIRO.rx*k*dt*invMirY*sensRelY));
+}
+function giroEstado(){ const el=document.getElementById('cfgGiro'); if(!el)return;
+  const vivo = GIRO.on && (performance.now()-GIRO.ult<600);
+  el.textContent = GIRO.err ? ('✕ '+GIRO.err)
+    : !GIRO.on ? tl({es:'Giroscopio apagado',en:'Gyroscope off',pt:'Giroscópio desligado'})
+    : vivo ? tl({es:'✓ Leyendo el giroscopio',en:'✓ Reading the gyroscope',pt:'✓ Lendo o giroscópio'})
+           : tl({es:'Encendido, esperando lecturas… (en PC no hay giroscopio)',en:'On, waiting for readings… (a PC has no gyroscope)',pt:'Ligado, aguardando leituras… (no PC não há giroscópio)'});
+  el.classList.toggle('ok',vivo); }
+/* ACELERACION del gesto de mirar. FIJA: el giro es proporcional al dedo y nada mas. POR DISTANCIA:
+   cuanto mas largo el arrastre, mas rapido gira — sirve para darse media vuelta sin levantar el
+   dedo. POR VELOCIDAD: manda la rapidez del dedo, asi un manotazo gira mucho y un ajuste fino
+   sigue siendo fino. */
+function acelGanancia(vel,rec){
+  if(acelModo==='fija') return 1;
+  const R=Math.max(innerWidth,innerHeight)||1;
+  const f=(acelModo==='vel') ? Math.min(1, vel/(R*1.6)) : Math.min(1, rec/(R*0.22));
+  return 1+acelF*f;
+}
 const app=document.getElementById('app');
 const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 /* 60 fps: la resolución no es fija. prBase la elige el preset de GRÁFICOS y prDyn la ajusta sola
@@ -8081,7 +8142,7 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
     if(!document.pointerLockElement && cv.requestPointerLock){ try{ cv.requestPointerLock(); }catch(e){} } });
   addEventListener('mousemove',e=>{ if(document.pointerLockElement!==cv)return;
     const lk=LOOK*sensMul*1.15*(1-0.45*adsW)*mirMul(); player.yaw-=(e.movementX||0)*lk;
-    player.pitch=Math.max(-0.9,Math.min(pitMax(),player.pitch-(e.movementY||0)*lk*invMirY)); });
+    player.pitch=Math.max(-0.9,Math.min(pitMax(),player.pitch-(e.movementY||0)*lk*invMirY*sensRelY)); });
   addEventListener('pointerdown',e=>{ if(e.pointerType==='mouse')_pc=true; },true);
 }
 
@@ -8111,7 +8172,21 @@ try{ window.__tiro={
             fps:cfgFps, sombras:cfgSombras, sombraReal:renderer.shadowMap.enabled, sangre:cfgSangre,
             marca:cfgMarca, vib:cfgVibrar, sfx:sfxOn, mus:musOn, vSfx:+volSfx.toFixed(2),
             vMus:+volMus.toFixed(2), vista:camView, zurdo:lefty, cal:quality,
-            tomAuto:cfgTomarAuto, lay:CFG.layout, idi:lang}; },
+            tomAuto:cfgTomarAuto, lay:CFG.layout, idi:lang,
+            adsFp:adsFpForzado, relY:sensRelY, acel:acelModo, acelF:+acelF.toFixed(2),
+            giro:giroModo, giroK:+giroK.toFixed(2), giroKAds:+giroKAds.toFixed(2),
+            camTP:+player.camTP.toFixed(3), adsW:+adsW.toFixed(2)}; },
+  // giroscopio: inyecta una lectura como la que manda el aparato y devuelve cuanto movio la mira
+  giroSim:(beta,gamma,ang,dt)=>{ const a0=player.yaw, p0=player.pitch;
+    const o=Object.getOwnPropertyDescriptor(window,'orientation');
+    try{ Object.defineProperty(window,'orientation',{value:ang||0,configurable:true}); }catch(e){}
+    giroEvento({rotationRate:{beta:beta,gamma:gamma}});
+    giroTick(dt==null?1:dt);
+    if(o) try{ Object.defineProperty(window,'orientation',o); }catch(e){}
+    return {dYaw:+(player.yaw-a0).toFixed(4), dPitch:+(player.pitch-p0).toFixed(4),
+            rx:+GIRO.rx.toFixed(2), ry:+GIRO.ry.toFixed(2), on:GIRO.on, muestras:GIRO.muestras}; },
+  // aceleracion del gesto: devuelve la ganancia para una velocidad y un recorrido dados
+  acelG:(vel,rec)=>+acelGanancia(vel,rec).toFixed(3),
   cfgSec:id=>{ const b=document.querySelector('[data-sec="'+id+'"]'); if(b)b.click();
     return {sec:id, filas:document.querySelectorAll('#cfgMain .cfgSec.on .cfgRow').length,
             fichas:document.querySelectorAll('#cfgMain .cfgSec.on .cfgCard').length}; },
@@ -9089,7 +9164,7 @@ addEventListener('pointerdown',e=>{ if(!gameplayActive())return;
       touchR={id:e.pointerId,sx:e.clientX,sy:e.clientY,on:false,btn:true};
       try{ ba.setPointerCapture(e.pointerId); }catch(err){} }
     return; }                                                     // el resto de los botones: su propio handler
-  if(isRightSide(e)){ if(touchR)return; touchR={id:e.pointerId,sx:e.clientX,sy:e.clientY,on:false}; }   // 2º dedo en el mismo lado se ignora
+  if(isRightSide(e)){ if(touchR)return; touchR={id:e.pointerId,sx:e.clientX,sy:e.clientY,on:false,rec:0,t:0}; }   // 2º dedo en el mismo lado se ignora
   else { if(touchL)return; touchL={id:e.pointerId,sx:e.clientX,sy:e.clientY,on:false}; joyR=(joyEl.clientWidth/2)||64; }
   e.preventDefault(); }, true);
 addEventListener('pointermove',e=>{
@@ -9099,11 +9174,21 @@ addEventListener('pointermove',e=>{
     const len=Math.hypot(dx,dy); if(len>joyR){ dx*=joyR/len; dy*=joyR/len; }
     knob.style.transform=`translate(${dx}px,${dy}px)`; joy.x=dx/joyR; joy.y=dy/joyR; }
   if(touchR && e.pointerId===touchR.id){ const sx=e.clientX-touchR.sx, sy=e.clientY-touchR.sy;
-    if(!touchR.on){ if(Math.hypot(sx,sy)<SLIDE_TH) return; touchR.on=true; lastX=e.clientX; lastY=e.clientY; }   // la cámara recién se mueve al DESLIZAR
+    if(!touchR.on){ if(Math.hypot(sx,sy)<SLIDE_TH) return; touchR.on=true; lastX=e.clientX; lastY=e.clientY;
+                    touchR.rec=0; touchR.t=(e.timeStamp||performance.now()); }   // la cámara recién se mueve al DESLIZAR
     let ddx=e.clientX-lastX, ddy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
-    if(Math.hypot(ddx,ddy) > Math.max(innerWidth,innerHeight)*0.30) return;   // anti-teletransporte (glitch Rezona)
+    const paso=Math.hypot(ddx,ddy);
+    if(paso > Math.max(innerWidth,innerHeight)*0.30) return;   // anti-teletransporte (glitch Rezona)
+    /* la ganancia se calcula con el gesto SIN rotar: el recorrido y la rapidez del dedo son los
+       mismos con el celular parado o acostado. */
+    const ahora=(e.timeStamp||performance.now());
+    const ms=Math.max(1, ahora-(touchR.t||ahora)); touchR.t=ahora;
+    touchR.rec+=paso;
+    const gan=acelGanancia(paso/ms*1000, touchR.rec);
     if(rot){ const t=ddx; ddx=ddy; ddy=-t; }
-    const lk=LOOK*sensMul*(1-0.45*adsW)*mirMul(); player.yaw-=ddx*lk; player.pitch=Math.max(-0.9,Math.min(pitMax(),player.pitch-ddy*lk*invMirY)); } });
+    const lk=LOOK*sensMul*(1-0.45*adsW)*mirMul()*gan;
+    player.yaw-=ddx*lk;
+    player.pitch=Math.max(-0.9,Math.min(pitMax(),player.pitch-ddy*lk*invMirY*sensRelY)); } });
 function endTouch(e){ if(touchL&&e.pointerId===touchL.id){ touchL=null; joyReset(); } if(touchR&&e.pointerId===touchR.id){ touchR=null; } }
 addEventListener('pointerup',endTouch); addEventListener('pointercancel',endTouch);
 
@@ -9294,6 +9379,7 @@ const clock=new THREE.Clock(); const euler=new THREE.Euler(0,0,0,'YXZ');
 const HUD=document.getElementById('hud'), HUDM=document.getElementById('hudMission');
 function setWorldHUD(nameKey,questKey){ if(HUD)HUD.textContent=t(nameKey); if(HUDM)HUDM.textContent=questKey?t(questKey):''; }
 function update(dt){
+  try{ giroTick(dt); }catch(e){}          // giroscopio: mueve la mira antes de mover al jugador
   if(player.pos.y<-18) respawn();          // te caíste del mapa → volvés al último punto seguro
   // en la isla el borde no es un precipicio, es la BAHÍA: si te metés al agua, la lancha te devuelve
   if(islaMode && player.pos.y<0.45){ player.pos.copy(ALC_START); player.pos.y=alcH(ALC_START.x,ALC_START.z-ALC_GZ)+0.1;
@@ -9470,7 +9556,10 @@ function update(dt){
   }
   euler.set(player.pitch+_lp+rollCam+shP, player.yaw+shY, _lr+shR); camera.quaternion.setFromEuler(euler);
   // ---- TERCERA PERSONA: cámara DETRÁS a la altura de los hombros; mirás arriba/abajo APUNTANDO (nunca se mete bajo el cuerpo → nada de cintura deformada) ----
-  const tpTarget=(camView==='tp')?1:0;   // la deslizada NO sale de 1ª persona (sólo el modo 'tp' manual)
+  /* APUNTAR SIEMPRE SE VE EN 1ª PERSONA. En 3ª la cámara está detrás del hombro y la mira del
+     fusil queda descolocada de donde pega el tiro: se apuntaba a ojo. Al apretar APUNTAR la cámara
+     entra al ojo (camTP baja a 0 con el mismo suavizado de siempre) y al soltar vuelve al hombro. */
+  const tpTarget=(camView==='tp' && !(adsFpForzado && adsW>0.25))?1:0;   // la deslizada NO sale de 1ª persona (sólo el modo 'tp' manual)
   player.camTP += (tpTarget-player.camTP)*Math.min(1,9*dt);
   if(player.camTP>0.02){
     const cx=player.pos.x, cy=player.pos.y+1.55, cz=player.pos.z;        // pivote a la altura de los hombros
@@ -9653,6 +9742,11 @@ const CFG_SECS=[
          en:'HOLD: you aim while the button is held. TOGGLE: it latches until you tap again — easier on a phone since it frees your finger to look around.',
          pt:'SEGURAR: mira enquanto o botão está pressionado. UM TOQUE: fica travado até tocar de novo.'},
       ops:[['hold',{es:'Mantener',en:'Hold',pt:'Segurar'}],['tap',{es:'Un toque',en:'Toggle',pt:'Um toque'}]]},
+     {k:'adsFp', t:{es:'Apuntar en 3ª persona',en:'Aiming in 3rd person',pt:'Mirar em 3ª pessoa'},
+      h:{es:'En 3ª persona la cámara va detrás del hombro y la mira del fusil queda descolocada de donde pega el tiro. Con "Entra a 1ª" apretás APUNTAR y la cámara se mete al ojo, apuntás bien, y al soltar vuelve al hombro. Con "Queda al hombro" se apunta desde atrás, como antes.',
+         en:'In third person the camera sits behind the shoulder and the sights no longer line up with where the bullet goes. With "Go to 1st" pressing AIM moves the camera into the eye, and releasing returns it to the shoulder.',
+         pt:'Em 3ª pessoa a câmera fica atrás do ombro e a mira não coincide com o tiro. Com "Vai para 1ª" a câmera entra no olho ao mirar.'},
+      ops:[[1,{es:'Entra a 1ª',en:'Go to 1st',pt:'Vai para 1ª'}],[0,{es:'Queda al hombro',en:'Stay on shoulder',pt:'Fica no ombro'}]]},
      {k:'deslizar', t:{es:'Deslizar',en:'Slide',pt:'Deslizar'},
       h:{es:'MANTENER alarga el deslizamiento mientras te quede velocidad (hasta 1,7 s). UN TOQUE hace uno corto y suelta enseguida.',
          en:'HOLD stretches the slide while you still have speed (up to 1.7 s). TAP does one short slide and releases.',
@@ -9744,9 +9838,40 @@ const CFG_SECS=[
          en:'Percentage of the general sensitivity used with the red dot up. Under 100% means slower and steadier while aiming.',
          pt:'Porcentagem da sensibilidade geral usada com a red dot.'}},
      {k:'sensMira', t:{es:'Con mira telescópica',en:'With scope',pt:'Com luneta'}, tipo:'sli', min:10, max:120, step:5, suf:'%', avanz:true,
-      h:{es:'Igual que la anterior pero para las miras de aumento (francotirador). A 4× o más conviene bajarla bastante: un movimiento chico del dedo barre mucho campo.',
-         en:'Same as above but for magnified scopes (sniper). At 4x and up, lower it a lot: a small finger move sweeps a lot of field.',
-         pt:'Igual à anterior, mas para lunetas. Em 4x ou mais convém baixar bastante.'}},
+      h:{es:'Igual que la anterior pero para las miras de aumento (AWM y SVD). Con tanto zoom conviene bajarla bastante: un movimiento chico del dedo barre mucho campo.',
+         en:'Same as above but for magnified scopes (AWM and SVD). With that much zoom, lower it a lot: a small finger move sweeps a lot of field.',
+         pt:'Igual à anterior, mas para lunetas (AWM e SVD). Com tanto zoom convém baixar bastante.'}},
+     {k:'sensRel', t:{es:'Relación vertical',en:'Vertical ratio',pt:'Relação vertical'}, tipo:'sli', min:30, max:150, step:5, suf:'%', avanz:true,
+      h:{es:'Cuánto gira en VERTICAL comparado con lo que gira en horizontal, con el mismo movimiento de dedo. Abajo de 100 % el cabeceo va más lento: como la pantalla es más ancha que alta, con 100 % el mismo arrastre se siente más brusco hacia arriba y abajo.',
+         en:'How much it turns VERTICALLY compared to horizontally for the same finger travel. Under 100% the pitch is slower: the screen is wider than tall, so at 100% the same drag feels harsher up and down.',
+         pt:'Quanto gira na VERTICAL em comparação com a horizontal. Abaixo de 100% a inclinação é mais lenta.'}},
+   ]},
+   {h:{es:'Aceleración del gesto',en:'Look acceleration',pt:'Aceleração do gesto'}, filas:[
+     {k:'acel', t:{es:'Modo',en:'Mode',pt:'Modo'},
+      h:{es:'FIJA: el giro es proporcional al dedo y nada más — es lo más predecible para apuntar. POR DISTANCIA: cuanto más largo el arrastre, más rápido gira, así te das media vuelta sin levantar el dedo. POR VELOCIDAD: manda la rapidez del dedo, un manotazo gira mucho y un ajuste fino sigue siendo fino.',
+         en:'FIXED: the turn is proportional to the finger and nothing else — the most predictable for aiming. BY DISTANCE: the longer the drag, the faster it turns, so you can spin around without lifting your finger. BY SPEED: the finger speed rules, so a flick turns a lot while a small correction stays small.',
+         pt:'FIXA: o giro é proporcional ao dedo. POR DISTÂNCIA: quanto maior o arrasto, mais rápido gira. POR VELOCIDADE: manda a rapidez do dedo.'},
+      ops:[['fija',{es:'Fija',en:'Fixed',pt:'Fixa'}],['dist',{es:'Por distancia',en:'By distance',pt:'Por distância'}],['vel',{es:'Por velocidad',en:'By speed',pt:'Por velocidade'}]]},
+     {k:'acelFuerza', t:{es:'Intensidad',en:'Strength',pt:'Intensidade'}, tipo:'sli', min:0, max:150, step:5, suf:'%',
+      h:{es:'Cuánto llega a acelerar como máximo. En 100 % el giro puede llegar a ir al doble de rápido al final de un arrastre largo o de un manotazo. No hace nada con el modo FIJA.',
+         en:'How much it can accelerate at most. At 100% the turn can reach double speed at the end of a long drag or a flick. Does nothing in FIXED mode.',
+         pt:'Quanto pode acelerar no máximo. Em 100% chega ao dobro. Não faz nada no modo FIXA.'}},
+   ]},
+   {h:{es:'Giroscopio',en:'Gyroscope',pt:'Giroscópio'}, filas:[
+     {k:'giro', t:{es:'Giroscopio',en:'Gyroscope',pt:'Giroscópio'},
+      h:{es:'Apuntás moviendo el teléfono. SOLO APUNTANDO es lo que usa casi todo el mundo: caminás y girás con el dedo, y cuando levantás la mira el celular te da el ajuste fino. Necesita un teléfono con giroscopio y que le des permiso.',
+         en:'Aim by moving the phone. ONLY WHILE AIMING is what most players use: you turn with your finger, and once the sights are up the phone gives you the fine adjustment. Needs a phone with a gyroscope and your permission.',
+         pt:'Mire movendo o telefone. SÓ MIRANDO é o que quase todos usam. Precisa de giroscópio e da sua permissão.'},
+      ops:[['no',CFG_L.no],['ads',{es:'Solo apuntando',en:'Only aiming',pt:'Só mirando'}],['siempre',{es:'Siempre',en:'Always',pt:'Sempre'}]]},
+     {tipo:'giro'},
+     {k:'sensGiro', t:{es:'Sensibilidad del giroscopio',en:'Gyroscope sensitivity',pt:'Sensibilidade do giroscópio'}, tipo:'sli', min:20, max:400, step:10, suf:'%',
+      h:{es:'En 100 % la mira gira lo MISMO que girás el teléfono: un cuarto de vuelta del aparato es un cuarto de vuelta en el juego. Subirla te deja girar más con menos movimiento de muñeca.',
+         en:'At 100% the view turns exactly as much as you turn the phone: a quarter turn of the device is a quarter turn in game. Raising it lets you turn more with less wrist movement.',
+         pt:'Em 100% a mira gira o MESMO que você gira o telefone.'}},
+     {k:'sensGiroAds', t:{es:'Giroscopio apuntando',en:'Gyroscope while aiming',pt:'Giroscópio mirando'}, tipo:'sli', min:10, max:300, step:10, suf:'%', avanz:true,
+      h:{es:'La del giroscopio mientras tenés la mira levantada. Suele ir más baja que la general: con el zoom puesto, mover el teléfono un centímetro ya barre medio campo.',
+         en:'The gyroscope figure while the sights are up. Usually lower than the general one: with zoom on, moving the phone a centimetre already sweeps half the field.',
+         pt:'A do giroscópio com a mira levantada. Costuma ser menor que a geral.'}},
    ]},
  ]},
  {id:'graf', ico:'🖼', nom:CFG_L.graf, grupos:[
@@ -9809,6 +9934,7 @@ function cfgFila(f){
       (m.k==='tiro'?'🎯':'🏚')+'</div><u>'+m.n+'</u><i>'+m.d+'</i></div>').join('')+'</div>';
   if(f.tipo==='mp')    return '<div id="cfgMp" class="cfgEst"></div>';
   if(f.tipo==='mando') return '<div id="cfgMando" class="cfgEst"></div>';
+  if(f.tipo==='giro')  return '<div id="cfgGiro" class="cfgEst"></div>';
   if(f.tipo==='mapeo') return '<div class="cfgEst" style="line-height:1.7">'+
       tl({es:'Palanca izquierda caminar · derecha mirar · RT disparar · LT apuntar · A saltar · B deslizar · X recargar · Y recoger · Start pausa',
           en:'Left stick move · right stick look · RT fire · LT aim · A jump · B slide · X reload · Y pick up · Start pause',
@@ -9848,6 +9974,7 @@ function cfgRender(){
     return h+'</div>';
   }).join('');
   try{ gpEstado(); }catch(e){}
+  try{ giroEstado(); }catch(e){}
   try{ cfgMpEstado(); }catch(e){}
 }
 function cfgMpEstado(){ const el=document.getElementById('cfgMp'); if(!el)return;
@@ -9870,6 +9997,13 @@ function cfgAplicar(){
   sensMul = Math.max(0.3,Math.min(3, (+CFG.sens||100)/100));
   sensAdsMul = Math.max(0.1,Math.min(2,(+CFG.sensAds||80)/100));
   sensMiraMul= Math.max(0.05,Math.min(2,(+CFG.sensMira||60)/100));
+  adsFpForzado = !!(+CFG.adsFp);
+  sensRelY = Math.max(0.2,Math.min(2,(+CFG.sensRel||100)/100));
+  acelModo = CFG.acel||'fija';
+  acelF    = Math.max(0,Math.min(2,(+CFG.acelFuerza||0)/100));
+  giroK    = Math.max(0.1,Math.min(5,(+CFG.sensGiro||100)/100));
+  giroKAds = Math.max(0.05,Math.min(4,(+CFG.sensGiroAds||70)/100));
+  if(giroModo!==CFG.giro){ giroModo=CFG.giro||'no'; try{ giroActivar(); }catch(e){} }
   cfgSangre=!!(+CFG.sangre); cfgMarca=!!(+CFG.marca); cfgVibrar=!!(+CFG.vibrar);
   sfxOn=!!(+CFG.sfx); musOn=!!(+CFG.musica);
   volSfx=Math.max(0,Math.min(1,(+CFG.volSfx||0)/100)); volMus=Math.max(0,Math.min(1,(+CFG.volMus||0)/100));
@@ -9941,7 +10075,7 @@ function cfgArrancar(){ try{ cfgAplicar(); }catch(e){ console.warn('cfgAplicar',
   try{ cfgRender(); }catch(e){ console.warn('cfgRender',e); } }
 setTimeout(cfgArrancar,0);
 setInterval(()=>{ const p=document.getElementById('settingsPanel');
-  if(p&&p.classList.contains('show')){ try{ gpEstado(); cfgMpEstado(); }catch(e){} } },1200);
+  if(p&&p.classList.contains('show')){ try{ gpEstado(); giroEstado(); cfgMpEstado(); }catch(e){} } },1200);
 
 /* ===================== EDITOR DE CONTROLES =====================
    Antes esto era un solo boton "mover controles": se arrastraba y nada mas. Faltaban tres cosas que
