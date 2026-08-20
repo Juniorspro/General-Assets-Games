@@ -5528,6 +5528,18 @@ const _ejeR=new THREE.Vector3(), _ejeL=new THREE.Vector3(), _m4=new THREE.Matrix
 const _refL=new THREE.Vector3(), _ejeN=new THREE.Vector3();
 /* Alinea el puño: X local = eje del agarre, Z local ≈ referencia (queda perpendicular). Con piezas rígidas
    se puede clavar la orientación exacta sin miedo: no hay piel que se estire. */
+/* ORIENTAR POR LA PALMA. Es la forma correcta de plantar un puño: el eje que los dedos RODEAN es X, y
+   lo que falta decidir es hacia donde MIRA LA PALMA, o sea el giro alrededor de ese eje. La version que
+   pasaba una referencia para el eje Z dejaba ese giro a merced de la geometria: con la referencia
+   "adelante" la palma de la derecha terminaba mirando al costado del arma y la mano quedaba girada
+   hacia el jugador en vez de envolver la empuñadura. Aca se le dice a donde mira la palma y listo. */
+function cuOrientarPalma(bone,ejeX,dirPalma,w){ if(!bone)return;
+  _ikU.copy(ejeX).normalize();
+  _ikP.copy(dirPalma).projectOnPlane(_ikU);
+  if(_ikP.lengthSq()<1e-6) _ikP.set(0,1,0).projectOnPlane(_ikU);
+  _ikP.normalize(); _ikN.crossVectors(_ikU,_ikP).normalize();
+  _m4.makeBasis(_ikU,_ikP,_ikN); _qa.setFromRotationMatrix(_m4);
+  _aimBone(bone,_qa,w); }
 function cuOrientarMano(bone,ejeX,ref,w){ if(!bone)return;
   _ikU.copy(ejeX).normalize();
   _ikN.copy(ref).projectOnPlane(_ikU);
@@ -6021,20 +6033,19 @@ function tiroPostura(dt){
   // (inclinado 0,30 rad) para la derecha y el guardamanos (eje Z del arma) para la izquierda. Sin dedos
   // articulados no hay cierre, pero el arma queda ADENTRO del puño, que es lo que se ve.
   if(DBG.mun){
+    /* DERECHA: los dedos rodean el eje de la empuñadura (inclinado 0,30 rad) y la palma tiene que mirar
+       HACIA ADELANTE, contra el frente del mango: la mano va DETRAS de la empuñadura y los dedos cierran
+       hacia adelante, que es como se agarra una pistola. Pasandole "adelante" como referencia del eje Z
+       —lo de antes— la palma terminaba mirando al costado y la mano quedaba girada hacia el jugador. */
     _ejeR.set(0,Math.cos(0.30),Math.sin(0.30)).applyQuaternion(gunRoot.quaternion);
-    cuOrientarMano(bRHand,_ejeR,_cf,1);
+    _ejeN.set(0,0,-1).applyQuaternion(gunRoot.quaternion);
+    cuOrientarPalma(bRHand,_ejeR,_ejeN,1);
     /* IZQUIERDA: no agarra el guardamanos —el brazo no llega, esta medido mas arriba— sino el POZO DEL
        CARGADOR. Ahi el eje que rodean los dedos no es el del caño sino el TRANSVERSAL del arma, y la palma
-       tiene que MIRAR al pozo. Antes la referencia era el "arriba" de la camara y la mano quedaba de canto,
-       colgando detras del guardamanos sin tocar nada. Ahora se construye: X = eje transversal, y la
-       referencia se elige para que el lado de la palma (+Y local) apunte del puño al pozo. */
+       mira al pozo. */
     _ejeL.set(1,0,0).applyQuaternion(gunRoot.quaternion);
-    _gp.set(0,-0.062,0.020).applyMatrix4(gunRoot.matrixWorld);
-    bLHand.getWorldPosition(_gA);
-    _ejeN.copy(_gp).sub(_gA);
-    _refL.crossVectors(_ejeL,_ejeN);
-    if(_refL.lengthSq()<1e-8) _refL.copy(_cu);
-    cuOrientarMano(bLHand,_ejeL,_refL.normalize(),1);
+    _refL.set(0,1,0).applyQuaternion(gunRoot.quaternion);   // la palma mira ARRIBA: la mano cuchara el pozo desde abajo
+    cuOrientarPalma(bLHand,_ejeL,_refL,1);
   }
   // ---- fogonazo y efectos cortos ----
   if(flashT>0){ gunFlash.visible=gunFlash2.visible=true;
@@ -6529,6 +6540,17 @@ try{ window.__tiro={
   // EL TEST DE VERDAD: no compara la mano con su OBJETIVO (eso es errDer/errIzq y por eso mentía),
   // compara la mano REAL con el ARMA REAL. También prueba la PALMA (muñeca + 0,045 m por TIRO_DEDOS_R/L).
   // VERDE = la palma toca el arma (adentro o a ≤15 mm) y la muñeca no está enterrada (>-25 mm).
+  /* ¿A DONDE MIRA CADA PALMA? Devuelve el +Y local de cada mano expresado en el local del ARMA, que es
+     donde se puede leer si la palma va contra el mango (z negativo para la derecha) o contra el pozo
+     (y positivo para la izquierda). Es lo que faltaba para no discutir de memoria el giro del puño. */
+  palmas:()=>{ if(!gunRoot||!bRHand||!bLHand)return null;
+    bodyRoot.updateMatrixWorld(true); gunRoot.updateMatrixWorld(true);
+    const q=new THREE.Quaternion(), qi=gunRoot.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const f=(b)=>{ b.getWorldQuaternion(q);
+      const Y=new THREE.Vector3(0,1,0).applyQuaternion(q).applyQuaternion(qi);
+      const X=new THREE.Vector3(1,0,0).applyQuaternion(q).applyQuaternion(qi);
+      return { palma:Y.toArray().map(v=>+v.toFixed(3)), dedos:X.toArray().map(v=>+v.toFixed(3)) }; };
+    return { der:f(bRHand), izq:f(bLHand) }; },
   tocando:()=>{ if(!gunRoot||!bRHand||!bLHand)return null;
     bodyRoot.updateMatrixWorld(true); gunRoot.updateMatrixWorld(true);
     const inv=new THREE.Matrix4().copy(gunRoot.matrixWorld).invert(), W=new THREE.Vector3(), L=new THREE.Vector3();
@@ -6727,7 +6749,11 @@ const cuManoGrupos=[];
    agarra cada una es muy distinto: la derecha envuelve una empuñadura de 40 mm y la izquierda se apoya
    sobre un guardamanos de 68x92, que no se puede rodear — ahi la mano abre mas y monta por el costado. */
 const CU_HUECO_R=new THREE.Vector3(0, 0.033, -0.024);
-const CU_HUECO_L=new THREE.Vector3(0,-0.042, -0.010);
+/* IZQUIERDA. El signo importa: el grupo se corre por -HUECO, asi que con y NEGATIVO la mano quedaba
+   por ENCIMA de la muñeca, o sea metida adentro del cajon, y los dedos cerraban dentro del metal.
+   Con y POSITIVA la palma queda 39 mm por debajo —justo apoyada en el piso del pozo del cargador— y
+   los dedos suben envolviendolo, que es como se cuchara un pozo. */
+const CU_HUECO_L=new THREE.Vector3(0, 0.039, -0.010);
 const CU_CIERRE_R=0.62, CU_CIERRE_L=0.52;
 const cuCaja=(w,h,d)=>new THREE.BoxGeometry(w*U,h*U,d*U);
 const cuCaps=(r,l)=>new THREE.CapsuleGeometry(r*U,Math.max(0.004,l-2*r)*U,4,10);
