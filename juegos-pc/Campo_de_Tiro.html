@@ -917,7 +917,10 @@ function giroTick(dt){
   if(giroModo==='no' || !GIRO.on) return;
   if(giroModo==='ads' && adsW<0.25) return;
   if(performance.now()-GIRO.ult>400) return;           // hace rato que no llega una lectura
-  const k=(adsW>0.35?giroKAds:giroK)*(Math.PI/180)*mirMul();
+  /* OJO: aca NO va mirMul(). Esa es la reduccion de la sensibilidad DEL DEDO al apuntar, y el
+     giroscopio ya tiene su propia cifra para apuntar (giroKAds): multiplicar las dos daba 56% con
+     el ajuste puesto en 70%, o sea el numero de la pantalla mentia. */
+  const k=(adsW>0.35?giroKAds:giroK)*(Math.PI/180);
   player.yaw   -= GIRO.ry*k*dt;  player.faceYaw=player.yaw;
   player.pitch = Math.max(-0.9, Math.min(pitMax(), player.pitch - GIRO.rx*k*dt*invMirY*sensRelY));
 }
@@ -8175,7 +8178,8 @@ try{ window.__tiro={
             tomAuto:cfgTomarAuto, lay:CFG.layout, idi:lang,
             adsFp:adsFpForzado, relY:sensRelY, acel:acelModo, acelF:+acelF.toFixed(2),
             giro:giroModo, giroK:+giroK.toFixed(2), giroKAds:+giroKAds.toFixed(2),
-            camTP:+player.camTP.toFixed(3), adsW:+adsW.toFixed(2)}; },
+            camTP:+player.camTP.toFixed(3), adsW:+adsW.toFixed(2),
+            yaw:+player.yaw.toFixed(4), pitch:+player.pitch.toFixed(4)}; },
   // giroscopio: inyecta una lectura como la que manda el aparato y devuelve cuanto movio la mira
   giroSim:(beta,gamma,ang,dt)=>{ const a0=player.yaw, p0=player.pitch;
     const o=Object.getOwnPropertyDescriptor(window,'orientation');
