@@ -245,6 +245,7 @@
   .heAct button{ flex:1; font-size:12.5px; padding:9px 4px; }
   #heSave{ background:linear-gradient(180deg,#ffd76b,#e0a11f); color:#231703; border-color:#ffe9ad; }
   #heReset{ background:rgba(255,140,120,.18); border-color:rgba(255,170,150,.35); }
+  .drCat{ margin:9px 2px 4px; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#7fd0ff; opacity:.85; }
   .heHint{ font-size:10.5px; font-weight:600; color:#9fb8d2; text-align:center; }
   /* PLEGADO. Desplegado el panel tapa justo el rincon donde hay que acomodar la palanca y el fuego,
      asi que se puede encoger a la fila de presets y seguir arrastrando debajo. */
@@ -1028,7 +1029,7 @@ function hfArma(mat,n,rx,ry,op){ op=op||{};
 /* TAMAÑO DEL FUSIL. 0.72 lo dejaba del porte de una pistola en pantalla. El limite de 0.86 que habia
    anotado era con el arma pegada al ojo y sin el reencuadre de la mira; con GUN_OJO actual entra
    holgado. 0.72 -> 0.95: sube 32% y recien ahi se lee como un fusil de asalto. */
-const GUN_ESC=0.95;
+let GUN_ESC=0.95;   // cambia con el arma (ver armaMontar)
 const GUN_MUZZLE=new THREE.Vector3(0,0.010,-0.548);       // boca del caño (local): freno de boca del AK
 // AGARRES SOBRE LA SUPERFICIE (G1). El criterio viejo era "errDer=0.000" = la muñeca está donde le
 // dijimos; nunca preguntaba DÓNDE le dijimos. El viejo GUN_GRIP_R (0.012,-0.045,0.135) caía 9,5 mm
@@ -1100,7 +1101,411 @@ function cruzTex(){ if(_txCruz)return _txCruz;
    una réflex abierta de marco grande, como la de la foto— y el centro de la retícula sube con ella. */
 const AK_VEN_W=0.116, AK_VEN_H=0.090;      // ancho y alto LOCALES de la ventana (× GUN_ESC = metros)
 const AK_VEN_Y=0.050;                      // base de los montantes, sobre la zapata
-const AK_MIRA_Y=AK_VEN_Y+AK_VEN_H/2;       // altura LOCAL del centro de la retícula: de acá sale la línea de mira
+let AK_MIRA_Y=AK_VEN_Y+AK_VEN_H/2;       // altura LOCAL del centro de la retícula: de acá sale la línea de mira (la pone el arma)
+/* ===================== ARSENAL =====================
+   Antes "cambiar de arma" era cambiarle el color al MISMO AK: tres acabados, una sola geometria.
+   Para un battle royale hace falta un arsenal de verdad, asi que el arma pasa a ser DATO: cada
+   entrada trae sus numeros (cadencia, cargador, recarga, daño, dispersion) y una RECETA de piezas.
+   Todo lo que el resto del codigo necesita saber del arma —la altura de la linea de mira, los dos
+   agarres, la boca del caño y a que distancia del ojo se apoya al apuntar— tambien es dato, asi que
+   el IK de las manos y el centrado de la mira siguen funcionando igual con cualquiera de las 17.
+   Las medidas estan en metros y en el local del arma, con -Z hacia adelante. */
+const ARM_VEN_W=0.116, ARM_VEN_H=0.090;      // ventana de la mira reflex (compartida)
+/* EL BRAZO IZQUIERDO TIENE UN LIMITE, Y ES EL MISMO PARA TODAS. Medido con manos(): el agarre de
+   apoyo tiene que caer a unos 0,44 m del ojo; mas lejos el brazo se estira y la mano se despega del
+   arma (el AWM con el apoyo en el guardamanos daba 212 mm de error, o sea el brazo al aire). Como el
+   arma se apoya a adsZ del ojo y el local +Z va hacia ATRAS, la regla es gL.z ≈ (adsZ - 0.44)/esc.
+   Por eso en los fusiles largos la mano de apoyo va sobre el pozo del cargador y no en la punta. */
+/* Mira reflex abierta: montantes finos, capota, cristal ambar. La altura sale de H.mira, que es la
+   MISMA que usa el apuntado y donde se planta la cruz, asi que no puede quedar desalineada: antes
+   cada arma repetia el numero a mano y con eso alcanzaba para que la reticula no cayera en el centro. */
+function armaReflex(H,z0){
+  const N=H.M.negro, aV=ARM_VEN_W, hV=ARM_VEN_H, venY=H.mira-hV/2, z=z0||0.010;
+  H.box(0.052,0.012,0.070, 0,venY,z, N);
+  H.box(0.005,hV,0.014, -(aV/2), venY+hV/2, z-0.006, N);
+  H.box(0.005,hV,0.014,  (aV/2), venY+hV/2, z-0.006, N);
+  H.box(aV+0.012,0.010,0.030, 0, venY+hV+0.003, z-0.012, N, -0.13);
+  H.box(0.010,0.010,0.030, (aV/2)+0.004, venY+0.014, z+0.020, N);
+  const vid=new THREE.MeshBasicMaterial({color:0xffa64a,transparent:true,opacity:0.15,
+    depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+  const cr=new THREE.Mesh(new THREE.PlaneGeometry(aV-0.006,hV-0.005), vid);
+  cr.position.set(0,venY+hV/2,z-0.006); cr.rotation.x=0.14; cr.renderOrder=4; gunCuerpo.add(cr);
+}
+/* Mira telescopica: tubo, dos monturas y la lente. Para francotirador. */
+function armaLente(H,z0,largo){
+  /* EL TUBO VA ABIERTO. Con cilindros cerrados, apuntando se veia una tapa negra tapando la mitad de
+     la pantalla: la reticula quedaba sobre un disco opaco y no habia por donde mirar. Abiertos, se ve
+     el mundo POR EL AGUJERO y las paredes del tubo hacen de viñeta, que es como se ve una mira. */
+  const N=H.M.negro, M=H.M.metal, L=largo||0.26, y0=H.mira;
+  H.tubo(0.024,L, 0,y0,z0, N);
+  H.tubo(0.031,0.045, 0,y0,z0-L/2+0.030, N);
+  H.tubo(0.028,0.040, 0,y0,z0+L/2-0.026, N);
+  H.box(0.020,0.030,0.022, 0,y0-0.024,z0-L/2+0.055, M);
+  H.box(0.020,0.030,0.022, 0,y0-0.024,z0+L/2-0.055, M);
+  const vid=new THREE.MeshBasicMaterial({color:0x9fd4ff,transparent:true,opacity:0.10,
+    depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+  const cr=new THREE.Mesh(new THREE.RingGeometry(0.019,0.023,20), vid);   // aro, no disco: no tapa
+  cr.position.set(0,y0,z0+L/2-0.006); cr.renderOrder=4; gunCuerpo.add(cr);
+}
+/* Alza y punto de mira de hierro, para pistolas y escopetas: no hay ventana, se mira por encima. */
+function armaHierros(H,zAtras,zAdelante){
+  const N=H.M.negro, y0=H.mira;
+  H.box(0.022,0.012,0.010, 0,y0-0.006,zAtras, N);
+  H.box(0.006,0.014,0.008, -0.008,y0+0.002,zAtras, N);
+  H.box(0.006,0.014,0.008,  0.008,y0+0.002,zAtras, N);
+  H.box(0.008,0.016,0.008, 0,y0,zAdelante, N);
+}
+const ARSENAL=[
+/* ---------------- ASALTO ---------------- */
+{id:'ak', n:'AK-47', d:'asalto · 7,62 · madera de abedul', cat:'asalto',
+ esc:0.95, rpm:640, mag:30, rec:1.55, dmg:27, disp:0.0016, mira:0.095, adsZ:0.460,
+ boca:[0,0.010,-0.548], gR:[0,-0.098,0.1175], gL:[0,-0.062,0.020],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.068,0.092,0.235, 0,0,0.055, M.metal);
+  H.box(0.070,0.026,0.215, 0,0.052,0.050, M.metal);
+  H.box(0.062,0.050,0.075, 0,-0.062,0.020, M.metal);
+  H.box(0.056,0.048,0.185, 0,-0.010,-0.185, M.madera);
+  H.box(0.046,0.034,0.150, 0,0.048,-0.170, M.maderaOsc);
+  H.box(0.030,0.030,0.055, 0,0.050,-0.075, M.metal, 0.22);
+  H.cil(0.0105,0.0105,0.30, 0,0.010,-0.360, M.metal, true);
+  H.cil(0.0135,0.0135,0.16, 0,0.048,-0.250, M.metal, true);
+  H.box(0.026,0.030,0.040, 0,0.028,-0.300, M.metal, -0.25);
+  const fr=H.cil(0.019,0.019,0.055, 0,0.010,-0.520, M.negro, true); fr.rotation.z=0.28;
+  H.box(0.022,0.028,0.016, 0,0.044,-0.398, M.negro);
+  H.box(0.006,0.024,0.006, 0,0.064,-0.398, M.negro);
+  H.box(0.030,0.008,0.012, 0,0.073,-0.398, M.negro);
+  H.box(0.034,0.020,0.030, 0,0.050,-0.040, M.negro);
+  H.box(0.010,0.030,0.070, 0.036,0.030,0.075, M.negro);
+  armaReflex(H,0.010);
+  H.mag(g=>{ const b=(w,h,d,x,y,z,rx)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M.metal);
+      m.position.set(x,y,z); if(rx)m.rotation.x=rx; g.add(m); };
+    b(0.044,0.075,0.058, 0,-0.120,0.000,-0.10); b(0.042,0.070,0.056, 0,-0.183,-0.016,-0.30);
+    b(0.040,0.060,0.054, 0,-0.238,-0.048,-0.52); });
+  H.box(0.040,0.110,0.052, 0,-0.098,0.1175, M.poli, 0.32);
+  H.box(0.026,0.020,0.052, 0,-0.052,0.072, M.metal);
+  H.box(0.014,0.026,0.018, 0,-0.038,0.086, M.metal);
+  H.box(0.008,0.055,0.020, 0.036,0.020,0.086, M.metal, 0,0,0.25);
+  H.cerrojo(0.020,0.018,0.060, 0.040,0.030,0.055, M.metal);
+  H.box(0.006,0.026,0.055, 0.035,0.028,-0.010, M.negro);
+  H.culata(g=>{ const b=(w,h,d,x,y,z,m,rx)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+      me.position.set(x,y,z); if(rx)me.rotation.x=rx; g.add(me); };
+    b(0.046,0.062,0.075, 0,0.006,0.205, M.madera,-0.06); b(0.048,0.078,0.150, 0,-0.006,0.320, M.madera,-0.03);
+    b(0.050,0.090,0.020, 0,-0.010,0.400, M.negro,-0.03); }); }},
+
+{id:'tr556', n:'TR-556', d:'asalto · 5,56 · riel completo', cat:'asalto',
+ esc:0.95, rpm:780, mag:30, rec:1.40, dmg:23, disp:0.0013, mira:0.100, adsZ:0.460,
+ boca:[0,0.012,-0.520], gR:[0,-0.096,0.120], gL:[0,-0.052,0.021],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.058,0.078,0.250, 0,0,0.060, M.poli);                  // cajon
+  H.box(0.060,0.022,0.230, 0,0.048,0.055, M.negro);             // riel superior
+  for(let i=0;i<7;i++) H.box(0.062,0.006,0.014, 0,0.061,0.150-i*0.032, M.negro);   // dientes del riel
+  H.box(0.056,0.052,0.070, 0,-0.048,0.030, M.poli);             // pozo
+  H.cil(0.026,0.026,0.190, 0,0.006,-0.130, M.negro, true);      // guardamanos tubular
+  for(let i=0;i<5;i++) H.box(0.040,0.006,0.010, 0,-0.020,-0.060-i*0.030, M.negro);
+  H.cil(0.0095,0.0095,0.24, 0,0.012,-0.330, M.metal, true);     // caño
+  H.cil(0.017,0.017,0.052, 0,0.012,-0.494, M.negro, true);      // apagafogonazo
+  H.box(0.030,0.026,0.026, 0,0.012,-0.440, M.negro);
+  H.box(0.052,0.030,0.048, 0,0.030,0.170, M.poli);              // tubo de amortiguador
+  armaReflex(H,0.006);
+  H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.030,0.150,0.055),M.poli);
+    m.position.set(0,-0.140,0.020); g.add(m);
+    const m2=new THREE.Mesh(new THREE.BoxGeometry(0.034,0.020,0.058),M.negro);
+    m2.position.set(0,-0.222,0.020); g.add(m2); });
+  H.box(0.038,0.108,0.050, 0,-0.096,0.120, M.poli, 0.30);
+  H.box(0.026,0.020,0.056, 0,-0.050,0.078, M.negro);
+  H.box(0.014,0.026,0.018, 0,-0.036,0.090, M.negro);
+  H.box(0.030,0.062,0.060, 0,-0.048,-0.100, M.poli, 0.14);      // empuñadura delantera
+  H.cerrojo(0.018,0.016,0.050, 0.034,0.036,0.060, M.metal);
+  H.culata(g=>{ const b=(w,h,d,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+      me.position.set(x,y,z); g.add(me); return me; };
+    b(0.030,0.036,0.170, 0,0.028,0.270, M.negro); b(0.048,0.070,0.026, 0,0.010,0.360, M.poli);
+    b(0.026,0.070,0.100, 0,-0.010,0.290, M.negro); }); }},
+
+{id:'fal', n:'FAL-7', d:'asalto pesado · 7,62 · retroceso alto', cat:'asalto',
+ esc:0.95, rpm:560, mag:20, rec:1.85, dmg:34, disp:0.0022, mira:0.108, adsZ:0.470,
+ boca:[0,0.012,-0.560], gR:[0,-0.100,0.125], gL:[0,-0.058,0.032],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.066,0.096,0.270, 0,0,0.070, M.metal);
+  H.box(0.068,0.024,0.240, 0,0.056,0.060, M.metal);
+  H.box(0.064,0.056,0.080, 0,-0.062,0.028, M.metal);
+  H.box(0.060,0.056,0.230, 0,-0.006,-0.190, M.maderaOsc);       // guardamanos de madera oscura
+  H.box(0.028,0.026,0.120, 0,0.052,-0.170, M.metal);
+  H.cil(0.0115,0.0115,0.30, 0,0.012,-0.380, M.metal, true);
+  H.cil(0.020,0.020,0.060, 0,0.012,-0.530, M.negro, true);
+  H.box(0.034,0.032,0.040, 0,0.044,-0.300, M.metal, -0.20);
+  H.box(0.026,0.030,0.018, 0,0.062,-0.420, M.negro);
+  armaReflex(H,0.014);
+  H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.036,0.160,0.062),M.metal);
+    m.position.set(0,-0.148,0.014); m.rotation.x=-0.06; g.add(m); });
+  H.box(0.042,0.112,0.054, 0,-0.100,0.125, M.poli, 0.30);
+  H.box(0.028,0.020,0.056, 0,-0.054,0.080, M.metal);
+  H.box(0.014,0.026,0.018, 0,-0.040,0.092, M.metal);
+  H.cerrojo(0.020,0.018,0.060, 0.038,0.034,0.070, M.metal);
+  H.culata(g=>{ const b=(w,h,d,x,y,z,m,rx)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+      me.position.set(x,y,z); if(rx)me.rotation.x=rx; g.add(me); };
+    b(0.050,0.080,0.230, 0,0.000,0.320, M.maderaOsc,-0.04); b(0.052,0.094,0.022, 0,-0.006,0.440, M.negro,-0.04); }); }},
+
+{id:'aug', n:'AUG-88', d:'asalto · bullpup · 5,56', cat:'asalto',
+ esc:0.95, rpm:700, mag:30, rec:1.50, dmg:24, disp:0.0014, mira:0.106, adsZ:0.455,
+ boca:[0,0.010,-0.500], gR:[0,-0.094,0.055], gL:[0,-0.058,0.016],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.062,0.100,0.400, 0,0.000,0.130, M.poli);              // carcasa bullpup entera
+  H.box(0.064,0.026,0.170, 0,0.056,0.060, M.negro);
+  H.box(0.058,0.070,0.090, 0,-0.056,0.230, M.poli);             // pozo detras del gatillo
+  H.cil(0.024,0.024,0.150, 0,0.004,-0.140, M.negro, true);
+  H.cil(0.0095,0.0095,0.22, 0,0.010,-0.320, M.metal, true);
+  H.cil(0.016,0.016,0.048, 0,0.010,-0.478, M.negro, true);
+  H.box(0.030,0.062,0.060, 0,-0.056,0.016, M.poli, 0.10);       // empuñadura delantera: donde el brazo LLEGA
+  armaReflex(H,0.020);
+  H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.032,0.130,0.056),M.poli);
+    m.position.set(0,-0.130,0.230); g.add(m); });
+  H.box(0.038,0.104,0.050, 0,-0.094,0.055, M.poli, 0.26);
+  H.box(0.026,0.020,0.054, 0,-0.048,0.014, M.negro);
+  H.box(0.014,0.026,0.018, 0,-0.034,0.026, M.negro);
+  H.culata(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.052,0.092,0.024),M.negro);
+    m.position.set(0,-0.006,0.340); g.add(m); }); }},
+
+/* ---------------- SUBFUSILES ---------------- */
+{id:'mp9', n:'MP-9', d:'subfusil · 9 mm · muy estable', cat:'sub',
+ esc:0.95, rpm:840, mag:30, rec:1.30, dmg:17, disp:0.0018, mira:0.096, adsZ:0.430,
+ boca:[0,0.010,-0.340], gR:[0,-0.092,0.090], gL:[0,-0.048,-0.070],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.052,0.070,0.200, 0,0,0.040, M.negro);
+  H.box(0.054,0.020,0.180, 0,0.044,0.036, M.negro);
+  H.box(0.050,0.048,0.060, 0,-0.042,0.010, M.negro);
+  H.cil(0.020,0.020,0.130, 0,0.004,-0.110, M.negro, true);      // guardamanos corto
+  H.cil(0.0085,0.0085,0.14, 0,0.010,-0.230, M.metal, true);
+  H.cil(0.014,0.014,0.030, 0,0.010,-0.325, M.negro, true);
+  H.box(0.030,0.014,0.014, 0,0.046,-0.150, M.negro);
+  armaReflex(H,0.006);
+  H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.026,0.130,0.050),M.negro);
+    m.position.set(0,-0.120,0.008); g.add(m); });
+  H.box(0.034,0.100,0.046, 0,-0.092,0.090, M.poli, 0.28);
+  H.box(0.024,0.018,0.050, 0,-0.046,0.052, M.negro);
+  H.box(0.012,0.024,0.016, 0,-0.034,0.062, M.negro);
+  H.box(0.026,0.052,0.048, 0,-0.042,-0.075, M.poli, 0.10);
+  H.cerrojo(0.016,0.014,0.044, 0.030,0.030,0.040, M.metal);
+  H.culata(g=>{ const b=(w,h,d,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+      me.position.set(x,y,z); g.add(me); };
+    b(0.024,0.026,0.140, 0,0.020,0.190, M.metal); b(0.044,0.060,0.020, 0,0.006,0.262, M.negro); }); }},
+
+{id:'uzi', n:'Uzi-45', d:'subfusil · .45 · cargador en la empuñadura', cat:'sub',
+ esc:0.95, rpm:900, mag:25, rec:1.25, dmg:19, disp:0.0030, mira:0.092, adsZ:0.420,
+ boca:[0,0.008,-0.260], gR:[0,-0.090,0.020], gL:[0,-0.070,0.020],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.048,0.084,0.190, 0,0.006,0.030, M.metal);
+  for(let i=0;i<5;i++) H.box(0.050,0.005,0.012, 0,0.046,0.090-i*0.030, M.negro);   // nervios del cajon
+  H.cil(0.0085,0.0085,0.12, 0,0.008,-0.180, M.metal, true);
+  H.cil(0.013,0.013,0.024, 0,0.008,-0.248, M.negro, true);
+  H.box(0.024,0.026,0.030, 0,0.040,-0.100, M.negro);
+  armaHierros(H,0.100,-0.115);
+  armaReflex(H,0.020);
+  H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.026,0.150,0.046),M.metal);
+    m.position.set(0,-0.140,0.020); g.add(m); });
+  H.box(0.044,0.100,0.058, 0,-0.062,0.020, M.poli);             // empuñadura = pozo
+  H.box(0.024,0.018,0.048, 0,-0.030,-0.010, M.negro);
+  H.culata(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.022,0.024,0.130),M.metal);
+    m.position.set(0,0.018,0.180); g.add(m);
+    const m2=new THREE.Mesh(new THREE.BoxGeometry(0.042,0.056,0.018),M.negro);
+    m2.position.set(0,0.006,0.250); g.add(m2); }); }},
+
+{id:'p90', n:'P-90', d:'subfusil · cargador plano arriba · alta cadencia', cat:'sub',
+ esc:0.95, rpm:900, mag:50, rec:1.60, dmg:16, disp:0.0016, mira:0.140, adsZ:0.375,
+ boca:[0,0.006,-0.320], gR:[0,-0.086,0.010], gL:[0,-0.070,-0.075],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.060,0.110,0.360, 0,0.004,0.070, M.poli);              // carcasa envolvente
+  H.box(0.052,0.030,0.300, 0,0.062,0.060, M.negro);             // cargador plano encima
+  H.box(0.062,0.024,0.120, 0,0.084,0.100, M.negro);
+  H.cil(0.0085,0.0085,0.14, 0,0.006,-0.220, M.metal, true);
+  H.cil(0.015,0.015,0.034, 0,0.006,-0.303, M.negro, true);
+  H.box(0.038,0.062,0.080, 0,-0.058,-0.075, M.poli);            // asa/agarre delantero cerrado
+  H.box(0.038,0.016,0.080, 0,-0.094,-0.075, M.poli);
+  armaReflex(H,0.030);
+  H.box(0.040,0.096,0.056, 0,-0.086,0.010, M.poli, 0.16);
+  H.box(0.026,0.018,0.050, 0,-0.040,-0.026, M.negro);
+  H.box(0.014,0.024,0.016, 0,-0.028,-0.016, M.negro); }},
+
+/* ---------------- PISTOLAS ---------------- */
+{id:'g17', n:'G-17', d:'pistola · 9 mm · semiautomática', cat:'pistola', semi:true,
+ esc:0.95, rpm:420, mag:17, rec:1.20, dmg:21, disp:0.0020, mira:0.052, adsZ:0.400,
+ boca:[0,0.030,-0.130], gR:[0,-0.062,0.030], gL:[-0.030,-0.030,-0.020],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.030,0.040,0.190, 0,0.030,-0.030, M.negro);            // corredera
+  H.box(0.032,0.028,0.130, 0,0.004,0.000, M.poli);              // armazon
+  H.cil(0.0075,0.0075,0.020, 0,0.030,-0.128, M.metal, true);
+  H.box(0.006,0.008,0.030, 0.012,0.050,-0.050, M.negro);        // nervios de agarre de la corredera
+  H.box(0.006,0.008,0.030,-0.012,0.050,-0.050, M.negro);
+  armaHierros(H,0.055,-0.115);
+  H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.024,0.100,0.036),M.negro);
+    m.position.set(0,-0.070,0.030); g.add(m); });
+  H.box(0.030,0.100,0.044, 0,-0.062,0.030, M.poli, 0.24);
+  H.box(0.022,0.016,0.040, 0,-0.020,0.000, M.negro);
+  H.box(0.010,0.020,0.012, 0,-0.010,0.010, M.negro);
+  H.cerrojo(0.008,0.010,0.026, 0.019,0.038,-0.010, M.metal); }},
+
+{id:'d50', n:'Desert .50', d:'pistola · .50 AE · un tiro, un problema menos', cat:'pistola', semi:true,
+ esc:0.95, rpm:220, mag:7, rec:1.45, dmg:52, disp:0.0032, mira:0.070, adsZ:0.405,
+ boca:[0,0.036,-0.170], gR:[0,-0.066,0.040], gL:[-0.032,-0.026,-0.030],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.036,0.052,0.240, 0,0.036,-0.040, M.metal);
+  H.box(0.038,0.030,0.150, 0,0.004,0.006, M.metal);
+  H.box(0.024,0.014,0.130, 0,0.062,-0.090, M.negro);            // riel sobre el cañon
+  H.cil(0.0105,0.0105,0.024, 0,0.036,-0.168, M.negro, true);
+  H.box(0.040,0.012,0.030, 0,0.036,-0.140, M.metal);
+  armaHierros(H,0.062,-0.150);
+  H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.028,0.110,0.040),M.metal);
+    m.position.set(0,-0.076,0.040); g.add(m); });
+  H.box(0.034,0.106,0.050, 0,-0.066,0.040, M.maderaOsc, 0.22);
+  H.box(0.024,0.018,0.044, 0,-0.022,0.006, M.metal);
+  H.box(0.010,0.022,0.012, 0,-0.010,0.016, M.metal); }},
+
+{id:'c45', n:'Colt .45', d:'pistola · .45 ACP · cachas de madera', cat:'pistola', semi:true,
+ esc:0.95, rpm:300, mag:8, rec:1.35, dmg:33, disp:0.0024, mira:0.056, adsZ:0.400,
+ boca:[0,0.030,-0.140], gR:[0,-0.062,0.034], gL:[-0.030,-0.028,-0.024],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.030,0.044,0.200, 0,0.030,-0.034, M.metal);
+  H.box(0.032,0.030,0.140, 0,0.002,0.004, M.metal);
+  H.cil(0.0080,0.0080,0.022, 0,0.030,-0.138, M.metal, true);
+  H.box(0.036,0.056,0.040, 0,-0.014,0.048, M.maderaOsc);        // cachas
+  armaHierros(H,0.058,-0.124);
+  H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.022,0.092,0.034),M.metal);
+    m.position.set(0,-0.066,0.034); g.add(m); });
+  H.box(0.030,0.098,0.042, 0,-0.062,0.034, M.maderaOsc, 0.22);
+  H.box(0.022,0.016,0.040, 0,-0.020,0.004, M.metal);
+  H.box(0.010,0.020,0.012, 0,-0.010,0.014, M.metal);
+  H.box(0.008,0.018,0.040, 0,0.050,0.048, M.metal); }},        // martillo/aleta
+
+/* ---------------- FRANCOTIRADOR ---------------- */
+{id:'awm', n:'AWM-338', d:'francotirador · cerrojo · un tiro por vez', cat:'sniper', semi:true, cerrojoManual:true,
+ esc:0.95, rpm:44, mag:5, rec:2.60, dmg:120, disp:0.0004, mira:0.132, adsZ:0.470, zoom:26,
+ boca:[0,0.010,-0.660], gR:[0,-0.100,0.130], gL:[0,-0.050,0.032],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.060,0.076,0.300, 0,0.000,0.080, M.metal);
+  H.box(0.070,0.050,0.560, 0,-0.046,-0.130, M.poli);            // chasis/culata de una pieza
+  H.cil(0.0135,0.0135,0.44, 0,0.010,-0.420, M.metal, true);
+  H.cil(0.021,0.021,0.070, 0,0.010,-0.632, M.negro, true);      // freno de boca
+  H.box(0.030,0.026,0.130, 0,-0.014,-0.300, M.poli);
+  H.box(0.016,0.070,0.016, 0,-0.088,-0.420, M.negro);           // bipode plegado
+  armaLente(H,0.010,0.300);
+  H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.030,0.070,0.070),M.metal);
+    m.position.set(0,-0.084,0.030); g.add(m); });
+  H.box(0.040,0.108,0.052, 0,-0.100,0.130, M.poli, 0.28);
+  H.box(0.026,0.020,0.054, 0,-0.056,0.088, M.metal);
+  H.box(0.014,0.026,0.018, 0,-0.042,0.100, M.metal);
+  H.cerrojo(0.018,0.018,0.090, 0.040,0.024,0.090, M.metal);
+  H.culata(g=>{ const b=(w,h,d,x,y,z,m,rx)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+      me.position.set(x,y,z); if(rx)me.rotation.x=rx; g.add(me); };
+    b(0.052,0.086,0.220, 0,0.000,0.320, M.poli,-0.02); b(0.054,0.100,0.024, 0,-0.004,0.440, M.negro,-0.02);
+    b(0.044,0.048,0.090, 0,0.056,0.280, M.poli); }); }},        // carrillera
+
+{id:'svd', n:'Dragunov', d:'francotirador · semiautomático · 7,62', cat:'sniper', semi:true,
+ esc:0.95, rpm:110, mag:10, rec:2.20, dmg:78, disp:0.0008, mira:0.126, adsZ:0.470, zoom:20,
+ boca:[0,0.012,-0.620], gR:[0,-0.098,0.126], gL:[0,-0.052,0.032],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.062,0.086,0.270, 0,0.000,0.070, M.metal);
+  H.box(0.064,0.024,0.230, 0,0.050,0.060, M.metal);
+  H.box(0.052,0.050,0.220, 0,-0.010,-0.180, M.maderaOsc);
+  H.box(0.028,0.026,0.140, 0,0.048,-0.170, M.metal);
+  H.cil(0.0115,0.0115,0.40, 0,0.012,-0.400, M.metal, true);
+  H.cil(0.018,0.018,0.060, 0,0.012,-0.594, M.negro, true);
+  H.box(0.030,0.028,0.036, 0,0.044,-0.320, M.metal, -0.18);
+  armaLente(H,0.030,0.280);
+  H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.032,0.120,0.060),M.metal);
+    m.position.set(0,-0.116,0.016); m.rotation.x=-0.08; g.add(m); });
+  H.box(0.038,0.106,0.050, 0,-0.098,0.126, M.maderaOsc, 0.28);
+  H.box(0.026,0.020,0.054, 0,-0.054,0.084, M.metal);
+  H.box(0.014,0.026,0.018, 0,-0.040,0.096, M.metal);
+  H.cerrojo(0.018,0.016,0.056, 0.038,0.032,0.076, M.metal);
+  H.culata(g=>{ const b=(w,h,d,x,y,z,m,rx)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+      me.position.set(x,y,z); if(rx)me.rotation.x=rx; g.add(me); };
+    b(0.044,0.070,0.090, 0,0.008,0.210, M.maderaOsc,-0.05);
+    b(0.020,0.056,0.150, 0,-0.020,0.300, M.maderaOsc,-0.03);    // culata calada
+    b(0.046,0.026,0.150, 0,0.024,0.300, M.maderaOsc,-0.03);
+    b(0.048,0.086,0.022, 0,-0.006,0.390, M.negro,-0.03); }); }},
+
+/* ---------------- ESCOPETAS ---------------- */
+{id:'r870', n:'Rem-870', d:'escopeta · corredera · 8 cartuchos', cat:'escopeta', semi:true, postas:8,
+ esc:0.95, rpm:70, mag:8, rec:2.30, dmg:15, disp:0.030, mira:0.083, adsZ:0.450,
+ boca:[0,0.014,-0.560], gR:[0,-0.096,0.130], gL:[0,-0.046,0.010],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.056,0.076,0.230, 0,0.000,0.070, M.metal);
+  H.cil(0.0155,0.0155,0.52, 0,0.014,-0.300, M.metal, true);     // caño
+  H.cil(0.0130,0.0130,0.40, 0,-0.020,-0.250, M.metal, true);    // tubo de cartuchos
+  H.box(0.046,0.040,0.180, 0,-0.026,-0.230, M.madera);          // corredera de madera
+  for(let i=0;i<6;i++) H.box(0.048,0.004,0.010, 0,-0.006,-0.160-i*0.026, M.maderaOsc);
+  H.box(0.020,0.014,0.014, 0,0.034,-0.520, M.negro);
+  armaReflex(H,0.030);
+  H.box(0.038,0.104,0.050, 0,-0.096,0.130, M.madera, 0.26);
+  H.box(0.026,0.020,0.056, 0,-0.052,0.086, M.metal);
+  H.box(0.014,0.026,0.018, 0,-0.038,0.098, M.metal);
+  H.culata(g=>{ const b=(w,h,d,x,y,z,m,rx)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+      me.position.set(x,y,z); if(rx)me.rotation.x=rx; g.add(me); };
+    b(0.046,0.076,0.230, 0,-0.004,0.310, M.madera,-0.05); b(0.048,0.092,0.022, 0,-0.010,0.430, M.negro,-0.05); }); }},
+
+{id:'s12', n:'Saiga-12', d:'escopeta · semiautomática · tambor', cat:'escopeta', semi:true, postas:6,
+ esc:0.95, rpm:160, mag:10, rec:2.10, dmg:13, disp:0.026, mira:0.104, adsZ:0.455,
+ boca:[0,0.012,-0.470], gR:[0,-0.098,0.120], gL:[0,-0.062,0.020],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.068,0.092,0.240, 0,0,0.060, M.metal);
+  H.box(0.070,0.026,0.210, 0,0.052,0.052, M.metal);
+  H.box(0.066,0.056,0.080, 0,-0.062,0.020, M.metal);
+  H.box(0.056,0.048,0.160, 0,-0.010,-0.150, M.poli);
+  H.cil(0.0165,0.0165,0.26, 0,0.012,-0.320, M.metal, true);
+  H.cil(0.022,0.022,0.040, 0,0.012,-0.450, M.negro, true);
+  H.box(0.030,0.030,0.050, 0,0.048,-0.070, M.metal, 0.20);
+  H.box(0.022,0.028,0.016, 0,0.044,-0.330, M.negro);
+  armaReflex(H,0.010);
+  H.mag(g=>{ const c=new THREE.Mesh(new THREE.CylinderGeometry(0.070,0.070,0.052,14),M.negro);
+    c.rotation.x=Math.PI/2; c.position.set(0,-0.140,0.010); g.add(c);
+    const b=new THREE.Mesh(new THREE.BoxGeometry(0.042,0.060,0.056),M.metal);
+    b.position.set(0,-0.096,0.014); g.add(b); });
+  H.box(0.040,0.110,0.052, 0,-0.098,0.120, M.poli, 0.30);
+  H.box(0.026,0.020,0.052, 0,-0.052,0.076, M.metal);
+  H.box(0.014,0.026,0.018, 0,-0.038,0.088, M.metal);
+  H.cerrojo(0.020,0.018,0.056, 0.040,0.030,0.058, M.metal);
+  H.culata(g=>{ const b=(w,h,d,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+      me.position.set(x,y,z); g.add(me); };
+    b(0.030,0.036,0.160, 0,0.026,0.260, M.negro); b(0.048,0.076,0.024, 0,0.008,0.348, M.poli); }); }},
+
+/* ---------------- CUERPO A CUERPO ---------------- */
+{id:'cuchillo', n:'Cuchillo', d:'cuerpo a cuerpo · rápido · 1,9 m', cat:'cac', cac:true, giro:[0,-0.78,0.10],
+ esc:0.95, rpm:150, dmg:45, alcance:1.9, mira:0.030, adsZ:0.380,
+ boca:[0,0.010,-0.230], gR:[0,-0.010,0.060], gL:[-0.040,-0.030,0.030],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.006,0.032,0.190, 0,0.010,-0.110, M.metal);            // hoja
+  H.box(0.004,0.014,0.060, 0.002,0.026,-0.170, M.negro);        // filo de sierra
+  H.box(0.026,0.014,0.020, 0,0.006,-0.008, M.negro);            // guarda
+  H.box(0.030,0.034,0.110, 0,-0.006,0.060, M.poli);             // mango
+  for(let i=0;i<4;i++) H.box(0.032,0.005,0.010, 0,-0.024,0.020+i*0.026, M.negro);
+  H.box(0.026,0.022,0.016, 0,-0.008,0.122, M.metal); }},
+
+{id:'machete', n:'Machete', d:'cuerpo a cuerpo · lento y bruto · 2,3 m', cat:'cac', cac:true, giro:[0,-0.78,0.10],
+ esc:0.95, rpm:80, dmg:85, alcance:2.3, mira:0.030, adsZ:0.380,
+ boca:[0,0.010,-0.340], gR:[0,-0.010,0.070], gL:[-0.040,-0.030,0.040],
+ hacer:(H)=>{ const M=H.M;
+  H.box(0.008,0.062,0.300, 0,0.014,-0.170, M.metal);
+  H.box(0.006,0.030,0.090, 0,0.044,-0.290, M.metal);            // punta ancha
+  H.box(0.010,0.010,0.300, 0.004,-0.014,-0.170, M.negro);       // lomo
+  H.box(0.030,0.020,0.018, 0,0.004,-0.010, M.negro);
+  H.box(0.034,0.038,0.120, 0,-0.006,0.070, M.maderaOsc);
+  H.box(0.038,0.026,0.018, 0,-0.008,0.136, M.negro); }},
+
+{id:'bate', n:'Bate', d:'cuerpo a cuerpo · barrido amplio · 2,5 m', cat:'cac', cac:true, giro:[0,-0.78,0.10],
+ esc:0.95, rpm:70, dmg:75, alcance:2.5, mira:0.030, adsZ:0.380,
+ boca:[0,0.010,-0.420], gR:[0,-0.010,0.090], gL:[-0.040,-0.030,0.050],
+ hacer:(H)=>{ const M=H.M;
+  H.cil(0.036,0.036,0.240, 0,0.010,-0.320, M.madera, true);
+  H.cil(0.036,0.022,0.140, 0,0.010,-0.130, M.madera, true);
+  H.cil(0.022,0.019,0.180, 0,0.010,0.040, M.madera, true);
+  H.cil(0.020,0.020,0.110, 0,0.010,0.150, M.negro, true);       // cinta del mango
+  H.cil(0.026,0.026,0.014, 0,0.010,0.212, M.negro, true); }},
+];
+
+let armaSel=0;
+try{ const k=localStorage.getItem('ct_arma')||'ak';
+  const j=ARSENAL.findIndex(o=>o.id===k); armaSel=(j>=0?j:0); }catch(e){}
+function ARMA(){ return ARSENAL[armaSel]||ARSENAL[0]; }
+
 function buildGun(){ if(gunRoot)return;
   /* ===================== AK-47 low-poly =====================
      El fusil genérico de cajas pasa a ser un AK reconocible: madera naranja, cargador CURVO
@@ -1121,75 +1526,9 @@ function buildGun(){ if(gunRoot)return;
   const cil=(r1,r2,h,x,y,z,m,ejeZ)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,8),m);
     if(ejeZ)me.rotation.x=Math.PI/2; me.position.set(x,y,z); gunRoot.add(me); return me; };
 
-  // --- cajón de mecanismos y tapa ---
-  box(0.068,0.092,0.235, 0,0,0.055, metal);                 // cajón  z[-0.062,+0.172]
-  box(0.070,0.026,0.215, 0,0.052,0.050, metal);             // tapa del cajón
-  box(0.062,0.050,0.075, 0,-0.062,0.020, metal);            // pozo del cargador (agarre izquierdo)
-  // --- madera: guardamanos inferior y superior, separados por el tubo de gas ---
-  box(0.056,0.048,0.185, 0,-0.010,-0.185, madera);          // guardamanos inferior
-  box(0.046,0.034,0.150, 0,0.048,-0.170, maderaOsc);        // guardamanos superior (sobre el tubo de gas)
-  box(0.030,0.030,0.055, 0,0.050,-0.075, metal, 0.22);      // bloque de gas trasero
-  // --- caño, tubo de gas y freno de boca ---
-  cil(0.0105,0.0105,0.30, 0,0.010,-0.360, metal, true);     // caño
-  cil(0.0135,0.0135,0.16, 0,0.048,-0.250, metal, true);     // tubo de gas
-  box(0.026,0.030,0.040, 0,0.028,-0.300, metal, -0.25);     // bloque de gas delantero
-  const freno=cil(0.019,0.019,0.055, 0,0.010,-0.520, negro, true); freno.rotation.z=0.28;   // freno de boca inclinado (el del AKM)
-  // --- miras ---
-  box(0.022,0.028,0.016, 0,0.044,-0.398, negro);            // base del punto de mira
-  box(0.006,0.024,0.006, 0,0.064,-0.398, negro);            // poste
-  box(0.030,0.008,0.012, 0,0.073,-0.398, negro);            // orejas (por debajo del eje de la réflex: no tapan la retícula)
-  box(0.034,0.020,0.030, 0,0.050,-0.040, negro);            // alza (bloque)
-  /* ===================== MIRA RÉFLEX ABIERTA (la de la foto) =====================
-     Marco ABIERTO, no un tubo: dos montantes finos a los costados, capota arriba y nada atrás,
-     así la ventana queda ESPACIOSA y el galpón se sigue viendo alrededor del vidrio. El cristal
-     va tintado ámbar y semitransparente como el de la foto, y la retícula es una CRUZ, no un
-     punto. La altura del centro (AK_MIRA_Y) es la que usa el apuntado, así que la cruz cae
-     exactamente sobre la cruceta de la pantalla. */
-  box(0.010,0.030,0.070, 0.036,0.030,0.075, negro);         // riel lateral del cajón
-  const anchoVen=AK_VEN_W, altoVen=AK_VEN_H, venY=AK_VEN_Y;   // VENTANA: bien ancha y alta a propósito
-  box(0.052,0.012,0.070, 0,venY,0.010, negro);               // base/zapata sobre la tapa
-  box(0.005,altoVen,0.014, -(anchoVen/2), venY+altoVen/2, 0.004, negro);   // montante izquierdo (fino: no come ventana)
-  box(0.005,altoVen,0.014,  (anchoVen/2), venY+altoVen/2, 0.004, negro);   // montante derecho
-  box(anchoVen+0.012,0.010,0.030, 0, venY+altoVen+0.003, -0.002, negro, -0.13);   // capota, apenas inclinada
-  box(0.010,0.010,0.030, (anchoVen/2)+0.004, venY+0.014, 0.030, negro);    // oreja trasera derecha
-  { const tor=new THREE.Mesh(new THREE.CylinderGeometry(0.005,0.005,0.006,8), metal);   // tornillo de ajuste
-    tor.rotation.z=Math.PI/2; tor.position.set((anchoVen/2)+0.006,venY+0.022,0.006); gunRoot.add(tor);
-    const tor2=new THREE.Mesh(new THREE.CylinderGeometry(0.005,0.005,0.006,8), metal);
-    tor2.rotation.x=Math.PI/2; tor2.position.set(0,venY+altoVen+0.004,0.020); gunRoot.add(tor2); }
-  // cristal: ámbar, semitransparente y apenas inclinado hacia atrás (así devuelve el reflejo al ojo)
-  { const vidrioMira=new THREE.MeshBasicMaterial({color:0xffa64a,transparent:true,opacity:0.15,
-      depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
-    const cr=new THREE.Mesh(new THREE.PlaneGeometry(anchoVen-0.006,altoVen-0.005), vidrioMira);
-    cr.position.set(0,venY+altoVen/2,0.004); cr.rotation.x=0.14; cr.renderOrder=4; gunRoot.add(cr); }
-  // la CRUZ: mezcla aditiva, sin test de profundidad y bien al frente del orden de dibujo
-  { const cruz=gunCruz=new THREE.Mesh(new THREE.PlaneGeometry(0.048,0.048),
-      new THREE.MeshBasicMaterial({map:cruzTex(),color:0xffffff,transparent:true,opacity:1,
-        depthWrite:false,depthTest:false,side:THREE.DoubleSide,fog:false,toneMapped:false}));
-    cruz.position.set(0,AK_MIRA_Y,0.004); cruz.renderOrder=7; gunRoot.add(cruz); }
-  // --- cargador CURVO: tres tramos que van girando (la "banana" del AK) ---
-  gunMag=new THREE.Group(); gunRoot.add(gunMag);
-  { const t1=new THREE.Mesh(new THREE.BoxGeometry(0.044,0.075,0.058),metal); t1.position.set(0,-0.120,0.000); t1.rotation.x=-0.10; gunMag.add(t1);
-    const t2=new THREE.Mesh(new THREE.BoxGeometry(0.042,0.070,0.056),metal); t2.position.set(0,-0.183,-0.016); t2.rotation.x=-0.30; gunMag.add(t2);
-    const t3=new THREE.Mesh(new THREE.BoxGeometry(0.040,0.060,0.054),metal); t3.position.set(0,-0.238,-0.048); t3.rotation.x=-0.52; gunMag.add(t3); }
-  // --- empuñadura y guardamonte ---
-  box(0.040,0.110,0.052, 0,-0.098,0.1175, poli, 0.32);      // empuñadura: el CENTRO es GUN_GRIP_R
-  box(0.026,0.020,0.052, 0,-0.052,0.072, metal);            // guardamonte
-  box(0.014,0.026,0.018, 0,-0.038,0.086, metal);            // cola del disparador
-  // --- selector y manija de carga (lado derecho, como el AK de verdad) ---
-  box(0.008,0.055,0.020, 0.036,0.020,0.086, metal, 0,0,0.25);   // palanca del selector
-  gunCH=box(0.020,0.018,0.060, 0.040,0.030,0.055, metal); gunCH.userData.z0=0.055;
-  box(0.006,0.026,0.055, 0.035,0.028,-0.010, negro);        // ventana de eyección
-  /* --- culata de madera ---
-     Va en su propio grupo: en 1ª persona la culata está apoyada en el hombro, DETRÁS del pómulo, y
-     lo único que llega a la lente es una astilla de un píxel que además se dibuja por delante del
-     antebrazo (se veía como una rayita naranja bajando por el medio de la pantalla). Se apaga en 1ª
-     persona y vuelve en 3ª/menú, que es donde el fusil se ve entero. */
-  gunCulata=new THREE.Group(); gunRoot.add(gunCulata);
-  { const pieza=(w,h,d,x,y,z,m,rx)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
-      me.position.set(x,y,z); if(rx)me.rotation.x=rx; gunCulata.add(me); return me; };
-    pieza(0.046,0.062,0.075, 0,0.006,0.205, madera, -0.06);   // cuello de la culata
-    pieza(0.048,0.078,0.150, 0,-0.006,0.320, madera, -0.03);  // cuerpo
-    pieza(0.050,0.090,0.020, 0,-0.010,0.400, negro, -0.03); } // cantonera
+  /* El CUERPO del arma sale de la receta del arsenal: buildGun ya no sabe como es un AK, sabe
+     como montar cualquiera. Lo comun (materiales, fogonazo, luz y recorte cercano) queda aca. */
+  armaMontar();
   // fogonazo: dos planos cruzados + luz puntual (viven 45 ms)
   const fm=new THREE.MeshBasicMaterial({map:flashTex(),color:0xffe0a0,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false,depthTest:false,side:THREE.DoubleSide});
   gunFlash=new THREE.Mesh(new THREE.PlaneGeometry(0.44,0.44),fm); gunFlash.position.copy(GUN_MUZZLE); gunFlash.position.z+=0.02; gunFlash.renderOrder=6; gunRoot.add(gunFlash);
@@ -1199,6 +1538,63 @@ function buildGun(){ if(gunRoot)return;
   /* Recorte cercano del ARMA: red de seguridad para lo que se acerque demasiado a la lente. La
      culata, que era lo único que llegaba tan cerca, ahora directamente no se dibuja en 1ª persona. */
   recorteObj(gunRoot,0.17);
+}
+/* ===================== MONTAR EL ARMA EQUIPADA =====================
+   Vacia el cuerpo anterior y corre la receta del arma elegida. Ademas PUBLICA en las variables vivas
+   todo lo que el resto del juego necesita saber del arma: escala, boca del caño, los dos agarres, la
+   altura de la linea de mira, el zoom al apuntar y los numeros de tiro. Asi el IK de las manos, el
+   centrado de la mira, el fogonazo y el HUD no saben ni les importa que arma esta puesta. */
+let gunCuerpo=null;
+function armaMontar(){
+  if(!gunRoot||!AKMAT.metal) return;
+  const d=ARMA(), M=AKMAT;
+  if(gunCuerpo){ gunCuerpo.traverse(o=>{ if(o.isMesh&&o.geometry) o.geometry.dispose(); }); gunRoot.remove(gunCuerpo); }
+  gunCuerpo=new THREE.Group(); gunRoot.add(gunCuerpo);
+  gunMag=null; gunCulata=null; gunCH=null;
+  const H={ M:M, mira:d.mira,
+    box:(w,h,dd,x,y,z,m,rx,ry,rz)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,dd),m||M.metal);
+      me.position.set(x,y,z); if(rx)me.rotation.x=rx; if(ry)me.rotation.y=ry; if(rz)me.rotation.z=rz;
+      gunCuerpo.add(me); return me; },
+    cil:(r1,r2,h,x,y,z,m,ejeZ)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,8),m||M.metal);
+      if(ejeZ)me.rotation.x=Math.PI/2; me.position.set(x,y,z); gunCuerpo.add(me); return me; },
+    tubo:(r,h,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,16,1,true),m||M.negro);
+      me.material.side=THREE.DoubleSide; me.rotation.x=Math.PI/2; me.position.set(x,y,z); gunCuerpo.add(me); return me; },
+    mag:(fn)=>{ gunMag=new THREE.Group(); gunCuerpo.add(gunMag); fn(gunMag); return gunMag; },
+    culata:(fn)=>{ gunCulata=new THREE.Group(); gunCuerpo.add(gunCulata); fn(gunCulata); return gunCulata; } };
+  H.cerrojo=(w,h,dd,x,y,z,m)=>{ gunCH=H.box(w,h,dd,x,y,z,m); gunCH.userData.z0=z; return gunCH; };
+  d.hacer(H);
+  /* GIRO PROPIO DEL ARMA. La hoja de un machete mide 8 mm de canto: de punta no se ve nada. Girando el
+     CUERPO en su propio local (y girando los agarres lo mismo, para que la mano lo siga) la cara plana
+     queda hacia la camara sin tener que torcer el ancla del ojo, que es lo que arrastraba el arma
+     entera al rincon de la pantalla. */
+  gunCuerpo.rotation.set(0,0,0);
+  if(d.giro){ gunCuerpo.rotation.set(d.giro[0]||0, d.giro[1]||0, d.giro[2]||0); }
+  GUN_ESC=d.esc||0.95; gunRoot.scale.setScalar(GUN_ESC);
+  GUN_MUZZLE.set(d.boca[0],d.boca[1],d.boca[2]);
+  GUN_GRIP_R.set(d.gR[0],d.gR[1],d.gR[2]);
+  GUN_GRIP_L.set(d.gL[0],d.gL[1],d.gL[2]);
+  if(d.giro){ const e=new THREE.Euler(d.giro[0]||0,d.giro[1]||0,d.giro[2]||0);
+    GUN_MUZZLE.applyEuler(e); GUN_GRIP_R.applyEuler(e); GUN_GRIP_L.applyEuler(e); }
+  GUN_GRIP_L_ALTO.copy(GUN_GRIP_L);
+  AK_MIRA_Y=d.mira;
+  GUN_OJO_ADS.set(0, -AK_MIRA_Y*GUN_ESC-0.0016, d.adsZ);
+  FOV_ADS = d.cac ? 72 : (d.zoom || 48);
+  TIRO_MAG=d.cac?0:(d.mag||1); TIRO_RPM=d.rpm||600; TIRO_RELOAD=d.rec||1.5;
+  /* LA CRUZ. Vive exactamente en el punto que usa el apuntado (0, mira, 0.004), asi que se planta
+     aca y no en cada receta: si una receta se olvidara, el arma apuntaria a un lugar y la reticula
+     se dibujaria en otro. Las de cuerpo a cuerpo no llevan. */
+  gunCruz=null;
+  if(!d.cac){ const cruz=gunCruz=new THREE.Mesh(new THREE.PlaneGeometry(0.048,0.048),
+      new THREE.MeshBasicMaterial({map:cruzTex(),color:0xffffff,transparent:true,opacity:1,
+        depthWrite:false,depthTest:false,side:THREE.DoubleSide,fog:false,toneMapped:false}));
+    cruz.position.set(0,AK_MIRA_Y,0.004); cruz.renderOrder=7; gunCuerpo.add(cruz); }
+  if(gunFlash){ gunFlash.position.copy(GUN_MUZZLE); gunFlash.position.z+=0.02;
+    gunFlash2.position.copy(gunFlash.position); if(gunLight) gunLight.position.copy(GUN_MUZZLE);
+    gunFlash.visible=gunFlash2.visible=(!!d.cac?false:gunFlash.visible); }
+  recorteObj(gunCuerpo,0.17);
+  _alcR=null; _alcL=null;                  // el alcance de los brazos se vuelve a medir
+  tiroAmmo=TIRO_MAG; tiroRel=0; RC.act=false; RC.ch=0;
+  try{ tiroHUD(); }catch(e){}
 }
 
 /* ---- construcción del nivel ---- */
@@ -4751,7 +5147,7 @@ function alcSol(on){
 
 
 /* ===================== ARMA: munición, disparo, retroceso ===================== */
-const TIRO_MAG=30, TIRO_RPM=640, TIRO_RELOAD=1.55;
+let TIRO_MAG=30, TIRO_RPM=640, TIRO_RELOAD=1.55;   // los pone el arma equipada
 /* ===================== RECARGA: una secuencia, no un contador =====================
    Antes la recarga era `tiroRel=1.85` y una inclinación fija del arma: no pasaba nada, sólo
    había que esperar. Ahora es una secuencia con sus tiempos, y el cargador es un objeto que
@@ -4803,6 +5199,8 @@ function rcTick(dt){   // el cargador que cae y la manija de carga
   RC.kick*=Math.max(0,1-9*dt);
 }
 let tiroAmmo=TIRO_MAG, tiroRel=0, tiroFire=false, tiroCd=0, tiroSemi=false;
+/* gatillo de un tiro por toque: lo consume tiroShoot y lo repone al soltar el boton */
+let _semiListo=true;
 let recBack=0, recUp=0, recCam=0, recYaw=0, flashT=0, _msgT=0;
 const _cr=new THREE.Vector3(),_cu=new THREE.Vector3(),_cf=new THREE.Vector3(),_gp=new THREE.Vector3(),_gp2=new THREE.Vector3(),
       _pol=new THREE.Vector3(),_pol2=new THREE.Vector3(),_mz=new THREE.Vector3();
@@ -4812,13 +5210,37 @@ function tiroHUD(force){ const s=document.getElementById('tiroHUD'); if(!s)retur
   const acc=tiroShots?Math.round(tiroHits/tiroShots*100):0;
   s.children[0].textContent=String(tiroScore);
   s.children[1].textContent=tiroHits+'/'+tiroShots+' · '+acc+'%';
-  const a=s.children[2]; a.textContent=(tiroRel>0? t('t_reloading') : tiroAmmo+' / '+TIRO_MAG); a.classList.toggle('low',tiroRel<=0&&tiroAmmo<=6);
+  const a=s.children[2]; a.textContent=ARMA().cac ? ARMA().n : (tiroRel>0? t('t_reloading') : tiroAmmo+' / '+TIRO_MAG);
+  a.classList.toggle('low',!ARMA().cac&&tiroRel<=0&&tiroAmmo<=6);
   if(force)tiroDrawBoard(); }
-function tiroReload(){ if(tiroRel>0||tiroAmmo>=TIRO_MAG)return;
+function tiroReload(){ if(ARMA().cac)return; if(tiroRel>0||tiroAmmo>=TIRO_MAG)return;
   tiroRel=TIRO_RELOAD; RC.act=true; RC.evt=0; RC.ch=0; tiroHUD(); }
+/* CUERPO A CUERPO. No hay balas ni cargador: el golpe es un rayo corto desde la camara con el
+   alcance del arma, y el arma acompaña con un tajo (armaTajo, que lee tickArma). */
+let armaTajoT=0;
+function armaGolpe(){
+  const d=ARMA(); armaTajoT=0.28; tiroCd=60/(d.rpm||90); tiroSnd('shot');
+  _cf.set(0,0,-1).applyQuaternion(camera.quaternion);
+  _shotRay.set(camera.position,_cf); _shotRay.far=(d.alcance||2.0);
+  const hits=_shotRay.intersectObjects(tiroTargets,false);
+  let hit=null; for(const h of hits){ if(h.distance<=(d.alcance||2.0)){ hit=h; break; } }
+  if(hit && hit.object.userData.kind==='steel' && hit.object.userData.down) hit=null;
+  if(hit) tiroImpactoBlanco(hit);
+  else { const hs=_shotRay.intersectObjects(tiroSolids,false);
+    if(hs.length && hs[0].distance<=(d.alcance||2.0)){ tiroSnd('pared');
+      const sp=tiroSpark(); sp.position.copy(hs[0].point); sp.userData.v=0.10; sp.visible=true; sp.scale.setScalar(0.5); } }
+  _shotRay.far=Infinity;
+  try{ if(typeof mpGolpe==='function') mpGolpe(_cf,(d.alcance||2.0),(d.dmg||40)); }catch(e){}
+}
 function tiroShoot(){
+  const AD=ARMA();
+  if(AD.cac){ armaGolpe(); return; }
   if(tiroRel>0)return;
   if(tiroAmmo<=0){ tiroSnd('dry'); tiroReload(); return; }
+  /* SEMIAUTOMATICO Y CERROJO. Con gatillo automatico basta con tiroCd, pero una pistola, una
+     escopeta de corredera o un francotirador de cerrojo tienen que pedir un toque por tiro:
+     mantener apretado no dispara en cadena. */
+  if(AD.semi){ if(_semiListo===false) return; _semiListo=false; }
   tiroAmmo--; tiroShots++; tiroCd=60/TIRO_RPM;
   try{ localStorage.setItem('pf_tiro_tiros', (+(localStorage.getItem('pf_tiro_tiros')||0))+1); }catch(e){}
   tiroSnd('shot'); flashT=0.045;
@@ -4827,13 +5249,25 @@ function tiroShoot(){
      mueve HACIA ATRAS, contra el hombro: recBack sube y recUp (que la levantaba) queda en lo minimo
      para que el caño no se clave. Apuntando, hasta ese resto se apaga. */
   const libre = 1-adsW;                                  // apuntando no hay patada de camara
-  recBack=Math.min(0.135,recBack+0.098); recUp=Math.min(0.038,recUp+0.017*libre);
-  recCam+=(0.0045+Math.random()*0.0022)*libre; recYaw+=(Math.random()-0.5)*0.0026*libre;
+  /* El retroceso escala con el arma: un subfusil de 9 mm no puede patear como una .50 */
+  const kk=Math.max(0.45,Math.min(2.3,(AD.dmg||26)/26));
+  recBack=Math.min(0.135*kk,recBack+0.098*kk); recUp=Math.min(0.038*kk,recUp+0.017*libre*kk);
+  recCam+=(0.0045+Math.random()*0.0022)*libre*kk; recYaw+=(Math.random()-0.5)*0.0026*libre*kk;
   // dispersión mínima (más al correr / en el aire)
-  const disp=(player.onGround?0.0016:0.010)+Math.min(1,Math.hypot(player.vel.x,player.vel.z)/RUN)*0.010;
+  const base=(AD.disp==null?0.0016:AD.disp);
+  const disp=(player.onGround?base:base+0.010)+Math.min(1,Math.hypot(player.vel.x,player.vel.z)/RUN)*0.010;
   _cf.set(0,0,-1).applyQuaternion(camera.quaternion);
   _cf.x+=(Math.random()-0.5)*disp; _cf.y+=(Math.random()-0.5)*disp; _cf.z+=(Math.random()-0.5)*disp; _cf.normalize();
   _shotRay.set(camera.position,_cf);
+  /* ESCOPETA: un tiro son varias postas. Se resuelve el rayo central para la estela y el impacto
+     principal, y las demas postas suman sus propios impactos alrededor. */
+  if(AD.postas>1){ const _g=new THREE.Vector3();
+    for(let k=1;k<AD.postas;k++){
+      _g.copy(_cf); _g.x+=(Math.random()-0.5)*AD.disp*2.2; _g.y+=(Math.random()-0.5)*AD.disp*2.2;
+      _g.z+=(Math.random()-0.5)*AD.disp*2.2; _g.normalize();
+      const r2=new THREE.Raycaster(camera.position,_g);
+      const h2=r2.intersectObjects(tiroTargets,false);
+      if(h2.length && !(h2[0].object.userData.kind==='steel'&&h2[0].object.userData.down)) tiroImpactoBlanco(h2[0]); } }
   const hits=_shotRay.intersectObjects(tiroTargets,false);
   let hit=hits.length?hits[0]:null;
   if(hit && hit.object.userData.kind==='steel' && hit.object.userData.down) hit=null;   // ya está caído
@@ -5174,7 +5608,7 @@ const GUN_OJO_MENU=new THREE.Vector3(0.135,-0.385,0.330);
 /* FOV apuntando: 62° dejaba la ventana en 65 px de 600. A 48° todo crece 1,4×, la ventana pasa a
    ocupar ~1/5 de la pantalla y de paso la culata (que cuelga 19° por debajo del eje de mira) se
    va del cuadro sola, sin tocar el recorte cercano del arma. */
-const FOV_CAD=90, FOV_ADS=48;
+const FOV_CAD=90; let FOV_ADS=48;   // el zoom apuntando lo pone el arma (los francotiradores acercan mas)
 let adsQ=0, adsW=0;              // adsQ = pedido (0/1), adsW = suavizado
 /* FICHA DE RE-DESLIZAMIENTO. Tocar apuntar —por corto que sea— habilita UN solo deslizamiento mas.
    Se gasta al usarla: si querés otro, tocás apuntar otra vez. No es una ventana de tiempo (asi
@@ -5344,10 +5778,14 @@ function tiroPostura(dt){
   // acostaba el torso, y eran grandes (0,52 / 0,26 / 0,34 rad). Con la máscara no hay nada que compensar:
   // si se dejan grandes, el fusil se para de costado y los brazos cruzan la lente. Ahora son sólo carácter.
   const TP_YAW=-0.55, TP_PIT=0.16;   // ver G8, abajo en pYaw
+  /* TAJO. Media campana de seno sobre los 0,28 s del golpe: el arma sube apenas, baja de un hachazo y
+     vuelve. Es lo unico que anima el cuerpo a cuerpo, y alcanza porque el arma pivota en el ojo. */
+  const _taj = armaTajoT>0 ? Math.sin((1-armaTajoT/0.28)*Math.PI) : 0;
   const pPit = pit + lagP*0.85 + Math.sin(paso*2.0+0.7)*0.013*mov*qADS + jit + recUp*0.9 + landK*1.6
              + aSpr*0.05 + sSld*0.08 + aAir*0.10 - aRel*0.26 + RC.kick*0.13 + player.camTP*TP_PIT
              + mnu*(-0.68 + Math.sin(menuT*0.55)*0.020)   // menú: 26° abajo, con la respiración del idle
-             + aQui*CONV_PIT + idl*(-0.085);               // reposo: converge en la cruceta; idle: la boca baja apenas
+             + aQui*CONV_PIT + idl*(-0.085)                // reposo: converge en la cruceta; idle: la boca baja apenas
+             + _taj*1.05;                                  // el tajo del arma blanca: baja de un golpe y vuelve
   // G8 · EN 3ª PERSONA EL FUSIL SE CRUZA HACIA AFUERA. Con el arma alineada con la mira (que es lo correcto
   // en 1ª persona) la cámara de 3ª queda EXACTAMENTE detrás del eje del caño y el fusil proyecta 0,062 m de
   // ancho a 3,5 m contra un torso de 0,38 m a 3,0 m: se esconde entero. Medido con __tiro.esq(): arma en
@@ -5361,7 +5799,7 @@ function tiroPostura(dt){
      en pantalla queda una chapa gris y no se le ve ni el caño ni la madera — de ahi el "parece una
      pistola". Con 0.10 rad (5.7°) la boca se corre ~46 mm y aparece el costado entero. Se apaga
      con adsW: apuntando el eje manda y esto vale exactamente 0, asi que no toca nada de la mira. */
-  const HIP_YAW=0.14;
+  const HIP_YAW=ARMA().cac?0.28:0.14;
   const pYaw = player.yaw - lagY*0.95 + jit*0.7 + aSpr*SPR_YAW + sSld*0.04 + aRel*0.12 + player.camTP*TP_YAW + (1-adsW)*HIP_YAW
              + mnu*0.85    // menú: el AK cruza al otro lado y se lee de costado (de punta proyectaba la mitad)
              + aQui*CONV_YAW + idl*0.075;
@@ -5370,7 +5808,7 @@ function tiroPostura(dt){
   // el alabeo de esprint era 0.16 rad: como el arma pivota en el OJO y el agarre izquierdo está a 0,22 m
   // del eje, cada rad de alabeo corre ese agarre 0,22 m. Con 0.16 la mano izquierda perdía el arma 38 mm
   // en el peor frame de la zancada. 0.08 = la mitad, y sigue leyéndose como "el arma se cruza al correr".
-  const pRol = -lagY*1.5 - latV*0.022 + Math.sin(paso)*0.020*mov + aSpr*0.08 + sSld*0.10*(player.slideRight?-1:1) + aRel*0.38
+  const pRol = _taj*(-0.55) + (ARMA().cac?-0.16:0) - lagY*1.5 - latV*0.022 + Math.sin(paso)*0.020*mov + aSpr*0.08 + sSld*0.10*(player.slideRight?-1:1) + aRel*0.38
                + sSld*Math.sin(sldFase*31.0)*0.028 + mnu*(-0.14)
                + idl*0.52;   // idle: lo gira para mirarle el costado DERECHO (ventana de eyección y manija)
   _euAim.set(pPit,pYaw,pRol,'YXZ'); _qAim.setFromEuler(_euAim);
@@ -5405,6 +5843,9 @@ function tiroPostura(dt){
      0.65 m con FOV 48 son 84 px exactos. Apuntando se apaga, igual que el golpe de aterrizaje. */
   const pUp=Math.max(0,pit);
   _gOjo.lerpVectors(GUN_OJO, GUN_OJO_ADS, adsW*(1-aRel));   // apuntando el arma sube al eje de la vista
+  /* El ancla del arma blanca es otra: con la del fusil el filo quedaba abajo del cuadro y tapado por
+     los brazos. Va alta y a la derecha, con la hoja cruzando la pantalla. */
+  if(ARMA().cac) _gOjo.set(0.175,-0.135,0.290);
   if(mnu) _gOjo.copy(GUN_OJO_MENU).setY(GUN_OJO_MENU.y + Math.sin(menuT*0.55)*0.006);   // menú: listo bajo, respirando
   else if(aQui>0.001) _gOjo.lerp(GUN_OJO_QUIETO, aQui*(1-adsW));   // quieto: el arma se centra sola
   if(idl>0){ _gOjo.x += idl*(-0.012); _gOjo.z += idl*(-0.072);     // idle: se la acerca a la cara para mirarla
@@ -5477,8 +5918,11 @@ function tiroPostura(dt){
   if(rcOn) rcManoIzq(rcE,_gp2);        // recargando: la izquierda va al retén, al cinturón y a la manija
   _pol.copy(_gp).addScaledVector(_cr,1.7).addScaledVector(_cu,-1.9).addScaledVector(_cf,-0.30);    // codo derecho: afuera y abajo
   _pol2.copy(_gp2).addScaledVector(_cr,-0.55).addScaledVector(_cu,-1.9).addScaledVector(_cf,-0.15); // codo izquierdo: abajo
+  /* CUERPO A CUERPO: UNA SOLA MANO. Un machete no se agarra con las dos: con el IK de la izquierda
+     encendido, la mano de apoyo se pegaba al filo y entre las dos manos tapaban el arma entera. */
+  const _unaMano=!!ARMA().cac;
   if(DBG.ik){ ikTwoBone(bRArm,bRFore,bRHand,_gp,_pol,1);
-    ikTwoBone(bLArm,bLFore,bLHand,_gp2,_pol2,1); }
+    if(!_unaMano) ikTwoBone(bLArm,bLFore,bLHand,_gp2,_pol2,1); }
   // ---- el ARMA se acomoda a las MANOS: así queda agarrada SIEMPRE, incluso cuando el brazo no pudo llegar ----
   bRHand.getWorldPosition(_hR); bLHand.getWorldPosition(_hL);
   if(RC.mano && RC.mano.visible){ RC.mano.position.copy(_hL).addScaledVector(_cu,-0.045);
@@ -5548,6 +5992,7 @@ function tiroPostura(dt){
 }
 /* gatillo, recarga y patada de cámara: lo único que corre DESPUÉS de orientar la cámara */
 function tickAim(dt){
+  if(armaTajoT>0){ armaTajoT=Math.max(0,armaTajoT-dt); }
   recBack+=(0-recBack)*Math.min(1,13*dt); recUp+=(0-recUp)*Math.min(1,11*dt);
   if(recCam>0.0001||Math.abs(recYaw)>0.0001){ camera.rotateX(-recCam); camera.rotateY(recYaw*0.6);
     recCam+=(0-recCam)*Math.min(1,9*dt); recYaw+=(0-recYaw)*Math.min(1,9*dt); }
@@ -5633,7 +6078,7 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
   try{ tiroBest=parseInt(localStorage.getItem('pf_tiro_best')||'0',10)||0; }catch(e){}
   const bf=document.getElementById('bFire'), br=document.getElementById('bReload');
   const down=e=>{ if(editHUD)return; e.preventDefault(); e.stopPropagation(); audioStart(); tiroFire=true; };
-  const up=e=>{ tiroFire=false; };
+  const up=e=>{ tiroFire=false; _semiListo=true; };
   if(bf){ bf.addEventListener('pointerdown',down); bf.addEventListener('pointerup',up); bf.addEventListener('pointercancel',up); bf.addEventListener('pointerleave',up); }
   if(br){ br.addEventListener('pointerdown',e=>{ if(editHUD)return; e.preventDefault(); e.stopPropagation(); tiroReload(); }); }
   // APUNTAR: en el celular es un interruptor (no se puede mantener apretado y mirar a la vez);
@@ -5648,8 +6093,8 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
   addEventListener('pointerup',e=>{ if(e.pointerType==='mouse'&&e.button===2) adsQ=0; });
   addEventListener('contextmenu',e=>{ if(enTiro()) e.preventDefault(); });
   addEventListener('pointerdown',e=>{ if(e.pointerType!=='mouse'||e.button!==0)return; if(!enTiro()||!gameplayActive())return; if(isBtn(e.target))return; audioStart(); tiroFire=true; },true);
-  addEventListener('pointerup',e=>{ if(e.pointerType==='mouse')tiroFire=false; });
-  addEventListener('blur',()=>{ tiroFire=false; });
+  addEventListener('pointerup',e=>{ if(e.pointerType==='mouse'){ tiroFire=false; _semiListo=true; } });
+  addEventListener('blur',()=>{ tiroFire=false; _semiListo=true; });
   // teclado (PC): WASD camina en cualquier mundo, R recarga y espacio salta
   addEventListener('keydown',e=>{ if(e.ctrlKey||e.metaKey||e.altKey)return; _pc=true; if(!gameplayActive())return;
     const k=(e.key||'').toLowerCase(); let m=true;
@@ -5660,7 +6105,7 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
       else if(k==='shift'){ startSlide(); }
       else if(k==='r'&&enTiro()){ tiroReload(); }
       else if((k==='shift')&&enTiro()){ adsTocado(); adsQ=1; }
-      else if(k==='f'&&enTiro()){ tiroFire=true; setTimeout(()=>{ tiroFire=false; },90); }
+      else if(k==='f'&&enTiro()){ tiroFire=true; setTimeout(()=>{ tiroFire=false; _semiListo=true; },90); }
       else return; }
     e.preventDefault(); if(m)tiroJoyTeclas(); });
   addEventListener('keyup',e=>{ const k=(e.key||'').toLowerCase();
@@ -5982,6 +6427,12 @@ try{ window.__tiro={
   islaEst:()=>({mundo:world, isla:islaMode, col:ALC_COL.length, mallas:alcGroup.children.length,
     pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ALC_GZ).toFixed(1)], suelo:+alcH(player.pos.x,player.pos.z-ALC_GZ).toFixed(2)}), pos:(x,z,y)=>{ player.pos.set(x,(y==null?0:y),TIRO_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true; },
   mira:(y,p)=>{ player.yaw=y; player.faceYaw=y; player.pitch=p||0; },
+  // equipar por indice o por id, y listar el arsenal: para verificar las 17 armas de una pasada
+  arma:(k)=>{ let i=(typeof k==='number')?k:ARSENAL.findIndex(o=>o.id===k); if(i<0)i=0;
+    armaEquipar(i); const d=ARMA();
+    return { id:d.id, n:d.n, cat:d.cat, mag:TIRO_MAG, rpm:TIRO_RPM, rec:TIRO_RELOAD, fov:FOV_ADS,
+             mira:AK_MIRA_Y, esc:GUN_ESC, adsZ:GUN_OJO_ADS.z, piezas:gunCuerpo?gunCuerpo.children.length:0 }; },
+  arsenal:()=>ARSENAL.map(o=>({id:o.id,n:o.n,cat:o.cat})),
   tirar:()=>tiroShoot(), auto:v=>{ tiroFire=!!v; }, recargar:()=>tiroReload(),
   escArma:v=>gunRoot.scale.setScalar(v), grip:(a,b,c,d,e,f)=>{ GUN_GRIP_R.set(a,b,c); GUN_GRIP_L.set(d,e,f); },   // ← se llamaba `esc` y pisaba en silencio a `esc:scene`
   tors:(a,b)=>{ TIRO_TORS_R=a; TIRO_TORS_L=b; }, ik:v=>{ TIRO_IKMAX=v; }, spryaw:v=>{ SPR_YAW=v; },
@@ -7011,27 +7462,21 @@ let menuMode=true, menuQ='med', menuT=0;
    materiales del mismo fusil (madera, polímero negro, dorado), que es lo que se ve, y no
    duplica geometría ni draw calls. Las skins tiñen las piezas del personaje procedural. */
 const AKMAT={};
-const ARMAS=[
-  {id:'ak',   n:'AK-47',        d:'madera de abedul · 7,62',      mad:0x9a5a24, mad2:0x7c4519, met:0x2a2f34, tex:true},
-  {id:'akt',  n:'AK Táctica',   d:'polímero negro · antirreflejo', mad:0x23272b, mad2:0x191d20, met:0x1d2226, tex:false},
-  {id:'akd',  n:'AK Dorada',    d:'grabado en oro · trofeo',       mad:0x6a4a18, mad2:0x4e3510, met:0xc9962f, tex:true}
-];
 const TRAJES=[
   {id:'rec', n:'Recluta',  d:'maniquí gris de fábrica', c:0x87909a, j:0x5f686f, m:0x3f464b, g:0x565e65, f:0x6d757c},
   {id:'sel', n:'Selva',    d:'verde oliva',             c:0x5d6b4a, j:0x44503a, m:0x2f3a2a, g:0x3f4c35, f:0x24291f},
   {id:'urb', n:'Urbano',   d:'gris asfalto',            c:0x545a61, j:0x3c4147, m:0x2a2e33, g:0x3f454b, f:0x1e2226},
   {id:'des', n:'Desierto', d:'arena',                   c:0xb09a72, j:0x8a7757, m:0x5e523c, g:0x8f7d5c, f:0x4a4032}
 ];
-let armaSel=0, skinSel=0;
-try{ armaSel=Math.max(0,Math.min(ARMAS.length-1, parseInt(localStorage.getItem('ct_arma')||'0',10)||0));
-     skinSel=Math.max(0,Math.min(TRAJES.length-1, parseInt(localStorage.getItem('ct_skin')||'1',10)||0)); }catch(e){}
-function aplicarArma(){ const a=ARMAS[armaSel]; if(!AKMAT.madera)return;
-  AKMAT.madera.color.setHex(a.tex?0xffffff:a.mad); AKMAT.maderaOsc.color.setHex(a.tex?0xc08c58:a.mad2);
-  if(!a.tex){ AKMAT.madera.map=null; AKMAT.maderaOsc.map=null; }
-  AKMAT.metal.color.setHex(a.met); AKMAT.metal.metalness=(a.id==='akd')?0.85:0.55; AKMAT.metal.roughness=(a.id==='akd')?0.26:0.42;
-  AKMAT.madera.needsUpdate=true; AKMAT.maderaOsc.needsUpdate=true; AKMAT.metal.needsUpdate=true;
+let skinSel=0;
+try{ skinSel=Math.max(0,Math.min(TRAJES.length-1, parseInt(localStorage.getItem('ct_skin')||'1',10)||0)); }catch(e){}
+/* EQUIPAR. Cambiar de arma ya no es cambiar un color: se vuelve a montar el arma entera desde su
+   receta y se republican sus numeros. Lo unico que se conserva es el juego de materiales. */
+function aplicarArma(){ const a=ARMA(); if(!AKMAT.madera)return;
+  try{ armaMontar(); }catch(e){ console.warn('armaMontar',e); }
   const el=document.getElementById('ldArmaN'); if(el)el.textContent=a.n;
-  try{ localStorage.setItem('ct_arma',armaSel); }catch(e){} }
+  try{ localStorage.setItem('ct_arma',a.id); }catch(e){} }
+function armaEquipar(i){ armaSel=Math.max(0,Math.min(ARSENAL.length-1,i|0)); aplicarArma(); return ARMA().id; }
 function aplicarSkin(){ const k=TRAJES[skinSel]; if(!CU_MAT.cuerpo)return;
   CU_MAT.cuerpo.color.setHex(k.c); CU_MAT.junta.color.setHex(k.j);
   CU_MAT.mano.color.setHex(k.m); CU_MAT.manga.color.setHex(k.g); CU_MAT.cara.color.setHex(k.f||k.c);
@@ -7049,13 +7494,23 @@ function abrirCajon(tipo){
   const dr=document.getElementById('mDrawer'), tt=document.getElementById('mDrawerT'), li=document.getElementById('mDrawerL');
   if(!dr)return; const arma=(tipo==='arma'), mapa=(tipo==='mapa');
   tt.textContent = mapa? t('ct_mapa') : (arma? t('ct_arma') : t('ct_skin'));
-  const lista = mapa? MAPAS : (arma? ARMAS : TRAJES);
+  const lista = mapa? MAPAS : (arma? ARSENAL : TRAJES);
   const sel = mapa? Math.max(0,MAPAS.map(o=>o.k).indexOf(startWorld)) : (arma? armaSel : skinSel);
-  li.innerHTML = lista.map((o,i)=>'<button class="drOpt'+(i===sel?' sel':'')+'" data-i="'+i+'"><b>'+o.n+'</b><span>'+o.d+'</span></button>').join('');
+  /* El arsenal se lista POR CATEGORIA, con un titulo por grupo: con 17 armas una lista plana no se
+     puede leer en un celular. */
+  if(arma){ const GR=[['asalto','Asalto'],['sub','Subfusiles'],['escopeta','Escopetas'],
+                      ['sniper','Francotirador'],['pistola','Pistolas'],['cac','Cuerpo a cuerpo']];
+    li.innerHTML = GR.map(([k,tit])=>{ const del=ARSENAL.map((o,i)=>[o,i]).filter(([o])=>o.cat===k);
+      if(!del.length) return '';
+      return '<div class="drCat">'+tit+'</div>'+del.map(([o,i])=>'<button class="drOpt'+(i===sel?' sel':'')+
+        '" data-i="'+i+'"><b>'+o.n+'</b><span>'+o.d+'</span></button>').join(''); }).join('');
+  } else {
+    li.innerHTML = lista.map((o,i)=>'<button class="drOpt'+(i===sel?' sel':'')+'" data-i="'+i+'"><b>'+o.n+'</b><span>'+o.d+'</span></button>').join('');
+  }
   li.querySelectorAll('.drOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu');
     const i=+b.dataset.i;
     if(mapa){ startWorld=MAPAS[i].k; aplicarMapa(); }
-    else if(arma){ armaSel=i; aplicarArma(); } else { skinSel=i; aplicarSkin(); }
+    else if(arma){ armaEquipar(i); } else { skinSel=i; aplicarSkin(); }
     li.querySelectorAll('.drOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); }));
   dr.classList.add('show');
 }
