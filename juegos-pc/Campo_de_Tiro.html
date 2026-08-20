@@ -960,7 +960,10 @@ function hfArma(mat,n,rx,ry,op){ op=op||{};
   if(op.nrm && mat.normalScale!==undefined)
     armTex(n+'_n',rx,ry,t=>{ mat.normalMap=t; mat.normalScale.set(op.nrm,op.nrm); mat.needsUpdate=true; }, THREE.NoColorSpace);
   return mat; }
-const GUN_ESC=0.72;   // con FOV vertical 90 todo lo cercano se agranda: a 0.86 el fusil se comía el cuadro
+/* TAMAÑO DEL FUSIL. 0.72 lo dejaba del porte de una pistola en pantalla. El limite de 0.86 que habia
+   anotado era con el arma pegada al ojo y sin el reencuadre de la mira; con GUN_OJO actual entra
+   holgado. 0.72 -> 0.95: sube 32% y recien ahi se lee como un fusil de asalto. */
+const GUN_ESC=0.95;
 const GUN_MUZZLE=new THREE.Vector3(0,0.010,-0.548);       // boca del caño (local): freno de boca del AK
 // AGARRES SOBRE LA SUPERFICIE (G1). El criterio viejo era "errDer=0.000" = la muñeca está donde le
 // dijimos; nunca preguntaba DÓNDE le dijimos. El viejo GUN_GRIP_R (0.012,-0.045,0.135) caía 9,5 mm
@@ -978,9 +981,18 @@ const GUN_GRIP_R=new THREE.Vector3(0.000,-0.098,0.1175);  // CENTRO de la empuñ
 // hombro→agarre mide 0.500 m contra un alcance de 0.497: _limitarArma se activa y arrastra el fusil entero
 // hacia el jugador hasta dejar la muñeca DERECHA a 0.104 m de la lente, o sea 10 cm adentro del recorte.
 // Corriendo el agarre a z=+0.150 la cadena baja a 0.43 m, el limitador suelta y la derecha queda a ~0.26.
-const GUN_GRIP_L_ALTO=new THREE.Vector3(0.000,0.004,-0.0200);   // idem, más atrás, al apuntar muy arriba
-const _gL=new THREE.Vector3(-0.041,-0.1052,-0.0095);      // agarre izquierdo VIVO (el que usa todo el código)
-const GUN_GRIP_L=new THREE.Vector3(0.000, 0.004,-0.0200);  // guardamanos por atrás: 0,556 m desde el hombro contra 0,577 de alcance
+const GUN_GRIP_L_ALTO=new THREE.Vector3(0.000,-0.062,0.020);   // idem, más atrás, al apuntar muy arriba
+/* AGARRE IZQUIERDO. Con el fusil a escala 0.72 el punto caia justo al costado del cajon; al subir la
+   escala a 0.95 toda la geometria del arma se abrio un 32% y la muñeca quedo 32 mm ADENTRO del cajon,
+   con media mano enterrada y los dedos saliendo por la cara cercana. Se corre hacia afuera en X y
+   hacia abajo en Y lo mismo que crecio el arma, asi el puño vuelve a envolver el pozo por fuera. */
+const _gL=new THREE.Vector3(-0.060,-0.118,-0.0095);      // agarre izquierdo VIVO (el que usa todo el código)
+/* AGARRE IZQUIERDO = POZO DEL CARGADOR. Barrido de 8 candidatos midiendo errIzq en cadera, apuntando
+   y en los dos extremos de pitch: el guardamanos deja entre 70 y 270 mm de error (el brazo no llega,
+   confirmado otra vez), el pozo deja 0 en cadera y apuntando. Y a diferencia del valor viejo
+   (0,0.004,-0.02), que caia 32 mm ADENTRO del cajon con media mano enterrada, el centro del pozo es
+   una pieza que SE PUEDE agarrar: el puño la envuelve por fuera. */
+const GUN_GRIP_L=new THREE.Vector3(0.000,-0.062,0.020);
 // PROBADO Y DESCARTADO subir el agarre a y=-0.075 "para acortar la cadena": el peor errIzq esprintando
 // EMPEORA (0.092 -> 0.103) y el peor de la palma también (38 -> 45 mm). El brazo izquierdo no está limitado
 // por DISTANCIA sino por ÁNGULO (TIRO_IKMAX topa cuánto se aparta el húmero de la pose de reposo, que es
@@ -5082,7 +5094,12 @@ const GUN_OJO=new THREE.Vector3(0.115,-0.175,0.460);   // más abajo: con el pu�
    ya estaba bien y las dos correcciones que hice mirando la foto sobraban. */
 /* El resto es un desvio CONSTANTE de 7 px hacia arriba en todo el rango de pitch: 7 px sobre 300 a
    0.65 m con FOV 48 son 6.7 mm, asi que el arma baja esos 6.7 mm. */
-const GUN_OJO_ADS=new THREE.Vector3(0.000,-AK_MIRA_Y*GUN_ESC-0.0016,0.660);
+/* DISTANCIA DEL ARMA APUNTANDO. 0.660 venia de cuando el fusil medía 0.72 de escala. Con 0.95 la
+   geometria se abrio un 32% y los agarres se fueron para adelante: medido con manos(), la MANO
+   IZQUIERDA quedaba a 186 mm de su agarre apuntando y a 308 mm mirando arriba — o sea, no agarraba
+   nada, el brazo quedaba estirado al aire. Acercando el ancla a 0.460 el error cae a 0 apuntando y
+   a 82 mm en el peor pitch, y el fusil ocupa en pantalla lo mismo que antes porque crecio la escala. */
+const GUN_OJO_ADS=new THREE.Vector3(0.000,-AK_MIRA_Y*GUN_ESC-0.0016,0.460);
 /* La sensibilidad real medida es el doble de la que calculé: bajar el arma 6.7 mm movio el alza 15
    px, no 7. Con ese numero el ajuste que centra es -0.0016. */
 /* MENÚ (pantalla de operador). El fusil no se sostiene apuntando: cuelga en LISTO BAJO, cruzado
@@ -5275,7 +5292,12 @@ function tiroPostura(dt){
   // línea de puntería, se lleva CRUZADA. 0.55 rad saca la boca a ndc.x +0.03 (píxel 619 contra el borde del
   // torso en 566): el fusil se ve entero, de punta a punta. Se aplica proporcional a camTP, así que en 1ª
   // persona vale exactamente 0 y no toca nada de lo verificado arriba.
-  const pYaw = player.yaw - lagY*0.95 + jit*0.7 + aSpr*SPR_YAW + sSld*0.04 + aRel*0.12 + player.camTP*TP_YAW
+  /* EN CADERA EL FUSIL SE LLEVA CRUZADO. Sosteniendolo en la linea de punteria se lo mira DE PUNTA:
+     en pantalla queda una chapa gris y no se le ve ni el caño ni la madera — de ahi el "parece una
+     pistola". Con 0.10 rad (5.7°) la boca se corre ~46 mm y aparece el costado entero. Se apaga
+     con adsW: apuntando el eje manda y esto vale exactamente 0, asi que no toca nada de la mira. */
+  const HIP_YAW=0.14;
+  const pYaw = player.yaw - lagY*0.95 + jit*0.7 + aSpr*SPR_YAW + sSld*0.04 + aRel*0.12 + player.camTP*TP_YAW + (1-adsW)*HIP_YAW
              + mnu*0.85    // menú: el AK cruza al otro lado y se lee de costado (de punta proyectaba la mitad)
              + aQui*CONV_YAW + idl*0.075;
   // el alabeo de la deslizada va CON SIGNO: antes alabeaba siempre para el mismo lado sin importar hacia
@@ -5607,6 +5629,16 @@ try{ window.__tiro={
   apuntar:v=>{ if(v) adsTocado(); adsQ=v?1:0; return adsQ; },
   deslizar:v=>{ sldHold=(v!==false); startSlide(); return {sld:player.sliding, v:+player.vel.length().toFixed(1)}; },
   correr:()=>{ player.vel.set(0,0,-9.5); player.onGround=true; return +player.vel.length().toFixed(1); },
+  /* CUANTO MIDE UN DESLIZAMIENTO. Se corre el deslizamiento completo con el update() real y se mide
+     el recorrido en el piso hasta que corta. Sin esto la distancia solo se puede estimar con la
+     integral de la friccion, que ignora el roce del suelo y los topes. */
+  desliz:(hold)=>{ const p0=player.pos.clone(); player.vel.set(0,0,-9.5); player.onGround=true; player.vy=0;
+    sldHold=(hold!==false); adsTocado(); startSlide();
+    let n=0, vmax=0; const dt=1/60;
+    while(player.sliding && n<400){ vmax=Math.max(vmax,player.vel.length()); update(dt); n++; }
+    const d=Math.hypot(player.pos.x-p0.x, player.pos.z-p0.z);
+    sldHold=false;
+    return { dist:+d.toFixed(2), seg:+(n*dt).toFixed(2), vmax:+vmax.toFixed(1) }; },
   sld:()=>({sld:player.sliding, t:+player.slideT.toFixed(2), v:+player.vel.length().toFixed(1), hold:sldHold,
             vx:+player.vel.x.toFixed(2), vz:+player.vel.z.toFixed(2)}),
   // mover la palanca desde afuera, para poder medir el deslizamiento dirigido
@@ -5959,6 +5991,10 @@ try{ window.__tiro={
              pitGr:+(Math.atan2(l.y,-l.z)*180/Math.PI).toFixed(2),
              bocaNdc:[+(nd.x/(d*camera.aspect)).toFixed(4), +(nd.y/d).toFixed(4)],
              spr:+aSpr.toFixed(3), lagY:+lagY.toFixed(4) }; },
+  // mover el ancla del arma apuntando, para barrer distancias sin recompilar
+  ojoAds:(x,y,z)=>{ GUN_OJO_ADS.set(x,y,z); return GUN_OJO_ADS.toArray(); },
+  // mover el agarre izquierdo en vivo, para barrer candidatos sin recompilar
+  agarreL:(x,y,z)=>{ GUN_GRIP_L.set(x,y,z); GUN_GRIP_L_ALTO.set(x,y,z); return GUN_GRIP_L.toArray(); },
   // ¿las manos llegan realmente a la empuñadura? (error en metros, medido después del IK)
   manos:()=>{ if(!bRHand||!gunRoot)return null; const A=new THREE.Vector3(),B=new THREE.Vector3();
     gunRoot.updateMatrixWorld(true); bRHand.getWorldPosition(A); B.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
@@ -6114,7 +6150,7 @@ const cuManoGrupos=[];
    agarra cada una es muy distinto: la derecha envuelve una empuñadura de 40 mm y la izquierda se apoya
    sobre un guardamanos de 68x92, que no se puede rodear — ahi la mano abre mas y monta por el costado. */
 const CU_HUECO_R=new THREE.Vector3(0, 0.033, -0.024);
-const CU_HUECO_L=new THREE.Vector3(0,-0.030, -0.010);
+const CU_HUECO_L=new THREE.Vector3(0,-0.042, -0.010);
 const CU_CIERRE_R=0.62, CU_CIERRE_L=0.52;
 const cuCaja=(w,h,d)=>new THREE.BoxGeometry(w*U,h*U,d*U);
 const cuCaps=(r,l)=>new THREE.CapsuleGeometry(r*U,Math.max(0.004,l-2*r)*U,4,10);
@@ -6709,7 +6745,11 @@ function update(dt){
     // se sostiene mientras haya velocidad en vez de cortarse siempre a los 0,9 s.
     /* Mas rapido y mas largo: arranca en 17.6 (era 13.5, con RUN en 8.6) y raspa menos, asi el
        deslizamiento se siente como un envion y no como frenar. */
-    const fr = sldHold ? 0.62 : 1.02;
+    /* DISTANCIA. Sosteniendo el boton el deslizamiento medido daba 21,0 m: demasiado, se cruzaba
+       media manzana de una. El pedido fue recortarlo un 30%, y se recorta subiendo el roce y NO la
+       velocidad de arranque: asi el envion inicial se sigue sintiendo igual de fuerte y lo que cambia
+       es cuanto aguanta. 0.62 -> 1.07 sosteniendo, 1.02 -> 1.80 en toque suelto. */
+    const fr = sldHold ? 1.05 : 1.72;
     player.vel.multiplyScalar(1-Math.min(1,fr*dt));
     const tope = sldHold ? 2.2 : 1.25;
     if(player.slideT>tope || player.vel.length()<2.0 || !player.onGround) { player.sliding=false; }
