@@ -2250,7 +2250,10 @@ const ALC_DATOS={
   {t:'edificio',p:[-16.4,20,57],s:[5.2,16,5.2],ry:0.07,m:'blancoSucio',hueco:false},
   {t:'prisma',p:[-16.4,29.4,57],s:[5.6,2.8,5.6],m:'techoRojo',ry:0.07,sinCol:true},
   {t:'cil',p:[-16.4,30.9,57],r1:0.16,r2:0.16,h:1.6,seg:6,m:'metal',sinCol:true},
-  {t:'camino',pts:[[16,42],[30,44]],w:16,m:'hormigonSucio'},
+  /* La plaza era un 'camino' de 16 m de ancho: se montaba encima de la vereda norte (que va de
+     z=34.4 a 36.6) y de la calle principal, y de ahi venia el "calles sobre calles". Ahora es una
+     LOSA, no una calzada —no excava el terreno ni cuenta como via— y empieza al norte de la vereda. */
+  {t:'plano',p:[23,0.11,45],s:[15,0.22,13],m:'hormigonSucio',ry:0.14,suelo:true,sinCol:true},
   {t:'cil',p:[23,12.35,43],r1:3.2,r2:3.2,h:0.7,seg:18,m:'hormigon'},
   {t:'cil',p:[23,12.95,43],r1:0.35,r2:0.25,h:1.9,seg:8,m:'hormigonSucio'},
   {t:'arbol',p:[31.5,12,43],h:7.2,tipo:'cipres'},
@@ -5570,6 +5573,44 @@ function alcValla(e){ const pts=e.pts||[], h=e.h||2.6, m=e.m||'metal', y=e.y||0;
     for(let k=0;k<=n;k++){ const t=k/n; alcAdd(m,new THREE.BoxGeometry(0.12,h+0.3,0.12),a[0]+dx*t,y+(h+0.3)/2,a[1]+dz*t,0); }
     alcCol((a[0]+b[0])/2, y+h/2, (a[1]+b[1])/2, 0.3, h, L, ang); } }
 /* camino: cinta que se apoya en el terreno (sin colisión: es piso) */
+/* ===================== NADA DE ARBOLES EN LA CALLE =====================
+   Los caminos son losas PINTADAS sobre el terreno y no registran colision, asi que ni la siembra
+   automatica ni los arboles puestos a mano sabian que ahi habia calzada: salian eucaliptos en el
+   medio de la calle principal y una hilera entera plantada sobre la plaza del pueblo. Lo mismo con
+   los edificios: alcEnEdificio consulta la grilla de colisiones, que todavia no existe cuando se
+   construyen los elementos, asi que los arboles del listado se plantaban adentro de las casas.
+   Se arma el catastro ANTES de construir —tramos de calzada y huellas de edificio— y se consulta
+   con el radio de la COPA, no del tronco: el tronco puede estar al borde y la copa tapar media calle. */
+const ALC_VIAS=[], ALC_EDIF=[];
+let ALC_ARB_MOV=0, ALC_ARB_FUERA=0, ALC_BOT_MOV=0, ALC_PROP_VIA=0;
+function alcCatastro(els){
+  ALC_VIAS.length=0; ALC_EDIF.length=0; ALC_ARB_MOV=0; ALC_ARB_FUERA=0;
+  for(const e of els){ if(!e)continue;
+    if(e.t==='camino' && e.pts){ const w=(e.w||4)/2;
+      for(let i=1;i<e.pts.length;i++) ALC_VIAS.push([e.pts[i-1][0],e.pts[i-1][1],e.pts[i][0],e.pts[i][1],w]); }
+    else if((e.t==='edificio'||e.t==='torre') && e.p){ const q=e.s||[8,4,8];
+      ALC_EDIF.push([e.p[0],e.p[2],q[0]/2,q[2]/2,e.ry||0]); } } }
+function alcEnCamino(x,z,r){ r=r||0;
+  for(const v of ALC_VIAS){ const ax=v[0],az=v[1],vx=v[2]-ax,vz=v[3]-az, L=vx*vx+vz*vz;
+    const t=L?Math.max(0,Math.min(1,((x-ax)*vx+(z-az)*vz)/L)):0;
+    const dx=x-(ax+vx*t), dz=z-(az+vz*t), R=v[4]+r;
+    if(dx*dx+dz*dz < R*R) return true; }
+  return false; }
+/* Si un prop apoyado en el suelo cae sobre la calzada, se corre al pasto. Solo los que llevan
+   suelo:true, o sea la cobertura sembrada: lo que esta puesto a mano con su cota se respeta. */
+function alcFueraDeVia(x,z,e,r){
+  if(!e.suelo || e.forzar) return [x,z];
+  if(!alcEnCamino(x,z,(r||1)*0.7)) return [x,z];
+  for(let k=0;k<8;k++){ const R=(r||1)*1.6+k*2.2, a=k*2.3999;
+    const nx=x+Math.cos(a)*R, nz=z+Math.sin(a)*R;
+    if(!alcEnCamino(nx,nz,(r||1)*0.7) && alcH(nx,nz)>2.6){ ALC_PROP_VIA++; return [nx,nz]; } }
+  return [x,z]; }
+function alcEnEdif(x,z,m){ m=m||0;
+  for(const e of ALC_EDIF){ const cs=Math.cos(-e[4]), sn=Math.sin(-e[4]);
+    const dx=x-e[0], dz=z-e[1];
+    const lx=dx*cs-dz*sn, lz=dx*sn+dz*cs;
+    if(Math.abs(lx)<e[2]+m && Math.abs(lz)<e[3]+m) return true; }
+  return false; }
 function alcCamino(e){ const pts=e.pts||[], w=e.w||4, m=e.m||'asfalto';
   for(let i=1;i<pts.length;i++){ const a=pts[i-1], b=pts[i];
     const dx=b[0]-a[0], dz=b[1]-a[1], L=Math.hypot(dx,dz); if(L<0.05)continue;
@@ -5601,10 +5642,22 @@ const VERDES=[0x5c6b39,0x66753f,0x718049,0x4f5d33,0x7a8a52,0x5a6a3c];
    sobre un palo y se veian como brocoli. Ahora la copa se arma por CAPAS de racimos achatados, mas
    densos abajo y mas claros arriba, con el tronco inclinado y en dos tramos. */
 function alcArbol(e){
-  const p=e.p||[0,0,0], h=e.h||8, x=p[0], y=p[1], z=p[2];
-  let sd=Math.abs(Math.sin(x*12.9898+z*78.233)*43758.5453); const rnd=()=>{ sd=(sd*1.618)%1; return sd; };
+  const p=e.p||[0,0,0], h=e.h||8;
   const tipo=e.tipo || ((h<7.5)?'cipres':'eucalipto');
   const flaco=(tipo==='eucalipto'||tipo==='palmera');
+  /* radio de la COPA: en el cipres llega a 0,50·h y en el eucalipto a 0,24·h (ver las capas de abajo) */
+  const rCopa=h*(flaco?0.24:0.50);
+  let x=p[0], y=p[1], z=p[2];
+  if(!e.forzar && (alcEnCamino(x,z,rCopa*0.75) || alcEnEdif(x,z,rCopa*0.80))){
+    /* se lo corre en espiral hasta encontrar lugar; si en diez intentos no hay, no se planta */
+    let ok=false;
+    for(let k=0;k<10 && !ok;k++){ const R=rCopa*(1.15+k*0.6), a=k*2.3999;
+      const nx=p[0]+Math.cos(a)*R, nz=p[2]+Math.sin(a)*R, nh=alcH(nx,nz);
+      if(nh>2.6 && !alcEnCamino(nx,nz,rCopa*0.75) && !alcEnEdif(nx,nz,rCopa*0.80)){ x=nx; z=nz; y=nh; ok=true; } }
+    if(!ok){ ALC_ARB_FUERA++; return; }
+    ALC_ARB_MOV++;
+  }
+  let sd=Math.abs(Math.sin(x*12.9898+z*78.233)*43758.5453); const rnd=()=>{ sd=(sd*1.618)%1; return sd; };
   const ancho=flaco?0.80:1.30;
   const rt=h*(flaco?0.026:0.042);
   const lean=(rnd()-0.5)*0.16;                      // el viento del oeste los peina
@@ -5824,12 +5877,14 @@ function alcElem(e){ if(!e||!e.t)return;
     /* suelo:true = la Y del elemento se mide DESDE EL TERRENO, no desde el cero del mundo. Sin esto,
        sembrar cobertura en el campo abierto obliga a saber de memoria la cota de cada punto, y el
        terreno baja hacia la costa: los props quedaban flotando o enterrados. */
-    case 'caja':     { const p=e.p||[0,0,0], s=e.s||[2,2,2]; const y=e.suelo?alcH(p[0],p[2])+p[1]:p[1];
-                       alcCaja(p[0],y,p[2],s[0],s[1],s[2],e.m||'hormigon',e.ry||0,e.sinCol); break; }
+    case 'caja':     { const p=e.p||[0,0,0], s=e.s||[2,2,2]; const q=alcFueraDeVia(p[0],p[2],e,Math.max(s[0],s[2])/2);
+                       const y=e.suelo?alcH(q[0],q[1])+p[1]:p[1];
+                       alcCaja(q[0],y,q[1],s[0],s[1],s[2],e.m||'hormigon',e.ry||0,e.sinCol); break; }
     case 'plano':    { const p=e.p||[0,0,0], s=e.s||[10,0.3,10]; const y=e.suelo?alcH(p[0],p[2])+p[1]:p[1];
                        alcCaja(p[0],y,p[2],s[0],Math.max(0.15,s[1]),s[2],e.m||'hormigon',e.ry||0,e.sinCol); break; }
-    case 'cil':      { const p=e.p||[0,0,0]; const y=e.suelo?alcH(p[0],p[2])+p[1]:p[1];
-                       alcCil(p[0],y,p[2],e.r1||1,(e.r2==null?e.r1:e.r2)||1,e.h||4,e.seg||10,e.m||'hormigon',e.ry||0,e.sinCol); break; }
+    case 'cil':      { const p=e.p||[0,0,0]; const q=alcFueraDeVia(p[0],p[2],e,(e.r1||1));
+                       const y=e.suelo?alcH(q[0],q[1])+p[1]:p[1];
+                       alcCil(q[0],y,q[1],e.r1||1,(e.r2==null?e.r1:e.r2)||1,e.h||4,e.seg||10,e.m||'hormigon',e.ry||0,e.sinCol); break; }
     case 'prisma':   { const p=e.p||[0,0,0], s=e.s||[6,3,6]; const y=e.suelo?alcH(p[0],p[2])+p[1]:p[1];
                        alcPrisma(p[0],y,p[2],s[0],s[1],s[2],e.m||'techoChapa',e.ry||0,e.sinCol); break; }
     case 'muro':     alcMuro(e); break;
@@ -5866,7 +5921,13 @@ function _semilla(x,z){ let h=Math.round(x*7.13+z*3.71)|0; h=(h^0x9e3779b9)>>>0;
   h=(h*1664525+1013904223)>>>0; return h/4294967296; }
 function alcBotin(e){
   const p=e.p||[0,0,0], tier=BOTIN_TIER[e.cal]?e.cal:'comun', T=BOTIN_TIER[tier];
-  const ry=e.ry||0, x=p[0], z=p[2];
+  const ry=e.ry||0;
+  /* Ni el botin en el medio de la calle: la caja al aire libre se corre si cae sobre la calzada. */
+  let x=p[0], z=p[2];
+  if(e.suelo && alcEnCamino(x,z,1.1)){
+    for(let k=0;k<8;k++){ const R=2.6+k*1.8, a=k*2.3999;
+      const nx=p[0]+Math.cos(a)*R, nz=p[2]+Math.sin(a)*R;
+      if(!alcEnCamino(nx,nz,1.1) && alcH(nx,nz)>2.6){ x=nx; z=nz; ALC_BOT_MOV++; break; } } }
   /* al aire libre no se puede clavar la altura a mano: el terreno baja hacia la costa. Con suelo:true
      la caja se apoya donde este el suelo de verdad. */
   const y=e.suelo? alcH(x,z)+0.16 : p[1];   // +16 cm: la losa del camino sobresale del terreno y la caja quedaba hundida
@@ -6143,6 +6204,7 @@ function alcVegetacion(){
     if(pd>0.80) continue;                       // en la roca viva no crece nada
     if(pd<0.15 && h>12) continue;               // las explanadas están limpias
     if(alcOcupado(jx,jz,h) || alcEnEdificio(jx,jz)) continue;   // ni adentro de un edificio ni bajo un techo
+    if(alcEnCamino(jx,jz,1.4)) continue;                       // ni sobre la calzada ni pisando el cordon
     const r=rnd();
     if(pd<0.30 && r>0.40) continue;             // menos densidad en lo llano
     if(r<0.13){ alcArbol({p:[jx,h,jz], h:6+rnd()*8}); ar++; }
@@ -6160,6 +6222,7 @@ function buildAlc(){ if(alcBuilt)return; alcBuilt=true;
   alcRaster(ALC_DATOS.terreno);
   // el plano base + la capa de DETALLE, que se va llenando de a partes (ver ALC_DETALLE)
   const els=(ALC_DATOS.elementos||[]).concat(ALC_DETALLE||[]);
+  alcCatastro(els);                // catastro de calzadas y huellas: los arboles lo consultan al plantarse
   alcExcavarCaminos(els);          // los caminos cortan la ladera ANTES de armar la malla del suelo
   alcTerreno();
   for(let i=0;i<els.length;i++){ ALC_QUIEN=i; try{ alcElem(els[i]); }catch(err){} } ALC_QUIEN=-1;
@@ -6168,7 +6231,7 @@ function buildAlc(){ if(alcBuilt)return; alcBuilt=true;
   alcIndexar();
   const n=alcFundir()+alcCartelesFundir();
   alcBotinMallas();               // las tapas del botin van APARTE: hay que poder abrir una sola
-  try{ console.log('Valle Ceniza:',els.length,'elementos →',n,'mallas,',ALC_COL.length,'colisiones, vegetación',JSON.stringify(veg)); }catch(e){} }
+  try{ console.log('Valle Ceniza:',els.length,'elementos →',n,'mallas,',ALC_COL.length,'colisiones, vegetación',JSON.stringify(veg),'· corridos de la calzada: arboles',ALC_ARB_MOV,'cajas',ALC_BOT_MOV,'props',ALC_PROP_VIA,'· arboles descartados',ALC_ARB_FUERA); }catch(e){} }
 
 function enterAlc(){ if(world==='valle')return; world='valle'; grassMode=false; dreamMode=false; islaMode=true; discover('valle');
   buildAlc(); tiroWire(); alcSol(true);
