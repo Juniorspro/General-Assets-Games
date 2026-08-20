@@ -6119,6 +6119,12 @@ function tiroSnd(k){ const c=tctx(); if(!c||!AUD.on)return; if(c.state==='suspen
   else if(k==='mag'){ noise(0.045,3200,700,0.20,300); }
   else if(k==='mag2'){ noise(0.05,3600,600,0.22,300); tono(240,120,0.05,0.10,'square'); }
   else if(k==='cerrojo'){ noise(0.055,5200,900,0.24,600); tono(420,150,0.07,0.14,'square'); noise(0.03,7000,2500,0.12,1500); }
+  /* IMPACTO ENTRE JUGADORES. Dos sonidos distintos y a proposito: el que PEGA oye un tick corto y
+     agudo (el "hitmarker", que confirma sin tapar el disparo) y el que RECIBE oye un golpe sordo y
+     grave, que se siente en el pecho. Sintetizados como el resto: cero descargas. */
+  else if(k==='golpe'){ tono(1850,1250,0.075,0.20,'triangle'); noise(0.035,7000,3000,0.14,2400); }
+  else if(k==='cabeza'){ tono(2450,1500,0.10,0.24,'triangle'); tono(1200,700,0.09,0.14,'sine'); noise(0.04,9000,3500,0.16,2600); }
+  else if(k==='recibido'){ noise(0.14,900,120,0.34,60); tono(115,52,0.20,0.30,'sine'); noise(0.05,3000,600,0.12,200); }
 }
 
 /* ===================== controles del arma (móvil: botones · PC: mouse/teclado) =====================
@@ -6501,6 +6507,28 @@ try{ window.__tiro={
     armaEquipar(i); const d=ARMA();
     return { id:d.id, n:d.n, cat:d.cat, mag:TIRO_MAG, rpm:TIRO_RPM, rec:TIRO_RELOAD, fov:FOV_ADS,
              mira:AK_MIRA_Y, esc:GUN_ESC, adsZ:GUN_OJO_ADS.z, piezas:gunCuerpo?gunCuerpo.children.length:0 }; },
+  // estado del multijugador: lo unico que sirve para saber si el online anda de verdad
+  /* ¿QUE HAY DELANTE DE LA MIRA? Dice si el rayo del disparo encuentra la caja de un jugador, a que
+     distancia y donde esta esa caja. Es lo que separa "el daño no funciona" de "no le estabas apuntando". */
+  rayo:()=>{ for(const c of _mpCajas) c.updateWorldMatrix(true,false);
+    const d=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    const R=new THREE.Raycaster(camera.position,d);
+    const jug=R.intersectObjects(_mpCajas,false), bl=R.intersectObjects(tiroTargets,false), so=R.intersectObjects(tiroSolids,false);
+    const f=(h)=>h.length?{d:+h[0].distance.toFixed(2)}:null;
+    return { cam:camera.position.toArray().map(v=>+v.toFixed(1)), dir:d.toArray().map(v=>+v.toFixed(2)),
+      jugador:jug.length?{d:+jug[0].distance.toFixed(2), id:jug[0].object.userData.mpId,
+        caja:jug[0].object.getWorldPosition(new THREE.Vector3()).toArray().map(v=>+v.toFixed(1))}:null,
+      blanco:f(bl), solido:f(so), cajas:_mpCajas.length }; },
+  mpEstado:()=>({ on:MP.on, url:MP.url, pub:MP.nPub|0, rx:MP.nRx|0, frames:MP.nTick|0, id:MP.id, sala:MP.room, mundo:world, yo:MP.name,
+    remotos:[...MP.remotes.values()].map(r=>({id:r.id,n:r.name,w:r.world,anim:r.anim,
+      vis:!!(r.avatar&&r.avatar.visible), rig:!!r.rigged, caja:!!r.caja,
+      cuerpo:(()=>{ if(!r.body)return null; let n=0,v=0;
+        r.body.traverse(o=>{ if(o.isMesh){ n++; if(o.visible)v++; } });
+        const bb=new THREE.Box3().setFromObject(r.body);
+        const t=bb.getSize(new THREE.Vector3()), c=bb.getCenter(new THREE.Vector3());
+        return { mallas:n, visibles:v, alto:+t.y.toFixed(2), ancho:+t.x.toFixed(2),
+                 centro:c.toArray().map(x=>+x.toFixed(1)), esc:+r.body.scale.x.toFixed(3) }; })(),
+      p:r.pos.toArray().map(v=>+v.toFixed(1))})), cajas:_mpCajas.length }),
   arsenal:()=>ARSENAL.map(o=>({id:o.id,n:o.n,cat:o.cat})),
   // probar el daño y la muerte sin necesitar un segundo cliente
   pvp:(d)=>{ if(d==null) return {vida:+PVP.vida.toFixed(1),muerto:PVP.muerto,bajas:PVP.bajas,muertes:PVP.muertes,cajas:_mpCajas.length};
@@ -6994,8 +7022,11 @@ function renderPack(){ if(!vPackEl)return;
 }
 function togglePack(){ if(!vPackEl)return; if(vPackEl.classList.toggle('show')) renderPack(); }
 function checkUnlocks(){
-  if(voidBest>voidUnlockedMax){ voidUnlockedMax=voidBest; try{ localStorage.setItem('pf_void_best',voidUnlockedMax); }catch(e){} }
-  for(const s of SKINS){ if(s.phase>0 && voidBest>=s.phase && !s._ann && (!s.owner||isOwner)){ s._ann=true;
+  /* voidBest venia del juego padre y aca no existe: esto tiraba ReferenceError. En este juego lo que
+     desbloquea skins son las BAJAS del multijugador. */
+  const logro=(typeof PVP!=='undefined')?(PVP.bajas|0):0;
+  if(logro>voidUnlockedMax){ voidUnlockedMax=logro; try{ localStorage.setItem('pf_void_best',voidUnlockedMax); }catch(e){} }
+  for(const s of SKINS){ if(s.phase>0 && logro>=s.phase && !s._ann && (!s.owner||isOwner)){ s._ann=true;
     mpChatIn('🎁', t('skin_unlock')+': '+s.name+' · '+t('fase')+' '+s.phase+' — 🎒'); } }   // NO se auto-equipa: andá a la mochila a ponértela (la dorada es exclusiva del dueño)
   renderPack();
 }
@@ -8035,23 +8066,43 @@ function buildKbd(){ if(kbBuilt||!kbdEl)return; kbBuilt=true;
 function openKbd(){ buildKbd(); kbBuf=''; if(kbTxt){ kbTxt.textContent=''; kbTxt.dataset.ph=t('mp_chat'); } kbdEl.classList.add('show'); }
 function closeKbd(){ if(kbdEl)kbdEl.classList.remove('show'); }
 function mpSendChat(){ openKbd(); }   // el botón 💬 abre el teclado del JUEGO
+/* BROKERS. Estaba clavado en broker.emqx.io y ese servidor publico se cae y limita conexiones: probado
+   con dos clientes de verdad, el estado ciclaba conectando -> desconectado y NUNCA llegaba a online, asi
+   que el multijugador no andaba nunca. Ahora hay una lista y se prueba uno por uno: si el primero no
+   conecta en 6 s se pasa al siguiente, y se sigue rotando. El que conecta se recuerda para la proxima. */
+const MP_BROKERS=[
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt',
+  'wss://test.mosquitto.org:8081/mqtt',
+  'wss://mqtt.eclipseprojects.io/mqtt'
+];
+let mpBroker=0; try{ const g=+localStorage.getItem('pf_broker'); if(g>=0&&g<MP_BROKERS.length) mpBroker=g; }catch(e){}
+let _mpTmr=null;
 function mpConnect(){
   if(typeof mqtt==='undefined'){ mpSetStatus('off','mp_nonet'); return; }
+  if(MP.client){ try{ MP.client.end(true); }catch(e){} MP.client=null; }
+  if(_mpTmr){ clearTimeout(_mpTmr); _mpTmr=null; }
+  const url=MP_BROKERS[mpBroker%MP_BROKERS.length];
   mpSetStatus('connecting','mp_conn');
-  let client; try{ client=mqtt.connect('wss://broker.emqx.io:8084/mqtt',{connectTimeout:8000,reconnectPeriod:5000,clean:true}); }
-  catch(e){ mpSetStatus('off','mp_nonet'); return; }
-  MP.client=client;
-  client.on('connect',()=>{ MP.on=true; mpSetStatus('online','mp_online'); client.subscribe([MP.room+'/state',MP.room+'/chat',MP.room+'/action',MP.room+'/rtc'],{qos:0}); if(VOICE.stream) voiceSend(null,'ready'); });
+  let client; try{ client=mqtt.connect(url,{connectTimeout:6000,reconnectPeriod:0,clean:true,keepalive:30}); }
+  catch(e){ mpBroker++; _mpTmr=setTimeout(mpConnect,1200); return; }
+  MP.client=client; MP.url=url;
+  /* si en 8 s no llego a online, este broker no sirve: se pasa al siguiente */
+  const plazo=setTimeout(()=>{ if(!MP.on){ try{ client.end(true); }catch(e){} mpBroker++; mpConnect(); } }, 8000);
+  const siguiente=()=>{ if(_mpTmr)return; MP.on=false; mpSetStatus('off','mp_off');
+    mpBroker++; _mpTmr=setTimeout(()=>{ _mpTmr=null; mpConnect(); }, 1500); };
+  client.on('connect',()=>{ clearTimeout(plazo); MP.on=true; mpSetStatus('online','mp_online');
+    try{ localStorage.setItem('pf_broker',String(mpBroker%MP_BROKERS.length)); }catch(e){}
+    client.subscribe([MP.room+'/state',MP.room+'/chat',MP.room+'/action',MP.room+'/rtc'],{qos:0}); if(VOICE.stream) voiceSend(null,'ready'); });
   client.on('reconnect',()=>mpSetStatus('connecting','mp_conn'));
-  client.on('close',()=>{ MP.on=false; mpSetStatus('off','mp_off'); });
-  client.on('error',()=>{ MP.on=false; mpSetStatus('off','mp_err'); });
-  client.on('message',(topic,buf)=>{ let d; try{ d=JSON.parse(buf.toString()); }catch(e){ return; } if(!d||d.id===MP.id)return;
+  client.on('close',()=>{ clearTimeout(plazo); siguiente(); });
+  client.on('error',()=>{ clearTimeout(plazo); siguiente(); });
+  client.on('message',(topic,buf)=>{ MP.nRx=(MP.nRx|0)+1; let d; try{ d=JSON.parse(buf.toString()); }catch(e){ return; } if(!d||d.id===MP.id)return;
     if(topic.slice(-6)==='/state'){ const r=mpRemote(d.id,d.name||'jugador'); r.name=d.name||r.name; r.world=d.world; r.anim=d.anim||'idle'; r.moving=!!d.isMoving; r.mir=!!d.mir; r.yaw=d.facingAngle||0;
-      r.vSeed=d.vSeed||0; r.vFase=d.vFase||0; r.vBest=d.vBest||0; r.vDead=!!d.vDead; r.talking=!!d.talk;   // estado del vacío + ¿está hablando? (ícono de voz)
+      r.vida=(typeof d.vida==='number')?d.vida:100; r.bajas=d.bajas|0; r.muerto=!!d.muerto; r.arma=d.arma||''; r.talking=!!d.talk;
       r.ch=(typeof d.ch==='number'&&d.ch>=0)?d.ch:-1;   // qué personaje de la tienda tiene puesto
-      boardUpdate(d.id, d.name, d.vBest);   // clasificación: mejor fase de cada jugador
-      r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now();
-      if(world==='void') updateVoidBoard(); }
+      try{ boardUpdate(d.id, d.name, d.bajas); }catch(e){}   // clasificación: bajas de cada jugador
+      r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now(); }
     else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); const r=MP.remotes.get(d.id); if(r) mpBubble(r, d.text||''); }   // panel de chat + burbuja sobre la cabeza
     else if(topic.slice(-7)==='/action'){
       if(d.type==='hit' && d.to===MP.id) pvpRecibir(d.dmg, d.name||'alguien', d.cab);
@@ -8064,12 +8115,18 @@ function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.n
   const p=player, moving=Math.hypot(p.vel.x,p.vel.z)>0.6;
   const mir=(curAnim==='wallrun'&&p.wallrun>0)||(curAnim==='slide'&&p.slideRight);   // mismo espejo que el cuerpo local
   let myCh=-1; try{ if(window.__charId){ const v=+window.__charId(); if(v>=0)myCh=v; } }catch(e){}   // personaje equipado (la tienda expone __charId)
+  /* ESTO ERA EL BUG DEL MULTIJUGADOR. El estado publicado arrastraba cuatro variables del juego del que
+     salio este (voidSeed, voidFase, voidBest, voidDead) que aca NO EXISTEN: mpPublishState tiraba
+     ReferenceError en cada frame, el try/catch que envuelve mpTick se lo comia sin dejar rastro en la
+     consola, y por lo tanto NUNCA se publicaba nada. Medido con dos clientes de verdad: los dos decian
+     "en linea" y los dos tenian 0 mensajes enviados. Ahora el estado lleva lo que este juego necesita:
+     donde estas, que animacion haces, cuanta vida te queda, cuantas bajas y con que arma andas. */
   const cur={x:+p.pos.x.toFixed(2),y:+p.pos.y.toFixed(2),z:+p.pos.z.toFixed(2),yaw:+p.yaw.toFixed(2),anim:curAnim||'idle',world,moving,mir,chId:myCh,
-    vSeed:world==='void'?voidSeed:0, vFase:voidFase, vBest:voidBest, vDead:voidDead, talk:voiceTalking};
+    vida:Math.round(PVP.vida), bajas:PVP.bajas|0, muerto:!!PVP.muerto, arma:ARMA().id, talk:voiceTalking};
   const l=MP.last, hb=(now-(MP.lastFull||0)>2200);   // latido cada ~2.2s aunque no cambie nada → no se cae la conexión
-  const ch=hb||(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving||cur.mir!==l.mir||cur.chId!==l.chId||cur.vSeed!==l.vSeed||cur.vFase!==l.vFase||cur.vBest!==l.vBest||cur.vDead!==l.vDead||cur.talk!==l.talk;
-  if(!ch)return; MP.lastPub=now; MP.last=cur; if(hb)MP.lastFull=now;
-  MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving,mir:cur.mir,ch:cur.chId,vSeed:cur.vSeed,vFase:cur.vFase,vBest:cur.vBest,vDead:cur.vDead,talk:cur.talk}),{qos:0}); }
+  const ch=hb||(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving||cur.mir!==l.mir||cur.chId!==l.chId||cur.vida!==l.vida||cur.bajas!==l.bajas||cur.muerto!==l.muerto||cur.arma!==l.arma||cur.talk!==l.talk;
+  if(!ch)return; MP.lastPub=now; MP.last=cur; if(hb)MP.lastFull=now; MP.nPub=(MP.nPub|0)+1;
+  MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving,mir:cur.mir,ch:cur.chId,vida:cur.vida,bajas:cur.bajas,muerto:cur.muerto,arma:cur.arma,talk:cur.talk}),{qos:0}); }
 /* ===================== TIROTEO ENTRE JUGADORES =====================
    El multijugador ya mostraba a los demas y les hablaba, pero no habia daño: el manejador de /action
    decia literalmente "este juego no tiene daño". Ahora si. El modelo es el mas simple que aguanta un
@@ -8094,9 +8151,13 @@ function pvpMarca(){ const m=document.getElementById('hitMark'); if(!m)return;
    cuerpo hecho de piezas sueltas, apuntarle a las piezas daria huecos entre brazo y torso. */
 function mpCaja(r){
   if(r.caja) return r.caja;
-  const g=new THREE.BoxGeometry(0.62,1.72,0.42);
+  /* ALTO 1,86 Y NO 1,72. Medido con el gancho rayo(): el ojo del jugador esta a 1,70 y la caja llegaba
+     a 1,72, asi que un tiro derecho al frente pasaba raspando POR ENCIMA de la cabeza del otro y no
+     pegaba. De ahi venia que el daño pareciera intermitente: solo entraba cuando el bamboleo del paso
+     bajaba la camara. Ahora la caja cubre de los pies a 1,86 y la cabeza es el tramo de arriba. */
+  const g=new THREE.BoxGeometry(0.66,1.86,0.46);
   const m=new THREE.MeshBasicMaterial({visible:false});
-  const me=new THREE.Mesh(g,m); me.position.y=0.86; me.userData.mpId=r.id; me.userData.mpRef=r;
+  const me=new THREE.Mesh(g,m); me.position.y=0.93; me.userData.mpId=r.id; me.userData.mpRef=r;
   me.frustumCulled=false; r.avatar.add(me); r.caja=me; _mpCajas.push(me); return me;
 }
 function mpSacarCaja(r){ if(!r||!r.caja)return; const i=_mpCajas.indexOf(r.caja); if(i>=0)_mpCajas.splice(i,1);
@@ -8104,24 +8165,29 @@ function mpSacarCaja(r){ if(!r||!r.caja)return; const i=_mpCajas.indexOf(r.caja)
 /* ¿el rayo le pego a un jugador antes que a lo demas? Devuelve el punto de impacto o null. */
 function mpDisparo(ray, distTope, dmg){
   if(!MP.on || !_mpCajas.length) return null;
+  /* Los avatares se colocan en el bucle de render, y el disparo se resuelve ANTES de ese render: si no
+     se les refresca la matriz de mundo, el rayo pregunta por una caja que quedo donde estaba hace un
+     frame —o en el origen, si el remoto acaba de aparecer— y el tiro pasa de largo. */
+  for(const c of _mpCajas) c.updateWorldMatrix(true,false);
   const hs=ray.intersectObjects(_mpCajas,false);
   if(!hs.length) return null;
   const h=hs[0]; if(h.distance>=distTope) return null;
   const r=h.object.userData.mpRef;
   /* la cabeza vale doble: el tercio de arriba de la caja */
   const local=h.point.clone(); r.avatar.worldToLocal(local);
-  const cabeza=(local.y>1.32);
+  const cabeza=(local.y>1.56);   // el tramo de arriba de la caja: la cabeza vale doble
   mpPegar(h.object.userData.mpId, Math.round(dmg*(cabeza?2:1)), cabeza);
   return h.point;
 }
 function mpPegar(id,dmg,cabeza){
   if(!MP.on||!MP.client) return;
   MP.client.publish(MP.room+'/action', JSON.stringify({id:MP.id,type:'hit',to:id,dmg:dmg,cab:!!cabeza,name:MP.name}),{qos:0});
-  pvpMarca(); sfx('btn', cabeza?0.85:0.45);
+  pvpMarca(); tiroSnd(cabeza?'cabeza':'golpe');
 }
 /* golpe cuerpo a cuerpo: mismo criterio pero con el alcance corto del arma */
 function mpGolpe(dir,alcance,dmg){
   if(!MP.on||!_mpCajas.length) return;
+  for(const c of _mpCajas) c.updateWorldMatrix(true,false);
   const ray=new THREE.Raycaster(camera.position,dir,0.01,alcance);
   const hs=ray.intersectObjects(_mpCajas,false);
   if(hs.length) mpPegar(hs[0].object.userData.mpId, dmg, false);
@@ -8132,7 +8198,7 @@ function pvpRecibir(dmg,quien,cab){
   PVP._sin=0;
   PVP.ultimo=quien||'?';
   document.body.classList.remove('golpe'); void document.body.offsetWidth; document.body.classList.add('golpe');
-  sfx('wrong',0.45);
+  tiroSnd('recibido');
   if(PVP.vida<=0) pvpMorir();
   pvpHUD();
 }
@@ -8168,6 +8234,7 @@ function pvpTick(dt){
 }
 try{ pvpHUD(); }catch(e){}
 function mpTick(dt){
+  MP.nTick=(MP.nTick|0)+1;
   const now=performance.now();
   if(mpStatusEl && mpStatusEl.dataset.s==='online') mpStatusEl.textContent=t('mp_online')+' · '+(MP.remotes.size+1)+'👥';   // nº de jugadores conectados (vos + remotos)
   for(const [id,r] of MP.remotes){ if(now-r.last>6500){ mpSacarCaja(r); scene.remove(r.avatar); MP.remotes.delete(id); voiceClose(id); continue; }   // timeout (con latido de 2.2s no se cae si sigue ahí)
