@@ -6336,6 +6336,12 @@ function alcMats(){ if(ALC_M.hormigon)return ALC_M;
   ALC_M.agua         = M(0x2e5468,0.16,0.1);
   // el follaje lleva COLOR POR VÉRTICE: con una sola malla fundida para toda la isla es la única
   // forma de que no queden doscientos árboles exactamente del mismo verde
+  /* alphaTest y no transparent: con transparencia habria que ordenar 40.000 cartas por distancia
+     todos los cuadros, y ademas se ven los bordes cuadrados unas contra otras. Con alphaTest el
+     recorte es duro, escribe profundidad y sale gratis. */
+  ALC_M.hoja        = new THREE.MeshStandardMaterial({color:0xffffff,map:texHoja(),alphaTest:0.45,
+                        side:THREE.DoubleSide,roughness:0.94,metalness:0,vertexColors:true});
+  ALC_M.hoja.envMapIntensity=0.35;
   ALC_M.follaje     = new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.93,metalness:0,vertexColors:true});
   ALC_M.follaje.envMapIntensity=0.35;
   /* VIENTO. Toda la isla se funde en UNA malla de follaje, asi que no hay como animar cada arbol
@@ -6343,6 +6349,25 @@ function alcMats(){ if(ALC_M.hormigon)return ALC_M;
      no del indice del vertice, asi que dos racimos vecinos van casi juntos (una rama entera se
      mueve como una rama) y dos arboles lejanos van desfasados. Cuesta cuatro senos por vertice. */
   ALC_M.follaje.userData.viento={value:0};
+  /* la hoja se mueve MAS que la masa: es lo que hace que el arbol parezca vivo y no una escultura */
+  ALC_M.hoja.userData.viento=ALC_M.follaje.userData.viento;
+  ALC_M.hoja.onBeforeCompile=(sh)=>{
+    sh.uniforms.uVientoT=ALC_M.follaje.userData.viento;
+    sh.uniforms.uVientoA={value:1};
+    ALC_M.hoja.userData.amp=sh.uniforms.uVientoA;
+    sh.vertexShader='uniform float uVientoT;uniform float uVientoA;\n'+sh.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+       vec3 wpH = (modelMatrix*vec4(transformed,1.0)).xyz;
+       float fH = uVientoT;
+       float aH = sin(wpH.x*0.13 + wpH.z*0.09 + fH*1.15)*0.62
+                + sin(wpH.z*0.21 - wpH.x*0.07 + fH*1.83)*0.38;
+       float bH = sin(wpH.x*1.9 + wpH.y*2.3 + wpH.z*1.7 + fH*4.6);   // temblor propio de cada hoja
+       float rH = (aH + bH*0.45) * uVientoA;
+       transformed.x += rH*0.115;
+       transformed.z += rH*0.075;
+       transformed.y -= abs(rH)*0.030;`);
+  };
   ALC_M.follaje.onBeforeCompile=(sh)=>{
     sh.uniforms.uVientoT=ALC_M.follaje.userData.viento;
     sh.uniforms.uVientoA={value:1};
@@ -6741,6 +6766,73 @@ function alcPoste(e){ const p=e.p||[0,0,0], h=e.h||5.5;
    apelmazaban en una mancha marron y el monte parecia una sola cosa. Ocho tonos en vez de seis, y
    dos tirando a amarillo para las capas de arriba, que es donde pega el sol. */
 const VERDES=[0x7e9159,0x8a9c62,0x93a76b,0x6f8250,0x9db474,0x778a55,0xa8bd83,0x869a5e];
+/* ===================== HOJAS SUELTAS =====================
+   La copa era un racimo de esferas achatadas: de lejos pasaba, de cerca es una pelota verde y el
+   borde del arbol se ve como un globo. Ahora el contorno lo hacen HOJAS: cartas de dos triangulos
+   con un racimo de hojas recortado en la textura, cada una con su inclinacion, su tamaño y su
+   tono. Adentro quedan dos bolas oscuras que hacen de masa para que el arbol no sea transparente.
+   Sale MAS BARATO que antes: la copa vieja gastaba unos 1.200 triangulos por arbol (4 capas x 5
+   racimos x una esfera de 60) y esta gasta unos 350 — 160 hojas de 2 triangulos mas la masa. */
+/* Paleta PROPIA de la hoja, mas oscura que la del follaje macizo. Cuando la textura llevaba el
+   verde adentro, los dos verdes se multiplicaban y el resultado daba el tono justo; al pasar la
+   textura a blanco (para que el color por vertice mande de verdad) se perdio ese oscurecido y el
+   monte quedo color coliflor. Estos son los mismos tonos pero ya multiplicados. */
+const VERDES_HOJA=[0x4f6134,0x59683a,0x627540,0x455530,0x6b7c48,0x4b5b33,0x748a52,0x566539];
+/* La MASA de adentro va mas oscura todavia que la hoja: es el interior de la copa, donde no entra
+   luz. Al reves quedaba una bocha clara con confeti oscuro encima. */
+const VERDES_MASA=[0x33402a,0x3a4630,0x2d3824,0x414e35];
+let _txHoja=null;
+function texHoja(){
+  if(_txHoja) return _txHoja;
+  const S=128, c=document.createElement('canvas'); c.width=c.height=S;
+  const g=c.getContext('2d');
+  g.clearRect(0,0,S,S);
+  const hoja=(cx,cy,L,W,a,col)=>{
+    g.save(); g.translate(cx,cy); g.rotate(a); g.fillStyle=col;
+    g.beginPath(); g.moveTo(0,-L/2);
+    g.quadraticCurveTo( W/2,-L*0.12,  0, L/2);   // media hoja
+    g.quadraticCurveTo(-W/2,-L*0.12,  0,-L/2);   // la otra media
+    g.fill();
+    g.strokeStyle='rgba(0,0,0,0.16)'; g.lineWidth=1.1;
+    g.beginPath(); g.moveTo(0,-L/2); g.lineTo(0,L/2); g.stroke();   // el nervio
+    g.restore(); };
+  /* siete hojas en la carta, con dos verdes distintos: una sola hoja por carta se ve rala y obliga
+     a poner el triple de cartas para tapar lo mismo */
+  const P=[[64,40,54,26,-0.30],[42,62,46,22,0.55],[86,60,48,23,-0.75],[58,86,50,24,0.18],
+           [92,96,40,19,1.05],[30,96,38,18,-1.15],[70,18,34,16,0.35]];
+  /* Las hojas van casi BLANCAS: el verde lo pone el color por vertice. Si la textura ya viniera
+     verde se multiplicarian los dos y el monte salia lavado, que es lo que pasaba. Las alternadas
+     un punto mas oscuras dan volumen dentro de la misma carta. */
+  for(let i=0;i<P.length;i++){ const q=P[i];
+    hoja(q[0],q[1],q[2],q[3],q[4], (i%2)? '#ffffff' : '#d8ddd0'); }
+  _txHoja=new THREE.CanvasTexture(c); _txHoja.colorSpace=THREE.SRGBColorSpace;
+  _txHoja.anisotropy=4; return _txHoja;
+}
+/* La carta se arma A MANO como BufferGeometry: alcUVMundo reescribe las UV de las geometrias con
+   parametros (Box, Cylinder, Plane) para que la textura mida metros, y a una hoja eso le destruiria
+   el recorte. Sin `parameters`, alcUVMundo se va derecho. */
+let _geoHoja=null;
+function geoHoja(){
+  if(_geoHoja) return _geoHoja;
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(
+    [-.5,-.5,0,  .5,-.5,0,  .5,.5,0,  -.5,-.5,0,  .5,.5,0,  -.5,.5,0],3));
+  g.setAttribute('normal',new THREE.Float32BufferAttribute(
+    [0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1, 0,0,1],3));
+  g.setAttribute('uv',new THREE.Float32BufferAttribute([0,0, 1,0, 1,1, 0,0, 1,1, 0,1],2));
+  _geoHoja=g; return g;
+}
+/* una carta de hojas en (x,y,z), de lado `t`, inclinada al azar */
+function alcHoja(x,y,z,t,rx,ry,rz,col){
+  const g=geoHoja().clone();
+  g.scale(t,t,t);
+  if(rx) g.rotateX(rx); if(rz) g.rotateZ(rz);
+  alcAddC('hoja',g,x,y,z,ry||0,col);
+}
+function hojasPorArbol(){
+  const q=(typeof CFG!=='undefined'? CFG.grafico : 'med');
+  return q==='low' ? 0.45 : (q==='high' ? 1.55 : 1.0);
+}
 /* ARBOLES. Cipreses de Monterey (copa densa, achatada y peinada por el
    viento), eucaliptos flacos y altos, y matas de higuera de mar. Antes eran cuatro esferas sueltas
    sobre un palo y se veian como brocoli. Ahora la copa se arma por CAPAS de racimos achatados, mas
@@ -6779,23 +6871,46 @@ function alcArbol(e){
     const g=new THREE.CylinderGeometry(rt*0.18,rt*0.52,lr,5);
     g.translate(0,lr*0.5,0); g.rotateZ(0.85+rnd()*0.40); g.rotateY(a);
     alcAdd('maderaVieja',g,x,yy,z,0); }
-  // copa por capas: cada capa mas chica y mas clara que la de abajo
-  const capas=flaco?3:4, base=flaco?0.60:0.48;
-  for(let c=0;c<capas;c++){
-    const f=c/(capas-1);                                   // 0 abajo, 1 arriba
-    const yy=y+h*(base+f*(flaco?0.34:0.44));
-    const rad=h*(flaco?0.13:0.20)*ancho*(1-0.35*f)*(0.85+rnd()*0.3);
-    const disp=h*(flaco?0.07:0.13)*ancho*(1-0.4*f);
-    const nc=(flaco?3:4)+((sd*13)|0)%2;
-    for(let i=0;i<nc;i++){
-      const a=(i/nc)*6.283+rnd()*1.1, r=disp*(0.4+rnd()*0.9);
-      const g=new THREE.SphereGeometry(rad*(0.72+rnd()*0.5),6,5);
-      g.scale(1,flaco?0.78:0.62,1);
-      const iv=Math.min(VERDES.length-1, ((sd*97)|0 + c*2 + i)%VERDES.length);
-      alcAddC('follaje',g, cx+Math.cos(a)*r, yy+(rnd()-0.5)*h*0.05, cz+Math.sin(a)*r, 0, VERDES[iv]); } }
-  // remate
-  const gr=new THREE.SphereGeometry(h*(flaco?0.10:0.15)*ancho,6,5); gr.scale(1,flaco?0.9:0.6,1);
-  alcAddC('follaje',gr,cx,y+h*(flaco?0.98:0.94),cz,0,VERDES[((sd*31)|0)%VERDES.length]); }
+  /* ---- COPA ----
+     Dos partes. (1) MASA: dos o tres bolas oscuras y muy pobres en poligonos, que tapan el fondo
+     para que el arbol no sea un colador. (2) HOJAS: cartas sueltas sembradas en la CASCARA del
+     elipsoide, que son las que dan el contorno. La cascara y no el volumen: las hojas de adentro
+     no se ven y solo cuestan.
+     El elipsoide es mas alto que ancho en el eucalipto y al reves en el cipres, que es lo que
+     distingue una especie de la otra desde lejos. */
+  const cy0 = y+h*(flaco?0.62:0.52);                      // centro de la copa
+  const ry0 = h*(flaco?0.30:0.26);                        // semieje vertical
+  const rx0 = h*(flaco?0.20:0.42)*ancho/1.30;             // semieje horizontal
+  // (1) masa interior: pobre a proposito, no se le ve la silueta
+  const nm = flaco?2:3;
+  for(let i=0;i<nm;i++){
+    const f=i/Math.max(1,nm-1), a2=rnd()*6.283, rr=rx0*0.22*rnd();
+    const g=new THREE.SphereGeometry(rx0*(0.80-0.10*f),5,4); g.scale(1,ry0/rx0*1.10,1);
+    alcAddC('follaje',g, cx+Math.cos(a2)*rr, cy0+(f-0.4)*ry0*0.7, cz+Math.sin(a2)*rr, 0,
+            VERDES_MASA[((sd*29)|0+i)%VERDES_MASA.length]); }
+  // (2) hojas: en la cascara, con la densidad que pida la calidad de graficos
+  const nH = Math.max(40, Math.round((flaco?190:300)*(h/9)*hojasPorArbol()));
+  /* 5 cm de hoja de verdad: la carta lleva siete, asi que mide medio metro escaso. Antes media
+     casi un metro y de cerca se veian hojas del tamaño de una mano abierta. */
+  const tH = h*(flaco?0.045:0.055)*(0.85+0.30*rnd());     // lado de la carta
+  for(let i=0;i<nH;i++){
+    /* reparto de Fibonacci sobre la esfera: sin esto los grupos se apelotonan en los polos y
+       quedan dos manchas arriba y abajo */
+    const u=(i+0.5)/nH, ph=Math.acos(1-2*u), th=i*2.399963;
+    const sh=0.86+0.16*rnd();                             // un poco de espesor, no una cascara fina
+    const px=Math.sin(ph)*Math.cos(th)*rx0*sh;
+    const py=Math.cos(ph)*ry0*sh;
+    const pz=Math.sin(ph)*Math.sin(th)*rx0*sh;
+    if(py<-ry0*0.72) continue;                            // por abajo del tronco no hay hoja
+    const iv=((sd*97)|0 + i)%VERDES_HOJA.length;
+    /* las de arriba mas claras (les pega el sol) y las de abajo mas oscuras */
+    const alto=(py/ry0+1)/2;
+    const col=VERDES_HOJA[(iv + (alto>0.62?2:0) + (alto<0.30?-2+VERDES_HOJA.length:0))%VERDES_HOJA.length];
+    alcHoja(cx+px, cy0+py, cz+pz, tH*(0.72+0.55*rnd()),
+            (rnd()-0.5)*2.2, th+(rnd()-0.5)*1.4, (rnd()-0.5)*2.6, col); }
+  // remate: una bocha chica arriba para cerrar la punta
+  const gr=new THREE.SphereGeometry(h*(flaco?0.070:0.10)*ancho,5,4); gr.scale(1,flaco?0.9:0.6,1);
+  alcAddC('follaje',gr,cx,y+h*(flaco?0.96:0.92),cz,0,VERDES_MASA[((sd*31)|0)%VERDES_MASA.length]); }
 /* ruina: el mismo bloque pero mordido arriba, sin techo */
 function alcEscombro(e){ const p0=e.p||[0,0,0], s=e.s||[4,3,4], ry=e.ry||0, m=e.m||'hormigonSucio';
   const p=e.suelo? [p0[0], alcH(p0[0],p0[2])+p0[1]+s[1]/2, p0[2]] : p0.slice();
@@ -10504,7 +10619,9 @@ function cfgAplicar(){
   /* OJO con el ||: viento en 0 es un valor VALIDO (copas quietas) y `(+CFG.viento||100)` lo
      convertia en 100, asi que el control no llegaba nunca al cero. */
   const _vv=(CFG.viento==null?100:+CFG.viento)||0;
-  try{ if(ALC_M.follaje&&ALC_M.follaje.userData.amp) ALC_M.follaje.userData.amp.value=Math.max(0,Math.min(2,_vv/100)); }catch(e){}
+  try{ const _va=Math.max(0,Math.min(2,_vv/100));
+    if(ALC_M.follaje&&ALC_M.follaje.userData.amp) ALC_M.follaje.userData.amp.value=_va;
+    if(ALC_M.hoja&&ALC_M.hoja.userData.amp) ALC_M.hoja.userData.amp.value=_va; }catch(e){}
   try{ aplicarEstilo(CFG.estilo||'pastel'); }catch(e){}
   lefty = (CFG.mano==='izq');
   try{ applyHudPos(); }catch(e){}          // tamaño y transparencia globales de los controles
