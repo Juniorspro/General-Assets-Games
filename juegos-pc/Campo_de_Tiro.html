@@ -1809,18 +1809,79 @@ function armaReflex(H,z0){
 }
 /* Mira telescopica: tubo, dos monturas y la lente. Para francotirador. */
 function armaLente(H,z0,largo){
-  /* EL TUBO VA ABIERTO. Con cilindros cerrados, apuntando se veia una tapa negra tapando la mitad de
-     la pantalla: la reticula quedaba sobre un disco opaco y no habia por donde mirar. Abiertos, se ve
-     el mundo POR EL AGUJERO y las paredes del tubo hacen de viñeta, que es como se ve una mira. */
+  /* ===================== LA MIRA TELESCOPICA =====================
+     EL TUBO VA ABIERTO. Con cilindros cerrados, apuntando se veia una tapa negra tapando media
+     pantalla: la reticula quedaba sobre un disco opaco y no habia por donde mirar. Abiertos, se ve
+     el mundo POR EL AGUJERO y las paredes del tubo hacen de viñeta, que es como se ve una mira.
+
+     Sobre eso van los VIDRIOS. Un objetivo delante y un ocular atras, los dos transparentes, con
+     metalness 1 y roughness casi 0: eso es lo que hace que agarren el reflejo del entorno y se vean
+     como vidrio y no como celofan de color. El objetivo lleva ademas el tornasol azul-violeta del
+     tratamiento antirreflejo, que es LO que hace que una mira se lea como una mira — un cristal
+     limpio en un juego se ve como un agujero. El tornasol se hace con un segundo aro aditivo por
+     delante, muy tenue y en angulo.
+
+     Y el tubo pasa a ser cromado oscuro (metalness 0.9, roughness 0.22) con dos aros de ajuste, las
+     dos torres de correccion con sus muescas, un parasol al frente y la charnela de las tapas. */
   const N=H.M.negro, M=H.M.metal, L=largo||0.26, y0=H.mira;
+  /* --- el cuerpo, cromado --- */
+  const crom=new THREE.MeshStandardMaterial({color:0x1a1d21, roughness:0.22, metalness:0.90});
+  crom.envMapIntensity=1.25;
+  /* TODO LO QUE ESTA EN EL EJE OPTICO VA ABIERTO. H.cil hace un cilindro CERRADO, con tapas: la
+     primera version del tubo cromado usaba H.cil y la tapa quedaba justo delante del ojo, o sea un
+     disco negro tapando la mira entera. Es la misma trampa que ya decia el comentario de arriba, y
+     volvi a caer. H.tubo es el que hace la pared sin tapas. */
   H.tubo(0.024,L, 0,y0,z0, N);
-  H.tubo(0.031,0.045, 0,y0,z0-L/2+0.030, N);
-  H.tubo(0.028,0.040, 0,y0,z0+L/2-0.026, N);
+  H.tubo(0.0265,L*0.62, 0,y0,z0, crom);                    // el tubo, visto de afuera
+  H.tubo(0.0335,0.050, 0,y0,z0-L/2+0.030, crom);           // campana del objetivo
+  H.tubo(0.0305,0.044, 0,y0,z0+L/2-0.026, crom);           // campana del ocular
+  H.tubo(0.0355,0.030, 0,y0,z0-L/2-0.012, N);              // parasol
+  for(let i=0;i<3;i++) H.tubo(0.0285,0.006, 0,y0,z0-0.05+i*0.05, N);   // aros de ajuste
+  /* --- las dos torres de correccion, con sus muescas --- */
+  const torre=(x,y,rz)=>{ const t=H.cil(0.0135,0.0135,0.026, x,y,z0+0.012, crom); if(rz)t.rotation.z=rz;
+    for(let i=0;i<6;i++){ const a=i/6*6.283;
+      H.box(0.0035,0.010,0.0035, x+Math.sin(a)*0.012, y+Math.cos(a)*0.012*(rz?0:1), z0+0.012, N); } };
+  { const t=H.cil(0.0135,0.0135,0.028, 0,y0+0.034,z0+0.012, crom); }   // torre de elevacion (vertical)
+  { const t=H.cil(0.0135,0.0135,0.028, 0.034,y0,z0+0.012, crom); t.rotation.z=Math.PI/2; }  // de deriva
+  H.cil(0.0155,0.0155,0.006, 0,y0+0.049,z0+0.012, N);
+  H.cil(0.0155,0.0155,0.006, 0.049,y0,z0+0.012, N).rotation.z=Math.PI/2;
+  /* --- monturas --- */
   H.box(0.020,0.030,0.022, 0,y0-0.024,z0-L/2+0.055, M);
   H.box(0.020,0.030,0.022, 0,y0-0.024,z0+L/2-0.055, M);
+  H.box(0.034,0.010,0.026, 0,y0-0.036,z0-L/2+0.055, N);
+  H.box(0.034,0.010,0.026, 0,y0-0.036,z0+L/2-0.055, N);
+  /* --- LOS VIDRIOS, PERO SIN TAPAR POR DONDE SE MIRA ---
+     Primer intento: dos discos de vidrio, objetivo y ocular. Apuntando quedaba un disco NEGRO
+     tapando toda la mira — es la misma trampa que dice el comentario de arriba sobre los cilindros
+     cerrados, y peor, porque un material con metalness 1 no tiene difuso: lo unico que le entra es
+     el reflejo, y si no hay nada que reflejar es negro liso.
+     Los vidrios van como AROS. El vidrio de una lente se ve sobre todo en el borde —ahi es donde
+     agarra la luz rasante y donde vive el tornasol del tratamiento— y el centro, que es por donde
+     se mira, queda limpio. Se ve el cristal desde afuera y se ve el mundo desde adentro. */
+  const vidrio=(r,z,op)=>{
+    const g=new THREE.MeshPhysicalMaterial({ color:0x8fc6e8, metalness:0.92, roughness:0.035,
+      transparent:true, opacity:op, side:THREE.DoubleSide, depthWrite:false });
+    g.envMapIntensity=2.6;
+    const m=new THREE.Mesh(new THREE.RingGeometry(r*0.80,r,26), g);   // solo el borde: el centro es por donde se mira
+    m.position.set(0,y0,z); m.renderOrder=3; gunCuerpo.add(m); return m; };
+  vidrio(0.0225, z0-L/2+0.048, 0.62);      // objetivo
+  vidrio(0.0205, z0+L/2-0.042, 0.34);      // ocular
+  /* el tornasol del tratamiento antirreflejo: dos aros aditivos, azul y violeta, en angulos
+     distintos. Es LO que hace que una mira se lea como una mira: un cristal limpio se ve como un
+     agujero. Aros tambien, por lo mismo. */
+  { const t=new THREE.MeshBasicMaterial({color:0x6a4fd0, transparent:true, opacity:0.40,
+      depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, toneMapped:false});
+    const a=new THREE.Mesh(new THREE.RingGeometry(0.0186,0.0225,26), t);
+    a.position.set(0,y0,z0-L/2+0.0475); a.rotation.y=0.22; a.rotation.x=-0.10; a.renderOrder=4;
+    gunCuerpo.add(a);
+    const t2=new THREE.MeshBasicMaterial({color:0x2f9bd8, transparent:true, opacity:0.30,
+      depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, toneMapped:false});
+    const a2=new THREE.Mesh(new THREE.RingGeometry(0.0196,0.0225,26), t2);
+    a2.position.set(0,y0,z0-L/2+0.0470); a2.rotation.y=-0.26; a2.renderOrder=4; gunCuerpo.add(a2); }
+  /* el aro interior del ocular, que es el que da la sensacion de estar mirando por un tubo */
   const vid=new THREE.MeshBasicMaterial({color:0x9fd4ff,transparent:true,opacity:0.10,
     depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
-  const cr=new THREE.Mesh(new THREE.RingGeometry(0.019,0.023,20), vid);   // aro, no disco: no tapa
+  const cr=new THREE.Mesh(new THREE.RingGeometry(0.019,0.023,20), vid);
   cr.position.set(0,y0,z0+L/2-0.006); cr.renderOrder=4; gunCuerpo.add(cr);
 }
 /* Alza y punto de mira de hierro, para pistolas y escopetas: no hay ventana, se mira por encima. */
