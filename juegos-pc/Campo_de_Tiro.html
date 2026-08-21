@@ -61,6 +61,16 @@
     filter:drop-shadow(0 0 1.6px rgba(0,0,0,.95)) drop-shadow(0 0 3px rgba(0,0,0,.55)); }
   /* apuntando manda el punto rojo de la réflex: dos cruces superpuestas es ruido */
   body.apuntando #cross{ opacity:0; }
+  /* LAS CUÑAS DE DAÑO. Van en un contenedor centrado en la mira; cada una se rota a su rumbo y se
+     empuja hacia afuera con translateY, asi que girar el contenedor la manda al lado que
+     corresponde sin tener que andar calculando seno y coseno en JS. */
+  #danWrap{ position:fixed; left:50%; top:50%; width:0; height:0; pointer-events:none; z-index:7; }
+  .danMk{ position:absolute; left:0; top:0; width:0; height:0; opacity:0;
+          transition:opacity .10s linear; will-change:transform,opacity; }
+  .danMk>i{ position:absolute; left:-27px; top:-13px; width:54px; height:26px; display:block;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 54 26'%3E%3Cpath d='M27 1.5 L51 22 L44.5 24.5 L27 10.5 L9.5 24.5 L3 22 Z' fill='%23ff2f2f' fill-opacity='.92' stroke='%23000' stroke-opacity='.55' stroke-width='1.4' stroke-linejoin='round'/%3E%3C/svg%3E") 50% 50% / 100% 100% no-repeat;
+    filter:drop-shadow(0 0 3px rgba(0,0,0,.8)); }
+  body.sinhud #danWrap, body.menu-open #danWrap{ display:none !important; }
   #tiroHUD{ position:fixed; right:calc(16px + var(--safe-t)); top:calc(106px + var(--safe-t)); z-index:11; pointer-events:none; text-align:right;
             font-family:'Segoe UI',system-ui,-apple-system,sans-serif; color:#fff; text-shadow:0 1px 6px rgba(0,0,0,.7),0 0 2px rgba(0,0,0,.5); }
   #tiroHUD>div:nth-child(1){ font-size:27px; font-weight:800; letter-spacing:.03em; line-height:1; }
@@ -9801,6 +9811,14 @@ try{ window.__tiro={
   // probar el daño y la muerte sin necesitar un segundo cliente
   pvp:(d)=>{ if(d==null) return {vida:+PVP.vida.toFixed(1),muerto:PVP.muerto,bajas:PVP.bajas,muertes:PVP.muertes,cajas:_mpCajas.length};
     pvpRecibir(d,'prueba',false); return {vida:+PVP.vida.toFixed(1),muerto:PVP.muerto}; },
+  /* el marcador de daño: se simula un golpe desde un punto de la arena y se lee la cuña */
+  danGolpe:(x,z)=>{ pvpRecibir(1,'prueba',false, x, ARE_GZ+z);
+    return DAN.marcas.map(m=>({grados:+(m.ang*57.2958).toFixed(1), t:+m.t.toFixed(2)})); },
+  danVer:()=>({ n:DAN.marcas.length,
+                marcas:DAN.marcas.map(m=>({grados:+(m.ang*57.2958).toFixed(1), t:+m.t.toFixed(2)})),
+                visibles:DAN.els.filter(e=>+e.style.opacity>0.02).length,
+                giros:DAN.els.map(e=>e.style.transform||'') }),
+  danLimpiar:()=>{ DAN.marcas.length=0; danTick(0.001); return 0; },
   tirar:()=>tiroShoot(), auto:v=>{ tiroFire=!!v; }, recargar:()=>tiroReload(),
   escArma:v=>gunRoot.scale.setScalar(v), grip:(a,b,c,d,e,f)=>{ GUN_GRIP_R.set(a,b,c); GUN_GRIP_L.set(d,e,f); },   // ← se llamaba `esc` y pisaba en silencio a `esc:scene`
   tors:(a,b)=>{ TIRO_TORS_R=a; TIRO_TORS_L=b; }, ik:v=>{ TIRO_IKMAX=v; }, spryaw:v=>{ SPR_YAW=v; },
@@ -10906,6 +10924,7 @@ function update(dt){
      En mpTick estaba un cuadro atrasado — con la camara del cuadro anterior — y en un giro rapido
      eso es un avatar que aparece tarde en el borde de la pantalla. */
   try{ ragTickTodos(dt); }catch(e){}   // los cuerpos que se estan cayendo
+  try{ danTick(dt); }catch(e){}        // las cuñas de "de aca te pegaron"
   try{ mpCullar(); }catch(e){}
 }
 
@@ -12008,7 +12027,8 @@ function mpMensaje(topic,buf){
   else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); const r=MP.remotes.get(d.id); if(r) mpBubble(r, d.text||''); }
   else if(topic.slice(-7)==='/action'){
     if(d.type==='shot') mpTiroAjeno(d);
-    else if(d.type==='hit' && d.to===MP.id) pvpRecibir(d.dmg, d.name||'alguien', d.cab);
+    else if(d.type==='hit' && d.to===MP.id){ const rr=MP.remotes.get(d.id);
+      pvpRecibir(d.dmg, d.name||'alguien', d.cab, rr?rr.pos.x:null, rr?rr.pos.z:null); }
     else if(d.type==='kill'){ if(d.by===MP.name){ PVP.bajas++; pvpHUD(); }
       mpChatIn('💀',(d.name||'?')+' cayó'+(d.by?(' · '+d.by):'')); } }
   else if(topic.slice(-4)==='/rtc'){ if(!d.to||d.to===MP.id) voiceSignal(d); }
@@ -12211,7 +12231,62 @@ function mpGolpe(dir,alcance,dmg){
   const hs=ray.intersectObjects(_mpCajas,false);
   if(hs.length) mpPegar(hs[0].object.userData.mpId, dmg, false);
 }
-function pvpRecibir(dmg,quien,cab){
+
+/* ===================== DE DONDE TE ESTAN PEGANDO =====================
+   Te pegaban y la pantalla parpadeaba en rojo, y nada mas: no habia forma de saber si venia de
+   adelante, de atras o del techo de la tienda. En un mapa con dieciseis rivales eso es girar en
+   redondo hasta que te terminan de matar.
+
+   Ahora cada impacto deja una CUÑA alrededor de la mira, en el rumbo de quien te pego. El rumbo se
+   mide en el plano: el angulo entre hacia donde MIRAS y hacia donde ESTA el que disparo. Si te
+   pegan de frente la cuña sale arriba; de atras, abajo; del costado, al costado. Es la del Call of
+   Duty y funciona porque no te dice una posicion, te dice HACIA DONDE GIRAR.
+
+   Cuatro cuñas como maximo, porque si te estan pegando cuatro ya no importa la quinta. Si el mismo
+   rumbo vuelve a recibir un golpe antes de apagarse, se le renueva la vida en vez de apilar otra:
+   una rafaga de tres tiros es UN atacante, no tres. Duran 1,4 s y se van desvaneciendo.
+   La zona no marca nada: no tiene de donde. */
+const DAN={ marcas:[], nodo:null, els:[] };
+const DAN_VIDA=1.4, DAN_MAX=4;
+function danCrear(){
+  if(DAN.nodo) return;
+  const st=document.getElementById('stage')||document.body;
+  const w=document.createElement('div'); w.id='danWrap'; w.setAttribute('aria-hidden','true');
+  for(let i=0;i<DAN_MAX;i++){ const d=document.createElement('div'); d.className='danMk';
+    d.innerHTML='<i></i>'; w.appendChild(d); DAN.els.push(d); }
+  st.appendChild(w); DAN.nodo=w;
+}
+/* x,z del que te pego, en coordenadas del MUNDO (las mismas que player.pos) */
+function danMarcar(x,z){
+  if(x==null||z==null) return;
+  danCrear();
+  const dx=x-player.pos.x, dz=z-player.pos.z;
+  if(Math.abs(dx)<1e-4 && Math.abs(dz)<1e-4) return;
+  /* rumbo relativo: 0 = de frente, +PI/2 = por la derecha, PI = por la espalda.
+     El jugador mira hacia (-sin yaw, -cos yaw), asi que se proyecta contra esa base. */
+  const fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
+  const rx= Math.cos(player.yaw), rz=-Math.sin(player.yaw);
+  const ang=Math.atan2(dx*rx+dz*rz, dx*fx+dz*fz);
+  /* ¿ya hay una cuña por ese lado? entonces se le renueva, no se apila */
+  for(const m of DAN.marcas){ let d=Math.abs(m.ang-ang); if(d>Math.PI) d=6.283-d;
+    if(d<0.55){ m.ang=ang; m.t=DAN_VIDA; return; } }
+  DAN.marcas.push({ang, t:DAN_VIDA});
+  while(DAN.marcas.length>DAN_MAX) DAN.marcas.shift();
+}
+function danTick(dt){
+  if(!DAN.marcas.length){ if(DAN.nodo && DAN.nodo.style.display!=='none') DAN.nodo.style.display='none'; return; }
+  if(DAN.nodo) DAN.nodo.style.display='';
+  for(let i=DAN.marcas.length-1;i>=0;i--){ DAN.marcas[i].t-=dt; if(DAN.marcas[i].t<=0) DAN.marcas.splice(i,1); }
+  for(let i=0;i<DAN.els.length;i++){
+    const m=DAN.marcas[i], el=DAN.els[i];
+    if(!m){ el.style.opacity='0'; continue; }
+    const k=Math.min(1, m.t/DAN_VIDA);
+    el.style.opacity=(k*k*0.95).toFixed(3);
+    /* la cuña arranca un poco mas afuera y se acerca al apagarse: da el golpe */
+    el.style.transform='rotate('+(m.ang*57.2958).toFixed(1)+'deg) translateY('+(-58-14*k).toFixed(1)+'px)';
+  }
+}
+function pvpRecibir(dmg,quien,cab,ox,oz){
   if(PVP.muerto) return;
   let d=dmg||10;
   /* el chaleco se come el daño primero; lo que sobra pasa a la vida */
@@ -12226,6 +12301,7 @@ function pvpRecibir(dmg,quien,cab){
   if(cfgSangre){ document.body.classList.remove('golpe'); void document.body.offsetWidth; document.body.classList.add('golpe'); }
   if(cfgVibrar && navigator.vibrate){ try{ navigator.vibrate(cab?[18,40,26]:32); }catch(e){} }
   tiroSnd('recibido');
+  try{ danMarcar(ox,oz); }catch(e){}   // la cuña que dice para donde girar
   if(PVP.vida<=0) pvpMorir();
   pvpHUD();
 }
@@ -13238,7 +13314,8 @@ function botTick(dt){
         try{ tiroSnd(dPl>45?'lejos':'shot', Math.max(0.10, Math.min(0.85, 22/(dPl+8)))); }catch(e){}
         if(acierta && !PVP.muerto && PVP_GRACIA<=0){
           const cab=Math.random()<BOT_CAB_P;
-          pvpRecibir(Math.round((d.dmg||24)*(cab?BOT_CAB_MUL:1)*BOT_DMG), b.nom, cab);
+          pvpRecibir(Math.round((d.dmg||24)*(cab?BOT_CAB_MUL:1)*BOT_DMG), b.nom, cab,
+                     b.x, b.z+((world==='arena')?ARE_GZ:ALC_GZ));
         } else {
           /* la que erra pasa cerca: es lo que te avisa que te estan tirando */
           try{ if(dPl<40 && Math.random()<0.55) tiroSnd('zumbido',0.45); }catch(e){}
