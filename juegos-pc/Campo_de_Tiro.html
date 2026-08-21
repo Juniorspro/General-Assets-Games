@@ -10019,19 +10019,19 @@ function cuMano(hueso,lado){
     const x=lado*(1.5-i)*PASO, L1=LARGO[i], L2=L1*0.78;    // i=0 índice (lado del pulgar) … i=3 meñique
     const b1=new THREE.Bone(); b1.name='dedo'+i+'_1'+(lado>0?'R':'L');
     b1.position.set(x*U, 0.001*U, PALMA_Z1*U); g.add(b1);          // arrancan EN la cara de los nudillos
-    cuPieza(b1,cuCaja(ANCHO,ALTO,L1), 0, 0, -L1/2, CU_MAT.mano);
+    cuPieza(b1,cuCaja(ANCHO,ALTO,L1), 0, 0, -L1/2, CU_MAT.mano).userData.fino=1;
     const b2=new THREE.Bone(); b2.name='dedo'+i+'_2'+(lado>0?'R':'L');
     b2.position.set(0,0,-L1*U); b1.add(b2);
-    cuPieza(b2,cuCaja(ANCHO*0.88,ALTO*0.88,L2), 0, 0, -L2/2, CU_MAT.mano);
+    cuPieza(b2,cuCaja(ANCHO*0.88,ALTO*0.88,L2), 0, 0, -L2/2, CU_MAT.mano).userData.fino=1;
     dedos.push([b1,b2]);
   }
   /* el pulgar nace del monte, cerca de la muñeca, y apunta hacia adelante y hacia afuera */
   const t1=new THREE.Bone(); t1.name='pulgar1'+(lado>0?'R':'L');
   t1.position.set(lado*(PALMA_W/2)*U, 0, (PALMA_Z0-0.028)*U); t1.rotation.y=-lado*0.62; g.add(t1);
-  cuPieza(t1,cuCaja(0.023,0.024,0.040), 0, 0, -0.020, CU_MAT.mano);
+  cuPieza(t1,cuCaja(0.023,0.024,0.040), 0, 0, -0.020, CU_MAT.mano).userData.fino=1;
   const t2=new THREE.Bone(); t2.name='pulgar2'+(lado>0?'R':'L');
   t2.position.set(0,0,-0.040*U); t1.add(t2);
-  cuPieza(t2,cuCaja(0.020,0.021,0.032), 0, 0, -0.016, CU_MAT.mano);
+  cuPieza(t2,cuCaja(0.020,0.021,0.032), 0, 0, -0.016, CU_MAT.mano).userData.fino=1;
   dedos.push([t1,t2]);
 
   g.userData.dedos=dedos; g.userData.lado=lado;
@@ -10763,6 +10763,11 @@ function update(dt){
 
   sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
   tickAim(dt);   // gatillo, recarga y patada de cámara: con la cámara ya orientada de este frame
+  /* El recorte de avatares va ACA, al final de la simulacion, no en mpTick: la camara acaba de
+     quedar donde va a dibujar (tickAim todavia le mete la patada del retroceso, que es lo ultimo).
+     En mpTick estaba un cuadro atrasado — con la camara del cuadro anterior — y en un giro rapido
+     eso es un avatar que aparece tarde en el borde de la pantalla. */
+  try{ mpCullar(); }catch(e){}
 }
 
 /* ===================== GRÁFICOS (presets de calidad) ===================== */
@@ -11735,7 +11740,7 @@ function mpRig(r){
   mpClips.forEach(c=>{ const a=r.mixer.clipAction(c); a.setLoop(THREE.LoopRepeat); a.clampWhenFinished=false; if(c.name==='roll')a.timeScale=ROLL_TIMESCALE; r.actions[c.name]=a; });
   r.cur=null;
   r.setAnim=(name)=>{ if(!r.actions[name]||r.cur===name)return; const nx=r.actions[name]; nx.reset(); if(name==='roll')nx.time=ROLL_ANIM_START; nx.enabled=true; nx.setEffectiveWeight(1); nx.play(); if(r.cur&&r.actions[r.cur])nx.crossFadeFrom(r.actions[r.cur],0.16,true); r.cur=name; };
-  r.rigged=true; r.setAnim('idle');
+  r.rigged=true; r._finos=null; r._lod=-1; r.setAnim('idle');
 }
 // ponerle al remoto SU personaje de la tienda (o volver al Clásico si res=null)
 function mpSwapBody(r,res){
@@ -11746,7 +11751,7 @@ function mpSwapBody(r,res){
   r.mixer=new THREE.AnimationMixer(res.node);
   const clips=(window.__safeClips?window.__safeClips(mpClips):mpClips)||[];   // clips SEGUROS (solo rotación + cadera) → no estira rigs ajenos
   clips.forEach(c=>{ const a=r.mixer.clipAction(c); a.setLoop(THREE.LoopRepeat); a.clampWhenFinished=false; if(c.name==='roll')a.timeScale=ROLL_TIMESCALE; r.actions[c.name]=a; });
-  r.rigged=true; r.setAnim(r.anim||'idle');
+  r.rigged=true; r._finos=null; r._lod=-1; r.setAnim(r.anim||'idle');
 }
 function mpRemote(id,name,callado){ let r=MP.remotes.get(id);
   if(!r){ const av=new THREE.Group(); const tg=mpNameTag(name); tg.sprite.visible=showNames; av.add(tg.sprite); scene.add(av);
@@ -12084,6 +12089,45 @@ function pvpTick(dt){
   if(PVP.vida<PVP.max && PVP._sin>4){ PVP.vida=Math.min(PVP.max,PVP.vida+6*dt); pvpHUD(); }
 }
 try{ pvpHUD(); }catch(e){}
+/* ===================== RECORTE DE AVATARES =====================
+   Un avatar son 61 mallas: un cuerpo de cajitas colgadas de los huesos, y TODAS llevan
+   frustumCulled=false — no es un descuido, es que la esfera de recorte de una cajita no sabe donde
+   la puso el hueso, asi que three la recortaria mal. El precio era que se dibujaban siempre: con 16
+   bots, 976 llamadas de dibujo por cuadro, mires donde mires. Medido en la arena: 1008 llamadas
+   para 22 mil triangulos, o sea que el cuello de botella no eran los triangulos sino las llamadas.
+
+   La malla suelta no se puede recortar, pero el AVATAR ENTERO si: una esfera en su posicion contra
+   el frustum de la camara, y un grupo invisible se saltea con todos sus hijos de una. La esfera va
+   generosa (2,2 m contra un cuerpo de 1,8) porque adentro del avatar cuelga la caja de impactos:
+   recortar de mas seria volver invisible a los tiros a alguien que todavia se ve en pantalla. */
+const _cuFr=new THREE.Frustum(), _cuMat=new THREE.Matrix4(), _cuEsf=new THREE.Sphere(new THREE.Vector3(),2.2);
+function mpCullar(){
+  camera.updateMatrixWorld();
+  _cuMat.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  _cuFr.setFromProjectionMatrix(_cuMat);
+  /* Y la visibilidad se decide EN UN SOLO LUGAR, que es aca: mundo, tumbado y cuadro. Estaba
+     repartida entre esto y mpTick, y como mpTick corre en el dibujo y botMuere en la simulacion,
+     un bot muerto volvia a aparecer de pie al cuadro siguiente. */
+  for(const [,r] of MP.remotes){ if(!r.avatar) continue;
+    _cuEsf.center.set(r.pos.x, r.pos.y+0.95, r.pos.z);
+    r.enCuadro=_cuFr.intersectsSphere(_cuEsf);
+    r.avatar.visible = (r.world===world) && !r.oculto && r.enCuadro;
+    if(r.avatar.visible) mpLod(r, _cuEsf.center.distanceToSquared(camera.position)); }
+}
+/* NIVEL DE DETALLE POR DISTANCIA. Las diez falanges de cada mano son veinte mallas de las sesenta y
+   una del avatar —un tercio del costo— y miden 2 cm. A 14 m, con 90 grados de campo en una pantalla
+   de 1280, eso es UN PIXEL: se pagan veinte llamadas de dibujo por algo que no se ve. Adentro de
+   14 m estan (es la distancia a la que se pelea de verdad y se le ven las manos al otro), afuera no.
+   Se toca solo cuando CAMBIA el nivel, no cada cuadro. */
+const LOD_DEDOS=14;
+function mpLod(r,d2){
+  const nivel=(d2>LOD_DEDOS*LOD_DEDOS)?0:1;
+  if(r._lod===nivel) return;
+  r._lod=nivel;
+  if(!r._finos){ r._finos=[];
+    if(r.body) r.body.traverse(o=>{ if(o.isMesh && o.userData && o.userData.fino) r._finos.push(o); }); }
+  for(const m of r._finos) m.visible=(nivel===1);
+}
 function mpTick(dt){
   MP.nTick=(MP.nTick|0)+1;
   const now=performance.now();
@@ -12094,7 +12138,7 @@ function mpTick(dt){
       if(want<0) mpSwapBody(r,null);
       else if(window.__remoteChar) window.__remoteChar(want, res=>{ if(r.chApplied===want && MP.remotes.has(r.id)) mpSwapBody(r,res); }); }
     r.pos.lerp(r.target, Math.min(1,10*dt));                                                                        // interpolación (10Hz → 60fps suave)
-    const same=(r.world===world); r.avatar.visible=same;                                                            // solo se ven los del MISMO mundo
+    const same=(r.world===world);   // quien lo hace visible es mpCullar, al final de la simulacion
     if(r.tag) r.tag.visible=showNames;                                                                               // nombre + ícono de voz sobre la cabeza
     if(r.tagSet && r.talking!==r._talkShown){ r.tagSet(r.talking); r._talkShown=r.talking; }                         // ícono verde (hablando) / X (callado)
     if(!same)continue;
@@ -12624,7 +12668,7 @@ function botMuere(b,porVos){
   if(b.muerto) return;
   b.muerto=true; b.tRes=5.0;
   try{ mpSacarCaja(b.r); }catch(e){}
-  b.r.avatar.visible=false;
+  b.r.oculto=true; b.r.avatar.visible=false;
   PART.vivos=Math.max(1,PART.vivos-1);
   if(porVos){ PART.bajas++; PVP.bajas++; try{ pvpHUD(); }catch(e){}
     partFeed('💀', MP.name+' → '+b.nom); }
@@ -12666,7 +12710,7 @@ function botTick(dt){
       if(arena){ b.tRes=(b.tRes||0)-dt;
         if(b.tRes<=0){ const a=Math.random()*6.283, d=24+Math.random()*(ARE_LADO/2-30);
           b.x=Math.cos(a)*d; b.z=Math.sin(a)*d; b.y=0; b.vida=100; b.muerto=false;
-          b.estado='patrulla'; b.tCambio=0; b.r.avatar.visible=true;
+          b.estado='patrulla'; b.tCambio=0; b.r.oculto=false; b.r.avatar.visible=true;
           try{ mpCaja(b.r); }catch(e){} PART.vivos++; } }
       continue; }
     // ---- la zona tambien los mata a ellos (solo en el valle) ----
