@@ -999,7 +999,7 @@ function gpTick(dt){
   const lx=gpZona(ej[2]||0,z), ly=gpZona(ej[3]||0,z);
   if(lx||ly){ const k=2.35*(CFG.mandoSens||100)/100*sensMul*(1-0.45*adsW)*mirMul()*dt;
     player.yaw-=lx*k; player.faceYaw=player.yaw;
-    player.pitch=Math.max(-0.9,Math.min(pitMax(),player.pitch-ly*k*invMirY*sensRelY)); }
+    player.pitch=Math.max(pitMin(),Math.min(pitMax(),player.pitch-ly*k*invMirY*sensRelY)); }
   const rt=Math.max(gpBoton(gp,7), (ej.length>5)?Math.max(0,ej[5]):0);
   const lt=Math.max(gpBoton(gp,6), (ej.length>4)?Math.max(0,ej[4]):0);
   if(enTiro()){ const q=rt>0.4;
@@ -1090,10 +1090,13 @@ let giroModo='no', giroK=1, giroKAds=0.7;
    que en los aparatos donde si funciona sigue sirviendo. */
 const GIRO={on:false, ligO:false, ligM:false, fuente:'', ult:0, err:'', muestras:0,
             yaw:0, pit:0, hay:false, dy:0, dp:0, hz:0, _n:0, _t0:0,
-            rx:0, ry:0, ux:0, uy:1, uz:0, gOk:false};
+            rx:0, ry:0, ux:0, uy:1, uz:0, gOk:false, fy:0};
 const _gq=new THREE.Quaternion(), _gq1=new THREE.Quaternion(-Math.SQRT1_2,0,0,Math.SQRT1_2);
 const _gq2=new THREE.Quaternion(), _ge=new THREE.Euler(), _gf=new THREE.Vector3();
 const _gZ=new THREE.Vector3(0,0,1);
+const _gAnt=new THREE.Quaternion(), _gDel=new THREE.Quaternion();
+const _gV=new THREE.Vector3(), _gH=new THREE.Vector3(), _gU=new THREE.Vector3();
+const _gArr=new THREE.Vector3(0,1,0);
 function giroPantalla(){
   return (((screen.orientation&&screen.orientation.angle)||window.orientation||0))*Math.PI/180;
 }
@@ -1107,14 +1110,45 @@ function giroOrient(e){
   _gq.multiply(_gq1);                                   // la camara mira por el dorso del aparato
   _gq2.setFromAxisAngle(_gZ,-o); _gq.multiply(_gq2);    // el angulo de la pantalla
   _gf.set(0,0,-1).applyQuaternion(_gq);                 // hacia donde apunta el telefono
-  const yaw=Math.atan2(-_gf.x,-_gf.z);
-  const pit=Math.asin(Math.max(-1,Math.min(1,_gf.y)));
-  if(GIRO.hay && Math.abs(_gf.y)<0.985){                // cerca del cenit el yaw se vuelve loco
-    let dy=yaw-GIRO.yaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy));
-    const dp=pit-GIRO.pit;
-    if(Math.abs(dy)<0.5 && Math.abs(dp)<0.5){ GIRO.dy+=dy; GIRO.dp+=dp; }   // saltos raros: se tiran
+  /* MISMA SENSIBILIDAD EN TODAS LAS DIRECCIONES.
+     Antes esto restaba angulos de Euler: yaw=atan2(fx,fz) y cabeceo=asin(fy), y miraba la
+     diferencia de un cuadro al otro. Eso NO es isotropico. Con el telefono cabeceado un angulo p,
+     un mismo giro de muñeca cambia el atan2 en 1/cos(p): a 60 grados de cabeceo el mismo gesto
+     giraba el DOBLE que mirando al horizonte, y cerca del cenit se disparaba (por eso el parche
+     de 0.985, que ademas dejaba la vista clavada ahi). El ladeo del aparato tambien se colaba.
+
+     Ahora se toma el giro REAL entre los dos cuadros como cuaternion y se pasa a vector de
+     rotacion (eje x angulo), que es lineal en el angulo venga de donde venga y no tiene ni saltos
+     ni polos. Ese vector se parte en los TRES ejes de la camara:
+       - alrededor de la DERECHA horizontal  -> cabeceo
+       - alrededor del ARRIBA de la camara   -> giro
+       - alrededor de la LINEA DE MIRA       -> ladeo, se tira: girar el telefono sobre el eje al
+         que estas apuntando no mueve la punteria ni un pelo, y antes si la movia.
+     El giro se divide por cos(cabeceo) porque player.yaw gira sobre la vertical del MUNDO: mirando
+     hacia arriba, un mismo barrido de la mano tiene que sumar mas grados de yaw para que la imagen
+     se corra lo mismo. El divisor se topea en 0.25 (4x) para que apuntando al cenit no explote,
+     que era justo lo que arreglaba a lo bruto el viejo parche de 0.985 dejando la vista clavada. */
+  if(GIRO.hay){
+    _gDel.copy(_gAnt).invert().multiply(_gq);
+    let qw=_gDel.w, qx=_gDel.x, qy=_gDel.y, qz=_gDel.z;
+    if(qw<0){ qw=-qw; qx=-qx; qy=-qy; qz=-qz; }         // el camino corto
+    const sn=Math.hypot(qx,qy,qz);
+    const ang=2*Math.atan2(sn,qw), f=(sn>1e-9)? ang/sn : 2;
+    _gV.set(qx*f, qy*f, qz*f).applyQuaternion(_gq);      // vector de rotacion, ya en el mundo
+    _gH.crossVectors(_gf,_gArr);                         // derecha horizontal de la camara
+    if(_gH.lengthSq()<1e-4) _gH.set(1,0,0).applyQuaternion(_gq);   // mirando al cenit
+    _gH.normalize();
+    _gU.crossVectors(_gH,_gf);                           // arriba de la camara, ya unitario
+    /* cos(cabeceo) en el PUNTO MEDIO del paso, no al final: si se toma al final, un gesto en
+       diagonal que ademas sube la mira se divide por un coseno ya mas chico y se pasa de largo.
+       Con el promedio el error baja de segundo a tercer orden y la rosa de direcciones cierra. */
+    const fym=(GIRO.fy+_gf.y)*0.5;
+    const cp=Math.max(0.25, Math.sqrt(Math.max(0,1-fym*fym)));
+    const dp=_gV.dot(_gH), dy=_gV.dot(_gU)/cp;
+    if(Math.abs(dy)<0.6 && Math.abs(dp)<0.6){ GIRO.dy+=dy; GIRO.dp+=dp; }   // saltos raros: se tiran
   }
-  GIRO.yaw=yaw; GIRO.pit=pit; GIRO.hay=true;
+  _gAnt.copy(_gq); GIRO.fy=_gf.y; GIRO.hay=true;
+  GIRO.yaw=Math.atan2(-_gf.x,-_gf.z); GIRO.pit=Math.asin(Math.max(-1,Math.min(1,_gf.y)));
   GIRO.fuente='orientacion'; GIRO.ult=performance.now(); giroCuenta();
 }
 function giroCuenta(){ GIRO.muestras++; GIRO._n++;
@@ -1165,8 +1199,12 @@ function giroMocion(e){
 const INC={ ok:false, gx:0, gy:0, gz:0, cx:0, cy:0, cz:0, cal:false, ult:0 };
 const INC_MUERTA=0.055;        // ~3 grados: abajo de eso no se mueve
 const INC_TOPE=0.52;           // ~31 grados: de ahi para arriba ya gira al maximo
-const INC_VEL_YAW=2.9;         // radianes por segundo a tope de inclinacion
-const INC_VEL_PIT=1.7;
+/* UNA SOLA velocidad para los dos ejes. Antes eran 2.9 horizontal y 1.7 vertical, o sea que
+   ladeando el telefono lo mismo para un lado que hacia atras, la vista giraba 1,7 veces mas rapido
+   en horizontal que en vertical. Con el aparato en cualquier postura, inclinarlo un angulo dado
+   cambia gx y gy en la misma proporcion (las dos derivadas valen |gz|), asi que para que la
+   sensibilidad sea igual en todas las direcciones alcanza con que la ganancia sea la misma. */
+const INC_VEL=2.4;             // radianes por segundo a tope de inclinacion, en cualquier direccion
 function incLeer(e){
   const a=e.accelerationIncludingGravity; if(!a) return;
   const L=Math.hypot(a.x||0,a.y||0,a.z||0);
@@ -1183,16 +1221,25 @@ function incLeer(e){
 function incCentrar(){ INC.cx=INC.gx; INC.cy=INC.gy; INC.cz=INC.gz; INC.cal=true; }
 function incTick(dt,k){
   if(!INC.ok || performance.now()-INC.ult>700) return false;
-  const zona=(v)=>{ const a=Math.abs(v)-INC_MUERTA; if(a<=0) return 0;
-    const t=Math.min(1, a/(INC_TOPE-INC_MUERTA)); return Math.sign(v)*t*t; };   // cuadratico: fino cerca del centro
   /* El cabeceo sale de GY (la componente vertical de la gravedad en la pantalla) y no de GZ.
      Medido inclinando el telefono: hacia adelante gy cambia 0,29 y hacia atras 0,30 —simetrico—,
      mientras que gz cambia 0,17 para un lado y 0,06 para el otro, o sea que hacia atras casi no
-     llegaba a la zona muerta y no se podia mirar arriba. */
-  const dx=zona(INC.gx-INC.cx), dy=zona(INC.gy-INC.cy);
-  if(!dx && !dy) return false;
-  player.yaw += -dx*INC_VEL_YAW*dt*k; player.faceYaw=player.yaw;
-  player.pitch = Math.max(-0.9, Math.min(pitMax(), player.pitch + dy*INC_VEL_PIT*dt*k*invMirY*sensRelY));
+     llegaba a la zona muerta y no se podia mirar arriba.
+
+     ZONA MUERTA REDONDA, no cuadrada. Antes la curva se aplicaba a cada eje por separado: con el
+     telefono ladeado 0,30 en diagonal a cada eje le tocaba 0,212, y como la curva es cuadratica
+     los dos pedazos sumaban 0,16 en vez de 0,28. O sea que ladeando lo mismo pero en diagonal la
+     vista giraba al 58% de lo que giraba en recto. Ahora la zona muerta y la curva se aplican al
+     MODULO del ladeo y el resultado se reparte segun la direccion: inclinar el aparato tanto da
+     la misma velocidad apunte para donde apunte. */
+  const vx=INC.gx-INC.cx, vy=INC.gy-INC.cy;
+  const m=Math.hypot(vx,vy);
+  if(m<=INC_MUERTA) return false;
+  const t=Math.min(1, (m-INC_MUERTA)/(INC_TOPE-INC_MUERTA));
+  const g=t*t/m;                                            // cuadratico: fino cerca del centro
+  const dx=vx*g, dy=vy*g;
+  player.yaw += -dx*INC_VEL*dt*k; player.faceYaw=player.yaw;
+  player.pitch = Math.max(pitMin(), Math.min(pitMax(), player.pitch + dy*INC_VEL*dt*k*invMirY));
   return true;
 }
 /* OJO: aca NO se toca INC.cal. giroReiniciar corre cada vez que hay un hueco sin lecturas del
@@ -1232,8 +1279,11 @@ function giroTick(dt){
   if(GIRO.fuente==='orientacion'){ dy=GIRO.dy; dp=GIRO.dp; GIRO.dy=0; GIRO.dp=0; }
   else { const r=Math.PI/180; dy=-GIRO.ry*r*dt; dp=-GIRO.rx*r*dt; }
   if(!dy && !dp) return;
+  /* sensRelY (la "Relacion vertical" del menu) NO entra aca: es para el pulgar, y si entrara
+     el giroscopio dejaria de tener la misma sensibilidad en los dos ejes. invMirY si, porque
+     invertir el eje no cambia cuanto se mueve, solo hacia donde. */
   player.yaw += dy*k; player.faceYaw=player.yaw;
-  player.pitch = Math.max(-0.9, Math.min(pitMax(), player.pitch + dp*k*invMirY*sensRelY));
+  player.pitch = Math.max(pitMin(), Math.min(pitMax(), player.pitch + dp*k*invMirY));
 }
 /* El estado dice QUE fuente entro y a que ritmo. Si el giroscopio no anda, esta linea es la que
    permite saber por que sin tener el telefono en la mano. */
@@ -9317,6 +9367,9 @@ function ambViento(on,fuerza){
 // El tope es SÓLO del campo de tiro: el parkour sigue con 1.3 (necesita mirar cornisas).
 const TIRO_PIT_MAX=1.30;   // rango completo: el tope de 0.25 era un parche por las púas del skinning
 function pitMax(){ return (world==='tiro')?TIRO_PIT_MAX:1.3; }
+/* Mirar para abajo llegaba a -0.9 (51 grados) y para arriba a 1.3 (74): el mismo gesto rendia
+   distinto segun para donde. Ahora el rango es simetrico. */
+function pitMin(){ return -pitMax(); }
 // mundos donde SE JUEGA con el fusil: la galería y la isla. Antes alcanzaba con world==='tiro'.
 /* "Estas en un mundo donde se dispara". Gobierna VEINTE cosas: que el arma se dibuje, apuntar,
    recargar, el gatillo, cambiar de arma, curarse, inspeccionar y la camara sobre el hombro. La arena
@@ -9409,7 +9462,7 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
     if(!document.pointerLockElement && cv.requestPointerLock){ try{ cv.requestPointerLock(); }catch(e){} } });
   addEventListener('mousemove',e=>{ if(document.pointerLockElement!==cv)return;
     const lk=LOOK*sensMul*1.15*(1-0.45*adsW)*mirMul(); player.yaw-=(e.movementX||0)*lk;
-    player.pitch=Math.max(-0.9,Math.min(pitMax(),player.pitch-(e.movementY||0)*lk*invMirY*sensRelY)); });
+    player.pitch=Math.max(pitMin(),Math.min(pitMax(),player.pitch-(e.movementY||0)*lk*invMirY*sensRelY)); });
   addEventListener('pointerdown',e=>{ if(e.pointerType==='mouse')_pc=true; },true);
 }
 
@@ -9720,6 +9773,92 @@ try{ window.__tiro={
              cabeceo:+(player.pitch-p0).toFixed(3), muestras:n,
              grav:[+INC.gx.toFixed(2),+INC.gy.toFixed(2),+INC.gz.toFixed(2)],
              centro:[+INC.cx.toFixed(2),+INC.cy.toFixed(2),+INC.cz.toFixed(2)] }; },
+  /* ---- isotropia del giroscopio (solo medicion) ----
+     Arma la orientacion del aparato a partir de la que deberia tener la camara, la gira un angulo
+     exacto en varias direcciones del plano de puntería y mide cuanto se movio la vista. */
+  giroIso:(pitBase, rollBase, ang, n)=>{
+    CFG.giro='siempre'; giroModo='siempre'; GIRO.on=true; GIRO.err='';
+    const pb=pitBase||0, rb=rollBase||0, A=ang||0.2, N=n||8;
+    const q1i=new THREE.Quaternion(-Math.SQRT1_2,0,0,Math.SQRT1_2).invert();
+    const q2i=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),
+              -(((screen.orientation&&screen.orientation.angle)||window.orientation||0))*Math.PI/180).invert();
+    const abg=(qCam)=>{ const E=qCam.clone().multiply(q2i).multiply(q1i);
+      const e=new THREE.Euler().setFromQuaternion(E,'YXZ');
+      return { alpha:e.y*180/Math.PI, beta:e.x*180/Math.PI, gamma:-e.z*180/Math.PI }; };
+    const qBase=new THREE.Quaternion().setFromEuler(new THREE.Euler(pb,0,rb,'YXZ'));
+    const fw=new THREE.Vector3(0,0,-1).applyQuaternion(qBase);
+    const arr=new THREE.Vector3(0,1,0);
+    const H=new THREE.Vector3().crossVectors(fw,arr).normalize();
+    const U=new THREE.Vector3().crossVectors(H,fw);
+    const cp=Math.sqrt(Math.max(0,1-fw.y*fw.y));
+    const out=[];
+    /* el eje del giro barre el plano PERPENDICULAR a la linea de mira: ahi viven todos los gestos
+       que tienen que mover la punteria. Lo que se mide es cuanto se corrio la IMAGEN, que es
+       dyaw*cos(cabeceo) en horizontal y dpitch en vertical. */
+    const mirar=(y,pt)=>new THREE.Vector3(-Math.sin(y)*Math.cos(pt), Math.sin(pt), -Math.cos(y)*Math.cos(pt));
+    const PASO=0.02;                                     // como llega de verdad a 60 Hz
+    for(let i=0;i<N;i++){
+      const th=i*2*Math.PI/N;
+      const eje=new THREE.Vector3().copy(H).multiplyScalar(Math.cos(th))
+                 .addScaledVector(U,Math.sin(th)).normalize();
+      GIRO.hay=false; GIRO.dy=0; GIRO.dp=0;
+      player.yaw=0; player.pitch=pb;
+      giroOrient(abg(qBase)); giroOrient(abg(qBase));
+      const v0=mirar(player.yaw,player.pitch);
+      const n=Math.max(1,Math.round(A/PASO));
+      for(let j=1;j<=n;j++){
+        const q=new THREE.Quaternion().setFromAxisAngle(eje,A*j/n).multiply(qBase);
+        giroOrient(abg(q)); giroTick(1/60);
+      }
+      const v1=mirar(player.yaw,player.pitch);
+      const arco=Math.acos(Math.max(-1,Math.min(1,v0.dot(v1))));
+      out.push({ dir:Math.round(th*180/Math.PI), arco:+arco.toFixed(4),
+                 rel:+(arco/A).toFixed(3),
+                 dy:+player.yaw.toFixed(4), dp:+(player.pitch-pb).toFixed(4) });
+    }
+    const ms=out.map(o=>o.arco);
+    return { giroDelAparato:+A.toFixed(4), arcoMin:+Math.min.apply(null,ms).toFixed(4),
+             arcoMax:+Math.max.apply(null,ms).toFixed(4),
+             desvio:+((Math.max.apply(null,ms)-Math.min.apply(null,ms))/A*100).toFixed(1)+'%',
+             dirs:out }; },
+  /* el ladeo puro del aparato no tiene que mover la punteria */
+  giroLadeo:(pitBase, ang)=>{
+    CFG.giro='siempre'; giroModo='siempre'; GIRO.on=true; GIRO.err='';
+    const pb=pitBase||0, A=ang||0.3;
+    const q1i=new THREE.Quaternion(-Math.SQRT1_2,0,0,Math.SQRT1_2).invert();
+    const q2i=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),
+              -(((screen.orientation&&screen.orientation.angle)||window.orientation||0))*Math.PI/180).invert();
+    const abg=(qCam)=>{ const E=qCam.clone().multiply(q2i).multiply(q1i);
+      const e=new THREE.Euler().setFromQuaternion(E,'YXZ');
+      return { alpha:e.y*180/Math.PI, beta:e.x*180/Math.PI, gamma:-e.z*180/Math.PI }; };
+    const qBase=new THREE.Quaternion().setFromEuler(new THREE.Euler(pb,0,0,'YXZ'));
+    const fw=new THREE.Vector3(0,0,-1).applyQuaternion(qBase);
+    const qFin=new THREE.Quaternion().setFromAxisAngle(fw,A).multiply(qBase);
+    GIRO.hay=false; GIRO.dy=0; GIRO.dp=0; player.yaw=0; player.pitch=pb;
+    giroOrient(abg(qBase)); giroOrient(abg(qBase));
+    const y0=player.yaw, p0=player.pitch;
+    giroOrient(abg(qFin)); giroTick(1/60);
+    return { ladeo:+A.toFixed(3), movio:+Math.hypot(player.yaw-y0,player.pitch-p0).toFixed(4) }; },
+  /* la misma rosa de direcciones, pero para el volante de inclinacion (telefonos sin giroscopio) */
+  incIso:(ladeo, n)=>{
+    CFG.giro='siempre'; giroModo='siempre'; GIRO.on=true; GIRO.err='';
+    const A=ladeo||0.30, N=n||12, out=[];
+    const ev=(x,y,z)=>({ accelerationIncludingGravity:{x:x*9.81,y:y*9.81,z:z*9.81}, rotationRate:null });
+    for(let i=0;i<N;i++){
+      const th=i*2*Math.PI/N, cx=0, cy=-0.35;
+      GIRO.fuente=''; GIRO.ult=0; GIRO.hay=false; INC.ok=false; INC.cal=false;
+      for(let j=0;j<40;j++) giroMocion(ev(cx,cy,-0.94));
+      player.yaw=0; player.pitch=0;
+      const gx=cx+A*Math.cos(th), gy=cy+A*Math.sin(th), gz=-Math.sqrt(Math.max(0.02,1-gx*gx-gy*gy));
+      for(let j=0;j<40;j++) giroMocion(ev(gx,gy,gz));      // que el pasabajos termine de llegar
+      const y0=player.yaw, p0=player.pitch;
+      for(let t=0;t<1;t+=1/60){ giroMocion(ev(gx,gy,gz)); giroTick(1/60); }
+      const v=Math.hypot(player.yaw-y0, player.pitch-p0);
+      out.push({ dir:Math.round(th*180/Math.PI), vel:+v.toFixed(3) });
+    }
+    const ms=out.map(o=>o.vel), mn=Math.min.apply(null,ms), mx=Math.max.apply(null,ms);
+    return { ladeo:A, radSeg:{min:+mn.toFixed(3), max:+mx.toFixed(3)},
+             desvio:+((mx-mn)/mx*100).toFixed(1)+'%', dirs:out }; },
   incVer:()=>({ ok:INC.ok, cal:INC.cal, g:[+INC.gx.toFixed(2),+INC.gy.toFixed(2),+INC.gz.toFixed(2)],
                 c:[+INC.cx.toFixed(2),+INC.cy.toFixed(2),+INC.cz.toFixed(2)], fuente:GIRO.fuente }),
   /* pone un bot en un punto despejado con la animacion que se pida y la camara a un costado */
@@ -10902,7 +11041,7 @@ addEventListener('pointermove',e=>{
     if(rot){ const t=ddx; ddx=ddy; ddy=-t; }
     const lk=LOOK*sensMul*(1-0.45*adsW)*mirMul()*gan;
     player.yaw-=ddx*lk;
-    player.pitch=Math.max(-0.9,Math.min(pitMax(),player.pitch-ddy*lk*invMirY*sensRelY)); } });
+    player.pitch=Math.max(pitMin(),Math.min(pitMax(),player.pitch-ddy*lk*invMirY*sensRelY)); } });
 function endTouch(e){ if(touchL&&e.pointerId===touchL.id){ touchL=null; joyReset(); } if(touchR&&e.pointerId===touchR.id){ touchR=null; } }
 addEventListener('pointerup',endTouch); addEventListener('pointercancel',endTouch);
 
