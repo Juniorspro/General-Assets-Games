@@ -9051,6 +9051,9 @@ function tiroPostura(dt){
   for(const sp of tiroSparks){ if(sp.userData.v>0){ sp.material.opacity=Math.max(0,sp.userData.v/0.16); sp.scale.multiplyScalar(1+dt*7); sp.userData.v-=dt;
     if(sp.userData.v<=0){ sp.visible=false; sp.userData.v=0; } } }
   if(_msgT>0){ _msgT-=dt; if(_msgT<=0){ const el=document.getElementById('tiroMsg'); if(el)el.style.opacity='0'; } }
+  /* ACA, no antes: los brazos recien tienen la pose de sostener el arma DESPUES del IK. Guardada
+     antes, lo que se copiaba era la pose de enlace y los remotos quedaban en cruz. */
+  try{ poseArmaGuardar(); }catch(e){}
 }
 /* gatillo, recarga y patada de cámara: lo único que corre DESPUÉS de orientar la cámara */
 function tickAim(dt){
@@ -9477,6 +9480,22 @@ try{ window.__tiro={
              pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
              off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
   inspIr:()=>insEmpezar(),
+  /* pone un bot en un punto despejado con la animacion que se pida y la camara a un costado */
+  botPose:(i,anim,x,z,lado)=>{ const b=BOTS[i|0]; if(!b) return 'no hay';
+    b.x=(x==null?0:x); b.z=(z==null?36:z); b.y=0; b.muerto=false; b.vida=100;
+    b.tx=b.x; b.tz=b.z+10; b.yaw=0; b.desl=0; b.salto=0;
+    b.r.pos.set(b.x,0,ARE_GZ+b.z); b.r.target.copy(b.r.pos); b.r.init=true;
+    b.r.yaw=0; b.r.anim=anim||'run'; b.r.avatar.position.copy(b.r.pos);
+    if(b.r.setAnim) b.r.setAnim(b.r.anim);
+    if(b.r.mixer) b.r.mixer.update(0.4);
+    try{ mpPoseArma(b.r); mpArmaMano(b.r); }catch(e){}
+    const L=(lado==null?3.2:lado);
+    player.pos.set(b.x+L, 1.55, ARE_GZ+b.z+0.4);
+    /* el jugador mira hacia (-sen yaw, -cos yaw); el bot esta a -L en X, asi que yaw = +PI/2 */
+    player.yaw=Math.PI/2; player.faceYaw=player.yaw; player.pitch=-0.02; player.vel.set(0,0,0);
+    PVP_GRACIA=999;
+    return { bot:b.nom, anim:b.r.anim, arma:b.r.arma, conArma:!!b.r._armaM,
+             pose:!!b.r._pz && b.r._pz.length }; },
   /* ¿cuanto tardan en matarte si te pegan TODO? Se apaga la punteria (todos aciertan) y se cuenta */
   ttk:(todoPega,x,z)=>{ if(world!=='arena') return 'solo en la arena';
     player.pos.set(x==null?20:x, 1.2, ARE_GZ+(z==null?20:z)); player.vel.set(0,0,0);
@@ -12581,7 +12600,9 @@ function mpTick(dt){
        a la pestaña con un cuerpo a medio caer) */
     if(r.rag) continue;
     r.avatar.position.set(r.pos.x, r.pos.y, r.pos.z); r.avatar.rotation.y=r.yaw+Math.PI;
-    if(r.rigged && r.mixer){ r.setAnim(r.anim||'idle'); r.mixer.update(dt);                                          // MISMA animación que está haciendo el otro
+    if(r.rigged && r.mixer){ r.setAnim(r.anim||'idle'); r.mixer.update(dt);
+      /* el clip mueve los brazos como si corriera sin nada; encima va la pose de llevar el arma */
+      try{ if(r.anim!=='slide' && r.anim!=='roll'){ mpPoseArma(r); mpArmaMano(r); } }catch(e){}                                          // MISMA animación que está haciendo el otro
       if(r.body) r.body.scale.x = r.mir? -r.sx : r.sx;                                                               // espejo (slide/wallrun a la derecha)
       if(r.hips&&r.hipsBind){ r.hips.position.x=r.hipsBind.x; r.hips.position.z=r.hipsBind.z; } }                     // anula solo el root-motion horizontal; Y libre (sin apretar la cintura)
     else if(r.body){ r.bob+=dt*8*(r.moving?1:0); r.avatar.position.y += Math.abs(Math.sin(r.bob))*0.06; } }         // cápsula provisional
@@ -13314,6 +13335,80 @@ function botQuitar(k){
 
 
 
+
+/* ===================== LOS REMOTOS TAMBIEN LLEVAN EL ARMA =====================
+   Los bots y los otros jugadores corrian con los BRAZOS ABIERTOS, moviendolos como si fueran a
+   una carrera de atletismo. No era un bug de la animacion: el clip de correr es asi. Lo que pasa
+   es que el jugador LOCAL nunca lo muestra, porque de la cintura para arriba le manda el codigo —
+   los dos brazos van por IK a la empuñadura y al guardamanos del fusil. Los remotos no tenian ese
+   paso, asi que se veia el clip crudo.
+
+   No hace falta inventar una pose: se COPIA la que tiene el jugador local en la mano. Cada cuadro
+   se guardan los seis huesos del brazo tal como quedaron despues del IK, y los remotos se los
+   ponen encima del clip. Sale gratis, es exactamente la pose de sostener el arma que esta puesta,
+   y si mañana cambia el IK los remotos cambian solos.
+
+   Y en la mano derecha va un ARMA: no la malla completa (treinta y pico de piezas por bot serian
+   quinientas llamadas de dibujo) sino una silueta de tres cajas fundidas en UNA, con la forma de
+   lo que ese jugador esta usando —larga si es fusil, corta si es pistola, hoja si es cuerpo a
+   cuerpo—. A la distancia a la que se pelea eso es todo lo que se lee. */
+const POSE_ARMA={ listo:false, q:{} };
+const POSE_HUESOS=['rightshoulder','rightarm','rightforearm','righthand',
+                   'leftshoulder','leftarm','leftforearm','lefthand'];
+function poseArmaGuardar(){
+  if(!bRArm) return;
+  const g=(n,b)=>{ if(!b)return; let q=POSE_ARMA.q[n]; if(!q) q=POSE_ARMA.q[n]=new THREE.Quaternion();
+    q.copy(b.quaternion); };
+  g('rightshoulder',bRSho); g('rightarm',bRArm); g('rightforearm',bRFore); g('righthand',bRHand);
+  g('leftshoulder',bLSho);  g('leftarm',bLArm);  g('leftforearm',bLFore);  g('lefthand',bLHand);
+  POSE_ARMA.listo=true;
+}
+function mpPoseArma(r){
+  if(!POSE_ARMA.listo || !r.body) return;
+  if(!r._pz){ const m=new Map();
+    r.body.traverse(o=>{ if(o.isBone) m.set((o.name||'').toLowerCase().replace('mixamorig',''),o); });
+    r._pz=POSE_HUESOS.map(n=>({n, h:m.get(n)})).filter(x=>x.h); }
+  for(const b of r._pz){ const q=POSE_ARMA.q[b.n]; if(q) b.h.quaternion.copy(q); }
+}
+/* la silueta del arma, UNA malla por tipo, compartida por todos los que la usen */
+const MP_ARMA_GEO={};
+function mpArmaGeo(cat){
+  if(MP_ARMA_GEO[cat]) return MP_ARMA_GEO[cat];
+  const gs=[];
+  const caja=(w,h,d,x,y,z)=>{ const g=new THREE.BoxGeometry(w,h,d); g.translate(x,y,z); gs.push(g.toNonIndexed()); };
+  if(cat==='cac'){ caja(0.010,0.055,0.30, 0,0.01,-0.15); caja(0.030,0.034,0.11, 0,0,0.05); }
+  else if(cat==='pistola'){ caja(0.032,0.042,0.19, 0,0.03,-0.03); caja(0.032,0.10,0.045, 0,-0.04,0.03); }
+  else { /* fusiles, subfusiles, escopetas y snipers: cajon + caño + cargador */
+    caja(0.056,0.082,0.26, 0,0,0.03);
+    caja(0.022,0.022,0.34, 0,0.01,-0.30);
+    caja(0.040,0.13,0.055, 0,-0.10,-0.02);
+    caja(0.046,0.070,0.20, 0,-0.01,0.26); }
+  const g=mergeGeometries(gs,false);
+  gs.forEach(x=>x.dispose());
+  return (MP_ARMA_GEO[cat]=g);
+}
+let MP_ARMA_MAT=null;
+function mpArmaMat(){ if(MP_ARMA_MAT) return MP_ARMA_MAT;
+  MP_ARMA_MAT=new THREE.MeshStandardMaterial({color:0x24282d, roughness:0.62, metalness:0.35});
+  MP_ARMA_MAT.envMapIntensity=0.3; return MP_ARMA_MAT; }
+function mpArmaMano(r){
+  const d=ARSENAL.find(a=>a.id===r.arma) || ARSENAL[0];
+  const cat=d.cac? 'cac' : (d.cat==='pistola'? 'pistola' : 'larga');
+  if(r._armaCat===cat && r._armaM) return;
+  if(!r._mano){ r.body && r.body.traverse(o=>{ if(o.isBone &&
+      (o.name||'').toLowerCase().replace('mixamorig','')==='righthand') r._mano=o; }); }
+  if(!r._mano) return;
+  if(r._armaM){ r._mano.remove(r._armaM); r._armaM=null; }
+  const m=new THREE.Mesh(mpArmaGeo(cat), mpArmaMat());
+  /* el hueso de la mano vive en unidades de hueso: hay que deshacer la escala del cuerpo */
+  const esc=1/(CU_ESC||0.0109);
+  m.scale.setScalar(esc);
+  m.position.set(0, -0.02*esc, -0.06*esc);
+  m.rotation.set(-1.35, 0, 0);
+  m.castShadow=true; m.frustumCulled=false;
+  r._mano.add(m); r._armaM=m; r._armaCat=cat;
+}
+
 /* ===================== EL VENDEDOR Y SU ARMERIA =====================
    En cada esquina habia un perchero con las armas colgadas: te acercabas y RECOGER te daba la que
    tenias mas cerca. Funcionaba, pero para elegir habia que caminar por delante de las diecisiete
@@ -13364,7 +13459,24 @@ function areVendTick(dt){
       try{ areVendedor(q.x, q.z, q.ry, i); }catch(e){ console.warn('vendedor',e); } }
   }
   if(!ARE_VEND.length) return;
-  for(const v of ARE_VEND) v.mez.update(dt);
+  /* MISMO RECORTE QUE LOS AVATARES. Un vendedor son 60 mallas con frustumCulled=false —igual que
+     cualquier cuerpo, porque la esfera de una cajita no sabe donde la puso el hueso— asi que los
+     cuatro se dibujaban SIEMPRE, mires donde mires: 240 llamadas de dibujo fijas. Medido: la arena
+     paso de 293 a 655 llamadas con solo agregarlos. Se recortan por esfera igual que los remotos,
+     y ademas se les apagan las falanges a partir de 14 m. */
+  for(const v of ARE_VEND){
+    _cuEsf.center.set(v.x, 0.95, ARE_GZ+v.z);
+    const dentro=_cuFr.intersectsSphere(_cuEsf);
+    if(v.g.visible!==dentro) v.g.visible=dentro;
+    if(!dentro) continue;
+    v.mez.update(dt);
+    /* nivel de detalle: los dedos son veinte mallas de 2 cm */
+    const d2=_cuEsf.center.distanceToSquared(camera.position);
+    const niv=(d2>LOD_DEDOS*LOD_DEDOS)?0:1;
+    if(v._lod!==niv){ v._lod=niv;
+      if(!v._finos){ v._finos=[]; v.g.traverse(o=>{ if(o.isMesh&&o.userData&&o.userData.fino) v._finos.push(o); }); }
+      for(const m of v._finos) m.visible=(niv===1); }
+  }
 }
 /* ¿hay un vendedor al alcance? */
 function areVendCerca(){
