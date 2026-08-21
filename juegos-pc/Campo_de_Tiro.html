@@ -885,7 +885,8 @@ const CFG_DEF={
   hudEsc:100, hudOpa:100, mano:'der', hudVer:1,
   layout:'clasico', mando:0, mapa:'tiro', idioma:'es',
   adsFp:1, sensRel:100, acel:'fija', acelFuerza:60,
-  giro:'no', sensGiro:100, sensGiroAds:70, vaiven:50
+  giro:'no', sensGiro:100, sensGiroAds:70, vaiven:50,
+  estilo:'pastel', sombraSuave:1, sombraRes:2048, brillo:100, vista_m:100, viento:100
 };
 const CFG=Object.assign({},CFG_DEF);
 try{ const g=JSON.parse(localStorage.getItem('pf_cfg')||'null');
@@ -899,6 +900,7 @@ let cfgSangre=true, cfgMarca=true, cfgVibrar=true, cfgSombras=true, cfgFps=60;
 let cfgTomarAuto=true;
 let adsFpForzado=true;  // apuntar SIEMPRE se ve en 1a persona, aunque juegues en 3a
 let vaivenK=0.5;        // cuanto se bambolean el arma y los brazos al mirar (1 = como era antes)
+let cfgBrillo=1, cfgVista=1;
 let sensRelY=1;         // relacion vertical/horizontal del giro
 let acelModo='fija', acelF=0.6;
 let giroModo='no', giroK=1, giroKAds=0.7;
@@ -1015,7 +1017,7 @@ const sun=new THREE.DirectionalLight(0xfff2e0,2.3); sun.position.set(-40,80,-50)
 sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.near=1; sun.shadow.camera.far=110;   // distancia de sombra reducida → más barato y nítido cerca
 sun.shadow.camera.left=-42; sun.shadow.camera.right=42; sun.shadow.camera.top=42; sun.shadow.camera.bottom=-42; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
 scene.add(sun); scene.add(sun.target);
-scene.add(new THREE.HemisphereLight(0xdfeeff,0x9aa6b2,0.9));
+const _hemi=new THREE.HemisphereLight(0xdfeeff,0x9aa6b2,0.9); scene.add(_hemi);
 
 /* ===================== MUNDO + COLISIÓN (AABB) — pista de pruebas de parkour ===================== */
 const colliders=[];      // {minx,maxx,miny,maxy,minz,maxz, mesh}
@@ -1048,6 +1050,43 @@ const skyMat=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:
   vertexShader:'varying float vh;void main(){vh=normalize(position).y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
   fragmentShader:'varying float vh;uniform vec3 top;uniform vec3 bot;void main(){gl_FragColor=vec4(mix(bot,top,clamp(vh*0.55+0.45,0.0,1.0)),1.0);}'});
 const skyMesh=new THREE.Mesh(new THREE.SphereGeometry(900,24,14),skyMat); scene.add(skyMesh);   // (sigue al jugador cada frame)
+
+/* ===================== ESTILO DE IMAGEN =====================
+   PASTEL no se hace bajando la saturacion en un filtro: se hace con LUZ. Un cielo grande y claro que
+   levanta las sombras (hemisferica fuerte) deja el contraste bajo, y con el tono NEUTRAL en vez de
+   ACES los claros no se queman ni se van al naranja. La niebla mas cerca y mas palida termina de
+   velar el fondo. Todo esto es luz de verdad, asi que las sombras y los reflejos siguen siendo
+   coherentes — un filtro de saturacion los aplanaria.
+   Los tres estilos tocan las MISMAS perillas, asi que cambiar de uno a otro nunca deja mitad y mitad. */
+const ESTILOS={
+  pastel:{ n:'Pastel',  tono:'neutral', exp:1.22,
+           sol:0xfff1e2, solI:1.55, hemiC:0xe6f2ff, hemiS:0xcfc9c0, hemiI:1.70,
+           cieloA:0x9fc6ea, cieloB:0xf6f1ea, niebla:0xe4ecf4, nDes:0.62, nLej:1.05, env:0.9 },
+  neutro:{ n:'Neutro',  tono:'aces',    exp:1.02,
+           sol:0xfff2e0, solI:2.30, hemiC:0xdfeeff, hemiS:0x9aa6b2, hemiI:0.90,
+           cieloA:0x3f78c0, cieloB:0xd9eaf7, niebla:0xcfe3f5, nDes:1.00, nLej:1.00, env:1.0 },
+  vivo:{   n:'Vivo',    tono:'aces',    exp:0.94,
+           sol:0xfff6cf, solI:2.85, hemiC:0xbfe0ff, hemiS:0x7f8b98, hemiI:0.62,
+           cieloA:0x2a63b4, cieloB:0xcfe6f7, niebla:0xbfd8ee, nDes:1.25, nLej:1.18, env:1.1 }
+};
+let estiloSel='pastel';
+let hemiLuz=_hemi;
+const _niebla0={cerca:150, lejos:640};   // los valores con que nacio la escena
+function aplicarEstilo(k){
+  const E=ESTILOS[k]||ESTILOS.pastel; estiloSel=(ESTILOS[k]?k:'pastel');
+  renderer.toneMapping = (E.tono==='neutral' && THREE.NeutralToneMapping!=null)
+                         ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = E.exp*(_expMundo||1)*(typeof cfgBrillo!=='undefined'?cfgBrillo:1);
+  sun.color.setHex(E.sol); sun.intensity=E.solI*(_solMundo||1);
+  if(hemiLuz){ hemiLuz.color.setHex(E.hemiC); hemiLuz.groundColor.setHex(E.hemiS); hemiLuz.intensity=E.hemiI; }
+  skyMat.uniforms.top.value.setHex(E.cieloA); skyMat.uniforms.bot.value.setHex(E.cieloB);
+  cityBg.setHex(E.cieloB);
+  const V=(typeof cfgVista!=='undefined'?cfgVista:1);
+  if(scene.fog){ scene.fog.color.setHex(E.niebla);
+    scene.fog.near=_niebla0.cerca*E.nDes*V; scene.fog.far=_niebla0.lejos*E.nLej*V; }
+  if(scene.environment) scene.environmentIntensity=E.env;
+}
+let _expMundo=1, _solMundo=1;   // los ajustes por mundo (galeria vs isla) multiplican, no pisan
 
 // ===== helpers =====
 function zoneTag(x,z,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.05,2.2),mat(color,0.6)); m.position.set(x,0.04,z); scene.add(m); }
@@ -2042,7 +2081,7 @@ function enterTiro(){ if(world==='tiro')return; world='tiro'; grassMode=false; d
   tiroGroup.visible=true;
   scene.background=new THREE.Color(0x1b1f23); skyMesh.visible=false; scene.environment=roomEnv;   // INTERIOR gris (sin cielo)
   scene.fog.color.set(0x23282d); scene.fog.near=22; scene.fog.far=140;
-  sun.intensity=0.55; sun.color.set(0xdfe8f2); renderer.toneMappingExposure=1.02;
+  _solMundo=0.24; _expMundo=1.00; aplicarEstilo(estiloSel);   // galeria cubierta: el sol entra poco
   player.pos.copy(TIRO_START); player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.noRoll=true;
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
@@ -6219,7 +6258,28 @@ function alcMats(){ if(ALC_M.hormigon)return ALC_M;
   // el follaje lleva COLOR POR VÉRTICE: con una sola malla fundida para toda la isla es la única
   // forma de que no queden doscientos árboles exactamente del mismo verde
   ALC_M.follaje     = new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.93,metalness:0,vertexColors:true});
-  ALC_M.follaje.envMapIntensity=0.3;
+  ALC_M.follaje.envMapIntensity=0.35;
+  /* VIENTO. Toda la isla se funde en UNA malla de follaje, asi que no hay como animar cada arbol
+     por separado desde JS: se mueve en el shader. El desplazamiento sale de la posicion en el mundo,
+     no del indice del vertice, asi que dos racimos vecinos van casi juntos (una rama entera se
+     mueve como una rama) y dos arboles lejanos van desfasados. Cuesta cuatro senos por vertice. */
+  ALC_M.follaje.userData.viento={value:0};
+  ALC_M.follaje.onBeforeCompile=(sh)=>{
+    sh.uniforms.uVientoT=ALC_M.follaje.userData.viento;
+    sh.uniforms.uVientoA={value:1};
+    ALC_M.follaje.userData.amp=sh.uniforms.uVientoA;
+    sh.vertexShader='uniform float uVientoT;uniform float uVientoA;\n'+sh.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+       vec3 wp = (modelMatrix*vec4(transformed,1.0)).xyz;
+       float f = uVientoT;
+       float s1 = sin(wp.x*0.13 + wp.z*0.09 + f*1.15);
+       float s2 = sin(wp.z*0.21 - wp.x*0.07 + f*1.83);
+       float r  = (0.62*s1 + 0.38*s2) * uVientoA;
+       transformed.x += r*0.085;
+       transformed.z += r*0.055;
+       transformed.y -= abs(r)*0.020;`);
+  };
   return ALC_M; }
 function alcMat(n){ alcMats(); return ALC_M[n]||ALC_M.hormigon; }
 
@@ -6577,7 +6637,10 @@ function alcPoste(e){ const p=e.p||[0,0,0], h=e.h||5.5;
    altos y desgarbados; los cipreses, anchos y oscuros. El tipo se elige por la altura pedida.
    La semilla sale de la POSICIÓN, así que el mismo árbol siempre se dibuja igual (nada de random:
    dos llamadas seguidas tienen que dar lo mismo). */
-const VERDES=[0x5c6b39,0x66753f,0x718049,0x4f5d33,0x7a8a52,0x5a6a3c];
+/* Verdes mas claros y menos oliva que los de antes: con la luz pastel los tonos oscuros se
+   apelmazaban en una mancha marron y el monte parecia una sola cosa. Ocho tonos en vez de seis, y
+   dos tirando a amarillo para las capas de arriba, que es donde pega el sol. */
+const VERDES=[0x7e9159,0x8a9c62,0x93a76b,0x6f8250,0x9db474,0x778a55,0xa8bd83,0x869a5e];
 /* ARBOLES. Cipreses de Monterey (copa densa, achatada y peinada por el
    viento), eucaliptos flacos y altos, y matas de higuera de mar. Antes eran cuatro esferas sueltas
    sobre un palo y se veian como brocoli. Ahora la copa se arma por CAPAS de racimos achatados, mas
@@ -7100,6 +7163,7 @@ function alcTomar(){
   return true;
 }
 function alcTick(dt){ _alcT+=dt; vcTick(dt); try{ alcBotinTick(); }catch(e){}
+  if(ALC_M.follaje&&ALC_M.follaje.userData.viento) ALC_M.follaje.userData.viento.value=_alcT;
   if(alcAgua&&alcAgua.material.normalMap){ const o=alcAgua.material.normalMap.offset;
     o.set((_alcT*0.010)%1, (_alcT*0.0068)%1); } }
 
@@ -7198,7 +7262,7 @@ function enterAlc(){ if(world==='valle')return; world='valle'; grassMode=false; 
   /* la niebla arrancaba a 90 m y la isla mide 500: de lejos todo salia lavado. Se corre para que
      quede la perspectiva atmosferica de la bahia sin borrar el relieve. */
   scene.fog.color.set(0xa8bccb); scene.fog.near=170; scene.fog.far=1150;
-  sun.intensity=2.1; sun.color.set(0xfff2de); renderer.toneMappingExposure=1.05;
+  _solMundo=0.92; _expMundo=1.03; aplicarEstilo(estiloSel);   // isla: cielo abierto
   sun.position.set(-260,320,ALC_GZ-120); sun.target.position.set(0,20,ALC_GZ); sun.target.updateMatrixWorld();
   player.pos.copy(ALC_START); player.pos.y=alcH(ALC_START.x,ALC_START.z-ALC_GZ)+0.1;
   player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.noRoll=true;
@@ -7216,7 +7280,10 @@ function alcModo(on){ islaMode=!!on; alcGroup.visible=!!on; try{ vcMapaMostrar(!
 /* sombra del sol sobre 340 m de isla: el shadow map de la galería (±42 m) no llega ni al patio */
 function alcSol(on){
   const s=sun.shadow.camera;
-  if(on){ s.left=-165; s.right=165; s.top=165; s.bottom=-165; s.far=720; sun.shadow.bias=-0.0009; }
+  /* El sol SIGUE al jugador todos los cuadros (ver el final de tickCam), asi que no hace falta un
+     frustum que cubra la isla entera: con +-165 m el mapa de 2048 daba 16 cm por texel y las sombras
+     eran escaleras. Con +-58 son 5,7 cm — tres veces mas fino y sale gratis. */
+  if(on){ s.left=-58; s.right=58; s.top=58; s.bottom=-58; s.far=300; sun.shadow.bias=-0.0005; }
   else  { s.left=-42;  s.right=42;  s.top=42;  s.bottom=-42;  s.far=110; sun.shadow.bias=-0.0004; }
   s.updateProjectionMatrix(); }
 
@@ -8272,6 +8339,14 @@ try{ window.__tiro={
             marca:cfgMarca, vib:cfgVibrar, sfx:sfxOn, mus:musOn, vSfx:+volSfx.toFixed(2),
             vMus:+volMus.toFixed(2), vista:camView, zurdo:lefty, cal:quality,
             tomAuto:cfgTomarAuto, lay:CFG.layout, idi:lang,
+            estilo:estiloSel, tono:renderer.toneMapping, exp:+renderer.toneMappingExposure.toFixed(3),
+            solI:+sun.intensity.toFixed(2), hemiI:+hemiLuz.intensity.toFixed(2),
+            sombraTipo:renderer.shadowMap.type, sombraRes:sun.shadow.mapSize.x,
+            sombraLado:+sun.shadow.camera.right.toFixed(0),
+            niebla:[+scene.fog.near.toFixed(0),+scene.fog.far.toFixed(0)],
+            cielo:['#'+skyMat.uniforms.top.value.getHexString(),'#'+skyMat.uniforms.bot.value.getHexString()],
+            vientoAmp:(ALC_M.follaje&&ALC_M.follaje.userData.amp)?ALC_M.follaje.userData.amp.value:null,
+            vientoT:(ALC_M.follaje&&ALC_M.follaje.userData.viento)?+ALC_M.follaje.userData.viento.value.toFixed(1):null,
             adsFp:adsFpForzado, relY:sensRelY, acel:acelModo, acelF:+acelF.toFixed(2),
             giro:giroModo, giroK:+giroK.toFixed(2), giroKAds:+giroKAds.toFixed(2), vaiven:+vaivenK.toFixed(2),
             camTP:+player.camTP.toFixed(3), adsW:+adsW.toFixed(2),
@@ -9707,9 +9782,18 @@ function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
   prBase=Math.max(0.45, Math.min(devicePixelRatio, Q.pr, devicePixelRatio*(Q.scale||1)));   // BAJO = 50% de la resolución nativa
   prDyn=1; aplicarPR();
   camera.far=Q.far||1200; camera.updateProjectionMatrix();
-  const wantShadow=Q.shadow>0;
+  /* La resolucion de sombra y el suavizado son ajustes PROPIOS, no un efecto colateral de la
+     calidad: en un celular flojo conviene resolucion nativa con sombras chicas, y en una maquina
+     buena al reves. La calidad solo decide si HAY sombras. */
+  const wantShadow=Q.shadow>0 && cfgSombras;
   if(renderer.shadowMap.enabled!==wantShadow){ renderer.shadowMap.enabled=wantShadow; renderer.shadowMap.needsUpdate=true; }
-  if(wantShadow){ if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; } sun.shadow.mapSize.set(Q.shadow,Q.shadow); }
+  const tipo = (typeof CFG!=='undefined' && +CFG.sombraSuave) ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  if(renderer.shadowMap.type!==tipo){ renderer.shadowMap.type=tipo; renderer.shadowMap.needsUpdate=true;
+    scene.traverse(o=>{ if(o.isMesh&&o.material){ const ms=Array.isArray(o.material)?o.material:[o.material];
+      for(const m of ms) m.needsUpdate=true; } }); }
+  if(wantShadow){ const R=Math.min(Q.shadow, (typeof CFG!=='undefined'? (+CFG.sombraRes||Q.shadow) : Q.shadow));
+    if(sun.shadow.mapSize.x!==R){ if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; }
+      sun.shadow.mapSize.set(R,R); } }
   eyeAdapt=Q.adapt;
   if(!cfgSombras && renderer.shadowMap.enabled){ renderer.shadowMap.enabled=false; renderer.shadowMap.needsUpdate=true; }
   layout();
@@ -10053,11 +10137,38 @@ const CFG_SECS=[
          en:'LOW renders at half resolution and pulls the fog in: it is what holds 60 fps on a mid-range phone. HIGH uses native resolution and big shadows.',
          pt:'BAIXO renderiza em meia resolução. ALTO usa resolução nativa e sombras grandes.'},
       ops:[['low',{es:'Bajo',en:'Low',pt:'Baixo'}],['med',{es:'Medio',en:'Medium',pt:'Médio'}],['high',{es:'Alto',en:'High',pt:'Alto'}]]},
+     {k:'estilo', t:{es:'Estilo de imagen',en:'Image style',pt:'Estilo de imagem'},
+      h:{es:'PASTEL levanta las sombras con un cielo grande y claro y usa un tono suave: colores lavados, contraste bajo, nada quemado. NEUTRO es el look de siempre. VIVO baja el cielo y sube el sol: más contraste y más saturación, se lee mejor a pleno día. No es un filtro: cambia la LUZ, así que las sombras y los reflejos siguen siendo coherentes.',
+         en:'PASTEL lifts the shadows with a big pale sky and a soft tone curve: washed colours, low contrast, nothing blown out. NEUTRAL is the old look. VIVID drops the sky and raises the sun for more contrast. It is not a filter: it changes the LIGHT, so shadows and reflections stay coherent.',
+         pt:'PASTEL levanta as sombras com um céu grande e claro. NEUTRO é o de sempre. VIVO sobe o contraste. Não é um filtro: muda a LUZ.'},
+      ops:[['pastel',{es:'Pastel',en:'Pastel',pt:'Pastel'}],['neutro',{es:'Neutro',en:'Neutral',pt:'Neutro'}],['vivo',{es:'Vivo',en:'Vivid',pt:'Vivo'}]]},
+     {k:'brillo', t:{es:'Brillo',en:'Brightness',pt:'Brilho'}, tipo:'sli', min:60, max:160, step:5, suf:'%',
+      h:{es:'Exposición de la cámara. Subilo si jugás con el celular al sol y no ves nada adentro de las casas.',
+         en:'Camera exposure. Raise it if you play in sunlight and cannot see inside the houses.',
+         pt:'Exposição da câmera. Aumente se joga sob o sol e não vê dentro das casas.'}},
      {k:'sombras', t:{es:'Sombras',en:'Shadows',pt:'Sombras'},
       h:{es:'Las sombras del sol son lo más caro de la escena. Apagarlas en calidad media o alta suele dar 10 a 15 cuadros más.',
          en:'Sun shadows are the most expensive thing in the scene. Turning them off on medium or high usually buys 10-15 fps.',
          pt:'As sombras do sol são o mais caro da cena. Desligar rende 10 a 15 fps.'},
       ops:[[0,CFG_L.no],[1,CFG_L.si]]},
+     {k:'sombraSuave', t:{es:'Sombras suaves',en:'Soft shadows',pt:'Sombras suaves'},
+      h:{es:'Difumina el borde de la sombra en vez de dejarlo dentado. Cuesta poco y es lo que más cambia cómo se ve el mapa de lejos.',
+         en:'Blurs the shadow edge instead of leaving it jagged. Cheap, and it is what changes the look of the map the most from a distance.',
+         pt:'Suaviza a borda da sombra em vez de deixá-la serrilhada.'},
+      ops:[[0,CFG_L.no],[1,CFG_L.si]]},
+     {k:'sombraRes', t:{es:'Detalle de la sombra',en:'Shadow detail',pt:'Detalhe da sombra'},
+      h:{es:'Tamaño del mapa de sombra. En el valle la sombra cubre 116 m, así que 1024 da 11 cm por punto y 4096 da 2,8: en el más alto se ven los barrotes de las ventanas proyectados en el piso.',
+         en:'Shadow map size. In the valley the shadow covers 116 m, so 1024 gives 11 cm per point and 4096 gives 2.8: at the highest you can see window bars projected on the floor.',
+         pt:'Tamanho do mapa de sombra. 1024 dá 11 cm por ponto, 4096 dá 2,8.'},
+      ops:[[1024,{es:'Bajo',en:'Low',pt:'Baixo'}],[2048,{es:'Medio',en:'Medium',pt:'Médio'}],[4096,{es:'Alto',en:'High',pt:'Alto'}]]},
+     {k:'vista_m', t:{es:'Distancia de visión',en:'View distance',pt:'Distância de visão'}, tipo:'sli', min:50, max:160, step:10, suf:'%',
+      h:{es:'Qué tan lejos empieza y termina la niebla. Bajarla acerca el velo y descarga el teléfono; subirla te deja ver el otro extremo del valle.',
+         en:'How far the fog starts and ends. Lowering it pulls the veil in and unloads the phone; raising it lets you see the far end of the valley.',
+         pt:'Onde começa e termina a névoa.'}},
+     {k:'viento', t:{es:'Viento en los árboles',en:'Wind in the trees',pt:'Vento nas árvores'}, tipo:'sli', min:0, max:200, step:10, suf:'%',
+      h:{es:'Las copas se mueven en el shader, con el desplazamiento sacado de la posición en el mapa: una rama entera se mueve junta y dos árboles lejanos van desfasados. En 0 % quedan quietas.',
+         en:'The canopies move in the shader, driven by world position: a whole branch moves together and distant trees are out of phase. At 0% they stand still.',
+         pt:'As copas se movem no shader. Em 0% ficam paradas.'}},
      {k:'fps', t:{es:'Límite de cuadros',en:'Frame limit',pt:'Limite de quadros'},
       h:{es:'Un tope de 30 o 60 calienta menos el teléfono. Cuando el celular se calienta, el sistema le baja el reloj y el juego va PEOR que con el tope puesto.',
          en:'A 30 or 60 cap keeps the phone cooler. Once it overheats the system throttles it and the game runs worse than with the cap on.',
@@ -10184,6 +10295,10 @@ function cfgAplicar(){
   else if(AUD.amb){ try{ AUD.amb.volume=volMus; }catch(e){} }
   cfgFps = +CFG.fps||0;
   cfgSombras = !!(+CFG.sombras);
+  cfgBrillo = Math.max(0.6,Math.min(1.6,(+CFG.brillo||100)/100));
+  cfgVista  = Math.max(0.5,Math.min(1.6,(+CFG.vista_m||100)/100));
+  try{ if(ALC_M.follaje&&ALC_M.follaje.userData.amp) ALC_M.follaje.userData.amp.value=Math.max(0,Math.min(2,(+CFG.viento||100)/100)); }catch(e){}
+  try{ aplicarEstilo(CFG.estilo||'pastel'); }catch(e){}
   lefty = (CFG.mano==='izq');
   try{ applyHudPos(); }catch(e){}          // tamaño y transparencia globales de los controles
   document.body.classList.toggle('sinhud', !(+CFG.hudVer));
