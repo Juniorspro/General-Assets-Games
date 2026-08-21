@@ -9477,6 +9477,27 @@ try{ window.__tiro={
              pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
              off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
   inspIr:()=>insEmpezar(),
+  /* ¿cuanto tardan en matarte si te pegan TODO? Se apaga la punteria (todos aciertan) y se cuenta */
+  ttk:(todoPega,x,z)=>{ if(world!=='arena') return 'solo en la arena';
+    player.pos.set(x==null?20:x, 1.2, ARE_GZ+(z==null?20:z)); player.vel.set(0,0,0);
+    PVP.vida=PVP.max; PVP.muerto=false; PVP_GRACIA=0; INV.blind=0; botBalde=BOT_COLCHON;
+    const p0=BOT_PUNT0_REF; if(todoPega!==false) __botPunt(1.0);
+    let t=0; const paso=1/60; let vieron=0, tiran=0;
+    while(t<40 && !PVP.muerto){ update(paso); t+=paso;
+      const v=BOTS.filter(b=>!b.muerto&&b.viendo).length; if(v>vieron)vieron=v;
+      const q=BOTS.filter(b=>b.turno).length; if(q>tiran)tiran=q; }
+    __botPunt(p0);
+    return { seg:+t.toFixed(2), muerto:PVP.muerto, vida:+PVP.vida.toFixed(0),
+             vieronMax:vieron, tiranMax:tiran }; },
+  bajasEntreBots:(seg)=>{ const T=seg||30, paso=1/60;
+    PVP_GRACIA=999; player.pos.set(0,1.2,ARE_GZ+300);   // lejos: que no te vean y peleen entre ellos
+    const v0=BOTS.map(b=>b.vida); let bajas=0, dan=0;
+    for(let t=0;t<T;t+=paso){ update(paso); }
+    for(let i=0;i<BOTS.length;i++){ if(BOTS[i].muerto) bajas++; }
+    for(const b of BOTS) dan+=Math.max(0,100-b.vida);
+    PVP_GRACIA=0;
+    return { seg:T, bajas, danioTotalEntreEllos:Math.round(dan),
+             conRival:BOTS.filter(b=>b.rival).length }; },
   /* como se ve el apuntado en TERCERA persona: donde queda el alza en pantalla, cuanto salio la
      camara del hombro, y sobre todo si el TIRO va a donde apunta la mira */
   tpDiag:()=>{ const a=__tiroAlza();
@@ -13064,6 +13085,7 @@ function partTick(dt){
     document.body.classList.remove('enPartida');
     if(PVP.muerto){ PVP.tRes-=dt; if(PVP.tRes<=0) areRevivir(); }
     if(PVP_GRACIA>0) PVP_GRACIA-=dt;
+    botBaldeTick(dt);            // el tope de daño por segundo se recarga
     botTurnos();                 // quien tiene permiso de tirar este cuadro
     botTick(dt);
     return;
@@ -13100,6 +13122,7 @@ function partTick(dt){
     else if(av && av.classList.contains('show')) av.classList.remove('show');
   }
   if(PVP_GRACIA>0) PVP_GRACIA-=dt;
+  botBaldeTick(dt);
   botTurnos();
   botTick(dt);
   partHUD();
@@ -13195,6 +13218,7 @@ function botSembrar(N){
     BOTS.push({ id, nom, r, vida:100, x, z, y:sueloY(x,z), yaw:Math.random()*6.283, mundo:world,
                 estado:'patrulla', tx:x, tz:z, tCambio:0, tTiro:0, tVer:0, rafaga:0,
                 desl:0, tDesl:1.5, salto:0, tSalto:2.0, deslDer:1,
+                rival:null, tRival:0.5, tTiroR:1.0,
                 arma, lado:(Math.random()<0.5?-1:1), tLado:0, muerto:false });
   }
   PART.vivos=1+BOTS.length;
@@ -13274,6 +13298,7 @@ function botAgregar(k){
     BOTS.push({ id, nom, r, vida:100, x, z, y, yaw:Math.random()*6.283, mundo:world,
                 estado:'patrulla', tx:x, tz:z, tCambio:0, tTiro:0, tVer:0, rafaga:0,
                 desl:0, tDesl:1.5, salto:0, tSalto:2.0, deslDer:1,
+                rival:null, tRival:0.5, tTiroR:1.0,
                 arma:['ak','tr556','mp9','uzi','g17','r870','fal'][(_botN*3)%7],
                 lado:(Math.random()<0.5?-1:1), tLado:0, muerto:false, tRes:0 });
     PART.vivos++;
@@ -13607,9 +13632,34 @@ function ragTick(r, dt){
    Con eso, dos bots encima son 15,6 de daño por segundo: 6,4 s de vida llena, con tiempo para
    taparte, curarte o contestar. Y al reaparecer hay 1,5 s en que no te pueden pegar, porque
    aparecer y morir en el mismo segundo no es dificil, es injusto. */
+/* QUINCE SEGUNDOS AUNQUE TE PEGUEN TODO.
+   Bajar el daño por bala no alcanza: la cuenta depende de cuantos bots te vean, de que arma tenga
+   cada uno y de a que distancia estan, asi que el peor caso siempre se escapa. En vez de adivinar
+   numero por numero hay un TOPE DE DAÑO POR SEGUNDO que no se puede pasar: un balde que se llena a
+   BOT_DPS por segundo y del que cada impacto saca lo que puede. Si el balde esta vacio, el tiro
+   suena y se ve pero no descuenta.
+
+   El balde arranca con BOT_COLCHON adentro, para que el primer golpe —o un tiro a la cabeza de una
+   sniper— duela de una y no quede recortado a una gota. Con 12 de colchon y 5,87 por segundo, el
+   peor caso imaginable (todos los tiros de todos los bots pegando sin parar) da 12 + 15x5,87 = 100,
+   o sea QUINCE SEGUNDOS exactos de vida llena.
+
+   Y el daño por bala sigue siendo distinto por arma: una .50 pega mas fuerte que una Uzi. Lo unico
+   que el tope decide es cuanto podes perder por segundo SUMANDO todo, que es lo que se siente. */
+const BOT_COLCHON=12;                          // lo que puede entrar de golpe
+const BOT_DPS=(100-BOT_COLCHON)/15;            // 5,87 por segundo sostenido
+let botBalde=BOT_COLCHON;
+function botBaldeTick(dt){ botBalde=Math.min(BOT_COLCHON, botBalde + BOT_DPS*dt); }
+function botDanioTope(d){
+  if(d<=0) return 0;
+  const pasa=Math.min(d, Math.max(0, botBalde));
+  botBalde-=pasa;
+  return pasa;
+}
 const BOT_MAX_TIRAN=2;         // cuantos pueden dispararte a la vez
 const BOT_REACCION=1.15;       // segundos desde que te ven hasta el primer tiro
-const BOT_PUNT0=0.42, BOT_PUNT_CAIDA=0.0075, BOT_PUNT_MIN=0.05;
+let BOT_PUNT0=0.42; const BOT_PUNT0_REF=0.42, BOT_PUNT_CAIDA=0.0075, BOT_PUNT_MIN=0.05;
+function __botPunt(v){ BOT_PUNT0=v; }
 const BOT_DMG=0.38, BOT_CAB_P=0.05, BOT_CAB_MUL=1.7;
 const BOT_PAUSA0=1.0, BOT_PAUSA1=1.3;   // el hueco entre rafagas: es el aire para taparte
 let PVP_GRACIA=0;              // invulnerable un rato despues de reaparecer
@@ -13700,6 +13750,35 @@ function botTick(dt){
       b.y=sueloY(b.x,b.z);
       b.yaw=(b.estado==='pelea')? Math.atan2(px-b.x, pz-b.z) : Math.atan2(vx,vz);
     }
+    /* ---- SE TIRAN ENTRE ELLOS ----
+       Dieciseis tipos armados que solo te miran a vos no son un tiroteo, son una fila esperandote.
+       Si el bot no te esta viendo, busca al bot enemigo mas cercano que si vea y le tira. No hace
+       falta que sean equipos: cada uno pelea con el que tenga a mano, que es lo que pasa en un mapa
+       de todos contra todos. El daño entre ellos NO pasa por el tope del jugador —ese tope es para
+       que a VOS no te maten rapido— asi que entre bots las bajas ocurren de verdad. */
+    if(!ve && b.estado!=='zona'){
+      b.tRival-=dt;
+      if(b.tRival<=0){ b.tRival=0.45+Math.random()*0.55;
+        let mej=null, d2=42*42;
+        for(const o of BOTS){ if(o===b||o.muerto) continue;
+          const dx=o.x-b.x, dz=o.z-b.z, d=dx*dx+dz*dz;
+          if(d<d2 && d>16 && botVe(b.x,b.y+1.55,b.z, o.x,o.y+1.2,o.z)){ d2=d; mej=o; } }
+        b.rival=mej? mej.id : null;
+      }
+      const R=b.rival? BOTS.find(o=>o.id===b.rival&&!o.muerto) : null;
+      if(R){
+        const dR=Math.hypot(R.x-b.x, R.z-b.z);
+        b.estado='pelea'; b.yaw=Math.atan2(R.x-b.x, R.z-b.z);
+        b.tTiroR-=dt;
+        if(b.tTiroR<=0){ const d=ARSENAL.find(o=>o.id===b.arma)||ARSENAL[0];
+          b.tTiroR=0.5+Math.random()*0.9;
+          try{ tiroSnd(dR>45?'lejos':'shot', Math.max(0.08, Math.min(0.6, 16/(dR+10)))); }catch(e){}
+          if(Math.random() < Math.max(0.10, 0.40 - dR*0.006)){
+            const cab=Math.random()<0.07;
+            botDanio(R.id, Math.round((d.dmg||24)*(cab?1.7:1)*0.42), cab); }
+        }
+      }
+    } else b.rival=null;
     // ---- tirar ----
     /* el turno se reparte arriba (botTurnos): b.turno dice si a este le toca tirar */
     if(b.estado==='pelea' && ve && b.turno && b.tVer>(BOT_REACCION+(b.lento||0))){
@@ -13712,8 +13791,13 @@ function botTick(dt){
         try{ tiroSnd(dPl>45?'lejos':'shot', Math.max(0.10, Math.min(0.85, 22/(dPl+8)))); }catch(e){}
         if(acierta && !PVP.muerto && PVP_GRACIA<=0){
           const cab=Math.random()<BOT_CAB_P;
-          pvpRecibir(Math.round((d.dmg||24)*(cab?BOT_CAB_MUL:1)*BOT_DMG), b.nom, cab,
+          const bruto=(d.dmg||24)*(cab?BOT_CAB_MUL:1)*BOT_DMG;
+          const neto=botDanioTope(bruto);
+          /* la cuña de "de aca te pegaron" sale igual aunque el tope se haya comido el daño: es
+             informacion, y taparla seria peor que el daño */
+          if(neto>0.05) pvpRecibir(Math.round(neto*10)/10, b.nom, cab,
                      b.x, b.z+((world==='arena')?ARE_GZ:ALC_GZ));
+          else { try{ danMarcar(b.x, b.z+((world==='arena')?ARE_GZ:ALC_GZ)); }catch(e){} }
         } else {
           /* la que erra pasa cerca: es lo que te avisa que te estan tirando */
           try{ if(dPl<40 && Math.random()<0.55) tiroSnd('zumbido',0.45); }catch(e){}
