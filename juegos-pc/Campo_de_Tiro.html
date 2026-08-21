@@ -9395,6 +9395,18 @@ try{ window.__tiro={
              pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
              off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
   inspIr:()=>insEmpezar(),
+  /* el ragdoll: se mata un bot y se sigue cuadro a cuadro como se cae */
+  ragVer:()=>{ const o=[];
+    for(const [,r] of MP.remotes){ if(!r.rag) continue; const R=r.rag;
+      o.push({ id:r.id, t:+R.t.toFixed(2), tip:+R.tip.toFixed(2),
+               rotX:+r.avatar.rotation.x.toFixed(3), rotZ:+r.avatar.rotation.z.toFixed(3),
+               y:+r.avatar.position.y.toFixed(3), vis:!!r.avatar.visible,
+               huesos:R.h.length,
+               brazoI:(()=>{ const p=R.h.find(q=>/leftarm$/i.test(q.b.name.replace('mixamorig','')));
+                 return p? +p.b.quaternion.z.toFixed(3) : null; })() }); }
+    return o; },
+  ragMatar:(i)=>{ const b=BOTS[i|0]; if(!b) return 'no hay';
+    botMuere(b,true); return {muerto:b.muerto, rag:!!b.r.rag}; },
   /* pone un jugador REAL de mentira en un punto de la arena y cuenta si se ve: sirve para probar
      el recorte de avatares sin necesitar dos telefonos */
   remotoEn:(x,z,nom)=>{ const id='sim_'+Math.random().toString(36).slice(2,8);
@@ -10821,6 +10833,7 @@ function update(dt){
      quedar donde va a dibujar (tickAim todavia le mete la patada del retroceso, que es lo ultimo).
      En mpTick estaba un cuadro atrasado — con la camara del cuadro anterior — y en un giro rapido
      eso es un avatar que aparece tarde en el borde de la pantalla. */
+  try{ ragTickTodos(dt); }catch(e){}   // los cuerpos que se estan cayendo
   try{ mpCullar(); }catch(e){}
 }
 
@@ -12233,6 +12246,17 @@ function mpTick(dt){
     if(r.tag) r.tag.visible=showNames;                                                                               // nombre + ícono de voz sobre la cabeza
     if(r.tagSet && r.talking!==r._talkShown){ r.tagSet(r.talking); r._talkShown=r.talking; }                         // ícono verde (hablando) / X (callado)
     if(!same)continue;
+    /* UN JUGADOR REAL TAMBIEN SE CAE. El estado trae r.muerto; cuando pasa de vivo a muerto
+       arranca el ragdoll, y cuando vuelve a estar vivo se levanta. */
+    if(!r.esBot){
+      if(r.muerto && !r.rag && !r._eraMuerto){ try{ ragEmpezar(r, null, null); }catch(e){} }
+      if(!r.muerto && r.rag){ try{ ragParar(r); }catch(e){} }
+      r._eraMuerto=!!r.muerto;
+    }
+    /* al que se esta cayendo no se le toca ni la posicion ni la pose: lo maneja ragTickTodos,
+       que corre en la SIMULACION (si viviera aca se congelaria con la pestaña de fondo, y volverias
+       a la pestaña con un cuerpo a medio caer) */
+    if(r.rag) continue;
     r.avatar.position.set(r.pos.x, r.pos.y, r.pos.z); r.avatar.rotation.y=r.yaw+Math.PI;
     if(r.rigged && r.mixer){ r.setAnim(r.anim||'idle'); r.mixer.update(dt);                                          // MISMA animación que está haciendo el otro
       if(r.body) r.body.scale.x = r.mir? -r.sx : r.sx;                                                               // espejo (slide/wallrun a la derecha)
@@ -12912,7 +12936,11 @@ function botMuere(b,porVos){
   if(b.muerto) return;
   b.muerto=true; b.tRes=5.0;
   try{ mpSacarCaja(b.r); }catch(e){}
-  b.r.oculto=true; b.r.avatar.visible=false;
+  /* se cae, no desaparece. La direccion es de donde vino el tiro: si le pegaste de frente cae de
+     espaldas. El cuerpo queda en el piso los cinco segundos hasta que reaparece. */
+  { const dx=b.x-(player.pos.x), dz=b.z-(player.pos.z-((world==='arena')?ARE_GZ:ALC_GZ));
+    const L=Math.hypot(dx,dz)||1;
+    try{ ragEmpezar(b.r, -dx/L, -dz/L); }catch(e){} }
   PART.vivos=Math.max(1,PART.vivos-1);
   if(porVos){ PART.bajas++; PVP.bajas++; try{ pvpHUD(); }catch(e){}
     partFeed('💀', MP.name+' → '+b.nom); }
@@ -12942,6 +12970,97 @@ function botQuitar(k){
     if(!b.muerto) PART.vivos=Math.max(1,PART.vivos-1);
   }
 }
+
+/* ===================== RAGDOLL: caerse muerto =====================
+   Antes morir era desaparecer: al bot se le ponia avatar.visible=false y en el cuadro siguiente ya
+   no estaba. No se sabia si le habias pegado, ni de donde venia el tiro, ni quedaba nada en el piso.
+
+   No hay motor de fisica aca —y meter uno por esto seria pagar carisimo— asi que el ragdoll es
+   procedural, pero con las cuatro cosas que hacen que se LEA como un ragdoll:
+
+   1. PIERDE LA POSE. Se para el mixer: el cuerpo deja de estar de pie de un golpe, no se queda
+      caminando mientras cae.
+   2. SE CAE PIVOTANDO EN LOS PIES. El avatar tiene el origen en los pies, asi que girarlo 85 grados
+      en X es exactamente caerse de espaldas o de cara — el cuerpo barre el arco que tiene que
+      barrer y termina acostado a la altura del piso, sin hundirse ni flotar. La caida acelera
+      (t al cuadrado), que es como cae algo de verdad.
+   3. SE CAE PARA EL LADO CONTRARIO AL TIRO. Le llega la direccion del disparo y se va de espaldas
+      si le pegaste de frente, de cara si le pegaste por atras, con algo de giro y de alabeo para
+      que no sean todas iguales.
+   4. LOS BRAZOS Y LAS PIERNAS SE AFLOJAN. Cada hueso va a una pose sin tono muscular —brazos
+      abiertos y caidos, columna doblada, cabeza para atras— con un temblor que se apaga en medio
+      segundo. Es lo que separa "un cuerpo cayendo" de "una tabla cayendo".
+
+   Y el cuerpo se queda en el piso hasta que reaparece, que en la arena son cinco segundos. */
+const RAG_HUESOS=['hips','spine','spine01','spine02','neck','head',
+  'leftarm','leftforearm','lefthand','rightarm','rightforearm','righthand',
+  'leftupleg','leftleg','leftfoot','rightupleg','rightleg','rightfoot'];
+/* la pose de un cuerpo sin tono: cuanto gira cada hueso desde donde estaba, en radianes */
+const RAG_POSE={
+  spine:[0.16,0,0.05], spine01:[0.20,0.04,-0.06], spine02:[0.22,-0.05,0.07],
+  neck:[-0.30,0.12,0.10], head:[-0.42,-0.16,-0.12],
+  leftarm:[0.30,0.20,0.85], leftforearm:[0.55,0,0.30], lefthand:[0.25,0,0.20],
+  rightarm:[0.30,-0.20,-0.85], rightforearm:[0.55,0,-0.30], righthand:[0.25,0,-0.20],
+  leftupleg:[-0.22,0.08,0.16], leftleg:[0.42,0,0], leftfoot:[0.30,0,0],
+  rightupleg:[-0.22,-0.08,-0.16], rightleg:[0.42,0,0], rightfoot:[0.30,0,0]
+};
+const _ragE=new THREE.Euler(), _ragQ=new THREE.Quaternion(), _ragQ2=new THREE.Quaternion();
+function ragHuesos(r){
+  if(r._ragH) return r._ragH;
+  const h=[];
+  if(r.body) r.body.traverse(o=>{ if(!o.isBone)return;
+    const n=(o.name||'').toLowerCase().replace('mixamorig','');
+    if(RAG_POSE[n]) h.push({b:o, of:RAG_POSE[n], q0:o.quaternion.clone(),
+      f:5+Math.random()*7, ph:Math.random()*6.283}); });
+  r._ragH=h; return h;
+}
+/* dx,dz = de donde vino el tiro (normalizado, en el mundo). Si no se sabe, se cae para atras. */
+function ragEmpezar(r, dx, dz){
+  if(!r || !r.avatar || r.rag) return;
+  const h=ragHuesos(r);
+  for(const p of h) p.q0.copy(p.b.quaternion);      // desde donde esta AHORA, no desde el bind
+  if(r.mixer){ try{ r.mixer.stopAllAction(); }catch(e){} }
+  /* el cuerpo mira a r.yaw+PI; el tiro viene de (dx,dz). Si viene de frente cae de espaldas. */
+  const mira=r.yaw||0;
+  const frente = (dx==null) ? 1 : Math.cos(mira)*(-dx) + Math.sin(mira)*(-dz);
+  r.rag={ t:0, tip:(frente>=0? 1.48 : -1.48), giro:(Math.random()-0.5)*1.1,
+          alabeo:(Math.random()-0.5)*0.55, yaw:mira+Math.PI,
+          y0:r.pos.y, salto:0.10+Math.random()*0.12, h };
+}
+function ragParar(r){
+  if(!r) return;
+  if(r._ragH) for(const p of r._ragH) p.b.quaternion.copy(p.q0);
+  r.rag=null;
+  if(r.avatar) r.avatar.rotation.set(0,(r.yaw||0)+Math.PI,0);
+  if(r.mixer && r.setAnim){ r.cur=null; try{ r.setAnim(r.anim||'idle'); }catch(e){} }
+}
+function ragTickTodos(dt){
+  if(!MP.remotes || !MP.remotes.size) return;
+  for(const [,r] of MP.remotes){ if(r.rag) ragTick(r,dt); }
+}
+function ragTick(r, dt){
+  const R=r.rag; if(!R) return;
+  R.t+=dt;
+  const T=R.t;
+  const k=Math.min(1, T/0.55), e=k*k;               // la caida acelera
+  if(r.avatar){
+    r.avatar.rotation.set(R.tip*e, R.yaw + R.giro*e, R.alabeo*e);
+    /* el saltito del impacto: sube y baja en los primeros 0,3 s */
+    const s=(T<0.30)? Math.sin(T/0.30*Math.PI)*R.salto : 0;
+    r.avatar.position.set(r.pos.x, R.y0 + s, r.pos.z);
+  }
+  /* los huesos se van a la pose floja, con un temblor que se apaga */
+  const a=Math.min(1, T/0.42);                       // cuanto ya se aflojo
+  const tem=Math.exp(-T*3.4);                        // el temblor
+  for(const p of R.h){
+    const w=1 + Math.sin(T*p.f + p.ph)*0.55*tem;
+    _ragE.set(p.of[0]*a*w, p.of[1]*a*w, p.of[2]*a*w, 'XYZ');
+    _ragQ.setFromEuler(_ragE);
+    _ragQ2.copy(p.q0).multiply(_ragQ);
+    p.b.quaternion.copy(_ragQ2);
+  }
+}
+
 /* ===================== CUANTO APRIETAN LOS BOTS =====================
    Medido con los numeros viejos: un bot con AK a 15 m tiraba rafagas de tres con 52% de acierto y
    17 de daño por bala, o sea 17,6 de daño POR SEGUNDO. Con 100 de vida eso es morir en 5,7 s
@@ -12990,6 +13109,7 @@ function botTick(dt){
         if(b.tRes<=0){ const a=Math.random()*6.283, d=24+Math.random()*(ARE_LADO/2-30);
           b.x=Math.cos(a)*d; b.z=Math.sin(a)*d; b.y=0; b.vida=100; b.muerto=false;
           b.estado='patrulla'; b.tCambio=0; b.r.oculto=false; b.r.avatar.visible=true;
+          try{ ragParar(b.r); }catch(e){}
           try{ mpCaja(b.r); }catch(e){} PART.vivos++; } }
       continue; }
     // ---- la zona tambien los mata a ellos (solo en el valle) ----
