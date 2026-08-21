@@ -1122,6 +1122,7 @@ function giroCuenta(){ GIRO.muestras++; GIRO._n++;
   if(t-GIRO._t0>1000){ GIRO.hz=Math.round(GIRO._n*1000/(t-GIRO._t0)); GIRO._n=0; GIRO._t0=t; } }
 /* ---- fuente 2 (respaldo): velocidad de giro ---- */
 function giroMocion(e){
+  try{ incLeer(e); }catch(err){}     // la inclinacion se calcula siempre: es el respaldo sin giroscopio
   if(GIRO.fuente==='orientacion' && performance.now()-GIRO.ult<1500) return;   // ya hay algo mejor
   const r=e.rotationRate; if(!r || (r.alpha==null&&r.beta==null&&r.gamma==null)) return;
   const wx=r.beta||0, wy=r.gamma||0, wz=r.alpha||0;
@@ -1143,13 +1144,69 @@ function giroMocion(e){
   GIRO.rx = wx*px + wy*py + wz*pz;
   GIRO.fuente='rotacion'; GIRO.ult=performance.now(); giroCuenta();
 }
+
+/* ===================== SIN GIROSCOPIO: MOVER POR INCLINACION =====================
+   Las dos fuentes de arriba necesitan un GIROSCOPIO: deviceorientation sale de fusionar giroscopio
+   con magnetometro, y rotationRate es el giroscopio pelado. Un telefono que no lo trae no da
+   ninguna de las dos y la opcion quedaba muerta.
+
+   Pero ACELEROMETRO tienen todos, hasta los mas baratos, y de ahi sale la GRAVEDAD: un vector que
+   siempre apunta al piso. Comparando adonde apunta ahora contra adonde apuntaba cuando calibraste,
+   se sabe cuanto inclinaste el aparato. Eso es lo que usan los juegos de laberinto para mover la
+   bolita, y por eso andan en telefonos sin giroscopio.
+
+   La diferencia con el giroscopio de verdad: la inclinacion no da RUMBO, da POSTURA. No se puede
+   saber para donde estas mirando, solo cuanto estas ladeado. Asi que no se usa 1 a 1 (inclinar 10
+   grados = girar 10 grados) sino como VOLANTE: mientras mantengas el telefono ladeado, la vista
+   sigue girando, y cuanto mas lo ladeas mas rapido. Es lo mismo que hace un juego de manejar.
+
+   Hay zona muerta —si no, la vista se va sola con el pulso— y se calibra sola al encender, con la
+   postura que tengas en ese momento. La opcion "Recentrar" del menu la vuelve a tomar. */
+const INC={ ok:false, gx:0, gy:0, gz:0, cx:0, cy:0, cz:0, cal:false, ult:0 };
+const INC_MUERTA=0.055;        // ~3 grados: abajo de eso no se mueve
+const INC_TOPE=0.52;           // ~31 grados: de ahi para arriba ya gira al maximo
+const INC_VEL_YAW=2.9;         // radianes por segundo a tope de inclinacion
+const INC_VEL_PIT=1.7;
+function incLeer(e){
+  const a=e.accelerationIncludingGravity; if(!a) return;
+  const L=Math.hypot(a.x||0,a.y||0,a.z||0);
+  if(L<3 || L>25) return;                                   // ni caida libre ni sacudon
+  /* a la referencia de la PANTALLA: asi da igual si jugas apaisado para un lado o para el otro */
+  const o=giroPantalla(), c=Math.cos(o), sn=Math.sin(o);
+  const ax=(a.x||0)/L, ay=(a.y||0)/L, az=(a.z||0)/L;
+  const gx= ax*c + ay*sn, gy= -ax*sn + ay*c, gz= az;
+  const k=INC.ok?0.16:1;                                    // pasabajos: el acelerometro es ruidoso
+  INC.gx+=(gx-INC.gx)*k; INC.gy+=(gy-INC.gy)*k; INC.gz+=(gz-INC.gz)*k;
+  INC.ok=true; INC.ult=performance.now();
+  if(!INC.cal){ incCentrar(); }
+}
+function incCentrar(){ INC.cx=INC.gx; INC.cy=INC.gy; INC.cz=INC.gz; INC.cal=true; }
+function incTick(dt,k){
+  if(!INC.ok || performance.now()-INC.ult>700) return false;
+  const zona=(v)=>{ const a=Math.abs(v)-INC_MUERTA; if(a<=0) return 0;
+    const t=Math.min(1, a/(INC_TOPE-INC_MUERTA)); return Math.sign(v)*t*t; };   // cuadratico: fino cerca del centro
+  /* El cabeceo sale de GY (la componente vertical de la gravedad en la pantalla) y no de GZ.
+     Medido inclinando el telefono: hacia adelante gy cambia 0,29 y hacia atras 0,30 —simetrico—,
+     mientras que gz cambia 0,17 para un lado y 0,06 para el otro, o sea que hacia atras casi no
+     llegaba a la zona muerta y no se podia mirar arriba. */
+  const dx=zona(INC.gx-INC.cx), dy=zona(INC.gy-INC.cy);
+  if(!dx && !dy) return false;
+  player.yaw += -dx*INC_VEL_YAW*dt*k; player.faceYaw=player.yaw;
+  player.pitch = Math.max(-0.9, Math.min(pitMax(), player.pitch + dy*INC_VEL_PIT*dt*k*invMirY*sensRelY));
+  return true;
+}
+/* OJO: aca NO se toca INC.cal. giroReiniciar corre cada vez que hay un hueco sin lecturas del
+   giroscopio —o sea, TODO el tiempo en un telefono que no lo tiene— y si ahi se borrara la
+   calibracion, el centro se volveria a tomar con el aparato ya ladeado y la inclinacion dejaria de
+   mover nada. Medido: inclinando el telefono hacia atras no pasaba nada, porque se habia
+   recentrado sobre esa misma postura. El centro se toma al ENCENDER y con Recentrar, nada mas. */
 function giroReiniciar(){ GIRO.hay=false; GIRO.dy=0; GIRO.dp=0; GIRO.rx=0; GIRO.ry=0; }
 function giroActivar(){
-  if(giroModo==='no'){ GIRO.on=false; giroReiniciar(); giroEstado(); return; }
+  if(giroModo==='no'){ GIRO.on=false; giroReiniciar(); INC.cal=false; giroEstado(); return; }
   const prender=()=>{
     if(!GIRO.ligO){ addEventListener('deviceorientation',giroOrient); GIRO.ligO=true; }
     if(!GIRO.ligM){ addEventListener('devicemotion',giroMocion); GIRO.ligM=true; }
-    GIRO.on=true; GIRO.err=''; giroReiniciar(); giroEstado(); };
+    GIRO.on=true; GIRO.err=''; giroReiniciar(); INC.cal=false; giroEstado(); };
   /* iOS 13+ pide permiso, y SON DOS permisos distintos: orientacion y movimiento. Solo se pueden
      pedir desde un gesto del usuario, por eso esto cuelga del toque en la opcion. */
   const pedir=(C)=>new Promise(res=>{
@@ -1163,8 +1220,14 @@ function giroTick(dt){
   if(giroModo==='no' || !GIRO.on){ return; }
   const activo = (giroModo!=='ads') || adsW>=0.25;
   if(!activo){ giroReiniciar(); return; }               // al soltar la mira se pierde la referencia
-  if(performance.now()-GIRO.ult>500){ giroReiniciar(); return; }
   const k=(adsW>0.35?giroKAds:giroK);
+  /* SIN GIROSCOPIO, MANDA LA INCLINACION. Si en medio segundo no llego nada del giroscopio pero el
+     acelerometro sigue dando, se usa el volante de inclinacion. En un telefono con giroscopio esta
+     rama no se pisa nunca; en uno sin, es la unica que corre. */
+  if(performance.now()-GIRO.ult>500){
+    if(giroModo!=='no' && incTick(dt,k)){ GIRO.fuente='inclinacion'; return; }
+    giroReiniciar(); return;
+  }
   let dy=0, dp=0;
   if(GIRO.fuente==='orientacion'){ dy=GIRO.dy; dp=GIRO.dp; GIRO.dy=0; GIRO.dp=0; }
   else { const r=Math.PI/180; dy=-GIRO.ry*r*dt; dp=-GIRO.rx*r*dt; }
@@ -1175,9 +1238,10 @@ function giroTick(dt){
 /* El estado dice QUE fuente entro y a que ritmo. Si el giroscopio no anda, esta linea es la que
    permite saber por que sin tener el telefono en la mano. */
 function giroEstado(){ const el=document.getElementById('cfgGiro'); if(!el)return;
-  const vivo = GIRO.on && (performance.now()-GIRO.ult<800);
+  const vivo = GIRO.on && (performance.now()-GIRO.ult<800 || (INC.ok && performance.now()-INC.ult<800));
   const fu = GIRO.fuente==='orientacion' ? tl({es:'orientación',en:'orientation',pt:'orientação'})
-           : GIRO.fuente==='rotacion' ? tl({es:'velocidad de giro',en:'rotation rate',pt:'velocidade de giro'}) : '—';
+           : GIRO.fuente==='rotacion' ? tl({es:'velocidad de giro',en:'rotation rate',pt:'velocidade de giro'})
+           : GIRO.fuente==='inclinacion' ? tl({es:'inclinación (sin giroscopio)',en:'tilt (no gyroscope)',pt:'inclinação (sem giroscópio)'}) : '—';
   el.textContent = GIRO.err ? ('✕ '+GIRO.err)
     : !GIRO.on ? tl({es:'Giroscopio apagado',en:'Gyroscope off',pt:'Giroscópio desligado'})
     : vivo ? ('✓ '+fu+' · '+GIRO.hz+' Hz · '+GIRO.muestras+tl({es:' lecturas',en:' readings',pt:' leituras'}))
@@ -9480,6 +9544,27 @@ try{ window.__tiro={
              pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
              off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
   inspIr:()=>insEmpezar(),
+  /* SIMULA UN TELEFONO SIN GIROSCOPIO: solo se le mandan eventos de movimiento con gravedad
+     (accelerationIncludingGravity) y NADA de rotationRate ni de orientacion. Si la vista se mueve,
+     el respaldo por inclinacion funciona. */
+  sinGiro:(gx,gy,gz,seg)=>{
+    CFG.giro='siempre'; giroModo='siempre'; GIRO.on=true; GIRO.err='';
+    GIRO.fuente=''; GIRO.ult=0; GIRO.hay=false;
+    const ev=(x,y,z)=>({ accelerationIncludingGravity:{x:x*9.81,y:y*9.81,z:z*9.81}, rotationRate:null });
+    /* postura de reposo: telefono apaisado, pantalla hacia arriba-ish */
+    INC.ok=false; INC.cal=false;
+    for(let i=0;i<12;i++) giroMocion(ev(0,-0.35,-0.94));
+    const y0=player.yaw, p0=player.pitch;
+    /* ahora se lo ladea */
+    for(let i=0;i<8;i++) giroMocion(ev(gx,gy,gz));
+    const T=seg||1.0, paso=1/60; let n=0;
+    for(let t=0;t<T;t+=paso){ giroMocion(ev(gx,gy,gz)); giroTick(paso); n++; }
+    return { fuente:GIRO.fuente, giroDeVista:+(player.yaw-y0).toFixed(3),
+             cabeceo:+(player.pitch-p0).toFixed(3), muestras:n,
+             grav:[+INC.gx.toFixed(2),+INC.gy.toFixed(2),+INC.gz.toFixed(2)],
+             centro:[+INC.cx.toFixed(2),+INC.cy.toFixed(2),+INC.cz.toFixed(2)] }; },
+  incVer:()=>({ ok:INC.ok, cal:INC.cal, g:[+INC.gx.toFixed(2),+INC.gy.toFixed(2),+INC.gz.toFixed(2)],
+                c:[+INC.cx.toFixed(2),+INC.cy.toFixed(2),+INC.cz.toFixed(2)], fuente:GIRO.fuente }),
   /* pone un bot en un punto despejado con la animacion que se pida y la camara a un costado */
   botPose:(i,anim,x,z,lado)=>{ const b=BOTS[i|0]; if(!b) return 'no hay';
     b.x=(x==null?0:x); b.z=(z==null?36:z); b.y=0; b.muerto=false; b.vida=100;
@@ -11493,11 +11578,16 @@ const CFG_SECS=[
    ]},
    {h:{es:'Giroscopio',en:'Gyroscope',pt:'Giroscópio'}, filas:[
      {k:'giro', t:{es:'Giroscopio',en:'Gyroscope',pt:'Giroscópio'},
-      h:{es:'Apuntás moviendo el teléfono. SOLO APUNTANDO es lo que usa casi todo el mundo: caminás y girás con el dedo, y cuando levantás la mira el celular te da el ajuste fino. Necesita un teléfono con giroscopio y que le des permiso.',
+      h:{es:'Apuntás moviendo el teléfono. SOLO APUNTANDO es lo que usa casi todo el mundo: caminás y girás con el dedo, y cuando levantás la mira el celular te da el ajuste fino. Si el teléfono NO tiene giroscopio, se usa solo el acelerómetro: ahí funciona como un volante, mantenés el celu ladeado y la vista sigue girando. Se calibra sola al encenderla, con la postura que tengas en ese momento.',
          en:'Aim by moving the phone. ONLY WHILE AIMING is what most players use: you turn with your finger, and once the sights are up the phone gives you the fine adjustment. Needs a phone with a gyroscope and your permission.',
          pt:'Mire movendo o telefone. SÓ MIRANDO é o que quase todos usam. Precisa de giroscópio e da sua permissão.'},
       ops:[['no',CFG_L.no],['ads',{es:'Solo apuntando',en:'Only aiming',pt:'Só mirando'}],['siempre',{es:'Siempre',en:'Always',pt:'Sempre'}]]},
      {tipo:'giro'},
+     {k:'giroCentrar', t:{es:'Recentrar el giroscopio',en:'Re-centre the gyroscope',pt:'Recentrar o giroscópio'},
+      h:{es:'Toma la postura que tenés AHORA como el centro. Sirve sobre todo sin giroscopio, donde se maneja por inclinación: si jugás acostado o con el celu apoyado, recentrá y desde ahí esa es la posición de reposo.',
+         en:'Takes your CURRENT posture as the centre. Mostly useful without a gyroscope, where it steers by tilt.',
+         pt:'Toma a postura ATUAL como o centro. Útil sobretudo sem giroscópio.'},
+      ops:[['ya',{es:'Recentrar',en:'Re-centre',pt:'Recentrar'}]]},
      {k:'sensGiro', t:{es:'Sensibilidad del giroscopio',en:'Gyroscope sensitivity',pt:'Sensibilidade do giroscópio'}, tipo:'sli', min:20, max:400, step:10, suf:'%',
       h:{es:'En 100 % la mira gira lo MISMO que girás el teléfono: un cuarto de vuelta del aparato es un cuarto de vuelta en el juego. Subirla te deja girar más con menos movimiento de muñeca.',
          en:'At 100% the view turns exactly as much as you turn the phone: a quarter turn of the device is a quarter turn in game. Raising it lets you turn more with less wrist movement.',
@@ -11698,6 +11788,7 @@ function cfgSet(k,v){
      permiso solo se puede pedir desde un gesto, y si al arrancar se pidio sin gesto quedo denegado.
      Volver a tocarlo tiene que ser la forma de destrabarlo. */
   if(k==='giro'){ giroModo=CFG.giro||'no'; try{ giroActivar(); }catch(e){} }
+  if(k==='giroCentrar'){ try{ incCentrar(); giroReiniciar(); INC.cal=true; tiroMsg(tl({es:'Centro tomado',en:'Centre set',pt:'Centro definido'}),'#9fe6c0'); }catch(e){} }
   /* El mapa se guardaba en CFG pero el que decide a donde arranca ENTRAR es startWorld, y solo lo
      movia el click en la ficha. Si el valor llegaba por otro lado (una partida guardada, la
      consola) quedaban en desacuerdo y entrabas al mapa viejo. Que los dos salgan del mismo lugar. */
