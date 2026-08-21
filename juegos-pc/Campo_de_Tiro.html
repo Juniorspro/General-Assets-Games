@@ -54,8 +54,13 @@
      ladrillos. Ahora es UN dibujo vectorial con las puntas redondeadas, y ademas mas corta y mas
      junta al centro: 18 px de lado contra 34, brazos de 3,7 px contra 11, y el hueco del medio
      apenas de 2,8 px. Tapa mucho menos y se apunta mejor. */
+  /* EL CUADRADO NEGRO DE LA MIRA. La regla de mas arriba le pone al punto blanco original un
+     box-shadow negro y un border-radius del 50%, o sea un halo redondo alrededor de un punto de
+     6 px. Aca se cambia el fondo, el borde y el radio… pero el BOX-SHADOW quedaba, y sobre una
+     caja de 18x18 con radio 0 eso es un recuadro negro difuso en las cuatro esquinas de la mira.
+     El contorno de la cruz ya lo pone el drop-shadow del ::before, que sigue la forma. */
   #cross{ width:18px; height:18px; margin:-9px; background:transparent; border:0; border-radius:0;
-          transition:opacity .12s linear; }
+          box-shadow:none; transition:opacity .12s linear; }
   #cross::before{ content:''; position:absolute; inset:0;
     background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg stroke='%23fff' stroke-width='1.9' stroke-linecap='round' fill='none'%3E%3Cpath d='M12 3.4V8.1'/%3E%3Cpath d='M12 15.9V20.6'/%3E%3Cpath d='M3.4 12H8.1'/%3E%3Cpath d='M15.9 12H20.6'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='1.05' fill='%23fff'/%3E%3C/svg%3E") 50% 50% / 100% 100% no-repeat;
     filter:drop-shadow(0 0 1.6px rgba(0,0,0,.95)) drop-shadow(0 0 3px rgba(0,0,0,.55)); }
@@ -8801,7 +8806,9 @@ function tiroPostura(dt){
      paseara por el blanco al caminar. Sin apuntar siguen enteros, que es lo que da el carácter. */
   const qADS=1-0.985*adsW;   // apuntando el arma queda practicamente quieta
   const bobY=Math.sin(paso*2.0)*0.019*mov*qADS, bobX=Math.sin(paso)*0.015*mov*qADS, bobZ=-Math.abs(Math.sin(paso))*0.011*mov*qADS;
-  const respY=Math.sin(resp)*0.0065*quieto*qADS, respX=Math.sin(resp*0.63)*0.0042*quieto*qADS;
+  /* la respiracion con la mira puesta baja un 40%: se sigue notando que el arma esta viva pero
+     ya no se le va sola la reticula al blanco */
+  const respY=Math.sin(resp)*0.0039*quieto*qADS, respX=Math.sin(resp*0.63)*0.0025*quieto*qADS;
   const jit=(Math.sin(tJit*11.3)*0.0016+Math.sin(tJit*7.1)*0.0021)*qADS;   // temblor de músculo
   const latV=player.vel.x*Math.cos(player.yaw)-player.vel.z*Math.sin(player.yaw);   // velocidad lateral (para el alabeo)
   // OJO con los términos de deslizada: cuando el arma colgaba del pecho tenían que COMPENSAR que el clip
@@ -8840,7 +8847,7 @@ function tiroPostura(dt){
   // del eje, cada rad de alabeo corre ese agarre 0,22 m. Con 0.16 la mano izquierda perdía el arma 38 mm
   // en el peor frame de la zancada. 0.08 = la mitad, y sigue leyéndose como "el arma se cruza al correr".
   const pRol = _taj*(-0.55) + (ARMA().cac?-0.16:0) - lagY*1.5 - latV*0.022 + Math.sin(paso)*0.020*mov + aSpr*0.08 + sSld*0.10*(player.slideRight?-1:1) + aRel*0.38
-               + sSld*Math.sin(sldFase*31.0)*0.028 + mnu*(-0.14)
+               + sSld*Math.sin(sldFase*31.0)*0.028*(1-0.85*adsW) + mnu*(-0.14)
                + idl*0.52    // idle: lo gira para mirarle el costado DERECHO (ventana de eyección y manija)
                + INS.r*INS.k;
   _euAim.set(pPit,pYaw,pRol,'YXZ'); _qAim.setFromEuler(_euAim);
@@ -8893,7 +8900,7 @@ function tiroPostura(dt){
     //  agarre del hombro IZQUIERDO, _limitarArma tira el fusil hacia atrás y la profundidad de la muñeca
     //  derecha cae de 0.265 a 0.217, o sea adentro del recorte. Medido con +0.100·pitch.)
     .addScaledVector(_cr, _gOjo.x + bobX*(1-0.95*adsW) + respX*(1-0.95*adsW) + aSpr*0.028 + sSld*0.035 - aRel*0.055
-                          + sSld*Math.sin(sldFase*29.0)*0.0075)
+                          + sSld*Math.sin(sldFase*29.0)*0.0075*(1-0.85*adsW))
     // los −0.120 de la deslizada eran compensación pura de un torso caído (lo decía el comentario viejo:
     // "es lo que mantiene el brazo izquierdo por debajo de la lente"). Con el torso erguido y el ojo
     // bajando junto con los hombros, la geometría ojo→hombro es la misma que de pie: no hay nada que
@@ -8901,9 +8908,9 @@ function tiroPostura(dt){
     // esprint: −0.085 (era −0.030). El pitch de esprint gira el arma alrededor del OJO, así que cada rad
     // sube el agarre 0,43 m; con GUN_OJO.y en −0.115 la mano izquierda terminaba sobre la cruceta.
     .addScaledVector(_cu, _gOjo.y + bobY*(1-0.95*adsW) + respY*(1-0.95*adsW) + 0.062*pUp*(1-adsW) - landK*0.55*(1-0.8*adsW) + aSpr*(-0.043) + sSld*(-0.030) + aRel*0.050 + RC.kick*0.02
-                          + sSld*(Math.sin(sldFase*37.0)*0.0065 + Math.sin(sldFase*22.0)*0.0040))
+                          + sSld*(Math.sin(sldFase*37.0)*0.0065 + Math.sin(sldFase*22.0)*0.0040)*(1-0.85*adsW))
     .addScaledVector(_cf, _gOjo.z + bobZ - recBack + aSpr*(-0.055) + sSld*(-0.030) - aRel*0.135
-                          + sSld*Math.sin(sldFase*25.0)*0.0055);
+                          + sSld*Math.sin(sldFase*25.0)*0.0055*(1-0.85*adsW));
   _gIdeal.copy(gunRoot.position);   // ← el ancla IDEAL, antes de que la toque ninguna red de seguridad
   // ---- VENTANA DE SEGURIDAD respecto al OJO (red de seguridad, no la regla principal) ----
   // Con el ancla en el ojo esto normalmente no toca nada; queda para el caso raro en que algún offset
@@ -9187,6 +9194,14 @@ function pitMax(){ return (world==='tiro')?TIRO_PIT_MAX:1.3; }
    recargar, el gatillo, cambiar de arma, curarse, inspeccionar y la camara sobre el hombro. La arena
    quedo afuera cuando se agrego —era una lista de dos— y con eso la arena era un mapa de PvP con 16
    bots donde no se veia el arma ni se podia disparar. Si aparece un cuarto mundo, va aca. */
+function __tiroAlza(){ if(!gunRoot)return null; gunRoot.updateMatrixWorld(true);
+  const p=new THREE.Vector3(0,AK_MIRA_Y,0.004).applyMatrix4(gunRoot.matrixWorld);
+  const n=p.clone().project(camera);
+  const W=renderer.domElement.width, H=renderer.domElement.height;
+  const rel=p.clone().sub(camera.position).applyQuaternion(camera.quaternion.clone().invert());
+  return { ndc:[+n.x.toFixed(4),+n.y.toFixed(4)],
+           px:[Math.round((n.x*0.5+0.5)*W), Math.round((0.5-n.y*0.5)*H)], centro:[W/2,H/2],
+           dist:+(-rel.z).toFixed(3), fov:+camera.fov.toFixed(1), ads:+adsW.toFixed(2) }; }
 function enTiro(){ return world==='tiro'||world==='valle'||world==='arena'; }
 let _pc=false;
 const TCL={w:false,a:false,s:false,d:false};
@@ -9462,6 +9477,26 @@ try{ window.__tiro={
              pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
              off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
   inspIr:()=>insEmpezar(),
+  /* como se ve el apuntado en TERCERA persona: donde queda el alza en pantalla, cuanto salio la
+     camara del hombro, y sobre todo si el TIRO va a donde apunta la mira */
+  tpDiag:()=>{ const a=__tiroAlza();
+    /* a donde pega el tiro: rayo desde la camara hacia adelante */
+    const q=camera.quaternion, dir=new THREE.Vector3(0,0,-1).applyQuaternion(q);
+    const rc=new THREE.Raycaster(camera.position.clone(), dir); rc.far=200; rc.camera=camera;
+    const hit=rc.intersectObjects(scene.children,true).filter(h=>h.object!==gunRoot && !gunRoot.getObjectById(h.object.id))[0];
+    /* y a donde mira el CAÑO */
+    gunRoot.updateMatrixWorld(true);
+    const boca=GUN_MUZZLE.clone().applyMatrix4(gunRoot.matrixWorld);
+    const ejeC=new THREE.Vector3(0,0,-1).applyQuaternion(gunRoot.quaternion);
+    const nB=boca.clone().addScaledVector(ejeC,60).project(camera);
+    const W=renderer.domElement.width, H=renderer.domElement.height;
+    return { vista:camView, camTP:+player.camTP.toFixed(2), adsW:+adsW.toFixed(2), fov:+camera.fov.toFixed(1),
+             alza:a.px, centro:[W/2,H/2],
+             canonEnPantalla:[Math.round((nB.x*0.5+0.5)*W), Math.round((0.5-nB.y*0.5)*H)],
+             impacto: hit? [+hit.point.x.toFixed(1),+hit.point.y.toFixed(1),+(hit.point.z-ARE_GZ).toFixed(1)] : null,
+             distImpacto: hit? +hit.distance.toFixed(1) : null }; },
+  tpVista:(v)=>{ camView=v?'tp':'fp'; return camView; },
+  tpCam:()=>+player.camTP.toFixed(3),
   vendMover:(i,x,z)=>{ const v=ARE_VEND[i|0]; if(!v) return 'no hay';
     v.x=x; v.z=z; v.g.position.set(x,0,ARE_GZ+z); v.g.rotation.y=Math.atan2(x,z);
     v.g.updateMatrixWorld(true); return {p:[x,z]}; },
@@ -10054,14 +10089,7 @@ try{ window.__tiro={
   /* ¿DONDE CAE EL ALZA EN PANTALLA? La cruz del arma vive en el punto local (0, AK_MIRA_Y, 0.004).
      Proyectarlo da el error de punteria en pixeles, que es lo unico que sirve para alinear la mira:
      a ojo, sobre un render oscuro, no se distingue el alza del cargador. */
-  alza:()=>{ if(!gunRoot)return null; gunRoot.updateMatrixWorld(true);
-    const p=new THREE.Vector3(0,AK_MIRA_Y,0.004).applyMatrix4(gunRoot.matrixWorld);
-    const n=p.clone().project(camera);
-    const W=renderer.domElement.width, H=renderer.domElement.height;
-    const rel=p.clone().sub(camera.position).applyQuaternion(camera.quaternion.clone().invert());
-    return { ndc:[+n.x.toFixed(4),+n.y.toFixed(4)],
-             px:[Math.round((n.x*0.5+0.5)*W), Math.round((0.5-n.y*0.5)*H)], centro:[W/2,H/2],
-             dist:+(-rel.z).toFixed(3), fov:+camera.fov.toFixed(1), ads:+adsW.toFixed(2) }; },
+  alza:()=>__tiroAlza(),
   esq:()=>{ const q=camera.quaternion.clone().invert(), P=new THREE.Vector3(), o={};
     bodyRoot.updateMatrixWorld(true);
     const g=(n,b)=>{ if(!b)return; b.getWorldPosition(P); o[n]=P.clone().sub(camera.position).applyQuaternion(q).toArray().map(v=>+v.toFixed(3)); };
@@ -10996,7 +11024,11 @@ function update(dt){
   // la velocidad. Es lo que hace que en primera persona se sienta el raspón contra el piso.
   let shP=0, shY=0, shR=0;
   if(aSldCam>0.002){
-    const k=aSldCam*Math.min(1, Math.hypot(player.vel.x,player.vel.z)/RUN)*(0.55+0.45*sldSac);
+    /* El raspon contra el piso esta bien que se sienta, pero era demasiado: deslizarse mareaba y
+       apuntando era imposible seguir a nadie. Baja un tercio en general, y APUNTANDO se apaga al
+       85% — con la mira puesta el temblor no agrega nada, solo corre el punto rojo del blanco. */
+    const kAds=1-0.85*adsW;
+    const k=aSldCam*Math.min(1, Math.hypot(player.vel.x,player.vel.z)/RUN)*(0.55+0.45*sldSac)*0.64*kAds;
     shP=(Math.sin(sldFase*33.0)*0.0130 + Math.sin(sldFase*19.7)*0.0075)*k;
     shY=(Math.sin(sldFase*27.3+1.1)*0.0115)*k;
     shR=(Math.sin(sldFase*23.1+0.6)*0.0340 + Math.sin(sldFase*41.0)*0.0090)*k;
@@ -11006,8 +11038,23 @@ function update(dt){
   /* APUNTAR SIEMPRE SE VE EN 1ª PERSONA. En 3ª la cámara está detrás del hombro y la mira del
      fusil queda descolocada de donde pega el tiro: se apuntaba a ojo. Al apretar APUNTAR la cámara
      entra al ojo (camTP baja a 0 con el mismo suavizado de siempre) y al soltar vuelve al hombro. */
-  const tpTarget=(camView==='tp' && !(adsFpForzado && adsW>0.25))?1:0;   // la deslizada NO sale de 1ª persona (sólo el modo 'tp' manual)
-  player.camTP += (tpTarget-player.camTP)*Math.min(1,9*dt);
+  /* APUNTANDO EN TERCERA, LA CAMARA Y EL ARMA TIENEN QUE VIAJAR JUNTAS.
+     Antes eran dos cosas sueltas: el arma se alineaba al OJO con adsW (rapido) y la camara salia
+     del hombro con su propio resorte a 9/s (mas lento). Durante el medio segundo del cambio el
+     fusil ya estaba apuntando a la lente pero la lente todavia estaba atras del hombro, asi que la
+     mira se iba de cuadro y volvia de un saque. Medido: el alza pasaba por y=283 → 211 → 117 → 301
+     en cuatro muestras, o sea se iba 180 px arriba y caia.
+     Ahora la camara NO tiene resorte propio: es funcion de adsW, la misma variable que mueve el
+     arma. Salen y llegan juntas por construccion. El x1.5 hace que la camara llegue al ojo un poco
+     ANTES de que el arma termine de alinearse, que es el orden que se siente bien: primero te
+     asomas a la mira y despues el arma se asienta. */
+  let tpTarget;
+  if(camView!=='tp') tpTarget=0;
+  else if(adsFpForzado) tpTarget=1-Math.min(1, adsW*1.5);
+  else tpTarget=1;
+  /* el resorte queda solo para el cambio de vista (fp<->tp), que sigue siendo un boton */
+  const _tpK = (camView==='tp' && adsFpForzado && adsW>0.02) ? 1 : Math.min(1,9*dt);
+  player.camTP += (tpTarget-player.camTP)*_tpK;
   if(player.camTP>0.02){
     const cx=player.pos.x, cy=player.pos.y+1.55, cz=player.pos.z;        // pivote a la altura de los hombros
     const _yv=player.yaw+(window.__tpOff||0);                            // __tpOff permite orbitar la 3ª persona (revisión del agarre)
