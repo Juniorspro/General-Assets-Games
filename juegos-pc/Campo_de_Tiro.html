@@ -631,6 +631,13 @@
     box-shadow:0 6px 20px rgba(160,40,10,.45); display:none; pointer-events:none; }
   #partAviso.show{ display:block; animation:avPulso 1.1s ease-in-out infinite; }
   @keyframes avPulso{ 0%,100%{ opacity:.75 } 50%{ opacity:1 } }
+  /* en que sala estas y con cuantos: en la arena es lo unico que hace falta saber */
+  #areSala{ position:fixed; left:50%; top:calc(6px + var(--safe-t)); transform:translateX(-50%); z-index:21;
+    display:none; padding:5px 12px; border-radius:11px; font-size:11.5px; font-weight:900; letter-spacing:.03em;
+    color:#e7f1fa; background:rgba(10,18,28,.62); border:1.2px solid rgba(255,255,255,.13);
+    backdrop-filter:blur(6px); pointer-events:none; }
+  body.enArena #areSala{ display:block; }
+  body.sinhud #areSala{ display:none !important; }
   #partFeed{ position:fixed; right:12px; top:calc(176px + var(--safe-t)); z-index:21; width:min(46vw,230px);
     display:flex; flex-direction:column; gap:4px; align-items:flex-end; pointer-events:none; }
   .pfLinea{ padding:4px 9px; border-radius:9px; font-size:11px; font-weight:800; color:#e9f1f8;
@@ -700,6 +707,7 @@
     <div class="phCaja"><i>BAJAS</i><span id="partBajas">0</span></div>
   </div>
   <div id="partAviso">FUERA DE LA ZONA</div>
+  <div id="areSala">SALA 1</div>
   <div id="partFeed"></div>
   <div id="hitMark"></div>
   <div id="muerte"><b>TE MATARON</b><span id="muerteQ">reapareciendo…</span></div>
@@ -862,21 +870,21 @@ const LANG={
     st_idle:'quieto',st_walk:'caminar',st_run:'correr',st_air:'en el aire',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'trepar',st_roll:'voltereta',
     m_frutiger:'🌱 Mundo Frutiger — explorá el césped',m_crystal:'🔷 Obby de Cristal — llegá a la meta',m_crystaldone:'🔷 ¡Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — ¡reinicio!',
     m_dream:'🌫️ Dream Core — un suburbio que no termina',m_back:'🟡 Backrooms — encontrá la salida',m_backdone:'🟡 ¡Saliste de las Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — llegá a la meta',m_pooldone:'💧 ¡Completaste los Poolrooms!',m_level1done:'¡NIVEL 1 COMPLETO! 🎉',
-    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Saltá las plataformas hasta la meta',void:'El Vacío',q_void:'Sobreviví las fases del obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entrá al árbol correcto y subí el obby',fase:'Fase',void_die:'Caíste · vuelve a cruzar el espacio',void_best:'mejor',void_reset:'¡Vacío regenerado desde cero!',void_lvl:'El Vacío ∞',skin_unlock:'¡Skin desbloqueada!',messi_got:'¡CONSEGUISTE A MESSI!',messi_fail:'No conseguiste a Messi',skins:'Mochila de skins',skin_on:'puesta',nombre:'TU NOMBRE',send:'ENVIAR',names:'Nombres',pausa:'Pausa',resumen:'▶ Resumen',ajustes:'⚙ Ajustes',salir:'✖ Salir',clasif:'CLASIFICACIÓN · MEJORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Clasificación',cerrar:'Cerrar',vista:'VISTA',cam_fp:'1ª persona',cam_tp:'3ª persona',empezar:'EMPEZAR EN',start_lvl1:'🏙️ Nivel 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLES · TAMAÑO',control_op:'CONTROLES · OPACIDAD',ctl_sm:'Chico',ctl_md:'Normal',ctl_lg:'Grande',op_low:'Baja',op_mid:'Media',op_full:'Llena',hud_lbl:'HUD · MANOS',hand_r:'Diestro',hand_l:'Zurdo',hud_on:'HUD visible',hud_off:'HUD oculto',mover_hud:'✥ Mover controles',mover_hint:'✥ Arrastrá los controles a donde quieras',listo:'✓ Listo',np_title:'👋 ¿Cómo te llamás?',np_sub:'así te ven los demás jugadores',cfg_pers:'✥ Personalizar botones',cfg_reset:'↺ Restablecer',cfg_unlock:'🔓 Desbloquear',ct_acab:'ACABADO',slot_vacia:'vacía',np_go:'Continuar ▶'},
+    mp_join:'se unió',mp_conn:'conectando…',mp_online:'en línea',mp_off:'desconectado',mp_nonet:'sin red',mp_err:'error',mp_chat:'Mensaje:',mp_nochat:'(sin conexión)',space:'Base Espacial',q_parkour:'Llegá al portal',q_frutiger:'Entrá a la esfera del árbol',q_crystal:'Llegá a la meta',q_dream:'Encontrá la casa con la puerta abierta',q_back:'Escapá pasando el obby',q_pool:'Llegá a la meta sin caer al agua',q_space:'Saltá las plataformas hasta la meta',void:'El Vacío',q_void:'Sobreviví las fases del obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entrá al árbol correcto y subí el obby',fase:'Fase',void_die:'Caíste · vuelve a cruzar el espacio',void_best:'mejor',void_reset:'¡Vacío regenerado desde cero!',void_lvl:'El Vacío ∞',skin_unlock:'¡Skin desbloqueada!',messi_got:'¡CONSEGUISTE A MESSI!',messi_fail:'No conseguiste a Messi',skins:'Mochila de skins',skin_on:'puesta',nombre:'TU NOMBRE',send:'ENVIAR',names:'Nombres',pausa:'Pausa',resumen:'▶ Resumen',ajustes:'⚙ Ajustes',salir:'✖ Salir',clasif:'CLASIFICACIÓN · MEJORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Clasificación',cerrar:'Cerrar',vista:'VISTA',cam_fp:'1ª persona',cam_tp:'3ª persona',empezar:'EMPEZAR EN',start_lvl1:'🏙️ Nivel 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLES · TAMAÑO',control_op:'CONTROLES · OPACIDAD',ctl_sm:'Chico',ctl_md:'Normal',ctl_lg:'Grande',op_low:'Baja',op_mid:'Media',op_full:'Llena',hud_lbl:'HUD · MANOS',hand_r:'Diestro',hand_l:'Zurdo',hud_on:'HUD visible',hud_off:'HUD oculto',mover_hud:'✥ Mover controles',mover_hint:'✥ Arrastrá los controles a donde quieras',listo:'✓ Listo',np_title:'👋 ¿Cómo te llamás?',np_sub:'así te ven los demás jugadores',cfg_pers:'✥ Personalizar botones',cfg_reset:'↺ Restablecer',cfg_unlock:'🔓 Desbloquear',ct_acab:'ACABADO',slot_vacia:'vacía',arena:'La Arena',q_arena:'Tiroteo libre · tienda en cada esquina',np_go:'Continuar ▶'},
   en:{title:'🌱 PARKOUR · FRUTIGER',sub:'set your name and play',lvl:'LEVEL',gfx:'GRAPHICS',low:'Low',med:'Medium',high:'High',play:'PLAY ▶',idioma:'LANGUAGE',sens:'SENSITIVITY',
     parkour:'Level 1 · Parkour',frutiger:'Frutiger World',crystal:'Crystal Obby',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'JUMP',slide:'SLIDE',roll:'ROLL',
     st_idle:'idle',st_walk:'walk',st_run:'run',st_air:'in air',st_slide:'slide',st_wallrun:'wall-run',st_climb:'climb',st_roll:'roll',
     m_frutiger:'🌱 Frutiger World — explore the grass',m_crystal:'🔷 Crystal Obby — reach the goal',m_crystaldone:'🔷 Obby complete! → Dream Core',m_crystalreset:'🔷 Crystal Obby — restart!',
     m_dream:'🌫️ Dream Core — a suburb that never ends',m_back:'🟡 Backrooms — find the exit',m_backdone:'🟡 You escaped the Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — reach the goal',m_pooldone:'💧 You cleared the Poolrooms!',m_level1done:'LEVEL 1 COMPLETE! 🎉',
-    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Jump the platforms to the goal',void:'The Void',q_void:'Survive the endless obby phases',fsurv:'Frutiger Aero Survival',q_fsurv:'Enter the right tree and climb the obby',fase:'Phase',void_die:'You fell · cross space again',void_best:'best',void_reset:'Void regenerated from scratch!',void_lvl:'The Void ∞',skin_unlock:'Skin unlocked!',messi_got:'YOU GOT MESSI!',messi_fail:"You didn't get Messi",skins:'Skin backpack',skin_on:'on',nombre:'YOUR NAME',send:'SEND',names:'Names',pausa:'Paused',resumen:'▶ Resume',ajustes:'⚙ Settings',salir:'✖ Exit',clasif:'LEADERBOARD · BEST PHASES',ajustes2:'⚙ Settings',clasif_btn:'🏆 Leaderboard',cerrar:'Close',vista:'VIEW',cam_fp:'1st person',cam_tp:'3rd person',empezar:'START AT',start_lvl1:'🏙️ Level 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLS · SIZE',control_op:'CONTROLS · OPACITY',ctl_sm:'Small',ctl_md:'Normal',ctl_lg:'Large',op_low:'Low',op_mid:'Mid',op_full:'Full',hud_lbl:'HUD · HANDS',hand_r:'Right',hand_l:'Left',hud_on:'HUD on',hud_off:'HUD off',mover_hud:'✥ Move controls',mover_hint:'✥ Drag the controls anywhere',listo:'✓ Done',np_title:'👋 What is your name?',np_sub:'this is how other players see you',cfg_pers:'✥ Customize buttons',cfg_reset:'↺ Reset',cfg_unlock:'🔓 Unlock',ct_acab:'FINISH',slot_vacia:'empty',np_go:'Continue ▶'},
+    mp_join:'joined',mp_conn:'connecting…',mp_online:'online',mp_off:'disconnected',mp_nonet:'no network',mp_err:'error',mp_chat:'Message:',mp_nochat:'(offline)',space:'Space Base',q_parkour:'Reach the portal',q_frutiger:'Enter the tree sphere',q_crystal:'Reach the goal',q_dream:'Find the house with the open door',q_back:'Escape by clearing the obby',q_pool:'Reach the goal without falling in',q_space:'Jump the platforms to the goal',void:'The Void',q_void:'Survive the endless obby phases',fsurv:'Frutiger Aero Survival',q_fsurv:'Enter the right tree and climb the obby',fase:'Phase',void_die:'You fell · cross space again',void_best:'best',void_reset:'Void regenerated from scratch!',void_lvl:'The Void ∞',skin_unlock:'Skin unlocked!',messi_got:'YOU GOT MESSI!',messi_fail:"You didn't get Messi",skins:'Skin backpack',skin_on:'on',nombre:'YOUR NAME',send:'SEND',names:'Names',pausa:'Paused',resumen:'▶ Resume',ajustes:'⚙ Settings',salir:'✖ Exit',clasif:'LEADERBOARD · BEST PHASES',ajustes2:'⚙ Settings',clasif_btn:'🏆 Leaderboard',cerrar:'Close',vista:'VIEW',cam_fp:'1st person',cam_tp:'3rd person',empezar:'START AT',start_lvl1:'🏙️ Level 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLS · SIZE',control_op:'CONTROLS · OPACITY',ctl_sm:'Small',ctl_md:'Normal',ctl_lg:'Large',op_low:'Low',op_mid:'Mid',op_full:'Full',hud_lbl:'HUD · HANDS',hand_r:'Right',hand_l:'Left',hud_on:'HUD on',hud_off:'HUD off',mover_hud:'✥ Move controls',mover_hint:'✥ Drag the controls anywhere',listo:'✓ Done',np_title:'👋 What is your name?',np_sub:'this is how other players see you',cfg_pers:'✥ Customize buttons',cfg_reset:'↺ Reset',cfg_unlock:'🔓 Unlock',ct_acab:'FINISH',slot_vacia:'empty',arena:'The Arena',q_arena:'Free-for-all · a shop in every corner',np_go:'Continue ▶'},
   pt:{title:'🌱 PARKOUR · FRUTIGER',sub:'ponha seu nome e jogue',lvl:'NÍVEL',gfx:'GRÁFICOS',low:'Baixo',med:'Médio',high:'Alto',play:'JOGAR ▶',idioma:'IDIOMA',sens:'SENSIBILIDADE',
     parkour:'Nível 1 · Parkour',frutiger:'Mundo Frutiger',crystal:'Obby de Cristal',dreamcore:'Dream Core',backrooms:'Backrooms',
     jump:'PULAR',slide:'DESLIZAR',roll:'ROLAR',
     st_idle:'parado',st_walk:'andar',st_run:'correr',st_air:'no ar',st_slide:'deslizar',st_wallrun:'wall-run',st_climb:'escalar',st_roll:'cambalhota',
     m_frutiger:'🌱 Mundo Frutiger — explore a grama',m_crystal:'🔷 Obby de Cristal — chegue à meta',m_crystaldone:'🔷 Obby completo! → Dream Core',m_crystalreset:'🔷 Obby de Cristal — reinício!',
     m_dream:'🌫️ Dream Core — um subúrbio sem fim',m_back:'🟡 Backrooms — ache a saída',m_backdone:'🟡 Você saiu das Backrooms!',poolrooms:'Poolrooms',m_pool:'💧 Poolrooms — chegue à meta',m_pooldone:'💧 Você completou as Poolrooms!',m_level1done:'NÍVEL 1 COMPLETO! 🎉',
-    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Pule as plataformas até a meta',void:'O Vazio',q_void:'Sobreviva às fases do obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entre na árvore certa e suba o obby',fase:'Fase',void_die:'Você caiu · cruze o espaço de novo',void_best:'melhor',void_reset:'Vazio regenerado do zero!',void_lvl:'O Vazio ∞',skin_unlock:'Skin desbloqueada!',messi_got:'VOCÊ CONSEGUIU MESSI!',messi_fail:'Você não conseguiu o Messi',skins:'Mochila de skins',skin_on:'usando',nombre:'SEU NOME',send:'ENVIAR',names:'Nomes',pausa:'Pausa',resumen:'▶ Retomar',ajustes:'⚙ Ajustes',salir:'✖ Sair',clasif:'CLASSIFICAÇÃO · MELHORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Classificação',cerrar:'Fechar',vista:'VISTA',cam_fp:'1ª pessoa',cam_tp:'3ª pessoa',empezar:'COMEÇAR EM',start_lvl1:'🏙️ Nível 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLES · TAMANHO',control_op:'CONTROLES · OPACIDADE',ctl_sm:'Pequeno',ctl_md:'Normal',ctl_lg:'Grande',op_low:'Baixa',op_mid:'Média',op_full:'Cheia',hud_lbl:'HUD · MÃOS',hand_r:'Destro',hand_l:'Canhoto',hud_on:'HUD visível',hud_off:'HUD oculto',mover_hud:'✥ Mover controles',mover_hint:'✥ Arraste os controles pra onde quiser',listo:'✓ Pronto',np_title:'👋 Como te chamas?',np_sub:'é assim que os outros te veem',cfg_pers:'✥ Personalizar botões',cfg_reset:'↺ Restaurar',cfg_unlock:'🔓 Desbloquear',ct_acab:'ACABAMENTO',slot_vacia:'vazia',np_go:'Continuar ▶'}
+    mp_join:'entrou',mp_conn:'conectando…',mp_online:'online',mp_off:'desconectado',mp_nonet:'sem rede',mp_err:'erro',mp_chat:'Mensagem:',mp_nochat:'(offline)',space:'Base Espacial',q_parkour:'Chegue ao portal',q_frutiger:'Entre na esfera da árvore',q_crystal:'Chegue à meta',q_dream:'Ache a casa com a porta aberta',q_back:'Escape passando o obby',q_pool:'Chegue à meta sem cair na água',q_space:'Pule as plataformas até a meta',void:'O Vazio',q_void:'Sobreviva às fases do obby infinito',fsurv:'Frutiger Aero Survival',q_fsurv:'Entre na árvore certa e suba o obby',fase:'Fase',void_die:'Você caiu · cruze o espaço de novo',void_best:'melhor',void_reset:'Vazio regenerado do zero!',void_lvl:'O Vazio ∞',skin_unlock:'Skin desbloqueada!',messi_got:'VOCÊ CONSEGUIU MESSI!',messi_fail:'Você não conseguiu o Messi',skins:'Mochila de skins',skin_on:'usando',nombre:'SEU NOME',send:'ENVIAR',names:'Nomes',pausa:'Pausa',resumen:'▶ Retomar',ajustes:'⚙ Ajustes',salir:'✖ Sair',clasif:'CLASSIFICAÇÃO · MELHORES FASES',ajustes2:'⚙ Ajustes',clasif_btn:'🏆 Classificação',cerrar:'Fechar',vista:'VISTA',cam_fp:'1ª pessoa',cam_tp:'3ª pessoa',empezar:'COMEÇAR EM',start_lvl1:'🏙️ Nível 1',start_frutiger:'🌳 Frutiger',controles:'CONTROLES · TAMANHO',control_op:'CONTROLES · OPACIDADE',ctl_sm:'Pequeno',ctl_md:'Normal',ctl_lg:'Grande',op_low:'Baixa',op_mid:'Média',op_full:'Cheia',hud_lbl:'HUD · MÃOS',hand_r:'Destro',hand_l:'Canhoto',hud_on:'HUD visível',hud_off:'HUD oculto',mover_hud:'✥ Mover controles',mover_hint:'✥ Arraste os controles pra onde quiser',listo:'✓ Pronto',np_title:'👋 Como te chamas?',np_sub:'é assim que os outros te veem',cfg_pers:'✥ Personalizar botões',cfg_reset:'↺ Restaurar',cfg_unlock:'🔓 Desbloquear',ct_acab:'ACABAMENTO',slot_vacia:'vazia',arena:'A Arena',q_arena:'Tiroteio livre · loja em cada canto',np_go:'Continuar ▶'}
 };
 // claves del CAMPO DE TIRO
 Object.assign(LANG.es,{ title:'🎯 CAMPO DE TIRO', sub:'poné tu nombre y entrá', tiro:'Campo de Tiro',
@@ -2242,7 +2250,8 @@ function tiroDrawBoard(){ if(!tiroBoardCv)return; const g=tiroBoardCv.getContext
   tiroBoardTex.needsUpdate=true; }
 
 /* ---- entrar al campo de tiro ---- */
-function enterTiro(){ if(world==='tiro')return; world='tiro'; grassMode=false; dreamMode=false; discover('tiro');
+function enterTiro(){ if(world==='tiro')return; document.body.classList.remove('enArena');
+  if(typeof areGroup!=='undefined') areGroup.visible=false; world='tiro'; grassMode=false; dreamMode=false; discover('tiro');
   try{ alcModo(false); alcSol(false); skyMesh.scale.setScalar(1); }catch(e){}
   buildTiro(); tiroWire();
   tiroGroup.visible=true;
@@ -7578,6 +7587,9 @@ function vcMapaMostrar(on){
    asi no se cambia de arma por caminar al lado de algo, que es lo que pasa con el botin automatico. */
 let _btnCerca=null;
 function alcBotinTick(){
+  /* En la arena el boton de RECOGER atiende el perchero de la tienda en vez de las cajas de la
+     isla: es el mismo gesto y el mismo boton, cambia de donde sale el arma. */
+  if(world==='arena'){ areTiendaTick(); return; }
   const b=alcBotinCerca(), el=document.getElementById('bTomar');
   _btnCerca=b;
   if(!el) return;
@@ -7596,7 +7608,26 @@ function alcBotinTick(){
   if(!hay) _tomAuto=false;
 }
 let _tomAuto=false;
+function areTiendaTick(){
+  const t=areTomaCerca(), el=document.getElementById('bTomar');
+  _areToma=t;
+  if(!el) return;
+  const hay=!!t && !PVP.muerto;
+  if(el.dataset.on!==(hay?'1':'0')){ el.dataset.on=hay?'1':'0'; el.classList.toggle('show',hay); }
+  if(hay){ const em=el.querySelector('em'); if(em) em.textContent=t.n;
+    el.style.setProperty('--cal','#ffd08a'); }
+}
+let _areToma=null;
+function areTomar(){
+  const t=_areToma; if(!t) return false;
+  const i=ARSENAL.findIndex(o=>o.id===t.arma); if(i<0) return false;
+  slotGuardarArma(i,null);
+  tiroRel=0; try{ tiroHUD(); }catch(e){}
+  tiroSnd('tomar'); try{ tiroMsg(t.n.toUpperCase(),'#ffd08a'); }catch(e){}
+  return true;
+}
 function alcTomar(){
+  if(world==='arena') return areTomar();
   const b=_btnCerca; if(!b||b.abierta) return false;
   alcBotinAbrir(b);
   if(b.item){
@@ -7701,7 +7732,8 @@ function buildAlc(){ if(alcBuilt)return; alcBuilt=true;
   try{ console.log('Valle Ceniza:',els.length,'elementos →',n,'mallas,',ALC_COL.length,'colisiones, vegetación',JSON.stringify(veg),'· corridos de la calzada: arboles',ALC_ARB_MOV,'cajas',ALC_BOT_MOV,'props',ALC_PROP_VIA,'· arboles descartados',ALC_ARB_FUERA,
     '· props apoyados',ALC_APOY,'· props sobre el agua descartados',ALC_VOLADO); }catch(e){} }
 
-function enterAlc(){ if(world==='valle')return; world='valle'; grassMode=false; dreamMode=false; islaMode=true; discover('valle');
+function enterAlc(){ if(world==='valle')return; document.body.classList.remove('enArena');
+  if(typeof areGroup!=='undefined') areGroup.visible=false; world='valle'; grassMode=false; dreamMode=false; islaMode=true; discover('valle');
   buildAlc(); tiroWire(); alcSol(true);
   // la isla mide 500 m de punta a punta: con el plano lejano de la galería (320 m) se cortaba al medio
   if(camera.far<900){ camera.far=900; camera.updateProjectionMatrix(); }
@@ -8932,6 +8964,19 @@ try{ window.__tiro={
   botines:()=>({total:ALC_BOTIN.length, armas:ALC_BOTIN.filter(q=>!q.item).length,
                 items:ALC_BOTIN.filter(q=>q.item).length,
                 porItem:ALC_BOTIN.reduce((o,q)=>{ if(q.item)o[q.item]=(o[q.item]||0)+1; return o; },{})}),
+  arena:()=>{ if(world!=='arena') enterArena();
+    return {mundo:world, tiendas:ARE_TOMA.length, mallas:areGroup.children.length,
+            col:colliders.length, bots:BOTS.length, meta:BOT_META, sala:salaN,
+            pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ARE_GZ).toFixed(1)]}; },
+  areTP:(x,z,y,yaw,pit)=>{ player.pos.set(x,(y==null?1.2:y),ARE_GZ+z);
+    if(yaw!=null){ player.yaw=yaw; player.faceYaw=yaw; player.pitch=pit||0; }
+    player.vel.set(0,0,0); player.vy=0; return {p:[x,y,z]}; },
+  areToma:()=>{ const t=areTomaCerca(); return t? {arma:t.arma,n:t.n,p:[+t.x.toFixed(1),+t.z.toFixed(1)]} : null; },
+  areIr:(i)=>{ const t=ARE_TOMA[i|0]; if(!t) return 'no hay';
+    player.pos.set(t.x,1.2,ARE_GZ+t.z); const q=areTomaCerca();
+    return {puesto:t.n, detecta:q?q.n:null}; },
+  sala:()=>({n:salaN, cupo:SALA_CUPO, reales:salaReales(), meta:BOT_META, bots:BOTS.length,
+             room:MP.room, texto:(document.getElementById('areSala')||{}).textContent}),
   cfgSec:id=>{ const b=document.querySelector('[data-sec="'+id+'"]'); if(b)b.click();
     return {sec:id, filas:document.querySelectorAll('#cfgMain .cfgSec.on .cfgRow').length,
             fichas:document.querySelectorAll('#cfgMain .cfgSec.on .cfgCard').length}; },
@@ -9263,7 +9308,8 @@ try{ window.__tiro={
     porTier:ALC_BOTIN.reduce((o,b)=>{o[b.tier]=(o[b.tier]||0)+1;return o;},{}),
     cerca:(()=>{ const b=alcBotinCerca(); return b?{arma:b.arma,tier:b.tier,p:[b.x,+b.y.toFixed(1),b.z]}:null; })(),
     mallas:alcTapas?1:0 }),
-  tomar:()=>{ const b=alcBotinCerca(); if(!b) return 'sin caja cerca'; _btnCerca=b; const ok=alcTomar(); return ok?{arma:ARMA().id,mag:TIRO_MAG}:'no'; },
+  tomar:()=>{ if(world==='arena'){ areTiendaTick(); const ok=alcTomar(); return ok?{arma:ARMA().id,mag:TIRO_MAG}:'sin puesto cerca'; }
+    const b=alcBotinCerca(); if(!b) return 'sin caja cerca'; _btnCerca=b; const ok=alcTomar(); return ok?{arma:ARMA().id,mag:TIRO_MAG}:'no'; },
   arsenal:()=>ARSENAL.map(o=>({id:o.id,n:o.n,cat:o.cat})),
   // probar el daño y la muerte sin necesitar un segundo cliente
   pvp:(d)=>{ if(d==null) return {vida:+PVP.vida.toFixed(1),muerto:PVP.muerto,bajas:PVP.bajas,muertes:PVP.muertes,cajas:_mpCajas.length};
@@ -10401,7 +10447,10 @@ const VOID_TRACKS=['amb3','amb4','amb5'];   // varias músicas para el VACÍO (r
 function voidMusic(){ let k; do{ k=VOID_TRACKS[Math.floor(Math.random()*VOID_TRACKS.length)]; }while(VOID_TRACKS.length>1 && k===AUD.ambKey); ambient(k); }
 
 /* ===================== Único mundo: el campo de tiro ===================== */
-function enterCity(){ enterTiro(); }   // alias: el resto del código pedía 'city' para volver al mundo
+function enterCity(){ enterTiro(); }
+/* el boton ENTRAR manda al mapa elegido en la ficha MAPA */
+function entrarMapa(){ if(startWorld==='arena') enterArena();
+  else if(startWorld==='valle') enterAlc(); else enterTiro(); }   // alias: el resto del código pedía 'city' para volver al mundo
 
 /* ===================== MENÚ DE INICIO ===================== */
 const menuEl=document.getElementById('menu');
@@ -10482,8 +10531,9 @@ function aplicarSkin(){ const k=TRAJES[skinSel]; if(!CU_MAT.cuerpo)return;
 let _equipOk=false;
 function equiparSiHace(){ if(_equipOk)return; if(!CU_MAT.cuerpo||!AKMAT.madera)return;
   _equipOk=true; aplicarArma(); aplicarSkin(); aplicarAcabado(); }
-const MAPAS=[{k:'tiro', n:'Campo de Tiro',   d:'galería cubierta · 45 m de tiro'},
-             {k:'valle', n:'Valle Ceniza', d:'mapa battle royale · ocho sectores · 460 × 400 m'}];
+const MAPAS=[{k:'arena', n:'La Arena',       d:'PvP tranquilo · 16 rivales · tienda en cada esquina'},
+             {k:'tiro',  n:'Campo de Tiro',  d:'galería cubierta · 45 m de tiro'},
+             {k:'valle', n:'Valle Ceniza',   d:'battle royale · ocho sectores · 460 × 400 m'}];
 function aplicarMapa(){ const m=MAPAS.filter(o=>o.k===startWorld)[0]||MAPAS[0];
   const el=document.getElementById('ldMapaN'); if(el)el.textContent=m.n;
   try{ localStorage.setItem('ct_mapa',startWorld); }catch(e){} }
@@ -10518,7 +10568,7 @@ const mNameEl=document.getElementById('mName');   // el campo de nombre se cable
 document.querySelectorAll('#mQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); document.querySelectorAll('#mQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; }));
 document.querySelectorAll('#mLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); applyLang(b.dataset.lang); }));   // selector de idioma
 let startWorld='tiro';   // se elige en la ficha MAPA del menú
-try{ const g=localStorage.getItem('ct_mapa'); if(g==='tiro'||g==='valle') startWorld=g; }catch(e){}
+try{ const g=localStorage.getItem('ct_mapa'); if(g==='tiro'||g==='valle'||g==='arena') startWorld=g; }catch(e){}
 function renderLevels(){ const el=document.getElementById('mLevels'); if(!el)return;
   if(!LEVELS.some(l=>l.key===startWorld)) startWorld='city';
   el.innerHTML=LEVELS.map(l=>{ const nm=l[lang]||l.es; const sel=(startWorld===l.key)?' sel':'';   // TODOS los niveles accesibles/gratis desde el inicio
@@ -11105,7 +11155,9 @@ document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)ret
   startLevel(startWorld);   // arranca en el nivel elegido del carrusel (descubierto)
   clock.getDelta();   // descartar el dt acumulado del menú
 });
-function startLevel(k){ if((k||startWorld)==='valle') enterAlc(); else enterTiro(); try{ equiparSiHace(); }catch(e){} }
+function startLevel(k){ const w=(k||startWorld);
+  if(w==='valle') enterAlc(); else if(w==='arena') enterArena(); else enterTiro();
+  try{ equiparSiHace(); }catch(e){} }
 
 // cámara cinemática del menú: orbita adentro del campo de tiro (el mismo mundo que vas a jugar, difuminado por CSS)
 /* MENÚ: el personaje es el protagonista, como en COD Mobile. Queda de pie con el AK, con su
@@ -11213,6 +11265,7 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
     if(menuLuz&&menuLuz.intensity>0){ menuLuz.intensity=0; menuLuz2.intensity=0; } }
   if(scene.fog){ if(_lastWorld!==world){ _lastWorld=world; _worldFog=scene.fog.far; }   // captura la niebla base al entrar a cada mundo
     const wf=(quality==='low')?Math.min(_worldFog,camera.far):_worldFog; if(scene.fog.far!==wf)scene.fog.far=wf; }   // BAJO: niebla tapa justo en el corte del plano lejano; medio/alto restauran la base
+  if(world==='arena'){ try{ areTiendaTick(); }catch(e){} }
   if(islaMode){ try{ alcTick(dt); }catch(e){} }   // el oleaje de la bahía
   try{ ambTick(dt); }catch(e){}                   // viento del valle + latido con poca vida
   try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player) — sigue latiendo aunque esté en pausa
@@ -11609,6 +11662,7 @@ function pvpMorir(){
   /* En el valle morir TERMINA la partida: es un battle royale, no un tiroteo con reaparicion. En la
      galeria se sigue reapareciendo, que es para lo que esta. */
   if(world==='valle' && typeof PART!=='undefined' && PART.activa){ try{ partTerminar(false); }catch(e){} }
+  if(world==='arena') PVP.tRes=3.2;               // en la arena se vuelve, no se pierde
   document.body.classList.add('muerto');
   const q=document.getElementById('muerteQ'); if(q) q.textContent='te mató '+PVP.ultimo+' · reapareciendo…';
   if(MP.on&&MP.client) MP.client.publish(MP.room+'/action', JSON.stringify({id:MP.id,type:'kill',by:PVP.ultimo,name:MP.name}),{qos:0});
@@ -11662,6 +11716,216 @@ function mpTick(dt){
   mpPublishState();
 }
 
+
+
+/* ===================== LA ARENA =====================
+   Un mapa tranquilo para tirotearse y nada mas: pasto plano, murallas con almenas alrededor,
+   cobertura simetrica —lo que hay de un lado esta igual del otro, asi nadie sale favorecido por
+   donde le toco aparecer— y una tienda con TODAS las armas en cada esquina.
+   Sin zona que se cierra y sin botin escondido: se aparece, se pelea y se vuelve a aparecer.
+
+   Esta armado para ser barato. Todo lo que se repite (almenas, cajones, barriles, postes) sale de
+   una sola geometria fundida por material, asi el mapa entero son ocho mallas y no ochocientas.
+   Las colisiones son cajas planas en el array de siempre, no una por objeto dibujado. */
+const ARE_GZ=32000;
+const ARE_LADO=132;                    // el pasto, de muralla a muralla
+const ARE_MURO=7.0;                    // alto de la muralla
+const areGroup=new THREE.Group(); areGroup.visible=false; scene.add(areGroup);
+let areBuilt=false;
+/* NO en el centro: ahi esta la plataforma con el torreon y se aparecia adentro de la piedra (la
+   resolucion de choques te escupia dos metros para arriba). Se aparece en un anillo, y cada vez en
+   un lado distinto, que ademas es lo que corresponde en un mapa de tiroteo. */
+const ARE_START=new THREE.Vector3(0,1.2,ARE_GZ+44);
+function areSpawn(){ const a=Math.random()*6.283, d=34+Math.random()*(ARE_LADO/2-46);
+  return [Math.cos(a)*d, Math.sin(a)*d]; }
+const ARE_TOMA=[];                     // puestos de arma de las tiendas
+const _areB=new Map();                 // geometrias juntadas por material, como en la isla
+const ARE_M={};
+function areMat(){
+  if(ARE_M.pasto) return;
+  const M=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m||0});
+  ARE_M.pasto   = M(0x6f8f4e,0.97,0);
+  ARE_M.piedra  = M(0x9a958c,0.92,0);
+  ARE_M.piedraOs= M(0x77736c,0.94,0);
+  ARE_M.madera  = M(0x8a6034,0.86,0);
+  ARE_M.maderaOs= M(0x5f4223,0.88,0);
+  ARE_M.metal   = M(0x6a7078,0.55,0.45);
+  ARE_M.arena   = M(0xbfae86,0.95,0);
+  ARE_M.tela    = M(0xa8412f,0.92,0);
+  for(const k in ARE_M) ARE_M[k].envMapIntensity=0.35;
+}
+function areAdd(mat,geo,x,y,z,ry){
+  if(geo.index) geo=geo.toNonIndexed();
+  const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), ry||0);
+  geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,y,z+ARE_GZ), q, new THREE.Vector3(1,1,1)));
+  let a=_areB.get(mat); if(!a){ a=[]; _areB.set(mat,a); } a.push(geo);
+}
+function areCaja(mat,x,y,z,w,h,d,ry,conCol){
+  areAdd(mat,new THREE.BoxGeometry(w,h,d),x,y,z,ry);
+  if(conCol!==false) areCol(x,y,z,w,h,d);
+}
+function areCol(x,y,z,w,h,d){
+  colliders.push({minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,
+                  minz:z+ARE_GZ-d/2,maxz:z+ARE_GZ+d/2,mesh:null});
+}
+function areFundir(){
+  let n=0;
+  for(const [mat,geos] of _areB){ if(!geos.length)continue;
+    let g=null; try{ g=mergeGeometries(geos,false); }catch(e){ g=null; }
+    if(g){ const me=new THREE.Mesh(g,mat); me.castShadow=true; me.receiveShadow=true;
+           me.frustumCulled=false; areGroup.add(me); n++; }
+    for(const gg of geos) if(gg!==g) gg.dispose&&gg.dispose(); }
+  _areB.clear(); return n;
+}
+/* una tienda: cobertizo abierto al centro del mapa, con las armas colgadas en la pared del fondo */
+function areTienda(cx,cz,ry){
+  const M=ARE_M, W=13, D=9, H=4.2;
+  const rot=(dx,dz)=>[cx+dx*Math.cos(ry)-dz*Math.sin(ry), cz+dx*Math.sin(ry)+dz*Math.cos(ry)];
+  // piso, fondo y dos costados; el frente queda abierto
+  let p=rot(0,0);      areCaja(M.piedraOs,p[0],0.10,p[1],W,0.20,D,ry,false);
+  p=rot(0,-D/2+0.2);   areCaja(M.piedra,  p[0],H/2,p[1],W,H,0.4,ry);
+  p=rot(-W/2+0.2,0);   areCaja(M.piedra,  p[0],H/2,p[1],0.4,H,D,ry);
+  p=rot( W/2-0.2,0);   areCaja(M.piedra,  p[0],H/2,p[1],0.4,H,D,ry);
+  p=rot(0,0);          areCaja(M.madera,  p[0],H+0.18,p[1],W+1.4,0.36,D+1.4,ry,false);   // el techo
+  // dos columnas al frente
+  for(const s of [-1,1]){ p=rot(s*(W/2-0.6),D/2-0.5); areCaja(M.maderaOs,p[0],H/2,p[1],0.5,H,0.5,ry); }
+  // el mostrador
+  p=rot(0,D/2-2.2);    areCaja(M.madera,  p[0],0.55,p[1],W-2.4,1.1,0.7,ry);
+  /* EL PERCHERO. Las diecisiete armas colgadas en la pared del fondo, cada una con su tablita.
+     Pararse enfrente y tocar RECOGER te da esa: es una tienda, no una caja sorpresa. */
+  const N=ARSENAL.length, fil=2, porFil=Math.ceil(N/fil);
+  for(let i=0;i<N;i++){
+    const f=Math.floor(i/porFil), c=i%porFil;
+    const lx=-(W-3.0)/2 + (W-3.0)*(porFil>1? c/(porFil-1) : 0.5);
+    const ly=1.35 + f*1.15;
+    const q=rot(lx,-D/2+0.62);
+    areCaja(M.maderaOs,q[0],ly-0.30,q[1],0.62,0.09,0.16,ry,false);        // la tablita
+    areCaja(M.metal,   q[0],ly,     q[1],0.50,0.13,0.10,ry,false);        // el arma, de canto
+    const t=rot(lx,-D/2+1.9);
+    ARE_TOMA.push({ x:t[0], y:0, z:t[1], arma:ARSENAL[i].id, n:ARSENAL[i].n, cat:ARSENAL[i].cat });
+  }
+}
+function buildArena(){
+  if(areBuilt) return; areBuilt=true;
+  areMat(); ARE_TOMA.length=0;
+  const M=ARE_M, L=ARE_LADO, H=ARE_MURO;
+  // ---- el pasto ----
+  areAdd(M.pasto,new THREE.BoxGeometry(L,0.4,L),0,-0.2,0,0);
+  colliders.push({minx:-L/2,maxx:L/2,miny:-0.4,maxy:0,minz:ARE_GZ-L/2,maxz:ARE_GZ+L/2,mesh:null});
+  // ---- la muralla, con sus almenas ----
+  const e=1.2, m=L/2+e/2;
+  for(const s of [[0,-m,L+e*2,e],[0,m,L+e*2,e],[-m,0,e,L+e*2],[m,0,e,L+e*2]]){
+    areCaja(M.piedra,s[0],H/2,s[1],s[2],H,s[3],0);
+    // almenas: un dientecito cada 2,4 m sobre el coronamiento
+    const largo=Math.max(s[2],s[3]), horiz=(s[2]>s[3]);
+    const n=Math.floor(largo/2.4);
+    for(let i=0;i<n;i++){ const t=-largo/2+1.2+i*2.4;
+      areCaja(M.piedraOs, s[0]+(horiz?t:0), H+0.55, s[1]+(horiz?0:t),
+              horiz?1.3:e+0.2, 1.1, horiz?e+0.2:1.3, 0, false); }
+  }
+  // torres en las cuatro esquinas
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    const x=sx*m, z=sz*m;
+    areAdd(M.piedra,new THREE.CylinderGeometry(2.6,2.9,H+2.6,12),x,(H+2.6)/2,z,0);
+    areCol(x,(H+2.6)/2,z,5.2,H+2.6,5.2);
+    areAdd(M.tela,new THREE.ConeGeometry(3.2,2.8,10),x,H+4.0,z,0);
+    for(let i=0;i<8;i++){ const a=i*0.785;
+      areCaja(M.piedraOs, x+Math.cos(a)*2.5, H+3.1, z+Math.sin(a)*2.5, 0.8,1.0,0.8, a, false); }
+  }
+  // ---- las cuatro tiendas, una por esquina, mirando al centro ----
+  const d=L/2-11;
+  areTienda(-d,-d, Math.PI*0.25);
+  areTienda( d,-d,-Math.PI*0.25);
+  areTienda(-d, d, Math.PI*0.75);
+  areTienda( d, d,-Math.PI*0.75);
+  // ---- cobertura, SIMETRICA en los dos ejes ----
+  const bloques=[
+    // [x,z,ancho,alto,fondo,material]
+    [0,0,   14,1.6,14,'piedraOs'],          // la plataforma del centro
+    [0,0,    8,3.2, 8,'piedra'],            // y el torreon de arriba
+    [26,0,   3,2.6, 9,'piedra'],
+    [0,26,   9,2.6, 3,'piedra'],
+    [40,22,  6,1.4, 6,'arena'],
+    [22,40,  6,1.4, 6,'arena'],
+    [46,46,  4,2.2, 4,'piedra'],
+    [16,10,  2.4,1.2,2.4,'madera'],
+    [34,8,   2.4,1.2,2.4,'madera'],
+    [10,34,  2.4,1.2,2.4,'madera'],
+    [30,30,  3.0,1.8,1.2,'piedraOs'],
+    [52,12,  1.2,2.4,7,'piedra'],
+    [12,52,  7,2.4,1.2,'piedra'],
+  ];
+  for(const b of bloques) for(const sx of (b[0]?[-1,1]:[1])) for(const sz of (b[1]?[-1,1]:[1])){
+    areCaja(M[b[5]], b[0]*sx, b[3]/2, b[1]*sz, b[2], b[3], b[4], 0);
+  }
+  // rampas para subir a la plataforma del centro
+  for(let k=0;k<4;k++){ const a=k*Math.PI/2;
+    const g=new THREE.BoxGeometry(5.0,0.5,7.0); g.rotateX(-0.24);
+    areAdd(M.piedraOs,g, Math.cos(a)*10.4, 0.82, Math.sin(a)*10.4, a);
+    /* la rampa se sube por ESCALONES de colision: una caja inclinada no se puede subir con un
+       cuerpo que camina por AABB, se traba en el canto */
+    for(let i=0;i<7;i++){ const t=(i+0.5)/7, alt=0.25+t*1.35;
+      const rx=Math.cos(a)*(13.8-t*6.8), rz=Math.sin(a)*(13.8-t*6.8);
+      areCol(rx,alt/2,rz, (k%2? 1.0:5.0), alt, (k%2? 5.0:1.0)); }
+  }
+  // barriles y postes sueltos, tambien en espejo
+  for(const p of [[19,19],[44,6],[6,44],[36,20],[20,36]]) for(const sx of [-1,1]) for(const sz of [-1,1]){
+    areAdd(M.metal,new THREE.CylinderGeometry(0.42,0.42,1.2,10), p[0]*sx, 0.6, p[1]*sz, 0);
+    areCol(p[0]*sx,0.6,p[1]*sz,0.84,1.2,0.84);
+  }
+  const n=areFundir();
+  try{ console.log('La Arena:',n,'mallas,',ARE_TOMA.length,'puestos de arma'); }catch(e){}
+}
+function enterArena(){
+  if(world==='arena') return;
+  world='arena'; grassMode=false; dreamMode=false; islaMode=false;
+  try{ alcModo(false); alcSol(false); skyMesh.scale.setScalar(1); }catch(e){}
+  buildArena();
+  areGroup.visible=true; tiroGroup.visible=false; if(typeof alcGroup!=='undefined') alcGroup.visible=false;
+  /* enterTiro REEMPLAZA scene.background por un gris de interior, asi que al venir del menu (que
+     vive en la galeria) la arena quedaba con el cielo negro. Hay que devolverle el color del
+     estilo, y traer la cupula del cielo hasta aca: vive en el origen y esto esta a 32 km. */
+  scene.background=cityBg;
+  skyMesh.visible=true; skyMesh.position.set(0,0,ARE_GZ); skyMesh.scale.setScalar(1.1);
+  if(camera.far<600){ camera.far=600; camera.updateProjectionMatrix(); }
+  _solMundo=0.95; _expMundo=1.0; _hemiMin=0; aplicarEstilo(estiloSel);
+  scene.fog.near=90; scene.fog.far=400;
+  { const p=areSpawn(); player.pos.set(p[0],1.2,ARE_GZ+p[1]);
+    player.yaw=Math.atan2(p[0],p[1])+Math.PI; player.faceYaw=player.yaw; player.pitch=0; }
+  player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.noRoll=true;
+  player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
+  lastSafe.copy(ARE_START); portalDone=true;
+  tiroAmmo=TIRO_MAG; tiroRel=0; tiroFire=false; tiroCd=0;
+  PVP.vida=PVP.max; PVP.muerto=false; document.body.classList.remove('muerto');
+  try{ pvpHUD(); }catch(e){}
+  document.body.classList.add('enArena'); document.body.classList.remove('enPartida');
+  try{ setWorldHUD('arena','q_arena'); }catch(e){}
+  ambient('amb2');
+  try{ botSembrar(); }catch(e){}
+  try{ vcMapaMostrar(false); }catch(e){}
+}
+/* el suelo depende del mundo: la isla tiene relieve, la arena es plana */
+function sueloY(x,z){ return (world==='arena') ? 0 : alcH(x,z); }
+function areRevivir(){
+  PVP.muerto=false; PVP.vida=PVP.max; document.body.classList.remove('muerto');
+  INV.curando=0; INV.curaTipo=''; try{ invHUD(); }catch(e){}
+  tiroAmmo=TIRO_MAG; tiroRel=0;
+  /* aparece lejos de donde te mataron y no siempre en el mismo lado */
+  const p=areSpawn();
+  player.pos.set(p[0], 1.2, ARE_GZ+p[1]);
+  player.yaw=Math.atan2(p[0],p[1])+Math.PI; player.faceYaw=player.yaw;
+  player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+  try{ pvpHUD(); }catch(e){}
+}
+/* puesto de arma mas cercano en la arena (el equivalente a una caja de botin) */
+function areTomaCerca(){
+  if(world!=='arena') return null;
+  const px=player.pos.x, pz=player.pos.z-ARE_GZ;
+  let mej=null, d2=3.0*3.0;
+  for(const t of ARE_TOMA){ const dx=t.x-px, dz=t.z-pz, d=dx*dx+dz*dz;
+    if(d<d2){ d2=d; mej=t; } }
+  return mej;
+}
 
 /* ===================== LA PARTIDA =====================
    Hasta aca el valle era un mapa donde se podia caminar y dispararle a quien estuviera conectado.
@@ -11779,6 +12043,15 @@ function partReiniciar(){
   partEmpezar();
 }
 function partTick(dt){
+  try{ salaTick(dt); }catch(e){}
+  if(world==='arena'){
+    /* La arena no tiene zona ni ganador: es tiroteo puro. Solo se mueven los bots y se cuenta. */
+    if(zonaMalla) zonaMalla.visible=false;
+    document.body.classList.remove('enPartida');
+    if(PVP.muerto){ PVP.tRes-=dt; if(PVP.tRes<=0) areRevivir(); }
+    botTick(dt);
+    return;
+  }
   if(world!=='valle'){ if(zonaMalla) zonaMalla.visible=false;
     if(PART.activa){ PART.activa=false; PART.fase='espera'; try{ botLimpiar(); }catch(e){} }
     document.body.classList.remove('enPartida'); return; }
@@ -11839,6 +12112,39 @@ function partFeed(ico,txt){
    con la distancia y con lo que se mueva el que dispara. Lo que los hace parecer vivos no es una
    maquina de estados grande sino tres detalles: se corren de costado mientras tiran (no son un
    poste), tardan en reaccionar cuando te ven (no es un aimbot) y entran a la zona cuando les toca. */
+/* ===================== SALAS Y CUPO =====================
+   Siempre hay DIECISEIS rivales enfrente, sean de carne o de silicio. Al entrar solo, los dieciseis
+   son bots; por cada persona que aparece se retira un bot, asi la sala no se agranda sino que se va
+   volviendo humana. Cuando ya no queda ningun bot que retirar —dieciseis personas— el que llega
+   despues no entra apretado: se abre la sala siguiente, y ahi vuelve a haber dieciseis bots y una
+   sola persona. El numero de sala viaja en el nombre del tema del broker, asi que no hace falta un
+   servidor que reparta: alcanza con contar quien esta publicando. */
+const SALA_CUPO=16;
+let salaN=1, BOT_META=SALA_CUPO, _salaT=0;
+function salaReales(){ let k=0; for(const [,r] of MP.remotes) if(!r.esBot) k++; return k; }
+function salaCambiar(nueva){
+  if(nueva===salaN || !MP.client) return;
+  const viejo=MP.room;
+  salaN=nueva; MP.room=NS+'sala'+salaN;
+  try{ MP.client.unsubscribe([viejo+'/state',viejo+'/chat',viejo+'/action',viejo+'/rtc']); }catch(e){}
+  try{ MP.client.subscribe([MP.room+'/state',MP.room+'/chat',MP.room+'/action',MP.room+'/rtc'],{qos:0}); }catch(e){}
+  for(const [id,r] of MP.remotes){ if(r.esBot) continue;
+    try{ mpSacarCaja(r); scene.remove(r.avatar); }catch(e){} MP.remotes.delete(id); }
+  try{ mpChatIn('🚪', tl({es:'Sala llena · pasaste a la sala ',en:'Room full · moved to room ',pt:'Sala cheia · foi para a sala '})+salaN); }catch(e){}
+  try{ localStorage.setItem('ct_sala',String(salaN)); }catch(e){}
+}
+function salaTick(dt){
+  _salaT-=dt; if(_salaT>0) return; _salaT=2.0;
+  const reales=salaReales();
+  if(reales>=SALA_CUPO){ salaCambiar(salaN+1); return; }
+  BOT_META=Math.max(0, SALA_CUPO-reales);
+  if(world!=='arena') return;                      // el cupo de dieciseis es de la arena
+  const vivos=BOTS.length;
+  if(vivos<BOT_META) botAgregar(BOT_META-vivos);
+  else if(vivos>BOT_META) botQuitar(vivos-BOT_META);
+  const e=document.getElementById('areSala');
+  if(e) e.textContent='SALA '+salaN+' · '+(reales+1)+tl({es:' pers · ',en:' ppl · ',pt:' pess · '})+BOTS.filter(b=>!b.muerto).length+' bots';
+}
 const BOTS=[];
 const BOT_NOMBRES=['Zorro','Cata','Pulpo','Nery','Tuco','Vera','Lobo','Mica','Rulo','Sosa','Kiki','Bruno','Pilar','Cacho'];
 let _botN=0;
@@ -11846,21 +12152,26 @@ function botLimpiar(){
   for(const b of BOTS){ try{ mpSacarCaja(b.r); scene.remove(b.r.avatar); MP.remotes.delete(b.id); }catch(e){} }
   BOTS.length=0; PART.vivos=1;
 }
-function botSembrar(){
+function botSembrar(N){
   botLimpiar();
-  const N=9;
+  const arena=(world==='arena');
+  N = N || (arena? BOT_META : 9);
   for(let i=0;i<N;i++){
-    const a=(i/N)*6.283+Math.random()*0.6, d=70+Math.random()*120;
-    let x=Math.cos(a)*d, z=Math.sin(a)*d;
-    if(alcH(x,z)<3){ x*=0.5; z*=0.5; }
+    const a=(i/N)*6.283+Math.random()*0.6;
+    let x,z;
+    if(arena){ const d=18+Math.random()*(ARE_LADO/2-26);
+      x=Math.cos(a)*d; z=Math.sin(a)*d; }
+    else { const d=70+Math.random()*120; x=Math.cos(a)*d; z=Math.sin(a)*d;
+      if(alcH(x,z)<3){ x*=0.5; z*=0.5; } }
     const id='bot_'+(++_botN);
     const nom=BOT_NOMBRES[(_botN*7+i)%BOT_NOMBRES.length];
     const r=mpRemote(id,nom,true);
-    r.world='valle'; r.esBot=true;
-    const y=alcH(x,z);
-    r.pos.set(x,y,z+ALC_GZ); r.target.copy(r.pos); r.init=true;
+    r.world=world; r.esBot=true;
+    const GZ=arena?ARE_GZ:ALC_GZ;
+    const y=sueloY(x,z);
+    r.pos.set(x,y,z+GZ); r.target.copy(r.pos); r.init=true;
     const arma=['ak','tr556','mp9','uzi','g17','r870','fal'][(i*3)%7];
-    BOTS.push({ id, nom, r, vida:100, x, z, y, yaw:Math.random()*6.283,
+    BOTS.push({ id, nom, r, vida:100, x, z, y:sueloY(x,z), yaw:Math.random()*6.283, mundo:world,
                 estado:'patrulla', tx:x, tz:z, tCambio:0, tTiro:0, tVer:0, rafaga:0,
                 arma, lado:(Math.random()<0.5?-1:1), tLado:0, muerto:false });
   }
@@ -11868,7 +12179,32 @@ function botSembrar(){
 }
 /* LINEA DE VISION contra la grilla de colisiones. Se camina el segmento de a metro y medio; con 55
    m de alcance son 37 muestras, y cada una mira solo la celda que le toca. */
+/* Lo que le tapa el paso a un bot depende del mundo: en la isla esta la grilla de colisiones de la
+   isla, en la arena estan las cajas de la arena. Una sola funcion para los dos. */
+function botTapado(x,z){
+  if(world==='arena'){
+    const L=ARE_LADO/2-2.0;
+    if(Math.abs(x)>L||Math.abs(z)>L) return true;          // la muralla
+    const zz=z+ARE_GZ;
+    for(let i=0;i<colliders.length;i++){ const c=colliders[i];
+      if(c.maxy<=0.45) continue;                            // el piso y los escalones no tapan
+      if(c.minx<x+0.34&&c.maxx>x-0.34&&c.minz<zz+0.34&&c.maxz>zz-0.34&&c.miny<1.7) return true; }
+    return false;
+  }
+  return alcOcupado(x,z,alcH(x,z));
+}
+function botVeArena(ax,ay,az,bx,by,bz){
+  const dx=bx-ax, dy=by-ay, dz=bz-az, L=Math.hypot(dx,dy,dz);
+  if(L<0.5) return true;
+  const n=Math.min(40,Math.max(3,Math.ceil(L/1.8)));
+  for(let i=1;i<n;i++){ const t=i/n, x=ax+dx*t, y=ay+dy*t, z=az+dz*t+ARE_GZ;
+    for(let k=0;k<colliders.length;k++){ const c=colliders[k];
+      if(c.maxy<=0.35) continue;
+      if(c.minx<=x&&c.maxx>=x&&c.minz<=z&&c.maxz>=z&&c.miny<=y&&c.maxy>=y) return false; } }
+  return true;
+}
 function botVe(ax,ay,az, bx,by,bz){
+  if(world==='arena') return botVeArena(ax,ay,az,bx,by,bz);
   const dx=bx-ax, dy=by-ay, dz=bz-az, L=Math.hypot(dx,dy,dz);
   if(L<0.5) return true;
   const n=Math.min(48,Math.max(3,Math.ceil(L/1.5)));
@@ -11891,7 +12227,7 @@ function botDanio(id,dmg,cab){
 }
 function botMuere(b,porVos){
   if(b.muerto) return;
-  b.muerto=true;
+  b.muerto=true; b.tRes=5.0;
   try{ mpSacarCaja(b.r); }catch(e){}
   b.r.avatar.visible=false;
   PART.vivos=Math.max(1,PART.vivos-1);
@@ -11899,21 +12235,54 @@ function botMuere(b,porVos){
     partFeed('💀', MP.name+' → '+b.nom); }
   else partFeed('💀', b.nom+tl({es:' cayó en la zona',en:' died in the zone',pt:' caiu na zona'}));
 }
+function botAgregar(k){
+  const arena=(world==='arena');
+  for(let i=0;i<k;i++){
+    const a=Math.random()*6.283;
+    const d= arena? (18+Math.random()*(ARE_LADO/2-26)) : (70+Math.random()*120);
+    const x=Math.cos(a)*d, z=Math.sin(a)*d;
+    const id='bot_'+(++_botN), nom=BOT_NOMBRES[(_botN*7)%BOT_NOMBRES.length];
+    const r=mpRemote(id,nom,true); r.world=world; r.esBot=true;
+    const GZ=arena?ARE_GZ:ALC_GZ, y=sueloY(x,z);
+    r.pos.set(x,y,z+GZ); r.target.copy(r.pos); r.init=true;
+    BOTS.push({ id, nom, r, vida:100, x, z, y, yaw:Math.random()*6.283, mundo:world,
+                estado:'patrulla', tx:x, tz:z, tCambio:0, tTiro:0, tVer:0, rafaga:0,
+                arma:['ak','tr556','mp9','uzi','g17','r870','fal'][(_botN*3)%7],
+                lado:(Math.random()<0.5?-1:1), tLado:0, muerto:false, tRes:0 });
+    PART.vivos++;
+  }
+}
+function botQuitar(k){
+  for(let i=0;i<k && BOTS.length;i++){
+    const b=BOTS.pop();
+    try{ mpSacarCaja(b.r); scene.remove(b.r.avatar); MP.remotes.delete(b.id); }catch(e){}
+    if(!b.muerto) PART.vivos=Math.max(1,PART.vivos-1);
+  }
+}
 function botTick(dt){
   if(!BOTS.length) return;
-  const px=player.pos.x, pz=player.pos.z-ALC_GZ, py=player.pos.y;
+  const arena=(world==='arena');
+  const px=player.pos.x, pz=player.pos.z-(arena?ARE_GZ:ALC_GZ), py=player.pos.y;
   const Z=ZONA[Math.min(PART.ronda,ZONA.length-1)];
   for(const b of BOTS){
-    if(b.muerto) continue;
-    // ---- la zona tambien los mata a ellos ----
-    const fuera=zonaFuera(b.x,b.z);
+    if(b.muerto){
+      /* EN LA ARENA NADIE SE QUEDA MUERTO. A los cinco segundos vuelve en otra punta: es un mapa de
+         tiroteo, no una partida con un ganador. En el valle si: ahi morir es quedar afuera. */
+      if(arena){ b.tRes=(b.tRes||0)-dt;
+        if(b.tRes<=0){ const a=Math.random()*6.283, d=24+Math.random()*(ARE_LADO/2-30);
+          b.x=Math.cos(a)*d; b.z=Math.sin(a)*d; b.y=0; b.vida=100; b.muerto=false;
+          b.estado='patrulla'; b.tCambio=0; b.r.avatar.visible=true;
+          try{ mpCaja(b.r); }catch(e){} PART.vivos++; } }
+      continue; }
+    // ---- la zona tambien los mata a ellos (solo en el valle) ----
+    const fuera = arena? -99 : zonaFuera(b.x,b.z);
     if(fuera>0){ b.vida-=Z.dmg*dt*0.7; if(b.vida<=0){ botMuere(b,false); continue; } }
     // ---- a donde va ----
     b.tCambio-=dt;
     const dPl=Math.hypot(px-b.x, pz-b.z);
     const ve = (!PVP.muerto) && dPl<55 && botVe(b.x,b.y+1.55,b.z, px,py+0.2,pz);
     if(ve) b.tVer+=dt; else b.tVer=Math.max(0,b.tVer-dt*1.6);
-    if(fuera>-6){                                  // primero que nada: meterse adentro
+    if(!arena && fuera>-6){                        // primero que nada: meterse adentro
       const c=zonaCentro();
       b.tx=c[0]+(b.x-c[0])*0.25; b.tz=c[1]+(b.z-c[1])*0.25; b.estado='zona';
     } else if(ve && b.tVer>0.35){
@@ -11926,9 +12295,11 @@ function botTick(dt){
       b.tz=b.z+Math.sin(ang)*quiere*6 + Math.sin(ang+1.57)*b.lado*5;
     } else if(b.tCambio<=0 || Math.hypot(b.tx-b.x,b.tz-b.z)<3){
       b.estado='patrulla'; b.tCambio=4+Math.random()*6;
-      const c=zonaCentro(), rr=zonaRadio()*0.85;
-      const a=Math.random()*6.283, d=Math.sqrt(Math.random())*rr;
-      b.tx=c[0]+Math.cos(a)*d; b.tz=c[1]+Math.sin(a)*d;
+      const a=Math.random()*6.283;
+      if(arena){ const d=Math.sqrt(Math.random())*(ARE_LADO/2-10);
+        b.tx=Math.cos(a)*d; b.tz=Math.sin(a)*d; }
+      else { const c=zonaCentro(), rr=zonaRadio()*0.85, d=Math.sqrt(Math.random())*rr;
+        b.tx=c[0]+Math.cos(a)*d; b.tz=c[1]+Math.sin(a)*d; }
     }
     // ---- caminar ----
     const vx=b.tx-b.x, vz=b.tz-b.z, L=Math.hypot(vx,vz);
@@ -11936,11 +12307,11 @@ function botTick(dt){
     if(L>0.4){
       const nx=b.x+vx/L*vel*dt, nz=b.z+vz/L*vel*dt;
       /* no atraviesa paredes: si el paso da contra algo, prueba de costado y si no, se queda */
-      if(!alcOcupado(nx,nz,alcH(nx,nz))) { b.x=nx; b.z=nz; }
+      if(!botTapado(nx,nz)) { b.x=nx; b.z=nz; }
       else { const a2=Math.atan2(vz,vx)+1.57*b.lado;
              const mx=b.x+Math.cos(a2)*vel*dt, mz=b.z+Math.sin(a2)*vel*dt;
-             if(!alcOcupado(mx,mz,alcH(mx,mz))){ b.x=mx; b.z=mz; } else b.tCambio=0; }
-      b.y=alcH(b.x,b.z);
+             if(!botTapado(mx,mz)){ b.x=mx; b.z=mz; } else b.tCambio=0; }
+      b.y=sueloY(b.x,b.z);
       b.yaw=(b.estado==='pelea')? Math.atan2(px-b.x, pz-b.z) : Math.atan2(vx,vz);
     }
     // ---- tirar ----
@@ -11964,8 +12335,8 @@ function botTick(dt){
     }
     // ---- pintarlo: es un remoto mas ----
     const r=b.r;
-    r.last=performance.now(); r.world='valle';
-    r.target.set(b.x, b.y, b.z+ALC_GZ);
+    r.last=performance.now(); r.world=world;
+    r.target.set(b.x, b.y, b.z+((world==='arena')?ARE_GZ:ALC_GZ));
     r.yaw=b.yaw;
     r.anim = (b.estado==='patrulla'||b.estado==='zona') ? (L>0.4?'run':'idle') : (L>0.4?'walk':'idle');
     r.moving = L>0.4;
