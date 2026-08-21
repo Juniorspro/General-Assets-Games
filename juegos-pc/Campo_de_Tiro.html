@@ -12267,23 +12267,168 @@ function areSpawn(){ const a=Math.random()*6.283, d=34+Math.random()*(ARE_LADO/2
 const ARE_TOMA=[];                     // puestos de arma de las tiendas
 const _areB=new Map();                 // geometrias juntadas por material, como en la isla
 const ARE_M={};
+/* ===================== LAS TEXTURAS DE LA ARENA =====================
+   El mapa estaba en colores planos: pasto verde liso, murallas gris liso. A 130 m de lado eso se
+   ve como cartulina, y peor con el sol de frente, porque sin grano no hay nada que le diga al ojo
+   a que distancia esta una pared.
+
+   Se generan por codigo (canvas), no se descargan: el juego sigue siendo un archivo.
+
+   Y las UV van PROYECTADAS EN EL MUNDO, no las 0..1 que trae cada caja. Con las UV de la caja,
+   una pared de 6 m y un cajon de 1 m muestran el mismo dibujo estirado distinto, y en la union de
+   dos paredes el patron se corta. Proyectando por la cara (la horizontal usa XZ, la que mira en X
+   usa ZY, la que mira en Z usa XY) el bloque mide lo mismo en todas partes y dos paredes pegadas
+   siguen el mismo aparejo. Las UV se calculan en coordenadas de la ARENA, antes de correrla los
+   32 km en Z: si no, los numeros se van a 16000 y el float del shader pierde el decimal, que es
+   justo donde vive el detalle. */
+function areLienzo(S){ const c=document.createElement('canvas'); c.width=c.height=S; return [c,c.getContext('2d')]; }
+function areTex(c,rep){ const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4; if(rep)t.repeat.set(rep,rep); return t; }
+/* normal map sacada del propio dibujo por diferencias: alcanza para que la juntura del bloque
+   agarre luz y la pared deje de ser una lamina */
+function areNormal(c, fuerza){
+  const S=c.width, g=c.getContext('2d'), d=g.getImageData(0,0,S,S).data;
+  const [c2,g2]=areLienzo(S), o=g2.createImageData(S,S), q=o.data;
+  const L=(x,y)=>{ const i=(((y+S)%S)*S+((x+S)%S))*4; return (d[i]*0.3+d[i+1]*0.59+d[i+2]*0.11)/255; };
+  const k=(fuerza==null?2.2:fuerza);
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+    const dx=(L(x+1,y)-L(x-1,y))*k, dy=(L(x,y+1)-L(x,y-1))*k;
+    let nx=-dx, ny=-dy, nz=1; const l=Math.hypot(nx,ny,nz); nx/=l; ny/=l; nz/=l;
+    const i=(y*S+x)*4;
+    q[i]=(nx*0.5+0.5)*255; q[i+1]=(ny*0.5+0.5)*255; q[i+2]=(nz*0.5+0.5)*255; q[i+3]=255; }
+  g2.putImageData(o,0,0);
+  const t=new THREE.CanvasTexture(c2); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4; return t;
+}
+/* PASTO. Verde de base con manchones mas claros y mas oscuros, briznas cortas y algunos peladeros
+   de tierra: es lo que hace que caminar sobre el se lea como caminar sobre algo. */
+function areTexPasto(){ const S=256,[c,g]=areLienzo(S);
+  g.fillStyle='#6f8f4e'; g.fillRect(0,0,S,S);
+  for(let i=0;i<40;i++){ const r=18+Math.random()*54;
+    g.fillStyle='rgba('+(90+Math.random()*40|0)+','+(120+Math.random()*45|0)+',60,0.18)';
+    g.beginPath(); g.arc(Math.random()*S,Math.random()*S,r,0,6.283); g.fill(); }
+  for(let i=0;i<14;i++){ const r=10+Math.random()*26;                 // peladeros de tierra
+    g.fillStyle='rgba(150,126,84,'+(0.10+Math.random()*0.14).toFixed(2)+')';
+    g.beginPath(); g.arc(Math.random()*S,Math.random()*S,r,0,6.283); g.fill(); }
+  for(let i=0;i<5200;i++){ const x=Math.random()*S, y=Math.random()*S, h=1.6+Math.random()*3.4;
+    const cl=Math.random(); g.strokeStyle= cl<0.42? 'rgba(126,158,84,0.55)' : (cl<0.78? 'rgba(88,116,60,0.5)' : 'rgba(150,172,96,0.42)');
+    g.lineWidth=1; g.beginPath(); g.moveTo(x,y); g.lineTo(x+(Math.random()-0.5)*1.6, y-h); g.stroke(); }
+  return c; }
+/* PIEDRA DE MURALLA. Bloques a junta trabada, cada uno con su tono, junta hundida, y algunos
+   golpes y manchas de humedad. Es la textura que le da escala al muro: sin bloques, siete metros
+   de pared y setenta se ven igual. */
+function areTexPiedra(base, junta){ const S=256,[c,g]=areLienzo(S);
+  g.fillStyle=junta||'#5f5b54'; g.fillRect(0,0,S,S);
+  const FIL=4, AL=S/FIL;
+  for(let f=0;f<FIL;f++){
+    const corr=(f%2)? AL*0.9 : 0, anchoBase=S/2.4;
+    for(let x=-anchoBase; x<S+anchoBase; x+=anchoBase){
+      const px=x+corr+2, py=f*AL+2, w=anchoBase-4, h=AL-4;
+      const t=(Math.random()-0.5)*26, n=parseInt(base.slice(1),16);
+      const r=Math.max(0,Math.min(255,(n>>16&255)+t)), gg=Math.max(0,Math.min(255,(n>>8&255)+t)), b=Math.max(0,Math.min(255,(n&255)+t));
+      g.fillStyle='rgb('+(r|0)+','+(gg|0)+','+(b|0)+')';
+      g.fillRect(px,py,w,h);
+      // bisel: arriba claro, abajo oscuro
+      g.fillStyle='rgba(255,255,255,0.10)'; g.fillRect(px,py,w,2);
+      g.fillStyle='rgba(0,0,0,0.16)';       g.fillRect(px,py+h-2,w,2);
+      // grano y algun golpe
+      for(let i=0;i<40;i++){ g.fillStyle='rgba(0,0,0,'+(0.02+Math.random()*0.05).toFixed(3)+')';
+        g.fillRect(px+Math.random()*w, py+Math.random()*h, 1+Math.random()*3, 1+Math.random()*3); }
+      if(Math.random()<0.22){ g.fillStyle='rgba(0,0,0,0.13)'; const rr=3+Math.random()*7;
+        g.beginPath(); g.arc(px+Math.random()*w, py+Math.random()*h, rr, 0, 6.283); g.fill(); }
+    }
+  }
+  for(let i=0;i<8;i++){ // humedad que baja
+    g.fillStyle='rgba(60,72,58,'+(0.05+Math.random()*0.07).toFixed(3)+')';
+    const x=Math.random()*S, w=6+Math.random()*22; g.fillRect(x,0,w,S); }
+  return c; }
+/* MADERA. Tablones con veta y nudos: los cobertizos de las tiendas y los percheros. */
+function areTexMadera(base){ const S=256,[c,g]=areLienzo(S);
+  g.fillStyle=base; g.fillRect(0,0,S,S);
+  const TAB=6, ANCHO=S/TAB;
+  for(let i=0;i<TAB;i++){
+    const y=i*ANCHO, t=(Math.random()-0.5)*22, n=parseInt(base.slice(1),16);
+    g.fillStyle='rgba('+((n>>16&255)+t|0)+','+((n>>8&255)+t|0)+','+((n&255)+t|0)+',0.55)';
+    g.fillRect(0,y,S,ANCHO);
+    g.fillStyle='rgba(0,0,0,0.22)'; g.fillRect(0,y+ANCHO-2,S,2);      // junta del tablon
+    for(let v=0;v<26;v++){ // veta
+      g.strokeStyle='rgba(0,0,0,'+(0.03+Math.random()*0.06).toFixed(3)+')'; g.lineWidth=1+Math.random();
+      const yy=y+2+Math.random()*(ANCHO-6); g.beginPath(); g.moveTo(0,yy);
+      for(let x=0;x<=S;x+=16) g.lineTo(x, yy+Math.sin(x*0.08+v)*1.6);
+      g.stroke(); }
+    if(Math.random()<0.5){ const kx=Math.random()*S, ky=y+ANCHO/2, r=2+Math.random()*3;   // nudo
+      g.fillStyle='rgba(0,0,0,0.30)'; g.beginPath(); g.arc(kx,ky,r,0,6.283); g.fill();
+      g.strokeStyle='rgba(0,0,0,0.16)'; g.lineWidth=1; g.beginPath(); g.arc(kx,ky,r+2.5,0,6.283); g.stroke(); }
+  }
+  return c; }
+/* TIERRA de las rampas y los caminos pisados */
+function areTexArena(){ const S=256,[c,g]=areLienzo(S);
+  g.fillStyle='#bfae86'; g.fillRect(0,0,S,S);
+  for(let i=0;i<6000;i++){ const l=150+Math.random()*70;
+    g.fillStyle='rgba('+(l|0)+','+((l*0.93)|0)+','+((l*0.74)|0)+',0.5)';
+    g.fillRect(Math.random()*S,Math.random()*S,1+Math.random()*2,1+Math.random()*2); }
+  for(let i=0;i<22;i++){ g.fillStyle='rgba(0,0,0,'+(0.02+Math.random()*0.05).toFixed(3)+')';
+    const r=6+Math.random()*26; g.beginPath(); g.arc(Math.random()*S,Math.random()*S,r,0,6.283); g.fill(); }
+  return c; }
+/* TELA de los estandartes: trama cruzada, no un plano de color */
+function areTexTela(base){ const S=128,[c,g]=areLienzo(S);
+  g.fillStyle=base; g.fillRect(0,0,S,S);
+  for(let i=0;i<S;i+=3){ g.fillStyle='rgba(0,0,0,0.07)'; g.fillRect(0,i,S,1);
+    g.fillStyle='rgba(255,255,255,0.05)'; g.fillRect(i,0,1,S); }
+  for(let i=0;i<28;i++){ g.fillStyle='rgba(0,0,0,'+(0.03+Math.random()*0.05).toFixed(3)+')';
+    const r=5+Math.random()*16; g.beginPath(); g.arc(Math.random()*S,Math.random()*S,r,0,6.283); g.fill(); }
+  return c; }
+/* METAL: chapa cepillada */
+function areTexMetal(){ const S=128,[c,g]=areLienzo(S);
+  g.fillStyle='#6a7078'; g.fillRect(0,0,S,S);
+  for(let i=0;i<1400;i++){ const y=Math.random()*S, w=6+Math.random()*40;
+    g.strokeStyle='rgba('+(Math.random()<0.5?255:0)+','+(Math.random()<0.5?255:0)+',255,'+(0.02+Math.random()*0.04).toFixed(3)+')';
+    g.lineWidth=1; g.beginPath(); g.moveTo(Math.random()*S,y); g.lineTo(Math.random()*S+w,y); g.stroke(); }
+  return c; }
 function areMat(){
   if(ARE_M.pasto) return;
-  const M=(c,r,m)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalness:m||0});
-  ARE_M.pasto   = M(0x6f8f4e,0.97,0);
-  ARE_M.piedra  = M(0x9a958c,0.92,0);
-  ARE_M.piedraOs= M(0x77736c,0.94,0);
-  ARE_M.madera  = M(0x8a6034,0.86,0);
-  ARE_M.maderaOs= M(0x5f4223,0.88,0);
-  ARE_M.metal   = M(0x6a7078,0.55,0.45);
-  ARE_M.arena   = M(0xbfae86,0.95,0);
-  ARE_M.tela    = M(0xa8412f,0.92,0);
+  /* la escala de cada textura esta en TILES POR METRO: el pasto repite cada 2,9 m, el bloque de
+     muralla mide 1,1 m de largo, el tablon 0,9. Se ve la escala del mapa sin marear */
+  const cPasto=areTexPasto(), cPiedra=areTexPiedra('#9a958c','#5f5b54'),
+        cPiedraOs=areTexPiedra('#77736c','#4d4a45'), cMadera=areTexMadera('#8a6034'),
+        cMaderaOs=areTexMadera('#5f4223'), cArena=areTexArena(),
+        cTela=areTexTela('#a8412f'), cMetal=areTexMetal();
+  const M=(c,r,m,esc,nrm,nf)=>{ const o={color:0xffffff, roughness:r, metalness:m||0,
+      map:areTex(c)};
+    o.map.repeat.set(1,1);
+    if(nrm){ o.normalMap=areNormal(c,nf||2.2); o.normalScale=new THREE.Vector2(0.85,0.85); }
+    const mat=new THREE.MeshStandardMaterial(o); mat.userData.uv=esc; return mat; };
+  ARE_M.pasto   = M(cPasto,   0.97,0,    0.34);
+  ARE_M.piedra  = M(cPiedra,  0.92,0,    0.90, true, 2.6);
+  ARE_M.piedraOs= M(cPiedraOs,0.94,0,    0.90, true, 2.6);
+  ARE_M.madera  = M(cMadera,  0.86,0,    1.10, true, 1.8);
+  ARE_M.maderaOs= M(cMaderaOs,0.88,0,    1.10, true, 1.8);
+  ARE_M.metal   = M(cMetal,   0.55,0.45, 1.40);
+  ARE_M.arena   = M(cArena,   0.95,0,    0.55);
+  ARE_M.tela    = M(cTela,    0.92,0,    1.60);
   for(const k in ARE_M) ARE_M[k].envMapIntensity=0.35;
+}
+/* UV proyectadas por la cara, en metros de la arena (ver el comentario de arriba) */
+function areUV(geo, esc){
+  const pos=geo.attributes.position, nor=geo.attributes.normal;
+  if(!pos||!nor) return;
+  const uv=new Float32Array(pos.count*2), e=esc||1;
+  for(let i=0;i<pos.count;i++){
+    const nx=Math.abs(nor.getX(i)), ny=Math.abs(nor.getY(i)), nz=Math.abs(nor.getZ(i));
+    let u,v;
+    if(ny>=nx && ny>=nz){ u=pos.getX(i); v=pos.getZ(i); }        // piso y techos
+    else if(nx>=nz){      u=pos.getZ(i); v=pos.getY(i); }        // caras que miran en X
+    else {                u=pos.getX(i); v=pos.getY(i); }        // caras que miran en Z
+    uv[i*2]=u*e; uv[i*2+1]=v*e;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv,2));
 }
 function areAdd(mat,geo,x,y,z,ry){
   if(geo.index) geo=geo.toNonIndexed();
   const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), ry||0);
-  geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,y,z+ARE_GZ), q, new THREE.Vector3(1,1,1)));
+  /* primero a su lugar EN LA ARENA (sin los 32 km): ahi se calculan las UV, con numeros chicos */
+  geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,y,z), q, new THREE.Vector3(1,1,1)));
+  areUV(geo, (mat.userData&&mat.userData.uv)||1);
+  geo.translate(0,0,ARE_GZ);
   let a=_areB.get(mat); if(!a){ a=[]; _areB.set(mat,a); } a.push(geo);
 }
 function areCaja(mat,x,y,z,w,h,d,ry,conCol){
