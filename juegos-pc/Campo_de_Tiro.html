@@ -1712,12 +1712,15 @@ function armaLente(H,z0,largo){
   cr.position.set(0,y0,z0+L/2-0.006); cr.renderOrder=4; gunCuerpo.add(cr);
 }
 /* Alza y punto de mira de hierro, para pistolas y escopetas: no hay ventana, se mira por encima. */
-function armaHierros(H,zAtras,zAdelante){
-  const N=H.M.negro, y0=H.mira;
-  H.box(0.022,0.012,0.010, 0,y0-0.006,zAtras, N);
-  H.box(0.006,0.014,0.008, -0.008,y0+0.002,zAtras, N);
-  H.box(0.006,0.014,0.008,  0.008,y0+0.002,zAtras, N);
-  H.box(0.008,0.016,0.008, 0,y0,zAdelante, N);
+/* Los hierros van a la ALTURA DE LA LINEA DE MIRA del arma (H.mira), no a un numero a ojo: si no,
+   al apuntar el alza y la cruz caen en lugares distintos. En una pistola los hierros viven sobre la
+   CORREDERA y se corren con ella, asi que se puede pedir que los monte en otro grupo. */
+function armaHierros(H,zAtras,zAdelante,B){
+  const N=H.M.negro, y0=H.mira, b=B||H.box;
+  b(0.022,0.012,0.010, 0,y0-0.006,zAtras, N);
+  b(0.006,0.014,0.008, -0.008,y0+0.002,zAtras, N);
+  b(0.006,0.014,0.008,  0.008,y0+0.002,zAtras, N);
+  b(0.008,0.016,0.008, 0,y0,zAdelante, N);
 }
 const ARSENAL=[
 /* ---------------- ASALTO ---------------- */
@@ -1826,6 +1829,11 @@ const ARSENAL=[
   H.box(0.038,0.104,0.050, 0,-0.094,0.055, M.poli, 0.26);
   H.box(0.026,0.020,0.054, 0,-0.048,0.014, M.negro);
   H.box(0.014,0.026,0.018, 0,-0.034,0.026, M.negro);
+  /* La manija de montaje del bullpup va a la IZQUIERDA y viaja mucho, casi todo el cajon. Sin ella
+     el arma no tenia ni una pieza movil y la inspeccion tiraba de la nada. */
+  H.cerrojo(0.026,0.016,0.052, -0.040,0.030,-0.040, M.negro, 0.085);
+  H.box(0.010,0.008,0.140, -0.033,0.030,0.020, M.poli);         // la ranura por donde corre
+  H.box(0.056,0.008,0.030, 0,-0.050,0.100, M.negro);            // guardamonte cerrado
   H.culata(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.052,0.092,0.024),M.negro);
     m.position.set(0,-0.006,0.340); g.add(m); }); }},
 
@@ -1862,6 +1870,10 @@ const ARSENAL=[
   H.cil(0.0085,0.0085,0.12, 0,0.008,-0.180, M.metal, true);
   H.cil(0.013,0.013,0.024, 0,0.008,-0.248, M.negro, true);
   H.box(0.024,0.026,0.030, 0,0.040,-0.100, M.negro);
+  /* La Uzi monta ARRIBA, con la manija en el lomo: es la pieza que la hace reconocible y era
+     justamente la que no se movia. */
+  H.cerrojo(0.024,0.018,0.046, 0,0.052,0.040, M.metal, 0.070);
+  H.box(0.014,0.008,0.130, 0,0.049,-0.010, M.negro);            // la ranura del lomo
   armaHierros(H,0.100,-0.115);
   armaReflex(H,0.020);
   H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.026,0.150,0.046),M.metal);
@@ -1878,8 +1890,14 @@ const ARSENAL=[
  boca:[0,0.006,-0.320], gR:[0,-0.086,0.010], gL:[0,-0.070,-0.075],
  hacer:(H)=>{ const M=H.M;
   H.box(0.060,0.110,0.360, 0,0.004,0.070, M.poli);              // carcasa envolvente
-  H.box(0.052,0.030,0.300, 0,0.062,0.060, M.negro);             // cargador plano encima
-  H.box(0.062,0.024,0.120, 0,0.084,0.100, M.negro);
+  /* el cargador va ARRIBA y acostado, y es desmontable: es lo que se saca al recargar y lo que
+     se mira en la inspeccion. Antes eran dos cajas pegadas al cuerpo y no salia nunca. */
+  H.mag(g=>{ const b=(w,h,d,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+      me.position.set(x,y,z); g.add(me); return me; };
+    b(0.052,0.030,0.300, 0,0.062,0.060, M.negro);
+    b(0.062,0.024,0.120, 0,0.084,0.100, M.negro);
+    b(0.046,0.014,0.290, 0,0.078,0.058, M.metal);        // la ventana por donde se ven las balas
+    for(let i=0;i<9;i++) b(0.030,0.009,0.020, 0,0.078,-0.062+i*0.030, M.laton); });
   H.cil(0.0085,0.0085,0.14, 0,0.006,-0.220, M.metal, true);
   H.cil(0.015,0.015,0.034, 0,0.006,-0.303, M.negro, true);
   H.box(0.038,0.062,0.080, 0,-0.058,-0.075, M.poli);            // asa/agarre delantero cerrado
@@ -1887,51 +1905,71 @@ const ARSENAL=[
   armaReflex(H,0.030);
   H.box(0.040,0.096,0.056, 0,-0.086,0.010, M.poli, 0.16);
   H.box(0.026,0.018,0.050, 0,-0.040,-0.026, M.negro);
-  H.box(0.014,0.024,0.016, 0,-0.028,-0.016, M.negro); }},
+  H.box(0.014,0.024,0.016, 0,-0.028,-0.016, M.negro);
+  H.cerrojo(0.020,0.020,0.040, 0.032,0.020,-0.060, M.negro, 0.065);   // manija de montaje
+  H.box(0.008,0.010,0.120, 0.030,0.020,0.010, M.negro);         // su ranura
+  H.box(0.024,0.020,0.040, 0,-0.050,0.222, M.poli); }},         // el tubo de expulsion, abajo y atras
 
 /* ---------------- PISTOLAS ---------------- */
 {id:'g17', n:'G-17', d:'pistola · 9 mm · semiautomática', cat:'pistola', semi:true,
  esc:0.95, rpm:420, mag:17, rec:1.20, dmg:21, disp:0.0020, mira:0.052, adsZ:0.400,
  boca:[0,0.030,-0.130], gR:[0,-0.062,0.030], gL:[-0.030,-0.030,-0.020],
  hacer:(H)=>{ const M=H.M;
-  H.box(0.030,0.040,0.190, 0,0.030,-0.030, M.negro);            // corredera
   H.box(0.032,0.028,0.130, 0,0.004,0.000, M.poli);              // armazon
-  H.cil(0.0075,0.0075,0.020, 0,0.030,-0.128, M.metal, true);
-  H.box(0.006,0.008,0.030, 0.012,0.050,-0.050, M.negro);        // nervios de agarre de la corredera
-  H.box(0.006,0.008,0.030,-0.012,0.050,-0.050, M.negro);
-  armaHierros(H,0.055,-0.115);
+  /* LA CORREDERA ES LA PIEZA QUE SE MUEVE. Antes era una caja fija y el "cerrojo" era una aleta de
+     8 mm al costado: montar la pistola no se veia. Ahora se corre entera 5 cm y detras aparece la
+     recamara con el caño adentro. */
+  H.corredera(0.050,(C)=>{
+    C.box(0.030,0.040,0.190, 0,0.030,-0.030, M.negro);          // corredera
+    C.cil(0.0075,0.0075,0.020, 0,0.030,-0.128, M.metal, true);  // boca
+    for(let i=0;i<7;i++) C.box(0.032,0.008,0.005, 0,0.046,0.018-i*0.011, M.poli);  // nervios de agarre
+    C.box(0.010,0.012,0.030, 0.016,0.036,-0.006, M.metal);      // ventana de eyeccion
+    armaHierros(H,0.055,-0.115,C.box); });                      // alza y punto: viajan con ella
+  H.cil(0.0060,0.0060,0.150, 0,0.030,-0.040, M.metal, true);    // el caño, que queda a la vista
   H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.024,0.100,0.036),M.negro);
     m.position.set(0,-0.070,0.030); g.add(m); });
   H.box(0.030,0.100,0.044, 0,-0.062,0.030, M.poli, 0.24);
   H.box(0.022,0.016,0.040, 0,-0.020,0.000, M.negro);
   H.box(0.010,0.020,0.012, 0,-0.010,0.010, M.negro);
-  H.cerrojo(0.008,0.010,0.026, 0.019,0.038,-0.010, M.metal); }},
+  H.box(0.008,0.010,0.020, 0.019,0.008,0.006, M.metal); }},     // reten del cargador
 
 {id:'d50', n:'Desert .50', d:'pistola · .50 AE · un tiro, un problema menos', cat:'pistola', semi:true,
  esc:0.95, rpm:220, mag:7, rec:1.45, dmg:52, disp:0.0032, mira:0.070, adsZ:0.405,
  boca:[0,0.036,-0.170], gR:[0,-0.066,0.040], gL:[-0.032,-0.026,-0.030],
  hacer:(H)=>{ const M=H.M;
-  H.box(0.036,0.052,0.240, 0,0.036,-0.040, M.metal);
-  H.box(0.038,0.030,0.150, 0,0.004,0.006, M.metal);
-  H.box(0.024,0.014,0.130, 0,0.062,-0.090, M.negro);            // riel sobre el cañon
-  H.cil(0.0105,0.0105,0.024, 0,0.036,-0.168, M.negro, true);
-  H.box(0.040,0.012,0.030, 0,0.036,-0.140, M.metal);
-  armaHierros(H,0.062,-0.150);
+  H.box(0.038,0.030,0.150, 0,0.004,0.006, M.metal);            // armazon
+  /* La .50 tiene la corredera mas grande de todas y un recorrido brutal: 6 cm. */
+  H.corredera(0.060,(C)=>{
+    C.box(0.036,0.052,0.240, 0,0.036,-0.040, M.metal);
+    C.box(0.024,0.014,0.130, 0,0.062,-0.090, M.negro);          // riel sobre el cañon
+    C.cil(0.0105,0.0105,0.024, 0,0.036,-0.168, M.negro, true);
+    C.box(0.040,0.012,0.030, 0,0.036,-0.140, M.metal);          // freno de boca
+    for(let i=0;i<5;i++) C.box(0.037,0.010,0.006, 0,0.056,0.042-i*0.013, M.negro);  // estrias del lomo
+    C.box(0.012,0.014,0.036, 0.019,0.040,0.000, M.negro);       // ventana de eyeccion
+    armaHierros(H,0.062,-0.150,C.box); });
+  H.cil(0.0085,0.0085,0.190, 0,0.036,-0.060, M.metal, true);    // el caño
   H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.028,0.110,0.040),M.metal);
     m.position.set(0,-0.076,0.040); g.add(m); });
   H.box(0.034,0.106,0.050, 0,-0.066,0.040, M.maderaOsc, 0.22);
   H.box(0.024,0.018,0.044, 0,-0.022,0.006, M.metal);
-  H.box(0.010,0.022,0.012, 0,-0.010,0.016, M.metal); }},
+  H.box(0.010,0.022,0.012, 0,-0.010,0.016, M.metal);
+  H.box(0.009,0.011,0.022, 0.021,0.010,0.014, M.metal); }},     // reten del cargador
 
 {id:'c45', n:'Colt .45', d:'pistola · .45 ACP · cachas de madera', cat:'pistola', semi:true,
  esc:0.95, rpm:300, mag:8, rec:1.35, dmg:33, disp:0.0024, mira:0.056, adsZ:0.400,
  boca:[0,0.030,-0.140], gR:[0,-0.062,0.034], gL:[-0.030,-0.028,-0.024],
  hacer:(H)=>{ const M=H.M;
-  H.box(0.030,0.044,0.200, 0,0.030,-0.034, M.metal);
-  H.box(0.032,0.030,0.140, 0,0.002,0.004, M.metal);
-  H.cil(0.0080,0.0080,0.022, 0,0.030,-0.138, M.metal, true);
+  H.box(0.032,0.030,0.140, 0,0.002,0.004, M.metal);            // armazon
+  H.corredera(0.052,(C)=>{
+    C.box(0.030,0.044,0.200, 0,0.030,-0.034, M.metal);
+    C.cil(0.0080,0.0080,0.022, 0,0.030,-0.138, M.metal, true);
+    C.box(0.031,0.010,0.030, 0,0.049, 0.022, M.metal);          // la joroba de atras
+    for(let i=0;i<6;i++) C.box(0.031,0.009,0.005, 0,0.049,0.038-i*0.010, M.negro);
+    C.box(0.011,0.013,0.032, 0.016,0.036,-0.010, M.metal);      // ventana de eyeccion
+    armaHierros(H,0.058,-0.124,C.box); });
+  H.cil(0.0065,0.0065,0.170, 0,0.030,-0.050, M.metal, true);    // el caño
   H.box(0.036,0.056,0.040, 0,-0.014,0.048, M.maderaOsc);        // cachas
-  armaHierros(H,0.058,-0.124);
+  for(let i=0;i<5;i++) H.box(0.037,0.007,0.006, 0,-0.002-i*0.011,0.048, M.madera);   // rayado de las cachas
   H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.022,0.092,0.034),M.metal);
     m.position.set(0,-0.066,0.034); g.add(m); });
   H.box(0.030,0.098,0.042, 0,-0.062,0.034, M.maderaOsc, 0.22);
@@ -1949,14 +1987,30 @@ const ARSENAL=[
   H.cil(0.0135,0.0135,0.44, 0,0.010,-0.420, M.metal, true);
   H.cil(0.021,0.021,0.070, 0,0.010,-0.632, M.negro, true);      // freno de boca
   H.box(0.030,0.026,0.130, 0,-0.014,-0.300, M.poli);
-  H.box(0.016,0.070,0.016, 0,-0.088,-0.420, M.negro);           // bipode plegado
+  /* EL BIPODE, ABIERTO. Plegado era un palo de 16 mm: no se leia como bipode. Dos patas en V con
+     sus zapatas, que es lo que hace que la AWM parezca una AWM y no un tubo con mira. */
+  { const pa=(sx)=>{ const m=H.cil(0.005,0.005,0.115, sx*0.030,-0.098,-0.418, M.negro);
+      m.rotation.z=sx*0.42; return m; };
+    pa(1); pa(-1);
+    H.box(0.016,0.008,0.030, 0.048,-0.152,-0.418, M.negro);
+    H.box(0.016,0.008,0.030,-0.048,-0.152,-0.418, M.negro);
+    H.box(0.022,0.024,0.040, 0,-0.070,-0.418, M.negro); }       // la base
+  H.box(0.062,0.014,0.120, 0,0.032,-0.170, M.negro);            // riel largo sobre el chasis
+  for(let i=0;i<4;i++) H.box(0.064,0.005,0.012, 0,0.041,-0.110-i*0.034, M.negro);
   armaLente(H,0.010,0.300);
   H.mag(g=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(0.030,0.070,0.070),M.metal);
     m.position.set(0,-0.084,0.030); g.add(m); });
   H.box(0.040,0.108,0.052, 0,-0.100,0.130, M.poli, 0.28);
   H.box(0.026,0.020,0.054, 0,-0.056,0.088, M.metal);
   H.box(0.014,0.026,0.018, 0,-0.042,0.100, M.metal);
-  H.cerrojo(0.018,0.018,0.090, 0.040,0.024,0.090, M.metal);
+  /* EL CERROJO. Un cerrojo de una AWM no es una caja: es un cilindro con una manija acodada y
+     una perilla en la punta, y viaja 11 cm — el largo de un cartucho .338. Es el gesto entero de
+     la inspeccion de esta arma, asi que tiene que verse. */
+  H.corredera(0.110,(C)=>{
+    C.cil(0.014,0.014,0.150, 0.030,0.028,0.090, M.metal, true);       // el cuerpo del cerrojo
+    C.box(0.048,0.014,0.016, 0.052,0.024,0.150, M.metal, 0,0,-0.25);  // la manija, acodada
+    C.cil(0.013,0.013,0.022, 0.072,0.014,0.150, M.metal);             // la perilla
+    C.box(0.014,0.012,0.020, 0.030,0.040,0.030, M.metal); });         // el diente de extraccion
   H.culata(g=>{ const b=(w,h,d,x,y,z,m,rx)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
       me.position.set(x,y,z); if(rx)me.rotation.x=rx; g.add(me); };
     b(0.052,0.086,0.220, 0,0.000,0.320, M.poli,-0.02); b(0.054,0.100,0.024, 0,-0.004,0.440, M.negro,-0.02);
@@ -1995,9 +2049,16 @@ const ARSENAL=[
   H.box(0.056,0.076,0.230, 0,0.000,0.070, M.metal);
   H.cil(0.0155,0.0155,0.52, 0,0.014,-0.300, M.metal, true);     // caño
   H.cil(0.0130,0.0130,0.40, 0,-0.020,-0.250, M.metal, true);    // tubo de cartuchos
-  H.box(0.046,0.040,0.180, 0,-0.026,-0.230, M.madera);          // corredera de madera
-  for(let i=0;i<6;i++) H.box(0.048,0.004,0.010, 0,-0.006,-0.160-i*0.026, M.maderaOsc);
+  /* EL BOMBEO. Es la mecanica de la 870 y hasta ahora la madera estaba clavada al arma: la
+     corredera se corre 9 cm hacia atras, que es lo que hace que expulsar un cartucho se vea. */
+  H.corredera(0.090,(C)=>{
+    C.box(0.046,0.040,0.180, 0,-0.026,-0.230, M.madera);
+    for(let i=0;i<6;i++) C.box(0.048,0.004,0.010, 0,-0.006,-0.160-i*0.026, M.maderaOsc);
+    C.box(0.050,0.010,0.014, 0,-0.042,-0.148, M.maderaOsc); }); // el tope de adelante
   H.box(0.020,0.014,0.014, 0,0.034,-0.520, M.negro);
+  /* los cartuchos que se ven por la boca del tubo: es lo que le dice al ojo que esta cargada */
+  H.cil(0.0105,0.0105,0.016, 0,-0.020,-0.436, M.laton, true);
+  H.box(0.030,0.014,0.050, 0,-0.040,-0.010, M.metal);           // portilla de carga
   armaReflex(H,0.030);
   H.box(0.038,0.104,0.050, 0,-0.096,0.130, M.madera, 0.26);
   H.box(0.026,0.020,0.056, 0,-0.052,0.086, M.metal);
@@ -2036,33 +2097,67 @@ const ARSENAL=[
  esc:0.95, rpm:150, dmg:45, alcance:1.9, mira:0.030, adsZ:0.380,
  boca:[0,0.010,-0.230], gR:[0,-0.010,0.060], gL:[-0.040,-0.030,0.030],
  hacer:(H)=>{ const M=H.M;
-  H.box(0.006,0.032,0.190, 0,0.010,-0.110, M.metal);            // hoja
-  H.box(0.004,0.014,0.060, 0.002,0.026,-0.170, M.negro);        // filo de sierra
-  H.box(0.026,0.014,0.020, 0,0.006,-0.008, M.negro);            // guarda
-  H.box(0.030,0.034,0.110, 0,-0.006,0.060, M.poli);             // mango
-  for(let i=0;i<4;i++) H.box(0.032,0.005,0.010, 0,-0.024,0.020+i*0.026, M.negro);
-  H.box(0.026,0.022,0.016, 0,-0.008,0.122, M.metal); }},
+  /* Un cuchillo de combate, no una chapa: hoja con FILO (un canto mas fino corrido al borde),
+     vaceo central, lomo aserrado, guarda con gavilan, cacha de cuero trenzado y un pomo con
+     agujero de cordon. Antes eran seis cajas y de perfil no se le veia ni el filo. */
+  H.box(0.0060,0.032,0.190, 0,0.010,-0.110, M.metal);           // cuerpo de la hoja
+  H.box(0.0022,0.011,0.186, -0.002,-0.002,-0.112, M.metal);     // el FILO, corrido al canto de abajo
+  H.box(0.0030,0.008,0.130, 0.001,0.014,-0.100, M.negro);       // vaceo (el canal de la hoja)
+  H.box(0.0058,0.030,0.044, 0,0.017,-0.212, M.metal, 0,0,0.30); // punta en clip
+  for(let i=0;i<7;i++) H.box(0.0044,0.008,0.006, 0.002,0.027,-0.146-i*0.011, M.negro);  // sierra del lomo
+  H.box(0.028,0.014,0.020, 0,0.006,-0.008, M.negro);            // guarda
+  H.box(0.010,0.030,0.014, -0.010,0.014,-0.006, M.negro, 0,0,-0.35);   // gavilan
+  H.box(0.030,0.034,0.110, 0,-0.006,0.060, M.cuero);            // cacha de cuero
+  for(let i=0;i<7;i++) H.box(0.032,0.006,0.008, 0,-0.024,0.016+i*0.015, M.negro, 0.22);  // trenzado
+  for(let i=0;i<5;i++) H.box(0.033,0.007,0.007, 0,0.011,0.022+i*0.019, M.negro, -0.22);
+  H.box(0.026,0.024,0.018, 0,-0.008,0.122, M.metal);            // pomo
+  H.box(0.010,0.010,0.010, 0,-0.008,0.132, M.negro); }},        // agujero del cordon
 
 {id:'machete', n:'Machete', d:'cuerpo a cuerpo · lento y bruto · 2,3 m', cat:'cac', cac:true, giro:[0,-0.78,0.10],
  esc:0.95, rpm:80, dmg:85, alcance:2.3, mira:0.030, adsZ:0.380,
  boca:[0,0.010,-0.340], gR:[0,-0.010,0.070], gL:[-0.040,-0.030,0.040],
  hacer:(H)=>{ const M=H.M;
-  H.box(0.008,0.062,0.300, 0,0.014,-0.170, M.metal);
-  H.box(0.006,0.030,0.090, 0,0.044,-0.290, M.metal);            // punta ancha
-  H.box(0.010,0.010,0.300, 0.004,-0.014,-0.170, M.negro);       // lomo
-  H.box(0.030,0.020,0.018, 0,0.004,-0.010, M.negro);
-  H.box(0.034,0.038,0.120, 0,-0.006,0.070, M.maderaOsc);
-  H.box(0.038,0.026,0.018, 0,-0.008,0.136, M.negro); }},
+  /* Un machete de monte: hoja ANCHA que se ensancha hacia la punta, filo vivo abajo, lomo grueso
+     arriba, cachas de madera remachadas con tres bulones de laton y una escotadura para el indice.
+     Lo que cambia como se lee no es el detalle: es que la hoja ya no es un rectangulo. */
+  H.box(0.0085,0.062,0.190, 0,0.010,-0.110, M.metal);           // primer tramo
+  H.box(0.0085,0.078,0.130, 0,0.020,-0.256, M.metal);           // se ensancha hacia la punta
+  H.box(0.0080,0.040,0.070, 0,0.046,-0.318, M.metal, 0,0,0.22); // punta con panza
+  H.box(0.0030,0.013,0.300, -0.003,-0.016,-0.180, M.metal);     // el FILO, todo el borde de abajo
+  H.box(0.0110,0.014,0.300, 0.003,0.040,-0.180, M.negro);       // lomo grueso
+  H.box(0.0090,0.014,0.028, 0,-0.020,-0.030, M.negro, 0,0,0.5); // escotadura del indice
+  H.box(0.030,0.022,0.018, 0,0.004,-0.010, M.negro);            // virola
+  H.box(0.034,0.040,0.120, 0,-0.006,0.070, M.maderaOsc);        // cachas
+  H.box(0.036,0.012,0.118, 0,-0.026,0.070, M.madera);           // canto claro de las cachas
+  /* los bulones cruzan la cacha de lado a lado: el cilindro nace parado y hay que acostarlo */
+  for(let i=0;i<3;i++){ const b=H.cil(0.005,0.005,0.037, 0,-0.006,0.026+i*0.044, M.laton);
+    b.rotation.z=Math.PI/2; }
+  H.box(0.038,0.028,0.018, 0,-0.008,0.136, M.negro);            // pomo
+  H.cil(0.004,0.004,0.014, 0,0.004,0.146, M.negro, true); }},   // ojo del cordon
 
 {id:'bate', n:'Bate', d:'cuerpo a cuerpo · barrido amplio · 2,5 m', cat:'cac', cac:true, giro:[0,-0.78,0.10],
  esc:0.95, rpm:70, dmg:75, alcance:2.5, mira:0.030, adsZ:0.380,
  boca:[0,0.010,-0.420], gR:[0,-0.010,0.090], gL:[-0.040,-0.030,0.050],
  hacer:(H)=>{ const M=H.M;
-  H.cil(0.036,0.036,0.240, 0,0.010,-0.320, M.madera, true);
-  H.cil(0.036,0.022,0.140, 0,0.010,-0.130, M.madera, true);
-  H.cil(0.022,0.019,0.180, 0,0.010,0.040, M.madera, true);
-  H.cil(0.020,0.020,0.110, 0,0.010,0.150, M.negro, true);       // cinta del mango
-  H.cil(0.026,0.026,0.014, 0,0.010,0.212, M.negro, true); }},
+  /* Un bate usado, no un palo: la maza engorda de a tramos (un cilindro solo se ve recto),
+     lleva la marca de fabrica, cuatro clavos atravesados de este lado, la cinta del mango
+     enrollada en vueltas y el aro del pomo. */
+  H.cil(0.034,0.037,0.090, 0,0.010,-0.386, M.madera, true);     // la punta de la maza
+  H.cil(0.037,0.037,0.150, 0,0.010,-0.296, M.madera, true);     // el barril
+  H.cil(0.037,0.028,0.120, 0,0.010,-0.160, M.madera, true);     // el cuello
+  H.cil(0.026,0.021,0.150, 0,0.010,-0.020, M.madera, true);     // el mango
+  H.box(0.018,0.005,0.052, 0.031,0.010,-0.300, M.negro);        // la marca grabada
+  H.box(0.030,0.004,0.004, 0,0.036,-0.330, M.maderaOsc);        // una veta
+  /* los clavos: cuatro, en cruz alternada, con la cabeza para afuera */
+  for(let i=0;i<4;i++){ const z=-0.360+i*0.048, a=(i%2)?0.9:-0.9;
+    const cl=H.cil(0.0035,0.0035,0.086, Math.sin(a)*0.006, 0.010+Math.cos(a)*0.006, z, M.metal);
+    cl.rotation.z=a;
+    const cb=H.cil(0.0075,0.0075,0.006, Math.sin(a)*0.045, 0.010+Math.cos(a)*0.045, z, M.metal);
+    cb.rotation.z=a; }
+  H.cil(0.021,0.021,0.120, 0,0.010,0.145, M.negro, true);       // cinta del mango
+  for(let i=0;i<8;i++) H.cil(0.0225,0.0225,0.005, 0,0.010,0.092+i*0.015, M.poli, true);  // las vueltas
+  H.cil(0.027,0.027,0.016, 0,0.010,0.212, M.negro, true);       // aro del pomo
+  H.cil(0.024,0.024,0.006, 0,0.010,0.222, M.metal, true); }},
 ];
 
 let armaSel=0;
@@ -2112,7 +2207,12 @@ function buildGun(){ if(gunRoot)return;
   const gm=(c,r,m)=>{ const t=tiroMat(c,r,m); t.envMapIntensity=0.22; return t; };
   const metal=gm(0x2a2f34,0.44,0.52), negro=gm(0x15181b,0.66,0.24), poli=gm(0x101315,0.86,0.05);
   const madera=gm(0x9a5a24,0.72,0.04), maderaOsc=gm(0x7c4519,0.78,0.03);
+  /* Dos materiales que faltaban y se notaban: el LATON de los cartuchos (la unica cosa amarilla y
+     brillante que tiene un arma, y es la que le dice al ojo "esto esta cargado") y el CUERO de las
+     empuñaduras trenzadas del machete y el cuchillo, que hasta ahora eran plastico negro. */
+  const laton=gm(0xc9a13c,0.32,0.78), cuero=gm(0x4a3122,0.80,0.02);
   AKMAT.madera=madera; AKMAT.maderaOsc=maderaOsc; AKMAT.metal=metal; AKMAT.negro=negro; AKMAT.poli=poli;
+  AKMAT.laton=laton; AKMAT.cuero=cuero;
   hfArma(madera,'maderaak',2,1,{rug:0.7,nrm:0.8}); hfArma(metal,'metalak',1,1,{rug:0.42,metal:0.55,nrm:0.7});
   hfArma(maderaOsc,'maderaak',2,2,{color:0xc08c58,rug:0.75,nrm:0.8});
   const box=(w,h,d,x,y,z,m,rx,ry,rz)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
@@ -2158,7 +2258,20 @@ function armaMontar(){
       me.material.side=THREE.DoubleSide; me.rotation.x=Math.PI/2; me.position.set(x,y,z); gunCuerpo.add(me); return me; },
     mag:(fn)=>{ gunMag=new THREE.Group(); gunCuerpo.add(gunMag); fn(gunMag); return gunMag; },
     culata:(fn)=>{ gunCulata=new THREE.Group(); gunCuerpo.add(gunCulata); fn(gunCulata); return gunCulata; } };
-  H.cerrojo=(w,h,dd,x,y,z,m)=>{ gunCH=H.box(w,h,dd,x,y,z,m); gunCH.userData.z0=z; return gunCH; };
+  H.cerrojo=(w,h,dd,x,y,z,m,rec)=>{ gunCH=H.box(w,h,dd,x,y,z,m); gunCH.userData.z0=z;
+    gunCH.userData.rec=(rec==null?0.075:rec); return gunCH; };
+  /* PIEZA CORREDIZA. Un cerrojo puede ser una manija —una caja sola— pero en una pistola es TODA la
+     corredera y en la 870 es el guardamanos entero: si solo se mueve una manijita, el gesto de
+     montar el arma no se lee. Esto arma un grupo que se corre en bloque, con su propio recorrido
+     (una corredera de pistola viaja 5 cm; el bombeo de una escopeta, 9). */
+  H.corredera=(rec,fn)=>{ gunCH=new THREE.Group(); gunCH.userData.z0=0; gunCH.userData.rec=rec;
+    gunCuerpo.add(gunCH); const g=gunCH;
+    fn({ box:(w,h,dd,x,y,z,mm,rx,ry,rz)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,dd),mm||M.metal);
+           me.position.set(x,y,z); if(rx)me.rotation.x=rx; if(ry)me.rotation.y=ry; if(rz)me.rotation.z=rz;
+           g.add(me); return me; },
+         cil:(r1,r2,h,x,y,z,mm,ejeZ)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,8),mm||M.metal);
+           if(ejeZ)me.rotation.x=Math.PI/2; me.position.set(x,y,z); g.add(me); return me; } });
+    return gunCH; };
   d.hacer(H);
   /* GIRO PROPIO DEL ARMA. La hoja de un machete mide 8 mm de canto: de punta no se ve nada. Girando el
      CUERPO en su propio local (y girando los agarres lo mismo, para que la mano lo siga) la cara plana
@@ -2191,6 +2304,10 @@ function armaMontar(){
   recorteObj(gunCuerpo,0.17);
   _alcR=null; _alcL=null;                  // el alcance de los brazos se vuelve a medir
   tiroAmmo=TIRO_MAG; tiroRel=0; RC.act=false; RC.ch=0;
+  /* el gatillo de un tiro por toque se rearma al CAMBIAR de arma. Si no, cambiabas de arma sin
+     soltar el boton y la nueva no disparaba hasta que soltaras: con dos ranuras y el boton de
+     cambio al lado del de fuego, eso pasa todo el tiempo. */
+  _semiListo=true; tiroCd=0;
   try{ tiroHUD(); }catch(e){}
 }
 
@@ -7818,8 +7935,13 @@ function rcMagMalla(){   // un cargador suelto (para el que cae y para el que tr
   m.castShadow=true; scene.add(m); return m;
 }
 function rcEventos(e){
-  if(RC.evt<1 && e>=0.16){ RC.evt=1; tiroSnd('mag');
-    if(gunMag) gunMag.visible=false;
+  /* Una escopeta de corredera NO tiene cargador. Hasta ahora la recarga era una sola: a la 870 se
+     le caia al piso un cargador que no existe y le aparecia otro en la mano. Si el arma no trae
+     cargador desmontable (gunMag), la recarga es solo cartuchos y bombeo. */
+  const conMag=!!gunMag;
+  if(RC.evt<1 && e>=0.16){ RC.evt=1; tiroSnd(conMag?'mag':'papel');
+    if(!conMag){ return; }
+    gunMag.visible=false;
     if(!RC.cae) RC.cae=rcMagMalla();
     RC.cae.visible=true; RC.cae.quaternion.copy(gunRoot.quaternion);
     RC.cae.position.copy(RC_MAGW).applyMatrix4(gunRoot.matrixWorld);
@@ -7827,8 +7949,9 @@ function rcEventos(e){
     RC.cae.userData.w=new THREE.Vector3((Math.random()-0.5)*6,(Math.random()-0.5)*4,(Math.random()-0.5)*6);
     RC.cae.userData.t=0;
   }
-  if(RC.evt<2 && e>=0.40){ RC.evt=2; if(!RC.mano) RC.mano=rcMagMalla(); RC.mano.visible=true; }
-  if(RC.evt<3 && e>=0.88){ RC.evt=3; tiroSnd('mag2'); RC.kick=1;
+  if(RC.evt<2 && e>=0.40){ RC.evt=2; if(!conMag){ tiroSnd('papel'); return; }
+    if(!RC.mano) RC.mano=rcMagMalla(); RC.mano.visible=true; }
+  if(RC.evt<3 && e>=0.88){ RC.evt=3; tiroSnd(conMag?'mag2':'papel'); RC.kick=1;
     if(RC.mano) RC.mano.visible=false; if(gunMag) gunMag.visible=true;
     tiroAmmo=TIRO_MAG; tiroHUD(); }
   if(RC.evt<4 && e>=1.06){ RC.evt=4; tiroSnd('cerrojo'); }
@@ -7838,8 +7961,8 @@ function rcTick(dt){   // el cargador que cae y la manija de carga
     RC.cae.position.addScaledVector(u.v,dt);
     RC.cae.rotation.x+=u.w.x*dt; RC.cae.rotation.y+=u.w.y*dt; RC.cae.rotation.z+=u.w.z*dt;
     if(u.t>2.2 || RC.cae.position.y<0.03){ RC.cae.visible=false; } }
-  if(gunCH){ const z0=gunCH.userData.z0||0.10;
-    gunCH.position.z=z0+Math.max(RC.ch, INS.act?INS.c:0)*0.075; }
+  if(gunCH){ const u=gunCH.userData, z0=(u.z0==null?0.10:u.z0);
+    gunCH.position.z=z0+Math.max(RC.ch, INS.act?INS.c:0)*(u.rec||0.075); }
   RC.kick*=Math.max(0,1-9*dt);
 }
 
@@ -9237,6 +9360,18 @@ try{ window.__tiro={
              pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
              off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
   inspIr:()=>insEmpezar(),
+  /* cuantas piezas tiene el arma equipada y cuanto mide: para ver de una que una receta armo lo
+     que decia, sin tener que buscarla en pantalla */
+  armaMalla:()=>{ let n=0,tri=0,nan=false; const bb=new THREE.Box3();
+    gunCuerpo.updateMatrixWorld(true);
+    gunCuerpo.traverse(o=>{ if(!o.isMesh||!o.geometry)return; n++;
+      const g=o.geometry; tri+=(g.index? g.index.count : g.attributes.position.count)/3;
+      const pa=g.attributes.position.array; for(let i=0;i<pa.length;i++) if(!isFinite(pa[i])) nan=true;
+      bb.expandByObject(o); });
+    const t=bb.getSize(new THREE.Vector3());
+    return {arma:ARMA().id, mallas:n, tri:Math.round(tri), nan,
+            largo:+t.z.toFixed(3), alto:+t.y.toFixed(3), ancho:+t.x.toFixed(3),
+            mag:!!gunMag, cerrojo:!!gunCH, culata:!!gunCulata}; },
   inspMag:()=>{ const m=INS.mano; if(!m||!m.visible) return null;
     const q=camera.quaternion.clone().invert();
     return {cam:m.position.clone().sub(camera.position).applyQuaternion(q).toArray().map(v=>+v.toFixed(3)),
