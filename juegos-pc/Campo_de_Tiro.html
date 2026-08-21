@@ -8258,7 +8258,7 @@ const AMB={on:false, src:null, gan:null, filtro:null, lfo:null, lfo2:null, ganLf
 let _latido=0;
 function ambTick(dt){
   const quiero = (world==='valle') && AUD.on && musOn && !menuMode;
-  const f = Math.max(0,Math.min(2,(typeof CFG!=='undefined'?(+CFG.viento||100):100)/100));
+  const f = Math.max(0,Math.min(2,((typeof CFG!=='undefined'&&CFG.viento!=null)?+CFG.viento:100)/100));
   if(quiero!==AMB.on || (quiero && Math.abs((AMB._f||0)-f)>0.02)){ AMB._f=f; ambViento(quiero,f); }
   if(AUD.on && sfxOn && !PVP.muerto && PVP.vida>0 && PVP.vida<35){
     _latido-=dt;
@@ -9853,7 +9853,9 @@ function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
   if(renderer.shadowMap.type!==tipo){ renderer.shadowMap.type=tipo; renderer.shadowMap.needsUpdate=true;
     scene.traverse(o=>{ if(o.isMesh&&o.material){ const ms=Array.isArray(o.material)?o.material:[o.material];
       for(const m of ms) m.needsUpdate=true; } }); }
-  if(wantShadow){ const R=Math.min(Q.shadow, (typeof CFG!=='undefined'? (+CFG.sombraRes||Q.shadow) : Q.shadow));
+  /* La resolucion la manda el ajuste, no la calidad: con Math.min(Q.shadow,...) pedir 4096 en
+     calidad media devolvia 1024 y el control no hacia nada. */
+  if(wantShadow){ const R=(typeof CFG!=='undefined' && +CFG.sombraRes>0) ? +CFG.sombraRes : Q.shadow;
     if(sun.shadow.mapSize.x!==R){ if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map=null; }
       sun.shadow.mapSize.set(R,R); } }
   eyeAdapt=Q.adapt;
@@ -10380,7 +10382,10 @@ function cfgAplicar(){
   cfgSombras = !!(+CFG.sombras);
   cfgBrillo = Math.max(0.6,Math.min(1.6,(+CFG.brillo||100)/100));
   cfgVista  = Math.max(0.5,Math.min(1.6,(+CFG.vista_m||100)/100));
-  try{ if(ALC_M.follaje&&ALC_M.follaje.userData.amp) ALC_M.follaje.userData.amp.value=Math.max(0,Math.min(2,(+CFG.viento||100)/100)); }catch(e){}
+  /* OJO con el ||: viento en 0 es un valor VALIDO (copas quietas) y `(+CFG.viento||100)` lo
+     convertia en 100, asi que el control no llegaba nunca al cero. */
+  const _vv=(CFG.viento==null?100:+CFG.viento)||0;
+  try{ if(ALC_M.follaje&&ALC_M.follaje.userData.amp) ALC_M.follaje.userData.amp.value=Math.max(0,Math.min(2,_vv/100)); }catch(e){}
   try{ aplicarEstilo(CFG.estilo||'pastel'); }catch(e){}
   lefty = (CFG.mano==='izq');
   try{ applyHudPos(); }catch(e){}          // tamaño y transparencia globales de los controles
