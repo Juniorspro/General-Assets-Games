@@ -1077,15 +1077,15 @@ const ESTILOS={
      el "pastel" salia MAS saturado que el neutro: 0.448 contra 0.308 medidos en pantalla.) */
   pastel:{ n:'Pastel',  tono:'aces',    exp:1.16,
            sol:0xfff6ee, solI:1.15, hemiC:0xf1f6ff, hemiS:0xe4e0da, hemiI:2.05,
-           cieloA:0xb9d6ee, cieloB:0xf7f4ef, niebla:0xeaeff4, nDes:0.48, nLej:0.94, env:1.25 },
+           cieloA:0xb9d6ee, cieloB:0xf7f4ef, niebla:0xeaeff4, nDes:0.48, nLej:0.94, env:1.25, techo:0.90 },
   neutro:{ n:'Neutro',  tono:'aces',    exp:1.02,
            sol:0xfff2e0, solI:2.30, hemiC:0xdfeeff, hemiS:0x9aa6b2, hemiI:0.90,
-           cieloA:0x3f78c0, cieloB:0xd9eaf7, niebla:0xcfe3f5, nDes:1.00, nLej:1.00, env:1.0 },
+           cieloA:0x3f78c0, cieloB:0xd9eaf7, niebla:0xcfe3f5, nDes:1.00, nLej:1.00, env:1.0, techo:1.15 },
   /* VIVO usa el tono NEUTRAL: no desatura, asi que los colores salen firmes, y con el sol fuerte
      contra poco relleno las sombras se cierran. Es el que mejor se lee a pleno sol. */
   vivo:{   n:'Vivo',    tono:'neutral', exp:0.92,
            sol:0xfff4cc, solI:2.95, hemiC:0xa9d2f5, hemiS:0x6e7a88, hemiI:0.50,
-           cieloA:0x2358ab, cieloB:0xc6e0f5, niebla:0xb6d2ea, nDes:1.30, nLej:1.20, env:0.85 }
+           cieloA:0x2358ab, cieloB:0xc6e0f5, niebla:0xb6d2ea, nDes:1.30, nLej:1.20, env:0.85, techo:1.80 }
 };
 let estiloSel='pastel';
 let hemiLuz=_hemi;
@@ -1094,17 +1094,26 @@ function aplicarEstilo(k){
   const E=ESTILOS[k]||ESTILOS.pastel; estiloSel=(ESTILOS[k]?k:'pastel');
   renderer.toneMapping = (E.tono==='neutral' && THREE.NeutralToneMapping!=null)
                          ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = E.exp*(_expMundo||1)*(typeof cfgBrillo!=='undefined'?cfgBrillo:1);
+  /* techo: correccion de exposicion BAJO TECHO. Cada estilo se apaga distinto adentro (el vivo usa
+     el tono Neutral, que come los medios), asi que la compensacion tiene que ser por estilo y no
+     una sola para todos. Solo se aplica en los niveles cubiertos (_hemiMin > 0). */
+  const _int = (_hemiMin>0) ? (E.techo||1) : 1;
+  renderer.toneMappingExposure = E.exp*(_expMundo||1)*_int*(typeof cfgBrillo!=='undefined'?cfgBrillo:1);
   sun.color.setHex(E.sol); sun.intensity=E.solI*(_solMundo||1);
-  if(hemiLuz){ hemiLuz.color.setHex(E.hemiC); hemiLuz.groundColor.setHex(E.hemiS); hemiLuz.intensity=E.hemiI; }
+  /* PISO DE LUZ BAJO TECHO. En la galeria cubierta el sol casi no entra, asi que el estilo VIVO
+     —que se apoya en un sol fuerte contra poquisimo relleno— la dejaba a oscuras (52 de luz en
+     neutro contra 31 en vivo, medido en pantalla): no se veian ni los blancos. Adentro el relleno
+     no puede bajar de _hemiMin, y ningun estilo puede volver el nivel injugable. */
+  if(hemiLuz){ hemiLuz.color.setHex(E.hemiC); hemiLuz.groundColor.setHex(E.hemiS);
+    hemiLuz.intensity=Math.max(E.hemiI, _hemiMin||0); }
   skyMat.uniforms.top.value.setHex(E.cieloA); skyMat.uniforms.bot.value.setHex(E.cieloB);
   cityBg.setHex(E.cieloB);
   const V=(typeof cfgVista!=='undefined'?cfgVista:1);
   if(scene.fog){ scene.fog.color.setHex(E.niebla);
     scene.fog.near=_niebla0.cerca*E.nDes*V; scene.fog.far=_niebla0.lejos*E.nLej*V; }
-  if(scene.environment) scene.environmentIntensity=E.env;
+  if(scene.environment) scene.environmentIntensity=(_hemiMin>0)?Math.max(E.env,1.15):E.env;
 }
-let _expMundo=1, _solMundo=1;   // los ajustes por mundo (galeria vs isla) multiplican, no pisan
+let _expMundo=1, _solMundo=1, _hemiMin=0;   // los ajustes por mundo (galeria vs isla) multiplican, no pisan
 
 // ===== helpers =====
 function zoneTag(x,z,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.05,2.2),mat(color,0.6)); m.position.set(x,0.04,z); scene.add(m); }
@@ -2099,7 +2108,7 @@ function enterTiro(){ if(world==='tiro')return; world='tiro'; grassMode=false; d
   tiroGroup.visible=true;
   scene.background=new THREE.Color(0x1b1f23); skyMesh.visible=false; scene.environment=roomEnv;   // INTERIOR gris (sin cielo)
   scene.fog.color.set(0x23282d); scene.fog.near=22; scene.fog.far=140;
-  _solMundo=0.24; _expMundo=1.00; aplicarEstilo(estiloSel);   // galeria cubierta: el sol entra poco
+  _solMundo=0.24; _expMundo=1.14; _hemiMin=1.25; aplicarEstilo(estiloSel);   // galeria cubierta: el sol entra poco
   player.pos.copy(TIRO_START); player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.noRoll=true;
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
@@ -7306,7 +7315,7 @@ function enterAlc(){ if(world==='valle')return; world='valle'; grassMode=false; 
   /* la niebla arrancaba a 90 m y la isla mide 500: de lejos todo salia lavado. Se corre para que
      quede la perspectiva atmosferica de la bahia sin borrar el relieve. */
   scene.fog.color.set(0xa8bccb); scene.fog.near=170; scene.fog.far=1150;
-  _solMundo=0.92; _expMundo=1.03; aplicarEstilo(estiloSel);   // isla: cielo abierto
+  _solMundo=0.92; _expMundo=1.03; _hemiMin=0; aplicarEstilo(estiloSel);   // isla: cielo abierto
   sun.position.set(-260,320,ALC_GZ-120); sun.target.position.set(0,20,ALC_GZ); sun.target.updateMatrixWorld();
   player.pos.copy(ALC_START); player.pos.y=alcH(ALC_START.x,ALC_START.z-ALC_GZ)+0.1;
   player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.noRoll=true;
