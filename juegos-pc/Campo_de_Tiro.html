@@ -867,7 +867,7 @@ const CFG_DEF={
   hudEsc:100, hudOpa:100, mano:'der', hudVer:1,
   layout:'clasico', mando:0, mapa:'tiro', idioma:'es',
   adsFp:1, sensRel:100, acel:'fija', acelFuerza:60,
-  giro:'no', sensGiro:100, sensGiroAds:70
+  giro:'no', sensGiro:100, sensGiroAds:70, vaiven:50
 };
 const CFG=Object.assign({},CFG_DEF);
 try{ const g=JSON.parse(localStorage.getItem('pf_cfg')||'null');
@@ -880,6 +880,7 @@ let volSfx=0.9, volMus=0.35, sfxOn=true, musOn=true;
 let cfgSangre=true, cfgMarca=true, cfgVibrar=true, cfgSombras=true, cfgFps=60;
 let cfgTomarAuto=true;
 let adsFpForzado=true;  // apuntar SIEMPRE se ve en 1a persona, aunque juegues en 3a
+let vaivenK=0.5;        // cuanto se bambolean el arma y los brazos al mirar (1 = como era antes)
 let sensRelY=1;         // relacion vertical/horizontal del giro
 let acelModo='fija', acelF=0.6;
 let giroModo='no', giroK=1, giroKAds=0.7;
@@ -889,14 +890,40 @@ let giroModo='no', giroK=1, giroKAds=0.7;
    absoluta: la orientacion deriva sola y termina con la mira torcida despues de un minuto.
    El aparato informa las velocidades en SUS ejes, asi que hay que rotarlas al marco de la
    PANTALLA con screen.orientation.angle — si no, en horizontal el giro te mueve el cabeceo. */
-const GIRO={on:false, lig:false, rx:0, ry:0, ult:0, err:'', muestras:0};
+/* De donde salia que cabecear tambien girara de costado: screen.orientation.angle SALTA de a 90
+   grados, pero el telefono en la mano nunca esta clavado en 0 ni en 90 — siempre hay algo de
+   ladeo. Con los ejes de pantalla supuestos, ese ladeo hacia que una parte del cabeceo cayera en
+   el eje del giro, y la mira se iba de costado al mirar para abajo.
+   La solucion no es suponer los ejes: es preguntarle a la GRAVEDAD donde queda el arriba de verdad.
+   El giro se toma sobre la VERTICAL DEL MUNDO y el cabeceo sobre la horizontal que queda al
+   quitarle a la pantalla su parte vertical. Asi los dos ejes son perpendiculares de verdad, no se
+   pisan, y el ladeo del aparato deja de contaminar. Tambien entra alpha (giro sobre el eje que sale
+   de la pantalla), que antes se tiraba entero: con el telefono inclinado, parte del giro vive ahi. */
+const GIRO={on:false, lig:false, rx:0, ry:0, ult:0, err:'', muestras:0,
+            ux:0, uy:1, uz:0, gOk:false};
 function giroEvento(e){
   const r=e.rotationRate; if(!r) return;
-  const b=r.beta||0, g=r.gamma||0;                     // giro sobre el eje X y el eje Y del aparato
+  const wx=r.beta||0, wy=r.gamma||0, wz=r.alpha||0;    // velocidad de giro en los ejes DEL APARATO
   const ang=((screen.orientation&&screen.orientation.angle)||window.orientation||0)*Math.PI/180;
   const c=Math.cos(ang), sn=Math.sin(ang);
-  GIRO.rx =  b*c + g*sn;    // sobre el eje HORIZONTAL de la pantalla → cabeceo
-  GIRO.ry = -b*sn + g*c;    // sobre el eje VERTICAL de la pantalla   → giro
+  // 1) el ARRIBA del mundo visto desde el aparato, filtrado: la gravedad no salta, el manotazo si
+  const a=e.accelerationIncludingGravity;
+  if(a){ const L=Math.hypot(a.x||0,a.y||0,a.z||0);
+    if(L>3){ const k=GIRO.gOk?0.12:1;
+      GIRO.ux+=((a.x||0)/L-GIRO.ux)*k; GIRO.uy+=((a.y||0)/L-GIRO.uy)*k; GIRO.uz+=((a.z||0)/L-GIRO.uz)*k;
+      GIRO.gOk=true; } }
+  let ux,uy,uz;
+  if(GIRO.gOk){ const L=Math.hypot(GIRO.ux,GIRO.uy,GIRO.uz)||1; ux=GIRO.ux/L; uy=GIRO.uy/L; uz=GIRO.uz/L; }
+  else { ux=-sn; uy=c; uz=0; }                          // sin acelerometro: el vertical de la pantalla
+  // 2) el eje horizontal de la pantalla, sin su parte vertical → cabeceo puro
+  let hx=c, hy=sn, hz=0;
+  const d=hx*ux+hy*uy+hz*uz;
+  let px=hx-d*ux, py=hy-d*uy, pz=hz-d*uz;
+  const pL=Math.hypot(px,py,pz);
+  if(pL<0.25){ px=hx; py=hy; pz=hz; }                   // pantalla casi horizontal: no hay como separar
+  else { px/=pL; py/=pL; pz/=pL; }
+  GIRO.ry = wx*ux + wy*uy + wz*uz;                      // giro SOBRE LA VERTICAL DEL MUNDO
+  GIRO.rx = wx*px + wy*py + wz*pz;                      // cabeceo sobre la horizontal de la pantalla
   GIRO.ult=performance.now(); GIRO.muestras++;
 }
 function giroActivar(){
@@ -7725,7 +7752,10 @@ function tiroPostura(dt){
   /* El retraso del caño al girar es lo que hace que el arma "nade" cuando movés la camara. De
      cadera esta bien —es lo que le da peso— pero con la mira puesta corre el punto rojo del blanco,
      que es justo lo que no se quiere. Apuntando se amortigua al 12% y el resorte se pone mas duro. */
-  const K=150+260*adsW, C=17.5+16*adsW, qLag=1-0.88*adsW;
+  /* El arma "nadaba" demasiado al mirar alrededor: el resorte del caño arrastraba tambien los dos
+     brazos, porque las manos van pegadas a los agarres por IK. vaivenK lo escala entero — de fabrica
+     va a la mitad de lo que era, y se puede subir o bajar desde Ajustes. */
+  const K=150+260*adsW, C=17.5+16*adsW, qLag=(1-0.88*adsW)*vaivenK;
   vlagY += (-lagY*K - vlagY*C)*dt + dY*30.0*qLag; lagY += vlagY*dt; lagY=Math.max(-0.20,Math.min(0.20,lagY));
   vlagP += (-lagP*K - vlagP*C)*dt + dP*24.0*qLag; lagP += vlagP*dt; lagP=Math.max(-0.16,Math.min(0.16,lagP));
   // ---- REPOSO: ¿está el jugador sin hacer NADA? ----
@@ -8177,18 +8207,22 @@ try{ window.__tiro={
             vMus:+volMus.toFixed(2), vista:camView, zurdo:lefty, cal:quality,
             tomAuto:cfgTomarAuto, lay:CFG.layout, idi:lang,
             adsFp:adsFpForzado, relY:sensRelY, acel:acelModo, acelF:+acelF.toFixed(2),
-            giro:giroModo, giroK:+giroK.toFixed(2), giroKAds:+giroKAds.toFixed(2),
+            giro:giroModo, giroK:+giroK.toFixed(2), giroKAds:+giroKAds.toFixed(2), vaiven:+vaivenK.toFixed(2),
             camTP:+player.camTP.toFixed(3), adsW:+adsW.toFixed(2),
             yaw:+player.yaw.toFixed(4), pitch:+player.pitch.toFixed(4)}; },
   // giroscopio: inyecta una lectura como la que manda el aparato y devuelve cuanto movio la mira
-  giroSim:(beta,gamma,ang,dt)=>{ const a0=player.yaw, p0=player.pitch;
+  giroSim:(beta,gamma,ang,dt,grav,alpha)=>{ const a0=player.yaw, p0=player.pitch;
     const o=Object.getOwnPropertyDescriptor(window,'orientation');
     try{ Object.defineProperty(window,'orientation',{value:ang||0,configurable:true}); }catch(e){}
-    giroEvento({rotationRate:{beta:beta,gamma:gamma}});
+    if(grav===null){ GIRO.gOk=false; GIRO.ux=0; GIRO.uy=1; GIRO.uz=0; }
+    giroEvento({rotationRate:{beta:beta,gamma:gamma,alpha:alpha||0},
+                accelerationIncludingGravity: grav? {x:grav[0],y:grav[1],z:grav[2]} : null});
     giroTick(dt==null?1:dt);
     if(o) try{ Object.defineProperty(window,'orientation',o); }catch(e){}
     return {dYaw:+(player.yaw-a0).toFixed(4), dPitch:+(player.pitch-p0).toFixed(4),
-            rx:+GIRO.rx.toFixed(2), ry:+GIRO.ry.toFixed(2), on:GIRO.on, muestras:GIRO.muestras}; },
+            rx:+GIRO.rx.toFixed(2), ry:+GIRO.ry.toFixed(2), on:GIRO.on, muestras:GIRO.muestras,
+            u:[+GIRO.ux.toFixed(2),+GIRO.uy.toFixed(2),+GIRO.uz.toFixed(2)], gOk:GIRO.gOk}; },
+  giroReset:()=>{ GIRO.gOk=false; GIRO.ux=0; GIRO.uy=1; GIRO.uz=0; return 'gravedad olvidada'; },
   // aceleracion del gesto: devuelve la ganancia para una velocidad y un recorrido dados
   acelG:(vel,rec)=>+acelGanancia(vel,rec).toFixed(3),
   cfgSec:id=>{ const b=document.querySelector('[data-sec="'+id+'"]'); if(b)b.click();
@@ -9856,6 +9890,10 @@ const CFG_SECS=[
          en:'FIXED: the turn is proportional to the finger and nothing else — the most predictable for aiming. BY DISTANCE: the longer the drag, the faster it turns, so you can spin around without lifting your finger. BY SPEED: the finger speed rules, so a flick turns a lot while a small correction stays small.',
          pt:'FIXA: o giro é proporcional ao dedo. POR DISTÂNCIA: quanto maior o arrasto, mais rápido gira. POR VELOCIDADE: manda a rapidez do dedo.'},
       ops:[['fija',{es:'Fija',en:'Fixed',pt:'Fixa'}],['dist',{es:'Por distancia',en:'By distance',pt:'Por distância'}],['vel',{es:'Por velocidad',en:'By speed',pt:'Por velocidade'}]]},
+     {k:'vaiven', t:{es:'Balanceo del arma',en:'Weapon sway',pt:'Balanço da arma'}, tipo:'sli', min:0, max:150, step:5, suf:'%',
+      h:{es:'Cuánto se quedan atrás el arma y los brazos cuando girás la cámara. Le da peso al fusil, pero de más te tapa media pantalla al mirar alrededor. En 0 % el arma va clavada a la mira.',
+         en:'How far the weapon and arms trail behind when you swing the camera. It gives the rifle weight, but too much covers half the screen while looking around. At 0% the weapon is locked to the sights.',
+         pt:'Quanto a arma e os braços ficam para trás ao girar a câmera. Em 0% a arma fica presa à mira.'}},
      {k:'acelFuerza', t:{es:'Intensidad',en:'Strength',pt:'Intensidade'}, tipo:'sli', min:0, max:150, step:5, suf:'%',
       h:{es:'Cuánto llega a acelerar como máximo. En 100 % el giro puede llegar a ir al doble de rápido al final de un arrastre largo o de un manotazo. No hace nada con el modo FIJA.',
          en:'How much it can accelerate at most. At 100% the turn can reach double speed at the end of a long drag or a flick. Does nothing in FIXED mode.',
@@ -10003,6 +10041,7 @@ function cfgAplicar(){
   sensMiraMul= Math.max(0.05,Math.min(2,(+CFG.sensMira||60)/100));
   adsFpForzado = !!(+CFG.adsFp);
   sensRelY = Math.max(0.2,Math.min(2,(+CFG.sensRel||100)/100));
+  vaivenK  = Math.max(0,Math.min(1.5,(+CFG.vaiven||0)/100));
   acelModo = CFG.acel||'fija';
   acelF    = Math.max(0,Math.min(2,(+CFG.acelFuerza||0)/100));
   giroK    = Math.max(0.1,Math.min(5,(+CFG.sensGiro||100)/100));
