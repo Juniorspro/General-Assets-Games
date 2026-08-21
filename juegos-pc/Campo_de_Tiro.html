@@ -9605,6 +9605,102 @@ try{ window.__tiro={
              pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
              off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
   inspIr:()=>insEmpezar(),
+  /* morir VARIAS veces seguidas y ver donde reaparece cada vez */
+  morirN:(n)=>{
+    const out=[]; PVP_GRACIA=0;
+    player.pos.set(0,1.2,ARE_GZ+30); player.vel.set(0,0,0); player.vy=0;
+    PVP.vida=PVP.max; PVP.muerto=false;
+    for(let k=0;k<(n||3);k++){
+      PVP.ultimo='prueba'; PVP.vida=0; pvpMorir();
+      let t=0, revivio=false;
+      while(t<8 && !revivio){ update(1/60); t+=1/60; if(!PVP.muerto) revivio=true; }
+      /* un rato mas para ver si se cae */
+      for(let i=0;i<90;i++) update(1/60);
+      const dentro = Math.abs(player.pos.x)<=66 && Math.abs(player.pos.z-ARE_GZ)<=66 && player.pos.y>-1;
+      out.push({ muerte:k+1, tardo:+t.toFixed(2), revivio,
+                 p:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ARE_GZ).toFixed(1)],
+                 dentroDelMapa:dentro, vida:+PVP.vida.toFixed(0) });
+    }
+    PVP_GRACIA=0; return out; },
+  /* ¿este punto de la arena esta DENTRO de algun solido? Es la forma directa de comprobar que el
+     colisionador coincide con lo que se ve, sin depender de caminar en la direccion correcta. */
+  solido:(x,y,z)=>{ const wz=ARE_GZ+z;
+    for(const c of colliders){ if(c.piso) continue;
+      if(x>=c.minx&&x<=c.maxx&&y>=c.miny&&y<=c.maxy&&wz>=c.minz&&wz<=c.maxz) return true; }
+    return false; },
+  /* recorre la tienda i: puntos DENTRO de cada pared (tienen que ser solidos) y puntos en el
+     hueco de adentro y en el pasto de afuera (tienen que estar libres) */
+  tiendaSolidos:(i)=>{
+    const L=ARE_LADO, d=L/2-11;
+    const cs=[[-d,-d,Math.PI*0.25],[d,-d,-Math.PI*0.25],[-d,d,Math.PI*0.75],[d,d,-Math.PI*0.75]];
+    const [cx,cz,ry]=cs[i|0]; const W=13, D=9;
+    const rot=(dx,dz)=>[cx+dx*Math.cos(ry)-dz*Math.sin(ry), cz+dx*Math.sin(ry)+dz*Math.cos(ry)];
+    const dentro=(px,pz,y)=>{ const wz=ARE_GZ+pz;
+      for(const c of colliders){ if(c.piso) continue;
+        if(px>=c.minx&&px<=c.maxx&&y>=c.miny&&y<=c.maxy&&wz>=c.minz&&wz<=c.maxz) return true; }
+      return false; };
+    const r={};
+    /* pared del fondo: cinco puntos a lo largo */
+    let ok=0; for(let k=-2;k<=2;k++){ const p=rot(k*2.4, -D/2+0.2); if(dentro(p[0],p[1],1.2)) ok++; }
+    r.fondo=ok+'/5';
+    ok=0; for(let k=-1;k<=1;k++){ const p=rot(-W/2+0.2, k*2.6); if(dentro(p[0],p[1],1.2)) ok++; }
+    r.ladoA=ok+'/3';
+    ok=0; for(let k=-1;k<=1;k++){ const p=rot( W/2-0.2, k*2.6); if(dentro(p[0],p[1],1.2)) ok++; }
+    r.ladoB=ok+'/3';
+    ok=0; for(let k=-2;k<=2;k++){ const p=rot(k*1.8, D/2-2.2); if(dentro(p[0],p[1],0.6)) ok++; }
+    r.mostrador=ok+'/5';
+    /* el hueco de adentro (a la altura del pecho, delante del mostrador) tiene que estar LIBRE */
+    ok=0; for(let k=-1;k<=1;k++){ const p=rot(k*3.0, -1.0); if(!dentro(p[0],p[1],1.2)) ok++; }
+    r.interiorLibre=ok+'/3';
+    /* y el pasto justo afuera, tambien */
+    ok=0; for(let k=-1;k<=1;k++){ const p=rot(k*3.0, D/2+4.0); if(!dentro(p[0],p[1],1.2)) ok++; }
+    r.afueraLibre=ok+'/3';
+    return r; },
+  /* sigue al jugador cuadro a cuadro y anota TODO salto grande: sirve para cazar teleports */
+  rastro:(seg,x,z,yaw,joyY)=>{
+    player.pos.set(x,1.2,ARE_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+    if(yaw!=null){ player.yaw=yaw; player.faceYaw=yaw; player.pitch=0; }
+    PVP.vida=PVP.max; PVP.muerto=false; PVP_GRACIA=999; botBalde=BOT_COLCHON;
+    const jx=joy.x, jy=joy.y; joy.x=0; joy.y=(joyY==null?-1:joyY);
+    const saltos=[]; let px=player.pos.x, py=player.pos.y, pz=player.pos.z;
+    const T=seg||3, paso=1/120;
+    for(let t=0;t<T;t+=paso){ update(paso);
+      const d=Math.hypot(player.pos.x-px, player.pos.y-py, player.pos.z-pz);
+      if(d>0.9 && saltos.length<12) saltos.push({t:+t.toFixed(2), salto:+d.toFixed(1),
+        de:[+px.toFixed(1),+py.toFixed(1),+(pz-ARE_GZ).toFixed(1)],
+        a:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ARE_GZ).toFixed(1)],
+        muerto:PVP.muerto});
+      px=player.pos.x; py=player.pos.y; pz=player.pos.z; }
+    joy.x=jx; joy.y=jy; PVP_GRACIA=0;
+    return { fin:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ARE_GZ).toFixed(1)],
+             saltos }; },
+  /* ¿se atraviesa la pared? Se camina desde afuera CONTRA la pared del fondo de una tienda y se
+     mira si el jugador quedo del lado de afuera o se metio adentro/del otro lado. */
+  paredTienda:(i,seg)=>{
+    const v=ARE_VEND[i|0]; if(!v) return 'no hay';
+    /* la tienda mira al centro: se entra por el frente y se camina hasta el fondo */
+    const ang=Math.atan2(v.x,v.z);                       // hacia el centro
+    const hx=-Math.sin(ang), hz=-Math.cos(ang);          // del vendedor hacia la pared del fondo
+    /* se arranca DELANTE del vendedor, del lado del campo, y se camina hacia el fondo */
+    const px=v.x + hx*2.5, pz=v.z + hz*2.5;
+    player.pos.set(px,1.2,ARE_GZ+pz); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+    player.yaw=Math.atan2(hx,hz); player.faceYaw=player.yaw; player.pitch=0;   // mirando al fondo
+    PVP_GRACIA=999; PVP.vida=PVP.max; PVP.muerto=false;
+    const jx=joy.x, jy=joy.y; joy.x=0; joy.y=-1;         // caminar hacia adelante = hacia el fondo
+    const T=seg||2.6, paso=1/120; let rec=0;
+    const x0=player.pos.x, z0=player.pos.z;
+    for(let t=0;t<T;t+=paso){ update(paso); }
+    joy.x=jx; joy.y=jy; PVP_GRACIA=0;
+    rec=Math.hypot(player.pos.x-x0, player.pos.z-z0);
+    /* a que distancia del vendedor quedo, medido a lo largo del eje de la tienda: si es mucho,
+       atraveso la pared del fondo */
+    const dx=player.pos.x-v.x, dz=(player.pos.z-ARE_GZ)-v.z;
+    const alFondo = -(dx*hx + dz*hz);                    // cuanto se metio hacia el fondo
+    /* la tienda mide 9 de fondo y el vendedor esta en la boca, asi que el fondo esta a unos 9 m.
+       Si se metio mas que eso, atraveso la pared. */
+    return { avanzo:+rec.toFixed(2), haciaElFondo:+alFondo.toFixed(2),
+             atraveso: alFondo > 9.5, p:[+player.pos.x.toFixed(1),+(player.pos.z-ARE_GZ).toFixed(1)] }; },
+  colArena:()=>({ total:colliders.length }),
   /* SIMULA UN TELEFONO SIN GIROSCOPIO: solo se le mandan eventos de movimiento con gravedad
      (accelerationIncludingGravity) y NADA de rotationRate ni de orientacion. Si la vista se mueve,
      el respaldo por inclinacion funciona. */
@@ -10262,6 +10358,7 @@ try{ window.__tiro={
     bLHand.getWorldPosition(A); const dL=+A.distanceTo(camera.position).toFixed(3);
     return { errDer:eR, errIzq:eL, distCamDer:dR, distCamIzq:dL }; },
   aceros:()=>tiroTargets.filter(o=>o.userData.kind==='steel').map(o=>({z:+(o.getWorldPosition(new THREE.Vector3()).z-TIRO_GZ).toFixed(1), x:+o.getWorldPosition(new THREE.Vector3()).x.toFixed(1), caido:o.userData.down, rot:+o.userData.piv.rotation.x.toFixed(2)})),
+  tirosAjenos:(reset)=>{ const n=_taN, L=_taLargo; if(reset) _taN=0; return {dibujados:n, ultimoLargo:+L.toFixed(1)}; },
   fx:()=>({flashT:+flashT.toFixed(3), flashVis:!!(gunFlash&&gunFlash.visible), luz:gunLight?gunLight.intensity:null,
     traz:tiroTracers.map(t=>+t.userData.v.toFixed(3)), chispas:tiroSparks.map(t=>+t.userData.v.toFixed(3)), marcas:tiroMarks.length}),
   brazo:()=>{ if(!bRArm)return null; const A=new THREE.Vector3(),B=new THREE.Vector3(),C=new THREE.Vector3(),E=new THREE.Vector3();
@@ -12422,6 +12519,57 @@ function mpAvisarTiro(px,py,pz,dx,dy,dz){
     p:[+px.toFixed(1),+py.toFixed(1),+pz.toFixed(1)], d:[+dx.toFixed(2),+dy.toFixed(2),+dz.toFixed(2)],
     w:world});
 }
+/* ===================== LOS TIROS DE LOS DEMAS SE VEN =====================
+   mpTiroAjeno solo hacia SONIDO. Ni fogonazo, ni estela, nada: el otro apretaba el gatillo y lo
+   unico que pasaba era un ruido que venia de ningun lado. Con dieciseis bots eso es un tiroteo a
+   ciegas — no se sabe quien tira, ni desde donde, ni si te estan apuntando a vos.
+
+   Ahora cada tiro ajeno deja lo mismo que el tuyo: un FOGONAZO en la boca del que disparo y una
+   ESTELA hasta donde fue la bala. Se reusan las mismas piscinas de objetos que usa el jugador
+   local (tiroTracer y tiroSpark), asi que no se crea nada nuevo por disparo y se ven iguales.
+
+   La estela se corta contra lo que haya en el camino: si el tiro pega en una pared, la linea
+   termina en la pared y no la atraviesa. Es lo que te deja leer de donde vino y donde pego. */
+const _taP=new THREE.Vector3(), _taD=new THREE.Vector3(), _taFin=new THREE.Vector3();
+let _taN=0, _taLargo=0;   // cuantos tiros ajenos se dibujaron y de que largo (para poder medirlo)
+const _taRay=new THREE.Raycaster(); _taRay.far=200;
+function tiroAjenoVer(px,py,pz, dx,dy,dz, alcance){
+  if(!isFinite(px)||!isFinite(dx)) return;
+  _taP.set(px,py,pz); _taD.set(dx,dy,dz);
+  const L=_taD.length(); if(L<1e-4) return; _taD.divideScalar(L);
+  let largo=alcance||140;
+  /* ¿pega en algo? Entonces la estela termina ahi y salta una chispa */
+  try{
+    _taRay.set(_taP,_taD); _taRay.far=largo; _taRay.camera=camera;
+    const h=_taRay.intersectObjects(tiroTargets&&tiroTargets.length?tiroTargets:[],false)[0];
+    if(h && h.distance<largo) largo=h.distance;
+  }catch(e){}
+  /* UN TUBO DE 30 METROS QUE ARRANCA EN TU CARA NO SE LEE COMO UNA ESTELA. Si el que dispara esta
+     pegado a la camara, la estela sale desde adentro de la lente y tapa media pantalla con una
+     mancha clara. Se corre el arranque para adelante hasta salir de la nariz, y si aun asi queda
+     demasiado cerca se dibuja solo el fogonazo: a dos metros no hace falta una linea para saber
+     quien te esta tirando. */
+  const dCam=_taP.distanceTo(camera.position);
+  let z0=0;
+  if(dCam<3.2){
+    /* cuanto hay que avanzar sobre la linea para despegarse de la camara */
+    z0=Math.min(largo*0.8, 2.2);
+    if(largo-z0 < 1.2) z0=largo;      // no queda estela util: solo el fogonazo
+  }
+  if(z0<largo){
+    const ini=_taFin.copy(_taP).addScaledVector(_taD,z0).clone();
+    const lg=largo-z0;
+    const fin=ini.clone().addScaledVector(_taD,lg);
+    const tr=tiroTracer();
+    tr.position.copy(ini); tr.lookAt(fin);
+    tr.scale.set(0.62,0.62,lg);       // mas finita que la propia: son muchas a la vez
+    tr.visible=true; tr.userData.v=0.075;
+    _taN++; _taLargo=lg;
+  }
+  const sp=tiroSpark();
+  sp.position.copy(_taP).addScaledVector(_taD,0.12);
+  sp.scale.setScalar(0.85); sp.visible=true; sp.userData.v=0.055;
+}
 function mpTiroAjeno(d){
   if(!d||!d.p||d.id===MP.id) return;
   if(d.w && d.w!==world) return;                       // otro mapa: no se oye
@@ -12441,6 +12589,8 @@ function mpTiroAjeno(d){
       if(lat<3.2) tiroSnd('zumbido', Math.max(0.25, 1-lat/3.2));
     }
   }
+  /* y AHORA se ve: fogonazo en la boca del otro y estela hasta donde fue la bala */
+  if(d.d) tiroAjenoVer(d.p[0],d.p[1],d.p[2], d.d[0],d.d[1],d.d[2], 160);
 }
 function mpPublishState(){ if(!MP.on)return; const now=performance.now(); if(now-MP.lastPub<100)return;
   const p=player, moving=Math.hypot(p.vel.x,p.vel.z)>0.6;
@@ -12953,11 +13103,54 @@ function areAdd(mat,geo,x,y,z,ry){
 }
 function areCaja(mat,x,y,z,w,h,d,ry,conCol){
   areAdd(mat,new THREE.BoxGeometry(w,h,d),x,y,z,ry);
-  if(conCol!==false) areCol(x,y,z,w,h,d);
+  if(conCol!==false) areCol(x,y,z,w,h,d,ry);
 }
-function areCol(x,y,z,w,h,d){
-  colliders.push({minx:x-w/2,maxx:x+w/2,miny:y-h/2,maxy:y+h/2,
-                  minz:z+ARE_GZ-d/2,maxz:z+ARE_GZ+d/2,mesh:null});
+/* ===================== POR QUE SE ATRAVESABAN LAS PAREDES DE LA TIENDA =====================
+   areCaja le pasaba el giro a la MALLA y no al colisionador: la pared se dibujaba girada y el
+   bloque solido quedaba alineado a los ejes, en el mismo centro pero sin girar. En casi toda la
+   arena da igual porque casi todo esta a 0 grados… pero las cuatro tiendas estan en las esquinas,
+   a 45, que es el peor angulo posible: el solido y lo que se ve no se tocan mas que en el medio.
+   Por eso se entraba caminando por la pared.
+
+   Un bloque girado no se puede describir con uno alineado a los ejes, asi que se PARTE: la pared
+   se corta en trozos del ancho de su lado corto a lo largo de su lado largo, y de cada trozo se
+   guarda su caja alineada, que para un trozo casi cuadrado se pasa poco. La cadena de trozos
+   sigue la pared girada. Las medidas de cada caja salen exactas: un rectangulo de semiejes
+   (hx,hz) girado un angulo tiene semiejes hx|cos|+hz|sen| y hx|sen|+hz|cos|. */
+function areCol(x,y,z,w,h,d,ry){
+  /* ===================== Y POR QUE SE ATRAVESABA TODO LO DEMAS TAMBIEN =====================
+     Estos colisionadores nacian con `mesh:null`. Y moveX y moveZ descartan un collider con
+     `c.mesh===ground`… donde `ground` vale null, porque hace rato que no hay piso infinito. O sea
+     que null===null daba verdadero y el motor se salteaba TODOS los solidos de la arena en el
+     movimiento horizontal: la muralla, las tiendas, las coberturas, todo. Solo funcionaba la
+     colision VERTICAL, que no mira ese campo — por eso te podias parar arriba de un cajon pero lo
+     cruzabas caminando.
+
+     Y cruzando la muralla te ibas del pasto, que termina a 66 m, y te caias al vacio: eso es el
+     "desaparezco y aparezco en el vacio". Medido: caminando hacia el fondo de una tienda el
+     jugador llegaba a (-74, -18, -64) —fuera del mapa y cayendo— y de ahi respawn lo mandaba al
+     punto de entrada.
+
+     La propiedad `mesh` simplemente NO se pone. Undefined no es igual a null, y el collider vale.
+     Hay un comentario en la isla que avisa de esta misma trampa; la arena cayo igual. */
+  const meter=(cx,cz,ex,ez)=>colliders.push({
+    minx:cx-ex, maxx:cx+ex, miny:y-h/2, maxy:y+h/2,
+    minz:cz+ARE_GZ-ez, maxz:cz+ARE_GZ+ez});
+  const g=ry||0;
+  if(Math.abs(Math.sin(2*g))<0.02){        // 0, 90, 180, 270: la caja alineada sirve tal cual
+    const gira=Math.abs(Math.cos(g))<0.5;  // a 90 grados se intercambian ancho y fondo
+    meter(x,z, (gira? d:w)/2, (gira? w:d)/2); return;
+  }
+  const c=Math.abs(Math.cos(g)), sn=Math.abs(Math.sin(g)), C=Math.cos(g), S=Math.sin(g);
+  const alX=(w>=d), largo=alX?w:d, corto=alX?d:w;
+  const n=Math.max(1, Math.round(largo/Math.max(0.5, corto)));
+  const L=largo/n, hxi=(alX? L:w)/2, hzi=(alX? d:L)/2;
+  const ex=hxi*c+hzi*sn, ez=hxi*sn+hzi*c;
+  for(let i=0;i<n;i++){
+    const t=-largo/2 + L*(i+0.5);
+    const lx=alX? t:0, lz=alX? 0:t;
+    meter(x + lx*C - lz*S, z + lx*S + lz*C, ex, ez);
+  }
 }
 function areFundir(){
   let n=0;
@@ -13014,7 +13207,9 @@ function buildArena(){
   const M=ARE_M, L=ARE_LADO, H=ARE_MURO;
   // ---- el pasto ----
   areAdd(M.pasto,new THREE.BoxGeometry(L,0.4,L),0,-0.2,0,0);
-  colliders.push({minx:-L/2,maxx:L/2,miny:-0.4,maxy:0,minz:ARE_GZ-L/2,maxz:ARE_GZ+L/2,mesh:null});
+  /* el pasto SI tiene que saltearse en horizontal (si no, el borde del piso te frena de costado):
+     para eso esta `piso`, que moveX y moveZ miran de verdad, en vez del truco del mesh nulo */
+  colliders.push({minx:-L/2,maxx:L/2,miny:-0.4,maxy:0,minz:ARE_GZ-L/2,maxz:ARE_GZ+L/2,piso:true});
   // ---- la muralla, con sus almenas ----
   const e=1.2, m=L/2+e/2;
   for(const s of [[0,-m,L+e*2,e],[0,m,L+e*2,e],[-m,0,e,L+e*2],[m,0,e,L+e*2]]){
@@ -13930,6 +14125,13 @@ let PVP_GRACIA=0;              // invulnerable un rato despues de reaparecer
 /* EL TURNO. Se calcula una vez por cuadro para todos: de los que te ven y estan en pelea, los
    BOT_MAX_TIRAN mas cercanos tienen permiso de tirar. Los demas siguen moviendose y flanqueando
    —no se quedan quietos— pero no aprietan el gatillo. */
+/* la boca del arma de un bot: a la altura del pecho y medio metro adelante, en la direccion en la
+   que esta mirando. No hace falta mas precision: lo que importa es que la estela salga DE EL. */
+const _bocaB=new THREE.Vector3();
+function botBoca(b){
+  const GZ=(world==='arena')?ARE_GZ:ALC_GZ;
+  return _bocaB.set(b.x + Math.sin(b.yaw)*0.42, b.y+1.35, b.z+GZ + Math.cos(b.yaw)*0.42);
+}
 function botTurnos(){
   const cand=[];
   for(const b of BOTS){ b.turno=false;
@@ -14037,6 +14239,9 @@ function botTick(dt){
         if(b.tTiroR<=0){ const d=ARSENAL.find(o=>o.id===b.arma)||ARSENAL[0];
           b.tTiroR=0.5+Math.random()*0.9;
           try{ tiroSnd(dR>45?'lejos':'shot', Math.max(0.08, Math.min(0.6, 16/(dR+10)))); }catch(e){}
+          try{ const B=botBoca(b), GZ=(world==='arena')?ARE_GZ:ALC_GZ;
+            const tx=R.x-B.x, ty=(R.y+1.2)-B.y, tz=R.z+GZ-B.z, L=Math.hypot(tx,ty,tz)||1;
+            tiroAjenoVer(B.x,B.y,B.z, tx/L,ty/L,tz/L, L+1.0); }catch(e){}
           if(Math.random() < Math.max(0.10, 0.40 - dR*0.006)){
             const cab=Math.random()<0.07;
             botDanio(R.id, Math.round((d.dmg||24)*(cab?1.7:1)*0.42), cab); }
@@ -14053,6 +14258,14 @@ function botTick(dt){
         b.tTiro=(b.rafaga>0)? (60/(d.rpm||600)) : (BOT_PAUSA0+Math.random()*BOT_PAUSA1);
         const acierta = Math.random() < Math.max(BOT_PUNT_MIN, BOT_PUNT0 - dPl*BOT_PUNT_CAIDA);
         try{ tiroSnd(dPl>45?'lejos':'shot', Math.max(0.10, Math.min(0.85, 22/(dPl+8)))); }catch(e){}
+        /* SE VE DE DONDE TE ESTAN TIRANDO. Antes el bot disparaba y no pasaba nada en pantalla:
+           solo un ruido. Ahora sale la estela desde su arma hasta vos (o hasta donde erro). */
+        try{ const B=botBoca(b);
+          let tx=px-B.x, ty=(py+0.9)-B.y, tz=pz+((world==='arena')?ARE_GZ:ALC_GZ)-B.z;
+          if(!acierta){ tx+=(Math.random()-0.5)*2.6; ty+=(Math.random()-0.5)*1.4; tz+=(Math.random()-0.5)*2.6; }
+          const L=Math.hypot(tx,ty,tz)||1;
+          tiroAjenoVer(B.x,B.y,B.z, tx/L,ty/L,tz/L, L+1.5);
+        }catch(e){}
         if(acierta && !PVP.muerto && PVP_GRACIA<=0){
           const cab=Math.random()<BOT_CAB_P;
           const bruto=(d.dmg||24)*(cab?BOT_CAB_MUL:1)*BOT_DMG;
