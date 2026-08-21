@@ -1193,8 +1193,9 @@ function addBox(x,y,z,w,h,d,color,rough,noWall){   // (x,y,z)=centro
 let world='city', grassMode=false, dreamMode=false;
 let _lastWorld='', _worldFog=900;   // niebla base del mundo (para recortar la distancia de render solo en BAJO sin romper los demás presets)
 // niveles DESCUBIERTOS: al llegar a uno se desbloquea en el menú de inicio (se guarda) para empezar directo desde ahí
-const LEVELS=[{key:'tiro',e:'🎯',es:'Campo de Tiro',en:'Shooting Range',pt:'Campo de Tiro'},
-               {key:'valle',e:'🏙️',es:'Valle Ceniza',en:'Ash Valley',pt:'Vale Cinza'}];
+/* La lista del selector viejo del menu. Queda con la arena sola, igual que MAPAS: si aca hubiera
+   niveles que MAPAS no tiene, renderLevels le pisaba startWorld con 'city' y te sacaba de la arena. */
+const LEVELS=[{key:'arena',e:'⚔️',es:'La Arena',en:'The Arena',pt:'A Arena'}];
 let discovered=(()=>{ try{ return new Set(JSON.parse(localStorage.getItem('pf_discovered')||'["city"]')); }catch(e){ return new Set(['city']); } })();
 function discover(key){ if(discovered.has(key))return; discovered.add(key); try{ localStorage.setItem('pf_discovered',JSON.stringify([...discovered])); }catch(e){} if(typeof renderLevels==='function')renderLevels(); }
 const GRASS_GZ=2000;          // el mundo de césped vive lejos en +Z para no chocar con la pista
@@ -7985,7 +7986,7 @@ function rcTick(dt){   // el cargador que cae y la manija de carga
    cuanto disparas, apuntas, recargas, corres, saltas o te matan: mirar el arma nunca te deja
    vendido. Se pide con la I en teclado, o manteniendo RECARGAR con el cargador lleno. */
 const INS={ act:false, t:0, dur:6.0, i:0, mano:null, magFuera:false,
-            p:0, y:0, r:0, x:0, u:0, z:0, c:0, k:0 };
+            p:0, y:0, r:0, x:0, u:0, z:0, c:0, k:0, mag01:0 };
 function insVal(L,t,k){   // los continuos: interpolados
   if(!L||!L.length) return 0;
   if(t<=L[0].t) return L[0][k]||0;
@@ -8027,7 +8028,7 @@ function insCortar(){ if(!INS.act && !INS.magFuera) return;
   if(gunMag) gunMag.visible=true;
 }
 function insTick(dt){
-  if(!INS.act){ INS.k=Math.max(0,INS.k-7*dt);
+  if(!INS.act){ INS.k=Math.max(0,INS.k-7*dt); INS.mag01=Math.max(0,INS.mag01-7*dt);
     if(INS.k<=0.0001){ INS.p=INS.y=INS.r=INS.x=INS.u=INS.z=INS.c=0; }
     return; }
   /* cualquier cosa que sea JUGAR la corta */
@@ -8042,6 +8043,7 @@ function insTick(dt){
   INS.x=insVal(L,t,'x'); INS.u=insVal(L,t,'u'); INS.z=insVal(L,t,'z');
   INS.c=insVal(L,t,'c');
   const fuera=insEstado(L,t,'m')>0.5;
+  INS.mag01 += ((fuera?1:0)-INS.mag01)*Math.min(1,8*dt);
   if(fuera!==INS.magFuera){ INS.magFuera=fuera;
     if(gunMag) gunMag.visible=!fuera;
     if(INS.mano) INS.mano.visible=fuera;
@@ -8832,7 +8834,10 @@ function tiroPostura(dt){
   else if(aQui>0.001) _gOjo.lerp(GUN_OJO_QUIETO, aQui*(1-adsW));   // quieto: el arma se centra sola
   if(idl>0){ _gOjo.x += idl*(-0.012); _gOjo.z += idl*(-0.072);     // idle: se la acerca a la cara para mirarla
     _gOjo.y += idl*0.016 + Math.sin(idleT*4.6)*0.005*idl; }
-  if(INS.k>0){ _gOjo.x += INS.x*INS.k; _gOjo.y += INS.u*INS.k; _gOjo.z += INS.z*INS.k; }
+  if(INS.k>0){ _gOjo.x += INS.x*INS.k; _gOjo.y += INS.u*INS.k; _gOjo.z += INS.z*INS.k;
+    /* con el cargador en la izquierda, el arma se corre un poco a la derecha: si no, las dos cosas
+       que hay que mirar quedan una encima de la otra */
+    _gOjo.x += INS.k*INS.mag01*0.070; }
   // el agarre izquierdo se corre al cajón a medida que subís la puntería (ver GUN_GRIP_L_ALTO)
   _gL.lerpVectors(GUN_GRIP_L, GUN_GRIP_L_ALTO, Math.max(0,Math.min(1,(pit-0.15)/0.70)));
   gunRoot.position.copy(_ojo).add(_vida)
@@ -8906,13 +8911,15 @@ function tiroPostura(dt){
   _gp.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
   _gp2.copy(_gL).applyMatrix4(gunRoot.matrixWorld);
   if(rcOn) rcManoIzq(rcE,_gp2);        // recargando: la izquierda va al retén, al cinturón y a la manija
-  /* INSPECCIONANDO CON EL CARGADOR AFUERA la izquierda no puede seguir agarrada al guardamanos.
-     Va donde iria de verdad: abajo y a la derecha del arma, con el codo doblado. Probado ponerla
-     DELANTE DEL OJO y no: el brazo tenia que estirarse mas de lo que da y el IK lo dejaba como una
-     cuña verde cruzando media pantalla. El cargador se lee igual —queda debajo del cajon— y el
-     brazo se ve como un brazo. */
+  /* EL CARGADOR SE MIRA CON LA IZQUIERDA, Y A LA IZQUIERDA. Estaba a la DERECHA del ojo: la mano
+     izquierda cruzaba por delante del arma para sostener algo del lado equivocado, y no habia forma
+     de que se leyera. Ahora va donde va de verdad — a la izquierda, un poco abajo de la linea de
+     los ojos y a 34 cm — que del hombro izquierdo son 30 cm: el brazo llega SIN estirarse, asi que
+     el codo queda doblado y se ve un brazo sosteniendo algo en vez de una cuña. El puño ya esta
+     cerrado de fabrica (cuCerrar en el bind), asi que poniendo el cargador en el hueco del puño
+     queda agarrado de verdad. */
   else if(INS.act && INS.magFuera)
-    _gp2.copy(_ojo).addScaledVector(_cr,0.215).addScaledVector(_cu,-0.245).addScaledVector(_cf,0.300);
+    _gp2.copy(_ojo).addScaledVector(_cr,-0.185).addScaledVector(_cu,-0.120).addScaledVector(_cf,0.330);
   _pol.copy(_gp).addScaledVector(_cr,1.7).addScaledVector(_cu,-1.9).addScaledVector(_cf,-0.30);    // codo derecho: afuera y abajo
   _pol2.copy(_gp2).addScaledVector(_cr,-0.55).addScaledVector(_cu,-1.9).addScaledVector(_cf,-0.15); // codo izquierdo: abajo
   /* CUERPO A CUERPO: UNA SOLA MANO. Un machete no se agarra con las dos: con el IK de la izquierda
@@ -8924,8 +8931,9 @@ function tiroPostura(dt){
   bRHand.getWorldPosition(_hR); bLHand.getWorldPosition(_hL);
   if(RC.mano && RC.mano.visible){ RC.mano.position.copy(_hL).addScaledVector(_cu,-0.045);
     RC.mano.quaternion.copy(gunRoot.quaternion); }
-  if(INS.mano && INS.mano.visible){ INS.mano.position.copy(_hL)
-      .addScaledVector(_cu,0.045).addScaledVector(_cf,0.035);
+  /* el cargador se pone en el HUECO DEL PUÑO (el origen del hueso de la mano, que es justo donde
+     cierra el aro de los dedos): asi la mano lo agarra en vez de tenerlo flotando al lado */
+  if(INS.mano && INS.mano.visible){ INS.mano.position.copy(_hL).addScaledVector(_cu,0.012);
     INS.mano.quaternion.copy(gunRoot.quaternion); }
   // …pero con CORREA CORTA. Esta línea era incondicional, y cuando el IK no llegaba (mirando muy arriba, o
   // esprintando con los hombros bamboleando) arrastraba el fusil entero adentro del ojo detrás de una mano
@@ -10968,9 +10976,11 @@ function aplicarSkin(){ const k=TRAJES[skinSel]; if(!CU_MAT.cuerpo)return;
 let _equipOk=false;
 function equiparSiHace(){ if(_equipOk)return; if(!CU_MAT.cuerpo||!AKMAT.madera)return;
   _equipOk=true; aplicarArma(); aplicarSkin(); aplicarAcabado(); }
-const MAPAS=[{k:'arena', n:'La Arena',       d:'PvP tranquilo · 16 rivales · tienda en cada esquina'},
-             {k:'tiro',  n:'Campo de Tiro',  d:'galería cubierta · 45 m de tiro'},
-             {k:'valle', n:'Valle Ceniza',   d:'battle royale · ocho sectores · 460 × 400 m'}];
+/* UN SOLO MAPA. La galeria y el valle siguen en el codigo —la galeria ademas es el telon del
+   menu— pero ya no se eligen: el juego es la arena. Tener tres mapas repartia a los pocos
+   jugadores que hay en tres lados, y en un juego de tiroteo entre gente eso es peor que un mapa
+   menos. Se sigue pudiendo entrar a los otros desde consola (__tiro.ir(), __tiro.valle()). */
+const MAPAS=[{k:'arena', n:'La Arena', d:'PvP · 16 rivales · tienda en cada esquina'}];
 function aplicarMapa(){ const m=MAPAS.filter(o=>o.k===startWorld)[0]||MAPAS[0];
   const el=document.getElementById('ldMapaN'); if(el)el.textContent=m.n;
   try{ localStorage.setItem('ct_mapa',startWorld); }catch(e){} }
@@ -11004,10 +11014,11 @@ function cerrarCajon(){ const dr=document.getElementById('mDrawer'); if(dr)dr.cl
 const mNameEl=document.getElementById('mName');   // el campo de nombre se cablea más abajo (después de definir MP)
 document.querySelectorAll('#mQual .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); document.querySelectorAll('#mQual .mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); menuQ=b.dataset.q; }));
 document.querySelectorAll('#mLang .mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); applyLang(b.dataset.lang); }));   // selector de idioma
-let startWorld='tiro';   // se elige en la ficha MAPA del menú
-try{ const g=localStorage.getItem('ct_mapa'); if(g==='tiro'||g==='valle'||g==='arena') startWorld=g; }catch(e){}
+let startWorld='arena';   // ya no se elige: es el unico mapa
+/* si el telefono tenia guardado 'tiro' o 'valle' de antes, se lo pasa a la arena */
+try{ localStorage.setItem('ct_mapa','arena'); }catch(e){}
 function renderLevels(){ const el=document.getElementById('mLevels'); if(!el)return;
-  if(!LEVELS.some(l=>l.key===startWorld)) startWorld='city';
+  if(!LEVELS.some(l=>l.key===startWorld)) startWorld='arena';
   el.innerHTML=LEVELS.map(l=>{ const nm=l[lang]||l.es; const sel=(startWorld===l.key)?' sel':'';   // TODOS los niveles accesibles/gratis desde el inicio
     return '<button class="mOpt'+sel+'" data-start="'+l.key+'">'+l.e+' '+nm+' <span class="lvN" data-lvn="'+l.key+'">👥 0</span></button>'; }).join('');
   el.querySelectorAll('.mOpt').forEach(b=>b.addEventListener('click',()=>{ audioStart(); sfx('menu'); el.querySelectorAll('.mOpt').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); startWorld=b.dataset.start; }));
@@ -11392,8 +11403,7 @@ function cfgSet(k,v){
   /* El mapa se guardaba en CFG pero el que decide a donde arranca ENTRAR es startWorld, y solo lo
      movia el click en la ficha. Si el valor llegaba por otro lado (una partida guardada, la
      consola) quedaban en desacuerdo y entrabas al mapa viejo. Que los dos salgan del mismo lugar. */
-  if(k==='mapa'){ if(CFG.mapa==='tiro'||CFG.mapa==='valle'||CFG.mapa==='arena'){ startWorld=CFG.mapa;
-      try{ aplicarMapa(); }catch(e){} } }
+  if(k==='mapa'){ CFG.mapa='arena'; startWorld='arena'; try{ aplicarMapa(); }catch(e){} }
   cfgAplicar();
   if(k==='idioma'){ cfgRender(); return; }
   cfgPintar();
@@ -11439,7 +11449,7 @@ function cfgAyuda(k){ const f=cfgBuscaFila(k), tip=document.getElementById('cfgT
     if(c) try{ applyPlayerName(String(c),false); }catch(e){} });
 }
 CFG.idioma=lang;
-try{ if(CFG.mapa) startWorld=CFG.mapa; }catch(e){}
+try{ CFG.mapa='arena'; }catch(e){}   // el unico mapa
 /* cfgRender dibuja las miniaturas con HUD_PRESETS, que se declara MAS ABAJO en el modulo: llamarlo
    aca reventaria por TDZ y el panel quedaria vacio. Se arma en cuanto el modulo termina. */
 function cfgArrancar(){ try{ cfgAplicar(); }catch(e){ console.warn('cfgAplicar',e); }
