@@ -9323,7 +9323,18 @@ try{ window.__tiro={
              fin:(document.getElementById('partFin')||{}).className}),
   bots:()=>BOTS.map(b=>({id:b.id,n:b.nom,vida:+b.vida.toFixed(0),e:b.estado,muerto:b.muerto,
                          p:[+b.x.toFixed(1),+b.z.toFixed(1)],vis:!!(b.r.avatar&&b.r.avatar.visible),
-                         ve:!!b.viendo, turno:!!b.turno, d:+(b.dPl||0).toFixed(1)})),
+                         ve:!!b.viendo, turno:!!b.turno, d:+(b.dPl||0).toFixed(1),
+                         anim:b.r.anim, desl:+(b.desl||0).toFixed(2), salto:+(b.salto||0).toFixed(2),
+                         aire:+(b.yAire||0).toFixed(2), mir:!!b.r.mir})),
+  /* ¿los bots se deslizan y saltan? Se deja correr un rato y se cuenta que animaciones aparecieron */
+  botAnims:(seg)=>{ const vistas={}, T=seg||20, paso=1/60;
+    PVP_GRACIA=999;
+    for(let t=0;t<T;t+=paso){ update(paso);
+      for(const b of BOTS){ if(b.muerto)continue; const a=b.r.anim||'?'; vistas[a]=(vistas[a]||0)+1; } }
+    PVP_GRACIA=0;
+    const tot=Object.values(vistas).reduce((a,c)=>a+c,0)||1;
+    const o={}; for(const k in vistas) o[k]=+(vistas[k]/tot*100).toFixed(1);
+    return {seg:T, porcentaje:o}; },
   /* cuanto te aprietan: se para en un punto y se mide la vida que se pierde por segundo, cuantos
      bots te ven y cuantos tienen permiso de tirar */
   presion:(seg,x,z)=>{ if(world!=='arena') return 'solo en la arena';
@@ -9405,6 +9416,13 @@ try{ window.__tiro={
              pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
              off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
   inspIr:()=>insEmpezar(),
+  /* obliga a un bot a deslizarse y planta la camara enfrente, para poder verlo */
+  forzarDesl:(i)=>{ const b=BOTS[i|0]; if(!b) return 'no hay';
+    b.desl=0.62; b.deslDer=1; b.tDesl=99;
+    b.tx=b.x+6; b.tz=b.z;                       // que tenga a donde ir
+    player.pos.set(b.x-1.5, 1.6, ARE_GZ+b.z+7); player.yaw=0; player.faceYaw=0; player.pitch=-0.06;
+    player.vel.set(0,0,0); PVP_GRACIA=999;
+    return {bot:b.nom, p:[b.x,b.z], desl:b.desl}; },
   /* ¿me trepo cuando no quiero? Se busca un cajon de la arena, se salta CONTRA el y se salta
      PASANDO al lado, y se compara donde termina cada uno */
   cajonCerca:(x,z)=>{ let mej=null,d2=1e9;
@@ -13028,6 +13046,7 @@ function botSembrar(N){
     const arma=['ak','tr556','mp9','uzi','g17','r870','fal'][(i*3)%7];
     BOTS.push({ id, nom, r, vida:100, x, z, y:sueloY(x,z), yaw:Math.random()*6.283, mundo:world,
                 estado:'patrulla', tx:x, tz:z, tCambio:0, tTiro:0, tVer:0, rafaga:0,
+                desl:0, tDesl:1.5, salto:0, tSalto:2.0, deslDer:1,
                 arma, lado:(Math.random()<0.5?-1:1), tLado:0, muerto:false });
   }
   PART.vivos=1+BOTS.length;
@@ -13106,6 +13125,7 @@ function botAgregar(k){
     r.pos.set(x,y,z+GZ); r.target.copy(r.pos); r.init=true;
     BOTS.push({ id, nom, r, vida:100, x, z, y, yaw:Math.random()*6.283, mundo:world,
                 estado:'patrulla', tx:x, tz:z, tCambio:0, tTiro:0, tVer:0, rafaga:0,
+                desl:0, tDesl:1.5, salto:0, tSalto:2.0, deslDer:1,
                 arma:['ak','tr556','mp9','uzi','g17','r870','fal'][(_botN*3)%7],
                 lado:(Math.random()<0.5?-1:1), tLado:0, muerto:false, tRes:0 });
     PART.vivos++;
@@ -13289,9 +13309,27 @@ function botTick(dt){
       else { const c=zonaCentro(), rr=zonaRadio()*0.85, d=Math.sqrt(Math.random())*rr;
         b.tx=c[0]+Math.cos(a)*d; b.tz=c[1]+Math.sin(a)*d; }
     }
+    /* ---- SE DESLIZAN Y SALTAN, COMO VOS ----
+       Un bot que solo camina y corre se lee como un muñeco. Los clips de deslizada y de salto ya
+       estan cargados (son los mismos del jugador), lo que faltaba era que el bot los PIDIERA.
+       Se desliza cuando cambia de lado en medio de un tiroteo —que es cuando se desliza una
+       persona: para cruzar de una cobertura a otra sin comerse la rafaga— y salta de vez en cuando
+       patrullando. Los dos tienen su propio tiempo de espera para que no sea un festival. */
+    b.tDesl-=dt; b.tSalto-=dt;
+    if(b.desl>0){ b.desl-=dt; if(b.desl<=0) b.tDesl=2.2+Math.random()*2.6; }
+    if(b.salto>0){ b.salto-=dt; if(b.salto<=0) b.tSalto=3.0+Math.random()*4.0; }
+    if(b.desl<=0 && b.salto<=0){
+      if(b.estado==='pelea' && b.tDesl<=0 && dPl>8 && dPl<34 && Math.random()<0.020){
+        b.desl=0.62; b.deslDer=(b.lado>0?1:-1); }
+      else if(b.tDesl<=0 && b.estado==='patrulla' && Math.random()<0.004){   // tambien se tiran patrullando, de vez en cuando
+        b.desl=0.55; b.deslDer=(Math.random()<0.5?1:-1); }
+      else if(b.estado!=='pelea' && b.tSalto<=0 && Math.random()<0.008){ b.salto=0.55; }
+    }
     // ---- caminar ----
     const vx=b.tx-b.x, vz=b.tz-b.z, L=Math.hypot(vx,vz);
-    const vel=(b.estado==='pelea')?2.6:(b.estado==='zona'?5.2:3.3);
+    /* deslizandose va mas rapido (es para lo que sirve deslizarse) y saltando pierde algo de paso */
+    const vel=(b.desl>0)? 7.4 : (b.salto>0? 2.0 :
+               ((b.estado==='pelea')?2.6:(b.estado==='zona'?5.2:3.3)));
     if(L>0.4){
       const nx=b.x+vx/L*vel*dt, nz=b.z+vz/L*vel*dt;
       /* no atraviesa paredes: si el paso da contra algo, prueba de costado y si no, se queda */
@@ -13325,10 +13363,21 @@ function botTick(dt){
     // ---- pintarlo: es un remoto mas ----
     const r=b.r;
     r.last=performance.now(); r.world=world;
-    r.target.set(b.x, b.y, b.z+((world==='arena')?ARE_GZ:ALC_GZ));
+    r.target.set(b.x, b.y+(b.yAire||0), b.z+((world==='arena')?ARE_GZ:ALC_GZ));
     r.yaw=b.yaw;
-    r.anim = (b.estado==='patrulla'||b.estado==='zona') ? (L>0.4?'run':'idle') : (L>0.4?'walk':'idle');
+    /* la animacion sale de lo que ESTA HACIENDO, no del estado de la maquinita: deslizandose
+       'slide' (espejada al lado que se tira), en el aire 'jump', y si no, segun la velocidad real
+       —corriendo 'run', caminando 'walk', quieto 'idle'—. Antes en pelea siempre era 'walk',
+       aunque estuviera cruzando el mapa de costado a toda velocidad. */
+    r.anim = (b.desl>0) ? 'slide'
+           : (b.salto>0) ? 'jump'
+           : (L<=0.4) ? 'idle'
+           : (vel>=3.0 ? 'run' : 'walk');   // patrullando (3,3) corren; peleando (2,6) caminan de costado
+    r.mir = (b.desl>0) && (b.deslDer>0);
     r.moving = L>0.4;
+    /* saltando el cuerpo se levanta del piso de verdad: media campana de seno sobre el salto */
+    if(b.salto>0){ const k=1-(b.salto/0.55); b.yAire=Math.sin(Math.max(0,Math.min(1,k))*Math.PI)*0.85; }
+    else b.yAire=0;
   }
 }
 
