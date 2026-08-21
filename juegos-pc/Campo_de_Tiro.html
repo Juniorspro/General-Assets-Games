@@ -7158,7 +7158,7 @@ function alcTomar(){
   const i=ARSENAL.findIndex(o=>o.id===b.arma);
   if(i>=0) slotGuardarArma(i,null);      // va a la ranura libre, o reemplaza la que tengo en la mano
   tiroRel=0; try{ tiroHUD(); }catch(e){}
-  tiroSnd('mag2'); try{ tiroMsg((ARSENAL[i]?ARSENAL[i].n:b.arma).toUpperCase()+' · '+b.tier.toUpperCase(), '#'+b.col.toString(16).padStart(6,'0')); }catch(e){}
+  tiroSnd('tomar'); try{ tiroMsg((ARSENAL[i]?ARSENAL[i].n:b.arma).toUpperCase()+' · '+b.tier.toUpperCase(), '#'+b.col.toString(16).padStart(6,'0')); }catch(e){}
   _btnCerca=null; alcBotinTick();
   return true;
 }
@@ -7410,6 +7410,7 @@ function tiroShoot(){
   const disp=(player.onGround?base:base+0.010)+Math.min(1,Math.hypot(player.vel.x,player.vel.z)/RUN)*0.010;
   _cf.set(0,0,-1).applyQuaternion(camera.quaternion);
   _cf.x+=(Math.random()-0.5)*disp; _cf.y+=(Math.random()-0.5)*disp; _cf.z+=(Math.random()-0.5)*disp; _cf.normalize();
+  try{ mpAvisarTiro(camera.position.x,camera.position.y,camera.position.z,_cf.x,_cf.y,_cf.z); }catch(e){}
   _shotRay.set(camera.position,_cf);
   /* ESCOPETA: un tiro son varias postas. Se resuelve el rayo central para la estela y el impacto
      principal, y las demas postas suman sus propios impactos alrededor. */
@@ -8205,14 +8206,15 @@ function nbuf(c){ if(_nb)return _nb; const n=(c.sampleRate*0.5)|0,b=c.createBuff
 function reverb(c){ if(_rev)return _revG; const n=(c.sampleRate*1.6)|0,b=c.createBuffer(2,n,c.sampleRate);
   for(let ch=0;ch<2;ch++){ const d=b.getChannelData(ch); for(let i=0;i<n;i++){ const e=Math.pow(1-i/n,2.6); d[i]=(Math.random()*2-1)*e*0.55; } }
   _rev=c.createConvolver(); _rev.buffer=b; _revG=c.createGain(); _revG.gain.value=0.42; _revG.connect(_rev); _rev.connect(c.destination); return _revG; }
-function tiroSnd(k){ const c=tctx(); if(!c||!AUD.on)return; if(c.state==='suspended'){ try{c.resume();}catch(e){} }
+function tiroSnd(k,esc){ const c=tctx(); if(!c||!AUD.on||!sfxOn)return; if(c.state==='suspended'){ try{c.resume();}catch(e){} }
+  const E=Math.max(0.02,Math.min(2,(esc==null?1:esc)))*Math.max(0.02,volSfx/0.9);
   const t0=c.currentTime, out=c.destination, wet=reverb(c);
-  const noise=(dur,f0,f1,vol,hp)=>{ const s=c.createBufferSource(); s.buffer=nbuf(c); const lp=c.createBiquadFilter(); lp.type='lowpass';
+  const noise=(dur,f0,f1,v0,hp)=>{ const vol=v0*E; const s=c.createBufferSource(); s.buffer=nbuf(c); const lp=c.createBiquadFilter(); lp.type='lowpass';
     lp.frequency.setValueAtTime(f0,t0); lp.frequency.exponentialRampToValueAtTime(Math.max(80,f1),t0+dur);
     const h=c.createBiquadFilter(); h.type='highpass'; h.frequency.value=hp||90; const g=c.createGain();
     g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(vol,t0+0.004); g.gain.exponentialRampToValueAtTime(0.0008,t0+dur);
     s.connect(h); h.connect(lp); lp.connect(g); g.connect(out); g.connect(wet); s.start(t0); s.stop(t0+dur+0.05); return g; };
-  const tono=(f0,f1,dur,vol,tipo)=>{ const o=c.createOscillator(),g=c.createGain(); o.type=tipo||'sine';
+  const tono=(f0,f1,dur,v0,tipo)=>{ const vol=v0*E; const o=c.createOscillator(),g=c.createGain(); o.type=tipo||'sine';
     o.frequency.setValueAtTime(f0,t0); o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t0+dur);
     g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(vol,t0+0.006); g.gain.exponentialRampToValueAtTime(0.0006,t0+dur);
     o.connect(g); g.connect(out); g.connect(wet); o.start(t0); o.stop(t0+dur+0.02); };
@@ -8230,6 +8232,57 @@ function tiroSnd(k){ const c=tctx(); if(!c||!AUD.on)return; if(c.state==='suspen
   else if(k==='golpe'){ tono(1850,1250,0.075,0.20,'triangle'); noise(0.035,7000,3000,0.14,2400); }
   else if(k==='cabeza'){ tono(2450,1500,0.10,0.24,'triangle'); tono(1200,700,0.09,0.14,'sine'); noise(0.04,9000,3500,0.16,2600); }
   else if(k==='recibido'){ noise(0.14,900,120,0.34,60); tono(115,52,0.20,0.30,'sine'); noise(0.05,3000,600,0.12,200); }
+  /* ---- sonidos nuevos, todos sintetizados igual que los de arriba ---- */
+  // PISADAS por superficie. El pasto es un roce corto y agudo; la tierra, sordo; el hormigon y la
+  // chapa tienen un golpe con tono. Sin esto, todo el mapa sonaba a lo mismo.
+  else if(k==='p_pasto'){ noise(0.055,3000+Math.random()*900,600,0.085,700); }
+  else if(k==='p_tierra'){ noise(0.070,1500+Math.random()*500,220,0.100,150); }
+  else if(k==='p_duro'){ noise(0.045,5200+Math.random()*1500,1200,0.085,900); tono(190+Math.random()*40,90,0.045,0.045,'square'); }
+  else if(k==='p_chapa'){ noise(0.060,6500,1400,0.095,1200); tono(420+Math.random()*120,180,0.09,0.070,'triangle'); }
+  // BALA QUE PASA CERCA. El chasquido supersonico primero y el silbido despues: es lo que te avisa
+  // que te estan tirando y de que lado, y no existia.
+  else if(k==='zumbido'){ noise(0.020,9000,5000,0.20,3000); tono(1500+Math.random()*700,320,0.16,0.10,'sine'); }
+  // DISPARO LEJANO: el estampido sin el chasquido de la boca, con mas cola de reverb.
+  else if(k==='lejos'){ noise(0.40,900,150,0.16,70); tono(95,38,0.34,0.13,'sine'); }
+  else if(k==='tomar'){ tono(720,1180,0.10,0.13,'triangle'); noise(0.05,4200,900,0.10,500); }
+  else if(k==='vidaBaja'){ tono(78,44,0.24,0.20,'sine'); }
+  else if(k==='ronda'){ tono(520,780,0.16,0.13,'triangle'); tono(780,1170,0.20,0.10,'triangle'); }
+}
+/* ===================== AMBIENTE: VIENTO =====================
+   Un lecho de ruido filtrado que respira: dos rachas lentas que se cruzan y nunca coinciden, asi no
+   se oye el bucle. Vive aparte de los sonidos de un tiro porque es un nodo PERMANENTE, no un
+   disparo suelto — encenderlo y apagarlo es conectar y desconectar, no crear nada nuevo. */
+const AMB={on:false, src:null, gan:null, filtro:null, lfo:null, lfo2:null, ganLfo:null};
+/* El viento solo en el valle (a cielo abierto), y el latido cuando te queda poca vida: dos avisos
+   que no ocupan pantalla. El latido va mas rapido cuanto peor estas. */
+let _latido=0;
+function ambTick(dt){
+  const quiero = (world==='valle') && AUD.on && musOn && !menuMode;
+  const f = Math.max(0,Math.min(2,(typeof CFG!=='undefined'?(+CFG.viento||100):100)/100));
+  if(quiero!==AMB.on || (quiero && Math.abs((AMB._f||0)-f)>0.02)){ AMB._f=f; ambViento(quiero,f); }
+  if(AUD.on && sfxOn && !PVP.muerto && PVP.vida>0 && PVP.vida<35){
+    _latido-=dt;
+    if(_latido<=0){ _latido=0.42+0.55*(PVP.vida/35); tiroSnd('vidaBaja', 0.55+0.45*(1-PVP.vida/35)); }
+  } else _latido=0;
+}
+function ambViento(on,fuerza){
+  const c=tctx(); if(!c) return;
+  if(on && !AMB.src){
+    const s=c.createBufferSource(); s.buffer=nbuf(c); s.loop=true;
+    const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=520; bp.Q.value=0.55;
+    const lp=c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1500;
+    const g=c.createGain(); g.gain.value=0.0001;
+    // dos rachas de periodo distinto: 1/13 s y 1/29 s no se sincronizan nunca
+    const l1=c.createOscillator(); l1.frequency.value=1/13; const g1=c.createGain(); g1.gain.value=260;
+    const l2=c.createOscillator(); l2.frequency.value=1/29; const g2=c.createGain(); g2.gain.value=150;
+    l1.connect(g1); g1.connect(bp.frequency); l2.connect(g2); g2.connect(bp.frequency);
+    s.connect(bp); bp.connect(lp); lp.connect(g); g.connect(c.destination);
+    s.start(); l1.start(); l2.start();
+    AMB.src=s; AMB.gan=g; AMB.filtro=bp; AMB.lfo=l1; AMB.lfo2=l2;
+  }
+  if(AMB.gan){ const v=on ? Math.max(0,Math.min(0.10,(fuerza==null?1:fuerza)*0.055*volMus)) : 0.0001;
+    try{ AMB.gan.gain.setTargetAtTime(Math.max(0.0001,v), c.currentTime, 0.9); }catch(e){} }
+  AMB.on=!!on;
 }
 
 /* ===================== controles del arma (móvil: botones · PC: mouse/teclado) =====================
@@ -8352,6 +8405,14 @@ try{ window.__tiro={
             camTP:+player.camTP.toFixed(3), adsW:+adsW.toFixed(2),
             yaw:+player.yaw.toFixed(4), pitch:+player.pitch.toFixed(4)}; },
   // giroscopio: inyecta una lectura como la que manda el aparato y devuelve cuanto movio la mira
+  // audio: disparar un sonido suelto y ver el estado del viento
+  snd:(k,e)=>{ tiroSnd(k,e); return {k, sfx:sfxOn, vol:+volSfx.toFixed(2)}; },
+  amb:()=>({ on:AMB.on, gan:AMB.gan?+AMB.gan.gain.value.toFixed(4):null, f:AMB._f||0,
+             mundo:world, musica:musOn, ctx:(()=>{const c=tctx();return c?c.state:'sin contexto';})() }),
+  tiroAjeno:(px,py,pz,dx,dy,dz)=>{ const g=[]; const o=tiroSnd; let ult=null;
+    window.__sndLog=[]; const orig=tiroSnd;
+    mpTiroAjeno({id:'otro',p:[px,py,pz],d:[dx,dy,dz],w:world});
+    return {llamado:true, dist:+Math.hypot(px-player.pos.x,py-player.pos.y,pz-player.pos.z).toFixed(1)}; },
   giroSim:(beta,gamma,ang,dt,grav,alpha)=>{ const a0=player.yaw, p0=player.pitch;
     const o=Object.getOwnPropertyDescriptor(window,'orientation');
     try{ Object.defineProperty(window,'orientation',{value:ang||0,configurable:true}); }catch(e){}
@@ -9695,6 +9756,7 @@ function update(dt){
     : !player.onGround ? 'idle'   // EN EL AIRE: SIEMPRE pose erguida y quieta (idle). Ni el clavado 'jump' ni la zancada 'run' — esos se ven torcidos/acostados en 3ª persona
     : (sp<0.5 ? 'idle' : ((mag>0.82 || sp>=4.2) ? 'run' : 'walk'));   // joystick a fondo o velocidad alta → CORRER
   runLoop((player.onGround && (animState==='run'||animState==='walk')) || animState==='wallrun', grassMode);   // pasos sólo en el piso (o wall-run); nunca en el aire
+  pasoSnd(dt, animState, sp);   // ademas del bucle: una pisada por paso, con el sonido de la superficie
   // el cuerpo/piernas miran hacia donde MIRÁS, no hacia donde camina el joystick
   player.faceYaw = player.yaw;
   tickBody(dt, animState);
@@ -9813,6 +9875,27 @@ const AUD={ on:false, el:{}, amb:null, ambKey:null, run:null, runKey:null };
 function aGet(k){ let a=AUD.el[k]; if(!a){ a=new Audio(SFX_BASE+SND[k]); a.preload='auto'; AUD.el[k]=a; } return a; }
 function sfx(k,vol){ if(!AUD.on||!sfxOn||!SND[k])return; try{ const a=aGet(k); a.volume=Math.max(0,Math.min(1,(vol==null?0.9:vol)*volSfx/0.9)); a.currentTime=0; const p=a.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){} }   // efecto puntual
 function ambient(k){ if(!AUD.on||!musOn||!SND[k]||AUD.ambKey===k)return; AUD.ambKey=k; try{ if(!AUD.amb){ AUD.amb=new Audio(); AUD.amb.loop=true; } AUD.amb.volume=volMus; AUD.amb.src=SFX_BASE+SND[k]; const p=AUD.amb.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){} }   // música del nivel (loop, cambia al cambiar de mundo)
+/* PISADAS. El bucle de mp3 sonaba igual en todo el mapa y ademas necesita la CDN. Esto emite UNA
+   pisada por zancada, con el sonido de lo que estas pisando: pasto, tierra, hormigon o chapa. La
+   cadencia sale de la velocidad real, no de un temporizador fijo, asi que caminar y correr suenan
+   distinto solos. La superficie se pregunta al catastro, que ya sabe donde hay calle y donde casa. */
+let _pasoAcum=0, _pasoLado=1;
+function pasoSup(){
+  if(world!=='valle') return 'p_duro';
+  const x=player.pos.x, z=player.pos.z-ALC_GZ;
+  try{ if(alcEnEdif(x,z,0)) return 'p_duro'; if(alcEnCamino(x,z,0)) return 'p_duro'; }catch(e){}
+  return (player.pos.y>alcH(x,z)+0.35) ? 'p_chapa' : 'p_pasto';   // arriba de algo = techo de chapa
+}
+function pasoSnd(dt, estado, vel){
+  if(!AUD.on||!sfxOn) return;
+  if(!player.onGround || (estado!=='run'&&estado!=='walk') || vel<0.6){ _pasoAcum=0; return; }
+  _pasoAcum += vel*dt;
+  const zancada = (estado==='run') ? 1.55 : 1.05;   // metros entre pisada y pisada
+  if(_pasoAcum < zancada) return;
+  _pasoAcum = 0; _pasoLado = -_pasoLado;
+  const fuerte = (estado==='run') ? 1.0 : 0.62;
+  tiroSnd(pasoSup(), fuerte*(_pasoLado>0?1:0.86));   // un pie suena un poco distinto del otro
+}
 function runLoop(on,grass){ if(!AUD.on)return; if(on){ const k=grass?'run_grass':'run'; if(AUD.runKey!==k){ if(AUD.run)AUD.run.pause(); AUD.run=aGet(k); AUD.run.loop=true; AUD.run.volume=0.22; AUD.runKey=k; const p=AUD.run.play(); if(p&&p.catch)p.catch(()=>{}); } } else if(AUD.run){ AUD.run.pause(); AUD.run=null; AUD.runKey=null; } }   // pasos en bucle mientras corrés (pasto / fuera del pasto)
 function audioStart(){ AUD.on=true; }   // se habilita con el primer gesto del usuario (móvil)
 const VOID_TRACKS=['amb3','amb4','amb5'];   // varias músicas para el VACÍO (rotan para dar variedad)
@@ -10622,6 +10705,7 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
   if(scene.fog){ if(_lastWorld!==world){ _lastWorld=world; _worldFog=scene.fog.far; }   // captura la niebla base al entrar a cada mundo
     const wf=(quality==='low')?Math.min(_worldFog,camera.far):_worldFog; if(scene.fog.far!==wf)scene.fog.far=wf; }   // BAJO: niebla tapa justo en el corte del plano lejano; medio/alto restauran la base
   if(islaMode){ try{ alcTick(dt); }catch(e){} }   // el oleaje de la bahía
+  try{ ambTick(dt); }catch(e){}                   // viento del valle + latido con poca vida
   try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player) — sigue latiendo aunque esté en pausa
   renderer.render(scene,camera);
   drsTick(dt); }
@@ -10813,11 +10897,47 @@ function mpConnect(){
       r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now(); }
     else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); const r=MP.remotes.get(d.id); if(r) mpBubble(r, d.text||''); }   // panel de chat + burbuja sobre la cabeza
     else if(topic.slice(-7)==='/action'){
-      if(d.type==='hit' && d.to===MP.id) pvpRecibir(d.dmg, d.name||'alguien', d.cab);
+      if(d.type==='shot') mpTiroAjeno(d);
+      else if(d.type==='hit' && d.to===MP.id) pvpRecibir(d.dmg, d.name||'alguien', d.cab);
       else if(d.type==='kill'){ if(d.by===MP.name){ PVP.bajas++; pvpHUD(); }
         mpChatIn('💀',(d.name||'?')+' cayó'+(d.by?(' · '+d.by):'')); } }
     else if(topic.slice(-4)==='/rtc'){ if(!d.to||d.to===MP.id) voiceSignal(d); }   // señalización del chat de voz (WebRTC)
   });
+}
+/* ===================== SE OYE DE DONDE TE TIRAN =====================
+   Los disparos de los demas no se transmitian: en un tiroteo el otro era MUDO y no habia forma de
+   saber de que lado venia. Ahora cada tiro avisa desde donde y hacia donde salio, y del otro lado
+   suena con el volumen de la distancia — de cerca el estampido seco, de lejos solo el retumbe sin
+   el chasquido de la boca. Y si la bala pasa al lado tuyo, se oye el chicotazo.
+   Se manda a lo sumo doce veces por segundo: un fusil a 640 golpes por minuto no necesita mas y
+   asi no se inunda el broker publico. */
+let _mpTiroT=0;
+function mpAvisarTiro(px,py,pz,dx,dy,dz){
+  if(!MP.on||!MP.client) return;
+  const now=performance.now(); if(now-_mpTiroT<80) return; _mpTiroT=now;
+  try{ MP.client.publish(MP.room+'/action', JSON.stringify({id:MP.id,type:'shot',
+    p:[+px.toFixed(1),+py.toFixed(1),+pz.toFixed(1)], d:[+dx.toFixed(2),+dy.toFixed(2),+dz.toFixed(2)],
+    w:world}),{qos:0}); }catch(e){}
+}
+function mpTiroAjeno(d){
+  if(!d||!d.p||d.id===MP.id) return;
+  if(d.w && d.w!==world) return;                       // otro mapa: no se oye
+  const ox=d.p[0]-player.pos.x, oy=d.p[1]-player.pos.y, oz=d.p[2]-player.pos.z;
+  const dist=Math.hypot(ox,oy,oz);
+  if(dist>260) return;
+  // volumen por distancia: cae con el cuadrado pero con un piso, si no a 100 m no se oye nada
+  const esc=Math.max(0.06, Math.min(1, 26/(dist+8)));
+  tiroSnd(dist>55?'lejos':'shot', esc*(dist>55?1.5:1));
+  /* CHICOTAZO. Distancia del oido a la RECTA del disparo, no al tirador: lo que asusta es la bala
+     que pasa cerca, no el que esta lejos. Solo cuenta si la bala va hacia adelante nuestro. */
+  if(d.d){
+    const t = -(ox*d.d[0] + oy*d.d[1] + oz*d.d[2]);     // proyeccion sobre la direccion del tiro
+    if(t>0 && t<200){
+      const cx=ox+d.d[0]*t, cy=oy+d.d[1]*t, cz=oz+d.d[2]*t;
+      const lat=Math.hypot(cx,cy,cz);
+      if(lat<3.2) tiroSnd('zumbido', Math.max(0.25, 1-lat/3.2));
+    }
+  }
 }
 function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.now(); if(now-MP.lastPub<100)return;
   const p=player, moving=Math.hypot(p.vel.x,p.vel.z)>0.6;
@@ -10890,6 +11010,7 @@ function mpDisparo(ray, distTope, dmg){
 function mpPegar(id,dmg,cabeza){
   if(!MP.on||!MP.client) return;
   MP.client.publish(MP.room+'/action', JSON.stringify({id:MP.id,type:'hit',to:id,dmg:dmg,cab:!!cabeza,name:MP.name}),{qos:0});
+
   pvpMarca(); tiroSnd(cabeza?'cabeza':'golpe');
 }
 /* golpe cuerpo a cuerpo: mismo criterio pero con el alcance corto del arma */
