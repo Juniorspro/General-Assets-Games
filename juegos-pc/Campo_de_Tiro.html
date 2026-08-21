@@ -6104,6 +6104,15 @@ const ALC_DATOS={
   {t:'cil',p:[142.17,12.44,131.69],r1:0.32,h:0.88,seg:10,m:'oxido',ry:1.57},
   {t:'cil',p:[141.16,12.44,131.68],r1:0.32,h:0.88,seg:10,m:'metal',ry:1.57},
   {t:'botin',p:[138.78,12,131.93],cal:'raro',ry:2.34},
+  /* ---- HITOS: uno por sector, para ubicarse desde el aire ---- */
+  {t:'hito',tipo:'campanario',p:[-14,0,26]},
+  {t:'hito',tipo:'chimenea',  p:[-128,0,-44]},
+  {t:'hito',tipo:'grua',      p:[168,0,86],ry:1.57},
+  {t:'hito',tipo:'molino',    p:[-152,0,112]},
+  {t:'hito',tipo:'radar',     p:[26,0,-56]},
+  {t:'hito',tipo:'antena',    p:[136,0,-126]},
+  {t:'hito',tipo:'faro',      p:[-52,0,164]},
+  {t:'hito',tipo:'cinta',     p:[-196,0,-20]},
   ]
 };
 
@@ -7001,6 +7010,100 @@ function alcArbol(e){
   const gr=new THREE.SphereGeometry(h*(flaco?0.070:0.10)*ancho,5,4); gr.scale(1,flaco?0.9:0.6,1);
   alcAddC('follaje',gr,cx,y+h*(flaco?0.96:0.92),cz,0,VERDES_MASA[((sd*31)|0)%VERDES_MASA.length]); }
 /* ruina: el mismo bloque pero mordido arriba, sin techo */
+/* ===================== HITOS: uno por sector =====================
+   Desde el aire los ocho sectores se leian todos igual —casas bajas y arboles— y no habia forma de
+   ubicarse sin mirar el minimapa. Cada sector recibe ahora UNA cosa alta y distinta, que se ve de
+   lejos y no se parece a ninguna otra: si ves la chimenea sabes que estas en La Fabrica.
+   Van como un solo elemento `hito` y no como veinte cajas sueltas por dos razones: se apoyan solos
+   en el terreno (una cota escrita a mano quedaria flotando o enterrada segun la loma), y no pasan
+   por el corrimiento de props, que movia una pieza y dejaba el resto atras. */
+function alcHito(e){
+  const p=e.p||[0,0,0], x=p[0], z=p[2], y=alcH(x,z), tipo=e.tipo||'chimenea';
+  const ry=e.ry||0;
+  const C=(w,h,d,dx,dy,dz,m,r)=>alcCaja(x+dx,y+dy,z+dz,w,h,d,m,r==null?ry:r);
+  const K=(r1,r2,h,dx,dy,dz,m,seg)=>alcCil(x+dx,y+dy,z+dz,r1,r2,h,seg||10,m,ry);
+  if(tipo==='chimenea'){
+    /* LA FABRICA: chimenea de ladrillo de 42 m con anillos blancos. Es lo mas alto del oeste. */
+    K(2.6,1.5,34, 0,17,0, 'ladrillo',14);
+    for(let i=0;i<3;i++) K(2.45-i*0.32,2.45-i*0.32,1.1, 0,9+i*10,0, 'blanco',14);
+    K(1.55,1.75,2.2, 0,35,0, 'oxido',14);
+    C(7,1.2,7, 0,0.6,0, 'hormigonSucio');
+    alcCol(x,y+17,z,4.4,34,4.4,0);
+  } else if(tipo==='antena'){
+    /* LAS TORRES: antena de radio de 58 m, roja y blanca, con tensores. Se ve de punta a punta. */
+    for(let i=0;i<8;i++){ const w=2.6-i*0.22;
+      C(w,7,w, 0,3.5+i*7,0, (i%2)?'blanco':'ladrilloRojo'); }
+    K(0.18,0.18,7, 0,59,0, 'metal',6);
+    C(5,1.0,5, 0,0.5,0, 'hormigonSucio');
+    for(let k=0;k<3;k++){ const a=k*2.094;
+      const g=new THREE.CylinderGeometry(0.07,0.07,34,4);
+      g.rotateZ(0.34); g.rotateY(a);
+      alcAdd('metal',g, x+Math.cos(a)*7, y+16, z+Math.sin(a)*7, 0); }
+    alcCol(x,y+28,z,3.2,56,3.2,0);
+  } else if(tipo==='grua'){
+    /* EL PUERTO: grua portico. Dos patas, el brazo largo hacia el agua y el contrapeso atras. */
+    C(1.5,22,1.5, -6,11,0, 'oxido'); C(1.5,22,1.5, 6,11,0, 'oxido');
+    C(15,1.8,2.4, 0,22.9,0, 'oxido');
+    C(3.2,2.6,3.0, 2,25.1,0, 'metal');
+    C(26,1.1,1.3, 8,25.6,0, 'oxido');            // el brazo
+    C(5,1.6,2.2, -8,25.6,0, 'metal');            // el contrapeso
+    K(0.09,0.09,9, 17,21,0, 'metal',5);          // el cable
+    C(1.6,1.2,1.6, 17,16.2,0, 'metal');          // el gancho
+    alcCol(x-6,y+11,z,2.4,22,2.4,0); alcCol(x+6,y+11,z,2.4,22,2.4,0);
+  } else if(tipo==='molino'){
+    /* LA GRANJA: molino de viento de chapa con la torre de celosia y el rotor. */
+    for(let i=0;i<5;i++){ const w=3.0-i*0.42; C(w,3.4,w, 0,1.7+i*3.4,0,'metal'); }
+    C(2.2,1.6,2.2, 0,18.4,0, 'oxido');
+    for(let k=0;k<8;k++){ const a=k*0.785;
+      const g=new THREE.BoxGeometry(0.5,3.2,0.10); g.translate(0,1.9,0); g.rotateZ(a+0.3);
+      alcAdd('chapa',g, x, y+18.6, z+1.3, 0); }
+    K(0.22,0.22,1.3, 0,18.6,0.7, 'metal',6);
+    C(3.0,0.5,2.0, 0,18.4,-1.9, 'chapa');        // la cola que lo orienta
+    alcCol(x,y+9,z,3.0,18,3.0,0);
+  } else if(tipo==='radar'){
+    /* EL BUNKER: parabola de radar sobre un mastil de hormigon. */
+    K(1.5,1.9,14, 0,7,0, 'hormigonSucio',12);
+    C(3.4,1.0,3.4, 0,14.3,0, 'hormigon');
+    { const g=new THREE.SphereGeometry(4.2,14,8,0,6.283,0,1.0);
+      g.scale(1,0.42,1); g.rotateX(-0.95);
+      alcAdd('blanco',g, x, y+17.4, z, ry); }
+    K(0.16,0.16,4.2, 0,17.0,2.0, 'metal',6);
+    C(9,0.9,9, 0,0.45,0, 'hormigonSucio');
+    alcCol(x,y+7,z,3.6,14,3.6,0);
+  } else if(tipo==='faro'){
+    /* LAS CABANAS: faro rayado en la punta, con la linterna encendida. */
+    K(3.0,1.9,18, 0,9,0, 'blanco',14);
+    for(let i=0;i<4;i++) K(2.92-i*0.28,2.92-i*0.28,1.6, 0,2.4+i*4.4,0, 'ladrilloRojo',14);
+    K(2.3,2.3,1.0, 0,18.4,0, 'metal',14);
+    K(1.5,1.5,2.4, 0,20.1,0, 'vidrio',12);
+    K(2.0,0.2,1.0, 0,21.6,0, 'oxido',12);
+    C(8,1.0,8, 0,0.5,0, 'hormigonSucio');
+    alcCol(x,y+9,z,5.0,18,5.0,0);
+  } else if(tipo==='cinta'){
+    /* LA CANTERA: la cinta transportadora que sube el arido a la tolva. */
+    C(6,7,6, 0,3.5,0, 'oxido');
+    C(4.6,4.0,4.6, 0,9,0, 'metal');
+    { const L=30, g=new THREE.BoxGeometry(2.6,0.8,L); g.rotateX(-0.42);
+      alcAdd('oxido',g, x, y+7.6, z+13, ry); }
+    for(let i=0;i<5;i++){ const t=i/4; C(0.7,3.0+t*7,0.7, 0, (3.0+t*7)/2, 5+t*22, 'metal'); }
+    C(3.0,2.2,3.0, 0,15.6,26, 'metal');
+    alcCol(x,y+5,z,6,10,6,0);
+  } else if(tipo==='campanario'){
+    /* EL PUEBLO: el campanario de la iglesia, con el reloj y la aguja. */
+    C(6,16,6, 0,8,0, 'blanco');
+    C(6.6,0.7,6.6, 0,16.4,0, 'ladrilloRojo');
+    C(4.6,3.4,4.6, 0,18.5,0, 'blanco');
+    for(const s of [[0,2.35],[0,-2.35],[2.35,0],[-2.35,0]])
+      C(s[0]?0.2:2.0, 2.0, s[0]?2.0:0.2, s[0],18.5,s[1], 'negro');
+    { const g=new THREE.ConeGeometry(3.6,7.0,6); alcAdd('techoRojo',g, x, y+23.7, z, ry); }
+    K(0.12,0.12,2.0, 0,27.8,0, 'metal',5);
+    { const g=new THREE.TorusGeometry(1.15,0.14,6,16);
+      alcAdd('oxido',g, x, y+12.6, z+3.02, 0); }        // el reloj
+    C(1.6,0.12,0.12, 0,12.6,3.06, 'negro');
+    C(0.12,1.1,0.12, 0,13.1,3.06, 'negro');
+    alcCol(x,y+8,z,6,16,6,0);
+  }
+}
 function alcEscombro(e){ const p0=e.p||[0,0,0], s=e.s||[4,3,4], ry=e.ry||0, m=e.m||'hormigonSucio';
   const p=e.suelo? [p0[0], alcH(p0[0],p0[2])+p0[1]+s[1]/2, p0[2]] : p0.slice();
   { const y=alcApoyar(p[0],p[2],p[1],s[1],e); if(y==null) return; p[1]=y; }
@@ -7206,6 +7309,7 @@ function alcElem(e){ if(!e||!e.t)return;
     case 'poste':    alcPoste(e); break;
     case 'arbol':    alcArbol(e); break;
     case 'escombro': alcEscombro(e); break;
+    case 'hito':     alcHito(e); break;
     case 'cartel':   alcCartel(e); break;
     case 'bloque':   alcBloque(e); break;
     case 'patio':    alcPatio(e); break;
