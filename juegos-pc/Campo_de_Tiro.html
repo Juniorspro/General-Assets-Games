@@ -9304,7 +9304,21 @@ try{ window.__tiro={
              pared:!!(zonaMalla&&zonaMalla.visible), vida:+PVP.vida.toFixed(1), muerto:PVP.muerto,
              fin:(document.getElementById('partFin')||{}).className}),
   bots:()=>BOTS.map(b=>({id:b.id,n:b.nom,vida:+b.vida.toFixed(0),e:b.estado,muerto:b.muerto,
-                         p:[+b.x.toFixed(1),+b.z.toFixed(1)],vis:!!(b.r.avatar&&b.r.avatar.visible)})),
+                         p:[+b.x.toFixed(1),+b.z.toFixed(1)],vis:!!(b.r.avatar&&b.r.avatar.visible),
+                         ve:!!b.viendo, turno:!!b.turno, d:+(b.dPl||0).toFixed(1)})),
+  /* cuanto te aprietan: se para en un punto y se mide la vida que se pierde por segundo, cuantos
+     bots te ven y cuantos tienen permiso de tirar */
+  presion:(seg,x,z)=>{ if(world!=='arena') return 'solo en la arena';
+    if(x!=null) { player.pos.set(x,1.2,ARE_GZ+z); player.vel.set(0,0,0); }
+    PVP.vida=PVP.max; PVP.muerto=false; PVP_GRACIA=0; INV.blind=0;
+    const T=seg||6, paso=0.05; let t=0, maxVen=0, maxTiran=0, sumVen=0, n=0;
+    while(t<T && !PVP.muerto){ update(paso); t+=paso; n++;
+      const ven=BOTS.filter(b=>!b.muerto&&b.viendo).length, tir=BOTS.filter(b=>b.turno).length;
+      if(ven>maxVen)maxVen=ven; if(tir>maxTiran)maxTiran=tir; sumVen+=ven; }
+    const perdida=PVP.max-PVP.vida;
+    return { seg:+t.toFixed(2), vida:+PVP.vida.toFixed(0), muerto:PVP.muerto,
+             danioPorSeg:+(perdida/Math.max(0.01,t)).toFixed(1),
+             venMax:maxVen, venProm:+(sumVen/Math.max(1,n)).toFixed(1), tiranMax:maxTiran }; },
   partSalto:(seg)=>{ PART.tFase-=(seg||10); return {tFase:+PART.tFase.toFixed(1), ronda:PART.ronda}; },
   botMatar:(i)=>{ const b=BOTS[i|0]; if(!b) return 'no hay'; botDanio(b.id,999,false);
                   return {vivos:PART.vivos, bajas:PART.bajas}; },
@@ -9373,6 +9387,24 @@ try{ window.__tiro={
              pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
              off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
   inspIr:()=>insEmpezar(),
+  /* pone un jugador REAL de mentira en un punto de la arena y cuenta si se ve: sirve para probar
+     el recorte de avatares sin necesitar dos telefonos */
+  remotoEn:(x,z,nom)=>{ const id='sim_'+Math.random().toString(36).slice(2,8);
+    const r=mpRemote(id, nom||'Amigo', true); r.esBot=false; r.world=world;
+    r.target.set(x, 0, (world==='arena'?ARE_GZ:ALC_GZ)+z); r.pos.copy(r.target); r.init=true;
+    r.last=performance.now()+1e9;   // que no lo saque el tiempo de espera
+    return {id, p:[x,z]}; },
+  remotoVer:()=>{ const q=camera.quaternion.clone().invert(), out=[];
+    for(const [,r] of MP.remotes){ if(r.esBot) continue;
+      const c=r.pos.clone(); c.y+=0.95;
+      const rel=c.clone().sub(camera.position).applyQuaternion(q);
+      const n=c.clone().project(camera);
+      let mallas=0, visibles=0;
+      if(r.body) r.body.traverse(o=>{ if(o.isMesh){ mallas++; if(o.visible)visibles++; } });
+      out.push({ nom:r.name, w:r.world, mundo:world, vis:!!(r.avatar&&r.avatar.visible),
+                 enCuadro:r.enCuadro, oculto:!!r.oculto, rig:!!r.rigged, mallas, visibles,
+                 dist:+(-rel.z).toFixed(1), ndc:[+n.x.toFixed(2),+n.y.toFixed(2)] }); }
+    return out; },
   /* cuantas piezas tiene el arma equipada y cuanto mide: para ver de una que una receta armo lo
      que decia, sin tener que buscarla en pantalla */
   armaMalla:()=>{ let n=0,tri=0,nan=false; const bb=new THREE.Box3();
@@ -9693,6 +9725,7 @@ try{ window.__tiro={
         caja:jug[0].object.getWorldPosition(new THREE.Vector3()).toArray().map(v=>+v.toFixed(1))}:null,
       blanco:f(bl), solido:f(so), cajas:_mpCajas.length }; },
   mpEstado:()=>({ on:MP.on, url:MP.url, pub:MP.nPub|0, rx:MP.nRx|0, frames:MP.nTick|0, id:MP.id, sala:MP.room, mundo:world, yo:MP.name,
+    conex:(MP.conex||[]).map(c=>({url:c.url, on:c.on})), vivos:(MP.conex||[]).filter(c=>c.on).length,
     remotos:[...MP.remotes.values()].map(r=>({id:r.id,n:r.name,w:r.world,anim:r.anim,
       vis:!!(r.avatar&&r.avatar.visible), rig:!!r.rigged, caja:!!r.caja,
       cuerpo:(()=>{ if(!r.body)return null; let n=0,v=0;
@@ -11799,7 +11832,7 @@ function mpBubble(r,text){ if(!r||!r.avatar||!text)return; text=String(text).sli
   clearTimeout(r.bubbleT); r.bubbleT=setTimeout(()=>{ if(r.bubble)r.bubble.sprite.visible=false; }, 5500); }
 function mpSendChatText(txt){ txt=(txt||'').trim().slice(0,120); if(!txt)return;
   if(!MP.on){ mpChatIn('', t('mp_nochat')); return; }
-  MP.client.publish(MP.room+'/chat',JSON.stringify({id:MP.id,name:MP.name,text:txt}),{qos:0}); mpChatIn(MP.name,txt); }
+  mpEnviar('/chat',{id:MP.id,name:MP.name,text:txt}); mpChatIn(MP.name,txt); }
 // --- TECLADO QWERTY frutiger aero DENTRO del juego (no abre el teclado del teléfono) ---
 const kbdEl=document.getElementById('kbd'); let kbBuilt=false, kbBuf='', kbTxt=null;
 function buildKbd(){ if(kbBuilt||!kbdEl)return; kbBuilt=true;
@@ -11842,41 +11875,76 @@ const MP_BROKERS=[
   'wss://test.mosquitto.org:8081/mqtt',
   'wss://mqtt.eclipseprojects.io/mqtt'
 ];
-let mpBroker=0; try{ const g=+localStorage.getItem('pf_broker'); if(g>=0&&g<MP_BROKERS.length) mpBroker=g; }catch(e){}
-let _mpTmr=null;
+/* ===================== POR QUE NO VEIAS A TU AMIGO =====================
+   Habia UN broker por vez. Se probaba el primero de la lista, y si no contestaba en 8 s se pasaba
+   al siguiente… y el que funcionaba quedaba GUARDADO en el telefono. Dos amigos con la misma sala
+   y el mismo mapa terminaban en servidores DISTINTOS —uno en emqx, el otro en hivemq— y ahi no hay
+   nada que hacer: son dos redes separadas, no se van a ver nunca. Y como la eleccion quedaba
+   guardada, una vez que se separaban no se volvian a juntar mas.
+
+   Ahora se conecta a TODOS a la vez. Se publica en todos y se escucha en todos. Como cada jugador
+   se identifica por su id, que el mismo mensaje llegue por dos brokers no molesta: el segundo pisa
+   al primero con lo mismo. El estado son ~200 bytes diez veces por segundo, o sea 2 KB/s por
+   broker: tres brokers son 6 KB/s, menos que una foto por minuto.
+
+   Con esto ya no importa a cual llegue cada uno: si tu amigo entra por cualquiera de los tres,
+   estas ahi tambien. */
+const MP_MAX_CONEX=3;                 // hasta tres a la vez: mas no agrega, solo gasta
+MP.conex=[];                          // {url, client, on}
+function mpVivos(){ return MP.conex.filter(c=>c.on).length; }
+/* publicar va a TODOS los conectados */
+function mpEnviar(sufijo, obj){
+  if(!MP.conex.length) return false;
+  const t=MP.room+sufijo, m=JSON.stringify(obj); let n=0;
+  for(const c of MP.conex){ if(!c.on) continue;
+    try{ c.client.publish(t, m, {qos:0}); n++; }catch(e){} }
+  if(n) MP.nPub=(MP.nPub|0)+1;
+  return n>0;
+}
+function mpSubs(cli, sala){ try{ cli.subscribe([sala+'/state',sala+'/chat',sala+'/action',sala+'/rtc'],{qos:0}); }catch(e){} }
+function mpDesubs(cli, sala){ try{ cli.unsubscribe([sala+'/state',sala+'/chat',sala+'/action',sala+'/rtc']); }catch(e){} }
+function mpMensaje(topic,buf){
+  MP.nRx=(MP.nRx|0)+1; let d; try{ d=JSON.parse(buf.toString()); }catch(e){ return; } if(!d||d.id===MP.id)return;
+  if(topic.slice(-6)==='/state'){ const r=mpRemote(d.id,d.name||'jugador'); r.name=d.name||r.name; r.world=d.world; r.anim=d.anim||'idle'; r.moving=!!d.isMoving; r.mir=!!d.mir; r.yaw=d.facingAngle||0;
+    r.vida=(typeof d.vida==='number')?d.vida:100; r.bajas=d.bajas|0; r.muerto=!!d.muerto; r.arma=d.arma||''; r.talking=!!d.talk;
+    r.ch=(typeof d.ch==='number'&&d.ch>=0)?d.ch:-1;   // qué personaje de la tienda tiene puesto
+    try{ boardUpdate(d.id, d.name, d.bajas); }catch(e){}   // clasificación: bajas de cada jugador
+    r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now(); }
+  else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); const r=MP.remotes.get(d.id); if(r) mpBubble(r, d.text||''); }
+  else if(topic.slice(-7)==='/action'){
+    if(d.type==='shot') mpTiroAjeno(d);
+    else if(d.type==='hit' && d.to===MP.id) pvpRecibir(d.dmg, d.name||'alguien', d.cab);
+    else if(d.type==='kill'){ if(d.by===MP.name){ PVP.bajas++; pvpHUD(); }
+      mpChatIn('💀',(d.name||'?')+' cayó'+(d.by?(' · '+d.by):'')); } }
+  else if(topic.slice(-4)==='/rtc'){ if(!d.to||d.to===MP.id) voiceSignal(d); }
+}
+function mpEstadoConex(){
+  const v=mpVivos();
+  if(v>0){ if(!MP.on){ MP.on=true; if(VOICE.stream) voiceSend(null,'ready'); }
+    MP.url=(MP.conex.find(c=>c.on)||{}).url||'';
+    mpSetStatus('online','mp_online'); }
+  else { MP.on=false; mpSetStatus(MP.conex.length?'connecting':'off', MP.conex.length?'mp_conn':'mp_off'); }
+}
 function mpConnect(){
   if(typeof mqtt==='undefined'){ mpSetStatus('off','mp_nonet'); return; }
-  if(MP.client){ try{ MP.client.end(true); }catch(e){} MP.client=null; }
-  if(_mpTmr){ clearTimeout(_mpTmr); _mpTmr=null; }
-  const url=MP_BROKERS[mpBroker%MP_BROKERS.length];
+  for(const c of MP.conex){ try{ c.client.end(true); }catch(e){} }
+  MP.conex=[];
   mpSetStatus('connecting','mp_conn');
-  let client; try{ client=mqtt.connect(url,{connectTimeout:6000,reconnectPeriod:0,clean:true,keepalive:30}); }
-  catch(e){ mpBroker++; _mpTmr=setTimeout(mpConnect,1200); return; }
-  MP.client=client; MP.url=url;
-  /* si en 8 s no llego a online, este broker no sirve: se pasa al siguiente */
-  const plazo=setTimeout(()=>{ if(!MP.on){ try{ client.end(true); }catch(e){} mpBroker++; mpConnect(); } }, 8000);
-  const siguiente=()=>{ if(_mpTmr)return; MP.on=false; mpSetStatus('off','mp_off');
-    mpBroker++; _mpTmr=setTimeout(()=>{ _mpTmr=null; mpConnect(); }, 1500); };
-  client.on('connect',()=>{ clearTimeout(plazo); MP.on=true; mpSetStatus('online','mp_online');
-    try{ localStorage.setItem('pf_broker',String(mpBroker%MP_BROKERS.length)); }catch(e){}
-    client.subscribe([MP.room+'/state',MP.room+'/chat',MP.room+'/action',MP.room+'/rtc'],{qos:0}); if(VOICE.stream) voiceSend(null,'ready'); });
-  client.on('reconnect',()=>mpSetStatus('connecting','mp_conn'));
-  client.on('close',()=>{ clearTimeout(plazo); siguiente(); });
-  client.on('error',()=>{ clearTimeout(plazo); siguiente(); });
-  client.on('message',(topic,buf)=>{ MP.nRx=(MP.nRx|0)+1; let d; try{ d=JSON.parse(buf.toString()); }catch(e){ return; } if(!d||d.id===MP.id)return;
-    if(topic.slice(-6)==='/state'){ const r=mpRemote(d.id,d.name||'jugador'); r.name=d.name||r.name; r.world=d.world; r.anim=d.anim||'idle'; r.moving=!!d.isMoving; r.mir=!!d.mir; r.yaw=d.facingAngle||0;
-      r.vida=(typeof d.vida==='number')?d.vida:100; r.bajas=d.bajas|0; r.muerto=!!d.muerto; r.arma=d.arma||''; r.talking=!!d.talk;
-      r.ch=(typeof d.ch==='number'&&d.ch>=0)?d.ch:-1;   // qué personaje de la tienda tiene puesto
-      try{ boardUpdate(d.id, d.name, d.bajas); }catch(e){}   // clasificación: bajas de cada jugador
-      r.target.set(d.x||0,d.y||0,d.z||0); if(!r.init){ r.init=true; r.pos.copy(r.target); } r.last=performance.now(); }
-    else if(topic.slice(-5)==='/chat'){ mpChatIn(d.name||'?', d.text||''); const r=MP.remotes.get(d.id); if(r) mpBubble(r, d.text||''); }   // panel de chat + burbuja sobre la cabeza
-    else if(topic.slice(-7)==='/action'){
-      if(d.type==='shot') mpTiroAjeno(d);
-      else if(d.type==='hit' && d.to===MP.id) pvpRecibir(d.dmg, d.name||'alguien', d.cab);
-      else if(d.type==='kill'){ if(d.by===MP.name){ PVP.bajas++; pvpHUD(); }
-        mpChatIn('💀',(d.name||'?')+' cayó'+(d.by?(' · '+d.by):'')); } }
-    else if(topic.slice(-4)==='/rtc'){ if(!d.to||d.to===MP.id) voiceSignal(d); }   // señalización del chat de voz (WebRTC)
-  });
+  const lista=MP_BROKERS.slice(0,MP_MAX_CONEX);
+  for(const url of lista){
+    let cli; try{ cli=mqtt.connect(url,{connectTimeout:8000,reconnectPeriod:4000,clean:true,keepalive:30}); }
+    catch(e){ continue; }
+    const c={url, client:cli, on:false};
+    MP.conex.push(c);
+    cli.on('connect',()=>{ c.on=true; mpSubs(cli, MP.room); mpEstadoConex(); });
+    cli.on('reconnect',()=>{ c.on=false; mpEstadoConex(); });
+    cli.on('close',()=>{ c.on=false; mpEstadoConex(); });
+    cli.on('error',()=>{ c.on=false; mpEstadoConex(); });
+    cli.on('message',mpMensaje);
+  }
+  /* MP.client sigue apuntando al primero que ande: hay codigo viejo que lo mira para saber si hay red */
+  Object.defineProperty(MP,'client',{ configurable:true, get(){ const c=MP.conex.find(x=>x.on); return c? c.client : null; } });
+  if(!MP.conex.length) mpSetStatus('off','mp_off');
 }
 /* ===================== SE OYE DE DONDE TE TIRAN =====================
    Los disparos de los demas no se transmitian: en un tiroteo el otro era MUDO y no habia forma de
@@ -11887,11 +11955,11 @@ function mpConnect(){
    asi no se inunda el broker publico. */
 let _mpTiroT=0;
 function mpAvisarTiro(px,py,pz,dx,dy,dz){
-  if(!MP.on||!MP.client) return;
+  if(!MP.on) return;
   const now=performance.now(); if(now-_mpTiroT<80) return; _mpTiroT=now;
-  try{ MP.client.publish(MP.room+'/action', JSON.stringify({id:MP.id,type:'shot',
+  mpEnviar('/action',{id:MP.id,type:'shot',
     p:[+px.toFixed(1),+py.toFixed(1),+pz.toFixed(1)], d:[+dx.toFixed(2),+dy.toFixed(2),+dz.toFixed(2)],
-    w:world}),{qos:0}); }catch(e){}
+    w:world});
 }
 function mpTiroAjeno(d){
   if(!d||!d.p||d.id===MP.id) return;
@@ -11913,7 +11981,7 @@ function mpTiroAjeno(d){
     }
   }
 }
-function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.now(); if(now-MP.lastPub<100)return;
+function mpPublishState(){ if(!MP.on)return; const now=performance.now(); if(now-MP.lastPub<100)return;
   const p=player, moving=Math.hypot(p.vel.x,p.vel.z)>0.6;
   const mir=(curAnim==='wallrun'&&p.wallrun>0)||(curAnim==='slide'&&p.slideRight);   // mismo espejo que el cuerpo local
   let myCh=-1; try{ if(window.__charId){ const v=+window.__charId(); if(v>=0)myCh=v; } }catch(e){}   // personaje equipado (la tienda expone __charId)
@@ -11927,8 +11995,8 @@ function mpPublishState(){ if(!MP.on||!MP.client)return; const now=performance.n
     vida:Math.round(PVP.vida), bajas:PVP.bajas|0, muerto:!!PVP.muerto, arma:ARMA().id, talk:voiceTalking};
   const l=MP.last, hb=(now-(MP.lastFull||0)>2200);   // latido cada ~2.2s aunque no cambie nada → no se cae la conexión
   const ch=hb||(l.x===undefined)||Math.abs(cur.x-l.x)>0.03||Math.abs(cur.y-l.y)>0.03||Math.abs(cur.z-l.z)>0.03||Math.abs(cur.yaw-l.yaw)>0.05||cur.anim!==l.anim||cur.world!==l.world||cur.moving!==l.moving||cur.mir!==l.mir||cur.chId!==l.chId||cur.vida!==l.vida||cur.bajas!==l.bajas||cur.muerto!==l.muerto||cur.arma!==l.arma||cur.talk!==l.talk;
-  if(!ch)return; MP.lastPub=now; MP.last=cur; if(hb)MP.lastFull=now; MP.nPub=(MP.nPub|0)+1;
-  MP.client.publish(MP.room+'/state', JSON.stringify({id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving,mir:cur.mir,ch:cur.chId,vida:cur.vida,bajas:cur.bajas,muerto:cur.muerto,arma:cur.arma,talk:cur.talk}),{qos:0}); }
+  if(!ch)return; MP.lastPub=now; MP.last=cur; if(hb)MP.lastFull=now;
+  mpEnviar('/state',{id:MP.id,name:MP.name,x:cur.x,y:cur.y,z:cur.z,facingAngle:cur.yaw,anim:cur.anim,world:cur.world,isMoving:cur.moving,mir:cur.mir,ch:cur.chId,vida:cur.vida,bajas:cur.bajas,muerto:cur.muerto,arma:cur.arma,talk:cur.talk}); }
 /* ===================== TIROTEO ENTRE JUGADORES =====================
    El multijugador ya mostraba a los demas y les hablaba, pero no habia daño: el manejador de /action
    decia literalmente "este juego no tiene daño". Ahora si. El modelo es el mas simple que aguanta un
@@ -12036,7 +12104,7 @@ function mpPegar(id,dmg,cabeza){
   if(typeof botDanio==='function' && String(id).slice(0,4)==='bot_'){
     if(botDanio(id,dmg,cabeza)){ pvpMarca(); return; } }
   if(!MP.on||!MP.client) return;
-  MP.client.publish(MP.room+'/action', JSON.stringify({id:MP.id,type:'hit',to:id,dmg:dmg,cab:!!cabeza,name:MP.name}),{qos:0});
+  mpEnviar('/action',{id:MP.id,type:'hit',to:id,dmg:dmg,cab:!!cabeza,name:MP.name});
 
   pvpMarca(); tiroSnd(cabeza?'cabeza':'golpe');
 }
@@ -12074,7 +12142,7 @@ function pvpMorir(){
   if(world==='arena') PVP.tRes=3.2;               // en la arena se vuelve, no se pierde
   document.body.classList.add('muerto');
   const q=document.getElementById('muerteQ'); if(q) q.textContent='te mató '+PVP.ultimo+' · reapareciendo…';
-  if(MP.on&&MP.client) MP.client.publish(MP.room+'/action', JSON.stringify({id:MP.id,type:'kill',by:PVP.ultimo,name:MP.name}),{qos:0});
+  if(MP.on) mpEnviar('/action',{id:MP.id,type:'kill',by:PVP.ultimo,name:MP.name});
   pvpHUD();
 }
 /* REAPARICION. En el valle cae en un punto al azar bien lejos del ultimo; en el campo de tiro, en la
@@ -12360,6 +12428,7 @@ function enterArena(){
 function sueloY(x,z){ return (world==='arena') ? 0 : alcH(x,z); }
 function areRevivir(){
   PVP.muerto=false; PVP.vida=PVP.max; document.body.classList.remove('muerto');
+  PVP_GRACIA=1.5;   // aparecer y morir en el mismo segundo no es dificil, es injusto
   INV.curando=0; INV.curaTipo=''; try{ invHUD(); }catch(e){}
   tiroAmmo=TIRO_MAG; tiroRel=0;
   /* aparece lejos de donde te mataron y no siempre en el mismo lado */
@@ -12501,6 +12570,8 @@ function partTick(dt){
     if(zonaMalla) zonaMalla.visible=false;
     document.body.classList.remove('enPartida');
     if(PVP.muerto){ PVP.tRes-=dt; if(PVP.tRes<=0) areRevivir(); }
+    if(PVP_GRACIA>0) PVP_GRACIA-=dt;
+    botTurnos();                 // quien tiene permiso de tirar este cuadro
     botTick(dt);
     return;
   }
@@ -12535,6 +12606,8 @@ function partTick(dt){
       if(av && !av.classList.contains('show')) av.classList.add('show'); }
     else if(av && av.classList.contains('show')) av.classList.remove('show');
   }
+  if(PVP_GRACIA>0) PVP_GRACIA-=dt;
+  botTurnos();
   botTick(dt);
   partHUD();
   if(PART.vivos<=1 && !PVP.muerto) partTerminar(true);
@@ -12575,11 +12648,10 @@ const SALA_CUPO=16;
 let salaN=1, BOT_META=SALA_CUPO, _salaT=0;
 function salaReales(){ let k=0; for(const [,r] of MP.remotes) if(!r.esBot) k++; return k; }
 function salaCambiar(nueva){
-  if(nueva===salaN || !MP.client) return;
+  if(nueva===salaN || !MP.conex.length) return;
   const viejo=MP.room;
   salaN=nueva; MP.room=NS+'sala'+salaN;
-  try{ MP.client.unsubscribe([viejo+'/state',viejo+'/chat',viejo+'/action',viejo+'/rtc']); }catch(e){}
-  try{ MP.client.subscribe([MP.room+'/state',MP.room+'/chat',MP.room+'/action',MP.room+'/rtc'],{qos:0}); }catch(e){}
+  for(const c of MP.conex){ if(!c.on) continue; mpDesubs(c.client, viejo); mpSubs(c.client, MP.room); }
   for(const [id,r] of MP.remotes){ if(r.esBot) continue;
     try{ mpSacarCaja(r); scene.remove(r.avatar); }catch(e){} MP.remotes.delete(id); }
   try{ mpChatIn('🚪', tl({es:'Sala llena · pasaste a la sala ',en:'Room full · moved to room ',pt:'Sala cheia · foi para a sala '})+salaN); }catch(e){}
@@ -12715,6 +12787,41 @@ function botQuitar(k){
     if(!b.muerto) PART.vivos=Math.max(1,PART.vivos-1);
   }
 }
+/* ===================== CUANTO APRIETAN LOS BOTS =====================
+   Medido con los numeros viejos: un bot con AK a 15 m tiraba rafagas de tres con 52% de acierto y
+   17 de daño por bala, o sea 17,6 de daño POR SEGUNDO. Con 100 de vida eso es morir en 5,7 s
+   contra UNO. Pero en la arena hay dieciseis, y cuando tres te veian a la vez eran 53 por segundo:
+   muerto en menos de dos. No es dificultad, es no tener tiempo de reaccionar.
+
+   Cuatro frenos, y el importante es el ultimo:
+   · REACCION: 1,15 s desde que te ven hasta el primer tiro (era 0,6), y cada bot con su propio
+     retardo de hasta medio segundo mas, para que no abran fuego los tres en el mismo cuadro.
+   · PUNTERIA: 42% pegado y cae mas rapido con la distancia (era 66%).
+   · DAÑO: 0,46 del daño del arma (era 0,62), y la cabeza 1,7 con 5% de probabilidad (era 1,9 y 10%).
+   · CUANTOS A LA VEZ: como maximo DOS bots te tiran al mismo tiempo — los dos mas cercanos que te
+     ven. El resto se acerca, te flanquea y espera turno. Es lo que convierte "me mataron de la
+     nada" en "me estan apretando dos, me cubro".
+
+   Con eso, dos bots encima son 15,6 de daño por segundo: 6,4 s de vida llena, con tiempo para
+   taparte, curarte o contestar. Y al reaparecer hay 1,5 s en que no te pueden pegar, porque
+   aparecer y morir en el mismo segundo no es dificil, es injusto. */
+const BOT_MAX_TIRAN=2;         // cuantos pueden dispararte a la vez
+const BOT_REACCION=1.15;       // segundos desde que te ven hasta el primer tiro
+const BOT_PUNT0=0.42, BOT_PUNT_CAIDA=0.0075, BOT_PUNT_MIN=0.05;
+const BOT_DMG=0.38, BOT_CAB_P=0.05, BOT_CAB_MUL=1.7;
+const BOT_PAUSA0=1.0, BOT_PAUSA1=1.3;   // el hueco entre rafagas: es el aire para taparte
+let PVP_GRACIA=0;              // invulnerable un rato despues de reaparecer
+/* EL TURNO. Se calcula una vez por cuadro para todos: de los que te ven y estan en pelea, los
+   BOT_MAX_TIRAN mas cercanos tienen permiso de tirar. Los demas siguen moviendose y flanqueando
+   —no se quedan quietos— pero no aprietan el gatillo. */
+function botTurnos(){
+  const cand=[];
+  for(const b of BOTS){ b.turno=false;
+    if(b.muerto || b.estado!=='pelea' || !b.viendo) continue;
+    cand.push(b); }
+  cand.sort((a,b)=>a.dPl-b.dPl);
+  for(let i=0;i<cand.length && i<BOT_MAX_TIRAN;i++) cand[i].turno=true;
+}
 function botTick(dt){
   if(!BOTS.length) return;
   const arena=(world==='arena');
@@ -12738,6 +12845,8 @@ function botTick(dt){
     const dPl=Math.hypot(px-b.x, pz-b.z);
     const ve = (!PVP.muerto) && dPl<55 && botVe(b.x,b.y+1.55,b.z, px,py+0.2,pz);
     if(ve) b.tVer+=dt; else b.tVer=Math.max(0,b.tVer-dt*1.6);
+    b.viendo=ve; b.dPl=dPl;                       // los lee botTurnos
+    if(b.lento===undefined) b.lento=Math.random()*0.5;   // cada uno reacciona un poco distinto
     if(!arena && fuera>-6){                        // primero que nada: meterse adentro
       const c=zonaCentro();
       b.tx=c[0]+(b.x-c[0])*0.25; b.tz=c[1]+(b.z-c[1])*0.25; b.estado='zona';
@@ -12771,18 +12880,18 @@ function botTick(dt){
       b.yaw=(b.estado==='pelea')? Math.atan2(px-b.x, pz-b.z) : Math.atan2(vx,vz);
     }
     // ---- tirar ----
-    if(b.estado==='pelea' && ve && b.tVer>0.6){
+    /* el turno se reparte arriba (botTurnos): b.turno dice si a este le toca tirar */
+    if(b.estado==='pelea' && ve && b.turno && b.tVer>(BOT_REACCION+(b.lento||0))){
       b.tTiro-=dt;
       if(b.tTiro<=0){
         const d=ARSENAL.find(o=>o.id===b.arma)||ARSENAL[0];
         b.rafaga=(b.rafaga>0)? b.rafaga-1 : (2+((Math.random()*3)|0));
-        b.tTiro=(b.rafaga>0)? (60/(d.rpm||600)) : (0.7+Math.random()*1.1);
-        /* punteria: base 0.62 a diez metros, cae con la distancia. Nunca perfecta ni siempre */
-        const acierta = Math.random() < Math.max(0.09, 0.66 - dPl*0.0092);
+        b.tTiro=(b.rafaga>0)? (60/(d.rpm||600)) : (BOT_PAUSA0+Math.random()*BOT_PAUSA1);
+        const acierta = Math.random() < Math.max(BOT_PUNT_MIN, BOT_PUNT0 - dPl*BOT_PUNT_CAIDA);
         try{ tiroSnd(dPl>45?'lejos':'shot', Math.max(0.10, Math.min(0.85, 22/(dPl+8)))); }catch(e){}
-        if(acierta && !PVP.muerto){
-          const cab=Math.random()<0.10;
-          pvpRecibir(Math.round((d.dmg||24)*(cab?1.9:1)*0.62), b.nom, cab);
+        if(acierta && !PVP.muerto && PVP_GRACIA<=0){
+          const cab=Math.random()<BOT_CAB_P;
+          pvpRecibir(Math.round((d.dmg||24)*(cab?BOT_CAB_MUL:1)*BOT_DMG), b.nom, cab);
         } else {
           /* la que erra pasa cerca: es lo que te avisa que te estan tirando */
           try{ if(dPl<40 && Math.random()<0.55) tiroSnd('zumbido',0.45); }catch(e){}
@@ -12803,7 +12912,7 @@ function botTick(dt){
 const VOICE={ ok:(typeof RTCPeerConnection!=='undefined'), mic:!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia), stream:null, peers:new Map(), inited:false };   // ok = puede ESCUCHAR (WebRTC); mic = puede HABLAR (getUserMedia)
 const RTC_CFG={ iceServers:[ {urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},
   {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'} ] };   // TURN público: sin esto, dos celulares con datos móviles casi nunca logran conectarse P2P
-function voiceSend(to,type,data){ if(MP.on&&MP.client) MP.client.publish(MP.room+'/rtc', JSON.stringify({id:MP.id,to:to||null,type,data:data||null}),{qos:0}); }
+function voiceSend(to,type,data){ if(MP.on) mpEnviar('/rtc',{id:MP.id,to:to||null,type,data:data||null}); }
 // --- VOZ 3D POR CERCANÍA: solo escuchás a los que están CERCA y en TU nivel, y suenan desde donde están parados ---
 const VDIST=28;   // distancia máxima (metros) a la que se escucha a un jugador
 let VCTX=null;
