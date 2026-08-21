@@ -929,14 +929,60 @@ let giroModo='no', giroK=1, giroKAds=0.7;
    quitarle a la pantalla su parte vertical. Asi los dos ejes son perpendiculares de verdad, no se
    pisan, y el ladeo del aparato deja de contaminar. Tambien entra alpha (giro sobre el eje que sale
    de la pantalla), que antes se tiraba entero: con el telefono inclinado, parte del giro vive ahi. */
-const GIRO={on:false, lig:false, rx:0, ry:0, ult:0, err:'', muestras:0,
-            ux:0, uy:1, uz:0, gOk:false};
-function giroEvento(e){
-  const r=e.rotationRate; if(!r) return;
-  const wx=r.beta||0, wy=r.gamma||0, wz=r.alpha||0;    // velocidad de giro en los ejes DEL APARATO
-  const ang=((screen.orientation&&screen.orientation.angle)||window.orientation||0)*Math.PI/180;
-  const c=Math.cos(ang), sn=Math.sin(ang);
-  // 1) el ARRIBA del mundo visto desde el aparato, filtrado: la gravedad no salta, el manotazo si
+/* ===================== GIROSCOPIO (reescrito) =====================
+   Los dos intentos anteriores integraban VELOCIDAD de giro (devicemotion.rotationRate). Dos
+   problemas de fondo con eso: rotationRate no existe en muchos Android (llega en null y el
+   giroscopio simplemente no hacia nada), y aunque exista, integrar velocidad por cuadro acumula
+   todo el error de muestreo — al rato la mira no vuelve al mismo lugar.
+
+   Este usa la ORIENTACION ABSOLUTA (deviceorientation), que soportan practicamente todos los
+   telefonos. Se arma el cuaternion del aparato con la formula estandar (Euler YXZ + el giro de
+   -90 grados que pone la pantalla mirando al frente + el angulo de la pantalla), se saca su
+   vector ADELANTE, y se mide cuanto giro y cuanto cabeceo ESE VECTOR de un cuadro al otro. Se
+   suma la DIFERENCIA, nunca el valor absoluto: asi la deriva de la brujula (que es lo que hace
+   que la mira se vaya sola) no entra, y el eje vertical sale de la gravedad que ya trae la
+   orientacion — el ladeo del telefono deja de mezclarse solo.
+
+   Si el aparato no manda orientacion en un segundo y medio, se cae al metodo viejo de velocidad,
+   que en los aparatos donde si funciona sigue sirviendo. */
+const GIRO={on:false, ligO:false, ligM:false, fuente:'', ult:0, err:'', muestras:0,
+            yaw:0, pit:0, hay:false, dy:0, dp:0, hz:0, _n:0, _t0:0,
+            rx:0, ry:0, ux:0, uy:1, uz:0, gOk:false};
+const _gq=new THREE.Quaternion(), _gq1=new THREE.Quaternion(-Math.SQRT1_2,0,0,Math.SQRT1_2);
+const _gq2=new THREE.Quaternion(), _ge=new THREE.Euler(), _gf=new THREE.Vector3();
+const _gZ=new THREE.Vector3(0,0,1);
+function giroPantalla(){
+  return (((screen.orientation&&screen.orientation.angle)||window.orientation||0))*Math.PI/180;
+}
+/* ---- fuente 1: orientacion absoluta (la buena) ---- */
+function giroOrient(e){
+  if(e.alpha==null && e.beta==null && e.gamma==null) return;
+  const a=(e.alpha||0)*Math.PI/180, b=(e.beta||0)*Math.PI/180, g=(e.gamma||0)*Math.PI/180;
+  const o=giroPantalla();
+  _ge.set(b,a,-g,'YXZ');
+  _gq.setFromEuler(_ge);
+  _gq.multiply(_gq1);                                   // la camara mira por el dorso del aparato
+  _gq2.setFromAxisAngle(_gZ,-o); _gq.multiply(_gq2);    // el angulo de la pantalla
+  _gf.set(0,0,-1).applyQuaternion(_gq);                 // hacia donde apunta el telefono
+  const yaw=Math.atan2(-_gf.x,-_gf.z);
+  const pit=Math.asin(Math.max(-1,Math.min(1,_gf.y)));
+  if(GIRO.hay && Math.abs(_gf.y)<0.985){                // cerca del cenit el yaw se vuelve loco
+    let dy=yaw-GIRO.yaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+    const dp=pit-GIRO.pit;
+    if(Math.abs(dy)<0.5 && Math.abs(dp)<0.5){ GIRO.dy+=dy; GIRO.dp+=dp; }   // saltos raros: se tiran
+  }
+  GIRO.yaw=yaw; GIRO.pit=pit; GIRO.hay=true;
+  GIRO.fuente='orientacion'; GIRO.ult=performance.now(); giroCuenta();
+}
+function giroCuenta(){ GIRO.muestras++; GIRO._n++;
+  const t=performance.now(); if(!GIRO._t0) GIRO._t0=t;
+  if(t-GIRO._t0>1000){ GIRO.hz=Math.round(GIRO._n*1000/(t-GIRO._t0)); GIRO._n=0; GIRO._t0=t; } }
+/* ---- fuente 2 (respaldo): velocidad de giro ---- */
+function giroMocion(e){
+  if(GIRO.fuente==='orientacion' && performance.now()-GIRO.ult<1500) return;   // ya hay algo mejor
+  const r=e.rotationRate; if(!r || (r.alpha==null&&r.beta==null&&r.gamma==null)) return;
+  const wx=r.beta||0, wy=r.gamma||0, wz=r.alpha||0;
+  const o=giroPantalla(), c=Math.cos(o), sn=Math.sin(o);
   const a=e.accelerationIncludingGravity;
   if(a){ const L=Math.hypot(a.x||0,a.y||0,a.z||0);
     if(L>3){ const k=GIRO.gOk?0.12:1;
@@ -944,49 +990,55 @@ function giroEvento(e){
       GIRO.gOk=true; } }
   let ux,uy,uz;
   if(GIRO.gOk){ const L=Math.hypot(GIRO.ux,GIRO.uy,GIRO.uz)||1; ux=GIRO.ux/L; uy=GIRO.uy/L; uz=GIRO.uz/L; }
-  else { ux=-sn; uy=c; uz=0; }                          // sin acelerometro: el vertical de la pantalla
-  // 2) el eje horizontal de la pantalla, sin su parte vertical → cabeceo puro
+  else { ux=-sn; uy=c; uz=0; }
   let hx=c, hy=sn, hz=0;
   const d=hx*ux+hy*uy+hz*uz;
   let px=hx-d*ux, py=hy-d*uy, pz=hz-d*uz;
   const pL=Math.hypot(px,py,pz);
-  if(pL<0.25){ px=hx; py=hy; pz=hz; }                   // pantalla casi horizontal: no hay como separar
-  else { px/=pL; py/=pL; pz/=pL; }
-  GIRO.ry = wx*ux + wy*uy + wz*uz;                      // giro SOBRE LA VERTICAL DEL MUNDO
-  GIRO.rx = wx*px + wy*py + wz*pz;                      // cabeceo sobre la horizontal de la pantalla
-  GIRO.ult=performance.now(); GIRO.muestras++;
+  if(pL<0.25){ px=hx; py=hy; pz=hz; } else { px/=pL; py/=pL; pz/=pL; }
+  GIRO.ry = wx*ux + wy*uy + wz*uz;
+  GIRO.rx = wx*px + wy*py + wz*pz;
+  GIRO.fuente='rotacion'; GIRO.ult=performance.now(); giroCuenta();
 }
+function giroReiniciar(){ GIRO.hay=false; GIRO.dy=0; GIRO.dp=0; GIRO.rx=0; GIRO.ry=0; }
 function giroActivar(){
-  if(giroModo==='no'){ GIRO.on=false; giroEstado(); return; }
-  const prender=()=>{ if(!GIRO.lig){ addEventListener('devicemotion',giroEvento); GIRO.lig=true; }
-    GIRO.on=true; GIRO.err=''; giroEstado(); };
-  try{
-    // iOS 13+ exige pedir permiso DESDE UN GESTO del usuario: por eso se llama al tocar la opcion
-    if(typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission){
-      DeviceMotionEvent.requestPermission().then(r=>{
-        if(r==='granted') prender();
-        else { GIRO.on=false; GIRO.err='permiso denegado'; giroEstado(); }
-      }).catch(err=>{ GIRO.on=false; GIRO.err=String(err&&err.message||err); giroEstado(); });
-    } else prender();
-  }catch(err){ GIRO.on=false; GIRO.err=String(err&&err.message||err); giroEstado(); }
+  if(giroModo==='no'){ GIRO.on=false; giroReiniciar(); giroEstado(); return; }
+  const prender=()=>{
+    if(!GIRO.ligO){ addEventListener('deviceorientation',giroOrient); GIRO.ligO=true; }
+    if(!GIRO.ligM){ addEventListener('devicemotion',giroMocion); GIRO.ligM=true; }
+    GIRO.on=true; GIRO.err=''; giroReiniciar(); giroEstado(); };
+  /* iOS 13+ pide permiso, y SON DOS permisos distintos: orientacion y movimiento. Solo se pueden
+     pedir desde un gesto del usuario, por eso esto cuelga del toque en la opcion. */
+  const pedir=(C)=>new Promise(res=>{
+    try{ if(typeof C!=='undefined' && C && C.requestPermission) C.requestPermission().then(r=>res(r==='granted')).catch(()=>res(false));
+         else res(true); }catch(e){ res(true); } });
+  Promise.all([ pedir(typeof DeviceOrientationEvent!=='undefined'?DeviceOrientationEvent:null),
+                pedir(typeof DeviceMotionEvent!=='undefined'?DeviceMotionEvent:null) ])
+    .then(([o,m])=>{ if(o||m){ prender(); } else { GIRO.on=false; GIRO.err='permiso denegado'; giroEstado(); } });
 }
 function giroTick(dt){
-  if(giroModo==='no' || !GIRO.on) return;
-  if(giroModo==='ads' && adsW<0.25) return;
-  if(performance.now()-GIRO.ult>400) return;           // hace rato que no llega una lectura
-  /* OJO: aca NO va mirMul(). Esa es la reduccion de la sensibilidad DEL DEDO al apuntar, y el
-     giroscopio ya tiene su propia cifra para apuntar (giroKAds): multiplicar las dos daba 56% con
-     el ajuste puesto en 70%, o sea el numero de la pantalla mentia. */
-  const k=(adsW>0.35?giroKAds:giroK)*(Math.PI/180);
-  player.yaw   -= GIRO.ry*k*dt;  player.faceYaw=player.yaw;
-  player.pitch = Math.max(-0.9, Math.min(pitMax(), player.pitch - GIRO.rx*k*dt*invMirY*sensRelY));
+  if(giroModo==='no' || !GIRO.on){ return; }
+  const activo = (giroModo!=='ads') || adsW>=0.25;
+  if(!activo){ giroReiniciar(); return; }               // al soltar la mira se pierde la referencia
+  if(performance.now()-GIRO.ult>500){ giroReiniciar(); return; }
+  const k=(adsW>0.35?giroKAds:giroK);
+  let dy=0, dp=0;
+  if(GIRO.fuente==='orientacion'){ dy=GIRO.dy; dp=GIRO.dp; GIRO.dy=0; GIRO.dp=0; }
+  else { const r=Math.PI/180; dy=-GIRO.ry*r*dt; dp=-GIRO.rx*r*dt; }
+  if(!dy && !dp) return;
+  player.yaw += dy*k; player.faceYaw=player.yaw;
+  player.pitch = Math.max(-0.9, Math.min(pitMax(), player.pitch + dp*k*invMirY*sensRelY));
 }
+/* El estado dice QUE fuente entro y a que ritmo. Si el giroscopio no anda, esta linea es la que
+   permite saber por que sin tener el telefono en la mano. */
 function giroEstado(){ const el=document.getElementById('cfgGiro'); if(!el)return;
-  const vivo = GIRO.on && (performance.now()-GIRO.ult<600);
+  const vivo = GIRO.on && (performance.now()-GIRO.ult<800);
+  const fu = GIRO.fuente==='orientacion' ? tl({es:'orientación',en:'orientation',pt:'orientação'})
+           : GIRO.fuente==='rotacion' ? tl({es:'velocidad de giro',en:'rotation rate',pt:'velocidade de giro'}) : '—';
   el.textContent = GIRO.err ? ('✕ '+GIRO.err)
     : !GIRO.on ? tl({es:'Giroscopio apagado',en:'Gyroscope off',pt:'Giroscópio desligado'})
-    : vivo ? tl({es:'✓ Leyendo el giroscopio',en:'✓ Reading the gyroscope',pt:'✓ Lendo o giroscópio'})
-           : tl({es:'Encendido, esperando lecturas… (en PC no hay giroscopio)',en:'On, waiting for readings… (a PC has no gyroscope)',pt:'Ligado, aguardando leituras… (no PC não há giroscópio)'});
+    : vivo ? ('✓ '+fu+' · '+GIRO.hz+' Hz · '+GIRO.muestras+tl({es:' lecturas',en:' readings',pt:' leituras'}))
+           : tl({es:'Encendido, esperando lecturas… (una PC no tiene giroscopio)',en:'On, waiting for readings… (a PC has no gyroscope)',pt:'Ligado, aguardando leituras… (um PC não tem giroscópio)'});
   el.classList.toggle('ok',vivo); }
 /* ACELERACION del gesto de mirar. FIJA: el giro es proporcional al dedo y nada mas. POR DISTANCIA:
    cuanto mas largo el arrastre, mas rapido gira — sirve para darse media vuelta sin levantar el
@@ -8466,18 +8518,31 @@ try{ window.__tiro={
     window.__sndLog=[]; const orig=tiroSnd;
     mpTiroAjeno({id:'otro',p:[px,py,pz],d:[dx,dy,dz],w:world});
     return {llamado:true, dist:+Math.hypot(px-player.pos.x,py-player.pos.y,pz-player.pos.z).toFixed(1)}; },
+  /* simula una lectura de ORIENTACION: alpha/beta/gamma como los manda el telefono */
+  giroO:(alpha,beta,gamma,ang,dt)=>{ const a0=player.yaw, p0=player.pitch;
+    const o=Object.getOwnPropertyDescriptor(window,'orientation');
+    try{ Object.defineProperty(window,'orientation',{value:ang||0,configurable:true}); }catch(e){}
+    giroOrient({alpha:alpha,beta:beta,gamma:gamma});
+    giroTick(dt==null?0.0166:dt);
+    if(o) try{ Object.defineProperty(window,'orientation',o); }catch(e){}
+    return {dYaw:+(player.yaw-a0).toFixed(4), dPitch:+(player.pitch-p0).toFixed(4),
+            devYaw:+GIRO.yaw.toFixed(4), devPit:+GIRO.pit.toFixed(4), fuente:GIRO.fuente, on:GIRO.on}; },
   giroSim:(beta,gamma,ang,dt,grav,alpha)=>{ const a0=player.yaw, p0=player.pitch;
     const o=Object.getOwnPropertyDescriptor(window,'orientation');
     try{ Object.defineProperty(window,'orientation',{value:ang||0,configurable:true}); }catch(e){}
     if(grav===null){ GIRO.gOk=false; GIRO.ux=0; GIRO.uy=1; GIRO.uz=0; }
-    giroEvento({rotationRate:{beta:beta,gamma:gamma,alpha:alpha||0},
+    GIRO.fuente='rotacion';
+    giroMocion({rotationRate:{beta:beta,gamma:gamma,alpha:alpha||0},
                 accelerationIncludingGravity: grav? {x:grav[0],y:grav[1],z:grav[2]} : null});
     giroTick(dt==null?1:dt);
     if(o) try{ Object.defineProperty(window,'orientation',o); }catch(e){}
     return {dYaw:+(player.yaw-a0).toFixed(4), dPitch:+(player.pitch-p0).toFixed(4),
             rx:+GIRO.rx.toFixed(2), ry:+GIRO.ry.toFixed(2), on:GIRO.on, muestras:GIRO.muestras,
             u:[+GIRO.ux.toFixed(2),+GIRO.uy.toFixed(2),+GIRO.uz.toFixed(2)], gOk:GIRO.gOk}; },
-  giroReset:()=>{ GIRO.gOk=false; GIRO.ux=0; GIRO.uy=1; GIRO.uz=0; return 'gravedad olvidada'; },
+  giroReset:()=>{ GIRO.gOk=false; GIRO.ux=0; GIRO.uy=1; GIRO.uz=0; giroReiniciar(); GIRO.fuente=''; return 'giroscopio olvidado'; },
+  giroEst:()=>({on:GIRO.on, fuente:GIRO.fuente, hz:GIRO.hz, muestras:GIRO.muestras, hay:GIRO.hay,
+                yaw:+GIRO.yaw.toFixed(3), pit:+GIRO.pit.toFixed(3), err:GIRO.err,
+                texto:(document.getElementById('cfgGiro')||{}).textContent}),
   // aceleracion del gesto: devuelve la ganancia para una velocidad y un recorrido dados
   acelG:(vel,rec)=>+acelGanancia(vel,rec).toFixed(3),
   // ranuras de arma y acabados
@@ -10453,6 +10518,10 @@ function cfgSet(k,v){
   CFG[k] = (typeof CFG_DEF[k]==='number') ? (+v) : v;
   if(k==='layout'){ if(v==='pers'){ cfgGuardar(); closeSettings(); enterEditHUD(); return; }
                     try{ hePreset(v); }catch(e){} }
+  /* Tocar la opcion del giroscopio SIEMPRE reintenta, aunque ya estuviera en ese valor: en iOS el
+     permiso solo se puede pedir desde un gesto, y si al arrancar se pidio sin gesto quedo denegado.
+     Volver a tocarlo tiene que ser la forma de destrabarlo. */
+  if(k==='giro'){ giroModo=CFG.giro||'no'; try{ giroActivar(); }catch(e){} }
   cfgAplicar();
   if(k==='idioma'){ cfgRender(); return; }
   cfgPintar();
