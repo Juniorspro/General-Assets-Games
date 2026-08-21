@@ -2609,8 +2609,8 @@ const ALC_DATOS={
      z=34.4 a 36.6) y de la calle principal, y de ahi venia el "calles sobre calles". Ahora es una
      LOSA, no una calzada —no excava el terreno ni cuenta como via— y empieza al norte de la vereda. */
   {t:'plano',p:[23,0.11,45],s:[15,0.22,13],m:'hormigonSucio',ry:0.14,suelo:true,sinCol:true},
-  {t:'cil',p:[23,12.35,43],r1:3.2,r2:3.2,h:0.7,seg:18,m:'hormigon'},
-  {t:'cil',p:[23,12.95,43],r1:0.35,r2:0.25,h:1.9,seg:8,m:'hormigonSucio'},
+  {t:'cil',p:[26.5,12.35,43],r1:3.2,r2:3.2,h:0.7,seg:18,m:'hormigon'},
+  {t:'cil',p:[26,12.95,43],r1:0.35,r2:0.25,h:1.9,seg:8,m:'hormigonSucio'},
   {t:'arbol',p:[31.5,12,43],h:7.2,tipo:'cipres'},
   {t:'arbol',p:[29.01,12,49.01],h:7.2,tipo:'cipres'},
   {t:'arbol',p:[23,12,51.5],h:7.2,tipo:'cipres'},
@@ -2657,8 +2657,8 @@ const ALC_DATOS={
   {t:'prisma',p:[-148.35,19.9,-36.36],s:[20.4,1.8,14.4],m:'techoChapa',ry:0.14,sinCol:true},
   {t:'cil',p:[-84,20,-84],r1:3.6,r2:3.6,h:16,seg:14,m:'chapa'},
   {t:'cil',p:[-84,29.8,-84],r1:3.6,r2:0.2,h:3.6,seg:14,m:'techoChapa',sinCol:true},
-  {t:'cil',p:[-76,20,-80],r1:3.6,r2:3.6,h:16,seg:14,m:'chapa'},
-  {t:'cil',p:[-76,29.8,-80],r1:3.6,r2:0.2,h:3.6,seg:14,m:'techoChapa',sinCol:true},
+  {t:'cil',p:[-75.58,20,-83.01],r1:3.6,r2:3.6,h:16,seg:14,m:'chapa'},
+  {t:'cil',p:[-76,29.8,-83],r1:3.6,r2:0.2,h:3.6,seg:14,m:'techoChapa',sinCol:true},
   {t:'cil',p:[-92,18.5,-88],r1:3,r2:3,h:13,seg:14,m:'chapa'},
   {t:'cil',p:[-92,26.5,-88],r1:3,r2:0.2,h:3,seg:14,m:'techoChapa',sinCol:true},
   {t:'caja',p:[-118,12.5,-74],s:[16,0.1,1.1],m:'metal',ry:0.14},
@@ -6593,7 +6593,7 @@ function alcValla(e){ const pts=e.pts||[], h=e.h||2.6, m=e.m||'metal', y=e.y||0;
 const ALC_VIAS=[], ALC_EDIF=[];
 let ALC_ARB_MOV=0, ALC_ARB_FUERA=0, ALC_BOT_MOV=0, ALC_PROP_VIA=0;
 function alcCatastro(els){
-  ALC_VIAS.length=0; ALC_EDIF.length=0; ALC_ARB_MOV=0; ALC_ARB_FUERA=0;
+  ALC_VIAS.length=0; ALC_EDIF.length=0; ALC_ARB_MOV=0; ALC_ARB_FUERA=0; ALC_APOY=0; ALC_VOLADO=0;
   for(const e of els){ if(!e)continue;
     if(e.t==='camino' && e.pts){ const w=(e.w||4)/2;
       for(let i=1;i<e.pts.length;i++) ALC_VIAS.push([e.pts[i-1][0],e.pts[i-1][1],e.pts[i][0],e.pts[i][1],w]); }
@@ -6614,6 +6614,27 @@ function alcFueraDeVia(x,z,e,r){
     const nx=x+Math.cos(a)*R, nz=z+Math.sin(a)*R;
     if(!alcEnCamino(nx,nz,(r||1)*0.7) && alcH(nx,nz)>2.6){ ALC_PROP_VIA++; return [nx,nz]; } }
   return [x,z]; }
+/* ===================== PROPS EN EL AIRE =====================
+   La siembra de escombro y cajas puso 174 piezas con su cota escrita a mano sin preguntar por el
+   terreno. Cerca del borde del mapa el terreno CAE al mar, asi que quedaban piedras y cajones
+   flotando hasta 27 m sobre el agua — se ven desde media isla.
+   Dos reglas, y ninguna toca los detalles de techo:
+     · si abajo no hay tierra (el terreno esta bajo la cota de la costa), la pieza NO se planta;
+     · si hay tierra pero la pieza flota, se la baja hasta apoyarla.
+   Lo que esta sobre la HUELLA DE UN EDIFICIO se respeta tal cual: un parapeto o un cajon en el
+   techo tienen que quedar arriba, y esa es justamente la diferencia entre un detalle puesto a
+   proposito y una piedra que se escapo al vacio. */
+let ALC_APOY=0, ALC_VOLADO=0;
+const ALC_COSTA=2.6;             // por debajo de esta cota ya es playa o agua
+function alcApoyar(x,z,y,alto,e){
+  if(e && (e.suelo||e.forzar)) return y;
+  const h=alcH(x,z);
+  if(h<ALC_COSTA){ ALC_VOLADO++; return null; }        // no hay donde apoyarla
+  if(alcEnEdif(x,z,0.6)) return y;                     // detalle de techo: se respeta
+  const base=y-(alto||0)/2;
+  if(base-h>1.2){ ALC_APOY++; return h+(alto||0)/2; }  // flotaba: se la apoya
+  return y;
+}
 function alcEnEdif(x,z,m){ m=m||0;
   for(const e of ALC_EDIF){ const cs=Math.cos(-e[4]), sn=Math.sin(-e[4]);
     const dx=x-e[0], dz=z-e[1];
@@ -6706,7 +6727,8 @@ function alcArbol(e){
   alcAddC('follaje',gr,cx,y+h*(flaco?0.98:0.94),cz,0,VERDES[((sd*31)|0)%VERDES.length]); }
 /* ruina: el mismo bloque pero mordido arriba, sin techo */
 function alcEscombro(e){ const p0=e.p||[0,0,0], s=e.s||[4,3,4], ry=e.ry||0, m=e.m||'hormigonSucio';
-  const p=e.suelo? [p0[0], alcH(p0[0],p0[2])+p0[1]+s[1]/2, p0[2]] : p0;
+  const p=e.suelo? [p0[0], alcH(p0[0],p0[2])+p0[1]+s[1]/2, p0[2]] : p0.slice();
+  { const y=alcApoyar(p[0],p[2],p[1],s[1],e); if(y==null) return; p[1]=y; }
   const n=Math.max(2,Math.round(s[0]/1.6));
   for(let i=0;i<n;i++){ const w=s[0]/n, lx=-s[0]/2+w*(i+0.5);
     const hh=s[1]*(0.55+0.45*Math.abs(Math.sin(i*2.399+p[0]*0.31)));
@@ -6890,14 +6912,17 @@ function alcElem(e){ if(!e||!e.t)return;
        sembrar cobertura en el campo abierto obliga a saber de memoria la cota de cada punto, y el
        terreno baja hacia la costa: los props quedaban flotando o enterrados. */
     case 'caja':     { const p=e.p||[0,0,0], s=e.s||[2,2,2]; const q=alcFueraDeVia(p[0],p[2],e,Math.max(s[0],s[2])/2);
-                       const y=e.suelo?alcH(q[0],q[1])+p[1]:p[1];
+                       let y=e.suelo?alcH(q[0],q[1])+p[1]:p[1];
+                       y=alcApoyar(q[0],q[1],y,s[1],e); if(y==null) break;
                        alcCaja(q[0],y,q[1],s[0],s[1],s[2],e.m||'hormigon',e.ry||0,e.sinCol); break; }
     case 'plano':    { const p=e.p||[0,0,0], s=e.s||[10,0.3,10]; const y=e.suelo?alcH(p[0],p[2])+p[1]:p[1];
                        alcCaja(p[0],y,p[2],s[0],Math.max(0.15,s[1]),s[2],e.m||'hormigon',e.ry||0,e.sinCol); break; }
     case 'cil':      { const p=e.p||[0,0,0]; const q=alcFueraDeVia(p[0],p[2],e,(e.r1||1));
-                       const y=e.suelo?alcH(q[0],q[1])+p[1]:p[1];
+                       let y=e.suelo?alcH(q[0],q[1])+p[1]:p[1];
+                       y=alcApoyar(q[0],q[1],y,e.h||4,e); if(y==null) break;
                        alcCil(q[0],y,q[1],e.r1||1,(e.r2==null?e.r1:e.r2)||1,e.h||4,e.seg||10,e.m||'hormigon',e.ry||0,e.sinCol); break; }
-    case 'prisma':   { const p=e.p||[0,0,0], s=e.s||[6,3,6]; const y=e.suelo?alcH(p[0],p[2])+p[1]:p[1];
+    case 'prisma':   { const p=e.p||[0,0,0], s=e.s||[6,3,6]; let y=e.suelo?alcH(p[0],p[2])+p[1]:p[1];
+                       y=alcApoyar(p[0],p[2],y,s[1],e); if(y==null) break;
                        alcPrisma(p[0],y,p[2],s[0],s[1],s[2],e.m||'techoChapa',e.ry||0,e.sinCol); break; }
     case 'muro':     alcMuro(e); break;
     case 'valla':    alcValla(e); break;
@@ -7252,7 +7277,8 @@ function buildAlc(){ if(alcBuilt)return; alcBuilt=true;
   alcIndexar();
   const n=alcFundir()+alcCartelesFundir();
   alcBotinMallas();               // las tapas del botin van APARTE: hay que poder abrir una sola
-  try{ console.log('Valle Ceniza:',els.length,'elementos →',n,'mallas,',ALC_COL.length,'colisiones, vegetación',JSON.stringify(veg),'· corridos de la calzada: arboles',ALC_ARB_MOV,'cajas',ALC_BOT_MOV,'props',ALC_PROP_VIA,'· arboles descartados',ALC_ARB_FUERA); }catch(e){} }
+  try{ console.log('Valle Ceniza:',els.length,'elementos →',n,'mallas,',ALC_COL.length,'colisiones, vegetación',JSON.stringify(veg),'· corridos de la calzada: arboles',ALC_ARB_MOV,'cajas',ALC_BOT_MOV,'props',ALC_PROP_VIA,'· arboles descartados',ALC_ARB_FUERA,
+    '· props apoyados',ALC_APOY,'· props sobre el agua descartados',ALC_VOLADO); }catch(e){} }
 
 function enterAlc(){ if(world==='valle')return; world='valle'; grassMode=false; dreamMode=false; islaMode=true; discover('valle');
   buildAlc(); tiroWire(); alcSol(true);
@@ -8448,6 +8474,7 @@ try{ window.__tiro={
   traje:(i)=>{ if(i!=null){ skinSel=Math.max(0,Math.min(TRAJES.length-1,i|0)); aplicarSkin(); }
     return {i:skinSel, id:TRAJES[skinSel].id, n:TRAJES[skinSel].n, total:TRAJES.length,
             cuerpo:'#'+CU_MAT.cuerpo.color.getHexString()}; },
+  apoyo:()=>({apoyados:ALC_APOY, descartados:ALC_VOLADO}),
   cfgSec:id=>{ const b=document.querySelector('[data-sec="'+id+'"]'); if(b)b.click();
     return {sec:id, filas:document.querySelectorAll('#cfgMain .cfgSec.on .cfgRow').length,
             fichas:document.querySelectorAll('#cfgMain .cfgSec.on .cfgCard').length}; },
