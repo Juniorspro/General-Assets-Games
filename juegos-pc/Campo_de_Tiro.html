@@ -9395,6 +9395,41 @@ try{ window.__tiro={
              pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
              off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
   inspIr:()=>insEmpezar(),
+  /* ¿me trepo cuando no quiero? Se busca un cajon de la arena, se salta CONTRA el y se salta
+     PASANDO al lado, y se compara donde termina cada uno */
+  cajonCerca:(x,z)=>{ let mej=null,d2=1e9;
+    for(const c of colliders){ const alto=c.maxy-0; if(alto<1.2||alto>2.6) continue;
+      if((c.maxx-c.minx)>5 || (c.maxz-c.minz)>5) continue;   // un CAJON, no la plataforma central
+      const cx=(c.minx+c.maxx)/2, cz=(c.minz+c.maxz)/2-ARE_GZ;
+      const dx=cx-(x||0), dz=cz-(z||0), d=dx*dx+dz*dz;
+      if(d<d2){ d2=d; mej={x:+cx.toFixed(2), z:+cz.toFixed(2), top:+c.maxy.toFixed(2),
+                          w:+(c.maxx-c.minx).toFixed(2), d:+(c.maxz-c.minz).toFixed(2)}; } }
+    return mej; },
+  /* corre hacia un punto con el JOYSTICK (que es lo que lee update: poner player.vel a mano no
+     sirve, se pisa cada cuadro) y salta al llegar. Devuelve donde termino y si se trepo. */
+  correrYSaltar:(x,z,yaw,joyY,saltarA,seg)=>{
+    PVP.vida=PVP.max; PVP.muerto=false; PVP_GRACIA=999;    // que los bots no arruinen la medicion
+    player.pos.set(x,1.2,ARE_GZ+z); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+    player.climbing=false; player.autoClimb=null; player.sliding=false;
+    player.yaw=yaw; player.faceYaw=yaw; player.pitch=0;
+    const jx=joy.x, jy=joy.y; joy.x=0; joy.y=(joyY==null?-1:joyY);
+    let trepo=false, yMax=0, salto=false, brinco=0, yAnt=player.pos.y; const _trz=[];
+    const T=seg||2.4, paso=1/120;
+    for(let t=0;t<T;t+=paso){
+      if(!salto && t>=(saltarA==null?0.55:saltarA)){ salto=true; jumpReq=true; }
+      update(paso);
+      if(player.climbing) trepo=true;
+      if(player.pos.y>yMax) yMax=player.pos.y;
+      const d=player.pos.y-yAnt;
+      if(d>0.25) _trz.push({t:+t.toFixed(3), de:+yAnt.toFixed(2), a:+player.pos.y.toFixed(2),
+                            z:+(player.pos.z-ARE_GZ).toFixed(1), vy:+player.vy.toFixed(1),
+                            trep:player.climbing, piso:player.onGround});
+      if(d>brinco) brinco=d; yAnt=player.pos.y;
+    }
+    joy.x=jx; joy.y=jy; PVP_GRACIA=0;
+    return { traza:_trz, yFinal:+player.pos.y.toFixed(2), yMax:+yMax.toFixed(2), trepo,
+             subioArriba:player.pos.y>1.1, brincoDeUnCuadro:+brinco.toFixed(3),
+             p:[+player.pos.x.toFixed(1), +(player.pos.z-ARE_GZ).toFixed(1)] }; },
   /* el ragdoll: se mata un bot y se sigue cuadro a cuadro como se cae */
   ragVer:()=>{ const o=[];
     for(const [,r] of MP.remotes){ if(!r.rag) continue; const R=r.rag;
@@ -10597,10 +10632,23 @@ function alcPiso(){ const g=alcH(player.pos.x, player.pos.z-ALC_GZ);
 function moveY(d){ if(grassMode||dreamMode){ player.pos.y+=d; const g=terrainH(player.pos.x,player.pos.z); player.onGround=false;
     if(player.pos.y<=g){ player.pos.y=g; player.vy=0; player.onGround=true; }                              // suelo o subida
     else if(player.vy<=0 && player.vy>-3.0 && player.pos.y-g<=0.9){ player.pos.y=g; player.vy=0; player.onGround=true; }   // PEGARSE al bajar pendientes suaves (evita el parpadeo de onGround). vy>0 (salto) y caídas rápidas quedan excluidas
-    return; } player.pos.y+=d; const a=pAABB(); player.onGround=false;
+    return; }
+  const y0=player.pos.y;                                   // donde estaban los pies ANTES de mover
+  player.pos.y+=d; const a=pAABB(); player.onGround=false;
   // sin piso infinito: si te caés del borde, caés al cielo y reaparecés (ver respawn)
   for(const c of alcLista()){ if(c.locked)continue; if(overlap(a,c)){
-    if(d<=0){ player.pos.y=c.maxy; player.vy=0; player.onGround=true; }   // caer sobre algo
+    if(d<=0){
+      /* SOLO SE ATERRIZA SOBRE LO QUE ESTABA DEBAJO DE LOS PIES.
+         Esto ponia al jugador en c.maxy fuera cual fuera la altura de la caja. El cuerpo ocupa
+         de los pies a los pies+1,6, asi que caminando pegado a un muro de 3,2 m tu caja TOCA la
+         del muro, la condicion daba verdadera y el motor te plantaba arriba: 3,2 metros hacia
+         arriba en UN cuadro. Eso es lo que se sentia como teletransportarse al techo. Medido:
+         caminando contra un muro, y saltaba de 1,6 a 3,2 con vy=0 y onGround=true.
+         Ahora se aterriza solo si los pies venian de arriba del techo de la caja. La tolerancia
+         de 0,35 es el limite de escalon del juego, asi que los escalones se siguen subiendo. */
+      if(y0 >= c.maxy-0.35){ player.pos.y=c.maxy; player.vy=0; player.onGround=true; }
+      else continue;                     // era un roce de costado: de eso se ocupan moveX/moveZ
+    }
     else { player.pos.y=c.miny-player.h; player.vy=0; }                    // pegar el techo
     a.miny=player.pos.y; a.maxy=player.pos.y+player.h; } }
   if(islaMode && !player.onGround) alcPiso(); }
@@ -10642,8 +10690,16 @@ function update(dt){
   let estado='';
   // ---- CLIMB en progreso (agarre de repisa + impulso hacia arriba) ----
   if(player.climbing){
-    player.climbT+=dt; const ct=Math.min(1,player.climbT/CLIMB_DUR); const e=ct*ct*(3-2*ct);
-    player.pos.lerpVectors(player.climbFrom,player.climbTo,e); estado=t('st_climb');
+    player.climbT+=dt; const ct=Math.min(1,player.climbT/CLIMB_DUR);
+    /* UN MANTLE, NO UNA DIAGONAL. La interpolacion recta metia el cuerpo POR DENTRO de la pared:
+       subia y avanzaba al mismo tiempo. Como en la vida: primero te izas (0 a 65%) y recien
+       cuando la cadera paso el borde entras (65 a 100%). */
+    const sub=Math.min(1, ct/0.65), ent=Math.max(0, (ct-0.55)/0.45);
+    const eSub=sub*sub*(3-2*sub), eEnt=Math.min(1,ent)*Math.min(1,ent)*(3-2*Math.min(1,ent));
+    player.pos.x = player.climbFrom.x + (player.climbTo.x-player.climbFrom.x)*eEnt;
+    player.pos.z = player.climbFrom.z + (player.climbTo.z-player.climbFrom.z)*eEnt;
+    player.pos.y = player.climbFrom.y + (player.climbTo.y-player.climbFrom.y)*eSub;
+    estado=t('st_climb');
     if(ct>=1){ player.climbing=false; player.onGround=true; player.vy=0; player.vel.set(0,0,0); }
   } else if(player.autoClimb){
     // ---- ENREDADERAS: subís SOLO por la cara del cubo; saltá para impulsarte al cubo del costado ----
@@ -10719,7 +10775,21 @@ function update(dt){
   // ---- AGARRE DE REPISA: salté a una superficie alta y no llegué → me agarro del BORDE real y subo ----
   if(lastWall && !player.onGround && player.vy<2 && !player.climbing && !player.rolling){
     const top=lastWall.maxy, foot=player.pos.y, rise=top-foot;
-    if(rise>=1.4 && rise<=2.4){   // sólo repisas altas (al alcance de las manos); las bajas se suben saltando
+    /* SE TREPA SI QUERES TREPAR. Antes alcanzaba con TOCAR la pared en el aire: en la arena los
+       cajones de cobertura miden entre 1,4 y 2,4 —justo el rango— asi que rozar uno saltando te
+       subia arriba solo, y como la subida arrancaba en un punto CALCULADO y no donde estabas, el
+       primer cuadro te corria hasta un metro de golpe: eso es lo que se veia como teletransporte.
+       Ahora hay que ir CONTRA la repisa (mas de 1,5 m/s de velocidad hacia ella) y estar MIRANDOLA
+       (menos de 70 grados de diferencia). Pasar rozando por al lado ya no te sube. */
+    let quiere=false;
+    if(rise>=1.4 && rise<=2.4){
+      const wcx=(lastWall.minx+lastWall.maxx)/2, wcz=(lastWall.minz+lastWall.maxz)/2;
+      let hx=wcx-player.pos.x, hz=wcz-player.pos.z; const hl=Math.hypot(hx,hz)||1; hx/=hl; hz/=hl;
+      const vHacia = player.vel.x*hx + player.vel.z*hz;                    // ¿voy hacia la repisa?
+      const mira = -Math.sin(player.yaw)*hx + -Math.cos(player.yaw)*hz;    // ¿la estoy mirando?
+      quiere = (vHacia>1.5 && mira>0.34);
+    }
+    if(quiere){
       const a={minx:player.pos.x-R,maxx:player.pos.x+R,miny:top+0.02,maxy:top+player.h,minz:player.pos.z-R,maxz:player.pos.z+R};
       let blocked=false; for(const c of colliders){ if(c.mesh===ground||c.locked||c===lastWall)continue; if(overlap(a,c)){blocked=true;break;} }
       if(!blocked){
@@ -10729,7 +10799,9 @@ function update(dt){
         const wcx=(lastWall.minx+lastWall.maxx)/2, wcz=(lastWall.minz+lastWall.maxz)/2;   // hacia el centro = adentro de la repisa
         let inx=wcx-ex, inz=wcz-ez; const il=Math.hypot(inx,inz)||1; inx/=il; inz/=il;
         player.climbing=true; player.climbT=0; player.vy=0; player.vel.set(0,0,0);
-        player.climbFrom.set(ex, Math.min(foot,Math.max(foot-0.4, top-GRAB_REACH)), ez);   // manos AL borde (altura de agarre)
+        /* arranca EXACTAMENTE donde estas: sin esto, el primer cuadro te corre hasta el borde y se
+           ve como un tirón. Los pies siguen donde los dejaste y de ahi sube. */
+        player.climbFrom.copy(player.pos);
         player.climbTo.set(ex+inx*0.5, top, ez+inz*0.5);                                    // termina arriba, un poco adentro
         estado=t('st_climb');
       }
