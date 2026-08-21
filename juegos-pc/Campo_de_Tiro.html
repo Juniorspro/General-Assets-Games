@@ -2145,6 +2145,9 @@ function armaMontar(){
   if(gunCuerpo){ gunCuerpo.traverse(o=>{ if(o.isMesh&&o.geometry) o.geometry.dispose(); }); gunRoot.remove(gunCuerpo); }
   gunCuerpo=new THREE.Group(); gunRoot.add(gunCuerpo);
   gunMag=null; gunCulata=null; gunCH=null;
+  /* el cargador que se lleva a la mano es un CLON del que trae el arma: si cambiaste de arma, el
+     viejo ya no representa nada. Se tira y se vuelve a clonar cuando haga falta. */
+  try{ insCortar(); if(INS.mano){ scene.remove(INS.mano); INS.mano=null; } }catch(e){}
   const H={ M:M, mira:d.mira,
     box:(w,h,dd,x,y,z,m,rx,ry,rz)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,dd),m||M.metal);
       me.position.set(x,y,z); if(rx)me.rotation.x=rx; if(ry)me.rotation.y=ry; if(rz)me.rotation.z=rz;
@@ -7835,9 +7838,190 @@ function rcTick(dt){   // el cargador que cae y la manija de carga
     RC.cae.position.addScaledVector(u.v,dt);
     RC.cae.rotation.x+=u.w.x*dt; RC.cae.rotation.y+=u.w.y*dt; RC.cae.rotation.z+=u.w.z*dt;
     if(u.t>2.2 || RC.cae.position.y<0.03){ RC.cae.visible=false; } }
-  if(gunCH){ const z0=gunCH.userData.z0||0.10; gunCH.position.z=z0+RC.ch*0.075; }
+  if(gunCH){ const z0=gunCH.userData.z0||0.10;
+    gunCH.position.z=z0+Math.max(RC.ch, INS.act?INS.c:0)*0.075; }
   RC.kick*=Math.max(0,1-9*dt);
 }
+
+/* ===================== INSPECCION: seis segundos con el arma en la mano =====================
+   Un arma que solo se dispara es un puntero con textura. La inspeccion es el rato en que se la
+   MIRA: se la gira, se le saca el cargador, se lo mira de cerca, se lo vuelve a encastrar, se tira
+   del cerrojo. Cada arma trae la suya —un AK no se revisa como una pistola, ni una pistola como un
+   machete— escrita como una lista de POSES en el tiempo:
+
+     t  segundo de la pose
+     p  cabeceo: negativo baja la boca, positivo la levanta
+     y  guiñada: corre la boca de lado
+     r  alabeo: POSITIVO gira el arma para mostrar su costado DERECHO (ventana y manija)
+     x  la corre a la derecha del ojo    u  la sube    z  NEGATIVO la acerca a la cara
+     m  1 mientras el cargador esta afuera (se esconde el del arma y aparece uno en la izquierda)
+     c  0..1 cuanto esta tirado el cerrojo
+     s  sonido al llegar a esta pose
+
+   Entre pose y pose se interpola con la misma curva suave que usa la recarga. Se corta sola en
+   cuanto disparas, apuntas, recargas, corres, saltas o te matan: mirar el arma nunca te deja
+   vendido. Se pide con la I en teclado, o manteniendo RECARGAR con el cargador lleno. */
+const INS={ act:false, t:0, dur:6.0, i:0, mano:null, magFuera:false,
+            p:0, y:0, r:0, x:0, u:0, z:0, c:0, k:0 };
+function insVal(L,t,k){   // los continuos: interpolados
+  if(!L||!L.length) return 0;
+  if(t<=L[0].t) return L[0][k]||0;
+  for(let i=1;i<L.length;i++){ if(t<=L[i].t){ const a=L[i-1], b=L[i];
+    const u=(t-a.t)/Math.max(1e-4,b.t-a.t), s=u*u*(3-2*u);
+    const va=a[k]||0, vb=b[k]||0; return va+(vb-va)*s; } }
+  return L[L.length-1][k]||0;
+}
+function insEstado(L,t,k){   // los de si/no: vale el de la ultima pose que ya paso
+  let v=0; for(const b of L){ if(t>=b.t && b[k]!==undefined) v=b[k]; } return v;
+}
+/* el cargador que queda en la mano izquierda es el DEL ARMA, clonado: asi el tambor de la Saiga se
+   ve como un tambor y el de la Uzi como el de la Uzi, sin un cajon generico para todas */
+function insMagMano(){
+  if(INS.mano){ scene.remove(INS.mano); INS.mano=null; }
+  if(!gunMag) return null;
+  const g=gunMag.clone(true);
+  /* el grupo del cargador vive DONDE VA PUESTO en el arma (el del AK cuelga 12 cm por debajo del
+     cajon). Suelto en la mano eso lo manda abajo del cuadro: se lo re-centra en su propio origen
+     para poder sostenerlo del punto que se ve. */
+  g.updateMatrixWorld(true);
+  const c=new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3());
+  g.children.forEach(o=>o.position.sub(c));
+  g.scale.setScalar(GUN_ESC||0.95);
+  g.userData.arma=ARMA().id; g.visible=false; scene.add(g); INS.mano=g; return g;
+}
+function insPuede(){ const d=ARMA();
+  return !!(gunRoot && enTiro() && !INS.act && tiroRel<=0 && !adsQ && adsW<0.06 && !tiroFire
+            && !menuPose && !PVP.muerto && INSPECCION[d.id] && INSPECCION[d.id].length);
+}
+function insEmpezar(){ if(!insPuede()) return false;
+  INS.act=true; INS.t=0; INS.i=0; INS.magFuera=false;
+  if(!INS.mano || INS.mano.userData.arma!==ARMA().id) insMagMano();
+  return true;
+}
+function insCortar(){ if(!INS.act && !INS.magFuera) return;
+  INS.act=false; INS.magFuera=false; INS.i=0;
+  if(INS.mano) INS.mano.visible=false;
+  if(gunMag) gunMag.visible=true;
+}
+function insTick(dt){
+  if(!INS.act){ INS.k=Math.max(0,INS.k-7*dt);
+    if(INS.k<=0.0001){ INS.p=INS.y=INS.r=INS.x=INS.u=INS.z=INS.c=0; }
+    return; }
+  /* cualquier cosa que sea JUGAR la corta */
+  if(tiroFire||adsQ||tiroRel>0||PVP.muerto||player.sliding||!player.onGround||menuPose
+     || player.vel.length()>RUN*0.60){ insCortar(); return; }
+  const L=INSPECCION[ARMA().id]; if(!L){ insCortar(); return; }
+  INS.t+=dt;
+  if(INS.t>=INS.dur){ insCortar(); return; }
+  const t=INS.t;
+  INS.k=kfRC(t,[[0,0],[0.26,1],[INS.dur-0.45,1],[INS.dur,0]]);
+  INS.p=insVal(L,t,'p'); INS.y=insVal(L,t,'y'); INS.r=insVal(L,t,'r');
+  INS.x=insVal(L,t,'x'); INS.u=insVal(L,t,'u'); INS.z=insVal(L,t,'z');
+  INS.c=insVal(L,t,'c');
+  const fuera=insEstado(L,t,'m')>0.5;
+  if(fuera!==INS.magFuera){ INS.magFuera=fuera;
+    if(gunMag) gunMag.visible=!fuera;
+    if(INS.mano) INS.mano.visible=fuera;
+    tiroSnd(fuera?'mag':'mag2'); }
+  while(INS.i<L.length && t>=L[INS.i].t){ const s=L[INS.i].s; if(s) tiroSnd(s); INS.i++; }
+}
+/* La coreografia de cada arma. Seis segundos, y ninguna se parece a otra: el AK se revisa de
+   costado y a los golpes, la AWM se abre el cerrojo despacio, el bate se apoya en el hombro. */
+const INSPECCION={
+/* --- ASALTO --- */
+ak:[ {t:0.0}, {t:0.55,r:0.80,p:-0.10,z:-0.09,x:0.03},
+     {t:1.30,r:0.62,y:0.20,u:0.02,s:'papel'}, {t:1.55,r:0.55,y:0.24,m:1},
+     {t:2.50,r:0.34,p:0.10,z:-0.12,x:-0.02,m:1}, {t:3.30,r:0.40,p:0.06,z:-0.11,m:1},
+     {t:3.85,r:0.62,y:0.10,m:0}, {t:4.40,r:1.00,p:-0.06,c:1,s:'cerrojo'},
+     {t:4.80,r:0.94,c:0.05}, {t:5.35,r:0.30,p:-0.05,z:-0.04}, {t:6.0} ],
+tr556:[ {t:0.0}, {t:0.50,r:-0.70,p:0.14,z:-0.08},
+     {t:1.20,r:-0.62,p:0.06,z:-0.11,s:'dry'}, {t:1.70,r:-0.20,y:-0.18},
+     {t:2.00,r:0.10,y:-0.10,m:1}, {t:2.90,r:0.20,p:0.12,z:-0.12,x:-0.02,m:1},
+     {t:3.60,r:0.35,p:0.02,m:1}, {t:4.05,r:0.45,m:0},
+     {t:4.55,r:0.85,c:1,s:'cerrojo'}, {t:4.85,r:0.80,c:0}, {t:5.30,r:0.36,p:-0.08,s:'dry'}, {t:6.0} ],
+fal:[ {t:0.0}, {t:0.70,p:0.26,r:0.30,z:-0.06},
+     {t:1.50,p:0.10,r:0.95,z:-0.10,x:0.04}, {t:1.90,r:0.80,y:0.22,m:1},
+     {t:2.95,r:0.45,p:0.14,z:-0.13,m:1,s:'papel'}, {t:3.70,r:0.50,p:0.04,m:1},
+     {t:4.25,r:0.70,y:0.08,m:0}, {t:4.80,r:-0.75,c:1,s:'cerrojo'},
+     {t:5.15,r:-0.70,c:0}, {t:5.55,r:-0.20,p:-0.10}, {t:6.0} ],
+aug:[ {t:0.0}, {t:0.60,y:0.55,r:0.20,z:-0.05},
+     {t:1.40,y:-0.50,r:-0.30,z:-0.05}, {t:2.00,y:0.05,r:0.70,z:-0.09,s:'dry'},
+     {t:2.40,r:0.60,y:0.20,m:1}, {t:3.35,r:0.30,p:0.16,z:-0.12,x:-0.03,m:1},
+     {t:4.00,r:0.45,m:1}, {t:4.40,r:0.65,m:0},
+     {t:4.95,r:0.90,c:1,s:'cerrojo'}, {t:5.25,r:0.85,c:0}, {t:5.60,r:0.25,p:-0.06}, {t:6.0} ],
+/* --- SUBFUSILES --- */
+mp9:[ {t:0.0}, {t:0.40,r:1.10,p:-0.16,z:-0.08,x:0.05},
+     {t:0.90,r:-0.95,p:0.10,z:-0.08,x:-0.02,s:'dry'}, {t:1.50,r:0.20,z:-0.10},
+     {t:1.80,r:0.30,y:0.22,m:1}, {t:2.60,r:0.15,p:0.18,z:-0.12,m:1},
+     {t:3.30,r:0.30,m:1}, {t:3.70,r:0.45,m:0},
+     {t:4.20,r:0.85,c:1,s:'cerrojo'}, {t:4.50,r:0.80,c:0},
+     {t:5.10,r:-0.60,p:0.10,z:-0.06}, {t:5.60,r:0.10,p:-0.08}, {t:6.0} ],
+uzi:[ {t:0.0}, {t:0.55,r:0.75,p:0.08,z:-0.09},
+     {t:1.05,r:0.55,p:-0.30,u:-0.05,s:'papel'}, {t:1.45,r:0.45,p:-0.34,m:1},
+     {t:2.40,r:0.25,p:0.20,z:-0.13,x:-0.03,m:1}, {t:3.20,r:0.35,p:0.08,m:1},
+     {t:3.70,r:0.40,p:-0.24,m:0}, {t:4.30,r:0.95,c:1,s:'cerrojo'},
+     {t:4.60,r:0.90,c:0}, {t:5.15,r:-0.85,p:0.06,z:-0.06}, {t:5.60,r:0.15}, {t:6.0} ],
+p90:[ {t:0.0}, {t:0.60,r:1.35,p:0.10,z:-0.10,x:0.04},
+     {t:1.60,r:1.30,p:-0.06,z:-0.12,s:'dry'}, {t:2.30,r:0.80,y:0.30},
+     {t:2.70,r:0.55,y:0.34,m:1}, {t:3.55,r:0.30,p:0.16,z:-0.12,x:-0.03,m:1},
+     {t:4.15,r:0.45,m:0}, {t:4.70,r:0.90,c:1,s:'cerrojo'},
+     {t:5.00,r:0.85,c:0}, {t:5.50,r:0.30,p:-0.08}, {t:6.0} ],
+/* --- PISTOLAS --- */
+g17:[ {t:0.0}, {t:0.45,r:0.90,p:0.16,z:-0.11,x:0.02},
+     {t:1.05,r:0.70,p:-0.34,u:-0.06,s:'papel'}, {t:1.40,r:0.60,p:-0.38,m:1},
+     {t:2.30,r:0.30,p:0.22,z:-0.14,x:-0.04,m:1}, {t:3.05,r:0.40,p:0.10,m:1},
+     {t:3.55,r:0.55,p:-0.26,m:0}, {t:4.10,r:0.95,c:1,s:'cerrojo'},
+     {t:4.40,r:0.90,c:0}, {t:4.95,r:-0.80,p:0.12,z:-0.08}, {t:5.55,r:0.10,p:-0.06}, {t:6.0} ],
+d50:[ {t:0.0}, {t:0.80,p:0.34,r:0.20,z:-0.06,u:0.03},
+     {t:1.60,p:0.10,r:1.05,z:-0.11,x:0.04,s:'dry'}, {t:2.10,r:0.85,p:-0.34,u:-0.06},
+     {t:2.45,r:0.75,p:-0.38,m:1}, {t:3.40,r:0.35,p:0.24,z:-0.14,x:-0.04,m:1},
+     {t:4.10,r:0.45,p:0.10,m:1}, {t:4.55,r:0.60,p:-0.26,m:0},
+     {t:5.10,r:1.00,c:1,s:'cerrojo'}, {t:5.45,r:0.90,c:0}, {t:6.0} ],
+c45:[ {t:0.0}, {t:0.50,r:-0.95,p:0.14,z:-0.11},
+     {t:1.30,r:-0.85,p:0.02,z:-0.12,s:'dry'}, {t:1.90,r:0.85,p:0.10,z:-0.11},
+     {t:2.35,r:0.70,p:-0.36,u:-0.06,m:1}, {t:3.25,r:0.30,p:0.22,z:-0.14,x:-0.04,m:1},
+     {t:3.95,r:0.45,p:0.08,m:1}, {t:4.40,r:0.60,p:-0.26,m:0},
+     {t:4.90,r:0.95,c:1,s:'cerrojo'}, {t:5.20,r:0.90,c:0}, {t:5.60,r:0.20,p:-0.06}, {t:6.0} ],
+/* --- FRANCOTIRADORES --- */
+awm:[ {t:0.0}, {t:0.70,p:0.20,r:0.30,z:-0.05},
+     {t:1.60,r:1.00,p:0.04,z:-0.09,x:0.04,c:0.35,s:'cerrojo'},
+     {t:2.30,r:1.00,c:1.0}, {t:3.00,r:0.95,c:1.0,p:-0.04},
+     {t:3.55,r:0.95,c:0.15,s:'cerrojo'}, {t:3.90,r:0.90,c:0},
+     {t:4.40,r:0.40,p:0.06,y:0.26,m:1}, {t:5.05,r:0.25,p:0.14,z:-0.11,m:1},
+     {t:5.45,r:0.35,m:0}, {t:6.0} ],
+svd:[ {t:0.0}, {t:0.75,y:0.60,r:0.35,p:0.06,z:-0.04},
+     {t:1.70,y:0.62,r:0.30,p:-0.04,z:-0.06,s:'dry'}, {t:2.40,y:0.10,r:0.75,z:-0.09},
+     {t:2.85,r:0.60,y:0.24,m:1}, {t:3.75,r:0.30,p:0.16,z:-0.13,x:-0.03,m:1},
+     {t:4.40,r:0.45,m:0}, {t:4.90,r:0.90,c:1,s:'cerrojo'},
+     {t:5.20,r:0.85,c:0}, {t:5.60,p:-0.10,r:0.20}, {t:6.0} ],
+/* --- ESCOPETAS --- */
+r870:[ {t:0.0}, {t:0.55,r:-0.85,p:0.12,z:-0.09},
+     {t:1.20,r:-0.75,p:0.00,z:-0.11,s:'papel'}, {t:1.85,r:0.85,p:0.08,z:-0.10},
+     {t:2.35,r:0.80,p:-0.10,c:1,s:'cerrojo'}, {t:2.75,r:0.80,c:0,s:'cerrojo'},
+     {t:3.30,r:0.85,p:0.04,c:1,s:'cerrojo'}, {t:3.70,r:0.85,c:0,s:'cerrojo'},
+     {t:4.40,r:0.20,p:0.22,z:-0.12,y:-0.20}, {t:5.20,r:-0.30,p:0.04,z:-0.06,s:'dry'}, {t:6.0} ],
+s12:[ {t:0.0}, {t:0.60,r:0.90,p:0.10,z:-0.09,x:0.04},
+     {t:1.35,r:0.70,y:0.24,u:-0.03,s:'papel'}, {t:1.70,r:0.60,y:0.28,m:1},
+     {t:2.70,r:0.30,p:0.18,z:-0.14,x:-0.04,m:1}, {t:3.55,r:0.35,p:0.06,m:1},
+     {t:4.05,r:0.55,y:0.10,m:0}, {t:4.60,r:1.00,c:1,s:'cerrojo'},
+     {t:4.95,r:0.95,c:0}, {t:5.45,r:0.25,p:-0.08}, {t:6.0} ],
+/* --- CUERPO A CUERPO --- */
+cuchillo:[ {t:0.0}, {t:0.40,r:-1.30,p:0.30,z:-0.08,x:-0.02,s:'dry'},
+     {t:0.90,r:-2.80,p:0.10,z:-0.06}, {t:1.30,r:-4.20,p:0.26,z:-0.09,s:'dry'},
+     {t:1.90,r:-4.30,p:0.34,z:-0.12,x:-0.03}, {t:2.80,r:-3.60,p:0.20,y:0.34,z:-0.12},
+     {t:3.60,r:-4.90,p:0.12,y:-0.30,z:-0.10}, {t:4.20,r:-6.28,p:0.28,z:-0.08,s:'dry'},
+     {t:4.90,r:-6.10,p:-0.34,z:-0.05,u:-0.04}, {t:5.50,r:-6.28,p:0.06}, {t:6.0,r:-6.28} ],
+machete:[ {t:0.0}, {t:0.80,p:0.42,r:0.30,z:-0.05,u:0.05},
+     {t:1.70,p:0.36,r:0.30,y:0.70,z:-0.07}, {t:2.90,p:0.30,r:0.25,y:-0.72,z:-0.07,s:'dry'},
+     {t:3.60,p:0.34,r:-1.20,y:-0.10,z:-0.10}, {t:4.30,p:0.30,r:1.30,y:0.10,z:-0.10,s:'dry'},
+     {t:5.00,p:-0.30,r:0.60,y:0.44,u:-0.06,z:-0.03}, {t:5.55,p:0.10,r:0.20}, {t:6.0} ],
+bate:[ {t:0.0}, {t:0.70,p:0.46,r:0.10,z:-0.04,u:0.05},
+     {t:1.20,p:0.30,r:0.10,x:-0.05,z:-0.06,s:'pared'}, {t:1.70,p:0.44,r:0.10,x:0.02,z:-0.03},
+     {t:2.20,p:0.30,r:0.10,x:-0.05,z:-0.06,s:'pared'}, {t:3.10,p:0.36,r:2.20,z:-0.06},
+     {t:4.00,p:0.36,r:4.60,z:-0.06}, {t:4.80,p:0.34,r:6.28,z:-0.06},
+     {t:5.30,p:-0.42,r:6.28,y:0.50,u:-0.05,z:0.02}, {t:6.0,r:6.28} ],
+};
+
 let tiroAmmo=TIRO_MAG, tiroRel=0, tiroFire=false, tiroCd=0, tiroSemi=false;
 /* gatillo de un tiro por toque: lo consume tiroShoot y lo repone al soltar el boton */
 let _semiListo=true;
@@ -8391,7 +8575,7 @@ function tiroPostura(dt){
   // ---- REPOSO: ¿está el jugador sin hacer NADA? ----
   const _giro=(Math.abs(dY)+Math.abs(dP))/Math.max(dt,1e-4);          // rad/s de cámara
   // (no hace falta mirar `paused`: en pausa no se llama a update, así que esto ni se evalúa)
-  const enReposo = (enTiro() && !menuPose && player.onGround && !player.sliding
+  const enReposo = (enTiro() && !menuPose && !INS.act && player.onGround && !player.sliding
                     && spd<0.20 && !adsQ && adsW<0.02 && tiroRel<=0 && !tiroFire && recUp<0.02 && _giro<0.12);
   if(enReposo){ quietoT+=dt; idleEsp+=dt; } else { quietoT=0; idleEsp=0; idleT=-1; }
   // entrada lenta (asentarse cuesta), salida rápida (apenas te movés el arma ya no está centrada)
@@ -8458,6 +8642,7 @@ function tiroPostura(dt){
              + aSpr*0.05 + sSld*0.08 + aAir*0.10 - aRel*0.26 + RC.kick*0.13 + player.camTP*TP_PIT
              + mnu*(-0.68 + Math.sin(menuT*0.55)*0.020)   // menú: 26° abajo, con la respiración del idle
              + aQui*CONV_PIT + idl*(-0.085)                // reposo: converge en la cruceta; idle: la boca baja apenas
+             + INS.p*INS.k                                  // inspeccion: la coreografia del arma
              + _taj*1.05;                                  // el tajo del arma blanca: baja de un golpe y vuelve
   // G8 · EN 3ª PERSONA EL FUSIL SE CRUZA HACIA AFUERA. Con el arma alineada con la mira (que es lo correcto
   // en 1ª persona) la cámara de 3ª queda EXACTAMENTE detrás del eje del caño y el fusil proyecta 0,062 m de
@@ -8475,7 +8660,7 @@ function tiroPostura(dt){
   const HIP_YAW=ARMA().cac?0.28:0.14;
   const pYaw = player.yaw - lagY*0.95 + jit*0.7 + aSpr*SPR_YAW + sSld*0.04 + aRel*0.12 + player.camTP*TP_YAW + (1-adsW)*HIP_YAW
              + mnu*0.85    // menú: el AK cruza al otro lado y se lee de costado (de punta proyectaba la mitad)
-             + aQui*CONV_YAW + idl*0.075;
+             + aQui*CONV_YAW + idl*0.075 + INS.y*INS.k;
   // el alabeo de la deslizada va CON SIGNO: antes alabeaba siempre para el mismo lado sin importar hacia
   // dónde te deslizabas (player.slideRight ya se calcula en startSlide y había quedado sin uso).
   // el alabeo de esprint era 0.16 rad: como el arma pivota en el OJO y el agarre izquierdo está a 0,22 m
@@ -8483,7 +8668,8 @@ function tiroPostura(dt){
   // en el peor frame de la zancada. 0.08 = la mitad, y sigue leyéndose como "el arma se cruza al correr".
   const pRol = _taj*(-0.55) + (ARMA().cac?-0.16:0) - lagY*1.5 - latV*0.022 + Math.sin(paso)*0.020*mov + aSpr*0.08 + sSld*0.10*(player.slideRight?-1:1) + aRel*0.38
                + sSld*Math.sin(sldFase*31.0)*0.028 + mnu*(-0.14)
-               + idl*0.52;   // idle: lo gira para mirarle el costado DERECHO (ventana de eyección y manija)
+               + idl*0.52    // idle: lo gira para mirarle el costado DERECHO (ventana de eyección y manija)
+               + INS.r*INS.k;
   _euAim.set(pPit,pYaw,pRol,'YXZ'); _qAim.setFromEuler(_euAim);
   gunRoot.quaternion.copy(_qAim);
   _cr.set(1,0,0).applyQuaternion(_qAim); _cu.set(0,1,0).applyQuaternion(_qAim); _cf.set(0,0,-1).applyQuaternion(_qAim);
@@ -8523,6 +8709,7 @@ function tiroPostura(dt){
   else if(aQui>0.001) _gOjo.lerp(GUN_OJO_QUIETO, aQui*(1-adsW));   // quieto: el arma se centra sola
   if(idl>0){ _gOjo.x += idl*(-0.012); _gOjo.z += idl*(-0.072);     // idle: se la acerca a la cara para mirarla
     _gOjo.y += idl*0.016 + Math.sin(idleT*4.6)*0.005*idl; }
+  if(INS.k>0){ _gOjo.x += INS.x*INS.k; _gOjo.y += INS.u*INS.k; _gOjo.z += INS.z*INS.k; }
   // el agarre izquierdo se corre al cajón a medida que subís la puntería (ver GUN_GRIP_L_ALTO)
   _gL.lerpVectors(GUN_GRIP_L, GUN_GRIP_L_ALTO, Math.max(0,Math.min(1,(pit-0.15)/0.70)));
   gunRoot.position.copy(_ojo).add(_vida)
@@ -8548,9 +8735,16 @@ function tiroPostura(dt){
   _gB.subVectors(gunRoot.position,_ojo);
   const cx=_gB.dot(_cr), cy=_gB.dot(_cu), cz=_gB.dot(_cf);
   const nx=Math.max(TIRO_VEN[0],Math.min(TIRO_VEN[1],cx)), ny=Math.max(TIRO_VEN[2],Math.min(TIRO_VEN[3],cy)), nz=Math.max(TIRO_VEN[4],Math.min(TIRO_VEN[5],cz));
-  if(nx!==cx||ny!==cy||nz!==cz) gunRoot.position.copy(_ojo).addScaledVector(_cr,nx).addScaledVector(_cu,ny).addScaledVector(_cf,nz);
+  /* INSPECCIONANDO NO HAY RED QUE CORREGIR. Las tres redes de abajo existen para que, EN CADERA,
+     el fusil no se meta en la lente cuando el brazo no llega: acercan el arma al hombro y la pegan
+     a la mano. Una inspeccion es lo contrario — la pose esta escrita a mano y el arma MANDA, las
+     manos la siguen hasta donde alcanzan. Con las redes puestas el AK entraba girado, el IK fallaba
+     y _limitarArma lo traia hasta la lente: medio cuadro de cajon gris. El recorte cercano del
+     shader sigue puesto, asi que lo peor que puede pasar es que se recorte, no que se vea sucio. */
+  const _insLibre=INS.k;
+  if(_insLibre<0.5 && (nx!==cx||ny!==cy||nz!==cz)) gunRoot.position.copy(_ojo).addScaledVector(_cr,nx).addScaledVector(_cu,ny).addScaledVector(_cf,nz);
   gunRoot.updateMatrixWorld(true);
-  _limitarArma();
+  if(_insLibre<0.5) _limitarArma();
   /* APUNTANDO, EL EJE MANDA. Las redes de arriba (ventana, alcance del brazo) existen para que en
      cadera el fusil no se meta en la lente. Apuntando cambian de signo: medido con __tiro.esq() con la
      mira cerrada, dejaban el arma 13 mm a la izquierda, 16 mm abajo y 35 mm más cerca del ojo, o sea la
@@ -8581,7 +8775,7 @@ function tiroPostura(dt){
   gunRoot.visible = enTiro() && !!DBG.arma;
   // La cruz se dibuja SIN test de profundidad para que ni el cristal ni el marco se la coman; eso está
   // bien mirando por el ojo, pero desde afuera (3ª persona, menú) atravesaba el brazo y el galpón.
-  if(gunCulata) gunCulata.visible=(mnu||player.camTP>0.30);   // la culata sólo en 3ª persona / menú
+  if(gunCulata) gunCulata.visible=(mnu||player.camTP>0.30||INS.k>0.45);   // 3ª persona, menú… y la inspección, que la separa del pómulo
   if(gunCruz){ const fuera=(mnu||player.camTP>0.30);
     gunCruz.material.depthTest = !!fuera;
     gunCruz.material.opacity   = fuera?0.55:0.98; }
@@ -8589,6 +8783,13 @@ function tiroPostura(dt){
   _gp.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
   _gp2.copy(_gL).applyMatrix4(gunRoot.matrixWorld);
   if(rcOn) rcManoIzq(rcE,_gp2);        // recargando: la izquierda va al retén, al cinturón y a la manija
+  /* INSPECCIONANDO CON EL CARGADOR AFUERA la izquierda no puede seguir agarrada al guardamanos.
+     Va donde iria de verdad: abajo y a la derecha del arma, con el codo doblado. Probado ponerla
+     DELANTE DEL OJO y no: el brazo tenia que estirarse mas de lo que da y el IK lo dejaba como una
+     cuña verde cruzando media pantalla. El cargador se lee igual —queda debajo del cajon— y el
+     brazo se ve como un brazo. */
+  else if(INS.act && INS.magFuera)
+    _gp2.copy(_ojo).addScaledVector(_cr,0.215).addScaledVector(_cu,-0.245).addScaledVector(_cf,0.300);
   _pol.copy(_gp).addScaledVector(_cr,1.7).addScaledVector(_cu,-1.9).addScaledVector(_cf,-0.30);    // codo derecho: afuera y abajo
   _pol2.copy(_gp2).addScaledVector(_cr,-0.55).addScaledVector(_cu,-1.9).addScaledVector(_cf,-0.15); // codo izquierdo: abajo
   /* CUERPO A CUERPO: UNA SOLA MANO. Un machete no se agarra con las dos: con el IK de la izquierda
@@ -8600,12 +8801,15 @@ function tiroPostura(dt){
   bRHand.getWorldPosition(_hR); bLHand.getWorldPosition(_hL);
   if(RC.mano && RC.mano.visible){ RC.mano.position.copy(_hL).addScaledVector(_cu,-0.045);
     RC.mano.quaternion.copy(gunRoot.quaternion); }
+  if(INS.mano && INS.mano.visible){ INS.mano.position.copy(_hL)
+      .addScaledVector(_cu,0.045).addScaledVector(_cf,0.035);
+    INS.mano.quaternion.copy(gunRoot.quaternion); }
   // …pero con CORREA CORTA. Esta línea era incondicional, y cuando el IK no llegaba (mirando muy arriba, o
   // esprintando con los hombros bamboleando) arrastraba el fusil entero adentro del ojo detrás de una mano
   // que había fracasado: es lo que ponía el arma diseñada a z=−0.42 en z=−0.18. El tope es ~medio ancho de
   // manopla: alcanza para que se vea agarrada y no alcanza para meter el arma detrás del recorte.
   _gp.copy(GUN_GRIP_R).applyMatrix4(gunRoot.matrixWorld);
-  { const _cor=GUN_CORREA*(1-0.93*adsW);   // apuntando la correa casi no tira: correría la retícula
+  { const _cor=GUN_CORREA*(1-0.93*adsW)*(1-0.92*_insLibre);   // apuntando la correa casi no tira: correría la retícula; inspeccionando tampoco
     _gB.subVectors(_hR,_gp); const _L=_gB.length(); if(_L>_cor) _gB.multiplyScalar(_cor/_L); }
   gunRoot.position.add(_gB); gunRoot.updateMatrixWorld(true);   // el mango va A la mano derecha
   // G3. Esto ANTES rotaba el fusil entero hasta 0.55 rad (31,5°) para "acomodarlo" a una mano izquierda
@@ -8675,6 +8879,7 @@ function tickAim(dt){
     RC.ch = kfRC(e,[[1.02,0],[1.10,1],[1.16,1],[1.22,0]]);   // tirar de la manija y soltarla
     if(tiroRel<=0){ tiroRel=0; RC.act=false; RC.ch=0; if(tiroAmmo<TIRO_MAG){ tiroAmmo=TIRO_MAG; tiroHUD(); } } }
   rcTick(dt);
+  try{ insTick(dt); }catch(e){}
   adsTick(dt);
   try{ pvpTick(dt); }catch(e){}
   tiroCd-=dt; if(tiroFire && tiroCd<=0 && !paused && gameplayActive()) tiroShoot();
@@ -8811,7 +9016,16 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
   const down=e=>{ if(editHUD)return; e.preventDefault(); e.stopPropagation(); audioStart(); tiroFire=true; };
   const up=e=>{ tiroFire=false; _semiListo=true; };
   if(bf){ bf.addEventListener('pointerdown',down); bf.addEventListener('pointerup',up); bf.addEventListener('pointercancel',up); bf.addEventListener('pointerleave',up); }
-  if(br){ br.addEventListener('pointerdown',e=>{ if(editHUD)return; e.preventDefault(); e.stopPropagation(); tiroReload(); }); }
+  /* RECARGAR mantenido = INSPECCIONAR. El toque corto recarga igual que siempre (ni un
+     milisegundo mas: la recarga sale en el pointerdown). Si a los 0,45 s seguis apretando y NO
+     habia nada que recargar —cargador lleno, o un machete— es que querias mirar el arma. */
+  if(br){ let _insT=0;
+    br.addEventListener('pointerdown',e=>{ if(editHUD)return; e.preventDefault(); e.stopPropagation();
+      tiroReload();
+      clearTimeout(_insT); _insT=setTimeout(()=>{ if(tiroRel<=0){ audioStart(); insEmpezar(); } },450); });
+    const soltar=()=>{ clearTimeout(_insT); };
+    br.addEventListener('pointerup',soltar); br.addEventListener('pointercancel',soltar);
+    br.addEventListener('pointerleave',soltar); }
   // APUNTAR: en el celular es un interruptor (no se puede mantener apretado y mirar a la vez);
   // en PC es el botón derecho del mouse, que es donde la mano ya lo busca.
   const ba=document.getElementById('bAds');
@@ -8840,6 +9054,7 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
       else if(k==='e'){ try{ alcTomar(); }catch(err){} }
       else if((k==='q'||k==='tab')&&enTiro()){ slotCambiar(); }        // Q o Tab: cambiar de arma
       else if(k==='c'&&enTiro()){ invUsar(); }                          // C: curarse
+      else if(k==='i'&&enTiro()){ audioStart(); insEmpezar(); }         // I: mirar el arma
       else if((k==='1'||k==='2')&&enTiro()){ const d=(+k)-1; if(d!==slotAct&&slotHay(d)){ slotGuardar(); slotEntrar(d); } }
       else return; }
     e.preventDefault(); if(m)tiroJoyTeclas(); });
@@ -9017,6 +9232,31 @@ try{ window.__tiro={
   patada:()=>({pitch:+camera.rotation.x.toFixed(4), recCam:+recCam.toFixed(5), recYaw:+recYaw.toFixed(5),
                recBack:+recBack.toFixed(4), recUp:+recUp.toFixed(4), ads:+adsW.toFixed(2)}),
   rc:()=>({evt:RC.evt, cae:!!(RC.cae&&RC.cae.visible), mano:!!(RC.mano&&RC.mano.visible), ch:+RC.ch.toFixed(2), rel:+tiroRel.toFixed(2)}),
+  insp:()=>({act:INS.act, t:+INS.t.toFixed(2), k:+INS.k.toFixed(2), mag:INS.magFuera,
+             mano:!!(INS.mano&&INS.mano.visible), arma:ARMA().id,
+             pose:[+INS.p.toFixed(3),+INS.y.toFixed(3),+INS.r.toFixed(3)],
+             off:[+INS.x.toFixed(3),+INS.u.toFixed(3),+INS.z.toFixed(3)], ch:+INS.c.toFixed(2)}),
+  inspIr:()=>insEmpezar(),
+  inspMag:()=>{ const m=INS.mano; if(!m||!m.visible) return null;
+    const q=camera.quaternion.clone().invert();
+    return {cam:m.position.clone().sub(camera.position).applyQuaternion(q).toArray().map(v=>+v.toFixed(3)),
+            esc:+m.scale.x.toFixed(3)}; },
+  inspStop:()=>{ insCortar(); return INS.act; },
+  inspAvanzar:(t,dt)=>{ const paso=dt||0.05; let n=0;
+    while(INS.act && INS.t<t && n<600){ insTick(paso); n++; }
+    return {t:+INS.t.toFixed(2), act:INS.act, mag:INS.magFuera, ch:+INS.c.toFixed(2)}; },
+  /* barrido de las 17: cuanto se mueve cada una y cuando saca el cargador */
+  inspTodas:()=>ARSENAL.map(a=>{ const L=INSPECCION[a.id];
+    if(!L) return {id:a.id, falta:true};
+    let pmax=0,ymax=0,rmax=0,zmax=0,cmax=0, magT=0, sn=0;
+    for(let t=0;t<=6.0001;t+=0.05){
+      pmax=Math.max(pmax,Math.abs(insVal(L,t,'p'))); ymax=Math.max(ymax,Math.abs(insVal(L,t,'y')));
+      rmax=Math.max(rmax,Math.abs(insVal(L,t,'r'))); zmax=Math.max(zmax,Math.abs(insVal(L,t,'z')));
+      cmax=Math.max(cmax,insVal(L,t,'c')); if(insEstado(L,t,'m')>0.5) magT+=0.05; }
+    for(const b of L) if(b.s) sn++;
+    return {id:a.id, cat:a.cat, poses:L.length, dur:+L[L.length-1].t.toFixed(2),
+            p:+pmax.toFixed(2), y:+ymax.toFixed(2), r:+rmax.toFixed(2), z:+zmax.toFixed(2),
+            cerrojo:+cmax.toFixed(2), magSeg:+magT.toFixed(2), sonidos:sn}; }),
   ren:renderer, esc:scene, cam:camera,
   ir:()=>enterTiro(),
   isla:()=>{ menuMode=false; try{ menuEl.classList.add('hide'); document.body.classList.remove('menu-open'); }catch(e){}
