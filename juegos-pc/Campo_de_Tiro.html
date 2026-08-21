@@ -1258,10 +1258,19 @@ function aplicarEstilo(k){
   cityBg.setHex(E.cieloB);
   const V=(typeof cfgVista!=='undefined'?cfgVista:1);
   if(scene.fog){ scene.fog.color.setHex(E.niebla);
-    scene.fog.near=_niebla0.cerca*E.nDes*V; scene.fog.far=_niebla0.lejos*E.nLej*V; }
+    const N=_mundoNieb||_niebla0;
+    scene.fog.near=N.cerca*E.nDes*V; scene.fog.far=N.lejos*E.nLej*V;
+    /* el bucle restaura cada cuadro la niebla que capturo al entrar al mundo; si cambias la
+       distancia de vista en medio de la partida hay que decirle cual es la nueva base */
+    if(typeof _worldFog!=='undefined') _worldFog=scene.fog.far; }
   if(scene.environment) scene.environmentIntensity=(_hemiMin>0)?Math.max(E.env,1.15):E.env;
 }
 let _expMundo=1, _solMundo=1, _hemiMin=0;   // los ajustes por mundo (galeria vs isla) multiplican, no pisan
+/* El plano lejano y la niebla los fijaba cada mundo al entrar, pero cualquier cambio de ajuste
+   vuelve a pasar por applyQuality y aplicarEstilo, que los pisaban con los valores base: tocabas
+   una opcion en medio de la partida y el horizonte se te venia encima. Ahora el mundo deja dicho
+   lo que necesita y esas dos funciones lo respetan. */
+let _mundoFar=0, _mundoNieb=null;
 
 // ===== helpers =====
 function zoneTag(x,z,color){ const m=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.05,2.2),mat(color,0.6)); m.position.set(x,0.04,z); scene.add(m); }
@@ -2256,8 +2265,9 @@ function enterTiro(){ if(world==='tiro')return; document.body.classList.remove('
   buildTiro(); tiroWire();
   tiroGroup.visible=true;
   scene.background=new THREE.Color(0x1b1f23); skyMesh.visible=false; scene.environment=roomEnv;   // INTERIOR gris (sin cielo)
-  scene.fog.color.set(0x23282d); scene.fog.near=22; scene.fog.far=140;
-  _solMundo=0.24; _expMundo=1.14; _hemiMin=1.25; aplicarEstilo(estiloSel);   // galeria cubierta: el sol entra poco
+  scene.fog.color.set(0x23282d); _mundoFar=0; _mundoNieb=null;
+  _solMundo=0.24; _expMundo=1.14; _hemiMin=1.25; aplicarEstilo(estiloSel);
+  camera.far=Math.max(camera.far,_mundoFar||0); camera.updateProjectionMatrix();   // galeria cubierta: el sol entra poco
   player.pos.copy(TIRO_START); player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.noRoll=true;
   player.yaw=Math.PI; player.faceYaw=Math.PI; player.pitch=0;
   player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
@@ -7736,6 +7746,7 @@ function enterAlc(){ if(world==='valle')return; document.body.classList.remove('
   if(typeof areGroup!=='undefined') areGroup.visible=false; world='valle'; grassMode=false; dreamMode=false; islaMode=true; discover('valle');
   buildAlc(); tiroWire(); alcSol(true);
   // la isla mide 500 m de punta a punta: con el plano lejano de la galería (320 m) se cortaba al medio
+  _mundoFar=900; _mundoNieb=null;
   if(camera.far<900){ camera.far=900; camera.updateProjectionMatrix(); }
   alcGroup.visible=true; tiroGroup.visible=false;
   for(const c of ALC_COL) if(colliders.indexOf(c)<0) colliders.push(c);
@@ -10386,7 +10397,7 @@ let quality='med';
 function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
   prBase=Math.max(0.45, Math.min(devicePixelRatio, Q.pr, devicePixelRatio*(Q.scale||1)));   // BAJO = 50% de la resolución nativa
   prDyn=1; aplicarPR();
-  camera.far=Q.far||1200; camera.updateProjectionMatrix();
+  camera.far=Math.max(Q.far||1200, _mundoFar||0); camera.updateProjectionMatrix();
   /* La resolucion de sombra y el suavizado son ajustes PROPIOS, no un efecto colateral de la
      calidad: en un celular flojo conviene resolucion nativa con sombras chicas, y en una maquina
      buena al reves. La calidad solo decide si HAY sombras. */
@@ -10952,6 +10963,11 @@ function cfgSet(k,v){
      permiso solo se puede pedir desde un gesto, y si al arrancar se pidio sin gesto quedo denegado.
      Volver a tocarlo tiene que ser la forma de destrabarlo. */
   if(k==='giro'){ giroModo=CFG.giro||'no'; try{ giroActivar(); }catch(e){} }
+  /* El mapa se guardaba en CFG pero el que decide a donde arranca ENTRAR es startWorld, y solo lo
+     movia el click en la ficha. Si el valor llegaba por otro lado (una partida guardada, la
+     consola) quedaban en desacuerdo y entrabas al mapa viejo. Que los dos salgan del mismo lugar. */
+  if(k==='mapa'){ if(CFG.mapa==='tiro'||CFG.mapa==='valle'||CFG.mapa==='arena'){ startWorld=CFG.mapa;
+      try{ aplicarMapa(); }catch(e){} } }
   cfgAplicar();
   if(k==='idioma'){ cfgRender(); return; }
   cfgPintar();
@@ -11886,10 +11902,14 @@ function enterArena(){
      vive en la galeria) la arena quedaba con el cielo negro. Hay que devolverle el color del
      estilo, y traer la cupula del cielo hasta aca: vive en el origen y esto esta a 32 km. */
   scene.background=cityBg;
-  skyMesh.visible=true; skyMesh.position.set(0,0,ARE_GZ); skyMesh.scale.setScalar(1.1);
-  if(camera.far<600){ camera.far=600; camera.updateProjectionMatrix(); }
+  /* La cupula nace con 900 de radio, mas lejos que el plano lejano de cualquier calidad: quedaba
+     recortada y el cielo era un color plano. Aca la arena mide 132 de lado, asi que con una
+     cupula de 450 y el corte en 700 entra entera hasta parada en la esquina de mas lejos.
+     Va sin niebla (ya lo dice su material) para que el degrade se vea igual que en el menu. */
+  skyMesh.visible=true; skyMesh.position.set(0,0,ARE_GZ); skyMesh.scale.setScalar(0.5);
+  _mundoFar=700; _mundoNieb={cerca:74, lejos:330};
+  camera.far=700; camera.updateProjectionMatrix();
   _solMundo=0.95; _expMundo=1.0; _hemiMin=0; aplicarEstilo(estiloSel);
-  scene.fog.near=90; scene.fog.far=400;
   { const p=areSpawn(); player.pos.set(p[0],1.2,ARE_GZ+p[1]);
     player.yaw=Math.atan2(p[0],p[1])+Math.PI; player.faceYaw=player.yaw; player.pitch=0; }
   player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.noRoll=true;
