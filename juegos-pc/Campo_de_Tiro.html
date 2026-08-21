@@ -9328,6 +9328,15 @@ try{ window.__tiro={
   areIr:(i)=>{ const t=ARE_TOMA[i|0]; if(!t) return 'no hay';
     player.pos.set(t.x,1.2,ARE_GZ+t.z); const q=areTomaCerca();
     return {puesto:t.n, detecta:q?q.n:null}; },
+  /* simula que entra gente de verdad a la sala, para poder ver el relevo de bots y el salto de
+     sala sin necesitar dieciseis celulares */
+  salaGente:(k)=>{ for(let i=0;i<(k|0);i++){ const id='sim_'+Math.random().toString(36).slice(2,8);
+      const r=mpRemote(id,'Sim'+i,true); r.esBot=false; r.world=world; r.last=Date.now()+1e9; }
+    _salaT=0; salaTick(0.0001);
+    return {reales:salaReales(), meta:BOT_META, bots:BOTS.length, sala:salaN}; },
+  salaVaciar:()=>{ for(const [id,r] of MP.remotes){ if(r.esBot) continue;
+      try{ mpSacarCaja(r); scene.remove(r.avatar); }catch(e){} MP.remotes.delete(id); }
+    _salaT=0; salaTick(0.0001); return {reales:salaReales(), meta:BOT_META, bots:BOTS.length}; },
   sala:()=>({n:salaN, cupo:SALA_CUPO, reales:salaReales(), meta:BOT_META, bots:BOTS.length,
              room:MP.room, texto:(document.getElementById('areSala')||{}).textContent}),
   cfgSec:id=>{ const b=document.querySelector('[data-sec="'+id+'"]'); if(b)b.click();
@@ -12578,8 +12587,12 @@ function salaCambiar(nueva){
 }
 function salaTick(dt){
   _salaT-=dt; if(_salaT>0) return; _salaT=2.0;
+  /* Si la sala se lleno de gente de verdad, se salta a la siguiente. Y se SIGUE DE LARGO: los
+     remotos reales acaban de irse con el cambio, asi que el cupo de bots que se calcula abajo ya
+     es el de la sala nueva. Antes esto cortaba con un return, y la sala recien abierta se quedaba
+     dos segundos con un solo bot y el cartel del HUD todavia decia la sala vieja. */
+  if(salaReales()>=SALA_CUPO) salaCambiar(salaN+1);
   const reales=salaReales();
-  if(reales>=SALA_CUPO){ salaCambiar(salaN+1); return; }
   BOT_META=Math.max(0, SALA_CUPO-reales);
   if(world!=='arena') return;                      // el cupo de dieciseis es de la arena
   const vivos=BOTS.length;
