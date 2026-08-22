@@ -1847,14 +1847,26 @@ function cruzTex(){ if(_txCruz)return _txCruz;
      ventana: tapaba justo lo que estabas por disparar. Una reflex de verdad proyecta UN punto chico
      y nada mas — el resto del cristal queda limpio, que es para lo que sirve. Y el resplandor es
      corto: un emisor de 2 MOA no ilumina medio vidrio. */
-  const cx=S/2, cy=S/2, R=S*0.065;
-  const halo=g.createRadialGradient(cx,cy,0,cx,cy,R*2.8);
-  halo.addColorStop(0,'rgba(255,72,42,0.50)'); halo.addColorStop(0.45,'rgba(255,52,26,0.14)');
+  /* PUNTO CON ARO, como el holografico de la referencia: el punto chico en el medio y un aro fino
+     bastante mas grande alrededor. El aro es lo que le da la escala y lo que hace que se lea como
+     una reticula proyectada y no como una manchita roja. */
+  const cx=S/2, cy=S/2, R=S*0.052;
+  const halo=g.createRadialGradient(cx,cy,0,cx,cy,R*2.6);
+  halo.addColorStop(0,'rgba(255,72,42,0.46)'); halo.addColorStop(0.45,'rgba(255,52,26,0.12)');
   halo.addColorStop(1,'rgba(255,40,20,0)');
-  g.fillStyle=halo; g.beginPath(); g.arc(cx,cy,R*2.8,0,7); g.fill();
-  g.fillStyle='rgba(110,8,0,0.72)'; g.beginPath(); g.arc(cx,cy,R*0.80,0,7); g.fill();   // borde, para que se lea sobre el cielo
-  g.fillStyle='rgba(255,46,28,1)';  g.beginPath(); g.arc(cx,cy,R*0.62,0,7); g.fill();   // EL PUNTO
-  g.fillStyle='rgba(255,196,176,1)';g.beginPath(); g.arc(cx,cy,R*0.24,0,7); g.fill();   // nucleo caliente
+  g.fillStyle=halo; g.beginPath(); g.arc(cx,cy,R*2.6,0,7); g.fill();
+  const aro=S*0.235;
+  g.strokeStyle='rgba(105,8,0,0.55)'; g.lineWidth=S*0.020;
+  g.beginPath(); g.arc(cx,cy,aro,0,7); g.stroke();
+  g.strokeStyle='rgba(255,54,30,0.95)'; g.lineWidth=S*0.011;
+  g.beginPath(); g.arc(cx,cy,aro,0,7); g.stroke();
+  /* cuatro cortes en el aro, a las horas 12, 3, 6 y 9: asi no es un anillo liso */
+  g.strokeStyle='rgba(255,80,50,1)'; g.lineWidth=S*0.014; g.lineCap='round';
+  for(let i=0;i<4;i++){ const a=i*Math.PI/2;
+    g.beginPath(); g.arc(cx,cy,aro,a-0.10,a+0.10); g.stroke(); }
+  g.fillStyle='rgba(110,8,0,0.72)'; g.beginPath(); g.arc(cx,cy,R*0.86,0,7); g.fill();   // borde, para que se lea sobre el cielo
+  g.fillStyle='rgba(255,46,28,1)';  g.beginPath(); g.arc(cx,cy,R*0.66,0,7); g.fill();   // EL PUNTO
+  g.fillStyle='rgba(255,200,180,1)';g.beginPath(); g.arc(cx,cy,R*0.26,0,7); g.fill();   // nucleo caliente
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return (_txCruz=t);
 }
 /* VENTANA DE LA MIRA. Medido en el barrido de apuntado: con 0,082 × 0,064 la ventana ocupaba 65 px
@@ -1881,16 +1893,48 @@ const ARM_VEN_W=0.116, ARM_VEN_H=0.090;      // ventana de la mira reflex (compa
    MISMA que usa el apuntado y donde se planta la cruz, asi que no puede quedar desalineada: antes
    cada arma repetia el numero a mano y con eso alcanzaba para que la reticula no cayera en el centro. */
 function armaReflex(H,z0){
-  const N=H.M.negro, aV=ARM_VEN_W, hV=ARM_VEN_H, venY=H.mira-hV/2, z=z0||0.010;
-  H.box(0.052,0.012,0.070, 0,venY,z, N);
-  H.box(0.005,hV,0.014, -(aV/2), venY+hV/2, z-0.006, N);
-  H.box(0.005,hV,0.014,  (aV/2), venY+hV/2, z-0.006, N);
-  H.box(aV+0.012,0.010,0.030, 0, venY+hV+0.003, z-0.012, N, -0.13);
-  H.box(0.010,0.010,0.030, (aV/2)+0.004, venY+0.014, z+0.020, N);
-  const vid=new THREE.MeshBasicMaterial({color:0xffa64a,transparent:true,opacity:0.15,
+  /* LA REFLEX ERA UN CUADRADO DE BARRITAS: una base, dos postes finos y una capota, o sea cuatro
+     cajas formando el contorno de un cuadrado. Se leia como un marco, no como una mira.
+     Ahora es una CARCASA de verdad: la silueta se dibuja VISTA DE FRENTE (eje 'z') con la ventana
+     como agujero calado, asi que el cristal queda dentro de un cuerpo con esquinas redondeadas y
+     marco fino, como el holografico de la foto. Encima va la capota y abajo la base con la mordaza. */
+  const N=H.M.negro, M=H.M.metal, aV=ARM_VEN_W, hV=ARM_VEN_H, venY=H.mira-hV/2, z=z0||0.010;
+  const ax=aV/2, ay=venY, ay2=venY+hV;
+  const mx=ax+0.011, my0=ay-0.013, my1=ay2+0.012, r=0.012;
+  /* carcasa: rectangulo de esquinas redondeadas con la ventana calada */
+  H.perf([[-mx+r,my0],[mx-r,my0],[mx,my0,mx,my0+r],[mx,my1-r],[mx,my1,mx-r,my1],
+          [-mx+r,my1],[-mx,my1,-mx,my1-r],[-mx,my0+r],[-mx,my0,-mx+r,my0]],
+         0.048, 0,0,z, N, {eje:'z', cs:5, bisel:0.0022,
+         huecos:[[[-ax+0.006,ay],[ax-0.006,ay],[ax,ay,ax,ay+0.006],[ax,ay2-0.006],
+                  [ax,ay2,ax-0.006,ay2],[-ax+0.006,ay2],[-ax,ay2,-ax,ay2-0.006],
+                  [-ax,ay+0.006],[-ax,ay,-ax+0.006,ay]]]});
+  /* capota que sale para adelante, en angulo */
+  H.perf([[z-0.024,my1],[z-0.048,my1-0.004],[z-0.048,my1-0.014],[z-0.024,my1-0.012]],
+         aV+0.020, 0,0,0, N, {bisel:0.0018});
+  /* base y mordaza sobre el riel */
+  H.perf([[z+0.026,my0],[z-0.026,my0],[z-0.026,my0-0.014],[z+0.026,my0-0.014]],
+         0.046, 0,0,0, N, {bisel:0.0020});
+  H.perf([[z+0.020,my0-0.012],[z-0.020,my0-0.012],[z-0.020,my0-0.026],[z+0.020,my0-0.026]],
+         0.056, 0,0,0, M, {bisel:0.0018});
+  /* la perilla de brillo, al costado */
+  { const t=H.cil(0.0090,0.0090,0.014, mx+0.004, ay+hV*0.45, z+0.004, M); t.rotation.z=Math.PI/2; }
+  /* EL CRISTAL, CASI TRANSPARENTE. Estaba en 0.15 de ambar aditivo sobre TODA la ventana y dejaba
+     el vidrio lechoso: mirando por la mira todo salia lavado de naranja. Un holografico de verdad
+     se ve limpio y solo tira color en el borde, donde pega la luz rasante. Asi que el pane baja a
+     0.04 y el color vive en un marco fino por dentro del vidrio. */
+  const vid=new THREE.MeshBasicMaterial({color:0xffb877,transparent:true,opacity:0.04,
     depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
   const cr=new THREE.Mesh(new THREE.PlaneGeometry(aV-0.006,hV-0.005), vid);
   cr.position.set(0,venY+hV/2,z-0.006); cr.rotation.x=0.14; cr.renderOrder=4; H.raiz.add(cr);
+  { /* el reflejo del tratamiento: un marco fino por dentro del cristal */
+    const bordeMat=new THREE.MeshBasicMaterial({color:0x7fd0ff,transparent:true,opacity:0.20,
+      depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+    const g=new THREE.PlaneGeometry(aV-0.008,hV-0.007);
+    const borde=new THREE.LineSegments(new THREE.EdgesGeometry(g),
+      new THREE.LineBasicMaterial({color:0x9fe0ff,transparent:true,opacity:0.34,
+        depthWrite:false,blending:THREE.AdditiveBlending}));
+    borde.position.set(0,venY+hV/2,z-0.0058); borde.rotation.x=0.14; borde.renderOrder=5;
+    H.raiz.add(borde); bordeMat.dispose(); }
 }
 /* Mira telescopica: tubo, dos monturas y la lente. Para francotirador. */
 function armaLente(H,z0,largo,yRiel){
@@ -10597,7 +10641,17 @@ try{ window.__tiro={
     const rc=(o,d)=>{ const R=new THREE.Raycaster(o.clone(),d.clone()); R.far=300; R.camera=camera;
       const h=R.intersectObjects(tiroSolids.concat(tiroTargets),false)[0];
       return h? +h.distance.toFixed(1) : null; };
-    return { acuerdo:+a.dot(b).toFixed(3), fov:+_telCam.fov.toFixed(1),
+    /* PRUEBA DE EJES: se toma un punto ADELANTE, a la DERECHA y ARRIBA del jugador, y se proyecta
+       en las dos camaras. Si los signos coinciden, el visor esta bien orientado; si se invierte x,
+       esta espejado; si se invierten los dos, esta girado 180. */
+    const der=new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion);
+    const arr=new THREE.Vector3(0,1,0).applyQuaternion(camera.quaternion);
+    const P=camera.position.clone().addScaledVector(a,40).addScaledVector(der,6).addScaledVector(arr,4);
+    camera.updateMatrixWorld(); _telCam.updateMatrixWorld();
+    const p1=P.clone().project(camera), p2=P.clone().project(_telCam);
+    const ejes={ yo:[+p1.x.toFixed(2),+p1.y.toFixed(2)], visor:[+p2.x.toFixed(2),+p2.y.toFixed(2)],
+      xIgual:(Math.sign(p1.x)===Math.sign(p2.x)), yIgual:(Math.sign(p1.y)===Math.sign(p2.y)) };
+    return { ejes, acuerdo:+a.dot(b).toFixed(3), fov:+_telCam.fov.toFixed(1),
              yo:[+a.x.toFixed(2),+a.y.toFixed(2),+a.z.toFixed(2)],
              visor:[+b.x.toFixed(2),+b.y.toFixed(2),+b.z.toFixed(2)],
              distYo:rc(camera.position,a), distVisor:rc(_telCam.position,b) }; },
