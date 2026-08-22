@@ -612,14 +612,20 @@
      terminado de ir.
      Ahora se esconde con visibility y opacidad, que no dependen de cuanto mida ni de donde arranque.
      El transform queda, pero solo para el deslizamiento. */
-  #avSoc{ position:fixed; left:50%; top:calc(8px + var(--safe-t)); transform:translateX(-50%) translateY(-160%);
+  #avSoc{ --avX:-50%; position:fixed; left:50%; top:calc(8px + var(--safe-t));
+    transform:translateX(var(--avX)) translateY(calc(-100% - 140px));
     z-index:72; width:min(94vw,392px); border-radius:14px; padding:11px 12px;
     background:linear-gradient(150deg, rgba(26,34,44,.985), rgba(12,17,23,.99));
     border:1px solid rgba(255,178,107,.42); box-shadow:0 16px 40px rgba(0,0,0,.6);
     display:flex; gap:10px; align-items:center; font-family:'Segoe UI',system-ui,sans-serif;
     opacity:0; visibility:hidden; pointer-events:none;
     transition:transform .3s cubic-bezier(.2,.9,.3,1), opacity .2s ease, visibility 0s linear .3s; }
-  #avSoc.show{ transform:translateX(-50%) translateY(0); opacity:1; visibility:visible; pointer-events:auto;
+  /* CON EL CAJON ABIERTO, EL CARTEL SE CORRE. Centrado y con el panel de la derecha desplegado, el
+     cartel le tapaba la primera pestaña —el CHAT quedaba escondido debajo—. Se pega a la izquierda
+     y se le da exactamente el ancho que sobra, asi las dos cosas se leen a la vez. */
+  body.socAbierto #avSoc{ --avX:0%; left:12px; width:min(calc(100vw - min(88vw,364px) - 26px), 392px);
+    top:calc(104px + var(--safe-t)); }   /* y por debajo de la tarjeta del jugador, que ahi si estorba */
+  #avSoc.show{ transform:translateX(var(--avX)) translateY(0); opacity:1; visibility:visible; pointer-events:auto;
     transition:transform .3s cubic-bezier(.2,.9,.3,1), opacity .18s ease, visibility 0s; }
   #avSocIns{ width:34px; height:34px; flex:0 0 auto; }
   #avSocT{ flex:1 1 auto; min-width:0; }
@@ -16546,9 +16552,11 @@ function socAbrir(tab){
   AMI.tab=tab||AMI.tab||'chat';
   for(const t of el.querySelectorAll('.socTab')) t.classList.toggle('on', t.dataset.tab===AMI.tab);
   socPintar(); el.classList.add('show');
+  document.body.classList.add('socAbierto');
   try{ tiroSnd('menu',0.5); }catch(e){}
 }
-function socCerrar(){ const el=document.getElementById('soc'); if(el) el.classList.remove('show'); }
+function socCerrar(){ const el=document.getElementById('soc'); if(el) el.classList.remove('show');
+  document.body.classList.remove('socAbierto'); }
 function socPintar(){
   const c=document.getElementById('socCuerpo'); if(!c) return;
   const esc=(t)=>String(t==null?'':t).replace(/[<>&"]/g,x=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[x]));
