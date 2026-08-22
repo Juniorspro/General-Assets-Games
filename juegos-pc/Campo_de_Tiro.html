@@ -2642,7 +2642,7 @@ const ARSENAL=[
 
 /* ---------------- FRANCOTIRADOR ---------------- */
 {id:'awm', n:'AWM-338', d:'francotirador · cerrojo · un tiro por vez', cat:'sniper', ret:[0.0420,0.0060,0.150], semi:true, cerrojoManual:true,
- esc:0.95, rpm:44, mag:5, rec:2.60, dmg:120, disp:0.0004, mira:0.132, adsZ:0.230, zoom:26, aum:6,
+ esc:0.95, rpm:44, mag:5, rec:2.60, dmg:120, disp:0.0004, mira:0.132, adsZ:0.195, zoom:26, aum:6,
  boca:[0,0.010,-0.660], gR:[0,-0.100,0.130], gL:[0,-0.050,0.032],
  hacer:(H)=>{ const M=H.M;
   /* CHASIS DE UNA PIEZA: del cajon hasta la punta del guardamanos, con el vientre que baja y la
@@ -2699,7 +2699,7 @@ const ARSENAL=[
   }); }},
 
 {id:'svd', n:'Dragunov', d:'francotirador · semiautomático · 7,62', cat:'sniper', ret:[0.0250,0.0055,0.130], semi:true,
- esc:0.95, rpm:110, mag:10, rec:2.20, dmg:78, disp:0.0008, mira:0.126, adsZ:0.250, zoom:20, aum:4,
+ esc:0.95, rpm:110, mag:10, rec:2.20, dmg:78, disp:0.0008, mira:0.126, adsZ:0.210, zoom:20, aum:4,
  boca:[0,0.012,-0.620], gR:[0,-0.098,0.126], gL:[0,-0.052,0.032],
  hacer:(H)=>{ const M=H.M;
   H.perf([[0.206,0.050],[0.090,0.062,-0.030,0.054],[-0.062,0.046],[-0.074,0.030],[-0.074,-0.024],
@@ -3140,7 +3140,7 @@ function armaMontar(){
      aro se veia casi igual que afuera. Con 62 la pantalla apenas se cierra —lo justo para que
      se sienta que apuntaste— y TODO el aumento queda adentro del visor, que es lo que hace que
      por la mira se vea MUCHO mas lejos que el fondo que la rodea. */
-  FOV_ADS = d.cac ? 72 : ((d.aum||0)>1 ? 62 : (d.zoom || 48));
+  FOV_ADS = d.cac ? 72 : ((d.aum||0)>1 ? 50 : (d.zoom || 48));
   TIRO_MAG=d.cac?0:(d.mag||1); TIRO_RPM=d.rpm||600; TIRO_RELOAD=d.rec||1.5;
   /* LA CRUZ. Vive exactamente en el punto que usa el apuntado (0, mira, 0.004), asi que se planta
      aca y no en cada receta: si una receta se olvidara, el arma apuntaria a un lugar y la reticula
@@ -10418,6 +10418,11 @@ try{ window.__tiro={
     for(let i=0;i<n;i++){ const b={mano:mano, racha:0, tVer:BOT_REACCION+0.05};
       if(botAcierta(b,dPl||12)) ok++; }
     return +(ok/n).toFixed(3); },
+  /* la mira: cuanto mas grande se ve lo de adentro del aro que lo de afuera */
+  visor:()=>{ if(!_telCam) return null;
+    const fs=camera.fov*Math.PI/180, ft=_telCam.fov*Math.PI/180;
+    return { aum:_telAum, fovPantalla:+camera.fov.toFixed(1), fovVisor:+_telCam.fov.toFixed(1),
+             veces:+(Math.tan(fs/2)/Math.tan(ft/2)).toFixed(2), on:_teleOn }; },
   botMatar:(i)=>{ const b=BOTS[i|0]; if(!b) return 'no hay'; botDanio(b.id,999,false);
                   return {vivos:PART.vivos, bajas:PART.bajas}; },
   partOtra:()=>{ partReiniciar(); return {fase:PART.fase, vivos:PART.vivos}; },
@@ -13094,8 +13099,11 @@ function telRender(){
      alrededor. Ahora se mide contra el campo visual DE CADERA, que es el 1x de este juego, y
      entero: 6x son 2*atan(tan(45)/6) = 18,9 grados. Contra los 62 de afuera, lo de adentro del
      aro se ve 3,6 veces mas grande. Eso es una mira. */
-  const uno=FOV_CAD*Math.PI/180;
-  _telCam.fov = 2*Math.atan(Math.tan(uno/2)/Math.max(1.5,_telAum))*180/Math.PI;
+  /* El aumento se cuenta EN GRADOS sobre el campo visual de cadera, que es como lo cuenta
+     cualquier shooter: 6x = 90/6 = 15 grados. Repartirlo por la tangente daba 18,9 y contra los
+     50 de la pantalla eran 2,8 veces; asi son 3,5, que es cuando se ve de una que la mira llega
+     mucho mas lejos que el fondo. */
+  _telCam.fov = Math.max(5.5, FOV_CAD/Math.max(1.5,_telAum));
   _telCam.near=0.05; _telCam.far=camera.far;
   _telCam.updateProjectionMatrix();
   /* el arma no se dibuja adentro del visor: taparia la vista con su propio tubo */
