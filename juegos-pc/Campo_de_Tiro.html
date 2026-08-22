@@ -10653,6 +10653,19 @@ try{ window.__tiro={
     return { caraSobreZ:+d.dot(z).toFixed(3), caraSobreX:+d.dot(x).toFixed(3),
              rotY:+r.avatar.rotation.y.toFixed(3), yaw:+(r.yaw||0).toFixed(3) };
   },
+  /* cuanto se mueve la imagen del visor entre cuadros: es lo que se siente como temblor */
+  visorTiembla:(n)=>{ const N=n||40, ds=[];
+    let ax=null;
+    for(let i=0;i<N;i++){ update(1/60); try{ tiroVis(); }catch(e){}
+      if(!_telCam) continue;
+      const d=new THREE.Vector3(0,0,-1).applyQuaternion(_telCam.quaternion);
+      if(ax) ds.push(Math.acos(Math.max(-1,Math.min(1,d.dot(ax))))*180/Math.PI);
+      ax=d; }
+    if(!ds.length) return null;
+    ds.sort((a,b)=>a-b);
+    const suma=ds.reduce((a,b)=>a+b,0);
+    return { n:ds.length, medio:+(suma/ds.length).toFixed(4), peor:+ds[ds.length-1].toFixed(4),
+             res:_telRT?_telRT.width:0, aum:_telAum }; },
   botMatar:(i)=>{ const b=BOTS[i|0]; if(!b) return 'no hay'; botDanio(b.id,999,false);
                   return {vivos:PART.vivos, bajas:PART.bajas}; },
   partOtra:()=>{ partReiniciar(); return {fase:PART.fase, vivos:PART.vivos}; },
@@ -13579,6 +13592,8 @@ function update(dt){
 const QUAL={ low:{pr:1.0,shadow:0,adapt:false,scale:0.5,far:320}, med:{pr:1.5,shadow:1024,adapt:true,far:320}, high:{pr:2.0,shadow:2048,adapt:true,far:320} };
 let quality='med';
 function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
+  /* el destino del visor se rehace con la calidad nueva: si no, queda con la resolucion vieja */
+  try{ if(_telRT && _telRT.width!==teleRes()){ _telRT.setSize(teleRes(),teleRes()); } }catch(e){}
   prBase=Math.max(0.45, Math.min(devicePixelRatio, Q.pr, devicePixelRatio*(Q.scale||1)));   // BAJO = 50% de la resolución nativa
   prDyn=1; aplicarPR();
   camera.far=Math.max(Q.far||1200, _mundoFar||0); camera.updateProjectionMatrix();
@@ -13613,11 +13628,15 @@ function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
 
    El costo es una pasada extra de escena, y solo mientras apuntas con un arma con mira: el resto
    del tiempo el disco se apaga y no se renderiza nada. */
-const TELE_RES=512;
+/* LA RESOLUCION DEL VISOR, SEGUN LA CALIDAD. Estaba clavada en 512 y es una PASADA ENTERA de la
+   escena por cuadro: con el jugador, siete bots y el mapa, apuntar con francotirador duplicaba el
+   trabajo del cuadro y en un telefono se sentia el tiron. Ahora sale de la calidad elegida. */
+function teleRes(){ return quality==='low'? 320 : (quality==='high'? 576 : 448); }
+const TELE_RES=448;
 let _telRT=null, _telCam=null, _telLente=null, _telRet=null, _telAum=4;
 function telRT(){
   if(_telRT) return _telRT;
-  _telRT=new THREE.WebGLRenderTarget(TELE_RES,TELE_RES,{ minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter });
+  _telRT=new THREE.WebGLRenderTarget(teleRes(),teleRes(),{ minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter });
   _telRT.texture.colorSpace=THREE.SRGBColorSpace;
   _telCam=new THREE.PerspectiveCamera(12,1,0.05,700);
   return _telRT;
@@ -13678,16 +13697,25 @@ function teleTick(){
 }
 /* la pasada extra: va JUSTO ANTES del render principal */
 const _telP=new THREE.Vector3(), _telQ=new THREE.Quaternion();
+let _telPS=null, _telDt=0.016, _telSalto=0;
 function telRender(){
   /* el estado se decide ACA, no en tiroVis: tiroVis solo lo llama el gancho de pruebas, no el bucle
      del juego, asi que enganchado ahi el visor no se hubiera prendido nunca jugando de verdad */
   teleTick();
   if(!_teleOn || !_telLente || !_telRT) return;
-  /* la camara del visor se para en la lente y mira a donde mira el arma */
+  /* ===================== EL VISOR TEMBLABA =====================
+     La camara del visor copiaba la orientacion de la LENTE, o sea de la malla del arma, y esa
+     malla lleva encima todo lo procedural: el balanceo del paso, la respiracion, el temblor de
+     musculo, el retraso del caño, el retroceso. A ojo desnudo eso es carácter; A SEIS AUMENTOS es
+     un terremoto — cualquier decima de grado se multiplica por seis y el visor no para quieto.
+     Ahora la orientacion sale de la CAMARA DEL JUGADOR, que es la que ya lleva la punteria y el
+     retroceso y no lleva nada del bamboleo del arma. La POSICION sigue saliendo de la lente pero
+     SUAVIZADA, asi el visor esta donde tiene que estar sin heredarle el bamboleo. */
   _telLente.getWorldPosition(_telP);
-  _telLente.getWorldQuaternion(_telQ);
-  _telCam.position.copy(_telP);
-  _telCam.quaternion.copy(_telQ);
+  if(!_telPS){ _telPS=_telP.clone(); }
+  else _telPS.lerp(_telP, Math.min(1, 14*Math.max(0.001,_telDt)));
+  _telCam.position.copy(_telPS);
+  _telCam.quaternion.copy(camera.quaternion);
   /* SIN DAR VUELTA LA CAMARA. Aca habia un rotateY(PI) y era el error: se veia lo que tenias
      ATRAS. El disco de la lente es un circulo cuya normal (+Z local) apunta al ojo, porque el
      adelante del arma es -Z; y una camara de three mira por su propio -Z. O sea que copiandole la
@@ -13711,10 +13739,17 @@ function telRender(){
   const vLente=_telLente.visible, vRet=_telRet?_telRet.visible:false;
   if(gunRoot) gunRoot.visible=false;
   _telLente.visible=false; if(_telRet) _telRet.visible=false;
-  const ant=renderer.getRenderTarget();
-  renderer.setRenderTarget(_telRT);
-  renderer.render(scene,_telCam);
-  renderer.setRenderTarget(ant);
+  /* SI EL APARATO NO DA, EL VISOR VA A MEDIA CADENCIA. La imagen del visor cambia poquisimo
+     entre dos cuadros —esta muy cerrada y el arma casi no se mueve— asi que dibujarla una vez
+     cada dos cuando el cuadro viene lento se nota mucho menos que el tiron de la pasada extra.
+     Mientras el cuadro esta holgado se dibuja siempre. */
+  _telSalto = (_telDt>0.021) ? (_telSalto+1) : 0;
+  if(_telSalto%2===0){
+    const ant=renderer.getRenderTarget();
+    renderer.setRenderTarget(_telRT);
+    renderer.render(scene,_telCam);
+    renderer.setRenderTarget(ant);
+  }
   if(gunRoot) gunRoot.visible=vArma;
   _telLente.visible=vLente; if(_telRet) _telRet.visible=vRet;
 }
@@ -15358,7 +15393,7 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
   try{ tdmTick(dt); }catch(e){}                   // el marcador del duelo de equipos
   try{ ambTick(dt); }catch(e){}                   // viento del valle + latido con poca vida
   try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player) — sigue latiendo aunque esté en pausa
-  try{ telRender(); }catch(e){}   // la vista de adentro del visor, antes del cuadro principal
+  try{ _telDt=dt; telRender(); }catch(e){}   // la vista de adentro del visor, antes del cuadro principal
   renderer.render(scene,camera);
   drsTick(dt); }
 
