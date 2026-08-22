@@ -1863,7 +1863,7 @@ function armaReflex(H,z0){
   const vid=new THREE.MeshBasicMaterial({color:0xffa64a,transparent:true,opacity:0.15,
     depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
   const cr=new THREE.Mesh(new THREE.PlaneGeometry(aV-0.006,hV-0.005), vid);
-  cr.position.set(0,venY+hV/2,z-0.006); cr.rotation.x=0.14; cr.renderOrder=4; gunCuerpo.add(cr);
+  cr.position.set(0,venY+hV/2,z-0.006); cr.rotation.x=0.14; cr.renderOrder=4; H.raiz.add(cr);
 }
 /* Mira telescopica: tubo, dos monturas y la lente. Para francotirador. */
 function armaLente(H,z0,largo){
@@ -1921,7 +1921,7 @@ function armaLente(H,z0,largo){
       transparent:true, opacity:op, side:THREE.DoubleSide, depthWrite:false });
     g.envMapIntensity=2.6;
     const m=new THREE.Mesh(new THREE.RingGeometry(r*0.80,r,26), g);   // solo el borde: el centro es por donde se mira
-    m.position.set(0,y0,z); m.renderOrder=3; gunCuerpo.add(m); return m; };
+    m.position.set(0,y0,z); m.renderOrder=3; H.raiz.add(m); return m; };
   vidrio(0.0225, z0-L/2+0.048, 0.62);      // objetivo
   vidrio(0.0205, z0+L/2-0.042, 0.34);      // ocular
   /* el tornasol del tratamiento antirreflejo: dos aros aditivos, azul y violeta, en angulos
@@ -1931,16 +1931,16 @@ function armaLente(H,z0,largo){
       depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, toneMapped:false});
     const a=new THREE.Mesh(new THREE.RingGeometry(0.0186,0.0225,26), t);
     a.position.set(0,y0,z0-L/2+0.0475); a.rotation.y=0.22; a.rotation.x=-0.10; a.renderOrder=4;
-    gunCuerpo.add(a);
+    H.raiz.add(a);
     const t2=new THREE.MeshBasicMaterial({color:0x2f9bd8, transparent:true, opacity:0.30,
       depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, toneMapped:false});
     const a2=new THREE.Mesh(new THREE.RingGeometry(0.0196,0.0225,26), t2);
-    a2.position.set(0,y0,z0-L/2+0.0470); a2.rotation.y=-0.26; a2.renderOrder=4; gunCuerpo.add(a2); }
+    a2.position.set(0,y0,z0-L/2+0.0470); a2.rotation.y=-0.26; a2.renderOrder=4; H.raiz.add(a2); }
   /* el aro interior del ocular, que es el que da la sensacion de estar mirando por un tubo */
   const vid=new THREE.MeshBasicMaterial({color:0x9fd4ff,transparent:true,opacity:0.10,
     depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
   const cr=new THREE.Mesh(new THREE.RingGeometry(0.019,0.023,20), vid);
-  cr.position.set(0,y0,z0+L/2-0.006); cr.renderOrder=4; gunCuerpo.add(cr);
+  cr.position.set(0,y0,z0+L/2-0.006); cr.renderOrder=4; H.raiz.add(cr);
 }
 /* Alza y punto de mira de hierro, para pistolas y escopetas: no hay ventana, se mira por encima. */
 /* Los hierros van a la ALTURA DE LA LINEA DE MIRA del arma (H.mira), no a un numero a ojo: si no,
@@ -2469,7 +2469,115 @@ function buildGun(){ if(gunRoot)return;
    todo lo que el resto del juego necesita saber del arma: escala, boca del caño, los dos agarres, la
    altura de la linea de mira, el zoom al apuntar y los numeros de tiro. Asi el IK de las manos, el
    centrado de la mira, el fogonazo y el HUD no saben ni les importa que arma esta puesta. */
-let gunCuerpo=null;
+/* ===================== LAS HERRAMIENTAS DE MODELADO, EN UN SOLO LUGAR =====================
+   Habia DOS copias de esto: una en armaMontar (el arma que se juega) y otra en armaGrupo (la que se
+   fotografia para la tienda). Cada vez que se agregaba una herramienta a una habia que acordarse de
+   la otra, y si no, la receta explotaba en la foto y la tienda mostraba un cuadro vacio. Ahora es
+   una sola, y las dos construyen exactamente lo mismo.
+
+   MODELADO A POLIGONO. Hasta aca cada arma era una PILA DE CAJAS: se veia el escalonado, no habia
+   una linea que siguiera de punta a punta y los cantos no agarraban luz.
+
+   perf() toma la SILUETA vista de costado —una lista de puntos [z,y], con -z hacia adelante— y la
+   extruye a lo ancho, con bisel en los cantos. Un cajon de mecanismos, una culata, un guardamanos,
+   un guardamonte y la hoja de un cuchillo SON siluetas, no cajas apiladas. Acepta curvas (un punto
+   de cuatro numeros es control+destino) y huecos (el guardamonte).
+
+   rev() revoluciona un PERFIL DE RADIO alrededor del eje del caño —lista de [radio,z]— y con eso
+   salen caños con sus escalones, apagafuegos, bocachas, silenciadores, tubos de mira y tambores.
+
+   Y despues armaFundir() junta en UNA malla todo lo que comparta material: mas detalle y al mismo
+   tiempo menos llamadas de dibujo que con las cajas. */
+function _armaForma(pts,huecos){
+  const traza=(o,ps)=>{ o.moveTo(ps[0][0],ps[0][1]);
+    for(let i=1;i<ps.length;i++){ const q=ps[i];
+      if(q.length===4) o.quadraticCurveTo(q[0],q[1],q[2],q[3]); else o.lineTo(q[0],q[1]); }
+    o.closePath(); };
+  const sh=new THREE.Shape(); traza(sh,pts);
+  if(huecos) for(const h of huecos){ const pa=new THREE.Path(); traza(pa,h); sh.holes.push(pa); }
+  return sh;
+}
+function _armaUtil(padre){
+  const M=AKMAT;
+  return {
+    box:(w,h,dd,x,y,z,m,rx,ry,rz)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,dd),m||M.metal);
+      me.position.set(x,y,z); if(rx)me.rotation.x=rx; if(ry)me.rotation.y=ry; if(rz)me.rotation.z=rz;
+      padre.add(me); return me; },
+    cil:(r1,r2,h,x,y,z,m,ejeZ)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,14),m||M.metal);
+      if(ejeZ)me.rotation.x=Math.PI/2; me.position.set(x,y,z); padre.add(me); return me; },
+    perf:(pts,ancho,x,y,z,m,o)=>{ o=o||{}; const bis=(o.bisel==null?0.0028:o.bisel);
+      const g=new THREE.ExtrudeGeometry(_armaForma(pts,o.huecos),{
+        depth:Math.max(0.0008,(ancho||0.05)-bis*2), bevelEnabled:bis>0,
+        bevelThickness:bis, bevelSize:bis, bevelSegments:(o.bs||1), curveSegments:(o.cs||6), steps:1 });
+      g.rotateY(-Math.PI/2);                    // la silueta pasa al plano z-y y el grosor al eje x
+      g.computeBoundingBox();
+      const cx=(g.boundingBox.min.x+g.boundingBox.max.x)/2;
+      g.translate((x||0)-cx,(y||0),(z||0));
+      const me=new THREE.Mesh(g, m||M.metal);
+      if(o.rx)me.rotation.x=o.rx; if(o.ry)me.rotation.y=o.ry; if(o.rz)me.rotation.z=o.rz;
+      padre.add(me); return me; },
+    rev:(pts,x,y,z,m,seg)=>{
+      const v=pts.map(q=>new THREE.Vector2(Math.max(0.00012,q[0]), q[1]));
+      const g=new THREE.LatheGeometry(v, seg||14);
+      g.rotateX(Math.PI/2);                     // el eje de revolucion pasa a ser el del caño
+      g.translate((x||0),(y||0),(z||0));
+      const me=new THREE.Mesh(g, m||M.metal); padre.add(me); return me; }
+  };
+}
+/* raiz = el grupo donde se construye. vivo = si es el arma que se juega (engancha los grupos que se
+   animan en gunMag / gunCulata / gunCH) o la copia para la foto (no engancha nada). */
+function armaHerr(raiz, def, vivo){
+  const M=AKMAT;
+  const H=Object.assign({ M:M, mira:def.mira, raiz:raiz }, _armaUtil(raiz));
+  H.tubo=(r,h,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,20,1,true),m||M.negro);
+    me.material.side=THREE.DoubleSide; me.rotation.x=Math.PI/2; me.position.set(x,y,z);
+    me.userData.noFundir=true;                  // tubo ABIERTO: fundido con lo demas se ve el reves
+    raiz.add(me); return me; };
+  H.mag=(fn)=>{ const q=new THREE.Group(); raiz.add(q); Object.assign(q,_armaUtil(q));
+    if(vivo) gunMag=q; fn(q); return q; };
+  H.culata=(fn)=>{ const q=new THREE.Group(); raiz.add(q); Object.assign(q,_armaUtil(q));
+    if(vivo) gunCulata=q; fn(q); return q; };
+  H.cerrojo=(w,h,dd,x,y,z,m,rec)=>{ const me=H.box(w,h,dd,x,y,z,m);
+    me.userData.z0=z; me.userData.rec=(rec==null?0.075:rec); me.userData.noFundir=true;
+    if(vivo) gunCH=me; return me; };
+  H.cerrojoPerf=(pts,ancho,x,y,z,m,rec,o)=>{ const me=H.perf(pts,ancho,x,y,z,m,o);
+    me.userData.z0=z; me.userData.rec=(rec==null?0.075:rec); me.userData.noFundir=true;
+    if(vivo) gunCH=me; return me; };
+  /* PIEZA CORREDIZA. Un cerrojo puede ser una manija —una caja sola— pero en una pistola es TODA la
+     corredera y en la 870 es el guardamanos entero: si solo se mueve una manijita, el gesto de
+     montar el arma no se lee. Esto arma un grupo que se corre en bloque, con su propio recorrido. */
+  H.corredera=(rec,fn)=>{ const q=new THREE.Group(); q.userData.z0=0; q.userData.rec=rec;
+    raiz.add(q); Object.assign(q,_armaUtil(q)); if(vivo) gunCH=q; fn(q); return q; };
+  return H;
+}
+/* junta en una malla por material, horneando la matriz de cada pieza. Queda afuera lo marcado
+   noFundir (el cerrojo, que se mueve solo, y los tubos abiertos) y todo lo que traiga un material
+   propio —los cristales de la mira, los aros del tornasol, la reticula—, que necesitan su orden. */
+function armaFundir(grupo, mats){
+  const bolsa=new Map();
+  for(const ch of grupo.children.slice()){
+    if(!ch.isMesh||!ch.geometry) continue;
+    if(ch.userData.noFundir) continue;
+    if(!mats.has(ch.material)) continue;
+    ch.updateMatrix();
+    let g=ch.geometry.index? ch.geometry.toNonIndexed() : ch.geometry.clone();
+    g.applyMatrix4(ch.matrix);
+    for(const k of Object.keys(g.attributes)) if(k!=='position'&&k!=='normal'&&k!=='uv') g.deleteAttribute(k);
+    if(!g.attributes.uv) g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(g.attributes.position.count*2),2));
+    if(!g.attributes.normal) g.computeVertexNormals();
+    if(!bolsa.has(ch.material)) bolsa.set(ch.material,[]);
+    bolsa.get(ch.material).push(g);
+    grupo.remove(ch); ch.geometry.dispose();
+  }
+  let n=0;
+  for(const [mat,geos] of bolsa){
+    let gg=null; try{ gg=(geos.length===1?geos[0]:mergeGeometries(geos,false)); }catch(e){ gg=null; }
+    if(gg){ grupo.add(new THREE.Mesh(gg,mat)); n++; }
+    for(const q of geos) if(q!==gg) q.dispose();
+  }
+  return n;
+}
+let gunCuerpo=null, _armaFundido=0;
 function armaMontar(){
   if(!gunRoot||!AKMAT.metal) return;
   const d=ARMA(), M=AKMAT;
@@ -2479,31 +2587,15 @@ function armaMontar(){
   /* el cargador que se lleva a la mano es un CLON del que trae el arma: si cambiaste de arma, el
      viejo ya no representa nada. Se tira y se vuelve a clonar cuando haga falta. */
   try{ insCortar(); if(INS.mano){ scene.remove(INS.mano); INS.mano=null; } }catch(e){}
-  const H={ M:M, mira:d.mira,
-    box:(w,h,dd,x,y,z,m,rx,ry,rz)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,dd),m||M.metal);
-      me.position.set(x,y,z); if(rx)me.rotation.x=rx; if(ry)me.rotation.y=ry; if(rz)me.rotation.z=rz;
-      gunCuerpo.add(me); return me; },
-    cil:(r1,r2,h,x,y,z,m,ejeZ)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,8),m||M.metal);
-      if(ejeZ)me.rotation.x=Math.PI/2; me.position.set(x,y,z); gunCuerpo.add(me); return me; },
-    tubo:(r,h,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,16,1,true),m||M.negro);
-      me.material.side=THREE.DoubleSide; me.rotation.x=Math.PI/2; me.position.set(x,y,z); gunCuerpo.add(me); return me; },
-    mag:(fn)=>{ gunMag=new THREE.Group(); gunCuerpo.add(gunMag); fn(gunMag); return gunMag; },
-    culata:(fn)=>{ gunCulata=new THREE.Group(); gunCuerpo.add(gunCulata); fn(gunCulata); return gunCulata; } };
-  H.cerrojo=(w,h,dd,x,y,z,m,rec)=>{ gunCH=H.box(w,h,dd,x,y,z,m); gunCH.userData.z0=z;
-    gunCH.userData.rec=(rec==null?0.075:rec); return gunCH; };
-  /* PIEZA CORREDIZA. Un cerrojo puede ser una manija —una caja sola— pero en una pistola es TODA la
-     corredera y en la 870 es el guardamanos entero: si solo se mueve una manijita, el gesto de
-     montar el arma no se lee. Esto arma un grupo que se corre en bloque, con su propio recorrido
-     (una corredera de pistola viaja 5 cm; el bombeo de una escopeta, 9). */
-  H.corredera=(rec,fn)=>{ gunCH=new THREE.Group(); gunCH.userData.z0=0; gunCH.userData.rec=rec;
-    gunCuerpo.add(gunCH); const g=gunCH;
-    fn({ box:(w,h,dd,x,y,z,mm,rx,ry,rz)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,dd),mm||M.metal);
-           me.position.set(x,y,z); if(rx)me.rotation.x=rx; if(ry)me.rotation.y=ry; if(rz)me.rotation.z=rz;
-           g.add(me); return me; },
-         cil:(r1,r2,h,x,y,z,mm,ejeZ)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,8),mm||M.metal);
-           if(ejeZ)me.rotation.x=Math.PI/2; me.position.set(x,y,z); g.add(me); return me; } });
-    return gunCH; };
+  const H=armaHerr(gunCuerpo, d, true);
   d.hacer(H);
+  /* UNA SOLA MALLA POR MATERIAL: los grupos que se mueven se funden por dentro, asi el
+     cargador sigue saliendose y el cerrojo sigue corriendose. */
+  { const mats=new Set(Object.values(M));
+    _armaFundido = armaFundir(gunCuerpo,mats)
+                 + (gunMag?armaFundir(gunMag,mats):0)
+                 + (gunCulata?armaFundir(gunCulata,mats):0)
+                 + (gunCH&&gunCH.isGroup?armaFundir(gunCH,mats):0); }
   /* GIRO PROPIO DEL ARMA. La hoja de un machete mide 8 mm de canto: de punta no se ve nada. Girando el
      CUERPO en su propio local (y girando los agarres lo mismo, para que la mano lo siga) la cara plana
      queda hacia la camara sin tener que torcer el ancla del ojo, que es lo que arrastraba el arma
@@ -14596,25 +14688,13 @@ function tdWire(){
    dibuja el juego. */
 const ARMA_FOTO={};
 function armaGrupo(def){
-  const M=AKMAT, g=new THREE.Group();
-  const add=(me)=>{ g.add(me); return me; };
-  const H={ M:M, mira:def.mira,
-    box:(w,h,dd,x,y,z,m,rx,ry,rz)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,dd),m||M.metal);
-      me.position.set(x,y,z); if(rx)me.rotation.x=rx; if(ry)me.rotation.y=ry; if(rz)me.rotation.z=rz; return add(me); },
-    cil:(r1,r2,h,x,y,z,m,ejeZ)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,8),m||M.metal);
-      if(ejeZ)me.rotation.x=Math.PI/2; me.position.set(x,y,z); return add(me); },
-    tubo:(r,h,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,16,1,true),m||M.negro);
-      me.rotation.x=Math.PI/2; me.position.set(x,y,z); return add(me); },
-    mag:(fn)=>{ const q=new THREE.Group(); g.add(q); fn(q); return q; },
-    culata:(fn)=>{ const q=new THREE.Group(); g.add(q); fn(q); return q; } };
-  H.cerrojo=(w,h,dd,x,y,z,m)=>H.box(w,h,dd,x,y,z,m);
-  H.corredera=(rec,fn)=>{ const q=new THREE.Group(); g.add(q);
-    fn({ box:(w,h,dd,x,y,z,mm,rx,ry,rz)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,dd),mm||M.metal);
-           me.position.set(x,y,z); if(rx)me.rotation.x=rx; if(ry)me.rotation.y=ry; if(rz)me.rotation.z=rz; q.add(me); return me; },
-         cil:(r1,r2,h,x,y,z,mm,ejeZ)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,8),mm||M.metal);
-           if(ejeZ)me.rotation.x=Math.PI/2; me.position.set(x,y,z); q.add(me); return me; } });
-    return q; };
+  /* la copia para la foto se arma con LAS MISMAS herramientas que la del juego (armaHerr) y se
+     funde igual, asi la foto de la tienda es literalmente el arma que vas a tener en la mano */
+  const g=new THREE.Group();
+  const H=armaHerr(g, def, false);
   try{ def.hacer(H); }catch(e){ console.warn('foto',def.id,e); }
+  try{ armaFundir(g,new Set(Object.values(AKMAT)));
+       for(const ch of g.children) if(ch.isGroup) armaFundir(ch,new Set(Object.values(AKMAT))); }catch(e){}
   return g;
 }
 let _fotoRT=null, _fotoEsc=null, _fotoCam=null, _fotoCv=null, _fotoBuf=null;
