@@ -470,11 +470,15 @@
     filter:drop-shadow(0 0 2px rgba(0,0,0,.8)); }
   #hitMark.on{ animation:hitPop .28s ease-out; }
   @keyframes hitPop{ 0%{opacity:1;transform:scale(.6)} 100%{opacity:0;transform:scale(1.5)} }
-  #muerte{ position:fixed; inset:0; z-index:46; display:none; align-items:center; justify-content:center; flex-direction:column; gap:8px;
-    background:rgba(70,10,10,.42); backdrop-filter:blur(3px); color:#ffe6e0; font-family:'Segoe UI',system-ui,sans-serif; }
-  body.muerto #muerte{ display:flex; }
-  #muerte b{ font-size:30px; font-weight:900; letter-spacing:.06em; text-shadow:0 3px 12px #000; }
-  #muerte span{ font-size:14px; font-weight:700; opacity:.9; }
+  /* EL CARTEL DE MUERTO YA NO TAPA NADA. Antes era un vidrio rojo con desenfoque sobre toda la
+     pantalla: tenia sentido cuando no habia nada que mirar, pero ahora atras se esta desplomando
+     el cuerpo y el lavado de color hace el trabajo del rojo. Queda una viñeta y el texto abajo. */
+  #muerte{ position:fixed; inset:0; z-index:46; display:none; align-items:flex-end; justify-content:center; flex-direction:column; gap:4px;
+    padding:0 0 min(16vh,120px); color:#f2e9e6; font-family:'Segoe UI',system-ui,sans-serif; pointer-events:none;
+    background:radial-gradient(ellipse at 50% 46%, rgba(0,0,0,0) 34%, rgba(0,0,0,.34) 78%, rgba(0,0,0,.62) 100%); }
+  body.muerto #muerte{ display:flex; align-items:center; }
+  #muerte b{ font-size:30px; font-weight:900; letter-spacing:.10em; text-shadow:0 3px 14px #000, 0 0 3px #000; }
+  #muerte span{ font-size:14px; font-weight:700; opacity:.85; text-shadow:0 2px 8px #000; }
   body.muerto #joy, body.muerto .actBtn{ opacity:.30; pointer-events:none; }
   /* ===== ICONOS DEL HUD. Generados y metidos EN el archivo como data URI, no traidos de un CDN:
      los botones son lo unico que no puede fallar por red. Van como mask-image y no como imagen, asi
@@ -10286,6 +10290,10 @@ function tiroSnd(k,esc){ const c=tctx(); if(!c||!AUD.on||!sfxOn)return; if(c.sta
   else if(k==='tajoCarne'){ noise(0.10,1600,240,0.32,120); tono(160,64,0.16,0.24,'sine');
     noise(0.045,5200,1400,0.14,600); }
   else if(k==='tecla'){ tono(1900+Math.random()*260,1500,0.022,0.045,'triangle'); }
+  /* EL CUERPO QUE SE DESPLOMA. Tres capas: el ahogo del que se queda sin aire (agudo y corto), el
+     bulto contra el piso (grave, con cuerpo) y la cola de polvo. Es lo que se oye al morir. */
+  else if(k==='caida'){ tono(430,150,0.22,0.13,'sine'); noise(0.09,2600,500,0.16,220);
+    tono(88,34,0.55,0.34,'sine'); noise(0.34,1000,120,0.24,60); noise(0.60,600,90,0.10,50); }
 }
 /* ===================== AMBIENTE: VIENTO =====================
    Un lecho de ruido filtrado que respira: dos rachas lentas que se cruzan y nunca coinciden, asi no
@@ -13159,7 +13167,12 @@ function setAnim(name){ if(!bodyActions[name]||curAnim===name)return;
 const SLD_DIP_MAX=0.80, SLD_T_HOLD=0.43, SLD_TS=0.85;   // m de bajada máxima · s del fotograma más bajo · timescale
 const NRM_DIP=0.050, NRM_UP=0.035;   // m: cuánto puede rebotar la cadera FUERA de la deslizada (ver 2e)
 let _sldAnim=0;                      // reloj propio del vaiven de la deslizada
-function tickBody(dt,gameState){ if(!bodyRoot)return; setAnim(gameState||'idle');
+function tickBody(dt,gameState){ if(!bodyRoot)return;
+  /* MIENTRAS CAE EL MUERTO, EL CUERPO NO SE ANIMA NI SE COLOCA: lo manda el ragdoll. Si esto
+     siguiera corriendo, cada cuadro le pisaria la pose floja con la del idle y la caida se veria
+     como un maniqui vibrando. */
+  if(MUERTE.act) return;
+  setAnim(gameState||'idle');
   /* LAS PIERNAS TIENEN QUE SEGUIR VIVAS. Antes el clip se congelaba en el fotograma mas bajo
      (a.time=SLD_T_HOLD) y el cuerpo quedaba como una estatua barriendo el piso. Ahora, mientras
      dura la deslizada, el tiempo del clip va y viene alrededor de ese fotograma: el pie de atras
@@ -13615,6 +13628,10 @@ function update(dt){
      En mpTick estaba un cuadro atrasado — con la camara del cuadro anterior — y en un giro rapido
      eso es un avatar que aparece tarde en el borde de la pantalla. */
   try{ ragTickTodos(dt); }catch(e){}   // los cuerpos que se estan cayendo
+  /* LA MUERTE VA AL FINAL, despues de tickAim: la camara de la caida tiene que pisar tanto la
+     colocacion de tercera persona como la patada del retroceso, o el ultimo tiro recibido la
+     sacude mientras el cuerpo se desploma. */
+  try{ muerteTick(dt); }catch(e){}
   try{ danTick(dt); }catch(e){}        // las cuñas de "de aca te pegaron"
   try{ mpCullar(); }catch(e){}
 }
@@ -16114,11 +16131,96 @@ function pvpRecibir(dmg,quien,cab,ox,oz){
   if(cfgVibrar && navigator.vibrate){ try{ navigator.vibrate(cab?[18,40,26]:32); }catch(e){} }
   tiroSnd('recibido');
   try{ danMarcar(ox,oz); }catch(e){}   // la cuña que dice para donde girar
-  if(PVP.vida<=0) pvpMorir();
+  if(PVP.vida<=0) pvpMorir(ox,oz);
   pvpHUD();
 }
-function pvpMorir(){
+/* ===================== LA MUERTE, EN TERCERA PERSONA =====================
+   Antes morir era un cartel: la pantalla se ponia roja, salia "TE MATARON" y a los tres segundos
+   volvias. No se veia caer a nadie — el que se desplomaba era el otro, vos nunca.
+   Ahora la camara SALE DE TU CABEZA, se pone atras y arriba y orbita despacio alrededor del cuerpo
+   mientras se desploma con el mismo ragdoll que usan los bots: los huesos se van a la pose floja
+   con un temblor que se apaga, el cuerpo se tumba para el lado del que vino el tiro y da el
+   saltito del impacto.
+   Y la imagen se lava: la saturacion cae a cero de golpe —la sangre se va del mundo, que es lo que
+   hace cualquier shooter para decirte "esto ya no es tu turno"— y el contraste sube DE A POCO,
+   asi lo que queda se endurece hasta el blanco y negro duro justo antes de reaparecer. */
+const MUERTE={ act:false, t:0, dur:3.2, r:null, vistaAnt:null, camAnt:0, ang:0, dist:3.4 };
+function muerteFalso(){
+  /* el ragdoll trabaja con objetos "remoto": se le arma uno que apunta al cuerpo local */
+  if(MUERTE.r) return MUERTE.r;
+  MUERTE.r={ body:bodyInner, avatar:bodyRoot, mixer:bodyMixer,
+             pos:new THREE.Vector3(), yaw:0, anim:'idle' };
+  return MUERTE.r;
+}
+function muerteEmpezar(dx,dz){
+  if(MUERTE.act || !bodyRoot || !bodyInner) return false;
+  const r=muerteFalso();
+  r.pos.set(player.pos.x, player.pos.y, player.pos.z);
+  r.yaw=player.faceYaw;
+  MUERTE.act=true; MUERTE.t=0;
+  MUERTE.ang=player.yaw + Math.PI*0.25;
+  MUERTE.vistaAnt=camView; MUERTE.camAnt=player.camTP;
+  /* el cuerpo entero tiene que verse: en primera persona la cabeza y el torso estan recortados */
+  camView='tp'; player.camTP=1;
+  try{ for(const m of cuSoloTP) m.visible=true; }catch(e){}
+  try{ if(gunRoot) gunRoot.visible=false; }catch(e){}
+  try{ ragEmpezar(r, dx, dz); }catch(e){}
+  try{ tiroSnd('caida', 1.0); }catch(e){}
+  muerteGrado(0);
+  return true;
+}
+function muerteParar(){
+  if(!MUERTE.act) return;
+  MUERTE.act=false;
+  try{ ragParar(MUERTE.r); }catch(e){}
+  try{ if(MUERTE.r && MUERTE.r.mixer) MUERTE.r.mixer.stopAllAction(); }catch(e){}
+  try{ curAnim=null; setAnim('idle'); }catch(e){}
+  camView=MUERTE.vistaAnt||'fp'; player.camTP=MUERTE.camAnt||0;
+  muerteGrado(-1);
+}
+/* el lavado de color: se pinta con un filtro sobre el lienzo, que no cuesta un solo triangulo */
+function muerteGrado(k){
+  const el=document.getElementById('app')||document.getElementById('stage');
+  if(!el) return;
+  if(k<0){ el.style.filter=''; return; }
+  /* saturacion: cae a cero en el primer cuarto de segundo. contraste: sube de a poco, de 1 a 1,55.
+     brillo: baja apenas, que el blanco y negro plano se ve lavado y no duro. */
+  const sat=Math.max(0, 1 - k*4);
+  const con=1 + Math.min(1,k)*0.55;
+  const bri=1 - Math.min(1,k)*0.22;
+  el.style.filter='saturate('+sat.toFixed(2)+') contrast('+con.toFixed(2)+') brightness('+bri.toFixed(2)+')';
+}
+function muerteTick(dt){
+  if(!MUERTE.act) return;
+  MUERTE.t+=dt;
+  const k=Math.min(1, MUERTE.t/MUERTE.dur);
+  muerteGrado(k);
+  const r=MUERTE.r;
+  try{ ragTick(r, dt); }catch(e){}
+  /* LA CAMARA ORBITA. Sale de la cabeza, se va para atras y arriba y gira despacio alrededor del
+     cuerpo: es lo que deja ver la caida entera en vez de mirarla desde adentro del muerto. */
+  MUERTE.ang += dt*0.42;
+  const sub=1.05 + k*1.35, dist=2.6 + k*2.2;
+  const cx=r.pos.x + Math.sin(MUERTE.ang)*dist;
+  const cz=r.pos.z + Math.cos(MUERTE.ang)*dist;
+  let cy=r.pos.y + sub;
+  /* no se mete abajo del piso ni dentro de una pared */
+  try{ const t=camClipDist(r.pos.x, r.pos.y+0.9, r.pos.z, (cx-r.pos.x)/dist, (sub-0.9)/dist, (cz-r.pos.z)/dist, dist+0.4);
+       if(t<dist){ const f=Math.max(0.5,(t-0.35)/dist);
+         camera.position.set(r.pos.x+(cx-r.pos.x)*f, r.pos.y+0.9+(cy-r.pos.y-0.9)*f, r.pos.z+(cz-r.pos.z)*f); }
+       else camera.position.set(cx,cy,cz); }
+  catch(e){ camera.position.set(cx,cy,cz); }
+  if(camera.position.y < r.pos.y+0.55) camera.position.y = r.pos.y+0.55;
+  camera.lookAt(r.pos.x, r.pos.y+0.42, r.pos.z);
+}
+function pvpMorir(ox,oz){
   PVP.muerto=true; PVP.muertes++; PVP.tRes=4.0;
+  /* la camara sale de la cabeza y el cuerpo se desploma. La direccion es la del que te tiro: si te
+     pegaron de frente caes de espaldas. Igual que con los bots. */
+  try{ let dx=null,dz=null;
+       if(ox!=null && oz!=null){ const ax=ox-player.pos.x, az=oz-player.pos.z, L=Math.hypot(ax,az)||1;
+         dx=ax/L; dz=az/L; }
+       muerteEmpezar(dx,dz); }catch(e){}
   try{ if(TDM.on) tdmMarcar('B',1); }catch(e){}   // caiste vos: la anota ROJO
   /* En el valle morir TERMINA la partida: es un battle royale, no un tiroteo con reaparicion. En la
      galeria se sigue reapareciendo, que es para lo que esta. */
@@ -16136,6 +16238,7 @@ function pvpRevivir(){
      16 km de la arena. Si se la llama estando en la arena, el jugador termina en el medio de la nada
      con la arena dibujada alrededor —el famoso "aparezco en el vacio"— y un instante despues, al
      pasar y<-18, respawn() lo devuelve al punto de inicio. La arena tiene su propia areRevivir. */
+  try{ muerteParar(); }catch(e){}
   if(world==='arena'){ try{ areRevivir(); }catch(e){} return; }
   PVP.muerto=false; PVP.vida=PVP.max; document.body.classList.remove('muerto');
   INV.curando=0; INV.curaTipo=''; try{ invHUD(); }catch(e){}
@@ -16795,6 +16898,7 @@ function enterArena(){
 /* el suelo depende del mundo: la isla tiene relieve, la arena es plana */
 function sueloY(x,z){ return (world==='arena') ? 0 : alcH(x,z); }
 function areRevivir(){
+  try{ muerteParar(); }catch(e){}   // devuelve la vista, el arma y el color
   PVP.muerto=false; PVP.vida=PVP.max; document.body.classList.remove('muerto');
   PVP_GRACIA=1.5;   // aparecer y morir en el mismo segundo no es dificil, es injusto
   INV.curando=0; INV.curaTipo=''; try{ invHUD(); }catch(e){}
@@ -16930,7 +17034,12 @@ function tdmTick(dt){
     else tdmPartidaFin(TDM.A>=TDM.B?'A':'B');
     return;
   }
-  if((TDM.t|0)!==(TDM._s|0)){ TDM._s=TDM.t; tdmHUD(); }
+  if((TDM.t|0)!==(TDM._s|0)){ TDM._s=TDM.t; tdmHUD();
+    /* EL CUERPO PUEDE LLEGAR TARDE. Si los equipos se repartieron antes de que cargara el GLB del
+       personaje, el bot era una capsula y no habia ropa que teñir. Una pasada por segundo alcanza
+       para vestirlos en cuanto tengan cuerpo, y no cuesta nada: son nueve. */
+    for(const b of BOTS){ if(b.eq && b._ropaEq!==b.eq && b.r && b.r.rigged){ try{ tdmRopa(b,b.eq); }catch(e){} } }
+  }
 }
 /* ---- armar la partida ---- */
 function tdmArrancar(){
@@ -16940,6 +17049,7 @@ function tdmArrancar(){
   try{ botQuitar(BOTS.length); }catch(e){}
   try{ botAgregar(9); }catch(e){}
   BOTS.forEach((b,i)=>{ b.eq = (i<4)?'A':'B'; try{ tdmMarcaEquipo(b); }catch(e){} });
+  try{ tdmRopaLocal('A'); }catch(e){}   // vos siempre sos de AZUL
   try{ tdmResituar(); }catch(e){}
   /* la pose de salida: cada uno mira al centro y espera con su propia animacion */
   BOTS.forEach((b,i)=>{
@@ -16958,9 +17068,77 @@ function tdmArrancar(){
    piso: el brazalete se ve de cerca y el aro de lejos, que es cuando mas falta hace. */
 const _tdmGeoBr=new THREE.CylinderGeometry(0.13,0.13,0.075,10,1,true);
 const _tdmGeoAro=new THREE.RingGeometry(0.42,0.60,20);
+/* ===================== LA ROPA DICE DE QUE LADO ESTAS =====================
+   El brazalete y el aro alcanzaban para el que ya estaba mirando, pero a diez metros y de reojo
+   los diez operadores eran el MISMO hombre verde oliva: uno le tiraba al compañero y descubria el
+   error cuando ya habia gastado medio cargador. En cualquier shooter de equipos el aliado se
+   reconoce por el BULTO, no por un detalle — el uniforme entero cambia de color.
+
+   Asi que el uniforme se tiñe: azul para los tuyos, rojo para los otros. Se mezcla, no se pinta —
+   la ropa queda azul de combate, no azul de plastico— y con pesos distintos por pieza, porque el
+   equipo tactico tiene que seguir leyendose como equipo: la tela va casi entera al color, el casco
+   y el chaleco a medias, los bolsillos apenas. Y lo que NO se toca es la piel, los guantes, las
+   lentes y las placas negras: eso es lo que le deja silueta al muñeco.
+
+   Los materiales son PROPIOS de cada avatar (mpRig los clona uno por uno), asi que teñir a uno no
+   mancha a los demas. El color original se guarda en el material la primera vez, para poder
+   devolverlo al terminar la partida. */
+const TDM_TINTE={ A:0x2456c8, B:0xa8281f };   // azul de uniforme y rojo ladrillo, no primarios
+let _tdmPesos=null;
+function tdmPesos(){
+  if(_tdmPesos) return _tdmPesos;
+  try{ cuMats(); }catch(e){}
+  _tdmPesos=new Map();
+  /* el hex original se estampa EN EL MATERIAL COMPARTIDO, antes de que nadie lo tiña. Los avatares
+     clonan estos materiales (y three copia el userData en el clon), asi que cada bot se lleva
+     escrito de que color era su uniforme aunque el del jugador ya este azul. */
+  const put=(m,w)=>{ if(!m||!m.color) return; const h=m.color.getHex();
+    if(m.userData._eqc===undefined) m.userData._eqc=h;
+    _tdmPesos.set(m.userData._eqc, w); };
+  put(CU_MAT.cuerpo,   0.80);   // el uniforme: es el que se ve de lejos
+  put(CU_MAT.manga,    0.76);
+  put(CU_MAT.junta,    0.68);
+  put(CU_MAT.casco,    0.52);
+  put(CU_MAT.chaleco,  0.44);
+  put(CU_MAT.bolsillo, 0.28);
+  /* la piel, los guantes, las lentes y el negro de placas no entran a proposito */
+  return _tdmPesos;
+}
+const _tdmCol=new THREE.Color();
+/* EL JUGADOR TAMBIEN SE VISTE. Se ve a si mismo en tercera persona, en la caida de la muerte y en
+   el menu, y quedar de verde oliva mientras los cuatro compañeros van de azul es raro. El cuerpo
+   local usa los materiales COMPARTIDOS, asi que se tiñen esos: los bots ya no dependen de ellos
+   —cada uno tiene su clon— y el original queda anotado en userData._eqc para devolverlo. */
+function tdmRopaLocal(eq){
+  const W=tdmPesos(); let n=0;
+  if(eq) _tdmCol.setHex(eq==='A'? TDM_TINTE.A : TDM_TINTE.B);
+  for(const k in CU_MAT){ const m=CU_MAT[k]; if(!m||!m.color) continue;
+    const o=m.userData._eqc; if(o===undefined) continue;
+    const w=W.get(o); if(w===undefined) continue;
+    m.color.setHex(o); if(eq) m.color.lerp(_tdmCol, w); m.needsUpdate=true; n++; }
+  return n;
+}
+function tdmRopa(b, eq){
+  const cuerpo = b && b.r && b.r.body; if(!cuerpo) return 0;
+  const W=tdmPesos(); let n=0;
+  if(eq) _tdmCol.setHex(eq==='A'? TDM_TINTE.A : TDM_TINTE.B);
+  cuerpo.traverse(o=>{ if(!o.isMesh) return;
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of ms){ if(!m||!m.color) continue;
+      /* el original se anota UNA vez: si se anotara cada vez, al cambiar de ronda se guardaria el
+         azul como "original" y ya no habria vuelta atras */
+      if(m.userData._eqc===undefined) m.userData._eqc=m.color.getHex();
+      const w=W.get(m.userData._eqc); if(w===undefined) continue;
+      m.color.setHex(m.userData._eqc);
+      if(eq) m.color.lerp(_tdmCol, w);
+      m.needsUpdate=true; n++; } });
+  b._ropaEq = eq||null;
+  return n;
+}
 function tdmMarcaEquipo(b){
   if(!b || !b.r || !b.r.avatar) return;
   const eq=b.eq; const col=eq==='A'? TDM_EQ.A.hex : TDM_EQ.B.hex;
+  try{ tdmRopa(b, eq); }catch(e){}
   if(b._marca){ b._marca.mat.color.setHex(col); b._marca.aro.material.color.setHex(col);
     b._marca.g.visible=true; return; }
   const g=new THREE.Group();
@@ -16975,7 +17153,9 @@ function tdmMarcaEquipo(b){
   b._marca={ g, mat, aro };
 }
 function tdmSacarMarcas(){
-  for(const b of BOTS){ if(b._marca){ try{ b._marca.g.visible=false; }catch(e){} } }
+  for(const b of BOTS){ if(b._marca){ try{ b._marca.g.visible=false; }catch(e){} }
+    if(b._ropaEq){ try{ tdmRopa(b, null); }catch(e){} } }   // el uniforme vuelve al verde oliva
+  try{ tdmRopaLocal(null); }catch(e){}
 }
 function tdmParar(){
   TDM.on=false; TDM.A=0; TDM.B=0; TDM.t=0; TDM.ronda=0; TDM.ganoR1=null; TDM.fin=false;
@@ -17687,7 +17867,11 @@ function ragEmpezar(r, dx, dz){
   if(r.mixer){ try{ r.mixer.stopAllAction(); }catch(e){} }
   /* el cuerpo mira a r.yaw+PI; el tiro viene de (dx,dz). Si viene de frente cae de espaldas. */
   const mira=r.yaw||0;
-  const frente = (dx==null) ? 1 : Math.cos(mira)*(-dx) + Math.sin(mira)*(-dz);
+  /* El cuerpo mira hacia (-sin yaw, -cos yaw) —la misma base que usan el jugador, los bots y las
+     cuñas de daño—. Antes esto proyectaba contra (cos, sin), que no es ni el frente ni el costado:
+     el resultado quedaba girado 90 grados, asi que un tiro de frente daba 0 y el cuerpo caia para
+     cualquier lado. Con la base buena, frente>0 = te pegaron de frente = caes de espaldas. */
+  const frente = (dx==null) ? 1 : (-Math.sin(mira))*dx + (-Math.cos(mira))*dz;
   r.rag={ t:0, tip:(frente>=0? 1.48 : -1.48), giro:(Math.random()-0.5)*1.1,
           alabeo:(Math.random()-0.5)*0.55, yaw:mira+Math.PI,
           y0:r.pos.y, salto:0.10+Math.random()*0.12, h };
@@ -18127,6 +18311,7 @@ function closeSettings(){ if(settingsPanelEl)settingsPanelEl.classList.remove('s
 function openBoard(){ renderBoard(bigBoardEl); if(boardPanelEl)boardPanelEl.classList.add('show'); }
 function closeBoard(){ if(boardPanelEl)boardPanelEl.classList.remove('show'); }
 function exitToMenu(){ closePause(); closeSettings(); closeBoard();
+  try{ muerteParar(); }catch(e){}   // salir muerto dejaba la pantalla en blanco y negro
   /* SALIR ABANDONA LA PARTIDA. Antes el duelo quedaba prendido: el marcador seguia en pantalla con
      los numeros de la partida anterior y, si volvias a entrar, arrancabas con esos. Abandonar no
      da puntos de rango —no se gana ni se pierde una partida que dejaste a la mitad— y el marcador
