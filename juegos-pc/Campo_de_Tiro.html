@@ -1916,7 +1916,11 @@ function armaLente(H,z0,largo,yRiel){
      primera version del tubo cromado usaba H.cil y la tapa quedaba justo delante del ojo, o sea un
      disco negro tapando la mira entera. Es la misma trampa que ya decia el comentario de arriba, y
      volvi a caer. H.tubo es el que hace la pared sin tapas. */
-  H.tubo(0.024,L, 0,y0,z0, N);
+  /* EL TUBO INTERIOR, ANCHO. Estaba en 0.024 contra una campana de ocular de 0.0305: mirando por
+     la mira quedaba un aro NEGRO metido adentro del aro gris, y entre los dos se comian casi la
+     mitad del ancho util. Ahora la pared interior va justo por dentro de la campana y la vista
+     ocupa todo el aro. */
+  H.tubo(0.0292,L, 0,y0,z0, N);
   H.tubo(0.0265,L*0.62, 0,y0,z0, crom);                    // el tubo, visto de afuera
   H.tubo(0.0335,0.050, 0,y0,z0-L/2+0.030, crom);           // campana del objetivo
   H.tubo(0.0305,0.044, 0,y0,z0+L/2-0.026, crom);           // campana del ocular
@@ -1980,7 +1984,8 @@ function armaLente(H,z0,largo,yRiel){
     const m=new THREE.Mesh(new THREE.RingGeometry(r*0.80,r,26), g);   // solo el borde: el centro es por donde se mira
     m.position.set(0,y0,z); m.renderOrder=3; H.raiz.add(m); return m; };
   vidrio(0.0225, z0-L/2+0.048, 0.62);      // objetivo
-  vidrio(0.0205, z0+L/2-0.042, 0.34);      // ocular
+  /* el cristal del ocular NO va: es un aro oscuro justo encima de la vista y era la segunda capa
+     que achicaba el campo. El del objetivo si queda, que ese se ve desde afuera. */
   /* el tornasol del tratamiento antirreflejo: dos aros aditivos, azul y violeta, en angulos
      distintos. Es LO que hace que una mira se lea como una mira: un cristal limpio se ve como un
      agujero. Aros tambien, por lo mismo. */
@@ -1993,11 +1998,7 @@ function armaLente(H,z0,largo,yRiel){
       depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, toneMapped:false});
     const a2=new THREE.Mesh(new THREE.RingGeometry(0.0196,0.0225,26), t2);
     a2.position.set(0,y0,z0-L/2+0.0470); a2.rotation.y=-0.26; a2.renderOrder=4; H.raiz.add(a2); }
-  /* el aro interior del ocular, que es el que da la sensacion de estar mirando por un tubo */
-  const vid=new THREE.MeshBasicMaterial({color:0x9fd4ff,transparent:true,opacity:0.10,
-    depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
-  const cr=new THREE.Mesh(new THREE.RingGeometry(0.019,0.023,20), vid);
-  cr.position.set(0,y0,z0+L/2-0.006); cr.renderOrder=4; H.raiz.add(cr);
+  /* tampoco va el aro interior del ocular: mismo problema, tapaba el borde de la vista */
 }
 /* Alza y punto de mira de hierro, para pistolas y escopetas: no hay ventana, se mira por encima. */
 /* Los hierros van a la ALTURA DE LA LINEA DE MIRA del arma (H.mira), no a un numero a ojo: si no,
@@ -12505,7 +12506,7 @@ function telRetTex(){
 function telMontarLente(H, z0, L, y0, aum){
   telRT();
   _telAum=aum||4;
-  const zl=z0+L/2-0.030, r=0.0206;
+  const zl=z0+L/2-0.030, r=0.0288;   // la lente llena el tubo: ver el comentario del tubo interior
   const mat=new THREE.MeshBasicMaterial({ map:_telRT.texture, toneMapped:false, fog:false });
   const disco=new THREE.Mesh(new THREE.CircleGeometry(r,44), mat);
   disco.position.set(0,y0,zl); disco.renderOrder=2; disco.visible=false;
@@ -14830,7 +14831,9 @@ function salaTick(dt){
      dos segundos con un solo bot y el cartel del HUD todavia decia la sala vieja. */
   if(salaReales()>=SALA_CUPO) salaCambiar(salaN+1);
   const reales=salaReales();
-  BOT_META=Math.max(0, SALA_CUPO-reales);
+  /* el -1 sos VOS: `reales` cuenta solo a los remotos, asi que sin este descuento con cupo 8 y
+     jugando solo salian 8 bots y en la sala habia 9. Ahora son 7 + vos. */
+  BOT_META=Math.max(0, SALA_CUPO-1-reales);
   if(world!=='arena') return;                      // el cupo de dieciseis es de la arena
   const vivos=BOTS.length;
   if(vivos<BOT_META) botAgregar(BOT_META-vivos);
