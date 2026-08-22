@@ -134,6 +134,32 @@
   #hudMission{ color:rgba(255,255,255,.82); font-weight:500; font-size:12.5px; letter-spacing:.05em; margin-top:3px; }
   #hudMission::before{ content:'◆ '; color:#7fd0ff; font-size:10px; }
   /* el aumento del visor, abajo a la derecha del aro */
+  /* ===== EL MARCADOR DEL DUELO DE EQUIPOS ===== */
+  #tdmHUD{ position:fixed; left:50%; top:calc(6px + var(--safe-t)); transform:translateX(-50%); z-index:18;
+    display:none; align-items:stretch; gap:0; pointer-events:none; font-family:'Segoe UI',system-ui,sans-serif; }
+  #tdmHUD .tdA, #tdmHUD .tdB{ display:flex; align-items:center; gap:8px; padding:5px 14px;
+    background:rgba(10,15,21,.80); border:1px solid rgba(255,255,255,.14); }
+  #tdmHUD .tdA{ border-radius:12px 0 0 12px; border-right:none; }
+  #tdmHUD .tdB{ border-radius:0 12px 12px 0; border-left:none; }
+  #tdmHUD .tdA span, #tdmHUD .tdB span{ font-size:9px; font-weight:900; letter-spacing:.14em; }
+  #tdmHUD .tdA span{ color:#4aa8ff; } #tdmHUD .tdB span{ color:#ff5a4a; }
+  #tdmHUD .tdA b, #tdmHUD .tdB b{ font:900 22px/1 ui-monospace,SFMono-Regular,Menlo,monospace; color:#eef4fa; }
+  #tdmHUD .tdA.pun{ background:linear-gradient(90deg, rgba(74,168,255,.28), rgba(10,15,21,.86)); }
+  #tdmHUD .tdB.pun{ background:linear-gradient(270deg, rgba(255,90,74,.28), rgba(10,15,21,.86)); }
+  #tdmHUD .tdMid{ display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:3px 12px; background:rgba(6,9,13,.88); border:1px solid rgba(255,255,255,.14);
+    border-left:none; border-right:none; min-width:78px; }
+  #tdmHUD .tdMid em{ font-style:normal; font-size:7.5px; font-weight:900; letter-spacing:.16em; color:#7f93a8; }
+  #tdmHUD .tdMid i{ font-style:normal; font:800 14px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace; color:#ffd9ac; }
+  #tdmHUD .tdMid span{ font-size:7.5px; font-weight:800; letter-spacing:.10em; color:#5d6f83; }
+  #tdmAviso{ position:fixed; left:50%; top:calc(52% - 0px); transform:translateX(-50%); z-index:19; display:none;
+    padding:10px 22px; border-radius:13px; pointer-events:none; text-align:center;
+    font:900 17px/1.2 'Segoe UI',system-ui,sans-serif; letter-spacing:.06em; color:#fff2e2;
+    background:rgba(8,12,17,.86); border:1.5px solid rgba(255,178,107,.55);
+    box-shadow:0 14px 44px rgba(0,0,0,.7), 0 0 40px rgba(255,150,60,.18);
+    animation:tdmPop .3s cubic-bezier(.16,1,.3,1) both; }
+  @keyframes tdmPop{ from{ opacity:0; transform:translateX(-50%) scale(.9);} to{ opacity:1; transform:translateX(-50%) scale(1);} }
+  body.sinhud #tdmHUD, body.sinhud #tdmAviso, body.cine #tdmHUD, body.cine #tdmAviso{ display:none !important; }
   #teleAum{ position:fixed; right:calc(16px + var(--safe-t)); bottom:calc(50% - 96px); z-index:12; display:none;
     font:900 15px/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.06em; color:#ffd9ac;
     text-shadow:0 2px 10px #000, 0 0 18px rgba(255,150,60,.35); pointer-events:none; }
@@ -10524,6 +10550,18 @@ try{ window.__tiro={
     if(bodyHead){ bodyHead.getWorldPosition(V); out.hueso_cabeza=+V.y.toFixed(3); }
     out.piezas=cuPiezas.length;
     return out; },
+  /* el duelo de equipos, desde las pruebas */
+  duelo:()=>({ on:TDM.on, ronda:TDM.ronda, A:TDM.A, B:TDM.B, t:+TDM.t.toFixed(1),
+    ganoR1:TDM.ganoR1, fin:TDM.fin, lado:TDM.lado,
+    eqs:BOTS.map(b=>b.eq), bases:{A:tdmBase('A'), B:tdmBase('B')} }),
+  dueloArrancar:()=>{ tdmArrancar(); return __tiro.duelo(); },
+  dueloMarcar:(eq,n)=>{ tdmMarcar(eq,n||1); return __tiro.duelo(); },
+  rango:(p)=>{ if(p!=null) rangoSet(p); const R=rangoDatos(); try{ menuRango(); }catch(e){}
+    return { pts:R.pts, div:R.div, nombre:R.nombre, pct:+R.pct.toFixed(1), max:R.max }; },
+  rangoPremio:(o)=>rangoPremio(o||{}),
+  modo:(i)=>{ if(i!=null) modoPoner(i); return { i:modoSel, id:MODO().id, n:MODO().n }; },
+  chatG:(t)=>{ const ok=gchEnviar(t||'hola'); return { mandado:ok, cuantos:GCH.length, puede:gchPuede() }; },
+  nombresG:()=>({ anotados:[...NOMS.keys()], mio:MP.name, libre:nomLibre(MP.name) }),
   botMatar:(i)=>{ const b=BOTS[i|0]; if(!b) return 'no hay'; botDanio(b.id,999,false);
                   return {vivos:PART.vivos, bajas:PART.bajas}; },
   partOtra:()=>{ partReiniciar(); return {fase:PART.fase, vivos:PART.vivos}; },
@@ -14858,6 +14896,70 @@ function cineEstela(dt){
     h.material.opacity=Math.max(0,0.52-h.userData.v*0.26);
     if(h.material.opacity<=0.01){ h.visible=false; h.userData.vivo=0; } }
 }
+/* ===================== EL CAREO (entrada del duelo de equipos) =====================
+   Sin avion: las dos escuadras ya estan en el mapa. La camara arranca detras del equipo AZUL,
+   barre a los cinco, corta al equipo ROJO en la esquina de enfrente y vuelve a vos. Dura poco
+   —cinco segundos y medio— porque una entrada larga en un 5 contra 5 cansa a la tercera partida.
+   Se saltea tocando, igual que la cinematica. */
+const CAREO={ act:false, t:0, dur:5.6, fin:null, cam:null };
+function careoArrancar(alTerminar){
+  try{
+    CAREO.act=true; CAREO.t=0; CAREO.t0=performance.now(); CAREO.fin=alTerminar||null;
+    if(!CAREO.cam) CAREO.cam=new THREE.PerspectiveCamera(52, innerWidth/Math.max(1,innerHeight), 0.1, 400);
+    const tela=cineTela(); tela.style.display='block'; tela.style.background='#000'; tela.style.opacity='1';
+    tela.onpointerdown=()=>careoCortar();
+    document.body.classList.add('cine');
+    return true;
+  }catch(e){ if(alTerminar)alTerminar(); return false; }
+}
+function careoCortar(){
+  if(!CAREO.act) return;
+  CAREO.act=false;
+  const tela=cineTela(); tela.style.opacity='1';
+  document.body.classList.remove('cine');
+  setTimeout(()=>{ tela.style.display='none'; tela.style.opacity='0'; },260);
+  const f=CAREO.fin; CAREO.fin=null; if(f) try{ f(); }catch(e){}
+  try{ tdmHUD(); }catch(e){}
+}
+const _caA=new THREE.Vector3(), _caB=new THREE.Vector3();
+function careoTick(dt){
+  if(!CAREO.act) return;
+  CAREO.t=(performance.now()-(CAREO.t0||performance.now()))/1000;
+  const t=CAREO.t, C=CAREO.cam, tela=cineTela();
+  if(C.aspect!==innerWidth/Math.max(1,innerHeight)){ C.aspect=innerWidth/Math.max(1,innerHeight); C.updateProjectionMatrix(); }
+  /* el centro de cada escuadra, para poder encuadrarlas */
+  const cen=(eq)=>{ let x=0,z=0,n=0;
+    for(const b of BOTS){ if(b.eq!==eq) continue; x+=b.x; z+=b.z; n++; }
+    if(eq==='A'){ x+=player.pos.x; z+=player.pos.z-ARE_GZ; n++; }
+    return n? {x:x/n, z:z/n} : tdmBase(eq); };
+  const A=cen('A'), B=cen('B');
+  if(t<2.6){                                   // barrido del equipo tuyo
+    const k=t/2.6;
+    const ang=Math.atan2(B.x-A.x, B.z-A.z);
+    const lat=(k-0.5)*16;
+    _caA.set(A.x - Math.sin(ang)*11 + Math.cos(ang)*lat, 2.6, A.z - Math.cos(ang)*11 - Math.sin(ang)*lat);
+    C.position.copy(_caA);
+    C.lookAt(A.x, 1.3, A.z);
+    tela.style.background='#000';
+    tela.style.opacity = t<0.5 ? String(1-t/0.5) : (t>2.35 ? String((t-2.35)/0.25) : '0');
+  } else if(t<4.9){                            // corte al equipo de enfrente
+    const k=(t-2.6)/2.3;
+    const ang=Math.atan2(A.x-B.x, A.z-B.z);
+    const lat=(0.5-k)*16;
+    C.position.set(B.x - Math.sin(ang)*11 + Math.cos(ang)*lat, 2.6, B.z - Math.cos(ang)*11 - Math.sin(ang)*lat);
+    C.lookAt(B.x, 1.3, B.z);
+    tela.style.opacity = t<2.85 ? String(1-(t-2.6)/0.25) : (t>4.6 ? String((t-4.6)/0.3) : '0');
+  } else if(t<CAREO.dur){                      // vuelve a vos
+    const k=(t-4.9)/(CAREO.dur-4.9);
+    C.position.set(player.pos.x, 2.2-k*0.4, player.pos.z-ARE_GZ+4.5-k*1.5);
+    C.lookAt(player.pos.x, 1.5, player.pos.z-ARE_GZ);
+    tela.style.opacity=String(Math.max(0,1-k*2.2));
+  } else { careoCortar(); return; }
+  /* los cuerpos y las animaciones tienen que seguir vivos durante el careo */
+  try{ mpTick(Math.min(dt,0.05)); }catch(e){}
+  try{ if(bodyMixer) bodyMixer.update(Math.min(dt,0.05)); }catch(e){}
+  renderer.render(scene, C);
+}
 document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)return; menuMode=false; menuPose=false; player.camTP=0;
   if(menuLuz){ menuLuz.intensity=0; menuLuz2.intensity=0; }
   try{ menuEscenario(false); }catch(e){} audioStart(); sfx('play'); pantallaCompleta();
@@ -14870,9 +14972,19 @@ document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)ret
   applyQuality(menuQ);
   startLevel(startWorld);   // arranca en el nivel elegido del carrusel (descubierto)
   clock.getDelta();   // descartar el dt acumulado del menú
-  /* LA ENTRADA. El nivel ya esta armado por detras; la cinematica corre encima y al terminar
-     devuelve el control. Si algo falla, cineArrancar devuelve false y se juega directo. */
-  try{ cineArrancar(()=>{ try{ clock.getDelta(); }catch(e){} }); }catch(e){}
+  /* CADA MODO ENTRA A SU MANERA. En baja libre cae el avion, como siempre. En duelo de equipos
+     no hay salto: las dos escuadras ya estan en el mapa, cada una en su esquina, y lo que se ve
+     es el careo — la camara pasa por los cinco tuyos y por los cinco de enfrente antes de
+     devolverte el control. Un avion para un 5 contra 5 en un patio no tiene sentido. */
+  try{
+    if(MODO().equipos){
+      tdmArrancar();
+      careoArrancar(()=>{ try{ clock.getDelta(); }catch(e){} });
+    } else {
+      tdmParar();
+      cineArrancar(()=>{ try{ clock.getDelta(); }catch(e){} });
+    }
+  }catch(e){ try{ clock.getDelta(); }catch(e2){} }
 });
 function startLevel(k){ const w=(k||startWorld);
   if(w==='valle') enterAlc(); else if(w==='arena') enterArena(); else enterTiro();
@@ -15082,6 +15194,7 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
     dt=Math.min(_fpsAcum,0.05); _fpsAcum=0; }
   try{ gpTick(dt); }catch(e){}                             // mando (si hay uno enchufado)
   if(CINE.act){ if(!CINE.congelar){ try{ cineTick(dt); }catch(e){ cineCortar(); } } return; }   // la entrada manda
+  if(CAREO.act){ try{ careoTick(dt); }catch(e){ careoCortar(); } return; }   // el careo del duelo
   if(menuMode) menuCam(dt); else if(!paused) update(dt);   // pausa: el mundo se congela
   // el telón y las luces del menú se apagan por CUALQUIER salida (el botón, la consola, un atajo),
   // no sólo por el botón ENTRAR: si no, el galpón quedaba jugándose con un panel oscuro en el medio.
@@ -15092,6 +15205,7 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
     const wf=(quality==='low')?Math.min(_worldFog,camera.far):_worldFog; if(scene.fog.far!==wf)scene.fog.far=wf; }   // BAJO: niebla tapa justo en el corte del plano lejano; medio/alto restauran la base
   if(world==='arena'){ try{ areTiendaTick(); }catch(e){} try{ areVendTick(dt); }catch(e){} }
   if(islaMode){ try{ alcTick(dt); }catch(e){} }   // el oleaje de la bahía
+  try{ tdmTick(dt); }catch(e){}                   // el marcador del duelo de equipos
   try{ ambTick(dt); }catch(e){}                   // viento del valle + latido con poca vida
   try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player) — sigue latiendo aunque esté en pausa
   try{ telRender(); }catch(e){}   // la vista de adentro del visor, antes del cuadro principal
@@ -15781,6 +15895,7 @@ function pvpRecibir(dmg,quien,cab,ox,oz){
 }
 function pvpMorir(){
   PVP.muerto=true; PVP.muertes++; PVP.tRes=4.0;
+  try{ if(TDM.on) tdmMarcar('B',1); }catch(e){}   // caiste vos: la anota ROJO
   /* En el valle morir TERMINA la partida: es un battle royale, no un tiroteo con reaparicion. En la
      galeria se sigue reapareciendo, que es para lo que esta. */
   if(world==='valle' && typeof PART!=='undefined' && PART.activa){ try{ partTerminar(false); }catch(e){} }
@@ -16338,7 +16453,128 @@ function areTomaCerca(){
    avatar con esqueleto, las mismas animaciones, la misma caja de impacto y el mismo camino de daño
    que un jugador de verdad. Asi todo lo que ya funcionaba para el multijugador funciona para ellos
    sin duplicar una linea, y un bot y una persona son indistinguibles para el resto del codigo. */
-const PART={ fase:'espera', t:0, ronda:0, cerrando:false,
+/* ===================== DUELO DE EQUIPOS (5 vs 5) =====================
+   Dos escuadras de cinco, cada una en una esquina del mapa. El marcador de arriba cuenta las
+   bajas de cada equipo y NO se reinicia entre rondas: es lo que pediste.
+   · RONDA 1: el primero que llega a 20 la gana, o el que va arriba a los cinco minutos. Ahi los
+     equipos se CAMBIAN de lugar y quien gano la ronda se lleva una bonificacion de rango.
+   · RONDA 2: se sigue sumando sobre lo mismo. Gana la partida el primero que llega a 40. Que en
+     la segunda el otro haga sus veinte no le devuelve la primera: la ronda 1 ya tiene dueño.
+   El jugador siempre esta en A (azul). El equipo NO se dispara entre si y el marcador solo cuenta
+   bajas del enemigo, que es lo unico que hace que un modo por equipos se sienta por equipos. */
+const TDM={ on:false, ronda:0, A:0, B:0, meta:20, total:40, t:0, dur:300,
+            ganoR1:null, fin:false, lado:1, aviso:0, msj:'', tMsj:0 };
+const TDM_EQ={ A:{n:'AZUL', col:'#4aa8ff', hex:0x4aa8ff}, B:{n:'ROJO', col:'#ff5a4a', hex:0xff5a4a} };
+/* las dos esquinas de salida, y `lado` las intercambia al cambiar de ronda */
+function tdmBase(eq){
+  const d=ARE_LADO/2-30, sg=(eq==='A'? TDM.lado : -TDM.lado);
+  return { x: sg*d*0.72, z: sg*d*0.72 };
+}
+function tdmEquipoDe(b){ return b && b.eq ? b.eq : 'B'; }
+function tdmEnemigo(eq){ return eq==='A' ? 'B' : 'A'; }
+/* ¿son del mismo equipo? Fuera del duelo, todos contra todos: nadie es de nadie. */
+function tdmAmigos(x,y){ if(!TDM.on) return false; return x && y && x===y; }
+function tdmMarcar(eq, n){
+  if(!TDM.on || TDM.fin) return;
+  TDM[eq]=(TDM[eq]|0)+(n||1);
+  tdmHUD();
+  /* la ronda 1 tiene dueño en cuanto alguien toca los 20 */
+  if(TDM.ronda===1 && TDM.ganoR1===null && TDM[eq]>=TDM.meta) tdmRondaFin(eq);
+  else if(TDM[eq]>=TDM.total) tdmPartidaFin(eq);
+}
+function tdmRondaFin(eq){
+  TDM.ganoR1=eq; TDM.ronda=2; TDM.t=0;
+  /* CAMBIO DE LADO: las bases se espejan y todos vuelven a nacer en la nueva */
+  TDM.lado=-TDM.lado;
+  tdmAviso((eq==='A'?'AZUL':'ROJO')+' GANA LA RONDA 1 · CAMBIO DE LADO', 3.4);
+  try{ tiroSnd('ronda',1.0); }catch(e){}
+  try{ tdmResituar(); }catch(e){}
+  tdmHUD();
+}
+function tdmPartidaFin(eq){
+  if(TDM.fin) return;
+  TDM.fin=true;
+  const gane=(eq==='A');
+  tdmAviso(gane? 'GANASTE LA PARTIDA' : 'PERDISTE LA PARTIDA', 6);
+  try{ tiroSnd(gane?'ronda':'wrong',1.0); }catch(e){}
+  let prem=null;
+  try{ prem=rangoSumar({ gano:gane, bajas:PVP.bajas|0, asist:PART.asist|0,
+                         rondaGanada:(TDM.ganoR1==='A') }); }catch(e){}
+  if(prem){ setTimeout(()=>{ try{
+      mpChatIn('🏅', (prem.gano?'Victoria':'Derrota')+' · +'+prem.puntos+' de rango · '+prem.rango);
+      if(prem.subio) mpChatIn('⬆️','¡Subiste a '+prem.rango+'!');
+    }catch(e){} }, 900); }
+  tdmHUD();
+}
+function tdmAviso(txt,seg){ TDM.msj=txt; TDM.tMsj=seg||3; tdmHUD(); }
+/* al empezar la ronda 2 todos vuelven a su base nueva */
+function tdmResituar(){
+  for(const b of BOTS){
+    const B=tdmBase(tdmEquipoDe(b));
+    const a=Math.random()*6.283, r=3+Math.random()*7;
+    b.x=B.x+Math.cos(a)*r; b.z=B.z+Math.sin(a)*r; b.y=sueloY(b.x,b.z);
+    b.tx=b.x; b.tz=b.z; b.estado='patrulla'; b.rival=null; b.vida=100; b.muerto=false; b.tRes=0;
+    const GZ=ARE_GZ; b.r.pos.set(b.x,b.y,b.z+GZ); b.r.target.copy(b.r.pos); b.r.muerto=false; b.r.vida=100;
+    if(b.r.avatar) b.r.avatar.visible=true;
+  }
+  const P=tdmBase('A'); const a=Math.random()*6.283;
+  player.pos.set(P.x+Math.cos(a)*5, 1.2, ARE_GZ+P.z+Math.sin(a)*5);
+  player.vel.set(0,0,0); player.vy=0;
+  PVP.vida=PVP.max; PVP.muerto=false; PVP_GRACIA=3;
+}
+/* ---- el HUD del marcador ---- */
+function tdmHUD(){
+  let el=document.getElementById('tdmHUD');
+  if(!TDM.on){ if(el) el.style.display='none'; return; }
+  if(!el){ el=document.createElement('div'); el.id='tdmHUD'; document.body.appendChild(el); }
+  el.style.display='flex';
+  const mm=Math.max(0, TDM.dur-TDM.t);
+  const reloj=String(Math.floor(mm/60))+':'+String(Math.floor(mm%60)).padStart(2,'0');
+  const meta=(TDM.ronda===1?TDM.meta:TDM.total);
+  el.innerHTML=
+    '<div class="tdA'+(TDM.A>=TDM.B?' pun':'')+'"><span>AZUL</span><b>'+TDM.A+'</b></div>'+
+    '<div class="tdMid"><em>RONDA '+TDM.ronda+'</em><i>'+reloj+'</i><span>a '+meta+'</span></div>'+
+    '<div class="tdB'+(TDM.B>TDM.A?' pun':'')+'"><b>'+TDM.B+'</b><span>ROJO</span></div>';
+  let av=document.getElementById('tdmAviso');
+  if(TDM.tMsj>0){
+    if(!av){ av=document.createElement('div'); av.id='tdmAviso'; document.body.appendChild(av); }
+    av.textContent=TDM.msj; av.style.display='block';
+  } else if(av) av.style.display='none';
+}
+function tdmTick(dt){
+  if(!TDM.on) return;
+  if(TDM.tMsj>0){ TDM.tMsj-=dt; if(TDM.tMsj<=0) tdmHUD(); }
+  if(TDM.fin) return;
+  TDM.t+=dt;
+  /* los cinco minutos: si nadie llego a la meta, la ronda la gana el que va arriba */
+  if(TDM.t>=TDM.dur){
+    if(TDM.ronda===1 && TDM.ganoR1===null) tdmRondaFin(TDM.A>=TDM.B?'A':'B');
+    else tdmPartidaFin(TDM.A>=TDM.B?'A':'B');
+    return;
+  }
+  if((TDM.t|0)!==(TDM._s|0)){ TDM._s=TDM.t; tdmHUD(); }
+}
+/* ---- armar la partida ---- */
+function tdmArrancar(){
+  TDM.on=true; TDM.ronda=1; TDM.A=0; TDM.B=0; TDM.t=0; TDM.ganoR1=null; TDM.fin=false;
+  TDM.lado=1; TDM.msj=''; TDM.tMsj=0; TDM._s=-1;
+  /* nueve bots: cuatro con vos en AZUL y cinco en ROJO */
+  try{ botQuitar(BOTS.length); }catch(e){}
+  try{ botAgregar(9); }catch(e){}
+  BOTS.forEach((b,i)=>{ b.eq = (i<4)?'A':'B'; });
+  try{ tdmResituar(); }catch(e){}
+  /* la pose de salida: cada uno mira al centro y espera con su propia animacion */
+  BOTS.forEach((b,i)=>{
+    const B=tdmBase(b.eq);
+    b.yaw=Math.atan2(-B.x, -B.z);
+    b.estado='patrulla'; b.tCambio=0.8+i*0.35;
+    if(b.r) b.r.anim=['idle','idle','walk','idle','idle'][i%5];
+  });
+  tdmAviso('RONDA 1 · A 20 BAJAS', 3.2);
+  tdmHUD();
+}
+function tdmParar(){ TDM.on=false; for(const b of BOTS) b.eq=null; tdmHUD(); }
+const PART={ fase:'espera', t:0, ronda:0, cerrando:false, asist:0,
              cx:0, cz:0, r:240, nx:0, nz:0, nr:240, tFase:0,
              vivos:1, bajas:0, puesto:0, dur:0, activa:false, resultado:'' };
 /* Cada ronda: cuanto se queda quieta la zona, cuanto tarda en cerrarse, a que radio llega y cuanto
@@ -16444,12 +16680,18 @@ function partReiniciar(){
   partEmpezar();
 }
 function partTick(dt){
-  try{ salaTick(dt); }catch(e){}
+  /* EN DUELO LA SALA NO MANDA. salaTick ajusta la cantidad de bots al cupo de la sala libre, y en
+     un 5 contra 5 eso agregaria o sacaria gente en medio de la ronda y desarmaria los equipos. */
+  if(!TDM.on){ try{ salaTick(dt); }catch(e){} }
   if(world==='arena'){
     /* La arena no tiene zona ni ganador: es tiroteo puro. Solo se mueven los bots y se cuenta. */
     if(zonaMalla) zonaMalla.visible=false;
     document.body.classList.remove('enPartida');
-    if(PVP.muerto){ PVP.tRes-=dt; if(PVP.tRes<=0) areRevivir(); }
+    if(PVP.muerto){ PVP.tRes-=dt; if(PVP.tRes<=0){ areRevivir();
+      /* en duelo se reaparece en la base del equipo, no en cualquier lado */
+      if(TDM.on){ try{ const B=tdmBase('A'), a=Math.random()*6.283, r=4+Math.random()*7;
+        player.pos.set(B.x+Math.cos(a)*r, 1.2, ARE_GZ+B.z+Math.sin(a)*r);
+        player.vel.set(0,0,0); player.vy=0; }catch(e){} } } }
     if(PVP_GRACIA>0) PVP_GRACIA-=dt;
     botBaldeTick(dt);            // el tope de daño por segundo se recarga
     botTurnos();                 // quien tiene permiso de tirar este cuadro
@@ -16645,6 +16887,9 @@ function botDanio(id,dmg,cab){
 function botMuere(b,porVos){
   if(b.muerto) return;
   b.muerto=true; b.tRes=5.0;
+  /* DUELO DE EQUIPOS: la baja la anota el equipo CONTRARIO al que cayo. El jugador es de AZUL,
+     asi que si el que cae es de ROJO suma azul, y al reves. */
+  try{ if(TDM.on && b.eq) tdmMarcar(tdmEnemigo(b.eq),1); }catch(e){}
   try{ mpSacarCaja(b.r); }catch(e){}
   /* se cae, no desaparece. La direccion es de donde vino el tiro: si le pegaste de frente cae de
      espaldas. El cuerpo queda en el piso los cinco segundos hasta que reaparece. */
@@ -17187,8 +17432,14 @@ function botTick(dt){
       /* EN LA ARENA NADIE SE QUEDA MUERTO. A los cinco segundos vuelve en otra punta: es un mapa de
          tiroteo, no una partida con un ganador. En el valle si: ahi morir es quedar afuera. */
       if(arena){ b.tRes=(b.tRes||0)-dt;
-        if(b.tRes<=0){ const a=Math.random()*6.283, d=24+Math.random()*(ARE_LADO/2-30);
-          b.x=Math.cos(a)*d; b.z=Math.sin(a)*d; b.y=0; b.vida=100; b.muerto=false;
+        if(b.tRes<=0){ let a=Math.random()*6.283, d=24+Math.random()*(ARE_LADO/2-30);
+          /* EN DUELO SE VUELVE A LA BASE DEL EQUIPO. Reapareciendo en cualquier punta, a los
+             treinta segundos los dos equipos estan mezclados y no hay frente: es un todos contra
+             todos con colores. */
+          if(TDM.on && b.eq){ const B=tdmBase(b.eq), r=4+Math.random()*9;
+            b.x=B.x+Math.cos(a)*r; b.z=B.z+Math.sin(a)*r; }
+          else { b.x=Math.cos(a)*d; b.z=Math.sin(a)*d; }
+          b.y=0; b.vida=100; b.muerto=false;
           b.estado='patrulla'; b.tCambio=0; b.r.oculto=false; b.r.avatar.visible=true;
           try{ ragParar(b.r); }catch(e){}
           try{ mpCaja(b.r); }catch(e){} PART.vivos++; } }
@@ -17264,6 +17515,7 @@ function botTick(dt){
       if(b.tRival<=0){ b.tRival=0.45+Math.random()*0.55;
         let mej=null, d2=42*42;
         for(const o of BOTS){ if(o===b||o.muerto) continue;
+          if(tdmAmigos(b.eq,o.eq)) continue;          // en duelo, al compañero no se le tira
           const dx=o.x-b.x, dz=o.z-b.z, d=dx*dx+dz*dz;
           if(d<d2 && d>16 && botVe(b.x,b.y+1.55,b.z, o.x,o.y+1.2,o.z)){ d2=d; mej=o; } }
         b.rival=mej? mej.id : null;
@@ -17287,7 +17539,7 @@ function botTick(dt){
     } else b.rival=null;
     // ---- tirar ----
     /* el turno se reparte arriba (botTurnos): b.turno dice si a este le toca tirar */
-    if(b.estado==='pelea' && ve && b.turno && b.tVer>(BOT_REACCION+(b.lento||0))){
+    if(b.estado==='pelea' && ve && b.turno && !tdmAmigos(b.eq,'A') && b.tVer>(BOT_REACCION+(b.lento||0))){
       b.tTiro-=dt;
       if(b.tTiro<=0){
         const d=ARSENAL.find(o=>o.id===b.arma)||ARSENAL[0];
