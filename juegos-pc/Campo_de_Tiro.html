@@ -10589,6 +10589,18 @@ try{ window.__tiro={
              distImpacto: hit? +hit.distance.toFixed(1) : null }; },
   tpVista:(v)=>{ camView=v?'tp':'fp'; return camView; },
   adsForzar:(v)=>{ adsQ=v?1:0; return {adsQ, adsW:+adsW.toFixed(2)}; },
+  /* ¿la camara del visor mira para el mismo lado que vos? 1 = si, -1 = al reves */
+  miraDir:()=>{ try{ telRender(); }catch(e){}
+    if(!_telCam||!_telLente) return 'sin visor';
+    const a=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    const b=new THREE.Vector3(0,0,-1).applyQuaternion(_telCam.quaternion);
+    const rc=(o,d)=>{ const R=new THREE.Raycaster(o.clone(),d.clone()); R.far=300; R.camera=camera;
+      const h=R.intersectObjects(tiroSolids.concat(tiroTargets),false)[0];
+      return h? +h.distance.toFixed(1) : null; };
+    return { acuerdo:+a.dot(b).toFixed(3), fov:+_telCam.fov.toFixed(1),
+             yo:[+a.x.toFixed(2),+a.y.toFixed(2),+a.z.toFixed(2)],
+             visor:[+b.x.toFixed(2),+b.y.toFixed(2),+b.z.toFixed(2)],
+             distYo:rc(camera.position,a), distVisor:rc(_telCam.position,b) }; },
   salirMenu:()=>{ exitToMenu(); return {menu:menuMode, mundo:world}; },
   donde:()=>({ mundo:world, menu:menuMode,
     pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+player.pos.z.toFixed(1)],
@@ -12540,7 +12552,11 @@ function telRender(){
   _telLente.getWorldQuaternion(_telQ);
   _telCam.position.copy(_telP);
   _telCam.quaternion.copy(_telQ);
-  _telCam.rotateY(Math.PI);                 // el disco mira al ojo; la camara tiene que mirar al revés
+  /* SIN DAR VUELTA LA CAMARA. Aca habia un rotateY(PI) y era el error: se veia lo que tenias
+     ATRAS. El disco de la lente es un circulo cuya normal (+Z local) apunta al ojo, porque el
+     adelante del arma es -Z; y una camara de three mira por su propio -Z. O sea que copiandole la
+     orientacion al disco, la camara ya queda mirando hacia la boca del caño. Girarla 180 la mandaba
+     justo para el otro lado. */
   const base=camera.fov*Math.PI/180;
   /* el aumento es RELATIVO a lo que se ve afuera del aro: la mitad del aumento nominal, porque la
      otra mitad ya la puso el acercamiento de la pantalla al apuntar */
