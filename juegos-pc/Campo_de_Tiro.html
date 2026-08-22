@@ -10213,6 +10213,60 @@ try{ window.__tiro={
              impacto: hit? [+hit.point.x.toFixed(1),+hit.point.y.toFixed(1),+(hit.point.z-ARE_GZ).toFixed(1)] : null,
              distImpacto: hit? +hit.distance.toFixed(1) : null }; },
   tpVista:(v)=>{ camView=v?'tp':'fp'; return camView; },
+  /* barre el yaw y compara los bots que SE VEN contra los que deberian verse (angulo dentro del
+     campo horizontal y distancia menor que el plano lejano). Si no coinciden, el recorte esta mal. */
+  botsVisibles:(x,z)=>{
+    player.pos.set(x==null?0:x, 0, ARE_GZ+(z==null?0:z)); player.vel.set(0,0,0); player.vy=0;
+    const vfov=camera.fov*Math.PI/360, hhalf=Math.atan(Math.tan(vfov)*camera.aspect);
+    const out=[];
+    for(let k=0;k<8;k++){
+      const yaw=k*Math.PI/4;
+      player.yaw=yaw; player.faceYaw=yaw; player.pitch=0;
+      for(let i=0;i<6;i++) update(1/60);
+      let ven=0, deberian=0;
+      const f=[-Math.sin(yaw),-Math.cos(yaw)];
+      for(const b of BOTS){ if(b.muerto) continue;
+        const r=b.r; if(!r||!r.avatar) continue;
+        const dx=r.pos.x-camera.position.x, dz=r.pos.z-camera.position.z;
+        const d=Math.hypot(dx,dz); if(d>camera.far) continue;
+        const cosA=(dx*f[0]+dz*f[1])/(d||1);
+        const ang=Math.acos(Math.max(-1,Math.min(1,cosA)));
+        /* margen de 2,2 m de radio de la esfera, en angulo */
+        if(ang < hhalf + Math.atan(2.2/Math.max(1,d))) deberian++;
+        if(r.avatar.visible) ven++;
+      }
+      out.push({ yaw:Math.round(yaw*180/Math.PI), ven, deberian });
+    }
+    return { vista:camView, fovH:+(hhalf*360/Math.PI).toFixed(0), lejos:camera.far,
+             bots:BOTS.filter(b=>!b.muerto).length, dirs:out }; },
+  /* las cajas de impacto: donde estan, de que tamaño, y si el rayo las encuentra */
+  cajasVer:()=>{
+    for(const c of _mpCajas) c.updateWorldMatrix(true,false);
+    const w=new THREE.Vector3();
+    const lista=_mpCajas.slice(0,4).map(c=>{
+      c.getWorldPosition(w);
+      let vis=c.visible, n=c.parent, cad=[];
+      while(n){ cad.push((n.name||n.type)+(n.visible?'+':'-')); if(!n.visible) vis=false; n=n.parent; }
+      const bb=new THREE.Box3().setFromObject(c);
+      const t=bb.getSize(new THREE.Vector3());
+      return { id:c.userData.mpId, p:[+w.x.toFixed(2),+w.y.toFixed(2),+(w.z-ARE_GZ).toFixed(2)],
+               tam:[+t.x.toFixed(2),+t.y.toFixed(2),+t.z.toFixed(2)],
+               visPropia:c.visible, visEfectiva:vis, cadena:cad.slice(0,5).join('<'),
+               capa:c.layers.mask };
+    });
+    const d=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    const R=new THREE.Raycaster(camera.position.clone(), d.clone()); R.far=200;
+    const hs=R.intersectObjects(_mpCajas,false);
+    /* y el mismo rayo pero preguntando a mano, sin three, contra la caja envolvente */
+    let aMano=null;
+    for(const c of _mpCajas){ const bb=new THREE.Box3().setFromObject(c);
+      const t=bb.clone(); const hit=new THREE.Ray(camera.position, d).intersectsBox(t);
+      if(hit){ aMano={ id:c.userData.mpId, caja:[+bb.min.x.toFixed(1),+bb.min.y.toFixed(1),+(bb.min.z-ARE_GZ).toFixed(1),
+                                                 +bb.max.x.toFixed(1),+bb.max.y.toFixed(1),+(bb.max.z-ARE_GZ).toFixed(1)] }; break; } }
+    return { n:_mpCajas.length, cam:[+camera.position.x.toFixed(2),+camera.position.y.toFixed(2),+(camera.position.z-ARE_GZ).toFixed(2)],
+             dir:[+d.x.toFixed(2),+d.y.toFixed(2),+d.z.toFixed(2)],
+             conThree:hs.length?{id:hs[0].object.userData.mpId,d:+hs[0].distance.toFixed(2)}:null,
+             aMano, capaRayo:R.layers.mask, lista }; },
   /* donde queda la camara respecto del jugador, donde cae su cuerpo en pantalla, y si el centro
      de la pantalla (la mira) esta tapado por el propio cuerpo */
   tpEncuadre:()=>{
@@ -13313,7 +13367,12 @@ function mpSacarCaja(r){ if(!r||!r.caja)return; const i=_mpCajas.indexOf(r.caja)
   if(r.caja.geometry)r.caja.geometry.dispose(); r.caja=null; }
 /* ¿el rayo le pego a un jugador antes que a lo demas? Devuelve el punto de impacto o null. */
 function mpDisparo(ray, distTope, dmg){
-  if(!MP.on || !_mpCajas.length) return null;
+  /* SIN RED TAMBIEN HAY A QUIEN PEGARLE. Esto cortaba con !MP.on, o sea que jugando sin internet el
+     rayo del disparo ni preguntaba por las cajas de impacto y los tiros a los bots no hacian NADA:
+     el bot se veia, la trazadora salia, y la vida no bajaba nunca. Los bots son locales, no estan
+     del otro lado de un broker —mpPegar ya les aplica el daño aca mismo— asi que lo unico que hace
+     falta es que existan las cajas. */
+  if(!_mpCajas.length) return null;
   /* Los avatares se colocan en el bucle de render, y el disparo se resuelve ANTES de ese render: si no
      se les refresca la matriz de mundo, el rayo pregunta por una caja que quedo donde estaba hace un
      frame —o en el origen, si el remoto acaba de aparecer— y el tiro pasa de largo. */
@@ -13340,7 +13399,7 @@ function mpPegar(id,dmg,cabeza){
 }
 /* golpe cuerpo a cuerpo: mismo criterio pero con el alcance corto del arma */
 function mpGolpe(dir,alcance,dmg){
-  if(!MP.on||!_mpCajas.length) return;
+  if(!_mpCajas.length) return;                 // idem mpDisparo: sin red el cuchillo tampoco pegaba
   for(const c of _mpCajas) c.updateWorldMatrix(true,false);
   const ray=new THREE.Raycaster(camera.position,dir,0.01,alcance);
   const hs=ray.intersectObjects(_mpCajas,false);
