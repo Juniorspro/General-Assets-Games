@@ -10423,6 +10423,18 @@ try{ window.__tiro={
     const fs=camera.fov*Math.PI/180, ft=_telCam.fov*Math.PI/180;
     return { aum:_telAum, fovPantalla:+camera.fov.toFixed(1), fovVisor:+_telCam.fov.toFixed(1),
              veces:+(Math.tan(fs/2)/Math.tan(ft/2)).toFixed(2), on:_teleOn }; },
+  /* las medidas reales del personaje, por parte: para dejar de calcular proporciones a ojo */
+  medir:()=>{ if(!bodyRoot) return null;
+    const B=new THREE.Box3(), V=new THREE.Vector3(), out={};
+    const mid=(o)=>{ B.setFromObject(o); B.getSize(V);
+      return { alto:+V.y.toFixed(3), ancho:+V.x.toFixed(3), fondo:+V.z.toFixed(3),
+               y0:+B.min.y.toFixed(3), y1:+B.max.y.toFixed(3) }; };
+    out.todo=mid(bodyRoot);
+    if(cuCabezaG) out.cabeza=mid(cuCabezaG);
+    for(const g of cuManos){ out['mano'+(g.userData.lado>0?'R':'L')]=mid(g); }
+    if(bodyHead){ bodyHead.getWorldPosition(V); out.hueso_cabeza=+V.y.toFixed(3); }
+    out.piezas=cuPiezas.length;
+    return out; },
   botMatar:(i)=>{ const b=BOTS[i|0]; if(!b) return 'no hay'; botDanio(b.id,999,false);
                   return {vivos:PART.vivos, bajas:PART.bajas}; },
   partOtra:()=>{ partReiniciar(); return {fase:PART.fase, vivos:PART.vivos}; },
@@ -11955,12 +11967,15 @@ function cuMats(){
   CU_MAT.chaleco=M(0x33372c,0.80,0.05);  // porta-placas
   CU_MAT.bolsillo=M(0x7a6844,0.82,0.03); // cargadores y bolsillos, coyote
   CU_MAT.casco =M(0x4a5140,0.70,0.06);
-  CU_MAT.placa =M(0x2a2d28,0.55,0.30);   // placas duras: nudillos, rodilleras, coderas
-  CU_MAT.lente =M(0x0d1116,0.16,0.72);   // el cristal de las gafas
-  CU_MAT.mascara=M(0x24261f,0.86,0.02);  // pasamontanas
-  CU_MAT.correa=M(0x2b2e26,0.88,0.02);   // cintas y correas
-  CU_MAT.bota  =M(0x2f2b25,0.78,0.04);
-  CU_MAT.puno  =M(0x22251f,0.80,0.03);   // el puño del guante
+  /* UN SOLO NEGRO. Placas, cintas, pasamontanas, puños y botas eran cinco materiales casi
+     identicos, y eso impedia fundir piezas del MISMO hueso: cinco llamadas de dibujo donde
+     alcanzaba una. A ojo no se distinguian; en el contador si. */
+  CU_MAT.placa =M(0x2a2d26,0.70,0.10);   // placas duras, cintas, pasamontanas, puños y botas
+  CU_MAT.lente =M(0x0b0e12,0.34,0.16);   // el cristal de las gafas (al 72% de metal se encendia y salia CLARO)
+  CU_MAT.mascara=CU_MAT.placa;
+  CU_MAT.correa =CU_MAT.placa;
+  CU_MAT.bota   =CU_MAT.placa;
+  CU_MAT.puno   =CU_MAT.placa;
 }
 const cuManos=[];   // los dos grupos de mano, para poder cerrar el puño
 const cuManoGrupos=[];
@@ -12187,20 +12202,26 @@ function cuVestir(h){
     G(cuBiselada(0.116,0.070,0.116,0.026,0.010), 0,L*0.5,0.004, CU_MAT.mascara);    // el cuello del pasamontanas
   }
   else if(n==='head'){ cuCabezaG=new THREE.Group(); h.add(cuCabezaG);
-    cuPieza(cuCabezaG,cuCaja(0.175,0.215,0.205),0,0.085,0.004);
+    /* LA CABEZA MEDIA 35,3 cm sobre un cuerpo de 1,88 m: uno de cada cinco, la proporcion de un
+       muñeco. En la portada el operador tiene la cabeza en uno de cada siete, que es la de una
+       persona. Todo el bloque baja y se achica hasta los 29 cm, casco incluido. */
+    cuPieza(cuCabezaG,cuCaja(0.162,0.158,0.188),0,0.062,0.004);
     /* ===== LA CABEZA DEL OPERADOR. Antes era una caja con una tirita clara pegada al frente.
        Ahora: pasamontanas tapando la boca y el menton, la franja de piel de los ojos, las gafas
        balisticas con su cinta, y el casco con el ala, el riel y el soporte de vision nocturna. ===== */
-    cuPiezaG(cuCabezaG,cuBiselada(0.180,0.132,0.208,0.030,0.012), 0,0.030,0.006, CU_MAT.mascara);   // pasamontanas
-    cuPieza(cuCabezaG,cuBiselada(0.150,0.040,0.020,0.010,0.005),  0,0.104,0.104, CU_MAT.cara);      // la franja de piel de los ojos
-    cuPiezaG(cuCabezaG,cuBiselada(0.186,0.062,0.030,0.014,0.006), 0,0.106,0.100, CU_MAT.lente);     // el cristal de las gafas
-    cuPiezaG(cuCabezaG,cuBiselada(0.196,0.030,0.212,0.014,0.006), 0,0.106,0.004, CU_MAT.correa);    // su cinta, alrededor
-    /* el casco: la copa, el ala que sobresale y el riel del costado */
-    cuPiezaG(cuCabezaG,cuBiselada(0.200,0.130,0.226,0.052,0.020), 0,0.176,0.002, CU_MAT.casco);
-    cuPiezaG(cuCabezaG,cuBiselada(0.208,0.036,0.234,0.048,0.014), 0,0.140,0.002, CU_MAT.casco);     // el ala
-    for(const sx of [-1,1]) cuPiezaG(cuCabezaG,cuBiselada(0.016,0.030,0.150,0.006,0.003), sx*0.100,0.166,0.004, CU_MAT.placa);
-    cuPiezaG(cuCabezaG,cuBiselada(0.052,0.040,0.030,0.010,0.005), 0,0.196,0.104, CU_MAT.placa);     // soporte de vision nocturna
-    cuPiezaG(cuCabezaG,cuBiselada(0.030,0.026,0.044,0.008,0.004), 0,0.192,0.128, CU_MAT.placa);
+    cuPiezaG(cuCabezaG,cuBiselada(0.166,0.098,0.190,0.026,0.010), 0,0.018,0.006, CU_MAT.mascara);   // pasamontanas
+    cuPieza(cuCabezaG,cuBiselada(0.138,0.030,0.017,0.008,0.004),  0,0.076,0.096, CU_MAT.cara);      // la franja de piel de los ojos
+    cuPiezaG(cuCabezaG,cuBiselada(0.172,0.048,0.026,0.012,0.005), 0,0.078,0.093, CU_MAT.lente);     // el cristal de las gafas
+    cuPiezaG(cuCabezaG,cuBiselada(0.182,0.024,0.196,0.012,0.005), 0,0.078,0.004, CU_MAT.correa);    // su cinta, alrededor
+    /* EL CASCO. El primer intento era un BALDE: 130 mm de copa apoyados a 176 de altura sobre una
+       cabeza cuyo techo esta a 193, o sea que sobresalia 48 mm y el personaje quedaba con la cabeza
+       del doble de alto. Ahora la copa ABRAZA el craneo —apenas 12 mm por encima— y el ala sale
+       para los costados, que es de donde sale la silueta de casco. */
+    cuPiezaG(cuCabezaG,cuBiselada(0.182,0.098,0.200,0.050,0.019), 0,0.104,0.002, CU_MAT.casco);
+    cuPiezaG(cuCabezaG,cuBiselada(0.198,0.024,0.212,0.048,0.011), 0,0.072,0.002, CU_MAT.casco);     // el ala
+    for(const sx of [-1,1]) cuPiezaG(cuCabezaG,cuBiselada(0.013,0.022,0.126,0.005,0.003), sx*0.093,0.100,0.004, CU_MAT.placa);
+    cuPiezaG(cuCabezaG,cuBiselada(0.040,0.028,0.022,0.008,0.004), 0,0.130,0.088, CU_MAT.placa);     // soporte de vision nocturna
+    cuPiezaG(cuCabezaG,cuBiselada(0.022,0.018,0.034,0.006,0.003), 0,0.128,0.106, CU_MAT.placa);
   }
   else if(/shoulder$/.test(n)){ cap(0.055); jun(0.066,L);
     G(cuBiselada(0.104,0.098,0.112,0.030,0.012), 0,L*0.62,0, CU_MAT.chaleco);       // hombrera
@@ -12259,6 +12280,67 @@ function cuEsqueleto(){
     if(/forearm$|hand$/.test(n)) b.position.multiplyScalar(CU_BRAZO); }
   return bs;
 }
+/* ===================== FUNDIR EL CUERPO =====================
+   Vestir al operador lo llevo de 40 a 117 mallas. Cada malla es una llamada de dibujo, y con el
+   jugador mas siete bots en pantalla son casi mil por cuadro: en un celular eso solo ya se come
+   el cuadro entero. Pero la mayoria de esas piezas cuelgan del MISMO hueso y comparten material,
+   asi que se pueden hornear en una sola: se le aplica a cada geometria su matriz local y se juntan.
+   Lo que NO se puede juntar:
+   · piezas de huesos distintos (se mueven por separado),
+   · una pieza de solo-tercera-persona con una que se ve siempre (se apagan por separado),
+   · las falanges (cada una gira sobre su hueso).
+   Asi que la clave del grupo es hueso + material + si es de tercera. */
+function cuFundir(){
+  if(typeof mergeGeometries!=='function') return 0;
+  const soloTP=new Set(cuSoloTP);
+  const padres=new Set();
+  for(const m of cuPiezas) if(m.parent) padres.add(m.parent);
+  const nuevas=[], nuevasTP=[], nuevasSkin=[];
+  let antes=cuPiezas.length, fundidas=0;
+  for(const P of padres){
+    const bolsa=new Map();
+    for(const ch of P.children.slice()){
+      if(!ch.isMesh || !ch.geometry || !cuPiezas.includes(ch)) continue;
+      const k=(soloTP.has(ch)?'T':'N')+'|'+ch.material.uuid;
+      if(!bolsa.has(k)) bolsa.set(k,[]);
+      bolsa.get(k).push(ch);
+    }
+    for(const [k,lista] of bolsa){
+      if(lista.length<2){ const m=lista[0];
+        nuevas.push(m); if(soloTP.has(m)) nuevasTP.push(m);
+        if(bodySkinMeshes.includes(m)) nuevasSkin.push(m);
+        continue; }
+      const geos=[];
+      for(const ch of lista){
+        ch.updateMatrix();
+        let g=ch.geometry.index? ch.geometry.toNonIndexed() : ch.geometry.clone();
+        g.applyMatrix4(ch.matrix);
+        for(const at of Object.keys(g.attributes)) if(at!=='position'&&at!=='normal'&&at!=='uv') g.deleteAttribute(at);
+        if(!g.attributes.uv) g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(g.attributes.position.count*2),2));
+        if(!g.attributes.normal) g.computeVertexNormals();
+        geos.push(g);
+      }
+      const g=mergeGeometries(geos,false);
+      if(!g){ for(const ch of lista){ nuevas.push(ch); if(soloTP.has(ch)) nuevasTP.push(ch);
+              if(bodySkinMeshes.includes(ch)) nuevasSkin.push(ch); } continue; }
+      const mat=lista[0].material;
+      const skin=bodySkinMeshes.includes(lista[0]);
+      const tp=soloTP.has(lista[0]);
+      for(const ch of lista){ P.remove(ch); if(ch.geometry) ch.geometry.dispose(); }
+      const m=new THREE.Mesh(g,mat);
+      m.castShadow=true; m.receiveShadow=true; m.frustumCulled=false;
+      m.userData._oc=[mat.color.clone()]; m.userData._om=[null];
+      P.add(m);
+      nuevas.push(m); if(tp) nuevasTP.push(m); if(skin) nuevasSkin.push(m);
+      fundidas+=lista.length-1;
+    }
+  }
+  cuPiezas.length=0; cuPiezas.push(...nuevas);
+  cuSoloTP.length=0; cuSoloTP.push(...nuevasTP);
+  bodySkinMeshes.length=0; bodySkinMeshes.push(...nuevasSkin);
+  try{ console.log('cuerpo: '+antes+' mallas -> '+cuPiezas.length+' ('+fundidas+' fundidas)'); }catch(e){}
+  return cuPiezas.length;
+}
 function construirCuerpo(){
   if(bodyRoot)return;
   cuMats();
@@ -12296,6 +12378,7 @@ function construirCuerpo(){
   setAnim('idle');
   try{ applySkin(equippedSkin); }catch(e){}
   mpBodySrc=inner; mpClips=clips;          // los avatares remotos clonan el mismo cuerpo
+  try{ cuFundir(); }catch(e){ console.warn('fundir cuerpo',e); }
   for(const m of cuPiezas) recorteCerca(m.material,0.115);   // recorte propio: el skinning ya no existe, alcanza con 11 cm
 }
 /* Se construye en un microtask: el bloque del nivel se inserta ANTES de que se declaren bodyRoot/bodyInner
@@ -14745,8 +14828,11 @@ function menuCam(dt){ menuT+=dt;
   // una luz sólo para el menú: en el galpón el personaje quedaba en penumbra
   if(!menuLuz){ menuLuz=new THREE.PointLight(0xffd9b0, 0, 7.5, 2.0); scene.add(menuLuz);
     menuLuz2=new THREE.PointLight(0x9fc4ff, 0, 6.0, 2.0); scene.add(menuLuz2); }
-  menuLuz.position.set(player.pos.x-1.9, 2.30, player.pos.z+1.0); menuLuz.intensity=11.0;   // clave, de arriba y del lado de la cámara
-  menuLuz2.position.set(player.pos.x+1.7, 1.55, player.pos.z-1.2); menuLuz2.intensity=5.5;  // contra: despega la silueta del telón
+  /* A 11 DE INTENSIDAD EL PERSONAJE SALIA LAVADO: el verde oliva del uniforme llegaba a la
+     pantalla como menta palido y el equipo oscuro perdia todo el contraste. Con la clave en
+     6,2 y el contra en 3,4 se ve el color que tiene, y la silueta se despega igual. */
+  menuLuz.position.set(player.pos.x-1.9, 2.30, player.pos.z+1.0); menuLuz.intensity=6.2;   // clave, de arriba y del lado de la cámara
+  menuLuz2.position.set(player.pos.x+1.7, 1.55, player.pos.z-1.2); menuLuz2.intensity=3.4;  // contra: despega la silueta del telón
   // telón: 2,6 m detrás del personaje sobre la línea cámara→personaje, siempre de frente a la lente
   menuEscenario(true);
   if(menuFondo){
