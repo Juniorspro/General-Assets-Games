@@ -1893,48 +1893,45 @@ const ARM_VEN_W=0.116, ARM_VEN_H=0.090;      // ventana de la mira reflex (compa
    MISMA que usa el apuntado y donde se planta la cruz, asi que no puede quedar desalineada: antes
    cada arma repetia el numero a mano y con eso alcanzaba para que la reticula no cayera en el centro. */
 function armaReflex(H,z0){
-  /* LA REFLEX ERA UN CUADRADO DE BARRITAS: una base, dos postes finos y una capota, o sea cuatro
-     cajas formando el contorno de un cuadrado. Se leia como un marco, no como una mira.
-     Ahora es una CARCASA de verdad: la silueta se dibuja VISTA DE FRENTE (eje 'z') con la ventana
-     como agujero calado, asi que el cristal queda dentro de un cuerpo con esquinas redondeadas y
-     marco fino, como el holografico de la foto. Encima va la capota y abajo la base con la mordaza. */
-  const N=H.M.negro, M=H.M.metal, aV=ARM_VEN_W, hV=ARM_VEN_H, venY=H.mira-hV/2, z=z0||0.010;
-  const ax=aV/2, ay=venY, ay2=venY+hV;
-  const mx=ax+0.011, my0=ay-0.013, my1=ay2+0.012, r=0.012;
-  /* carcasa: rectangulo de esquinas redondeadas con la ventana calada */
-  H.perf([[-mx+r,my0],[mx-r,my0],[mx,my0,mx,my0+r],[mx,my1-r],[mx,my1,mx-r,my1],
-          [-mx+r,my1],[-mx,my1,-mx,my1-r],[-mx,my0+r],[-mx,my0,-mx+r,my0]],
-         0.048, 0,0,z, N, {eje:'z', cs:5, bisel:0.0022,
-         huecos:[[[-ax+0.006,ay],[ax-0.006,ay],[ax,ay,ax,ay+0.006],[ax,ay2-0.006],
-                  [ax,ay2,ax-0.006,ay2],[-ax+0.006,ay2],[-ax,ay2,-ax,ay2-0.006],
-                  [-ax,ay+0.006],[-ax,ay,-ax+0.006,ay]]]});
-  /* capota que sale para adelante, en angulo */
-  H.perf([[z-0.024,my1],[z-0.048,my1-0.004],[z-0.048,my1-0.014],[z-0.024,my1-0.012]],
-         aV+0.020, 0,0,0, N, {bisel:0.0018});
-  /* base y mordaza sobre el riel */
-  H.perf([[z+0.026,my0],[z-0.026,my0],[z-0.026,my0-0.014],[z+0.026,my0-0.014]],
-         0.046, 0,0,0, N, {bisel:0.0020});
-  H.perf([[z+0.020,my0-0.012],[z-0.020,my0-0.012],[z-0.020,my0-0.026],[z+0.020,my0-0.026]],
-         0.056, 0,0,0, M, {bisel:0.0018});
-  /* la perilla de brillo, al costado */
-  { const t=H.cil(0.0090,0.0090,0.014, mx+0.004, ay+hV*0.45, z+0.004, M); t.rotation.z=Math.PI/2; }
-  /* EL CRISTAL, CASI TRANSPARENTE. Estaba en 0.15 de ambar aditivo sobre TODA la ventana y dejaba
-     el vidrio lechoso: mirando por la mira todo salia lavado de naranja. Un holografico de verdad
-     se ve limpio y solo tira color en el borde, donde pega la luz rasante. Asi que el pane baja a
-     0.04 y el color vive en un marco fino por dentro del vidrio. */
-  const vid=new THREE.MeshBasicMaterial({color:0xffb877,transparent:true,opacity:0.04,
+  /* REDONDA, NO CUADRADA. Primero fueron cuatro barritas formando un cuadrado; despues una carcasa
+     rectangular con la ventana calada. Las dos se leen como un marco. Un punto rojo de verdad es un
+     TUBO: un cilindro corto, con un bisel a cada punta y el cristal adentro. Eso es lo que se pide.
+
+     El tubo va ABIERTO (H.tubo hace la pared sin tapas): con un cilindro cerrado la tapa queda
+     justo delante del ojo y no hay por donde mirar. Es la misma trampa del visor telescopico.
+
+     Y ESCONDE LOS HIERROS DEL ARMA. Con la mira puesta, el alza y el punto de mira del fusil
+     quedaban adentro de la ventana. Las recetas los marcan con H.hierro y aca se apagan. */
+  const N=H.M.negro, M=H.M.metal, y0=H.mira, z=z0||0.010;
+  const R=0.050, L=0.062;                       // radio util del tubo y su largo
+  H.tubo(R, L, 0,y0,z, N);                      // el cuerpo
+  /* los dos biseles, uno por punta: aros macizos que le dan el canto grueso */
+  const bisel=(zz)=>H.rev([[R,zz-0.006],[R+0.0085,zz-0.006],[R+0.0085,zz+0.006],[R,zz+0.006],[R,zz-0.006]],
+                          0,y0,0, N, 30);
+  bisel(z-L/2+0.005); bisel(z+L/2-0.005);
+  /* la capucha, media luna por arriba de la punta de adelante */
+  H.rev([[R+0.0086,z-L/2-0.014],[R+0.0135,z-L/2-0.014],[R+0.0135,z-L/2+0.004],[R+0.0086,z-L/2+0.004],[R+0.0086,z-L/2-0.014]],
+        0,y0,0, N, 30);
+  /* el pie: del tubo al riel, y la mordaza */
+  H.perf([[z+0.020, y0-R+0.004],[z-0.020, y0-R+0.004],[z-0.020, y0-R-0.026],[z+0.020, y0-R-0.026]],
+         0.030, 0,0,0, N, {bisel:0.0020});
+  H.perf([[z+0.026, y0-R-0.022],[z-0.026, y0-R-0.022],[z-0.026, y0-R-0.036],[z+0.026, y0-R-0.036]],
+         0.044, 0,0,0, M, {bisel:0.0018});
+  /* perilla de brillo al costado y torre de ajuste arriba */
+  { const t=H.cil(0.0090,0.0090,0.016, R+0.006, y0-0.004, z+0.006, M); t.rotation.z=Math.PI/2; }
+  { H.cil(0.0080,0.0080,0.014, 0, y0+R+0.006, z+0.006, M); }
+  /* EL CRISTAL, casi transparente: solo un velo y el aro del tratamiento en el borde */
+  const vid=new THREE.MeshBasicMaterial({color:0xffb877,transparent:true,opacity:0.045,
     depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
-  const cr=new THREE.Mesh(new THREE.PlaneGeometry(aV-0.006,hV-0.005), vid);
-  cr.position.set(0,venY+hV/2,z-0.006); cr.rotation.x=0.14; cr.renderOrder=4; H.raiz.add(cr);
-  { /* el reflejo del tratamiento: un marco fino por dentro del cristal */
-    const bordeMat=new THREE.MeshBasicMaterial({color:0x7fd0ff,transparent:true,opacity:0.20,
+  const cr=new THREE.Mesh(new THREE.CircleGeometry(R-0.002,40), vid);
+  cr.position.set(0,y0,z-0.008); cr.renderOrder=4; H.raiz.add(cr);
+  { const aroMat=new THREE.MeshBasicMaterial({color:0x8fd4ff,transparent:true,opacity:0.26,
       depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
-    const g=new THREE.PlaneGeometry(aV-0.008,hV-0.007);
-    const borde=new THREE.LineSegments(new THREE.EdgesGeometry(g),
-      new THREE.LineBasicMaterial({color:0x9fe0ff,transparent:true,opacity:0.34,
-        depthWrite:false,blending:THREE.AdditiveBlending}));
-    borde.position.set(0,venY+hV/2,z-0.0058); borde.rotation.x=0.14; borde.renderOrder=5;
-    H.raiz.add(borde); bordeMat.dispose(); }
+    const aro=new THREE.Mesh(new THREE.RingGeometry(R-0.009,R-0.002,40), aroMat);
+    aro.position.set(0,y0,z-0.0076); aro.renderOrder=5; H.raiz.add(aro); }
+  /* con la mira montada, los hierros del arma sobran */
+  try{ if(H._hierros) for(const m of H._hierros) m.visible=false; }catch(e){}
+  H.conReflex=true;
 }
 /* Mira telescopica: tubo, dos monturas y la lente. Para francotirador. */
 function armaLente(H,z0,largo,yRiel){
@@ -2091,9 +2088,9 @@ const ARSENAL=[
   H.rev([[0.0000,-0.104],[0.0076,-0.108],[0.0076,-0.250],[0.0000,-0.250]], 0,0.048,0, M.metal, 14);
   const bo=H.rev([[0.0000,-0.498],[0.0176,-0.502],[0.0176,-0.556],[0.0132,-0.556],[0.0132,-0.506],[0.0000,-0.506]],
                  0,0.010,0, M.negro, 16); bo.rotation.z=0.26;   // bocacha en diagonal, la firma del AKM
-  H.perf([[-0.038,0.040],[-0.038,0.062],[-0.062,0.064],[-0.078,0.052],[-0.078,0.040]], 0.026, 0,0,0, M.negro, {bisel:0.0018});
-  H.perf([[-0.392,0.044],[-0.392,0.078],[-0.404,0.078],[-0.404,0.044]], 0.008, 0,0,0, M.negro, {bisel:0.0012});
-  H.perf([[-0.384,0.052],[-0.384,0.082],[-0.412,0.082],[-0.412,0.052],[-0.404,0.052],[-0.404,0.072],
+  H.hierro([[-0.038,0.040],[-0.038,0.062],[-0.062,0.064],[-0.078,0.052],[-0.078,0.040]], 0.026, 0,0,0, M.negro, {bisel:0.0018});
+  H.hierro([[-0.392,0.044],[-0.392,0.078],[-0.404,0.078],[-0.404,0.044]], 0.008, 0,0,0, M.negro, {bisel:0.0012});
+  H.hierro([[-0.384,0.052],[-0.384,0.082],[-0.412,0.082],[-0.412,0.052],[-0.404,0.052],[-0.404,0.072],
           [-0.392,0.072],[-0.392,0.052]], 0.024, 0,0,0, M.negro, {bisel:0.0014});
   armaReflex(H,0.010);
   /* CARGADOR CURVO. Es lo que mas se nota: eran tres cajas en escalera y ahora es una sola silueta
@@ -2147,7 +2144,7 @@ const ARSENAL=[
         0,0.012,0, M.negro, 16);
   for(let i=0;i<3;i++) H.perf([[-0.478-i*0.014,0.024],[-0.484-i*0.014,0.024],[-0.484-i*0.014,0.014],[-0.478-i*0.014,0.014]],
          0.030, 0,0,0, M.poli, {bisel:0.0008});
-  H.perf([[-0.428,0.014],[-0.428,0.040],[-0.452,0.040],[-0.452,0.014]], 0.030, 0,0,0, M.negro, {bisel:0.0016});
+  H.hierro([[-0.428,0.014],[-0.428,0.040],[-0.452,0.040],[-0.452,0.014]], 0.030, 0,0,0, M.negro, {bisel:0.0016});
   H.perf([[0.152,0.044],[0.208,0.038],[0.208,0.004],[0.152,0.006]], 0.050, 0,0,0, M.poli, {bisel:0.0024});
   armaReflex(H,0.006);
   /* cargador STANAG: recto arriba y con la curva suave abajo */
@@ -2190,7 +2187,7 @@ const ARSENAL=[
   H.rev([[0.0000,-0.498],[0.0198,-0.504],[0.0198,-0.566],[0.0148,-0.566],[0.0148,-0.508],[0.0000,-0.508]],
         0,0.012,0, M.negro, 16);
   H.perf([[-0.276,0.062],[-0.320,0.050],[-0.320,0.004],[-0.276,0.002]], 0.034, 0,0,0, M.metal, {bisel:0.0024});
-  H.perf([[-0.406,0.026],[-0.406,0.070],[-0.430,0.070],[-0.430,0.026]], 0.026, 0,0,0, M.negro, {bisel:0.0016});
+  H.hierro([[-0.406,0.026],[-0.406,0.070],[-0.430,0.070],[-0.430,0.026]], 0.026, 0,0,0, M.negro, {bisel:0.0016});
   armaReflex(H,0.014);
   H.mag(g=>{
     g.perf([[0.048,-0.024],[0.032,-0.130,0.006,-0.222],[-0.048,-0.238],[-0.062,-0.212],
@@ -2262,7 +2259,7 @@ const ARSENAL=[
   H.rev([[0.0000,-0.168],[0.0088,-0.174],[0.0088,-0.300],[0.0000,-0.300]], 0,0.010,0, M.metal, 16);
   H.rev([[0.0000,-0.296],[0.0142,-0.302],[0.0142,-0.340],[0.0104,-0.340],[0.0104,-0.306],[0.0000,-0.306]],
         0,0.010,0, M.negro, 14);
-  H.perf([[-0.144,0.040],[-0.144,0.062],[-0.164,0.062],[-0.164,0.040]], 0.028, 0,0,0, M.negro, {bisel:0.0014});
+  H.hierro([[-0.144,0.040],[-0.144,0.062],[-0.164,0.062],[-0.164,0.040]], 0.028, 0,0,0, M.negro, {bisel:0.0014});
   armaReflex(H,0.006);
   H.mag(g=>{ g.perf([[0.032,-0.056],[0.018,-0.128,-0.002,-0.186],[-0.030,-0.192],[-0.040,-0.168],
       [-0.014,-0.116,-0.004,-0.058]], 0.026, 0,0,0, M.negro, {cs:10,bisel:0.0020}); });
@@ -2290,7 +2287,7 @@ const ARSENAL=[
   H.rev([[0.0000,-0.058],[0.0086,-0.064],[0.0086,-0.238],[0.0000,-0.238]], 0,0.008,0, M.metal, 14);
   H.rev([[0.0000,-0.234],[0.0132,-0.240],[0.0132,-0.262],[0.0098,-0.262],[0.0098,-0.244],[0.0000,-0.244]],
         0,0.008,0, M.negro, 14);
-  H.perf([[-0.086,0.040],[-0.086,0.058],[-0.114,0.058],[-0.114,0.040]], 0.024, 0,0,0, M.negro, {bisel:0.0014});
+  H.hierro([[-0.086,0.040],[-0.086,0.058],[-0.114,0.058],[-0.114,0.040]], 0.024, 0,0,0, M.negro, {bisel:0.0014});
   /* La Uzi monta ARRIBA, con la manija en el lomo: es la pieza que la hace reconocible y era
      justamente la que no se movia. */
   H.cerrojo(0.024,0.018,0.046, 0,0.052,0.040, M.metal, 0.070);
@@ -2563,7 +2560,7 @@ const ARSENAL=[
     for(let i=0;i<6;i++){ const z=-0.160-i*0.026;
       C.perf([[z,-0.004],[z,-0.014],[z-0.016,-0.014],[z-0.016,-0.004]], 0.049, 0,0,0, M.maderaOsc, {bisel:0.0008}); }
     C.perf([[-0.140,-0.006],[-0.152,-0.006],[-0.152,-0.052],[-0.140,-0.052]], 0.050, 0,0,0, M.maderaOsc, {bisel:0.0014}); });
-  H.perf([[-0.514,0.024],[-0.514,0.042],[-0.528,0.042],[-0.528,0.024]], 0.018, 0,0,0, M.negro, {bisel:0.0012});
+  H.hierro([[-0.514,0.024],[-0.514,0.042],[-0.528,0.042],[-0.528,0.024]], 0.018, 0,0,0, M.negro, {bisel:0.0012});
   H.rev([[0.0000,-0.428],[0.0104,-0.432],[0.0104,-0.444],[0.0000,-0.444]], 0,-0.020,0, M.laton, 14);
   H.perf([[0.014,-0.034],[0.014,-0.048],[-0.036,-0.048],[-0.036,-0.034]], 0.030, 0,0,0, M.metal, {bisel:0.0014});
   armaReflex(H,0.030);
@@ -2594,7 +2591,7 @@ const ARSENAL=[
   H.rev([[0.0000,-0.418],[0.0224,-0.424],[0.0224,-0.474],[0.0170,-0.474],[0.0170,-0.428],[0.0000,-0.428]],
         0,0.012,0, M.negro, 16);
   H.perf([[-0.052,0.062],[-0.090,0.054],[-0.090,0.010],[-0.052,0.008]], 0.030, 0,0,0, M.metal, {bisel:0.0022});
-  H.perf([[-0.322,0.040],[-0.322,0.066],[-0.340,0.066],[-0.340,0.040]], 0.022, 0,0,0, M.negro, {bisel:0.0014});
+  H.hierro([[-0.322,0.040],[-0.322,0.066],[-0.340,0.066],[-0.340,0.040]], 0.022, 0,0,0, M.negro, {bisel:0.0014});
   armaReflex(H,0.010);
   H.mag(g=>{
     /* EL TAMBOR es una revolucion: caja con el borde redondeado y el eje en el centro, no un
@@ -2856,6 +2853,11 @@ function armaHerr(raiz, def, vivo){
   H.cerrojo=(w,h,dd,x,y,z,m,rec)=>{ const me=H.box(w,h,dd,x,y,z,m);
     me.userData.z0=z; me.userData.rec=(rec==null?0.075:rec); me.userData.noFundir=true;
     if(vivo) gunCH=me; return me; };
+  /* una pieza de mira de hierro: se dibuja igual, pero queda anotada para que armaReflex la
+     pueda apagar si el arma termina llevando punto rojo */
+  H._hierros=[];
+  H.hierro=(pts,ancho,x,y,z,m,o)=>{ const me=H.perf(pts,ancho,x,y,z,m,o);
+    H._hierros.push(me); if(H.conReflex) me.visible=false; return me; };
   H.cerrojoPerf=(pts,ancho,x,y,z,m,rec,o)=>{ const me=H.perf(pts,ancho,x,y,z,m,o);
     me.userData.z0=z; me.userData.rec=(rec==null?0.075:rec); me.userData.noFundir=true;
     if(vivo) gunCH=me; return me; };
@@ -9560,7 +9562,9 @@ function tiroPostura(dt){
   gunRoot.visible = enTiro() && !!DBG.arma;
   // La cruz se dibuja SIN test de profundidad para que ni el cristal ni el marco se la coman; eso está
   // bien mirando por el ojo, pero desde afuera (3ª persona, menú) atravesaba el brazo y el galpón.
-  if(gunCulata) gunCulata.visible=(mnu||player.camTP>0.30||INS.k>0.45);   // 3ª persona, menú… y la inspección, que la separa del pómulo
+  /* LA CULATA, SIEMPRE. Se escondia en primera persona porque de tan cerca queda dentro de la
+     cara; pero el resultado era un arma cortada por la mitad, que es peor. Queda visible siempre. */
+  if(gunCulata) gunCulata.visible=true;
   if(gunCruz){ const fuera=(mnu||player.camTP>0.30);
     gunCruz.material.depthTest = !!fuera;
     gunCruz.material.opacity   = fuera?0.55:0.98; }
@@ -10656,7 +10660,7 @@ try{ window.__tiro={
              visor:[+b.x.toFixed(2),+b.y.toFixed(2),+b.z.toFixed(2)],
              distYo:rc(camera.position,a), distVisor:rc(_telCam.position,b) }; },
   salirMenu:()=>{ exitToMenu(); return {menu:menuMode, mundo:world}; },
-  donde:()=>({ mundo:world, menu:menuMode,
+  donde:()=>({ mundo:world, menu:menuMode, yaw:+player.yaw.toFixed(3), giro:+menuGiro.toFixed(3),
     pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+player.pos.z.toFixed(1)],
     local:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ARE_GZ).toFixed(1)] }),
   /* ¿la mira APOYA en el arma o flota? Tira un rayo vertical por el eje de cada anillo y lista las
@@ -13422,6 +13426,25 @@ function startLevel(k){ const w=(k||startWorld);
    animación de idle corriendo, y la cámara lo encuadra de tres cuartos con un movimiento muy
    lento. No es un render aparte: es el MISMO cuerpo y la MISMA arma del juego, posados. */
 let menuPose=false, menuLuz=null, menuLuz2=null, menuFondo=null, menuPiso=null;
+/* arrastre para girar el personaje del menu */
+let menuGiro=0, menuGiroV=0, menuGiroTocando=false, menuGiroUsado=false;
+(function(){
+  let id=null, x0=0, g0=0, movido=0;
+  const esBoton=(t)=>!!(t&&t.closest&&(t.closest('button')||t.closest('input')||t.closest('#mLoad')||
+                        t.closest('#mGo')||t.closest('#mTop')||t.closest('#mDrawer')));
+  const abajo=(e)=>{ if(!menuMode||id!==null) return; if(esBoton(e.target)) return;
+    id=e.pointerId; x0=e.clientX; g0=menuGiro; movido=0; menuGiroTocando=true; menuGiroV=0; };
+  const mover=(e)=>{ if(id!==e.pointerId||!menuMode) return;
+    const dx=e.clientX-x0; movido=Math.max(movido,Math.abs(dx));
+    const ang=g0 + dx*0.011;                       // 1 px de dedo = 0,011 rad
+    menuGiroV=(ang-menuGiro)*0.5; menuGiro=ang;
+    if(movido>6) menuGiroUsado=true; };
+  const arriba=(e)=>{ if(id!==e.pointerId) return; id=null; menuGiroTocando=false; };
+  addEventListener('pointerdown',abajo,{passive:true});
+  addEventListener('pointermove',mover,{passive:true});
+  addEventListener('pointerup',arriba,{passive:true});
+  addEventListener('pointercancel',arriba,{passive:true});
+})();
 const _mnObj=new THREE.Vector3(), _mnDir=new THREE.Vector3();
 /* FRANJA LIBRE del menú: lo que queda entre la barra de arriba y la fila de abajo, contando sólo
    los bloques de interfaz que pasan por el medio de la pantalla (el botón ENTRAR está a la derecha
@@ -13487,7 +13510,12 @@ function menuCam(dt){ menuT+=dt;
      que se cruce. La gravedad no lo tira porque en el menu corre menuCam y no update. */
   player.pos.set(0.0, 300, TIRO_GZ+5.2); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
   player.sliding=false; player.crouch=false; player.h=STAND; player.eye=EYE;
-  player.yaw = Math.PI*0.80 + Math.sin(menuT*0.16)*0.05;    // casi de perfil, con una respiración lenta
+  /* GIRAR CON EL DEDO. menuGiro lo mueve el arrastre; si lo soltas con impulso sigue girando y
+     frena solo, y si no lo tocaste nunca vuelve despacio al rumbo de tres cuartos. */
+  menuGiroV*=0.92;
+  if(!menuGiroTocando){ menuGiro+=menuGiroV;
+    if(Math.abs(menuGiroV)<0.0004){ menuGiroV=0; if(!menuGiroUsado) menuGiro*=0.94; } }
+  player.yaw = Math.PI*0.80 + menuGiro + Math.sin(menuT*0.16)*0.05;
   player.faceYaw = player.yaw; player.pitch = 0.08;   // apenas arriba: parado derecho, no encorvado
   player.camTP = 1;                                          // así se le ve la cabeza (en 1ª persona se recorta)
   // tickBody es el que planta el cuerpo en player.pos y le pasa el mixer; sin esto el personaje
@@ -13511,7 +13539,9 @@ function menuCam(dt){ menuT+=dt;
   const HP=Math.max(1,innerHeight), fr=menuFranja();
   const libre=Math.max(0.32,(fr.y1-fr.y0)/HP);             // fracción del alto sin interfaz encima
   const CUERPO=2.02;                                       // lo que mide el personaje con el fusil
-  const dist=Math.max(2.6, Math.min(9, CUERPO/(2*tg*libre*0.84)));
+  /* al 84% de la franja el personaje quedaba chiquito en el medio de una foto. En la referencia
+     ocupa casi todo el alto y los pies se meten detras de la fila de abajo. 1.10 es eso. */
+  const dist=Math.max(2.0, Math.min(9, CUERPO/(2*tg*libre*1.10)));
   const yB=Math.PI*0.80;                                   // rumbo de base del personaje
   const fx=-Math.sin(yB), fz=-Math.cos(yB);                // su "adelante"
   const rx= Math.cos(yB), rz=-Math.sin(yB);                // su "derecha"
