@@ -750,8 +750,11 @@
     width:min(48vw,330px); display:flex; flex-direction:column; gap:5px; }
   #mChatL{ display:flex; flex-direction:column; gap:5px; max-height:34vh; overflow:hidden;
     justify-content:flex-end; }
-  .gcMsg{ display:flex; align-items:flex-start; gap:6px; animation:gcEntra .28s ease both; }
-  @keyframes gcEntra{ from{ opacity:0; transform:translateY(6px);} to{ opacity:1; transform:none; } }
+  /* SIN ANIMACION DE ENTRADA. La tenia, y el mensaje quedaba clavado en el primer fotograma con
+     opacity 0: ocupaba su lugar en el layout —41 px medidos— y no se veia nada. El nodo se crea
+     reemplazando innerHTML y el navegador no siempre arranca la animacion de un nodo recien
+     insertado asi. Un chat que a veces no se ve no vale una animacion de 280 ms. */
+  .gcMsg{ display:flex; align-items:flex-start; gap:6px; opacity:1; }
   .gcIns{ flex:0 0 auto; width:22px; height:22px; object-fit:contain; margin-top:1px; }
   .gcCol{ min-width:0; flex:1; }
   .gcTop{ display:flex; align-items:baseline; gap:5px; }
@@ -12680,6 +12683,11 @@ const RANGO_UMBRAL=(()=>{
   for(let i=0;i<5;i++) u.push(RANGO_MITICO+mit[i]);
   return u;
 })();
+/* ARRANCA EN CERO. La escalera es nueva, asi que la primera vez que se abre esta version se
+   pone el contador en cero para todos: nadie empieza con puntos de un sistema que no existia.
+   La marca queda guardada, asi que esto pasa UNA sola vez y despues suma normal. */
+try{ if(localStorage.getItem('pf_rango_v')!=='1'){ localStorage.setItem('pf_rango','0');
+      localStorage.setItem('pf_rango_v','1'); } }catch(e){}
 function rangoPts(){ try{ const v=localStorage.getItem('pf_rango'); return v==null?0:Math.max(0,+v||0); }catch(e){ return 0; } }
 function rangoSet(v){ try{ localStorage.setItem('pf_rango', Math.max(0,Math.round(v))); }catch(e){} }
 /* devuelve todo lo que hace falta para pintarlo: division, escalon, nombre y cuanto falta */
@@ -14905,10 +14913,17 @@ const CAREO={ act:false, t:0, dur:5.6, fin:null, cam:null };
 function careoArrancar(alTerminar){
   try{
     CAREO.act=true; CAREO.t=0; CAREO.t0=performance.now(); CAREO.fin=alTerminar||null;
-    if(!CAREO.cam) CAREO.cam=new THREE.PerspectiveCamera(52, innerWidth/Math.max(1,innerHeight), 0.1, 400);
+    /* EL PLANO LEJANO, EL MISMO QUE EL DEL JUEGO. Con 400 la camara del careo veia MAS LEJOS que
+       la del juego y aparecia una cupula blanca en el cielo: es la galeria de tiro, que vive a
+       16.000 en Z y que la camara normal recorta. */
+    if(!CAREO.cam) CAREO.cam=new THREE.PerspectiveCamera(52, innerWidth/Math.max(1,innerHeight), 0.1, camera.far);
+    CAREO.cam.far=camera.far; CAREO.cam.updateProjectionMatrix();
     const tela=cineTela(); tela.style.display='block'; tela.style.background='#000'; tela.style.opacity='1';
     tela.onpointerdown=()=>careoCortar();
     document.body.classList.add('cine');
+    /* LA CUPULA DE LA ZONA TAPABA EL CIELO. Es partTick el que la apaga en la arena, y partTick
+       corre dentro de update(), que el careo se saltea: durante el careo quedaba prendida. */
+    try{ if(zonaMalla) zonaMalla.visible=false; }catch(e){}
     return true;
   }catch(e){ if(alTerminar)alTerminar(); return false; }
 }
@@ -14933,28 +14948,33 @@ function careoTick(dt){
     if(eq==='A'){ x+=player.pos.x; z+=player.pos.z-ARE_GZ; n++; }
     return n? {x:x/n, z:z/n} : tdmBase(eq); };
   const A=cen('A'), B=cen('B');
+  /* LAS CUENTAS VAN EN COORDENADAS DE LA ARENA Y LA ESCENA EN MUNDO. La arena vive corrida
+     ARE_GZ en Z (32.000), asi que sin sumarlo la camara quedaba a treinta y dos mil metros del
+     mapa mirando el vacio: la pantalla salia en blanco. */
+  const GZ=ARE_GZ;
   if(t<2.6){                                   // barrido del equipo tuyo
     const k=t/2.6;
     const ang=Math.atan2(B.x-A.x, B.z-A.z);
     const lat=(k-0.5)*16;
-    _caA.set(A.x - Math.sin(ang)*11 + Math.cos(ang)*lat, 2.6, A.z - Math.cos(ang)*11 - Math.sin(ang)*lat);
+    _caA.set(A.x - Math.sin(ang)*8.5 + Math.cos(ang)*lat, 2.25, GZ + A.z - Math.cos(ang)*8.5 - Math.sin(ang)*lat);
     C.position.copy(_caA);
-    C.lookAt(A.x, 1.3, A.z);
+    C.lookAt(A.x, 1.3, GZ+A.z);
     tela.style.background='#000';
     tela.style.opacity = t<0.5 ? String(1-t/0.5) : (t>2.35 ? String((t-2.35)/0.25) : '0');
   } else if(t<4.9){                            // corte al equipo de enfrente
     const k=(t-2.6)/2.3;
     const ang=Math.atan2(A.x-B.x, A.z-B.z);
     const lat=(0.5-k)*16;
-    C.position.set(B.x - Math.sin(ang)*11 + Math.cos(ang)*lat, 2.6, B.z - Math.cos(ang)*11 - Math.sin(ang)*lat);
-    C.lookAt(B.x, 1.3, B.z);
+    C.position.set(B.x - Math.sin(ang)*8.5 + Math.cos(ang)*lat, 2.25, GZ + B.z - Math.cos(ang)*8.5 - Math.sin(ang)*lat);
+    C.lookAt(B.x, 1.3, GZ+B.z);
     tela.style.opacity = t<2.85 ? String(1-(t-2.6)/0.25) : (t>4.6 ? String((t-4.6)/0.3) : '0');
   } else if(t<CAREO.dur){                      // vuelve a vos
     const k=(t-4.9)/(CAREO.dur-4.9);
-    C.position.set(player.pos.x, 2.2-k*0.4, player.pos.z-ARE_GZ+4.5-k*1.5);
-    C.lookAt(player.pos.x, 1.5, player.pos.z-ARE_GZ);
+    C.position.set(player.pos.x, 2.2-k*0.4, player.pos.z+4.5-k*1.5);
+    C.lookAt(player.pos.x, 1.5, player.pos.z);
     tela.style.opacity=String(Math.max(0,1-k*2.2));
   } else { careoCortar(); return; }
+  try{ if(zonaMalla) zonaMalla.visible=false; }catch(e){}   // se crea tarde: hay que apagarla por cuadro
   /* los cuerpos y las animaciones tienen que seguir vivos durante el careo */
   try{ mpTick(Math.min(dt,0.05)); }catch(e){}
   try{ if(bodyMixer) bodyMixer.update(Math.min(dt,0.05)); }catch(e){}
@@ -16511,7 +16531,7 @@ function tdmAviso(txt,seg){ TDM.msj=txt; TDM.tMsj=seg||3; tdmHUD(); }
 function tdmResituar(){
   for(const b of BOTS){
     const B=tdmBase(tdmEquipoDe(b));
-    const a=Math.random()*6.283, r=3+Math.random()*7;
+    const a=Math.random()*6.283, r=2.2+Math.random()*4.2;
     b.x=B.x+Math.cos(a)*r; b.z=B.z+Math.sin(a)*r; b.y=sueloY(b.x,b.z);
     b.tx=b.x; b.tz=b.z; b.estado='patrulla'; b.rival=null; b.vida=100; b.muerto=false; b.tRes=0;
     const GZ=ARE_GZ; b.r.pos.set(b.x,b.y,b.z+GZ); b.r.target.copy(b.r.pos); b.r.muerto=false; b.r.vida=100;
@@ -16561,7 +16581,7 @@ function tdmArrancar(){
   /* nueve bots: cuatro con vos en AZUL y cinco en ROJO */
   try{ botQuitar(BOTS.length); }catch(e){}
   try{ botAgregar(9); }catch(e){}
-  BOTS.forEach((b,i)=>{ b.eq = (i<4)?'A':'B'; });
+  BOTS.forEach((b,i)=>{ b.eq = (i<4)?'A':'B'; try{ tdmMarcaEquipo(b); }catch(e){} });
   try{ tdmResituar(); }catch(e){}
   /* la pose de salida: cada uno mira al centro y espera con su propia animacion */
   BOTS.forEach((b,i)=>{
@@ -16573,7 +16593,33 @@ function tdmArrancar(){
   tdmAviso('RONDA 1 · A 20 BAJAS', 3.2);
   tdmHUD();
 }
-function tdmParar(){ TDM.on=false; for(const b of BOTS) b.eq=null; tdmHUD(); }
+/* ===================== DE QUE EQUIPO ES CADA UNO =====================
+   LOS DIEZ SON IGUALES: mismo uniforme, mismo casco. En un modo por equipos eso es injugable —no
+   sabes a quien tirarle hasta que te mata—. Cada bot recibe un BRAZALETE del color de su equipo,
+   una sola pieza con su propio material (nueve mallas mas en total, nada), y ademas un aro en el
+   piso: el brazalete se ve de cerca y el aro de lejos, que es cuando mas falta hace. */
+const _tdmGeoBr=new THREE.CylinderGeometry(0.13,0.13,0.075,10,1,true);
+const _tdmGeoAro=new THREE.RingGeometry(0.42,0.60,20);
+function tdmMarcaEquipo(b){
+  if(!b || !b.r || !b.r.avatar) return;
+  const eq=b.eq; const col=eq==='A'? TDM_EQ.A.hex : TDM_EQ.B.hex;
+  if(b._marca){ b._marca.mat.color.setHex(col); b._marca.aro.material.color.setHex(col);
+    b._marca.g.visible=true; return; }
+  const g=new THREE.Group();
+  const mat=new THREE.MeshBasicMaterial({color:col, fog:false, side:THREE.DoubleSide});
+  const br=new THREE.Mesh(_tdmGeoBr, mat); br.position.set(0.30,1.32,0); br.rotation.z=0.18;
+  const br2=new THREE.Mesh(_tdmGeoBr, mat); br2.position.set(-0.30,1.32,0); br2.rotation.z=-0.18;
+  const aro=new THREE.Mesh(_tdmGeoAro, new THREE.MeshBasicMaterial({color:col, fog:false,
+    transparent:true, opacity:0.55, depthWrite:false, side:THREE.DoubleSide}));
+  aro.rotation.x=-Math.PI/2; aro.position.y=0.045;
+  g.add(br); g.add(br2); g.add(aro);
+  b.r.avatar.add(g);
+  b._marca={ g, mat, aro };
+}
+function tdmSacarMarcas(){
+  for(const b of BOTS){ if(b._marca){ try{ b._marca.g.visible=false; }catch(e){} } }
+}
+function tdmParar(){ TDM.on=false; tdmSacarMarcas(); for(const b of BOTS) b.eq=null; tdmHUD(); }
 const PART={ fase:'espera', t:0, ronda:0, cerrando:false, asist:0,
              cx:0, cz:0, r:240, nx:0, nz:0, nr:240, tFase:0,
              vivos:1, bajas:0, puesto:0, dur:0, activa:false, resultado:'' };
