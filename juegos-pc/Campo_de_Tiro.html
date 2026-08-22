@@ -473,10 +473,14 @@
   /* EL CARTEL DE MUERTO YA NO TAPA NADA. Antes era un vidrio rojo con desenfoque sobre toda la
      pantalla: tenia sentido cuando no habia nada que mirar, pero ahora atras se esta desplomando
      el cuerpo y el lavado de color hace el trabajo del rojo. Queda una viñeta y el texto abajo. */
-  #muerte{ position:fixed; inset:0; z-index:46; display:none; align-items:flex-end; justify-content:center; flex-direction:column; gap:4px;
-    padding:0 0 min(16vh,120px); color:#f2e9e6; font-family:'Segoe UI',system-ui,sans-serif; pointer-events:none;
-    background:radial-gradient(ellipse at 50% 46%, rgba(0,0,0,0) 34%, rgba(0,0,0,.34) 78%, rgba(0,0,0,.62) 100%); }
-  body.muerto #muerte{ display:flex; align-items:center; }
+  /* columna: align-items manda en HORIZONTAL y justify-content en VERTICAL. Al reves el cartel se
+     iba fuera de la pantalla por la derecha. Centrado y abajo, para no taparle la cara al muerto. */
+  #muerte{ position:fixed; inset:0; z-index:46; display:none; align-items:center; justify-content:flex-end; flex-direction:column; gap:4px;
+    padding:0 0 min(14vh,96px); color:#f2e9e6; font-family:'Segoe UI',system-ui,sans-serif; pointer-events:none;
+    background:radial-gradient(ellipse at 50% 44%, rgba(0,0,0,0) 30%, rgba(0,0,0,.30) 72%, rgba(0,0,0,.66) 100%); }
+  body.muerto #muerte{ display:flex; }
+  /* muerto no se apunta: la cruz sobre el propio cadaver quedaba ridicula */
+  body.muerto #cross{ display:none !important; }
   #muerte b{ font-size:30px; font-weight:900; letter-spacing:.10em; text-shadow:0 3px 14px #000, 0 0 3px #000; }
   #muerte span{ font-size:14px; font-weight:700; opacity:.85; text-shadow:0 2px 8px #000; }
   body.muerto #joy, body.muerto .actBtn{ opacity:.30; pointer-events:none; }
@@ -10623,6 +10627,33 @@ try{ window.__tiro={
     ganoR1:TDM.ganoR1, fin:TDM.fin, lado:TDM.lado,
     eqs:BOTS.map(b=>b.eq), bases:{A:tdmBase('A'), B:tdmBase('B')} }),
   dueloArrancar:()=>{ tdmArrancar(); return __tiro.duelo(); },
+  /* LA MUERTE: estado de la secuencia, para poder medirla desde afuera */
+  muerte:()=>{ const el=document.getElementById('stage');
+    const f=(el&&el.style.filter)||'';
+    const sat=/saturate\(([-\d.]+)\)/.exec(f), con=/contrast\(([-\d.]+)\)/.exec(f);
+    const R=MUERTE.r&&MUERTE.r.rag;
+    return { act:MUERTE.act, t:+MUERTE.t.toFixed(2), vista:camView, tp:+player.camTP.toFixed(2),
+      sat:sat?+sat[1]:null, con:con?+con[1]:null, filtro:f,
+      rag:!!R, tip:R?+R.tip.toFixed(2):null, huesos:R?R.h.length:0,
+      cam:[+camera.position.x.toFixed(2),+camera.position.y.toFixed(2),+camera.position.z.toFixed(2)],
+      cuerpo:bodyRoot?[+bodyRoot.position.x.toFixed(2),+bodyRoot.position.y.toFixed(2),+bodyRoot.position.z.toFixed(2)]:null,
+      incl:bodyRoot?+bodyRoot.rotation.x.toFixed(3):null,
+      dist:bodyRoot?+camera.position.distanceTo(bodyRoot.position).toFixed(2):null,
+      arma:gunRoot?gunRoot.visible:null, tpVis:cuSoloTP.length?cuSoloTP[0].visible:null }; },
+  matarme:(ox,oz)=>{ pvpRecibir(999,'PRUEBA',false,ox,oz); return __tiro.muerte(); },
+  /* LA ROPA DE EQUIPO: cuantas mallas quedaron azules y cuantas rojas, y el color medio del uniforme */
+  ropa:()=>{ const cuenta=(cuerpo)=>{ let n=0, r=0,g=0,b=0;
+      if(!cuerpo) return null;
+      cuerpo.traverse(o=>{ if(!o.isMesh)return; const ms=Array.isArray(o.material)?o.material:[o.material];
+        for(const m of ms){ if(!m||!m.color||m.userData._eqc===undefined) continue;
+          if(!tdmPesos().has(m.userData._eqc)) continue;
+          n++; r+=m.color.r; g+=m.color.g; b+=m.color.b; } });
+      return n? { n, r:+(r/n).toFixed(3), g:+(g/n).toFixed(3), b:+(b/n).toFixed(3) } : {n:0}; };
+    const loc=(()=>{ let n=0,r=0,g=0,b=0; for(const k in CU_MAT){ const m=CU_MAT[k];
+      if(!m||!m.color||m.userData._eqc===undefined||!tdmPesos().has(m.userData._eqc)) continue;
+      n++; r+=m.color.r; g+=m.color.g; b+=m.color.b; }
+      return n?{n,r:+(r/n).toFixed(3),g:+(g/n).toFixed(3),b:+(b/n).toFixed(3)}:{n:0}; })();
+    return { yo:loc, bots:BOTS.map(b=>({ eq:b.eq, ropaEq:b._ropaEq, col:cuenta(b.r&&b.r.body) })) }; },
   dueloMarcar:(eq,n)=>{ tdmMarcar(eq,n||1); return __tiro.duelo(); },
   rango:(p)=>{ if(p!=null) rangoSet(p); const R=rangoDatos(); try{ menuRango(); }catch(e){}
     return { pts:R.pts, div:R.div, nombre:R.nombre, pct:+R.pct.toFixed(1), max:R.max }; },
@@ -16176,18 +16207,27 @@ function muerteParar(){
   try{ if(MUERTE.r && MUERTE.r.mixer) MUERTE.r.mixer.stopAllAction(); }catch(e){}
   try{ curAnim=null; setAnim('idle'); }catch(e){}
   camView=MUERTE.vistaAnt||'fp'; player.camTP=MUERTE.camAnt||0;
+  try{ camera.fov=player.fov; camera.updateProjectionMatrix(); }catch(e){}   // la lente vuelve a la del juego
   muerteGrado(-1);
 }
 /* el lavado de color: se pinta con un filtro sobre el lienzo, que no cuesta un solo triangulo */
 function muerteGrado(k){
-  const el=document.getElementById('app')||document.getElementById('stage');
+  /* SOBRE #stage, NO SOBRE #app. En #app el filtro solo agarraba el lienzo: el mundo se iba a gris
+     y el HUD seguia con la munición en naranja y la cuña de daño en rojo, o sea justo lo contrario
+     de "la sangre se va del mundo". #stage es position:fixed inset:0, asi que meterle un filtro no
+     mueve un pixel de los elementos fijos que cuelgan de el. */
+  const el=document.getElementById('stage')||document.getElementById('app');
   if(!el) return;
   if(k<0){ el.style.filter=''; return; }
-  /* saturacion: cae a cero en el primer cuarto de segundo. contraste: sube de a poco, de 1 a 1,55.
-     brillo: baja apenas, que el blanco y negro plano se ve lavado y no duro. */
+  /* saturacion: cae a cero en el primer cuarto de segundo. contraste: sube de a poco, de 1 a 1,62.
+     BRILLO: baja fuerte, y no es un adorno. El contraste de CSS abre alrededor del gris medio, asi
+     que sobre un piso claro —el de la arena lo es— subirlo solo EMPUJA TODO AL BLANCO: medido, a
+     los dos segundos y medio la pantalla entera quedaba lavada y el cuerpo no se distinguia del
+     suelo. Bajando el brillo en la misma proporcion, el contraste endurece hacia el NEGRO y la
+     silueta del muerto se recorta contra el piso, que es lo que se quiere ver. */
   const sat=Math.max(0, 1 - k*4);
-  const con=1 + Math.min(1,k)*0.55;
-  const bri=1 - Math.min(1,k)*0.22;
+  const con=1 + Math.min(1,k)*0.62;
+  const bri=1 - Math.min(1,k)*0.42;
   el.style.filter='saturate('+sat.toFixed(2)+') contrast('+con.toFixed(2)+') brightness('+bri.toFixed(2)+')';
 }
 function muerteTick(dt){
@@ -16200,7 +16240,11 @@ function muerteTick(dt){
   /* LA CAMARA ORBITA. Sale de la cabeza, se va para atras y arriba y gira despacio alrededor del
      cuerpo: es lo que deja ver la caida entera en vez de mirarla desde adentro del muerto. */
   MUERTE.ang += dt*0.42;
-  const sub=1.05 + k*1.35, dist=2.6 + k*2.2;
+  /* MAS CERCA Y CON LENTE MAS LARGO. Con la distancia vieja (2,6 a 4,8 m) y los 90 grados de juego
+     el cuerpo medía menos de un dedo en la pantalla: se veia caer una mancha. Se acorta el orbite y
+     se cierra la lente a 58 grados, que es el plano medio de cualquier repeticion de muerte. */
+  const sub=0.92 + k*0.95, dist=2.15 + k*1.45;
+  { const f=78 - k*20; if(Math.abs(camera.fov-f)>0.05){ camera.fov=f; camera.updateProjectionMatrix(); } }
   const cx=r.pos.x + Math.sin(MUERTE.ang)*dist;
   const cz=r.pos.z + Math.cos(MUERTE.ang)*dist;
   let cy=r.pos.y + sub;
@@ -17083,7 +17127,10 @@ const _tdmGeoAro=new THREE.RingGeometry(0.42,0.60,20);
    Los materiales son PROPIOS de cada avatar (mpRig los clona uno por uno), asi que teñir a uno no
    mancha a los demas. El color original se guarda en el material la primera vez, para poder
    devolverlo al terminar la partida. */
-const TDM_TINTE={ A:0x2456c8, B:0xa8281f };   // azul de uniforme y rojo ladrillo, no primarios
+/* Medido en el careo: con el rojo claro los cinco de enfrente quedaban de un naranja plano y el
+   equipo tactico se perdia dentro del uniforme — un cono de transito con piernas. El rojo va mas
+   oscuro que el azul a proposito: el mismo peso de mezcla sobre un tono claro tapa mas. */
+const TDM_TINTE={ A:0x2456c8, B:0x8c1f18 };   // azul de uniforme y rojo oscuro, no primarios
 let _tdmPesos=null;
 function tdmPesos(){
   if(_tdmPesos) return _tdmPesos;
@@ -17098,9 +17145,9 @@ function tdmPesos(){
   put(CU_MAT.cuerpo,   0.80);   // el uniforme: es el que se ve de lejos
   put(CU_MAT.manga,    0.76);
   put(CU_MAT.junta,    0.68);
-  put(CU_MAT.casco,    0.52);
-  put(CU_MAT.chaleco,  0.44);
-  put(CU_MAT.bolsillo, 0.28);
+  put(CU_MAT.casco,    0.42);   // el casco y el chaleco, a medias: tienen que seguir leyendose
+  put(CU_MAT.chaleco,  0.34);
+  put(CU_MAT.bolsillo, 0.22);
   /* la piel, los guantes, las lentes y el negro de placas no entran a proposito */
   return _tdmPesos;
 }
