@@ -10165,6 +10165,7 @@ try{ window.__tiro={
     sldHold=false;
     return { dist:+d.toFixed(2), seg:+(n*dt).toFixed(2), vmax:+vmax.toFixed(1) }; },
   sld:()=>({sld:player.sliding, t:+player.slideT.toFixed(2), v:+player.vel.length().toFixed(1), hold:sldHold,
+           cuclillas:!!player.crouch, h:+player.h.toFixed(2), ojo:+player.eye.toFixed(2), ads:adsQ,
             vx:+player.vel.x.toFixed(2), vz:+player.vel.z.toFixed(2)}),
   // mover la palanca desde afuera, para poder medir el deslizamiento dirigido
   palanca:(x,y)=>{ joy.x=x||0; joy.y=y||0; return [joy.x,joy.y]; },
@@ -13696,18 +13697,21 @@ function cineAvion(){
   /* --- LA COLA. En un carguero la cola SUBE por encima de la boca de carga: es lo que deja ver la
      bodega entera desde afuera con la compuerta abierta. El cono va arriba y atras de la boca, no
      tapandola. --- */
-  const cono=new THREE.Mesh(new THREE.CylinderGeometry(R-0.15,1.05,7.0,N,1), gris);
-  cono.rotation.x=-Math.PI/2; cono.position.set(0, Y+1.75, AV.BOCA+3.0);
-  cono.rotation.z=0; g.add(cono);
-  const rampaTecho=new THREE.Mesh(new THREE.BoxGeometry(4.4,0.30,5.2), gris);
-  rampaTecho.position.set(0, Y+1.05, AV.BOCA+1.4); rampaTecho.rotation.x=-0.36; g.add(rampaTecho);
-  const deriva=new THREE.Mesh(new THREE.BoxGeometry(0.34,5.6,4.4), gris);
-  deriva.position.set(0, Y+5.2, AV.BOCA+5.0); g.add(deriva);
-  const timon=new THREE.Mesh(new THREE.BoxGeometry(0.30,3.6,1.1), osc);
-  timon.position.set(0, Y+5.6, AV.BOCA+7.3); g.add(timon);
+  /* EL CONO IBA MUY BAJO Y MUY ADELANTE: colgaba dentro de la boca y en la toma final tapaba la
+     mitad de arriba —solo se le veian las piernas al personaje—. Va mas arriba y mas atras, que es
+     donde va en un carguero: la cola sube POR ENCIMA de la boca de carga y la deja despejada. */
+  const cono=new THREE.Mesh(new THREE.CylinderGeometry(R-0.20,1.00,7.4,N,1), gris);
+  cono.rotation.x=-Math.PI/2; cono.position.set(0, Y+2.85, AV.BOCA+5.0); g.add(cono);
+  /* el labio de arriba de la boca, en rampa: une el lomo con el cono */
+  const rampaTecho=new THREE.Mesh(new THREE.BoxGeometry(4.2,0.28,4.6), gris);
+  rampaTecho.position.set(0, Y+2.05, AV.BOCA+1.9); rampaTecho.rotation.x=-0.42; g.add(rampaTecho);
+  const deriva=new THREE.Mesh(new THREE.BoxGeometry(0.34,5.8,4.6), gris);
+  deriva.position.set(0, Y+6.4, AV.BOCA+7.0); g.add(deriva);
+  const timon=new THREE.Mesh(new THREE.BoxGeometry(0.30,3.8,1.1), osc);
+  timon.position.set(0, Y+6.8, AV.BOCA+9.4); g.add(timon);
   for(const sz of [1,-1]){
-    const est=new THREE.Mesh(new THREE.BoxGeometry(5.4,0.30,2.3), gris);
-    est.position.set(sz*3.2, Y+2.5, AV.BOCA+5.6); g.add(est);
+    const est=new THREE.Mesh(new THREE.BoxGeometry(5.6,0.30,2.4), gris);
+    est.position.set(sz*3.3, Y+3.7, AV.BOCA+7.6); g.add(est);
   }
 
   /* --- el tren en las gondolas del costado, para que no parezca un tubo --- */
@@ -13719,7 +13723,8 @@ function cineAvion(){
   /* ================= LA BODEGA, adentro del mismo grupo ================= */
   const met=new THREE.MeshStandardMaterial({color:0x525b67, roughness:0.74, metalness:0.30, flatShading:true});
   const bod=new THREE.Group(); g.add(bod); g.userData.bodega=bod;
-  const zA=AV.MORRO+2.2, zB=AV.BOCA;
+  /* 24 m de bodega se veian como un TUNEL de subte. Una bodega de carguero son doce. */
+  const zA=-6.0, zB=AV.BOCA;
   const piso=new THREE.Mesh(new THREE.BoxGeometry(3.9,0.16,zB-zA), met);
   piso.position.set(0,-0.08,(zA+zB)/2); bod.add(piso);
   /* las tiras antideslizantes del piso: es lo que le da escala al pasillo */
@@ -13735,9 +13740,9 @@ function cineAvion(){
     const b=new THREE.Mesh(new THREE.BoxGeometry(0.62,0.12,zB-zA-2.0),
       new THREE.MeshStandardMaterial({color:0x2d3138, roughness:0.88, flatShading:true}));
     b.position.set(sz*1.68,0.62,(zA+zB)/2-0.4); bod.add(b);
-    const resp=new THREE.Mesh(new THREE.BoxGeometry(0.10,0.72,zB-zA-2.0),
+    const resp=new THREE.Mesh(new THREE.BoxGeometry(0.08,0.58,zB-zA-2.0),
       new THREE.MeshStandardMaterial({color:0x2d3138, roughness:0.88, flatShading:true}));
-    resp.position.set(sz*2.02,1.00,(zA+zB)/2-0.4); bod.add(resp);
+    resp.position.set(sz*2.08,0.95,(zA+zB)/2-0.4); bod.add(resp);
     for(let z=zA+1.4; z<zB-1.2; z+=2.2){
       const pata=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.62,0.09), osc);
       pata.position.set(sz*1.68,0.31,z); bod.add(pata); }
@@ -13773,6 +13778,8 @@ function cineArmar(){
   /* el sol del lado de la camara: del otro lado el avion salia como una silueta negra */
   const sol=new THREE.DirectionalLight(0xffeed2,3.1); sol.position.set(46,52,48); E.add(sol);
   const contra=new THREE.DirectionalLight(0xbcd6ee,0.9); contra.position.set(-40,20,-30); E.add(contra);
+  /* rebote del cielo desde abajo: sin esto el vientre y la cola eran una mancha negra */
+  const rebote=new THREE.DirectionalLight(0xa8c8e8,0.85); rebote.position.set(6,-30,40); E.add(rebote);
   const C=new THREE.PerspectiveCamera(58, innerWidth/Math.max(1,innerHeight), 0.1, 900);
   /* nubes: dos capas, una lejos y grande y otra cerca y chica */
   const nubes=new THREE.Group();
@@ -13873,11 +13880,12 @@ function cineTick(dt){
     const k=(t-2.4)/2.9;
     A.visible=true; CINE.fuga.visible=false; CINE.nubes.visible=true;
     A.scale.setScalar(1);
-    A.position.set(-58+k*66, 2+k*30, -96+k*40);
+    A.position.set(-30+k*34, 4+k*24, -52+k*22);
     A.rotation.set(0.10-k*0.05, -0.62-k*0.20, 0.13-k*0.07);
     CINE.puerta.rotation.x=0;
-    /* la camara mas alta que el avion y siguiendolo: desde el plano del ala parecia un dardo */
-    C.position.set(24-k*6, 40+k*10, 26-k*4);
+    /* la camara mas alta que el avion y siguiendolo: desde el plano del ala parecia un dardo.
+       Y CERCA: a cuarenta metros el carguero era una mosca en el cuadro. */
+    C.position.set(16-k*4, 26+k*7, 22-k*3);
     C.lookAt(A.position.x, A.position.y+2, A.position.z);
     cineMano(C,t,0.16);
     cineEstela(dt);
@@ -13888,10 +13896,11 @@ function cineTick(dt){
     const k=(t-5.3)/1.2;
     A.visible=true; CINE.nubes.visible=true;
     A.scale.setScalar(1);
-    A.position.set(-64+k*128, 33+k*4, 6);
+    A.position.set(-74+k*148, 30+k*3, -2);
     A.rotation.set(0.03, -0.30, 0.06);
-    C.position.set(0, 32, 66);
-    C.lookAt(A.position.x*0.55, 34, 6);
+    /* la camara pegada al pasillo del avion: le pasa por delante ENTERO y cerca */
+    C.position.set(0, 29, 34);
+    C.lookAt(A.position.x*0.42, 31, -2);
     cineMano(C,t,0.30);
     cineEstela(dt);
     tela.style.background='#eef4fb';
@@ -13922,7 +13931,7 @@ function cineTick(dt){
         CINE.acts.walk.reset().fadeIn(0.25).play();
       }
       const cam = Math.min(1, k/0.72);
-      const zz  = (AV.MORRO+3.4) + cam*(AV.BOCA-1.9-(AV.MORRO+3.4));
+      const zz  = -1.4 + cam*(AV.BOCA-2.1+1.4);
       P.position.set(Math.sin(t*1.4)*0.045, 0, zz);
       P.rotation.set(0, 0, Math.sin(t*1.1)*0.022);   // mirando a la cola (+Z es su frente aca)
       if(k>=0.72 && CINE.acts && CINE.acts.idle && P.userData.and!==2){
@@ -13932,12 +13941,12 @@ function cineTick(dt){
       }
       /* la camara lo sigue por atras y a la altura del hombro, alejandose despacio: es el
          travelling de la toma de Warzone, no un plano fijo */
-      const atras = 5.2 - cam*1.1;
-      C.position.set(0.34, 1.78+cam*0.10, P.position.z-atras);
-      C.lookAt(0.04, 1.06, P.position.z+3.6);
+      const atras = 4.4 - cam*0.9;
+      C.position.set(0.34, 1.92+cam*0.12, P.position.z-atras);
+      C.lookAt(0.04, 1.14, P.position.z+3.6);
       cineMano(C,t,0.026);
     } else {
-      C.position.set(0.34,1.78,AV.MORRO+1.0); C.lookAt(0,1.1,AV.BOCA);
+      C.position.set(0.34,1.92,-3.6); C.lookAt(0,1.14,AV.BOCA);
     }
   }
   /* --- 5) DESDE AFUERA DE LA COMPUERTA, MIRANDO PARA ADENTRO: 10.2 a 12.4. La camara sale por la
@@ -13951,12 +13960,14 @@ function cineTick(dt){
     A.userData.luz.intensity = 4.2 + Math.sin(t*9)*2.4;
     if(CINE.cuerpo){
       /* DE FRENTE A LA CAMARA Y AL BORDE: la pose de "listo para tirarse". Antes daba la espalda. */
-      CINE.cuerpo.position.set(0, -0.04, AV.BOCA-0.55);
-      CINE.cuerpo.rotation.set(0.13, Math.PI, 0);
+      CINE.cuerpo.position.set(0, -0.04, AV.BOCA-0.30);
+      CINE.cuerpo.rotation.set(0.13, 0, 0);
     }
     /* la camara se va para atras y baja apenas: la bodega se abre en cuadro con la cola encima */
-    C.position.set(0.10, AV.EJE-0.20-k*0.30, AV.BOCA+4.4+k*4.2);
-    C.lookAt(0, 1.12, AV.BOCA-1.4);
+    /* estaba a la altura del piso y pegada: el cono de la cola tapaba arriba y del personaje se
+       veian las piernas. Mas alta que la rampa y mas atras: la bodega entra entera. */
+    C.position.set(0.10, AV.EJE+0.10-k*0.22, AV.BOCA+5.0+k*3.4);
+    C.lookAt(0, 1.22, AV.BOCA-1.8);
     cineMano(C,t,0.018);
     tela.style.background='#000';
     tela.style.opacity=String(Math.max(0,(k-0.60)/0.40));
@@ -13978,12 +13989,17 @@ function cineEstela(dt){
       _cnA.set(sz*7.0, AV.EJE+1.5, -0.4).applyEuler(A.rotation).multiplyScalar(ea).add(A.position);
       m.visible=true; m.userData.vivo=1; m.userData.v=0;
       m.position.copy(_cnA);
-      m.position.y+=(Math.random()-0.5)*0.9*ea;
-      m.scale.setScalar(0.62*ea); m.material.opacity=0.52;
+      /* TAMANO Y LUGAR AL AZAR. Todas iguales y en fila salia un collar de cuentas, no una estela. */
+      m.position.x+=(Math.random()-0.5)*1.1*ea;
+      m.position.y+=(Math.random()-0.5)*1.2*ea;
+      m.position.z+=(Math.random()-0.5)*1.4*ea;
+      m.userData.r0=0.42+Math.random()*0.55;
+      m.rotation.set(Math.random()*3,Math.random()*3,Math.random()*3);
+      m.scale.setScalar(m.userData.r0*ea); m.material.opacity=0.52;
     }
   }
   for(const h of CINE.humo){ if(!h.userData.vivo) continue;
-    h.userData.v+=dt; h.scale.setScalar((0.62+h.userData.v*1.15)*ea);
+    h.userData.v+=dt; h.scale.setScalar(((h.userData.r0||0.62)+h.userData.v*1.25)*ea);
     h.material.opacity=Math.max(0,0.52-h.userData.v*0.26);
     if(h.material.opacity<=0.01){ h.visible=false; h.userData.vivo=0; } }
 }
