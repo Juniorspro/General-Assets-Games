@@ -9140,7 +9140,11 @@ let TIRO_VIDA=0;
 //            alcance para el brazo izquierdo, que tiene que cruzar 0.183+x.
 //  x=0.080 (era 0.110): con el agarre izquierdo en el magwell la cadena da 0.489 m contra 0.513 de
 //            alcance útil (24 mm de sobra para el bamboleo). Con 0.110 sobran 9 mm: cierra, pero al filo.
-const GUN_OJO=new THREE.Vector3(0.115,-0.175,0.460);   // más abajo: con el puño envolviendo, a -0,13 la mano quedaba en el centro del cuadro
+/* EL ARMA VA ABAJO Y A LA DERECHA, y sin llegar al centro. A 0,115 de costado y -0,175 de alto el
+   caño y la mira de la reflex subian hasta la cruceta y te tapaban justo el punto al que apuntas.
+   Se la corre mas a la derecha y mas abajo: en cadera el arma ocupa la esquina inferior derecha y
+   el centro del cuadro queda limpio. Apuntando no cambia nada, porque ahi manda GUN_OJO_ADS. */
+const GUN_OJO=new THREE.Vector3(0.150,-0.212,0.460);
 /* APUNTAR (mira réflex). El arma se corre al eje de la vista y el campo visual se cierra: el punto
    rojo queda sobre la cruceta y la sensibilidad baja, que es lo que uno espera al apuntar. No es un
    zoom de cámara aparte: es el MISMO arma movida, así que las manos y el cuerpo lo siguen solos. */
@@ -10566,6 +10570,10 @@ try{ window.__tiro={
              distImpacto: hit? +hit.distance.toFixed(1) : null }; },
   tpVista:(v)=>{ camView=v?'tp':'fp'; return camView; },
   adsForzar:(v)=>{ adsQ=v?1:0; return {adsQ, adsW:+adsW.toFixed(2)}; },
+  salirMenu:()=>{ exitToMenu(); return {menu:menuMode, mundo:world}; },
+  donde:()=>({ mundo:world, menu:menuMode,
+    pj:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+player.pos.z.toFixed(1)],
+    local:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+(player.pos.z-ARE_GZ).toFixed(1)] }),
   /* ¿la mira APOYA en el arma o flota? Tira un rayo vertical por el eje de cada anillo y lista las
      superficies que encuentra: si entre el lomo del arma y el anillo hay un salto grande, flota. */
   miraApoyo:()=>{
@@ -11899,7 +11907,24 @@ function slideDeseo(){
   const x=rx*ix - fx*iz, z=rz*ix - fz*iz, L=Math.hypot(x,z);
   return L<1e-4? null : {x:x/L, z:z/L};
 }
-function startSlide(){ if(!player.onGround)return;
+/* SEGUNDO TOQUE = CANCELAR. Tocar DESLIZAR mientras te deslizas ahora te levanta en el acto y te
+   deja la velocidad que traias: es el slide cancel de cualquier shooter, y sirve para cortar el
+   deslizamiento a mitad y disparar de pie sin esperar a que termine solo. */
+function cancelSlide(){
+  if(!player.sliding) return false;
+  player.sliding=false; player.slideT=0; sldSac=0; sldHold=false;
+  player.crouch=false; player.h=STAND;
+  /* al levantarse se conserva el envion, pero recortado: si no, cancelar seria gratis y saldrias
+     mas rapido que corriendo */
+  const v=player.vel.length();
+  if(v>RUN) player.vel.multiplyScalar(RUN/v);
+  try{ document.body.classList.remove('deslizando'); }catch(e){}
+  try{ sfx('jump'); }catch(e){}
+  return true;
+}
+function startSlide(){
+  if(player.sliding && !sldFicha) { cancelSlide(); return; }
+  if(!player.onGround)return;
   if(player.sliding){
     /* Ya deslizando: solo se encadena SI HAY FICHA, y la ficha se gasta. O sea: deslizas, tocas
        apuntar, y eso te habilita UN deslizamiento mas —hacia donde pida la palanca—. Para otro,
@@ -13181,6 +13206,23 @@ document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)ret
 });
 function startLevel(k){ const w=(k||startWorld);
   if(w==='valle') enterAlc(); else if(w==='arena') enterArena(); else enterTiro();
+  /* LA POSICION SE PONE SIEMPRE, ENTRE O NO A CONSTRUIR EL MUNDO.
+     enterArena/enterAlc/enterTiro arrancan con `if(world===...) return;`, asi que la segunda vez
+     que entras no reubican nada. Y mientras estas en el menu, menuCam planta al jugador a 300 m de
+     altura (ahi se arma el diorama). Resultado: salias al menu, volvias a entrar y aparecias en el
+     cielo, con el mapa invisible ahi abajo y el personaje moviendose igual. Eso es lo que se veia
+     como "el mapa aparece todo nada pero el personaje si se mueve". */
+  try{
+    if(w==='arena'){ const p=areSpawn(); player.pos.set(p[0],1.2,ARE_GZ+p[1]);
+      player.yaw=Math.atan2(p[0],p[1])+Math.PI; }
+    else if(w==='valle'){ player.pos.copy(ALC_START);
+      player.pos.y=alcH(ALC_START.x,ALC_START.z-ALC_GZ)+0.1; player.yaw=Math.PI; }
+    else { player.pos.copy(TIRO_START); player.yaw=0; }
+    player.faceYaw=player.yaw; player.pitch=0;
+    player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+    player.sliding=player.rolling=player.climbing=false; player.wallrun=0; player.wallrunT=0;
+    lastSafe.copy(player.pos);
+  }catch(e){ console.warn('spawn',e); }
   try{ equiparSiHace(); }catch(e){} }
 
 // cámara cinemática del menú: orbita adentro del campo de tiro (el mismo mundo que vas a jugar, difuminado por CSS)
@@ -14642,7 +14684,10 @@ function partFeed(ico,txt){
    despues no entra apretado: se abre la sala siguiente, y ahi vuelve a haber dieciseis bots y una
    sola persona. El numero de sala viaja en el nombre del tema del broker, asi que no hace falta un
    servidor que reparta: alcanza con contar quien esta publicando. */
-const SALA_CUPO=16;
+/* SIETE BOTS. Estaba en 16 y la arena era un tumulto: te mataban desde tres lados sin ver de
+   donde. Con cupo 8 quedan 7 bots + vos, y a medida que entra gente de verdad los bots se van
+   yendo, que es como estaba pensado. */
+const SALA_CUPO=8;
 let salaN=1, BOT_META=SALA_CUPO, _salaT=0;
 function salaReales(){ let k=0; for(const [,r] of MP.remotes) if(!r.esBot) k++; return k; }
 function salaCambiar(nueva){
