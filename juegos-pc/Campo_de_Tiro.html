@@ -10260,6 +10260,20 @@ try{ window.__tiro={
              danioPorSeg:+(perdida/Math.max(0.01,t)).toFixed(1),
              venMax:maxVen, venProm:+(sumVen/Math.max(1,n)).toFixed(1), tiranMax:maxTiran }; },
   partSalto:(seg)=>{ PART.tFase-=(seg||10); return {tFase:+PART.tFase.toFixed(1), ronda:PART.ronda}; },
+  /* la punteria de los bots, desarmada: la mano de cada uno y cuanto pesa lo que estas haciendo */
+  punt:()=>({ base:BOT_PUNT0, caida:BOT_PUNT_CAIDA, min:BOT_PUNT_MIN,
+    dificil:+botBlancoDificil().toFixed(3),
+    manos:BOTS.map(b=>b.mano==null?null:+b.mano.toFixed(2)),
+    rachas:BOTS.map(b=>b.racha||0) }),
+  /* cuantos de N tiros acierta un bot con esta mano, a esta distancia, con vos haciendo esto */
+  puntSim:(mano,dPl,n)=>{ const b={mano:mano, racha:0, tVer:99}; let ok=0;
+    n=n||400; for(let i=0;i<n;i++) if(botAcierta(b,dPl||12)) ok++;
+    return +(ok/n).toFixed(3); },
+  puntFria:(mano,dPl,n)=>{ /* recien te engancha: tVer justo despues de reaccionar */
+    let ok=0; n=n||400;
+    for(let i=0;i<n;i++){ const b={mano:mano, racha:0, tVer:BOT_REACCION+0.05};
+      if(botAcierta(b,dPl||12)) ok++; }
+    return +(ok/n).toFixed(3); },
   botMatar:(i)=>{ const b=BOTS[i|0]; if(!b) return 'no hay'; botDanio(b.id,999,false);
                   return {vivos:PART.vivos, bajas:PART.bajas}; },
   partOtra:()=>{ partReiniciar(); return {fase:PART.fase, vivos:PART.vivos}; },
@@ -16290,8 +16304,53 @@ function botDanioTope(d){
 }
 const BOT_MAX_TIRAN=2;         // cuantos pueden dispararte a la vez
 const BOT_REACCION=1.15;       // segundos desde que te ven hasta el primer tiro
-let BOT_PUNT0=0.42; const BOT_PUNT0_REF=0.42, BOT_PUNT_CAIDA=0.0075, BOT_PUNT_MIN=0.05;
+/* ===================== LA PUNTERIA DE LOS BOTS =====================
+   "SE VE QUE TIENEN TREMENDO AIM". Y era cierto: la probabilidad de acertar salia de UNA cuenta,
+   la distancia. `0.42 - d*0.0075`. O sea que todos los bots eran el mismo tirador, con la misma
+   punteria siempre, aciertes lo que hagas: quieto o esquivando, primer tiro o el vigesimo, y
+   apenas te veian ya tiraban con el 38% pegado. Eso no se siente como un rival, se siente como
+   una torreta.
+
+   Ahora la punteria sale de cuatro cosas, y ninguna sola manda:
+
+   1. QUIEN ES. Cada bot tiene su mano, sorteada al nacer y fija: hay malos (0,55) y hay buenos
+      (1,25). El de al lado no tira como vos.
+   2. HACE CUANTO TE ENGANCHO. Los primeros tiros de una rafaga se van: la punteria arranca en el
+      35% y tarda ~2,2 s en asentarse. Nadie clava el primer tiro de una esquina.
+   3. QUE ESTAS HACIENDO. Corriendo, deslizandote o en el aire sos mucho mas dificil: hasta el 62%
+      menos. Quieto en el medio del campo sos un blanco, y esta bien que lo seas.
+   4. LA MALA RACHA. Cuando erra, sigue errando un toque mas —el rival se le fue de la mira— y
+      cuando pega, encadena. Eso es lo que hace que se sienta que hay alguien apuntando y no una
+      moneda cargada. */
+let BOT_PUNT0=0.30; const BOT_PUNT0_REF=0.30, BOT_PUNT_CAIDA=0.0062, BOT_PUNT_MIN=0.035;
+const BOT_ASIENTA=2.2;         // segundos hasta que le agarra la mano al blanco
 function __botPunt(v){ BOT_PUNT0=v; }
+/* cuanto te cuesta acertarle a alguien que se mueve. 1 = quieto, y baja desde ahi. */
+function botBlancoDificil(){
+  let f=1;
+  const v=Math.hypot(player.vel.x, player.vel.z);
+  f *= 1 - Math.min(0.34, v/RUN*0.34);          // corriendo: hasta 34% menos
+  if(player.sliding)   f*=0.55;                  // deslizandote: la mitad
+  if(!player.onGround) f*=0.62;                  // en el aire
+  if(player.crouch)    f*=1.12;                  // agachado y quieto sos mas facil de encuadrar
+  return Math.max(0.28, f);
+}
+/* la probabilidad final de que ESTE bot acierte ESTE tiro */
+function botAcierta(b, dPl){
+  if(BOT_PUNT0>=0.999) return true;      // la prueba de "cuanto tardan si te pegan TODO"
+  if(b.mano==null){
+    /* la mano de cada uno, sorteada una vez. Una campana chata: pocos muy malos, pocos muy buenos. */
+    b.mano = 0.55 + (Math.random()+Math.random())*0.35;
+    b.racha = 0;
+  }
+  const asienta = 0.35 + 0.65*Math.min(1, Math.max(0,(b.tVer-BOT_REACCION))/BOT_ASIENTA);
+  const racha   = 1 + Math.max(-0.35, Math.min(0.30, (b.racha||0)*0.12));
+  const p = Math.max(BOT_PUNT_MIN,
+              (BOT_PUNT0 - dPl*BOT_PUNT_CAIDA) * b.mano * asienta * botBlancoDificil() * racha);
+  const da = Math.random() < Math.min(0.92, p);
+  b.racha = da ? Math.min(3, Math.max(0,(b.racha||0))+1) : Math.max(-3, Math.min(0,(b.racha||0))-1);
+  return da;
+}
 const BOT_DMG=0.38, BOT_CAB_P=0.05, BOT_CAB_MUL=1.7;
 const BOT_PAUSA0=1.0, BOT_PAUSA1=1.3;   // el hueco entre rafagas: es el aire para taparte
 let PVP_GRACIA=0;              // invulnerable un rato despues de reaparecer
@@ -16429,7 +16488,7 @@ function botTick(dt){
         const d=ARSENAL.find(o=>o.id===b.arma)||ARSENAL[0];
         b.rafaga=(b.rafaga>0)? b.rafaga-1 : (2+((Math.random()*3)|0));
         b.tTiro=(b.rafaga>0)? (60/(d.rpm||600)) : (BOT_PAUSA0+Math.random()*BOT_PAUSA1);
-        const acierta = Math.random() < Math.max(BOT_PUNT_MIN, BOT_PUNT0 - dPl*BOT_PUNT_CAIDA);
+        const acierta = botAcierta(b, dPl);
         try{ tiroSnd(dPl>45?'lejos':'shot', Math.max(0.10, Math.min(0.85, 22/(dPl+8)))); }catch(e){}
         /* SE VE DE DONDE TE ESTAN TIRANDO. Antes el bot disparaba y no pasaba nada en pantalla:
            solo un ruido. Ahora sale la estela desde su arma hasta vos (o hasta donde erro). */
