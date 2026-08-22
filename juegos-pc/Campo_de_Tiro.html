@@ -10213,6 +10213,39 @@ try{ window.__tiro={
              impacto: hit? [+hit.point.x.toFixed(1),+hit.point.y.toFixed(1),+(hit.point.z-ARE_GZ).toFixed(1)] : null,
              distImpacto: hit? +hit.distance.toFixed(1) : null }; },
   tpVista:(v)=>{ camView=v?'tp':'fp'; return camView; },
+  /* donde queda la camara respecto del jugador, donde cae su cuerpo en pantalla, y si el centro
+     de la pantalla (la mira) esta tapado por el propio cuerpo */
+  tpEncuadre:()=>{
+    const W=innerWidth, H=innerHeight;
+    const dx=camera.position.x-player.pos.x, dz=camera.position.z-player.pos.z;
+    const f=[-Math.sin(player.yaw), -Math.cos(player.yaw)], r=[Math.cos(player.yaw), -Math.sin(player.yaw)];
+    const atras=-(dx*f[0]+dz*f[1]), lado=dx*r[0]+dz*r[1];
+    const alto=camera.position.y-player.pos.y;
+    const camF=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    let caja=null, tapa=null;
+    if(bodyRoot){
+      bodyRoot.updateMatrixWorld(true);
+      const bb=new THREE.Box3().setFromObject(bodyRoot);
+      if(isFinite(bb.min.x)){
+        let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; const v=new THREE.Vector3();
+        for(let i=0;i<8;i++){
+          v.set(i&1?bb.max.x:bb.min.x, i&2?bb.max.y:bb.min.y, i&4?bb.max.z:bb.min.z).project(camera);
+          const sx=(v.x*0.5+0.5)*W, sy=(1-(v.y*0.5+0.5))*H;
+          x0=Math.min(x0,sx); x1=Math.max(x1,sx); y0=Math.min(y0,sy); y1=Math.max(y1,sy);
+        }
+        caja=[Math.round(x0),Math.round(y0),Math.round(x1),Math.round(y1)];
+        tapa=(W/2>x0 && W/2<x1 && H/2>y0 && H/2<y1);
+      }
+      /* y la prueba de verdad: un rayo desde la camara al centro, ¿pega primero en mi cuerpo? */
+      const rc=new THREE.Raycaster(camera.position.clone(), camF.clone()); rc.far=60; rc.camera=camera;
+      const hs=rc.intersectObject(bodyRoot,true);
+      var miCuerpoDelante = hs.length? +hs[0].distance.toFixed(2) : null;
+    }
+    return { pitch:+player.pitch.toFixed(2), camTP:+player.camTP.toFixed(2),
+             sobreLosPies:+alto.toFixed(2), atras:+atras.toFixed(2), alHombro:+lado.toFixed(2),
+             cabeceoCamara:+Math.asin(Math.max(-1,Math.min(1,camF.y))).toFixed(3),
+             cuerpoEnPantalla:caja, tapaLaMira:tapa, pantalla:[W,H],
+             miCuerpoDelanteDeLaMira: (typeof miCuerpoDelante==='undefined'? null : miCuerpoDelante) }; },
   /* donde cae el personaje del menu en la pantalla, y que parte del alto le queda libre de HUD */
   menuEncuadre:()=>{ if(!bodyRoot) return 'sin cuerpo';
     bodyRoot.updateMatrixWorld(true);
@@ -11241,8 +11274,11 @@ const ROLL_ANIM_START=1.15, ROLL_TIMESCALE=1.7, ROLL_DUR=0.82, ROLL_SPEED=9.5, R
 // estructura entrada→LOOP(medio)→FINAL(outro) para estados sostenidos (tiempos del clip, en segundos)
 let prevVy=0, rollReq=false;
 const forward=new THREE.Vector3(),right=new THREE.Vector3(),_v=new THREE.Vector3(),_v2=new THREE.Vector3(),_v3=new THREE.Vector3(),_camAnchor=new THREE.Vector3();
-const TP_DIST=3.1;   // distancia de la cámara en 3ª persona
-const TP_LAT=0.80;   // corrimiento lateral (hombro) en 3ª persona dentro del campo de tiro: ver 2j
+const TP_DIST=3.4;   // distancia de la cámara en 3ª persona
+const TP_LAT=0.90;   // corrimiento lateral (hombro) en 3ª persona
+const TP_ALTO=1.05;  // cuanto SUBE la camara por encima de los ojos: es lo que hace que se vea el cuerpo desde arriba
+const TP_CONV=18.0;  // a que distancia converge la mira: la camara apunta a ese punto del rayo de punteria
+const _tpP=new THREE.Vector3(), _tpA=new THREE.Vector3(), _tpD=new THREE.Vector3();
 function camClipDist(ox,oy,oz,dx,dy,dz,maxD){ let best=maxD;   // ray-AABB contra colliders → evita que la cámara 3ª persona atraviese paredes
   for(let i=0;i<colliders.length;i++){ const c=colliders[i]; if(!c||c.locked||c.mesh===ground||c._survground)continue;
     let t0=0,t1=best;
@@ -11827,19 +11863,58 @@ function update(dt){
   const _tpK = (camView==='tp' && adsFpForzado && adsW>0.02) ? 1 : Math.min(1,9*dt);
   player.camTP += (tpTarget-player.camTP)*_tpK;
   if(player.camTP>0.02){
-    const cx=player.pos.x, cy=player.pos.y+1.55, cz=player.pos.z;        // pivote a la altura de los hombros
-    const _yv=player.yaw+(window.__tpOff||0);                            // __tpOff permite orbitar la 3ª persona (revisión del agarre)
-    const bx=-Math.sin(_yv), bz=-Math.cos(_yv);                          // adelante horizontal (la cámara va detrás)
-    const want=TP_DIST*player.camTP;
-    const maxB=camClipDist(cx,cy,cz,-bx,0,-bz,want+0.3);                 // anti-clip horizontal contra paredes
-    const back=Math.min(want,Math.max(0.4,maxB-0.3));
-    camera.position.set(cx-bx*back, cy, cz-bz*back);                     // SIEMPRE a la altura de los hombros (nunca por debajo)
-    if(enTiro()){                                                        // ← 3ª persona SOBRE EL HOMBRO (ver 2j)
-      const rx=Math.cos(_yv), rz=-Math.sin(_yv);                         // eje derecha de la cámara
-      const maxL=camClipDist(camera.position.x,cy,camera.position.z, rx,0,rz, TP_LAT+0.25);
-      const lat=Math.min(TP_LAT*player.camTP, Math.max(0, maxL-0.25));
-      camera.position.x+=rx*lat; camera.position.z+=rz*lat; }
-    euler.set(player.pitch+rollCam, _yv, 0); camera.quaternion.setFromEuler(euler);   // la mirada sube/baja con el pitch (cielo o piso), el cuerpo nunca se deforma
+    /* TERCERA PERSONA, REESCRITA.
+       Antes la camara se paraba EXACTAMENTE a la altura de los hombros (pos.y+1.55) y justo detras,
+       mirando en la misma direccion que la punteria. Con eso el cuerpo del jugador cae en el centro
+       de la pantalla y tapa la mira: la cabeza y el torso quedan encima del punto al que estas
+       apuntando. Como se ve en la foto: se le ven las botas y el torso en el medio y no se ve nada
+       de lo que hay adelante.
+
+       Ahora la camara va POR ARRIBA de la cabeza y MIRA HACIA ABAJO, que es como se para en
+       cualquier juego de tercera persona:
+       - Se levanta TP_ALTO por encima de los ojos, asi el cuerpo se ve desde arriba y cae en la
+         mitad de abajo del cuadro, con el centro de la pantalla despejado.
+       - No mira paralela a la punteria: apunta a un punto del RAYO DE PUNTERIA a TP_CONV metros.
+         Como el disparo sale de la camara, la mira y el tiro siguen coincidiendo exactamente; lo
+         unico que cambia es que la camara queda cabeceada un par de grados hacia abajo, que es de
+         donde sale la sensacion de estar mirando al personaje desde arriba.
+       - Al mirar para ABAJO la camara ORBITA: se va para arriba y para atras en vez de quedarse
+         clavada, asi el cuerpo no se te viene encima. Al mirar para arriba se queda donde esta (no
+         orbita hacia abajo) porque meterse debajo del cuerpo era justo el defecto viejo, el de la
+         cintura deformada.
+       - El corrimiento al hombro va en todos los mundos, no solo en la galeria. */
+    const t=player.camTP;
+    const px=player.pos.x, py=player.pos.y+player.eye, pz=player.pos.z;   // pivote: de aca sale la punteria
+    const _yv=player.yaw+(window.__tpOff||0);                             // __tpOff: orbitar a mano para revisar
+    const fx=-Math.sin(_yv), fz=-Math.cos(_yv);                           // adelante horizontal
+    const rx= Math.cos(_yv), rz=-Math.sin(_yv);                           // derecha
+    /* la orbita usa SOLO la parte de cabeceo hacia abajo */
+    const pOrb=Math.min(0, player.pitch), cO=Math.cos(pOrb), sO=Math.sin(pOrb);
+    /* vector camara-desde-pivote, sin normalizar todavia */
+    _tpD.set(-(fx*cO)*TP_DIST + rx*TP_LAT,
+             -sO*TP_DIST + TP_ALTO,
+             -(fz*cO)*TP_DIST + rz*TP_LAT).multiplyScalar(t);
+    const L=_tpD.length();
+    if(L>1e-4){
+      _tpD.divideScalar(L);
+      /* un solo rayo para las tres direcciones a la vez: si hay pared, techo o loma, la camara se
+         queda mas cerca, pero nunca a menos de 0,9 m para que no se meta dentro del cuerpo */
+      const maxD=camClipDist(px,py,pz,_tpD.x,_tpD.y,_tpD.z, L+0.35);
+      const dist=Math.min(L, Math.max(0.9, maxD-0.35));
+      camera.position.set(px+_tpD.x*dist, py+_tpD.y*dist, pz+_tpD.z*dist);
+    } else camera.position.set(px,py,pz);
+    /* y no por debajo del piso ni de la cintura */
+    const minY=player.pos.y+0.85;
+    if(camera.position.y<minY) camera.position.y=minY;
+    /* mira al punto de convergencia sobre el rayo de punteria */
+    const cP=Math.cos(player.pitch), sP=Math.sin(player.pitch);
+    _tpA.set(px + (-Math.sin(player.yaw)*cP)*TP_CONV,
+             py + sP*TP_CONV,
+             pz + (-Math.cos(player.yaw)*cP)*TP_CONV);
+    _tpD.copy(_tpA).sub(camera.position);
+    const hor=Math.hypot(_tpD.x,_tpD.z)||1e-4;
+    euler.set(Math.atan2(_tpD.y,hor)+rollCam, Math.atan2(-_tpD.x,-_tpD.z), 0);
+    camera.quaternion.setFromEuler(euler);
   }
 
   sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
