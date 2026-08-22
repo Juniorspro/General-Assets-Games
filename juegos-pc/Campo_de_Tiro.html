@@ -159,7 +159,11 @@
     box-shadow:0 14px 44px rgba(0,0,0,.7), 0 0 40px rgba(255,150,60,.18);
     animation:tdmPop .3s cubic-bezier(.16,1,.3,1) both; }
   @keyframes tdmPop{ from{ opacity:0; transform:translateX(-50%) scale(.9);} to{ opacity:1; transform:translateX(-50%) scale(1);} }
-  body.sinhud #tdmHUD, body.sinhud #tdmAviso, body.cine #tdmHUD, body.cine #tdmAviso{ display:none !important; }
+  /* Y EN EL MENU TAMPOCO. El marcador vive en z-index 18 y el menu en 50, pero el menu es casi todo
+     transparente: arriba al centro no hay nada que lo tape, asi que el contador se seguia viendo
+     por encima del telon con los numeros de la partida que ya habias dejado. */
+  body.sinhud #tdmHUD, body.sinhud #tdmAviso, body.cine #tdmHUD, body.cine #tdmAviso,
+  body.menu-open #tdmHUD, body.menu-open #tdmAviso{ display:none !important; }
   #teleAum{ position:fixed; right:calc(16px + var(--safe-t)); bottom:calc(50% - 96px); z-index:12; display:none;
     font:900 15px/1 ui-monospace,SFMono-Regular,Menlo,monospace; letter-spacing:.06em; color:#ffd9ac;
     text-shadow:0 2px 10px #000, 0 0 18px rgba(255,150,60,.35); pointer-events:none; }
@@ -292,7 +296,10 @@
   /* Estos tres los tapaba el telon del menu cuando era un DIV opaco encima del canvas. Ahora el
      canvas se ve, asi que hay que esconderlos como al resto del HUD. */
   body.menu-open #hpWrap, body.menu-open #mpStatus, body.menu-open .actBtn{ display:none !important; }
-  body.menu-open #joy, body.menu-open #bJump, body.menu-open #bSlide, body.menu-open #bFire, body.menu-open #bReload, body.menu-open #bAds, body.menu-open #tiroHUD, body.menu-open #tiroMsg, body.menu-open #hudWrap, body.menu-open #cross, body.menu-open #bChat, body.menu-open #bPack, body.menu-open #bVoice, body.menu-open #btnMenu, body.menu-open #billHUD{ display:none !important; }
+  body.menu-open #joy, body.menu-open #bJump, body.menu-open #bSlide, body.menu-open #bFire, body.menu-open #bReload, body.menu-open #bAds, body.menu-open #tiroHUD, body.menu-open #tiroMsg, body.menu-open #hudWrap, body.menu-open #cross, body.menu-open #bChat, body.menu-open #bPack, body.menu-open #bVoice, body.menu-open #btnMenu, body.menu-open #billHUD,
+  /* la chapa de la sala tambien: al salir al menu quedaba asomando arriba al centro */
+  body.menu-open #areSala, body.menu-open #bTomar, body.menu-open #bCambiar, body.menu-open #bCurar,
+  body.menu-open #vBoard, body.menu-open #vTimer, body.menu-open #teleAum{ display:none !important; }
   /* ===== MULTIJUGADOR ===== */
   #mpStatus{ position:fixed; right:calc(12px + var(--safe-t)); top:calc(12px + var(--safe-t)); z-index:15; display:flex; align-items:center; gap:6px;
     background:rgba(14,22,30,.62); border:1px solid rgba(255,255,255,.16); border-radius:999px; padding:5px 10px; font-size:11px; font-weight:700; color:#cfe0ee; pointer-events:none; }
@@ -16909,6 +16916,11 @@ function tdmHUD(){
 }
 function tdmTick(dt){
   if(!TDM.on) return;
+  /* EL RELOJ NO CORRE SI NO ESTAS JUGANDO. tdmTick vive en animate, que sigue latiendo con el menu
+     abierto y en pausa: el cronometro de la ronda avanzaba igual, y a los cinco minutos la ronda
+     —o la partida entera— se terminaba sola mientras mirabas el menu, con premio de rango incluido
+     por algo que no jugaste. Eso era lo de "al salir sigue el contador". */
+  if(menuMode || paused) return;
   if(TDM.tMsj>0){ TDM.tMsj-=dt; if(TDM.tMsj<=0) tdmHUD(); }
   if(TDM.fin) return;
   TDM.t+=dt;
@@ -16965,7 +16977,19 @@ function tdmMarcaEquipo(b){
 function tdmSacarMarcas(){
   for(const b of BOTS){ if(b._marca){ try{ b._marca.g.visible=false; }catch(e){} } }
 }
-function tdmParar(){ TDM.on=false; tdmSacarMarcas(); for(const b of BOTS) b.eq=null; tdmHUD(); }
+function tdmParar(){
+  TDM.on=false; TDM.A=0; TDM.B=0; TDM.t=0; TDM.ronda=0; TDM.ganoR1=null; TDM.fin=false;
+  TDM.msj=''; TDM.tMsj=0; TDM._s=-1;
+  tdmSacarMarcas(); for(const b of BOTS) b.eq=null; tdmHUD();
+}
+/* abandonar: igual que parar, pero avisando y sin tocar el rango */
+function tdmAbandonar(){
+  if(!TDM.on) return false;
+  const habia=(TDM.A|0)+(TDM.B|0);
+  tdmParar();
+  if(habia) try{ mpChatIn('🚪','Dejaste la partida · no cuenta para el rango'); }catch(e){}
+  return true;
+}
 const PART={ fase:'espera', t:0, ronda:0, cerrando:false, asist:0,
              cx:0, cz:0, r:240, nx:0, nz:0, nr:240, tFase:0,
              vivos:1, bajas:0, puesto:0, dur:0, activa:false, resultado:'' };
@@ -18102,11 +18126,26 @@ function openSettings(){ if(settingsPanelEl)settingsPanelEl.classList.add('show'
 function closeSettings(){ if(settingsPanelEl)settingsPanelEl.classList.remove('show'); }
 function openBoard(){ renderBoard(bigBoardEl); if(boardPanelEl)boardPanelEl.classList.add('show'); }
 function closeBoard(){ if(boardPanelEl)boardPanelEl.classList.remove('show'); }
-function exitToMenu(){ closePause(); closeSettings(); closeBoard(); menuMode=true; aplicarPR(); document.body.classList.add('menu-open'); menuEl.classList.remove('hide'); }
+function exitToMenu(){ closePause(); closeSettings(); closeBoard();
+  /* SALIR ABANDONA LA PARTIDA. Antes el duelo quedaba prendido: el marcador seguia en pantalla con
+     los numeros de la partida anterior y, si volvias a entrar, arrancabas con esos. Abandonar no
+     da puntos de rango —no se gana ni se pierde una partida que dejaste a la mitad— y el marcador
+     se pone en cero. */
+  try{ tdmAbandonar(); }catch(e){}
+  /* Y SE CORTA LA ENTRADA SI ESTABA CORRIENDO. Saliendo mientras el avion o el careo estaban en
+     el aire, nadie sacaba la clase `cine` del body… y `body.cine #menu{display:none}` deja el
+     menu invisible PARA SIEMPRE: se sale al menu y no hay menu. Se cortan las dos y, por si acaso,
+     se saca la clase a mano: es una linea contra una pantalla muerta. */
+  try{ if(typeof CINE!=='undefined' && CINE.act) cineCortar(); }catch(e){}
+  try{ if(typeof CAREO!=='undefined' && CAREO.act) careoCortar(); }catch(e){}
+  try{ document.body.classList.remove('cine');
+       const tl=document.getElementById('cineTela'); if(tl){ tl.style.display='none'; tl.style.opacity='0'; } }catch(e){}
+  menuMode=true; aplicarPR(); document.body.classList.add('menu-open'); menuEl.classList.remove('hide'); }
 
 /* ===================== Init ===================== */
 boardLoad();
 try{ modoPoner(modoSel); }catch(e){}      // la ficha del modo, con lo ultimo que elegiste
+try{ aplicarMapa(); }catch(e){}           // y la ficha MAPA, que se quedaba con el texto del HTML
 setupQuiz();   // randomiza las sumas del edificio 4
 applyLang(lang);   // aplica el idioma guardado a todo el menú/HUD/botones
 const loaderEl=document.getElementById('loader');
