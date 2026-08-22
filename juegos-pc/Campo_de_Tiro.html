@@ -9907,7 +9907,7 @@ try{ window.__tiro={
     const jx0=joy.x, jy0=joy.y;
     const cajas=alcLista().filter(c=>!c.piso && (c.maxy-c.miny)>0.6 && c.maxy>0.9
                  && Math.abs((c.minz+c.maxz)/2-ARE_GZ)<80 && Math.abs((c.minx+c.maxx)/2)<80);
-    const sp=areSpawn(); player.pos.set(sp[0],1.2,ARE_GZ+sp[1]);
+    player.pos.set(0,1.2,ARE_GZ+44);                        // fijo: areSpawn() usa Math.random
     player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.h=STAND;
     const fallos=[]; let n=0, t=0, T=seg||30, adentro=0, afuera=0, bajo=0;
     let mx=0, mz=0;
@@ -9943,6 +9943,42 @@ try{ window.__tiro={
     return { cuadros:n, seg:+t.toFixed(1), cajas:cajas.length,
              dentroDeUnaCaja:adentro, afueraDelMapa:afuera, bajoElPiso:bajo,
              maxX:+mx.toFixed(1), maxZ:+mz.toFixed(1), fallos }; },
+  /* el fuzz otra vez, pero guardando los ultimos cuadros para ver COMO empezo el fallo */
+  fuzzOjo:(seg,semilla,que)=>{
+    let sm=(semilla||1)|0; const rnd=()=>{ sm=(sm*1103515245+12345)&0x7fffffff; return sm/0x7fffffff; };
+    const jx0=joy.x, jy0=joy.y;
+    player.pos.set(0,1.2,ARE_GZ+44);
+    player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.h=STAND;
+    const anillo=[]; let t=0, T=seg||40, disparo=null;
+    while(t<T){
+      const h=0.016 + rnd()*0.034;
+      if(rnd()<0.06){ const a=rnd()*6.283; joy.x=Math.sin(a); joy.y=Math.cos(a); }
+      if(rnd()<0.02 && player.onGround){ player.vy=JUMP_V; player.onGround=false; }
+      if(rnd()<0.02){ try{ sldHold=true; startSlide(); }catch(e){} }
+      if(rnd()<0.05){ try{ sldHold=false; }catch(e){} }
+      if(rnd()<0.03){ player.yaw+=(rnd()-0.5)*2.2; player.faceYaw=player.yaw; }
+      update(h); t+=h;
+      anillo.push({ t:+t.toFixed(2), dt:+h.toFixed(3),
+        p:[+player.pos.x.toFixed(2),+player.pos.y.toFixed(2),+(player.pos.z-ARE_GZ).toFixed(2)],
+        vy:+player.vy.toFixed(2), suelo:player.onGround, h:+player.h.toFixed(2),
+        desl:!!player.sliding, tr:!!player.climbing, wr:+(player.wallrun||0).toFixed(2) });
+      if(anillo.length>26) anillo.shift();
+      const bajo = player.pos.y < -1.2;
+      const afu = Math.abs(player.pos.x)>67.5 || Math.abs(player.pos.z-ARE_GZ)>67.5;
+      if((que==='afuera'? afu : bajo) && !disparo){ disparo=anillo.slice(); break; }
+    }
+    joy.x=jx0; joy.y=jy0;
+    return { hasta:+t.toFixed(2), encontrado:!!disparo, cuadros:disparo||anillo.slice(-8) }; },
+  /* que hay debajo y alrededor de un punto: para saber si el piso tiene un agujero */
+  quePiso:(x,z)=>{
+    const wz=ARE_GZ+z, r=[];
+    for(const c of alcLista()){
+      if(x>c.minx-0.4&&x<c.maxx+0.4&&wz>c.minz-0.4&&wz<c.maxz+0.4)
+        r.push({ miny:+c.miny.toFixed(2), maxy:+c.maxy.toFixed(2), piso:!!c.piso,
+                 an:+(c.maxx-c.minx).toFixed(2), fo:+(c.maxz-c.minz).toFixed(2),
+                 cx:+((c.minx+c.maxx)/2).toFixed(1), cz:+(((c.minz+c.maxz)/2)-ARE_GZ).toFixed(1) });
+    }
+    return { p:[x,z], cajas:r.length, lista:r.slice(0,12) }; },
   tiendaSolidos:(i)=>{
     const L=ARE_LADO, d=L/2-11;
     const cs=[[-d,-d,Math.PI*0.25],[d,-d,-Math.PI*0.25],[-d,d,Math.PI*0.75],[d,d,-Math.PI*0.75]];
@@ -13777,13 +13813,22 @@ function buildArena(){
   }
   // rampas para subir a la plataforma del centro
   for(let k=0;k<4;k++){ const a=k*Math.PI/2;
+    /* LA RAMPA TIENE QUE APUNTAR AL CENTRO. La geometria sube hacia su +Z local, asi que el giro
+       se calcula para que ese +Z quede mirando al origen; antes se le pasaba `a` derecho y las
+       cuatro rampas quedaban ATRAVESADAS, tangentes a la plataforma en vez de radiales, mientras
+       los escalones de colision si iban radiales. O sea: se veia una rampa donde no habia nada y
+       habia una escalera invisible al costado. */
+    const gy=Math.atan2(-Math.cos(a), -Math.sin(a));
     const g=new THREE.BoxGeometry(5.0,0.5,7.0); g.rotateX(-0.24);
-    areAdd(M.piedraOs,g, Math.cos(a)*10.4, 0.82, Math.sin(a)*10.4, a);
+    areAdd(M.piedraOs,g, Math.cos(a)*10.4, 0.82, Math.sin(a)*10.4, gy);
     /* la rampa se sube por ESCALONES de colision: una caja inclinada no se puede subir con un
-       cuerpo que camina por AABB, se traba en el canto */
+       cuerpo que camina por AABB, se traba en el canto.
+       Cada escalon va FINO a lo largo del radio (1 m, que es lo que avanza cada uno) y ANCHO a lo
+       ancho de la rampa (5 m). Estaba al reves: el pasillo pisable medía 1 m contra una rampa de 5,
+       asi que subiendo por los costados no habia nada abajo. */
     for(let i=0;i<7;i++){ const t=(i+0.5)/7, alt=0.25+t*1.35;
       const rx=Math.cos(a)*(13.8-t*6.8), rz=Math.sin(a)*(13.8-t*6.8);
-      areCol(rx,alt/2,rz, (k%2? 1.0:5.0), alt, (k%2? 5.0:1.0)); }
+      areCol(rx,alt/2,rz, (k%2? 5.0:1.0), alt, (k%2? 1.0:5.0)); }
   }
   // barriles y postes sueltos, tambien en espejo
   for(const p of [[19,19],[44,6],[6,44],[36,20],[20,36]]) for(const sx of [-1,1]) for(const sz of [-1,1]){
