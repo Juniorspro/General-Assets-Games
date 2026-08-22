@@ -27,7 +27,10 @@
   body.cine #mpStatus, body.cine #btnMenu, body.cine #bChat, body.cine #bVoice, body.cine #bNames,
   body.cine #bPack, body.cine #hpWrap, body.cine #salaHUD, body.cine #danWrap,
   body.cine #billHUD, body.cine #bTienda, body.cine #tiroMsg, body.cine #kbd,
-  body.cine #menu, body.cine #areSala, body.cine #mTop, body.cine #mDrawer{ display:none !important; }
+  /* durante la cinematica de entrada no hay menu ni cajon: lo unico que puede aparecer es el
+     aviso de invitacion, que es justo lo que no queres perderte por estar mirando el avion */
+  body.cine #menu, body.cine #areSala, body.cine #mTop, body.cine #mDrawer,
+  body.cine #soc, body.cine #perf{ display:none !important; }
   #joy{ position:fixed; left:26px; bottom:calc(28px + var(--safe-b)); z-index:20; width:128px; height:128px; border-radius:50%;
         background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.18); backdrop-filter:blur(6px); touch-action:none; }
   #joyKnob{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%;
@@ -366,7 +369,8 @@
     background:rgba(4,7,10,.55); }
   /* kbSalida: los 380 ms de gracia despues de cerrar el teclado. Sin opacidad —los paneles ya se
      ven— pero sordos, para que el dedo que soltas sobre ENVIAR no apriete lo que quedo debajo. */
-  body.kbSalida #mLoad, body.kbSalida #mGo, body.kbSalida #mChat, body.kbSalida #mTop{ pointer-events:none !important; }
+  body.kbSalida #mLoad, body.kbSalida #mGo, body.kbSalida #mChat, body.kbSalida #mTop,
+  body.kbSalida .actBtn, body.kbSalida #joy, body.kbSalida #socPie{ pointer-events:none !important; }
   body.tecleando #mLoad, body.tecleando #mGo, body.tecleando #mChat{ opacity:0; pointer-events:none;
     transition:opacity .15s; }
   #kbd .kbField{ display:flex; gap:9px; align-items:center; }
@@ -495,7 +499,9 @@
      a alguien, ver como juega y decidir si lo sumas. */
   #soc{ position:fixed; right:0; top:0; bottom:0; width:min(88vw,364px); z-index:58;
     transform:translateX(103%); transition:transform .26s cubic-bezier(.2,.8,.3,1);
-    background:linear-gradient(205deg, rgba(17,23,30,.985), rgba(9,13,18,.99));
+    /* OPACO DEL TODO. Con 98,5% de alfa el naranja de ENTRAR se seguia leyendo a traves del panel
+       —medido en pantalla: el texto del boton se ve—, y un cajon con fantasmas atras se lee mal. */
+    background:linear-gradient(205deg, #111720, #090d12);
     border-left:1px solid rgba(255,255,255,.13); box-shadow:-20px 0 48px rgba(0,0,0,.6);
     display:flex; flex-direction:column; font-family:'Segoe UI',system-ui,sans-serif;
     padding-top:var(--safe-t); padding-bottom:var(--safe-b); }
@@ -508,9 +514,10 @@
     background:linear-gradient(150deg, rgba(255,178,107,.18), rgba(18,24,31,.9)); }
   .socTab b{ position:absolute; top:-5px; right:-3px; min-width:16px; height:16px; line-height:16px;
     border-radius:8px; background:#e0561f; color:#fff; font-size:9.5px; padding:0 4px; }
-  #socX{ position:absolute; top:calc(10px + var(--safe-t)); left:-1px; transform:translateX(-100%);
-    width:34px; height:38px; border-radius:11px 0 0 11px; border:1px solid rgba(255,255,255,.13);
-    border-right:0; background:rgba(17,23,30,.96); color:#cfe0f0; font-size:16px; cursor:pointer; }
+  /* LA X VA ADENTRO. Colgada del borde de afuera se montaba justo encima de las fichas de
+     billetes y estrellas de la barra de arriba: dos cosas apretadas en el mismo pixel. */
+  #socX{ flex:0 0 auto; width:38px; border-radius:10px; cursor:pointer; font-size:15px;
+    color:#8fa2b6; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.10); }
   #socCuerpo{ flex:1 1 auto; overflow-y:auto; overflow-x:hidden; padding:2px 10px 8px;
     -webkit-overflow-scrolling:touch; }
   #socPie{ padding:8px 10px calc(8px + var(--safe-b)); border-top:1px solid rgba(255,255,255,.09); }
@@ -1398,10 +1405,10 @@
        Van FUERA de #menu a proposito: el cajon de amigos y el aviso de invitacion tienen que
        poder aparecer tambien en medio de una partida, no solo en el menu. -->
   <div id="soc">
-    <button id="socX" aria-label="Cerrar">✕</button>
     <div id="socTabs">
-      <div class="socTab on" data-tab="chat">💬 CHAT GLOBAL</div>
+      <div class="socTab on" data-tab="chat">💬 CHAT</div>
       <div class="socTab" data-tab="amigos">👥 AMIGOS<b id="socNum" style="display:none">0</b></div>
+      <button id="socX" aria-label="Cerrar">✕</button>
     </div>
     <div id="socCuerpo"></div>
     <div id="socPie"><button id="socEnviar">ESCRIBIR AL CHAT</button></div>
@@ -10857,6 +10864,14 @@ try{ window.__tiro={
     boton:(document.getElementById('perfAcc')||{}).textContent,
     puedo:!(document.getElementById('perfAcc')||{classList:{contains:()=>1}}).classList.contains('muerto') }; },
   socResponder:(si)=>{ socResponder(!!si); return __tiro.social(); },
+  /* CUANTOS QUEDARON DENTRO DE UNA CAJA. Devuelve, para el jugador y para cada bot, si su punto
+     esta libre. La prueba de que los spawns dejaron de meter gente adentro de los contenedores. */
+  encajados:function(){ const malo=[]; let n=0;
+    const rad=(arguments.length&&arguments[0]!=null)?arguments[0]:0.55;
+    for(const b of BOTS){ n++; if(!areLibre(b.x,b.z,rad)) malo.push({nom:b.nom, x:+b.x.toFixed(1), z:+b.z.toFixed(1)}); }
+    const px=player.pos.x, pz=player.pos.z-ARE_GZ;
+    const yo=(world==='arena') ? areLibre(px,pz,0.55) : true;
+    return { bots:n, encajados:malo.length, cuales:malo, yoLibre:yo, mundo:world }; },
   socChat:(n,txt)=>{ gchPintarUno({ id:'p_'+n, n, r:'oro', rn:'ORO II', c:'#e8c063', t:txt||'hola',
     ts:Date.now() }, false); return GCH_TODO.length; },
   /* EL BANCO DE SONIDO: que se decodifico, cuanto dura cada cosa y que cancion esta puesta */
@@ -16518,19 +16533,23 @@ function socPintar(){
 }
 
 /* ---------- LA TARJETA DE PERFIL ---------- */
-function perfAbrir(id, nomSuelto){
+/* `suelto` es lo poco que se sabe de alguien cuyo tarjeta todavia no llego: el nombre y el rango
+   vienen dentro del propio mensaje de chat, asi que la tarjeta no arranca en blanco. */
+function perfAbrir(id, nomSuelto, suelto){
   AMI.mirando=id;
-  perfPintar(id, nomSuelto);
+  perfPintar(id, nomSuelto, suelto);
   const el=document.getElementById('perf'); if(el) el.classList.add('show');
   try{ tiroSnd('menu',0.5); }catch(e){}
 }
 function perfCerrar(){ AMI.mirando=null; const el=document.getElementById('perf'); if(el) el.classList.remove('show'); }
-function perfPintar(id, nomSuelto){
+function perfPintar(id, nomSuelto, suelto){
   const q=(x)=>document.getElementById(x);
   const propio=(id===MP.id);
-  const p = propio ? perfMio() : (perfDe(id) || { id, n:nomSuelto||'jugador', r:'bronce', rn:'—',
-                                  c:'#c88a55', pts:0, tope:200, pct:0, baj:0, part:0, prec:-1,
-                                  arma:'—', skin:'—', ts:0 });
+  const flaco = Object.assign({ id, n:nomSuelto||'jugador', r:'bronce', rn:'—', c:'#c88a55',
+                  pts:0, tope:200, pct:0, baj:0, part:0, prec:-1, arma:'—', skin:'—', ts:0 },
+                  suelto||{});
+  const p = propio ? perfMio() : (perfDe(id) || flaco);
+  const parcial = !propio && !perfDe(id);
   const ins=RANGO_INS[p.r]||RANGO_INS.bronce;
   const im=q('perfIns'); if(im) im.src=ins;
   const nm=q('perfNom'); if(nm) nm.textContent=p.n||'jugador';
@@ -16538,6 +16557,7 @@ function perfPintar(id, nomSuelto){
   const idl=q('perfId'); if(idl) idl.textContent='ID '+String(id||'—').toUpperCase();
   const es=q('perfEstado');
   if(es){ if(propio){ es.textContent='Vos'; es.className=''; }
+    else if(parcial){ es.textContent='Buscando su ficha…'; es.className='off'; }
     else { const d=perfDonde(p); es.textContent=d.txt; es.className=d.on?'':'off'; } }
   const ba=q('perfBarra'); if(ba){ const i=ba.querySelector('i');
     i.style.width=Math.max(2,Math.min(100,p.pct||0)).toFixed(1)+'%';
@@ -16559,7 +16579,9 @@ function perfPintar(id, nomSuelto){
     b.dataset.acc='inv'; if(!vivo||p.sala===MP.room) b.classList.add('muerto'); }
   else if(socPendiente(id)){ b.textContent='SOLICITUD ENVIADA'; b.classList.add('muerto'); b.dataset.acc=''; }
   else { b.textContent='AÑADIR AMIGO'; b.dataset.acc='ami';
-    if(!perfEnLinea(p)) b.classList.add('muerto'); }
+    /* sin ficha no se sabe si esta, pero se le puede mandar igual: el buzon no es retenido, si no
+       esta el mensaje se pierde y listo. Peor es un boton apagado sin explicacion. */
+    if(!parcial && !perfEnLinea(p)) b.classList.add('muerto'); }
 }
 
 /* ---------- los cables de la interfaz ---------- */
@@ -16592,7 +16614,8 @@ function perfPintar(id, nomSuelto){
     if(fa){ const a=AMI.lista.find(x=>x.id===fa.dataset.ami);
       if(a) perfAbrir(amiIdVivo(a)||a.id, a.nom); return; }
     const m=ev.target.closest('.scMsg');
-    if(m && m.dataset.id) perfAbrir(m.dataset.id, m.dataset.n);
+    if(m && m.dataset.id){ const q=GCH_TODO.find(x=>x.id===m.dataset.id);
+      perfAbrir(m.dataset.id, m.dataset.n, q?{n:q.n, r:q.r, rn:q.rn, c:q.c}:null); }
   });
   on('socEnviar','click',()=>{ if(!gchPuede()){ gchBoton(); return; } openKbd('global'); });
   on('perfAcc','click',ev=>{ const b=ev.currentTarget, id=b.dataset.id, n=b.dataset.n;
