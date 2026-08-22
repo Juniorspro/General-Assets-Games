@@ -1813,21 +1813,18 @@ let _txCruz=null;
 function cruzTex(){ if(_txCruz)return _txCruz;
   const S=256, c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
   g.clearRect(0,0,S,S);
-  const cx=S/2, cy=S/2;
-  const halo=g.createRadialGradient(cx,cy,S*0.02,cx,cy,S*0.46);   // halo suave alrededor
-  halo.addColorStop(0,'rgba(255,90,50,0.42)'); halo.addColorStop(0.45,'rgba(255,60,30,0.14)');
+  /* UN PUNTO ROJO, NO UNA CRUCETA. Esto dibujaba cuatro brazos que se comian el 88% del ancho de la
+     ventana: tapaba justo lo que estabas por disparar. Una reflex de verdad proyecta UN punto chico
+     y nada mas — el resto del cristal queda limpio, que es para lo que sirve. Y el resplandor es
+     corto: un emisor de 2 MOA no ilumina medio vidrio. */
+  const cx=S/2, cy=S/2, R=S*0.065;
+  const halo=g.createRadialGradient(cx,cy,0,cx,cy,R*2.8);
+  halo.addColorStop(0,'rgba(255,72,42,0.50)'); halo.addColorStop(0.45,'rgba(255,52,26,0.14)');
   halo.addColorStop(1,'rgba(255,40,20,0)');
-  g.fillStyle=halo; g.fillRect(0,0,S,S);
-  const brazo=(w,col)=>{ g.strokeStyle=col; g.lineCap='round'; g.lineWidth=w;
-    g.beginPath(); g.moveTo(cx-S*0.44,cy); g.lineTo(cx-S*0.10,cy);
-                   g.moveTo(cx+S*0.10,cy); g.lineTo(cx+S*0.44,cy);
-                   g.moveTo(cx,cy-S*0.44); g.lineTo(cx,cy-S*0.10);
-                   g.moveTo(cx,cy+S*0.10); g.lineTo(cx,cy+S*0.44); g.stroke(); };
-  brazo(S*0.062,'rgba(40,0,0,0.85)');                             // contorno oscuro (contraste sobre blanco)
-  brazo(S*0.036,'rgba(255,48,32,1)');                             // brazos de la cruz
-  g.fillStyle='rgba(60,0,0,0.9)';  g.beginPath(); g.arc(cx,cy,S*0.052,0,7); g.fill();   // borde del punto
-  g.fillStyle='rgba(255,40,25,1)'; g.beginPath(); g.arc(cx,cy,S*0.038,0,7); g.fill();   // PUNTO ROJO
-  g.fillStyle='rgba(255,225,205,1)';g.beginPath(); g.arc(cx,cy,S*0.014,0,7); g.fill();  // núcleo caliente
+  g.fillStyle=halo; g.beginPath(); g.arc(cx,cy,R*2.8,0,7); g.fill();
+  g.fillStyle='rgba(110,8,0,0.72)'; g.beginPath(); g.arc(cx,cy,R*0.80,0,7); g.fill();   // borde, para que se lea sobre el cielo
+  g.fillStyle='rgba(255,46,28,1)';  g.beginPath(); g.arc(cx,cy,R*0.62,0,7); g.fill();   // EL PUNTO
+  g.fillStyle='rgba(255,196,176,1)';g.beginPath(); g.arc(cx,cy,R*0.24,0,7); g.fill();   // nucleo caliente
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return (_txCruz=t);
 }
 /* VENTANA DE LA MIRA. Medido en el barrido de apuntado: con 0,082 × 0,064 la ventana ocupaba 65 px
@@ -1866,7 +1863,7 @@ function armaReflex(H,z0){
   cr.position.set(0,venY+hV/2,z-0.006); cr.rotation.x=0.14; cr.renderOrder=4; H.raiz.add(cr);
 }
 /* Mira telescopica: tubo, dos monturas y la lente. Para francotirador. */
-function armaLente(H,z0,largo){
+function armaLente(H,z0,largo,yRiel){
   /* ===================== LA MIRA TELESCOPICA =====================
      EL TUBO VA ABIERTO. Con cilindros cerrados, apuntando se veia una tapa negra tapando media
      pantalla: la reticula quedaba sobre un disco opaco y no habia por donde mirar. Abiertos, se ve
@@ -1903,11 +1900,39 @@ function armaLente(H,z0,largo){
   { const t=H.cil(0.0135,0.0135,0.028, 0.034,y0,z0+0.012, crom); t.rotation.z=Math.PI/2; }  // de deriva
   H.cil(0.0155,0.0155,0.006, 0,y0+0.049,z0+0.012, N);
   H.cil(0.0155,0.0155,0.006, 0.049,y0,z0+0.012, N).rotation.z=Math.PI/2;
-  /* --- monturas --- */
-  H.box(0.020,0.030,0.022, 0,y0-0.024,z0-L/2+0.055, M);
-  H.box(0.020,0.030,0.022, 0,y0-0.024,z0+L/2-0.055, M);
-  H.box(0.034,0.010,0.026, 0,y0-0.036,z0-L/2+0.055, N);
-  H.box(0.034,0.010,0.026, 0,y0-0.036,z0+L/2-0.055, N);
+  /* --- MONTURAS ---
+     Antes eran dos taquitos de 3 cm colgando del tubo, y como la linea de mira del AWM esta 8 cm
+     por encima del cajon, los taquitos terminaban en el aire: la mira flotaba. Eso es lo que se
+     veia. Ahora hay un riel corrido debajo y DOS ANILLOS que abrazan el tubo, cada uno con su pie
+     bajando hasta el riel y su mordaza con el tornillo pasante. El pie mide lo que tenga que medir
+     —se calcula desde yRiel, que cada arma pasa segun donde tiene el lomo— asi que la mira apoya
+     en el arma y no en la nada. */
+  const yR=(yRiel==null? y0-0.046 : yRiel); yRielUlt=yR;
+  H.perf([[z0-L/2-0.012, yR],[z0+L/2+0.016, yR],[z0+L/2+0.016, yR-0.013],[z0-L/2-0.012, yR-0.013]],
+         0.026, 0,0,0, N, {bisel:0.0014});
+  for(let i=0;i<9;i++){ const z=z0-L/2+0.006+i*((L+0.020)/9);
+    H.perf([[z,yR+0.001],[z+0.007,yR+0.001],[z+0.007,yR-0.006],[z,yR-0.006]], 0.028, 0,0,0, N, {bisel:0.0007}); }
+  const anillo=(zc)=>{
+    /* la banda que abraza el tubo: un aro de verdad, no una caja */
+    H.rev([[0.0272,zc-0.0105],[0.0316,zc-0.0105],[0.0316,zc+0.0105],[0.0272,zc+0.0105],[0.0272,zc-0.0105]],
+          0,y0,0, crom, 20);
+    H.rev([[0.0316,zc-0.0060],[0.0344,zc-0.0060],[0.0344,zc+0.0060],[0.0316,zc+0.0060],[0.0316,zc-0.0060]],
+          0,y0,0, N, 20);
+    /* las dos orejas del anillo partido, con sus tornillos */
+    for(const sx of [-1,1]){
+      H.perf([[zc-0.010, y0-0.006],[zc+0.010, y0-0.006],[zc+0.010, y0+0.004],[zc-0.010, y0+0.004]],
+             0.007, sx*0.030,0,0, M, {bisel:0.0008});
+      const t=H.cil(0.0022,0.0022,0.009, sx*0.030, y0-0.001, zc, M); t.rotation.x=Math.PI/2; }
+    /* el PIE: del anillo hasta el riel */
+    { const yA=y0-0.012, alto=yA-yR;
+      H.box(0.021, alto, 0.023, 0, yR+alto/2, zc, N); }
+    /* la mordaza que agarra el riel, con el tornillo pasante */
+    H.perf([[zc-0.017, yR+0.003],[zc+0.017, yR+0.003],[zc+0.017, yR-0.017],[zc-0.017, yR-0.017]],
+           0.036, 0,0,0, N, {bisel:0.0016});
+    const p=H.cil(0.0050,0.0050,0.042, 0, yR-0.009, zc, M); p.rotation.z=Math.PI/2;
+    const c1=H.cil(0.0072,0.0072,0.005, 0.021, yR-0.009, zc, M); c1.rotation.z=Math.PI/2;
+  };
+  anillo(z0-L/2+0.055); anillo(z0+L/2-0.055);
   /* --- LOS VIDRIOS, PERO SIN TAPAR POR DONDE SE MIRA ---
      Primer intento: dos discos de vidrio, objetivo y ocular. Apuntando quedaba un disco NEGRO
      tapando toda la mira — es la misma trampa que dice el comentario de arriba sobre los cilindros
@@ -1946,12 +1971,23 @@ function armaLente(H,z0,largo){
 /* Los hierros van a la ALTURA DE LA LINEA DE MIRA del arma (H.mira), no a un numero a ojo: si no,
    al apuntar el alza y la cruz caen en lugares distintos. En una pistola los hierros viven sobre la
    CORREDERA y se corren con ella, asi que se puede pedir que los monte en otro grupo. */
-function armaHierros(H,zAtras,zAdelante,B){
-  const N=H.M.negro, y0=H.mira, b=B||H.box;
-  b(0.022,0.012,0.010, 0,y0-0.006,zAtras, N);
-  b(0.006,0.014,0.008, -0.008,y0+0.002,zAtras, N);
-  b(0.006,0.014,0.008,  0.008,y0+0.002,zAtras, N);
-  b(0.008,0.016,0.008, 0,y0,zAdelante, N);
+function armaHierros(H,zAtras,zAdelante,U){
+  /* Eran cuatro cajitas: una base y tres tacos. De frente —que es de donde se miran— no habia ni
+     muesca ni poste, solo bloques. Ahora se modelan con la silueta VISTA DE FRENTE (eje 'z'):
+     el alza es una escuadra con la muesca calada de verdad, y el punto de mira es un poste fino
+     con sus dos orejas y la base, como el de un fusil. */
+  const N=H.M.negro, y0=H.mira, P=(U&&U.perf)?U.perf:H.perf;
+  P([[-0.015,y0-0.010],[0.015,y0-0.010],[0.015,y0+0.007],[0.0035,y0+0.007],[0.0035,y0-0.0015],
+     [-0.0035,y0-0.0015],[-0.0035,y0+0.007],[-0.015,y0+0.007]],
+    0.009, 0,0,zAtras, N, {eje:'z',bisel:0.0008});
+  P([[-0.0024,y0-0.009],[0.0024,y0-0.009],[0.0024,y0+0.005],[-0.0024,y0+0.005]],
+    0.008, 0,0,zAdelante, N, {eje:'z',bisel:0.0005});
+  P([[-0.0115,y0-0.010],[-0.0075,y0-0.010],[-0.0075,y0+0.009],[-0.0115,y0+0.009]],
+    0.008, 0,0,zAdelante, N, {eje:'z',bisel:0.0005});
+  P([[0.0075,y0-0.010],[0.0115,y0-0.010],[0.0115,y0+0.009],[0.0075,y0+0.009]],
+    0.008, 0,0,zAdelante, N, {eje:'z',bisel:0.0005});
+  P([[-0.0125,y0-0.011],[0.0125,y0-0.011],[0.0125,y0-0.007],[-0.0125,y0-0.007]],
+    0.010, 0,0,zAdelante, N, {eje:'z',bisel:0.0005});
 }
 const ARSENAL=[
 /* ---------------- ASALTO ---------------- */
@@ -2253,10 +2289,13 @@ const ARSENAL=[
            0.030, 0,0,0, M.negro, {bisel:0.0022});
     C.rev([[0.0000,-0.112],[0.0076,-0.116],[0.0076,-0.136],[0.0044,-0.136],[0.0044,-0.120],[0.0000,-0.120]],
           0,0.030,0, M.metal, 14);
-    for(let i=0;i<7;i++) C.perf([[0.020-i*0.011,0.050],[0.020-i*0.011,0.040],[0.014-i*0.011,0.040],[0.014-i*0.011,0.050]],
-           0.032, 0,0,0, M.poli, {bisel:0.0006});
+    /* las estrias van en los COSTADOS de la corredera, que es donde se agarra, no en el lomo.
+       Estaban arriba y en color claro: se veia una franja crema a lo largo de todo el lomo. */
+    for(let i=0;i<7;i++) for(const sx of [-1,1])
+      C.perf([[0.020-i*0.011,0.046],[0.020-i*0.011,0.016],[0.015-i*0.011,0.016],[0.015-i*0.011,0.046]],
+             0.004, sx*0.0155, 0,0, M.negro, {bisel:0.0005});
     C.perf([[0.008,0.046],[0.008,0.024],[-0.026,0.024],[-0.026,0.046]], 0.010, 0.016,0,0, M.metal, {bisel:0.0010});
-    armaHierros(H,0.055,-0.115,C.box); });                      // alza y punto: viajan con ella
+    armaHierros(H,0.055,-0.115,C); });                      // alza y punto: viajan con ella
   H.rev([[0.0000,0.036],[0.0062,0.032],[0.0062,-0.114],[0.0036,-0.114],[0.0036,0.030],[0.0000,0.030]],
         0,0.030,0, M.metal, 14);                                 // el caño, que queda a la vista
   H.mag(g=>{ g.perf([[0.052,-0.026],[0.052,-0.120],[0.010,-0.122],[0.010,-0.028]], 0.024, 0,0,0, M.negro, {bisel:0.0018});
@@ -2281,10 +2320,11 @@ const ARSENAL=[
     C.rev([[0.0000,-0.146],[0.0104,-0.152],[0.0104,-0.180],[0.0068,-0.180],[0.0068,-0.156],[0.0000,-0.156]],
           0,0.036,0, M.negro, 14);
     C.perf([[-0.126,0.050],[-0.126,0.022],[-0.156,0.022],[-0.156,0.050]], 0.040, 0,0,0, M.metal, {bisel:0.0016});
-    for(let i=0;i<5;i++) C.perf([[0.048-i*0.013,0.062],[0.048-i*0.013,0.050],[0.041-i*0.013,0.050],[0.041-i*0.013,0.062]],
-           0.037, 0,0,0, M.negro, {bisel:0.0007});
+    for(let i=0;i<6;i++) for(const sx of [-1,1])
+      C.perf([[0.052-i*0.013,0.058],[0.052-i*0.013,0.016],[0.046-i*0.013,0.016],[0.046-i*0.013,0.058]],
+             0.005, sx*0.0185, 0,0, M.negro, {bisel:0.0006});
     C.perf([[0.018,0.058],[0.018,0.024],[-0.018,0.024],[-0.018,0.058]], 0.012, 0.019,0,0, M.negro, {bisel:0.0010});
-    armaHierros(H,0.062,-0.150,C.box); });
+    armaHierros(H,0.062,-0.150,C); });
   H.rev([[0.0000,0.036],[0.0086,0.032],[0.0086,-0.152],[0.0054,-0.152],[0.0054,0.030],[0.0000,0.030]],
         0,0.036,0, M.metal, 14);
   H.mag(g=>{ g.perf([[0.066,-0.030],[0.066,-0.130],[0.018,-0.132],[0.018,-0.032]], 0.028, 0,0,0, M.metal, {bisel:0.0018});
@@ -2310,10 +2350,11 @@ const ARSENAL=[
             [-0.020,0.052],[0.040,0.054]], 0.030, 0,0,0, M.metal, {cs:8,bisel:0.0022});
     C.rev([[0.0000,-0.122],[0.0080,-0.126],[0.0080,-0.148],[0.0048,-0.148],[0.0048,-0.130],[0.0000,-0.130]],
           0,0.030,0, M.metal, 14);
-    for(let i=0;i<6;i++) C.perf([[0.040-i*0.010,0.054],[0.040-i*0.010,0.044],[0.035-i*0.010,0.044],[0.035-i*0.010,0.054]],
-           0.031, 0,0,0, M.negro, {bisel:0.0006});
+    for(let i=0;i<6;i++) for(const sx of [-1,1])
+      C.perf([[0.040-i*0.010,0.050],[0.040-i*0.010,0.014],[0.035-i*0.010,0.014],[0.035-i*0.010,0.050]],
+             0.004, sx*0.0155, 0,0, M.negro, {bisel:0.0005});
     C.perf([[0.006,0.048],[0.006,0.022],[-0.028,0.022],[-0.028,0.048]], 0.011, 0.016,0,0, M.metal, {bisel:0.0010});
-    armaHierros(H,0.058,-0.124,C.box); });
+    armaHierros(H,0.058,-0.124,C); });
   H.rev([[0.0000,0.034],[0.0066,0.030],[0.0066,-0.126],[0.0040,-0.126],[0.0040,0.028],[0.0000,0.028]],
         0,0.030,0, M.metal, 14);
   H.perf([[0.078,-0.018],[0.080,-0.072],[0.024,-0.076],[0.020,-0.022]], 0.036, 0,0,0, M.maderaOsc, {bisel:0.0020});
@@ -2356,10 +2397,9 @@ const ARSENAL=[
     H.box(0.016,0.008,0.030, 0.048,-0.152,-0.418, M.negro);
     H.box(0.016,0.008,0.030,-0.048,-0.152,-0.418, M.negro);
     H.box(0.022,0.024,0.040, 0,-0.070,-0.418, M.negro); }       // la base
-  H.perf([[-0.108,0.038],[-0.108,0.050],[-0.232,0.050],[-0.232,0.030]], 0.062, 0,0,0, M.negro, {bisel:0.0016});
-  for(let i=0;i<4;i++) H.perf([[-0.116-i*0.034,0.050],[-0.116-i*0.034,0.060],[-0.130-i*0.034,0.060],[-0.130-i*0.034,0.050]],
-         0.064, 0,0,0, M.negro, {bisel:0.0010});
-  armaLente(H,0.010,0.300);
+  /* la base sobre el cajon, que es donde apoya el riel de la mira */
+  H.perf([[0.180,0.040],[-0.180,0.036],[-0.180,0.022],[0.180,0.026]], 0.058, 0,0,0, M.negro, {bisel:0.0018});
+  armaLente(H,0.010,0.300,0.042);
   H.mag(g=>{ g.perf([[0.066,-0.048],[0.066,-0.122],[-0.006,-0.126],[-0.006,-0.050]], 0.030, 0,0,0, M.metal, {bisel:0.0020});
     g.perf([[0.070,-0.116],[0.070,-0.132],[-0.010,-0.136],[-0.010,-0.120]], 0.034, 0,0,0, M.negro, {bisel:0.0014}); });
   H.perf([[0.096,-0.038],[0.080,-0.106,0.108,-0.176],[0.156,-0.178],[0.164,-0.148],
@@ -2379,7 +2419,8 @@ const ARSENAL=[
     /* CULATA CON AGUJERO PARA EL PULGAR, que es la firma de la AWM, y la carrillera arriba */
     g.perf([[0.230,0.036],[0.300,0.048,0.380,0.046],[0.436,0.040],[0.436,-0.058],
             [0.370,-0.062,0.300,-0.048],[0.234,-0.044]], 0.052, 0,0,0, M.poli, {cs:12,bisel:0.0032,
-            huecos:[[[0.268,0.008],[0.264,-0.030],[0.330,-0.034],[0.344,0.004]]]});
+            huecos:[[[0.270,0.006],[0.266,-0.012,0.286,-0.030],[0.318,-0.034],
+                      [0.340,-0.030,0.344,-0.012],[0.340,0.004],[0.312,0.012,0.284,0.012]]]});
     g.perf([[0.246,0.046],[0.330,0.056,0.400,0.052],[0.416,0.044],[0.250,0.038]], 0.044, 0,0,0, M.poli, {cs:8,bisel:0.0022});
     g.perf([[0.432,0.044],[0.452,0.040],[0.452,-0.062],[0.432,-0.058]], 0.054, 0,0,0, M.negro, {bisel:0.0020});
   }); }},
@@ -2403,7 +2444,7 @@ const ARSENAL=[
   H.rev([[0.0000,-0.560],[0.0182,-0.566],[0.0182,-0.626],[0.0136,-0.626],[0.0136,-0.570],[0.0000,-0.570]],
         0,0.012,0, M.negro, 16);
   H.perf([[-0.298,0.058],[-0.340,0.048],[-0.340,0.006],[-0.298,0.004]], 0.030, 0,0,0, M.metal, {bisel:0.0022});
-  armaLente(H,0.030,0.280);
+  armaLente(H,0.030,0.280,0.064);
   H.mag(g=>{ g.perf([[0.048,-0.038],[0.030,-0.116,0.006,-0.176],[-0.040,-0.186],[-0.052,-0.162],
       [-0.016,-0.104,-0.010,-0.042]], 0.032, 0,0,0, M.metal, {cs:12,bisel:0.0022}); });
   H.perf([[0.092,-0.034],[0.076,-0.102,0.104,-0.168],[0.152,-0.170],[0.160,-0.142],
@@ -2699,10 +2740,18 @@ function _armaUtil(padre){
       const g=new THREE.ExtrudeGeometry(_armaForma(pts,o.huecos),{
         depth:Math.max(0.0008,(ancho||0.05)-bis*2), bevelEnabled:bis>0,
         bevelThickness:bis, bevelSize:bis, bevelSegments:(o.bs||1), curveSegments:(o.cs||6), steps:1 });
-      g.rotateY(-Math.PI/2);                    // la silueta pasa al plano z-y y el grosor al eje x
-      g.computeBoundingBox();
-      const cx=(g.boundingBox.min.x+g.boundingBox.max.x)/2;
-      g.translate((x||0)-cx,(y||0),(z||0));
+      if(o.eje==='z'){
+        /* la silueta queda en el plano x-y y el grosor va por el eje z. Sirve para las piezas que
+           se leen DE FRENTE y no de costado: la muesca del alza, las orejas del punto de mira. */
+        g.computeBoundingBox();
+        const cz=(g.boundingBox.min.z+g.boundingBox.max.z)/2;
+        g.translate((x||0),(y||0),(z||0)-cz);
+      } else {
+        g.rotateY(-Math.PI/2);                  // la silueta pasa al plano z-y y el grosor al eje x
+        g.computeBoundingBox();
+        const cx=(g.boundingBox.min.x+g.boundingBox.max.x)/2;
+        g.translate((x||0)-cx,(y||0),(z||0));
+      }
       const me=new THREE.Mesh(g, m||M.metal);
       if(o.rx)me.rotation.x=o.rx; if(o.ry)me.rotation.y=o.ry; if(o.rz)me.rotation.z=o.rz;
       padre.add(me); return me; },
@@ -2767,7 +2816,7 @@ function armaFundir(grupo, mats){
   }
   return n;
 }
-let gunCuerpo=null, _armaFundido=0;
+let gunCuerpo=null, _armaFundido=0, yRielUlt=null;
 function armaMontar(){
   if(!gunRoot||!AKMAT.metal) return;
   const d=ARMA(), M=AKMAT;
@@ -2807,7 +2856,7 @@ function armaMontar(){
      aca y no en cada receta: si una receta se olvidara, el arma apuntaria a un lugar y la reticula
      se dibujaria en otro. Las de cuerpo a cuerpo no llevan. */
   gunCruz=null;
-  if(!d.cac){ const cruz=gunCruz=new THREE.Mesh(new THREE.PlaneGeometry(0.048,0.048),
+  if(!d.cac){ const cruz=gunCruz=new THREE.Mesh(new THREE.PlaneGeometry(0.040,0.040),
       new THREE.MeshBasicMaterial({map:cruzTex(),color:0xffffff,transparent:true,opacity:1,
         depthWrite:false,depthTest:false,side:THREE.DoubleSide,fog:false,toneMapped:false}));
     cruz.position.set(0,AK_MIRA_Y,0.004); cruz.renderOrder=7; gunCuerpo.add(cruz); }
@@ -10496,6 +10545,57 @@ try{ window.__tiro={
              distImpacto: hit? +hit.distance.toFixed(1) : null }; },
   tpVista:(v)=>{ camView=v?'tp':'fp'; return camView; },
   adsForzar:(v)=>{ adsQ=v?1:0; return {adsQ, adsW:+adsW.toFixed(2)}; },
+  /* ¿la mira APOYA en el arma o flota? Tira un rayo vertical por el eje de cada anillo y lista las
+     superficies que encuentra: si entre el lomo del arma y el anillo hay un salto grande, flota. */
+  miraApoyo:()=>{
+    if(!gunCuerpo) return 'sin arma';
+    gunCuerpo.updateMatrixWorld(true);
+    const d=ARMA(), y0=d.mira;
+    const mallas=[]; gunCuerpo.traverse(o=>{ if(o.isMesh&&o.geometry) mallas.push(o); });
+    const mw=gunCuerpo.matrixWorld, nm=new THREE.Matrix3().getNormalMatrix(mw);
+    const esc=gunRoot?gunRoot.scale.x:1;
+    const linea=(zl)=>{
+      const z=zl;
+      const o=new THREE.Vector3(0,y0-0.30,z).applyMatrix4(mw);
+      const dir=new THREE.Vector3(0,1,0).applyMatrix3(nm).normalize();
+      const R=new THREE.Raycaster(o, dir, 0, 0.60*esc);
+      /* las alturas se devuelven en el LOCAL del arma, que es donde estan los numeros del modelo */
+      const inv=new THREE.Matrix4().copy(mw).invert();
+      const hs=R.intersectObjects(mallas,false)
+                .map(h=>+h.point.clone().applyMatrix4(inv).y.toFixed(4))
+                .filter(v=>v<=y0+0.002).sort((a,b)=>a-b);
+      const u=[]; for(const v of hs) if(!u.length||v-u[u.length-1]>0.0006) u.push(v);
+      /* solo interesa el tramo ENTRE EL LOMO DEL ARMA Y EL ANILLO: abajo de eso el rayo atraviesa
+         el hueco de adentro del cajon, que no dice nada */
+      const arriba=u.filter(v=>v>0.010);
+      let hueco=0, dz=null;
+      for(let i=1;i<arriba.length;i++){ const g=arriba[i]-arriba[i-1]; if(g>hueco){ hueco=g; dz=[arriba[i-1],arriba[i]]; } }
+      return { z:+z.toFixed(3), sup:arriba.length, desde:arriba.length?arriba[0]:null,
+               hasta:arriba.length?arriba[arriba.length-1]:null,
+               huecoMax:+hueco.toFixed(4), entre:dz, alturas:arriba };
+    };
+    const L=(d.id==='awm')?0.300:(d.id==='svd'?0.280:0.26), z0=(d.id==='awm')?0.010:0.030;
+    /* rejilla alrededor del anillo, por si el pie existe pero esta corrido */
+    if(true){ const zc0=z0-L/2+0.055, rej=[];
+      for(const dx of [-0.008,-0.004,0,0.004,0.008]) for(const dz of [-0.008,0,0.008]){
+        const o=new THREE.Vector3(dx,y0-0.30,zc0+dz).applyMatrix4(mw);
+        const dir=new THREE.Vector3(0,1,0).applyMatrix3(nm).normalize();
+        const R=new THREE.Raycaster(o,dir,0,0.60*esc);
+        const inv=new THREE.Matrix4().copy(mw).invert();
+        const u=R.intersectObjects(mallas,false).map(h=>+h.point.clone().applyMatrix4(inv).y.toFixed(4))
+                 .filter(v=>v>0.010&&v<=y0+0.002).sort((a,b)=>a-b);
+        let hu=0; for(let i=1;i<u.length;i++) hu=Math.max(hu,u[i]-u[i-1]);
+        rej.push([dx,dz,+hu.toFixed(3),u.length]); }
+      return { arma:d.id, mira:y0, riel:(yRielUlt==null?null:yRielUlt), rejilla:rej }; }
+    /* y de paso, que mallas hay en la columna del anillo */
+    const zc=z0-L/2+0.055, cols=[];
+    for(const m of mallas){ const bb=new THREE.Box3().setFromObject(m);
+      const inv=new THREE.Matrix4().copy(gunCuerpo.matrixWorld).invert();
+      const a=bb.min.clone().applyMatrix4(inv), b=bb.max.clone().applyMatrix4(inv);
+      const x0=Math.min(a.x,b.x), x1=Math.max(a.x,b.x), za=Math.min(a.z,b.z), zb=Math.max(a.z,b.z);
+      if(x0<=0.002&&x1>=-0.002&&za<=zc&&zb>=zc)
+        cols.push({y:[+Math.min(a.y,b.y).toFixed(3),+Math.max(a.y,b.y).toFixed(3)], tri:m.geometry.attributes.position.count/3|0}); }
+    return { arma:d.id, mira:y0, anillos:[linea(zc), linea(z0+L/2-0.055)], columna:cols }; },
   /* barre el yaw y compara los bots que SE VEN contra los que deberian verse (angulo dentro del
      campo horizontal y distancia menor que el plano lejano). Si no coinciden, el recorte esta mal. */
   botsVisibles:(x,z)=>{
