@@ -311,6 +311,10 @@
   #mpStatus[data-s=connecting]{ color:#ffd27a; } #mpStatus[data-s=connecting]::before{ background:#ffbf45; }
   #mpStatus[data-s=off]{ color:#ff9a9a; } #mpStatus[data-s=off]::before{ background:#e05a5a; }
   #mpChatLog{ position:fixed; left:12px; top:calc(50px + var(--safe-t)); z-index:14; width:min(56vw,300px); display:flex; flex-direction:column; gap:4px; pointer-events:none; }
+  /* EN EL MENU BAJA. A 50 px de arriba cae justo encima de la tarjeta del jugador —se veia el aviso
+     del codigo de dueño cruzado sobre el nivel y la precision— y no habia forma de leer ninguno de
+     los dos. En partida se queda donde estaba, que ahi arriba no hay nada. */
+  body.menu-open #mpChatLog{ top:calc(112px + var(--safe-t)); }
   .mpMsg{ background:rgba(14,22,30,.6); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:5px 9px; font-size:12px; color:#e6f0fa; transition:opacity .6s; max-width:100%; word-wrap:break-word; }
   .mpMsg b{ color:#ffb26b; }
   #vBoard{ position:fixed; left:calc(12px + var(--safe-t)); top:calc(96px + var(--safe-t)); z-index:14; width:min(50vw,240px); display:none; flex-direction:column; gap:3px;
@@ -506,17 +510,19 @@
     display:flex; flex-direction:column; font-family:'Segoe UI',system-ui,sans-serif;
     padding-top:var(--safe-t); padding-bottom:var(--safe-b); }
   #soc.show{ transform:none; }
-  #socTabs{ display:flex; gap:6px; padding:10px 10px 8px; }
-  .socTab{ flex:1 1 0; padding:9px 6px; border-radius:10px; cursor:pointer; text-align:center;
-    font-size:11px; font-weight:900; letter-spacing:.08em; color:#7f93a8;
-    background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.10); position:relative; }
+  #socTabs{ display:flex; gap:5px; padding:10px 9px 8px; align-items:stretch; }
+  .socTab{ flex:1 1 0; min-width:0; padding:9px 3px; border-radius:10px; cursor:pointer; text-align:center;
+    font-size:9.5px; font-weight:900; letter-spacing:.03em; color:#7f93a8; line-height:1.25;
+    background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.10); position:relative;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
+  .socTab i{ font-style:normal; font-size:13px; line-height:1; }
   .socTab.on{ color:#ffe0bd; border-color:rgba(255,178,107,.55);
     background:linear-gradient(150deg, rgba(255,178,107,.18), rgba(18,24,31,.9)); }
   .socTab b{ position:absolute; top:-5px; right:-3px; min-width:16px; height:16px; line-height:16px;
     border-radius:8px; background:#e0561f; color:#fff; font-size:9.5px; padding:0 4px; }
   /* LA X VA ADENTRO. Colgada del borde de afuera se montaba justo encima de las fichas de
      billetes y estrellas de la barra de arriba: dos cosas apretadas en el mismo pixel. */
-  #socX{ flex:0 0 auto; width:38px; border-radius:10px; cursor:pointer; font-size:15px;
+  #socX{ flex:0 0 auto; width:32px; border-radius:10px; cursor:pointer; font-size:14px;
     color:#8fa2b6; background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.10); }
   #socCuerpo{ flex:1 1 auto; overflow-y:auto; overflow-x:hidden; padding:2px 10px 8px;
     -webkit-overflow-scrolling:touch; }
@@ -551,6 +557,13 @@
   .amBtn.no{ border-color:rgba(255,255,255,.14); color:#8fa2b6; background:rgba(255,255,255,.05); }
   .amBtn.muerto{ opacity:.35; pointer-events:none; }
   .socTit{ font-size:9px; font-weight:900; letter-spacing:.14em; color:#6d8096; margin:10px 2px 6px; }
+  .amBtn.si{ border-color:rgba(99,214,139,.55); color:#bdf5d2; background:rgba(63,191,114,.18); }
+  .amTxt[data-ver]{ cursor:pointer; }
+  .amTxt[data-ver] b{ text-decoration:underline dotted rgba(232,242,251,.35); }
+  /* el atajo que avisa desde la pestaña de amigos que hay solicitudes esperando */
+  .socAtajo{ padding:9px 10px; border-radius:11px; cursor:pointer; margin-bottom:6px;
+    font-size:11px; font-weight:800; color:#ffd9ac; border:1px solid rgba(255,178,107,.42);
+    background:linear-gradient(150deg, rgba(255,178,107,.16), rgba(18,24,31,.7)); }
   /* ===== LA TARJETA DE PERFIL ===== */
   #perf{ position:fixed; inset:0; z-index:64; display:none; align-items:center; justify-content:center;
     background:rgba(4,7,10,.72); backdrop-filter:blur(4px); padding:14px; font-family:'Segoe UI',system-ui,sans-serif; }
@@ -590,13 +603,24 @@
   .pbSec{ color:#cfe0f0; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.14) !important; }
   #perfBtns button.muerto{ opacity:.38; pointer-events:none; }
   /* ===== EL AVISO DE ARRIBA: invitacion o solicitud, aceptar o rechazar ===== */
-  #avSoc{ position:fixed; left:50%; top:calc(8px + var(--safe-t)); transform:translateX(-50%) translateY(-140%);
+  /* POR QUE ASOMABA EL AVISO VACIO.
+     Se escondia con transform:translateY(-140%), o sea 140% de SU PROPIA ALTURA: el cartel mide
+     unos 56 px, asi que subia 78. Pero arranca en top:8px + el margen seguro del telefono, y en un
+     celular con muesca ese margen son 40 px o mas: 8+40 = 48 de arriba contra 78 de subida deja el
+     borde de abajo a 26 px DENTRO de la pantalla. Por eso se veia el cartel con la insignia rota y
+     los dos guiones del HTML: no era una invitacion, era el cartel en blanco que nunca se habia
+     terminado de ir.
+     Ahora se esconde con visibility y opacidad, que no dependen de cuanto mida ni de donde arranque.
+     El transform queda, pero solo para el deslizamiento. */
+  #avSoc{ position:fixed; left:50%; top:calc(8px + var(--safe-t)); transform:translateX(-50%) translateY(-160%);
     z-index:72; width:min(94vw,392px); border-radius:14px; padding:11px 12px;
     background:linear-gradient(150deg, rgba(26,34,44,.985), rgba(12,17,23,.99));
     border:1px solid rgba(255,178,107,.42); box-shadow:0 16px 40px rgba(0,0,0,.6);
     display:flex; gap:10px; align-items:center; font-family:'Segoe UI',system-ui,sans-serif;
-    transition:transform .3s cubic-bezier(.2,.9,.3,1); }
-  #avSoc.show{ transform:translateX(-50%) translateY(0); }
+    opacity:0; visibility:hidden; pointer-events:none;
+    transition:transform .3s cubic-bezier(.2,.9,.3,1), opacity .2s ease, visibility 0s linear .3s; }
+  #avSoc.show{ transform:translateX(-50%) translateY(0); opacity:1; visibility:visible; pointer-events:auto;
+    transition:transform .3s cubic-bezier(.2,.9,.3,1), opacity .18s ease, visibility 0s; }
   #avSocIns{ width:34px; height:34px; flex:0 0 auto; }
   #avSocT{ flex:1 1 auto; min-width:0; }
   #avSocT b{ display:block; font-size:12.5px; color:#fff3e4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -1406,8 +1430,9 @@
        poder aparecer tambien en medio de una partida, no solo en el menu. -->
   <div id="soc">
     <div id="socTabs">
-      <div class="socTab on" data-tab="chat">💬 CHAT</div>
-      <div class="socTab" data-tab="amigos">👥 AMIGOS<b id="socNum" style="display:none">0</b></div>
+      <div class="socTab on" data-tab="chat"><i>💬</i>CHAT</div>
+      <div class="socTab" data-tab="amigos"><i>👥</i>AMIGOS</div>
+      <div class="socTab" data-tab="solic"><i>✉️</i>SOLICITUDES<b id="socNum" style="display:none">0</b></div>
       <button id="socX" aria-label="Cerrar">✕</button>
     </div>
     <div id="socCuerpo"></div>
@@ -10847,6 +10872,12 @@ try{ window.__tiro={
   /* LO SOCIAL, desde afuera: sirve para probarlo sin dos telefonos */
   social:()=>({ id:MP.id, sala:MP.room, salaN, cupo:SALA_CUPO, gracia:+_salaGracia.toFixed(1),
     perfiles:[...PERF.keys()].length, amigos:AMI.lista.map(a=>a.nom), cola:AMI.cola.length,
+    recibidas:AMI.recibidas.map(a=>a.nom), enviadas:AMI.enviadas.map(a=>a.nom),
+    avisoVisible:(()=>{ const e=document.getElementById('avSoc'); if(!e) return null;
+      const c=getComputedStyle(e), r=e.getBoundingClientRect();
+      return { clase:e.classList.contains('show'), vis:c.visibility, op:+c.opacity,
+               abajo:Math.round(r.bottom), alto:Math.round(r.height) }; })(),
+    numerito:(document.getElementById('socNum')||{}).textContent,
     mostrando:AMI.mostrando?AMI.mostrando.k:null, tab:AMI.tab,
     cajon:(document.getElementById('soc')||{classList:{contains:()=>0}}).classList.contains('show'),
     perfilAbierto:(document.getElementById('perf')||{classList:{contains:()=>0}}).classList.contains('show'),
@@ -16284,18 +16315,45 @@ function nomAsegurar(n){
 const GLOB_PERF='zforce/g/perf';
 const GLOB_SOC ='zforce/g/soc';
 const PERF=new Map();                  // id -> la ultima tarjeta que publico
-const AMI={ lista:[], pendientes:[], cola:[], mostrando:null, tab:'chat', mirando:null, _t:0, _ultInv:0 };
+/* TRES LISTAS, NO UNA.
+   Antes una solicitud vivia UNICAMENTE en la cola del cartel de arriba. Si mirabas para otro lado
+   veinte segundos, el cartel se iba y la solicitud se perdia para siempre: no habia ningun lado
+   donde volver a encontrarla. Ahora el cartel es solo el aviso; la solicitud queda anotada en su
+   propia lista y se guarda en el telefono, asi sigue ahi despues de cerrar el juego.
+   · recibidas: las que te mandaron y todavia no contestaste  → la pestaña SOLICITUDES
+   · enviadas:  las que mandaste vos y nadie contesto todavia → tambien ahi, abajo
+   · cola:      lo que le toca mostrar al cartel de arriba, de a uno */
+const AMI={ lista:[], recibidas:[], enviadas:[], cola:[], mostrando:null, tab:'chat', mirando:null, _t:0, _ultInv:0 };
 const SOC_VIVO=70000;                  // sin latido por mas de esto, se lo da por desconectado
 const GCH_HIST=40;                     // el cajon guarda mucho mas que las seis lineas del menu
 const GCH_TODO=[];                     // el historial largo, para el panel lateral
 
 /* ---------- la libreta de amigos, en el telefono ---------- */
 function amiCargar(){
-  try{ AMI.lista=JSON.parse(localStorage.getItem('pf_amigos')||'[]')||[]; }catch(e){ AMI.lista=[]; }
-  if(!Array.isArray(AMI.lista)) AMI.lista=[];
-  AMI.lista=AMI.lista.filter(a=>a&&a.nom).slice(0,60);
+  const leer=(k)=>{ try{ const v=JSON.parse(localStorage.getItem(k)||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; } };
+  AMI.lista=leer('pf_amigos').filter(a=>a&&a.nom).slice(0,60);
+  /* las solicitudes viejas se caen solas: una de hace tres dias ya no le importa a nadie */
+  const fresco=(x)=>x && x.nom && (Date.now()-(x.ts||0) < 3*24*3600*1000);
+  AMI.recibidas=leer('pf_solic_rx').filter(fresco).slice(0,30);
+  AMI.enviadas =leer('pf_solic_tx').filter(fresco).slice(0,30);
 }
-function amiGuardar(){ try{ localStorage.setItem('pf_amigos', JSON.stringify(AMI.lista)); }catch(e){} }
+function amiGuardar(){ try{
+  localStorage.setItem('pf_amigos', JSON.stringify(AMI.lista));
+  localStorage.setItem('pf_solic_rx', JSON.stringify(AMI.recibidas));
+  localStorage.setItem('pf_solic_tx', JSON.stringify(AMI.enviadas));
+}catch(e){} }
+/* aceptar o rechazar, venga del cartel de arriba o de la pestaña: un solo camino */
+function amiResolver(id, si){
+  const q=AMI.recibidas.find(x=>x.id===id);
+  const nom=q?q.nom:'alguien';
+  AMI.recibidas=AMI.recibidas.filter(x=>x.id!==id);
+  AMI.cola=AMI.cola.filter(x=>!(x.k==='ami'&&x.de===id));
+  if(si){ amiSumar(id, nom); socMandar(id,{k:'amiok'});
+    try{ mpChatIn('🤝','Ahora sos amigo de '+nom); }catch(e){} }
+  else { socMandar(id,{k:'amino'}); amiGuardar(); }
+  socNum(); socPintar();
+  if(AMI.mirando===id) perfPintar(id);
+}
 function amiClave(n){ return String(n||'').trim().toLowerCase(); }
 function amiEs(id, nom){
   for(const a of AMI.lista){ if(a.id===id) return a;
@@ -16350,7 +16408,8 @@ function perfRecibir(id, d){
   if(!d || !d.n){ PERF.delete(id); return; }
   d.id=id; PERF.set(id, d);
   /* si es un amigo, la fila del cajon cambia de estado sola */
-  if(AMI.tab==='amigos' && document.getElementById('soc').classList.contains('show')) socPintar();
+  { const sc=document.getElementById('soc');
+    if(AMI.tab!=='chat' && sc && sc.classList.contains('show')) socPintar(); }
   if(AMI.mirando===id) perfPintar(id);
 }
 function perfDe(id){ return PERF.get(id)||null; }
@@ -16375,14 +16434,19 @@ function socRecibir(d){
   if(!d || !d.de || d.de===MP.id) return;
   if(d.k==='ami'){
     if(amiEs(d.de,d.nom)){ socMandar(d.de,{k:'amiok'}); return; }   // ya eramos amigos
-    if(AMI.cola.some(x=>x.k==='ami'&&x.de===d.de)) return;
+    if(AMI.recibidas.some(x=>x.id===d.de)) return;                  // ya la tenias pendiente
+    AMI.recibidas.push({ id:d.de, nom:d.nom||'jugador', r:(perfDe(d.de)||{}).r, ts:Date.now() });
+    amiGuardar();
     socEncolar({ k:'ami', de:d.de, nom:d.nom, r:(perfDe(d.de)||{}).r });
+    socPintar();
   }
   else if(d.k==='amiok'){
+    AMI.enviadas=AMI.enviadas.filter(x=>x.id!==d.de);
     if(amiSumar(d.de, d.nom)) try{ mpChatIn('🤝', d.nom+' te aceptó como amigo'); }catch(e){}
-    socNum(); if(AMI.mirando===d.de) perfPintar(d.de); socPintar();
+    amiGuardar(); socNum(); if(AMI.mirando===d.de) perfPintar(d.de); socPintar();
   }
-  else if(d.k==='amino'){ try{ mpChatIn('🤝', (d.nom||'alguien')+' rechazó tu solicitud'); }catch(e){} }
+  else if(d.k==='amino'){ AMI.enviadas=AMI.enviadas.filter(x=>x.id!==d.de); amiGuardar(); socPintar();
+    try{ mpChatIn('🤝', (d.nom||'alguien')+' rechazó tu solicitud'); }catch(e){} }
   else if(d.k==='inv'){
     if(AMI.cola.some(x=>x.k==='inv'&&x.de===d.de)) return;
     socEncolar({ k:'inv', de:d.de, nom:d.nom, sala:d.sala, salaN:d.salaN, r:(perfDe(d.de)||{}).r });
@@ -16423,18 +16487,17 @@ function socCerrarAviso(){
 }
 function socResponder(si){
   const a=AMI.mostrando; if(!a) return;
-  if(a.k==='ami'){
-    if(si){ amiSumar(a.de, a.nom); socMandar(a.de,{k:'amiok'});
-      try{ mpChatIn('🤝','Ahora sos amigo de '+a.nom); }catch(e){} }
-    else socMandar(a.de,{k:'amino'});
-  } else if(a.k==='inv'){
+  if(a.k==='ami'){ socCerrarAviso(); amiResolver(a.de, si); return; }
+  else if(a.k==='inv'){
     if(si){ socMandar(a.de,{k:'invok'}); salaIrA(a.sala, a.salaN, a.nom); }
     else socMandar(a.de,{k:'invno'});
   }
   socCerrarAviso(); socPintar(); socNum();
 }
 function socNum(){
-  const n=AMI.cola.length + (AMI.mostrando?1:0);
+  /* la cuenta es de SOLICITUDES SIN CONTESTAR, no de carteles en cola: el cartel se va solo y el
+     numerito tiene que seguir marcando que hay algo esperando adentro */
+  const n=AMI.recibidas.length;
   for(const id of ['socNum','mAmiNum']){ const e=document.getElementById(id); if(!e) continue;
     e.textContent=String(n); e.style.display=n?'':'none'; }
 }
@@ -16471,10 +16534,11 @@ function socSolicitar(id, nom){
   if(!id) return false;
   const ok=socMandar(id,{k:'ami'});
   try{ mpChatIn('🤝', ok? ('Le mandaste solicitud a '+(nom||'ese jugador')) : 'No se pudo enviar'); }catch(e){}
-  if(ok){ AMI.pendientes.push({id, ts:Date.now()}); if(AMI.mirando===id) perfPintar(id); }
+  if(ok){ if(!AMI.enviadas.some(x=>x.id===id)) AMI.enviadas.push({id, nom:nom||'jugador', ts:Date.now()});
+    amiGuardar(); socPintar(); if(AMI.mirando===id) perfPintar(id); }
   return ok;
 }
-function socPendiente(id){ return AMI.pendientes.some(x=>x.id===id && Date.now()-x.ts<120000); }
+function socPendiente(id){ return AMI.enviadas.some(x=>x.id===id); }
 
 /* ---------- EL CAJON LATERAL ---------- */
 function socAbrir(tab){
@@ -16505,14 +16569,8 @@ function socPintar(){
   } else {
     if(pie) pie.style.display='none';
     let h='';
-    const sol=AMI.cola.filter(a=>a.k==='ami');
-    if(sol.length){ h+='<div class="socTit">SOLICITUDES</div>';
-      h+=sol.map(a=>'<div class="amFila" data-sol="'+esc(a.de)+'">'+
-        '<img src="'+(RANGO_INS[a.r]||RANGO_INS.bronce)+'" alt="">'+
-        '<div class="amTxt"><b>'+esc(a.nom)+'</b><span>quiere ser tu amigo</span></div>'+
-        '<div class="amBtn" data-si="'+esc(a.de)+'">ACEPTAR</div>'+
-        '<div class="amBtn no" data-no="'+esc(a.de)+'">✕</div></div>').join('');
-    }
+    if(AMI.recibidas.length) h+='<div class="socAtajo" data-tab="solic">✉️ Tenés '+AMI.recibidas.length+
+      ' solicitud'+(AMI.recibidas.length>1?'es':'')+' esperando · tocá para verlas</div>';
     h+='<div class="socTit">AMIGOS · '+AMI.lista.length+'</div>';
     if(!AMI.lista.length){
       h+='<div class="scVacio">Ningún amigo todavía.<br>Tocá a alguien en el chat global para ver su perfil y mandarle solicitud.</div>';
@@ -16528,6 +16586,30 @@ function socPintar(){
           '</div>';
       }).join('');
     }
+    c.innerHTML=h;
+  }
+  if(AMI.tab==='solic'){
+    if(pie) pie.style.display='none';
+    let h='';
+    h+='<div class="socTit">TE MANDARON · '+AMI.recibidas.length+'</div>';
+    if(!AMI.recibidas.length) h+='<div class="scVacio">Ninguna solicitud por ahora.</div>';
+    else h+=AMI.recibidas.map(a=>{
+      const p=perfDe(a.id), ins=RANGO_INS[(p&&p.r)||a.r||'bronce']||RANGO_INS.bronce;
+      return '<div class="amFila">'+
+        '<img src="'+ins+'" alt="">'+
+        '<div class="amTxt" data-ver="'+esc(a.id)+'"><b>'+esc(p?p.n:a.nom)+'</b><span>quiere ser tu amigo</span></div>'+
+        '<div class="amBtn si" data-si="'+esc(a.id)+'">ACEPTAR</div>'+
+        '<div class="amBtn no" data-no="'+esc(a.id)+'">✕</div></div>';
+    }).join('');
+    h+='<div class="socTit">MANDASTE VOS · '+AMI.enviadas.length+'</div>';
+    if(!AMI.enviadas.length) h+='<div class="scVacio">No mandaste ninguna.<br>Tocá a alguien en el chat global para ver su perfil.</div>';
+    else h+=AMI.enviadas.map(a=>{
+      const p=perfDe(a.id), ins=RANGO_INS[(p&&p.r)||'bronce']||RANGO_INS.bronce;
+      return '<div class="amFila">'+
+        '<img src="'+ins+'" alt="">'+
+        '<div class="amTxt" data-ver="'+esc(a.id)+'"><b>'+esc(p?p.n:a.nom)+'</b><span>esperando respuesta</span></div>'+
+        '<div class="amBtn no" data-borrar="'+esc(a.id)+'">✕</div></div>';
+    }).join('');
     c.innerHTML=h;
   }
 }
@@ -16598,15 +16680,18 @@ function perfPintar(id, nomSuelto, suelto){
   if(soc) soc.addEventListener('click',ev=>{
     const t=ev.target.closest('.socTab');
     if(t){ socAbrir(t.dataset.tab); return; }
+    const at=ev.target.closest('.socAtajo');
+    if(at){ socAbrir(at.dataset.tab); return; }
     const si=ev.target.closest('[data-si]');
-    if(si){ const id=si.dataset.si, a=AMI.cola.find(x=>x.k==='ami'&&x.de===id);
-      if(a){ AMI.cola=AMI.cola.filter(x=>x!==a); amiSumar(a.de,a.nom); socMandar(a.de,{k:'amiok'});
-        try{ mpChatIn('🤝','Ahora sos amigo de '+a.nom); }catch(e){} }
-      socNum(); socPintar(); return; }
+    if(si){ amiResolver(si.dataset.si, true); return; }
     const no=ev.target.closest('[data-no]');
-    if(no){ const id=no.dataset.no, a=AMI.cola.find(x=>x.k==='ami'&&x.de===id);
-      if(a){ AMI.cola=AMI.cola.filter(x=>x!==a); socMandar(a.de,{k:'amino'}); }
-      socNum(); socPintar(); return; }
+    if(no){ amiResolver(no.dataset.no, false); return; }
+    const bo=ev.target.closest('[data-borrar]');
+    if(bo){ AMI.enviadas=AMI.enviadas.filter(x=>x.id!==bo.dataset.borrar); amiGuardar(); socPintar(); return; }
+    const vr=ev.target.closest('[data-ver]');
+    if(vr){ const id=vr.dataset.ver;
+      const q=AMI.recibidas.find(x=>x.id===id)||AMI.enviadas.find(x=>x.id===id);
+      perfAbrir(id, q?q.nom:null, q?{n:q.nom, r:q.r}:null); return; }
     const iv=ev.target.closest('[data-inv]');
     if(iv){ const a=AMI.lista.find(x=>x.id===iv.dataset.inv);
       if(a) socInvitar(amiIdVivo(a), a.nom); return; }
@@ -16627,7 +16712,7 @@ function perfPintar(id, nomSuelto, suelto){
           av.querySelector('.no').addEventListener('click',()=>socResponder(false)); }
   /* el latido de tu tarjeta y el repintado de los estados */
   setInterval(()=>{ try{ perfPublicar(); }catch(e){}
-    try{ if(AMI.tab==='amigos' && soc && soc.classList.contains('show')) socPintar(); }catch(e){} }, 25000);
+    try{ if(AMI.tab!=='chat' && soc && soc.classList.contains('show')) socPintar(); }catch(e){} }, 25000);
   setTimeout(()=>{ try{ perfPublicar(); }catch(e){} }, 3000);
   socNum();
 })();
