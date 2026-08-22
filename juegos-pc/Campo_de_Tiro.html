@@ -9691,6 +9691,258 @@ try{ window.__tiro={
     return false; },
   /* recorre la tienda i: puntos DENTRO de cada pared (tienen que ser solidos) y puntos en el
      hueco de adentro y en el pasto de afuera (tienen que estar libres) */
+  /* CENSO DE SALTEOS. moveX/moveZ ignoran un collider si es piso, si es escalon, si su mesh es
+     `ground` o si esta locked. Esto cuenta, collider por collider, cuantos entran de verdad al
+     test de choque y cuantos se saltan y por que. */
+  colSalteados:()=>{
+    const antes=player.pos.y, ag=player.onGround;
+    player.pos.y=0; player.onGround=true;
+    const r={total:0, piso:0, escalon:0, ground:0, locked:0, activos:0, altos:0, altosActivos:0, ej:[]};
+    for(const c of alcLista()){
+      r.total++;
+      const alto=(c.maxy-c.miny)>0.6 && c.maxy>0.6;
+      if(alto) r.altos++;
+      let por=null;
+      if(c.piso) por='piso';
+      else if(alcEscalon(c)) por='escalon';
+      else if(c.mesh===ground) por='ground';
+      else if(c.locked) por='locked';
+      if(por){ r[por]++; if(alto && r.ej.length<8) r.ej.push({por, miny:+c.miny.toFixed(2), maxy:+c.maxy.toFixed(2), x:+((c.minx+c.maxx)/2).toFixed(1), z:+((c.minz+c.maxz)/2-ARE_GZ).toFixed(1)}); }
+      else { r.activos++; if(alto) r.altosActivos++; }
+    }
+    player.pos.y=antes; player.onGround=ag;
+    return r; },
+  /* EXPULSION. Pone al jugador en el centro de cada caja alta y pide un paso minimo: si el collider
+     esta vivo, moveX/moveZ lo tienen que echar afuera. Las que no lo echan son atravesables. */
+  expulsa:()=>{
+    const g=player.pos.y, gx=player.pos.x, gz=player.pos.z, ag=player.onGround, gh=player.h;
+    player.h=STAND; player.onGround=true;
+    const malas=[]; let probadas=0;
+    for(const c of alcLista()){
+      if(c.piso) continue;
+      if(!((c.maxy-c.miny)>0.6 && c.maxy>0.9)) continue;      // solo paredes de verdad
+      const cx=(c.minx+c.maxx)/2, cz=(c.minz+c.maxz)/2;
+      player.pos.set(cx, 0, cz); player.vel.set(0,0,0);
+      probadas++;
+      moveX(0.01); moveZ(0.01);
+      const sigue = (player.pos.x>c.minx&&player.pos.x<c.maxx&&player.pos.z>c.minz&&player.pos.z<c.maxz);
+      if(sigue && malas.length<10) malas.push({x:+cx.toFixed(1), z:+(cz-ARE_GZ).toFixed(1),
+        miny:+c.miny.toFixed(2), maxy:+c.maxy.toFixed(2),
+        ancho:+(c.maxx-c.minx).toFixed(2), fondo:+(c.maxz-c.minz).toFixed(2)});
+      if(sigue) malas.n=(malas.n||0)+1;
+    }
+    player.pos.set(gx,g,gz); player.onGround=ag; player.h=gh;
+    return { probadas, atravesables:(malas.n||0), ej:malas }; },
+  /* CAMINATA DE VERDAD: joystick a fondo, update() cuadro a cuadro, y se mira si cruzo */
+  chocar:(x0,z0,x1,z1,seg)=>{
+    const jx=joy.x, jy=joy.y;
+    player.pos.set(x0, 0, ARE_GZ+z0); player.vel.set(0,0,0); player.vy=0; player.onGround=true;
+    player.h=STAND; player.crouch=false; player.sliding=false;
+    const dx=x1-x0, dz=z1-z0, L=Math.hypot(dx,dz)||1;
+    player.yaw=Math.atan2(-dx/L,-dz/L); player.faceYaw=player.yaw; player.pitch=0;
+    joy.x=0; joy.y=-1;                                        // -1 = adelante
+    const T=seg||3, paso=1/60; let n=0, avanceMax=0;
+    for(let t=0;t<T;t+=paso){ update(paso); n++;
+      const a=(player.pos.x-x0)*dx/L + (player.pos.z-ARE_GZ-z0)*dz/L;
+      if(a>avanceMax) avanceMax=a; }
+    joy.x=jx; joy.y=jy;
+    return { de:[x0,z0], hacia:[x1,z1], fin:[+player.pos.x.toFixed(1), +(player.pos.z-ARE_GZ).toFixed(1)],
+             avance:+avanceMax.toFixed(2), pedido:+L.toFixed(2), cuadros:n,
+             pared:lastWall? 'si':'no' }; },
+  /* FUGA DE LA TIENDA: se para al jugador en el medio de la tienda y camina a fondo en 16
+     direcciones, cuatro segundos cada una. La tienda mide 13x9 y solo tiene un lado abierto (el
+     frente), asi que salir por cualquier otro rumbo es atravesar una pared. */
+  tiendaFuga:(i,seg,dt,desl)=>{
+    const L=ARE_LADO, d=L/2-11;
+    const cs=[[-d,-d,Math.PI*0.25],[d,-d,-Math.PI*0.25],[-d,d,Math.PI*0.75],[d,d,-Math.PI*0.75]];
+    const [cx,cz,ry]=cs[i|0];
+    const jx=joy.x, jy=joy.y, out=[]; let fugas=0;
+    for(let k=0;k<16;k++){
+      const th=k*Math.PI/8;
+      player.pos.set(cx,0,ARE_GZ+cz); player.vel.set(0,0,0); player.vy=0;
+      player.onGround=true; player.h=STAND; player.crouch=false; player.sliding=false;
+      /* th=0 apunta al FRENTE de la tienda (su +Z local), que es el lado abierto */
+      const dx=Math.sin(th+ry), dz=Math.cos(th+ry);
+      player.yaw=Math.atan2(-dx,-dz); player.faceYaw=player.yaw; player.pitch=0;
+      joy.x=0; joy.y=-1;
+      const h=dt||1/60, T=seg||4;
+      for(let t=0;t<T;t+=h){ if(desl && t>0.5 && t<0.6){ try{ deslizar(); }catch(e){} } update(h); }
+      const ex=player.pos.x-cx, ez=player.pos.z-ARE_GZ-cz, dist=Math.hypot(ex,ez);
+      /* el frente abierto es +-50 grados alrededor de th=0 */
+      const frente = Math.abs(Math.atan2(Math.sin(th),Math.cos(th)))<0.88;
+      const fuga = !frente && dist>7.5;
+      if(fuga) fugas++;
+      out.push({ rumbo:Math.round(th*180/Math.PI), dist:+dist.toFixed(1), frente, fuga });
+    }
+    joy.x=jx; joy.y=jy;
+    return { tienda:i|0, centro:[cx,cz], fugas, dirs:out }; },
+  /* AL REVES: se arranca afuera de la tienda y se camina hacia su centro. Una pared que frena de
+     un lado y no del otro es un clasico, y el test de adentro hacia afuera no lo ve. */
+  tiendaEntrar:(i,seg,dt)=>{
+    const L=ARE_LADO, d=L/2-11;
+    const cs=[[-d,-d,Math.PI*0.25],[d,-d,-Math.PI*0.25],[-d,d,Math.PI*0.75],[d,d,-Math.PI*0.75]];
+    const [cx,cz,ry]=cs[i|0];
+    const jx=joy.x, jy=joy.y, out=[]; let entradas=0;
+    for(let k=0;k<16;k++){
+      const th=k*Math.PI/8;
+      const dx=Math.sin(th+ry), dz=Math.cos(th+ry);
+      const x0=cx+dx*14, z0=cz+dz*14;                       // 14 m afuera, mirando al centro
+      player.pos.set(x0,0,ARE_GZ+z0); player.vel.set(0,0,0); player.vy=0;
+      player.onGround=true; player.h=STAND; player.crouch=false; player.sliding=false;
+      player.yaw=Math.atan2(dx,dz); player.faceYaw=player.yaw; player.pitch=0;   // hacia el centro
+      joy.x=0; joy.y=-1;
+      const h=dt||1/60, T=seg||4; for(let t=0;t<T;t+=h) update(h);
+      const ex=player.pos.x-cx, ez=player.pos.z-ARE_GZ-cz, dist=Math.hypot(ex,ez);
+      const frente = Math.abs(Math.atan2(Math.sin(th),Math.cos(th)))<0.88;
+      const entro = !frente && dist<5.5;                    // entro sin pasar por el frente
+      if(entro) entradas++;
+      out.push({ rumbo:Math.round(th*180/Math.PI), dist:+dist.toFixed(1), frente, entro });
+    }
+    joy.x=jx; joy.y=jy;
+    return { tienda:i|0, entradas, dirs:out }; },
+  /* el camino cuadro a cuadro, para ver DONDE salta */
+  rastroRumbo:(x0,z0,gradosRumbo,seg,dt)=>{
+    const jx=joy.x, jy=joy.y;
+    const th=(gradosRumbo||0)*Math.PI/180, dx=Math.sin(th), dz=Math.cos(th);
+    player.pos.set(x0,0,ARE_GZ+z0); player.vel.set(0,0,0); player.vy=0;
+    player.onGround=true; player.h=STAND; player.crouch=false; player.sliding=false;
+    player.yaw=Math.atan2(-dx,-dz); player.faceYaw=player.yaw; player.pitch=0;
+    joy.x=0; joy.y=-1;
+    const h=dt||1/60, T=seg||6, saltos=[]; let px=player.pos.x, pz=player.pos.z, t=0;
+    for(; t<T; t+=h){ update(h);
+      const d=Math.hypot(player.pos.x-px, player.pos.z-pz);
+      if(d>1.5) saltos.push({ t:+t.toFixed(2), de:[+px.toFixed(1),+(pz-ARE_GZ).toFixed(1)],
+                              a:[+player.pos.x.toFixed(1),+(player.pos.z-ARE_GZ).toFixed(1)], salto:+d.toFixed(1) });
+      px=player.pos.x; pz=player.pos.z; }
+    joy.x=jx; joy.y=jy;
+    return { rumbo:gradosRumbo, fin:[+player.pos.x.toFixed(1),+(player.pos.z-ARE_GZ).toFixed(1)],
+             y:+player.pos.y.toFixed(2), mundo:world, saltos }; },
+  /* lo mismo con la muralla: se camina desde el centro del mapa hacia afuera en 16 rumbos */
+  murallaFuga:(seg)=>{
+    const jx=joy.x, jy=joy.y, L=ARE_LADO, out=[]; let fugas=0;
+    for(let k=0;k<16;k++){
+      const th=k*Math.PI/8, dx=Math.sin(th), dz=Math.cos(th);
+      player.pos.set(dx*40,0,ARE_GZ+dz*40); player.vel.set(0,0,0); player.vy=0;
+      player.onGround=true; player.h=STAND; player.crouch=false; player.sliding=false;
+      player.yaw=Math.atan2(-dx,-dz); player.faceYaw=player.yaw; player.pitch=0;
+      joy.x=0; joy.y=-1;
+      const T=seg||6; for(let t=0;t<T;t+=1/60) update(1/60);
+      const x=player.pos.x, z=player.pos.z-ARE_GZ;
+      const afuera = Math.abs(x)>L/2 || Math.abs(z)>L/2;
+      if(afuera) fugas++;
+      out.push({ rumbo:Math.round(th*180/Math.PI), fin:[+x.toFixed(1),+z.toFixed(1)], y:+player.pos.y.toFixed(1), afuera });
+    }
+    joy.x=jx; joy.y=jy;
+    return { lado:L, fugas, dirs:out }; },
+  /* BARRIDO DE TODAS LAS CAJAS DE LA ARENA. Para cada caja alta se para al jugador justo afuera de
+     cada una de sus cuatro caras y se lo empuja hacia el centro con pasos del tamaño que da un
+     cuadro real (paso = velocidad x dt). No se llama a update() —seria carisimo por 441 cajas x 4
+     caras— sino directo a moveX/moveZ, que es el codigo que decide si algo frena o no.
+     Con paso grande se prueba tambien el TUNEL: en un telefono el cuadro dura mucho mas y el paso
+     por cuadro crece, y una pared de 15 cm se puede saltear de un tiron. */
+  barrerArena:(paso,largo)=>{
+    const g={x:player.pos.x,y:player.pos.y,z:player.pos.z,h:player.h,og:player.onGround};
+    player.h=STAND; player.onGround=true;
+    const P=paso||0.12, LG=largo||3.2, N=Math.ceil(LG/P);
+    const cajas=alcLista().filter(c=>!c.piso && (c.maxy-c.miny)>0.6 && c.maxy>0.9
+                 && Math.abs((c.minz+c.maxz)/2-ARE_GZ)<80 && Math.abs((c.minx+c.maxx)/2)<80);
+    const malas=[]; let probadas=0, pasadas=0;
+    for(const c of cajas){
+      const cx=(c.minx+c.maxx)/2, cz=(c.minz+c.maxz)/2;
+      const hx=(c.maxx-c.minx)/2, hz=(c.maxz-c.minz)/2;
+      for(let k=0;k<4;k++){
+        const sx=(k===0?1:k===1?-1:0), sz=(k===2?1:k===3?-1:0);
+        player.pos.set(cx+sx*(hx+R+LG*0.55), 0, cz+sz*(hz+R+LG*0.55));
+        player.vel.set(0,0,0);
+        probadas++;
+        for(let i=0;i<N;i++){ if(sx) moveX(-sx*P); if(sz) moveZ(-sz*P); }
+        const dentro = player.pos.x>c.minx+0.04 && player.pos.x<c.maxx-0.04
+                    && player.pos.z>c.minz+0.04 && player.pos.z<c.maxz-0.04;
+        if(dentro){ pasadas++;
+          if(malas.length<8) malas.push({ cara:['+X','-X','+Z','-Z'][k],
+            x:+cx.toFixed(1), z:+(cz-ARE_GZ).toFixed(1),
+            ancho:+(hx*2).toFixed(2), fondo:+(hz*2).toFixed(2),
+            alto:+(c.maxy-c.miny).toFixed(2), quedo:[+player.pos.x.toFixed(2),+(player.pos.z-ARE_GZ).toFixed(2)] }); }
+      }
+    }
+    player.pos.set(g.x,g.y,g.z); player.h=g.h; player.onGround=g.og;
+    return { paso:P, cajas:cajas.length, probadas, pasadas, ej:malas }; },
+  /* la tienda, pero razonando en SUS coordenadas y no en distancia al centro, que era ambiguo */
+  tiendaLocal:(i,seg,dt)=>{
+    const L=ARE_LADO, d=L/2-11, W=13, D=9;
+    const cs=[[-d,-d,Math.PI*0.25],[d,-d,-Math.PI*0.25],[-d,d,Math.PI*0.75],[d,d,-Math.PI*0.75]];
+    const [cx,cz,ry]=cs[i|0];
+    const aMundo=(lx,lz)=>[cx+lx*Math.cos(ry)-lz*Math.sin(ry), cz+lx*Math.sin(ry)+lz*Math.cos(ry)];
+    const aLocal=(x,z)=>{ const dx=x-cx, dz=z-cz;
+      return [dx*Math.cos(ry)+dz*Math.sin(ry), -dx*Math.sin(ry)+dz*Math.cos(ry)]; };
+    const jx=joy.x, jy=joy.y, out=[]; let colados=0;
+    for(let k=0;k<24;k++){
+      /* el rumbo se define EN LOCAL: 0 = frente (el lado abierto, +Z local) */
+      const al=k*2*Math.PI/24;
+      const p0=aMundo(Math.sin(al)*15, Math.cos(al)*15);
+      if(Math.abs(p0[0])>64 || Math.abs(p0[1])>64) { out.push({local:Math.round(al*180/Math.PI), fuera:true}); continue; }
+      const dir=[ (cx-p0[0]), (cz-p0[1]) ]; const LL=Math.hypot(dir[0],dir[1])||1;
+      player.pos.set(p0[0],0,ARE_GZ+p0[1]); player.vel.set(0,0,0); player.vy=0;
+      player.onGround=true; player.h=STAND; player.crouch=false; player.sliding=false;
+      player.yaw=Math.atan2(-dir[0]/LL,-dir[1]/LL); player.faceYaw=player.yaw; player.pitch=0;
+      joy.x=0; joy.y=-1;
+      const h=dt||1/60, T=seg||4; for(let t=0;t<T;t+=h) update(h);
+      const lp=aLocal(player.pos.x, player.pos.z-ARE_GZ);
+      const dentro = Math.abs(lp[0])<W/2-0.3 && Math.abs(lp[1])<D/2-0.3;
+      /* la linea al centro entra por el frente si al cruzar z=+D/2 sigue dentro del ancho */
+      const porFrente = Math.cos(al)>0 && Math.abs((D/2)*Math.tan(al))<=W/2;
+      const colado = dentro && !porFrente;
+      if(colado) colados++;
+      out.push({ local:Math.round(al*180/Math.PI), lx:+lp[0].toFixed(1), lz:+lp[1].toFixed(1),
+                 dentro, porFrente, colado });
+    }
+    joy.x=jx; joy.y=jy;
+    return { tienda:i|0, colados, dirs:out }; },
+  /* FUZZ. Se juega solo: joystick al azar, saltos, deslizadas y corridas, con el cuadro durando
+     entre 16 y 50 ms como en un telefono. Despues de CADA cuadro se pregunta si el jugador quedo
+     adentro de una caja solida, afuera del mapa o debajo del piso. Es lo mas parecido a lo que hace
+     una persona jugando, y encuentra lo que un test dirigido no ve. */
+  fuzz:(seg,semilla)=>{
+    let sm=(semilla||1)|0; const rnd=()=>{ sm=(sm*1103515245+12345)&0x7fffffff; return sm/0x7fffffff; };
+    const jx0=joy.x, jy0=joy.y;
+    const cajas=alcLista().filter(c=>!c.piso && (c.maxy-c.miny)>0.6 && c.maxy>0.9
+                 && Math.abs((c.minz+c.maxz)/2-ARE_GZ)<80 && Math.abs((c.minx+c.maxx)/2)<80);
+    const sp=areSpawn(); player.pos.set(sp[0],1.2,ARE_GZ+sp[1]);
+    player.vel.set(0,0,0); player.vy=0; player.onGround=true; player.h=STAND;
+    const fallos=[]; let n=0, t=0, T=seg||30, adentro=0, afuera=0, bajo=0;
+    let mx=0, mz=0;
+    while(t<T){
+      const h=0.016 + rnd()*0.034;                          // 16 a 50 ms
+      if(rnd()<0.06){ const a=rnd()*6.283; joy.x=Math.sin(a); joy.y=Math.cos(a); }
+      if(rnd()<0.02 && player.onGround){ player.vy=JUMP_V; player.onGround=false; }
+      if(rnd()<0.02){ try{ sldHold=true; startSlide(); }catch(e){} }
+      if(rnd()<0.05){ try{ sldHold=false; }catch(e){} }
+      if(rnd()<0.03){ player.yaw+=(rnd()-0.5)*2.2; player.faceYaw=player.yaw; }
+      update(h); t+=h; n++;
+      const x=player.pos.x, y=player.pos.y, z=player.pos.z;
+      if(Math.abs(x)>mx) mx=Math.abs(x);
+      if(Math.abs(z-ARE_GZ)>mz) mz=Math.abs(z-ARE_GZ);
+      let mal=null;
+      if(Math.abs(x)>67.5 || Math.abs(z-ARE_GZ)>67.5) { mal='afuera'; afuera++; }
+      else if(y<-1.2) { mal='bajoElPiso'; bajo++; }
+      else { for(const c of cajas){
+          if(x>c.minx+0.05 && x<c.maxx-0.05 && z>c.minz+0.05 && z<c.maxz-0.05
+             && y+0.9<c.maxy && y+0.9>c.miny){ mal='dentroDeUnaCaja'; adentro++;
+            if(fallos.length<8) fallos.push({ que:mal, t:+t.toFixed(2), dt:+h.toFixed(3),
+              p:[+x.toFixed(1),+y.toFixed(1),+(z-ARE_GZ).toFixed(1)],
+              caja:{x:+((c.minx+c.maxx)/2).toFixed(1), z:+((c.minz+c.maxz)/2-ARE_GZ).toFixed(1),
+                    an:+(c.maxx-c.minx).toFixed(2), fo:+(c.maxz-c.minz).toFixed(2), alto:+c.maxy.toFixed(2)},
+              vel:+player.vel.length().toFixed(1), desl:!!player.sliding, aire:!player.onGround });
+            break; } } }
+      if(mal && mal!=='dentroDeUnaCaja' && fallos.length<8)
+        fallos.push({ que:mal, t:+t.toFixed(2), dt:+h.toFixed(3),
+          p:[+x.toFixed(1),+y.toFixed(1),+(z-ARE_GZ).toFixed(1)],
+          vel:+player.vel.length().toFixed(1), desl:!!player.sliding, aire:!player.onGround });
+    }
+    joy.x=jx0; joy.y=jy0;
+    return { cuadros:n, seg:+t.toFixed(1), cajas:cajas.length,
+             dentroDeUnaCaja:adentro, afueraDelMapa:afuera, bajoElPiso:bajo,
+             maxX:+mx.toFixed(1), maxZ:+mz.toFixed(1), fallos }; },
   tiendaSolidos:(i)=>{
     const L=ARE_LADO, d=L/2-11;
     const cs=[[-d,-d,Math.PI*0.25],[d,-d,-Math.PI*0.25],[-d,d,Math.PI*0.75],[d,d,-Math.PI*0.75]];
@@ -11223,12 +11475,43 @@ function alcTrepa(nx,nz){ const x=nx, z=nz-ALC_GZ;
   const px=player.pos.x, pz=player.pos.z-ALC_GZ;
   const h0=alcH(px,pz), h1=alcH(px+dx/L, pz+dz/L);              // un metro adelante
   return (h1-h0) > ALC_PEND_MAX; }
+/* CHOQUE EN X/Z, reescrito.
+   La version anterior recorria la lista y, por CADA caja que se solapaba, movia al jugador a la
+   cara de ESA caja. Ganaba la ultima de la lista. Con una caja sola daba igual, pero desde que las
+   cajas rotadas se parten en una cadena de AABB chicos —las tiendas estan a 45 grados— una misma
+   pared son cincuenta cajitas escalonadas en diagonal, y resolver una atras de la otra podia dejar
+   al jugador DEL OTRO LADO: la cajita 1 lo empujaba a su cara, la cajita 2 (corrida en diagonal) lo
+   empujaba mas adentro, y asi hasta cruzar. Medido: entrando desde afuera se colaba en 3 o 4 de
+   cada 16 rumbos, en las cuatro tiendas, mientras que desde adentro la pared frenaba bien. De ahi
+   que pareciera que la pared existe a veces y a veces no.
+
+   Ahora hay dos reglas:
+   1. Solo frena la caja que el paso ACABA de invadir. Si el jugador ya estaba pisado con ella antes
+      de moverse, no frena: asi nunca lo empuja para atras ni lo deja clavado adentro de algo.
+   2. De todas las que frenan gana la cara MAS CERCANA al punto de partida, no la ultima.
+   Con esas dos, el resultado siempre cae entre donde estaba y donde queria ir: cruzar es imposible. */
 function moveX(d){ if(grassMode){ player.pos.x=Math.max(-GBND.x,Math.min(GBND.x,player.pos.x+d)); return; }
   if(islaMode && alcTrepa(player.pos.x+d, player.pos.z)) return;
-  player.pos.x+=d; const a=pAABB(); for(const c of alcLista()){ if(alcEscalon(c)||c.piso)continue; if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.x = d>0? c.minx-R : c.maxx+R; player.vel.x=0; lastWall=c; a.minx=player.pos.x-R; a.maxx=player.pos.x+R; } } }
+  const x0=player.pos.x;
+  player.pos.x+=d; const a=pAABB(); let lim=null, cw=null;
+  for(const c of alcLista()){ if(alcEscalon(c)||c.piso)continue; if(c.mesh===ground||c.locked)continue;
+    if(!overlap(a,c)) continue;
+    if(d>0){ if(x0+R > c.minx+1e-6) continue;                  // ya la pisaba: no frena
+             const v=c.minx-R; if(lim===null || v<lim){ lim=v; cw=c; } }
+    else   { if(x0-R < c.maxx-1e-6) continue;
+             const v=c.maxx+R; if(lim===null || v>lim){ lim=v; cw=c; } } }
+  if(lim!==null){ player.pos.x=lim; player.vel.x=0; lastWall=cw; } }
 function moveZ(d){ if(grassMode){ player.pos.z=Math.max(GBND.z0,Math.min(GBND.z1,player.pos.z+d)); return; }
   if(islaMode && alcTrepa(player.pos.x, player.pos.z+d)) return;
-  player.pos.z+=d; const a=pAABB(); for(const c of alcLista()){ if(alcEscalon(c)||c.piso)continue; if(c.mesh===ground||c.locked)continue; if(overlap(a,c)){ player.pos.z = d>0? c.minz-R : c.maxz+R; player.vel.z=0; lastWall=c; a.minz=player.pos.z-R; a.maxz=player.pos.z+R; } } }
+  const z0=player.pos.z;
+  player.pos.z+=d; const a=pAABB(); let lim=null, cw=null;
+  for(const c of alcLista()){ if(alcEscalon(c)||c.piso)continue; if(c.mesh===ground||c.locked)continue;
+    if(!overlap(a,c)) continue;
+    if(d>0){ if(z0+R > c.minz+1e-6) continue;
+             const v=c.minz-R; if(lim===null || v<lim){ lim=v; cw=c; } }
+    else   { if(z0-R < c.maxz-1e-6) continue;
+             const v=c.maxz+R; if(lim===null || v>lim){ lim=v; cw=c; } } }
+  if(lim!==null){ player.pos.z=lim; player.vel.z=0; lastWall=cw; } }
 /* ISLA: si ninguna caja te sostuvo, manda el campo de alturas. El orden importa — las cajas
    (edificios, muros, escaleras) ganan siempre, así se puede caminar por los techos y las gradas. */
 function alcPiso(){ const g=alcH(player.pos.x, player.pos.z-ALC_GZ);
@@ -13040,6 +13323,11 @@ function pvpMorir(){
 /* REAPARICION. En el valle cae en un punto al azar bien lejos del ultimo; en el campo de tiro, en la
    linea de tiro. La vida vuelve entera: es un tiroteo de sala, no una partida con botiquines. */
 function pvpRevivir(){
+  /* EN LA ARENA NO. Esta funcion reaparece en la linea de tiro de la galeria, TIRO_GZ+8, que esta a
+     16 km de la arena. Si se la llama estando en la arena, el jugador termina en el medio de la nada
+     con la arena dibujada alrededor —el famoso "aparezco en el vacio"— y un instante despues, al
+     pasar y<-18, respawn() lo devuelve al punto de inicio. La arena tiene su propia areRevivir. */
+  if(world==='arena'){ try{ areRevivir(); }catch(e){} return; }
   PVP.muerto=false; PVP.vida=PVP.max; document.body.classList.remove('muerto');
   INV.curando=0; INV.curaTipo=''; try{ invHUD(); }catch(e){}
   tiroAmmo=TIRO_MAG; tiroRel=0;
@@ -13052,11 +13340,17 @@ function pvpRevivir(){
   player.vel.set(0,0,0); player.vy=0; pvpHUD();
 }
 function pvpTick(dt){
-  if(PVP.muerto){ PVP.tRes-=dt;
+  if(PVP.muerto){
     joy.x=0; joy.y=0; tiroFire=false; adsQ=0;        // muerto no se mueve ni dispara
+    /* EL RELOJ DE LA MUERTE LO LLEVA UNO SOLO. En la arena tambien corre partTick, que descuenta el
+       mismo PVP.tRes y llama a areRevivir. Con los dos descontando, la cuenta de 3,2 s se gastaba en
+       1,6 y encima reaparecia el que llegaba primero a cero: a veces areRevivir (bien) y a veces
+       pvpRevivir (a 16 km, en el vacio). De ahi que pasara una de cada dos muertes. */
+    if(world!=='arena'){ PVP.tRes-=dt; }
     const q=document.getElementById('muerteQ');
     if(q) q.textContent='te mató '+PVP.ultimo+' · reaparecés en '+Math.max(0,PVP.tRes).toFixed(1)+' s';
-    if(PVP.tRes<=0) pvpRevivir(); return; }
+    if(world!=='arena' && PVP.tRes<=0) pvpRevivir();
+    return; }
   /* regeneracion lenta: 6 de vida por segundo despues de 4 s sin recibir nada */
   PVP._sin=(PVP._sin||0)+dt;
   if(PVP.vida<PVP.max && PVP._sin>4){ PVP.vida=Math.min(PVP.max,PVP.vida+6*dt); pvpHUD(); }
