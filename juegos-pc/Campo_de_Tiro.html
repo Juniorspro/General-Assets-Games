@@ -13521,7 +13521,7 @@ function cineArmar(){
   const humo=[];
   /* era blanco hueso y se perdia entre las nubes; gris carbon se lee como estela de turbina */
   const hm=new THREE.MeshBasicMaterial({color:0x69707a, transparent:true, opacity:0.62, fog:false});
-  for(let i=0;i<48;i++){ const m=new THREE.Mesh(new THREE.IcosahedronGeometry(1,0), hm.clone());
+  for(let i=0;i<84;i++){ const m=new THREE.Mesh(new THREE.IcosahedronGeometry(1,0), hm.clone());
     m.visible=false; E.add(m); humo.push(m); }
   /* el personaje: el mismo avatar que usan los remotos */
   let cuerpo=null, mix=null, acts={};
@@ -13536,6 +13536,7 @@ function cineArmar(){
   CINE.inte=inte; CINE.humo=humo; CINE.cuerpo=cuerpo; CINE.mix=mix; CINE.acts=acts;
 }
 function cineArrancar(alTerminar){
+  CINE.n=(CINE.n||0)+1; CINE.marca=(CINE.marca||[]); CINE.marca.push(+(performance.now()/1000).toFixed(2));
   CINE.t0=performance.now();
   try{ cineArmar(); }catch(e){ console.warn('cine',e); if(alTerminar)alTerminar(); return false; }
   if(!CINE.esc){ if(alTerminar)alTerminar(); return false; }
@@ -13556,6 +13557,7 @@ function cineCortar(){
 const _cnA=new THREE.Vector3(), _cnB=new THREE.Vector3();
 try{ if(window.__tiro){
   window.__tiro.cineT=()=>CINE.act? +CINE.t.toFixed(2) : -1;
+  window.__tiro.cineLog=()=>({n:CINE.n||0, marca:CINE.marca||[], act:CINE.act, t:+((CINE.t||0).toFixed(2)), ahora:+(performance.now()/1000).toFixed(2)});
   /* para las pruebas: parar el reloj en un instante exacto y dibujar ese cuadro */
   window.__tiro.cineIr=(t,n)=>{ if(!CINE.act) return -1;
     const tl=document.getElementById('cineTela'); if(tl) tl.style.transition='none';
@@ -13576,44 +13578,49 @@ function cineTick(dt){
   /* --- 1) nubes: 0 a 2.6 s. La camara se mete entre ellas --- */
   if(t<2.6){
     const k=t/2.6;
-    CINE.inte.visible=false; CINE.avion.visible=true;
+    /* SOLO NUBES: el avion, chico y de canto alla al fondo, parecia un bote. El pedido era
+       primero las nubes y DESPUES que suba el avion, asi que aca no esta. */
+    CINE.inte.visible=false; CINE.avion.visible=false;
+    CINE.avion.scale.setScalar(2.4);
     CINE.nubes.position.z = 40 - k*70;
     C.position.set(Math.sin(t*0.35)*6, 22+k*10, 60-k*36);
     C.lookAt(0, 26+k*8, -40);
-    CINE.avion.position.set(-58+k*30, 6+k*12, -78);
-    CINE.avion.rotation.set(0,0.22,0.06);
-    CINE.avion.scale.setScalar(2.4);
     tela.style.opacity = t<0.5 ? String(1-t/0.5) : '0';
   }
   /* --- 2) el avion sube con la estela: 2.6 a 5.4 --- */
   else if(t<5.4){
     const k=(t-2.6)/2.8;
-    CINE.avion.position.set(-34+k*40, 18+k*13, -48+k*34);
-    CINE.avion.rotation.set(0, -0.18, 0.10-k*0.05);
+    CINE.avion.visible=true;
+    CINE.avion.position.set(-46+k*54, 2+k*32, -58+k*46);
+    CINE.avion.rotation.set(0, -0.18, 0.13-k*0.07);
     /* mas alta que el avion: desde el plano del ala parecia un dardo sin alas */
     C.position.set(14-k*5, 33+k*9, 14-k*3);
     C.lookAt(CINE.avion.position.x, CINE.avion.position.y, CINE.avion.position.z);
     /* la estela sale de la cola y queda flotando */
     /* LA ESTELA VA POR RELOJ, NO POR CUADRO: a dos bolas por cuadro, en un telefono de 60 Hz la
        pileta se vaciaba en medio segundo y la estela se cortaba. Una bola cada 55 ms aguanta. */
-    _cnA.set(-7.4,0.15,0).applyEuler(CINE.avion.rotation).multiplyScalar(CINE.avion.scale.x)
-        .add(CINE.avion.position);
+    /* LA ESTELA VA POR RELOJ, NO POR CUADRO: a dos bolas por cuadro, en un telefono de 60 Hz la
+       pileta se vaciaba en medio segundo y la estela se cortaba. Una tanda cada 55 ms aguanta.
+       Y VA EN LA ESCALA DEL AVION: el avion esta agrandado 2,4 veces, asi que unas bolas de radio
+       uno al lado de un fuselaje de cuarenta metros no se veian, y encima nacian adentro del casco. */
+    const ea=CINE.avion.scale.x;
     CINE.hAc=(CINE.hAc||0)+dt;
     while(CINE.hAc>0.055){
       CINE.hAc-=0.055;
       for(const sz of [1,-1]){
         const m=CINE.humo.find(h=>!h.userData.vivo);
         if(!m) break;
+        _cnA.set(-10.2, 0.10, sz*3.6).applyEuler(CINE.avion.rotation).multiplyScalar(ea)
+            .add(CINE.avion.position);
         m.visible=true; m.userData.vivo=1; m.userData.v=0;
         m.position.copy(_cnA);
-        m.position.z+=sz*2.1*CINE.avion.scale.x*0.42;
-        m.position.y+=(Math.random()-0.5)*0.8;
-        m.scale.setScalar(0.9); m.material.opacity=0.66;
+        m.position.y+=(Math.random()-0.5)*0.9*ea;
+        m.scale.setScalar(0.62*ea); m.material.opacity=0.52;
       }
     }
     for(const h of CINE.humo){ if(!h.userData.vivo) continue;
-      h.userData.v+=dt; h.scale.setScalar(0.9+h.userData.v*4.2);
-      h.material.opacity=Math.max(0,0.66-h.userData.v*0.46);
+      h.userData.v+=dt; h.scale.setScalar((0.62+h.userData.v*1.15)*ea);
+      h.material.opacity=Math.max(0,0.52-h.userData.v*0.26);
       if(h.material.opacity<=0.01){ h.visible=false; h.userData.vivo=0; } }
   }
   /* --- 3) pasa raspando la lente y se va a blanco: 5.4 a 6.4 --- */
