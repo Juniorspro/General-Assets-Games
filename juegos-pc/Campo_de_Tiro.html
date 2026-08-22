@@ -1855,15 +1855,7 @@ function cruzTex(){ if(_txCruz)return _txCruz;
   halo.addColorStop(0,'rgba(255,72,42,0.46)'); halo.addColorStop(0.45,'rgba(255,52,26,0.12)');
   halo.addColorStop(1,'rgba(255,40,20,0)');
   g.fillStyle=halo; g.beginPath(); g.arc(cx,cy,R*2.6,0,7); g.fill();
-  const aro=S*0.235;
-  g.strokeStyle='rgba(105,8,0,0.55)'; g.lineWidth=S*0.020;
-  g.beginPath(); g.arc(cx,cy,aro,0,7); g.stroke();
-  g.strokeStyle='rgba(255,54,30,0.95)'; g.lineWidth=S*0.011;
-  g.beginPath(); g.arc(cx,cy,aro,0,7); g.stroke();
-  /* cuatro cortes en el aro, a las horas 12, 3, 6 y 9: asi no es un anillo liso */
-  g.strokeStyle='rgba(255,80,50,1)'; g.lineWidth=S*0.014; g.lineCap='round';
-  for(let i=0;i<4;i++){ const a=i*Math.PI/2;
-    g.beginPath(); g.arc(cx,cy,aro,a-0.10,a+0.10); g.stroke(); }
+  /* UN SOLO PUNTO. El aro alrededor sobraba: se pidio un punto y nada mas. */
   g.fillStyle='rgba(110,8,0,0.72)'; g.beginPath(); g.arc(cx,cy,R*0.86,0,7); g.fill();   // borde, para que se lea sobre el cielo
   g.fillStyle='rgba(255,46,28,1)';  g.beginPath(); g.arc(cx,cy,R*0.66,0,7); g.fill();   // EL PUNTO
   g.fillStyle='rgba(255,200,180,1)';g.beginPath(); g.arc(cx,cy,R*0.26,0,7); g.fill();   // nucleo caliente
@@ -1929,9 +1921,14 @@ function armaReflex(H,z0){
       depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
     const aro=new THREE.Mesh(new THREE.RingGeometry(R-0.009,R-0.002,40), aroMat);
     aro.position.set(0,y0,z-0.0076); aro.renderOrder=5; H.raiz.add(aro); }
-  /* con la mira montada, los hierros del arma sobran */
-  try{ if(H._hierros) for(const m of H._hierros) m.visible=false; }catch(e){}
+  /* CON LA MIRA MONTADA, LOS HIERROS SE QUITAN — no se esconden. Esconderlos no alcanzaba: el
+     fundido por material corre DESPUES de la receta y se lleva la geometria igual, visible o no,
+     asi que los hierros volvian a aparecer adentro de la ventana. Hay que sacarlos del grupo. */
   H.conReflex=true;
+  try{ if(H._hierros){ for(const m of H._hierros){
+        if(m && m.parent) m.parent.remove(m);
+        if(m && m.geometry) m.geometry.dispose(); }
+      H._hierros.length=0; } }catch(e){}
 }
 /* Mira telescopica: tubo, dos monturas y la lente. Para francotirador. */
 function armaLente(H,z0,largo,yRiel){
@@ -2856,8 +2853,9 @@ function armaHerr(raiz, def, vivo){
   /* una pieza de mira de hierro: se dibuja igual, pero queda anotada para que armaReflex la
      pueda apagar si el arma termina llevando punto rojo */
   H._hierros=[];
-  H.hierro=(pts,ancho,x,y,z,m,o)=>{ const me=H.perf(pts,ancho,x,y,z,m,o);
-    H._hierros.push(me); if(H.conReflex) me.visible=false; return me; };
+  H.hierro=(pts,ancho,x,y,z,m,o)=>{
+    if(H.conReflex) return null;           // la mira ya esta puesta: ni se crean
+    const me=H.perf(pts,ancho,x,y,z,m,o); H._hierros.push(me); return me; };
   H.cerrojoPerf=(pts,ancho,x,y,z,m,rec,o)=>{ const me=H.perf(pts,ancho,x,y,z,m,o);
     me.userData.z0=z; me.userData.rec=(rec==null?0.075:rec); me.userData.noFundir=true;
     if(vivo) gunCH=me; return me; };
