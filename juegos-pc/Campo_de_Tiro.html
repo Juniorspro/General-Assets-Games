@@ -22,6 +22,12 @@
   body.tele #bNames, body.tele #bPack{ opacity:.22 !important; transition:opacity .12s linear; }
   body.tele #bFire{ opacity:.7 !important; }
   body.tele #cross{ display:none; }
+  /* durante la cinematica no se ve nada del juego */
+  body.cine #joy, body.cine .actBtn, body.cine #hudWrap, body.cine #cross, body.cine #tiroHUD,
+  body.cine #mpStatus, body.cine #btnMenu, body.cine #bChat, body.cine #bVoice, body.cine #bNames,
+  body.cine #bPack, body.cine #hpWrap, body.cine #salaHUD, body.cine #danWrap,
+  body.cine #billHUD, body.cine #bTienda, body.cine #tiroMsg, body.cine #kbd,
+  body.cine #menu, body.cine #areSala, body.cine #mTop, body.cine #mDrawer{ display:none !important; }
   #joy{ position:fixed; left:26px; bottom:calc(28px + var(--safe-b)); z-index:20; width:128px; height:128px; border-radius:50%;
         background:rgba(255,255,255,.06); border:1.5px solid rgba(255,255,255,.18); backdrop-filter:blur(6px); touch-action:none; }
   #joyKnob{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px; border-radius:50%;
@@ -13385,6 +13391,290 @@ try{ if(window.__tiro) window.__tiro.hudEd={ entrar:enterEditHUD, salir:exitEdit
   q('mCfg',()=>openSettings()); q('mCtl',()=>{ try{ enterEditHUD(); }catch(e){} });
   const dr=document.getElementById('mDrawer'); if(dr) dr.addEventListener('click',e=>{ if(e.target===dr) cerrarCajon(); });
   aplicarArma(); aplicarSkin(); try{ aplicarMapa(); }catch(e){} }
+/* ===================== LA ENTRADA: SALTO DESDE EL AVION =====================
+   Cinco tomas encadenadas, en su PROPIA escena y con su propia camara, asi nada de esto toca el
+   mundo del juego ni lo que ya estaba armado:
+     1. nubes de pocos poligonos pasando
+     2. el avion subiendo, con la estela de humo
+     3. pasa cerca y raspa la lente: fundido a blanco
+     4. adentro: el personaje camina hacia la compuerta de atras, que se abre
+     5. desde afuera de la compuerta, mirando para adentro, el personaje listo para tirarse
+   Se puede saltear tocando la pantalla. Si algo falla, se cae al juego directo: la cinematica
+   nunca puede dejarte trabado en una pantalla negra. */
+const CINE={ act:false, t:0, dur:11.2, esc:null, cam:null, mix:null, cuerpo:null,
+             avion:null, rampa:null, nubes:null, humo:[], al:null, fin:null };
+function cineTela(){
+  let el=document.getElementById('cineTela');
+  if(!el){ el=document.createElement('div'); el.id='cineTela';
+    el.style.cssText='position:fixed;inset:0;z-index:60;pointer-events:auto;background:#000;opacity:0;'+
+      'transition:opacity .18s linear;display:none';
+    const s=document.createElement('div'); s.id='cineSalt';
+    s.textContent='TOCÁ PARA SALTAR ▸';
+    s.style.cssText='position:absolute;right:16px;bottom:14px;font:700 12px/1 system-ui,sans-serif;'+
+      'letter-spacing:.10em;color:rgba(255,255,255,.72);text-shadow:0 2px 8px #000;';
+    el.appendChild(s); document.body.appendChild(el); }
+  return el;
+}
+function cineNube(x,y,z,r,n){
+  /* una nube = varias esferas de pocas caras pegadas, plano y sin brillo */
+  const g=new THREE.Group();
+  const mat=new THREE.MeshLambertMaterial({color:0xffffff, emissive:0xdfe9f5, emissiveIntensity:0.35,
+    transparent:true, opacity:0.92, flatShading:true, fog:false});
+  for(let i=0;i<n;i++){
+    const rr=r*(0.55+Math.random()*0.65);
+    const m=new THREE.Mesh(new THREE.IcosahedronGeometry(rr,0), mat);
+    m.position.set((Math.random()-0.5)*r*3.2,(Math.random()-0.5)*r*0.9,(Math.random()-0.5)*r*2.4);
+    m.rotation.set(Math.random()*3,Math.random()*3,Math.random()*3);
+    m.scale.y=0.62+Math.random()*0.25; g.add(m);
+  }
+  g.position.set(x,y,z); return g;
+}
+function cineAvion(){
+  const g=new THREE.Group();
+  const gris=new THREE.MeshStandardMaterial({color:0x6d7683, roughness:0.62, metalness:0.35, flatShading:true});
+  const osc =new THREE.MeshStandardMaterial({color:0x3b4249, roughness:0.7, metalness:0.3, flatShading:true});
+  /* fuselaje: un cilindro de 10 caras con la trompa y la cola afinadas */
+  const fus=new THREE.Mesh(new THREE.CylinderGeometry(1.5,1.5,13,10,1), gris);
+  fus.rotation.z=Math.PI/2; g.add(fus);
+  const trompa=new THREE.Mesh(new THREE.ConeGeometry(1.5,2.6,10), gris);
+  trompa.rotation.z=-Math.PI/2; trompa.position.x=7.8; g.add(trompa);
+  const cola=new THREE.Mesh(new THREE.CylinderGeometry(1.5,0.9,3.4,10,1), gris);
+  cola.rotation.z=Math.PI/2; cola.position.x=-8.1; g.add(cola);
+  /* alas y estabilizadores, cajas finas y en angulo */
+  const ala=(sz)=>{ const a=new THREE.Mesh(new THREE.BoxGeometry(3.4,0.32,9.5), gris);
+    a.position.set(0.4, 0.9, sz*5.6); a.rotation.x=sz*0.06; g.add(a); };
+  ala(1); ala(-1);
+  const est=(sz)=>{ const a=new THREE.Mesh(new THREE.BoxGeometry(2.0,0.24,3.6), gris);
+    a.position.set(-8.4, 0.6, sz*2.1); g.add(a); };
+  est(1); est(-1);
+  const deriva=new THREE.Mesh(new THREE.BoxGeometry(2.6,3.8,0.28), gris);
+  deriva.position.set(-8.6,2.4,0); g.add(deriva);
+  /* cuatro turbinas colgando de las alas */
+  for(const sz of [1,-1]) for(const d of [3.4,6.6]){
+    const t=new THREE.Mesh(new THREE.CylinderGeometry(0.62,0.62,2.2,8,1), osc);
+    t.rotation.z=Math.PI/2; t.position.set(0.9,0.25,sz*d); g.add(t); }
+  /* la compuerta trasera, con bisagra abajo: gira para abrirse */
+  const rampa=new THREE.Group();
+  const hoja=new THREE.Mesh(new THREE.BoxGeometry(4.6,0.22,2.7), osc);
+  hoja.position.set(-2.3,0,0); rampa.add(hoja);
+  rampa.position.set(-6.4,-1.2,0); g.add(rampa);
+  g.userData.rampa=rampa;
+  return g;
+}
+function cineInterior(){
+  /* el tunel de adentro: piso, techo, costillas, luz roja y la boca de la compuerta */
+  const g=new THREE.Group();
+  const met=new THREE.MeshStandardMaterial({color:0x4a525c, roughness:0.72, metalness:0.35, flatShading:true, side:THREE.DoubleSide});
+  const piso=new THREE.Mesh(new THREE.BoxGeometry(3.0,0.14,12), met); piso.position.y=-0.07; g.add(piso);
+  const techo=new THREE.Mesh(new THREE.BoxGeometry(3.0,0.14,12), met); techo.position.y=2.4; g.add(techo);
+  for(const sx of [-1,1]){
+    const p=new THREE.Mesh(new THREE.BoxGeometry(0.14,2.5,12), met); p.position.set(sx*1.5,1.2,0); g.add(p); }
+  for(let i=0;i<7;i++){ const c=new THREE.Mesh(new THREE.BoxGeometry(3.1,0.10,0.16), met);
+    c.position.set(0,2.3,-5+i*1.6); g.add(c);
+    for(const sx of [-1,1]){ const b=new THREE.Mesh(new THREE.BoxGeometry(0.16,2.4,0.16), met);
+      b.position.set(sx*1.42,1.2,-5+i*1.6); g.add(b); } }
+  /* bancos a los costados */
+  for(const sx of [-1,1]){ const b=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.12,9),
+      new THREE.MeshStandardMaterial({color:0x2f3238, roughness:0.85, flatShading:true}));
+    b.position.set(sx*1.1,0.52,-0.5); g.add(b); }
+  /* la luz roja de salto */
+  /* adentro estaba negro: la luz roja sola no alcanza para leer el personaje */
+  g.add(new THREE.HemisphereLight(0xa9c4e0,0x2a2f36,1.05));
+  const relleno=new THREE.PointLight(0xbfd4ea, 2.2, 13, 1.9); relleno.position.set(0,2.0,2.6); g.add(relleno);
+  const luz=new THREE.PointLight(0xff3a22, 5.0, 6.5, 2.2); luz.position.set(0,2.16,-4.2); g.add(luz);
+  const foco=new THREE.Mesh(new THREE.SphereGeometry(0.085,8,6),
+    new THREE.MeshBasicMaterial({color:0xff5533, fog:false})); foco.position.copy(luz.position); g.add(foco);
+  g.userData.luz=luz;
+  /* DESDE AFUERA ERA UNA CAJA FLOTANDO: un casco de diez caras alrededor del tunel para que la
+     ultima toma se lea como la boca de carga de un avion y no como un cubo en el aire. */
+  /* A DOS CARAS metia una cuna palida atravesada dentro del tunel. A una cara: desde adentro las
+     caras quedan de espaldas y no se dibujan, desde afuera si. */
+  const casco=new THREE.Mesh(new THREE.CylinderGeometry(2.34,2.34,10.6,10,1,true),
+    new THREE.MeshStandardMaterial({color:0x565f6a, roughness:0.66, metalness:0.34,
+      flatShading:true, side:THREE.FrontSide}));
+  /* mas corto que el tunel: si llegaba hasta el fondo, al arrancar la toma de adentro la camara
+     quedaba afuera del casco y se veia el avion por atras. */
+  casco.rotation.x=Math.PI/2; casco.rotation.z=Math.PI/10; casco.position.set(0,1.16,0.42); g.add(casco);
+  const marco=new THREE.Mesh(new THREE.TorusGeometry(2.16,0.13,4,10),
+    new THREE.MeshStandardMaterial({color:0x3b4249, roughness:0.7, metalness:0.3, flatShading:true}));
+  marco.position.set(0,1.16,5.72); marco.rotation.z=Math.PI/10; g.add(marco);
+  return g;
+}
+function cineArmar(){
+  if(CINE.esc) return;
+  const E=new THREE.Scene();
+  E.background=new THREE.Color(0x8fbbe4);
+  E.fog=new THREE.Fog(0xbcd6ee, 60, 320);
+  E.add(new THREE.HemisphereLight(0xdff0ff,0x546070,2.2));
+  /* el sol iba del otro lado y el avion salia en contraluz, una silueta negra */
+  const sol=new THREE.DirectionalLight(0xffeed2,3.1); sol.position.set(46,52,48); E.add(sol);
+  const contra=new THREE.DirectionalLight(0xbcd6ee,0.9); contra.position.set(-40,20,-30); E.add(contra);
+  const C=new THREE.PerspectiveCamera(58, innerWidth/Math.max(1,innerHeight), 0.1, 800);
+  /* nubes: dos capas, una lejos y grande y otra cerca y chica */
+  const nubes=new THREE.Group();
+  for(let i=0;i<26;i++) nubes.add(cineNube((Math.random()-0.5)*400, 6+Math.random()*70, -40-Math.random()*300, 6+Math.random()*10, 5));
+  for(let i=0;i<14;i++) nubes.add(cineNube((Math.random()-0.5)*160, -6+Math.random()*40, -10-Math.random()*90, 3+Math.random()*4, 4));
+  E.add(nubes);
+  const av=cineAvion(); E.add(av);
+  const inte=cineInterior(); inte.visible=false; E.add(inte);
+  /* la estela: bolas que se agrandan y se apagan detras de las turbinas */
+  const humo=[];
+  /* era blanco hueso y se perdia entre las nubes; gris carbon se lee como estela de turbina */
+  const hm=new THREE.MeshBasicMaterial({color:0x69707a, transparent:true, opacity:0.62, fog:false});
+  for(let i=0;i<48;i++){ const m=new THREE.Mesh(new THREE.IcosahedronGeometry(1,0), hm.clone());
+    m.visible=false; E.add(m); humo.push(m); }
+  /* el personaje: el mismo avatar que usan los remotos */
+  let cuerpo=null, mix=null, acts={};
+  try{ if(mpBodySrc&&mpClips){
+      cuerpo=SkeletonUtils.clone(mpBodySrc);
+      cuerpo.traverse(o=>{ o.visible=true; if(o.isMesh){ o.frustumCulled=false; o.castShadow=false; } });
+      mix=new THREE.AnimationMixer(cuerpo);
+      mpClips.forEach(c=>{ acts[c.name]=mix.clipAction(c); });
+      inte.add(cuerpo);
+  } }catch(e){ console.warn('cine cuerpo',e); }
+  CINE.esc=E; CINE.cam=C; CINE.avion=av; CINE.rampa=av.userData.rampa; CINE.nubes=nubes;
+  CINE.inte=inte; CINE.humo=humo; CINE.cuerpo=cuerpo; CINE.mix=mix; CINE.acts=acts;
+}
+function cineArrancar(alTerminar){
+  CINE.t0=performance.now();
+  try{ cineArmar(); }catch(e){ console.warn('cine',e); if(alTerminar)alTerminar(); return false; }
+  if(!CINE.esc){ if(alTerminar)alTerminar(); return false; }
+  CINE.act=true; CINE.t=0; CINE.fin=alTerminar||null;
+  const tela=cineTela(); tela.style.display='block'; tela.style.opacity='0';
+  tela.onpointerdown=()=>cineCortar();
+  document.body.classList.add('cine');
+  return true;
+}
+function cineCortar(){
+  if(!CINE.act) return;
+  CINE.act=false;
+  const tela=cineTela(); tela.style.opacity='1';
+  document.body.classList.remove('cine');
+  setTimeout(()=>{ tela.style.display='none'; tela.style.opacity='0'; }, 260);
+  const f=CINE.fin; CINE.fin=null; if(f) try{ f(); }catch(e){}
+}
+const _cnA=new THREE.Vector3(), _cnB=new THREE.Vector3();
+try{ if(window.__tiro){
+  window.__tiro.cineT=()=>CINE.act? +CINE.t.toFixed(2) : -1;
+  /* para las pruebas: parar el reloj en un instante exacto y dibujar ese cuadro */
+  window.__tiro.cineIr=(t,n)=>{ if(!CINE.act) return -1;
+    const tl=document.getElementById('cineTela'); if(tl) tl.style.transition='none';
+    n=Math.max(1,n||1);
+    for(let i=n-1;i>=0;i--){ CINE.congelar=false;
+      CINE.t0=performance.now()-(t-i*0.033)*1000; cineTick(0.033); }
+    CINE.congelar=true; return +CINE.t.toFixed(2); };
+} }catch(e){}
+function cineTick(dt){
+  if(!CINE.act) return;
+  /* EL RELOJ VA POR TIEMPO REAL, no por el dt del juego: ese esta capado a 0,05 s por cuadro para
+     que la fisica no explote, y en un aparato lento eso hacia que la cinematica durara el doble. */
+  CINE.t=(performance.now()-(CINE.t0||performance.now()))/1000;
+  const t=CINE.t, E=CINE.esc, C=CINE.cam;
+  if(C.aspect!==innerWidth/Math.max(1,innerHeight)){ C.aspect=innerWidth/Math.max(1,innerHeight); C.updateProjectionMatrix(); }
+  if(CINE.mix) CINE.mix.update(dt);
+  const tela=cineTela();
+  /* --- 1) nubes: 0 a 2.6 s. La camara se mete entre ellas --- */
+  if(t<2.6){
+    const k=t/2.6;
+    CINE.inte.visible=false; CINE.avion.visible=true;
+    CINE.nubes.position.z = 40 - k*70;
+    C.position.set(Math.sin(t*0.35)*6, 22+k*10, 60-k*36);
+    C.lookAt(0, 26+k*8, -40);
+    CINE.avion.position.set(-58+k*30, 6+k*12, -78);
+    CINE.avion.rotation.set(0,0.22,0.06);
+    CINE.avion.scale.setScalar(2.4);
+    tela.style.opacity = t<0.5 ? String(1-t/0.5) : '0';
+  }
+  /* --- 2) el avion sube con la estela: 2.6 a 5.4 --- */
+  else if(t<5.4){
+    const k=(t-2.6)/2.8;
+    CINE.avion.position.set(-34+k*40, 18+k*13, -48+k*34);
+    CINE.avion.rotation.set(0, -0.18, 0.10-k*0.05);
+    /* mas alta que el avion: desde el plano del ala parecia un dardo sin alas */
+    C.position.set(14-k*5, 33+k*9, 14-k*3);
+    C.lookAt(CINE.avion.position.x, CINE.avion.position.y, CINE.avion.position.z);
+    /* la estela sale de la cola y queda flotando */
+    /* LA ESTELA VA POR RELOJ, NO POR CUADRO: a dos bolas por cuadro, en un telefono de 60 Hz la
+       pileta se vaciaba en medio segundo y la estela se cortaba. Una bola cada 55 ms aguanta. */
+    _cnA.set(-7.4,0.15,0).applyEuler(CINE.avion.rotation).multiplyScalar(CINE.avion.scale.x)
+        .add(CINE.avion.position);
+    CINE.hAc=(CINE.hAc||0)+dt;
+    while(CINE.hAc>0.055){
+      CINE.hAc-=0.055;
+      for(const sz of [1,-1]){
+        const m=CINE.humo.find(h=>!h.userData.vivo);
+        if(!m) break;
+        m.visible=true; m.userData.vivo=1; m.userData.v=0;
+        m.position.copy(_cnA);
+        m.position.z+=sz*2.1*CINE.avion.scale.x*0.42;
+        m.position.y+=(Math.random()-0.5)*0.8;
+        m.scale.setScalar(0.9); m.material.opacity=0.66;
+      }
+    }
+    for(const h of CINE.humo){ if(!h.userData.vivo) continue;
+      h.userData.v+=dt; h.scale.setScalar(0.9+h.userData.v*4.2);
+      h.material.opacity=Math.max(0,0.66-h.userData.v*0.46);
+      if(h.material.opacity<=0.01){ h.visible=false; h.userData.vivo=0; } }
+  }
+  /* --- 3) pasa raspando la lente y se va a blanco: 5.4 a 6.4 --- */
+  else if(t<6.4){
+    const k=(t-5.4)/1.0;
+    CINE.avion.position.set(8+k*54, 34-k*4, 12-k*44);
+    CINE.avion.rotation.set(0,-0.18,0.05);
+    C.position.set(4, 33, 4);
+    C.lookAt(CINE.avion.position.x, CINE.avion.position.y, CINE.avion.position.z);
+    tela.style.background='#eaf2fb';
+    tela.style.opacity=String(Math.max(0, (k-0.55)/0.45));
+  }
+  /* --- 4) adentro: camina a la compuerta, que se abre: 6.4 a 9.4 --- */
+  else if(t<9.4){
+    const k=(t-6.4)/3.0;
+    CINE.avion.visible=false; CINE.inte.visible=true;
+    tela.style.background='#eaf2fb';
+    tela.style.opacity=String(Math.max(0, 1-k*3.2));
+    if(CINE.cuerpo){
+      if(CINE.acts && CINE.acts.run && !CINE.cuerpo.userData.and){
+        CINE.cuerpo.userData.and=1; CINE.acts.run.reset().play(); }
+      CINE.cuerpo.position.set(0, 0, -3.2+k*3.6);
+      CINE.cuerpo.rotation.y=Math.PI;                 // mirando a la cola
+      if(k>0.80 && CINE.acts && CINE.acts.idle && CINE.cuerpo.userData.and!==2){
+        CINE.cuerpo.userData.and=2;
+        if(CINE.acts.run) CINE.acts.run.fadeOut(0.25);
+        CINE.acts.idle.reset().fadeIn(0.25).play(); }
+    }
+    /* la compuerta baja */
+    const ap=Math.max(0,(k-0.35)/0.65);
+    CINE.inte.userData.luz.intensity = 5.0 + Math.sin(t*9)*2.5;
+    if(!CINE.inte.userData.puerta){
+      /* ANTES ERA UNA TABLA ACOSTADA EN EL PISO: cerrada no tapaba nada y ya se veia el cielo.
+         Ahora es un panel PARADO con la bisagra abajo, que se tumba para afuera al abrirse. */
+      const p=new THREE.Mesh(new THREE.BoxGeometry(3.0,2.6,0.16),
+        new THREE.MeshStandardMaterial({color:0x3b4249, roughness:0.7, metalness:0.3, flatShading:true}));
+      p.geometry.translate(0,1.3,0); p.position.set(0,0,5.92); CINE.inte.add(p);
+      CINE.inte.userData.puerta=p; }
+    CINE.inte.userData.puerta.rotation.x = ap*(Math.PI/2+0.30);
+    /* camara siguiendo por atras, a la altura del hombro */
+    const z=(CINE.cuerpo?CINE.cuerpo.position.z:0);
+    /* A 2,5 m el personaje ocupaba media pantalla y salia cortado por abajo. Cuatro metros y
+       medio atras y un poco mas alto: entra entero y se le ve caminar. */
+    C.position.set(0.30, 1.72, z-4.6);
+    C.lookAt(0.02, 1.00, z+3.4);
+  }
+  /* --- 5) desde afuera de la compuerta, mirando para adentro: 9.4 a 11.2 --- */
+  else if(t<CINE.dur){
+    const k=(t-9.4)/(CINE.dur-9.4);
+    /* daba la espalda a la camara. De frente a la boca, inclinado, listo para tirarse. */
+    if(CINE.cuerpo){ CINE.cuerpo.position.set(0,-0.05,5.55); CINE.cuerpo.rotation.set(0.12,0,0); }
+    CINE.inte.userData.puerta.rotation.x=Math.PI/2+0.30;
+    /* de frente a la boca y bien cerca: antes se veia el avion entero y el personaje era un punto */
+    C.position.set(0.15, 1.30-k*0.42, 8.1+k*1.5);
+    C.lookAt(0, 1.15, 5.4);
+    tela.style.background='#000';
+    tela.style.opacity=String(Math.max(0,(k-0.62)/0.38));
+  }
+  else { cineCortar(); return; }
+  renderer.render(E, C);
+}
 document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)return; menuMode=false; menuPose=false; player.camTP=0;
   if(menuLuz){ menuLuz.intensity=0; menuLuz2.intensity=0; }
   try{ menuEscenario(false); }catch(e){} audioStart(); sfx('play'); pantallaCompleta();
@@ -13397,6 +13687,9 @@ document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)ret
   applyQuality(menuQ);
   startLevel(startWorld);   // arranca en el nivel elegido del carrusel (descubierto)
   clock.getDelta();   // descartar el dt acumulado del menú
+  /* LA ENTRADA. El nivel ya esta armado por detras; la cinematica corre encima y al terminar
+     devuelve el control. Si algo falla, cineArrancar devuelve false y se juega directo. */
+  try{ cineArrancar(()=>{ try{ clock.getDelta(); }catch(e){} }); }catch(e){}
 });
 function startLevel(k){ const w=(k||startWorld);
   if(w==='valle') enterAlc(); else if(w==='arena') enterArena(); else enterTiro();
@@ -13599,6 +13892,7 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
     if(_fpsAcum < 1/cfgFps - 0.0015) return;               // este cuadro no se dibuja
     dt=Math.min(_fpsAcum,0.05); _fpsAcum=0; }
   try{ gpTick(dt); }catch(e){}                             // mando (si hay uno enchufado)
+  if(CINE.act){ if(!CINE.congelar){ try{ cineTick(dt); }catch(e){ cineCortar(); } } return; }   // la entrada manda
   if(menuMode) menuCam(dt); else if(!paused) update(dt);   // pausa: el mundo se congela
   // el telón y las luces del menú se apagan por CUALQUIER salida (el botón, la consola, un atajo),
   // no sólo por el botón ENTRAR: si no, el galpón quedaba jugándose con un panel oscuro en el medio.
