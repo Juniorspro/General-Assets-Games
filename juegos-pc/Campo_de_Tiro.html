@@ -900,7 +900,28 @@
   </div>
 </div>
 
+<!-- MQTT: TRES CDN, no uno.
+     Estaba solo unpkg. Si unpkg no contesta —pasa seguido en redes moviles y detras de algunos
+     proveedores— `mqtt` queda indefinido, mpConnect corta en la primera linea y el juego se queda
+     en "sin red" PARA SIEMPRE, sin reintentar nunca. Era la razon de que el multijugador no
+     apareciera aunque hubiera internet. Ahora, si el primero no llega, se prueban los otros dos y
+     recien ahi se da por perdido. -->
 <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<script>
+window.__mqttListo=function(cb){
+  if(typeof mqtt!=='undefined') return cb(true);
+  var alt=['https://cdn.jsdelivr.net/npm/mqtt@5/dist/mqtt.min.js',
+           'https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.10.1/mqtt.min.js'], i=0;
+  (function prox(){
+    if(typeof mqtt!=='undefined') return cb(true);
+    if(i>=alt.length) return cb(false);
+    var sc=document.createElement('script'); sc.src=alt[i++]; sc.async=true;
+    sc.onload=function(){ cb(typeof mqtt!=='undefined'); };
+    sc.onerror=prox;
+    document.head.appendChild(sc);
+  })();
+};
+</script>
 <script type="importmap">
 {
   "imports": {
@@ -13150,6 +13171,10 @@ document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)ret
   try{ menuEscenario(false); }catch(e){} audioStart(); sfx('play'); pantallaCompleta();
   if(mNameEl){ const v=mNameEl.value.trim().slice(0,14); if(v){ MP.name=v; try{ localStorage.setItem('pf_name',v); }catch(e){} } }
   menuEl.classList.add('hide'); document.body.classList.remove('menu-open');
+  /* AL ENTRAR, A LA SALA. Si al apretar ENTRAR todavia no hay conexion (la libreria tardo, el
+     broker no contesto, el telefono estaba sin datos hasta recien), se reintenta aca mismo en vez
+     de dejarte jugando solo hasta que recargues la pagina. */
+  try{ if(!MP.on) mpConnect(); }catch(e){}
   applyQuality(menuQ);
   startLevel(startWorld);   // arranca en el nivel elegido del carrusel (descubierto)
   clock.getDelta();   // descartar el dt acumulado del menú
@@ -13540,7 +13565,15 @@ function mpEstadoConex(){
   else { MP.on=false; mpSetStatus(MP.conex.length?'connecting':'off', MP.conex.length?'mp_conn':'mp_off'); }
 }
 function mpConnect(){
-  if(typeof mqtt==='undefined'){ mpSetStatus('off','mp_nonet'); return; }
+  /* si la libreria todavia no llego, se la busca en los CDN de respaldo y se vuelve por aca */
+  if(typeof mqtt==='undefined'){
+    mpSetStatus('connecting','mp_conn');
+    if(!mpConnect._buscando && window.__mqttListo){ mpConnect._buscando=true;
+      window.__mqttListo(function(ok){ mpConnect._buscando=false;
+        if(ok) mpConnect(); else mpSetStatus('off','mp_nonet'); }); }
+    else if(!window.__mqttListo) mpSetStatus('off','mp_nonet');
+    return;
+  }
   for(const c of MP.conex){ try{ c.client.end(true); }catch(e){} }
   MP.conex=[];
   mpSetStatus('connecting','mp_conn');
