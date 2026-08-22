@@ -10618,17 +10618,26 @@ try{ window.__tiro={
   /* ¿CAMINAN AL REVES? Devuelve, para cada bot en movimiento, el producto entre hacia donde SE
      MUEVE y hacia donde MIRA su malla. Positivo = camina de frente; negativo = camina de espaldas. */
   rumbo:()=>{ const out=[];
+    /* la rotacion de la malla la pone mpTick, que corre en animate y NO en update: sin esto el
+       gancho compara el rumbo de AHORA contra una malla de hace varios cuadros y el resultado es
+       una moneda al aire. */
+    try{ mpTick(0.016); }catch(e){}
     for(const b of BOTS){ if(b.muerto||!b.r||!b.r.avatar) continue;
-      const vx=b.tx-b.x, vz=b.tz-b.z, L=Math.hypot(vx,vz); if(L<0.5) continue;
+      const vx=b.tx-b.x, vz=b.tz-b.z, L=Math.hypot(vx,vz); if(L<0.05) continue;
       const q=b.r.avatar.quaternion;
       /* la cara vive en el +Z local (medido con caraDe: producto 1,000) */
       /* el +Z local de la malla, en mundo */
       const zx=2*(q.x*q.z+q.w*q.y), zz=1-2*(q.x*q.x+q.y*q.y);
       /* el -Z local */
-      out.push({ n:b.nom, mueve:[+(vx/L).toFixed(2),+(vz/L).toFixed(2)],
+      out.push({ n:b.nom, e:b.estado, mueve:[+(vx/L).toFixed(2),+(vz/L).toFixed(2)],
                  masZ:+((vx/L)*zx+(vz/L)*zz).toFixed(2),
                  menosZ:+(-((vx/L)*zx+(vz/L)*zz)).toFixed(2),
-                 yaw:+b.yaw.toFixed(2), rotY:+b.r.avatar.rotation.y.toFixed(2) });
+                 yaw:+b.yaw.toFixed(2), rotY:+b.r.avatar.rotation.y.toFixed(2),
+                 /* y en pelea: ¿la cara apunta AL JUGADOR? Es la prueba directa de que ya no te
+                    disparan de espaldas. */
+                 caraAlJugador:(()=>{ const dx=player.pos.x-b.x, dz=(player.pos.z-ARE_GZ)-b.z;
+                   const D=Math.hypot(dx,dz)||1;
+                   return +((dx/D)*zx+(dz/D)*zz).toFixed(2); })() });
       if(out.length>=6) break; }
     return out; },
   /* ¿PARA QUE LADO MIRA LA MALLA? Se mide con la geometria, no con la teoria: se compara la
@@ -10666,6 +10675,22 @@ try{ window.__tiro={
     const suma=ds.reduce((a,b)=>a+b,0);
     return { n:ds.length, medio:+(suma/ds.length).toFixed(4), peor:+ds[ds.length-1].toFixed(4),
              res:_telRT?_telRT.width:0, aum:_telAum }; },
+  /* los cinco campos: cambiar, listar y medir cuanto ocupa cada uno */
+  mapas:()=>MAPAS_ARENA.map((m,i)=>({i, id:m.id, n:m.n, lado:m.lado, elegido:i===mapaArena})),
+  mapaIr:(i)=>{ const m=areIrA(i);
+    return { id:m.id, n:m.n, lado:ARE_LADO, mallas:areGroup.children.length,
+             solidos:colliders.filter(c=>c.are).length, puestos:ARE_TOMA.length }; },
+  /* una foto del mapa desde arriba, para revisar la planta de un vistazo */
+  planta:(alt,incl)=>{ if(alt===false){ window.__plantaCam=null; camera.far=_mundoFar||700;
+      camera.updateProjectionMatrix(); return 'off'; }
+    const C=new THREE.PerspectiveCamera(58, innerWidth/Math.max(1,innerHeight), 1, 2400);
+    const A=alt||150, I=(incl==null?0.95:incl);
+    C.position.set(0, A, ARE_GZ + A*Math.tan(I)*0.55);
+    C.lookAt(0, 0, ARE_GZ);
+    /* queda PUESTA: si se dibujara una sola vez, el cuadro siguiente del juego la pisa antes de
+       que la captura llegue a sacar la foto */
+    window.__plantaCam=C; camera.far=2400; camera.updateProjectionMatrix();
+    return { alto:A, lado:ARE_LADO, mapa:MAPA_ARE().n }; },
   botMatar:(i)=>{ const b=BOTS[i|0]; if(!b) return 'no hay'; botDanio(b.id,999,false);
                   return {vivos:PART.vivos, bajas:PART.bajas}; },
   partOtra:()=>{ partReiniciar(); return {fase:PART.fase, vivos:PART.vivos}; },
@@ -14040,16 +14065,22 @@ function equiparSiHace(){ if(_equipOk)return; if(!CU_MAT.cuerpo||!AKMAT.madera)r
    menu— pero ya no se eligen: el juego es la arena. Tener tres mapas repartia a los pocos
    jugadores que hay en tres lados, y en un juego de tiroteo entre gente eso es peor que un mapa
    menos. Se sigue pudiendo entrar a los otros desde consola (__tiro.ir(), __tiro.valle()). */
-const MAPAS=[{k:'arena', n:'La Arena', d:'PvP · 16 rivales · tienda en cada esquina'}];
-function aplicarMapa(){ const m=MAPAS.filter(o=>o.k===startWorld)[0]||MAPAS[0];
+/* LA FICHA MAPA lista los cinco campos. Antes tenia uno solo y era un cajon con una sola opcion.
+   Se llena TARDE, no al declararse: MAPAS_ARENA se define mil lineas mas abajo y leerla aca es la
+   zona muerta temporal de un const — el modulo entero se caia con "Cannot access before
+   initialization". Se arma la primera vez que alguien la pide. */
+const MAPAS=[];
+function MAPAS_(){ if(!MAPAS.length) try{ for(const m of MAPAS_ARENA) MAPAS.push({k:'arena', id:m.id, n:m.n, d:m.d}); }catch(e){}
+  return MAPAS; }
+function aplicarMapa(){ const L=MAPAS_(); const m=L[mapaArena]||L[0]||{n:'La Arena'};
   const el=document.getElementById('ldMapaN'); if(el)el.textContent=m.n;
   try{ localStorage.setItem('ct_mapa',startWorld); }catch(e){} }
 function abrirCajon(tipo){
   const dr=document.getElementById('mDrawer'), tt=document.getElementById('mDrawerT'), li=document.getElementById('mDrawerL');
   if(!dr)return; const arma=(tipo==='arma'), mapa=(tipo==='mapa'), acab=(tipo==='acab');
   tt.textContent = mapa? t('ct_mapa') : (arma? t('ct_arma') : (acab? t('ct_acab') : t('ct_skin')));
-  const lista = mapa? MAPAS : (arma? ARSENAL : (acab? ACABADOS : TRAJES));
-  const sel = mapa? Math.max(0,MAPAS.map(o=>o.k).indexOf(startWorld)) : (arma? armaSel : (acab? acabSel : skinSel));
+  const lista = mapa? MAPAS_() : (arma? ARSENAL : (acab? ACABADOS : TRAJES));
+  const sel = mapa? mapaArena : (arma? armaSel : (acab? acabSel : skinSel));
   /* El arsenal se lista POR CATEGORIA, con un titulo por grupo: con 17 armas una lista plana no se
      puede leer en un celular. */
   if(arma){ const GR=[['asalto','Asalto'],['sub','Subfusiles'],['escopeta','Escopetas'],
@@ -14063,7 +14094,7 @@ function abrirCajon(tipo){
   }
   li.querySelectorAll('.drOpt').forEach(b=>b.addEventListener('click',()=>{ sfx('menu');
     const i=+b.dataset.i;
-    if(mapa){ startWorld=MAPAS[i].k; aplicarMapa(); }
+    if(mapa){ startWorld='arena'; areIrA(i); aplicarMapa(); }
     else if(arma){ armaEquipar(i); SLOT[slotAct]=armaSel; SLOT_MUN[slotAct]=-1; }
     else if(acab){ acabSel=i; aplicarAcabado(); }
     else { skinSel=i; aplicarSkin(); }
@@ -15394,7 +15425,7 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
   try{ ambTick(dt); }catch(e){}                   // viento del valle + latido con poca vida
   try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player) — sigue latiendo aunque esté en pausa
   try{ _telDt=dt; telRender(); }catch(e){}   // la vista de adentro del visor, antes del cuadro principal
-  renderer.render(scene,camera);
+  renderer.render(scene, window.__plantaCam || camera);   // __plantaCam: solo para las pruebas
   drsTick(dt); }
 
 /* ===================== MULTIJUGADOR (MQTT, sin backend; relay vía broker público) ===================== */
@@ -16214,7 +16245,7 @@ function mpTick(dt){
    una sola geometria fundida por material, asi el mapa entero son ocho mallas y no ochocientas.
    Las colisiones son cajas planas en el array de siempre, no una por objeto dibujado. */
 const ARE_GZ=32000;
-const ARE_LADO=132;                    // el pasto, de muralla a muralla
+let ARE_LADO=132;                      // el pasto, de muralla a muralla (lo pone cada mapa)
 const ARE_MURO=7.0;                    // alto de la muralla
 const areGroup=new THREE.Group(); areGroup.visible=false; scene.add(areGroup);
 let areBuilt=false;
@@ -16423,7 +16454,9 @@ function areCol(x,y,z,w,h,d,ry){
 
      La propiedad `mesh` simplemente NO se pone. Undefined no es igual a null, y el collider vale.
      Hay un comentario en la isla que avisa de esta misma trampa; la arena cayo igual. */
-  const meter=(cx,cz,ex,ez)=>colliders.push({
+  /* `are:1` marca el solido como DE LA ARENA: al cambiar de mapa hay que sacar los del anterior
+     y sin la marca no habria como distinguirlos de los del valle o la galeria. */
+  const meter=(cx,cz,ex,ez)=>colliders.push({ are:1,
     minx:cx-ex, maxx:cx+ex, miny:y-h/2, maxy:y+h/2,
     minz:cz+ARE_GZ-ez, maxz:cz+ARE_GZ+ez});
   const g=ry||0;
@@ -16491,15 +16524,168 @@ function areTienda(cx,cz,ry){
      que mire al origen alcanza con ry = atan2(x, z). */
   ARE_VPUESTO.push({ x:v[0], z:v[1], ry:Math.atan2(v[0], v[1]) });
 }
+/* ===================== LOS CINCO CAMPOS DE ENFRENTAMIENTO =====================
+   Todos comparten el mismo esqueleto —pasto, muralla con almenas, torres en las esquinas y las
+   cuatro tiendas— porque eso es lo que hace que se sientan del mismo juego, y lo que cambia es
+   la PLANTA: por donde se camina, donde te podes tapar y que hay para trepar.
+   Cada uno esta pensado para un tipo de pelea distinto:
+   · LA ARENA    campo abierto con una plataforma en el medio. Se pelea a media distancia.
+   · EL CRUCE    tres calles paralelas con callejones: la de siempre de los duelos por equipos.
+   · EL PUERTO   contenedores apilados en cuadricula. Esquinas cerradas y techos para trepar.
+   · LA FABRICA  naves con maquinas y pasarelas. Lo mas cerrado de los cinco.
+   · LAS RUINAS  muros rotos y monticulos, sin simetria. El que mejor premia conocerlo.
+   `espejo` refleja cada bloque en los dos ejes, que es como se arma un mapa competitivo sin
+   ventaja de lado. Las ruinas lo apagan a proposito. */
+function areRampa(x,z,ang,ancho,largo,alto,mat){
+  const M=ARE_M;
+  const g=new THREE.BoxGeometry(ancho,0.5,largo); g.rotateX(-Math.atan2(alto,largo));
+  areAdd(mat||M.piedraOs, g, x, alto/2+0.25, z, ang);
+  /* la rampa se sube por ESCALONES: una caja inclinada no se puede subir con un cuerpo que camina
+     por AABB, se traba en el canto. Cada escalon va fino a lo largo y ancho a lo ancho. */
+  const n=Math.max(4, Math.round(largo));
+  const dx=Math.sin(ang), dz=Math.cos(ang);
+  for(let i=0;i<n;i++){ const t=(i+0.5)/n, h=Math.max(0.22, alto*t);
+    const px=x - dx*(largo/2) + dx*largo*t, pz=z - dz*(largo/2) + dz*largo*t;
+    areCol(px,h/2,pz, (Math.abs(dx)>0.5? largo/n+0.4 : ancho), h, (Math.abs(dx)>0.5? ancho : largo/n+0.4)); }
+}
+/* un contenedor: caja con las costillas marcadas */
+function areCont(x,y,z,ry,col){
+  const M=ARE_M, W=6.0,H=2.6,D=2.5;
+  areCaja(col||M.metal, x,y+H/2,z, W,H,D, ry);
+  const c=Math.cos(ry||0), sn=Math.sin(ry||0);
+  for(let i=-2;i<=2;i++){ const t=i*1.1;
+    areAdd(M.piedraOs,new THREE.BoxGeometry(0.14,H-0.3,D+0.06), x+t*c, y+H/2, z+t*sn, ry||0); }
+}
+const MAPAS_ARENA=[
+  { id:'arena', n:'La Arena', d:'Campo abierto · plataforma central', lado:132, espejo:true,
+    bloques:[ [0,0,14,1.6,14,'piedraOs'], [0,0,8,3.2,8,'piedra'],
+      [26,0,3,2.6,9,'piedra'], [0,26,9,2.6,3,'piedra'],
+      [40,22,6,1.4,6,'arena'], [22,40,6,1.4,6,'arena'], [46,46,4,2.2,4,'piedra'],
+      [16,10,2.4,1.2,2.4,'madera'], [34,8,2.4,1.2,2.4,'madera'], [10,34,2.4,1.2,2.4,'madera'],
+      [30,30,3.0,1.8,1.2,'piedraOs'], [52,12,1.2,2.4,7,'piedra'], [12,52,7,2.4,1.2,'piedra'] ],
+    rampas:[[0,0,4,5,7,1.6]], barriles:[[19,19],[44,6],[6,44],[36,20],[20,36]] },
+
+  { id:'cruce', n:'El Cruce', d:'Tres calles y callejones · duelos', lado:122, espejo:true,
+    bloques:[
+      /* los dos bloques largos que hacen las tres calles */
+      [21,14,7,4.4,26,'piedra'], [21,46,7,4.4,18,'piedra'],
+      [44,20,6,3.6,20,'arena'],  [44,50,6,3.6,14,'arena'],
+      /* los cruces: paredes cortas que cortan la linea de tiro larga */
+      [10,32,14,2.2,1.6,'piedraOs'], [33,32,12,2.2,1.6,'piedraOs'],
+      [0,8,20,1.5,1.5,'piedraOs'],
+      /* el centro: una plaza baja con dos cubiertas */
+      [0,0,16,0.6,16,'arena'], [6,6,3.2,1.8,3.2,'piedra'], [0,20,10,2.0,2.0,'piedra'],
+      /* cajones sueltos en las bocacalles */
+      [14,4,2.2,1.1,2.2,'madera'], [30,6,2.2,1.1,2.2,'madera'], [52,34,2.4,1.3,2.4,'madera'],
+      [36,42,3.0,1.6,3.0,'piedraOs'], [50,8,1.4,2.6,6,'piedra'] ],
+    rampas:[[21,29,0,5,6,4.4],[44,36,0,5,6,3.6]],
+    barriles:[[16,26],[38,30],[8,44],[48,18],[27,52]] },
+
+  { id:'puerto', n:'El Puerto', d:'Contenedores apilados · esquinas', lado:126, espejo:true,
+    bloques:[
+      /* el muelle: una franja larga en el medio */
+      [0,0,20,0.7,54,'madera'], [0,0,6,1.9,6,'piedraOs'],
+      /* las grúas, dos torres altas */
+      [30,0,2.2,7.0,2.2,'metal'], [30,0,10,0.8,1.6,'metal'],
+      /* pilas de cajones */
+      [46,40,4,2.4,4,'madera'], [40,52,3,1.6,3,'madera'], [54,20,3.4,3.2,3.4,'madera'],
+      [18,44,5,1.4,5,'arena'], [8,54,7,2.2,3,'piedra'] ],
+    contenedores:[
+      [14,10,0,0],[14,10,0,2.6],[22,10,0,0],
+      [14,26,1.5708,0],[22,30,0,0],[22,30,0,2.6],[22,30,0,5.2],
+      [38,14,1.5708,0],[38,14,1.5708,2.6],[46,8,0,0],
+      [10,40,0,0],[34,36,1.5708,0],[34,36,1.5708,2.6],
+      [50,32,0,0],[26,50,1.5708,0],
+      /* mas pilas: con quince el muelle quedaba abierto de mas y no habia esquinas donde cortar */
+      [46,8,0,2.6],[10,40,0,2.6],[26,50,1.5708,2.6],[50,32,0,2.6],
+      [30,44,0,0],[30,44,0,2.6],[42,26,1.5708,0],[6,22,1.5708,0],[6,22,1.5708,2.6],
+      [54,44,0,0],[18,58,1.5708,0],[42,58,0,0] ],
+    rampas:[[22,20,0,4,5,2.6],[38,22,1.5708,4,5,2.6]],
+    barriles:[[10,18],[28,8],[44,28],[18,52],[52,46]] },
+
+  { id:'fabrica', n:'La Fábrica', d:'Naves y pasarelas · corta distancia', lado:112, espejo:true,
+    bloques:[
+      /* las naves: paredes largas que forman pasillos */
+      [16,0,2.0,4.6,34,'piedra'], [34,0,2.0,4.6,26,'piedra'],
+      [0,18,30,4.6,2.0,'piedra'], [0,38,18,4.6,2.0,'piedra'],
+      /* las maquinas */
+      [25,12,6,2.2,5,'metal'], [8,28,5,2.4,6,'metal'], [42,30,7,2.0,5,'metal'],
+      /* los silos */
+      [46,10,3.2,5.5,3.2,'metal'], [12,46,2.8,4.8,2.8,'metal'],
+      /* la pasarela de arriba, con su plataforma */
+      [25,25,12,0.5,3,'piedraOs'], [0,0,10,0.6,10,'piedraOs'], [0,0,4,2.6,4,'metal'],
+      [40,44,3,1.5,3,'madera'], [22,44,2.4,1.2,2.4,'madera'] ],
+    rampas:[[25,34,0,4,7,2.9],[8,8,1.5708,4,6,0.6]],
+    barriles:[[20,20],[6,14],[36,6],[14,36],[46,40]] },
+
+  { id:'ruinas', n:'Las Ruinas', d:'Muros rotos y montículos · sin simetría', lado:138, espejo:false,
+    bloques:[
+      /* muros rotos de distinto alto: la silueta que hace ruinas */
+      [-30,-24,18,3.4,1.8,'piedraOs'], [-30,-8,1.8,2.2,14,'piedraOs'],
+      [-12,-30,1.8,4.0,16,'piedra'],   [6,-34,14,2.0,1.8,'piedra'],
+      [26,-20,1.8,3.2,20,'piedraOs'],  [40,-4,16,1.6,1.8,'piedraOs'],
+      [34,22,1.8,2.8,18,'piedra'],     [12,34,20,2.2,1.8,'piedra'],
+      [-16,26,1.8,3.6,16,'piedraOs'],  [-38,10,14,2.4,1.8,'piedraOs'],
+      /* monticulos de escombro, para trepar */
+      [-4,0,12,1.2,12,'arena'], [-4,0,6,2.4,6,'piedraOs'],
+      [20,8,7,1.0,7,'arena'], [-24,-4,6,1.4,6,'arena'], [16,-12,5,1.8,5,'piedraOs'],
+      [-30,30,8,1.2,8,'arena'], [44,36,6,1.6,6,'arena'],
+      /* los arcos: dos columnas y el dintel */
+      [-2,-16,1.6,3.6,1.6,'piedra'], [4,-16,1.6,3.6,1.6,'piedra'], [1,-16,7,0.9,1.6,'piedra'],
+      [30,40,1.6,3.2,1.6,'piedra'], [36,40,1.6,3.2,1.6,'piedra'], [33,40,7,0.9,1.6,'piedra'],
+      /* cajones y restos */
+      [8,18,2.6,1.3,2.6,'madera'], [-20,14,2.2,1.1,2.2,'madera'], [46,-26,3,1.5,3,'madera'],
+      [-44,-36,4,2.0,4,'piedraOs'], [50,14,3.4,1.8,3.4,'piedraOs'],
+      /* SIN ESPEJO CADA BLOQUE VA UNA SOLA VEZ, asi que con treinta el mapa quedaba pelado sobre
+         138 m de lado: se cruzaba de punta a punta sin nada donde taparse. Otra tanda. */
+      [-52,-14,1.8,2.6,12,'piedraOs'], [-40,-46,12,1.8,1.8,'piedra'], [-8,-48,1.8,3.0,10,'piedra'],
+      [22,-44,10,2.2,1.8,'piedraOs'], [48,-42,1.8,2.4,10,'piedraOs'], [54,-8,10,1.6,1.8,'piedra'],
+      [50,26,1.8,3.0,12,'piedra'],    [22,52,12,2.0,1.8,'piedraOs'], [-6,50,1.8,2.6,10,'piedraOs'],
+      [-34,48,10,1.8,1.8,'piedra'],   [-52,34,1.8,2.2,12,'piedra'],  [-50,-2,8,1.4,1.8,'piedraOs'],
+      /* mas monticulos y restos, repartidos para que haya siempre algo a diez metros */
+      [-18,-14,7,1.1,7,'arena'],  [12,-2,6,1.5,6,'arena'],    [-32,12,5,1.3,5,'arena'],
+      [30,-32,6,1.2,6,'arena'],   [-14,40,6,1.4,6,'arena'],   [40,10,5,1.7,5,'piedraOs'],
+      [2,28,4,2.0,4,'piedraOs'],  [-42,-20,3.2,1.6,3.2,'madera'], [26,30,2.8,1.4,2.8,'madera'],
+      [-26,-42,2.6,1.2,2.6,'madera'], [44,50,3.0,1.5,3.0,'madera'], [-8,8,2.4,2.2,2.4,'piedra'],
+      /* un tercer arco, y una torre rota que se ve desde lejos */
+      [-38,-2,1.6,3.4,1.6,'piedra'], [-32,-2,1.6,3.4,1.6,'piedra'], [-35,-2,7,0.9,1.6,'piedra'],
+      [18,20,5,5.5,5,'piedraOs'],  [18,20,3.4,7.0,3.4,'piedra'] ],
+    rampas:[[-4,9,0,5,7,2.4],[20,15,3.1416,4,6,1.0]],
+    barriles:[[-10,6],[24,-6],[-34,18],[38,28],[4,44],[-46,-8],[48,-14]] }
+];
+let mapaArena=(()=>{ try{ const k=localStorage.getItem('ct_mapaAre');
+  const i=MAPAS_ARENA.findIndex(m=>m.id===k); return i<0?0:i; }catch(e){ return 0; } })();
+function MAPA_ARE(){ return MAPAS_ARENA[mapaArena]||MAPAS_ARENA[0]; }
+/* al cambiar de mapa hay que desarmar el anterior: mallas, solidos y puestos de arma */
+function areLimpiar(){
+  for(const m of areGroup.children.slice()){
+    areGroup.remove(m); if(m.geometry) m.geometry.dispose(); }
+  for(let i=colliders.length-1;i>=0;i--) if(colliders[i].are) colliders.splice(i,1);
+  ARE_TOMA.length=0; _areB.clear(); areBuilt=false;
+  /* los vendedores son avatares clonados, aparte de la geometria: hay que sacarlos a mano */
+  try{ for(const v of ARE_VEND){ if(v && v.g){ areGroup.remove(v.g); scene.remove(v.g); } }
+       ARE_VEND.length=0; ARE_VPUESTO.length=0; }catch(e){}
+}
+function areIrA(i){
+  const j=Math.max(0,Math.min(MAPAS_ARENA.length-1,i|0));
+  if(j===mapaArena && areBuilt) return MAPA_ARE();
+  mapaArena=j; try{ localStorage.setItem('ct_mapaAre', MAPA_ARE().id); }catch(e){}
+  if(world==='arena'){ areLimpiar(); buildArena();
+    const p=areSpawn(); player.pos.set(p[0],1.2,ARE_GZ+p[1]); player.vel.set(0,0,0); player.vy=0; }
+  else areLimpiar();
+  return MAPA_ARE();
+}
 function buildArena(){
   if(areBuilt) return; areBuilt=true;
   areMat(); ARE_TOMA.length=0;
+  const P=MAPA_ARE();
+  ARE_LADO=P.lado||132;
   const M=ARE_M, L=ARE_LADO, H=ARE_MURO;
   // ---- el pasto ----
   areAdd(M.pasto,new THREE.BoxGeometry(L,0.4,L),0,-0.2,0,0);
   /* el pasto SI tiene que saltearse en horizontal (si no, el borde del piso te frena de costado):
      para eso esta `piso`, que moveX y moveZ miran de verdad, en vez del truco del mesh nulo */
-  colliders.push({minx:-L/2,maxx:L/2,miny:-0.4,maxy:0,minz:ARE_GZ-L/2,maxz:ARE_GZ+L/2,piso:true});
+  colliders.push({are:1,minx:-L/2,maxx:L/2,miny:-0.4,maxy:0,minz:ARE_GZ-L/2,maxz:ARE_GZ+L/2,piso:true});
   // ---- la muralla, con sus almenas ----
   const e=1.2, m=L/2+e/2;
   for(const s of [[0,-m,L+e*2,e],[0,m,L+e*2,e],[-m,0,e,L+e*2],[m,0,e,L+e*2]]){
@@ -16526,52 +16712,46 @@ function buildArena(){
   areTienda( d,-d,-Math.PI*0.25);
   areTienda(-d, d, Math.PI*0.75);
   areTienda( d, d,-Math.PI*0.75);
-  // ---- cobertura, SIMETRICA en los dos ejes ----
-  const bloques=[
-    // [x,z,ancho,alto,fondo,material]
-    [0,0,   14,1.6,14,'piedraOs'],          // la plataforma del centro
-    [0,0,    8,3.2, 8,'piedra'],            // y el torreon de arriba
-    [26,0,   3,2.6, 9,'piedra'],
-    [0,26,   9,2.6, 3,'piedra'],
-    [40,22,  6,1.4, 6,'arena'],
-    [22,40,  6,1.4, 6,'arena'],
-    [46,46,  4,2.2, 4,'piedra'],
-    [16,10,  2.4,1.2,2.4,'madera'],
-    [34,8,   2.4,1.2,2.4,'madera'],
-    [10,34,  2.4,1.2,2.4,'madera'],
-    [30,30,  3.0,1.8,1.2,'piedraOs'],
-    [52,12,  1.2,2.4,7,'piedra'],
-    [12,52,  7,2.4,1.2,'piedra'],
-  ];
-  for(const b of bloques) for(const sx of (b[0]?[-1,1]:[1])) for(const sz of (b[1]?[-1,1]:[1])){
-    areCaja(M[b[5]], b[0]*sx, b[3]/2, b[1]*sz, b[2], b[3], b[4], 0);
+  // ---- LA PLANTA DEL MAPA ELEGIDO ----
+  /* `espejo` refleja cada bloque en los dos ejes: es como se arma un mapa competitivo sin que
+     ningun lado tenga ventaja. Las ruinas lo apagan a proposito, que de eso viven. */
+  const esp=(P.espejo!==false);
+  for(const b of (P.bloques||[])){
+    const xs = esp ? (b[0]?[-1,1]:[1]) : [1];
+    const zs = esp ? (b[1]?[-1,1]:[1]) : [1];
+    for(const sx of xs) for(const sz of zs){
+      areCaja(M[b[5]]||M.piedra, b[0]*sx, b[3]/2, b[1]*sz, b[2], b[3], b[4], (b[6]||0)*sx*sz);
+    }
   }
-  // rampas para subir a la plataforma del centro
-  for(let k=0;k<4;k++){ const a=k*Math.PI/2;
-    /* LA RAMPA TIENE QUE APUNTAR AL CENTRO. La geometria sube hacia su +Z local, asi que el giro
-       se calcula para que ese +Z quede mirando al origen; antes se le pasaba `a` derecho y las
-       cuatro rampas quedaban ATRAVESADAS, tangentes a la plataforma en vez de radiales, mientras
-       los escalones de colision si iban radiales. O sea: se veia una rampa donde no habia nada y
-       habia una escalera invisible al costado. */
-    const gy=Math.atan2(-Math.cos(a), -Math.sin(a));
-    const g=new THREE.BoxGeometry(5.0,0.5,7.0); g.rotateX(-0.24);
-    areAdd(M.piedraOs,g, Math.cos(a)*10.4, 0.82, Math.sin(a)*10.4, gy);
-    /* la rampa se sube por ESCALONES de colision: una caja inclinada no se puede subir con un
-       cuerpo que camina por AABB, se traba en el canto.
-       Cada escalon va FINO a lo largo del radio (1 m, que es lo que avanza cada uno) y ANCHO a lo
-       ancho de la rampa (5 m). Estaba al reves: el pasillo pisable medía 1 m contra una rampa de 5,
-       asi que subiendo por los costados no habia nada abajo. */
-    for(let i=0;i<7;i++){ const t=(i+0.5)/7, alt=0.25+t*1.35;
-      const rx=Math.cos(a)*(13.8-t*6.8), rz=Math.sin(a)*(13.8-t*6.8);
-      areCol(rx,alt/2,rz, (k%2? 5.0:1.0), alt, (k%2? 1.0:5.0)); }
+  // ---- contenedores (el puerto) ----
+  for(const c of (P.contenedores||[])){
+    const xs = esp ? (c[0]?[-1,1]:[1]) : [1];
+    const zs = esp ? (c[1]?[-1,1]:[1]) : [1];
+    for(const sx of xs) for(const sz of zs) areCont(c[0]*sx, c[3]||0, c[1]*sz, (c[2]||0)*sx*sz);
   }
-  // barriles y postes sueltos, tambien en espejo
-  for(const p of [[19,19],[44,6],[6,44],[36,20],[20,36]]) for(const sx of [-1,1]) for(const sz of [-1,1]){
-    areAdd(M.metal,new THREE.CylinderGeometry(0.42,0.42,1.2,10), p[0]*sx, 0.6, p[1]*sz, 0);
-    areCol(p[0]*sx,0.6,p[1]*sz,0.84,1.2,0.84);
+  // ---- rampas ----
+  for(const r of (P.rampas||[])){
+    if(r[2]===4){
+      /* el 4 quiere decir "las cuatro, radiales al centro": es la plataforma de La Arena */
+      for(let k=0;k<4;k++){ const a=k*Math.PI/2;
+        areRampa(Math.cos(a)*(r[3]+7.4), Math.sin(a)*(r[3]+7.4),
+                 Math.atan2(-Math.cos(a),-Math.sin(a)), r[3], r[4], r[5]); }
+    } else {
+      const xs = esp ? (r[0]?[-1,1]:[1]) : [1];
+      const zs = esp ? (r[1]?[-1,1]:[1]) : [1];
+      for(const sx of xs) for(const sz of zs) areRampa(r[0]*sx, r[1]*sz, r[2], r[3], r[4], r[5]);
+    }
+  }
+  // ---- barriles y postes sueltos ----
+  for(const p of (P.barriles||[])){
+    const xs = esp ? (p[0]?[-1,1]:[1]) : [1];
+    const zs = esp ? (p[1]?[-1,1]:[1]) : [1];
+    for(const sx of xs) for(const sz of zs){
+      areAdd(M.metal,new THREE.CylinderGeometry(0.42,0.42,1.2,10), p[0]*sx, 0.6, p[1]*sz, 0);
+      areCol(p[0]*sx,0.6,p[1]*sz,0.84,1.2,0.84); }
   }
   const n=areFundir();
-  try{ console.log('La Arena:',n,'mallas,',ARE_TOMA.length,'puestos de arma'); }catch(e){}
+  try{ console.log(P.n+':',n,'mallas,',ARE_TOMA.length,'puestos de arma, lado',L); }catch(e){}
 }
 function enterArena(){
   if(world==='arena') return;
