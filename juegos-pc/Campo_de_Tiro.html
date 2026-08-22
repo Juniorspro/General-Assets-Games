@@ -364,6 +364,9 @@
   body.menu-open #kbd.show{ z-index:62; }
   body.menu-open #kbd.show::before{ content:''; position:fixed; inset:0; z-index:-1;
     background:rgba(4,7,10,.55); }
+  /* kbSalida: los 380 ms de gracia despues de cerrar el teclado. Sin opacidad —los paneles ya se
+     ven— pero sordos, para que el dedo que soltas sobre ENVIAR no apriete lo que quedo debajo. */
+  body.kbSalida #mLoad, body.kbSalida #mGo, body.kbSalida #mChat, body.kbSalida #mTop{ pointer-events:none !important; }
   body.tecleando #mLoad, body.tecleando #mGo, body.tecleando #mChat{ opacity:0; pointer-events:none;
     transition:opacity .15s; }
   #kbd .kbField{ display:flex; gap:9px; align-items:center; }
@@ -13073,8 +13076,8 @@ function menuEscuadra(){
   }
   if(el.innerHTML!==h) el.innerHTML=h;
   const ms=document.getElementById('mModoS');
-  if(ms){ let cupo=8; try{ cupo=SALA_CUPO||8; }catch(e){}
-    ms.textContent=cupo+' en la sala · '+nombres.length+(nombres.length===1?' real':' reales'); }
+  if(ms){ let cupo=4; try{ cupo=SALA_CUPO||4; }catch(e){}
+    ms.textContent=nombres.length+' de '+cupo+' en la escuadra'; }
 }
 let sensMul=1; try{ const v=parseFloat(localStorage.getItem('pf_sens')); if(v>=0.3&&v<=3) sensMul=v; }catch(e){}   // sensibilidad de cámara (ajustable en Ajustes, se guarda)
 (function(){
@@ -15854,7 +15857,35 @@ function kbMandar(txt){
   if(kbDestino==='global'){ try{ gchEnviar(txt); }catch(e){} }
   else { try{ mpSendChatText(txt); }catch(e){} }
 }
-function closeKbd(){ if(kbdEl)kbdEl.classList.remove('show'); document.body.classList.remove('tecleando'); }
+/* ===================== POR QUE MANDAR UN MENSAJE EMPEZABA LA PARTIDA =====================
+   El teclado responde al POINTERDOWN (tiene que ser asi: con click, en el celular hay 300 ms de
+   retardo y escribir se siente pegajoso). La tecla ENVIAR llamaba a closeKbd(), que sacaba
+   body.tecleando en ese mismo instante. Y en el CSS esta esto:
+
+       body.tecleando #mLoad, body.tecleando #mGo, body.tecleando #mChat{ pointer-events:none }
+
+   O sea que en el pointerdown el boton ENTRAR estaba muerto, pero al soltar el dedo —unos
+   milisegundos despues, en el pointerup y el click— ya habia vuelto a la vida… y el dedo estaba
+   justo encima, porque ENVIAR queda abajo a la derecha, en el mismo lugar que ENTRAR. Mandabas
+   "hola" y arrancaba una partida.
+
+   Dos cerrojos, porque uno solo no alcanza:
+   · Los paneles quedan sordos 380 ms mas (body.kbSalida), asi el pointerup no encuentra a nadie.
+   · Y el primer click que llegue en ese rato se traga en fase de captura, antes de que nadie lo
+     escuche. Si no llega ninguno, el vigilante se retira solo. */
+function kbTragarClick(){
+  const tragar=(ev)=>{ ev.stopPropagation(); ev.preventDefault(); soltar(); };
+  const soltar=()=>{ clearTimeout(kbTragarClick._t);
+    try{ window.removeEventListener('click',tragar,true); }catch(e){}
+    try{ window.removeEventListener('pointerup',tragar,true); }catch(e){}
+    document.body.classList.remove('kbSalida'); };
+  window.addEventListener('click',tragar,true);
+  window.addEventListener('pointerup',tragar,true);
+  document.body.classList.add('kbSalida');
+  kbTragarClick._t=setTimeout(soltar, 380);
+}
+function closeKbd(){ if(kbdEl)kbdEl.classList.remove('show'); document.body.classList.remove('tecleando');
+  kbTragarClick(); }
 function mpSendChat(){ openKbd('sala'); }   // el botón 💬 abre el teclado del JUEGO
 /* el chat global del menu: mismo teclado, otro destino, y con su espera de cinco segundos */
 (function(){
@@ -16582,8 +16613,40 @@ let areBuilt=false;
    resolucion de choques te escupia dos metros para arriba). Se aparece en un anillo, y cada vez en
    un lado distinto, que ademas es lo que corresponde en un mapa de tiroteo. */
 const ARE_START=new THREE.Vector3(0,1.2,ARE_GZ+44);
-function areSpawn(){ const a=Math.random()*6.283, d=34+Math.random()*(ARE_LADO/2-46);
-  return [Math.cos(a)*d, Math.sin(a)*d]; }
+/* ===================== NADIE APARECE DENTRO DE UNA PARED =====================
+   Los puntos de aparicion —el tuyo, el de los bots al sembrarlos, el de cada reaparicion y el de
+   las dos bases del duelo— salian de un angulo y una distancia AL AZAR, sin mirar una sola vez
+   donde estan las cajas. En un mapa con contenedores, bloques y rampas eso es cuestion de tiempo:
+   el que caia adentro de un contenedor quedaba trabado, o peor, medio cuerpo afuera y disparando
+   a traves del metal.
+
+   Lo raro es que el chequeo ya existia: botTapado() se usa en CADA PASO que da un bot para no
+   caminar contra una caja. Nunca se habia usado para elegir donde nacen. Ahora si, con un margen
+   mas grande que el del paso (0,95 m contra 0,34): pegado a la pared tampoco sirve, porque el
+   primer movimiento te mete adentro.
+
+   Y se reintenta. Cuarenta tiros de dado son de sobra en un mapa que es casi todo campo abierto;
+   si ninguno sale limpio se devuelve el ultimo, que es peor que nada pero mejor que colgarse. */
+function areLibre(x,z,rad){
+  rad=(rad==null?0.95:rad);
+  const L=ARE_LADO/2-3.2;
+  if(Math.abs(x)>L||Math.abs(z)>L) return false;      // pegado a la muralla tampoco
+  const zz=z+ARE_GZ;
+  for(let i=0;i<colliders.length;i++){ const c=colliders[i];
+    if(c.maxy<=0.45) continue;                        // el piso y los escalones no estorban
+    if(c.minx<x+rad && c.maxx>x-rad && c.minz<zz+rad && c.maxz>zz-rad && c.miny<1.9) return false; }
+  return true;
+}
+/* dame un punto que de verdad este libre. `dado` tira un [x,z] candidato. */
+function arePuntoLibre(dado, intentos, rad){
+  let p=dado();
+  for(let i=0;i<(intentos||40);i++){ if(areLibre(p[0],p[1],rad)) return p; p=dado(); }
+  return p;
+}
+function areSpawn(){
+  return arePuntoLibre(()=>{ const a=Math.random()*6.283, d=34+Math.random()*(ARE_LADO/2-46);
+    return [Math.cos(a)*d, Math.sin(a)*d]; });
+}
 const ARE_TOMA=[];                     // puestos de arma de las tiendas
 const _areB=new Map();                 // geometrias juntadas por material, como en la isla
 const ARE_M={};
@@ -17208,14 +17271,16 @@ function tdmAviso(txt,seg){ TDM.msj=txt; TDM.tMsj=seg||3; tdmHUD(); }
 function tdmResituar(){
   for(const b of BOTS){
     const B=tdmBase(tdmEquipoDe(b));
-    const a=Math.random()*6.283, r=2.2+Math.random()*4.2;
-    b.x=B.x+Math.cos(a)*r; b.z=B.z+Math.sin(a)*r; b.y=sueloY(b.x,b.z);
+    const p=arePuntoLibre(()=>{ const a=Math.random()*6.283, r=2.2+Math.random()*4.2;
+      return [B.x+Math.cos(a)*r, B.z+Math.sin(a)*r]; });
+    b.x=p[0]; b.z=p[1]; b.y=sueloY(b.x,b.z);
     b.tx=b.x; b.tz=b.z; b.estado='patrulla'; b.rival=null; b.vida=100; b.muerto=false; b.tRes=0;
     const GZ=ARE_GZ; b.r.pos.set(b.x,b.y,b.z+GZ); b.r.target.copy(b.r.pos); b.r.muerto=false; b.r.vida=100;
     if(b.r.avatar) b.r.avatar.visible=true;
   }
-  const P=tdmBase('A'); const a=Math.random()*6.283;
-  player.pos.set(P.x+Math.cos(a)*5, 1.2, ARE_GZ+P.z+Math.sin(a)*5);
+  const P=tdmBase('A');
+  const pp=arePuntoLibre(()=>{ const a=Math.random()*6.283; return [P.x+Math.cos(a)*5, P.z+Math.sin(a)*5]; });
+  player.pos.set(pp[0], 1.2, ARE_GZ+pp[1]);
   player.vel.set(0,0,0); player.vy=0;
   PVP.vida=PVP.max; PVP.muerto=false; PVP_GRACIA=3;
 }
@@ -17591,8 +17656,14 @@ function partFeed(ico,txt){
 /* SIETE BOTS. Estaba en 16 y la arena era un tumulto: te mataban desde tres lados sin ver de
    donde. Con cupo 8 quedan 7 bots + vos, y a medida que entra gente de verdad los bots se van
    yendo, que es como estaba pensado. */
-const SALA_CUPO=8;
-let salaN=1, BOT_META=SALA_CUPO, _salaT=0;
+/* CUATRO PERSONAS POR SALA, NO OCHO. Una sala es una ESCUADRA: cuatro lugares, que son los
+   cuatro que se muestran arriba del boton de entrar y los cuatro que podes invitar. El quinto que
+   llega pasa a la sala siguiente.
+   Los BOTS son otra cuenta. Si el cupo de bots fuera el mismo, la arena quedaria con tres bots y
+   un patio vacio: siguen llenando hasta ocho cuerpos, y se van yendo a medida que entra gente. */
+const SALA_CUPO=4;                    // personas de verdad por sala
+const ARENA_CUERPOS=8;                // cuantos cuerpos queremos en la arena, bots incluidos
+let salaN=1, BOT_META=ARENA_CUERPOS-1, _salaT=0;
 function salaReales(){ let k=0; for(const [,r] of MP.remotes) if(!r.esBot) k++; return k; }
 function salaCambiar(nueva){
   if(nueva===salaN || !MP.conex.length) return;
@@ -17614,7 +17685,7 @@ function salaTick(dt){
   const reales=salaReales();
   /* el -1 sos VOS: `reales` cuenta solo a los remotos, asi que sin este descuento con cupo 8 y
      jugando solo salian 8 bots y en la sala habia 9. Ahora son 7 + vos. */
-  BOT_META=Math.max(0, SALA_CUPO-1-reales);
+  BOT_META=Math.max(0, ARENA_CUERPOS-1-reales);
   if(world!=='arena') return;                      // el cupo de dieciseis es de la arena
   const vivos=BOTS.length;
   if(vivos<BOT_META) botAgregar(BOT_META-vivos);
@@ -17636,10 +17707,18 @@ function botSembrar(N){
   for(let i=0;i<N;i++){
     const a=(i/N)*6.283+Math.random()*0.6;
     let x,z;
-    if(arena){ const d=18+Math.random()*(ARE_LADO/2-26);
-      x=Math.cos(a)*d; z=Math.sin(a)*d; }
-    else { const d=70+Math.random()*120; x=Math.cos(a)*d; z=Math.sin(a)*d;
-      if(alcH(x,z)<3){ x*=0.5; z*=0.5; } }
+    if(arena){
+      /* el angulo lo decide el reparto (para que no salgan todos juntos) y la distancia se vuelve
+         a tirar hasta dar con un lugar despejado */
+      const p=arePuntoLibre(()=>{ const aa=a+(Math.random()-0.5)*0.9, d=18+Math.random()*(ARE_LADO/2-26);
+        return [Math.cos(aa)*d, Math.sin(aa)*d]; });
+      x=p[0]; z=p[1]; }
+    else { let ok=false;
+      for(let k=0;k<30 && !ok;k++){ const aa=a+(Math.random()-0.5)*0.9, d=70+Math.random()*120;
+        x=Math.cos(aa)*d; z=Math.sin(aa)*d;
+        if(alcH(x,z)<3){ x*=0.5; z*=0.5; }
+        ok=!alcOcupado(x,z,alcH(x,z)); }
+    }
     const id='bot_'+(++_botN);
     const nom=BOT_NOMBRES[(_botN*7+i)%BOT_NOMBRES.length];
     const r=mpRemote(id,nom,true);
@@ -17725,9 +17804,15 @@ function botMuere(b,porVos){
 function botAgregar(k){
   const arena=(world==='arena');
   for(let i=0;i<k;i++){
-    const a=Math.random()*6.283;
-    const d= arena? (18+Math.random()*(ARE_LADO/2-26)) : (70+Math.random()*120);
-    const x=Math.cos(a)*d, z=Math.sin(a)*d;
+    /* mismo criterio que al sembrar: el punto se busca LIBRE. Este es el que rellena la sala
+       cuando se va gente de verdad, y era el que mas metia bots adentro de las cajas, porque
+       corre en cualquier momento de la partida y sin mirar nada. */
+    let x,z;
+    if(arena){ const p=arePuntoLibre(()=>{ const a=Math.random()*6.283, d=18+Math.random()*(ARE_LADO/2-26);
+        return [Math.cos(a)*d, Math.sin(a)*d]; }); x=p[0]; z=p[1]; }
+    else { let ok=false;
+      for(let t=0;t<30 && !ok;t++){ const a=Math.random()*6.283, d=70+Math.random()*120;
+        x=Math.cos(a)*d; z=Math.sin(a)*d; ok=!alcOcupado(x,z,alcH(x,z)); } }
     const id='bot_'+(++_botN), nom=BOT_NOMBRES[(_botN*7)%BOT_NOMBRES.length];
     const r=mpRemote(id,nom,true); r.world=world; r.esBot=true;
     const GZ=arena?ARE_GZ:ALC_GZ, y=sueloY(x,z);
@@ -18257,13 +18342,18 @@ function botTick(dt){
       /* EN LA ARENA NADIE SE QUEDA MUERTO. A los cinco segundos vuelve en otra punta: es un mapa de
          tiroteo, no una partida con un ganador. En el valle si: ahi morir es quedar afuera. */
       if(arena){ b.tRes=(b.tRes||0)-dt;
-        if(b.tRes<=0){ let a=Math.random()*6.283, d=24+Math.random()*(ARE_LADO/2-30);
+        if(b.tRes<=0){
           /* EN DUELO SE VUELVE A LA BASE DEL EQUIPO. Reapareciendo en cualquier punta, a los
              treinta segundos los dos equipos estan mezclados y no hay frente: es un todos contra
-             todos con colores. */
-          if(TDM.on && b.eq){ const B=tdmBase(b.eq), r=4+Math.random()*9;
-            b.x=B.x+Math.cos(a)*r; b.z=B.z+Math.sin(a)*r; }
-          else { b.x=Math.cos(a)*d; b.z=Math.sin(a)*d; }
+             todos con colores. En los dos casos el punto se busca LIBRE: reaparecer adentro de un
+             contenedor era la otra mitad del problema de los bots trabados. */
+          let p;
+          if(TDM.on && b.eq){ const B=tdmBase(b.eq);
+            p=arePuntoLibre(()=>{ const aa=Math.random()*6.283, r=4+Math.random()*9;
+              return [B.x+Math.cos(aa)*r, B.z+Math.sin(aa)*r]; }); }
+          else p=arePuntoLibre(()=>{ const aa=Math.random()*6.283, d=24+Math.random()*(ARE_LADO/2-30);
+              return [Math.cos(aa)*d, Math.sin(aa)*d]; });
+          b.x=p[0]; b.z=p[1];
           b.y=0; b.vida=100; b.muerto=false;
           b.estado='patrulla'; b.tCambio=0; b.r.oculto=false; b.r.avatar.visible=true;
           try{ ragParar(b.r); }catch(e){}
