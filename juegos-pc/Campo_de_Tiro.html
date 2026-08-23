@@ -2291,7 +2291,14 @@ function cieloTick(dt){
   CIELO_U.t.value += dt;
   try{ if(sun && sun.position){ const v=CIELO_U.sol.value;
     v.set(sun.position.x-sun.target.position.x, sun.position.y-sun.target.position.y,
-          sun.position.z-sun.target.position.z).normalize(); } }catch(e){}
+          sun.position.z-sun.target.position.z).normalize();
+    /* EL CIELO SE GIRA PARA QUE EL SOL PINTADO QUEDE DE DONDE VIENE LA LUZ. Sin esto tenias el sol
+       de la foto en una punta y las sombras cayendo hacia la otra, que es de las cosas que mas
+       delatan un cielo pegado. El sol de la escena esta clavado, asi que el giro se calcula una
+       vez; si algun dia se mueve, el cielo lo sigue solo. */
+    const g=CIELO_SOL_ANG - Math.atan2(v.z, v.x);
+    if(Math.abs(CIELO_U.giro.value-g)>0.001){ CIELO_U.giro.value=g; cieloRefrescar(); }
+  } }catch(e){}
   if(_cieloEnvT<0){ _cieloEnvT=0; cieloEnv(); }
 }
 const skyMesh=new THREE.Mesh(new THREE.SphereGeometry(900,24,14),cieloMat); scene.add(skyMesh);   // (sigue al jugador cada frame)
@@ -2345,6 +2352,11 @@ function aplicarEstilo(k){
   /* el cielo nuevo usa los MISMOS dos colores del estilo, asi pastel/neutro/vivo lo siguen mandando */
   try{ CIELO_U.cenit.value.setHex(E.cieloA); CIELO_U.horiz.value.setHex(E.cieloB);
        CIELO_U.bruma.value = (E.nDes||1)*0.55;
+       /* con la foto puesta el estilo no repinta el cielo, lo GRADUA: pastel lo lava hacia el
+          blanco, vivo lo aprieta. Asi las tres paletas se siguen distinguiendo con una sola foto. */
+       const est=CFG.estilo||'pastel';
+       CIELO_U.lavado.value   = est==='pastel'? 0.50 : (est==='vivo'? 0.0  : 0.16);
+       CIELO_U.ganancia.value = est==='pastel'? 1.06 : (est==='vivo'? 0.94 : 1.0);
        cieloRefrescar(); }catch(e){}
   cityBg.setHex(E.cieloB);
   const V=(typeof cfgVista!=='undefined'?cfgVista:1);
@@ -11255,6 +11267,17 @@ try{ window.__tiro={
       cielo:{ nubes:CIELO_U.nubes.value, t:+CIELO_U.t.value.toFixed(1),
               sol:CIELO_U.sol.value.toArray().map(v=>+v.toFixed(2)),
               cenit:'#'+CIELO_U.cenit.value.getHexString(), horiz:'#'+CIELO_U.horiz.value.getHexString() } }; },
+  /* A QUE PUNTO DE LA FOTO CAE EL SOL DE LA ESCENA. Si coincide con donde esta pintado el sol
+     (medido: u 0.739, v 0.7275) el giro esta bien puesto. */
+  cieloSol:()=>{ const d=CIELO_U.sol.value.clone().normalize();
+    const arriba=Math.acos(Math.max(-1,Math.min(1,d.y)))/(Math.PI/2);
+    const L=Math.hypot(d.x,d.z)||1e-6, hx=d.x/L, hz=d.z/L;
+    const g=CIELO_U.giro.value, cg=Math.cos(g), sg=Math.sin(g);
+    const rx=hx*cg-hz*sg, ry=hx*sg+hz*cg;
+    return { giro:+g.toFixed(3), sol:[+d.x.toFixed(3),+d.y.toFixed(3),+d.z.toFixed(3)],
+      arriba:+arriba.toFixed(3), uv:[+(0.5+rx*arriba*0.5).toFixed(3), +(0.5+ry*arriba*0.5).toFixed(3)],
+      esperado:[0.739,0.728], hayFoto:CIELO_U.hayFoto.value,
+      elevSol:+(Math.asin(d.y)*57.3).toFixed(1), elevFoto:30.6 }; },
   estilo:(k)=>{ if(k){ cfgSet('estilo',k); cfgAplicar(); } return { estilo:CFG.estilo, cielo:__tiro.pbr().cielo }; },
   socChat:(n,txt)=>{ gchPintarUno({ id:'p_'+n, n, r:'oro', rn:'ORO II', c:'#e8c063', t:txt||'hola',
     ts:Date.now() }, false); return GCH_TODO.length; },
@@ -14314,7 +14337,13 @@ function update(dt){
     camera.quaternion.setFromEuler(euler);
   }
 
-  sun.position.set(player.pos.x-40,80,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
+  /* LA ALTURA DEL SOL SALE DE LA FOTO DEL CIELO. Estaba en 80 sobre 64 de distancia horizontal, o
+     sea 51 grados; el sol pintado en el cielo generado esta a 30,6. Con esa diferencia veias el
+     disco en un lado y las sombras cayendo con otro angulo — de lo que mas delata un cielo pegado.
+     Ahora la luz esta a la MISMA altura que el sol que se ve: 37,9 sobre los mismos 64. De paso
+     las sombras se alargan (1,69 veces la altura del objeto contra 0,81) y el mapa gana relieve.
+     La camara de sombra aguanta: la luz queda a 74,6 del jugador y su plano lejano esta en 110. */
+  sun.position.set(player.pos.x-40,37.9,player.pos.z-50); sun.target.position.copy(player.pos); sun.target.updateMatrixWorld();
   tickAim(dt);   // gatillo, recarga y patada de cámara: con la cámara ya orientada de este frame
   /* El recorte de avatares va ACA, al final de la simulacion, no en mpTick: la camara acaba de
      quedar donde va a dibujar (tickAim todavia le mete la patada del retroceso, que es lo ultimo).
