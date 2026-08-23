@@ -12,6 +12,14 @@
   html,body{ height:100%; overflow:hidden; background:#aebfcf; font-family:-apple-system,"Segoe UI",Roboto,system-ui,sans-serif; color:#eef3f8; overscroll-behavior:none; }
   #stage{ position:fixed; inset:0; }
   body.rot #stage{ width:100vh; height:100vw; top:50%; left:50%; transform:translate(-50%,-50%) rotate(90deg); transform-origin:center; }
+  /* LA PANTALLA DE CARGA TAMBIEN GIRA. Si el juego sale rotado y la carga no, arrancas leyendo el
+     cartel de idioma con el telefono parado y en cuanto termina tenes que darlo vuelta: dos
+     posturas en diez segundos. Girando las dos, agarras el telefono de costado y no lo soltas. */
+  /* OJO CON EL ORDEN: `inset:auto` tiene que ir ANTES de top/left. El #loader base trae inset:0,
+     y si el auto se escribe despues borra el 50% que acaba de ponerse — la pantalla de carga
+     quedaba girada pero encajada en el cuarto de arriba a la izquierda. */
+  body.rot #loader, html.rotIni #loader{ inset:auto; width:100vh; height:100vw; top:50%; left:50%;
+    transform:translate(-50%,-50%) rotate(90deg); transform-origin:center; }
   #app{ position:absolute; inset:0; }
   #app canvas{ display:block; width:100%!important; height:100%!important; touch-action:none; }
   #cross{ position:fixed; left:50%; top:50%; width:6px; height:6px; margin:-3px; z-index:6; border-radius:50%; background:rgba(255,255,255,.6); box-shadow:0 0 4px rgba(0,0,0,.6); pointer-events:none; }
@@ -210,7 +218,9 @@
   #ldTip{ position:relative; padding-top:15px; min-height:2.7em; text-align:center;
     font-size:clamp(11px,2.4vw,13.5px); font-weight:600; line-height:1.34; color:#a9bccf;
     transition:opacity .34s ease; }
-  #ldTip::before{ content:'CONSEJO'; position:absolute; left:0; right:0; top:0;
+  /* el rotulo sale de una variable para que lo pueda cambiar el idioma: estaba clavado en
+     castellano y con el juego abriendo en ingles se leia CONSEJO arriba de un texto en ingles */
+  #ldTip::before{ content:var(--ldTipLbl,'TIP'); position:absolute; left:0; right:0; top:0;
     font-size:8px; font-weight:900; letter-spacing:.28em; text-indent:.28em; color:#ffb26b; opacity:.9; }
   #ldFila{ display:flex; align-items:center; gap:11px; }
   #ldBarra{ position:relative; flex:1; height:7px; border-radius:99px; background:rgba(255,255,255,.075);
@@ -1306,6 +1316,14 @@
 </style>
 </head>
 <body>
+<script>/* EL GIRO, DECIDIDO EN EL PRIMER INSTANTE. layout() lo resuelve bien, pero corre recien
+   cuando termina de cargar el modulo de three: hasta entonces la pantalla de carga se veria
+   parada y despues daria un salto. Aca se lee el ajuste guardado y se pone la clase de una. */
+(function(){ try{
+  var g=1; try{ var c=JSON.parse(localStorage.getItem('pf_cfg')||'null'); if(c&&c.girarPant!=null) g=+c.girarPant; }catch(e){}
+  if(g && innerHeight>innerWidth) document.documentElement.classList.add('rotIni');
+}catch(e){} })();
+</script>
 <div id="loader">
   <div id="ldArte" aria-hidden="true"></div>
   <div id="ldVin" aria-hidden="true"></div>
@@ -1832,7 +1850,7 @@ const CFG_DEF={
      y lo sube reafilado (o sea, MENOS pixeles que antes) y encima le suma multimuestreo 2x,
      anisotropico 4x y una viñeta suave. Se ve mejor y cuesta menos que como venia. */
   fps:0, gPreset:'med', gEsc:85, gNit:45, gMsaa:2, gAniso:4, gBloom:0, gVin:25, gAo:0, gGrano:0,
-  gPart:100, gLod:100, gTex:'alta'
+  gPart:100, gLod:100, gTex:'alta', girarPant:1
 };
 const CFG=Object.assign({},CFG_DEF);
 try{ const g=JSON.parse(localStorage.getItem('pf_cfg')||'null');
@@ -11391,6 +11409,11 @@ try{ window.__tiro={
   casasTodas:()=>{ const g=mapaArena, out=[];
     for(let i=0;i<MAPAS_ARENA.length;i++){ areIrA(i); out.push(__tiro.casas()); }
     areIrA(g); return out; },
+  girar:(v)=>{ if(v!=null){ cfgSet('girarPant', v?1:0); cfgAplicar(); }
+    const c=document.querySelector('#app canvas'), st=document.getElementById('stage');
+    return { girar:+CFG.girarPant, clases:document.body.className,
+      vent:[innerWidth,innerHeight], escena:[st.offsetWidth,st.offsetHeight],
+      lienzo:[c.width,c.height], asp:+camera.aspect.toFixed(3), fov:+camera.fov.toFixed(0) }; },
   estilo:(k)=>{ if(k){ cfgSet('estilo',k); cfgAplicar(); } return { estilo:CFG.estilo, cielo:__tiro.pbr().cielo }; },
   socChat:(n,txt)=>{ gchPintarUno({ id:'p_'+n, n, r:'oro', rn:'ORO II', c:'#e8c063', t:txt||'hola',
     ts:Date.now() }, false); return GCH_TODO.length; },
@@ -13549,10 +13572,19 @@ const CAM_FWD=0.04, CAM_UP=0.12;   // cámara apenas adelante (margen contra el 
 let leanPitch=0, leanRoll=0, aSldCam=0;   // aSldCam: el mismo alfa de deslizada, pero para la cámara
 
 /* ===================== Rotación 90° ===================== */
-/* YA NO SE ROTA LA PANTALLA. Rotar el escenario 90 grados era la unica salida cuando no habia un
-   diseño vertical; ahora lo hay (body.vert), asi que con el telefono parado el juego se juega
-   parado. Queda la palanca por si alguna vez hace falta volver al truco viejo. */
-let forceLandscape=false, rot=false;
+/* ===================== GIRAR LA PANTALLA =====================
+   Hay dos maneras de jugar un juego apaisado en un telefono parado, y no son intercambiables:
+
+   · GIRAR (lo de siempre, y lo que va por defecto): el juego dibuja TODO rotado 90 grados dentro
+     de la ventana vertical. Vos das vuelta el telefono y lo ves derecho. Es la unica que funciona
+     cuando el contenedor NO PUEDE rotar —el visor de Rezona es asi: da pantalla completa pero
+     siempre en vertical, y por mas que gires el aparato la pagina se queda parada—. El juego se
+     gira solo y compensa.
+   · NO GIRAR: la interfaz se reacomoda para una pantalla alta (body.vert) y se juega con el
+     telefono parado. Sirve si tu navegador SI rota, o si preferis jugar con una mano.
+
+   Es un ajuste porque depende de donde este corriendo el juego, no de como esta hecho. */
+let forceLandscape=true, rot=false;
 function pantallaCompleta(){
   try{ const e=document.documentElement;
     if(!(document.fullscreenElement||document.webkitFullscreenElement)){
@@ -13577,7 +13609,9 @@ function fovVert(base){
   const v=2*Math.atan(Math.tan(100*Math.PI/360)/Math.max(0.35,a))*180/Math.PI;
   return Math.max(base, Math.min(105, v));
 }
-function layout(){ rot=forceLandscape&&(innerHeight>innerWidth); document.body.classList.toggle('rot',rot);
+function layout(){
+  try{ forceLandscape = (CFG.girarPant==null? 1 : +CFG.girarPant) !== 0; }catch(e){}
+  rot=forceLandscape&&(innerHeight>innerWidth); document.body.classList.toggle('rot',rot);
   const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight;
   /* VERTICAL: mas alto que ancho y sin el truco de rotar. El 1,02 es para que una pantalla casi
      cuadrada no ande saltando de un diseño al otro con cada teclado que se abre. */
@@ -15603,6 +15637,12 @@ const CFG_SECS=[
       final; con todo en su valor mas bajo el juego dibuja derecho a la pantalla y no cuesta nada.
       El PRESET de arriba mueve todos los de abajo de una. ===== */
    {h:{es:'Motor de imagen',en:'Image engine',pt:'Motor de imagem'}, filas:[
+     {k:'girarPant', t:{es:'Girar la pantalla',en:'Rotate the screen',pt:'Girar a tela'},
+      h:{es:'Con el teléfono PARADO el juego dibuja todo girado 90°, y vos das vuelta el aparato para verlo derecho. Es la única forma que sirve cuando la página no puede rotar sola — el visor de Rezona da pantalla completa pero siempre en vertical, por más que gires el celular. Si lo apagás, la interfaz se reacomoda para una pantalla alta y se juega con el teléfono parado.',
+         en:'With the phone UPRIGHT the game draws everything rotated 90°, and you turn the device to see it straight. It is the only thing that works when the page cannot rotate by itself — the Rezona viewer goes fullscreen but always in portrait, no matter how you hold the phone. Turn it off and the interface rearranges itself for a tall screen instead.',
+         pt:'Com o telefone EM PÉ o jogo desenha tudo girado 90° e você vira o aparelho. É a única forma que serve quando a página não pode girar sozinha. Desligado, a interface se reorganiza para uma tela alta.'},
+      ops:[[1,{es:'Girar (recomendado)',en:'Rotate (recommended)',pt:'Girar (recomendado)'}],
+           [0,{es:'Interfaz vertical',en:'Portrait interface',pt:'Interface vertical'}]]},
      {k:'gPreset', t:{es:'Preajuste',en:'Preset',pt:'Predefinição'},
       h:{es:'AHORRO apaga todo el camino de imagen y baja la resolución: es el modo de un celular viejo o de batería al 10%. EQUILIBRIO enciende lo barato (reafilado y multimuestreo 2x). CALIDAD suma resplandor y oclusión. ULTRA lo pone todo arriba, incluido el grano de película. Tocar cualquier control de abajo pasa el preajuste a PERSONALIZADO.',
          en:'SAVER turns the whole image path off and lowers the resolution: the mode for an old phone or a battery at 10%. BALANCED turns on the cheap parts (sharpening and 2x multisampling). QUALITY adds bloom and occlusion. ULTRA puts everything up, film grain included. Touching any control below switches the preset to CUSTOM.',
@@ -15773,6 +15813,7 @@ function cfgAplicar(){
   try{ hsndMusVol(); }catch(e){}
   cfgFps = +CFG.fps||0;
   try{ gfxAplicar(); }catch(e){ console.warn('gfx cfg',e); }
+  try{ layout(); }catch(e){}   // girar/no girar cambia el tamaño del lienzo y las clases del cuerpo
   cfgSombras = !!(+CFG.sombras);
   cfgBrillo = Math.max(0.6,Math.min(1.6,(+CFG.brillo||100)/100));
   cfgVista  = Math.max(0.5,Math.min(1.6,(+CFG.vista_m||100)/100));
@@ -20594,6 +20635,9 @@ let _ldPct=0, _ldObj=0;
   }, 120);
 })();
 function ldProgreso(v){ _ldObj=Math.max(_ldObj, Math.max(0,Math.min(100,v))); }
+function ldRotulo(){ try{ const L={es:'CONSEJO',en:'TIP',pt:'DICA'}[lang]||'TIP';
+  document.documentElement.style.setProperty('--ldTipLbl', "'"+L+"'"); }catch(e){} }
+try{ ldRotulo(); }catch(e){}
 /* ---- la eleccion de idioma ---- */
 let _ldIdiomaListo=false;
 (function ldIdioma(){
@@ -20605,7 +20649,8 @@ let _ldIdiomaListo=false;
     try{ applyLang(b.dataset.lang); }catch(e){}
     langElegido=true; try{ localStorage.setItem('pf_lang_ok','1'); }catch(e){}
     try{ const T=ldTips(), e2=document.getElementById('ldTip');
-         if(e2&&T&&T.length) e2.textContent=T[(Math.random()*T.length)|0]; }catch(e){}
+         if(e2&&T&&T.length) e2.textContent=T[(Math.random()*T.length)|0];
+         ldRotulo(); }catch(e){}
     marcar();
     try{ tiroSnd('btn',0.6); }catch(e){}
     /* se va con una transicion corta: elegir y que desaparezca de golpe se siente a error */
