@@ -10,9 +10,19 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 
 Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
 
-- [x] **Mira del sniper**: optimizada. El destino del visor ya no es un numero fijo: se mide
-      cuanto ocupa el disco en pantalla y se pide eso. 448x448 -> 320x320 en telefono (49% menos
-      pixeles), 128x128 en calidad baja. Commit del 2026-08-23.
+- [x] **Mira del sniper: RESUELTA DE RAIZ** (2026-08-23). Se saco la segunda pasada de escena
+      entera. El aumento lo hace la camara del juego (por tangente) y el aro con su reticula es una
+      superposicion PLANA. Medido: apuntar pasa de +187 llamadas / +580.888 triangulos a
+      -24 llamadas / -4.080 triangulos, o sea cuesta MENOS que la cadera. AWM 6,00x, Dragunov 4,00x.
+- [x] **Controles para los que recien empiezan** (2026-08-23): apuntar de UN TOQUE por omision
+      (CFG_DEF.apuntar='tap'), botones un 10% mas chicos, y FUEGO y APUNTAR del 50% al 81% del alto
+      de la pantalla — estaban justo sobre la linea del horizonte. Con la mira puesta el HUD se
+      esconde salvo joystick, apuntar y disparar.
+- [ ] **NO REPRODUCIDO: los NPC desaparecen al cambiar ajustes.** Medido en la arena con 7 bots:
+      barrido de 360 grados antes y despues de cambiar preajuste (bajo/ultra), calidad general
+      (baja/alta), calidad de texturas y detalle de personajes -> 7 de 7 visibles en todos los
+      casos, 58-78 mallas encendidas. Si vuelve a pasar hace falta saber EN QUE MODO y QUE ajuste.
+      De paso se arreglo un defecto real del mismo tipo: `mundoGZ()`.
 - [~] **Armas de verdad**: buscar referencias reales y rehacer los modelos. **P90 hecha**
       (2026-08-23): rehecha con las medidas de FN Herstal — bullpup, cargador acostado arriba,
       hueco del pulgar, guardamonte-aro, expulsion para abajo, manijas ambidiestras y apagallamas
