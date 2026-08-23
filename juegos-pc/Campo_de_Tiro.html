@@ -332,6 +332,46 @@
   /* la chapa de la sala tambien: al salir al menu quedaba asomando arriba al centro */
   body.menu-open #areSala, body.menu-open #bTomar, body.menu-open #bCambiar, body.menu-open #bCurar,
   body.menu-open #vBoard, body.menu-open #vTimer, body.menu-open #teleAum{ display:none !important; }
+  /* ===================== EL SALTO DEL BATTLE ROYALE =====================
+     Arriba del avion no se camina, no se dispara y no se recarga: hay UN boton. Esconder el resto
+     del HUD no es cosmetica, es lo que hace que la caida se lea como una caida y no como una
+     partida con la interfaz puesta encima. Cayendo vuelve el joystick (con eso elegis picado o
+     plancha) y el boton pasa a ser ABRIR; con la campana abierta no queda ningun boton. */
+  body.enAvion #joy, body.enAvion #bSlide, body.enAvion #bFire, body.enAvion #bReload,
+  body.enAvion #bAds, body.enAvion #bChat, body.enAvion #bPack, body.enAvion #bVoice,
+  body.enAvion #cross, body.enAvion #hudWrap, body.enAvion #tiroHUD, body.enAvion #bTomar,
+  body.enAvion #bCambiar, body.enAvion #bCurar, body.enAvion #hpWrap, body.enAvion #bRoll,
+  body.cayendo #bSlide, body.cayendo #bFire, body.cayendo #bReload, body.cayendo #bAds,
+  body.cayendo #bChat, body.cayendo #bPack, body.cayendo #bVoice, body.cayendo #cross,
+  body.cayendo #bTomar, body.cayendo #bCambiar, body.cayendo #bCurar, body.cayendo #bRoll,
+  body.cayendo #hudWrap, body.cayendo #tiroHUD, body.cayendo #hpWrap,
+  body.enParacaidas #hudWrap, body.enParacaidas #tiroHUD, body.enParacaidas #hpWrap,
+  body.enParacaidas #bSlide, body.enParacaidas #bFire, body.enParacaidas #bReload,
+  body.enParacaidas #bAds, body.enParacaidas #bChat, body.enParacaidas #bPack,
+  body.enParacaidas #bVoice, body.enParacaidas #cross, body.enParacaidas #bTomar,
+  body.enParacaidas #bCambiar, body.enParacaidas #bCurar, body.enParacaidas #bRoll,
+  body.enParacaidas #bJump{ display:none !important; }
+  /* el unico boton: al medio, mas grande y latiendo */
+  body.enAvion #bJump, body.cayendo #bJump{ display:flex !important; width:104px; height:104px;
+    right:auto; left:50%; margin-left:-52px; bottom:calc(38px + var(--safe-b));
+    background:linear-gradient(180deg,rgba(255,201,138,.96),rgba(224,118,29,.96));
+    border-color:rgba(255,236,206,.9); animation:salLat 1.15s ease-in-out infinite; }
+  body.cayendo #bJump{ width:84px; height:84px; margin-left:-42px; bottom:calc(22px + var(--safe-b)); }
+  body.vert.enAvion #bJump{ width:92px; height:92px; margin-left:-46px; }
+  body.vert.cayendo #bJump{ width:76px; height:76px; margin-left:-38px; }
+  @keyframes salLat{ 0%,100%{ box-shadow:0 8px 22px rgba(220,110,25,.40); }
+                     50%{ box-shadow:0 8px 36px rgba(255,182,92,.88); } }
+  /* EL ALTIMETRO. Sin un numero la caida es una pantalla de tierra que crece: no sabes si te
+     quedan diez segundos o dos, y la campana se abre sola sin que entiendas por que. */
+  #salHud{ position:fixed; left:50%; top:calc(46px + var(--safe-t)); transform:translateX(-50%);
+    z-index:16; display:none; text-align:center; pointer-events:none;
+    font-family:system-ui,-apple-system,sans-serif; }
+  body.enAvion #salHud, body.cayendo #salHud, body.enParacaidas #salHud{ display:block; }
+  #salHud b{ display:block; font-size:32px; font-weight:900; color:#fff; line-height:1;
+    text-shadow:0 2px 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.9); font-variant-numeric:tabular-nums; }
+  #salHud i{ font-style:normal; font-size:14px; font-weight:800; opacity:.72; margin-left:2px; }
+  #salHud span{ display:block; margin-top:4px; font-size:10px; font-weight:800; letter-spacing:.18em;
+    color:rgba(255,214,168,.92); text-shadow:0 2px 8px rgba(0,0,0,.85); }
   /* ===== MULTIJUGADOR ===== */
   #mpStatus{ position:fixed; right:calc(12px + var(--safe-t)); top:calc(12px + var(--safe-t)); z-index:15; display:flex; align-items:center; gap:6px;
     background:rgba(14,22,30,.62); border:1px solid rgba(255,255,255,.16); border-radius:999px; padding:5px 10px; font-size:11px; font-weight:700; color:#cfe0ee; pointer-events:none; }
@@ -1355,6 +1395,7 @@
 
   <div id="vSlide" aria-hidden="true"></div>
   <div id="joy"><div id="joyKnob"></div></div>
+  <div id="salHud"><b>0<i>M</i></b><span>ALTURA</span></div>
   <button id="bJump" class="actBtn ic"><i></i><em>SALTAR</em></button>
   <button id="bSlide" class="actBtn ic"><i></i><em>DESLIZAR</em></button>
   <button id="bFire" class="actBtn ic"><i></i><em>FUEGO</em></button>
@@ -11029,6 +11070,45 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
 function ruta_(pts,n){ return window.__tiro.ruta(pts,n); }
 function choque_(dx,dz){ return window.__tiro.choque(dx,dz); }
 try{ window.__tiro={
+  // ---- EL SALTO: estado, y poder empezarlo/forzarlo sin ver los doce segundos de pelicula ----
+  salto:()=>{ if(typeof SALTO==='undefined') return null;
+    const GZ=(typeof ALC_GZ!=='undefined')?ALC_GZ:0;
+    let yS=0; try{ yS=alcH(player.pos.x, player.pos.z-GZ); }catch(e){}
+    const b=document.getElementById('bJump'), em=b&&b.querySelector('em');
+    const hb=document.getElementById('salHud'); const hn=hb&&hb.querySelector('b');
+    return { fase:SALTO.fase, t:+SALTO.t.toFixed(2), rec:+SALTO.rec.toFixed(1), largo:+SALTO.largo.toFixed(1),
+             vy:+SALTO.vy.toFixed(2), picado:+SALTO.picado.toFixed(2), abierto:+SALTO.abierto.toFixed(2),
+             y:+player.pos.y.toFixed(1), sobre:+(player.pos.y-yS).toFixed(1),
+             x:+player.pos.x.toFixed(1), z:+(player.pos.z-GZ).toFixed(1),
+             fov:+camera.fov.toFixed(1), far:+camera.far.toFixed(0),
+             niebla: scene.fog? [+scene.fog.near.toFixed(0), +scene.fog.far.toFixed(0)] : null,
+             cam:[+camera.position.x.toFixed(1),+camera.position.y.toFixed(1),+camera.position.z.toFixed(1)],
+             avion: !!(SALTO.avion&&SALTO.avion.visible), brazos: !!(SALTO.grupo&&SALTO.grupo.visible),
+             para: !!(SALTO.para&&SALTO.para.visible),
+             paraEsc: (SALTO.para&&SALTO.para.userData.cupula)? +SALTO.para.userData.cupula.scale.y.toFixed(2):0,
+             temblor:+SALTO.temblor.toFixed(2),
+             mano:(()=>{ const b=SALTO.brazos&&SALTO.brazos[1]; if(!b) return null;
+               const w=new THREE.Vector3(); b.userData.mano.getWorldPosition(w);
+               w.sub(camera.position); return [+w.x.toFixed(4),+w.y.toFixed(4),+w.z.toFixed(4)]; })(),
+             camP:+camera.rotation.x.toFixed(4),
+             body:document.body.className.split(/\s+/).filter(c=>/enAvion|cayendo|enParacaidas/.test(c)),
+             btn: em? em.textContent : null, alt: hn? hn.textContent : null,
+             joyVis: (()=>{ const j=document.getElementById('joy'); return j? getComputedStyle(j).display!=='none' : null; })(),
+             jumpVis:(()=>{ return b? getComputedStyle(b).display!=='none' : null; })() }; },
+  saltoIr:()=>{ try{ return saltoArrancar(()=>{}); }catch(e){ return ''+e; } },
+  saltoTirar:()=>{ try{ return saltoTirarse(); }catch(e){ return ''+e; } },
+  saltoAbrir:()=>{ try{ return saltoAbrir(); }catch(e){ return ''+e; } },
+  // adelantar el avion hasta el final de su ruta, para probar que te suelta solo
+  saltoFin:()=>{ try{ SALTO.rec=SALTO.largo-1; return SALTO.rec; }catch(e){ return ''+e; } },
+  // bajarte de golpe a una altura dada sobre el suelo, sin esperar la caida entera
+  jugador:()=>({ x:+player.pos.x.toFixed(2), y:+player.pos.y.toFixed(2), z:+player.pos.z.toFixed(2),
+    piso:!!player.onGround, yaw:+player.yaw.toFixed(2), pitch:+player.pitch.toFixed(2) }),
+  saltoAlt:(m)=>{ try{ const GZ=ALC_GZ; player.pos.y=alcH(player.pos.x, player.pos.z-GZ)+m;
+    return +player.pos.y.toFixed(1); }catch(e){ return ''+e; } },
+  // mover el joystick a mano: es la unica entrada que tiene la caida
+  joyPon:(x,y)=>{ joy.x=x; joy.y=y; return [joy.x,joy.y]; },
+  mirar:(p,y)=>{ if(p!=null) player.pitch=p; if(y!=null) player.yaw=y;
+    return [+player.pitch.toFixed(2), +player.yaw.toFixed(2)]; },
   // gancho para depurar/capturar: entra al nivel, avanza frames a mano y esconde el HUD
   entrar:()=>{ menuMode=false; try{ menuEl.classList.add('hide'); document.body.classList.remove('menu-open'); }catch(e){}
     applyQuality(menuQ); enterTiro(); return world; },
@@ -11042,7 +11122,7 @@ try{ window.__tiro={
   // pintar SIN avanzar el mundo: frames() llama a update() y update() vuelve a colocar la camara,
   // asi que para un primer plano hay que poder renderizar sin que nada la mueva
   foto:()=>{ renderer.render(scene,camera); return 1; },
-  frames:(n,dt)=>{ for(let i=0;i<(n||8);i++){ update(dt||0.0166); try{tiroVis();}catch(e){} } renderer.render(scene,camera); return world; },
+  frames:(n,dt)=>{ for(let i=0;i<(n||8);i++){ update(dt||0.0166); try{tiroVis();}catch(e){} try{saltoDibujo();}catch(e){} } renderer.render(scene,camera); return world; },
   hud:v=>{ document.body.classList.toggle('sinhud',!v); },
   // Ajustes: leer/escribir cualquier clave y ver que quedo escrito EN EL MOTOR, no solo en CFG
   cfg:(k,v)=>{ if(k==null) return JSON.parse(JSON.stringify(CFG));
@@ -13941,7 +14021,14 @@ addEventListener('pointerup',endTouch); addEventListener('pointercancel',endTouc
 
 function tapBtn(id,fn){ const el=document.getElementById(id); if(!el)return;   // sin el guarda, un id ausente cortaba el resto del cableado
   el.addEventListener('pointerdown',e=>{ if(editHUD)return; e.preventDefault();e.stopPropagation();fn();}); }
-tapBtn('bJump',()=>{ jumpReq=true; });
+/* EL MISMO BOTON, TRES TRABAJOS. Arriba del avion te tira; cayendo abre la campana antes de
+   tiempo (por si querés frenar y planear mas lejos); en el piso salta, como siempre. */
+tapBtn('bJump',()=>{
+  if(SALTO.fase==='avion'){ saltoTirarse(); return; }
+  if(SALTO.fase==='caida'){ saltoAbrir(); return; }
+  if(SALTO.fase==='para') return;
+  jumpReq=true;
+});
 tapBtn('bCambiar',()=>{ if(!slotCambiar()) sfx('wrong',0.35); });
 tapBtn('bCurar',()=>{ invUsar(); });
 /* OJO: bSlide NO va por tapBtn. Su cableado propio (abajo) atiende touchstart y pointerdown, y si
@@ -14195,6 +14282,18 @@ const HUD=document.getElementById('hud'), HUDM=document.getElementById('hudMissi
 function setWorldHUD(nameKey,questKey){ if(HUD)HUD.textContent=t(nameKey); if(HUDM)HUDM.textContent=questKey?t(questKey):''; }
 function update(dt){
   try{ giroTick(dt); }catch(e){}          // giroscopio: mueve la mira antes de mover al jugador
+  /* EL SALTO MANDA. Mientras estas arriba del avion, cayendo o colgado de la campana, el jugador
+     no camina, no choca, no salta y no se cae del mapa: lo mueve saltoTick y punto. Cortar aca en
+     vez de meter tres `if` adentro de la locomocion es lo que evita que la fisica de piso te
+     teletransporte al suelo a mitad de la caida. Si algo revienta, se corta el salto y la partida
+     sigue: nunca te podes quedar trabado en el aire. */
+  if(SALTO.fase!=='off'){
+    let _sk=false;
+    try{ _sk=saltoTick(dt); }
+    catch(e){ if(!window.__salErr){ window.__salErr=1; console.warn('salto',e); }
+              try{ saltoTerminar(); }catch(e2){ SALTO.fase='off'; } }
+    if(_sk) return;
+  }
   /* La partida avanza con la SIMULACION, no con el dibujo: si viviera en animate() se frenaria
      cuando el navegador deja de pintar (pestaña de fondo) y la zona se quedaria quieta. */
   try{ partTick(dt); }catch(e){ console.warn('partTick',e); }
@@ -16060,6 +16159,447 @@ try{ if(window.__tiro) window.__tiro.hudEd={ entrar:enterEditHUD, salir:exitEdit
      5. desde afuera de la compuerta, mirando para adentro, el personaje listo para tirarse
    Se puede saltear tocando la pantalla. Si algo falla, se cae al juego directo: la cinematica
    nunca puede dejarte trabado en una pantalla negra. */
+/* ===================== EL SALTO DE BATTLE ROYALE =====================
+   El avion ya existia pero era una PELICULA: doce segundos mirando, y despues aparecias en el
+   suelo. Esto es lo otro — el avion cruza el valle, vos decidis cuando saltar, caes, y a cierta
+   altura se abre el paracaidas. Tres fases encadenadas, todas jugables.
+
+   NUMEROS, sacados de como cae un cuerpo de verdad (que es de donde los saca el genero):
+   · un paracaidista de panza, brazos y piernas abiertos, se estabiliza en unos 55 m/s;
+   · de cabeza, con los brazos pegados al cuerpo, pasa de 85;
+   · una campana de las chicas baja a unos 11 m/s y avanza a 20 y pico.
+   Por eso PICADO y PLANCHA no son un adorno: son casi el doble de velocidad de bajada, y esa es
+   toda la decision del salto — caer rapido y llegar primero, o planear y llegar mas lejos.
+
+   COMO SE VEN LOS BRAZOS. La camara va en primera persona, asi que hay un juego de brazos propio
+   —dos, con hombro, codo y mano— colgados de un grupo que sigue al jugador y GIRA CON SU RUMBO
+   pero no con el cabeceo. Eso es lo que hace que al mirar para abajo veas tus brazos y que al
+   girar la cabeza el paracaidas siga arriba tuyo y no se vaya de costado.
+   · en PLANCHA los brazos van abiertos adelante, como el que nada, y tiemblan con el viento;
+   · en PICADO se van hacia atras, pegados al cuerpo: casi no se ven, que es justo el punto;
+   · con el paracaidas abierto suben a agarrar los MANDOS, los dos tiradores que cuelgan de las
+     bandas. Y las bandas y los cordones estan ahi: se ven subir hasta la campana. */
+const SALTO={ fase:'off', t:0, avion:null, grupo:null, bra:null, brazos:null, para:null,
+              ax:0, az:0, dx:0, dz:1, largo:0, rec:0, vy:0, picado:0, abierto:0,
+              tAbre:0, fin:null, yAvion:0, temblor:0, bocina:0,
+              fogNearAnt:0, fogFarAnt:0, farAnt:0 };
+const SAL_ALT   = 330;    // a que altura vuela el avion sobre el piso del valle
+const SAL_VAV   = 56;     // velocidad del avion, m/s
+const SAL_PICADO= 88;     // caida de cabeza
+const SAL_PLANCHA=52;     // caida de panza
+const SAL_HOR   = 34;     // cuanto te podes correr de costado cayendo
+const SAL_PARA_V= 11;     // bajada con la campana abierta
+const SAL_PARA_H= 23;     // avance con la campana abierta
+const SAL_ABRE  = 130;    // a que altura sobre el suelo se abre sola
+const SAL_FOG_N = 340, SAL_FOG_F = 3400, SAL_FAR = 3800;   // ver el valle entero desde arriba
+const SAL_ABRIR_T=0.75;   // cuanto tarda en inflarse
+
+/* ---------- un brazo de primera persona: hombro, codo y mano ---------- */
+function saltoBrazo(lado){
+  const M=(typeof CU_MAT!=='undefined' && CU_MAT.manga) ? CU_MAT : null;
+  const mM = M? CU_MAT.manga : new THREE.MeshStandardMaterial({color:0x555c43,roughness:0.7});
+  const mG = M? CU_MAT.mano  : new THREE.MeshStandardMaterial({color:0x2e332f,roughness:0.62});
+  const g=new THREE.Group();                              // pivote del HOMBRO
+  const brazo=new THREE.Mesh(new THREE.CapsuleGeometry(0.058,0.21,4,8), mM);
+  brazo.rotation.z=Math.PI/2; brazo.position.x=lado*0.16; g.add(brazo);
+  const codo=new THREE.Group(); codo.position.x=lado*0.315; g.add(codo);
+  const ante=new THREE.Mesh(new THREE.CapsuleGeometry(0.050,0.19,4,8), mM);
+  ante.rotation.z=Math.PI/2; ante.position.x=lado*0.145; codo.add(ante);
+  const mano=new THREE.Group(); mano.position.x=lado*0.285; codo.add(mano);
+  const palma=new THREE.Mesh(new THREE.BoxGeometry(0.115,0.070,0.098), mG);
+  palma.position.x=lado*0.045; mano.add(palma);
+  for(let i=0;i<3;i++){ const d=new THREE.Mesh(new THREE.CapsuleGeometry(0.016,0.048,3,6), mG);
+    d.rotation.z=Math.PI/2; d.position.set(lado*0.112, 0.010, -0.028+i*0.028); mano.add(d); }
+  const pul=new THREE.Mesh(new THREE.CapsuleGeometry(0.016,0.038,3,6), mG);
+  pul.rotation.set(0,0,Math.PI/2.6); pul.position.set(lado*0.075,-0.016,0.048); mano.add(pul);
+  g.userData={codo, mano, lado};
+  g.traverse(o=>{ o.frustumCulled=false; if(o.isMesh) o.renderOrder=6; });
+  return g;
+}
+/* LA CAMPANA, LAS CUERDAS Y LAS BANDAS.
+   Referencia: cualquier paracaidas de descenso rapido de los del genero, y uno de verdad. Lo que
+   se ve mirando para arriba es siempre lo mismo, en este orden: la tela en gajos, el borde, DOCE
+   cuerdas que convergen, las dos bandas anchas y los dos tiradores a la altura de la cara. Las
+   medidas importan: la campana va a CUATRO METROS Y MEDIO de la cabeza —no a medio metro, o parece
+   un sombrero— y las cuerdas son largas de verdad, que es lo que da la sensacion de colgar. */
+const SAL_CAMPANA=4.55, SAL_RAD=4.6;
+const SAL_NUDO =[0.32, 1.15,-0.20];   // donde convergen las cuerdas, arriba de los hombros
+/* EL TIRADOR VA A LA ALTURA DE LOS OJOS, NO ARRIBA DE LA CABEZA. Con los mandos a 26 cm por
+   encima de la lente las manos quedaban a sesenta grados de altura: fuera del cuadro salvo que
+   miraras al cielo. Un paracaidista de verdad los lleva delante de la cara, y ahi se ven siempre. */
+const SAL_TIRA =[0.31,-0.04,-0.38];
+function saltoParacaidas(){
+  const g=new THREE.Group();
+  const tela =new THREE.MeshStandardMaterial({color:0xdc8a3c, roughness:0.90, metalness:0,
+                side:THREE.DoubleSide, flatShading:true});
+  const tela2=new THREE.MeshStandardMaterial({color:0x2c3742, roughness:0.92, metalness:0,
+                side:THREE.DoubleSide, flatShading:true});
+  const R=SAL_RAD, H=2.05, N=10;
+  const cupula=new THREE.Group(); cupula.position.y=SAL_CAMPANA; g.add(cupula);
+  for(let i=0;i<N;i++){
+    const a0=i/N*Math.PI*2, a1=(i+1)/N*Math.PI*2;
+    const gg=new THREE.SphereGeometry(R, 4, 5, a0, a1-a0, 0, Math.PI*0.5);
+    gg.scale(1, H/R, 1);
+    const m=new THREE.Mesh(gg, i%2? tela : tela2); m.frustumCulled=false; cupula.add(m);
+  }
+  /* el borde: un aro fino que cierra la silueta contra el cielo */
+  const aro=new THREE.Mesh(new THREE.TorusGeometry(R*0.985,0.035,4,28), tela2);
+  aro.rotation.x=Math.PI/2; aro.frustumCulled=false; cupula.add(aro);
+  /* LAS CUERDAS. Doce, del borde a los dos nudos. Van con material basico y sin niebla: son de
+     dos centimetros y con sombreado se perdian contra el cielo — y son justamente lo que hay que
+     ver. */
+  const cor=new THREE.MeshBasicMaterial({color:0x20262d, fog:false});
+  const nudo=[ new THREE.Vector3(-SAL_NUDO[0], SAL_NUDO[1], SAL_NUDO[2]),
+               new THREE.Vector3( SAL_NUDO[0], SAL_NUDO[1], SAL_NUDO[2]) ];
+  for(let i=0;i<12;i++){
+    const a=(i/12)*Math.PI*2 + Math.PI/12;
+    const p=new THREE.Vector3(Math.cos(a)*R*0.95, SAL_CAMPANA+0.02, Math.sin(a)*R*0.95);
+    const b=nudo[Math.cos(a)<0?0:1];
+    const d=new THREE.Vector3().subVectors(p,b), L=d.length();
+    const c=new THREE.Mesh(new THREE.CylinderGeometry(0.020,0.020,L,4), cor);
+    c.position.copy(b).addScaledVector(d,0.5);
+    c.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), d.clone().normalize());
+    c.frustumCulled=false; c.renderOrder=5; g.add(c);
+  }
+  /* LAS BANDAS y LOS TIRADORES: las cintas anchas que bajan del nudo y los dos aros que agarran
+     las manos. Son los que el jugador ve delante de la cara todo el descenso. */
+  const cinta=new THREE.MeshStandardMaterial({color:0x3b444f, roughness:0.9, flatShading:true});
+  for(const sx of [-1,1]){
+    const a=new THREE.Vector3(sx*SAL_NUDO[0], SAL_NUDO[1], SAL_NUDO[2]);
+    const p=new THREE.Vector3(sx*SAL_TIRA[0], SAL_TIRA[1], SAL_TIRA[2]);
+    const d=new THREE.Vector3().subVectors(p,a), L=d.length();
+    const b=new THREE.Mesh(new THREE.BoxGeometry(0.058,L,0.020), cinta);
+    b.position.copy(a).addScaledVector(d,0.5);
+    b.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), d.clone().normalize());
+    b.frustumCulled=false; b.renderOrder=5; g.add(b);
+    /* el TIRADOR, el aro que agarra la mano. Va con el eje en la direccion de la banda para que se
+       vea de canto desde la cara y no como un anillo plano flotando. */
+    const tir=new THREE.Mesh(new THREE.TorusGeometry(0.060,0.018,4,12), cinta);
+    tir.position.copy(p);
+    tir.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), d.clone().normalize());
+    tir.frustumCulled=false; tir.renderOrder=6; g.add(tir);
+  }
+  g.userData.cupula=cupula;
+  return g;
+}
+/* ---------- armar todo una sola vez ----------
+   DOS MARCOS, y la diferencia importa. `grupo` gira solo con el RUMBO: ahi vive la campana, y por
+   eso al mirar para arriba la tenes encima y no se va de costado. `bra` cuelga de `grupo` y le
+   suma el CABECEO, con lo cual queda exactamente en el eje de la lente: los brazos son un
+   viewmodel y se encuadran siempre igual, mires donde mires. Con la campana abierta el cabeceo de
+   `bra` se apaga, asi las manos quedan pegadas a los tiradores en vez de flotar aparte. */
+function saltoArmar(){
+  if(SALTO.grupo) return;
+  const g=new THREE.Group(); g.visible=false; g.renderOrder=5; scene.add(g);
+  const bra=new THREE.Group(); g.add(bra);
+  const bI=saltoBrazo(-1), bD=saltoBrazo(1);
+  bra.add(bI); bra.add(bD);
+  const par=saltoParacaidas(); par.visible=false; g.add(par);
+  SALTO.grupo=g; SALTO.bra=bra; SALTO.brazos=[bI,bD]; SALTO.para=par;
+}
+/* LAS TRES POSES. Cada brazo se apunta con DOS direcciones —a donde va el brazo desde el hombro y
+   a donde va el antebrazo desde el codo— en vez de con angulos de Euler encadenados. Es la unica
+   forma de decidir donde queda la MANO: con Euler el codo hereda el giro del hombro y la mano
+   termina donde salga. Aca la mano cae en shoulder + 0,315·hom + 0,33·ant, que es una cuenta que se
+   puede hacer con papel antes de tocar el juego.
+     PLANCHA: brazos adelante, abiertos y algo abajo, las manos en el tercio de abajo del cuadro.
+              El que nada. Es lo que se ve apenas te tiras.
+     PICADO : todo para ATRAS, detras de la lente. No se ven, que es exactamente el punto.
+     MANDOS : arriba y adentro, las manos AGARRADAS de los dos tiradores. */
+/* DONDE NACE EL HOMBRO. Esto parece un detalle y es lo que separa unos brazos de un par de troncos
+   verdes tapando media pantalla. Con el pivote pegado a la lente —que es donde estaba— se veia el
+   brazo DESDE EL HOMBRO, en escorzo y a veinte centimetros: dos cuñas enormes. Un hombro de verdad
+   esta unos 30 cm por debajo de los ojos y unos 10 cm por DETRAS, y desde ahi el ojo no alcanza a
+   ver el brazo entero: ve del codo para afuera. Poniendo el pivote donde va, la parte de adentro
+   queda detras del plano cercano y se recorta sola, y lo que entra al cuadro es antebrazo y mano
+   —exactamente lo que se ve en cualquier camara de casco. */
+const SAL_POSE=[
+  { pos:[0.200,-0.300, 0.100], hom:[ 0.30, 0.02,-0.95], ant:[ 0.02, 0.10,-0.99] },
+  { pos:[0.200,-0.300, 0.160], hom:[ 0.28,-0.10, 0.95], ant:[ 0.16,-0.16, 0.97] },
+  /* con la campana abierta el codo va ABAJO Y AFUERA y el antebrazo sube casi vertical: asi los
+     dos brazos enmarcan la vista por los costados en vez de cruzarla por el medio, que es lo que
+     pasaba con el antebrazo en diagonal. */
+  { pos:[0.210,-0.280, 0.100], hom:[ 0.42,-0.06,-0.90], ant:[-0.10, 0.79,-0.60] }
+];
+const _sbA=new THREE.Vector3(), _sbB=new THREE.Vector3(), _sbC=new THREE.Vector3(),
+      _sbQ=new THREE.Quaternion();
+function saltoPose(m, dt){
+  const P=SAL_POSE[m]||SAL_POSE[0], T=SALTO.temblor;
+  for(const b of SALTO.brazos){
+    const L=b.userData.lado, co=b.userData.codo;
+    /* EL TEMBLOR DEL VIENTO: dos senos de periodo distinto y desfasados entre un brazo y el otro,
+       mas fuerte cuanto mas rapido caes. Un solo seno se lee como un motor; dos, como aire. */
+    const w=SALTO.t*13.0 + (L>0?1.7:0);
+    const tb=T*(Math.sin(w)*0.075 + Math.sin(w*2.3)*0.040);
+    b.position.set(L*P.pos[0], P.pos[1], P.pos[2]);
+    /* el brazo, apuntado en el marco del padre */
+    _sbA.set(L,0,0);
+    _sbB.set(P.hom[0]*L, P.hom[1]+tb*0.9, P.hom[2]).normalize();
+    b.quaternion.setFromUnitVectors(_sbA,_sbB);
+    b.rotateZ(tb*1.4);
+    /* y el antebrazo, apuntado en el MISMO marco pero llevado al local del hombro: por eso se
+       invierte la orientacion del brazo antes de resolver el giro del codo. */
+    _sbC.set(P.ant[0]*L, P.ant[1]+tb*1.2, P.ant[2]).normalize();
+    _sbQ.copy(b.quaternion).invert();
+    _sbC.applyQuaternion(_sbQ);
+    co.quaternion.setFromUnitVectors(_sbA,_sbC);
+  }
+}
+/* LA NIEBLA DEL SALTO. Desde 330 metros la niebla del mundo —que empieza a 150 y tapa a 640— deja
+   la pantalla blanca: el valle no existe, y el salto entero consiste justamente en MIRAR el valle y
+   elegir donde caer. Asi que mientras estas en el aire la niebla se abre y el plano lejano se va a
+   3800, y a medida que bajas vuelve sola a la del mundo. Sin el degrade habria un salto de imagen
+   al aterrizar; con el, no se nota que cambio nada. */
+function saltoNiebla(sobre){
+  if(!scene.fog) return;
+  const k=Math.min(1, Math.max(0, (sobre-40)/220));
+  scene.fog.near = SALTO.fogNearAnt + (SAL_FOG_N-SALTO.fogNearAnt)*k;
+  scene.fog.far  = SALTO.fogFarAnt  + (SAL_FOG_F-SALTO.fogFarAnt )*k;
+}
+/* ---------- arrancar: el avion entra al valle ---------- */
+function saltoArrancar(alTerminar){
+  saltoArmar();
+  try{ SALTO.fogNearAnt = scene.fog? scene.fog.near : 0;
+       SALTO.fogFarAnt  = scene.fog? scene.fog.far  : 0;
+       SALTO.farAnt     = camera.far;
+       if(camera.far<SAL_FAR){ camera.far=SAL_FAR; camera.updateProjectionMatrix(); } }catch(e){}
+  SALTO.fin=alTerminar||null;
+  SALTO.fase='avion'; SALTO.t=0; SALTO.rec=0; SALTO.vy=0; SALTO.picado=0;
+  SALTO.abierto=0; SALTO.tAbre=0; SALTO.temblor=0;
+  /* LA RUTA: de una esquina a la otra, pasando por el centro, y con la punta de partida al azar
+     para que no sea siempre la misma linea. Es lo que hace que dos partidas no empiecen igual. */
+  const a=Math.random()*Math.PI*2, R=250;
+  SALTO.ax=Math.cos(a)*R; SALTO.az=Math.sin(a)*R;
+  SALTO.dx=-Math.cos(a);  SALTO.dz=-Math.sin(a);
+  /* LA RUTA TERMINA EN EL BORDE DE LA ZONA, NO EN LA ESQUINA OPUESTA. Cruzar los 500 metros
+     enteros suena bien hasta que alguien no se tira: el avion lo soltaba a 250 del centro, o sea
+     sobre el agua, y terminaba nadando. Entra desde afuera y te suelta justo en el borde jugable
+     —150, el radio de la primera zona—: sigue siendo un castigo por quedarte, pero es un castigo
+     que se puede jugar. */
+  SALTO.largo=R+150;
+  SALTO.yAvion=SAL_ALT;
+  /* el avion: el mismo que se armaba para la pelicula, pero puesto en el mundo de verdad */
+  if(!SALTO.avion){ try{ SALTO.avion=cineAvion(); SALTO.avion.traverse(o=>{ o.frustumCulled=false; });
+    scene.add(SALTO.avion); }catch(e){ SALTO.avion=null; } }
+  if(SALTO.avion) SALTO.avion.visible=true;
+  SALTO.grupo.visible=false; SALTO.para.visible=false;
+  document.body.classList.add('enAvion');
+  document.body.classList.remove('cayendo','enParacaidas');
+  player.vel.set(0,0,0); player.vy=0; player.onGround=false;
+  try{ if(gunRoot) gunRoot.visible=false; }catch(e){}
+  saltoEtiqueta(tl({es:'SALTAR',en:'DROP',pt:'SALTAR'}));
+  try{ tiroMsg(tl({es:'TOCÁ SALTAR PARA TIRARTE',en:'TAP JUMP TO DROP',pt:'TOQUE PULAR PARA SALTAR'}),'#ffd08a'); }catch(e){}
+  return true;
+}
+/* ---------- tirarse ---------- */
+function saltoTirarse(){
+  if(SALTO.fase!=='avion') return false;
+  SALTO.fase='caida'; SALTO.t=0; SALTO.vy=-14;      // el primer envion, todavia no es caida libre
+  document.body.classList.remove('enAvion');
+  document.body.classList.add('cayendo');
+  SALTO.grupo.visible=true;
+  /* mirando para abajo, que es a donde vas */
+  player.pitch=-0.72; player.yaw=Math.atan2(-SALTO.dx,-SALTO.dz);
+  saltoEtiqueta(tl({es:'ABRIR',en:'DEPLOY',pt:'ABRIR'}));
+  try{ tiroSnd('caer',0.7); }catch(e){}
+  return true;
+}
+/* ---------- el paracaidas ---------- */
+function saltoAbrir(){
+  if(SALTO.fase!=='caida') return false;
+  SALTO.fase='para'; SALTO.tAbre=0; SALTO.abierto=0;
+  SALTO.para.visible=true;
+  document.body.classList.remove('cayendo');
+  document.body.classList.add('enParacaidas');
+  try{ tiroSnd('slide',0.55); }catch(e){}
+  try{ tiroMsg(tl({es:'PARACAÍDAS ABIERTO',en:'CHUTE DEPLOYED',pt:'PARAQUEDAS ABERTO'}),'#9fe8ff'); }catch(e){}
+  return true;
+}
+/* ---------- llegar al piso y devolver el control ---------- */
+function saltoTerminar(){
+  SALTO.fase='off';
+  if(SALTO.avion) SALTO.avion.visible=false;
+  if(SALTO.grupo) SALTO.grupo.visible=false;
+  if(SALTO.para)  SALTO.para.visible=false;
+  document.body.classList.remove('enAvion','cayendo','enParacaidas');
+  try{ if(scene.fog && SALTO.fogFarAnt){ scene.fog.near=SALTO.fogNearAnt; scene.fog.far=SALTO.fogFarAnt; }
+       if(SALTO.farAnt){ camera.far=SALTO.farAnt; camera.updateProjectionMatrix(); } }catch(e){}
+  player.vy=0; player.vel.set(0,0,0); player.onGround=true;
+  try{ if(gunRoot) gunRoot.visible=true; }catch(e){}
+  try{ saltoEtiqueta(t('jump')); }catch(e){}
+  try{ camera.fov=fovVert(player.fov); camera.updateProjectionMatrix(); }catch(e){}
+  try{ tiroMsg(tl({es:'EN TIERRA',en:'TOUCHDOWN',pt:'EM TERRA'}),'#b7ff9a'); }catch(e){}
+  const f=SALTO.fin; SALTO.fin=null; if(f) try{ f(); }catch(e){}
+}
+const _salV=new THREE.Vector3(), _salQ=new THREE.Quaternion(), _salE=new THREE.Euler();
+/* LA CAMARA DE LA CAIDA. En el aire no hay hueso de cabeza que seguir ni bob que aplicar: la lente
+   va donde estan los ojos y mira a donde apunta el jugador, y nada mas. Ponerla aca y no dejarla en
+   manos de update() es lo que permite cortar el resto de la simulacion mientras caes. */
+function saltoCam(fovBase){
+  camera.position.set(player.pos.x, player.pos.y+EYE, player.pos.z);
+  /* LA LENTE TIEMBLA CON EL VIENTO, poquito. Cayendo a 52 metros por segundo con la camara clavada
+     parece un ascensor de cristal; con tres decimas de grado de sacudida se siente el aire. Va
+     atada al mismo temblor que los brazos, asi que crece con el picado y casi se apaga con la
+     campana abierta. */
+  const T=SALTO.temblor, w=SALTO.t;
+  const sx=T*(Math.sin(w*9.7)*0.0060 + Math.sin(w*21.3)*0.0028);
+  const sy=T*(Math.sin(w*7.9+1.3)*0.0060 + Math.sin(w*17.1)*0.0026);
+  euler.set(player.pitch+sx, player.yaw+sy, 0); camera.quaternion.setFromEuler(euler);
+  const f=fovVert(fovBase);
+  if(Math.abs(camera.fov-f)>0.15){ camera.fov=f; camera.updateProjectionMatrix(); }
+}
+function saltoHud(m, etq){
+  const el=document.getElementById('salHud'); if(!el) return;
+  const b=el.querySelector('b'), s=el.querySelector('span');
+  if(b) b.firstChild.nodeValue=Math.max(0, Math.round(m));
+  if(s && s.textContent!==etq) s.textContent=etq;
+}
+/* el boton es el mismo, pero no dice lo mismo arriba del avion que cayendo */
+function saltoEtiqueta(txt){
+  const b=document.getElementById('bJump'); if(!b) return;
+  const e=b.querySelector('em'); if(e) e.textContent=txt;
+}
+/* ---------- el reloj: corre ANTES que el resto de update ---------- */
+function saltoTick(dt){
+  if(SALTO.fase==='off') return false;
+  SALTO.t+=dt;
+  /* El reloj que apaga el cartel de pantalla vive DESPUES del corte que hace este mismo tick, asi
+     que hay que darle cuerda a mano: si no, "TOCÁ SALTAR PARA TIRARTE" se queda escrito en el medio
+     de la pantalla los treinta segundos que dura la caida. */
+  if(_msgT>0){ _msgT-=dt; if(_msgT<=0){ const el=document.getElementById('tiroMsg'); if(el) el.style.opacity='0'; } }
+  const GZ=ALC_GZ;
+  const suelo=(x,z)=>{ try{ return alcH(x,z); }catch(e){ return 0; } };
+
+  /* EL AVION SIGUE SU RUTA DESPUES DE QUE TE TIRASTE. Si se queda clavado en el punto donde
+     saltaste, al mirar para arriba hay un aparato colgado del cielo, quieto, hasta que tocas el
+     piso. Sigue volando, se achica y desaparece al terminar el recorrido — que es exactamente lo
+     que se ve cuando te tiras de verdad. */
+  if(SALTO.fase!=='avion' && SALTO.avion && SALTO.avion.visible){
+    SALTO.rec += SAL_VAV*dt;
+    const ax=SALTO.ax+SALTO.dx*SALTO.rec, az=SALTO.az+SALTO.dz*SALTO.rec;
+    SALTO.avion.position.set(ax, suelo(ax,az)+SAL_ALT, GZ+az);
+    if(SALTO.rec>=SALTO.largo) SALTO.avion.visible=false;
+  }
+
+  if(SALTO.fase==='avion'){
+    SALTO.rec += SAL_VAV*dt;
+    const px=SALTO.ax + SALTO.dx*SALTO.rec, pz=SALTO.az + SALTO.dz*SALTO.rec;
+    const py=suelo(px,pz)+SAL_ALT;
+    /* el avion, apuntando a donde va */
+    if(SALTO.avion){ SALTO.avion.position.set(px, py, GZ+pz);
+      SALTO.avion.rotation.set(0, Math.atan2(-SALTO.dx,-SALTO.dz)+Math.PI, 0); }
+    /* vos vas adentro, cerca de la compuerta */
+    player.pos.set(px - SALTO.dx*10, py-1.2, GZ + pz - SALTO.dz*10);
+    /* LA CAMARA MIRA EL AVION DE AFUERA. Es una toma de tercera persona que gira despacio: se ve
+       el aparato entero, el valle abajo y por donde vas pasando. */
+    /* La lente da la vuelta a 42 metros —el avion mide 30, a 26 se salia del cuadro— y apunta a un
+       punto POR DEBAJO del aparato: asi entra el valle en la toma, que es lo que tenes que mirar
+       para elegir donde tirarte. */
+    const gir=SALTO.t*0.14, rad=42;
+    const lat=Math.cos(gir)*rad, atr=-Math.sin(gir)*rad;
+    const alt=15 + Math.sin(gir*0.7)*4;
+    camera.position.set(px + SALTO.dz*lat + SALTO.dx*atr, py+alt, GZ + pz - SALTO.dx*lat + SALTO.dz*atr);
+    camera.lookAt(px, py-16, GZ+pz);
+    { const f=fovVert(78); if(Math.abs(camera.fov-f)>0.15){ camera.fov=f; camera.updateProjectionMatrix(); } }
+    saltoNiebla(SAL_ALT);
+    saltoHud(SAL_ALT, tl({es:'TOCÁ SALTAR',en:'TAP TO DROP',pt:'TOQUE PARA SALTAR'}));
+    /* SE ACABO EL RECORRIDO: el avion se va y caes desde donde desaparecio. Es lo que evita que
+       alguien se quede arriba para siempre. */
+    if(SALTO.rec>=SALTO.largo){
+      try{ tiroMsg(tl({es:'EL AVIÓN SE FUE',en:'THE PLANE IS GONE',pt:'O AVIÃO FOI EMBORA'}),'#ffb26b'); }catch(e){}
+      if(SALTO.avion) SALTO.avion.visible=false;
+      saltoTirarse();
+    }
+    return true;
+  }
+
+  const gx=player.pos.x, gz=player.pos.z-GZ;
+  const yS=suelo(gx,gz), sobre=player.pos.y - yS;
+
+  if(SALTO.fase==='caida'){
+    /* PICADO O PLANCHA. Con el joystick a fondo te tiras de cabeza y caes a 88; soltandolo te
+       ponés de panza y bajas a 52. La transicion no es un salto: el cuerpo tarda en cambiar de
+       forma, asi que se interpola. */
+    const mag=Math.min(1, Math.hypot(joy.x, joy.y));
+    const quiere=(mag>0.35)?1:0;
+    SALTO.picado += (quiere-SALTO.picado)*Math.min(1, 2.4*dt);
+    const vObj = SAL_PLANCHA + (SAL_PICADO-SAL_PLANCHA)*SALTO.picado;
+    SALTO.vy += (-vObj - SALTO.vy)*Math.min(1, 1.6*dt);
+    player.pos.y += SALTO.vy*dt;
+    /* moverse de costado: el joystick empuja en la direccion en la que mirás */
+    if(mag>0.05){
+      const c=Math.cos(player.yaw), s=Math.sin(player.yaw);
+      const fx=-s, fz=-c, rx=c, rz=-s;
+      const vx=(fx*(-joy.y) + rx*joy.x)*SAL_HOR, vz=(fz*(-joy.y) + rz*joy.x)*SAL_HOR;
+      player.pos.x += vx*dt; player.pos.z += vz*dt;
+    }
+    /* el temblor y el campo de vision: cuanto mas rapido, mas se abre y mas sacude */
+    SALTO.temblor = 0.45 + SALTO.picado*0.75;
+    const fov = 92 + SALTO.picado*16;
+    if(Math.abs(camera.fov-fov)>0.2){ camera.fov=fov; camera.updateProjectionMatrix(); }
+    saltoPose(SALTO.picado>0.55?1:0, dt);
+    saltoCam(fov); saltoNiebla(sobre);
+    saltoHud(sobre, SALTO.picado>0.55 ? tl({es:'PICADO',en:'DIVE',pt:'MERGULHO'})
+                                      : tl({es:'PLANCHA',en:'SPREAD',pt:'PRANCHA'}));
+    if(sobre<=SAL_ABRE) saltoAbrir();
+    return true;
+  }
+
+  if(SALTO.fase==='para'){
+    SALTO.tAbre += dt;
+    const k=Math.min(1, SALTO.tAbre/SAL_ABRIR_T);
+    SALTO.abierto=k;
+    /* la campana se infla: arranca hecha un bollo y se abre con un tiron */
+    const e=1-Math.pow(1-k,3);
+    { const c=SALTO.para.userData.cupula;
+      if(c){ c.scale.set(0.16+e*0.84, 0.10+e*0.90, 0.16+e*0.84); c.position.y=SAL_CAMPANA*(0.42+e*0.58); }
+      SALTO.para.scale.setScalar(1); }
+    /* y el tiron te frena: de 50 o 90 a 11 en menos de un segundo */
+    const vObj=-SAL_PARA_V;
+    SALTO.vy += (vObj-SALTO.vy)*Math.min(1, (2.5+e*6)*dt);
+    player.pos.y += SALTO.vy*dt;
+    const mag=Math.min(1, Math.hypot(joy.x, joy.y));
+    const c=Math.cos(player.yaw), s=Math.sin(player.yaw);
+    const fx=-s, fz=-c, rx=c, rz=-s;
+    /* Con la campana abierta SIEMPRE avanzas algo: un paracaidas no se queda quieto en el aire.
+       Pero se FRENA, tirando de los dos mandos para abajo — el joystick hacia atras—, y eso no es
+       un adorno: sin freno el descenso desde 130 metros te arrastra 120 y no llegas nunca a donde
+       apuntaste. Suelto avanza a 10 m/s, a fondo a 23, frenando a 2 y pico. */
+    const av=0.45 + 0.55*Math.max(0,-joy.y) - 0.35*Math.max(0,joy.y);
+    const vx=(fx*av + rx*joy.x*0.8)*SAL_PARA_H, vz=(fz*av + rz*joy.x*0.8)*SAL_PARA_H;
+    player.pos.x += vx*dt; player.pos.z += vz*dt;
+    /* LA VISTA SE ENDEREZA SOLA AL ABRIRSE. Venias mirando 41 grados para abajo porque ibas de
+       cabeza; con la campana abierta se cuelga y se mira casi al frente. Si no se corrige, el
+       jugador pasa todo el descenso mirando el piso y no ve ni la campana ni los tiradores que
+       tiene agarrados. Se corrige solo durante el primer segundo y medio: despues la mira vuelve a
+       ser del jugador y no se le pelea con el dedo. */
+    if(SALTO.tAbre<1.5) player.pitch += (-0.20-player.pitch)*Math.min(1, 2.6*dt);
+    SALTO.temblor=0.12;
+    const fov=90;
+    if(Math.abs(camera.fov-fov)>0.2){ camera.fov=fov; camera.updateProjectionMatrix(); }
+    saltoPose(2, dt);
+    /* la campana se inclina hacia donde vas: es lo que hace que se sienta que la manejas */
+    { const c=SALTO.para.userData.cupula;
+      if(c){ c.rotation.z = -joy.x*0.20; c.rotation.x = 0.08 - Math.max(0,-joy.y)*0.14; } }
+    saltoCam(fov); saltoNiebla(sobre);
+    saltoHud(sobre, tl({es:'PARACAÍDAS',en:'CHUTE',pt:'PARAQUEDAS'}));
+    if(sobre<=0.30){ player.pos.y=yS+0.05; saltoTerminar(); }
+    return true;
+  }
+  return false;
+}
+/* el grupo de los brazos y el paracaidas viaja con vos y gira con tu RUMBO, no con el cabeceo:
+   por eso al mirar para arriba ves la campana y al mirar abajo, tus brazos. */
+function saltoDibujo(){
+  if(SALTO.fase!=='caida' && SALTO.fase!=='para'){ if(SALTO.grupo) SALTO.grupo.visible=false; return; }
+  const g=SALTO.grupo; g.visible=true;
+  g.position.copy(camera.position);
+  g.rotation.set(0, player.yaw, 0);              // marco de RUMBO: la campana queda encima tuyo
+  /* y los brazos le suman el cabeceo, con lo que quedan clavados al eje de la lente. Con la
+     campana abierta no: ahi van con la campana, para que las manos agarren los tiradores. */
+  SALTO.bra.rotation.x = (SALTO.fase==='para') ? 0 : player.pitch;
+  SALTO.para.visible=(SALTO.fase==='para');
+}
 const CINE={ act:false, t:0, dur:12.4, esc:null, cam:null, mix:null, cuerpo:null,
              avion:null, rampa:null, nubes:null, humo:[], al:null, fin:null };
 function cineTela(){
@@ -16603,8 +17143,12 @@ document.getElementById('mPlay').addEventListener('click',()=>{ if(!menuMode)ret
      cinematica para un duelo suelto. Ahora la camara te da una vuelta a VOS y arranca. */
   try{
     if(MODO().br){
+      /* PRIMERO LA PELICULA, DESPUES EL AVION DE VERDAD. La cinematica termina con el personaje
+         parado en la compuerta; ahi mismo arranca el salto jugable, asi que las dos piezas se
+         encadenan sin corte: lo que veias en la toma es lo que ahora manejás. */
       tdmParar();
-      cineArrancar(()=>{ try{ clock.getDelta(); }catch(e){} });
+      cineArrancar(()=>{ try{ clock.getDelta(); }catch(e){}
+        try{ saltoArrancar(()=>{ try{ clock.getDelta(); }catch(e2){} }); }catch(e){} });
     } else if(MODO().equipos){
       tdmArrancar();
       careoArrancar(()=>{ try{ clock.getDelta(); }catch(e){} }, false);
@@ -16832,7 +17376,8 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
   if(!menuMode){ menuPose=false;
     if(menuFondo&&menuFondo.visible) menuEscenario(false);
     if(menuLuz&&menuLuz.intensity>0){ menuLuz.intensity=0; menuLuz2.intensity=0; } }
-  if(scene.fog){ if(_lastWorld!==world){ _lastWorld=world; _worldFog=scene.fog.far; }   // captura la niebla base al entrar a cada mundo
+  if(scene.fog && (typeof SALTO==='undefined' || SALTO.fase==='off')){   // en el aire la niebla la maneja el salto
+    if(_lastWorld!==world){ _lastWorld=world; _worldFog=scene.fog.far; }   // captura la niebla base al entrar a cada mundo
     const wf=(quality==='low')?Math.min(_worldFog,camera.far):_worldFog; if(scene.fog.far!==wf)scene.fog.far=wf; }   // BAJO: niebla tapa justo en el corte del plano lejano; medio/alto restauran la base
   if(world==='arena'){ try{ areTiendaTick(); }catch(e){} try{ areVendTick(dt); }catch(e){} }
   if(islaMode){ try{ alcTick(dt); }catch(e){} }   // el oleaje de la bahía
@@ -16840,6 +17385,7 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
   try{ ambTick(dt); }catch(e){}                   // viento del valle + latido con poca vida
   try{ cieloTick(dt); }catch(e){}                 // las nubes se mueven y el sol sigue a la luz
   try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player) — sigue latiendo aunque esté en pausa
+  try{ saltoDibujo(); }catch(e){}           // los brazos y la campana viajan con la lente
   try{ _telDt=dt; telRender(); }catch(e){}   // la vista de adentro del visor, antes del cuadro principal
   /* Y ACA SE DIBUJA. gfxRender decide solo: si no hay nada del camino de imagen encendido,
      llama a renderer.render igual que siempre y no cuesta un microsegundo de mas. */
@@ -20549,6 +21095,9 @@ function exitToMenu(){ closePause(); closeSettings(); closeBoard();
      se saca la clase a mano: es una linea contra una pantalla muerta. */
   try{ if(typeof CINE!=='undefined' && CINE.act) cineCortar(); }catch(e){}
   try{ if(typeof CAREO!=='undefined' && CAREO.act) careoCortar(); }catch(e){}
+  /* Y EL SALTO TAMBIEN. Saliendo en pleno aire quedaban puestas `enAvion`/`cayendo`, y con esas
+     clases el menu vuelve pero sin joystick ni botones: la partida siguiente arrancaba muda. */
+  try{ if(typeof SALTO!=='undefined' && SALTO.fase!=='off'){ SALTO.fin=null; saltoTerminar(); } }catch(e){}
   try{ document.body.classList.remove('cine');
        const tl=document.getElementById('cineTela'); if(tl){ tl.style.display='none'; tl.style.opacity='0'; } }catch(e){}
   menuMode=true; aplicarPR(); document.body.classList.add('menu-open'); menuEl.classList.remove('hide'); }
