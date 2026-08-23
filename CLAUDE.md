@@ -73,6 +73,42 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
 - [ ] **Bug: reaparecés sin nada**. Al salir o al morir y revivir, te quedás sin equipo.
 - [ ] **Bug: el cambio de gráficos borra a los enemigos**. Tocar los ajustes de imagen
       hace desaparecer a los bots / jugadores.
+- [x] **EL HTML BAJA A LA MITAD Y LOS ASSETS SALEN DE jsDELIVR, TODOS JUNTOS** (2026-08-23).
+      Treinta y un assets vivian incrustados en base64: 9 texturas de mapa, 11 pistas de audio, 6
+      insignias de rango, la portada y el arte del menu y las 3 tarjetas de modo. Eran 2,16 MB de
+      3,83 —el 56,6%— y en base64, que abulta un tercio sobre el binario (1,62 MB de verdad).
+      **HTML: 3,83 MB -> 1,68 MB.** Cero data: URI.
+      TRES COSAS QUE SE MIDIERON Y CAMBIARON EL DISENO:
+      1. EL SCRIPT DE MQTT FRENABA TODO. Un `<script src>` sin defer bloquea el parseo hasta que
+         llega o falla, y estaba ARRIBA de la precarga. Medido con los tiempos del navegador: el
+         primer byte de un asset se pedia **12,7 segundos** despues de abrir la pagina en una red
+         donde unpkg no contesta. Poniendo la precarga arriba y `defer` en el de mqtt: la ventana
+         de descarga completa paso de **12.778 ms a 239 ms**, y los 31 arrancan dentro de 160 ms
+         unos de otros. La suma de las duraciones individuales es 1.573 ms, o sea que el paralelismo
+         da **6,6x**. Ese es el numero del pedido "no uno por uno sino en simultaneo".
+      2. CORS, o no anda nada. De las texturas del mapa se LEEN PIXELES para derivar normal,
+         rugosidad y oclusion, y un lienzo con una imagen de otro dominio queda tenido: getImageData
+         tira SecurityError. Mientras venian en data: URI el problema no existia (mismo origen).
+         Va `crossOrigin='anonymous'` en las imagenes y `crossorigin` en el `<img>` del arte, que se
+         sube a la GPU. Verificado con curl: jsDelivr manda `access-control-allow-origin: *` en los
+         seis caminos probados.
+      3. EL AUDIO YA NO SE CONVIERTE. Antes cada pista pasaba de base64 a ArrayBuffer con atob() y
+         un bucle byte por byte: casi un mega de trabajo en el hilo principal en cada arranque.
+         Ahora la precarga deja los ArrayBuffer listos. OJO: `decodeAudioData` VACIA el buffer que
+         recibe, asi que va `ab.slice(0)` — sin la copia, un segundo intento encuentra cero bytes.
+      Y no se decodifica dos veces: `hgTexCargar` usa la imagen que ya bajo la precarga en vez de
+      crear otra con la misma URL (pega en el cache, pero decodificar nueve WebP de 512 de nuevo son
+      medio segundo de telefono regalado).
+      Medido: 31 de 31 en 210 ms, los 11 audios decodifican con su duracion real (m_menu 20,04 s,
+      m_combate 25,08 s) y `sinte:false`, la insignia carga a 176 px, cero errores de pagina.
+      DEGRADA BIEN: con la CDN caida a proposito (31 de 31 fallados) el juego entra a la arena y se
+      juega — texturas dibujadas por codigo, audio sintetizado, bots presentes.
+      NO SE PUDO PROBAR de punta a punta contra jsDelivr desde el arnes: el navegador de prueba no
+      tiene salida a internet (unpkg tambien da ERR_CONNECTION_RESET, con y sin proxy). Lo que si
+      se verifico es que jsDelivr responde 200 con CORS en los seis caminos, y que el juego anda con
+      los mismos archivos servidos local.
+      EL PIN VA A UN COMMIT (`@73fde79`) y no a una rama: jsDelivr cachea por URL para siempre con
+      hash y 12 horas con nombre de rama. **Al cambiar un asset hay que mover el pin.**
 - [ ] **Lobby de BR**: al iniciar partida de battle royale, caer primero en un lobby
       (antes del avión), no directo a la partida.
 - [x] **PBR en el BR** (2026-08-23): los 26 materiales del valle mas el suelo derivan rugosidad,
