@@ -2969,7 +2969,7 @@ function armaLente(H,z0,largo,yRiel){
   };
   anillo(z0-L/2+0.055); anillo(z0+L/2-0.055);
   /* la lente con la vista aumentada, y su reticula */
-  try{ telMontarLente(H, z0, L, y0, (H.aum||4)); }catch(e){}
+  try{ telMontarLente(H, z0, L, y0, (H.aum||4), H.reticula); }catch(e){}
   /* --- LOS VIDRIOS, PERO SIN TAPAR POR DONDE SE MIRA ---
      Primer intento: dos discos de vidrio, objetivo y ocular. Apuntando quedaba un disco NEGRO
      tapando toda la mira — es la misma trampa que dice el comentario de arriba sobre los cilindros
@@ -3470,6 +3470,7 @@ const ARSENAL=[
 
 {id:'svd', n:'Dragunov', d:'francotirador · semiautomático · 7,62', cat:'sniper', ret:[0.0250,0.0055,0.130], semi:true,
  esc:0.95, rpm:110, mag:10, rec:2.20, dmg:78, disp:0.0008, mira:0.126, adsZ:0.210, zoom:20, aum:4,
+ reticula:'pso1',
  boca:[0,0.012,-0.620], gR:[0,-0.098,0.126], gL:[0,-0.052,0.032],
  hacer:(H)=>{ const M=H.M;
   H.perf([[0.206,0.050],[0.090,0.062,-0.030,0.054],[-0.062,0.046],[-0.074,0.030],[-0.074,-0.024],
@@ -3810,7 +3811,8 @@ function _armaUtil(padre){
    animan en gunMag / gunCulata / gunCH) o la copia para la foto (no engancha nada). */
 function armaHerr(raiz, def, vivo){
   const M=AKMAT;
-  const H=Object.assign({ M:M, mira:def.mira, raiz:raiz, aum:(def.aum||0) }, _armaUtil(raiz));
+  const H=Object.assign({ M:M, mira:def.mira, raiz:raiz, aum:(def.aum||0),
+                          reticula:(def.reticula||'mildot') }, _armaUtil(raiz));
   H.tubo=(r,h,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,20,1,true),m||M.negro);
     me.material.side=THREE.DoubleSide; me.rotation.x=Math.PI/2; me.position.set(x,y,z);
     me.userData.noFundir=true;                  // tubo ABIERTO: fundido con lo demas se ve el reves
@@ -11371,6 +11373,34 @@ try{ window.__tiro={
   calidad:(q)=>{ if(q) applyQuality(q); return quality; },
   /* forzar UNA remedida del destino del visor: la histeresis normal tarda un tercio de segundo y
      en el banco cada pasada de escena por software cuesta segundos */
+  /* EL AUMENTO QUE SE VE DE VERDAD. No es camara/visor: el disco ocupa una FRACCION de la
+     pantalla, asi que un objeto adentro se ve
+        (diametro del disco / alto del lienzo) x tan(fov pantalla/2) / tan(fov visor/2)
+     veces mas grande que afuera. Con un aro chico, un visor de 15 grados puede terminar
+     aumentando dos veces y no seis. */
+  /* la reticula sola, en grande: para poder mirarla sin el resto de la pantalla encima */
+  reticulaVer:(tipo)=>{ const t=telRetTex(tipo||'mildot'); const c=t.image;
+    let d=document.getElementById('retVer');
+    if(!d){ d=document.createElement('div'); d.id='retVer';
+      d.style.cssText='position:fixed;inset:0;z-index:9999;background:#8a9aa8;display:flex;align-items:center;justify-content:center';
+      document.body.appendChild(d); }
+    d.innerHTML=''; const cv=document.createElement('canvas'); cv.width=cv.height=400;
+    const g=cv.getContext('2d'); g.fillStyle='#9fb0bd'; g.fillRect(0,0,400,400);
+    g.beginPath(); g.arc(200,200,198,0,7); g.clip();
+    g.drawImage(c,0,0,400,400);
+    cv.style.cssText='width:400px;height:400px;border-radius:50%;box-shadow:0 0 0 6px #111';
+    d.appendChild(cv); d.style.display='flex';
+    return { tipo:tipo||'mildot', lado:c.width }; },
+  reticulaCerrar:()=>{ const d=document.getElementById('retVer'); if(d) d.style.display='none'; return 1; },
+  visorAumento:()=>{ if(!_telCam||!_telLente) return null;
+    const H=renderer.domElement.height||1, d=telDiamPx();
+    const tc=Math.tan(camera.fov*Math.PI/360), tt=Math.tan(_telCam.fov*Math.PI/360);
+    return { arma:(ARMA()||{}).id, dice:_telAum,
+             fovPantalla:+camera.fov.toFixed(1), fovVisor:+_telCam.fov.toFixed(2),
+             diam:+d.toFixed(0), alto:H, fraccion:+(d/H).toFixed(3),
+             pxPorGradoFuera:+(H/camera.fov).toFixed(2),
+             pxPorGradoDentro:+(d/_telCam.fov).toFixed(2),
+             seVe:+((d/H)*tc/tt).toFixed(2) }; },
   visorRemedir:()=>{ const d=_telDt; _telDt=0.016; _telSalto=0; _telLadoT=99; telRender(); _telDt=d;
     return { diam:+telDiamPx().toFixed(0), rt:_telRT?_telRT.width:null, ideal:telLadoIdeal(),
              techo:teleTecho(), calidad:quality, on:_teleOn,
@@ -14984,32 +15014,117 @@ function telRT(){
   _telCam=new THREE.PerspectiveCamera(12,1,0.05,700);
   return _telRT;
 }
-/* la reticula, dibujada en un lienzo y pegada delante de la lente: fina, con el hueco en el medio
-   y las marcas de distancia, como la de la foto */
-let _telRetTex=null;
-function telRetTex(){
-  if(_telRetTex) return _telRetTex;
-  const S=512, c=document.createElement('canvas'); c.width=c.height=S;
+/* ===================== LAS RETICULAS, COPIADAS DE LAS DE VERDAD =====================
+   Habia UNA sola reticula inventada —una cruz con unas marquitas— puesta en las dos miras. Ahora
+   cada fusil lleva la suya, calcada de la que lleva de verdad:
+
+   · MIL-DOT (la AWM). Es la reticula de los Unertl del cuerpo de marines y de casi todo visor de
+     francotirador occidental. Cruz fina en el medio, PUNTOS cada milirradian sobre los cuatro
+     brazos, y de ahi para afuera los brazos se engordan (duplex). El punto mide un cuarto de mil y
+     quedan tres cuartos de hueco entre uno y otro — por eso se la llama "3/4 USMC mil-dot" — y en
+     el centro exacto NO hay punto: si lo hubiera, taparia justo lo que estas apuntando.
+     Referencia: snipercentral.com/mastering-mildots y armament.com/pages/how-to-use-gen-2-reticles.
+
+   · PSO-1 (la Dragunov). La sovietica, que no se parece a ninguna otra y por eso se reconoce de
+     una: el punto de mira NO es una cruz sino un GALON —una V invertida— y abajo cuelgan otros
+     tres galones mas chicos, para 1100, 1200 y 1300 metros. A los costados, diez marcas por lado a
+     un milirradian de distancia, para el viento y para los blancos que se mueven. Y abajo a la
+     izquierda, el TELEMETRO: una curva calibrada contra un hombre de 1,70 m — le apoyas los pies
+     en la linea de abajo, mirás donde le queda la cabeza contra la curva y leés el numero, del 2
+     al 10, que son cientos de metros.
+     Referencia: en.wikipedia.org/wiki/PSO-1 y safar-publishing.com/post/pso-1-reticle-explained.
+
+   UNA ACLARACION HONESTA sobre la escala. En un visor de verdad el milirradian es una medida
+   angular: los diez mils del mil-dot ocupan una porcion chica del campo. Dibujado asi, en una
+   pantalla de telefono los puntos quedan amontonados en el centro y no se ven. Estan dibujadas con
+   las PROPORCIONES de la foto de referencia, que es lo que hace que se reconozcan, y no a
+   subtension real — como en cualquier shooter. */
+const _telRetCache={};
+function telRetTex(tipo){
+  tipo=tipo||'mildot';
+  if(_telRetCache[tipo]) return _telRetCache[tipo];
+  const S=1024, c=document.createElement('canvas'); c.width=c.height=S;
   const g=c.getContext('2d'), C=S/2;
   g.clearRect(0,0,S,S);
-  g.strokeStyle='rgba(8,10,13,0.95)'; g.lineCap='butt';
-  const hueco=S*0.045;
-  const brazo=(dx,dy)=>{ g.lineWidth=S*0.016;
-    g.beginPath(); g.moveTo(C+dx*S*0.49, C+dy*S*0.49); g.lineTo(C+dx*S*0.20, C+dy*S*0.20); g.stroke();
-    g.lineWidth=S*0.0062;
-    g.beginPath(); g.moveTo(C+dx*S*0.20, C+dy*S*0.20); g.lineTo(C+dx*hueco, C+dy*hueco); g.stroke(); };
-  brazo(1,0); brazo(-1,0); brazo(0,1); brazo(0,-1);
-  g.lineWidth=S*0.0050;
-  for(let i=1;i<=5;i++){ const d=hueco+i*S*0.058, t=(i%2? S*0.014 : S*0.024);
-    g.beginPath(); g.moveTo(C-d,C-t); g.lineTo(C-d,C+t);
-                   g.moveTo(C+d,C-t); g.lineTo(C+d,C+t);
-                   g.moveTo(C-t,C+d); g.lineTo(C+t,C+d); g.stroke(); }
-  g.fillStyle='rgba(8,10,13,0.95)'; g.beginPath(); g.arc(C,C,S*0.0075,0,7); g.fill();
-  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4;
-  return (_telRetTex=t);
+  const TINTA='rgba(9,11,14,0.96)';
+  g.strokeStyle=TINTA; g.fillStyle=TINTA; g.lineCap='butt'; g.lineJoin='miter';
+
+  if(tipo==='pso1'){
+    /* ---------- PSO-1 ---------- */
+    const MIL=S*0.0392;                 // cuanto mide un milirradian dibujado
+    const gr=S*0.0040;                  // el grosor de la linea fina
+    /* la barra horizontal: la linea central y las diez marcas por lado */
+    g.lineWidth=gr;
+    g.beginPath(); g.moveTo(C-MIL*10.6, C); g.lineTo(C-MIL*0.9, C);
+                   g.moveTo(C+MIL*0.9, C); g.lineTo(C+MIL*10.6, C); g.stroke();
+    for(let i=1;i<=10;i++){
+      /* cada dos, la marca es mas larga: es lo que deja contarlas de un vistazo */
+      const alto=(i%5===0)? MIL*0.95 : (i%2===0? MIL*0.62 : MIL*0.38);
+      g.lineWidth=(i%5===0)? gr*1.5 : gr;
+      for(const sx of [-1,1]){ const x=C+sx*MIL*i;
+        g.beginPath(); g.moveTo(x, C); g.lineTo(x, C-alto); g.stroke(); }
+    }
+    /* EL GALON. La V invertida es el punto de mira: se apunta con el VERTICE, no con el centro. */
+    const galon=(cx,cy,w,h,gs)=>{ g.lineWidth=gs;
+      g.beginPath(); g.moveTo(cx-w, cy+h); g.lineTo(cx, cy); g.lineTo(cx+w, cy+h); g.stroke(); };
+    galon(C, C-MIL*0.05, MIL*0.95, MIL*0.95, gr*1.9);
+    /* y los tres de abajo, para 1100, 1200 y 1300 metros */
+    for(let i=1;i<=3;i++) galon(C, C+MIL*(1.05*i), MIL*0.52, MIL*0.52, gr*1.45);
+    /* EL TELEMETRO, abajo a la izquierda. La curva sube de derecha a izquierda —cuanto mas lejos
+       el hombre, mas chico se ve— y abajo corre la linea donde se le apoyan los pies. */
+    const x0=C-MIL*10.4, x1=C-MIL*2.2, yPie=C+MIL*4.5, hMax=MIL*3.5, hMin=MIL*0.70;
+    g.lineWidth=gr*1.25;
+    g.beginPath(); g.moveTo(x0, yPie); g.lineTo(x1, yPie); g.stroke();
+    g.lineWidth=gr*1.25; g.beginPath();
+    for(let i=0;i<=48;i++){ const t=i/48, x=x0+(x1-x0)*t;
+      /* la altura va como 1/distancia: eso es lo que hace que la curva sea una hiperbola y no una
+         recta, y es de donde sale la lectura */
+      const d=2+8*t, y=yPie-(hMax*2/d);
+      if(i===0) g.moveTo(x,y); else g.lineTo(x,y); }
+    g.stroke();
+    /* la pared vertical del extremo cercano, y los numeros */
+    g.lineWidth=gr; g.beginPath(); g.moveTo(x0,yPie); g.lineTo(x0, yPie-hMax); g.stroke();
+    g.font='700 '+Math.round(MIL*0.82)+'px system-ui,sans-serif';
+    g.textAlign='center'; g.textBaseline='top';
+    for(const n of [2,4,6,8,10]){ const t=(n-2)/8, x=x0+(x1-x0)*t;
+      g.fillText(String(n), x, yPie+MIL*0.16); }
+    void hMin;
+  } else {
+    /* ---------- MIL-DOT ---------- */
+    const R=S*0.482;                    // hasta donde llega el brazo
+    const POSTE=S*0.176;                // donde el brazo fino se vuelve poste grueso
+    const HUECO=S*0.020;                // el hueco del medio, para no tapar el blanco
+    const gFino=S*0.0034, gPoste=S*0.0175;
+    /* los cuatro brazos: poste grueso desde el borde y linea fina hacia el centro */
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      g.lineWidth=gPoste;
+      g.beginPath(); g.moveTo(C+dx*R, C+dy*R); g.lineTo(C+dx*POSTE, C+dy*POSTE); g.stroke();
+      g.lineWidth=gFino;
+      g.beginPath(); g.moveTo(C+dx*POSTE, C+dy*POSTE); g.lineTo(C+dx*HUECO, C+dy*HUECO); g.stroke();
+      /* CUATRO PUNTOS POR BRAZO, uno por milirradian, y NINGUNO en el centro. El paso sale de
+         repartir el tramo fino en cinco: cuatro puntos y el quinto lugar es donde arranca el
+         poste, que es como esta armada la de verdad. */
+      const paso=(POSTE-HUECO)/4.4;
+      /* el punto mide un cuarto del paso: es el "3/4 USMC mil-dot" — un cuarto de mil de punto y
+         tres cuartos de hueco. Con el punto a la mitad del paso, que es como estaba, los puntos se
+         tocaban y la escala dejaba de leerse. */
+      const rPunto=paso*0.125;
+      for(let i=1;i<=4;i++){ const d=HUECO+paso*i;
+        g.beginPath(); g.arc(C+dx*d, C+dy*d, rPunto, 0, 7); g.fill(); }
+    }
+  }
+  /* SIN MIPMAPS. La reticula es de lineas finas y el disco la muestra casi al mismo tamano que la
+     textura: con mipmaps el aparato elige un nivel reducido y PROMEDIA las lineas hasta dejarlas en
+     un gris que no se ve — que es exactamente lo que pasaba, el aro salia vacio. Y no hay riesgo de
+     centelleo porque la reticula no se mueve nunca respecto de la pantalla: esta pegada a la lente,
+     que esta pegada a la camara. */
+  const t=new THREE.CanvasTexture(c);
+  t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=8;
+  t.minFilter=THREE.LinearFilter; t.magFilter=THREE.LinearFilter; t.generateMipmaps=false;
+  return (_telRetCache[tipo]=t);
 }
 /* la lente y la reticula se crean dentro del tubo, en armaLente */
-function telMontarLente(H, z0, L, y0, aum){
+function telMontarLente(H, z0, L, y0, aum, reticula){
   telRT();
   _telAum=aum||4;
   const zl=z0+L/2-0.030, r=0.0288;   // la lente llena el tubo: ver el comentario del tubo interior
@@ -15018,7 +15133,7 @@ function telMontarLente(H, z0, L, y0, aum){
   disco.position.set(0,y0,zl); disco.renderOrder=2; disco.visible=false;
   disco.userData.noFundir=true; H.raiz.add(disco); _telLente=disco;
   const ret=new THREE.Mesh(new THREE.CircleGeometry(r*0.995,44),
-    new THREE.MeshBasicMaterial({ map:telRetTex(), transparent:true, depthWrite:false,
+    new THREE.MeshBasicMaterial({ map:telRetTex(reticula), transparent:true, depthWrite:false,
       toneMapped:false, fog:false }));
   ret.position.set(0,y0,zl+0.0016); ret.renderOrder=3; ret.visible=false;
   ret.userData.noFundir=true; H.raiz.add(ret); _telRet=ret;
@@ -15043,42 +15158,52 @@ function teleTick(){
   document.body.classList.toggle('tele', q);
 }
 /* la pasada extra: va JUSTO ANTES del render principal */
-const _telP=new THREE.Vector3(), _telQ=new THREE.Quaternion();
-let _telPS=null, _telDt=0.016, _telSalto=0, _telDtS=0.016;
+let _telDt=0.016, _telSalto=0, _telDtS=0.016;
 function telRender(){
   /* el estado se decide ACA, no en tiroVis: tiroVis solo lo llama el gancho de pruebas, no el bucle
      del juego, asi que enganchado ahi el visor no se hubiera prendido nunca jugando de verdad */
   teleTick();
   if(!_teleOn || !_telLente || !_telRT) return;
-  /* ===================== EL VISOR TEMBLABA =====================
-     La camara del visor copiaba la orientacion de la LENTE, o sea de la malla del arma, y esa
-     malla lleva encima todo lo procedural: el balanceo del paso, la respiracion, el temblor de
-     musculo, el retraso del caño, el retroceso. A ojo desnudo eso es carácter; A SEIS AUMENTOS es
-     un terremoto — cualquier decima de grado se multiplica por seis y el visor no para quieto.
-     Ahora la orientacion sale de la CAMARA DEL JUGADOR, que es la que ya lleva la punteria y el
-     retroceso y no lleva nada del bamboleo del arma. La POSICION sigue saliendo de la lente pero
-     SUAVIZADA, asi el visor esta donde tiene que estar sin heredarle el bamboleo. */
-  _telLente.getWorldPosition(_telP);
-  if(!_telPS){ _telPS=_telP.clone(); }
-  else _telPS.lerp(_telP, Math.min(1, 14*Math.max(0.001,_telDt)));
-  _telCam.position.copy(_telPS);
+  /* ===================== EL VISOR IBA ARRASTRADO =====================
+     Venia de dos parches encadenados. Primero la camara del visor copiaba la orientacion de la
+     LENTE —o sea de la malla del arma, con el balanceo del paso, la respiracion, el temblor de
+     musculo y el retroceso encima—, y a seis aumentos eso es un terremoto. Se arreglo sacando la
+     orientacion de la camara del jugador, pero la POSICION se dejo en la lente y SUAVIZADA con un
+     lerp, para que el bamboleo del arma no se colara por ahi.
+     Ese lerp es el arrastre. La imagen de adentro perseguia a la de afuera con un cuadro y pico de
+     retraso, y a seis aumentos un cuadro de retraso son metros: mueves la mira y el aro tarda en
+     acompanar. Se nota mucho mas en la AWM que en la Dragunov porque el retraso se multiplica por
+     el aumento, y una es de 6 y la otra de 4.
+     La solucion no es suavizar mejor: es no tener nada que suavizar. La camara del visor va EN EL
+     OJO, la misma posicion y la misma orientacion que la del jugador. Asi lo de adentro del aro es
+     un recorte exacto de lo de afuera —clavado, sin bamboleo y sin retraso— y encima la mira
+     apunta exactamente a donde apunta el arma, que antes dependia de que el lerp hubiera llegado.
+     Los seis centimetros que hay del ojo a la lente no cambian nada a distancia de francotirador. */
+  _telCam.position.copy(camera.position);
   _telCam.quaternion.copy(camera.quaternion);
   /* SIN DAR VUELTA LA CAMARA. Aca habia un rotateY(PI) y era el error: se veia lo que tenias
      ATRAS. El disco de la lente es un circulo cuya normal (+Z local) apunta al ojo, porque el
      adelante del arma es -Z; y una camara de three mira por su propio -Z. O sea que copiandole la
      orientacion al disco, la camara ya queda mirando hacia la boca del caño. Girarla 180 la mandaba
      justo para el otro lado. */
-  /* EL AUMENTO DE VERDAD. Antes se medía contra el campo visual DE APUNTADO y encima se partía
-     al medio (`_telAum*0.5`): con la AWM en 6x el visor terminaba mostrando 25 grados contra 36
-     de afuera, o sea un aumento real de 1,4 — de ahi que por la mira se viera casi lo mismo que
-     alrededor. Ahora se mide contra el campo visual DE CADERA, que es el 1x de este juego, y
-     entero: 6x son 2*atan(tan(45)/6) = 18,9 grados. Contra los 62 de afuera, lo de adentro del
-     aro se ve 3,6 veces mas grande. Eso es una mira. */
-  /* El aumento se cuenta EN GRADOS sobre el campo visual de cadera, que es como lo cuenta
-     cualquier shooter: 6x = 90/6 = 15 grados. Repartirlo por la tangente daba 18,9 y contra los
-     50 de la pantalla eran 2,8 veces; asi son 3,5, que es cuando se ve de una que la mira llega
-     mucho mas lejos que el fondo. */
-  _telCam.fov = Math.max(5.5, FOV_CAD/Math.max(1.5,_telAum));
+  /* ===================== EL AUMENTO SE MIDE CONTRA LA PANTALLA =====================
+     El campo del visor era 90/aumento y punto: la AWM en 6x pedia 15 grados. Pero el aumento que
+     se VE no es ese, porque el aro no ocupa la pantalla entera — ocupa un disco. Un objeto adentro
+     se ve
+         (diametro del disco / alto del lienzo) x tan(fov pantalla/2) / tan(fov visor/2)
+     veces mas grande que afuera. Medido: la AWM decia 6x y se veia 2,03x; la Dragunov decia 4x y
+     se veia 1,38x. Y como el primer factor es una FRACCION menor que uno, en cuanto el aro queda
+     relativamente mas chico —otra pantalla, otra calidad, otro alto de lienzo— el numero se cae por
+     debajo de uno y por la mira se ve MAS LEJOS que alrededor. Que es justo lo que pasaba.
+     Ahora se da vuelta la cuenta: se mide el disco y se pide el campo que hace falta para que lo de
+     adentro se vea EXACTAMENTE `aum` veces mas grande que lo de afuera. Asi 6x son 6x en cualquier
+     telefono, y no puede volver a invertirse. La AWM queda en unos 5 grados de campo, que es
+     tambien lo que mide un visor de 6 aumentos de verdad. */
+  { const Hl=renderer.domElement.height||1;
+    const frac=Math.max(0.18, Math.min(1, telDiamPx()/Hl));
+    const tanPant=Math.tan(camera.fov*Math.PI/360);
+    const tanTel=frac*tanPant/Math.max(1.2,_telAum);
+    _telCam.fov=Math.max(3.2, Math.min(46, 2*Math.atan(tanTel)*180/Math.PI)); }
   _telCam.near=0.05; _telCam.far=camera.far;
   _telCam.updateProjectionMatrix();
   /* EL DESTINO SIGUE AL DISCO. Se revisa tres veces por segundo y solo se rehace si cambio de
@@ -15104,8 +15229,12 @@ function telRender(){
      el recolector de basura— prendia y apagaba la media cadencia de un cuadro al otro, y ese
      parpadeo se ve mas que el tiron que evita. Con la media movil hace falta que el aparato venga
      lento de verdad para que baje la cadencia, y cuando se recupera vuelve solo. */
+  /* MEDIA CADENCIA SOLO EN CALIDAD BAJA. Dibujar el visor un cuadro de cada dos ahorra, pero a
+     seis aumentos se VE: la imagen de adentro va a la mitad de cuadros que la de afuera y eso se
+     lee como que el aro va atrasado. Ahora que el destino dibuja la mitad de pixeles, en media y
+     alta no hace falta; en baja se mantiene, que es donde el aparato de verdad no da. */
   _telDtS += (_telDt-_telDtS)*0.15;
-  _telSalto = (_telDtS>0.021) ? (_telSalto+1) : 0;
+  _telSalto = (quality==='low' && _telDtS>0.021) ? (_telSalto+1) : 0;
   if(_telSalto%2===0){
     const ant=renderer.getRenderTarget();
     renderer.setRenderTarget(_telRT);
