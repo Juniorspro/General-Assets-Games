@@ -13,8 +13,16 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
 - [x] **Mira del sniper**: optimizada. El destino del visor ya no es un numero fijo: se mide
       cuanto ocupa el disco en pantalla y se pide eso. 448x448 -> 320x320 en telefono (49% menos
       pixeles), 128x128 en calidad baja. Commit del 2026-08-23.
-- [ ] **Armas de verdad**: buscar referencias reales y rehacer los modelos. La P90 es
-      todo menos una P90. Aplica a los snipers y al resto del arsenal.
+- [~] **Armas de verdad**: buscar referencias reales y rehacer los modelos. **P90 hecha**
+      (2026-08-23): rehecha con las medidas de FN Herstal — bullpup, cargador acostado arriba,
+      hueco del pulgar, guardamonte-aro, expulsion para abajo, manijas ambidiestras y apagallamas
+      en diagonal. Medida: 522x227x79 mm contra 505x210x55 reales.
+      **Faltan las otras 16.** Ir de a una, con referencia y medidas, y verificar con
+      `__tiro.armaMedir()` (mide el arma sola, en su marco local, en milimetros).
+- [x] **Reticulas reales** (2026-08-23): mil-dot en la AWM y PSO-1 en la Dragunov, calcadas.
+- [x] **Zoom del visor invertido** (2026-08-23): el campo del visor sale de cuanto ocupa el disco
+      en pantalla, asi que el aumento que se ve es el que dice el arma. AWM 6,00x, Dragunov 4,00x.
+- [x] **Lag del visor** (2026-08-23): la camara del visor va en el ojo, sin lerp de posicion.
 - [ ] **Bug: reaparecés sin nada**. Al salir o al morir y revivir, te quedás sin equipo.
 - [ ] **Bug: el cambio de gráficos borra a los enemigos**. Tocar los ajustes de imagen
       hace desaparecer a los bots / jugadores.

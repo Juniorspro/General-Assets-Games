@@ -2847,7 +2847,7 @@ const ARM_VEN_W=0.116, ARM_VEN_H=0.090;      // ventana de la mira reflex (compa
 /* Mira reflex abierta: montantes finos, capota, cristal ambar. La altura sale de H.mira, que es la
    MISMA que usa el apuntado y donde se planta la cruz, asi que no puede quedar desalineada: antes
    cada arma repetia el numero a mano y con eso alcanzaba para que la reticula no cayera en el centro. */
-function armaReflex(H,z0){
+function armaReflex(H,z0,radio,largo){
   /* REDONDA, NO CUADRADA. Primero fueron cuatro barritas formando un cuadrado; despues una carcasa
      rectangular con la ventana calada. Las dos se leen como un marco. Un punto rojo de verdad es un
      TUBO: un cilindro corto, con un bisel a cada punta y el cristal adentro. Eso es lo que se pide.
@@ -2858,7 +2858,11 @@ function armaReflex(H,z0){
      Y ESCONDE LOS HIERROS DEL ARMA. Con la mira puesta, el alza y el punto de mira del fusil
      quedaban adentro de la ventana. Las recetas los marcan con H.hierro y aca se apagan. */
   const N=H.M.negro, M=H.M.metal, y0=H.mira, z=z0||0.010;
-  const R=0.050, L=0.062;                       // radio util del tubo y su largo
+  /* EL TAMANO SE PUEDE PEDIR. Los cincuenta milimetros de radio son un punto rojo de tubo, que es
+     lo que llevan casi todos, pero no todos: la P90 trae el visor INTEGRADO en la carcasa y es una
+     ventanita chata — con el tubo grande el arma media 127 mm de ancho contra los 55 que mide de
+     verdad, o sea que el accesorio era mas ancho que el arma. */
+  const R=(radio||0.050), L=(largo||0.062);     // radio util del tubo y su largo
   H.tubo(R, L, 0,y0,z, N);                      // el cuerpo
   /* los dos biseles, uno por punta: aros macizos que le dan el canto grueso */
   const bisel=(zz)=>H.rev([[R,zz-0.006],[R+0.0085,zz-0.006],[R+0.0085,zz+0.006],[R,zz+0.006],[R,zz-0.006]],
@@ -3278,37 +3282,106 @@ const ARSENAL=[
     g.perf([[0.238,0.036],[0.258,0.032],[0.258,-0.024],[0.238,-0.020]], 0.042, 0,0,0, M.negro, {bisel:0.0018});
   }); }},
 
-{id:'p90', n:'P-90', d:'subfusil · cargador plano arriba · alta cadencia', cat:'sub', ret:[0.0070,0.0034,0.062],
- esc:0.95, rpm:900, mag:50, rec:1.60, dmg:16, disp:0.0016, mira:0.140, adsZ:0.375,
- boca:[0,0.006,-0.320], gR:[0,-0.086,0.010], gL:[0,-0.070,-0.075],
+{id:'p90', n:'P-90', d:'subfusil · bullpup · cargador plano arriba · alta cadencia', cat:'sub', ret:[0.0070,0.0034,0.062],
+ esc:0.95, rpm:900, mag:50, rec:1.60, dmg:16, disp:0.0016, mira:0.072, adsZ:0.355,
+ boca:[0,0.008,-0.275], gR:[0,-0.070,-0.040], gL:[0,-0.078,-0.170],
+ /* ===================== FN P90 =====================
+    Lo que habia era un subfusil generico con una caja arriba. La P90 no se parece a ningun otro
+    arma y es justamente por eso que se la reconoce de lejos, asi que esta rehecha con las medidas
+    y la disposicion de la de verdad (fnherstal.com y en.wikipedia.org/wiki/FN_P90):
+
+      505 mm de largo, 210 de alto, 55 de ancho. Aca: de z=-0,275 (la boca) a z=+0,230 (la
+      cantonera) son 505 mm clavados, y del piso del guardamonte (y=-0,112) al techo del visor
+      (y=+0,098) son 210.
+
+    Y las cinco cosas que la hacen ella y ninguna otra:
+    · ES BULLPUP: el mecanismo va DETRAS del disparador. Por eso mide medio metro llevando un cano
+      de 26 cm, y por eso el gatillo queda tan adelante.
+    · EL CARGADOR VA ARRIBA Y ACOSTADO, paralelo al cano, en polimero translucido — se ven las
+      balas adentro. Las cincuenta van de costado, apuntando a la izquierda, y una rampa en espiral
+      las gira noventa grados antes de meterlas en la recamara.
+    · LA EMPUNADURA ES UN AGUJERO. No hay puno: hay un hueco en la carcasa por donde se pasa la
+      mano. Eso es lo primero que se ve de frente.
+    · EL GUARDAMONTE ES ENORME y hace de asa delantera: la otra mano entra ENTERA adentro del aro.
+    · TIRA LOS CASQUILLOS PARA ABAJO, por un tubo detras de la empunadura, no de costado.
+
+    Todo el contorno es redondeado y sin aristas —esta pensada para no engancharse— asi que la
+    carcasa es UNA sola silueta con los dos agujeros calados de verdad, no piezas pegadas. */
  hacer:(H)=>{ const M=H.M;
-  /* CARCASA ENVOLVENTE de una pieza: el lomo plano para el cargador, la joroba del hombro atras y
-     el vientre que baja al asa delantera */
-  H.perf([[0.250,0.048],[0.240,0.060,0.150,0.058],[-0.110,0.052],[-0.126,0.030],[-0.126,-0.010],
-          [-0.090,-0.030],[0.010,-0.036],[0.030,-0.048],[0.170,-0.050],[0.244,-0.044],[0.252,-0.006]],
-         0.060, 0,0,0, M.poli, {cs:10,bisel:0.0034});
-  /* el cargador va ARRIBA y acostado, y es desmontable: es lo que se saca al recargar y lo que
-     se mira en la inspeccion. Antes eran dos cajas pegadas al cuerpo y no salia nunca. */
-  H.mag(g=>{ const b=(w,h,d,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
-      me.position.set(x,y,z); g.add(me); return me; };
-    b(0.052,0.030,0.300, 0,0.062,0.060, M.negro);
-    b(0.062,0.024,0.120, 0,0.084,0.100, M.negro);
-    b(0.046,0.014,0.290, 0,0.078,0.058, M.metal);        // la ventana por donde se ven las balas
-    for(let i=0;i<9;i++) b(0.030,0.009,0.020, 0,0.078,-0.062+i*0.030, M.laton); });
-  H.rev([[0.0000,-0.126],[0.0088,-0.132],[0.0088,-0.288],[0.0000,-0.288]], 0,0.006,0, M.metal, 16);
-  H.rev([[0.0000,-0.284],[0.0152,-0.290],[0.0152,-0.322],[0.0112,-0.322],[0.0112,-0.294],[0.0000,-0.294]],
-        0,0.006,0, M.negro, 14);
-  /* el asa delantera CERRADA, de una sola silueta con el hueco para los dedos */
-  H.perf([[-0.032,-0.028],[-0.036,-0.104],[-0.118,-0.106],[-0.118,-0.028]], 0.038, 0,0,0, M.poli,
-         {bisel:0.0026, huecos:[[[-0.044,-0.038],[-0.048,-0.092],[-0.106,-0.094],[-0.106,-0.038]]]});
-  armaReflex(H,0.030);
-  H.perf([[-0.016,-0.034],[-0.030,-0.098,-0.002,-0.140],[0.040,-0.142],[0.048,-0.116],
-          [0.032,-0.076,0.038,-0.036]], 0.040, 0,0,0, M.poli, {cs:12,bisel:0.0030});
-  H.perf([[-0.048,-0.036],[-0.052,-0.076],[0.004,-0.080],[0.004,-0.036]], 0.026, 0,0,0, M.negro,
-         {bisel:0.0016, huecos:[[[-0.040,-0.044],[-0.042,-0.070],[-0.004,-0.072],[-0.004,-0.044]]]});
-  H.cerrojo(0.020,0.020,0.040, 0.032,0.020,-0.060, M.negro, 0.065);   // manija de montaje
-  H.box(0.008,0.010,0.120, 0.030,0.020,0.010, M.negro);         // su ranura
-  H.box(0.024,0.020,0.040, 0,-0.050,0.222, M.poli); }},         // el tubo de expulsion, abajo y atras
+  /* ---- LA CARCASA, de una pieza, con el hueco del pulgar y el aro del guardamonte calados ---- */
+  H.perf([[-0.268, 0.020],[-0.180, 0.030,-0.060, 0.030],[ 0.010, 0.032],
+          [ 0.060, 0.044],[ 0.170, 0.046],[ 0.214, 0.038],
+          [ 0.230, 0.014],[ 0.230,-0.024],[ 0.206,-0.042],
+          [ 0.120,-0.050],[ 0.040,-0.054],
+          [ 0.014,-0.058],[-0.004,-0.092],[-0.030,-0.106],
+          [-0.070,-0.104],[-0.086,-0.082],[-0.090,-0.052],
+          [-0.104,-0.090],[-0.140,-0.110],[-0.200,-0.112],
+          [-0.240,-0.096],[-0.262,-0.056],[-0.268,-0.014]],
+         0.055, 0,0,0, M.poli, {cs:12, bisel:0.0038, huecos:[
+    /* el hueco del pulgar: por aca entra la mano que dispara */
+    [[-0.080,-0.084],[-0.068,-0.092,-0.040,-0.094],[-0.020,-0.084],
+     [-0.012,-0.062],[-0.020,-0.038],[-0.056,-0.030],[-0.078,-0.044]],
+    /* y el aro del guardamonte, que es donde entra la otra mano entera */
+    [[-0.112,-0.092],[-0.150,-0.100],[-0.212,-0.098],[-0.246,-0.078],
+     [-0.250,-0.040],[-0.222,-0.026],[-0.150,-0.024],[-0.118,-0.040]]]});
+  /* ---- EL CANO Y EL APAGALLAMAS ----
+     El apagallamas de la P90 esta CORTADO EN DIAGONAL: hace de freno de boca y tira los gases
+     para arriba. Es el detalle que se ve en cualquier foto de frente. */
+  H.rev([[0.0000,-0.150],[0.0092,-0.156],[0.0092,-0.252],[0.0000,-0.252]], 0,0.008,0, M.metal, 16);
+  H.rev([[0.0000,-0.248],[0.0148,-0.254],[0.0148,-0.276],[0.0104,-0.276],[0.0104,-0.258],[0.0000,-0.258]],
+        0,0.008,0, M.negro, 16);
+  { const c=H.box(0.030,0.030,0.006, 0,0.008,-0.2765, M.negro); c.rotation.x=-0.42; }  // el corte en diagonal
+  /* el tope de mano: el escaloncito de adelante, para que la mano no se vaya al cano */
+  H.perf([[-0.244,-0.020],[-0.244,-0.040],[-0.266,-0.040],[-0.266,-0.016]], 0.050, 0,0,0, M.poli, {bisel:0.0018});
+
+  /* ---- EL CARGADOR, arriba y acostado. Es la pieza que se saca al recargar. ----
+     Cuerpo translucido con las balas de costado adentro, y el pico de atras donde la rampa las
+     endereza. */
+  H.mag(g=>{
+    g.perf([[-0.232, 0.030],[-0.232, 0.056],[-0.026, 0.056],[-0.010, 0.048],[-0.010, 0.030]],
+           0.044, 0,0,0, M.negro, {bisel:0.0016});
+    /* la ventana translucida por donde se ven las balas: mas clara y angosta que el cuerpo */
+    g.perf([[-0.226, 0.034],[-0.226, 0.052],[-0.030, 0.052],[-0.030, 0.034]],
+           0.048, 0,0,0, M.metal, {bisel:0.0010});
+    /* las balas, acostadas y apuntando a la izquierda, que es como van de verdad */
+    for(let i=0;i<11;i++){ const z=-0.216+i*0.0176;
+      const b=g.cil(0.0042,0.0042,0.040, 0,0.0435,z, M.laton); b.rotation.z=Math.PI/2; }
+    /* la rampa de atras, donde el cartucho gira noventa grados */
+    g.perf([[-0.030, 0.030],[-0.030, 0.050],[-0.010, 0.044],[-0.008, 0.030]], 0.030, 0,0,0, M.negro, {bisel:0.0012});
+  });
+
+  /* ---- EL VISOR INTEGRADO. En la P90 no es un accesorio: la carcasa del punto rojo es parte del
+     arma y lleva las miras de hierro de respaldo grabadas a los costados. ---- */
+  /* la base del visor, corrida sobre el cajon */
+  H.perf([[-0.016, 0.040],[-0.016, 0.052],[ 0.104, 0.052],[ 0.112, 0.046],[ 0.104, 0.040]],
+         0.046, 0,0,0, M.poli, {bisel:0.0020});
+  /* EL VISOR INTEGRADO, chato y ancho — no un tubo pegado encima. Es el Ring Sights que trae de
+     fabrica, y va con radio propio: con el tubo generico de 50 mm el arma quedaba mas ancha que
+     larga en la parte de arriba. */
+  armaReflex(H, 0.040, 0.026, 0.070);
+  /* el techo de la carcasa del visor, con las miras de hierro de respaldo grabadas a los costados */
+  H.perf([[-0.014, 0.096],[-0.014, 0.104],[ 0.102, 0.104],[ 0.102, 0.096]], 0.050, 0,0,0, M.negro, {bisel:0.0012});
+  for(const sx of [-1,1]){
+    H.perf([[-0.012, 0.052],[-0.012, 0.100],[ 0.100, 0.100],[ 0.100, 0.052]], 0.004, sx*0.024, 0,0, M.negro, {bisel:0.0008});
+    /* la mira de hierro de respaldo: una muesca atras y un punto adelante, grabados en el costado */
+    H.perf([[ 0.086, 0.100],[ 0.086, 0.110],[ 0.094, 0.110],[ 0.094, 0.100]], 0.004, sx*0.024, 0,0, M.metal, {bisel:0.0005});
+    H.perf([[-0.008, 0.100],[-0.008, 0.108],[-0.002, 0.108],[-0.002, 0.100]], 0.004, sx*0.024, 0,0, M.metal, {bisel:0.0005}); }
+
+  /* ---- LAS MANIJAS DE MONTAJE, una de cada lado: la P90 es ambidiestra ---- */
+  H.cerrojo(0.012,0.016,0.034,  0.030, 0.020,-0.052, M.negro, 0.055);
+  H.box    (0.012,0.016,0.034, -0.030, 0.020,-0.052, M.negro);
+  for(const sx of [-1,1]) H.box(0.004,0.008,0.110, sx*0.029, 0.020,-0.010, M.negro);   // sus ranuras
+
+  /* ---- EL TUBO DE EXPULSION, para abajo y detras de la empunadura ---- */
+  H.perf([[0.020,-0.054],[0.020,-0.076],[0.056,-0.078],[0.056,-0.054]], 0.026, 0,0,0, M.negro, {bisel:0.0014});
+  /* ---- el gatillo, y el selector en la base ---- */
+  H.perf([[-0.096,-0.038],[-0.100,-0.062],[-0.086,-0.066],[-0.082,-0.040]], 0.010, 0,0,0, M.metal, {bisel:0.0008});
+  for(const sx of [-1,1]) H.cil(0.007,0.007,0.005, sx*0.028,-0.032,-0.086, M.metal);
+  /* ---- las anillas de la correa: una adelante abajo y otra atras arriba ---- */
+  for(const sx of [-1,1]){ const a=H.cil(0.0075,0.0075,0.004, sx*0.026,-0.030,-0.236, M.metal); a.rotation.z=Math.PI/2; }
+  H.box(0.010,0.014,0.006, 0, 0.040, 0.196, M.metal);
+  /* ---- la cantonera de goma ---- */
+  H.perf([[0.222, 0.030],[0.234, 0.014],[0.234,-0.020],[0.222,-0.036]], 0.052, 0,0,0, M.negro, {bisel:0.0022}); }},
 
 /* ---------------- PISTOLAS ---------------- */
 {id:'g17', n:'G-17', d:'pistola · 9 mm · semiautomática', cat:'pistola', ret:[0.0135,0.0032,0.070], semi:true,
@@ -12598,6 +12671,32 @@ try{ window.__tiro={
     return out; },
   /* cuantas piezas tiene el arma equipada y cuanto mide: para ver de una que una receta armo lo
      que decia, sin tener que buscarla en pantalla */
+  /* LAS MEDIDAS DEL ARMA SOLA, EN SU PROPIO MARCO. Dos trampas: armaMalla mide gunCuerpo entero y
+     ahi adentro estan las MANOS —por eso daba 35 cm de ancho para un arma de 5—, y Box3 mide en
+     coordenadas del MUNDO, asi que el resultado dependia de para donde estuviera mirando el
+     jugador. Aca se toman solo las mallas pintadas con los materiales del arsenal y se las lleva al
+     marco local del arma antes de medirlas. */
+  armaMedir:()=>{
+    const mats=new Set(Object.values(AKMAT));
+    gunCuerpo.updateMatrixWorld(true);
+    const inv=new THREE.Matrix4().copy(gunCuerpo.matrixWorld).invert();
+    const bb=new THREE.Box3(); bb.makeEmpty();
+    const tmp=new THREE.Matrix4(), caja=new THREE.Box3();
+    let n=0, tri=0;
+    gunCuerpo.traverse(o=>{ if(!o.isMesh||!o.geometry) return;
+      const ms=Array.isArray(o.material)? o.material : [o.material];
+      if(!ms.some(m=>mats.has(m))) return;
+      const g=o.geometry; if(!g.boundingBox) g.computeBoundingBox();
+      n++; tri+=(g.index? g.index.count : g.attributes.position.count)/3;
+      caja.copy(g.boundingBox).applyMatrix4(tmp.multiplyMatrices(inv, o.matrixWorld));
+      bb.union(caja); });
+    if(!n) return null;
+    const t=bb.getSize(new THREE.Vector3());
+    return { arma:ARMA().id, mallas:n, tri:Math.round(tri),
+             largoMm:Math.round(t.z*1000), altoMm:Math.round(t.y*1000), anchoMm:Math.round(t.x*1000),
+             z:[+bb.min.z.toFixed(3),+bb.max.z.toFixed(3)],
+             y:[+bb.min.y.toFixed(3),+bb.max.y.toFixed(3)],
+             x:[+bb.min.x.toFixed(3),+bb.max.x.toFixed(3)] }; },
   armaMalla:()=>{ let n=0,tri=0,nan=false; const bb=new THREE.Box3();
     gunCuerpo.updateMatrixWorld(true);
     gunCuerpo.traverse(o=>{ if(!o.isMesh||!o.geometry)return; n++;
