@@ -78,8 +78,36 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
 - [x] **PBR en el BR** (2026-08-23): los 26 materiales del valle mas el suelo derivan rugosidad,
       normales, oclusion y metal de su propio lienzo de color, igual que los mapas de la arena.
       Todo en segundo plano y autoregulado por costo medido.
-- [ ] **Mas texturas en el BR**: el Valle Ceniza necesita bastantes mas VARIEDAD de texturas
-      (no mas mapas por material, eso ya esta: mas materiales distintos).
+- [x] **EL BR DEJA DE SER PROCEDURAL** (2026-08-23), preguntado por el usuario: "veo que el br tiene
+      texturas procedurales". Tenia razon y era un pendiente abierto de verdad. Los 26 materiales del
+      valle se dibujaban con lienzos 2D; el PBR de antes derivaba rugosidad, normales y oclusion DE
+      ESE LIENZO —mapas de verdad, color base dibujado—, y eso se ve.
+      HALLAZGO: en el repo ya habia 42 texturas de foto hechas con Higgsfield que NADIE usaba. La
+      tuberia (`armTex`/`hfArma`) existia y estaba enchufada a 3 materiales, los tres del arma.
+      Ahora `ALC_HF` mapea 24 materiales del valle a foto, en diferido igual que las del arma: el
+      mapa arranca con los lienzos y las fotos entran cuando llegan, asi que sin red se juega igual.
+      Quedan a proposito en lienzo `ventana`, `vidrio` y `hoja`: su lienzo dibuja la cuadricula del
+      marco, que es geometria disfrazada de textura, y una foto no la trae.
+      Se generaron las 6 que faltaban (ladrillo, ladrillorojo, ceniza, grava, quemado, rejilla).
+      DOS COSAS QUE HAY QUE HACER Y NO SON OBVIAS:
+      · LA ESCALA SE MIDE. Un mosaico del valle son 2,2 m y el lienzo del ladrillo dibuja 32 hiladas
+        de 6,9 cm. La foto tiene 20 hiladas (medido con el perfil de filas de la imagen), de ahi sale
+        repeat 1,60; el rojo tiene 16,8 y va en 1,90. Sin esta cuenta las paredes salen de casa de
+        munecas o de gigante.
+      · EL TINTE SE CALCULA. Poniendo el color en blanco manda la foto y el valle se puso NARANJA
+        entero: la teja promedia #c0815f y el techo estaba autorizado en #9c5541. El tinte es la
+        division canal por canal EN LINEAL entre el color del material y el promedio de la foto.
+        Donde la foto es mas oscura que el color, el tinte se topa en blanco y el material queda mas
+        oscuro que antes (el ladrillo rojo).
+      Medido y asentado: 24 de 24 materiales en foto, 23 con normal de archivo, 26/26 con rugosidad.
+      Memoria de texturas del valle: 21,5 MB procedural -> 33,1 MB en calidad baja (sin normales de
+      archivo, que son 24 MB) -> 60,4 MB en media/alta. Es un costo real y por eso esta escalonado.
+      De paso se solto el lienzo viejo de la placa al reemplazarlo, que se quedaba ocupando lugar sin
+      que nadie lo dibujara.
+      OJO: `alcPBRUno` pedia `getContext`, o sea un lienzo, asi que con textura de foto se rendia y
+      el material se quedaba sin rugosidad. Ahora pide que tenga ancho y sirve para los dos.
+- [ ] **Mas VARIEDAD de materiales en el BR**: distinto de lo de arriba. Ya no son procedurales,
+      pero siguen siendo 26 materiales para todo el mapa; hacen falta mas materiales DISTINTOS.
 - [ ] **Cinco mapas distintos** — EL PEDIDO CONCRETO (2026-08-23): que sean **islas**, un
       **lugar de trafico con contenedores** (tipo Shipment) y **Nuketown**. Con referencias.
       HALLAZGO IMPORTANTE de por que los cinco se sienten iguales: `buildArena()` envuelve

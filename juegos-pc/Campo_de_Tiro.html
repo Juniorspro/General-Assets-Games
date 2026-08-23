@@ -2796,7 +2796,7 @@ let gunCulata=null; // la culata: en 1ª persona está detrás del pómulo y só
 // estaba a 0,629 m: 21 cm fuera de alcance, y ningún torso lo salva (haría falta blandear el pecho 70°).
 /* Texturas del arma (generadas con Higgsfield). Se cargan solas y en diferido: hasta que llegan,
    el fusil se ve con sus colores planos, así que sin red igual se juega. */
-const ARM_TEX='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@faa8257/assets/fp/tex/';
+const ARM_TEX='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@3108fae/assets/fp/tex/';
 const _armSrc={}, _armCola={}, _armLd=new THREE.ImageLoader();
 const ARM_ANISO=Math.min(8, renderer.capabilities.getMaxAnisotropy()||1);
 function _armHacer(n,rx,ry,esp){ const t=new THREE.Texture(); t.source=_armSrc[n];
@@ -8499,6 +8499,8 @@ function alcMats(){ if(ALC_M.hormigon)return ALC_M;
   };
   /* y recien aca los cuatro mapas que faltaban: alcPBR necesita los materiales ya creados */
   try{ alcPBR(); }catch(e){ console.warn('pbr valle',e); }
+  /* y las fotos, que entran cuando lleguen */
+  try{ alcHF(); }catch(e){ console.warn('fotos valle',e); }
   return ALC_M; }
 /* ===================== EL VALLE, EN PBR DE VERDAD =====================
    Los cinco mapas de enfrentamiento tienen material completo —color, normales, rugosidad, oclusion
@@ -8551,7 +8553,11 @@ function alcMini(c, max){
   return c2;
 }
 function alcPBRUno(mat, r, completo){
-  const t=mat.map; if(!t||!t.image||!t.image.getContext) return false;
+  /* SIRVE IGUAL PARA UN LIENZO Y PARA UNA FOTO. El guardia pedia getContext, o sea un lienzo, asi
+     que cuando el material pasaba a textura de foto esto se rendia y el material se quedaba sin
+     rugosidad ni oclusion — justo el material que MAS los aprovecha. alcMini() ya sabe dibujar
+     cualquiera de los dos en un lienzo chico, asi que alcanza con pedir algo que tenga ancho. */
+  const t=mat.map; if(!t||!t.image||!(t.image.width>0)) return false;
   /* RESOLUCION SEGUN LO QUE APORTA CADA MAPA. El color va a 512 porque ahi vive el detalle que se
      mira. Los otros tres no: una normal, una rugosidad y una oclusion son informacion de BAJA
      frecuencia por definicion —bultos, no bordes— y a 256 y 128 no se distinguen del original,
@@ -8568,10 +8574,15 @@ function alcPBRUno(mat, r, completo){
     if(!completo){
       /* LA RUGOSIDAD PRIMERO, que es la que mas cambia por lo que cuesta: sin ella la junta de
          cemento y el bloque brillan igual y todo se lee como plastico pintado. */
+      if(mat.roughnessMap && mat.roughnessMap.dispose) mat.roughnessMap.dispose();
       mat.roughnessMap=igual(areMapaGris(c, r[1], r[2], true, false)); mat.roughness=1;
     } else {
-      mat.normalMap=igual(areNormal(c, r[0]));
-      mat.normalScale.set(0.85,0.85);
+      /* si el material ya tiene normal DE ARCHIVO no se la pisa: una normal derivada del color
+         adivina el relieve a partir del brillo, y una hecha aparte lo sabe. */
+      if(!mat.userData.nrmPropia){
+        mat.normalMap=igual(areNormal(c, r[0]));
+        mat.normalScale.set(0.85,0.85);
+      }
       /* la oclusion va en el canal 0: por omision three la busca en uv2, que estas mallas no tienen */
       const cg=alcMini(t.image, 128);
       mat.aoMap=igual(areMapaGris(cg, 0.62, 1.0, false, true));
@@ -8643,6 +8654,115 @@ function alcPBRSuelo(){
       if(quality!=='low') setTimeout(()=>{ try{ alcPBRUno(alcSuelo.material, [1.6,0.90,1.00,0], true); }catch(e){} }, 0);
     }catch(e){} }, 0);
     return true; }catch(e){ return false; }
+}
+/* ===================== EL VALLE PASA A TEXTURAS DE FOTO =====================
+   Los veintiseis materiales del valle se dibujaban con lienzos 2D. El PBR que se le puso antes
+   deriva rugosidad, normales y oclusion DE ESE LIENZO: son mapas de verdad, pero el color base
+   seguia siendo dibujado, y eso se ve. En el repo ya habia cuarenta y dos texturas de foto hechas
+   con Higgsfield que nadie estaba usando —solo tres materiales del arma las tocaban— y las seis que
+   faltaban (los dos ladrillos, ceniza, grava, quemado y rejilla) se generaron aparte.
+
+   VA EN DIFERIDO, igual que las del arma: el mapa arranca con los lienzos de siempre y las fotos
+   entran cuando llegan. Sin red se juega igual, y entrar al mapa no espera una descarga.
+
+   LA ESCALA SE MIDE, no se elige. Un mosaico del valle son 2,2 m —el lienzo del ladrillo dibuja
+   32 hiladas de 6,9 cm, que es el numero que hay que igualar— y la foto del ladrillo tostado tiene
+   20 hiladas y la del rojo 16,8, medidas con el perfil de filas de la propia imagen. De ahi salen
+   los 1,60 y 1,90: con eso la hilada queda en 6,9 cm y no en 11. Sin esta cuenta las paredes salen
+   de casa de munecas o de gigante, que es el error tipico de poner una foto y confiar. */
+/* EL TINTE DE CADA MATERIAL SE CALCULA, no se elige. Poniendo el color en blanco manda la foto, y
+   el valle se puso naranja entero: la teja de la foto promedia #c0815f y el techo estaba autorizado
+   en #9c5541, o sea que la foto es mucho mas clara y mas saturada. El tinte es la division
+   canal por canal EN LINEAL entre el color que tenia el material y el promedio de la foto, asi que
+   la foto queda con el color de la paleta y aporta el detalle y la variacion, que es lo que se le
+   pedia. Donde la foto es MAS oscura que el color, el tinte se topa en blanco: multiplicar no puede
+   aclarar, y ahi el material queda mas oscuro que antes (el ladrillo rojo, por ejemplo). */
+const ALC_HF={
+  hormigon:      ['hormigon', 1.0, 0xffffff],
+  hormigonSucio: ['hormigon', 1.0, 0xf5f5ed],
+  blanco:        ['estuco', 1.0, 0xffffff],
+  blancoSucio:   ['estuco', 1.0, 0xffffff],
+  ladrillo:      ['ladrillo', 1.60, 0xffe7d9],
+  ladrilloRojo:  ['ladrillorojo', 1.90, 0xffffff],
+  techoRojo:     ['teja', 1.0, 0xd0acb6],
+  techoChapa:    ['chapa', 1.0, 0xffffff],
+  techoAlquitran:['asfalto', 1.0, 0x969ea6],
+  metal:         ['acero', 1.0, 0xd1d9e0],
+  oxido:         ['oxido', 1.0, 0xd6cd97],
+  madera:        ['madera', 1.5, 0xd7d1ac],
+  maderaVieja:   ['madera', 1.5, 0xa9b3a4],
+  roca:          ['roca', 1.0, 0xf2ede1],
+  tierra:        ['tierra', 1.0, 0xffffff],
+  pasto:         ['pasto', 1.0, 0xffffff],
+  arena:         ['arena', 1.0, 0xf9ffff],
+  asfalto:       ['asfalto', 1.0, 0xc2c6cc],
+  ceniza:        ['ceniza', 1.0, 0xc5b6a6],
+  cenizaClara:   ['ceniza', 1.0, 0xf6e3cd],
+  quemado:       ['quemado', 2.0, 0xf7ebe0],
+  grava:         ['grava', 1.0, 0xffffff],
+  rejilla:       ['rejilla', 1.5, 0xffffff],
+  faro:          ['estuco', 1.0, 0xffffff]
+  /* ventana y vidrio NO van: su lienzo dibuja la cuadricula del marco, que es geometria disfrazada
+     de textura, y una foto de vidrio no la trae. */
+};
+/* cuales tienen normal hecha aparte, en archivo. 'acero' no la tiene y se la deriva como antes. */
+const ALC_HF_N=new Set(['hormigon','estuco','teja','chapa','asfalto','oxido','madera','roca',
+  'tierra','pasto','arena','ladrillo','ladrillorojo','ceniza','grava','quemado','rejilla']);
+let _alcHfHecho=false, _alcHfN=0, _alcHfCola=[], _alcHfTurnoVivo=false;
+/* cuando llega una foto, la rugosidad y la oclusion hay que volver a sacarlas DE LA FOTO: las que
+   habia salieron del lienzo y describen otra superficie. De a una por turno, como el resto. */
+function alcHFTurno(){
+  _alcHfTurnoVivo=false;
+  if(!_alcHfCola.length) return;
+  const k=_alcHfCola.shift(), m=ALC_M[k], r=ALC_PBR[k];
+  if(m && r){ try{ alcPBRUno(m, r, false); if(quality!=='low') alcPBRUno(m, r, true); }catch(e){} }
+  if(_alcHfCola.length && !_alcHfTurnoVivo){ _alcHfTurnoVivo=true; setTimeout(alcHFTurno, 0); }
+}
+function alcHFEncolar(k){
+  if(_alcHfCola.indexOf(k)<0) _alcHfCola.push(k);
+  if(!_alcHfTurnoVivo){ _alcHfTurnoVivo=true; setTimeout(alcHFTurno, 0); }
+}
+function alcHF(){
+  if(_alcHfHecho) return _alcHfN;
+  /* interruptor de prueba: para medir el mismo mapa con y sin fotos y comparar de verdad */
+  try{ if(typeof window!=='undefined' && window.__sinFotos){ _alcHfHecho=true; return 0; } }catch(e){}
+  _alcHfHecho=true;
+  alcMats();
+  for(const k in ALC_HF){
+    const r=ALC_HF[k]; if(!r) continue;
+    const m=ALC_M[k]; if(!m) continue;
+    const nom=r[0], rep=r[1], tinte=r[2];
+    armTex(nom, rep, rep, t=>{
+      /* se guarda el lienzo y el color de antes: sirve para volver atras y comparar de verdad
+         (__tiro.fotos(false)), que es la unica forma de decir si una foto mejoro algo o no */
+      if(!m.userData.mapLienzo){ m.userData.mapLienzo=m.map;
+        m.userData.colLienzo=m.color? m.color.getHex() : 0xffffff; }
+      m.map=t; m.userData.mapFoto=t;
+      /* el color pasa a blanco (o al tinte que hace la variante): la foto YA trae el color, y
+         multiplicarla por el color viejo del material la ensucia dos veces. */
+      if(m.color) m.color.setHex(tinte==null? 0xffffff : tinte);
+      m.needsUpdate=true; _alcHfN++;
+      /* Y SE SUELTA EL LIENZO DE LA PLACA. El lienzo viejo sigue vivo en la cache de _alcTx, y si no
+         se lo suelta se queda ocupando memoria de video para siempre sin que nadie lo dibuje:
+         medido, veintiocho megas de nada. dispose() libera la copia de la placa pero NO rompe la
+         textura — si algo vuelve a usarla, three la sube de nuevo. */
+      try{ const v=m.userData.mapLienzo;
+        if(v && v!==t && v.dispose) v.dispose();
+        for(const q of ['roughnessMap','aoMap','metalnessMap']){
+          const d=m.userData['pbr_'+q]; if(d && d.dispose) d.dispose(); }
+      }catch(e){}
+      if(ALC_HF_N.has(nom) && quality!=='low'){
+        /* en calidad baja no van las normales de archivo: son veinticuatro megas mas, y el aparato
+           que no da prefiere el color bien y el relieve derivado a 128, que ya lo hace alcPBRUno */
+        armTex(nom+'_n', rep, rep, tn=>{
+          m.normalMap=tn; m.normalScale.set(0.9,0.9);
+          m.userData.nrmPropia=true; m.needsUpdate=true;
+        }, THREE.NoColorSpace);
+      }
+      alcHFEncolar(k);
+    });
+  }
+  return _alcHfN;
 }
 function alcMat(n){ alcMats(); return ALC_M[n]||ALC_M.hormigon; }
 
@@ -13146,6 +13266,66 @@ try{ window.__tiro={
       frenteModelo:+bb.min.z.toFixed(3), colaModelo:+bb.max.z.toFixed(3) }; },
   /* QUE MAPAS TIENE CADA MATERIAL DEL VALLE, y cuanto costo derivarlos. El equivalente de
      __tiro.pbr() pero para el battle royale, que es el que no los tenia. */
+  /* vuelve al lienzo procedural, o a la foto. Para comparar el antes y el despues en el MISMO sitio
+     y con la MISMA luz, que es la unica comparacion que dice algo. */
+  fotos:(on)=>{ try{ alcMats(); }catch(e){}
+    let n=0;
+    for(const k in ALC_HF){ const m=ALC_M[k]; if(!m||!m.userData.mapLienzo) continue;
+      if(on===false){ m.map=m.userData.mapLienzo;
+        if(m.color) m.color.setHex(m.userData.colLienzo);
+        m.userData.nrmGuardada=m.normalMap; m.normalMap=null; }
+      else { m.map=m.userData.mapFoto||m.map;
+        const t=ALC_HF[k][2]; if(m.color) m.color.setHex(t==null?0xffffff:t);
+        if(m.userData.nrmGuardada) m.normalMap=m.userData.nrmGuardada; }
+      m.needsUpdate=true; n++; }
+    return { cambiados:n, ahora:(on===false?'lienzo':'foto') }; },
+  /* lo que ocupan las texturas en la placa, y cuanto tardo entrar al mapa */
+  memoria:()=>{ const I=renderer.info;
+    let bytes=0, n=0, det={};
+    /* SE CUENTA POR IMAGEN, NO POR TEXTURA. three.js sube a la placa una vez por Source, no una vez
+       por Texture: hormigon lo usan dos materiales, estuco tres, madera, asfalto y ceniza dos cada
+       uno, y todas esas comparten la misma imagen. Contando por textura daba 78,8 MB, que es el
+       numero que asusta y no el que ocupa. */
+    const vistos=new Set();
+    const contar=(t,quien)=>{ if(!t||!t.image) return;
+      const id=(t.source&&t.source.uuid)||t.image.src||t.uuid;
+      if(vistos.has(id)) return; vistos.add(id);
+      const w=t.image.width||0, h=t.image.height||0;
+      /* 4 bytes por texel y un tercio mas por los mipmaps */
+      const b=w*h*4*1.34; bytes+=b; n++;
+      det[quien]=(det[quien]||0)+b; };
+    try{ for(const k in ALC_M){ const m=ALC_M[k]; if(!m) continue;
+      contar(m.map,'valle'); contar(m.normalMap,'valle'); contar(m.roughnessMap,'valle');
+      contar(m.aoMap,'valle'); contar(m.metalnessMap,'valle'); } }catch(e){}
+    return { texturasGPU:I.memory.textures, geometrias:I.memory.geometries,
+             valleMB:+(bytes/1048576).toFixed(1), valleTexturas:n,
+             llamadas:I.render.calls }; },
+  /* el estado del cargador, SIN dispararlo: para saber si arranco solo en la entrada al mapa */
+  fotosEstado:()=>({ arranco:_alcHfHecho, cargadas:_alcHfN, colaPBR:_alcHfCola.length,
+                     base:ARM_TEX, enCache:Object.keys(_armSrc).length,
+                     esperando:Object.keys(_armCola).filter(k=>_armCola[k].length).length }),
+  /* cuantos materiales del valle quedaron con textura de FOTO y cuantos siguen con lienzo */
+  fotosValle:()=>{ try{ alcMats(); alcHF(); }catch(e){}
+    const foto=[], lienzo=[], sinRug=[], conNrm=[];
+    for(const k in ALC_M){ const m=ALC_M[k];
+      if(!m || !m.map || !m.map.image) continue;
+      const esFoto = !m.map.image.getContext;   // un lienzo tiene getContext, una foto no
+      (esFoto? foto : lienzo).push(k);
+      if(!m.roughnessMap) sinRug.push(k);
+      if(m.normalMap && m.userData.nrmPropia) conNrm.push(k);
+    }
+    return { foto:foto.length, lienzo:lienzo.length, pedidos:Object.keys(ALC_HF).length,
+             cargadas:_alcHfN, colaPBR:_alcHfCola.length,
+             normalDeArchivo:conNrm.length, sinRugosidad:sinRug,
+             siguenLienzo:lienzo }; },
+  /* la escala de verdad de un material: cuantos centimetros mide un mosaico en el mundo */
+  escalaValle:(k)=>{ try{ alcMats(); }catch(e){}
+    const m=ALC_M[k]; if(!m||!m.map) return null;
+    return { rep:[m.map.repeat.x, m.map.repeat.y],
+             lado:m.map.image? m.map.image.width : null,
+             esFoto: !!(m.map.image && !m.map.image.getContext),
+             /* un mosaico del valle son 2,2 m; con repeat r entran r mosaicos, o sea 220/r cm */
+             mosaicoCm:+(220/(m.map.repeat.x||1)).toFixed(1) }; },
   pbrValle:()=>{ try{ alcMats(); }catch(e){}
     const q={}; let conNrm=0, conRug=0, conAo=0, conMet=0, total=0;
     for(const k in ALC_PBR){ const m=ALC_M[k]; if(!m) continue; total++;
