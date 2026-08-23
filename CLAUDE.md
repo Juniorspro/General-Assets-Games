@@ -10,7 +10,9 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 
 Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
 
-- [ ] **Mira del sniper negro**: optimizarla (rinde mal / se ve mal).
+- [x] **Mira del sniper**: optimizada. El destino del visor ya no es un numero fijo: se mide
+      cuanto ocupa el disco en pantalla y se pide eso. 448x448 -> 320x320 en telefono (49% menos
+      pixeles), 128x128 en calidad baja. Commit del 2026-08-23.
 - [ ] **Armas de verdad**: buscar referencias reales y rehacer los modelos. La P90 es
       todo menos una P90. Aplica a los snipers y al resto del arsenal.
 - [ ] **Bug: reaparecés sin nada**. Al salir o al morir y revivir, te quedás sin equipo.

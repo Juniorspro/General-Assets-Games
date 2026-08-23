@@ -11350,12 +11350,47 @@ try{ window.__tiro={
       bright:GFX.bright?[GFX.bright.width,GFX.bright.height]:null,
       llamadas:inf.render.calls, tris:inf.render.triangles, texturas:inf.memory.textures }; },
   gfxSet:(k,v)=>{ cfgSet(k,v); cfgAplicar(); return __tiro.gfx(); },
-  gfxMed:(n)=>{ n=n||60; const c=window.__plantaCam||camera;
-    gfxRender(c); const t0=performance.now();
-    for(let i=0;i<n;i++) gfxRender(c);
-    const ms=(performance.now()-t0)/n;
-    return { ms:+ms.toFixed(2), fps:Math.round(1000/Math.max(0.01,ms)), preset:CFG.gPreset,
-      rt:GFX.rt?GFX.rt.width+'x'+GFX.rt.height:'pantalla', llamadas:renderer.info.render.calls }; },
+  /* CUANTO CUESTA EL VISOR. renderer.info se pone en cero en CADA render, asi que no hay que
+     restar: se hace una pasada y se lee. Se cuentan llamadas de dibujo y triangulos, que es lo que
+     se paga en un telefono — el reloj de CPU con swiftshader no mide la GPU. Y hay que poner
+     _telSalto en cero antes de cada medida: si no, la media cadencia saltea una llamada de cada
+     dos y la mitad de las mediciones salen vacias. */
+  /* QUE TAMANO OCUPA EL DISCO EN PANTALLA. Es el numero que decide la resolucion del destino:
+     dibujar 448x448 para un disco de 200 pixeles es tirar tres cuartos del trabajo a la basura. */
+  visorDisco:()=>{ if(!_telLente) return null;
+    camera.updateMatrixWorld(); _telLente.updateMatrixWorld();
+    const c=new THREE.Vector3(); _telLente.getWorldPosition(c);
+    const r=_telLente.geometry.parameters.radius;
+    const der=new THREE.Vector3(1,0,0).applyQuaternion(camera.quaternion).multiplyScalar(r);
+    const a=c.clone().sub(der).project(camera), b=c.clone().add(der).project(camera);
+    const W=renderer.domElement.width, H=renderer.domElement.height;
+    const px=Math.abs(b.x-a.x)/2*W, py=Math.abs(b.y-a.y)/2*H;
+    return { diamPx:+Math.round(Math.hypot(px,py)*2), lienzo:[W,H],
+             rtActual:_telRT?_telRT.width:null, radio:r,
+             sobraVeces:_telRT? +( _telRT.width/Math.max(1,Math.hypot(px,py)*2) ).toFixed(2):null }; },
+  calidad:(q)=>{ if(q) applyQuality(q); return quality; },
+  /* forzar UNA remedida del destino del visor: la histeresis normal tarda un tercio de segundo y
+     en el banco cada pasada de escena por software cuesta segundos */
+  visorRemedir:()=>{ const d=_telDt; _telDt=0.016; _telSalto=0; _telLadoT=99; telRender(); _telDt=d;
+    return { diam:+telDiamPx().toFixed(0), rt:_telRT?_telRT.width:null, ideal:telLadoIdeal(),
+             techo:teleTecho(), calidad:quality, on:_teleOn,
+             lienzo:[renderer.domElement.width, renderer.domElement.height] }; },
+  visorMed:()=>{ const I=renderer.info;
+    const leer=()=>({ llamadas:I.render.calls, tris:I.render.triangles });
+    /* _telDt manda: telRender incrementa _telSalto ANTES de mirarlo, asi que poniendolo en cero
+       la pasada se saltea. Se fija un dt holgado para que la media cadencia no se meta. */
+    const pasada=()=>{ const d=_telDt; _telDt=0.016; _telSalto=0; telRender(); _telDt=d; return leer(); };
+    const au=renderer.shadowMap.autoUpdate, sm=renderer.shadowMap.enabled;
+    const conSombras=pasada();
+    renderer.shadowMap.autoUpdate=false; const sinSombras=pasada();
+    renderer.shadowMap.autoUpdate=au;
+    renderer.render(scene,camera); const cuadro=leer();
+    return { visor:conSombras, visorSinSombras:sinSombras, cuadro:cuadro, on:_teleOn,
+             ideal:_telIdeal, cambios:_telResN, diam:+telDiamPx().toFixed(0), reloj:+_telLadoT.toFixed(2),
+             sombras:sm, rt:_telRT?[_telRT.width,_telRT.height]:null,
+             fovVisor:_telCam?+_telCam.fov.toFixed(1):null, calidad:quality,
+             pctLlamadas:+(100*conSombras.llamadas/Math.max(1,cuadro.llamadas)).toFixed(0),
+             pctTris:+(100*conSombras.tris/Math.max(1,cuadro.tris)).toFixed(0) }; },
   /* LOS MATERIALES DEL MAPA: que mapas tiene cada uno (color, normal, rugosidad, oclusion, metal) */
   pbr:()=>{ const q={};
     for(const k in ARE_M){ const m=ARE_M[k];
@@ -14618,8 +14653,11 @@ function update(dt){
 const QUAL={ low:{pr:1.0,shadow:0,adapt:false,scale:0.5,far:320}, med:{pr:1.5,shadow:1024,adapt:true,far:320}, high:{pr:2.0,shadow:2048,adapt:true,far:320} };
 let quality='med';
 function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
-  /* el destino del visor se rehace con la calidad nueva: si no, queda con la resolucion vieja */
-  try{ if(_telRT && _telRT.width!==teleRes()){ _telRT.setSize(teleRes(),teleRes()); } }catch(e){}
+  /* EL VISOR NO SE REDIMENSIONA ACA, SE MANDA A REMEDIR. Cambiar la calidad mueve el TECHO de
+     resolucion del visor, no su tamano: el tamano sale de cuanto ocupa el disco en pantalla y lo
+     resuelve telRender. Poniendolo a mano aca —que es lo que hacia— se pisaba la medida y el
+     destino volvia al techo tres veces por segundo, para siempre. */
+  try{ _telLadoT=99; }catch(e){}
   prBase=Math.max(0.45, Math.min(devicePixelRatio, Q.pr, devicePixelRatio*(Q.scale||1)));   // BAJO = 50% de la resolución nativa
   prDyn=1; aplicarPR();
   camera.far=Math.max(Q.far||1200, _mundoFar||0); camera.updateProjectionMatrix();
@@ -14883,7 +14921,7 @@ function gfxAplicar(){
   /* la densidad de particulas y de pasto, y hasta donde se ven las manos del otro */
   try{ PART_DENS = Math.max(0, Math.min(1.5, n('gPart',100)/100)); }catch(e){}
   try{ LOD_MANOS = Math.max(4, Math.min(40, n('gLod',100)/100*14)); }catch(e){}
-  try{ if(typeof _telRT!=='undefined' && _telRT && _telRT.width!==teleRes()) _telRT.setSize(teleRes(),teleRes()); }catch(e){}
+  try{ _telLadoT=99; }catch(e){}   // idem: el ajuste de graficos manda a remedir, no fija el tamano
   /* la calidad de texturas: si cambio, se rehacen los cuatro mapas de cada material */
   try{ const q=CFG.gTex||'alta';
     if(gfxAplicar._tex!==undefined && gfxAplicar._tex!==q) areMatRehacer();
@@ -14906,12 +14944,42 @@ function gfxAplicar(){
 /* LA RESOLUCION DEL VISOR, SEGUN LA CALIDAD. Estaba clavada en 512 y es una PASADA ENTERA de la
    escena por cuadro: con el jugador, siete bots y el mapa, apuntar con francotirador duplicaba el
    trabajo del cuadro y en un telefono se sentia el tiron. Ahora sale de la calidad elegida. */
-function teleRes(){ return quality==='low'? 320 : (quality==='high'? 576 : 448); }
-const TELE_RES=448;
+/* EL TECHO POR CALIDAD. Ya no es LA resolucion: es el maximo que se le permite pedir. */
+function teleTecho(){ return quality==='low'? 256 : (quality==='high'? 512 : 384); }
 let _telRT=null, _telCam=null, _telLente=null, _telRet=null, _telAum=4;
+/* ===================== EL DESTINO SE MIDE, NO SE ADIVINA =====================
+   Estaba clavado en 448x448 y eso son 200.704 pixeles por cuadro. Medido en el valle a 900x420, el
+   disco de la lente ocupa 235 pixeles de diametro en pantalla: 43.373 pixeles de area. O sea que se
+   dibujaban CUATRO VECES Y MEDIA los pixeles que se llegan a ver — y no es un dibujo cualquiera,
+   es una pasada ENTERA de escena, la cosa mas cara del cuadro despues del cuadro mismo (medido:
+   187 llamadas de dibujo y 580.888 triangulos, contra 214 y 585.676 del cuadro principal; apuntar
+   con francotirador casi duplicaba el trabajo).
+   Ahora se proyecta el disco a pantalla, se pide ese tamano con un cuarto de sobremuestreo —para
+   que a seis aumentos no se vea blando— y se redondea a escalones de 64. Como el disco crece
+   mientras levantas el arma, durante la subida se pide poco y solo al final se pide todo. */
+const _telDP=new THREE.Vector3(), _telDV=new THREE.Vector3(),
+      _telPA=new THREE.Vector3(), _telPB=new THREE.Vector3();
+let _telLadoT=0, _telResN=0, _telIdeal=0;
+function telDiamPx(){
+  if(!_telLente) return 0;
+  const r=(_telLente.geometry.parameters&&_telLente.geometry.parameters.radius)||0.0288;
+  _telLente.getWorldPosition(_telDP);
+  _telDV.set(1,0,0).applyQuaternion(camera.quaternion).multiplyScalar(r);
+  _telPA.copy(_telDP).sub(_telDV).project(camera);
+  _telPB.copy(_telDP).add(_telDV).project(camera);
+  const W=renderer.domElement.width, H=renderer.domElement.height;
+  const dx=(_telPB.x-_telPA.x)/2*W, dy=(_telPB.y-_telPA.y)/2*H;
+  const d=Math.hypot(dx,dy)*2;
+  return isFinite(d)? d : 0;
+}
+function telLadoIdeal(){
+  const d=telDiamPx();
+  if(!(d>1)) return 192;
+  return Math.max(128, Math.min(teleTecho(), Math.round(d*1.25/64)*64));
+}
 function telRT(){
   if(_telRT) return _telRT;
-  _telRT=new THREE.WebGLRenderTarget(teleRes(),teleRes(),{ minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter });
+  _telRT=new THREE.WebGLRenderTarget(teleTecho(),teleTecho(),{ minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, depthBuffer:true, stencilBuffer:false });
   _telRT.texture.colorSpace=THREE.SRGBColorSpace;
   _telCam=new THREE.PerspectiveCamera(12,1,0.05,700);
   return _telRT;
@@ -14968,11 +15036,15 @@ function teleTick(){
   if(_telRet) _telRet.visible=q;
   if(gunCruz) gunCruz.visible=!q;          // el punto rojo no va cuando hay mira telescopica
   if(q===_teleOn) return; _teleOn=q;
+  /* AL ABRIR LA MIRA, EL DESTINO SE MIDE YA. Esperar el tercio de segundo de la histeresis
+     significaba levantar el arma y dibujar veinte cuadros al tamano de la vez anterior — que si
+     venias de girar el telefono o de otra arma, es el equivocado. */
+  if(q) _telLadoT=99;
   document.body.classList.toggle('tele', q);
 }
 /* la pasada extra: va JUSTO ANTES del render principal */
 const _telP=new THREE.Vector3(), _telQ=new THREE.Quaternion();
-let _telPS=null, _telDt=0.016, _telSalto=0;
+let _telPS=null, _telDt=0.016, _telSalto=0, _telDtS=0.016;
 function telRender(){
   /* el estado se decide ACA, no en tiroVis: tiroVis solo lo llama el gancho de pruebas, no el bucle
      del juego, asi que enganchado ahi el visor no se hubiera prendido nunca jugando de verdad */
@@ -15009,6 +15081,16 @@ function telRender(){
   _telCam.fov = Math.max(5.5, FOV_CAD/Math.max(1.5,_telAum));
   _telCam.near=0.05; _telCam.far=camera.far;
   _telCam.updateProjectionMatrix();
+  /* EL DESTINO SIGUE AL DISCO. Se revisa tres veces por segundo y solo se rehace si cambio de
+     escalon: cambiar el tamano de un destino tira la textura de la placa y la vuelve a pedir, asi
+     que hacerlo por cuadro seria peor que el problema. Tres por segundo alcanza — lo que lo mueve
+     es girar el telefono, cambiar de arma o de calidad, no la partida. */
+  _telLadoT += Math.max(0.001,_telDt);
+  if(_telLadoT>0.33){ _telLadoT=0;
+    const ideal=telLadoIdeal();
+    if(ideal!==_telRT.width){ _telRT.setSize(ideal,ideal); _telResN++; }
+    _telIdeal=ideal;
+  }
   /* el arma no se dibuja adentro del visor: taparia la vista con su propio tubo */
   const vArma=gunRoot?gunRoot.visible:false;
   const vLente=_telLente.visible, vRet=_telRet?_telRet.visible:false;
@@ -15018,7 +15100,12 @@ function telRender(){
      entre dos cuadros —esta muy cerrada y el arma casi no se mueve— asi que dibujarla una vez
      cada dos cuando el cuadro viene lento se nota mucho menos que el tiron de la pasada extra.
      Mientras el cuadro esta holgado se dibuja siempre. */
-  _telSalto = (_telDt>0.021) ? (_telSalto+1) : 0;
+  /* MEDIA CADENCIA CON UN RELOJ SUAVIZADO. Con el dt crudo, UN cuadro lento —una carga de textura,
+     el recolector de basura— prendia y apagaba la media cadencia de un cuadro al otro, y ese
+     parpadeo se ve mas que el tiron que evita. Con la media movil hace falta que el aparato venga
+     lento de verdad para que baje la cadencia, y cuando se recupera vuelve solo. */
+  _telDtS += (_telDt-_telDtS)*0.15;
+  _telSalto = (_telDtS>0.021) ? (_telSalto+1) : 0;
   if(_telSalto%2===0){
     const ant=renderer.getRenderTarget();
     renderer.setRenderTarget(_telRT);
