@@ -640,6 +640,91 @@
   #mAmi{ position:relative; }
   #mAmi b{ position:absolute; top:-4px; right:-4px; min-width:15px; height:15px; line-height:15px;
     border-radius:8px; background:#e0561f; color:#fff; font-size:9px; font-weight:900; padding:0 3px; }
+
+  /* ===================== VERTICAL DE VERDAD =====================
+     El juego nacio apaisado y, con el telefono parado, hacia trampa: rotaba TODO el escenario 90
+     grados (body.rot). Geometricamente estaba bien —nada se estiraba— pero te obligaba a inclinar
+     la cabeza, y en un contenedor que no puede girar la pantalla, como el visor de Rezona, esa era
+     la unica manera de jugar. La interfaz se leia de costado.
+
+     Ahora hay un modo VERTICAL propio: nada rota, y lo que cambia es donde va cada cosa.
+     · El menu se apila: la tarjeta arriba, el equipamiento en una tira que se desliza y el boton de
+       entrar cruzando todo el ancho abajo.
+     · El HUD se reordena en tres columnas de pulgar a la derecha, porque con 420 px de ancho la
+       columna de recargar caia justo encima del joystick.
+     · Y el campo de vision se corrige: ver mas abajo fovVert().  */
+  body.vert #mTop{ gap:6px; padding:6px 8px 0; align-items:flex-start; }
+  body.vert #mCard{ flex:1 1 auto; min-width:0; padding:6px 8px; gap:7px; }
+  body.vert #mCard .mAv{ width:34px; height:34px; }
+  body.vert #mCardName{ font-size:13px; }
+  body.vert #mRango{ font-size:8.5px; }
+  body.vert .mStats{ display:none; }          /* record y precision viven en el perfil */
+  body.vert #mRec{ flex-direction:column; gap:4px; }
+  body.vert #mRec .mRc{ padding:3px 7px; font-size:10px; }
+  body.vert #mTopBtns{ flex-direction:column; gap:5px; }
+  body.vert .icoBtn{ width:34px; height:34px; font-size:14px; }
+  /* el chat: una tira angosta arriba del equipamiento, no una columna alta */
+  /* TRES BANDAS QUE NO SE PISAN. #mGo, #mLoad y #mChat son hermanos absolutos: en apaisado viven
+     en esquinas distintas y no se tocan, pero apilados en 420 px hay que darles su franja a cada
+     uno. La altura de #mGo no es fija —el texto del modo envuelve, la escuadra crece— asi que se
+     MIDE en cada relayout y se publica en --goH; las otras dos bandas se apoyan en ese numero.
+     Con valores a ojo (138) se pisaban: medido, #mGo terminaba midiendo 177. */
+  body.vert #mChat{ left:8px; right:8px; width:auto; bottom:calc(var(--goH,160px) + 76px + var(--safe-b)); }
+  body.vert #mChatL{ max-height:14vh; }
+  body.vert #mChatB{ padding:6px 9px; }
+  body.vert #mChatB em{ font-size:9.5px; }
+  /* el equipamiento: una tira que se desliza con el dedo, no cuatro fichas apretadas */
+  body.vert #mLoad{ left:8px; right:8px; width:auto; bottom:calc(var(--goH,160px) + 14px + var(--safe-b));
+    display:flex; flex-wrap:nowrap; overflow-x:auto; gap:6px; padding-bottom:3px;
+    scroll-snap-type:x proximity; -webkit-overflow-scrolling:touch; }
+  body.vert #mLoad::-webkit-scrollbar{ height:3px; }
+  body.vert #mLoad::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.28); border-radius:2px; }
+  body.vert .ldCard{ flex:0 0 auto; min-width:104px; scroll-snap-align:start; padding:6px 9px; }
+  body.vert .ldCard b{ font-size:12.5px; }
+  /* entrar, el modo y el rango: cruzando todo el ancho, abajo de todo */
+  body.vert #mGo{ left:8px; right:8px; width:auto; bottom:calc(8px + var(--safe-b)); gap:5px; }
+  body.vert #mEsc{ gap:4px; }
+  body.vert .escSlot{ height:26px; font-size:8.5px; }
+  body.vert #mName{ display:none; }           /* el nombre se cambia desde el perfil */
+  body.vert #mPlay{ padding:13px; font-size:15px; }
+  body.vert #mModo{ padding:6px 10px; }
+  body.vert #mModo b{ font-size:13px; }
+  body.vert #mRangoC{ padding:5px 8px; }
+  /* el cajon social ocupa todo el ancho: en 420 px un panel de 364 deja una franja inutil */
+  body.vert #soc{ width:100%; }
+  body.vert.socAbierto #avSoc{ --avX:-50%; left:50%; width:min(94vw,392px); top:calc(8px + var(--safe-t)); }
+  /* ===== EL HUD DE JUEGO, EN TRES COLUMNAS DE PULGAR =====
+     En apaisado los botones se reparten en 900 px de ancho. En 420 la columna de RECARGAR (a 238
+     de la derecha) empezaba en x=120 y el joystick terminaba en 154: se pisaban. Todo se achica y
+     se acomoda en tres columnas que caben en la mitad derecha. */
+  body.vert #joy{ left:14px; bottom:calc(22px + var(--safe-b)); width:112px; height:112px; }
+  body.vert #joyKnob{ width:46px; height:46px; margin:-23px 0 0 -23px; }
+  body.vert .actBtn{ width:64px; height:64px; font-size:9.5px; }
+  body.vert #bFire  { right:12px;  bottom:calc(188px + var(--safe-b)); width:82px; height:82px; font-size:10px; }
+  body.vert #bSlide { right:104px; bottom:calc(34px + var(--safe-b)); width:74px; height:74px; font-size:10px; }
+  body.vert #bJump  { right:16px;  bottom:calc(30px + var(--safe-b)); width:74px; height:74px; }
+  body.vert #bAds   { right:104px; bottom:calc(196px + var(--safe-b)); width:68px; height:68px; font-size:9px; }
+  body.vert #bReload{ right:110px; bottom:calc(122px + var(--safe-b)); width:56px; height:56px; font-size:17px; }
+  body.vert #bCambiar{ right:16px; bottom:calc(118px + var(--safe-b)); width:56px; height:56px; font-size:8.5px; }
+  body.vert #bChat  { right:14px;  bottom:calc(286px + var(--safe-b)); width:44px; height:44px; }
+  body.vert #bVoice { left:14px;   bottom:calc(146px + var(--safe-b)); width:44px; height:44px; }
+  body.vert #bTomar, body.vert #bTienda, body.vert #bCurar{ bottom:calc(280px + var(--safe-b)); }
+  body.vert #hpWrap{ left:12px; top:calc(74px + var(--safe-t)); width:min(52vw,168px); }
+  body.vert #tiroHUD{ right:10px; top:calc(74px + var(--safe-t)); }
+  /* ARRIBA, APILADO. En apaisado el nombre del mapa va a la izquierda, la chapa de la sala al
+     medio y el estado de red a la derecha, y sobra lugar. En 420 px los tres se montaban uno
+     encima del otro: se leia "La Arena SALA 1 · 7 bots conectando" todo pisado. */
+  body.vert #hudWrap{ left:10px; right:96px; top:calc(6px + var(--safe-t)); }
+  body.vert #hudWrap #hud{ font-size:13px; }
+  body.vert #hudMission{ font-size:9.5px; }
+  body.vert #areSala{ left:10px; right:auto; transform:none; top:calc(46px + var(--safe-t)); font-size:9.5px; padding:3px 8px; }
+  body.vert #mpStatus{ right:8px; top:calc(6px + var(--safe-t)); font-size:9px; padding:3px 7px; max-width:86px;
+    overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  body.vert #btnMenu{ right:8px; top:calc(32px + var(--safe-t)); width:40px; height:40px; }
+  body.vert #vcMapa{ width:104px; height:104px; }
+  body.vert #tdmHUD{ transform:translateX(-50%) scale(.86); transform-origin:top center; }
+  body.vert #partHUD{ transform:scale(.88); transform-origin:top right; }
+  /* la mira, el cartel de muerte y el perfil no necesitan nada: ya son relativos a la pantalla */
   /* ===== ICONOS DEL HUD. Generados y metidos EN el archivo como data URI, no traidos de un CDN:
      los botones son lo unico que no puede fallar por red. Van como mask-image y no como imagen, asi
      el color y el brillo los sigue poniendo el CSS (currentColor) y el boton apretado se ilumina
@@ -9963,7 +10048,12 @@ function adsTick(dt){
   const quiere=(adsQ && enTiro() && !menuMode && !paused)?1:0;
   adsW += (quiere-adsW)*Math.min(1, 12*dt);
   if(adsW<0.001) adsW=0; if(adsW>0.999) adsW=1;
-  const fov=FOV_CAD+(FOV_ADS-FOV_CAD)*adsW*(1-0.45*aRel);   // recargando la mira se abre un poco, no se pierde
+  /* Y ACA MANDA LA PANTALLA. Este es el fov que gana en partida (pisa al de update), asi que la
+     correccion de vertical tiene que pasar por aca tambien o el telefono parado queda en tunel.
+     Apuntando NO se corrige: la mira tiene que acercar lo mismo en las dos orientaciones o el
+     francotirador de vertical veria mas lejos que el de apaisado. */
+  const fovC=FOV_CAD+(FOV_ADS-FOV_CAD)*adsW*(1-0.45*aRel);
+  const fov=fovVert(fovC)*(1-adsW) + fovC*adsW;
   if(Math.abs(camera.fov-fov)>0.05){ camera.fov=fov; camera.updateProjectionMatrix(); }
   const b=document.getElementById('bAds'); if(b) b.classList.toggle('on', adsQ===1);
   document.body.classList.toggle('apuntando', adsW>0.55);   // la cruceta se apaga y queda la réflex
@@ -13091,7 +13181,10 @@ const CAM_FWD=0.04, CAM_UP=0.12;   // cámara apenas adelante (margen contra el 
 let leanPitch=0, leanRoll=0, aSldCam=0;   // aSldCam: el mismo alfa de deslizada, pero para la cámara
 
 /* ===================== Rotación 90° ===================== */
-let forceLandscape=true, rot=false;
+/* YA NO SE ROTA LA PANTALLA. Rotar el escenario 90 grados era la unica salida cuando no habia un
+   diseño vertical; ahora lo hay (body.vert), asi que con el telefono parado el juego se juega
+   parado. Queda la palanca por si alguna vez hace falta volver al truco viejo. */
+let forceLandscape=false, rot=false;
 function pantallaCompleta(){
   try{ const e=document.documentElement;
     if(!(document.fullscreenElement||document.webkitFullscreenElement)){
@@ -13104,13 +13197,38 @@ function pantallaCompleta(){
 function alternarPantalla(){ if(document.fullscreenElement||document.webkitFullscreenElement){ try{ document.exitFullscreen(); }catch(e){} } else pantallaCompleta(); }
 addEventListener('orientationchange',()=>setTimeout(layout,120));
 document.addEventListener('fullscreenchange',()=>setTimeout(layout,120));
+/* EL CAMPO DE VISION EN VERTICAL. El fov de three es el VERTICAL. Con la pantalla apaisada
+   (relacion 2,14) los 90 grados verticales dan 129 horizontales: bien ancho. Con el telefono
+   parado (relacion 0,47) esos mismos 90 verticales dan 50 HORIZONTALES — un tunel, no se ve a
+   nadie que no este justo enfrente. Asi que en vertical se estira el campo vertical hasta 105
+   grados, que es lo maximo antes de que la deformacion de los bordes se note, y con eso el
+   horizontal vuelve a unos 60. Apaisado no se toca ni un grado: el juego se siente igual. */
+function fovVert(base){
+  if(!document.body.classList.contains('vert')) return base;
+  const a=camera.aspect||1;
+  const v=2*Math.atan(Math.tan(100*Math.PI/360)/Math.max(0.35,a))*180/Math.PI;
+  return Math.max(base, Math.min(105, v));
+}
 function layout(){ rot=forceLandscape&&(innerHeight>innerWidth); document.body.classList.toggle('rot',rot);
-  const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight; camera.aspect=vw/vh; camera.updateProjectionMatrix(); renderer.setSize(vw,vh,false);
+  const vw=rot?innerHeight:innerWidth, vh=rot?innerWidth:innerHeight;
+  /* VERTICAL: mas alto que ancho y sin el truco de rotar. El 1,02 es para que una pantalla casi
+     cuadrada no ande saltando de un diseño al otro con cada teclado que se abre. */
+  document.body.classList.toggle('vert', !rot && vh > vw*1.02);
+  camera.aspect=vw/vh; camera.fov=fovVert(player.fov||baseFov); camera.updateProjectionMatrix(); renderer.setSize(vw,vh,false);
   // el escenario se rota 90° cuando el celular está parado, así que la orientación del aparato miente:
   // lo que manda es el tamaño REAL del escenario.
   document.body.classList.toggle('ancho', vw > vh*1.25);
   document.body.classList.toggle('bajo', vh < 420);
   document.body.classList.toggle('enPantalla', !!(document.fullscreenElement||document.webkitFullscreenElement));
+  vertBandas();
+}
+/* la altura real de la columna de abajo, para que el equipamiento y el chat se apoyen encima */
+function vertBandas(){
+  if(!document.body.classList.contains('vert')) return;
+  const g=document.getElementById('mGo'); if(!g) return;
+  const h=Math.round(g.getBoundingClientRect().height);
+  if(h>40 && h!==vertBandas._h){ vertBandas._h=h;
+    document.documentElement.style.setProperty('--goH', h+'px'); }
 }
 addEventListener('resize',layout);
 
@@ -13336,7 +13454,7 @@ function menuEscuadra(){
       String(nombres[i]).slice(0,9).replace(/[<>&]/g,'')+'</div>';
     else h+='<div class="escSlot vacio">+</div>';
   }
-  if(el.innerHTML!==h) el.innerHTML=h;
+  if(el.innerHTML!==h){ el.innerHTML=h; try{ vertBandas(); }catch(e){} }
   /* el "+" de un lugar vacio abre los amigos: es de donde sale la gente para llenarlo */
   if(!el._cable){ el._cable=1; el.addEventListener('click',ev=>{
     if(ev.target.closest('.escSlot.vacio')) socAbrir('amigos'); }); }
@@ -13839,7 +13957,8 @@ function update(dt){
   player.roll+=(targetRoll-player.roll)*Math.min(1,10*dt);
   // FOV kick por velocidad / wallrun / slide
   const targetFov=baseFov + Math.min(5,sp*0.4) + (player.wallrun?4:0) + (player.sliding?6:0);   // base 90: kicks suaves
-  player.fov+=(targetFov-player.fov)*Math.min(1,6*dt); if(Math.abs(camera.fov-player.fov)>0.05){camera.fov=player.fov;camera.updateProjectionMatrix();}
+  player.fov+=(targetFov-player.fov)*Math.min(1,6*dt);
+  { const f=fovVert(player.fov); if(Math.abs(camera.fov-f)>0.05){ camera.fov=f; camera.updateProjectionMatrix(); } }
   // ---- cámara FP: a la altura de la cabeza (bob vertical real del hueso) pero CENTRADA en el cuerpo ----
   // XZ estable (centro del cuerpo + un poco adelante) → quieto miras AL FRENTE, no al hombro; sólo la ALTURA viene del hueso de la cabeza
   if(bodyHead && !player.rolling){ bodyHead.getWorldPosition(_camAnchor);
@@ -15755,7 +15874,7 @@ function menuFranja(){
   let y0=0, y1=H;
   const arr=document.getElementById('mTop');
   if(arr){ const r=arr.getBoundingClientRect(); if(r.height>2) y0=Math.max(y0,r.bottom); }
-  for(const id of ['mLoad','mGo']){
+  for(const id of ['mLoad','mGo','mChat']){
     const e=document.getElementById(id); if(!e) continue;
     const r=e.getBoundingClientRect(); if(r.height<2) continue;
     if(r.left-20<=cx && cx<=r.right+20) y1=Math.min(y1,r.top);
