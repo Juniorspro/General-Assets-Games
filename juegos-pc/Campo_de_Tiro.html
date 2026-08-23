@@ -403,13 +403,11 @@
      la cruz que en un visor de verdad se leen contra el tubo. */
   #telMira{ position:fixed; inset:0; z-index:14; display:none; opacity:0; pointer-events:none;
     transition:opacity .06s linear; }
-  /* EL ARO, MAS CHICO Y DE UNA SOLA LINEA. Estaba en 30vh de radio, o sea sesenta por ciento del
-     alto de la pantalla: tapaba todo. Y llevaba tres capas —un aro oscuro, uno gris claro por
-     dentro y un degrade— que juntas se ven como un tubo de plastico. En la foto de referencia el
-     aro es UNA linea fina y oscura y nada mas. Radio 21vh: cuarenta y dos por ciento del alto,
-     que deja ver alrededor. */
-  #telMira{ --r:min(21vh,21vw); }
-  body.vert #telMira{ --r:min(19vh,19vw); }
+  /* EL ARO ES UN CONTORNO, y su radio sale MEDIDO de donde estaria la campana del ocular
+     —vmAroPx()— y no de un porcentaje elegido a ojo: asi el aro cae donde el arma dice que esta el
+     visor, en cualquier pantalla. Una sola linea oscura, nada de relleno: el mundo se ve por el aro
+     y alrededor del aro, al mismo aumento. */
+  #telMira{ --r:100px; }
   #telAro{ position:absolute; left:50%; top:50%;
     width:calc(var(--r)*2); height:calc(var(--r)*2); margin:calc(var(--r)*-1) 0 0 calc(var(--r)*-1);
     border-radius:50%; box-shadow:0 0 0 2px rgba(12,15,18,.80); }
@@ -2774,6 +2772,14 @@ function flashTex(){ if(_txFlash)return _txFlash; const S=128,c=document.createE
 /* ---- ARMA (viewmodel de cajas: se ve prolijo y no pesa nada) ---- */
 let gunRoot=null, gunFlash=null, gunFlash2=null, gunLight=null, gunMag=null, gunCH=null;
 let _teleOn=false;   // ¿esta puesto el visor telescopico? (lo lee poseArma para no dibujar el arma)
+/* ARRIBA A PROPOSITO. armaLente le escribe a _telTapa cuando se arma el arma, y eso pasa al
+   arrancar el juego. Con la declaracion mas abajo eso es ZONA MUERTA: la asignacion tira
+   ReferenceError adentro de la receta del arma, la receta aborta a mitad de camino, y FOV_ADS se
+   queda en su valor inicial de 48 — o sea que el arma se ve bien pero el zoom no se aplica. Me
+   costo un render entero: el sintoma era "dice 6x y se ve 2,25x" y no tenia nada que ver con el
+   zoom. */
+let _telTapa=[], _telOcular=null, _telMiraG=null, _telOcularR=0.0305, _telOcularZ=0.124;
+let _vmEsc=null, _vmCam=null, _vmPadre=null;
 let gunCruz=null;   // la cruz de la mira réflex: se apaga/entra en test de profundidad cuando la cámara sale del ojo
 let gunCulata=null; // la culata: en 1ª persona está detrás del pómulo y sólo deja una astilla en la lente
 // Medido en el propio rig: hombro a 0.182 der / 0.231 abajo / 0.10 detrás del ojo, y el brazo ALCANZA 0.54 m (0.267+0.273).
@@ -2953,6 +2959,15 @@ function armaReflex(H,z0,radio,largo){
 }
 /* Mira telescopica: tubo, dos monturas y la lente. Para francotirador. */
 function armaLente(H,z0,largo,yRiel){
+  /* TODA LA MIRA VA A UN GRUPO, y el grupo se esconde al apuntar. Fui pieza por pieza —el tubo, el
+     parasol, las campanas, los cristales, el tornasol— y siempre quedaba algo tapando: las
+     torretas, los anillos de la montura, el riel. Y tiene que ser asi: desde seis centimetros, con
+     la camara del arma a 34 grados, TODA la mira cae en el centro del cuadro. No hay una pieza
+     culpable, es el conjunto.
+     Y esta bien que se esconda: apuntando por un visor uno no VE el visor, ve por el. Lo que queda
+     a la vista es el rifle —el cajon, el cerrojo, el cargador, la culata— abajo del aro, que es
+     exactamente lo que se ve en la foto de referencia. */
+  const _iMira=H.raiz.children.length;
   /* ===================== LA MIRA TELESCOPICA =====================
      EL TUBO VA ABIERTO. Con cilindros cerrados, apuntando se veia una tapa negra tapando media
      pantalla: la reticula quedaba sobre un disco opaco y no habia por donde mirar. Abiertos, se ve
@@ -2979,12 +2994,33 @@ function armaLente(H,z0,largo,yRiel){
      la mira quedaba un aro NEGRO metido adentro del aro gris, y entre los dos se comian casi la
      mitad del ancho util. Ahora la pared interior va justo por dentro de la campana y la vista
      ocupa todo el aro. */
-  H.tubo(0.0292,L, 0,y0,z0, N);
-  H.tubo(0.0265,L*0.62, 0,y0,z0, crom);                    // el tubo, visto de afuera
-  H.tubo(0.0335,0.050, 0,y0,z0-L/2+0.030, crom);           // campana del objetivo
-  H.tubo(0.0305,0.044, 0,y0,z0+L/2-0.026, crom);           // campana del ocular
-  H.tubo(0.0355,0.030, 0,y0,z0-L/2-0.012, N);              // parasol
-  for(let i=0;i<3;i++) H.tubo(0.0285,0.006, 0,y0,z0-0.05+i*0.05, N);   // aros de ajuste
+  /* LO QUE ESTA EN EL EJE SE ESCONDE AL APUNTAR, y hay geometria detras de esa decision. El tubo
+     mide 30 cm y el ojo queda a 6,5 cm del ocular: desde ahi la campana del ocular subtiende 24
+     grados de MEDIO angulo, o sea que es mas ancha que el campo visual entero cuando apuntas a seis
+     aumentos. No se ve "por" el tubo: se ve la pared interior del tubo, y eso es el gris que tapaba
+     la pantalla. Un visor de verdad no tiene ese problema porque tiene OPTICA que colima la imagen;
+     un tubo hueco en un juego no.
+     Asi que apuntando se esconden las paredes largas y el parasol, y queda la campana del ocular
+     —que es el aro que se mira— mas las torretas, el riel y los anillos, que estan fuera del eje y
+     son los que dicen "hay una mira aca". */
+  const tapa=[];
+  tapa.push(H.tubo(0.0292,L, 0,y0,z0, N));
+  tapa.push(H.tubo(0.0265,L*0.62, 0,y0,z0, crom));         // el tubo, visto de afuera
+  tapa.push(H.tubo(0.0335,0.050, 0,y0,z0-L/2+0.030, crom));// campana del objetivo
+  /* LA CAMPANA DEL OCULAR TAMBIEN SE ESCONDE. La habia dejado pensando que era "el aro por el que
+     se mira", y no lo es: es un tubo abierto de 4,4 cm de largo, asi que desde el ojo se le ve la
+     PARED DE ADENTRO como una banda maciza, y adentro de esa banda quedan el caño y el cajon del
+     rifle. O sea que no es una ventana: es otra cosa mas tapando el centro.
+     La conclusion, despues de probar las tres variantes: el aro de un visor NO se puede hacer con
+     la geometria del tubo. Un tubo hueco visto desde seis centimetros muestra su interior, no lo
+     que hay al otro lado; hace falta optica, y optica no hay. En la foto de referencia ese aro es
+     una capa de interfaz, no una pieza del arma — y por eso el aro vuelve a ser un contorno.
+     Lo que SI se gana con la camara propia es que el RIFLE se vea: el cajon, el cerrojo, el
+     cargador, las torretas y el riel quedan a la vista abajo del aro, que es lo que faltaba. */
+  const ocular=H.tubo(0.0305,0.044, 0,y0,z0+L/2-0.026, crom);   // campana del ocular
+  tapa.push(ocular);
+  tapa.push(H.tubo(0.0355,0.030, 0,y0,z0-L/2-0.012, N));   // parasol
+  for(let i=0;i<3;i++) tapa.push(H.tubo(0.0285,0.006, 0,y0,z0-0.05+i*0.05, N));   // aros de ajuste
   /* --- las dos torres de correccion, con sus muescas --- */
   const torre=(x,y,rz)=>{ const t=H.cil(0.0135,0.0135,0.026, x,y,z0+0.012, crom); if(rz)t.rotation.z=rz;
     for(let i=0;i<6;i++){ const a=i/6*6.283;
@@ -3028,6 +3064,7 @@ function armaLente(H,z0,largo,yRiel){
   anillo(z0-L/2+0.055); anillo(z0+L/2-0.055);
   /* la lente con la vista aumentada, y su reticula */
   try{ telMontarLente(H, z0, L, y0, (H.aum||4), H.reticula); }catch(e){}
+  void tapa; void ocular;
   /* --- LOS VIDRIOS, PERO SIN TAPAR POR DONDE SE MIRA ---
      Primer intento: dos discos de vidrio, objetivo y ocular. Apuntando quedaba un disco NEGRO
      tapando toda la mira — es la misma trampa que dice el comentario de arriba sobre los cilindros
@@ -3042,7 +3079,7 @@ function armaLente(H,z0,largo,yRiel){
     g.envMapIntensity=2.6;
     const m=new THREE.Mesh(new THREE.RingGeometry(r*0.80,r,26), g);   // solo el borde: el centro es por donde se mira
     m.position.set(0,y0,z); m.renderOrder=3; H.raiz.add(m); return m; };
-  vidrio(0.0225, z0-L/2+0.048, 0.62);      // objetivo
+  tapa.push(vidrio(0.0225, z0-L/2+0.048, 0.62));      // objetivo
   /* el cristal del ocular NO va: es un aro oscuro justo encima de la vista y era la segunda capa
      que achicaba el campo. El del objetivo si queda, que ese se ve desde afuera. */
   /* el tornasol del tratamiento antirreflejo: dos aros aditivos, azul y violeta, en angulos
@@ -3052,12 +3089,26 @@ function armaLente(H,z0,largo,yRiel){
       depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, toneMapped:false});
     const a=new THREE.Mesh(new THREE.RingGeometry(0.0186,0.0225,26), t);
     a.position.set(0,y0,z0-L/2+0.0475); a.rotation.y=0.22; a.rotation.x=-0.10; a.renderOrder=4;
-    H.raiz.add(a);
+    H.raiz.add(a); tapa.push(a);
     const t2=new THREE.MeshBasicMaterial({color:0x2f9bd8, transparent:true, opacity:0.30,
       depthWrite:false, side:THREE.DoubleSide, blending:THREE.AdditiveBlending, toneMapped:false});
     const a2=new THREE.Mesh(new THREE.RingGeometry(0.0196,0.0225,26), t2);
-    a2.position.set(0,y0,z0-L/2+0.0470); a2.rotation.y=-0.26; a2.renderOrder=4; H.raiz.add(a2); }
+    a2.position.set(0,y0,z0-L/2+0.0470); a2.rotation.y=-0.26; a2.renderOrder=4; H.raiz.add(a2);
+    tapa.push(a2); }
   /* tampoco va el aro interior del ocular: mismo problema, tapaba el borde de la vista */
+  /* y todo lo que armaLente agrego se muda a un grupo propio: reparentar no cambia nada porque los
+     dos estan en la identidad, y con un solo `visible` se apaga la mira entera */
+  { const gMira=new THREE.Group(); gMira.name='mira';
+    const nuevos=H.raiz.children.slice(_iMira);
+    for(const o of nuevos) gMira.add(o);
+    H.raiz.add(gMira);
+    /* ESTO VA AL FINAL DE LA FUNCION Y NO A LA MITAD. Antes se agrupaba en la linea de
+       telMontarLente, y los cristales y el tornasol se crean despues: quedaban fuera del grupo, y
+       eran el aro celeste y los dos aros azul y violeta que se veian en el medio del cuadro al
+       apuntar. Agrupando al final entra todo, y no hay que acordarse de nada la proxima vez que se
+       le agregue una pieza a la mira. */
+    if(H.vivo){ _telMiraG=gMira; _telTapa=tapa;
+      _telOcularR=0.0305; _telOcularZ=z0+L/2-0.026; } }
 }
 /* Alza y punto de mira de hierro, para pistolas y escopetas: no hay ventana, se mira por encima. */
 /* Los hierros van a la ALTURA DE LA LINEA DE MIRA del arma (H.mira), no a un numero a ojo: si no,
@@ -3947,7 +3998,7 @@ function _armaUtil(padre){
    animan en gunMag / gunCulata / gunCH) o la copia para la foto (no engancha nada). */
 function armaHerr(raiz, def, vivo){
   const M=AKMAT;
-  const H=Object.assign({ M:M, mira:def.mira, raiz:raiz, aum:(def.aum||0),
+  const H=Object.assign({ M:M, mira:def.mira, raiz:raiz, aum:(def.aum||0), vivo:!!vivo,
                           reticula:(def.reticula||'mildot') }, _armaUtil(raiz));
   H.tubo=(r,h,x,y,z,m)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,20,1,true),m||M.negro);
     me.material.side=THREE.DoubleSide; me.rotation.x=Math.PI/2; me.position.set(x,y,z);
@@ -11421,7 +11472,8 @@ try{ window.__tiro={
   // pintar SIN avanzar el mundo: frames() llama a update() y update() vuelve a colocar la camara,
   // asi que para un primer plano hay que poder renderizar sin que nada la mueva
   foto:()=>{ renderer.render(scene,camera); return 1; },
-  frames:(n,dt)=>{ for(let i=0;i<(n||8);i++){ update(dt||0.0166); try{tiroVis();}catch(e){} try{saltoDibujo();}catch(e){} try{telRender();}catch(e){} } renderer.render(scene,camera); return world; },
+  frames:(n,dt)=>{ for(let i=0;i<(n||8);i++){ update(dt||0.0166); try{tiroVis();}catch(e){} try{saltoDibujo();}catch(e){} try{telRender();}catch(e){} }
+    renderer.setRenderTarget(null); renderer.render(scene,camera); try{ vmRender(); }catch(e){} return world; },
   hud:v=>{ document.body.classList.toggle('sinhud',!v); },
   // Ajustes: leer/escribir cualquier clave y ver que quedo escrito EN EL MOTOR, no solo en CFG
   cfg:(k,v)=>{ if(k==null) return JSON.parse(JSON.stringify(CFG));
@@ -11568,6 +11620,22 @@ try{ window.__tiro={
     adsQ=antes; adsW=aw; try{ telRender(); }catch(e){}
     return { cadera, mira, difLlamadas:mira.llamadas-cadera.llamadas,
              difTris:mira.tris-cadera.tris }; },
+  /* EL COSTO DE UN CUADRO ENTERO, sumando todas las pasadas.
+     `visor()` devuelve renderer.info.render, y eso NO es el cuadro: three.js pone los contadores a
+     cero al empezar cada render(), asi que leerlo despues deja solo la ultima pasada —la del arma,
+     que da 5 llamadas y parece un regalo. Con autoReset en false los contadores se acumulan y
+     entonces si se ve lo que cuesta el cuadro completo. */
+  costo:(n)=>{ const I=renderer.info, ar=I.autoReset;
+    const uno=()=>{ I.autoReset=false; I.reset();
+      for(let i=0;i<(n||1);i++){ try{ __tiro.frames(1,0.0166); }catch(e){ animate(0); } }
+      const r={llamadas:I.render.calls, tris:I.render.triangles};
+      I.autoReset=ar; I.reset(); return r; };
+    const aw=adsW, aq=adsQ;
+    adsW=0; adsQ=0; try{ telTick(0.0166); }catch(e){} const cadera=uno();
+    adsW=1; adsQ=1; try{ telTick(0.0166); }catch(e){} const mira=uno();
+    adsW=aw; adsQ=aq; try{ telTick(0.0166); }catch(e){}
+    return { cuadros:(n||1), cadera, mira,
+             difLlamadas:mira.llamadas-cadera.llamadas, difTris:mira.tris-cadera.tris }; },
   /* las medidas reales del personaje, por parte: para dejar de calcular proporciones a ojo */
   medir:()=>{ if(!bodyRoot) return null;
     const B=new THREE.Box3(), V=new THREE.Vector3(), out={};
@@ -11929,6 +11997,23 @@ try{ window.__tiro={
                 items:ALC_BOTIN.filter(q=>q.item).length,
                 porItem:ALC_BOTIN.reduce((o,q)=>{ if(q.item)o[q.item]=(o[q.item]||0)+1; return o; },{})}),
   calidad:(q)=>{ if(q) applyQuality(q); return quality; },
+  vmQue:()=>{ if(!_vmEsc||!_vmCam) return null;
+    _vmCam.updateMatrixWorld(); _vmCam.updateProjectionMatrix();
+    const W=renderer.domElement.width, H=renderer.domElement.height;
+    const out=[];
+    _vmEsc.traverse(o=>{ if(!o.isMesh||!o.visible) return;
+      let p=o; while(p){ if(p.visible===false) return; p=p.parent; }
+      const c=new THREE.Vector3(); o.getWorldPosition(c);
+      const q=c.clone().project(_vmCam);
+      const g=o.geometry; if(!g.boundingSphere) g.computeBoundingSphere();
+      const r=g.boundingSphere.radius*(o.getWorldScale(new THREE.Vector3()).x);
+      out.push({ x:Math.round((q.x*0.5+0.5)*W), y:Math.round((-q.y*0.5+0.5)*H),
+                 rMm:Math.round(r*1000),
+                 mat:(o.material&&o.material.color)? '#'+o.material.color.getHexString():'?',
+                 pad:o.parent? (o.parent.name||'?') : '?',
+                 d:+c.distanceTo(_vmCam.position).toFixed(3) }); });
+    out.sort((a,b)=>Math.hypot(a.x-W/2,a.y-H/2)-Math.hypot(b.x-W/2,b.y-H/2));
+    return { lienzo:[W,H], n:out.length, cerca:out.slice(0,8) }; },
   /* las tres Z que tienen que coincidir: el jugador, el checkpoint y los bots */
   zetas:()=>({ mundo:world, gz:mundoGZ(),
     jugador:+player.pos.z.toFixed(1), jugadorY:+player.pos.y.toFixed(2),
@@ -15398,6 +15483,78 @@ function gfxAplicar(){
    tanto glossy style". Lo que se gana es que el francotirador rinde igual que cualquier otra arma. */
 /* _teleOn ya se declara arriba (lo lee poseArma para no dibujar el arma) */
 let _telAum=4, _telRetiUlt='mildot';
+/* ===================== EL ARMA TIENE SU PROPIA CAMARA =====================
+   EL PROBLEMA, con numeros. El mundo se acerca cerrando el campo visual de la camara: seis aumentos
+   son 18,9 grados. Pero el arma esta a seis centimetros del ojo, y la campana del ocular —2,9 cm de
+   radio a 6,5 cm— subtiende 24 grados de MEDIO angulo. O sea que es MAS ANCHA que el campo visual
+   entero cuando apuntas. Apuntando no se ve POR el tubo: se ve la pared de adentro del tubo, y eso
+   es el gris que tapaba la pantalla. Un visor de verdad no tiene ese problema porque tiene OPTICA
+   que colima la imagen; un tubo hueco en un juego, si.
+   Por eso el arma estaba escondida, y por eso el aro tenia que ser un dibujo — y un dibujo con
+   fondo se lee como una segunda pantalla, que es de lo que se venia quejando.
+
+   LA SOLUCION es la que usa cualquier shooter: el arma se dibuja en una SEGUNDA PASADA con su
+   propia camara, que NO se acerca. Dos numeros la definen:
+   · un campo visual propio de 52 grados, que no depende del aumento del arma;
+   · y la lente corrida hacia ATRAS 6,2 cm, asi el ocular queda a 12,7 cm en vez de 6,5 y subtiende
+     13,5 grados de medio angulo: un aro de la mitad del alto de la pantalla, que es como se ve en
+     la foto de referencia.
+   La pasada cuesta las veinte mallas del arma, no las 187 llamadas de una escena entera. Y el
+   mundo, que ya se dibujo acercado, se ve POR el aro y ALREDEDOR del aro: una sola imagen. */
+/* 34 grados y no 52. Con 52 el aro del ocular salia de 110 pixeles sobre 420 de alto —un cuarto de
+   la pantalla— y en la foto de referencia ocupa casi la mitad. El radio proyectado va como
+   1/tan(fov/2), asi que cerrando de 52 a 34 el aro crece 1,6 veces y queda en el 42% del alto. Y de
+   paso el rifle entero se ve mas grande, que tambien es como se ve en la foto. */
+const VM_FOV=34, VM_ATRAS=0.062;
+const _vmFw=new THREE.Vector3();
+function vmPreparar(){
+  if(_vmEsc) return;
+  _vmEsc=new THREE.Scene();
+  /* el arma necesita luz propia: en una escena pelada los materiales con metal alto salen negro
+     carbon. Es el mismo problema que tenian las fotos del arsenal. */
+  _vmEsc.add(new THREE.HemisphereLight(0xdfe8f2,0x4a5158,1.6));
+  const k=new THREE.DirectionalLight(0xffffff,2.0); k.position.set(0.5,1.2,0.9); _vmEsc.add(k);
+  const f=new THREE.DirectionalLight(0xb8d4f0,0.8); f.position.set(-0.8,0.3,-0.7); _vmEsc.add(f);
+  _vmCam=new THREE.PerspectiveCamera(VM_FOV, 1, 0.02, 4);
+}
+/* muda el arma a la escena del visor, o la trae de vuelta */
+function vmArma(dentro){
+  if(!gunRoot) return;
+  vmPreparar();
+  try{ _vmEsc.environment=scene.environment; _vmEsc.environmentIntensity=1.0; }catch(e){}
+  if(dentro){ if(gunRoot.parent!==_vmEsc){ _vmPadre=gunRoot.parent||scene; _vmEsc.add(gunRoot); } }
+  else { if(gunRoot.parent===_vmEsc) (_vmPadre||scene).add(gunRoot); }
+}
+/* el radio del aro del ocular, proyectado a pixeles con la camara del arma. De aca sale el tamano
+   de la reticula: asi cae clavada adentro del aro en cualquier pantalla, en vez de ser un
+   porcentaje elegido a ojo que en un telefono da y en otro no. */
+function vmAroPx(){
+  const H=renderer.domElement.height||1;
+  const esc=(()=>{ try{ return gunRoot? gunRoot.scale.x : 1; }catch(e){ return 1; } })();
+  const r=_telOcularR*esc, d=Math.abs(_telOcularZ)*esc + VM_ATRAS;
+  if(!(d>0.001)) return 0;
+  return (r/d) / Math.tan(VM_FOV*Math.PI/360) * (H/2);
+}
+/* LA PASADA DEL ARMA. Va al final y con la profundidad limpia: el arma no tiene que competir con el
+   mundo por profundidad —esta a doce centimetros y el mundo a cien metros— y ademas asi no se le
+   aplica el reafilado ni el resplandor del camino de imagen, que a esta distancia solo la ensucian. */
+function vmRender(){
+  if(!_teleOn || !_vmEsc || !_vmCam || !gunRoot || gunRoot.parent!==_vmEsc) return;
+  _vmCam.aspect=camera.aspect; _vmCam.fov=VM_FOV; _vmCam.updateProjectionMatrix();
+  _vmFw.set(0,0,-1).applyQuaternion(camera.quaternion);
+  _vmCam.position.copy(camera.position).addScaledVector(_vmFw, -VM_ATRAS);
+  _vmCam.quaternion.copy(camera.quaternion);
+  /* SIN LIMPIAR EL COLOR. renderer.autoClear viene en true, asi que este segundo render borraba el
+     cuadro entero y quedaba el arma sobre negro — el mundo desaparecia. Se limpia SOLO la
+     profundidad: el arma esta a doce centimetros y el mundo a cien metros, y sin limpiar
+     profundidad el mundo le pasaria por encima. */
+  const ac=renderer.autoClear;
+  renderer.setRenderTarget(null);
+  renderer.autoClear=false;
+  renderer.clearDepth();
+  renderer.render(_vmEsc, _vmCam);
+  renderer.autoClear=ac;
+}
 /* el sitio de la reticula, cacheado como imagen: el lienzo se dibuja una vez por tipo */
 const _telRetURL={};
 function telRetURL(tipo){
@@ -15550,6 +15707,9 @@ function teleTick(){
   if(q){
     const k=Math.min(1, Math.max(0, (adsW-0.62)/0.30));
     el.style.opacity=k.toFixed(3);
+    /* el radio, medido de la campana del ocular y no elegido a ojo */
+    try{ const rp=vmAroPx();
+      if(rp>8 && Math.abs(rp-(el._r||0))>0.5){ el._r=rp; el.style.setProperty('--r', rp.toFixed(1)+'px'); } }catch(e){}
     const u=telRetURL(_telRetiUlt);
     if(u && el.dataset.reti!==_telRetiUlt){ el.dataset.reti=_telRetiUlt;
       const r=document.getElementById('telRet'); if(r) r.style.backgroundImage='url("'+u+'")'; }
@@ -15564,13 +15724,14 @@ function teleTick(){
     if(!a && q){ a=document.createElement('div'); a.id='teleAum'; document.body.appendChild(a); }
     if(a){ a.textContent=(Math.round(_telAum*10)/10)+'×'; a.style.display=q?'block':'none'; }
   }
-  /* EL ARMA SE ESCONDE, PERO EL MUNDO NO SE TAPA. Probe dejarla: el tubo magnificado seis veces
-     deberia ser el aro por el que se mira, y no lo es — su pared interior, las campanas y los
-     cristales del objetivo quedan justo delante del ojo y tapan el centro del cuadro, que es lo
-     unico que no se puede tapar. Asi que el arma no se dibuja y el aro es un CONTORNO, no un
-     dibujo con fondo: el mundo se ve al mismo aumento adentro y afuera, y lo unico que se agrega
-     encima es la linea del tubo y la reticula. Una sola imagen, que es lo que se pidio. */
-  try{ if(gunRoot) gunRoot.visible=!q; }catch(e){}
+  /* EL ARMA SE VE, PERO CON SU PROPIA CAMARA. No se esconde: se muda a la escena del visor, que se
+     dibuja al final con un campo visual que NO se acerca. Y de la mira se esconde lo que esta en el
+     eje optico —las paredes del tubo, el parasol, el objetivo— porque desde seis centimetros eso es
+     pared interior y no ventana. Queda la campana del ocular, que es el aro por el que se mira, con
+     las torretas y el riel al lado. */
+  try{ vmArma(q); if(gunRoot) gunRoot.visible=true;
+       if(_telMiraG) _telMiraG.visible=!q;
+       for(const m of _telTapa) if(m) m.visible=!q; }catch(e){}
   if(gunCruz) gunCruz.visible=!q;   // el punto rojo no va cuando hay mira telescopica
 }
 /* Ya no hay pasada extra. Se deja el nombre porque animate() lo llama, y lo que hace es mantener
@@ -17938,6 +18099,8 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
   try{ gfxRender(window.__plantaCam || camera); }
   catch(e){ if(!window.__gfxErr){ window.__gfxErr=1; console.warn('gfx',e); }
     try{ renderer.setRenderTarget(null); renderer.render(scene, window.__plantaCam || camera); }catch(e2){} }
+  try{ vmRender(); }catch(e){}   // y el arma encima, con su propia camara
+
   drsTick(dt); }
 
 /* ===================== MULTIJUGADOR (MQTT, sin backend; relay vía broker público) ===================== */

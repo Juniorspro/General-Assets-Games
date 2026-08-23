@@ -14,8 +14,20 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
       entera. El aumento lo hace la camara del juego (por tangente) y el aro es un CONTORNO fino con
       la reticula — SIN negro alrededor. Una sola imagen: el mismo mundo, al mismo aumento, adentro
       y afuera del aro. El negro era el error: se leia como dos pantallas distintas.
-      Medido: apuntar pasa de +187 llamadas / +580.888 triangulos a -25 / -4.172, o sea cuesta MENOS
-      que la cadera. AWM 6,00x, Dragunov 4,00x. Referencia: Blood Strike, M700 mira x6.
+      AWM 6,00x, Dragunov 4,00x. Referencia: Blood Strike, M700 mira x6.
+      **Y EL FUSIL SE VE** (pedido "PERO ESO CON LA MIRS Y EL ARMA DEL SNIPER"): el mundo se dibuja
+      con el campo angosto del aumento y el arma va en una SEGUNDA PASADA propia (`_vmEsc`,
+      `_vmCam` a 34 grados, `autoClear=false` + `clearDepth()`), asi el fusil no se estira con el
+      zoom. El tubo del visor se apaga mientras se apunta y no es un descuido: mide 30 cm y el ojo
+      queda a 6,5 cm del ocular, o sea que la campana abarca 24 grados de SEMIangulo contra los
+      18,9 que mide todo el campo a 6x — por el tubo se ve la pared de adentro, no el otro lado.
+      Por eso el aro es un contorno y no una ventana.
+      Medido en cuadro completo (`__tiro.costo()`): AWM cadera 428 llamadas / 1.072.624 triangulos
+      contra 260 / 1.055.934 apuntando (-168 y -16.690); Dragunov -52 llamadas; AK sin visor 0 y 0,
+      que es el testigo de que la medicion mide lo que dice.
+      OJO con `renderer.info.render`: three.js lo pone a cero al empezar cada `render()`, asi que
+      leerlo despues de un cuadro deja solo la ultima pasada. Para el cuadro entero va
+      `info.autoReset=false`, que es lo que hace `__tiro.costo()`.
 - [x] **Controles para los que recien empiezan** (2026-08-23): apuntar de UN TOQUE por omision
       (CFG_DEF.apuntar='tap'), botones un 10% mas chicos, y FUEGO y APUNTAR del 50% al 81% del alto
       de la pantalla — estaban justo sobre la linea del horizonte. Con la mira puesta el HUD se
