@@ -388,37 +388,34 @@
   #salHud i{ font-style:normal; font-size:14px; font-weight:800; opacity:.72; margin-left:2px; }
   #salHud span{ display:block; margin-top:4px; font-size:10px; font-weight:800; letter-spacing:.18em;
     color:rgba(255,214,168,.92); text-shadow:0 2px 8px rgba(0,0,0,.85); }
-  /* ===================== EL ARO DE LA MIRA TELESCOPICA =====================
-     Una capa plana sobre la pantalla: negro afuera, ventana redonda adentro y la reticula pegada al
-     centro. No hay vidrio, no hay reflejo y no hay una segunda pasada de escena — el fondo ya viene
-     acercado por la camara del juego, asi que lo de adentro del aro y la reticula se acercan en la
-     misma imagen, que es justo lo que le falta a un visor dibujado aparte.
-     El borde del circulo es DURO a proposito: un degrade suave se lee como desenfoque, y un visor
-     no desenfoca, recorta. */
+  /* ===================== LA RETICULA DE LA MIRA TELESCOPICA =====================
+     LO QUE ESTABA MAL: pintaba NEGRO alrededor del circulo. Eso hace que se lean DOS pantallas —una
+     adentro del aro y otra afuera— y es exactamente lo contrario de lo que se busca. En un shooter
+     de telefono la pantalla ENTERA se acerca y el tubo de la mira, que esta a seis centimetros del
+     ojo, se acerca con ella: lo que queda es un aro grande en el medio por el que ves el mundo, y
+     el MISMO mundo alrededor, al mismo aumento. Una sola imagen.
+     Asi que aca no hay mascara ni fondo: solo la reticula, pegada al centro, y las dos lineas de
+     la cruz que en un visor de verdad se leen contra el tubo. */
   #telMira{ position:fixed; inset:0; z-index:14; display:none; opacity:0; pointer-events:none;
     transition:opacity .06s linear; }
-  /* --r es el radio de la ventana: 39% del lado corto, o sea grande en un telefono */
-  #telMira{ --r:min(39vh,39vw); }
-  body.vert #telMira{ --r:min(34vh,34vw); }
-  #telAro{ position:absolute; inset:0;
-    background:radial-gradient(circle at 50% 50%,
-      rgba(0,0,0,0) 0, rgba(0,0,0,0) calc(var(--r) - 1px),
-      rgba(6,8,11,.985) var(--r), rgba(4,6,8,1) 100%); }
-  /* el canto del tubo: dos aros finos, uno claro por dentro y uno oscuro por fuera */
-  #telAro::after{ content:''; position:absolute; left:50%; top:50%;
+  #telMira{ --r:min(30vh,30vw); }
+  body.vert #telMira{ --r:min(26vh,26vw); }
+  /* EL CANTO DEL TUBO: dos aros finos y NADA adentro ni afuera. Es la diferencia entre "hay una
+     mira delante del ojo" y "hay dos pantallas". El de afuera es oscuro y grueso —el fierro— y el
+     de adentro claro y fino —el borde del cristal—, que es como se lee un tubo de verdad. */
+  #telAro{ position:absolute; left:50%; top:50%;
     width:calc(var(--r)*2); height:calc(var(--r)*2); margin:calc(var(--r)*-1) 0 0 calc(var(--r)*-1);
-    border-radius:50%; box-shadow:inset 0 0 0 2px rgba(150,160,170,.34),
-                                  0 0 0 3px rgba(0,0,0,.85); }
+    border-radius:50%; box-shadow:0 0 0 3px rgba(10,13,16,.72),
+                                 inset 0 0 0 2px rgba(150,162,174,.30),
+                                 inset 0 0 14px 4px rgba(8,11,14,.34); }
   #telRet{ position:absolute; left:50%; top:50%;
     width:calc(var(--r)*2); height:calc(var(--r)*2); margin:calc(var(--r)*-1) 0 0 calc(var(--r)*-1);
-    background-repeat:no-repeat; background-size:100% 100%; opacity:.92; }
-  /* LAS DOS LINEAS QUE SIGUEN AFUERA DEL ARO. En un visor de verdad la cruz no termina en el borde
-     del campo: los postes se leen contra el negro. Son dos rayas finas, y ayudan a encontrar el
-     centro cuando el fondo es todo cielo. */
-  .telCruz{ position:absolute; background:rgba(120,132,144,.30); }
+    background-repeat:no-repeat; background-size:100% 100%; opacity:.95; }
+  /* las dos lineas siguen fuera del aro: es lo que ayuda a encontrar el centro cuando el fondo es
+     todo cielo, y es como se ve en cualquier visor */
+  .telCruz{ position:absolute; background:rgba(18,22,26,.34); }
   .telCruzH{ left:0; right:0; top:50%; height:1px; margin-top:-0.5px; }
   .telCruzV{ top:0; bottom:0; left:50%; width:1px; margin-left:-0.5px; }
-  /* con la mira puesta, el punto de mira y el arma no van */
   body.tele #cross{ display:none !important; }
   #teleAum{ position:fixed; z-index:16; pointer-events:none; display:none;
     right:calc(16px + var(--safe-t)); bottom:calc(96px + var(--safe-b));
@@ -11421,7 +11418,7 @@ try{ window.__tiro={
   // pintar SIN avanzar el mundo: frames() llama a update() y update() vuelve a colocar la camara,
   // asi que para un primer plano hay que poder renderizar sin que nada la mueva
   foto:()=>{ renderer.render(scene,camera); return 1; },
-  frames:(n,dt)=>{ for(let i=0;i<(n||8);i++){ update(dt||0.0166); try{tiroVis();}catch(e){} try{saltoDibujo();}catch(e){} } renderer.render(scene,camera); return world; },
+  frames:(n,dt)=>{ for(let i=0;i<(n||8);i++){ update(dt||0.0166); try{tiroVis();}catch(e){} try{saltoDibujo();}catch(e){} try{telRender();}catch(e){} } renderer.render(scene,camera); return world; },
   hud:v=>{ document.body.classList.toggle('sinhud',!v); },
   // Ajustes: leer/escribir cualquier clave y ver que quedo escrito EN EL MOTOR, no solo en CFG
   cfg:(k,v)=>{ if(k==null) return JSON.parse(JSON.stringify(CFG));
@@ -15560,9 +15557,12 @@ function teleTick(){
     if(!a && q){ a=document.createElement('div'); a.id='teleAum'; document.body.appendChild(a); }
     if(a){ a.textContent=(Math.round(_telAum*10)/10)+'×'; a.style.display=q?'block':'none'; }
   }
-  /* EL ARMA NO SE DIBUJA CON LA MIRA PUESTA. Con la pantalla entera acercada seis veces, un tubo
-     que esta a seis centimetros del ojo tapa medio cuadro. Y no hace falta: el aro que se mira es
-     la superposicion. */
+  /* EL ARMA SE ESCONDE, PERO EL MUNDO NO SE TAPA. Probe dejarla: el tubo magnificado seis veces
+     deberia ser el aro por el que se mira, y no lo es — su pared interior, las campanas y los
+     cristales del objetivo quedan justo delante del ojo y tapan el centro del cuadro, que es lo
+     unico que no se puede tapar. Asi que el arma no se dibuja y el aro es un CONTORNO, no un
+     dibujo con fondo: el mundo se ve al mismo aumento adentro y afuera, y lo unico que se agrega
+     encima es la linea del tubo y la reticula. Una sola imagen, que es lo que se pidio. */
   try{ if(gunRoot) gunRoot.visible=!q; }catch(e){}
   if(gunCruz) gunCruz.visible=!q;   // el punto rojo no va cuando hay mira telescopica
 }

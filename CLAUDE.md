@@ -11,9 +11,11 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
 
 - [x] **Mira del sniper: RESUELTA DE RAIZ** (2026-08-23). Se saco la segunda pasada de escena
-      entera. El aumento lo hace la camara del juego (por tangente) y el aro con su reticula es una
-      superposicion PLANA. Medido: apuntar pasa de +187 llamadas / +580.888 triangulos a
-      -24 llamadas / -4.080 triangulos, o sea cuesta MENOS que la cadera. AWM 6,00x, Dragunov 4,00x.
+      entera. El aumento lo hace la camara del juego (por tangente) y el aro es un CONTORNO fino con
+      la reticula — SIN negro alrededor. Una sola imagen: el mismo mundo, al mismo aumento, adentro
+      y afuera del aro. El negro era el error: se leia como dos pantallas distintas.
+      Medido: apuntar pasa de +187 llamadas / +580.888 triangulos a -25 / -4.172, o sea cuesta MENOS
+      que la cadera. AWM 6,00x, Dragunov 4,00x. Referencia: Blood Strike, M700 mira x6.
 - [x] **Controles para los que recien empiezan** (2026-08-23): apuntar de UN TOQUE por omision
       (CFG_DEF.apuntar='tap'), botones un 10% mas chicos, y FUEGO y APUNTAR del 50% al 81% del alto
       de la pantalla — estaban justo sobre la linea del horizonte. Con la mira puesta el HUD se
