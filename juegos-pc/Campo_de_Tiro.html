@@ -2139,7 +2139,118 @@ const skyMat=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:
   uniforms:{top:{value:new THREE.Color(0x3f78c0)},bot:{value:new THREE.Color(0xd9eaf7)}},
   vertexShader:'varying float vh;void main(){vh=normalize(position).y;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
   fragmentShader:'varying float vh;uniform vec3 top;uniform vec3 bot;void main(){gl_FragColor=vec4(mix(bot,top,clamp(vh*0.55+0.45,0.0,1.0)),1.0);}'});
-const skyMesh=new THREE.Mesh(new THREE.SphereGeometry(900,24,14),skyMat); scene.add(skyMesh);   // (sigue al jugador cada frame)
+/* ===================== EL CIELO, DE VERDAD =====================
+   Era un degradado de dos colores sobre una esfera. Alcanzaba para no ver el vacio, pero no es un
+   cielo: no tiene sol, no tiene nubes, no tiene el aire mas denso pegado al horizonte, y sobre
+   todo no APORTA LUZ — el ambiente salia de un cuarto virtual que no se parecia en nada a lo que
+   se veia arriba, asi que un metal reflejaba una habitacion mientras estabas en un patio.
+
+   Este se calcula entero en el shader, sin una sola textura descargada:
+   · el degradado del cenit al horizonte, con la banda palida de aire denso abajo;
+   · el SOL en la direccion real de la luz de la escena, con su disco y su halo;
+   · nubes de ruido fraccionario en dos capas que se mueven a distinta velocidad, con la de abajo
+     mas gruesa y mas oscura por debajo — que es lo que le da espesor a una nube y no una mancha;
+   · y el resplandor del sol sobre las nubes que tiene cerca.
+
+   Y de ese mismo cielo sale el mapa de ambiente (PMREM): lo que refleja un caño es el cielo que
+   tenes encima, no un cuarto inventado. */
+const CIELO_U={
+  cenit:{value:new THREE.Color(0x3f78c0)}, horiz:{value:new THREE.Color(0xd9eaf7)},
+  sol:{value:new THREE.Vector3(0.4,0.55,0.3)}, solCol:{value:new THREE.Color(0xfff2d8)},
+  nubes:{value:0.70}, t:{value:0}, bruma:{value:0.55}
+};
+const cieloMat=new THREE.ShaderMaterial({ side:THREE.BackSide, depthWrite:false, fog:false,
+  uniforms:CIELO_U,
+  vertexShader:`varying vec3 vD; void main(){ vD=normalize(position);
+    gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    precision highp float;
+    varying vec3 vD;
+    uniform vec3 cenit, horiz, solCol, sol;
+    uniform float nubes, t, bruma;
+    /* ruido de valor con interpolacion suave: barato y sin textura */
+    float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453123); }
+    float ruido(vec2 p){
+      vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+      return mix(mix(h21(i), h21(i+vec2(1,0)), f.x),
+                 mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), f.x), f.y);
+    }
+    float fbm(vec2 p){
+      float v=0.0, a=0.5;
+      for(int i=0;i<5;i++){ v+=a*ruido(p); p*=2.03; a*=0.5; }
+      return v;
+    }
+    void main(){
+      vec3 d=normalize(vD);
+      float y=clamp(d.y*0.5+0.5, 0.0, 1.0);
+      /* el degradado: el cenit arriba, el horizonte abajo, y una banda de aire denso que lo
+         blanquea justo sobre la linea del suelo */
+      vec3 c=mix(horiz, cenit, pow(clamp(d.y*0.85+0.15,0.0,1.0), 0.62));
+      float aire=pow(1.0-clamp(abs(d.y)*2.4,0.0,1.0), 3.0);
+      c=mix(c, horiz*1.06, aire*bruma);
+      /* EL SOL: disco duro con halo ancho */
+      vec3 sd=normalize(sol);
+      float cs=max(dot(d,sd), 0.0);
+      /* El halo estaba demasiado abierto: con el resplandor encima, media pantalla se iba a
+         blanco y el cielo perdia el degradado. Disco mas chico y duro, halo mas ceñido. */
+      c += solCol * pow(cs, 1500.0) * 4.2;                // el disco
+      c += solCol * pow(cs, 70.0) * 0.24;                 // el halo cercano
+      c += solCol * pow(cs, 5.0) * 0.030;                 // la difusion en todo el cielo
+      /* NUBES. Se proyecta la direccion sobre un plano a altura fija: es la proyeccion de cupula
+         de siempre, y hace que las nubes se junten hacia el horizonte como pasa de verdad. */
+      if(nubes > 0.01 && d.y > 0.005){
+        vec2 pp = d.xz / max(d.y, 0.055);
+        float capa1 = fbm(pp*0.55 + vec2(t*0.012, t*0.006));
+        float capa2 = fbm(pp*1.35 + vec2(-t*0.021, t*0.014));
+        float m = capa1*0.68 + capa2*0.32;
+        /* el borde: por debajo del umbral no hay nube, y sube rapido. Sin esto es una niebla
+           pareja en vez de nubes con contorno. */
+        float cob = smoothstep(0.50, 0.78, m) * nubes;
+        cob *= smoothstep(0.0, 0.16, d.y);                 // se disuelven al ras del horizonte
+        /* espesor: la parte de abajo de la nube es mas oscura y la de arriba, la que mira al sol,
+           se enciende. Es lo unico que separa una nube de una mancha blanca. */
+        /* EL COLOR DE LA NUBE SALE DEL CIELO, no de un gris fijo. Con la paleta pastel el
+           horizonte es casi blanco (#f7f4ef): unas nubes gris claro encima de eso no se ven. La
+           base se saca del propio color del horizonte oscurecido, asi la nube destaca en las tres
+           paletas y no solo en la azul. */
+        float alto = smoothstep(0.46, 0.88, m);
+        vec3 base = horiz*0.58 + vec3(0.06);
+        vec3 nubeCol = mix(base, min(horiz*1.25 + vec3(0.22), vec3(1.05)), alto);
+        nubeCol += solCol * pow(cs, 9.0) * 0.55 * alto;    // el borde encendido del lado del sol
+        c = mix(c, nubeCol, clamp(cob,0.0,1.0));
+      }
+      gl_FragColor=vec4(max(c,0.0), 1.0);
+      #include <colorspace_fragment>
+    }`
+});
+/* ---- el mapa de ambiente sale del cielo ---- */
+let _cieloPMREM=null, _cieloEnv=null, _cieloEnvT=-1;
+function cieloEnv(forzar){
+  try{
+    if(!_cieloPMREM) _cieloPMREM=new THREE.PMREMGenerator(renderer);
+    /* la esfera del cielo con sus mismos uniforms, en una escena aparte: lo que se hornea es
+       exactamente lo que se ve arriba */
+    const esc=new THREE.Scene();
+    const m=new THREE.Mesh(new THREE.SphereGeometry(10,24,16), cieloMat);
+    esc.add(m);
+    const nuevo=_cieloPMREM.fromScene(esc, 0.04);
+    if(_cieloEnv) _cieloEnv.dispose();
+    _cieloEnv=nuevo.texture;
+    scene.environment=_cieloEnv;
+    esc.remove(m);
+    return true;
+  }catch(e){ return false; }
+}
+/* se rehornea cuando cambia la luz (estilo, hora), no cada cuadro: cuesta unos milisegundos */
+function cieloRefrescar(){ _cieloEnvT=-1; }
+function cieloTick(dt){
+  CIELO_U.t.value += dt;
+  try{ if(sun && sun.position){ const v=CIELO_U.sol.value;
+    v.set(sun.position.x-sun.target.position.x, sun.position.y-sun.target.position.y,
+          sun.position.z-sun.target.position.z).normalize(); } }catch(e){}
+  if(_cieloEnvT<0){ _cieloEnvT=0; cieloEnv(); }
+}
+const skyMesh=new THREE.Mesh(new THREE.SphereGeometry(900,24,14),cieloMat); scene.add(skyMesh);   // (sigue al jugador cada frame)
 
 /* ===================== ESTILO DE IMAGEN =====================
    PASTEL no se hace bajando la saturacion en un filtro: se hace con LUZ. Un cielo grande y claro que
@@ -2187,6 +2298,10 @@ function aplicarEstilo(k){
   if(hemiLuz){ hemiLuz.color.setHex(E.hemiC); hemiLuz.groundColor.setHex(E.hemiS);
     hemiLuz.intensity=Math.max(E.hemiI, _hemiMin||0); }
   skyMat.uniforms.top.value.setHex(E.cieloA); skyMat.uniforms.bot.value.setHex(E.cieloB);
+  /* el cielo nuevo usa los MISMOS dos colores del estilo, asi pastel/neutro/vivo lo siguen mandando */
+  try{ CIELO_U.cenit.value.setHex(E.cieloA); CIELO_U.horiz.value.setHex(E.cieloB);
+       CIELO_U.bruma.value = (E.nDes||1)*0.55;
+       cieloRefrescar(); }catch(e){}
   cityBg.setHex(E.cieloB);
   const V=(typeof cfgVista!=='undefined'?cfgVista:1);
   if(scene.fog){ scene.fog.color.setHex(E.niebla);
@@ -11087,6 +11202,16 @@ try{ window.__tiro={
     const ms=(performance.now()-t0)/n;
     return { ms:+ms.toFixed(2), fps:Math.round(1000/Math.max(0.01,ms)), preset:CFG.gPreset,
       rt:GFX.rt?GFX.rt.width+'x'+GFX.rt.height:'pantalla', llamadas:renderer.info.render.calls }; },
+  /* LOS MATERIALES DEL MAPA: que mapas tiene cada uno (color, normal, rugosidad, oclusion, metal) */
+  pbr:()=>{ const q={};
+    for(const k in ARE_M){ const m=ARE_M[k];
+      q[k]={ map:!!m.map, nrm:!!m.normalMap, rug:!!m.roughnessMap, ao:!!m.aoMap, met:!!m.metalnessMap,
+             env:+(m.envMapIntensity||0).toFixed(2) }; }
+    return { mats:q, ambiente:!!scene.environment, texturas:renderer.info.memory.textures,
+      cielo:{ nubes:CIELO_U.nubes.value, t:+CIELO_U.t.value.toFixed(1),
+              sol:CIELO_U.sol.value.toArray().map(v=>+v.toFixed(2)),
+              cenit:'#'+CIELO_U.cenit.value.getHexString(), horiz:'#'+CIELO_U.horiz.value.getHexString() } }; },
+  estilo:(k)=>{ if(k){ cfgSet('estilo',k); cfgAplicar(); } return { estilo:CFG.estilo, cielo:__tiro.pbr().cielo }; },
   socChat:(n,txt)=>{ gchPintarUno({ id:'p_'+n, n, r:'oro', rn:'ORO II', c:'#e8c063', t:txt||'hola',
     ts:Date.now() }, false); return GCH_TODO.length; },
   /* EL BANCO DE SONIDO: que se decodifico, cuanto dura cada cosa y que cancion esta puesta */
@@ -16417,6 +16542,7 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
   if(islaMode){ try{ alcTick(dt); }catch(e){} }   // el oleaje de la bahía
   try{ tdmTick(dt); }catch(e){}                   // el marcador del duelo de equipos
   try{ ambTick(dt); }catch(e){}                   // viento del valle + latido con poca vida
+  try{ cieloTick(dt); }catch(e){}                 // las nubes se mueven y el sol sigue a la luz
   try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player) — sigue latiendo aunque esté en pausa
   try{ _telDt=dt; telRender(); }catch(e){}   // la vista de adentro del visor, antes del cuadro principal
   /* Y ACA SE DIBUJA. gfxRender decide solo: si no hay nada del camino de imagen encendido,
@@ -17881,7 +18007,11 @@ const ARE_M={};
    siguen el mismo aparejo. Las UV se calculan en coordenadas de la ARENA, antes de correrla los
    32 km en Z: si no, los numeros se van a 16000 y el float del shader pierde el decimal, que es
    justo donde vive el detalle. */
-function areLienzo(S){ const c=document.createElement('canvas'); c.width=c.height=S; return [c,c.getContext('2d')]; }
+/* willReadFrequently: de estos lienzos se leen los pixeles (para la normal y los mapas de
+   rugosidad y oclusion) y sin el aviso el navegador los deja en la GPU y cada lectura es un viaje
+   de vuelta. Lo dice la propia consola. */
+function areLienzo(S){ const c=document.createElement('canvas'); c.width=c.height=S;
+  return [c, c.getContext('2d',{willReadFrequently:true})]; }
 function areTex(c,rep){ const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace;
   t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4; if(rep)t.repeat.set(rep,rep); return t; }
 /* normal map sacada del propio dibujo por diferencias: alcanza para que la juntura del bloque
@@ -17896,6 +18026,35 @@ function areNormal(c, fuerza){
     let nx=-dx, ny=-dy, nz=1; const l=Math.hypot(nx,ny,nz); nx/=l; ny/=l; nz/=l;
     const i=(y*S+x)*4;
     q[i]=(nx*0.5+0.5)*255; q[i+1]=(ny*0.5+0.5)*255; q[i+2]=(nz*0.5+0.5)*255; q[i+3]=255; }
+  g2.putImageData(o,0,0);
+  const t=new THREE.CanvasTexture(c2); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4; return t;
+}
+/* ===================== DE COLOR PLANO A PBR DE VERDAD =====================
+   Habia color y, en la piedra y la madera, un mapa de normales. Falta lo que hace que una
+   superficie se lea como el material que es: la RUGOSIDAD punto por punto. Una pared de bloques no
+   tiene una sola rugosidad — la junta de cemento es mate y el bloque esta mas pulido; una chapa
+   tiene el oxido opaco y el metal limpio brillante. Con una rugosidad unica, la luz del sol se
+   refleja igual en todos lados y por eso todo parecia plastico del mismo plastico.
+
+   Los tres mapas salen del MISMO dibujo, que es lo que los hace gratis: ya esta pintado, solo hay
+   que leerlo distinto.
+   · Rugosidad: de la luminancia. Lo oscuro de una textura casi siempre es lo poroso —la junta, la
+     veta, la tierra entre el pasto— y lo claro lo gastado y liso. Se mapea a un rango por
+     material, no de 0 a 1: una madera nunca llega a espejo.
+   · Oclusion: la misma luminancia, mas suave y menos contrastada, para hundir apenas las juntas.
+   · Metalicidad: solo donde tiene sentido (la chapa), y tambien por luminancia: el oxido no es
+     metal, el metal limpio si. */
+function areMapaGris(c, lo, hi, invertir, suave){
+  const S=c.width, g=c.getContext('2d'), d=g.getImageData(0,0,S,S).data;
+  const [c2,g2]=areLienzo(S), o=g2.createImageData(S,S), q=o.data;
+  const L=(x,y)=>{ const i=(((y+S)%S)*S+((x+S)%S))*4; return (d[i]*0.3+d[i+1]*0.59+d[i+2]*0.11)/255; };
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+    let l;
+    if(suave){ l=(L(x,y)*4+L(x+1,y)+L(x-1,y)+L(x,y+1)+L(x,y-1))/8; }
+    else l=L(x,y);
+    if(invertir) l=1-l;
+    const v=Math.round(Math.max(0,Math.min(1, lo+(hi-lo)*l))*255);
+    const i=(y*S+x)*4; q[i]=q[i+1]=q[i+2]=v; q[i+3]=255; }
   g2.putImageData(o,0,0);
   const t=new THREE.CanvasTexture(c2); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4; return t;
 }
@@ -17992,20 +18151,28 @@ function areMat(){
         cPiedraOs=areTexPiedra('#77736c','#4d4a45'), cMadera=areTexMadera('#8a6034'),
         cMaderaOs=areTexMadera('#5f4223'), cArena=areTexArena(),
         cTela=areTexTela('#a8412f'), cMetal=areTexMetal();
-  const M=(c,r,m,esc,nrm,nf)=>{ const o={color:0xffffff, roughness:r, metalness:m||0,
+  /* rug:[minimo,maximo] de rugosidad; met = si ademas lleva mapa de metalicidad */
+  const M=(c,r,m,esc,nrm,nf,rug,met)=>{ const o={color:0xffffff, roughness:r, metalness:m||0,
       map:areTex(c)};
     o.map.repeat.set(1,1);
     if(nrm){ o.normalMap=areNormal(c,nf||2.2); o.normalScale=new THREE.Vector2(0.85,0.85); }
+    if(rug){ o.roughnessMap=areMapaGris(c, rug[0], rug[1], true, false); o.roughness=1;
+             /* la oclusion propia del dibujo: hunde la junta sin depender de ninguna pasada */
+             o.aoMap=areMapaGris(c, 0.62, 1.0, false, true); o.aoMapIntensity=0.75;
+             /* el canal 0. Desde r152 el aoMap lee uv1 por defecto, y estas geometrias tienen UN
+                solo juego de UV (el proyectado por cara): sin esto el mapa no se aplicaba. */
+             o.aoMap.channel=0; }
+    if(met){ o.metalnessMap=areMapaGris(c, 0.05, 1.0, false, true); o.metalness=1; }
     const mat=new THREE.MeshStandardMaterial(o); mat.userData.uv=esc; return mat; };
-  ARE_M.pasto   = M(cPasto,   0.97,0,    0.34);
-  ARE_M.piedra  = M(cPiedra,  0.92,0,    0.90, true, 2.6);
-  ARE_M.piedraOs= M(cPiedraOs,0.94,0,    0.90, true, 2.6);
-  ARE_M.madera  = M(cMadera,  0.86,0,    1.10, true, 1.8);
-  ARE_M.maderaOs= M(cMaderaOs,0.88,0,    1.10, true, 1.8);
-  ARE_M.metal   = M(cMetal,   0.55,0.45, 1.40);
-  ARE_M.arena   = M(cArena,   0.95,0,    0.55);
-  ARE_M.tela    = M(cTela,    0.92,0,    1.60);
-  for(const k in ARE_M) ARE_M[k].envMapIntensity=0.35;
+  ARE_M.pasto   = M(cPasto,   0.97,0,    0.34, false,0,  [0.80,1.00]);
+  ARE_M.piedra  = M(cPiedra,  0.92,0,    0.90, true, 2.6,[0.62,0.98]);
+  ARE_M.piedraOs= M(cPiedraOs,0.94,0,    0.90, true, 2.6,[0.66,0.99]);
+  ARE_M.madera  = M(cMadera,  0.86,0,    1.10, true, 1.8,[0.52,0.94]);
+  ARE_M.maderaOs= M(cMaderaOs,0.88,0,    1.10, true, 1.8,[0.56,0.96]);
+  ARE_M.metal   = M(cMetal,   0.55,0.45, 1.40, true, 1.4,[0.22,0.78], true);
+  ARE_M.arena   = M(cArena,   0.95,0,    0.55, false,0,  [0.78,1.00]);
+  ARE_M.tela    = M(cTela,    0.92,0,    1.60, true, 1.2,[0.70,0.99]);
+  for(const k in ARE_M) ARE_M[k].envMapIntensity=0.55;
 }
 /* UV proyectadas por la cara, en metros de la arena (ver el comentario de arriba) */
 function areUV(geo, esc){
