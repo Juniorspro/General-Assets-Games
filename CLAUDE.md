@@ -28,10 +28,25 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
       hace desaparecer a los bots / jugadores.
 - [ ] **Lobby de BR**: al iniciar partida de battle royale, caer primero en un lobby
       (antes del avión), no directo a la partida.
-- [ ] **Más texturas en el BR**: el Valle Ceniza necesita bastantes más.
-- [ ] **Cinco mapas distintos** (pedido viejo, nunca hecho): hoy los cinco mapas de
-      enfrentamiento comparten la misma planta — llano con bloques desperdigados.
-      Hay que darles estructuras diferentes de verdad, uno por uno.
+- [x] **PBR en el BR** (2026-08-23): los 26 materiales del valle mas el suelo derivan rugosidad,
+      normales, oclusion y metal de su propio lienzo de color, igual que los mapas de la arena.
+      Todo en segundo plano y autoregulado por costo medido.
+- [ ] **Mas texturas en el BR**: el Valle Ceniza necesita bastantes mas VARIEDAD de texturas
+      (no mas mapas por material, eso ya esta: mas materiales distintos).
+- [ ] **Cinco mapas distintos** — EL PEDIDO CONCRETO (2026-08-23): que sean **islas**, un
+      **lugar de trafico con contenedores** (tipo Shipment) y **Nuketown**. Con referencias.
+      HALLAZGO IMPORTANTE de por que los cinco se sienten iguales: `buildArena()` envuelve
+      SIEMPRE el mapa en la misma MURALLA DE CASTILLO con almenas, cuatro torres en las esquinas
+      y cuatro tiendas (linea ~20050). Los `bloques` de cada mapa cambian el interior pero el
+      marco es identico, y el marco es lo que uno ve. Antes de hacer Nuketown o Shipment hay que
+      hacer el CERCO configurable por mapa: muralla / malla de alambre / cerco de suburbio con
+      bloqueo. Ese es el desbloqueo, no los bloques.
+      Referencias ya buscadas:
+      · Nuketown: dos casas enfrentadas (norte verde-azul, sur amarilla) con garaje y jardin
+        atras, calle en el medio con un colectivo y una camioneta, al oeste un auto delante de
+        una casa rosa en el fondo ciego, al este un bloqueo, maniquies en los jardines.
+      · Shipment: cuadrado chico, cuatro bloques de contenedores formando un cruce, cerco de
+        malla, contenedores inclinados contra las paredes.
 - [ ] **Bots con slide-cancel** (pedido viejo).
 - [ ] **Menú de skins / personalización de ropa** (pedido viejo).
 

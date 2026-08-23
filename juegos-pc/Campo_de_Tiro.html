@@ -8326,7 +8326,153 @@ function alcMats(){ if(ALC_M.hormigon)return ALC_M;
        transformed.z += r*0.055;
        transformed.y -= abs(r)*0.020;`);
   };
+  /* y recien aca los cuatro mapas que faltaban: alcPBR necesita los materiales ya creados */
+  try{ alcPBR(); }catch(e){ console.warn('pbr valle',e); }
   return ALC_M; }
+/* ===================== EL VALLE, EN PBR DE VERDAD =====================
+   Los cinco mapas de enfrentamiento tienen material completo —color, normales, rugosidad, oclusion
+   y metal, derivados de la propia textura en areMapas— y el valle del battle royale tenia SOLO
+   COLOR. Eso es lo que hace que el mismo hormigon se vea de plastico en un mapa y de hormigon en el
+   otro: sin rugosidad punto por punto no hay diferencia entre la junta de cemento y el bloque, y
+   sin normales una pared de ladrillos es un dibujo de ladrillos sobre una tabla lisa.
+
+   No hay que inventar nada: las texturas del valle ya son lienzos, y areNormal y areMapaGris —los
+   dos derivadores que usan los mapas— trabajan sobre un lienzo. Asi que se les pasa el lienzo de
+   color de cada material y salen los cuatro mapas que faltaban.
+
+   LA RECETA POR MATERIAL, que es donde esta el criterio:
+     [fuerza de normales, rugosidad minima, rugosidad maxima, lleva metal]
+   La rugosidad se lee INVERTIDA del color —lo claro de una textura suele ser lo gastado y pulido,
+   lo oscuro la junta y la sombra— y la oclusion sale del mismo canal sin invertir y suavizada.
+   El metal solo en lo que es metal: poner metalness en una pared de ladrillos la vuelve un espejo.
+
+   Y EN CALIDAD BAJA VA SOLO LA RUGOSIDAD. Derivar los cuatro mapas de veintiseis materiales son
+   unos cuantos millones de operaciones por pixel al entrar al mapa, y noventa texturas mas en la
+   placa. La rugosidad es la que mas cambia por lo que cuesta; las normales son las que mas cuestan. */
+const ALC_PBR={
+  hormigon:[1.8,0.80,0.99,0], hormigonSucio:[2.0,0.85,1.00,0],
+  blanco:[1.5,0.75,0.95,0],   blancoSucio:[1.8,0.82,0.99,0],
+  ladrillo:[2.6,0.78,0.98,0], ladrilloRojo:[2.6,0.78,0.98,0],
+  ventana:[1.0,0.18,0.55,1],  vidrio:[0.8,0.06,0.30,1],
+  techoRojo:[2.2,0.72,0.95,0],techoChapa:[2.4,0.35,0.75,1],
+  techoAlquitran:[2.0,0.88,1.00,0],
+  metal:[2.0,0.28,0.68,1],    oxido:[2.6,0.70,0.98,1],
+  madera:[2.2,0.72,0.96,0],   maderaVieja:[2.6,0.82,1.00,0],
+  roca:[3.0,0.86,1.00,0],     tierra:[2.2,0.90,1.00,0],
+  pasto:[1.6,0.88,1.00,0],    arena:[1.8,0.90,1.00,0],
+  asfalto:[2.2,0.82,0.99,0],  ceniza:[2.0,0.92,1.00,0],
+  cenizaClara:[2.0,0.92,1.00,0], quemado:[2.4,0.90,1.00,0],
+  grava:[2.8,0.88,1.00,0],    rejilla:[1.8,0.45,0.80,1],
+  faro:[1.4,0.72,0.94,0]
+};
+let _alcPbrHecho=false, _alcPbrMs=0, _alcPbrN=0, _alcPbrCola=null, _alcPbrFase='',
+    _alcPbrPeor=0, _alcPbrRecorte=0;
+/* DERIVAR A MEDIA RESOLUCION. Las texturas del valle son de 512, y derivar cuatro mapas de 512 por
+   cada uno de veintiseis materiales son cuarenta millones de lecturas de pixel en JS: medido, cinco
+   segundos clavados al entrar al mapa. Un mapa de normales o de rugosidad de 256 sobre un color de
+   512 no se distingue —la informacion que aportan es de baja frecuencia por definicion— y cuesta la
+   cuarta parte. */
+function alcMini(c, max){
+  const S=Math.min(max||256, c.width);
+  if(S===c.width) return c;
+  const [c2,g2]=areLienzo(S);
+  g2.imageSmoothingEnabled=true; g2.drawImage(c,0,0,S,S);
+  return c2;
+}
+function alcPBRUno(mat, r, completo){
+  const t=mat.map; if(!t||!t.image||!t.image.getContext) return false;
+  /* RESOLUCION SEGUN LO QUE APORTA CADA MAPA. El color va a 512 porque ahi vive el detalle que se
+     mira. Los otros tres no: una normal, una rugosidad y una oclusion son informacion de BAJA
+     frecuencia por definicion —bultos, no bordes— y a 256 y 128 no se distinguen del original,
+     pero cuestan cuatro y dieciseis veces menos. Derivar en JS sobre un lienzo es lo caro de todo
+     esto, asi que aca es donde hay que ahorrar. */
+  const c=alcMini(t.image, completo? 256 : 128);
+  /* los mapas derivados repiten igual que el color: si no, la normal va a otra escala que el color
+     y la superficie se ve como dos materiales superpuestos */
+  const igual=(m)=>{ if(!m) return m;
+    m.wrapS=m.wrapT=THREE.RepeatWrapping;
+    m.repeat.copy(t.repeat); m.offset.copy(t.offset); m.rotation=t.rotation;
+    m.anisotropy=t.anisotropy||4; return m; };
+  try{
+    if(!completo){
+      /* LA RUGOSIDAD PRIMERO, que es la que mas cambia por lo que cuesta: sin ella la junta de
+         cemento y el bloque brillan igual y todo se lee como plastico pintado. */
+      mat.roughnessMap=igual(areMapaGris(c, r[1], r[2], true, false)); mat.roughness=1;
+    } else {
+      mat.normalMap=igual(areNormal(c, r[0]));
+      mat.normalScale.set(0.85,0.85);
+      /* la oclusion va en el canal 0: por omision three la busca en uv2, que estas mallas no tienen */
+      const cg=alcMini(t.image, 128);
+      mat.aoMap=igual(areMapaGris(cg, 0.62, 1.0, false, true));
+      mat.aoMapIntensity=0.70; mat.aoMap.channel=0;
+      if(r[3]){ mat.metalnessMap=igual(areMapaGris(cg, 0.05, 1.0, false, true)); mat.metalness=1; }
+    }
+    mat.needsUpdate=true; return true;
+  }catch(e){ return false; }
+}
+/* TODO EN SEGUNDO PLANO, NADA EN EL CAMINO CRITICO. Primero intente dejar la rugosidad sincronica
+   —es la que mas se nota— y las normales en segundo plano. Medido: la rugosidad de los veintiseis
+   materiales tardaba 4,4 segundos igual, o sea que el problema no era CUANTOS mapas sino que
+   derivar en JS sobre un lienzo es caro y punto. Y cuatro segundos clavados al entrar al mapa es
+   cambiar un defecto por otro peor: la textura plana la ve el que mira, el tiron lo sufre el que
+   juega.
+   Asi que no bloquea nada. El mapa arranca con los colores de siempre y los mapas van entrando de
+   a poco, con un presupuesto de ocho milisegundos por turno: primero la rugosidad de todos —dos
+   pasadas por la cola, la barata primero— y despues las normales, la oclusion y el metal. En un par
+   de segundos de partida ya estan los cuatro, y no se pierde un cuadro. */
+function alcPBR(){
+  if(_alcPbrHecho) return _alcPbrN;
+  _alcPbrHecho=true; _alcPbrFase='en cola';
+  /* en calidad baja va solo la rugosidad: el aparato que no da tampoco quiere noventa texturas mas */
+  const pasadas = (quality==='low') ? [false] : [false,true];
+  _alcPbrCola=[];
+  for(const completo of pasadas)
+    for(const k in ALC_PBR) _alcPbrCola.push([k,completo]);
+  _alcPbrN=0; _alcPbrMs=0;
+  /* ni el primero va sincronico: entrar al mapa no espera un solo material */
+  setTimeout(alcPBRTurno, 60);
+  return _alcPbrN;
+}
+function alcPBRTurno(){
+  if(!_alcPbrCola){ return; }
+  /* UN MATERIAL POR TURNO, no un presupuesto de milisegundos. El presupuesto se chequea ANTES de
+     cada item, asi que un item caro lo pasa de largo entero: medido, el primer turno se comio 612
+     ms de un presupuesto de 8. De a uno el peor caso esta acotado por lo que cuesta el material
+     mas caro, y no por lo que quede de presupuesto. */
+  const t0=performance.now();
+  { const [k,completo]=_alcPbrCola.shift(), m=ALC_M[k];
+    if(m && alcPBRUno(m, ALC_PBR[k], completo)) _alcPbrN++; }
+  const costo=performance.now()-t0;
+  _alcPbrMs+=costo; _alcPbrPeor=Math.max(_alcPbrPeor,costo);
+  /* SE MIDE SOLO Y SE FRENA SOLO. Cuanto cuesta derivar un mapa depende del aparato, y no hay
+     manera de saberlo de antemano: leer un lienzo con getImageData va por hardware en un telefono
+     y por software en otro, y entre los dos hay dos ordenes de magnitud. Medido en un rasterizador
+     por software daba un segundo y medio POR MATERIAL — si eso pasara en un telefono, cada turno
+     seria un tiron de un segundo.
+     Asi que el primero se cronometra. Si sale caro, se tira la pasada completa —normales, oclusion
+     y metal— y se queda solo la rugosidad, que es la que mas cambia por lo que cuesta. Si sale
+     barato, siguen los cuatro mapas. El aparato decide, no yo. */
+  if(costo>45 && _alcPbrCola.length){
+    const antes=_alcPbrCola.length;
+    _alcPbrCola=_alcPbrCola.filter(t=>!t[1]);
+    if(_alcPbrCola.length<antes) _alcPbrRecorte=antes-_alcPbrCola.length;
+  }
+  if(_alcPbrCola.length){ _alcPbrFase='derivando ('+_alcPbrCola.length+' en cola)';
+    setTimeout(alcPBRTurno, 0); }
+  else { _alcPbrCola=null; _alcPbrFase='completo'; try{ alcPBRSuelo(); }catch(e){} }
+}
+/* EL SUELO VA APARTE. Es la superficie mas grande del mapa —ciento treinta metros de ceniza— y no
+   esta en ALC_M: se arma en alcSuelo con su propia textura, y cuando corre alcMats todavia no
+   existe. Asi que se le pone el material cuando el terreno ya esta hecho. */
+function alcPBRSuelo(){
+  try{ if(!alcSuelo||!alcSuelo.material||!alcSuelo.material.map) return false;
+    if(alcSuelo.material.roughnessMap) return false;
+    /* tambien en dos turnos: la textura del suelo es la mas grande del mapa */
+    setTimeout(()=>{ try{ alcPBRUno(alcSuelo.material, [1.6,0.90,1.00,0], false);
+      if(quality!=='low') setTimeout(()=>{ try{ alcPBRUno(alcSuelo.material, [1.6,0.90,1.00,0], true); }catch(e){} }, 0);
+    }catch(e){} }, 0);
+    return true; }catch(e){ return false; }
+}
 function alcMat(n){ alcMats(); return ALC_M[n]||ALC_M.hormigon; }
 
 /* ---------------- acumulador: geometría por material, se funde al final ---------------- */
@@ -9309,6 +9455,8 @@ function alcTerreno(){
     for(let k=0;k<uv.count;k++) uv.setXY(k, (pp.getX(k))/6, (pp.getZ(k))/6);
     uv.needsUpdate=true; }
   alcSuelo=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.98,metalness:0,map:alcTexSuelo()}));
+  /* y con el terreno ya armado, sus mapas: es la superficie que mas se mira de todo el mapa */
+  try{ alcPBRSuelo(); }catch(e){}
   alcSuelo.position.set((ALC_X0+ALC_X1)/2,0,(ALC_Z0+ALC_Z1)/2+ALC_GZ);
   alcSuelo.receiveShadow=true; alcSuelo.castShadow=false; alcSuelo.frustumCulled=false;
   alcGroup.add(alcSuelo);
@@ -12754,6 +12902,21 @@ try{ window.__tiro={
       /* bien = la boca esta ADELANTE (z negativa) y mas adelante que la cola */
       bien:(boca.z<0 && zFrente.z<zCola.z),
       frenteModelo:+bb.min.z.toFixed(3), colaModelo:+bb.max.z.toFixed(3) }; },
+  /* QUE MAPAS TIENE CADA MATERIAL DEL VALLE, y cuanto costo derivarlos. El equivalente de
+     __tiro.pbr() pero para el battle royale, que es el que no los tenia. */
+  pbrValle:()=>{ try{ alcMats(); }catch(e){}
+    const q={}; let conNrm=0, conRug=0, conAo=0, conMet=0, total=0;
+    for(const k in ALC_PBR){ const m=ALC_M[k]; if(!m) continue; total++;
+      const f={ map:!!m.map, nrm:!!m.normalMap, rug:!!m.roughnessMap, ao:!!m.aoMap, met:!!m.metalnessMap };
+      if(f.nrm) conNrm++; if(f.rug) conRug++; if(f.ao) conAo++; if(f.met) conMet++;
+      q[k]=f; }
+    const su=(alcSuelo&&alcSuelo.material)? { map:!!alcSuelo.material.map, nrm:!!alcSuelo.material.normalMap,
+      rug:!!alcSuelo.material.roughnessMap, ao:!!alcSuelo.material.aoMap } : null;
+    return { materiales:total, conNormal:conNrm, conRugosidad:conRug, conOclusion:conAo, conMetal:conMet,
+             suelo:su, ms:+_alcPbrMs.toFixed(0), derivados:_alcPbrN, calidad:quality,
+             fase:_alcPbrFase, colaPendiente:(_alcPbrCola? _alcPbrCola.length : 0),
+             peorTurnoMs:+_alcPbrPeor.toFixed(1), recortados:_alcPbrRecorte,
+             texturasGPU:renderer.info.memory.textures, detalle:q }; },
   armaMedir:()=>{
     const mats=new Set(Object.values(AKMAT));
     gunCuerpo.updateMatrixWorld(true);
