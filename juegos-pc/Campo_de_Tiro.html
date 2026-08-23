@@ -11286,6 +11286,111 @@ try{ window.__tiro={
     piezas: cuPiezas.length, piezasVis: cuPiezas.filter(m=>m.visible).length,
     cam: CAREO.cam? [+CAREO.cam.position.x.toFixed(1),+CAREO.cam.position.y.toFixed(1),+CAREO.cam.position.z.toFixed(1)] : null,
     dCam: (CAREO.cam&&bodyRoot)? +CAREO.cam.position.distanceTo(bodyRoot.position).toFixed(2) : null }),
+  /* LA PRUEBA DE LA CASA. Camina desde afuera hacia el centro de cada casa por cuatro lados y
+     dice si llego. Por la PUERTA tiene que entrar; por las otras tres paredes, no. */
+  casas:()=>{
+    const P=MAPA_ARE(), out=[];
+    const libre=(x,z,y,yTope)=>{
+      const R=0.36, zz=z+ARE_GZ, y0=(y==null?0.14:y), y1=(yTope==null? y0+1.80 : yTope);
+      for(let i=0;i<colliders.length;i++){ const c=colliders[i];
+        if(c.minx<x+R&&c.maxx>x-R&&c.minz<zz+R&&c.maxz>zz-R&&c.miny<y1&&c.maxy>y0) return false; }
+      return true; };
+    const esp=(P.espejo!==false);
+    for(const h of (P.casas||[])){
+      const xs = esp ? (h[0]?[-1,1]:[1]) : [1];
+      const zs = esp ? (h[1]?[-1,1]:[1]) : [1];
+      for(const sx of xs) for(const sz of zs){
+        const cx=h[0]*sx, cz=h[1]*sz, ry=casaGiro(h[5]||0, sx, sz), w=h[2], d=h[3];
+        const c=Math.cos(ry), sn=Math.sin(ry);
+        const mundo=(lx,lz)=>[cx+lx*c+lz*sn, cz-lx*sn+lz*c];
+        /* se camina de a 20 cm desde 3 m afuera hasta el centro */
+        const cruza=(lx0,lz0)=>{ const n=26;
+          for(let i=0;i<=n;i++){ const t=i/n;
+            const [px,pz]=mundo(lx0*(1-t), lz0*(1-t));
+            if(!libre(px,pz)) return false; }
+          return true; };
+        out.push({ casa:[+cx.toFixed(0),+cz.toFixed(0)],
+          puerta: cruza(0, d/2+3.0),          // por el vano: TIENE que pasar
+          fondo:  cruza(0, -(d/2+3.0)),       // por la pared de atras: NO
+          izq:    cruza(-(w/2+3.0), 0),
+          der:    cruza( (w/2+3.0), 0),
+          /* la ventana: a la altura del pecho el hueco esta libre, a la altura de las piernas no */
+          /* la ventana se mide con una FRANJA de 20 cm a la altura del pecho (asomarse y tirar),
+             no con el cuerpo entero de 1,80: con el cuerpo entero siempre pega el dintel */
+          ventanaVe:   (()=>{ const [px,pz]=mundo(0,-(d/2)); return libre(px,pz,1.15,1.35); })(),
+          ventanaPasa: (()=>{ const [px,pz]=mundo(0,-(d/2)); return libre(px,pz,0.14,1.94); })() });
+      }
+    }
+    return { mapa:P.n, casas:out };
+  },
+  /* para cada casa del mapa: que giros dejan la puerta libre. Sirve para elegir bien la
+     orientacion en vez de adivinar contra que bloque queda pegada. */
+  casaGiros:()=>{
+    const P=MAPA_ARE(), out=[];
+    const libre=(x,z)=>{ const R=0.36, zz=z+ARE_GZ;
+      for(let i=0;i<colliders.length;i++){ const c=colliders[i];
+        if(c.minx<x+R&&c.maxx>x-R&&c.minz<zz+R&&c.maxz>zz-R&&c.miny<1.94&&c.maxy>0.14) return false; }
+      return true; };
+    for(let k=0;k<(P.casas||[]).length;k++){ const h=P.casas[k];
+      const bien=[];
+      for(let q=0;q<8;q++){ const g=q*Math.PI/4;
+        const c=Math.cos(g), sn=Math.sin(g), d=h[3];
+        let ok=true;
+        for(let i=0;i<=26;i++){ const t=1-i/26, lz=(d/2+3.0)*t;
+          if(!libre(h[0]+lz*sn, h[1]+lz*c)){ ok=false; break; } }
+        if(ok) bien.push(+(g).toFixed(3));
+      }
+      out.push({ i:k, pos:[h[0],h[1]], giroActual:+(h[5]||0).toFixed(3), girosLibres:bien });
+    }
+    return { mapa:P.n, casas:out };
+  },
+  casaGirosTodos:()=>{ const g=mapaArena, out=[];
+    for(let i=0;i<MAPAS_ARENA.length;i++){ areIrA(i); out.push(__tiro.casaGiros()); }
+    areIrA(g); return out; },
+  /* DONDE ENTRA UNA CASA. Se saca la casa del plano, se rearma el mapa sin ella y se barre una
+     grilla buscando un rectangulo w x d libre CON su entrada de 3 m tambien libre. Devuelve los
+     mejores sitios, del mas despejado al menos. Es la manera de colocarlas sin adivinar. */
+  casaSitios:(w,d,paso)=>{
+    const P=MAPA_ARE(), guard=P.casas; P.casas=[];
+    areLimpiar(); buildArena();
+    const L=ARE_LADO/2-10, S=paso||4;
+    const libre=(x,z,R)=>{ const zz=z+ARE_GZ, r=R||0.4;
+      for(let i=0;i<colliders.length;i++){ const c=colliders[i];
+        if(c.maxy<=0.30) continue;
+        if(c.minx<x+r&&c.maxx>x-r&&c.minz<zz+r&&c.maxz>zz-r&&c.miny<2.6) return false; }
+      return true; };
+    const sitios=[];
+    for(let x=-L;x<=L;x+=S) for(let z=-L;z<=L;z+=S){
+      if(Math.hypot(x,z)<12) continue;                       // el centro se deja jugable
+      /* la huella, con medio metro de aire alrededor */
+      let ok=true;
+      for(let a=-1;a<=1 && ok;a++) for(let b=-1;b<=1 && ok;b++)
+        if(!libre(x+a*(w/2+0.6), z+b*(d/2+0.6))) ok=false;
+      if(!ok) continue;
+      /* y una entrada libre por alguno de los cuatro lados */
+      const gir=[];
+      for(let q=0;q<4;q++){ const g=q*Math.PI/2, sn=Math.sin(g), c2=Math.cos(g);
+        let bien=true;
+        for(let t=0;t<=8;t++){ const lz=(d/2+3.2)*(t/8);
+          if(!libre(x+lz*sn, z+lz*c2, 0.5)){ bien=false; break; } }
+        if(bien) gir.push(+g.toFixed(3));
+      }
+      if(gir.length) sitios.push({ x:+x.toFixed(0), z:+z.toFixed(0), giros:gir, d:+Math.hypot(x,z).toFixed(0) });
+    }
+    P.casas=guard; areLimpiar(); buildArena();
+    sitios.sort((a,b)=>b.giros.length-a.giros.length || a.d-b.d);
+    /* una muestra repartida por anillos, que los primeros de la lista son todos del centro */
+    const anillos=[[18,26],[26,34],[34,42],[42,52]], m=[];
+    for(const [r0,r1] of anillos){ const q=sitios.filter(t=>t.d>=r0&&t.d<r1&&t.giros.length===4);
+      for(let i=0;i<Math.min(4,q.length);i++) m.push(q[Math.floor(i*q.length/Math.min(4,q.length))]); }
+    return { mapa:P.n, lado:ARE_LADO, cuantos:sitios.length, mejores:m };
+  },
+  casaSitiosTodos:(w,d)=>{ const g=mapaArena, out=[];
+    for(let i=0;i<MAPAS_ARENA.length;i++){ areIrA(i); out.push(__tiro.casaSitios(w||8,d||7,4)); }
+    areIrA(g); return out; },
+  casasTodas:()=>{ const g=mapaArena, out=[];
+    for(let i=0;i<MAPAS_ARENA.length;i++){ areIrA(i); out.push(__tiro.casas()); }
+    areIrA(g); return out; },
   estilo:(k)=>{ if(k){ cfgSet('estilo',k); cfgAplicar(); } return { estilo:CFG.estilo, cielo:__tiro.pbr().cielo }; },
   socChat:(n,txt)=>{ gchPintarUno({ id:'p_'+n, n, r:'oro', rn:'ORO II', c:'#e8c063', t:txt||'hola',
     ts:Date.now() }, false); return GCH_TODO.length; },
@@ -18579,6 +18684,94 @@ function areCont(x,y,z,ry,col){
   for(let i=-2;i<=2;i++){ const t=i*1.1;
     areAdd(M.piedraOs,new THREE.BoxGeometry(0.14,H-0.3,D+0.06), x+t*c, y+H/2, z+t*sn, ry||0); }
 }
+/* ===================== UNA CASA EN LA QUE SE PUEDE ENTRAR =====================
+   Los mapas tenian bloques macizos: cubierta, si, pero nada por dentro. Una casa cambia como se
+   juega el metro cuadrado — hay una puerta que vigilar, una ventana desde la que asomarse y un
+   adentro donde el que entra pierde el angulo largo y gana el corto.
+
+   Es simple a proposito: cuatro paredes, un techo, un piso. Nada de ruinas ni escombros, que es
+   justo lo que se pidio. Lo que tiene de fino es COMO SE PARTEN LOS SOLIDOS:
+
+   · LA PUERTA no lleva solido de ningun tipo — es un hueco de verdad, del piso al dintel. La pared
+     de adelante se hace en dos pedazos, uno a cada lado, mas una viga arriba.
+   · LA VENTANA lleva antepecho y dintel, y NO lleva solido en el medio. El cuerpo del jugador mide
+     de los pies a 1,85: el antepecho de un metro le frena las piernas, asi que no se puede entrar
+     por la ventana… pero el hueco de 1,00 a 1,90 esta libre y por ahi se ve y se dispara. Es
+     exactamente lo que hace una ventana.
+   · EL PISO va 12 cm sobre el suelo. El escalon del juego perdona hasta 38, asi que se entra
+     caminando sin saltar, y el borde se ve.
+
+   Los solidos del mapa son cajas alineadas a los ejes, asi que una casa girada se parte en pedazos
+   igual que las paredes de las tiendas (ver el comentario de areCaja). */
+/* EL GIRO DE UNA CASA ESPEJADA NO ES -giro.
+   Para un bloque da igual —una caja es simetrica— pero una casa tiene UNA puerta, y si el reflejo
+   la manda contra el borde del mapa la copia no sirve para nada. Reflejar no es girar: hay que
+   reflejar la DIRECCION a la que mira la puerta y despues buscar el giro que la produce.
+   La puerta mira al +Z local, que en el mundo es (sen g, cos g).
+   · espejo en X (x -> -x): la puerta pasa a (-sen g, cos g)  =>  g' = -g
+   · espejo en Z (z -> -z): pasa a (sen g, -cos g)            =>  g' = PI - g
+   · los dos:                                                     g' = PI + g
+   Medido antes de esto: de las ocho casas de La Arena, cuatro tenian la puerta tapada. */
+function casaGiro(g, sx, sz){
+  let r=g;
+  if(sx<0) r=-r;
+  if(sz<0) r=Math.PI-r;
+  return r;
+}
+const CASA_PUERTA=1.75;      // ancho del vano de la puerta
+const CASA_DINTEL=2.15;      // desde donde arranca la viga de arriba
+const CASA_VENT=[1.00,1.90]; // antepecho y dintel de la ventana
+function areCasa(x, z, w, d, h, ry, matPared, matTecho){
+  const M=ARE_M, T=0.32;
+  const mp = matPared || M.piedra, mt = matTecho || M.maderaOs;
+  const c=Math.cos(ry||0), sn=Math.sin(ry||0);
+  /* de coordenadas de la casa a coordenadas de la arena */
+  const aMundo=(lx,lz)=>[x + lx*c + lz*sn, z - lx*sn + lz*c];
+  /* un pedazo de pared, en coordenadas locales */
+  const pared=(lx,ly,lz,lw,lh,ld,mat)=>{
+    if(lw<=0.02 || lh<=0.02 || ld<=0.02) return;
+    const [wx,wz]=aMundo(lx,lz);
+    areCaja(mat||mp, wx, ly, wz, lw, lh, ld, ry);
+  };
+  /* una pared con ventana en el medio. `eje` es 'x' si la pared corre a lo largo de X. */
+  const conVentana=(eje, lx, lz, largo)=>{
+    const V=Math.min(2.2, largo*0.45);           // ancho del vano
+    const lado=(largo-V)/2;
+    const A=CASA_VENT[0], B=CASA_VENT[1];
+    const dim=(l,g)=> eje==='x' ? [l,g] : [g,l];  // [ancho, profundidad] segun por donde corre
+    let p;
+    p=dim(largo, T);   pared(lx, A/2,        lz, p[0], A,   p[1]);              // antepecho
+    p=dim(largo, T);   pared(lx, (B+h)/2,    lz, p[0], h-B, p[1]);              // dintel para arriba
+    p=dim(lado,  T);
+    const off=(V+lado)/2;
+    if(eje==='x'){ pared(lx-off, (A+B)/2, lz, p[0], B-A, p[1]);
+                   pared(lx+off, (A+B)/2, lz, p[0], B-A, p[1]); }
+    else         { pared(lx, (A+B)/2, lz-off, p[0], B-A, p[1]);
+                   pared(lx, (A+B)/2, lz+off, p[0], B-A, p[1]); }
+  };
+  /* --- piso: 12 cm, escalable de un paso --- */
+  { const [wx,wz]=aMundo(0,0);
+    areCaja(M.piedraOs, wx, 0.06, wz, w+T, 0.12, d+T, ry); }
+  /* --- pared de la puerta (+Z local) --- */
+  { const P=CASA_PUERTA, lado=(w-P)/2, off=(P+lado)/2;
+    pared(-off, h/2, d/2, lado, h, T);
+    pared( off, h/2, d/2, lado, h, T);
+    pared(0, (CASA_DINTEL+h)/2, d/2, P, h-CASA_DINTEL, T);          // la viga sobre la puerta
+    /* el marco: dos montantes de madera, que es lo que le da lectura de PUERTA y no de agujero */
+    pared(-P/2-0.07, CASA_DINTEL/2, d/2+0.02, 0.14, CASA_DINTEL, T+0.06, mt);
+    pared( P/2+0.07, CASA_DINTEL/2, d/2+0.02, 0.14, CASA_DINTEL, T+0.06, mt);
+  }
+  /* --- las otras tres, con ventana --- */
+  conVentana('x', 0, -d/2, w);
+  conVentana('z', -w/2, 0, d);
+  conVentana('z',  w/2, 0, d);
+  /* --- techo: una losa con alero. Se puede caminar por arriba si llegas. --- */
+  { const [wx,wz]=aMundo(0,0);
+    areCaja(mt, wx, h+0.16, wz, w+0.9, 0.32, d+0.9, ry);
+    /* y una viga en el borde de adelante, para que el alero no sea una tabla flotando */
+    const [bx,bz]=aMundo(0, d/2+0.42);
+    areCaja(mt, bx, h-0.06, bz, w+0.9, 0.2, 0.18, ry, false); }
+}
 const MAPAS_ARENA=[
   { id:'arena', n:'La Arena', d:'Campo abierto · plataforma central', lado:132, espejo:true,
     bloques:[ [0,0,14,1.6,14,'piedraOs'], [0,0,8,3.2,8,'piedra'],
@@ -18586,7 +18779,15 @@ const MAPAS_ARENA=[
       [40,22,6,1.4,6,'arena'], [22,40,6,1.4,6,'arena'], [46,46,4,2.2,4,'piedra'],
       [16,10,2.4,1.2,2.4,'madera'], [34,8,2.4,1.2,2.4,'madera'], [10,34,2.4,1.2,2.4,'madera'],
       [30,30,3.0,1.8,1.2,'piedraOs'], [52,12,1.2,2.4,7,'piedra'], [12,52,7,2.4,1.2,'piedra'] ],
-    rampas:[[0,0,4,5,7,1.6]], barriles:[[19,19],[44,6],[6,44],[36,20],[20,36]] },
+    rampas:[[0,0,4,5,7,1.6]], barriles:[[19,19],[44,6],[6,44],[36,20],[20,36]],
+    /* dos casas por cuadrante, con la puerta MIRANDO AL CENTRO: son el refugio de media distancia
+       que al campo abierto le faltaba */
+    /* LOS SITIOS SALEN DE UN BARRIDO, NO DE LA INTUICION. Las primeras las puse a ojo y cuatro de
+       ocho quedaron con la puerta contra un bloque del mapa: la casa se veia bien y no se podia
+       entrar. Ahora un barrido de la grilla busca donde entra la huella CON su entrada de tres
+       metros libre, y de ahi salen estas coordenadas. La puerta mira al centro del mapa. */
+    casas:[ [24,12, 8,7,3.1, -Math.PI/2, 'piedra','maderaOs'],
+            [16,32, 8,7,3.0, Math.PI, 'arena','maderaOs'] ] },
 
   { id:'cruce', n:'El Cruce', d:'Tres calles y callejones · duelos', lado:122, espejo:true,
     bloques:[
@@ -18602,7 +18803,10 @@ const MAPAS_ARENA=[
       [14,4,2.2,1.1,2.2,'madera'], [30,6,2.2,1.1,2.2,'madera'], [52,34,2.4,1.3,2.4,'madera'],
       [36,42,3.0,1.6,3.0,'piedraOs'], [50,8,1.4,2.6,6,'piedra'] ],
     rampas:[[21,29,0,5,6,4.4],[44,36,0,5,6,3.6]],
-    barriles:[[16,26],[38,30],[8,44],[48,18],[27,52]] },
+    barriles:[[16,26],[38,30],[8,44],[48,18],[27,52]],
+    /* en las esquinas de las bocacalles: se entra desde la calle y se sale mirando el cruce */
+    casas:[ [33,9, 8,7,3.2, -Math.PI/2, 'piedra','maderaOs'],
+            [9,23, 8,7,3.0, Math.PI, 'piedraOs','maderaOs'] ] },
 
   { id:'puerto', n:'El Puerto', d:'Contenedores apilados · esquinas', lado:126, espejo:true,
     bloques:[
@@ -18624,7 +18828,13 @@ const MAPAS_ARENA=[
       [30,44,0,0],[30,44,0,2.6],[42,26,1.5708,0],[6,22,1.5708,0],[6,22,1.5708,2.6],
       [54,44,0,0],[18,58,1.5708,0],[42,58,0,0] ],
     rampas:[[22,20,0,4,5,2.6],[38,22,1.5708,4,5,2.6]],
-    barriles:[[10,18],[28,8],[44,28],[18,52],[52,46]] },
+    barriles:[[10,18],[28,8],[44,28],[18,52],[52,46]],
+    /* la caseta del muelle y la oficina del fondo */
+    casas:[ [35,9, 8,7,2.9, -Math.PI/2, 'madera','maderaOs'],
+            /* EN X=0 A PROPOSITO: con x=1 el espejo hacia dos casas separadas por dos metros y se
+               metian una dentro de la otra. Con la coordenada en cero el espejo saca DOS copias
+               (z positivo y negativo) en vez de cuatro, que es lo que corresponde. */
+            [0,43, 8,7,3.1, Math.PI, 'piedra','maderaOs'] ] },
 
   { id:'fabrica', n:'La Fábrica', d:'Naves y pasarelas · corta distancia', lado:112, espejo:true,
     bloques:[
@@ -18639,7 +18849,10 @@ const MAPAS_ARENA=[
       [25,25,12,0.5,3,'piedraOs'], [0,0,10,0.6,10,'piedraOs'], [0,0,4,2.6,4,'metal'],
       [40,44,3,1.5,3,'madera'], [22,44,2.4,1.2,2.4,'madera'] ],
     rampas:[[25,34,0,4,7,2.9],[8,8,1.5708,4,6,0.6]],
-    barriles:[[20,20],[6,14],[36,6],[14,36],[46,40]] },
+    barriles:[[20,20],[6,14],[36,6],[14,36],[46,40]],
+    /* la casilla del capataz, pegada a la nave */
+    casas:[ [40,18, 7,6,2.9, -Math.PI/2, 'metal','maderaOs'],
+            [16,40, 6,7,2.9, 0, 'piedra','maderaOs'] ] },
 
   { id:'ruinas', n:'Las Ruinas', d:'Muros rotos y montículos · sin simetría', lado:138, espejo:false,
     bloques:[
@@ -18674,7 +18887,13 @@ const MAPAS_ARENA=[
       [-38,-2,1.6,3.4,1.6,'piedra'], [-32,-2,1.6,3.4,1.6,'piedra'], [-35,-2,7,0.9,1.6,'piedra'],
       [18,20,5,5.5,5,'piedraOs'],  [18,20,3.4,7.0,3.4,'piedra'] ],
     rampas:[[-4,9,0,5,7,2.4],[20,15,3.1416,4,6,1.0]],
-    barriles:[[-10,6],[24,-6],[-34,18],[38,28],[4,44],[-46,-8],[48,-14]] }
+    barriles:[[-10,6],[24,-6],[-34,18],[38,28],[4,44],[-46,-8],[48,-14]],
+    /* SIN ESPEJO van una por una, asi que aca hay cuatro sueltas y cada una mira para otro lado:
+       en un mapa sin simetria las casas son las que te dicen donde estas parado */
+    casas:[ [-19,5,  8,7,3.1, Math.PI/2, 'piedraOs','maderaOs'],
+            [17,-23, 8,7,3.0, Math.PI, 'piedra','maderaOs'],
+            [-3,37,  8,7,3.2, -Math.PI/2, 'arena','maderaOs'],
+            [-39,-11,8,7,2.9, 0, 'piedraOs','madera'] ] }
 ];
 let mapaArena=(()=>{ try{ const k=localStorage.getItem('ct_mapaAre');
   const i=MAPAS_ARENA.findIndex(m=>m.id===k); return i<0?0:i; }catch(e){ return 0; } })();
@@ -18763,6 +18982,15 @@ function buildArena(){
       const xs = esp ? (r[0]?[-1,1]:[1]) : [1];
       const zs = esp ? (r[1]?[-1,1]:[1]) : [1];
       for(const sx of xs) for(const sz of zs) areRampa(r[0]*sx, r[1]*sz, r[2], r[3], r[4], r[5]);
+    }
+  }
+  // ---- casas ----
+  for(const h of (P.casas||[])){
+    const xs = esp ? (h[0]?[-1,1]:[1]) : [1];
+    const zs = esp ? (h[1]?[-1,1]:[1]) : [1];
+    for(const sx of xs) for(const sz of zs){
+      areCasa(h[0]*sx, h[1]*sz, h[2], h[3], h[4]||3.0, casaGiro(h[5]||0, sx, sz),
+              ARE_M[h[6]]||ARE_M.piedra, ARE_M[h[7]]||ARE_M.maderaOs);
     }
   }
   // ---- barriles y postes sueltos ----
