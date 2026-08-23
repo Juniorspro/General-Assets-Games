@@ -1802,7 +1802,14 @@ const CFG_DEF={
   layout:'clasico', mando:0, mapa:'tiro', idioma:'es',
   adsFp:1, sensRel:100, acel:'fija', acelFuerza:60,
   giro:'no', sensGiro:100, sensGiroAds:70, vaiven:50,
-  estilo:'pastel', sombraSuave:1, sombraRes:2048, brillo:100, vista_m:100, viento:100
+  estilo:'pastel', sombraSuave:1, sombraRes:2048, brillo:100, vista_m:100, viento:100,
+  /* ---- el camino de imagen. Todo en cero = el juego dibuja derecho a la pantalla, como siempre.
+     El preset MEDIO enciende lo barato; ULTRA enciende todo. ---- */
+  /* de fabrica sale en EQUILIBRIO, que son los mismos numeros del preajuste 'med': dibuja al 85%
+     y lo sube reafilado (o sea, MENOS pixeles que antes) y encima le suma multimuestreo 2x,
+     anisotropico 4x y una viñeta suave. Se ve mejor y cuesta menos que como venia. */
+  fps:0, gPreset:'med', gEsc:85, gNit:45, gMsaa:2, gAniso:4, gBloom:0, gVin:25, gAo:0, gGrano:0,
+  gPart:100, gLod:100, gTex:'alta'
 };
 const CFG=Object.assign({},CFG_DEF);
 try{ const g=JSON.parse(localStorage.getItem('pf_cfg')||'null');
@@ -11063,6 +11070,23 @@ try{ window.__tiro={
   camInfo:()=>({ pos:[+camera.position.x.toFixed(1),+camera.position.y.toFixed(1),+camera.position.z.toFixed(1)],
     fov:camera.fov, far:camera.far, near:camera.near, aspect:+camera.aspect.toFixed(3),
     mundo:world, ticks:MP.nTick|0 }),
+  /* EL MOTOR DE IMAGEN, desde afuera: que esta encendido, que tamaño tiene el destino y que
+     cuesta cada cosa. `gfx(preset)` cambia el preajuste; `gfxMed(n)` mide n cuadros. */
+  gfx:(pre)=>{ if(pre){ if(pre==='custom') CFG.gPreset='custom'; else gfxPreset(pre); cfgAplicar(); }
+    const inf=renderer.info;
+    return { preset:CFG.gPreset, esc:+GFX.esc.toFixed(2), nit:+GFX.nitidez.toFixed(3), msaa:GFX.msaa,
+      bloom:+GFX.bloom.toFixed(2), ao:+GFX.ao.toFixed(2), vin:+GFX.vineta.toFixed(2), grano:+GFX.grano.toFixed(3),
+      aniso:_anisoAct, lod:LOD_MANOS, part:PART_DENS, camino:gfxNecesita(),
+      rt:GFX.rt?[GFX.rt.width,GFX.rt.height]:null, prof:!!(GFX.rt&&GFX.rt.depthTexture),
+      bright:GFX.bright?[GFX.bright.width,GFX.bright.height]:null,
+      llamadas:inf.render.calls, tris:inf.render.triangles, texturas:inf.memory.textures }; },
+  gfxSet:(k,v)=>{ cfgSet(k,v); cfgAplicar(); return __tiro.gfx(); },
+  gfxMed:(n)=>{ n=n||60; const c=window.__plantaCam||camera;
+    gfxRender(c); const t0=performance.now();
+    for(let i=0;i<n;i++) gfxRender(c);
+    const ms=(performance.now()-t0)/n;
+    return { ms:+ms.toFixed(2), fps:Math.round(1000/Math.max(0.01,ms)), preset:CFG.gPreset,
+      rt:GFX.rt?GFX.rt.width+'x'+GFX.rt.height:'pantalla', llamadas:renderer.info.render.calls }; },
   socChat:(n,txt)=>{ gchPintarUno({ id:'p_'+n, n, r:'oro', rn:'ORO II', c:'#e8c063', t:txt||'hola',
     ts:Date.now() }, false); return GCH_TODO.length; },
   /* EL BANCO DE SONIDO: que se decodifico, cuanto dura cada cosa y que cancion esta puesta */
@@ -14164,6 +14188,251 @@ function applyQuality(q){ quality=q; const Q=QUAL[q]||QUAL.med;
   if(!cfgSombras && renderer.shadowMap.enabled){ renderer.shadowMap.enabled=false; renderer.shadowMap.needsUpdate=true; }
   layout();
 }
+/* ===================== EL MOTOR DE IMAGEN =====================
+   Hasta aca el juego dibujaba DERECHO A LA PANTALLA: una pasada, sin nada en el medio. Es lo mas
+   barato que hay y por eso andaba en cualquier telefono, pero deja afuera todo lo que hace que un
+   juego se vea caro — el suavizado, el brillo de las luces, el volumen en los rincones— y ademas
+   ata la resolucion a la del aparato: o dibujas todos los pixeles o bajas el pixel ratio y queda
+   todo borroso, sin termino medio.
+
+   Ahora hay un CAMINO DE IMAGEN de dos pasadas:
+     1. la escena se dibuja en una textura, que puede ser mas chica que la pantalla y puede tener
+        multimuestreo (MSAA) — el suavizado bueno, el que hace el hardware en los bordes;
+     2. una pasada de pantalla completa la sube a la resolucion real reafilandola, le suma el
+        resplandor, la oclusion de los rincones, la viñeta y el grano.
+
+   Lo importante: si no hay NADA encendido, el camino se apaga entero y se vuelve a dibujar derecho
+   a la pantalla, sin una sola instruccion de mas. Un telefono viejo con todo en bajo no paga por
+   existir esto.
+
+   Lo que NO esta, y no por olvido:
+   · Reflejos en espacio de pantalla (SSR): necesitan trazar rayos contra el buffer de profundidad
+     cuadro a cuadro. En un celular se come mas de lo que da un charco brillante.
+   · Sombreado de tasa variable (VRS) y renderizado de fovea: son extensiones que WebGL no expone.
+     Lo mas parecido que se puede hacer desde acá es bajar la escala de render, que ya esta.
+   · Dispersion bajo la piel: el personaje es de facetas planas, no hay piel donde disperse nada.
+   · Y no hay tope de cuadros: va a los que de. */
+let PART_DENS=1;      // multiplicador de particulas (humo, chispas, casquillos)
+const GFX={
+  esc:1, nitidez:0, msaa:0, bloom:0, vineta:0, ao:0, grano:0,
+  rt:null, bright:null, blurA:null, blurB:null, w:0, h:0, prendido:false, _msaa:-1, _prof:false
+};
+const _gfxCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+const _gfxEsc=new THREE.Scene();
+const _gfxGeo=new THREE.PlaneGeometry(2,2);
+/* --- la pasada final: reafilado + resplandor + oclusion + viñeta + grano, todo en un shader --- */
+const _gfxMatFinal=new THREE.ShaderMaterial({
+  uniforms:{ tCol:{value:null}, tBloom:{value:null}, tProf:{value:null},
+             texel:{value:new THREE.Vector2(1,1)}, nitidez:{value:0}, bloomK:{value:0},
+             vineta:{value:0}, grano:{value:0}, aoK:{value:0}, tiempo:{value:0},
+             camNF:{value:new THREE.Vector2(0.05,700)} },
+  depthTest:false, depthWrite:false, toneMapped:false,
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`,
+  fragmentShader:`
+    precision highp float;
+    uniform sampler2D tCol, tBloom, tProf;
+    uniform vec2 texel, camNF;
+    uniform float nitidez, bloomK, vineta, grano, aoK, tiempo;
+    varying vec2 vUv;
+    float lin(float z){ float n=camNF.x, f=camNF.y; return (2.0*n)/(f+n-z*(f-n)); }
+    void main(){
+      vec3 c = texture2D(tCol, vUv).rgb;
+      /* REAFILADO tipo contrast-adaptive: se le suma el laplaciano de los cuatro vecinos y se
+         encierra el resultado entre el minimo y el maximo del vecindario. Ese encierre es lo que
+         separa "nitido" de "con halos blancos alrededor de todo". */
+      if(nitidez > 0.001){
+        vec3 n=texture2D(tCol, vUv+vec2(0.0,texel.y)).rgb;
+        vec3 s=texture2D(tCol, vUv-vec2(0.0,texel.y)).rgb;
+        vec3 e=texture2D(tCol, vUv+vec2(texel.x,0.0)).rgb;
+        vec3 w=texture2D(tCol, vUv-vec2(texel.x,0.0)).rgb;
+        vec3 mn=min(min(n,s),min(e,w)), mx=max(max(n,s),max(e,w));
+        vec3 sh=c + (c*4.0-n-s-e-w)*nitidez;
+        c=clamp(sh, min(mn,c)-0.05, max(mx,c)+0.05);
+      }
+      /* OCLUSION AMBIENTAL de pobre: seis muestras de profundidad alrededor. Si los vecinos estan
+         MAS CERCA que el centro, el centro esta en un hueco y se oscurece. No es un SSAO con
+         hemisferio y normales —eso cuesta el triple— pero define pliegues y esquinas, que es lo
+         que se pide. El radio se achica con la distancia para que no manche el horizonte. */
+      if(aoK > 0.001){
+        float z0=lin(texture2D(tProf, vUv).r);
+        float r=texel.x*7.0/max(0.25, z0*22.0);
+        float oc=0.0;
+        for(int i=0;i<6;i++){
+          float a=float(i)*1.0472;
+          vec2 o=vec2(cos(a),sin(a))*r*vec2(1.0,texel.y/texel.x);
+          float zn=lin(texture2D(tProf, vUv+o).r);
+          float d=(z0-zn);
+          oc += (d>0.00035 && d<0.02) ? 1.0 : 0.0;
+        }
+        c *= 1.0 - aoK*(oc/6.0);
+      }
+      if(bloomK > 0.001) c += texture2D(tBloom, vUv).rgb * bloomK;
+      if(vineta > 0.001){ vec2 d=vUv-0.5; c *= 1.0 - vineta*dot(d,d)*1.45; }
+      if(grano > 0.001){
+        float g=fract(sin(dot(vUv+tiempo, vec2(12.9898,78.233)))*43758.5453);
+        c += (g-0.5)*grano;
+      }
+      gl_FragColor=vec4(max(c,0.0),1.0);
+      #include <colorspace_fragment>
+    }`
+});
+/* --- el paso de brillo: se queda solo con lo que pasa el umbral --- */
+const _gfxMatBright=new THREE.ShaderMaterial({
+  uniforms:{ tCol:{value:null}, umbral:{value:0.72} },
+  depthTest:false, depthWrite:false, toneMapped:false,
+  vertexShader:_gfxMatFinal.vertexShader,
+  fragmentShader:`
+    precision mediump float; uniform sampler2D tCol; uniform float umbral; varying vec2 vUv;
+    void main(){ vec3 c=texture2D(tCol,vUv).rgb;
+      float l=dot(c, vec3(0.2126,0.7152,0.0722));
+      gl_FragColor=vec4(c*smoothstep(umbral, umbral+0.30, l), 1.0); }`
+});
+/* --- desenfoque separable de nueve muestras --- */
+const _gfxMatBlur=new THREE.ShaderMaterial({
+  uniforms:{ tCol:{value:null}, dir:{value:new THREE.Vector2(1,0)} },
+  depthTest:false, depthWrite:false, toneMapped:false,
+  vertexShader:_gfxMatFinal.vertexShader,
+  fragmentShader:`
+    precision mediump float; uniform sampler2D tCol; uniform vec2 dir; varying vec2 vUv;
+    void main(){
+      vec3 c=texture2D(tCol,vUv).rgb*0.227027;
+      c+=texture2D(tCol,vUv+dir*1.3846).rgb*0.316216;
+      c+=texture2D(tCol,vUv-dir*1.3846).rgb*0.316216;
+      c+=texture2D(tCol,vUv+dir*3.2308).rgb*0.070270;
+      c+=texture2D(tCol,vUv-dir*3.2308).rgb*0.070270;
+      gl_FragColor=vec4(c,1.0); }`
+});
+const _gfxQuad=new THREE.Mesh(_gfxGeo, _gfxMatFinal);
+_gfxQuad.frustumCulled=false; _gfxEsc.add(_gfxQuad);
+
+function gfxNecesita(){ return GFX.esc<0.995 || GFX.msaa>0 || GFX.bloom>0 || GFX.vineta>0 || GFX.ao>0 || GFX.grano>0; }
+function gfxLibrar(){
+  for(const k of ['rt','bright','blurA','blurB']){ const t=GFX[k];
+    if(t){ try{ t.dispose(); }catch(e){} GFX[k]=null; } }
+  GFX.w=GFX.h=0; GFX._msaa=-1;
+}
+function gfxTam(){
+  const v=new THREE.Vector2(); renderer.getSize(v);
+  const pr=renderer.getPixelRatio();
+  return [Math.max(64, Math.round(v.x*pr*GFX.esc)), Math.max(64, Math.round(v.y*pr*GFX.esc))];
+}
+function gfxPreparar(){
+  const [w,h]=gfxTam();
+  const quiereProf=GFX.ao>0;
+  if(GFX.rt && GFX.w===w && GFX.h===h && GFX._msaa===GFX.msaa && GFX._prof===quiereProf) return;
+  gfxLibrar();
+  GFX.w=w; GFX.h=h; GFX._msaa=GFX.msaa; GFX._prof=quiereProf;
+  const op={ type:THREE.UnsignedByteType, minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter,
+             depthBuffer:true, stencilBuffer:false, samples:GFX.msaa };
+  GFX.rt=new THREE.WebGLRenderTarget(w,h,op);
+  if(quiereProf){
+    /* la profundidad hace falta para la oclusion. Con multimuestreo three la resuelve sola al
+       leer el destino, asi que las dos cosas conviven. */
+    GFX.rt.depthTexture=new THREE.DepthTexture(w,h);
+    GFX.rt.depthTexture.type=THREE.UnsignedIntType;
+  }
+  if(GFX.bloom>0){
+    const bw=Math.max(32,w>>2), bh=Math.max(32,h>>2);
+    const bo={ type:THREE.UnsignedByteType, minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, depthBuffer:false };
+    GFX.bright=new THREE.WebGLRenderTarget(bw,bh,bo);
+    GFX.blurA =new THREE.WebGLRenderTarget(bw,bh,bo);
+    GFX.blurB =new THREE.WebGLRenderTarget(bw,bh,bo);
+  }
+}
+function _gfxPasada(mat, destino){
+  _gfxQuad.material=mat;
+  renderer.setRenderTarget(destino||null);
+  renderer.render(_gfxEsc, _gfxCam);
+}
+let _gfxT=0;
+function gfxRender(cam){
+  if(!GFX.prendido || !gfxNecesita()){ renderer.setRenderTarget(null); renderer.render(scene, cam); return; }
+  gfxPreparar();
+  if(!GFX.rt){ renderer.render(scene, cam); return; }
+  renderer.setRenderTarget(GFX.rt);
+  renderer.clear();
+  renderer.render(scene, cam);
+  if(GFX.bloom>0 && GFX.bright){
+    _gfxMatBright.uniforms.tCol.value=GFX.rt.texture;
+    _gfxPasada(_gfxMatBright, GFX.bright);
+    const px=1/GFX.bright.width, py=1/GFX.bright.height;
+    _gfxMatBlur.uniforms.tCol.value=GFX.bright.texture;
+    _gfxMatBlur.uniforms.dir.value.set(px,0); _gfxPasada(_gfxMatBlur, GFX.blurA);
+    _gfxMatBlur.uniforms.tCol.value=GFX.blurA.texture;
+    _gfxMatBlur.uniforms.dir.value.set(0,py); _gfxPasada(_gfxMatBlur, GFX.blurB);
+  }
+  const U=_gfxMatFinal.uniforms;
+  U.tCol.value=GFX.rt.texture;
+  U.tBloom.value=GFX.blurB?GFX.blurB.texture:null;
+  U.tProf.value=GFX.rt.depthTexture||null;
+  U.texel.value.set(1/GFX.w, 1/GFX.h);
+  U.nitidez.value=GFX.nitidez; U.bloomK.value=GFX.bloom;
+  U.vineta.value=GFX.vineta; U.grano.value=GFX.grano; U.aoK.value=GFX.ao;
+  U.camNF.value.set(cam.near, cam.far);
+  _gfxT=(_gfxT+0.017)%1000; U.tiempo.value=_gfxT;
+  _gfxPasada(_gfxMatFinal, null);
+  _gfxQuad.material=_gfxMatFinal;
+}
+/* ---------- el filtrado anisotropico, en TODA textura que haya ---------- */
+let _anisoAct=-1;
+function gfxAniso(n){
+  const tope=renderer.capabilities.getMaxAnisotropy();
+  const v=Math.max(1, Math.min(tope, n|0));
+  if(v===_anisoAct) return 0;
+  _anisoAct=v; let k=0;
+  const tocar=(t)=>{ if(t && t.isTexture && t.anisotropy!==v){ t.anisotropy=v; t.needsUpdate=true; k++; } };
+  scene.traverse(o=>{ if(!o.isMesh && !o.isSprite && !o.isPoints) return;
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of ms){ if(!m) continue;
+      for(const p of ['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap','bumpMap','alphaMap','displacementMap'])
+        tocar(m[p]); } });
+  return k;
+}
+/* ---------- LOS PREAJUSTES ----------
+   Cada uno es una fila entera de valores. AHORRO no enciende una sola pasada: dibuja al 60% y sube
+   con reafilado, que en un telefono viejo es la diferencia entre 30 y 50 cuadros. ULTRA enciende
+   todo, incluido el grano; el multimuestreo a 4x es lo unico que puede pesar de verdad en memoria. */
+const GFX_PRESETS={
+  low  :{ gEsc:60,  gNit:55, gMsaa:0, gAniso:1,  gBloom:0,  gAo:0,  gVin:0,  gGrano:0, gLod:60,  gPart:40  },
+  med  :{ gEsc:85,  gNit:45, gMsaa:2, gAniso:4,  gBloom:0,  gAo:0,  gVin:25, gGrano:0, gLod:100, gPart:100 },
+  high :{ gEsc:100, gNit:30, gMsaa:2, gAniso:8,  gBloom:45, gAo:45, gVin:35, gGrano:8, gLod:130, gPart:120 },
+  ultra:{ gEsc:100, gNit:25, gMsaa:4, gAniso:16, gBloom:65, gAo:70, gVin:45, gGrano:14,gLod:200, gPart:150 }
+};
+const GFX_CLAVES=Object.keys(GFX_PRESETS.med);
+/* aplicar un preajuste = escribir sus valores en CFG. Y al reves: tocar cualquier control suelto
+   deja el preajuste en "personalizado", que es lo unico honesto que puede decir. */
+function gfxPreset(id){
+  const P=GFX_PRESETS[id]; if(!P) return false;
+  for(const k of GFX_CLAVES) CFG[k]=P[k];
+  CFG.gPreset=id;
+  return true;
+}
+function gfxCualPreset(){
+  for(const id in GFX_PRESETS){ const P=GFX_PRESETS[id];
+    let igual=true;
+    for(const k of GFX_CLAVES) if(+CFG[k]!==+P[k]){ igual=false; break; }
+    if(igual) return id; }
+  return 'custom';
+}
+/* ---------- lo que se aplica cuando cambias un ajuste ---------- */
+function gfxAplicar(){
+  const n=(k,d)=>{ const v=+CFG[k]; return isFinite(v)?v:d; };
+  GFX.esc     = Math.max(0.4, Math.min(1, n('gEsc',100)/100));
+  GFX.nitidez = Math.max(0, Math.min(0.55, n('gNit',0)/100*0.55));
+  GFX.msaa    = n('gMsaa',0)|0;
+  GFX.bloom   = Math.max(0, Math.min(1.2, n('gBloom',0)/100*1.2));
+  GFX.vineta  = Math.max(0, Math.min(0.9, n('gVin',0)/100*0.9));
+  GFX.ao      = Math.max(0, Math.min(0.85, n('gAo',0)/100*0.85));
+  GFX.grano   = Math.max(0, Math.min(0.06, n('gGrano',0)/100*0.06));
+  GFX.prendido=true;
+  if(!gfxNecesita()) gfxLibrar();
+  try{ gfxAniso(n('gAniso',4)); }catch(e){}
+  /* la densidad de particulas y de pasto, y hasta donde se ven las manos del otro */
+  try{ PART_DENS = Math.max(0, Math.min(1.5, n('gPart',100)/100)); }catch(e){}
+  try{ LOD_MANOS = Math.max(4, Math.min(40, n('gLod',100)/100*14)); }catch(e){}
+  try{ if(typeof _telRT!=='undefined' && _telRT && _telRT.width!==teleRes()) _telRT.setSize(teleRes(),teleRes()); }catch(e){}
+}
+
 /* ===================== LA MIRA TELESCOPICA, MIRANDO POR ELLA =====================
    Primer intento: un circulo negro a pantalla completa con la reticula pintada encima. Se veia
    bien pero no es lo pedido: eso es una imagen tapando el juego, no una mira. Lo que hace Blood
@@ -15004,7 +15273,61 @@ const CFG_SECS=[
       h:{es:'Un tope de 30 o 60 calienta menos el teléfono. Cuando el celular se calienta, el sistema le baja el reloj y el juego va PEOR que con el tope puesto.',
          en:'A 30 or 60 cap keeps the phone cooler. Once it overheats the system throttles it and the game runs worse than with the cap on.',
          pt:'Um limite de 30 ou 60 esquenta menos o telefone.'},
-      ops:[[30,'30'],[60,'60'],[120,'120'],[0,{es:'Sin tope',en:'Uncapped',pt:'Sem limite'}]]},
+      ops:[[0,{es:'Sin tope',en:'Uncapped',pt:'Sem limite'}],[30,'30'],[60,'60'],[120,'120']]},
+   ]},
+   /* ===== EL CAMINO DE IMAGEN. Cada uno de estos enciende una pasada o una pieza del shader
+      final; con todo en su valor mas bajo el juego dibuja derecho a la pantalla y no cuesta nada.
+      El PRESET de arriba mueve todos los de abajo de una. ===== */
+   {h:{es:'Motor de imagen',en:'Image engine',pt:'Motor de imagem'}, filas:[
+     {k:'gPreset', t:{es:'Preajuste',en:'Preset',pt:'Predefinição'},
+      h:{es:'AHORRO apaga todo el camino de imagen y baja la resolución: es el modo de un celular viejo o de batería al 10%. EQUILIBRIO enciende lo barato (reafilado y multimuestreo 2x). CALIDAD suma resplandor y oclusión. ULTRA lo pone todo arriba, incluido el grano de película. Tocar cualquier control de abajo pasa el preajuste a PERSONALIZADO.',
+         en:'SAVER turns the whole image path off and lowers the resolution: the mode for an old phone or a battery at 10%. BALANCED turns on the cheap parts (sharpening and 2x multisampling). QUALITY adds bloom and occlusion. ULTRA puts everything up, film grain included. Touching any control below switches the preset to CUSTOM.',
+         pt:'ECONOMIA desliga tudo e baixa a resolução. EQUILÍBRIO liga o barato. QUALIDADE soma brilho e oclusão. ULTRA põe tudo no máximo.'},
+      ops:[['low',{es:'Ahorro',en:'Saver',pt:'Economia'}],['med',{es:'Equilibrio',en:'Balanced',pt:'Equilíbrio'}],
+           ['high',{es:'Calidad',en:'Quality',pt:'Qualidade'}],['ultra',{es:'Ultra',en:'Ultra',pt:'Ultra'}],
+           ['custom',{es:'Personalizado',en:'Custom',pt:'Personalizado'}]]},
+     {k:'gEsc', t:{es:'Escala de render',en:'Render scale',pt:'Escala de render'}, tipo:'sli', min:50, max:100, step:5, suf:'%',
+      h:{es:'A cuánto de la resolución de la pantalla se dibuja la escena. Al 70% se dibujan la MITAD de los píxeles: es de lejos lo que más cuadros da. Lo que se pierde de nitidez lo devuelve el reafilado de abajo, que es la idea de FSR: dibujar menos y reconstruir bien.',
+         en:'What fraction of the screen resolution the scene is drawn at. At 70% you draw HALF the pixels: by far the biggest frame-rate win. The sharpening below gives back what you lose, which is the whole idea of FSR: draw less, reconstruct well.',
+         pt:'A que fração da resolução da tela a cena é desenhada. A 70% são METADE dos pixels.'}},
+     {k:'gNit', t:{es:'Nitidez (reconstrucción)',en:'Sharpening (reconstruction)',pt:'Nitidez'}, tipo:'sli', min:0, max:100, step:5, suf:'%',
+      h:{es:'Reafila la imagen después de subirla de escala, con el resultado encerrado entre el mínimo y el máximo de los píxeles vecinos: así no aparecen los halos blancos alrededor de los bordes que deja un enfoque común. Con la escala al 100% también sirve, pero se nota menos.',
+         en:'Re-sharpens the image after upscaling, clamped between the minimum and maximum of the neighbouring pixels so you do not get the white halos a plain sharpen leaves. It works at 100% scale too, just less noticeably.',
+         pt:'Reafia a imagem depois de ampliar, sem os halos brancos de um foco comum.'}},
+     {k:'gMsaa', t:{es:'Suavizado MSAA',en:'MSAA anti-aliasing',pt:'Suavização MSAA'},
+      h:{es:'El suavizado que hace el hardware en los BORDES de la geometría, que es donde se ven los dientes: la muralla contra el cielo, el caño del fusil. Cuesta memoria, no cálculo, así que en un celular moderno 2x casi no se siente. Necesita WebGL 2.',
+         en:'Hardware anti-aliasing on geometry EDGES, which is where the jaggies live: the wall against the sky, the barrel of the rifle. It costs memory, not maths, so 2x is nearly free on a modern phone. Needs WebGL 2.',
+         pt:'Suavização por hardware nas BORDAS da geometria. Custa memória, não cálculo.'},
+      ops:[[0,CFG_L.no],[2,'2x'],[4,'4x']]},
+     {k:'gAniso', t:{es:'Filtrado anisotrópico',en:'Anisotropic filtering',pt:'Filtragem anisotrópica'},
+      h:{es:'Define las texturas que se ven EN ÁNGULO: el piso de la arena a diez metros, la pared vista de costado. Sin él se vuelven una papilla gris a media distancia. Es de las pocas cosas que se ven mucho y no cuestan casi batería.',
+         en:'Sharpens textures seen at an ANGLE: the arena floor ten metres out, a wall seen edge-on. Without it they turn to grey mush at mid distance. One of the few settings that shows a lot and costs almost no battery.',
+         pt:'Define as texturas vistas em ÂNGULO. Mostra muito e custa quase nada.'},
+      ops:[[1,{es:'Apagado',en:'Off',pt:'Desligado'}],[4,'4x'],[8,'8x'],[16,'16x']]},
+     {k:'gBloom', t:{es:'Resplandor (bloom)',en:'Bloom',pt:'Brilho (bloom)'}, tipo:'sli', min:0, max:100, step:5, suf:'%',
+      h:{es:'Lo más brillante de la escena se desborda sobre lo que tiene al lado: el sol entre las nubes, el fogonazo del caño, el naranja de los carteles. Es el efecto que más "cine" agrega por lo que cuesta. Se calcula a un cuarto de resolución.',
+         en:'The brightest parts of the scene bleed into what is next to them: the sun through the clouds, the muzzle flash, the orange of the signs. The most cinematic effect per unit of cost. Computed at quarter resolution.',
+         pt:'O mais brilhante da cena transborda sobre o que está ao lado. Calculado em um quarto da resolução.'}},
+     {k:'gAo', t:{es:'Oclusión ambiental',en:'Ambient occlusion',pt:'Oclusão ambiental'}, tipo:'sli', min:0, max:100, step:5, suf:'%',
+      h:{es:'Oscurece los rincones y los pliegues: donde una caja toca el piso, la unión de dos paredes, abajo del chaleco. Es lo que le da VOLUMEN a un mapa de colores planos. Acá va una versión barata de seis muestras de profundidad, no el SSAO completo con hemisferio y normales, que en un celular no se paga.',
+         en:'Darkens corners and creases: where a crate meets the floor, the joint of two walls, under the vest. It is what gives VOLUME to a flat-coloured map. This is a cheap six-sample depth version, not full SSAO with hemisphere and normals, which a phone cannot afford.',
+         pt:'Escurece cantos e dobras. É o que dá VOLUME a um mapa de cores planas.'}},
+     {k:'gVin', t:{es:'Viñeta',en:'Vignette',pt:'Vinheta'}, tipo:'sli', min:0, max:100, step:5, suf:'%',
+      h:{es:'Oscurece las esquinas de la pantalla. Suena a adorno y no lo es: empuja la mirada al centro, que es donde está la mira, y de paso disimula la pérdida de nitidez del borde cuando bajás la escala de render.',
+         en:'Darkens the corners of the screen. It sounds decorative and is not: it pushes your eye to the centre, where the crosshair is, and it hides the softness at the edges when you lower the render scale.',
+         pt:'Escurece os cantos da tela. Empurra o olhar para o centro.'}},
+     {k:'gGrano', t:{es:'Grano de película',en:'Film grain',pt:'Granulação'}, tipo:'sli', min:0, max:100, step:5, suf:'%',
+      h:{es:'Un ruido finito encima de todo. Rompe las bandas que deja un degradado en un cielo grande y le saca el aspecto de plástico a las superficies planas. En dosis chicas.',
+         en:'A fine noise on top of everything. It breaks the banding a gradient leaves in a big sky and takes the plastic look off flat surfaces. Small doses.',
+         pt:'Um ruído fino sobre tudo. Quebra as faixas do degradê no céu.'}},
+     {k:'gLod', t:{es:'Detalle de personajes',en:'Character detail',pt:'Detalhe de personagens'}, tipo:'sli', min:40, max:200, step:10, suf:'%',
+      h:{es:'A qué distancia se les siguen dibujando los dedos a los otros jugadores. Las diez falanges de cada mano son veinte mallas de las sesenta y una del cuerpo: un tercio del costo por algo que a catorce metros mide un píxel.',
+         en:'How far out other players keep their fingers. The ten phalanges of each hand are twenty of the body’s sixty-one meshes: a third of the cost for something that is one pixel wide at fourteen metres.',
+         pt:'A que distância os outros jogadores mantêm os dedos. Um terço do custo do corpo.'}},
+     {k:'gPart', t:{es:'Partículas',en:'Particles',pt:'Partículas'}, tipo:'sli', min:0, max:150, step:10, suf:'%',
+      h:{es:'Cuántas chispas, casquillos y nubes de polvo se sueltan por disparo e impacto. Bajarlo se nota sobre todo en un tiroteo de varios a la vez, que es justo cuando el teléfono está más apretado.',
+         en:'How many sparks, casings and dust puffs come off each shot and impact. Lowering it shows most in a firefight with several people at once, which is exactly when the phone is most loaded.',
+         pt:'Quantas faíscas, cápsulas e poeira saem por tiro e impacto.'}},
    ]},
    {h:{es:'Audio',en:'Audio',pt:'Áudio'}, filas:[
      {k:'sfx', t:{es:'Efectos',en:'Sound effects',pt:'Efeitos'},
@@ -15125,6 +15448,7 @@ function cfgAplicar(){
   try{ if(MUS.key) musIr(MUS.key); else musEncender(false); }catch(e){}   // el interruptor manda sobre las dos musicas
   try{ hsndMusVol(); }catch(e){}
   cfgFps = +CFG.fps||0;
+  try{ gfxAplicar(); }catch(e){ console.warn('gfx cfg',e); }
   cfgSombras = !!(+CFG.sombras);
   cfgBrillo = Math.max(0.6,Math.min(1.6,(+CFG.brillo||100)/100));
   cfgVista  = Math.max(0.5,Math.min(1.6,(+CFG.vista_m||100)/100));
@@ -15145,6 +15469,12 @@ function cfgAplicar(){
 }
 function cfgSet(k,v){
   CFG[k] = (typeof CFG_DEF[k]==='number') ? (+v) : v;
+  /* EL PREAJUSTE Y SUS PIEZAS SE HABLAN EN LOS DOS SENTIDOS: elegir uno reescribe los diez
+     controles; mover cualquiera de los diez pasa el preajuste a "personalizado". Si no, quedaria
+     diciendo ULTRA con la escala de render al 50%, que es mentir. */
+  if(k==='gPreset'){ if(v!=='custom'){ gfxPreset(v); try{ cfgRender(); }catch(e){} } }
+  else if(GFX_CLAVES.indexOf(k)>=0){ const q=gfxCualPreset();
+    if(CFG.gPreset!==q){ CFG.gPreset=q; try{ cfgRender(); }catch(e){} } }
   if(k==='layout'){ if(v==='pers'){ cfgGuardar(); closeSettings(); enterEditHUD(); return; }
                     try{ hePreset(v); }catch(e){} }
   /* Tocar la opcion del giroscopio SIEMPRE reintenta, aunque ya estuviera en ese valor: en iOS el
@@ -15190,6 +15520,11 @@ function cfgAyuda(k){ const f=cfgBuscaFila(k), tip=document.getElementById('cfgT
       const k=i.dataset.sli, f=cfgBuscaFila(k);
       CFG[k]=+i.value;
       const b=document.getElementById('cfgV_'+k); if(b) b.textContent=i.value+((f&&f.suf)||'');
+      /* mover una perilla del motor de imagen tambien despega el preajuste */
+      if(GFX_CLAVES.indexOf(k)>=0){ const q=gfxCualPreset();
+        if(CFG.gPreset!==q){ CFG.gPreset=q;
+          const ch=document.querySelectorAll('[data-k=\"gPreset\"] [data-v]');
+          ch.forEach(x=>x.classList.toggle('sel', x.dataset.v===q)); } }
       cfgAplicar(); });
   }
   const rst=document.getElementById('cfgReset');
@@ -16061,6 +16396,9 @@ function drsTick(dt){
    ACUMULA el dt salteado en vez de tirarlo, asi la fisica avanza igual y no se siente camara lenta. */
 let _fpsAcum=0;
 function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDelta(),0.05);
+  /* SIN TOPE DE CUADROS. Estaba en 60 por defecto para que el telefono no se calentara, pero es
+     una decision que le corresponde al que juega: el juego va a los cuadros que de. El ajuste
+     sigue existiendo por si alguien lo quiere poner. */
   if(cfgFps>0 && cfgFps<200){ _fpsAcum+=dt;
     if(_fpsAcum < 1/cfgFps - 0.0015) return;               // este cuadro no se dibuja
     dt=Math.min(_fpsAcum,0.05); _fpsAcum=0; }
@@ -16081,7 +16419,11 @@ function animate(){ requestAnimationFrame(animate); let dt=Math.min(clock.getDel
   try{ ambTick(dt); }catch(e){}                   // viento del valle + latido con poca vida
   try{ mpTick(dt); }catch(e){}   // multijugador (nunca rompe el single-player) — sigue latiendo aunque esté en pausa
   try{ _telDt=dt; telRender(); }catch(e){}   // la vista de adentro del visor, antes del cuadro principal
-  renderer.render(scene, window.__plantaCam || camera);   // __plantaCam: solo para las pruebas
+  /* Y ACA SE DIBUJA. gfxRender decide solo: si no hay nada del camino de imagen encendido,
+     llama a renderer.render igual que siempre y no cuesta un microsegundo de mas. */
+  try{ gfxRender(window.__plantaCam || camera); }
+  catch(e){ if(!window.__gfxErr){ window.__gfxErr=1; console.warn('gfx',e); }
+    try{ renderer.setRenderTarget(null); renderer.render(scene, window.__plantaCam || camera); }catch(e2){} }
   drsTick(dt); }
 
 /* ===================== MULTIJUGADOR (MQTT, sin backend; relay vía broker público) ===================== */
@@ -17420,9 +17762,12 @@ function mpCullar(){
    de 1280, eso es UN PIXEL: se pagan veinte llamadas de dibujo por algo que no se ve. Adentro de
    14 m estan (es la distancia a la que se pelea de verdad y se le ven las manos al otro), afuera no.
    Se toca solo cuando CAMBIA el nivel, no cada cuadro. */
+/* LOD_MANOS lo mueve el ajuste de "detalle de personajes": mas alto, las manos finas de los otros
+   se siguen dibujando de mas lejos. */
+let LOD_MANOS=14;
 const LOD_DEDOS=14;
 function mpLod(r,d2){
-  const nivel=(d2>LOD_DEDOS*LOD_DEDOS)?0:1;
+  const nivel=(d2>LOD_MANOS*LOD_MANOS)?0:1;
   if(r._lod===nivel) return;
   r._lod=nivel;
   if(!r._finos){ r._finos=[];
