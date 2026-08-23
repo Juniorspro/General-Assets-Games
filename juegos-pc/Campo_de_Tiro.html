@@ -2779,6 +2779,9 @@ let _teleOn=false;   // ¿esta puesto el visor telescopico? (lo lee poseArma par
    costo un render entero: el sintoma era "dice 6x y se ve 2,25x" y no tenia nada que ver con el
    zoom. */
 let _telTapa=[], _telOcular=null, _telMiraG=null, _telOcularR=0.0305, _telOcularZ=0.124;
+let _telBiselG=null;
+/* el plano de la abertura del bisel, en el marco del arma: de aca sale el radio del aro MEDIDO */
+let _telAroR=0.0305, _telAroY=0.132, _telAroZ=0.124, _telAroRO=0.036;
 let _vmEsc=null, _vmCam=null, _vmPadre=null;
 let gunCruz=null;   // la cruz de la mira réflex: se apaga/entra en test de profundidad cuando la cámara sale del ojo
 let gunCulata=null; // la culata: en 1ª persona está detrás del pómulo y sólo deja una astilla en la lente
@@ -3109,6 +3112,61 @@ function armaLente(H,z0,largo,yRiel){
        le agregue una pieza a la mira. */
     if(H.vivo){ _telMiraG=gMira; _telTapa=tapa;
       _telOcularR=0.0305; _telOcularZ=z0+L/2-0.026; } }
+  /* ===================== EL BISEL DEL OCULAR: EL METAL DEL ARO =====================
+     El aro era SOLO una linea de CSS, y una linea no es metal: no tiene canto, no tiene brillo y no
+     se entera de donde esta el sol. Faltaba el borde metalico del modelo, que es lo que se ve en la
+     foto de referencia — un anillo de metal grueso alrededor del circulo, con la luz corrida a un
+     lado.
+     Va aparte de `gMira` A PROPOSITO. Toda la mira se esconde al apuntar porque un tubo de 30 cm
+     visto desde 6 cm muestra su pared interior; el bisel NO tiene ese problema porque no es un
+     tubo: es un aro de 2 cm de fondo, asi que su pared casi no se proyecta y lo que se ve es la
+     CARA, de frente. Por eso este es el unico pedazo de la mira que queda encendido apuntando, y es
+     al reves que el resto: `visible` cuando `gMira` esta apagado.
+     Se construye del radio y el plano que usa vmAroPx(), no de numeros aparte: asi el metal y la
+     linea de CSS caen en el mismo sitio POR CONSTRUCCION y no porque yo haya acertado dos veces. */
+  { const rA=0.0305, zA=z0+L/2-0.026, kO=1.18;
+    /* DOS MATERIALES Y NO UNO, y esto es lo que hace que se lea como metal mecanizado en vez de
+       como un aro gris. Con un solo material el bisel salia de un tono parejo: metalness 1 no tiene
+       difuso, asi que todo su color sale del reflejo del entorno, y un aro entero reflejando lo
+       mismo se ve plano.
+       La CARA va pulida y clara —es la que mira al ojo y la que agarra el brillo— y la PARED de
+       afuera va mate y oscura. El corte entre las dos es el canto, y un canto con dos acabados
+       distintos es exactamente lo que uno lee como "aca hay una pieza torneada". */
+    const bisCara=new THREE.MeshStandardMaterial({color:0x3f464f, roughness:0.22, metalness:0.96});
+    bisCara.envMapIntensity=2.3;
+    const bisPared=new THREE.MeshStandardMaterial({color:0x191d21, roughness:0.58, metalness:0.85});
+    bisPared.envMapIntensity=1.2;
+    /* El perfil se recorre de ADELANTE hacia ATRAS por la pared de afuera y despues HACIA ADENTRO
+       cruzando la cara. El orden importa: LatheGeometry saca la normal girando la tangente, asi que
+       recorrer con el radio creciendo apunta la normal para afuera (la pared) y recorrerlo con el
+       radio bajando la apunta al ojo (la cara). Al reves queda todo negro, que es el sintoma de una
+       normal dada vuelta. */
+    /* el grupo se para EN EL CENTRO DEL ARO y el perfil se construye en el origen. Asi escalarlo
+       agranda el radio sin moverlo ni acercarlo: si el perfil llevara la posicion adentro, escalar
+       multiplicaria tambien la distancia al ojo y el aro se iria de lugar. */
+    const g=new THREE.Group(); g.name='bisel'; g.position.set(0,y0,zA);
+    const U=_armaUtil(g);
+    /* EL BISEL VA FINO. La primera version iba de la abertura a 1,26 veces el radio y con 2 cm de
+       fondo: medido, el metal salia de 105 a 143 pixeles, o sea un aro del 68% del alto de la
+       pantalla — justo la queja de "tapa toda la pantalla" que ya habiamos arreglado. A 1,18 el
+       metal es una banda de 19 pixeles sobre 420 y el circulo limpio no se toca. */
+    /* El perfil se parte en dos donde esta el canto, para que cada mitad lleve su acabado. */
+    const m=U.rev([
+      [rA*(kO-0.015), 0.0000],   // el canto exterior, con chaflan
+      [rA*1.105, 0.0018],        // la cara, que es la que mira al ojo
+      [rA*1.035, 0.0018],
+      [rA*1.00,  0.0005]         // el labio, cae a la abertura y ahi termina
+    ], 0, 0, 0, bisCara, 44);
+    const m2=U.rev([
+      [rA*1.12, -0.0140],   // el arranque, sobre el tubo
+      [rA*kO,   -0.0110],   // el hombro del ocular
+      [rA*kO,   -0.0020]    // la pared de afuera, hasta el canto
+    ], 0, 0, 0, bisPared, 44);
+    m.userData.noFundir=true;   // se esconde y se muestra solo: fundido con el cuerpo no se puede
+    m2.userData.noFundir=true;
+    g.visible=false;            // apagado por omision; teleTick lo enciende al apuntar
+    H.raiz.add(g);
+    if(H.vivo){ _telBiselG=g; _telAroR=rA; _telAroY=0; _telAroZ=0.0005; _telAroRO=rA*kO; } }
 }
 /* Alza y punto de mira de hierro, para pistolas y escopetas: no hay ventana, se mira por encima. */
 /* Los hierros van a la ALTURA DE LA LINEA DE MIRA del arma (H.mira), no a un numero a ojo: si no,
@@ -11608,9 +11666,42 @@ try{ window.__tiro={
              aro:el? { vis:getComputedStyle(el).display!=='none', op:+getComputedStyle(el).opacity,
                        reti:el.dataset.reti||null } : null,
              armaVisible:(()=>{ try{ return gunRoot? gunRoot.visible : null; }catch(e){ return null; } })(),
+             /* el aro en pixeles y donde cae el metal: radio de la abertura y del canto de afuera */
+             aroPx:+vmAroAjustar().toFixed(1),
+             /* donde cae el metal, medido: la abertura, el canto de afuera, y cuanto del alto de
+                la pantalla ocupa el circulo entero. El limite de lo que el usuario acepto es 50%. */
+             metal:(()=>{ const H=renderer.domElement.height||1;
+               vmAroAjustar();
+               const ri=vmAroPx(_telAroR), ro=vmAroPx(_telAroRO);
+               return { aperturaPx:+ri.toFixed(1), exteriorPx:+ro.toFixed(1),
+                        bandaPx:+(ro-ri).toFixed(1), altoLienzo:H,
+                        escala:+(_telBiselG?_telBiselG.scale.x:0).toFixed(3),
+                        pctAbertura:+((ri*2/H)*100).toFixed(1),
+                        pctDelAlto:+((ro*2/H)*100).toFixed(1) }; })(),
+             bisel:(()=>{ try{ if(!_telBiselG) return null;
+               const B=new THREE.Box3().setFromObject(_telBiselG);
+               const V=new THREE.Vector3(); B.getSize(V);
+               return { visible:_telBiselG.visible,
+                        anchoMm:Math.round(V.x*1000), fondoMm:Math.round(V.z*1000) };
+             }catch(e){ return 'ERR '+e.message; } })(),
              /* lo que importa: cuanto cuesta. Sin la pasada extra, esto tiene que dar lo mismo
                 apuntando que a la cadera. */
              llamadas:renderer.info.render.calls, tris:renderer.info.render.triangles }; },
+  /* el estado del bisel: encendido o no, y el aro. Sirve para comprobar que a la cadera se ve el
+     visor de verdad y apuntando se ve el bisel, que es al reves uno del otro. */
+  bisel:()=>{ const el=document.getElementById('telMira');
+    return { bisel:_telBiselG?_telBiselG.visible:null, mira:_telMiraG?_telMiraG.visible:null,
+             apuntando:_teleOn, adsW:+adsW.toFixed(2),
+             aro:el? getComputedStyle(el).display : null,
+             aroR:el? getComputedStyle(el).getPropertyValue('--r').trim() : null,
+             lienzo:[renderer.domElement.width, renderer.domElement.height] }; },
+  /* que entorno tiene la escena del arma: un metal con metalness alto SIN entorno sale negro */
+  vmEnt:()=>{ const m=(()=>{ try{ return _telBiselG&&_telBiselG.children[0]&&_telBiselG.children[0].material; }catch(e){ return null; } })();
+    return { escenaEnt:!!(scene&&scene.environment), vmEnt:!!(_vmEsc&&_vmEsc.environment),
+             vmInt:_vmEsc?_vmEsc.environmentIntensity:null,
+             mat:m? { color:'#'+m.color.getHexString(), metal:m.metalness, rug:m.roughness,
+                      envInt:m.envMapIntensity, env:!!m.envMap } : null,
+             luces:_vmEsc? _vmEsc.children.filter(o=>o.isLight).length : 0 }; },
   /* el costo del cuadro con la mira puesta y sin ella, en llamadas y triangulos */
   visorMed:()=>{ const I=renderer.info;
     const una=()=>{ renderer.render(scene,camera); return {llamadas:I.render.calls, tris:I.render.triangles}; };
@@ -15528,12 +15619,50 @@ function vmArma(dentro){
 /* el radio del aro del ocular, proyectado a pixeles con la camara del arma. De aca sale el tamano
    de la reticula: asi cae clavada adentro del aro en cualquier pantalla, en vez de ser un
    porcentaje elegido a ojo que en un telefono da y en otro no. */
-function vmAroPx(){
-  const H=renderer.domElement.height||1;
+/* EL ARO OCUPA LA MITAD DEL ALTO, y esto es una decision de imagen, no una medida.
+   El ocular de verdad, a la distancia de verdad, se proyecta en 73 pixeles sobre 420: el 35% del
+   alto. El aro que el usuario aprobo estaba en 105, o sea el 50%, y en la foto de referencia ocupa
+   mas o menos eso. Asi que el bisel se ESCALA hasta dar en el blanco, igual que VM_FOV se eligio en
+   34 y no en el campo que le tocaria: son las dos la misma clase de decision.
+   Se escala el bisel SOLO, no la mira entera, y solo mientras se apunta — a la cadera se ve el
+   visor en su tamano de verdad. */
+const VM_ARO_ALTO=0.50;
+function vmAroAjustar(){
+  if(!_telBiselG || !_vmCam || !_telBiselG.parent) return vmAroPx();
+  const H=renderer.domElement.height||1, meta=H*VM_ARO_ALTO/2;
+  const s=_telBiselG.scale.x||1, px=vmAroPx(_telAroR);
+  if(!(px>2)) return px;
+  /* el radio proyectado va LINEAL con el radio del objeto, asi que una sola multiplicacion clava el
+     blanco: no hace falta iterar ni suavizar. Y de paso se reacomoda solo cuando gira la pantalla. */
+  const k=Math.max(0.5, Math.min(3.5, s*meta/px));
+  if(Math.abs(k-s)>0.002){ _telBiselG.scale.set(k,k,1); _telBiselG.updateMatrixWorld(true); }
+  return vmAroPx(_telAroR);
+}
+const _vmPa=new THREE.Vector3(), _vmPb=new THREE.Vector3();
+function vmAroPx(r){
+  const L=renderer.domElement, H=L.height||1, W=L.width||1;
+  /* SE MIDE, NO SE ESTIMA. La cuenta de abajo supone que el ojo esta a |_telOcularZ| del ocular, o
+     sea que el origen del arma cae en la camara. No cae: gunRoot tiene su propia posicion y el
+     apuntado la corre otra vez. Medido, el error era de 1,46 veces — el metal del bisel quedaba
+     bien adentro del aro de CSS en vez de arrancar justo en el. Proyectando el punto de verdad con
+     la camara del arma, la linea y el metal caen en el mismo sitio porque es el MISMO punto. */
+  const rr=(r==null? _telAroR : r);
+  if(_telBiselG && _vmCam && _telBiselG.parent){
+    try{
+      _telBiselG.updateWorldMatrix(true,false);
+      const M=_telBiselG.matrixWorld;
+      _vmPa.set(0,  _telAroY, _telAroZ).applyMatrix4(M).project(_vmCam);
+      _vmPb.set(rr, _telAroY, _telAroZ).applyMatrix4(M).project(_vmCam);
+      const px=Math.hypot((_vmPb.x-_vmPa.x)*W/2, (_vmPb.y-_vmPa.y)*H/2);
+      if(px>4 && px<H*1.5) return px;
+    }catch(e){}
+  }
+  /* de reserva, la estimacion vieja: sirve el primer cuadro, antes de que la camara del arma tenga
+     matriz, y con las armas que no llevan bisel */
   const esc=(()=>{ try{ return gunRoot? gunRoot.scale.x : 1; }catch(e){ return 1; } })();
-  const r=_telOcularR*esc, d=Math.abs(_telOcularZ)*esc + VM_ATRAS;
+  const d=Math.abs(_telOcularZ)*esc + VM_ATRAS;
   if(!(d>0.001)) return 0;
-  return (r/d) / Math.tan(VM_FOV*Math.PI/360) * (H/2);
+  return ((rr*esc)/d) / Math.tan(VM_FOV*Math.PI/360) * (H/2);
 }
 /* LA PASADA DEL ARMA. Va al final y con la profundidad limpia: el arma no tiene que competir con el
    mundo por profundidad —esta a doce centimetros y el mundo a cien metros— y ademas asi no se le
@@ -15708,7 +15837,7 @@ function teleTick(){
     const k=Math.min(1, Math.max(0, (adsW-0.62)/0.30));
     el.style.opacity=k.toFixed(3);
     /* el radio, medido de la campana del ocular y no elegido a ojo */
-    try{ const rp=vmAroPx();
+    try{ const rp=vmAroAjustar();
       if(rp>8 && Math.abs(rp-(el._r||0))>0.5){ el._r=rp; el.style.setProperty('--r', rp.toFixed(1)+'px'); } }catch(e){}
     const u=telRetURL(_telRetiUlt);
     if(u && el.dataset.reti!==_telRetiUlt){ el.dataset.reti=_telRetiUlt;
@@ -15731,7 +15860,9 @@ function teleTick(){
      las torretas y el riel al lado. */
   try{ vmArma(q); if(gunRoot) gunRoot.visible=true;
        if(_telMiraG) _telMiraG.visible=!q;
-       for(const m of _telTapa) if(m) m.visible=!q; }catch(e){}
+       for(const m of _telTapa) if(m) m.visible=!q;
+       /* al REVES que el resto de la mira: el bisel es el unico pedazo que se enciende apuntando */
+       if(_telBiselG) _telBiselG.visible=q; }catch(e){}
   if(gunCruz) gunCruz.visible=!q;   // el punto rojo no va cuando hay mira telescopica
 }
 /* Ya no hay pasada extra. Se deja el nombre porque animate() lo llama, y lo que hace es mantener

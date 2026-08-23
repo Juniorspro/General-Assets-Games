@@ -28,6 +28,29 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
       OJO con `renderer.info.render`: three.js lo pone a cero al empezar cada `render()`, asi que
       leerlo despues de un cuadro deja solo la ultima pasada. Para el cuadro entero va
       `info.autoReset=false`, que es lo que hace `__tiro.costo()`.
+- [x] **El borde metalico del aro** (2026-08-23), pedido "LE FALTA LOS BORDES METALICOS DEL MODELO
+      3D": el aro era SOLO una linea de CSS, y una linea no tiene canto ni brillo. Ahora hay un
+      BISEL de verdad (`_telBiselG`): dos torneados de revolucion, la cara pulida (metalness 0,96 /
+      roughness 0,22) y la pared mate oscura (0,85 / 0,58). El quiebre entre los dos acabados es lo
+      que lo hace leer como pieza torneada; con un solo material salia un aro gris plano, porque
+      metalness 1 no tiene difuso y todo el aro reflejaba lo mismo.
+      Va APARTE de `gMira` y al REVES: es el unico pedazo de la mira que se enciende apuntando. Y
+      puede, porque no es un tubo: 15 mm de fondo casi no se proyectan, asi que lo que se ve es la
+      CARA de frente.
+      DEFECTO DE FONDO QUE APARECIO ACA: `vmAroPx()` ESTIMABA el radio suponiendo que el ojo estaba
+      a |_telOcularZ| del ocular, o sea que el origen del arma caia en la camara. No cae: gunRoot
+      tiene su posicion y el apuntado la corre otra vez. Medido, el error era de 1,44 veces — el aro
+      de CSS se venia dibujando 44% mas grande que el ocular de verdad desde el principio, y por eso
+      el metal aparecia bien adentro de la linea. Ahora se PROYECTA el punto de verdad con la camara
+      del arma, asi que la linea y el metal caen en el mismo sitio por construccion.
+      Y como el ocular de verdad se proyecta en el 35% del alto y el aro aprobado estaba en el 50%,
+      el bisel se ESCALA hasta dar en el blanco (`vmAroAjustar`, VM_ARO_ALTO=0.50). Es una decision
+      de imagen y esta anotada como tal, igual que VM_FOV=34. Una sola multiplicacion clava el
+      blanco porque el radio proyectado va lineal con el radio del objeto.
+      Medido: abertura 50,0% del alto y canto exterior 59,0% con lienzos de 420, 430 y 600 px de
+      alto; la pasada del arma pasa de 5 a 7 llamadas; apuntando sigue costando menos que la cadera
+      (-51 llamadas la AWM, -50 la Dragunov). Cadera, apuntado y arma sin visor verificados: el
+      bisel y el visor son exactamente inversos, y el AK no enciende ninguno de los dos.
 - [x] **Controles para los que recien empiezan** (2026-08-23): apuntar de UN TOQUE por omision
       (CFG_DEF.apuntar='tap'), botones un 10% mas chicos, y FUEGO y APUNTAR del 50% al 81% del alto
       de la pantalla — estaban justo sobre la linea del horizonte. Con la mira puesta el HUD se
