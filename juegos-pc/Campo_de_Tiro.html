@@ -18255,6 +18255,9 @@ function hgLienzo(nombre, respaldo){
   const S=Math.max(128, c.width>>1), [c2,g2]=areLienzo(S);
   g2.drawImage(c,0,0,S,S); return c2;
 }
+/* cuanta variacion de manchas lleva cada uno (0 = ninguna) */
+const VARIA={ pasto:0.55, arena:0.50, piedra:0.34, piedraOs:0.34, madera:0.26, maderaOs:0.26,
+              tela:0.18, metal:0.22 };
 /* la receta de cada material, en un solo lugar: la usan el armado y el reemplazo */
 const ARE_REC=[
   /* clave      lienzo propio                              rug  met  uv    normal, fuerza,  rugosidad */
@@ -18291,9 +18294,48 @@ function areMat(){
     const mat=new THREE.MeshStandardMaterial({color:0xffffff, roughness:r, metalness:m||0});
     areMapas(mat, hgLienzo(k, prop), nrm, nf, rug, met);
     mat.userData.uv=esc; mat.userData.rec=[k,prop,nrm,nf,rug,met];
+    /* cuanto se nota la repeticion depende de cuantas veces entra la textura en la superficie:
+       el pasto cubre 130 m y es el que mas la sufre; la lona de un contenedor entra dos veces y
+       casi no necesita ayuda. */
+    areVariar(mat, 0.147, VARIA[k]==null?0.40:VARIA[k]);
     ARE_M[k]=mat;
   }
   for(const k in ARE_M) ARE_M[k].envMapIntensity=0.55;
+}
+/* ===================== QUE NO SE VEA EL PATRON =====================
+   La costura entre baldosa y baldosa quedo invisible (0,12 sobre 255), pero eso arregla la UNION,
+   no la REPETICION: el pasto repite cada 2,9 m y la arena mide 130, o sea cuarenta y cinco copias
+   exactas de la misma mancha. El ojo encuentra un manchon claro, lo ve otra vez tres metros mas
+   alla, y a partir de ahi ya no puede dejar de ver la grilla. Es el defecto clasico de cualquier
+   textura repetida, y no se arregla con mas resolucion.
+
+   Lo que se hace es UNA SEGUNDA LECTURA de la misma textura a una escala mucho mas grande —siete
+   veces— y se usa su luminancia para subir y bajar el brillo de la primera. Como la escala grande
+   repite cada veinte metros y la chica cada tres, y veinte no es multiplo de tres, el resultado no
+   se repite hasta muchisimo mas lejos: donde antes habia cuarenta y cinco parches identicos ahora
+   hay manchones grandes de campo mas seco y mas verde, cada uno con su grano.
+
+   Cuesta UNA lectura de textura mas, sobre una textura que ya esta en memoria. Es de lo mas barato
+   que se puede pagar por algo que se nota tanto. */
+function areVariar(mat, escala, fuerza){
+  if(!mat || mat.userData._var) return;
+  mat.userData._var=true;
+  mat.onBeforeCompile=(sh)=>{
+    sh.uniforms.macroEsc={value:escala||0.147};
+    sh.uniforms.macroFza={value:(fuerza==null?0.45:fuerza)};
+    sh.fragmentShader = sh.fragmentShader
+      .replace('void main() {', 'uniform float macroEsc;\nuniform float macroFza;\nvoid main() {')
+      .replace('#include <map_fragment>', `
+        #ifdef USE_MAP
+          vec4 sampledDiffuseColor = texture2D( map, vMapUv );
+          /* la lectura grande: el mismo dibujo estirado siete veces, que hace de mapa de manchas */
+          float macro = dot( texture2D( map, vMapUv * macroEsc ).rgb, vec3(0.3333) );
+          sampledDiffuseColor.rgb *= mix( 1.0, clamp(macro*2.0, 0.45, 1.75), macroFza );
+          diffuseColor *= sampledDiffuseColor;
+        #endif
+      `);
+  };
+  mat.needsUpdate=true;
 }
 /* cuando llegan las generadas (o cambia la calidad de texturas), se cambian LOS MAPAS de cada
    material que ya esta puesto en el mapa */
