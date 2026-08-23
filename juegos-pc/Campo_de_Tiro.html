@@ -37,6 +37,11 @@
   body.tele #hudWrap, body.tele #tiroHUD, body.tele #areSala,
   body.tele #vBoard, body.tele #hpWrap, body.tele #billHUD{ display:none !important; }
   body.tele #mpStatus{ opacity:.20 !important; }
+  /* Y EL JOYSTICK Y LOS BOTONES, CASI APAGADOS. Se siguen pudiendo usar —hay que poder moverse y
+     hay que poder bajar la mira— pero al 22% dejan de competir con lo que estas mirando. Con la
+     mira puesta la pantalla tiene que estar despejada: es el momento en que mas importa ver. */
+  body.tele #joy, body.tele #bAds{ opacity:.22 !important; }
+  body.tele #joy:active, body.tele #bAds:active{ opacity:.55 !important; }
   body.tele #cross{ display:none; }
   /* durante la cinematica no se ve nada del juego */
   body.cine #joy, body.cine .actBtn, body.cine #hudWrap, body.cine #cross, body.cine #tiroHUD,
@@ -398,24 +403,22 @@
      la cruz que en un visor de verdad se leen contra el tubo. */
   #telMira{ position:fixed; inset:0; z-index:14; display:none; opacity:0; pointer-events:none;
     transition:opacity .06s linear; }
-  #telMira{ --r:min(30vh,30vw); }
-  body.vert #telMira{ --r:min(26vh,26vw); }
-  /* EL CANTO DEL TUBO: dos aros finos y NADA adentro ni afuera. Es la diferencia entre "hay una
-     mira delante del ojo" y "hay dos pantallas". El de afuera es oscuro y grueso —el fierro— y el
-     de adentro claro y fino —el borde del cristal—, que es como se lee un tubo de verdad. */
+  /* EL ARO, MAS CHICO Y DE UNA SOLA LINEA. Estaba en 30vh de radio, o sea sesenta por ciento del
+     alto de la pantalla: tapaba todo. Y llevaba tres capas —un aro oscuro, uno gris claro por
+     dentro y un degrade— que juntas se ven como un tubo de plastico. En la foto de referencia el
+     aro es UNA linea fina y oscura y nada mas. Radio 21vh: cuarenta y dos por ciento del alto,
+     que deja ver alrededor. */
+  #telMira{ --r:min(21vh,21vw); }
+  body.vert #telMira{ --r:min(19vh,19vw); }
   #telAro{ position:absolute; left:50%; top:50%;
     width:calc(var(--r)*2); height:calc(var(--r)*2); margin:calc(var(--r)*-1) 0 0 calc(var(--r)*-1);
-    border-radius:50%; box-shadow:0 0 0 3px rgba(10,13,16,.72),
-                                 inset 0 0 0 2px rgba(150,162,174,.30),
-                                 inset 0 0 14px 4px rgba(8,11,14,.34); }
+    border-radius:50%; box-shadow:0 0 0 2px rgba(12,15,18,.80); }
   #telRet{ position:absolute; left:50%; top:50%;
     width:calc(var(--r)*2); height:calc(var(--r)*2); margin:calc(var(--r)*-1) 0 0 calc(var(--r)*-1);
     background-repeat:no-repeat; background-size:100% 100%; opacity:.95; }
-  /* las dos lineas siguen fuera del aro: es lo que ayuda a encontrar el centro cuando el fondo es
-     todo cielo, y es como se ve en cualquier visor */
-  .telCruz{ position:absolute; background:rgba(18,22,26,.34); }
-  .telCruzH{ left:0; right:0; top:50%; height:1px; margin-top:-0.5px; }
-  .telCruzV{ top:0; bottom:0; left:50%; width:1px; margin-left:-0.5px; }
+  /* LAS LINEAS QUE CRUZABAN LA PANTALLA, AFUERA. Las puse pensando en los postes de un visor de
+     verdad, pero cruzando los 900 pixeles de la pantalla no leen como un visor: leen como una
+     cruz encima del juego. En la foto de referencia no estan. */
   body.tele #cross{ display:none !important; }
   #teleAum{ position:fixed; z-index:16; pointer-events:none; display:none;
     right:calc(16px + var(--safe-t)); bottom:calc(96px + var(--safe-b));
@@ -15435,13 +15438,14 @@ function telRetTex(tipo){
   const S=1024, c=document.createElement('canvas'); c.width=c.height=S;
   const g=c.getContext('2d'), C=S/2;
   g.clearRect(0,0,S,S);
-  const TINTA='rgba(9,11,14,0.96)';
+  /* un poco menos opaca: una reticula esta GRABADA en el cristal, no pintada encima */
+  const TINTA='rgba(11,14,18,0.86)';
   g.strokeStyle=TINTA; g.fillStyle=TINTA; g.lineCap='butt'; g.lineJoin='miter';
 
   if(tipo==='pso1'){
     /* ---------- PSO-1 ---------- */
     const MIL=S*0.0392;                 // cuanto mide un milirradian dibujado
-    const gr=S*0.0040;                  // el grosor de la linea fina
+    const gr=S*0.0026;                  // el grosor de la linea fina
     /* la barra horizontal: la linea central y las diez marcas por lado */
     g.lineWidth=gr;
     g.beginPath(); g.moveTo(C-MIL*10.6, C); g.lineTo(C-MIL*0.9, C);
@@ -15480,10 +15484,14 @@ function telRetTex(tipo){
     void hMin;
   } else {
     /* ---------- MIL-DOT ---------- */
+    /* LOS POSTES, MUCHO MAS FINOS. Estaban en 0,0175 del lado —dieciocho pixeles de mil— y a
+       tamano de aro eso es una barra negra que tapa. En un visor de verdad el poste se ve grueso
+       porque el campo es chiquito; en una pantalla de telefono hay que dibujarlo fino o come la
+       imagen. Y el hueco del medio va mas grande: es por donde se ve lo que estas apuntando. */
     const R=S*0.482;                    // hasta donde llega el brazo
-    const POSTE=S*0.176;                // donde el brazo fino se vuelve poste grueso
-    const HUECO=S*0.020;                // el hueco del medio, para no tapar el blanco
-    const gFino=S*0.0034, gPoste=S*0.0175;
+    const POSTE=S*0.200;                // donde el brazo fino se vuelve poste grueso
+    const HUECO=S*0.034;                // el hueco del medio, para no tapar el blanco
+    const gFino=S*0.0022, gPoste=S*0.0062;
     /* los cuatro brazos: poste grueso desde el borde y linea fina hacia el centro */
     for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
       g.lineWidth=gPoste;
@@ -15528,8 +15536,7 @@ function esTele(){ try{ const d=ARMA();
 function telMiraEl(){
   let e=document.getElementById('telMira');
   if(!e){ e=document.createElement('div'); e.id='telMira';
-    e.innerHTML='<div id="telAro"></div><div id="telRet"></div>'+
-                '<i class="telCruz telCruzH"></i><i class="telCruz telCruzV"></i>';
+    e.innerHTML='<div id="telAro"></div><div id="telRet"></div>';
     document.body.appendChild(e); }
   return e;
 }
