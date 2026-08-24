@@ -12235,7 +12235,7 @@ try{ window.__tiro={
              aroPx:+vmAroAjustar().toFixed(1),
              /* donde cae el metal, medido: la abertura, el canto de afuera, y cuanto del alto de
                 la pantalla ocupa el circulo entero. El limite de lo que el usuario acepto es 50%. */
-             metal:(()=>{ const H=renderer.domElement.height||1;
+             metal:(()=>{ const H=vmLienzo().H;
                vmAroAjustar();
                const ri=vmAroPx(_telAroR), ro=vmAroPx(_telAroRO);
                return { aperturaPx:+ri.toFixed(1), exteriorPx:+ro.toFixed(1),
@@ -13747,6 +13747,20 @@ try{ window.__tiro={
              llamadas:I.render.calls }; },
   /* leer una clave de traduccion como la ve el juego, para comprobar que la pisa la plataforma */
   i18n:(k)=>t(k),
+  /* EL ARO, MEDIDO EN LA PANTALLA. Compara el radio que el CSS esta dibujando contra el radio al
+     que se proyecta el metal del bisel: si no coinciden, la reticula se sale del circulo. Y muestra
+     las dos unidades del lienzo, que es donde estaba el error. */
+  aroMed:()=>{ const L=renderer.domElement, el=document.getElementById('telMira');
+    const css=el? parseFloat(getComputedStyle(el).getPropertyValue('--r')) : null;
+    const metal=vmAroPx(_telAroR), ext=vmAroPx(_telAroRO);
+    const a=document.getElementById('telAro'), r=document.getElementById('telRet');
+    const cw=(x)=>x? Math.round(x.getBoundingClientRect().width/2) : null;
+    return { lienzoBuffer:[L.width,L.height], lienzoCSS:[L.clientWidth,L.clientHeight],
+             densidad:+(L.width/(L.clientWidth||1)).toFixed(2),
+             cssVarR:css, metalAperturaPx:+metal.toFixed(1), metalExteriorPx:+ext.toFixed(1),
+             desvio:+(css/metal).toFixed(3),
+             aroDibujadoR:cw(a), reticulaDibujadaR:cw(r),
+             reticulaCabe:(cw(r)!=null && cw(a)!=null)? cw(r)<=cw(a)+1 : null }; },
   /* la plataforma: que se adivino, que se eligio, y que se ve por eso */
   plataforma:(p)=>{ if(p){ platAplicar(p,true); }
     const B=document.body, oculto=(id)=>{ const e=document.getElementById(id);
@@ -16309,7 +16323,7 @@ function vmArma(dentro){
 const VM_ARO_ALTO=0.50;
 function vmAroAjustar(){
   if(!_telBiselG || !_vmCam || !_telBiselG.parent) return vmAroPx();
-  const H=renderer.domElement.height||1, meta=H*VM_ARO_ALTO/2;
+  const H=vmLienzo().H, meta=H*VM_ARO_ALTO/2;
   const s=_telBiselG.scale.x||1, px=vmAroPx(_telAroR);
   if(!(px>2)) return px;
   /* el radio proyectado va LINEAL con el radio del objeto, asi que una sola multiplicacion clava el
@@ -16319,8 +16333,21 @@ function vmAroAjustar(){
   return vmAroPx(_telAroR);
 }
 const _vmPa=new THREE.Vector3(), _vmPb=new THREE.Vector3();
+/* EL LIENZO MIDE EN DOS UNIDADES Y HAY QUE PEDIR LA QUE CORRESPONDE.
+   `domElement.width/height` son los pixeles del BUFFER DE DIBUJO: el ancho en CSS multiplicado por
+   la densidad del aparato y por la escala de resolucion. `clientWidth/clientHeight` son los
+   pixeles de CSS, que es la unidad en la que se dibuja el aro, porque el aro es un div.
+   Yo devolvia buffer y lo asignaba como CSS. En la computadora de prueba casi no se notaba (densidad
+   1 y escala 0,85, o sea 18% de error), pero en un telefono con densidad 3 y escala 0,7 el factor es
+   2,1: el aro salia mas del DOBLE de grande que el metal del visor, y la reticula —que se dimensiona
+   con el mismo radio— se iba de la pantalla. Eso es lo que se ve en la foto vertical.
+   Se mide en CSS, y el bisel 3D y la linea caen otra vez en el mismo sitio. */
+function vmLienzo(){
+  const L=renderer.domElement;
+  return { W:(L.clientWidth||L.width||1), H:(L.clientHeight||L.height||1) };
+}
 function vmAroPx(r){
-  const L=renderer.domElement, H=L.height||1, W=L.width||1;
+  const _L=vmLienzo(), H=_L.H, W=_L.W;
   /* SE MIDE, NO SE ESTIMA. La cuenta de abajo supone que el ojo esta a |_telOcularZ| del ocular, o
      sea que el origen del arma cae en la camara. No cae: gunRoot tiene su propia posicion y el
      apuntado la corre otra vez. Medido, el error era de 1,46 veces — el metal del bisel quedaba
