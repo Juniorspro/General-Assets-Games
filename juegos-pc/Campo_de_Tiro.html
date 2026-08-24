@@ -13747,6 +13747,20 @@ try{ window.__tiro={
              llamadas:I.render.calls }; },
   /* leer una clave de traduccion como la ve el juego, para comprobar que la pisa la plataforma */
   i18n:(k)=>t(k),
+  /* prende y apaga el muro de la zona, y donde esta parado: para poder comparar el mismo cuadro
+     con muro y sin muro, que es la unica forma de saber cuanto tapa de verdad */
+  zonaVer:(v)=>{ try{ zonaCrear(); if(v!=null) zonaMalla.visible=!!v;
+    return { visible:zonaMalla.visible, y:+zonaMalla.position.y.toFixed(1),
+             esc:[+zonaMalla.scale.x.toFixed(1), +zonaMalla.scale.y.toFixed(1)],
+             jug:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1)],
+             pitch:+player.pitch.toFixed(2), yaw:+player.yaw.toFixed(2) };
+  }catch(e){ return 'ERR '+e.message; } },
+  /* pone al jugador donde uno quiera, para poder mirar una cosa concreta del mapa */
+  poner:(x,z,y)=>{ const GZ=(typeof ALC_GZ!=='undefined'&&world==='valle')? ALC_GZ
+                   : (world==='arena'? ARE_GZ : TIRO_GZ);
+    let h=0; try{ h=(world==='valle')? alcH(x,z) : 0; }catch(e){}
+    player.pos.set(x, (y==null? h+1.6 : y), GZ+z);
+    return {p:[+player.pos.x.toFixed(1),+player.pos.y.toFixed(1),+player.pos.z.toFixed(1)]}; },
   /* CUANTO TIEMBLA EL ARO. Mide donde cae el CENTRO del bisel proyectado, cuadro a cuadro, y
      devuelve cuanto se movio. El aro de CSS esta clavado en el medio de la pantalla; si el metal se
      mueve respecto de el, eso es el temblor que se ve. */
@@ -21613,17 +21627,67 @@ function zonaCrear(){
   /* La pared de la zona es un cilindro visto DESDE ADENTRO, con la textura desvaneciendose hacia
      arriba. Sin depthWrite para que no tape lo que hay detras y sin sombra: es un aviso, no un
      objeto. */
-  const g=new THREE.CylinderGeometry(1,1,90,64,1,true);
+  const g=new THREE.CylinderGeometry(1,1,90,72,1,true);
+  /* HUMO VERDE, NO RAYAS DE NEON. Lo que habia era un cilindro celeste con rayas verticales
+     corriendo: leia como una valla de ciencia ficcion, no como algo que te mata si lo cruzas.
+     Ahora es gas: tres capas de ruido a distintas escalas y velocidades, la de abajo lenta y densa
+     y la de arriba rapida y deshilachada, mas un borde encendido donde el muro toca el piso.
+     TRES OCTAVAS Y NO CINCO. El muro puede llegar a tapar la pantalla entera, asi que cada octava
+     de mas se paga en TODOS los pixeles. Con tres ya no se ve el patron; con cinco se ve igual y
+     cuesta 66% mas. El ruido es de valor y con hash aritmetico: cero texturas, cero lecturas. */
+  /* BACKSIDE Y NO DOUBLESIDE. Lo puse a dos caras pensando en que tambien se vea desde afuera, y el
+     resultado fue que desde ADENTRO se dibujan la pared de enfrente y la de atras: el alfa se suma y
+     el muro satura hasta tapar el mapa. Una cara sola ya cubre los 360 grados vistos desde dentro,
+     que es donde se juega; el que esta afuera tiene el aviso rojo y se esta muriendo. */
   const m=new THREE.ShaderMaterial({ side:THREE.BackSide, transparent:true, depthWrite:false, fog:false,
-    uniforms:{ uCol:{value:new THREE.Color(0x6fd3ff)}, uT:{value:0} },
-    vertexShader:'varying vec2 vU; varying float vY; void main(){ vU=uv; vY=position.y; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
-    fragmentShader:`varying vec2 vU; varying float vY; uniform vec3 uCol; uniform float uT;
+    uniforms:{ uCol:{value:new THREE.Color(0x62e35a)}, uBorde:{value:new THREE.Color(0xd8ff8a)},
+               uT:{value:0}, uCal:{value:1} },
+    vertexShader:`varying vec2 vU; varying float vY; varying vec3 vW; varying vec3 vN;
+      void main(){ vU=uv; vY=position.y;
+        vec4 wp=modelMatrix*vec4(position,1.0); vW=wp.xyz;
+        vN=normalize(mat3(modelMatrix)*normal);
+        gl_Position=projectionMatrix*viewMatrix*wp; }`,
+    fragmentShader:`
+      varying vec2 vU; varying float vY; varying vec3 vW; varying vec3 vN;
+      uniform vec3 uCol; uniform vec3 uBorde; uniform float uT; uniform float uCal;
+      /* hash y ruido de valor: barato y sin texturas */
+      float h21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+      float ruido(vec2 p){
+        vec2 i=floor(p), f=fract(p);
+        f=f*f*(3.0-2.0*f);
+        float a=h21(i), b=h21(i+vec2(1.0,0.0)), c=h21(i+vec2(0.0,1.0)), d=h21(i+vec2(1.0,1.0));
+        return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
+      }
       void main(){
-        float alto = clamp(1.0 - (vY+45.0)/90.0*1.35, 0.0, 1.0);      // se apaga hacia arriba
-        float ray  = 0.55 + 0.45*sin(vU.x*220.0 + uT*1.7);            // rayas verticales que corren
-        float pulso= 0.80 + 0.20*sin(uT*2.3);
-        float a = alto*alto*0.42*ray*pulso;
-        gl_FragColor = vec4(uCol, a);
+        /* la coordenada corre por la circunferencia y sube: asi el humo gira y trepa a la vez */
+        /* mas ciclos alrededor: con 26 sobre una circunferencia de 390 m cada bocanada media 15
+           metros y se leia como manchones, no como humo. Con 44 mide 9, y la segunda octava 4. */
+        vec2 p = vec2(vU.x*44.0, vY*0.10);
+        float n  = ruido(p + vec2(uT*0.12, -uT*0.16));
+        n += 0.5  * ruido(p*2.3 + vec2(-uT*0.21, -uT*0.28));
+        if(uCal > 0.5) n += 0.25 * ruido(p*5.1 + vec2(uT*0.34, -uT*0.44));
+        n /= (uCal > 0.5) ? 1.75 : 1.5;
+        /* denso abajo, deshilachado arriba: el humo pesa */
+        /* SE TIENE QUE VER EL OTRO LADO. Con la densidad que le puse primero el muro saturaba y
+           tapaba el mapa entero: un muro de gas opaco no avisa donde esta el borde, esconde lo
+           que hay detras. Ahora el pico ronda 0,7 y de lejos se ve el terreno por atras. */
+        float alto = clamp(1.0 - (vY+45.0)/90.0*1.15, 0.0, 1.0);
+        float dens = pow(alto,1.35)*(0.34 + 0.80*n);
+        /* mas opaco visto de costado: un muro de gas se ve mas espeso en diagonal */
+        vec3 V = normalize(cameraPosition - vW);
+        float raso = 1.0 - abs(dot(normalize(vN), V));
+        dens *= (0.70 + 0.45*raso);
+        /* el filo de abajo, encendido: es lo que dice DONDE esta la linea que no hay que cruzar */
+        /* EL FILO ERA MEDIA PARED. smoothstep(0.0, 0.16, 1.0-t*6.0) da 1 para todo t<0.14, o sea
+           los doce metros de abajo de una pared de noventa: en vez de una franja al pie sumaba
+           alfa por media pantalla, y eso es lo que hacia que el muro se viera como una niebla
+           pareja que tapa el mapa. Ahora t va de 0 a 1 de abajo arriba y la franja son los tres
+           metros bajos, que es donde se apoya en el suelo. */
+        float t = (vY+45.0)/90.0;
+        float pie = 1.0 - smoothstep(0.0, 0.035, t);
+        vec3 col = mix(uCol, uBorde, pie*0.75 + 0.25*n);
+        float a = clamp(dens*1.00 + pie*0.34, 0.0, 0.82);
+        gl_FragColor = vec4(col, a);
       }` });
   zonaMalla=new THREE.Mesh(g,m); zonaMalla.frustumCulled=false; zonaMalla.renderOrder=6;
   zonaMalla.visible=false; scene.add(zonaMalla);
@@ -21744,7 +21808,10 @@ function partTick(dt){
   if(zonaMalla){ zonaMalla.visible=true;
     zonaMalla.position.set(c[0], 30, c[1]+ALC_GZ);
     zonaMalla.scale.set(rad,1,rad);
-    zonaMalla.material.uniforms.uT.value=_zonaT; }
+    zonaMalla.material.uniforms.uT.value=_zonaT;
+    /* en calidad baja se va la tercera octava: el muro puede tapar la pantalla entera, asi que su
+       costo se paga en cada pixel, y es justo lo que un aparato flojo no tiene para dar */
+    try{ zonaMalla.material.uniforms.uCal.value=(quality==='low')?0:1; }catch(e){} }
   // daño por quedarse afuera
   if(!PVP.muerto){
     const fuera=zonaFuera(player.pos.x, player.pos.z-ALC_GZ);
