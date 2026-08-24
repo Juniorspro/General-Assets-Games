@@ -113,8 +113,30 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
       al reves. Segunda visita no pregunta. Si nadie elige, a los 15 s se toma lo adivinado y no
       queda trabado (y no se sella, asi que la proxima vez vuelve a preguntar). El texto de ayuda
       cambia con la plataforma, verificado leyendo la clave. Cero errores de pagina en 9 corridas.
-      PENDIENTE CHICO: los consejos de la pantalla de carga siguen con lenguaje tactil ("Tocá
-      DESLIZAR"), y ahi todavia no se eligio la plataforma, asi que son ambiguos por naturaleza.
+      Y despues, en la pasada de arreglos:
+      · **BUG GRAVE: el battle royale NO SE PODIA JUGAR con teclado.** La logica de "el mismo boton,
+        tres trabajos" (avion -> tirarse, cayendo -> abrir campana, piso -> saltar) vivia SOLO en el
+        manejador del boton tactil; la barra espaciadora se limitaba a `jumpReq=true`. O sea que con
+        teclado no habia forma de salir del avion ni de abrir el paracaidas. Ahora es una funcion,
+        `saltoBoton()`, y la llaman las tres entradas: boton, teclado y mando (el boton A del mando
+        tenia el mismo defecto). Verificado: avion -> Espacio -> caida -> Espacio -> para.
+      · **El boton del salto ganaba por especificidad de ID.** `body.enAvion #bJump{...!important}`
+        lleva un ID, y un ID le gana a dos clases aunque ambas tengan !important: en una partida de
+        PC aparecia un boton tactil de 104 px en el medio de la pantalla. Se agrego
+        `body.plat-pc.enAvion #bJump`. Esconderlo recien es seguro DESPUES de arreglar lo de arriba.
+      · **`#salHud` no es un control.** Lo habia escondido en PC de puro barrido, y es el marcador de
+        ALTURA: en la caida es lo unico que te dice cuanto falta. Vuelve.
+      · **OTRO TDZ, y grave.** Las declaraciones de plataforma estaban abajo, con el resto de su
+        logica, y `ldTips()` llama a `esPC()` al armar la pantalla de carga — antes de que se
+        evaluara `let plataf`. Un `let` leido antes de su linea tira ReferenceError, y eso corto el
+        modulo COMPLETO: se cayo hasta la precarga de audio. Es la segunda vez en este archivo que
+        una declaracion puesta "donde corresponde tematicamente" en vez de "antes del primer uso"
+        tira todo abajo. Las cuatro declaraciones se subieron al principio del modulo.
+      · Los avisos del salto decian "TOCÁ SALTAR" en PC, donde no hay boton: ahora hay `tp()`, que es
+        tl() pero eligiendo primero el aparato. Y los dos consejos de la carga que nombran un boton
+        van por plataforma (DESLIZAR / SHIFT); los otros diez hablan del juego y sirven igual.
+      · Y aparecieron cuatro etiquetas en castellano que el barrido de traduccion no habia pescado
+        porque no llevan acento: VIVOS, BAJAS, bajas y "RONDA 1 · A 20 BAJAS".
 - [ ] **NO REPRODUCIDO: los NPC desaparecen al cambiar ajustes.** Medido en la arena con 7 bots:
       barrido de 360 grados antes y despues de cambiar preajuste (bajo/ultra), calidad general
       (baja/alta), calidad de texturas y detalle de personajes -> 7 de 7 visibles en todos los

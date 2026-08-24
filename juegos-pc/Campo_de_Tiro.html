@@ -305,7 +305,16 @@
      Y en su lugar entra la leyenda de teclas, que es el equivalente honesto de los botones. */
   body.plat-pc #joy, body.plat-pc #vSlide, body.plat-pc .actBtn,
   body.plat-pc #bChat, body.plat-pc #bVoice, body.plat-pc #bNames, body.plat-pc #bPack,
-  body.plat-pc #btnMenu, body.plat-pc #salHud{ display:none !important; }
+  body.plat-pc #btnMenu{ display:none !important; }
+  /* EL BOTON DEL SALTO EN EL AVION GANABA POR ESPECIFICIDAD. La regla del paracaidas es
+     `body.enAvion #bJump{ display:flex !important }`: lleva un ID, y un ID le gana a dos clases
+     aunque las dos tengan !important. Resultado: en una partida de PC aparecia un boton tactil de
+     104 px en el medio de la pantalla. Con la clase de plataforma adelante empata en IDs y gana en
+     clases. Y esconderlo recien es seguro AHORA, porque hasta hace un rato la barra espaciadora no
+     servia para saltar del avion: el boton era la unica salida. */
+  body.plat-pc.enAvion #bJump, body.plat-pc.cayendo #bJump{ display:none !important; }
+  /* el marcador de ALTURA si se queda: informa, no es un control, y en la caida es lo unico que
+     te dice cuanto falta. Lo habia escondido de puro barrido. */
   /* el editor de botones tampoco tiene sentido si no hay botones que mover */
   body.plat-pc #sEditHud{ display:none !important; }
   /* y al reves: lo que es solo de PC no se ve en el telefono */
@@ -1561,9 +1570,9 @@
   <div id="golpeFlash"></div>
   <!-- PARTIDA: marcador arriba, aviso de zona, kill feed y pantalla de resultado -->
   <div id="partHUD">
-    <div class="phCaja"><i>VIVOS</i><span id="partVivos">1</span></div>
+    <div class="phCaja"><i data-i18n="hud_vivos">VIVOS</i><span id="partVivos">1</span></div>
     <div class="phCaja" id="partZona">◷ 0:55</div>
-    <div class="phCaja"><i>BAJAS</i><span id="partBajas">0</span></div>
+    <div class="phCaja"><i data-i18n="hud_bajas">BAJAS</i><span id="partBajas">0</span></div>
   </div>
   <div id="partAviso" data-i18n="fuera_zona">FUERA DE LA ZONA</div>
   <div id="areSala" data-i18n="sala">SALA</div>
@@ -1612,7 +1621,7 @@
     <div id="pfSub">Puesto #4</div>
     <div id="pfNums">
       <div class="pfNum"><b id="pfPuesto">#4</b><span>puesto</span></div>
-      <div class="pfNum"><b id="pfBajas">0</b><span>bajas</span></div>
+      <div class="pfNum"><b id="pfBajas">0</b><span data-i18n="hud_bajas_min">bajas</span></div>
       <div class="pfNum"><b id="pfTiempo">0:00</b><span>tiempo</span></div>
     </div>
     <div id="pfBtns">
@@ -1769,7 +1778,7 @@
     <div id="perfBarra"><i></i></div>
     <div id="perfCif"><span><b>0</b> pts de rango</span><span id="perfTope">/ 200</span></div>
     <div id="perfEst">
-      <div class="peC"><b id="peBaj">0</b><span>BAJAS</span></div>
+      <div class="peC"><b id="peBaj">0</b><span data-i18n="hud_bajas">BAJAS</span></div>
       <div class="peC"><b id="pePar">0</b><span>PARTIDAS</span></div>
       <div class="peC"><b id="pePre">—</b><span data-i18n="precision">PRECISIÓN</span></div>
     </div>
@@ -1947,6 +1956,30 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';   // clonar el personaje (con esqueleto) para los otros jugadores
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';   // la isla entera se funde por material
 
+/* VA ARRIBA DE TODO A PROPOSITO. Estaba abajo, junto al resto de la logica de plataforma, y eso
+   rompio el juego entero: ldTips() llama a esPC() y se ejecuta al armar la pantalla de carga, o sea
+   ANTES de que se evaluara `let plataf`. Un `let` leido antes de su linea no da undefined, tira
+   ReferenceError, y el error corta el modulo completo — se cayo hasta la precarga de audio, que no
+   tiene nada que ver. Es la segunda vez en este archivo que una declaracion `let` puesta "donde
+   corresponde tematicamente" en vez de "antes del primer uso" tira todo abajo.
+   Las cuatro declaraciones son puras: no tocan el DOM ni dependen de nada de mas abajo. */
+/* ===================== QUE APARATO ES ESTE =====================
+   Se adivina para dejar marcada la opcion probable, y se PREGUNTA para decidirla. La cuenta es la
+   de siempre: es telefono solo si tiene tactil Y el puntero es grueso. Con una sola de las dos no
+   alcanza —una notebook con pantalla tactil tiene tactil y puntero fino, y ahi el joystick seria un
+   estorbo—, y por eso van las dos juntas.
+   Adivinar y aplicar sin preguntar es lo que hace la mayoria, y falla justo en los casos raros: el
+   monitor tactil, el telefono con teclado, el emulador. Preguntar una vez cuesta un toque y no
+   falla nunca. */
+function platAdivinar(){
+  const grueso = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  const tactil = (navigator.maxTouchPoints||0) > 0 || 'ontouchstart' in window;
+  return (tactil && grueso) ? 'movil' : 'pc';
+}
+let plataf = (()=>{ try{ const v=localStorage.getItem('pf_plat'); if(v==='pc'||v==='movil') return v; }catch(e){} return platAdivinar(); })();
+let platElegido = (()=>{ try{ return localStorage.getItem('pf_plat_ok')==='1'; }catch(e){ return false; } })();
+function esPC(){ return plataf==='pc'; }
+
 /* ===================== IDIOMAS (es / en / pt) ===================== */
 const LANG={
   es:{title:'🎯 CAMPO DE TIRO',sub:'poné tu nombre y jugá',lvl:'NIVEL',gfx:'GRÁFICOS',low:'Bajo',med:'Medio',high:'Alto',play:'JUGAR ▶',idioma:'IDIOMA',sens:'SENSIBILIDAD',
@@ -2001,6 +2034,10 @@ Object.assign(LANG.pt,{ title:'🎯 CAMPO DE TIRO', sub:'ponha seu nome e entre'
    El respaldo esta bien y se queda: es mejor mostrar algo en otro idioma que mostrar la clave
    pelada. Lo que estaba mal era apoyarse en el. */
 Object.assign(LANG.en,{ /* las 107 que faltaban en ingles */
+  hud_bajas_min:'kills',
+  hud_vivos:'ALIVE',
+  hud_bajas:'KILLS',
+  tdm_ronda1:'ROUND 1 · TO 20 KILLS',
   plat_t:'CONTROLS · DEVICE',
   plat_pc:'PC',
   plat_pc_d:'WASD + mouse',
@@ -2064,6 +2101,10 @@ Object.assign(LANG.en,{ /* las 107 que faltaban en ingles */
   void_best:'best', void_die:'You fell · cross the void again', void_lvl:'The Void ∞',
   void_reset:'Void rebuilt from scratch!' });
 Object.assign(LANG.pt,{ /* las mismas 107 en portugues */
+  hud_bajas_min:'abates',
+  hud_vivos:'VIVOS',
+  hud_bajas:'ABATES',
+  tdm_ronda1:'RODADA 1 · ATÉ 20 ABATES',
   plat_t:'CONTROLES · APARELHO',
   plat_pc:'PC',
   plat_pc_d:'WASD + mouse',
@@ -2137,6 +2178,10 @@ Object.assign(LANG.pt,{ /* las mismas 107 en portugues */
    y descartando los que ya tienen hermano en:'...' al lado (la tabla de ajustes, por ejemplo, ya
    estaba completa en los tres idiomas y salia como falso positivo). */
 Object.assign(LANG.es,{ /* las que estaban sueltas en el codigo */
+  hud_bajas_min:'bajas',
+  hud_vivos:'VIVOS',
+  hud_bajas:'BAJAS',
+  tdm_ronda1:'RONDA 1 · A 20 BAJAS',
   plat_t:'CONTROLES · APARATO',
   plat_pc:'PC',
   plat_pc_d:'WASD + mouse',
@@ -2290,7 +2335,7 @@ function gpTick(dt){
     if(q!==!!GP._fue){ tiroFire=q; if(!q) _semiListo=true; GP._fue=q; }
     const w=lt>0.4;
     if(w!==!!GP._ads){ GP._ads=w; if(w) adsTocado(); adsQ=w?1:0; } }
-  if(gpFlanco('a',gpBoton(gp,0)>0.5)) jumpReq=true;
+  if(gpFlanco('a',gpBoton(gp,0)>0.5)){ try{ saltoBoton(); }catch(err){ jumpReq=true; } }
   const bB=gpBoton(gp,1)>0.5;
   if(bB && !GP._sld){ sldHold=true; startSlide(); }      // igual que el boton en pantalla: mantener alarga
   if(!bB && GP._sld) sldHold=false;
@@ -11946,7 +11991,7 @@ function tiroWire(){ if(_tiroWired)return; _tiroWired=true;
     if(k==='w'||k==='arrowup')TCL.w=true; else if(k==='s'||k==='arrowdown')TCL.s=true;
     else if(k==='a'||k==='arrowleft')TCL.a=true; else if(k==='d'||k==='arrowright')TCL.d=true;
     else { m=false;
-      if(k===' '){ jumpReq=true; }
+      if(k===' '){ try{ saltoBoton(); }catch(err){ jumpReq=true; } }
       else if(k==='shift'){ startSlide(); }
       else if(k==='r'&&enTiro()){ tiroReload(); }
       else if(k==='f'&&enTiro()){ tiroFire=true; setTimeout(()=>{ tiroFire=false; _semiListo=true; },90); }
@@ -15299,13 +15344,18 @@ addEventListener('pointerup',endTouch); addEventListener('pointercancel',endTouc
 function tapBtn(id,fn){ const el=document.getElementById(id); if(!el)return;   // sin el guarda, un id ausente cortaba el resto del cableado
   el.addEventListener('pointerdown',e=>{ if(editHUD)return; e.preventDefault();e.stopPropagation();fn();}); }
 /* EL MISMO BOTON, TRES TRABAJOS. Arriba del avion te tira; cayendo abre la campana antes de
-   tiempo (por si querés frenar y planear mas lejos); en el piso salta, como siempre. */
-tapBtn('bJump',()=>{
+   tiempo (por si querés frenar y planear mas lejos); en el piso salta, como siempre.
+   VA EN UNA FUNCION Y NO ADENTRO DEL BOTON, y esto era un defecto de verdad: los tres trabajos
+   vivian solo en el manejador del boton tactil, y la barra espaciadora se limitaba a poner
+   jumpReq=true. O sea que con teclado NO se podia salir del avion ni abrir el paracaidas — en un
+   battle royale, no se podia jugar. Ahora las dos entradas llaman a lo mismo. */
+function saltoBoton(){
   if(SALTO.fase==='avion'){ saltoTirarse(); return; }
   if(SALTO.fase==='caida'){ saltoAbrir(); return; }
   if(SALTO.fase==='para') return;
   jumpReq=true;
-});
+}
+tapBtn('bJump', saltoBoton);
 tapBtn('bCambiar',()=>{ if(!slotCambiar()) sfx('wrong',0.35); });
 tapBtn('bCurar',()=>{ invUsar(); });
 /* OJO: bSlide NO va por tapBtn. Su cableado propio (abajo) atiende touchstart y pointerdown, y si
@@ -17012,6 +17062,10 @@ const CFG_L={
   si:{es:'Sí',en:'On',pt:'Sim'}, no:{es:'No',en:'Off',pt:'Não'},
 };
 function tl(o){ return (o&&(o[lang]||o.es))||''; }
+/* COMO tl() PERO ELIGIENDO PRIMERO EL APARATO. Los avisos del salto decian "TOCÁ SALTAR", y en PC
+   no hay boton que tocar: hay que apretar la barra. Decirle "tocá" a alguien con teclado es el
+   mismo error que decirle "apretá E" a alguien con un telefono, y esta escrito como regla. */
+function tp(o){ if(!o) return ''; const a=o[esPC()?'pc':'movil']; return tl(a||o); }
 /* MISMO SITIO, DOS FORMAS. Varias tablas pasaron de tener el texto en una cadena a tenerlo en un
    objeto de tres idiomas, y no todas de una vez: el mismo lugar de la pantalla puede recibir
    cualquiera de las dos. Sin esto, la que ya es objeto sale como "[object Object]" — que es el
@@ -17890,7 +17944,7 @@ function saltoArrancar(alTerminar){
   player.vel.set(0,0,0); player.vy=0; player.onGround=false;
   try{ if(gunRoot) gunRoot.visible=false; }catch(e){}
   saltoEtiqueta(tl({es:'SALTAR',en:'DROP',pt:'SALTAR'}));
-  try{ tiroMsg(tl({es:'TOCÁ SALTAR PARA TIRARTE',en:'TAP JUMP TO DROP',pt:'TOQUE PULAR PARA SALTAR'}),'#ffd08a'); }catch(e){}
+  try{ tiroMsg(tp({movil:{es:'TOCÁ SALTAR PARA TIRARTE',en:'TAP JUMP TO DROP',pt:'TOQUE PULAR PARA SALTAR'},pc:{es:'ESPACIO PARA TIRARTE',en:'SPACE TO DROP',pt:'ESPAÇO PARA SALTAR'}}),'#ffd08a'); }catch(e){}
   return true;
 }
 /* ---------- tirarse ---------- */
@@ -18004,7 +18058,7 @@ function saltoTick(dt){
     camera.lookAt(px, py-16, GZ+pz);
     { const f=fovVert(78); if(Math.abs(camera.fov-f)>0.15){ camera.fov=f; camera.updateProjectionMatrix(); } }
     saltoNiebla(SAL_ALT);
-    saltoHud(SAL_ALT, tl({es:'TOCÁ SALTAR',en:'TAP TO DROP',pt:'TOQUE PARA SALTAR'}));
+    saltoHud(SAL_ALT, tp({movil:{es:'TOCÁ SALTAR',en:'TAP TO DROP',pt:'TOQUE PARA SALTAR'},pc:{es:'ESPACIO',en:'SPACE',pt:'ESPAÇO'}}));
     /* SE ACABO EL RECORRIDO: el avion se va y caes desde donde desaparecio. Es lo que evita que
        alguien se quede arriba para siempre. */
     if(SALTO.rec>=SALTO.largo){
@@ -18110,7 +18164,7 @@ function cineTela(){
     el.style.cssText='position:fixed;inset:0;z-index:60;pointer-events:auto;background:#000;opacity:0;'+
       'transition:opacity .18s linear;display:none';
     const s=document.createElement('div'); s.id='cineSalt';
-    s.textContent=t('br_tocasaltar');
+    s.textContent=tp({movil:{es:'TOCÁ PARA SALTAR ▸',en:'TAP TO JUMP ▸',pt:'TOQUE PARA SALTAR ▸'},pc:{es:'ESPACIO PARA SALTAR ▸',en:'SPACE TO JUMP ▸',pt:'ESPAÇO PARA SALTAR ▸'}});
     s.style.cssText='position:absolute;right:16px;bottom:14px;font:700 12px/1 system-ui,sans-serif;'+
       'letter-spacing:.10em;color:rgba(255,255,255,.72);text-shadow:0 2px 8px #000;';
     el.appendChild(s); document.body.appendChild(el); }
@@ -21343,7 +21397,7 @@ function tdmArrancar(){
     b.estado='patrulla'; b.tCambio=0.8+i*0.35;
     if(b.r) b.r.anim=['idle','idle','walk','idle','idle'][i%5];
   });
-  tdmAviso('RONDA 1 · A 20 BAJAS', 3.2);
+  tdmAviso(t('tdm_ronda1'), 3.2);
   tdmHUD();
 }
 /* ===================== DE QUE EQUIPO ES CADA UNO =====================
@@ -22662,7 +22716,7 @@ const loaderEl=document.getElementById('loader');
    contra el retroceso, que los bots erran mas si te movés—. Se cambian cada 3,4 s con un fundido,
    y arrancan en uno al azar para que no sea siempre el mismo el primero. */
 const LD_TIPS={ es:[
-  'Mantené DESLIZAR sin correr y te agachás. Soltalo y te levantás… si hay lugar arriba.',
+  {movil:'Mantené DESLIZAR sin correr y te agachás. Soltalo y te levantás… si hay lugar arriba.',pc:'Mantené SHIFT sin correr y te agachás. Soltalo y te levantás… si hay lugar arriba.'},
   'Poner o sacar la mira CORTA la deslizada: es el slide cancel, y salís con el envión puesto.',
   'La ráfaga larga te sube la vista. Bajá el pulgar mientras disparás: el retroceso no se recupera solo hasta que soltás.',
   'Los bots te apuntan peor si te movés: corriendo aciertan un 30% menos, deslizándote un 64% menos.',
@@ -22670,7 +22724,7 @@ const LD_TIPS={ es:[
   'Apuntando el retroceso pesa el 62%. Menos, pero existe: no hay arma que se dispare sola.',
   'Hay una tienda en cada esquina del mapa. Se compra con lo que juntás en la partida.',
   'Con la mira telescópica se ve MUCHO más lejos que alrededor del aro: ése es el aumento de verdad.',
-  'Tocá dos veces DESLIZAR para cortar el deslizamiento a mitad y disparar de pie.',
+  {movil:'Tocá dos veces DESLIZAR para cortar el deslizamiento a mitad y disparar de pie.',pc:'Apretá SHIFT dos veces para cortar el deslizamiento a mitad y disparar de pie.'},
   'El bate y el machete pegan a mitad del revoleo, no al apretar. Calculá la distancia.',
   'Los primeros tiros de un bot recién enganchado se van casi siempre. Los que duelen son los del final.',
   'En el menú podés girar al personaje con el dedo, y mover cada botón donde te quede cómodo.'
@@ -22678,7 +22732,7 @@ const LD_TIPS={ es:[
 /* LOS CONSEJOS TAMBIEN SE TRADUCEN. Es lo primero que se lee del juego: dejarlos en castellano
    mientras el resto abre en ingles hace ver el cartel de idioma como un adorno. */
 en:[
-  'Hold SLIDE without running to crouch. Let go and you stand up again — if there is room above you.',
+  {movil:'Hold SLIDE without running to crouch. Let go and you stand up again — if there is room above you.',pc:'Hold SHIFT without running to crouch. Let go and you stand up again — if there is room above you.'},
   'Aiming down sights CANCELS the slide. That is the slide cancel, and you keep the momentum.',
   'Long bursts walk your aim up. Pull your thumb down while firing: recoil only settles once you let go.',
   'Bots aim worse when you move: running cuts their accuracy by 30%, sliding by 64%.',
@@ -22686,13 +22740,13 @@ en:[
   'Aiming keeps 62% of the recoil. Less, but still there — no gun shoots itself straight.',
   'There is a shop in every corner of the map. You pay with what you pick up in the match.',
   'Through a scope you see MUCH further than around the ring: that is the real magnification.',
-  'Double tap SLIDE to cut the slide halfway and shoot standing up.',
+  {movil:'Double tap SLIDE to cut the slide halfway and shoot standing up.',pc:'Double tap SHIFT to cut the slide halfway and shoot standing up.'},
   'The bat and the machete land mid swing, not when you press. Judge the distance.',
   'A bot that just spotted you misses its first shots almost every time. The last ones are the ones that hurt.',
   'In the menu you can spin your operator with a finger, and drag every button where your thumb wants it.'
 ],
 pt:[
-  'Segure DESLIZAR sem correr para agachar. Solte e você levanta — se houver espaço em cima.',
+  {movil:'Segure DESLIZAR sem correr para agachar. Solte e você levanta — se houver espaço em cima.',pc:'Segure SHIFT sem correr para agachar. Solte e você levanta — se houver espaço em cima.'},
   'Mirar CORTA o deslize: é o slide cancel, e você sai com o embalo.',
   'Rajadas longas sobem a mira. Puxe o polegar para baixo enquanto atira: o recuo só assenta quando você solta.',
   'Os bots miram pior se você se mexe: correndo acertam 30% menos, deslizando 64% menos.',
@@ -22700,12 +22754,18 @@ pt:[
   'Mirando, o recuo pesa 62%. Menos, mas existe: não há arma que atire sozinha.',
   'Há uma loja em cada canto do mapa. Paga-se com o que você junta na partida.',
   'Pela luneta se vê MUITO mais longe do que em volta do aro: esse é o aumento de verdade.',
-  'Toque duas vezes em DESLIZAR para cortar o deslize no meio e atirar de pé.',
+  {movil:'Toque duas vezes em DESLIZAR para cortar o deslize no meio e atirar de pé.',pc:'Aperte SHIFT duas vezes para cortar o deslize no meio e atirar de pé.'},
   'O bastão e o facão acertam no meio do golpe, não ao apertar. Calcule a distância.',
   'Os primeiros tiros de um bot que acabou de te ver quase sempre erram. Os que doem são os últimos.',
   'No menu dá para girar o personagem com o dedo e mover cada botão para onde ficar melhor.'
 ]};
-function ldTips(){ const l=(typeof lang!=='undefined'&&LD_TIPS[lang])?LD_TIPS[lang]:LD_TIPS.es; return l; }
+/* LOS DOS CONSEJOS QUE NOMBRAN UN BOTON van por plataforma. Los otros diez hablan del juego y no
+   de como se lo toca, asi que sirven igual en las dos. Un consejo que dice "tocá DESLIZAR" a
+   alguien con teclado no es un detalle: es el primer texto que lee del juego, y manda a buscar un
+   boton que no existe. */
+function ldTips(){ const l=(typeof lang!=='undefined'&&LD_TIPS[lang])?LD_TIPS[lang]:LD_TIPS.es;
+  const k=esPC()?'pc':'movil';
+  return l.map(x=>(x && typeof x==='object')? (x[k]||x.movil||x.pc||'') : x); }
 (function(){
   const el=document.getElementById('ldTip'); if(!el) return;
   const T=ldTips(); let i=(Math.random()*T.length)|0;
@@ -22738,22 +22798,6 @@ function ldRotulo(){ try{ const L={es:'CONSEJO',en:'TIP',pt:'DICA'}[lang]||'TIP'
   document.documentElement.style.setProperty('--mAvLbl', "'"+t('lvl')+"'"); }catch(e){} }
 try{ ldRotulo(); }catch(e){}
 /* ---- la eleccion de idioma ---- */
-/* ===================== QUE APARATO ES ESTE =====================
-   Se adivina para dejar marcada la opcion probable, y se PREGUNTA para decidirla. La cuenta es la
-   de siempre: es telefono solo si tiene tactil Y el puntero es grueso. Con una sola de las dos no
-   alcanza —una notebook con pantalla tactil tiene tactil y puntero fino, y ahi el joystick seria un
-   estorbo—, y por eso van las dos juntas.
-   Adivinar y aplicar sin preguntar es lo que hace la mayoria, y falla justo en los casos raros: el
-   monitor tactil, el telefono con teclado, el emulador. Preguntar una vez cuesta un toque y no
-   falla nunca. */
-function platAdivinar(){
-  const grueso = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-  const tactil = (navigator.maxTouchPoints||0) > 0 || 'ontouchstart' in window;
-  return (tactil && grueso) ? 'movil' : 'pc';
-}
-let plataf = (()=>{ try{ const v=localStorage.getItem('pf_plat'); if(v==='pc'||v==='movil') return v; }catch(e){} return platAdivinar(); })();
-let platElegido = (()=>{ try{ return localStorage.getItem('pf_plat_ok')==='1'; }catch(e){ return false; } })();
-function esPC(){ return plataf==='pc'; }
 /* la clase del body es la que manda: toda la interfaz cuelga de ella y no de un if desparramado */
 function platAplicar(p, guardar){
   plataf = (p==='pc')? 'pc' : 'movil';
@@ -22817,6 +22861,9 @@ function platTextos(){
   try{ const P=document.getElementById('pcPista'); if(P) P.textContent=L(PLAT_TXT.pista[plataf]); }catch(e){}
   try{ const K=document.getElementById('pcTeclas');
     if(K) K.innerHTML=PC_TECLAS.map(([k,d])=>'<i>'+k+'</i><span>'+L(d)+'</span>').join(''); }catch(e){}
+  /* y el consejo que ya esta en pantalla: si nombraba un boton, ahora nombra la tecla */
+  try{ const e=document.getElementById('ldTip'), T=ldTips();
+    if(e && T && T.length) e.textContent=T[(Math.random()*T.length)|0]; }catch(e){}
 }
 /* la leyenda se muestra al entrar a jugar y se va sola: fija es ruido, ausente es esconder los
    controles. Seis segundos alcanzan para leerla y no molestan al que ya la sabe. */
