@@ -82,6 +82,39 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
       queda UNA, y es "Español" en el selector de idioma, que tiene que quedar asi. Verificado
       tambien en portugues (sale portugues, no castellano) y en partida, no solo en el menu. Cero
       errores de pagina.
+- [x] **PC DE VERDAD, Y SE ELIGE AL ABRIR** (2026-08-24). Pedido: "agrega PC control e interfaz PC
+      al entrar al juego antes del menu de carga te debe aparecer si eres de PC o movil".
+      HALLAZGO: los CONTROLES de PC ya estaban casi completos (WASD, mouse con pointer lock, click
+      izquierdo dispara, derecho apunta, R, E, Q, C, I, B, 1/2). Lo que NO existia era la INTERFAZ:
+      el joystick y los nueve botones tactiles se dibujaban igual en PC, tapando media pantalla para
+      hacer cosas que ya hacia el teclado.
+      Ahora hay un cartel de PC/Movil ANTES del de idioma, con la opcion probable ya marcada por
+      `platAdivinar()` (tactil Y puntero grueso; con una sola de las dos no alcanza, porque una
+      notebook tactil da tactil y puntero fino). Se pregunta igual: adivinar y aplicar sin preguntar
+      falla justo en los casos raros (monitor tactil, telefono con teclado, emulador).
+      La interfaz cuelga de `body.plat-pc` / `body.plat-movil`, no de ifs desparramados. En PC se
+      esconden joystick, los nueve botones, el menu ☰ y el editor de botones, y entran la leyenda de
+      teclas (13 teclas, dos columnas) mas una pista de una linea.
+      TECLAS QUE FALTABAN: Esc pausa (en PC no hay boton ☰, asi que no habia forma de pausar), T
+      abre el chat, Ctrl desliza. Y se borro una rama muerta: el `else if` de Shift+apuntar era
+      inalcanzable porque el de arriba ya atrapaba Shift.
+      CUATRO COSAS QUE SALIERON MAL Y VALE ANOTAR:
+      1. `let plat` choca con una `function plat()` que ya existia para construir plataformas de
+         nivel. La variable pasa a `plataf`.
+      2. La leyenda decia "Shift apunta" porque lo puse de memoria, y Shift DESLIZA: el apuntado es
+         con click derecho. Una leyenda que miente es peor que no tenerla.
+      3. La fila de ajustes GUARDABA la plataforma, y eso pisaba la eleccion de la pantalla de carga
+         —que es justo el valor al que vuelve 'Automatico'. Medido: movil -> PC -> Automatico se
+         quedaba en PC para siempre. Ahora no guarda, y el ciclo cierra.
+      4. `ct_ayuda2` no lo dibuja NINGUN elemento hoy: es una clave viva en la tabla sin consumidor,
+         asi que barrer por data-i18n no hacia nada. Se pisa la ENTRADA DE LA TABLA, y entonces
+         cualquiera que llame t('ct_ayuda2') recibe la version de su plataforma.
+      Medido: en PC los seis controles tactiles ocultos y la leyenda visible; en movil exactamente
+      al reves. Segunda visita no pregunta. Si nadie elige, a los 15 s se toma lo adivinado y no
+      queda trabado (y no se sella, asi que la proxima vez vuelve a preguntar). El texto de ayuda
+      cambia con la plataforma, verificado leyendo la clave. Cero errores de pagina en 9 corridas.
+      PENDIENTE CHICO: los consejos de la pantalla de carga siguen con lenguaje tactil ("Tocá
+      DESLIZAR"), y ahi todavia no se eligio la plataforma, asi que son ambiguos por naturaleza.
 - [ ] **NO REPRODUCIDO: los NPC desaparecen al cambiar ajustes.** Medido en la arena con 7 bots:
       barrido de 360 grados antes y despues de cambiar preajuste (bajo/ultra), calidad general
       (baja/alta), calidad de texturas y detalle de personajes -> 7 de 7 visibles en todos los
