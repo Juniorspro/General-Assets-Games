@@ -13747,6 +13747,26 @@ try{ window.__tiro={
              llamadas:I.render.calls }; },
   /* leer una clave de traduccion como la ve el juego, para comprobar que la pisa la plataforma */
   i18n:(k)=>t(k),
+  /* saca al avion de la cinematica y lo pone delante de la camara, para poder mirarlo entero */
+  avionVer:(dist,alt,ang)=>{ try{
+    if(!SALTO.avion){ SALTO.avion=cineAvion(); SALTO.avion.traverse(o=>{o.frustumCulled=false;}); scene.add(SALTO.avion); }
+    SALTO.avion.visible=true;
+    /* SE COLOCA SOBRE EL VECTOR HACIA ADELANTE DE LA CAMARA, no sobre un yaw calculado a mano.
+       Adivinar la convencion de angulos me costo tres corridas poniendo el avion detras de una
+       casa; preguntarle a la camara adonde mira no falla nunca. */
+    camera.updateMatrixWorld();
+    const F=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    const d=dist||46;
+    SALTO.avion.position.copy(camera.position).addScaledVector(F,d);
+    SALTO.avion.position.y += (alt==null?0:alt);
+    /* y se lo gira para que se lo vea de tres cuartos, que es como se lee una silueta */
+    SALTO.avion.rotation.set(0, Math.atan2(F.x,F.z)+(ang==null?0.9:ang), 0);
+    document.body.classList.add('sinhud');
+    let n=0, tris=0;
+    SALTO.avion.traverse(o=>{ if(o.isMesh){ n++; const g2=o.geometry;
+      if(g2&&g2.index) tris+=g2.index.count/3; else if(g2&&g2.attributes.position) tris+=g2.attributes.position.count/3; } });
+    return { mallas:n, triangulos:Math.round(tris) };
+  }catch(e){ return 'ERR '+e.message; } },
   /* prende y apaga el muro de la zona, y donde esta parado: para poder comparar el mismo cuadro
      con muro y sin muro, que es la unica forma de saber cuanto tapa de verdad */
   zonaVer:(v)=>{ try{ zonaCrear(); if(v!=null) zonaMalla.visible=!!v;
@@ -18318,27 +18338,61 @@ function cineAvion(){
   const gorro=new THREE.Mesh(new THREE.BoxGeometry(3.5,0.9,3.4), gris);
   gorro.position.set(0,Y+2.00,AV.MORRO+1.2); g.add(gorro);
 
-  /* --- ala ALTA, sobre el lomo, con diedro y las cuatro turbinas colgadas --- */
+  /* --- EL ALA, EN FLECHA Y DE UNA PIEZA --- */
+  /* Eran dos cajas por lado: una recta para el ala y otra para la punta. Un ala recta se lee como
+     una tabla clavada al fuselaje; la de un carguero a reaccion va EN FLECHA y se afina hacia la
+     punta, y eso es lo que hace que se lea como un avion y no como una maqueta. Se dibuja el
+     contorno visto desde arriba y se le da espesor: una malla por ala en vez de dos cajas, y encima
+     con la forma correcta. */
+  /* SE DIBUJA UN ALA Y LA OTRA ES SU ESPEJO. La primera version armaba el contorno con un signo
+     dentro de cada coordenada, y para el lado izquierdo eso invierte el SENTIDO del poligono:
+     ExtrudeGeometry con el sentido al reves devuelve una malla dada vuelta o degenerada, y en el
+     avion se veia una chapa cruzando el fuselaje en lugar de dos alas. Un contorno, una geometria,
+     y el lado izquierdo con escala -1 en x, que no puede salir mal. */
+  const alaGeo=(()=>{
+    const f=new THREE.Shape();
+    f.moveTo(0,     -2.6);          // raiz, borde de ataque
+    f.lineTo(15.4,   0.9);          // punta, borde de ataque (la flecha)
+    f.lineTo(15.4,   3.3);          // punta, borde de salida
+    f.lineTo(4.2,    3.0);
+    f.lineTo(0,      2.6);          // raiz, borde de salida
+    f.closePath();
+    const g2=new THREE.ExtrudeGeometry(f,{depth:0.40,bevelEnabled:false});
+    g2.rotateX(Math.PI/2);          // el contorno pasa del plano x-y al x-z
+    return g2;
+  })();
   for(const sz of [1,-1]){
-    const ala=new THREE.Mesh(new THREE.BoxGeometry(13.6,0.42,5.0), gris);
-    ala.position.set(sz*7.9, Y+2.20, -2.2); ala.rotation.z=sz*0.055; g.add(ala);
-    const punta=new THREE.Mesh(new THREE.BoxGeometry(1.4,0.34,3.0), osc);
-    punta.position.set(sz*15.0, Y+2.20+sz*sz*0.42, -2.2); g.add(punta);
-    for(const d of [4.6,9.4]){
-      const nac=new THREE.Mesh(new THREE.CylinderGeometry(0.86,0.80,3.4,8,1), osc);
-      nac.rotation.x=Math.PI/2; nac.position.set(sz*d, Y+1.62, -3.1); g.add(nac);
-      const helice=new THREE.Mesh(new THREE.BoxGeometry(0.16,5.2,0.10), osc);
-      helice.position.set(sz*d, Y+1.62, -4.9); g.add(helice);
-      helice.userData.gira=1;
-      const helice2=new THREE.Mesh(new THREE.BoxGeometry(5.2,0.16,0.10), osc);
-      helice2.position.copy(helice.position); helice2.userData.gira=1; g.add(helice2);
+    const ala=new THREE.Mesh(alaGeo, gris);
+    /* EL ALA VA ENCIMA DEL TUBO, NO ADENTRO. El eje esta en 1,5 y el radio es 2,55: el lomo del
+       fuselaje queda en 4,05. Con el ala en Y+2.20 (=3,70) quedaba TREINTA Y CINCO centimetros por
+       debajo del lomo, o sea enterrada: de lejos el avion se leia como un tubo con cola y las alas
+       no aparecian. En Y+2.55 apoya justo sobre el lomo, que es donde va en un carguero de ala
+       alta y es lo que se ve en la foto de referencia. */
+    ala.position.set(0, Y+2.55, -2.2); ala.rotation.z=sz*0.055;
+    ala.scale.x=sz; g.add(ala);
+    /* el alerón de punta, parado: en los cargueros modernos es lo primero que se reconoce de lejos */
+    const wl=new THREE.Mesh(new THREE.BoxGeometry(0.22,1.9,2.1), osc);
+    wl.position.set(sz*15.3, Y+3.35, -0.1); wl.rotation.z=sz*0.10; g.add(wl);
+    /* --- LAS CUATRO TURBINAS. Eran helices: un carguero a reaccion no las tiene, y una helice
+       girando arriba de un ala en flecha se lee como un error. Cada una es cuerpo, aro de admision
+       oscuro, cara del ventilador y cono de escape, colgada del ala por su pilon. --- */
+    for(const [d,zc] of [[5.0,-3.4],[9.8,-2.0]]){
+      const nac=new THREE.Mesh(new THREE.CylinderGeometry(1.02,0.86,4.2,10,1), gris);
+      nac.rotation.x=Math.PI/2; nac.position.set(sz*d, Y+1.05, zc); g.add(nac);
+      /* el aro de la boca: es el detalle que hace que se lea "motor" y no "tubo" */
+      const boca=new THREE.Mesh(new THREE.CylinderGeometry(1.06,1.02,0.55,10,1,true), osc);
+      boca.rotation.x=Math.PI/2; boca.position.set(sz*d, Y+1.05, zc-2.0); g.add(boca);
+      const fan=new THREE.Mesh(new THREE.CircleGeometry(0.94,10), vidrio);
+      fan.position.set(sz*d, Y+1.05, zc-2.20); fan.rotation.y=Math.PI; g.add(fan);
+      fan.userData.gira=1;
       if(!g.userData.helices) g.userData.helices=[];
-      g.userData.helices.push(helice,helice2);
-      const pilon=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.7,1.6), gris);
-      pilon.position.set(sz*d, Y+1.98, -2.6); g.add(pilon);
+      g.userData.helices.push(fan);
+      const cola=new THREE.Mesh(new THREE.CylinderGeometry(0.62,0.30,1.0,10,1), osc);
+      cola.rotation.x=Math.PI/2; cola.position.set(sz*d, Y+1.05, zc+2.4); g.add(cola);
+      const pilon=new THREE.Mesh(new THREE.BoxGeometry(0.42,1.15,1.9), gris);
+      pilon.position.set(sz*d, Y+1.90, zc+0.5); g.add(pilon);
     }
   }
-
   /* --- LA COLA. En un carguero la cola SUBE por encima de la boca de carga: es lo que deja ver la
      bodega entera desde afuera con la compuerta abierta. El cono va arriba y atras de la boca, no
      tapandola. --- */
@@ -18359,6 +18413,37 @@ function cineAvion(){
     est.position.set(sz*3.3, Y+3.7, AV.BOCA+7.6); g.add(est);
   }
 
+  /* la panza, un tono mas oscura: un carguero no es de un solo gris, y la linea que separa el lomo
+     de la panza es lo que le da volumen al tubo desde abajo */
+  { const panza=new THREE.Mesh(new THREE.CylinderGeometry(R+0.03,R+0.03,largo-1.2,N,1,true,
+        Math.PI*0.62, Math.PI*0.76), osc);
+    panza.rotation.x=Math.PI/2; panza.position.copy(casco.position); g.add(panza); }
+  /* --- LA MATRICULA. Es lo que separa un tubo gris de un avion: sin numeros y sin banda, la
+     silueta puede estar perfecta y sigue leyendo como maqueta. Un lienzo de 256x64 por lado, con la
+     matricula y una banda de servicio, pegado como calco sobre el casco. --- */
+  { const cv=document.createElement('canvas'); cv.width=256; cv.height=64;
+    const q=cv.getContext('2d');
+    q.clearRect(0,0,256,64);
+    q.fillStyle='rgba(38,44,52,0.92)';
+    q.font='900 30px system-ui,sans-serif'; q.textBaseline='middle';
+    q.fillText('AS89', 10, 22);
+    q.font='900 26px system-ui,sans-serif';
+    q.fillText('1024', 96, 22);
+    /* la banda de servicio: una linea fina y una tanda de marcas cortas, como las de mantenimiento */
+    q.fillStyle='rgba(38,44,52,0.55)'; q.fillRect(8, 42, 240, 2.2);
+    for(let i=0;i<14;i++) q.fillRect(12+i*17, 48, 7, 1.6);
+    const tx=new THREE.CanvasTexture(cv);
+    tx.colorSpace=THREE.SRGBColorSpace; tx.anisotropy=4;
+    const mMat=new THREE.MeshBasicMaterial({map:tx, transparent:true, depthWrite:false});
+    for(const sz of [1,-1]){
+      const cal=new THREE.Mesh(new THREE.PlaneGeometry(7.2,1.8), mMat);
+      /* apenas por fuera del casco, para que no pelee con el en profundidad */
+      cal.position.set(sz*(R+0.02), Y+0.55, -4.2);
+      cal.rotation.y=sz*Math.PI/2;
+      cal.renderOrder=2;
+      g.add(cal);
+    }
+  }
   /* --- el tren en las gondolas del costado, para que no parezca un tubo --- */
   for(const sz of [1,-1]){
     const gon=new THREE.Mesh(new THREE.BoxGeometry(1.15,1.7,7.4), gris);
