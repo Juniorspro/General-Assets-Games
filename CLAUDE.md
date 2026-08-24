@@ -55,6 +55,33 @@ Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
       (CFG_DEF.apuntar='tap'), botones un 10% mas chicos, y FUEGO y APUNTAR del 50% al 81% del alto
       de la pantalla — estaban justo sobre la linea del horizonte. Con la mira puesta el HUD se
       esconde salvo joystick, apuntar y disparar.
+- [x] **EL JUEGO ESTA TRADUCIDO DE VERDAD** (2026-08-23). Los dos que lo probaron dijeron lo mismo:
+      "the game is not fully translated into English, still a lot of Spanish". Medido: LANG.es tenia
+      137 claves y LANG.en solo 30, asi que 107 caian al respaldo de t() —que devuelve el castellano
+      cuando falta la traduccion— y el jugador en ingles leia el menu en ingles y todo lo demas en
+      castellano. Aparte habia unas cuarenta cadenas escritas derecho en el codigo, sin pasar por la
+      tabla: esas no se arreglaban traduciendo, habia que hacerlas pasar por t() primero.
+      QUE SE HIZO: las 107 que faltaban, en ingles y portugues. Mas 60 claves nuevas para lo que
+      estaba suelto: el aviso de quien te mato, el panel de amigos entero, el microfono, los rotulos
+      del HUD, los nueve grados militares, los seis escalones de rango, los tres modos, los cinco
+      mapas de arena, los ocho acabados de arma, las nueve skins de ropa, las 16 descripciones de
+      arma, las frases del teclado rapido y la tienda de personajes.
+      TRES TRAMPAS QUE VALE ANOTAR:
+      1. UNA TABLA DE DATOS NO SE TRADUCE CON UNA CADENA. Las tablas se arman una sola vez al
+         arrancar, asi que si el texto queda ya resuelto, cambiar de idioma no lo cambia nunca. Van
+         como objeto {es,en,pt} y quien los MUESTRA los pasa por tl(). Y como no todas se
+         convirtieron a la vez, el mismo sitio puede recibir cadena u objeto: para eso esta tv(),
+         que resuelve las dos. Sin tv(), la tabla ya convertida sale como "[object Object]".
+      2. HAY TEXTO QUE NO ES textContent. El placeholder del cuadro de nombre necesita su propio
+         barrido (data-i18n-ph), y el rotulo NIVEL de abajo del avatar vive en un ::after de CSS:
+         a ese no lo alcanza ningun atributo y va por variable, como ya se hacia con CONSEJO.
+      3. EL PLURAL NO ES UNA 's'. "solicitud/solicitudes" contra "request/requests" son dos palabras
+         distintas en la tabla, no una con sufijo.
+      Medido con el juego corriendo en ingles, barriendo TODO el texto visible mas los placeholder
+      mas las variables de CSS: de 288 cadenas visibles quedaban 25 en castellano al empezar; ahora
+      queda UNA, y es "Español" en el selector de idioma, que tiene que quedar asi. Verificado
+      tambien en portugues (sale portugues, no castellano) y en partida, no solo en el menu. Cero
+      errores de pagina.
 - [ ] **NO REPRODUCIDO: los NPC desaparecen al cambiar ajustes.** Medido en la arena con 7 bots:
       barrido de 360 grados antes y despues de cambiar preajuste (bajo/ultra), calidad general
       (baja/alta), calidad de texturas y detalle de personajes -> 7 de 7 visibles en todos los
