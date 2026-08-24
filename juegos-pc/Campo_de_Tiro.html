@@ -13747,6 +13747,27 @@ try{ window.__tiro={
              llamadas:I.render.calls }; },
   /* leer una clave de traduccion como la ve el juego, para comprobar que la pisa la plataforma */
   i18n:(k)=>t(k),
+  /* CUANTO TIEMBLA EL ARO. Mide donde cae el CENTRO del bisel proyectado, cuadro a cuadro, y
+     devuelve cuanto se movio. El aro de CSS esta clavado en el medio de la pantalla; si el metal se
+     mueve respecto de el, eso es el temblor que se ve. */
+  aroTemb:(n,girar)=>{ n=n||60; const P=[];
+    for(let i=0;i<n;i++){
+      /* GIRANDO, que es cuando el bamboleo existe. Quieto no se mueve nada y la medida da cero:
+         el vaiven lo dispara el giro de la camara, asi que medir parado es medir otra cosa. */
+      if(girar){ try{ player.yaw -= 0.028; player.pitch += (i%2? 0.010 : -0.010); }catch(e){} }
+      try{ __tiro.frames(1,0.0166); }catch(e){}
+      try{ _telBiselG.updateWorldMatrix(true,false);
+        const v=new THREE.Vector3(0,_telAroY,_telAroZ).applyMatrix4(_telBiselG.matrixWorld).project(_vmCam);
+        const L=vmLienzo();
+        P.push([v.x*L.W/2, -v.y*L.H/2]);
+      }catch(e){}
+    }
+    if(!P.length) return null;
+    const mx=P.reduce((a,p)=>a+p[0],0)/P.length, my=P.reduce((a,p)=>a+p[1],0)/P.length;
+    let peor=0, sum=0;
+    for(const p of P){ const d=Math.hypot(p[0]-mx,p[1]-my); sum+=d; if(d>peor)peor=d; }
+    return { cuadros:P.length, centroMedioPx:[+mx.toFixed(1),+my.toFixed(1)],
+             desvioMedioPx:+(sum/P.length).toFixed(2), desvioPeorPx:+peor.toFixed(2) }; },
   /* EL ARO, MEDIDO EN LA PANTALLA. Compara el radio que el CSS esta dibujando contra el radio al
      que se proyecta el metal del bisel: si no coinciden, la reticula se sale del circulo. Y muestra
      las dos unidades del lienzo, que es donde estaba el error. */
@@ -16301,6 +16322,10 @@ function vmPreparar(){
   const k=new THREE.DirectionalLight(0xffffff,2.0); k.position.set(0.5,1.2,0.9); _vmEsc.add(k);
   const f=new THREE.DirectionalLight(0xb8d4f0,0.8); f.position.set(-0.8,0.3,-0.7); _vmEsc.add(f);
   _vmCam=new THREE.PerspectiveCamera(VM_FOV, 1, 0.02, 4);
+  /* LA CAMARA VA EN LA ESCENA. Sola no hace falta —three la usa por referencia— pero SI hace falta
+     para que lo que se le cuelgue encima se dibuje: el recorrido de dibujo sale de la escena, y un
+     hijo de una camara suelta no lo visita nadie. El bisel se le cuelga aca abajo. */
+  _vmEsc.add(_vmCam);
 }
 /* muda el arma a la escena del visor, o la trae de vuelta */
 function vmArma(dentro){
@@ -16309,6 +16334,32 @@ function vmArma(dentro){
   try{ _vmEsc.environment=scene.environment; _vmEsc.environmentIntensity=1.0; }catch(e){}
   if(dentro){ if(gunRoot.parent!==_vmEsc){ _vmPadre=gunRoot.parent||scene; _vmEsc.add(gunRoot); } }
   else { if(gunRoot.parent===_vmEsc) (_vmPadre||scene).add(gunRoot); }
+  /* EL BISEL SE CUELGA DE LA CAMARA, NO DEL ARMA, y esto arregla dos cosas de una.
+     Colgado del arma, el aro heredaba la POSE del apuntado y el bamboleo: medido, el centro del
+     metal caia cuatro pixeles abajo del centro de la pantalla —donde esta clavada la reticula, que
+     es un div— y se movia hasta un pixel al girar. Cuatro pixeles de desalineacion permanente entre
+     el aro y la cruz se leen como un aro torcido, y el movimiento como un temblor.
+     Colgado de la camara, el aro esta en el eje optico POR CONSTRUCCION: no hay nada que alinear ni
+     que estabilizar, y el fusil sigue bamboleandose debajo, que es lo que tiene que hacer.
+     Ademas es lo que pedia el usuario sin saber como decirlo: que el circulo SEA la mira y no una
+     capa encima que a veces coincide. */
+  try{
+    if(_telBiselG){
+      if(dentro){
+        if(_telBiselG.parent!==_vmCam){
+          _telBiselG.userData.padre=_telBiselG.parent||null;
+          _telBiselG.userData.pos=_telBiselG.position.clone();
+          _vmCam.add(_telBiselG);
+        }
+        _telBiselG.position.set(0,0,-VM_ARO_DIST);
+        _telBiselG.quaternion.identity();
+      } else if(_telBiselG.parent===_vmCam){
+        const p=_telBiselG.userData.padre;
+        if(p) p.add(_telBiselG); else _vmCam.remove(_telBiselG);
+        if(_telBiselG.userData.pos) _telBiselG.position.copy(_telBiselG.userData.pos);
+      }
+    }
+  }catch(e){}
 }
 /* el radio del aro del ocular, proyectado a pixeles con la camara del arma. De aca sale el tamano
    de la reticula: asi cae clavada adentro del aro en cualquier pantalla, en vez de ser un
@@ -16321,6 +16372,10 @@ function vmArma(dentro){
    Se escala el bisel SOLO, no la mira entera, y solo mientras se apunta — a la cadera se ve el
    visor en su tamano de verdad. */
 const VM_ARO_ALTO=0.50;
+/* a que distancia del ojo se para el aro. Con el bisel colgado de la camara el numero ya no sale de
+   donde este el visor del arma: es una distancia de trabajo, y vmAroAjustar lo escala hasta que el
+   aro mida lo que tiene que medir. 18 cm es mas o menos donde caia antes. */
+const VM_ARO_DIST=0.18;
 function vmAroAjustar(){
   if(!_telBiselG || !_vmCam || !_telBiselG.parent) return vmAroPx();
   const H=vmLienzo().H, meta=H*VM_ARO_ALTO/2;
