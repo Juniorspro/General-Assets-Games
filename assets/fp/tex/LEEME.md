@@ -70,3 +70,19 @@ castiga sin que se vea. Verificado repitiendo 3x3 y mirando: no aparece cruz ni 
 las seis, y la hilada de ladrillos sigue de una baldosa a la otra.
 
 El guion que hace todo esto queda en `herramientas/tesela.py`, que antes no estaba en el repo.
+
+
+## Tercera tanda: los materiales del ARMA
+
+El arma usa siete materiales y solo tres tenian foto (`maderaak` para las dos maderas y `metalak`
+para el metal). Los otros cuatro se dibujaban con color plano: el polimero negro del cajon, el
+polimero tostado de la culata, el laton de los cartuchos y el cuero trenzado de las empunaduras del
+machete y el cuchillo. Generadas con **Nano Banana Pro**, mismo proceso y mismo presupuesto: 640 el
+color, 512 la normal, 470 KB las ocho.
+
+| textura | costura v / h | uso |
+|---|---|---|
+| polimero | 1.32 / 1.30 | cajon, guardamanos y empunadura |
+| polimerotan | 0.97 / 1.25 | culatas y guardamanos color desierto |
+| laton | 0.84 / 0.93 | cartuchos y casquillos |
+| cuero | 1.04 / 1.17 | trenzado del machete y el cuchillo |
