@@ -3234,7 +3234,7 @@ let gunCulata=null; // la culata: en 1ª persona está detrás del pómulo y só
 // estaba a 0,629 m: 21 cm fuera de alcance, y ningún torso lo salva (haría falta blandear el pecho 70°).
 /* Texturas del arma (generadas con Higgsfield). Se cargan solas y en diferido: hasta que llegan,
    el fusil se ve con sus colores planos, así que sin red igual se juega. */
-const ARM_TEX='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@3108fae/assets/fp/tex/';
+const ARM_TEX='https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@de09709/assets/fp/tex/';
 const _armSrc={}, _armCola={}, _armLd=new THREE.ImageLoader();
 const ARM_ANISO=Math.min(8, renderer.capabilities.getMaxAnisotropy()||1);
 function _armHacer(n,rx,ry,esp){ const t=new THREE.Texture(); t.source=_armSrc[n];
@@ -4404,6 +4404,15 @@ function buildGun(){ if(gunRoot)return;
   AKMAT.laton=laton; AKMAT.cuero=cuero;
   hfArma(madera,'maderaak',2,1,{rug:0.7,nrm:0.8}); hfArma(metal,'metalak',1,1,{rug:0.42,metal:0.55,nrm:0.7});
   hfArma(maderaOsc,'maderaak',2,2,{color:0xc08c58,rug:0.75,nrm:0.8});
+  /* LOS CUATRO QUE FALTABAN. De los siete materiales del arma solo tres tenian foto; el polimero
+     del cajon, el de la culata, el laton de los cartuchos y el cuero de las empunaduras iban con
+     color plano. En un cajon de fusil eso se nota: un polimero de verdad tiene grano de molde y un
+     casquillo tiene las lineas de estirado, y son las dos cosas que uno mira de cerca al inspeccionar
+     el arma. Repeticion alta en las piezas chicas: si el grano se estira, deja de ser grano. */
+  hfArma(negro,'polimero',3,3,{rug:0.86,metal:0.03,nrm:0.55});
+  hfArma(poli, 'polimerotan',3,3,{color:0xbfae90,rug:0.82,metal:0.04,nrm:0.55});
+  hfArma(laton,'laton',2,2,{rug:0.30,metal:0.85,nrm:0.35});
+  hfArma(cuero,'cuero',4,4,{rug:0.82,metal:0.02,nrm:0.9});
   const box=(w,h,d,x,y,z,m,rx,ry,rz)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
     me.position.set(x,y,z); if(rx)me.rotation.x=rx; if(ry)me.rotation.y=ry; if(rz)me.rotation.z=rz; gunRoot.add(me); return me; };
   const cil=(r1,r2,h,x,y,z,m,ejeZ)=>{ const me=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,8),m);
@@ -13747,6 +13756,84 @@ try{ window.__tiro={
              llamadas:I.render.calls }; },
   /* leer una clave de traduccion como la ve el juego, para comprobar que la pisa la plataforma */
   i18n:(k)=>t(k),
+  /* los siete materiales del arma: cual tiene foto y cual sigue con color plano */
+  armaMat:()=>{ const o={};
+    for(const k of ['madera','maderaOsc','metal','negro','poli','laton','cuero']){ const m=AKMAT[k];
+      o[k]= m? { foto:!!(m.map&&m.map.image&&!m.map.image.getContext), normal:!!m.normalMap,
+                 rug:+(m.roughness||0).toFixed(2), metal:+(m.metalness||0).toFixed(2) } : null; }
+    return o; },
+  /* el escalon de sombras, para medirlo prendido y apagado EN LA MISMA sesion: comparar entre dos
+     corridas no sirve, porque entre una y otra cambian los bots, la hora y donde esta parado uno */
+  sombraLod:(d)=>{ if(d!=null){ LOD_SOMBRA=d;
+      for(const [,r] of MP.remotes){ r._som=null; }   // que se recalcule el escalon de todos
+      try{ mpCullar(); }catch(e){} }
+    let cs=0, n=0;
+    for(const [,r] of MP.remotes){ if(!r.avatar) continue;
+      r.avatar.traverse(o=>{ if(o.isMesh){ n++; if(o.castShadow) cs++; } }); }
+    return { lodSombra:LOD_SOMBRA, mallasDeAvatar:n, proyectando:cs }; },
+  /* cuanto de las llamadas se lleva CADA cosa: se apaga un grupo, se mide, se vuelve a prender.
+     Es la unica forma honesta de saber a que hay que atacarle, en vez de suponer. */
+  culpa:()=>{
+    /* RENDER CRUDO Y NO UN CUADRO ENTERO. La primera version llamaba a frames(1), que corre el tick
+       completo — y el tick vuelve a poner visible lo que yo acababa de apagar. Resultado: apagar
+       los siete bots ahorraba CERO llamadas, que es imposible, y me hubiera mandado a optimizar
+       cualquier otra cosa. Dibujando la escena directo, lo que apago se queda apagado. */
+    const med=()=>{ const I=renderer.info, ar=I.autoReset; I.autoReset=false; I.reset();
+      const rt=renderer.getRenderTarget(); renderer.setRenderTarget(null);
+      renderer.render(scene,camera);
+      renderer.setRenderTarget(rt);
+      const r={c:I.render.calls, t:I.render.triangles}; I.autoReset=ar; I.reset(); return r; };
+    const base=med();
+    const out={ base:base.c, baseTris:base.t, reparto:{} };
+    const probar=(nom, apagar, prender)=>{ try{ apagar(); const m=med(); out.reparto[nom]=base.c-m.c; prender(); }catch(e){ out.reparto[nom]='ERR'; } };
+    /* los bots */
+    probar('bots', ()=>{ for(const b of BOTS) if(b.r&&b.r.avatar) b.r.avatar.visible=false; },
+                   ()=>{ for(const b of BOTS) if(b.r&&b.r.avatar) b.r.avatar.visible=!b.muerto; });
+    /* el mapa */
+    probar('mapa', ()=>{ if(typeof areGroup!=='undefined'&&areGroup) areGroup.visible=false;
+                         if(typeof alcGroup!=='undefined'&&alcGroup) alcGroup.visible=false; },
+                   ()=>{ if(typeof areGroup!=='undefined'&&areGroup) areGroup.visible=true;
+                         if(typeof alcGroup!=='undefined'&&alcGroup) alcGroup.visible=true; });
+    /* el arma y los brazos */
+    probar('arma', ()=>{ if(gunRoot) gunRoot.visible=false; }, ()=>{ if(gunRoot) gunRoot.visible=true; });
+    /* los vendedores de las tiendas */
+    probar('tiendas', ()=>{ scene.traverse(o=>{ if(o.userData&&o.userData.vendedor) o.visible=false; }); },
+                      ()=>{ scene.traverse(o=>{ if(o.userData&&o.userData.vendedor) o.visible=true; }); });
+    /* la pasada de sombras dibuja OTRA VEZ cada malla que proyecta: si la mitad de las llamadas
+       salen de ahi, atacar el cuerpo del bot vale el doble de lo que parece */
+    probar('sombras', ()=>{ renderer.shadowMap.enabled=false; }, ()=>{ renderer.shadowMap.enabled=true; });
+    probar('sombraDeBots', ()=>{ for(const b of BOTS) if(b.r&&b.r.avatar) b.r.avatar.traverse(o=>{ if(o.isMesh){ o.userData._cs=o.castShadow; o.castShadow=false; } }); },
+                           ()=>{ for(const b of BOTS) if(b.r&&b.r.avatar) b.r.avatar.traverse(o=>{ if(o.isMesh&&o.userData._cs!=null) o.castShadow=o.userData._cs; }); });
+    out.mallasPorBot=(()=>{ const b=BOTS[0]; if(!b||!b.r||!b.r.avatar) return null;
+      let n=0,cs=0; b.r.avatar.traverse(o=>{ if(o.isMesh){ n++; if(o.castShadow) cs++; } }); return {mallas:n, conSombra:cs}; })();
+    out.bots={ total:BOTS.length, vivos:BOTS.filter(b=>!b.muerto).length,
+               visibles:BOTS.filter(b=>b.r&&b.r.avatar&&b.r.avatar.visible).length };
+    return out; },
+  /* ===================== EL PERFIL, PARA OPTIMIZAR CON NUMEROS =====================
+     Optimizar sin medir es adivinar. Esto devuelve, de un cuadro real: llamadas de dibujo,
+     triangulos, memoria de la placa, cuantas mallas hay y cuantas se descartan por fuera del
+     cuadro, cuantos materiales y programas distintos hay (cada programa es una compilacion y un
+     cambio de estado), y cuanto tarda el JavaScript por cuadro. */
+  perfil:(n)=>{ n=n||30;
+    const I=renderer.info, ar=I.autoReset;
+    I.autoReset=false; I.reset();
+    const t0=performance.now();
+    for(let i=0;i<n;i++){ try{ __tiro.frames(1,0.0166); }catch(e){} }
+    const ms=(performance.now()-t0)/n;
+    const r={ llamadas:Math.round(I.render.calls/n), tris:Math.round(I.render.triangles/n),
+              lineas:Math.round(I.render.lines/n), programas:(I.programs||[]).length,
+              geometrias:I.memory.geometries, texturas:I.memory.textures,
+              msPorCuadro:+ms.toFixed(1) };
+    I.autoReset=ar; I.reset();
+    /* el arbol: cuantos objetos hay, cuantos son mallas, cuantos visibles y cuantos con culling */
+    let obj=0, mallas=0, vis=0, sinCull=0, mats=new Set(), geos=new Set();
+    scene.traverse(o=>{ obj++;
+      if(o.isMesh){ mallas++; if(o.visible) vis++; if(o.frustumCulled===false) sinCull++;
+        if(o.material) (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m.uuid));
+        if(o.geometry) geos.add(o.geometry.uuid); } });
+    r.escena={ objetos:obj, mallas:mallas, visibles:vis, sinRecorte:sinCull,
+               materiales:mats.size, geometrias:geos.size };
+    return r; },
   /* saca al avion de la cinematica y lo pone delante de la camara, para poder mirarlo entero */
   avionVer:(dist,alt,ang)=>{ try{
     if(!SALTO.avion){ SALTO.avion=cineAvion(); SALTO.avion.traverse(o=>{o.frustumCulled=false;}); scene.add(SALTO.avion); }
@@ -20479,8 +20566,23 @@ function mpCullar(){
    se siguen dibujando de mas lejos. */
 let LOD_MANOS=14;
 const LOD_DEDOS=14;
+/* LA SOMBRA TAMBIEN TIENE DISTANCIA. Medido en la arena con siete bots: de 1.143 llamadas de dibujo
+   por cuadro, 805 son los bots, y de esas 399 son SOLO SU SOMBRA — cada una de las 77 mallas que
+   proyectan se vuelve a dibujar en el mapa de sombras. La sombra de alguien a cuarenta metros no se
+   distingue de una mancha; la de alguien a diez, si, y es la que te dice que hay uno detras de la
+   esquina. Asi que adentro de LOD_SOMBRA proyectan y afuera no.
+   Se toca SOLO cuando cambia el escalon, no por cuadro: recorrer 78 mallas por bot y por cuadro
+   costaria mas que lo que ahorra. */
+let LOD_SOMBRA=17;
 function mpLod(r,d2){
   const nivel=(d2>LOD_MANOS*LOD_MANOS)?0:1;
+  const som=(d2>LOD_SOMBRA*LOD_SOMBRA)?0:1;
+  if(r._som!==som){
+    r._som=som;
+    if(!r._sombras){ r._sombras=[];
+      if(r.avatar) r.avatar.traverse(o=>{ if(o.isMesh && o.castShadow) r._sombras.push(o); }); }
+    for(const m of r._sombras) m.castShadow=(som===1);
+  }
   if(r._lod===nivel) return;
   r._lod=nivel;
   if(!r._finos){ r._finos=[];
