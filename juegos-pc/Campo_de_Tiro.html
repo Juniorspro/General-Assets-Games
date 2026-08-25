@@ -10192,7 +10192,10 @@ function alcTerreno(){
   { const uv=g.attributes.uv, pp=g.attributes.position;
     for(let k=0;k<uv.count;k++) uv.setXY(k, (pp.getX(k))/6, (pp.getZ(k))/6);
     uv.needsUpdate=true; }
-  alcSuelo=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.98,metalness:0,map:alcTexSuelo()}));
+  { const mSuelo=alcTexSuelo();
+    alcSuelo=new THREE.Mesh(g,new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.98,metalness:0,map:mSuelo}));
+    /* la de foto es la unica que sale con repeat 4: es la marca fiable de cual de las dos se uso */
+    alcSuelo.userData.conFoto=!!(mSuelo && mSuelo.repeat && mSuelo.repeat.x===4); }
   /* y con el terreno ya armado, sus mapas: es la superficie que mas se mira de todo el mapa */
   try{ alcPBRSuelo(); }catch(e){}
   alcSuelo.position.set((ALC_X0+ALC_X1)/2,0,(ALC_Z0+ALC_Z1)/2+ALC_GZ);
@@ -10210,7 +10213,68 @@ function alcTerreno(){
   mAgua.normalMap.repeat.set(260,260); mAgua.envMapIntensity=0.9;
   alcAgua=new THREE.Mesh(ag,mAgua);
   alcAgua.position.set(0,0,ALC_GZ); alcAgua.receiveShadow=false; alcAgua.frustumCulled=false; alcGroup.add(alcAgua); }
+/* ===================== EL PASTO DEL SUELO, DE FOTO =====================
+   El suelo del valle es la superficie mas grande del juego y era la unica que seguia sin foto: un
+   lienzo de 256 en escala de grises con manchones y unas rayas, multiplicado por el color por
+   vertice. De lejos pasaba; de cerca el pasto no tenia hojas, tenia manchas.
+   La foto de pasto YA ESTA EN MEMORIA y decodificada: hgTexCargar la deja en HG_CV para poder
+   leerle los pixeles, asi que esto no descarga ni un byte mas.
+   VA CASI GRIS, Y ESA ES LA CLAVE. El terreno pinta pasto, tierra, roca y ceniza con el color por
+   vertice; si el mapa entrara verde, la ceniza saldria verde y la arena tambien. Se le baja la
+   saturacion al 18% y se le normaliza el brillo alrededor de 0,92, asi aporta la ESTRUCTURA de las
+   hojas y el color lo sigue poniendo el bioma. Es lo mismo que hacia el lienzo de manchones, pero
+   con hojas de verdad en vez de elipses. */
+function alcSueloDeFoto(){
+  try{
+    const src=(typeof HG_CV!=='undefined') && HG_CV.pasto;
+    if(!src || !src.width) return null;
+    const S=256, [c,g]=areLienzo(S);
+    g.drawImage(src,0,0,S,S);
+    const im=g.getImageData(0,0,S,S), d=im.data;
+    let suma=0;
+    for(let i=0;i<d.length;i+=4){
+      const L=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+      /* 18% del color y 82% de gris: quedan las hojas y se va el verde */
+      d[i]  =L+(d[i]  -L)*0.18;
+      d[i+1]=L+(d[i+1]-L)*0.18;
+      d[i+2]=L+(d[i+2]-L)*0.18;
+      suma+=L;
+    }
+    /* normalizado: si la foto es oscura, multiplicar por ella apagaria el terreno entero */
+    const media=suma/(d.length/4), k=(0.92*255)/Math.max(1,media);
+    for(let i=0;i<d.length;i+=4){
+      d[i]  =Math.min(255,d[i]  *k);
+      d[i+1]=Math.min(255,d[i+1]*k);
+      d[i+2]=Math.min(255,d[i+2]*k);
+    }
+    g.putImageData(im,0,0);
+    const t=alcTexFin(c,8);
+    /* la UV del terreno va en METROS con una baldosa cada 6 m, y la foto muestra mas o menos un
+       metro y medio de pasto: sin este repeat las hojas medirian seis metros. */
+    t.repeat.set(4,4);
+    return t;
+  }catch(e){ return null; }
+}
+/* cuando llegan las fotos del mapa, el suelo se rehace: puede que el valle se haya armado antes */
+function alcSueloRefrescar(){
+  try{
+    if(!alcSuelo || !alcSuelo.material) return false;
+    if(alcSuelo.userData.conFoto) return false;
+    const t=alcSueloDeFoto(); if(!t) return false;
+    const v=alcSuelo.material.map;
+    alcSuelo.material.map=t;
+    alcSuelo.userData.conFoto=true;
+    /* y los mapas derivados se rehacen DE LA FOTO: los que habia salieron del lienzo de manchones
+       y describen otra superficie */
+    alcSuelo.material.roughnessMap=null; alcSuelo.material.normalMap=null; alcSuelo.material.aoMap=null;
+    alcSuelo.material.needsUpdate=true;
+    try{ alcPBRSuelo(); }catch(e){}
+    if(v && v!==t && v.dispose) v.dispose();
+    return true;
+  }catch(e){ return false; }
+}
 function alcTexSuelo(){ if(_alcTx.suelo)return _alcTx.suelo;
+  { const f=alcSueloDeFoto(); if(f) return (_alcTx.suelo=f); }
   const S=256, c=alcLienzo(S), g=c.getContext('2d');
   g.fillStyle='#f2f2f2'; g.fillRect(0,0,S,S);
   for(let i=0;i<3000;i++){ const l=170+Math.random()*70;
@@ -13756,6 +13820,17 @@ try{ window.__tiro={
              llamadas:I.render.calls }; },
   /* leer una clave de traduccion como la ve el juego, para comprobar que la pisa la plataforma */
   i18n:(k)=>t(k),
+  /* el suelo del valle: si tiene la foto de pasto y con que escala */
+  suelo:()=>{ try{ if(!alcSuelo) return 'sin suelo';
+    const m=alcSuelo.material, t=m.map;
+    return { conFoto:!!alcSuelo.userData.conFoto,
+             lado:t&&t.image? t.image.width : null,
+             esLienzo:!!(t&&t.image&&t.image.getContext),
+             repeat:t? [t.repeat.x,t.repeat.y] : null,
+             metrosPorBaldosa:t? +(6/(t.repeat.x||1)).toFixed(2) : null,
+             nrm:!!m.normalMap, rug:!!m.roughnessMap, ao:!!m.aoMap,
+             fotoEnMemoria:!!(typeof HG_CV!=='undefined' && HG_CV.pasto) };
+  }catch(e){ return 'ERR '+e.message; } },
   /* los siete materiales del arma: cual tiene foto y cual sigue con color plano */
   armaMat:()=>{ const o={};
     for(const k of ['madera','maderaOsc','metal','negro','poli','laton','cuero']){ const m=AKMAT[k];
@@ -23324,6 +23399,7 @@ function preloadAll(onp){
 try{ hgTexCargar((hubo)=>{
   if(!hubo) return;
   try{ areMatRehacer(); }catch(e){ console.warn('tex',e); }
+  try{ alcSueloRefrescar(); }catch(e){ console.warn('suelo',e); }
   try{ cieloFoto(); }catch(e){ console.warn('cielo',e); }
 }); }catch(e){}
 try{
