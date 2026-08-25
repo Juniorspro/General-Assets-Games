@@ -12,7 +12,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Campo_de_Tiro.html` ES "Z Force"** (1,83 MB). Es el proyecto grande: FPS con campo de
   tiro, todos-contra-todos, duelo de equipos y battle royale. **NO SE TOCA NI SE BORRA**:
   el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
-- **`Eco.html` es "Eco"** (~75 KB), beta nueva y aparte. Laberinto a ciegas: el mundo está
+- **`Eco.html` es "Eco"** (~167 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
@@ -20,6 +20,74 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
 ### Cómo está hecho `Eco.html`
+
+**Tercera vuelta (2026-08-25).** Pedido textual: *"mejora la calidad agrega que los brazos no se vean
+así we que feo sácalos también agrega mejores gráficos y que el entorno brille entero por 2 segundos
+y después se apague y que el eco sean rayas, también agrega buenas pistas y una hoja de papel o sea
+al leerlo que lo leas en una hoja no un pinche globo de texto generalo con highsfield la foto de la
+hoja o hazla vos, también deja rastros en el suelo rojos que se ven pocos pero te guían de a poco que
+encuentres hojas y si mejora todo en general y un menú más goty we"*.
+
+- **BRAZOS FUERA, y tenía razón.** Dos cajas a 20 cm del ojo se proyectan enormes y entran en cuña
+  desde las esquinas de abajo: cada antebrazo se comía una franja de ~30°, y en una pantalla casi
+  toda negra eso no lee como un brazo, lee como dos tablones grises tapando el juego. El cuerpo de
+  abajo queda (pecho, muslos, piernas, pies): mirando al piso los pies dan y=−0,80 sobre un borde
+  de −1,00, y mirando adelante no hay nada colgado en el cuadro.
+- **EL ECO PASA A SER RAYAS**, y el primer intento se midió y se descartó: anillos finísimos (coseno
+  a la 26). Se veía **un** aro grande y borroso en la pared de enfrente y nada más — los anillos de
+  atrás caen todos dentro de la misma celda y no hay geometría donde dibujarlos. El brillo pasó de
+  ~80% de pantalla encendida a **9,8%**: injugable.
+  **Lo que funciona**: dejar la zona iluminada ancha y **modularla** con franjas (`0.26 + 0.74·cosⁿ`).
+  La franja no es la luz, es el dibujo sobre la luz: cruzando una pared plana es una banda recta, al
+  doblar una esquina se **quiebra**, al pasar un hueco se **corta**. Eso es lo que se lee como sonar.
+- **EL FOGONAZO: 2 s enteros y después se apaga.** Se sostiene **plano** y no se desvanece durante
+  los dos segundos; si se desvanece no se lee como fogonazo, se lee como una onda más grande.
+  Medido: 1,000 durante 85 cuadros y después baja lineal a 0 en 0,55 s.
+  PRIMER INTENTO MEDIDO Y DESCARTADO: nivel parejo con término de cara contra el ojo → la pantalla
+  quedó **blanca de punta a punta** (220/255 de brillo medio, 100% de píxeles encendidos) y no se leía
+  **una** esquina. El problema no era el nivel: sin variación entre caras, un laberinto de cajas es
+  una sola superficie.
+  **Lo que funciona son tres tonos por eje**: paredes X 0,340, paredes Z 0,240, piso 0,160, techo
+  0,100, más una caída floja (100%→45% entre 6 y 55 m). Cada quiebre del laberinto aparece como un
+  quiebre, gratis, sin sombras. Medido en un pasillo de 10 celdas: medio 69,4 y máximo 140.
+- **GRANO ANCLADO AL MUNDO** en el shader (no a la pantalla, así no titila al moverse). Sin él una
+  pared es un plano de un solo valor, y un plano de un solo valor se lee a plástico.
+- **LA HOJA DE PAPEL.** Antes el texto más importante del juego se leía en un globo con borde de un
+  píxel, o sea como un cartel de sistema. Ahora es una **foto de papel de trapo envejecido** generada
+  con Higgsfield (manchas de humedad, esquinas dobladas, borde roto), apoyada de costado, girada 1,4°,
+  con tinta sepia y sombra. Va **adentro del archivo**, 58 KB en WebP: es una hoja, no vale bajarla de
+  una red que puede no estar. Copia también en `assets/fp/eco/hoja.webp`.
+  DOS COSAS QUE SALIERON MAL:
+  1. La primera versión era WebP **opaco** y arrastraba el fondo negro de la foto: se veía un
+     rectángulo negro alrededor de la hoja, porque las esquinas dobladas son oscuras y el recorte por
+     luminancia no las separa del fondo. Con **canal alfa** (rampa de 14 a 30 de luminancia) la
+     sombra sigue la silueta de verdad, borde roto incluido.
+  2. El último párrafo de la nota más larga quedaba **cortado** abajo. Verificado ahora nota por nota
+     y en los dos tamaños: **6 de 6 sin recorte** en 1280×720 y en 412×915.
+- **RASTROS ROJOS EN EL SUELO**, en **cadena** de una hoja a la siguiente y no todos desde la
+  entrada: con seis rastros saliendo del mismo punto la primera sala queda una telaraña y no guían
+  nada. Cada tramo se apaga al 22% cuando su hoja de destino ya apareció, así siempre hay **uno**
+  encendido: el que lleva a lo que falta. Verificado: 5 de 5 tramos se apagan al abrir las seis hojas.
+  UNA MARCA CADA DOS SALAS (una por sala se lee a línea pintada), y la forma son **tres tiras de
+  ancho decreciente más gotas**: un rectángulo limpio se lee a calcomanía pegada.
+  **EL PISO SALIÓ DE UNA MEDICIÓN.** Con 0,006 en lineal el brillo máximo del cuadro a oscuras daba
+  **CERO**: son 15/255 en un solo canal y en luminancia no llega a 5. Con **0,09** el canal rojo sale
+  a 53/255 — una mancha roja oscura que a oscuras se adivina y no ilumina nada, que es lo pedido.
+- **MENÚ.** Fondo de tres anillos que salen del centro y se apagan (la mecánica del juego funcionando
+  antes de tocar nada), título con latido, y lo que hay que saber en **tres fichas** —el ruido, el
+  silencio, las hojas— en vez de un párrafo, que en un menú no se lee. Botón con relleno que barre.
+  TRAMPA: los huecos en **porcentaje** en una columna de altura automática resuelven contra **cero**,
+  así que el subtítulo se montaba sobre la base del título y "beta" quedaba pegado al botón. Van en
+  `clamp` de px.
+- **VIÑETA** de CSS: cero triángulos, y empuja la vista al centro, que en un juego a oscuras es justo
+  lo que hace falta.
+- **La caída de la onda pasó de 0,020 a 0,013**: con la anterior una pisada dejaba de verse a los
+  10 m (medido: 0,7 de brillo medio a 9,5 m) y en pasillos de 20 m eso es caminar a ciegas entre paso
+  y paso.
+- Costo final: **19 llamadas de dibujo, 5.720 triángulos, 0,4 ms por cuadro**. Partida completa
+  re-verificada con los cuatro enigmas y la victoria. Cero errores de página.
+
+### Cómo estaba hecho la segunda vuelta
 
 **Segunda vuelta (2026-08-25).** Pedido textual: *"el movimiento nada que ver hacelo más realista pue
 y que no se vean a menos que hagas ruido también que sea tirador 90° 16:9 y también movimiento goty
