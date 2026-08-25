@@ -106,11 +106,21 @@
   /* ---------- el HUD, casi nada ---------- */
   #hud{ position:absolute; inset:0; z-index:20; pointer-events:none; display:none; }
   body.jugando #hud{ display:block; }
-  #eco{ position:absolute; left:50%; top:calc(14px + var(--safe-t)); transform:translateX(-50%);
-    font-size:10px; font-weight:800; letter-spacing:.20em; color:rgba(190,205,220,.40); }
-  #reloj{ position:absolute; left:50%; top:calc(32px + var(--safe-t)); transform:translateX(-50%);
-    font-size:22px; font-weight:900; letter-spacing:.06em; color:rgba(230,240,250,.72);
-    font-variant-numeric:tabular-nums; }
+  /* el interruptor de sonido: chico, arriba a la derecha, y con puntero propio porque el HUD entero
+     no recibe toques */
+  #bSon{ position:absolute; right:14px; top:12px; z-index:24;
+    width:calc(30px * var(--esc,1)); height:calc(30px * var(--esc,1));
+    border-radius:50%; border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.05);
+    color:rgba(220,232,244,.75); font-size:13px; line-height:1; cursor:pointer;
+    pointer-events:auto; display:none; align-items:center; justify-content:center; padding:0; }
+  body.jugando #bSon{ display:flex; }
+  #bSon.mudo{ color:rgba(220,232,244,.28); border-color:rgba(255,255,255,.07); }
+  #eco{ position:absolute; left:50%; top:calc(13px * var(--esc,1)); transform:translateX(-50%);
+    font-size:calc(10px * var(--esc,1)); font-weight:800; letter-spacing:.20em;
+    color:rgba(190,205,220,.40); white-space:nowrap; }
+  #reloj{ position:absolute; left:50%; top:calc(28px * var(--esc,1)); transform:translateX(-50%);
+    font-size:calc(22px * var(--esc,1)); font-weight:900; letter-spacing:.06em;
+    color:rgba(230,240,250,.72); font-variant-numeric:tabular-nums; }
   #aviso{ position:absolute; left:50%; top:52%; transform:translate(-50%,-50%);
     font-size:clamp(15px,4vw,22px); font-weight:900; letter-spacing:.14em; text-align:center;
     color:#fff; opacity:0; transition:opacity .4s ease; padding:0 22px; }
@@ -130,14 +140,31 @@
     letter-spacing:.10em; align-items:center; justify-content:center; cursor:pointer; }
   .btn:active{ background:rgba(255,255,255,.16); }
   #bGrito{ right:20px; bottom:118px; width:86px; height:86px; }
+  /* con una hoja sin revelar al lado el boton late: en telefono no hay leyenda de teclas donde
+     poner "grita aca", asi que lo dice el boton */
+  body.hoja #bGrito{ animation:latirBoton 1.5s ease-in-out infinite; border-color:rgba(255,240,210,.55); }
+  @keyframes latirBoton{ 0%,100%{ box-shadow:0 0 0 0 rgba(255,238,205,.00); }
+                         50%{ box-shadow:0 0 0 9px rgba(255,238,205,.13); } }
   #bSalto{ right:118px; bottom:30px; width:66px; height:66px; }
   #bAgachar{ right:22px; bottom:30px; width:66px; height:66px; font-size:9px; }
   #bAgachar.on{ background:rgba(255,255,255,.20); color:#fff; }
   body.movil.jugando #joy, body.movil.jugando .btn{ display:flex; }
 
   /* ---------- los cuatro sellos: lo unico que hay que juntar ---------- */
-  #sellos{ position:absolute; left:50%; top:64px; transform:translateX(-50%); display:flex; gap:9px; }
-  #sellos i{ width:9px; height:9px; border-radius:50%; border:1.4px solid rgba(200,215,230,.30); }
+  #sellos{ position:absolute; left:50%; top:calc(60px * var(--esc,1)); transform:translateX(-50%);
+    display:flex; gap:calc(9px * var(--esc,1)); }
+  /* ---------- QUE HAY QUE HACER AHORA ----------
+     Sin esto el juego no se puede terminar: hay cuatro enigmas repartidos en un laberinto a oscuras
+     y nada que te diga cual estas haciendo ni que te falta. Una linea. Se lee de un vistazo y no
+     tapa nada. */
+  #meta{ position:absolute; left:50%; top:calc(77px * var(--esc,1)); transform:translateX(-50%);
+    max-width:80%; text-align:center; font-size:calc(10.5px * var(--esc,1)); font-weight:800;
+    letter-spacing:.10em; color:rgba(196,210,226,.62); line-height:1.5; }
+  #meta em{ font-style:normal; color:rgba(255,246,228,.92); }
+  #meta s{ text-decoration:none; display:block; font-size:calc(9px * var(--esc,1));
+    letter-spacing:.14em; color:rgba(150,166,184,.50); margin-top:2px; }
+  #sellos i{ width:calc(9px * var(--esc,1)); height:calc(9px * var(--esc,1)); border-radius:50%;
+    border:1.4px solid rgba(200,215,230,.30); }
   #sellos i.on{ background:#fff; border-color:#fff; box-shadow:0 0 11px rgba(255,255,255,.75); }
 
   /* ---------- LA HOJA DE PAPEL ----------
@@ -175,9 +202,14 @@
     flex:0 0 auto; text-align:right; }
 
   /* ---------- la pista de "aca se puede leer" ---------- */
-  #leerP{ position:absolute; left:50%; top:60%; transform:translateX(-50%); font-size:10px;
-    font-weight:900; letter-spacing:.16em; color:rgba(255,255,255,.60); opacity:0;
-    transition:opacity .22s ease; white-space:nowrap; }
+  /* el aviso de la hoja va abajo del centro pero ARRIBA de la leyenda de teclas y de los botones:
+     en un cuadro bajo, al 60% ya se metia en el bloque de teclas */
+  #leerP{ position:absolute; left:50%; top:56%; transform:translateX(-50%);
+    font-size:calc(10px * var(--esc,1)); font-weight:900; letter-spacing:.16em;
+    color:rgba(240,232,215,.72); opacity:0; transition:opacity .22s ease; white-space:nowrap;
+    text-align:center; line-height:2.0; text-shadow:0 2px 10px rgba(0,0,0,.95); }
+  #leerP b{ color:#05070a; background:rgba(245,238,225,.88); border-radius:4px;
+    padding:calc(2px * var(--esc,1)) calc(7px * var(--esc,1)); letter-spacing:.10em; }
   #leerP.ver{ opacity:1; }
   #bLeer{ position:absolute; left:50%; bottom:26px; margin-left:-56px; width:112px; height:40px;
     z-index:22; display:none; align-items:center; justify-content:center; border-radius:999px;
@@ -195,9 +227,10 @@
     opacity:0; transition:opacity .6s ease; pointer-events:none; }
   body.pc.jugando #teclas{ display:grid; }
   #teclas.ver{ opacity:1; }
-  #teclas i{ font-style:normal; font-size:9px; font-weight:900; letter-spacing:.05em; color:#05070a;
-    background:rgba(232,238,245,.78); border-radius:4px; padding:2px 6px; text-align:center; }
-  #teclas span{ font-size:10px; font-weight:700; color:rgba(190,205,220,.55); }
+  #teclas i{ font-style:normal; font-size:calc(9px * var(--esc,1)); font-weight:900;
+    letter-spacing:.05em; color:#05070a; background:rgba(232,238,245,.78); border-radius:4px;
+    padding:calc(2px * var(--esc,1)) calc(6px * var(--esc,1)); text-align:center; }
+  #teclas span{ font-size:calc(10px * var(--esc,1)); font-weight:700; color:rgba(190,205,220,.55); }
 
   /* ---------- la viñeta ---------- */
   #vineta{ position:absolute; inset:0; z-index:18; pointer-events:none; display:none;
@@ -215,6 +248,8 @@
     <div id="eco">ECO</div>
     <div id="reloj">0:00</div>
     <div id="sellos"><i></i><i></i><i></i><i></i></div>
+    <div id="meta"></div>
+    <button id="bSon" title="sonido">♪</button>
     <div id="aviso"></div>
     <div id="leerP"></div>
   </div>
@@ -384,6 +419,29 @@ function distancias(cel,n,x0,y0){
 }
 
 const MAPA=generarLaberinto(N);
+
+/* ===================== LAS SALAS =====================
+   Un laberinto perfecto son 169 cajas del mismo tamano, y ese es el problema que hace que no se
+   sienta un lugar: TODAS las celdas son iguales, asi que no hay forma de saber si ya pasaste por
+   ahi. Sin puntos de referencia uno no explora, da vueltas.
+   Se abren unas plazas de dos por dos tirando las cuatro paredes internas del bloque. Quedan salas
+   de ocho metros y medio de lado, con una columna en el cruce: se leen de lejos con una sola onda y
+   funcionan como mojones. Van ANTES de calcular distancias, porque cambian el laberinto de verdad. */
+const SALAS=[];
+(function abrirSalas(){
+  let intentos=0;
+  while(SALAS.length<4 && intentos++<300){
+    const x=1+((Math.random()*(N-3))|0), y=1+((Math.random()*(N-3))|0);
+    if(x===0&&y===0) continue;
+    if(SALAS.some(s2=>Math.abs(s2[0]-x)<3 && Math.abs(s2[1]-y)<3)) continue;
+    MAPA[y][x].e=false;   MAPA[y][x+1].o=false;
+    MAPA[y+1][x].e=false; MAPA[y+1][x+1].o=false;
+    MAPA[y][x].s=false;   MAPA[y+1][x].n=false;
+    MAPA[y][x+1].s=false; MAPA[y+1][x+1].n=false;
+    SALAS.push([x,y]);
+  }
+})();
+
 const DIST=distancias(MAPA,N,0,0);
 /* la salida va en la celda MAS LEJANA en pasos, no en la esquina opuesta: en un laberinto la
    esquina de enfrente puede estar a la vuelta de una pared y arruinar la partida */
@@ -418,6 +476,11 @@ function ajustarCuadro(){
   let w=dw, h=Math.round(w/ASPECTO);
   if(h>dh){ h=dh; w=Math.round(h*ASPECTO); }
   cajaW=w; cajaH=h;
+  /* EL HUD ESCALA CON EL CUADRO. Con medidas fijas en px, en un cuadro bajo —un telefono girado da
+     732x412— el reloj, los sellos, la linea del objetivo, el aviso de la hoja y la leyenda de teclas
+     se pisan entre si. Medido a 480x270: la linea del objetivo se encimaba con la leyenda Y con el
+     aviso de la hoja. Un solo factor lo resuelve para todos los tamanos. */
+  CAJA.style.setProperty('--esc', Math.max(0.60, Math.min(1.15, h/720)).toFixed(3));
   CAJA.style.width=w+'px'; CAJA.style.height=h+'px';
   CAJA.style.transform='translate(-50%,-50%)'+(girado?' rotate(90deg)':'');
   render.setSize(w,h);
@@ -765,6 +828,80 @@ function construirMarcas(){
     const horiz = corredor.length>1 && corredor[0][1]===corredor[1][1];
     const w=horiz? 0.22 : CEL*0.72, d=horiz? CEL*0.72 : 0.22;
     meter(new THREE.BoxGeometry(w,0.20,d), x, 2.62, z);
+    /* y las dos jambas: un dintel flotando no se lee como arco, se lee como una viga suelta */
+    for(const sg of [-1,1]){
+      const jx = horiz? x+sg*(CEL*0.36) : x, jz = horiz? z : z+sg*(CEL*0.36);
+      meter(new THREE.BoxGeometry(horiz?0.22:0.26, 2.52, horiz?0.26:0.22), jx, 1.26, jz);
+    }
+  }
+
+  /* ---------- LA COLUMNA DE CADA SALA ----------
+     Va en el cruce de las cuatro celdas. Es el mojon: una plaza vacia de ocho metros y medio se
+     parece a cualquier otra plaza vacia, una plaza con una columna en el medio es ESA plaza. */
+  for(const s2 of SALAS){
+    const cx=XC(s2[0])+CEL/2, cz=ZC(s2[1])+CEL/2;
+    meter(new THREE.CylinderGeometry(0.42,0.50,ALTO,14,1), cx, ALTO/2, cz);
+    meter(new THREE.BoxGeometry(1.30,0.24,1.30), cx, 0.12, cz);        // la base
+    meter(new THREE.BoxGeometry(1.16,0.20,1.16), cx, ALTO-0.10, cz);   // el capitel
+    OBST.push({x:cx, z:cz, r:0.66});
+  }
+
+  /* ---------- LOS PROPS: MOJONES REPARTIDOS ----------
+     Uno de cada cinco celdas lleva algo. No es decoracion: en un laberinto a oscuras donde todas las
+     celdas miden lo mismo, un objeto es la UNICA forma de decir "por acá ya pasé". Se elige por un
+     hash de la celda, asi que es fijo para cada partida y no cambia entre cuadros.
+     Todo va contra las paredes o es finito: lo que se cruza en el medio del paso molesta y no ayuda. */
+  const lados=['n','e','s','o'];
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++){
+    if(i===0&&j===0) continue;
+    if(usadas.has(cl(i,j))) continue;              // las celdas de los enigmas no se tocan
+    const h=(i*73856093 ^ j*19349663)>>>0;
+    if(h%5!==0) continue;
+    const x=XC(i), z=ZC(j), tipo=(h>>3)%5;
+    /* contra que pared: la primera que exista */
+    let lado=null;
+    for(let k=0;k<4;k++){ const l=lados[(h>>7|0+k)%4]; if(MAPA[j][i][l]){ lado=l; break; } }
+    if(!lado) lado='n';
+    const dir={n:[0,-1],s:[0,1],o:[-1,0],e:[1,0]}[lado];
+    const px=x+dir[0]*(CEL/2-0.55), pz=z+dir[1]*(CEL/2-0.55);
+    const ang=Math.atan2(dir[0],dir[1]);
+    if(tipo===0){
+      /* escombros: cuatro bloques caidos contra la pared */
+      for(let k=0;k<4;k++){
+        const hh=0.18+0.30*(((h>>(k+2))&7)/7), an=0.28+0.22*(((h>>(k+5))&3)/3);
+        const g=new THREE.BoxGeometry(an,hh,an*0.8);
+        g.rotateY(ang + ((h>>(k+9))&15)/15*1.2);
+        g.translate(px + dir[1]*(k-1.5)*0.52, hh/2, pz - dir[0]*(k-1.5)*0.52);
+        gs.push(g);
+      }
+    } else if(tipo===1){
+      /* la losa: un banco de piedra partido */
+      const g=new THREE.BoxGeometry(1.70,0.42,0.56); g.rotateY(ang); g.translate(px,0.21,pz); gs.push(g);
+      const g2=new THREE.BoxGeometry(0.42,0.30,0.44); g2.rotateY(ang+0.5);
+      g2.translate(px + dir[1]*1.05, 0.15, pz - dir[0]*1.05); gs.push(g2);
+      OBST.push({x:px, z:pz, r:0.80});
+    } else if(tipo===2){
+      /* la cadena colgada del techo: no estorba y se lee de lejos */
+      const largo=1.5+1.0*(((h>>4)&7)/7);
+      const g=new THREE.BoxGeometry(0.075,largo,0.075);
+      g.translate(x+dir[0]*0.9, ALTO-largo/2, z+dir[1]*0.9); gs.push(g);
+      const g2=new THREE.BoxGeometry(0.30,0.12,0.30);
+      g2.translate(x+dir[0]*0.9, ALTO-largo-0.06, z+dir[1]*0.9); gs.push(g2);
+    } else if(tipo===3){
+      /* el nicho: una repisa con algo encima */
+      const g=new THREE.BoxGeometry(0.86,0.13,0.36); g.rotateY(ang);
+      g.translate(px+dir[0]*0.34, 1.30, pz+dir[1]*0.34); gs.push(g);
+      const g2=new THREE.CylinderGeometry(0.13,0.17,0.34,9,1);
+      g2.translate(px+dir[0]*0.34, 1.53, pz+dir[1]*0.34); gs.push(g2);
+    } else {
+      /* pilastras: dos medias columnas contra la pared. Es lo que le da cara de sala construida */
+      for(const sg of [-1,1]){
+        const g=new THREE.CylinderGeometry(0.26,0.30,ALTO,10,1);
+        g.translate(px + dir[1]*sg*1.25, ALTO/2, pz - dir[0]*sg*1.25);
+        gs.push(g);
+        OBST.push({x:px+dir[1]*sg*1.25, z:pz-dir[0]*sg*1.25, r:0.44});
+      }
+    }
   }
   const g=mergeGeometries(gs,false);
   for(const q of gs) q.dispose();
@@ -776,7 +913,12 @@ function construirMarcas(){
 const marcas=construirMarcas();
 
 /* ---------- LAS NOTAS ---------- */
-const NOTA_ALC=3.0;          // a que distancia cuenta un grito y a que distancia se puede leer
+/* 4,4 Y NO 3,0, Y ESTO ERA UN DEFECTO DE VERDAD.
+   La hoja va pegada a una pared, o sea a 1,90 m del centro de su celda. El jugador puede pararse en
+   el lado opuesto de ESA MISMA CELDA, a 1,59 m del centro: 3,49 m de la hoja, y en diagonal 3,84.
+   Con el alcance en 3,0, buena parte de la celda de la hoja NO CONTABA. El usuario lo dijo tal cual:
+   "me acerco y nada". Con 4,4 entra la celda entera y sobra un poco. */
+const NOTA_ALC=4.4;
 const NOTA_GRITOS=3;
 const nomBanda=['','UNA BANDA','DOS BANDAS','TRES BANDAS'];
 const notas=[];
@@ -936,15 +1078,42 @@ function sellar(k,txt){
   const el=document.getElementById('sellos');
   if(el && el.children[k]) el.children[k].classList.add('on');
   avisar((txt||'SELLO')+' · '+nSellos()+'/4', 3.0);
+  son('sello');
   emitir(jug.x, jug.y, jug.z, 1.0, 62);
   matMundo.uniforms.uAbierta.value = nSellos()>=4? 1 : 0;
 }
 function cerca(x,z,r){ return Math.hypot(jug.x-x, jug.z-z) < r; }
 
+/* EL OBJETIVO DE AHORA MISMO.
+   Un enigma solo cuenta como objetivo si su hoja YA SE LEYO: si no, el HUD estaria contando cosas
+   que el jugador no tiene forma de saber, y eso no es guiar, es spoilear. Mientras no haya leido
+   ninguna, el objetivo es justamente buscar una hoja. */
+const NOTA_DE=[null,0,1,2,3,null];   // que enigma explica cada hoja
+function objetivo(){
+  if(ganado) return { t:'SALISTE', s:'' };
+  for(let k=0;k<notas.length;k++){
+    const e=NOTA_DE[k];
+    if(e===null || !notas[k].leida || SELLOS[e]) continue;
+    if(e===0) return { t:'LOS TRES TAMBORES · gritale al de <em>'+nomBanda[P1_ORDEN[p1Paso]]+'</em>',
+                       s:'van '+p1Paso+' de 3 · si te equivocás vuelve a cero' };
+    if(e===1) return { t:'EL PASILLO DORMIDO · cruzalo <em>agachado</em>',
+                       s:corredor.length+' salas rectas entre los dos arcos · un solo ruido y se despierta' };
+    if(e===2) return { t:'LA CUENTA · <em>contá las paredes</em> del aro y golpeá el piso esa cantidad',
+                       s:'llevás '+p3Cuenta+' golpe'+(p3Cuenta===1?'':'s')+' · saltar es golpear' };
+    if(e===3) return { t:'EL ECO LARGO · <em>gritá</em> entre los cuatro postes',
+                       s:'el pasillo ciego más hondo del laberinto' };
+  }
+  if(nSellos()>=4) return { t:'LA SALIDA ESTÁ ABIERTA', s:'late cada vez que hacés ruido · andá para allá' };
+  const falta=notas.filter(n=>!n.abierta).length;
+  return { t:'BUSCÁ UNA HOJA · <em>seguí las marcas rojas</em> del suelo',
+           s:falta+' hoja'+(falta===1?'':'s')+' sin encontrar · gritale a la pared cuando llegues' };
+}
+
 /* TODO EL RUIDO PASA POR ACA. Antes cada sitio llamaba a emitir() por su cuenta; con enigmas que
    escuchan el ruido eso obliga a repetir el aviso en cinco lugares y garantiza olvidarse de uno. */
 function ruido(tipo,x,y,z,fuerza,alcance){
   emitir(x,y,z,fuerza,alcance);
+  son(tipo, fuerza);
   if(!jugando) return;
   const c=celdaDe(jug.x,jug.z);
   /* EL CORREDOR SILENCIOSO: cualquier ruido adentro lo despierta */
@@ -965,9 +1134,10 @@ function ruido(tipo,x,y,z,fuerza,alcance){
         if(!cerca(XC(t.cel[0]), ZC(t.cel[1]), 2.9)) continue;
         if(t.bandas===P1_ORDEN[p1Paso]){
           p1Paso++;
+          son('tambor');
           if(p1Paso>=3) sellar(0,'LOS TRES TAMBORES');
           else avisar('SUENA · '+p1Paso+'/3', 1.6);
-        } else { p1Paso=0; avisar('DESAFINA', 1.6); }
+        } else { p1Paso=0; son('mal'); avisar('DESAFINA', 1.6); }
         break;
       }
     }
@@ -1006,18 +1176,35 @@ const notaEl=document.getElementById('nota'), notaT=document.getElementById('not
 let notaAbierta=null;
 function abrirNota(nt){
   notaAbierta=nt; nt.leida=true;
+  nt._nuevo=true;
+  son('papel');
   avisar('');   // si no, el cartel de "2/3" se queda leyendose por atras del papel
   notaT.textContent=nt.titulo;
   notaC.innerHTML=nt.texto;
   notaX.textContent = plataf==='pc'? 'CUALQUIER TECLA PARA SEGUIR' : 'TOCÁ PARA SEGUIR';
   notaEl.classList.add('ver');
 }
-function cerrarNota(){ notaAbierta=null; notaEl.classList.remove('ver'); }
+function cerrarNota(){
+  /* al cerrar una hoja que explica un enigma, se avisa que hay objetivo nuevo: si no, el jugador
+     cierra el papel, vuelve al negro y no le queda nada en la mano */
+  if(notaAbierta && notaAbierta._nuevo){ notaAbierta._nuevo=false;
+    const i=notas.indexOf(notaAbierta);
+    if(NOTA_DE[i]!==null && !SELLOS[NOTA_DE[i]]) avisar('OBJETIVO NUEVO', 2.2);
+  }
+  notaAbierta=null; notaEl.classList.remove('ver');
+}
 notaEl.addEventListener('click',cerrarNota);
 notaEl.addEventListener('touchstart',e=>{ e.preventDefault(); cerrarNota(); },{passive:false});
 function notaCercana(){
   let mejorN=null, mejorD=1e9;
   for(const nt of notas){ if(!nt.abierta) continue;
+    const d=Math.hypot(jug.x-nt.x, jug.z-nt.z);
+    if(d<NOTA_ALC && d<mejorD){ mejorD=d; mejorN=nt; } }
+  return mejorN;
+}
+function notaSinAbrirCerca(){
+  let mejorN=null, mejorD=1e9;
+  for(const nt of notas){ if(nt.abierta) continue;
     const d=Math.hypot(jug.x-nt.x, jug.z-nt.z);
     if(d<NOTA_ALC && d<mejorD){ mejorD=d; mejorN=nt; } }
   return mejorN;
@@ -1168,6 +1355,10 @@ const tocar=(id,fn)=>{ const el=document.getElementById(id); if(!el) return;
 tocar('bSalto',()=>saltar());
 tocar('bGrito',()=>gritar());
 tocar('bLeer',()=>leerCercana());
+tocar('bSon',()=>{ AUD.on=!AUD.on;
+  const b=document.getElementById('bSon');
+  if(b){ b.classList.toggle('mudo', !AUD.on); b.textContent = AUD.on? '♪' : '×'; }
+  if(AUD.drone && AUD.ctx) try{ AUD.drone.gain.value = AUD.on? 0.012 : 0; }catch(e){} });
 /* agacharse en telefono es un INTERRUPTOR y no un boton que se mantiene: el enigma del corredor
    pide cruzar veinte metros agachado, y sostener un boton con el pulgar mientras el otro maneja el
    joystick no se puede. En PC C y Ctrl hacen lo mismo. */
@@ -1208,6 +1399,123 @@ function pisada(fuerte){
   ruido('paso', jug.x, 0.35, jug.z, fuerte?0.85:0.55, fuerte?24:15);
 }
 
+/* ===================== EL SONIDO =====================
+   UN JUEGO QUE VA DE ESCUCHAR EL ECO NO PUEDE SER MUDO. Era lo que mas le faltaba: todo el diseño
+   dice "esto se oye" y despues no sonaba nada, asi que el grito era un boton que prendia luces.
+
+   TODO ES PROCEDURAL: ni un archivo. Ruido blanco de un segundo generado una vez y filtrado distinto
+   para cada golpe, mas dos osciladores para el sello. Pesa cero y no depende de ninguna red.
+
+   Y LA REVERB ES LA PIEZA CENTRAL, no un adorno. La respuesta al impulso se arma con ruido que decae
+   en 2,8 segundos: es literalmente un eco de piedra. Cada sonido va por dos caminos, seco y enviado
+   a la reverb, y el grito manda mucho mas que una pisada — por eso gritar SUENA a laberinto y un
+   paso suena a paso. */
+const AUD={ ctx:null, on:true };
+function audioIniciar(){
+  if(AUD.ctx) return;
+  const C=window.AudioContext||window.webkitAudioContext; if(!C) return;
+  let ctx; try{ ctx=new C(); }catch(e){ return; }
+  AUD.ctx=ctx;
+  const maestro=ctx.createGain(); maestro.gain.value=0.0; maestro.connect(ctx.destination);
+  maestro.gain.linearRampToValueAtTime(1.0, ctx.currentTime+1.4);
+  /* la respuesta al impulso: ruido que decae. El arranque suave de 4 ms evita el "clic" del primer
+     sample, que en una reverb se escucha como un chasquido en cada sonido. */
+  const seg=2.8, n=Math.floor(ctx.sampleRate*seg);
+  const ir=ctx.createBuffer(2,n,ctx.sampleRate);
+  for(let c=0;c<2;c++){ const d=ir.getChannelData(c);
+    for(let i=0;i<n;i++){ const t=i/n;
+      d[i]=(Math.random()*2-1)*Math.pow(1-t,2.4)*(t<0.0015? t/0.0015 : 1); } }
+  const conv=ctx.createConvolver(); conv.buffer=ir;
+  const envio=ctx.createGain(); envio.gain.value=1.0;
+  envio.connect(conv); conv.connect(maestro);
+  const seco=ctx.createGain(); seco.gain.value=0.78; seco.connect(maestro);
+  const nn=ctx.sampleRate|0;
+  const rb=ctx.createBuffer(1,nn,ctx.sampleRate);
+  const rd=rb.getChannelData(0);
+  for(let i=0;i<nn;i++) rd[i]=Math.random()*2-1;
+  /* un analizador colgado del maestro. No es para el juego: es para poder COMPROBAR que suena.
+     Sin esto, "el audio anda" seria "no tiro excepcion", que no es lo mismo ni parecido. */
+  try{ const an=ctx.createAnalyser(); an.fftSize=2048; maestro.connect(an); AUD.an=an;
+       AUD.buf=new Float32Array(an.fftSize); }catch(e){}
+  AUD.maestro=maestro; AUD.seco=seco; AUD.envio=envio; AUD.ruido=rb;
+  /* el zumbido de fondo, casi inaudible. Sin el, el silencio del juego suena a archivo cortado y no
+     a un lugar; con el, se siente que hay aire ahi abajo.
+     A 0,030 el zumbido COMPETIA con todo lo demas: medido, un grito daba 0,0228 de RMS contra 0,0122
+     del zumbido solo, o sea vez y media. Un grito tiene que ser un acontecimiento, no un matiz. A
+     0,012 el fondo se sigue sintiendo y deja lugar. */
+  try{
+    const osc=ctx.createOscillator(); osc.type='sine'; osc.frequency.value=37;
+    const og=ctx.createGain(); og.gain.value=0.012;
+    osc.connect(og); og.connect(maestro); osc.start();
+    AUD.drone=og;
+  }catch(e){}
+}
+/* un golpe de ruido filtrado, con envolvente. Es el ladrillo de todos los sonidos. */
+function golpeRuido(dur, tipo, f0, f1, q, vol, env){
+  const ctx=AUD.ctx, t=ctx.currentTime;
+  const src=ctx.createBufferSource(); src.buffer=AUD.ruido; src.loop=true;
+  src.playbackRate.value=0.85+Math.random()*0.3;
+  const bq=ctx.createBiquadFilter(); bq.type=tipo; bq.Q.value=q||1;
+  bq.frequency.setValueAtTime(f0,t);
+  bq.frequency.exponentialRampToValueAtTime(Math.max(40,f1), t+dur);
+  const g=ctx.createGain();
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vol), t+dur*0.12);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  src.connect(bq); bq.connect(g); g.connect(AUD.seco);
+  const e=ctx.createGain(); e.gain.value=env; g.connect(e); e.connect(AUD.envio);
+  src.start(t); src.stop(t+dur+0.05);
+}
+function tono(frec, dur, vol, env, tipoOsc){
+  const ctx=AUD.ctx, t=ctx.currentTime;
+  const o=ctx.createOscillator(); o.type=tipoOsc||'sine'; o.frequency.setValueAtTime(frec,t);
+  const g=ctx.createGain();
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vol), t+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  o.connect(g); g.connect(AUD.seco);
+  const e=ctx.createGain(); e.gain.value=env; g.connect(e); e.connect(AUD.envio);
+  o.start(t); o.stop(t+dur+0.05);
+}
+function son(tipo, f){
+  if(!AUD.ctx || !AUD.on) return;
+  if(AUD.ctx.state==='suspended'){ try{ AUD.ctx.resume(); }catch(e){} }
+  f = f==null? 1 : f;
+  try{
+    if(tipo==='paso'){    golpeRuido(0.16,'lowpass', 1500, 260, 0.9, 0.34*f, 0.34);
+                          tono(58+Math.random()*8, 0.10, 0.14*f, 0.20); }
+    else if(tipo==='caida'){ golpeRuido(0.26,'lowpass', 1100, 150, 1.1, 0.62*f, 0.70);
+                          tono(46, 0.20, 0.28*f, 0.40); }
+    else if(tipo==='salto'){ golpeRuido(0.11,'highpass', 700, 1600, 0.8, 0.16, 0.25); }
+    /* EL GRITO: dos formantes sobre ruido y un envio a la reverb TRES VECES mas alto que el de una
+       pisada. Esa diferencia de envio es lo que hace que el grito suene a "acabo de despertar un
+       laberinto entero" y no a un ruido mas fuerte. */
+    else if(tipo==='grito'){
+      const ctx=AUD.ctx, t=ctx.currentTime;
+      for(const [fr,q,v] of [[760,2.6,0.52],[1280,3.4,0.30],[2300,4.0,0.12]]){
+        const src=ctx.createBufferSource(); src.buffer=AUD.ruido; src.loop=true;
+        const bq=ctx.createBiquadFilter(); bq.type='bandpass'; bq.Q.value=q;
+        bq.frequency.setValueAtTime(fr*1.12,t);
+        bq.frequency.exponentialRampToValueAtTime(fr*0.80, t+0.55);
+        const g=ctx.createGain();
+        g.gain.setValueAtTime(0.0001,t);
+        g.gain.exponentialRampToValueAtTime(v, t+0.055);
+        g.gain.setValueAtTime(v, t+0.20);
+        g.gain.exponentialRampToValueAtTime(0.0001, t+0.60);
+        src.connect(bq); bq.connect(g); g.connect(AUD.seco);
+        const e=ctx.createGain(); e.gain.value=1.6; g.connect(e); e.connect(AUD.envio);
+        src.start(t); src.stop(t+0.7);
+      }
+    }
+    else if(tipo==='sello'){ tono(622,1.5,0.26,1.1); tono(933,1.3,0.15,1.1);
+                             setTimeout(()=>{ if(AUD.ctx&&AUD.on) tono(1245,1.6,0.10,1.2); }, 130); }
+    else if(tipo==='papel'){ golpeRuido(0.34,'highpass', 1800, 4200, 0.7, 0.24, 0.30); }
+    else if(tipo==='tambor'){ tono(96,0.9,0.34,1.0); golpeRuido(0.5,'lowpass',900,180,1.4,0.28,0.9); }
+    else if(tipo==='mal'){ tono(140,0.5,0.20,0.6,'sawtooth'); tono(133,0.5,0.18,0.6,'sawtooth'); }
+    else if(tipo==='salida'){ tono(392,2.4,0.26,1.3); tono(523,2.4,0.20,1.3); tono(784,2.2,0.13,1.3); }
+  }catch(e){}
+}
+
 /* ===================== EL AVISO Y EL RELOJ ===================== */
 const avisoEl=document.getElementById('aviso'), relojEl=document.getElementById('reloj');
 let avisoT=0;
@@ -1218,6 +1526,9 @@ function avisar(txt,seg){ if(!txt){ avisoEl.classList.remove('ver'); avisoT=0; r
 let jugando=false, tiempo=0, ganado=false, selloAviso=0;
 const menuEl=document.getElementById('menu');
 document.getElementById('jugar').addEventListener('click',()=>{
+  /* el audio SOLO se puede crear desde un gesto del usuario: los navegadores bloquean un
+     AudioContext creado al cargar la pagina, y queda "suspended" para siempre */
+  audioIniciar();
   menuEl.classList.add('ir');
   setTimeout(()=>{ menuEl.style.display='none'; },460);
   document.body.classList.add('jugando');
@@ -1397,9 +1708,16 @@ function animar(){
   const kc=CUERPO_PISO+(1-CUERPO_PISO)*eco;
   matCuerpo.color.copy(CUERPO_BASE).multiplyScalar(kc);
   matPiel.color.copy(PIEL_BASE).multiplyScalar(kc);
+  /* LAS HOJAS TIENEN LUZ PROPIA, poca. Antes eran una mancha OSCURA sobre una pared iluminada: a
+     oscuras no se veian y con luz se leian como una sombra. Una hoja de papel viejo en una pared de
+     piedra tiene que ser lo mas claro del cuadro, no lo mas oscuro. Ahora tienen un piso propio
+     —como los rastros del suelo— asi que se ven aunque no hagas ruido, y cada grito que les das las
+     sube un escalon. Es la unica forma de que "acercate y gritale a la pared" sea una instruccion
+     que se pueda seguir. */
   for(const nt of notas){
-    const k=(nt.abierta? 0.90 : 0.06+0.26*nt.cargas)*(0.012+0.988*eco);
-    nt.mat.color.setRGB(k*0.96,k*0.98,k);
+    const piso = nt.abierta? 0.055 : (0.030 + 0.045*nt.cargas);
+    const k = piso + (nt.abierta? 0.90 : 0.30+0.22*nt.cargas)*eco;
+    nt.mat.color.setRGB(k, k*0.965, k*0.90);
   }
   /* los rastros: el tramo que lleva a una hoja ya encontrada se apaga al 22%, asi el unico que
      realmente se ve es el que lleva a la que falta */
@@ -1456,6 +1774,7 @@ function animar(){
         ganado=true;
         const m=Math.floor(tiempo/60), sg=Math.floor(tiempo%60);
         avisar('SALISTE · '+m+':'+(sg<10?'0':'')+sg, 999);
+        son('salida');
         emitir(jug.x, jug.y, jug.z, 1.0, 78);
       } else if(selloAviso<=0){
         /* con espera: sin ella el cartel se vuelve a poner cada cuadro que estas parado ahi y no se
@@ -1467,19 +1786,37 @@ function animar(){
   }
   if(selloAviso>0) selloAviso-=dt;
 
-  /* ---------- ¿hay una nota al lado para leer? ---------- */
-  {
-    const nt=jugando? notaCercana() : null;
-    document.body.classList.toggle('cerca', !!nt);
+  /* ---------- ¿HAY UNA HOJA AL LADO? ----------
+     Esto antes solo avisaba de hojas YA REVELADAS y solo en PC. O sea que el jugador se acercaba a
+     una pared con una hoja sin revelar y no pasaba absolutamente nada: no habia forma de saber que
+     ahi habia algo ni que habia que gritarle. Ahora avisa en los dos casos y en las dos plataformas,
+     y dice exactamente que hacer y cuanto falta. */
+  if(jugando){
+    const leible=notaCercana(), sinAbrir=notaSinAbrirCerca();
+    document.body.classList.toggle('cerca', !!leible);
+    document.body.classList.toggle('hoja', !!sinAbrir);
     const lp=document.getElementById('leerP');
-    if(lp){
-      const ver = !!nt && !notaAbierta && plataf==='pc';
-      lp.textContent = nt? ('F · LEER "'+nt.titulo+'"') : '';
-      lp.classList.toggle('ver', ver);
-    }
+    if(lp && !notaAbierta){
+      if(sinAbrir){
+        lp.innerHTML='HAY UNA HOJA EN ESTA PARED<br><b>'+(plataf==='pc'?'E':'GRITAR')+
+                     '</b> · '+sinAbrir.cargas+' DE '+NOTA_GRITOS+' GRITOS';
+        lp.classList.add('ver');
+      } else if(leible){
+        lp.innerHTML='<b>'+(plataf==='pc'?'F':'LEER')+'</b> · '+leible.titulo;
+        lp.classList.add('ver');
+      } else lp.classList.remove('ver');
+    } else if(lp) lp.classList.remove('ver');
   }
 
   /* el aro del HUD dice cuanto ruido estas haciendo: es la unica lectura que importa */
+  /* la linea del objetivo */
+  if(jugando){
+    const mEl=document.getElementById('meta');
+    if(mEl){ const o=objetivo();
+      const txt=o.t+(o.s? '<s>'+o.s+'</s>' : '');
+      if(mEl._ult!==txt){ mEl._ult=txt; mEl.innerHTML=txt; } }
+  }
+
   const ecoEl=document.getElementById('eco');
   if(ecoEl){ jug.ruido += (((jug.agachado?0:velH)/5.5) - jug.ruido)*Math.min(1,dt*4);
     ecoEl.style.color='rgba(190,205,220,'+(0.22+jug.ruido*0.62).toFixed(2)+')';
@@ -1529,6 +1866,17 @@ window.__eco={
   notas:()=>notas.map(n=>({ titulo:n.titulo, cel:n.cel.slice(), lado:n.lado,
                             cargas:n.cargas, abierta:n.abierta, leida:n.leida,
                             dist:+Math.hypot(jug.x-n.x, jug.z-n.z).toFixed(2) })),
+  objetivo:()=>objetivo(),
+  audio:()=>{ let pico=0, rms=0;
+    if(AUD.an&&AUD.buf){ AUD.an.getFloatTimeDomainData(AUD.buf);
+      for(let i=0;i<AUD.buf.length;i++){ const v=Math.abs(AUD.buf[i]); if(v>pico) pico=v; rms+=v*v; }
+      rms=Math.sqrt(rms/AUD.buf.length); }
+    return { hay:!!AUD.ctx, estado:AUD.ctx? AUD.ctx.state:null, on:AUD.on,
+             pico:+pico.toFixed(4), rms:+rms.toFixed(4) }; },
+  sonido:(v)=>{ AUD.on = v==null? !AUD.on : !!v;
+    if(AUD.drone) try{ AUD.drone.gain.value = AUD.on? 0.012 : 0; }catch(e){}
+    return AUD.on; },
+  son:(t,f)=>{ son(t,f); return true; },
   papel:()=>({ abierta:!!notaAbierta, titulo:notaAbierta? notaAbierta.titulo:null,
                visible:document.getElementById('nota').classList.contains('ver') }),
   cerrarNota:()=>{ cerrarNota(); return true; },

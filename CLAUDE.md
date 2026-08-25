@@ -12,7 +12,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Campo_de_Tiro.html` ES "Z Force"** (1,83 MB). Es el proyecto grande: FPS con campo de
   tiro, todos-contra-todos, duelo de equipos y battle royale. **NO SE TOCA NI SE BORRA**:
   el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
-- **`Eco.html` es "Eco"** (~167 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
+- **`Eco.html` es "Eco"** (~188 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
@@ -20,6 +20,66 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
 ### Cómo está hecho `Eco.html`
+
+**Cuarta vuelta (2026-08-25).** Pedido textual: *"las notas no se pueden leer we me acerco y nada,
+también mejora los props y pistas y habitaciones we no se siente god al jugarlo ni se cómo
+completarlo"*.
+
+- **EL DEFECTO DE LAS NOTAS ERA REAL Y TENÍA DOS MITADES.**
+  1. **Alcance corto.** La hoja va pegada a una pared, o sea a 1,90 m del centro de su celda. El
+     jugador puede pararse en el lado opuesto de **esa misma celda**, a 1,59 m del centro: 3,49 m de
+     la hoja, y en diagonal **3,84**. Con el alcance en 3,0 buena parte de la propia celda **no
+     contaba**. Ahora 4,4.
+  2. **Cero aviso.** El cartel de proximidad solo salía para hojas **ya reveladas** y solo en **PC**.
+     O sea que acercarse a una pared con una hoja sin revelar no producía absolutamente nada: no
+     había forma de saber que ahí había algo ni que había que gritarle. Ahora avisa en los dos casos
+     y en las dos plataformas, con la cuenta: *"HAY UNA HOJA EN ESTA PARED · E · 1 DE 3 GRITOS"*, y
+     en teléfono el botón GRITAR late.
+  3. Y las hojas eran una mancha **oscura** sobre pared iluminada: a oscuras invisibles, con luz se
+     leían como una sombra. Ahora tienen **luz propia** (piso 0,030 lineal, +0,045 por cada grito):
+     una hoja de papel viejo tiene que ser lo más claro del cuadro, no lo más oscuro.
+- **NO SE SABÍA CÓMO COMPLETARLO → LÍNEA DE OBJETIVO EN EL HUD.** Una línea bajo los sellos que dice
+  qué hacer ahora y cuánto falta: *"LOS TRES TAMBORES · gritale al de DOS BANDAS · van 0 de 3"*,
+  *"LA CUENTA · contá las paredes del aro y golpeá el piso esa cantidad · llevás 1 golpe"*.
+  REGLA: un enigma solo aparece como objetivo si **su hoja ya se leyó**. Si no, el HUD estaría
+  contando cosas que el jugador no tiene forma de saber, y eso no es guiar, es spoilear. Mientras no
+  leyó ninguna, el objetivo es *"BUSCÁ UNA HOJA · seguí las marcas rojas"*.
+- **HABITACIONES.** Un laberinto perfecto son 169 cajas del mismo tamaño, y por eso no se sentía un
+  lugar: sin puntos de referencia uno no explora, da vueltas. Se abren **4 plazas de 2×2** tirando
+  las paredes internas (8,5 m de lado) con una **columna con base y capitel** en el cruce. Van
+  **antes** de calcular distancias porque cambian el laberinto de verdad; verificado 169/169
+  alcanzables después de abrirlas.
+- **PROPS COMO MOJONES.** Una de cada cinco celdas lleva algo, elegido por un hash de la celda (fijo
+  por partida): escombros contra la pared, una losa partida, una cadena colgada del techo, un nicho
+  con repisa, o dos pilastras. No es decoración: en un laberinto a oscuras donde todas las celdas
+  miden lo mismo, un objeto es la **única** forma de decir "por acá ya pasé". Todo va fundido en la
+  misma malla que las marcas de los enigmas → sigue siendo **una** llamada de dibujo. Y los arcos del
+  corredor ganaron jambas: un dintel flotando no se lee como arco, se lee como una viga suelta.
+- **SONIDO, que era lo que más faltaba.** Todo el diseño dice "esto se oye" y el juego era **mudo**:
+  el grito era un botón que prendía luces. Ahora hay audio **procedural**, ni un archivo: ruido
+  blanco de un segundo generado una vez y filtrado distinto para cada golpe, más osciladores.
+  **La reverb es la pieza central, no un adorno**: la respuesta al impulso se arma con ruido que
+  decae en 2,8 s — literalmente un eco de piedra. Cada sonido va por dos caminos (seco y envío), y el
+  grito manda **3× más** a la reverb que una pisada; esa diferencia es lo que hace que gritar suene a
+  laberinto y un paso suene a paso.
+  MEDIDO con un analizador colgado del maestro (si no, "el audio anda" sería "no tiró excepción"):
+  fondo pico 0,0120 / rms 0,0087 · grito 0,1418 / 0,0497 (**5,7× el fondo en rms**) · cola de reverb
+  1 s después 0,0373 · caída 0,2230 · **en mudo 0,0000**.
+  PRIMER AJUSTE DESCARTADO: el zumbido de fondo a 0,030 **competía** con todo — un grito daba 1,5× el
+  fondo. Un grito tiene que ser un acontecimiento, no un matiz. A 0,012 se sigue sintiendo el aire y
+  deja lugar.
+- **EL HUD ESCALA CON EL CUADRO** (`--esc` = alto/720, topado entre 0,60 y 1,15). Con medidas fijas
+  en px, en un cuadro bajo —un teléfono girado da 732×412— el reloj, los sellos, la línea de
+  objetivo, el aviso de la hoja y la leyenda de teclas **se pisaban**. Medido a 480×270: el objetivo
+  se encimaba con la leyenda **y** con el aviso. Verificado ahora en 1280×720, 800×450, 480×270 y
+  412×915 girado: **cero solapamientos** en los seis pares.
+  OJO al medir con el cuadro girado: `getBoundingClientRect` devuelve la caja alineada a los ejes y
+  da falsos positivos. Se mide con `offsetTop/offsetLeft`, que son coordenadas de la caja.
+- Costo: **14 llamadas de dibujo, 7.016 triángulos, 0,5 ms por cuadro**. Partida completa verificada
+  caminando de verdad hasta una hoja (53 celdas), leyéndola con la espera real del grito, los cuatro
+  enigmas y la victoria. Cero errores de página.
+
+### Cómo estaba hecho la tercera vuelta
 
 **Tercera vuelta (2026-08-25).** Pedido textual: *"mejora la calidad agrega que los brazos no se vean
 así we que feo sácalos también agrega mejores gráficos y que el entorno brille entero por 2 segundos
