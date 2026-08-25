@@ -33,8 +33,18 @@
   :root{ --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
          --safe-l:env(safe-area-inset-left,0px); --safe-r:env(safe-area-inset-right,0px); }
 
+  /* ---------- EL CUADRO 16:9 ----------
+     El juego se dibuja SIEMPRE en 16:9 y con 90 grados de campo HORIZONTAL, como un tirador. Lo que
+     sobra de la pantalla queda negro.
+     Y EN UN TELEFONO VERTICAL EL CUADRO SE GIRA 90 GRADOS en vez de encogerse a una tirita. En
+     412x915 un 16:9 sin girar mide 412x232: el 11% de la pantalla. Girado mide 915x515 y usa todo.
+     Adentro va TODO —lienzo, HUD, botones y menu— asi que hay una sola transformacion y nada queda
+     desalineado. */
+  #caja{ position:fixed; left:50%; top:50%; overflow:hidden; background:#000; z-index:10;
+    transform:translate(-50%,-50%); }
+
   /* ---------- el menu: lo mas simple que se pueda ---------- */
-  #menu{ position:fixed; inset:0; z-index:40; display:flex; flex-direction:column;
+  #menu{ position:absolute; inset:0; z-index:40; display:flex; flex-direction:column;
     align-items:center; justify-content:center; gap:26px; background:#05070a;
     transition:opacity .45s ease; }
   #menu.ir{ opacity:0; pointer-events:none; }
@@ -55,7 +65,7 @@
   #comoS b{ color:#93a1af; font-weight:800; }
 
   /* ---------- el HUD, casi nada ---------- */
-  #hud{ position:fixed; inset:0; z-index:20; pointer-events:none; display:none; }
+  #hud{ position:absolute; inset:0; z-index:20; pointer-events:none; display:none; }
   body.jugando #hud{ display:block; }
   #eco{ position:absolute; left:50%; top:calc(14px + var(--safe-t)); transform:translateX(-50%);
     font-size:10px; font-weight:800; letter-spacing:.20em; color:rgba(190,205,220,.40); }
@@ -71,24 +81,53 @@
     border-radius:50%; background:rgba(255,255,255,.30); }
 
   /* ---------- los controles del telefono ---------- */
-  #joy{ position:fixed; left:calc(20px + var(--safe-l)); bottom:calc(20px + var(--safe-b));
+  #joy{ position:absolute; left:20px; bottom:20px;
     width:132px; height:132px; border-radius:50%; z-index:22; display:none;
     background:rgba(255,255,255,.045); border:1.4px solid rgba(255,255,255,.10); }
   #joyP{ position:absolute; left:50%; top:50%; width:52px; height:52px; margin:-26px 0 0 -26px;
     border-radius:50%; background:rgba(232,238,245,.30); border:1.4px solid rgba(255,255,255,.22); }
-  .btn{ position:fixed; z-index:22; display:none; border-radius:50%; border:1.4px solid rgba(255,255,255,.14);
+  .btn{ position:absolute; z-index:22; display:none; border-radius:50%; border:1.4px solid rgba(255,255,255,.14);
     background:rgba(255,255,255,.05); color:#cdd8e3; font-size:10px; font-weight:900;
     letter-spacing:.10em; align-items:center; justify-content:center; cursor:pointer; }
   .btn:active{ background:rgba(255,255,255,.16); }
-  #bGrito{ right:calc(22px + var(--safe-r)); bottom:calc(112px + var(--safe-b)); width:86px; height:86px; }
-  #bSalto{ right:calc(120px + var(--safe-r)); bottom:calc(26px + var(--safe-b)); width:66px; height:66px; }
+  #bGrito{ right:20px; bottom:118px; width:86px; height:86px; }
+  #bSalto{ right:118px; bottom:30px; width:66px; height:66px; }
+  #bAgachar{ right:22px; bottom:30px; width:66px; height:66px; font-size:9px; }
+  #bAgachar.on{ background:rgba(255,255,255,.20); color:#fff; }
   body.movil.jugando #joy, body.movil.jugando .btn{ display:flex; }
+
+  /* ---------- los cuatro sellos: lo unico que hay que juntar ---------- */
+  #sellos{ position:absolute; left:50%; top:64px; transform:translateX(-50%); display:flex; gap:9px; }
+  #sellos i{ width:9px; height:9px; border-radius:50%; border:1.4px solid rgba(200,215,230,.30); }
+  #sellos i.on{ background:#fff; border-color:#fff; box-shadow:0 0 11px rgba(255,255,255,.75); }
+
+  /* ---------- el papel: lo unico del juego que tiene fondo ---------- */
+  #nota{ position:absolute; inset:0; z-index:34; display:none; align-items:center;
+    justify-content:center; background:rgba(3,5,8,.92); }
+  #nota.ver{ display:flex; }
+  #notaP{ max-width:min(560px,86%); padding:24px 26px; border:1px solid rgba(255,255,255,.13);
+    background:rgba(232,238,245,.05); }
+  #notaT{ font-size:9.5px; font-weight:900; letter-spacing:.24em; color:#6c7b8a; margin-bottom:11px; }
+  #notaC{ font-size:clamp(12.5px,2.4vw,15px); line-height:1.9; color:#dce6f0; font-weight:600; }
+  #notaX{ margin-top:16px; font-size:9px; letter-spacing:.18em; color:#4e5a67; }
+
+  /* ---------- la pista de "aca se puede leer" ---------- */
+  #leerP{ position:absolute; left:50%; top:60%; transform:translateX(-50%); font-size:10px;
+    font-weight:900; letter-spacing:.16em; color:rgba(255,255,255,.60); opacity:0;
+    transition:opacity .22s ease; white-space:nowrap; }
+  #leerP.ver{ opacity:1; }
+  #bLeer{ position:absolute; left:50%; bottom:26px; margin-left:-56px; width:112px; height:40px;
+    z-index:22; display:none; align-items:center; justify-content:center; border-radius:999px;
+    border:1.4px solid rgba(255,255,255,.30); background:rgba(232,238,245,.14); color:#fff;
+    font-size:10px; font-weight:900; letter-spacing:.14em; cursor:pointer; }
+  #bLeer:active{ background:rgba(255,255,255,.30); }
+  body.movil.jugando.cerca #bLeer{ display:flex; }
   /* la barra del grito: dice cuando se puede volver a gritar */
   #gritoAro{ position:absolute; inset:-4px; border-radius:50%; pointer-events:none;
     background:conic-gradient(rgba(255,255,255,.34) var(--g,0%), rgba(0,0,0,0) 0); }
 
   /* ---------- la leyenda de teclas, en PC ---------- */
-  #teclas{ position:fixed; left:calc(16px + var(--safe-l)); bottom:calc(16px + var(--safe-b));
+  #teclas{ position:absolute; left:16px; bottom:16px;
     z-index:22; display:none; grid-template-columns:auto auto; gap:4px 10px;
     opacity:0; transition:opacity .6s ease; pointer-events:none; }
   body.pc.jugando #teclas{ display:grid; }
@@ -100,29 +139,47 @@
 </head>
 <body>
 
-<div id="menu">
-  <div id="tit">ECO</div>
-  <div id="sub">el laberinto no se ve · se oye</div>
-  <button id="jugar">EMPEZAR</button>
-  <div id="comoS">
-    Está todo a oscuras. Lo único que ves es <b>tu propio cuerpo</b>.<br>
-    Cada paso hace ruido, y el ruido <b>dibuja las paredes</b> por un instante.<br>
-    Corré para ver más lejos. <b>Gritá</b> para ver todo de golpe.<br>
-    Encontrá la salida.
+<div id="caja">
+
+  <div id="hud">
+    <div id="punto"></div>
+    <div id="eco">ECO</div>
+    <div id="reloj">0:00</div>
+    <div id="sellos"><i></i><i></i><i></i><i></i></div>
+    <div id="aviso"></div>
+    <div id="leerP"></div>
   </div>
-</div>
 
-<div id="hud">
-  <div id="punto"></div>
-  <div id="eco">ECO</div>
-  <div id="reloj">0:00</div>
-  <div id="aviso"></div>
-</div>
+  <div id="joy"><div id="joyP"></div></div>
+  <button id="bGrito" class="btn">GRITAR<div id="gritoAro"></div></button>
+  <button id="bSalto" class="btn">SALTAR</button>
+  <button id="bAgachar" class="btn">AGACHAR</button>
+  <button id="bLeer">LEER</button>
+  <div id="teclas"></div>
 
-<div id="joy"><div id="joyP"></div></div>
-<button id="bGrito" class="btn">GRITAR<div id="gritoAro"></div></button>
-<button id="bSalto" class="btn">SALTAR</button>
-<div id="teclas"></div>
+  <div id="nota">
+    <div id="notaP">
+      <div id="notaT">NOTA EN LA PARED</div>
+      <div id="notaC"></div>
+      <div id="notaX"></div>
+    </div>
+  </div>
+
+  <div id="menu">
+    <div id="tit">ECO</div>
+    <div id="sub">el laberinto no se ve · se oye</div>
+    <button id="jugar">EMPEZAR</button>
+    <div id="comoS">
+      Está todo a oscuras. <b>Nada se ve si no hacés ruido.</b><br>
+      Cada paso manda una onda, y la onda <b>dibuja las paredes</b> por un instante.<br>
+      <b>Agachado no hacés ruido</b>: te movés a ciegas, pero en silencio.<br>
+      Hay <b>notas</b> en las paredes: acercate y gritá tres veces para que aparezcan.<br>
+      Cuatro enigmas, cuatro sellos. La salida no abre sin los cuatro.<br>
+      <b>Empujá el joystick más allá del aro para correr.</b>
+    </div>
+  </div>
+
+</div>
 
 <script type="importmap">
 { "imports": {
@@ -249,19 +306,52 @@ for(let y=0;y<N;y++) for(let x=0;x<N;x++) if(DIST[y][x]>mejor){ mejor=DIST[y][x]
 /* ===================== LA ESCENA ===================== */
 const escena=new THREE.Scene();
 escena.background=new THREE.Color(0x000000);
-const camara=new THREE.PerspectiveCamera(78, innerWidth/innerHeight, 0.05, 220);
+/* EL CAMPO DE VISION: 90 GRADOS, Y HORIZONTALES.
+   Los tiradores cuentan el campo en horizontal; three.js lo pide en VERTICAL. Con 16:9, 90
+   horizontales son 58,72 verticales, no 90. Ponerle 90 a three.js da 121 horizontales y el mundo
+   sale estirado como en un ojo de pez. */
+const FOV_H=90, ASPECTO=16/9;
+const FOV_V=2*Math.atan(Math.tan(FOV_H*Math.PI/360)/ASPECTO)*180/Math.PI;
+const camara=new THREE.PerspectiveCamera(FOV_V, ASPECTO, 0.05, 220);
 const render=new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
 /* SE TOPA LA DENSIDAD EN 2. Un telefono moderno da 3 o 3,5, y a esa densidad se dibujan mas del
    doble de pixeles para una diferencia que no se ve — y en un juego cuya imagen es casi toda negra,
    menos todavia. */
 render.setPixelRatio(Math.min(devicePixelRatio||1, 2));
-render.setSize(innerWidth, innerHeight);
 render.outputColorSpace=THREE.SRGBColorSpace;
-document.body.appendChild(render.domElement);
-addEventListener('resize',()=>{
-  camara.aspect=innerWidth/innerHeight; camara.updateProjectionMatrix();
-  render.setSize(innerWidth,innerHeight);
-});
+const CAJA=document.getElementById('caja');
+CAJA.appendChild(render.domElement);
+
+/* ---------- EL CUADRO: 16:9 SIEMPRE, GIRADO SI EL APARATO ESTA VERTICAL ---------- */
+let girado=false, cajaW=16, cajaH=9;
+function ajustarCuadro(){
+  const W=innerWidth, H=innerHeight;
+  girado = H>W;
+  const dw=girado?H:W, dh=girado?W:H;     // el espacio disponible, ya girado si hace falta
+  let w=dw, h=Math.round(w/ASPECTO);
+  if(h>dh){ h=dh; w=Math.round(h*ASPECTO); }
+  cajaW=w; cajaH=h;
+  CAJA.style.width=w+'px'; CAJA.style.height=h+'px';
+  CAJA.style.transform='translate(-50%,-50%)'+(girado?' rotate(90deg)':'');
+  render.setSize(w,h);
+  camara.aspect=ASPECTO; camara.updateProjectionMatrix();
+}
+ajustarCuadro();
+addEventListener('resize',ajustarCuadro);
+addEventListener('orientationchange',()=>setTimeout(ajustarCuadro,120));
+
+/* PASAR UN PUNTO DE LA PANTALLA AL CUADRO. Hace falta porque con el cuadro girado
+   getBoundingClientRect devuelve la caja ALINEADA A LOS EJES: para un joystick redondo eso da el
+   cuadrado equivocado y el dedo nunca acierta.
+   CSS rotate(90deg) manda un punto local (ex,ey) medido desde el centro a (-ey, ex) en la pantalla.
+   Invertido: lx = (py - H/2) + w/2 y ly = h/2 - (px - W/2). */
+function aCuadro(px,py){
+  const W=innerWidth, H=innerHeight;
+  if(!girado) return [px-(W-cajaW)/2, py-(H-cajaH)/2];
+  return [ (py-H/2)+cajaW/2, cajaH/2-(px-W/2) ];
+}
+/* y los arrastres: un delta tambien gira */
+function dCuadro(dx,dy){ return girado? [dy,-dx] : [dx,dy]; }
 
 /* ===================== LAS ONDAS =====================
    Ocho como maximo, y no es un numero al azar: cada una es un vec4 y un float de uniforme, y el
@@ -302,6 +392,12 @@ const matMundo=new THREE.ShaderMaterial({
     uBanda:{value:1.15},        // el grosor del frente, en metros
     uCola:{value:5.2},          // cuanto persiste detras del frente
     uSalida:{value:new THREE.Vector3()},
+    /* uEco = cuanto eco vivo hay ahora mismo, de 0 a 1. TODO lo que no sea el frente de una onda se
+       multiplica por esto, asi que en silencio absoluto la pantalla queda NEGRA de verdad y no
+       "oscura pero se adivina". Era el agujero de la version anterior: el faro de la salida se veia
+       siempre, sin hacer un solo ruido. */
+    uEco:{value:0},
+    uAbierta:{value:0},
     uT:{value:0}
   },
   vertexShader:`
@@ -317,6 +413,7 @@ const matMundo=new THREE.ShaderMaterial({
     uniform vec3 uPos[${MAX_ONDAS}];
     uniform vec3 uDat[${MAX_ONDAS}];
     uniform float uBanda; uniform float uCola; uniform vec3 uSalida; uniform float uT;
+    uniform float uEco; uniform float uAbierta;
 
     void main(){
       float luz=0.0;
@@ -339,10 +436,13 @@ const matMundo=new THREE.ShaderMaterial({
         cara=0.35+0.65*cara;
         luz=max(luz, (frente + cola) * vida * fuerza * caida * cara);
       }
-      /* LA SALIDA LATE SOLA. Es lo unico del mundo que emite en vez de reflejar: sin una referencia
-         fija, un laberinto a oscuras no se recorre, se deambula. Se ve tenue y de cerca. */
+      /* LA SALIDA LATE, PERO SOLO MIENTRAS HAYA ECO. Sin una referencia fija un laberinto a oscuras
+         no se recorre, se deambula; pero un faro encendido en silencio rompe la unica regla del
+         juego. Asi que late con el eco: hace ruido y aparece, te quedas quieto y se apaga.
+         Con los cuatro sellos late mas fuerte y desde mas lejos: es el premio. */
       float dS=distance(vW, uSalida);
-      float faro=(1.0-smoothstep(2.0, 26.0, dS))*(0.16+0.10*sin(uT*2.6));
+      float alc=mix(22.0, 40.0, uAbierta);
+      float faro=(1.0-smoothstep(2.0, alc, dS))*(0.14+0.34*uAbierta+0.10*sin(uT*2.6))*uEco;
       luz=max(luz, faro);
       luz=clamp(luz,0.0,1.0);
       /* blanco y negro, con una pizca de azul en las luces bajas para que no se vea sucio */
@@ -412,8 +512,279 @@ function corregir(px,pz,nx,nz){
     if(l2z> lim && paredEn(i2,j2,'s')) z=c2z+lim;
     if(l2z<-lim && paredEn(i2,j2,'n')) z=c2z-lim;
   }
+  /* Y LOS TAMBORES FRENAN. Las colisiones salen de la grilla, asi que un tambor plantado en el
+     medio de una celda no existe para ellas y el jugador lo cruza como si fuera humo: se ve un
+     cilindro con la onda y se pasa por adentro. Un circulo por obstaculo alcanza, y son cuatro. */
+  for(const o of OBST){
+    const dx=x-o.x, dz=z-o.z, d=Math.hypot(dx,dz), lim2=o.r+RADIO;
+    if(d>1e-4 && d<lim2){ x=o.x+dx/d*lim2; z=o.z+dz/d*lim2; }
+  }
   return [x,z];
 }
+/* se llena mas abajo, cuando se plantan los tambores. Va declarado ACA porque corregir() lo lee y
+   una constante leida antes de su linea tira ReferenceError y se cae el modulo entero. */
+const OBST=[];
+
+/* ===================== LAS NOTAS Y LOS CUATRO ENIGMAS =====================
+   El laberinto solo, aunque se vea lindo, es una caminata. Lo que lo vuelve un juego es que haya
+   algo que ENTENDER, y en un mundo que se lee por el oido lo que se entiende tiene que entrar por
+   ahi: contar paredes con una onda, cruzar en silencio, golpear el piso, gritarle a un tambor.
+
+   TODAS LAS MARCAS VAN AL MATERIAL DEL SONIDO, no a uno propio. O sea que los tambores, los aros y
+   los arcos tampoco se ven si no hacés ruido: si se vieran, serian faroles y el juego se caeria.
+   Y van FUNDIDAS EN UNA SOLA MALLA, igual que el laberinto: son adorno fijo, no hay nada que ganar
+   teniendolas sueltas.
+   Las NOTAS si van sueltas y con material propio, porque cada una se enciende sola segun cuantos
+   gritos lleva encima. Seis notas son seis llamadas de dibujo; es el precio de que se revelen de a
+   una. */
+const XC=i=>(i-(N-1)/2)*CEL, ZC=j=>(j-(N-1)/2)*CEL;
+const LADOS=['n','e','s','o'];
+function paredesDe(i,j){ let n=0; for(const l of LADOS) if(MAPA[j][i][l]) n++; return n; }
+function mezclar(a){ for(let k=a.length-1;k>0;k--){ const r=(Math.random()*(k+1))|0; const t=a[k]; a[k]=a[r]; a[r]=t; } return a; }
+const usadas=new Set();
+const cl=(i,j)=>i+','+j;
+function libre(i,j){ return !usadas.has(cl(i,j)); }
+function tomar(i,j){ usadas.add(cl(i,j)); return [i,j]; }
+
+/* ---------- ENIGMA 4: el pasillo mas profundo ----------
+   Es el que se elige PRIMERO porque es el mas exigente: tiene que ser un sin salida y tiene que ser
+   el mas lejano. Si lo eligiera al final, los otros enigmas ya le habrian ocupado la celda. */
+const sinSalida=[];
+for(let j=0;j<N;j++) for(let i=0;i<N;i++) if(paredesDe(i,j)===3 && !(i===salida[0]&&j===salida[1])) sinSalida.push([i,j]);
+sinSalida.sort((a,b)=>DIST[b[1]][b[0]]-DIST[a[1]][a[0]]);
+const celP4 = sinSalida.length? tomar(sinSalida[0][0],sinSalida[0][1]) : tomar(0,0);
+
+/* ---------- ENIGMA 3: contar las paredes de una sala y golpear el piso ---------- */
+let celP3=null;
+for(const c of sinSalida){ if(libre(c[0],c[1]) && DIST[c[1]][c[0]]>=3){ celP3=tomar(c[0],c[1]); break; } }
+if(!celP3){ for(let j=1;j<N-1&&!celP3;j++) for(let i=1;i<N-1&&!celP3;i++)
+              if(libre(i,j)&&paredesDe(i,j)===2&&DIST[j][i]>=3) celP3=tomar(i,j); }
+if(!celP3) celP3=tomar(1,1);
+const P3_GOLPES=paredesDe(celP3[0],celP3[1]);
+
+/* ---------- ENIGMA 1: los tres tambores ----------
+   Van en celdas de paso (dos salidas o mas) para no tapar un sin salida, y separadas al menos
+   cuatro celdas: tres tambores juntos no son un enigma, son un adorno. */
+const tambores=[];
+{
+  const cand=[];
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++)
+    if(libre(i,j) && paredesDe(i,j)<=2 && DIST[j][i]>=3) cand.push([i,j]);
+  mezclar(cand);
+  for(const c of cand){
+    if(tambores.length>=3) break;
+    if(tambores.some(t=>Math.abs(t.cel[0]-c[0])+Math.abs(t.cel[1]-c[1])<4)) continue;
+    tambores.push({ cel:tomar(c[0],c[1]), bandas:0 });
+  }
+  /* si el laberinto salio raro y no hubo tres huecos separados, se relaja la separacion antes de
+     quedarse con menos de tres: un enigma que no se puede resolver es peor que uno apretado */
+  for(const c of cand){ if(tambores.length>=3) break;
+    if(!libre(c[0],c[1])) continue;
+    tambores.push({ cel:tomar(c[0],c[1]), bandas:0 }); }
+  mezclar(tambores);
+  tambores.forEach((t,k)=>{ t.bandas=k+1; });
+}
+const P1_ORDEN=mezclar([1,2,3]);
+
+/* ---------- ENIGMA 2: el pasillo que no perdona un ruido ----------
+   Se busca la tirada recta mas larga del laberinto. Recta y larga importan las dos: cruzar a ciegas
+   una linea se puede hacer de memoria, y cruzar a ciegas dos celdas no es nada. */
+let corredor=[];
+{
+  const tiradas=[];
+  for(let j=0;j<N;j++){ let run=[[0,j]];
+    for(let i=0;i<N-1;i++){ if(!MAPA[j][i].e){ run.push([i+1,j]); } else { tiradas.push(run); run=[[i+1,j]]; } }
+    tiradas.push(run); }
+  for(let i=0;i<N;i++){ let run=[[i,0]];
+    for(let j=0;j<N-1;j++){ if(!MAPA[j][i].s){ run.push([i,j+1]); } else { tiradas.push(run); run=[[i,j+1]]; } }
+    tiradas.push(run); }
+  tiradas.sort((a,b)=>b.length-a.length);
+  for(const t of tiradas){ if(t.length<3) break;
+    if(t.every(c=>libre(c[0],c[1]))){ corredor=t; break; } }
+  if(!corredor.length) corredor=tiradas[0]||[[0,0]];
+  for(const c of corredor) tomar(c[0],c[1]);
+}
+const CORR_IDX=new Map(); corredor.forEach((c,k)=>CORR_IDX.set(cl(c[0],c[1]),k));
+
+/* ---------- LAS MARCAS EN EL MUNDO, todas en una malla ---------- */
+function construirMarcas(){
+  const gs=[];
+  const meter=(g,x,y,z,rx)=>{ if(rx) g.rotateX(rx); g.translate(x,y,z); gs.push(g); };
+  /* los tambores: un cilindro con una, dos o tres bandas talladas. Las bandas son el enunciado del
+     enigma: sin algo que los distinga, "en este orden" no quiere decir nada. */
+  for(const t of tambores){
+    const x=XC(t.cel[0]), z=ZC(t.cel[1]);
+    meter(new THREE.CylinderGeometry(0.50,0.56,1.40,18,1), x,0.70,z);
+    for(let k=0;k<t.bandas;k++) meter(new THREE.TorusGeometry(0.57,0.055,7,20), x, 0.42+k*0.34, z, Math.PI/2);
+    OBST.push({x, z, r:0.62});
+  }
+  /* el aro del enigma de los golpes */
+  meter(new THREE.TorusGeometry(1.15,0.075,7,34), XC(celP3[0]),0.09,ZC(celP3[1]), Math.PI/2);
+  /* los cuatro postes del pasillo mas profundo */
+  for(const [dx,dz] of [[-1,-1],[1,-1],[-1,1],[1,1]])
+    meter(new THREE.BoxGeometry(0.17,0.95,0.17), XC(celP4[0])+dx*1.05, 0.47, ZC(celP4[1])+dz*1.05);
+  /* los dos arcos del corredor silencioso, uno en cada punta */
+  for(const c of [corredor[0], corredor[corredor.length-1]]){
+    const x=XC(c[0]), z=ZC(c[1]);
+    const horiz = corredor.length>1 && corredor[0][1]===corredor[1][1];
+    const w=horiz? 0.22 : CEL*0.72, d=horiz? CEL*0.72 : 0.22;
+    meter(new THREE.BoxGeometry(w,0.20,d), x, 2.62, z);
+  }
+  const g=mergeGeometries(gs,false);
+  for(const q of gs) q.dispose();
+  const m=new THREE.Mesh(g, matMundo);
+  m.frustumCulled=false;
+  escena.add(m);
+  return m;
+}
+const marcas=construirMarcas();
+
+/* ---------- LAS NOTAS ---------- */
+const NOTA_ALC=3.0;          // a que distancia cuenta un grito y a que distancia se puede leer
+const NOTA_GRITOS=3;
+const nomBanda=['','UNA BANDA','DOS BANDAS','TRES BANDAS'];
+const notas=[];
+function ponerNota(cel, titulo, texto){
+  const [i,j]=cel;
+  /* la nota va en una pared de la celda, la que haya. Sin esto una nota puede quedar colgada en el
+     aire en el medio de un cruce, que es exactamente donde no se lee. */
+  const orden=mezclar(LADOS.slice()).filter(l=>MAPA[j][i][l]);
+  const lado=orden[0]||'n';
+  const g=new THREE.PlaneGeometry(1.05,1.40);
+  const mat=new THREE.MeshBasicMaterial({color:0x000000, side:THREE.DoubleSide});
+  const me=new THREE.Mesh(g,mat);
+  const x=XC(i), z=ZC(j), sep=CEL/2-GRUESO/2-0.03;
+  if(lado==='n'){ me.position.set(x, 1.55, z-sep); }
+  if(lado==='s'){ me.position.set(x, 1.55, z+sep); me.rotation.y=Math.PI; }
+  if(lado==='o'){ me.position.set(x-sep, 1.55, z); me.rotation.y=Math.PI/2; }
+  if(lado==='e'){ me.position.set(x+sep, 1.55, z); me.rotation.y=-Math.PI/2; }
+  escena.add(me);
+  notas.push({ cel:[i,j], lado, titulo, texto, mat, malla:me, cargas:0, abierta:false, leida:false,
+               x:me.position.x, z:me.position.z });
+}
+/* la primera va al lado de la entrada: si el juego no explica el silencio, el enigma del corredor
+   es imposible de adivinar y no es un enigma, es una pared */
+ponerNota([0,0], 'LO PRIMERO',
+  'No hay luz acá abajo. Nunca hubo.<br>Lo que ves al moverte no es luz: es el ruido que vuelve.<br>'+
+  'Quedate quieto y dejás de existir para el mundo.<br>'+
+  '<b>Agachate y el mundo deja de existir para vos</b>: no hacés ruido, no ves nada. A veces conviene.');
+ponerNota(tambores[0].cel, 'LOS TRES TAMBORES',
+  'Tres tambores duermen acá. Están tallados con <b>una, dos y tres bandas</b>.<br>'+
+  'Gritales al lado en este orden:<br><b>'+P1_ORDEN.map(k=>nomBanda[k]).join(' &nbsp;·&nbsp; ')+'</b><br>'+
+  'Si te equivocás, vuelven a dormirse.');
+ponerNota(corredor[0], 'EL PASILLO DORMIDO',
+  'El pasillo entre los dos arcos no perdona <b>un solo ruido</b>.<br>'+
+  'Cruzalo entero <b>agachado</b>: ni un paso fuerte, ni un salto, ni un grito.<br>'+
+  'Lo vas a cruzar ciego. Es la idea.');
+ponerNota(celP3, 'LA CUENTA',
+  'Dentro del aro, <b>contá las paredes de la sala</b>.<br>'+
+  'Después golpeá el piso esa misma cantidad de veces, sin salir del aro.<br>'+
+  '<b>Saltar es golpear.</b> Si te pasás, la cuenta vuelve a cero.');
+ponerNota(celP4, 'EL ECO LARGO',
+  'Buscá el pasillo donde el eco <b>tarda más en volver</b>: el más hondo, el que no lleva a ningún lado.<br>'+
+  'Está marcado con cuatro postes. <b>Gritá ahí.</b>');
+ponerNota(salida, 'LA SALIDA',
+  'La salida está <b>sellada con cuatro sellos</b>.<br>'+
+  'Los cuatro enigmas los abren, uno cada uno.<br>'+
+  'Con los cuatro puestos, la salida late aunque estés lejos.');
+
+/* ===================== EL ESTADO DE LOS ENIGMAS ===================== */
+const SELLOS=[false,false,false,false];
+let p1Paso=0, p2Desde=-1, p3Cuenta=0;
+function nSellos(){ return SELLOS.reduce((a,b)=>a+(b?1:0),0); }
+function sellar(k,txt){
+  if(SELLOS[k]) return;
+  SELLOS[k]=true;
+  const el=document.getElementById('sellos');
+  if(el && el.children[k]) el.children[k].classList.add('on');
+  avisar((txt||'SELLO')+' · '+nSellos()+'/4', 3.0);
+  emitir(jug.x, jug.y, jug.z, 1.0, 62);
+  matMundo.uniforms.uAbierta.value = nSellos()>=4? 1 : 0;
+}
+function cerca(x,z,r){ return Math.hypot(jug.x-x, jug.z-z) < r; }
+
+/* TODO EL RUIDO PASA POR ACA. Antes cada sitio llamaba a emitir() por su cuenta; con enigmas que
+   escuchan el ruido eso obliga a repetir el aviso en cinco lugares y garantiza olvidarse de uno. */
+function ruido(tipo,x,y,z,fuerza,alcance){
+  emitir(x,y,z,fuerza,alcance);
+  if(!jugando) return;
+  const c=celdaDe(jug.x,jug.z);
+  /* EL CORREDOR SILENCIOSO: cualquier ruido adentro lo despierta */
+  if(CORR_IDX.has(cl(c[0],c[1])) && p2Desde>=0 && !SELLOS[1]){
+    p2Desde=-2; avisar('EL PASILLO TE OYÓ', 2.0);
+  }
+  if(tipo==='grito'){
+    /* las notas: tres gritos cerca y aparece */
+    for(const nt of notas){
+      if(nt.abierta || !cerca(nt.x, nt.z, NOTA_ALC)) continue;
+      nt.cargas++;
+      if(nt.cargas>=NOTA_GRITOS){ nt.abierta=true; abrirNota(nt); }
+      else avisar('ALGO HAY EN LA PARED · '+nt.cargas+'/'+NOTA_GRITOS, 1.8);
+    }
+    /* los tambores */
+    if(!SELLOS[0]){
+      for(const t of tambores){
+        if(!cerca(XC(t.cel[0]), ZC(t.cel[1]), 2.9)) continue;
+        if(t.bandas===P1_ORDEN[p1Paso]){
+          p1Paso++;
+          if(p1Paso>=3) sellar(0,'LOS TRES TAMBORES');
+          else avisar('SUENA · '+p1Paso+'/3', 1.6);
+        } else { p1Paso=0; avisar('DESAFINA', 1.6); }
+        break;
+      }
+    }
+    /* el eco largo */
+    if(!SELLOS[3] && cerca(XC(celP4[0]), ZC(celP4[1]), 2.2)) sellar(3,'EL ECO LARGO');
+  }
+  /* los golpes del piso: solo el aterrizaje cuenta, no el despegue */
+  if(tipo==='caida' && !SELLOS[2] && cerca(XC(celP3[0]), ZC(celP3[1]), 1.45)){
+    p3Cuenta++;
+    if(p3Cuenta===P3_GOLPES) sellar(2,'LA CUENTA');
+    else if(p3Cuenta>P3_GOLPES){ p3Cuenta=0; avisar('TE PASASTE', 1.6); }
+    else avisar('GOLPE '+p3Cuenta, 1.4);
+  }
+}
+
+/* el paso del corredor silencioso se mira por cuadro, no por ruido: es lo unico que hay que
+   comprobar cuando NO pasa nada */
+function corredorTick(){
+  if(SELLOS[1] || !jugando) return;
+  const c=celdaDe(jug.x,jug.z);
+  const idx=CORR_IDX.get(cl(c[0],c[1]));
+  const L=corredor.length;
+  if(idx===undefined){ p2Desde=-1; return; }
+  if(p2Desde===-1){
+    /* recien entra: solo cuenta si entro por una punta. Entrar por el medio no es cruzarlo. */
+    p2Desde = (idx===0)? 0 : (idx===L-1? L-1 : -2);
+    if(p2Desde>=0) avisar('EN SILENCIO', 1.6);
+  }
+  if(p2Desde===0 && idx===L-1) sellar(1,'EL PASILLO DORMIDO');
+  if(p2Desde===L-1 && idx===0) sellar(1,'EL PASILLO DORMIDO');
+}
+
+/* ---------- leer una nota ---------- */
+const notaEl=document.getElementById('nota'), notaT=document.getElementById('notaT'),
+      notaC=document.getElementById('notaC'), notaX=document.getElementById('notaX');
+let notaAbierta=null;
+function abrirNota(nt){
+  notaAbierta=nt; nt.leida=true;
+  avisar('');   // si no, el cartel de "2/3" se queda leyendose por atras del papel
+  notaT.textContent=nt.titulo;
+  notaC.innerHTML=nt.texto;
+  notaX.textContent = plataf==='pc'? 'CUALQUIER TECLA PARA SEGUIR' : 'TOCÁ PARA SEGUIR';
+  notaEl.classList.add('ver');
+}
+function cerrarNota(){ notaAbierta=null; notaEl.classList.remove('ver'); }
+notaEl.addEventListener('click',cerrarNota);
+notaEl.addEventListener('touchstart',e=>{ e.preventDefault(); cerrarNota(); },{passive:false});
+function notaCercana(){
+  let mejorN=null, mejorD=1e9;
+  for(const nt of notas){ if(!nt.abierta) continue;
+    const d=Math.hypot(jug.x-nt.x, jug.z-nt.z);
+    if(d<NOTA_ALC && d<mejorD){ mejorD=d; mejorN=nt; } }
+  return mejorN;
+}
+function leerCercana(){ const nt=notaCercana(); if(nt && !notaAbierta) abrirNota(nt); }
 
 /* ===================== EL CUERPO =====================
    Es lo unico que se ve siempre, asi que es lo unico que lleva material propio: un blanco apagado
@@ -422,6 +793,17 @@ function corregir(px,pz,nx,nz){
    Sin cuerpo, una pantalla negra con un punto en el medio no se lee como estar en un lugar. */
 const matCuerpo=new THREE.MeshBasicMaterial({color:0x6f7a86});
 const matPiel  =new THREE.MeshBasicMaterial({color:0x9aa6b2});
+/* los colores de referencia y cuanto queda en silencio absoluto. El cuerpo tambien se apaga con el
+   eco: el pedido fue que NADA se vea sin hacer ruido, y un cuerpo encendido en un cuarto negro es
+   justamente lo que se veia. Queda un 12% de silueta para no perder la referencia de donde estas. */
+const CUERPO_BASE=new THREE.Color(0x6f7a86), PIEL_BASE=new THREE.Color(0x9aa6b2);
+/* EL PISO ES 0,012 Y NO 0,12, Y LA DIFERENCIA LA ENCONTRO UNA MEDICION.
+   three.js guarda el color del material en espacio LINEAL y la salida lo convierte a sRGB. O sea
+   que multiplicar por 0,12 no da un 12% en pantalla: da 0,12^(1/2,2) = 36%. Medido: con el piso en
+   0,12 el cuerpo se leia a 60 sobre 255 en silencio absoluto, un gris bien visible, y el pedido era
+   justo el contrario. 0,012 sale a 13% en pantalla: una silueta que se adivina y nada mas. */
+const CUERPO_PISO=0.012;
+let eco=0;      // cuanto eco vivo hay, 0 a 1. Lo calcula el bucle y lo lee medio juego.
 const cuerpo=new THREE.Group(); camara.add(cuerpo); escena.add(camara);
 
 function caja(w,h,d,x,y,z,m,padre){
@@ -465,12 +847,15 @@ for(const [m,s] of [[manoI,-1],[manoD,1]]){
 }
 
 /* ===================== EL JUGADOR ===================== */
-const OJO=1.62;
+const OJO=1.62, OJO_AGACHADO=1.04;
 const jug={
   x:(0-(N-1)/2)*CEL, z:(0-(N-1)/2)*CEL, y:OJO,
   vx:0, vz:0, vy:0, giro:0, alto:0, enPiso:true, agachado:false,
-  paso:0,           // el reloj de la zancada, para saber cuando cae un pie
-  ruido:0           // cuanto ruido viene haciendo: alimenta el aro del HUD
+  ojo:OJO,          // la altura del ojo, que baja al agacharse con un muelle y no de golpe
+  paso:0,           // la fase del ciclo de la marcha, 0 a 1. Dos pisadas por ciclo.
+  dip:0, dipV:0,    // el muelle del aterrizaje
+  roll:0,           // la inclinacion al ir de costado
+  ruido:0           // cuanto ruido viene haciendo: alimenta el rotulo del HUD
 };
 const salidaMundo=new THREE.Vector3((salida[0]-(N-1)/2)*CEL, 1.2, (salida[1]-(N-1)/2)*CEL);
 matMundo.uniforms.uSalida.value.copy(salidaMundo);
@@ -478,9 +863,14 @@ matMundo.uniforms.uSalida.value.copy(salidaMundo);
 const tecla={};
 addEventListener('keydown',e=>{
   const k=(e.key||'').toLowerCase();
+  /* con una nota abierta cualquier tecla la cierra, y NO hace lo que esa tecla hace: si no, cerrar
+     el papel con la barra te manda un salto de regalo */
+  if(notaAbierta){ e.preventDefault(); cerrarNota(); return; }
   tecla[k]=true;
   if(k===' ') { e.preventDefault(); saltar(); }
-  if(k==='e'||k==='f') gritar();
+  if(k==='e') gritar();
+  if(k==='f') leerCercana();
+  if(k==='c'||k==='control'){ e.preventDefault(); agacharBoton=!agacharBoton; pintarAgachar(); }
   if(k==='escape'){ document.exitPointerLock&&document.exitPointerLock(); }
 });
 addEventListener('keyup',e=>{ tecla[(e.key||'').toLowerCase()]=false; });
@@ -495,20 +885,25 @@ render.domElement.addEventListener('click',()=>{
 });
 addEventListener('mousemove',e=>{
   if(document.pointerLockElement!==render.domElement) return;
-  jug.giro -= (e.movementX||0)*0.0022;
-  pitch = Math.max(-1.35, Math.min(1.35, pitch - (e.movementY||0)*0.0022));
+  const [mx,my]=dCuadro(e.movementX||0, e.movementY||0);
+  jug.giro -= mx*0.0022;
+  pitch = Math.max(-1.35, Math.min(1.35, pitch - my*0.0022));
 });
 
 /* ---------- el joystick y el arrastre para mirar, en telefono ---------- */
 const joyEl=document.getElementById('joy'), joyP=document.getElementById('joyP');
-const joy={x:0,y:0}; let joyId=null, mirarId=null, mirarX=0, mirarY=0;
-function dentroJoy(t){ const r=joyEl.getBoundingClientRect();
-  return t.clientX>=r.left-26 && t.clientX<=r.right+26 && t.clientY>=r.top-26 && t.clientY<=r.bottom+26; }
+const joy={x:0,y:0,bruto:0}; let joyId=null, mirarId=null, mirarX=0, mirarY=0;
+/* el rectangulo del joystick se lee de offset*, que son coordenadas DE LA CAJA y no de la pantalla.
+   getBoundingClientRect no sirve: con el cuadro girado devuelve la caja alineada a los ejes. */
+function joyRect(){ return { l:joyEl.offsetLeft, t:joyEl.offsetTop, w:joyEl.offsetWidth, h:joyEl.offsetHeight }; }
+function dentroJoy(t){ const r=joyRect(), [x,y]=aCuadro(t.clientX,t.clientY);
+  return x>=r.l-26 && x<=r.l+r.w+26 && y>=r.t-26 && y<=r.t+r.h+26; }
 addEventListener('touchstart',e=>{
   if(!e.changedTouches) return;
   for(const t of e.changedTouches){
     if(joyId===null && dentroJoy(t)){ joyId=t.identifier; moverJoy(t); }
-    else if(mirarId===null && t.clientX>innerWidth*0.32){ mirarId=t.identifier; mirarX=t.clientX; mirarY=t.clientY; }
+    else if(mirarId===null){ const [lx,ly]=aCuadro(t.clientX,t.clientY);
+      if(lx>cajaW*0.30){ mirarId=t.identifier; mirarX=lx; mirarY=ly; } }
   }
 },{passive:true});
 addEventListener('touchmove',e=>{
@@ -516,23 +911,29 @@ addEventListener('touchmove',e=>{
   for(const t of e.changedTouches){
     if(t.identifier===joyId) moverJoy(t);
     else if(t.identifier===mirarId){
-      jug.giro -= (t.clientX-mirarX)*0.0052;
-      pitch = Math.max(-1.35, Math.min(1.35, pitch - (t.clientY-mirarY)*0.0052));
-      mirarX=t.clientX; mirarY=t.clientY;
+      const [lx,ly]=aCuadro(t.clientX,t.clientY);
+      jug.giro -= (lx-mirarX)*0.0052;
+      pitch = Math.max(-1.35, Math.min(1.35, pitch - (ly-mirarY)*0.0052));
+      mirarX=lx; mirarY=ly;
     }
   }
 },{passive:true});
 addEventListener('touchend',e=>{
   if(!e.changedTouches) return;
   for(const t of e.changedTouches){
-    if(t.identifier===joyId){ joyId=null; joy.x=0; joy.y=0; joyP.style.transform='translate(0,0)'; }
+    if(t.identifier===joyId){ joyId=null; joy.x=0; joy.y=0; joy.bruto=0; joyP.style.transform='translate(0,0)'; }
     if(t.identifier===mirarId) mirarId=null;
   }
 },{passive:true});
 function moverJoy(t){
-  const r=joyEl.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
-  let dx=(t.clientX-cx)/(r.width/2), dy=(t.clientY-cy)/(r.height/2);
-  const L=Math.hypot(dx,dy); if(L>1){ dx/=L; dy/=L; }
+  const r=joyRect(), cx=r.l+r.w/2, cy=r.t+r.h/2, [lx,ly]=aCuadro(t.clientX,t.clientY);
+  let dx=(lx-cx)/(r.w/2), dy=(ly-cy)/(r.h/2);
+  /* SE GUARDA LA DESVIACION EN BRUTO, antes de recortarla. De ahi sale el correr en telefono:
+     empujar el dedo MAS ALLA del aro. El umbral que habia antes (0,90 de desviacion ya recortada)
+     estaba roto de raiz: un joystick de pulgar se lleva al borde para caminar normal, asi que
+     medido, en telefono el personaje corria SIEMPRE y la velocidad de caminar no existia. */
+  joy.bruto=Math.hypot(dx,dy);
+  const L=joy.bruto; if(L>1){ dx/=L; dy/=L; }
   joy.x=dx; joy.y=dy;
   joyP.style.transform='translate('+(dx*36)+'px,'+(dy*36)+'px)';
 }
@@ -541,20 +942,39 @@ const tocar=(id,fn)=>{ const el=document.getElementById(id); if(!el) return;
   el.addEventListener('pointerdown',ev=>{ if(ev.pointerType==='touch') return; fn(); }); };
 tocar('bSalto',()=>saltar());
 tocar('bGrito',()=>gritar());
+tocar('bLeer',()=>leerCercana());
+/* agacharse en telefono es un INTERRUPTOR y no un boton que se mantiene: el enigma del corredor
+   pide cruzar veinte metros agachado, y sostener un boton con el pulgar mientras el otro maneja el
+   joystick no se puede. En PC C y Ctrl hacen lo mismo. */
+let agacharBoton=false;
+function pintarAgachar(){ const b=document.getElementById('bAgachar');
+  if(b) b.classList.toggle('on', agacharBoton); }
+tocar('bAgachar',()=>{ agacharBoton=!agacharBoton; pintarAgachar(); });
 
 /* ===================== LO QUE HACE RUIDO ===================== */
-function saltar(){ if(!jugando||!jug.enPiso) return; jug.vy=4.5; jug.enPiso=false; }
-let gritoT=0;
-const GRITO_ESPERA=6.0;
+/* EL SALTO SE PIDE Y SE GUARDA. Apretar en el aire un pelo antes de tocar el piso tiene que valer:
+   sin ese margen el salto se siente roto y la culpa se le echa al juego, no al dedo. */
+let saltoPedido=0, coyote=0;
+function saltar(){ if(!jugando) return; saltoPedido=0.16; }
+let gritoT=0, gritoMax=6.0;
+const GRITO_ESPERA=6.0, GRITO_ESPERA_NOTA=2.0;
 function gritar(){
   if(!jugando||gritoT>0) return;
-  gritoT=GRITO_ESPERA;
+  /* LA ESPERA SE ACORTA AL LADO DE UNA NOTA SIN REVELAR, y no es un mimo: revelarla pide tres
+     gritos, y a seis segundos cada uno son dieciocho segundos parado mirando una pared. Medido en
+     una prueba: tres gritos seguidos dejaban la nota en 1 de 3 porque los otros dos caian en la
+     espera. Con dos segundos son seis, y de paso la pared que contesta rapido se lee como que ahi
+     hay algo. Lejos de una nota el grito sigue costando los seis: es el recurso del juego. */
+  let hayNota=false;
+  for(const nt of notas) if(!nt.abierta && cerca(nt.x,nt.z,NOTA_ALC)){ hayNota=true; break; }
+  gritoMax = hayNota? GRITO_ESPERA_NOTA : GRITO_ESPERA;
+  gritoT = gritoMax;
   /* el grito ve MUCHO mas lejos y mas fuerte: es el recurso, y por eso tiene espera */
-  emitir(jug.x, jug.y, jug.z, 1.0, 46);
+  ruido('grito', jug.x, jug.y, jug.z, 1.0, 46);
   avisar('');
 }
 function pisada(fuerte){
-  emitir(jug.x, 0.35, jug.z, fuerte?0.85:0.55, fuerte?24:15);
+  ruido('paso', jug.x, 0.35, jug.z, fuerte?0.85:0.55, fuerte?24:15);
 }
 
 /* ===================== EL AVISO Y EL RELOJ ===================== */
@@ -564,7 +984,7 @@ function avisar(txt,seg){ if(!txt){ avisoEl.classList.remove('ver'); avisoT=0; r
   avisoEl.textContent=txt; avisoEl.classList.add('ver'); avisoT=seg||2.4; }
 
 /* ===================== EL MENU ===================== */
-let jugando=false, tiempo=0, ganado=false;
+let jugando=false, tiempo=0, ganado=false, selloAviso=0;
 const menuEl=document.getElementById('menu');
 document.getElementById('jugar').addEventListener('click',()=>{
   menuEl.classList.add('ir');
@@ -575,12 +995,14 @@ document.getElementById('jugar').addEventListener('click',()=>{
     setTimeout(()=>T.classList.remove('ver'), 7000); }
   /* la primera onda, de regalo: si el juego empieza en negro absoluto nadie entiende que paso */
   emitir(jug.x, jug.y, jug.z, 1.0, 40);
-  avisar('ESCUCHÁ', 2.2);
+  eco=1;
+  avisar('ESCUCHÁ · HAY UNA NOTA ACÁ AL LADO', 3.0);
 });
 /* la leyenda de teclas */
 document.getElementById('teclas').innerHTML=[
   ['WASD','moverse'],['Mouse','mirar'],['Shift','correr'],
-  ['Space','saltar'],['E','gritar'],['Esc','soltar el mouse']
+  ['C / Ctrl','agacharse · sin ruido'],['Space','saltar · golpear el piso'],
+  ['E','gritar'],['F','leer una nota'],['Esc','soltar el mouse']
 ].map(([k,d])=>'<i>'+k+'</i><span>'+d+'</span>').join('');
 
 /* ===================== EL BUCLE ===================== */
@@ -600,12 +1022,12 @@ function animar(){
   if(avisoT>0){ avisoT-=dt; if(avisoT<=0) avisoEl.classList.remove('ver'); }
   if(gritoT>0){ gritoT-=dt;
     const aro=document.getElementById('gritoAro');
-    if(aro) aro.style.setProperty('--g', (100*(1-gritoT/GRITO_ESPERA)).toFixed(0)+'%');
+    if(aro) aro.style.setProperty('--g', (100*(1-gritoT/gritoMax)).toFixed(0)+'%');
   }
 
   /* ---------- lo que pide el jugador ---------- */
   let ax=0, az=0;
-  if(jugando){
+  if(jugando && !notaAbierta){
     if(plataf==='pc'){
       if(tecla['w']||tecla['arrowup'])   az-=1;
       if(tecla['s']||tecla['arrowdown']) az+=1;
@@ -615,92 +1037,219 @@ function animar(){
     ax+=joy.x; az+=joy.y;
     const L=Math.hypot(ax,az); if(L>1){ ax/=L; az/=L; }
   }
-  const corriendo = (tecla['shift'] || Math.hypot(joy.x,joy.y)>0.86) && (ax||az);
-  const VEL = corriendo? 5.6 : 2.9;
+  const pedido = Math.hypot(ax,az);
+  const quiere = pedido>0.03;
+  jug.agachado = agacharBoton;
+  const corriendo = !jug.agachado && quiere && (tecla['shift'] || joy.bruto>1.35);
+  /* Y LA VELOCIDAD ES ANALOGICA con el joystick: media desviacion, media velocidad. En un juego que
+     se juega por el ruido que hacés, poder ir despacio no es un lujo: es la mitad del juego. El
+     teclado no tiene medias tintas, asi que ahi el factor es 1. */
+  const analog = (plataf==='pc' && !joy.bruto)? 1 : Math.max(0.34, Math.min(1, pedido));
+  const VEL = (jug.agachado? 1.30 : (corriendo? 5.50 : 2.85)) * (corriendo?1:analog);
 
-  /* ---------- el movimiento: se acelera y se frena, no se teletransporta ----------
-     Con velocidad puesta directo el personaje arranca y para en un cuadro, y eso se siente a
-     muñeco. Con aceleracion y roce hay peso, y el peso es lo que hace que un primera persona se
-     sienta bien. */
+  /* ---------- EL MOVIMIENTO ----------
+     LO QUE ESTABA MAL ANTES: se sumaba aceleracion al vector de la velocidad y despues se topaba la
+     velocidad TOTAL. Eso hace dos cosas raras a la vez. Una, al girar en movimiento la velocidad
+     vieja y la nueva se suman y el tope las recorta juntas, asi que doblar FRENA. Dos, en diagonal
+     se acumulaba mas empuje que en recto. El resultado se siente a patinar sobre hielo con freno de
+     mano, que es literalmente lo que dijo el usuario.
+
+     COMO SE HACE BIEN, Y ES COMO LO HACEN LOS TIRADORES DESDE QUAKE: se mira cuanto de la velocidad
+     que YA se tiene va en la direccion que se pide, y se agrega solo lo que falta para llegar al
+     tope EN ESA DIRECCION. La componente de costado no se toca: la frena el roce. Con eso la
+     inercia se conserva al cambiar de rumbo —que es lo que da peso— pero no se acumula velocidad de
+     la nada, y el tope se cumple sin recortar nada a mano. */
   ADEL.set(Math.sin(jug.giro),0,Math.cos(jug.giro));
   DER.set(-Math.cos(jug.giro),0,Math.sin(jug.giro));
   const dx=(DER.x*ax - ADEL.x*az), dz=(DER.z*ax - ADEL.z*az);
-  const ACEL = jug.enPiso? 34 : 8;      // en el aire casi no se corrige: si no, se vuela
-  jug.vx += dx*VEL*ACEL*dt;
-  jug.vz += dz*VEL*ACEL*dt;
-  const roce = jug.enPiso? (ax||az? 9.5 : 16) : 1.4;
-  jug.vx -= jug.vx*Math.min(1, roce*dt);
-  jug.vz -= jug.vz*Math.min(1, roce*dt);
-  const vel=Math.hypot(jug.vx,jug.vz);
-  if(vel>VEL){ jug.vx=jug.vx/vel*VEL; jug.vz=jug.vz/vel*VEL; }
+  const dl=Math.hypot(dx,dz)||1, ux=dx/dl, uz=dz/dl;
+  const ACEL = jug.enPiso? 58 : 11;      // en el aire casi no se corrige: si no, se vuela
+  if(quiere){
+    const yaVa = jug.vx*ux + jug.vz*uz;
+    const falta = VEL - yaVa;
+    if(falta>0){ const suma=Math.min(falta, ACEL*dt); jug.vx+=ux*suma; jug.vz+=uz*suma; }
+  }
+  /* EL ROCE. Y ACA HAY UNA TRAMPA QUE COSTO UNA MEDICION:
+     frenando la velocidad ENTERA mientras se acelera, el roce y la aceleracion se equilibran ANTES
+     del tope. Medido: con el tope en 5,50 la velocidad se plantaba en 4,96, un 10% menos, y la
+     misma cuenta para caminar. O sea que los numeros del ajuste eran mentira.
+     Se arregla frenando SOLO la parte de la velocidad que NO va en la direccion pedida. Asi el tope
+     es exactamente el tope, y la inercia se sigue perdiendo al doblar —que es lo que se buscaba—
+     porque al girar la velocidad vieja pasa a ser "de costado" y ahi si la come el roce. */
+  if(jug.enPiso && quiere){
+    let pl = jug.vx*ux + jug.vz*uz;                  // lo que ya va en la direccion pedida
+    let lx = jug.vx - ux*pl, lz = jug.vz - uz*pl;    // y lo que va de costado
+    const ll=Math.hypot(lx,lz);
+    if(ll>1e-5){ const nl=Math.max(0, ll - ll*9.0*dt); lx*=nl/ll; lz*=nl/ll; }
+    /* si venias mas rapido que el tope de ahora (soltaste el correr), el exceso si se frena */
+    if(pl>VEL) pl = VEL + (pl-VEL)*(1-Math.min(1, 9.0*dt));
+    jug.vx = ux*pl + lx; jug.vz = uz*pl + lz;
+  } else {
+    const v=Math.hypot(jug.vx,jug.vz);
+    if(v>1e-5){
+      /* EL UMBRAL DE PARADA. Un roce proporcional nunca llega a cero y deja al personaje derrapando
+         medio metro cada vez que se suelta la tecla; en pasillos de cuatro metros eso es la
+         diferencia entre doblar y chocar. */
+      const ROCE = jug.enPiso? 13.5 : 0.35;
+      let nv=v - v*ROCE*dt;
+      if(jug.enPiso && nv<0.14) nv=0;
+      jug.vx*=nv/v; jug.vz*=nv/v;
+    }
+  }
 
-  const [nx,nz]=corregir(jug.x, jug.z, jug.x+jug.vx*dt, jug.z+jug.vz*dt);
+  const px=jug.x+jug.vx*dt, pz=jug.z+jug.vz*dt;
+  const [nx,nz]=corregir(jug.x, jug.z, px, pz);
   /* si la pared freno el movimiento, tambien se frena la velocidad: si no, uno queda "empujando"
      la pared y al soltar sale disparado */
-  if(Math.abs(nx-(jug.x+jug.vx*dt))>1e-6) jug.vx*=0.2;
-  if(Math.abs(nz-(jug.z+jug.vz*dt))>1e-6) jug.vz*=0.2;
+  if(Math.abs(nx-px)>1e-6) jug.vx*=0.2;
+  if(Math.abs(nz-pz)>1e-6) jug.vz*=0.2;
   jug.x=nx; jug.z=nz;
 
-  /* ---------- el salto ---------- */
-  jug.vy-=13.5*dt;
+  /* ---------- EL SALTO, CON MARGEN DE LOS DOS LADOS ----------
+     coyote: seguis pudiendo saltar 0,12 s despues de salir del borde. saltoPedido: el pedido vale
+     0,16 s, asi que apretar justo antes de aterrizar salta al tocar. Los dos margenes son invisibles
+     y son la diferencia entre "salta cuando le digo" y "a veces no salta". */
+  if(jug.enPiso) coyote=0.12; else coyote=Math.max(0,coyote-dt);
+  saltoPedido=Math.max(0,saltoPedido-dt);
+  if(saltoPedido>0 && coyote>0 && jugando){
+    jug.vy=5.0; jug.enPiso=false; coyote=0; saltoPedido=0;
+    if(!jug.agachado) ruido('salto', jug.x, 0.45, jug.z, 0.45, 13);
+  }
+  jug.vy-=17.0*dt;
   jug.alto+=jug.vy*dt;
   if(jug.alto<=0){
     if(!jug.enPiso){
-      /* caer hace MUCHO ruido: es la forma barata de ver, y por eso cuesta —te deja quieto */
-      emitir(jug.x, 0.25, jug.z, 0.95, 30);
-      jug.enPiso=true;
+      /* el golpe se mide por la velocidad de caida, no es fijo: caer de un salto no es lo mismo que
+         bajar un escalon, y el ruido y el sacudon van con lo que dolio */
+      const golpe=Math.min(1, Math.abs(jug.vy)/7.0);
+      jug.dipV -= 2.0*golpe;
+      if(!jug.agachado) ruido('caida', jug.x, 0.25, jug.z, 0.50+0.45*golpe, 16+18*golpe);
     }
-    jug.alto=0; jug.vy=0;
+    jug.alto=0; jug.vy=0; jug.enPiso=true;
   }
 
-  /* ---------- las pisadas: una onda por zancada, no por cuadro ---------- */
-  if(jug.enPiso && vel>0.5){
-    jug.paso += vel*dt*(corriendo?1.35:1.0);
-    if(jug.paso>1.55){ jug.paso=0; pisada(corriendo); }
-  } else jug.paso=Math.min(jug.paso, 1.2);
+  /* ---------- LAS PISADAS: POR DISTANCIA, NO POR TIEMPO ----------
+     Antes el reloj de la zancada avanzaba con la velocidad y disparaba en un umbral fijo, o sea que
+     la zancada MEDIA distinto segun lo rapido que fueras. Ahora la zancada es una distancia en
+     metros: caminando 3,4 m por ciclo, corriendo 4,3, agachado 2,6. Asi la pisada cae siempre en el
+     mismo punto del paso y las piernas y el bamboleo van clavados con ella.
+     Y AGACHADO NO SUENA. No es un detalle de sabor: es la herramienta del enigma del corredor. */
+  const velH=Math.hypot(jug.vx,jug.vz);
+  if(jug.enPiso && velH>0.30){
+    const ZANC = corriendo? 4.3 : (jug.agachado? 2.6 : 3.4);
+    const p0=jug.paso;
+    jug.paso=(jug.paso + velH*dt/ZANC)%1;
+    const cruzo = (p0<0.5 && jug.paso>=0.5) || (jug.paso<p0);
+    if(cruzo && !jug.agachado) pisada(corriendo);
+  } else {
+    /* parado las piernas vuelven a su lugar, no se quedan clavadas a media zancada */
+    jug.paso += (0-jug.paso)*Math.min(1,dt*7);
+  }
 
   ondasTick(dt);
+  corredorTick();
+
+  /* ---------- CUANTO ECO HAY VIVO ----------
+     Es el numero del que cuelga TODO lo que no sea el frente de una onda: el faro de la salida, el
+     brillo del cuerpo y el de las notas. Se toma la onda mas viva y se deja BAJAR despacio, no
+     saltar: si sigue al maximo instantaneo, la pantalla pestañea cada vez que muere una onda. */
+  let ecoCrudo=0;
+  for(const o of ondas) ecoCrudo=Math.max(ecoCrudo, (1-o.t/o.dur)*o.fuerza);
+  eco = ecoCrudo>eco? ecoCrudo : eco + (ecoCrudo-eco)*Math.min(1,dt*2.2);
+  matMundo.uniforms.uEco.value=eco;
+  /* el cuerpo se apaga con el eco pero no del todo: en silencio absoluto queda una silueta apenas
+     visible. Sin ese piso la pantalla queda literalmente en negro y no se lee ni donde estas
+     mirando; con el piso muy alto, el cuerpo seria un farol y romperia la regla del juego. */
+  const kc=CUERPO_PISO+(1-CUERPO_PISO)*eco;
+  matCuerpo.color.copy(CUERPO_BASE).multiplyScalar(kc);
+  matPiel.color.copy(PIEL_BASE).multiplyScalar(kc);
+  for(const nt of notas){
+    const k=(nt.abierta? 0.90 : 0.06+0.26*nt.cargas)*(0.012+0.988*eco);
+    nt.mat.color.setRGB(k*0.96,k*0.98,k);
+  }
 
   /* ---------- la camara y el cuerpo ---------- */
-  jug.y = OJO + jug.alto;
-  /* el bamboleo del paso: sube y baja con la zancada. Poco, pero sin el, caminar se siente a
-     deslizarse sobre patines. */
-  const bamb = jug.enPiso? Math.sin(jug.paso*Math.PI*2)*0.035*Math.min(1,vel/3) : 0;
-  camara.position.set(jug.x, jug.y+bamb, jug.z);
-  camara.rotation.set(pitch, jug.giro+Math.PI, 0, 'YXZ');
+  /* la altura del ojo baja al agacharse con un muelle: de golpe se lee como un corte de camara */
+  jug.ojo += ((jug.agachado?OJO_AGACHADO:OJO) - jug.ojo)*Math.min(1,dt*11);
+  jug.y = jug.ojo + jug.alto;
+  /* EL MUELLE DEL ATERRIZAJE. Amortiguado, no un decaimiento: un decaimiento baja y sube, un muelle
+     baja, pasa de largo y vuelve, y eso es lo que se siente como golpe. w=12,6 y amortiguacion 0,71,
+     o sea un rebote y medio. */
+  jug.dipV += (-jug.dip*160 - jug.dipV*18)*dt;
+  jug.dip  += jug.dipV*dt;
+  /* EL BAMBOLEO VA EN OCHO. Sube y baja al DOBLE de la frecuencia con la que va y viene de costado,
+     porque hay dos pisadas por ciclo de marcha y un solo vaiven de cadera. Con las dos al mismo
+     ritmo el paso se lee a rengo. */
+  const ampB=Math.min(1, velH/4.6);
+  const fase=jug.paso*Math.PI*2;
+  const bobY=Math.sin(fase*2)*0.034*ampB;
+  const bobX=Math.sin(fase)*0.046*ampB;
+  const bobR=Math.sin(fase)*0.013*ampB;
+  /* y la inclinacion al ir de costado, suavizada: es poco y es la mitad de lo que hace que doblar
+     se sienta como doblar */
+  jug.roll += ((-ax*0.052) - jug.roll)*Math.min(1,dt*7);
+  camara.position.set(jug.x + DER.x*bobX, jug.y + bobY + jug.dip, jug.z + DER.z*bobX);
+  camara.rotation.set(pitch, jug.giro+Math.PI, jug.roll+bobR, 'YXZ');
+  /* EL TIRON DE CAMPO AL CORRER. Cinco grados de mas. Es un truco viejo de los tiradores y funciona:
+     la velocidad se siente en el campo de vision, no en el numero. */
+  const fovMeta = FOV_V + (corriendo && velH>3.0 ? 5.0 : 0) - (jug.agachado? 2.0 : 0);
+  if(Math.abs(camara.fov-fovMeta)>0.02){
+    camara.fov += (fovMeta-camara.fov)*Math.min(1,dt*6); camara.updateProjectionMatrix(); }
   /* el tronco NO hereda el cabeceo: se le resta, asi mirar al piso no te mete el pecho en la cara */
   tronco.rotation.x = -pitch;
   /* las piernas caminan: es lo unico que hay para mirar, asi que tiene que moverse bien */
-  const cic=jug.paso*Math.PI*2;
-  const amp=Math.min(1, vel/4.2);
+  const cic=fase;
+  const amp=Math.min(1, velH/4.2);
   piernaI.rotation.x =  Math.sin(cic)*0.55*amp;
   piernaD.rotation.x = -Math.sin(cic)*0.55*amp;
   pieI.position.z = -0.05 + Math.sin(cic)*0.16*amp;
   pieD.position.z = -0.05 - Math.sin(cic)*0.16*amp;
   pieI.position.y = -1.55 + Math.max(0,Math.sin(cic))*0.10*amp;
   pieD.position.y = -1.55 + Math.max(0,-Math.sin(cic))*0.10*amp;
-  /* los brazos van al contrario de las piernas, como al caminar de verdad */
-  brazoI.rotation.x = BRAZO_BASE - Math.sin(cic)*BRAZO_VAIVEN*amp;
-  brazoD.rotation.x = BRAZO_BASE + Math.sin(cic)*BRAZO_VAIVEN*amp;
+  /* los brazos van al contrario de las piernas, como al caminar de verdad. Y agachado se adelantan:
+     a oscuras y en silencio, tantear es lo unico que queda. */
+  const ade=jug.agachado? 0.16 : 0;
+  brazoI.rotation.x = BRAZO_BASE+ade - Math.sin(cic)*BRAZO_VAIVEN*amp;
+  brazoD.rotation.x = BRAZO_BASE+ade + Math.sin(cic)*BRAZO_VAIVEN*amp;
   brazoI.position.x = -BRAZO_X - amp*0.02;
   brazoD.position.x =  BRAZO_X + amp*0.02;
-
   /* ---------- ¿llego a la salida? ---------- */
   if(jugando && !ganado){
     const d=Math.hypot(jug.x-salidaMundo.x, jug.z-salidaMundo.z);
-    if(d<1.6){
-      ganado=true;
-      const m=Math.floor(tiempo/60), s=Math.floor(tiempo%60);
-      avisar('SALISTE · '+m+':'+(s<10?'0':'')+s, 999);
-      emitir(jug.x, jug.y, jug.z, 1.0, 70);
+    if(d<1.7){
+      if(nSellos()>=4){
+        ganado=true;
+        const m=Math.floor(tiempo/60), sg=Math.floor(tiempo%60);
+        avisar('SALISTE · '+m+':'+(sg<10?'0':'')+sg, 999);
+        emitir(jug.x, jug.y, jug.z, 1.0, 78);
+      } else if(selloAviso<=0){
+        /* con espera: sin ella el cartel se vuelve a poner cada cuadro que estas parado ahi y no se
+           puede leer nada mas */
+        selloAviso=4.0;
+        avisar('SELLADA · '+nSellos()+'/4', 2.4);
+      }
+    }
+  }
+  if(selloAviso>0) selloAviso-=dt;
+
+  /* ---------- ¿hay una nota al lado para leer? ---------- */
+  {
+    const nt=jugando? notaCercana() : null;
+    document.body.classList.toggle('cerca', !!nt);
+    const lp=document.getElementById('leerP');
+    if(lp){
+      const ver = !!nt && !notaAbierta && plataf==='pc';
+      lp.textContent = nt? ('F · LEER "'+nt.titulo+'"') : '';
+      lp.classList.toggle('ver', ver);
     }
   }
 
   /* el aro del HUD dice cuanto ruido estas haciendo: es la unica lectura que importa */
   const ecoEl=document.getElementById('eco');
-  if(ecoEl){ jug.ruido += ((vel/5.6) - jug.ruido)*Math.min(1,dt*4);
+  if(ecoEl){ jug.ruido += (((jug.agachado?0:velH)/5.5) - jug.ruido)*Math.min(1,dt*4);
     ecoEl.style.color='rgba(190,205,220,'+(0.22+jug.ruido*0.62).toFixed(2)+')';
-    ecoEl.textContent = ganado? 'SALIDA' : (jug.ruido>0.62? 'RUIDO' : jug.ruido>0.18? 'ECO' : 'SILENCIO'); }
+    ecoEl.textContent = ganado? 'SALIDA' : jug.agachado? 'AGACHADO · SIN RUIDO'
+                      : (jug.ruido>0.62? 'RUIDO' : jug.ruido>0.18? 'ECO' : 'SILENCIO'); }
 
   render.render(escena,camara);
 }
@@ -712,10 +1261,51 @@ animar();
 window.__eco={
   estado:()=>({ jugando, ganado, t:+tiempo.toFixed(1),
                 jug:[+jug.x.toFixed(2),+jug.z.toFixed(2)], celda:celdaDe(jug.x,jug.z),
-                salida:salida.slice(), salidaPasos:mejor, plataf }),
+                salida:salida.slice(), salidaPasos:mejor, plataf,
+                sellos:nSellos(), eco:+eco.toFixed(3), agachado:jug.agachado,
+                vel:+Math.hypot(jug.vx,jug.vz).toFixed(2), enPiso:jug.enPiso,
+                alto:+jug.alto.toFixed(3), bruto:+joy.bruto.toFixed(2),
+                ojo:+jug.ojo.toFixed(2), fov:+camara.fov.toFixed(2) }),
+  /* EL CUADRO: que sea 16:9 de verdad y que el mapeo de coordenadas cierre. Sin medir esto, con el
+     cuadro girado el joystick apunta a otro lado y no hay foto que lo muestre. */
+  cuadro:()=>{
+    const l=render.domElement;
+    const pr=[[10,10],[innerWidth-10,10],[innerWidth/2,innerHeight/2],[10,innerHeight-10]]
+      .map(([x,y])=>{ const [a,b]=aCuadro(x,y); return [Math.round(a),Math.round(b)]; });
+    return { girado, ancho:cajaW, alto:cajaH, relacion:+(cajaW/cajaH).toFixed(4),
+             lienzo:[l.clientWidth,l.clientHeight], buffer:[l.width,l.height],
+             fovV:+camara.fov.toFixed(2),
+             fovH:+(2*Math.atan(Math.tan(camara.fov*Math.PI/360)*camara.aspect)*180/Math.PI).toFixed(2),
+             aspecto:+camara.aspect.toFixed(4), mapeo:pr };
+  },
+  /* el estado de los cuatro enigmas, con lo que hace falta para resolverlos desde una prueba */
+  enigmas:()=>({
+    sellos:SELLOS.slice(), n:nSellos(),
+    tambores:{ orden:P1_ORDEN.slice(), paso:p1Paso,
+               donde:tambores.map(t=>({bandas:t.bandas, cel:t.cel.slice()})) },
+    corredor:{ celdas:corredor.map(c=>c.slice()), largo:corredor.length, desde:p2Desde },
+    cuenta:{ cel:celP3.slice(), golpes:P3_GOLPES, van:p3Cuenta },
+    ecoLargo:{ cel:celP4.slice(), pasos:DIST[celP4[1]][celP4[0]] }
+  }),
+  notas:()=>notas.map(n=>({ titulo:n.titulo, cel:n.cel.slice(), lado:n.lado,
+                            cargas:n.cargas, abierta:n.abierta, leida:n.leida,
+                            dist:+Math.hypot(jug.x-n.x, jug.z-n.z).toFixed(2) })),
+  papel:()=>({ abierta:!!notaAbierta, titulo:notaAbierta? notaAbierta.titulo:null,
+               visible:document.getElementById('nota').classList.contains('ver') }),
+  cerrarNota:()=>{ cerrarNota(); return true; },
+  leer:()=>{ leerCercana(); return { abierta:!!notaAbierta, titulo:notaAbierta?notaAbierta.titulo:null }; },
+  /* adelantar cuadros SIN tocar el joystick: hace falta para probar el joystick de verdad, porque
+     caminar() lo pisa y despues lo deja en cero */
+  cuadros:(n)=>{ let vMax=0, ond=0;
+    for(let k=0;k<(n||60);k++){ const a0=ondas.length; animarUno(0.0166);
+      if(ondas.length>a0) ond++; vMax=Math.max(vMax,Math.hypot(jug.vx,jug.vz)); }
+    return { velMax:+vMax.toFixed(2), ondas:ond, celda:celdaDe(jug.x,jug.z) }; },
+  agachar:(v)=>{ agacharBoton=(v==null? !agacharBoton : !!v); pintarAgachar(); return agacharBoton; },
+  saltar:()=>{ saltar(); return true; },
   ondas:()=>ondas.map(o=>({i:o.i, r:+o.r.toFixed(2), vida:+(1-o.t/o.dur).toFixed(2), f:o.fuerza})),
   emitir:(f,a)=>{ emitir(jug.x,jug.y,jug.z,f==null?1:f,a==null?40:a); return ondas.length; },
-  gritar:()=>{ gritoT=0; gritar(); return {espera:gritoT}; },
+  gritar:(respetar)=>{ if(!respetar) gritoT=0; const antes=gritoT; gritar();
+                       return {habiaEspera:+antes.toFixed(2), espera:+gritoT.toFixed(2)}; },
   /* el laberinto se comprueba de verdad: que TODAS las celdas se alcancen desde el arranque */
   laberinto:()=>{ let alc=0, tot=N*N, peor=0;
     for(let y=0;y<N;y++) for(let x=0;x<N;x++){ if(DIST[y][x]>=0){ alc++; if(DIST[y][x]>peor) peor=DIST[y][x]; } }
@@ -734,12 +1324,52 @@ window.__eco={
   mirar:(p,g)=>{ if(p!=null) pitch=p; if(g!=null) jug.giro=g; return {pitch:+pitch.toFixed(2), giro:+jug.giro.toFixed(2)}; },
   /* camina de verdad hacia un lado durante n cuadros: sirve para comprobar que las pisadas emiten
      y que no se atraviesan paredes */
-  caminar:(n,ejeX,ejeZ)=>{ const p0=[jug.x,jug.z]; let ondasVistas=0;
-    for(let k=0;k<(n||60);k++){ joy.x=ejeX||0; joy.y=ejeZ==null?-1:ejeZ;
-      const antes=ondas.length; animarUno(0.0166); if(ondas.length>antes) ondasVistas++; }
-    joy.x=0; joy.y=0;
+  caminar:(n,ejeX,ejeZ,correr)=>{ const p0=[jug.x,jug.z]; let ondasVistas=0, vMax=0;
+    for(let k=0;k<(n||60);k++){
+      joy.x=ejeX||0; joy.y=ejeZ==null?-1:ejeZ;
+      joy.bruto=Math.hypot(joy.x,joy.y);
+      if(correr) tecla['shift']=true;
+      const antes=ondas.length; animarUno(0.0166); if(ondas.length>antes) ondasVistas++;
+      vMax=Math.max(vMax, Math.hypot(jug.vx,jug.vz));
+    }
+    joy.x=0; joy.y=0; joy.bruto=0; tecla['shift']=false;
     return { de:p0.map(v=>+v.toFixed(2)), a:[+jug.x.toFixed(2),+jug.z.toFixed(2)],
-             ondasEmitidas:ondasVistas }; },
+             ondasEmitidas:ondasVistas, velMax:+vMax.toFixed(2) }; },
+  /* ir a una celda CAMINANDO por el laberinto, siguiendo el camino corto. Sin esto no hay forma de
+     probar un enigma que esta a cuarenta pasos: teletransportarse saltea justo lo que se quiere
+     comprobar, que es que se pueda llegar. */
+  ir:(i,j,agachado)=>{
+    const antes=agacharBoton; if(agachado!=null){ agacharBoton=!!agachado; pintarAgachar(); }
+    const D=distancias(MAPA,N,i,j);
+    let pasos=0, ondas0=0;
+    for(let g=0; g<4000; g++){
+      const c=celdaDe(jug.x,jug.z);
+      if(c[0]===i && c[1]===j) break;
+      /* el vecino que baja la distancia al destino */
+      let mejorL=null, mejorD=D[c[1]][c[0]];
+      for(const [dx,dz,l] of [[0,-1,'n'],[1,0,'e'],[0,1,'s'],[-1,0,'o']]){
+        if(MAPA[c[1]][c[0]][l]) continue;
+        const ni=c[0]+dx, nj=c[1]+dz;
+        if(ni<0||nj<0||ni>=N||nj>=N) continue;
+        if(D[nj][ni]>=0 && D[nj][ni]<mejorD){ mejorD=D[nj][ni]; mejorL=[dx,dz]; }
+      }
+      if(!mejorL) break;
+      /* se apunta al centro de la celda vecina y se camina para alla en coordenadas del mundo */
+      const tx=(c[0]+mejorL[0]-(N-1)/2)*CEL, tz=(c[1]+mejorL[1]-(N-1)/2)*CEL;
+      for(let k=0;k<40;k++){
+        const ex=tx-jug.x, ez=tz-jug.z;
+        if(Math.hypot(ex,ez)<0.45) break;
+        /* adelante es (sin giro, cos giro): la camara mira por -Z girada giro+PI, y eso da lo mismo */
+        jug.giro=Math.atan2(ex,ez);
+        joy.x=0; joy.y=-1; joy.bruto=1;
+        const a0=ondas.length; animarUno(0.0166); if(ondas.length>a0) ondas0++;
+      }
+      pasos++;
+    }
+    joy.x=0; joy.y=0; joy.bruto=0;
+    if(agachado!=null){ agacharBoton=antes; pintarAgachar(); }
+    return { celda:celdaDe(jug.x,jug.z), meta:[i,j], celdasAndadas:pasos, ondas:ondas0 };
+  },
   perfil:(n)=>{ n=n||30; const I=render.info, ar=I.autoReset;
     I.autoReset=false; I.reset();
     const t0=performance.now();

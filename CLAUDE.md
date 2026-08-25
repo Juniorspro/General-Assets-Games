@@ -12,7 +12,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Campo_de_Tiro.html` ES "Z Force"** (1,83 MB). Es el proyecto grande: FPS con campo de
   tiro, todos-contra-todos, duelo de equipos y battle royale. **NO SE TOCA NI SE BORRA**:
   el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
-- **`Eco.html` es "Eco"** (~37 KB), beta nueva y aparte. Laberinto a ciegas: el mundo está
+- **`Eco.html` es "Eco"** (~75 KB), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
@@ -20,6 +20,92 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
 ### Cómo está hecho `Eco.html`
+
+**Segunda vuelta (2026-08-25).** Pedido textual: *"el movimiento nada que ver hacelo más realista pue
+y que no se vean a menos que hagas ruido también que sea tirador 90° 16:9 y también movimiento goty
+no así de choto mejora todo agrega notas en las paredes que al acercarte debes gritar unas cuantas
+veces para que aparezca y leer pistas y agrega 4 puzlles etc"*.
+
+- **CUADRO 16:9 Y 90 GRADOS HORIZONTALES.** Ojo: three.js pide el campo **vertical**. Con 16:9, 90
+  horizontales son **58,72 verticales**; ponerle 90 a three.js da 121 horizontales y sale ojo de pez.
+  Medido: `relacion 1.7778`, `fovH 90.00`, `fovV 58.72`.
+  Y **en vertical el cuadro se GIRA 90°** en vez de encogerse: en 412×915 un 16:9 sin girar mide
+  412×232 (el 11% de la pantalla), girado mide 732×412. Adentro del `#caja` va TODO —lienzo, HUD,
+  botones y menú— así que hay **una sola transformación** y nada queda desalineado.
+  TRAMPA: con el cuadro girado `getBoundingClientRect` devuelve la caja **alineada a los ejes**, y
+  para un joystick redondo eso da el cuadrado equivocado. Va `aCuadro(px,py)` (inversa de
+  `rotate(90deg)`: `lx=(py-H/2)+w/2`, `ly=h/2-(px-W/2)`) más `dCuadro` para los arrastres, y el
+  rectángulo del joystick sale de `offsetLeft/offsetTop`, que son coordenadas de la caja.
+  Verificado con toques sintéticos: un toque a 66 px del centro del joystick da desviación 1,00 y a
+  105 px da 1,59, con el cuadro girado.
+- **NADA SE VE SIN RUIDO, y antes sí se veía.** El agujero era el faro de la salida: estaba
+  encendido siempre. Ahora hay un uniforme `uEco` (cuánta onda viva hay, 0 a 1) y **todo** lo que no
+  sea el frente de una onda cuelga de él: el faro, el brillo del cuerpo y el de las notas.
+  Medido: en silencio absoluto `medio 1.1`, **`pctEncendido 0`**, franjas `[0,0,0,1.9,3.6]`;
+  gritando `medio 98.4` y `pctEncendido 100`.
+  **TRAMPA DE GAMMA que costó una medición:** three.js guarda el color del material en espacio
+  **lineal** y la salida lo convierte a sRGB, así que multiplicar por 0,12 **no** da 12% en pantalla,
+  da `0,12^(1/2,2)` = **36%**. Con el piso en 0,12 el cuerpo se leía a 60/255 en silencio: un gris
+  bien visible, justo lo contrario del pedido. `CUERPO_PISO=0.012` sale a 13%.
+- **MOVIMIENTO.** Lo que estaba mal: se sumaba aceleración al vector velocidad y después se topaba
+  la velocidad **total**, y el roce se aplicaba a **todo**. Dos consecuencias medidas:
+  1. doblar **frenaba** (la velocidad vieja y la nueva se recortaban juntas);
+  2. el tope real quedaba **10% por debajo del ajuste** (4,96 con el tope en 5,50), porque el roce y
+     la aceleración se equilibran antes de llegar.
+  Ahora, como en los tiradores desde Quake: se agrega **solo lo que falta en la dirección pedida**, y
+  el roce se aplica **solo a la componente de costado** mientras se pide movimiento. Medido:
+  topes exactos **2,85 / 5,50 / 1,30** (caminar / correr / agachado), arranque 0→5,5 en **6 cuadros**,
+  frenada con umbral en **0,310 m**, salto de **0,694 m** de ápice y **34 cuadros** (0,57 s) de aire.
+  Media vuelta corriendo: 5,5 → 0,28 → 5,5 en 11 cuadros, o sea **inercia de verdad**.
+  Más: coyote de 0,12 s y pedido de salto guardado 0,16 s, muelle de aterrizaje amortiguado
+  (ω=12,6, ζ=0,71) con golpe proporcional a la caída, bamboleo **en ocho** (vertical al doble de la
+  frecuencia del vaivén de cadera, porque hay dos pisadas por ciclo), inclinación al ir de costado,
+  tirón de campo de +5° al correr y −2° agachado, y ojo que baja a 1,04 al agacharse con muelle.
+- **JOYSTICK ANALÓGICO, y el "correr" estaba roto de raíz.** El umbral era 0,90 de desviación **ya
+  recortada**, y un joystick de pulgar se lleva al borde para caminar normal: medido, en teléfono el
+  personaje **corría siempre** y la velocidad de caminar no existía. Ahora se guarda la desviación
+  **en bruto** antes de recortarla, y correr es empujar el dedo **más allá del aro** (>1,35). La
+  velocidad es analógica: media desviación, media velocidad, con piso en 0,34.
+- **AGACHADO NO HACE RUIDO.** No es sabor: es la herramienta del enigma del corredor. Verificado:
+  300 cuadros andando agachado emiten **0 ondas**.
+- **LAS PISADAS VAN POR DISTANCIA, no por tiempo.** Antes el reloj de la zancada avanzaba con la
+  velocidad y disparaba en un umbral fijo, o sea que la zancada **medía distinto** según lo rápido
+  que fueras. Ahora es una distancia en metros por ciclo (3,4 caminando, 4,3 corriendo, 2,6
+  agachado), así la pisada cae siempre en el mismo punto del paso y las piernas van clavadas con ella.
+- **SEIS NOTAS EN LAS PAREDES.** Se revelan con **tres gritos** cerca (3 m). Cada una va en una pared
+  de su celda (`mezclar(LADOS).filter(l => MAPA[j][i][l])`: si no, una nota puede quedar colgada en
+  el aire en el medio de un cruce). Se leen con **F** en PC o el botón LEER en teléfono, y la primera
+  se abre sola al revelarse.
+  DEFECTO ENCONTRADO MIDIENDO: con la espera del grito en 6 s, revelar una nota son **18 segundos**
+  parado mirando una pared — la prueba dejaba la nota en 1 de 3 porque los otros dos gritos caían en
+  la espera. Ahora **al lado de una nota sin revelar la espera es 2 s** y lejos sigue siendo 6.
+  Verificado: 6,00 lejos, 2,00 al lado.
+- **CUATRO ENIGMAS, CUATRO SELLOS.** La salida no abre sin los cuatro (verificado: con 3/4 el cartel
+  dice `SELLADA · 3/4` y no gana; con 4/4 gana).
+  1. **Los tres tambores**: tres cilindros con **una, dos y tres bandas** talladas. Gritarles al lado
+     en el orden que da la nota. Orden equivocado → vuelve a cero. Las bandas son el enunciado: sin
+     algo que los distinga, "en este orden" no quiere decir nada.
+  2. **El pasillo dormido**: la tirada recta más larga del laberinto, con un arco en cada punta.
+     Cualquier ruido adentro lo despierta. Se cruza **agachado y a ciegas**. Verificado los dos
+     caminos: gritar adentro deja `desde=-2` y cruzar **no** sella; agachado cruza 32 celdas con
+     **1 sola onda** (la del propio sello) y **sí** sella.
+  3. **La cuenta**: contar las paredes de la sala del aro y **golpear el piso** esa cantidad de veces
+     (saltar es golpear; solo cuenta el **aterrizaje**, no el despegue). Pasarse vuelve a cero.
+  4. **El eco largo**: el sin salida más profundo (BFS), marcado con cuatro postes. Gritar ahí.
+- **LOS TAMBORES FRENAN.** Las colisiones salen de la grilla, así que un cilindro plantado en el
+  medio de una celda no existe para ellas y se cruzaba como si fuera humo. Un círculo por obstáculo
+  (`OBST`), y va **declarado arriba** porque `corregir()` lo lee: un `const` leído antes de su línea
+  tira ReferenceError y se cae el módulo entero. Es la tercera vez en este proyecto.
+- **TODO EL RUIDO PASA POR `ruido(tipo,...)`.** Con cuatro enigmas que escuchan, dejar que cada sitio
+  llame a `emitir()` por su cuenta obliga a repetir el aviso en cinco lugares y garantiza olvidarse
+  de uno.
+- Costo medido: **19-21 llamadas de dibujo, 4.878 triángulos, 0,1-0,3 ms por cuadro**. Las marcas de
+  los enigmas van fundidas en **una sola malla** con el mismo material del sonido (o sea que tampoco
+  se ven sin ruido); las notas van sueltas porque cada una se enciende sola.
+- Partida completa verificada de punta a punta: laberinto 169/169 alcanzable, los cuatro sellos, el
+  cartel de sellada con 3/4, y `SALISTE · 0:28` con 4/4. Cero errores de página.
+
+### Cómo estaba hecho la primera vuelta
 
 - Laberinto 13×13 (`CEL=4.2`, `N=13`) por vuelta atrás recursiva + ~6% de atajos, para que
   no sea un árbol puro y haya bucles. La salida va en la celda **más lejana en pasos**
