@@ -6,6 +6,58 @@ Cuando el usuario escriba **"Pope"** (solo, o dentro de un mensaje), significa
 **"seguí con la lista de pendientes de abajo"**, sin volver a preguntar qué hacer.
 Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pushearlo.
 
+
+## Los juegos de `juegos-pc/`
+
+- **`Campo_de_Tiro.html` ES "Z Force"** (1,83 MB). Es el proyecto grande: FPS con campo de
+  tiro, todos-contra-todos, duelo de equipos y battle royale. **NO SE TOCA NI SE BORRA**:
+  el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
+- **`Eco.html` es "Eco"** (~37 KB), beta nueva y aparte. Laberinto a ciegas: el mundo está
+  negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
+  con las mismas características de primera persona buen movimiento etc y manos en primera
+  persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
+  entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
+  en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cómo está hecho `Eco.html`
+
+- Laberinto 13×13 (`CEL=4.2`, `N=13`) por vuelta atrás recursiva + ~6% de atajos, para que
+  no sea un árbol puro y haya bucles. La salida va en la celda **más lejana en pasos**
+  (BFS desde la entrada), no en la esquina.
+- Todo el laberinto fundido en **una sola malla** con `mergeGeometries` → 16 llamadas de
+  dibujo en total, 2.436 triángulos, 0,1 ms por cuadro.
+- Un `ShaderMaterial` con hasta **8 ondas** (`uPos` xyz+t0, `uDat` fuerza/alcance). Cada
+  onda ilumina donde `abs(dist - radio) < uBanda` (frente, 1,15 m) más una cola que decae
+  (`uCola`, 5,2 m). Término de cara (`dot(normal, hacia la onda)`) para que las esquinas
+  se lean. `VEL_SONIDO=13,5` m/s: con 343 el laberinto parpadea y no se ve nada.
+- Ruido = ondas: una por zancada (`jug.paso>1.55`), una al caer, y `gritar()` con alcance
+  46 y espera de 6 s (anillo de `conic-gradient` como recarga).
+- Cuerpo completo visible (pecho, muslos, pantorrillas, pies, dos brazos con manos y dedos)
+  en `MeshBasicMaterial`, así se ve siempre aunque el resto esté negro. El tronco se
+  inclina con el pitch (`tronco.rotation.x = -pitch`).
+- Movimiento con aceleración y roce (`ACEL` 34/8, roce 9,5/16/1,4, `VEL` 2,9/5,6), no
+  velocidad instantánea.
+- Colisiones desde la grilla, **eje por eje**, así se desliza por la pared en vez de
+  clavarse; más un re-chequeo de la celda nueva en diagonal.
+- El cuerpo tuvo tres arreglos medidos con `__eco.manos()` (proyecta manos y pies a NDC):
+  1. Los brazos colgando dejaban las manos a 37 grados debajo del centro y el vaiven del paso las
+     empujaba a 51: con 39 grados de medio campo vertical desaparecian **justo al caminar**.
+     Ahora van casi horizontales (`BRAZO_BASE=-0.02`, `BRAZO_VAIVEN=0.16`), como quien tantea a
+     oscuras: lo peor medido caminando es y=-0.60 sobre un borde de -1.00.
+  2. El antebrazo arrancaba a 3 cm del ojo: una caja de 11 cm ahi tapa media pantalla en cuna hasta
+     las esquinas. Se corrio a 22 cm y se afino a 8,5 cm.
+  3. El pecho puesto donde va de verdad (22 cm bajo el ojo) tapaba la pantalla ENTERA al mirar al
+     piso. `tronco.position.set(0,-0.10,0.10)`: la trampa que hacen todos los primera persona con
+     cuerpo. Mirando a -1,2 rad ahora se leen pecho, manos y los dos pies, y el laberinto alrededor.
+- El detector de plataforma tenia un agujero grave para telefono: **Chrome de Android dispara
+  `mousemove` sintetico despues de cada toque**, y eso pasaba a modo PC y apagaba el joystick. Un
+  `mousemove` ahora solo cuenta si movio de verdad Y si no viene dentro de 1,2 s de un toque.
+  Verificado: toque+mousemove sintetico queda en `movil` con joystick/grito/salto visibles; un
+  mousemove real 1,4 s despues pasa a `pc` con la leyenda de teclas encendida y el joystick apagado.
+- Ganchos de prueba en `window.__eco`: `estado, ondas, emitir, gritar, laberinto, poner,
+  mirar, caminar, perfil, brillo`. `brillo()` lee el cuadro con `gl.readPixels` (no
+  `drawImage`: un lienzo WebGL sin `preserveDrawingBuffer` sale en cero) y devuelve media,
+  máximo, % encendido y 5 franjas horizontales.
 ## Pendientes de Campo_de_Tiro.html
 
 Pedidos el 2026-08-23, todos sobre `juegos-pc/Campo_de_Tiro.html`:
