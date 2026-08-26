@@ -12,7 +12,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Campo_de_Tiro.html` ES "Z Force"** (1,83 MB). Es el proyecto grande: FPS con campo de
   tiro, todos-contra-todos, duelo de equipos y battle royale. **NO SE TOCA NI SE BORRA**:
   el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
-- **`Maicol.html` es "Maicol"** (~256 KB, de los cuales 158 KB son los sprites y los fondos).
+- **`Maicol.html` es "Maicol"** (~300 KB, de los cuales ~200 KB son los sprites y los fondos).
   Plataformas 2D, siete niveles, hay que rescatar a Maicolito. Arte generado con Higgsfield.
 - **`Eco.html` es "Eco"** (~215 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
@@ -20,6 +20,41 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Segunda vuelta de `Maicol.html` (2026-08-26)
+
+Pedido: *"mejora todo hazlo un juego profesional mejora los Sprites a 24 Sprites de fps y todo esas
+cosas muy simple y el suelo está muy abajo"*.
+
+- **EL SUELO ESTABA MUY ABAJO, y tenía dos causas.** Una: el mundo se dibujaba a 1280×720, que es
+  **exactamente** el alto del mapa (15 filas × 48), así que la cámara **no podía moverse en vertical**
+  y el suelo quedaba clavado al borde. Ahora el mundo va a **1024×576** (todo se ve 25% más grande) y
+  el mapa tiene **16 filas** con el piso de la 11 a la 15 — 240 px de tierra. Medido: la línea de
+  caminar pasó del **84% al 58%** de la pantalla.
+- **24 CUADROS POR SEGUNDO Y 14 SPRITES**, contra 7 y ritmo por distancia. Ocho de caminar (el ciclo
+  entero: contacto, bajo, pasada, alto, por cada pierna), dos de quieto que respiran, agachado, golpe,
+  salto y caída. El ritmo va a 24 fps **escalado por la velocidad**: parado no cicla, corriendo cicla
+  rápido. Solo por distancia se ve mecánico a baja velocidad; solo por tiempo, patina.
+  TRAMPA AL CORTAR: los ocho cuadros vienen **superpuestos**, y el cortador por columnas vacías juntó
+  dos figuras en una y devolvió cuatro. Va un cortador que parte en octavos y corre cada corte al
+  mínimo de contenido que haya cerca.
+- **APLASTE Y ESTIRE**, que es lo que separa un muñeco que se traslada de un personaje que se mueve:
+  se estira al despegar, se aplasta al aterrizar en proporción a la velocidad de caída, y vuelve con
+  un muelle que pasa de largo. No cuesta un sprite y se nota más que cuatro cuadros extra.
+- **POLVO, CHISPAS Y SACUDÓN.** Un salto sin polvo se lee a personaje flotando; un enemigo que
+  desaparece sin nada se lee a error. Y cartel de nivel al empezar.
+- **YA NO ES "CORRER A LA DERECHA Y SALTAR":** resortes (rompen la altura fija del salto), plataformas
+  móviles **que te llevan** (sin arrastrar al jugador con ellas uno se queda en el aire mientras la
+  plataforma se va, que es el error clásico) y **banderas de control** a un tercio y dos tercios.
+- **TRES DEFECTOS DE GENERACIÓN, todos encontrados por el bot y todos del mismo tipo — geometría que
+  corta el salto:**
+  1. **Plataformas apiladas sin espacio para la cabeza.** El jugador mide 62 px y la casilla 48: parado
+     sobre una plataforma su cabeza llega a la fila *j−2*. Con una sola fila libre se generaban repisas
+     donde **no se puede estar parado**, y el bot se encajaba ahí y no salía. Ahora se piden **dos**.
+  2. **Plataformas justo encima de los pinches.** Cortan el salto en el aire y te dejan caer **justo
+     sobre el pinche**. Ahora un pinche pide cuatro filas de aire encima en todo el tramo del salto.
+  3. Y de la vuelta anterior: el aire sobre los huecos.
+  Verificado con vidas infinitas y sin bichos: **los 7 llegan a la meta**, con 0 o 1 caída cada uno.
 
 ### Cómo está hecho `Maicol.html`
 
