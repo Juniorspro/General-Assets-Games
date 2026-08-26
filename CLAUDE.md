@@ -21,6 +21,79 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Undécima vuelta (2026-08-26): **Eco cambia de juego** — llaves, voz y un perseguidor
+
+Pedido textual: *"cambiemos el plan de eco ahora no hay formas de ver a menos que hables o grites y
+hay que escapar de uno que te persigue y hay que andar callado hay que escapar buscando llaves en
+habitaciones etc cambia todo"*. Se hizo con `herramientas/eco/parche_llaves.py`, que es idempotente.
+
+#### LA REGLA NUEVA, Y ES UNA SOLA: **te oye hasta donde ves**
+
+`ruido()` pasó a llevar un parámetro más, `ver`. Un ruido siempre **suena** y la cosa siempre lo
+**oye**; lo que cambia es si además **enciende**. Los pies, el salto y la caída van con `ver:false`.
+Y la cosa dejó de oír por *fuerza* y pasó a oír por *alcance*, que es el mismo número que ve el
+jugador. Medido con el gancho `__eco.pisada(fuerte, agachado)`, con la cosa puesta a una distancia
+exacta y sin dejarla moverse:
+
+| lo que hacés | ondas de luz | la oye a 12,6 m | a 16,8 m | a 21 m | a 25,2 m |
+|---|---|---|---|---|---|
+| caminar (15 m) | **0** | caza | ronda | — | — |
+| correr (24 m) | **0** | — | — | caza | ronda |
+| agachado (4 m) | **0** | — | — | — | — (ni a 4,2 m) |
+
+Y la voz, con el mismo método: **hablar** (15 m) despierta a la cosa a 12,6 m y no a 25,2;
+**gritar** (46 m) la despierta a 25,2 y a 42.
+
+#### DOS VOCES Y NO UNA
+
+Con el grito solo, un laberinto a oscuras son cuatro segundos de espera por cada paso: eso no es
+tensión, es un semáforo. **HABLAR** (`Q`, o el botón nuevo) espera 1,15 s, llega a 15 m y da un
+destello del 26%. **GRITAR** (`E`) espera 4 s, llega a 46 m y da el destello entero. Medido con
+`__eco.brillo()`, que lee el búfer de verdad con `readPixels`:
+
+| | brillo medio | pantalla encendida |
+|---|---|---|
+| en silencio | 0,0 | 0 % |
+| hablando | 10,6 | 22,3 % |
+| gritando | 60,5 | 100 % |
+
+#### LAS LLAVES CONTESTAN, Y ESO ES LO QUE HACE QUE BUSCARLAS SEA UN JUEGO
+
+Cuatro llaves, una en cada una de las cuatro salas (las salas ya existían y son los únicos cuatro
+lugares que no se parecen a un pasillo). Cuando una onda tuya toca una llave, la llave **suena** —
+pero **tarde**, a `2·d / 13,5 m/s`: un tintineo a los tres segundos quiere decir veinte metros. Sin
+esa demora las cuatro sonarían igual y no dirían nada. Y **la flecha sólo apunta a una llave que ya
+te contestó**: si apuntara siempre a la más cercana, buscar sobraría.
+
+Los cuatro enigmas viejos (los tambores, el corredor silencioso, el aro de los golpes y el eco
+largo) se fueron; los tambores, los arcos, el aro y los postes **quedan como ruina**, porque eran
+los mojones que hacían que una celda se distinguiera de otra.
+
+#### DOS COSAS QUE SE MIDIERON Y ESTABAN MAL
+
+- **La llave no se levantaba al pasarle por encima.** El radio era 1,30 m, pero la llave va en el
+  centro de su celda y el pedestal frena el cuerpo a 0,80 m: cruzar la celda por el borde te deja a
+  2,1 m, y en diagonal a 2,97. En un juego a oscuras eso es pisar lo que buscás y no enterarte.
+  Ahora **estar en su celda ya cuenta**, además del radio de 2,20 m.
+- **Un material compartido por las cuatro llaves.** El brillo se calcula por llave y se escribía en
+  el mismo sitio: mandaba la última del bucle. O sea que la llave que tenías al lado se veía apagada
+  si la cuarta estaba lejos. Un material por llave.
+
+#### LA CINEMÁTICA HABÍA QUEDADO MINTIENDO
+
+El pie de pantalla de la cinemática **es** el texto que se escucha, así que cambiar el guion sin
+rehacer la voz sería peor que no tener voz. Se rehicieron **las doce** (cuatro planos × tres
+idiomas) con una sola voz —mezclar dos narradores en cuatro planos se nota más que el cambio— y
+también **la foto del plano 4**, que mostraba unas hojas escritas cuando el texto nuevo habla de una
+puerta de cuatro cerraduras. 284 KB de voz y 24 KB de foto; el archivo quedó en 929 KB.
+
+#### LA COSA APARECE ANTES Y NO SE OLVIDA DE VOS
+
+`COSA_GRACIA` bajó de 25 s a 12: aparece apenas termina el tutorial, que es cuando el jugador recién
+sabe hablar y gritar. Y la ronda dejó de ser al azar puro: la mitad de las veces elige una celda a
+tres o cuatro de donde estás. Sin eso, quedarse agachado en un rincón sin hacer un ruido era una
+partida ganada — la cosa se iba a la otra punta y no volvía nunca.
+
 ### Décima vuelta (2026-08-26): la estática de Maicol y **Eco terminado**
 
 #### LA ESTÁTICA AL CAMINAR NO ERA EL SONIDO, ERA EL DISPARADOR
