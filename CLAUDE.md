@@ -21,6 +21,81 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Decimotercera vuelta (2026-08-26): **modelos 3D de verdad** — la cosa y cuatro props
+
+Pedido: *"por cierto genera modelos 3D de props y el monstruo también como la imagen"*, con un dibujo
+de la criatura adjunto. Cinco GLB generados con Higgsfield (`image_to_3d`), podados con
+`herramientas/eco/podar_glb.py` y metidos con `meter_modelos.py`; el enganche lo hace
+`parche_modelos.py`.
+
+#### LA COSA VIENE RIGGEADA, ASÍ QUE NO HAY QUE ELEGIR ENTRE FORMA Y ANIMACIÓN
+
+`image_to_3d` acepta `enable_rigging` + `enable_animation`: la criatura salió del dibujo del usuario
+**con esqueleto de 24 huesos y ciclo de caminata**. Sin eso habría habido que elegir entre un modelo
+que se parece al dibujo y un bicho de cajas que camina. Mide 2,45 m, 8.363 triángulos, y el ciclo va
+**con la velocidad y no con el reloj** (`mixer.update(dt · vel/1,45)`): un ciclo a paso fijo sobre
+algo que acelera de 1,55 a 3,30 m/s patina los pies, y patinar es lo único que hace que un monstruo
+se lea a muñeco.
+
+El cuerpo de cajas **no se borra, se apaga** (`cosa.viejo.visible=false`): si un GLB no decodifica,
+se vuelve a prender y el juego sigue teniendo monstruo.
+
+#### TRES COSAS QUE HAY QUE RESOLVER PARA QUE UN GLB ENTRE EN *ESTE* JUEGO
+
+1. **Acá nada tiene material propio.** Todo se dibuja con el shader del sonido; un modelo con su
+   material se vería en silencio y el juego se cae. Se les tira el material y se les pone `matMundo`
+   — y para eso el shader tuvo que aprender **esqueleto** e **instancias**. Va todo en el MISMO
+   material: three.js pone `USE_SKINNING`/`USE_INSTANCING` según el **objeto**, no según el material,
+   y compila un programa por combinación. Una definición cubre las tres.
+2. **El prop repetido va instanciado.** 17 props sueltos serían 17 llamadas de dibujo; con
+   `InstancedMesh` son **4**, haya los que haya.
+3. **Carga en diferido y degrada.** Los cinco GLB se decodifican después de arrancar.
+
+#### PODAR EL GLB: 1,45 MB → 734 KB, Y SE COMPRUEBA QUE NO CAMBIÓ NADA
+
+Se pueden tirar muchos bytes justamente porque el shader sólo lee POSITION y NORMAL:
+
+| | antes | después |
+|---|---|---|
+| cosa (con esqueleto) | 597 KB | **370 KB** |
+| pozo | 222 KB | **99 KB** |
+| figura | 194 KB | **89 KB** |
+| brasero | 239 KB | **105 KB** |
+| columna | 196 KB | **88 KB** |
+
+Fuera las coordenadas de textura; la **normal a un byte** (es un versor: medio grado de error sobre
+un coseno no se ve ni midiendo); la **posición a dos bytes** en las mallas sin esqueleto (Meshy
+devuelve la malla dentro de una caja de lado 2, así que un short normalizado da 3 centésimas de
+milímetro de error sobre dos metros); y los **pesos y los índices del esqueleto a un byte** — 108 KB
+sólo eso. Comprobado renderizando podado contra original en el mismo encuadre: **diferencia media
+0,03 sobre 255 y 0,02% de píxeles distintos**. O sea: idéntico.
+
+**TRES DEFECTOS PROPIOS, Y LOS TRES SILENCIOSOS:**
+- **El `min`/`max` de un accesor va en las unidades GUARDADAS, no en metros.** Con el min/max en
+  float sobre un accesor normalizado, three.js —que divide esos números por 32767 al armar la caja—
+  calculaba un volumen de **47 micras**, ponía la cámara adentro y **no dibujaba nada**. La malla
+  estaba perfecta; la que mentía era la caja.
+- **`[] is None` es falso.** `soldar()` devuelve listas, así que una malla sin esqueleto salía con
+  `joi=[]` y la guarda `joi is None` no se cumplía nunca: la cuantización de posición **no se
+  aplicaba jamás** y no fallaba nada, sólo no ahorraba.
+- **Un VEC3 de shorts son 6 bytes y la especificación pide múltiplo de 4.** Va con paso 8 y dos
+  bytes de relleno: apretado a 6 three.js igual lo lee, pero el archivo queda inválido y eso se paga
+  en la próxima versión de la biblioteca, no hoy.
+
+#### LOS OJOS SE MUDAN AL HUESO DE LA CABEZA
+
+Son lo único de la cosa que emite luz propia y de cerca, o sea el aviso de "la tenés encima". Van
+colgados del hueso `Head`, que **el rig trae en centímetros**: su escala mundial es 0,0102, así que
+un offset puesto a ojo en metros deja los ojos a ocho metros de la cabeza. Se divide por esa escala.
+El gancho `__eco.huesos()` es el que lo dice.
+
+#### MEDIDO CON TODO PUESTO
+
+35 llamadas de dibujo, **84.796 triángulos**, **0,5 ms por cuadro** con SwiftShader, cero errores.
+5 de 5 modelos cargados, 17 props en 4 mallas instanciadas. Y lo de la vuelta anterior sigue en pie:
+caminar y correr con la cosa al lado dan **0 ondas** y no la despiertan; gritar hace contestar a las
+llaves y se puede ir a buscarlas. El HTML pasó de 937 KB a **1,95 MB**.
+
 ### Duodécima vuelta (2026-08-26): **Eco se juega con el micrófono de verdad**
 
 Pedido textual: *"que solamente te puedas mover pero no hagas ruido al caminar, que se use el
