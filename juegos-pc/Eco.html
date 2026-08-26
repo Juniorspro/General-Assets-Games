@@ -44,6 +44,27 @@
   #caja{ position:fixed; left:50%; top:50%; overflow:hidden; background:#000; z-index:10;
     transform:translate(-50%,-50%); }
 
+  /* ---------- la pantalla de idioma ---------- */
+  #idioma{ position:absolute; inset:0; z-index:50; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:clamp(12px,2vw,24px); background:#04060a;
+    transition:opacity .4s ease; }
+  #idioma.ir{ opacity:0; pointer-events:none; }
+  #idTit{ font-size:clamp(34px,7.4vw,74px); font-weight:900; letter-spacing:.34em;
+    margin-left:.34em; color:#dbe4ee; }
+  #idSub{ font-size:max(9px,calc(11px * var(--esc,1))); font-weight:700; letter-spacing:.30em;
+    color:#5d6a78; }
+  #idBotones{ display:flex; gap:clamp(8px,1.4vw,18px); flex-wrap:wrap; justify-content:center; }
+  .idB{ padding:clamp(9px,1.2vw,15px) clamp(20px,3.4vw,42px); border-radius:999px; cursor:pointer;
+    font-size:max(12px,calc(13px * var(--esc,1))); font-weight:900; letter-spacing:.14em;
+    color:#cfd9e4; background:transparent; border:1.4px solid rgba(232,238,245,.34);
+    transition:background .2s ease, color .2s ease, border-color .2s ease; }
+  .idB:hover{ background:#e8eef5; color:#04060a; border-color:#e8eef5; }
+  .idB:active{ transform:scale(.96); }
+  body.tapa #menu{ opacity:0; pointer-events:none; }
+  #cambiaIdioma{ cursor:pointer; pointer-events:auto; text-decoration:underline;
+    text-underline-offset:3px; }
+  #cambiaIdioma:hover{ color:#8fa0b2; }
+
   /* ---------- el menu: lo mas simple que se pueda ---------- */
   /* ---------- EL MENU ----------
      Una pantalla negra con el titulo y un boton alcanza para arrancar, pero no dice que juego es
@@ -293,6 +314,15 @@
 
 <div id="caja">
 
+  <!-- LA PANTALLA DE IDIOMA. Va ANTES del menu y no despues: elegir idioma dentro de un menu que
+       ya esta escrito en un idioma que no entendes no sirve de nada. Y el juego arranca en INGLES,
+       asi que el que no toca nada juega en ingles. -->
+  <div id="idioma">
+    <div id="idTit">ECO</div>
+    <div id="idSub">LANGUAGE · IDIOMA · IDIOMA</div>
+    <div id="idBotones"></div>
+  </div>
+
   <div id="hud">
     <div id="punto"></div>
     <div id="top">
@@ -314,10 +344,10 @@
   </div>
 
   <div id="joy"><div id="joyP"></div></div>
-  <button id="bGrito" class="btn">GRITAR<div id="gritoAro"></div></button>
-  <button id="bSalto" class="btn">SALTAR</button>
-  <button id="bAgachar" class="btn">AGACHAR</button>
-  <button id="bLeer">LEER</button>
+  <button id="bGrito" class="btn"><span data-i18n="bGritar"></span><div id="gritoAro"></div></button>
+  <button id="bSalto" class="btn" data-i18n="bSaltar"></button>
+  <button id="bAgachar" class="btn" data-i18n="bAgachar"></button>
+  <button id="bLeer" data-i18n="bLeer"></button>
   <div id="teclas"></div>
 
   <div id="nota">
@@ -333,30 +363,18 @@
        es justo lo que hace falta. -->
   <div id="vineta"></div>
 
-  <div id="menu">
+  <div id="menu" class="tapado">
     <div id="ondasM"><i></i><i></i><i></i></div>
     <div id="menuIn">
       <div id="tit">ECO</div>
-      <div id="sub">el laberinto no se ve · se oye</div>
+      <div id="sub" data-i18n="sub"></div>
       <div id="fichas">
-        <div class="ficha">
-          <h4>El ruido</h4>
-          <p>Nada se ve si no hacés ruido. Cada paso manda una onda y las <b>rayas</b> te dibujan
-             la piedra por un instante. <b>Gritá</b> y se enciende todo dos segundos.</p>
-        </div>
-        <div class="ficha">
-          <h4>El silencio</h4>
-          <p><b>Agachado no hacés ruido</b>: te movés a ciegas, pero nada te oye. Y algo te oye:
-             hay <b>una cosa</b> ahí abajo que caza por el ruido. Correr te salva; gritar la trae.</p>
-        </div>
-        <div class="ficha">
-          <h4>Las hojas</h4>
-          <p>Seguí las <b>marcas rojas</b> del suelo. Llevan a hojas escritas, y las hojas explican
-             los <b>cuatro enigmas</b>. La salida no abre sin los cuatro sellos.</p>
-        </div>
+        <div class="ficha"><h4 data-i18n="f1t"></h4><p data-i18n="f1b"></p></div>
+        <div class="ficha"><h4 data-i18n="f2t"></h4><p data-i18n="f2b"></p></div>
+        <div class="ficha"><h4 data-i18n="f3t"></h4><p data-i18n="f3b"></p></div>
       </div>
-      <button id="jugar">EMPEZAR</button>
-      <div id="pie">beta</div>
+      <button id="jugar" data-i18n="jugar"></button>
+      <div id="pie">beta · <span id="cambiaIdioma">english / español / português</span></div>
     </div>
   </div>
 
@@ -372,6 +390,196 @@
 <script type="module">
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* ===================== LOS IDIOMAS =====================
+   El juego arranca en INGLES y se puede cambiar antes de entrar. Todo lo que se lee sale de esta
+   tabla: no queda una sola cadena suelta en el codigo, porque una sola que se escape es la que el
+   jugador va a ver justo en el idioma equivocado.
+   Las hojas guardan la CLAVE y no el texto: se traducen al abrirlas, asi cambiar de idioma en el
+   menu tambien cambia las que ya encontraste. */
+const IDIOMAS=[['en','English'],['es','Español'],['pt','Português']];
+let IDIOMA='en';
+try{ const g=localStorage.getItem('eco_idioma'); if(g && IDIOMAS.some(i=>i[0]===g)) IDIOMA=g; }catch(e){}
+const L={
+ sub:{en:'the maze cannot be seen · it is heard', es:'el laberinto no se ve · se oye', pt:'o labirinto não se vê · se ouve'},
+ f1t:{en:'The noise', es:'El ruido', pt:'O ruído'},
+ f1b:{en:'Nothing is visible unless you make noise. Every step sends a wave, and the <b>stripes</b> draw the stone for an instant. <b>Shout</b> and everything lights up for two seconds.',
+      es:'Nada se ve si no hacés ruido. Cada paso manda una onda y las <b>rayas</b> te dibujan la piedra por un instante. <b>Gritá</b> y se enciende todo dos segundos.',
+      pt:'Nada se vê se você não fizer barulho. Cada passo manda uma onda e as <b>listras</b> desenham a pedra por um instante. <b>Grite</b> e tudo acende por dois segundos.'},
+ f2t:{en:'The silence', es:'El silencio', pt:'O silêncio'},
+ f2b:{en:'<b>Crouched you make no noise</b>: you move blind, but nothing hears you. And something does hear: there is <b>a thing</b> down here that hunts by sound. Running saves you; shouting brings it.',
+      es:'<b>Agachado no hacés ruido</b>: te movés a ciegas, pero nada te oye. Y algo te oye: hay <b>una cosa</b> ahí abajo que caza por el ruido. Correr te salva; gritar la trae.',
+      pt:'<b>Agachado você não faz barulho</b>: anda às cegas, mas nada te ouve. E algo ouve: há <b>uma coisa</b> aí embaixo que caça pelo som. Correr te salva; gritar a traz.'},
+ f3t:{en:'The pages', es:'Las hojas', pt:'As folhas'},
+ f3b:{en:'Follow the <b>red marks</b> on the floor. They lead to written pages, and the pages explain the <b>four riddles</b>. The exit will not open without the four seals.',
+      es:'Seguí las <b>marcas rojas</b> del suelo. Llevan a hojas escritas, y las hojas explican los <b>cuatro enigmas</b>. La salida no abre sin los cuatro sellos.',
+      pt:'Siga as <b>marcas vermelhas</b> do chão. Levam a folhas escritas, e as folhas explicam os <b>quatro enigmas</b>. A saída não abre sem os quatro selos.'},
+ jugar:{en:'START', es:'EMPEZAR', pt:'COMEÇAR'},
+ idiomaTit:{en:'LANGUAGE', es:'IDIOMA', pt:'IDIOMA'},
+ /* HUD */
+ hSilencio:{en:'SILENCE', es:'SILENCIO', pt:'SILÊNCIO'},
+ hEco:{en:'ECHO', es:'ECO', pt:'ECO'},
+ hRuido:{en:'NOISE', es:'RUIDO', pt:'BARULHO'},
+ hAgachado:{en:'CROUCHED · NO NOISE', es:'AGACHADO · SIN RUIDO', pt:'AGACHADO · SEM BARULHO'},
+ hSalida:{en:'EXIT', es:'SALIDA', pt:'SAÍDA'},
+ hSigue:{en:'SOMETHING IS FOLLOWING YOU', es:'ALGO TE SIGUE', pt:'ALGO TE SEGUE'},
+ hEncima:{en:'IT IS RIGHT BEHIND YOU', es:'LO TENÉS ENCIMA', pt:'ESTÁ EM CIMA DE VOCÊ'},
+ /* botones */
+ bGritar:{en:'SHOUT', es:'GRITAR', pt:'GRITAR'},
+ bSaltar:{en:'JUMP', es:'SALTAR', pt:'PULAR'},
+ bAgachar:{en:'CROUCH', es:'AGACHAR', pt:'AGACHAR'},
+ bLeer:{en:'READ', es:'LEER', pt:'LER'},
+ /* teclas */
+ kMover:{en:'move', es:'moverse', pt:'mover'},
+ kMirar:{en:'look', es:'mirar', pt:'olhar'},
+ kCorrer:{en:'run', es:'correr', pt:'correr'},
+ kAgachar:{en:'crouch · no noise', es:'agacharse · sin ruido', pt:'agachar · sem barulho'},
+ kSaltar:{en:'jump · stomp the floor', es:'saltar · golpear el piso', pt:'pular · bater no chão'},
+ kGritar:{en:'shout', es:'gritar', pt:'gritar'},
+ kLeer:{en:'read a page', es:'leer una nota', pt:'ler uma folha'},
+ kEsc:{en:'release the mouse', es:'soltar el mouse', pt:'soltar o mouse'},
+ /* avisos */
+ aOyo:{en:'THE CORRIDOR HEARD YOU', es:'EL PASILLO TE OYÓ', pt:'O CORREDOR TE OUVIU'},
+ aPared:{en:'SOMETHING IS ON THIS WALL · {n}/{m}', es:'ALGO HAY EN LA PARED · {n}/{m}', pt:'HÁ ALGO NA PAREDE · {n}/{m}'},
+ aSuena:{en:'IT SOUNDS · {n}/3', es:'SUENA · {n}/3', pt:'SOA · {n}/3'},
+ aDesafina:{en:'OUT OF TUNE', es:'DESAFINA', pt:'DESAFINADO'},
+ aPasaste:{en:'TOO MANY', es:'TE PASASTE', pt:'PASSOU DA CONTA'},
+ aGolpe:{en:'STOMP {n}', es:'GOLPE {n}', pt:'BATIDA {n}'},
+ aEnSilencio:{en:'IN SILENCE', es:'EN SILENCIO', pt:'EM SILÊNCIO'},
+ aObjetivo:{en:'NEW OBJECTIVE', es:'OBJETIVO NUEVO', pt:'NOVO OBJETIVO'},
+ aEscucha:{en:'LISTEN · THERE IS A PAGE RIGHT HERE', es:'ESCUCHÁ · HAY UNA NOTA ACÁ AL LADO', pt:'ESCUTE · HÁ UMA FOLHA BEM AQUI'},
+ aDesperto:{en:'SOMETHING WOKE UP', es:'ALGO SE DESPERTÓ', pt:'ALGO ACORDOU'},
+ aAgarro:{en:'IT CAUGHT YOU', es:'TE AGARRÓ', pt:'ELA TE PEGOU'},
+ aSaliste:{en:'YOU GOT OUT · {t}', es:'SALISTE · {t}', pt:'VOCÊ SAIU · {t}'},
+ aSellada:{en:'SEALED · {n}/4', es:'SELLADA · {n}/4', pt:'SELADA · {n}/4'},
+ /* nombres de los sellos */
+ sTambores:{en:'THE THREE DRUMS', es:'LOS TRES TAMBORES', pt:'OS TRÊS TAMBORES'},
+ sPasillo:{en:'THE SLEEPING CORRIDOR', es:'EL PASILLO DORMIDO', pt:'O CORREDOR ADORMECIDO'},
+ sCuenta:{en:'THE COUNT', es:'LA CUENTA', pt:'A CONTA'},
+ sEco:{en:'THE LONG ECHO', es:'EL ECO LARGO', pt:'O ECO LONGO'},
+ sSalida:{en:'THE EXIT', es:'LA SALIDA', pt:'A SAÍDA'},
+ sPrimero:{en:'FIRST OF ALL · IN HANDWRITING', es:'LO PRIMERO · DE PUÑO Y LETRA', pt:'ANTES DE TUDO · DE PRÓPRIO PUNHO'},
+ /* bandas */
+ banda1:{en:'ONE BAND', es:'UNA BANDA', pt:'UMA FAIXA'},
+ banda2:{en:'TWO BANDS', es:'DOS BANDAS', pt:'DUAS FAIXAS'},
+ banda3:{en:'THREE BANDS', es:'TRES BANDAS', pt:'TRÊS FAIXAS'},
+ /* objetivo */
+ oTambores:{en:'THE THREE DRUMS · shout at the one with <em>{b}</em>', es:'LOS TRES TAMBORES · gritale al de <em>{b}</em>', pt:'OS TRÊS TAMBORES · grite para o de <em>{b}</em>'},
+ oTamboresS:{en:'{n} of 3 · one mistake and it resets', es:'van {n} de 3 · si te equivocás vuelve a cero', pt:'{n} de 3 · se errar, volta a zero'},
+ oPasillo:{en:'THE SLEEPING CORRIDOR · cross it <em>crouched</em>', es:'EL PASILLO DORMIDO · cruzalo <em>agachado</em>', pt:'O CORREDOR ADORMECIDO · atravesse <em>agachado</em>'},
+ oPasilloS:{en:'{n} straight rooms between the two arches · one noise and it wakes', es:'{n} salas rectas entre los dos arcos · un solo ruido y se despierta', pt:'{n} salas retas entre os dois arcos · um só barulho e acorda'},
+ oCuenta:{en:'THE COUNT · <em>count the walls</em> of the ring and stomp that many times', es:'LA CUENTA · <em>contá las paredes</em> del aro y golpeá el piso esa cantidad', pt:'A CONTA · <em>conte as paredes</em> do aro e bata no chão essa quantidade'},
+ oCuentaS:{en:'{n} stomps so far · jumping is stomping', es:'llevás {n} golpe{s} · saltar es golpear', pt:'{n} batida{s} até agora · pular é bater'},
+ oEco:{en:'THE LONG ECHO · <em>shout</em> between the four posts', es:'EL ECO LARGO · <em>gritá</em> entre los cuatro postes', pt:'O ECO LONGO · <em>grite</em> entre os quatro postes'},
+ oEcoS:{en:'the deepest dead end in the maze', es:'el pasillo ciego más hondo del laberinto', pt:'o corredor sem saída mais fundo do labirinto'},
+ oAbierta:{en:'THE EXIT IS OPEN', es:'LA SALIDA ESTÁ ABIERTA', pt:'A SAÍDA ESTÁ ABERTA'},
+ oAbiertaS:{en:'it pulses every time you make noise · head for it', es:'late cada vez que hacés ruido · andá para allá', pt:'pulsa cada vez que você faz barulho · vá para lá'},
+ oBuscar:{en:'FIND A PAGE · <em>follow the red marks</em> on the floor', es:'BUSCÁ UNA HOJA · <em>seguí las marcas rojas</em> del suelo', pt:'PROCURE UMA FOLHA · <em>siga as marcas vermelhas</em> do chão'},
+ oBuscarS:{en:'{n} page{s} still missing · shout at the wall when you get there', es:'{n} hoja{s} sin encontrar · gritale a la pared cuando llegues', pt:'{n} folha{s} sem encontrar · grite para a parede quando chegar'},
+ oSaliste:{en:'YOU GOT OUT', es:'SALISTE', pt:'VOCÊ SAIU'},
+ /* cartel de la hoja */
+ pHoja:{en:'THERE IS A PAGE ON THIS WALL', es:'HAY UNA HOJA EN ESTA PARED', pt:'HÁ UMA FOLHA NESTA PAREDE'},
+ pGritos:{en:'{n} OF {m} SHOUTS', es:'{n} DE {m} GRITOS', pt:'{n} DE {m} GRITOS'},
+ pSeguir:{en:'ANY KEY TO CONTINUE', es:'CUALQUIER TECLA PARA SEGUIR', pt:'QUALQUER TECLA PARA CONTINUAR'},
+ pTocar:{en:'TAP TO CONTINUE', es:'TOCÁ PARA SEGUIR', pt:'TOQUE PARA CONTINUAR'},
+ /* tutorial */
+ t0:{en:'MOVE', es:'MOVETE', pt:'ANDE'},
+ t0s:{en:'there is no light: all you see is what the noise gives back', es:'no hay luz: lo único que ves es lo que devuelve el ruido', pt:'não há luz: só se vê o que o barulho devolve'},
+ t0kPC:{en:'W A S D', es:'W A S D', pt:'W A S D'},
+ t0kMov:{en:'drag the joystick', es:'arrastrá el joystick', pt:'arraste o joystick'},
+ t1:{en:'THAT IS YOUR OWN FOOTSTEPS', es:'ESO QUE VES SON TUS PASOS', pt:'ISSO QUE VOCÊ VÊ SÃO SEUS PASSOS'},
+ t1s:{en:'each step sends a wave, and the stripes draw the stone for an instant', es:'cada pisada manda una onda, y las rayas te dibujan la piedra por un instante', pt:'cada passo manda uma onda, e as listras desenham a pedra por um instante'},
+ t2:{en:'NOW SHOUT', es:'AHORA GRITÁ', pt:'AGORA GRITE'},
+ t2s:{en:'a shout lights the whole maze for two seconds · then you have to wait', es:'un grito enciende el laberinto entero dos segundos · después hay que esperar', pt:'um grito acende o labirinto inteiro por dois segundos · depois tem que esperar'},
+ t2kMov:{en:'the SHOUT button', es:'el botón GRITAR', pt:'o botão GRITAR'},
+ t3:{en:'THERE IS A PAGE ON A WALL HERE', es:'HAY UNA HOJA EN UNA PARED DE ACÁ', pt:'HÁ UMA FOLHA NUMA PAREDE DAQUI'},
+ t3s:{en:'follow the arrow, get close and shout at it three times', es:'seguí la flecha, acercate y gritale tres veces', pt:'siga a seta, chegue perto e grite três vezes'},
+ t4:{en:'THAT IS THE GAME', es:'ASÍ SE JUEGA', pt:'É ASSIM QUE SE JOGA'},
+ t4s:{en:'the arrow and the red marks lead to the other pages · each page explains a riddle · four seals open the exit', es:'la flecha y las marcas rojas del suelo llevan a las otras hojas · cada hoja explica un enigma · cuatro sellos abren la salida', pt:'a seta e as marcas vermelhas levam às outras folhas · cada folha explica um enigma · quatro selos abrem a saída'}
+};
+/* SE LLAMA TX Y NO t A PROPOSITO. Una funcion global de UNA letra es una bomba: cualquier
+   script que comparta la pagina —o un eval con un `var t` adentro— la pisa, y cuando se pisa
+   no falla el idioma, falla TODO, porque no queda un solo texto que no pase por aca.
+   Paso de verdad en una prueba: un `var t` en un eval dejo el juego sin cargar nivel. */
+function TX(k,v){
+  let s=(L[k] && (L[k][IDIOMA]||L[k].en)) || k;
+  if(v) for(const p in v) s=s.split('{'+p+'}').join(v[p]);
+  return s;
+}
+
+/* los textos de las seis hojas. Van aparte de la tabla chica porque son parrafos y no rotulos, y
+   porque son lo unico del juego que se lee de verdad: aca no se puede traducir a las apuradas. */
+const HOJAS={
+ n0:{en:'There is no light down here. There never was, so stop looking for it.<br>'+
+        'What you see when you move is not light: it is <b>the noise coming back</b>. Every step sends a ring, the ring hits and the stripes draw the stone for an instant.<br>'+
+        'A <b>shout</b> is another thing: the whole maze lights up for <b>two seconds</b>. Use it to look at the way, not to walk it.<br>'+
+        '<b>Crouch and you make no noise</b> — and then you see nothing. It looks like a punishment. It is a tool.<br>'+
+        'And watch the floor: someone left <b>red marks</b>. They go from page to page. I followed them this far.',
+     es:'No hay luz acá abajo. Nunca hubo, y no la busques.<br>'+
+        'Lo que ves cuando te movés no es luz: es <b>el ruido que vuelve</b>. Cada paso manda un anillo, el anillo choca y las rayas te dibujan la piedra por un instante.<br>'+
+        'Un <b>grito</b> es otra cosa: el laberinto entero se te enciende <b>dos segundos</b>. Usalo para mirar el camino, no para caminar.<br>'+
+        '<b>Agachate y no hacés ruido</b> — y entonces no ves nada. Parece un castigo. Es una herramienta.<br>'+
+        'Y mirá el piso: alguien fue dejando <b>marcas rojas</b>. Van de hoja en hoja. Yo las seguí hasta acá.',
+     pt:'Não há luz aqui embaixo. Nunca houve, e não a procure.<br>'+
+        'O que você vê quando anda não é luz: é <b>o barulho voltando</b>. Cada passo manda um anel, o anel bate e as listras desenham a pedra por um instante.<br>'+
+        'Um <b>grito</b> é outra coisa: o labirinto inteiro acende por <b>dois segundos</b>. Use para olhar o caminho, não para caminhar.<br>'+
+        '<b>Agache e você não faz barulho</b> — e aí não vê nada. Parece um castigo. É uma ferramenta.<br>'+
+        'E olhe o chão: alguém foi deixando <b>marcas vermelhas</b>. Vão de folha em folha. Eu as segui até aqui.'},
+ n1:{en:'There are three stone drums spread around the maze. Not together: each one in its own room.<br>'+
+        'You tell them apart by the <b>carved bands</b> around them: one has one, another two, another three. Count them when the echo shows them to you.<br>'+
+        'You have to <b>shout beside them</b>, and in this order:<br>&nbsp;&nbsp;<b>{orden}</b><br>'+
+        'One shout at the wrong drum and all three go back to sleep. You start over.',
+     es:'Hay tres tambores de piedra repartidos por el laberinto. No están juntos: cada uno en su sala.<br>'+
+        'Se distinguen por las <b>bandas talladas</b> alrededor: uno tiene una, otro dos, otro tres. Contalas cuando el eco te los muestre.<br>'+
+        'Hay que <b>gritarles al lado</b>, y en este orden:<br>&nbsp;&nbsp;<b>{orden}</b><br>'+
+        'Un grito en el tambor equivocado y los tres vuelven a dormirse. Se empieza de nuevo.',
+     pt:'Há três tambores de pedra espalhados pelo labirinto. Não estão juntos: cada um na sua sala.<br>'+
+        'Você os distingue pelas <b>faixas entalhadas</b> em volta: um tem uma, outro duas, outro três. Conte quando o eco os mostrar.<br>'+
+        'É preciso <b>gritar ao lado deles</b>, e nesta ordem:<br>&nbsp;&nbsp;<b>{orden}</b><br>'+
+        'Um grito no tambor errado e os três voltam a dormir. Recomeça.'},
+ n2:{en:'Between the two <b>stone arches</b> there are {n} rooms in a straight line. Count them: it is straight, no turns, you cannot get lost.<br>'+
+        'What it does not forgive is noise. <b>A single sound inside</b> —a step, a jump, a shout— and it wakes: you have to leave and come back in through one end.<br>'+
+        'Go in <b>crouched</b> and cross it that way. You will be completely blind, in a straight line, from one end to the other. That is the whole riddle: holding out in the dark.',
+     es:'Entre los dos <b>arcos de piedra</b> hay {n} salas en línea recta. Contalas: es recto, no tiene vueltas, no te podés perder.<br>'+
+        'Lo que no perdona es el ruido. <b>Un solo sonido adentro</b> —un paso, un salto, un grito— y se despierta: hay que salir y volver a entrar por una punta.<br>'+
+        'Entrá <b>agachado</b> y cruzalo entero así. Vas a ir completamente a ciegas, en línea recta, de una punta a la otra. Eso es todo el enigma: aguantar el negro.',
+     pt:'Entre os dois <b>arcos de pedra</b> há {n} salas em linha reta. Conte: é reto, não tem curvas, não dá para se perder.<br>'+
+        'O que não perdoa é o barulho. <b>Um único som lá dentro</b> —um passo, um pulo, um grito— e ele acorda: tem que sair e voltar a entrar por uma ponta.<br>'+
+        'Entre <b>agachado</b> e atravesse inteiro assim. Você vai completamente às cegas, em linha reta, de uma ponta à outra. Esse é o enigma todo: aguentar o escuro.'},
+ n3:{en:'There is a <b>stone ring</b> on the floor. Step inside it and shout: you will see the whole room.<br>'+
+        'Now <b>count the walls</b> that close it. A room like that can have two or three; this one has what it has, and I am not going to tell you.<br>'+
+        'Then <b>stomp the floor</b> that many times, without leaving the ring. <b>Jumping is stomping</b>: what counts is the landing.<br>'+
+        'If you go over the count it goes back to zero and you start again.',
+     es:'En el suelo hay un <b>aro de piedra</b>. Metete adentro y gritá: vas a ver la sala entera.<br>'+
+        'Ahora <b>contá las paredes</b> que la cierran. Una sala así puede tener dos o tres; ésta tiene las que tiene, y no te lo voy a decir yo.<br>'+
+        'Después <b>golpeá el piso</b> esa misma cantidad de veces, sin salir del aro. <b>Saltar es golpear</b>: lo que cuenta es el golpe al caer.<br>'+
+        'Si te pasás de la cuenta, vuelve a cero y hay que empezar.',
+     pt:'No chão há um <b>aro de pedra</b>. Entre nele e grite: você vai ver a sala inteira.<br>'+
+        'Agora <b>conte as paredes</b> que a fecham. Uma sala dessas pode ter duas ou três; esta tem as que tem, e não sou eu que vou dizer.<br>'+
+        'Depois <b>bata no chão</b> essa mesma quantidade de vezes, sem sair do aro. <b>Pular é bater</b>: o que conta é a batida ao cair.<br>'+
+        'Se passar da conta, volta a zero e recomeça.'},
+ n4:{en:'Of all the blind corridors in the maze there is one that is <b>the deepest</b>: the one furthest from the entrance, the one that leads nowhere. The echo takes longer to come back from there than from anywhere else.<br>'+
+        'You will know it by the <b>four posts</b> planted at its corners.<br>'+
+        'When you are standing between the four, <b>shout</b>. Nothing more than that.',
+     es:'De todos los pasillos ciegos del laberinto hay uno que es <b>el más hondo</b>: el que queda más lejos de la entrada, el que no lleva a ningún lado. El eco tarda más en volver de ahí que de cualquier otra parte.<br>'+
+        'Lo vas a reconocer por los <b>cuatro postes</b> plantados en las esquinas.<br>'+
+        'Cuando estés parado entre los cuatro, <b>gritá</b>. Nada más que eso.',
+     pt:'De todos os corredores cegos do labirinto há um que é <b>o mais fundo</b>: o mais longe da entrada, o que não leva a lugar nenhum. O eco demora mais para voltar de lá do que de qualquer outro lugar.<br>'+
+        'Você vai reconhecer pelos <b>quatro postes</b> fincados nas esquinas.<br>'+
+        'Quando estiver parado entre os quatro, <b>grite</b>. Nada mais que isso.'},
+ n5:{en:'This is where it ends, and this is where I stayed.<br>'+
+        'The door has <b>four seals</b> and it does not open with three. The four riddles each set one; the four dots at the top of the screen light up one by one.<br>'+
+        'With the four in place the exit <b>pulses</b> every time you make noise, and you feel it from far away. You will know which way to go without looking for it.<br>'+
+        'If you are reading this and you are missing seals: do not insist with the door. Go back to the red marks.',
+     es:'Acá termina, y acá me quedé.<br>'+
+        'La puerta tiene <b>cuatro sellos</b> y no se abre con tres. Los cuatro enigmas ponen uno cada uno; arriba de la pantalla se van encendiendo los cuatro puntos.<br>'+
+        'Con los cuatro puestos, la salida <b>late</b> cada vez que hacés ruido, y se siente desde lejos. Vas a saber para dónde ir sin buscarla.<br>'+
+        'Si estás leyendo esto y te faltan sellos: no insistas con la puerta. Volvé por las marcas rojas.',
+     pt:'Aqui termina, e aqui eu fiquei.<br>'+
+        'A porta tem <b>quatro selos</b> e não abre com três. Os quatro enigmas colocam um cada; no alto da tela os quatro pontos vão acendendo.<br>'+
+        'Com os quatro postos, a saída <b>pulsa</b> cada vez que você faz barulho, e se sente de longe. Você vai saber para onde ir sem procurar.<br>'+
+        'Se está lendo isto e faltam selos: não insista com a porta. Volte pelas marcas vermelhas.'}
+};
 
 /* ===================== QUE APARATO ES ESTE =====================
    Es telefono solo si tiene tactil Y el puntero es grueso. Con una sola de las dos no alcanza: una
@@ -1022,9 +1230,9 @@ const marcas=construirMarcas();
    "me acerco y nada". Con 4,4 entra la celda entera y sobra un poco. */
 const NOTA_ALC=4.4;
 const NOTA_GRITOS=3;
-const nomBanda=['','UNA BANDA','DOS BANDAS','TRES BANDAS'];
+
 const notas=[];
-function ponerNota(cel, titulo, texto){
+function ponerNota(cel, claveTit, claveTxt, datos){
   const [i,j]=cel;
   /* la nota va en una pared de la celda, la que haya. Sin esto una nota puede quedar colgada en el
      aire en el medio de un cruce, que es exactamente donde no se lee. */
@@ -1039,52 +1247,18 @@ function ponerNota(cel, titulo, texto){
   if(lado==='o'){ me.position.set(x-sep, 1.55, z); me.rotation.y=Math.PI/2; }
   if(lado==='e'){ me.position.set(x+sep, 1.55, z); me.rotation.y=-Math.PI/2; }
   escena.add(me);
-  notas.push({ cel:[i,j], lado, titulo, texto, mat, malla:me, cargas:0, abierta:false, leida:false,
-               x:me.position.x, z:me.position.z });
+  notas.push({ cel:[i,j], lado, claveTit, claveTxt, datos:datos||null, mat, malla:me,
+               cargas:0, abierta:false, leida:false, x:me.position.x, z:me.position.z });
 }
 /* la primera va al lado de la entrada: si el juego no explica el silencio, el enigma del corredor
    es imposible de adivinar y no es un enigma, es una pared */
-ponerNota([0,0], 'LO PRIMERO · DE PUÑO Y LETRA',
-  'No hay luz acá abajo. Nunca hubo, y no la busques.<br>'+
-  'Lo que ves cuando te movés no es luz: es <b>el ruido que vuelve</b>. Cada paso manda un anillo, '+
-  'el anillo choca y las rayas te dibujan la piedra por un instante.<br>'+
-  'Un <b>grito</b> es otra cosa: el laberinto entero se te enciende <b>dos segundos</b>. Usalo para mirar '+
-  'el camino, no para caminar.<br>'+
-  '<b>Agachate y no hacés ruido</b> — y entonces no ves nada. Parece un castigo. Es una herramienta.<br>'+
-  'Y mirá el piso: alguien fue dejando <b>marcas rojas</b>. Van de hoja en hoja. Yo las seguí hasta acá.');
-ponerNota(tambores[0].cel, 'LOS TRES TAMBORES',
-  'Hay tres tambores de piedra repartidos por el laberinto. No están juntos: cada uno en su sala.<br>'+
-  'Se distinguen por las <b>bandas talladas</b> alrededor: uno tiene una, otro dos, otro tres. '+
-  'Contalas cuando el eco te los muestre.<br>'+
-  'Hay que <b>gritarles al lado</b>, y en este orden:<br>'+
-  '&nbsp;&nbsp;<b>'+P1_ORDEN.map((k,i)=>(i+1)+'º &nbsp;'+nomBanda[k]).join('<br>&nbsp;&nbsp;')+'</b><br>'+
-  'Un grito en el tambor equivocado y los tres vuelven a dormirse. Se empieza de nuevo.');
-ponerNota(corredor[0], 'EL PASILLO DORMIDO',
-  'Entre los dos <b>arcos de piedra</b> hay '+corredor.length+' salas en línea recta. Contalas: es recto, '+
-  'no tiene vueltas, no te podés perder.<br>'+
-  'Lo que no perdona es el ruido. <b>Un solo sonido adentro</b> —un paso, un salto, un grito— y se despierta: '+
-  'hay que salir y volver a entrar por una punta.<br>'+
-  'Entrá <b>agachado</b> y cruzalo entero así. Vas a ir completamente a ciegas, en línea recta, '+
-  'de una punta a la otra. Eso es todo el enigma: aguantar el negro.');
-ponerNota(celP3, 'LA CUENTA',
-  'En el suelo hay un <b>aro de piedra</b>. Metete adentro y gritá: vas a ver la sala entera.<br>'+
-  'Ahora <b>contá las paredes</b> que la cierran. Una sala así puede tener dos o tres; ésta tiene las '+
-  'que tiene, y no te lo voy a decir yo.<br>'+
-  'Después <b>golpeá el piso</b> esa misma cantidad de veces, sin salir del aro. '+
-  '<b>Saltar es golpear</b>: lo que cuenta es el golpe al caer.<br>'+
-  'Si te pasás de la cuenta, vuelve a cero y hay que empezar.');
-ponerNota(celP4, 'EL ECO LARGO',
-  'De todos los pasillos ciegos del laberinto hay uno que es <b>el más hondo</b>: el que queda más lejos de la '+
-  'entrada, el que no lleva a ningún lado. El eco tarda más en volver de ahí que de cualquier otra parte.<br>'+
-  'Lo vas a reconocer por los <b>cuatro postes</b> plantados en las esquinas.<br>'+
-  'Cuando estés parado entre los cuatro, <b>gritá</b>. Nada más que eso.');
-ponerNota(salida, 'LA SALIDA',
-  'Acá termina, y acá me quedé.<br>'+
-  'La puerta tiene <b>cuatro sellos</b> y no se abre con tres. Los cuatro enigmas ponen uno cada uno; '+
-  'arriba de la pantalla se van encendiendo los cuatro puntos.<br>'+
-  'Con los cuatro puestos, la salida <b>late</b> cada vez que hacés ruido, y se siente desde lejos. '+
-  'Vas a saber para dónde ir sin buscarla.<br>'+
-  'Si estás leyendo esto y te faltan sellos: no insistas con la puerta. Volvé por las marcas rojas.');
+ponerNota([0,0], 'sPrimero', 'n0');
+ponerNota(tambores[0].cel, 'sTambores', 'n1',
+  ()=>({ orden:P1_ORDEN.map((k,i)=>(i+1)+'º &nbsp;'+TX('banda'+k)).join('<br>&nbsp;&nbsp;') }));
+ponerNota(corredor[0], 'sPasillo', 'n2', ()=>({ n:corredor.length }));
+ponerNota(celP3, 'sCuenta', 'n3');
+ponerNota(celP4, 'sEco', 'n4');
+ponerNota(salida, 'sSalida', 'n5');
 
 /* ===================== LOS RASTROS ROJOS DEL SUELO =====================
    Alguien pasó antes y fue dejando marcas. Van EN CADENA de una hoja a la siguiente, no todas desde
@@ -1179,7 +1353,7 @@ function sellar(k,txt){
   SELLOS[k]=true;
   const el=document.getElementById('sellos');
   if(el && el.children[k]) el.children[k].classList.add('on');
-  avisar((txt||'SELLO')+' · '+nSellos()+'/4', 3.0);
+  avisar((txt||'')+' · '+nSellos()+'/4', 3.0);
   son('sello');
   emitir(jug.x, jug.y, jug.z, 1.0, 62);
   matMundo.uniforms.uAbierta.value = nSellos()>=4? 1 : 0;
@@ -1192,23 +1366,18 @@ function cerca(x,z,r){ return Math.hypot(jug.x-x, jug.z-z) < r; }
    ninguna, el objetivo es justamente buscar una hoja. */
 const NOTA_DE=[null,0,1,2,3,null];   // que enigma explica cada hoja
 function objetivo(){
-  if(ganado) return { t:'SALISTE', s:'' };
+  if(ganado) return { t:TX('oSaliste'), s:'' };
   for(let k=0;k<notas.length;k++){
     const e=NOTA_DE[k];
     if(e===null || !notas[k].leida || SELLOS[e]) continue;
-    if(e===0) return { t:'LOS TRES TAMBORES · gritale al de <em>'+nomBanda[P1_ORDEN[p1Paso]]+'</em>',
-                       s:'van '+p1Paso+' de 3 · si te equivocás vuelve a cero' };
-    if(e===1) return { t:'EL PASILLO DORMIDO · cruzalo <em>agachado</em>',
-                       s:corredor.length+' salas rectas entre los dos arcos · un solo ruido y se despierta' };
-    if(e===2) return { t:'LA CUENTA · <em>contá las paredes</em> del aro y golpeá el piso esa cantidad',
-                       s:'llevás '+p3Cuenta+' golpe'+(p3Cuenta===1?'':'s')+' · saltar es golpear' };
-    if(e===3) return { t:'EL ECO LARGO · <em>gritá</em> entre los cuatro postes',
-                       s:'el pasillo ciego más hondo del laberinto' };
+    if(e===0) return { t:TX('oTambores',{b:TX('banda'+P1_ORDEN[p1Paso])}), s:TX('oTamboresS',{n:p1Paso}) };
+    if(e===1) return { t:TX('oPasillo'), s:TX('oPasilloS',{n:corredor.length}) };
+    if(e===2) return { t:TX('oCuenta'), s:TX('oCuentaS',{n:p3Cuenta, s:(p3Cuenta===1?'':'s')}) };
+    if(e===3) return { t:TX('oEco'), s:TX('oEcoS') };
   }
-  if(nSellos()>=4) return { t:'LA SALIDA ESTÁ ABIERTA', s:'late cada vez que hacés ruido · andá para allá' };
+  if(nSellos()>=4) return { t:TX('oAbierta'), s:TX('oAbiertaS') };
   const falta=notas.filter(n=>!n.abierta).length;
-  return { t:'BUSCÁ UNA HOJA · <em>seguí las marcas rojas</em> del suelo',
-           s:falta+' hoja'+(falta===1?'':'s')+' sin encontrar · gritale a la pared cuando llegues' };
+  return { t:TX('oBuscar'), s:TX('oBuscarS',{n:falta, s:(falta===1?'':'s')}) };
 }
 
 /* TODO EL RUIDO PASA POR ACA. Antes cada sitio llamaba a emitir() por su cuenta; con enigmas que
@@ -1221,7 +1390,7 @@ function ruido(tipo,x,y,z,fuerza,alcance){
   const c=celdaDe(jug.x,jug.z);
   /* EL CORREDOR SILENCIOSO: cualquier ruido adentro lo despierta */
   if(CORR_IDX.has(cl(c[0],c[1])) && p2Desde>=0 && !SELLOS[1]){
-    p2Desde=-2; avisar('EL PASILLO TE OYÓ', 2.0);
+    p2Desde=-2; avisar(TX('aOyo'), 2.0);
   }
   if(tipo==='grito'){
     /* las notas: tres gritos cerca y aparece */
@@ -1229,7 +1398,7 @@ function ruido(tipo,x,y,z,fuerza,alcance){
       if(nt.abierta || !cerca(nt.x, nt.z, NOTA_ALC)) continue;
       nt.cargas++;
       if(nt.cargas>=NOTA_GRITOS){ nt.abierta=true; abrirNota(nt); }
-      else avisar('ALGO HAY EN LA PARED · '+nt.cargas+'/'+NOTA_GRITOS, 1.8);
+      else avisar(TX('aPared',{n:nt.cargas,m:NOTA_GRITOS}), 1.8);
     }
     /* los tambores */
     if(!SELLOS[0]){
@@ -1238,21 +1407,21 @@ function ruido(tipo,x,y,z,fuerza,alcance){
         if(t.bandas===P1_ORDEN[p1Paso]){
           p1Paso++;
           son('tambor');
-          if(p1Paso>=3) sellar(0,'LOS TRES TAMBORES');
-          else avisar('SUENA · '+p1Paso+'/3', 1.6);
-        } else { p1Paso=0; son('mal'); avisar('DESAFINA', 1.6); }
+          if(p1Paso>=3) sellar(0,TX('sTambores'));
+          else avisar(TX('aSuena',{n:p1Paso}), 1.6);
+        } else { p1Paso=0; son('mal'); avisar(TX('aDesafina'), 1.6); }
         break;
       }
     }
     /* el eco largo */
-    if(!SELLOS[3] && cerca(XC(celP4[0]), ZC(celP4[1]), 2.2)) sellar(3,'EL ECO LARGO');
+    if(!SELLOS[3] && cerca(XC(celP4[0]), ZC(celP4[1]), 2.2)) sellar(3,TX('sEco'));
   }
   /* los golpes del piso: solo el aterrizaje cuenta, no el despegue */
   if(tipo==='caida' && !SELLOS[2] && cerca(XC(celP3[0]), ZC(celP3[1]), 1.45)){
     p3Cuenta++;
-    if(p3Cuenta===P3_GOLPES) sellar(2,'LA CUENTA');
-    else if(p3Cuenta>P3_GOLPES){ p3Cuenta=0; avisar('TE PASASTE', 1.6); }
-    else avisar('GOLPE '+p3Cuenta, 1.4);
+    if(p3Cuenta===P3_GOLPES) sellar(2,TX('sCuenta'));
+    else if(p3Cuenta>P3_GOLPES){ p3Cuenta=0; avisar(TX('aPasaste'), 1.6); }
+    else avisar(TX('aGolpe',{n:p3Cuenta}), 1.4);
   }
 }
 
@@ -1267,10 +1436,10 @@ function corredorTick(){
   if(p2Desde===-1){
     /* recien entra: solo cuenta si entro por una punta. Entrar por el medio no es cruzarlo. */
     p2Desde = (idx===0)? 0 : (idx===L-1? L-1 : -2);
-    if(p2Desde>=0) avisar('EN SILENCIO', 1.6);
+    if(p2Desde>=0) avisar(TX('aEnSilencio'), 1.6);
   }
-  if(p2Desde===0 && idx===L-1) sellar(1,'EL PASILLO DORMIDO');
-  if(p2Desde===L-1 && idx===0) sellar(1,'EL PASILLO DORMIDO');
+  if(p2Desde===0 && idx===L-1) sellar(1,TX('sPasillo'));
+  if(p2Desde===L-1 && idx===0) sellar(1,TX('sPasillo'));
 }
 
 /* ===================== EL TUTORIAL Y LA FLECHA =====================
@@ -1279,31 +1448,16 @@ function corredorTick(){
    entendio la consigna y da vueltas veinte minutos igual. */
 let tutoPaso=0, tutoT=0, tutoAndado=0, tutoGritos=0, tutoListo=false;
 const TUTO=[
-  { t:'MOVETE',
-    s:'no hay luz: lo único que ves es lo que devuelve el ruido',
-    k:()=>plataf==='pc'? 'W A S D' : 'arrastrá el joystick',
-    p:()=>Math.min(1, tutoAndado/3.5),
-    ok:()=>tutoAndado>3.5 },
-  { t:'ESO QUE VES SON TUS PASOS',
-    s:'cada pisada manda una onda, y las rayas te dibujan la piedra por un instante',
-    k:()=>'',
-    p:()=>Math.min(1, (tutoAndado-3.5)/9),
-    ok:()=>tutoAndado>12.5 },
-  { t:'AHORA GRITÁ',
-    s:'un grito enciende el laberinto entero dos segundos · después hay que esperar',
-    k:()=>plataf==='pc'? 'E' : 'el botón GRITAR',
-    p:()=>Math.min(1, tutoGritos),
-    ok:()=>tutoGritos>0 },
-  { t:'HAY UNA HOJA EN UNA PARED DE ACÁ',
-    s:'seguí la flecha, acercate y gritale tres veces',
-    k:()=>plataf==='pc'? 'E' : 'el botón GRITAR',
-    p:()=>Math.min(1, notas[0].cargas/NOTA_GRITOS),
-    ok:()=>notas[0].abierta },
-  { t:'ASÍ SE JUEGA',
-    s:'la flecha y las marcas rojas del suelo llevan a las otras hojas · cada hoja explica un enigma · cuatro sellos abren la salida',
-    k:()=>'',
-    p:()=>Math.min(1, tutoT/7),
-    ok:()=>tutoT>7 }
+  { t:()=>TX('t0'), s:()=>TX('t0s'), k:()=>plataf==='pc'? TX('t0kPC') : TX('t0kMov'),
+    p:()=>Math.min(1, tutoAndado/3.5), ok:()=>tutoAndado>3.5 },
+  { t:()=>TX('t1'), s:()=>TX('t1s'), k:()=>'',
+    p:()=>Math.min(1, (tutoAndado-3.5)/9), ok:()=>tutoAndado>12.5 },
+  { t:()=>TX('t2'), s:()=>TX('t2s'), k:()=>plataf==='pc'? 'E' : TX('t2kMov'),
+    p:()=>Math.min(1, tutoGritos), ok:()=>tutoGritos>0 },
+  { t:()=>TX('t3'), s:()=>TX('t3s'), k:()=>plataf==='pc'? 'E' : TX('t2kMov'),
+    p:()=>Math.min(1, notas[0].cargas/NOTA_GRITOS), ok:()=>notas[0].abierta },
+  { t:()=>TX('t4'), s:()=>TX('t4s'), k:()=>'',
+    p:()=>Math.min(1, tutoT/7), ok:()=>tutoT>7 }
 ];
 function tutoTick(dt){
   if(tutoListo || !jugando) return;
@@ -1312,7 +1466,7 @@ function tutoTick(dt){
   tutoT+=dt;
   const T=document.getElementById('tutoT'), S=document.getElementById('tutoS'),
         K=document.getElementById('tutoK'), P=document.querySelector('#tutoP i');
-  if(T && T._p!==tutoPaso){ T._p=tutoPaso; T.textContent=paso.t; S.textContent=paso.s; K.textContent=paso.k(); }
+  if(T && T._p!==tutoPaso){ T._p=tutoPaso; T.textContent=paso.t(); S.textContent=paso.s(); K.textContent=paso.k(); }
   if(P) P.style.width=(paso.p()*100).toFixed(0)+'%';
   /* NO se pasa de paso hasta que la cosa este hecha, y hay medio segundo de respiro entre uno y otro
      para que se alcance a leer el que acaba de completarse */
@@ -1386,17 +1540,26 @@ function abrirNota(nt){
   nt._nuevo=true;
   son('papel');
   avisar('');   // si no, el cartel de "2/3" se queda leyendose por atras del papel
-  notaT.textContent=nt.titulo;
-  notaC.innerHTML=nt.texto;
-  notaX.textContent = plataf==='pc'? 'CUALQUIER TECLA PARA SEGUIR' : 'TOCÁ PARA SEGUIR';
+  notaT.textContent=TX(nt.claveTit);
+  notaC.innerHTML=textoHoja(nt);
+  notaX.textContent = plataf==='pc'? TX('pSeguir') : TX('pTocar');
   notaEl.classList.add('ver');
+}
+/* el texto de una hoja se arma en el momento de leerla, no al crearla: asi cambiar de idioma
+   tambien cambia las hojas que ya encontraste */
+function textoHoja(nt){
+  const e=HOJAS[nt.claveTxt];
+  let txt=(e && (e[IDIOMA]||e.en)) || '';
+  const d = typeof nt.datos==='function'? nt.datos() : nt.datos;
+  if(d) for(const k in d) txt=txt.split('{'+k+'}').join(d[k]);
+  return txt;
 }
 function cerrarNota(){
   /* al cerrar una hoja que explica un enigma, se avisa que hay objetivo nuevo: si no, el jugador
      cierra el papel, vuelve al negro y no le queda nada en la mano */
   if(notaAbierta && notaAbierta._nuevo){ notaAbierta._nuevo=false;
     const i=notas.indexOf(notaAbierta);
-    if(NOTA_DE[i]!==null && !SELLOS[NOTA_DE[i]]) avisar('OBJETIVO NUEVO', 2.2);
+    if(NOTA_DE[i]!==null && !SELLOS[NOTA_DE[i]]) avisar(TX('aObjetivo'), 2.2);
   }
   notaAbierta=null; notaEl.classList.remove('ver');
 }
@@ -1737,6 +1900,43 @@ let avisoT=0;
 function avisar(txt,seg){ if(!txt){ avisoEl.classList.remove('ver'); avisoT=0; return; }
   avisoEl.textContent=txt; avisoEl.classList.add('ver'); avisoT=seg||2.4; }
 
+/* ===================== IDIOMA: PINTAR Y ELEGIR ===================== */
+function pintarIdioma(){
+  for(const el of document.querySelectorAll('[data-i18n]')) el.innerHTML=TX(el.getAttribute('data-i18n'));
+  pintarTeclas();
+  /* si hay una hoja abierta se vuelve a armar con el idioma nuevo */
+  if(notaAbierta) abrirNota(notaAbierta);
+  const m=document.getElementById('meta'); if(m) m._ult=null;
+  const T=document.getElementById('tutoT'); if(T) T._p=null;
+}
+function elegirIdioma(cod){
+  IDIOMA=cod;
+  try{ localStorage.setItem('eco_idioma', cod); }catch(e){}
+  document.documentElement.lang=cod;
+  pintarIdioma();
+}
+(function armarIdioma(){
+  const cont=document.getElementById('idBotones');
+  for(const [cod,nom] of IDIOMAS){
+    const b=document.createElement('button'); b.className='idB'; b.textContent=nom;
+    const ir=()=>{ elegirIdioma(cod);
+      document.getElementById('idioma').classList.add('ir');
+      document.body.classList.remove('tapa');
+      setTimeout(()=>{ const e=document.getElementById('idioma'); if(e) e.style.display='none'; }, 420); };
+    b.addEventListener('click', ir);
+    b.addEventListener('touchstart', ev=>{ ev.preventDefault(); ir(); }, {passive:false});
+    cont.appendChild(b);
+  }
+  document.body.classList.add('tapa');
+  elegirIdioma(IDIOMA);
+  /* y desde el menu se puede volver a elegir */
+  const c=document.getElementById('cambiaIdioma');
+  if(c){ const volver=()=>{ const e=document.getElementById('idioma');
+      e.style.display=''; e.classList.remove('ir'); document.body.classList.add('tapa'); };
+    c.addEventListener('click', volver);
+    c.addEventListener('touchstart', ev=>{ ev.preventDefault(); volver(); }, {passive:false}); }
+})();
+
 /* ===================== EL MENU ===================== */
 let jugando=false, tiempo=0, ganado=false, selloAviso=0;
 const menuEl=document.getElementById('menu');
@@ -1753,14 +1953,16 @@ document.getElementById('jugar').addEventListener('click',()=>{
   /* la primera onda, de regalo: si el juego empieza en negro absoluto nadie entiende que paso */
   emitir(jug.x, jug.y, jug.z, 1.0, 40);
   eco=1;
-  avisar('ESCUCHÁ · HAY UNA NOTA ACÁ AL LADO', 3.0);
+  avisar(TX('aEscucha'), 3.0);
 });
 /* la leyenda de teclas */
-document.getElementById('teclas').innerHTML=[
-  ['WASD','moverse'],['Mouse','mirar'],['Shift','correr'],
-  ['C / Ctrl','agacharse · sin ruido'],['Space','saltar · golpear el piso'],
-  ['E','gritar'],['F','leer una nota'],['Esc','soltar el mouse']
-].map(([k,d])=>'<i>'+k+'</i><span>'+d+'</span>').join('');
+function pintarTeclas(){
+  document.getElementById('teclas').innerHTML=[
+    ['WASD',TX('kMover')],['Mouse',TX('kMirar')],['Shift',TX('kCorrer')],
+    ['C / Ctrl',TX('kAgachar')],['Space',TX('kSaltar')],
+    ['E',TX('kGritar')],['F',TX('kLeer')],['Esc',TX('kEsc')]
+  ].map(([k,d])=>'<i>'+k+'</i><span>'+d+'</span>').join('');
+}
 
 /* ===================== LA COSA =====================
    Un monstruo que te sigue, y que en este juego solo puede funcionar de una forma: CAZANDO POR EL
@@ -1875,7 +2077,7 @@ function cosaTick(dt){
   cosa.g.visible=true;
   cosa.t+=dt;
   if(cosa.estado==='duerme'){
-    if(tiempo>COSA_GRACIA && tutoListo){ cosaPonerLejos(); avisar('ALGO SE DESPERTÓ', 2.6); son('mal'); }
+    if(tiempo>COSA_GRACIA && tutoListo){ cosaPonerLejos(); avisar(TX('aDesperto'), 2.6); son('mal'); }
     else return;
   }
   /* LA DISTANCIA Y LOS OJOS SE ACTUALIZAN SIEMPRE, aturdida o no. Estaban despues del corte y eso
@@ -1955,7 +2157,7 @@ function cosaAgarra(){
   son('agarron');
   jug.dipV -= 3.2;                     // el sacudon
   emitir(jug.x, 1.2, jug.z, 1.0, 52);
-  avisar('TE AGARRÓ', 3.0);
+  avisar(TX('aAgarro'), 3.0);
   /* de vuelta a la entrada, con los sellos puestos. No se pierde nada: perder progreso por un
      descuido en un juego a oscuras es la forma mas rapida de que lo cierren. */
   jug.x=XC(0); jug.z=ZC(0); jug.vx=0; jug.vz=0;
@@ -2190,14 +2392,14 @@ function animar(){
       if(nSellos()>=4){
         ganado=true;
         const m=Math.floor(tiempo/60), sg=Math.floor(tiempo%60);
-        avisar('SALISTE · '+m+':'+(sg<10?'0':'')+sg, 999);
+        avisar(TX('aSaliste',{t:m+':'+(sg<10?'0':'')+sg}), 999);
         son('salida');
         emitir(jug.x, jug.y, jug.z, 1.0, 78);
       } else if(selloAviso<=0){
         /* con espera: sin ella el cartel se vuelve a poner cada cuadro que estas parado ahi y no se
            puede leer nada mas */
         selloAviso=4.0;
-        avisar('SELLADA · '+nSellos()+'/4', 2.4);
+        avisar(TX('aSellada',{n:nSellos()}), 2.4);
       }
     }
   }
@@ -2218,11 +2420,11 @@ function animar(){
     const tapado = !tutoListo && tutoPaso<3;
     if(lp && !notaAbierta && !tapado){
       if(sinAbrir){
-        lp.innerHTML='HAY UNA HOJA EN ESTA PARED<br><b>'+(plataf==='pc'?'E':'GRITAR')+
-                     '</b> · '+sinAbrir.cargas+' DE '+NOTA_GRITOS+' GRITOS';
+        lp.innerHTML=TX('pHoja')+'<br><b>'+(plataf==='pc'?'E':TX('bGritar'))+'</b> · '+
+                     TX('pGritos',{n:sinAbrir.cargas, m:NOTA_GRITOS});
         lp.classList.add('ver');
       } else if(leible){
-        lp.innerHTML='<b>'+(plataf==='pc'?'F':'LEER')+'</b> · '+leible.titulo;
+        lp.innerHTML='<b>'+(plataf==='pc'?'F':TX('bLeer'))+'</b> · '+TX(leible.claveTit);
         lp.classList.add('ver');
       } else lp.classList.remove('ver');
     } else if(lp) lp.classList.remove('ver');
@@ -2244,10 +2446,10 @@ function animar(){
     ecoEl.style.color='rgba(190,205,220,'+(0.22+jug.ruido*0.62).toFixed(2)+')';
     if(cosa.estado!=='duerme' && cosa.aturdida<=0 && cosa.cerca<14){
       ecoEl.style.color='rgba(255,120,96,'+(0.45+0.55*Math.max(0,1-cosa.cerca/14)).toFixed(2)+')';
-      ecoEl.textContent = cosa.cerca<6? 'LO TENÉS ENCIMA' : 'ALGO TE SIGUE';
+      ecoEl.textContent = cosa.cerca<6? TX('hEncima') : TX('hSigue');
     } else
-    ecoEl.textContent = ganado? 'SALIDA' : jug.agachado? 'AGACHADO · SIN RUIDO'
-                      : (jug.ruido>0.62? 'RUIDO' : jug.ruido>0.18? 'ECO' : 'SILENCIO'); }
+    ecoEl.textContent = ganado? TX('hSalida') : jug.agachado? TX('hAgachado')
+                      : (jug.ruido>0.62? TX('hRuido') : jug.ruido>0.18? TX('hEco') : TX('hSilencio')); }
 
   render.render(escena,camara);
 }
@@ -2292,6 +2494,12 @@ window.__eco={
   notas:()=>notas.map(n=>({ titulo:n.titulo, cel:n.cel.slice(), lado:n.lado,
                             cargas:n.cargas, abierta:n.abierta, leida:n.leida,
                             dist:+Math.hypot(jug.x-n.x, jug.z-n.z).toFixed(2) })),
+  idioma:(c)=>{ if(c) elegirIdioma(c); return { actual:IDIOMA, hay:IDIOMAS.map(i=>i[0]) }; },
+  textos:()=>({ menuSub:document.getElementById('sub').textContent,
+                jugar:document.getElementById('jugar').textContent,
+                ficha1:document.querySelector('.ficha h4').textContent,
+                tecla1:(document.querySelector('#teclas span')||{}).textContent||'',
+                bGritar:document.querySelector('#bGrito span').textContent }),
   objetivo:()=>objetivo(),
   tutorial:()=>({ paso:tutoPaso, listo:tutoListo, andado:+tutoAndado.toFixed(2), gritos:tutoGritos,
                   texto:(document.getElementById('tutoT')||{}).textContent||'',

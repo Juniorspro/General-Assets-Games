@@ -12,12 +12,67 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Campo_de_Tiro.html` ES "Z Force"** (1,83 MB). Es el proyecto grande: FPS con campo de
   tiro, todos-contra-todos, duelo de equipos y battle royale. **NO SE TOCA NI SE BORRA**:
   el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
+- **`Maicol.html` es "Maicol"** (~256 KB, de los cuales 158 KB son los sprites y los fondos).
+  Plataformas 2D, siete niveles, hay que rescatar a Maicolito. Arte generado con Higgsfield.
 - **`Eco.html` es "Eco"** (~215 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cómo está hecho `Maicol.html`
+
+Pedido: *"haz otro juego 2D de Maicol, con 7 niveles donde tiene que rescatar a Maicolito su hermano,
+ahí tienes highsfield para los Sprites y animaciones buena decoración"*.
+
+- **LIENZO 2D Y NO WEBGL.** Todo lo que se dibuja son rectángulos y recortes de sprites, que es justo
+  lo que un contexto 2D hace por hardware. WebGL acá no compra nada y cuesta mil líneas.
+- **LOS SPRITES SON GENERADOS Y VIVEN ADENTRO DEL ARCHIVO.** Se pidieron a Higgsfield sobre fondo
+  **magenta puro**, se cortaron por columnas con contenido, se les sacó el fondo **por distancia en
+  RGB y no por igualdad** (los bordes vienen con halo) y se empaquetaron en tiras.
+  DOS COSAS QUE SALIERON MAL: la primera tanda de poses vino en **pixel art** y no pegaba con el
+  ciclo de carrera (vectorial), hubo que regenerarla diciendo explícitamente "NOT pixel art"; y
+  escalar cada pose a un alto común hacía que **el personaje cambiara de tamaño según la pose** — la
+  de caída, más achatada, salía el doble de grande. Va **una sola escala para todos los cuadros**,
+  sacada del primero, y alineados abajo y al centro. Herramientas en `herramientas/maicol/`.
+- **LOS NIVELES SE GENERAN Y SE VALIDAN, NO SE DIBUJAN A OJO.** Los primeros siete los escribí a mano
+  y **los siete eran imposibles**: tenían huecos de hasta **nueve casillas** cuando el salto llega a
+  cuatro. Un comprobador de alcanzabilidad (BFS sobre casillas donde se puede estar parado, con el
+  alcance real del salto) rechaza cualquier nivel del que no se pueda llegar a la meta, y el
+  generador reintenta hasta 900 veces. Verificado: **los 7 se terminan** con un bot que corre a la
+  derecha y salta.
+- **Y LAS MEDIDAS DEL SALTO MANDAN SOBRE EL DISEÑO.** Con `SALTO=700` el ápice subía 111 px = 2,3
+  casillas, o sea que **ninguna plataforma era alcanzable**: la más baja que se puede poner sobre el
+  piso está a 3 casillas (144 px). Con 820 el ápice sube 160 px y el vuelo dura 0,78 s = 219 px de
+  largo. `v = raíz(2·g·h)`.
+- **EL AIRE SOBRE CADA HUECO ES SAGRADO.** Al saltar un hueco la cabeza barre de la fila 11 a la 8;
+  una plataforma ahí frena el salto en seco y el jugador cae al pozo. Fue exactamente lo que pasaba:
+  el bot moría siempre en la casilla 9,7, que es el primer hueco. Ahora las columnas del hueco y
+  cinco antes quedan prohibidas para plataformas.
+- **194 PINCHES FLOTANDO.** Los pinches sobre un pozo quedan a la altura de la **cabeza** del jugador
+  parado en el piso de al lado: matan al primer paso. Se quitan todos los que no tengan piso justo
+  abajo y se ponen de a uno o dos sobre tramos de al menos cinco casillas, con dos libres a cada
+  lado — tres seguidos al borde de un hueco dejan un tramo que no se puede saltar.
+- **CAER A UN POZO CUESTA UNA VIDA, NO LA PARTIDA.** Se guarda el último piso firme y se vuelve ahí.
+  Perder dos minutos de nivel por un salto es la forma más rápida de que alguien cierre el juego.
+  Y hay zona segura: nada de bichos ni pinches en las primeras 12 casillas ni en las últimas 8 —
+  aparecer al lado de un enemigo no es dificultad, es una emboscada.
+- Salto con **coyote** (0,10 s) y **pedido guardado** (0,14 s), aceleración y roce, animación por
+  distancia recorrida, cámara con suavizado, y audio procedural.
+
+### Idiomas (los dos juegos)
+
+Pedido: *"que venga por predeterminado en inglés"*. Pantalla de idioma **antes** del menú —elegir
+idioma dentro de un menú ya escrito en un idioma que no entendés no sirve— y desde el menú se puede
+volver a cambiar. Arranca en **inglés**, se guarda en `localStorage`.
+Nada de texto suelto en el código: todo sale de una tabla. Las hojas de Eco guardan la **clave** y no
+el texto, así cambiar de idioma también cambia las que ya encontraste — verificado en vivo con una
+hoja abierta.
+**LA FUNCIÓN SE LLAMA `TX` Y NO `t`.** Una función global de una letra es una bomba: cualquier script
+que comparta la página —o un `eval` con un `var t` adentro— la pisa, y cuando se pisa no falla el
+idioma, falla **todo**, porque no queda un solo texto que no pase por ahí. Pasó de verdad en una
+prueba y dejó el juego sin poder cargar nivel.
 
 ### Cómo está hecho `Eco.html`
 
