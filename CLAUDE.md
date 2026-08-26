@@ -21,6 +21,85 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Sexta vuelta de `Maicol.html` (2026-08-26)
+
+Pedido: *"genera música efectos de sonido voces todo por highsfield también va muy pero MUY Lag y
+también genera Sprites de caminar agachado, ahora quiero que generes 60 fotogramas de animaciones
+en todo puedes hacer varias imágenes y después juntar las pero si o si 60"*.
+
+#### EL LAG: dos causas, las dos medidas, las dos arregladas
+
+Lo primero fue medir en vez de adivinar. **Dibujar cuesta 0,19 ms de JS por cuadro** — o sea que el
+problema no estaban las órdenes, estaba en los **píxeles que hay que rellenar**. Con eso el
+diagnóstico se vuelve aritmética.
+
+1. **EL LIENZO SE DIBUJABA AL DOBLE DE LA RESOLUCIÓN DE DISEÑO.** El mundo está hecho para
+   1024×576: el sprite del jugador mide 86 px y la casilla 48. Pero `lienzo.width = ancho * DPR`
+   con `DPR` hasta 2, así que en un teléfono de 412×915 el lienzo salía de **1464×824 =
+   1.206.336 píxeles contra los 589.824 del diseño: 2,04 veces**. El doble de relleno por cuadro,
+   cada cuadro, y lo único que se ganaba era **resamplear para arriba dibujos que no tienen más
+   detalle que dar**. Ahora hay techo. Medido en 412×915 con DPR 2: **19,5 → 29,25** cuadros por
+   segundo.
+   Y hay un **vigía que mide si sirve** antes de bajar más: bajar la resolución a ciegas es una
+   apuesta, y en un aparato que no está limitado por relleno no gana nada y sólo deja la imagen más
+   blanda. Medido acá: de 590 mil a 389 mil píxeles, 29,45 → 29,60, o sea **cero**. Así que baja un
+   escalón, vuelve a medir, y si no ganó al menos un 8% **se vuelve para arriba y deja de tocar**.
+2. **EL NIVEL SE REPINTABA CASILLA POR CASILLA, SESENTA VECES POR SEGUNDO.** Las casillas no se
+   mueven. Las 286 que entran en pantalla, cada una con un relleno de textura **más** un velo, son
+   **572 rellenos cada 16 ms para obtener siempre el mismo dibujo**. Ahora el nivel entero se pinta
+   una vez en un lienzo aparte al cargarlo (3072×768 en el nivel 1) y cada cuadro es **una copia de
+   la ventana visible**. Los adornos van horneados también, que son estáticos; los árboles del
+   terreno no, porque se mecen. Medido en la misma sesión: **25,15 → 37,65**.
+   Más el cielo pre-escalado al alto justo: dibujado con `drawImage` escalado hay que remuestrear
+   590 mil píxeles por cuadro para llegar siempre al mismo resultado.
+
+**Total en el perfil del teléfono: 19,5 → 37,65 cuadros por segundo, casi el doble, y eso CON los
+60 fotogramas y todo el audio encima.**
+
+#### 60 FOTOGRAMAS, en diez tandas
+
+`corre` 8 · `quieto` 4 · `agCamina` 6 · `agQuieto` 6 · `salto` 6 · `cae` 6 · `golpe` 6 · `muere` 6 ·
+`festeja` 6 · `frena` 6. Cada ciclo se recorre por **la variable física que lo causa** y no por
+tiempo: el salto por la velocidad vertical, la caída por la velocidad de caída, el golpe y la muerte
+por su reloj. Un ciclo recorrido por tiempo cuando la física va a otra velocidad se ve patinando.
+
+**POR QUÉ LA ALTURA VA DECLARADA A MANO Y NO MEDIDA.** Con 16 cuadros la regla del **ancho de
+cabeza** funcionaba: en una pose de pie, arriba de todo hay cabeza y nada más. Con 60 se rompe, y
+se rompe medido: en las poses agachadas el tercio de arriba de la figura es la **espalda arqueada**,
+que es anchísima, y la regla devolvía **429 px de "cabeza" para una figura de 430 de alto** — o sea
+que escalaba el muñeco a 18 px. Probé tres reglas rígidas más y las tres se caen con la pose:
+- contar píxeles de **zapatilla**: 5415 en una tanda y **6** en el festejo (ahí son más claras);
+- contar **rojo de campera**: 29913 en una y **958** en el tumbo de la muerte;
+- contar **piel de la cara**: varía hasta un **111% dentro de la misma tanda**, porque la cara se da
+  vuelta y las manos se esconden.
+
+Lo que **sí** es cierto y está medido: dentro de cada tanda el modelo mantuvo la escala (`agCamina`
+da 430, 430, 430, 430, 430, 430; `frena` da 669..675). O sea que hace falta **un número por tanda**,
+no una regla universal. Y ese número se sabe: se sabe cuánto mide un chico parado (118 px de atlas,
+medido en la vuelta 3) y se sabe qué animación es cada tanda. Se declara y **se comprueba midiendo
+el resultado en el navegador**: parado **73,3 px** contra contacto de correr **69,0** = **6,2%**, los
+60 centrados dentro de 2 px, y los doce agachados entre **40 y 44 px**, todos por debajo de los 48
+del túnel — ya no hace falta aplastar el dibujo a mano para que entre.
+
+#### AUDIO GRABADO: 4 temas y 8 efectos
+
+- Los temas vienen en **AAC de 1 MB cada uno**, 3,9 MB los cuatro. El contenedor no tiene `ffmpeg`
+  de línea de comandos y Chromium **no trae el decodificador de AAC** (es Chromium, no Chrome:
+  `decodeAudioData` devuelve EncodingError). Se decodifican con **PyAV**, que trae las bibliotecas
+  adentro. De 3,9 MB a **270 KB**.
+- **El empalme del bucle es lo que más se nota.** Un tema cortado en seco y puesto en loop da un
+  golpe seco cada vuelta, y ese golpe se escucha más que la música. Se funde la cola sobre la
+  cabeza — el mismo problema que la costura de una textura, pero en una dimensión.
+- **Cada efecto es una pila de tres `Audio`.** Un solo elemento no puede sonar encima de sí mismo:
+  al segundo disparo salta al principio y corta el primero, y dos monedas seguidas pasan todo el
+  tiempo. Y la música se guarda una vez por tema: creando un `Audio` nuevo en cada cambio hay que
+  volver a decodificar 65 KB de base64 justo cuando arranca el nivel.
+- Los osciladores quedan como respaldo: si un efecto no está, suena el sintetizado.
+- La música arranca con el **primer toque**, no al cargar: ningún navegador deja sonar nada sin un
+  gesto. Y baja a 0,08 mientras habla la cinemática.
+
+Bytes: el HTML pasó de 994 KB a **1562 KB** (atlas 163, música 270, efectos 29, y lo que ya estaba).
+
 ### Quinta vuelta de `Maicol.html` (2026-08-26)
 
 Pedido: *"ahora sí haz un mejor menú también haz que los árboles estén sobre el terreno we no de
