@@ -13,7 +13,9 @@ const srv=http.createServer((q,r)=>{ let u=decodeURIComponent(q.url.split('?')[0
 await new Promise(r=>srv.listen(8098,r));
 const nav=await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
  args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--proxy-bypass-list=<-loopback>','--autoplay-policy=no-user-gesture-required'] });
-const ctx=await nav.newContext({viewport:{width:W,height:H},hasTouch:!PC,deviceScaleFactor:1});
+const MOVIL=!!process.env.MOVIL;   // telefono de verdad: pointer:coarse y user agent de Android
+const ctx=await nav.newContext(Object.assign({viewport:{width:W,height:H},hasTouch:!PC,deviceScaleFactor:1},
+  MOVIL? { isMobile:true, hasTouch:true, userAgent:'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36' } : {}));
 const pg=await ctx.newPage(); const cdp=await ctx.newCDPSession(pg);
 pg.on('requestfinished',async r=>{ try{ const q=await r.response(); if(q&&q.status()>=400) console.log('[HTTP]',q.status(),r.url().slice(0,140)); }catch(e){} });
 pg.on('console',m=>{ if(m.type()==='error') console.log('[err]',m.text().slice(0,200)); });
