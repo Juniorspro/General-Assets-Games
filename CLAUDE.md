@@ -21,6 +21,59 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Tercera vuelta de `Maicol.html` (2026-08-26)
+
+Pedido: *"agrega mejor decoración también el personaje es un poco más grande estando quieto y al
+moverse se achica, también necesito una animación Idle mientras está quieto, también niveles más
+decorados no solo una imagen por detrás, un menú más pixel art y nintendo Snes también, agrega
+animaciones de fondo como pájaros árboles en movimiento que largan hojas etc"*.
+
+- **EL MUÑECO CAMBIABA DE PORTE, y era medible.** Cada tanda de dibujos viene con su propia escala,
+  y al recortar cada pose por separado quedaba **parado 139 px de atlas contra 112 corriendo: 24%
+  más grande**. En pantalla eran 85,4 px contra 68,8 — 16,6 px de salto **cada vez que arrancabas a
+  caminar**.
+  LA REGLA PARA ARREGLARLO ES LA CABEZA. Es una parte rígida: no cambia con la pose. Medida en los
+  cuadros de contacto (que son los únicos donde arriba de todo hay solo cabeza y no un brazo
+  levantado) da **31,0 px, clavado en los cuatro**. Se escaló cada fuente para que su cabeza mida
+  eso. Medido **en el navegador, sobre los píxeles dibujados**: parado 73,3 px contra 68,8 corriendo,
+  **6,5% de diferencia** — que es lo que mide una persona parada contra la misma persona en el apoyo
+  de una zancada. Los cuatro cuadros de quieto dan 73, 74, 73, 73 y todos centrados dentro de 0,5 px,
+  así que tampoco se corre de costado al respirar.
+- **QUIETO DE VERDAD: cuatro cuadros que respiran**, en ida y vuelta (0-1-2-3-3-2-1-0) a 3,5 por
+  segundo = **2,3 s de ciclo**, que es una respiración tranquila. Va con **reloj propio**: si
+  compartía el de correr, la respiración salía a cámara rápida al frenar.
+- **TRES CAPAS, no una foto.** Lejos (la imagen, a 0,30), **medio a 0,55** y **cosas apoyadas en el
+  piso** a velocidad de cámara. Sin la tercera no hay profundidad, hay papel tapiz.
+  - **18 adornos** nuevos, seis por tema, puestos sobre las caras de casilla que dan al aire con un
+    **azar clavado** por (nivel, i, j): tiene que salir igual cada vez que se entra, porque si cambia
+    al morir el nivel se lee a otro nivel. 23, 12, 25, 19, 17, 21 y 15 por nivel.
+  - Bosque: árboles que se **mecen**, pájaros que cruzan (3 cuadros) y **hojas que caen** (4 dibujos,
+    girando).
+  - Cueva y fábrica no tienen árboles: la capa del medio se arma con los **mismos adornos
+    oscurecidos**, que es cómo se hace una silueta sin pedir dibujos nuevos. Más motas que flotan
+    (cueva) y chispas que suben (fábrica).
+- **LAS HOJAS CAÍAN DETRÁS DEL PISO.** Soltadas desde la copa de los árboles del medio recorrían
+  150 px y se metían atrás del bloque de tierra: **no se veía ninguna**. Ahora salen de arriba de la
+  pantalla y se dibujan **adelante de todo**, así cruzan los 576 px enteros.
+- **EL ÁRBOL MENEADO VA DIBUJADO DE ANTEMANO.** Un `drawImage` torcido lo resuelve el procesador
+  píxel por píxel; uno derecho lo copia de una. Doce sesgos precalculados y después son copias:
+  el costo de los árboles pasó de **4,07 ms a 1,85 ms por cuadro**.
+- **DOS TRAMPAS AL PEGAR LOS DIBUJOS EN EL HTML:**
+  1. El **último** elemento de `CARGA` no lleva coma. Agregando abajo sin ponérsela, JS lee las dos
+     líneas como `['a','b']['c','d']` — un acceso por índice — y **se come dos elementos**. Se caía
+     con "undefined is not iterable" y quedaban 7 de 14 dibujos.
+  2. Las hojas de origen traen una **línea de piso de punta a punta**. Como cruza toda la imagen, el
+     recorte se la lleva y **ensancha la caja de cada cuadro un poco distinto**: el muñeco queda
+     descentrado y se mueve de costado al animar (458, 636, 692 y 758 px de ancho para la misma
+     figura). Sacándola quedan 358, 356, 358, 358. Hay que borrar **también lo de abajo**: las suelas
+     asoman uno o dos píxeles por debajo de la línea.
+- **NO SE TOCÓ NADA DEL JUEGO.** Verificado corriendo el mismo bot contra la versión vieja y la
+  nueva: los 7 niveles dan **exactamente los mismos números** — mismo avance, mismas caídas, mismos
+  pasos. Todo lo de esta vuelta es dibujo.
+- Costo: 24,2 → 20,8 cuadros por segundo **con SwiftShader** (el render por software del contenedor,
+  que hace cada `drawImage` a mano en el procesador). En un teléfono con canvas acelerado esto no se
+  paga. La capa que más cuesta sigue siendo **la imagen de fondo**, que ya estaba.
+
 ### Segunda vuelta de `Maicol.html` (2026-08-26)
 
 Pedido: *"mejora todo hazlo un juego profesional mejora los Sprites a 24 Sprites de fps y todo esas

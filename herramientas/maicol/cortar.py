@@ -24,9 +24,30 @@ def quitar_magenta(im):
     out=np.dstack([rgb.astype(np.uint8), (alfa*255).astype(np.uint8)])
     return Image.fromarray(out,'RGBA'), (~fondo)
 
-def cortar(ruta, esperados=None, hueco=14):
+def sin_linea_de_piso(mask, frac=0.55, zona=0.12):
+    """El modelo suele dibujar una LINEA DE PISO de punta a punta abajo. Como cruza toda la
+       imagen, el recorte se la lleva y ensancha la caja de cada cuadro un poco distinto: el
+       muneco queda descentrado y se mueve de costado al animar.
+       Se busca en la franja de abajo la fila mas alta que este llena de punta a punta y se borra
+       de ahi para abajo. Hay que borrar TAMBIEN lo de abajo: las suelas asoman uno o dos pixeles
+       por debajo de la linea, y si se corta solo la linea el recorte sigue midiendo de punta a
+       punta por culpa de esas suelas."""
+    m=mask.copy()
+    cols=np.where(m.any(axis=0))[0]; filas=np.where(m.any(axis=1))[0]
+    if not len(cols) or not len(filas): return m
+    ancho = int(cols.max()-cols.min()+1)
+    y0, y1 = int(filas.min()), int(filas.max())
+    desde = max(y0, y1 - int(max(6, (y1-y0)*zona)))
+    corte=None
+    for y in range(desde, y1+1):
+        if m[y].sum() > ancho*frac: corte=y; break
+    if corte is not None: m[corte:]=False
+    return m
+
+def cortar(ruta, esperados=None, hueco=14, piso=False):
     im=Image.open(ruta)
     rgba, mask = quitar_magenta(im)
+    if piso: mask = sin_linea_de_piso(mask)
     cols = mask.any(axis=0)
     # runs de columnas con contenido, uniendo huecos chicos
     runs=[]; i=0; W=len(cols)
@@ -52,6 +73,38 @@ def cortar(ruta, esperados=None, hueco=14):
         if not len(filas): continue
         cuadros.append(rgba.crop((a, filas.min(), b, filas.max()+1)))
     return cuadros
+
+def cortar_parejo(ruta, n, margen=0.28, piso=False):
+    """Corta en enesimos. Hace falta cuando las figuras se TOCAN o se pisan y el corte por
+       huecos las une: ahi no hay hueco que buscar, hay que repartir el ancho.
+       Cada corte se corre al minimo de contenido dentro de una ventana, asi cae por el punto
+       mas flaco entre dos figuras y no por el medio de una."""
+    im=Image.open(ruta)
+    rgba, mask = quitar_magenta(im)
+    if piso: mask = sin_linea_de_piso(mask)
+    cuenta = mask.sum(axis=0)
+    llenas = np.where(cuenta>0)[0]
+    if not len(llenas): return []
+    x0, x1 = int(llenas.min()), int(llenas.max())+1
+    paso = (x1-x0)/n
+    vent = max(2, int(paso*margen))
+    cortes=[x0]
+    for k in range(1, n):
+        ideal = int(round(x0 + k*paso))
+        a=max(x0+1, ideal-vent); b=min(x1-1, ideal+vent)
+        if b<=a: cortes.append(ideal); continue
+        cortes.append(a + int(np.argmin(cuenta[a:b])))
+    cortes.append(x1)
+    cuadros=[]
+    for k in range(n):
+        a,b = cortes[k], cortes[k+1]
+        sub=mask[:, a:b]
+        filas=np.where(sub.any(axis=1))[0]; cols=np.where(sub.any(axis=0))[0]
+        if not len(filas) or not len(cols): continue
+        cuadros.append(rgba.crop((a+int(cols.min()), int(filas.min()),
+                                  a+int(cols.max())+1, int(filas.max())+1)))
+    return cuadros
+
 
 def hoja(cuadros, alto, apoyo='abajo'):
     """Los escala a un alto comun y los alinea por el piso, en una tira horizontal."""
