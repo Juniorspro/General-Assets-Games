@@ -21,6 +21,85 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Duodécima vuelta (2026-08-26): **Eco se juega con el micrófono de verdad**
+
+Pedido textual: *"que solamente te puedas mover pero no hagas ruido al caminar, que se use el
+micrófono y eso es lo único que debes poder usar para ver alrededor y ya"*. Se hizo con
+`herramientas/eco/parche_micro.py`, que es idempotente (comprobado: dos pasadas dan el mismo archivo).
+
+#### LOS BOTONES DE VOZ ERAN UNA IMITACIÓN
+
+HABLAR y GRITAR eran dos botones con dos esperas y dos alcances fijos. Ahora entra
+`getUserMedia` y **el alcance de la onda sale del nivel que entra por el micrófono**: no hay dos
+opciones, hay una rampa. Verificado en el navegador con el micrófono de verdad (`estado:'si'`,
+`on:true`), y medido inyectando el nivel crudo con el gancho `__eco.micNivel(rms)`:
+
+| | alcance | brillo medio | pantalla encendida |
+|---|---|---|---|
+| silencio | — | **0,0** | **0 %** |
+| susurro (k=0,10) | 10,4 m | 6,0 | 0 % |
+| hablando (k=0,40) | 23,6 m | 15,3 | 63,1 % |
+| gritando (k=1,0) | 50 m | 67,4 | 100 % |
+
+**La escala es logarítmica y no lineal**, porque el oído lo es: en lineal, hablar normal y gritar
+quedan los dos pegados arriba y el susurro no existe.
+
+#### CAMINAR NO HACE ABSOLUTAMENTE NADA
+
+Se fueron la pisada, el ruido del salto y el del aterrizaje. Medido con la cosa **a 4,2 m** y
+despierta, andando 120 cuadros:
+
+| | andado | ondas de luz | la cosa |
+|---|---|---|---|
+| caminar | 5,63 m | **0** | ronda |
+| correr | 9,99 m | **0** | ronda |
+| agachado | 2,58 m | **0** | ronda |
+
+Y cruzando **20 celdas** del laberinto: **0 ondas**, la cosa sigue en `ronda`. Antes correr se oía a
+24 m; ahora moverse es gratis y lo único que existe es lo que sale de tu boca.
+
+#### LA REGLA SIGUE SIENDO UNA: TE OYE HASTA DONDE VES
+
+`COSA_OYE` pasó de 46 a **50**, que es exactamente el alcance máximo de la voz: con 46 contra 50 la
+frase dejaba de ser cierta justo en el grito más fuerte, que es cuando el jugador la comprueba.
+Medido, con la cosa puesta a una distancia exacta:
+
+| voz | alcance | 4,2 m | 12,6 | 21 | 25,2 | 37,8 | 42 |
+|---|---|---|---|---|---|---|---|
+| susurro | 10,4 m | caza | ronda | — | — | — | — |
+| hablando | 23,6 m | — | — | caza | ronda | — | — |
+| gritando | 50 m | — | — | — | — | caza | caza |
+
+Y las llaves contestan por el mismo alcance: con llaves a 33,9 / 29,7 / 17,3 / 29,7 m, un susurro no
+despierta ninguna, hablando contesta **sólo la de 17,3**, y gritando contestan **las cuatro**.
+
+#### DOS COSAS QUE HAY QUE HACER Y NO SON OBVIAS
+
+- **EL PISO SE MIDE Y DESPUÉS SE SIGUE AJUSTANDO.** Un micrófono de teléfono en un cuarto callado y
+  uno de notebook al lado de un ventilador no dan ni parecido: con un umbral fijo el juego queda
+  encendido para siempre o apagado para siempre. Se escucha segundo y medio al empezar y ése es el
+  cero. Y sigue corrigiendo **despacio y sólo mientras estás callado** (ocho segundos de constante):
+  medido, con un fondo nuevo de 0,006 el piso sube 0,004 → 0,00639 (5 s) → 0,00823 (13 s) y **`k`
+  nunca deja de ser 0**, o sea que el ruido del cuarto no enciende el laberinto. Si siguiera también
+  mientras hablás, hablar mucho rato te dejaría ciego.
+- **EL MICRÓFONO NO SE CONECTA AL MAESTRO.** Si se conectara, el jugador se oiría a sí mismo por los
+  parlantes con el retardo del navegador: eso no es un efecto, es un acople. El micrófono va **sólo
+  al analizador**. Y lo que devuelve el juego es la **cola** de reverb y no una voz sintetizada —
+  el jugador ya se oyó con sus orejas; repetírsela suena a doblaje mal hecho.
+
+#### EL RESPALDO, QUE HACE FALTA
+
+Si el permiso se niega o el aparato no tiene micrófono, el juego quedaría imposible de jugar. Con el
+micrófono negado a propósito: aparece el aviso, sale el botón VOZ y la tecla `E` emite una onda
+media. Verificado: `bVoz` en `flex`, `E` produce una onda, cero errores.
+
+#### EL MEDIDOR VA EN LA COLUMNA DE ARRIBA, Y ESO SE APRENDIÓ ANTES
+
+El aviso del micrófono empezó suelto en el medio de la pantalla y se pisaba con el tutorial, que
+ocupa justo esa franja. Va adentro de `#top`, donde el solapamiento es **imposible por
+construcción** — la misma lección que ya había costado una vuelta con el HUD. El medidor sí va
+abajo, y en teléfono sube a 78 px porque el botón LEER vive en el borde.
+
 ### Undécima vuelta (2026-08-26): **Eco cambia de juego** — llaves, voz y un perseguidor
 
 Pedido textual: *"cambiemos el plan de eco ahora no hay formas de ver a menos que hables o grites y
