@@ -22,8 +22,18 @@ pg.on('console',m=>{ if(m.type()==='error') console.log('[err]',m.text().slice(0
 pg.on('response',r=>{ if(r.status()>=400) console.log('[404]', r.status(), r.url().slice(0,120)); });
 pg.on('pageerror',e=>console.log('[PAGE ERROR]',String(e).slice(0,400)));
 await pg.goto('http://127.0.0.1:8098/'+(process.env.PAGINA||'eco.html')+'?v='+Date.now(),{waitUntil:'domcontentloaded'});
-const foto=async n=>{ const r=await cdp.send('Page.captureScreenshot',{format:'png'});
- fs.writeFileSync('/tmp/ui/out/'+n+'.png',Buffer.from(r.data,'base64')); console.log('foto ->',n); };
+// EL RECORTE VA EXPLICITO. Sin clip, Page.captureScreenshot devolvia 1024x489 en una ventana de
+// 1024x576 -se comia los 87 px de abajo- y el pie de la cinematica parecia no existir cuando en
+// realidad estaba dibujado fuera de la foto. Con el clip del tamano de la ventana sale completo.
+// El navegador a veces se pone en escala de pagina 0,849 y entonces la foto sale con marco negro
+// y encogida aunque el DOM mida exactamente 1024x576. Se fija en 1 y listo.
+await cdp.send('Emulation.setDeviceMetricsOverride',{width:W,height:H,deviceScaleFactor:1,
+  mobile:MOVIL, screenWidth:W, screenHeight:H, positionX:0, positionY:0}).catch(()=>{});
+await cdp.send('Emulation.setPageScaleFactor',{pageScaleFactor:1}).catch(()=>{});
+const foto=async n=>{ const r=await cdp.send('Page.captureScreenshot',{format:'png',
+   captureBeyondViewport:false, clip:{x:0,y:0,width:W,height:H,scale:1}});
+ fs.writeFileSync('/tmp/ui/out/'+n+'.png',Buffer.from(r.data,'base64'));
+ console.log('foto ->',n); };
 for(const p of plan){
  if(p.wait) await pg.waitForTimeout(p.wait);
  if(p.click){ try{ await pg.click(p.click); }catch(e){ console.log('click falla',p.click); } }

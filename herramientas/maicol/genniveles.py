@@ -26,10 +26,13 @@ def solido(g,i,j):
 def pincho(g,i,j):
     W=len(g[0])
     return 0<=j<H and 0<=i<W and g[j][i]=='^'
-def parado(g,i,j):
+def pisable(g,i,j):
+    """Hay piso y entra el cuerpo AGACHADO: 34 px, o sea una casilla de 48."""
     W=len(g[0])
-    return 0<=i<W and 0<=j<H and not solido(g,i,j) and solido(g,i,j+1) \
-           and not solido(g,i,j-1) and not pincho(g,i,j) and not pincho(g,i,j-1)
+    return 0<=i<W and 0<=j<H and not solido(g,i,j) and solido(g,i,j+1) and not pincho(g,i,j)
+def parado(g,i,j):
+    """Ademas entra la cabeza: 62 px son DOS casillas. Solo desde aca se puede saltar."""
+    return pisable(g,i,j) and not solido(g,i,j-1) and not pincho(g,i,j-1)
 
 def alcanzable(g, ini, meta):
     SUBE=3; LA=4; LC=6; CAE=9
@@ -43,19 +46,24 @@ def alcanzable(g, ini, meta):
     while q:
         i,j=q.popleft()
         v=[]
+        # AL COSTADO SE PUEDE IR AGACHADO: alcanza con que haya piso y una casilla de aire.
+        # Si aca se pidiera estar parado, un tunel de agacharse cortaria el nivel en dos y el
+        # validador lo rechazaria aunque se pueda pasar de sobra.
         for d in(-1,1):
-            if parado(g,i+d,j): v.append((i+d,j))
-        for dx in range(-LA,LA+1):
-            for dy in range(-SUBE,1):
-                if parado(g,i+dx,j+dy): v.append((i+dx,j+dy))
+            if pisable(g,i+d,j): v.append((i+d,j))
+        # PERO SALTAR SOLO SE PUEDE PARADO, y hay que caer donde quepa parado.
+        if parado(g,i,j):
+            for dx in range(-LA,LA+1):
+                for dy in range(-SUBE,1):
+                    if parado(g,i+dx,j+dy): v.append((i+dx,j+dy))
         for dx in range(-LC,LC+1):
             for dy in range(1,CAE+1):
-                if parado(g,i+dx,j+dy): v.append((i+dx,j+dy)); break
+                if pisable(g,i+dx,j+dy): v.append((i+dx,j+dy)); break
         for c in v:
             if c not in vis: vis.add(c); q.append(c)
     return (b in vis), len(vis)
 
-def armar(W, huecos, anchoMax, plataformas, slimes, bats, estrellas, pinches, resortes, moviles, rnd):
+def armar(W, huecos, anchoMax, plataformas, slimes, bats, estrellas, pinches, resortes, moviles, agachados, rnd):
     g=vacio(W)
     # el piso, con huecos que SIEMPRE se pueden saltar
     for j in range(SUELO, H):
@@ -75,11 +83,35 @@ def armar(W, huecos, anchoMax, plataformas, slimes, bats, estrellas, pinches, re
     prohibidas=set()
     for (a,an) in cortes:
         for d in range(-5, an+3): prohibidas.add(a+d)
+    # TUNELES PARA AGACHARSE. Una losa en la fila FILA-1 sobre piso firme: parado el jugador ocupa
+    # FILA y FILA-1 -mide 62 px y la casilla 48-, agachado ocupa solo FILA. Con la losa encima hay
+    # que agacharse para pasar, y ADENTRO VA UNA ESTRELLA, que es lo que le da sentido al boton.
+    # Nunca sobre un hueco ni en la zona segura, y con dos casillas de piso firme de cada lado:
+    # salir agachado justo al borde de un pozo no es dificultad, es una trampa.
+    # VAN ANTES DE LAS PLATAFORMAS. Puestos despues salian uno o dos por juego en vez de tres:
+    # el tunel pide aire en la fila FILA-2 y las plataformas de la fila 8 ya se lo habian comido.
+    # Ahora se reservan las columnas y las plataformas de esa fila las esquivan.
+    tuneles=[]; sinTecho=set()
+    for _ in range(agachados):
+        for intento in range(400):
+            an=rnd.randint(3,5); i=rnd.randint(14, max(15, W-16))
+            if any((i+d) in prohibidas for d in range(-2, an+2)): continue
+            if not all(solido(g,i+d,SUELO) for d in range(-2, an+2)): continue
+            if not all(g[FILA][i+d]=='.' for d in range(-2, an+2)): continue
+            if not all(g[FILA-1][i+d]=='.' for d in range(-2, an+2)): continue
+            if any(abs(i-t) < 9 for t in tuneles): continue
+            for d in range(an): g[FILA-1][i+d]='#'
+            g[FILA][i+an//2]='*'
+            tuneles.append(i)
+            for d in range(-2, an+2): sinTecho.add(i+d)
+            break
+
     # plataformas: a 3 filas o menos por encima de algo donde se pueda estar, o no se llega
     for _ in range(plataformas):
         for intento in range(60):
             an=rnd.randint(3,6); i=rnd.randint(4, W-an-10); j=rnd.choice([8,6,4,7,5])
             if any((i+d) in prohibidas for d in range(an)): continue
+            if j>=8 and any((i+d) in sinTecho for d in range(an)): continue
             if any(g[j][i+d]!='.' for d in range(an)): continue
             # DOS FILAS LIBRES ARRIBA, no una. El jugador mide 62 px y la casilla 48: parado sobre
             # una plataforma su cabeza llega a la fila j-2. Con una sola libre se generaban
@@ -181,13 +213,13 @@ def armar(W, huecos, anchoMax, plataformas, slimes, bats, estrellas, pinches, re
     return g, mi
 
 def nivel(k, rnd):
-    cfg=[ dict(W=64,huecos=2,anchoMax=2,plataformas=4,slimes=1,bats=0,estrellas=4,pinches=0,resortes=1,moviles=0),
-          dict(W=66,huecos=3,anchoMax=2,plataformas=5,slimes=2,bats=1,estrellas=5,pinches=2,resortes=1,moviles=1),
-          dict(W=68,huecos=3,anchoMax=3,plataformas=6,slimes=3,bats=2,estrellas=6,pinches=3,resortes=2,moviles=1),
-          dict(W=70,huecos=4,anchoMax=3,plataformas=7,slimes=3,bats=3,estrellas=7,pinches=4,resortes=2,moviles=2),
-          dict(W=72,huecos=4,anchoMax=3,plataformas=8,slimes=4,bats=3,estrellas=8,pinches=5,resortes=3,moviles=2),
-          dict(W=74,huecos=5,anchoMax=3,plataformas=9,slimes=5,bats=4,estrellas=9,pinches=6,resortes=3,moviles=3),
-          dict(W=76,huecos=5,anchoMax=3,plataformas=10,slimes=6,bats=5,estrellas=10,pinches=7,resortes=4,moviles=3) ][k]
+    cfg=[ dict(W=64,huecos=2,anchoMax=2,plataformas=4,slimes=1,bats=0,estrellas=4,pinches=0,resortes=1,moviles=0,agachados=1),
+          dict(W=66,huecos=3,anchoMax=2,plataformas=5,slimes=2,bats=1,estrellas=5,pinches=2,resortes=1,moviles=1,agachados=2),
+          dict(W=68,huecos=3,anchoMax=3,plataformas=6,slimes=3,bats=2,estrellas=6,pinches=3,resortes=2,moviles=1,agachados=2),
+          dict(W=70,huecos=4,anchoMax=3,plataformas=7,slimes=3,bats=3,estrellas=7,pinches=4,resortes=2,moviles=2,agachados=3),
+          dict(W=72,huecos=4,anchoMax=3,plataformas=8,slimes=4,bats=3,estrellas=8,pinches=5,resortes=3,moviles=2,agachados=3),
+          dict(W=74,huecos=5,anchoMax=3,plataformas=9,slimes=5,bats=4,estrellas=9,pinches=6,resortes=3,moviles=3,agachados=3),
+          dict(W=76,huecos=5,anchoMax=3,plataformas=10,slimes=6,bats=5,estrellas=10,pinches=7,resortes=4,moviles=3,agachados=3) ][k]
     for intento in range(900):
         g,mi = armar(rnd=rnd, **cfg)
         ok,n = alcanzable(g, (0,FILA), (mi,FILA))

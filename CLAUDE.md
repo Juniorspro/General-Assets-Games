@@ -21,6 +21,71 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Quinta vuelta de `Maicol.html` (2026-08-26)
+
+Pedido: *"ahora sí haz un mejor menú también haz que los árboles estén sobre el terreno we no de
+fondo, también las rocas y eso mejoralo, mejora el menú de inicio haz una Cinemática generando
+voces de highsfield e imágenes representativas también genera que los pájaros no se muevan con el
+player porque nunca salen de la cámara xd también mejora todo etc etc y haz algo útil con las
+estrellas y un botón de agacharte para espacios pequeños etc"*.
+
+- **LOS PÁJAROS VIAJABAN PEGADOS A LA CÁMARA.** Estaban guardados en coordenadas de **pantalla**,
+  así que por más que corrieras nunca salían del cuadro — y un pájaro que te sigue a todos lados no
+  se lee a pájaro. Ahora la x es del **mundo** y se dibujan a 0,45 de la cámara. El reciclado va
+  contra la cámara, que es lo único que sabe dónde está el borde.
+- **AGACHARSE ES UNA MEDIDA, no un dibujo.** Parado el jugador mide 62 px y la casilla 48: ocupa
+  **dos** filas. Agachado mide 34 y entra en **una**. El generador pone losas en la fila `FILA-1`
+  sobre piso firme, y **adentro va una estrella** — así el botón tiene para qué existir.
+  Medido: parado, corriendo contra el túnel, avanza **1512 → 1568 y se clava** (vx=0). Agachado,
+  **1512 → 1804 a 118 px/s** y se lleva la estrella. La estrella del túnel **no se puede juntar de
+  ninguna otra manera**.
+  No se puede estirar si hay techo: si se pudiera, el jugador saldría disparado atravesando la losa.
+  Y el dibujo también se aplasta a 46 px, porque el cuadro de agacharse mide 62 dibujado y el túnel
+  tiene 48: sin aplastarlo la cabeza atraviesa la losa.
+- **EL VALIDADOR TUVO QUE APRENDER A AGACHARSE.** Se partió `parado` en dos: `pisable` (hay piso y
+  una casilla de aire) y `parado` (además hay lugar para la cabeza). Al costado se puede ir
+  agachado; **saltar solo se puede parado**. Sin esa distinción un túnel corta el nivel en dos y el
+  validador lo rechaza aunque se pase de sobra. Los 7 salieron **al primer intento**, con 1 o 2
+  túneles cada uno.
+- **CUATRO ESTRELLAS, UNA VIDA** (tope 5). Una estrella que solo sube un número es decoración; se
+  junta la cuarta, la barra de corazones **crece**, y eso sí se siente. Además el selector de
+  niveles muestra `★n/total` por nivel, guardado.
+- **ÁRBOLES SOBRE EL TERRENO**, a velocidad de cámara. Los del fondo van a 0,55 y por eso se leen a
+  fondo. La regla para no arruinar el nivel: **solo donde hay cinco filas de aire limpias** y dos
+  columnas a cada lado, y lejos de estrellas, bichos, resortes, banderas, la meta y el arranque. Un
+  árbol de tres casillas y media tapa lo que hay detrás, así que va únicamente donde no hay nada
+  que tapar. La mitad van espejados: es **un solo dibujo**, y cuatro copias idénticas en pantalla se
+  leen a copia y pega.
+- **EL PISO CON TEXTURA.** Un relleno de color plano con dos manchitas encima se lee a casilla de
+  prueba. Las tres texturas están **cosidas por los cuatro bordes**: se dibujan con `createPattern`,
+  o sea repitiendo, y cualquier diferencia entre bordes pinta una **rejilla** sobre todo el piso.
+  Y van con el lienzo corrido a coordenadas de mundo: un patrón de canvas está clavado al origen de
+  la transformación, así que dibujando en pantalla el piso **se desliza por debajo de sí mismo**.
+- **CINEMÁTICA CON VOZ: cuatro planos, cuatro líneas y cuatro voces por idioma** (12 en total).
+  **La voz manda el tiempo** — cada plano dura lo que dura la línea, no un número fijo, porque en
+  tres idiomas la misma frase dura distinto. Con plazo de respaldo: si el audio no arranca (teléfono
+  en silencio, autoplay bloqueado) la cinematica se quedaría clavada para siempre en el primer plano.
+  Los WAV venían a 700 KB cada uno (8 MB los doce): van a MP3 mono de 24 kbps a 22 kHz, sin el medio
+  segundo de silencio de cada punta y con el volumen igualado — **244 KB los doce**.
+- **MENÚ CON ARTE**, con degradé encima y no solo con opacidad: bajándole nada más la opacidad el
+  dibujo compite con el título en todo el cuadro y no se lee ninguno de los dos.
+- **Y SALIÓ 49% MÁS RÁPIDO.** Medido en la misma sesión, los dos en juego: `3f774d9` daba **18,2**
+  cuadros por segundo con SwiftShader y esto da **27,2**. La textura reemplazó **dos `fillRect` por
+  casilla de tierra** (las manchitas) por un relleno de patrón: con 110 casillas de tierra a la
+  vista son 220 rellenos menos por cuadro.
+- **DOS BUGS PROPIOS, los dos del mismo tipo.** `jug.quieto += dt` había quedado escrito **cuatro
+  veces** y la respiración corría a 4×; y `const EST_X_VIDA` salió **seis veces** y el juego no
+  arrancaba. Los dos por el mismo guardia mal escrito en el parche: decía
+  `if b in s and a not in s`, y cuando el texto nuevo **contiene** al viejo —que es el caso normal,
+  porque casi siempre se agrega alrededor de lo que ya estaba— después de parchear `a` sigue estando
+  dentro de `b`, el guardia no salta y el parche se aplica de nuevo. El guardia correcto es
+  **`if b in s` y nada más**.
+- Y una del banco de pruebas: `Page.captureScreenshot` devolvía **1024×489** en una ventana de
+  1024×576 mientras el DOM medía exacto. El pie de la cinematica estaba dibujado 87 px por debajo
+  del borde de la foto y parecía no existir. Se arregló con `clip` explícito y escala de página 1.
+- Bytes: el HTML pasó de 372 a **994 KB**, casi todo cinemática (210 KB de dibujos + 244 KB de voz,
+  que en base64 son 605).
+
 ### Cuarta vuelta de `Maicol.html` (2026-08-26)
 
 Pedido: *"la foto de atrás hacele de cielo nomás después otra parallax de montaña después más
