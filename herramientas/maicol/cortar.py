@@ -24,6 +24,33 @@ def quitar_magenta(im):
     out=np.dstack([rgb.astype(np.uint8), (alfa*255).astype(np.uint8)])
     return Image.fromarray(out,'RGBA'), (~fondo)
 
+def quitar_fondo(im, tol=52):
+    """Saca el fondo SEA DEL COLOR QUE SEA. quitar_magenta pide magenta puro y eso alcanzaba
+       mientras el modelo aceptara background_color; los modelos con imagen de referencia no
+       tienen ese parametro y devuelven el magenta que se les canta —uno devolvio (191,83,145)—,
+       asi que el recorte no sacaba nada y la hoja entera salia como un solo cuadro.
+       Se muestrean las cuatro esquinas, se toma el color que mas se repite y se saca por
+       distancia: los bordes vienen con halo y por igualdad exacta quedan dientes."""
+    # float32 y NO int16: (255-0)^2 = 65025 y el maximo de un int16 es 32767, asi que la
+    # distancia al fondo desbordaba y sqrt recibia negativos. La mascara salia con agujeros.
+    a=np.asarray(im.convert('RGB')).astype(np.float32)
+    H,W,_=a.shape
+    e=[tuple(a[2,2].astype(int)), tuple(a[2,W-3].astype(int)),
+       tuple(a[H-3,2].astype(int)), tuple(a[H-3,W-3].astype(int))]
+    from collections import Counter
+    fondo=np.array(Counter(e).most_common(1)[0][0], np.float32)
+    d=np.sqrt(((a-fondo)**2).sum(axis=2))
+    mask = d > tol                              # True = hay dibujo
+    alfa=np.clip((d-tol*0.55)/(tol*0.45), 0, 1).astype(np.float32)
+    rgb=a.copy()
+    # descontaminar el borde: los pixeles casi-fondo tiran al color del fondo
+    borde=(alfa>0.05)&(alfa<0.95)
+    for c in range(3):
+        rgb[:,:,c]=np.where(borde, np.clip((a[:,:,c]-fondo[c]*(1-alfa))/np.maximum(alfa,0.15),0,255), a[:,:,c])
+    out=np.dstack([rgb.astype(np.uint8), (alfa*255).astype(np.uint8)])
+    return Image.fromarray(out,'RGBA'), mask
+
+
 def sin_linea_de_piso(mask, frac=0.55, zona=0.12):
     """El modelo suele dibujar una LINEA DE PISO de punta a punta abajo. Como cruza toda la
        imagen, el recorte se la lleva y ensancha la caja de cada cuadro un poco distinto: el
@@ -44,9 +71,9 @@ def sin_linea_de_piso(mask, frac=0.55, zona=0.12):
     if corte is not None: m[corte:]=False
     return m
 
-def cortar(ruta, esperados=None, hueco=14, piso=False):
+def cortar(ruta, esperados=None, hueco=14, piso=False, auto=False):
     im=Image.open(ruta)
-    rgba, mask = quitar_magenta(im)
+    rgba, mask = (quitar_fondo(im) if auto else quitar_magenta(im))
     if piso: mask = sin_linea_de_piso(mask)
     cols = mask.any(axis=0)
     # runs de columnas con contenido, uniendo huecos chicos
@@ -74,13 +101,13 @@ def cortar(ruta, esperados=None, hueco=14, piso=False):
         cuadros.append(rgba.crop((a, filas.min(), b, filas.max()+1)))
     return cuadros
 
-def cortar_parejo(ruta, n, margen=0.28, piso=False):
+def cortar_parejo(ruta, n, margen=0.28, piso=False, auto=False):
     """Corta en enesimos. Hace falta cuando las figuras se TOCAN o se pisan y el corte por
        huecos las une: ahi no hay hueco que buscar, hay que repartir el ancho.
        Cada corte se corre al minimo de contenido dentro de una ventana, asi cae por el punto
        mas flaco entre dos figuras y no por el medio de una."""
     im=Image.open(ruta)
-    rgba, mask = quitar_magenta(im)
+    rgba, mask = (quitar_fondo(im) if auto else quitar_magenta(im))
     if piso: mask = sin_linea_de_piso(mask)
     cuenta = mask.sum(axis=0)
     llenas = np.where(cuenta>0)[0]

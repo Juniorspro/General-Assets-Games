@@ -21,6 +21,38 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Séptima vuelta de `Maicol.html` (2026-08-26)
+
+Pedido: *"las animaciones nada que ver"*. Tenía razón y se ve al medirlo.
+
+- **LOS 48 CUADROS NUEVOS ERAN OTRO PERSONAJE.** Puestos al mismo alto que el original, la cabeza
+  pasaba de **un quinto del cuerpo a un tercio**: un chibi con la misma ropa. Al jugar, pasar de
+  correr a agacharse **cambiaba el dibujo entero**.
+- **La causa es concreta:** el modelo de la vuelta anterior (`recraft_v4_1`) **no acepta imagen de
+  referencia**, así que lo único que ataba al personaje eran las palabras del prompt — y las
+  palabras describen ropa, no proporciones. Cada hoja salió con el chibi que le pareció.
+- **El arreglo es de construcción, no de descripción.** Se saca el cuadro 8 del atlas —el quieto
+  **original**, que es el personaje de verdad—, se agranda, se limpia con `nano_banana_pro` usando
+  ese cuadro como referencia, y **esa limpieza es la referencia de las ocho hojas**. Ahora el
+  personaje queda atado por la imagen y no por el texto.
+- **Y ESTA VEZ SE MIRÓ ANTES DE EMBEBER.** La comprobación que faltó: un cuadro de cada ciclo, todos
+  llevados al mismo alto de figura, uno al lado del otro contra el original. Eso es lo que hace
+  visible un cambio de proporciones; medir sólo la ALTURA no lo detecta nunca, porque la altura ya
+  la estaba normalizando.
+- **Dos cosas del cortador que se rompieron y por qué:**
+  1. `quitar_magenta` pide magenta puro. Los modelos con referencia **no tienen el parámetro
+     `background_color`** y devuelven el magenta que se les canta — uno devolvió **(191,83,145)** —,
+     así que el recorte no sacaba nada y la hoja entera salía como un solo cuadro. Va un
+     `quitar_fondo` que muestrea las cuatro esquinas y saca por distancia.
+  2. Ese mismo keyer calculaba la distancia en `int16`: **(255−0)² = 65025 y el máximo de un int16
+     es 32767**, así que desbordaba y `sqrt` recibía negativos. La máscara salía con agujeros.
+- **La hoja de agacharse costó tres intentos.** Las dos primeras devolvieron una caminata **de pie**
+  por más que el prompt dijera "crouch" y "duck-walk". La tercera funcionó describiendo la mecánica
+  cuadro por cuadro y prohibiendo lo contrario: *"las rodillas siempre dobladas, la cadera nunca
+  sube por encima de las rodillas, la cabeza queda a la misma altura baja en los seis"*.
+- Comprobado en el navegador sobre píxeles dibujados: **parado 72,5 px contra correr 68,8 = 5,5%**,
+  los doce agachados entre **38 y 44 px** (el túnel tiene 48), y cero errores.
+
 ### Sexta vuelta de `Maicol.html` (2026-08-26)
 
 Pedido: *"genera música efectos de sonido voces todo por highsfield también va muy pero MUY Lag y
