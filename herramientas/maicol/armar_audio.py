@@ -35,6 +35,16 @@ def sin_silencio(a, hz, umbral=0.010, cola=0.05):
     if not len(viv): return a
     return a[max(0,(viv[0]-1)*v) : min(len(a), (viv[-1]+2)*v + int(hz*cola))]
 
+def recortar_seguro(a, hz, minimo=0.12):
+    """Corta el silencio, PERO NO SE COME EL EFECTO. El sonido de la estrella quedaba en 0,03 s
+       -o sea un click- porque venia bajito y el umbral se lo llevaba entero. Si el recorte deja
+       menos de un minimo, se baja el umbral, y si aun asi queda corto no se recorta nada: mejor
+       un efecto con silencio adelante que un efecto que no existe."""
+    for u in (0.010, 0.004, 0.0015):
+        w=sin_silencio(a, hz, umbral=u)
+        if len(w) >= hz*minimo: return w
+    return a
+
 def bucle(a, hz, desde, largo, fundido=0.45):
     """Saca una ventana que da la vuelta: la cola se funde sobre la cabeza."""
     i0=int(desde*hz); L=int(largo*hz); f=int(fundido*hz)
@@ -73,7 +83,7 @@ if __name__=='__main__':
         f=[os.path.join(D,k+e) for e in ('.mp3','.wav','.m4a')]
         f=[x for x in f if os.path.exists(x)][0]
         a,hz=leer(f,HZ)
-        w=normalizar(sin_silencio(a,hz), 0.86)
+        w=normalizar(recortar_seguro(a,hz), 0.86)
         m=a_mp3(w,hz,KB_SFX); tot+=len(m)
         open(os.path.join(OUT,k+'.mp3'),'wb').write(m)
         lineas.append("  %s:'data:audio/mpeg;base64,%s'"%(k, base64.b64encode(m).decode()))

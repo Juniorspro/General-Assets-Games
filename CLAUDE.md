@@ -21,6 +21,54 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Octava vuelta de `Maicol.html` (2026-08-26)
+
+Pedido: *"agrégale que el menú sea más god, métele una foto recortada del nombre y de fondo una
+foto de esos dos, una de Maicol saliendo de un lado a la izquierda y otro a la derecha... también
+genera los fakin sonidos we no cargan, mejora todos los sonidos y música de fondo"*.
+
+#### LOS SONIDOS NO CARGABAN, Y LA CAUSA ERA LA ARQUITECTURA
+
+Estaban hechos con elementos `<audio>` sueltos. Dos problemas, los dos de fondo:
+
+1. **Con `<audio>`, para que un efecto suene encima de sí mismo hace falta una copia por voz.** Ocho
+   efectos × tres copias, más cuatro temas, más doce líneas de la cinemática = **28 elementos de
+   audio vivos**, cada uno decodificando su propio base64. Los teléfonos limitan cuántos se pueden
+   tener a la vez y **cuando se pasa el límite no tiran error: simplemente no suenan**.
+2. **Un `<audio>` suelto no pasa por el contexto de audio, así que NO SE PUEDE MEDIR si sonó.** El
+   analizador leía **pico 0** con la música supuestamente sonando. O sea que ni siquiera había forma
+   de saber si andaba: sólo se podía comprobar que la llamada no tiraba error.
+
+Ahora va todo por **WebAudio**: se decodifica una vez al arrancar y cada disparo es un
+`BufferSource` nuevo. No hay límite, se superponen solos, y **todo pasa por el maestro**, así que el
+pico del analizador es la prueba. Medido: los 24 clips decodificados, y `estrella` 0,33 ·
+`salto` 0,38 · `dano` 0,52 · `meta` 0,56 de pico, con la música sola en 0,10. Antes: **0**.
+
+De yapa, el bucle de la música ahora es exacto: `loop` de un `BufferSource` vuelve al cero del
+buffer sin el hueco de milisegundos que deja el `loop` de un `<audio>`, que en un tema de 14
+segundos se escucha en cada vuelta. Y las voces de la cinemática se decodifican **sólo si se mira
+la historia**, no al arrancar.
+
+Un detalle del re-encodeo: el recorte de silencio dejaba el sonido de la estrella en **0,03 s** —un
+click— porque venía bajito y el umbral se lo llevaba entero. Ahora baja el umbral hasta que quede
+al menos 0,12 s, y si aun así no alcanza no recorta: mejor un efecto con silencio adelante que un
+efecto que no existe.
+
+#### EL MENÚ
+
+- **El nombre es una imagen recortada.** Un título escrito con la fuente del sistema y tres sombras
+  encima es lo que delata a un menú hecho en HTML; un logo dibujado se lee a juego.
+- **Los dos hermanos entran uno por cada costado**, pegados al borde de abajo y **cortados por el
+  lado**: un personaje entero y centrado se lee a calcomanía pegada encima, uno que entra desde
+  afuera del cuadro se lee a que el mundo sigue más allá del menú. Entran deslizándose y después
+  flotan despacio, cada uno a su ritmo.
+- Telón nuevo de bosque con el centro vacío a propósito, y **el velo violeta bajó de 0,62 a 0,30**:
+  con el anterior el bosque quedaba morado y turbio. El logo y las cajas traen su propio contraste,
+  así que el scrim casi no hacía falta.
+
+- Música y efectos regenerados con prompts de chiptune de 16 bits en vez de descripciones genéricas.
+- El HTML quedó en **1668 KB**. En el perfil del teléfono: **53 fps**, cero errores.
+
 ### Séptima vuelta de `Maicol.html` (2026-08-26)
 
 Pedido: *"las animaciones nada que ver"*. Tenía razón y se ve al medirlo.
