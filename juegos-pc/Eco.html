@@ -174,6 +174,42 @@
     box-shadow:inset 0 0 0 1px rgba(255,255,255,.07); backdrop-filter:blur(3px);
     text-shadow:0 1px 6px rgba(0,0,0,.95); }
   #meta:empty{ display:none; }
+  body.tutorial #meta{ display:none; }
+
+  /* ---------- EL TUTORIAL ----------
+     El juego no se entendia, y con razon: te suelta en una pantalla negra y espera que descubras
+     solo que el ruido es la vista, que hay hojas en las paredes y que hay que gritarles. Ahora hay
+     cuatro pasos que se ENSEÑAN HACIENDO: cada uno espera a que hagas la cosa y recien ahi pasa al
+     siguiente. No se puede quedar trabado y no se puede saltear sin haber entendido. */
+  #tuto{ position:absolute; left:50%; bottom:16%; transform:translateX(-50%); z-index:23;
+    display:none; flex-direction:column; align-items:center; gap:7px; text-align:center;
+    max-width:84%; }
+  body.tutorial.jugando #tuto{ display:flex; }
+  #tutoT{ font-size:max(15px, calc(19px * var(--esc,1))); font-weight:900; letter-spacing:.10em;
+    color:#fff; text-shadow:0 2px 16px rgba(0,0,0,1); line-height:1.35; }
+  #tutoS{ font-size:max(11px, calc(12px * var(--esc,1))); font-weight:700; letter-spacing:.08em;
+    color:rgba(210,222,236,.86); text-shadow:0 2px 12px rgba(0,0,0,1); line-height:1.5; }
+  #tutoK{ margin-top:3px; font-size:max(11px, calc(12px * var(--esc,1))); font-weight:900;
+    letter-spacing:.14em; color:#05070a; background:rgba(245,240,228,.94); border-radius:6px;
+    padding:5px 13px; animation:tk 1.5s ease-in-out infinite; }
+  #tutoK:empty{ display:none; }
+  @keyframes tk{ 0%,100%{ box-shadow:0 0 0 0 rgba(255,244,220,0); }
+                 50%{ box-shadow:0 0 0 8px rgba(255,244,220,.18); } }
+  #tutoP{ width:min(210px,42vw); height:3px; border-radius:3px; background:rgba(255,255,255,.13);
+    overflow:hidden; margin-top:4px; }
+  #tutoP i{ display:block; height:100%; width:0%; background:rgba(255,245,225,.80);
+    transition:width .25s linear; }
+
+  /* ---------- LA FLECHA QUE DICE PARA DONDE IR ----------
+     Un objetivo escrito dice QUE hacer; en un laberinto a oscuras falta el DONDE. Sin esto el
+     jugador entiende la consigna y aun asi da vueltas veinte minutos. */
+  #guia{ position:absolute; left:50%; top:50%; z-index:21; transform:translate(-50%,-50%);
+    display:none; flex-direction:column; align-items:center; gap:2px; pointer-events:none; }
+  body.jugando #guia.ver{ display:flex; }
+  #guiaF{ font-size:19px; line-height:1; color:rgba(255,226,170,.92);
+    text-shadow:0 0 12px rgba(0,0,0,1), 0 0 22px rgba(255,190,110,.45); }
+  #guiaD{ font-size:max(9.5px, calc(10px * var(--esc,1))); font-weight:900; letter-spacing:.10em;
+    color:rgba(255,232,196,.80); text-shadow:0 1px 8px rgba(0,0,0,1); }
   #meta em{ font-style:normal; color:#ffe9b8; }
   #meta s{ text-decoration:none; display:block; font-size:max(10px, calc(9.5px * var(--esc,1)));
     letter-spacing:.10em; font-weight:700; color:rgba(178,194,212,.80); margin-top:3px; }
@@ -268,6 +304,13 @@
     <button id="bSon" title="sonido">♪</button>
     <div id="aviso"></div>
     <div id="leerP"></div>
+    <div id="guia"><div id="guiaF">▲</div><div id="guiaD"></div></div>
+    <div id="tuto">
+      <div id="tutoT"></div>
+      <div id="tutoS"></div>
+      <div id="tutoK"></div>
+      <div id="tutoP"><i></i></div>
+    </div>
   </div>
 
   <div id="joy"><div id="joyP"></div></div>
@@ -303,8 +346,8 @@
         </div>
         <div class="ficha">
           <h4>El silencio</h4>
-          <p><b>Agachado no hacés ruido</b>: te movés a ciegas, pero nada te oye. Hay un pasillo que
-             sólo se cruza así.</p>
+          <p><b>Agachado no hacés ruido</b>: te movés a ciegas, pero nada te oye. Y algo te oye:
+             hay <b>una cosa</b> ahí abajo que caza por el ruido. Correr te salva; gritar la trae.</p>
         </div>
         <div class="ficha">
           <h4>Las hojas</h4>
@@ -377,7 +420,10 @@ addEventListener('keydown',()=>ponerPlataforma('pc'));
    error te obliga a desandar TODO el ramal. Con un 6% de paredes de menos siguen habiendo decisiones
    pero dejan de haber castigos de un minuto. */
 const CEL=4.2;            // el lado de una celda, en metros
-const N=13;               // celdas por lado (impar queda mejor centrado)
+/* 11 Y NO 13. Ciento sesenta y nueve celdas a oscuras son muchisimas: entre un enigma y el
+   siguiente se caminaban cuarenta o cincuenta salas sin ver nada, y eso no es tension, es
+   aburrimiento. Con 11 son 121, un tercio menos, y todo queda mas cerca sin dejar de ser laberinto. */
+const N=11;               // celdas por lado (impar queda mejor centrado)
 const ALTO=3.4;           // alto de las paredes
 const GRUESO=0.34;
 
@@ -402,7 +448,10 @@ function generarLaberinto(n){
     cel[ny][nx].v=true; pila.push([nx,ny]);
   }
   /* los atajos: se tiran paredes internas al azar */
-  let atajos=Math.round(n*n*0.06);
+  /* MAS ATAJOS: del 6% al 14%. Un laberinto perfecto es un arbol, y en un arbol cada decision
+     equivocada obliga a desandar el ramal ENTERO. A oscuras eso no se siente a desafio, se siente a
+     castigo. Con mas paredes de menos hay bucles: casi siempre hay otra forma de volver. */
+  let atajos=Math.round(n*n*0.14);
   let intentos=0;
   while(atajos>0 && intentos++<n*n*4){
     const x=1+((Math.random()*(n-2))|0), y=1+((Math.random()*(n-2))|0);
@@ -872,8 +921,10 @@ function construirMarcas(){
     if(i===0&&j===0) continue;
     if(usadas.has(cl(i,j))) continue;              // las celdas de los enigmas no se tocan
     const h=(i*73856093 ^ j*19349663)>>>0;
-    if(h%5!==0) continue;
-    const x=XC(i), z=ZC(j), tipo=(h>>3)%5;
+    /* una de cada TRES celdas, no una de cada cinco: el laberinto quedo mas chico (11 en vez de 13)
+       y con un objeto cada cinco salas seguian sobrando pasillos identicos entre mojon y mojon */
+    if(h%3!==0) continue;
+    const x=XC(i), z=ZC(j), tipo=(h>>3)%9;
     /* contra que pared: la primera que exista */
     let lado=null;
     for(let k=0;k<4;k++){ const l=lados[(h>>7|0+k)%4]; if(MAPA[j][i][l]){ lado=l; break; } }
@@ -909,7 +960,7 @@ function construirMarcas(){
       g.translate(px+dir[0]*0.34, 1.30, pz+dir[1]*0.34); gs.push(g);
       const g2=new THREE.CylinderGeometry(0.13,0.17,0.34,9,1);
       g2.translate(px+dir[0]*0.34, 1.53, pz+dir[1]*0.34); gs.push(g2);
-    } else {
+    } else if(tipo===4){
       /* pilastras: dos medias columnas contra la pared. Es lo que le da cara de sala construida */
       for(const sg of [-1,1]){
         const g=new THREE.CylinderGeometry(0.26,0.30,ALTO,10,1);
@@ -917,6 +968,41 @@ function construirMarcas(){
         gs.push(g);
         OBST.push({x:px+dir[1]*sg*1.25, z:pz-dir[0]*sg*1.25, r:0.44});
       }
+    } else if(tipo===5){
+      /* EL POZO: un brocal en el medio de la sala. Es el mojon mas fuerte que hay, porque hay que
+         rodearlo: una sala en la que caminaste distinto no se olvida. */
+      const br=new THREE.CylinderGeometry(0.92,1.00,0.62,16,1,true); br.translate(x,0.31,z); gs.push(br);
+      const bo=new THREE.TorusGeometry(0.96,0.09,7,18); bo.rotateX(Math.PI/2); bo.translate(x,0.62,z); gs.push(bo);
+      for(const sg of [-1,1]){ const pos=new THREE.BoxGeometry(0.12,1.70,0.12);
+        pos.translate(x+sg*0.92, 0.85, z); gs.push(pos); }
+      const vg=new THREE.BoxGeometry(2.10,0.13,0.13); vg.translate(x,1.70,z); gs.push(vg);
+      OBST.push({x, z, r:1.16});
+    } else if(tipo===6){
+      /* LA COLUMNA PARTIDA: el fuste cortado y el resto tirado al lado */
+      const alto=1.1+1.0*(((h>>6)&7)/7);
+      const f=new THREE.CylinderGeometry(0.30,0.36,alto,11,1); f.translate(px,alto/2,pz); gs.push(f);
+      const c=new THREE.CylinderGeometry(0.30,0.30,1.35,11,1);
+      c.rotateZ(Math.PI/2); c.rotateY(ang+0.4);
+      c.translate(px+dir[1]*1.05, 0.30, pz-dir[0]*1.05); gs.push(c);
+      OBST.push({x:px, z:pz, r:0.50});
+    } else if(tipo===7){
+      /* EL BRASERO apagado: un trípode con una copa. Hace siglos que no arde nada acá. */
+      for(let k=0;k<3;k++){ const a2=ang+k*2.094;
+        const pa=new THREE.BoxGeometry(0.09,1.05,0.09);
+        pa.rotateX(0.20*Math.cos(a2)); pa.rotateZ(-0.20*Math.sin(a2));
+        pa.translate(px+Math.sin(a2)*0.24, 0.52, pz+Math.cos(a2)*0.24); gs.push(pa); }
+      const co=new THREE.CylinderGeometry(0.44,0.26,0.34,13,1); co.translate(px,1.18,pz); gs.push(co);
+      OBST.push({x:px, z:pz, r:0.46});
+    } else {
+      /* LA FIGURA: algo que alguna vez fue una estatua, sin cabeza y sin un brazo. Es el unico prop
+         con forma de persona, y a oscuras eso pega distinto que una caja. */
+      const pe=new THREE.BoxGeometry(0.80,0.26,0.80); pe.translate(px,0.13,pz); gs.push(pe);
+      const cu=new THREE.BoxGeometry(0.42,1.05,0.30); cu.rotateY(ang); cu.translate(px,0.78,pz); gs.push(cu);
+      const ho=new THREE.BoxGeometry(0.56,0.20,0.30); ho.rotateY(ang); ho.translate(px,1.34,pz); gs.push(ho);
+      const br2=new THREE.BoxGeometry(0.15,0.62,0.15); br2.rotateX(0.30); br2.rotateY(ang);
+      br2.translate(px+Math.cos(ang)*0.30, 1.02, pz-Math.sin(ang)*0.30); gs.push(br2);
+      const pi=new THREE.BoxGeometry(0.34,0.44,0.30); pi.rotateY(ang); pi.translate(px,0.36,pz); gs.push(pi);
+      OBST.push({x:px, z:pz, r:0.52});
     }
   }
   const g=mergeGeometries(gs,false);
@@ -1043,9 +1129,9 @@ function construirRastros(){
     const desde=notas[orden[k].i].cel, hasta=notas[orden[k+1].i].cel;
     const cam=caminoEntre(desde,hasta);
     const gs=[];
-    /* UNA MARCA CADA DOS SALAS. Una por sala se lee como una linea pintada y deja de ser un rastro;
-       cada dos, hay que buscar la que sigue, que es lo que se pidio: que guien de a poco. */
-    for(let t=1;t<cam.length;t+=2){
+    /* UNA MARCA POR SALA. Estaba cada dos y era demasiado poco: en un pasillo a oscuras, perder el
+       rastro es perder el juego. Lo de "que se vean pocos" lo cumple el BRILLO, no el hueco. */
+    for(let t=1;t<cam.length;t+=1){
       const a=cam[t-1], b=cam[t];
       const ax=XC(a[0]), az=ZC(a[1]), bx=XC(b[0]), bz=ZC(b[1]);
       const mx=(ax+bx)/2, mz=(az+bz)/2;
@@ -1130,6 +1216,7 @@ function objetivo(){
 function ruido(tipo,x,y,z,fuerza,alcance){
   emitir(x,y,z,fuerza,alcance);
   son(tipo, fuerza);
+  cosaOye(x, z, fuerza);
   if(!jugando) return;
   const c=celdaDe(jug.x,jug.z);
   /* EL CORREDOR SILENCIOSO: cualquier ruido adentro lo despierta */
@@ -1184,6 +1271,110 @@ function corredorTick(){
   }
   if(p2Desde===0 && idx===L-1) sellar(1,'EL PASILLO DORMIDO');
   if(p2Desde===L-1 && idx===0) sellar(1,'EL PASILLO DORMIDO');
+}
+
+/* ===================== EL TUTORIAL Y LA FLECHA =====================
+   Los dos resuelven el mismo problema desde dos lados: el tutorial dice QUE hay que hacer, la flecha
+   dice DONDE. Con uno solo no alcanza — un objetivo escrito y un laberinto negro dan un jugador que
+   entendio la consigna y da vueltas veinte minutos igual. */
+let tutoPaso=0, tutoT=0, tutoAndado=0, tutoGritos=0, tutoListo=false;
+const TUTO=[
+  { t:'MOVETE',
+    s:'no hay luz: lo único que ves es lo que devuelve el ruido',
+    k:()=>plataf==='pc'? 'W A S D' : 'arrastrá el joystick',
+    p:()=>Math.min(1, tutoAndado/3.5),
+    ok:()=>tutoAndado>3.5 },
+  { t:'ESO QUE VES SON TUS PASOS',
+    s:'cada pisada manda una onda, y las rayas te dibujan la piedra por un instante',
+    k:()=>'',
+    p:()=>Math.min(1, (tutoAndado-3.5)/9),
+    ok:()=>tutoAndado>12.5 },
+  { t:'AHORA GRITÁ',
+    s:'un grito enciende el laberinto entero dos segundos · después hay que esperar',
+    k:()=>plataf==='pc'? 'E' : 'el botón GRITAR',
+    p:()=>Math.min(1, tutoGritos),
+    ok:()=>tutoGritos>0 },
+  { t:'HAY UNA HOJA EN UNA PARED DE ACÁ',
+    s:'seguí la flecha, acercate y gritale tres veces',
+    k:()=>plataf==='pc'? 'E' : 'el botón GRITAR',
+    p:()=>Math.min(1, notas[0].cargas/NOTA_GRITOS),
+    ok:()=>notas[0].abierta },
+  { t:'ASÍ SE JUEGA',
+    s:'la flecha y las marcas rojas del suelo llevan a las otras hojas · cada hoja explica un enigma · cuatro sellos abren la salida',
+    k:()=>'',
+    p:()=>Math.min(1, tutoT/7),
+    ok:()=>tutoT>7 }
+];
+function tutoTick(dt){
+  if(tutoListo || !jugando) return;
+  document.body.classList.add('tutorial');
+  const paso=TUTO[tutoPaso];
+  tutoT+=dt;
+  const T=document.getElementById('tutoT'), S=document.getElementById('tutoS'),
+        K=document.getElementById('tutoK'), P=document.querySelector('#tutoP i');
+  if(T && T._p!==tutoPaso){ T._p=tutoPaso; T.textContent=paso.t; S.textContent=paso.s; K.textContent=paso.k(); }
+  if(P) P.style.width=(paso.p()*100).toFixed(0)+'%';
+  /* NO se pasa de paso hasta que la cosa este hecha, y hay medio segundo de respiro entre uno y otro
+     para que se alcance a leer el que acaba de completarse */
+  if(paso.ok() && tutoT>0.7){
+    tutoPaso++; tutoT=0;
+    if(tutoPaso>=TUTO.length){ tutoListo=true; document.body.classList.remove('tutorial'); }
+    else son('papel', 0.5);
+  }
+}
+
+/* ---------- A DONDE HAY QUE IR ---------- */
+const _gv=new THREE.Vector3();
+function objetivoLugar(){
+  if(ganado) return null;
+  /* si hay un enigma en curso y su hoja ya se leyo, el destino es el enigma; si no, la hoja que falta */
+  for(let k=0;k<notas.length;k++){
+    const e=NOTA_DE[k];
+    if(e===null || !notas[k].leida || SELLOS[e]) continue;
+    if(e===0){ const b=P1_ORDEN[p1Paso], t=tambores.find(x=>x.bandas===b);
+               if(t) return new THREE.Vector3(XC(t.cel[0]), 1.2, ZC(t.cel[1])); }
+    if(e===1){ const c=corredor[p2Desde===corredor.length-1? 0 : corredor.length-1];
+               return new THREE.Vector3(XC(c[0]), 1.2, ZC(c[1])); }
+    if(e===2) return new THREE.Vector3(XC(celP3[0]), 0.9, ZC(celP3[1]));
+    if(e===3) return new THREE.Vector3(XC(celP4[0]), 1.2, ZC(celP4[1]));
+  }
+  if(nSellos()>=4) return salidaMundo.clone();
+  /* si no, la hoja sin abrir mas cercana en pasos desde donde estas */
+  let mejorN=null, mejorD=1e9;
+  const c=celdaDe(jug.x,jug.z);
+  const D=distancias(MAPA,N,c[0],c[1]);
+  for(const nt of notas){ if(nt.abierta) continue;
+    const d=D[nt.cel[1]][nt.cel[0]];
+    if(d>=0 && d<mejorD){ mejorD=d; mejorN=nt; } }
+  return mejorN? new THREE.Vector3(mejorN.x, 1.5, mejorN.z) : null;
+}
+let guiaCada=0, guiaPos=null;
+function guiaTick(dt){
+  const el=document.getElementById('guia');
+  if(!el) return;
+  if(!jugando || notaAbierta){ el.classList.remove('ver'); return; }
+  /* el destino se recalcula tres veces por segundo y no por cuadro: adentro hay un BFS del laberinto
+     entero, y hacerlo sesenta veces por segundo para mover una flecha es tirar el cuadro a la basura */
+  guiaCada-=dt;
+  if(guiaCada<=0){ guiaCada=0.33; guiaPos=objetivoLugar(); }
+  if(!guiaPos){ el.classList.remove('ver'); return; }
+  _gv.copy(guiaPos).project(camara);
+  let x=_gv.x, y=_gv.y;
+  const detras=_gv.z>1;
+  if(detras){ x=-x; y=-y; }
+  const lim=0.80;
+  let fuera=detras;
+  const k=Math.max(Math.abs(x),Math.abs(y));
+  if(detras || k>lim){ if(k>0.0001){ x=x/k*lim; y=y/k*lim; } else { x=0; y=-lim; } fuera=true; }
+  el.style.left=((x*0.5+0.5)*100).toFixed(2)+'%';
+  el.style.top =((0.5-y*0.5)*100).toFixed(2)+'%';
+  const f=document.getElementById('guiaF'), d=document.getElementById('guiaD');
+  /* fuera de pantalla, una flecha apuntando hacia alla; dentro, un rombo sobre el lugar */
+  if(fuera){ const ang=Math.atan2(x,y)*180/Math.PI;
+             f.textContent='▲'; f.style.transform='rotate('+ang.toFixed(1)+'deg)'; }
+  else { f.textContent='◆'; f.style.transform='none'; }
+  d.textContent=Math.round(Math.hypot(jug.x-guiaPos.x, jug.z-guiaPos.z))+' m';
+  el.classList.add('ver');
 }
 
 /* ---------- leer una nota ---------- */
@@ -1389,7 +1580,7 @@ tocar('bAgachar',()=>{ agacharBoton=!agacharBoton; pintarAgachar(); });
 let saltoPedido=0, coyote=0;
 function saltar(){ if(!jugando) return; saltoPedido=0.16; }
 let gritoT=0, gritoMax=6.0;
-const GRITO_ESPERA=6.0, GRITO_ESPERA_NOTA=2.0;
+const GRITO_ESPERA=4.0, GRITO_ESPERA_NOTA=1.6;
 /* el fogonazo: dos segundos enteros encendido y despues se apaga en medio segundo. Se sostiene
    plano y NO se desvanece de a poco durante los dos segundos: si se desvanece, no se lee como un
    fogonazo, se lee como una onda mas grande. */
@@ -1407,6 +1598,7 @@ function gritar(){
   gritoMax = hayNota? GRITO_ESPERA_NOTA : GRITO_ESPERA;
   gritoT = gritoMax;
   flashT = FLASH_DURA;  flash = 1;
+  tutoGritos++;
   /* el grito ve MUCHO mas lejos y mas fuerte: es el recurso, y por eso tiene espera */
   ruido('grito', jug.x, jug.y, jug.z, 1.0, 46);
   avisar('');
@@ -1526,6 +1718,13 @@ function son(tipo, f){
     else if(tipo==='sello'){ tono(622,1.5,0.26,1.1); tono(933,1.3,0.15,1.1);
                              setTimeout(()=>{ if(AUD.ctx&&AUD.on) tono(1245,1.6,0.10,1.2); }, 130); }
     else if(tipo==='papel'){ golpeRuido(0.34,'highpass', 1800, 4200, 0.7, 0.24, 0.30); }
+    /* el resuello de la cosa: ruido grave y aspero, con muy poca reverb para que suene CERCA aunque
+       este lejos. Un resuello con eco se confunde con el ambiente; uno seco se te mete en la nuca. */
+    else if(tipo==='resuello'){ golpeRuido(0.42,'bandpass', 220, 130, 2.2, 0.34*f, 0.16);
+                                tono(52+Math.random()*10, 0.30, 0.12*f, 0.10, 'sawtooth'); }
+    else if(tipo==='resuelloLento'){ golpeRuido(0.70,'lowpass', 380, 150, 1.2, 0.20*f, 0.22); }
+    else if(tipo==='agarron'){ golpeRuido(0.55,'lowpass', 900, 90, 1.0, 0.75, 0.9);
+                               tono(74,0.7,0.34,0.7,'sawtooth'); tono(58,0.9,0.30,0.7,'square'); }
     else if(tipo==='tambor'){ tono(96,0.9,0.34,1.0); golpeRuido(0.5,'lowpass',900,180,1.4,0.28,0.9); }
     else if(tipo==='mal'){ tono(140,0.5,0.20,0.6,'sawtooth'); tono(133,0.5,0.18,0.6,'sawtooth'); }
     else if(tipo==='salida'){ tono(392,2.4,0.26,1.3); tono(523,2.4,0.20,1.3); tono(784,2.2,0.13,1.3); }
@@ -1562,6 +1761,206 @@ document.getElementById('teclas').innerHTML=[
   ['C / Ctrl','agacharse · sin ruido'],['Space','saltar · golpear el piso'],
   ['E','gritar'],['F','leer una nota'],['Esc','soltar el mouse']
 ].map(([k,d])=>'<i>'+k+'</i><span>'+d+'</span>').join('');
+
+/* ===================== LA COSA =====================
+   Un monstruo que te sigue, y que en este juego solo puede funcionar de una forma: CAZANDO POR EL
+   RUIDO. Todo el juego dice que el sonido es lo que existe, asi que un bicho que te ve seria una
+   regla nueva y peor; uno que te OYE convierte la mecanica en un dilema. Para ver hay que hacer
+   ruido, y hacer ruido es exactamente lo que lo trae. Agacharse deja de ser un truco para un enigma
+   y pasa a ser la forma de escaparse.
+
+   VA CON EL MATERIAL DE LAS ONDAS, no con uno propio: se ve cuando una onda lo toca y desaparece
+   cuando pasa, igual que las paredes. Verlo un cuadro en el frente de tu propio grito y perderlo es
+   la mitad del susto. Lo unico suyo son los ojos, que emiten poquito y de cerca — si no, no habria
+   forma justa de darse cuenta de que lo tenes encima.
+
+   Y NO MATA. Te agarra, te sacude y aparecés en la entrada con los sellos que ya tenias. El juego es
+   de entender un laberinto, no de perder media hora por un descuido. */
+const COSA_LENTO=1.55, COSA_CAZA=3.05;   // m/s. Correr son 5,5: siempre se le puede ganar corriendo
+const COSA_AGARRA=1.20;                  // a que distancia te alcanza
+const COSA_GRACIA=25;                    // segundos de arranque antes de que despierte
+const COSA_OYE=30;                       // hasta donde le llega un ruido, en metros
+
+const cosa={ g:new THREE.Group(), x:0, z:0, vy:0, giro:0, fase:0, vel:0,
+             meta:null, metaCel:null, estado:'duerme', t:0, aturdida:0, cerca:9e9 };
+const cosaOjosMat=new THREE.MeshBasicMaterial({color:0x000000});
+(function armarCosa(){
+  const M=matMundo;
+  const caja=(w,h,d,x,y,z,padre)=>{ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), M);
+    m.position.set(x,y,z); m.frustumCulled=false; (padre||cosa.g).add(m); return m; };
+  /* el tronco y la cabeza van fundidos: la cabeza no necesita moverse sola y cada malla suelta es
+     una llamada de dibujo mas */
+  const gs=[];
+  const met=(g,x,y,z,rx)=>{ if(rx) g.rotateX(rx); g.translate(x,y,z); gs.push(g); };
+  /* MAS GRANDE DE LO QUE PARECIA NECESARIO. Con el tronco chico, a cuatro metros el bicho se leia
+     como cuatro patas sueltas: la masa del cuerpo no llegaba a ocupar nada y la cabeza quedaba
+     perdida. Un tronco ancho y un cuello largo hacen que se entienda de un vistazo QUE es, que es
+     todo lo que se necesita cuando lo ves un cuadro y medio en el frente de tu propio grito. */
+  met(new THREE.BoxGeometry(0.72,0.56,1.45), 0,0,0);              // tronco
+  met(new THREE.BoxGeometry(0.62,0.44,0.34), 0,0.06,-0.62);       // el pecho, mas angosto
+  met(new THREE.BoxGeometry(0.26,0.24,0.62), 0,0.12,-1.02);       // cuello largo
+  met(new THREE.BoxGeometry(0.44,0.40,0.54), 0,0.16,-1.52);       // craneo
+  met(new THREE.BoxGeometry(0.36,0.15,0.38), 0,-0.10,-1.68);      // mandibula
+  met(new THREE.BoxGeometry(0.24,0.56,0.70), 0,0.42,0.32);        // la joroba
+  for(let k=0;k<5;k++)                                            // las vertebras del lomo
+    met(new THREE.BoxGeometry(0.09,0.20+0.10*Math.sin(k),0.09), 0, 0.34+0.06*k, 0.66-k*0.30);
+  const tg=mergeGeometries(gs,false); for(const q of gs) q.dispose();
+  const tronco=new THREE.Mesh(tg, M); tronco.frustumCulled=false;
+  cosa.tronco=new THREE.Group(); cosa.tronco.position.y=1.62;
+  cosa.tronco.add(tronco); cosa.g.add(cosa.tronco);
+  /* los ojos: dos puntos que emiten. Es lo unico del bicho con luz propia */
+  const og=[];
+  for(const sg of [-1,1]){ const e=new THREE.SphereGeometry(0.062,7,5);
+    e.translate(sg*0.145, 0.21, -1.77); og.push(e); }
+  const ojos=new THREE.Mesh(mergeGeometries(og,false), cosaOjosMat);
+  for(const q of og) q.dispose();
+  ojos.frustumCulled=false; cosa.tronco.add(ojos);
+  /* CUATRO PATAS LARGAS, de dos tramos. Las patas largas son lo que lo hace leer a bicho y no a
+     persona: el tronco casi no se mueve y lo que camina son cuatro angulos por encima de tu cabeza. */
+  cosa.patas=[];
+  const anclas=[[-0.38,0.08,-0.56],[0.38,0.08,-0.56],[-0.38,0.04,0.62],[0.38,0.04,0.62]];
+  for(let k=0;k<4;k++){
+    const hombro=new THREE.Group(); hombro.position.set(anclas[k][0],anclas[k][1],anclas[k][2]);
+    cosa.tronco.add(hombro);
+    caja(0.115,0.115,0.95, 0,0,0, hombro).position.set(0,-0.02,0);
+    const sup=hombro.children[hombro.children.length-1];
+    sup.geometry.translate(0,0,-0.46);          // el tramo cuelga desde el hombro
+    const codo=new THREE.Group(); codo.position.set(0,0,-0.92); hombro.add(codo);
+    const bg=[];
+    const b1=new THREE.BoxGeometry(0.095,0.095,1.00); b1.translate(0,0,-0.48); bg.push(b1);
+    const b2=new THREE.BoxGeometry(0.20,0.075,0.26); b2.translate(0,-0.02,-1.03); bg.push(b2);
+    for(let d=0;d<3;d++){ const gd=new THREE.BoxGeometry(0.038,0.038,0.20);
+      gd.translate((d-1)*0.062,-0.03,-1.22); bg.push(gd); }
+    const inf=new THREE.Mesh(mergeGeometries(bg,false), M);
+    for(const q of bg) q.dispose();
+    inf.frustumCulled=false; codo.add(inf);
+    cosa.patas.push({hombro, codo, lado:(k%2)?1:-1, par:(k<2)?0:1});
+  }
+  escena.add(cosa.g);
+})();
+
+function cosaPonerLejos(){
+  /* la mandan lo mas lejos que se pueda del jugador, en pasos y no en linea recta */
+  const c=celdaDe(jug.x,jug.z);
+  const D=distancias(MAPA,N,c[0],c[1]);
+  let mejor=-1, cel=[N-1,N-1];
+  for(let j=0;j<N;j++) for(let i=0;i<N;i++) if(D[j][i]>mejor){ mejor=D[j][i]; cel=[i,j]; }
+  cosa.x=XC(cel[0]); cosa.z=ZC(cel[1]);
+  cosa.meta=null; cosa.metaCel=null; cosa.estado='ronda';
+}
+function cosaOye(x,z,fuerza){
+  if(cosa.estado==='duerme' || cosa.aturdida>0) return;
+  const d=Math.hypot(cosa.x-x, cosa.z-z);
+  if(d > COSA_OYE*(0.45+0.55*(fuerza||1))) return;
+  cosa.meta=[x,z]; cosa.metaCel=celdaDe(x,z); cosa.estado='caza'; cosa.t=0;
+}
+function cosaSiguiente(){
+  /* el paso que sigue: BFS desde la meta y bajar la cuesta. Se recalcula pocas veces por segundo. */
+  if(!cosa.metaCel) return null;
+  const c=celdaDe(cosa.x,cosa.z);
+  if(c[0]===cosa.metaCel[0] && c[1]===cosa.metaCel[1]) return null;
+  const D=distancias(MAPA,N,cosa.metaCel[0],cosa.metaCel[1]);
+  let mejorD=D[c[1]][c[0]], sig=null;
+  for(const [dx,dz,l] of [[0,-1,'n'],[1,0,'e'],[0,1,'s'],[-1,0,'o']]){
+    if(MAPA[c[1]][c[0]][l]) continue;
+    const ni=c[0]+dx, nj=c[1]+dz;
+    if(ni<0||nj<0||ni>=N||nj>=N) continue;
+    if(D[nj][ni]>=0 && D[nj][ni]<mejorD){ mejorD=D[nj][ni]; sig=[ni,nj]; }
+  }
+  return sig;
+}
+let cosaRuta=0, cosaSig=null, cosaResuello=0;
+function cosaTick(dt){
+  if(!jugando || ganado){ cosa.g.visible=false; return; }
+  cosa.g.visible=true;
+  cosa.t+=dt;
+  if(cosa.estado==='duerme'){
+    if(tiempo>COSA_GRACIA && tutoListo){ cosaPonerLejos(); avisar('ALGO SE DESPERTÓ', 2.6); son('mal'); }
+    else return;
+  }
+  /* LA DISTANCIA Y LOS OJOS SE ACTUALIZAN SIEMPRE, aturdida o no. Estaban despues del corte y eso
+     daba dos defectos: la distancia se quedaba en infinito (o sea que el HUD nunca avisaba mientras
+     estaba aturdida) y el material de los ojos se quedaba en NEGRO PURO. Y un negro puro no es
+     invisible: se pinta, y escribe profundidad. Con la cosa cerca, los ojos salian como dos agujeros
+     negros recortados sobre la pared iluminada. */
+  cosa.cerca=Math.hypot(jug.x-cosa.x, jug.z-cosa.z);
+  {
+    const kOjo=Math.max(0, 1-cosa.cerca/13)*0.55 + 0.30*eco;
+    cosaOjosMat.color.setRGB(kOjo, kOjo*0.16, kOjo*0.10);
+  }
+  /* Y LA MALLA SE MUEVE SIEMPRE. Estaba al final de la funcion, o sea despues del corte por aturdida:
+     al agarrarte, la cosa se teletransporta al otro punto del laberinto pero su MALLA se quedaba
+     donde estaba, y quedaba dibujada al lado tuyo los once segundos del aturdimiento. */
+  cosa.g.position.set(cosa.x, 0, cosa.z);
+  cosa.g.rotation.y=cosa.giro;
+  if(cosa.aturdida>0){ cosa.aturdida-=dt; cosa.vel=0; return; }
+  /* si no tiene a donde ir, se pone a rondar: elige una celda al azar y camina para alla */
+  if(!cosa.metaCel || (cosa.estado==='ronda' && cosa.t>9)){
+    const i=(Math.random()*N)|0, j=(Math.random()*N)|0;
+    if(DIST[j][i]>=0){ cosa.metaCel=[i,j]; cosa.meta=[XC(i),ZC(j)]; cosa.t=0; }
+  }
+  cosaRuta-=dt;
+  if(cosaRuta<=0){ cosaRuta=0.30; cosaSig=cosaSiguiente(); }
+  const objetivoVel = cosa.estado==='caza'? COSA_CAZA : COSA_LENTO;
+  let tx=cosa.x, tz=cosa.z;
+  if(cosaSig){ tx=XC(cosaSig[0]); tz=ZC(cosaSig[1]); }
+  else if(cosa.meta){ tx=cosa.meta[0]; tz=cosa.meta[1]; }
+  const ex=tx-cosa.x, ez=tz-cosa.z, dd=Math.hypot(ex,ez);
+  if(dd>0.06){
+    const v=objetivoVel;
+    cosa.x+=ex/dd*v*dt; cosa.z+=ez/dd*v*dt;
+    cosa.vel=v;
+    const gq=Math.atan2(ex,ez);
+    let dif=gq-cosa.giro; while(dif>Math.PI)dif-=2*Math.PI; while(dif<-Math.PI)dif+=2*Math.PI;
+    cosa.giro+=dif*Math.min(1,dt*4.5);
+    cosa.fase=(cosa.fase + v*dt/1.9)%1;
+  } else {
+    cosa.vel*= Math.max(0,1-3*dt);
+    if(cosa.estado==='caza' && cosa.t>3.5){ cosa.estado='ronda'; cosa.t=0; cosa.metaCel=null; }
+  }
+  cosa.g.position.set(cosa.x, 0, cosa.z);
+  cosa.g.rotation.y=cosa.giro;
+  /* las patas: dos pares en contrafase, y el tronco cabecea con el paso */
+  const f=cosa.fase*Math.PI*2, amp=Math.min(1, cosa.vel/2.8);
+  /* LOS ANGULOS. El primer intento tenia el codo en +1,75, y como el codo es RELATIVO al hombro el
+     angulo neto daba +0,70: o sea que el antebrazo apuntaba hacia ARRIBA y el bicho caminaba con las
+     cuatro patas dobladas al reves, con las garras por encima del lomo. Se ve raro y encima no toca
+     el piso.
+     Las cuentas: el hombro esta a 1,65 m del suelo y los dos tramos miden 0,92 y 1,00. Con el hombro
+     en -1,15 el codo baja 0,86 (queda a 0,79) y con el codo en -0,62 —o sea neto -1,77— el antebrazo
+     baja otros 0,98 y la garra llega al piso. Eso es una pata.
+     El giro de apertura va en Y y no en Z: la pata se extiende sobre -Z, asi que rotar en Z la
+     RETUERCE sobre si misma en vez de abrirla. */
+  for(let k=0;k<cosa.patas.length;k++){
+    const P=cosa.patas[k];
+    const ang=Math.sin(f + (P.par? Math.PI:0) + (P.lado>0? 0.45:0));
+    P.hombro.rotation.set(-1.15 + ang*0.40*amp, P.lado*0.42 + (P.par? -0.30 : 0.26), 0);
+    P.codo.rotation.x = -0.62 - Math.max(0,ang)*0.34*amp;
+  }
+  cosa.tronco.position.y = 1.62 + Math.sin(f*2)*0.055*amp;
+  cosa.tronco.rotation.x = 0.12 + Math.sin(f*2)*0.035*amp;
+  /* el resuello: mas seguido y mas fuerte cuanto mas cerca. Es el sistema de aviso de verdad —
+     el que te hace frenar y agacharte antes de verlo. */
+  cosaResuello-=dt;
+  if(cosaResuello<=0 && cosa.cerca<22){
+    cosaResuello=0.75+Math.random()*0.7;
+    const v=Math.max(0, 1-cosa.cerca/22);
+    son(cosa.estado==='caza'? 'resuello' : 'resuelloLento', v*v);
+  }
+  if(cosa.cerca<COSA_AGARRA) cosaAgarra();
+}
+function cosaAgarra(){
+  cosa.aturdida=11;
+  cosa.estado='ronda'; cosa.metaCel=null;
+  son('agarron');
+  jug.dipV -= 3.2;                     // el sacudon
+  emitir(jug.x, 1.2, jug.z, 1.0, 52);
+  avisar('TE AGARRÓ', 3.0);
+  /* de vuelta a la entrada, con los sellos puestos. No se pierde nada: perder progreso por un
+     descuido en un juego a oscuras es la forma mas rapida de que lo cierren. */
+  jug.x=XC(0); jug.z=ZC(0); jug.vx=0; jug.vz=0;
+  cosaPonerLejos();
+}
 
 /* ===================== EL BUCLE ===================== */
 const reloj=new THREE.Clock();
@@ -1655,6 +2054,7 @@ function animar(){
     }
   }
 
+  if(jugando && !tutoListo) tutoAndado += Math.hypot(jug.vx,jug.vz)*dt;
   const px=jug.x+jug.vx*dt, pz=jug.z+jug.vz*dt;
   const [nx,nz]=corregir(jug.x, jug.z, px, pz);
   /* si la pared freno el movimiento, tambien se frena la velocidad: si no, uno queda "empujando"
@@ -1706,6 +2106,7 @@ function animar(){
 
   ondasTick(dt);
   corredorTick();
+  cosaTick(dt);
 
   /* ---------- CUANTO ECO HAY VIVO ----------
      Es el numero del que cuelga TODO lo que no sea el frente de una onda: el faro de la salida, el
@@ -1812,7 +2213,10 @@ function animar(){
     document.body.classList.toggle('cerca', !!leible);
     document.body.classList.toggle('hoja', !!sinAbrir);
     const lp=document.getElementById('leerP');
-    if(lp && !notaAbierta){
+    /* durante los tres primeros pasos del tutorial el aviso de la hoja se calla: el tutorial ya esta
+       diciendo una cosa y dos carteles a la vez no se leen, se ignoran los dos */
+    const tapado = !tutoListo && tutoPaso<3;
+    if(lp && !notaAbierta && !tapado){
       if(sinAbrir){
         lp.innerHTML='HAY UNA HOJA EN ESTA PARED<br><b>'+(plataf==='pc'?'E':'GRITAR')+
                      '</b> · '+sinAbrir.cargas+' DE '+NOTA_GRITOS+' GRITOS';
@@ -1825,6 +2229,8 @@ function animar(){
   }
 
   /* el aro del HUD dice cuanto ruido estas haciendo: es la unica lectura que importa */
+  tutoTick(dt);
+  guiaTick(dt);
   /* la linea del objetivo */
   if(jugando){
     const mEl=document.getElementById('meta');
@@ -1836,6 +2242,10 @@ function animar(){
   const ecoEl=document.getElementById('eco');
   if(ecoEl){ jug.ruido += (((jug.agachado?0:velH)/5.5) - jug.ruido)*Math.min(1,dt*4);
     ecoEl.style.color='rgba(190,205,220,'+(0.22+jug.ruido*0.62).toFixed(2)+')';
+    if(cosa.estado!=='duerme' && cosa.aturdida<=0 && cosa.cerca<14){
+      ecoEl.style.color='rgba(255,120,96,'+(0.45+0.55*Math.max(0,1-cosa.cerca/14)).toFixed(2)+')';
+      ecoEl.textContent = cosa.cerca<6? 'LO TENÉS ENCIMA' : 'ALGO TE SIGUE';
+    } else
     ecoEl.textContent = ganado? 'SALIDA' : jug.agachado? 'AGACHADO · SIN RUIDO'
                       : (jug.ruido>0.62? 'RUIDO' : jug.ruido>0.18? 'ECO' : 'SILENCIO'); }
 
@@ -1883,6 +2293,41 @@ window.__eco={
                             cargas:n.cargas, abierta:n.abierta, leida:n.leida,
                             dist:+Math.hypot(jug.x-n.x, jug.z-n.z).toFixed(2) })),
   objetivo:()=>objetivo(),
+  tutorial:()=>({ paso:tutoPaso, listo:tutoListo, andado:+tutoAndado.toFixed(2), gritos:tutoGritos,
+                  texto:(document.getElementById('tutoT')||{}).textContent||'',
+                  tecla:(document.getElementById('tutoK')||{}).textContent||'',
+                  visible:document.body.classList.contains('tutorial') }),
+  cosa:()=>({ estado:cosa.estado, celda:celdaDe(cosa.x,cosa.z), pos:[+cosa.x.toFixed(1),+cosa.z.toFixed(1)],
+              dist:+cosa.cerca.toFixed(2), vel:+cosa.vel.toFixed(2), aturdida:+cosa.aturdida.toFixed(1),
+              patas:cosa.patas.length, visible:cosa.g.visible }),
+  despertar:()=>{ cosaPonerLejos(); cosa.estado='ronda'; return cosa.estado; },
+  congelar:(sg)=>{ cosa.aturdida=(sg==null?6:sg); return cosa.aturdida; },
+  abierto:(i,j,l)=>!MAPA[j][i][l],
+  /* apuntar la vista a la cosa: hace falta para poder FOTOGRAFIARLA, porque el laberinto es distinto
+     cada partida y un angulo fijo la encuadra una de cada cinco veces */
+  mirarCosa:()=>{ const ex=cosa.x-jug.x, ez=cosa.z-jug.z;
+    jug.giro=Math.atan2(ex,ez);
+    pitch=Math.atan2(1.9-jug.y, Math.hypot(ex,ez))*0.6;
+    return { giro:+jug.giro.toFixed(2), dist:+Math.hypot(ex,ez).toFixed(2) }; },
+  animarCosa:(n)=>{ for(let k=0;k<(n||30);k++){ cosa.fase=(cosa.fase+0.02)%1;
+      const f=cosa.fase*Math.PI*2;
+      for(const P of cosa.patas){ const ang=Math.sin(f+(P.par?Math.PI:0)+(P.lado>0?0.45:0));
+        P.hombro.rotation.set(-1.15+ang*0.40, P.lado*0.42+(P.par?-0.30:0.26), 0);
+        P.codo.rotation.x=-0.62-Math.max(0,ang)*0.34; } }
+    return cosa.fase; },
+  /* donde cae cada garra: sin esto no hay forma de saber si las patas llegan al piso o el bicho
+     camina en el aire, que es exactamente lo que pasaba */
+  garras:()=>{ const v=new THREE.Vector3(); return cosa.patas.map(P=>{
+      const inf=P.codo.children[0]; inf.updateWorldMatrix(true,false);
+      v.set(0,-0.03,-1.22).applyMatrix4(inf.matrixWorld);
+      return { y:+v.y.toFixed(2) }; }); },
+  traerCosa:(i,j)=>{ cosa.x=XC(i==null?celdaDe(jug.x,jug.z)[0]:i); cosa.z=ZC(j==null?celdaDe(jug.x,jug.z)[1]:j);
+                     return [+cosa.x.toFixed(1),+cosa.z.toFixed(1)]; },
+  guia:()=>{ const el=document.getElementById('guia');
+    return { ver:el.classList.contains('ver'), flecha:document.getElementById('guiaF').textContent,
+             dist:document.getElementById('guiaD').textContent,
+             izq:el.style.left, arr:el.style.top,
+             destino:guiaPos? [+guiaPos.x.toFixed(1), +guiaPos.z.toFixed(1)] : null }; },
   audio:()=>{ let pico=0, rms=0;
     if(AUD.an&&AUD.buf){ AUD.an.getFloatTimeDomainData(AUD.buf);
       for(let i=0;i<AUD.buf.length;i++){ const v=Math.abs(AUD.buf[i]); if(v>pico) pico=v; rms+=v*v; }

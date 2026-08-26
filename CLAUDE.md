@@ -12,7 +12,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 - **`Campo_de_Tiro.html` ES "Z Force"** (1,83 MB). Es el proyecto grande: FPS con campo de
   tiro, todos-contra-todos, duelo de equipos y battle royale. **NO SE TOCA NI SE BORRA**:
   el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
-- **`Eco.html` es "Eco"** (~188 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
+- **`Eco.html` es "Eco"** (~215 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
@@ -20,6 +20,61 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
 ### Cómo está hecho `Eco.html`
+
+**Sexta vuelta (2026-08-26).** Pedido: *"no sé entiende ni mierda que hay que hacer, también podes
+mejorar los props aún más y hacer el juego más fácil y agregar un monstruo que nos sigue con
+extremidades y eso"*.
+
+- **EL BANCO DE PRUEBAS AHORA VIVE EN EL REPO**: `herramientas/banco/`. El contenedor se revirtió
+  cuatro veces en esta sesión y cada vez había que rearmar todo a mano. Ahora es
+  `bash herramientas/banco/armar.sh`.
+- **TUTORIAL DE CINCO PASOS QUE ENSEÑA HACIENDO.** El juego te soltaba en una pantalla negra y
+  esperaba que descubrieras solo que el ruido es la vista, que hay hojas en las paredes y que hay que
+  gritarles. Ahora cada paso **espera a que hagas la cosa** y recién ahí pasa al siguiente: MOVETE →
+  eso que ves son tus pasos → ahora GRITÁ → hay una hoja acá, gritale tres veces → así se juega. No
+  se puede trabar ni saltear sin haber entendido. Verificado paso por paso: 0→1 a los 4,1 m, 1→2 a
+  los 13,9 m, 2→3 con el primer grito, 3→4 al revelar la hoja, y `listo:true` al final.
+- **UNA FLECHA QUE DICE DÓNDE.** El objetivo escrito dice QUÉ; en un laberinto a oscuras faltaba el
+  DÓNDE, y sin eso el jugador entiende la consigna y da vueltas veinte minutos igual. Un marcador
+  proyectado sobre el destino: rombo con los metros cuando está en pantalla, flecha girada contra el
+  borde cuando está fuera o detrás. El destino se recalcula **3 veces por segundo y no por cuadro**:
+  adentro hay un BFS del laberinto entero.
+- **MÁS FÁCIL, con números**: laberinto de 13×13 a **11×11** (169 → 121 celdas; entre enigma y enigma
+  se caminaban 40-50 salas a oscuras y eso no es tensión, es aburrimiento), atajos del **6% al 14%**
+  (un laberinto perfecto es un árbol y cada error obliga a desandar el ramal entero), espera del
+  grito de **6 s a 4 s** (1,6 al lado de una hoja), y los rastros rojos pasan a **una marca por sala**
+  — perder el rastro en un pasillo negro es perder el juego.
+- **LA COSA.** Un monstruo que caza **por el ruido**, que es la única forma que puede funcionar acá:
+  para ver hay que hacer ruido, y hacer ruido es exactamente lo que la trae. Agacharse deja de ser un
+  truco de un enigma y pasa a ser la forma de escapar. Va con **el material de las ondas**, así que
+  se ve cuando una onda la toca y desaparece cuando pasa, igual que las paredes; lo único propio son
+  los ojos, que emiten de cerca. **No mata**: te agarra, te sacude y aparecés en la entrada con los
+  sellos puestos.
+  Verificado: duerme 25 s, un grito la pasa a `caza` y cierra de 12,6 m a 1,2 m a 3,05 m/s (correr
+  son 5,5: siempre se le gana corriendo), agarra, teletransporta al jugador a la entrada y se aturde
+  11 s; agachado emite **0 ondas** y vuelve a `ronda`.
+  TRES DEFECTOS ENCONTRADOS MIDIENDO, los tres del mismo corte prematuro en su `tick`:
+  1. Con las patas en +1,75 el **ángulo neto del antebrazo daba +0,70**: caminaba con las cuatro
+     patas dobladas al revés y las garras por encima del lomo. Las cuentas: hombro a 1,65 m, tramos
+     de 0,92 y 1,00; hombro −1,15 baja el codo a 0,79 y codo −0,62 (neto −1,77) apoya la garra en el
+     piso. Verificado: garras en y = −0,14 / 0,11 / 0,19 / −0,24.
+  2. Con la cosa aturdida no se actualizaban **ni la distancia ni los ojos**: la distancia quedaba en
+     infinito (el HUD no avisaba) y el material de los ojos se quedaba en **negro puro** — y un negro
+     puro no es invisible, se pinta y escribe profundidad, así que salían dos agujeros negros
+     recortados sobre la pared.
+  3. Y **la malla no se movía** mientras estaba aturdida: al agarrarte se teletransportaba lejos pero
+     seguía dibujada al lado tuyo los 11 segundos.
+  El giro de apertura de la pata va en **Y y no en Z**: la pata se extiende sobre −Z, así que rotar
+  en Z la retuerce sobre sí misma en vez de abrirla.
+- **PROPS**: de 5 tipos a **9** y de una cada 5 celdas a **una cada 3**. Nuevos: el **pozo** con
+  brocal y horca (el mojón más fuerte que hay, porque hay que rodearlo), la **columna partida**, el
+  **brasero** apagado de trípode, y **la figura** — algo que fue una estatua, sin cabeza y sin un
+  brazo; es el único prop con forma de persona y a oscuras eso pega distinto que una caja. Y la cosa
+  se agrandó: con el tronco chico, a cuatro metros se leía como cuatro patas sueltas.
+- Costo: **27 llamadas de dibujo, 10.486 triángulos, 0,8 ms por cuadro** con todo a la vista.
+  Partida completa verificada: tutorial de punta a punta, los cuatro enigmas y la victoria.
+
+### Cómo estaba hecho la quinta vuelta
 
 **Quinta vuelta (2026-08-26).** Pedido: *"el objetivo debe aparecer en pantalla we no en el menú"*.
 
