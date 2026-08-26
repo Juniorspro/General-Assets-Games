@@ -21,6 +21,44 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Décima vuelta (2026-08-26): la estática de Maicol y **Eco terminado**
+
+#### LA ESTÁTICA AL CAMINAR NO ERA EL SONIDO, ERA EL DISPARADOR
+
+`son('pisa')` estaba en la rama de choque del eje Y, y **esa rama corre todos los cuadros mientras
+se está parado en el piso**: la gravedad empuja la caja dentro del suelo en cada cuadro y el choque
+se resuelve de nuevo. Medido con un contador de llamadas, corriendo dos segundos: **24 pisadas por
+segundo superpuestas**. Eso no es una pisada, es ruido blanco.
+
+Ahora la pisada de aterrizar suena sólo en la transición **aire → piso**, y los pasos de caminar van
+por el **ciclo de la animación**: el ciclo tiene ocho cuadros y dos apoyos, el 0 y el 4, que es donde
+el pie toca. Atado ahí, la cadencia del sonido y la de las piernas son la misma cosa por
+construcción y cambian juntas con la velocidad. Medido igual: **4,5 por segundo**, que es un trote.
+Y la muestra también: el paso lleva su propio sonido, más corto y con el ruido filtrado bajado de
+0,50 a 0,22, que es lo que sonaba a estática al repetirse.
+
+#### ECO: HISTORIA, IMÁGENES Y AMBIENTE
+
+Eco ya tenía tutorial, cuatro enigmas, el monstruo que caza por el ruido y las notas. Le faltaba
+todo lo que rodea al juego.
+
+- **Historia de cuatro planos con voz en tres idiomas** (12 clips), misma arquitectura que Maicol:
+  la voz manda el tiempo de cada plano y hay plazo de respaldo si el audio no arranca. En un juego
+  que empieza en **negro absoluto y sin una sola palabra**, lo primero que le falta al jugador no es
+  una mecánica: es saber dónde está y por qué le importa.
+- **Imágenes en el tono del juego**, no en el de Maicol: casi todo negro, contornos apenas
+  insinuados, grano alto. El plano 2 es un pasillo dibujado **sólo** por anillos de sonar, que es
+  literalmente lo que hace el juego.
+- **El nombre dibujado** con anillos de eco, y telón de fondo en el menú.
+- **Cama de ambiente, y el volumen está MEDIDO.** Acá el sonido no es adorno, es el mecanismo: la
+  regla de este juego ya estaba escrita para el zumbido de fondo —a 0,030 competía con un grito y un
+  grito tiene que ser un **acontecimiento**, no un matiz—. La cama nueva se puso al mismo criterio y
+  se comprobó: fondo con ambiente **0,0117** de RMS, durante un grito **0,0238**, o sea que **el
+  grito queda 2,03× por encima**. Sin ambiente el fondo era 0,0089, así que la cama sube el piso un
+  31% y no se come el grito.
+- Todo el audio cuelga del **maestro**, que es lo que ya medía el analizador de Eco.
+- El HTML de Eco pasó de 229 a **835 KB**.
+
 ### Novena vuelta de `Maicol.html` (2026-08-26)
 
 Pedido: *"el salto suena nada que ver y hay otros sonidos que no da"*. Las dos cosas ciertas, y las
