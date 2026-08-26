@@ -109,18 +109,24 @@
   /* el interruptor de sonido: chico, arriba a la derecha, y con puntero propio porque el HUD entero
      no recibe toques */
   #bSon{ position:absolute; right:14px; top:12px; z-index:24;
-    width:calc(30px * var(--esc,1)); height:calc(30px * var(--esc,1));
+    width:max(26px, calc(30px * var(--esc,1))); height:max(26px, calc(30px * var(--esc,1)));
     border-radius:50%; border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.05);
     color:rgba(220,232,244,.75); font-size:13px; line-height:1; cursor:pointer;
     pointer-events:auto; display:none; align-items:center; justify-content:center; padding:0; }
   body.jugando #bSon{ display:flex; }
   #bSon.mudo{ color:rgba(220,232,244,.28); border-color:rgba(255,255,255,.07); }
-  #eco{ position:absolute; left:50%; top:calc(13px * var(--esc,1)); transform:translateX(-50%);
-    font-size:calc(10px * var(--esc,1)); font-weight:800; letter-spacing:.20em;
-    color:rgba(190,205,220,.40); white-space:nowrap; }
-  #reloj{ position:absolute; left:50%; top:calc(28px * var(--esc,1)); transform:translateX(-50%);
-    font-size:calc(22px * var(--esc,1)); font-weight:900; letter-spacing:.06em;
-    color:rgba(230,240,250,.72); font-variant-numeric:tabular-nums; }
+  /* ---------- EL BLOQUE DE ARRIBA, EN COLUMNA ----------
+     Estaba todo posicionado en absoluto con medidas en px por un factor de escala, y eso tiene dos
+     problemas que se pisan entre si: si el factor es chico el texto queda ilegible, y si lo agrando
+     los bloques se solapan porque las posiciones son fijas. En columna, el solapamiento es imposible
+     POR CONSTRUCCION y las fuentes quedan libres de tener un minimo legible. */
+  #top{ position:absolute; left:50%; top:calc(10px * var(--esc,1)); transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:calc(3px + 3px * var(--esc,1));
+    width:88%; }
+  #eco{ font-size:max(9px, calc(10px * var(--esc,1))); font-weight:800; letter-spacing:.20em;
+    color:rgba(190,205,220,.42); white-space:nowrap; }
+  #reloj{ font-size:max(17px, calc(22px * var(--esc,1))); font-weight:900; letter-spacing:.06em;
+    color:rgba(230,240,250,.72); font-variant-numeric:tabular-nums; line-height:1; }
   #aviso{ position:absolute; left:50%; top:52%; transform:translate(-50%,-50%);
     font-size:clamp(15px,4vw,22px); font-weight:900; letter-spacing:.14em; text-align:center;
     color:#fff; opacity:0; transition:opacity .4s ease; padding:0 22px; }
@@ -151,20 +157,27 @@
   body.movil.jugando #joy, body.movil.jugando .btn{ display:flex; }
 
   /* ---------- los cuatro sellos: lo unico que hay que juntar ---------- */
-  #sellos{ position:absolute; left:50%; top:calc(60px * var(--esc,1)); transform:translateX(-50%);
-    display:flex; gap:calc(9px * var(--esc,1)); }
+  #sellos{ display:flex; gap:9px; }
   /* ---------- QUE HAY QUE HACER AHORA ----------
      Sin esto el juego no se puede terminar: hay cuatro enigmas repartidos en un laberinto a oscuras
      y nada que te diga cual estas haciendo ni que te falta. Una linea. Se lee de un vistazo y no
      tapa nada. */
-  #meta{ position:absolute; left:50%; top:calc(77px * var(--esc,1)); transform:translateX(-50%);
-    max-width:80%; text-align:center; font-size:calc(10.5px * var(--esc,1)); font-weight:800;
-    letter-spacing:.10em; color:rgba(196,210,226,.62); line-height:1.5; }
-  #meta em{ font-style:normal; color:rgba(255,246,228,.92); }
-  #meta s{ text-decoration:none; display:block; font-size:calc(9px * var(--esc,1));
-    letter-spacing:.14em; color:rgba(150,166,184,.50); margin-top:2px; }
-  #sellos i{ width:calc(9px * var(--esc,1)); height:calc(9px * var(--esc,1)); border-radius:50%;
-    border:1.4px solid rgba(200,215,230,.30); }
+  /* MEDIDO EN UN TELEFONO: con la escala en 0,60 esta linea se dibujaba a 6,3 px y el subtitulo a
+     5,4, encima al 62% de opacidad. O sea que el unico cartel que dice QUE HAY QUE HACER era
+     ilegible justo en el aparato donde se juega. Las posiciones pueden encoger; el texto no.
+     Ahora tiene minimo de 12 px, contraste de verdad y un fondo propio, porque tiene que leerse
+     igual sobre el negro que sobre el fogonazo, que deja la pantalla clara. */
+  #meta{ max-width:100%; text-align:center; font-size:max(12px, calc(11px * var(--esc,1)));
+    font-weight:800; letter-spacing:.08em; color:rgba(236,244,252,.95); line-height:1.45;
+    padding:calc(4px + 2px * var(--esc,1)) calc(10px + 6px * var(--esc,1));
+    border-radius:999px; background:rgba(6,9,14,.58);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.07); backdrop-filter:blur(3px);
+    text-shadow:0 1px 6px rgba(0,0,0,.95); }
+  #meta:empty{ display:none; }
+  #meta em{ font-style:normal; color:#ffe9b8; }
+  #meta s{ text-decoration:none; display:block; font-size:max(10px, calc(9.5px * var(--esc,1)));
+    letter-spacing:.10em; font-weight:700; color:rgba(178,194,212,.80); margin-top:3px; }
+  #sellos i{ width:9px; height:9px; border-radius:50%; border:1.4px solid rgba(200,215,230,.32); }
   #sellos i.on{ background:#fff; border-color:#fff; box-shadow:0 0 11px rgba(255,255,255,.75); }
 
   /* ---------- LA HOJA DE PAPEL ----------
@@ -205,11 +218,11 @@
   /* el aviso de la hoja va abajo del centro pero ARRIBA de la leyenda de teclas y de los botones:
      en un cuadro bajo, al 60% ya se metia en el bloque de teclas */
   #leerP{ position:absolute; left:50%; top:56%; transform:translateX(-50%);
-    font-size:calc(10px * var(--esc,1)); font-weight:900; letter-spacing:.16em;
-    color:rgba(240,232,215,.72); opacity:0; transition:opacity .22s ease; white-space:nowrap;
-    text-align:center; line-height:2.0; text-shadow:0 2px 10px rgba(0,0,0,.95); }
-  #leerP b{ color:#05070a; background:rgba(245,238,225,.88); border-radius:4px;
-    padding:calc(2px * var(--esc,1)) calc(7px * var(--esc,1)); letter-spacing:.10em; }
+    font-size:max(11px, calc(10px * var(--esc,1))); font-weight:900; letter-spacing:.14em;
+    color:rgba(248,242,230,.92); opacity:0; transition:opacity .22s ease; white-space:nowrap;
+    text-align:center; line-height:2.0; text-shadow:0 2px 10px rgba(0,0,0,.98); }
+  #leerP b{ color:#05070a; background:rgba(245,238,225,.92); border-radius:4px;
+    padding:2px 7px; letter-spacing:.10em; }
   #leerP.ver{ opacity:1; }
   #bLeer{ position:absolute; left:50%; bottom:26px; margin-left:-56px; width:112px; height:40px;
     z-index:22; display:none; align-items:center; justify-content:center; border-radius:999px;
@@ -227,10 +240,11 @@
     opacity:0; transition:opacity .6s ease; pointer-events:none; }
   body.pc.jugando #teclas{ display:grid; }
   #teclas.ver{ opacity:1; }
-  #teclas i{ font-style:normal; font-size:calc(9px * var(--esc,1)); font-weight:900;
+  #teclas i{ font-style:normal; font-size:max(8.5px, calc(9px * var(--esc,1))); font-weight:900;
     letter-spacing:.05em; color:#05070a; background:rgba(232,238,245,.78); border-radius:4px;
-    padding:calc(2px * var(--esc,1)) calc(6px * var(--esc,1)); text-align:center; }
-  #teclas span{ font-size:calc(10px * var(--esc,1)); font-weight:700; color:rgba(190,205,220,.55); }
+    padding:2px 6px; text-align:center; }
+  #teclas span{ font-size:max(9.5px, calc(10px * var(--esc,1))); font-weight:700;
+    color:rgba(190,205,220,.55); }
 
   /* ---------- la viñeta ---------- */
   #vineta{ position:absolute; inset:0; z-index:18; pointer-events:none; display:none;
@@ -245,10 +259,12 @@
 
   <div id="hud">
     <div id="punto"></div>
-    <div id="eco">ECO</div>
-    <div id="reloj">0:00</div>
-    <div id="sellos"><i></i><i></i><i></i><i></i></div>
-    <div id="meta"></div>
+    <div id="top">
+      <div id="eco">ECO</div>
+      <div id="reloj">0:00</div>
+      <div id="sellos"><i></i><i></i><i></i><i></i></div>
+      <div id="meta"></div>
+    </div>
     <button id="bSon" title="sonido">♪</button>
     <div id="aviso"></div>
     <div id="leerP"></div>

@@ -21,6 +21,28 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
 
 ### Cómo está hecho `Eco.html`
 
+**Quinta vuelta (2026-08-26).** Pedido: *"el objetivo debe aparecer en pantalla we no en el menú"*.
+
+- **NO ES QUE FALTARA: ERA ILEGIBLE.** La línea de objetivo ya estaba en el HUD, pero se dibujaba
+  escalada por `--esc`. Medido en un teléfono (cuadro girado 732×412, escala 0,60): **6,3 px** el
+  objetivo y **5,4 px** el subtítulo, encima al **62% de opacidad**. O sea que el único cartel que
+  dice *qué hay que hacer* era invisible justo en el aparato donde se juega.
+- **LAS POSICIONES PUEDEN ENCOGER; EL TEXTO NO.** Todo el texto del HUD tiene ahora mínimo con
+  `max()`: objetivo 12 px, subtítulo 10 px, aviso de hoja 11 px, reloj 17 px. Verificado: **12 px /
+  10 px en los tres tamaños** (1280×720, 480×270 y 412×915 girado), contra 6,3/5,4 de antes.
+- **Y EL BLOQUE DE ARRIBA PASA A SER UNA COLUMNA FLEX** (`#top` con `#eco`, `#reloj`, `#sellos`,
+  `#meta`). Antes cada uno iba posicionado en absoluto con px por el factor de escala, y eso tiene
+  dos problemas que se muerden la cola: con el factor chico el texto queda ilegible, y si se agranda
+  el texto los bloques se solapan porque las posiciones son fijas. En columna el solapamiento es
+  **imposible por construcción** y las fuentes quedan libres de tener un mínimo. Verificado: cero
+  solapamientos en los cuatro pares y en los tres tamaños.
+- El objetivo además tiene **fondo propio** (píldora oscura con desenfoque) y contraste al 95%:
+  tiene que leerse igual sobre el negro que sobre el **fogonazo**, que deja la pantalla clara.
+- Verificado en modo teléfono de verdad (por tacto, sin ratón): joystick, GRITAR, SALTAR y AGACHAR
+  visibles, leyenda de teclas oculta, y el objetivo a 12 px.
+
+### Cómo estaba hecho la cuarta vuelta
+
 **Cuarta vuelta (2026-08-25).** Pedido textual: *"las notas no se pueden leer we me acerco y nada,
 también mejora los props y pistas y habitaciones we no se siente god al jugarlo ni se cómo
 completarlo"*.
