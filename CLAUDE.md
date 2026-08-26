@@ -21,6 +21,59 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Novena vuelta de `Maicol.html` (2026-08-26)
+
+Pedido: *"el salto suena nada que ver y hay otros sonidos que no da"*. Las dos cosas ciertas, y las
+dos se pueden medir en vez de discutir.
+
+#### EL MEDIDOR: DIRECCIÓN DEL TONO POR AUTOCORRELACIÓN
+
+Un blip de arcade es una **envolvente de tono**: el salto sube, el golpe baja. Eso se mide. Se
+rastrea el tono ventana por ventana y se compara el primer tercio contra el último.
+
+Primero lo hice con el **centroide espectral** y estaba mal: en una onda cuadrada los armónicos
+pesan más que el fundamental, así que una arpegiada que **sube una octava** movía el centroide
+apenas un 10% y el control la daba por "plana". La **autocorrelación** busca el período que se
+repite, o sea el fundamental, que es lo que el oído llama tono. Dos trampas más, las dos
+encontradas mirando el rastro cuadro por cuadro:
+- **`fmin` = 90 Hz dejaba fuera las caídas.** El golpe termina en 80 Hz y la muerte en 70: el
+  período de esas notas no entraba en la ventana de búsqueda, el algoritmo se agarraba de un
+  **armónico** y reportaba **+575% y +738% de subida en dos sonidos que bajan**. Con `fmin` = 55 Hz
+  entran.
+- **Si el máximo cae en el borde de la búsqueda no es un pico, es que no encontró nada.** Devolvía
+  2756 Hz —justo el límite de arriba— en las ventanas donde el sonido ya se había apagado, y esas
+  ventanas falsas daban vuelta la lectura.
+
+#### EL VEREDICTO: 1 DE 7 CONTRA 10 DE 10
+
+Con el medidor andando, los efectos que había:
+
+| efecto | tiene que | estaba |
+|---|---|---|
+| **salto** | subir, ~0,2 s | **plano y de 0,91 s** |
+| **resorte** | subir | **bajaba** |
+| **golpe** | bajar | **plano** |
+| estrella | subir | plano y a 0,357 de pico contra 0,81 del resto |
+
+Los volví a pedir al modelo con prompts mucho más explícitos y **pasó uno de siete**. Sintetizados
+—escribiendo la envolvente de tono a mano— pasan **diez de diez**. Un modelo de texto-a-audio no
+toma órdenes sobre la dirección del tono ni sobre el largo. **La música sigue generada**, que es
+donde el modelo aporta algo que no se escribe a mano.
+
+#### LOS QUE NO DABAN
+
+- **`son('agacha')` no lo llamaba nadie.** El archivo estaba cargado y mapeado desde la vuelta
+  pasada, y no había una sola llamada en todo el juego: un sonido que nunca se dispara es un sonido
+  que no existe. Ahora suena al pasar de parado a agachado.
+- **`pisotón` no tenía sonido propio** y caía al oscilador viejo.
+- **`final` sonaba igual que `meta`**: terminar el juego sonaba igual que terminar un nivel. Ahora
+  tiene su propia fanfarria, más larga y con acorde final.
+
+Comprobado en el navegador, disparando cada uno y leyendo el pico del analizador: **los diez suenan**
+— salto 0,48 · pisa 0,37 · estrella 0,69 · daño 0,51 · muerte 0,68 · resorte 0,55 · meta 0,81 ·
+final 0,67 · agacha 0,68 · pisotón 0,51. Y agachándose de verdad en el juego el pico sube de 0,171
+(sólo música) a 0,215.
+
 ### Octava vuelta de `Maicol.html` (2026-08-26)
 
 Pedido: *"agrégale que el menú sea más god, métele una foto recortada del nombre y de fondo una
