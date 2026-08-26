@@ -21,6 +21,50 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Cuarta vuelta de `Maicol.html` (2026-08-26)
+
+Pedido: *"la foto de atrás hacele de cielo nomás después otra parallax de montaña después más
+decoración y así we"*.
+
+- **CINCO CAPAS, cada una a su velocidad.** Cielo 0,06 · montaña 0,20 · loma 0,36 · árboles o
+  siluetas 0,55 · adornos y mundo 1,00. Con el cielo, las montañas, los árboles y el piso metidos
+  en UNA sola foto no importa cuánto camines: nada se mueve respecto de nada, y eso es un telón
+  pintado. Separadas, caminar produce **paralaje**, que es lo único que da distancia en 2D.
+- **LAS LÍNEAS DE APOYO ESTÁN ELEGIDAS PARA QUE NO SE VEA NINGÚN CORTE.** El borde de abajo de una
+  banda es una línea recta y se delata. La loma apoya en el 96% del alto — o sea **por debajo del
+  suelo** — así que su corte queda tapado por la tierra siempre; la montaña apoya en el 79%, seis
+  píxeles por debajo del techo de la loma. Con la cámara mirando hacia abajo el suelo sube y tapa
+  todavía más, así que el caso justo es con la cámara arriba de todo, que es el que se midió.
+- **NINGUNA BANDA SE REPITE DENTRO DE UN NIVEL, y es una cuenta.** Alcance = ancho ÷ velocidad:
+  cielo 22948 px, montaña 4680 px, loma 2250 px, contra 3552 px del nivel más ancho. Solo la loma
+  da una vuelta y media, y por eso a las bandas se les **cose la costura**: se funde el borde
+  derecho sobre el izquierdo y el empalme desaparece.
+- **LAS BANDAS VAN APLASTADAS A PROPÓSITO.** Respetando la proporción, una sierra de 2400×930
+  llevada a 176 px de alto queda de 456 px de ancho: a 0,20 eso dura 2280 px de mundo y **la
+  misma sierra se ve dos veces y media en la misma pantalla**. Aplastada a 1040×176 entra entera.
+  Una sierra lejana más chata sigue leyéndose a sierra lejana.
+- **EL TECHO ES LA MISMA BANDA DE MONTAÑA DADA VUELTA.** En la cueva los bastones de roca colgando
+  son estalactitas y en la fábrica los caños son la estructura del galpón. Sin eso, los dos
+  tercios de arriba quedaban de un color plano y liso, que es lo que más delata a un fondo pintado.
+  Se da vuelta una sola vez a un lienzo aparte.
+- **BAJARLE EL COLOR A LO LEJANO NO ES UN GUSTO, ES LA CUENTA.** El escombro azul de la cueva
+  venía a todo color y sobre un fondo casi negro **pegaba en el ojo y se leía más cerca que el
+  piso** — al revés de lo que tiene que pasar. Va horneado por banda (`TONOS`): el de la cueva a
+  0,60 de brillo y 0,52 de color, los rojos de la fábrica a 0,56 de color. Eso es lo que hace el
+  aire en la realidad, y es lo que hace que algo se lea **lejos** y no simplemente más chico.
+- **36 ADORNOS, doce por tema** (eran 18). Los seis nuevos de cada tema se juntan con los seis que
+  ya estaban en una sola tira de doce, así el juego sigue teniendo una imagen de adornos por tema.
+- **Y SALIÓ MÁS RÁPIDO QUE ANTES.** Cinco capas contra una foto: 21,5 → 17,0 cuadros por segundo
+  con SwiftShader. El degradé de aire y el velo final eran **dos rellenos de pantalla entera por
+  cuadro — 1,2 millones de píxeles mezclados con alfa para dar siempre lo mismo**, porque ninguno
+  de los dos cambia nunca. Horneados adentro de la imagen del cielo: **23,3**, más que las 21,5
+  que daba con una sola foto.
+- **NO SE TOCÓ NADA DEL JUEGO, otra vez.** El mismo bot contra `d869e03` y contra esto da los
+  mismos números en los 7 niveles: mismo avance, mismas caídas, mismos pasos. Y el muñeco sigue
+  midiendo 6,5% más parado que corriendo.
+- Bytes: salieron las tres fotos enteras de fondo (120 KB) y entraron nueve bandas más las tiras
+  de doce. El HTML pasó de 349 a **372 KB**.
+
 ### Tercera vuelta de `Maicol.html` (2026-08-26)
 
 Pedido: *"agrega mejor decoración también el personaje es un poco más grande estando quieto y al
