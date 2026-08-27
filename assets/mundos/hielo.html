@@ -1,0 +1,3568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#071018"/>
+<title>HIELO</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;background:#071018;color:#eef4f9;
+    font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    overflow:hidden;touch-action:none;overscroll-behavior:none;user-select:none}
+  #gl{position:fixed;left:0;top:0;width:100%;height:100%;display:block}
+
+  /* ---------------- HUD ---------------- */
+  #hud{position:fixed;inset:0;z-index:4;pointer-events:none;display:none}
+  #hud.on{display:block}
+  #obj{position:absolute;left:50%;top:10px;transform:translateX(-50%);
+    background:rgba(9,18,26,.62);border:1px solid rgba(180,220,255,.25);border-radius:12px;
+    padding:7px 14px;text-align:center;backdrop-filter:blur(4px);max-width:86vw}
+  #objT{font-weight:800;font-size:13px;letter-spacing:.04em;color:#e2f0fc}
+  #objD{font-size:11.5px;color:#9cbcd8;margin-top:1px}
+  #capCard{position:absolute;left:50%;top:32%;transform:translateX(-50%);text-align:center;
+    opacity:0;transition:opacity 1.1s;pointer-events:none;width:92vw}
+  #capCard.on{opacity:1}
+  #capN{font-size:13px;letter-spacing:.34em;color:#bfe0f8;font-weight:700}
+  #capT{font-size:30px;font-weight:900;letter-spacing:.06em;margin-top:4px;
+    text-shadow:0 2px 18px rgba(0,0,0,.65)}
+  /* MENU, SONIDO y CORRER ARRIBA a la derecha y cuadrados. Abajo quedaban alargados
+     y apretados contra el pulgar con el que se juega, que es justo donde estorban. */
+  #btns{position:absolute;right:max(10px,2.5vw);top:max(10px,2.5vh);display:flex;
+    flex-direction:row;gap:8px;align-items:flex-start;pointer-events:auto}
+  #btns .b{width:46px;height:46px;min-width:0;padding:0;display:grid;place-items:center;
+    text-align:center;border-radius:12px;font-size:15px}
+  /* USAR: REDONDO, abajo, al lado del salto. Dos motivos.
+     Sitio: position FIXED y no absolute. #btns se subio arriba a la derecha y es
+     absolute, asi que un hijo absolute dejaba de colgar de la pantalla y colgaba de
+     EL: su "bottom" se medía desde la caja de arriba y el boton aparecia arriba.
+     Forma: es el unico boton de accion que se toca en medio del juego, con el pulgar
+     y sin mirar; una pastilla alargada al lado de un salto redondo se toca peor y se
+     ve peor. Mismo diametro que el salto, a su izquierda. */
+  #btns .b.usar{position:fixed;right:calc(max(14px,3.5vw) + min(84px,19vw) + 12px);
+    bottom:max(16px,5vh);width:min(72px,16vw);height:min(72px,16vw);
+    aspect-ratio:1;border-radius:50%;padding:0;display:none;place-items:center;
+    font-size:clamp(10px,2.6vw,13px);line-height:1.05;text-align:center;
+    letter-spacing:.04em}
+  #btns .b.usar.on{display:grid}
+  .b{min-width:86px;text-align:center;padding:12px 15px;border-radius:14px;font-weight:800;
+    font-size:13px;background:rgba(12,22,32,.62);border:1.5px solid rgba(180,220,255,.4);
+    color:#e2f0fc;pointer-events:auto;cursor:pointer;backdrop-filter:blur(3px)}
+  .b:active{transform:translateY(1px);filter:brightness(1.3)}
+  .b.usar{background:rgba(40,110,160,.78);border-color:#bfe6ff;font-size:15px;display:none}
+  .b.usar.on{display:block}
+  .b.corre.on{background:rgba(40,110,160,.78)}
+  /* ayuda de controles de PC: sale sola al detectar mouse/teclado */
+  /* en un aparato sin tactil no se dibujan los controles de dedo */
+  body.sinTactil #joy,body.sinTactil #bSalta{display:none}
+  /* AVISO DEL TRASLADO: una linea corta, centrada, por encima del boton USAR y
+     de la palanca para no tapar ni una cosa ni la otra. Es todo el tutorial que
+     tiene el traslado: aparece cuando estas donde se usa y se va cuando no. */
+  #aviso{position:fixed;left:50%;bottom:max(96px,20vh);transform:translateX(-50%);
+    display:none;pointer-events:none;text-align:center;max-width:80vw;z-index:4;
+    font:800 11.5px/1.35 ui-sans-serif,system-ui,sans-serif;letter-spacing:.07em;
+    padding:7px 13px;border-radius:10px;background:rgba(10,22,34,.68);
+    border:1px solid rgba(150,200,240,.34);color:#dcecff;backdrop-filter:blur(4px);
+    text-shadow:0 1px 6px rgba(0,0,0,.7)}
+  #aviso.on{display:block}
+  body.hablando #aviso{display:none}
+  @media (max-height:430px){ #aviso{bottom:max(84px,26vh);font-size:10.5px} }
+  /* ---- PALANCA DIBUJADA, igual que en los ocho mundos nuevos. Antes este mundo
+       se movia arrastrando el dedo por la mitad izquierda de la pantalla, sin
+       nada que lo dijera. ---- */
+  #joy{position:absolute;left:max(14px,3.5vw);bottom:max(16px,5vh);
+    width:min(150px,32vw);aspect-ratio:1;pointer-events:auto;touch-action:none;
+    opacity:.9;transition:opacity .25s}
+  #joy canvas{width:100%;height:100%;display:block}
+  /* se esconde SOLO si el aparato no tiene tactil: escondiendola al detectar
+     raton, un portatil tactil se quedaba sin ningun control a la vista. */
+  body.sinTactil #joy{display:none}
+  body.hablando #joy{opacity:0;pointer-events:none}
+  /* ---- LA BARRA DE ARRIBA: sonido, correr y pausa. Estaban apilados en la
+       columna de la derecha; arriba es donde se pidieron y donde no estorban al
+       pulgar que juega. Abajo queda solo el boton de accion. ---- */
+  #hudTop{position:absolute;right:max(10px,2.5vw);top:max(10px,2vh);display:flex;
+    gap:8px;pointer-events:auto;z-index:6}
+  #hudTop .bt{min-width:44px;height:44px;padding:0 10px;border-radius:12px;display:grid;
+    place-items:center;font:900 15px/1 ui-sans-serif,system-ui,sans-serif;
+    letter-spacing:.04em;cursor:pointer;background:rgba(0,0,0,.46);
+    border:1.5px solid rgba(255,255,255,.28);color:#eaf2ff;backdrop-filter:blur(4px)}
+  #hudTop .bt.ico{font-size:19px;padding:0}
+  #hudTop .bt:active{transform:translateY(1px);filter:brightness(1.35)}
+  #hudTop .bt.on{background:rgba(120,190,255,.32);border-color:rgba(255,255,255,.6);color:#fff}
+  /* EL SELLO EN LA PORTADA: dos veces la duda fue «esto esta actualizado o el
+     navegador me dio una copia vieja», y la respuesta solo estaba en la linea de
+     fps —chiquita, tapada por la barra de estado del telefono y visible unicamente
+     DENTRO del juego—. Aca se ve antes de tocar nada. */
+  #mSello{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);
+    font:800 10.5px/1 ui-monospace,monospace;letter-spacing:.12em;
+    color:rgba(255,255,255,.42);pointer-events:none;z-index:3}
+  #pcHelp{position:absolute;left:10px;top:30px;display:none;pointer-events:none;
+    font:600 11px/1.5 ui-sans-serif,system-ui,sans-serif;color:#dfeecd;
+    background:rgba(7,14,22,.5);border:1px solid rgba(190,230,180,.26);
+    border-radius:10px;padding:8px 10px;backdrop-filter:blur(4px);max-width:44vw}
+  body.pc #pcHelp{display:block}
+  #pcHelp b{display:block;font:800 9px/1 ui-sans-serif,system-ui,sans-serif;
+    letter-spacing:.16em;opacity:.6;margin-bottom:6px}
+  #pcHelp .row{margin-top:4px;white-space:nowrap}
+  #pcHelp kbd{display:inline-block;min-width:13px;text-align:center;padding:1px 5px;
+    margin-right:1px;border-radius:5px;font:700 10px ui-monospace,monospace;
+    background:rgba(190,230,180,.16);border:1px solid rgba(190,230,180,.3);color:#e2f0fc}
+  #dlg{position:absolute;left:50%;bottom:8%;transform:translateX(-50%);width:min(560px,92vw);
+    background:rgba(7,14,22,.88);border:1px solid rgba(180,220,255,.35);border-radius:16px;
+    padding:16px 18px 13px;display:none;pointer-events:auto;backdrop-filter:blur(6px);z-index:5}
+  #dlg.on{display:block}
+  #dlgT{font-weight:900;letter-spacing:.05em;color:#bfe0f8;font-size:13px;margin-bottom:6px}
+  #dlgB{font-size:14.5px;line-height:1.5;color:#eef4f9;white-space:pre-wrap}
+  #dlgGo{margin-top:12px;text-align:center;padding:11px;border-radius:11px;font-weight:800;
+    background:linear-gradient(180deg,#2e7cb8,#174a74);border:1px solid #bfe6ff;cursor:pointer}
+  #fps{position:absolute;left:10px;top:10px;font:10px ui-monospace,monospace;color:#a8cce8;
+    background:rgba(7,14,22,.5);padding:3px 6px;border-radius:6px}
+  /* viñeta cinematográfica: oscurece apenas las esquinas, gratis (es CSS) */
+  #vig{position:fixed;inset:0;z-index:2;pointer-events:none;
+    background:radial-gradient(ellipse 78% 68% at 50% 46%,transparent 62%,rgba(0,0,10,.34) 100%)}
+
+  /* ---------------- CINEMÁTICAS: barras, subtítulo, saltear --------------- */
+  #cineTop,#cineBot{position:fixed;left:0;width:100%;height:0;background:#000;
+    z-index:6;transition:height .5s ease}
+  #cineTop{top:0}#cineBot{bottom:0}
+  body.cine #cineTop,body.cine #cineBot{height:11vh}
+  #cineTxt{position:fixed;left:50%;bottom:13vh;transform:translateX(-50%);z-index:7;
+    font-size:15.5px;font-weight:700;letter-spacing:.06em;color:#fff;
+    text-shadow:0 1px 12px #000,0 0 4px #000;opacity:0;transition:opacity .4s;
+    text-align:center;width:92vw;pointer-events:none}
+  body.cine #cineTxt{opacity:1}
+  #cineSkip{position:fixed;right:14px;top:13vh;z-index:7;display:none;
+    padding:8px 16px;border-radius:10px;background:rgba(0,0,0,.55);
+    border:1px solid rgba(255,255,255,.3);color:#fff;font-size:12px;
+    letter-spacing:.12em;cursor:pointer}
+  body.cine #cineSkip{display:block}
+
+  /* diálogo con PERSONAJE: la carita pintada + el nombre */
+  #dlgFila{display:flex;gap:12px;align-items:flex-start}
+  #dlgCara{width:64px;height:64px;border-radius:12px;flex:0 0 64px;display:none;
+    border:1.5px solid rgba(180,220,255,.4);background:#0006}
+  #dlgCara.on{display:block}
+
+  /* la TAREA del capítulo (contador, sin idioma: iconos y números) */
+  #tarea{font-size:13px;font-weight:900;letter-spacing:.06em;margin-top:2px;display:none}
+  #tarea.on{display:block}
+  /* PISTA: que hace el boton USAR ahora mismo. Sin esto el boton se prendia y
+     listo, y en PC ni siquiera hay boton a la vista: estabas encima de la cosa
+     sin una sola pista de que se podia levantar ni con que tecla. */
+  #pistaUso{font-size:12px;font-weight:900;letter-spacing:.08em;margin-top:3px;
+    display:none;color:#ffe9a8;text-shadow:0 1px 3px rgba(0,0,0,.75)}
+  #pistaUso.on{display:block}
+
+  /* medidor de supervivencia (oxígeno / calor) */
+  #medidor{position:absolute;left:12px;bottom:16px;width:150px;display:none;
+    pointer-events:none}
+  #medidor.on{display:block}
+  #medIco{font-size:14px;margin-bottom:3px;text-shadow:0 1px 6px #000}
+  #medBar{height:9px;border-radius:6px;background:rgba(0,0,0,.45);
+    border:1px solid rgba(255,255,255,.3);overflow:hidden}
+  #medFill{height:100%;width:100%;border-radius:6px;transition:width .3s linear;
+    background:linear-gradient(90deg,#7fd4ff,#cfefff)}
+  #medFill.rojo{background:linear-gradient(90deg,#ff5a4a,#ffb09a)}
+
+  /* fundido a negro para reaparecer */
+  #fundido{position:fixed;inset:0;z-index:8;background:#000;opacity:0;
+    pointer-events:none;transition:opacity .7s}
+
+  /* ---------------- MENÚ ---------------- */
+  /* el menú es un velo: DETRÁS se ve el valle en vivo (cámara cinemática) */
+  #menu{position:fixed;inset:0;z-index:9;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;background:
+    linear-gradient(180deg,rgba(5,10,16,.16) 0%,rgba(5,10,16,.34) 55%,rgba(4,8,13,.72) 100%);
+    text-align:center;padding:16px;overflow-y:auto}
+  #menu h1{margin:0;font-size:54px;font-weight:900;letter-spacing:.22em;
+    background:linear-gradient(180deg,#f2f9ff,#6aa8dc);-webkit-background-clip:text;
+    background-clip:text;-webkit-text-fill-color:transparent}
+  #menu .sub{color:#8fb0c8;font-size:13px;margin:6px 0 26px;letter-spacing:.08em}
+  .mbtn{display:block;width:min(320px,84vw);margin:7px auto;padding:15px;font-size:16px;
+    font-weight:800;letter-spacing:.06em;border-radius:14px;cursor:pointer;color:#e2f0fc;
+    background:rgba(14,30,44,.8);border:1.5px solid rgba(180,220,255,.4)}
+  .mbtn.go{background:linear-gradient(180deg,#2e7cb8,#174a74);border-color:#bfe6ff}
+  /* portadas distintas por mundo: cada juego alinea su menú diferente */
+  #menu.m-izq{align-items:flex-start;text-align:left;padding-left:min(10vw,110px)}
+  #menu.m-izq .mbtn,#menu.m-izq #fLang,#menu.m-izq #fGfx{margin-left:0;margin-right:auto}
+  #menu.m-der{align-items:flex-end;text-align:right;padding-right:min(10vw,110px)}
+  #menu.m-der .mbtn,#menu.m-der #fLang,#menu.m-der #fGfx{margin-right:0;margin-left:auto}
+  #menu.m-abajo{justify-content:flex-end;padding-bottom:min(9vh,74px)}
+  #menu.m-arriba{justify-content:flex-start;padding-top:min(7vh,56px)}
+  #menu.m-grande h1{font-size:70px;letter-spacing:.3em}
+  #menu.m-compacto h1{font-size:40px;letter-spacing:.5em;font-weight:800}
+  #mCap{color:#6aa8dc;font-size:12px;margin-top:14px;letter-spacing:.1em;
+    text-shadow:0 1px 8px rgba(0,0,0,.8)}
+  .fila{display:flex;gap:8px;justify-content:center;margin:10px 0 0;flex-wrap:wrap}
+  .filaT{font-size:10.5px;letter-spacing:.22em;color:#8fb0c8;margin-top:16px;
+    text-shadow:0 1px 6px rgba(0,0,0,.8)}
+  .chip{padding:8px 16px;border-radius:20px;font-weight:800;font-size:12.5px;cursor:pointer;
+    background:rgba(10,20,30,.72);border:1.5px solid rgba(180,220,255,.35);color:#c2ddf2}
+  .chip.on{background:linear-gradient(180deg,#2e7cb8,#174a74);border-color:#bfe6ff;color:#f2f9ff}
+  #cargando{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;
+    background:#071018;color:#8fb0c8;font-size:13px;letter-spacing:.2em}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="vig"></div>
+<div id="cineTop"></div><div id="cineBot"></div>
+<div id="cineTxt"></div><div id="cineSkip">SALTEAR ▸▸</div>
+<div id="fundido"></div>
+
+<div id="hud">
+  <div id="obj"><div id="objT">…</div><div id="objD"></div><div id="tarea"></div><div id="pistaUso"></div></div>
+  <div id="capCard"><div id="capN"></div><div id="capT"></div></div>
+  <div id="fps"></div>
+  <div id="hudTop">
+    <div class="bt ico" id="bSon">🔊</div>
+    <div class="bt" id="bCorre">RUN</div>
+    <div class="bt ico" id="bMenu">☰</div>
+  </div>
+  <div id="btns">
+    <div class="b usar" id="bUsar">◉ USAR</div>
+  </div>
+  <div id="joy"><canvas width="300" height="300"></canvas></div>
+  <div id="dlg"><div id="dlgFila"><canvas id="dlgCara" width="96" height="96"></canvas><div style="flex:1;min-width:0"><div id="dlgT"></div><div id="dlgB"></div></div></div><div id="dlgGo">SEGUIR ▸</div></div>
+  <div id="medidor"><div id="medIco"></div><div id="medBar"><div id="medFill"></div></div></div>
+  <div id="aviso"></div>
+  <div id="pcHelp"></div>
+</div>
+
+<div id="menu">
+  <div id="mSello"></div>
+  <h1>HIELO</h1>
+  <div class="sub">la expedición aurora · un valle blanco que canta de noche</div>
+  <div class="mbtn go" id="mJugar">EMPEZAR LA HISTORIA</div>
+  <div class="mbtn" id="mSeguir" style="display:none">CONTINUAR</div>
+  <div id="mCap"></div>
+  <div class="filaT" id="tLang">IDIOMA</div>
+  <div class="fila" id="fLang">
+    <div class="chip" data-l="es">ESPAÑOL</div>
+    <div class="chip" data-l="en">ENGLISH</div>
+    <div class="chip" data-l="pt">PORTUGUÊS</div>
+  </div>
+  <div class="filaT" id="tGfx">GRÁFICOS</div>
+  <div class="fila" id="fGfx">
+    <div class="chip" data-g="b">BAJOS</div>
+    <div class="chip" data-g="m">MEDIOS</div>
+    <div class="chip" data-g="a">ALTOS</div>
+  </div>
+</div>
+<div id="cargando">CARGANDO EL HIELO…</div>
+
+<script>
+/* ============================================================================
+   HIELO — el cuarto mundo hermano: un valle glacial, 100% procedural.
+     · NIEVE con chispas pintada en canvas, huella pisada en la senda,
+       roca fría por pendiente — y un LAGO CONGELADO que se CRUZA A PIE:
+       el terreno se clava a la cota del hielo dentro de la cuenca y encima
+       va una placa con GRIETAS pintadas, pulida y reflectante
+     · la AURORA: dos cortinas gigantes animadas por shader (ruido +
+       ondulación de vértices, aditivas), que despiertan con la noche
+     · NEVADA de partículas que viaja con la cámara, remolinos de nieve
+       errantes, cristales de hielo instanciados que brillan
+     · campamento con carpa que se ENCIENDE de noche, cueva de hielo con
+       su depósito, y el FARO de la señal: la historia es encenderlo
+     · ambiente sintetizado: viento que silba, la estufa del campamento
+       (posicional), y de noche EL HIELO CANTA (gemidos graves + crujidos)
+   HISTORIA (6 caps, ES/EN/PT): KAI, glacióloga de la expedición Aurora,
+   sin generador y con un avión de suministros buscando una luz.
+   ========================================================================== */
+(async () => {
+'use strict';
+const Q = new URLSearchParams(location.search);
+const LOC = Q.has('local');
+/* CERO descargas de assets: todas las texturas se pintan al vuelo.
+   Lo único que llega de la red es three.js. */
+/* assets compartidos de los mundos hermanos (cielos, modelos 3D, audio). Se
+   define acá arriba —antes del armado del mundo— porque los mk_*.py insertan
+   propGLB()/AX() en el cuerpo del build, que corre mucho antes. */
+const HASHAX = 'fb644fc';
+const AX = f => (LOC ? '/assets/mundos/'
+  : 'https://cdn.jsdelivr.net/gh/Juniorspro/General-Assets-Games@' + HASHAX + '/assets/mundos/') + f;
+const TRE = LOC ? '/_vthree/build/three.module.js'
+  : 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+/* importmap ANTES de cargar GLTFLoader (que importa 'three' por specifier).
+   Se inyecta al vuelo: el import de three es por URL absoluta, así que no lo
+   afecta, y el mapa resuelve el 'three' de GLTFLoader al MISMO módulo. */
+{
+  const im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: { three: TRE } });
+  document.head.appendChild(im);
+}
+const T = await import(TRE);
+/* GLTFLoader para los personajes 3D generados (riggeados + animados). Si por
+   lo que sea no carga, GLTF queda null y todo cae al personaje procedural. */
+let GLTF = null;
+try {
+  const GLU = LOC ? '/_vthree/examples/jsm/loaders/GLTFLoader.js'
+    : 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
+  GLTF = (await import(GLU)).GLTFLoader;
+} catch (e) {}
+const $ = i => document.getElementById(i);
+
+/* ---------------- azar reproducible: el valle es SIEMPRE el mismo ---------- */
+let _s = 20271111;
+const rnd = () => { _s = (_s * 1664525 + 1013904223) >>> 0; return _s / 4294967296; };
+const rr = (a, b) => a + (b - a) * rnd();
+const cl = (v, a, b) => v < a ? a : (v > b ? b : v);
+
+/* ---------------- terreno: ruido de valor FBM, determinista ---------------- */
+const MAPA = 900, MITAD = MAPA / 2;
+function hash2(i, j){
+  /* Math.imul, no `*`: en JS el producto de enteros grandes se hace float y
+     PIERDE los bits bajos (>2^53) — el hash quedaba sesgado hacia abajo y el
+     ruido casi nunca pasaba de 0,36. Medido: la compuerta de densidad rechazaba
+     3.356 de 3.481 celdas y el "bosque" tenía 83 árboles. */
+  let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263)) ^ 20260801;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function vnoise(x, z){
+  const i = Math.floor(x), j = Math.floor(z);
+  const fx = x - i, fz = z - j;
+  const sx = fx * fx * (3 - 2 * fx), sz = fz * fz * (3 - 2 * fz);
+  const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+  return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
+}
+function fbm(x, z){
+  let v = 0, amp = .5, f = 1;
+  for (let o = 0; o < 4; o++){ v += amp * vnoise(x * f, z * f); amp *= .5; f *= 2.03; }
+  return v;
+}
+/* PUNTOS DE LA HISTORIA (fijos, el terreno se allana alrededor) */
+const POI = {
+  inicio:     { x: 0,    z: 400 },
+  campamento: { x: -70,  z: 250 },
+  cuevahielo: { x: 200,  z: 90 },
+  lagohielo:  { x: -30,  z: -140 },
+  faro:       { x: 200,  z: -330 },
+  crater:     { x: -70,  z: -130 }
+};
+/* la cota del hielo: dentro de la cuenca, el suelo NUNCA baja de acá.
+   El lago congelado se camina. */
+const HIELO_Y = -2.4;
+function alturaBase(x, z){
+  let h = fbm(x * .006 + 33, z * .006 + 205) * 30 - 10;   /* lomas nevadas */
+  h += fbm(x * .02 + 88, z * .02 + 140) * 4;
+  /* la cuenca del lago congelado */
+  const dl = Math.hypot(x - POI.crater.x, z - POI.crater.z);
+  h -= 20 * Math.exp(-(dl * dl) / (140 * 140));
+  /* la loma de la cueva */
+  const dr = Math.hypot(x - POI.cuevahielo.x, z - POI.cuevahielo.z);
+  h += 12 * Math.exp(-(dr * dr) / (170 * 170));
+  /* EL HIELO: piso firme dentro de la cuenca */
+  if (dl < 185) h = Math.max(h, HIELO_Y);
+  return h;
+}
+function H(x, z){
+  let h = alturaBase(x, z);
+  for (const k in POI){
+    if (k === 'crater') continue;
+    const p = POI[k];
+    const d = Math.hypot(x - p.x, z - p.z);
+    const w = Math.exp(-(d * d) / (26 * 26));
+    h = h * (1 - w) + (p.h != null ? p.h : alturaBase(p.x, p.z)) * w;
+  }
+  return h;
+}
+/* la SENDA: huellas de trineo entre los puntos */
+const SENDA = [POI.inicio, POI.campamento, POI.cuevahielo, POI.lagohielo, POI.faro];
+const SENDA_PTS = [], PTS_SEG = [[]];
+for (let i = 1; i < SENDA.length; i++){
+  const a = SENDA[i - 1], b = SENDA[i];
+  const mx = (a.x + b.x) / 2 + (fbm(i * 5.3, i * 7.7) - .5) * 100;
+  const mz = (a.z + b.z) / 2 + (fbm(i * 8.1, i * 3.7) - .5) * 100;
+  const seg = [];
+  for (let k = 0; k <= 24; k++){
+    const t = k / 24, u = 1 - t;
+    const P = [u*u*a.x + 2*u*t*mx + t*t*b.x, u*u*a.z + 2*u*t*mz + t*t*b.z];
+    seg.push(P);
+    if (i === 1 || k > 0) SENDA_PTS.push(P);
+  }
+  PTS_SEG.push(seg);
+}
+for (const k in POI) POI[k].h = alturaBase(POI[k].x, POI[k].z);
+
+
+/* ==================== TEXTURAS PROCEDURALES (canvas) ========================
+   No hay créditos de generación: acá TODO se PINTA. Cada textura es un canvas
+   con ruido FBM azulejable (retícula en módulo, del mismo motor del terreno),
+   así que empalman sin costura y no pesan un byte de descarga. */
+const lienzo = (n, fn) => {
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  fn(c.getContext('2d'), n);
+  const t = new T.CanvasTexture(c);
+  t.wrapS = t.wrapT = T.RepeatWrapping;
+  t.colorSpace = T.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+};
+const valT = (x, y, per) => {
+  const i = Math.floor(x), j = Math.floor(y);
+  const fx = x - i, fy = y - j;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const h = (a, b) => hash2(((a % per) + per) % per + 101, ((b % per) + per) % per + 37);
+  const a = h(i, j), b = h(i + 1, j), c2 = h(i, j + 1), d = h(i + 1, j + 1);
+  return a + (b - a) * sx + (c2 - a) * sy + (a - b - c2 + d) * sx * sy;
+};
+const fbmT = (x, y, per, oct) => {
+  let v = 0, amp = .55, p = per;
+  for (let o = 0; o < oct; o++){ v += amp * valT(x * p, y * p, p); amp *= .5; p *= 2; }
+  return cl(v, 0, 1);
+};
+const mezC = (a, b, t) => [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+/* suelo genérico: dos colores por FBM + pecas (piedritas y chispas de polvo)
+   + rayas de duna opcionales (ondas de arena talladas por el viento) */
+function texSuelo(n, colA, colB, pecas, rayas){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      let t = fbmT(x / n, y / n, 6, 4);
+      if (rayas){
+        const w = Math.sin((y / n * 18 + fbmT(x / n, y / n, 5, 3) * 2.6) * 6.283);
+        t = cl(t * .55 + .45 * (.5 + .5 * w), 0, 1);
+      }
+      let c = mezC(colA, colB, t);
+      const r = hash2(x + 7, y + 13);
+      if (pecas && r > .965) c = mezC(c, [16, 18, 24], .55);
+      else if (r < .012) c = [255, 255, 255];   /* la nieve CHISPEA al sol */
+      const gr = .92 + .16 * hash2(x + 91, y + 57);
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0] * gr; img.data[i4+1] = c[1] * gr; img.data[i4+2] = c[2] * gr;
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+/* chapa de nave: paneles con junta, remaches y mugre de polvo en las costuras */
+function texMetal(n){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      const px2 = x % 64, py = y % 48;
+      let c = mezC([196, 202, 206], [166, 174, 181], fbmT(x / n, y / n, 5, 3));
+      if (px2 < 2 || py < 2) c = [118, 126, 133];
+      if ((px2 - 7) * (px2 - 7) + (py - 7) * (py - 7) < 4) c = [108, 116, 123];
+      c = mezC(c, [152, 96, 58], .4 * fbmT(x / n + .3, y / n + .7, 7, 3) *
+        fbmT(x / n, y / n, 3, 2));
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0]; img.data[i4+1] = c[1]; img.data[i4+2] = c[2];
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+/* celda fotovoltaica: azul profundo con retícula clara y reflejos */
+function texPanel(n){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      const cx = x % 42, cy2 = y % 42;
+      let c = mezC([15, 27, 56], [34, 58, 104], fbmT(x / n, y / n, 6, 3));
+      if (cx < 3 || cy2 < 3) c = [186, 194, 202];
+      if (hash2(x + 3, y + 9) > .994) c = [130, 170, 230];
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0]; img.data[i4+1] = c[1]; img.data[i4+2] = c[2];
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+/* HIELO del lago: azul pálido veteado con GRIETAS pintadas a trazo */
+function texHielo(n){
+  return lienzo(n, g => {
+    const img = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++){
+      const t = fbmT(x / n, y / n, 5, 4);
+      const c = mezC([168, 200, 226], [222, 240, 250], t);
+      const i4 = (y * n + x) * 4;
+      img.data[i4] = c[0]; img.data[i4+1] = c[1]; img.data[i4+2] = c[2];
+      img.data[i4+3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    /* las grietas: trazos finos azul profundo que se ramifican */
+    for (let i = 0; i < 22; i++){
+      g.strokeStyle = 'rgba(60,100,150,' + (.25 + rnd() * .3).toFixed(2) + ')';
+      g.lineWidth = .8 + rnd() * 1.4;
+      let x = rnd() * n, y = rnd() * n;
+      g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 5; k++){
+        x += (rnd() - .5) * n * .3; y += (rnd() - .5) * n * .3;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  });
+}
+/* el CIELO ártico: azul empolvado, claridad baja en el horizonte, estrellas
+   tenues arriba (que la noche revela) */
+const cieloM = (() => {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const g = c.getContext('2d');
+  const d = g.createLinearGradient(0, 0, 0, 512);
+  d.addColorStop(0, '#1c2c44');
+  d.addColorStop(.3, '#5c7ea6');
+  d.addColorStop(.46, '#aec8de');
+  d.addColorStop(.5, '#e6eef4');
+  d.addColorStop(.56, '#8ea6ba');
+  d.addColorStop(1, '#3c4a58');
+  g.fillStyle = d; g.fillRect(0, 0, 1024, 512);
+  /* estrellas LEJOS del polo: en equirectangular, un punto pintado cerca de
+     y=0 se estira en una CUÑA gigante alrededor del cénit (medido: cuñas
+     grises cruzando el cielo diurno) */
+  for (let i = 0; i < 380; i++){
+    const x = rnd() * 1024, y = 78 + rnd() * 122;
+    const at2 = (.1 + rnd() * .26) * Math.min(1, (y - 70) / 60);
+    g.fillStyle = 'rgba(255,255,255,' + at2.toFixed(2) + ')';
+    g.fillRect(x, y, .9, .9);
+  }
+  const t = new T.CanvasTexture(c);
+  t.mapping = T.EquirectangularReflectionMapping;
+  t.colorSpace = T.SRGBColorSpace;
+  /* SIN mipmaps: en el polo del equirectangular las derivadas explotan y el
+     mip más chico pinta CUÑAS y un seam vertical sobre el cielo claro */
+  t.generateMipmaps = false;
+  t.minFilter = T.LinearFilter;
+  return t;
+})();
+/* mismas CLAVES que el motor: pasto=regolito, tierra=arena de la senda,
+   hojarasca=grava oscura, roca=basalto (por pendiente) */
+const TX = {
+  pasto:     texSuelo(256, [208, 220, 234], [238, 245, 252], false, false),
+  tierra:    texSuelo(256, [172, 184, 200], [200, 211, 224], false, true),
+  hojarasca: texSuelo(256, [150, 180, 210], [192, 216, 238], false, false),
+  roca:      texSuelo(256, [56, 62, 78], [98, 108, 128], true, false),
+  metal:     texMetal(256),
+  panel:     texPanel(256),
+  oscuro:    texSuelo(128, [30, 34, 42], [56, 62, 74], true, false),
+  hielo:     texHielo(256),
+  cielo:     cieloM
+};
+
+/* ================================ ESCENA =================================== */
+const ren = new T.WebGLRenderer({ canvas: $('gl'), antialias: false,
+  powerPreference: 'high-performance' });
+ren.outputColorSpace = T.SRGBColorSpace;
+/* GOTY: tone mapping FÍLMICO (ACES) — los blancos ruedan suave en vez de
+   recortarse, los atardeceres saturan como en cine — y SOMBRAS suaves (PCF).
+   La exposición la maneja el ciclo del día, capítulo a capítulo. */
+ren.toneMapping = T.ACESFilmicToneMapping;
+ren.toneMappingExposure = 1.12;
+ren.shadowMap.enabled = true;
+ren.shadowMap.type = T.PCFSoftShadowMap;
+const scene = new T.Scene();
+/* el fondo NO usa scene.background: la caja interna de three muestra las
+   COSTURAS de sus caras sobre un cielo claro (medido). En su lugar, un DOMO:
+   los UV de la esfera ya son equirectangulares, cero costuras. El brillo lo
+   sigue manejando backgroundIntensity (el ciclo del día lo anima). */
+scene.background = new T.Color(0x0a0e14);
+scene.backgroundIntensity = 1;
+const DOMO = new T.Mesh(new T.SphereGeometry(1040, 48, 24),
+  new T.MeshBasicMaterial({ map: TX.cielo, side: T.BackSide, fog: false,
+    depthWrite: false }));
+DOMO.renderOrder = -1;
+DOMO.frustumCulled = false;
+scene.add(DOMO);
+/* el canvas del cielo ya trae un "suelo" pintado bajo el horizonte: el PMREM
+   sale directo, sin el parche que necesitaba la foto de SENDA */
+const pm = new T.PMREMGenerator(ren);
+scene.environment = pm.fromEquirectangular(TX.cielo).texture;
+scene.fog = new T.Fog(new T.Color('#b8cadb'), 60, 430);
+const cam = new T.PerspectiveCamera(72, 1, .1, 1200);
+cam.rotation.order = 'YXZ';
+
+/* luz: UNA direccional (el sol) + hemisferio. Lambert por fragmento.
+   El sol PROYECTA SOMBRA: su caja de sombra (±78 m) viaja pegada al jugador —
+   con un mapa de 900 m una sola caja fija daría texels de medio metro; así el
+   texel queda en ~15 cm y las copas dibujan sombra de verdad sobre el sendero. */
+const SOLD = new T.Vector3(.5, .7, .3).normalize();   /* dirección actual del sol */
+const sol = new T.DirectionalLight(0xfff4e0, 2.4);
+sol.position.copy(SOLD).multiplyScalar(420);
+{
+  const sc = sol.shadow.camera;
+  sc.left = sc.bottom = -78; sc.right = sc.top = 78;
+  sc.near = 40; sc.far = 760;
+  sol.shadow.mapSize.set(1024, 1024);
+  sol.shadow.bias = -0.0006;
+  sol.shadow.normalBias = 1.6;      /* sin esto el terreno de quads de 5 m se acnea */
+}
+scene.add(sol); scene.add(sol.target);
+const hemi = new T.HemisphereLight(0xbdd4ee, 0x8a97a8, .85);
+scene.add(hemi);
+/* el DESTELLO del sol: un sprite aditivo donde apunta SOLD. Con niebla y ACES
+   es lo que hace que mirar contra el sol "queme" como en un juego grande. */
+const glare = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const d = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  d.addColorStop(0, 'rgba(255,248,225,1)');
+  d.addColorStop(.12, 'rgba(255,238,190,.85)');
+  d.addColorStop(.4, 'rgba(255,214,140,.22)');
+  d.addColorStop(1, 'rgba(255,200,120,0)');
+  g.fillStyle = d; g.fillRect(0, 0, 128, 128);
+  const s = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c),
+    transparent: true, blending: T.AdditiveBlending, depthWrite: false, fog: false }));
+  s.scale.set(300, 300, 1);
+  scene.add(s);
+  return s;
+})();
+/* la ventana de la cabaña, de noche, VUELCA luz cálida al porche */
+const focoCasa = new T.PointLight(0xffb46a, 0, 26, 1.7);
+scene.add(focoCasa);
+/* al caer el sol el halo ártico vira al ROSA de las nubes de hielo */
+const AZUL_OCASO = new T.Color(0xffb8cf);
+/* UNA LUNA pálida de invierno (solo de noche) + LA AURORA + LA NEVADA */
+const LUNAS = [];
+{
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const d = g.createRadialGradient(28, 26, 2, 32, 32, 30);
+  d.addColorStop(0, '#f8fbff');
+  d.addColorStop(.75, '#c9d6e4');
+  d.addColorStop(1, '#7c8ba0');
+  g.fillStyle = d; g.beginPath(); g.arc(32, 32, 29, 0, 6.284); g.fill();
+  for (let i = 0; i < 7; i++){
+    g.fillStyle = 'rgba(140,155,175,.4)';
+    g.beginPath();
+    g.arc(32 + (rnd() - .5) * 40, 32 + (rnd() - .5) * 40, 2 + rnd() * 5, 0, 6.284);
+    g.fill();
+  }
+  const sp = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c),
+    transparent: true, opacity: 0, depthWrite: false, fog: false }));
+  sp.scale.set(46, 46, 1);
+  sp.userData.dir = new T.Vector3(-.4, .55, -.5).normalize();
+  scene.add(sp); LUNAS.push(sp);
+}
+/* LA AURORA: dos cortinas gigantes, aditivas, animadas por shader — el ruido
+   les da las varillas verticales, el vértice las hace ondular como tela */
+const AURORA_MAT = (() => {
+  const ruidoA = texSuelo(128, [0, 0, 0], [255, 255, 255], false, false);
+  return new T.ShaderMaterial({
+    uniforms: { uT: { value: 0 }, tN: { value: ruidoA }, uOp: { value: 0 } },
+    transparent: true, depthWrite: false, side: T.DoubleSide,
+    blending: T.AdditiveBlending,
+    vertexShader: `varying vec2 vUv; uniform float uT;
+      void main(){ vUv = uv;
+        vec3 p = position;
+        p.y += sin(uv.x*9.0 + uT*.3) * 7.0;
+        p.z += sin(uv.x*5.0 - uT*.22) * 9.0;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.); }`,
+    fragmentShader: `varying vec2 vUv; uniform float uT; uniform sampler2D tN;
+      uniform float uOp;
+      void main(){
+        float cort = texture2D(tN, vec2(vUv.x*2.0 + uT*.012, uT*.006)).r;
+        float veil = texture2D(tN, vec2(vUv.x*6.0 - uT*.02, vUv.y*.5)).r;
+        float a = smoothstep(.28, .78, cort*.65 + veil*.55);
+        a *= smoothstep(0.0, .15, vUv.y) * smoothstep(1.0, .35, vUv.y);
+        vec3 col = mix(vec3(.12, .95, .5), vec3(.2, .55, .95), vUv.x);
+        col = mix(col, vec3(.68, .3, .92), smoothstep(.55, 1., vUv.y));
+        gl_FragColor = vec4(col, a * uOp); }`
+  });
+})();
+{
+  const cortinas = [[150, 200, -620, -.15], [-260, 235, -520, .55]];
+  for (const [x, y, z, ry] of cortinas){
+    const m = new T.Mesh(new T.PlaneGeometry(950, 130, 56, 1), AURORA_MAT);
+    m.position.set(x, y, z);
+    m.rotation.y = ry;
+    m.frustumCulled = false;
+    scene.add(m);
+  }
+}
+/* LA NEVADA: una nube de copos que viaja con la cámara */
+const NIEVE = (() => {
+  const N3 = 520, P = new Float32Array(N3 * 3);
+  for (let i = 0; i < N3; i++){
+    P[i*3] = rr(-38, 38); P[i*3+1] = rr(0, 30); P[i*3+2] = rr(-38, 38);
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P, 3));
+  const cv = document.createElement('canvas'); cv.width = cv.height = 16;
+  const gc = cv.getContext('2d');
+  const dd = gc.createRadialGradient(8, 8, 0, 8, 8, 8);
+  dd.addColorStop(0, 'rgba(255,255,255,1)'); dd.addColorStop(1, 'rgba(255,255,255,0)');
+  gc.fillStyle = dd; gc.fillRect(0, 0, 16, 16);
+  const pts = new T.Points(g, new T.PointsMaterial({ size: .3,
+    map: new T.CanvasTexture(cv), transparent: true, depthWrite: false,
+    opacity: .85, sizeAttenuation: true }));
+  pts.frustumCulled = false;
+  scene.add(pts);
+  return pts;
+})();
+function pasoNieve(dt){
+  const P = NIEVE.geometry.attributes.position;
+  for (let i = 0; i < P.count; i++){
+    let y = P.array[i*3+1] - dt * (1.5 + (i % 5) * .25);
+    if (y < 0) y += 30;
+    P.array[i*3+1] = y;
+    P.array[i*3] += Math.sin(t0 * .8 + i) * dt * .5;
+    if (P.array[i*3] > 38) P.array[i*3] = -38;
+    if (P.array[i*3] < -38) P.array[i*3] = 38;
+  }
+  P.needsUpdate = true;
+  NIEVE.position.set(cam.position.x, cam.position.y - 14, cam.position.z);
+}
+
+/* --------------------------- SPLAT DE CONTROL ------------------------------
+   R = tierra del sendero · G = hojarasca bajo el bosque. Se pinta UNA vez en un
+   canvas de 512: el sendero como trazo gordo entre los puntos de la historia,
+   la hojarasca como manchas de ruido donde después van los árboles. */
+const SPL = document.createElement('canvas'); SPL.width = SPL.height = 512;
+const wx2u = x => (x + MITAD) / MAPA * 512;
+const wz2u = z => (z + MITAD) / MAPA * 512;
+{
+  const g = SPL.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, 512, 512);
+  /* placas de hielo azulado: manchas */
+  g.fillStyle = '#003800';
+  for (let i = 0; i < 900; i++){
+    const x = rnd() * 512, y = rnd() * 512, r = 6 + rnd() * 22;
+    if (vnoise(x * .02, y * .02) < .52) continue;
+    g.beginPath(); g.arc(x, y, r, 0, 6.284); g.fill();
+  }
+  g.filter = 'blur(6px)';
+  g.drawImage(SPL, 0, 0);
+  g.filter = 'none';
+  /* el sendero: R fuerte, con borde difuso */
+  for (const [w, c] of [[16, 'rgba(140,0,0,.55)'], [8, 'rgba(255,0,0,.85)']]){
+    g.strokeStyle = c; g.lineWidth = w; g.lineCap = g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(wx2u(SENDA_PTS[0][0]), wz2u(SENDA_PTS[0][1]));
+    for (const P of SENDA_PTS) g.lineTo(wx2u(P[0]), wz2u(P[1]));
+    g.stroke();
+  }
+  /* claros: cabaña y santuario sin hojarasca, con algo de tierra */
+  for (const k of ['campamento', 'faro']){
+    g.fillStyle = 'rgba(160,0,0,.5)';
+    g.beginPath(); g.arc(wx2u(POI[k].x), wz2u(POI[k].z), 12, 0, 6.284); g.fill();
+  }
+}
+const splTex = new T.CanvasTexture(SPL);
+splTex.colorSpace = T.NoColorSpace;
+
+/* ----------------------------- MATERIAL DEL TERRENO ------------------------
+   Antes era un ShaderMaterial propio: sol+hemi calculados a mano, SIN sombras,
+   sin tone mapping y con la niebla sincronizada por uniformes. Ahora es un
+   Lambert con el SPLAT inyectado en map_fragment: el mismo mezclado de 4
+   texturas, pero con TODO el pipeline de three gratis — RECIBE las sombras del
+   sol, pasa por ACES, y la niebla y el colorspace son los del resto del mundo
+   (antes el terreno y los árboles se iluminaban por recetas distintas y había
+   que emparejarlos a ojo). La roca por pendiente se calcula en el VÉRTICE: la
+   malla del terreno no rota, así que la normal del objeto ES la del mundo. */
+const uniTerr = {
+  tTierra: { value: TX.tierra }, tHoja: { value: TX.hojarasca },
+  tRoca: { value: TX.roca }, tSplat: { value: splTex },
+  repite: { value: MAPA / 7 }
+};
+const matTerr = new T.MeshLambertMaterial({ map: TX.pasto });
+matTerr.onBeforeCompile = sh => {
+  Object.assign(sh.uniforms, uniTerr);
+  /* en calidad baja, un solo tap: cuatro muestras a pantalla llena es relleno de
+     pixeles, que es lo que mata a un telefono de gama baja. */
+  try { if (typeof GFX !== 'undefined' && (GFX === 'b' || GFX === 'bajos'))
+    sh.defines = Object.assign({}, sh.defines, { SUELO_BARATO: '' }); } catch(e){}
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying float vRocoso;')
+    .replace('#include <begin_vertex>',
+      '#include <begin_vertex>\n  vRocoso = smoothstep(.82, .6, normal.y);');
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', `#include <common>
+      uniform sampler2D tTierra, tHoja, tRoca, tSplat;
+      uniform float repite;
+      varying float vRocoso;
+      /* ---- SUELO SIN REJILLA: teselado estocastico ----
+         Una sola muestra a escala fija repite el mismo parche decenas de veces
+         ALINEADO, y a media distancia el ojo encuentra las filas enseguida: es la
+         cuadricula que se veia. Aca cada celda del parche se lee con un
+         desplazamiento Y un giro sacados de su propia posicion, y las cuatro celdas
+         vecinas se cruzan con pesos bilineales al cubo. Sin periodo no hay rejilla. */
+      float h21_(vec2 p){ return fract(sin(dot(p, vec2(41.31, 289.07))) * 43758.5453); }
+      vec2 h22_(vec2 p){ return fract(sin(vec2(dot(p, vec2(127.1, 311.7)),
+                                               dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+      float ruido_(vec2 p){
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h21_(i), h21_(i + vec2(1.0, 0.0)), f.x),
+                   mix(h21_(i + vec2(0.0, 1.0)), h21_(i + vec2(1.0, 1.0)), f.x), f.y);
+      }
+      vec3 sinGrilla_(sampler2D t, vec2 uv){
+        vec2 cel = floor(uv), f = fract(uv);
+        #if defined(SUELO_BARATO)
+          vec2 h = h22_(cel);
+          float a = h.x * 6.2831853;
+          mat2 R = mat2(cos(a), -sin(a), sin(a), cos(a));
+          return texture2D(t, R * (uv - cel - 0.5) + h).rgb;
+        #else
+          vec3 acc = vec3(0.0); float ws = 0.0;
+          for (int j = 0; j < 2; j++){ for (int i = 0; i < 2; i++){
+            vec2 c = cel + vec2(float(i), float(j));
+            vec2 h = h22_(c);
+            float a = h.x * 6.2831853;
+            mat2 R = mat2(cos(a), -sin(a), sin(a), cos(a));
+            float w = (1.0 - abs(f.x - float(i))) * (1.0 - abs(f.y - float(j)));
+            w = w * w * w;
+            acc += texture2D(t, R * (uv - c) + h).rgb * w; ws += w;
+          } }
+          return acc / max(ws, 1e-4);
+        #endif
+      }`)
+    .replace('#include <map_fragment>', `
+      vec2 uvT = vMapUv * repite;
+      vec3 spl = texture2D(tSplat, vMapUv).rgb;
+      vec3 c = sinGrilla_(map, uvT);
+      c = mix(c, sinGrilla_(tHoja, uvT*1.3), clamp(spl.g*1.5, 0., 1.));
+      c = mix(c, texture2D(tTierra, uvT*1.6).rgb, clamp(spl.r*1.35, 0., 1.));
+      c = mix(c, sinGrilla_(tRoca, uvT*.9), vRocoso);
+      /* la luz del suelo varia en dos frecuencias: manchones grandes y grano cercano.
+         Sin esto, incluso sin rejilla, todo el terreno se lee con el mismo brillo. */
+      c *= 0.86 + 0.20 * ruido_(vMapUv * 6.3) + 0.14 * ruido_(vMapUv * 71.0);
+      diffuseColor.rgb *= c;`);
+};
+
+/* ---------------------- malla del terreno en 36 trozos --------------------- */
+const CHN = 6, CVERT = 30;                    /* 6x6 trozos de 30x30 celdas */
+const terrChunks = [];
+{
+  const paso = MAPA / (CHN * CVERT);
+  for (let cj = 0; cj < CHN; cj++) for (let ci = 0; ci < CHN; ci++){
+    const g = new T.PlaneGeometry(MAPA / CHN, MAPA / CHN, CVERT, CVERT);
+    g.rotateX(-Math.PI / 2);
+    const ox = -MITAD + (ci + .5) * MAPA / CHN;
+    const oz = -MITAD + (cj + .5) * MAPA / CHN;
+    const P = g.attributes.position, UV = g.attributes.uv;
+    for (let i = 0; i < P.count; i++){
+      const x = P.getX(i) + ox, z = P.getZ(i) + oz;
+      P.setY(i, H(x, z));
+      /* uv GLOBAL del valle, para que el splat y el tileado sigan entre trozos */
+      UV.setXY(i, (x + MITAD) / MAPA, (z + MITAD) / MAPA);
+    }
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    /* los vértices son LOCALES al trozo; la posición del mesh los lleva al mundo.
+       (la primera versión además trasladaba la geometría: doble desplazamiento y
+       los 36 trozos caían apilados en el centro) */
+    const m = new T.Mesh(g, matTerr);
+    m.position.set(ox, 0, oz);
+    m.receiveShadow = true;
+    m.castShadow = true;          /* las lomas se sombrean entre sí al atardecer */
+    scene.add(m);
+    terrChunks.push(m);
+  }
+}
+
+/* falda del horizonte: tapa la parte BAJA de la foto del cielo (que es oscura)
+   con suelo que a esa distancia ya es color de niebla puro */
+/* EL SUELO MAS BAJO DEL MUNDO. Se mide una vez, barriendo el mapa cada 12 m: unas
+   5.000 llamadas a H, imperceptible al lado de las que cuesta el terreno. Hace
+   falta porque la falda del horizonte estaba clavada en -10 y en varios mundos el
+   suelo baja mas: los metros de abajo quedaban tapados por una chapa lisa. */
+const SUELO_MIN = (() => {
+  let m = 1e9;
+  for (let x = -MITAD; x <= MITAD; x += 12)
+    for (let z = -MITAD; z <= MITAD; z += 12){
+      const h = H(x, z);
+      if (h < m) m = h;
+    }
+  return m;
+})();
+{
+  const f = new T.Mesh(new T.CircleGeometry(1150, 24),
+    new T.MeshLambertMaterial({ color: 0xb6c6d6 }));
+  f.rotation.x = -Math.PI / 2;
+  /* DEBAJO del suelo mas bajo, no en -10 a mano: con -10 la falda enterraba los
+     crateres, las hoyas y el fondo de las gargantas, y se veia como una mancha
+     lisa con el canto recto. A 1.150 m, veinte metros son un grado de
+     horizonte: no se nota, y el fondo del mundo aparece. */
+  f.position.y = Math.min(-10, SUELO_MIN - 8);
+  f.frustumCulled = false;
+  scene.add(f);
+  /* PARED DE LOMAS LEJANAS: una falda plana converge exactamente a la altura del
+     ojo, así que desde cualquier punto alto (la colina del roble, la cámara del
+     menú) se veía la franja oscura de la foto del cielo entre la falda y el
+     horizonte. Este anillo sube hasta +70 a 1.100 m: a esa distancia la niebla lo
+     pinta liso y se lee como una serranía en la bruma que CIERRA el horizonte. */
+  const pared = new T.Mesh(new T.CylinderGeometry(1100, 660, 78, 24, 1, true),
+    new T.MeshLambertMaterial({ color: 0x9fb4c8, side: T.BackSide }));
+  /* la pared baja LO MISMO que la falda: si no, queda una ranura entre las dos
+     por donde se ve la franja oscura de la foto del cielo. */
+  pared.position.y = 31 + Math.min(0, SUELO_MIN - 8 + 10);
+  pared.frustumCulled = false;
+  scene.add(pared);
+}
+/* --------------------------- REMOLINOS DE NIEVE ----------------------------
+   Tres remolinos de ventisca que vagan por el valle: conos translúcidos con
+   vetas blancas, girando sobre sí mismos. Más CHICOS y tenues que las
+   tolvaneras de Marte: de cerca, un cono de 30 m tapaba el cielo. */
+const dustTex = lienzo(128, (g, n) => {
+  g.clearRect(0, 0, n, n);
+  for (let i = 0; i < 90; i++){
+    g.strokeStyle = 'rgba(235,244,255,' + (.05 + rnd() * .1).toFixed(3) + ')';
+    g.lineWidth = 1 + rnd() * 3;
+    const x = rnd() * n;
+    g.beginPath(); g.moveTo(x, 0);
+    g.bezierCurveTo(x + 8, n * .3, x - 8, n * .6, x + rnd() * 10 - 5, n);
+    g.stroke();
+  }
+});
+const TOLVAS = [];
+{
+  const geoT = new T.CylinderGeometry(1.9, .45, 16, 10, 1, true);
+  geoT.translate(0, 8, 0);
+  for (let i = 0; i < 3; i++){
+    const m = new T.Mesh(geoT, new T.MeshLambertMaterial({ map: dustTex,
+      transparent: true, opacity: .09, side: T.DoubleSide, depthWrite: false }));
+    m.userData = { cx: [230, -300, 40][i], cz: [120, 100, -60][i],
+      R: 60 + i * 25, w: .05 + i * .013, f: i * 2.1 };
+    m.visible = false;   /* en la nieve, la ventisca la cuenta la NEVADA */
+    scene.add(m);
+    TOLVAS.push(m);
+  }
+}
+function pasoTolvas(t){
+  for (const m of TOLVAS){
+    const u = m.userData;
+    const x = u.cx + Math.cos(t * u.w + u.f) * u.R;
+    const z = u.cz + Math.sin(t * u.w + u.f) * u.R;
+    m.position.set(x, H(x, z) - .5, z);
+    m.rotation.y = t * 5 + u.f;
+    m.material.opacity = .05 + .04 * Math.abs(Math.sin(t * .3 + u.f));
+  }
+}
+
+/* ------------- ROCAS FRÍAS + PIEDRITAS + CRISTALES DE HIELO ---------------
+   Rocas oscuras asomando de la nieve, y racimos de CRISTALES celestes con un
+   brillo propio, más densos cerca del lago congelado. */
+function fusiona(geos){
+  let nv = 0; for (const g of geos) nv += g.attributes.position.count;
+  const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2);
+  const I = [];
+  let off = 0;
+  for (const g of geos){
+    P.set(g.attributes.position.array, off * 3);
+    N.set(g.attributes.normal.array, off * 3);
+    if (g.attributes.uv) U.set(g.attributes.uv.array, off * 2);
+    const idx = g.index.array;
+    for (let k = 0; k < idx.length; k++) I.push(idx[k] + off);
+    off += g.attributes.position.count;
+  }
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P, 3));
+  g.setAttribute('normal', new T.BufferAttribute(N, 3));
+  g.setAttribute('uv', new T.BufferAttribute(U, 2));
+  g.setIndex(I);
+  return g;
+}
+const ARB = [];                                /* [x,z,r] choque */
+function molesta(x, z, margen){
+  for (const k in POI){ const p = POI[k];
+    if (k !== 'crater' && Math.hypot(x - p.x, z - p.z) < 16) return true; }
+  const m2 = margen * margen;
+  for (const P of SENDA_PTS){
+    const dx = x - P[0], dz = z - P[1];
+    if (dx * dx + dz * dz < m2) return true;
+  }
+  return false;
+}
+const M4 = new T.Matrix4(), V3 = new T.Vector3(), Q4 = new T.Quaternion(), E3 = new T.Euler();
+function geoRoca(sem, punta){
+  const g = new T.SphereGeometry(1, 7, 5);
+  const P = g.attributes.position, UV = g.attributes.uv;
+  for (let i = 0; i < P.count; i++){
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+    const k = .6 + .62 * vnoise(x * 2.1 + sem, z * 2.1 + y * 1.3 + sem * 2);
+    P.setXYZ(i, x * k, y * k * punta, z * k);
+    UV.setXY(i, UV.getX(i) * 2, UV.getY(i) * 1.4);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function plantar(){
+  const variantes = [geoRoca(3, .55), geoRoca(17, .72), geoRoca(41, .62), geoRoca(77, .9)];
+  const posV = [[], [], [], []];
+  const PASO_A = 18;
+  const CTA = { tot: 0, dens: 0, camino: 0, ok: 0 };
+  window.__PLANTA = CTA;
+  for (let gz = -MITAD + 12; gz < MITAD - 12; gz += PASO_A)
+  for (let gx = -MITAD + 12; gx < MITAD - 12; gx += PASO_A){
+    CTA.tot++;
+    const x = gx + rr(-5, 5), z = gz + rr(-5, 5);
+    let dens = vnoise(x * .011 + 60, z * .011 + 22);
+    const dl = Math.hypot(x - POI.crater.x, z - POI.crater.z);
+    dens += .22 * Math.exp(-((dl - 185) * (dl - 185)) / (70 * 70));
+    if (dens < .46){ CTA.dens++; continue; }
+    if (dens < .58 && rnd() > (dens - .46) * 6){ CTA.dens++; continue; }
+    if (molesta(x, z, 13)){ CTA.camino++; continue; }
+    const y = H(x, z);
+    const pend = Math.max(Math.abs(H(x + 2, z) - y), Math.abs(H(x, z + 2) - y));
+    if (pend > 1.6){ CTA.dens++; continue; }
+    CTA.ok++;
+    const sc = rr(.5, 2.7);
+    posV[(rnd() * 4) | 0].push([x, y - sc * .18, z, sc]);
+    if (sc > 1.4) ARB.push([x, z, sc * .8]);
+  }
+  const matRoca = new T.MeshLambertMaterial({ map: TX.roca });
+  for (let v = 0; v < 4; v++){
+    const arr = posV[v];
+    if (!arr.length) continue;
+    const im = new T.InstancedMesh(variantes[v], matRoca, arr.length);
+    for (let i = 0; i < arr.length; i++){
+      const [x, y, z, sc] = arr[i];
+      Q4.setFromEuler(E3.set(0, rr(0, 6.28), rr(-.08, .08)));
+      M4.compose(V3.set(x, y, z), Q4, new T.Vector3(sc, sc * rr(.85, 1.1), sc));
+      im.setMatrixAt(i, M4);
+    }
+    im.frustumCulled = false;
+    im.castShadow = im.receiveShadow = true;
+    scene.add(im);
+  }
+  /* PIEDRITAS: sin colisión ni sombra, puro detalle del regolito */
+  const chico = new T.InstancedMesh(geoRoca(5, .5), matRoca, 400);
+  for (let i = 0; i < 400; i++){
+    const x = rr(-MITAD + 8, MITAD - 8), z = rr(-MITAD + 8, MITAD - 8);
+    const sc = rr(.08, .3);
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+    M4.compose(V3.set(x, H(x, z) - sc * .2, z), Q4, new T.Vector3(sc, sc, sc));
+    chico.setMatrixAt(i, M4);
+  }
+  chico.frustumCulled = false;
+  scene.add(chico);
+  /* CRISTALES DE HIELO: racimos de tres agujas, con emisión propia */
+  const gCri = (() => {
+    const conos = [];
+    for (let k = 0; k < 3; k++){
+      const g = new T.ConeGeometry(.16 + k * .05, 1.1 + k * .45, 5);
+      g.rotateX(rr(-.3, .3)); g.rotateZ(rr(-.3, .3));
+      g.translate(rr(-.25, .25), (1.1 + k * .45) / 2, rr(-.25, .25));
+      conos.push(g);
+    }
+    return fusiona(conos);
+  })();
+  window.__CRISTAL_MAT = new T.MeshLambertMaterial({ color: 0x9fc8e8,
+    emissive: 0x3a78b8, emissiveIntensity: .3, transparent: true, opacity: .92 });
+  const iCri = new T.InstancedMesh(gCri, window.__CRISTAL_MAT, 160);
+  let nc = 0, itc = 0;
+  while (nc < 160 && itc < 40000){
+    itc++;
+    const x = rr(-MITAD + 10, MITAD - 10), z = rr(-MITAD + 10, MITAD - 10);
+    const dl2 = Math.hypot(x - POI.crater.x, z - POI.crater.z);
+    if (dl2 > 320 && rnd() < .6) continue;      /* más cerca del lago */
+    if (dl2 < 180 && rnd() < .7) continue;      /* pero no SOBRE el hielo */
+    if (molesta(x, z, 9)) continue;
+    const sc = rr(.5, 1.8);
+    Q4.setFromEuler(E3.set(0, rr(0, 6.28), 0));
+    M4.compose(V3.set(x, H(x, z) - .1, z), Q4, new T.Vector3(sc, sc, sc));
+    iCri.setMatrixAt(nc, M4);
+    if (sc > 1.2) ARB.push([x, z, .9]);
+    nc++;
+  }
+  iCri.count = nc;
+  iCri.frustumCulled = false;
+  iCri.castShadow = true;
+  scene.add(iCri);
+  window.__CRISTALES = nc;
+  /* CARGA de la expedición: cajones medio tapados por la nieve, cerca de la
+     senda entre el campamento y la cueva */
+  const matMet = new T.MeshLambertMaterial({ map: TX.metal });
+  for (let i = 0; i < 6; i++){
+    const t = .15 + i * .13;
+    const a = POI.campamento, b = POI.cuevahielo;
+    const x = a.x + (b.x - a.x) * t + rr(8, 16) * (i % 2 ? 1 : -1);
+    const z = a.z + (b.z - a.z) * t + rr(8, 16) * (i % 2 ? -1 : 1);
+    const m = new T.Mesh(new T.BoxGeometry(rr(1.2, 2.4), .08, rr(.8, 1.6)), matMet);
+    m.position.set(x, H(x, z) + .05, z);
+    m.rotation.set(rr(-.3, .3), rr(0, 6.28), rr(-.25, .25));
+    m.castShadow = true;
+    scene.add(m);
+  }
+}
+plantar();
+
+/* ---------------- LA CUEVA DE HIELO: el depósito ----------------------------
+   Un arco de hielo (medio toro) clavado en la loma, cristales custodiando la
+   boca, y adentro los cajones del depósito con las células de energía. */
+{
+  const p = POI.cuevahielo, y = H(p.x, p.z);
+  const matHielo = new T.MeshLambertMaterial({ map: TX.hielo });
+  const arco = new T.Mesh(new T.TorusGeometry(4.2, 1.3, 7, 14, Math.PI), matHielo);
+  arco.position.set(p.x, y + .2, p.z);
+  arco.rotation.y = .4;
+  arco.castShadow = true;
+  scene.add(arco);
+  /* dos colmillos de hielo a los lados de la boca */
+  for (const lado of [-1, 1]){
+    const colm = new T.Mesh(new T.ConeGeometry(.7, 3.2, 6), matHielo);
+    const cx = p.x + Math.cos(.4) * lado * 5.4, cz = p.z - Math.sin(.4) * lado * 5.4;
+    colm.position.set(cx, H(cx, cz) + 1.5, cz);
+    colm.rotation.z = lado * .12;
+    colm.castShadow = true;
+    scene.add(colm);
+    ARB.push([cx, cz, 1.1]);
+  }
+  /* los cajones del depósito */
+  const matMet2 = new T.MeshLambertMaterial({ map: TX.metal });
+  for (let i = 0; i < 3; i++){
+    const caja = new T.Mesh(new T.BoxGeometry(1.1, .8, .8), matMet2);
+    const cx = p.x + 1.5 - i * 1.3, cz = p.z + 1.2 + (i % 2) * .9;
+    caja.position.set(cx, H(cx, cz) + .35, cz);
+    caja.rotation.y = rr(0, 1.2);
+    caja.castShadow = true;
+    scene.add(caja);
+  }
+  ARB.push([p.x, p.z, 2.4]);
+  window.__ROVER = 3;
+}
+/* ---------------- EL CAMPAMENTO: la carpa que se enciende -------------------
+   Carpa prisma con lona que de noche brilla desde adentro (ventanaMat +
+   focoCasa), el generador muerto, el mástil de la radio, cajas y un barril.
+   5 piezas. */
+let ventanaMat = null;
+{
+  const p = POI.campamento, y = H(p.x, p.z);
+  const matMet = new T.MeshLambertMaterial({ map: TX.metal });
+  const matOsc = new T.MeshLambertMaterial({ map: TX.oscuro });
+  /* la carpa: prisma triangular (lona) */
+  const carpa = [];
+  const gA2 = new T.CylinderGeometry(2.6, 2.6, 5.2, 3, 1, false);
+  gA2.rotateZ(Math.PI / 2);
+  gA2.rotateX(Math.PI / 6);
+  gA2.scale(1, .78, 1);
+  gA2.translate(0, 1.55, 0);
+  carpa.push(gA2);
+  const mCarpa = new T.Mesh(fusiona(carpa),
+    new T.MeshLambertMaterial({ color: 0xc85a30 }));   /* lona naranja expedición */
+  mCarpa.position.set(p.x, y, p.z);
+  mCarpa.rotation.y = .3;
+  mCarpa.castShadow = mCarpa.receiveShadow = true;
+  scene.add(mCarpa);
+  /* la boca de la carpa, que se enciende de noche */
+  ventanaMat = new T.MeshBasicMaterial({ color: 0x584a33 });
+  const boca = new T.Mesh(new T.CircleGeometry(1.15, 3), ventanaMat);
+  boca.position.set(p.x + Math.sin(.3 + Math.PI / 2) * 2.62,
+    y + 1.5, p.z + Math.cos(.3 + Math.PI / 2) * 2.62);
+  boca.rotation.y = .3 + Math.PI / 2;
+  boca.scale.y = .8;
+  scene.add(boca);
+  focoCasa.position.set(p.x + 3.4, y + 1.6, p.z + 1.2);
+  /* generador muerto + mástil de radio + barril */
+  const gen = new T.Mesh(new T.BoxGeometry(1.4, 1.0, .9), matMet);
+  gen.position.set(p.x - 3.2, y + .45, p.z + 1.8);
+  gen.castShadow = true;
+  scene.add(gen);
+  const mast = new T.Mesh(new T.CylinderGeometry(.05, .07, 5.2, 5), matMet);
+  mast.position.set(p.x - 1.8, y + 2.6, p.z - 2.4);
+  scene.add(mast);
+  const barril = new T.Mesh(new T.CylinderGeometry(.45, .45, 1.0, 9), matOsc);
+  barril.position.set(p.x + 2.8, y + .45, p.z - 2.2);
+  barril.castShadow = true;
+  scene.add(barril);
+  ARB.push([p.x, p.z, 3.4]);
+  ARB.push([p.x - 3.2, p.z + 1.8, 1.1]);
+  propGLB({ url:'prop/carpa-hielo.glb', x:p.x, z:p.z, esc:3.8, giro:.3, ocultar:[mCarpa, boca] });
+  window.__PARTES = 5;
+}
+/* ---------------- EL LAGO CONGELADO -----------------------------------------
+   La PLACA de hielo (encima del terreno clavado a HIELO_Y): pulida, con las
+   grietas pintadas y el reflejo del cielo. En la orilla, el trineo de carga
+   y el cartel de la expedición. */
+{
+  const placa = new T.Mesh(new T.CircleGeometry(184, 36),
+    new T.MeshStandardMaterial({ map: TX.hielo, metalness: .05, roughness: .18,
+      transparent: true, opacity: .94, envMapIntensity: .9 }));
+  TX.hielo.repeat.set(9, 9);
+  placa.rotation.x = -Math.PI / 2;
+  placa.position.set(POI.crater.x, HIELO_Y + .07, POI.crater.z);
+  placa.receiveShadow = true;
+  scene.add(placa);
+  /* la orilla: el trineo y el cartel */
+  const p = POI.lagohielo, y = H(p.x, p.z);
+  const matMad = new T.MeshLambertMaterial({ map: TX.oscuro });
+  const tri = [];
+  const base = new T.BoxGeometry(2.4, .16, 1.1); base.translate(0, .45, 0); tri.push(base);
+  for (const lado of [-1, 1]){
+    const patin = new T.BoxGeometry(2.9, .1, .14);
+    patin.translate(.1, .12, lado * .48);
+    tri.push(patin);
+  }
+  const frente = new T.BoxGeometry(.14, .5, 1.1); frente.translate(1.15, .75, 0); tri.push(frente);
+  const mTri = new T.Mesh(fusiona(tri), matMad);
+  mTri.position.set(p.x + 3, y, p.z + 2);
+  mTri.rotation.y = .7;
+  mTri.castShadow = true;
+  scene.add(mTri);
+  ARB.push([p.x + 3, p.z + 2, 1.6]);
+  const poste = new T.Mesh(new T.CylinderGeometry(.06, .08, 2.2, 5),
+    new T.MeshLambertMaterial({ map: TX.metal }));
+  poste.position.set(p.x - 2, y + 1.1, p.z - 1);
+  scene.add(poste);
+  const cartel = new T.Mesh(new T.BoxGeometry(1.3, .5, .06),
+    new T.MeshLambertMaterial({ color: 0xc85a30 }));
+  cartel.position.set(p.x - 2, y + 1.9, p.z - 1);
+  cartel.rotation.y = .4;
+  scene.add(cartel);
+}
+/* ---------------- EL FARO DE LA SEÑAL ---------------------------------------
+   Torre cónica con plataforma, cabina y la GRAN LÁMPARA (beaconMat: late en
+   el bucle — encendida cuenta como historia), la escalera de tambores y el
+   tablero del USAR al pie. */
+let beaconMat = null;
+{
+  const p = POI.faro, y = H(p.x, p.z);
+  const matMet = new T.MeshLambertMaterial({ map: TX.metal });
+  const torreParts = [];
+  const torre = new T.Mesh(new T.CylinderGeometry(1.1, 2.2, 14, 10), matMet);
+  torre.position.set(p.x, y + 7, p.z);
+  torre.castShadow = true;
+  scene.add(torre); torreParts.push(torre);
+  /* franjas rojas del faro: dos anillos */
+  for (const hh of [3.5, 9.5]){
+    const anillo = new T.Mesh(new T.CylinderGeometry(
+      1.1 + (14 - hh) / 14 * 1.1 + .06, 1.1 + (14 - hh - 1.4) / 14 * 1.1 + .06,
+      1.4, 10, 1, true),
+      new T.MeshLambertMaterial({ color: 0xc23a2c }));
+    anillo.position.set(p.x, y + hh + .7, p.z);
+    scene.add(anillo); torreParts.push(anillo);
+  }
+  const plataforma = new T.Mesh(new T.CylinderGeometry(1.9, 1.9, .25, 10), matMet);
+  plataforma.position.set(p.x, y + 14.2, p.z);
+  plataforma.castShadow = true;
+  scene.add(plataforma); torreParts.push(plataforma);
+  const cabina = new T.Mesh(new T.CylinderGeometry(1.2, 1.3, 1.8, 8, 1, true), matMet);
+  cabina.position.set(p.x, y + 15.2, p.z);
+  scene.add(cabina); torreParts.push(cabina);
+  /* LA LÁMPARA (se queda: late en el bucle cuando el faro está encendido) */
+  beaconMat = new T.MeshBasicMaterial({ color: 0xffd870, transparent: true });
+  const lampara = new T.Mesh(new T.SphereGeometry(.7, 10, 8), beaconMat);
+  /* dentro de la linterna del faro 3D (el GLB llega a ~14 m sobre el piso) */
+  lampara.position.set(p.x, y + 11.9, p.z);
+  scene.add(lampara);
+  const techo = new T.Mesh(new T.ConeGeometry(1.5, 1.1, 8), matMet);
+  techo.position.set(p.x, y + 16.7, p.z);
+  scene.add(techo); torreParts.push(techo);
+  /* el faro 3D de Higgsfield reemplaza el cuerpo procedural; la lámpara y el
+     tablero del USAR se quedan porque son gameplay */
+  propGLB({ url:'prop/faro-hielo.glb', x:p.x, z:p.z, esc:14, giro:.4, ocultar:torreParts });
+  /* el tablero del USAR */
+  const tab = new T.Mesh(new T.BoxGeometry(.9, 1.2, .4), matMet);
+  tab.position.set(p.x + 2.7, y + .6, p.z + 2.3);
+  tab.castShadow = true;
+  scene.add(tab);
+  ARB.push([p.x, p.z, 2.6]);
+  window.__PANELES = 4;
+}
+/* -------- BALIZAS de emergencia flotantes (capítulos 4-5) + marcador ------- */
+let luci = null, luci0 = null;
+{
+  const NL = 90, P = new Float32Array(NL * 3), C = new Float32Array(NL * 3);
+  const c = new T.Color();
+  const a = POI.lagohielo, b = POI.faro;
+  for (let i = 0; i < NL; i++){
+    const t = i / NL;
+    const x = a.x + (b.x - a.x) * t + rr(-14, 14);
+    const z = a.z + (b.z - a.z) * t + rr(-14, 14);
+    P[i*3] = x; P[i*3+1] = H(x, z) + rr(1, 4); P[i*3+2] = z;
+    c.setHSL(.42 + rnd() * .12, .9, .7);
+    C[i*3] = c.r; C[i*3+1] = c.g; C[i*3+2] = c.b;
+  }
+  luci0 = Float32Array.from(P);
+  const g = new T.BufferGeometry();
+  g.setAttribute('position', new T.BufferAttribute(P, 3));
+  g.setAttribute('color', new T.BufferAttribute(C, 3));
+  const cn = document.createElement('canvas'); cn.width = cn.height = 32;
+  const g2 = cn.getContext('2d');
+  const d = g2.createRadialGradient(16,16,0,16,16,16);
+  d.addColorStop(0,'rgba(255,255,255,1)'); d.addColorStop(1,'rgba(255,255,255,0)');
+  g2.fillStyle = d; g2.fillRect(0,0,32,32);
+  luci = new T.Points(g, new T.PointsMaterial({ size: .8, map: new T.CanvasTexture(cn),
+    vertexColors: true, transparent: true, blending: T.AdditiveBlending,
+    depthWrite: false, sizeAttenuation: true }));
+  luci.visible = false;
+  scene.add(luci);
+}
+const marca3d = new T.Mesh(new T.OctahedronGeometry(1.1, 0),
+  new T.MeshBasicMaterial({ color: 0x9fffd8, fog: false, transparent: true, opacity: .9 }));
+scene.add(marca3d);
+
+/* ================================ HISTORIA ================================= */
+/* ===== IDIOMAS. El texto ES la historia: va entero en los tres. ===== */
+const L = {
+es: { npc: {
+  dante: ['¡KAI! Sabía que ibas a venir.\nMe quedé sin linterna buscando las células.\nEncontré: las células. Perdí: la linterna.',
+    'Voy con vos. Cuatro ojos ven más hielo\nque dos. Y yo conozco los crujidos buenos.',
+    'Dato: el chocolate del campamento es mío.\nBueno, ERA mío. Ahora es de los dos.'],
+  pico: ['(Pico te mira fijo. Mucho rato.)', '(Pico hace un ruidito como de bisagra.)',
+    '(Pico se aleja tres pasos y vuelve.\nParece que eso significa algo.)'] },
+ui: { sub: 'la expedición aurora · un valle blanco que canta de noche',
+  empezar: 'EMPEZAR LA EXPEDICIÓN', otra: 'JUGAR OTRA VEZ', denuevo: 'EMPEZAR DE NUEVO',
+  seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENÚ', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
+  idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAJOS', g_m: 'MEDIOS', g_a: 'ALTOS',
+  completa: (m2, mn) => 'EXPEDICIÓN COMPLETA · ' + m2 + ' m caminados · ' + mn + ' min',
+  introT: 'El apagón',
+  intro: 'La ventisca duró tres días y se llevó el generador.\nSin generador no hay luz. Sin luz, el avión de\nsuministros no encuentra el valle.\n\nSos KAI, glacióloga de la expedición Aurora.\nEl avión pasa esta noche.\n\nEl campamento está al norte. Abrigate y caminá.' },
+caps: [
+  { n: 'CAPÍTULO 1', t: 'EL CAMPAMENTO', obj: 'campamento', objT: 'Volvé al campamento base',
+    dT: 'La radio', d: 'La carpa aguantó. La radio también, a pilas:\n\n«…Aurora, aquí VUELO 7. Sobrevolamos a las 03:00.\nSi no vemos el FARO encendido, seguimos al sur.\nRepito: si no hay luz, seguimos al sur.»\n\nHay células de energía en la cueva de hielo.' },
+  { n: 'CAPÍTULO 2', t: 'LA CUEVA', obj: 'cuevahielo', objT: 'Buscá las células en la cueva de hielo',
+    dT: 'El depósito', d: 'La boca de la cueva es un arco de hielo viejo.\nAdentro, los cajones del verano pasado: raciones,\ncuerda… y las células. CARGADAS.\n\nAl salir lo escuchás por primera vez:\nun gemido largo, abajo, lejos. El lago.' },
+  { n: 'CAPÍTULO 3', t: 'EL LAGO HELADO', obj: 'lagohielo', objT: 'Cruzá por la orilla del lago congelado',
+    dT: 'El hielo canta', d: 'El atajo al faro cruza el lago congelado.\nEl hielo CANTA bajo tus botas: gemidos, chasquidos,\nun latigazo que corre de orilla a orilla.\n\nCanta, pero aguanta. Los glaciólogos lo sabemos:\nel hielo que canta es hielo vivo. El mudo mata.' },
+  { n: 'CAPÍTULO 4', t: 'LA AURORA', obj: 'faro', objT: 'Seguí las chispas hasta el faro',
+    dT: 'El cielo verde', d: 'Y entonces el cielo se enciende.\n\nLa aurora cae en cortinas verdes y violetas,\ntan bajas que parece que se pueden tocar.\nEl faro espera, apagado, negro contra el cielo\nque baila. Última subida.' },
+  { n: 'CAPÍTULO 5', t: 'EL ENCENDIDO', obj: 'faro', objT: 'Encendé las 3 fogatas de la ruta y después el faro', usar: true,
+    dT: 'La luz', d: 'Célula uno. Célula dos. El interruptor pesa\ncomo todos los interruptores importantes.\n\nLa lámpara parpadea… y AGARRA.\nUn haz dorado barre el valle blanco.\n\nA las 03:04, un punto de luz allá arriba\nmueve las alas: te vieron.' },
+  { n: 'CAPÍTULO 6', t: 'EL REGRESO', obj: 'campamento', objT: 'Volvé al campamento',
+    dT: 'FIN', d: 'Volvés con el faro barriendo la nieve a tu espalda\ny la aurora todavía bailando.\n\nMañana llega el suministro. Esta noche, chocolate\ncaliente y el hielo cantando de fondo.\n\nHIELO — fin de la historia.' }
+] },
+en: { npc: {
+  dante: ['KAI! I knew you would come.\nLost my flashlight looking for the cells.\nFound: the cells. Lost: the flashlight.',
+    'I am coming with you. Four eyes read more\nice than two. And I know the good creaks.',
+    'Fact: the camp chocolate is mine.\nWell, it WAS mine. Now it belongs to both of us.'],
+  pico: ['(Pico stares at you. For a long time.)', '(Pico makes a small hinge-like noise.)',
+    '(Pico walks three steps away and comes back.\nApparently that means something.)'] },
+ui: { sub: 'the aurora expedition · a white valley that sings at night',
+  empezar: 'START THE EXPEDITION', otra: 'PLAY AGAIN', denuevo: 'START OVER',
+  seguir: 'CONTINUE', correr: 'RUN', menu: 'MENU', usar: '◉ USE', dlgGo: 'CONTINUE ▸',
+  idioma: 'LANGUAGE', graficos: 'GRAPHICS', g_b: 'LOW', g_m: 'MEDIUM', g_a: 'HIGH',
+  completa: (m2, mn) => 'EXPEDITION COMPLETE · ' + m2 + ' m walked · ' + mn + ' min',
+  introT: 'The blackout',
+  intro: 'The blizzard lasted three days and took the generator.\nNo generator, no light. No light, and the supply\nplane cannot find the valley.\n\nYou are KAI, glaciologist of the Aurora expedition.\nThe plane flies over tonight.\n\nCamp is up north. Bundle up and walk.' },
+caps: [
+  { n: 'CHAPTER 1', t: 'THE CAMP', obj: 'campamento', objT: 'Return to base camp',
+    dT: 'The radio', d: 'The tent held. So did the radio, on batteries:\n\n“…Aurora, this is FLIGHT 7. Flyover at 03:00.\nIf we do not see the BEACON lit, we continue south.\nRepeat: no light, we continue south.”\n\nThere are power cells in the ice cave.' },
+  { n: 'CHAPTER 2', t: 'THE CAVE', obj: 'cuevahielo', objT: 'Fetch the cells from the ice cave',
+    dT: 'The depot', d: 'The cave mouth is an arch of old ice.\nInside, last summer’s crates: rations, rope…\nand the cells. CHARGED.\n\nOn the way out you hear it for the first time:\na long groan, below, far away. The lake.' },
+  { n: 'CHAPTER 3', t: 'THE FROZEN LAKE', obj: 'lagohielo', objT: 'Cross by the frozen lakeshore',
+    dT: 'The ice sings', d: 'The shortcut to the beacon crosses the frozen lake.\nThe ice SINGS under your boots: groans, snaps,\na whipcrack running from shore to shore.\n\nIt sings, but it holds. Glaciologists know:\nsinging ice is living ice. The silent kind kills.' },
+  { n: 'CHAPTER 4', t: 'THE AURORA', obj: 'faro', objT: 'Follow the sparks to the beacon tower',
+    dT: 'The green sky', d: 'And then the sky turns on.\n\nThe aurora falls in green and violet curtains,\nso low you could almost touch them.\nThe tower waits, unlit, black against a dancing\nsky. One last climb.' },
+  { n: 'CHAPTER 5', t: 'THE LIGHTING', obj: 'faro', objT: 'Light the 3 route bonfires, then the beacon', usar: true,
+    dT: 'The light', d: 'Cell one. Cell two. The switch is heavy,\nthe way all important switches are.\n\nThe lamp flickers… and CATCHES.\nA golden beam sweeps the white valley.\n\nAt 03:04, a point of light up there\nwags its wings: they saw you.' },
+  { n: 'CHAPTER 6', t: 'THE RETURN', obj: 'campamento', objT: 'Return to camp',
+    dT: 'THE END', d: 'You walk back with the beacon sweeping the snow\nbehind you and the aurora still dancing.\n\nThe supplies arrive tomorrow. Tonight: hot\nchocolate, and the ice singing along.\n\nICE — end of the story.' }
+] },
+pt: { npc: {
+  dante: ['KAI! Eu sabia que você viria.\nFiquei sem lanterna procurando as células.\nAchei: as células. Perdi: a lanterna.',
+    'Vou com você. Quatro olhos leem mais gelo\nque dois. E eu conheço os estalos bons.',
+    'Fato: o chocolate do acampamento é meu.\nBom, ERA meu. Agora é dos dois.'],
+  pico: ['(Pico encara você. Por um bom tempo.)', '(Pico faz um barulhinho de dobradiça.)',
+    '(Pico se afasta três passos e volta.\nParece que isso significa algo.)'] },
+ui: { sub: 'a expedição aurora · um vale branco que canta à noite',
+  empezar: 'COMEÇAR A EXPEDIÇÃO', otra: 'JOGAR DE NOVO', denuevo: 'RECOMEÇAR',
+  seguir: 'CONTINUAR', correr: 'CORRER', menu: 'MENU', usar: '◉ USAR', dlgGo: 'SEGUIR ▸',
+  idioma: 'IDIOMA', graficos: 'GRÁFICOS', g_b: 'BAIXOS', g_m: 'MÉDIOS', g_a: 'ALTOS',
+  completa: (m2, mn) => 'EXPEDIÇÃO COMPLETA · ' + m2 + ' m caminhados · ' + mn + ' min',
+  introT: 'O apagão',
+  intro: 'A nevasca durou três dias e levou o gerador.\nSem gerador não há luz. Sem luz, o avião de\nsuprimentos não encontra o vale.\n\nVocê é KAI, glaciologista da expedição Aurora.\nO avião passa esta noite.\n\nO acampamento fica ao norte. Agasalhe-se e caminhe.' },
+caps: [
+  { n: 'CAPÍTULO 1', t: 'O ACAMPAMENTO', obj: 'campamento', objT: 'Volte ao acampamento base',
+    dT: 'O rádio', d: 'A barraca aguentou. O rádio também, a pilhas:\n\n«…Aurora, aqui VOO 7. Sobrevoo às 03:00.\nSe não virmos o FAROL aceso, seguimos ao sul.\nRepito: sem luz, seguimos ao sul.»\n\nHá células de energia na caverna de gelo.' },
+  { n: 'CAPÍTULO 2', t: 'A CAVERNA', obj: 'cuevahielo', objT: 'Busque as células na caverna de gelo',
+    dT: 'O depósito', d: 'A boca da caverna é um arco de gelo velho.\nDentro, os caixotes do verão passado: rações,\ncorda… e as células. CARREGADAS.\n\nAo sair você o escuta pela primeira vez:\num gemido longo, abaixo, longe. O lago.' },
+  { n: 'CAPÍTULO 3', t: 'O LAGO CONGELADO', obj: 'lagohielo', objT: 'Cruze pela margem do lago congelado',
+    dT: 'O gelo canta', d: 'O atalho ao farol cruza o lago congelado.\nO gelo CANTA sob suas botas: gemidos, estalos,\num chicote que corre de margem a margem.\n\nCanta, mas aguenta. Os glaciologistas sabem:\ngelo que canta é gelo vivo. O mudo mata.' },
+  { n: 'CAPÍTULO 4', t: 'A AURORA', obj: 'faro', objT: 'Siga as faíscas até o farol',
+    dT: 'O céu verde', d: 'E então o céu se acende.\n\nA aurora cai em cortinas verdes e violetas,\ntão baixas que parece dar para tocar.\nO farol espera, apagado, negro contra o céu\nque dança. Última subida.' },
+  { n: 'CAPÍTULO 5', t: 'O ACENDIMENTO', obj: 'faro', objT: 'Acenda as 3 fogueiras da rota e depois o farol', usar: true,
+    dT: 'A luz', d: 'Célula um. Célula dois. O interruptor pesa\ncomo pesam todos os interruptores importantes.\n\nA lâmpada pisca… e PEGA.\nUm feixe dourado varre o vale branco.\n\nÀs 03:04, um ponto de luz lá em cima\nbalança as asas: viram você.' },
+  { n: 'CAPÍTULO 6', t: 'O REGRESSO', obj: 'campamento', objT: 'Volte ao acampamento',
+    dT: 'FIM', d: 'Você volta com o farol varrendo a neve às suas\ncostas e a aurora ainda dançando.\n\nAmanhã chegam os suprimentos. Hoje à noite:\nchocolate quente e o gelo cantando de fundo.\n\nGELO — fim da história.' }
+] } };
+/* INGLES por defecto. La clave de guardado lleva sufijo 2 a proposito: con la
+   vieja, a quien ya habia abierto el juego en espanol le seguia saliendo en
+   espanol para siempre y parecia que el cambio no habia entrado. El idioma se
+   sigue pudiendo cambiar y se sigue recordando, bajo la clave nueva. */
+let LANG = 'en';
+try { LANG = localStorage.getItem('hielo_lang2') || 'en'; } catch(e){}
+if (!L[LANG]) LANG = 'en';
+let CAPS = L[LANG].caps;
+const Tx = k => L[LANG].ui[k];
+/* luz por capítulo: dirección/intensidad del sol, cielo, niebla, hemisferio y
+   EXPOSICIÓN del tone mapping (la cámara "abre" en el atardecer, "cierra" de
+   noche: el mismo truco de exposición que usan los juegos grandes) */
+const LUZCAP = [
+  { sol: [.5, .5, .3],   solI: 2.4, bg: 1.0,  fog: '#b8cadb', fogFar: 430, hemiI: .85, exp: 1.1 },
+  { sol: [.2, .75, .2],  solI: 2.6, bg: 1.05, fog: '#c2d3e2', fogFar: 460, hemiI: .95, exp: 1.12 },
+  { sol: [-.6, .28, .2], solI: 1.9, bg: .85,  fog: '#cfaeb4', fogFar: 390, hemiI: .7,  exp: 1.2 },
+  { sol: [-.8, .1, .1],  solI: 1.0, bg: .5,   fog: '#8a92b8', fogFar: 330, hemiI: .55, exp: 1.16 },
+  { sol: [-.4, .05, -.3],solI: .3,  bg: .2,   fog: '#0e1626', fogFar: 280, hemiI: .5,  exp: 1.02 },
+  { sol: [.6, .42, .35], solI: 2.2, bg: .92,  fog: '#c8d4e0', fogFar: 430, hemiI: .85, exp: 1.12 }
+];
+let cap = 0, enDlg = false, fase = 'menu';
+let luzDe = LUZCAP[0], luzA = LUZCAP[0], luzK = 1;
+function guardar(){ try { localStorage.setItem('hielo1', JSON.stringify({ cap, t: stats.t, dist: stats.dist })); } catch(e){} }
+function cargar(){ try { return JSON.parse(localStorage.getItem('hielo1') || 'null'); } catch(e){ return null; } }
+function ponCap(n, silencio){
+  cap = cl(n, 0, CAPS.length - 1);
+  const C = CAPS[cap];
+  $('objT').textContent = C.objT;
+  luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;
+  luci.visible = cap === 3 || cap === 4;
+  MISION.alCap(cap);
+  if (!silencio){
+    $('capN').textContent = C.n;
+    $('capT').textContent = C.t;
+    $('capCard').classList.add('on');
+    clearTimeout(ponCap._t);
+    ponCap._t = setTimeout(() => $('capCard').classList.remove('on'), 3400);
+    /* la CINEMÁTICA del capítulo: la cámara te muestra adónde vas */
+    cineObjetivo(C);
+  }
+  guardar();
+}
+function mezclaLuz(){
+  /* estado ACTUAL de la luz (para arrancar la transición desde donde está) */
+  return { sol: [SOLD.x, SOLD.y, SOLD.z],
+    solI: sol.intensity, bg: scene.backgroundIntensity,
+    fog: '#' + scene.fog.color.getHexString(), fogFar: scene.fog.far,
+    hemiI: hemi.intensity, exp: ren.toneMappingExposure };
+}
+function pasoLuz(dt){
+  if (luzK >= 1) return;
+  luzK = Math.min(1, luzK + dt / 7);           /* la transición dura ~7 s */
+  const k = luzK * luzK * (3 - 2 * luzK);
+  const A2 = luzDe, B2 = luzA;
+  /* la DIRECCIÓN del sol se mezcla acá; su POSICIÓN la pone el bucle cada
+     cuadro, pegada al jugador, para que la caja de sombra lo siga */
+  SOLD.set(A2.sol[0] + (B2.sol[0] - A2.sol[0]) * k,
+           A2.sol[1] + (B2.sol[1] - A2.sol[1]) * k,
+           A2.sol[2] + (B2.sol[2] - A2.sol[2]) * k).normalize();
+  sol.intensity = A2.solI + (B2.solI - A2.solI) * k;
+  hemi.intensity = A2.hemiI + (B2.hemiI - A2.hemiI) * k;
+  scene.backgroundIntensity = A2.bg + (B2.bg - A2.bg) * k;
+  scene.fog.color.set(A2.fog).lerp(new T.Color(B2.fog), k);
+  scene.fog.far = (A2.fogFar + (B2.fogFar - A2.fogFar) * k) * GFXQ[GFX].fogK;
+  const eA = A2.exp != null ? A2.exp : 1.12, eB = B2.exp != null ? B2.exp : 1.12;
+  ren.toneMappingExposure = eA + (eB - eA) * k;
+  /* el ATARDECER AZUL: el halo del sol vira del caramelo al azul al caer */
+  glare.material.color.set(0xfff0dc).lerp(AZUL_OCASO, cl(1 - SOLD.y * 2.4, 0, 1));
+  /* la ventana de la cabaña se enciende sola cuando oscurece, y VUELCA luz */
+  if (ventanaMat){
+    const osc = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+    ventanaMat.color.setRGB(.35 + .65 * osc, .29 + .55 * osc, .2 + .28 * osc);
+    focoCasa.intensity = osc * osc * 60;
+  }
+}
+function dialogo(titulo, cuerpo, alCerrar, cara){
+  enDlg = true;
+  $('dlgT').textContent = titulo;
+  $('dlgB').textContent = cuerpo;
+  /* si habla un PERSONAJE, su retrato se pinta al vuelo (canvas) */
+  const cv = $('dlgCara');
+  if (cara){
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, 96, 96);
+    cara(g, 96);
+    cv.classList.add('on');
+  } else cv.classList.remove('on');
+  $('dlg').classList.add('on');
+  $('dlgGo').onclick = () => {
+    $('dlg').classList.remove('on');
+    enDlg = false;
+    if (alCerrar) alCerrar();
+  };
+}
+function llegaObjetivo(){
+  const C = CAPS[cap];
+  dialogo(C.dT, C.d, () => {
+    if (cap >= CAPS.length - 1){ finDeHistoria(); return; }
+    ponCap(cap + 1);
+  });
+}
+function finDeHistoria(){
+  fase = 'fin';
+  guardarFin();
+  $('menu').style.display = 'flex';
+  $('hud').classList.remove('on');
+  $('mCap').textContent = Tx('completa')(Math.round(stats.dist), Math.round(stats.t / 60));
+  $('mJugar').textContent = Tx('otra');
+  $('mSeguir').style.display = 'none';
+}
+function guardarFin(){ try { localStorage.removeItem('hielo1'); } catch(e){} }
+
+/* ================= AUDIO GENERADO (Higgsfield) ============================
+   Ambiente + música + pasos por mundo, cargados SOBRE el sintetizado: cuando
+   decodifican lo apagan; si una URL falla (offline o el navegador no decodifica
+   AAC) el sintetizado sigue solo. Vive acá (motor compartido) y no en la
+   sección AMB, que cada mundo reescribe. Los mk_*.py pisan MUNDO_AUDIO. */
+const MUNDO_AUDIO = { amb: 'amb-hielo.mp3', mus: 'mus-hielo.m4a', paso: 'pasos-nieve.mp3', pasoRate: 1.4 };
+/* CIELO fotográfico generado (equirectangular). Vacío = deja el cielo actual
+   (senda ya trae su foto). Los mk_*.py lo pisan con el de cada mundo. Se carga
+   y reemplaza el fondo pintado; si falla, queda el pintado. */
+const MUNDO_CIELO = 'cielo-hielo.jpg';
+/* disposición del MENÚ por mundo (clases en #menu): cada juego arma su portada
+   distinta. '' = centrado (senda). Los mk_*.py lo pisan. */
+const MUNDO_MENU = 'm-izq m-abajo m-compacto';
+/* PROPS 3D generados (Tripo, estáticos): edificios/vehículos de cada mundo.
+   Se colocan en su POI, se apoyan en el terreno y OCULTAN la estructura
+   procedural (que pasa como grupo en `ocultar`). Si el GLB no llega, queda la
+   procedural. Los mk_*.py llaman propGLB en su bloque de estructura. */
+function propGLB(o){
+  if (!GLTF){ return; }
+  new GLTF().load(AX(o.url), g => {
+    const m = g.scene;
+    m.scale.setScalar(o.esc || 1);
+    m.rotation.set(o.rx || 0, o.giro || 0, o.rz || 0);
+    m.position.set(o.x, 0, o.z);
+    m.traverse(n => { if (n.isMesh){ n.castShadow = true; n.receiveShadow = true;
+      n.frustumCulled = false; if (n.material) n.material.metalness = 0; } });
+    /* AUTO-APOYO: el punto más bajo del modelo se posa en el suelo + o.y */
+    m.updateWorldMatrix(true, true);
+    const caja = new T.Box3().setFromObject(m);
+    m.position.y = H(o.x, o.z) + (o.y || 0) - caja.min.y;
+    scene.add(m);
+    if (o.ocultar){ const a = Array.isArray(o.ocultar) ? o.ocultar : [o.ocultar];
+      for (const x of a) x.visible = false; }         /* apagar la procedural */
+    window.__PROPS = (window.__PROPS || 0) + 1;
+  }, undefined, () => {});
+}
+function cargarCieloFoto(){
+  if (!MUNDO_CIELO) return;
+  new T.TextureLoader().load(AX(MUNDO_CIELO), tex => {
+    tex.mapping = T.EquirectangularReflectionMapping;
+    tex.colorSpace = T.SRGBColorSpace;
+    scene.background = tex;
+    /* HIELO dibuja el cielo en un DOMO; los demás usan scene.background */
+    if (typeof DOMO !== 'undefined' && DOMO){ DOMO.material.map = tex; DOMO.material.needsUpdate = true; }
+  }, undefined, () => {});
+}
+function cargarAudioReal(){
+  const A2 = AMB.ctx; if (!A2 || AMB._cargado) return;
+  AMB._cargado = true;
+  const carga = async url => A2.decodeAudioData(await (await fetch(url)).arrayBuffer());
+  /* música y pasos en PARALELO e independientes: si el m4a no decodifica (AAC),
+     los pasos no lo esperan. El AMBIENTE viene del sintetizado del motor (viento
+     limpio + voces de cada mundo): la pista de ambiente generada traía golpes y
+     jadeos que sonaban raro al estar quieto, así que no se usa. */
+  carga(AX(MUNDO_AUDIO.mus)).then(bm => {
+    const nm = A2.createBufferSource(); nm.buffer = bm; nm.loop = true;
+    AMB.musGain = A2.createGain(); AMB.musGain.gain.value = .3;
+    nm.connect(AMB.musGain); AMB.musGain.connect(AMB.master); nm.start();
+  }).catch(() => {});
+  carga(AX(MUNDO_AUDIO.paso)).then(bp => {
+    AMB.pasoSrc = A2.createBufferSource(); AMB.pasoSrc.buffer = bp; AMB.pasoSrc.loop = true;
+    AMB.pasoSrc.playbackRate.value = MUNDO_AUDIO.pasoRate || 1.4;
+    AMB.pasoGain = A2.createGain(); AMB.pasoGain.gain.value = 0;
+    AMB.pasoSrc.connect(AMB.pasoGain); AMB.pasoGain.connect(AMB.master); AMB.pasoSrc.start();
+  }).catch(() => {});
+}
+
+/* ========================= CINEMÁTICAS =====================================
+   Cámara sobre rieles: cada paso vuela de `de` a `a` mirando a `mira`, con
+   subtítulo y letterbox. Se saltea con un toque. El sol (y su caja de sombra)
+   siguen a la cámara mientras dura. */
+const CINE = { on: false, i: 0, t: 0, pasos: null, fin: null };
+const _cv1 = new T.Vector3(), _cv2 = new T.Vector3(), _cv3 = new T.Vector3();
+function cinematica(pasos, fin){
+  CINE.on = true; CINE.pasos = pasos; CINE.i = 0; CINE.t = 0; CINE.fin = fin || null;
+  fase = 'cine';
+  $('hud').classList.remove('on');
+  document.body.classList.add('cine');
+}
+function terminaCine(){
+  if (!CINE.on) return;
+  CINE.on = false;
+  document.body.classList.remove('cine');
+  $('cineTxt').textContent = '';
+  fase = 'juego';
+  $('hud').classList.add('on');
+  cam.fov = 72; cam.updateProjectionMatrix();
+  if (CINE.fin){ const f = CINE.fin; CINE.fin = null; f(); }
+}
+function pasoCine(dt){
+  const p = CINE.pasos[CINE.i];
+  if (!p){ terminaCine(); return; }
+  CINE.t = Math.min(1, CINE.t + dt / (p.dur || 3));
+  const k = CINE.t * CINE.t * (3 - 2 * CINE.t);
+  _cv1.set(p.de[0], p.de[1], p.de[2]);
+  _cv2.set(p.a[0], p.a[1], p.a[2]);
+  cam.position.lerpVectors(_cv1, _cv2, k);
+  _cv3.set(p.mira[0], p.mira[1], p.mira[2]);
+  cam.lookAt(_cv3);
+  cam.fov = p.fov || 58; cam.updateProjectionMatrix();
+  $('cineTxt').textContent = p.txt || '';
+  if (CINE.t >= 1){ CINE.i++; CINE.t = 0;
+    if (CINE.i >= CINE.pasos.length) terminaCine(); }
+}
+$('cineSkip').addEventListener('pointerdown', e => { e.preventDefault(); terminaCine(); });
+/* la cine de CAPÍTULO: dos tomas que muestran adónde hay que ir */
+function cineObjetivo(C){
+  const o = POI[C.obj], oy = H(o.x, o.z), py = H(px, pz);
+  const dx2 = o.x - px, dz2 = o.z - pz, dd = Math.hypot(dx2, dz2) || 1;
+  const ux = dx2 / dd, uz = dz2 / dd;
+  cinematica([
+    { de: [px - ux * 7, py + 3.5, pz - uz * 7], a: [px + ux * 8, py + 15, pz + uz * 8],
+      mira: [o.x, oy + 6, o.z], dur: 2.7, txt: C.n + ' · ' + C.t },
+    { de: [o.x - ux * 44 + uz * 12, oy + 19, o.z - uz * 44 - ux * 12],
+      a: [o.x - ux * 15, oy + 6, o.z - uz * 15],
+      mira: [o.x, oy + 3.5, o.z], dur: 2.7, txt: C.objT }
+  ]);
+}
+
+/* ========================= PERSONAJES Y CRIATURAS ==========================
+   Figuras 100% procedurales con partes animables (userData.lim): humanos con
+   brazos y piernas en péndulo, perro con cola, dron con rotores, criatura
+   que late. npcTick las hace CAMINAR detrás del jugador si `sigue`. */
+const NPCS = [];
+function figHumano(colTraje, colCasco){
+  const g = new T.Group();
+  const mT = new T.MeshLambertMaterial({ color: colTraje });
+  const mC = new T.MeshLambertMaterial({ color: colCasco || 0xd8dde2 });
+  const torso = new T.Mesh(new T.CapsuleGeometry(.32, .55, 4, 8), mT);
+  torso.position.y = 1.08; g.add(torso);
+  const cabeza = new T.Mesh(new T.SphereGeometry(.25, 10, 8), mC);
+  cabeza.position.y = 1.78; g.add(cabeza);
+  const visor = new T.Mesh(new T.SphereGeometry(.19, 8, 6),
+    new T.MeshLambertMaterial({ color: 0x18242f }));
+  visor.position.set(0, 1.79, .13); visor.scale.set(.92, .68, .6); g.add(visor);
+  const lim = {};
+  for (const [k, sx] of [['bI', -.44], ['bD', .44]]){
+    const b = new T.Mesh(new T.CapsuleGeometry(.085, .5, 3, 6), mT);
+    b.geometry.translate(0, -.3, 0);
+    b.position.set(sx, 1.46, 0); g.add(b); lim[k] = b;
+  }
+  for (const [k, sx] of [['pI', -.16], ['pD', .16]]){
+    const p2 = new T.Mesh(new T.CapsuleGeometry(.105, .5, 3, 6), mT);
+    p2.geometry.translate(0, -.32, 0);
+    p2.position.set(sx, .74, 0); g.add(p2); lim[k] = p2;
+  }
+  const mochi = new T.Mesh(new T.BoxGeometry(.4, .5, .2), mC);
+  mochi.position.set(0, 1.22, -.3); g.add(mochi);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.lim = lim;
+  return g;
+}
+function figPerro(col){
+  const g = new T.Group();
+  const m = new T.MeshLambertMaterial({ color: col });
+  const mOsc = new T.MeshLambertMaterial({ color: 0x2a1e14 });
+  const cuerpo = new T.Mesh(new T.BoxGeometry(.62, .3, .27), m);
+  cuerpo.position.y = .46; g.add(cuerpo);
+  const cabeza = new T.Mesh(new T.BoxGeometry(.24, .22, .2), m);
+  cabeza.position.set(.4, .6, 0); g.add(cabeza);
+  const hocico = new T.Mesh(new T.BoxGeometry(.12, .1, .12), mOsc);
+  hocico.position.set(.54, .55, 0); g.add(hocico);
+  for (const sz of [-1, 1]){
+    const oreja = new T.Mesh(new T.BoxGeometry(.05, .12, .06), mOsc);
+    oreja.position.set(.36, .76, sz * .07); g.add(oreja);
+  }
+  const lim = {};
+  let pi = 0;
+  for (const sx of [-.22, .22]) for (const sz of [-.09, .09]){
+    const pata = new T.Mesh(new T.CylinderGeometry(.045, .04, .34, 5), m);
+    pata.geometry.translate(0, -.17, 0);
+    pata.position.set(sx, .34, sz); g.add(pata);
+    lim['p' + (++pi)] = pata;
+  }
+  const cola = new T.Mesh(new T.CylinderGeometry(.03, .015, .3, 5), m);
+  cola.geometry.translate(0, .15, 0);
+  cola.position.set(-.32, .52, 0);
+  cola.rotation.x = .0; cola.rotation.z = .8;
+  g.add(cola); lim.cola = cola;
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.lim = lim;
+  return g;
+}
+function figDron(col){
+  const g = new T.Group();
+  const m = new T.MeshLambertMaterial({ color: col });
+  const cuerpo = new T.Mesh(new T.SphereGeometry(.3, 10, 8), m);
+  cuerpo.scale.y = .6; g.add(cuerpo);
+  const ojo = new T.Mesh(new T.SphereGeometry(.08, 8, 6),
+    new T.MeshBasicMaterial({ color: 0x7fe8ff }));
+  ojo.position.set(0, 0, .27); g.add(ojo);
+  const lim = { rot: [] };
+  for (const [sx, sz] of [[-.34, -.34], [.34, -.34], [-.34, .34], [.34, .34]]){
+    const brazo = new T.Mesh(new T.BoxGeometry(.2, .03, .05), m);
+    brazo.position.set(sx * .7, .12, sz * .7);
+    brazo.rotation.y = Math.atan2(sz, sx);
+    g.add(brazo);
+    const rotor = new T.Mesh(new T.CylinderGeometry(.16, .16, .02, 8),
+      new T.MeshLambertMaterial({ color: 0x333a40, transparent: true, opacity: .6 }));
+    rotor.position.set(sx, .18, sz);
+    g.add(rotor); lim.rot.push(rotor);
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.lim = lim;
+  return g;
+}
+function figCriatura(col){
+  const g = new T.Group();
+  const domo = new T.Mesh(new T.SphereGeometry(.3, 10, 8),
+    new T.MeshLambertMaterial({ color: 0x10201c, emissive: col,
+      emissiveIntensity: .8, transparent: true, opacity: .92 }));
+  domo.position.y = .42; domo.scale.y = 1.15; g.add(domo);
+  const lim = {};
+  let pi = 0;
+  for (const a of [.6, 2.2, 4.0, 5.6]){
+    const pata = new T.Mesh(new T.CylinderGeometry(.02, .015, .3, 4),
+      new T.MeshLambertMaterial({ color: 0x1a2a26 }));
+    pata.geometry.translate(0, -.15, 0);
+    pata.position.set(Math.cos(a) * .18, .3, Math.sin(a) * .18);
+    pata.rotation.z = Math.cos(a) * .4; pata.rotation.x = -Math.sin(a) * .4;
+    g.add(pata); lim['p' + (++pi)] = pata;
+  }
+  for (const sz of [-1, 1]){
+    const ojo = new T.Mesh(new T.SphereGeometry(.045, 6, 5),
+      new T.MeshBasicMaterial({ color: 0xffffff }));
+    ojo.position.set(sz * .1, .48, .26); g.add(ojo);
+  }
+  g.userData.lim = lim;
+  g.userData.late = domo.material;
+  return g;
+}
+const MIXERS = [];
+
+/* ====================== BIBLIOTECA DE CLIPS PRESTADOS =====================
+   Los personajes del repo salieron todos del mismo tipo de rig: comparten los
+   NUEVE huesos estandar (Hips, Spine, LeftArm, RightArm, LeftForeArm,
+   RightForeArm, LeftUpLeg, RightUpLeg, Head). El AnimationMixer de three ata
+   las pistas de un clip POR NOMBRE DE NODO, asi que un clip de un modelo anda
+   igual en otro. Por eso no hace falta generar animacion para cada personaje:
+   se PRESTA la que ya existe en el repo.
+     viajera.glb / dante.glb  ->  solo traen Idle (patinaban sin mover la pierna)
+     hyper/char.glb           ->  Casual_Walk
+     reliquia/hero.glb        ->  RunFast
+     aero/hero-idle.glb       ->  Idle
+   Se cargan los tres donantes UNA sola vez y se reparten a todos. */
+const CLIPS = { quieto: null, andar: null, correr: null, listos: 0, cola: [] };
+{
+  /* reliquia/hero.glb y aero/hero-idle.glb piden KHR_draco_mesh_compression
+     como extension REQUERIDA, asi que el GLTFLoader los rechaza enteros y no
+     cargaban. DRACO comprime solo la GEOMETRIA: las pistas de animacion son
+     accesores normales. Asi que se extrajeron a GLB de SOLO ANIMACION (sin
+     mallas, sin skins, sin texturas): 39 y 85 KB, sin ninguna extension.
+     Ver scratchpad/mundos/extrae_clip.py. */
+  const DON = [['andar', AX('anim/andar.glb')], ['correr', AX('anim/correr.glb')],
+               ['quieto', AX('anim/quieto2.glb')]   /* Idle, no Idle_02: el 02 es el de
+                 MIRAR A LOS COSTADOS, que molesta y encima pelea con el de
+                 caminar cada vez que se cambia de clip */];
+  const fin = () => {
+    CLIPS.listos++;
+    if (CLIPS.listos < DON.length) return;
+    /* los personajes que cargaron antes que la biblioteca esperan en la cola */
+    for (const npc of CLIPS.cola.splice(0)) armarAcciones(npc);
+  };
+  for (const [k, u] of DON){
+    if (!GLTF){ fin(); continue; }
+    new GLTF().load(u, g => {
+      if (g.animations && g.animations.length){
+        CLIPS[k] = g.animations[0];
+        /* la POSE DE REPOSO del donante: sin esto no se puede retargetear */
+        CLIPS[k + 'Rest'] = reposoDe(g.scene);
+      }
+      fin();
+    }, undefined, fin);
+  }
+}
+/* ======================== RETARGET DE LOS CLIPS ===========================
+   Los 11 personajes de per/*.glb no traen animacion y se les presta uno de los
+   tres clips de anim/*.glb. Comparten los MISMOS 26 nombres de hueso, pero NO la
+   pose de reposo: el rig sale ajustado a cada malla y los marcos de cada
+   articulacion quedan girados de cualquier manera. Medido sobre los GLB, la
+   rotacion local de reposo de Hips va de 2,4 grados en canon-cuerdas a 133,5 en
+   volcan-obrero, y la de Spine02 de 6,0 a 133,5.
+
+   POR QUE NO ALCANZA UNA CORRECCION FIJA POR HUESO (lo que habia antes)
+   Se hacia  q_donante * inv(reposoDonante) * reposoDestino , o sea una constante
+   por hueso. Eso puede acertar UN fotograma pero no todos: la rotacion local se
+   compone en el marco del PADRE, y ese marco cambia en cada fotograma cuando el
+   padre se mueve. Con las caderas a cien grados de diferencia una constante no
+   puede ser correcta a la vez para el reposo y para el movimiento, y por eso el
+   personaje quedaba derecho quieto pero encorvado al caminar.
+
+   LO QUE SE HACE AHORA: espacio de MUNDO, que es donde "girar el brazo treinta
+   grados hacia adelante" significa lo mismo en los dos rigs. Por hueso b y
+   fotograma f:
+       delta   = mundoAnimadoDonante(b) * inv(mundoReposoDonante(b))
+       mundoDestino(b) = delta * mundoReposoDestino(b)
+       localDestino(b) = inv(mundoDestino(padre)) * mundoDestino(b)
+   El pase va de padre a hijo porque mundoDestino(padre) es el resultado YA
+   corregido: ahi esta justamente la parte que una constante no puede reproducir.
+
+   El cero del donante viaja dentro del propio GLB: mk_anim.py le dejo como pose
+   de reposo de los nodos la POSE NEUTRA del clip (el promedio de sus fotogramas),
+   asi que aca no hay que promediar nada. Eso importa porque los clips de la
+   libreria vienen con un sesgo constante grande (Idle tiene la cadera 40 grados
+   fuera de su bind, Run_02 la columna 27) y si se tomara ese sesgo como cero se
+   le sumaria al personaje, que es la joroba que se veia.
+
+   Costo: 26 huesos x ~70-127 fotogramas x 3 clips por personaje, una sola vez al
+   cargarlo. Son unos pocos milisegundos y no toca el bucle de dibujado, asi que
+   no depende de GFX. */
+const _rtQ = new T.Quaternion(), _rtI = new T.Quaternion(),
+      _rtD = new T.Quaternion(), _rtL = new T.Quaternion();
+/* El rig de un GLB por NOMBRE de hueso: rotacion y posicion locales de reposo
+   mas el nombre del PADRE. El padre hace falta porque el retarget pasa por
+   mundo; la version anterior solo guardaba q y p y por eso no podia hacerlo. */
+function reposoDe(raiz){
+  const R = {};
+  raiz.traverse(o => {
+    if (!o.name || R[o.name] !== undefined) return;
+    const pa = o.parent;
+    R[o.name] = { q: o.quaternion.clone(), p: o.position.clone(),
+                  padre: (pa && pa.name && R[pa.name]) ? pa.name : null };
+  });
+  return R;
+}
+/* rotaciones de mundo de la pose de reposo, mas el orden padre-antes-que-hijo */
+function mundoDe(rig){
+  const W = {}, orden = [];
+  const sube = nom => {
+    if (W[nom]) return W[nom];
+    const h = rig[nom];
+    W[nom] = (h.padre && rig[h.padre]) ? sube(h.padre).clone().multiply(h.q)
+                                       : h.q.clone();
+    orden.push(nom);
+    return W[nom];
+  };
+  for (const nom in rig) sube(nom);
+  return { W, orden };
+}
+function retargetClip(clip, rigDon, modelo){
+  if (!clip || !rigDon) return clip;
+  /* el reposo se lee UNA vez y se guarda: si un personaje ya tiene acciones
+     sonando, sus huesos no estan en reposo y leerlos daria un cero falso */
+  const rigDst = modelo.userData._rig || (modelo.userData._rig = reposoDe(modelo));
+  const A = mundoDe(rigDon), B = mundoDe(rigDst);
+  const c2 = clip.clone();
+  const rot = {}, pos = [];
+  for (const tr of c2.tracks){
+    const i = tr.name.lastIndexOf('.');
+    if (i < 0) continue;
+    const nom = tr.name.slice(0, i), prop = tr.name.slice(i + 1);
+    if (prop === 'quaternion' && rigDon[nom] && rigDst[nom]) rot[nom] = tr;
+    else if (prop === 'position') pos.push([nom, tr]);
+  }
+  /* mk_anim.py deja todas las pistas con el MISMO reloj, asi que se recorre por
+     indice de fotograma. Si alguna vez no fuera asi, mejor devolver el clip sin
+     tocar que escribir cualquier cosa. */
+  let nf = -1, mezcla = false;
+  for (const n in rot){
+    const c = rot[n].values.length / 4;
+    if (nf < 0) nf = c; else if (c !== nf) mezcla = true;
+  }
+  if (nf <= 0 || mezcla) return c2;
+
+  const orden = A.orden.filter(n => rigDst[n]);
+  const Wd = {}, Wt = {}, prev = {};
+  for (const n of orden){ Wd[n] = new T.Quaternion(); Wt[n] = new T.Quaternion(); }
+  for (let f = 0; f < nf; f++){
+    // 1) pose del donante, de local a mundo
+    for (const n of orden){
+      const tr = rot[n];
+      if (tr){ const k = f * 4;
+        _rtQ.set(tr.values[k], tr.values[k+1], tr.values[k+2], tr.values[k+3]); }
+      else _rtQ.copy(rigDon[n].q);
+      const pa = rigDon[n].padre;
+      if (pa && Wd[pa]) Wd[n].copy(Wd[pa]).multiply(_rtQ); else Wd[n].copy(_rtQ);
+    }
+    // 2) el giro de mundo del donante, aplicado al reposo del destino
+    for (const n of orden){
+      if (rot[n]){
+        _rtD.copy(Wd[n]).multiply(_rtI.copy(A.W[n]).invert());
+        Wt[n].copy(_rtD).multiply(B.W[n]);
+      } else {
+        const pa = rigDst[n].padre;
+        if (pa && Wt[pa]) Wt[n].copy(Wt[pa]).multiply(rigDst[n].q);
+        else Wt[n].copy(B.W[n]);
+      }
+    }
+    // 3) de vuelta a local, que es lo que consume el AnimationMixer
+    for (const n of orden){
+      const tr = rot[n]; if (!tr) continue;
+      const pa = rigDst[n].padre;
+      if (pa && Wt[pa]) _rtL.copy(_rtI.copy(Wt[pa]).invert()).multiply(Wt[n]);
+      else _rtL.copy(Wt[n]);
+      /* continuidad de signo: dos cuaterniones opuestos son la misma rotacion
+         pero interpolados dan la vuelta larga, y se ve un tironeo */
+      const p = prev[n];
+      if (p && (p[0]*_rtL.x + p[1]*_rtL.y + p[2]*_rtL.z + p[3]*_rtL.w) < 0){
+        _rtL.set(-_rtL.x, -_rtL.y, -_rtL.z, -_rtL.w);
+      }
+      const k = f * 4;
+      tr.values[k] = _rtL.x; tr.values[k+1] = _rtL.y;
+      tr.values[k+2] = _rtL.z; tr.values[k+3] = _rtL.w;
+      prev[n] = [_rtL.x, _rtL.y, _rtL.z, _rtL.w];
+    }
+  }
+  /* Solo la cadera trae traslacion: mk_anim.py tiro las otras 23, que eran
+     constantes y llevaban los LARGOS DE HUESO del donante (aplicadas al
+     personaje le pisaban sus proporciones y le estiraban la malla). Va en delta
+     y escalada por la relacion de alturas de cadera, si no un personaje bajo
+     flota y uno alto se hunde. */
+  for (const par of pos){
+    const h = rigDon[par[0]], hd = rigDst[par[0]];
+    if (!h || !hd) continue;
+    const tr = par[1], k = h.p.y ? (hd.p.y / h.p.y) : 1;
+    for (let i = 0; i < tr.values.length; i += 3){
+      tr.values[i]     = hd.p.x + (tr.values[i]     - h.p.x) * k;
+      tr.values[i + 1] = hd.p.y + (tr.values[i + 1] - h.p.y) * k;
+      tr.values[i + 2] = hd.p.z + (tr.values[i + 2] - h.p.z) * k;
+    }
+  }
+  return c2;
+}
+/* le arma a un personaje las tres acciones, con lo propio primero y lo prestado
+   despues: si el GLB ya trae un clip de caminar, ese gana. */function armarAcciones(npc){
+  const m = npc.modelo;
+  if (!m) return;
+  if (CLIPS.listos < 3){ if (CLIPS.cola.indexOf(npc) < 0) CLIPS.cola.push(npc); return; }
+  const propios = npc.clipsPropios || [];
+  const buscar = rx => propios.find(c => rx.test(c.name || '')) || null;
+  /* lo PROPIO ya viene en su propio reposo: no se toca. Lo PRESTADO se
+     retargetea al reposo de este modelo. */
+  const pQuieto = buscar(/idle|quiet/i), pAndar = buscar(/walk|camin/i),
+        pCorrer = buscar(/run|corr/i);
+  const cQuieto = pQuieto || retargetClip(CLIPS.quieto, CLIPS.quietoRest, m);
+  const cAndar  = pAndar  || retargetClip(CLIPS.andar,  CLIPS.andarRest,  m);
+  const cCorrer = pCorrer || retargetClip(CLIPS.correr, CLIPS.correrRest, m) || cAndar;
+  if (!cQuieto && !cAndar) return;
+  /* Sin HUESOS no se ata nada. El perro es una sola pieza: se le ataban las tres
+     acciones igual, npc.acc quedaba definido, y el balanceo a mano —lo unico que
+     puede moverlo— no corria nunca porque su condicion es justamente !npc.acc.
+     Estaba congelado desde el primer dia. */
+  let _hue = false;
+  m.traverse(o => { if (o.isBone) _hue = true; });
+  if (!_hue) return;
+  const mix = npc.mixer || new T.AnimationMixer(m);
+  if (!npc.mixer){ npc.mixer = mix; MIXERS.push(mix); }
+  const A = npc.acc = {};
+  for (const par of [['quieto', cQuieto], ['andar', cAndar], ['correr', cCorrer]]){
+    if (!par[1]) continue;
+    let a;
+    try { a = mix.clipAction(par[1]); } catch(e){ continue; }
+    a.enabled = true;
+    a.setEffectiveWeight(par[0] === 'quieto' ? 1 : 0);
+    a.play();
+    /* desfase propio: sin esto los seis personajes de un mundo respiran y giran
+       la cabeza en el mismo fotograma, y se ve a un coro, no a gente */
+    a.time = Math.random() * (a.getClip().duration || 1);
+    A[par[0]] = a;
+  }
+  npc.estAnim = 'quieto';
+}
+/* la MEZCLA: los pesos siguen a la velocidad de verdad del personaje, asi que
+   nadie patina ni corre en el lugar. */
+function mezclaAcciones(npc, vel, dt){
+  const A = npc.acc;
+  if (!A) return;
+  /* UN SOLO CLIP A LA VEZ. Mezclar por peso parece lo elegante y es lo que
+     rompia todo: el mixer acumula los cuaterniones de cada pista y los normaliza,
+     y con el Idle mirando a un costado y el Casual_Walk al frente, el hueso Hips
+     interpolaba por el camino largo y ACOSTABA al personaje en el aire. Los
+     torsos retorcidos con la cabeza en el pecho eran lo mismo, mas suave.
+     Con histeresis: elegir por un umbral seco hace que a velocidad de frontera
+     el personaje parpadee entre quieto y caminando cada cuadro. */
+  const est = npc.estAnim || 'quieto';
+  let q = est;
+  if (est === 'quieto')      q = vel > 0.55 ? (vel > 4.2 ? 'correr' : 'andar') : 'quieto';
+  else if (est === 'andar')  q = vel < 0.30 ? 'quieto' : (vel > 4.2 ? 'correr' : 'andar');
+  else                       q = vel < 3.4 ? (vel < 0.30 ? 'quieto' : 'andar') : 'correr';
+  if (!A[q]) q = A.andar ? 'andar' : 'quieto';
+  if (q !== est){
+    npc.estAnim = q;
+    for (const k in A){
+      const a = A[k];
+      a.setEffectiveWeight(k === q ? 1 : 0);
+      if (k === q){ a.paused = false; a.enabled = true; }
+    }
+  }
+  /* el clip avanza al ritmo del paso: si no, se arrastra o patina */
+  if (A.andar) A.andar.timeScale = cl(vel / 1.9, .55, 2.1);
+  if (A.correr) A.correr.timeScale = cl(vel / 5.4, .6, 1.9);
+  /* el Idle de Meshy mira a los costados. La queja no era que mire: era que lo
+     hace rapido, sin parar y todos a la vez. A 0,42 el MISMO clip se lee como
+     respirar, y el desfase por personaje rompe el coro. */
+  if (A.quieto) A.quieto.timeScale = 0.42;
+}
+/* carga un personaje 3D generado y lo cuelga del Group del NPC, apagando la
+   figura procedural; si falla, la procedural se queda. Reproduce su clip. */
+function ponerModelo(npc){
+  if (!GLTF || !npc.glb) return;
+  new GLTF().load(AX(npc.glb), g => {
+    const m = g.scene;
+    m.scale.setScalar(npc.glbEsc || 1);
+    m.position.y = npc.glbY || 0;
+    m.rotation.y = npc.glbGiro || 0;
+    m.traverse(o => { if (o.isMesh){ o.castShadow = true; o.frustumCulled = false;
+      if (o.material){ o.material.metalness = 0; } } });
+    /* apagar la figura procedural (queda de respaldo si el modelo no llegó) */
+    npc.fig.traverse(o => { if (o.isMesh) o.visible = false; });
+    npc.fig.add(m);
+    npc.modelo = m;
+    if (g.animations && g.animations.length){
+      /* LOS CLIPS QUE CORRESPONDEN, NO EL PRIMERO DEL ARCHIVO. Antes esto era
+         `mix.clipAction(g.animations[0]).play()`, y para los modelos que solo
+         traen `Idle` eso es la animacion de ESTAR QUIETO puesta encima de un
+         personaje que camina: patinaba sin mover una pierna. `armarAcciones` usa
+         los clips propios si los hay y presta los compartidos si no. */
+      npc.clipsPropios = g.animations || [];
+      armarAcciones(npc);
+      const mix = npc.mixer || new T.AnimationMixer(m);
+      if (!npc.acc) mix.clipAction(g.animations[0]).play();
+      npc.mixer = mix; MIXERS.push(mix);
+      /* si el clip es de CAMINAR (Meshy sube las dos manos a la vez), le
+         manejamos los brazos a mano igual que al cuerpo en 1ª persona */
+      if (/walk|camin/i.test(g.animations[0].name || '')){
+        const arm = {};
+        m.traverse(o => { if (o.isBone){
+          if (o.name === 'LeftArm') arm.la = o; else if (o.name === 'RightArm') arm.ra = o;
+          else if (o.name === 'LeftForeArm') arm.lf = o;
+          else if (o.name === 'RightForeArm') arm.rf = o; } });
+        for (const k in arm) arm[k].userData.bindQ = arm[k].quaternion.clone();
+        npc.arms = arm; npc.armPh = 0;
+      }
+    }
+    npc.cargado = true;
+  }, undefined, () => {});
+}
+function nuevoNPC(o){
+  o.fig.position.set(o.x, H(o.x, o.z) + (o.vuela ? (o.alto || 2.2) : 0), o.z);
+  o.fig.rotation.y = o.giro || 0;
+  scene.add(o.fig);
+  o.fase = rr(0, 6.28); o.li = 0;
+  NPCS.push(o);
+  ponerModelo(o);
+  return o;
+}
+function npcTick(dt){
+  for (const mix of MIXERS) mix.update(dt);
+  for (const npc of NPCS){
+    /* el modelo 3D generado ya trae su propia orientación: si el clip es de
+       caminar, no le sumamos el balanceo procedural de las extremidades */
+    const f = npc.fig;
+    const d = Math.hypot(px - f.position.x, pz - f.position.z);
+    let anda = 0;
+    if (npc.sigue){
+      if (d > 40){                       /* nunca se queda atrás de verdad */
+        f.position.x = px - Math.sin(yaw) * -3 + 1.5;
+        f.position.z = pz - Math.cos(yaw) * -3 + 1.5;
+      } else if (d > 3.4){
+        const vel2 = (corre ? 10.8 : 5.8) * dt;
+        f.rotation.y = Math.atan2(px - f.position.x, pz - f.position.z);
+        f.position.x += (px - f.position.x) / d * Math.min(vel2, d - 3.2);
+        f.position.z += (pz - f.position.z) / d * Math.min(vel2, d - 3.2);
+        anda = 1;
+      }
+    } else if (d < 11){
+      const objY = Math.atan2(px - f.position.x, pz - f.position.z);
+      let dy = objY - f.rotation.y;
+      while (dy > Math.PI) dy -= 6.283;
+      while (dy < -Math.PI) dy += 6.283;
+      f.rotation.y += dy * Math.min(1, dt * 3);
+    }
+    /* la mezcla de animacion, con la velocidad de verdad de este personaje:
+       `anda` ya lo calculo el bloque de arriba para moverlo. */
+    if (npc.acc) mezclaAcciones(npc, anda ? (corre ? 10.8 : 5.8) : 0, dt);
+    const suelo = H(f.position.x, f.position.z);
+    f.position.y = npc.vuela
+      ? suelo + (npc.alto || 2.2) + Math.sin(t0 * 1.7 + npc.fase) * .25
+      : suelo;
+    const L2 = f.userData.lim || {};
+    const sw = anda ? Math.sin(t0 * 9) * .55 : Math.sin(t0 * 1.4 + npc.fase) * .06;
+    if (L2.bI){ L2.bI.rotation.x = sw; L2.bD.rotation.x = -sw;
+      /* hay figuras con brazos pero sin piernas (el pingüino aletea) */
+      if (L2.pI){ L2.pI.rotation.x = -sw; L2.pD.rotation.x = sw; } }
+    if (L2.p1 && !L2.bI){ const s2 = anda ? Math.sin(t0 * 11) * .6 : 0;
+      L2.p1.rotation.x = s2; L2.p4.rotation.x = s2;
+      L2.p2.rotation.x = -s2; L2.p3.rotation.x = -s2; }
+    if (L2.cola) L2.cola.rotation.x = Math.sin(t0 * (anda ? 13 : 6) + npc.fase) * .4;
+    if (L2.rot) for (const r of L2.rot) r.rotation.y += dt * 28;
+    if (f.userData.late)
+      f.userData.late.emissiveIntensity = .6 + .35 * Math.sin(t0 * 2.2 + npc.fase);
+    /* brazos del modelo 3D con clip de caminar: colgando + vaivén al andar
+       (pisa lo que dejó el mixer, que subía las dos manos a la vez) */
+    if (npc.arms){
+      npc.armPh += dt * (anda ? (corre ? 9 : 6.2) : 0);
+      const swA = Math.sin(npc.armPh) * (anda ? 0.42 : 0)
+        + Math.sin(t0 * 1.3 + npc.fase) * 0.03 * (anda ? 0 : 1);
+      apuntarBrazos(npc.arms, swA);
+    }
+  }
+}
+function npcCerca(){
+  let mejor = null, md = 4.4;
+  for (const npc of NPCS){
+    if (!npc.clave) continue;
+    const d = Math.hypot(px - npc.fig.position.x, pz - npc.fig.position.z);
+    if (d < md){ md = d; mejor = npc; }
+  }
+  return mejor;
+}
+function hablaNPC(npc){
+  const lineas = (L[LANG].npc && L[LANG].npc[npc.clave]) || [];
+  if (!lineas.length) return;
+  const txt = lineas[npc.li % lineas.length];
+  npc.li++;
+  dialogo(npc.nombre, txt, npc.alHablar || null, npc.cara);
+}
+
+/* ========================= ITEMS USABLES ================================== */
+const ITEMS = [];
+function nuevoItem(o){ o.activo = true; ITEMS.push(o); return o; }
+function itemCerca(){
+  for (const it of ITEMS){
+    if (!it.activo) continue;
+    if (Math.hypot(px - it.x, pz - it.z) < (it.r || 3.5)) return it;
+  }
+  return null;
+}
+/* ¿qué haría el botón USAR ahora mismo? El capítulo manda, después los
+   items, después charlar con quien esté cerca. */
+function accionUsable(){
+  const C = CAPS[cap];
+  const p = POI[C.obj];
+  /* DENTRO DEL TRASLADO manda el traslado y nada mas: si no, llegar al objetivo
+     encima de la mecanica dispararia el capitulo a toda velocidad —y el dialogo
+     congela la fisica— y ademas no habria como salirse, porque salirse es el
+     mismo boton. */
+  if (TRINEO.modo){
+    const t2 = TRINEO.accion();
+    return t2 ? { tipo: 'trineo', tr: t2 } : null;
+  }
+  if (C.usar && Math.hypot(px - p.x, pz - p.z) < 7 && MISION.lista(cap))
+    return { tipo: 'cap' };
+  const tr = TRINEO.accion();
+  if (tr) return { tipo: 'trineo', tr };
+  const it = itemCerca();
+  if (it) return { tipo: 'item', it };
+  const npc = npcCerca();
+  if (npc) return { tipo: 'npc', npc };
+  return null;
+}
+function usarAccion(){
+  if (enDlg) return;
+  const acc = accionUsable();
+  if (!acc) return;
+  if (acc.tipo === 'trineo') TRINEO.usar(acc.tr);
+  else if (acc.tipo === 'cap') llegaObjetivo();
+  else if (acc.tipo === 'item'){ acc.it.activo = false; acc.it.fn(acc.it); }
+  else hablaNPC(acc.npc);
+}
+
+/* ================== MEDIDOR DE SUPERVIVENCIA + FUNDIDO ===================== */
+const MED = { on: false, v: 1 };
+function medidor(on, icono){
+  MED.on = on;
+  $('medIco').textContent = icono || '';
+  $('medidor').classList.toggle('on', on);
+}
+function medPon(v){
+  MED.v = cl(v, 0, 1);
+  $('medFill').style.width = (MED.v * 100).toFixed(1) + '%';
+  $('medFill').classList.toggle('rojo', MED.v < .28);
+}
+function fundido(fn){
+  $('fundido').style.opacity = 1;
+  setTimeout(() => { fn(); $('fundido').style.opacity = 0; }, 800);
+}
+
+/* ===================== EL CUERPO EN PRIMERA PERSONA ========================
+   Como en los juegos de parkour: MANOS y antebrazos siempre a la vista
+   (viewmodel colgado de la cámara) que bombean al caminar y se aprietan al
+   correr; PIERNAS de verdad con rodilla al mirar hacia abajo; y un torso y
+   cabeza que NO se dibujan (colorWrite=false) pero SÍ proyectan: tu propia
+   sombra camina entera por el suelo. Colores por mundo en MUNDO_CUERPO. */
+const MUNDO_CUERPO = { mangas: 0xc85a30, guantes: 0x2a3a48, pantalon: 0x33424e, botas: 0x1e2830, glb: 'npc/cuerpo-hielo.glb' };  /* KAI: parka naranja */
+const CUERPO = {};
+{
+  const mM = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.mangas });
+  const mG = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.guantes });
+  const mPa = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.pantalon });
+  const mB = new T.MeshLambertMaterial({ color: MUNDO_CUERPO.botas });
+  /* material FANTASMA: invisible a la cámara, visible para el sol */
+  const mF = new T.MeshLambertMaterial({ color: 0x000000 });
+  mF.colorWrite = false; mF.depthWrite = false;
+
+  /* --- viewmodel: dos antebrazos con puño, hijos de la CÁMARA --- */
+  scene.add(cam);                 /* la cámara entra a la escena para tener hijos */
+  const vm = new T.Group();
+  const brazoVM = s2 => {
+    const g = new T.Group();
+    const puno = new T.Mesh(new T.BoxGeometry(.09, .08, .11), mG);
+    puno.rotation.z = s2 * .18;
+    g.add(puno);
+    const pulgar = new T.Mesh(new T.BoxGeometry(.028, .03, .05), mG);
+    pulgar.position.set(-s2 * .052, .012, .012);
+    g.add(pulgar);
+    const ante = new T.Mesh(new T.CapsuleGeometry(.05, .3, 3, 8), mM);
+    ante.position.set(s2 * .07, -.16, .15);
+    ante.rotation.x = .95;
+    ante.rotation.z = -s2 * .3;
+    g.add(ante);
+    g.position.set(s2 * .23, -.26, -.46);
+    vm.add(g);
+    return g;
+  };
+  CUERPO.bI = brazoVM(-1);
+  CUERPO.bD = brazoVM(1);
+  cam.add(vm);
+  CUERPO.vm = vm;
+
+  /* --- el cuerpo en el mundo: piernas visibles + resto sólo-sombra --- */
+  const root = new T.Group();
+  const pierna = s2 => {
+    const cad = new T.Group();
+    cad.position.set(s2 * .115, .98, .03);
+    const muslo = new T.Mesh(new T.CapsuleGeometry(.075, .3, 3, 8), mPa);
+    muslo.geometry.translate(0, -.21, 0);
+    muslo.castShadow = true;
+    cad.add(muslo);
+    const rodilla = new T.Group();
+    rodilla.position.set(0, -.46, 0);
+    const canilla = new T.Mesh(new T.CapsuleGeometry(.06, .28, 3, 8), mPa);
+    canilla.geometry.translate(0, -.19, 0);
+    canilla.castShadow = true;
+    rodilla.add(canilla);
+    const bota = new T.Mesh(new T.BoxGeometry(.11, .09, .24), mB);
+    bota.position.set(0, -.42, .05);
+    bota.castShadow = true;
+    rodilla.add(bota);
+    cad.add(rodilla);
+    root.add(cad);
+    return { cad, rodilla };
+  };
+  const pI = pierna(-1), pD = pierna(1);
+  CUERPO.pI = pI.cad; CUERPO.rI = pI.rodilla;
+  CUERPO.pD = pD.cad; CUERPO.rD = pD.rodilla;
+  /* torso, cabeza y brazos FANTASMA: sólo existen en la sombra */
+  const torso = new T.Mesh(new T.CapsuleGeometry(.17, .5, 4, 8), mF);
+  torso.position.y = 1.28; torso.castShadow = true; root.add(torso);
+  const cabeza = new T.Mesh(new T.SphereGeometry(.12, 8, 6), mF);
+  cabeza.position.y = 1.72; cabeza.castShadow = true; root.add(cabeza);
+  CUERPO.bsI = new T.Mesh(new T.CapsuleGeometry(.05, .55, 3, 6), mF);
+  CUERPO.bsI.geometry.translate(0, -.3, 0);
+  CUERPO.bsI.position.set(-.28, 1.5, 0); CUERPO.bsI.castShadow = true;
+  root.add(CUERPO.bsI);
+  CUERPO.bsD = CUERPO.bsI.clone();
+  CUERPO.bsD.position.x = .28;
+  root.add(CUERPO.bsD);
+  root.visible = false;
+  vm.visible = false;
+  scene.add(root);
+  CUERPO.root = root;
+}
+/* CUERPO 3D generado (riggeado + caminar) en PRIMERA PERSONA: se cuelga del
+   mismo Group que sigue al jugador; se apaga el cuerpo procedural; se ENCOGE
+   el hueso de la cabeza para no tapar la cámara; el clip de caminar avanza a
+   la velocidad del paso. Si el GLB no llega, queda el procedural. */
+function cargarCuerpoGLB(){
+  if (!GLTF || !MUNDO_CUERPO.glb) return;
+  new GLTF().load(AX(MUNDO_CUERPO.glb), g => {
+    const m = g.scene;
+    m.rotation.y = Math.PI;                 /* de frente a la marcha */
+    const arm = {};
+    m.traverse(o => { if (o.isMesh){ o.castShadow = true; o.frustumCulled = false;
+      if (o.material) o.material.metalness = 0; }
+      if (o.isBone && /head|cabeza|neck/i.test(o.name) && !CUERPO.headBone)
+        CUERPO.headBone = o;
+      /* brazos: los manejamos a mano porque el clip de Meshy sube las dos manos
+         a la vez (quedaban "arriba" al estar quieto). Los dejamos colgando. */
+      if (o.isBone){
+        if (o.name === 'LeftArm') arm.la = o;
+        else if (o.name === 'RightArm') arm.ra = o;
+        else if (o.name === 'LeftForeArm') arm.lf = o;
+        else if (o.name === 'RightForeArm') arm.rf = o;
+      } });
+    for (const k in arm) arm[k].userData.bindQ = arm[k].quaternion.clone();
+    CUERPO.arms = arm;
+    CUERPO.root.add(m);
+    CUERPO.glb = m;
+    /* LOS CLIPS PRESTADOS, IGUAL QUE UN PERSONAJE. Este GLB no trae animaciones
+       propias: sin esto el cuerpo es una estatua que se desliza, que es lo que
+       se reporto como «la pose al moverse es rara». `armarAcciones` le presta
+       quieto/andar/correr retargeteados a su esqueleto, y si los clips todavia
+       no cargaron lo deja en la cola y lo arma solo cuando lleguen. */
+    CUERPO.npc = { modelo: m, clipsPropios: (g.animations || []) };
+    armarAcciones(CUERPO.npc);
+    /* apagar el cuerpo procedural (piernas + fantasma + viewmodel) */
+    CUERPO.root.traverse(o => { if (o.isMesh && o !== m && !m.getObjectById(o.id)) o.visible = false; });
+    CUERPO.pI.visible = CUERPO.pD.visible = false;
+    CUERPO.bsI.visible = CUERPO.bsD.visible = false;
+    if (g.animations && g.animations.length){
+      CUERPO.mixer = new T.AnimationMixer(m);
+      CUERPO.accion = CUERPO.mixer.clipAction(g.animations[0]);
+      CUERPO.accion.play();
+    }
+  }, undefined, () => {});
+}
+cargarCuerpoGLB();
+cargarCieloFoto();
+/* apunta los brazos de un modelo Meshy SIN depender de su pose de bind (que
+   varía por modelo): orienta cada hombro para que el brazo señale HACIA ABAJO
+   en el mundo (algo adelante y afuera), con `sw` de vaivén. Así quedan colgando
+   normales en los 5 cuerpos y en los NPC, sin importar cómo vino riggeado. */
+const _brAim = new T.Vector3(), _brTgt = new T.Vector3(), _brPw = new T.Quaternion();
+function apuntarBrazos(A, sw, outX, fwdZ, forebend){
+  outX = outX == null ? 0.17 : outX;
+  fwdZ = fwdZ == null ? 0.12 : fwdZ;
+  forebend = forebend == null ? 0.28 : forebend;
+  const aim = (up, fore, side, s) => {
+    if (!up || !fore) return;
+    _brAim.copy(fore.position).normalize();
+    _brTgt.set(side * outX, -1, fwdZ + s).normalize();
+    up.parent.getWorldQuaternion(_brPw);
+    _brTgt.applyQuaternion(_brPw.invert());
+    up.quaternion.setFromUnitVectors(_brAim, _brTgt);
+  };
+  aim(A.la, A.lf, 1, sw);
+  aim(A.ra, A.rf, -1, -sw);
+  if (A.lf && A.lf.userData.bindQ){ A.lf.quaternion.copy(A.lf.userData.bindQ); A.lf.rotateX(forebend); }
+  if (A.rf && A.rf.userData.bindQ){ A.rf.quaternion.copy(A.rf.userData.bindQ); A.rf.rotateX(forebend); }
+}
+function cuerpoTick(dt){
+  const enJuego = fase === 'juego';
+  CUERPO.root.visible = enJuego;
+  CUERPO.vm.visible = enJuego && !enDlg && !CUERPO.glb;   /* con GLB no hay viewmodel */
+  if (!enJuego) return;
+  CUERPO.root.position.set(px, H(px, pz), pz);
+  CUERPO.root.rotation.y = yaw;
+  const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
+  /* --- rama del CUERPO 3D generado --- */
+  if (CUERPO.glb){
+    /* PRIMERO, LOS CLIPS. Si los prestados llegaron, el cuerpo camina y corre
+       como cualquier personaje del mundo, con la mezcla que sigue a la velocidad
+       de verdad: es lo que arregla la pose. El mixer lo actualiza `npcTick`
+       junto con los demas, asi que aca solo se elige el clip. */
+    if (CUERPO.npc && !CUERPO.npc.acc) armarAcciones(CUERPO.npc);
+    if (CUERPO.npc && CUERPO.npc.acc){
+      mezclaAcciones(CUERPO.npc, Math.hypot(pvx, pvz), dt);
+    } else {
+      /* RESPALDO, para el caso de que los clips no lleguen: lo de antes, que es
+         mejor que una estatua con los brazos en cruz. */
+      if (CUERPO.mixer){
+        CUERPO.mixer.timeScale = v * (corre ? 2.4 : 1.4);
+        CUERPO.mixer.update(dt);
+      }
+      if (CUERPO.arms){
+        const sw = Math.sin(bobF) * v * (corre ? 0.5 : 0.34) + Math.sin(t0 * 1.4) * 0.03 * (1 - v);
+        apuntarBrazos(CUERPO.arms, sw);
+      }
+    }
+    /* achicar la cabeza CADA cuadro (el mixer la reescribe) para no taparte */
+    if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02);
+    return;
+  }
+  const sw = Math.sin(bobF) * (corre ? .95 : .62) * v;
+  /* piernas: péndulo desde la cadera, rodilla que se dobla al recoger */
+  CUERPO.pI.rotation.x = sw;
+  CUERPO.pD.rotation.x = -sw;
+  CUERPO.rI.rotation.x = Math.max(0, -sw) * 1.25;
+  CUERPO.rD.rotation.x = Math.max(0, sw) * 1.25;
+  /* brazos de la sombra, en contrafase con las piernas */
+  CUERPO.bsI.rotation.x = -sw * .8;
+  CUERPO.bsD.rotation.x = sw * .8;
+  /* el viewmodel BOMBEA: quieto respira, caminando alterna, corriendo los
+     puños se juntan y suben (parkour) */
+  const pump = Math.sin(bobF) * v;
+  const amp = corre ? .10 : .06;
+  const baseX = corre ? .17 : .23;
+  const baseY = -.26 + (corre ? .035 : 0);   /* corriendo los puños SUBEN */
+  const resp = Math.sin(t0 * 1.3) * .006;
+  CUERPO.bD.position.set(baseX, baseY + pump * amp + resp, -.46 + Math.cos(bobF) * .05 * v);
+  CUERPO.bI.position.set(-baseX, baseY - pump * amp + resp, -.46 - Math.cos(bobF) * .05 * v);
+  CUERPO.bD.rotation.z = -.06 + pump * .16;
+  CUERPO.bI.rotation.z = .06 + pump * .16;
+  CUERPO.bD.rotation.x = -.12 + pump * .14;
+  CUERPO.bI.rotation.x = -.12 - pump * .14;
+}
+
+/* ========================= AMBIENTE SONORO ================================
+   SINTETIZADO con WebAudio. Las voces del valle blanco:
+     · VIENTO que SILBA: ruido grave + un pasabanda agudo cuya frecuencia
+       sube y baja con las ráfagas (el silbido de la ventisca)
+     · la ESTUFA del campamento: crepitar filtrado, sube al ACERCARSE
+     · EL HIELO CANTA de noche: gemidos graves y CRUJIDOS secos al azar
+   ========================================================================== */
+const AMB = { ctx: null, master: null, on: true, viento: null, pos: null,
+  noche: null, silbF: null, tBlip: 6 };
+try { AMB.on = localStorage.getItem('hielo_son') !== '0'; } catch(e){}
+function ambienteOn(){
+  if (AMB.ctx){ if (AMB.ctx.state === 'suspended') AMB.ctx.resume(); return; }
+  try { AMB.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return; }
+  const A2 = AMB.ctx;
+  AMB.master = A2.createGain();
+  AMB.master.gain.value = AMB.on ? 1 : 0;
+  AMB.master.connect(A2.destination);
+  const buf = A2.createBuffer(1, A2.sampleRate * 3, A2.sampleRate);
+  const d = buf.getChannelData(0); let l = 0;
+  for (let i = 0; i < d.length; i++){ const w = Math.random() * 2 - 1;
+    l = l * .972 + w * .028; d[i] = l * 3.1; }
+  /* viento base + silbido (mismo ruido por un pasabanda que sube y baja) */
+  const nv = A2.createBufferSource(); nv.buffer = buf; nv.loop = true;
+  const fv = A2.createBiquadFilter(); fv.type = 'lowpass'; fv.frequency.value = 300;
+  AMB.viento = A2.createGain(); AMB.viento.gain.value = .08;
+  nv.connect(fv); fv.connect(AMB.viento); AMB.viento.connect(AMB.master); nv.start();
+  const ns = A2.createBufferSource(); ns.buffer = buf; ns.loop = true;
+  AMB.silbF = A2.createBiquadFilter(); AMB.silbF.type = 'bandpass';
+  AMB.silbF.frequency.value = 700; AMB.silbF.Q.value = 9;
+  const gs = A2.createGain(); gs.gain.value = .05;
+  ns.connect(AMB.silbF); AMB.silbF.connect(gs); gs.connect(AMB.master); ns.start();
+  /* la estufa: crepitar (ruido rápido por pasaaltos, con mordidas) */
+  const ne2 = A2.createBufferSource(); ne2.buffer = buf; ne2.loop = true;
+  ne2.playbackRate.value = 1.9;
+  const fe2 = A2.createBiquadFilter(); fe2.type = 'highpass'; fe2.frequency.value = 1400;
+  AMB.pos = A2.createGain(); AMB.pos.gain.value = 0;
+  ne2.connect(fe2); fe2.connect(AMB.pos); AMB.pos.connect(AMB.master); ne2.start();
+  /* el gemido del hielo: seno gravísimo con vibrato lento */
+  const og = A2.createOscillator(); og.frequency.value = 62;
+  const vib = A2.createOscillator(); vib.frequency.value = .5;
+  const vg = A2.createGain(); vg.gain.value = 7;
+  vib.connect(vg); vg.connect(og.frequency); vib.start();
+  AMB.noche = A2.createGain(); AMB.noche.gain.value = 0;
+  og.connect(AMB.noche); AMB.noche.connect(AMB.master); og.start();
+}
+/* el CRUJIDO del hielo: golpe de ruido grave con caída rápida */
+function crujido(){
+  const A2 = AMB.ctx; if (!A2) return;
+  const dur = .25, sr = A2.sampleRate;
+  const b = A2.createBuffer(1, sr * dur, sr);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++)
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (sr * .04));
+  const src = A2.createBufferSource(); src.buffer = b;
+  const f = A2.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(900, A2.currentTime);
+  f.frequency.exponentialRampToValueAtTime(120, A2.currentTime + dur);
+  const g = A2.createGain(); g.gain.value = .16;   /* suave: no un martillazo */
+  src.connect(f); f.connect(g); g.connect(AMB.master); src.start();
+}
+function ambTick(dt){
+  if (!AMB.ctx || fase !== 'juego') return;
+  const rafaga = Math.abs(Math.sin(t0 * .09)) * .6 + Math.max(0, Math.sin(t0 * .23)) * .4;
+  AMB.viento.gain.value = .06 + .09 * rafaga;
+  AMB.silbF.frequency.value = 550 + 500 * rafaga;
+  const dh = Math.hypot(px - POI.campamento.x, pz - POI.campamento.z);
+  AMB.pos.gain.value = cl(1 - dh / 40, 0, 1) * .2;
+  const osc = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+  const enLago = Math.hypot(px - POI.crater.x, pz - POI.crater.z) < 220 ? 1.6 : 1;
+  AMB.noche.gain.value = (osc > .5 ? (osc - .5) * .3 : 0) * enLago;
+  AMB.tBlip -= dt;
+  if (AMB.tBlip <= 0){
+    AMB.tBlip = 12 + Math.random() * 16;
+    /* el hielo sólo "canta" cuando estás SOBRE el lago congelado (es lo que
+       cuenta la historia); en el campamento no se oye ningún golpe */
+    if (enLago > 1) crujido();
+  }
+}
+$('bSon').addEventListener('pointerdown', e => {
+  e.preventDefault();
+  AMB.on = !AMB.on;
+  try { localStorage.setItem('hielo_son', AMB.on ? '1' : '0'); } catch(e2){}
+  if (AMB.master) AMB.master.gain.value = AMB.on ? 1 : 0;
+  $('bSon').textContent = AMB.on ? '🔊' : '🔇';
+});
+$('bSon').textContent = AMB.on ? '🔊' : '🔇';
+
+/* =================== EL MUNDO PROPIO: misión, personajes ===================
+   HIELO es el mundo del CALOR: el frío te gasta (peor de noche), y el calor
+   vive en el campamento, en la cueva y en las TRES FOGATAS apagadas de la
+   ruta — encenderlas es la misión (y tus puntos de reaparición). En la cueva
+   espera DANTE, el otro glaciólogo, que se suma a la caminata; y cerca del
+   lago, PICO, un pingüino con opiniones. */
+const MISION = (() => {
+  let calor = 1, prendidas = 0, caidas = 0;
+  let seguro = { x: POI.campamento.x + 4, z: POI.campamento.z + 8 };
+  const calientes = [POI.campamento, POI.cuevahielo];
+  /* la llama: sprite pintado, prendida cuando la fogata se enciende */
+  const llamaTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const d = g.createRadialGradient(32, 40, 2, 32, 34, 30);
+    d.addColorStop(0, 'rgba(255,240,180,1)');
+    d.addColorStop(.4, 'rgba(255,150,60,.85)');
+    d.addColorStop(1, 'rgba(255,80,20,0)');
+    g.fillStyle = d; g.fillRect(0, 0, 64, 64);
+    return new T.CanvasTexture(c);
+  })();
+  const llamas = [];
+  const matLena = new T.MeshLambertMaterial({ map: TX.oscuro });
+  for (const [si, ki] of [[2, 12], [3, 12], [4, 12]]){
+    const [bx, bz] = PTS_SEG[si][ki];
+    const x = bx + 4, z = bz - 3, y = H(x, z);
+    /* tres troncos en trípode + piedras alrededor */
+    const palos = [];
+    for (let k = 0; k < 3; k++){
+      const gL = new T.CylinderGeometry(.06, .08, 1.1, 5);
+      gL.rotateZ(.5);
+      gL.rotateY(k / 3 * 6.283);
+      gL.translate(0, .4, 0);
+      palos.push(gL);
+    }
+    const mF = new T.Mesh(fusiona(palos), matLena);
+    mF.position.set(x, y, z);
+    mF.castShadow = true;
+    scene.add(mF);
+    const luz = new T.PointLight(0xff8c3a, 0, 11, 1.6);
+    luz.position.set(x, y + 1.2, z);
+    scene.add(luz);
+    const llama = new T.Sprite(new T.SpriteMaterial({ map: llamaTex,
+      transparent: true, blending: T.AdditiveBlending, depthWrite: false }));
+    llama.scale.set(1.6, 2.2, 1);
+    llama.position.set(x, y + 1.0, z);
+    llama.visible = false;
+    scene.add(llama);
+    llamas.push(llama);
+    nuevoItem({ x, z, r: 3.6, fn: () => {
+      llama.visible = true;
+      luz.intensity = 14;
+      calientes.push({ x, z });
+      prendidas++;
+      calor = 1;
+      medPon(1);
+      pinta();
+    } });
+  }
+  function pinta(){
+    $('tarea').textContent = '🔥 ' + prendidas + '/3' + (prendidas >= 3 ? ' ✓' : '');
+  }
+  return {
+    lista(c){ return c !== 4 || prendidas >= 3; },
+    alCap(c){
+      medidor(c >= 1, '🔥');
+      $('tarea').classList.toggle('on', c >= 1 && c <= 4);
+      if (c >= 1) pinta();
+      if (c >= 2 && window.__DANTE && window.__DANTE.hablado)
+        window.__DANTE.sigue = true;
+    },
+    tick(dt){
+      if (cap < 1 || fase !== 'juego') return;
+      const osc = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+      let alCalor = false;
+      for (const p of calientes){
+        if (Math.hypot(px - p.x, pz - p.z) < 11){
+          alCalor = true;
+          seguro = { x: p.x + 3, z: p.z + 3 };
+        }
+      }
+      calor = alCalor ? Math.min(1, calor + dt / 4)
+                      : calor - dt / 280 * (osc > .5 ? 1.6 : 1);
+      medPon(calor);
+      for (const ll of llamas)
+        if (ll.visible) ll.scale.y = 2.0 + Math.sin(t0 * 7 + ll.position.x) * .3;
+      if (calor <= 0){
+        calor = .65; caidas++;
+        fundido(() => { px = seguro.x; pz = seguro.z; medPon(calor); });
+      }
+    },
+    forzar(v){ calor = v; },
+    estado(){ return { tipo: 'fogatas', prendidas, calor: +calor.toFixed(3), caidas }; }
+  };
+})();
+window.__MISION = MISION;
+/* --- DANTE y PICO --- */
+const caraDante = (g, n2) => {
+  g.fillStyle = '#12212e'; g.fillRect(0, 0, n2, n2);
+  g.fillStyle = '#c85a30';                                     /* capucha */
+  g.beginPath(); g.arc(n2*.5, n2*.5, n2*.42, 0, 6.29); g.fill();
+  g.fillStyle = '#e8b48a';                                     /* cara */
+  g.beginPath(); g.ellipse(n2*.5, n2*.56, n2*.22, n2*.25, 0, 0, 6.29); g.fill();
+  g.fillStyle = '#4a2e1a';                                     /* barba */
+  g.beginPath(); g.ellipse(n2*.5, n2*.72, n2*.18, n2*.12, 0, 0, 6.29); g.fill();
+  g.fillStyle = '#2a1e18';
+  g.beginPath(); g.arc(n2*.42, n2*.52, n2*.035, 0, 6.29); g.fill();
+  g.beginPath(); g.arc(n2*.58, n2*.52, n2*.035, 0, 6.29); g.fill();
+  g.strokeStyle = '#c85a30'; g.lineWidth = 6;                  /* borde capucha */
+  g.beginPath(); g.arc(n2*.5, n2*.5, n2*.36, 3.6, 5.8); g.stroke();
+};
+const caraPico = (g, n2) => {
+  g.fillStyle = '#0e1626'; g.fillRect(0, 0, n2, n2);
+  g.fillStyle = '#1c2430';                                     /* cabeza */
+  g.beginPath(); g.ellipse(n2*.5, n2*.52, n2*.3, n2*.36, 0, 0, 6.29); g.fill();
+  g.fillStyle = '#f4f8fc';                                     /* panza-carita */
+  g.beginPath(); g.ellipse(n2*.5, n2*.62, n2*.18, n2*.22, 0, 0, 6.29); g.fill();
+  g.fillStyle = '#ffb845';                                     /* pico */
+  g.beginPath(); g.moveTo(n2*.44, n2*.5); g.lineTo(n2*.56, n2*.5);
+  g.lineTo(n2*.5, n2*.6); g.closePath(); g.fill();
+  g.fillStyle = '#fff';
+  g.beginPath(); g.arc(n2*.4, n2*.42, n2*.055, 0, 6.29); g.fill();
+  g.beginPath(); g.arc(n2*.6, n2*.42, n2*.055, 0, 6.29); g.fill();
+  g.fillStyle = '#000';
+  g.beginPath(); g.arc(n2*.41, n2*.43, n2*.025, 0, 6.29); g.fill();
+  g.beginPath(); g.arc(n2*.59, n2*.43, n2*.025, 0, 6.29); g.fill();
+};
+/* pingüino procedural: cuerpo negro, panza blanca, pico naranja, aletas */
+function figPinguino(){
+  const g = new T.Group();
+  const mN = new T.MeshLambertMaterial({ color: 0x1c2430 });
+  const mB = new T.MeshLambertMaterial({ color: 0xf4f8fc });
+  const cuerpo = new T.Mesh(new T.CapsuleGeometry(.22, .35, 4, 8), mN);
+  cuerpo.position.y = .45; g.add(cuerpo);
+  const panza = new T.Mesh(new T.SphereGeometry(.19, 8, 6), mB);
+  panza.position.set(0, .42, .1); panza.scale.set(.8, 1.15, .6); g.add(panza);
+  const cabeza = new T.Mesh(new T.SphereGeometry(.14, 8, 6), mN);
+  cabeza.position.y = .82; g.add(cabeza);
+  const pico = new T.Mesh(new T.ConeGeometry(.045, .14, 5),
+    new T.MeshLambertMaterial({ color: 0xffb845 }));
+  pico.rotation.x = 1.57;
+  pico.position.set(0, .8, .18); g.add(pico);
+  const lim = {};
+  for (const [k, sx] of [['bI', -.24], ['bD', .24]]){
+    const ala = new T.Mesh(new T.BoxGeometry(.05, .3, .12), mN);
+    ala.geometry.translate(0, -.12, 0);
+    ala.position.set(sx, .6, 0);
+    ala.rotation.z = sx > 0 ? -.25 : .25;
+    g.add(ala); lim[k] = ala;
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.lim = lim;
+  return g;
+}
+{
+  const cv2 = POI.cuevahielo;
+  window.__DANTE = nuevoNPC({ fig: figHumano(0xc85a30, 0xd8dde2),
+    x: cv2.x - 4, z: cv2.z + 5, nombre: 'DANTE', clave: 'dante',
+    cara: caraDante, giro: 2.8, glb: 'npc/dante.glb', glbGiro: 0,
+    alHablar(){
+      window.__DANTE.hablado = true;
+      if (cap >= 2) window.__DANTE.sigue = true;
+    } });
+  const lg = POI.lagohielo;
+  nuevoNPC({ fig: figPinguino(),
+    x: lg.x + 8, z: lg.z + 6, nombre: 'PICO', clave: 'pico',
+    cara: caraPico, giro: 1.5 });
+}
+
+/* ================================ JUGADOR ================================== */
+const stats = { t: 0, dist: 0 };
+let px = POI.inicio.x, pz = POI.inicio.z, yaw = 0, pitch = -.03;
+let pvx = 0, pvz = 0, bobF = 0, corre = false;
+const OJO = 1.7, VEL = 6.2, VEL_CORRE = 11.5;
+/* ALTURA DE MAS DEL OJO. La pone el traslado del mundo: sentado en un rover
+   el ojo va a la altura del asiento, y volando va donde este el vuelo. En cero
+   —o sea a pie— la camara queda exactamente como estaba. */
+let altExtra = 0;
+const DED = { mov: null, mira: null };
+let movV = { x: 0, y: 0 }, keyV = { x: 0, y: 0 }, keyL = { x: 0, y: 0 };
+function fisica(dt){
+  /* dentro del traslado no se camina: tiene su propio paso */
+  if (TRINEO.modo){ TRINEO.paso(dt); return; }
+  yaw -= keyL.x * 2.2 * dt;
+  pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+  let mx = movV.x + keyV.x, my = movV.y + keyV.y;
+  const m = Math.hypot(mx, my);
+  if (m > 1){ mx /= m; my /= m; }
+  const sp = corre ? VEL_CORRE : VEL;
+  const sy = Math.sin(yaw), cy = Math.cos(yaw);
+  pvx = (-sy * -my + cy * mx) * sp;
+  pvz = (-cy * -my - sy * mx) * sp;
+  let nx = cl(px + pvx * dt, -MITAD + 6, MITAD - 6);
+  let nz = cl(pz + pvz * dt, -MITAD + 6, MITAD - 6);
+  /* a través de las rocas y las máquinas, no */
+  for (const a of ARB){
+    const dx = nx - a[0], dz = nz - a[1], d = Math.hypot(dx, dz), rq = a[2] + .5;
+    if (d < rq && d > 1e-4){ nx = a[0] + dx / d * rq; nz = a[1] + dz / d * rq; }
+  }
+  stats.dist += Math.hypot(nx - px, nz - pz);
+  px = nx; pz = nz;
+  bobF += dt * (2 + 8 * Math.min(1, Math.hypot(pvx, pvz) / VEL));
+  stats.t += dt;
+}
+function ponCam(){
+  const v = Math.min(1, Math.hypot(pvx, pvz) / VEL);
+  let ex = px, ez = pz;
+  /* con CUERPO 3D: el ojo va a la altura de la frente y un pelo ADELANTE del
+     cuello, así al mirar abajo ves el pecho y las piernas sin el agujero del
+     cuello, y la cabeza colapsada queda detrás del lente */
+  if (CUERPO.glb){ ex = px + Math.sin(yaw) * -.16; ez = pz + Math.cos(yaw) * -.16; }
+  cam.position.set(ex, H(px, pz) + OJO + altExtra + Math.abs(Math.sin(bobF)) * .06 * v, ez);
+  cam.rotation.y = yaw;
+  cam.rotation.x = pitch + Math.sin(bobF * 2) * .004 * v;
+  /* FOV PROGRESIVO: antes saltaba de 72 a 77 en un cuadro al empezar a correr y se
+     sentia un tironazo. Ahora persigue el objetivo y llega en medio segundo (el
+     factor 6 da el 95% en 0,5 s). El reloj se saca aca porque esta funcion no
+     recibe dt. */
+  {
+    const _n = performance.now();
+    const _d = Math.min(.1, (_n - (window.__fovT || _n)) / 1000);
+    window.__fovT = _n;
+    const _obj = 72 + (corre ? 5 : 0);
+    window.__fovS = (window.__fovS == null ? _obj : window.__fovS + (_obj - window.__fovS) * Math.min(1, _d * 6));
+    cam.fov = window.__fovS;
+  }
+  cam.updateProjectionMatrix();
+}
+
+/* ================= EL TRINEO: EL TRASLADO PROPIO DE HIELO =================
+   EL TRINEO DE HIELO. Este mundo tiene un lago CONGELADO caminable y lomas
+   nevadas alrededor, y hasta ahora las lomas eran una molestia: se subian y se
+   bajaban a pie.
+
+   EL HIELO CASI NO ROZA, y eso es todo el caracter de la mecanica. La pendiente
+   manda igual que en la tabla de DUNAS, pero en la arena el llano te frena en
+   veinte metros y aca no te frena: lo que alla era una bajada corta, aca es un
+   cruce de punta a punta del lago. Frenar es arrastrar los talones (palanca
+   atras) y girar es apoyar el canto de los patines.
+
+   Los trineos se ponen ARRIBA de la bajada de cada tramo del guion, y la bajada
+   se BUSCA: se barre un disco de 70 m alrededor del punto medio del tramo y se
+   elige donde mas baja EN EL RUMBO del tramo, asi el trineo siempre te deja mas
+   cerca del objetivo, aunque mañana se toque el terreno. Cada uno lleva una vara
+   con un trapo, porque un trineo tirado en la nieve es una raya blanca sobre
+   blanco y no se encuentra desde la loma anterior.
+   ========================================================================== */
+const TRINEO = (() => {
+  const A = { modo: null, vel: 0, hd: 0, act: null, PUE: [], nPaso: 0, tSim: 0 };
+  const TT = {
+    es: { toma: 'TRINEO · ◉ USAR para subirte',
+          va:   'PALANCA para el canto · atras frena con los talones',
+          baja: '◉ USAR para bajarte' },
+    en: { toma: 'SLED · ◉ USE to ride',
+          va:   'STICK to carve · pull back to drag your heels',
+          baja: '◉ USE to step off' },
+    pt: { toma: 'TRENO · ◉ USAR para subir',
+          va:   'ALAVANCA para a borda · atras freia com os calcanhares',
+          baja: '◉ USAR para descer' }
+  };
+  const tx = k => ((TT[LANG] || TT.en)[k] || '');
+
+  const RTOMA = 7;
+  /* GRAV_T: cuanto empuja un metro de pendiente. Con 24 la punta quedaba en
+     13,1 m/s y correr ya da 11,5: el trineo no se sentia distinto. Las lomas de
+     HIELO son mas mansas que las dunas, asi que hace falta mas empuje y menos
+     roce para que la mecanica exista. */
+  const GRAV_T = 30;
+  const GIRO = 1.7;
+  const VMAX = 26;
+  const V_BAJA = .9;
+  /* con que fuerza y hasta que velocidad empuja el pie. Nueve es poco al lado
+     de los veintiseis de VMAX a proposito: empujar te saca del llano, no te
+     hace campeon. */
+  const EMPUJE = 9, V_EMPUJE = 9;
+  const E = 1.5;
+  let carve = 0, tSol = 0;
+
+  const pendEn = (x, z, ux, uz) =>
+    ((H(x + E, z) - H(x - E, z)) * ux + (H(x, z + E) - H(x, z - E)) * uz) / (2 * E);
+
+  /* ------------------------- donde estan los trineos ---------------------- */
+  /* ARRIBA DE LA BAJADA de cada tramo del guion, y la bajada se BUSCA: se barre
+     un disco de 70 m alrededor del punto medio del tramo y se elige donde mas
+     baja EN EL RUMBO del tramo, asi el trineo siempre te deja mas cerca. */
+  {
+    const ks = Object.keys(POI);
+    for (let i = 1; i < ks.length; i++){
+      const P1 = POI[ks[i - 1]], P2 = POI[ks[i]];
+      const dx = P2.x - P1.x, dz = P2.z - P1.z, dl = Math.hypot(dx, dz) || 1;
+      const ux = dx / dl, uz = dz / dl;
+      const cx = (P1.x + P2.x) / 2, cz = (P1.z + P2.z) / 2;
+      let bx = cx, bz = cz, mej = 0;
+      for (let sx = -70; sx <= 70; sx += 7) for (let sz = -70; sz <= 70; sz += 7){
+        if (sx * sx + sz * sz > 70 * 70) continue;
+        const x = cx + sx, z = cz + sz;
+        if (Math.abs(x) > MITAD - 60 || Math.abs(z) > MITAD - 60) continue;
+        const q = pendEn(x, z, ux, uz);
+        if (q < mej){ mej = q; bx = x; bz = z; }
+      }
+      if (mej < -.13) A.PUE.push({ x: bx, z: bz, hd: Math.atan2(-ux, -uz), lib: true });
+    }
+  }
+
+  /* ------------------------------- el trineo ------------------------------ */
+  const mMad = new T.MeshLambertMaterial({ color: 0x8a6a44 });
+  const mPat = new T.MeshLambertMaterial({ color: 0xb9c6cf });
+  const GEO = (() => {
+    const g = [];
+    const t = new T.BoxGeometry(.72, .12, 1.7); t.translate(0, .34, 0); g.push(t);
+    for (const s of [-1, 1]){
+      const pa = new T.BoxGeometry(.09, .1, 1.9); pa.translate(s * .32, .1, 0); g.push(pa);
+      const cu = new T.BoxGeometry(.09, .34, .1); cu.translate(s * .32, .24, -.92); g.push(cu);
+    }
+    return fusiona(g);
+  })();
+  for (const P of A.PUE){
+    P.y = H(P.x, P.z);
+    const m = new T.Mesh(GEO, mMad);
+    m.rotation.order = 'YXZ';
+    m.position.set(P.x, P.y, P.z);
+    m.rotation.set(0, P.hd, 0);
+    m.castShadow = true;
+    scene.add(m);
+    P.malla = m;
+    /* una vara con un trapo: un trineo tirado en la nieve es una raya blanca
+       sobre blanco y no se encuentra desde la loma anterior */
+    const g2 = [];
+    const va = new T.CylinderGeometry(.05, .06, 2.6, 5); va.translate(P.x, P.y + 1.3, P.z);
+    g2.push(va);
+    const tr = new T.BoxGeometry(.55, .3, .03); tr.translate(P.x + .3, P.y + 2.3, P.z);
+    g2.push(tr);
+    const ba = new T.Mesh(fusiona(g2), mPat);
+    ba.castShadow = true;
+    scene.add(ba);
+  }
+  const tri = new T.Mesh(GEO, mMad);
+  tri.rotation.order = 'YXZ';
+  tri.visible = false;
+  scene.add(tri);
+
+  /* ---------------------------- lo que se hace ---------------------------- */
+  A.accion = () => {
+    if (A.modo) return A.vel < 4 ? { baja: true } : null;
+    for (const P of A.PUE)
+      if (P.lib && Math.hypot(px - P.x, pz - P.z) < RTOMA) return { P };
+    return null;
+  };
+  A.usar = c => {
+    if (c.baja){ A.suelta(); return; }
+    const P = c.P;
+    P.lib = false; P.malla.visible = false; A.act = P;
+    /* SE SUBE PARADO. Antes se montaba ya a 5,5 m/s: te subias y el trineo
+       arrancaba solo, sin haber tocado nada. Ahora arranca quieto y sos vos el
+       que empuja. */
+    A.modo = 'trineo'; A.vel = 0; A.hd = P.hd; carve = 0; tSol = -1;
+    yaw = P.hd;
+    px = P.x; pz = P.z;
+    altExtra = -.85;              /* sentado, el ojo baja casi un metro */
+    tri.visible = true;
+  };
+  A.suelta = () => {
+    if (!A.modo) return;
+    const P = A.act;
+    A.modo = null; A.vel = 0; altExtra = 0;
+    tri.visible = false;
+    if (P){
+      P.x = cl(px - Math.sin(A.hd) * 1.5, -MITAD + 8, MITAD - 8);
+      P.z = cl(pz - Math.cos(A.hd) * 1.5, -MITAD + 8, MITAD - 8);
+      P.y = H(P.x, P.z); P.hd = A.hd; P.lib = true;
+      P.malla.position.set(P.x, P.y, P.z);
+      P.malla.rotation.set(0, P.hd, 0);
+      P.malla.visible = true;
+    }
+    pvx = 0; pvz = 0;
+  };
+
+  A.paso = dt => {
+    A.nPaso++; A.tSim += dt;
+    pitch = cl(pitch - keyL.y * 1.7 * dt, -1.2, 1.2);
+    const mx = cl(movV.x + keyV.x, -1, 1), my = cl(movV.y + keyV.y, -1, 1);
+    const fv = cl(A.vel / 6, .18, 1);
+    A.hd -= mx * GIRO * dt * fv;
+    carve += (mx - carve) * Math.min(1, dt * 6);
+    const ux = -Math.sin(A.hd), uz = -Math.cos(A.hd);
+    const rx = Math.cos(A.hd), rz = -Math.sin(A.hd);
+    const gx = (H(px + E, pz) - H(px - E, pz)) / (2 * E);
+    const gz = (H(px, pz + E) - H(px, pz - E)) / (2 * E);
+    const dh = gx * ux + gz * uz;
+    const dl = gx * rx + gz * rz;
+    /* la linea de maxima pendiente lleva al trineo, igual que a una tabla */
+    A.hd += cl(dl, -.5, .5) * 1.5 * dt * fv;
+    /* CLAVADO HASTA QUE EMPUJES. Un trineo parado en una loma no se va solo: la
+       madera muerde el hielo. Antes la pendiente lo tomaba desde el cuadro cero,
+       asi que montarte YA era irte cuesta abajo sin haber tocado nada —eso es lo
+       que el reporte llamo «se mueve derecho solo»—. Ahora la pendiente tira si
+       ya venis andando o si estas empujando, y nada mas. */
+    const emp = Math.max(0, -my);
+    if (A.vel > .6 || emp > .1) A.vel += -dh * GRAV_T * dt;
+    /* EL HIELO CASI NO ROZA, y eso es todo el caracter de esta mecanica: en la
+       arena el llano te frena en veinte metros, aca el llano no te frena. Lo que
+       en DUNAS era una bajada corta aca es un cruce de punta a punta del lago. */
+    /* EL EMPUJON. El trineo era pura gravedad: en el llano, una vez parado,
+       no habia forma de arrancar y quedabas clavado —la otra mitad del
+       reporte—. Adelante ahora empuja con el pie, como se empuja un trineo
+       de verdad: sirve para arrancar y para cruzar un llano, y nada mas. La
+       velocidad de verdad la sigue dando la bajada, que es la gracia. */
+    if (emp > .1 && A.vel < V_EMPUJE) A.vel += EMPUJE * emp * dt;
+    const fren = Math.max(0, my) * 7 + Math.abs(carve) * .7 + .07;
+    A.vel -= (fren + A.vel * A.vel * .0022) * dt;
+    A.vel = cl(A.vel, 0, VMAX);
+    if (emp < .1 && A.vel < .6) A.vel = 0;   /* se queda quieto de verdad */
+    let nx = cl(px + ux * A.vel * dt, -MITAD + 6, MITAD - 6);
+    let nz = cl(pz + uz * A.vel * dt, -MITAD + 6, MITAD - 6);
+    for (const o of ARB){
+      const bx = nx - o[0], bz = nz - o[1], d = Math.hypot(bx, bz), rq = o[2] + .6;
+      if (o[2] > 0 && d < rq && d > 1e-4){
+        nx = o[0] + bx / d * rq; nz = o[1] + bz / d * rq; A.vel *= .4;
+      }
+    }
+    stats.dist += Math.hypot(nx - px, nz - pz);
+    px = nx; pz = nz;
+    yaw = A.hd;
+    pvx = ux * A.vel; pvz = uz * A.vel;
+    bobF += dt * (2 + 2.5 * Math.min(1, A.vel / VMAX));
+    /* cuesta arriba y sin envion, te bajas: quedarse clavado no es una decision */
+    /* SE BAJA SOLO, PERO NO EN LA CARA DEL QUE ESTA EMPUJANDO. Antes bastaba con
+       quedar por debajo de 0,9 m/s en llano SEIS DECIMAS para que el trineo te
+       bajara. Sin forma de impulsarte eso tenia sentido —no habia nada que
+       hacer—, pero era la otra cara de «se traba cuando me muevo»: parabas y te
+       escupia. Ahora el reloj solo corre si NO estas empujando, y da tres
+       segundos, que es tiempo de sobra para arrancar de nuevo. */
+    if (A.vel < V_BAJA && dh > -.02 && emp < .1){ tSol += dt; if (tSol > 3){ A.suelta(); return; } }
+    else tSol = Math.min(tSol, 0);
+    tri.position.set(px + ux * .35, H(px, pz) + .06, pz + uz * .35);
+    tri.rotation.set(Math.asin(cl(dh, -.9, .9)), A.hd, -carve * .3);
+    stats.t += dt;
+  };
+  A.aviso = acc => {
+    if (A.modo) return A.vel < 4 ? tx('baja') : tx('va');
+    if (acc && acc.tipo === 'trineo') return tx('toma');
+    return '';
+  };
+
+  A.est = () => ({ modo: A.modo, vel: +A.vel.toFixed(2), porque: A.porque,
+    nPaso: A.nPaso, tSim: +A.tSim.toFixed(2), alto: +altExtra.toFixed(2),
+    hd: +A.hd.toFixed(2),
+    pue: A.PUE.map(P => ({ x: Math.round(P.x), z: Math.round(P.z), lib: P.lib })) });
+  return A;
+})();
+
+/* -------- objetivo: marcador 3D + distancia + botón USAR ------------------- */
+/* ================= LO QUE FALTA, Y COMO SE AGARRA =========================
+   Los trece mundos se trababan en el capitulo que pide juntar N cosas: el
+   mecanismo andaba, pero el mojon apuntaba al sitio del capitulo y no a las
+   cosas, y ningun renglon de la pantalla decia que existieran ni con que boton
+   se levantan. Estas tres piezas son lo que lo arregla, y son iguales en los
+   trece. */
+const VERBO = {
+  es: { item: 'RECOGER', npc: 'HABLAR', cap: 'SEGUIR',
+        junta: 'Junta lo que falta', quedan: n => '◈ faltan ' + n },
+  en: { item: 'PICK UP', npc: 'TALK',   cap: 'CONTINUE',
+        junta: 'Collect what you need', quedan: n => '◈ ' + n + ' to go' },
+  pt: { item: 'PEGAR',   npc: 'FALAR',  cap: 'SEGUIR',
+        junta: 'Pega o que falta', quedan: n => '◈ faltam ' + n }
+};
+/* la cosa pendiente mas cercana: lo unico que los trece mundos tienen igual es
+   la lista ITEMS, asi que la guia se arma con eso y no con la mision de cada uno */
+function itemPendiente(){
+  let mej = null, dm = 1e9;
+  for (const it of ITEMS){
+    if (!it.activo) continue;
+    const d = Math.hypot(px - it.x, pz - it.z);
+    if (d < dm){ dm = d; mej = it; }
+  }
+  return mej;
+}
+function pistaAccion(acc){
+  const e = document.getElementById('pistaUso');
+  if (!e) return;
+  const V = VERBO[LANG] || VERBO.en;
+  const tecla = document.body.classList.contains('sinTactil') ? 'E' : '◉';
+  const t = (acc && V[acc.tipo]) ? tecla + ' · ' + V[acc.tipo] : '';
+  e.textContent = t;
+  e.classList.toggle('on', !!t && !enDlg);
+}
+function pasoObjetivo(){
+  const C = CAPS[cap];
+  const V = VERBO[LANG] || VERBO.en;
+  /* EL MOJON APUNTA A LO QUE FALTA. Mientras la mision del capitulo no este
+     lista el capitulo no se cierra, asi que apuntar al sitio del capitulo es
+     mandar al jugador a un lugar donde no va a pasar nada —y era exactamente lo
+     que pasaba: se trababan los trece—. Con la mision pendiente, la marca y los
+     metros van a la cosa mas cercana que quede. Es seguro: `pend` solo existe
+     cuando `MISION.lista(cap)` es falso, que es justo cuando el disparo
+     automatico y la accion 'cap' ya estan apagados. */
+  /* Si la MISION sabe a donde hay que ir, manda ella: hay mundos donde lo que
+     falta no son objetos que se levantan (en exo son tres criaturas que hay que
+     ir a buscar y llevar al anillo). Si no lo sabe, se usa la cosa mas cercana. */
+  const pend = (MISION && MISION.lista && !MISION.lista(cap))
+    ? ((MISION.guia && MISION.guia()) || itemPendiente()) : null;
+  const p = pend || POI[C.obj];
+  const d = Math.hypot(px - p.x, pz - p.z);
+  $('objD').textContent = Math.round(d) + ' m';
+  {
+    const oT = $('objT');
+    if (pend){
+      if (!oT.dataset.orig) oT.dataset.orig = oT.textContent;
+      oT.textContent = V.junta;
+      const q = ITEMS.filter(i => i.activo).length;
+      const ta = $('tarea');
+      if (!ta.textContent) ta.textContent = V.quedan(q);
+      /* se marca que el contador lo prendimos NOSOTROS, para poder apagarlo al
+         terminar la mision sin pisarle el suyo al mundo */
+      if (!ta.classList.contains('on')){ ta.classList.add('on'); ta.dataset.auto = '1'; }
+    } else {
+      if (oT.dataset.orig){
+        oT.textContent = oT.dataset.orig;
+        delete oT.dataset.orig;
+      }
+      const ta = $('tarea');
+      if (ta.dataset.auto){ ta.classList.remove('on'); delete ta.dataset.auto; }
+    }
+  }
+  marca3d.position.set(p.x, H(p.x, p.z) + 6.5 + Math.sin(t0 * 2) * .5, p.z);
+  marca3d.rotation.y = t0 * 1.4;
+  marca3d.visible = !enDlg;
+  const cerca = d < (C.usar ? 7 : 10);
+  /* los capítulos automáticos también esperan a que la MISIÓN esté lista */
+  /* el capitulo automatico NO se dispara dentro del traslado: el dialogo congela
+     la fisica y te dejaria clavado a media mecanica. Se dispara al salirte. */
+  if (!C.usar && cerca && !enDlg && !TRINEO.modo && MISION.lista(cap)){
+    llegaObjetivo();
+    return;
+  }
+  const acc = accionUsable();
+  $('bUsar').classList.toggle('on', !!acc && !enDlg);
+  pistaAccion(acc);
+  const av = TRINEO.aviso(acc);
+  $('aviso').textContent = av;
+  $('aviso').classList.toggle('on', !!av && !enDlg);
+  if (window.__autoUsar && acc && acc.tipo === 'cap' && !enDlg) llegaObjetivo();
+}
+$('bUsar').addEventListener('pointerdown', e => { e.preventDefault(); usarAccion(); });
+$('bCorre').addEventListener('pointerdown', e => { e.preventDefault();
+  corre = !corre; $('bCorre').classList.toggle('on', corre); });
+$('bMenu').addEventListener('pointerdown', e => { e.preventDefault();
+  fase = 'menu'; $('menu').style.display = 'flex'; $('hud').classList.remove('on');
+  $('mJugar').textContent = Tx('denuevo');
+  const sv = cargar();
+  if (sv && sv.cap > 0){ $('mSeguir').style.display = 'block';
+    $('mCap').textContent = CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t; }
+});
+
+/* -------------------------- entrada táctil / teclado ----------------------- */
+/* CORRER se pinta en el boton de arriba: estos cinco no tienen el indicador
+   `#corriendo` que tienen los ocho nuevos, y la palanca necesita avisar de algun
+   modo que ya estas corriendo. */
+function marcaCorre(){
+  const e = document.getElementById('bCorre');
+  if (e) e.classList.toggle('on', !!corre);
+}
+
+/* ========================= JOYSTICK DIBUJADO =============================
+   Se dibuja en un canvas propio (no en el del juego) para no tocar el render:
+   solo se repinta cuando la palanca se mueve. El estilo lo pone cada mundo. */
+const JOY = { el: $('joy'), cv: null, g: null, x: 0, y: 0, act: false, id: -1,
+  aro: '#f0c088', pal: '#ffe6c4', glifo: '≈', trama: 'arena' };
+JOY.cv = JOY.el.querySelector('canvas'); JOY.g = JOY.cv.getContext('2d');
+function joyDibuja(){
+  const g = JOY.g, N = 300, c = N / 2, R = N * .42;
+  g.clearRect(0, 0, N, N);
+  /* el aro: doble trazo con la trama del mundo por dentro */
+  g.save();
+  g.beginPath(); g.arc(c, c, R, 0, 6.2832);
+  g.fillStyle = 'rgba(0,0,0,.34)'; g.fill();
+  g.clip();
+  joyTrama(g, N, c, R);
+  g.restore();
+  g.lineWidth = 6; g.strokeStyle = JOY.aro; g.globalAlpha = .78;
+  g.beginPath(); g.arc(c, c, R, 0, 6.2832); g.stroke();
+  g.lineWidth = 1.5; g.globalAlpha = .34;
+  g.beginPath(); g.arc(c, c, R - 12, 0, 6.2832); g.stroke();
+  g.globalAlpha = 1;
+  /* la marca de AUTO-CORRER arriba: se prende cuando la palanca llega */
+  const autoOn = JOY.act && -JOY.y > .80;
+  g.save();
+  g.globalAlpha = autoOn ? 1 : .3;
+  g.strokeStyle = autoOn ? JOY.pal : JOY.aro; g.lineWidth = autoOn ? 7 : 4;
+  g.beginPath(); g.arc(c, c, R - 3, -2.36, -0.78); g.stroke();
+  g.restore();
+  /* la palanca */
+  const kx = c + JOY.x * (R - 34), ky = c + JOY.y * (R - 34), r = N * .155;
+  g.beginPath(); g.arc(kx, ky + 4, r, 0, 6.2832);
+  g.fillStyle = 'rgba(0,0,0,.4)'; g.fill();
+  const grd = g.createRadialGradient(kx - r * .3, ky - r * .4, r * .1, kx, ky, r);
+  grd.addColorStop(0, JOY.pal); grd.addColorStop(1, JOY.aro);
+  g.beginPath(); g.arc(kx, ky, r, 0, 6.2832); g.fillStyle = grd; g.fill();
+  g.lineWidth = 2.5; g.strokeStyle = 'rgba(0,0,0,.45)'; g.stroke();
+  /* el glifo del mundo en la palanca */
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.font = '900 ' + Math.round(r * 1.05) + 'px system-ui';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(JOY.glifo, kx, ky + 1);
+}
+/* la TRAMA del fondo del aro: cada mundo tiene la suya */
+function joyTrama(g, N, c, R){
+  g.globalAlpha = .26; g.strokeStyle = JOY.aro; g.fillStyle = JOY.aro;
+  const T = JOY.trama;
+  if (T === 'arena' || T === 'viento'){                 /* rayas / rafagas */
+    g.lineWidth = T === 'viento' ? 2 : 3.5;
+    for (let i = -6; i <= 6; i++){
+      g.beginPath();
+      for (let k = 0; k <= 20; k++){
+        const x = c - R + (k / 20) * R * 2;
+        const y = c + i * 22 + Math.sin(k * .6 + i) * (T === 'viento' ? 9 : 4);
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  } else if (T === 'hoja'){                             /* nervaduras */
+    g.lineWidth = 2.5;
+    for (let i = 0; i < 9; i++){
+      const a = i / 9 * 6.2832;
+      g.beginPath(); g.moveTo(c, c);
+      g.quadraticCurveTo(c + Math.cos(a) * R * .5 - Math.sin(a) * 26,
+                         c + Math.sin(a) * R * .5 + Math.cos(a) * 26,
+                         c + Math.cos(a) * R, c + Math.sin(a) * R);
+      g.stroke();
+    }
+  } else if (T === 'lava'){                             /* grietas */
+    g.lineWidth = 3;
+    for (let i = 0; i < 7; i++){
+      const a = i / 7 * 6.2832;
+      g.beginPath(); g.moveTo(c, c);
+      let x = c, y = c;
+      for (let k = 0; k < 5; k++){
+        x += Math.cos(a + Math.sin(k * 2.3 + i) * .7) * R / 5;
+        y += Math.sin(a + Math.sin(k * 2.3 + i) * .7) * R / 5;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  } else if (T === 'junco'){                            /* burbujas */
+    for (let i = 0; i < 26; i++){
+      const a = i * 2.399, rr = R * Math.sqrt(i / 26) * .93;
+      g.beginPath(); g.arc(c + Math.cos(a) * rr, c + Math.sin(a) * rr,
+        3 + (i % 4) * 2.2, 0, 6.2832); g.fill();
+    }
+  } else if (T === 'roca' || T === 'marmol'){           /* estratos / venas */
+    g.lineWidth = T === 'marmol' ? 1.8 : 5;
+    for (let i = -5; i <= 5; i++){
+      g.beginPath();
+      for (let k = 0; k <= 24; k++){
+        const x = c - R + (k / 24) * R * 2;
+        const y = c + i * 25 + (T === 'marmol'
+          ? Math.sin(k * 1.1 + i * 2) * 14 : Math.sin(k * .35 + i) * 3);
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  } else {                                              /* anillos de tronco */
+    g.lineWidth = 2.4;
+    for (let i = 1; i <= 8; i++){
+      g.beginPath();
+      for (let k = 0; k <= 40; k++){
+        const a = k / 40 * 6.2832, rr = R * i / 8.6 * (1 + Math.sin(a * 3 + i) * .06);
+        const x = c + Math.cos(a) * rr, y = c + Math.sin(a) * rr;
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  }
+  g.globalAlpha = 1;
+}
+joyDibuja();
+{
+  const R = () => JOY.el.getBoundingClientRect();
+  const mueve = e => {
+    const b = R(), c = b.width / 2;
+    /* si la palanca esta oculta (modo PC) el rectangulo mide 0 y las divisiones
+       de abajo dan NaN, que se propaga a movV y deja al jugador clavado */
+    if (!(c > 0)) return;
+    let dx = (e.clientX - b.left - c) / (c * .78), dy = (e.clientY - b.top - c) / (c * .78);
+    const d = Math.hypot(dx, dy); if (d > 1){ dx /= d; dy /= d; }
+    JOY.x = dx; JOY.y = dy;
+    movV.x = dx; movV.y = dy;
+    /* AUTO-CORRER: palanca del todo hacia ARRIBA (y con poco desvio lateral) */
+    const arriba = -dy, lateral = Math.abs(dx);
+    corre = arriba > .80 && lateral < .62;
+    /* CORRER lo decide la palanca (o Shift): el boton de arriba solo se pinta */
+    marcaCorre();
+    joyDibuja();
+  };
+  JOY.el.addEventListener('pointerdown', e => {
+    e.preventDefault(); JOY.act = true; JOY.id = e.pointerId;
+    /* la captura del puntero no esta en todos los navegadores y tira si el
+       evento es sintetico: no puede tumbar al resto del control */
+    try { JOY.el.setPointerCapture(e.pointerId); } catch(e2){}
+    JOY.el.style.opacity = '1'; mueve(e);
+  });
+  JOY.el.addEventListener('pointermove', e => { if (JOY.act && e.pointerId === JOY.id) mueve(e); });
+  const suelta = e => {
+    if (!JOY.act || e.pointerId !== JOY.id) return;
+    JOY.act = false; JOY.id = -1; JOY.x = JOY.y = 0; movV.x = movV.y = 0;
+    corre = false;
+    marcaCorre();
+    JOY.el.style.opacity = '.9'; joyDibuja();
+  };
+  JOY.el.addEventListener('pointerup', suelta);
+  JOY.el.addEventListener('pointercancel', suelta);
+}
+JOY.aro = '#a8d8f0'; JOY.pal = '#e0f4ff'; JOY.glifo = '❄'; JOY.trama = 'marmol';
+joyDibuja();
+
+const cv = $('gl');
+cv.addEventListener('pointerdown', e => {
+  if (fase !== 'juego' || enDlg) return;
+  const x = e.clientX, y = e.clientY;
+  if (x < innerWidth * .5 && !DED.mov) DED.mov = { id: e.pointerId, x0: x, y0: y };
+  else if (!DED.mira) DED.mira = { id: e.pointerId, x, y };
+});
+cv.addEventListener('pointermove', e => {
+  if (DED.mov && DED.mov.id === e.pointerId){
+    const R = Math.max(34, innerHeight * .12);
+    const dx = e.clientX - DED.mov.x0, dy = e.clientY - DED.mov.y0;
+    const d = Math.hypot(dx, dy), k = d > R ? R / d : 1;
+    movV.x = dx * k / R; movV.y = dy * k / R;
+  } else if (DED.mira && DED.mira.id === e.pointerId){
+    yaw -= (e.clientX - DED.mira.x) * .005;
+    pitch = cl(pitch - (e.clientY - DED.mira.y) * .005, -1.2, 1.2);
+    DED.mira.x = e.clientX; DED.mira.y = e.clientY;
+  }
+});
+const sueltaDedo = e => {
+  if (DED.mov && DED.mov.id === e.pointerId){ DED.mov = null; movV.x = movV.y = 0; }
+  if (DED.mira && DED.mira.id === e.pointerId) DED.mira = null;
+};
+cv.addEventListener('pointerup', sueltaDedo);
+cv.addEventListener('pointercancel', sueltaDedo);
+addEventListener('keydown', e => {
+  const c = e.code;
+  if (c === 'KeyW') keyV.y = -1; if (c === 'KeyS') keyV.y = 1;
+  if (c === 'KeyA') keyV.x = -1; if (c === 'KeyD') keyV.x = 1;
+  if (c === 'ArrowLeft') keyL.x = -1; if (c === 'ArrowRight') keyL.x = 1;
+  if (c === 'ArrowUp') keyL.y = -1; if (c === 'ArrowDown') keyL.y = 1;
+  if (c === 'ShiftLeft') { corre = true; $('bCorre').classList.add('on'); }
+  if (c === 'KeyE') usarAccion();
+  if (c === 'Enter' && enDlg) $('dlgGo').onclick();
+});
+addEventListener('keyup', e => {
+  const c = e.code;
+  if (c === 'KeyW' || c === 'KeyS') keyV.y = 0;
+  if (c === 'KeyA' || c === 'KeyD') keyV.x = 0;
+  if (c === 'ArrowLeft' || c === 'ArrowRight') keyL.x = 0;
+  if (c === 'ArrowUp' || c === 'ArrowDown') keyL.y = 0;
+  if (c === 'ShiftLeft') { corre = false; $('bCorre').classList.remove('on'); }
+});
+
+/* -------- detección PC (mouse/teclado) + ayuda de controles al costado ----- */
+const PCH = {
+  es: { t: 'CONTROLES PC', mov: 'moverse', mir: 'mirar', cor: 'correr', usa: 'usar', dlg: 'seguir' , kEsp: 'Espacio', kEnt: 'Enter' },
+  en: { t: 'PC CONTROLS', mov: 'move', mir: 'look', cor: 'run', usa: 'use', dlg: 'next' , kEsp: 'Space', kEnt: 'Enter' },
+  pt: { t: 'CONTROLES PC', mov: 'mover', mir: 'olhar', cor: 'correr', usa: 'usar', dlg: 'seguir' , kEsp: 'Espa\u00e7o', kEnt: 'Enter' }
+};
+function pintaPCHelp(){
+  const d = PCH[LANG] || PCH.es;
+  $('pcHelp').innerHTML =
+    '<b>' + d.t + '</b>' +
+    '<div class="row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> ' + d.mov + '</div>' +
+    '<div class="row"><kbd>🖱</kbd> / <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> ' + d.mir + '</div>' +
+    '<div class="row"><kbd>Shift</kbd> ' + d.cor + ' · <kbd>E</kbd> ' + d.usa + '</div>' +
+    '<div class="row"><kbd>' + (d.kEnt || 'Enter') + '</kbd> ' + d.dlg + '</div>';
+}
+let esPC = false;
+function activaPC(){ if (esPC) return; esPC = true; document.body.classList.add('pc'); pintaPCHelp(); }
+function desactivaPC(){ if (!esPC) return; esPC = false; document.body.classList.remove('pc'); }
+addEventListener('keydown', e => {
+  if (/^(Key|Arrow|Shift|Enter|Space)/.test(e.code)) activaPC(); }, true);
+addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') activaPC(); }, true);
+addEventListener('touchstart', desactivaPC, { passive: true, capture: true });
+/* SIN TACTIL: se marca UNA vez, mirando de que es capaz el aparato y no con que se lo
+   esta usando ahora. Es lo que decide si se dibuja la palanca y el boton de salto: sin
+   esta marca, un PC de escritorio se quedaba con los dos encima del paisaje. */
+try {
+  if (!('ontouchstart' in window) && !(navigator.maxTouchPoints > 0))
+    document.body.classList.add('sinTactil');
+} catch(e){ }
+
+try {
+  if (window.matchMedia && matchMedia('(pointer:fine)').matches
+      && !matchMedia('(pointer:coarse)').matches) activaPC();
+} catch(e){}
+
+/* ------------------------ resolución adaptativa ---------------------------- */
+/* som = lado del mapa de sombra (0 = sin sombras, para la gama baja) */
+const GFXQ = { b: { dpr: .7, fogK: .78, som: 0 },
+               m: { dpr: 1.15, fogK: 1, som: 1024 },
+               a: { dpr: 2, fogK: 1.25, som: 2048 } };
+let SOMBRAS = true;
+const FOCO = { x: 0, z: 0 };
+let GFX = 'm';
+try { GFX = localStorage.getItem('hielo_gfx') || 'm'; } catch(e){}
+if (!GFXQ[GFX]) GFX = 'm';
+let rs = 1, rsVotos = 0, tRS = 0, fps = 60;
+function aplicaRS(){
+  const dpr = Math.min(window.devicePixelRatio || 1, GFXQ[GFX].dpr);
+  ren.setPixelRatio(dpr * rs);
+  ren.setSize(innerWidth, innerHeight, false);
+  cam.aspect = innerWidth / innerHeight;
+  cam.updateProjectionMatrix();
+}
+addEventListener('resize', aplicaRS);
+aplicaRS();
+function rsTick(dt){
+  tRS += dt;
+  if (tRS < .8) return;
+  tRS = 0;
+  const quiere = fps < 34 ? -1 : (fps > 55 ? 1 : 0);
+  if (quiere === 0 || (rsVotos !== 0 && Math.sign(rsVotos) !== quiere)){ rsVotos = 0; return; }
+  rsVotos += quiere;
+  if (Math.abs(rsVotos) < 2) return;
+  rsVotos = 0;
+  if (quiere < 0 && rs > .5){ rs = Math.max(.5, rs - .1); aplicaRS(); }
+  else if (quiere > 0 && rs < 1){ rs = Math.min(1, rs + .08); aplicaRS(); }
+}
+
+/* ================================ BUCLE ==================================== */
+/* SELLO DE BUILD. La linea de abajo dice con que version estas jugando, y es
+   lo unico que distingue «no entro el cambio» de «el navegador te dio la copia
+   vieja». Los ocho mundos nuevos lo tenian y estos cinco no. */
+const BUILD = '7b20e89';
+let t0 = 0, tPrev = performance.now(), msAcum = 0, nCuadros = 0;
+function bucle(t){
+  requestAnimationFrame(bucle);
+  const dt = Math.min(.05, (t - tPrev) / 1000) || .016;
+  tPrev = t; t0 += dt;
+  msAcum += dt; nCuadros++;
+  if (msAcum > .5){ fps = fps * .3 + (nCuadros / msAcum) * .7; msAcum = 0; nCuadros = 0;
+    $('fps').textContent = fps.toFixed(0) + ' fps · ' + (rs * 100 | 0) + '% · ' +
+      ren.info.render.calls + ' dib · ' + (ren.info.render.triangles / 1000).toFixed(0) + 'k tri' + ' · b' + BUILD; }
+  if (fase === 'cine'){
+    pasoCine(dt);
+    pasoLuz(dt);
+    npcTick(dt);
+    MISION.tick(dt);
+    FOCO.x = cam.position.x; FOCO.z = cam.position.z;
+  } else if (fase !== 'juego'){
+    /* MENÚ: el valle se ve DETRÁS, con una cámara que orbita despacio entre la
+       cabaña y el lago (el pedido: que el fondo del menú sea el mapa) */
+    const cx2 = (POI.campamento.x + POI.crater.x) / 2, cz2 = (POI.campamento.z + POI.crater.z) / 2;
+    const a = t0 * .045;
+    cam.position.set(cx2 + Math.cos(a) * 240, 64 + Math.sin(t0 * .1) * 10,
+                     cz2 + Math.sin(a) * 240);
+    cam.lookAt(cx2, 0, cz2);
+    cam.fov = 62; cam.updateProjectionMatrix();
+    pasoLuz(dt);
+    FOCO.x = cx2; FOCO.z = cz2;
+  } else if (fase === 'juego'){ FOCO.x = px; FOCO.z = pz; }
+  /* el sol (y su caja de sombra) viajan con el foco de la cámara; con el sol
+     casi acostado la sombra direccional se apaga (rayos horizontales barren
+     el mapa entero y el resultado es puro artefacto, no una sombra) */
+  sol.target.position.set(FOCO.x, 0, FOCO.z);
+  sol.position.set(FOCO.x + SOLD.x * 420, SOLD.y * 420, FOCO.z + SOLD.z * 420);
+  sol.castShadow = SOMBRAS && SOLD.y > .12;
+  glare.position.set(cam.position.x + SOLD.x * 950, cam.position.y + SOLD.y * 950,
+                     cam.position.z + SOLD.z * 950);
+  glare.material.opacity = cl((sol.intensity - .6) / 1.6, 0, 1);
+  if (fase === 'juego'){
+    if (!enDlg) fisica(dt);
+    pasoLuz(dt);
+    pasoObjetivo();
+    rsTick(dt);
+    ambTick(dt);
+    npcTick(dt);
+    MISION.tick(dt);
+    /* luciérnagas ondulando */
+    if (luci.visible){
+      const P = luci.geometry.attributes.position;
+      for (let i = 0; i < P.count; i++){
+        P.array[i*3+1] = luci0[i*3+1] + Math.sin(t0 * .9 + i * 1.7) * .5;
+      }
+      P.needsUpdate = true;
+    }
+  }
+  cuerpoTick(dt);
+  /* los PASOS suenan mientras caminás, más rápido al correr */
+  if (AMB.pasoGain){
+    const cam2 = fase === 'juego' ? Math.min(1, Math.hypot(pvx, pvz) / VEL) : 0;
+    AMB.pasoGain.gain.value = cam2 * (corre ? .5 : .34);
+    if (AMB.pasoSrc) AMB.pasoSrc.playbackRate.value = (MUNDO_AUDIO.pasoRate || 1.4) * (corre ? 1.5 : 1);
+  }
+  pasoTolvas(t0);
+  pasoNieve(dt);
+  if (beaconMat) beaconMat.opacity = .35 + .65 * (.5 + .5 * Math.sin(t0 * 3.6));
+  /* la aurora despierta con la noche */
+  AURORA_MAT.uniforms.uT.value = t0;
+  /* las lunas y la Tierra solo viven de noche, pegadas al cielo de la cámara */
+  const nocheK = cl(1 - (SOLD.y * 420) / 160, 0, 1);
+  /* la aurora es un fenómeno NOCTURNO: de día, cero (sobre cielo claro
+     hasta el aditivo más tenue dibuja los bordes del plano) */
+  AURORA_MAT.uniforms.uOp.value = nocheK * nocheK * .9;
+  DOMO.position.copy(cam.position);
+  DOMO.material.color.setScalar(scene.backgroundIntensity);
+  for (const lu of LUNAS){
+    lu.position.set(cam.position.x + lu.userData.dir.x * 900,
+      cam.position.y + lu.userData.dir.y * 900,
+      cam.position.z + lu.userData.dir.z * 900);
+    lu.material.opacity = nocheK * .9;
+  }
+  if (fase === 'juego') ponCam();
+  ren.render(scene, cam);
+}
+/* el sello de la portada: se pinta una vez, al arrancar */
+{ const e = document.getElementById('mSello'); if (e) e.textContent = 'build b' + BUILD; }
+
+requestAnimationFrame(bucle);
+
+/* ================================ MENÚ ===================================== */
+function entrar(desde){
+  fase = 'juego';
+  ambienteOn();
+  cargarAudioReal();
+  $('menu').style.display = 'none';
+  $('hud').classList.add('on');
+  try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch (e) {}
+  try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); } catch (e) {}
+  if (desde === 0){
+    px = POI.inicio.x; pz = POI.inicio.z; yaw = 0; pitch = -.03;   /* mirando al valle, no al borde */
+    stats.t = 0; stats.dist = 0;
+    ponCap(0, true);
+    /* la CINE DE APERTURA: el mundo primero, el destino después, y la cámara
+       baja hasta tus ojos. Al final, la primera página de la historia. */
+    const o = POI[CAPS[0].obj], oy = H(o.x, o.z), py = H(px, pz);
+    cinematica([
+      { de: [o.x + 70, oy + 60, o.z + 90], a: [o.x - 34, oy + 22, o.z + 38],
+        mira: [o.x, oy + 4, o.z], dur: 3.6, txt: Tx('sub') },
+      { de: [px + 34, py + 34, pz + 64], a: [px, py + 2.4, pz + 7],
+        mira: [px, py + 1.6, pz], dur: 3.4, txt: CAPS[0].objT }
+    ], () => dialogo(Tx('introT'), Tx('intro'), null));
+  } else {
+    const sv = cargar();
+    const c2 = sv ? sv.cap : 0;
+    if (sv){ stats.t = sv.t || 0; stats.dist = sv.dist || 0; }
+    const p = POI[CAPS[c2].obj === 'campamento' && c2 === 0 ? 'inicio' : CAPS[Math.max(0, c2 - 1)].obj];
+    px = p.x + 8; pz = p.z + 8;
+    ponCap(c2, true);
+  }
+}
+/* ---------- idioma ---------- */
+function aplicaIdioma(){
+  CAPS = L[LANG].caps;
+  document.querySelector('#menu .sub').textContent = Tx('sub');
+  if (!/OTRA|AGAIN|DE NOVO|DE NUEVO|OVER|RECOME/.test($('mJugar').textContent))
+    $('mJugar').textContent = Tx('empezar');
+  $('mSeguir').textContent = Tx('seguir');
+  $('tLang').textContent = Tx('idioma');
+  $('tGfx').textContent = Tx('graficos');
+  const g = { b: 'g_b', m: 'g_m', a: 'g_a' };
+  document.querySelectorAll('#fGfx .chip').forEach(ch => ch.textContent = Tx(g[ch.dataset.g]));
+  $('bCorre').textContent = Tx('correr');
+  $('bMenu').textContent = Tx('menu');
+  $('bUsar').textContent = Tx('usar');
+  $('dlgGo').textContent = Tx('dlgGo');
+  if (esPC) pintaPCHelp();
+  document.querySelectorAll('#fLang .chip').forEach(ch =>
+    ch.classList.toggle('on', ch.dataset.l === LANG));
+  if (fase === 'juego') ponCap(cap, true);
+  const sv = cargar();
+  if (sv && sv.cap > 0 && fase === 'menu')
+    $('mCap').textContent = CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t;
+}
+function setLang(l){
+  if (!L[l]) return;
+  LANG = l;
+  try { localStorage.setItem('hielo_lang2', l); } catch(e){}
+  aplicaIdioma();
+}
+document.querySelectorAll('#fLang .chip').forEach(ch =>
+  ch.addEventListener('pointerdown', e => { e.preventDefault(); setLang(ch.dataset.l); }));
+
+/* ---------- calidad gráfica: tope de resolución y alcance de la niebla ------ */
+function setGfx(g){
+  if (!GFXQ[g]) return;
+  GFX = g;
+  try { localStorage.setItem('hielo_gfx', g); } catch(e){}
+  document.querySelectorAll('#fGfx .chip').forEach(ch =>
+    ch.classList.toggle('on', ch.dataset.g === GFX));
+  rs = 1; aplicaRS();
+  /* sombras por calidad: apagadas en BAJOS, 1k en MEDIOS, 2k en ALTOS.
+     Cambiar el tamaño exige tirar el mapa viejo para que three lo recree. */
+  const s = GFXQ[g].som;
+  SOMBRAS = s > 0;
+  if (s > 0 && sol.shadow.mapSize.x !== s){
+    sol.shadow.mapSize.set(s, s);
+    if (sol.shadow.map){ sol.shadow.map.dispose(); sol.shadow.map = null; }
+  }
+  luzDe = mezclaLuz(); luzA = LUZCAP[cap]; luzK = 0;   /* re-apunta la niebla */
+}
+document.querySelectorAll('#fGfx .chip').forEach(ch =>
+  ch.addEventListener('pointerdown', e => { e.preventDefault(); setGfx(ch.dataset.g); }));
+
+{
+  const sv = cargar();
+  if (sv && sv.cap > 0){
+    $('mSeguir').style.display = 'block';
+    $('mCap').textContent = sv ? (CAPS[sv.cap].n + ' — ' + CAPS[sv.cap].t) : '';
+  }
+}
+aplicaIdioma();
+setGfx(GFX);
+if (MUNDO_MENU) MUNDO_MENU.split(/\s+/).forEach(c => c && $('menu').classList.add(c));
+$('mJugar').onclick = () => entrar(0);
+$('mSeguir').onclick = () => entrar(1);
+$('cargando').style.display = 'none';
+
+/* =========================== GANCHOS DE PRUEBA ============================= */
+window.__S = {
+  T, scene, ren, cam, POI, CAPS, H,
+  get(){ return { fase, cap, enDlg, px: +px.toFixed(1), pz: +pz.toFixed(1),
+    yaw: +yaw.toFixed(2), fps: +fps.toFixed(1), rs,
+    dib: ren.info.render.calls, tri: ren.info.render.triangles,
+    dist: Math.round(stats.dist), obj: CAPS[cap].obj,
+    dObj: Math.round(Math.hypot(px - POI[CAPS[cap].obj].x, pz - POI[CAPS[cap].obj].z)),
+    solY: +sol.position.y.toFixed(0), bg: +scene.backgroundIntensity.toFixed(2),
+    luci: luci.visible, usar: $('bUsar').classList.contains('on'),
+    save: (() => { try { return JSON.parse(localStorage.getItem('hielo1') || 'null'); } catch(e){ return null; } })() };
+  },
+  entrar, tp(x, z){ px = x; pz = z; },
+  lang(){ return LANG; }, setLang, gfx(){ return GFX; }, setGfx,
+  amb(){ return AMB.ctx ? { estado: AMB.ctx.state, master: AMB.master.gain.value,
+    viento: +AMB.viento.gain.value.toFixed(3), pos: +AMB.pos.gain.value.toFixed(3),
+    noche: +AMB.noche.gain.value.toFixed(3) } : null; },
+  pr(){ return ren.getPixelRatio(); },
+  sombras(){ return { on: SOMBRAS, sol: sol.castShadow, mapa: sol.shadow.mapSize.x,
+    tipo: ren.shadowMap.type, tone: ren.toneMapping, exp: +ren.toneMappingExposure.toFixed(2),
+    terr: terrChunks[0].receiveShadow, solY: +SOLD.y.toFixed(2),
+    foco: +focoCasa.intensity.toFixed(1) }; },
+  sendaPts(){ return SENDA_PTS; }, arboles(){ return ARB; },
+  partes(){ return window.__PARTES || 0; },
+  cristales(){ return window.__CRISTALES || 0; },
+  rover(){ return window.__ROVER || 0; },
+  props(){ return window.__PROPS || 0; },
+  bodyDur(){ return CUERPO.accion ? CUERPO.accion.getClip().duration : 0; },
+  bodyTime(t){ if (CUERPO.accion){ CUERPO.mixer.timeScale = 0; CUERPO.accion.time = t;
+    CUERPO.mixer.update(0); if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02); } },
+  armCal(outX, fwdZ, swing, forebend){ if (!CUERPO.glb || !CUERPO.arms) return;
+    CUERPO.mixer && (CUERPO.mixer.timeScale = 0); CUERPO.mixer && CUERPO.mixer.update(0);
+    apuntarBrazos(CUERPO.arms, swing || 0, outX, fwdZ, forebend);
+    if (CUERPO.headBone) CUERPO.headBone.scale.setScalar(0.02); },
+  /* la palanca a mano y el sitio del traslado, para probarlo sin un dedo */
+  palanca(x, y){ movV.x = x; movV.y = y; },
+  trineo(){ return TRINEO.est(); },
+  trineoIr(k){ const P = TRINEO.PUE[k]; if (!P) return null;
+    px = P.gx != null ? P.gx : P.x; pz = P.gz != null ? P.gz : P.z;
+    return TRINEO.est(); },
+  mira(y, p){ yaw = y; if (p != null) pitch = p; },
+  dlgOk(){ if (enDlg) $('dlgGo').onclick(); },
+  usar(){ usarAccion(); },
+  cap(n){ ponCap(n, true); },
+  corre(v){ corre = !!v; },
+  cine(){ return { on: CINE.on, paso: CINE.i }; },
+  cineSkip(){ terminaCine(); },
+  npcs(){ return NPCS.map(x => ({ nombre: x.nombre, clave: x.clave || null,
+    sigue: !!x.sigue, x: +x.fig.position.x.toFixed(1), z: +x.fig.position.z.toFixed(1) })); },
+  items(){ return ITEMS.filter(i => i.activo).map(i => ({ x: +i.x.toFixed(1), z: +i.z.toFixed(1) })); },
+  mision(){ return MISION.estado(); },
+  med(){ return { on: MED.on, v: +MED.v.toFixed(3) }; },
+  medSet(v){ medPon(v); },
+  accion(){ const a = accionUsable(); return a ? a.tipo : null; },
+  cuerpo(){ return { visible: CUERPO.root.visible, vm: CUERPO.vm.visible,
+    pierna: +CUERPO.pD.rotation.x.toFixed(3), brazoY: +CUERPO.bD.position.y.toFixed(3) }; },
+  audio(){ return { amb: !!AMB.ambReal, mus: !!AMB.musGain, paso: !!AMB.pasoGain,
+    pasoVol: AMB.pasoGain ? +AMB.pasoGain.gain.value.toFixed(2) : null }; },
+  modelos(){ let sk = 0, mx = MIXERS.length;
+    scene.traverse(o => { if (o.isSkinnedMesh) sk++; });
+    return { skinned: sk, mixers: mx, glb: !!GLTF,
+      cargados: NPCS.filter(n => n.cargado).map(n => n.clave || n.nombre) }; },
+  cuerpoGLB(){ return CUERPO.glb ? { cargado: true, mixer: !!CUERPO.mixer,
+    cabeza: !!CUERPO.headBone } : null; },
+  luzYa(){ luzK = .999; pasoLuz(1); },
+  pix(){
+    ren.render(scene, cam);
+    const gl = ren.getContext();
+    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    const b = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b);
+    const at = (fx, fy) => { const x = Math.floor(fx*(w-1)), y = Math.floor((1-fy)*(h-1));
+      const i = (y*w + x)*4; return [b[i], b[i+1], b[i+2]]; };
+    const set = new Set(); let neg = 0, n = 0;
+    for (let i = 0; i < b.length; i += 4*41){
+      set.add((b[i]>>4)+','+(b[i+1]>>4)+','+(b[i+2]>>4));
+      if (b[i]+b[i+1]+b[i+2] < 14) neg++;
+      n++;
+    }
+    return { w, h, colores: set.size, negro: +(neg/n).toFixed(3),
+      arriba: at(.5,.08), centro: at(.5,.5), abajo: at(.5,.92) };
+  }
+};
+})().catch(e => {
+  document.body.insertAdjacentHTML('beforeend',
+    '<pre style="position:fixed;left:8px;top:8px;z-index:99;color:#f88;background:#000c;' +
+    'padding:10px;max-width:92vw;white-space:pre-wrap">SE ROMPIÓ:\n' +
+    ((e && (e.stack || e.message)) || e) + '</pre>');
+  window.__SERR = '' + (e && (e.stack || e.message) || e);
+});
+</script>
+</body>
+</html>
