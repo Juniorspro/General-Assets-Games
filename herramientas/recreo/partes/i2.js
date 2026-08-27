@@ -133,6 +133,7 @@ function empezar(){
   MANO.cand=-1; MANO.votos=0; MANO.dedos=0; padPedido=-1;
   document.body.classList.remove('clase');
   pintarLibros(); verPantalla('juego');
+  musicaNivel(0); musicaEmpezar();
   siguienteEscena();
 }
 function siguienteEscena(){
@@ -146,6 +147,7 @@ function siguienteEscena(){
      para la misma cosa. Al jugador no le importa como se llaman las aulas en el plano: le importa
      cuantas le faltan. */
   decir(TX(E.txt, {a:(E.aula? TOUR.indexOf(E.aula)+1 : 1), t:TOUR.length}));
+  if(E.voz) hablar(E.voz, 0.9);
   document.body.classList.toggle('esperando', !!E.espera);
   if(E.espera) pintarAro(0, null, '');
   if(E.viaje!=null){
@@ -188,15 +190,15 @@ function siguienteEscena(){
     aulaPrev=0;
   }
   bichosCerrado=false;
-  /* si quedo algun bicho de la tanda anterior, se apaga: un bicho suelto adentro de un aula es un
-     bicho que nadie puede reventar y una escena que no termina nunca */
-  if(!E.bichos && bichosVivos>0) bichosApagar();
-  if(!E.bichos) bichosMira=null;
-  if(E.bichos){
+  /* si quedo algo de la tanda anterior, se apaga: un blanco suelto adentro de un aula es un blanco
+     que nadie puede pinzar y una escena que no termina nunca */
+  if(!E.act && bichosVivos>0) bichosApagar();
+  if(!E.act) bichosMira=null;
+  if(E.act){
     const fin = (restoRuta && restoRuta.length)? cel2(restoRuta[restoRuta.length-1]) : null;
     bichosMira = fin;
     const rumbo = fin? Math.atan2(fin[0]-cam.x, fin[1]-cam.z) : cam.giro;
-    bichosSoltar(E.bichos, rumbo);
+    actSoltar(E.tipo, E.act, rumbo);
   }
   if(E.puerta!=null){
     const p=puertaDe(E.puerta);
@@ -205,6 +207,10 @@ function siguienteEscena(){
   if(E.clase!=null){
     const n=E.clase, S=AULA_SITIO[n];
     aulaN=n; aulaIdx=TOUR.indexOf(n); aulaK=0; aulaPrev=n;
+    /* CUATRO ESCALONES EN OCHO AULAS: el bajo solo, despues el acorde, despues la melodia y al final
+       el charles. Es el mismo tema todo el juego —cambiarlo por otro cada aula seria empezar de cero
+       ocho veces— pero se va poblando, y eso se siente como que la escuela aprieta. */
+    musicaNivel(Math.floor(aulaIdx/2));
     cuenta=null; bloqueo=false;              // por si se entro de una prueba con una cuenta abierta
     LIBROS[0].g.visible=false;
     document.body.classList.add('clase');
@@ -223,7 +229,7 @@ function siguienteEscena(){
     PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
     profeRiel=null;
     pintarLibros();
-  } else if(!E.bichos){
+  } else if(!E.act){
     document.body.classList.remove('clase');
   }
 }
@@ -257,7 +263,7 @@ function contestar(n){
   bloqueo=true;
   if(n===cuenta.res){
     aciertos++; libros++; aulaK++;
-    avisar(TX('bien'), 1.0, '#2ecc0f'); son('bien');
+    avisar(TX('bien'), 1.0, '#2ecc0f'); son('bien'); hablar('bien', 0.85);
     decir(TX('dBien'));
     pintarLibros();
     const l=LIBROS[0];
@@ -318,6 +324,9 @@ function gritoTick(dt){
   PROFE.at+=dt;
   if(gritoT<=0){
     gritoT=0;
+    /* la risa cae DESPUES del grito, ya sobre la pantalla de muerte: el grito es el susto y la risa
+       es la burla, y encimadas se pisan */
+    hablar('risa', 0.95);
     document.body.classList.remove('grito');
     document.getElementById('muereT').textContent=TX('muereT');
     document.getElementById('muereS').textContent=TX('muereS',{a:aulaIdx+1});
@@ -351,6 +360,7 @@ function terminarClase(){
 }
 function ganar(){
   terminado=1; jugando=false;
+  musicaParar(1.4);
   document.getElementById('finT').textContent=TX('finT');
   document.getElementById('finS').textContent=TX('finS',{n:aciertos,t:TOTAL_CUENTAS});
   verPantalla('fin');
@@ -386,7 +396,7 @@ const BICHOS=[], ESQ=[];
 const BICHO_R=0.105;          // radio del blanco, en fraccion del ancho del marco
 const BICHO_CERCA=0.95;       // a esta distancia te muerde
 const _bm=new THREE.Matrix4(), _bv=new THREE.Vector3(), _bq=new THREE.Quaternion();
-const _be=new THREE.Euler(), _bs=new THREE.Vector3(1,1,1);
+const _be=new THREE.Euler(), _bs=new THREE.Vector3(1,1,1), _bc=new THREE.Color();
 /* LA CAMARA SE SINCRONIZA ANTES DE PROYECTAR. `camara` solo se acomoda al dibujar, asi que dentro
    del paso fijo tiene la posicion del cuadro anterior — y el auto-jugador, que corre sin dibujar ni
    un cuadro, la tenia con la posicion del MENU: los bichos se proyectaban a cualquier lado y no se
@@ -426,23 +436,45 @@ function bichosSoltar(n, rumbo){
   pintarLibros();
 }
 function bichosApagar(){
-  BICHOS.length=0; ESQ.length=0; bichosVivos=0;
+  BICHOS.length=0; ESQ.length=0; TIZAS.length=0; CASILL.length=0;
+  bichosVivos=0; casillBueno=-1;
   bichoMalla.visible=false; bichoOjos.visible=false; esqMalla.visible=false;
+  tizaMalla.visible=false; casillMalla.visible=false;
   document.body.classList.remove('bichos');
   pintarLibros();
 }
+/* UNA SOLA PUERTA PARA LAS TRES. El guion dice el tipo y aca se reparte; asi el resto del codigo
+   —soltar, terminar, apagar, contar— no sabe cuantas actividades hay ni le importa, y agregar una
+   cuarta es una linea en esta tabla y otra en TRAMOS. */
+function actSoltar(tipo, n, rumbo){
+  /* SIEMPRE SE APAGA LO ANTERIOR PRIMERO. En la partida normal la tanda anterior ya se apago al
+     terminar, pero apoyarse en eso deja un blanco vivo de la actividad anterior en cuanto algo
+     entra a una escena de actividad por otro camino —una prueba, un reintento—: se vieron dos
+     bichos y tres tizas contando para el mismo contador, o sea una escena que pedia cinco. */
+  bichosApagar();
+  if(tipo==='tizas') tizasSoltar(n, rumbo);
+  else if(tipo==='casilleros') casillSoltar(n, rumbo);
+  else bichosSoltar(n, rumbo);
+}
+function actTick(dt){ bichosTick(dt); tizasTick(dt); casillTick(dt); }
+function actDibujar(){ bichosDibujar(); tizasDibujar(); casillDibujar(); }
 /* UN ESTALLIDO SON DOS COSAS: las esquirlas que vuelan Y el bicho que desaparece en el mismo cuadro.
    Con las esquirlas solas se ve un bicho que sigue ahi con basura alrededor. */
-function bichoReventar(b){
-  b.viva=false;
-  bichosVivos=Math.max(0, bichosVivos-1);
-  for(let k=0;k<9 && ESQ.length<ESQ_MAX;k++){
+/* las esquirlas las usan las tres actividades: un bicho que revienta, una tiza que se agarra y un
+   casillero que se abre tiran lo mismo */
+function esquirlasSoltar(x,y,z,n){
+  for(let k=0;k<(n||9) && ESQ.length<ESQ_MAX;k++){
     const a=Math.random()*6.283, e=Math.random()*1.4-0.5;
     const v=1.6+Math.random()*1.5;
-    ESQ.push({ x:b.x, y:b.y, z:b.z, t:0.55,
+    ESQ.push({ x, y, z, t:0.55,
                vx:Math.cos(a)*Math.cos(e)*v, vy:Math.sin(e)*v+1.4, vz:Math.sin(a)*Math.cos(e)*v,
                gx:Math.random()*6.28, gy:Math.random()*6.28 });
   }
+}
+function bichoReventar(b){
+  b.viva=false;
+  bichosVivos=Math.max(0, bichosVivos-1);
+  esquirlasSoltar(b.x, b.y, b.z);
   son('revienta');
   pintarLibros();
 }
@@ -483,24 +515,13 @@ function bichosTick(dt){
     }
   }
   /* ---- lo que mata a un bicho: una pinza nueva, o un toque ---- */
-  const golpes=[];
-  if(MANO.on){ for(const p of MANO.pinzas) if(p.nueva) golpes.push(p); }
-  while(TOQUES.length) golpes.push(TOQUES.shift());
+  const golpes=golpesJuntar();
   if(!golpes.length) return;
-  const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
-  const rad=BICHO_R*W;
   for(const g of golpes){
-    let mejor=null, mejorD=rad;
-    for(const b of BICHOS){
-      if(!b.viva) continue;
-      const s=aPantalla(b.x, b.y, b.z);
-      if(!s.delante) continue;
-      const dd=Math.hypot((s.x-g.x)*W, (s.y-g.y)*H);
-      if(dd<mejorD){ mejorD=dd; mejor=b; }
-    }
     /* UNA PINZA MATA UN BICHO Y NO TODOS LOS QUE TOQUE: se elige el mas cercano al dedo. Con "todos
        los que esten dentro del radio" una pinza en el medio de un grupo limpiaba tres de una. */
-    if(mejor) bichoReventar(mejor);
+    const k=golpeEnLista(g, BICHOS, b=>b.viva, b=>[b.x, b.y, b.z]);
+    if(k>=0) bichoReventar(BICHOS[k]);
   }
 }
 function bichosDibujar(){
@@ -546,6 +567,164 @@ function bichosDibujar(){
   }
 }
 
+/* =========================================================================================
+   TIZAS Y CASILLEROS
+   Las dos comparten con los bichos el mismo golpe —una pinza nueva o un toque, convertidos a
+   fraccion del marco— asi que lo unico propio de cada una es como se mueve el blanco y como se
+   pierde. Reusar `golpesJuntar()` no es ahorro de lineas: es lo que garantiza que apuntar se sienta
+   igual en las tres, que es lo que el jugador aprendio en la primera.
+   ========================================================================================= */
+const TIZAS=[], CASILL=[];
+let casillBueno=-1, casillT=0;
+/* los golpes de este cuadro, en fraccion del marco: pinzas nuevas de cualquier mano, y toques */
+function golpesJuntar(){
+  const g=[];
+  if(MANO.on){ for(const p of MANO.pinzas) if(p.nueva) g.push(p); }
+  while(TOQUES.length) g.push(TOQUES.shift());
+  return g;
+}
+/* el blanco mas cercano al dedo, dentro del radio. Devuelve el indice o -1. */
+function golpeEnLista(g, lista, vivo, pos){
+  const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+  let mejor=-1, mejorD=BICHO_R*W;
+  for(let k=0;k<lista.length;k++){
+    if(!vivo(lista[k])) continue;
+    const p=pos(lista[k]);
+    const s=aPantalla(p[0], p[1], p[2]);
+    if(!s.delante) continue;
+    const d=Math.hypot((s.x-g.x)*W, (s.y-g.y)*H);
+    if(d<mejorD){ mejorD=d; mejor=k; }
+  }
+  return mejor;
+}
+
+/* ---------- TIZAS: caen y hay que agarrarlas antes de que toquen el piso ---------- */
+function tizasSoltar(n, rumbo){
+  TIZAS.length=0;
+  const g=(rumbo!=null)? rumbo : cam.giro;
+  const dx=Math.sin(g), dz=Math.cos(g), px=-dz, pz=dx;
+  for(let k=0;k<n && k<TIZAS_MAX;k++){
+    const d=2.1+((k*0.53)%1.5);
+    const lat=(((k%2)?1:-1)*(0.28+((k*0.37)%0.95)));
+    TIZAS.push({ x:cam.x+dx*d+px*lat, z:cam.z+dz*d+pz*lat,
+                 /* SALEN ESCALONADAS EN EL TIEMPO Y NO TODAS JUNTAS: siete tizas cayendo a la vez
+                    son una pared de tizas, y no hay dos manos que alcancen. El retardo las convierte
+                    en una fila, que es lo que se puede atender. */
+                 espera:k*0.55, y:2.9, vy:0, viva:true, giro:k*1.3 });
+  }
+  bichosVivos=n; document.body.classList.add('bichos'); son('bicho'); pintarLibros();
+}
+function tizasTick(dt){
+  if(!TIZAS.length) return;
+  for(const z of TIZAS){
+    if(!z.viva) continue;
+    if(z.espera>0){ z.espera-=dt; continue; }
+    /* 3,4 Y NO 9,8 NI 6,2. Con 6,2 la tiza tarda 0,96 s en caer los 2,84 m, y ese es TODO el tiempo
+       que hay para llevar la mano y cerrar la pinza — con el retardo de la deteccion no alcanza. Con
+       3,4 son 1,29 s. No es gravedad de verdad y no importa: importa que se pueda agarrar. */
+    z.vy-=3.4*dt; z.y+=z.vy*dt; z.giro+=dt*3.1;
+    if(z.y<=0.06){
+      /* SE ROMPE Y VUELVE A SALIR, no te mata. La muerte de este juego es una cuenta mal. */
+      z.y=0.06; son('muerde'); avisar(TX('mal'), 0.45, '#c0392b');
+      z.y=2.9; z.vy=0; z.espera=0.5+Math.random()*0.6;
+    }
+  }
+  const golpes=golpesJuntar();
+  for(const g of golpes){
+    const k=golpeEnLista(g, TIZAS, z=>z.viva && z.espera<=0, z=>[z.x, z.y, z.z]);
+    if(k>=0){ TIZAS[k].viva=false; bichosVivos=Math.max(0,bichosVivos-1);
+              esquirlasSoltar(TIZAS[k].x, TIZAS[k].y, TIZAS[k].z); son('revienta'); pintarLibros(); }
+  }
+}
+function tizasDibujar(){
+  const hay=TIZAS.some(z=>z.viva);
+  tizaMalla.visible=hay;
+  if(!hay) return;
+  let k=0;
+  for(const z of TIZAS){
+    if(!z.viva || k>=TIZAS_MAX) continue;
+    if(z.espera>0){ _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+                    tizaMalla.setMatrixAt(k++, _bm); continue; }
+    _be.set(z.giro*0.7, z.giro, z.giro*0.4); _bq.setFromEuler(_be);
+    _bm.compose(_bv.set(z.x, z.y, z.z), _bq, _bs.set(1,1,1));
+    tizaMalla.setMatrixAt(k++, _bm);
+  }
+  for(let q=k;q<TIZAS_MAX;q++){
+    _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+    tizaMalla.setMatrixAt(q, _bm);
+  }
+  tizaMalla.instanceMatrix.needsUpdate=true;
+}
+
+/* ---------- CASILLEROS: tiembla uno y hay que abrir ESE ---------- */
+function casillSoltar(n, rumbo){
+  CASILL.length=0;
+  const g=(rumbo!=null)? rumbo : cam.giro;
+  const dx=Math.sin(g), dz=Math.cos(g), px=-dz, pz=dx;
+  /* en abanico y todos a la misma distancia: la gracia es ELEGIR, no alcanzar */
+  for(let k=0;k<CASILL_N;k++){
+    const lat=(k-(CASILL_N-1)/2)*0.76;
+    const d=4.4+Math.abs(lat)*0.22;
+    CASILL.push({ x:cam.x+dx*d+px*lat, z:cam.z+dz*d+pz*lat, y:0.80, abierto:false, sac:0 });
+  }
+  bichosVivos=n; casillT=0; casillBueno=-1;
+  document.body.classList.add('bichos'); pintarLibros();
+}
+function casillElegir(){
+  const libres=[];
+  for(let k=0;k<CASILL.length;k++) if(!CASILL[k].abierto) libres.push(k);
+  casillBueno = libres.length? libres[Math.floor(Math.random()*libres.length)] : -1;
+  casillT=0;
+  if(casillBueno>=0) son('bicho');
+}
+function casillTick(dt){
+  if(!CASILL.length) return;
+  if(casillBueno<0) casillElegir();
+  casillT+=dt;
+  for(const c of CASILL) c.sac=Math.max(0, c.sac-dt*4);
+  if(casillBueno>=0) CASILL[casillBueno].sac=1;
+  const golpes=golpesJuntar();
+  for(const g of golpes){
+    const k=golpeEnLista(g, CASILL, c=>!c.abierto, c=>[c.x, c.y+0.35, c.z]);
+    if(k<0) continue;
+    if(k===casillBueno){
+      CASILL[k].abierto=true;
+      bichosVivos=Math.max(0, bichosVivos-1);
+      esquirlasSoltar(CASILL[k].x, CASILL[k].y+0.5, CASILL[k].z);
+      son('revienta'); pintarLibros();
+      casillElegir();
+    } else {
+      /* EL CASILLERO EQUIVOCADO CUESTA TIEMPO, no una vida: se cambia el que tiembla, asi que hay
+         que volver a mirar. Castigar con la muerte una eleccion de ocho seria injusto. */
+      son('muerde'); avisar(TX('mal'), 0.45, '#c0392b');
+      casillElegir();
+    }
+  }
+}
+function casillDibujar(){
+  const hay=CASILL.length>0 && CASILL.some(c=>!c.abierto);
+  casillMalla.visible=hay;
+  if(!hay) return;
+  for(let k=0;k<CASILL_N;k++){
+    const c=CASILL[k];
+    if(!c || c.abierto){ _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+                         casillMalla.setMatrixAt(k, _bm); continue; }
+    /* EL QUE TIEMBLA SE VE PORQUE TIEMBLA, no porque este pintado de otro color: un casillero
+       marcado con color se elige sin mirar la escena, y lo que hay que entrenar es mirar. */
+    /* el que tiembla se INCLINA y SALTA un poco: solo inclinado, a cuatro metros y con el filtro de
+       baja calidad puesto, 0,045 rad son tres pixeles y no se ve cual es */
+    const s=c.sac>0? Math.sin(casillT*34)*0.055*c.sac : 0;
+    const salto=c.sac>0? Math.abs(Math.sin(casillT*17))*0.045*c.sac : 0;
+    _be.set(0, Math.atan2(cam.x-c.x, cam.z-c.z), s); _bq.setFromEuler(_be);
+    _bm.compose(_bv.set(c.x+s*0.5, c.y+salto, c.z), _bq, _bs.set(1,1,1));
+    casillMalla.setMatrixAt(k, _bm);
+    _bc.setRGB(0.70+ (c.sac>0? 0.22*c.sac : 0), 0.22, 0.17);
+    casillMalla.setColorAt(k, _bc);
+  }
+  casillMalla.instanceMatrix.needsUpdate=true;
+  if(casillMalla.instanceColor) casillMalla.instanceColor.needsUpdate=true;
+}
+
 function pasoFijo(dt){
   /* EL GRITO CORRE ANTES QUE TODO Y DEVUELVE. Es el unico momento del juego en que el guion no
      manda: no avanza la escena, no camina nadie y el jugador no puede contestar nada. */
@@ -557,7 +736,7 @@ function pasoFijo(dt){
   esperasTick(dt);
   rielTick(dt);
   profeTick(dt);
-  bichosTick(dt);
+  actTick(dt);
   /* GESTICULA CUANDO HABLA Y SE QUEDA QUIETO CUANDO ESPERA. Antes se quedaba en 'explicando' todo
      el rato, o sea con los brazos abiertos mientras el jugador contaba con los dedos: a la distancia
      y con el filtro, dos brazos abiertos y quietos son dos palitos que no dicen nada. Atar el gesto
@@ -573,10 +752,10 @@ function pasoFijo(dt){
   /* --- el viaje: la camara es la que manda. El llega antes y espera. --- */
   if(E.viaje!=null && !riel){ profeAnim('quieto'); siguienteEscena(); return; }
   /* --- los bichos: se sale cuando no queda ninguno --- */
-  if(E.bichos && bichosMira) mirarA(bichosMira[0], bichosMira[1], dt, 3.0);
-  if(E.bichos && !bichosCerrado){
+  if(E.act && bichosMira) mirarA(bichosMira[0], bichosMira[1], dt, 3.0);
+  if(E.act && !bichosCerrado){
     if(bichosVivos<=0 && escenaT>0.5){
-      /* LA BANDERA NO VA ESCRITA EN EL GUION. El primer intento ponia GUION[i]={...E,bichos:0}: eso
+      /* LA BANDERA NO VA ESCRITA EN EL GUION. El primer intento ponia GUION[i]={...E,act:0}: eso
          apaga la tanda para siempre, asi que al morir y volver a pasar por el mismo pasillo ya no
          habia bichos. El guion es la partitura y no se toca; lo que cambia es el estado. */
       bichosCerrado=true;
@@ -683,7 +862,7 @@ function dibujar(alfa){
     l.giro+=0.012; l.g.rotation.y=Math.PI+Math.sin(l.giro)*0.34;
     l.g.position.y=1.52+Math.sin(l.giro*1.7)*0.055; }
   for(const p of PUERTAS) if(p.g) p.g.rotation.y=(p.vertical?0:Math.PI/2) + p.ang;
-  bichosDibujar();
+  actDibujar();
   manos3DDibujar();
   pintarEscena();
 }

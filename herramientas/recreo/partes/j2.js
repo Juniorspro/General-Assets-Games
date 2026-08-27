@@ -159,6 +159,11 @@ window.__recreo={
     return r;
   },
   /* ---- LOS BICHOS ---- */
+  /* el estado de la actividad de pasillo, sea cual sea */
+  actVer:()=>({ vivos:bichosVivos, bichos:BICHOS.filter(b=>b.viva).length,
+                tizas:TIZAS.filter(z=>z.viva).length,
+                casilleros:CASILL.filter(c=>!c.abierto).length,
+                casillBueno, esquirlas:ESQ.length }),
   bichosVer:()=>{
     const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
     return { vivos:bichosVivos, esquirlas:ESQ.length, marco:[W,H],
@@ -171,7 +176,7 @@ window.__recreo={
   /* una pinza de mentira en coordenadas del marco (0..1): es la unica forma de probar el apuntado
      sin camara ni mano */
   pinzaFalsa:(x,y)=>{ TOQUES.push({x,y}); return TOQUES.length; },
-  bichosSoltar:(n)=>{ bichosSoltar(n||3); return bichosVivos; },
+  bichosSoltar:(n,tipo)=>{ actSoltar(tipo||'bichos', n||3); return bichosVivos; },
   /* ---- LA MUERTE ---- */
   matar:()=>{ morir(); return { grito:gritoT, muertes }; },
   reintentar:()=>{ reintentar(); return window.__recreo.estado(); },
@@ -275,9 +280,20 @@ window.__recreo={
          donde cae el bicho. Probar esto con una llamada directa a bichoReventar() no probaria nada
          de lo que puede estar mal, que es la proyeccion y el radio del blanco. */
       if(pararEn && (GUION[escena_i]||{}).id===pararEn) break;
+      /* LAS TRES ACTIVIDADES SE JUEGAN POR EL MISMO CAMINO QUE USA EL JUGADOR: se empuja un toque en
+         el pixel donde cae el blanco. Llamar directo a la funcion que lo revienta no probaria nada de
+         lo que puede estar mal, que es la proyeccion, el radio del blanco y —en los casilleros— que
+         el que tiembla sea el que se abre. */
       if(bichosVivos>0 && !(vueltas%8) && !pararEn){
+        let p=null;
         const b=BICHOS.find(q=>q.viva);
-        if(b){ const s=aPantalla(b.x,b.y,b.z); if(s.delante) TOQUES.push({x:s.x, y:s.y}); }
+        const z=TIZAS.find(q=>q.viva && q.espera<=0);
+        if(b) p=[b.x,b.y,b.z];
+        else if(z) p=[z.x,z.y,z.z];
+        else if(casillBueno>=0 && CASILL[casillBueno] && !CASILL[casillBueno].abierto){
+          const c=CASILL[casillBueno]; p=[c.x, c.y+0.35, c.z];
+        }
+        if(p){ const s=aPantalla(p[0],p[1],p[2]); if(s.delante) TOQUES.push({x:s.x, y:s.y}); }
       }
       const antes=escena_i, aL=libros, mu=muertes;
       avanzar(1/60);
@@ -302,8 +318,15 @@ window.__recreo={
       if(E && E.espera){ MANO.on=false; padPedido=(E.espera.tipo==='dedos')? E.espera.n : 1; }
       else if(cuenta && !bloqueo){ MANO.on=false; padPedido=cuenta.res; }
       if(bichosVivos>0 && !(pasos%8)){
+        let p=null;
         const b=BICHOS.find(q=>q.viva);
-        if(b){ const s=aPantalla(b.x,b.y,b.z); if(s.delante) TOQUES.push({x:s.x,y:s.y}); }
+        const z=TIZAS.find(q=>q.viva && q.espera<=0);
+        if(b) p=[b.x,b.y,b.z];
+        else if(z) p=[z.x,z.y,z.z];
+        else if(casillBueno>=0 && CASILL[casillBueno] && !CASILL[casillBueno].abierto){
+          const c=CASILL[casillBueno]; p=[c.x, c.y+0.35, c.z];
+        }
+        if(p){ const s=aPantalla(p[0],p[1],p[2]); if(s.delante) TOQUES.push({x:s.x,y:s.y}); }
       }
       avanzar(1/60);
       const c=celda(PROFE.x, PROFE.z);
@@ -356,6 +379,47 @@ window.__recreo={
       rms=Math.sqrt(rms/AUD.buf.length); }
     return { hay:!!AUD.ctx, pico:+pico.toFixed(4), rms:+rms.toFixed(4) }; },
   son:(k)=>{ son(k); return true; },
+  /* que ladridos quedaron decodificados: un data URI que no decodifica deja al personaje mudo sin
+     que nada falle ni aparezca en la consola */
+  voces:()=>{ const r={}; for(const k in VOZ_DATOS){
+      const b=VOZ[k]; r[k]= b? +b.duration.toFixed(2) : 0; }
+    return { lista:vozLista, buffers:r,
+             musica:{ on:MUS.on, nivel:MUS.nivel, paso:MUS.paso,
+                      gan:MUS.gan? +MUS.gan.gain.value.toFixed(4) : null,
+                      ctx:AUD.ctx? AUD.ctx.state : 'no',
+                      reloj:AUD.ctx? +AUD.ctx.currentTime.toFixed(2) : 0,
+                      prox:+MUS.prox.toFixed(2),
+                      nBajar:MUS.nBajar, nParar:MUS.nParar, nNotas:MUS.nNotas } }; },
+  /* cancela la automatizacion y pone el volumen a mano: separa "la musica no suena" de "la rampa
+     del volumen no llega" */
+  /* EL NIVEL DE UNA MUSICA NO SE MIDE CON UNA MUESTRA. El analizador devuelve una ventana de 2.048
+     muestras, o sea 43 ms: cae entre dos notas y da cero, cae encima del bajo y da 0,15. Para saber
+     como suena una cama de fondo hay que mirar un rato. Se muestrea en un bucle cerrado —el hilo de
+     audio sigue corriendo aunque el principal este ocupado— y se devuelve el maximo, el promedio y
+     cuantas muestras salieron en silencio. */
+  audioVentana:(ms)=>{
+    if(!AUD.an) return 'sin analizador';
+    const fin=performance.now()+(ms||500);
+    let pico=0, suma=0, n=0, mudas=0;
+    while(performance.now()<fin){
+      AUD.an.getFloatTimeDomainData(AUD.buf);
+      let p=0, s=0;
+      for(let i=0;i<AUD.buf.length;i++){ const v=Math.abs(AUD.buf[i]); if(v>p)p=v; s+=v*v; }
+      const r=Math.sqrt(s/AUD.buf.length);
+      if(p>pico) pico=p;
+      if(p<0.002) mudas++;
+      suma+=r; n++;
+    }
+    return { pico:+pico.toFixed(4), rmsMedio:+(suma/Math.max(1,n)).toFixed(4),
+             muestras:n, mudasPct:+(mudas/Math.max(1,n)*100).toFixed(0) };
+  },
+  musProbar:(v)=>{ if(!MUS.gan) return 'no hay';
+    const t=AUD.ctx.currentTime;
+    MUS.gan.gain.cancelScheduledValues(t);
+    MUS.gan.gain.setValueAtTime(v==null?1:v, t);
+    return +MUS.gan.gain.value.toFixed(3); },
+  hablar:(k)=>{ hablar(k, 1.0); return !!VOZ[k]; },
+  musica:(n)=>{ if(n!=null) musicaNivel(n); return { on:MUS.on, nivel:MUS.nivel }; },
   idioma:(c)=>{ if(c) elegirIdioma(c); return IDIOMA; },
   pantalla:(p)=>{ verPantalla(p); return pant; }
 };

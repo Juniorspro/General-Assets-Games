@@ -103,32 +103,45 @@ let aulaN=1, aulaK=0, aulaIdx=0, muertes=0, bichosVivos=0;
    las cuatro de abajo de derecha a izquierda por la fila 9. Recorrer 1,2,3,4,5,6,7,8 obligaria a
    cruzar la escuela entera entre la 4 y la 5, y son veinte metros de pasillo vacio. */
 const TOUR=[1,2,3,4,8,7,6,5];
-/* CUANTOS BICHOS EN CADA TRAMO. El primer viaje no tiene: es el que sigue al tutorial y el jugador
-   recien aprendio a contar. Los bichos empiezan camino al SEGUNDO salon, que es como se pidio, y
-   suben de dos a cinco. Mas de cinco no cabe: seis bichos a la vez en un marco 9:16 se solapan y
-   dejan de poder apuntarse de a uno. */
-const BICHOS_POR=[0,2,3,3,4,4,5,5];
+/* QUE ACTIVIDAD HAY EN CADA TRAMO, Y POR QUE SON TRES Y NO UNA.
+   Siete tandas de bichos son una tanda repetida siete veces. Las tres piden algo DISTINTO de la
+   mano, y ese es el criterio —no la variedad decorativa:
+     bichos     → vienen hacia vos: se entrena APUNTAR a un blanco que se mueve.
+     tizas      → caen: se entrena el TIEMPO, hay que llegar antes de que toquen el piso.
+     casilleros → tiembla uno de ocho, todos a la misma distancia: se entrena ELEGIR.
+   El primer tramo no tiene nada: es el que sigue al tutorial y el jugador recien aprendio a contar.
+   Las cantidades suben, y ninguna pasa de cinco o seis blancos a la vez porque en un marco 9:16 mas
+   que eso se solapa y deja de poder apuntarse de a uno. */
+const TRAMOS=[ null,
+  { tipo:'bichos',     n:2, txt:'dBichos' },
+  { tipo:'tizas',      n:3, txt:'dTizas' },
+  { tipo:'casilleros', n:3, txt:'dCasill' },
+  { tipo:'bichos',     n:4, txt:'dBichos' },
+  { tipo:'tizas',      n:4, txt:'dTizas' },
+  { tipo:'casilleros', n:3, txt:'dCasill' },
+  { tipo:'bichos',     n:5, txt:'dBichos' } ];
 const TOTAL_CUENTAS=TOUR.length*CUENTAS_AULA;
 
 const GUION=[
- { id:'saludo',  anim:'saludar',  txt:'d1', dur:3.0, mira:true },
+ { id:'saludo',  anim:'saludar',  txt:'d1', dur:3.0, mira:true, voz:'hola' },
  { id:'presenta',anim:'explicar', txt:'d2', dur:3.8, mira:true },
  { id:'t5',      anim:'explicar', txt:'d3', mira:true, espera:{tipo:'dedos', n:5} },
  { id:'tp',      anim:'explicar', txt:'d4', mira:true, espera:{tipo:'gesto', g:'pinza'} },
  { id:'t2',      anim:'explicar', txt:'d5', mira:true, espera:{tipo:'dedos', n:2} },
- { id:'listo',   anim:'saludar',  txt:'d6', dur:2.6, mira:true }
+ { id:'listo',   anim:'saludar',  txt:'d6', dur:2.6, mira:true, voz:'risa' }
 ];
 /* EL GUION DE LAS AULAS SE GENERA. Ocho aulas por tres escenas mas siete tandas de bichos son
    treinta y una escenas: escritas a mano son treinta y una oportunidades de poner un numero de aula
    en el lugar de otro. Se genera del TOUR y cada escena lleva ADENTRO el numero de aula al que se
    refiere, asi que ninguna parte del codigo tiene que adivinar "en que aula estoy". */
 TOUR.forEach((n,k)=>{
-  if(BICHOS_POR[k]>0){
-    /* el viaje va PARTIDO EN DOS y los bichos caen en la juntura: la actividad tiene que estar EN el
-       camino, no al final de el */
-    GUION.push({ id:'viaje'+n,  anim:'caminar', txt:'dSale',   viaje:n, mitad:true, aula:n });
-    GUION.push({ id:'bichos'+n, anim:'quieto',  txt:'dBichos', bichos:BICHOS_POR[k], aula:n });
-    GUION.push({ id:'sigue'+n,  anim:'caminar', txt:'dSale2',  viaje:n, resto:true, aula:n });
+  const T=TRAMOS[k];
+  if(T){
+    /* el viaje va PARTIDO EN DOS y la actividad cae en la juntura: tiene que estar EN el camino, no
+       al final de el */
+    GUION.push({ id:'viaje'+n, anim:'caminar', txt:'dSale',  viaje:n, mitad:true, aula:n });
+    GUION.push({ id:'act'+n,   anim:'quieto',  txt:T.txt, act:T.n, tipo:T.tipo, aula:n });
+    GUION.push({ id:'sigue'+n, anim:'caminar', txt:'dSale2', viaje:n, resto:true, aula:n });
   } else {
     GUION.push({ id:'viaje'+n,  anim:'caminar', txt:'d7', viaje:n, aula:n });
   }

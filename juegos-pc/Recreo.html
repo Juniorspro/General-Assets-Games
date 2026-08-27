@@ -368,6 +368,12 @@ const L={
           es:'¡Bichos en el pasillo! <b>Reventalos</b>.',
           pt:'Bichos no corredor! <b>Esmague-os</b>.'},
  dBichosFin:{en:'All of them. Good hands.', es:'Todos. Buenas manos.', pt:'Todos. Boas mãos.'},
+ dTizas:{en:'My chalk! <b>Catch it</b> before it hits the floor.',
+         es:'¡Mi tiza! <b>Agarrala</b> antes de que toque el piso.',
+         pt:'Meu giz! <b>Pegue</b> antes de bater no chão.'},
+ dCasill:{en:'Something is moving in a locker. <b>Open that one</b>.',
+          es:'Algo se mueve en un casillero. <b>Abrí ese</b>.',
+          pt:'Algo se move num armário. <b>Abra esse</b>.'},
  dGrito:{en:'W R O N G', es:'M A L', pt:'E R R A D O'},
  dBien:{en:'That is it!', es:'¡Eso es!', pt:'É isso!'},
  dMal:{en:'No. Look again.', es:'No. Mirá otra vez.', pt:'Não. Olhe de novo.'},
@@ -914,6 +920,58 @@ const esqGeo=new THREE.TetrahedronGeometry(0.062,0);
 const esqMalla=new THREE.InstancedMesh(esqGeo, new THREE.MeshLambertMaterial({color:0x6f3a1c}), ESQ_MAX);
 esqMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 esqMalla.frustumCulled=false; esqMalla.visible=false; escena.add(esqMalla);
+
+/* =========================================================================================
+   LAS OTRAS DOS ACTIVIDADES DE PASILLO
+
+   Los bichos solos se gastan: siete tandas de lo mismo es una tanda repetida siete veces. Se agregan
+   dos que piden algo DISTINTO de la mano, y eso es el criterio, no la variedad decorativa:
+
+   - BICHOS: vienen hacia vos. Lo que se entrena es APUNTAR a un blanco que se mueve.
+   - TIZAS: caen. Lo que se entrena es el TIEMPO — hay que llegar antes de que toquen el piso, y no
+     importa que la tiza este quieta en x.
+   - CASILLEROS: uno de los ocho tiembla. Lo que se entrena es ELEGIR: los ocho estan a la misma
+     distancia y hay que pinzar el correcto, no el mas cercano.
+
+   Las tres se juegan con la misma pinza y ninguna necesita un boton nuevo.
+   ========================================================================================= */
+const TIZAS_MAX=7;
+const tizaGeo=(()=>{
+  /* una tiza: un cilindro corto y gordo, con la punta gastada de un lado */
+  const ps=[];
+  /* 4,5 cm DE RADIO Y NO 3: una tiza de verdad mide 1 cm, pero a tres metros eso son OCHO PIXELES en
+     un marco de 790 y con el filtro de baja calidad puesto desaparece. Es el mismo criterio que el
+     radio del blanco: lo que tiene que costar es llegar a tiempo, no distinguir el objeto. */
+  const c=new THREE.CylinderGeometry(0.045,0.045,0.26,9,1,false); ps.push(c);
+  const p=new THREE.ConeGeometry(0.045,0.06,9); p.rotateX(Math.PI); p.translate(0,0.16,0); ps.push(p);
+  /* la faja de papel del medio, que es lo que la hace leer a tiza y no a palito */
+  const f=new THREE.CylinderGeometry(0.048,0.048,0.07,9,1,false); f.translate(0,-0.02,0); ps.push(f);
+  const pl=ps.map(g=>g.index? g.toNonIndexed() : g);
+  const g=mergeGeometries(pl,false); for(const q of ps) q.dispose(); return g;
+})();
+const tizaMalla=new THREE.InstancedMesh(tizaGeo,
+  /* emissive bajo: la tiza cae en un pasillo beige y contra el piso beige un blanco mate se pierde.
+     Con un pelo de emision se lee como algo que cae aunque este a contraluz. */
+  new THREE.MeshLambertMaterial({color:0xfdfaf0, emissive:0x2a2620}), TIZAS_MAX);
+tizaMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+tizaMalla.frustumCulled=false; tizaMalla.visible=false; escena.add(tizaMalla);
+
+/* LOS CASILLEROS DE LA ACTIVIDAD son propios y no los del pasillo: los del pasillo estan fundidos en
+   una malla con toda la escuela y no se pueden mover ni sacudir. Estos son ocho, instanciados, y se
+   ponen delante del jugador cuando toca. */
+/* CINCO Y NO OCHO, Y MAS LEJOS. Con ocho de 0,62 m cada 0,66 m el abanico medía 5,3 metros de ancho
+   puesto a 3 m de la camara, donde solo entran 3,4: en pantalla no eran ocho casilleros, era UNA
+   PARED ROJA de lado a lado tapando el pasillo — y encima 5,3 m no caben en un pasillo de 4,2. Cinco
+   cada 0,76 m son 3,8 m de abanico a 4,4 de distancia: entran en el pasillo, entran en el cuadro con
+   margen, y se ven separados, que es lo unico que hace que se puedan elegir de a uno. */
+const CASILL_N=5;
+const casillGeo=new THREE.BoxGeometry(0.56, 1.55, 0.30);
+const casillMalla=new THREE.InstancedMesh(casillGeo,
+  new THREE.MeshLambertMaterial({color:0xb2392c}), CASILL_N);
+casillMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+casillMalla.frustumCulled=false; casillMalla.visible=false; escena.add(casillMalla);
+casillMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(CASILL_N*3), 3);
+casillMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);
 
 /* =========================================================================================
    EL PROFESOR
@@ -1474,32 +1532,45 @@ let aulaN=1, aulaK=0, aulaIdx=0, muertes=0, bichosVivos=0;
    las cuatro de abajo de derecha a izquierda por la fila 9. Recorrer 1,2,3,4,5,6,7,8 obligaria a
    cruzar la escuela entera entre la 4 y la 5, y son veinte metros de pasillo vacio. */
 const TOUR=[1,2,3,4,8,7,6,5];
-/* CUANTOS BICHOS EN CADA TRAMO. El primer viaje no tiene: es el que sigue al tutorial y el jugador
-   recien aprendio a contar. Los bichos empiezan camino al SEGUNDO salon, que es como se pidio, y
-   suben de dos a cinco. Mas de cinco no cabe: seis bichos a la vez en un marco 9:16 se solapan y
-   dejan de poder apuntarse de a uno. */
-const BICHOS_POR=[0,2,3,3,4,4,5,5];
+/* QUE ACTIVIDAD HAY EN CADA TRAMO, Y POR QUE SON TRES Y NO UNA.
+   Siete tandas de bichos son una tanda repetida siete veces. Las tres piden algo DISTINTO de la
+   mano, y ese es el criterio —no la variedad decorativa:
+     bichos     → vienen hacia vos: se entrena APUNTAR a un blanco que se mueve.
+     tizas      → caen: se entrena el TIEMPO, hay que llegar antes de que toquen el piso.
+     casilleros → tiembla uno de ocho, todos a la misma distancia: se entrena ELEGIR.
+   El primer tramo no tiene nada: es el que sigue al tutorial y el jugador recien aprendio a contar.
+   Las cantidades suben, y ninguna pasa de cinco o seis blancos a la vez porque en un marco 9:16 mas
+   que eso se solapa y deja de poder apuntarse de a uno. */
+const TRAMOS=[ null,
+  { tipo:'bichos',     n:2, txt:'dBichos' },
+  { tipo:'tizas',      n:3, txt:'dTizas' },
+  { tipo:'casilleros', n:3, txt:'dCasill' },
+  { tipo:'bichos',     n:4, txt:'dBichos' },
+  { tipo:'tizas',      n:4, txt:'dTizas' },
+  { tipo:'casilleros', n:3, txt:'dCasill' },
+  { tipo:'bichos',     n:5, txt:'dBichos' } ];
 const TOTAL_CUENTAS=TOUR.length*CUENTAS_AULA;
 
 const GUION=[
- { id:'saludo',  anim:'saludar',  txt:'d1', dur:3.0, mira:true },
+ { id:'saludo',  anim:'saludar',  txt:'d1', dur:3.0, mira:true, voz:'hola' },
  { id:'presenta',anim:'explicar', txt:'d2', dur:3.8, mira:true },
  { id:'t5',      anim:'explicar', txt:'d3', mira:true, espera:{tipo:'dedos', n:5} },
  { id:'tp',      anim:'explicar', txt:'d4', mira:true, espera:{tipo:'gesto', g:'pinza'} },
  { id:'t2',      anim:'explicar', txt:'d5', mira:true, espera:{tipo:'dedos', n:2} },
- { id:'listo',   anim:'saludar',  txt:'d6', dur:2.6, mira:true }
+ { id:'listo',   anim:'saludar',  txt:'d6', dur:2.6, mira:true, voz:'risa' }
 ];
 /* EL GUION DE LAS AULAS SE GENERA. Ocho aulas por tres escenas mas siete tandas de bichos son
    treinta y una escenas: escritas a mano son treinta y una oportunidades de poner un numero de aula
    en el lugar de otro. Se genera del TOUR y cada escena lleva ADENTRO el numero de aula al que se
    refiere, asi que ninguna parte del codigo tiene que adivinar "en que aula estoy". */
 TOUR.forEach((n,k)=>{
-  if(BICHOS_POR[k]>0){
-    /* el viaje va PARTIDO EN DOS y los bichos caen en la juntura: la actividad tiene que estar EN el
-       camino, no al final de el */
-    GUION.push({ id:'viaje'+n,  anim:'caminar', txt:'dSale',   viaje:n, mitad:true, aula:n });
-    GUION.push({ id:'bichos'+n, anim:'quieto',  txt:'dBichos', bichos:BICHOS_POR[k], aula:n });
-    GUION.push({ id:'sigue'+n,  anim:'caminar', txt:'dSale2',  viaje:n, resto:true, aula:n });
+  const T=TRAMOS[k];
+  if(T){
+    /* el viaje va PARTIDO EN DOS y la actividad cae en la juntura: tiene que estar EN el camino, no
+       al final de el */
+    GUION.push({ id:'viaje'+n, anim:'caminar', txt:'dSale',  viaje:n, mitad:true, aula:n });
+    GUION.push({ id:'act'+n,   anim:'quieto',  txt:T.txt, act:T.n, tipo:T.tipo, aula:n });
+    GUION.push({ id:'sigue'+n, anim:'caminar', txt:'dSale2', viaje:n, resto:true, aula:n });
   } else {
     GUION.push({ id:'viaje'+n,  anim:'caminar', txt:'d7', viaje:n, aula:n });
   }
@@ -2142,6 +2213,9 @@ function audioIniciar(){
   let c; try{ c=new C(); }catch(e){ return; }
   AUD.ctx=c;
   const m=c.createGain(); m.gain.value=0.8; m.connect(c.destination); AUD.m=m;
+  /* la voz se decodifica UNA vez, aca: decodeAudioData es asincrono y hacerlo en el momento de
+     hablar dejaria el primer "eh!" del juego sin sonar */
+  vozCargar();
   try{ const an=c.createAnalyser(); an.fftSize=2048; m.connect(an);
        AUD.an=an; AUD.buf=new Float32Array(an.fftSize); }catch(e){}
 }
@@ -2192,6 +2266,12 @@ function son(k){
     /* EL GRITO ES EL SONIDO MAS FUERTE DEL JUEGO, y tiene que serlo: es el unico momento en que el
        juego habla mas fuerte que el jugador. Tres formantes que BAJAN mas un soplo ancho. */
     else if(k==='grito'){
+      /* LA VOZ VA ENCIMA DEL GRITO SINTETICO Y NO EN SU LUGAR. Sola, la voz generada es un hombre
+         gritando en una habitacion; solo, el sintetico es un ruido descendente sin garganta. Juntos
+         suena a algo con pulmones que ademas rompe el aire, y encima el sintetico tapa el corte del
+         final del archivo. */
+      hablar('grito', 1.0);
+      musicaBajar(0.08, 0);
       tono(840,1.15,0.30,'sawtooth',170);
       tono(520,1.15,0.24,'sawtooth',115);
       tono(1280,0.85,0.14,'square',300);
@@ -2269,7 +2349,8 @@ function verPantalla(p){
   document.body.classList.toggle('jugando', enJuego);
   jugando=enJuego && !terminado;
   if(!enJuego){ document.body.classList.remove('esperando'); document.body.classList.remove('clase');
-                document.body.classList.remove('bichos'); document.body.classList.remove('grito'); }
+                document.body.classList.remove('bichos'); document.body.classList.remove('grito');
+                musicaParar(p==='muere'? 0.25 : 0.8); }
 }
 let ctrlManos=true;
 try{ const g=localStorage.getItem('recreo_ctrl'); if(g) ctrlManos=(g==='manos'); }catch(e){}
@@ -2351,6 +2432,228 @@ addEventListener('keydown', e=>{
   if(e.key>='1' && e.key<='9') padPedido=+e.key;
   if(e.key==='0') padPedido=10;
 });
+/* =========================================================================================
+   LA VOZ DE BALDI Y LA MUSICA
+
+   DOS ORIGENES DISTINTOS, Y NO ES INCONSISTENCIA:
+
+   - LA VOZ ESTA GENERADA. Cinco ladridos cortos —hola, bien, mal, grito, risa— hechos con un
+     text-to-speech, recortados a la rafaga util y horneados a MP3 mono de 16 kHz: diecinueve
+     kilobytes los cinco. Son INTERJECCIONES a proposito, no frases: el juego habla en tres idiomas y
+     una frase grabada habria que grabarla tres veces, mientras que un "eh!" y un grito se entienden
+     igual en los tres. Los subtitulos siguen haciendo el trabajo del idioma.
+   - LA MUSICA ES PROCEDURAL, escrita con osciladores. No por gusto: no hubo con que generarla —el
+     unico modelo de musica disponible esta reservado para otro flujo y no habia llave del otro
+     proveedor— asi que en vez de dejar el juego en silencio se compone. Y encima resulta lo correcto
+     para este juego: pesa CERO bytes, no se corta nunca, y puede cambiar de intensidad segun el aula
+     en la que estas, que un archivo suelto no puede.
+
+   COMO SE AGENDA LA MUSICA, que es la unica parte con truco: NO va colgada del bucle de dibujo. Un
+   requestAnimationFrame se atrasa, se pausa cuando el telefono se va a segundo plano y no garantiza
+   nada; el reloj de AudioContext es un reloj de audio y no se mueve. Asi que un temporizador de 100
+   ms mira "que notas entran en los proximos 250 ms" y las agenda con su tiempo exacto. El sonido
+   nunca depende de los cuadros. Es el patron clasico de dos relojes: el de la agenda puede temblar,
+   el de la reproduccion no.
+   ========================================================================================= */
+const VOZ_DATOS={"hola": "data:audio/mpeg;base64,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", "bien": "data:audio/mpeg;base64,//NYxAAeRAJI90gYAQSuZpxNAKAKAAAFBELBWC8P6RERERHd3d3dwAAREREL//d0RC9ER3d3dz/0RERHd3f/REREREd3d3P///R3P/3RERE//d3dz9ERP//65kiIiIiO7u79dEREL///0d3P/0REL/d3d///d3c93d//67n+hf/XAAAAAAABD9ySOSRGEwiENFol9AEYIqDIfJLDIySAi5lhoSAIExytgXwZgYihUGf40JIQ//NYxC4ws56dv5l4A8qBjiRKfWbw3+t21SufA79/WPDw9nY2umvbdH8fD+8PWq5lUrJvT+PqZPqOfN/DhNN95zW0Bnf4xuWr+PFj7lfv4cFhtHzjVd57+HPT6pX7V6rZNf///w8x59////Pzv6/3vG73x96vvX1b7eau8/3v4xiHe8Bspemr4/rjP9d/0rivpiBTxK5gQEGce3pg9JYhb/9dAAMAgjqKqqqq8dkwFQ+Xrjy///NYxBIpyubPH5hoAShUjKSIIdFdCrYFHi3SYDgwdVTwg4KIllBeC4eAFsLWPdNkVG7oy4VGA51KTOo0Xcli+bmBIEg6bmhoYUaDF1a7SsoGj6llwosqgZiyE5LqlJHTpkSJubF8vujp1Ld1uk59JmUzlI87/1nEf+ggj//vUtzZ1mKt39FamJBA///9bLBVxgKAKr/h99YKWd+neUDQQRARqgAleqrEoHOf4UwDKccIaYLR//NYxBEpm9LN389YAFK6ItOTplSHQ1vG5qfPJITWzzg4BHG8xGomGoUDQNhaCQcG94J5UOgxHWRGwx++JbH/b3+w5L6oqJhCG60v/vu+DTmCyGEw8oqdrbcy75+a+2blo6f2z////+vmXvl5y5fb7/ik4Z//9f8ffbGNtkwctknIQRSjNKZsl8zCzN0vhrKMFV3JpMJJMUNF4VM4lJxVZJD9dZbrSAFAV36xCAWvqUoyoiXG//NYxBEjM2LIfsJK+ZJblLyWylpJfxkjuNZh7GHp5rnKVYkxVgjHxUuRn5IVmKe6HmSWqsRmzJMuBe52IMFydFHmRgTkbVuaYU8FFJ0q7XG0C9Mx2mvZDu6ojTWVtEYccQMokjN//9dzFKWOF0ICOyTdP//6F7UGNx2MXRaqPeNH4v6JxfsztslQKTJll2qLm7m72ktqM9+qpqwWFhYaZPN++CkX4gecLsUWVpy780+zrxjG//NYxCsf0yLnHsGFDYQIB30gffJDs5D0dcZMkMjk9fBYWRQTDSWQrIfkdlBEHRRTFYxnstSnbbVlo6bVKKOYtn//9b9mKHMzqZjPqn//9etaUaNre9wkDy7z8bXk/fPU9dXs3B32suX+zbrUF2QqW+y9TK80ycM9ss1n5fzKaCEEEOF2zrCHnDFeK1IOTPddZu2Zq6zXeMswI+HhcWcnm5PVDpYugkykQHMcaKXUvTajOlJD//NYxFIfC2bqXnmLDG5bIrDw+LOMHGMjf//0qsyiIwt8pf/t6r0XR9mPlfRWq7MjY09EtVXS5aqRAiAFVgm36zPngGw2qcEwnWRllbri57rcvWnQaxrIvTTRl+66tEuY3fbZDdmk9BixB4EFfa2Wrt8/307/Jw8KDkUlxM7933bSNlkX314WoGQJzgUiDn+qKtNCyRzP87eByTAALYu8DpYoXXRY1nPXIn4BOJB1hm7+Ozor//NYxHwccfri/mGG+EAeBBJqEy+eLjtg63HrwuIVo15SjR6x22w4+jNfEk6pAQmB3cTALKgyJXh++3l3y3Za6iMU4Itf2UigOQncjnTZGeQUQEp6Oa2n//M8xbKxFddat//5cROVXtsvSroCJDbq4TDwWZuYHyD6TEFNRTMuMTAwqqqqqqqqqqqqqqqqYdaxUNu+xbRWHHBvQa1KELV5K1DpL1Gm4UUvVLsQWKCosURoPh5h//NYxLEdIz7eXmDFNK0fDo0B0CgcRBTP7UqktHsjIaVUjVOxSmOpGanpIYYhCTUaldSmEjjmNNVr////9/LR7W/rZnMtnLvbYq1PnT/5q796vOJnYVMJKh8NKRUBNxTDrxx1JpSOkpFp+jxq5FgwrgA2gqkChSZtYUkDU5hxL4SHQvARZpO4TTd4fi61H9YyhmzZcsOPCk3AskbOnEp9naV6/UXkcEAUjprLR2bSBroyQNKO//NYxM4dW8LWP0woAJVWseUTWjJEUYrJWyQ5KIjLAWVQVWKB0RGJxGdnYrK5ymovduB4FyrzEvaLSPJahNHRUtNS56rw1ErEOO+7EYjb+bpad/W9ZFAFdsT/NDg6WRGg538quNeHnZkP5/j/ea+na1TySORuvRyyKchX/rtXXfuSKphWrP7/8v8pa1mQz17CN2d//3rPcvwlsBS6+/taaft1p6gu0ESppI/301e/V/X/Mw9D//NYxP9IBAq6P5nAA9bnKtbUVxr65l///+5jAZE5EIfZprDmJMgxp5ZOXpZK1HLtqSQ/lbooxIGARLZIkUvJEiRIkSNEiRL+Zmu8zMmka3/9qr1QUSqqr9qJUs6CpYGg6oGg7liwNA18sDQNA0Gu31gqCoKhLg03Wd4NAr/LfKhqrUHRUFQ1/BV0GgVBV3h1TEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NYxIYYcPKqX8YwAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV", "mal": "data:audio/mpeg;base64,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//NYxFUeQp7dnnmKnv/7LIUkSBUEGM5xyX/7BpcDmguAxVauEiCrlEMo0LvKAhVd7zjAe8Trm1YO2MJ4Xowzp0TGmWEysKVQmLKzoywa9q1K9IkgVDhQESVHFT1mGdjHUs0IOLGZEaZhMDMDmlZWKJdVMxDMuzHcbeVJbOrS3Y6kEiVUhEUj///u5nZSGCuLEAlRr//13lV5CoirVlMxB1oXfrNWzI4xHBA5rOL4BaA3EigV//NYxIMgQ6rE/npEXIjqeDR0gpGUFiEKm/Q0rUWq7LFi0uDkemKuPsya61k2Q4xJOhGRMBGh8zORFzEboQaLhggggbc6mV6tvVBilFDHkE5DqxlEGGhoiKpVX1cwqKysg+Qo4rfb///6lpRUMdm//IeKCSFkOKxJRqYxBtNP/+ZqzsQyiKXAE/7vbVUCuRQkT5KNK7NkOcv6pQB4KZVVV1NTRo+mV69ntGa3r6M7urCBw+Ku//NYxKkgC6qwXMMKXTRFAYTHOgu7CL3dWdiOGlDg1h6DqXVhtKIqqx6nprvsogyiTiZCW6sjuzjDB9yVZX////9bbO9m/+tRokIO12XeVnZVdGN/2b9zUdaXnV2FT2lmazeJCvtSbkKTkRJJvBVWa0NTd1DYhMQNGiXpk0ocY0mAJTNtbnGxlkpsDTRaEFzHiT2IoC3CiQ8Z4GYE2piFDdNEWVmPLexjiKnEwLsuoR05n8Bm//NYxM8fg76+X08oAVG9Z4tRqwVlefvWVnQh43sU19NiwwRfvNoUePmnrmBW7UsMclr4nVkjLaLTxcMT++pPI5RlvG67+f/9px7E831/Tcqy2xd+1PrOrf///yxpMbrr/4/prUuJK7hZ/+90x8woOIL1Y/xEt4U88TNtelf/Gdxs2vuLnN96/xfP/1mvzh9DdVTQDRlJATKhWAGACCqM5MXbVnLLntOTH2Vq09y1rVVVeMKK//NYxPg1u+axvZl4AzNhQEBEt7AQEx1gJv9mKMx9VfUvZm4fS2YtmPqr1VXjN8ZugICdAQEozN/9Uv//Zv/6pf///GY6qnVUuM3/9VfVS2DASiIqGi1QdnZKDSg7UeBo9lga5YOwVkxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//NYxMgesx5of8wYAKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq", "grito": "data:audio/mpeg;base64,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", "risa": "data:audio/mpeg;base64,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"};
+const VOZ={};                     // nombre -> AudioBuffer, decodificado al arrancar el audio
+let vozLista=false;
+function vozCargar(){
+  if(!AUD.ctx || vozLista) return;
+  vozLista=true;
+  for(const k in VOZ_DATOS){
+    const b64=VOZ_DATOS[k].split(',')[1];
+    if(!b64) continue;
+    try{
+      const bin=atob(b64), n=bin.length, u=new Uint8Array(n);
+      for(let i=0;i<n;i++) u[i]=bin.charCodeAt(i);
+      AUD.ctx.decodeAudioData(u.buffer, (buf)=>{ VOZ[k]=buf; }, ()=>{});
+    }catch(e){}
+  }
+}
+/* SE LLAMA hablar() Y NO voz(): `voz` ya existe y es el bip por letra del subtitulo, en h2b.js. Dos
+   `function voz` en un modulo no son un aviso, son un SyntaxError que tira la pagina antes de la
+   primera linea — la segunda vez en este archivo que un nombre repetido cuesta una vuelta entera.
+   PARA QUE NO SE PISE CONSIGO MISMA: dos "bien" encimados suenan a coro de una persona, que es lo
+   mas raro que puede sonar una voz. Si el mismo ladrido ya esta sonando, el nuevo lo reemplaza. */
+const vozSonando={};
+function hablar(k, vol){
+  if(!AUD.ctx || !AUD.on) return;
+  const buf=VOZ[k]; if(!buf) return;
+  try{
+    const s=vozSonando[k];
+    if(s){ try{ s.stop(); }catch(e){} }
+    const src=AUD.ctx.createBufferSource(); src.buffer=buf;
+    const g=AUD.ctx.createGain(); g.gain.value=(vol==null?1:vol);
+    src.connect(g); g.connect(AUD.m);
+    src.start(); vozSonando[k]=src;
+    src.onended=()=>{ if(vozSonando[k]===src) vozSonando[k]=null; };
+  }catch(e){}
+}
+
+/* ===================== LA MUSICA ===================== */
+/* Cuatro compases en la menor con el ultimo acorde tenso: Am - F - G - E. El E mayor sobre una
+   escala menor es lo que hace que el loop no se cierre nunca del todo, o sea que suene a "todavia
+   falta algo" — que es exactamente el clima de una escuela en la que algo va a pasar. */
+const MUS_BPM=92;
+const MUS_BAJO=[[110.00,0],[87.31,1],[98.00,2],[82.41,3]];     // A2 F2 G2 E2, un acorde por compas
+const MUS_ACORDE=[[220.0,261.6,329.6],[174.6,220.0,261.6],
+                  [196.0,246.9,293.7],[164.8,207.7,246.9]];
+/* la melodia va en grados de la escala y no en frecuencias: asi la misma linea sirve sobre los
+   cuatro acordes sin escribirla cuatro veces */
+const MUS_MEL=[0,2,4,2, 7,4,2,0, 0,4,7,4, 2,0,-1,0];
+const MUS_ESC=[220.0,246.9,261.6,293.7,329.6,349.2,392.0,440.0,493.9];
+const MUS={ on:false, paso:0, prox:0, timer:null, gan:null, pad:null, nivel:0, ducking:1,
+            nBajar:0, nParar:0, nNotas:0 };
+/* UNA NOTA PUEDE DECAER O SOSTENER, Y LA DIFERENCIA ERA TODO EL PROBLEMA.
+   La primera version tenia un solo sobre: subir y despues caer exponencialmente hasta cero a lo
+   largo de toda la duracion. Con eso una nota "sostenida" de un segundo pasa el 80% de ese segundo
+   casi en silencio, porque una exponencial baja rapido al principio. Medido con audioVentana: el
+   96% de las muestras del nivel 0 salian MUDAS. Una cama de fondo que esta callada el 96% del tiempo
+   no es una cama tenue, es silencio con un bip cada tanto.
+   Con `sostener`, la nota sube, SE QUEDA en su nivel, y recien suelta al final. */
+function musNota(f, t, dur, vol, tipo, ataque, sostener){
+  if(!AUD.ctx) return;
+  const c=AUD.ctx;
+  const o=c.createOscillator(); o.type=tipo||'triangle'; o.frequency.setValueAtTime(f,t);
+  const g=c.createGain();
+  const at=Math.min(ataque||0.008, dur*0.4);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(vol,t+at);
+  if(sostener){
+    const suelta=Math.min(0.28, dur*0.45);
+    g.gain.setValueAtTime(vol, t+dur-suelta);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  } else {
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  }
+  o.connect(g); g.connect(MUS.gan||AUD.m); o.start(t); o.stop(t+dur+0.02); MUS.nNotas++;
+}
+/* =========================================================================================
+   EL COLCHON, QUE SUENA SIEMPRE
+   Tres osciladores por un pasabajos, creados UNA vez y encendidos para todo el juego; lo unico que
+   cambia es su afinacion, que sigue al acorde del compas. Es lo que hace que la musica sea una cama
+   y no una sucesion de notas: entre nota y nota siempre hay algo sonando.
+   Y son tres osciladores para el juego entero, no tres por compas: encender y apagar osciladores 90
+   veces por minuto es basura para el recolector y clicks en los bordes.
+   ========================================================================================= */
+function padArmar(){
+  const c=AUD.ctx;
+  const fil=c.createBiquadFilter(); fil.type='lowpass'; fil.frequency.value=540; fil.Q.value=0.7;
+  const gan=c.createGain(); gan.gain.value=0.075;
+  fil.connect(gan); gan.connect(MUS.gan);
+  const osc=[];
+  for(const [d,v] of [[1,1.0],[1.5,0.45],[2,0.30]]){       // raiz, quinta, octava
+    const o=c.createOscillator(); o.type='sawtooth'; o.frequency.value=110*d;
+    const g=c.createGain(); g.gain.value=v;
+    o.connect(g); g.connect(fil); o.start();
+    osc.push({o,d});
+  }
+  MUS.pad={ osc, fil, gan };
+}
+function padAfinar(base, t){
+  if(!MUS.pad) return;
+  for(const {o,d} of MUS.pad.osc){
+    /* setTargetAtTime y no setValueAtTime: un salto de frecuencia en un sawtooth sostenido hace un
+       click, y un glissando de 120 ms se lee como que el acorde "gira" */
+    o.frequency.setTargetAtTime(base*d, t, 0.12);
+  }
+}
+function musGolpe(t, vol){
+  if(!AUD.ctx) return;
+  const c=AUD.ctx, dur=0.045, n=Math.floor(c.sampleRate*dur);
+  const b=c.createBuffer(1,n,c.sampleRate), d=b.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+  const s=c.createBufferSource(); s.buffer=b;
+  const f=c.createBiquadFilter(); f.type='highpass'; f.frequency.value=5200;
+  const g=c.createGain(); g.gain.value=vol;
+  s.connect(f); f.connect(g); g.connect(MUS.gan||AUD.m); s.start(t);
+}
+/* agenda todo lo que entra en la ventana de adelanto.
+   LO QUE SUENA EN CADA NIVEL, Y POR QUE EL NIVEL 0 NO ES "CASI NADA":
+   la primera version dejaba en el nivel 0 solamente el bajo en los pasos 0 y 4, o sea DOS notas por
+   compas de 2,6 segundos — medido con el contador de notas, UNA nota agendada en tres segundos de
+   juego y el analizador leyendo cero casi todo el tiempo. Eso no es una musica tenue: es silencio con
+   un bip. El nivel 0 ya tiene que ser una musica completa y tranquila, y los niveles siguientes
+   AGREGAN capas sobre ella, no la vuelven audible. */
+function musAgendar(){
+  if(!MUS.on || !AUD.ctx) return;
+  const c=AUD.ctx;
+  const semi=60/MUS_BPM/2;                       // duracion de una corchea
+  if(MUS.prox < c.currentTime) MUS.prox = c.currentTime + 0.06;
+  while(MUS.prox < c.currentTime + 0.30){
+    const p=MUS.paso, t=MUS.prox;
+    const compas=(p>>3)&3, dentro=p&7;
+    const ac=MUS_ACORDE[compas];
+    /* EL BAJO, en las cuatro negras del compas: es el pulso, y un pulso que aparece dos veces por
+       compas no es un pulso, es un aviso */
+    if((dentro&1)===0) musNota(MUS_BAJO[compas][0], t, semi*1.5, 0.100, 'square', 0.010);
+    /* EL ACORDE SOSTENIDO, desde el nivel 0: es lo que hace que haya musica y no percusion. Dura
+       cuatro corcheas y entra suave, asi que las tres notas se leen como un colchon y no como un
+       golpe de organo. */
+    if(dentro===0 || dentro===4)
+      for(let k=0;k<ac.length;k++) musNota(ac[k], t, semi*3.6, 0.026, 'triangle', 0.120, true);
+    /* el colchon se reafina al empezar cada compas */
+    if(dentro===0) padAfinar(MUS_BAJO[compas][0], t);
+    /* la melodia desde el aula 3 */
+    if(MUS.nivel>=1 && (p&1)===0){
+      const g=MUS_MEL[(p>>1)&15];
+      if(g!=null){
+        const f=MUS_ESC[Math.max(0, Math.min(MUS_ESC.length-1, g+1))];
+        musNota(f, t, semi*0.95, 0.048, 'triangle', 0.006);
+      }
+    }
+    /* el charles en las corcheas impares desde el aula 5: aprieta el pulso sin subir el volumen */
+    if(MUS.nivel>=2 && (dentro&1)===1) musGolpe(t, 0.034);
+    /* y desde el aula 7 una quinta abajo del bajo: la nota que hace que suene amenazante */
+    if(MUS.nivel>=3 && dentro===0) musNota(MUS_BAJO[compas][0]*0.5, t, semi*3.2, 0.062, 'sawtooth', 0.030);
+    MUS.prox += semi;
+    MUS.paso = (MUS.paso+1) & 31;
+  }
+}
+function musicaEmpezar(){
+  if(!AUD.ctx || MUS.on) return;
+  if(!MUS.gan){ MUS.gan=AUD.ctx.createGain(); MUS.gan.gain.value=0; MUS.gan.connect(AUD.m); }
+  if(!MUS.pad) padArmar();
+  MUS.on=true; MUS.paso=0; MUS.prox=AUD.ctx.currentTime+0.1;
+  /* ENTRA CON RAMPA LINEAL Y NO EXPONENCIAL, y no es cosmetica: una rampa exponencial no puede pasar
+     por cero, asi que hay que arrancarla en un valor chiquito como 0,0001 — y medido en este
+     navegador la rampa quedaba congelada a mitad de camino, en 0,0049, o sea la musica agendandose y
+     sonando a la milesima parte de su volumen: `on:true`, `paso` avanzando, y el analizador leyendo
+     cero. La lineal arranca en 0 de verdad y no tiene ese borde. */
+  const t0=AUD.ctx.currentTime;
+  MUS.gan.gain.cancelScheduledValues(t0);
+  MUS.gan.gain.setValueAtTime(0, t0);
+  MUS.gan.gain.linearRampToValueAtTime(1, t0+1.6);
+  if(MUS.timer) clearInterval(MUS.timer);
+  MUS.timer=setInterval(musAgendar, 100);
+  musAgendar();
+}
+function musicaParar(seg){
+  if(!AUD.ctx || !MUS.on) return;
+  MUS.nParar++;
+  const t=AUD.ctx.currentTime, d=seg==null? 0.6 : seg;
+  if(MUS.gan){
+    MUS.gan.gain.cancelScheduledValues(t);
+    MUS.gan.gain.setValueAtTime(MUS.gan.gain.value, t);
+    MUS.gan.gain.linearRampToValueAtTime(0, t+d);
+  }
+  MUS.on=false;
+  if(MUS.timer){ clearInterval(MUS.timer); MUS.timer=null; }
+}
+/* LA MUSICA SE AGACHA CUANDO EL HABLA O GRITA. Sin esto, el grito —que es el sonido mas fuerte del
+   juego— compite con una musica que sigue a su volumen y el susto se diluye. */
+function musicaBajar(f, seg){
+  if(!AUD.ctx || !MUS.gan) return;
+  MUS.nBajar++;
+  const t=AUD.ctx.currentTime;
+  MUS.gan.gain.cancelScheduledValues(t);
+  MUS.gan.gain.setValueAtTime(MUS.gan.gain.value, t);
+  MUS.gan.gain.linearRampToValueAtTime(Math.max(0, f), t+0.08);
+  if(seg>0) MUS.gan.gain.linearRampToValueAtTime(1, t+0.08+seg);
+}
+/* el nivel sube con el aula: mismo tema, mas voces. Cuatro escalones en ocho aulas. */
+function musicaNivel(n){ MUS.nivel=Math.max(0, Math.min(3, n)); }
 
 /* =========================================================================================
    LOS DOS FILTROS: SATURACION Y BAJA CALIDAD
@@ -2608,6 +2911,7 @@ function empezar(){
   MANO.cand=-1; MANO.votos=0; MANO.dedos=0; padPedido=-1;
   document.body.classList.remove('clase');
   pintarLibros(); verPantalla('juego');
+  musicaNivel(0); musicaEmpezar();
   siguienteEscena();
 }
 function siguienteEscena(){
@@ -2621,6 +2925,7 @@ function siguienteEscena(){
      para la misma cosa. Al jugador no le importa como se llaman las aulas en el plano: le importa
      cuantas le faltan. */
   decir(TX(E.txt, {a:(E.aula? TOUR.indexOf(E.aula)+1 : 1), t:TOUR.length}));
+  if(E.voz) hablar(E.voz, 0.9);
   document.body.classList.toggle('esperando', !!E.espera);
   if(E.espera) pintarAro(0, null, '');
   if(E.viaje!=null){
@@ -2663,15 +2968,15 @@ function siguienteEscena(){
     aulaPrev=0;
   }
   bichosCerrado=false;
-  /* si quedo algun bicho de la tanda anterior, se apaga: un bicho suelto adentro de un aula es un
-     bicho que nadie puede reventar y una escena que no termina nunca */
-  if(!E.bichos && bichosVivos>0) bichosApagar();
-  if(!E.bichos) bichosMira=null;
-  if(E.bichos){
+  /* si quedo algo de la tanda anterior, se apaga: un blanco suelto adentro de un aula es un blanco
+     que nadie puede pinzar y una escena que no termina nunca */
+  if(!E.act && bichosVivos>0) bichosApagar();
+  if(!E.act) bichosMira=null;
+  if(E.act){
     const fin = (restoRuta && restoRuta.length)? cel2(restoRuta[restoRuta.length-1]) : null;
     bichosMira = fin;
     const rumbo = fin? Math.atan2(fin[0]-cam.x, fin[1]-cam.z) : cam.giro;
-    bichosSoltar(E.bichos, rumbo);
+    actSoltar(E.tipo, E.act, rumbo);
   }
   if(E.puerta!=null){
     const p=puertaDe(E.puerta);
@@ -2680,6 +2985,10 @@ function siguienteEscena(){
   if(E.clase!=null){
     const n=E.clase, S=AULA_SITIO[n];
     aulaN=n; aulaIdx=TOUR.indexOf(n); aulaK=0; aulaPrev=n;
+    /* CUATRO ESCALONES EN OCHO AULAS: el bajo solo, despues el acorde, despues la melodia y al final
+       el charles. Es el mismo tema todo el juego —cambiarlo por otro cada aula seria empezar de cero
+       ocho veces— pero se va poblando, y eso se siente como que la escuela aprieta. */
+    musicaNivel(Math.floor(aulaIdx/2));
     cuenta=null; bloqueo=false;              // por si se entro de una prueba con una cuenta abierta
     LIBROS[0].g.visible=false;
     document.body.classList.add('clase');
@@ -2698,7 +3007,7 @@ function siguienteEscena(){
     PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
     profeRiel=null;
     pintarLibros();
-  } else if(!E.bichos){
+  } else if(!E.act){
     document.body.classList.remove('clase');
   }
 }
@@ -2732,7 +3041,7 @@ function contestar(n){
   bloqueo=true;
   if(n===cuenta.res){
     aciertos++; libros++; aulaK++;
-    avisar(TX('bien'), 1.0, '#2ecc0f'); son('bien');
+    avisar(TX('bien'), 1.0, '#2ecc0f'); son('bien'); hablar('bien', 0.85);
     decir(TX('dBien'));
     pintarLibros();
     const l=LIBROS[0];
@@ -2793,6 +3102,9 @@ function gritoTick(dt){
   PROFE.at+=dt;
   if(gritoT<=0){
     gritoT=0;
+    /* la risa cae DESPUES del grito, ya sobre la pantalla de muerte: el grito es el susto y la risa
+       es la burla, y encimadas se pisan */
+    hablar('risa', 0.95);
     document.body.classList.remove('grito');
     document.getElementById('muereT').textContent=TX('muereT');
     document.getElementById('muereS').textContent=TX('muereS',{a:aulaIdx+1});
@@ -2826,6 +3138,7 @@ function terminarClase(){
 }
 function ganar(){
   terminado=1; jugando=false;
+  musicaParar(1.4);
   document.getElementById('finT').textContent=TX('finT');
   document.getElementById('finS').textContent=TX('finS',{n:aciertos,t:TOTAL_CUENTAS});
   verPantalla('fin');
@@ -2861,7 +3174,7 @@ const BICHOS=[], ESQ=[];
 const BICHO_R=0.105;          // radio del blanco, en fraccion del ancho del marco
 const BICHO_CERCA=0.95;       // a esta distancia te muerde
 const _bm=new THREE.Matrix4(), _bv=new THREE.Vector3(), _bq=new THREE.Quaternion();
-const _be=new THREE.Euler(), _bs=new THREE.Vector3(1,1,1);
+const _be=new THREE.Euler(), _bs=new THREE.Vector3(1,1,1), _bc=new THREE.Color();
 /* LA CAMARA SE SINCRONIZA ANTES DE PROYECTAR. `camara` solo se acomoda al dibujar, asi que dentro
    del paso fijo tiene la posicion del cuadro anterior — y el auto-jugador, que corre sin dibujar ni
    un cuadro, la tenia con la posicion del MENU: los bichos se proyectaban a cualquier lado y no se
@@ -2901,23 +3214,45 @@ function bichosSoltar(n, rumbo){
   pintarLibros();
 }
 function bichosApagar(){
-  BICHOS.length=0; ESQ.length=0; bichosVivos=0;
+  BICHOS.length=0; ESQ.length=0; TIZAS.length=0; CASILL.length=0;
+  bichosVivos=0; casillBueno=-1;
   bichoMalla.visible=false; bichoOjos.visible=false; esqMalla.visible=false;
+  tizaMalla.visible=false; casillMalla.visible=false;
   document.body.classList.remove('bichos');
   pintarLibros();
 }
+/* UNA SOLA PUERTA PARA LAS TRES. El guion dice el tipo y aca se reparte; asi el resto del codigo
+   —soltar, terminar, apagar, contar— no sabe cuantas actividades hay ni le importa, y agregar una
+   cuarta es una linea en esta tabla y otra en TRAMOS. */
+function actSoltar(tipo, n, rumbo){
+  /* SIEMPRE SE APAGA LO ANTERIOR PRIMERO. En la partida normal la tanda anterior ya se apago al
+     terminar, pero apoyarse en eso deja un blanco vivo de la actividad anterior en cuanto algo
+     entra a una escena de actividad por otro camino —una prueba, un reintento—: se vieron dos
+     bichos y tres tizas contando para el mismo contador, o sea una escena que pedia cinco. */
+  bichosApagar();
+  if(tipo==='tizas') tizasSoltar(n, rumbo);
+  else if(tipo==='casilleros') casillSoltar(n, rumbo);
+  else bichosSoltar(n, rumbo);
+}
+function actTick(dt){ bichosTick(dt); tizasTick(dt); casillTick(dt); }
+function actDibujar(){ bichosDibujar(); tizasDibujar(); casillDibujar(); }
 /* UN ESTALLIDO SON DOS COSAS: las esquirlas que vuelan Y el bicho que desaparece en el mismo cuadro.
    Con las esquirlas solas se ve un bicho que sigue ahi con basura alrededor. */
-function bichoReventar(b){
-  b.viva=false;
-  bichosVivos=Math.max(0, bichosVivos-1);
-  for(let k=0;k<9 && ESQ.length<ESQ_MAX;k++){
+/* las esquirlas las usan las tres actividades: un bicho que revienta, una tiza que se agarra y un
+   casillero que se abre tiran lo mismo */
+function esquirlasSoltar(x,y,z,n){
+  for(let k=0;k<(n||9) && ESQ.length<ESQ_MAX;k++){
     const a=Math.random()*6.283, e=Math.random()*1.4-0.5;
     const v=1.6+Math.random()*1.5;
-    ESQ.push({ x:b.x, y:b.y, z:b.z, t:0.55,
+    ESQ.push({ x, y, z, t:0.55,
                vx:Math.cos(a)*Math.cos(e)*v, vy:Math.sin(e)*v+1.4, vz:Math.sin(a)*Math.cos(e)*v,
                gx:Math.random()*6.28, gy:Math.random()*6.28 });
   }
+}
+function bichoReventar(b){
+  b.viva=false;
+  bichosVivos=Math.max(0, bichosVivos-1);
+  esquirlasSoltar(b.x, b.y, b.z);
   son('revienta');
   pintarLibros();
 }
@@ -2958,24 +3293,13 @@ function bichosTick(dt){
     }
   }
   /* ---- lo que mata a un bicho: una pinza nueva, o un toque ---- */
-  const golpes=[];
-  if(MANO.on){ for(const p of MANO.pinzas) if(p.nueva) golpes.push(p); }
-  while(TOQUES.length) golpes.push(TOQUES.shift());
+  const golpes=golpesJuntar();
   if(!golpes.length) return;
-  const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
-  const rad=BICHO_R*W;
   for(const g of golpes){
-    let mejor=null, mejorD=rad;
-    for(const b of BICHOS){
-      if(!b.viva) continue;
-      const s=aPantalla(b.x, b.y, b.z);
-      if(!s.delante) continue;
-      const dd=Math.hypot((s.x-g.x)*W, (s.y-g.y)*H);
-      if(dd<mejorD){ mejorD=dd; mejor=b; }
-    }
     /* UNA PINZA MATA UN BICHO Y NO TODOS LOS QUE TOQUE: se elige el mas cercano al dedo. Con "todos
        los que esten dentro del radio" una pinza en el medio de un grupo limpiaba tres de una. */
-    if(mejor) bichoReventar(mejor);
+    const k=golpeEnLista(g, BICHOS, b=>b.viva, b=>[b.x, b.y, b.z]);
+    if(k>=0) bichoReventar(BICHOS[k]);
   }
 }
 function bichosDibujar(){
@@ -3021,6 +3345,164 @@ function bichosDibujar(){
   }
 }
 
+/* =========================================================================================
+   TIZAS Y CASILLEROS
+   Las dos comparten con los bichos el mismo golpe —una pinza nueva o un toque, convertidos a
+   fraccion del marco— asi que lo unico propio de cada una es como se mueve el blanco y como se
+   pierde. Reusar `golpesJuntar()` no es ahorro de lineas: es lo que garantiza que apuntar se sienta
+   igual en las tres, que es lo que el jugador aprendio en la primera.
+   ========================================================================================= */
+const TIZAS=[], CASILL=[];
+let casillBueno=-1, casillT=0;
+/* los golpes de este cuadro, en fraccion del marco: pinzas nuevas de cualquier mano, y toques */
+function golpesJuntar(){
+  const g=[];
+  if(MANO.on){ for(const p of MANO.pinzas) if(p.nueva) g.push(p); }
+  while(TOQUES.length) g.push(TOQUES.shift());
+  return g;
+}
+/* el blanco mas cercano al dedo, dentro del radio. Devuelve el indice o -1. */
+function golpeEnLista(g, lista, vivo, pos){
+  const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+  let mejor=-1, mejorD=BICHO_R*W;
+  for(let k=0;k<lista.length;k++){
+    if(!vivo(lista[k])) continue;
+    const p=pos(lista[k]);
+    const s=aPantalla(p[0], p[1], p[2]);
+    if(!s.delante) continue;
+    const d=Math.hypot((s.x-g.x)*W, (s.y-g.y)*H);
+    if(d<mejorD){ mejorD=d; mejor=k; }
+  }
+  return mejor;
+}
+
+/* ---------- TIZAS: caen y hay que agarrarlas antes de que toquen el piso ---------- */
+function tizasSoltar(n, rumbo){
+  TIZAS.length=0;
+  const g=(rumbo!=null)? rumbo : cam.giro;
+  const dx=Math.sin(g), dz=Math.cos(g), px=-dz, pz=dx;
+  for(let k=0;k<n && k<TIZAS_MAX;k++){
+    const d=2.1+((k*0.53)%1.5);
+    const lat=(((k%2)?1:-1)*(0.28+((k*0.37)%0.95)));
+    TIZAS.push({ x:cam.x+dx*d+px*lat, z:cam.z+dz*d+pz*lat,
+                 /* SALEN ESCALONADAS EN EL TIEMPO Y NO TODAS JUNTAS: siete tizas cayendo a la vez
+                    son una pared de tizas, y no hay dos manos que alcancen. El retardo las convierte
+                    en una fila, que es lo que se puede atender. */
+                 espera:k*0.55, y:2.9, vy:0, viva:true, giro:k*1.3 });
+  }
+  bichosVivos=n; document.body.classList.add('bichos'); son('bicho'); pintarLibros();
+}
+function tizasTick(dt){
+  if(!TIZAS.length) return;
+  for(const z of TIZAS){
+    if(!z.viva) continue;
+    if(z.espera>0){ z.espera-=dt; continue; }
+    /* 3,4 Y NO 9,8 NI 6,2. Con 6,2 la tiza tarda 0,96 s en caer los 2,84 m, y ese es TODO el tiempo
+       que hay para llevar la mano y cerrar la pinza — con el retardo de la deteccion no alcanza. Con
+       3,4 son 1,29 s. No es gravedad de verdad y no importa: importa que se pueda agarrar. */
+    z.vy-=3.4*dt; z.y+=z.vy*dt; z.giro+=dt*3.1;
+    if(z.y<=0.06){
+      /* SE ROMPE Y VUELVE A SALIR, no te mata. La muerte de este juego es una cuenta mal. */
+      z.y=0.06; son('muerde'); avisar(TX('mal'), 0.45, '#c0392b');
+      z.y=2.9; z.vy=0; z.espera=0.5+Math.random()*0.6;
+    }
+  }
+  const golpes=golpesJuntar();
+  for(const g of golpes){
+    const k=golpeEnLista(g, TIZAS, z=>z.viva && z.espera<=0, z=>[z.x, z.y, z.z]);
+    if(k>=0){ TIZAS[k].viva=false; bichosVivos=Math.max(0,bichosVivos-1);
+              esquirlasSoltar(TIZAS[k].x, TIZAS[k].y, TIZAS[k].z); son('revienta'); pintarLibros(); }
+  }
+}
+function tizasDibujar(){
+  const hay=TIZAS.some(z=>z.viva);
+  tizaMalla.visible=hay;
+  if(!hay) return;
+  let k=0;
+  for(const z of TIZAS){
+    if(!z.viva || k>=TIZAS_MAX) continue;
+    if(z.espera>0){ _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+                    tizaMalla.setMatrixAt(k++, _bm); continue; }
+    _be.set(z.giro*0.7, z.giro, z.giro*0.4); _bq.setFromEuler(_be);
+    _bm.compose(_bv.set(z.x, z.y, z.z), _bq, _bs.set(1,1,1));
+    tizaMalla.setMatrixAt(k++, _bm);
+  }
+  for(let q=k;q<TIZAS_MAX;q++){
+    _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+    tizaMalla.setMatrixAt(q, _bm);
+  }
+  tizaMalla.instanceMatrix.needsUpdate=true;
+}
+
+/* ---------- CASILLEROS: tiembla uno y hay que abrir ESE ---------- */
+function casillSoltar(n, rumbo){
+  CASILL.length=0;
+  const g=(rumbo!=null)? rumbo : cam.giro;
+  const dx=Math.sin(g), dz=Math.cos(g), px=-dz, pz=dx;
+  /* en abanico y todos a la misma distancia: la gracia es ELEGIR, no alcanzar */
+  for(let k=0;k<CASILL_N;k++){
+    const lat=(k-(CASILL_N-1)/2)*0.76;
+    const d=4.4+Math.abs(lat)*0.22;
+    CASILL.push({ x:cam.x+dx*d+px*lat, z:cam.z+dz*d+pz*lat, y:0.80, abierto:false, sac:0 });
+  }
+  bichosVivos=n; casillT=0; casillBueno=-1;
+  document.body.classList.add('bichos'); pintarLibros();
+}
+function casillElegir(){
+  const libres=[];
+  for(let k=0;k<CASILL.length;k++) if(!CASILL[k].abierto) libres.push(k);
+  casillBueno = libres.length? libres[Math.floor(Math.random()*libres.length)] : -1;
+  casillT=0;
+  if(casillBueno>=0) son('bicho');
+}
+function casillTick(dt){
+  if(!CASILL.length) return;
+  if(casillBueno<0) casillElegir();
+  casillT+=dt;
+  for(const c of CASILL) c.sac=Math.max(0, c.sac-dt*4);
+  if(casillBueno>=0) CASILL[casillBueno].sac=1;
+  const golpes=golpesJuntar();
+  for(const g of golpes){
+    const k=golpeEnLista(g, CASILL, c=>!c.abierto, c=>[c.x, c.y+0.35, c.z]);
+    if(k<0) continue;
+    if(k===casillBueno){
+      CASILL[k].abierto=true;
+      bichosVivos=Math.max(0, bichosVivos-1);
+      esquirlasSoltar(CASILL[k].x, CASILL[k].y+0.5, CASILL[k].z);
+      son('revienta'); pintarLibros();
+      casillElegir();
+    } else {
+      /* EL CASILLERO EQUIVOCADO CUESTA TIEMPO, no una vida: se cambia el que tiembla, asi que hay
+         que volver a mirar. Castigar con la muerte una eleccion de ocho seria injusto. */
+      son('muerde'); avisar(TX('mal'), 0.45, '#c0392b');
+      casillElegir();
+    }
+  }
+}
+function casillDibujar(){
+  const hay=CASILL.length>0 && CASILL.some(c=>!c.abierto);
+  casillMalla.visible=hay;
+  if(!hay) return;
+  for(let k=0;k<CASILL_N;k++){
+    const c=CASILL[k];
+    if(!c || c.abierto){ _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+                         casillMalla.setMatrixAt(k, _bm); continue; }
+    /* EL QUE TIEMBLA SE VE PORQUE TIEMBLA, no porque este pintado de otro color: un casillero
+       marcado con color se elige sin mirar la escena, y lo que hay que entrenar es mirar. */
+    /* el que tiembla se INCLINA y SALTA un poco: solo inclinado, a cuatro metros y con el filtro de
+       baja calidad puesto, 0,045 rad son tres pixeles y no se ve cual es */
+    const s=c.sac>0? Math.sin(casillT*34)*0.055*c.sac : 0;
+    const salto=c.sac>0? Math.abs(Math.sin(casillT*17))*0.045*c.sac : 0;
+    _be.set(0, Math.atan2(cam.x-c.x, cam.z-c.z), s); _bq.setFromEuler(_be);
+    _bm.compose(_bv.set(c.x+s*0.5, c.y+salto, c.z), _bq, _bs.set(1,1,1));
+    casillMalla.setMatrixAt(k, _bm);
+    _bc.setRGB(0.70+ (c.sac>0? 0.22*c.sac : 0), 0.22, 0.17);
+    casillMalla.setColorAt(k, _bc);
+  }
+  casillMalla.instanceMatrix.needsUpdate=true;
+  if(casillMalla.instanceColor) casillMalla.instanceColor.needsUpdate=true;
+}
+
 function pasoFijo(dt){
   /* EL GRITO CORRE ANTES QUE TODO Y DEVUELVE. Es el unico momento del juego en que el guion no
      manda: no avanza la escena, no camina nadie y el jugador no puede contestar nada. */
@@ -3032,7 +3514,7 @@ function pasoFijo(dt){
   esperasTick(dt);
   rielTick(dt);
   profeTick(dt);
-  bichosTick(dt);
+  actTick(dt);
   /* GESTICULA CUANDO HABLA Y SE QUEDA QUIETO CUANDO ESPERA. Antes se quedaba en 'explicando' todo
      el rato, o sea con los brazos abiertos mientras el jugador contaba con los dedos: a la distancia
      y con el filtro, dos brazos abiertos y quietos son dos palitos que no dicen nada. Atar el gesto
@@ -3048,10 +3530,10 @@ function pasoFijo(dt){
   /* --- el viaje: la camara es la que manda. El llega antes y espera. --- */
   if(E.viaje!=null && !riel){ profeAnim('quieto'); siguienteEscena(); return; }
   /* --- los bichos: se sale cuando no queda ninguno --- */
-  if(E.bichos && bichosMira) mirarA(bichosMira[0], bichosMira[1], dt, 3.0);
-  if(E.bichos && !bichosCerrado){
+  if(E.act && bichosMira) mirarA(bichosMira[0], bichosMira[1], dt, 3.0);
+  if(E.act && !bichosCerrado){
     if(bichosVivos<=0 && escenaT>0.5){
-      /* LA BANDERA NO VA ESCRITA EN EL GUION. El primer intento ponia GUION[i]={...E,bichos:0}: eso
+      /* LA BANDERA NO VA ESCRITA EN EL GUION. El primer intento ponia GUION[i]={...E,act:0}: eso
          apaga la tanda para siempre, asi que al morir y volver a pasar por el mismo pasillo ya no
          habia bichos. El guion es la partitura y no se toca; lo que cambia es el estado. */
       bichosCerrado=true;
@@ -3158,7 +3640,7 @@ function dibujar(alfa){
     l.giro+=0.012; l.g.rotation.y=Math.PI+Math.sin(l.giro)*0.34;
     l.g.position.y=1.52+Math.sin(l.giro*1.7)*0.055; }
   for(const p of PUERTAS) if(p.g) p.g.rotation.y=(p.vertical?0:Math.PI/2) + p.ang;
-  bichosDibujar();
+  actDibujar();
   manos3DDibujar();
   pintarEscena();
 }
@@ -3339,6 +3821,11 @@ window.__recreo={
     return r;
   },
   /* ---- LOS BICHOS ---- */
+  /* el estado de la actividad de pasillo, sea cual sea */
+  actVer:()=>({ vivos:bichosVivos, bichos:BICHOS.filter(b=>b.viva).length,
+                tizas:TIZAS.filter(z=>z.viva).length,
+                casilleros:CASILL.filter(c=>!c.abierto).length,
+                casillBueno, esquirlas:ESQ.length }),
   bichosVer:()=>{
     const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
     return { vivos:bichosVivos, esquirlas:ESQ.length, marco:[W,H],
@@ -3351,7 +3838,7 @@ window.__recreo={
   /* una pinza de mentira en coordenadas del marco (0..1): es la unica forma de probar el apuntado
      sin camara ni mano */
   pinzaFalsa:(x,y)=>{ TOQUES.push({x,y}); return TOQUES.length; },
-  bichosSoltar:(n)=>{ bichosSoltar(n||3); return bichosVivos; },
+  bichosSoltar:(n,tipo)=>{ actSoltar(tipo||'bichos', n||3); return bichosVivos; },
   /* ---- LA MUERTE ---- */
   matar:()=>{ morir(); return { grito:gritoT, muertes }; },
   reintentar:()=>{ reintentar(); return window.__recreo.estado(); },
@@ -3455,9 +3942,20 @@ window.__recreo={
          donde cae el bicho. Probar esto con una llamada directa a bichoReventar() no probaria nada
          de lo que puede estar mal, que es la proyeccion y el radio del blanco. */
       if(pararEn && (GUION[escena_i]||{}).id===pararEn) break;
+      /* LAS TRES ACTIVIDADES SE JUEGAN POR EL MISMO CAMINO QUE USA EL JUGADOR: se empuja un toque en
+         el pixel donde cae el blanco. Llamar directo a la funcion que lo revienta no probaria nada de
+         lo que puede estar mal, que es la proyeccion, el radio del blanco y —en los casilleros— que
+         el que tiembla sea el que se abre. */
       if(bichosVivos>0 && !(vueltas%8) && !pararEn){
+        let p=null;
         const b=BICHOS.find(q=>q.viva);
-        if(b){ const s=aPantalla(b.x,b.y,b.z); if(s.delante) TOQUES.push({x:s.x, y:s.y}); }
+        const z=TIZAS.find(q=>q.viva && q.espera<=0);
+        if(b) p=[b.x,b.y,b.z];
+        else if(z) p=[z.x,z.y,z.z];
+        else if(casillBueno>=0 && CASILL[casillBueno] && !CASILL[casillBueno].abierto){
+          const c=CASILL[casillBueno]; p=[c.x, c.y+0.35, c.z];
+        }
+        if(p){ const s=aPantalla(p[0],p[1],p[2]); if(s.delante) TOQUES.push({x:s.x, y:s.y}); }
       }
       const antes=escena_i, aL=libros, mu=muertes;
       avanzar(1/60);
@@ -3482,8 +3980,15 @@ window.__recreo={
       if(E && E.espera){ MANO.on=false; padPedido=(E.espera.tipo==='dedos')? E.espera.n : 1; }
       else if(cuenta && !bloqueo){ MANO.on=false; padPedido=cuenta.res; }
       if(bichosVivos>0 && !(pasos%8)){
+        let p=null;
         const b=BICHOS.find(q=>q.viva);
-        if(b){ const s=aPantalla(b.x,b.y,b.z); if(s.delante) TOQUES.push({x:s.x,y:s.y}); }
+        const z=TIZAS.find(q=>q.viva && q.espera<=0);
+        if(b) p=[b.x,b.y,b.z];
+        else if(z) p=[z.x,z.y,z.z];
+        else if(casillBueno>=0 && CASILL[casillBueno] && !CASILL[casillBueno].abierto){
+          const c=CASILL[casillBueno]; p=[c.x, c.y+0.35, c.z];
+        }
+        if(p){ const s=aPantalla(p[0],p[1],p[2]); if(s.delante) TOQUES.push({x:s.x,y:s.y}); }
       }
       avanzar(1/60);
       const c=celda(PROFE.x, PROFE.z);
@@ -3536,6 +4041,47 @@ window.__recreo={
       rms=Math.sqrt(rms/AUD.buf.length); }
     return { hay:!!AUD.ctx, pico:+pico.toFixed(4), rms:+rms.toFixed(4) }; },
   son:(k)=>{ son(k); return true; },
+  /* que ladridos quedaron decodificados: un data URI que no decodifica deja al personaje mudo sin
+     que nada falle ni aparezca en la consola */
+  voces:()=>{ const r={}; for(const k in VOZ_DATOS){
+      const b=VOZ[k]; r[k]= b? +b.duration.toFixed(2) : 0; }
+    return { lista:vozLista, buffers:r,
+             musica:{ on:MUS.on, nivel:MUS.nivel, paso:MUS.paso,
+                      gan:MUS.gan? +MUS.gan.gain.value.toFixed(4) : null,
+                      ctx:AUD.ctx? AUD.ctx.state : 'no',
+                      reloj:AUD.ctx? +AUD.ctx.currentTime.toFixed(2) : 0,
+                      prox:+MUS.prox.toFixed(2),
+                      nBajar:MUS.nBajar, nParar:MUS.nParar, nNotas:MUS.nNotas } }; },
+  /* cancela la automatizacion y pone el volumen a mano: separa "la musica no suena" de "la rampa
+     del volumen no llega" */
+  /* EL NIVEL DE UNA MUSICA NO SE MIDE CON UNA MUESTRA. El analizador devuelve una ventana de 2.048
+     muestras, o sea 43 ms: cae entre dos notas y da cero, cae encima del bajo y da 0,15. Para saber
+     como suena una cama de fondo hay que mirar un rato. Se muestrea en un bucle cerrado —el hilo de
+     audio sigue corriendo aunque el principal este ocupado— y se devuelve el maximo, el promedio y
+     cuantas muestras salieron en silencio. */
+  audioVentana:(ms)=>{
+    if(!AUD.an) return 'sin analizador';
+    const fin=performance.now()+(ms||500);
+    let pico=0, suma=0, n=0, mudas=0;
+    while(performance.now()<fin){
+      AUD.an.getFloatTimeDomainData(AUD.buf);
+      let p=0, s=0;
+      for(let i=0;i<AUD.buf.length;i++){ const v=Math.abs(AUD.buf[i]); if(v>p)p=v; s+=v*v; }
+      const r=Math.sqrt(s/AUD.buf.length);
+      if(p>pico) pico=p;
+      if(p<0.002) mudas++;
+      suma+=r; n++;
+    }
+    return { pico:+pico.toFixed(4), rmsMedio:+(suma/Math.max(1,n)).toFixed(4),
+             muestras:n, mudasPct:+(mudas/Math.max(1,n)*100).toFixed(0) };
+  },
+  musProbar:(v)=>{ if(!MUS.gan) return 'no hay';
+    const t=AUD.ctx.currentTime;
+    MUS.gan.gain.cancelScheduledValues(t);
+    MUS.gan.gain.setValueAtTime(v==null?1:v, t);
+    return +MUS.gan.gain.value.toFixed(3); },
+  hablar:(k)=>{ hablar(k, 1.0); return !!VOZ[k]; },
+  musica:(n)=>{ if(n!=null) musicaNivel(n); return { on:MUS.on, nivel:MUS.nivel }; },
   idioma:(c)=>{ if(c) elegirIdioma(c); return IDIOMA; },
   pantalla:(p)=>{ verPantalla(p); return pant; }
 };

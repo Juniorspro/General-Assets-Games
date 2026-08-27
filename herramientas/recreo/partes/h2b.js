@@ -7,6 +7,9 @@ function audioIniciar(){
   let c; try{ c=new C(); }catch(e){ return; }
   AUD.ctx=c;
   const m=c.createGain(); m.gain.value=0.8; m.connect(c.destination); AUD.m=m;
+  /* la voz se decodifica UNA vez, aca: decodeAudioData es asincrono y hacerlo en el momento de
+     hablar dejaria el primer "eh!" del juego sin sonar */
+  vozCargar();
   try{ const an=c.createAnalyser(); an.fftSize=2048; m.connect(an);
        AUD.an=an; AUD.buf=new Float32Array(an.fftSize); }catch(e){}
 }
@@ -57,6 +60,12 @@ function son(k){
     /* EL GRITO ES EL SONIDO MAS FUERTE DEL JUEGO, y tiene que serlo: es el unico momento en que el
        juego habla mas fuerte que el jugador. Tres formantes que BAJAN mas un soplo ancho. */
     else if(k==='grito'){
+      /* LA VOZ VA ENCIMA DEL GRITO SINTETICO Y NO EN SU LUGAR. Sola, la voz generada es un hombre
+         gritando en una habitacion; solo, el sintetico es un ruido descendente sin garganta. Juntos
+         suena a algo con pulmones que ademas rompe el aire, y encima el sintetico tapa el corte del
+         final del archivo. */
+      hablar('grito', 1.0);
+      musicaBajar(0.08, 0);
       tono(840,1.15,0.30,'sawtooth',170);
       tono(520,1.15,0.24,'sawtooth',115);
       tono(1280,0.85,0.14,'square',300);
@@ -134,7 +143,8 @@ function verPantalla(p){
   document.body.classList.toggle('jugando', enJuego);
   jugando=enJuego && !terminado;
   if(!enJuego){ document.body.classList.remove('esperando'); document.body.classList.remove('clase');
-                document.body.classList.remove('bichos'); document.body.classList.remove('grito'); }
+                document.body.classList.remove('bichos'); document.body.classList.remove('grito');
+                musicaParar(p==='muere'? 0.25 : 0.8); }
 }
 let ctrlManos=true;
 try{ const g=localStorage.getItem('recreo_ctrl'); if(g) ctrlManos=(g==='manos'); }catch(e){}

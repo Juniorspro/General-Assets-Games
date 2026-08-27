@@ -288,3 +288,55 @@ const esqGeo=new THREE.TetrahedronGeometry(0.062,0);
 const esqMalla=new THREE.InstancedMesh(esqGeo, new THREE.MeshLambertMaterial({color:0x6f3a1c}), ESQ_MAX);
 esqMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 esqMalla.frustumCulled=false; esqMalla.visible=false; escena.add(esqMalla);
+
+/* =========================================================================================
+   LAS OTRAS DOS ACTIVIDADES DE PASILLO
+
+   Los bichos solos se gastan: siete tandas de lo mismo es una tanda repetida siete veces. Se agregan
+   dos que piden algo DISTINTO de la mano, y eso es el criterio, no la variedad decorativa:
+
+   - BICHOS: vienen hacia vos. Lo que se entrena es APUNTAR a un blanco que se mueve.
+   - TIZAS: caen. Lo que se entrena es el TIEMPO — hay que llegar antes de que toquen el piso, y no
+     importa que la tiza este quieta en x.
+   - CASILLEROS: uno de los ocho tiembla. Lo que se entrena es ELEGIR: los ocho estan a la misma
+     distancia y hay que pinzar el correcto, no el mas cercano.
+
+   Las tres se juegan con la misma pinza y ninguna necesita un boton nuevo.
+   ========================================================================================= */
+const TIZAS_MAX=7;
+const tizaGeo=(()=>{
+  /* una tiza: un cilindro corto y gordo, con la punta gastada de un lado */
+  const ps=[];
+  /* 4,5 cm DE RADIO Y NO 3: una tiza de verdad mide 1 cm, pero a tres metros eso son OCHO PIXELES en
+     un marco de 790 y con el filtro de baja calidad puesto desaparece. Es el mismo criterio que el
+     radio del blanco: lo que tiene que costar es llegar a tiempo, no distinguir el objeto. */
+  const c=new THREE.CylinderGeometry(0.045,0.045,0.26,9,1,false); ps.push(c);
+  const p=new THREE.ConeGeometry(0.045,0.06,9); p.rotateX(Math.PI); p.translate(0,0.16,0); ps.push(p);
+  /* la faja de papel del medio, que es lo que la hace leer a tiza y no a palito */
+  const f=new THREE.CylinderGeometry(0.048,0.048,0.07,9,1,false); f.translate(0,-0.02,0); ps.push(f);
+  const pl=ps.map(g=>g.index? g.toNonIndexed() : g);
+  const g=mergeGeometries(pl,false); for(const q of ps) q.dispose(); return g;
+})();
+const tizaMalla=new THREE.InstancedMesh(tizaGeo,
+  /* emissive bajo: la tiza cae en un pasillo beige y contra el piso beige un blanco mate se pierde.
+     Con un pelo de emision se lee como algo que cae aunque este a contraluz. */
+  new THREE.MeshLambertMaterial({color:0xfdfaf0, emissive:0x2a2620}), TIZAS_MAX);
+tizaMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+tizaMalla.frustumCulled=false; tizaMalla.visible=false; escena.add(tizaMalla);
+
+/* LOS CASILLEROS DE LA ACTIVIDAD son propios y no los del pasillo: los del pasillo estan fundidos en
+   una malla con toda la escuela y no se pueden mover ni sacudir. Estos son ocho, instanciados, y se
+   ponen delante del jugador cuando toca. */
+/* CINCO Y NO OCHO, Y MAS LEJOS. Con ocho de 0,62 m cada 0,66 m el abanico medía 5,3 metros de ancho
+   puesto a 3 m de la camara, donde solo entran 3,4: en pantalla no eran ocho casilleros, era UNA
+   PARED ROJA de lado a lado tapando el pasillo — y encima 5,3 m no caben en un pasillo de 4,2. Cinco
+   cada 0,76 m son 3,8 m de abanico a 4,4 de distancia: entran en el pasillo, entran en el cuadro con
+   margen, y se ven separados, que es lo unico que hace que se puedan elegir de a uno. */
+const CASILL_N=5;
+const casillGeo=new THREE.BoxGeometry(0.56, 1.55, 0.30);
+const casillMalla=new THREE.InstancedMesh(casillGeo,
+  new THREE.MeshLambertMaterial({color:0xb2392c}), CASILL_N);
+casillMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+casillMalla.frustumCulled=false; casillMalla.visible=false; escena.add(casillMalla);
+casillMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(CASILL_N*3), 3);
+casillMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);

@@ -21,6 +21,7 @@ PARTES = ['a2.html',   # el marco, el CSS y el HUD
           'g2.js',     # MediaPipe: leer la mano, contar dedos, el teclado de respaldo
           'g3.js',     # las manos en 3D, reconstruidas desde la pantalla
           'h2b.js',    # las pantallas, el audio, la calidad
+          'h3.js',     # la voz generada de Baldi y la musica procedural
           'p2.js',     # los dos filtros (saturacion y baja calidad)
           'i2.js',     # el guion corriendo, el paso fijo y el dibujado
           'j2.js']     # los ganchos de prueba
@@ -33,6 +34,10 @@ def main():
     if '__BALDI_GLB__' not in s:
         print('no aparece __BALDI_GLB__ en las partes', file=sys.stderr); return 1
     s = s.replace('__BALDI_GLB__', uri, 1)
+    # las voces horneadas, como un objeto de data URIs
+    vp = os.path.join(RAIZ, 'herramientas', 'recreo', 'voz', 'voz.json')
+    voz = io.open(vp, encoding='utf8').read().strip() if os.path.exists(vp) else '{}'
+    s = s.replace('__VOZ_JSON__', voz, 1)
     # SE ESCRIBE RECIEN CUANDO EL TEXTO ESTA COMPLETO. io.open(p,'w') trunca el archivo ANTES de
     # evaluar lo que se le pasa: una vez un NameError en el argumento me dejo Recreo.html en cero.
     salida = os.path.join(RAIZ, 'juegos-pc', 'Recreo.html')

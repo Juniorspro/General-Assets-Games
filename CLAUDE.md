@@ -27,8 +27,8 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   tener cuidado ya que al punto en el que quiere ir hay bolas malas con espinas girando alrededor de
   la bola y hay que tocar justo ... procedural con físicas ... una beta del nivel 1 tutorial ...
   buenos gráficos blancos minimalistas"*.
-- **`Recreo.html` es "RECREO"** (~811 KB, de los cuales 489 son el modelo 3D de Baldi generado con
-  Higgsfield y horneado). **Recreación de fan, no comercial y sin publicar**, del colegio y del
+- **`Recreo.html` es "RECREO"** (~902 KB: 489 son el modelo 3D de Baldi generado con Higgsfield y
+  horneado, y 25 la voz generada; la música es procedural y pesa cero). **Recreación de fan, no comercial y sin publicar**, del colegio y del
   profesor de Baldi's Basics (Basically Games / mystman12). **Vertical (9:16), FOV 90 y el jugador no
   maneja la cámara**: va sobre rieles. Baldi te saluda, te enseña a usar las manos —cinco dedos,
   pinza, dos dedos— te lleva a un aula, se pone del otro lado del escritorio con el pizarrón, y
@@ -36,8 +36,11 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   ocho dedos, o sea las dos manos (MediaPipe, `numHands:2`). Son **8 aulas con un libro y 3 cuentas
   cada una (24)**, y en los pasillos de en medio hay **7 tandas de bichos que se revientan haciendo
   pinza encima**. **Una cuenta mal y te mata con un screamer**; volvés al principio de esa aula.
-  Con **filtro de saturación y de baja calidad** (pixelado real) y respaldo de teclado numérico —y de
-  toque, para los bichos— para quien no tenga cámara. Simulación a **60 pasos fijos con
+  Las manos se ven **en 3D dentro del juego**, con profundidad, reconstruidas punto por punto sobre su
+  rayo de pantalla; MediaPipe corre **fuera del hilo de render** a 24 Hz con los puntos interpolados a
+  60. Usa la **cámara trasera** y no se muestra en pantalla. En los pasillos rotan **tres**
+  actividades: bichos, tizas que caen y casilleros. Con **filtro de saturación y de baja calidad**
+  (pixelado real) y respaldo de teclado numérico —y de toque— para quien no tenga cámara. Simulación a **60 pasos fijos con
   interpolación**. El juego vive partido en `herramientas/recreo/partes/` y se arma con
   `python3 herramientas/recreo/armar.py`.
 - **`Eco.html` es "Eco"** (~215 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
@@ -46,6 +49,151 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Vigesimoquinta vuelta (2026-08-27): **RECREO** — MediaPipe fuera del render, manos 3D, cámara trasera, tres actividades, voz y música
+
+Pedido: cámara trasera; interpolar cuadros porque *"baja mucho el rendimiento solamente por las manos
+y el mediapipe"*, y forzar 60 estables; sacar la cámara de la pantalla pero dejarla activa; manos 3D
+riggeadas humanas con profundidad; que Baldi no se desvíe; más cosas al salir del salón; animaciones
+más rápidas y fluidas; y voz y música generadas.
+
+#### EL RENDIMIENTO: MEDIR MENOS, DIBUJAR IGUAL
+
+`detectForVideo()` tarda entre 8 y 20 ms en un teléfono, **y estaba llamándose dentro del
+`requestAnimationFrame` del juego**. Con 16,6 ms de presupuesto para 60 fps, cada cuadro pagaba la
+medición. No se arregla midiendo más rápido:
+
+1. La medición la maneja **`requestVideoFrameCallback` del propio `<video>`**, que dispara una vez por
+   cuadro de *cámara* y no por cuadro de *render* — corre al mínimo entre los fps del video y los del
+   navegador. Y encima se limita a 24 Hz en teléfono.
+2. Entre medición y medición los 21 puntos de cada mano se **interpolan**, con predicción acotada a
+   45 ms y suavizado exponencial de τ=32 ms. Es el mismo criterio que el juego ya usaba con su paso
+   fijo de 60 y sus cuadros de 120: la verdad se calcula pocas veces y el dibujo rellena.
+3. Entrada a **320×240**, que son 2,25 veces menos píxeles que 480×360 para la misma mano.
+
+**Por qué NO un Web Worker**, que es lo que dice todo el mundo: `@mediapipe/tasks-vision` hace
+`document.createElement('canvas')` adentro, que no existe en un worker, y el caso de iOS 17 sigue
+abierto en el repositorio de MediaPipe ([#5292](https://github.com/google-ai-edge/mediapipe/issues/5292)).
+Un worker que no arranca en la mitad de los teléfonos es peor que 24 Hz interpolados que arrancan en
+todos.
+
+Detalle que también costaba: la salida suavizada se convertía a 21 objetos por mano **por cuadro**, o
+sea 2.520 objetos por segundo a la basura. Ahora se escriben los mismos objetos siempre.
+
+#### LAS MANOS 3D: RECONSTRUIDAS POR RAYO DE PANTALLA, NO DESDE LOS worldLandmarks
+
+MediaPipe da `worldLandmarks` métricos y parece lo obvio, pero anclando la mano en la muñeca y
+escalando la forma **el pulgar y el índice en 3D no caen donde están los mismos puntos en pantalla** —
+y el juego apunta a los bichos con los puntos de pantalla. Verías la pinza en un lugar y reventarías
+un bicho en otro.
+
+Así que cada punto se coloca **sobre su propio rayo de pantalla**, a una profundidad que sale de la z
+relativa. El dibujo y el apuntado son la misma cosa *por construcción*: medido, la muñeca proyecta en
+(536, 994) y el punto de pantalla es (536, 994). Y la perspectiva sale gratis, porque los puntos
+normalizados ya la traen puesta.
+
+Lo demás es lo que hace que se lean a manos y no a palitos: falanges con volumen, articulaciones
+redondeadas, **palma rellena** (con sólo huesos se lee a araña), punta afinada, y el **grosor derivado
+de la propia palma** — con radios en metros absolutos los dedos salían como chorizos, porque el grosor
+dependía de una constante y el ancho en pantalla, en cambio, sale de los puntos. Van instanciadas: 84
+piezas, **dos llamadas de dibujo**, 0,125 ms por cuadro.
+
+#### LA CÁMARA: TRASERA, INVISIBLE, Y EL ESPEJO DEJA DE SER UNA CONSTANTE
+
+`facingMode: environment`. Y con la trasera **la imagen NO va espejada** —con la frontal sí— así que
+el espejo se lee del propio track con `getSettings()`: si se espeja al revés, mover la mano a la
+derecha mueve la mano del juego a la izquierda y no hay forma de apuntar.
+
+La miniatura sale de la pantalla, pero el `<video>` **no va con `display:none`**: un video que el
+compositor considera que no se dibuja puede dejar de entregar cuadros, y sin cuadros no hay detección.
+Queda de 2 px y transparente.
+
+#### BALDI NO SE DESVÍA: ERAN DOS COSAS Y NINGUNA ERA EL RUMBO
+
+- `rutaDesde()` descartaba **todos** los puntos a menos de una celda, y en un pasillo con esquina eso
+  se come el punto de la esquina: la ruta \[entrada, esquina, destino\] queda en \[destino\] y camina
+  en diagonal atravesando la pared.
+- Y **el saludo pasaba justo en una esquina del mapa**: los dos estaban en el cruce, así que su primer
+  movimiento era ir hacia atrás hasta la celda de la cámara para poder doblar. Salteándole ese punto,
+  cortaba la esquina. Poniendo a los dos sobre la columna 11 y la cámara mirando a −Z, la ruta sale
+  derecho y no hay esquina que cortar.
+
+**Auditoría nueva**, y es la parte importante: se juega la partida entera preguntando en cada paso si
+la celda del profesor es pisable. Una diagonal por dentro de una pared dura dos segundos y en una
+captura no se ve. Medido: **113 pasos dentro de paredes antes, 0 ahora** — y verificado que la prueba
+detecta el defecto, revirtiendo el arreglo y viendo volver los 113.
+
+#### LAS ANIMACIONES: EL CICLO SALE DE LA VELOCIDAD
+
+Estaba en `t*2,0` —un paso cada 1,57 s— mientras el riel lo movía a 3,4 m/s: **2,7 metros por paso**,
+o sea los pies arrastrando mientras el cuerpo avanza. El patinaje clásico. Ahora el ritmo se **deriva**
+de la velocidad y la zancada (`CAMINA_W = 2π·v/(2·zancada)`), así que si cambia la velocidad el ciclo
+la sigue solo. Más: desfase de 0,45 rad entre cadera y rodilla (sin desfase todo el cuerpo cambia de
+dirección en el mismo cuadro y se lee a marioneta), la cabeza compensando el rebote, y la mezcla entre
+animaciones de 0,40 a **0,22 s** — 0,40 s a 60 pasos son veinticuatro cuadros mezclando dos poses, o
+sea medio segundo en el que el personaje no está haciendo ninguna de las dos cosas. Recorrido de
+rodilla medido: de 0,21 a **0,57 m**.
+
+#### TRES ACTIVIDADES DE PASILLO, Y EL CRITERIO NO ES LA VARIEDAD
+
+Siete tandas de bichos son una tanda repetida siete veces. Las tres piden algo **distinto** de la mano:
+
+- **bichos** vienen hacia vos → se entrena *apuntar* a un blanco que se mueve.
+- **tizas** caen → se entrena el *tiempo*; hay que llegar antes de que toquen el piso.
+- **casilleros**: tiembla uno de cinco, todos a la misma distancia → se entrena *elegir*.
+
+Las tres pasan por el mismo `golpesJuntar()` y el mismo radio de blanco, y eso no es ahorro de líneas:
+es lo que garantiza que apuntar se sienta igual en las tres. Dos números salieron de mirar: los
+casilleros eran **ocho de 0,62 m cada 0,66** puestos a 3 m, o sea un abanico de 5,3 metros donde
+entran 3,4 — no eran ocho casilleros, era una **pared roja** tapando el pasillo, y encima 5,3 m no
+caben en un pasillo de 4,2. Y la tiza a escala real mide 1 cm, que a tres metros son **ocho píxeles**
+con el filtro de baja calidad puesto: lo que tiene que costar es llegar a tiempo, no distinguir el
+objeto.
+
+#### LA VOZ ESTÁ GENERADA, LA MÚSICA ESTÁ COMPUESTA, Y LA DIFERENCIA NO ES CAPRICHO
+
+**La voz**: cinco ladridos con text-to-speech (Higgsfield / seed_audio, voz Holden), recortados,
+mono 16 kHz, MP3 a 40 kbps: **19 KB los cinco**. Son **interjecciones a propósito** —"¡eh!", "mm-hm",
+"uh-uh", el grito, la risa— y no frases: el juego habla en tres idiomas y una frase habría que
+grabarla tres veces, mientras que un grito se entiende igual en los tres. Los subtítulos siguen
+haciendo el trabajo del idioma.
+
+El horneado tiene un paso que costó dos intentos: **se queda con la ráfaga de más ENERGÍA, no con la
+del pico más alto**. El TTS devuelve dos tomas de la misma línea con silencio en el medio y a veces un
+chasquido al final: en `bien.wav` ese chasquido mide 0,276 de amplitud, **más alto** que el "mm-hm"
+real que está en el medio a 0,20. La regla del pico se llevaba el chasquido y devolvía un ladrido de
+0,11 s cortado al medio. La energía total —amplitud *por* duración— no se deja engañar: 5 cuadros de
+0,2 suman 0,2 y 23 cuadros de 0,15 suman 0,52.
+
+**La música es procedural**, y hay que decir por qué: no hubo con qué generarla. El único modelo de
+música disponible está reservado para otro flujo y no había llave del otro proveedor. En vez de dejar
+el juego en silencio, se compone — y encima resulta lo correcto acá: pesa **cero bytes**, no se corta
+nunca, y puede cambiar de intensidad según el aula, que un archivo suelto no puede. Cuatro compases en
+la menor con el último acorde tenso (Am–F–G–**E**): el E mayor sobre una escala menor es lo que hace
+que el loop no se cierre nunca del todo.
+
+Dos cosas que la medición corrigió, y que a oído se habrían pasado:
+
+- **La agenda no va colgada del bucle de dibujo.** Un rAF se atrasa y se pausa en segundo plano; el
+  reloj de `AudioContext` no. Un temporizador de 100 ms agenda lo que entra en los próximos 300 ms.
+- **El 96 % de las muestras salían MUDAS.** El sobre de cada nota decaía exponencialmente a cero a lo
+  largo de toda su duración, así que una nota "sostenida" de un segundo pasa el 80 % de ese segundo
+  casi en silencio. Eso no es una música tenue: es silencio con un bip. Se agregó un sobre con
+  sostenimiento y —la pieza que faltaba— un **colchón de tres osciladores encendidos para todo el
+  juego**, que sólo cambian de afinación siguiendo el acorde. Medido con una ventana de 1,4 s:
+  **0 % mudas**, rms 0,033, pico 0,13.
+
+Y el grito quedó donde tenía que quedar: **rms 0,291 contra 0,033 de la música, o sea nueve veces más
+fuerte**, con la música agachándose a 0,08 cuando suena.
+
+#### MEDIDO AL CERRAR
+
+Partida completa: **24 cuentas de 24**, las 8 aulas, las 7 tandas —bichos, tizas y casilleros—
+reventadas por el mismo camino que usa el jugador, `window.__errs` vacío. **0 pasos dentro de paredes**
+en 19.706 pasos. Contestando mal: muerte, y desde el reintento la partida se termina igual (24/24 con
+1 muerte). Voces decodificadas: 0,54 · 0,43 · 0,58 · 1,37 · 0,90 s. Manos 3D a **0,125 ms por cuadro**,
+proyección exacta contra el punto de pantalla. 10 llamadas de dibujo y 16.302 triángulos sin manos, 16
+con manos y bichos.
 
 ### Vigesimocuarta vuelta (2026-08-27): **RECREO** — el permiso de cámara y las dos manos dibujadas en el juego
 
