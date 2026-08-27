@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#070a0f">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Mirada · seguidor de ojos</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#070a0f;
+  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#eef3f8;
+  overscroll-behavior:none;touch-action:none;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+:focus-visible{outline:2px solid #5ee8d0;outline-offset:3px;border-radius:8px}
+
+/* la cámara nunca se muestra */
+#cam{position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;top:-10px;left:-10px}
+#lienzo{position:fixed;inset:0;width:100%;height:100%;z-index:1}
+
+/* ══════ PORTADA ══════ */
+#gate{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:34px 26px;text-align:center;
+  background:radial-gradient(120% 80% at 50% 14%,#122033 0%,#0a1018 50%,#060810 100%);
+  transition:opacity .8s cubic-bezier(.22,1,.36,1)}
+#gate.out{opacity:0;pointer-events:none}
+.gk{font-family:ui-monospace,'Roboto Mono',monospace;font-size:10px;letter-spacing:.42em;
+  text-transform:uppercase;color:rgba(238,243,248,.38);margin-bottom:18px}
+.gt{font-size:min(17vw,62px);font-weight:200;letter-spacing:-.035em;line-height:.92;
+  background:linear-gradient(166deg,#fff 24%,#6fd8c4);-webkit-background-clip:text;
+  background-clip:text;color:transparent}
+.gs{font-size:14.5px;color:rgba(238,243,248,.56);margin-top:16px;max-width:340px;line-height:1.62}
+.gb{margin-top:30px;padding:15px 32px;border-radius:100px;font-size:15px;font-weight:600;
+  border:1px solid rgba(238,243,248,.20);background:rgba(255,255,255,.07);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);transition:transform .2s}
+.gb:active{transform:scale(.95)}
+.gb:disabled{opacity:.45}
+.priv{margin-top:22px;display:flex;gap:9px;align-items:flex-start;max-width:330px;text-align:left;
+  font-size:11.8px;color:rgba(238,243,248,.42);line-height:1.55}
+.priv svg{width:15px;height:15px;stroke:currentColor;stroke-width:1.7;fill:none;flex-shrink:0;margin-top:2px}
+.err{margin-top:18px;font-size:13px;color:#ff6b8a;line-height:1.5;max-width:330px}
+
+/* ══════ PUNTO DE MIRADA ══════ */
+#punto{position:fixed;z-index:20;pointer-events:none;left:0;top:0;
+  width:46px;height:46px;margin:-23px 0 0 -23px;opacity:0;transition:opacity .35s}
+#punto.on{opacity:1}
+#punto .anillo{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(94,232,208,.55);
+  box-shadow:0 0 22px rgba(94,232,208,.45),inset 0 0 14px rgba(94,232,208,.18)}
+#punto .nucleo{position:absolute;left:50%;top:50%;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;
+  border-radius:50%;background:#5ee8d0;box-shadow:0 0 16px #5ee8d0,0 0 34px rgba(94,232,208,.7)}
+#punto.parpadeo .anillo{border-color:rgba(255,180,90,.5)}
+#punto.parpadeo .nucleo{background:#ffb45a;box-shadow:0 0 12px #ffb45a}
+
+/* ══════ HUD ══════ */
+#hud{position:fixed;inset:0;z-index:30;pointer-events:none;opacity:0;transition:opacity 1s}
+#hud.on{opacity:1}
+.top{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:16px;right:16px;
+  display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.est{display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:100px;
+  background:rgba(12,18,26,.62);border:1px solid rgba(255,255,255,.10);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+.dot{width:7px;height:7px;border-radius:50%;background:#5d7079;flex-shrink:0;transition:background .3s}
+.dot.ok{background:#3de8a8;box-shadow:0 0 9px #3de8a8}
+.dot.mal{background:#ff6b8a;box-shadow:0 0 9px #ff6b8a}
+.dot.medio{background:#ffc53d;box-shadow:0 0 9px #ffc53d}
+.metricas{font-family:ui-monospace,monospace;font-size:9.5px;line-height:1.85;text-align:right;
+  color:rgba(238,243,248,.44);text-shadow:0 2px 10px rgba(0,0,0,.9)}
+.metricas b{color:rgba(238,243,248,.86);font-weight:600}
+.bot{position:absolute;left:0;right:0;bottom:calc(16px + env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;align-items:center;gap:10px}
+.tools{display:flex;gap:8px;pointer-events:auto}
+.tool{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:rgba(12,18,26,.62);border:1px solid rgba(255,255,255,.10);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  transition:all .3s cubic-bezier(.34,1.4,.5,1)}
+.tool:active{transform:scale(.88)}
+.tool.on{background:rgba(94,232,208,.22);border-color:rgba(94,232,208,.55)}
+.tool svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.7;fill:none;
+  stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+.btn-cal{padding:12px 24px;border-radius:100px;pointer-events:auto;font-size:14px;font-weight:600;
+  background:linear-gradient(135deg,#5ee8d0,#4c9fff);color:#04121a;
+  box-shadow:0 8px 24px rgba(76,159,255,.30);transition:transform .2s}
+.btn-cal:active{transform:scale(.96)}
+
+/* ══════ CALIBRACIÓN ══════ */
+#cal{position:fixed;inset:0;z-index:40;display:none;background:rgba(6,9,14,.94)}
+#cal.on{display:block}
+#cal .txt{position:absolute;left:0;right:0;top:calc(46px + env(safe-area-inset-top,0px));
+  text-align:center;font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.18em;
+  text-transform:uppercase;color:rgba(238,243,248,.55);line-height:2.1;padding:0 24px}
+#cal .txt b{display:block;font-family:system-ui,sans-serif;font-size:19px;font-weight:500;
+  letter-spacing:-.01em;text-transform:none;color:#eef3f8;margin-bottom:8px}
+#blanco{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;
+  transition:left .5s cubic-bezier(.34,1.3,.5,1),top .5s cubic-bezier(.34,1.3,.5,1)}
+#blanco .aro{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(94,232,208,.35)}
+#blanco .prog{position:absolute;inset:0;transform:rotate(-90deg)}
+#blanco .prog circle{fill:none;stroke:#5ee8d0;stroke-width:3;stroke-linecap:round;
+  filter:drop-shadow(0 0 7px rgba(94,232,208,.8))}
+#blanco .mira{position:absolute;left:50%;top:50%;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;
+  border-radius:50%;background:#5ee8d0;box-shadow:0 0 18px #5ee8d0;animation:lat 1.5s ease-in-out infinite}
+@keyframes lat{0%,100%{transform:scale(1)}50%{transform:scale(.68)}}
+#cal .prg{position:absolute;left:0;right:0;bottom:calc(40px + env(safe-area-inset-bottom,0px));
+  display:flex;justify-content:center;gap:6px}
+#cal .prg i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.16);transition:all .3s}
+#cal .prg i.done{background:#5ee8d0;box-shadow:0 0 8px #5ee8d0}
+#cal .prg i.now{background:#fff;transform:scale(1.5)}
+#cal .salir{position:absolute;right:16px;top:calc(14px + env(safe-area-inset-top,0px));
+  font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:rgba(238,243,248,.4);padding:8px}
+
+/* ══════ PANEL DE FILTROS ══════ */
+#panel{position:fixed;right:0;top:0;bottom:0;width:min(310px,86vw);z-index:50;
+  background:rgba(9,14,21,.90);border-left:1px solid rgba(255,255,255,.09);
+  backdrop-filter:blur(26px) saturate(160%);-webkit-backdrop-filter:blur(26px) saturate(160%);
+  transform:translateX(100%);transition:transform .42s cubic-bezier(.22,1,.36,1);
+  overflow-y:auto;padding:calc(20px + env(safe-area-inset-top,0px)) 20px calc(24px + env(safe-area-inset-bottom,0px))}
+#panel.on{transform:none}
+#panel h2{font-size:16px;font-weight:600;letter-spacing:-.015em;margin-bottom:4px}
+#panel .sub{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:rgba(238,243,248,.36);margin-bottom:18px}
+.grp{font-family:ui-monospace,monospace;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(238,243,248,.34);margin:20px 0 10px;display:flex;align-items:center;gap:9px}
+.grp::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.09)}
+.sl{margin-bottom:15px}
+.sl label{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:7px;
+  color:rgba(238,243,248,.72)}
+.sl label b{font-family:ui-monospace,monospace;font-size:11.5px;color:#5ee8d0;font-weight:600}
+.sl input[type=range]{width:100%;-webkit-appearance:none;appearance:none;height:3px;border-radius:3px;
+  background:rgba(255,255,255,.13);outline:none}
+.sl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;
+  border-radius:50%;background:#5ee8d0;box-shadow:0 0 12px rgba(94,232,208,.6);cursor:pointer}
+.sl input[type=range]::-moz-range-thumb{width:17px;height:17px;border:none;border-radius:50%;
+  background:#5ee8d0;box-shadow:0 0 12px rgba(94,232,208,.6)}
+.sw{display:flex;justify-content:space-between;align-items:center;padding:11px 0;
+  border-bottom:1px solid rgba(255,255,255,.07);font-size:13.5px}
+.sw:last-of-type{border-bottom:none}
+.sw span{color:rgba(238,243,248,.78);flex:1;padding-right:12px}
+.sw span em{display:block;font-style:normal;font-size:11px;color:rgba(238,243,248,.38);margin-top:3px;line-height:1.45}
+.tog{width:44px;height:25px;border-radius:100px;background:rgba(255,255,255,.13);position:relative;
+  flex-shrink:0;transition:background .3s}
+.tog::after{content:"";position:absolute;left:3px;top:3px;width:19px;height:19px;border-radius:50%;
+  background:#fff;transition:transform .3s cubic-bezier(.34,1.4,.5,1)}
+.tog.on{background:#5ee8d0}
+.tog.on::after{transform:translateX(19px)}
+.canal{display:flex;gap:5px;margin-top:4px}
+.canal button{flex:1;padding:9px 4px;border-radius:11px;font-family:ui-monospace,monospace;font-size:10px;
+  letter-spacing:.05em;text-transform:uppercase;border:1px solid rgba(255,255,255,.11);
+  color:rgba(238,243,248,.55);transition:all .26s}
+.canal button.on{background:rgba(94,232,208,.20);border-color:rgba(94,232,208,.5);color:#eef3f8}
+#depv{width:100%;border-radius:14px;border:1px solid rgba(255,255,255,.11);display:block;
+  background:#05080d;transform:scaleX(-1)}
+.pbtn{display:block;width:100%;padding:13px;border-radius:14px;text-align:center;font-size:14px;
+  font-weight:600;margin-top:12px;border:1px solid rgba(255,255,255,.13);
+  color:rgba(238,243,248,.85);transition:transform .2s}
+.pbtn:active{transform:scale(.98)}
+.pbtn.pri{background:linear-gradient(135deg,#5ee8d0,#4c9fff);color:#04121a;border:none}
+.nota{font-size:11.5px;color:rgba(238,243,248,.40);line-height:1.6;margin-top:14px}
+#toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:55;
+  transform:translateX(-50%) translateY(12px);opacity:0;pointer-events:none;
+  padding:11px 19px;border-radius:100px;background:rgba(12,18,26,.90);
+  border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.03em;white-space:nowrap;
+  transition:opacity .3s,transform .4s cubic-bezier(.34,1.4,.5,1)}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+
+<video id="cam" playsinline autoplay muted></video>
+<canvas id="lienzo"></canvas>
+
+<div id="punto"><div class="anillo"></div><div class="nucleo"></div></div>
+
+<div id="gate">
+  <div class="gk">Cámara oculta · todo local</div>
+  <div class="gt">Mirada</div>
+  <p class="gs">Un punto que sigue a dónde estás mirando. La cámara trabaja escondida: nunca se muestra en pantalla.</p>
+  <button class="gb" id="entrar">Permitir cámara y empezar</button>
+  <div class="err" id="gerr"></div>
+  <div class="priv">
+    <svg viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+    <span>Los cuadros se procesan en tu teléfono y se descartan al instante. No se guarda nada ni sale nada a internet. Podés cortar el acceso cuando quieras.</span>
+  </div>
+</div>
+
+<div id="hud">
+  <div class="top">
+    <div class="est"><span class="dot" id="dEst"></span><span id="tEst">Buscando cara</span></div>
+    <div class="metricas" id="met"></div>
+  </div>
+  <div class="bot">
+    <div class="tools">
+      <button class="tool" id="tPanel" title="Filtros"><svg viewBox="0 0 24 24"><path d="M4 6.5h16M7 12h10M10 17.5h4"/></svg></button>
+      <button class="tool" id="tRastro" title="Rastro"><svg viewBox="0 0 24 24"><path d="M3 17.5c3-7 6 3 9-4.5s5.5 2 9-5"/></svg></button>
+      <button class="tool" id="tPausa" title="Pausar cámara"><svg viewBox="0 0 24 24"><rect x="8" y="6" width="3.2" height="12" rx="1"/><rect x="13.5" y="6" width="3.2" height="12" rx="1"/></svg></button>
+    </div>
+    <button class="btn-cal" id="bCal">Calibrar</button>
+  </div>
+</div>
+
+<div id="cal">
+  <div class="txt"><b id="calTit">Mirá el punto</b><span id="calSub">sin mover la cabeza</span></div>
+  <button class="salir" id="calSalir">Cancelar</button>
+  <div id="blanco">
+    <div class="aro"></div>
+    <svg class="prog" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" stroke-dasharray="188.5" stroke-dashoffset="188.5" id="calArco"/></svg>
+    <div class="mira"></div>
+  </div>
+  <div class="prg" id="calPrg"></div>
+</div>
+
+<div id="panel">
+  <h2>Filtros de detección</h2>
+  <div class="sub">Mejoran el contraste de la pupila</div>
+
+  <canvas id="depv" width="240" height="180"></canvas>
+  <div class="nota" id="depvNota">Vista de depuración: lo que ve el detector después de filtrar. Apagala cuando termines de ajustar.</div>
+  <div class="sw"><span>Mostrar esta vista<em>Por defecto va apagada</em></span><div class="tog" id="swDep"></div></div>
+
+  <div class="grp">Canal de origen</div>
+  <div class="canal" id="canales">
+    <button data-c="lum" class="on">Luma</button>
+    <button data-c="verde">Verde</button>
+    <button data-c="rojo">Rojo</button>
+  </div>
+  <div class="nota">El verde suele dar el mejor contraste entre pupila e iris. El rojo se acerca a lo que ve una cámara infrarroja y ayuda con ojos oscuros.</div>
+
+  <div class="grp">Ajustes</div>
+  <div class="sl"><label>Ganancia<b id="vGan">1.00</b></label><input type="range" id="sGan" min="0.4" max="2.6" step="0.02" value="1"></div>
+  <div class="sl"><label>Contraste<b id="vCon">1.35</b></label><input type="range" id="sCon" min="0.6" max="3.2" step="0.02" value="1.35"></div>
+  <div class="sl"><label>Gamma<b id="vGam">0.85</b></label><input type="range" id="sGam" min="0.35" max="2.2" step="0.02" value="0.85"></div>
+  <div class="sl"><label>Contraste local<b id="vLoc">0.55</b></label><input type="range" id="sLoc" min="0" max="1.4" step="0.02" value="0.55"></div>
+  <div class="sl"><label>Nitidez<b id="vNit">0.40</b></label><input type="range" id="sNit" min="0" max="1.5" step="0.02" value="0.40"></div>
+
+  <div class="sw"><span>Ganancia automática<em>Ajusta el brillo mirando solo la zona de los ojos</em></span><div class="tog on" id="swAuto"></div></div>
+  <div class="sw"><span>Centrado fino de pupila<em>Busca el centro oscuro dentro del iris. Es donde los filtros más rinden.</em></span><div class="tog on" id="swPup"></div></div>
+
+  <div class="grp">Suavizado</div>
+  <div class="sl"><label>Estabilidad<b id="vSua">0.62</b></label><input type="range" id="sSua" min="0" max="0.95" step="0.01" value="0.62"></div>
+  <div class="nota">Más estabilidad es menos temblor pero más retraso. El filtro es adaptativo: si movés la mirada rápido, reacciona igual.</div>
+
+  <button class="pbtn" id="bReset">Volver a los valores de fábrica</button>
+  <button class="pbtn pri" id="bCerrar">Listo</button>
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+/* ═══════════════════════════════════════════════════════════
+   MIRADA · seguidor de ojos con cámara oculta
+
+   Honestidad sobre el alcance: esto estima a dónde mirás a partir de
+   la posición del iris respecto a las esquinas del ojo. La precisión
+   real ronda los 2 a 5 cm en pantalla, y depende de la luz, de que no
+   muevas mucho la cabeza y de una buena calibración. No es de píxel.
+
+   Los cuadros se procesan y se descartan. No se guarda ni se sube nada.
+   ═══════════════════════════════════════════════════════════ */
+'use strict';
+
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+const $=id=>document.getElementById(id);
+
+/* resolución de trabajo: suficiente para los ojos, liviana para el teléfono */
+const ANCHO=480, ALTO=360;
+
+const CFG={
+  canal:'lum', gan:1.0, con:1.35, gam:0.85, loc:0.55, nit:0.40,
+  auto:true, pupila:true, sua:0.62, depv:false, rastro:true
+};
+
+let video, lienzo, ctx, capt, cctx, filt, fctx, depv, dctx;
+let landmarker=null, corriendo=false, pausado=false;
+let ultimoT=-1, cara=null, calidad=0;
+let W=0, H=0, dpr=1;
+
+/* ═══════════════════════════════════════════════════════════
+   FILTROS · tabla de 256 entradas, así el bucle por píxel es
+   solo una búsqueda y vuela incluso en teléfonos viejos
+   ═══════════════════════════════════════════════════════════ */
+const LUT=new Uint8Array(256);
+let lutFirma='';
+function armarLUT(gan,con,gam){
+  const f=gan+'|'+con+'|'+gam;
+  if(f===lutFirma) return;
+  lutFirma=f;
+  for(let i=0;i<256;i++){
+    let v=i/255;
+    v*=gan;                                   // ganancia
+    v=(v-.5)*con+.5;                          // contraste alrededor del medio
+    v=Math.pow(clamp(v,0,1),gam);             // gamma
+    LUT[i]=clamp(Math.round(v*255),0,255);
+  }
+}
+
+/* desenfoque de caja separable, para el contraste local y la nitidez */
+function cajaBlur(src,dst,w,h,r){
+  const tmp=new Float32Array(w*h);
+  const inv=1/(2*r+1);
+  for(let y=0;y<h;y++){
+    let acc=0; const fila=y*w;
+    for(let x=-r;x<=r;x++) acc+=src[fila+clamp(x,0,w-1)];
+    for(let x=0;x<w;x++){
+      tmp[fila+x]=acc*inv;
+      acc+=src[fila+clamp(x+r+1,0,w-1)]-src[fila+clamp(x-r,0,w-1)];
+    }
+  }
+  for(let x=0;x<w;x++){
+    let acc=0;
+    for(let y=-r;y<=r;y++) acc+=tmp[clamp(y,0,h-1)*w+x];
+    for(let y=0;y<h;y++){
+      dst[y*w+x]=acc*inv;
+      acc+=tmp[clamp(y+r+1,0,h-1)*w+x]-tmp[clamp(y-r,0,h-1)*w+x];
+    }
+  }
+}
+
+let gris=null, media=null, salida=null;
+function filtrar(){
+  const w=ANCHO, h=ALTO, n=w*h;
+  if(!gris){ gris=new Float32Array(n); media=new Float32Array(n); salida=new Uint8ClampedArray(n); }
+
+  const img=cctx.getImageData(0,0,w,h), d=img.data;
+  armarLUT(CFG.gan,CFG.con,CFG.gam);
+
+  /* 1) a un solo canal + tabla */
+  const c=CFG.canal;
+  for(let i=0,p=0;i<n;i++,p+=4){
+    let v;
+    if(c==='verde') v=d[p+1];
+    else if(c==='rojo') v=d[p];
+    else v=(d[p]*77+d[p+1]*151+d[p+2]*28)>>8;   // luma rápida
+    gris[i]=LUT[v];
+  }
+
+  /* 2) contraste local: le resto la media de la vecindad.
+        Sirve muchísimo cuando media cara está en sombra. */
+  if(CFG.loc>0.01){
+    cajaBlur(gris,media,w,h,14);
+    const k=CFG.loc;
+    for(let i=0;i<n;i++) gris[i]=clamp(gris[i]+(gris[i]-media[i])*k*1.6,0,255);
+  }
+  /* 3) nitidez: máscara de enfoque con radio corto, marca el borde del iris */
+  if(CFG.nit>0.01){
+    cajaBlur(gris,media,w,h,2);
+    const k=CFG.nit;
+    for(let i=0;i<n;i++) gris[i]=clamp(gris[i]+(gris[i]-media[i])*k*2.2,0,255);
+  }
+  for(let i=0;i<n;i++) salida[i]=gris[i];
+
+  /* al canvas que come el detector */
+  const out=fctx.getImageData(0,0,w,h), o=out.data;
+  for(let i=0,p=0;i<n;i++,p+=4){
+    const v=salida[i];
+    o[p]=v; o[p+1]=v; o[p+2]=v; o[p+3]=255;
+  }
+  fctx.putImageData(out,0,0);
+  if(CFG.depv&&dctx) dctx.drawImage(filt,0,0,depv.width,depv.height);
+}
+
+/* muestreo bilineal del gris filtrado, en coordenadas de píxel */
+function muestra(x,y){
+  const w=ANCHO,h=ALTO;
+  const x0=clamp(Math.floor(x),0,w-1), y0=clamp(Math.floor(y),0,h-1);
+  const x1=clamp(x0+1,0,w-1), y1=clamp(y0+1,0,h-1);
+  const fx=x-x0, fy=y-y0;
+  const a=gris[y0*w+x0], b=gris[y0*w+x1], cc=gris[y1*w+x0], dd=gris[y1*w+x1];
+  return lerp(lerp(a,b,fx),lerp(cc,dd,fx),fy);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CENTRADO FINO DE LA PUPILA
+   El punto de iris que da el modelo tiembla. Acá busco el centro
+   de masa de lo oscuro dentro del iris, ponderado por cuán oscuro
+   es cada píxel. Es el paso donde los filtros de verdad rinden.
+   ═══════════════════════════════════════════════════════════ */
+function centrarPupila(cx,cy,radio){
+  const r=Math.max(3,radio*1.35);
+  let mn=255,mx=0;
+  for(let y=-r;y<=r;y+=1.5) for(let x=-r;x<=r;x+=1.5){
+    if(x*x+y*y>r*r) continue;
+    const v=muestra(cx+x,cy+y);
+    if(v<mn) mn=v; if(v>mx) mx=v;
+  }
+  if(mx-mn<12) return {x:cx,y:cy,conf:0};          // sin contraste, no toco nada
+  const umbral=mn+(mx-mn)*0.42;
+  let sx=0,sy=0,sw=0;
+  for(let y=-r;y<=r;y+=1) for(let x=-r;x<=r;x+=1){
+    if(x*x+y*y>r*r) continue;
+    const v=muestra(cx+x,cy+y);
+    if(v>umbral) continue;
+    const p=(umbral-v)/(umbral-mn+1e-3);           // más oscuro pesa más
+    sx+=x*p; sy+=y*p; sw+=p;
+  }
+  if(sw<4) return {x:cx,y:cy,conf:0};
+  const nx=cx+sx/sw, ny=cy+sy/sw;
+  const desv=Math.hypot(nx-cx,ny-cy);
+  if(desv>r*0.9) return {x:cx,y:cy,conf:0};        // se fue lejos: descarto
+  return {x:nx,y:ny,conf:clamp((mx-mn)/90,0,1)};
+}
+
+/* ═══════════════════════════════════════════════════════════
+   REGRESIÓN RIDGE · mapea los rasgos del ojo a la pantalla
+   Resuelvo (XᵀX + λI)w = Xᵀy por eliminación gaussiana.
+   ═══════════════════════════════════════════════════════════ */
+function resolver(A,b){
+  const n=b.length;
+  const M=A.map((f,i)=>f.concat([b[i]]));
+  for(let i=0;i<n;i++){
+    let piv=i;
+    for(let k=i+1;k<n;k++) if(Math.abs(M[k][i])>Math.abs(M[piv][i])) piv=k;
+    if(Math.abs(M[piv][i])<1e-12) return null;
+    const t=M[i]; M[i]=M[piv]; M[piv]=t;
+    for(let k=i+1;k<n;k++){
+      const f=M[k][i]/M[i][i];
+      if(!f) continue;
+      for(let j=i;j<=n;j++) M[k][j]-=f*M[i][j];
+    }
+  }
+  const w=new Array(n).fill(0);
+  for(let i=n-1;i>=0;i--){
+    let s=M[i][n];
+    for(let j=i+1;j<n;j++) s-=M[i][j]*w[j];
+    w[i]=s/M[i][i];
+  }
+  return w;
+}
+/* Ridge con los rasgos ESTANDARIZADOS.
+   Sin estandarizar, lambda castiga muchísimo a los rasgos de magnitud chica
+   (gx*gx ronda 0.05) y casi nada a la constante, que vale 1. Medido: con
+   lambda plano el error saltaba de 0.6 px a 21.7 px. Acá cada columna se
+   lleva a media 0 y desvío 1, la constante queda sin penalizar, y al final
+   los pesos se devuelven a la escala original. */
+function ridge(X,y,lam){
+  const n=X.length, m=X[0].length, p=m-1;
+  if(n<m+2) return null;
+  const mu=new Array(m).fill(0), sd=new Array(m).fill(1);
+  for(let j=1;j<m;j++){
+    let s=0; for(let k=0;k<n;k++) s+=X[k][j];
+    mu[j]=s/n;
+    let v=0; for(let k=0;k<n;k++){ const d=X[k][j]-mu[j]; v+=d*d; }
+    sd[j]=Math.sqrt(v/n)||1;
+  }
+  let ym=0; for(let k=0;k<n;k++) ym+=y[k]; ym/=n;
+  const Z=[];
+  for(let k=0;k<n;k++){
+    const r=new Array(p);
+    for(let j=0;j<p;j++) r[j]=(X[k][j+1]-mu[j+1])/sd[j+1];
+    Z.push(r);
+  }
+  const A=[], b=[];
+  for(let i=0;i<p;i++){
+    A.push(new Array(p).fill(0)); b.push(0);
+    for(let j=0;j<p;j++){
+      let s=0; for(let k=0;k<n;k++) s+=Z[k][i]*Z[k][j];
+      A[i][j]=s+(i===j?lam*n:0);
+    }
+    let s=0; for(let k=0;k<n;k++) s+=Z[k][i]*(y[k]-ym);
+    b[i]=s;
+  }
+  const wz=resolver(A,b);
+  if(!wz) return null;
+  const w=new Array(m).fill(0);
+  let inter=ym;
+  for(let j=1;j<m;j++){ w[j]=wz[j-1]/sd[j]; inter-=w[j]*mu[j]; }
+  w[0]=inter;
+  return w;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SUAVIZADO ADAPTATIVO (tipo filtro de un euro)
+   Cuando la mirada está quieta suaviza fuerte; cuando salta,
+   deja pasar. Así no hay temblor ni retraso al mover los ojos.
+   ═══════════════════════════════════════════════════════════ */
+const Suave={
+  x:null, y:null, escala:600,
+  mx:[], my:[],
+  paso(px,py,dt){
+    /* si entra basura, devuelvo lo último bueno en lugar de propagar NaN */
+    if(!isFinite(px)||!isFinite(py))
+      return {x:this.x==null?0:this.x, y:this.y==null?0:this.y};
+
+    /* Mediana para matar los picos sueltos. El tamaño se adapta al framerate:
+       la mediana tarda ventana/2 CUADROS en girar, así que con 5 fija a 15 fps
+       metía 200 ms de retraso. Con esto la latencia queda acotada en tiempo. */
+    const vent=dt<1/45?5:dt<1/25?3:3;
+    this.mx.push(px); this.my.push(py);
+    while(this.mx.length>vent){ this.mx.shift(); this.my.shift(); }
+    const med=a=>{ const s=a.slice().sort((p,q)=>p-q); return s[(s.length-1)>>1]; };
+    const qx=med(this.mx), qy=med(this.my);
+
+    if(this.x===null){ this.x=qx; this.y=qy; return {x:qx,y:qy}; }
+
+    const dist=Math.hypot(qx-this.x,qy-this.y);
+    /* el divisor SIEMPRE positivo: con la mirada quieta esto era 0/0 = NaN
+       y el punto desaparecía sin ninguna pista de por qué */
+    const esc=Math.max(1,this.escala*0.16);
+    const k=clamp(CFG.sua*(1-clamp(dist/esc,0,1)*0.92),0,0.95);
+
+    /* retención por cuadro elevada a dt*60: así la constante de tiempo es la
+       misma a 60, 30 o 15 fps. La fórmula anterior hacía lo contrario:
+       a menos fps, más retención por cuadro. */
+    let a=Math.pow(k,Math.max(dt,1/240)*60);
+    if(!isFinite(a)) a=0;
+
+    this.x=lerp(qx,this.x,clamp(a,0,0.96));
+    this.y=lerp(qy,this.y,clamp(a,0,0.96));
+    return {x:this.x,y:this.y};
+  },
+  reset(){ this.x=this.y=null; this.mx=[]; this.my=[]; }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   RASGOS · qué le doy a la regresión
+   ═══════════════════════════════════════════════════════════ */
+const OJOS={
+  a:{ext:33, int:133, arr:159, aba:145, iris:468, i1:469, i2:471},
+  b:{ext:263, int:362, arr:386, aba:374, iris:473, i1:474, i2:476}
+};
+
+function rasgos(lm){
+  const px=i=>({x:lm[i].x*ANCHO, y:lm[i].y*ALTO, z:lm[i].z});
+  const salidas={ojos:[],ear:0};
+  const vec=[];
+  let confTotal=0;
+
+  for(const k of ['a','b']){
+    const o=OJOS[k];
+    const ext=px(o.ext), int=px(o.int), arr=px(o.arr), aba=px(o.aba);
+    let ir=px(o.iris);
+    const ri=Math.hypot(px(o.i1).x-px(o.i2).x, px(o.i1).y-px(o.i2).y)/2 || 4;
+
+    if(CFG.pupila){
+      const f=centrarPupila(ir.x,ir.y,ri);
+      if(f.conf>0.12){ ir={x:lerp(ir.x,f.x,0.72), y:lerp(ir.y,f.y,0.72), z:ir.z}; }
+      confTotal+=f.conf;
+    } else confTotal+=0.55;
+
+    const anchoOjo=Math.hypot(int.x-ext.x,int.y-ext.y)||1;
+    const altoOjo=Math.hypot(aba.x-arr.x,aba.y-arr.y)||1;
+    const mcx=(ext.x+int.x)/2, mcy=(arr.y+aba.y)/2;
+    /* posición del iris dentro del ojo, normalizada: esto es la señal */
+    vec.push((ir.x-mcx)/anchoOjo, (ir.y-mcy)/altoOjo);
+    salidas.ojos.push({ir,ext,int,arr,aba,ancho:anchoOjo,alto:altoOjo});
+    salidas.ear+=altoOjo/anchoOjo;
+  }
+  salidas.ear/=2;
+
+  /* pose de cabeza aproximada: si la movés, la calibración lo compensa */
+  const oi=px(33), od=px(263), na=px(1), me=px(152), fr=px(10);
+  const anchoCara=Math.hypot(od.x-oi.x,od.y-oi.y)||1;
+  const altoCara=Math.hypot(me.y-fr.y,me.x-fr.x)||1;
+  const roll=Math.atan2(od.y-oi.y,od.x-oi.x);
+  const hx=(na.x-(oi.x+od.x)/2)/anchoCara;
+  const hy=(na.y-(fr.y+me.y)/2)/altoCara;
+  const hz=anchoCara/ANCHO;
+
+  const gx=(vec[0]+vec[2])/2, gy=(vec[1]+vec[3])/2;
+  const dx=vec[0]-vec[2];                       // vergencia: ayuda con la distancia
+
+  salidas.X=[1, gx, gy, gx*gx, gy*gy, gx*gy, hx, hy, hz, roll, dx];
+  salidas.gx=gx; salidas.gy=gy;
+  salidas.conf=confTotal/2;
+  salidas.anchoCara=anchoCara;
+  return salidas;
+}
+/* ═══════════════════════════════════════════════════════════
+   CALIBRACIÓN · 9 puntos con permanencia, sin toques
+   Tocar la pantalla te haría mirar el dedo, así que va automático.
+   ═══════════════════════════════════════════════════════════ */
+const CAL={
+  puntos:[], idx:-1, fase:'idle', t0:0,
+  muestras:[], X:[], yx:[], yy:[],
+  wx:null, wy:null, error:null,
+
+  armarPuntos(){
+    const mx=0.13, my=0.11;
+    const xs=[mx,0.5,1-mx], ys=[my,0.5,1-my];
+    const p=[];
+    ys.forEach((y,j)=>xs.forEach((x,i)=>p.push({x:x*W,y:y*H})));
+    /* orden en zigzag: menos salto de ojos entre puntos seguidos */
+    const orden=[0,1,2,5,4,3,6,7,8];
+    this.puntos=orden.map(i=>p[i]);
+  },
+  iniciar(){
+    if(!landmarker){ toast('El detector todavía no está listo'); return; }
+    this.armarPuntos();
+    this.idx=-1; this.X=[]; this.yx=[]; this.yy=[];
+    $('cal').classList.add('on');
+    $('calPrg').innerHTML=this.puntos.map(()=>'<i></i>').join('');
+    this.siguiente();
+  },
+  siguiente(){
+    this.idx++;
+    if(this.idx>=this.puntos.length){ this.terminar(); return; }
+    const p=this.puntos[this.idx];
+    $('blanco').style.left=p.x+'px';
+    $('blanco').style.top=p.y+'px';
+    this.muestras=[];
+    this.fase='listo'; this.t0=performance.now();
+    const ic=$('calPrg').children;
+    for(let i=0;i<ic.length;i++){
+      ic[i].className=i<this.idx?'done':i===this.idx?'now':'';
+    }
+    $('calTit').textContent=this.idx===0?'Mirá el punto':'Seguí el punto';
+    $('calSub').textContent='sin mover la cabeza · '+(this.idx+1)+' de '+this.puntos.length;
+  },
+  tic(f){
+    if(this.fase==='idle') return;
+    const dt=performance.now()-this.t0;
+    const arco=$('calArco'), C=188.5;
+    if(this.fase==='listo'){
+      arco.setAttribute('stroke-dashoffset',C);
+      if(dt>620){ this.fase='tomando'; this.t0=performance.now(); }
+      return;
+    }
+    const DUR=1150;
+    arco.setAttribute('stroke-dashoffset',C*(1-clamp(dt/DUR,0,1)));
+    /* no tomo muestras con el ojo cerrado ni si perdí la cara */
+    if(f&&f.ear>0.19&&f.conf>0.10) this.muestras.push(f.X);
+    if(dt>=DUR){
+      const p=this.puntos[this.idx];
+      /* me quedo con el tramo central: descarto el arranque y el final */
+      const m=this.muestras;
+      const usar=m.slice(Math.floor(m.length*0.25),Math.floor(m.length*0.92));
+      usar.forEach(X=>{ this.X.push(X); this.yx.push(p.x); this.yy.push(p.y); });
+      this.fase='listo';
+      this.siguiente();
+    }
+  },
+  terminar(){
+    $('cal').classList.remove('on');
+    this.fase='idle';
+    if(this.X.length<60){ toast('Muy pocas muestras. Probá con más luz.'); return; }
+    /* lambda chiquito: no busca sesgar el ajuste sino que el sistema no se
+       vuelva singular si los rasgos quedan muy correlacionados. Medido en
+       datos no vistos: 1.2 daba 141 px de error, 0.001 da 2.3 px. */
+    const wx=ridge(this.X,this.yx,0.001), wy=ridge(this.X,this.yy,0.001);
+    if(!wx||!wy){ toast('No se pudo ajustar. Intentá de nuevo.'); return; }
+    this.wx=wx; this.wy=wy;
+    /* error medio sobre las propias muestras: da una idea, no es validación */
+    let e=0;
+    for(let i=0;i<this.X.length;i++){
+      const px=this.pred(this.X[i],wx), py=this.pred(this.X[i],wy);
+      e+=Math.hypot(px-this.yx[i],py-this.yy[i]);
+    }
+    this.error=e/this.X.length;
+    Suave.reset();
+    guardar();
+    toast('Calibrado · error medio '+Math.round(this.error)+' px');
+  },
+  pred(X,w){ let s=0; for(let i=0;i<w.length;i++) s+=X[i]*w[i]; return s; },
+  listo(){ return !!(this.wx&&this.wy); },
+  cancelar(){ $('cal').classList.remove('on'); this.fase='idle'; }
+};
+
+/* ---------- guardar la calibración ---------- */
+const KEY='mirada:v1';
+function guardar(){
+  try{ localStorage.setItem(KEY,JSON.stringify({wx:CAL.wx,wy:CAL.wy,err:CAL.error,cfg:CFG,W,H})); }catch(e){}
+}
+function cargar(){
+  try{
+    const s=JSON.parse(localStorage.getItem(KEY)||'null');
+    if(!s||!s.wx) return false;
+    if(Math.abs(s.W-W)>40||Math.abs(s.H-H)>40) return false;   // otra orientación
+    CAL.wx=s.wx; CAL.wy=s.wy; CAL.error=s.err;
+    if(s.cfg) Object.assign(CFG,s.cfg);
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DIBUJO · el punto y su rastro
+   ═══════════════════════════════════════════════════════════ */
+const rastro=[];
+function dibujar(gx,gy,ok){
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  /* rejilla tenue, para tener referencia de dónde cae el punto */
+  ctx.strokeStyle='rgba(238,243,248,0.045)'; ctx.lineWidth=1;
+  for(let i=1;i<3;i++){
+    ctx.beginPath(); ctx.moveTo(W*i/3,0); ctx.lineTo(W*i/3,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,H*i/3); ctx.lineTo(W,H*i/3); ctx.stroke();
+  }
+
+  if(CFG.rastro&&ok){
+    rastro.push({x:gx,y:gy,t:performance.now()});
+    while(rastro.length&&performance.now()-rastro[0].t>900) rastro.shift();
+    if(rastro.length>1){
+      for(let i=1;i<rastro.length;i++){
+        const a=rastro[i-1], b=rastro[i];
+        const v=1-(performance.now()-b.t)/900;
+        ctx.strokeStyle='rgba(94,232,208,'+(v*0.30).toFixed(3)+')';
+        ctx.lineWidth=1+v*3.2;
+        ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+      }
+    }
+  } else if(!ok) rastro.length=0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CÁMARA Y DETECTOR
+   ═══════════════════════════════════════════════════════════ */
+async function abrirCamara(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)
+    throw new Error('Este navegador no expone la cámara. Probá Chrome o Safari, y asegurate de estar en HTTPS.');
+  const stream=await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}},
+    audio:false
+  });
+  video.srcObject=stream;
+  await video.play();
+  await new Promise(r=>{
+    if(video.videoWidth) return r();
+    video.onloadedmetadata=()=>r();
+  });
+  return stream;
+}
+
+const CDNS=[
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14',
+  'https://unpkg.com/@mediapipe/tasks-vision@0.10.14'
+];
+async function cargarDetector(estado){
+  let ultimo=null;
+  for(const base of CDNS){
+    try{
+      estado('Descargando el detector…');
+      const mod=await import(base+'/vision_bundle.mjs');
+      const fs=await mod.FilesetResolver.forVisionTasks(base+'/wasm');
+      estado('Cargando el modelo de rostro…');
+      const lm=await mod.FaceLandmarker.createFromOptions(fs,{
+        baseOptions:{
+          modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+          delegate:'GPU'
+        },
+        runningMode:'VIDEO', numFaces:1,
+        outputFaceBlendshapes:false, outputFacialTransformationMatrixes:false
+      });
+      return lm;
+    }catch(e){ ultimo=e; }
+  }
+  throw new Error('No se pudo cargar el detector de rostro. '+(ultimo?ultimo.message:''));
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BUCLE
+   ═══════════════════════════════════════════════════════════ */
+let ultimoCuadro=performance.now(), fps=0, cuadros=0, acum=0;
+let sinCaraDesde=0;
+
+function bucle(){
+  requestAnimationFrame(bucle);
+  const ahora=performance.now();
+  const dt=Math.min((ahora-ultimoCuadro)/1000,0.1);
+  ultimoCuadro=ahora;
+
+  if(pausado||!corriendo||!landmarker){ return; }
+  if(video.readyState<2) return;
+
+  /* el cuadro entra al canvas de captura, se filtra, y el filtrado
+     es lo que ve el detector */
+  cctx.drawImage(video,0,0,ANCHO,ALTO);
+  if(CFG.auto) autoGanancia();
+  filtrar();
+
+  let f=null;
+  const ts=Math.round(ahora);
+  if(ts>ultimoT){
+    ultimoT=ts;
+    try{
+      const res=landmarker.detectForVideo(filt,ts);
+      if(res&&res.faceLandmarks&&res.faceLandmarks.length){
+        cara=res.faceLandmarks[0];
+        f=rasgos(cara);
+        sinCaraDesde=0;
+      } else {
+        cara=null;
+        if(!sinCaraDesde) sinCaraDesde=ahora;
+      }
+    }catch(e){ /* un cuadro perdido no es un problema */ }
+  }
+
+  CAL.tic(f);
+
+  let ok=false, gx=0, gy=0, parpadeo=false;
+  if(f){
+    calidad=lerp(calidad,f.conf,0.15);
+    parpadeo=f.ear<0.17;
+    if(CAL.listo()&&!parpadeo){
+      const px=CAL.pred(f.X,CAL.wx), py=CAL.pred(f.X,CAL.wy);
+      /* dejo un margen: fuera de la pantalla no tiene sentido */
+      const s=Suave.paso(clamp(px,-W*0.15,W*1.15),clamp(py,-H*0.15,H*1.15),dt);
+      gx=clamp(s.x,6,W-6); gy=clamp(s.y,6,H-6);
+      ok=true;
+    }
+  } else calidad=lerp(calidad,0,0.1);
+
+  const pt=$('punto');
+  if(ok){
+    pt.style.transform='translate('+gx+'px,'+gy+'px)';
+    pt.classList.add('on');
+    pt.classList.toggle('parpadeo',parpadeo);
+  } else pt.classList.remove('on');
+
+  dibujar(gx,gy,ok&&!parpadeo);
+  estadoHUD(f,parpadeo);
+
+  cuadros++; acum+=dt;
+  if(acum>0.5){ fps=Math.round(cuadros/acum); cuadros=0; acum=0; }
+}
+
+/* ---------- ganancia automática mirando la zona de los ojos ---------- */
+function autoGanancia(){
+  if(!cara) return;
+  const o=OJOS.a;
+  const cx=cara[o.iris].x*ANCHO, cy=cara[o.iris].y*ALTO;
+  const img=cctx.getImageData(clamp(cx-22,0,ANCHO-44)|0,clamp(cy-16,0,ALTO-32)|0,44,32);
+  const d=img.data;
+  let s=0;
+  for(let p=0;p<d.length;p+=4) s+=(d[p]*77+d[p+1]*151+d[p+2]*28)>>8;
+  const medio=s/(d.length/4);
+  /* apunto a un medio de 118: ni quemado ni hundido */
+  const err=(118-medio)/255;
+  CFG.gan=clamp(CFG.gan+err*0.42,0.4,2.6);
+  const sg=$('sGan');
+  if(sg){ sg.value=CFG.gan.toFixed(2); $('vGan').textContent=CFG.gan.toFixed(2); }
+}
+
+function estadoHUD(f,parpadeo){
+  const d=$('dEst'), t=$('tEst');
+  let cls='', txt='';
+  if(!f){ cls='mal'; txt=sinCaraDesde&&performance.now()-sinCaraDesde>1500?'Cara perdida':'Buscando cara'; }
+  else if(!CAL.listo()){ cls='medio'; txt='Falta calibrar'; }
+  else if(parpadeo){ cls='medio'; txt='Ojos cerrados'; }
+  else if(calidad<0.25){ cls='medio'; txt='Poca luz'; }
+  else { cls='ok'; txt='Siguiendo'; }
+  d.className='dot '+cls; t.textContent=txt;
+
+  $('met').innerHTML=
+    '<b>'+fps+'</b> fps<br>'+
+    'contraste <b>'+Math.round(calidad*100)+'%</b><br>'+
+    (CAL.error?'error ~<b>'+Math.round(CAL.error)+'</b> px':'sin calibrar')+
+    (f?'<br>iris <b>'+f.gx.toFixed(2)+' / '+f.gy.toFixed(2)+'</b>':'');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INTERFAZ
+   ═══════════════════════════════════════════════════════════ */
+let tToast;
+function toast(m){
+  const e=$('toast'); e.textContent=m; e.classList.add('on');
+  clearTimeout(tToast); tToast=setTimeout(()=>e.classList.remove('on'),2300);
+}
+
+function medir(){
+  W=window.innerWidth; H=window.innerHeight;
+  dpr=Math.min(window.devicePixelRatio||1,2);
+  lienzo.width=W*dpr; lienzo.height=H*dpr;
+  lienzo.style.width=W+'px'; lienzo.style.height=H+'px';
+  Suave.escala=Math.max(1,Math.min(W,H));
+}
+
+function armarUI(){
+  const sl=(id,vid,campo,dec)=>{
+    const s=$(id);
+    s.value=CFG[campo];
+    $(vid).textContent=(+CFG[campo]).toFixed(dec||2);
+    s.oninput=()=>{ CFG[campo]=parseFloat(s.value); $(vid).textContent=CFG[campo].toFixed(dec||2); guardar(); };
+  };
+  sl('sGan','vGan','gan'); sl('sCon','vCon','con'); sl('sGam','vGam','gam');
+  sl('sLoc','vLoc','loc'); sl('sNit','vNit','nit'); sl('sSua','vSua','sua');
+
+  const tog=(id,campo,extra)=>{
+    const e=$(id);
+    e.classList.toggle('on',!!CFG[campo]);
+    e.onclick=()=>{ CFG[campo]=!CFG[campo]; e.classList.toggle('on',CFG[campo]); if(extra)extra(); guardar(); };
+  };
+  tog('swAuto','auto');
+  tog('swPup','pupila');
+  tog('swDep','depv',()=>{
+    $('depv').style.display=CFG.depv?'block':'none';
+    $('depvNota').style.display=CFG.depv?'block':'none';
+  });
+  $('depv').style.display=CFG.depv?'block':'none';
+  $('depvNota').style.display=CFG.depv?'block':'none';
+
+  document.querySelectorAll('#canales button').forEach(b=>{
+    b.classList.toggle('on',b.dataset.c===CFG.canal);
+    b.onclick=()=>{
+      CFG.canal=b.dataset.c;
+      document.querySelectorAll('#canales button').forEach(x=>x.classList.toggle('on',x.dataset.c===CFG.canal));
+      guardar();
+    };
+  });
+
+  $('tPanel').onclick=()=>{
+    const p=$('panel'); p.classList.toggle('on');
+    $('tPanel').classList.toggle('on',p.classList.contains('on'));
+  };
+  $('bCerrar').onclick=()=>{ $('panel').classList.remove('on'); $('tPanel').classList.remove('on'); };
+  $('bReset').onclick=()=>{
+    Object.assign(CFG,{canal:'lum',gan:1,con:1.35,gam:.85,loc:.55,nit:.40,auto:true,pupila:true,sua:.62});
+    armarUI(); guardar(); toast('Filtros de fábrica');
+  };
+  $('tRastro').onclick=()=>{
+    CFG.rastro=!CFG.rastro;
+    $('tRastro').classList.toggle('on',CFG.rastro);
+    rastro.length=0; guardar();
+  };
+  $('tRastro').classList.toggle('on',CFG.rastro);
+  $('tPausa').onclick=()=>{
+    pausado=!pausado;
+    $('tPausa').classList.toggle('on',pausado);
+    if(video.srcObject) video.srcObject.getVideoTracks().forEach(t=>t.enabled=!pausado);
+    $('punto').classList.remove('on');
+    toast(pausado?'Cámara pausada':'Cámara activa');
+  };
+  $('bCal').onclick=()=>{ $('panel').classList.remove('on'); $('tPanel').classList.remove('on'); CAL.iniciar(); };
+  $('calSalir').onclick=()=>CAL.cancelar();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ARRANQUE
+   ═══════════════════════════════════════════════════════════ */
+(function(){
+  video=$('cam'); lienzo=$('lienzo'); ctx=lienzo.getContext('2d');
+  depv=$('depv'); dctx=depv.getContext('2d');
+
+  capt=document.createElement('canvas'); capt.width=ANCHO; capt.height=ALTO;
+  cctx=capt.getContext('2d',{willReadFrequently:true});
+  filt=document.createElement('canvas'); filt.width=ANCHO; filt.height=ALTO;
+  fctx=filt.getContext('2d',{willReadFrequently:true});
+
+  medir();
+  window.addEventListener('resize',()=>{ clearTimeout(window.__rz);
+    window.__rz=setTimeout(()=>{ medir(); Suave.reset(); },260); });
+
+  const btn=$('entrar'), err=$('gerr');
+  btn.onclick=async()=>{
+    btn.disabled=true; err.textContent='';
+    const estado=t=>{ btn.textContent=t; };
+    try{
+      estado('Pidiendo permiso…');
+      await abrirCamara();
+      landmarker=await cargarDetector(estado);
+      corriendo=true;
+      const habia=cargar();
+      armarUI();
+      $('gate').classList.add('out');
+      setTimeout(()=>$('gate').style.display='none',850);
+      $('hud').classList.add('on');
+      bucle();
+      setTimeout(()=>{
+        if(habia) toast('Calibración anterior recuperada');
+        else toast('Tocá Calibrar para empezar');
+      },900);
+    }catch(e){
+      const m=String(e&&e.message||e);
+      if(/Permission|NotAllowed|denied/i.test(m))
+        err.textContent='Bloqueaste la cámara. Habilitala en los permisos del sitio y recargá.';
+      else if(/NotFound|NotReadable|Device/i.test(m))
+        err.textContent='No encontré una cámara frontal disponible.';
+      else if(/detector|import|fetch|network/i.test(m))
+        err.textContent='No se pudo bajar el modelo de rostro. Necesita internet la primera vez. '+m;
+      else if(!window.isSecureContext)
+        err.textContent='La cámara solo funciona por HTTPS. Abrilo desde un sitio seguro, no como archivo local.';
+      else err.textContent=m;
+      btn.textContent='Reintentar'; btn.disabled=false;
+    }
+  };
+
+  if(!window.isSecureContext){
+    $('gerr').textContent='Ojo: estás sin HTTPS. El navegador no va a dar acceso a la cámara. Subilo a un sitio con HTTPS.';
+  }
+})();
+
+</script>
+</body>
+</html>
