@@ -44,8 +44,8 @@ function vozCargar(){
    mas raro que puede sonar una voz. Si el mismo ladrido ya esta sonando, el nuevo lo reemplaza. */
 const vozSonando={};
 function hablar(k, vol){
-  if(!AUD.ctx || !AUD.on) return;
-  const buf=VOZ[k]; if(!buf) return;
+  if(!AUD.ctx || !AUD.on) return 0;
+  const buf=VOZ[k]; if(!buf) return 0;
   try{
     const s=vozSonando[k];
     if(s){ try{ s.stop(); }catch(e){} }
@@ -54,7 +54,28 @@ function hablar(k, vol){
     src.connect(g); g.connect(AUD.m);
     src.start(); vozSonando[k]=src;
     src.onended=()=>{ if(vozSonando[k]===src) vozSonando[k]=null; };
-  }catch(e){}
+  }catch(e){ return 0; }
+  return buf.duration;
+}
+
+/* =========================================================================================
+   DECIR UNA LINEA: SUBTITULO Y VOZ SON LA MISMA LLAMADA
+
+   La voz esta grabada POR CLAVE DE DIALOGO Y POR IDIOMA —'es:d1', 'en:d1', 'pt:d1'— asi que quien
+   habla necesita la clave, no el texto ya resuelto. Antes las llamadas eran decir(TX('dBien')): el
+   texto llegaba traducido y la clave se perdia en el camino, o sea que no habia con que elegir el
+   archivo. Pasando la clave, el subtitulo y la voz salen del mismo lugar y no pueden desincronizarse:
+   si algun dia falta el clip de un idioma, se ve el subtitulo y no suena nada — que es exactamente el
+   comportamiento correcto y no un error.
+   ========================================================================================= */
+function dice(clave, params, vol){
+  decir(TX(clave, params));
+  const dur=hablar(IDIOMA+':'+clave, vol==null? 0.78 : vol);
+  /* LA MUSICA SE AGACHA MIENTRAS HABLA, y vuelve sola cuando termina la linea. Sin esto la cama y la
+     voz comparten el mismo rango y la voz —que es la que lleva la instruccion del juego— queda
+     peleandole a un acorde. Se agacha a 0,35 y no a cero: cortar la musica del todo cada vez que
+     habla se nota mas que dejarla abajo. */
+  if(dur>0) musicaBajar(0.35, dur+0.15);
 }
 
 /* ===================== LA MUSICA ===================== */

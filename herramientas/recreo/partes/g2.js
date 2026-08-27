@@ -26,7 +26,7 @@ const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:f
                 unico con lo que se puede apuntar; la TRASERA no, porque ahi la mano ya se ve del
                 lado que esta. Depende de que camara se abrio, no es una constante. */
              espejo:true, camaraUsada:'',
-             hz:24, medidas:0, msDet:0, ranuras:[null,null] };
+             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null] };
 /* CUANTAS VECES POR SEGUNDO SE MIDE, que no es lo mismo que cuantas veces se dibuja.
    24 y no 60: el detector tarda entre 8 y 20 ms por cuadro en un telefono, asi que medir en cada
    cuadro de render es gastar un tercio del presupuesto de 16,6 ms en mirar una mano que apenas se
@@ -206,14 +206,28 @@ async function manosIniciar(){
    peor que 24 Hz interpolados que arrancan en todos.
    ========================================================================================= */
 const MANO_PRED=45;      // ms de prediccion como maximo: mas que esto y la mano se adelanta y tiembla
-const MANO_TAU=0.032;    // constante del suavizado, en segundos
+/* 0,13 EN FRACCION DE CUADRO. Dos munecas mas cerca que esto no son dos manos: una mano abierta mide
+   0,25 de ancho, asi que dos munecas a 0,13 estarian una encima de la otra. */
+const MANO_SEP=0.13;
+/* y a mas de 0,30 de donde estaba, ya no es la misma mano: es otra que aparecio */
+const MANO_EMPAREJA=0.30;
+/* la prediccion se enciende con la velocidad. Por debajo de V_QUIETA lo unico que se mueve es el
+   ruido del detector, y extrapolarlo es amplificarlo. */
+const V_QUIETA=0.00009, V_RAPIDA=0.00045;    // fraccion de cuadro por milisegundo
+let MANO_TAU=0.018;      // constante del suavizado del dibujo, en segundos (ajustable)
 const MANO_CADUCA=260;   // sin medicion nueva por mas de esto, la mano se fue
 const MANO_SALTO=0.22;   // si el objetivo esta mas lejos que esto (en fraccion de pantalla), se salta
 
 function ranuraNueva(){
   const R={ hay:false, viva:0, t0:0, t1:0,
             a:new Float32Array(63), b:new Float32Array(63), sal:new Float32Array(63),
+            /* estado del filtro 1-euro EN DOS ETAPAS: valor filtrado y derivada suavizada por
+               coordenada, dos veces */
+            oeX:new Float32Array(63), oeD:new Float32Array(63),
+            oeX2:new Float32Array(63), oeD2:new Float32Array(63), oeListo:false, oeT:0,
             dedos:0, estirados:[false,false,false,false,false], pinza:false, lado:'',
+            estCand:[false,false,false,false,false], estN:[0,0,0,0,0],
+            escSal:0,                                  // la escala de la mano, suavizada
             lmsSal:new Array(21) };
   /* LA SALIDA VA PREASIGNADA. Convertir 21 puntos a objetos en cada cuadro son 42 objetos por
      cuadro y 2.520 por segundo tirados a la basura: en un telefono eso es el recolector de basura
@@ -232,27 +246,176 @@ function arregloALms(src, dst){
   for(let i=0;i<21;i++){ const p=dst[i]; p.x=src[i*3]; p.y=src[i*3+1]; p.z=src[i*3+2]; }
   return dst;
 }
-/* una medicion entra a su ranura: corre la anterior a `a`, la nueva a `b`, y guarda los tiempos.
-   Es lo unico que la interpolacion necesita saber. */
+/* =========================================================================================
+   EL FILTRO 1-EURO, QUE ES LO QUE SACA EL TEMBLOR
+
+   Por que el suavizado exponencial de siempre no alcanza, y esto es el nudo del problema: un filtro
+   con constante FIJA tiene que elegir entre temblar o ir atrasado. Si suaviza poco, el ruido del
+   detector pasa entero; si suaviza mucho, la mano llega tarde y apuntar se siente como manejar un
+   barco. No hay valor que sirva para las dos cosas, porque las dos cosas no pasan al mismo tiempo.
+
+   El 1-euro resuelve eso mirando la VELOCIDAD: cuando la mano esta quieta, lo unico que se mueve es
+   el ruido, asi que baja la frecuencia de corte y lo aplasta; cuando la mano se mueve rapido, el
+   ruido es despreciable al lado del movimiento, asi que abre el corte y no agrega retardo. Un solo
+   filtro que es lento cuando conviene ser lento y rapido cuando conviene ser rapido.
+
+   Y ADEMAS SE ARREGLO LA PREDICCION, que era la otra mitad del temblor y estaba escondida: la
+   extrapolacion multiplicaba (b-a) por el tiempo transcurrido, y con la mano quieta (b-a) ES EL
+   RUIDO. O sea que el codigo tomaba el ruido y lo amplificaba antes de dibujarlo. Ahora la prediccion
+   esta ATADA A LA VELOCIDAD: con la mano quieta no predice nada.
+   ========================================================================================= */
+/* LOS PARAMETROS SALEN DE UN BARRIDO MEDIDO, no de un valor "razonable". Se probaron 24 y despues
+   otras 24 combinaciones midiendo las dos cosas que se pelean —cuanto aplasta el temblor y cuanto
+   tarda en seguir un salto— y la frontera esta en atenuar unas 4 veces con 83 ms de retardo. Bajar
+   mas el corte atenua un poco mas y el retardo se va a 400 ms, que es inaceptable para apuntar.
+   Y LA Z LLEVA SU PROPIO CORTE, MUCHO MAS BAJO. La z de MediaPipe es la coordenada mas ruidosa de
+   las tres —es profundidad estimada de una sola camara— y en este juego no decide donde esta el
+   punto en pantalla (eso lo deciden x e y sobre su rayo) sino el TAMANO del dedo y la escala de la
+   mano. Con la z al mismo corte que x e y, la mano quieta latia de grosor. Filtrarla cuatro veces
+   mas fuerte no cuesta nada, porque un retardo en la profundidad no se ve. */
+const OE={ fcMin:0.35, beta:3.0, fcD:1.2, fcMinZ:0.10, betaZ:0.6 };
+function oeAlfa(fc, dt){ const tau=1/(2*Math.PI*fc); return 1/(1+tau/dt); }
+/* DOS ETAPAS EN CASCADA, y el numero sale de una cuenta que hay que hacer antes de tocar parametros.
+   Un filtro de primer orden con coeficiente alfa atenua el ruido en raiz(alfa/(2-alfa)); con el corte
+   en 0,35 Hz sobre mediciones a 24 Hz eso da 4,8 veces COMO TECHO — barrido 24 combinaciones y
+   ninguna paso de 3,45. O sea que seguir bajando el corte no iba a alcanzar nunca: el limite era el
+   ORDEN del filtro, no su ajuste.
+   Dos etapas iguales en cascada multiplican la atenuacion (pasa a ~23 veces) y el retardo extra lo
+   paga solo la mano QUIETA, porque el corte de las dos etapas se abre con la velocidad. Es la forma
+   mas barata de subir el orden sin escribir un biquad y sin tener que elegir sus coeficientes. */
+function oePaso(x, d, v, j, dt, ad, esZ){
+  const der=(v-x[j])/dt;
+  d[j] += ad*(der-d[j]);
+  const fc = esZ? (OE.fcMinZ + OE.betaZ*Math.abs(d[j]))
+                : (OE.fcMin  + OE.beta *Math.abs(d[j]));
+  x[j] += oeAlfa(fc, dt)*(v-x[j]);
+  return x[j];
+}
+function oeFiltrar(R, lm, dt){
+  if(!R.oeListo){
+    lmsAArreglo(lm, R.oeX); R.oeX2.set(R.oeX);
+    R.oeD.fill(0); R.oeD2.fill(0); R.oeListo=true; return R.oeX2;
+  }
+  const ad=oeAlfa(OE.fcD, dt);
+  for(let i=0;i<21;i++){
+    const p=lm[i];
+    for(let c=0;c<3;c++){
+      const j=i*3+c;
+      const v = c===0? p.x : (c===1? p.y : (p.z||0));
+      const esZ=(c===2);
+      oePaso(R.oeX2, R.oeD2, oePaso(R.oeX, R.oeD, v, j, dt, ad, esZ), j, dt, ad, esZ);
+    }
+  }
+  return R.oeX2;
+}
+/* una medicion entra a su ranura: se filtra, corre la anterior a `a`, la nueva a `b`, y guarda los
+   tiempos. Es lo unico que la interpolacion necesita saber. */
 function ranuraPoner(q, lm, t){
   const R=MANO.ranuras[q];
   const lec=manoLeer(lm);
-  if(lec){ R.dedos=lec.dedos; R.estirados=lec.estirados; R.pinza=lec.pinza; }
-  if(!R.hay){ lmsAArreglo(lm, R.a); R.sal.set(R.a); R.t0=t-33; }
+  if(lec){
+    R.dedos=lec.dedos; R.pinza=lec.pinza;
+    /* CADA DEDO NECESITA DOS LECTURAS IGUALES PARA CAMBIAR DE ESTADO. El total ya pasaba por un voto
+       de tres, pero `estirados` —que es lo que pinta las puntas de las manos 3D— se tomaba crudo: un
+       dedo a medio estirar cruzaba el umbral varias veces por segundo y la punta parpadeaba de color.
+       Un dedo que se estira tarda mas de dos cuadros; el ruido, no. */
+    for(let d=0;d<5;d++){
+      const v=!!lec.estirados[d];
+      if(v===R.estirados[d]){ R.estCand[d]=v; R.estN[d]=0; }
+      else if(v===R.estCand[d]){ if(++R.estN[d]>=2){ R.estirados[d]=v; R.estN[d]=0; } }
+      else { R.estCand[d]=v; R.estN[d]=1; }
+    }
+  }
+  const dt=Math.max(0.008, (t-(R.oeT||t-33))/1000);
+  R.oeT=t;
+  if(!R.hay){ R.oeListo=false; }
+  const fx=oeFiltrar(R, lm, dt);
+  if(!R.hay){ R.a.set(fx); R.sal.set(fx); R.t0=t-33; }
   else { R.a.set(R.b); R.t0=R.t1; }
-  lmsAArreglo(lm, R.b);
+  R.b.set(fx);
   R.t1=t; R.hay=true; R.viva=t;
   return R;
 }
 /* GANCHO DE PRUEBA: mete manos como si las hubiera medido la camara. Entra por el MISMO lugar que
    una medicion de verdad —las ranuras— porque probar el dibujo por otro camino no probaria ni la
    interpolacion ni el reparto por mano izquierda/derecha. */
-function manosInyectar(lms){
-  const t=performance.now();
+function manosInyectar(lms, t){
+  const ahora = t==null? performance.now() : t;
   const n=Math.min(2, (lms&&lms.length)||0);
-  for(let k=0;k<n;k++) ranuraPoner(k, lms[k], t);
+  for(let k=0;k<n;k++) ranuraPoner(k, lms[k], ahora);
   for(let q=n;q<2;q++) MANO.ranuras[q].hay=false;
   MANO.lms=lms||null;
+}
+
+/* =========================================================================================
+   DE LAS DETECCIONES CRUDAS A LAS DOS RANURAS
+   Sale de manosMedir() a su propia funcion por una razon de prueba: el reparto es donde estaba el
+   defecto de "se crean dos manos", asi que el banco tiene que poder inyectar detecciones y ver a que
+   ranura van. Probandolo por otro camino no se probaria el reparto.
+   ========================================================================================= */
+function manosRepartir(crudas, lados, t){
+  MANO.lms=crudas.length? crudas : null;
+  /* =======================================================================================
+     UNA MANO ES UNA MANO: SE TIRAN LAS DETECCIONES DUPLICADAS
+
+     Esto era el defecto que rompia el conteo. Con dos manos declaradas, MediaPipe puede devolver la
+     MISMA mano fisica dos veces —dos cajas que se solapan sobre los mismos dedos— y el juego sumaba
+     los dedos de las dos: cuatro dedos se contaban ocho. Se descarta toda deteccion cuya muneca este
+     a menos de MANO_SEP de otra ya aceptada; a esa distancia no hay dos manos, hay una vista dos
+     veces. Se prefiere la de palma mas grande, que es la que esta mejor resuelta.
+     ======================================================================================= */
+  const acept=[];
+  for(let k=0;k<crudas.length;k++){
+    const lm=crudas[k];
+    const lec=manoLeer(lm); if(!lec) continue;
+    const mu=lm[0];
+    let dup=-1;
+    for(let q=0;q<acept.length;q++){
+      const o=acept[q].lm[0];
+      if(Math.hypot(mu.x-o.x, mu.y-o.y) < MANO_SEP){ dup=q; break; }
+    }
+    const cat=(lados[k] && lados[k][0] && lados[k][0].categoryName)||'';
+    if(dup>=0){
+      MANO.dupes++;
+      if(lec.palma > acept[dup].palma) acept[dup]={ lm, palma:lec.palma, cat };
+    } else acept.push({ lm, palma:lec.palma, cat });
+    if(acept.length>=2) { /* nunca hacen falta mas de dos */ }
+  }
+  /* =======================================================================================
+     Y LAS RANURAS SE ASIGNAN POR CERCANIA, NO POR handedness.
+
+     Usar Left/Right parecia lo estable y es lo contrario, y la razon es la camara TRASERA: MediaPipe
+     decide la mano suponiendo una imagen ESPEJADA, la de una camara frontal. Con la trasera la imagen
+     no esta espejada, asi que la etiqueta se le da vuelta —y peor, PARPADEA entre cuadros. Una sola
+     mano real alternando Left/Right cae un cuadro en la ranura 0 y el siguiente en la 1, las dos
+     quedan vivas los 260 ms de caducidad, y el juego ve DOS MANOS y suma el doble de dedos.
+     La posicion no parpadea: una mano esta donde estaba hace 40 ms. Se empareja cada deteccion con
+     la ranura cuya ultima muneca este mas cerca, y si ninguna esta razonablemente cerca, va a una
+     ranura libre.
+     ======================================================================================= */
+  const libre=[!MANO.ranuras[0].hay || (t-MANO.ranuras[0].viva)>MANO_CADUCA,
+               !MANO.ranuras[1].hay || (t-MANO.ranuras[1].viva)>MANO_CADUCA];
+  const tomada=[false,false];
+  const pend=[];
+  for(const c of acept){
+    let mejor=-1, mejorD=MANO_EMPAREJA;
+    for(let q=0;q<2;q++){
+      if(tomada[q] || libre[q]) continue;
+      const R=MANO.ranuras[q];
+      const d=Math.hypot(c.lm[0].x-R.b[0], c.lm[0].y-R.b[1]);
+      if(d<mejorD){ mejorD=d; mejor=q; }
+    }
+    if(mejor>=0){ tomada[mejor]=true; ranuraPoner(mejor, c.lm, t).lado=c.cat; }
+    else pend.push(c);
+  }
+  for(const c of pend){
+    let q=-1;
+    for(let i=0;i<2;i++) if(!tomada[i]){ q=i; break; }
+    if(q<0) break;
+    tomada[q]=true;
+    MANO.ranuras[q].hay=false;            // entra nueva: sin arrastre de la anterior
+    ranuraPoner(q, c.lm, t).lado=c.cat;
+  }
 }
 
 function manosMedir(t){
@@ -261,23 +424,9 @@ function manosMedir(t){
   try{ r=MANO.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
   MANO.msDet = MANO.msDet*0.8 + (performance.now()-t0)*0.2;
   MANO.medidas++;
-  const lms=(r && r.landmarks)? r.landmarks : [];
+  const crudas=(r && r.landmarks)? r.landmarks : [];
   const lados=(r && (r.handednesses||r.handedness)) || [];
-  MANO.lms=lms.length? lms : null;
-  /* LAS RANURAS SE ASIGNAN POR MANO IZQUIERDA/DERECHA Y NO POR ORDEN DE LLEGADA. MediaPipe devuelve
-     las manos en el orden que le sale, asi que usar el indice del arreglo hace que en cuanto el orden
-     cambia la interpolacion cruce una mano con la otra: en pantalla se ve un salto de una mano a la
-     otra. `handedness` es estable. */
-  const usada=[false,false];
-  const asignada=new Array(lms.length).fill(-1);
-  for(let k=0;k<lms.length;k++){
-    const cat=(lados[k] && lados[k][0] && lados[k][0].categoryName)||'';
-    let q = (cat==='Left')? 0 : (cat==='Right'? 1 : -1);
-    if(q<0 || usada[q]) q = usada[0]? (usada[1]? -1 : 1) : 0;
-    if(q<0) continue;
-    usada[q]=true; asignada[k]=q;
-    ranuraPoner(q, lms[k], t).lado=cat;
-  }
+  manosRepartir(crudas, lados, t);
   pintarCam();
 }
 
@@ -294,9 +443,14 @@ function manosAvanzar(dt){
        inyeccion y la foto y la captura salia sin manos aunque el codigo estuviera bien. */
     if(!MANO.pausa && ahora-R.viva > MANO_CADUCA){ R.hay=false; continue; }
     const span=Math.max(8, R.t1-R.t0);
-    /* prediccion ACOTADA: se extrapola el tiempo que paso desde la ultima medicion, pero nunca mas
-       de MANO_PRED. Sin tope, un hueco de medio segundo manda la mano al otro lado de la pantalla. */
-    const f = 1 + Math.min(MANO_PRED, ahora-R.t1)/span;
+    /* LA PREDICCION SE ENCIENDE CON LA VELOCIDAD, y esto era la mitad del temblor.
+       Antes extrapolaba siempre: objetivo = b + (b-a)*(f-1). Con la mano quieta, (b-a) NO es
+       movimiento, es el ruido del detector — asi que la formula tomaba el ruido y lo multiplicaba
+       antes de dibujarlo. Se mide la velocidad de la muneca y la prediccion entra progresivamente
+       entre V_QUIETA y V_RAPIDA: quieta no predice nada, moviendose predice todo. */
+    const vel=Math.hypot(R.b[0]-R.a[0], R.b[1]-R.a[1])/span;
+    const puerta=Math.max(0, Math.min(1, (vel-V_QUIETA)/(V_RAPIDA-V_QUIETA)));
+    const f = 1 + puerta*Math.min(MANO_PRED, ahora-R.t1)/span;
     const k = 1-Math.exp(-dt/MANO_TAU);
     /* si el objetivo salto lejisimo —la mano reaparecio en otro lado— no se desliza, se pone */
     const d=Math.hypot(R.b[0]+(R.b[0]-R.a[0])*(f-1)-R.sal[0],

@@ -112,8 +112,16 @@ function manos3DDibujar(){
       _hp[i].set((x*2-1)*tanV*camara.aspect*d*MANO_ESC, -(y*2-1)*tanV*d*MANO_ESC, -d);
       camara.localToWorld(_hp[i]);
     }
-    /* la escala de ESTA mano, medida en ella misma */
-    const esc=Math.max(0.15, _hd.subVectors(_hp[9], _hp[0]).length()/MANO_PALMA_M);
+    /* LA ESCALA DE ESTA MANO, MEDIDA EN ELLA MISMA Y SUAVIZADA EN EL TIEMPO.
+       Sale de la distancia muneca-nudillo RECONSTRUIDA, y esa reconstruccion usa la z para poner cada
+       punto en su rayo: o sea que la escala hereda todo el ruido de la coordenada mas ruidosa que da
+       MediaPipe. Sin suavizar, la mano quieta LATIA de grosor varias veces por segundo — y eso a ojo
+       se lee como "tiembla", aunque la posicion en pantalla estuviera perfectamente quieta. Un
+       suavizado exponencial de 0,25 s alcanza: la mano puede acercarse a la camara todo lo rapido que
+       quiera, pero su tamano no cambia en dos cuadros. */
+    const escCruda=Math.max(0.15, _hd.subVectors(_hp[9], _hp[0]).length()/MANO_PALMA_M);
+    R.escSal = R.escSal>0? R.escSal + (escCruda-R.escSal)*0.14 : escCruda;
+    const esc=R.escSal;
     /* las articulaciones */
     for(let i=0;i<MANO_ART;i++){
       const r=MANO_RADIO[i]*esc;

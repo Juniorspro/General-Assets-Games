@@ -235,6 +235,135 @@ window.__recreo={
                gesto:MANO.gesto, manos:MANO.manos, votos:MANO.votos }),
   manosIniciar:()=>manosIniciar(),
   manoPausa:(v)=>{ MANO.pausa=!!v; return !!MANO.pausa; },
+  /* =========================================================================================
+     COMO SE MIDE EL TEMBLOR, que es lo unico que permite ajustar un filtro sin adivinar.
+     Se inyecta una mano QUIETA con ruido conocido y se mira cuanto se mueve la salida. Si el filtro
+     sirve, la salida se mueve mucho menos que la entrada; el numero que importa es el cociente.
+     Y como un filtro puede matar todo el temblor a cambio de llegar tarde, va junto con la medida de
+     RETARDO: se inyecta un salto y se cuenta cuantos milisegundos tarda la salida en cubrir el 90%.
+     Los dos numeros juntos son la unica forma de saber si un cambio mejoro o solo movio el problema.
+     ========================================================================================= */
+  manoTemblor:(opts)=>{
+    const o=opts||{};
+    const ruido=o.ruido==null? 0.004 : o.ruido;
+    const hz=o.hz||24, cuadros=o.cuadros||90, render=o.render||60;
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
+    const base=window.__recreo.manoFalsa(5,false,0.5,0.5);
+    /* ruido pseudoaleatorio REPETIBLE: con Math.random cada corrida da otro numero y no se pueden
+       comparar dos ajustes del filtro */
+    let sem=12345;
+    const az=()=>{ sem=(sem*1103515245+12345)&0x7fffffff; return sem/0x7fffffff*2-1; };
+    let t=1000;
+    const entradas=[], salidas=[], escalas=[];
+    const dtR=1000/render, dtM=1000/hz;
+    let proxMed=t;
+    for(let c=0;c<cuadros*render/hz;c++){
+      if(t>=proxMed){
+        const lm=base.map(p=>({ x:p.x+az()*ruido, y:p.y+az()*ruido, z:p.z }));
+        manosInyectar([lm], t);
+        entradas.push([lm[0].x, lm[0].y]);
+        proxMed+=dtM;
+      }
+      /* se avanza el reloj a mano: performance.now() no se puede mover, asi que la caducidad se
+         desactiva con la pausa y la interpolacion recibe su dt directo */
+      manosAvanzar(dtR/1000);
+      manos3DDibujar();                    // para que la escala suavizada se actualice de verdad
+      const R=MANO.ranuras[0];
+      if(R.hay){ salidas.push([R.sal[0], R.sal[1]]); if(R.escSal>0) escalas.push(R.escSal); }
+      t+=dtR;
+    }
+    const des=(A)=>{
+      if(A.length<4) return 0;
+      const mx=A.reduce((s,p)=>s+p[0],0)/A.length, my=A.reduce((s,p)=>s+p[1],0)/A.length;
+      return Math.sqrt(A.reduce((s,p)=>s+(p[0]-mx)**2+(p[1]-my)**2,0)/A.length);
+    };
+    const de=des(entradas), ds=des(salidas);
+    /* EL LATIDO DE GROSOR, que es la otra mitad del temblor y no se ve en la posicion: se mide la
+       desviacion de la escala reconstruida contra su promedio, en porcentaje. */
+    const ze=escalas.length>3? (()=>{ const m=escalas.reduce((s,v)=>s+v,0)/escalas.length;
+        return Math.sqrt(escalas.reduce((s,v)=>s+(v-m)**2,0)/escalas.length)/Math.max(1e-9,m)*100; })() : 0;
+    MANO.pausa=false;
+    return { ruido, hz, entrada:+de.toFixed(5), salida:+ds.toFixed(5),
+             atenuacion:+(de>0? de/Math.max(1e-9,ds) : 0).toFixed(2),
+             latidoPct:+ze.toFixed(2),
+             muestras:{entrada:entradas.length, salida:salidas.length} };
+  },
+  manoRetardo:(opts)=>{
+    const o=opts||{};
+    const hz=o.hz||24, render=o.render||60, salto=o.salto==null? 0.20 : o.salto;
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
+    const A=window.__recreo.manoFalsa(5,false,0.40,0.50);
+    const B=window.__recreo.manoFalsa(5,false,0.40+salto,0.50);
+    const dtR=1000/render, dtM=1000/hz;
+    let t=1000, proxMed=t;
+    for(let c=0;c<20;c++){                       // se asienta en A
+      if(t>=proxMed){ manosInyectar([A], t); proxMed+=dtM; }
+      manosAvanzar(dtR/1000); t+=dtR;
+    }
+    const x0=MANO.ranuras[0].sal[0];
+    const t0=t; let ms90=-1;
+    for(let c=0;c<200;c++){
+      if(t>=proxMed){ manosInyectar([B], t); proxMed+=dtM; }
+      manosAvanzar(dtR/1000);
+      const x=MANO.ranuras[0].sal[0];
+      if(ms90<0 && Math.abs(x-x0)>=Math.abs(salto)*0.90){ ms90=t-t0; break; }
+      t+=dtR;
+    }
+    MANO.pausa=false;
+    return { salto, hz, ms90: ms90<0? null : +ms90.toFixed(0),
+             desde:+x0.toFixed(4), hasta:+MANO.ranuras[0].sal[0].toFixed(4) };
+  },
+  /* cuantas detecciones duplicadas se descartaron: si esto sube, MediaPipe esta viendo dos veces la
+     misma mano y sin el descarte el conteo de dedos saldria al doble */
+  /* =========================================================================================
+     LA PRUEBA DEL DEFECTO QUE REPORTO EL USUARIO: "se crean dos manos y el conteo esta mal".
+     Se inyectan detecciones por el MISMO reparto que usa la camara y se mira cuantas ranuras quedan
+     vivas y cuantos dedos suma el juego. Dos detecciones encimadas tienen que contar UNA mano.
+     ========================================================================================= */
+  manoReparto:(caso)=>{
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
+    MANO.dupes=0;
+    const F=window.__recreo.manoFalsa;
+    let crudas=[], lados=[];
+    if(caso==='encimadas'){
+      /* la misma mano vista dos veces: las munecas a 0,04 una de la otra */
+      crudas=[F(5,false,0.50,0.50), F(5,false,0.54,0.51)];
+      lados=[[{categoryName:'Left'}],[{categoryName:'Right'}]];
+    } else if(caso==='separadas'){
+      crudas=[F(5,false,0.28,0.50), F(5,false,0.72,0.50)];
+      lados=[[{categoryName:'Left'}],[{categoryName:'Right'}]];
+    } else if(caso==='ladoParpadea'){
+      /* UNA sola mano cuya etiqueta Left/Right se da vuelta cuadro a cuadro, que es lo que hace la
+         camara trasera. Con reparto por handedness caia alternadamente en las dos ranuras y las dos
+         quedaban vivas: el juego veia dos manos. */
+      let t=1000;
+      for(let k=0;k<8;k++){
+        manosRepartir([F(4,false,0.50+k*0.002,0.50)],
+                      [[{categoryName:(k%2? 'Left':'Right')}]], t);
+        t+=42;
+      }
+      manosAvanzar(1/60);
+      const r={ caso, ranuras:MANO.ranuras.map(R=>R.hay), manos:MANO.manos, dedos:MANO.crudo,
+                dupes:MANO.dupes };
+      MANO.pausa=false; return r;
+    }
+    manosRepartir(crudas, lados, 1000);
+    manosAvanzar(1/60);
+    const r={ caso, ranuras:MANO.ranuras.map(R=>R.hay), manos:MANO.manos, dedos:MANO.crudo,
+              dupes:MANO.dupes };
+    MANO.pausa=false; return r;
+  },
+  manoDupes:()=>({ dupes:MANO.dupes, medidas:MANO.medidas,
+                   filtro:{ fcMin:OE.fcMin, beta:OE.beta, fcD:OE.fcD, tau:MANO_TAU },
+                   sep:MANO_SEP, empareja:MANO_EMPAREJA }),
+  manoFiltro:(o)=>{ if(o){ if(o.fcMin!=null) OE.fcMin=o.fcMin;
+                           if(o.beta!=null) OE.beta=o.beta;
+                           if(o.fcD!=null) OE.fcD=o.fcD;
+                           if(o.tau!=null) MANO_TAU=o.tau; }
+                    return { fcMin:OE.fcMin, beta:OE.beta, fcD:OE.fcD, tau:MANO_TAU }; },
   /* cuanto cuesta dibujar las dos manos encima del juego, en milisegundos por cuadro */
   /* cuanto cuesta armar las dos manos 3D, en milisegundos por cuadro */
   manoCosto:(n)=>{
@@ -381,9 +510,15 @@ window.__recreo={
   son:(k)=>{ son(k); return true; },
   /* que ladridos quedaron decodificados: un data URI que no decodifica deja al personaje mudo sin
      que nada falle ni aparezca en la consola */
-  voces:()=>{ const r={}; for(const k in VOZ_DATOS){
-      const b=VOZ[k]; r[k]= b? +b.duration.toFixed(2) : 0; }
-    return { lista:vozLista, buffers:r,
+  voces:()=>{ let listos=0, faltan=[], seg=0;
+    for(const k in VOZ_DATOS){ const b=VOZ[k];
+      if(b){ listos++; seg+=b.duration; } else faltan.push(k); }
+    const porIdi={};
+    for(const k in VOZ_DATOS){ const i=k.indexOf(':');
+      const g=i<0? '--' : k.slice(0,i); porIdi[g]=(porIdi[g]||0)+(VOZ[k]?1:0); }
+    return { lista:vozLista, clips:Object.keys(VOZ_DATOS).length, listos,
+             faltan:faltan.slice(0,6), segundos:+seg.toFixed(1), porIdioma:porIdi,
+             idioma:IDIOMA,
              musica:{ on:MUS.on, nivel:MUS.nivel, paso:MUS.paso,
                       gan:MUS.gan? +MUS.gan.gain.value.toFixed(4) : null,
                       ctx:AUD.ctx? AUD.ctx.state : 'no',
@@ -419,6 +554,10 @@ window.__recreo={
     MUS.gan.gain.setValueAtTime(v==null?1:v, t);
     return +MUS.gan.gain.value.toFixed(3); },
   hablar:(k)=>{ hablar(k, 1.0); return !!VOZ[k]; },
+  /* dice una linea por clave, igual que el juego: comprueba que subtitulo y voz salgan juntos */
+  dice:(clave)=>{ dice(clave); return { clave, idioma:IDIOMA,
+                   suena:!!VOZ[IDIOMA+':'+clave],
+                   subtitulo:(document.getElementById('dTxt')||{}).textContent||'' }; },
   musica:(n)=>{ if(n!=null) musicaNivel(n); return { on:MUS.on, nivel:MUS.nivel }; },
   idioma:(c)=>{ if(c) elegirIdioma(c); return IDIOMA; },
   pantalla:(p)=>{ verPantalla(p); return pant; }

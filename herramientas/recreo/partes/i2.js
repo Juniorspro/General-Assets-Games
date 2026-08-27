@@ -146,8 +146,7 @@ function siguienteEscena(){
      visita, asi que decir "Aula 5" con el cartel de arriba en "AULA 8/8" son dos numeros distintos
      para la misma cosa. Al jugador no le importa como se llaman las aulas en el plano: le importa
      cuantas le faltan. */
-  decir(TX(E.txt, {a:(E.aula? TOUR.indexOf(E.aula)+1 : 1), t:TOUR.length}));
-  if(E.voz) hablar(E.voz, 0.9);
+  dice(E.txt, {a:(E.aula? TOUR.indexOf(E.aula)+1 : 1), t:TOUR.length});
   document.body.classList.toggle('esperando', !!E.espera);
   if(E.espera) pintarAro(0, null, '');
   if(E.viaje!=null){
@@ -263,8 +262,8 @@ function contestar(n){
   bloqueo=true;
   if(n===cuenta.res){
     aciertos++; libros++; aulaK++;
-    avisar(TX('bien'), 1.0, '#2ecc0f'); son('bien'); hablar('bien', 0.85);
-    decir(TX('dBien'));
+    avisar(TX('bien'), 1.0, '#2ecc0f'); son('bien');
+    dice('dBien');
     pintarLibros();
     const l=LIBROS[0];
     luegoDe(1.1, ()=>{ l.g.visible=false; cuenta=null; bloqueo=false;
@@ -355,7 +354,7 @@ function terminarClase(){
   document.body.classList.remove('esperando');
   document.body.classList.remove('clase');
   const ultima=(aulaIdx>=TOUR.length-1);
-  decir(TX(ultima? 'dFin' : 'dSale')); son('listo');
+  dice(ultima? 'dFin' : 'dSale'); son('listo');
   luegoDe(ultima? 2.6 : 1.4, ()=>{ if(ultima) ganar(); else siguienteEscena(); });
 }
 function ganar(){
@@ -759,7 +758,7 @@ function pasoFijo(dt){
          apaga la tanda para siempre, asi que al morir y volver a pasar por el mismo pasillo ya no
          habia bichos. El guion es la partitura y no se toca; lo que cambia es el estado. */
       bichosCerrado=true;
-      decir(TX('dBichosFin')); son('listo');
+      dice('dBichosFin'); son('listo');
       bichosApagar();
       luegoDe(0.9, ()=>siguienteEscena());
       return;

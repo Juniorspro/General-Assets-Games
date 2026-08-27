@@ -27,8 +27,8 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   tener cuidado ya que al punto en el que quiere ir hay bolas malas con espinas girando alrededor de
   la bola y hay que tocar justo ... procedural con físicas ... una beta del nivel 1 tutorial ...
   buenos gráficos blancos minimalistas"*.
-- **`Recreo.html` es "RECREO"** (~902 KB: 489 son el modelo 3D de Baldi generado con Higgsfield y
-  horneado, y 25 la voz generada; la música es procedural y pesa cero). **Recreación de fan, no comercial y sin publicar**, del colegio y del
+- **`Recreo.html` es "RECREO"** (~1,40 MB: 489 KB son el modelo 3D de Baldi generado con Higgsfield
+  y horneado, y 507 el diálogo completo hablado en tres idiomas; la música es procedural y pesa cero). **Recreación de fan, no comercial y sin publicar**, del colegio y del
   profesor de Baldi's Basics (Basically Games / mystman12). **Vertical (9:16), FOV 90 y el jugador no
   maneja la cámara**: va sobre rieles. Baldi te saluda, te enseña a usar las manos —cinco dedos,
   pinza, dos dedos— te lleva a un aula, se pone del otro lado del escritorio con el pizarrón, y
@@ -49,6 +49,93 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
+
+Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo
+esté mal … y las voces de highsfield las quería diciendo el diálogo completo"*.
+
+#### LAS DOS MANOS FANTASMA: LA CAUSA ERA LA CÁMARA TRASERA
+
+Yo repartía las dos ranuras por **`handedness`** —Left/Right— convencido de que era lo estable. Es lo
+contrario, y la razón es justamente el cambio de la vuelta anterior: **MediaPipe decide la mano
+suponiendo una imagen espejada**, la de una cámara frontal. Con la trasera la imagen no está espejada,
+así que la etiqueta se da vuelta y, peor, **parpadea entre cuadros**. Una sola mano real alternando
+Left/Right cae un cuadro en la ranura 0 y el siguiente en la 1, las dos quedan vivas los 260 ms de
+caducidad, y el juego ve **dos manos y suma el doble de dedos**.
+
+La posición no parpadea: una mano está donde estaba hace 40 ms. Ahora cada detección se empareja con
+la ranura cuya última muñeca esté más cerca. Y aparte, **se descartan las detecciones duplicadas**:
+MediaPipe puede devolver la misma mano física dos veces, y a menos de 0,13 de cuadro no hay dos manos
+—una mano abierta mide 0,25 de ancho— sino una vista dos veces.
+
+Tres pruebas que entran por el mismo reparto que usa la cámara: dos detecciones encimadas → **1 mano,
+5 dedos** (antes 10); dos manos separadas → 2 manos, 10 dedos; y una mano cuya etiqueta se da vuelta
+cada cuadro → **1 mano, 4 dedos**.
+
+#### EL TEMBLOR: DOS CAUSAS, Y UNA ERA MI PROPIA PREDICCIÓN
+
+1. **La predicción amplificaba el ruido.** Extrapolaba siempre: `objetivo = b + (b−a)·(f−1)`. Con la
+   mano quieta `(b−a)` **no es movimiento, es el ruido del detector** — o sea que el código tomaba el
+   ruido y lo multiplicaba antes de dibujarlo. Ahora la predicción está atada a la velocidad: quieta
+   no predice nada.
+2. **Un filtro de constante fija no puede ganar.** Si suaviza poco pasa el ruido; si suaviza mucho la
+   mano llega tarde. No hay valor que sirva, porque las dos cosas no pasan al mismo tiempo. Entró un
+   **1-euro**: mira la velocidad y baja el corte cuando la mano está quieta —donde lo único que se
+   mueve es el ruido— y lo abre cuando se mueve.
+
+**Y acá me equivoqué en una predicción y la medición me corrigió:** puse dos etapas en cascada
+esperando que la atenuación se elevara al cuadrado (de 4,8 a 23 veces). Dio **4,0**. La razón es que el
+ruido que sale de la primera etapa ya está dentro de la banda de paso de la segunda, así que cascadear
+no lo vuelve a atenuar. Barrí 48 combinaciones midiendo las dos cosas que se pelean y la frontera real
+está en **atenuar 3,8 veces con 100 ms de retardo**; bajar más el corte lleva el retardo a 400 ms, que
+para apuntar es inaceptable.
+
+**Y había una tercera causa que no está en la posición:** la **z** de MediaPipe es la coordenada más
+ruidosa —es profundidad estimada de una sola cámara— y en este juego no decide dónde está el punto en
+pantalla sino el **tamaño** del dedo y la escala de la mano. Con la z al mismo corte que x e y, la mano
+quieta **latía de grosor** varias veces por segundo: a ojo eso se lee como "tiembla" aunque la posición
+esté perfectamente quieta. La z lleva su propio corte, cuatro veces más bajo, y la escala de la mano se
+suaviza en el tiempo. Medido: latido **1,12 %** del grosor, y con el doble de ruido 1,95 %.
+
+Y un cuarto: `estirados` —lo que pinta las puntas de las manos 3D— se tomaba crudo, así que un dedo a
+medio estirar cruzaba el umbral varias veces por segundo y la punta parpadeaba de color. Ahora cada
+dedo necesita dos lecturas iguales para cambiar de estado: un dedo que se estira tarda más de dos
+cuadros, el ruido no.
+
+#### EL DIÁLOGO COMPLETO, HABLADO EN LOS TRES IDIOMAS
+
+**59 clips**: 19 líneas × 3 idiomas + el grito y la risa, generados con Higgsfield (seed_audio, voz
+Holden), recortados y horneados a MP3 mono de 16 kHz. Las frases van a **20 kbps** y los dos no
+verbales a 40: 380 KB de MP3, 507 en base64. El archivo pasa de 902 KB a **1,40 MB**, y es el precio
+de tener el diálogo actuado en tres idiomas dentro de un solo HTML.
+
+Dos decisiones del horneado:
+
+- **Las frases se recortan sólo por los extremos**, a diferencia de los ladridos de la vuelta anterior
+  que se recortaban a la ráfaga de más energía. Una frase tiene pausas entre palabras que superan
+  cualquier hueco razonable: cortar por ráfagas la partiría al medio.
+- **`dAula` se graba sin el número.** El subtítulo dice "Aula 3" porque tiene la variable; la voz dice
+  "Otra aula" — grabar ocho variantes por idioma serían 24 clips para que diga un número que ya está
+  escrito en pantalla.
+
+Y **la clave viaja con el texto**. Antes las llamadas eran `decir(TX('dBien'))`: el texto llegaba
+traducido y la clave se perdía, o sea que no había con qué elegir el archivo. Ahora `dice(clave)` hace
+las dos cosas, así que subtítulo y voz no pueden desincronizarse — y si falta el clip de un idioma se
+ve el subtítulo y no suena nada, que es el comportamiento correcto y no un error.
+
+La mezcla quedó en tres escalones medidos con ventana de 0,7 a 0,9 s: **música rms 0,035 · voz 0,067 ·
+grito 0,280**, con la música agachándose a 0,35 mientras habla y a 0,08 cuando grita.
+
+#### MEDIDO AL CERRAR
+
+Partida completa **24 de 24**, 0 pasos dentro de paredes en 19.706, los 59 clips decodificados (19 ·
+19 · 19 · 2), atenuación de temblor 3,83 con 100 ms de retardo, latido de grosor 1,12 %, las tres
+pruebas de reparto de manos en verde, y `window.__errs` vacío.
+
+**Lo que no pude verificar:** no puedo escuchar el audio, así que la calidad del español y del
+portugués de esta voz —que es una voz inglesa hablando los tres idiomas— está sin comprobar. Si suena
+mal, se cambia la voz y se rehornea con un comando.
 
 ### Vigesimoquinta vuelta (2026-08-27): **RECREO** — MediaPipe fuera del render, manos 3D, cámara trasera, tres actividades, voz y música
 

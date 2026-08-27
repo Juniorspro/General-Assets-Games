@@ -123,12 +123,12 @@ const TRAMOS=[ null,
 const TOTAL_CUENTAS=TOUR.length*CUENTAS_AULA;
 
 const GUION=[
- { id:'saludo',  anim:'saludar',  txt:'d1', dur:3.0, mira:true, voz:'hola' },
+ { id:'saludo',  anim:'saludar',  txt:'d1', dur:3.0, mira:true },
  { id:'presenta',anim:'explicar', txt:'d2', dur:3.8, mira:true },
  { id:'t5',      anim:'explicar', txt:'d3', mira:true, espera:{tipo:'dedos', n:5} },
  { id:'tp',      anim:'explicar', txt:'d4', mira:true, espera:{tipo:'gesto', g:'pinza'} },
  { id:'t2',      anim:'explicar', txt:'d5', mira:true, espera:{tipo:'dedos', n:2} },
- { id:'listo',   anim:'saludar',  txt:'d6', dur:2.6, mira:true, voz:'risa' }
+ { id:'listo',   anim:'saludar',  txt:'d6', dur:2.6, mira:true }
 ];
 /* EL GUION DE LAS AULAS SE GENERA. Ocho aulas por tres escenas mas siete tandas de bichos son
    treinta y una escenas: escritas a mano son treinta y una oportunidades de poner un numero de aula
