@@ -14,11 +14,14 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
 - **`Maicol.html` es "Maicol"** (~300 KB, de los cuales ~200 KB son los sprites y los fondos).
   Plataformas 2D, siete niveles, hay que rescatar a Maicolito. Arte generado con Higgsfield.
-- **`Pelusa.html` es "Pelusa"** (~81 KB, sin un solo asset: todo se dibuja por código, incluidos la
-  historia, el fondo y la música). Juego 2D de tranquilidad: la pelusa está pegada a un punto, hay
-  una línea recta marcada hasta el siguiente y alrededor de ese punto giran bolas con espinas. Se
-  toca y sale; si una espina la toca en el camino, vuelve. **8 mundos × 20 niveles = 160**,
-  procedurales con semilla y **validados uno por uno** — y jugados solos de punta a punta.
+- **`Pompom.html` es "POMPOM"** (~114 KB, sin un solo asset: todo se dibuja por código, incluidos la
+  historia, el fondo, los gorritos y la música). **Se llamaba `Pelusa.html`**; el personaje sigue
+  siendo Pelusín. Juego 2D de tranquilidad: la pelusa está pegada a un punto, hay una línea recta
+  marcada hasta el siguiente y alrededor de ese punto giran pelusas con espinas. Se toca y sale; si
+  una espina la toca en el camino, se pierde una de las **cuatro vidas**. **8 mundos × 20 niveles =
+  160**, procedurales con semilla y **validados uno por uno** — y jugados solos de punta a punta.
+  El menú es un **hub**: Pelusín en el medio siguiendo el dedo, JUGAR abajo, niveles arriba y las dos
+  tiendas (colores y gorritos) a los costados.
   Pedido textual: *"un juego 2D de tranquilidad, de 20 niveles y 6 mundos ... apretamos y nuestro
   muñequito peludo se moverá hacia un punto ya que pasará por una línea recta marcada, pero hay que
   tener cuidado ya que al punto en el que quiere ir hay bolas malas con espinas girando alrededor de
@@ -30,6 +33,114 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Decimoctava vuelta (2026-08-27): **Pelusa pasa a llamarse POMPOM** — hub, tiendas, vidas y enemigos peludos
+
+Pedido: *"haz que pelusa tenga un mejor nombre universal, haz que al entrar no sea botón jugar y eso
+sino que sea nuestra pelusa siguiendo nuestro dedo ... abajo dice jugar y a los costados estará el
+menú de tiendas para comprar colores o gorritos ... arriba para seleccionar niveles siempre pelusin
+centrado no tan gigante y abajo al jugar siempre juegas el último nivel ... mejores enemigos peluzas
+espinas con animaciones goty y que no solamente haya uno por sector ... también tienes 4 vida, hay
+veces que en sectores puede Spawn un escudo o una vida más ... y los 5 mundos deben ser diferentes
+entre si con mejor decoración"*. Todo con `herramientas/pelusa/parche_hub.py`, idempotente y
+verificado: `commit anterior → parche_grande → parche_hub` da el mismo md5.
+
+#### EL NOMBRE
+
+**"Pelusa" es una palabra que hay que traducir; POMPOM se lee igual en todos lados** y además
+*describe* al personaje, que es literalmente un pompón. El archivo pasó a `juegos-pc/Pompom.html`
+(`git mv`, con el historial conservado). El bicho sigue llamándose Pelusín.
+
+#### LA PRUEBA DE LA VUELTA: **160/160 JUGADOS SOLOS, 1.280 SALTOS, CERO CHOQUES**
+
+Con 1.280 sectores (eran 880), hasta **cuatro enemigos por sector** (eran tres, y el tercero recién
+aparecía en el mundo 6 pasado el 70%) y cinco formas. La cuenta sigue siendo una sola: `chocaRotor()`
+la usan el validador y el choque de verdad.
+
+#### EL AGUJERO DE FONDO DEL VALIDADOR: **"existe una ventana" no es "se puede jugar"**
+
+Es el hallazgo de la vuelta y sólo salió porque el auto-jugador falló donde la auditoría decía que
+todo estaba bien. El 5·16 daba 0,167 s de ventana —por encima de su mínimo— y el sector 8 era
+**injugable**. Las dos cosas eran ciertas y el defecto estaba justo en el medio:
+
+`ventana()` barre los **primeros 3,6 segundos** del nivel. Pero el jugador llega al sector 8 cuando
+llega —a los treinta segundos, o a los noventa— y con cuatro rotores a frecuencias que no son
+múltiplos entre sí (2,44 · −2,29 · 2,26 · −2,57) **el patrón nunca se repite igual**: el hueco que
+existe al principio puede no volver a abrirse en los diez segundos siguientes al instante en que el
+jugador está parado ahí. Con uno o dos rotores no se notaba porque el patrón casi se repetía; con
+cuatro la fracción segura cayó al 6,4% y salió a la luz.
+
+**El arreglo no es barrer más tiempo** —eso corre el problema más lejos— sino exigir también una
+**fracción mínima de instantes seguros**. "Hay un hueco" es una propiedad del principio del nivel;
+"el 12% de los instantes sirve" es una propiedad del sector, y ésa sí vale en cualquier momento.
+Medido sobre los 1.280 sectores: la fracción más baja es **0,121**.
+
+Y dos defectos más del generador, los dos aritmética:
+- **La luna del satélite se paraba encima del nodo.** Gira a 0,71 de su bola; con la bola en la
+  órbita nueva más chica (1,25) la luna llega a 0,54 del centro y la pelusa más la luna miden 0,62.
+  Aterrizar era chocar **siempre**. Es el mismo defecto que ya había costado el pulso, con otro
+  disfraz: todo lo que orbite más cerca que RP+su radio se come el punto de llegada.
+- **Un rotor no puede quedar casi quieto.** La red de seguridad lo frenaba hasta el 10,7% de su
+  velocidad: 0,2 rad/s son treinta segundos por vuelta. Ahora hay piso (0,55 rad/s) y, si con el piso
+  puesto el sector sigue sin servir, el rotor se saca del todo — un respiro es infinitamente mejor
+  que un sector imposible o que una espina congelada.
+
+#### EL HUB: NO HAY BOTÓN JUGAR EN EL MEDIO, HAY UN BICHO
+
+Lo que hay en el medio es Pelusín, y **sigue el dedo con un resorte**. Con un salto al dedo el pelo
+quedaría tieso —el viento del pelo se alimenta de la velocidad del cuerpo— y justamente el pelo es lo
+que hay que mostrar. La primera cosa que el jugador hace es tocar la pantalla y ver que algo peludo
+le contesta: un botón no enseña nada.
+
+`JUGAR` abajo y **arranca siempre en el último nivel al que llegaste** (lo dice abajo del rótulo:
+`3 · 12`); `NIVELES` arriba con el progreso; `COLORES` y `GORROS` a los costados. Y **no tan
+gigante**: estaba en escala 3,0, que en un teléfono da 90 px de radio con el pelo y tapa los botones
+de los costados. A 1,70, además, las 118 cerdas dejan de contarse de a una y el bicho vuelve a
+leerse a pelusa y no a erizo.
+
+#### DIEZ COLORES Y NUEVE GORRITOS, DIBUJADOS POR CÓDIGO
+
+Ni un asset: nueve gorros como imágenes serían nueve descargas para nueve dibujos de treinta líneas.
+La muestra de cada artículo **es la misma pelusa con ese color o ese gorro puesto** — un cuadradito
+de color no dice cómo va a quedar.
+
+**El gorro va arriba del PELO, no arriba del cuerpo.** Puesto sobre el radio del cuerpo (0,42) la
+corona quedaba adentro de los mechones, que llegan a 0,75: se compraba un sombrero y no se veía
+ninguno. Y va **afuera del `scale()`** del muelle de aterrizaje: un sombrero que se achata cuando el
+bicho rebota se lee a error de dibujo.
+
+Las **motas** salen sólo de jugar: 2 por nivel nuevo y 3 si sale limpio. **No se puede farmear** —
+repetir un nivel es gratis y no da nada, que es lo único coherente en un juego de tranquilidad.
+
+#### CUATRO VIDAS, Y SIGUE SIN HABER PANTALLA DE DERROTA
+
+El juego nació sin vidas a propósito y ahora las tiene porque el jugador las pidió. La forma de que
+no se peleen con el tono: quedarse sin las cuatro **no es un game over**, es volver al primer punto
+del mismo nivel con las cuatro otra vez. Lo único que se pierde es el *limpio*.
+Y hay dos premios: el **escudo**, que se come un golpe entero, y la **vida**. Medido: 151 escudos y
+121 vidas repartidos en los 160 niveles; con escudo puesto un golpe cuesta el escudo y **cero vidas**,
+y el siguiente ya cuesta una.
+
+#### LOS ESPINOSOS SON PELUSAS
+
+Era un círculo liso con ocho palitos. Ahora es **la misma familia que el personaje**: un pompón rojo
+erizado, con veinte cerdas cortas, dos ojitos, y tres animaciones que salen del reloj y no cuestan
+estado — las espinas **respiran**, el cuerpo se **aplasta** en la dirección en la que va, y deja tres
+**fantasmas** atrás sobre su propia órbita.
+**El respiro es sólo dibujo**: la espina jamás se dibuja más larga que `R_ESP`, que es el radio con
+el que choca. Si el dibujo se pasara del radio de choque, el jugador vería una espina atravesarlo sin
+que pase nada — y a partir de ahí no podría confiar en lo que ve, que en un juego de puntería es lo
+único que tiene.
+
+#### LOS OCHO MUNDOS DEJAN DE PARECERSE
+
+Antes los ocho eran discos y aros y lo único que cambiaba era un par de grises: dos mundos seguidos
+se veían iguales con el brillo apenas movido. Ahora cada uno dibuja **otra figura** — disco, aro,
+triángulo, rombo, arco, hexágono, cruz y estrella — y eso se nota de una ojeada sin leer un rótulo.
+
+Costo: **0,74 ms por cuadro** con cuatro enemigos por sector, el rastro, los premios y las cuatro
+capas. El HTML pasó de 81 KB a **114 KB**. Cero errores de página en las nueve corridas, en 900×460 y
+en 412×915 táctil, sin solapamientos en el hub (medido: JUGAR 792-853, pie 880-903, niveles 89-141).
 
 ### Decimoséptima vuelta (2026-08-27): **Eco** — el menú a 60, menos texto, tres calidades y el tutorial en una sala aparte
 

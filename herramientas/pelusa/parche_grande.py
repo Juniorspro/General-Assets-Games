@@ -11,8 +11,10 @@ veces.
 """
 import io, sys, os
 
-RUTA = os.path.join(os.path.dirname(__file__), '..', '..', 'juegos-pc', 'Pelusa.html')
-RUTA = os.path.normpath(RUTA)
+RUTA = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', 'juegos-pc', 'Pelusa.html'))
+if not os.path.exists(RUTA):
+    # el juego paso a llamarse Pompom en la vuelta siguiente; el parche tiene que seguir corriendo
+    RUTA = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', 'juegos-pc', 'Pompom.html'))
 s = io.open(RUTA, encoding='utf8').read()
 ANTES = len(s)
 hechos, saltados = 0, 0
