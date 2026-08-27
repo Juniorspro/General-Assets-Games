@@ -47,6 +47,94 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Vigesimocuarta vuelta (2026-08-27): **RECREO** — el permiso de cámara y las dos manos dibujadas en el juego
+
+Reporte del usuario probando en el teléfono: *"no está usando MEDIAPIPE ni me pide permiso de cámara
+y además la mano debe aparecer en el juego debe hasta detectar 2 manos"*. Las dos cosas eran mías.
+
+#### POR QUÉ NO PEDÍA LA CÁMARA
+
+El permiso se pedía **sólo al tocar el botón `MANOS`**, que es una de seis opciones chicas del menú
+—entre calidad y filtro— **y que ya aparecía elegida**, porque el modo manos es el de por defecto. O
+sea: el botón que había que tocar se veía como si ya estuviera tocado. Nadie tenía razón para
+tocarlo, así que `manosIniciar()` no corría nunca, MediaPipe no se bajaba nunca y el juego arrancaba
+con el teclado de números. Desde afuera eso es exactamente *"no usa la cámara"*.
+
+Ahora la cámara se pide **al tocar JUGAR**, que es el gesto que todos hacen. Y no bloquea nada: si
+falla, arranca con los números.
+
+**Y EL ORDEN DENTRO DE `manosIniciar()` CAMBIÓ: LA CÁMARA VA PRIMERO.** El detector son dos descargas
+de un CDN más un modelo de **7,8 MB** de Google, o sea varios segundos. Pidiéndolos antes del permiso,
+cuando por fin se llama a `getUserMedia` el gesto del jugador ya expiró y Safari lo rechaza con
+`NotAllowedError` **sin mostrar el cartelito**. Pidiendo la cámara en la primera línea, el permiso
+aparece al instante y la descarga pasa después.
+
+#### CADA FALLA SE NOMBRA, Y EL MOTIVO SE QUEDA PUESTO
+
+Antes cualquier problema terminaba en un cartel de 2,6 s **dentro del juego** que decía "sin cámara":
+el mismo mensaje para negaste-el-permiso, no-hay-cámara, el-CDN-no-contesta y estás-en-http. Un aviso
+de 2,6 segundos en una pantalla que no se está mirando no es un aviso. Ahora hay una línea de estado
+**en el menú**, permanente, con el motivo. Cinco motivos separados, y uno de ellos no se arregla desde
+el código: **sin HTTPS `navigator.mediaDevices` no existe**, así que no hay permiso que negar — el
+navegador ni pregunta. Es la causa más fácil de confundir con un error del juego.
+
+Más: **dos CDN** (jsDelivr y unpkg de respaldo — el detector es una descarga de un tercero y si ese
+tercero no contesta el juego se queda sin manos), y **GPU primero, CPU de respaldo**, porque en
+teléfonos viejos el delegado de GPU tira al crear la tarea y un detector a 15 fps en CPU sigue siendo
+jugable.
+
+#### LAS DOS MANOS, DIBUJADAS SOBRE EL JUEGO
+
+Estaban sólo dentro de la camarita de la esquina, **de 78 a 132 px de ancho**: a ese tamaño una mano
+son veinte puntos en dos centímetros y no se ve si el detector te está siguiendo. Ahora el esqueleto
+de las **dos** manos se dibuja sobre todo el marco. Cada decisión del dibujo tiene un motivo:
+
+- **Contorno oscuro debajo de cada hueso.** El pasillo es beige claro y el aula también: una línea
+  verde sola desaparece sobre el piso. Se pinta dos veces, grueso y oscuro primero.
+- **La palma rellena.** Con sólo huesos se lee a araña; con el polígono de la palma se lee a mano.
+- **Las puntas que el juego CONTÓ van rellenas y grandes; las que no, huecas y chicas.** Cuando el
+  número no es el que el jugador esperaba, ahí se ve cuál dedo no estiró. Un número solo no explica
+  nada — para esto `manoLeer()` ahora devuelve también **cuáles**.
+- **Un número por mano, en la muñeca.** Con dos manos el total no alcanza: si dice 7 y pusiste 4 y 3,
+  hay que poder ver que leyó 4 en una y 3 en la otra.
+- **Todo espejado en x**, igual que la camarita: sin el espejo, mover la mano a la derecha mueve el
+  dibujo a la izquierda y no hay forma de apuntar.
+
+El aro DOM que marcaba la pinza se fue: ahora el punto de la pinza se dibuja en el lienzo, y así
+salen **las dos manos** en vez de una.
+
+#### DOS COSAS QUE APARECIERON DE PASO
+
+- **`window.pintarFiltro` no existía y la llamada nunca corría.** Esto es un módulo ES, así que una
+  `function` declarada arriba **no aparece en `window`**: `pintarIdioma()` la llamaba con un guard
+  `if(window.pintarFiltro)` que era falso para siempre, o sea que al cambiar de idioma los botones del
+  filtro no se repintaban nunca. El guard está para saltear la llamada del arranque —cuando el `let
+  filtro` de un archivo posterior todavía no existe y leerlo rompe el módulo entero—, no para
+  desactivarla siempre. Se arregla asignando `window.pintarFiltro=pintarFiltro` al final de su
+  archivo. Mismo par —guard allá, asignación acá— para el `manosTam()` nuevo.
+- **`MANO.dedos` y "lo que la cámara ve" son dos números distintos.** `MANO.dedos` es el que ya pasó
+  el voto de tres cuadros y arranca en −1 mientras no hay acuerdo; el cartelito decía "2 MANOS · −1".
+  El cartel muestra el crudo, que es la respuesta inmediata a *"¿me está viendo?"*.
+
+#### MEDIDO
+
+Con la cámara falsa del contenedor: al tocar JUGAR, `estado: lista · on: true · delegado: GPU ·
+video 480×360 readyState 4 · aviso "CÁMARA LISTA · las dos manos"`. Con dos manos sintéticas de cinco
+dedos: `dedos 10 · manos 2`, el cartel dice **"2 MANOS · 10"** y los dos esqueletos se dibujan con su
+número al pie. El lienzo de manos mide 788×1400 y dibujar las dos manos cuesta **0,098 ms por cuadro**
+(300 pasadas). Partida completa detrás de todo esto: **24 de 24**, sin errores en consola.
+
+#### HOSTEO PARA PROBAR EN EL TELÉFONO
+
+`raw.githubusercontent.com` **no sirve**: devuelve 200 pero con `content-type: text/plain` y
+`X-Content-Type-Options: nosniff`, así que el navegador muestra el código en vez de correr el juego.
+jsDelivr, igual. Lo que sí funciona es **githack**, que sirve el mismo archivo con `text/html`:
+
+    https://raw.githack.com/Juniorspro/General-Assets-Games/claude/billeteras-sin-registro-3z7uvz/juegos-pc/Recreo.html
+
+Ojo al probarlo: **githack contesta 403 a los HEAD y 200 a los GET**, así que `curl -I` lo hace
+parecer roto. Y `getUserMedia` exige HTTPS, que githack cumple.
+
 ### Vigesimotercera vuelta (2026-08-27): **RECREO se vuelve un juego** — ocho aulas, bichos con pinza y el screamer
 
 Pedido: *"en cada salon hayan un libro y 3 problemas para hacer y minis actividades por el camino a

@@ -24,6 +24,9 @@ function ajustar(){
   render.setSize(w,h,false);
   camara.aspect=w/h; camara.fov=FOV;
   camara.updateProjectionMatrix();
+  /* el lienzo de las manos vive del mismo marco: si no se reajusta acá, al girar el telefono el
+     esqueleto queda dibujado a la resolucion vieja y corrido */
+  if(window.manosTam) manosTam();
 }
 addEventListener('resize', ajustar);
 

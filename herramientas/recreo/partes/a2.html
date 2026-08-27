@@ -86,16 +86,6 @@
     font-size:max(12px,3.6vw); font-weight:900; letter-spacing:.20em;
     text-shadow:0 2px 0 rgba(0,0,0,.6); display:none; }
   body.clase #libros, body.bichos #libros{ display:block; }
-  /* LA MARCA DE LA PINZA. Sin esto los bichos son inapuntables: el jugador no sabe donde cree el
-     juego que esta su mano, asi que falla y no aprende nada del fallo — el mismo problema que una
-     mira invisible en un tirador. Es un aro y no una cruz porque tiene que leerse sobre un pasillo
-     beige y sobre un bicho negro, y un aro tiene contorno de los dos lados. */
-  #mira{ position:absolute; z-index:27; width:clamp(30px,9vw,54px); aspect-ratio:1; display:none;
-    transform:translate(-50%,-50%); border-radius:50%; pointer-events:none;
-    border:2.6px solid rgba(46,204,15,.95); background:rgba(46,204,15,.10);
-    box-shadow:0 0 0 2px rgba(0,0,0,.40); }
-  body.bichos #mira.ver{ display:block; }
-  #mira.cerrada{ border-color:#f2efe6; background:rgba(242,239,230,.30); }
   /* EL FOGONAZO DEL GRITO. Va en CSS y no en el shader por una razon de costo: son cero triangulos y
      cero uniformes, y ademas tiene que taparlo TODO —el HUD incluido—, que es justo lo que un
      elemento con z-index alto hace y una pasada de render no. Y va A TIRONES y no en desvanecido:
@@ -120,6 +110,18 @@
     cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;
     z-index:25; }
 
+  /* =========================================================================================
+     LAS MANOS SE DIBUJAN EN EL JUEGO, NO EN UNA MINIATURA
+     Estaban solo dentro de la camarita de la esquina, de 78 a 132 px de ancho: a ese tamano una
+     mano son veinte puntos en dos centimetros y no se ve si el detector te esta siguiendo o no.
+     Ahora el esqueleto de las DOS manos se dibuja sobre todo el marco, con la punta de cada dedo
+     marcada y el punto de la pinza resaltado. La camarita queda, chica, solo como prueba de vida.
+     Va en un canvas 2D encima del 3D y no en el mundo: es informacion de interfaz —donde esta tu
+     mano AHORA— y tiene que verse nitida y del mismo grosor en cualquier pantalla.
+     ========================================================================================= */
+  #manosCv{ position:absolute; inset:0; width:100%; height:100%; z-index:24;
+    pointer-events:none; display:none; }
+  body.manos #manosCv{ display:block; }
   /* la camara de la mano */
   #camCaja{ position:absolute; right:8px; top:8px; width:clamp(78px,26vw,132px);
     aspect-ratio:4/3; border:1.2px solid #35353d; border-radius:9px; overflow:hidden;
@@ -144,6 +146,15 @@
     background:rgba(0,0,0,.42); color:#f2efe6; font:inherit; font-weight:900;
     font-size:max(13px,3.8vw); border-radius:9px; padding:9px 0; cursor:pointer; }
   #pad button:active{ background:#f2efe6; color:#0d0d10; }
+  /* POR QUE HAY UN CARTEL DE ESTADO DE CAMARA EN EL MENU.
+     Cuando el detector no arranca —permiso negado, sin camara, el CDN caido— el unico aviso era un
+     cartel de 2,6 segundos DENTRO del juego, o sea en una pantalla que en ese momento no se estaba
+     mirando. Desde afuera el juego simplemente "no usaba la camara" y no habia forma de saber por
+     que. El motivo va escrito y se queda puesto. */
+  #camAviso{ font-size:max(9.5px,2.6vw); font-weight:800; letter-spacing:.10em; line-height:1.5;
+    max-width:92%; min-height:1.2em; text-align:center; color:var(--beige); }
+  #camAviso.mal{ color:#e8776d; }
+  #camAviso.bien{ color:var(--verde); }
   #idBotones{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
 </style>
 </head>
@@ -165,7 +176,7 @@
       <div id="aroN"></div>
       <div id="aroS"></div>
     </div>
-    <div id="mira"></div>
+    <canvas id="manosCv"></canvas>
     <div id="dialogo"><span id="quien">BALDI</span><span id="dTxt"></span></div>
   </div>
 
@@ -202,6 +213,7 @@
       <button class="opB" id="oManos" data-i18n="ctrlManos"></button>
       <button class="opB" id="oPad" data-i18n="ctrlPad"></button>
     </div>
+    <div id="camAviso"></div>
     <div style="height:2px"></div>
     <button class="bot lleno" id="bJugar" data-i18n="jugar"></button>
     <div class="fila">

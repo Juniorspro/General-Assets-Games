@@ -114,3 +114,9 @@ function pintarEscena(){
   render.setRenderTarget(null);
   render.render(postEsc, postCam);
 }
+
+/* IDEM manosTam: pintarIdioma() la llama con `if(window.pintarFiltro)` y nadie la asignaba, asi que
+   al cambiar de idioma los botones del filtro no se repintaban nunca. El guard esta para saltear la
+   llamada del arranque —cuando `filtro` de este archivo todavia no existe y leerlo rompe el modulo
+   entero—, no para desactivarla siempre. */
+window.pintarFiltro=pintarFiltro;

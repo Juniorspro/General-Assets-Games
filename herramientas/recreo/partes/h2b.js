@@ -167,10 +167,21 @@ function aplicarCal(c){
   ajustar(); pintarCal();
 }
 for(const b of document.querySelectorAll('[data-cal]')) b.onclick=()=>aplicarCal(b.dataset.cal);
+const MANO_MOTIVO={ permiso:'manoErrPermiso', camara:'manoErrCamara', cdn:'manoErrCdn',
+                    modelo:'manoErrModelo', insegura:'manoErrInsegura' };
 function pintarCtrl(){
   document.getElementById('oManos').classList.toggle('si', ctrlManos);
   document.getElementById('oPad').classList.toggle('si', !ctrlManos);
   document.body.classList.toggle('pad', !ctrlManos || MANO.estado==='no');
+  /* EL MOTIVO SE ESCRIBE Y SE QUEDA. Un juego que se maneja con la camara y no la pide se ve roto,
+     y sin decir por que no hay nada que el jugador pueda hacer al respecto. */
+  const av=document.getElementById('camAviso'); if(!av) return;
+  av.classList.remove('mal','bien');
+  if(!ctrlManos){ av.textContent=TX('manoPad'); return; }
+  if(MANO.estado==='carga'){ av.textContent=TX('manoCarga'); return; }
+  if(MANO.estado==='lista'){ av.textContent=TX('manoOk'); av.classList.add('bien'); return; }
+  if(MANO.error){ av.textContent=TX(MANO_MOTIVO[MANO.error]||'manoErrCamara'); av.classList.add('mal'); return; }
+  av.textContent=TX('manoPide');
 }
 document.getElementById('oManos').onclick=async()=>{
   ctrlManos=true; try{ localStorage.setItem('recreo_ctrl','manos'); }catch(e){}
@@ -178,7 +189,21 @@ document.getElementById('oManos').onclick=async()=>{
 document.getElementById('oPad').onclick=()=>{
   ctrlManos=false; try{ localStorage.setItem('recreo_ctrl','pad'); }catch(e){}
   MANO.on=false; document.body.classList.remove('manos'); pintarCtrl(); };
-document.getElementById('bJugar').onclick=()=>{ audioIniciar(); empezar(); };
+/* LA CAMARA SE PIDE AL TOCAR JUGAR, y esto era el defecto que reporto el usuario: "no me pide
+   permiso de camara". El permiso solo se pedia al tocar el boton MANOS, que es una de seis opciones
+   chicas del menu Y QUE YA APARECIA ELEGIDA —el modo manos es el de por defecto—, asi que tocarlo
+   no parecia hacer nada y no habia ninguna razon para hacerlo. Resultado: el juego arrancaba en modo
+   numeros y MediaPipe no se cargaba nunca.
+   Va en JUGAR porque getUserMedia necesita un gesto del jugador y JUGAR es el gesto que todos hacen.
+   Y no se bloquea el juego si falla: si no hay camara, arranca con los numeros. */
+document.getElementById('bJugar').onclick=async()=>{
+  audioIniciar();
+  if(ctrlManos && MANO.estado!=='lista'){
+    await manosIniciar();
+    ctrlManos=MANO.on; pintarCtrl();
+  }
+  empezar();
+};
 document.getElementById('bComo').onclick=()=>verPantalla('como');
 document.getElementById('bIdioma').onclick=()=>verPantalla('idioma');
 document.getElementById('bVolver').onclick=()=>verPantalla('menu');

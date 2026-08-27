@@ -417,7 +417,6 @@ function bichosApagar(){
   BICHOS.length=0; ESQ.length=0; bichosVivos=0;
   bichoMalla.visible=false; bichoOjos.visible=false; esqMalla.visible=false;
   document.body.classList.remove('bichos');
-  const mi=document.getElementById('mira'); if(mi) mi.classList.remove('ver');
   pintarLibros();
 }
 /* UN ESTALLIDO SON DOS COSAS: las esquirlas que vuelan Y el bicho que desaparece en el mismo cuadro.
@@ -532,16 +531,6 @@ function bichosDibujar(){
       esqMalla.setMatrixAt(q, _bm);
     }
     esqMalla.instanceMatrix.needsUpdate=true;
-  }
-  /* EL ARO DE LA MANO. Va en DOM y no en el mundo 3D a proposito: es informacion de interfaz —donde
-     esta tu dedo— y tiene que verse nitido y del mismo tamano en cualquier pantalla. */
-  const mi=document.getElementById('mira');
-  if(mi){
-    const p = (MANO.on && MANO.pinzas.length)? MANO.pinzas[0] : null;
-    if(p && document.body.classList.contains('bichos')){
-      mi.style.left=(p.x*100)+'%'; mi.style.top=(p.y*100)+'%';
-      mi.classList.add('ver'); mi.classList.toggle('cerrada', !!p.pinza);
-    } else mi.classList.remove('ver');
   }
 }
 

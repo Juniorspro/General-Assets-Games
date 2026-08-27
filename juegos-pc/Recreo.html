@@ -86,16 +86,6 @@
     font-size:max(12px,3.6vw); font-weight:900; letter-spacing:.20em;
     text-shadow:0 2px 0 rgba(0,0,0,.6); display:none; }
   body.clase #libros, body.bichos #libros{ display:block; }
-  /* LA MARCA DE LA PINZA. Sin esto los bichos son inapuntables: el jugador no sabe donde cree el
-     juego que esta su mano, asi que falla y no aprende nada del fallo — el mismo problema que una
-     mira invisible en un tirador. Es un aro y no una cruz porque tiene que leerse sobre un pasillo
-     beige y sobre un bicho negro, y un aro tiene contorno de los dos lados. */
-  #mira{ position:absolute; z-index:27; width:clamp(30px,9vw,54px); aspect-ratio:1; display:none;
-    transform:translate(-50%,-50%); border-radius:50%; pointer-events:none;
-    border:2.6px solid rgba(46,204,15,.95); background:rgba(46,204,15,.10);
-    box-shadow:0 0 0 2px rgba(0,0,0,.40); }
-  body.bichos #mira.ver{ display:block; }
-  #mira.cerrada{ border-color:#f2efe6; background:rgba(242,239,230,.30); }
   /* EL FOGONAZO DEL GRITO. Va en CSS y no en el shader por una razon de costo: son cero triangulos y
      cero uniformes, y ademas tiene que taparlo TODO —el HUD incluido—, que es justo lo que un
      elemento con z-index alto hace y una pasada de render no. Y va A TIRONES y no en desvanecido:
@@ -120,6 +110,18 @@
     cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;
     z-index:25; }
 
+  /* =========================================================================================
+     LAS MANOS SE DIBUJAN EN EL JUEGO, NO EN UNA MINIATURA
+     Estaban solo dentro de la camarita de la esquina, de 78 a 132 px de ancho: a ese tamano una
+     mano son veinte puntos en dos centimetros y no se ve si el detector te esta siguiendo o no.
+     Ahora el esqueleto de las DOS manos se dibuja sobre todo el marco, con la punta de cada dedo
+     marcada y el punto de la pinza resaltado. La camarita queda, chica, solo como prueba de vida.
+     Va en un canvas 2D encima del 3D y no en el mundo: es informacion de interfaz —donde esta tu
+     mano AHORA— y tiene que verse nitida y del mismo grosor en cualquier pantalla.
+     ========================================================================================= */
+  #manosCv{ position:absolute; inset:0; width:100%; height:100%; z-index:24;
+    pointer-events:none; display:none; }
+  body.manos #manosCv{ display:block; }
   /* la camara de la mano */
   #camCaja{ position:absolute; right:8px; top:8px; width:clamp(78px,26vw,132px);
     aspect-ratio:4/3; border:1.2px solid #35353d; border-radius:9px; overflow:hidden;
@@ -144,6 +146,15 @@
     background:rgba(0,0,0,.42); color:#f2efe6; font:inherit; font-weight:900;
     font-size:max(13px,3.8vw); border-radius:9px; padding:9px 0; cursor:pointer; }
   #pad button:active{ background:#f2efe6; color:#0d0d10; }
+  /* POR QUE HAY UN CARTEL DE ESTADO DE CAMARA EN EL MENU.
+     Cuando el detector no arranca —permiso negado, sin camara, el CDN caido— el unico aviso era un
+     cartel de 2,6 segundos DENTRO del juego, o sea en una pantalla que en ese momento no se estaba
+     mirando. Desde afuera el juego simplemente "no usaba la camara" y no habia forma de saber por
+     que. El motivo va escrito y se queda puesto. */
+  #camAviso{ font-size:max(9.5px,2.6vw); font-weight:800; letter-spacing:.10em; line-height:1.5;
+    max-width:92%; min-height:1.2em; text-align:center; color:var(--beige); }
+  #camAviso.mal{ color:#e8776d; }
+  #camAviso.bien{ color:var(--verde); }
   #idBotones{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
 </style>
 </head>
@@ -165,7 +176,7 @@
       <div id="aroN"></div>
       <div id="aroS"></div>
     </div>
-    <div id="mira"></div>
+    <canvas id="manosCv"></canvas>
     <div id="dialogo"><span id="quien">BALDI</span><span id="dTxt"></span></div>
   </div>
 
@@ -202,6 +213,7 @@
       <button class="opB" id="oManos" data-i18n="ctrlManos"></button>
       <button class="opB" id="oPad" data-i18n="ctrlPad"></button>
     </div>
+    <div id="camAviso"></div>
     <div style="height:2px"></div>
     <button class="bot lleno" id="bJugar" data-i18n="jugar"></button>
     <div class="fila">
@@ -295,6 +307,26 @@ const L={
  manoCarga:{en:'LOADING…', es:'CARGANDO…', pt:'CARREGANDO…'},
  manoNo:{en:'NO CAMERA · numbers instead', es:'SIN CÁMARA · van los números', pt:'SEM CÂMERA · vão os números'},
  manoLista:{en:'SHOW YOUR HAND', es:'MOSTRÁ LA MANO', pt:'MOSTRE A MÃO'},
+ manoDos:{en:'2 HANDS · {n}', es:'2 MANOS · {n}', pt:'2 MÃOS · {n}'},
+ manoPide:{en:'PRESS PLAY AND ALLOW THE CAMERA',
+           es:'TOCÁ JUGAR Y ACEPTÁ LA CÁMARA',
+           pt:'TOQUE JOGAR E ACEITE A CÂMERA'},
+ manoOk:{en:'CAMERA READY · both hands', es:'CÁMARA LISTA · las dos manos',
+         pt:'CÂMERA PRONTA · as duas mãos'},
+ manoPad:{en:'ANSWERING WITH NUMBERS', es:'CONTESTANDO CON NÚMEROS',
+          pt:'RESPONDENDO COM NÚMEROS'},
+ manoErrPermiso:{en:'CAMERA DENIED · tap HANDS to try again',
+                 es:'CÁMARA NEGADA · tocá MANOS para reintentar',
+                 pt:'CÂMERA NEGADA · toque MÃOS para tentar de novo'},
+ manoErrCamara:{en:'NO CAMERA ON THIS DEVICE', es:'ESTE APARATO NO TIENE CÁMARA',
+                pt:'ESTE APARELHO NÃO TEM CÂMERA'},
+ manoErrCdn:{en:'COULD NOT DOWNLOAD THE HAND DETECTOR', es:'NO SE PUDO BAJAR EL DETECTOR DE MANOS',
+             pt:'NÃO FOI POSSÍVEL BAIXAR O DETECTOR'},
+ manoErrModelo:{en:'THE DETECTOR WOULD NOT START HERE', es:'EL DETECTOR NO ARRANCÓ EN ESTE APARATO',
+                pt:'O DETECTOR NÃO INICIOU NESTE APARELHO'},
+ manoErrInsegura:{en:'THE CAMERA NEEDS HTTPS · open the page over https',
+                  es:'LA CÁMARA NECESITA HTTPS · abrí la página con https',
+                  pt:'A CÂMERA PRECISA DE HTTPS · abra a página com https'},
  dedos:{en:'{n} FINGERS', es:'{n} DEDOS', pt:'{n} DEDOS'},
  hazPinza:{en:'PINCH', es:'PINZA', pt:'PINÇA'},
  sostene:{en:'HOLD IT', es:'SOSTENELO', pt:'SEGURE'},
@@ -492,6 +524,9 @@ function ajustar(){
   render.setSize(w,h,false);
   camara.aspect=w/h; camara.fov=FOV;
   camara.updateProjectionMatrix();
+  /* el lienzo de las manos vive del mismo marco: si no se reajusta acá, al girar el telefono el
+     esqueleto queda dibujado a la resolucion vieja y corrido */
+  if(window.manosTam) manosTam();
 }
 addEventListener('resize', ajustar);
 
@@ -1486,9 +1521,15 @@ let CUENTAS=[];
       contestar con el cuerpo no se sienta como una trampa.
    ========================================================================================= */
 const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:false,
-             cand:-1, votos:0, ultT:0, manos:0, lms:null, pinzas:[], pzPrev:[] };
+             cand:-1, votos:0, ultT:0, manos:0, lms:null, pinzas:[], pzPrev:[],
+             error:'', delegado:'', cdn:null, crudo:0, pausa:false, habia:false };
 const MANO_URL='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
 const MANO_WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+/* DOS CDN Y NO UNO. El detector son dos descargas de un tercero, y si ese tercero no contesta el
+   juego entero se queda sin manos sin que se pueda saber por que. unpkg sirve el mismo paquete. */
+const MANO_CDN=[{ js:MANO_URL, wasm:MANO_WASM },
+                { js:'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs',
+                  wasm:'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/wasm' }];
 const MANO_MODELO='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
 function d3(a,b){ const x=a.x-b.x, y=a.y-b.y, z=(a.z||0)-(b.z||0); return Math.hypot(x,y,z); }
@@ -1504,8 +1545,12 @@ function manoLeer(lm){
   /* el pulgar, contra el nudillo del menique */
   const pulgar = (d3(lm[4], lm[17]) / palma) > 1.05;
   const pinza  = (d3(lm[4], lm[8]) / palma) < 0.45 && largos.filter(Boolean).length<=2;
+  /* SE DEVUELVE TAMBIEN CUALES. El dibujo de la mano marca en verde los dedos que el juego CONTO,
+     y eso es la mitad de la enseñanza: cuando el numero no es el que el jugador cree, se ve cual
+     dedo no cerro o no estiro del todo. Un numero solo no explica nada. */
   return { dedos: largos.filter(Boolean).length + (pulgar?1:0),
            pulgar, pinza, palma,
+           estirados: [pulgar, largos[0], largos[1], largos[2], largos[3]],
            abierta: largos.every(Boolean) && pulgar };
 }
 function manoTotal(lms){
@@ -1544,30 +1589,78 @@ function manoVoto(n){
   else { MANO.cand=n; MANO.votos=1; }
   if(MANO.votos>=3) MANO.dedos=MANO.cand;
 }
+/* =========================================================================================
+   ARRANCAR EL DETECTOR, Y QUE SE SEPA CUANDO NO ARRANCA
+
+   EL ORDEN IMPORTA Y ES: LA CAMARA PRIMERO. El detector son dos descargas de un CDN mas un modelo
+   de siete megas de Google, o sea varios segundos; si se piden ANTES del permiso, cuando por fin se
+   llama a getUserMedia el gesto del jugador ya expiro y Safari lo rechaza con NotAllowedError sin
+   mostrar el cartelito. Pidiendo la camara en la primera linea, el permiso aparece al instante y la
+   descarga pasa despues, con el permiso ya dado.
+
+   Y CADA FALLA SE NOMBRA. Antes cualquier problema terminaba en un cartel de 2,6 segundos dentro
+   del juego que decia "sin camara": el mismo mensaje para "negaste el permiso", "no hay camara",
+   "el CDN no contesta" y "estas en http y el navegador no expone la camara". Desde afuera eso se ve
+   como un juego que simplemente no usa la camara, que es justo lo que reporto el usuario.
+   ========================================================================================= */
+function manosFallo(cual){
+  MANO.estado='no'; MANO.on=false; MANO.error=cual||'camara';
+  document.body.classList.remove('manos'); document.body.classList.add('pad');
+  pintarCam(); pintarCtrl();
+  return 'no';
+}
 async function manosIniciar(){
   if(MANO.estado==='carga'||MANO.estado==='lista') return MANO.estado;
-  MANO.estado='carga'; pintarCam();
-  try{
-    const vision=await import(MANO_URL);
-    const fs=await vision.FilesetResolver.forVisionTasks(MANO_WASM);
-    MANO.det=await vision.HandLandmarker.createFromOptions(fs,{
-      baseOptions:{ modelAssetPath:MANO_MODELO, delegate:'GPU' },
-      runningMode:'VIDEO', numHands:2 });
-    const st=await navigator.mediaDevices.getUserMedia({ video:{ width:320, height:240, facingMode:'user' } });
-    const v=document.getElementById('camVid');
-    v.srcObject=st; MANO.vid=v;
-    await v.play().catch(()=>{});
-    MANO.estado='lista'; MANO.on=true;
-    document.body.classList.add('manos'); document.body.classList.remove('pad');
-  }catch(e){
-    MANO.estado='no'; MANO.on=false;
-    document.body.classList.remove('manos'); document.body.classList.add('pad');
-    avisar(TX('manoNo'), 2.6);
+  MANO.estado='carga'; MANO.error=''; pintarCam(); pintarCtrl();
+  /* CONTEXTO SEGURO. Sin https —o sin localhost— navigator.mediaDevices NO EXISTE, asi que no hay
+     permiso que negar: el navegador ni pregunta. Es la causa mas facil de confundir con un error
+     del juego, y la unica que no se arregla desde el codigo. */
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return manosFallo(window.isSecureContext===false? 'insegura' : 'camara');
   }
-  pintarCam();
+  let st=null;
+  try{
+    st=await navigator.mediaDevices.getUserMedia({
+      video:{ width:{ideal:480}, height:{ideal:360}, facingMode:'user' } });
+  }catch(e){
+    const n=(e && e.name)||'';
+    return manosFallo(n==='NotAllowedError'||n==='SecurityError'? 'permiso'
+                    : (n==='NotFoundError'||n==='OverconstrainedError'? 'camara' : 'camara'));
+  }
+  const v=document.getElementById('camVid');
+  v.srcObject=st; MANO.vid=v;
+  await v.play().catch(()=>{});
+  /* recien ahora el detector, que es lo lento */
+  let vision=null;
+  for(const c of MANO_CDN){
+    try{ vision=await import(c.js); MANO.cdn=c; break; }catch(e){}
+  }
+  if(!vision) return manosFallo('cdn');
+  let fs=null;
+  try{ fs=await vision.FilesetResolver.forVisionTasks(MANO.cdn.wasm); }
+  catch(e){ return manosFallo('cdn'); }
+  /* GPU PRIMERO Y CPU DE RESPALDO: en telefonos viejos el delegado de GPU tira al crear la tarea, y
+     un detector a 15 cuadros por segundo en CPU sigue siendo un juego jugable. */
+  for(const dg of ['GPU','CPU']){
+    try{
+      MANO.det=await vision.HandLandmarker.createFromOptions(fs,{
+        baseOptions:{ modelAssetPath:MANO_MODELO, delegate:dg },
+        runningMode:'VIDEO', numHands:2 });
+      MANO.delegado=dg; break;
+    }catch(e){ MANO.det=null; }
+  }
+  if(!MANO.det) return manosFallo('modelo');
+  MANO.estado='lista'; MANO.on=true; MANO.error='';
+  document.body.classList.add('manos'); document.body.classList.remove('pad');
+  manosTam();
+  pintarCam(); pintarCtrl();
   return MANO.estado;
 }
 function manosTick(){
+  /* PAUSA PARA PROBAR. En el banco no hay mano de verdad —la camara del contenedor es un patron
+     sintetico— asi que las manos se inyectan a mano; sin esta pausa el tick siguiente lee la camara
+     falsa, no encuentra nada y borra el dibujo antes de la captura. */
+  if(MANO.pausa) return;
   if(MANO.estado!=='lista' || !MANO.det || !MANO.vid || MANO.vid.readyState<2) return;
   const t=performance.now();
   if(t-MANO.ultT < 33) return;
@@ -1578,10 +1671,16 @@ function manosTick(){
   MANO.lms=lms;
   const tot=manoTotal(lms);
   MANO.hay=tot.hay; MANO.manos=tot.manos;
+  /* EL CRUDO Y EL VOTADO SON DOS COSAS. MANO.dedos es el numero que ya paso el voto de tres cuadros
+     —el que vale para contestar— y arranca en -1 mientras no hay acuerdo; el cartelito de la camara
+     tiene que mostrar lo que la camara ve AHORA, porque es la respuesta inmediata a "¿me esta
+     viendo?". Mostrando el votado, el cartel decia "2 MANOS · -1". */
+  MANO.crudo = tot.hay? tot.dedos : 0;
   MANO.gesto = tot.pinza? 'pinza' : '';
   MANO.pinzas = manoPinzas(lms);
   manoVoto(tot.hay? tot.dedos : -1);
   dibujarManos(lms);
+  dibujarManosGrande(lms);
   pintarCam();
 }
 function dibujarManos(lms){
@@ -1601,12 +1700,100 @@ function dibujarManos(lms){
     for(const p of lm){ g.beginPath(); g.arc(X(p),Y(p),1.7,0,7); g.fill(); }
   }
 }
+/* =========================================================================================
+   LAS DOS MANOS, DIBUJADAS SOBRE EL JUEGO
+
+   Que se dibuja y por que cada cosa:
+   - EL CONTORNO OSCURO DEBAJO DE CADA HUESO. El pasillo es beige claro y el aula tambien; una linea
+     verde sola desaparece sobre el piso. Se pinta dos veces, primero grueso y oscuro y despues fino
+     y de color, que es como se hace legible un trazo sobre un fondo cualquiera.
+   - LA PALMA RELLENA. Con solo huesos se lee a arana; con el poligono de la palma se lee a mano.
+   - LAS PUNTAS DE LOS DEDOS QUE EL JUEGO CONTO van rellenas y grandes; las que no, huecas y chicas.
+     Cuando el numero no es el que el jugador esperaba, ahi se ve cual dedo no estiro.
+   - EL PUNTO DE LA PINZA, resaltado, porque es el que apunta a los bichos.
+   - UN NUMERO POR MANO, en la muñeca. Con dos manos el total no alcanza: si dice 7 y vos pusiste 4
+     y 3, hay que poder ver que leyo 4 en una y 3 en la otra.
+   Y TODO ESPEJADO en x, igual que la camarita: sin el espejo, mover la mano a la derecha mueve el
+   dibujo a la izquierda y no hay forma de apuntar.
+   ========================================================================================= */
+const MANO_HUESOS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+                   [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const MANO_PUNTAS=[4,8,12,16,20];
+const MANO_PALMA=[0,1,5,9,13,17];
+const MANO_COLOR=['#2ecc0f','#4cc9ff'];
+function manosTam(){
+  const cv=document.getElementById('manosCv'); if(!cv) return;
+  const w=Math.max(2, marco.clientWidth), h=Math.max(2, marco.clientHeight);
+  /* EL LIENZO VA A PIXELES DE VERDAD Y NO A CSS. Con width/height por defecto (300x150) estirados
+     al marco, el esqueleto sale borroso y grueso: es el mismo error que hace ver mal cualquier
+     canvas 2D superpuesto. Se limita a 2 el ratio para no pintar 4 veces de mas en telefonos. */
+  const r=Math.min(devicePixelRatio||1, 2);
+  cv.width=Math.round(w*r); cv.height=Math.round(h*r);
+}
+function dibujarManosGrande(lms){
+  const cv=document.getElementById('manosCv'); if(!cv) return;
+  const g=cv.getContext('2d'), W=cv.width, H=cv.height;
+  if(!W || !H) return;
+  /* SI NO HABIA MANOS Y SIGUE SIN HABER, NO SE TOCA EL LIENZO. Un clearRect de 788x1400 son 1,1
+     millones de pixeles treinta veces por segundo para dejarlo igual que estaba. */
+  const hay=!!(lms && lms.length);
+  if(!hay && !MANO.habia) return;
+  MANO.habia=hay;
+  g.clearRect(0,0,W,H);
+  if(!hay) return;
+  const e=Math.max(1, Math.min(W,H)/400);          // grosor proporcional a la pantalla
+  g.lineJoin='round'; g.lineCap='round';
+  lms.forEach((lm,k)=>{
+    const col=MANO_COLOR[k%2];
+    const r=manoLeer(lm);
+    const X=p=>(1-p.x)*W, Y=p=>p.y*H;
+    /* la palma */
+    g.beginPath();
+    MANO_PALMA.forEach((i,q)=>{ const p=lm[i]; if(q) g.lineTo(X(p),Y(p)); else g.moveTo(X(p),Y(p)); });
+    g.closePath();
+    g.fillStyle='rgba(13,13,16,0.28)'; g.fill();
+    /* los huesos: contorno oscuro y encima el color */
+    for(const [anch,color] of [[7.0*e,'rgba(13,13,16,0.62)'], [3.2*e,col]]){
+      g.strokeStyle=color; g.lineWidth=anch;
+      g.beginPath();
+      for(const [a,b] of MANO_HUESOS){ g.moveTo(X(lm[a]),Y(lm[a])); g.lineTo(X(lm[b]),Y(lm[b])); }
+      g.stroke();
+    }
+    /* las puntas: rellenas si el juego las conto */
+    MANO_PUNTAS.forEach((i,q)=>{
+      const p=lm[i], si=r? !!r.estirados[q] : false;
+      g.beginPath(); g.arc(X(p), Y(p), (si? 7.0:4.2)*e, 0, 6.2832);
+      g.fillStyle = si? col : 'rgba(13,13,16,0.55)';
+      g.fill();
+      g.lineWidth=2.0*e; g.strokeStyle = si? 'rgba(13,13,16,0.75)' : col; g.stroke();
+    });
+    /* el punto de la pinza */
+    const px=(X(lm[4])+X(lm[8]))/2, py=(Y(lm[4])+Y(lm[8]))/2;
+    const pz=r && r.pinza;
+    g.beginPath(); g.arc(px, py, (pz? 17:13)*e, 0, 6.2832);
+    g.lineWidth=3.0*e; g.strokeStyle= pz? '#f2efe6' : 'rgba(242,239,230,0.55)'; g.stroke();
+    if(pz){ g.beginPath(); g.arc(px,py,7*e,0,6.2832); g.fillStyle='#f2efe6'; g.fill(); }
+    /* el numero de esta mano, en la muñeca */
+    if(r){
+      const wx=X(lm[0]), wy=Y(lm[0])+26*e;
+      g.font='900 '+Math.round(22*e)+'px ui-sans-serif,system-ui,Arial';
+      g.textAlign='center'; g.textBaseline='middle';
+      g.lineWidth=5*e; g.strokeStyle='rgba(13,13,16,0.75)';
+      g.strokeText(String(r.dedos), wx, wy);
+      g.fillStyle=col; g.fillText(String(r.dedos), wx, wy);
+    }
+  });
+}
 function pintarCam(){
   const e=document.getElementById('camEst'); if(!e) return;
   if(MANO.estado==='carga'){ e.textContent=TX('manoCarga'); return; }
   if(MANO.estado!=='lista'){ e.textContent='—'; return; }
   if(!MANO.hay){ e.textContent=TX('manoLista'); return; }
-  e.textContent = MANO.gesto==='pinza'? TX('hazPinza') : TX('dedos',{n:MANO.dedos});
+  if(MANO.gesto==='pinza'){ e.textContent=TX('hazPinza'); return; }
+  /* CON DOS MANOS SE DICE QUE SON DOS. El detector va con numHands 2 porque las cuentas llegan a
+     diez, y si el cartel dice solo "7 DEDOS" no hay forma de saber si leyo las dos manos o una. */
+  const n=(MANO.crudo!=null? MANO.crudo : Math.max(0,MANO.dedos));
+  e.textContent = (MANO.manos>1)? TX('manoDos',{n}) : TX('dedos',{n});
 }
 
 /* ===================== EL TECLADO DE NUMEROS (RESPALDO) ===================== */
@@ -1638,6 +1825,14 @@ const TOQUES=[];
     if(TOQUES.length>8) TOQUES.shift();
   }, {passive:true});
 })();
+
+/* SE PUBLICA EN window A PROPOSITO, y no es descuido: esto es un modulo, asi que una `function` de
+   aca NO aparece en window, y ajustar() —que vive en un archivo anterior— la llama con un guard
+   `if(window.manosTam)`. Ese guard es lo que evita que el primer ajustar() del arranque toque un
+   lienzo que todavia no existe. Sin la asignacion el guard es falso PARA SIEMPRE y el lienzo nunca
+   se redimensiona: es exactamente el error que ya tenia pintarFiltro, que nunca se llamaba.
+   Con este par —guard alla, asignacion aca— la llamada del arranque se saltea y las de resize no. */
+window.manosTam=manosTam;
 
 /* ===================== EL SONIDO, PROCEDURAL ===================== */
 const AUD={ ctx:null, on:true };
@@ -1807,10 +2002,21 @@ function aplicarCal(c){
   ajustar(); pintarCal();
 }
 for(const b of document.querySelectorAll('[data-cal]')) b.onclick=()=>aplicarCal(b.dataset.cal);
+const MANO_MOTIVO={ permiso:'manoErrPermiso', camara:'manoErrCamara', cdn:'manoErrCdn',
+                    modelo:'manoErrModelo', insegura:'manoErrInsegura' };
 function pintarCtrl(){
   document.getElementById('oManos').classList.toggle('si', ctrlManos);
   document.getElementById('oPad').classList.toggle('si', !ctrlManos);
   document.body.classList.toggle('pad', !ctrlManos || MANO.estado==='no');
+  /* EL MOTIVO SE ESCRIBE Y SE QUEDA. Un juego que se maneja con la camara y no la pide se ve roto,
+     y sin decir por que no hay nada que el jugador pueda hacer al respecto. */
+  const av=document.getElementById('camAviso'); if(!av) return;
+  av.classList.remove('mal','bien');
+  if(!ctrlManos){ av.textContent=TX('manoPad'); return; }
+  if(MANO.estado==='carga'){ av.textContent=TX('manoCarga'); return; }
+  if(MANO.estado==='lista'){ av.textContent=TX('manoOk'); av.classList.add('bien'); return; }
+  if(MANO.error){ av.textContent=TX(MANO_MOTIVO[MANO.error]||'manoErrCamara'); av.classList.add('mal'); return; }
+  av.textContent=TX('manoPide');
 }
 document.getElementById('oManos').onclick=async()=>{
   ctrlManos=true; try{ localStorage.setItem('recreo_ctrl','manos'); }catch(e){}
@@ -1818,7 +2024,21 @@ document.getElementById('oManos').onclick=async()=>{
 document.getElementById('oPad').onclick=()=>{
   ctrlManos=false; try{ localStorage.setItem('recreo_ctrl','pad'); }catch(e){}
   MANO.on=false; document.body.classList.remove('manos'); pintarCtrl(); };
-document.getElementById('bJugar').onclick=()=>{ audioIniciar(); empezar(); };
+/* LA CAMARA SE PIDE AL TOCAR JUGAR, y esto era el defecto que reporto el usuario: "no me pide
+   permiso de camara". El permiso solo se pedia al tocar el boton MANOS, que es una de seis opciones
+   chicas del menu Y QUE YA APARECIA ELEGIDA —el modo manos es el de por defecto—, asi que tocarlo
+   no parecia hacer nada y no habia ninguna razon para hacerlo. Resultado: el juego arrancaba en modo
+   numeros y MediaPipe no se cargaba nunca.
+   Va en JUGAR porque getUserMedia necesita un gesto del jugador y JUGAR es el gesto que todos hacen.
+   Y no se bloquea el juego si falla: si no hay camara, arranca con los numeros. */
+document.getElementById('bJugar').onclick=async()=>{
+  audioIniciar();
+  if(ctrlManos && MANO.estado!=='lista'){
+    await manosIniciar();
+    ctrlManos=MANO.on; pintarCtrl();
+  }
+  empezar();
+};
 document.getElementById('bComo').onclick=()=>verPantalla('como');
 document.getElementById('bIdioma').onclick=()=>verPantalla('idioma');
 document.getElementById('bVolver').onclick=()=>verPantalla('menu');
@@ -1947,6 +2167,12 @@ function pintarEscena(){
   render.setRenderTarget(null);
   render.render(postEsc, postCam);
 }
+
+/* IDEM manosTam: pintarIdioma() la llama con `if(window.pintarFiltro)` y nadie la asignaba, asi que
+   al cambiar de idioma los botones del filtro no se repintaban nunca. El guard esta para saltear la
+   llamada del arranque —cuando `filtro` de este archivo todavia no existe y leerlo rompe el modulo
+   entero—, no para desactivarla siempre. */
+window.pintarFiltro=pintarFiltro;
 
 /* =========================================================================================
    EL GUION CORRIENDO, Y EL BUCLE
@@ -2366,7 +2592,6 @@ function bichosApagar(){
   BICHOS.length=0; ESQ.length=0; bichosVivos=0;
   bichoMalla.visible=false; bichoOjos.visible=false; esqMalla.visible=false;
   document.body.classList.remove('bichos');
-  const mi=document.getElementById('mira'); if(mi) mi.classList.remove('ver');
   pintarLibros();
 }
 /* UN ESTALLIDO SON DOS COSAS: las esquirlas que vuelan Y el bicho que desaparece en el mismo cuadro.
@@ -2481,16 +2706,6 @@ function bichosDibujar(){
       esqMalla.setMatrixAt(q, _bm);
     }
     esqMalla.instanceMatrix.needsUpdate=true;
-  }
-  /* EL ARO DE LA MANO. Va en DOM y no en el mundo 3D a proposito: es informacion de interfaz —donde
-     esta tu dedo— y tiene que verse nitido y del mismo tamano en cualquier pantalla. */
-  const mi=document.getElementById('mira');
-  if(mi){
-    const p = (MANO.on && MANO.pinzas.length)? MANO.pinzas[0] : null;
-    if(p && document.body.classList.contains('bichos')){
-      mi.style.left=(p.x*100)+'%'; mi.style.top=(p.y*100)+'%';
-      mi.classList.add('ver'); mi.classList.toggle('cerrada', !!p.pinza);
-    } else mi.classList.remove('ver');
   }
 }
 
@@ -2862,17 +3077,35 @@ window.__recreo={
   /* inyecta manos y corre el conteo entero, voto incluido */
   mano:(lms)=>{ const t=manoTotal(lms);
     MANO.hay=t.hay; MANO.manos=t.manos; MANO.gesto=t.pinza?'pinza':'';
+    MANO.crudo=t.hay? t.dedos : 0;
     /* TAMBIEN LAS PINZAS. Sin esta linea el gancho probaba contar dedos pero no apuntar, que es
        justo la mitad nueva del juego. */
     MANO.pinzas=manoPinzas(lms);
     manoVoto(t.hay? t.dedos : -1); MANO.on=true; MANO.estado='lista';
-    dibujarManos(lms); pintarCam();
+    dibujarManos(lms); dibujarManosGrande(lms); pintarCam();
     return { crudo:t, firme:MANO.dedos, votos:MANO.votos,
              pinzas:MANO.pinzas.map(p=>({x:+p.x.toFixed(3), y:+p.y.toFixed(3),
                                          pinza:p.pinza, nueva:p.nueva})) }; },
   manos:()=>({ estado:MANO.estado, on:MANO.on, hay:MANO.hay, dedos:MANO.dedos,
                gesto:MANO.gesto, manos:MANO.manos, votos:MANO.votos }),
   manosIniciar:()=>manosIniciar(),
+  manoPausa:(v)=>{ MANO.pausa=!!v; return !!MANO.pausa; },
+  /* cuanto cuesta dibujar las dos manos encima del juego, en milisegundos por cuadro */
+  manoCosto:(n)=>{
+    const lms=[window.__recreo.manoFalsa(4,false,0.3,0.5), window.__recreo.manoFalsa(3,true,0.7,0.6)];
+    const v=n||200, t0=performance.now();
+    for(let k=0;k<v;k++){ MANO.habia=true; dibujarManosGrande(lms); }
+    return { ms:+((performance.now()-t0)/v).toFixed(3), veces:v,
+             lienzo:[document.getElementById('manosCv').width, document.getElementById('manosCv').height] };
+  },
+  manoEstado:()=>({ estado:MANO.estado, on:MANO.on, error:MANO.error, delegado:MANO.delegado,
+                    cdn:MANO.cdn? MANO.cdn.js.slice(0,42) : null,
+                    seguro:!!window.isSecureContext,
+                    lienzo:(()=>{ const c=document.getElementById('manosCv');
+                                  return c? [c.width,c.height] : null; })(),
+                    video:(()=>{ const v=document.getElementById('camVid');
+                                 return v? [v.videoWidth, v.videoHeight, v.readyState] : null; })(),
+                    aviso:(document.getElementById('camAviso')||{}).textContent||'' }),
   /* ---- correr el guion sin cuadros de verdad ---- */
   avanzar:(seg,fps)=>{ const n=Math.round((seg||1)*(fps||60));
     for(let k=0;k<n;k++) avanzar(1/(fps||60));

@@ -214,17 +214,35 @@ window.__recreo={
   /* inyecta manos y corre el conteo entero, voto incluido */
   mano:(lms)=>{ const t=manoTotal(lms);
     MANO.hay=t.hay; MANO.manos=t.manos; MANO.gesto=t.pinza?'pinza':'';
+    MANO.crudo=t.hay? t.dedos : 0;
     /* TAMBIEN LAS PINZAS. Sin esta linea el gancho probaba contar dedos pero no apuntar, que es
        justo la mitad nueva del juego. */
     MANO.pinzas=manoPinzas(lms);
     manoVoto(t.hay? t.dedos : -1); MANO.on=true; MANO.estado='lista';
-    dibujarManos(lms); pintarCam();
+    dibujarManos(lms); dibujarManosGrande(lms); pintarCam();
     return { crudo:t, firme:MANO.dedos, votos:MANO.votos,
              pinzas:MANO.pinzas.map(p=>({x:+p.x.toFixed(3), y:+p.y.toFixed(3),
                                          pinza:p.pinza, nueva:p.nueva})) }; },
   manos:()=>({ estado:MANO.estado, on:MANO.on, hay:MANO.hay, dedos:MANO.dedos,
                gesto:MANO.gesto, manos:MANO.manos, votos:MANO.votos }),
   manosIniciar:()=>manosIniciar(),
+  manoPausa:(v)=>{ MANO.pausa=!!v; return !!MANO.pausa; },
+  /* cuanto cuesta dibujar las dos manos encima del juego, en milisegundos por cuadro */
+  manoCosto:(n)=>{
+    const lms=[window.__recreo.manoFalsa(4,false,0.3,0.5), window.__recreo.manoFalsa(3,true,0.7,0.6)];
+    const v=n||200, t0=performance.now();
+    for(let k=0;k<v;k++){ MANO.habia=true; dibujarManosGrande(lms); }
+    return { ms:+((performance.now()-t0)/v).toFixed(3), veces:v,
+             lienzo:[document.getElementById('manosCv').width, document.getElementById('manosCv').height] };
+  },
+  manoEstado:()=>({ estado:MANO.estado, on:MANO.on, error:MANO.error, delegado:MANO.delegado,
+                    cdn:MANO.cdn? MANO.cdn.js.slice(0,42) : null,
+                    seguro:!!window.isSecureContext,
+                    lienzo:(()=>{ const c=document.getElementById('manosCv');
+                                  return c? [c.width,c.height] : null; })(),
+                    video:(()=>{ const v=document.getElementById('camVid');
+                                 return v? [v.videoWidth, v.videoHeight, v.readyState] : null; })(),
+                    aviso:(document.getElementById('camAviso')||{}).textContent||'' }),
   /* ---- correr el guion sin cuadros de verdad ---- */
   avanzar:(seg,fps)=>{ const n=Math.round((seg||1)*(fps||60));
     for(let k=0;k<n;k++) avanzar(1/(fps||60));
