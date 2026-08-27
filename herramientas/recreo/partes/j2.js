@@ -267,6 +267,56 @@ window.__recreo={
              largoPx:Math.round(Math.hypot((b.x-a.x)*W,(b.y-a.y)*H)),
              fraccionAlto:+(Math.hypot((b.x-a.x)*W,(b.y-a.y)*H)/H).toFixed(3), marco:[W,H] };
   },
+  /* =========================================================================================
+     LA PRUEBA DEL DEFECTO QUE REPORTO EL JUGADOR: "el rompecabezas agarra los de la izquierda
+     cuando mi mano esta a la derecha".
+
+     Se inyecta la MISMA mano con el espejo puesto y sacado, y se compara DONDE SE DIBUJA contra
+     DONDE AGARRA. Si los dos no caen en el mismo sitio, el jugador ve su mano en un lado del marco y
+     el juego agarra en el otro — que es exactamente lo que pasaba con la camara trasera, donde
+     MANO.espejo vale false. No alcanzaba con probar el apuntado: habia que probar que el apuntado y
+     el DIBUJO coinciden, que es la pareja que estaba rota.
+     ========================================================================================= */
+  /* poner el espejo a mano: sin camara el banco arranca en true (camara frontal), y el caso que
+     rompio —y el que corre en un telefono— es el de la camara TRASERA, o sea false */
+  manoEspejoPoner:(v)=>{ MANO.espejo=!!v; return MANO.espejo; },
+  manoEspejo:()=>{
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    const guard=MANO.espejo;
+    const r=[];
+    for(const esp of [true,false]){
+      MANO.espejo=esp;
+      MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
+      const lm=window.__recreo.manoFalsa(2,true,0.30,0.50);
+      manosInyectar([lm], 1000);
+      manosAvanzar(1/60);
+      manos3DDibujar();
+      const L=MANO.ranuras[0].sal;
+      /* donde se DIBUJA la muñeca en el marco, con la misma cuenta que usa manos3DDibujar */
+      const dibujo = MANO.espejo? 1-L[0] : L[0];
+      const p=(MANO.pinzas||[])[0];
+      r.push({ espejo:esp, dibujoX:+dibujo.toFixed(3),
+               agarraX:p? +p.x.toFixed(3) : null,
+               palmaX:p? +p.px.toFixed(3) : null,
+               difDibujoAgarre: p? +Math.abs(dibujo-p.x).toFixed(3) : null });
+    }
+    MANO.espejo=guard; MANO.pausa=false;
+    /* el veredicto en una sola linea: los dos casos tienen que dar la mano y el agarre en el mismo
+       lado del marco. Antes, con espejo:false, la diferencia era de 0,4 del ancho. */
+    return { casos:r, ok: r.every(c=>c.difDibujoAgarre!=null && c.difDibujoAgarre<0.06) };
+  },
+  /* el aro de punteria: donde esta, que tamaño tiene y si dice que hay blanco debajo */
+  miraVer:()=>{
+    dibujar(1);
+    const r=[];
+    for(let q=0;q<2;q++){
+      const el=document.getElementById('manoMira'+q); if(!el) continue;
+      r.push({ q, ver:el.classList.contains('ver'), hit:el.classList.contains('hit'),
+               cerrada:el.classList.contains('cerrada'),
+               izq:el.style.left, arr:el.style.top, ancho:el.style.width });
+    }
+    return r;
+  },
   manoSoltarTodo:()=>{ MANO.pinzas=[]; MANO.on=false; MANO.pausa=false; MANO.hay=false;
                        MANO.manos=0; return true; },
   bichosVer:()=>{

@@ -1170,6 +1170,72 @@ function globosDibujar(){
    colgaba en el pasillo 6. Devuelve una fraccion del marco, o sea exactamente lo mismo que produce un
    dedo: la prueba entra por el mismo agujero que el jugador y no por atras.
    ========================================================================================= */
+/* =========================================================================================
+   EL INDICADOR DE PUNTERIA: DONDE ESTA APUNTANDO LA MANO Y SI HAY ALGO DEBAJO
+
+   `miraBlanco` pregunta lo mismo que preguntaria un golpe en ese punto, pero SIN pegarle a nada, y
+   pasa por las mismas funciones —golpeEnLista y el mismo radio—: si el aro se encendiera con una
+   cuenta propia, podria decir "le estas dando" en un sitio donde el golpe falla, y un indicador que
+   miente es peor que no tener indicador.
+   ========================================================================================= */
+const MIRA_R=0.055;          // radio del aro en reposo, en fraccion del ancho
+function miraBlanco(g){
+  if(BICHOS.length) return golpeEnLista(g, BICHOS, b=>b.viva, b=>[b.x,b.y,b.z])>=0;
+  if(TIZAS.length)  return golpeEnLista(g, TIZAS, z=>z.viva && z.espera<=0, z=>[z.x,z.y,z.z])>=0;
+  if(CASILL.length) return golpeEnLista(g, CASILL, c=>!c.abierto, c=>[c.x,c.y+0.35,c.z])>=0;
+  if(GLOBOS.length) return golpeEnLista(g, GLOBOS, b=>b.viva,
+                                        b=>[b.x, b.y+Math.sin(b.fase*1.5)*0.12, b.z])>=0;
+  if(ROMPE.length){
+    /* el rompecabezas vive en fracciones del marco y no en el mundo, asi que no pasa por
+       golpeEnLista; el radio es el mismo */
+    for(const p of ROMPE){
+      if(p.puesta) continue;
+      if(Math.hypot(p.cx-g.x, p.cy-g.y) < BICHO_R) return true;
+      /* y tambien se enciende sobre el HUECO mientras se lleva una pieza: ahi el blanco es el hueco */
+      if(p.tomada>=0 && Math.hypot(p.sx-g.x, p.sy-g.y) < ROMPE_PEGA*1.6) return true;
+    }
+    return false;
+  }
+  if(BLOQUES.length){
+    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+    for(const b of BLOQUES){
+      if(!b.viva || b.d>BL_ALCANCE) continue;
+      const w=bloquePos(b); const t=aPantalla(w[0],w[1],w[2]);
+      if(!t.delante) continue;
+      if(Math.hypot((t.x-g.x)*W, (t.y-g.y)*H) < BL_R*W) return true;
+    }
+    return false;
+  }
+  return false;
+}
+/* se llama una vez por cuadro, DESPUES de dibujar las manos: el aro sale del mismo punto que usa el
+   juego para golpear, o sea de MANO.pinzas, y no de una proyeccion propia */
+function pintarMiras(){
+  const W=lienzo.clientWidth||1;
+  const hayAct = bichosVivos>0;
+  const ps=(MANO.on && MANO.pinzas)? MANO.pinzas : [];
+  for(let q=0;q<2;q++){
+    const el=document.getElementById('manoMira'+q); if(!el) continue;
+    const m=ps.find(p=>p.k===q);
+    /* SOLO MIENTRAS HAY ACTIVIDAD. En el aula lo que se hace es contar con los dedos, y ahi un aro
+       de punteria no indica nada: es ruido encima del unico momento en que hay que mirar el libro. */
+    if(!hayAct || !m){ el.classList.remove('ver'); continue; }
+    /* con la espada la mano va cerrada, asi que el punto es la palma y no la pinza — el mismo que usa
+       espTick() para cortar */
+    const usaPalma=!!MANO.espada;
+    const x=usaPalma? m.px : m.x;
+    const y=usaPalma? m.py : m.y;
+    const hay=miraBlanco({x, y});
+    const rad=(hay? (BLOQUES.length? BL_R : BICHO_R) : MIRA_R)*W;
+    el.style.width=(rad*2)+'px'; el.style.height=(rad*2)+'px';
+    el.style.left=(x*100)+'%';
+    el.style.top=(y*100)+'%';
+    el.classList.toggle('hit', hay);
+    el.classList.toggle('cerrada', !!m.pinza);
+    el.classList.add('ver');
+  }
+}
+
 function actPuntoAuto(){
   let p=null;
   const b=BICHOS.find(q=>q.viva);
@@ -1349,6 +1415,7 @@ function dibujar(alfa){
   for(const p of PUERTAS) if(p.g) p.g.rotation.y=(p.vertical?0:Math.PI/2) + p.ang;
   actDibujar();
   manos3DDibujar();
+  pintarMiras();
   pintarEscena();
 }
 function bucle(){

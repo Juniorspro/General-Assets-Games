@@ -164,6 +164,66 @@ al dedo y encaja (4→3), y soltado a 0,63 del hueco **no** encaja; dejar pasar 
 la tanda; cortar un rojo también (5→6, y los ocho bloques vuelven); reventar un globo rojo sube el
 contador de 4 a 5 y uno verde lo baja.
 
+### Vigesimoctava vuelta (2026-08-27): **RECREO** — el espejo del punto de la mano y el aro de puntería
+
+Reporte: *"el del rompecabezas no anda, y también deberías poner un indicador a la hora de matar a los
+monstruos; por ejemplo el rompecabezas agarra los de la izquierda cuando mi mano está a la derecha, re
+nada que ver"*.
+
+#### NO ERA DEL ROMPECABEZAS: LO TENÍAN LAS SIETE ACTIVIDADES
+
+`manoPinzas()` espejaba la x **siempre**, con un `1-x` escrito a mano. La función se escribió cuando el
+juego usaba la cámara **frontal**, donde la imagen siempre va espejada. Después el juego pasó a la
+cámara **trasera** —donde la imagen NO va espejada— y `MANO.espejo` pasó a leerse del track del video;
+pero de eso se enteraron sólo el dibujo de las manos 3D y los números de cada mano. Acá seguía el `1-x`
+fijo.
+
+O sea que en un teléfono la mano **dibujada** aparecía en `x` y el punto que **agarra** estaba en `1-x`:
+los dos reflejados uno del otro, a **0,452 del ancho de distancia** cuando la mano está a un costado.
+El rompecabezas no tiene nada de especial — sólo lo hace obvio, porque ahí se mira la pieza mientras se
+arrastra en vez de un bicho que desaparece. Con los bichos el mismo defecto se siente como "no le
+pego", que es más fácil de confundir con puntería propia.
+
+**Y LA PRUEBA QUE FALTABA NO ERA DE APUNTADO.** El apuntado estaba probado: había manos falsas, radios
+medidos y actividades jugadas de punta a punta. Lo que no estaba probado es que el apuntado y el
+**dibujo** caigan en el mismo sitio, que es la pareja que estaba rota — y encima las pruebas del
+rompecabezas usaban `manoArrastrar`, que escribe `MANO.pinzas` directo y por eso **salteaba justamente
+la función con el defecto**. `manoEspejo()` inyecta la misma mano con el espejo puesto y sacado y
+compara dónde se dibuja contra dónde agarra. Verificado que la prueba detecta el defecto: revirtiendo
+el arreglo, el caso `espejo:false` pasa de 0,053 a **0,452** de diferencia y da `ok:false`.
+
+Y el rompecabezas se volvió a probar por el camino de verdad —landmarks inyectados, cámara trasera—:
+con la mano en 0,87 agarra la pieza de la **derecha**.
+
+#### EL ARO DE PUNTERÍA, Y POR QUÉ HACÍA FALTA
+
+En este juego la mano no se ve como un cursor: se ve un **modelo 3D de una mano con veintiún puntos**,
+y el juego apunta con **uno** de ellos (el punto medio entre el pulgar y el índice). Cuál de los
+veintiuno es, no hay forma de adivinarlo mirando. Sin el aro, fallar no enseña nada: no se sabe si
+fallaste por poco o si estabas apuntando con otra parte de la mano.
+
+Tres decisiones:
+
+- **El aro CRECE hasta el radio de verdad cuando hay un blanco debajo.** En reposo mide 45 px —un
+  cursor— y sobre un blanco se abre a **86,5 px**, que es exactamente `BICHO_R·ancho·2`. Así la
+  tolerancia deja de ser un secreto del código y se aprende jugando.
+- **La pinza cerrada engorda el aro.** Es el acuse de recibo del gesto: sin eso no hay forma de saber
+  si el juego vio que cerraste los dedos o si no llegaste a cerrarlos.
+- **`miraBlanco()` pasa por `golpeEnLista()` y el mismo radio**, no por una cuenta propia. Un aro con
+  su propia cuenta podría decir "le estás dando" en un sitio donde el golpe falla, y un indicador que
+  miente es peor que no tener indicador.
+
+Sólo aparece mientras hay actividad: en el aula lo que se hace es contar con los dedos, y ahí un aro de
+puntería es ruido encima del único momento en que hay que mirar el libro.
+
+#### MEDIDO AL CERRAR
+
+`manoEspejo` en verde en los dos casos (0,053 de diferencia, que es el desvío real del punto de la
+pinza respecto de la muñeca, no un espejo). Partida completa **24 de 24** dos veces —limpia y después
+de morir—, 0 pasos dentro de paredes en 20.913, `window.__errs` vacío. Aro medido: 86,52 px sobre un
+blanco y 45,32 px en el aire, `hit` verdadero sólo cuando el golpe también pegaría. Costo sin cambios:
+10 llamadas de dibujo y 16.302 triángulos.
+
 ### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
 
 Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo

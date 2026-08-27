@@ -93,10 +93,21 @@ function manoPinzas(lms){
     /* SE DEVUELVE TAMBIEN EL CENTRO DE LA PALMA, y no es un dato de mas: con la mano CERRADA —que es
        como se juega el mundo neon— el punto de la pinza deja de significar nada, porque el pulgar y
        el indice estan los dos recogidos. La espada cuelga del centro de la palma, que existe con la
-       mano abierta y con la mano cerrada igual. Y va espejado en x por el mismo motivo que el resto:
-       sin el espejo, mover la mano a la derecha mueve la del juego a la izquierda. */
-    r.push({ x: 1-(p4.x+p8.x)/2, y: (p4.y+p8.y)/2,
-             px: 1-p9.x, py: p9.y, k,
+       mano abierta y con la mano cerrada igual.
+
+       EL ESPEJO ES CONDICIONAL Y ANTES ESTABA FIJO. ESE ERA EL DEFECTO QUE REPORTO EL JUGADOR:
+       "el rompecabezas agarra los de la izquierda cuando mi mano esta a la derecha".
+       Esta funcion se escribio cuando el juego usaba la camara FRONTAL, donde la imagen siempre va
+       espejada, asi que el 1-x estaba puesto a mano. Despues el juego paso a la camara TRASERA, donde
+       la imagen NO va espejada, y `MANO.espejo` paso a leerse del track — pero solo lo miraban el
+       dibujo de las manos 3D y los numeros. Aca seguia el 1-x fijo.
+       Consecuencia: en un telefono la mano DIBUJADA aparecia en x y el punto que AGARRA estaba en
+       1-x, o sea los dos reflejados uno del otro. No es un defecto del rompecabezas: lo tenian las
+       siete actividades —bichos incluidos— y el rompecabezas solo lo hace obvio, porque ahi se mira
+       la pieza mientras se arrastra en vez de un bicho que desaparece. */
+    const ex = MANO.espejo? (v)=>1-v : (v)=>v;
+    r.push({ x: ex((p4.x+p8.x)/2), y: (p4.y+p8.y)/2,
+             px: ex(p9.x), py: p9.y, k,
              pinza:q.pinza, nueva: q.pinza && !MANO.pzPrev[k] });
     MANO.pzPrev[k]=q.pinza;
   });
