@@ -27,19 +27,130 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   tener cuidado ya que al punto en el que quiere ir hay bolas malas con espinas girando alrededor de
   la bola y hay que tocar justo ... procedural con físicas ... una beta del nivel 1 tutorial ...
   buenos gráficos blancos minimalistas"*.
-- **`Recreo.html` es "RECREO"** (~85 KB, sin un solo asset: la escuela, el profesor, las texturas y
-  el sonido se generan por código al cargar). **Recreación de fan, no comercial y sin publicar**, del
-  colegio y del profesor de Baldi's Basics (Basically Games / mystman12) — no hay un solo archivo del
-  original en el repo. Primera persona: ocho libretas, una por aula, y con las ocho abren las
-  puertas de salida. Caminar es callado, correr hace ruido y él va hasta donde lo oyó. Se juega con
-  **teclas, táctil o con la mano en el aire** (MediaPipe), y la simulación corre a **60 pasos por
-  segundo fijos con interpolación al dibujar**, así que va igual en cualquier aparato.
+- **`Recreo.html` es "RECREO"** (~752 KB, de los cuales 489 son el modelo 3D de Baldi generado con
+  Higgsfield y horneado). **Recreación de fan, no comercial y sin publicar**, del colegio y del
+  profesor de Baldi's Basics (Basically Games / mystman12). **Vertical (9:16), FOV 90 y el jugador no
+  maneja la cámara**: va sobre rieles. Baldi te saluda, te enseña a usar las manos —cinco dedos,
+  pinza, dos dedos— te lleva a un aula, se pone del otro lado del escritorio con el pizarrón, y
+  aparecen **ocho libros flotantes con una cuenta cada uno que se contesta con los dedos**: cuatro
+  más cuatro son ocho dedos, o sea las dos manos (MediaPipe, `numHands:2`). Con **filtro de
+  saturación y de baja calidad** (pixelado real) y respaldo de teclado numérico para quien no tenga
+  cámara. Simulación a **60 pasos fijos con interpolación**.
 - **`Eco.html` es "Eco"** (~215 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Vigesimoprimera vuelta (2026-08-27): **RECREO se rehace** — el modelo generado, vertical, cámara sobre rieles y los dedos
+
+Pedido: *"con highsfield generes el modelo 3D de baldis, si o si, y que a él lo animés, y que no haya
+joystick ni movimiento de cámara y que el juego sea vertical con buen fov de 90 aprox … inicie como el
+juego en sí, saludando él y que baldi te vaya dando un tutorial de como usar las manos … después la
+cámara y el mismo se va a un salón … al llegar baldi se pone del otro lado de la mesa con la pizarra y
+aparece un libro flotante a un costado debes responder con los dedos o sea 4+4 8 dedos y así habrán 8
+libros"*. Después: *"hazlo así"* (con tres fotos del modelo low-poly) *"y si le puedes agregar ese
+filtro de saturación y filtro baja calidad"*.
+
+#### EL MODELO: GENERADO CON HIGGSFIELD, Y AL SEGUNDO INTENTO
+
+`image_to_3d` (Meshy) con texturizado y **rigging automático**. Vino con un esqueleto humanoide de
+**24 huesos y nombres estándar** —Hips, Spine01, Head, LeftArm, LeftForeArm, LeftUpLeg…— que es
+exactamente lo que hacía falta.
+
+**El primer intento salió aplanado** y hay una razón: la fuente era el *sprite 2D* del personaje, y
+Meshy interpretó un dibujo plano como papel extruido. Con la foto del modelo low-poly de verdad que
+mandó el usuario —volúmenes, luz, fondo liso— salió el personaje que se quería. La lección no es
+"Meshy es malo": es que **una imagen plana no contiene la información de profundidad que se le está
+pidiendo**, y ninguna cantidad de parámetros la inventa.
+
+De **7,80 MB a 489 KB (6,3%)**, y casi todo el ahorro es una sola cosa: la textura venía en PNG de
+2048 sin comprimir (7,39 MB) y sale en **JPEG de 512 (77 KB)**. A JPEG y no a WebP a propósito: WebP
+dentro de un GLB necesita la extensión `EXT_texture_webp` declarada, y si el cargador no la soporta el
+modelo aparece **sin textura**. JPEG es núcleo de glTF. Y se tira el clip que Meshy pega por defecto,
+con reempaquetado del binario — si no se reempaqueta, los accesores huérfanos quedan y el ahorro es
+imaginario.
+
+#### LAS ANIMACIONES SE ESCRIBEN A MANO SOBRE ESE ESQUELETO, Y LOS EJES SE MIDEN
+
+De las cuatro que el juego necesita, **dos no existen en ninguna biblioteca**: "abrir la puerta" y
+"explicando". Con el esqueleto en la mano una animación es una función del tiempo a diez rotaciones,
+así que se escriben las cinco y se comparten con el rig de cajas de respaldo.
+
+**El problema real es la pose de reposo.** Puse el desvío sobre la Z local "porque es lo que suele
+ser" y el personaje apareció en **T perfecta**. Los ejes locales de un hueso dependen de cómo quedó el
+bind, así que no se adivinan: `__recreo.probarHueso()` gira un hueso un radián en cada eje y devuelve
+**para dónde se fue la mano en el mundo**. Medido:
+
+| | resultado |
+|---|---|
+| `hombroD` +1,0 en **X** | mano `dy = −0,625` → **baja** |
+| `hombroD` −1,0 en X | `dy = +0,473` → sube |
+| `hombroD` +1,0 en **Z** | `dz = +0,549` → **adelante** |
+| `hombroD` +1,0 en Y | `dy = −0,017` → nada (es el eje del hueso) |
+| `caderaD` +0,6 en X | rodilla `dy = −0,241` → pierna atrás |
+
+O sea: en este rig el brazo **sube y baja sobre X y se mece sobre Z**, justo al revés de lo que asumen
+mis poses. Las poses no se reescriben: se **remapean los canales** con una tabla de diez líneas, y
+las dos versiones del personaje siguen compartiendo las mismas curvas. Y el signo del meceo también
+estaba invertido — se vio en *explicando*, donde el brazo se iba para atrás: el personaje explicaba
+de espaldas a sus propias manos.
+
+Medido el recorrido real: **caminar** mueve la mano 46 cm y las rodillas 52; **saludar** mueve la
+derecha 37 cm y la izquierda **1,4 cm**; **explicando** las dos, desfasadas.
+
+#### LOS DOS FILTROS SON LA MISMA COSA, Y NO SON SOLO UN LOOK
+
+La escena no se dibuja en la pantalla: se dibuja en un destino de render **chico** y ese destino se
+estira con NEAREST. Así, el filtro de baja calidad no es un efecto encima — es la razón por la que
+esto corre en un teléfono viejo:
+
+| | píxeles dibujados | fps medidos |
+|---|---|---|
+| fuerte (0,40) | 39.072 | **58,9** |
+| apagado (1,00) | 244.489 | 27,6 |
+
+Más de **el doble de cuadros**. Un `filter: saturate()` de CSS satura pero no baja la resolución
+—solo desenfoca— y el navegador lo aplica **después** de haber dibujado todos los píxeles.
+El tercer ingrediente es la **cuantización de color**: sin escalones, una pared con niebla se ve
+suave y moderna aunque esté pixelada.
+
+**Y UN DEFECTO QUE SÓLO SE VE MIRANDO:** three.js aplica `outputColorSpace` **sólo** cuando dibuja en
+el buffer de pantalla; con un `WebGLRenderTarget` la imagen queda en **lineal**. Mi pasada la copiaba
+tal cual y todo salía oscuro con tinte verde-oliva —el techo casi blanco se veía verde musgo—. No era
+la saturación (saturar un beige lo pone naranja, no oliva): era el gamma. Dos líneas en el shader.
+Y bajé la mano de 1,50/14 escalones a 1,28/22: con los primeros el pasillo era un solo bloque de
+color y la línea del zócalo desaparecía. El filtro tiene que **ensuciar** la imagen, no borrarla.
+
+#### CONTAR DEDOS, Y EL PULGAR NO SE MIDE COMO LOS DEMÁS
+
+Cuatro más cuatro son ocho dedos, o sea las dos manos: `numHands: 2` y el número es la suma.
+Los otros cuatro dedos se estiran **alejando** la punta de la muñeca y con eso alcanza; el pulgar se
+abre **hacia el costado** y su punta puede quedar a la misma distancia de la muñeca abierto o cerrado.
+Se mide contra el nudillo del **meñique**: abierto se aleja de él, cerrado se le cruza por delante.
+Sin esa distinción, "cinco dedos" no existe.
+Y el número **no se toma, se sostiene**: 1,1 s con un aro que se llena. Eso mata el temblor de un dedo
+a medio estirar Y le da al jugador tiempo de cambiar de idea. Verificado con manos sintéticas: una
+mano de 5 → 5, **dos manos de 4 → 8**, 0 → 0, pinza detectada, y el voto de tres cuadros medido paso
+a paso (cuadro 1 y 2 el número firme sigue vacío; en el 3 pasa a valer).
+
+#### DOS DEFECTOS MÁS, LOS DOS ENCONTRADOS POR EL AUTO-JUGADOR
+
+- **Las pausas estaban en `setTimeout`** y el juego se clavaba después del primer libro: 6.001
+  vueltas con `bloqueo` en true para siempre. Pero el defecto no es del test — una pausa medida con
+  `setTimeout` es la única parte del juego que **no** respeta el paso fijo. Metida en el paso fijo,
+  dura lo mismo a 30 y a 144 cuadros.
+- **El pizarrón invisible**: el marco de madera estaba a `zP−0,03` y la pizarra a `zP+0,03`, o sea que
+  desde la cámara el marco tapaba la pizarra entera. Tres centímetros. Y el `PlaneGeometry` con
+  `FrontSide` girado quedaba invisible desde este lado: va a dos caras.
+- Y la composición del aula: el aula mide cinco celdas, **21 metros de fondo**. Con el escritorio en
+  el centro el personaje quedaba a doce metros y en un marco vertical se veía del tamaño de un dedo.
+  Todo se corrió al fondo y la cámara termina a **3,6 m**. Lo mismo en el saludo: de 5,88 m a 2,73.
+
+Verificado de punta a punta: el guión entero corre solo —saludo, los tres pasos de manos, el viaje, la
+puerta, el aula— y los **ocho libros se contestan bien**. FOV 90 vertical = 58,7 horizontal en 9:16.
+9 llamadas de dibujo. Cero errores de página en nueve corridas.
 
 ### Vigésima vuelta (2026-08-27): **RECREO**, el cuarto juego — la escuela, handtracking y el reloj clavado
 
