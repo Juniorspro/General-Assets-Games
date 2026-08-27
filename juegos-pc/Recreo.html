@@ -500,7 +500,12 @@ const CAL={ minima:{ px:0.45, lockers:false, niebla:24 },
             baja:{ px:0.60, lockers:false, niebla:30 },
             media:{ px:0.90, lockers:true,  niebla:40 },
             alta:{ px:2.00, lockers:true,  niebla:52 } };
-let calidad='media';
+/* ARRANCA EN ALTA, Y ESO RECIEN AHORA ES SENSATO. Antes 'alta' significaba a la vez mas pixeles y
+   mas cosas que ver, asi que ponerla por defecto habria hundido a medio mundo. Con la resolucion
+   dinamica delante, lo que cuesta —el relleno— se ajusta solo cuadro a cuadro, y lo que se ve —los
+   lockers, la niebla larga— se queda puesto. Un telefono lento termina con el mismo relleno que tenia
+   en 'media' pero con el colegio completo, que es lo que se pidio. */
+let calidad='alta';
 try{ const g=localStorage.getItem('recreo_cal'); if(g && CAL[g]) calidad=g; }catch(e){}
 /* ===================== EL MAPA DE LA ESCUELA =====================
    NO ES UN LABERINTO GENERADO, ES UNA ESCUELA ESCRITA A MANO, y la diferencia es todo el punto: un
@@ -2172,6 +2177,34 @@ let MANO_PRED=20;        // ms de prediccion como maximo
 /* 0,13 EN FRACCION DE CUADRO. Dos munecas mas cerca que esto no son dos manos: una mano abierta mide
    0,25 de ancho, asi que dos munecas a 0,13 estarian una encima de la otra. */
 const MANO_SEP=0.13;
+/* =========================================================================================
+   TODO LO QUE SE MIDE EN FRACCIONES DEL MARCO TIENE QUE ESCALAR CON EL TAMAÑO DE LA MANO
+
+   Es el defecto que reporto el jugador: "mejor deteccion de manos a lo lejos, asi no se buguean o
+   desaparecen". Y la causa es una sola, repetida en cuatro constantes: la zona muerta del filtro, las
+   dos puertas de velocidad y la separacion minima entre dos manos estaban todas en fracciones del
+   MARCO, como si una mano midiera siempre lo mismo. Una mano al doble de distancia se ve a la mitad
+   de tamaño Y SE MUEVE LA MITAD EN PANTALLA para el mismo gesto de verdad — asi que su movimiento
+   real cae por debajo de umbrales pensados para una mano cerca, el filtro lo toma por ruido y lo
+   aplasta, y la prediccion no se enciende nunca.
+
+   MEDIDO, con el movimiento escalado por la distancia como pasa de verdad:
+       cerca   -> 9 ms de retardo · media -> 35 ms · lejos -> 82 ms
+   O sea que a cuatro veces la distancia la mano iba NUEVE VECES mas atrasada. No era que MediaPipe
+   la perdiera: era que mi propio filtro la estaba frenando.
+
+   La regla ya estaba escrita en este archivo desde la primera vuelta —"todo se mide en proporcion al
+   tamano de la palma, que es invariante a la distancia"— y se habia aplicado a contar dedos y a la
+   pinza, pero nunca al filtro ni a la prediccion, que se escribieron despues.
+
+   PALMA_REF es la palma de una mano a distancia comoda, y el factor va topado por los dos lados: sin
+   tope, una mano casi fuera de cuadro tendria umbrales tan chicos que volveria a pasar el ruido. */
+const PALMA_REF=0.14;
+function manoEscala(lm){
+  const dx=lm[0].x-lm[9].x, dy=lm[0].y-lm[9].y;
+  const palma=Math.hypot(dx,dy);
+  return Math.max(0.22, Math.min(1.6, palma/PALMA_REF));
+}
 /* y a mas de 0,30 de donde estaba, ya no es la misma mano: es otra que aparecio */
 const MANO_EMPAREJA=0.30;
 /* la prediccion se enciende con la velocidad. Por debajo de V_QUIETA lo unico que se mueve es el
@@ -2190,6 +2223,7 @@ function ranuraNueva(){
             oeX2:new Float32Array(63), oeD2:new Float32Array(63), oeListo:false, oeT:0,
             dedos:0, estirados:[false,false,false,false,false], pinza:false, lado:'',
             estCand:[false,false,false,false,false], estN:[0,0,0,0,0],
+            esc:0,                                     // que tan grande se ve esta mano (1 = cerca)
             escSal:0,                                  // la escala de la mano, suavizada
             lmsSal:new Array(21) };
   /* LA SALIDA VA PREASIGNADA. Convertir 21 puntos a objetos en cada cuadro son 42 objetos por
@@ -2254,16 +2288,25 @@ function oeAlfa(fc, dt){ const tau=1/(2*Math.PI*fc); return 1/(1+tau/dt); }
    Dos etapas iguales en cascada multiplican la atenuacion (pasa a ~23 veces) y el retardo extra lo
    paga solo la mano QUIETA, porque el corte de las dos etapas se abre con la velocidad. Es la forma
    mas barata de subir el orden sin escribir un biquad y sin tener que elegir sus coeficientes. */
-function oePaso(x, d, v, j, dt, ad, esZ){
+function oePaso(x, d, v, j, dt, ad, esZ, esc){
   const der=(v-x[j])/dt;
   d[j] += ad*(der-d[j]);
-  const mag = esZ? Math.max(0, Math.abs(d[j])-OE.dzZ) : Math.max(0, Math.abs(d[j])-OE.dz);
-  const fc = esZ? (OE.fcMinZ + OE.betaZ*mag)
-                : (OE.fcMin  + OE.beta *mag);
+  /* la zona muerta se achica con la mano: lo que para una mano cerca es ruido, para una lejos es
+     movimiento de verdad */
+  const dzc = (esZ? OE.dzZ : OE.dz) * esc;
+  const mag = Math.max(0, Math.abs(d[j])-dzc);
+  /* Y BETA SE DIVIDE POR LA ESCALA, que es la otra mitad de lo mismo. La zona muerta escalada evita
+     que el movimiento de una mano lejana se tome por ruido, pero el corte del filtro seguia saliendo
+     de beta*|derivada| — y la derivada de una mano lejana ES mas chica para el mismo gesto, asi que
+     el corte quedaba mas bajo y la mano mas suavizada. Dividiendo beta por la escala, lo que manda
+     pasa a ser la velocidad de la mano EN PALMAS POR SEGUNDO y no en pantalla por segundo: el mismo
+     gesto abre el filtro lo mismo este cerca o lejos. */
+  const b = (esZ? OE.betaZ : OE.beta) / Math.max(0.22, esc);
+  const fc = (esZ? OE.fcMinZ : OE.fcMin) + b*mag;
   x[j] += oeAlfa(fc, dt)*(v-x[j]);
   return x[j];
 }
-function oeFiltrar(R, lm, dt){
+function oeFiltrar(R, lm, dt, esc){
   if(!R.oeListo){
     lmsAArreglo(lm, R.oeX); R.oeX2.set(R.oeX);
     R.oeD.fill(0); R.oeD2.fill(0); R.oeListo=true; return R.oeX2;
@@ -2275,7 +2318,7 @@ function oeFiltrar(R, lm, dt){
       const j=i*3+c;
       const v = c===0? p.x : (c===1? p.y : (p.z||0));
       const esZ=(c===2);
-      oePaso(R.oeX2, R.oeD2, oePaso(R.oeX, R.oeD, v, j, dt, ad, esZ), j, dt, ad, esZ);
+      oePaso(R.oeX2, R.oeD2, oePaso(R.oeX, R.oeD, v, j, dt, ad, esZ, esc), j, dt, ad, esZ, esc);
     }
   }
   return R.oeX2;
@@ -2301,7 +2344,11 @@ function ranuraPoner(q, lm, t){
   const dt=Math.max(0.008, (t-(R.oeT||t-33))/1000);
   R.oeT=t;
   if(!R.hay){ R.oeListo=false; }
-  const fx=oeFiltrar(R, lm, dt);
+  /* la escala de ESTA mano, suavizada: salta si MediaPipe tiembla en un cuadro, y un salto de escala
+     mueve todos los umbrales a la vez */
+  const escCruda=manoEscala(lm);
+  R.esc = R.esc>0? R.esc + (escCruda-R.esc)*0.20 : escCruda;
+  const fx=oeFiltrar(R, lm, dt, R.esc);
   if(!R.hay){ R.a.set(fx); R.sal.set(fx); R.t0=t-33; }
   else { R.a.set(R.b); R.t0=R.t1; }
   R.b.set(fx);
@@ -2344,7 +2391,9 @@ function manosRepartir(crudas, lados, t){
     let dup=-1;
     for(let q=0;q<acept.length;q++){
       const o=acept[q].lm[0];
-      if(Math.hypot(mu.x-o.x, mu.y-o.y) < MANO_SEP){ dup=q; break; }
+      /* y la separacion minima entre dos manos tambien: dos manos LEJOS estan mas cerca una de otra
+         en pantalla que dos manos cerca, asi que con el umbral fijo se las tomaba por una sola */
+      if(Math.hypot(mu.x-o.x, mu.y-o.y) < MANO_SEP*manoEscala(lm)){ dup=q; break; }
     }
     const cat=(lados[k] && lados[k][0] && lados[k][0].categoryName)||'';
     if(dup>=0){
@@ -2438,7 +2487,11 @@ function manosAvanzar(dt){
        puede anticipar un cambio de sentido que todavia no ocurrio, y ninguna cantidad de historia lo
        arregla. Asi que el tope de prediccion se elige midiendo el intercambio y no tapandolo. */
     const vel=Math.hypot(R.b[0]-R.a[0], R.b[1]-R.a[1])/span;
-    const puerta=Math.max(0, Math.min(1, (vel-V_QUIETA)/(V_RAPIDA-V_QUIETA)));
+    /* las dos puertas tambien escalan con el tamaño de la mano, por el mismo motivo que la zona
+       muerta: una mano lejos nunca alcanzaria la velocidad de una cerca aunque haga el mismo gesto */
+    const e=(R.esc>0? R.esc : 1);
+    const vq=V_QUIETA*e, vr=V_RAPIDA*e;
+    const puerta=Math.max(0, Math.min(1, (vel-vq)/(vr-vq)));
     const f = 1 + puerta*Math.min(MANO_PRED, ahora-R.t1)/span;
     const k = 1-Math.exp(-dt/MANO_TAU);
     /* si el objetivo salto lejisimo —la mano reaparecio en otro lado— no se desliza, se pone */
@@ -3304,11 +3357,43 @@ const postMat=new THREE.ShaderMaterial({
 });
 postEsc.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), postMat));
 
+/* =========================================================================================
+   RESOLUCION DINAMICA: LA CALIDAD ALTA DEJA DE SER UN PRIVILEGIO DE LOS APARATOS RAPIDOS
+
+   El pedido fue "mejoralo para graficos altos, asi las gamas bajas pueden disfrutar de buena calidad
+   tambien". Y el problema estaba en como estaban armadas las calidades: `calidad` mezclaba DOS cosas
+   distintas en una sola perilla — cuantos pixeles se dibujan (px) y que se ve (los lockers, cuanto
+   alcanza la niebla). Bajar la calidad en un telefono lento le sacaba las dos, o sea que el aparato
+   que menos podia era ademas el unico que veia un colegio mas pobre y mas corto.
+
+   Son cosas independientes y ahora van separadas. Lo que CUESTA es el relleno de pixeles, y eso se
+   ajusta solo cuadro a cuadro; lo que se VE se queda puesto. Un telefono lento corre 'alta' con todos
+   los lockers y la niebla larga, a menos resolucion — que es exactamente como lo resuelven las
+   consolas, y es preferible: la resolucion se nota mucho menos que un pasillo vacio, y encima este
+   juego ya dibuja pixelado a proposito, asi que bajarla mas cae dentro de su propio estilo.
+
+   Se mueve DE A POCO y con banda muerta: un ajuste que persigue cada cuadro hace latir la imagen, que
+   se ve peor que quedarse un escalon por debajo. */
+let resDin=1.0;
+const RES_MIN=0.45, RES_MAX=1.0;
+const RES_OBJ=1000/58;        // ms por cuadro a los que se apunta
+let _resN=0, _resSuma=0;
+function resTick(dt){
+  if(dt>0.25) return;                       // un cuadro larguisimo no dice nada del aparato
+  _resSuma+=dt; _resN++;
+  if(_resN<24) return;
+  const ms=(_resSuma/_resN)*1000;
+  _resN=0; _resSuma=0;
+  /* banda muerta: entre el objetivo y un 25% por encima no se toca nada */
+  if(ms>RES_OBJ*1.25) resDin=Math.max(RES_MIN, resDin-0.06);
+  else if(ms<RES_OBJ*0.92) resDin=Math.min(RES_MAX, resDin+0.03);
+}
 function postTam(){
   const F=FILTROS[filtro];
   const w=Math.max(2, marco.clientWidth), h=Math.max(2, marco.clientHeight);
   const dpr=render.getPixelRatio();
-  const bw=Math.max(2, Math.round(w*dpr*F.escala)), bh=Math.max(2, Math.round(h*dpr*F.escala));
+  const e=F.escala*resDin;
+  const bw=Math.max(2, Math.round(w*dpr*e)), bh=Math.max(2, Math.round(h*dpr*e));
   if(!postRT){
     postRT=new THREE.WebGLRenderTarget(bw,bh,{ depthBuffer:true, stencilBuffer:false });
   } else if(postRT.width!==bw || postRT.height!==bh){
@@ -4942,6 +5027,11 @@ const VIG_PASOS=[
 ];
 function vigiaTick(dt){
   if(!VIGIA.activo || VIGIA.manual || VIGIA.hecho || !jugando) return;
+  /* LA RESOLUCION DINAMICA TIENE PRIORIDAD SOBRE EL VIGIA, y el orden importa: bajar resolucion no le
+     saca nada al jugador —el juego ya es pixelado— mientras que los escalones del vigia le apagan los
+     lockers y le acortan la niebla, que es contenido. Asi que mientras a la resolucion le quede
+     margen, el vigia espera; solo entra cuando ya toco fondo y aun asi no alcanza. */
+  if(resDin>RES_MIN+0.001){ VIGIA.t0+=dt; return; }
   VIGIA.t0+=dt;
   if(VIGIA.t0<VIG_ESPERA) return;
   /* un cuadro larguisimo —una pestaña que volvio, el recolector de basura— no dice nada del aparato */
@@ -5030,6 +5120,7 @@ function bucle(){
   if(MANO.on) manosAvanzar(dt);
   avanzar(dt);
   dibujar(Math.min(1, acum/PASO));
+  resTick(dt);
   vigiaTick(dt);
 }
 ajustar(); aplicarCal(calidad); aplicarFiltro(filtro); usarCajas();
@@ -5378,32 +5469,37 @@ window.__recreo={
   /* ---- LOS DEDOS ---- */
   leer:(lm)=>manoLeer(lm),
   contar:(lms)=>manoTotal(lms),
-  manoFalsa:(dedos, pinza, cx, cy)=>{
+  manoFalsa:(dedos, pinza, cx, cy, esc)=>{
     /* arma una mano de 21 puntos con N dedos estirados. Los indices son los de MediaPipe:
-       0 muneca, 1-4 pulgar, 5-8 indice, 9-12 medio, 13-16 anular, 17-20 menique. */
-    const X=cx==null?0.5:cx, Y=cy==null?0.5:cy, S=0.16;
+       0 muneca, 1-4 pulgar, 5-8 indice, 9-12 medio, 13-16 anular, 17-20 menique.
+       `esc` es LO LEJOS QUE ESTA: 1 es la distancia comoda y 0,4 es una mano chica en el marco, o sea
+       lejos. Sin este parametro no habia forma de probar el caso que reporto el jugador —"que no se
+       buguee ni desaparezca a lo lejos"— porque todas las manos falsas median exactamente lo mismo. */
+    const E=(esc==null?1:esc);
+    const X=cx==null?0.5:cx, Y=cy==null?0.5:cy, S=0.16*E;
     const lm=[]; for(let k=0;k<21;k++) lm.push({x:X,y:Y,z:0});
     lm[0]={x:X, y:Y+S, z:0};
     const nud=[[5,-0.055],[9,0],[13,0.050],[17,0.098]];
     const cuantos=Math.max(0,Math.min(5,dedos|0));
     const largos = Math.min(4, pinza? Math.max(0,cuantos-1) : cuantos);
     nud.forEach(([n,off],idx)=>{
-      lm[n]={x:X+off, y:Y+0.02, z:0};
+      const O=off*E;
+      lm[n]={x:X+O, y:Y+0.02*E, z:0};
       const estirado = idx<largos;
-      const L = estirado? 0.118 : -0.02;
-      lm[n+1]={x:X+off, y:Y+0.02-(estirado?L*0.34:-0.04), z:0};
-      lm[n+2]={x:X+off, y:Y+0.02-(estirado?L*0.66:-0.08), z:0};
-      lm[n+3]={x:X+off, y:Y+0.02-(estirado?L:-0.10), z:0};
+      const L = (estirado? 0.118 : -0.02)*E;
+      lm[n+1]={x:X+O, y:Y+0.02*E-(estirado?L*0.34:-0.04*E), z:0};
+      lm[n+2]={x:X+O, y:Y+0.02*E-(estirado?L*0.66:-0.08*E), z:0};
+      lm[n+3]={x:X+O, y:Y+0.02*E-(estirado?L:-0.10*E), z:0};
     });
     /* el pulgar: abierto se va lejos del nudillo del menique; cerrado se le cruza por delante */
     const pulgarAbierto = pinza? false : (cuantos>=5 || (cuantos>0 && largos<cuantos));
-    if(pinza){ lm[1]={x:X-0.05,y:Y+0.11,z:0}; lm[2]={x:X-0.06,y:Y+0.07,z:0};
-               lm[3]={x:X-0.055,y:Y+0.03,z:0};
-               lm[4]={x:lm[8].x+0.005, y:lm[8].y+0.005, z:0}; }
-    else if(pulgarAbierto){ lm[1]={x:X-0.06,y:Y+0.12,z:0}; lm[2]={x:X-0.11,y:Y+0.09,z:0};
-               lm[3]={x:X-0.155,y:Y+0.06,z:0}; lm[4]={x:X-0.195,y:Y+0.035,z:0}; }
-    else { lm[1]={x:X-0.05,y:Y+0.12,z:0}; lm[2]={x:X-0.02,y:Y+0.09,z:0};
-           lm[3]={x:X+0.02,y:Y+0.075,z:0}; lm[4]={x:X+0.055,y:Y+0.065,z:0}; }
+    if(pinza){ lm[1]={x:X-0.05*E,y:Y+0.11*E,z:0}; lm[2]={x:X-0.06*E,y:Y+0.07*E,z:0};
+               lm[3]={x:X-0.055*E,y:Y+0.03*E,z:0};
+               lm[4]={x:lm[8].x+0.005*E, y:lm[8].y+0.005*E, z:0}; }
+    else if(pulgarAbierto){ lm[1]={x:X-0.06*E,y:Y+0.12*E,z:0}; lm[2]={x:X-0.11*E,y:Y+0.09*E,z:0};
+               lm[3]={x:X-0.155*E,y:Y+0.06*E,z:0}; lm[4]={x:X-0.195*E,y:Y+0.035*E,z:0}; }
+    else { lm[1]={x:X-0.05*E,y:Y+0.12*E,z:0}; lm[2]={x:X-0.02*E,y:Y+0.09*E,z:0};
+           lm[3]={x:X+0.02*E,y:Y+0.075*E,z:0}; lm[4]={x:X+0.055*E,y:Y+0.065*E,z:0}; }
     return lm;
   },
   /* inyecta manos y corre el conteo entero, voto incluido */
@@ -5439,7 +5535,7 @@ window.__recreo={
     const hz=o.hz||24, cuadros=o.cuadros||90, render=o.render||60;
     MANO.pausa=true; MANO.on=true; MANO.estado='lista';
     MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
-    const base=window.__recreo.manoFalsa(5,false,0.5,0.5);
+    const base=window.__recreo.manoFalsa(5,false,0.5,0.5,(o.esc==null?1:o.esc));
     /* ruido pseudoaleatorio REPETIBLE: con Math.random cada corrida da otro numero y no se pueden
        comparar dos ajustes del filtro */
     let sem=12345;
@@ -5474,7 +5570,7 @@ window.__recreo={
     const ze=escalas.length>3? (()=>{ const m=escalas.reduce((s,v)=>s+v,0)/escalas.length;
         return Math.sqrt(escalas.reduce((s,v)=>s+(v-m)**2,0)/escalas.length)/Math.max(1e-9,m)*100; })() : 0;
     MANO.pausa=false;
-    return { ruido, hz, entrada:+de.toFixed(5), salida:+ds.toFixed(5),
+    return { ruido, hz, esc:(o.esc==null?1:o.esc), entrada:+de.toFixed(5), salida:+ds.toFixed(5),
              atenuacion:+(de>0? de/Math.max(1e-9,ds) : 0).toFixed(2),
              latidoPct:+ze.toFixed(2),
              muestras:{entrada:entradas.length, salida:salidas.length} };
@@ -5527,23 +5623,24 @@ window.__recreo={
     MANO.pausa=true; MANO.on=true; MANO.estado='lista';
     MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
     const F=window.__recreo.manoFalsa;
+    const E=o.esc==null? 1 : o.esc;
     const dtR=1000/render, dtM=1000/hz;
     let t=1000, proxMed=t, x=0.18;
     for(let c=0;c<20;c++){                        // asentar quieta
-      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5,E)], t); proxMed+=dtM; }
       manosAvanzar(dtR/1000); t+=dtR;
     }
     const errs=[];
     for(let c=0;c<90;c++){
       x += vel*dtR/1000;
-      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5,E)], t); proxMed+=dtM; }
       manosAvanzar(dtR/1000);
       if(c>25) errs.push(x-MANO.ranuras[0].sal[0]);   // los primeros son el arranque, no el regimen
       t+=dtR;
     }
     MANO.pausa=false;
     const m=errs.reduce((s,v)=>s+v,0)/Math.max(1,errs.length);
-    return { vel, hz, errorMedio:+m.toFixed(5), retardoMs:+(m/vel*1000).toFixed(0),
+    return { vel, hz, esc:E, errorMedio:+m.toFixed(5), retardoMs:+(m/vel*1000).toFixed(0),
              muestras:errs.length };
   },
   /* cuantas detecciones duplicadas se descartaron: si esto sube, MediaPipe esta viendo dos veces la
@@ -5664,7 +5761,7 @@ window.__recreo={
     const dtR=1000/render, dtM=1000/hz;
     let t=1000, proxMed=t, x=0.35;
     for(let c=0;c<20;c++){                          // asentar quieta
-      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5,E)], t); proxMed+=dtM; }
       manosAvanzar(dtR/1000); t+=dtR;
     }
     const x0=x, xTope=x+largo;
@@ -5672,7 +5769,7 @@ window.__recreo={
     while(pasos++<600){
       if(subiendo){ x += vel*dtR/1000; if(x>=xTope){ x=xTope; subiendo=false; } }
       else x -= vel*dtR/1000;
-      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5,E)], t); proxMed+=dtM; }
       manosAvanzar(dtR/1000);
       if(MANO.ranuras[0].hay) maxSal=Math.max(maxSal, MANO.ranuras[0].sal[0]);
       t+=dtR;
@@ -5715,6 +5812,20 @@ window.__recreo={
     const r={ hist:VIGIA.hist.slice(), calidadFinal:calidad, pasos:VIGIA.paso, hecho:VIGIA.hecho };
     jugando=gJug; VIGIA.manual=gMan; aplicarCal(gCal);
     return r;
+  },
+  /* la resolucion dinamica: donde esta y a cuantos pixeles equivale */
+  resVer:()=>({ resDin:+resDin.toFixed(3), min:RES_MIN, max:RES_MAX,
+                objetivoMs:+RES_OBJ.toFixed(2), destino:postTam(),
+                pixeles:postTam()[0]*postTam()[1] }),
+  resProbar:(msPorCuadro, cuadros)=>{
+    const g=resDin;
+    const R=[];
+    for(const ms of msPorCuadro){
+      for(let k=0;k<(cuadros||120);k++) resTick(ms/1000);
+      R.push({ ms, resDin:+resDin.toFixed(3) });
+    }
+    const fin=+resDin.toFixed(3); resDin=g;
+    return { pasos:R, fin };
   },
   vigiaVer:()=>({ activo:VIGIA.activo, manual:VIGIA.manual, hecho:VIGIA.hecho, paso:VIGIA.paso,
                   fase:VIGIA.fase, calidad, px:CAL[calidad].px, filtro,

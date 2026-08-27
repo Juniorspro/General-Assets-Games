@@ -340,32 +340,37 @@ window.__recreo={
   /* ---- LOS DEDOS ---- */
   leer:(lm)=>manoLeer(lm),
   contar:(lms)=>manoTotal(lms),
-  manoFalsa:(dedos, pinza, cx, cy)=>{
+  manoFalsa:(dedos, pinza, cx, cy, esc)=>{
     /* arma una mano de 21 puntos con N dedos estirados. Los indices son los de MediaPipe:
-       0 muneca, 1-4 pulgar, 5-8 indice, 9-12 medio, 13-16 anular, 17-20 menique. */
-    const X=cx==null?0.5:cx, Y=cy==null?0.5:cy, S=0.16;
+       0 muneca, 1-4 pulgar, 5-8 indice, 9-12 medio, 13-16 anular, 17-20 menique.
+       `esc` es LO LEJOS QUE ESTA: 1 es la distancia comoda y 0,4 es una mano chica en el marco, o sea
+       lejos. Sin este parametro no habia forma de probar el caso que reporto el jugador —"que no se
+       buguee ni desaparezca a lo lejos"— porque todas las manos falsas median exactamente lo mismo. */
+    const E=(esc==null?1:esc);
+    const X=cx==null?0.5:cx, Y=cy==null?0.5:cy, S=0.16*E;
     const lm=[]; for(let k=0;k<21;k++) lm.push({x:X,y:Y,z:0});
     lm[0]={x:X, y:Y+S, z:0};
     const nud=[[5,-0.055],[9,0],[13,0.050],[17,0.098]];
     const cuantos=Math.max(0,Math.min(5,dedos|0));
     const largos = Math.min(4, pinza? Math.max(0,cuantos-1) : cuantos);
     nud.forEach(([n,off],idx)=>{
-      lm[n]={x:X+off, y:Y+0.02, z:0};
+      const O=off*E;
+      lm[n]={x:X+O, y:Y+0.02*E, z:0};
       const estirado = idx<largos;
-      const L = estirado? 0.118 : -0.02;
-      lm[n+1]={x:X+off, y:Y+0.02-(estirado?L*0.34:-0.04), z:0};
-      lm[n+2]={x:X+off, y:Y+0.02-(estirado?L*0.66:-0.08), z:0};
-      lm[n+3]={x:X+off, y:Y+0.02-(estirado?L:-0.10), z:0};
+      const L = (estirado? 0.118 : -0.02)*E;
+      lm[n+1]={x:X+O, y:Y+0.02*E-(estirado?L*0.34:-0.04*E), z:0};
+      lm[n+2]={x:X+O, y:Y+0.02*E-(estirado?L*0.66:-0.08*E), z:0};
+      lm[n+3]={x:X+O, y:Y+0.02*E-(estirado?L:-0.10*E), z:0};
     });
     /* el pulgar: abierto se va lejos del nudillo del menique; cerrado se le cruza por delante */
     const pulgarAbierto = pinza? false : (cuantos>=5 || (cuantos>0 && largos<cuantos));
-    if(pinza){ lm[1]={x:X-0.05,y:Y+0.11,z:0}; lm[2]={x:X-0.06,y:Y+0.07,z:0};
-               lm[3]={x:X-0.055,y:Y+0.03,z:0};
-               lm[4]={x:lm[8].x+0.005, y:lm[8].y+0.005, z:0}; }
-    else if(pulgarAbierto){ lm[1]={x:X-0.06,y:Y+0.12,z:0}; lm[2]={x:X-0.11,y:Y+0.09,z:0};
-               lm[3]={x:X-0.155,y:Y+0.06,z:0}; lm[4]={x:X-0.195,y:Y+0.035,z:0}; }
-    else { lm[1]={x:X-0.05,y:Y+0.12,z:0}; lm[2]={x:X-0.02,y:Y+0.09,z:0};
-           lm[3]={x:X+0.02,y:Y+0.075,z:0}; lm[4]={x:X+0.055,y:Y+0.065,z:0}; }
+    if(pinza){ lm[1]={x:X-0.05*E,y:Y+0.11*E,z:0}; lm[2]={x:X-0.06*E,y:Y+0.07*E,z:0};
+               lm[3]={x:X-0.055*E,y:Y+0.03*E,z:0};
+               lm[4]={x:lm[8].x+0.005*E, y:lm[8].y+0.005*E, z:0}; }
+    else if(pulgarAbierto){ lm[1]={x:X-0.06*E,y:Y+0.12*E,z:0}; lm[2]={x:X-0.11*E,y:Y+0.09*E,z:0};
+               lm[3]={x:X-0.155*E,y:Y+0.06*E,z:0}; lm[4]={x:X-0.195*E,y:Y+0.035*E,z:0}; }
+    else { lm[1]={x:X-0.05*E,y:Y+0.12*E,z:0}; lm[2]={x:X-0.02*E,y:Y+0.09*E,z:0};
+           lm[3]={x:X+0.02*E,y:Y+0.075*E,z:0}; lm[4]={x:X+0.055*E,y:Y+0.065*E,z:0}; }
     return lm;
   },
   /* inyecta manos y corre el conteo entero, voto incluido */
@@ -401,7 +406,7 @@ window.__recreo={
     const hz=o.hz||24, cuadros=o.cuadros||90, render=o.render||60;
     MANO.pausa=true; MANO.on=true; MANO.estado='lista';
     MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
-    const base=window.__recreo.manoFalsa(5,false,0.5,0.5);
+    const base=window.__recreo.manoFalsa(5,false,0.5,0.5,(o.esc==null?1:o.esc));
     /* ruido pseudoaleatorio REPETIBLE: con Math.random cada corrida da otro numero y no se pueden
        comparar dos ajustes del filtro */
     let sem=12345;
@@ -436,7 +441,7 @@ window.__recreo={
     const ze=escalas.length>3? (()=>{ const m=escalas.reduce((s,v)=>s+v,0)/escalas.length;
         return Math.sqrt(escalas.reduce((s,v)=>s+(v-m)**2,0)/escalas.length)/Math.max(1e-9,m)*100; })() : 0;
     MANO.pausa=false;
-    return { ruido, hz, entrada:+de.toFixed(5), salida:+ds.toFixed(5),
+    return { ruido, hz, esc:(o.esc==null?1:o.esc), entrada:+de.toFixed(5), salida:+ds.toFixed(5),
              atenuacion:+(de>0? de/Math.max(1e-9,ds) : 0).toFixed(2),
              latidoPct:+ze.toFixed(2),
              muestras:{entrada:entradas.length, salida:salidas.length} };
@@ -489,23 +494,24 @@ window.__recreo={
     MANO.pausa=true; MANO.on=true; MANO.estado='lista';
     MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
     const F=window.__recreo.manoFalsa;
+    const E=o.esc==null? 1 : o.esc;
     const dtR=1000/render, dtM=1000/hz;
     let t=1000, proxMed=t, x=0.18;
     for(let c=0;c<20;c++){                        // asentar quieta
-      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5,E)], t); proxMed+=dtM; }
       manosAvanzar(dtR/1000); t+=dtR;
     }
     const errs=[];
     for(let c=0;c<90;c++){
       x += vel*dtR/1000;
-      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5,E)], t); proxMed+=dtM; }
       manosAvanzar(dtR/1000);
       if(c>25) errs.push(x-MANO.ranuras[0].sal[0]);   // los primeros son el arranque, no el regimen
       t+=dtR;
     }
     MANO.pausa=false;
     const m=errs.reduce((s,v)=>s+v,0)/Math.max(1,errs.length);
-    return { vel, hz, errorMedio:+m.toFixed(5), retardoMs:+(m/vel*1000).toFixed(0),
+    return { vel, hz, esc:E, errorMedio:+m.toFixed(5), retardoMs:+(m/vel*1000).toFixed(0),
              muestras:errs.length };
   },
   /* cuantas detecciones duplicadas se descartaron: si esto sube, MediaPipe esta viendo dos veces la
@@ -626,7 +632,7 @@ window.__recreo={
     const dtR=1000/render, dtM=1000/hz;
     let t=1000, proxMed=t, x=0.35;
     for(let c=0;c<20;c++){                          // asentar quieta
-      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5,E)], t); proxMed+=dtM; }
       manosAvanzar(dtR/1000); t+=dtR;
     }
     const x0=x, xTope=x+largo;
@@ -634,7 +640,7 @@ window.__recreo={
     while(pasos++<600){
       if(subiendo){ x += vel*dtR/1000; if(x>=xTope){ x=xTope; subiendo=false; } }
       else x -= vel*dtR/1000;
-      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5,E)], t); proxMed+=dtM; }
       manosAvanzar(dtR/1000);
       if(MANO.ranuras[0].hay) maxSal=Math.max(maxSal, MANO.ranuras[0].sal[0]);
       t+=dtR;
@@ -677,6 +683,20 @@ window.__recreo={
     const r={ hist:VIGIA.hist.slice(), calidadFinal:calidad, pasos:VIGIA.paso, hecho:VIGIA.hecho };
     jugando=gJug; VIGIA.manual=gMan; aplicarCal(gCal);
     return r;
+  },
+  /* la resolucion dinamica: donde esta y a cuantos pixeles equivale */
+  resVer:()=>({ resDin:+resDin.toFixed(3), min:RES_MIN, max:RES_MAX,
+                objetivoMs:+RES_OBJ.toFixed(2), destino:postTam(),
+                pixeles:postTam()[0]*postTam()[1] }),
+  resProbar:(msPorCuadro, cuadros)=>{
+    const g=resDin;
+    const R=[];
+    for(const ms of msPorCuadro){
+      for(let k=0;k<(cuadros||120);k++) resTick(ms/1000);
+      R.push({ ms, resDin:+resDin.toFixed(3) });
+    }
+    const fin=+resDin.toFixed(3); resDin=g;
+    return { pasos:R, fin };
   },
   vigiaVer:()=>({ activo:VIGIA.activo, manual:VIGIA.manual, hecho:VIGIA.hecho, paso:VIGIA.paso,
                   fase:VIGIA.fase, calidad, px:CAL[calidad].px, filtro,

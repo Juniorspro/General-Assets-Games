@@ -387,6 +387,34 @@ let MANO_PRED=20;        // ms de prediccion como maximo
 /* 0,13 EN FRACCION DE CUADRO. Dos munecas mas cerca que esto no son dos manos: una mano abierta mide
    0,25 de ancho, asi que dos munecas a 0,13 estarian una encima de la otra. */
 const MANO_SEP=0.13;
+/* =========================================================================================
+   TODO LO QUE SE MIDE EN FRACCIONES DEL MARCO TIENE QUE ESCALAR CON EL TAMAÑO DE LA MANO
+
+   Es el defecto que reporto el jugador: "mejor deteccion de manos a lo lejos, asi no se buguean o
+   desaparecen". Y la causa es una sola, repetida en cuatro constantes: la zona muerta del filtro, las
+   dos puertas de velocidad y la separacion minima entre dos manos estaban todas en fracciones del
+   MARCO, como si una mano midiera siempre lo mismo. Una mano al doble de distancia se ve a la mitad
+   de tamaño Y SE MUEVE LA MITAD EN PANTALLA para el mismo gesto de verdad — asi que su movimiento
+   real cae por debajo de umbrales pensados para una mano cerca, el filtro lo toma por ruido y lo
+   aplasta, y la prediccion no se enciende nunca.
+
+   MEDIDO, con el movimiento escalado por la distancia como pasa de verdad:
+       cerca   -> 9 ms de retardo · media -> 35 ms · lejos -> 82 ms
+   O sea que a cuatro veces la distancia la mano iba NUEVE VECES mas atrasada. No era que MediaPipe
+   la perdiera: era que mi propio filtro la estaba frenando.
+
+   La regla ya estaba escrita en este archivo desde la primera vuelta —"todo se mide en proporcion al
+   tamano de la palma, que es invariante a la distancia"— y se habia aplicado a contar dedos y a la
+   pinza, pero nunca al filtro ni a la prediccion, que se escribieron despues.
+
+   PALMA_REF es la palma de una mano a distancia comoda, y el factor va topado por los dos lados: sin
+   tope, una mano casi fuera de cuadro tendria umbrales tan chicos que volveria a pasar el ruido. */
+const PALMA_REF=0.14;
+function manoEscala(lm){
+  const dx=lm[0].x-lm[9].x, dy=lm[0].y-lm[9].y;
+  const palma=Math.hypot(dx,dy);
+  return Math.max(0.22, Math.min(1.6, palma/PALMA_REF));
+}
 /* y a mas de 0,30 de donde estaba, ya no es la misma mano: es otra que aparecio */
 const MANO_EMPAREJA=0.30;
 /* la prediccion se enciende con la velocidad. Por debajo de V_QUIETA lo unico que se mueve es el
@@ -405,6 +433,7 @@ function ranuraNueva(){
             oeX2:new Float32Array(63), oeD2:new Float32Array(63), oeListo:false, oeT:0,
             dedos:0, estirados:[false,false,false,false,false], pinza:false, lado:'',
             estCand:[false,false,false,false,false], estN:[0,0,0,0,0],
+            esc:0,                                     // que tan grande se ve esta mano (1 = cerca)
             escSal:0,                                  // la escala de la mano, suavizada
             lmsSal:new Array(21) };
   /* LA SALIDA VA PREASIGNADA. Convertir 21 puntos a objetos en cada cuadro son 42 objetos por
@@ -469,16 +498,25 @@ function oeAlfa(fc, dt){ const tau=1/(2*Math.PI*fc); return 1/(1+tau/dt); }
    Dos etapas iguales en cascada multiplican la atenuacion (pasa a ~23 veces) y el retardo extra lo
    paga solo la mano QUIETA, porque el corte de las dos etapas se abre con la velocidad. Es la forma
    mas barata de subir el orden sin escribir un biquad y sin tener que elegir sus coeficientes. */
-function oePaso(x, d, v, j, dt, ad, esZ){
+function oePaso(x, d, v, j, dt, ad, esZ, esc){
   const der=(v-x[j])/dt;
   d[j] += ad*(der-d[j]);
-  const mag = esZ? Math.max(0, Math.abs(d[j])-OE.dzZ) : Math.max(0, Math.abs(d[j])-OE.dz);
-  const fc = esZ? (OE.fcMinZ + OE.betaZ*mag)
-                : (OE.fcMin  + OE.beta *mag);
+  /* la zona muerta se achica con la mano: lo que para una mano cerca es ruido, para una lejos es
+     movimiento de verdad */
+  const dzc = (esZ? OE.dzZ : OE.dz) * esc;
+  const mag = Math.max(0, Math.abs(d[j])-dzc);
+  /* Y BETA SE DIVIDE POR LA ESCALA, que es la otra mitad de lo mismo. La zona muerta escalada evita
+     que el movimiento de una mano lejana se tome por ruido, pero el corte del filtro seguia saliendo
+     de beta*|derivada| — y la derivada de una mano lejana ES mas chica para el mismo gesto, asi que
+     el corte quedaba mas bajo y la mano mas suavizada. Dividiendo beta por la escala, lo que manda
+     pasa a ser la velocidad de la mano EN PALMAS POR SEGUNDO y no en pantalla por segundo: el mismo
+     gesto abre el filtro lo mismo este cerca o lejos. */
+  const b = (esZ? OE.betaZ : OE.beta) / Math.max(0.22, esc);
+  const fc = (esZ? OE.fcMinZ : OE.fcMin) + b*mag;
   x[j] += oeAlfa(fc, dt)*(v-x[j]);
   return x[j];
 }
-function oeFiltrar(R, lm, dt){
+function oeFiltrar(R, lm, dt, esc){
   if(!R.oeListo){
     lmsAArreglo(lm, R.oeX); R.oeX2.set(R.oeX);
     R.oeD.fill(0); R.oeD2.fill(0); R.oeListo=true; return R.oeX2;
@@ -490,7 +528,7 @@ function oeFiltrar(R, lm, dt){
       const j=i*3+c;
       const v = c===0? p.x : (c===1? p.y : (p.z||0));
       const esZ=(c===2);
-      oePaso(R.oeX2, R.oeD2, oePaso(R.oeX, R.oeD, v, j, dt, ad, esZ), j, dt, ad, esZ);
+      oePaso(R.oeX2, R.oeD2, oePaso(R.oeX, R.oeD, v, j, dt, ad, esZ, esc), j, dt, ad, esZ, esc);
     }
   }
   return R.oeX2;
@@ -516,7 +554,11 @@ function ranuraPoner(q, lm, t){
   const dt=Math.max(0.008, (t-(R.oeT||t-33))/1000);
   R.oeT=t;
   if(!R.hay){ R.oeListo=false; }
-  const fx=oeFiltrar(R, lm, dt);
+  /* la escala de ESTA mano, suavizada: salta si MediaPipe tiembla en un cuadro, y un salto de escala
+     mueve todos los umbrales a la vez */
+  const escCruda=manoEscala(lm);
+  R.esc = R.esc>0? R.esc + (escCruda-R.esc)*0.20 : escCruda;
+  const fx=oeFiltrar(R, lm, dt, R.esc);
   if(!R.hay){ R.a.set(fx); R.sal.set(fx); R.t0=t-33; }
   else { R.a.set(R.b); R.t0=R.t1; }
   R.b.set(fx);
@@ -559,7 +601,9 @@ function manosRepartir(crudas, lados, t){
     let dup=-1;
     for(let q=0;q<acept.length;q++){
       const o=acept[q].lm[0];
-      if(Math.hypot(mu.x-o.x, mu.y-o.y) < MANO_SEP){ dup=q; break; }
+      /* y la separacion minima entre dos manos tambien: dos manos LEJOS estan mas cerca una de otra
+         en pantalla que dos manos cerca, asi que con el umbral fijo se las tomaba por una sola */
+      if(Math.hypot(mu.x-o.x, mu.y-o.y) < MANO_SEP*manoEscala(lm)){ dup=q; break; }
     }
     const cat=(lados[k] && lados[k][0] && lados[k][0].categoryName)||'';
     if(dup>=0){
@@ -653,7 +697,11 @@ function manosAvanzar(dt){
        puede anticipar un cambio de sentido que todavia no ocurrio, y ninguna cantidad de historia lo
        arregla. Asi que el tope de prediccion se elige midiendo el intercambio y no tapandolo. */
     const vel=Math.hypot(R.b[0]-R.a[0], R.b[1]-R.a[1])/span;
-    const puerta=Math.max(0, Math.min(1, (vel-V_QUIETA)/(V_RAPIDA-V_QUIETA)));
+    /* las dos puertas tambien escalan con el tamaño de la mano, por el mismo motivo que la zona
+       muerta: una mano lejos nunca alcanzaria la velocidad de una cerca aunque haga el mismo gesto */
+    const e=(R.esc>0? R.esc : 1);
+    const vq=V_QUIETA*e, vr=V_RAPIDA*e;
+    const puerta=Math.max(0, Math.min(1, (vel-vq)/(vr-vq)));
     const f = 1 + puerta*Math.min(MANO_PRED, ahora-R.t1)/span;
     const k = 1-Math.exp(-dt/MANO_TAU);
     /* si el objetivo salto lejisimo —la mano reaparecio en otro lado— no se desliza, se pone */

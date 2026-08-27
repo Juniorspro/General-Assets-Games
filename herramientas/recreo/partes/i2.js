@@ -1585,6 +1585,11 @@ const VIG_PASOS=[
 ];
 function vigiaTick(dt){
   if(!VIGIA.activo || VIGIA.manual || VIGIA.hecho || !jugando) return;
+  /* LA RESOLUCION DINAMICA TIENE PRIORIDAD SOBRE EL VIGIA, y el orden importa: bajar resolucion no le
+     saca nada al jugador —el juego ya es pixelado— mientras que los escalones del vigia le apagan los
+     lockers y le acortan la niebla, que es contenido. Asi que mientras a la resolucion le quede
+     margen, el vigia espera; solo entra cuando ya toco fondo y aun asi no alcanza. */
+  if(resDin>RES_MIN+0.001){ VIGIA.t0+=dt; return; }
   VIGIA.t0+=dt;
   if(VIGIA.t0<VIG_ESPERA) return;
   /* un cuadro larguisimo —una pestaña que volvio, el recolector de basura— no dice nada del aparato */
@@ -1673,6 +1678,7 @@ function bucle(){
   if(MANO.on) manosAvanzar(dt);
   avanzar(dt);
   dibujar(Math.min(1, acum/PASO));
+  resTick(dt);
   vigiaTick(dt);
 }
 ajustar(); aplicarCal(calidad); aplicarFiltro(filtro); usarCajas();

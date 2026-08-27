@@ -179,7 +179,12 @@ const CAL={ minima:{ px:0.45, lockers:false, niebla:24 },
             baja:{ px:0.60, lockers:false, niebla:30 },
             media:{ px:0.90, lockers:true,  niebla:40 },
             alta:{ px:2.00, lockers:true,  niebla:52 } };
-let calidad='media';
+/* ARRANCA EN ALTA, Y ESO RECIEN AHORA ES SENSATO. Antes 'alta' significaba a la vez mas pixeles y
+   mas cosas que ver, asi que ponerla por defecto habria hundido a medio mundo. Con la resolucion
+   dinamica delante, lo que cuesta —el relleno— se ajusta solo cuadro a cuadro, y lo que se ve —los
+   lockers, la niebla larga— se queda puesto. Un telefono lento termina con el mismo relleno que tenia
+   en 'media' pero con el colegio completo, que es lo que se pidio. */
+let calidad='alta';
 try{ const g=localStorage.getItem('recreo_cal'); if(g && CAL[g]) calidad=g; }catch(e){}
 /* ===================== EL MAPA DE LA ESCUELA =====================
    NO ES UN LABERINTO GENERADO, ES UNA ESCUELA ESCRITA A MANO, y la diferencia es todo el punto: un

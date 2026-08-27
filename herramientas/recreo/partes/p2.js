@@ -69,11 +69,43 @@ const postMat=new THREE.ShaderMaterial({
 });
 postEsc.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2), postMat));
 
+/* =========================================================================================
+   RESOLUCION DINAMICA: LA CALIDAD ALTA DEJA DE SER UN PRIVILEGIO DE LOS APARATOS RAPIDOS
+
+   El pedido fue "mejoralo para graficos altos, asi las gamas bajas pueden disfrutar de buena calidad
+   tambien". Y el problema estaba en como estaban armadas las calidades: `calidad` mezclaba DOS cosas
+   distintas en una sola perilla — cuantos pixeles se dibujan (px) y que se ve (los lockers, cuanto
+   alcanza la niebla). Bajar la calidad en un telefono lento le sacaba las dos, o sea que el aparato
+   que menos podia era ademas el unico que veia un colegio mas pobre y mas corto.
+
+   Son cosas independientes y ahora van separadas. Lo que CUESTA es el relleno de pixeles, y eso se
+   ajusta solo cuadro a cuadro; lo que se VE se queda puesto. Un telefono lento corre 'alta' con todos
+   los lockers y la niebla larga, a menos resolucion — que es exactamente como lo resuelven las
+   consolas, y es preferible: la resolucion se nota mucho menos que un pasillo vacio, y encima este
+   juego ya dibuja pixelado a proposito, asi que bajarla mas cae dentro de su propio estilo.
+
+   Se mueve DE A POCO y con banda muerta: un ajuste que persigue cada cuadro hace latir la imagen, que
+   se ve peor que quedarse un escalon por debajo. */
+let resDin=1.0;
+const RES_MIN=0.45, RES_MAX=1.0;
+const RES_OBJ=1000/58;        // ms por cuadro a los que se apunta
+let _resN=0, _resSuma=0;
+function resTick(dt){
+  if(dt>0.25) return;                       // un cuadro larguisimo no dice nada del aparato
+  _resSuma+=dt; _resN++;
+  if(_resN<24) return;
+  const ms=(_resSuma/_resN)*1000;
+  _resN=0; _resSuma=0;
+  /* banda muerta: entre el objetivo y un 25% por encima no se toca nada */
+  if(ms>RES_OBJ*1.25) resDin=Math.max(RES_MIN, resDin-0.06);
+  else if(ms<RES_OBJ*0.92) resDin=Math.min(RES_MAX, resDin+0.03);
+}
 function postTam(){
   const F=FILTROS[filtro];
   const w=Math.max(2, marco.clientWidth), h=Math.max(2, marco.clientHeight);
   const dpr=render.getPixelRatio();
-  const bw=Math.max(2, Math.round(w*dpr*F.escala)), bh=Math.max(2, Math.round(h*dpr*F.escala));
+  const e=F.escala*resDin;
+  const bw=Math.max(2, Math.round(w*dpr*e)), bh=Math.max(2, Math.round(h*dpr*e));
   if(!postRT){
     postRT=new THREE.WebGLRenderTarget(bw,bh,{ depthBuffer:true, stencilBuffer:false });
   } else if(postRT.width!==bw || postRT.height!==bh){

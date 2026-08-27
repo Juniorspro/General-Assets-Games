@@ -600,6 +600,70 @@ Partida completa **24 de 24** dos veces, 0 pasos dentro de paredes en 19.752, `w
 diagonal perfecta en el puntuador de la tableta, las tres pruebas de reparto de manos y la del espejo
 en verde, y la tabla de reposo intacta (sin mano 10 Hz, con mano 24 o más).
 
+### Trigésima cuarta vuelta (2026-08-27): **RECREO** — la mano a lo lejos y la calidad alta para todos
+
+Pedido: *"mejoralo aún más para gráficos altos así gamas bajas pueden disfrutar de buena calidad
+también, y agrega una mejor detección de manos a lo lejos así no se buguean o desaparecen"*.
+
+#### LA MANO A LO LEJOS: ERA MI FILTRO FRENÁNDOLA, NO MEDIAPIPE PERDIÉNDOLA
+
+Cuatro constantes —la zona muerta del filtro, las dos puertas de velocidad y la separación mínima
+entre dos manos— estaban en fracciones **del marco**, como si una mano midiera siempre lo mismo. Una
+mano al doble de distancia se ve a la mitad de tamaño **y se mueve la mitad en pantalla para el mismo
+gesto de verdad**, así que su movimiento real caía por debajo de umbrales pensados para una mano cerca:
+el filtro lo tomaba por ruido y lo aplastaba, y la predicción no se encendía nunca.
+
+**Y la regla ya estaba escrita en este archivo desde la primera vuelta** —*"todo se mide en proporción
+al tamaño de la palma, que es invariante a la distancia"*—, aplicada a contar dedos y a la pinza, pero
+nunca al filtro ni a la predicción, que se escribieron después.
+
+Medido, con el movimiento escalado por la distancia como pasa de verdad:
+
+| lejanía | cerca | media | lejos |
+|---|---|---|---|
+| **antes** | 9 ms | 35 ms | **82 ms** |
+| **ahora** | 9 ms | **9 ms** | **9 ms** |
+
+A cuatro veces la distancia la mano iba **nueve veces más atrasada**; ahora el retardo es **plano** y la
+atenuación del temblor se queda en 4,10 a cualquier distancia.
+
+Hicieron falta **dos** correcciones y la segunda no era obvia: escalar la zona muerta llevó 82 a 36,
+pero el corte del filtro sale de `beta·|derivada|` y la derivada de una mano lejana **es** más chica
+para el mismo gesto, así que seguía saliendo más suavizada. Dividiendo beta por la escala, lo que manda
+pasa a ser la velocidad **en palmas por segundo** y no en pantalla por segundo: el mismo gesto abre el
+filtro lo mismo esté cerca o lejos. Ahí quedó plano.
+
+#### LA CALIDAD ALTA DEJA DE SER UN PRIVILEGIO DE LOS APARATOS RÁPIDOS
+
+`calidad` mezclaba **dos cosas distintas** en una sola perilla: cuántos píxeles se dibujan y **qué se
+ve** (los lockers, cuánto alcanza la niebla). Bajarla en un teléfono lento le sacaba las dos, o sea que
+el aparato que menos podía era además el único que veía un colegio más pobre y más corto.
+
+Ahora van separadas. Lo que **cuesta** —el relleno— se ajusta solo cuadro a cuadro con **resolución
+dinámica**; lo que **se ve** se queda puesto. Es como lo resuelven las consolas, y acá es todavía más
+adecuado: el juego ya dibuja pixelado a propósito, así que bajarle resolución cae dentro de su propio
+estilo, mientras que un pasillo sin lockers se nota siempre.
+
+Medido, la política: 40 ms por cuadro → baja al piso 0,45 · 10 ms → se queda en 1,0 · 18 ms → se
+sostiene en 0,97 sin latir, porque tiene banda muerta (un ajuste que persigue cada cuadro hace latir la
+imagen, y eso se ve peor que quedarse un escalón por debajo).
+
+Con eso, **el juego arranca en `alta`**, que antes habría hundido a medio mundo. Un teléfono lento
+termina con el mismo relleno que tenía en `media` —0,45 × 0,58 contra 0,9 × 0,58— pero con el colegio
+completo. Y **la resolución tiene prioridad sobre el vigía**: mientras a la resolución le quede margen,
+el vigía espera; sólo entra a apagar cosas cuando ya tocó fondo y aun así no alcanza.
+
+#### MEDIDO AL CERRAR
+
+Retardo plano a toda distancia (9 ms), temblor 4,10 en todas, las tres pruebas de reparto de manos en
+verde. Resolución dinámica probada en sus tres regímenes. Partida completa **24 de 24** dos veces, 0
+pasos dentro de paredes en 19.752, `window.__errs` vacío, diagonal perfecta en el puntuador.
+
+**Lo que no pude verificar:** `PALMA_REF` (0,14) está calibrado contra la mano sintética del banco. Si
+en un teléfono real la palma se ve bastante más grande o más chica que eso, el escalado sigue siendo
+correcto en su forma —es una proporción— pero el punto donde vale 1 se corre, y con él el ajuste fino
+de la zona muerta. Se corrige con un solo número si hace falta.
+
 ### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
 
 Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo
