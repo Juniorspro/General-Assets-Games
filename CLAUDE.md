@@ -14,12 +14,96 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
 - **`Maicol.html` es "Maicol"** (~300 KB, de los cuales ~200 KB son los sprites y los fondos).
   Plataformas 2D, siete niveles, hay que rescatar a Maicolito. Arte generado con Higgsfield.
+- **`Pelusa.html` es "Pelusa"** (~48 KB, sin un solo asset: todo se dibuja por código). Juego 2D de
+  tranquilidad: la pelusa está pegada a un punto, hay una línea recta marcada hasta el siguiente y
+  alrededor de ese punto giran bolas con espinas. Se toca y sale; si una espina la toca en el camino,
+  vuelve. **6 mundos × 20 niveles = 120**, procedurales con semilla y **validados uno por uno**.
+  Pedido textual: *"un juego 2D de tranquilidad, de 20 niveles y 6 mundos ... apretamos y nuestro
+  muñequito peludo se moverá hacia un punto ya que pasará por una línea recta marcada, pero hay que
+  tener cuidado ya que al punto en el que quiere ir hay bolas malas con espinas girando alrededor de
+  la bola y hay que tocar justo ... procedural con físicas ... una beta del nivel 1 tutorial ...
+  buenos gráficos blancos minimalistas"*.
 - **`Eco.html` es "Eco"** (~215 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Decimoquinta vuelta (2026-08-27): **Pelusa**, un juego nuevo
+
+Un 2D de tranquilidad: tocás y la pelusa sale por una línea recta marcada hasta el punto siguiente,
+donde giran bolas con espinas. Hay que tocar justo. **6 mundos × 20 niveles**, procedurales.
+
+#### UN NIVEL GENERADO Y NO COMPROBADO ES UN NIVEL ROTO QUE TODAVÍA NO SE DESCUBRIÓ
+
+Es la misma lección que costó siete niveles imposibles en Maicol. Acá el generador tira los nodos y
+los anillos, y después **un validador barre los cuatro segundos de instantes posibles de salida**,
+simula el vuelo entero y devuelve **la ventana más larga en la que se puede salir sano**. Si la
+ventana es más corta que el mínimo del mundo, se afloja (menos vueltas, o un rotor menos) y se vuelve
+a medir; si más del 82% del barrido es seguro, se aprieta — porque un salto que se puede hacer en
+cualquier momento no es un salto, es un botón.
+
+**Auditados los 120 en 2,25 s:**
+
+| mundo | ventana más corta de todo el mundo | mínimo exigido |
+|---|---|---|
+| 1 · primer respiro | 1,008 s | 0,229 |
+| 2 · dos lunas | 0,683 s | 0,203 |
+| 3 · lejos y cerca | 0,642 s | 0,177 |
+| 4 · la marea | 0,383 s | 0,151 |
+| 5 · anillos que respiran | 0,367 s | 0,125 |
+| 6 · todo junto | **0,308 s** | 0,099 |
+
+El mínimo **nunca baja de 90 ms**: por debajo de eso deja de ser puntería y pasa a ser lotería.
+
+#### EL VALIDADOR Y EL JUEGO USAN LA MISMA CUENTA, Y ESO TAMBIÉN SE COMPROBÓ
+
+De nada sirve un validador que aprueba un juego distinto del que se juega. La posición de una espina
+es una fórmula cerrada —`rotorPos(rotor, nodo, t)`— y la usan los dos: el barrido y el choque de cada
+cuadro. La prueba es un jugador automático que salta **en el medio de la ventana** que dice el
+validador: **8 niveles de 6 mundos, todos terminados, cero choques**.
+
+Primera corrida: 4 de 8 con choques. No era el juego — era la prueba: devolvía **el primer instante
+seguro**, o sea el borde exacto de la ventana, y redondearlo al cuadro más cercano cae ocho
+milisegundos del lado malo. Un jugador tampoco apunta al borde.
+
+#### EL PELO ES FÍSICA, Y CON VERLET A SECAS QUEDA UNA FREGONA
+
+62 mechones de tres puntos con verlet. La primera versión tenía gravedad y restricciones de
+distancia y nada más: los mechones **se caen todos para abajo** porque la gravedad es lo único que
+los orienta, y el bicho quedaba con barba y calvo. Un pelo real tiene **rigidez**: sale perpendicular
+a la piel y sólo se dobla. Cada punto se tira hacia donde estaría el mechón tieso, con la rigidez
+bajando hacia la punta — la raíz casi no cede y la punta sigue al cuerpo, que es de donde sale el
+latigueo al salir disparada.
+
+#### LA GEOMETRÍA NO SE TOCA; LA CÁMARA SE ALEJA
+
+Un nivel con semilla tiene que ser **el mismo nivel en cualquier pantalla**: si los nodos se
+corrieran para caber, el 12 del mundo 4 sería otro nivel en cada teléfono. Medido: con los nodos en
+una banda de ±2,3 y órbitas de hasta 2,15, hay que ver **5,16 unidades a cada lado**, y en un
+teléfono 9:19,5 la altura sola daba 4,11 — las bolas de la derecha quedaban cortadas por el borde.
+La escala la decide el lado que aprieta: `U = min(H/17,8 , W/10,32)`. Verificado en 412×892
+(`entraTodo: true`) y en 1280×720.
+
+#### LO QUE NO TIENE, A PROPÓSITO
+
+No hay reloj, no hay vidas y no hay pantalla de derrota. Fallar cuesta **volver a tocar**: la pelusa
+vuelve exactamente al punto del que salió —comprobado, `mismoLugar: true`— y ya. Un contador de
+vidas convierte cada error en una pérdida, que es lo contrario de lo que pide un juego "de
+tranquilidad". Lo único que se anota es si el nivel salió **limpio**.
+
+Y **el anillo se duerme al llegar**: si siguiera girando, pararse en un punto sería pararse adentro
+de un molinete. El peligro es el camino y nada más que el camino.
+
+#### EL SONIDO, MEDIDO
+
+Procedural, senos con ataque lento sobre **pentatónica** — la escala en la que cualquier nota suena
+bien con cualquier otra, que en un juego de tocar cien veces por partida es la diferencia entre
+música y tortura. En silencio el analizador da **0,0000**; salto 0,0707 de pico, nivel completo
+0,1143, y el choque **0,1061** — el choque es lo más fuerte, que es lo que corresponde.
+
+48 KB, un archivo, sin un solo asset: todo dibujado por código.
 
 ### Decimocuarta vuelta (2026-08-27): **cuatro animaciones y un screamer**
 

@@ -1,0 +1,1059 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Pelusa</title>
+<style>
+  /* ===================== LO BLANCO =====================
+     Una sola idea: casi todo es papel. Hay UN color y es el peligro, y hay una tinta y es la pelusa.
+     Todo lo demas son grises de humo. Un juego "de tranquilidad" no se hace con musica suave sobre
+     una pantalla llena: se hace sacando cosas hasta que lo unico que queda es lo que hay que mirar. */
+  :root{
+    --papel:#F7F6F3; --papel2:#EFEEEA;
+    --tinta:#24242B; --humo:#C9C7C0; --humo2:#DEDCD6;
+    --peligro:#D9695A; --calma:#7FB2A2;
+    --esc:1;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; height:100%; overflow:hidden; background:var(--papel2);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    color:var(--tinta); -webkit-user-select:none; user-select:none; touch-action:none; }
+  #caja{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  #lienzo{ display:block; background:var(--papel); }
+
+  .pan{ position:absolute; inset:0; z-index:20; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:calc(14px * var(--esc));
+    background:var(--papel); padding:24px; text-align:center; }
+  .pan.ver{ display:flex; }
+  .tit{ font-size:clamp(30px,7.4vmin,58px); font-weight:200; letter-spacing:.30em;
+    margin-left:.30em; color:var(--tinta); }
+  .sub{ font-size:max(11px,calc(12px * var(--esc))); font-weight:600; letter-spacing:.22em;
+    color:var(--humo); text-transform:uppercase; }
+  .bot{ appearance:none; border:1.4px solid var(--humo); background:transparent; color:var(--tinta);
+    font:inherit; font-size:max(12px,calc(13px * var(--esc))); font-weight:700; letter-spacing:.18em;
+    padding:13px 30px; border-radius:999px; cursor:pointer; transition:.18s ease;
+    text-transform:uppercase; }
+  .bot:hover{ border-color:var(--tinta); }
+  .bot:active{ background:var(--tinta); color:var(--papel); }
+  .bot.lleno{ background:var(--tinta); color:var(--papel); border-color:var(--tinta); }
+  .fila{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+
+  /* la rejilla de mundos: seis fichas, nada mas */
+  #gMundos{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;
+    width:min(560px,92%); }
+  .mundo{ border:1.4px solid var(--humo2); border-radius:18px; padding:16px 12px; cursor:pointer;
+    background:var(--papel); transition:.18s ease; display:flex; flex-direction:column;
+    align-items:center; gap:7px; }
+  .mundo:hover{ border-color:var(--tinta); }
+  .mundo .n{ font-size:max(9px,calc(10px * var(--esc))); letter-spacing:.24em; color:var(--humo);
+    font-weight:700; }
+  .mundo .nm{ font-size:max(13px,calc(15px * var(--esc))); font-weight:300; letter-spacing:.14em; }
+  .mundo .pg{ font-size:max(9px,calc(10px * var(--esc))); color:var(--humo); letter-spacing:.14em; }
+  .mundo.trabado{ opacity:.38; cursor:not-allowed; }
+  .mundo .bolita{ width:34px; height:34px; }
+
+  /* los veinte niveles */
+  #gNiveles{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:9px;
+    width:min(430px,92%); }
+  .niv{ aspect-ratio:1; border:1.3px solid var(--humo2); border-radius:12px; background:var(--papel);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; transition:.15s ease;
+    font-size:max(11px,calc(12px * var(--esc))); font-weight:600; color:var(--tinta); }
+  .niv:hover{ border-color:var(--tinta); }
+  .niv.hecho{ background:var(--tinta); color:var(--papel); border-color:var(--tinta); }
+  .niv.limpio{ background:var(--calma); border-color:var(--calma); color:var(--papel); }
+  .niv.trabado{ opacity:.3; cursor:not-allowed; }
+
+  /* ===================== EL HUD =====================
+     Tres cosas y ninguna mas: donde estas, cuanto falta, y como se sale. Un contador de vidas o un
+     reloj serian exactamente lo contrario de lo que este juego dice ser. */
+  #hud{ position:absolute; inset:0; z-index:10; pointer-events:none; }
+  #arriba{ position:absolute; top:calc(14px * var(--esc)); left:0; right:0; display:flex;
+    align-items:center; justify-content:center; gap:calc(12px * var(--esc)); }
+  #donde{ font-size:max(10px,calc(11px * var(--esc))); font-weight:700; letter-spacing:.22em;
+    color:var(--humo); }
+  #barra{ width:min(190px,34%); height:3px; border-radius:9px; background:var(--humo2);
+    overflow:hidden; }
+  #barra i{ display:block; height:100%; width:0%; background:var(--tinta);
+    transition:width .28s cubic-bezier(.2,.8,.2,1); }
+  #salir{ position:absolute; top:calc(10px * var(--esc)); left:calc(12px * var(--esc));
+    pointer-events:auto; width:36px; height:36px; border-radius:50%; border:1.3px solid var(--humo2);
+    background:var(--papel); color:var(--humo); cursor:pointer; font-size:15px; line-height:1;
+    display:flex; align-items:center; justify-content:center; }
+  #salir:active{ color:var(--tinta); border-color:var(--tinta); }
+  #son{ position:absolute; top:calc(10px * var(--esc)); right:calc(12px * var(--esc));
+    pointer-events:auto; width:36px; height:36px; border-radius:50%; border:1.3px solid var(--humo2);
+    background:var(--papel); color:var(--humo); cursor:pointer; font-size:14px;
+    display:flex; align-items:center; justify-content:center; }
+  #son.mudo{ color:var(--humo2); }
+
+  /* el cartel del tutorial: se explica haciendo, nunca antes */
+  #tuto{ position:absolute; left:50%; bottom:12%; transform:translateX(-50%); z-index:14;
+    display:none; flex-direction:column; align-items:center; gap:8px; width:86%; max-width:520px;
+    text-align:center; pointer-events:none; }
+  body.tutorial #tuto{ display:flex; }
+  #tutoT{ font-size:max(14px,calc(17px * var(--esc))); font-weight:300; letter-spacing:.10em; }
+  #tutoS{ font-size:max(11px,calc(12px * var(--esc))); font-weight:600; letter-spacing:.10em;
+    color:var(--humo); line-height:1.6; }
+  #tutoP{ width:120px; height:2px; background:var(--humo2); border-radius:9px; overflow:hidden; }
+  #tutoP i{ display:block; height:100%; width:0%; background:var(--tinta); }
+
+  /* el aviso del medio, que casi nunca aparece */
+  #aviso{ position:absolute; left:50%; top:46%; transform:translate(-50%,-50%); z-index:15;
+    font-size:clamp(17px,4.4vmin,30px); font-weight:200; letter-spacing:.24em; margin-left:.24em;
+    opacity:0; transition:opacity .35s ease; text-align:center; pointer-events:none; }
+  #aviso.ver{ opacity:1; }
+
+  #toque{ position:absolute; left:50%; bottom:calc(26px * var(--esc)); transform:translateX(-50%);
+    z-index:12; font-size:max(10px,calc(11px * var(--esc))); font-weight:700; letter-spacing:.22em;
+    color:var(--humo); opacity:0; transition:opacity .4s ease; pointer-events:none; }
+  #toque.ver{ opacity:1; }
+
+  #idBotones{ display:flex; gap:9px; flex-wrap:wrap; justify-content:center; }
+  #creditos{ position:absolute; bottom:16px; left:0; right:0; text-align:center;
+    font-size:9px; letter-spacing:.24em; color:var(--humo2); }
+</style>
+</head>
+<body>
+
+<div id="caja">
+  <canvas id="lienzo"></canvas>
+
+  <div id="hud">
+    <div id="arriba">
+      <div id="donde">1 · 1</div>
+      <div id="barra"><i></i></div>
+    </div>
+    <button id="salir">‹</button>
+    <button id="son">♪</button>
+    <div id="aviso"></div>
+    <div id="toque"></div>
+    <div id="tuto">
+      <div id="tutoT"></div>
+      <div id="tutoS"></div>
+      <div id="tutoP"><i></i></div>
+    </div>
+  </div>
+
+  <div id="pIdioma" class="pan ver">
+    <div class="tit">PELUSA</div>
+    <div class="sub">Language · Idioma · Idioma</div>
+    <div id="idBotones"></div>
+  </div>
+
+  <div id="pMenu" class="pan">
+    <div class="tit">PELUSA</div>
+    <div class="sub" data-i18n="sub"></div>
+    <div style="height:6px"></div>
+    <button class="bot lleno" id="bJugar" data-i18n="jugar"></button>
+    <div class="fila">
+      <button class="bot" id="bMundos" data-i18n="mundos"></button>
+      <button class="bot" id="bIdioma" data-i18n="idioma"></button>
+    </div>
+    <div id="creditos">REZONA</div>
+  </div>
+
+  <div id="pMundos" class="pan">
+    <div class="sub" data-i18n="mundos"></div>
+    <div id="gMundos"></div>
+    <button class="bot" id="bVolver1" data-i18n="volver"></button>
+  </div>
+
+  <div id="pNiveles" class="pan">
+    <div class="sub" id="tNiveles"></div>
+    <div id="gNiveles"></div>
+    <button class="bot" id="bVolver2" data-i18n="volver"></button>
+  </div>
+
+  <div id="pFin" class="pan">
+    <div class="tit" data-i18n="finT"></div>
+    <div class="sub" data-i18n="finS"></div>
+    <button class="bot lleno" id="bFin" data-i18n="volver"></button>
+  </div>
+</div>
+
+<script>
+/* =========================================================================================
+   PELUSA — un juego de tocar en el momento justo.
+
+   LA REGLA, Y ES UNA SOLA: la pelusa esta pegada a un punto, hay una linea recta marcada hasta el
+   punto siguiente, y alrededor de ese punto giran bolas con espinas. Se toca y sale. Si una espina
+   la toca en el camino, vuelve. Nada mas que eso.
+
+   POR QUE NO HAY RELOJ NI VIDAS: el pedido dice "de tranquilidad". Un contador de vidas convierte
+   cada error en una perdida y eso es exactamente lo contrario. Fallar cuesta volver a tocar.
+   ========================================================================================= */
+
+/* ===================== LOS IDIOMAS =====================
+   Arranca en INGLES y se elige antes que nada. Ni una cadena suelta en el codigo: una sola que se
+   escape es la que el jugador va a ver en el idioma equivocado. */
+const IDIOMAS=[['en','English'],['es','Español'],['pt','Português']];
+let IDIOMA='en';
+try{ const g=localStorage.getItem('pelusa_idioma'); if(g && IDIOMAS.some(i=>i[0]===g)) IDIOMA=g; }catch(e){}
+const L={
+ sub:{en:'tap at the right moment', es:'tocá en el momento justo', pt:'toque no momento certo'},
+ jugar:{en:'PLAY', es:'JUGAR', pt:'JOGAR'},
+ mundos:{en:'WORLDS', es:'MUNDOS', pt:'MUNDOS'},
+ idioma:{en:'LANGUAGE', es:'IDIOMA', pt:'IDIOMA'},
+ volver:{en:'BACK', es:'VOLVER', pt:'VOLTAR'},
+ nivel:{en:'LEVEL', es:'NIVEL', pt:'NÍVEL'},
+ mundo:{en:'WORLD', es:'MUNDO', pt:'MUNDO'},
+ m1:{en:'FIRST BREATH', es:'PRIMER RESPIRO', pt:'PRIMEIRO FÔLEGO'},
+ m2:{en:'TWO MOONS', es:'DOS LUNAS', pt:'DUAS LUAS'},
+ m3:{en:'FAR AND NEAR', es:'LEJOS Y CERCA', pt:'LONGE E PERTO'},
+ m4:{en:'THE TIDE', es:'LA MAREA', pt:'A MARÉ'},
+ m5:{en:'BREATHING RINGS', es:'ANILLOS QUE RESPIRAN', pt:'ANÉIS QUE RESPIRAM'},
+ m6:{en:'ALL AT ONCE', es:'TODO JUNTO', pt:'TUDO JUNTO'},
+ hecho:{en:'{n} of 20', es:'{n} de 20', pt:'{n} de 20'},
+ trabado:{en:'finish the world before', es:'terminá el mundo anterior', pt:'termine o mundo anterior'},
+ listo:{en:'DONE', es:'LISTO', pt:'PRONTO'},
+ limpio:{en:'CLEAN', es:'LIMPIO', pt:'LIMPO'},
+ tocaPC:{en:'CLICK OR SPACE', es:'CLIC O ESPACIO', pt:'CLIQUE OU ESPAÇO'},
+ tocaMov:{en:'TAP ANYWHERE', es:'TOCÁ EN CUALQUIER LADO', pt:'TOQUE EM QUALQUER LUGAR'},
+ finT:{en:'THAT IS ALL OF IT', es:'ESO FUE TODO', pt:'FOI TUDO'},
+ finS:{en:'six worlds, one hundred and twenty hops', es:'seis mundos, ciento veinte saltos', pt:'seis mundos, cento e vinte saltos'},
+ /* tutorial */
+ t0:{en:'THIS IS YOU', es:'ESTA SOS VOS', pt:'ESTA É VOCÊ'},
+ t0s:{en:'the dotted line is where you will go · tap and you go', es:'la línea de puntos es a dónde vas a ir · tocá y vas', pt:'a linha pontilhada é para onde você vai · toque e vai'},
+ t1:{en:'WATCH THE SPIKES', es:'MIRÁ LAS ESPINAS', pt:'OLHE OS ESPINHOS'},
+ t1s:{en:'they turn around the next point · wait until the way is clear, then tap', es:'giran alrededor del punto siguiente · esperá a que el camino esté libre y tocá', pt:'giram em volta do próximo ponto · espere o caminho ficar livre e toque'},
+ t2:{en:'IF THEY TOUCH YOU, YOU COME BACK', es:'SI TE TOCAN, VOLVÉS', pt:'SE TE TOCAREM, VOCÊ VOLTA'},
+ t2s:{en:'nothing else happens · there is no clock and there are no lives', es:'no pasa nada más · no hay reloj y no hay vidas', pt:'não acontece mais nada · não há relógio nem vidas'},
+ t3:{en:'ONCE YOU LAND, THAT RING SLEEPS', es:'AL LLEGAR, ESE ANILLO SE DUERME', pt:'AO CHEGAR, ESSE ANEL DORME'},
+ t3s:{en:'you are safe on a point · the danger is only on the way', es:'sobre un punto estás a salvo · el peligro es sólo el camino', pt:'sobre um ponto você está a salvo · o perigo é só o caminho'},
+ t4:{en:'GET TO THE LAST ONE', es:'LLEGÁ AL ÚLTIMO', pt:'CHEGUE AO ÚLTIMO'},
+ t4s:{en:'that is the whole game · take all the time you want', es:'ese es todo el juego · tomate todo el tiempo que quieras', pt:'esse é o jogo todo · leve o tempo que quiser'},
+ aLimpio:{en:'CLEAN', es:'LIMPIO', pt:'LIMPO'},
+ aBien:{en:'DONE', es:'LISTO', pt:'PRONTO'},
+ aMundo:{en:'WORLD DONE', es:'MUNDO COMPLETO', pt:'MUNDO COMPLETO'}
+};
+function TX(k,v){ let s=(L[k]&&(L[k][IDIOMA]||L[k].en))||k;
+  if(v) for(const p in v) s=s.split('{'+p+'}').join(v[p]);
+  return s; }
+
+/* ===================== QUE APARATO ES ESTE =====================
+   Telefono solo si hay tactil Y el puntero es grueso: una notebook tactil tiene tactil y puntero
+   fino, y ahi el texto de "tocá" seria mentira. */
+function adivinar(){
+  try{ const t=matchMedia('(pointer:coarse)').matches, d=('ontouchstart' in window)||navigator.maxTouchPoints>0;
+       return (t&&d)? 'movil':'pc'; }catch(e){ return 'pc'; }
+}
+let plataf=adivinar();
+
+/* ===================== EL MUNDO EN UNIDADES =====================
+   La columna de juego mide 10 unidades de ancho SIEMPRE y la camara muestra 17,8 de alto. En un
+   telefono 9:16 eso da exactamente los 10 de ancho; en una pantalla ancha la columna queda centrada
+   con papel a los costados, que es como se ve un juego minimalista en un monitor y no un error. */
+const ANCHO_COL=10, ALTO_CAM=17.8;
+const RP=0.42;                 // el radio de la pelusa
+const R_BOLA=0.26, R_ESP=0.46; // la bola mala y hasta donde llegan sus espinas (lo que choca)
+const SEP_MIN=3.6, SEP_MAX=5.0;
+const ORB_MIN=1.15, ORB_MAX=2.15;
+const BANDA=2.30;                      // hasta donde se corre un nodo del centro
+const MEDIO_MIN=BANDA+ORB_MAX+R_ESP+0.25;   // lo que hay que ver a cada lado, si o si
+
+const lienzo=document.getElementById('lienzo');
+const cx=lienzo.getContext('2d', {alpha:false});
+let W=0, H=0, DPR=1, esc=1, camY=0, camObj=0;
+
+function ajustar(){
+  const w=innerWidth, h=innerHeight;
+  DPR=Math.min(devicePixelRatio||1, 2);
+  lienzo.style.width=w+'px'; lienzo.style.height=h+'px';
+  lienzo.width=Math.round(w*DPR); lienzo.height=Math.round(h*DPR);
+  W=w; H=h;
+  esc=Math.max(0.62, Math.min(1.18, h/860));
+  document.documentElement.style.setProperty('--esc', esc.toFixed(3));
+  /* LA ESCALA LA DECIDE EL LADO QUE APRIETA, Y LA GEOMETRIA NO SE TOCA. Un nivel con semilla tiene
+     que ser el MISMO nivel en cualquier pantalla: si los nodos se corrieran para caber, el 12 del
+     mundo 4 seria otro nivel en cada telefono. Asi que se aleja la camara.
+     Medido: con los nodos en una banda de +-2,3 y una orbita de 2,15, hace falta ver 5,16 unidades a
+     cada lado. En un telefono 9:19,5 la altura sola daria 4,11 y las bolas de la derecha quedaban
+     cortadas por el borde. */
+  U=Math.min(H/ALTO_CAM, W/(2*MEDIO_MIN));
+}
+let U=40;                     // pixeles por unidad
+function px(x){ return W/2 + x*U; }
+/* la pelusa va abajo del todo y no en el medio: lo que hay que mirar es lo que VIENE,
+   asi que el papel de arriba es el que sirve. */
+function py(y){ return H*0.76 - (y-camY)*U; }
+addEventListener('resize', ajustar);
+
+/* ===================== EL AZAR CON SEMILLA =====================
+   Un nivel procedural que cambia cada vez que entras no es un nivel, es una tirada. Con semilla, el
+   3 del mundo 2 es SIEMPRE el mismo 3 del mundo 2: se puede aprender, que es de lo que se trata. */
+function rng(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15, 1|a);
+  t=t+Math.imul(t^t>>>7, 61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+/* ===================== LOS ROTORES =====================
+   Todo el juego depende de que la posicion de una espina en un instante se pueda calcular sin
+   simular nada: asi el validador que comprueba que el nivel se pueda pasar usa EXACTAMENTE la misma
+   cuenta que el dibujo. Si fueran dos cuentas distintas, el validador estaria aprobando otro juego. */
+function rotorAng(ro, t){
+  if(ro.tipo==='vaiven') return ro.fase + ro.amp*Math.sin(ro.w*t);
+  return ro.fase + ro.w*t;
+}
+function rotorRad(ro, t){
+  if(ro.tipo==='pulso') return ro.r + ro.pa*Math.sin(ro.pw*t);
+  return ro.r;
+}
+function rotorPos(ro, nodo, t, sal){
+  const a=rotorAng(ro,t), r=rotorRad(ro,t);
+  sal.x = nodo.x + Math.cos(a)*r;
+  sal.y = nodo.y + Math.sin(a)*r;
+  return sal;
+}
+
+/* ===================== EL GENERADOR =====================
+   Seis mundos, veinte niveles cada uno. Cada mundo agrega UNA idea y nada mas: dos lunas, dos
+   radios, ida y vuelta, anillos que respiran. Meter todo en el mundo uno es la forma mas rapida de
+   que nadie entienda ninguna. */
+const MUNDOS=6, NIVELES=20;
+function generar(mundo, nivel){
+  const R=rng(mundo*1009 + nivel*7919 + 1013);
+  const d=(nivel-1)/(NIVELES-1);                    // 0..1 dentro del mundo
+  const saltos=Math.min(10, 2 + Math.round(d*3) + Math.floor(mundo/2));
+  const nodos=[{x:0, y:0}];
+  for(let k=0;k<saltos;k++){
+    const sep=SEP_MIN + R()*(SEP_MAX-SEP_MIN);
+    /* el zigzag: nunca dos veces para el mismo lado seguido, y nunca tan al costado que la columna
+       se salga del papel */
+    let dx=(R()*2-1)*(BANDA*1.55);
+    const ant=nodos[nodos.length-1];
+    if(Math.abs(ant.x+dx)>BANDA) dx=-dx*0.6;
+    const nx=Math.max(-BANDA, Math.min(BANDA, ant.x+dx));
+    const dy=Math.sqrt(Math.max(0.6, sep*sep - (nx-ant.x)*(nx-ant.x)));
+    nodos.push({x:nx, y:ant.y+dy});
+  }
+  const anillos=[];
+  for(let k=1;k<nodos.length;k++) anillos.push(anilloDe(R, mundo, d, k));
+  const niv={ mundo, nivel, nodos, anillos, ventanas:[] };
+  ajustarDificultad(niv, mundo, d, R);
+  return niv;
+}
+
+function anilloDe(R, mundo, d, k){
+  const cuantos = 1 + ((mundo>=2 && d>0.25)?1:0) + ((mundo>=4 && d>0.55)?1:0) + ((mundo>=6 && d>0.8)?1:0);
+  const base = 1.55 + mundo*0.20 + d*0.85;
+  const ro=[];
+  for(let i=0;i<Math.min(3,cuantos);i++){
+    let r = ORB_MIN + (ORB_MAX-ORB_MIN)*((mundo>=3)? ((i%2)? 0.92 : 0.14) + R()*0.08 : R());
+    let tipo='fijo', amp=0, pa=0, pw=0;
+    if(mundo>=4 && (i===0) && d>0.3){ tipo='vaiven'; amp=1.1+R()*1.5; }
+    if(mundo>=5 && (i===(cuantos>1?1:0)) && d>0.2){ tipo='pulso'; pa=0.28+R()*0.3; pw=0.9+R()*1.1; }
+    const w = (base*(0.82+R()*0.42)) * ((i%2)? -1 : 1);
+    ro.push({ r, w, fase:R()*Math.PI*2, tipo, amp, pa, pw });
+  }
+  return ro;
+}
+
+/* ---------- ¿SE PUEDE PASAR? ----------
+   Se barren los instantes posibles de salida a lo largo de cuatro segundos y se simula el viaje
+   entero con la misma cuenta que usa el dibujo. Sale la VENTANA MAS LARGA en la que se puede salir
+   sano. Es el mismo criterio que en Maicol: un nivel generado y no comprobado es un nivel roto que
+   todavia no se descubrio. */
+const BARRIDO=4.0, PASO_BARRIDO=1/120, PASO_VUELO=1/300;
+function velDe(mundo){ return 8.6 + mundo*0.55; }
+
+function seguro(nodoA, nodoB, anillo, t0, vel){
+  const dx=nodoB.x-nodoA.x, dy=nodoB.y-nodoA.y;
+  const largo=Math.hypot(dx,dy), ux=dx/largo, uy=dy/largo;
+  const T=largo/vel, lim=(RP+R_ESP)*(RP+R_ESP);
+  const p={x:0,y:0};
+  for(let t=0;t<=T;t+=PASO_VUELO){
+    const x=nodoA.x+ux*vel*t, y=nodoA.y+uy*vel*t;
+    for(const ro of anillo){
+      rotorPos(ro, nodoB, t0+t, p);
+      const ex=x-p.x, ey=y-p.y;
+      if(ex*ex+ey*ey < lim) return false;
+    }
+  }
+  return true;
+}
+
+function ventana(nodoA, nodoB, anillo, vel){
+  let mejor=0, actual=0, seguros=0, total=0;
+  for(let t0=0;t0<BARRIDO;t0+=PASO_BARRIDO){
+    total++;
+    if(seguro(nodoA,nodoB,anillo,t0,vel)){ seguros++; actual+=PASO_BARRIDO; if(actual>mejor) mejor=actual; }
+    else actual=0;
+  }
+  return { mejor, fraccion: seguros/Math.max(1,total) };
+}
+
+/* La ventana minima se achica de mundo en mundo, pero NUNCA baja de 90 ms: por debajo de eso deja de
+   ser puntería y pasa a ser lotería, y este juego no es de lotería. */
+function ventanaMinima(mundo, d){ return Math.max(0.090, 0.30 - mundo*0.026 - d*0.045); }
+
+function ajustarDificultad(niv, mundo, d, R){
+  const vel=velDe(mundo), min=ventanaMinima(mundo, d);
+  for(let k=0;k<niv.anillos.length;k++){
+    const A=niv.nodos[k], B=niv.nodos[k+1];
+    let v=ventana(A,B,niv.anillos[k],vel), intentos=0;
+    /* DEMASIADO DIFICIL: se aflojan las vueltas. Cambiar la fase no sirve — la ventana mas larga de
+       un anillo no depende de donde arranca, depende de que tan rapido gira y cuantos son. */
+    while(v.mejor<min && intentos++<14){
+      const a=niv.anillos[k];
+      if(a.length>1 && intentos%5===0) a.pop();
+      else for(const ro of a) ro.w*=0.88;
+      v=ventana(A,B,a,vel);
+    }
+    /* DEMASIADO FACIL: si se puede salir en cualquier momento no hay juego. Se aprieta hasta que
+       haya peligro de verdad, sin pasarse del minimo. */
+    let ap=0;
+    while(v.fraccion>0.82 && ap++<10){
+      const a=niv.anillos[k];
+      for(const ro of a) ro.w*=1.12;
+      const w2=ventana(A,B,a,vel);
+      if(w2.mejor<min){ for(const ro of a) ro.w/=1.12; break; }
+      v=w2;
+    }
+    niv.ventanas.push({ mejor:+v.mejor.toFixed(3), fraccion:+v.fraccion.toFixed(3) });
+  }
+}
+
+/* ===================== LA PELUSA =====================
+   El pelo es fisica de verdad y no un dibujo: cada mechon es una cadena de tres puntos con verlet,
+   con gravedad y con el arrastre del cuerpo. Es lo que hace que al salir disparada el pelo se quede
+   atras y al frenar se le venga encima — y eso, que no se puede animar a mano sin que se note, es la
+   mitad de por que el bicho cae simpatico. */
+const PELOS=62, PELO_N=3, PELO_LARGO=0.105;
+const pelusa={
+  x:0, y:0, vx:0, vy:0, en:0, viajando:false, t:0, T:0, ax:0, ay:0, bx:0, by:0,
+  ang:0, sq:0, sqv:0, pelo:[], mira:0, guiño:0, sacude:0
+};
+function armarPelo(){
+  pelusa.pelo.length=0;
+  for(let i=0;i<PELOS;i++){
+    const a=(i/PELOS)*Math.PI*2 + (i%2)*0.06;
+    const p=[];
+    for(let k=0;k<=PELO_N;k++){
+      const rr=RP + k*PELO_LARGO;
+      p.push({ x:pelusa.x+Math.cos(a)*rr, y:pelusa.y+Math.sin(a)*rr, px:0, py:0, init:false });
+    }
+    pelusa.pelo.push({ a, p, largo:PELO_LARGO*(0.72+((i*37)%13)/13*0.6) });
+  }
+}
+const PELO_G=-2.1, PELO_RIG=0.34;
+function peloTick(dt){
+  for(const m of pelusa.pelo){
+    const ang=m.a+pelusa.ang, cs=Math.cos(ang), sn=Math.sin(ang);
+    const base=m.p[0];
+    base.x = pelusa.x + cs*RP;
+    base.y = pelusa.y + sn*RP;
+    for(let k=1;k<m.p.length;k++){
+      const q=m.p[k];
+      if(!q.init){ q.px=q.x; q.py=q.y; q.init=true; }
+      const vx=(q.x-q.px)*0.86, vy=(q.y-q.py)*0.86;
+      q.px=q.x; q.py=q.y;
+      q.x+=vx; q.y+=vy + PELO_G*dt*dt;
+    }
+    /* dos pasadas de restriccion: con una el mechon se estira y se ve de goma */
+    for(let it=0; it<2; it++){
+      for(let k=1;k<m.p.length;k++){
+        const a=m.p[k-1], b=m.p[k];
+        let dx=b.x-a.x, dy=b.y-a.y, l=Math.hypot(dx,dy)||1e-6;
+        const f=(l-m.largo)/l;
+        b.x-=dx*f; b.y-=dy*f;
+      }
+      /* PELO Y NO BARBA. Con verlet a secas los mechones se caen todos para abajo y el bicho queda
+         hecho una fregona: la gravedad es lo unico que los orienta. Un pelo REAL tiene rigidez —
+         sale perpendicular a la piel y solo se dobla— asi que cada punto se tira hacia donde
+         estaria el mechon tieso. La rigidez baja hacia la punta: la raiz casi no cede y la punta
+         sigue al cuerpo, que es de donde sale el latigueo al salir disparada. */
+      for(let k=1;k<m.p.length;k++){
+        const q=m.p[k], rr=RP + k*m.largo;
+        const ox=pelusa.x + cs*rr, oy=pelusa.y + sn*rr;
+        const rig=PELO_RIG/k;
+        q.x += (ox-q.x)*rig; q.y += (oy-q.y)*rig;
+      }
+    }
+  }
+}
+
+/* ===================== EL ESTADO ===================== */
+let pant='idioma';            // idioma | menu | mundos | niveles | juego | fin
+let mundoAct=1, nivelAct=1, nivel=null, tiempo=0, intentos=0, limpio=true;
+let jugando=false, terminado=0, sacudon=0, chispas=[], ondas=[];
+let tutoPaso=0, tutoT=0, tutoListo=true, tutoSalio=0, tutoChoques=0;
+
+const prog=(()=>{ try{ return JSON.parse(localStorage.getItem('pelusa_prog')||'{}'); }catch(e){ return {}; } })();
+function guardar(){ try{ localStorage.setItem('pelusa_prog', JSON.stringify(prog)); }catch(e){} }
+function clave(m,n){ return m+'-'+n; }
+function hechoDe(m,n){ return prog[clave(m,n)]||0; }        // 0 nada, 1 pasado, 2 limpio
+function mundoHechos(m){ let n=0; for(let k=1;k<=NIVELES;k++) if(hechoDe(m,k)) n++; return n; }
+function mundoAbierto(m){ return m===1 || mundoHechos(m-1)>=Math.ceil(NIVELES*0.6); }
+function nivelAbierto(m,n){ return n===1 || hechoDe(m,n-1)>0; }
+
+/* ===================== EL SONIDO =====================
+   Procedural y suave: senos con ataque lento sobre una escala pentatonica, que es la escala en la
+   que cualquier nota suena bien con cualquier otra. En un juego de tocar cien veces, dos notas que
+   chocan se vuelven insoportables a la tercera partida. */
+const AUD={ ctx:null, on:true };
+function audioIniciar(){
+  if(AUD.ctx) return;
+  const C=window.AudioContext||window.webkitAudioContext; if(!C) return;
+  let ctx; try{ ctx=new C(); }catch(e){ return; }
+  AUD.ctx=ctx;
+  const m=ctx.createGain(); m.gain.value=0.0; m.connect(ctx.destination);
+  m.gain.linearRampToValueAtTime(0.9, ctx.currentTime+1.2);
+  const conv=ctx.createConvolver();
+  const seg=2.2, n=Math.floor(ctx.sampleRate*seg), ir=ctx.createBuffer(2,n,ctx.sampleRate);
+  for(let c=0;c<2;c++){ const dd=ir.getChannelData(c);
+    for(let i=0;i<n;i++){ const t=i/n; dd[i]=(Math.random()*2-1)*Math.pow(1-t,2.8)*(t<0.002?t/0.002:1); } }
+  conv.buffer=ir;
+  const env=ctx.createGain(); env.gain.value=0.5; env.connect(conv); conv.connect(m);
+  const seco=ctx.createGain(); seco.gain.value=0.75; seco.connect(m);
+  try{ const an=ctx.createAnalyser(); an.fftSize=2048; m.connect(an); AUD.an=an;
+       AUD.buf=new Float32Array(an.fftSize); }catch(e){}
+  AUD.maestro=m; AUD.seco=seco; AUD.envio=env;
+}
+const PENTA=[0,2,4,7,9,12,14,16,19,21,24];
+function nota(semi, dur, vol, tipo){
+  if(!AUD.ctx||!AUD.on) return;
+  const ctx=AUD.ctx, t=ctx.currentTime;
+  const f=261.63*Math.pow(2, semi/12);
+  const o=ctx.createOscillator(); o.type=tipo||'sine'; o.frequency.value=f;
+  const g=ctx.createGain();
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(vol, t+0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+  o.connect(g); g.connect(AUD.seco);
+  const e=ctx.createGain(); e.gain.value=0.9; g.connect(e); e.connect(AUD.envio);
+  o.start(t); o.stop(t+dur+0.03);
+}
+function son(tipo, k){
+  if(!AUD.ctx||!AUD.on) return;
+  try{
+    if(tipo==='salta'){ nota(PENTA[Math.min(PENTA.length-1, k||0)]+12, 0.5, 0.13); }
+    else if(tipo==='llega'){ const s=PENTA[Math.min(PENTA.length-1,(k||0)+1)];
+      nota(s+12,0.7,0.16); nota(s+19,0.55,0.07); }
+    else if(tipo==='choque'){
+      const ctx=AUD.ctx, t=ctx.currentTime;
+      const o=ctx.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(220,t);
+      o.frequency.exponentialRampToValueAtTime(90,t+0.22);
+      const g=ctx.createGain(); g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.18,t+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.30);
+      o.connect(g); g.connect(AUD.seco); o.start(t); o.stop(t+0.34);
+    }
+    else if(tipo==='nivel'){ [0,4,7,12].forEach((s,i)=>setTimeout(()=>nota(s+12,1.3,0.13), i*95)); }
+    else if(tipo==='mundo'){ [0,7,12,16,19].forEach((s,i)=>setTimeout(()=>nota(s+12,1.8,0.12), i*130)); }
+    else if(tipo==='toque'){ nota(PENTA[3]+24, 0.22, 0.05); }
+  }catch(e){}
+}
+
+/* ===================== JUGAR ===================== */
+function cargarNivel(m,n){
+  mundoAct=m; nivelAct=n;
+  nivel=generar(m,n);
+  pelusa.en=0; pelusa.viajando=false;
+  pelusa.x=nivel.nodos[0].x; pelusa.y=nivel.nodos[0].y;
+  pelusa.vx=pelusa.vy=0; pelusa.sq=0; pelusa.sqv=0; pelusa.ang=0;
+  for(const m2 of pelusa.pelo) for(const q of m2.p) q.init=false;
+  camY=pelusa.y; camObj=pelusa.y;
+  tiempo=0; intentos=0; limpio=true; terminado=0; chispas.length=0; ondas.length=0;
+  jugando=true;
+  const esTuto = (m===1 && n===1);
+  tutoListo=!esTuto; tutoPaso=0; tutoT=0; tutoSalio=0; tutoChoques=0;
+  document.body.classList.toggle('tutorial', esTuto);
+  pintarHud();
+  verPantalla('juego');
+  avisoToque(true);
+}
+function saltar(){
+  if(!jugando || pelusa.viajando || terminado) return;
+  const A=nivel.nodos[pelusa.en], B=nivel.nodos[pelusa.en+1];
+  if(!B) return;
+  const dx=B.x-A.x, dy=B.y-A.y, l=Math.hypot(dx,dy);
+  pelusa.ax=A.x; pelusa.ay=A.y; pelusa.bx=B.x; pelusa.by=B.y;
+  pelusa.T=l/velDe(mundoAct); pelusa.t=0; pelusa.viajando=true; pelusa.t0=tiempo;
+  pelusa.sqv=-7.5;                       // se estira al salir
+  son('salta', pelusa.en);
+  tutoSalio++;
+  camObj=B.y;
+  avisoToque(false);
+  ondas.push({x:A.x, y:A.y, r:0, v:1});
+}
+function chocar(){
+  intentos++; limpio=false; tutoChoques++;
+  pelusa.viajando=false;
+  const A=nivel.nodos[pelusa.en];
+  pelusa.x=A.x; pelusa.y=A.y; pelusa.sqv=9.5; pelusa.sacude=0.42;
+  sacudon=0.34;
+  camObj=A.y;
+  son('choque');
+  for(let i=0;i<14;i++){
+    const a=Math.random()*Math.PI*2, v=1.6+Math.random()*2.6;
+    chispas.push({x:pelusa.x, y:pelusa.y, vx:Math.cos(a)*v, vy:Math.sin(a)*v, t:0, T:0.5+Math.random()*0.3});
+  }
+  avisoToque(true);
+}
+function llegar(){
+  pelusa.viajando=false;
+  pelusa.en++;
+  const B=nivel.nodos[pelusa.en];
+  pelusa.x=B.x; pelusa.y=B.y; pelusa.sqv=6.2;
+  /* EL ANILLO SE DUERME AL LLEGAR. Sin esto, pararse en un punto seria pararse adentro de un
+     molinete: el peligro tiene que ser el camino y nada mas que el camino. */
+  const an=nivel.anillos[pelusa.en-1];
+  if(an) for(const ro of an) ro.duerme=0.0001;
+  son('llega', pelusa.en);
+  ondas.push({x:B.x, y:B.y, r:0, v:1});
+  camObj=B.y;
+  pintarHud();
+  if(pelusa.en>=nivel.nodos.length-1) completar();
+  else avisoToque(true);
+}
+function completar(){
+  terminado=1;
+  const antes=hechoDe(mundoAct,nivelAct);
+  const val=limpio?2:1;
+  if(val>antes){ prog[clave(mundoAct,nivelAct)]=val; guardar(); }
+  avisar(limpio? TX('aLimpio') : TX('aBien'), 1.5);
+  son('nivel');
+  const eraUltimo = nivelAct>=NIVELES;
+  setTimeout(()=>{
+    if(!jugando) return;
+    if(eraUltimo){
+      son('mundo');
+      if(mundoAct>=MUNDOS){ verPantalla('fin'); jugando=false; }
+      else { mundoAct++; nivelAct=1; cargarNivel(mundoAct,1); }
+    } else cargarNivel(mundoAct, nivelAct+1);
+  }, 1450);
+}
+
+/* ===================== EL BUCLE ===================== */
+let ultimo=performance.now();
+function paso(dt){
+  tiempo+=dt;
+  if(sacudon>0) sacudon=Math.max(0, sacudon-dt*2.4);
+  if(pelusa.sacude>0) pelusa.sacude=Math.max(0, pelusa.sacude-dt*2.2);
+
+  /* el muelle del aplaste: pasa de largo y vuelve, que es lo que hace que se lea a blando */
+  pelusa.sqv += (-pelusa.sq*150 - pelusa.sqv*11)*dt;
+  pelusa.sq  += pelusa.sqv*dt;
+
+  if(jugando && nivel){
+    if(pelusa.viajando){
+      pelusa.t+=dt;
+      const f=Math.min(1, pelusa.t/pelusa.T);
+      pelusa.x = pelusa.ax + (pelusa.bx-pelusa.ax)*f;
+      pelusa.y = pelusa.ay + (pelusa.by-pelusa.ay)*f;
+      pelusa.ang += dt*7.5;
+      /* EL CHOQUE SE MIRA CON LA MISMA CUENTA QUE EL VALIDADOR. Si el juego usara una y el
+         comprobador otra, el comprobador estaria aprobando un juego que no existe. */
+      const B=nivel.nodos[pelusa.en+1], an=nivel.anillos[pelusa.en];
+      const lim=(RP+R_ESP)*(RP+R_ESP), p={x:0,y:0};
+      if(an) for(const ro of an){
+        if(ro.duerme) continue;
+        rotorPos(ro, B, tiempo, p);
+        const ex=pelusa.x-p.x, ey=pelusa.y-p.y;
+        if(ex*ex+ey*ey<lim){ chocar(); break; }
+      }
+      if(pelusa.viajando && f>=1) llegar();
+    } else {
+      pelusa.ang *= Math.max(0, 1-dt*4);
+    }
+  }
+  /* los anillos que se durmieron se apagan de a poco: cortarlos de golpe se lee a error */
+  if(nivel) for(const an of nivel.anillos) for(const ro of an)
+    if(ro.duerme!==undefined && ro.duerme<1) ro.duerme=Math.min(1, ro.duerme+dt*1.6);
+
+  camY += (camObj-camY)*Math.min(1, dt*3.4);
+  peloTick(dt);
+
+  for(let i=chispas.length-1;i>=0;i--){ const c=chispas[i];
+    c.t+=dt; c.x+=c.vx*dt; c.y+=c.vy*dt; c.vy-=6*dt; c.vx*=1-dt*1.4; c.vy*=1-dt*1.4;
+    if(c.t>=c.T) chispas.splice(i,1); }
+  for(let i=ondas.length-1;i>=0;i--){ const o=ondas[i]; o.r+=dt*4.2; o.v-=dt*1.5;
+    if(o.v<=0) ondas.splice(i,1); }
+
+  if(!tutoListo) tutoTick(dt);
+  if(avisoT>0){ avisoT-=dt; if(avisoT<=0) document.getElementById('aviso').classList.remove('ver'); }
+}
+
+/* ===================== EL DIBUJO =====================
+   Todo con la misma tinta y un solo color. Las sombras son una elipse suave y nada mas: una sombra
+   de verdad en un juego blanco lo ensucia. */
+function dibujar(){
+  const g=cx;
+  g.setTransform(DPR,0,0,DPR,0,0);
+  g.fillStyle='#F7F6F3'; g.fillRect(0,0,W,H);
+  if(sacudon>0){ g.translate((Math.random()*2-1)*sacudon*9, (Math.random()*2-1)*sacudon*9); }
+  if(!nivel){ return; }
+
+  /* la columna, apenas insinuada: en una pantalla ancha dice donde esta el juego */
+  g.strokeStyle='rgba(0,0,0,0.030)'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(px(-ANCHO_COL/2), 0); g.lineTo(px(-ANCHO_COL/2), H);
+  g.moveTo(px(ANCHO_COL/2), 0); g.lineTo(px(ANCHO_COL/2), H); g.stroke();
+
+  /* el camino ya hecho: una linea llena y clara */
+  g.strokeStyle='rgba(36,36,43,0.13)'; g.lineWidth=Math.max(1.2, U*0.035); g.lineCap='round';
+  g.beginPath();
+  for(let k=0;k<=pelusa.en && k<nivel.nodos.length-1;k++){
+    const a=nivel.nodos[k], b=nivel.nodos[k+1];
+    g.moveTo(px(a.x),py(a.y)); g.lineTo(px(b.x),py(b.y));
+  }
+  g.stroke();
+
+  /* LA LINEA QUE VIENE, DE PUNTOS. Es el enunciado del juego: dice exactamente por donde vas a
+     pasar, asi que el error nunca puede ser "no sabia". */
+  const B=nivel.nodos[pelusa.en+1];
+  if(B && !terminado){
+    const A=nivel.nodos[pelusa.en];
+    g.save();
+    g.strokeStyle='rgba(36,36,43,0.34)'; g.lineWidth=Math.max(1.1, U*0.028);
+    g.setLineDash([U*0.13, U*0.20]); g.lineDashOffset=-(tiempo*U*0.7)%(U*0.33);
+    g.beginPath(); g.moveTo(px(A.x),py(A.y)); g.lineTo(px(B.x),py(B.y)); g.stroke();
+    g.restore();
+  }
+
+  /* los nodos */
+  for(let k=0;k<nivel.nodos.length;k++){
+    const n=nivel.nodos[k], hecho=k<=pelusa.en, meta=k===nivel.nodos.length-1;
+    const X=px(n.x), Y=py(n.y);
+    if(Y<-80||Y>H+80) continue;
+    const r=U*(meta?0.40:0.30);
+    g.beginPath(); g.ellipse(X, Y+r*0.95, r*0.9, r*0.30, 0, 0, 7); g.fillStyle='rgba(0,0,0,0.045)'; g.fill();
+    g.beginPath(); g.arc(X,Y,r,0,7);
+    g.fillStyle='#FFFFFF'; g.fill();
+    g.lineWidth=Math.max(1.2,U*0.030);
+    g.strokeStyle = meta? 'rgba(127,178,162,0.95)' : (hecho? 'rgba(36,36,43,0.55)':'rgba(36,36,43,0.20)');
+    g.stroke();
+    if(meta){ g.beginPath(); g.arc(X,Y,r*0.42,0,7); g.fillStyle='rgba(127,178,162,0.85)'; g.fill(); }
+    else if(hecho){ g.beginPath(); g.arc(X,Y,r*0.30,0,7); g.fillStyle='rgba(36,36,43,0.5)'; g.fill(); }
+  }
+
+  /* los anillos y sus bolas con espinas */
+  const p={x:0,y:0};
+  for(let k=0;k<nivel.anillos.length;k++){
+    const nodo=nivel.nodos[k+1], an=nivel.anillos[k];
+    const Y=py(nodo.y); if(Y<-260||Y>H+260) continue;
+    for(const ro of an){
+      const dorm = ro.duerme!==undefined? ro.duerme : 0;
+      const alfa = 1-dorm;
+      if(alfa<=0.01) continue;
+      const rr=rotorRad(ro, tiempo);
+      /* la orbita: un circulo finisimo. Sin el, la bola aparece de la nada y no se puede prever */
+      g.beginPath(); g.arc(px(nodo.x),Y,rr*U,0,7);
+      g.strokeStyle='rgba(217,105,90,'+(0.16*alfa).toFixed(3)+')'; g.lineWidth=1; g.stroke();
+      rotorPos(ro, nodo, tiempo, p);
+      dibujarEspinosa(px(p.x), py(p.y), U, rotorAng(ro,tiempo)*1.6, alfa);
+    }
+  }
+
+  /* las ondas de salir y de llegar */
+  for(const o of ondas){
+    g.beginPath(); g.arc(px(o.x),py(o.y),o.r*U,0,7);
+    g.strokeStyle='rgba(36,36,43,'+(0.20*o.v).toFixed(3)+')'; g.lineWidth=Math.max(1,U*0.02); g.stroke();
+  }
+  /* las chispas del choque */
+  for(const c of chispas){
+    const a=1-c.t/c.T;
+    g.beginPath(); g.arc(px(c.x),py(c.y), U*0.035*a, 0, 7);
+    g.fillStyle='rgba(217,105,90,'+(0.75*a).toFixed(3)+')'; g.fill();
+  }
+
+  dibujarPelusa();
+}
+
+function dibujarEspinosa(X,Y,u,giro,alfa){
+  const g=cx;
+  g.save(); g.translate(X,Y); g.rotate(giro);
+  g.strokeStyle='rgba(217,105,90,'+(0.92*alfa).toFixed(3)+')';
+  g.lineWidth=Math.max(1.1,u*0.030); g.lineCap='round';
+  g.beginPath();
+  for(let i=0;i<8;i++){
+    const a=i/8*Math.PI*2;
+    g.moveTo(Math.cos(a)*R_BOLA*u*0.86, Math.sin(a)*R_BOLA*u*0.86);
+    g.lineTo(Math.cos(a)*R_ESP*u*0.94, Math.sin(a)*R_ESP*u*0.94);
+  }
+  g.stroke();
+  g.beginPath(); g.arc(0,0,R_BOLA*u,0,7);
+  g.fillStyle='rgba(217,105,90,'+(0.95*alfa).toFixed(3)+')'; g.fill();
+  g.beginPath(); g.arc(-R_BOLA*u*0.25,-R_BOLA*u*0.25,R_BOLA*u*0.30,0,7);
+  g.fillStyle='rgba(255,255,255,'+(0.35*alfa).toFixed(3)+')'; g.fill();
+  g.restore();
+}
+
+function dibujarPelusa(){
+  const g=cx;
+  const X=px(pelusa.x), Y=py(pelusa.y);
+  const s=1+pelusa.sq*0.055, sx=1/Math.max(0.55,s), sy=Math.max(0.55,s);
+  /* la sombra: cuanto mas arriba del piso, mas chica y mas clara. Es lo unico que ancla al bicho */
+  g.beginPath(); g.ellipse(X, Y+RP*U*1.15, RP*U*0.95*sx, RP*U*0.26, 0, 0, 7);
+  g.fillStyle='rgba(0,0,0,0.055)'; g.fill();
+
+  /* el pelo, un trazo por mechon */
+  g.strokeStyle='rgba(36,36,43,0.80)'; g.lineWidth=Math.max(1.0,U*0.022); g.lineCap='round';
+  g.beginPath();
+  for(const m of pelusa.pelo){
+    const p=m.p;
+    g.moveTo(px(p[0].x),py(p[0].y));
+    for(let k=1;k<p.length;k++) g.lineTo(px(p[k].x),py(p[k].y));
+  }
+  g.stroke();
+
+  g.save(); g.translate(X,Y); g.scale(sx,sy);
+  g.beginPath(); g.arc(0,0,RP*U,0,7); g.fillStyle='#24242B'; g.fill();
+  /* los ojos miran a donde va: es lo unico que le da intencion */
+  const B=nivel? nivel.nodos[pelusa.en+1] : null;
+  let mx=0, my=0.35;
+  if(B){ const dx=B.x-pelusa.x, dy=B.y-pelusa.y, l=Math.hypot(dx,dy)||1; mx=dx/l; my=dy/l; }
+  const oj=RP*U*0.30, se=RP*U*0.34;
+  for(const sg of [-1,1]){
+    g.beginPath();
+    g.arc(sg*se + mx*oj*0.5, -my*oj*0.5, RP*U*0.15, 0, 7);
+    g.fillStyle='#F7F6F3'; g.fill();
+  }
+  g.restore();
+}
+
+/* ===================== EL TUTORIAL =====================
+   Cinco pasos y cada uno ESPERA a que la cosa pase. Un tutorial que se pasa solo con un temporizador
+   se lee sin leerlo; uno que espera obliga a hacerlo una vez, y hacerlo una vez es entenderlo. */
+const TUTO=[
+  { t:()=>TX('t0'), s:()=>TX('t0s'), p:()=>Math.min(1,tutoT/2.4), ok:()=>tutoT>2.4 },
+  { t:()=>TX('t1'), s:()=>TX('t1s'), p:()=>Math.min(1,tutoT/3.4), ok:()=>tutoT>3.4 },
+  { t:()=>TX('t2'), s:()=>TX('t2s'), p:()=>Math.min(1,tutoSalio/1), ok:()=>tutoSalio>=1 },
+  { t:()=>TX('t3'), s:()=>TX('t3s'), p:()=>Math.min(1,pelusa.en/1), ok:()=>pelusa.en>=1 },
+  { t:()=>TX('t4'), s:()=>TX('t4s'), p:()=>Math.min(1,tutoT/3.0), ok:()=>tutoT>3.0 }
+];
+function tutoTick(dt){
+  tutoT+=dt;
+  const P=TUTO[tutoPaso];
+  const T=document.getElementById('tutoT'), S=document.getElementById('tutoS'),
+        b=document.querySelector('#tutoP i');
+  if(T && T._p!==tutoPaso){ T._p=tutoPaso; T.textContent=P.t(); S.textContent=P.s(); }
+  if(b) b.style.width=(P.p()*100).toFixed(0)+'%';
+  if(P.ok() && tutoT>0.6){
+    tutoPaso++; tutoT=0;
+    if(tutoPaso>=TUTO.length){ tutoListo=true; document.body.classList.remove('tutorial'); }
+    else son('toque');
+  }
+}
+
+/* ===================== EL HUD Y LAS PANTALLAS ===================== */
+let avisoT=0;
+function avisar(txt,seg){ const el=document.getElementById('aviso');
+  if(!txt){ el.classList.remove('ver'); avisoT=0; return; }
+  el.textContent=txt; el.classList.add('ver'); avisoT=seg||1.4; }
+function avisoToque(v){ const el=document.getElementById('toque');
+  el.textContent = plataf==='pc'? TX('tocaPC') : TX('tocaMov');
+  el.classList.toggle('ver', !!v && !terminado); }
+function pintarHud(){
+  document.getElementById('donde').textContent = mundoAct+' · '+nivelAct;
+  const b=document.querySelector('#barra i');
+  if(b && nivel) b.style.width=(100*pelusa.en/Math.max(1,nivel.nodos.length-1)).toFixed(1)+'%';
+}
+function verPantalla(p){
+  pant=p;
+  for(const [id,n] of [['pIdioma','idioma'],['pMenu','menu'],['pMundos','mundos'],
+                       ['pNiveles','niveles'],['pFin','fin']])
+    document.getElementById(id).classList.toggle('ver', p===n);
+  document.getElementById('hud').style.display = (p==='juego')? 'block':'none';
+  if(p!=='juego'){ jugando=false; document.body.classList.remove('tutorial'); }
+}
+function pintarIdioma(){
+  for(const el of document.querySelectorAll('[data-i18n]')) el.textContent=TX(el.getAttribute('data-i18n'));
+  pintarMundos();
+}
+function elegirIdioma(c){ IDIOMA=c; try{ localStorage.setItem('pelusa_idioma',c); }catch(e){}
+  document.documentElement.lang=c; pintarIdioma(); }
+(function(){
+  const c=document.getElementById('idBotones');
+  for(const [cod,nom] of IDIOMAS){
+    const b=document.createElement('button'); b.className='bot'; b.textContent=nom;
+    b.onclick=()=>{ audioIniciar(); elegirIdioma(cod); verPantalla('menu'); };
+    c.appendChild(b);
+  }
+  elegirIdioma(IDIOMA);
+})();
+
+function pintarMundos(){
+  const c=document.getElementById('gMundos'); if(!c) return;
+  c.innerHTML='';
+  for(let m=1;m<=MUNDOS;m++){
+    const ab=mundoAbierto(m), h=mundoHechos(m);
+    const d=document.createElement('div');
+    d.className='mundo'+(ab?'':' trabado');
+    d.innerHTML='<canvas class="bolita" width="68" height="68"></canvas>'+
+      '<div class="n">'+TX('mundo')+' '+m+'</div>'+
+      '<div class="nm">'+TX('m'+m)+'</div>'+
+      '<div class="pg">'+(ab? TX('hecho',{n:h}) : TX('trabado'))+'</div>';
+    if(ab) d.onclick=()=>{ mundoAct=m; pintarNiveles(); verPantalla('niveles'); };
+    c.appendChild(d);
+    icono(d.querySelector('canvas'), m);
+  }
+}
+/* el iconito de cada mundo: la idea del mundo dibujada, no un numero */
+function icono(cv, m){
+  const g=cv.getContext('2d'); const s=68;
+  g.clearRect(0,0,s,s); g.translate(s/2,s/2);
+  g.strokeStyle='rgba(36,36,43,0.30)'; g.lineWidth=1;
+  const radios = (m>=3)? [12,25] : [21];
+  for(const r of radios){ g.beginPath(); g.arc(0,0,r,0,7); g.stroke(); }
+  g.fillStyle='#24242B'; g.beginPath(); g.arc(0,0,7,0,7); g.fill();
+  const n = 1 + ((m>=2)?1:0) + ((m>=4)?1:0);
+  g.fillStyle='#D9695A';
+  for(let i=0;i<n;i++){
+    const a=i/n*Math.PI*2 + 0.5, r=radios[i%radios.length];
+    g.beginPath(); g.arc(Math.cos(a)*r, Math.sin(a)*r, 4.6, 0, 7); g.fill();
+  }
+  g.setTransform(1,0,0,1,0,0);
+}
+function pintarNiveles(){
+  document.getElementById('tNiveles').textContent=TX('mundo')+' '+mundoAct+' · '+TX('m'+mundoAct);
+  const c=document.getElementById('gNiveles'); c.innerHTML='';
+  for(let n=1;n<=NIVELES;n++){
+    const ab=nivelAbierto(mundoAct,n), h=hechoDe(mundoAct,n);
+    const d=document.createElement('div');
+    d.className='niv'+(ab?'':' trabado')+(h===2?' limpio':(h?' hecho':''));
+    d.textContent=n;
+    if(ab) d.onclick=()=>{ audioIniciar(); cargarNivel(mundoAct,n); };
+    c.appendChild(d);
+  }
+}
+function primerSinHacer(){
+  for(let m=1;m<=MUNDOS;m++) if(mundoAbierto(m))
+    for(let n=1;n<=NIVELES;n++) if(!hechoDe(m,n) && nivelAbierto(m,n)) return [m,n];
+  return [1,1];
+}
+document.getElementById('bJugar').onclick=()=>{ audioIniciar(); const [m,n]=primerSinHacer(); cargarNivel(m,n); };
+document.getElementById('bMundos').onclick=()=>{ pintarMundos(); verPantalla('mundos'); };
+document.getElementById('bIdioma').onclick=()=>verPantalla('idioma');
+document.getElementById('bVolver1').onclick=()=>verPantalla('menu');
+document.getElementById('bVolver2').onclick=()=>{ pintarMundos(); verPantalla('mundos'); };
+document.getElementById('bFin').onclick=()=>verPantalla('menu');
+document.getElementById('salir').onclick=(e)=>{ e.stopPropagation(); pintarNiveles(); verPantalla('niveles'); };
+document.getElementById('son').onclick=(e)=>{ e.stopPropagation(); AUD.on=!AUD.on;
+  document.getElementById('son').classList.toggle('mudo', !AUD.on); };
+
+/* ===================== LO QUE SE TOCA =====================
+   Un solo gesto en todo el juego: tocar en cualquier lado, o la barra, o un clic. No hay nada mas
+   que aprender y por eso no hay nada mas que explicar. */
+function tocar(e){
+  if(pant!=='juego') return;
+  if(e && e.target && e.target.closest && e.target.closest('button')) return;
+  audioIniciar();
+  saltar();
+}
+addEventListener('pointerdown', tocar, {passive:true});
+addEventListener('keydown', e=>{
+  if(e.key===' '||e.key==='Enter'){ e.preventDefault(); tocar(null); }
+  if(e.key==='Escape' && pant==='juego'){ pintarNiveles(); verPantalla('niveles'); }
+});
+/* Chrome de Android manda un mousemove sintetico despues de cada toque: sin la guarda, un telefono
+   pasaria a modo PC y el cartel diria "clic o espacio" en una pantalla sin mouse. */
+let ultimoToque=-1e9;
+addEventListener('pointerdown', ()=>{ ultimoToque=performance.now(); }, {passive:true});
+addEventListener('mousemove', e=>{
+  if(performance.now()-ultimoToque < 1200) return;
+  if(!e.movementX && !e.movementY) return;
+  if(plataf!=='pc'){ plataf='pc'; avisoToque(document.getElementById('toque').classList.contains('ver')); }
+});
+
+/* ===================== ARRANQUE ===================== */
+ajustar(); armarPelo();
+function bucle(){
+  requestAnimationFrame(bucle);
+  const t=performance.now(), dt=Math.min(0.05, (t-ultimo)/1000); ultimo=t;
+  paso(dt);
+  dibujar();
+}
+bucle();
+
+/* ===================== GANCHOS DE PRUEBA =====================
+   Un juego de puntería no se comprueba mirando una foto: se comprueba midiendo que exista la ventana
+   en la que se puede pasar, y que el juego use la MISMA cuenta para chocar que el validador. */
+window.__pelusa={
+  estado:()=>({ pant, mundo:mundoAct, nivel:nivelAct, jugando, terminado,
+                en:pelusa.en, nodos:nivel? nivel.nodos.length:0,
+                viajando:pelusa.viajando, intentos, limpio, plataf,
+                pos:[+pelusa.x.toFixed(2),+pelusa.y.toFixed(2)],
+                tuto:{ paso:tutoPaso, listo:tutoListo, texto:(document.getElementById('tutoT')||{}).textContent||'' } }),
+  nivel:()=>nivel && ({ mundo:nivel.mundo, nivel:nivel.nivel, saltos:nivel.nodos.length-1,
+                        vel:velDe(nivel.mundo),
+                        ventanas:nivel.ventanas,
+                        rotores:nivel.anillos.map(a=>a.map(r=>({ r:+r.r.toFixed(2), w:+r.w.toFixed(2),
+                                 tipo:r.tipo, duerme:r.duerme!==undefined })))}),
+  cargar:(m,n)=>{ cargarNivel(m,n); return window.__pelusa.nivel(); },
+  /* genera TODOS los niveles y devuelve el peor caso: es la unica forma de afirmar que los ciento
+     veinte se pueden pasar sin jugarlos a mano */
+  auditar:(mundos)=>{
+    const r=[]; let peor=9, peorEn=null, dur=0;
+    for(let m=1;m<=(mundos||MUNDOS);m++){
+      let pm=9;
+      for(let n=1;n<=NIVELES;n++){
+        const t0=performance.now();
+        const nv=generar(m,n); dur+=performance.now()-t0;
+        for(const v of nv.ventanas){
+          if(v.mejor<pm) pm=v.mejor;
+          if(v.mejor<peor){ peor=v.mejor; peorEn=[m,n]; }
+        }
+      }
+      r.push({ mundo:m, ventanaPeor:+pm.toFixed(3), minimo:+ventanaMinima(m,1).toFixed(3) });
+    }
+    return { mundos:r, peor:+peor.toFixed(3), peorEn, msTotal:Math.round(dur) };
+  },
+  /* EL MEDIO DE LA VENTANA, NO SU BORDE. Es el detalle que hizo fallar la primera prueba: devolver
+     el primer instante seguro y despues redondearlo al cuadro mas cercano cae ocho milisegundos
+     ANTES del borde, o sea justo del lado malo. Un jugador tampoco apunta al borde: apunta al medio.
+     Con el medio, si el juego y el validador no usaran la misma cuenta esto chocaria igual — y ahi
+     estaria la prueba de que una de las dos esta mal. */
+  saltarBien:(minVent)=>{
+    if(!nivel||pelusa.viajando) return 'no se puede';
+    const A=nivel.nodos[pelusa.en], B=nivel.nodos[pelusa.en+1], an=nivel.anillos[pelusa.en];
+    if(!B) return 'no hay a donde';
+    const vel=velDe(mundoAct), P=1/240, MIN=minVent||0.07;
+    let ini=-1;
+    for(let k=0;k<2400;k++){
+      const t=tiempo + k*P;
+      if(seguro(A,B,an,t,vel)){ if(ini<0) ini=t; }
+      else { if(ini>=0 && (t-P-ini)>=MIN) return { esperar:+((ini + (t-P-ini)/2) - tiempo).toFixed(4),
+                                                   ventana:+(t-P-ini).toFixed(3) };
+             ini=-1; }
+    }
+    return 'sin ventana';
+  },
+  cuadros:(n,dt)=>{ for(let k=0;k<(n||60);k++) paso(dt||1/60); return window.__pelusa.estado(); },
+  saltar:()=>{ saltar(); return pelusa.viajando; },
+  /* juega un nivel entero solo, saltando siempre en la ventana: comprueba de punta a punta */
+  jugarSolo:(tope)=>{
+    let vueltas=0, choques=0; const ventanas=[];
+    while(!terminado && vueltas++<(tope||5000)){
+      if(!pelusa.viajando){
+        const q=window.__pelusa.saltarBien();
+        if(typeof q==='string') return { error:q, en:pelusa.en };
+        const n=Math.max(0, Math.round(q.esperar*60));
+        for(let i=0;i<n;i++) paso(1/60);
+        ventanas.push(q.ventana);
+        const antes=intentos;
+        saltar();
+        while(pelusa.viajando && vueltas++<(tope||5000)) paso(1/60);
+        if(intentos>antes) choques++;
+      } else paso(1/60);
+    }
+    return { terminado:!!terminado, en:pelusa.en, saltos:nivel.nodos.length-1, choques, limpio,
+             ventanaMin:ventanas.length? +Math.min(...ventanas).toFixed(3) : null };
+  },
+  audio:()=>{ let pico=0,rms=0;
+    if(AUD.an&&AUD.buf){ AUD.an.getFloatTimeDomainData(AUD.buf);
+      for(let i=0;i<AUD.buf.length;i++){ const v=Math.abs(AUD.buf[i]); if(v>pico)pico=v; rms+=v*v; }
+      rms=Math.sqrt(rms/AUD.buf.length); }
+    return { hay:!!AUD.ctx, on:AUD.on, pico:+pico.toFixed(4), rms:+rms.toFixed(4) }; },
+  son:(t,k)=>{ son(t,k); return true; },
+  pelo:()=>({ mechones:pelusa.pelo.length, puntos:pelusa.pelo.length*(PELO_N+1),
+              largo:+(pelusa.pelo[0]?Math.hypot(pelusa.pelo[0].p[3].x-pelusa.pelo[0].p[0].x,
+                     pelusa.pelo[0].p[3].y-pelusa.pelo[0].p[0].y):0).toFixed(3) }),
+  progreso:()=>({ prog:Object.keys(prog).length, mundosAbiertos:[1,2,3,4,5,6].filter(mundoAbierto) }),
+  idioma:(c)=>{ if(c) elegirIdioma(c); return IDIOMA; },
+  pantalla:(p)=>{ verPantalla(p); return pant; },
+  medidas:()=>({ W, H, U:+U.toFixed(2), DPR, banda:BANDA, medioMin:+MEDIO_MIN.toFixed(2),
+                 vePorLado:+((W/2)/U).toFixed(2), veDeAlto:+(H/U).toFixed(2),
+                 entraTodo:((W/2)/U)>=MEDIO_MIN-0.001, esc:+esc.toFixed(2) })
+};
+</script>
+</body>
+</html>
