@@ -189,6 +189,7 @@ function siguienteEscena(){
     aulaPrev=0;
   }
   bichosCerrado=false;
+  manoAjustarPedido();
   /* si quedo algo de la tanda anterior, se apaga: un blanco suelto adentro de un aula es un blanco
      que nadie puede pinzar y una escena que no termina nunca */
   if(!E.act && bichosVivos>0) bichosApagar();
@@ -236,6 +237,8 @@ function ponerCuenta(){
   if(aulaK>=CUENTAS_AULA){ terminarClase(); return; }
   cuenta=CUENTAS[aulaIdx*CUENTAS_AULA + aulaK];
   cuentaTxt=cuenta.txt;
+  /* recien aca se sabe si la respuesta pasa de cinco, o sea si hacen falta las dos manos */
+  manoAjustarPedido();
   const S=AULA_SITIO[aulaN];
   const l=LIBROS[0];
   l.g.visible=true;
@@ -260,6 +263,7 @@ function ponerCuenta(){
 function contestar(n){
   if(bloqueo || !cuenta) return;
   bloqueo=true;
+  manoAjustarPedido();          // contestada la cuenta, se deja de pagar por la segunda mano
   if(n===cuenta.res){
     aciertos++; libros++; aulaK++;
     avisar(TX('bien'), 1.0, '#2ecc0f'); son('bien');
@@ -1614,6 +1618,48 @@ function vigiaSiguiente(){
     if(P.puede()){ P.hacer(); return; }
   }
   VIGIA.hecho=true;                                     // no queda nada que bajar
+}
+
+/* =========================================================================================
+   LO QUE EL DETECTOR TIENE QUE HACER SALE DE LO QUE EL JUEGO ESTA PIDIENDO
+
+   Dos numeros, y los dos venian clavados como constantes:
+
+   CUANTAS MANOS. Dos manos solo hacen falta cuando la respuesta pasa de cinco, porque seis dedos no
+   entran en una mano. Eso pasa en el aula y en un paso del tutorial. En los siete pasillos —pinza,
+   arrastre, dibujo— no hay una sola actividad que necesite dos, y sin embargo se estaban midiendo
+   las dos todo el juego, pagando el modelo de puntos dos veces.
+
+   A QUE RITMO. Mientras el profesor camina y habla, el jugador no tiene nada que contestar: la mano
+   no decide nada y ni siquiera hace falta que se vea. Medir 24 veces por segundo para dibujar una
+   mano que no hace nada es el gasto mas facil de sacar que queda, y es la mayor parte del juego —
+   los pasillos son largos. Se baja a un ritmo de reposo y se vuelve al normal en cuanto hay algo que
+   contestar, con margen: si el ritmo subiera recien cuando el jugador ya levanto la mano, el primer
+   gesto de cada aula llegaria tarde.
+   ========================================================================================= */
+const MANO_HZ_REPOSO=8;
+function manoLoQueHaceFalta(){
+  const E=GUION[escena_i];
+  /* una cuenta abierta: dos manos si la respuesta pasa de cinco */
+  if(cuenta && !bloqueo) return { manos:(cuenta.res>5? 2 : 1), activo:true };
+  /* un paso del tutorial que espera un gesto o un numero */
+  if(E && E.espera){
+    const n=(E.espera.tipo==='dedos')? (E.espera.n||1) : 1;
+    return { manos:(n>5? 2 : 1), activo:true };
+  }
+  /* una actividad de pasillo: siempre con una mano */
+  if(bichosVivos>0) return { manos:1, activo:true };
+  /* el aula, aunque todavia no haya libro abierto: en un segundo lo va a haber */
+  if(E && E.clase!=null) return { manos:1, activo:true };
+  return { manos:1, activo:false };
+}
+function manoAjustarPedido(){
+  if(!MANO.on) return;
+  const q=manoLoQueHaceFalta();
+  manoPedirManos(q.manos);
+  MANO.hzTope = q.activo? ((plataf==='movil')? MANO_HZ_MOVIL : MANO_HZ_PC) : MANO_HZ_REPOSO;
+  if(MANO.hz>MANO.hzTope) MANO.hz=MANO.hzTope;
+  else if(q.activo && MANO.hz<MANO_HZ_REPOSO+1) MANO.hz=MANO.hzTope;
 }
 
 function bucle(){

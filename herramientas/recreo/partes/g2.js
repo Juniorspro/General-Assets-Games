@@ -26,13 +26,51 @@ const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:f
                 unico con lo que se puede apuntar; la TRASERA no, porque ahi la mano ya se ve del
                 lado que esta. Depende de que camara se abrio, no es una constante. */
              espejo:true, camaraUsada:'',
-             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null] };
+             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null],
+             /* CUANTAS MANOS SE LE PIDEN AL DETECTOR AHORA MISMO. No es una constante: es lo que el
+                juego necesita en esta escena, y de eso depende buena parte de lo que cuesta. */
+             pedidas:1, entradaChica:false };
 /* CUANTAS VECES POR SEGUNDO SE MIDE, que no es lo mismo que cuantas veces se dibuja.
    24 y no 60: el detector tarda entre 8 y 20 ms por cuadro en un telefono, asi que medir en cada
    cuadro de render es gastar un tercio del presupuesto de 16,6 ms en mirar una mano que apenas se
    movio. Se mide 24 veces por segundo y se INTERPOLA el resto, que es exactamente lo que hace el
    propio juego con su paso fijo de 60 y sus 120 cuadros. */
 const MANO_HZ_MOVIL=24, MANO_HZ_PC=30;
+/* 256x192 Y NO 320x240, Y EL MOTIVO ES QUE EL DETECTOR NO USA LA RESOLUCION QUE SE LE DA.
+   Los modelos de MediaPipe tienen entrada fija y chica —el de palma trabaja alrededor de 192 px de
+   lado y el de puntos alrededor de 224—, asi que todo lo que se le mande por encima de eso se
+   ACHICA ANTES DE MIRARLO: son pixeles que se copian y se reescalan para tirarlos. Bajar de 320x240
+   a 256x192 son 1,56 veces menos pixeles que mover en cada medicion y no se pierde detalle que el
+   modelo fuera a usar. */
+const MANO_ENT_W=256, MANO_ENT_H=192;
+
+/* =========================================================================================
+   CUANTAS MANOS SE MIDEN, Y POR QUE NO SON SIEMPRE DOS
+
+   Aca estaba el gasto mas grande que quedaba, y estaba escrito como una constante: numHands:2 para
+   todo el juego. El modelo de puntos CORRE UNA VEZ POR MANO, asi que pedir dos con las dos manos en
+   el cuadro cuesta el doble que pedir una — todo el tiempo, incluso en las siete actividades de
+   pasillo, donde no hay una sola que necesite dos manos: la pinza, el arrastre y el dibujo se hacen
+   con una.
+
+   Dos manos hacen falta EN UN SOLO CASO en todo el juego: cuando la respuesta de una cuenta pasa de
+   cinco, porque ahi hay que mostrar seis o mas dedos y en una mano no entran. Eso es el aula, no el
+   pasillo. Asi que el numero se lo pide el juego a la escena, y no al reves.
+
+   Y SE CAMBIA EN LOS BORDES DE ESCENA, NUNCA POR CUADRO: setOptions rearma el grafo del detector, o
+   sea que llamarlo seguido costaria mas de lo que ahorra. Por eso hay una guarda de igualdad. */
+function manoPedirManos(n){
+  const q=(n>=2)? 2 : 1;
+  if(q===MANO.pedidas) return false;
+  MANO.pedidas=q;
+  if(MANO.det && MANO.det.setOptions){
+    try{ MANO.det.setOptions({ numHands:q }); }catch(e){}
+  }
+  /* la ranura que sobra se apaga: si quedara viva con su ultima medicion, el juego seguiria contando
+     los dedos de una mano que ya no se esta midiendo */
+  if(q===1 && MANO.ranuras[1]) MANO.ranuras[1].hay=false;
+  return true;
+}
 /* =========================================================================================
    EL RITMO DE MEDICION SE AJUSTA SOLO AL APARATO
 
@@ -214,7 +252,8 @@ async function manosIniciar(){
        - 320x240 y no 480x360: el detector escala la entrada igual, y 320x240 son 76.800 pixeles
          contra 172.800, o sea 2,25 veces menos trabajo por medicion para la misma mano. */
     st=await navigator.mediaDevices.getUserMedia({
-      video:{ width:{ideal:320}, height:{ideal:240}, facingMode:{ideal:'environment'} } });
+      video:{ width:{ideal:MANO_ENT_W}, height:{ideal:MANO_ENT_H},
+              facingMode:{ideal:'environment'} } });
   }catch(e){
     const n=(e && e.name)||'';
     return manosFallo(n==='NotAllowedError'||n==='SecurityError'? 'permiso'
@@ -246,7 +285,18 @@ async function manosIniciar(){
     try{
       MANO.det=await vision.HandLandmarker.createFromOptions(fs,{
         baseOptions:{ modelAssetPath:MANO_MODELO, delegate:dg },
-        runningMode:'VIDEO', numHands:2 });
+        runningMode:'VIDEO', numHands:MANO.pedidas,
+        /* LOS UMBRALES BAJAN, Y NO ES PARA "DETECTAR MEJOR": ES PARA DETECTAR MENOS VECES.
+           HandLandmarker en modo VIDEO tiene dos modelos y no uno. El caro es el DETECTOR DE PALMA,
+           que busca la mano en el cuadro entero; el barato es el de puntos, que la sigue una vez que
+           ya sabe donde esta. En modo VIDEO el de palma NO corre siempre: corre cuando el seguimiento
+           se cae por debajo de minTrackingConfidence. O sea que un umbral alto no da mas precision —
+           da mas VECES QUE SE VUELVE A BUSCAR LA MANO DE CERO, que es justo lo caro.
+           Con 0,40 el seguimiento se sostiene mas y el detector de palma entra menos. El riesgo de
+           sostener una mano que ya no esta lo cubre la caducidad de 260 ms, que ya estaba. */
+        minHandDetectionConfidence:0.5,
+        minHandPresenceConfidence:0.4,
+        minTrackingConfidence:0.4 });
       MANO.delegado=dg; break;
     }catch(e){ MANO.det=null; }
   }

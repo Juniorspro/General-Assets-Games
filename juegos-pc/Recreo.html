@@ -1811,13 +1811,51 @@ const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:f
                 unico con lo que se puede apuntar; la TRASERA no, porque ahi la mano ya se ve del
                 lado que esta. Depende de que camara se abrio, no es una constante. */
              espejo:true, camaraUsada:'',
-             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null] };
+             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null],
+             /* CUANTAS MANOS SE LE PIDEN AL DETECTOR AHORA MISMO. No es una constante: es lo que el
+                juego necesita en esta escena, y de eso depende buena parte de lo que cuesta. */
+             pedidas:1, entradaChica:false };
 /* CUANTAS VECES POR SEGUNDO SE MIDE, que no es lo mismo que cuantas veces se dibuja.
    24 y no 60: el detector tarda entre 8 y 20 ms por cuadro en un telefono, asi que medir en cada
    cuadro de render es gastar un tercio del presupuesto de 16,6 ms en mirar una mano que apenas se
    movio. Se mide 24 veces por segundo y se INTERPOLA el resto, que es exactamente lo que hace el
    propio juego con su paso fijo de 60 y sus 120 cuadros. */
 const MANO_HZ_MOVIL=24, MANO_HZ_PC=30;
+/* 256x192 Y NO 320x240, Y EL MOTIVO ES QUE EL DETECTOR NO USA LA RESOLUCION QUE SE LE DA.
+   Los modelos de MediaPipe tienen entrada fija y chica —el de palma trabaja alrededor de 192 px de
+   lado y el de puntos alrededor de 224—, asi que todo lo que se le mande por encima de eso se
+   ACHICA ANTES DE MIRARLO: son pixeles que se copian y se reescalan para tirarlos. Bajar de 320x240
+   a 256x192 son 1,56 veces menos pixeles que mover en cada medicion y no se pierde detalle que el
+   modelo fuera a usar. */
+const MANO_ENT_W=256, MANO_ENT_H=192;
+
+/* =========================================================================================
+   CUANTAS MANOS SE MIDEN, Y POR QUE NO SON SIEMPRE DOS
+
+   Aca estaba el gasto mas grande que quedaba, y estaba escrito como una constante: numHands:2 para
+   todo el juego. El modelo de puntos CORRE UNA VEZ POR MANO, asi que pedir dos con las dos manos en
+   el cuadro cuesta el doble que pedir una — todo el tiempo, incluso en las siete actividades de
+   pasillo, donde no hay una sola que necesite dos manos: la pinza, el arrastre y el dibujo se hacen
+   con una.
+
+   Dos manos hacen falta EN UN SOLO CASO en todo el juego: cuando la respuesta de una cuenta pasa de
+   cinco, porque ahi hay que mostrar seis o mas dedos y en una mano no entran. Eso es el aula, no el
+   pasillo. Asi que el numero se lo pide el juego a la escena, y no al reves.
+
+   Y SE CAMBIA EN LOS BORDES DE ESCENA, NUNCA POR CUADRO: setOptions rearma el grafo del detector, o
+   sea que llamarlo seguido costaria mas de lo que ahorra. Por eso hay una guarda de igualdad. */
+function manoPedirManos(n){
+  const q=(n>=2)? 2 : 1;
+  if(q===MANO.pedidas) return false;
+  MANO.pedidas=q;
+  if(MANO.det && MANO.det.setOptions){
+    try{ MANO.det.setOptions({ numHands:q }); }catch(e){}
+  }
+  /* la ranura que sobra se apaga: si quedara viva con su ultima medicion, el juego seguiria contando
+     los dedos de una mano que ya no se esta midiendo */
+  if(q===1 && MANO.ranuras[1]) MANO.ranuras[1].hay=false;
+  return true;
+}
 /* =========================================================================================
    EL RITMO DE MEDICION SE AJUSTA SOLO AL APARATO
 
@@ -1999,7 +2037,8 @@ async function manosIniciar(){
        - 320x240 y no 480x360: el detector escala la entrada igual, y 320x240 son 76.800 pixeles
          contra 172.800, o sea 2,25 veces menos trabajo por medicion para la misma mano. */
     st=await navigator.mediaDevices.getUserMedia({
-      video:{ width:{ideal:320}, height:{ideal:240}, facingMode:{ideal:'environment'} } });
+      video:{ width:{ideal:MANO_ENT_W}, height:{ideal:MANO_ENT_H},
+              facingMode:{ideal:'environment'} } });
   }catch(e){
     const n=(e && e.name)||'';
     return manosFallo(n==='NotAllowedError'||n==='SecurityError'? 'permiso'
@@ -2031,7 +2070,18 @@ async function manosIniciar(){
     try{
       MANO.det=await vision.HandLandmarker.createFromOptions(fs,{
         baseOptions:{ modelAssetPath:MANO_MODELO, delegate:dg },
-        runningMode:'VIDEO', numHands:2 });
+        runningMode:'VIDEO', numHands:MANO.pedidas,
+        /* LOS UMBRALES BAJAN, Y NO ES PARA "DETECTAR MEJOR": ES PARA DETECTAR MENOS VECES.
+           HandLandmarker en modo VIDEO tiene dos modelos y no uno. El caro es el DETECTOR DE PALMA,
+           que busca la mano en el cuadro entero; el barato es el de puntos, que la sigue una vez que
+           ya sabe donde esta. En modo VIDEO el de palma NO corre siempre: corre cuando el seguimiento
+           se cae por debajo de minTrackingConfidence. O sea que un umbral alto no da mas precision —
+           da mas VECES QUE SE VUELVE A BUSCAR LA MANO DE CERO, que es justo lo caro.
+           Con 0,40 el seguimiento se sostiene mas y el detector de palma entra menos. El riesgo de
+           sostener una mano que ya no esta lo cubre la caducidad de 260 ms, que ya estaba. */
+        minHandDetectionConfidence:0.5,
+        minHandPresenceConfidence:0.4,
+        minTrackingConfidence:0.4 });
       MANO.delegado=dg; break;
     }catch(e){ MANO.det=null; }
   }
@@ -3430,6 +3480,7 @@ function siguienteEscena(){
     aulaPrev=0;
   }
   bichosCerrado=false;
+  manoAjustarPedido();
   /* si quedo algo de la tanda anterior, se apaga: un blanco suelto adentro de un aula es un blanco
      que nadie puede pinzar y una escena que no termina nunca */
   if(!E.act && bichosVivos>0) bichosApagar();
@@ -3477,6 +3528,8 @@ function ponerCuenta(){
   if(aulaK>=CUENTAS_AULA){ terminarClase(); return; }
   cuenta=CUENTAS[aulaIdx*CUENTAS_AULA + aulaK];
   cuentaTxt=cuenta.txt;
+  /* recien aca se sabe si la respuesta pasa de cinco, o sea si hacen falta las dos manos */
+  manoAjustarPedido();
   const S=AULA_SITIO[aulaN];
   const l=LIBROS[0];
   l.g.visible=true;
@@ -3501,6 +3554,7 @@ function ponerCuenta(){
 function contestar(n){
   if(bloqueo || !cuenta) return;
   bloqueo=true;
+  manoAjustarPedido();          // contestada la cuenta, se deja de pagar por la segunda mano
   if(n===cuenta.res){
     aciertos++; libros++; aulaK++;
     avisar(TX('bien'), 1.0, '#2ecc0f'); son('bien');
@@ -4857,6 +4911,48 @@ function vigiaSiguiente(){
   VIGIA.hecho=true;                                     // no queda nada que bajar
 }
 
+/* =========================================================================================
+   LO QUE EL DETECTOR TIENE QUE HACER SALE DE LO QUE EL JUEGO ESTA PIDIENDO
+
+   Dos numeros, y los dos venian clavados como constantes:
+
+   CUANTAS MANOS. Dos manos solo hacen falta cuando la respuesta pasa de cinco, porque seis dedos no
+   entran en una mano. Eso pasa en el aula y en un paso del tutorial. En los siete pasillos —pinza,
+   arrastre, dibujo— no hay una sola actividad que necesite dos, y sin embargo se estaban midiendo
+   las dos todo el juego, pagando el modelo de puntos dos veces.
+
+   A QUE RITMO. Mientras el profesor camina y habla, el jugador no tiene nada que contestar: la mano
+   no decide nada y ni siquiera hace falta que se vea. Medir 24 veces por segundo para dibujar una
+   mano que no hace nada es el gasto mas facil de sacar que queda, y es la mayor parte del juego —
+   los pasillos son largos. Se baja a un ritmo de reposo y se vuelve al normal en cuanto hay algo que
+   contestar, con margen: si el ritmo subiera recien cuando el jugador ya levanto la mano, el primer
+   gesto de cada aula llegaria tarde.
+   ========================================================================================= */
+const MANO_HZ_REPOSO=8;
+function manoLoQueHaceFalta(){
+  const E=GUION[escena_i];
+  /* una cuenta abierta: dos manos si la respuesta pasa de cinco */
+  if(cuenta && !bloqueo) return { manos:(cuenta.res>5? 2 : 1), activo:true };
+  /* un paso del tutorial que espera un gesto o un numero */
+  if(E && E.espera){
+    const n=(E.espera.tipo==='dedos')? (E.espera.n||1) : 1;
+    return { manos:(n>5? 2 : 1), activo:true };
+  }
+  /* una actividad de pasillo: siempre con una mano */
+  if(bichosVivos>0) return { manos:1, activo:true };
+  /* el aula, aunque todavia no haya libro abierto: en un segundo lo va a haber */
+  if(E && E.clase!=null) return { manos:1, activo:true };
+  return { manos:1, activo:false };
+}
+function manoAjustarPedido(){
+  if(!MANO.on) return;
+  const q=manoLoQueHaceFalta();
+  manoPedirManos(q.manos);
+  MANO.hzTope = q.activo? ((plataf==='movil')? MANO_HZ_MOVIL : MANO_HZ_PC) : MANO_HZ_REPOSO;
+  if(MANO.hz>MANO.hzTope) MANO.hz=MANO.hzTope;
+  else if(q.activo && MANO.hz<MANO_HZ_REPOSO+1) MANO.hz=MANO.hzTope;
+}
+
 function bucle(){
   requestAnimationFrame(bucle);
   const ahora=performance.now();
@@ -5518,6 +5614,47 @@ window.__recreo={
   vigiaVer:()=>({ activo:VIGIA.activo, manual:VIGIA.manual, hecho:VIGIA.hecho, paso:VIGIA.paso,
                   fase:VIGIA.fase, calidad, px:CAL[calidad].px, filtro,
                   entradaChica:!!MANO.entradaChica, hist:VIGIA.hist.slice(-6) }),
+  /* =========================================================================================
+     QUE LE PIDE EL JUEGO AL DETECTOR EN CADA ESCENA
+
+     Es la prueba del ahorro mas grande que quedaba: que en los siete pasillos se mida UNA mano y no
+     dos, que las dos aparezcan solo cuando la respuesta pasa de cinco, y que el ritmo caiga a reposo
+     mientras el profesor camina. Se recorre la partida entera y se anota que se pidio en cada escena.
+     ========================================================================================= */
+  manoPedido:()=>{ manoAjustarPedido();
+    const q=manoLoQueHaceFalta();
+    return { escena:(GUION[escena_i]||{}).id||null, manos:q.manos, activo:q.activo,
+             pedidas:MANO.pedidas, hzTope:MANO.hzTope, cuenta:cuenta? cuenta.res : null }; },
+  /* la partida entera, resumida: cuantas escenas piden dos manos y cuantas van en reposo */
+  manoPedidoPartida:(tope)=>{
+    /* OJO: NO se enciende MANO.on. El jugador automatico contesta por el teclado, y eso solo funciona
+       con las manos apagadas; encenderlas para "probar mejor" cuelga la partida en el tutorial —paso
+       que espera un gesto que nadie va a hacer. Lo que se audita es manoLoQueHaceFalta(), que es una
+       funcion del ESTADO DEL JUEGO y no del detector, asi que se puede preguntar con las manos
+       apagadas y contesta exactamente lo mismo. */
+    empezar();
+    const vistos={}; let pasos=0, dos=0, reposo=0, total=0, act=0;
+    let ult=null;
+    while(!terminado && pasos++<(tope||60000)){
+      const E=GUION[escena_i];
+      if(E && E.espera){ padPedido=(E.espera.tipo==='dedos')? E.espera.n : 1; }
+      else if(cuenta && !bloqueo){ padPedido=cuenta.res; }
+      if(bichosVivos>0){ if(TABLETA.on) tabAuto();
+                         else if(!(pasos%8)){ const g=actPuntoAuto(); if(g) TOQUES.push(g); } }
+      const id=(GUION[escena_i]||{}).id||'fin';
+      const q=manoLoQueHaceFalta();
+      if(id!==ult || (vistos[id] && vistos[id].manos!==q.manos)){
+        if(id!==ult){ ult=id; total++; if(!q.activo) reposo++; else act++; }
+        if(q.manos===2 && !(vistos[id]||{}).dos){ dos++; }
+        vistos[id]={ manos:q.manos, activo:q.activo, dos:q.manos===2 };
+      }
+      avanzar(1/60);
+    }
+    const claves=Object.keys(vistos);
+    return { escenas:total, conDosManos:dos, enReposo:reposo, activas:act,
+             muestra:claves.slice(0,8).reduce((o,k)=>(o[k]={manos:vistos[k].manos,
+                                                           activo:vistos[k].activo},o),{}) };
+  },
   manoRitmo:()=>({ hz:MANO.hz, medidas:MANO.medidas, msDeteccion:+MANO.msDet.toFixed(2),
                    espejo:MANO.espejo, camara:MANO.camaraUsada,
                    ranuras:MANO.ranuras.map(R=>({ hay:R.hay, dedos:R.dedos, lado:R.lado,

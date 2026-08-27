@@ -642,6 +642,47 @@ window.__recreo={
   vigiaVer:()=>({ activo:VIGIA.activo, manual:VIGIA.manual, hecho:VIGIA.hecho, paso:VIGIA.paso,
                   fase:VIGIA.fase, calidad, px:CAL[calidad].px, filtro,
                   entradaChica:!!MANO.entradaChica, hist:VIGIA.hist.slice(-6) }),
+  /* =========================================================================================
+     QUE LE PIDE EL JUEGO AL DETECTOR EN CADA ESCENA
+
+     Es la prueba del ahorro mas grande que quedaba: que en los siete pasillos se mida UNA mano y no
+     dos, que las dos aparezcan solo cuando la respuesta pasa de cinco, y que el ritmo caiga a reposo
+     mientras el profesor camina. Se recorre la partida entera y se anota que se pidio en cada escena.
+     ========================================================================================= */
+  manoPedido:()=>{ manoAjustarPedido();
+    const q=manoLoQueHaceFalta();
+    return { escena:(GUION[escena_i]||{}).id||null, manos:q.manos, activo:q.activo,
+             pedidas:MANO.pedidas, hzTope:MANO.hzTope, cuenta:cuenta? cuenta.res : null }; },
+  /* la partida entera, resumida: cuantas escenas piden dos manos y cuantas van en reposo */
+  manoPedidoPartida:(tope)=>{
+    /* OJO: NO se enciende MANO.on. El jugador automatico contesta por el teclado, y eso solo funciona
+       con las manos apagadas; encenderlas para "probar mejor" cuelga la partida en el tutorial —paso
+       que espera un gesto que nadie va a hacer. Lo que se audita es manoLoQueHaceFalta(), que es una
+       funcion del ESTADO DEL JUEGO y no del detector, asi que se puede preguntar con las manos
+       apagadas y contesta exactamente lo mismo. */
+    empezar();
+    const vistos={}; let pasos=0, dos=0, reposo=0, total=0, act=0;
+    let ult=null;
+    while(!terminado && pasos++<(tope||60000)){
+      const E=GUION[escena_i];
+      if(E && E.espera){ padPedido=(E.espera.tipo==='dedos')? E.espera.n : 1; }
+      else if(cuenta && !bloqueo){ padPedido=cuenta.res; }
+      if(bichosVivos>0){ if(TABLETA.on) tabAuto();
+                         else if(!(pasos%8)){ const g=actPuntoAuto(); if(g) TOQUES.push(g); } }
+      const id=(GUION[escena_i]||{}).id||'fin';
+      const q=manoLoQueHaceFalta();
+      if(id!==ult || (vistos[id] && vistos[id].manos!==q.manos)){
+        if(id!==ult){ ult=id; total++; if(!q.activo) reposo++; else act++; }
+        if(q.manos===2 && !(vistos[id]||{}).dos){ dos++; }
+        vistos[id]={ manos:q.manos, activo:q.activo, dos:q.manos===2 };
+      }
+      avanzar(1/60);
+    }
+    const claves=Object.keys(vistos);
+    return { escenas:total, conDosManos:dos, enReposo:reposo, activas:act,
+             muestra:claves.slice(0,8).reduce((o,k)=>(o[k]={manos:vistos[k].manos,
+                                                           activo:vistos[k].activo},o),{}) };
+  },
   manoRitmo:()=>({ hz:MANO.hz, medidas:MANO.medidas, msDeteccion:+MANO.msDet.toFixed(2),
                    espejo:MANO.espejo, camara:MANO.camaraUsada,
                    ranuras:MANO.ranuras.map(R=>({ hay:R.hay, dedos:R.dedos, lado:R.lado,

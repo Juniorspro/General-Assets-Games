@@ -408,6 +408,70 @@ perdido: `origin` tenía todo.** La regla que queda: cuando algo parezca faltar,
 `origin` con `git fetch` ANTES de sacar conclusiones, y recuperar con
 `git reset --hard origin/<rama>` en vez de rehacer.
 
+### Trigésima primera vuelta (2026-08-27): **RECREO** — el detector deja de trabajar de más
+
+Reporte: *"optimiza la mano, porque eso es lo que laguea cuando aparece; mejoraste un poquito antes de
+esta versión, ahora mejoralo aún más"*.
+
+Y tenía razón en el diagnóstico: **cuando aparece** es la parte importante de la frase. HandLandmarker
+en modo VIDEO tiene **dos** modelos, no uno. El caro es el **detector de palma**, que busca la mano en
+el cuadro entero; el barato es el de puntos, que la sigue una vez que ya sabe dónde está. Y el de
+puntos **corre una vez por mano**. Sin una mano en cuadro sólo hay búsqueda; con la mano aparecen los
+dos, y con dos manos el de puntos se paga doble.
+
+Las vueltas anteriores atacaron *cada cuánto* se mide. Ésta ataca **cuánto trabajo se pide en cada
+medición**, que era donde quedaba lo grande — y estaba escrito como tres constantes.
+
+#### 1. `numHands: 2` PARA TODO EL JUEGO, CUANDO CASI NADA NECESITA DOS
+
+Era una constante puesta cuando el juego era sólo contar dedos: cuatro más cuatro son ocho, y ocho
+dedos son las dos manos. Pero desde entonces el juego tiene **siete actividades de pasillo** y
+**ninguna** necesita dos manos: la pinza, el arrastre y el dibujo se hacen con una. Se estaba pagando
+el modelo de puntos dos veces en todos los pasillos para nada.
+
+Ahora el número se lo pide el juego a la escena. Auditada la partida entera: **44 escenas, y sólo 15
+momentos piden dos manos** — los que tienen una cuenta cuya respuesta pasa de cinco, porque seis dedos
+no entran en una mano. De las 24 cuentas, 14 pasan de cinco. Todo lo demás va con una.
+Y **se cambia en los bordes de escena, nunca por cuadro**: `setOptions` rearma el grafo del detector,
+así que llamarlo seguido costaría más de lo que ahorra.
+
+#### 2. LOS UMBRALES BAJAN, Y NO ES PARA DETECTAR MEJOR: ES PARA DETECTAR MENOS VECES
+
+En modo VIDEO el detector de palma **no corre siempre**: corre cuando el seguimiento se cae por debajo
+de `minTrackingConfidence`. O sea que un umbral alto no da más precisión — da **más veces que se vuelve
+a buscar la mano de cero**, que es justo lo caro. Bajado a 0,40, el seguimiento se sostiene más y el
+modelo caro entra menos. El riesgo de sostener una mano que ya no está lo cubre la caducidad de 260 ms,
+que ya estaba.
+
+#### 3. 320×240 ERAN PÍXELES QUE SE COPIABAN PARA TIRARLOS
+
+Los modelos tienen entrada fija y chica —el de palma trabaja alrededor de 192 px de lado y el de puntos
+alrededor de 224—, así que todo lo que se le mande por encima **se achica antes de mirarlo**. Bajar a
+**256×192** son 1,56 veces menos píxeles que mover en cada medición, sin perder detalle que el modelo
+fuera a usar.
+
+#### 4. Y MIENTRAS EL PROFESOR CAMINA, LA MANO NO DECIDE NADA
+
+Los pasillos son largos y ahí no hay nada que contestar. Medir 24 veces por segundo para dibujar una
+mano que no hace nada era el gasto más fácil que quedaba, y es **la mayor parte del juego**: medido,
+**26 de las 44 escenas (59 %) están en reposo**. Ahí el ritmo baja a 8 Hz y vuelve al normal en cuanto
+hay algo que contestar — con margen, porque si subiera recién cuando el jugador ya levantó la mano, el
+primer gesto de cada aula llegaría tarde.
+
+#### MEDIDO AL CERRAR
+
+Auditoría de la partida entera: 44 escenas, 15 momentos con dos manos, 26 en reposo. Verificado escena
+por escena: `saludo` 1 mano y 8 Hz · `act2` (pasillo) 1 mano y 24 Hz · `viaje3` 1 mano y 8 Hz · una
+cuenta que da 6 → **2 manos pedidas**. Partida completa **24 de 24** dos veces —limpia y después de
+morir—, 0 pasos dentro de paredes en 19.752, `window.__errs` vacío, diagonal perfecta en el puntuador
+de la tableta, las tres pruebas de reparto de manos en verde.
+
+**Lo que no pude verificar, y es lo mismo de siempre:** no hay cámara ni MediaPipe de verdad en el
+banco, así que lo medido es *qué le pide el juego al detector*, no cuántos milisegundos ahorra eso en
+un teléfono. Las tres primeras cosas son estructurales —la mitad de trabajo del modelo de puntos en
+los pasillos, menos corridas del modelo caro y 1,56 veces menos píxeles de entrada— pero el número
+final sólo lo dice el aparato.
+
 ### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
 
 Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo
