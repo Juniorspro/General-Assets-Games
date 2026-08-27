@@ -372,45 +372,6 @@ const huecoMalla=new THREE.InstancedMesh(rompeGeo,
 huecoMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 huecoMalla.frustumCulled=false; huecoMalla.visible=false; escena.add(huecoMalla);
 
-/* ---------- EL MUNDO NEON: LOS BLOQUES Y LA ESPADA ----------
-   Los bloques van con material BASICO por la misma razon que las piezas y por una mas: en el mundo
-   neon no hay luz. Un Lambert sin luz es negro, asi que lo unico que puede brillar es lo que trae su
-   color puesto. */
-const BLOQUE_MAX=12;
-const bloqueGeo=(()=>{
-  /* el cubo mas un marco apenas mas grande: el marco es lo que le da el borde encendido que hace que
-     se lea a neon y no a caja de color */
-  const ps=[];
-  const c=new THREE.BoxGeometry(0.52,0.52,0.52); ps.push(c);
-  const m=new THREE.BoxGeometry(0.60,0.60,0.10); ps.push(m);
-  const pl=ps.map(g=>g.index? g.toNonIndexed() : g);
-  const g=mergeGeometries(pl,false); for(const q of ps) q.dispose(); return g;
-})();
-const bloqueMalla=new THREE.InstancedMesh(bloqueGeo,
-  new THREE.MeshBasicMaterial({color:0xffffff}), BLOQUE_MAX);
-bloqueMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-bloqueMalla.frustumCulled=false; bloqueMalla.visible=false; escena.add(bloqueMalla);
-bloqueMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(BLOQUE_MAX*3), 3);
-bloqueMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);
-
-/* LA ESPADA. Dos, porque en el ultimo pasillo hay una por mano. */
-const espadaGeo=(()=>{
-  const ps=[];
-  /* LAS PROPORCIONES SE CORRIGIERON MIRANDO: con la hoja en 0,90 y la guarda en 0,20 —o sea la
-     guarda casi cuatro veces mas ancha que la hoja— y ademas con la espada escorzada hacia adentro
-     de la pantalla, lo que se veia no era una espada sino un MARTILLO: un palo corto con un travesaño
-     gordo arriba. La hoja se alarga a 1,25 y la guarda se angosta a 0,13. */
-  const h=new THREE.BoxGeometry(0.062,0.062,1.25); h.translate(0,0,-0.70); ps.push(h);  // la hoja
-  const g2=new THREE.BoxGeometry(0.13,0.042,0.05); ps.push(g2);                          // la guarda
-  const p=new THREE.BoxGeometry(0.055,0.055,0.18); p.translate(0,0,0.10); ps.push(p);    // el puño
-  const pl=ps.map(g=>g.index? g.toNonIndexed() : g);
-  const g=mergeGeometries(pl,false); for(const q of ps) q.dispose(); return g;
-})();
-const espadaMalla=new THREE.InstancedMesh(espadaGeo,
-  new THREE.MeshBasicMaterial({color:0x9ef7ff}), 2);
-espadaMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-espadaMalla.frustumCulled=false; espadaMalla.visible=false; escena.add(espadaMalla);
-
 /* ---------- LOS GLOBOS ---------- */
 const GLOBO_MAX=7;
 const globoGeo=(()=>{
@@ -427,59 +388,33 @@ globoMalla.frustumCulled=false; globoMalla.visible=false; escena.add(globoMalla)
 globoMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(GLOBO_MAX*3), 3);
 globoMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);
 
-/* ---------- LA REJILLA DEL MUNDO NEON ----------
-   Un tunel de lineas. Va de lineas y no de cajas porque lo unico que tiene que hacer es dar
-   VELOCIDAD: al venir los bloques hacia vos, las lineas que pasan al costado son lo que dice cuanto
-   te estas moviendo. Con paredes llenas no se nota el avance. */
-const neonGrupo=new THREE.Group(); neonGrupo.visible=false; escena.add(neonGrupo);
-/* SE CONSTRUYE CON EL PISO EN y=0 Y HACIA -Z, y despues se PLANTA en el jugador (ver neonPoner):
-   armado alrededor del origen del mundo, el tunel le quedaba al jugador abajo y de costado, porque el
-   pasillo donde cae la actividad esta a treinta metros del origen. Un tunel que no esta centrado en
-   vos no se lee como un lugar en el que estas parado, se lee como un dibujo suelto en el fondo. */
-(()=>{
-  const pts=[];
-  const L=46, W=3.2, PISO=0.02, TECHO=3.5;
-  for(let k=0;k<=23;k++){                       // los aros del tunel
-    const z=-k*(L/23);
-    pts.push(-W,PISO,z,  W,PISO,z);
-    pts.push(-W,TECHO,z, W,TECHO,z);
-    pts.push(-W,PISO,z, -W,TECHO,z);
-    pts.push( W,PISO,z,  W,TECHO,z);
-  }
-  for(const x of [-W,-W*0.5,0,W*0.5,W]){        // las lineas que corren al fondo
-    pts.push(x,PISO ,0, x,PISO ,-L);
-    pts.push(x,TECHO,0, x,TECHO,-L);
-  }
-  const g=new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pts,3));
-  const l=new THREE.LineSegments(g, new THREE.LineBasicMaterial({color:0x2de3ff, transparent:true,
-                                                                 opacity:0.55}));
-  l.frustumCulled=false; neonGrupo.add(l);
-})();
-/* EL COLEGIO SE APAGA POR LISTA NEGRA Y NO POR LISTA BLANCA, y la diferencia importa: si la lista
-   fuera de lo que hay que apagar, cada malla nueva que se agregue al juego aparecera flotando en el
-   mundo neon y nadie se va a acordar de agregarla. Se apaga TODO lo que estaba encendido y se anota
-   que se apago, asi volver es exacto. */
-/* EL TUNEL SE PLANTA DONDE ESTA EL JUGADOR Y MIRANDO A DONDE MIRA. El rumbo es el mismo que ya se
-   calcula para soltar los bichos —el final del tramo que queda por caminar— asi que el tunel corre
-   en la direccion en la que el pasillo seguia. Y va con +PI porque el tunel esta construido hacia su
-   -Z local, mientras que en este juego un rumbo g apunta a (sin g, cos g), o sea al +Z. */
-function neonPoner(x, z, rumbo){
-  neonGrupo.position.set(x, 0, z);
-  neonGrupo.rotation.y = rumbo + Math.PI;
-}
-let _neonGuardado=null;
-function neonVer(on){
-  if(on && !_neonGuardado){
-    _neonGuardado=[];
-    for(const o of escena.children){
-      if(o===neonGrupo || o===bloqueMalla || o===espadaMalla || o===esqMalla) continue;
-      if(o.isLight) continue;                    // las luces no molestan y apagarlas apagaria las manos
-      if(o.visible){ _neonGuardado.push(o); o.visible=false; }
-    }
-    neonGrupo.visible=true;
-  } else if(!on && _neonGuardado){
-    for(const o of _neonGuardado) o.visible=true;
-    _neonGuardado=null; neonGrupo.visible=false;
-  }
-}
+/* =========================================================================================
+   LA TABLETA CON OJOS: lo que se entrena es DIBUJAR
+
+   Reemplaza a la espada y a los bloques neon, que el jugador saco: "el de los laseres con la espada
+   saca nomas, no me gusta; agrega otros mas simple, como una tableta con ojos donde debes escribir o
+   dibujar algo que te pida, como un circulo, y eso con el pinch".
+
+   TODO SE DIBUJA CON DOS MALLAS Y NADA MAS, y eso no es prolijidad: es la razon por la que esta
+   actividad no cuesta nada. El cuerpo y la pantalla son dos cuadrados instanciados; los ojos, las
+   pupilas, los puntos de la forma pedida y el trazo del jugador son TODOS discos de la misma malla
+   instanciada. Sean cuatro puntos o ciento veinte, son DOS llamadas de dibujo.
+   ========================================================================================= */
+const tabGeo=new THREE.PlaneGeometry(1,1);
+const tabMalla=new THREE.InstancedMesh(tabGeo,
+  new THREE.MeshBasicMaterial({color:0xffffff, side:THREE.DoubleSide}), 2);
+tabMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+tabMalla.frustumCulled=false; tabMalla.visible=false; escena.add(tabMalla);
+tabMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(2*3), 3);
+tabMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);
+
+/* UN SOLO DISCO PARA TODO LO REDONDO. 14 lados y no 24: a estos tamaños en pantalla la diferencia no
+   se ve, y son diez triangulos menos por instancia sobre ciento y pico de instancias. */
+const DISCO_MAX=136;
+const discoGeo=new THREE.CircleGeometry(0.5, 14);
+const discoMalla=new THREE.InstancedMesh(discoGeo,
+  new THREE.MeshBasicMaterial({color:0xffffff, side:THREE.DoubleSide}), DISCO_MAX);
+discoMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+discoMalla.frustumCulled=false; discoMalla.visible=false; escena.add(discoMalla);
+discoMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(DISCO_MAX*3), 3);
+discoMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);

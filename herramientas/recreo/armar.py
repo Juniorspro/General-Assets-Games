@@ -38,6 +38,16 @@ def main():
     vp = os.path.join(RAIZ, 'herramientas', 'recreo', 'voz', 'voz.json')
     voz = io.open(vp, encoding='utf8').read().strip() if os.path.exists(vp) else '{}'
     s = s.replace('__VOZ_JSON__', voz, 1)
+    # EL ARTE DEL MENU. Van como data URI por lo mismo que todo lo demas: el juego se sube como UN
+    # archivo HTML y no puede depender de que un servidor le sirva nada al lado. Los tres suman 41 KB.
+    for clave, arch in (('__MENU_FONDO__',  'menu_fondo.webp'),
+                        ('__MENU_TITULO__', 'menu_titulo.webp'),
+                        ('__MENU_BOTON__',  'menu_boton.webp')):
+        ruta = os.path.join(RAIZ, 'assets', 'recreo', arch)
+        if not os.path.exists(ruta):
+            print('falta', ruta, file=sys.stderr); return 1
+        dat = open(ruta, 'rb').read()
+        s = s.replace(clave, 'data:image/webp;base64,' + base64.b64encode(dat).decode('ascii'))
     # SE ESCRIBE RECIEN CUANDO EL TEXTO ESTA COMPLETO. io.open(p,'w') trunca el archivo ANTES de
     # evaluar lo que se le pasa: una vez un NameError en el argumento me dejo Recreo.html en cero.
     salida = os.path.join(RAIZ, 'juegos-pc', 'Recreo.html')

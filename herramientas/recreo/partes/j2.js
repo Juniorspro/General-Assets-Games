@@ -166,35 +166,44 @@ window.__recreo={
                 rompe:ROMPE.filter(p=>!p.puesta).length, rompeSel,
                 globos:GLOBOS.filter(b=>b.viva && b.verde).length,
                 globosRojos:GLOBOS.filter(b=>b.viva && !b.verde).length,
-                bloques:BLOQUES.filter(b=>b.viva).length,
-                bloquesVerdes:BLOQUES.filter(b=>b.viva && b.verde).length,
-                neon:espMundo, espadas:MANO.espada,
+                tableta:TABLETA.on? { forma:TABLETA.formas[TABLETA.k]||null, k:TABLETA.k,
+                                      total:TABLETA.formas.length, ok:TABLETA.ok,
+                                      trazo:TABLETA.trazo.length, dibujando:TABLETA.dibujando } : null,
                 casillBueno, esquirlas:ESQ.length }),
   /* =========================================================================================
-     EL MUNDO NEON, MEDIDO: que se apago del colegio, que quedo encendido, y donde caen los bloques
-     en PANTALLA — que es la unica coordenada que decide si se pueden cortar.
+     EL PUNTUADOR DE LA TABLETA, PROBADO CON TRAZOS SINTETICOS
+
+     Es la unica forma de probar esto a fondo: un puntuador que solo se prueba jugando bien demuestra
+     que acepta lo correcto, y lo que hay que demostrar ademas es que RECHAZA lo incorrecto. Se le
+     pasan trazos armados a mano —el circulo perfecto, el circulo a medias, la raya cuando pide
+     circulo, el garabato— y se mira el veredicto.
      ========================================================================================= */
-  neonVer2:()=>{
-    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
-    let visibles=0, ocultas=0;
-    for(const o of escena.children){ if(o.isLight) continue; if(o.visible) visibles++; else ocultas++; }
-    return { neon:espMundo, espadas:MANO.espada, marco:[W,H],
-             niebla:[escena.fog.near, escena.fog.far, '#'+escena.fog.color.getHexString()],
-             visibles, ocultas,
-             bloques: BLOQUES.filter(b=>b.viva).map(b=>{
-               const w=bloquePos(b); const s=aPantalla(w[0],w[1],w[2]);
-               return { verde:b.verde, d:+b.d.toFixed(2), enAlcance:b.d<=BL_ALCANCE,
-                        px:[Math.round(s.x*W), Math.round(s.y*H)], delante:s.delante }; }) };
-  },
-  /* los globos, con su color y donde caen en pantalla: el color es la mitad de la actividad, asi que
-     una prueba que no lo devuelva no puede comprobar que reventar el rojo cuesta */
-  globosVer:()=>{
-    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
-    const r=GLOBOS.filter(b=>b.viva).map(b=>{
-      const s=aPantalla(b.x, b.y+Math.sin(b.fase*1.5)*0.12, b.z);
-      return { verde:b.verde, px:[Math.round(s.x*W), Math.round(s.y*H)], delante:s.delante }; });
-    r.marco=[W,H];
-    return r;
+  /* mover el dedo como lo mueve una persona sin camara: es el camino por el que se dibuja */
+  dedo:(x,y,apoya)=>{ DEDO.activo=apoya!==false; DEDO.x=x; DEDO.y=y; return {x:DEDO.x,y:DEDO.y,apoya:DEDO.activo}; },
+  tabPuntuar:(tipo, pts)=>tabPuntuar(tipo, pts),
+  tabMedir:(tipo, pts)=>tabMedir(tipo, pts),
+  tabTrazo:(clase, ruido, sem)=>{
+    /* trazos de mentira en fracciones del marco, con el mismo ruido pseudoaleatorio repetible que
+       usan las otras pruebas */
+    let S=sem||12345;
+    const az=()=>{ S=(S*1103515245+12345)&0x7fffffff; return (S/0x7fffffff*2-1)*(ruido||0); };
+    const cx=0.5, cy=0.44, rx=0.095, ry=0.056;
+    const P=[];
+    if(clase==='circulo')       for(let k=0;k<=26;k++){ const a=k/24*6.2832;
+                                  P.push([cx+Math.cos(a)*rx+az(), cy+Math.sin(a)*ry+az()]); }
+    else if(clase==='medioCirculo') for(let k=0;k<=13;k++){ const a=k/24*6.2832;
+                                  P.push([cx+Math.cos(a)*rx+az(), cy+Math.sin(a)*ry+az()]); }
+    else if(clase==='circuloChico') for(let k=0;k<=26;k++){ const a=k/24*6.2832;
+                                  P.push([cx+Math.cos(a)*0.02+az(), cy+Math.sin(a)*0.014+az()]); }
+    else if(clase==='raya')     for(let k=0;k<=18;k++) P.push([0.26+k/18*0.48+az(), cy+az()]);
+    else if(clase==='rayaCorta') for(let k=0;k<=18;k++) P.push([0.48+k/18*0.10+az(), cy+az()]);
+    else if(clase==='rayaTorcida') for(let k=0;k<=18;k++){ const t=k/18;
+                                  P.push([0.26+t*0.48+az(), cy+Math.sin(t*3.14)*0.075+az()]); }
+    else if(clase==='zigzag')   for(let k=0;k<=26;k++){ const t=k/26;
+                                  P.push([0.26+t*0.48+az(), cy+Math.sin(t*9.42)*0.050+az()]); }
+    else if(clase==='garabato') for(let k=0;k<=26;k++){ const t=k/26;
+                                  P.push([cx+Math.sin(t*31)*0.03+az(), cy+Math.cos(t*27)*0.02+az()]); }
+    return P;
   },
   /* el rompecabezas en fracciones del marco: pieza, hueco y si esta puesta */
   rompeVer:()=>ROMPE.map(p=>({ pieza:[+p.cx.toFixed(3), +p.cy.toFixed(3)],
@@ -210,73 +219,6 @@ window.__recreo={
     MANO.hay=true; MANO.manos=1;
     return { x, y, pinza:!!pinza, k:k||0 };
   },
-  /* =========================================================================================
-     LA PRUEBA DE QUE LA MANO QUEDA CERRADA A LA FUERZA
-
-     Se inyecta una mano ABIERTA de cinco dedos y se mide cuanto se alejan las puntas del centro de
-     la palma, con la espada apagada y encendida. Si el puño forzado funciona, con la espada puesta
-     ese numero tiene que caer mucho AUNQUE la mano inyectada siga abierta — que es literalmente lo
-     que se pidio: "no importa si abris tu mano va a estar cerrada".
-     ========================================================================================= */
-  manoPuno:()=>{
-    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
-    MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
-    manosInyectar([window.__recreo.manoFalsa(5,false,0.5,0.5)], 1000);
-    manosAvanzar(1/60);
-    const R=MANO.ranuras[0];
-    const medir=(L)=>{
-      let cx=0, cy=0;
-      for(const i of [0,5,9,13,17]){ cx+=L[i*3]; cy+=L[i*3+1]; }
-      cx/=5; cy/=5;
-      let s=0;
-      for(const i of [4,8,12,16,20]) s+=Math.hypot(L[i*3]-cx, L[i*3+1]-cy);
-      return s/5;
-    };
-    const abierta=medir(R.sal);
-    const guard=MANO.espada; MANO.espada=1;
-    const cerrada=medir(puñoDe(R));
-    MANO.espada=guard; MANO.pausa=false;
-    return { dedosLeidos:R.dedos, abierta:+abierta.toFixed(4), cerrada:+cerrada.toFixed(4),
-             encogePct:+((1-cerrada/Math.max(1e-9,abierta))*100).toFixed(1) };
-  },
-  /* =========================================================================================
-     LA ESPADA, EN PIXELES. Mirando la primera captura se veia que era enorme, pero "enorme" no es un
-     numero con el que se pueda ajustar nada. Se proyectan el puño y la punta de la hoja y se devuelve
-     el largo EN FRACCION DEL ALTO DEL MARCO, que es lo que decide si tapa el juego: una espada tiene
-     que leerse a espada y dejar ver los bloques, o sea del orden de un tercio del alto, no de dos.
-     ========================================================================================= */
-  espadaVer:()=>{
-    /* manosAvanzar ANTES de dibujar: es el que llena MANO.vivas a partir de las ranuras, y vive en el
-       bucle y no en dibujar(). Sin esta linea el gancho devolvia vivas:0 con la mano inyectada. */
-    if(MANO.on) manosAvanzar(1/60);
-    dibujar(1);
-    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
-    const v=(MANO.vivas||[]);
-    if(!v.length || !MANO.espada) return { espada:MANO.espada, vivas:v.length, hay:false };
-    const m=new THREE.Matrix4(), p=new THREE.Vector3(), q=new THREE.Quaternion(),
-          e=new THREE.Vector3();
-    espadaMalla.getMatrixAt(0, m);
-    m.decompose(p, q, e);
-    /* el puño esta en el origen de la geometria y la punta de la hoja a z=-1,32 en local */
-    const punta=new THREE.Vector3(0,0,-1.32).applyMatrix4(m);
-    const a=aPantalla(p.x,p.y,p.z), b=aPantalla(punta.x,punta.y,punta.z);
-    return { espada:MANO.espada, vivas:v.length, hay:true, escala:+e.x.toFixed(4),
-             largoM:+(1.32*e.x).toFixed(3),
-             puñoPx:[Math.round(a.x*W), Math.round(a.y*H)],
-             puntaPx:[Math.round(b.x*W), Math.round(b.y*H)],
-             largoPx:Math.round(Math.hypot((b.x-a.x)*W,(b.y-a.y)*H)),
-             fraccionAlto:+(Math.hypot((b.x-a.x)*W,(b.y-a.y)*H)/H).toFixed(3), marco:[W,H] };
-  },
-  /* =========================================================================================
-     LA PRUEBA DEL DEFECTO QUE REPORTO EL JUGADOR: "el rompecabezas agarra los de la izquierda
-     cuando mi mano esta a la derecha".
-
-     Se inyecta la MISMA mano con el espejo puesto y sacado, y se compara DONDE SE DIBUJA contra
-     DONDE AGARRA. Si los dos no caen en el mismo sitio, el jugador ve su mano en un lado del marco y
-     el juego agarra en el otro — que es exactamente lo que pasaba con la camara trasera, donde
-     MANO.espejo vale false. No alcanzaba con probar el apuntado: habia que probar que el apuntado y
-     el DIBUJO coinciden, que es la pareja que estaba rota.
-     ========================================================================================= */
   /* poner el espejo a mano: sin camara el banco arranca en true (camara frontal), y el caso que
      rompio —y el que corre en un telefono— es el de la camara TRASERA, o sea false */
   /* =========================================================================================
@@ -625,6 +567,28 @@ window.__recreo={
                              betaZ:OE.betaZ, pred:MANO_PRED, vQ:V_QUIETA, vR:V_RAPIDA,
                              tau:MANO_TAU }; },
   /* cuanto cuesta dibujar las dos manos encima del juego, en milisegundos por cuadro */
+  /* =========================================================================================
+     DONDE SE VA EL TIEMPO CUANDO APARECE LA MANO
+
+     El jugador lo reporto en un aparato de verdad: "en mi Poco X8 Pro me va a 30-25 cuando aparece la
+     mano". Antes de tocar nada hay que saber QUE parte cuesta, porque hay cuatro sospechosos y solo
+     uno se puede medir a ojo. Se corre cada etapa sola, muchas veces, con y sin manos.
+     ========================================================================================= */
+  costoPartes:(n)=>{
+    const v=n||300;
+    const medir=(f)=>{ f(); const t0=performance.now(); for(let k=0;k<v;k++) f();
+                       return +((performance.now()-t0)/v).toFixed(4); };
+    const sinManos={ avanzar:medir(()=>avanzar(1/60)), dibujar:medir(()=>dibujar(1)),
+                     manos3D:medir(()=>manos3DDibujar()), miras:medir(()=>pintarMiras()) };
+    manosInyectar([window.__recreo.manoFalsa(4,false,0.3,0.5),
+                   window.__recreo.manoFalsa(3,true,0.7,0.6)]);
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    manosAvanzar(1/60);
+    const conManos={ avanzar:medir(()=>manosAvanzar(1/60)), dibujar:medir(()=>dibujar(1)),
+                     manos3D:medir(()=>manos3DDibujar()), miras:medir(()=>pintarMiras()) };
+    MANO.pausa=false;
+    return { sinManos, conManos, veces:v };
+  },
   /* cuanto cuesta armar las dos manos 3D, en milisegundos por cuadro */
   manoCosto:(n)=>{
     manosInyectar([window.__recreo.manoFalsa(4,false,0.3,0.5), window.__recreo.manoFalsa(3,true,0.7,0.6)]);
@@ -634,6 +598,23 @@ window.__recreo={
   },
   /* el ritmo real: cuantas mediciones por segundo y cuanto tarda cada una */
   manos3D:()=>manos3DVer(),
+  /* =========================================================================================
+     EL RITMO ADAPTATIVO, PROBADO SIN TELEFONO
+
+     No hay forma de correr MediaPipe de verdad en el banco, pero la decision que hay que probar no es
+     "cuanto tarda el detector" sino "dado lo que tarda, que ritmo elige". Se le inyecta un tiempo de
+     deteccion y se mira el ritmo al que converge: un aparato rapido tiene que quedarse en el tope y
+     uno lento tiene que bajar hasta que la carga del hilo vuelva a estar acotada.
+     ========================================================================================= */
+  manoRitmoProbar:(msDet, tope)=>{
+    const gMs=MANO.msDet, gHz=MANO.hz, gTope=MANO.hzTope;
+    MANO.hzTope=tope||24; MANO.hz=MANO.hzTope; MANO.msDet=msDet;
+    for(let k=0;k<60;k++) manoRitmoAjustar();
+    const r={ msDet, tope:MANO.hzTope, hz:+MANO.hz.toFixed(1),
+              cargaPct:+(MANO.hz*msDet/10).toFixed(1) };
+    MANO.msDet=gMs; MANO.hz=gHz; MANO.hzTope=gTope;
+    return r;
+  },
   manoRitmo:()=>({ hz:MANO.hz, medidas:MANO.medidas, msDeteccion:+MANO.msDet.toFixed(2),
                    espejo:MANO.espejo, camara:MANO.camaraUsada,
                    ranuras:MANO.ranuras.map(R=>({ hay:R.hay, dedos:R.dedos, lado:R.lado,
@@ -677,9 +658,10 @@ window.__recreo={
          pero los bloques del mundo neon vienen a dos metros por segundo y con 8 cuadros de espera se
          pasan de largo entre toque y toque: el jugador automatico perdia la tanda una y otra vez y la
          escena no terminaba nunca. Ahi se apunta todos los cuadros. */
-      if(bichosVivos>0 && !pararEn && (BLOQUES.length? true : !(vueltas%8))){
-        const g=actPuntoAuto();
-        if(g) TOQUES.push(g);
+      if(bichosVivos>0 && !pararEn){
+        /* la tableta se dibuja, no se toca: va por su propio camino y todos los cuadros */
+        if(TABLETA.on) tabAuto();
+        else if(!(vueltas%8)){ const g=actPuntoAuto(); if(g) TOQUES.push(g); }
       }
       const antes=escena_i, aL=libros, mu=muertes;
       avanzar(1/60);
@@ -703,9 +685,9 @@ window.__recreo={
       const E=GUION[escena_i];
       if(E && E.espera){ MANO.on=false; padPedido=(E.espera.tipo==='dedos')? E.espera.n : 1; }
       else if(cuenta && !bloqueo){ MANO.on=false; padPedido=cuenta.res; }
-      if(bichosVivos>0 && (BLOQUES.length? true : !(pasos%8))){
-        const g=actPuntoAuto();
-        if(g) TOQUES.push(g);
+      if(bichosVivos>0){
+        if(TABLETA.on) tabAuto();
+        else if(!(pasos%8)){ const g=actPuntoAuto(); if(g) TOQUES.push(g); }
       }
       avanzar(1/60);
       const c=celda(PROFE.x, PROFE.z);

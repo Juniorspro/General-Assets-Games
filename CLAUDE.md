@@ -249,6 +249,96 @@ de morir—, 0 pasos dentro de paredes en 20.913, `window.__errs` vacío. Aro me
 blanco y 45,32 px en el aire, `hit` verdadero sólo cuando el golpe también pegaría. Costo sin cambios:
 10 llamadas de dibujo y 16.302 triángulos.
 
+### Vigesimonovena vuelta (2026-08-27): **RECREO** — la tableta, el menú con arte y el ritmo que se ajusta solo
+
+Pedido: *"el de los láseres con la espada saca nomás, no me gusta; agrega otros más simple como una
+tableta con ojos donde debes escribir o dibujar algo que te pida como un círculo, y eso con el pinch;
+y mejora el menú, agrega un menú parecido al de Baldi's, y genera las imágenes y botones con
+Higgsfield; mejora la optimización también porque en mi Poco X8 Pro me va a 30-25 cuando aparece la
+mano"*.
+
+#### LA TABLETA CON OJOS REEMPLAZA A LA ESPADA
+
+Se fue entero el mundo neón: los bloques, la espada, el puño forzado, el túnel y su CSS. En su lugar,
+en los pasillos 3 y 7, una tableta que pide una forma y hay que dibujarla con la pinza apoyada como un
+lápiz. Bajar la pinza es apoyar; subirla es levantar, y ahí se corrige.
+
+**Es la segunda actividad que usa la pinza sostenida, y la única que mira el CAMINO.** El rompecabezas
+también arrastra, pero a él sólo le importan dónde agarraste y dónde soltaste; acá lo único que importa
+es lo que quedó dibujado en el medio.
+
+**Y SE CORRIGE SOLA, CON GEOMETRÍA DE TRES LÍNEAS:** el círculo pide radio parejo **y** casi la vuelta
+entera (parejo sin dar la vuelta es un arco; la vuelta sin ser parejo es un garabato); la raya pide que
+ningún punto se aleje de la cuerda; el zigzag pide al menos dos cambios de sentido.
+
+**DOS DEFECTOS DEL PUNTUADOR, LOS DOS ENCONTRADOS POR LA MATRIZ DE PRUEBA** —cada forma contra cada
+regla, que es lo único que demuestra que además de aceptar lo correcto RECHAZA lo incorrecto:
+
+- **Un zigzag pasaba como raya.** Medido, el desvío de un zigzag respecto de su propia cuerda es 0,104
+  —los picos se cancelan porque la cuerda va por el medio— contra 0,075 de una raya temblorosa: tres
+  centésimas de hueco, que no alcanzan para un umbral. Lo que los separa de verdad no es cuánto se
+  desvía sino **cuántas veces cambia de sentido**.
+- **Pero contar cambios comparando con el punto anterior contaba al revés.** Medido: una raya
+  temblorosa daba **cinco** cambios y un zigzag de verdad **tres**, porque el ruido cambia de signo
+  todo el tiempo mientras que un zigzag cambia pocas veces y en grande. Contando contra el último
+  **extremo** con histéresis de 0,045, el ruido no puede acumular: raya limpia 0, raya ruidosa **0**,
+  zigzag **3**. Es detección de picos de toda la vida, e inmune al pulso por construcción y no por un
+  umbral elegido a ojo.
+
+Matriz final: cada forma se acepta **sólo como sí misma**, y medio círculo, círculo chico, raya corta,
+raya torcida y garabato no pasan como nada. Las tres siguen aceptándose con un temblor de ±0,028 del
+marco, que son once píxeles en un teléfono.
+
+**Y LA TABLETA SE ACERCÓ DE 2,7 A 1,7 M** porque en una captura **el profesor quedaba delante de la
+hoja**: él camina el tramo y espera, así que a dos metros y medio su cuerpo tapa justo el área de
+dibujo. Los tamaños no hubo que recalcularlos: están en fracciones del marco.
+
+#### LA OPTIMIZACIÓN: PRIMERO MEDIR CUÁL DE LOS CUATRO SOSPECHOSOS ERA
+
+`costoPartes()` corre cada etapa sola, con y sin manos. El render sube 0,145 ms al aparecer la mano, de
+los cuales el armado de las manos 3D es 0,033 y el aro 0,012: **el resto es lo que se dibuja**. Y la
+cuenta que explica los 25-30 fps del teléfono sin misterio: `detectForVideo()` tarda entre 8 y 20 ms y
+**corre en el hilo principal** —no hay forma de sacarlo, tasks-vision usa `document.createElement`
+adentro y no arranca en un worker—. A 24 Hz eso son entre 190 y 480 ms de cada segundo mirando la mano:
+en el peor caso, **la mitad del hilo**. Los 60 fps no se pierden dibujando, se pierden midiendo.
+
+Dos cambios:
+
+1. **EL RITMO SE AJUSTA SOLO.** Un número fijo de mediciones por segundo no puede estar bien en los dos
+   extremos: 24 le sobra a un teléfono rápido y hunde a uno lento. Lo que sí se puede fijar es **cuánto
+   del hilo se le presta al detector**, y de ahí sale el ritmo. Medido: con 4 y 12 ms se queda en 24 Hz
+   (un aparato rápido no pierde nada); con 20 ms baja a **15 Hz** y con 28 a **12**, dejando la carga
+   acotada en ~30 % en vez de 48 % o 67 %. Y esto **sólo se puede hacer porque la interpolación ya
+   estaba**: medir menos veces no es dibujar menos veces.
+2. **LOS TRIÁNGULOS DE LAS MANOS: 7.080 → 2.680.** De los 7.080, **5.880 eran las 42 esferas de las
+   articulaciones a 10×8 segmentos**. Un nudillo ocupa unos pocos píxeles —y encima el juego dibuja a
+   resolución reducida y estira con NEAREST—, así que 6×5 se ve igual. Es el mismo criterio que decidió
+   los 14 lados de los discos de la tableta.
+
+#### EL MENÚ
+
+Era un panel negro con texto centrado, o sea la pantalla de opciones de cualquier cosa, delante de un
+colegio de 1999 dibujado a propósito con colores planos. **Tres imágenes generadas y nada más, 41 KB
+las tres**: el pasillo de fondo, el logo recortado y una chapa de botón vacía que se estira debajo del
+texto —un botón por imagen serían seis descargas para seis rectángulos iguales, y encima el texto tiene
+que poder traducirse a tres idiomas—.
+
+**El logo salió mal la primera vez y decía "RECEO".** Un modelo de imagen no deletrea a pedido: se
+pidieron tres variantes con la palabra escrita letra por letra en el prompt y se eligió la que estaba
+bien. Y el fondo se recorta con un **relleno desde el borde** y no con un umbral de brillo: el logo
+tiene contorno negro *adentro* de cada letra, y un umbral se los lleva junto con el fondo.
+
+#### MEDIDO AL CERRAR
+
+Partida completa **24 de 24** dos veces —limpia y después de morir—, 0 pasos dentro de paredes en
+19.752, `window.__errs` vacío. Matriz del puntuador con diagonal perfecta. Manos: 21 ms de retardo,
+atenuación 4,10, las tres pruebas de reparto y la del espejo en verde. Costo sin actividad: 10 llamadas
+de dibujo y 16.302 triángulos.
+
+**Lo que no pude verificar:** no tengo el teléfono del jugador, así que el ritmo adaptativo está
+probado por su decisión (dado un tiempo de detección, qué ritmo elige) y no contra MediaPipe corriendo
+de verdad. Si sigue yendo a 25-30, el próximo paso es bajar la entrada del detector de 320×240.
+
 ### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
 
 Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo

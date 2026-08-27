@@ -117,22 +117,22 @@ const TOUR=[1,2,3,4,8,7,6,5];
    que ninguna otra pide:
      1 bichos      → APUNTAR: un blanco que se mueve, pinza encima.
      2 rompecabezas→ ARRASTRAR: agarrar con la pinza SOSTENIDA y soltar en su lugar.
-     3 espada      → CORTAR: barrer la mano por encima, y la mano va cerrada.
+     3 tableta     → DIBUJAR: la forma que pide, con la pinza apoyada como un lapiz.
      4 tizas       → EL TIEMPO: llegar antes de que toque el piso.
      5 casilleros  → ELEGIR: cinco iguales y hay que dar con el que tiembla.
      6 globos      → DISTINGUIR: reventar los verdes y NO los rojos.
-     7 espada dos  → todo junto: dos espadas, y cortar rojo se paga.
+     7 tableta     → dibujar otra vez, con las tres formas.
    Y las siete se juegan con lo mismo: la mano encima del objeto EN LA PANTALLA. Ninguna pide
    estirarse hacia adelante ni acertar una profundidad — eso lo pidio el jugador con todas las letras
    ("la mano no puede ir mas lejos"), y ademas es lo unico que una webcam sola mide bien. */
 const TRAMOS=[ null,
   { tipo:'bichos',     n:3, txt:'dBichos' },
   { tipo:'rompe',      n:4, txt:'dRompe' },
-  { tipo:'espada',     n:6, txt:'dEspada',  espadas:1, rojos:false },
+  { tipo:'tableta',    n:2, txt:'dTableta', formas:['circulo','raya'] },
   { tipo:'tizas',      n:4, txt:'dTizas' },
   { tipo:'casilleros', n:3, txt:'dCasill' },
   { tipo:'globos',     n:5, txt:'dGlobos' },
-  { tipo:'espada',     n:8, txt:'dEspada2', espadas:2, rojos:true } ];
+  { tipo:'tableta',    n:3, txt:'dTableta2', formas:['zigzag','circulo','raya'] } ];
 const TOTAL_CUENTAS=TOUR.length*CUENTAS_AULA;
 
 const GUION=[
@@ -154,7 +154,7 @@ TOUR.forEach((n,k)=>{
        al final de el */
     GUION.push({ id:'viaje'+n, anim:'caminar', txt:'dSale',  viaje:n, mitad:true, aula:n });
     GUION.push({ id:'act'+n,   anim:'quieto',  txt:T.txt, act:T.n, tipo:T.tipo, aula:n,
-                 esp:T.espadas||0, rojos:!!T.rojos });
+                 formas:T.formas||null });
     GUION.push({ id:'sigue'+n, anim:'caminar', txt:'dSale2', viaje:n, resto:true, aula:n });
   } else {
     GUION.push({ id:'viaje'+n,  anim:'caminar', txt:'d7', viaje:n, aula:n });

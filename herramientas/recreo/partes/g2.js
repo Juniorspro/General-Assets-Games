@@ -26,17 +26,42 @@ const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:f
                 unico con lo que se puede apuntar; la TRASERA no, porque ahi la mano ya se ve del
                 lado que esta. Depende de que camara se abrio, no es una constante. */
              espejo:true, camaraUsada:'',
-             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null],
-             /* 0 = mano normal. 1 o 2 = mundo neon: la mano se dibuja CERRADA con una espada, y no
-                importa lo que hagan los dedos de verdad. Lo pidio el jugador con esas palabras: "si
-                o si cerrada con la espada no importa si abris tu mano". */
-             espada:0 };
+             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null] };
 /* CUANTAS VECES POR SEGUNDO SE MIDE, que no es lo mismo que cuantas veces se dibuja.
    24 y no 60: el detector tarda entre 8 y 20 ms por cuadro en un telefono, asi que medir en cada
    cuadro de render es gastar un tercio del presupuesto de 16,6 ms en mirar una mano que apenas se
    movio. Se mide 24 veces por segundo y se INTERPOLA el resto, que es exactamente lo que hace el
    propio juego con su paso fijo de 60 y sus 120 cuadros. */
 const MANO_HZ_MOVIL=24, MANO_HZ_PC=30;
+/* =========================================================================================
+   EL RITMO DE MEDICION SE AJUSTA SOLO AL APARATO
+
+   El jugador lo reporto en uno de verdad: "en mi Poco X8 Pro me va a 30-25 cuando aparece la mano".
+   Y la cuenta explica el numero sin misterio: detectForVideo() tarda entre 8 y 20 ms segun el
+   telefono Y CORRE EN EL HILO PRINCIPAL —no hay forma de sacarlo, porque tasks-vision usa
+   document.createElement adentro y no arranca en un worker—. A 24 Hz eso son entre 190 y 480 ms de
+   cada segundo dedicados a mirar la mano: en el peor caso, la MITAD del hilo. Los 60 fps no se
+   pierden dibujando, se pierden midiendo.
+
+   Un numero fijo de mediciones por segundo no puede estar bien en los dos extremos: 24 le sobra a un
+   telefono rapido y lo hunde a uno lento. Lo que SI se puede fijar es cuanto del hilo se le presta al
+   detector, y de ahi sale el ritmo: hz = carga / lo_que_tarda. Un aparato rapido sube solo hasta el
+   tope y uno lento baja hasta que deja de ahogarse.
+
+   Y ESTO SOLO SE PUEDE HACER PORQUE LA INTERPOLACION YA ESTABA. Medir menos veces no significa
+   dibujar menos veces: entre medicion y medicion los puntos se interpolan y se filtran a 60. Bajar de
+   24 a 14 Hz sin interpolacion seria una mano a saltos; con ella es la misma mano medida menos veces.
+   ========================================================================================= */
+const MANO_CARGA=0.30;        // fraccion del hilo que se le presta al detector, como mucho
+const MANO_HZ_MIN=12;         // por debajo de esto ni la interpolacion lo tapa
+function manoRitmoAjustar(){
+  if(MANO.msDet<=0.5) return;                     // todavia no hay una medida creible
+  const tope = MANO.hzTope || MANO_HZ_MOVIL;
+  const hz = Math.max(MANO_HZ_MIN, Math.min(tope, (1000*MANO_CARGA)/MANO.msDet));
+  /* se mueve DE A POCO. Con el ritmo saltando entre 24 y 12 segun el ultimo cuadro, la mano cambia de
+     suavidad todo el tiempo y eso se nota mas que ir siempre a 14. */
+  MANO.hz = MANO.hz + (hz-MANO.hz)*0.25;
+}
 const MANO_URL='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
 const MANO_WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 /* DOS CDN Y NO UNO. El detector son dos descargas de un tercero, y si ese tercero no contesta el
@@ -209,6 +234,7 @@ async function manosIniciar(){
   if(!MANO.det) return manosFallo('modelo');
   MANO.estado='lista'; MANO.on=true; MANO.error='';
   MANO.hz = (plataf==='movil')? MANO_HZ_MOVIL : MANO_HZ_PC;
+  MANO.hzTope = MANO.hz;                      // el ritmo nunca sube mas alla del de su plataforma
   document.body.classList.add('manos'); document.body.classList.remove('pad');
   pintarCam(); pintarCtrl();
   manosLazo();
@@ -465,6 +491,8 @@ function manosMedir(t){
   try{ r=MANO.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
   MANO.msDet = MANO.msDet*0.8 + (performance.now()-t0)*0.2;
   MANO.medidas++;
+  /* cada veinte mediciones se revisa el ritmo: mas seguido persigue el ruido de una medicion suelta */
+  if(!(MANO.medidas%20)) manoRitmoAjustar();
   const crudas=(r && r.landmarks)? r.landmarks : [];
   const lados=(r && (r.handednesses||r.handedness)) || [];
   manosRepartir(crudas, lados, t);

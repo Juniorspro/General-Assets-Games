@@ -437,15 +437,12 @@ function bichosSoltar(n, rumbo){
 function bichosApagar(){
   BICHOS.length=0; ESQ.length=0; TIZAS.length=0; CASILL.length=0;
   ROMPE.length=0; GLOBOS.length=0; rompeSel=-1;
-  /* EL MUNDO NEON SE DESARMA ACA Y NO EN OTRO LADO. Si el colegio quedara apagado, salir de la
-     actividad por cualquier camino que no sea terminarla —un reintento, una prueba, morir— dejaria
-     al jugador caminando por un pasillo invisible el resto de la partida. */
-  espSalir();
+  tabApagar();
   bichosVivos=0; casillBueno=-1;
   bichoMalla.visible=false; bichoOjos.visible=false; esqMalla.visible=false;
   tizaMalla.visible=false; casillMalla.visible=false;
   rompeMalla.visible=false; huecoMalla.visible=false;
-  globoMalla.visible=false; bloqueMalla.visible=false;
+  globoMalla.visible=false;
   document.body.classList.remove('bichos');
   pintarLibros();
 }
@@ -462,13 +459,13 @@ function actSoltar(tipo, n, rumbo, E){
   else if(tipo==='casilleros') casillSoltar(n, rumbo);
   else if(tipo==='rompe') rompeSoltar(n);
   else if(tipo==='globos') globosSoltar(n, rumbo);
-  else if(tipo==='espada') espEntrar({ n, espadas:(E&&E.esp)||1, rojos:!!(E&&E.rojos) }, rumbo);
+  else if(tipo==='tableta') tabSoltar(n, E&&E.formas);
   else bichosSoltar(n, rumbo);
 }
-function actTick(dt){ bichosTick(dt); tizasTick(dt); casillTick(dt); rompeTick(dt); globosTick(dt);
-                      espTick(dt); }
+function actTick(dt){ bichosTick(dt); tizasTick(dt); casillTick(dt); rompeTick(dt);
+                      globosTick(dt); tabTick(dt); }
 function actDibujar(){ bichosDibujar(); tizasDibujar(); casillDibujar(); rompeDibujar();
-                       globosDibujar(); espDibujar(); }
+                       globosDibujar(); tabDibujar(); }
 /* UN ESTALLIDO SON DOS COSAS: las esquirlas que vuelan Y el bicho que desaparece en el mismo cuadro.
    Con las esquirlas solas se ve un bicho que sigue ahi con basura alrededor. */
 /* las esquirlas las usan las tres actividades: un bicho que revienta, una tiza que se agarra y un
@@ -907,180 +904,285 @@ function rompeDibujar(){
   if(rompeMalla.instanceColor) rompeMalla.instanceColor.needsUpdate=true;
 }
 
+/* EL DEDO QUE ARRASTRA, PARA QUIEN NO TIENE CAMARA. `TOQUES` guarda toques sueltos y con eso alcanza
+   para pinzar un bicho, pero no para dibujar: un dibujo es un camino, no un punto. Se sigue el puntero
+   mientras esta apoyado. Va aca y no en g2.js porque solo la tableta lo usa. */
+const DEDO={ activo:false, x:0, y:0 };
+(function(){
+  const m=document.getElementById('marco'); if(!m) return;
+  const pos=(e)=>{ const r=m.getBoundingClientRect();
+    if(!r.width||!r.height) return null;
+    return { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height }; };
+  m.addEventListener('pointerdown', e=>{ const q=pos(e); if(!q) return;
+    DEDO.activo=true; DEDO.x=q.x; DEDO.y=q.y; }, {passive:true});
+  m.addEventListener('pointermove', e=>{ if(!DEDO.activo) return; const q=pos(e); if(!q) return;
+    DEDO.x=q.x; DEDO.y=q.y; }, {passive:true});
+  for(const ev of ['pointerup','pointercancel','pointerleave'])
+    m.addEventListener(ev, ()=>{ DEDO.activo=false; }, {passive:true});
+})();
+
 /* =========================================================================================
-   PASILLOS 3 Y 7 — EL MUNDO NEON: lo que se entrena es CORTAR
+   PASILLOS 3 Y 7 — LA TABLETA CON OJOS: lo que se entrena es DIBUJAR
 
-   El pedido: "en el tercero tengas una espada y vengan bloques hacia a ti porque te teletransportas
-   a un mundo neon, y tu mano ahi si o si cerrada con la espada, no importa si abris tu mano va a
-   estar cerrada, y debes cortar los bloques verdes; si pierdes se reinicia ese nivel".
+   Reemplaza a la espada y a los bloques del mundo neon, que el jugador saco de una: "el de los
+   laseres con la espada saca nomas, no me gusta; agrega otros mas simple, como una tableta con ojos
+   donde debes escribir o dibujar algo que te pida, como un circulo, y eso con el pinch".
 
-   TRES DECISIONES QUE NO SON OBVIAS:
+   ES LA SEGUNDA ACTIVIDAD QUE USA LA PINZA SOSTENIDA, y la unica que mira el CAMINO que hizo la mano
+   en vez de donde termino. El rompecabezas usa el arrastre para llevar algo de un lado a otro y solo
+   le importan el punto donde agarraste y el punto donde soltaste; aca lo unico que importa es el
+   dibujo que quedo en el medio. Bajar la pinza es apoyar el lapiz, subirla es levantarlo.
 
-   1. NO HAY PINZA ACA, Y ESO ES EL PUNTO. En las otras seis actividades la mano dice "ahora" con la
-      pinza. Con una espada en la mano no hay pinza que hacer —la mano esta cerrada— asi que lo que
-      corta es EL MOVIMIENTO: el camino que la mano recorrio entre este cuadro y el anterior. Es la
-      unica actividad del juego que se juega con velocidad y no con un gesto, y por eso se siente
-      distinta de las otras seis aunque el blanco se juzgue en pantalla igual que en todas.
-
-   2. SE CORTA CONTRA EL SEGMENTO, NO CONTRA EL PUNTO. Ver distSeg() arriba: una mano que barre rapido
-      salta 30 o 40 pixeles por cuadro, asi que juzgar solo con la posicion de este cuadro deja
-      bloques sin cortar aunque la mano les haya pasado por encima — y eso se siente como que el juego
-      no responde, que es lo peor que puede pasar en la actividad mas rapida.
-
-   3. PERDER REINICIA LA ACTIVIDAD, NO LA ESCUELA NI EL AULA. Es lo que se pidio y ademas es lo unico
-      coherente: la muerte con screamer ya existe y es de las cuentas. Aca perder cuesta volver a
-      empezar los bloques, que dura veinte segundos.
+   Y SE CORRIGE SOLA, SIN JURADO. Las tres formas se puntuan con geometria de tres lineas y no con
+   nada que haya que entrenar:
+     circulo → los puntos tienen que estar a una distancia PAREJA de su propio centro, y hay que dar
+               casi la vuelta entera. Las dos cosas juntas: parejo sin dar la vuelta es un arco, y dar
+               la vuelta sin ser parejo es un garabato.
+     raya    → ningun punto se aleja mucho de la recta que une la punta con la punta.
+     zigzag  → la mano tiene que cambiar de sentido vertical al menos dos veces mientras avanza.
    ========================================================================================= */
-const BLOQUES=[];
-const BL_LEJOS=13.0;          // desde donde vienen
-const BL_CERCA=0.9;           // aca ya te pasaron
-const BL_ALCANCE=7.5;         // mas lejos que esto no se puede cortar todavia
-const BL_R=0.115;             // el radio del corte, en fraccion del ancho — un pelo mas que la pinza
-let espMundo=false, espCfg={espadas:1, rojos:false, n:6}, espPrev=[null,null], espDestello=0;
-/* DONDE ESTA PLANTADO EL TUNEL: sirve para poner los bloques ADENTRO de el.
-   El primer intento los repartia por posicion de PANTALLA, que es lo que hacen las demas
-   actividades, y ahi se vio por que aca no sirve: la seccion del tunel se angosta con la distancia,
-   asi que un bloque con la altura de pantalla fija sale POR ARRIBA del techo del tunel apenas se
-   aleja — en la foto los bloques flotaban en el vacio negro de arriba en vez de venir por el pasillo.
-   Se reparten en coordenadas del tunel, que es la unica forma de que esten adentro a cualquier
-   distancia; el corte se sigue juzgando en pantalla, como en todas. */
-let espOrigen={x:0, z:0, g:0};
-function bloquePos(b){
-  const fx=Math.sin(espOrigen.g), fz=Math.cos(espOrigen.g);
-  const rx=Math.cos(espOrigen.g), rz=-Math.sin(espOrigen.g);
-  return [espOrigen.x + rx*b.lx + fx*b.d, b.ly, espOrigen.z + rz*b.lx + fz*b.d];
+const TABLETA={ on:false, formas:[], k:0, trazo:[], dibujando:false, sacud:0, ok:0, t:0 };
+/* 1,7 M Y NO 2,7, y el motivo se vio en una captura: a 2,7 EL PROFESOR QUEDABA DELANTE DE LA HOJA.
+   El camina la ruta entera y espera al final del pasillo, o sea que durante la actividad esta parado
+   en algun lado del tramo — y a dos metros y medio su cuerpo tapa justo el centro del area de dibujo.
+   A 1,7 la tableta esta mas cerca que cualquier cosa del pasillo salvo tus propias manos, que se
+   dibujan a 40 cm y por eso siguen viendose por delante como corresponde.
+   Los tamaños no hay que recalcularlos: estan en fracciones del marco y tamPant() los pasa a metros a
+   la distancia que sea, asi que la tableta ocupa exactamente lo mismo en pantalla que antes. */
+const TAB_D=1.7;                       // a que distancia flota la tableta
+/* todo en FRACCIONES DEL MARCO, y de ahi a metros: asi la tableta ocupa lo mismo en cualquier
+   telefono, que es el defecto que ya habia costado la fila de casilleros y los huecos del
+   rompecabezas */
+const TAB_ANCHO=0.72, TAB_ALTO=0.50, TAB_CX=0.5, TAB_CY=0.40;
+const HOJA_X0=0.22, HOJA_X1=0.78, HOJA_Y0=0.30, HOJA_Y1=0.58;   // donde se puede dibujar
+const TRAZO_MAX=80, GUIA_MAX=40;
+const TRAZO_SEP=0.012;                 // no se guarda un punto si no se movio al menos esto
+function tamPant(frac, dist){ return frac*2*dist*Math.tan(camara.fov*Math.PI/360); }
+/* las tres formas, como lista de puntos en fracciones del marco */
+function formaPuntos(tipo){
+  const cx=(HOJA_X0+HOJA_X1)/2, cy=(HOJA_Y0+HOJA_Y1)/2;
+  const rx=(HOJA_X1-HOJA_X0)*0.34, ry=(HOJA_Y1-HOJA_Y0)*0.40;
+  const P=[];
+  if(tipo==='circulo'){ for(let k=0;k<24;k++){ const a=k/24*6.2832;
+                          P.push([cx+Math.cos(a)*rx, cy+Math.sin(a)*ry]); } }
+  else if(tipo==='raya'){ for(let k=0;k<16;k++) P.push([HOJA_X0+0.06+(k/15)*(HOJA_X1-HOJA_X0-0.12), cy]); }
+  else { for(let k=0;k<25;k++){ const t=k/24;
+           P.push([HOJA_X0+0.06+t*(HOJA_X1-HOJA_X0-0.12), cy+Math.sin(t*9.42)*ry*0.9]); } }
+  return P;
 }
-let _nieblaGuardada=null;
-function espEntrar(cfg, rumbo){
-  espCfg=cfg;
-  if(!espMundo){
-    espOrigen={ x:cam.x, z:cam.z, g:(rumbo!=null)? rumbo : cam.giro };
-    neonPoner(cam.x, cam.z, espOrigen.g);
-    espMundo=true;
-    _nieblaGuardada={ near:escena.fog.near, far:escena.fog.far, col:escena.fog.color.getHex(),
-                      fondo:escena.background.getHex() };
-    /* LA NIEBLA SE CIERRA MUCHO. Es lo que hace de teletransporte sin cambiar de escena: el colegio
-       se apaga por su lado, pero si la niebla siguiera abierta a treinta metros se veria el vacio
-       negro de afuera del mapa y se leeria como un error, no como otro lugar. */
-    escena.fog.color.setHex(0x14001f); escena.fog.near=3; escena.fog.far=26;
-    escena.background.setHex(0x14001f);
-    neonVer(true);
-    MANO.espada=espCfg.espadas||1;
-    document.body.classList.add('neon');
-  }
-  espPrev=[null,null];
-  espSoltar();
-}
-function espSalir(){
-  if(!espMundo) return;
-  espMundo=false; BLOQUES.length=0; MANO.espada=0; espDestello=0;
-  neonVer(false);
-  if(_nieblaGuardada){
-    escena.fog.color.setHex(_nieblaGuardada.col);
-    escena.fog.near=_nieblaGuardada.near; escena.fog.far=_nieblaGuardada.far;
-    escena.background.setHex(_nieblaGuardada.fondo);
-    _nieblaGuardada=null;
-  }
-  document.body.classList.remove('neon');
-  espadaMalla.visible=false;
-}
-/* la tanda entera de bloques. Se llama al entrar Y al perder: reiniciar es exactamente volver a
-   llamar a esto, que es lo que hace que "se reinicia ese nivel" sea una linea y no un caso especial */
-function espSoltar(){
-  BLOQUES.length=0;
-  const n=espCfg.n||6;
-  for(let k=0;k<n;k++){
-    /* repartidos DENTRO del tunel: 2,0 m a cada lado de un tunel que mide 3,2, y entre 0,75 y 2,55
-       de alto en uno que va de 0 a 3,5. El margen no es de adorno — un bloque pegado a la pared del
-       tunel se confunde con las lineas de la pared y deja de leerse como algo que viene hacia vos. */
-    const lx=(((k*0.41)%1)*2-1)*2.0;
-    const ly=0.75+((k*0.57)%1)*1.80;
-    /* los rojos NO son la mitad: son uno de cada tres. Con la mitad rojos, barrer la mano deja de ser
-       una opcion y la actividad se vuelve otra cosa —esperar quieto— que es lo contrario de lo que
-       tiene que entrenar. */
-    const verde = espCfg.rojos? ((k%3)!==2) : true;
-    BLOQUES.push({ lx, ly, d:BL_LEJOS+k*2.6, vel:2.2+((k*0.31)%0.9), verde, viva:true, giro:k*0.7 });
-  }
-  bichosVivos=BLOQUES.filter(b=>b.verde).length;
+function tabSoltar(n, formas){
+  TABLETA.on=true; TABLETA.k=0; TABLETA.trazo.length=0; TABLETA.dibujando=false;
+  TABLETA.sacud=0; TABLETA.ok=0; TABLETA.t=0;
+  TABLETA.formas=(formas||['circulo','raya','zigzag']).slice(0, Math.max(1,n||2));
+  bichosVivos=TABLETA.formas.length;
   son('bicho'); document.body.classList.add('bichos'); pintarLibros();
+  dice('dTabPide', {f:TX('f_'+TABLETA.formas[0])});
 }
-function espPerder(){
-  son('mal'); son('muerde');
-  espDestello=1;
-  dice('dPierde');
-  espSoltar();
+function tabApagar(){
+  TABLETA.on=false; TABLETA.formas.length=0; TABLETA.trazo.length=0; TABLETA.dibujando=false;
+  tabMalla.visible=false; discoMalla.visible=false;
 }
-function espTick(dt){
-  if(!BLOQUES.length) return;
-  if(espDestello>0) espDestello=Math.max(0, espDestello-dt*2.2);
-  const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
-  /* los bloques se acercan */
-  for(const b of BLOQUES){
-    if(!b.viva) continue;
-    b.d -= b.vel*dt; b.giro += dt*1.1;
-    if(b.d<=BL_CERCA){
-      b.viva=false;
-      /* UN VERDE QUE SE PASA ES PERDER; un rojo que se pasa es lo correcto y no cuesta nada */
-      if(b.verde){ espPerder(); return; }
-    }
+/* la punta con la que se dibuja: la pinza de la primera mano, o el dedo de quien no tiene camara */
+function tabPunta(){
+  if(MANO.on && MANO.pinzas && MANO.pinzas.length){
+    const m=MANO.pinzas[0];
+    return { x:m.x, y:m.y, apoya:m.pinza };
   }
-  /* el corte: el camino que hizo cada mano entre el cuadro anterior y este */
-  const caminos=[];
-  if(MANO.on && MANO.pinzas){
-    for(const m of MANO.pinzas){
-      if(m.k>=(espCfg.espadas||1)) continue;      // con una sola espada, solo la primera mano corta
-      const a=espPrev[m.k];
-      caminos.push({ ax:(a? a[0] : m.px), ay:(a? a[1] : m.py), bx:m.px, by:m.py });
-      espPrev[m.k]=[m.px, m.py];
+  if(DEDO.activo) return { x:DEDO.x, y:DEDO.y, apoya:true };
+  return null;
+}
+function tabTick(dt){
+  if(!TABLETA.on) return;
+  TABLETA.t+=dt;
+  if(TABLETA.sacud>0) TABLETA.sacud=Math.max(0, TABLETA.sacud-dt*3);
+  /* los toques sueltos no sirven para dibujar: se descartan para que no se acumulen y para que no los
+     agarre otra actividad despues */
+  TOQUES.length=0;
+  const p=tabPunta();
+  if(!p){ if(TABLETA.dibujando) tabCerrar(); return; }
+  if(p.apoya){
+    /* solo se dibuja DENTRO de la hoja: si se aceptaran puntos de todo el marco, mover la mano para
+       acomodarse antes de empezar ya contaria como parte del dibujo */
+    const dentro = p.x>HOJA_X0-0.04 && p.x<HOJA_X1+0.04 && p.y>HOJA_Y0-0.04 && p.y<HOJA_Y1+0.04;
+    if(!dentro){ if(TABLETA.dibujando) tabCerrar(); return; }
+    if(!TABLETA.dibujando){ TABLETA.dibujando=true; TABLETA.trazo.length=0; son('libro'); }
+    const u=TABLETA.trazo[TABLETA.trazo.length-1];
+    if(!u || Math.hypot(p.x-u[0], p.y-u[1])>TRAZO_SEP){
+      if(TABLETA.trazo.length<TRAZO_MAX) TABLETA.trazo.push([p.x, p.y]);
     }
-  }
-  /* y el camino sin camara: un toque corta el bloque que tenga debajo */
-  while(TOQUES.length){ const g=TOQUES.shift(); caminos.push({ax:g.x, ay:g.y, bx:g.x, by:g.y}); }
-  if(!caminos.length) return;
-  for(const c of caminos){
-    let mejor=-1, mejorD=BL_R*W;
-    for(let k=0;k<BLOQUES.length;k++){
-      const b=BLOQUES[k];
-      if(!b.viva || b.d>BL_ALCANCE) continue;
-      const w=bloquePos(b);
-      const s=aPantalla(w[0], w[1], w[2]);
-      if(!s.delante) continue;
-      const d=distSeg(s.x*W, s.y*H, c.ax*W, c.ay*H, c.bx*W, c.by*H);
-      if(d<mejorD){ mejorD=d; mejor=k; }
-    }
-    if(mejor<0) continue;
-    const b=BLOQUES[mejor]; b.viva=false;
-    const w=bloquePos(b);
-    esquirlasSoltar(w[0], w[1], w[2], 10);
-    if(b.verde){ bichosVivos=Math.max(0, bichosVivos-1); son('revienta'); pintarLibros(); }
-    else { espPerder(); return; }                 // cortar un rojo es perder
+  } else if(TABLETA.dibujando) tabCerrar();
+}
+/* se levanto el lapiz: se puntua */
+function tabCerrar(){
+  TABLETA.dibujando=false;
+  const T=TABLETA.trazo;
+  if(T.length<6){ TABLETA.trazo.length=0; return; }   // un toque no es un dibujo
+  if(tabPuntuar(TABLETA.formas[TABLETA.k], T)){
+    TABLETA.ok++; bichosVivos=Math.max(0, bichosVivos-1);
+    son('revienta'); son('bien');
+    const w=deSPantalla(TAB_CX, TAB_CY, TAB_D);
+    esquirlasSoltar(w[0], w[1], w[2], 8);
+    TABLETA.k++; TABLETA.trazo.length=0;
+    pintarLibros();
+    if(TABLETA.k<TABLETA.formas.length) dice('dTabPide', {f:TX('f_'+TABLETA.formas[TABLETA.k])});
+  } else {
+    /* NO SE PIERDE NADA AL ERRAR. Un dibujo a mano alzada con una camara no es una respuesta con
+       una sola forma correcta: castigarlo seria castigar al detector. Se sacude y se borra. */
+    TABLETA.sacud=1; son('mal'); dice('dTabNo');
+    TABLETA.trazo.length=0;
   }
 }
-function espDibujar(){
-  const hay=BLOQUES.some(b=>b.viva);
-  bloqueMalla.visible=hay;
-  if(!hay) return;
-  let k=0;
-  for(const b of BLOQUES){
-    if(!b.viva || k>=BLOQUE_MAX) continue;
-    const w=bloquePos(b);
-    _be.set(b.giro*0.4, b.giro, b.giro*0.25); _bq.setFromEuler(_be);
-    _bm.compose(_bv.set(w[0],w[1],w[2]), _bq, _bs.set(1,1,1));
-    bloqueMalla.setMatrixAt(k, _bm);
-    /* SE ENCIENDEN AL ENTRAR EN ALCANCE. Con brillo fijo no hay forma de saber cuando ya se puede
-       cortar uno, y llegar antes de tiempo no hace nada: la mano barre y el bloque sigue ahi. */
-    const f = b.d>BL_ALCANCE? 0.42 : 1.0;
-    /* mismo cuidado que con los globos: en lineal, para que el verde sea VERDE y no menta */
-    if(b.verde) _bc.setRGB(0.05*f, 1.0*f, 0.20*f); else _bc.setRGB(1.0*f, 0.02*f, 0.09*f);
-    bloqueMalla.setColorAt(k, _bc);
-    k++;
+/* =========================================================================================
+   LA PUNTUACION. Tres formas, tres reglas, y todas en fracciones del marco.
+   ========================================================================================= */
+/* CUANTAS VECES LA MANO CAMBIO DE SENTIDO VERTICAL. Lo usan las dos: el zigzag pide al menos dos y la
+   raya pide como mucho uno. Escrito una vez, porque son la MISMA pregunta con el signo cambiado —y si
+   fueran dos cuentas distintas podrian contestar cosas incompatibles sobre el mismo trazo.
+   El umbral de 0,02 es lo que separa un cambio de sentido del pulso: sin el, un trazo recto cuenta
+   veinte cambios porque una mano nunca esta perfectamente quieta. */
+const TAB_HIST=0.045;
+function tabCambios(T){
+  /* CON HISTERESIS Y CONTRA EL EXTREMO, NO CONTRA EL PUNTO ANTERIOR. La primera version comparaba
+     cada punto con el anterior y descartaba los saltos menores a 0,02; medido, eso le daba a una RAYA
+     temblorosa CINCO cambios de sentido y a un zigzag de verdad solo TRES — o sea que contaba al
+     reves de lo que hace falta, porque el ruido cambia de signo todo el tiempo mientras que un zigzag
+     cambia pocas veces y en grande.
+     Contando contra el ultimo EXTREMO y exigiendo que la mano vuelva 0,045 hacia atras para que
+     cuente, el ruido no puede acumular: por chico que sea el paso, si el recorrido total en contra no
+     llega a la histeresis no hay cambio. Es deteccion de picos de toda la vida, y es inmune al pulso
+     por construccion en vez de por umbral elegido a ojo. */
+  let cambios=0, sig=0, ext=T[0][1];
+  for(let k=1;k<T.length;k++){
+    const y=T[k][1];
+    if(sig===0){ if(Math.abs(y-ext)>TAB_HIST){ sig=(y>ext)?1:-1; ext=y; } continue; }
+    if(sig>0){ if(y>ext) ext=y; else if(ext-y>TAB_HIST){ cambios++; sig=-1; ext=y; } }
+    else     { if(y<ext) ext=y; else if(y-ext>TAB_HIST){ cambios++; sig=1;  ext=y; } }
   }
-  for(let q=k;q<BLOQUE_MAX;q++){
+  return cambios;
+}
+/* los numeros con los que se decide, expuestos para poder elegir los umbrales midiendo */
+function tabMedir(tipo, T){
+  const n=T.length;
+  let cx=0, cy=0;
+  for(const q of T){ cx+=q[0]; cy+=q[1]; }
+  cx/=n; cy/=n;
+  let rm=0; const rs=[];
+  for(const q of T){ const r=Math.hypot(q[0]-cx, q[1]-cy); rs.push(r); rm+=r; }
+  rm/=n;
+  let v=0; for(const r of rs) v+=(r-rm)*(r-rm);
+  let giro=0, a0=Math.atan2(T[0][1]-cy, T[0][0]-cx);
+  for(let k=1;k<n;k++){
+    const a=Math.atan2(T[k][1]-cy, T[k][0]-cx);
+    let d=a-a0; while(d>Math.PI) d-=6.2832; while(d<-Math.PI) d+=6.2832;
+    giro+=d; a0=a;
+  }
+  const A=T[0], B=T[n-1];
+  const L=Math.hypot(B[0]-A[0], B[1]-A[1]);
+  let peor=0;
+  for(const q of T) peor=Math.max(peor, distSeg(q[0],q[1], A[0],A[1], B[0],B[1]));
+  let minX=T[0][0], maxX=T[0][0];
+  for(const q of T){ minX=Math.min(minX,q[0]); maxX=Math.max(maxX,q[0]); }
+  return { puntos:n, radioMedio:+rm.toFixed(4), dispersion:+(Math.sqrt(v/n)/Math.max(1e-9,rm)).toFixed(3),
+           giro:+giro.toFixed(2), largo:+L.toFixed(3), desvio:+(peor/Math.max(1e-9,L)).toFixed(3),
+           cambios:tabCambios(T), extension:+(maxX-minX).toFixed(3) };
+}
+function tabPuntuar(tipo, T){
+  const n=T.length;
+  if(tipo==='circulo'){
+    let cx=0, cy=0;
+    for(const q of T){ cx+=q[0]; cy+=q[1]; }
+    cx/=n; cy/=n;
+    let rm=0; const rs=[];
+    for(const q of T){ const r=Math.hypot(q[0]-cx, q[1]-cy); rs.push(r); rm+=r; }
+    rm/=n;
+    if(rm<0.045) return false;                         // demasiado chico para ser un circulo
+    let v=0; for(const r of rs) v+=(r-rm)*(r-rm);
+    const disp=Math.sqrt(v/n)/rm;                      // que tan parejo es el radio
+    /* LA VUELTA SE MIDE SUMANDO LOS SALTOS DE ANGULO CON SIGNO, no el angulo total recorrido: un
+       garabato de ida y vuelta recorre mucho angulo pero no da la vuelta, y sumando con signo se
+       cancela solo. */
+    let giro=0, a0=Math.atan2(T[0][1]-cy, T[0][0]-cx);
+    for(let k=1;k<n;k++){
+      const a=Math.atan2(T[k][1]-cy, T[k][0]-cx);
+      let d=a-a0; while(d>Math.PI) d-=6.2832; while(d<-Math.PI) d+=6.2832;
+      giro+=d; a0=a;
+    }
+    return disp<0.30 && Math.abs(giro)>4.7;            // 4,7 rad = 270 grados
+  }
+  if(tipo==='raya'){
+    const a=T[0], b=T[n-1];
+    const L=Math.hypot(b[0]-a[0], b[1]-a[1]);
+    if(L<0.22) return false;                           // una raya tiene que medir algo
+    let peor=0;
+    for(const q of T) peor=Math.max(peor, distSeg(q[0],q[1], a[0],a[1], b[0],b[1]));
+    /* DOS CONDICIONES Y NO UNA, y la segunda salio de una prueba que fallo: con el desvio solo en
+       0,16, UN ZIGZAG PASABA COMO RAYA. Medido, el desvio de un zigzag respecto de su propia cuerda
+       es 0,104 —los picos se cancelan porque la cuerda va por el medio— contra 0,075 de una raya
+       temblorosa: el hueco entre los dos es de tres centesimas y no alcanza para un umbral.
+       Lo que los separa de verdad no es cuanto se desvia sino CUANTAS VECES cambia de sentido: una
+       raya cambia una vez o ninguna, un zigzag cambia varias. Con las dos condiciones el hueco pasa a
+       ser categorico y el umbral de desvio puede quedar flojo, que es lo que conviene para una mano. */
+    return peor/L < 0.16 && tabCambios(T) <= 1;
+  }
+  /* zigzag: la mano tiene que cambiar de sentido vertical al menos dos veces mientras avanzaba */
+  let minX=T[0][0], maxX=T[0][0];
+  for(const q of T){ minX=Math.min(minX,q[0]); maxX=Math.max(maxX,q[0]); }
+  return tabCambios(T)>=2 && (maxX-minX)>0.24;
+}
+function tabDibujar(){
+  if(!TABLETA.on){ tabMalla.visible=false; discoMalla.visible=false; return; }
+  tabMalla.visible=true; discoMalla.visible=true;
+  _bq.copy(camara.quaternion);
+  const sac=TABLETA.sacud>0? Math.sin(TABLETA.t*40)*0.018*TABLETA.sacud : 0;
+  /* el cuerpo y la pantalla */
+  const cuerpo=deSPantalla(TAB_CX+sac, TAB_CY, TAB_D+0.06);
+  _bm.compose(_bv.set(cuerpo[0],cuerpo[1],cuerpo[2]), _bq,
+              _bs.set(tamPant(TAB_ANCHO,TAB_D)*camara.aspect, tamPant(TAB_ALTO,TAB_D), 1));
+  tabMalla.setMatrixAt(0, _bm);
+  _bc.setRGB(0.06,0.07,0.075); tabMalla.setColorAt(0, _bc);
+  const hoja=deSPantalla((HOJA_X0+HOJA_X1)/2+sac, (HOJA_Y0+HOJA_Y1)/2, TAB_D+0.03);
+  _bm.compose(_bv.set(hoja[0],hoja[1],hoja[2]), _bq,
+              _bs.set(tamPant(HOJA_X1-HOJA_X0,TAB_D)*camara.aspect,
+                      tamPant(HOJA_Y1-HOJA_Y0,TAB_D), 1));
+  tabMalla.setMatrixAt(1, _bm);
+  /* la pantalla se pone ROJA al errar: es el aviso que se ve sin leer nada */
+  if(TABLETA.sacud>0) _bc.setRGB(0.55,0.06,0.06); else _bc.setRGB(0.72,0.80,0.62);
+  tabMalla.setColorAt(1, _bc);
+  tabMalla.instanceMatrix.needsUpdate=true;
+  if(tabMalla.instanceColor) tabMalla.instanceColor.needsUpdate=true;
+
+  let d=0;
+  const poner=(x,y,rFrac,cr,cg,cb,dz)=>{
+    if(d>=DISCO_MAX) return;
+    const w=deSPantalla(x+sac, y, TAB_D-(dz||0));
+    const r=tamPant(rFrac, TAB_D);
+    _bm.compose(_bv.set(w[0],w[1],w[2]), _bq, _bs.set(r,r,1));
+    discoMalla.setMatrixAt(d, _bm);
+    _bc.setRGB(cr,cg,cb); discoMalla.setColorAt(d, _bc);
+    d++;
+  };
+  /* LOS OJOS, que son lo que la vuelve un personaje y no un cartel. Miran a la punta cuando hay una:
+     una tableta que sigue tu mano con la mirada dice "te estoy viendo dibujar" sin una palabra. */
+  const p=tabPunta();
+  for(const ox of [-0.115, 0.115]){
+    const ex=TAB_CX+ox, ey=0.215;
+    poner(ex, ey, 0.052, 0.97,0.97,0.94, 0.05);
+    let dx=0, dy=0;
+    if(p){ dx=Math.max(-1,Math.min(1,(p.x-ex)*5))*0.017; dy=Math.max(-1,Math.min(1,(p.y-ey)*5))*0.017; }
+    poner(ex+dx, ey+dy, 0.024, 0.05,0.05,0.06, 0.07);
+  }
+  /* la forma pedida, en puntitos apagados */
+  const G=formaPuntos(TABLETA.formas[TABLETA.k]||'circulo');
+  const paso=Math.max(1, Math.ceil(G.length/GUIA_MAX));
+  for(let k=0;k<G.length;k+=paso) poner(G[k][0], G[k][1], 0.010, 0.34,0.38,0.30, 0.02);
+  /* y el trazo del jugador, encima */
+  for(const q of TABLETA.trazo) poner(q[0], q[1], 0.016, 0.05,0.06,0.05, 0.04);
+  for(let q=d;q<DISCO_MAX;q++){
     _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
-    bloqueMalla.setMatrixAt(q, _bm);
+    discoMalla.setMatrixAt(q, _bm);
   }
-  bloqueMalla.instanceMatrix.needsUpdate=true;
-  if(bloqueMalla.instanceColor) bloqueMalla.instanceColor.needsUpdate=true;
+  discoMalla.instanceMatrix.needsUpdate=true;
+  if(discoMalla.instanceColor) discoMalla.instanceColor.needsUpdate=true;
 }
 
 /* =========================================================================================
@@ -1196,15 +1298,11 @@ function miraBlanco(g){
     }
     return false;
   }
-  if(BLOQUES.length){
-    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
-    for(const b of BLOQUES){
-      if(!b.viva || b.d>BL_ALCANCE) continue;
-      const w=bloquePos(b); const t=aPantalla(w[0],w[1],w[2]);
-      if(!t.delante) continue;
-      if(Math.hypot((t.x-g.x)*W, (t.y-g.y)*H) < BL_R*W) return true;
-    }
-    return false;
+  if(TABLETA.on){
+    /* en la tableta el aro no dice "hay un blanco": dice EL LAPIZ ESTA SOBRE LA HOJA. Es la misma
+       pregunta desde el punto de vista del jugador —¿lo que hago ahora cuenta?— y es la unica que
+       importa antes de empezar a dibujar. */
+    return g.x>HOJA_X0-0.04 && g.x<HOJA_X1+0.04 && g.y>HOJA_Y0-0.04 && g.y<HOJA_Y1+0.04;
   }
   return false;
 }
@@ -1220,13 +1318,11 @@ function pintarMiras(){
     /* SOLO MIENTRAS HAY ACTIVIDAD. En el aula lo que se hace es contar con los dedos, y ahi un aro
        de punteria no indica nada: es ruido encima del unico momento en que hay que mirar el libro. */
     if(!hayAct || !m){ el.classList.remove('ver'); continue; }
-    /* con la espada la mano va cerrada, asi que el punto es la palma y no la pinza — el mismo que usa
-       espTick() para cortar */
-    const usaPalma=!!MANO.espada;
-    const x=usaPalma? m.px : m.x;
-    const y=usaPalma? m.py : m.y;
+    const x=m.x, y=m.y;
     const hay=miraBlanco({x, y});
-    const rad=(hay? (BLOQUES.length? BL_R : BICHO_R) : MIRA_R)*W;
+    /* sobre la hoja de la tableta el aro NO se abre al radio de un blanco: ahi no hay blanco, hay
+       hoja, y un aro gigante taparia justamente el dibujo que se esta haciendo */
+    const rad=(hay? (TABLETA.on? MIRA_R*1.15 : BICHO_R) : MIRA_R)*W;
     el.style.width=(rad*2)+'px'; el.style.height=(rad*2)+'px';
     el.style.left=(x*100)+'%';
     el.style.top=(y*100)+'%';
@@ -1234,6 +1330,35 @@ function pintarMiras(){
     el.classList.toggle('cerrada', !!m.pinza);
     el.classList.add('ver');
   }
+}
+
+/* =========================================================================================
+   EL JUGADOR AUTOMATICO DE LA TABLETA
+
+   Las otras seis actividades se prueban empujando un TOQUE en el pixel del blanco. Esta no se puede
+   probar asi, porque no hay un pixel: hay un camino. Asi que el automatico recorre la forma pedida
+   moviendo el DEDO —el mismo puntero que usa una persona sin camara— y al terminar lo levanta, que es
+   lo que dispara la puntuacion. La prueba entra por el mismo agujero que el jugador.
+
+   Y VA CON TEMBLOR A PROPOSITO. Trazar la forma exacta probaria que el puntuador acepta una
+   circunferencia perfecta, que es lo unico que una mano NO va a dibujar nunca. Con ruido encima se
+   prueba lo que hace falta: que tolera el pulso de una persona.
+   ========================================================================================= */
+let tabAutoK=0, tabAutoSem=7;
+function tabAuto(){
+  if(!TABLETA.on) return;
+  const G=formaPuntos(TABLETA.formas[TABLETA.k]||'circulo');
+  /* el circulo se cierra: se recorre un pelo mas de la vuelta para que el giro medido pase de 270 */
+  const total = (TABLETA.formas[TABLETA.k]==='circulo')? G.length+3 : G.length;
+  if(tabAutoK>=total+4){ DEDO.activo=false; tabAutoK=0; return; }   // lapiz levantado: puntua
+  if(tabAutoK>=total){ DEDO.activo=false; tabAutoK++; return; }
+  const q=G[tabAutoK%G.length];
+  tabAutoSem=(tabAutoSem*1103515245+12345)&0x7fffffff;
+  const r1=(tabAutoSem/0x7fffffff*2-1)*0.006;
+  tabAutoSem=(tabAutoSem*1103515245+12345)&0x7fffffff;
+  const r2=(tabAutoSem/0x7fffffff*2-1)*0.006;
+  DEDO.activo=true; DEDO.x=q[0]+r1; DEDO.y=q[1]+r2;
+  tabAutoK++;
 }
 
 function actPuntoAuto(){
@@ -1256,19 +1381,10 @@ function actPuntoAuto(){
     const q=ROMPE.find(r=>!r.puesta);
     if(q) return { x:q.cx, y:q.cy };
   }
-  else if(BLOQUES.length){
-    /* solo se puede cortar lo que ya entro en alcance: apuntarle a uno lejano no hace nada, y el
-       jugador automatico se quedaria tocando el aire hasta que el bloque se pase y pierda */
-    let mejor=null;
-    for(const q of BLOQUES){
-      if(!q.viva || !q.verde || q.d>BL_ALCANCE) continue;
-      if(!mejor || q.d<mejor.d) mejor=q;
-    }
-    if(mejor){
-      const w=bloquePos(mejor);
-      const s=aPantalla(w[0],w[1],w[2]);
-      return s.delante? { x:s.x, y:s.y } : null;
-    }
+  else if(TABLETA.on){
+    /* LA TABLETA NO SE JUEGA CON UN TOQUE: hay que DIBUJAR. El jugador automatico no puede apuntar a
+       un punto — tiene que recorrer la forma entera —, asi que esta actividad se avanza desde
+       tabAuto() y aca no hay a donde apuntar. */
     return null;
   }
   if(!p) return null;
