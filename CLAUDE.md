@@ -472,6 +472,57 @@ un teléfono. Las tres primeras cosas son estructurales —la mitad de trabajo d
 los pasillos, menos corridas del modelo caro y 1,56 veces menos píxeles de entrada— pero el número
 final sólo lo dice el aparato.
 
+### Trigésima segunda vuelta (2026-08-27): **RECREO** — el ritmo de reposo estaba al revés
+
+Reporte: *"ok bien, pero ahora la mano va lento y súper lagueada, y el fondo del juego bien"*.
+
+**Era mío y de la vuelta anterior.** Bajé el ritmo de medición a 8 Hz "mientras el profesor camina,
+porque ahí la mano no decide nada". El razonamiento estaba mal y el jugador lo vio en un segundo: **la
+mano se sigue viendo en esas escenas**, y una mano muestreada ocho veces por segundo se ve exactamente
+como lag, decida algo o no. Que el fondo fuera bien y sólo la mano no es la firma exacta de esto: el
+render no cambió, cambió cada cuánto se mide la mano.
+
+Y el número deja poco que discutir. Retardo de seguimiento contra el ritmo:
+
+| ritmo | 24 Hz | 15 | 12 | 10 | 8 | 6 |
+|---|---|---|---|---|---|---|
+| retardo | **21 ms** | 34 | 43 | 52 | **64** | 88 |
+
+A 8 Hz la mano quedaba en **64 ms**, o sea **peor que los 65 ms de los que se había partido dos vueltas
+atrás** — deshaciendo justo lo que se había pedido arreglar.
+
+#### LA REGLA CORRECTA ES LA DE AL LADO
+
+El ritmo de reposo es para cuando **no hay mano en cuadro**, no para cuando el juego no pregunta.
+Sin mano no hay nada que dibujar ni que seguir —y encima es el caso barato, porque sólo corre el
+buscador de palma—, así que mirar diez veces por segundo alcanza de sobra: en cuanto aparece, **la
+misma medición que la encontró sube el ritmo al máximo**. Si hay una mano, el jugador la está usando, y
+va a fondo camine el profesor o no.
+
+Y el tope pasó a decidirse **en la medición y no en el borde de escena**, que era el otro defecto de la
+misma idea: decidido por escena, la mano aparecía y seguía a ritmo de reposo hasta el siguiente cambio.
+
+Tabla de verdad, medida:
+
+| hay mano | la escena pide | ritmo |
+|---|---|---|
+| no | no | 10 |
+| no | sí | 24 |
+| **sí** | **no** | **24** ← la casilla que estaba en 8 |
+| sí | sí | 24 |
+
+**Lo honesto es decir que el ahorro de esa idea era chico y estaba en el lugar equivocado.** Lo que sí
+ahorra de la vuelta anterior sigue en pie y no se tocó: una sola mano en los siete pasillos (la mitad
+del modelo de puntos), los umbrales que hacen que el modelo caro entre menos veces, y 256×192 de
+entrada.
+
+#### MEDIDO AL CERRAR
+
+Retardo de vuelta en **21 ms** con atenuación 4,10. En `viaje3` —pasillo, escena que no pide nada— con
+una mano en cuadro el tope es **24**. Partida completa **24 de 24** dos veces, 0 pasos dentro de
+paredes en 19.752, `window.__errs` vacío, diagonal perfecta en el puntuador y las tres pruebas de
+reparto de manos en verde.
+
 ### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
 
 Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo

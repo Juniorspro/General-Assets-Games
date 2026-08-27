@@ -652,7 +652,23 @@ window.__recreo={
   manoPedido:()=>{ manoAjustarPedido();
     const q=manoLoQueHaceFalta();
     return { escena:(GUION[escena_i]||{}).id||null, manos:q.manos, activo:q.activo,
-             pedidas:MANO.pedidas, hzTope:MANO.hzTope, cuenta:cuenta? cuenta.res : null }; },
+             pedidas:MANO.pedidas, hzTope:MANO.hzTope, tope:manoTope(), hay:MANO.hay,
+             escenaPide:MANO.escenaPide, cuenta:cuenta? cuenta.res : null }; },
+  /* =========================================================================================
+     LA PRUEBA DEL DEFECTO QUE REPORTO EL JUGADOR: "ahora la mano va lento y super lagueada".
+     El ritmo de reposo tiene que valer SOLO cuando no hay mano en cuadro. Con una mano puesta, el
+     tope tiene que ser el maximo aunque la escena no este pidiendo nada.
+     ========================================================================================= */
+  manoToparProbar:()=>{
+    const g={ hay:MANO.hay, pide:MANO.escenaPide };
+    const r=[];
+    for(const hay of [false,true]) for(const pide of [false,true]){
+      MANO.hay=hay; MANO.escenaPide=pide;
+      r.push({ hayMano:hay, escenaPide:pide, tope:manoTope() });
+    }
+    MANO.hay=g.hay; MANO.escenaPide=g.pide;
+    return r;
+  },
   /* la partida entera, resumida: cuantas escenas piden dos manos y cuantas van en reposo */
   manoPedidoPartida:(tope)=>{
     /* OJO: NO se enciende MANO.on. El jugador automatico contesta por el teclado, y eso solo funciona

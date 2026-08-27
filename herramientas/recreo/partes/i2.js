@@ -1637,7 +1637,6 @@ function vigiaSiguiente(){
    contestar, con margen: si el ritmo subiera recien cuando el jugador ya levanto la mano, el primer
    gesto de cada aula llegaria tarde.
    ========================================================================================= */
-const MANO_HZ_REPOSO=8;
 function manoLoQueHaceFalta(){
   const E=GUION[escena_i];
   /* una cuenta abierta: dos manos si la respuesta pasa de cinco */
@@ -1657,9 +1656,10 @@ function manoAjustarPedido(){
   if(!MANO.on) return;
   const q=manoLoQueHaceFalta();
   manoPedirManos(q.manos);
-  MANO.hzTope = q.activo? ((plataf==='movil')? MANO_HZ_MOVIL : MANO_HZ_PC) : MANO_HZ_REPOSO;
-  if(MANO.hz>MANO.hzTope) MANO.hz=MANO.hzTope;
-  else if(q.activo && MANO.hz<MANO_HZ_REPOSO+1) MANO.hz=MANO.hzTope;
+  /* la escena solo APORTA: dice que esta pidiendo algo. Quien decide el ritmo es manoTope(), que
+     mira ademas si hay una mano en cuadro — y si la hay, va a fondo aunque la escena no pida nada. */
+  MANO.escenaPide=q.activo;
+  if(MANO.escenaPide && MANO.hz<(MANO.hzMax||24)) MANO.hz=MANO.hzMax||24;
 }
 
 function bucle(){

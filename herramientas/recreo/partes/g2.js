@@ -29,7 +29,10 @@ const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:f
              hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null],
              /* CUANTAS MANOS SE LE PIDEN AL DETECTOR AHORA MISMO. No es una constante: es lo que el
                 juego necesita en esta escena, y de eso depende buena parte de lo que cuesta. */
-             pedidas:1, entradaChica:false };
+             pedidas:1, entradaChica:false,
+             /* si la escena esta pidiendo algo con la mano. Lo escribe el juego; el ritmo lo combina
+                con si HAY una mano, que es lo que de verdad manda. */
+             escenaPide:false, hzMax:24 };
 /* CUANTAS VECES POR SEGUNDO SE MIDE, que no es lo mismo que cuantas veces se dibuja.
    24 y no 60: el detector tarda entre 8 y 20 ms por cuadro en un telefono, asi que medir en cada
    cuadro de render es gastar un tercio del presupuesto de 16,6 ms en mirar una mano que apenas se
@@ -43,6 +46,28 @@ const MANO_HZ_MOVIL=24, MANO_HZ_PC=30;
    a 256x192 son 1,56 veces menos pixeles que mover en cada medicion y no se pierde detalle que el
    modelo fuera a usar. */
 const MANO_ENT_W=256, MANO_ENT_H=192;
+/* =========================================================================================
+   EL RITMO DE REPOSO ES PARA CUANDO NO HAY NADA QUE SEGUIR, NO PARA CUANDO EL JUEGO NO PREGUNTA
+
+   La vuelta anterior baje el ritmo a 8 Hz "mientras el profesor camina, porque ahi la mano no decide
+   nada". El razonamiento estaba mal y el jugador lo vio en un segundo: "ahora la mano va lento y
+   super lagueada". Y tenia razon — LA MANO SE SIGUE VIENDO en esas escenas, y una mano muestreada
+   ocho veces por segundo se ve exactamente como lag, decida algo o no.
+
+   MEDIDO, el retardo de seguimiento contra el ritmo:
+       24 Hz -> 21 ms · 15 -> 34 · 12 -> 43 · 10 -> 52 · 8 -> 64 · 6 -> 88
+   O sea que a 8 Hz la mano quedaba en 64 ms: PEOR que los 65 ms de los que habiamos partido dos
+   vueltas atras, deshaciendo justo lo que se habia pedido arreglar.
+
+   La regla correcta es la de al lado y es la que se usa ahora: el ritmo de reposo es para cuando NO
+   HAY MANO EN CUADRO. Ahi no hay nada que dibujar ni que seguir, y encima es el caso barato —sin mano
+   solo corre el buscador de palma—; mirar diez veces por segundo alcanza de sobra para notar que
+   aparecio, porque en cuanto aparece la MISMA medicion que la encontro ya sube el ritmo al maximo.
+   Si hay una mano, el jugador la esta usando: va a fondo, camine el profesor o no. */
+const MANO_HZ_REPOSO=10;
+function manoTope(){
+  return (MANO.hay || MANO.escenaPide)? (MANO.hzMax || MANO_HZ_MOVIL) : MANO_HZ_REPOSO;
+}
 
 /* =========================================================================================
    CUANTAS MANOS SE MIDEN, Y POR QUE NO SON SIEMPRE DOS
@@ -303,7 +328,8 @@ async function manosIniciar(){
   if(!MANO.det) return manosFallo('modelo');
   MANO.estado='lista'; MANO.on=true; MANO.error='';
   MANO.hz = (plataf==='movil')? MANO_HZ_MOVIL : MANO_HZ_PC;
-  MANO.hzTope = MANO.hz;                      // el ritmo nunca sube mas alla del de su plataforma
+  MANO.hzMax  = MANO.hz;                      // el techo de esta plataforma
+  MANO.hzTope = MANO.hz;
   document.body.classList.add('manos'); document.body.classList.remove('pad');
   pintarCam(); pintarCtrl();
   manosLazo();
@@ -560,6 +586,12 @@ function manosMedir(t){
   try{ r=MANO.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
   MANO.msDet = MANO.msDet*0.8 + (performance.now()-t0)*0.2;
   MANO.medidas++;
+  /* EL TOPE SE DECIDE ACA Y NO EN EL BORDE DE ESCENA: aca es donde se sabe si hay una mano, y tiene
+     que subir en la MISMA medicion que la encuentra. Decidido por escena, la mano aparecia y seguia
+     yendo a ritmo de reposo hasta el siguiente cambio de escena. */
+  const tope=manoTope();
+  MANO.hzTope=tope;
+  if(MANO.hz<tope) MANO.hz=tope;          // subir es inmediato; bajar lo hace manoRitmoAjustar
   /* cada veinte mediciones se revisa el ritmo: mas seguido persigue el ruido de una medicion suelta */
   if(!(MANO.medidas%20)) manoRitmoAjustar();
   const crudas=(r && r.landmarks)? r.landmarks : [];
