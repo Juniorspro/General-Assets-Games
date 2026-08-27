@@ -26,7 +26,11 @@ const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:f
                 unico con lo que se puede apuntar; la TRASERA no, porque ahi la mano ya se ve del
                 lado que esta. Depende de que camara se abrio, no es una constante. */
              espejo:true, camaraUsada:'',
-             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null] };
+             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null],
+             /* 0 = mano normal. 1 o 2 = mundo neon: la mano se dibuja CERRADA con una espada, y no
+                importa lo que hagan los dedos de verdad. Lo pidio el jugador con esas palabras: "si
+                o si cerrada con la espada no importa si abris tu mano". */
+             espada:0 };
 /* CUANTAS VECES POR SEGUNDO SE MIDE, que no es lo mismo que cuantas veces se dibuja.
    24 y no 60: el detector tarda entre 8 y 20 ms por cuadro en un telefono, asi que medir en cada
    cuadro de render es gastar un tercio del presupuesto de 16,6 ms en mirar una mano que apenas se
@@ -85,8 +89,14 @@ function manoPinzas(lms){
   if(!lms || !lms.length){ MANO.pzPrev=[]; return r; }
   lms.forEach((lm,k)=>{
     const q=manoLeer(lm); if(!q) return;
-    const p4=lm[4], p8=lm[8];
+    const p4=lm[4], p8=lm[8], p9=lm[9];
+    /* SE DEVUELVE TAMBIEN EL CENTRO DE LA PALMA, y no es un dato de mas: con la mano CERRADA —que es
+       como se juega el mundo neon— el punto de la pinza deja de significar nada, porque el pulgar y
+       el indice estan los dos recogidos. La espada cuelga del centro de la palma, que existe con la
+       mano abierta y con la mano cerrada igual. Y va espejado en x por el mismo motivo que el resto:
+       sin el espejo, mover la mano a la derecha mueve la del juego a la izquierda. */
     r.push({ x: 1-(p4.x+p8.x)/2, y: (p4.y+p8.y)/2,
+             px: 1-p9.x, py: p9.y, k,
              pinza:q.pinza, nueva: q.pinza && !MANO.pzPrev[k] });
     MANO.pzPrev[k]=q.pinza;
   });
@@ -205,7 +215,7 @@ async function manosIniciar(){
    abierto en el repositorio de MediaPipe. Un worker que no arranca en la mitad de los telefonos es
    peor que 24 Hz interpolados que arrancan en todos.
    ========================================================================================= */
-const MANO_PRED=45;      // ms de prediccion como maximo: mas que esto y la mano se adelanta y tiembla
+let MANO_PRED=8;         // ms de prediccion como maximo: mas que esto y la mano se adelanta y tiembla
 /* 0,13 EN FRACCION DE CUADRO. Dos munecas mas cerca que esto no son dos manos: una mano abierta mide
    0,25 de ancho, asi que dos munecas a 0,13 estarian una encima de la otra. */
 const MANO_SEP=0.13;
@@ -213,8 +223,8 @@ const MANO_SEP=0.13;
 const MANO_EMPAREJA=0.30;
 /* la prediccion se enciende con la velocidad. Por debajo de V_QUIETA lo unico que se mueve es el
    ruido del detector, y extrapolarlo es amplificarlo. */
-const V_QUIETA=0.00009, V_RAPIDA=0.00045;    // fraccion de cuadro por milisegundo
-let MANO_TAU=0.018;      // constante del suavizado del dibujo, en segundos (ajustable)
+let V_QUIETA=0.00009, V_RAPIDA=0.00045;      // fraccion de cuadro por milisegundo
+let MANO_TAU=0.005;      // constante del suavizado del dibujo, en segundos (ajustable)
 const MANO_CADUCA=260;   // sin medicion nueva por mas de esto, la mano se fue
 const MANO_SALTO=0.22;   // si el objetivo esta mas lejos que esto (en fraccion de pantalla), se salta
 
@@ -273,7 +283,15 @@ function arregloALms(src, dst){
    punto en pantalla (eso lo deciden x e y sobre su rayo) sino el TAMANO del dedo y la escala de la
    mano. Con la z al mismo corte que x e y, la mano quieta latia de grosor. Filtrarla cuatro veces
    mas fuerte no cuesta nada, porque un retardo en la profundidad no se ve. */
-const OE={ fcMin:0.35, beta:3.0, fcD:1.2, fcMinZ:0.10, betaZ:0.6 };
+/* Y LA PIEZA QUE FALTABA PARA PODER ACELERAR SIN QUE VUELVA EL TEMBLOR: UNA ZONA MUERTA EN LA
+   DERIVADA. El 1-euro abre el corte con |derivada|, y con la mano quieta la derivada NO ES CERO: es
+   el ruido del detector dividido por el intervalo, que con 0,004 de ruido a 24 Hz da del orden de
+   0,1 por segundo. O sea que subir beta para que la mano siga rapido tambien multiplica ESE ruido y
+   abre el corte cuando no hay que abrirlo — que es exactamente por que, en el barrido, la atenuacion
+   caia de 3,83 a 3,17 al subir beta. Restandole la zona muerta a |derivada| antes de multiplicar,
+   una derivada de nivel de ruido aporta CERO y una de movimiento real aporta todo: las dos cosas
+   dejan de estar atadas y beta se puede subir sin pagar temblor. */
+const OE={ fcMin:0.35, beta:44.0, fcD:2.4, dz:0.16, fcMinZ:0.10, betaZ:8.8, dzZ:0.16 };
 function oeAlfa(fc, dt){ const tau=1/(2*Math.PI*fc); return 1/(1+tau/dt); }
 /* DOS ETAPAS EN CASCADA, y el numero sale de una cuenta que hay que hacer antes de tocar parametros.
    Un filtro de primer orden con coeficiente alfa atenua el ruido en raiz(alfa/(2-alfa)); con el corte
@@ -286,8 +304,9 @@ function oeAlfa(fc, dt){ const tau=1/(2*Math.PI*fc); return 1/(1+tau/dt); }
 function oePaso(x, d, v, j, dt, ad, esZ){
   const der=(v-x[j])/dt;
   d[j] += ad*(der-d[j]);
-  const fc = esZ? (OE.fcMinZ + OE.betaZ*Math.abs(d[j]))
-                : (OE.fcMin  + OE.beta *Math.abs(d[j]));
+  const mag = esZ? Math.max(0, Math.abs(d[j])-OE.dzZ) : Math.max(0, Math.abs(d[j])-OE.dz);
+  const fc = esZ? (OE.fcMinZ + OE.betaZ*mag)
+                : (OE.fcMin  + OE.beta *mag);
   x[j] += oeAlfa(fc, dt)*(v-x[j]);
   return x[j];
 }

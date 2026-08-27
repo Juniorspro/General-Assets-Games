@@ -85,6 +85,44 @@ for(let i=0;i<MANO_ART;i++) _hp.push(new THREE.Vector3());
    apenas mas claro y frio alcanza para verlo y no rompe la mano. */
 const COL_PIEL=new THREE.Color(0xEDB894), COL_CUENTA=new THREE.Color(0xC8E8A8);
 
+/* =========================================================================================
+   LA MANO CERRADA A LA FUERZA DEL MUNDO NEON
+
+   El pedido fue literal: "tu mano en ese lugar si o si cerrada con la espada, no importa si abris tu
+   mano va a estar cerrada". O sea que ahi los dedos DEJAN DE SER UNA ENTRADA. Y eso no es un capricho
+   de estilo: en el mundo neon lo unico que se pide es barrer la mano por encima de un bloque, asi que
+   si los dedos siguieran contando, abrir la mano sin querer —que pasa todo el tiempo mientras se
+   mueve rapido— cambiaria lo que el juego cree que estas haciendo en medio de un corte.
+
+   COMO SE CIERRA, Y POR QUE ASI. Se toman los puntos de verdad y se ACERCAN AL CENTRO DE LA PALMA:
+   cuanto mas lejos esta la falange del nudillo, mas se recoge. No es la curva anatomica exacta de un
+   puño —para eso habria que rotar cada falange sobre su articulacion— pero al tamano al que se ve una
+   mano en un telefono se lee como un puño cerrado, cuesta una resta por punto, y sobre todo es
+   ESTABLE: no depende de que MediaPipe acierte la flexion de un dedo que esta tapado por los otros,
+   que es justo lo que no acierta cuando la mano esta cerrada.
+
+   Va en el espacio de los puntos y no en el del dibujo, asi la escala de la mano, la palma y la
+   espada salen todas de la misma fuente y no se pueden desincronizar. */
+const _puno=new Float32Array(63);
+const PUNO_K=[1,0.86,0.60,0.42,0.34,   1,0.72,0.46,0.34,   1,0.70,0.44,0.32,
+              1,0.72,0.46,0.34,   1,0.76,0.52,0.40];
+function puñoDe(R){
+  const L=R.sal;
+  /* el centro de la palma: muñeca y los cuatro nudillos */
+  let cx=0, cy=0, cz=0;
+  for(const i of [0,5,9,13,17]){ cx+=L[i*3]; cy+=L[i*3+1]; cz+=L[i*3+2]; }
+  cx/=5; cy/=5; cz/=5;
+  for(let i=0;i<21;i++){
+    const k=PUNO_K[i];
+    _puno[i*3]   = cx + (L[i*3]  -cx)*k;
+    _puno[i*3+1] = cy + (L[i*3+1]-cy)*k;
+    _puno[i*3+2] = cz + (L[i*3+2]-cz)*k;
+  }
+  return _puno;
+}
+const _sv=new THREE.Vector3(), _sd=new THREE.Vector3(), _sm=new THREE.Matrix4();
+const _sq=new THREE.Quaternion(), _ss=new THREE.Vector3(), _sup=new THREE.Vector3(0,0,-1);
+const _sf=new THREE.Vector3();
 function manos3DDibujar(){
   const vivas=(MANO.on && MANO.vivas)? MANO.vivas : null;
   const n=vivas? vivas.length : 0;
@@ -96,13 +134,14 @@ function manos3DDibujar(){
     for(let q=0;q<MANOS_MAX;q++){
       const el=document.getElementById('manoN'+q); if(el) el.classList.remove('ver');
     }
+    espadaMalla.visible=false;
     return;
   }
   /* de pantalla a espacio de camara: media altura visible a la distancia de la mano */
   const tanV=Math.tan(camara.fov*Math.PI/360);
-  let ia=0, ih=0;
+  let ia=0, ih=0, espUsadas=0;
   for(let q=0;q<n && q<MANOS_MAX;q++){
-    const R=vivas[q], L=R.sal;
+    const R=vivas[q], L=MANO.espada? puñoDe(R) : R.sal;
     const z0=L[2];
     for(let i=0;i<MANO_ART;i++){
       const x=MANO.espejo? 1-L[i*3] : L[i*3];
@@ -128,7 +167,7 @@ function manos3DDibujar(){
       _hm.compose(_hp[i], _hq.identity(), _hs.set(r,r,r));
       manoArt.setMatrixAt(ia, _hm);
       const punta=MANO_PUNTAS.indexOf(i);
-      _hc.copy(punta>=0 && R.estirados[punta]? COL_CUENTA : COL_PIEL);
+      _hc.copy((!MANO.espada && punta>=0 && R.estirados[punta])? COL_CUENTA : COL_PIEL);
       manoArt.setColorAt(ia, _hc);
       ia++;
     }
@@ -164,7 +203,49 @@ function manos3DDibujar(){
       _hm.compose(_hv, _hq, _hs.set(r, largo, r));
       manoHue.setMatrixAt(ih++, _hm);
     }
+    /* LA ESPADA SALE DE LA MANO Y APUNTA HACIA DONDE APUNTA LA MANO: de la muñeca al nudillo del
+       medio. Girando la muñeca gira la hoja, que es lo unico que hace que se sienta una espada y no
+       un puntero. Se ancla en la palma, o sea en el mismo sitio del que sale el punto con el que se
+       corta: lo que se ve y lo que corta son la misma cosa por construccion. */
+    if(MANO.espada && q<MANO.espada){
+      _sd.subVectors(_hp[9], _hp[0]);
+      if(_sd.lengthSq()>1e-8){
+        _sd.normalize();
+        /* LA HOJA SE INCLINA HACIA ADENTRO DE LA PANTALLA Y NO SIGUE A LA MANO DEL TODO.
+           Apuntando exactamente a donde apunta la mano, la hoja sale VERTICAL —una mano levantada
+           apunta para arriba— y medida daba 1,06 veces el alto del marco: una barra cian que tapaba
+           los bloques que hay que cortar. Mezclada con el frente de la camara, la espada se escorza,
+           deja ver el tunel, y SIGUE girando con la muñeca, que es lo que hace que se sienta tuya. */
+        _sf.set(0,0,-1).applyQuaternion(camara.quaternion);
+        _sd.multiplyScalar(0.55).addScaledVector(_sf, 0.85).normalize();
+        _sq.setFromUnitVectors(_sup, _sd);
+        _sv.copy(_hp[9]).addScaledVector(_sd, 0.05*esc);
+        /* LA ESPADA SE ESCALA CON LA MANO, Y A PROPOSITO NO EN PROPORCION REAL.
+           Primero le puse un piso fijo (max(0,6 · esc)) y salio una cruz cian tapando la pantalla.
+           Despues la calcule "bien", en palmas: una espada mide unas siete palmas, o sea 0,74·esc con
+           esta geometria. MEDIDO, esa version daba una hoja de 0,85 m que en pantalla ocupaba 1,058
+           VECES EL ALTO DEL MARCO — mas larga que la pantalla entera.
+           Y la razon no es un error de cuenta: LA MANO SE DIBUJA A 40 CM DEL OJO. Cualquier cosa
+           pegada a ella y con proporciones de verdad es gigante en el cuadro. Asi que la espada esta
+           deliberadamente sub-escalada: 0,24·esc deja la hoja en un tercio del alto, que se lee a
+           espada y DEJA VER LOS BLOQUES, que es lo unico que la actividad necesita que se vea.
+           El numero final salio de medir dos veces: con la hoja escorzada hacia adentro, 0,24 la
+           dejaba en 0,113 del alto —un cuchillito— y 0,60 la sube a un tercio, que es donde queda. */
+        const e=0.60*esc;
+        _sm.compose(_sv, _sq, _ss.set(e, e, e));
+        espadaMalla.setMatrixAt(q, _sm);
+        espUsadas++;
+      }
+    }
   }
+  if(MANO.espada){
+    for(let q=espUsadas;q<2;q++){
+      _sm.makeScale(0.0001,0.0001,0.0001); _sm.setPosition(0,-90,0);
+      espadaMalla.setMatrixAt(q, _sm);
+    }
+    espadaMalla.visible=espUsadas>0;
+    espadaMalla.instanceMatrix.needsUpdate=true;
+  } else espadaMalla.visible=false;
   /* las instancias que no se usan se esconden en escala cero */
   for(; ia<MANOS_MAX*MANO_ART; ia++){
     _hm.makeScale(0.0001,0.0001,0.0001); _hm.setPosition(0,-90,0);

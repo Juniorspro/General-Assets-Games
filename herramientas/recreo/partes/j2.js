@@ -163,7 +163,112 @@ window.__recreo={
   actVer:()=>({ vivos:bichosVivos, bichos:BICHOS.filter(b=>b.viva).length,
                 tizas:TIZAS.filter(z=>z.viva).length,
                 casilleros:CASILL.filter(c=>!c.abierto).length,
+                rompe:ROMPE.filter(p=>!p.puesta).length, rompeSel,
+                globos:GLOBOS.filter(b=>b.viva && b.verde).length,
+                globosRojos:GLOBOS.filter(b=>b.viva && !b.verde).length,
+                bloques:BLOQUES.filter(b=>b.viva).length,
+                bloquesVerdes:BLOQUES.filter(b=>b.viva && b.verde).length,
+                neon:espMundo, espadas:MANO.espada,
                 casillBueno, esquirlas:ESQ.length }),
+  /* =========================================================================================
+     EL MUNDO NEON, MEDIDO: que se apago del colegio, que quedo encendido, y donde caen los bloques
+     en PANTALLA — que es la unica coordenada que decide si se pueden cortar.
+     ========================================================================================= */
+  neonVer2:()=>{
+    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+    let visibles=0, ocultas=0;
+    for(const o of escena.children){ if(o.isLight) continue; if(o.visible) visibles++; else ocultas++; }
+    return { neon:espMundo, espadas:MANO.espada, marco:[W,H],
+             niebla:[escena.fog.near, escena.fog.far, '#'+escena.fog.color.getHexString()],
+             visibles, ocultas,
+             bloques: BLOQUES.filter(b=>b.viva).map(b=>{
+               const w=bloquePos(b); const s=aPantalla(w[0],w[1],w[2]);
+               return { verde:b.verde, d:+b.d.toFixed(2), enAlcance:b.d<=BL_ALCANCE,
+                        px:[Math.round(s.x*W), Math.round(s.y*H)], delante:s.delante }; }) };
+  },
+  /* los globos, con su color y donde caen en pantalla: el color es la mitad de la actividad, asi que
+     una prueba que no lo devuelva no puede comprobar que reventar el rojo cuesta */
+  globosVer:()=>{
+    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+    const r=GLOBOS.filter(b=>b.viva).map(b=>{
+      const s=aPantalla(b.x, b.y+Math.sin(b.fase*1.5)*0.12, b.z);
+      return { verde:b.verde, px:[Math.round(s.x*W), Math.round(s.y*H)], delante:s.delante }; });
+    r.marco=[W,H];
+    return r;
+  },
+  /* el rompecabezas en fracciones del marco: pieza, hueco y si esta puesta */
+  rompeVer:()=>ROMPE.map(p=>({ pieza:[+p.cx.toFixed(3), +p.cy.toFixed(3)],
+                               hueco:[+p.sx.toFixed(3), +p.sy.toFixed(3)],
+                               dist:+Math.hypot(p.cx-p.sx, p.cy-p.sy).toFixed(3),
+                               puesta:p.puesta, tomada:p.tomada })),
+  /* UNA PINZA SOSTENIDA DE MENTIRA: es la unica forma de probar el ARRASTRE sin camara ni mano. Se
+     inyecta una mano de verdad por las ranuras y despues se le pisa el punto de la pinza, asi el
+     agarre entra por el mismo camino que usa la camara. */
+  manoArrastrar:(x,y,pinza,k)=>{
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.pinzas=[{ x, y, px:x, py:y, k:k||0, pinza:!!pinza, nueva:false }];
+    MANO.hay=true; MANO.manos=1;
+    return { x, y, pinza:!!pinza, k:k||0 };
+  },
+  /* =========================================================================================
+     LA PRUEBA DE QUE LA MANO QUEDA CERRADA A LA FUERZA
+
+     Se inyecta una mano ABIERTA de cinco dedos y se mide cuanto se alejan las puntas del centro de
+     la palma, con la espada apagada y encendida. Si el puño forzado funciona, con la espada puesta
+     ese numero tiene que caer mucho AUNQUE la mano inyectada siga abierta — que es literalmente lo
+     que se pidio: "no importa si abris tu mano va a estar cerrada".
+     ========================================================================================= */
+  manoPuno:()=>{
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
+    manosInyectar([window.__recreo.manoFalsa(5,false,0.5,0.5)], 1000);
+    manosAvanzar(1/60);
+    const R=MANO.ranuras[0];
+    const medir=(L)=>{
+      let cx=0, cy=0;
+      for(const i of [0,5,9,13,17]){ cx+=L[i*3]; cy+=L[i*3+1]; }
+      cx/=5; cy/=5;
+      let s=0;
+      for(const i of [4,8,12,16,20]) s+=Math.hypot(L[i*3]-cx, L[i*3+1]-cy);
+      return s/5;
+    };
+    const abierta=medir(R.sal);
+    const guard=MANO.espada; MANO.espada=1;
+    const cerrada=medir(puñoDe(R));
+    MANO.espada=guard; MANO.pausa=false;
+    return { dedosLeidos:R.dedos, abierta:+abierta.toFixed(4), cerrada:+cerrada.toFixed(4),
+             encogePct:+((1-cerrada/Math.max(1e-9,abierta))*100).toFixed(1) };
+  },
+  /* =========================================================================================
+     LA ESPADA, EN PIXELES. Mirando la primera captura se veia que era enorme, pero "enorme" no es un
+     numero con el que se pueda ajustar nada. Se proyectan el puño y la punta de la hoja y se devuelve
+     el largo EN FRACCION DEL ALTO DEL MARCO, que es lo que decide si tapa el juego: una espada tiene
+     que leerse a espada y dejar ver los bloques, o sea del orden de un tercio del alto, no de dos.
+     ========================================================================================= */
+  espadaVer:()=>{
+    /* manosAvanzar ANTES de dibujar: es el que llena MANO.vivas a partir de las ranuras, y vive en el
+       bucle y no en dibujar(). Sin esta linea el gancho devolvia vivas:0 con la mano inyectada. */
+    if(MANO.on) manosAvanzar(1/60);
+    dibujar(1);
+    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+    const v=(MANO.vivas||[]);
+    if(!v.length || !MANO.espada) return { espada:MANO.espada, vivas:v.length, hay:false };
+    const m=new THREE.Matrix4(), p=new THREE.Vector3(), q=new THREE.Quaternion(),
+          e=new THREE.Vector3();
+    espadaMalla.getMatrixAt(0, m);
+    m.decompose(p, q, e);
+    /* el puño esta en el origen de la geometria y la punta de la hoja a z=-1,32 en local */
+    const punta=new THREE.Vector3(0,0,-1.32).applyMatrix4(m);
+    const a=aPantalla(p.x,p.y,p.z), b=aPantalla(punta.x,punta.y,punta.z);
+    return { espada:MANO.espada, vivas:v.length, hay:true, escala:+e.x.toFixed(4),
+             largoM:+(1.32*e.x).toFixed(3),
+             puñoPx:[Math.round(a.x*W), Math.round(a.y*H)],
+             puntaPx:[Math.round(b.x*W), Math.round(b.y*H)],
+             largoPx:Math.round(Math.hypot((b.x-a.x)*W,(b.y-a.y)*H)),
+             fraccionAlto:+(Math.hypot((b.x-a.x)*W,(b.y-a.y)*H)/H).toFixed(3), marco:[W,H] };
+  },
+  manoSoltarTodo:()=>{ MANO.pinzas=[]; MANO.on=false; MANO.pausa=false; MANO.hay=false;
+                       MANO.manos=0; return true; },
   bichosVer:()=>{
     const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
     return { vivos:bichosVivos, esquirlas:ESQ.length, marco:[W,H],
@@ -303,17 +408,58 @@ window.__recreo={
       manosAvanzar(dtR/1000); t+=dtR;
     }
     const x0=MANO.ranuras[0].sal[0];
-    const t0=t; let ms90=-1;
+    const t0=t; let ms90=-1, pico=0;
+    /* NO SE CORTA AL LLEGAR AL 90%, y eso importa: la prediccion adelanta la salida, asi que un
+       ajuste puede cruzar el 90% antes Y PASARSE DE LARGO. Cortando ahi el sobrepico no se ve, y un
+       sobrepico es exactamente lo que se siente como "la mano rebota". Se corre la ventana entera. */
     for(let c=0;c<200;c++){
       if(t>=proxMed){ manosInyectar([B], t); proxMed+=dtM; }
       manosAvanzar(dtR/1000);
       const x=MANO.ranuras[0].sal[0];
-      if(ms90<0 && Math.abs(x-x0)>=Math.abs(salto)*0.90){ ms90=t-t0; break; }
+      const av=(x-x0)/salto;
+      if(av>pico) pico=av;
+      if(ms90<0 && Math.abs(x-x0)>=Math.abs(salto)*0.90) ms90=t-t0;
       t+=dtR;
     }
     MANO.pausa=false;
     return { salto, hz, ms90: ms90<0? null : +ms90.toFixed(0),
+             sobrepicoPct:+((pico-1)*100).toFixed(1),
              desde:+x0.toFixed(4), hasta:+MANO.ranuras[0].sal[0].toFixed(4) };
+  },
+  /* =========================================================================================
+     LA MEDIDA QUE DE VERDAD CORRESPONDE A "LAS MANOS VAN LENTAS"
+
+     El salto mide un escalon, y una mano no da escalones: se mueve. Lo que el jugador siente es que
+     la mano dibujada va ATRAS de la suya mientras la mueve, y eso es el error de seguimiento en un
+     movimiento sostenido. Se arrastra una mano a velocidad constante por el marco, se mide cuanto
+     queda atras la salida y se divide por la velocidad: el resultado esta EN MILISEGUNDOS, que es
+     lo unico comparable entre ajustes y lo que hay que dividir por tres.
+     ========================================================================================= */
+  manoRampa:(opts)=>{
+    const o=opts||{};
+    const hz=o.hz||24, render=o.render||60;
+    const vel=o.vel==null? 0.55 : o.vel;          // fraccion de marco por segundo
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
+    const F=window.__recreo.manoFalsa;
+    const dtR=1000/render, dtM=1000/hz;
+    let t=1000, proxMed=t, x=0.18;
+    for(let c=0;c<20;c++){                        // asentar quieta
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      manosAvanzar(dtR/1000); t+=dtR;
+    }
+    const errs=[];
+    for(let c=0;c<90;c++){
+      x += vel*dtR/1000;
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      manosAvanzar(dtR/1000);
+      if(c>25) errs.push(x-MANO.ranuras[0].sal[0]);   // los primeros son el arranque, no el regimen
+      t+=dtR;
+    }
+    MANO.pausa=false;
+    const m=errs.reduce((s,v)=>s+v,0)/Math.max(1,errs.length);
+    return { vel, hz, errorMedio:+m.toFixed(5), retardoMs:+(m/vel*1000).toFixed(0),
+             muestras:errs.length };
   },
   /* cuantas detecciones duplicadas se descartaron: si esto sube, MediaPipe esta viendo dos veces la
      misma mano y sin el descarte el conteo de dedos saldria al doble */
@@ -362,8 +508,17 @@ window.__recreo={
   manoFiltro:(o)=>{ if(o){ if(o.fcMin!=null) OE.fcMin=o.fcMin;
                            if(o.beta!=null) OE.beta=o.beta;
                            if(o.fcD!=null) OE.fcD=o.fcD;
+                           if(o.dz!=null) OE.dz=o.dz;
+                           if(o.dzZ!=null) OE.dzZ=o.dzZ;
+                           if(o.fcMinZ!=null) OE.fcMinZ=o.fcMinZ;
+                           if(o.betaZ!=null) OE.betaZ=o.betaZ;
+                           if(o.pred!=null) MANO_PRED=o.pred;
+                           if(o.vQ!=null) V_QUIETA=o.vQ;
+                           if(o.vR!=null) V_RAPIDA=o.vR;
                            if(o.tau!=null) MANO_TAU=o.tau; }
-                    return { fcMin:OE.fcMin, beta:OE.beta, fcD:OE.fcD, tau:MANO_TAU }; },
+                    return { fcMin:OE.fcMin, beta:OE.beta, fcD:OE.fcD, dz:OE.dz, fcMinZ:OE.fcMinZ,
+                             betaZ:OE.betaZ, pred:MANO_PRED, vQ:V_QUIETA, vR:V_RAPIDA,
+                             tau:MANO_TAU }; },
   /* cuanto cuesta dibujar las dos manos encima del juego, en milisegundos por cuadro */
   /* cuanto cuesta armar las dos manos 3D, en milisegundos por cuadro */
   manoCosto:(n)=>{
@@ -413,16 +568,13 @@ window.__recreo={
          el pixel donde cae el blanco. Llamar directo a la funcion que lo revienta no probaria nada de
          lo que puede estar mal, que es la proyeccion, el radio del blanco y —en los casilleros— que
          el que tiembla sea el que se abre. */
-      if(bichosVivos>0 && !(vueltas%8) && !pararEn){
-        let p=null;
-        const b=BICHOS.find(q=>q.viva);
-        const z=TIZAS.find(q=>q.viva && q.espera<=0);
-        if(b) p=[b.x,b.y,b.z];
-        else if(z) p=[z.x,z.y,z.z];
-        else if(casillBueno>=0 && CASILL[casillBueno] && !CASILL[casillBueno].abierto){
-          const c=CASILL[casillBueno]; p=[c.x, c.y+0.35, c.z];
-        }
-        if(p){ const s=aPantalla(p[0],p[1],p[2]); if(s.delante) TOQUES.push({x:s.x, y:s.y}); }
+      /* EL RITMO DEPENDE DE LA ACTIVIDAD. Cada 8 cuadros alcanza para todo lo que espera quieto,
+         pero los bloques del mundo neon vienen a dos metros por segundo y con 8 cuadros de espera se
+         pasan de largo entre toque y toque: el jugador automatico perdia la tanda una y otra vez y la
+         escena no terminaba nunca. Ahi se apunta todos los cuadros. */
+      if(bichosVivos>0 && !pararEn && (BLOQUES.length? true : !(vueltas%8))){
+        const g=actPuntoAuto();
+        if(g) TOQUES.push(g);
       }
       const antes=escena_i, aL=libros, mu=muertes;
       avanzar(1/60);
@@ -446,16 +598,9 @@ window.__recreo={
       const E=GUION[escena_i];
       if(E && E.espera){ MANO.on=false; padPedido=(E.espera.tipo==='dedos')? E.espera.n : 1; }
       else if(cuenta && !bloqueo){ MANO.on=false; padPedido=cuenta.res; }
-      if(bichosVivos>0 && !(pasos%8)){
-        let p=null;
-        const b=BICHOS.find(q=>q.viva);
-        const z=TIZAS.find(q=>q.viva && q.espera<=0);
-        if(b) p=[b.x,b.y,b.z];
-        else if(z) p=[z.x,z.y,z.z];
-        else if(casillBueno>=0 && CASILL[casillBueno] && !CASILL[casillBueno].abierto){
-          const c=CASILL[casillBueno]; p=[c.x, c.y+0.35, c.z];
-        }
-        if(p){ const s=aPantalla(p[0],p[1],p[2]); if(s.delante) TOQUES.push({x:s.x,y:s.y}); }
+      if(bichosVivos>0 && (BLOQUES.length? true : !(pasos%8))){
+        const g=actPuntoAuto();
+        if(g) TOQUES.push(g);
       }
       avanzar(1/60);
       const c=celda(PROFE.x, PROFE.z);

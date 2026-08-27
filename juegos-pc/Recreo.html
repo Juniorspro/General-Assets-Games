@@ -86,6 +86,11 @@
     font-size:max(12px,3.6vw); font-weight:900; letter-spacing:.20em;
     text-shadow:0 2px 0 rgba(0,0,0,.6); display:none; }
   body.clase #libros, body.bichos #libros{ display:block; }
+  /* EL MUNDO NEON TAMBIEN CAMBIA EL HUD. Es un lugar distinto: si el contador siguiera del mismo
+     beige del colegio, el teletransporte se leeria como "le cambiaron el fondo al pasillo" y no como
+     que estas en otro lado. Un cian encendido sobre negro es lo unico que hace falta. */
+  body.neon #libros{ color:#7df9ff; text-shadow:0 0 12px rgba(45,227,255,.9), 0 2px 0 #000; }
+  body.neon #dialogo{ border-color:rgba(125,249,255,.55); }
   /* EL FOGONAZO DEL GRITO. Va en CSS y no en el shader por una razon de costo: son cero triangulos y
      cero uniformes, y ademas tiene que taparlo TODO —el HUD incluido—, que es justo lo que un
      elemento con z-index alto hace y una pasada de render no. Y va A TIRONES y no en desvanecido:
@@ -374,6 +379,21 @@ const L={
  dCasill:{en:'Something is moving in a locker. <b>Open that one</b>.',
           es:'Algo se mueve en un casillero. <b>Abrí ese</b>.',
           pt:'Algo se move num armário. <b>Abra esse</b>.'},
+ dRompe:{en:'A page tore up. <b>Pinch a piece</b>, drag it, drop it in its hole.',
+         es:'Se rompió una hoja. <b>Pellizcá un pedazo</b>, arrastralo y soltalo en su hueco.',
+         pt:'Uma folha rasgou. <b>Belisque um pedaço</b>, arraste e solte no buraco dele.'},
+ dEspada:{en:'Where are we? <b>Your hand is a sword.</b> Cut the GREEN blocks.',
+          es:'¿Dónde estamos? <b>Tu mano es una espada.</b> Cortá los bloques VERDES.',
+          pt:'Onde estamos? <b>Sua mão é uma espada.</b> Corte os blocos VERDES.'},
+ dEspada2:{en:'Again — <b>two swords</b> now. Cut GREEN, never RED.',
+           es:'Otra vez — ahora <b>dos espadas</b>. Cortá VERDE, nunca ROJO.',
+           pt:'De novo — agora <b>duas espadas</b>. Corte VERDE, nunca VERMELHO.'},
+ dGlobos:{en:'Balloons from the fair. <b>Pop the green ones only</b>.',
+          es:'Globos de la feria. <b>Reventá sólo los verdes</b>.',
+          pt:'Balões da feira. <b>Estoure só os verdes</b>.'},
+ dPierde:{en:'One got through. <b>From the top.</b>',
+          es:'Se te pasó uno. <b>De nuevo desde el principio.</b>',
+          pt:'Passou um. <b>De novo desde o começo.</b>'},
  dGrito:{en:'W R O N G', es:'M A L', pt:'E R R A D O'},
  dBien:{en:'That is it!', es:'¡Eso es!', pt:'É isso!'},
  dMal:{en:'No. Look again.', es:'No. Mirá otra vez.', pt:'Não. Olhe de novo.'},
@@ -974,6 +994,149 @@ casillMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(CA
 casillMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);
 
 /* =========================================================================================
+   LO QUE HACE FALTA PARA LAS CUATRO ACTIVIDADES NUEVAS
+
+   Y LA REGLA QUE MANDA SOBRE TODAS, QUE LA PIDIO EL JUGADOR: "la mano no puede ir mas lejos".
+   Nada de esto se juega en profundidad. Todo blanco se PROYECTA A LA PANTALLA y se compara ahi, en
+   fracciones del marco, igual que los bichos del primer pasillo: la mano se pone ENCIMA del objeto
+   en la pantalla y listo. Que las piezas y los bloques sean objetos 3D es solo para que tengan
+   perspectiva y sombra propia; la cuenta que decide si acertaste es siempre en dos dimensiones.
+   ========================================================================================= */
+
+/* ---------- EL ROMPECABEZAS: cuatro pedazos de una hoja arrancada ----------
+   Un cuadrado partido en cuatro. Las piezas van con material BASICO y no Lambert a proposito: una
+   pieza que se agarra y se arrastra tiene que verse igual mientras cruza la pantalla, y con luz
+   difusa cambiaria de tono segun donde este —lo que se leeria como que la pieza cambia, no como que
+   se movio. */
+const ROMPE_MAX=4;
+const rompeGeo=new THREE.PlaneGeometry(1,1);
+const rompeMalla=new THREE.InstancedMesh(rompeGeo,
+  new THREE.MeshBasicMaterial({color:0xffffff, side:THREE.DoubleSide}), ROMPE_MAX);
+rompeMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+rompeMalla.frustumCulled=false; rompeMalla.visible=false; escena.add(rompeMalla);
+rompeMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(ROMPE_MAX*3), 3);
+rompeMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);
+/* LOS HUECOS SE DIBUJAN Y NO SE SUPONEN. Sin el hueco marcado, "ponela en su lugar" no quiere decir
+   nada: el jugador ve cuatro pedazos flotando y ningun sitio donde ponerlos. */
+const huecoMalla=new THREE.InstancedMesh(rompeGeo,
+  new THREE.MeshBasicMaterial({color:0x14130f, transparent:true, opacity:0.68,
+                               side:THREE.DoubleSide}), ROMPE_MAX);
+huecoMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+huecoMalla.frustumCulled=false; huecoMalla.visible=false; escena.add(huecoMalla);
+
+/* ---------- EL MUNDO NEON: LOS BLOQUES Y LA ESPADA ----------
+   Los bloques van con material BASICO por la misma razon que las piezas y por una mas: en el mundo
+   neon no hay luz. Un Lambert sin luz es negro, asi que lo unico que puede brillar es lo que trae su
+   color puesto. */
+const BLOQUE_MAX=12;
+const bloqueGeo=(()=>{
+  /* el cubo mas un marco apenas mas grande: el marco es lo que le da el borde encendido que hace que
+     se lea a neon y no a caja de color */
+  const ps=[];
+  const c=new THREE.BoxGeometry(0.52,0.52,0.52); ps.push(c);
+  const m=new THREE.BoxGeometry(0.60,0.60,0.10); ps.push(m);
+  const pl=ps.map(g=>g.index? g.toNonIndexed() : g);
+  const g=mergeGeometries(pl,false); for(const q of ps) q.dispose(); return g;
+})();
+const bloqueMalla=new THREE.InstancedMesh(bloqueGeo,
+  new THREE.MeshBasicMaterial({color:0xffffff}), BLOQUE_MAX);
+bloqueMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+bloqueMalla.frustumCulled=false; bloqueMalla.visible=false; escena.add(bloqueMalla);
+bloqueMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(BLOQUE_MAX*3), 3);
+bloqueMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);
+
+/* LA ESPADA. Dos, porque en el ultimo pasillo hay una por mano. */
+const espadaGeo=(()=>{
+  const ps=[];
+  /* LAS PROPORCIONES SE CORRIGIERON MIRANDO: con la hoja en 0,90 y la guarda en 0,20 —o sea la
+     guarda casi cuatro veces mas ancha que la hoja— y ademas con la espada escorzada hacia adentro
+     de la pantalla, lo que se veia no era una espada sino un MARTILLO: un palo corto con un travesaño
+     gordo arriba. La hoja se alarga a 1,25 y la guarda se angosta a 0,13. */
+  const h=new THREE.BoxGeometry(0.062,0.062,1.25); h.translate(0,0,-0.70); ps.push(h);  // la hoja
+  const g2=new THREE.BoxGeometry(0.13,0.042,0.05); ps.push(g2);                          // la guarda
+  const p=new THREE.BoxGeometry(0.055,0.055,0.18); p.translate(0,0,0.10); ps.push(p);    // el puño
+  const pl=ps.map(g=>g.index? g.toNonIndexed() : g);
+  const g=mergeGeometries(pl,false); for(const q of ps) q.dispose(); return g;
+})();
+const espadaMalla=new THREE.InstancedMesh(espadaGeo,
+  new THREE.MeshBasicMaterial({color:0x9ef7ff}), 2);
+espadaMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+espadaMalla.frustumCulled=false; espadaMalla.visible=false; escena.add(espadaMalla);
+
+/* ---------- LOS GLOBOS ---------- */
+const GLOBO_MAX=7;
+const globoGeo=(()=>{
+  const ps=[];
+  const b=new THREE.SphereGeometry(0.26,12,9); b.scale(1,1.18,1); ps.push(b);
+  const n=new THREE.ConeGeometry(0.07,0.12,7); n.rotateX(Math.PI); n.translate(0,-0.30,0); ps.push(n);
+  const pl=ps.map(g=>g.index? g.toNonIndexed() : g);
+  const g=mergeGeometries(pl,false); for(const q of ps) q.dispose(); return g;
+})();
+const globoMalla=new THREE.InstancedMesh(globoGeo,
+  new THREE.MeshLambertMaterial({color:0xffffff, emissive:0x2e2e2e}), GLOBO_MAX);
+globoMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+globoMalla.frustumCulled=false; globoMalla.visible=false; escena.add(globoMalla);
+globoMalla.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(GLOBO_MAX*3), 3);
+globoMalla.instanceColor.setUsage(THREE.DynamicDrawUsage);
+
+/* ---------- LA REJILLA DEL MUNDO NEON ----------
+   Un tunel de lineas. Va de lineas y no de cajas porque lo unico que tiene que hacer es dar
+   VELOCIDAD: al venir los bloques hacia vos, las lineas que pasan al costado son lo que dice cuanto
+   te estas moviendo. Con paredes llenas no se nota el avance. */
+const neonGrupo=new THREE.Group(); neonGrupo.visible=false; escena.add(neonGrupo);
+/* SE CONSTRUYE CON EL PISO EN y=0 Y HACIA -Z, y despues se PLANTA en el jugador (ver neonPoner):
+   armado alrededor del origen del mundo, el tunel le quedaba al jugador abajo y de costado, porque el
+   pasillo donde cae la actividad esta a treinta metros del origen. Un tunel que no esta centrado en
+   vos no se lee como un lugar en el que estas parado, se lee como un dibujo suelto en el fondo. */
+(()=>{
+  const pts=[];
+  const L=46, W=3.2, PISO=0.02, TECHO=3.5;
+  for(let k=0;k<=23;k++){                       // los aros del tunel
+    const z=-k*(L/23);
+    pts.push(-W,PISO,z,  W,PISO,z);
+    pts.push(-W,TECHO,z, W,TECHO,z);
+    pts.push(-W,PISO,z, -W,TECHO,z);
+    pts.push( W,PISO,z,  W,TECHO,z);
+  }
+  for(const x of [-W,-W*0.5,0,W*0.5,W]){        // las lineas que corren al fondo
+    pts.push(x,PISO ,0, x,PISO ,-L);
+    pts.push(x,TECHO,0, x,TECHO,-L);
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts,3));
+  const l=new THREE.LineSegments(g, new THREE.LineBasicMaterial({color:0x2de3ff, transparent:true,
+                                                                 opacity:0.55}));
+  l.frustumCulled=false; neonGrupo.add(l);
+})();
+/* EL COLEGIO SE APAGA POR LISTA NEGRA Y NO POR LISTA BLANCA, y la diferencia importa: si la lista
+   fuera de lo que hay que apagar, cada malla nueva que se agregue al juego aparecera flotando en el
+   mundo neon y nadie se va a acordar de agregarla. Se apaga TODO lo que estaba encendido y se anota
+   que se apago, asi volver es exacto. */
+/* EL TUNEL SE PLANTA DONDE ESTA EL JUGADOR Y MIRANDO A DONDE MIRA. El rumbo es el mismo que ya se
+   calcula para soltar los bichos —el final del tramo que queda por caminar— asi que el tunel corre
+   en la direccion en la que el pasillo seguia. Y va con +PI porque el tunel esta construido hacia su
+   -Z local, mientras que en este juego un rumbo g apunta a (sin g, cos g), o sea al +Z. */
+function neonPoner(x, z, rumbo){
+  neonGrupo.position.set(x, 0, z);
+  neonGrupo.rotation.y = rumbo + Math.PI;
+}
+let _neonGuardado=null;
+function neonVer(on){
+  if(on && !_neonGuardado){
+    _neonGuardado=[];
+    for(const o of escena.children){
+      if(o===neonGrupo || o===bloqueMalla || o===espadaMalla || o===esqMalla) continue;
+      if(o.isLight) continue;                    // las luces no molestan y apagarlas apagaria las manos
+      if(o.visible){ _neonGuardado.push(o); o.visible=false; }
+    }
+    neonGrupo.visible=true;
+  } else if(!on && _neonGuardado){
+    for(const o of _neonGuardado) o.visible=true;
+    _neonGuardado=null; neonGrupo.visible=false;
+  }
+}
+
+/* =========================================================================================
    EL PROFESOR
    Modelado por codigo copiando la referencia: cabeza pelada de piel clara con ojos grandes y una
    boca roja, sueter verde ancho, brazos verdes flacos con manos claras de dedos visibles, dos
@@ -1541,14 +1704,27 @@ const TOUR=[1,2,3,4,8,7,6,5];
    El primer tramo no tiene nada: es el que sigue al tutorial y el jugador recien aprendio a contar.
    Las cantidades suben, y ninguna pasa de cinco o seis blancos a la vez porque en un marco 9:16 mas
    que eso se solapa y deja de poder apuntarse de a uno. */
+/* SIETE PASILLOS, SIETE COSAS DISTINTAS. Antes eran tres actividades rotando, y tres rotando en
+   siete tramos es la tercera vez que hacés lo mismo antes de llegar al aula 8. Cada una pide algo
+   que ninguna otra pide:
+     1 bichos      → APUNTAR: un blanco que se mueve, pinza encima.
+     2 rompecabezas→ ARRASTRAR: agarrar con la pinza SOSTENIDA y soltar en su lugar.
+     3 espada      → CORTAR: barrer la mano por encima, y la mano va cerrada.
+     4 tizas       → EL TIEMPO: llegar antes de que toque el piso.
+     5 casilleros  → ELEGIR: cinco iguales y hay que dar con el que tiembla.
+     6 globos      → DISTINGUIR: reventar los verdes y NO los rojos.
+     7 espada dos  → todo junto: dos espadas, y cortar rojo se paga.
+   Y las siete se juegan con lo mismo: la mano encima del objeto EN LA PANTALLA. Ninguna pide
+   estirarse hacia adelante ni acertar una profundidad — eso lo pidio el jugador con todas las letras
+   ("la mano no puede ir mas lejos"), y ademas es lo unico que una webcam sola mide bien. */
 const TRAMOS=[ null,
-  { tipo:'bichos',     n:2, txt:'dBichos' },
-  { tipo:'tizas',      n:3, txt:'dTizas' },
-  { tipo:'casilleros', n:3, txt:'dCasill' },
-  { tipo:'bichos',     n:4, txt:'dBichos' },
+  { tipo:'bichos',     n:3, txt:'dBichos' },
+  { tipo:'rompe',      n:4, txt:'dRompe' },
+  { tipo:'espada',     n:6, txt:'dEspada',  espadas:1, rojos:false },
   { tipo:'tizas',      n:4, txt:'dTizas' },
   { tipo:'casilleros', n:3, txt:'dCasill' },
-  { tipo:'bichos',     n:5, txt:'dBichos' } ];
+  { tipo:'globos',     n:5, txt:'dGlobos' },
+  { tipo:'espada',     n:8, txt:'dEspada2', espadas:2, rojos:true } ];
 const TOTAL_CUENTAS=TOUR.length*CUENTAS_AULA;
 
 const GUION=[
@@ -1569,7 +1745,8 @@ TOUR.forEach((n,k)=>{
     /* el viaje va PARTIDO EN DOS y la actividad cae en la juntura: tiene que estar EN el camino, no
        al final de el */
     GUION.push({ id:'viaje'+n, anim:'caminar', txt:'dSale',  viaje:n, mitad:true, aula:n });
-    GUION.push({ id:'act'+n,   anim:'quieto',  txt:T.txt, act:T.n, tipo:T.tipo, aula:n });
+    GUION.push({ id:'act'+n,   anim:'quieto',  txt:T.txt, act:T.n, tipo:T.tipo, aula:n,
+                 esp:T.espadas||0, rojos:!!T.rojos });
     GUION.push({ id:'sigue'+n, anim:'caminar', txt:'dSale2', viaje:n, resto:true, aula:n });
   } else {
     GUION.push({ id:'viaje'+n,  anim:'caminar', txt:'d7', viaje:n, aula:n });
@@ -1631,7 +1808,11 @@ const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:f
                 unico con lo que se puede apuntar; la TRASERA no, porque ahi la mano ya se ve del
                 lado que esta. Depende de que camara se abrio, no es una constante. */
              espejo:true, camaraUsada:'',
-             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null] };
+             hz:24, medidas:0, msDet:0, dupes:0, ranuras:[null,null],
+             /* 0 = mano normal. 1 o 2 = mundo neon: la mano se dibuja CERRADA con una espada, y no
+                importa lo que hagan los dedos de verdad. Lo pidio el jugador con esas palabras: "si
+                o si cerrada con la espada no importa si abris tu mano". */
+             espada:0 };
 /* CUANTAS VECES POR SEGUNDO SE MIDE, que no es lo mismo que cuantas veces se dibuja.
    24 y no 60: el detector tarda entre 8 y 20 ms por cuadro en un telefono, asi que medir en cada
    cuadro de render es gastar un tercio del presupuesto de 16,6 ms en mirar una mano que apenas se
@@ -1690,8 +1871,14 @@ function manoPinzas(lms){
   if(!lms || !lms.length){ MANO.pzPrev=[]; return r; }
   lms.forEach((lm,k)=>{
     const q=manoLeer(lm); if(!q) return;
-    const p4=lm[4], p8=lm[8];
+    const p4=lm[4], p8=lm[8], p9=lm[9];
+    /* SE DEVUELVE TAMBIEN EL CENTRO DE LA PALMA, y no es un dato de mas: con la mano CERRADA —que es
+       como se juega el mundo neon— el punto de la pinza deja de significar nada, porque el pulgar y
+       el indice estan los dos recogidos. La espada cuelga del centro de la palma, que existe con la
+       mano abierta y con la mano cerrada igual. Y va espejado en x por el mismo motivo que el resto:
+       sin el espejo, mover la mano a la derecha mueve la del juego a la izquierda. */
     r.push({ x: 1-(p4.x+p8.x)/2, y: (p4.y+p8.y)/2,
+             px: 1-p9.x, py: p9.y, k,
              pinza:q.pinza, nueva: q.pinza && !MANO.pzPrev[k] });
     MANO.pzPrev[k]=q.pinza;
   });
@@ -1810,7 +1997,7 @@ async function manosIniciar(){
    abierto en el repositorio de MediaPipe. Un worker que no arranca en la mitad de los telefonos es
    peor que 24 Hz interpolados que arrancan en todos.
    ========================================================================================= */
-const MANO_PRED=45;      // ms de prediccion como maximo: mas que esto y la mano se adelanta y tiembla
+let MANO_PRED=8;         // ms de prediccion como maximo: mas que esto y la mano se adelanta y tiembla
 /* 0,13 EN FRACCION DE CUADRO. Dos munecas mas cerca que esto no son dos manos: una mano abierta mide
    0,25 de ancho, asi que dos munecas a 0,13 estarian una encima de la otra. */
 const MANO_SEP=0.13;
@@ -1818,8 +2005,8 @@ const MANO_SEP=0.13;
 const MANO_EMPAREJA=0.30;
 /* la prediccion se enciende con la velocidad. Por debajo de V_QUIETA lo unico que se mueve es el
    ruido del detector, y extrapolarlo es amplificarlo. */
-const V_QUIETA=0.00009, V_RAPIDA=0.00045;    // fraccion de cuadro por milisegundo
-let MANO_TAU=0.018;      // constante del suavizado del dibujo, en segundos (ajustable)
+let V_QUIETA=0.00009, V_RAPIDA=0.00045;      // fraccion de cuadro por milisegundo
+let MANO_TAU=0.005;      // constante del suavizado del dibujo, en segundos (ajustable)
 const MANO_CADUCA=260;   // sin medicion nueva por mas de esto, la mano se fue
 const MANO_SALTO=0.22;   // si el objetivo esta mas lejos que esto (en fraccion de pantalla), se salta
 
@@ -1878,7 +2065,15 @@ function arregloALms(src, dst){
    punto en pantalla (eso lo deciden x e y sobre su rayo) sino el TAMANO del dedo y la escala de la
    mano. Con la z al mismo corte que x e y, la mano quieta latia de grosor. Filtrarla cuatro veces
    mas fuerte no cuesta nada, porque un retardo en la profundidad no se ve. */
-const OE={ fcMin:0.35, beta:3.0, fcD:1.2, fcMinZ:0.10, betaZ:0.6 };
+/* Y LA PIEZA QUE FALTABA PARA PODER ACELERAR SIN QUE VUELVA EL TEMBLOR: UNA ZONA MUERTA EN LA
+   DERIVADA. El 1-euro abre el corte con |derivada|, y con la mano quieta la derivada NO ES CERO: es
+   el ruido del detector dividido por el intervalo, que con 0,004 de ruido a 24 Hz da del orden de
+   0,1 por segundo. O sea que subir beta para que la mano siga rapido tambien multiplica ESE ruido y
+   abre el corte cuando no hay que abrirlo — que es exactamente por que, en el barrido, la atenuacion
+   caia de 3,83 a 3,17 al subir beta. Restandole la zona muerta a |derivada| antes de multiplicar,
+   una derivada de nivel de ruido aporta CERO y una de movimiento real aporta todo: las dos cosas
+   dejan de estar atadas y beta se puede subir sin pagar temblor. */
+const OE={ fcMin:0.35, beta:44.0, fcD:2.4, dz:0.16, fcMinZ:0.10, betaZ:8.8, dzZ:0.16 };
 function oeAlfa(fc, dt){ const tau=1/(2*Math.PI*fc); return 1/(1+tau/dt); }
 /* DOS ETAPAS EN CASCADA, y el numero sale de una cuenta que hay que hacer antes de tocar parametros.
    Un filtro de primer orden con coeficiente alfa atenua el ruido en raiz(alfa/(2-alfa)); con el corte
@@ -1891,8 +2086,9 @@ function oeAlfa(fc, dt){ const tau=1/(2*Math.PI*fc); return 1/(1+tau/dt); }
 function oePaso(x, d, v, j, dt, ad, esZ){
   const der=(v-x[j])/dt;
   d[j] += ad*(der-d[j]);
-  const fc = esZ? (OE.fcMinZ + OE.betaZ*Math.abs(d[j]))
-                : (OE.fcMin  + OE.beta *Math.abs(d[j]));
+  const mag = esZ? Math.max(0, Math.abs(d[j])-OE.dzZ) : Math.max(0, Math.abs(d[j])-OE.dz);
+  const fc = esZ? (OE.fcMinZ + OE.betaZ*mag)
+                : (OE.fcMin  + OE.beta *mag);
   x[j] += oeAlfa(fc, dt)*(v-x[j]);
   return x[j];
 }
@@ -2227,6 +2423,44 @@ for(let i=0;i<MANO_ART;i++) _hp.push(new THREE.Vector3());
    apenas mas claro y frio alcanza para verlo y no rompe la mano. */
 const COL_PIEL=new THREE.Color(0xEDB894), COL_CUENTA=new THREE.Color(0xC8E8A8);
 
+/* =========================================================================================
+   LA MANO CERRADA A LA FUERZA DEL MUNDO NEON
+
+   El pedido fue literal: "tu mano en ese lugar si o si cerrada con la espada, no importa si abris tu
+   mano va a estar cerrada". O sea que ahi los dedos DEJAN DE SER UNA ENTRADA. Y eso no es un capricho
+   de estilo: en el mundo neon lo unico que se pide es barrer la mano por encima de un bloque, asi que
+   si los dedos siguieran contando, abrir la mano sin querer —que pasa todo el tiempo mientras se
+   mueve rapido— cambiaria lo que el juego cree que estas haciendo en medio de un corte.
+
+   COMO SE CIERRA, Y POR QUE ASI. Se toman los puntos de verdad y se ACERCAN AL CENTRO DE LA PALMA:
+   cuanto mas lejos esta la falange del nudillo, mas se recoge. No es la curva anatomica exacta de un
+   puño —para eso habria que rotar cada falange sobre su articulacion— pero al tamano al que se ve una
+   mano en un telefono se lee como un puño cerrado, cuesta una resta por punto, y sobre todo es
+   ESTABLE: no depende de que MediaPipe acierte la flexion de un dedo que esta tapado por los otros,
+   que es justo lo que no acierta cuando la mano esta cerrada.
+
+   Va en el espacio de los puntos y no en el del dibujo, asi la escala de la mano, la palma y la
+   espada salen todas de la misma fuente y no se pueden desincronizar. */
+const _puno=new Float32Array(63);
+const PUNO_K=[1,0.86,0.60,0.42,0.34,   1,0.72,0.46,0.34,   1,0.70,0.44,0.32,
+              1,0.72,0.46,0.34,   1,0.76,0.52,0.40];
+function puñoDe(R){
+  const L=R.sal;
+  /* el centro de la palma: muñeca y los cuatro nudillos */
+  let cx=0, cy=0, cz=0;
+  for(const i of [0,5,9,13,17]){ cx+=L[i*3]; cy+=L[i*3+1]; cz+=L[i*3+2]; }
+  cx/=5; cy/=5; cz/=5;
+  for(let i=0;i<21;i++){
+    const k=PUNO_K[i];
+    _puno[i*3]   = cx + (L[i*3]  -cx)*k;
+    _puno[i*3+1] = cy + (L[i*3+1]-cy)*k;
+    _puno[i*3+2] = cz + (L[i*3+2]-cz)*k;
+  }
+  return _puno;
+}
+const _sv=new THREE.Vector3(), _sd=new THREE.Vector3(), _sm=new THREE.Matrix4();
+const _sq=new THREE.Quaternion(), _ss=new THREE.Vector3(), _sup=new THREE.Vector3(0,0,-1);
+const _sf=new THREE.Vector3();
 function manos3DDibujar(){
   const vivas=(MANO.on && MANO.vivas)? MANO.vivas : null;
   const n=vivas? vivas.length : 0;
@@ -2238,13 +2472,14 @@ function manos3DDibujar(){
     for(let q=0;q<MANOS_MAX;q++){
       const el=document.getElementById('manoN'+q); if(el) el.classList.remove('ver');
     }
+    espadaMalla.visible=false;
     return;
   }
   /* de pantalla a espacio de camara: media altura visible a la distancia de la mano */
   const tanV=Math.tan(camara.fov*Math.PI/360);
-  let ia=0, ih=0;
+  let ia=0, ih=0, espUsadas=0;
   for(let q=0;q<n && q<MANOS_MAX;q++){
-    const R=vivas[q], L=R.sal;
+    const R=vivas[q], L=MANO.espada? puñoDe(R) : R.sal;
     const z0=L[2];
     for(let i=0;i<MANO_ART;i++){
       const x=MANO.espejo? 1-L[i*3] : L[i*3];
@@ -2270,7 +2505,7 @@ function manos3DDibujar(){
       _hm.compose(_hp[i], _hq.identity(), _hs.set(r,r,r));
       manoArt.setMatrixAt(ia, _hm);
       const punta=MANO_PUNTAS.indexOf(i);
-      _hc.copy(punta>=0 && R.estirados[punta]? COL_CUENTA : COL_PIEL);
+      _hc.copy((!MANO.espada && punta>=0 && R.estirados[punta])? COL_CUENTA : COL_PIEL);
       manoArt.setColorAt(ia, _hc);
       ia++;
     }
@@ -2306,7 +2541,49 @@ function manos3DDibujar(){
       _hm.compose(_hv, _hq, _hs.set(r, largo, r));
       manoHue.setMatrixAt(ih++, _hm);
     }
+    /* LA ESPADA SALE DE LA MANO Y APUNTA HACIA DONDE APUNTA LA MANO: de la muñeca al nudillo del
+       medio. Girando la muñeca gira la hoja, que es lo unico que hace que se sienta una espada y no
+       un puntero. Se ancla en la palma, o sea en el mismo sitio del que sale el punto con el que se
+       corta: lo que se ve y lo que corta son la misma cosa por construccion. */
+    if(MANO.espada && q<MANO.espada){
+      _sd.subVectors(_hp[9], _hp[0]);
+      if(_sd.lengthSq()>1e-8){
+        _sd.normalize();
+        /* LA HOJA SE INCLINA HACIA ADENTRO DE LA PANTALLA Y NO SIGUE A LA MANO DEL TODO.
+           Apuntando exactamente a donde apunta la mano, la hoja sale VERTICAL —una mano levantada
+           apunta para arriba— y medida daba 1,06 veces el alto del marco: una barra cian que tapaba
+           los bloques que hay que cortar. Mezclada con el frente de la camara, la espada se escorza,
+           deja ver el tunel, y SIGUE girando con la muñeca, que es lo que hace que se sienta tuya. */
+        _sf.set(0,0,-1).applyQuaternion(camara.quaternion);
+        _sd.multiplyScalar(0.55).addScaledVector(_sf, 0.85).normalize();
+        _sq.setFromUnitVectors(_sup, _sd);
+        _sv.copy(_hp[9]).addScaledVector(_sd, 0.05*esc);
+        /* LA ESPADA SE ESCALA CON LA MANO, Y A PROPOSITO NO EN PROPORCION REAL.
+           Primero le puse un piso fijo (max(0,6 · esc)) y salio una cruz cian tapando la pantalla.
+           Despues la calcule "bien", en palmas: una espada mide unas siete palmas, o sea 0,74·esc con
+           esta geometria. MEDIDO, esa version daba una hoja de 0,85 m que en pantalla ocupaba 1,058
+           VECES EL ALTO DEL MARCO — mas larga que la pantalla entera.
+           Y la razon no es un error de cuenta: LA MANO SE DIBUJA A 40 CM DEL OJO. Cualquier cosa
+           pegada a ella y con proporciones de verdad es gigante en el cuadro. Asi que la espada esta
+           deliberadamente sub-escalada: 0,24·esc deja la hoja en un tercio del alto, que se lee a
+           espada y DEJA VER LOS BLOQUES, que es lo unico que la actividad necesita que se vea.
+           El numero final salio de medir dos veces: con la hoja escorzada hacia adentro, 0,24 la
+           dejaba en 0,113 del alto —un cuchillito— y 0,60 la sube a un tercio, que es donde queda. */
+        const e=0.60*esc;
+        _sm.compose(_sv, _sq, _ss.set(e, e, e));
+        espadaMalla.setMatrixAt(q, _sm);
+        espUsadas++;
+      }
+    }
   }
+  if(MANO.espada){
+    for(let q=espUsadas;q<2;q++){
+      _sm.makeScale(0.0001,0.0001,0.0001); _sm.setPosition(0,-90,0);
+      espadaMalla.setMatrixAt(q, _sm);
+    }
+    espadaMalla.visible=espUsadas>0;
+    espadaMalla.instanceMatrix.needsUpdate=true;
+  } else espadaMalla.visible=false;
   /* las instancias que no se usan se esconden en escala cero */
   for(; ia<MANOS_MAX*MANO_ART; ia++){
     _hm.makeScale(0.0001,0.0001,0.0001); _hm.setPosition(0,-90,0);
@@ -3158,7 +3435,7 @@ function siguienteEscena(){
     const fin = (restoRuta && restoRuta.length)? cel2(restoRuta[restoRuta.length-1]) : null;
     bichosMira = fin;
     const rumbo = fin? Math.atan2(fin[0]-cam.x, fin[1]-cam.z) : cam.giro;
-    actSoltar(E.tipo, E.act, rumbo);
+    actSoltar(E.tipo, E.act, rumbo, E);
   }
   if(E.puerta!=null){
     const p=puertaDe(E.puerta);
@@ -3397,16 +3674,23 @@ function bichosSoltar(n, rumbo){
 }
 function bichosApagar(){
   BICHOS.length=0; ESQ.length=0; TIZAS.length=0; CASILL.length=0;
+  ROMPE.length=0; GLOBOS.length=0; rompeSel=-1;
+  /* EL MUNDO NEON SE DESARMA ACA Y NO EN OTRO LADO. Si el colegio quedara apagado, salir de la
+     actividad por cualquier camino que no sea terminarla —un reintento, una prueba, morir— dejaria
+     al jugador caminando por un pasillo invisible el resto de la partida. */
+  espSalir();
   bichosVivos=0; casillBueno=-1;
   bichoMalla.visible=false; bichoOjos.visible=false; esqMalla.visible=false;
   tizaMalla.visible=false; casillMalla.visible=false;
+  rompeMalla.visible=false; huecoMalla.visible=false;
+  globoMalla.visible=false; bloqueMalla.visible=false;
   document.body.classList.remove('bichos');
   pintarLibros();
 }
 /* UNA SOLA PUERTA PARA LAS TRES. El guion dice el tipo y aca se reparte; asi el resto del codigo
    —soltar, terminar, apagar, contar— no sabe cuantas actividades hay ni le importa, y agregar una
    cuarta es una linea en esta tabla y otra en TRAMOS. */
-function actSoltar(tipo, n, rumbo){
+function actSoltar(tipo, n, rumbo, E){
   /* SIEMPRE SE APAGA LO ANTERIOR PRIMERO. En la partida normal la tanda anterior ya se apago al
      terminar, pero apoyarse en eso deja un blanco vivo de la actividad anterior en cuanto algo
      entra a una escena de actividad por otro camino —una prueba, un reintento—: se vieron dos
@@ -3414,10 +3698,15 @@ function actSoltar(tipo, n, rumbo){
   bichosApagar();
   if(tipo==='tizas') tizasSoltar(n, rumbo);
   else if(tipo==='casilleros') casillSoltar(n, rumbo);
+  else if(tipo==='rompe') rompeSoltar(n);
+  else if(tipo==='globos') globosSoltar(n, rumbo);
+  else if(tipo==='espada') espEntrar({ n, espadas:(E&&E.esp)||1, rojos:!!(E&&E.rojos) }, rumbo);
   else bichosSoltar(n, rumbo);
 }
-function actTick(dt){ bichosTick(dt); tizasTick(dt); casillTick(dt); }
-function actDibujar(){ bichosDibujar(); tizasDibujar(); casillDibujar(); }
+function actTick(dt){ bichosTick(dt); tizasTick(dt); casillTick(dt); rompeTick(dt); globosTick(dt);
+                      espTick(dt); }
+function actDibujar(){ bichosDibujar(); tizasDibujar(); casillDibujar(); rompeDibujar();
+                       globosDibujar(); espDibujar(); }
 /* UN ESTALLIDO SON DOS COSAS: las esquirlas que vuelan Y el bicho que desaparece en el mismo cuadro.
    Con las esquirlas solas se ve un bicho que sigue ahi con basura alrededor. */
 /* las esquirlas las usan las tres actividades: un bicho que revienta, una tiza que se agarra y un
@@ -3683,6 +3972,480 @@ function casillDibujar(){
   }
   casillMalla.instanceMatrix.needsUpdate=true;
   if(casillMalla.instanceColor) casillMalla.instanceColor.needsUpdate=true;
+}
+
+
+/* =========================================================================================
+   LAS CUATRO ACTIVIDADES NUEVAS, Y LA REGLA QUE COMPARTEN
+
+   El jugador la puso en una linea: "la mano no puede ir mas lejos ... hay que hacer pinch con dos
+   dedos por encima de ellos EN PANTALLA, NO EN PROFUNDIDAD". O sea que la profundidad no decide nada
+   en ninguna de las cuatro. Todo blanco se proyecta a la pantalla con aPantalla() y se compara ahi,
+   en fracciones del marco, con el mismo radio de siempre. Que las cosas sean objetos 3D es para que
+   tengan perspectiva; el juicio de "le diste" es de dos dimensiones, siempre.
+
+   Y ESTA ES LA PUERTA DE IDA: de pantalla al mundo. Hace falta porque estas actividades se disponen
+   AL REVES que los bichos —primero se decide donde van EN LA PANTALLA (una pieza en cada esquina,
+   una fila de bloques) y despues donde queda eso en el mundo—. Sin esto habria que elegir posiciones
+   3D a ojo y despues rezar para que caigan dentro del marco en un telefono 9:16, que es exactamente
+   como los casilleros terminaron siendo una pared roja de lado a lado.
+   ========================================================================================= */
+const _ev=new THREE.Vector3(), _ef=new THREE.Vector3();
+function deSPantalla(sx, sy, dist){
+  ponerCamara(1);
+  _ev.set(sx*2-1, 1-sy*2, 0.5).unproject(camara).sub(camara.position).normalize();
+  _ef.set(0,0,-1).applyQuaternion(camara.quaternion);
+  const t=dist/Math.max(0.05, _ev.dot(_ef));
+  return [camara.position.x+_ev.x*t, camara.position.y+_ev.y*t, camara.position.z+_ev.z*t];
+}
+/* la distancia de un punto a un SEGMENTO, en pixeles. Es lo que hace que cortar sea cortar: con la
+   mano a 21 ms de retardo y a 60 cuadros, una mano rapida se mueve 30 o 40 pixeles ENTRE UN CUADRO Y
+   EL SIGUIENTE. Comparando solo la posicion de este cuadro, el bloque queda entre dos posiciones y el
+   corte no existe — se barre la mano por encima y no pasa nada. Se compara contra el segmento que
+   unio las dos, o sea contra el camino que hizo la mano. */
+function distSeg(px,py, ax,ay, bx,by){
+  const dx=bx-ax, dy=by-ay, L=dx*dx+dy*dy;
+  if(L<1e-9) return Math.hypot(px-ax, py-ay);
+  let t=((px-ax)*dx+(py-ay)*dy)/L;
+  t=Math.max(0, Math.min(1, t));
+  return Math.hypot(px-(ax+dx*t), py-(ay+dy*t));
+}
+
+/* =========================================================================================
+   PASILLO 2 — EL ROMPECABEZAS: lo que se entrena es ARRASTRAR
+
+   Todas las demas actividades se juegan con el FLANCO de la pinza: el cuadro en el que la pinza
+   aparece. Esta es la unica que se juega con la pinza SOSTENIDA, y por eso agrega algo: hasta ahora
+   la mano solo sabia decir "aca", y aca tiene que decir "esto, y llevalo alla".
+
+   DOS FORMAS DE JUGARLO Y NO UNA, por la misma razon por la que existe el teclado de numeros: con la
+   mano es agarrar y arrastrar; con el dedo —o sin camara— es tocar la pieza y despues tocar el hueco.
+   Las dos terminan en el mismo sitio, asi que el que no tiene camara juega el mismo juego.
+   ========================================================================================= */
+const ROMPE=[];
+const ROMPE_D=2.6;            // a que distancia flota el tablero
+const ROMPE_ESC=0.62;         // lado de una pieza, en metros a esa distancia
+const ROMPE_PEGA=0.085;       // que tan cerca del hueco hay que soltarla, en fraccion del ancho
+let rompeSel=-1;              // la pieza elegida a dedo (el camino sin camara)
+/* cuatro cuartos de una hoja arrancada: el mismo beige de papel, cada uno con su mancha */
+const ROMPE_COL=[[0.92,0.88,0.78],[0.86,0.82,0.70],[0.90,0.85,0.74],[0.83,0.79,0.68]];
+function rompeSoltar(n){
+  ROMPE.length=0; rompeSel=-1;
+  const N=Math.max(1, Math.min(4, n||4));
+  /* los huecos: un cuadrado de 2x2 arriba del centro. Arriba y no en el centro porque el globo de
+     dialogo vive en el tercio de abajo y una pieza puesta ahi queda debajo del cartel. */
+  for(let k=0;k<N;k++){
+    /* LOS HUECOS VAN SEPARADOS Y NO PEGADOS. Con los centros a 0,23 del ancho y la pieza midiendo
+       0,21, los cuatro se tocaban: en pantalla no eran cuatro huecos, era UN rectangulo gris — el
+       mismo defecto que ya habia convertido cinco casilleros en una pared roja. Con los centros a
+       0,34 queda aire entre los cuatro y se leen de a uno, que es lo unico que permite apuntarles. */
+    const cx=(k%2)? 0.67 : 0.33, cy=(k<2)? 0.30 : 0.47;
+    /* y las piezas arrancan repartidas por los costados, lejos de su hueco: si arrancaran cerca,
+       soltar en cualquier lado ya acertaria.
+       NINGUNA POR DEBAJO DE 0,71: el globo de dialogo arranca en el 0,78 del alto, y las dos piezas
+       de abajo estaban en 0,78 — o sea tapadas por el cartel justo mientras el cartel explica que
+       hay que agarrarlas. */
+    const ax=(k%2)? 0.87 : 0.13, ay=(k<2)? 0.58 : 0.71;
+    ROMPE.push({ sx:cx, sy:cy, cx:ax, cy:ay, col:ROMPE_COL[k], puesta:false, tomada:-1 });
+  }
+  bichosVivos=N;
+  son('bicho'); document.body.classList.add('bichos'); pintarLibros();
+}
+function rompeTick(dt){
+  if(!ROMPE.length) return;
+  const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+  const R=BICHO_R;
+  /* ---- el camino con la mano: pinza SOSTENIDA ---- */
+  if(MANO.on && MANO.pinzas){
+    /* primero se sueltan las que dejaron de estar pinzadas */
+    for(const p of ROMPE){
+      if(p.tomada<0 || p.puesta) continue;
+      const m=MANO.pinzas.find(q=>q.k===p.tomada);
+      if(!m || !m.pinza){ p.tomada=-1; rompeProbar(p); }
+    }
+    for(const m of MANO.pinzas){
+      if(!m.pinza) continue;
+      const yaTiene=ROMPE.some(p=>p.tomada===m.k);
+      if(!yaTiene){
+        /* agarra la pieza mas cercana dentro del radio, y UNA sola: con "todas las que esten dentro"
+           una pinza en el medio del tablero se llevaria dos piezas pegadas */
+        let mejor=-1, mejorD=R;
+        for(let k=0;k<ROMPE.length;k++){
+          const p=ROMPE[k];
+          if(p.puesta || p.tomada>=0) continue;
+          const d=Math.hypot(p.cx-m.x, p.cy-m.y);
+          if(d<mejorD){ mejorD=d; mejor=k; }
+        }
+        if(mejor>=0){ ROMPE[mejor].tomada=m.k; son('libro'); }
+      }
+      const p=ROMPE.find(q=>q.tomada===m.k);
+      if(p){ p.cx=m.x; p.cy=m.y; }
+    }
+  } else {
+    for(const p of ROMPE) if(p.tomada>=0){ p.tomada=-1; rompeProbar(p); }
+  }
+  /* ---- el camino a dedo: tocar la pieza, tocar el hueco ---- */
+  while(TOQUES.length){
+    const g=TOQUES.shift();
+    if(rompeSel>=0 && ROMPE[rompeSel] && !ROMPE[rompeSel].puesta){
+      const p=ROMPE[rompeSel];
+      p.cx=g.x; p.cy=g.y; rompeSel=-1; rompeProbar(p);
+    } else {
+      let mejor=-1, mejorD=R;
+      for(let k=0;k<ROMPE.length;k++){
+        const p=ROMPE[k];
+        if(p.puesta) continue;
+        const d=Math.hypot(p.cx-g.x, p.cy-g.y);
+        if(d<mejorD){ mejorD=d; mejor=k; }
+      }
+      if(mejor>=0){ rompeSel=mejor; son('libro'); }
+    }
+  }
+}
+function rompeProbar(p){
+  if(p.puesta) return;
+  if(Math.hypot(p.cx-p.sx, p.cy-p.sy) <= ROMPE_PEGA){
+    p.puesta=true; p.cx=p.sx; p.cy=p.sy;
+    bichosVivos=Math.max(0, bichosVivos-1);
+    const w=deSPantalla(p.sx, p.sy, ROMPE_D);
+    esquirlasSoltar(w[0], w[1], w[2], 6);
+    son('revienta'); pintarLibros();
+  }
+}
+function rompeDibujar(){
+  const hay=ROMPE.length>0;
+  rompeMalla.visible=hay; huecoMalla.visible=hay;
+  if(!hay) return;
+  for(let k=0;k<ROMPE_MAX;k++){
+    const p=ROMPE[k];
+    if(!p){ _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+            rompeMalla.setMatrixAt(k,_bm); huecoMalla.setMatrixAt(k,_bm); continue; }
+    /* las piezas y los huecos MIRAN A LA CAMARA. Son objetos planos puestos en un pasillo: sin
+       encararlos, en cuanto la camara gira un poco se ven de canto, o sea que desaparecen. */
+    _bq.copy(camara.quaternion);
+    /* EL HUECO ES MAS GRANDE QUE LA PIEZA, y ese sobrante es todo el dibujo: deja un marco oscuro
+       alrededor del sitio vacio —que es lo que hace que se lea como un HUECO y no como una mancha— y
+       cuando la pieza cae adentro, ese mismo marco queda enmarcandola. */
+    const wh=deSPantalla(p.sx, p.sy, ROMPE_D+0.05);
+    const eh=ROMPE_ESC*1.18;
+    _bm.compose(_bv.set(wh[0],wh[1],wh[2]), _bq, _bs.set(eh,eh,1));
+    huecoMalla.setMatrixAt(k, _bm);
+    const w=deSPantalla(p.cx, p.cy, ROMPE_D);
+    /* la que esta agarrada va un poco mas grande: es la unica forma de ver CUAL agarraste sin
+       pintarla de otro color, que arruinaria el dibujo que se esta armando */
+    const e=ROMPE_ESC*(p.tomada>=0? 1.14 : 1);
+    _bm.compose(_bv.set(w[0],w[1],w[2]), _bq, _bs.set(e,e,1));
+    rompeMalla.setMatrixAt(k, _bm);
+    const c=p.col, f=p.puesta? 1 : (p.tomada>=0? 1.12 : 0.86);
+    _bc.setRGB(Math.min(1,c[0]*f), Math.min(1,c[1]*f), Math.min(1,c[2]*f));
+    rompeMalla.setColorAt(k, _bc);
+  }
+  rompeMalla.instanceMatrix.needsUpdate=true;
+  huecoMalla.instanceMatrix.needsUpdate=true;
+  if(rompeMalla.instanceColor) rompeMalla.instanceColor.needsUpdate=true;
+}
+
+/* =========================================================================================
+   PASILLOS 3 Y 7 — EL MUNDO NEON: lo que se entrena es CORTAR
+
+   El pedido: "en el tercero tengas una espada y vengan bloques hacia a ti porque te teletransportas
+   a un mundo neon, y tu mano ahi si o si cerrada con la espada, no importa si abris tu mano va a
+   estar cerrada, y debes cortar los bloques verdes; si pierdes se reinicia ese nivel".
+
+   TRES DECISIONES QUE NO SON OBVIAS:
+
+   1. NO HAY PINZA ACA, Y ESO ES EL PUNTO. En las otras seis actividades la mano dice "ahora" con la
+      pinza. Con una espada en la mano no hay pinza que hacer —la mano esta cerrada— asi que lo que
+      corta es EL MOVIMIENTO: el camino que la mano recorrio entre este cuadro y el anterior. Es la
+      unica actividad del juego que se juega con velocidad y no con un gesto, y por eso se siente
+      distinta de las otras seis aunque el blanco se juzgue en pantalla igual que en todas.
+
+   2. SE CORTA CONTRA EL SEGMENTO, NO CONTRA EL PUNTO. Ver distSeg() arriba: una mano que barre rapido
+      salta 30 o 40 pixeles por cuadro, asi que juzgar solo con la posicion de este cuadro deja
+      bloques sin cortar aunque la mano les haya pasado por encima — y eso se siente como que el juego
+      no responde, que es lo peor que puede pasar en la actividad mas rapida.
+
+   3. PERDER REINICIA LA ACTIVIDAD, NO LA ESCUELA NI EL AULA. Es lo que se pidio y ademas es lo unico
+      coherente: la muerte con screamer ya existe y es de las cuentas. Aca perder cuesta volver a
+      empezar los bloques, que dura veinte segundos.
+   ========================================================================================= */
+const BLOQUES=[];
+const BL_LEJOS=13.0;          // desde donde vienen
+const BL_CERCA=0.9;           // aca ya te pasaron
+const BL_ALCANCE=7.5;         // mas lejos que esto no se puede cortar todavia
+const BL_R=0.115;             // el radio del corte, en fraccion del ancho — un pelo mas que la pinza
+let espMundo=false, espCfg={espadas:1, rojos:false, n:6}, espPrev=[null,null], espDestello=0;
+/* DONDE ESTA PLANTADO EL TUNEL: sirve para poner los bloques ADENTRO de el.
+   El primer intento los repartia por posicion de PANTALLA, que es lo que hacen las demas
+   actividades, y ahi se vio por que aca no sirve: la seccion del tunel se angosta con la distancia,
+   asi que un bloque con la altura de pantalla fija sale POR ARRIBA del techo del tunel apenas se
+   aleja — en la foto los bloques flotaban en el vacio negro de arriba en vez de venir por el pasillo.
+   Se reparten en coordenadas del tunel, que es la unica forma de que esten adentro a cualquier
+   distancia; el corte se sigue juzgando en pantalla, como en todas. */
+let espOrigen={x:0, z:0, g:0};
+function bloquePos(b){
+  const fx=Math.sin(espOrigen.g), fz=Math.cos(espOrigen.g);
+  const rx=Math.cos(espOrigen.g), rz=-Math.sin(espOrigen.g);
+  return [espOrigen.x + rx*b.lx + fx*b.d, b.ly, espOrigen.z + rz*b.lx + fz*b.d];
+}
+let _nieblaGuardada=null;
+function espEntrar(cfg, rumbo){
+  espCfg=cfg;
+  if(!espMundo){
+    espOrigen={ x:cam.x, z:cam.z, g:(rumbo!=null)? rumbo : cam.giro };
+    neonPoner(cam.x, cam.z, espOrigen.g);
+    espMundo=true;
+    _nieblaGuardada={ near:escena.fog.near, far:escena.fog.far, col:escena.fog.color.getHex(),
+                      fondo:escena.background.getHex() };
+    /* LA NIEBLA SE CIERRA MUCHO. Es lo que hace de teletransporte sin cambiar de escena: el colegio
+       se apaga por su lado, pero si la niebla siguiera abierta a treinta metros se veria el vacio
+       negro de afuera del mapa y se leeria como un error, no como otro lugar. */
+    escena.fog.color.setHex(0x14001f); escena.fog.near=3; escena.fog.far=26;
+    escena.background.setHex(0x14001f);
+    neonVer(true);
+    MANO.espada=espCfg.espadas||1;
+    document.body.classList.add('neon');
+  }
+  espPrev=[null,null];
+  espSoltar();
+}
+function espSalir(){
+  if(!espMundo) return;
+  espMundo=false; BLOQUES.length=0; MANO.espada=0; espDestello=0;
+  neonVer(false);
+  if(_nieblaGuardada){
+    escena.fog.color.setHex(_nieblaGuardada.col);
+    escena.fog.near=_nieblaGuardada.near; escena.fog.far=_nieblaGuardada.far;
+    escena.background.setHex(_nieblaGuardada.fondo);
+    _nieblaGuardada=null;
+  }
+  document.body.classList.remove('neon');
+  espadaMalla.visible=false;
+}
+/* la tanda entera de bloques. Se llama al entrar Y al perder: reiniciar es exactamente volver a
+   llamar a esto, que es lo que hace que "se reinicia ese nivel" sea una linea y no un caso especial */
+function espSoltar(){
+  BLOQUES.length=0;
+  const n=espCfg.n||6;
+  for(let k=0;k<n;k++){
+    /* repartidos DENTRO del tunel: 2,0 m a cada lado de un tunel que mide 3,2, y entre 0,75 y 2,55
+       de alto en uno que va de 0 a 3,5. El margen no es de adorno — un bloque pegado a la pared del
+       tunel se confunde con las lineas de la pared y deja de leerse como algo que viene hacia vos. */
+    const lx=(((k*0.41)%1)*2-1)*2.0;
+    const ly=0.75+((k*0.57)%1)*1.80;
+    /* los rojos NO son la mitad: son uno de cada tres. Con la mitad rojos, barrer la mano deja de ser
+       una opcion y la actividad se vuelve otra cosa —esperar quieto— que es lo contrario de lo que
+       tiene que entrenar. */
+    const verde = espCfg.rojos? ((k%3)!==2) : true;
+    BLOQUES.push({ lx, ly, d:BL_LEJOS+k*2.6, vel:2.2+((k*0.31)%0.9), verde, viva:true, giro:k*0.7 });
+  }
+  bichosVivos=BLOQUES.filter(b=>b.verde).length;
+  son('bicho'); document.body.classList.add('bichos'); pintarLibros();
+}
+function espPerder(){
+  son('mal'); son('muerde');
+  espDestello=1;
+  dice('dPierde');
+  espSoltar();
+}
+function espTick(dt){
+  if(!BLOQUES.length) return;
+  if(espDestello>0) espDestello=Math.max(0, espDestello-dt*2.2);
+  const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+  /* los bloques se acercan */
+  for(const b of BLOQUES){
+    if(!b.viva) continue;
+    b.d -= b.vel*dt; b.giro += dt*1.1;
+    if(b.d<=BL_CERCA){
+      b.viva=false;
+      /* UN VERDE QUE SE PASA ES PERDER; un rojo que se pasa es lo correcto y no cuesta nada */
+      if(b.verde){ espPerder(); return; }
+    }
+  }
+  /* el corte: el camino que hizo cada mano entre el cuadro anterior y este */
+  const caminos=[];
+  if(MANO.on && MANO.pinzas){
+    for(const m of MANO.pinzas){
+      if(m.k>=(espCfg.espadas||1)) continue;      // con una sola espada, solo la primera mano corta
+      const a=espPrev[m.k];
+      caminos.push({ ax:(a? a[0] : m.px), ay:(a? a[1] : m.py), bx:m.px, by:m.py });
+      espPrev[m.k]=[m.px, m.py];
+    }
+  }
+  /* y el camino sin camara: un toque corta el bloque que tenga debajo */
+  while(TOQUES.length){ const g=TOQUES.shift(); caminos.push({ax:g.x, ay:g.y, bx:g.x, by:g.y}); }
+  if(!caminos.length) return;
+  for(const c of caminos){
+    let mejor=-1, mejorD=BL_R*W;
+    for(let k=0;k<BLOQUES.length;k++){
+      const b=BLOQUES[k];
+      if(!b.viva || b.d>BL_ALCANCE) continue;
+      const w=bloquePos(b);
+      const s=aPantalla(w[0], w[1], w[2]);
+      if(!s.delante) continue;
+      const d=distSeg(s.x*W, s.y*H, c.ax*W, c.ay*H, c.bx*W, c.by*H);
+      if(d<mejorD){ mejorD=d; mejor=k; }
+    }
+    if(mejor<0) continue;
+    const b=BLOQUES[mejor]; b.viva=false;
+    const w=bloquePos(b);
+    esquirlasSoltar(w[0], w[1], w[2], 10);
+    if(b.verde){ bichosVivos=Math.max(0, bichosVivos-1); son('revienta'); pintarLibros(); }
+    else { espPerder(); return; }                 // cortar un rojo es perder
+  }
+}
+function espDibujar(){
+  const hay=BLOQUES.some(b=>b.viva);
+  bloqueMalla.visible=hay;
+  if(!hay) return;
+  let k=0;
+  for(const b of BLOQUES){
+    if(!b.viva || k>=BLOQUE_MAX) continue;
+    const w=bloquePos(b);
+    _be.set(b.giro*0.4, b.giro, b.giro*0.25); _bq.setFromEuler(_be);
+    _bm.compose(_bv.set(w[0],w[1],w[2]), _bq, _bs.set(1,1,1));
+    bloqueMalla.setMatrixAt(k, _bm);
+    /* SE ENCIENDEN AL ENTRAR EN ALCANCE. Con brillo fijo no hay forma de saber cuando ya se puede
+       cortar uno, y llegar antes de tiempo no hace nada: la mano barre y el bloque sigue ahi. */
+    const f = b.d>BL_ALCANCE? 0.42 : 1.0;
+    /* mismo cuidado que con los globos: en lineal, para que el verde sea VERDE y no menta */
+    if(b.verde) _bc.setRGB(0.05*f, 1.0*f, 0.20*f); else _bc.setRGB(1.0*f, 0.02*f, 0.09*f);
+    bloqueMalla.setColorAt(k, _bc);
+    k++;
+  }
+  for(let q=k;q<BLOQUE_MAX;q++){
+    _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+    bloqueMalla.setMatrixAt(q, _bm);
+  }
+  bloqueMalla.instanceMatrix.needsUpdate=true;
+  if(bloqueMalla.instanceColor) bloqueMalla.instanceColor.needsUpdate=true;
+}
+
+/* =========================================================================================
+   PASILLO 6 — LOS GLOBOS: lo que se entrena es DISTINGUIR
+
+   Los casilleros ya entrenan elegir, pero ahi elegir es dar con el unico que se mueve: el juego te
+   dice cual. Aca los cinco estan quietos y a la vista, y lo que hay que hacer es NO tocar el que no
+   va. Es la primera actividad en la que hacer algo de mas cuesta — y por eso es la que prepara el
+   ultimo pasillo, donde cortar un bloque rojo se paga.
+
+   Y NO MATA: reventar un rojo suelta un verde nuevo, o sea que cuesta tiempo. La muerte de este juego
+   es una sola cosa —contestar mal una cuenta— y meter una segunda la abarataria.
+   ========================================================================================= */
+const GLOBOS=[];
+function globosSoltar(n, rumbo){
+  GLOBOS.length=0;
+  const g=(rumbo!=null)? rumbo : cam.giro;
+  const dx=Math.sin(g), dz=Math.cos(g), px=-dz, pz=dx;
+  const N=Math.max(2, Math.min(GLOBO_MAX, n||5));
+  for(let k=0;k<N;k++){
+    /* MAS CERCA Y MAS ABIERTOS DE LO QUE PARECE QUE HACE FALTA. Puestos a tres metros con poco
+       reparto lateral, los cinco caian sobre la columna del medio del pasillo — o sea justo encima
+       del profesor, que es verde. Un globo verde delante de un sueter verde no es un blanco: es un
+       bulto. Se abren a los costados para que ninguno comparta silueta con el, y se acercan para que
+       sean grandes en el marco, que es lo unico que hace que se distinga el color de un vistazo. */
+    const d=2.2+((k*0.63)%1.30);
+    const lat=(((k%2)?1:-1)*(0.62+((k*0.37)%0.55)));
+    /* uno de cada tres es rojo, y el reparto es fijo por indice: con azar puro puede salir una tanda
+       entera de un color y la actividad no ensena nada */
+    GLOBOS.push({ x:cam.x+dx*d+px*lat, y:0.98+((k*0.51)%1.10), z:cam.z+dz*d+pz*lat,
+                  verde:((k%3)!==2), viva:true, fase:k*1.3 });
+  }
+  bichosVivos=GLOBOS.filter(b=>b.verde).length;
+  son('bicho'); document.body.classList.add('bichos'); pintarLibros();
+}
+function globosTick(dt){
+  if(!GLOBOS.length) return;
+  for(const b of GLOBOS){ b.fase+=dt; }
+  const golpes=golpesJuntar();
+  for(const g of golpes){
+    const k=golpeEnLista(g, GLOBOS, b=>b.viva, b=>[b.x, b.y+Math.sin(b.fase*1.5)*0.12, b.z]);
+    if(k<0) continue;
+    const b=GLOBOS[k]; b.viva=false;
+    esquirlasSoltar(b.x, b.y, b.z, 8);
+    if(b.verde){ bichosVivos=Math.max(0, bichosVivos-1); son('revienta'); }
+    else {
+      /* el castigo: sale un verde nuevo donde estaba el rojo */
+      son('mal');
+      GLOBOS.push({ x:b.x, y:b.y, z:b.z, verde:true, viva:true, fase:b.fase+1.1 });
+      bichosVivos++;
+    }
+    pintarLibros();
+  }
+}
+function globosDibujar(){
+  const hay=GLOBOS.some(b=>b.viva);
+  globoMalla.visible=hay;
+  if(!hay) return;
+  let k=0;
+  for(const b of GLOBOS){
+    if(!b.viva || k>=GLOBO_MAX) continue;
+    _be.set(0, Math.atan2(cam.x-b.x, cam.z-b.z), Math.sin(b.fase*1.1)*0.13); _bq.setFromEuler(_be);
+    _bm.compose(_bv.set(b.x, b.y+Math.sin(b.fase*1.5)*0.12, b.z), _bq, _bs.set(1,1,1));
+    globoMalla.setMatrixAt(k, _bm);
+    /* OJO: setRGB TOMA LOS NUMEROS EN LINEAL, no en sRGB, y esa es la trampa que ya habia costado
+       una vuelta entera en Eco. Puesto (0,44 · 1,00 · 0,52) —que escrito parece un verde vivo— sale
+       en pantalla como (0,69 · 1,00 · 0,75): un verde salvia lavado, casi gris. Para que se vea un
+       verde hay que escribir los canales que NO mandan mucho mas abajo. */
+    if(b.verde) _bc.setRGB(0.09, 0.80, 0.18); else _bc.setRGB(0.80, 0.015, 0.03);
+    globoMalla.setColorAt(k, _bc);
+    k++;
+  }
+  for(let q=k;q<GLOBO_MAX;q++){
+    _bm.makeScale(0.0001,0.0001,0.0001); _bm.setPosition(0,-90,0);
+    globoMalla.setMatrixAt(q, _bm);
+  }
+  globoMalla.instanceMatrix.needsUpdate=true;
+  if(globoMalla.instanceColor) globoMalla.instanceColor.needsUpdate=true;
+}
+
+/* =========================================================================================
+   EL PUNTO AL QUE APUNTA EL JUGADOR AUTOMATICO, PARA CUALQUIERA DE LAS SIETE ACTIVIDADES
+
+   Vive aca y no en los ganchos de prueba por una razon concreta: los ganchos lo necesitan DOS veces
+   —jugarSolo() y auditarRumbo()— y tenerlo escrito dos veces garantiza que una actividad nueva quede
+   soportada en una de las dos y no en la otra, que es como se descubre tarde que la auditoria se
+   colgaba en el pasillo 6. Devuelve una fraccion del marco, o sea exactamente lo mismo que produce un
+   dedo: la prueba entra por el mismo agujero que el jugador y no por atras.
+   ========================================================================================= */
+function actPuntoAuto(){
+  let p=null;
+  const b=BICHOS.find(q=>q.viva);
+  const z=TIZAS.find(q=>q.viva && q.espera<=0);
+  const gl=GLOBOS.find(q=>q.viva && q.verde);
+  if(b) p=[b.x,b.y,b.z];
+  else if(z) p=[z.x,z.y,z.z];
+  else if(gl) p=[gl.x, gl.y, gl.z];
+  else if(casillBueno>=0 && CASILL[casillBueno] && !CASILL[casillBueno].abierto){
+    const c=CASILL[casillBueno]; p=[c.x, c.y+0.35, c.z];
+  }
+  else if(ROMPE.length){
+    /* el rompecabezas se juega en dos toques —la pieza y despues el hueco—, asi que el punto depende
+       de si ya hay una elegida. Es el mismo camino de dos toques que usa un jugador sin camara. */
+    if(rompeSel>=0 && ROMPE[rompeSel] && !ROMPE[rompeSel].puesta){
+      const q=ROMPE[rompeSel]; return { x:q.sx, y:q.sy };
+    }
+    const q=ROMPE.find(r=>!r.puesta);
+    if(q) return { x:q.cx, y:q.cy };
+  }
+  else if(BLOQUES.length){
+    /* solo se puede cortar lo que ya entro en alcance: apuntarle a uno lejano no hace nada, y el
+       jugador automatico se quedaria tocando el aire hasta que el bloque se pase y pierda */
+    let mejor=null;
+    for(const q of BLOQUES){
+      if(!q.viva || !q.verde || q.d>BL_ALCANCE) continue;
+      if(!mejor || q.d<mejor.d) mejor=q;
+    }
+    if(mejor){
+      const w=bloquePos(mejor);
+      const s=aPantalla(w[0],w[1],w[2]);
+      return s.delante? { x:s.x, y:s.y } : null;
+    }
+    return null;
+  }
+  if(!p) return null;
+  const s=aPantalla(p[0],p[1],p[2]);
+  return s.delante? { x:s.x, y:s.y } : null;
 }
 
 function pasoFijo(dt){
@@ -4007,7 +4770,112 @@ window.__recreo={
   actVer:()=>({ vivos:bichosVivos, bichos:BICHOS.filter(b=>b.viva).length,
                 tizas:TIZAS.filter(z=>z.viva).length,
                 casilleros:CASILL.filter(c=>!c.abierto).length,
+                rompe:ROMPE.filter(p=>!p.puesta).length, rompeSel,
+                globos:GLOBOS.filter(b=>b.viva && b.verde).length,
+                globosRojos:GLOBOS.filter(b=>b.viva && !b.verde).length,
+                bloques:BLOQUES.filter(b=>b.viva).length,
+                bloquesVerdes:BLOQUES.filter(b=>b.viva && b.verde).length,
+                neon:espMundo, espadas:MANO.espada,
                 casillBueno, esquirlas:ESQ.length }),
+  /* =========================================================================================
+     EL MUNDO NEON, MEDIDO: que se apago del colegio, que quedo encendido, y donde caen los bloques
+     en PANTALLA — que es la unica coordenada que decide si se pueden cortar.
+     ========================================================================================= */
+  neonVer2:()=>{
+    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+    let visibles=0, ocultas=0;
+    for(const o of escena.children){ if(o.isLight) continue; if(o.visible) visibles++; else ocultas++; }
+    return { neon:espMundo, espadas:MANO.espada, marco:[W,H],
+             niebla:[escena.fog.near, escena.fog.far, '#'+escena.fog.color.getHexString()],
+             visibles, ocultas,
+             bloques: BLOQUES.filter(b=>b.viva).map(b=>{
+               const w=bloquePos(b); const s=aPantalla(w[0],w[1],w[2]);
+               return { verde:b.verde, d:+b.d.toFixed(2), enAlcance:b.d<=BL_ALCANCE,
+                        px:[Math.round(s.x*W), Math.round(s.y*H)], delante:s.delante }; }) };
+  },
+  /* los globos, con su color y donde caen en pantalla: el color es la mitad de la actividad, asi que
+     una prueba que no lo devuelva no puede comprobar que reventar el rojo cuesta */
+  globosVer:()=>{
+    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+    const r=GLOBOS.filter(b=>b.viva).map(b=>{
+      const s=aPantalla(b.x, b.y+Math.sin(b.fase*1.5)*0.12, b.z);
+      return { verde:b.verde, px:[Math.round(s.x*W), Math.round(s.y*H)], delante:s.delante }; });
+    r.marco=[W,H];
+    return r;
+  },
+  /* el rompecabezas en fracciones del marco: pieza, hueco y si esta puesta */
+  rompeVer:()=>ROMPE.map(p=>({ pieza:[+p.cx.toFixed(3), +p.cy.toFixed(3)],
+                               hueco:[+p.sx.toFixed(3), +p.sy.toFixed(3)],
+                               dist:+Math.hypot(p.cx-p.sx, p.cy-p.sy).toFixed(3),
+                               puesta:p.puesta, tomada:p.tomada })),
+  /* UNA PINZA SOSTENIDA DE MENTIRA: es la unica forma de probar el ARRASTRE sin camara ni mano. Se
+     inyecta una mano de verdad por las ranuras y despues se le pisa el punto de la pinza, asi el
+     agarre entra por el mismo camino que usa la camara. */
+  manoArrastrar:(x,y,pinza,k)=>{
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.pinzas=[{ x, y, px:x, py:y, k:k||0, pinza:!!pinza, nueva:false }];
+    MANO.hay=true; MANO.manos=1;
+    return { x, y, pinza:!!pinza, k:k||0 };
+  },
+  /* =========================================================================================
+     LA PRUEBA DE QUE LA MANO QUEDA CERRADA A LA FUERZA
+
+     Se inyecta una mano ABIERTA de cinco dedos y se mide cuanto se alejan las puntas del centro de
+     la palma, con la espada apagada y encendida. Si el puño forzado funciona, con la espada puesta
+     ese numero tiene que caer mucho AUNQUE la mano inyectada siga abierta — que es literalmente lo
+     que se pidio: "no importa si abris tu mano va a estar cerrada".
+     ========================================================================================= */
+  manoPuno:()=>{
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
+    manosInyectar([window.__recreo.manoFalsa(5,false,0.5,0.5)], 1000);
+    manosAvanzar(1/60);
+    const R=MANO.ranuras[0];
+    const medir=(L)=>{
+      let cx=0, cy=0;
+      for(const i of [0,5,9,13,17]){ cx+=L[i*3]; cy+=L[i*3+1]; }
+      cx/=5; cy/=5;
+      let s=0;
+      for(const i of [4,8,12,16,20]) s+=Math.hypot(L[i*3]-cx, L[i*3+1]-cy);
+      return s/5;
+    };
+    const abierta=medir(R.sal);
+    const guard=MANO.espada; MANO.espada=1;
+    const cerrada=medir(puñoDe(R));
+    MANO.espada=guard; MANO.pausa=false;
+    return { dedosLeidos:R.dedos, abierta:+abierta.toFixed(4), cerrada:+cerrada.toFixed(4),
+             encogePct:+((1-cerrada/Math.max(1e-9,abierta))*100).toFixed(1) };
+  },
+  /* =========================================================================================
+     LA ESPADA, EN PIXELES. Mirando la primera captura se veia que era enorme, pero "enorme" no es un
+     numero con el que se pueda ajustar nada. Se proyectan el puño y la punta de la hoja y se devuelve
+     el largo EN FRACCION DEL ALTO DEL MARCO, que es lo que decide si tapa el juego: una espada tiene
+     que leerse a espada y dejar ver los bloques, o sea del orden de un tercio del alto, no de dos.
+     ========================================================================================= */
+  espadaVer:()=>{
+    /* manosAvanzar ANTES de dibujar: es el que llena MANO.vivas a partir de las ranuras, y vive en el
+       bucle y no en dibujar(). Sin esta linea el gancho devolvia vivas:0 con la mano inyectada. */
+    if(MANO.on) manosAvanzar(1/60);
+    dibujar(1);
+    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+    const v=(MANO.vivas||[]);
+    if(!v.length || !MANO.espada) return { espada:MANO.espada, vivas:v.length, hay:false };
+    const m=new THREE.Matrix4(), p=new THREE.Vector3(), q=new THREE.Quaternion(),
+          e=new THREE.Vector3();
+    espadaMalla.getMatrixAt(0, m);
+    m.decompose(p, q, e);
+    /* el puño esta en el origen de la geometria y la punta de la hoja a z=-1,32 en local */
+    const punta=new THREE.Vector3(0,0,-1.32).applyMatrix4(m);
+    const a=aPantalla(p.x,p.y,p.z), b=aPantalla(punta.x,punta.y,punta.z);
+    return { espada:MANO.espada, vivas:v.length, hay:true, escala:+e.x.toFixed(4),
+             largoM:+(1.32*e.x).toFixed(3),
+             puñoPx:[Math.round(a.x*W), Math.round(a.y*H)],
+             puntaPx:[Math.round(b.x*W), Math.round(b.y*H)],
+             largoPx:Math.round(Math.hypot((b.x-a.x)*W,(b.y-a.y)*H)),
+             fraccionAlto:+(Math.hypot((b.x-a.x)*W,(b.y-a.y)*H)/H).toFixed(3), marco:[W,H] };
+  },
+  manoSoltarTodo:()=>{ MANO.pinzas=[]; MANO.on=false; MANO.pausa=false; MANO.hay=false;
+                       MANO.manos=0; return true; },
   bichosVer:()=>{
     const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
     return { vivos:bichosVivos, esquirlas:ESQ.length, marco:[W,H],
@@ -4147,17 +5015,58 @@ window.__recreo={
       manosAvanzar(dtR/1000); t+=dtR;
     }
     const x0=MANO.ranuras[0].sal[0];
-    const t0=t; let ms90=-1;
+    const t0=t; let ms90=-1, pico=0;
+    /* NO SE CORTA AL LLEGAR AL 90%, y eso importa: la prediccion adelanta la salida, asi que un
+       ajuste puede cruzar el 90% antes Y PASARSE DE LARGO. Cortando ahi el sobrepico no se ve, y un
+       sobrepico es exactamente lo que se siente como "la mano rebota". Se corre la ventana entera. */
     for(let c=0;c<200;c++){
       if(t>=proxMed){ manosInyectar([B], t); proxMed+=dtM; }
       manosAvanzar(dtR/1000);
       const x=MANO.ranuras[0].sal[0];
-      if(ms90<0 && Math.abs(x-x0)>=Math.abs(salto)*0.90){ ms90=t-t0; break; }
+      const av=(x-x0)/salto;
+      if(av>pico) pico=av;
+      if(ms90<0 && Math.abs(x-x0)>=Math.abs(salto)*0.90) ms90=t-t0;
       t+=dtR;
     }
     MANO.pausa=false;
     return { salto, hz, ms90: ms90<0? null : +ms90.toFixed(0),
+             sobrepicoPct:+((pico-1)*100).toFixed(1),
              desde:+x0.toFixed(4), hasta:+MANO.ranuras[0].sal[0].toFixed(4) };
+  },
+  /* =========================================================================================
+     LA MEDIDA QUE DE VERDAD CORRESPONDE A "LAS MANOS VAN LENTAS"
+
+     El salto mide un escalon, y una mano no da escalones: se mueve. Lo que el jugador siente es que
+     la mano dibujada va ATRAS de la suya mientras la mueve, y eso es el error de seguimiento en un
+     movimiento sostenido. Se arrastra una mano a velocidad constante por el marco, se mide cuanto
+     queda atras la salida y se divide por la velocidad: el resultado esta EN MILISEGUNDOS, que es
+     lo unico comparable entre ajustes y lo que hay que dividir por tres.
+     ========================================================================================= */
+  manoRampa:(opts)=>{
+    const o=opts||{};
+    const hz=o.hz||24, render=o.render||60;
+    const vel=o.vel==null? 0.55 : o.vel;          // fraccion de marco por segundo
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
+    const F=window.__recreo.manoFalsa;
+    const dtR=1000/render, dtM=1000/hz;
+    let t=1000, proxMed=t, x=0.18;
+    for(let c=0;c<20;c++){                        // asentar quieta
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      manosAvanzar(dtR/1000); t+=dtR;
+    }
+    const errs=[];
+    for(let c=0;c<90;c++){
+      x += vel*dtR/1000;
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      manosAvanzar(dtR/1000);
+      if(c>25) errs.push(x-MANO.ranuras[0].sal[0]);   // los primeros son el arranque, no el regimen
+      t+=dtR;
+    }
+    MANO.pausa=false;
+    const m=errs.reduce((s,v)=>s+v,0)/Math.max(1,errs.length);
+    return { vel, hz, errorMedio:+m.toFixed(5), retardoMs:+(m/vel*1000).toFixed(0),
+             muestras:errs.length };
   },
   /* cuantas detecciones duplicadas se descartaron: si esto sube, MediaPipe esta viendo dos veces la
      misma mano y sin el descarte el conteo de dedos saldria al doble */
@@ -4206,8 +5115,17 @@ window.__recreo={
   manoFiltro:(o)=>{ if(o){ if(o.fcMin!=null) OE.fcMin=o.fcMin;
                            if(o.beta!=null) OE.beta=o.beta;
                            if(o.fcD!=null) OE.fcD=o.fcD;
+                           if(o.dz!=null) OE.dz=o.dz;
+                           if(o.dzZ!=null) OE.dzZ=o.dzZ;
+                           if(o.fcMinZ!=null) OE.fcMinZ=o.fcMinZ;
+                           if(o.betaZ!=null) OE.betaZ=o.betaZ;
+                           if(o.pred!=null) MANO_PRED=o.pred;
+                           if(o.vQ!=null) V_QUIETA=o.vQ;
+                           if(o.vR!=null) V_RAPIDA=o.vR;
                            if(o.tau!=null) MANO_TAU=o.tau; }
-                    return { fcMin:OE.fcMin, beta:OE.beta, fcD:OE.fcD, tau:MANO_TAU }; },
+                    return { fcMin:OE.fcMin, beta:OE.beta, fcD:OE.fcD, dz:OE.dz, fcMinZ:OE.fcMinZ,
+                             betaZ:OE.betaZ, pred:MANO_PRED, vQ:V_QUIETA, vR:V_RAPIDA,
+                             tau:MANO_TAU }; },
   /* cuanto cuesta dibujar las dos manos encima del juego, en milisegundos por cuadro */
   /* cuanto cuesta armar las dos manos 3D, en milisegundos por cuadro */
   manoCosto:(n)=>{
@@ -4257,16 +5175,13 @@ window.__recreo={
          el pixel donde cae el blanco. Llamar directo a la funcion que lo revienta no probaria nada de
          lo que puede estar mal, que es la proyeccion, el radio del blanco y —en los casilleros— que
          el que tiembla sea el que se abre. */
-      if(bichosVivos>0 && !(vueltas%8) && !pararEn){
-        let p=null;
-        const b=BICHOS.find(q=>q.viva);
-        const z=TIZAS.find(q=>q.viva && q.espera<=0);
-        if(b) p=[b.x,b.y,b.z];
-        else if(z) p=[z.x,z.y,z.z];
-        else if(casillBueno>=0 && CASILL[casillBueno] && !CASILL[casillBueno].abierto){
-          const c=CASILL[casillBueno]; p=[c.x, c.y+0.35, c.z];
-        }
-        if(p){ const s=aPantalla(p[0],p[1],p[2]); if(s.delante) TOQUES.push({x:s.x, y:s.y}); }
+      /* EL RITMO DEPENDE DE LA ACTIVIDAD. Cada 8 cuadros alcanza para todo lo que espera quieto,
+         pero los bloques del mundo neon vienen a dos metros por segundo y con 8 cuadros de espera se
+         pasan de largo entre toque y toque: el jugador automatico perdia la tanda una y otra vez y la
+         escena no terminaba nunca. Ahi se apunta todos los cuadros. */
+      if(bichosVivos>0 && !pararEn && (BLOQUES.length? true : !(vueltas%8))){
+        const g=actPuntoAuto();
+        if(g) TOQUES.push(g);
       }
       const antes=escena_i, aL=libros, mu=muertes;
       avanzar(1/60);
@@ -4290,16 +5205,9 @@ window.__recreo={
       const E=GUION[escena_i];
       if(E && E.espera){ MANO.on=false; padPedido=(E.espera.tipo==='dedos')? E.espera.n : 1; }
       else if(cuenta && !bloqueo){ MANO.on=false; padPedido=cuenta.res; }
-      if(bichosVivos>0 && !(pasos%8)){
-        let p=null;
-        const b=BICHOS.find(q=>q.viva);
-        const z=TIZAS.find(q=>q.viva && q.espera<=0);
-        if(b) p=[b.x,b.y,b.z];
-        else if(z) p=[z.x,z.y,z.z];
-        else if(casillBueno>=0 && CASILL[casillBueno] && !CASILL[casillBueno].abierto){
-          const c=CASILL[casillBueno]; p=[c.x, c.y+0.35, c.z];
-        }
-        if(p){ const s=aPantalla(p[0],p[1],p[2]); if(s.delante) TOQUES.push({x:s.x,y:s.y}); }
+      if(bichosVivos>0 && (BLOQUES.length? true : !(pasos%8))){
+        const g=actPuntoAuto();
+        if(g) TOQUES.push(g);
       }
       avanzar(1/60);
       const c=celda(PROFE.x, PROFE.z);

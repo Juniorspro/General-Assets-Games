@@ -50,6 +50,120 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Vigesimoséptima vuelta (2026-08-27): **RECREO** — las manos 3 veces más rápidas y siete pasillos distintos
+
+Pedido: *"hace que sea 3 veces más rápido el movimiento de las manos, también que por ejemplo en el
+segundo pasillo tengas que armar un rompecabezas con las manos, en el tercero tengas una espada y
+vengan bloques hacia a ti porque te teletransportas a un mundo neón, y ahora tu mano en ese lugar si o
+si cerrada con la espada, no importa si abris tu mano va a estar cerrada, y debes cortar los bloques
+verdes; si pierdes se reinicia ese nivel, y así agrega más hasta el último salón 8"*. Y una aclaración
+que mandó a mitad de camino y que ordena **todo** lo demás: *"recuerda que la mano no puede ir más
+lejos, tienes que hacer simples juegos fáciles de usar la mano, por ejemplo que los monstruos para
+matarlos en el primer salón hay que hacer pinch con dos dedos por encima de ellos **en pantalla, no en
+profundidad**"*.
+
+#### LAS MANOS: DE 65 ms A 21 ms, Y EL TEMBLOR MEJORÓ EN VEZ DE EMPEORAR
+
+**Primero hubo que medir la cosa correcta.** La vuelta pasada el retardo se medía con un ESCALÓN, y una
+mano no da escalones: se mueve. Lo que el jugador siente como "van lentas" es que la mano dibujada va
+**atrás** de la suya mientras la arrastra, o sea el error de seguimiento en movimiento sostenido.
+`manoRampa()` arrastra una mano a velocidad constante, mide cuánto queda atrás la salida y divide por
+la velocidad: el resultado está **en milisegundos**, y ése es el número que había que dividir por tres.
+
+Y al escalón se le agregó el **sobrepico**, porque antes la prueba cortaba al llegar al 90 %: la
+predicción adelanta la salida, así que un ajuste podía cruzar el 90 % antes *y pasarse de largo*, y
+cortando ahí eso no se veía. Un sobrepico es exactamente lo que se siente como "la mano rebota".
+
+**LO QUE EL BARRIDO ENCONTRÓ, Y NO ERA LO QUE YO ESPERABA.** Subir `beta` —la perilla que abre el corte
+del 1-euro con la velocidad— casi no cuesta temblor: de beta 3 a beta 9 la atenuación caía sólo de 3,83
+a 3,47. Pero seguía cayendo, y a beta 16 ya estaba en 3,17. **La causa: con la mano quieta la derivada
+NO ES CERO, es el ruido del detector dividido por el intervalo.** Así que subir beta para que la mano
+siga rápido también multiplica ese ruido y abre el corte justo cuando no hay que abrirlo.
+
+El arreglo es una resta: **una zona muerta en la derivada**. `fc = fcMin + beta·max(0, |d| − dz)`. Una
+derivada de nivel de ruido aporta **cero** y una de movimiento real aporta todo. Medido, con `dz` de
+0,10 en adelante la atenuación se **clava en 4,10 para beta 9, 14, 20 y 28 por igual**: las dos cosas
+dejan de estar atadas y beta se puede subir sin pagar nada.
+
+| | retardo de seguimiento | atenuación del temblor | latido de grosor |
+|---|---|---|---|
+| antes | **65 ms** | 3,83 | 1,12 % |
+| ahora | **21 ms** (3,1×) | **4,10** | 1,12 % |
+
+Sin subir la frecuencia de medición: sigue en 24 Hz en teléfono, porque el reclamo original de todo
+esto era el rendimiento. Lo que quedó como costo es **10,3 % de sobrepico** en un escalón del 20 % del
+marco — un salto instantáneo que una mano de verdad no puede dar.
+
+#### SIETE PASILLOS, SIETE COSAS DISTINTAS, Y TODAS EN PANTALLA
+
+Eran tres actividades rotando en siete tramos, o sea la tercera vez que hacés lo mismo antes del aula
+8. Ahora cada una pide algo que ninguna otra pide: **apuntar** (bichos) · **arrastrar**
+(rompecabezas) · **cortar** (espada) · **el tiempo** (tizas) · **elegir** (casilleros) ·
+**distinguir** (globos) · **todo junto** (dos espadas y bloques rojos).
+
+Y las siete se juzgan igual: el blanco se proyecta a la pantalla y se compara ahí, en fracciones del
+marco. **Ninguna pide estirarse hacia adelante ni acertar una profundidad**, que es lo que el jugador
+pidió con todas las letras — y además es lo único que una webcam sola mide bien.
+
+**EL ROMPECABEZAS es la única que se juega con la pinza SOSTENIDA.** Las otras seis usan el *flanco*:
+el cuadro en el que la pinza aparece. Hasta acá la mano sólo sabía decir "acá"; ésta la obliga a decir
+"esto, y llevalo allá". Y tiene dos caminos que terminan en el mismo sitio: con la mano es agarrar y
+arrastrar, con el dedo es tocar la pieza y después tocar el hueco — el mismo criterio por el que existe
+el teclado de números.
+
+**LA ESPADA NO USA PINZA, y eso es el punto.** Con la mano cerrada no hay pinza que hacer, así que lo
+que corta es **el movimiento**: el camino que la mano recorrió entre este cuadro y el anterior. Es la
+única actividad del juego que se juega con velocidad y no con un gesto. Y se compara contra el
+**segmento** y no contra el punto, porque con las manos ahora a 21 ms y a 60 cuadros una mano rápida
+salta 30 o 40 píxeles **entre un cuadro y el siguiente**: mirando sólo la posición de este cuadro, el
+bloque queda entre dos posiciones y el corte no existe.
+
+**LA MANO CERRADA A LA FUERZA** se hace acercando los puntos al centro de la palma, no rotando falanges.
+No es la curva anatómica de un puño, pero al tamaño al que se ve una mano en un teléfono se lee como
+uno, cuesta una resta por punto y —lo que importa— **es estable**: no depende de que MediaPipe acierte
+la flexión de un dedo tapado por los otros, que es justo lo que no acierta con la mano cerrada.
+Medido: se inyecta una mano **abierta, con los cinco dedos leídos**, y las puntas dibujadas se recogen
+un **65,2 %** hacia la palma.
+
+#### CINCO DEFECTOS PROPIOS, TODOS ENCONTRADOS MIRANDO O MIDIENDO
+
+- **El túnel neón estaba armado en el origen del mundo** y el pasillo donde cae la actividad está a
+  treinta metros de ahí: le quedaba al jugador abajo y de costado. Un túnel que no está centrado en vos
+  no se lee como un lugar en el que estás parado. Se planta en la cámara con el rumbo del tramo.
+- **Los bloques flotaban ARRIBA del túnel.** Los repartía por posición de *pantalla*, que es lo que
+  hacen las otras seis, y acá no sirve: la sección del túnel se angosta con la distancia, así que una
+  altura de pantalla fija sale por encima del techo apenas se aleja. Van en coordenadas del túnel; el
+  corte se sigue juzgando en pantalla.
+- **Los cuatro huecos del rompecabezas eran UN rectángulo gris.** Con los centros a 0,23 del ancho y la
+  pieza midiendo 0,21, los cuatro se tocaban — el mismo defecto que ya había convertido cinco
+  casilleros en una pared roja. Y las dos piezas de abajo estaban en 0,78 del alto, o sea **tapadas por
+  el globo de diálogo justo mientras el cartel explica que hay que agarrarlas**.
+- **`setRGB` TOMA LOS NÚMEROS EN LINEAL, no en sRGB**, y es la misma trampa que ya había costado una
+  vuelta en Eco. `(0,44 · 1,00 · 0,52)` —que escrito parece un verde vivo— sale en pantalla como
+  `(0,69 · 1,00 · 0,75)`: un verde salvia lavado. Los globos verdes se confundían con el suéter del
+  profesor, que también es verde y estaba justo detrás de ellos.
+- **LA ESPADA, TRES VECES.** Primero con un piso fijo de escala: una cruz cian que tapaba la pantalla.
+  Después "bien" calculada, en palmas (una espada mide unas siete): medido, la hoja daba **1,058 veces
+  el alto del marco**, más larga que la pantalla entera. Y la razón no es un error de cuenta —**la mano
+  se dibuja a 40 cm del ojo**, así que cualquier cosa pegada a ella con proporciones de verdad es
+  gigante en el cuadro. La espada está deliberadamente sub-escalada y escorzada hacia adentro de la
+  pantalla, y quedó en **0,21 del alto**. La tercera fue de proporciones: con la guarda casi cuatro
+  veces más ancha que la hoja y todo escorzado, lo que se veía era un **martillo**.
+
+#### MEDIDO AL CERRAR
+
+Partida completa **24 de 24** con las siete actividades nuevas jugadas por el mismo camino que usa el
+jugador, 0 pasos dentro de paredes en 20.913, contestando mal la partida se termina igual (24/24 con 1
+muerte), `window.__errs` vacío. Retardo de seguimiento **21 ms** (era 65), atenuación **4,10** (era
+3,83), puño forzado **65,2 %**, las tres pruebas de reparto de manos en verde. Costo: 10 llamadas de
+dibujo y 16.302 triángulos sin actividad —igual que antes, porque las mallas nuevas están ocultas
+mientras no se usan—, 19 y 23.382 con el mundo neón, las dos manos y la espada en pantalla.
+
+**Probado por casos, no sólo de punta a punta:** el rompecabezas agarra con la pinza sostenida, sigue
+al dedo y encaja (4→3), y soltado a 0,63 del hueco **no** encaja; dejar pasar un bloque verde reinicia
+la tanda; cortar un rojo también (5→6, y los ocho bloques vuelven); reventar un globo rojo sube el
+contador de 4 a 5 y uno verde lo baja.
+
 ### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
 
 Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo

@@ -112,14 +112,27 @@ const TOUR=[1,2,3,4,8,7,6,5];
    El primer tramo no tiene nada: es el que sigue al tutorial y el jugador recien aprendio a contar.
    Las cantidades suben, y ninguna pasa de cinco o seis blancos a la vez porque en un marco 9:16 mas
    que eso se solapa y deja de poder apuntarse de a uno. */
+/* SIETE PASILLOS, SIETE COSAS DISTINTAS. Antes eran tres actividades rotando, y tres rotando en
+   siete tramos es la tercera vez que hacés lo mismo antes de llegar al aula 8. Cada una pide algo
+   que ninguna otra pide:
+     1 bichos      → APUNTAR: un blanco que se mueve, pinza encima.
+     2 rompecabezas→ ARRASTRAR: agarrar con la pinza SOSTENIDA y soltar en su lugar.
+     3 espada      → CORTAR: barrer la mano por encima, y la mano va cerrada.
+     4 tizas       → EL TIEMPO: llegar antes de que toque el piso.
+     5 casilleros  → ELEGIR: cinco iguales y hay que dar con el que tiembla.
+     6 globos      → DISTINGUIR: reventar los verdes y NO los rojos.
+     7 espada dos  → todo junto: dos espadas, y cortar rojo se paga.
+   Y las siete se juegan con lo mismo: la mano encima del objeto EN LA PANTALLA. Ninguna pide
+   estirarse hacia adelante ni acertar una profundidad — eso lo pidio el jugador con todas las letras
+   ("la mano no puede ir mas lejos"), y ademas es lo unico que una webcam sola mide bien. */
 const TRAMOS=[ null,
-  { tipo:'bichos',     n:2, txt:'dBichos' },
-  { tipo:'tizas',      n:3, txt:'dTizas' },
-  { tipo:'casilleros', n:3, txt:'dCasill' },
-  { tipo:'bichos',     n:4, txt:'dBichos' },
+  { tipo:'bichos',     n:3, txt:'dBichos' },
+  { tipo:'rompe',      n:4, txt:'dRompe' },
+  { tipo:'espada',     n:6, txt:'dEspada',  espadas:1, rojos:false },
   { tipo:'tizas',      n:4, txt:'dTizas' },
   { tipo:'casilleros', n:3, txt:'dCasill' },
-  { tipo:'bichos',     n:5, txt:'dBichos' } ];
+  { tipo:'globos',     n:5, txt:'dGlobos' },
+  { tipo:'espada',     n:8, txt:'dEspada2', espadas:2, rojos:true } ];
 const TOTAL_CUENTAS=TOUR.length*CUENTAS_AULA;
 
 const GUION=[
@@ -140,7 +153,8 @@ TOUR.forEach((n,k)=>{
     /* el viaje va PARTIDO EN DOS y la actividad cae en la juntura: tiene que estar EN el camino, no
        al final de el */
     GUION.push({ id:'viaje'+n, anim:'caminar', txt:'dSale',  viaje:n, mitad:true, aula:n });
-    GUION.push({ id:'act'+n,   anim:'quieto',  txt:T.txt, act:T.n, tipo:T.tipo, aula:n });
+    GUION.push({ id:'act'+n,   anim:'quieto',  txt:T.txt, act:T.n, tipo:T.tipo, aula:n,
+                 esp:T.espadas||0, rojos:!!T.rojos });
     GUION.push({ id:'sigue'+n, anim:'caminar', txt:'dSale2', viaje:n, resto:true, aula:n });
   } else {
     GUION.push({ id:'viaje'+n,  anim:'caminar', txt:'d7', viaje:n, aula:n });
