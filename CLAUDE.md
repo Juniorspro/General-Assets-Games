@@ -14,7 +14,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
 - **`Maicol.html` es "Maicol"** (~300 KB, de los cuales ~200 KB son los sprites y los fondos).
   Plataformas 2D, siete niveles, hay que rescatar a Maicolito. Arte generado con Higgsfield.
-- **`Pompom.html` es "POMPOM"** (~114 KB, sin un solo asset: todo se dibuja por código, incluidos la
+- **`Pompom.html` es "POMPOM"** (~150 KB, sin un solo asset: todo se dibuja por código, incluidos la
   historia, el fondo, los gorritos y la música). **Se llamaba `Pelusa.html`**; el personaje sigue
   siendo Pelusín. Juego 2D de tranquilidad: la pelusa está pegada a un punto, hay una línea recta
   marcada hasta el siguiente y alrededor de ese punto giran pelusas con espinas. Se toca y sale; si
@@ -33,6 +33,80 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Decimonovena vuelta (2026-08-27): **POMPOM** — un fondo generado por mundo, cinemática por nivel, bloom y estallidos
+
+Pedido: *"agrega fondos diferentes para cada mundo de pompom generalos con highsfield y también agrega
+que cada terminar un nivel haya una cinematica, también en algunos mundos pon Bloom efectos de
+explosiones y fondos animados ya que debemos representar una historia, también los fondos no deben ser
+súper elaborados o sea árboles y plantas sino que puede ser un fondo de hielo en cascada esas cosas"*.
+`herramientas/pompom/hornear_fondos.py` + `herramientas/pompom/parche_cine.py`, idempotente.
+
+#### OCHO FONDOS QUE PESAN 13 KB **LOS OCHO JUNTOS**
+
+Generados con `z_image` en 9:16: niebla, dos lunas, dunas, mar, **una cascada congelada** (el ejemplo
+textual del pedido), un cañón, una salina y un pico. Nada de árboles ni plantas, como se pidió.
+De 1152×2048 PNG (3 MB cada uno) a **360×640 WebP**: se ven igual de bien estirados a pantalla
+completa porque **no hay un solo detalle fino en ellos** — son manchas suaves, y no hay nada que se
+pueda ver pixelado si no hay nada nítido.
+
+**Se repiten EN ESPEJO.** Un nivel del mundo 8 son 40 unidades de alto y la imagen cubre unas 18:
+repetirla derecha deja una costura cada vuelta; en espejo **no hay costura posible**, porque el borde
+de arriba de una copia es exactamente el borde de arriba de la de al lado.
+
+**Dos cosas que medí y salieron mal antes de salir bien:**
+- El recorte de marco se comió medio dibujo. Pedía "plano y más claro que el centro", y **un cielo
+  pálido liso cumple**: le arrancó 512 px de cielo al desierto y a la salina. Ahora exige plano, casi
+  blanco en absoluto (>238) **y fino** (≤8% del lado) — un margen de póster nunca pasa de ahí.
+- La mezcla contra el papel intenté sacarla del contraste de cada imagen y **midió peor**: la
+  desviación estándar de la imagen entera está dominada por las zonas pálidas, que son casi todo el
+  cuadro, así que la cascada —cuyo contraste es *local*— salía con std 15,8 y le tocaba menos mezcla
+  que antes. Una regla que mide lo que no es el problema no le gana a un número comprobado en una
+  foto. Quedó fijo en 46%.
+
+#### EL BLOOM ES SELECTIVO, Y EN UN JUEGO BLANCO NO ES UNA PREFERENCIA
+
+Un bloom de pantalla completa toma lo más brillante del cuadro y lo derrama — **y acá lo más brillante
+del cuadro es el papel**. Sobre `#F7F6F3` devuelve una pantalla lavada donde ya no se lee ni la línea
+de puntos. Así que el brillo **no se deduce de la imagen: se declara**. Cada cosa que tiene que brillar
+se anota en una lista mientras se dibuja y al final se pinta a mitad de resolución como degradados
+radiales, sumada con `lighter`. Cuatro o cinco degradados por cuadro contra un desenfoque de pantalla
+completa: más barato **y** más correcto.
+Y **no en todos los mundos**: va en el 5, 6, 7 y 8, donde la historia lo pide. Un brillo que está
+siempre deja de significar algo. Los estallidos brillan en los ocho.
+
+| | ms por cuadro |
+|---|---|
+| con efectos | 1,01 |
+| sin efectos | 0,69 |
+
+#### UNA CINEMÁTICA AL TERMINAR CADA NIVEL
+
+**La línea es del MUNDO y no del nivel.** Veinte frases distintas por mundo serían ciento sesenta
+frases que nadie lee a partir de la tercera; lo que cambia nivel a nivel es la barra, y lo que cambia
+de mundo a mundo es el capítulo. Al cerrar un mundo, la cinemática dura 4,6 s en vez de 2,8 y agrega
+"MUNDO {m} ATRÁS".
+Se dibuja **en el lienzo de siempre** —el mismo fondo, el mismo clima, el mismo Pelusín con su pelo de
+verdad cruzando el plano a saltitos— y lo único en DOM es el texto, que tiene que ser nítido en un
+teléfono y poder traducirse. Y **se saltea con un toque en cualquier lado**: una cinemática obligatoria
+repetida ciento sesenta veces deja de ser una historia y pasa a ser un peaje.
+
+#### CLIMA: OCHO COSAS MOVIÉNDOSE
+
+Niebla, polvo, arena, espuma, nieve, brasas, calor y aurora. **Las partículas viven en la pantalla y
+no en el mundo**: el clima no es geometría —no hay que poder aprendérselo, ni tiene que ser igual en
+todos los teléfonos— así que se guarda de 0 a 1 y se envuelve por módulo. Ponerlo en unidades de mundo
+obligaría a toda la maquinaria de repetición del parallax para algo que el jugador no mira de frente.
+La aurora del mundo 8 pasa por el bloom, y por eso ese mundo se siente distinto de los otros siete.
+
+#### UN ESTALLIDO SON TRES COSAS A LA VEZ
+
+La onda de choque que sale, las esquirlas que vuelan y **el fogonazo que brilla en el medio**. Con dos
+de las tres se ve a medio hacer; el fogonazo es el que hace el trabajo y dura tres cuadros.
+
+Verificado después de todo esto: los **160 niveles siguen jugándose solos con cero choques** y la
+fracción segura mínima sigue en 0,121. Cero errores de página. El HTML pasó de 114 KB a **150 KB**,
+de los cuales 18 son los ocho fondos en base64.
 
 ### Decimoctava vuelta (2026-08-27): **Pelusa pasa a llamarse POMPOM** — hub, tiendas, vidas y enemigos peludos
 
