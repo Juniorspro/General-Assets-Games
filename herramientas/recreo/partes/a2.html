@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Recreo</title>
+<style>
+  /* ===================== VERTICAL, Y NO ES UNA PREFERENCIA =====================
+     El juego se juega con UNA MANO EN EL AIRE delante de la camara del telefono. Eso obliga a
+     vertical: el telefono queda parado (apoyado o en la otra mano), la camara frontal mira de frente,
+     y la mano entra en el cuadro completa. Acostado, la mano tapa media pantalla o se sale del
+     encuadre. Asi que el marco es 9:16 SIEMPRE — en un telefono ocupa todo, y en una notebook queda
+     centrado con negro a los costados, que es como se ve un juego vertical en un monitor y no un
+     error. */
+  :root{ --tinta:#1b1b1f; --papel:#f2efe6; --beige:#c9b48a; --rojo:#c0392b;
+         --verde:#2ecc0f; --azul:#2626d6; --calma:#7fb2a2; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; height:100%; overflow:hidden; background:#07070a;
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    color:#f2efe6; -webkit-user-select:none; user-select:none; touch-action:none; }
+  #caja{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  #marco{ position:relative; overflow:hidden; background:#0d0d10;
+    width:min(100vw, calc(100vh * 9 / 16));
+    height:min(100vh, calc(100vw * 16 / 9)); }
+  canvas#lienzo{ display:block; width:100%; height:100%; }
+
+  .pan{ position:absolute; inset:0; z-index:40; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:clamp(9px,1.7vh,17px); background:#0d0d10;
+    padding:22px; text-align:center; }
+  .pan.ver{ display:flex; }
+  .tit{ font-size:clamp(26px,8.4vw,54px); font-weight:900; letter-spacing:.28em;
+    margin-left:.28em; }
+  .sub{ font-size:max(9.5px,2.6vw); font-weight:700; letter-spacing:.22em; color:#8a8a94;
+    text-transform:uppercase; }
+  .bot{ appearance:none; border:1.4px solid #45454f; background:transparent; color:#f2efe6;
+    font:inherit; font-size:max(12px,3.2vw); font-weight:800; letter-spacing:.16em;
+    padding:12px 26px; border-radius:999px; cursor:pointer; text-transform:uppercase; }
+  .bot.lleno{ background:#f2efe6; color:#0d0d10; border-color:#f2efe6; }
+  .fila{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center; }
+  .rot{ font-size:max(8px,2.2vw); font-weight:900; letter-spacing:.24em; color:#6a6a74;
+    text-transform:uppercase; }
+  .opB{ font:inherit; font-size:max(9px,2.4vw); font-weight:800; letter-spacing:.14em;
+    text-transform:uppercase; padding:7px 13px; border-radius:999px; cursor:pointer;
+    color:#9a9aa4; background:transparent; border:1px solid #35353d; }
+  .opB.si{ color:#0d0d10; background:var(--beige); border-color:var(--beige); }
+  #creditos{ position:absolute; bottom:10px; left:0; right:0; text-align:center;
+    font-size:8.5px; letter-spacing:.22em; color:#3a3a42; }
+
+  /* ===================== EL HUD ===================== */
+  #hud{ position:absolute; inset:0; z-index:20; pointer-events:none; display:none; }
+  body.jugando #hud{ display:block; }
+  /* el subtitulo: es la voz de el, y va abajo porque arriba esta su cara */
+  /* SUBE CUANDO ESTA EL TECLADO. Con los dos a la vez el teclado se comia el globo de dialogo y la
+     unica cosa que el juego dice quedaba tapada por el respaldo de la cosa que dice. */
+  body.pad #dialogo{ bottom:23% !important; }
+  #dialogo{ position:absolute; left:4%; right:4%; bottom:12%; z-index:24;
+    background:rgba(10,10,14,.80); border:1.2px solid rgba(201,180,138,.42);
+    border-radius:14px; padding:11px 14px; min-height:4.2em;
+    font-size:max(12px,3.5vw); font-weight:700; letter-spacing:.03em; line-height:1.55;
+    color:#f2efe6; opacity:0; transition:opacity .25s ease; }
+  #dialogo.ver{ opacity:1; }
+  #dialogo b{ color:var(--verde); }
+  #quien{ position:absolute; top:-9px; left:12px; font-size:max(8px,2.2vw); font-weight:900;
+    letter-spacing:.20em; color:var(--beige); background:#0d0d10; padding:0 7px;
+    text-transform:uppercase; }
+  /* el aro de espera: se llena cuando la mano hace lo que hay que hacer */
+  /* EL ARO VA AL COSTADO Y NO EN EL MEDIO: en el medio quedaba justo encima del pecho de el, o sea
+     tapando lo unico que hay que mirar. A la derecha queda enfrentado al libro, que flota a la
+     izquierda. */
+  body.pad #aro{ bottom:34% !important; }
+  #aro{ position:absolute; right:5%; bottom:26%; z-index:24;
+    width:clamp(66px,19vw,104px); aspect-ratio:1; display:none; }
+  body.esperando #aro{ display:block; }
+  #aro svg{ width:100%; height:100%; transform:rotate(-90deg); }
+  #aroN{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:max(20px,7vw); font-weight:900; color:#f2efe6; }
+  /* CON FONDO PROPIO. El aro flota sobre la pared del aula, que es beige claro, y este cartel
+     estaba en beige sobre beige: en la captura del telefono la cuenta se leia como una marca de
+     agua. El texto claro necesita su propio respaldo oscuro, no depender de lo que haya detras. */
+  #aroS{ position:absolute; left:-60%; right:-10%; bottom:-22px; text-align:center;
+    font-size:max(8.5px,2.3vw); font-weight:800; letter-spacing:.16em; color:#f2efe6;
+    text-transform:uppercase; }
+  #aroS:not(:empty){ background:rgba(13,13,16,.72); border-radius:8px; padding:3px 0; }
+  #libros{ position:absolute; top:12px; left:0; right:0; text-align:center; z-index:23;
+    font-size:max(12px,3.6vw); font-weight:900; letter-spacing:.20em;
+    text-shadow:0 2px 0 rgba(0,0,0,.6); display:none; }
+  body.clase #libros{ display:block; }
+  #marca{ position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); z-index:26;
+    font-size:max(26px,9vw); font-weight:900; letter-spacing:.16em; opacity:0;
+    transition:opacity .2s ease; text-shadow:0 3px 0 rgba(0,0,0,.5); }
+  #marca.ver{ opacity:1; }
+  #salirJ{ position:absolute; top:8px; left:8px; pointer-events:auto; width:32px; height:32px;
+    border-radius:50%; border:1.2px solid #45454f; background:rgba(0,0,0,.4); color:#c9c9d2;
+    cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;
+    z-index:25; }
+
+  /* la camara de la mano */
+  #camCaja{ position:absolute; right:8px; top:8px; width:clamp(78px,26vw,132px);
+    aspect-ratio:4/3; border:1.2px solid #35353d; border-radius:9px; overflow:hidden;
+    background:#000; display:none; z-index:23; }
+  body.manos #camCaja{ display:block; }
+  #camVid{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    transform:scaleX(-1); }
+  #camCv{ position:absolute; inset:0; width:100%; height:100%; }
+  #camEst{ position:absolute; left:0; right:0; bottom:0; font-size:7.5px; letter-spacing:.12em;
+    text-align:center; background:rgba(0,0,0,.6); color:var(--beige); padding:2px 0;
+    font-weight:800; }
+
+  /* EL TECLADO DE NUMEROS: el respaldo para quien no tiene camara o no quiere darla.
+     Un juego que solo se puede abrir con webcam es un juego que la mayoria no puede abrir. */
+  #pad{ position:absolute; left:5%; right:5%; bottom:3%; z-index:25; display:none;
+    grid-template-columns:repeat(5,1fr); gap:5px; pointer-events:auto; }
+  /* SOLO CUANDO HAY ALGO QUE CONTESTAR. Estaba visible toda la partida, asi que en la escena del
+     saludo —donde no hay nada que responder— habia diez botones de numeros abajo pidiendo algo que
+     el juego no estaba preguntando. Se muestra con la misma condicion que el aro: 'esperando'. */
+  body.pad.jugando.esperando #pad{ display:grid; }
+  #pad button{ appearance:none; border:1.2px solid rgba(255,255,255,.18);
+    background:rgba(0,0,0,.42); color:#f2efe6; font:inherit; font-weight:900;
+    font-size:max(13px,3.8vw); border-radius:9px; padding:9px 0; cursor:pointer; }
+  #pad button:active{ background:#f2efe6; color:#0d0d10; }
+  #idBotones{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+</style>
+</head>
+<body>
+<div id="caja"><div id="marco">
+  <canvas id="lienzo"></canvas>
+
+  <div id="hud">
+    <div id="libros">0 / 8</div>
+    <div id="marca"></div>
+    <button id="salirJ">‹</button>
+    <div id="aro">
+      <svg viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(13,13,16,.42)" stroke-width="9"/>
+        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.30)" stroke-width="7"/>
+        <circle id="aroC" cx="50" cy="50" r="44" fill="none" stroke="#2ecc0f" stroke-width="7"
+                stroke-linecap="round" stroke-dasharray="276.5" stroke-dashoffset="276.5"/>
+      </svg>
+      <div id="aroN"></div>
+      <div id="aroS"></div>
+    </div>
+    <div id="dialogo"><span id="quien">BALDI</span><span id="dTxt"></span></div>
+  </div>
+
+  <div id="camCaja">
+    <video id="camVid" playsinline muted autoplay></video>
+    <canvas id="camCv" width="240" height="180"></canvas>
+    <div id="camEst">—</div>
+  </div>
+  <div id="pad"></div>
+
+  <div id="pIdioma" class="pan ver">
+    <div class="tit">RECREO</div>
+    <div class="sub">Language · Idioma · Idioma</div>
+    <div id="idBotones"></div>
+  </div>
+
+  <div id="pMenu" class="pan">
+    <div class="tit">RECREO</div>
+    <div class="sub" data-i18n="sub"></div>
+    <div class="fila">
+      <span class="rot" data-i18n="calidad"></span>
+      <button class="opB" data-cal="baja" data-i18n="calBaja"></button>
+      <button class="opB" data-cal="media" data-i18n="calMedia"></button>
+      <button class="opB" data-cal="alta" data-i18n="calAlta"></button>
+    </div>
+    <div class="fila">
+      <span class="rot" data-i18n="filtro"></span>
+      <button class="opB" data-fil="apagado" data-i18n="filNo"></button>
+      <button class="opB" data-fil="suave" data-i18n="filSuave"></button>
+      <button class="opB" data-fil="fuerte" data-i18n="filFuerte"></button>
+    </div>
+    <div class="fila">
+      <span class="rot" data-i18n="control"></span>
+      <button class="opB" id="oManos" data-i18n="ctrlManos"></button>
+      <button class="opB" id="oPad" data-i18n="ctrlPad"></button>
+    </div>
+    <div style="height:2px"></div>
+    <button class="bot lleno" id="bJugar" data-i18n="jugar"></button>
+    <div class="fila">
+      <button class="bot" id="bComo" data-i18n="como"></button>
+      <button class="bot" id="bIdioma" data-i18n="idioma"></button>
+    </div>
+    <div id="creditos">REZONA</div>
+  </div>
+
+  <div id="pComo" class="pan">
+    <div class="sub" data-i18n="como"></div>
+    <div id="comoTxt" style="max-width:94%; line-height:2.0; font-size:max(11px,3.1vw);
+      letter-spacing:.03em; color:#c9c9d2; text-align:left"></div>
+    <button class="bot" id="bVolver" data-i18n="volver"></button>
+  </div>
+
+  <div id="pFin" class="pan">
+    <div class="tit" id="finT"></div>
+    <div class="sub" id="finS"></div>
+    <button class="bot lleno" id="bFin" data-i18n="volver"></button>
+  </div>
+</div></div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';

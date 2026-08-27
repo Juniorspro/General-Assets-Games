@@ -43,6 +43,120 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Vigesimosegunda vuelta (2026-08-27): **RECREO, "sigue de la mierda"** — el rig, el encuadre y las poses
+
+Pedido: una captura del celular con el aula y el personaje hecho una **mancha verde**, y tres palabras:
+*"sigue de la mierda"*. Tenía razón, y lo peor es que la vuelta anterior yo había reportado que
+funcionaba.
+
+#### EL ERROR DE MÉTODO, ANTES QUE EL DE CÓDIGO
+
+Yo estaba juzgando el modelo en capturas de **412 px de ancho, donde el personaje medía 130 px de
+alto**. A ese tamaño una mancha verde con la silueta correcta y una mancha verde con un zapato al lado
+de la oreja se ven igual. Lo que arregló esto no fue mirar mejor: fue **armar un visor de 900×900 con
+el modelo solo** —`/tmp/ui/visor.html`— y **sacar las fotos del juego a la resolución real del
+teléfono del usuario, 790×1400**. Con eso a la vista, los defectos se cuentan solos.
+
+Y para no volver a ajustar el encuadre a ojo, ahora hay dos ganchos que **devuelven píxeles**:
+`__recreo.caja()` proyecta la caja del personaje y del libro a coordenadas de pantalla, y
+`__recreo.encuadre({z, pitch, ojo, fov})` mueve la cámara en vivo. Un encuadre se mide, no se estima.
+
+#### DEFECTO 1 — LA POSE LE BORRABA EL BIND AL RIG (era EL defecto)
+
+Un rig de Meshy trae la pose de reposo escrita **EN LAS ROTACIONES** de los huesos, no solo en la
+jerarquía: medido en este modelo, `caderaI` viene con X = **−3,078 radianes** —casi media vuelta— y
+`hombroD` con (0,743 · −0,743 · 0), que es la dirección del brazo en T. Mi código hacía
+`rotation.set(mi_pose)`, o sea que **borraba todo eso**: la cadera saltaba de −176 grados a 0 y la
+pierna se le iba a la altura de la cabeza (**la rodilla medida en y = 1,529 cuando tiene que estar en
+0,44**), y a los brazos les borraba la Y y quedaban metidos dentro del torso. El resultado en pantalla
+era una mancha verde con un zapato al lado de la oreja. **La pose es un DELTA sobre el reposo del
+rig.** Siempre lo fue; yo estaba escribiendo absolutos.
+
+#### DEFECTO 2 — LOS EJES DEL HUESO NO SON EJES ANATÓMICOS
+
+Arreglado el bind, los brazos seguían raros y ninguna constante los acomodaba. La razón: **los ejes
+locales de un hueso son los que dejó el bind**, y acá el bind del hombro es el brazo en T, así que
+ninguno de los tres ejes locales significa nada. Medido con `probarHueso()` sobre este modelo: girar
+el eje X mueve la mano en el plano XY (sirve de abducción), pero girar Z la mueve 0,27 en Z **y además
+0,39 en Y** — o sea que "levantar el brazo hacia adelante" también lo subía. Con eso, la pose de
+"explicando" —que pide 1,06 de flexión— le ponía las dos manos a la altura de la oreja: **mano medida
+a y = 629 px con la cabeza a 618**. Dos palos en cruz.
+
+La salida no fue buscar mejores números para los mismos ejes: fue **dejar de usar los ejes del hueso**.
+La abducción es un giro alrededor del **Z del cuerpo**, la flexión alrededor del **X del cuerpo** y la
+torsión alrededor del Y, y eso se pasa al espacio del padre con **P⁻¹·R·P**, calculado una sola vez al
+cargar. Verificado midiendo: abducción pedida 0,60 → 0,704 medidos; 1,40 → 1,503; 2,40 → 2,50. Flexión
+pedida 1,06 → 1,03 medidos; 1,44 → 1,41. **El orden importa y es abducción adentro, flexión afuera**:
+al revés la abducción deja de ser un ángulo en el plano frontal y se mezcla.
+
+Los **codos NO** van por ahí: ahí el eje local X del hueso ya es la bisagra buena —medido, mueve la
+mano en el plano del brazo— y encima acompaña al brazo solo, que es justo lo que tiene que hacer un
+codo. Su eje Y, en cambio, mueve la mano **1 mm**: es el eje del propio hueso, o sea torsión. Las
+poses que lo usaban estaban girando la nada.
+
+Y el reposo del hombro **ya no es una constante a mano**. Estuvo en 0,42 y después en 0,65, y los dos
+eran el mismo parche: tapar con un número que el eje estaba mal. Ahora se **mide el ángulo del brazo
+del bind contra la vertical** al cargar y el reposo sale de ahí. Si Meshy manda el próximo modelo en
+A-pose en vez de T-pose, esto se acomoda solo.
+
+#### DEFECTO 3 — LA CÁMARA SE QUEDABA EN EL VANO DE LA PUERTA
+
+`ZC(14,238)` da z = 22,0 y a esa altura la cámara **no había entrado al aula**. Medido a 790×1400: el
+personaje ocupaba **36,8 % del alto**, los pupitres de los costados hacían de marco y el tercio de
+abajo era piso vacío. `ZC(14,44)` = 22,85 la mete dentro, a 2,35 m de él, y pasa a ocupar **51,9 %**
+con el escritorio de primer plano abajo. El mismo 51,9 % a 360×800, así que el encuadre no depende del
+tamaño de pantalla.
+
+El libro flotante se salía del marco por la izquierda: a 22,85 flota a 1,75 m y el medio ancho visible
+ahí es 0,98 m. A 0,95 del eje quedaba mitad afuera; a 0,70 todavía se salían **28 px** (medidos con
+`caja()`); entra entero a 0,55 con escala 1,02.
+
+#### DEFECTO 4 — LAS ANIMACIONES ESTABAN ESCRITAS PARA OTRO PUNTO DE VISTA
+
+Con el rig por fin correcto, quedó a la vista que las poses eran el problema. En la escena de clase
+**él mira a la cámara**, y un brazo levantado hacia adelante apunta al lente: en pantalla no se lee
+como un brazo que gesticula sino como un palo saliendo del hombro. De frente lo que se lee es el
+**antebrazo**, así que "explicando" pasó a hombros casi pegados al cuerpo y codos a 70 grados.
+
+- **Saludar**: 2,42 de abducción más los 0,14 de base son 2,56 — el brazo **pasado de la vertical**,
+  cruzándose por encima de la cabeza. Bajado a 2,15.
+- **Abrir la puerta**: el tronco giraba con **el mismo `f`** que el brazo, y el tronco es antepasado
+  del hombro: los dos movimientos se restaban y la mano quedaba clavada. Medido, **3 mm de recorrido
+  en todo el ciclo** — un empujón que no empuja. El giro del tronco pasó a constante.
+- Y **el empujón dura lo que dura el empujón**: se quedaba en la pose de 'puerta' los siete segundos
+  que tarda en cruzar el aula, medido empujando aire en z = 18,45. Ahora camina.
+
+#### DEFECTO 5 — TRES COSAS MÁS QUE SE VIERON RECIÉN AL MIRAR EN GRANDE
+
+- **El pasillo terminaba en un agujero negro.** La celda de una salida es puerta, así que el
+  constructor de paredes no levanta pared ahí, y del otro lado de la reja del mapa no hay nada.
+  Medido: **90 px de lado a 42 m**, o sea los 4,2 m enteros de la celda — el vacío de afuera de la
+  escuela, visible por arriba y por los costados de la hoja (que mide 0,92 de celda de ancho y 0,86
+  de alto). Dos paneles pegados por fuera.
+- **El profesor caminaba hacia atrás y quedaba detrás de la cámara.** Su ruta empezaba con el primer
+  punto de la ruta de la cámara —la celda 11— y él arranca en la 10,35, o sea **delante**. Lo primero
+  que hacía era caminar 2,7 m hacia atrás y cruzarse con la cámara: en la captura del pasillo no había
+  nadie y el *"vení conmigo"* lo decía una voz sin cuerpo.
+- **El teclado de números estaba visible toda la partida**, también en la escena del saludo, donde no
+  hay nada que responder: diez botones pidiendo algo que el juego no estaba preguntando. Ahora se
+  muestra con la misma condición que el aro, `esperando`. Y el cartel de la cuenta debajo del aro
+  estaba en beige sobre la pared beige del aula: se leía como una marca de agua. Fondo propio.
+
+#### AHORA EL JUEGO VIVE PARTIDO Y SE ARMA CON UN SCRIPT
+
+`herramientas/recreo/partes/` (once archivos) + `python3 herramientas/recreo/armar.py` →
+`juegos-pc/Recreo.html`. El HTML final pesa 769 KB y **490 de esos son el GLB en base64**: editar un
+archivo así con parches de texto es operar con guantes de horno, y ya me costó una vez el archivo
+entero en cero bytes. Las partes son la fuente; el HTML es la salida.
+
+#### MEDIDO AL CERRAR
+
+Partida completa desde el arranque, sin saltos: las **nueve escenas** en orden
+(`presenta · t5 · tp · t2 · listo · viaje · entra · clase`), **8 libros de 8, 8 aciertos**, 2831 pasos,
+`window.__errs` vacío. Encuadre 51,9 % del alto a 790×1400 y **el mismo 51,9 % a 360×800**. Libro
+entero dentro del marco (20…129 px de 360). Filtro fuerte: destino 188×334 = 62.792 píxeles contra
+186.624 de pantalla, y la cara sigue legible.
+
 ### Vigesimoprimera vuelta (2026-08-27): **RECREO se rehace** — el modelo generado, vertical, cámara sobre rieles y los dedos
 
 Pedido: *"con highsfield generes el modelo 3D de baldis, si o si, y que a él lo animés, y que no haya

@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+"""Arma juegos-pc/Recreo.html juntando las partes de herramientas/recreo/partes/ y metiendo
+el modelo de Baldi (assets/recreo/baldi_p.glb) como data URI.
+
+Por que el juego vive partido en once archivos y no en uno solo: el HTML final pesa 750 KB y
+490 de esos son el GLB en base64. Editar un archivo asi con parches de texto es como operar
+con guantes de horno — y ya me costo una vez el archivo entero en cero bytes. Las partes son
+la fuente; el HTML es la salida.
+
+    python3 herramientas/recreo/armar.py
+"""
+import base64, io, os, sys
+
+RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PARTES = ['a2.html',   # el marco, el CSS y el HUD
+          'b2.js',     # three.js, el mapa de la escuela, los idiomas
+          'c2.js',     # el render, la camara, las texturas pintadas por codigo
+          'd2.js',     # la escuela, el aula, el pizarron, el escritorio, los libros
+          'e2.js',     # el rig de cajas, la tabla de animaciones y el modelo generado
+          'f2.js',     # los rieles de camara, el profesor en el mundo y el guion
+          'g2.js',     # MediaPipe: leer la mano, contar dedos, el teclado de respaldo
+          'h2b.js',    # las pantallas, el audio, la calidad
+          'p2.js',     # los dos filtros (saturacion y baja calidad)
+          'i2.js',     # el guion corriendo, el paso fijo y el dibujado
+          'j2.js']     # los ganchos de prueba
+
+def main():
+    partes = os.path.join(RAIZ, 'herramientas', 'recreo', 'partes')
+    s = ''.join(io.open(os.path.join(partes, p), encoding='utf8').read() for p in PARTES)
+    glb = open(os.path.join(RAIZ, 'assets', 'recreo', 'baldi_p.glb'), 'rb').read()
+    uri = 'data:model/gltf-binary;base64,' + base64.b64encode(glb).decode('ascii')
+    if '__BALDI_GLB__' not in s:
+        print('no aparece __BALDI_GLB__ en las partes', file=sys.stderr); return 1
+    s = s.replace('__BALDI_GLB__', uri, 1)
+    # SE ESCRIBE RECIEN CUANDO EL TEXTO ESTA COMPLETO. io.open(p,'w') trunca el archivo ANTES de
+    # evaluar lo que se le pasa: una vez un NameError en el argumento me dejo Recreo.html en cero.
+    salida = os.path.join(RAIZ, 'juegos-pc', 'Recreo.html')
+    io.open(salida, 'w', encoding='utf8').write(s)
+    print(salida, len(s), 'caracteres')
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())

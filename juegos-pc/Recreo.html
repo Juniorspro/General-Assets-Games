@@ -64,16 +64,23 @@
     letter-spacing:.20em; color:var(--beige); background:#0d0d10; padding:0 7px;
     text-transform:uppercase; }
   /* el aro de espera: se llena cuando la mano hace lo que hay que hacer */
-  body.pad #aro{ bottom:41% !important; }
-  #aro{ position:absolute; left:50%; bottom:31%; transform:translateX(-50%); z-index:24;
-    width:clamp(74px,22vw,118px); aspect-ratio:1; display:none; }
+  /* EL ARO VA AL COSTADO Y NO EN EL MEDIO: en el medio quedaba justo encima del pecho de el, o sea
+     tapando lo unico que hay que mirar. A la derecha queda enfrentado al libro, que flota a la
+     izquierda. */
+  body.pad #aro{ bottom:34% !important; }
+  #aro{ position:absolute; right:5%; bottom:26%; z-index:24;
+    width:clamp(66px,19vw,104px); aspect-ratio:1; display:none; }
   body.esperando #aro{ display:block; }
   #aro svg{ width:100%; height:100%; transform:rotate(-90deg); }
   #aroN{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     font-size:max(20px,7vw); font-weight:900; color:#f2efe6; }
-  #aroS{ position:absolute; left:-40%; right:-40%; bottom:-22px; text-align:center;
-    font-size:max(8.5px,2.3vw); font-weight:800; letter-spacing:.16em; color:var(--beige);
+  /* CON FONDO PROPIO. El aro flota sobre la pared del aula, que es beige claro, y este cartel
+     estaba en beige sobre beige: en la captura del telefono la cuenta se leia como una marca de
+     agua. El texto claro necesita su propio respaldo oscuro, no depender de lo que haya detras. */
+  #aroS{ position:absolute; left:-60%; right:-10%; bottom:-22px; text-align:center;
+    font-size:max(8.5px,2.3vw); font-weight:800; letter-spacing:.16em; color:#f2efe6;
     text-transform:uppercase; }
+  #aroS:not(:empty){ background:rgba(13,13,16,.72); border-radius:8px; padding:3px 0; }
   #libros{ position:absolute; top:12px; left:0; right:0; text-align:center; z-index:23;
     font-size:max(12px,3.6vw); font-weight:900; letter-spacing:.20em;
     text-shadow:0 2px 0 rgba(0,0,0,.6); display:none; }
@@ -103,7 +110,10 @@
      Un juego que solo se puede abrir con webcam es un juego que la mayoria no puede abrir. */
   #pad{ position:absolute; left:5%; right:5%; bottom:3%; z-index:25; display:none;
     grid-template-columns:repeat(5,1fr); gap:5px; pointer-events:auto; }
-  body.pad.jugando #pad{ display:grid; }
+  /* SOLO CUANDO HAY ALGO QUE CONTESTAR. Estaba visible toda la partida, asi que en la escena del
+     saludo —donde no hay nada que responder— habia diez botones de numeros abajo pidiendo algo que
+     el juego no estaba preguntando. Se muestra con la misma condicion que el aro: 'esperando'. */
+  body.pad.jugando.esperando #pad{ display:grid; }
   #pad button{ appearance:none; border:1.2px solid rgba(255,255,255,.18);
     background:rgba(0,0,0,.42); color:#f2efe6; font:inherit; font-weight:900;
     font-size:max(13px,3.8vw); border-radius:9px; padding:9px 0; cursor:pointer; }
@@ -121,7 +131,8 @@
     <button id="salirJ">‹</button>
     <div id="aro">
       <svg viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="7"/>
+        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(13,13,16,.42)" stroke-width="9"/>
+        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.30)" stroke-width="7"/>
         <circle id="aroC" cx="50" cy="50" r="44" fill="none" stroke="#2ecc0f" stroke-width="7"
                 stroke-linecap="round" stroke-dasharray="276.5" stroke-dashoffset="276.5"/>
       </svg>
@@ -568,6 +579,19 @@ for(const p of PUERTAS){
   else { g.position.set(XC(p.i) - CEL*0.46, ALTO_M*0.43, ZC(p.j)); }
   p.g=g; p.vertical=vertical; escena.add(g);
 }
+/* TAPA POR FUERA DE CADA SALIDA. La celda de una salida es puerta, asi que el constructor de
+   paredes no levanta pared ahi, y del otro lado de la reja del mapa NO HAY NADA. Mirando el pasillo
+   del medio de punta a punta se veia un agujero negro al fondo: medido en una captura de 790x1400,
+   unos 90 px de lado a 42 m de distancia, o sea los 4,2 m enteros de la celda. Eso era el vacio de
+   afuera de la escuela, visible por arriba y por los costados de la hoja —que mide 0,92 de celda de
+   ancho y 0,86 de alto—. Dos paneles pegados por fuera y el pasillo vuelve a terminar en algo. */
+for(const p of PUERTAS){
+  if(!p.salida) continue;
+  const fuera=(p.i===0)? -1 : 1;
+  const tapa=new THREE.Mesh(new THREE.BoxGeometry(CEL*0.5, ALTO_M, CEL), M_PARED);
+  tapa.position.set(XC(p.i)+fuera*CEL*0.62, ALTO_M/2, ZC(p.j));
+  escena.add(tapa);
+}
 
 /* ---------- LOS PUPITRES DE ADORNO ----------
    Un aula vacia con una libreta en el medio se lee a deposito. Cuatro pupitres alcanzan. */
@@ -631,7 +655,7 @@ const T_PIZA=tex(256,128,(g,w,h)=>{
      a doce metros y en un marco vertical se ve del tamano de un dedo. Toda la escena se corre al
      fondo —pizarron a 27,3, el a 25,0, la mesa a 23,3— y la camara termina a 21,4: tres metros y
      medio, que es la distancia a la que una persona te habla. */
-  const zE=23.3;
+  const zE=23.6;
   const tapa=new THREE.Mesh(new THREE.BoxGeometry(2.60,0.11,1.10),
                             new THREE.MeshLambertMaterial({color:0x8f6a3c}));
   tapa.position.set(CLASE_X, 0.86, zE); escena.add(tapa);
@@ -810,7 +834,10 @@ const ANIM={
   saludar:(t,p)=>{
     ANIM.quieto(t,p);
     const w=Math.sin(t*6.4);
-    p.hombroD[2]=-2.42; p.hombroD[0]=0.22;
+    /* 2,15 y no 2,42: con la abduccion ya medida en radianes de verdad, 2,42 mas los 0,14 de base
+       son 2,56 — o sea el brazo PASADO de la vertical, cruzandose por encima de la cabeza. 2,15
+       deja la mano un puno arriba de la oreja, que es donde saluda una persona. */
+    p.hombroD[2]=-2.15; p.hombroD[0]=0.18;
     p.codoD[2]=w*0.62; p.codoD[0]=-0.26;
     p.torso[2]=-0.075; p.cabeza[1]=0.16; p.cabeza[2]=0.06;
   },
@@ -818,24 +845,36 @@ const ANIM={
      empujon. Se resuelve en un ciclo de dos segundos que va y vuelve. */
   puerta:(t,p)=>{
     const f=(Math.sin(t*3.1)+1)/2;
-    p.hombroD[0]=-1.44-f*0.30; p.hombroD[2]=-0.24;
-    p.codoD[0]=-0.34+f*0.30;
-    p.hombroI[0]=-0.50; p.hombroI[2]= 0.20; p.codoI[0]=-0.70;
-    p.torso[0]=0.10+f*0.10; p.torso[1]=-0.20-f*0.12;
+    /* EL TRONCO YA NO GIRA CON EL MISMO f QUE EL BRAZO. Estaba con torso[1]=-0,20-f*0,12 y el
+       brazo con -1,44-f*0,30: el tronco es ANTEPASADO del hombro, asi que los dos movimientos se
+       restaban y la mano quedaba clavada — medido, 3 mm de recorrido en todo el ciclo, o sea un
+       empujon que no empuja. El giro del tronco pasa a constante y el empujon queda solo en el
+       brazo y el codo. */
+    p.hombroD[0]=-1.10-f*0.34; p.hombroD[2]=-0.26;
+    p.codoD[0]=-0.40+f*0.34;
+    p.hombroI[0]=-0.44; p.hombroI[2]= 0.22; p.codoI[0]=-0.66;
+    p.torso[0]=0.08+f*0.06; p.torso[1]=-0.14;
     p.cabeza[0]=0.10; p.cabeza[1]=0.16;
-    p.caderaD[0]=0.20; p.caderaI[0]=-0.14; p.rodillaI[0]=0.22;
-    p.alto=-0.030-f*0.030;
+    p.caderaD[0]=0.18; p.caderaI[0]=-0.12; p.rodillaI[0]=0.20;
+    p.alto=-0.028-f*0.022;
   },
   /* EXPLICANDO: las dos manos hablando, la cabeza acompanando y el tronco girando de a poco. Las
      dos manos van DESFASADAS: en fase se lee a marioneta. */
   explicar:(t,p)=>{
     const a=Math.sin(t*2.6), b=Math.sin(t*2.6+1.9), c=Math.sin(t*1.1);
-    p.hombroD[0]=-1.06+a*0.34; p.hombroD[2]=-0.52-a*0.18;
-    p.codoD[0]=-1.14+b*0.42;   p.codoD[1]= b*0.30;
-    p.hombroI[0]=-0.96+b*0.30; p.hombroI[2]= 0.50+b*0.16;
-    p.codoI[0]=-1.20+a*0.38;   p.codoI[1]=-a*0.30;
-    p.torso[1]=c*0.20; p.cabeza[1]=-c*0.30; p.cabeza[0]=-0.06+a*0.07;
-    p.alto=Math.sin(t*2.6)*0.014;
+    /* EL GESTO VA EN LOS CODOS Y NO EN LOS HOMBROS, y la razon es el punto de vista: en esta escena
+       el mira A LA CAMARA. Un brazo levantado hacia adelante —1,06 de flexion, que es lo que tenia—
+       apunta al lente y en pantalla no se ve como un brazo que gesticula sino como un palo saliendo
+       del hombro; medido, la mano terminaba a 615 px con la cabeza a 618, o sea a la altura de la
+       oreja. De frente lo que se lee es el ANTEBRAZO: hombros casi pegados al cuerpo, codos a 70
+       grados y las manos hablando. El giro del codo tampoco usa mas el eje Y —medido con poseCruda,
+       ese eje mueve la mano 1 mm porque es el eje del propio hueso: es torsion, no flexion. */
+    p.hombroD[0]=-0.34+a*0.14; p.hombroD[2]=-0.26-a*0.07;
+    p.codoD[0]=-1.25+b*0.32;   p.codoD[2]=-b*0.20;
+    p.hombroI[0]=-0.30+b*0.12; p.hombroI[2]= 0.24+b*0.07;
+    p.codoI[0]=-1.32+a*0.30;   p.codoI[2]= a*0.20;
+    p.torso[1]=c*0.14; p.cabeza[1]=-c*0.24; p.cabeza[0]=-0.06+a*0.07;
+    p.alto=a*0.012;
   }
 };
 const ANIM_NOMBRES=['quieto','caminar','saludar','puerta','explicar'];
@@ -900,7 +939,17 @@ const HUESO_DE={ torso:'Spine01', cabeza:'Head',
    Asi que las poses no se reescriben: se REMAPEAN los canales. Es una tabla de diez lineas contra
    reescribir cinco animaciones, y ademas las dos versiones —cajas y generado— siguen compartiendo
    exactamente las mismas curvas. */
-const REPOSO={ hombroI:[1.30,0,0], hombroD:[1.30,0,0], codoI:[0.12,0,0], codoD:[0.12,0,0] };
+/* Y AHORA EL DESVIO ES UN DELTA CHICO, no 1,30: barrido con probarHueso() sobre el bind,
+   delta 0 deja la mano en (0,724 · 1,365) —brazo casi horizontal— y cada dos decimas la baja:
+     0,2 -> (0,592 · 1,230)      0,6 -> (0,358 · 1,117)
+     0,4 -> (0,481 · 1,162)      0,8 -> (0,229 · 1,097)  <- la mano se mete en el cuerpo
+   0,42 deja la mano justo por fuera del torso y a la altura de la cadera, que es como cuelga un
+   brazo. Con 1,30 —el numero de cuando pisaba el bind— el brazo se cruzaba por delante del pecho. */
+/* LOS HOMBROS YA NO LLEVAN DESVIO A MANO. Estuvo en 0,42 y despues en 0,65 —numeros sacados de
+   medir donde caia la mano— y los dos eran el mismo parche: tapar con una constante que el eje
+   estaba mal. Ahora el reposo del hombro se calcula solo (ver ABD_COLGADO) y aca queda unicamente
+   el de los codos, que si tienen su eje anatomico en el bind. */
+const REPOSO={ codoI:[0.10,0,0], codoD:[0.10,0,0] };
 /* p = [x,y,z] de mi pose; r = desvio de reposo. Devuelve los tres angulos del hueso del GLB. */
 const CANAL={
   torso:   (p,r)=>[r[0]+p[0], r[1]+p[1], r[2]+p[2]],
@@ -909,8 +958,7 @@ const CANAL={
      para ATRAS en vez de adelante, o sea que el personaje explicaba de espaldas a sus propias manos.
      En el rig de cajas el brazo cuelga sobre -Y y girar +X lo lleva adelante; acá el mismo gesto va
      sobre -Z. Medido: hombroD +1,2 en Z movio la mano +0,642 en Z, o sea adelante. */
-  hombroD: (p,r)=>[r[0]+p[2], p[1], -p[0]],
-  hombroI: (p,r)=>[r[0]-p[2], p[1],  p[0]],
+  /* los hombros no estan aca: van por quaternion en ejes del cuerpo, mas abajo */
   codoD:   (p,r)=>[r[0]+p[0], p[1],  p[2]],
   codoI:   (p,r)=>[r[0]+p[0], p[1], -p[2]],
   caderaD: (p,r)=>[p[0], p[1],  p[2]],
@@ -921,6 +969,26 @@ const CANAL={
 const REPOSO_MANO={ manoI:'LeftHand', manoD:'RightHand' };
 
 let baldi=null;                 // el rig que se esta usando (generado o de cajas)
+/* =========================================================================================
+   LOS HOMBROS SE MANEJAN EN EJES DEL CUERPO Y NO EN LOS DEL HUESO
+   Por que hizo falta esto: los ejes locales de un hueso son los que dejo el bind, y en este rig el
+   bind del hombro es (0,743 · -0,743 · 0) —el brazo en T—, asi que ninguno de los tres ejes locales
+   es un eje anatomico. Medido con probarHueso() sobre este modelo: girar el eje X mueve la mano en
+   el plano XY (sirve de abduccion, bien), pero girar Z la mueve 0,27 en Z Y ADEMAS 0,39 en Y. O sea
+   que "levantar el brazo hacia adelante" tambien lo subia. Con eso, la pose de 'explicando' —que
+   pide 1,06 de flexion— le ponia las dos manos a la altura de la oreja: medido, mano a y=643 px con
+   la cabeza a 628. Dos palos en cruz.
+   La salida no es buscar mejores numeros para los mismos ejes: es dejar de usar los ejes del hueso.
+   La abduccion es un giro alrededor del Z DEL CUERPO, la flexion alrededor del X DEL CUERPO y la
+   torsion alrededor del Y, y eso se pasa al espacio del padre con P⁻¹·R·P una sola vez al cargar.
+   Los codos NO: ahi el eje local X del hueso ya es la bisagra buena —medido, mueve la mano en el
+   plano del brazo— y encima acompana al brazo solo, que es justo lo que tiene que hacer un codo.
+   ========================================================================================= */
+const ABD_COLGADO=0.14;          // 8 grados: un brazo colgando no queda pegado al cuerpo
+const EJE_X=new THREE.Vector3(1,0,0), EJE_Y=new THREE.Vector3(0,1,0), EJE_Z=new THREE.Vector3(0,0,1);
+const _qA=new THREE.Quaternion(), _qB=new THREE.Quaternion(), _qC=new THREE.Quaternion();
+const _vS=new THREE.Vector3(), _vH=new THREE.Vector3();
+
 let baldiGLB=false;
 const profe=armarProfe();       // el de cajas: existe SIEMPRE, y es el respaldo
 profe.raiz.visible=false;
@@ -934,10 +1002,30 @@ function mapearGLB(raiz){
   let faltan=0;
   for(const k in HUESO_DE){
     const o=porNombre[HUESO_DE[k]];
-    if(o){ R[k]=o; o.userData.rep=REPOSO[k]||[0,0,0]; }
+    if(o){ R[k]=o; o.userData.rep=REPOSO[k]||[0,0,0];
+           /* SE GUARDA LA ROTACION CON LA QUE VINO. Es la pose de reposo del rig, y hay huesos que
+              la traen distinta de cero. */
+           o.userData.bind=[o.rotation.x, o.rotation.y, o.rotation.z]; }
     else faltan++;
   }
   for(const k in REPOSO_MANO){ const o=porNombre[REPOSO_MANO[k]]; if(o) R[k]=o; }
+  /* CUANTO HAY QUE BAJAR CADA BRAZO SALE MEDIDO, NO ELEGIDO. Se mide el angulo que forma el brazo
+     del bind con la vertical y se guarda: el reposo es ese angulo menos ABD_COLGADO, con lo cual las
+     poses vuelven a significar lo mismo que en el rig de cajas —donde 0 es colgando— sin tocar la
+     tabla de animaciones. Si Meshy manda el proximo modelo en A-pose en vez de T-pose, esto se
+     acomoda solo. */
+  raiz.updateMatrixWorld(true);
+  for(const k of ['hombroI','hombroD']){
+    const o=R[k], mano=R[k==='hombroI'? 'manoI':'manoD'];
+    if(!o || !mano) continue;
+    o.getWorldPosition(_vS); mano.getWorldPosition(_vH);
+    o.userData.abdBind=Math.atan2(Math.abs(_vH.x-_vS.x), Math.max(1e-6, _vS.y-_vH.y));
+    o.userData.lado = (k==='hombroI')? 1 : -1;
+    o.userData.qBind=o.quaternion.clone();
+    const qp=new THREE.Quaternion();
+    if(o.parent) o.parent.getWorldQuaternion(qp);
+    o.userData.qP=qp.clone(); o.userData.qPI=qp.clone().invert();
+  }
   R.porNombre=porNombre;
   R.faltan=faltan;
   return R;
@@ -945,9 +1033,12 @@ function mapearGLB(raiz){
 /* animar() del rig de cajas escribe rotation.set() a secas. Sobre el GLB hay que SUMAR el desvio de
    reposo, asi que va una version propia y no un parche dentro de la otra: dos rigs distintos con la
    misma tabla de poses es mas claro que una funcion con un if adentro. */
+let _poseFija=null;      // gancho de prueba: fuerza una pose cruda para poder medir un solo eje
 function animarGLB(R, nombre, otro, mezcla, t){
   for(const h of HUESOS){ _pa[h][0]=_pa[h][1]=_pa[h][2]=0; } _pa.alto=0;
   (ANIM[nombre]||ANIM.quieto)(t,_pa);
+  if(_poseFija){ for(const h of HUESOS){ const v=_poseFija[h];
+    _pa[h][0]=v?v[0]:0; _pa[h][1]=v?v[1]:0; _pa[h][2]=v?v[2]:0; } _pa.alto=0; }
   if(otro && mezcla>0.001){
     for(const h of HUESOS){ _pb[h][0]=_pb[h][1]=_pb[h][2]=0; } _pb.alto=0;
     (ANIM[otro]||ANIM.quieto)(t,_pb);
@@ -957,9 +1048,39 @@ function animarGLB(R, nombre, otro, mezcla, t){
   for(const h of HUESOS){
     const q=R[h]; if(!q) continue;
     const r=q.userData.rep||[0,0,0];
+    const b=q.userData.bind||[0,0,0];
     const f=CANAL[h];
+    if(q.userData.qP){
+      /* HOMBRO: abduccion / flexion / torsion en ejes del cuerpo, sobre el bind.
+         abd sale de la medida del bind, asi que _pa[h][2] significa exactamente lo mismo que en el
+         rig de cajas: 0 es el brazo colgando. */
+      const lado=q.userData.lado;
+      const abd = (ABD_COLGADO - q.userData.abdBind) + lado*_pa[h][2];
+      /* EL ORDEN IMPORTA Y ESTE ES EL BUENO: primero abduccion, despues flexion.
+         Al reves —flexion adentro— la abduccion deja de ser un angulo en el plano frontal y se
+         mezcla: con 'explicando' (0,52 de abduccion y 1,06 de flexion) la mano terminaba MAS ARRIBA
+         que el hombro, medido a y=629 px con la cabeza a 618. Abduccion adentro: el brazo se separa
+         del cuerpo lo que dice la pose y despues la flexion lo lleva hacia adelante desde ahi. */
+      _qA.setFromAxisAngle(EJE_X, _pa[h][0]);
+      _qB.setFromAxisAngle(EJE_Z, lado*abd);
+      _qA.multiply(_qB);
+      if(_pa[h][1]){ _qC.setFromAxisAngle(EJE_Y, _pa[h][1]); _qA.multiply(_qC); }
+      q.quaternion.copy(q.userData.qPI).multiply(_qA).multiply(q.userData.qP)
+                  .multiply(q.userData.qBind);
+      continue;
+    }
     const a = f? f(_pa[h], r) : [r[0]+_pa[h][0], r[1]+_pa[h][1], r[2]+_pa[h][2]];
-    q.rotation.set(a[0], a[1], a[2]);
+    /* SE SUMA A LA ROTACION DE BIND. NO SE PISA.
+       Esto era EL defecto, y se veia como un personaje derretido. Un rig de Meshy trae la pose de
+       reposo escrita EN LAS ROTACIONES de los huesos, no solo en la jerarquia: medido en este
+       modelo, `caderaI` viene con X = -3,078 radianes —casi media vuelta— y `hombroD` con
+       (0,743 · -0,743 · 0), que es la direccion del brazo en T.
+       Mi codigo hacia `rotation.set(mi_pose)`, o sea que BORRABA todo eso: la cadera saltaba de -176
+       grados a 0 y la pierna se le iba a la altura de la cabeza (la rodilla medida en y=1,529 cuando
+       tiene que estar en 0,44), y a los brazos les borraba la Y y quedaban metidos dentro del torso.
+       El resultado en pantalla era una mancha verde con un zapato al lado de la oreja.
+       La pose es un DELTA sobre el reposo del rig. Siempre lo fue; yo estaba escribiendo absolutos. */
+    q.rotation.set(b[0]+a[0], b[1]+a[1], b[2]+a[2]);
   }
   if(R.raiz) R.raiz.position.y = (R.baseY||0) + _pa.alto;
 }
@@ -1426,11 +1547,14 @@ addEventListener('keydown', e=>{
    ========================================================================================= */
 const FILTROS={
   apagado:{ escala:1.00, sat:1.00, niveles:0   },
-  suave:  { escala:0.60, sat:1.14, niveles:40  },
-  /* 1,28 y 22 escalones, no 1,50 y 14: con los primeros numeros el pasillo beige se volvia un solo
-     bloque de color y la linea del zocalo desaparecia. El filtro tiene que ensuciar la imagen, no
-     borrarla. */
-  fuerte: { escala:0.40, sat:1.28, niveles:22  }
+  suave:  { escala:0.80, sat:1.14, niveles:44  },
+  /* 0,58 Y NO 0,40, y el numero sale de una cuenta que no habia hecho: con 0,40 en un marco de
+     790x1400 el destino de render son 148x264 pixeles. El personaje ocupa un tercio de la altura,
+     o sea SETENTA Y CUATRO pixeles de alto: su cara son ocho, y un brazo son dos. A ese tamano no
+     hay modelo que sobreviva — se ve una mancha verde, y eso es exactamente lo que se veia.
+     Con 0,58 el destino son 214x382 y el personaje pasa a 130 pixeles: se le ve la cara.
+     La saturacion y los escalones se quedan; lo que estaba mal era la resolucion. */
+  fuerte: { escala:0.58, sat:1.28, niveles:26  }
 };
 let filtro='fuerte';
 try{ const g=localStorage.getItem('recreo_filtro'); if(g && FILTROS[g]) filtro=g; }catch(e){}
@@ -1524,9 +1648,13 @@ function pintarEscena(){
    ========================================================================================= */
 /* los puntos del viaje, en celdas: del pasillo del medio hasta el aula 6 */
 const RUTA_CAM=[[11,9],[8,9]];
-const RUTA_DENTRO=[[8,11],[8,13],[8,14.10]];
+/* 14,44 Y NO 14,238: ZC(14,238) da z=22,0 y a esa altura la camara se queda EN EL VANO DE LA
+   PUERTA. Medido en una captura de 790x1400: el personaje ocupaba 36,8% del alto, los pupitres de
+   los costados hacian de marco y el tercio de abajo era piso vacio. ZC(14,44)=22,85 la mete dentro
+   del aula, a 2,35 m de el, y pasa a ocupar 41% con el escritorio de primer plano abajo. */
+const RUTA_DENTRO=[[8,11],[8,13],[8,14.44]];
 const PUERTA_CLASE=(()=>PUERTAS.find(p=>p.aula===AULA_CLASE.n))();
-const CAM_FIN=[XC(8), 21.4];
+const CAM_FIN=[XC(8), 22.85];
 
 function cel2(p){ return [XC(p[0]), ZC(p[1])]; }
 
@@ -1581,7 +1709,12 @@ function siguienteEscena(){
     /* EL VA ADELANTE Y LA CAMARA LO SIGUE. Se lanzan los dos rieles a la vez con el de el mas
        rapido: asi le saca ventaja, y lo que el jugador ve es una espalda que se aleja y una camara
        que la persigue — que es como se lee "vení conmigo" sin decirlo. */
-    profeIr([...RUTA_CAM.map(cel2), cel2([8,10])], 2.9);
+    /* EL NO ARRANCA EN EL PRIMER PUNTO DE LA RUTA DE LA CAMARA. Estaba con [...RUTA_CAM], cuyo
+       primer punto es la celda 11 —donde esta la camara— y el arranca en la 10,35, o sea DELANTE.
+       Con eso lo primero que hacia era caminar 2,7 m hacia atras, cruzarse con la camara y quedar
+       detras de ella: en la captura del pasillo no habia nadie, el "vení conmigo" lo decia una voz
+       sin cuerpo. Su ruta empieza adelante y sigue adelante. */
+    profeIr([cel2([9.6,9]), cel2([8,9]), cel2([8,10])], 2.9);
     rielIr(RUTA_CAM.map(cel2), 2.2, ()=>{});
   }
   if(E.puerta){
@@ -1598,7 +1731,9 @@ function siguienteEscena(){
       if(PUERTA_CLASE) PUERTA_CLASE.abierta=true;
     }
     /* el se pone DEL OTRO LADO del escritorio, entre la mesa y el pizarron */
-    PROFE.x=CLASE_X; PROFE.z=25.0; PROFE.giro=Math.PI;
+    /* 3,2 m y no 3,6: el frente del escritorio queda a un metro de la camara —o sea llenando el
+       borde de abajo del cuadro, como una mesa de verdad— y el ocupa un tercio de la altura. */
+    PROFE.x=CLASE_X; PROFE.z=25.2; PROFE.giro=Math.PI;
     PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
     profeRiel=null;
   }
@@ -1616,9 +1751,18 @@ function ponerCuenta(){
   /* a un costado, a la altura de los ojos, y GIRADO PARA QUE LA TAPA MIRE A LA CAMARA: la cara con
      la cuenta esta en el +Z local del libro y la camara mira hacia +Z, asi que sin este giro se veia
      el lomo azul y la cuenta quedaba del otro lado. */
-  l.g.position.set(CLASE_X+1.45, 1.52, 20.6);
+  /* EL LIBRO ESTABA DETRAS DE LA CAMARA. z=21,4 con la camara en z=22,0 mirando hacia +Z: el libro
+     quedaba un metro a la espalda del jugador. Y no se puede correr solo de costado: con el campo de
+     vision horizontal de 58 grados, a 1,6 m de distancia solo entran 90 cm a cada lado del centro.
+     A 2,0 m de distancia y 80 cm al costado queda al lado de el y adentro del cuadro. */
+  /* Y MAS LEJOS Y MAS CHICO: a 2,0 m con escala 1,6 el libro medía 80 cm de ancho y se salia por el
+     borde izquierdo del marco. A 2,6 m entran 1,46 m a cada lado del centro, asi que con el desvio de
+     0,95 queda entero y al lado de el, no encima. */
+  /* 0,70 Y NO 0,95: con la camara a 22,85 el libro flota a 1,75 m y el medio ancho visible ahi es
+     0,98 m. A 0,95 quedaba mitad afuera; medido con caja(): a 0,70 todavia se salia 28 px, a 0,55 y escala 1,02 entra entero. */
+  l.g.position.set(CLASE_X+0.55, 1.45, 24.6);
   l.g.rotation.y=Math.PI;
-  l.g.scale.setScalar(1.6);
+  l.g.scale.setScalar(1.02);
   son('libro');
   MANO.cand=-1; MANO.votos=0; padPedido=-1; esperaT=0;
   document.body.classList.add('esperando');
@@ -1673,6 +1817,11 @@ function pasoFijo(dt){
   esperasTick(dt);
   rielTick(dt);
   profeTick(dt);
+  /* GESTICULA CUANDO HABLA Y SE QUEDA QUIETO CUANDO ESPERA. Antes se quedaba en 'explicando' todo
+     el rato, o sea con los brazos abiertos mientras el jugador contaba con los dedos: a la distancia
+     y con el filtro, dos brazos abiertos y quietos son dos palitos que no dicen nada. Atar el gesto
+     a que el subtitulo se este escribiendo sale gratis y ademas es lo que hace una persona. */
+  if(E.clase){ profeAnim((dVer && dPos<dCola.length)? 'explicar' : 'quieto'); }
   if(E.mira && !riel) profeMirarCam(dt, 3.0);
   if(E.mira && !riel) mirarA(PROFE.x, PROFE.z, dt, 2.2);
 
@@ -1685,7 +1834,13 @@ function pasoFijo(dt){
   if(E.puerta){
     /* el empuja la puerta y despues los dos entran */
     if(escenaT>1.5 && !riel && !profeRiel){
-      profeIr(RUTA_DENTRO.map(cel2), 2.6);
+      /* EL EMPUJON DURA LO QUE DURA EL EMPUJON. Los dos rieles arrancaban y el se quedaba en la
+         pose de 'puerta' los siete segundos que tarda en cruzar el aula: medido, seguia con el brazo
+         estirado empujando aire en z=18,45. Y su ruta terminaba en 14,44 —la celda de la camara—
+         para despues aparecer de golpe en 25,2: dos metros y medio de teletransporte. Ahora camina,
+         y camina hasta donde se tiene que quedar. */
+      profeAnim('caminar');
+      profeIr([...RUTA_DENTRO.slice(0,-1).map(cel2), cel2([8,15])], 2.6);
       rielIr(RUTA_DENTRO.map(cel2), 2.0, ()=>siguienteEscena());
     }
   }
@@ -1758,7 +1913,12 @@ function dibujar(alfa){
   if(R && R.raiz){
     R.raiz.position.x=PROFE.ax+(PROFE.x-PROFE.ax)*alfa;
     R.raiz.position.z=PROFE.az+(PROFE.z-PROFE.az)*alfa;
-    R.raiz.rotation.y=angLerp(PROFE.agiro, PROFE.giro, alfa)+Math.PI;
+    /* SIN EL +PI. Estaba copiado del rig de cajas de la version anterior y sumaba media vuelta de
+       mas: profeMirarCam() calcula bien el rumbo HACIA la camara —atan2 da pi cuando la camara esta
+       en -Z— y el +PI lo devolvia a 0, o sea de espaldas. En pantalla se veia una cabeza pelada SIN
+       CARA, porque la cara estaba del otro lado. La camara SI lleva +PI, y no es lo mismo: three.js
+       apunta las camaras a su -Z y los modelos vienen mirando a +Z. */
+    R.raiz.rotation.y=angLerp(PROFE.agiro, PROFE.giro, alfa);
   }
   animarBaldi(PROFE.anim, PROFE.animOtro, PROFE.mezcla, PROFE.at);
   for(const l of LIBROS){ if(!l.g.visible) continue;
@@ -1835,6 +1995,26 @@ window.__recreo={
                 animarBaldi(PROFE.anim, PROFE.animOtro, PROFE.mezcla, PROFE.at);
                 return PROFE.anim; },
   animLista:()=>ANIM_NOMBRES,
+  /* VOLCADO DE HUESOS: la rotacion con la que vino el hueso (bind) contra la que tiene puesta ahora,
+     y donde caen manos y pies en el mundo. Es la unica forma de ver si mis poses SUMAN a la pose de
+     reposo del rig o la PISAN. */
+  huesosDump:()=>{
+    const R=baldiGLB? baldi : profe;
+    const o={}, v=new THREE.Vector3();
+    R.raiz.updateMatrixWorld(true);
+    for(const k in HUESO_DE){
+      const q=R[k]; if(!q) continue;
+      o[k]={ bind: q.userData.bind? q.userData.bind.map(x=>+x.toFixed(3)) : null,
+             ahora:[+q.rotation.x.toFixed(3), +q.rotation.y.toFixed(3), +q.rotation.z.toFixed(3)] };
+      if(q.userData.abdBind!=null) o[k].abdBind=+q.userData.abdBind.toFixed(3);
+    }
+    const p={};
+    for(const k of ['manoD','manoI','rodillaD','rodillaI','cabeza']){
+      if(!R[k]) continue; R[k].getWorldPosition(v);
+      p[k]=[+v.x.toFixed(3), +v.y.toFixed(3), +v.z.toFixed(3)];
+    }
+    return { huesos:o, mundo:p };
+  },
   /* PARA MEDIR LOS EJES DEL RIG. Los ejes locales de un hueso dependen de como quedo el bind, asi
      que el desvio de reposo no se adivina: se gira el hueso en un eje y se mira para donde se fue la
      mano en el mundo. */
@@ -1846,8 +2026,10 @@ window.__recreo={
                : (hueso.indexOf('cadera')===0||hueso.indexOf('rodilla')===0? (hueso.slice(-1)==='D'?'rodillaD':'rodillaI') : 'cabeza');
     const ref=R[mano]||R.cabeza;
     const r0=o.rotation.clone();
+    const bi=o.userData.bind||[0,0,0];
     R.raiz.updateMatrixWorld(true); ref.getWorldPosition(antes);
-    o.rotation.set(eje==='x'?ang:r0.x, eje==='y'?ang:r0.y, eje==='z'?ang:r0.z);
+    /* el angulo se mide como DELTA sobre el bind, que es como lo aplica animarGLB */
+    o.rotation.set(bi[0]+(eje==='x'?ang:0), bi[1]+(eje==='y'?ang:0), bi[2]+(eje==='z'?ang:0));
     R.raiz.updateMatrixWorld(true); ref.getWorldPosition(v);
     o.rotation.copy(r0); R.raiz.updateMatrixWorld(true);
     return { hueso, eje, ang, ref:mano,
@@ -1859,6 +2041,62 @@ window.__recreo={
     if(!o) return 'no hay '+hueso;
     if(xyz){ o.userData.rep=xyz; REPOSO[hueso]=xyz; }
     return o.userData.rep||[0,0,0]; },
+  /* ---- EL ENCUADRE ----
+     Mover la camara y LEER DONDE CAE EL PERSONAJE EN PIXELES. Sin esto el encuadre se ajusta a ojo
+     sobre capturas, que es exactamente como se me paso que el tercio de abajo de la pantalla era
+     piso vacio. */
+  encuadre:(o)=>{
+    if(o){
+      if(o.z!=null){ cam.z=o.z; cam.az=o.z; }
+      if(o.x!=null){ cam.x=o.x; cam.ax=o.x; }
+      if(o.pitch!=null){ cam.pitch=o.pitch; cam.apitch=o.pitch; }
+      if(o.ojo!=null){ cam.ojo=o.ojo; cam.aojo=o.ojo; }
+      if(o.fov!=null){ camara.fov=o.fov; camara.updateProjectionMatrix(); }
+    }
+    return { z:+cam.z.toFixed(2), x:+cam.x.toFixed(2), pitch:+cam.pitch.toFixed(3),
+             ojo:+cam.ojo.toFixed(2), fov:camara.fov,
+             marco:[lienzo.clientWidth, lienzo.clientHeight] };
+  },
+  /* la caja del personaje EN PIXELES de pantalla, y los libros tambien: es la medida del encuadre */
+  caja:()=>{
+    const R=baldiGLB? baldi : profe;
+    const W=lienzo.clientWidth, H=lienzo.clientHeight;
+    const v=new THREE.Vector3();
+    const aPx=(x,y,z)=>{ v.set(x,y,z).project(camara);
+      return [+((v.x*0.5+0.5)*W).toFixed(0), +((-v.y*0.5+0.5)*H).toFixed(0)]; };
+    const enCaja=(obj)=>{
+      const c=new THREE.Box3().setFromObject(obj);
+      let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+      for(let i=0;i<8;i++){
+        const q=aPx(i&1?c.max.x:c.min.x, i&2?c.max.y:c.min.y, i&4?c.max.z:c.min.z);
+        if(q[0]<x0)x0=q[0]; if(q[0]>x1)x1=q[0]; if(q[1]<y0)y0=q[1]; if(q[1]>y1)y1=q[1];
+      }
+      return [x0,y0,x1,y1];
+    };
+    const r={ marco:[W,H], profe:enCaja(R.raiz) };
+    r.altoPct=+((r.profe[3]-r.profe[1])/H*100).toFixed(1);
+    const pts={};
+    for(const k of ['cabeza','manoD','manoI','rodillaD']){ if(!R[k]) continue;
+      R.raiz.updateMatrixWorld(true); R[k].getWorldPosition(v);
+      pts[k]=aPx(v.x,v.y,v.z); }
+    r.puntos=pts;
+    const l=LIBROS.find(q=>q.g && q.g.visible);
+    if(l) r.libro=enCaja(l.g);
+    return r;
+  },
+  /* pone una pose cruda y devuelve donde cayeron las manos: para medir UN eje a la vez */
+  poseCruda:(o)=>{
+    _poseFija = o || null;
+    const R=baldiGLB? baldi : profe;
+    animarBaldi(PROFE.anim, null, 0, PROFE.at);
+    R.raiz.updateMatrixWorld(true);
+    const v=new THREE.Vector3(), r={};
+    for(const k of ['manoD','manoI','hombroD','hombroI']){ if(!R[k]) continue;
+      R[k].getWorldPosition(v);
+      r[k]=[+v.x.toFixed(3), +v.y.toFixed(3), +v.z.toFixed(3)]; }
+    if(R.hombroD && R.manoD){ r.abdBindD=+(R.hombroD.userData.abdBind||0).toFixed(3); }
+    return r;
+  },
   /* ---- LOS DEDOS ---- */
   leer:(lm)=>manoLeer(lm),
   contar:(lms)=>manoTotal(lms),
