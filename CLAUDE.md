@@ -216,6 +216,31 @@ Tres decisiones:
 Sólo aparece mientras hay actividad: en el aula lo que se hace es contar con los dedos, y ahí un aro de
 puntería es ruido encima del único momento en que hay que mirar el libro.
 
+#### Y LA PINZA ERA CERRAR LA MANO ENTERA
+
+Tercer reporte de la misma tanda: *"además el pinch es cerrando pulgar e índice, no la mano entera"*.
+`manoLeer()` pedía la distancia pulgar-índice **y además** `largos.filter(Boolean).length<=2`, o sea
+que como mucho dos de los cuatro dedos podían estar estirados. Una pinza natural —pulgar e índice
+juntos y el medio, el anular y el meñique afuera— deja **tres** estirados: no contaba.
+
+**Y la condición no estaba protegiendo de nada, lo cual se ve en cuanto se miden los números.**
+Distancia pulgar-índice en palmas: pinza **0,061** · puño 0,878 · dos dedos 1,405 · mano abierta
+1,379. La distancia sola separa la pinza de todo lo demás por **catorce veces**, y el umbral de 0,45
+cae en el medio de un hueco enorme — ni siquiera el puño cerrado lo cruza. La cuenta de dedos no
+aportaba margen: sólo rechazaba pinzas de verdad.
+
+**POR QUÉ SOBREVIVIÓ, Y ES LO MISMO QUE PASÓ CON EL ESPEJO: LA PRUEBA COMPARTÍA EL ERROR.**
+`manoFalsa(dedos, pinza, …)` cuenta los dedos estirados **desde el índice hacia afuera**, así que para
+juntar el pulgar con el índice tenía que cerrar también el índice y todo lo que viniera después. La
+única pinza que el banco sabía dibujar era la de puño cerrado — justo la que el código aceptaba. Ahora
+`manoFalsaPinza(cx, cy, afuera)` arma el índice doblado hacia el pulgar y deja los otros tres a
+elección, que es la pose que hace cualquiera sin pensarlo.
+
+Medido después del arreglo: las cuatro variantes de pinza (3, 2, 1 y 0 dedos afuera) dan `pinza:true`,
+y **ninguna** pose que no sea pinza da falso positivo — mano abierta, puño, y 1, 2, 3 y 4 dedos, todas
+en `false`. Y el rompecabezas, jugado por el camino de verdad con una pinza natural: agarra la pieza de
+la derecha, la arrastra al hueco, y al abrir la mano encaja (4→3).
+
 #### MEDIDO AL CERRAR
 
 `manoEspejo` en verde en los dos casos (0,053 de diferencia, que es el desvío real del punto de la

@@ -58,7 +58,18 @@ function manoLeer(lm){
     (d3(lm[pt],mu) / Math.max(1e-6,d3(lm[n],mu))) > 1.28 );
   /* el pulgar, contra el nudillo del menique */
   const pulgar = (d3(lm[4], lm[17]) / palma) > 1.05;
-  const pinza  = (d3(lm[4], lm[8]) / palma) < 0.45 && largos.filter(Boolean).length<=2;
+  /* LA PINZA ES EL PULGAR Y EL INDICE, Y NADA MAS. Lo reporto el jugador con esas palabras: "el
+     pinch es cerrando pulgar e indice, no la mano entera".
+     Antes decia ademas `largos.filter(Boolean).length<=2`, o sea que exigia que como mucho dos de los
+     cuatro dedos estuvieran estirados. Una pinza natural —pulgar e indice juntos y el medio, el
+     anular y el menique afuera— deja TRES estirados, asi que no contaba: habia que cerrar casi toda
+     la mano para que el juego la viera.
+     Y la condicion no estaba protegiendo de nada. MEDIDO, la distancia pulgar-indice en palmas:
+       pinza 0,061 · puño 0,878 · dos dedos 1,405 · mano abierta 1,379
+     o sea que la distancia sola separa la pinza de todo lo demas por CATORCE VECES, y el umbral de
+     0,45 cae en el medio de un hueco enorme. Ni siquiera el puño cerrado la cruza. La cuenta de dedos
+     no aportaba margen: solo rechazaba pinzas de verdad. */
+  const pinza  = (d3(lm[4], lm[8]) / palma) < 0.45;
   /* SE DEVUELVE TAMBIEN CUALES. El dibujo de la mano marca en verde los dedos que el juego CONTO,
      y eso es la mitad de la enseñanza: cuando el numero no es el que el jugador cree, se ve cual
      dedo no cerro o no estiro del todo. Un numero solo no explica nada. */

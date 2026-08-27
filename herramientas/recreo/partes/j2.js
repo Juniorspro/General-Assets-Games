@@ -279,6 +279,61 @@ window.__recreo={
      ========================================================================================= */
   /* poner el espejo a mano: sin camara el banco arranca en true (camara frontal), y el caso que
      rompio —y el que corre en un telefono— es el de la camara TRASERA, o sea false */
+  /* =========================================================================================
+     LA PINZA DE VERDAD: PULGAR E INDICE JUNTOS Y LOS OTROS TRES DONDE QUIERAN
+
+     manoFalsa() no puede armar esta pose, y eso no es un detalle del banco: es LA RAZON de que el
+     defecto sobreviviera. Su parametro `pinza` cuenta los dedos estirados desde el indice hacia
+     afuera, asi que para juntar el pulgar con el indice tiene que cerrar tambien el indice Y todo lo
+     que venga despues — o sea que la unica pinza que el banco sabia dibujar era la de puño cerrado,
+     que es justo la que el codigo aceptaba. La prueba y el codigo compartian el mismo error.
+
+     Esta arma el indice DOBLADO hacia el pulgar y deja el medio, el anular y el menique estirados o
+     no, a eleccion. `afuera` es cuantos de esos tres quedan estirados: 3 es la pinza que hace
+     cualquiera sin pensarlo.
+     ========================================================================================= */
+  manoFalsaPinza:(cx, cy, afuera)=>{
+    const X=cx==null?0.5:cx, Y=cy==null?0.5:cy, S=0.16;
+    const n=Math.max(0, Math.min(3, afuera==null? 3 : afuera|0));
+    const lm=[]; for(let k=0;k<21;k++) lm.push({x:X,y:Y,z:0});
+    lm[0]={x:X, y:Y+S, z:0};
+    const nud=[[5,-0.055],[9,0],[13,0.050],[17,0.098]];
+    nud.forEach(([nu,off],idx)=>{
+      lm[nu]={x:X+off, y:Y+0.02, z:0};
+      /* idx 0 es el INDICE y va siempre doblado: es el que se junta con el pulgar */
+      const estirado = idx>0 && idx<=n;
+      if(estirado){
+        const L=0.118;
+        lm[nu+1]={x:X+off, y:Y+0.02-L*0.34, z:0};
+        lm[nu+2]={x:X+off, y:Y+0.02-L*0.66, z:0};
+        lm[nu+3]={x:X+off, y:Y+0.02-L, z:0};
+      } else {
+        /* doblado: la punta se recoge hacia la palma, sin llegar a meterse adentro */
+        lm[nu+1]={x:X+off, y:Y+0.02-0.040, z:0};
+        lm[nu+2]={x:X+off*0.75, y:Y+0.02-0.052, z:0};
+        lm[nu+3]={x:X+off*0.45, y:Y+0.02-0.040, z:0};
+      }
+    });
+    /* el pulgar sale al costado y su punta va a tocar la del indice */
+    lm[1]={x:X-0.058, y:Y+0.120, z:0};
+    lm[2]={x:X-0.072, y:Y+0.082, z:0};
+    lm[3]={x:X-0.050, y:Y+0.040, z:0};
+    lm[4]={x:lm[8].x-0.006, y:lm[8].y+0.006, z:0};
+    return lm;
+  },
+  /* los numeros CRUDOS con los que manoLeer() decide, para poder calibrar en vez de adivinar:
+     cuanto miden pulgar-a-indice y pulgar-a-menique en palmas, y que dedos da por estirados */
+  manoLeerVer:(lm)=>{
+    const d=(a,b)=>Math.hypot(a.x-b.x, a.y-b.y, (a.z||0)-(b.z||0));
+    const palma=Math.max(1e-6, d(lm[0], lm[9]));
+    const largos=[[8,5],[12,9],[16,13],[20,17]].map(([pt,n])=>
+      +(d(lm[pt],lm[0]) / Math.max(1e-6,d(lm[n],lm[0]))).toFixed(3));
+    const q=manoLeer(lm);
+    return { pulgarIndice:+(d(lm[4],lm[8])/palma).toFixed(3),
+             pulgarMenique:+(d(lm[4],lm[17])/palma).toFixed(3),
+             razones:largos, estirados:q? q.estirados : null,
+             dedos:q? q.dedos : null, pinza:q? q.pinza : null };
+  },
   manoEspejoPoner:(v)=>{ MANO.espejo=!!v; return MANO.espejo; },
   manoEspejo:()=>{
     MANO.pausa=true; MANO.on=true; MANO.estado='lista';
