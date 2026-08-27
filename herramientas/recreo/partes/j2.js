@@ -615,6 +615,33 @@ window.__recreo={
     MANO.msDet=gMs; MANO.hz=gHz; MANO.hzTope=gTope;
     return r;
   },
+  /* =========================================================================================
+     EL VIGIA, PROBADO SIN UN TELEFONO LENTO
+
+     No puedo hacer que este contenedor vaya a 25 fps a pedido, pero lo que hay que probar no es el
+     aparato: es la POLITICA. Se le inyectan tiempos de cuadro y se mira que decide — que baje cuando
+     va mal, que NO toque nada cuando va bien, y sobre todo que DEVUELVA un escalon que no gano nada,
+     que es la regla que aprendio Maicol y la que evita dejar la imagen peor a cambio de cero.
+     ========================================================================================= */
+  vigiaProbar:(fpsPorMedicion)=>{
+    const gCal=calidad, gMan=VIGIA.manual, gJug=jugando;
+    VIGIA.activo=true; VIGIA.manual=false; VIGIA.hecho=false; VIGIA.fase='espera';
+    VIGIA.t0=0; VIGIA.n=0; VIGIA.suma=0; VIGIA.paso=0; VIGIA.hist.length=0;
+    jugando=true;
+    aplicarCal('media');
+    for(const fps of fpsPorMedicion){
+      const dt=1/fps;
+      while(VIGIA.t0<VIG_ESPERA) VIGIA.t0+=dt;
+      for(let k=0;k<VIG_CUADROS;k++){ if(VIGIA.hecho) break; vigiaTick(dt); }
+      if(VIGIA.hecho) break;
+    }
+    const r={ hist:VIGIA.hist.slice(), calidadFinal:calidad, pasos:VIGIA.paso, hecho:VIGIA.hecho };
+    jugando=gJug; VIGIA.manual=gMan; aplicarCal(gCal);
+    return r;
+  },
+  vigiaVer:()=>({ activo:VIGIA.activo, manual:VIGIA.manual, hecho:VIGIA.hecho, paso:VIGIA.paso,
+                  fase:VIGIA.fase, calidad, px:CAL[calidad].px, filtro,
+                  entradaChica:!!MANO.entradaChica, hist:VIGIA.hist.slice(-6) }),
   manoRitmo:()=>({ hz:MANO.hz, medidas:MANO.medidas, msDeteccion:+MANO.msDet.toFixed(2),
                    espejo:MANO.espejo, camara:MANO.camaraUsada,
                    ranuras:MANO.ranuras.map(R=>({ hay:R.hay, dedos:R.dedos, lado:R.lado,

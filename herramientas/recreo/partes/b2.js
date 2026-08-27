@@ -172,7 +172,11 @@ try{ plataf=(matchMedia('(pointer:coarse)').matches &&
       (('ontouchstart' in window)||navigator.maxTouchPoints>0))? 'movil':'pc'; }catch(e){}
 
 /* ===================== LAS TRES CALIDADES ===================== */
-const CAL={ baja:{ px:0.60, lockers:false, niebla:30 },
+/* UN ESCALON MAS ABAJO QUE 'baja', PARA APARATOS DE GAMA BAJA DE VERDAD. No aparece en el menu: no
+   es una opcion, es a donde llega el vigia solo cuando midio que ni 'baja' alcanza. Ponerlo en el
+   menu seria ofrecerle a alguien elegir la peor imagen del juego sin saber si la necesita. */
+const CAL={ minima:{ px:0.45, lockers:false, niebla:24 },
+            baja:{ px:0.60, lockers:false, niebla:30 },
             media:{ px:0.90, lockers:true,  niebla:40 },
             alta:{ px:2.00, lockers:true,  niebla:52 } };
 let calidad='media';

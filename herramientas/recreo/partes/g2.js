@@ -54,6 +54,25 @@ const MANO_HZ_MOVIL=24, MANO_HZ_PC=30;
    ========================================================================================= */
 const MANO_CARGA=0.30;        // fraccion del hilo que se le presta al detector, como mucho
 const MANO_HZ_MIN=12;         // por debajo de esto ni la interpolacion lo tapa
+/* BAJAR LA ENTRADA DEL DETECTOR EN CALIENTE, SIN CORTAR LA CAMARA.
+   El ultimo escalon que queda cuando ya se bajo la resolucion de dibujo es darle MENOS PIXELES QUE
+   MIRAR al detector: de 320x240 a 224x168 son 2,04 veces menos, y el costo de detectForVideo() va
+   con los pixeles de entrada.
+
+   Va con applyConstraints y no volviendo a pedir getUserMedia, y la diferencia importa: pedir la
+   camara otra vez en algunos navegadores VUELVE A PREGUNTAR EL PERMISO, y preguntarlo en medio de una
+   partida —cuando el gesto del jugador ya expiro— es la forma mas rapida de quedarse sin manos a la
+   mitad del juego. applyConstraints reusa el mismo track.
+   Y si el aparato no deja cambiar la resolucion, no pasa nada: se sigue con la que habia. */
+function manoEntradaChica(si){
+  MANO.entradaChica=!!si;
+  const v=MANO.vid, st=v && v.srcObject;
+  const tr=st && st.getVideoTracks && st.getVideoTracks()[0];
+  if(!tr || !tr.applyConstraints) return false;
+  const w=si? 224 : 320, h=si? 168 : 240;
+  try{ tr.applyConstraints({ width:{ideal:w}, height:{ideal:h} }).catch(()=>{}); }catch(e){ return false; }
+  return true;
+}
 function manoRitmoAjustar(){
   if(MANO.msDet<=0.5) return;                     // todavia no hay una medida creible
   const tope = MANO.hzTope || MANO_HZ_MOVIL;

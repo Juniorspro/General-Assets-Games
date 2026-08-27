@@ -339,6 +339,75 @@ de dibujo y 16.302 triángulos.
 probado por su decisión (dado un tiempo de detección, qué ritmo elige) y no contra MediaPipe corriendo
 de verdad. Si sigue yendo a 25-30, el próximo paso es bajar la entrada del detector de 320×240.
 
+### Trigésima vuelta (2026-08-27): **RECREO** — el juego se mide solo y se baja la calidad
+
+Pedido: *"puedes mejorarlo aún más, incluso para dispositivos más gama baja"*.
+
+#### EL AGUJERO MÁS GRANDE NO ERA UNA CONSTANTE: ERA QUE NADIE TOCA LOS AJUSTES
+
+El juego arranca en calidad `media` **y ahí se queda**. Los ajustes existen desde hace vueltas y están
+en el menú, pero nadie entra al menú a bajarse los gráficos — y menos alguien que no sabe que el
+problema son los gráficos. **Un ajuste que hay que descubrir para que sirva, en la práctica no
+existe.**
+
+Y el escalón que nadie usaba es el más grande que hay: de `media` a `baja` el pixel ratio pasa de 0,90
+a 0,60, o sea **2,25 veces menos píxeles que rellenar**, en un juego que está limitado por relleno
+(todo pasa por el filtro de baja calidad, que ya dibuja a un destino reducido).
+
+Ahora hay un **vigía**: mide los cuadros y baja solo. Tres reglas, y las tres son lecciones viejas de
+este proyecto:
+
+1. **BAJAR A CIEGAS ES UNA APUESTA.** En un aparato que *no* está limitado por relleno, bajar la
+   resolución no gana nada y sólo deja la imagen más blanda — medido en Maicol: de 590 mil a 389 mil
+   píxeles, 29,45 → 29,60 cuadros por segundo, o sea **cero**. Así que después de cada escalón se
+   vuelve a medir, y si no ganó al menos un 8 % **se vuelve para arriba y no se toca más**.
+2. **NO SE MIDE EL PRIMER SEGUNDO.** Los primeros cuadros traen la compilación de shaders, la subida
+   de texturas y el primer paso de MediaPipe: medir ahí es concluir que el aparato es lento cuando lo
+   único lento fue empezar.
+3. **SI EL JUGADOR ELIGE, EL VIGÍA SE CALLA.** Un ajuste automático que le pisa la elección a alguien
+   que acaba de elegir no es una ayuda, es un forcejeo — y desde afuera se ve como que el menú no
+   guarda lo que le ponen.
+
+La escalera: `calidad baja` → `entrada del detector a 224×168` → `calidad mínima` (px 0,45, un escalón
+nuevo que **no aparece en el menú**: no es una opción, es a donde llega el vigía solo; ofrecerle a
+alguien elegir la peor imagen del juego sin saber si la necesita no es una opción, es una trampa).
+
+**La entrada del detector se baja con `applyConstraints`, no volviendo a pedir `getUserMedia`**, y la
+diferencia importa: pedir la cámara otra vez en algunos navegadores **vuelve a preguntar el permiso**,
+y preguntarlo en medio de una partida —cuando el gesto del jugador ya expiró— es la forma más rápida
+de quedarse sin manos a la mitad del juego.
+
+#### PROBADO SIN UN TELÉFONO LENTO, PORQUE LO QUE HAY QUE PROBAR ES LA POLÍTICA
+
+No puedo hacer que el contenedor vaya a 25 fps a pedido, pero el aparato no es lo que hay que probar:
+es qué **decide**. Se le inyectan tiempos de cuadro:
+
+| lo que mide | qué hace | dónde termina |
+|---|---|---|
+| 60 fps | **no toca nada**, 0 escalones | media |
+| 26 → 45 → 58 | baja dos escalones | mínima |
+| 26 → 27 (no gana) | aplica uno, mide, **lo devuelve** | media |
+| 18 → 24 → 31 | baja hasta el fondo | mínima |
+
+La tercera fila es la que importa: es la regla de Maicol funcionando, y es la que evita dejar la imagen
+peor a cambio de cero.
+
+#### MEDIDO AL CERRAR
+
+Partida completa **24 de 24** dos veces —limpia y después de morir—, 0 pasos dentro de paredes en
+19.752, `window.__errs` vacío, matriz del puntuador con diagonal perfecta, las tres pruebas de reparto
+de manos en verde, manos a 21 ms con atenuación 4,10, 10 llamadas de dibujo y 16.302 triángulos.
+
+#### UNA ADVERTENCIA SOBRE EL CONTENEDOR, QUE COSTÓ MEDIA VUELTA
+
+**El contenedor revirtió la copia local del repo tres veces en esta sesión**, y una de esas veces lo
+hizo *en medio* de una tanda de ediciones: quedaron archivos míos nuevos encima de otros archivos
+viejos. Peor todavía, en un momento `git log` mostraba la rama en un commit anterior y me llevó a
+concluir —mirando el HEAD equivocado— que trabajo ya empujado se había perdido. **No se había
+perdido: `origin` tenía todo.** La regla que queda: cuando algo parezca faltar, comprobar contra
+`origin` con `git fetch` ANTES de sacar conclusiones, y recuperar con
+`git reset --hard origin/<rama>` en vez de rehacer.
+
 ### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
 
 Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo

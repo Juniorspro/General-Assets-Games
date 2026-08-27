@@ -1534,6 +1534,88 @@ function dibujar(alfa){
   pintarMiras();
   pintarEscena();
 }
+/* =========================================================================================
+   EL VIGIA: EL JUEGO SE MIDE SOLO Y SE BAJA LA CALIDAD SI HACE FALTA
+
+   El pedido fue "mejoralo aun mas, incluso para dispositivos mas gama baja". Y el agujero mas grande
+   no era una constante mal puesta: era que EL JUEGO ARRANCA EN 'media' Y AHI SE QUEDA. Los ajustes
+   existen desde hace vueltas y estan en el menu, pero nadie entra al menu a bajarse los graficos —
+   y menos alguien que no sabe que el problema son los graficos. Un ajuste que hay que descubrir para
+   que sirva, en la practica no existe.
+
+   De media a baja el pixel ratio pasa de 0,90 a 0,60, o sea 2,25 VECES MENOS PIXELES QUE RELLENAR, y
+   este juego esta limitado por relleno (todo pasa por el filtro de baja calidad, que ya dibuja a un
+   destino reducido). Es el escalon mas grande que hay y no lo estaba usando nadie.
+
+   TRES REGLAS, Y LAS TRES SON LECCIONES VIEJAS DE ESTE PROYECTO:
+
+   1. BAJAR A CIEGAS ES UNA APUESTA. En un aparato que NO esta limitado por relleno, bajar la
+      resolucion no gana nada y solo deja la imagen mas blanda — medido en Maicol: de 590 mil a 389
+      mil pixeles, 29,45 -> 29,60 cuadros por segundo, o sea CERO. Asi que despues de cada escalon se
+      vuelve a medir, y si no gano al menos un 8% SE VUELVE PARA ARRIBA y no se toca mas.
+   2. NO SE MIDE EL PRIMER SEGUNDO. Los primeros cuadros de una partida traen la compilacion de
+      shaders, la subida de texturas y el primer paso de MediaPipe: medir ahi es medir el arranque y
+      concluir que el aparato es lento cuando lo unico lento fue empezar.
+   3. SI EL JUGADOR ELIGE, EL VIGIA SE CALLA. Ver el onclick de [data-cal].
+   ========================================================================================= */
+const VIGIA={ activo:true, manual:false, fase:'espera', t0:0, n:0, suma:0,
+              fpsBase:0, fpsAnt:0, paso:0, hist:[], hecho:false, calAnt:null };
+const VIG_ESPERA=1.2;        // segundos que se dejan pasar antes de empezar a medir
+const VIG_CUADROS=75;        // cuantos cuadros entran en cada medicion
+const VIG_META=50;           // por encima de esto no hay nada que arreglar
+const VIG_GANANCIA=1.08;     // un escalon tiene que dar al menos un 8% para quedarse
+/* la escalera, de menos a mas agresiva. Cada escalon dice como aplicarse y como deshacerse. */
+const VIG_PASOS=[
+  { nombre:'calidad-baja',
+    puede:()=>calidad==='media'||calidad==='alta',
+    hacer:()=>{ VIGIA.calAnt=calidad; aplicarCal('baja'); },
+    deshacer:()=>aplicarCal(VIGIA.calAnt||'media') },
+  { nombre:'deteccion-chica',
+    puede:()=>MANO.on && !MANO.entradaChica,
+    hacer:()=>manoEntradaChica(true),
+    deshacer:()=>manoEntradaChica(false) },
+  { nombre:'calidad-minima',
+    puede:()=>calidad!=='minima',
+    hacer:()=>{ VIGIA.calAnt=calidad; aplicarCal('minima'); },
+    deshacer:()=>aplicarCal(VIGIA.calAnt||'baja') }
+];
+function vigiaTick(dt){
+  if(!VIGIA.activo || VIGIA.manual || VIGIA.hecho || !jugando) return;
+  VIGIA.t0+=dt;
+  if(VIGIA.t0<VIG_ESPERA) return;
+  /* un cuadro larguisimo —una pestaña que volvio, el recolector de basura— no dice nada del aparato */
+  if(dt>0.25) return;
+  VIGIA.suma+=dt; VIGIA.n++;
+  if(VIGIA.n<VIG_CUADROS) return;
+  const fps=VIGIA.n/VIGIA.suma;
+  VIGIA.n=0; VIGIA.suma=0;
+  VIGIA.hist.push({ paso:VIGIA.paso, fps:+fps.toFixed(1), calidad, chica:!!MANO.entradaChica });
+  if(VIGIA.fase==='espera'){
+    VIGIA.fpsBase=fps; VIGIA.fpsAnt=fps;
+    if(fps>=VIG_META){ VIGIA.hecho=true; return; }      // va bien: no se toca nada
+    VIGIA.fase='probando';
+    vigiaSiguiente();
+    return;
+  }
+  /* venimos de aplicar un escalon: ¿sirvio? */
+  if(fps < VIGIA.fpsAnt*VIG_GANANCIA){
+    const P=VIG_PASOS[VIGIA.paso-1];
+    if(P) P.deshacer();
+    VIGIA.hist.push({ revertido:P? P.nombre : null, fps:+fps.toFixed(1) });
+    VIGIA.hecho=true; return;
+  }
+  VIGIA.fpsAnt=fps;
+  if(fps>=VIG_META){ VIGIA.hecho=true; return; }        // ya alcanza
+  vigiaSiguiente();
+}
+function vigiaSiguiente(){
+  while(VIGIA.paso<VIG_PASOS.length){
+    const P=VIG_PASOS[VIGIA.paso++];
+    if(P.puede()){ P.hacer(); return; }
+  }
+  VIGIA.hecho=true;                                     // no queda nada que bajar
+}
+
 function bucle(){
   requestAnimationFrame(bucle);
   const ahora=performance.now();
@@ -1545,6 +1627,7 @@ function bucle(){
   if(MANO.on) manosAvanzar(dt);
   avanzar(dt);
   dibujar(Math.min(1, acum/PASO));
+  vigiaTick(dt);
 }
 ajustar(); aplicarCal(calidad); aplicarFiltro(filtro); usarCajas();
 addEventListener('resize', ajustar);

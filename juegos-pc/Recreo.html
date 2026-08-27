@@ -493,7 +493,11 @@ try{ plataf=(matchMedia('(pointer:coarse)').matches &&
       (('ontouchstart' in window)||navigator.maxTouchPoints>0))? 'movil':'pc'; }catch(e){}
 
 /* ===================== LAS TRES CALIDADES ===================== */
-const CAL={ baja:{ px:0.60, lockers:false, niebla:30 },
+/* UN ESCALON MAS ABAJO QUE 'baja', PARA APARATOS DE GAMA BAJA DE VERDAD. No aparece en el menu: no
+   es una opcion, es a donde llega el vigia solo cuando midio que ni 'baja' alcanza. Ponerlo en el
+   menu seria ofrecerle a alguien elegir la peor imagen del juego sin saber si la necesita. */
+const CAL={ minima:{ px:0.45, lockers:false, niebla:24 },
+            baja:{ px:0.60, lockers:false, niebla:30 },
             media:{ px:0.90, lockers:true,  niebla:40 },
             alta:{ px:2.00, lockers:true,  niebla:52 } };
 let calidad='media';
@@ -1835,6 +1839,25 @@ const MANO_HZ_MOVIL=24, MANO_HZ_PC=30;
    ========================================================================================= */
 const MANO_CARGA=0.30;        // fraccion del hilo que se le presta al detector, como mucho
 const MANO_HZ_MIN=12;         // por debajo de esto ni la interpolacion lo tapa
+/* BAJAR LA ENTRADA DEL DETECTOR EN CALIENTE, SIN CORTAR LA CAMARA.
+   El ultimo escalon que queda cuando ya se bajo la resolucion de dibujo es darle MENOS PIXELES QUE
+   MIRAR al detector: de 320x240 a 224x168 son 2,04 veces menos, y el costo de detectForVideo() va
+   con los pixeles de entrada.
+
+   Va con applyConstraints y no volviendo a pedir getUserMedia, y la diferencia importa: pedir la
+   camara otra vez en algunos navegadores VUELVE A PREGUNTAR EL PERMISO, y preguntarlo en medio de una
+   partida —cuando el gesto del jugador ya expiro— es la forma mas rapida de quedarse sin manos a la
+   mitad del juego. applyConstraints reusa el mismo track.
+   Y si el aparato no deja cambiar la resolucion, no pasa nada: se sigue con la que habia. */
+function manoEntradaChica(si){
+  MANO.entradaChica=!!si;
+  const v=MANO.vid, st=v && v.srcObject;
+  const tr=st && st.getVideoTracks && st.getVideoTracks()[0];
+  if(!tr || !tr.applyConstraints) return false;
+  const w=si? 224 : 320, h=si? 168 : 240;
+  try{ tr.applyConstraints({ width:{ideal:w}, height:{ideal:h} }).catch(()=>{}); }catch(e){ return false; }
+  return true;
+}
 function manoRitmoAjustar(){
   if(MANO.msDet<=0.5) return;                     // todavia no hay una medida creible
   const tope = MANO.hzTope || MANO_HZ_MOVIL;
@@ -2795,7 +2818,13 @@ function aplicarCal(c){
   if(escuela.lockers) escuela.lockers.visible=CAL[c].lockers;
   ajustar(); pintarCal();
 }
-for(const b of document.querySelectorAll('[data-cal]')) b.onclick=()=>aplicarCal(b.dataset.cal);
+/* SI EL JUGADOR ELIGE, EL VIGIA SE CALLA PARA SIEMPRE. Un ajuste automatico que le pisa la eleccion
+   a alguien que acaba de elegir no es una ayuda, es un forcejeo — y desde afuera se ve como que el
+   menu no guarda lo que le ponen. */
+for(const b of document.querySelectorAll('[data-cal]')) b.onclick=()=>{
+  if(typeof VIGIA==='object') VIGIA.manual=true;
+  aplicarCal(b.dataset.cal);
+};
 const MANO_MOTIVO={ permiso:'manoErrPermiso', camara:'manoErrCamara', cdn:'manoErrCdn',
                     modelo:'manoErrModelo', insegura:'manoErrInsegura' };
 function pintarCtrl(){
@@ -4746,6 +4775,88 @@ function dibujar(alfa){
   pintarMiras();
   pintarEscena();
 }
+/* =========================================================================================
+   EL VIGIA: EL JUEGO SE MIDE SOLO Y SE BAJA LA CALIDAD SI HACE FALTA
+
+   El pedido fue "mejoralo aun mas, incluso para dispositivos mas gama baja". Y el agujero mas grande
+   no era una constante mal puesta: era que EL JUEGO ARRANCA EN 'media' Y AHI SE QUEDA. Los ajustes
+   existen desde hace vueltas y estan en el menu, pero nadie entra al menu a bajarse los graficos —
+   y menos alguien que no sabe que el problema son los graficos. Un ajuste que hay que descubrir para
+   que sirva, en la practica no existe.
+
+   De media a baja el pixel ratio pasa de 0,90 a 0,60, o sea 2,25 VECES MENOS PIXELES QUE RELLENAR, y
+   este juego esta limitado por relleno (todo pasa por el filtro de baja calidad, que ya dibuja a un
+   destino reducido). Es el escalon mas grande que hay y no lo estaba usando nadie.
+
+   TRES REGLAS, Y LAS TRES SON LECCIONES VIEJAS DE ESTE PROYECTO:
+
+   1. BAJAR A CIEGAS ES UNA APUESTA. En un aparato que NO esta limitado por relleno, bajar la
+      resolucion no gana nada y solo deja la imagen mas blanda — medido en Maicol: de 590 mil a 389
+      mil pixeles, 29,45 -> 29,60 cuadros por segundo, o sea CERO. Asi que despues de cada escalon se
+      vuelve a medir, y si no gano al menos un 8% SE VUELVE PARA ARRIBA y no se toca mas.
+   2. NO SE MIDE EL PRIMER SEGUNDO. Los primeros cuadros de una partida traen la compilacion de
+      shaders, la subida de texturas y el primer paso de MediaPipe: medir ahi es medir el arranque y
+      concluir que el aparato es lento cuando lo unico lento fue empezar.
+   3. SI EL JUGADOR ELIGE, EL VIGIA SE CALLA. Ver el onclick de [data-cal].
+   ========================================================================================= */
+const VIGIA={ activo:true, manual:false, fase:'espera', t0:0, n:0, suma:0,
+              fpsBase:0, fpsAnt:0, paso:0, hist:[], hecho:false, calAnt:null };
+const VIG_ESPERA=1.2;        // segundos que se dejan pasar antes de empezar a medir
+const VIG_CUADROS=75;        // cuantos cuadros entran en cada medicion
+const VIG_META=50;           // por encima de esto no hay nada que arreglar
+const VIG_GANANCIA=1.08;     // un escalon tiene que dar al menos un 8% para quedarse
+/* la escalera, de menos a mas agresiva. Cada escalon dice como aplicarse y como deshacerse. */
+const VIG_PASOS=[
+  { nombre:'calidad-baja',
+    puede:()=>calidad==='media'||calidad==='alta',
+    hacer:()=>{ VIGIA.calAnt=calidad; aplicarCal('baja'); },
+    deshacer:()=>aplicarCal(VIGIA.calAnt||'media') },
+  { nombre:'deteccion-chica',
+    puede:()=>MANO.on && !MANO.entradaChica,
+    hacer:()=>manoEntradaChica(true),
+    deshacer:()=>manoEntradaChica(false) },
+  { nombre:'calidad-minima',
+    puede:()=>calidad!=='minima',
+    hacer:()=>{ VIGIA.calAnt=calidad; aplicarCal('minima'); },
+    deshacer:()=>aplicarCal(VIGIA.calAnt||'baja') }
+];
+function vigiaTick(dt){
+  if(!VIGIA.activo || VIGIA.manual || VIGIA.hecho || !jugando) return;
+  VIGIA.t0+=dt;
+  if(VIGIA.t0<VIG_ESPERA) return;
+  /* un cuadro larguisimo —una pestaña que volvio, el recolector de basura— no dice nada del aparato */
+  if(dt>0.25) return;
+  VIGIA.suma+=dt; VIGIA.n++;
+  if(VIGIA.n<VIG_CUADROS) return;
+  const fps=VIGIA.n/VIGIA.suma;
+  VIGIA.n=0; VIGIA.suma=0;
+  VIGIA.hist.push({ paso:VIGIA.paso, fps:+fps.toFixed(1), calidad, chica:!!MANO.entradaChica });
+  if(VIGIA.fase==='espera'){
+    VIGIA.fpsBase=fps; VIGIA.fpsAnt=fps;
+    if(fps>=VIG_META){ VIGIA.hecho=true; return; }      // va bien: no se toca nada
+    VIGIA.fase='probando';
+    vigiaSiguiente();
+    return;
+  }
+  /* venimos de aplicar un escalon: ¿sirvio? */
+  if(fps < VIGIA.fpsAnt*VIG_GANANCIA){
+    const P=VIG_PASOS[VIGIA.paso-1];
+    if(P) P.deshacer();
+    VIGIA.hist.push({ revertido:P? P.nombre : null, fps:+fps.toFixed(1) });
+    VIGIA.hecho=true; return;
+  }
+  VIGIA.fpsAnt=fps;
+  if(fps>=VIG_META){ VIGIA.hecho=true; return; }        // ya alcanza
+  vigiaSiguiente();
+}
+function vigiaSiguiente(){
+  while(VIGIA.paso<VIG_PASOS.length){
+    const P=VIG_PASOS[VIGIA.paso++];
+    if(P.puede()){ P.hacer(); return; }
+  }
+  VIGIA.hecho=true;                                     // no queda nada que bajar
+}
+
 function bucle(){
   requestAnimationFrame(bucle);
   const ahora=performance.now();
@@ -4757,6 +4868,7 @@ function bucle(){
   if(MANO.on) manosAvanzar(dt);
   avanzar(dt);
   dibujar(Math.min(1, acum/PASO));
+  vigiaTick(dt);
 }
 ajustar(); aplicarCal(calidad); aplicarFiltro(filtro); usarCajas();
 addEventListener('resize', ajustar);
@@ -5379,6 +5491,33 @@ window.__recreo={
     MANO.msDet=gMs; MANO.hz=gHz; MANO.hzTope=gTope;
     return r;
   },
+  /* =========================================================================================
+     EL VIGIA, PROBADO SIN UN TELEFONO LENTO
+
+     No puedo hacer que este contenedor vaya a 25 fps a pedido, pero lo que hay que probar no es el
+     aparato: es la POLITICA. Se le inyectan tiempos de cuadro y se mira que decide — que baje cuando
+     va mal, que NO toque nada cuando va bien, y sobre todo que DEVUELVA un escalon que no gano nada,
+     que es la regla que aprendio Maicol y la que evita dejar la imagen peor a cambio de cero.
+     ========================================================================================= */
+  vigiaProbar:(fpsPorMedicion)=>{
+    const gCal=calidad, gMan=VIGIA.manual, gJug=jugando;
+    VIGIA.activo=true; VIGIA.manual=false; VIGIA.hecho=false; VIGIA.fase='espera';
+    VIGIA.t0=0; VIGIA.n=0; VIGIA.suma=0; VIGIA.paso=0; VIGIA.hist.length=0;
+    jugando=true;
+    aplicarCal('media');
+    for(const fps of fpsPorMedicion){
+      const dt=1/fps;
+      while(VIGIA.t0<VIG_ESPERA) VIGIA.t0+=dt;
+      for(let k=0;k<VIG_CUADROS;k++){ if(VIGIA.hecho) break; vigiaTick(dt); }
+      if(VIGIA.hecho) break;
+    }
+    const r={ hist:VIGIA.hist.slice(), calidadFinal:calidad, pasos:VIGIA.paso, hecho:VIGIA.hecho };
+    jugando=gJug; VIGIA.manual=gMan; aplicarCal(gCal);
+    return r;
+  },
+  vigiaVer:()=>({ activo:VIGIA.activo, manual:VIGIA.manual, hecho:VIGIA.hecho, paso:VIGIA.paso,
+                  fase:VIGIA.fase, calidad, px:CAL[calidad].px, filtro,
+                  entradaChica:!!MANO.entradaChica, hist:VIGIA.hist.slice(-6) }),
   manoRitmo:()=>({ hz:MANO.hz, medidas:MANO.medidas, msDeteccion:+MANO.msDet.toFixed(2),
                    espejo:MANO.espejo, camara:MANO.camaraUsada,
                    ranuras:MANO.ranuras.map(R=>({ hay:R.hay, dedos:R.dedos, lado:R.lado,
