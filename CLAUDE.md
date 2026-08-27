@@ -21,6 +21,87 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Decimocuarta vuelta (2026-08-27): **cuatro animaciones y un screamer**
+
+Pedido: *"agrégale rig al monstruo y animaciones de búsqueda caminar correr y screamer"*. Los cuatro
+clips salieron de la biblioteca de Meshy vía `image_to_3d` (`Walk_Slowly_and_Look_Around` 341,
+`Casual_Walk_inplace` 613, `Lean_Forward_Sprint_inplace` 644 y `Zombie_Scream` 386) y se juntaron en
+un solo GLB con `herramientas/eco/juntar_clips.py`.
+
+#### CADA GENERACIÓN TRAE SU PROPIO RIG, Y ESO ROMPE EL COPIAR Y PEGAR
+
+El generador da **un archivo por animación**, cada uno con su copia de la malla: cuatro clips serían
+cuatro mallas de 8.374 triángulos adentro del HTML para dibujar siempre la misma criatura. Lo obvio
+es tomar una malla y copiarle los canales de las otras por nombre de hueso. **No funciona, y se
+midió por qué:** aun con la misma imagen y la misma semilla, cada tanda devuelve mallas de 9.314,
+9.387 y 9.457 vértices y **poses de reposo distintas** — la rotación de reposo de la cadera es
+(-0,33 -0,33 -0,68 0,57) en una y (0,49 0,49 -0,59 0,43) en otra. Un canal de rotación es **local al
+padre**: copiado sobre un hueso que arranca mirando para otro lado, el bicho sale doblado en dos. Se
+probó y se vio: el torso a noventa grados y un brazo saliéndose del cuadro.
+
+**Lo que sí funciona es pasar por el mundo**, que es el retarget de siempre:
+1. cinemática directa sobre el esqueleto de origen → rotación mundial de cada hueso por fotograma;
+2. corregir por la diferencia de reposo, que sale de las **matrices de bind** y no de los nodos:
+   `Rw_destino = Rw_origen · inv(Rw_reposo_origen) · Rw_reposo_destino`;
+3. volver a local dividiendo por la rotación mundial del padre **ya corregido**, de arriba abajo.
+
+**Y HUBO UN SEGUNDO ERROR, DE UNIDADES.** La altura de la cadera se tomó primero de `inv(matriz de
+bind)`, que devuelve la pose en el mundo del esqueleto — o sea **con la escala del Armature**, 0,01,
+porque el rig viene en centímetros — mientras que la traslación de un nodo está en centímetros.
+Mezclarlos ponía la cadera a un centímetro del piso: el cuerpo quedaba hecho un acordeón y en
+pantalla sólo se veía la cabeza. Va en el espacio de los nodos.
+
+Comprobado midiendo el recorrido de un pie y de una mano a lo largo de cada clip:
+
+| clip | pie en Z | pie en Y | mano en Z | qué es |
+|---|---|---|---|---|
+| caminar | 0,62 m | 0,05 | 0,45 | zancada de caminata |
+| correr | **1,18 m** | **0,44** | 0,95 | zancada larga y rodilla alta |
+| busqueda | 0,65 m | 0,14 | **0,25** | camina, pero los brazos quietos |
+| screamer | **0,12 m** | 0,16 | **0,65** | no camina: tira los brazos |
+
+#### EL ANDAR Y LA VELOCIDAD SON LA MISMA DECISIÓN
+
+Antes había dos velocidades y **un** ciclo estirado por un factor: a 3,30 m/s el ciclo de caminata
+iba al doble y los pies patinaban. Ahora hay tres andares y cada uno trae su velocidad y el ritmo
+para el que está hecho su clip, así que la zancada avanza lo que avanza el cuerpo por construcción:
+
+| andar | velocidad | cuándo |
+|---|---|---|
+| **búsqueda** | 1,35 m/s | ronda: camina despacio y mira para todos lados |
+| **caminar** | 2,30 m/s | te oyó y viene, a más de 13 m |
+| **correr** | 3,55 m/s | te tiene a menos de 13 m |
+
+Correr sigue siendo 5,50: sigue siendo cierto que corriendo se le gana. Y ahora **el andar se puede
+leer**: si la ves caminando todavía hay tiempo. Verificado en partida: `ronda` → búsqueda a 1,35;
+`caza` a 21,08 m → caminar a 2,30; `caza` a 8,58 m → correr a 3,55. El cambio de clip se **funde** en
+0,28 s, porque un corte se ve aunque la criatura esté a veinte metros y la ilumine media onda.
+
+#### EL SCREAMER ES UN MOMENTO, NO UN SONIDO
+
+El agarrón era una línea: te teletransportaba en el mismo cuadro y **no se llegaba a ver nada**, que
+en un juego a oscuras es tirar a la basura el único momento que da miedo. Ahora son **1,35 s** en los
+que la cosa se planta, te obliga a mirarla —la vista se va sola hacia ella—, grita, y **el mundo se
+enciende entero**, porque la luz de este juego es el sonido y ese grito es un sonido. Recién después
+te tira a la entrada.
+
+Es lo único del juego que le saca el control al jugador. Verificado: durante el grito, `caminar(30)`
+deja al jugador clavado (`velMax 0`), el fogonazo está en 1, y al terminar aparece en la entrada con
+la cosa aturdida 9 s y a 45 m.
+
+El grito **es el sonido más fuerte del juego**, y tiene que serlo: es el único momento en que el
+juego habla más fuerte que el jugador. Medido con el analizador: fondo 0,0130 de RMS, grito del
+jugador 0,0356, **screamer 0,0708** — o sea **2,0× el grito del jugador** y 5,4× el fondo. Tres
+formantes que **bajan**: un grito que sube suena a persona, uno que baja suena a animal grande.
+
+#### COSTO
+
+El GLB de la cosa pasó de un clip a cuatro: 370 → **537 KB**, con las rotaciones de la animación a
+dos bytes (un cuaternión siempre está entre -1 y 1 y el formato admite short normalizado sin ninguna
+extensión: la mitad de la animación, con cinco milésimas de grado de error) y a 24 fotogramas por
+segundo. En partida: 29 llamadas de dibujo, 81.388 triángulos, **0,6 ms por cuadro**, cero errores.
+El HTML quedó en **2,18 MB**.
+
 ### Decimotercera vuelta (2026-08-26): **modelos 3D de verdad** — la cosa y cuatro props
 
 Pedido: *"por cierto genera modelos 3D de props y el monstruo también como la imagen"*, con un dibujo

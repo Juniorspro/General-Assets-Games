@@ -170,12 +170,26 @@ def podar(ent, sal):
             s.inverseBindMatrices = e.meter(crudo(g, blob, s.inverseBindMatrices),
                                             a.componentType, a.type, a.count)
     for an in (g.animations or []):
+        # LAS ROTACIONES DE UNA ANIMACION A DOS BYTES. Un cuaternion siempre esta entre -1 y 1, y el
+        # formato admite short normalizado para el canal de rotacion sin ninguna extension: 16 bytes
+        # por hueso y fotograma pasan a 8. Con veintiseis huesos y ciento veintisiete fotogramas por
+        # clip eso es la mitad de todo lo que pesa la animacion, y el error de un short en un
+        # cuaternion son cinco milesimas de grado.
+        rot = set()
+        for ch in an.channels:
+            if ch.target.path == 'rotation': rot.add(an.samplers[ch.sampler].output)
         for sm in an.samplers:
             for campo in ('input', 'output'):
                 i = getattr(sm, campo)
                 a = g.accessors[i]
-                nuevo = e.meter(crudo(g, blob, i), a.componentType, a.type, a.count)
-                if a.min is not None: e.acc[nuevo].min, e.acc[nuevo].max = a.min, a.max
+                if campo == 'output' and i in rot and a.componentType == 5126 and a.type == 'VEC4':
+                    v = struct.unpack('<%df' % (a.count*4), crudo(g, blob, i))
+                    q = [max(-32767, min(32767, int(round(c*32767)))) for c in v]
+                    nuevo = e.meter(struct.pack('<%dh' % len(q), *q), 5122, 'VEC4', a.count, norm=True)
+                    quitados.add('rotaciones->short')
+                else:
+                    nuevo = e.meter(crudo(g, blob, i), a.componentType, a.type, a.count)
+                    if a.min is not None: e.acc[nuevo].min, e.acc[nuevo].max = a.min, a.max
                 setattr(sm, campo, nuevo)
 
     while len(e.buf) % 4: e.buf.append(0)
