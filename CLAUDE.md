@@ -523,6 +523,83 @@ una mano en cuadro el tope es **24**. Partida completa **24 de 24** dos veces, 0
 paredes en 19.752, `window.__errs` vacío, diagonal perfecta en el puntuador y las tres pruebas de
 reparto de manos en verde.
 
+### Trigésima tercera vuelta (2026-08-27): **RECREO** — el techo de 24 Hz y la predicción tímida
+
+Pedido: *"ahora haz que vaya a 60 fps sí o sí la mano, sin lentitud, súper ajustada a la mano real, y
+que siga movimientos bruscos"*.
+
+Quedaban **dos techos**, y los dos estaban escritos como constantes de cuando no había con qué decidir
+mejor.
+
+#### 1. EL RITMO ESTABA CLAVADO EN 24 AUNQUE SOBRARA PROCESADOR
+
+`MANO_HZ_MOVIL=24` se puso cuando medir costaba entre 8 y 20 ms y no había forma de saber cuál de los
+dos era este aparato. Desde la vuelta anterior **hay una regla que lo sabe** —el ritmo sale de cuánto
+tarda la detección y de cuánto hilo se le presta—, y con esa regla puesta el tope de 24 lo único que
+hacía era impedirle a un teléfono rápido usar lo que le sobra: **con una detección de 6 ms, el 30 % del
+hilo da cincuenta mediciones por segundo, y el tope las cortaba en 24.**
+
+El techo sube a 60 y deja de ser la regla. Medido, lo que elige ahora:
+
+| detección | 4 ms | 6 | 10 | 20 | 28 |
+|---|---|---|---|---|---|
+| ritmo | **60 Hz** | 50 | 30 | 15 | 12 |
+
+Y se piden **60 cuadros de cámara**, que faltaban: la medición cuelga de `requestVideoFrameCallback`,
+o sea que corre al mínimo entre lo que pide el juego y **lo que da la cámara** — con una cámara a 30 no
+hay forma de medir más de 30 por mucho que sobre procesador. Se arranca a 30 y no en el techo: todavía
+no hay ni una medición de este aparato, y empezar a 60 es apostar a que es rápido justo mientras se
+compilan los shaders.
+
+#### 2. LA PREDICCIÓN ESTABA EN 8 ms, QUE ES NO PREDECIR
+
+Y acá **se probó una idea, se midió, y se sacó**, que es la parte que vale anotar. La idea era una
+segunda puerta: mirar si la mano viene **derecho** o está **doblando** —comparando el último
+desplazamiento con el anterior— y apagar la predicción en la curva, que es el único momento en que
+predecir hace daño. Con esa puerta, el tope se podría subir sin pagar sobrepico.
+
+**No cambiaba absolutamente nada.** El barrido dio columnas **idénticas** para umbrales de 0,0 a
+0,9999 — la firma de un parámetro que no toca nada. Y la razón no es que estuviera mal conectada (lo
+estaba, se verificó en el archivo armado): **es que la puerta no puede funcionar.** El sobrepico de una
+vuelta ocurre *antes* de que la vuelta se pueda ver — mientras la mano todavía va derecho a toda
+velocidad, la predicción la empuja más allá, y recién la medición siguiente muestra que dio la vuelta.
+Para cuando la puerta se entera, el pico ya pasó. **Un predictor no puede anticipar un cambio de
+sentido que todavía no ocurrió**, y ninguna cantidad de historia lo arregla. Se sacó entera en vez de
+dejar una perilla que no hace nada.
+
+Así que el tope se elige midiendo el intercambio, que es lo que había que hacer desde el principio:
+
+| predicción | seguimiento | manotazo | se pasa al frenar |
+|---|---|---|---|
+| 8 ms | 21 ms | 11 ms | 0,0 % |
+| **20 ms** | **9 ms** | **−1 ms** | **5,8 %** |
+| 30 ms | −1 ms | −11 ms | 11,2 % |
+
+A 20 la mano deja de ir atrás en el movimiento sostenido y **empata en un manotazo**, que es lo que se
+pidió. Lo que se paga es un 5,8 % de exceso al frenar de golpe: siete píxeles en un teléfono, dos
+cuadros. Eso no se lee como rebote, se lee como inercia — 30, que ya adelanta a la mano de verdad, sí
+se nota mal.
+
+#### LO QUE QUEDA, JUNTANDO LAS DOS COSAS
+
+| ritmo | seguimiento | manotazo | atenuación del temblor |
+|---|---|---|---|
+| 24 Hz | 9 ms | −1 ms | 4,10 |
+| 40 Hz | −1 ms | −9 ms | 5,25 |
+| 60 Hz | **−7 ms** | −15 ms | **6,16** |
+
+Partiendo de los 65 ms de tres vueltas atrás, a 24 Hz son **7,2 veces menos retardo**, y en un aparato
+que llegue a 60 la mano dibujada va **por delante** de la medición — que no es un defecto: la pantalla
+y el compositor agregan sus propios veinte o treinta milisegundos, así que adelantarse un poco es lo
+que hace que se vea pegada a la mano de verdad. Y el temblor **mejora** con el ritmo (4,10 → 6,16),
+porque más muestras es más filtro.
+
+#### MEDIDO AL CERRAR
+
+Partida completa **24 de 24** dos veces, 0 pasos dentro de paredes en 19.752, `window.__errs` vacío,
+diagonal perfecta en el puntuador de la tableta, las tres pruebas de reparto de manos y la del espejo
+en verde, y la tabla de reposo intacta (sin mano 10 Hz, con mano 24 o más).
+
 ### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
 
 Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo

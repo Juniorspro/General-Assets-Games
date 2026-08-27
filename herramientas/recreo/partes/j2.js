@@ -606,6 +606,45 @@ window.__recreo={
      deteccion y se mira el ritmo al que converge: un aparato rapido tiene que quedarse en el tope y
      uno lento tiene que bajar hasta que la carga del hilo vuelva a estar acotada.
      ========================================================================================= */
+  /* =========================================================================================
+     EL MANOTAZO Y LA VUELTA: las dos cosas que se pelean cuando se sube la prediccion
+
+     `manoRampa` mide una mano que va derecho a velocidad constante, y ahi predecir siempre acierta.
+     Lo que hay que medir para poder subir la prediccion es el caso contrario: la mano que VA Y VUELVE.
+     Ahi la velocidad de hace un instante apunta al reves de donde la mano va a estar, y una prediccion
+     sin freno se pasa de largo — que es lo que se siente como rebote.
+     Devuelve cuanto se paso del punto de giro, en fraccion del marco Y en porcentaje del recorrido.
+     ========================================================================================= */
+  manoVuelta:(opts)=>{
+    const o=opts||{};
+    const hz=o.hz||24, render=o.render||60;
+    const largo=o.largo==null? 0.30 : o.largo;      // cuanto se mueve la mano antes de volver
+    const vel=o.vel==null? 1.60 : o.vel;            // fraccion de marco por segundo: un manotazo
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
+    const F=window.__recreo.manoFalsa;
+    const dtR=1000/render, dtM=1000/hz;
+    let t=1000, proxMed=t, x=0.35;
+    for(let c=0;c<20;c++){                          // asentar quieta
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      manosAvanzar(dtR/1000); t+=dtR;
+    }
+    const x0=x, xTope=x+largo;
+    let subiendo=true, maxSal=-1e9, pasos=0;
+    while(pasos++<600){
+      if(subiendo){ x += vel*dtR/1000; if(x>=xTope){ x=xTope; subiendo=false; } }
+      else x -= vel*dtR/1000;
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      manosAvanzar(dtR/1000);
+      if(MANO.ranuras[0].hay) maxSal=Math.max(maxSal, MANO.ranuras[0].sal[0]);
+      t+=dtR;
+      if(!subiendo && x<=x0) break;
+    }
+    MANO.pausa=false;
+    const paso=Math.max(0, maxSal-xTope);
+    return { hz, largo, vel, tope:+xTope.toFixed(4), pico:+maxSal.toFixed(4),
+             sePasa:+paso.toFixed(4), sePasaPct:+(paso/largo*100).toFixed(1) };
+  },
   manoRitmoProbar:(msDet, tope)=>{
     const gMs=MANO.msDet, gHz=MANO.hz, gTope=MANO.hzTope;
     MANO.hzTope=tope||24; MANO.hz=MANO.hzTope; MANO.msDet=msDet;

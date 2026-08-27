@@ -1823,7 +1823,15 @@ const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:f
    cuadro de render es gastar un tercio del presupuesto de 16,6 ms en mirar una mano que apenas se
    movio. Se mide 24 veces por segundo y se INTERPOLA el resto, que es exactamente lo que hace el
    propio juego con su paso fijo de 60 y sus 120 cuadros. */
-const MANO_HZ_MOVIL=24, MANO_HZ_PC=30;
+/* EL TECHO SUBE A 60 Y DEJA DE SER LA REGLA. Estaba clavado en 24 en telefono, y eso ya no era una
+   decision sino un resto: se puso cuando medir costaba 8-20 ms y no habia forma de saber cual de los
+   dos era este aparato. Ahora hay una regla que lo sabe —el ritmo sale de cuanto tarda la deteccion y
+   de cuanto hilo se le presta— y el tope de 24 lo unico que hacia era impedirle a un telefono rapido
+   usar lo que le sobra: con una deteccion de 6 ms, el 30% del hilo da CINCUENTA mediciones por
+   segundo, y el tope las cortaba en 24.
+   60 y no mas: por encima del ritmo de dibujo, medir de nuevo no tiene a donde ir. */
+const MANO_HZ_MOVIL=60, MANO_HZ_PC=60;
+/* con lo que se pide arriba, un aparato lento sigue cayendo solo a 15 o a 12 */
 /* 256x192 Y NO 320x240, Y EL MOTIVO ES QUE EL DETECTOR NO USA LA RESOLUCION QUE SE LE DA.
    Los modelos de MediaPipe tienen entrada fija y chica —el de palma trabaja alrededor de 192 px de
    lado y el de puntos alrededor de 224—, asi que todo lo que se le mande por encima de eso se
@@ -2062,7 +2070,12 @@ async function manosIniciar(){
        - 320x240 y no 480x360: el detector escala la entrada igual, y 320x240 son 76.800 pixeles
          contra 172.800, o sea 2,25 veces menos trabajo por medicion para la misma mano. */
     st=await navigator.mediaDevices.getUserMedia({
+      /* Y SE PIDEN 60 CUADROS DE CAMARA. La medicion cuelga de requestVideoFrameCallback, o sea que
+         corre al minimo entre el ritmo que pide el juego y EL DE LA CAMARA: con una camara a 30 no
+         hay forma de medir mas de 30 por mucho que sobre procesador. A 256x192 los 60 son baratos y
+         casi cualquier telefono los da; si no los da, `ideal` no falla, devuelve lo que puede. */
       video:{ width:{ideal:MANO_ENT_W}, height:{ideal:MANO_ENT_H},
+              frameRate:{ideal:60},
               facingMode:{ideal:'environment'} } });
   }catch(e){
     const n=(e && e.name)||'';
@@ -2112,9 +2125,13 @@ async function manosIniciar(){
   }
   if(!MANO.det) return manosFallo('modelo');
   MANO.estado='lista'; MANO.on=true; MANO.error='';
-  MANO.hz = (plataf==='movil')? MANO_HZ_MOVIL : MANO_HZ_PC;
-  MANO.hzMax  = MANO.hz;                      // el techo de esta plataforma
-  MANO.hzTope = MANO.hz;
+  MANO.hzMax  = (plataf==='movil')? MANO_HZ_MOVIL : MANO_HZ_PC;
+  /* SE ARRANCA A 30 Y NO EN EL TECHO. Todavia no hay ni una medicion de cuanto tarda la deteccion en
+     este aparato, asi que empezar a 60 es apostar a que es rapido — y si no lo es, el primer segundo
+     de juego se ahoga justo cuando se estan compilando los shaders. Desde 30 sube o baja con la
+     primera tanda de veinte mediciones, que son menos de un segundo. */
+  MANO.hz = 30;
+  MANO.hzTope = MANO.hzMax;
   document.body.classList.add('manos'); document.body.classList.remove('pad');
   pintarCam(); pintarCtrl();
   manosLazo();
@@ -2143,7 +2160,15 @@ async function manosIniciar(){
    abierto en el repositorio de MediaPipe. Un worker que no arranca en la mitad de los telefonos es
    peor que 24 Hz interpolados que arrancan en todos.
    ========================================================================================= */
-let MANO_PRED=8;         // ms de prediccion como maximo: mas que esto y la mano se adelanta y tiembla
+/* 20 ms Y NO 8, Y EL NUMERO SALE DE MEDIR LAS TRES COSAS QUE SE PELEAN:
+       pred=8  -> retardo 21 ms · manotazo 11 ms · se pasa 0,0% en una vuelta
+       pred=20 -> retardo  9 ms · manotazo -1 ms · se pasa 5,8%
+       pred=30 -> retardo -1 ms · manotazo -11 ms · se pasa 11,2%
+   A 20 la mano deja de ir atras en el movimiento sostenido y EMPATA en un manotazo, que es lo que se
+   pidio; lo que se paga es un 5,8% de exceso al frenar de golpe, o sea siete pixeles en un telefono y
+   dos cuadros. Eso no se lee como rebote, se lee como inercia — y 30, que ya adelanta a la mano de
+   verdad, si se nota mal. */
+let MANO_PRED=20;        // ms de prediccion como maximo
 /* 0,13 EN FRACCION DE CUADRO. Dos munecas mas cerca que esto no son dos manos: una mano abierta mide
    0,25 de ancho, asi que dos munecas a 0,13 estarian una encima de la otra. */
 const MANO_SEP=0.13;
@@ -2398,11 +2423,20 @@ function manosAvanzar(dt){
        inyeccion y la foto y la captura salia sin manos aunque el codigo estuviera bien. */
     if(!MANO.pausa && ahora-R.viva > MANO_CADUCA){ R.hay=false; continue; }
     const span=Math.max(8, R.t1-R.t0);
-    /* LA PREDICCION SE ENCIENDE CON LA VELOCIDAD, y esto era la mitad del temblor.
-       Antes extrapolaba siempre: objetivo = b + (b-a)*(f-1). Con la mano quieta, (b-a) NO es
-       movimiento, es el ruido del detector — asi que la formula tomaba el ruido y lo multiplicaba
-       antes de dibujarlo. Se mide la velocidad de la muneca y la prediccion entra progresivamente
-       entre V_QUIETA y V_RAPIDA: quieta no predice nada, moviendose predice todo. */
+    /* LA PREDICCION SE ENCIENDE CON LA VELOCIDAD: con la mano quieta, (b-a) no es movimiento sino el
+       ruido del detector, asi que extrapolarlo es amplificarlo. Quieta no predice nada.
+
+       Y ACA HUBO UNA SEGUNDA PUERTA QUE SE PROBO Y SE SACO, que vale anotar para no volver a
+       intentarla. La idea era mirar si la mano viene DERECHO o esta DOBLANDO —comparando el ultimo
+       desplazamiento con el anterior— y apagar la prediccion en la curva, que es el unico momento en
+       que predecir hace dano. Medido, no cambiaba absolutamente nada: el barrido dio columnas
+       IDENTICAS para umbrales de 0,0 a 0,9999, que es la firma de un parametro que no toca nada.
+       Y la razon no es que estuviera mal conectada: es que la puerta no puede funcionar. El
+       sobrepico de una vuelta ocurre ANTES de que la vuelta se pueda ver — mientras la mano todavia
+       va derecho a toda velocidad, la prediccion la empuja mas alla, y recien la medicion siguiente
+       muestra que dio la vuelta. Para cuando la puerta se entera, el pico ya paso. Un predictor no
+       puede anticipar un cambio de sentido que todavia no ocurrio, y ninguna cantidad de historia lo
+       arregla. Asi que el tope de prediccion se elige midiendo el intercambio y no tapandolo. */
     const vel=Math.hypot(R.b[0]-R.a[0], R.b[1]-R.a[1])/span;
     const puerta=Math.max(0, Math.min(1, (vel-V_QUIETA)/(V_RAPIDA-V_QUIETA)));
     const f = 1 + puerta*Math.min(MANO_PRED, ahora-R.t1)/span;
@@ -5610,6 +5644,45 @@ window.__recreo={
      deteccion y se mira el ritmo al que converge: un aparato rapido tiene que quedarse en el tope y
      uno lento tiene que bajar hasta que la carga del hilo vuelva a estar acotada.
      ========================================================================================= */
+  /* =========================================================================================
+     EL MANOTAZO Y LA VUELTA: las dos cosas que se pelean cuando se sube la prediccion
+
+     `manoRampa` mide una mano que va derecho a velocidad constante, y ahi predecir siempre acierta.
+     Lo que hay que medir para poder subir la prediccion es el caso contrario: la mano que VA Y VUELVE.
+     Ahi la velocidad de hace un instante apunta al reves de donde la mano va a estar, y una prediccion
+     sin freno se pasa de largo — que es lo que se siente como rebote.
+     Devuelve cuanto se paso del punto de giro, en fraccion del marco Y en porcentaje del recorrido.
+     ========================================================================================= */
+  manoVuelta:(opts)=>{
+    const o=opts||{};
+    const hz=o.hz||24, render=o.render||60;
+    const largo=o.largo==null? 0.30 : o.largo;      // cuanto se mueve la mano antes de volver
+    const vel=o.vel==null? 1.60 : o.vel;            // fraccion de marco por segundo: un manotazo
+    MANO.pausa=true; MANO.on=true; MANO.estado='lista';
+    MANO.ranuras[0].hay=false; MANO.ranuras[1].hay=false;
+    const F=window.__recreo.manoFalsa;
+    const dtR=1000/render, dtM=1000/hz;
+    let t=1000, proxMed=t, x=0.35;
+    for(let c=0;c<20;c++){                          // asentar quieta
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      manosAvanzar(dtR/1000); t+=dtR;
+    }
+    const x0=x, xTope=x+largo;
+    let subiendo=true, maxSal=-1e9, pasos=0;
+    while(pasos++<600){
+      if(subiendo){ x += vel*dtR/1000; if(x>=xTope){ x=xTope; subiendo=false; } }
+      else x -= vel*dtR/1000;
+      if(t>=proxMed){ manosInyectar([F(5,false,x,0.5)], t); proxMed+=dtM; }
+      manosAvanzar(dtR/1000);
+      if(MANO.ranuras[0].hay) maxSal=Math.max(maxSal, MANO.ranuras[0].sal[0]);
+      t+=dtR;
+      if(!subiendo && x<=x0) break;
+    }
+    MANO.pausa=false;
+    const paso=Math.max(0, maxSal-xTope);
+    return { hz, largo, vel, tope:+xTope.toFixed(4), pico:+maxSal.toFixed(4),
+             sePasa:+paso.toFixed(4), sePasaPct:+(paso/largo*100).toFixed(1) };
+  },
   manoRitmoProbar:(msDet, tope)=>{
     const gMs=MANO.msDet, gHz=MANO.hz, gTope=MANO.hzTope;
     MANO.hzTope=tope||24; MANO.hz=MANO.hzTope; MANO.msDet=msDet;
