@@ -20,6 +20,23 @@ function tono(f,dur,vol,tipo,f2){
   g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
   o.connect(g); g.connect(AUD.m); o.start(t); o.stop(t+dur+0.02);
 }
+/* RUIDO FILTRADO. Un grito y un bicho reventando son ruido, no tono: con osciladores solos el
+   grito sale a pitido de microondas y el estallido a timbre de ascensor. Un segundo de ruido blanco
+   por un pasabanda que barre da las dos cosas, y el barrido es lo que decide cual es cual — el grito
+   BAJA (un grito que sube suena a persona, uno que baja suena a animal grande) y el estallido sube. */
+function soplo(dur, vol, f0, f1, q){
+  if(!AUD.ctx||!AUD.on) return;
+  const c=AUD.ctx, t=c.currentTime, n=Math.max(1,Math.floor(c.sampleRate*dur));
+  const b=c.createBuffer(1,n,c.sampleRate), d=b.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+  const src=c.createBufferSource(); src.buffer=b;
+  const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=q||0.9;
+  bp.frequency.setValueAtTime(f0,t);
+  if(f1) bp.frequency.exponentialRampToValueAtTime(Math.max(40,f1), t+dur);
+  const g=c.createGain(); g.gain.setValueAtTime(vol,t);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  src.connect(bp); bp.connect(g); g.connect(AUD.m); src.start(t); src.stop(t+dur+0.03);
+}
 function son(k){
   if(!AUD.ctx||!AUD.on) return;
   try{
@@ -29,6 +46,22 @@ function son(k){
     else if(k==='puerta'){ tono(170,0.18,0.13,'sawtooth',115); }
     else if(k==='libro'){ tono(1046,0.10,0.12,'square'); }
     else if(k==='paso'){ tono(90+Math.random()*24,0.06,0.07,'sine'); }
+    else if(k==='bicho'){ tono(1500,0.09,0.07,'sawtooth',2400); tono(1500,0.09,0.05,'square',900); }
+    /* MEDIDO: con soplo a 0,20 y Q 0,7 el estallido daba 0,0136 de pico contra 0,1155 de 'bien' —
+       o sea que reventar un bicho sonaba doce veces mas bajo que acertar una cuenta. Un pasabanda
+       angosto se come casi toda la energia del ruido blanco. Con Q 0,5, mas volumen y un golpe bajo
+       encima queda por debajo del grito pero se escucha como lo que es. */
+    else if(k==='revienta'){ soplo(0.22,0.55,380,2200,0.5); tono(280,0.12,0.16,'square',80);
+                             tono(1100,0.07,0.09,'sawtooth',420); }
+    else if(k==='muerde'){ soplo(0.18,0.40,220,90,0.8); tono(150,0.16,0.16,'sawtooth',70); }
+    /* EL GRITO ES EL SONIDO MAS FUERTE DEL JUEGO, y tiene que serlo: es el unico momento en que el
+       juego habla mas fuerte que el jugador. Tres formantes que BAJAN mas un soplo ancho. */
+    else if(k==='grito'){
+      tono(840,1.15,0.30,'sawtooth',170);
+      tono(520,1.15,0.24,'sawtooth',115);
+      tono(1280,0.85,0.14,'square',300);
+      soplo(1.10,0.22,1600,180,0.6);
+    }
   }catch(e){}
 }
 /* LA VOZ: un bip por letra, con el tono siguiendo la letra. No es un idioma y no pretende serlo —
@@ -84,18 +117,24 @@ function pintarAro(f, num, rot){
   aroN.textContent = num==null? '' : String(num);
   aroS.textContent = rot||'';
 }
+/* EL CARTEL DE ARRIBA DICE DONDE ESTAS, no cuantos libros juntaste. Con ocho aulas de tres cuentas
+   "5 / 24" no ubica a nadie: lo que el jugador necesita saber es en que aula esta y cuanto le falta
+   para salir de ella. Y durante los bichos dice cuantos quedan, porque en ese rato no hay cuentas. */
 function pintarLibros(){
-  document.getElementById('libros').textContent=TX('libros',{n:libros,t:LIBROS_N});
+  const el=document.getElementById('libros'); if(!el) return;
+  if(bichosVivos>0){ el.textContent=TX('bichosHud',{n:bichosVivos}); return; }
+  el.textContent=TX('aulaHud',{a:aulaIdx+1, t:TOUR.length, n:aulaK});
 }
 let pant='idioma';
 function verPantalla(p){
   pant=p;
-  for(const [id,n] of [['pIdioma','idioma'],['pMenu','menu'],['pComo','como'],['pFin','fin']])
+  for(const [id,n] of [['pIdioma','idioma'],['pMenu','menu'],['pComo','como'],['pFin','fin'],['pMuere','muere']])
     document.getElementById(id).classList.toggle('ver', p===n);
   const enJuego=(p==='juego');
   document.body.classList.toggle('jugando', enJuego);
   jugando=enJuego && !terminado;
-  if(!enJuego){ document.body.classList.remove('esperando'); document.body.classList.remove('clase'); }
+  if(!enJuego){ document.body.classList.remove('esperando'); document.body.classList.remove('clase');
+                document.body.classList.remove('bichos'); document.body.classList.remove('grito'); }
 }
 let ctrlManos=true;
 try{ const g=localStorage.getItem('recreo_ctrl'); if(g) ctrlManos=(g==='manos'); }catch(e){}
@@ -144,6 +183,8 @@ document.getElementById('bComo').onclick=()=>verPantalla('como');
 document.getElementById('bIdioma').onclick=()=>verPantalla('idioma');
 document.getElementById('bVolver').onclick=()=>verPantalla('menu');
 document.getElementById('bFin').onclick=()=>verPantalla('menu');
+document.getElementById('bReint').onclick=()=>reintentar();
+document.getElementById('bMuereSalir').onclick=()=>verPantalla('menu');
 document.getElementById('salirJ').onclick=(e)=>{ e.stopPropagation(); verPantalla('menu'); };
 /* el respaldo por teclado: los numeros del 1 al 0 (0 = diez) */
 addEventListener('keydown', e=>{

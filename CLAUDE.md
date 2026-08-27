@@ -27,21 +27,149 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   tener cuidado ya que al punto en el que quiere ir hay bolas malas con espinas girando alrededor de
   la bola y hay que tocar justo ... procedural con físicas ... una beta del nivel 1 tutorial ...
   buenos gráficos blancos minimalistas"*.
-- **`Recreo.html` es "RECREO"** (~752 KB, de los cuales 489 son el modelo 3D de Baldi generado con
+- **`Recreo.html` es "RECREO"** (~811 KB, de los cuales 489 son el modelo 3D de Baldi generado con
   Higgsfield y horneado). **Recreación de fan, no comercial y sin publicar**, del colegio y del
   profesor de Baldi's Basics (Basically Games / mystman12). **Vertical (9:16), FOV 90 y el jugador no
   maneja la cámara**: va sobre rieles. Baldi te saluda, te enseña a usar las manos —cinco dedos,
   pinza, dos dedos— te lleva a un aula, se pone del otro lado del escritorio con el pizarrón, y
-  aparecen **ocho libros flotantes con una cuenta cada uno que se contesta con los dedos**: cuatro
-  más cuatro son ocho dedos, o sea las dos manos (MediaPipe, `numHands:2`). Con **filtro de
-  saturación y de baja calidad** (pixelado real) y respaldo de teclado numérico para quien no tenga
-  cámara. Simulación a **60 pasos fijos con interpolación**.
+  aparece **un libro flotante con una cuenta que se contesta con los dedos**: cuatro más cuatro son
+  ocho dedos, o sea las dos manos (MediaPipe, `numHands:2`). Son **8 aulas con un libro y 3 cuentas
+  cada una (24)**, y en los pasillos de en medio hay **7 tandas de bichos que se revientan haciendo
+  pinza encima**. **Una cuenta mal y te mata con un screamer**; volvés al principio de esa aula.
+  Con **filtro de saturación y de baja calidad** (pixelado real) y respaldo de teclado numérico —y de
+  toque, para los bichos— para quien no tenga cámara. Simulación a **60 pasos fijos con
+  interpolación**. El juego vive partido en `herramientas/recreo/partes/` y se arma con
+  `python3 herramientas/recreo/armar.py`.
 - **`Eco.html` es "Eco"** (~215 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Vigesimotercera vuelta (2026-08-27): **RECREO se vuelve un juego** — ocho aulas, bichos con pinza y el screamer
+
+Pedido: *"en cada salon hayan un libro y 3 problemas para hacer y minis actividades por el camino a
+otro salón, por ejemplo yendo al segundo salon aparece un bicho en la pantalla 3D que con las manos
+puedes hacer pinch para matarlos y explotan si haces mal una ecuación baldi te mata o sea un
+screamer"*.
+
+De un aula con ocho libros a **ocho aulas con un libro y tres cuentas cada una (24)**, con **siete
+tandas de bichos** en los pasillos del medio y **muerte instantánea con grito** si una cuenta sale mal.
+
+#### LO QUE ANTES ESTABA ESCRITO A MANO AHORA SE CALCULA
+
+Había **una** aula amueblada con cuatro números puestos a dedo (pizarrón 27,47 · escritorio 23,6 ·
+él 25,2 · cámara 22,85) y **dos rutas** escritas en celdas. Con ocho aulas eso serían cuarenta números
+y quince rutas, y el primero que se escriba mal deja un pizarrón dentro de una pared en el aula 7 sin
+que nadie se entere hasta llegar ahí.
+
+- **El sitio de cada aula sale de su rectángulo**: la pared del fondo es la fila `j1+1`, él va en la
+  última fila del aula, el escritorio 1,6 m delante y la cámara 2,35 — la distancia medida donde ocupa
+  el 51,9 % del alto del marco.
+- **Las rutas salen de un BFS** sobre el mismo mapa que ya decide dónde va cada puerta, simplificadas
+  a las esquinas: un riel con veinte puntos en línea recta hace temblar la cámara, porque cada punto
+  es una parada de 10 cm donde el resorte del giro vuelve a arrancar.
+- **El guión de las aulas se genera** del recorrido: 8 aulas × 3 escenas + 7 tandas de bichos = 31
+  escenas, y cada una lleva adentro el número de aula, así que ninguna parte del código tiene que
+  adivinar en qué aula está.
+
+#### EL PIZARRÓN ESTUVO ENTERRADO EN LA PARED DESDE SIEMPRE Y SE VIO RECIÉN AHORA
+
+La fórmula era `ZC(j1+1) − CEL/2 + GRUESO/2 + 0,02`, o sea **17 cm pasada la cara interior de la
+pared** — y una pared acá es un cubo de celda entera (4,2 m), no un panel de `GRUESO` de espesor. El
+pizarrón quedaba adentro y la pared lo tapaba.
+
+**Por qué nunca se notó:** la única aula amueblada era la 6, y la 6 tenía su **segunda puerta justo en
+esa celda del fondo**. Donde hay puerta el constructor no levanta pared, así que el pizarrón se veía
+**por el agujero**. Al mover las segundas puertas a las paredes laterales —para que no quedaran detrás
+del pizarrón— la pared del fondo se cerró en las ocho aulas y el defecto salió a la luz en las ocho a
+la vez. Es el mejor ejemplo de la vuelta: **amueblar la segunda aula reveló un error de la primera**.
+
+#### LOS BICHOS: EL PROBLEMA NO ES EL BICHO, ES EL "ENCIMA"
+
+La regla es una: se revienta poniéndole la **pinza** encima. Todo el trabajo está en ese *encima*,
+porque la mano vive en la cámara web —dos dimensiones, normalizadas y **espejadas**— y el bicho vive
+en el mundo 3D. El puente es proyectar el bicho a la pantalla y comparar ahí, en fracciones del marco:
+en píxeles habría que rehacer el número en cada tamaño de pantalla.
+
+- **El radio del blanco es el 10,5 % del ancho, y es grande a propósito.** Una punta de dedo detectada
+  por MediaPipe tiembla unos puntos por cuadro. Lo que tiene que costar es *llegar* con la mano, no
+  acertar el píxel.
+- **Vale el FLANCO de la pinza, no el estado.** Una pinza sostenida medio segundo son treinta cuadros:
+  si cada cuadro matara, una sola pinza limpiaría el pasillo. Solo cuenta el cuadro en que la pinza
+  aparece, y para eso hay que recordar la de cada mano en el cuadro anterior.
+- **Una pinza mata UN bicho**, el más cercano al dedo. Con "todos los que estén dentro del radio" una
+  pinza en el medio de un grupo se llevaba tres de una.
+- **Van instanciados.** Un bicho creíble son nueve piezas; seis bichos sueltos serían 54 mallas en un
+  juego que dibuja la escuela entera con una. Fundido, un bicho es una geometría y seis bichos son un
+  `InstancedMesh`: **dos llamadas contando los ojos**, haya uno o haya seis. Los ojos van en otra malla
+  a propósito —sin luz— porque son lo único que dice "eso está vivo y viene hacia vos".
+
+**TRES DEFECTOS MEDIDOS, LOS TRES INVISIBLES EN UNA FOTO:**
+- **`mergeGeometries` devolvía null.** `IcosahedronGeometry` viene **sin índice** y `Box`/`Sphere`
+  vienen **con** índice, y no acepta la mezcla: el bicho se quedaba sin geometría. Se desindexa todo,
+  porque desindexar siempre existe y reindexar hay que calcularlo.
+- **La cámara se proyectaba desde el menú.** `camara` sólo se acomoda al dibujar, así que dentro del
+  paso fijo tenía la posición del cuadro anterior — y el auto-jugador, que corre sin dibujar un solo
+  cuadro, la tenía **en el menú**: los bichos se proyectaban a cualquier lado. Medido: **56.400 pasos
+  en un pasillo con dos bichos que no morían nunca**. Se sincroniza antes de proyectar.
+- **Aparecían aplastados contra una pared.** Al salir de un aula el último tramo va de la puerta al
+  pasillo, o sea que la cámara queda mirando **la pared de enfrente**: medido en la celda (4,1), giro
+  −3,14 contra un muro de lockers a dos metros. Ahora se apunta al final del tramo que queda —donde el
+  profesor está esperando— y la cámara gira sola en medio segundo.
+- Y **se acercan en zigzag**: apuntando exacto a la cámara todos convergen a la misma línea y terminan
+  uno detrás del otro (medido después de un rato largo: cinco bichos en x = −29,40 los cinco, o sea un
+  solo blanco apilado).
+
+#### EL GRITO ES UN MOMENTO, NO UN SONIDO
+
+1,55 s en los que se planta a **noventa centímetros** de la cámara —más cerca la cabeza no entra en el
+cuadro, más lejos no es un susto sino alguien que se acercó—, la vista se va sola hacia él, grita, y la
+pantalla se enciende **a tirones** (un fogonazo que se apaga suave se lee a transición; uno que corta
+se lee a susto). Es lo único del juego que le saca el control al jugador.
+
+- **El grito corta, no se funde.** `profeAnim()` deja la mezcla en 1 —o sea 100 % la animación vieja— y
+  la baja `profeTick()`; pero durante el grito `profeTick` **no corre**, así que la mezcla se quedaba
+  clavada y en pantalla el pobre gritaba **con los brazos colgando** en pose de 'quieto'.
+- **El cartel va al medio y con fondo propio.** El globo de diálogo vive en el tercio de abajo, que es
+  exactamente donde queda su pecho al plantarse: tapaba el susto con una caja gris.
+- **Es el sonido más fuerte del juego**, y tiene que serlo. Medido con el analizador: fondo 0 · reventar
+  un bicho 0,0557 · acertar una cuenta 0,1155 · **grito 0,244 de pico y 0,077 de rms**. Tres formantes
+  que **bajan** más un soplo ancho: un grito que sube suena a persona, uno que baja suena a animal
+  grande. De paso, `revienta` medía **0,0136** —doce veces por debajo de acertar una cuenta— porque un
+  pasabanda de Q 0,7 se come casi toda la energía del ruido blanco.
+
+#### DÓNDE VOLVÉS, QUE ES LA ÚNICA DECISIÓN DE DIFICULTAD
+
+Una cuenta mal y te mata: **no hay segundo intento**, y no es una decisión de dificultad sino la única
+forma de que contestar tenga peso — con reintento libre el jugador tira números hasta que uno pegue
+(diez opciones, tres segundos) y las veinticuatro cuentas dejan de ser cuentas. Lo que **sí** es una
+decisión es dónde volvés: **al principio de esa aula, no de la escuela**. Perder veinte minutos por una
+resta es la forma más rápida de que alguien cierre el juego, y el susto ya lo dio el grito.
+Y **los bichos no matan**: te muerden, suenan, y vuelven al fondo del pasillo. La muerte de este juego
+es una sola cosa.
+
+#### EL RECORRIDO, Y POR QUÉ NO ES 1..8
+
+`[1,2,3,4,8,7,6,5]`: las cuatro de arriba por el pasillo de la fila 1, se baja por la columna 21 y las
+cuatro de abajo por la fila 9. Recorrerlas en orden obligaría a cruzar la escuela entera entre la 4 y
+la 5. El tramo más largo son catorce celdas = **58,8 m**, que a 2,2 m/s son veintisiete segundos de
+pasillo sin nada que hacer: la caminata subió a 2,9 (él a 3,4) **y se parte al medio**, con los bichos
+en la juntura — la actividad tiene que estar *en* el camino, no al final.
+Y el número que se dice es el del recorrido y no el del mapa: el aula 5 es la octava que se visita, así
+que decir "Aula 5" con el cartel en "AULA 8/8" son dos números para la misma cosa.
+
+#### MEDIDO AL CERRAR
+
+Partida completa desde el arranque, sin saltos: **24 cuentas de 24, 24 aciertos**, las 8 aulas en orden
+de recorrido, **las 7 tandas de bichos reventadas por el mismo camino que usa el jugador** (un toque en
+el píxel donde cae el bicho), 18.171 pasos ≈ 5 minutos, `window.__errs` vacío. Contestando **mal**:
+muerte en la primera cuenta, pantalla de agarrón, y **desde el reintento la partida se termina igual**
+(24/24 con 1 muerte). Pinza de MediaPipe verificada con mano sintética: apuntada al blanco (0,199 ·
+0,579) cae en (0,200 · 0,579) y **mata exactamente un bicho, con nueve esquirlas**. Costo: **14 llamadas
+de dibujo y 16.340 triángulos** con el aula amueblada, 16 con los bichos en pantalla. Encuadre 51,9 %
+del alto a 790×1400 y 50 % a 360×800.
 
 ### Vigesimosegunda vuelta (2026-08-27): **RECREO, "sigue de la mierda"** — el rig, el encuadre y las poses
 

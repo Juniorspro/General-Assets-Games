@@ -20,7 +20,7 @@
       contestar con el cuerpo no se sienta como una trampa.
    ========================================================================================= */
 const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:false,
-             cand:-1, votos:0, ultT:0, manos:0, lms:null };
+             cand:-1, votos:0, ultT:0, manos:0, lms:null, pinzas:[], pzPrev:[] };
 const MANO_URL='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
 const MANO_WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 const MANO_MODELO='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
@@ -48,6 +48,30 @@ function manoTotal(lms){
   for(const lm of lms){ const r=manoLeer(lm); if(!r) continue; d+=r.dedos; pz=pz||r.pinza; }
   return { hay:true, dedos:Math.min(10,d), pinza:pz, manos:lms.length };
 }
+/* ---------- DONDE ESTA LA PINZA EN LA PANTALLA ----------
+   Contar dedos no necesita saber DONDE esta la mano; reventar un bicho si. El punto de la pinza es
+   el medio entre la punta del pulgar y la del indice, que es justo donde el jugador cree que esta
+   pinchando.
+   DOS COSAS QUE NO SON OBVIAS:
+   1. VA ESPEJADO. La camara se muestra como un espejo —si no, mover la mano a la derecha mueve la
+      marca a la izquierda y no hay forma de apuntar—, asi que la x de MediaPipe se invierte. Es el
+      mismo 1-x que ya usaba dibujarManos() para el esqueleto de la camarita.
+   2. LO QUE VALE ES EL FLANCO, no el estado. Una pinza sostenida medio segundo son treinta cuadros:
+      si cada cuadro matara, una sola pinza limpiaria el pasillo entero. Solo cuenta el cuadro en que
+      la pinza APARECE, y para eso hay que recordar la de cada mano en el cuadro anterior. */
+function manoPinzas(lms){
+  const r=[];
+  if(!lms || !lms.length){ MANO.pzPrev=[]; return r; }
+  lms.forEach((lm,k)=>{
+    const q=manoLeer(lm); if(!q) return;
+    const p4=lm[4], p8=lm[8];
+    r.push({ x: 1-(p4.x+p8.x)/2, y: (p4.y+p8.y)/2,
+             pinza:q.pinza, nueva: q.pinza && !MANO.pzPrev[k] });
+    MANO.pzPrev[k]=q.pinza;
+  });
+  return r;
+}
+
 /* el voto: tres lecturas seguidas con el mismo numero para que el numero valga */
 function manoVoto(n){
   if(n===MANO.cand) MANO.votos++;
@@ -89,6 +113,7 @@ function manosTick(){
   const tot=manoTotal(lms);
   MANO.hay=tot.hay; MANO.manos=tot.manos;
   MANO.gesto = tot.pinza? 'pinza' : '';
+  MANO.pinzas = manoPinzas(lms);
   manoVoto(tot.hay? tot.dedos : -1);
   dibujarManos(lms);
   pintarCam();
@@ -128,4 +153,22 @@ let padPedido=-1;
     b.onclick=()=>{ padPedido=k; };
     c.appendChild(b);
   }
+})();
+
+/* ===================== EL TOQUE, PARA QUIEN NO TIENE CAMARA =====================
+   Los bichos se revientan con pinza, pero un juego que solo se puede jugar con webcam es un juego
+   que la mayoria no puede jugar — la misma razon por la que existe el teclado de numeros. Un toque
+   en la pantalla es la pinza de quien no tiene camara, y ademas es lo que cualquiera intenta primero.
+   Se guardan las coordenadas NORMALIZADAS del marco y no los pixeles: el marco cambia de tamano con
+   la pantalla, y la proyeccion de los bichos tambien, asi que compararlos en 0..1 es lo unico que no
+   depende del aparato. */
+const TOQUES=[];
+(function(){
+  const m=document.getElementById('marco'); if(!m) return;
+  m.addEventListener('pointerdown', e=>{
+    const r=m.getBoundingClientRect();
+    if(!r.width || !r.height) return;
+    TOQUES.push({ x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height });
+    if(TOQUES.length>8) TOQUES.shift();
+  }, {passive:true});
 })();

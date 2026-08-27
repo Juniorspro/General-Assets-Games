@@ -88,6 +88,24 @@ const MANO_SOSTEN=1.1;                 // cuanto hay que sostener el numero para
 let escena_i=-1, escenaT=0, esperaT=0, jugando=false, terminado=0;
 let libros=0, aciertos=0, cuenta=null, cuentaTxt='';
 let bloqueo=false;
+/* VAN DECLARADOS ACA Y NO EN i2.js, donde vive su logica, POR EL ORDEN DE EVALUACION: pintarLibros()
+   los lee y se llama desde pintarIdioma() al armar la pantalla de idioma, o sea mil lineas antes.
+   Un let leido antes de su linea no rompe una funcion: rompe el modulo entero. Es la sexta vez en
+   este proyecto que una declaracion puesta "donde corresponde tematicamente" tira todo abajo. */
+let aulaN=1, aulaK=0, aulaIdx=0, muertes=0, bichosVivos=0;
+
+/* EL RECORRIDO DE LA ESCUELA.
+   Ocho aulas, y el orden no es 1..8 sino el que dibuja una vuelta sin volver sobre sus pasos: las
+   cuatro de arriba de izquierda a derecha por el pasillo de la fila 1, se baja por la columna 21 y
+   las cuatro de abajo de derecha a izquierda por la fila 9. Recorrer 1,2,3,4,5,6,7,8 obligaria a
+   cruzar la escuela entera entre la 4 y la 5, y son veinte metros de pasillo vacio. */
+const TOUR=[1,2,3,4,8,7,6,5];
+/* CUANTOS BICHOS EN CADA TRAMO. El primer viaje no tiene: es el que sigue al tutorial y el jugador
+   recien aprendio a contar. Los bichos empiezan camino al SEGUNDO salon, que es como se pidio, y
+   suben de dos a cinco. Mas de cinco no cabe: seis bichos a la vez en un marco 9:16 se solapan y
+   dejan de poder apuntarse de a uno. */
+const BICHOS_POR=[0,2,3,3,4,4,5,5];
+const TOTAL_CUENTAS=TOUR.length*CUENTAS_AULA;
 
 const GUION=[
  { id:'saludo',  anim:'saludar',  txt:'d1', dur:3.0, mira:true },
@@ -95,23 +113,47 @@ const GUION=[
  { id:'t5',      anim:'explicar', txt:'d3', mira:true, espera:{tipo:'dedos', n:5} },
  { id:'tp',      anim:'explicar', txt:'d4', mira:true, espera:{tipo:'gesto', g:'pinza'} },
  { id:'t2',      anim:'explicar', txt:'d5', mira:true, espera:{tipo:'dedos', n:2} },
- { id:'listo',   anim:'saludar',  txt:'d6', dur:2.6, mira:true },
- { id:'viaje',   anim:'caminar',  txt:'d7', viaje:true },
- { id:'entra',   anim:'puerta',   txt:'d8', puerta:true },
- { id:'clase',   anim:'explicar', txt:'d9', dur:4.2, clase:true, mira:true }
+ { id:'listo',   anim:'saludar',  txt:'d6', dur:2.6, mira:true }
 ];
+/* EL GUION DE LAS AULAS SE GENERA. Ocho aulas por tres escenas mas siete tandas de bichos son
+   treinta y una escenas: escritas a mano son treinta y una oportunidades de poner un numero de aula
+   en el lugar de otro. Se genera del TOUR y cada escena lleva ADENTRO el numero de aula al que se
+   refiere, asi que ninguna parte del codigo tiene que adivinar "en que aula estoy". */
+TOUR.forEach((n,k)=>{
+  if(BICHOS_POR[k]>0){
+    /* el viaje va PARTIDO EN DOS y los bichos caen en la juntura: la actividad tiene que estar EN el
+       camino, no al final de el */
+    GUION.push({ id:'viaje'+n,  anim:'caminar', txt:'dSale',   viaje:n, mitad:true, aula:n });
+    GUION.push({ id:'bichos'+n, anim:'quieto',  txt:'dBichos', bichos:BICHOS_POR[k], aula:n });
+    GUION.push({ id:'sigue'+n,  anim:'caminar', txt:'dSale2',  viaje:n, resto:true, aula:n });
+  } else {
+    GUION.push({ id:'viaje'+n,  anim:'caminar', txt:'d7', viaje:n, aula:n });
+  }
+  GUION.push({ id:'entra'+n,  anim:'puerta',   txt:'d8', puerta:n, aula:n });
+  GUION.push({ id:'clase'+n,  anim:'explicar', txt:(k===0?'d9':'dAula'), dur:3.4,
+               clase:n, aula:n, mira:true });
+});
 
-/* los ocho libros: cuentas cuyo resultado entra en los dedos de dos manos, o sea de 1 a 10. Suben
-   de a poco: primero una mano, despues dos, y al final una resta. */
+/* LAS VEINTICUATRO CUENTAS: tres por aula, y el resultado siempre entra en los dedos de dos manos,
+   o sea de 1 a 10. La dificultad sube POR AULA y no cuenta por cuenta: dentro de un aula las tres
+   son del mismo tipo, asi que el jugador no tiene que volver a entender el enunciado en cada libro —
+   entiende el aula. Y sube de a un paso: una mano, dos manos, restas y al final multiplicar.
+   El tope de 10 no es un detalle: una cuenta que da 12 no se puede contestar con el cuerpo, y una
+   cuenta que no se puede contestar es una muerte que el jugador no entiende. */
 function armarCuentas(){
   const R=[];
   const azar=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
-  for(let k=0;k<LIBROS_N;k++){
+  for(let k=0;k<TOTAL_CUENTAS;k++){
+    const aula=Math.floor(k/CUENTAS_AULA);        // 0..7
     let a,b,r,t;
-    if(k<3){ r=azar(2,5); a=azar(1,r-1); b=r-a; t=a+' + '+b; }
-    else if(k<6){ r=azar(6,10); a=azar(2,r-2); b=r-a; t=a+' + '+b; }
-    else { a=azar(7,12); b=azar(2,Math.min(6,a-1)); r=a-b; if(r>10){ a=12; b=2; r=10; } t=a+' − '+b; }
-    R.push({ txt:t, res:r });
+    if(aula<2){        r=azar(2,5);  a=azar(1,r-1); b=r-a; t=a+' + '+b; }
+    else if(aula<4){   r=azar(6,10); a=azar(2,r-2); b=r-a; t=a+' + '+b; }
+    else if(aula<6){   a=azar(7,12); b=azar(2,Math.min(6,a-1)); r=a-b;
+                       if(r>10){ a=12; b=2; r=10; } t=a+' − '+b; }
+    else {             const pares=[[2,2],[2,3],[3,3],[2,4],[2,5],[3,2],[4,2],[5,2],[1,7],[3,1]];
+                       const p=pares[azar(0,pares.length-1)];
+                       a=p[0]; b=p[1]; r=a*b; t=a+' × '+b; }
+    R.push({ txt:t, res:r, aula:aula+1 });
   }
   return R;
 }

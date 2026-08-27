@@ -8,7 +8,9 @@
 window.__recreo={
   estado:()=>({ pant, jugando, terminado, escena:(GUION[escena_i]||{}).id||null, i:escena_i,
                 t:+escenaT.toFixed(2), espera:+esperaT.toFixed(2),
-                libros, aciertos, total:LIBROS_N,
+                aula:aulaN, aulaIdx, aulaK, bichos:bichosVivos, muertes,
+                grito:+gritoT.toFixed(2),
+                libros, aciertos, total:TOTAL_CUENTAS,
                 cuenta: cuenta? {txt:cuenta.txt, res:cuenta.res} : null,
                 cam:[+cam.x.toFixed(2), +cam.z.toFixed(2), +cam.giro.toFixed(2)],
                 profe:[+PROFE.x.toFixed(2), +PROFE.z.toFixed(2)], anim:PROFE.anim,
@@ -156,6 +158,28 @@ window.__recreo={
     if(R.hombroD && R.manoD){ r.abdBindD=+(R.hombroD.userData.abdBind||0).toFixed(3); }
     return r;
   },
+  /* ---- LOS BICHOS ---- */
+  bichosVer:()=>{
+    const W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+    return { vivos:bichosVivos, esquirlas:ESQ.length, marco:[W,H],
+             lista: BICHOS.filter(b=>b.viva).map(b=>{
+               const s=aPantalla(b.x,b.y,b.z);
+               return { mundo:[+b.x.toFixed(2), +b.y.toFixed(2), +b.z.toFixed(2)],
+                        px:[Math.round(s.x*W), Math.round(s.y*H)], delante:s.delante,
+                        dist:+Math.hypot(cam.x-b.x, cam.z-b.z).toFixed(2) }; }) };
+  },
+  /* una pinza de mentira en coordenadas del marco (0..1): es la unica forma de probar el apuntado
+     sin camara ni mano */
+  pinzaFalsa:(x,y)=>{ TOQUES.push({x,y}); return TOQUES.length; },
+  bichosSoltar:(n)=>{ bichosSoltar(n||3); return bichosVivos; },
+  /* ---- LA MUERTE ---- */
+  matar:()=>{ morir(); return { grito:gritoT, muertes }; },
+  reintentar:()=>{ reintentar(); return window.__recreo.estado(); },
+  /* ---- EL MAPA Y LAS RUTAS ---- */
+  aulas:()=>Object.keys(AULA_SITIO).map(k=>{ const S=AULA_SITIO[k], p=puertaDe(S.n);
+    return { n:S.n, x:+S.x.toFixed(2), zPiza:+S.zPiza.toFixed(2), zProfe:+S.zProfe.toFixed(2),
+             zCam:+S.zCam.toFixed(2), puerta:p? [p.i,p.j] : null, frente:frenteDe(S.n) }; }),
+  ruta:(a,b)=>{ const r=rutaCeldas(a,b); return { largo:r?r.length:0, esquinas:esquinas(r) }; },
   /* ---- LOS DEDOS ---- */
   leer:(lm)=>manoLeer(lm),
   contar:(lms)=>manoTotal(lms),
@@ -190,9 +214,14 @@ window.__recreo={
   /* inyecta manos y corre el conteo entero, voto incluido */
   mano:(lms)=>{ const t=manoTotal(lms);
     MANO.hay=t.hay; MANO.manos=t.manos; MANO.gesto=t.pinza?'pinza':'';
+    /* TAMBIEN LAS PINZAS. Sin esta linea el gancho probaba contar dedos pero no apuntar, que es
+       justo la mitad nueva del juego. */
+    MANO.pinzas=manoPinzas(lms);
     manoVoto(t.hay? t.dedos : -1); MANO.on=true; MANO.estado='lista';
     dibujarManos(lms); pintarCam();
-    return { crudo:t, firme:MANO.dedos, votos:MANO.votos }; },
+    return { crudo:t, firme:MANO.dedos, votos:MANO.votos,
+             pinzas:MANO.pinzas.map(p=>({x:+p.x.toFixed(3), y:+p.y.toFixed(3),
+                                         pinza:p.pinza, nueva:p.nueva})) }; },
   manos:()=>({ estado:MANO.estado, on:MANO.on, hay:MANO.hay, dedos:MANO.dedos,
                gesto:MANO.gesto, manos:MANO.manos, votos:MANO.votos }),
   manosIniciar:()=>manosIniciar(),
@@ -202,31 +231,57 @@ window.__recreo={
     return window.__recreo.estado(); },
   /* juega el juego entero contestando siempre bien: es la prueba de que el guion no se traba y de
      que los ocho libros se pueden resolver */
-  jugarSolo:(tope)=>{
-    const log=[]; let vueltas=0;
-    while(!terminado && vueltas++<(tope||6000)){
+  jugarSolo:(tope, mal, pararEn)=>{
+    const log=[]; let vueltas=0, W=lienzo.clientWidth||1, H=lienzo.clientHeight||1;
+    while(!terminado && vueltas++<(tope||60000)){
       const E=GUION[escena_i];
       if(E && E.espera){
         if(E.espera.tipo==='dedos'){ MANO.on=false; padPedido=E.espera.n; }
         else { MANO.on=false; padPedido=1; }
-      } else if(cuenta && !bloqueo){ MANO.on=false; padPedido=cuenta.res; }
-      const antes=escena_i, aL=libros;
+      } else if(cuenta && !bloqueo){
+        MANO.on=false;
+        /* con `mal` contesta cualquier cosa MENOS la buena: es la unica forma de probar el grito
+           dentro de una partida de verdad */
+        padPedido = mal? (cuenta.res===1? 2 : cuenta.res-1) : cuenta.res;
+      }
+      /* los bichos se revientan por el MISMO camino que el jugador: se empuja un toque en el pixel
+         donde cae el bicho. Probar esto con una llamada directa a bichoReventar() no probaria nada
+         de lo que puede estar mal, que es la proyeccion y el radio del blanco. */
+      if(pararEn && (GUION[escena_i]||{}).id===pararEn) break;
+      if(bichosVivos>0 && !(vueltas%8) && !pararEn){
+        const b=BICHOS.find(q=>q.viva);
+        if(b){ const s=aPantalla(b.x,b.y,b.z); if(s.delante) TOQUES.push({x:s.x, y:s.y}); }
+      }
+      const antes=escena_i, aL=libros, mu=muertes;
       avanzar(1/60);
       if(escena_i!==antes) log.push('escena:'+((GUION[escena_i]||{}).id||'fin'));
-      if(libros!==aL) log.push('libro:'+libros);
+      if(libros!==aL) log.push('cuenta:'+libros);
+      if(muertes!==mu) log.push('MUERTE');
+      if(terminado===2) break;
+      if(pararEn && (GUION[escena_i]||{}).id===pararEn) break;   // para poder mirar una escena
     }
-    return { terminado, libros, aciertos, vueltas, log:log.slice(0,40) };
+    return { terminado, libros, aciertos, muertes, vueltas, log:log.slice(0,80) };
   },
   saltarA:(id)=>{ const k=GUION.findIndex(e=>e.id===id); if(k<0) return 'no hay '+id;
                   escena_i=k-1; siguienteEscena(); return window.__recreo.estado(); },
-  aula:()=>({ i:CLASE_I, j:CLASE_J, x:+CLASE_X.toFixed(2), z:+CLASE_Z.toFixed(2),
+  aulaVieja:()=>({ i:CLASE_I, j:CLASE_J, x:+CLASE_X.toFixed(2), z:+CLASE_Z.toFixed(2),
               puerta: PUERTA_CLASE? [PUERTA_CLASE.i, PUERTA_CLASE.j, PUERTA_CLASE.abierta] : null,
               libros:LIBROS.length }),
   cuentas:()=>CUENTAS.map(c=>({txt:c.txt, res:c.res})),
-  perfil:()=>{ const i=render.info;
-    return { llamadas:i.render.calls, tris:i.render.triangles, programas:i.programs?i.programs.length:0,
-             geometrias:i.memory.geometries, texturas:i.memory.textures,
-             cuadros:cuadrosTotal, pasos:pasosTotal }; },
+  /* OJO CON render.info: three.js lo pone a CERO al empezar cada render(), y con el filtro puesto la
+     escena se dibuja en dos pasadas —al destino y despues el blit a pantalla—, asi que leerlo despues
+     de un cuadro devolvia SOLO el blit: "1 llamada, 2 triangulos". Con autoReset apagado se suman
+     las dos y el numero pasa a significar algo. */
+  perfil:()=>{
+    render.info.autoReset=false; render.info.reset();
+    dibujar(1);
+    const i=render.info;
+    const r={ llamadas:i.render.calls, tris:i.render.triangles,
+              programas:i.programs?i.programs.length:0,
+              geometrias:i.memory.geometries, texturas:i.memory.textures,
+              cuadros:cuadrosTotal, pasos:pasosTotal };
+    render.info.autoReset=true;
+    return r; },
   filtro:(f)=>{ if(f) aplicarFiltro(f);
     const F=FILTROS[filtro];
     return { filtro, escala:F.escala, sat:F.sat, niveles:F.niveles,

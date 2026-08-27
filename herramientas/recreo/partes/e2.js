@@ -171,9 +171,23 @@ const ANIM={
     p.codoI[0]=-1.32+a*0.30;   p.codoI[2]= a*0.20;
     p.torso[1]=c*0.14; p.cabeza[1]=-c*0.24; p.cabeza[0]=-0.06+a*0.07;
     p.alto=a*0.012;
+  },
+  /* EL GRITO: la unica pose que no es de un maestro. Los dos brazos abiertos y arriba, el tronco
+     echado atras, la cabeza levantada y TODO vibrando a 22 Hz. La vibracion es la pieza: una pose
+     quieta a diez centimetros de la camara se lee a muneco, y una que tiembla se lee a algo vivo
+     que te esta gritando. Va con `alto` positivo porque en el grito se estira hacia arriba. */
+  grito:(t,p)=>{
+    const s=Math.sin(t*22)*0.055, r=Math.sin(t*31)*0.035;
+    p.hombroD[2]=-2.05+s; p.hombroI[2]= 2.05-s;
+    p.hombroD[0]=-0.30-r; p.hombroI[0]=-0.30+r;
+    p.codoD[0]=-0.34; p.codoI[0]=-0.34;
+    p.torso[0]=-0.20+r*0.5; p.torso[2]=s*0.3;
+    p.cabeza[0]=-0.32+s; p.cabeza[1]=r;
+    p.caderaD[0]=-0.10; p.caderaI[0]=0.10;
+    p.alto=0.055+Math.abs(s)*0.5;
   }
 };
-const ANIM_NOMBRES=['quieto','caminar','saludar','puerta','explicar'];
+const ANIM_NOMBRES=['quieto','caminar','saludar','puerta','explicar','grito'];
 
 function animar(R, nombre, otro, mezcla, t){
   const A=ANIM[nombre]||ANIM.quieto;

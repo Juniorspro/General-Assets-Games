@@ -42,6 +42,10 @@ const L={
  ctrlPad:{en:'NUMBERS', es:'NÚMEROS', pt:'NÚMEROS'},
  quien:{en:'BALDI', es:'BALDI', pt:'BALDI'},
  libros:{en:'{n} / {t}', es:'{n} / {t}', pt:'{n} / {t}'},
+ aulaHud:{en:'ROOM {a}/{t} · {n}/3', es:'AULA {a}/{t} · {n}/3', pt:'SALA {a}/{t} · {n}/3'},
+ bichosHud:{en:'{n} LEFT', es:'QUEDAN {n}', pt:'FALTAM {n}'},
+ tocaBicho:{en:'TAP THEM', es:'TOCALOS', pt:'TOQUE NELES'},
+ pinchaBicho:{en:'PINCH THEM', es:'HACÉLES PINZA', pt:'FAÇA PINÇA NELES'},
  manoCarga:{en:'LOADING…', es:'CARGANDO…', pt:'CARREGANDO…'},
  manoNo:{en:'NO CAMERA · numbers instead', es:'SIN CÁMARA · van los números', pt:'SEM CÂMERA · vão os números'},
  manoLista:{en:'SHOW YOUR HAND', es:'MOSTRÁ LA MANO', pt:'MOSTRE A MÃO'},
@@ -50,7 +54,12 @@ const L={
  sostene:{en:'HOLD IT', es:'SOSTENELO', pt:'SEGURE'},
  bien:{en:'RIGHT', es:'BIEN', pt:'CERTO'},
  mal:{en:'NO', es:'NO', pt:'NÃO'},
- finT:{en:'CLASS OVER', es:'TERMINÓ LA CLASE', pt:'ACABOU A AULA'},
+ finT:{en:'SCHOOL OVER', es:'TERMINÓ LA ESCUELA', pt:'ACABOU A ESCOLA'},
+ muereT:{en:'HE GOT YOU', es:'TE AGARRÓ', pt:'ELE TE PEGOU'},
+ muereS:{en:'One wrong sum. Room {a} from the top.',
+         es:'Una cuenta mal. El aula {a} desde el principio.',
+         pt:'Uma conta errada. A sala {a} desde o começo.'},
+ reint:{en:'AGAIN', es:'DE NUEVO', pt:'DE NOVO'},
  finS:{en:'{n} of {t} right', es:'{n} de {t} bien', pt:'{n} de {t} certas'},
  /* ---- LO QUE DICE ----
     Corto, y una idea por globo: se lee mientras el habla, no despues. Un parrafo en un subtitulo de
@@ -71,27 +80,43 @@ const L={
  d6:{en:'You got it. Come with me.', es:'Lo tenés. Vení conmigo.', pt:'Você pegou. Venha comigo.'},
  d7:{en:'This way…', es:'Por acá…', pt:'Por aqui…'},
  d8:{en:'After you.', es:'Pasá.', pt:'Entre.'},
- d9:{en:'Eight books. One sum each. Fingers up when you know.',
-     es:'Ocho libros. Una cuenta cada uno. Dedos arriba cuando lo sepas.',
-     pt:'Oito livros. Uma conta cada um. Dedos para cima quando souber.'},
+ d9:{en:'One book. <b>Three sums</b>. Fingers up when you know.',
+     es:'Un libro. <b>Tres cuentas</b>. Dedos arriba cuando lo sepas.',
+     pt:'Um livro. <b>Três contas</b>. Dedos para cima quando souber.'},
+ dAula:{en:'Room {a}. One book, three sums.',
+        es:'Aula {a}. Un libro, tres cuentas.',
+        pt:'Sala {a}. Um livro, três contas.'},
+ dSale:{en:'Next room. Come on.', es:'Al otro salón. Vamos.', pt:'Para a outra sala. Vamos.'},
+ dSale2:{en:'Good. Almost there.', es:'Bien. Ya casi.', pt:'Bom. Já quase.'},
+ dBichos:{en:'Bugs in the hall! <b>Squash them</b>.',
+          es:'¡Bichos en el pasillo! <b>Reventalos</b>.',
+          pt:'Bichos no corredor! <b>Esmague-os</b>.'},
+ dBichosFin:{en:'All of them. Good hands.', es:'Todos. Buenas manos.', pt:'Todos. Boas mãos.'},
+ dGrito:{en:'W R O N G', es:'M A L', pt:'E R R A D O'},
  dBien:{en:'That is it!', es:'¡Eso es!', pt:'É isso!'},
  dMal:{en:'No. Look again.', es:'No. Mirá otra vez.', pt:'Não. Olhe de novo.'},
  dFin:{en:'Class over. Nicely done.', es:'Terminó la clase. Muy bien.', pt:'Acabou a aula. Muito bem.'},
  comoT:{en:
   'Baldi asks, you answer with your <b>fingers</b>. Four plus four is eight fingers — both hands.<br><br>'+
   '<b>Hold the number still</b> until the ring fills up. That way you can change your mind before it counts.<br><br>'+
+  '<b>Get one wrong and he gets you.</b> You go back to the start of that room, not of the school.<br><br>'+
+  'Eight rooms, one book and three sums each. In the halls there are <b>bugs</b>: put a <b>pinch</b> right on top of one and it pops.<br><br>'+
   'You never move the camera: it goes on its own.<br><br>'+
-  'No camera, or you would rather not give it? Pick <b>NUMBERS</b> in the menu and tap the answer.',
+  'No camera, or you would rather not give it? Pick <b>NUMBERS</b> in the menu, tap the answer, and tap the bugs.',
   es:
   'Baldi pregunta y vos contestás con los <b>dedos</b>. Cuatro más cuatro son ocho dedos: las dos manos.<br><br>'+
   '<b>Mantené el número quieto</b> hasta que el aro se llene. Así podés cambiar de idea antes de que cuente.<br><br>'+
+  '<b>Una cuenta mal y te agarra.</b> Volvés al principio de ese aula, no de la escuela.<br><br>'+
+  'Ocho aulas, un libro y tres cuentas en cada una. En los pasillos hay <b>bichos</b>: ponéles una <b>pinza</b> justo encima y revientan.<br><br>'+
   'La cámara no se maneja: va sola.<br><br>'+
-  '¿No tenés cámara, o preferís no darla? Elegí <b>NÚMEROS</b> en el menú y tocá la respuesta.',
+  '¿No tenés cámara, o preferís no darla? Elegí <b>NÚMEROS</b> en el menú, tocá la respuesta y tocá los bichos.',
   pt:
   'Baldi pergunta e você responde com os <b>dedos</b>. Quatro mais quatro são oito dedos: as duas mãos.<br><br>'+
   '<b>Mantenha o número parado</b> até o anel encher. Assim você pode mudar de ideia antes de contar.<br><br>'+
+  '<b>Erre uma conta e ele te pega.</b> Você volta ao começo daquela sala, não da escola.<br><br>'+
+  'Oito salas, um livro e três contas em cada uma. Nos corredores há <b>bichos</b>: ponha uma <b>pinça</b> em cima e eles estouram.<br><br>'+
   'A câmera não se controla: vai sozinha.<br><br>'+
-  'Sem câmera, ou prefere não dar? Escolha <b>NÚMEROS</b> no menu e toque na resposta.'}
+  'Sem câmera, ou prefere não dar? Escolha <b>NÚMEROS</b> no menu, toque na resposta e toque nos bichos.'}
 };
 function TX(k,v){ let s=(L[k]&&(L[k][IDIOMA]||L[k].en))||k;
   if(v) for(const p in v) s=s.split('{'+p+'}').join(v[p]);
@@ -148,7 +173,13 @@ for(const a of AULAS) for(let j=a.j0;j<=a.j1;j++) for(let i=a.i0;i<=a.i1;i++) MA
 const PUERTAS=[];
 for(const a of AULAS){
   const im=Math.round((a.i0+a.i1)/2), jm=Math.round((a.j0+a.j1)/2);
-  const cand=[[im,a.j0-1],[im,a.j1+1],[a.i0-1,jm],[a.i1+1,jm]];
+  /* LA PARED DEL FONDO NO ES CANDIDATA A PUERTA, y esto aparecio al amueblar las ocho aulas:
+     el pizarron va en la pared de enfrente de la puerta principal —la del fondo— y mide 2,5 celdas
+     de ancho sobre un aula de 3, o sea que la tapa entera. Las aulas 3 y 6, que llevan dos puertas,
+     tenian la segunda justo ahi: un pizarron con una puerta atras. Sacando (im, j1+1) de la lista,
+     la segunda puerta cae en una pared LATERAL —la 3 en (12,5) y la 6 en (10,13), las dos contra el
+     pasillo de la columna 11— y el fondo queda libre por construccion. */
+  const cand=[[im,a.j0-1],[a.i0-1,jm],[a.i1+1,jm]];
   let puesta=0;
   for(const [i,j] of cand){
     if(i<0||j<0||i>=GW||j>=GH) continue;

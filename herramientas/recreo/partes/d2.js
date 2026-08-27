@@ -103,11 +103,8 @@ for(const p of PUERTAS){
    ocho libros que flotan a un costado. Las otras siete quedan con sus pupitres y nada mas — el
    juego pasa entero en esta, asi que amueblar las ocho seria trabajo que nadie va a ver.
    ========================================================================================= */
-const AULA_CLASE=AULAS[5];                       // cols 7..9, filas 11..15
-const CLASE_I=8, CLASE_J=13;                     // el centro del aula
-const CLASE_X=XC(CLASE_I), CLASE_Z=ZC(CLASE_J);
 
-/* el pizarron: un verde oscuro con marco de madera y tiza. Va contra la pared de la fila 16. */
+/* el pizarron: un verde oscuro con marco de madera y tiza. Va contra la pared del fondo. */
 const T_PIZA=tex(256,128,(g,w,h)=>{
   g.fillStyle='#2f4f3a'; g.fillRect(0,0,w,h);
   g.fillStyle='rgba(255,255,255,0.05)';
@@ -116,52 +113,95 @@ const T_PIZA=tex(256,128,(g,w,h)=>{
   g.strokeStyle='rgba(255,255,255,0.10)'; g.lineWidth=1;
   g.beginPath(); g.moveTo(0,h*0.5); g.lineTo(w,h*0.5); g.stroke();
 }, 1, 1, false);
+
+/* =========================================================================================
+   LAS OCHO AULAS AMUEBLADAS, Y CADA UNA CON SU SITIO CALCULADO
+
+   Antes habia UNA aula amueblada a mano con numeros escritos: pizarron en z=27,47, escritorio en
+   23,6, el en 25,2 y la camara en 22,85. Con ocho aulas eso serian cuarenta numeros a mano, y el
+   primero que se escriba mal deja un pizarron dentro de una pared sin que nadie se entere hasta
+   llegar a ese salon. Asi que el sitio de cada aula SE CALCULA a partir de su rectangulo:
+
+     pared del fondo = la fila j1+1, que es pared por construccion y —desde que la puerta principal
+                       va siempre en j0-1— nunca tiene puerta;
+     el              = la ultima fila del aula (j1);
+     el escritorio   = 1,6 m delante de el;
+     la camara       = 2,35 m delante de el, que es la distancia medida donde ocupa el 51,9% del
+                       alto del marco en un telefono;
+     el libro        = 0,6 m delante de el y 0,55 a un costado.
+
+   Y TODO EL MOBILIARIO VA FUNDIDO. Ocho pizarrones y ocho escritorios sueltos son 56 mallas, o sea
+   56 llamadas de dibujo sobre un juego que venia usando UNA para la escuela entera. Fundido por
+   material son tres: las pizarras, la madera clara y la madera oscura.
+   ========================================================================================= */
+const M_MAD1=new THREE.MeshLambertMaterial({color:0x8f6a3c});
+const M_MAD2=new THREE.MeshLambertMaterial({color:0x7d5c34});
+const AULA_SITIO={};
 {
-  const zP=ZC(16)-CEL/2+GRUESO/2+0.02;
-  /* EL MARCO VA DETRAS DE LA PIZARRA Y NO DELANTE, y esto se vio en una foto: el marco estaba a
-     zP-0,03 y la pizarra a zP+0,03, o sea que desde la camara —que esta a menor Z— el marco tapaba
-     la pizarra entera y el aula tenia un rectangulo de madera en la pared. Tres centimetros.
-     Y la pizarra va a DOS CARAS: un PlaneGeometry mira a su +Z, y girarlo con FrontSide lo deja
-     invisible desde este lado. Con DoubleSide no hay lado equivocado posible. */
-  const marcoP=new THREE.Mesh(new THREE.BoxGeometry(CEL*2.5+0.34, 2.02, 0.10),
-                              new THREE.MeshLambertMaterial({color:0x8f6a3c}));
-  marcoP.position.set(CLASE_X, 1.90, zP+0.06); escena.add(marcoP);
-  const piza=new THREE.Mesh(new THREE.PlaneGeometry(CEL*2.5, 1.86),
-                            new THREE.MeshLambertMaterial({map:T_PIZA, side:THREE.DoubleSide}));
-  piza.position.set(CLASE_X, 1.90, zP-0.02); escena.add(piza);
-  /* la bandeja de la tiza, que es lo que hace que se lea a pizarron de escuela */
-  const band=new THREE.Mesh(new THREE.BoxGeometry(CEL*2.5, 0.07, 0.16),
-                            new THREE.MeshLambertMaterial({color:0x8f6a3c}));
-  band.position.set(CLASE_X, 0.94, zP-0.08); escena.add(band);
-}
-/* EL ESCRITORIO. El se para DEL OTRO LADO, entre el escritorio y el pizarron: es la posicion de un
-   maestro y ademas pone una mesa entre el jugador y el, que es lo que hace que la escena se lea a
-   clase y no a persecucion. */
-{
-  /* EL ESCRITORIO VA CONTRA EL PIZARRON Y NO EN EL MEDIO DEL AULA. El aula mide cinco celdas, o sea
-     21 metros de fondo: con el escritorio en el centro y la camara en la puerta, el personaje queda
-     a doce metros y en un marco vertical se ve del tamano de un dedo. Toda la escena se corre al
-     fondo —pizarron a 27,3, el a 25,0, la mesa a 23,3— y la camara termina a 21,4: tres metros y
-     medio, que es la distancia a la que una persona te habla. */
-  const zE=23.6;
-  const tapa=new THREE.Mesh(new THREE.BoxGeometry(2.60,0.11,1.10),
-                            new THREE.MeshLambertMaterial({color:0x8f6a3c}));
-  tapa.position.set(CLASE_X, 0.86, zE); escena.add(tapa);
-  const frente=new THREE.Mesh(new THREE.BoxGeometry(2.60,0.74,0.09),
-                              new THREE.MeshLambertMaterial({color:0x7d5c34}));
-  frente.position.set(CLASE_X, 0.45, zE-0.50); escena.add(frente);
-  for(const sx of [-1,1]){
-    const lat=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.74,1.10),
-                             new THREE.MeshLambertMaterial({color:0x7d5c34}));
-    lat.position.set(CLASE_X+sx*1.25, 0.45, zE); escena.add(lat);
+  const pizas=[], mad1=[], mad2=[];
+  const caja=(lista,w,h,d,x,y,z)=>{ const g=new THREE.BoxGeometry(w,h,d); g.translate(x,y,z); lista.push(g); };
+  for(const a of AULAS){
+    const xC=XC(Math.round((a.i0+a.i1)/2));
+    /* EL PIZARRON VA DELANTE DE LA CARA DE LA PARED, NO ADENTRO.
+       Esto estuvo mal desde que existe el aula y no se vio nunca por una casualidad. La formula era
+       ZC(j1+1) - CEL/2 + GRUESO/2 + 0.02, o sea 17 cm PASADA la cara interior de la pared — y una
+       pared es un cubo de celda entera, no un panel de GRUESO de espesor. El pizarron quedaba
+       enterrado y la pared lo tapaba.
+       Por que no se noto: la unica aula amueblada era la 6, y la 6 tenia su segunda puerta justo en
+       esa celda del fondo. Donde hay puerta el constructor no levanta pared, asi que el pizarron se
+       veia POR EL AGUJERO. Al mover las segundas puertas a las paredes laterales —para que no
+       quedaran detras del pizarron— la pared del fondo se cerro en las ocho aulas y el defecto salio
+       a la luz en las ocho a la vez.
+       Ahora la cara interior de la pared es F y todo se cuelga hacia adelante de ella: el marco
+       apoyado (F-0,10 a F), la pizarra 1,5 cm delante del marco y la bandeja de la tiza sobresaliendo,
+       que es lo que hace una bandeja. */
+    const F=ZC(a.j1+1)-CEL/2;
+    const zPiza=F-0.115;
+    const zProfe=ZC(a.j1);
+    const zEsc=zProfe-1.60;
+    const zCam=zProfe-2.35;
+    AULA_SITIO[a.n]={ n:a.n, x:xC, i:Math.round((a.i0+a.i1)/2), zPiza, zProfe, zEsc, zCam,
+                      jCam:zCam/CEL+(GH-1)/2, jm:Math.round((a.j0+a.j1)/2), j0:a.j0, j1:a.j1 };
+    /* EL MARCO VA DETRAS DE LA PIZARRA Y NO DELANTE, y esto se vio en una foto: el marco estaba a
+       zP-0,03 y la pizarra a zP+0,03, o sea que desde la camara —que esta a menor Z— el marco tapaba
+       la pizarra entera y el aula tenia un rectangulo de madera en la pared. Tres centimetros. */
+    caja(mad1, CEL*2.5+0.34, 2.02, 0.10, xC, 1.90, F-0.05);
+    caja(mad1, CEL*2.5, 0.07, 0.16, xC, 0.94, F-0.14);           // la bandeja de la tiza
+    /* la pizarra: un plano, y el material va a DOS CARAS — un PlaneGeometry mira a su +Z y girarlo
+       con FrontSide lo deja invisible desde este lado. Con DoubleSide no hay lado equivocado. */
+    const pl=new THREE.PlaneGeometry(CEL*2.5, 1.86);
+    pl.translate(xC, 1.90, zPiza); pizas.push(pl);
+    /* EL ESCRITORIO. El se para DEL OTRO LADO, entre el escritorio y el pizarron: es la posicion de
+       un maestro y ademas pone una mesa entre el jugador y el, que es lo que hace que la escena se
+       lea a clase y no a persecucion. */
+    caja(mad1, 2.60, 0.11, 1.10, xC, 0.86, zEsc);
+    caja(mad2, 2.60, 0.74, 0.09, xC, 0.45, zEsc-0.50);
+    for(const sx of [-1,1]) caja(mad2, 0.09, 0.74, 1.10, xC+sx*1.25, 0.45, zEsc);
   }
+  const juntar=(lista, mat)=>{
+    if(!lista.length) return null;
+    const g=mergeGeometries(lista,false);
+    for(const q of lista) q.dispose();
+    const m=new THREE.Mesh(g, mat); m.frustumCulled=false; escena.add(m); return m;
+  };
+  juntar(pizas, new THREE.MeshLambertMaterial({map:T_PIZA, side:THREE.DoubleSide}));
+  juntar(mad1, M_MAD1);
+  juntar(mad2, M_MAD2);
 }
+const AULA_CLASE=AULAS[0];
+const CLASE_I=AULA_SITIO[1].i, CLASE_J=AULA_SITIO[1].jm;
+const CLASE_X=AULA_SITIO[1].x, CLASE_Z=ZC(CLASE_J);
 
 /* ---------- LOS OCHO LIBROS ----------
    Flotan a un costado, girando despacio. El de turno se pone al frente, grande, y en su tapa se
    dibuja la cuenta: la cuenta va en una TEXTURA y no en HTML porque tiene que estar en el mundo —
    pegada al libro, girando con el— y porque asi no hay que traducir un numero. */
-const LIBROS_N=8;
+/* UN SOLO LIBRO Y NO OCHO. Antes habia un libro por cuenta y las ocho cuentas eran de la misma
+   aula, asi que ocho grupos de tres mallas dormidos esperando su turno. Ahora hay un libro por
+   AULA —eso pidio el usuario— y las tres cuentas del aula se dibujan sobre la misma tapa: un libro
+   que cambia de pagina es exactamente lo que hace un libro. */
+const CUENTAS_AULA=3;
+const LIBROS_N=1;
 const LIBROS=[];
 function texCuenta(txt){
   return tex(256,256,(g,w,h)=>{
@@ -190,3 +230,61 @@ for(let k=0;k<LIBROS_N;k++){
   escena.add(g);
   LIBROS.push({ g, cara, hecho:false, giro:k*0.7 });
 }
+
+/* =========================================================================================
+   LOS BICHOS DEL PASILLO
+   La actividad de en medio: entre un aula y la siguiente aparecen bichos flotando y hay que
+   reventarlos haciendo PINZA con la mano encima de cada uno (o tocandolos, si no hay camara).
+
+   POR QUE VAN INSTANCIADOS. Un bicho creible son nueve piezas —cuerpo, cabeza, seis patas, dos
+   antenas, dos ojos—; seis bichos sueltos serian cincuenta y cuatro mallas, o sea cincuenta y cuatro
+   llamadas de dibujo en un juego que dibuja la escuela entera con una. Fundido, un bicho es UNA
+   geometria, y seis bichos son UN InstancedMesh: dos llamadas en total contando los ojos, haya uno
+   o haya seis. Reventar un bicho es ponerle la escala en cero, no borrar nada.
+
+   Y LOS OJOS VAN EN OTRA MALLA A PROPOSITO: son lo unico del bicho que tiene que verse a oscuras y
+   de lejos —es el aviso de "hay algo ahi"— asi que van con material propio, sin luz. Con el mismo
+   material que el cuerpo un bicho a cuatro metros es una mancha marron y no se sabe para donde mira.
+   ========================================================================================= */
+const BICHOS_MAX=6, ESQ_MAX=54;
+const bichoGeo=(()=>{
+  const ps=[];
+  const cuerpo=new THREE.IcosahedronGeometry(0.17,0);
+  cuerpo.scale(1.05,0.78,1.25); ps.push(cuerpo);
+  const cab=new THREE.SphereGeometry(0.105,8,6); cab.translate(0,0.02,0.20); ps.push(cab);
+  for(const sx of [-1,1]) for(const [dz,ang] of [[0.10,0.5],[-0.02,0.0],[-0.14,-0.5]]){
+    const p=new THREE.BoxGeometry(0.022,0.022,0.26);
+    p.rotateX(Math.PI/2.6); p.rotateY(sx*(1.15+ang));
+    p.translate(sx*0.13, -0.06, dz); ps.push(p);
+  }
+  for(const sx of [-1,1]){
+    const an=new THREE.BoxGeometry(0.016,0.15,0.016);
+    an.rotateZ(sx*0.42); an.rotateX(-0.30);
+    an.translate(sx*0.055, 0.13, 0.20); ps.push(an);
+  }
+  /* TODAS SIN INDICE ANTES DE FUNDIR. IcosahedronGeometry viene NO indexada y BoxGeometry y
+     SphereGeometry vienen indexadas, y mergeGeometries no acepta la mezcla: tira "make sure index
+     attribute exists among all geometries, or in none of them" y devuelve null, o sea que el bicho
+     se quedaba sin geometria y no se dibujaba nada. Se lleva todo al mismo lado y no al otro porque
+     desindexar es una operacion que siempre existe; reindexar hay que calcularla. */
+  const pl=ps.map(p=>p.index? p.toNonIndexed() : p);
+  const g=mergeGeometries(pl,false);
+  for(const p of ps) p.dispose();
+  return g;
+})();
+const ojosGeo=(()=>{
+  const ps=[];
+  for(const sx of [-1,1]){ const o=new THREE.SphereGeometry(0.040,7,5);
+    o.translate(sx*0.050, 0.055, 0.275); ps.push(o); }
+  const g=mergeGeometries(ps,false); for(const p of ps) p.dispose(); return g;
+})();
+const bichoMalla=new THREE.InstancedMesh(bichoGeo, new THREE.MeshLambertMaterial({color:0x2a2118}), BICHOS_MAX);
+const bichoOjos=new THREE.InstancedMesh(ojosGeo, new THREE.MeshBasicMaterial({color:0xff3a1e}), BICHOS_MAX);
+for(const m of [bichoMalla, bichoOjos]){
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  m.frustumCulled=false; m.visible=false; escena.add(m);
+}
+const esqGeo=new THREE.TetrahedronGeometry(0.062,0);
+const esqMalla=new THREE.InstancedMesh(esqGeo, new THREE.MeshLambertMaterial({color:0x6f3a1c}), ESQ_MAX);
+esqMalla.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+esqMalla.frustumCulled=false; esqMalla.visible=false; escena.add(esqMalla);
