@@ -176,13 +176,7 @@ function aplicarCal(c){
   if(escuela.lockers) escuela.lockers.visible=CAL[c].lockers;
   ajustar(); pintarCal();
 }
-/* SI EL JUGADOR ELIGE, EL VIGIA SE CALLA PARA SIEMPRE. Un ajuste automatico que le pisa la eleccion
-   a alguien que acaba de elegir no es una ayuda, es un forcejeo — y desde afuera se ve como que el
-   menu no guarda lo que le ponen. */
-for(const b of document.querySelectorAll('[data-cal]')) b.onclick=()=>{
-  if(typeof VIGIA==='object') VIGIA.manual=true;
-  aplicarCal(b.dataset.cal);
-};
+for(const b of document.querySelectorAll('[data-cal]')) b.onclick=()=>aplicarCal(b.dataset.cal);
 const MANO_MOTIVO={ permiso:'manoErrPermiso', camara:'manoErrCamara', cdn:'manoErrCdn',
                     modelo:'manoErrModelo', insegura:'manoErrInsegura' };
 function pintarCtrl(){

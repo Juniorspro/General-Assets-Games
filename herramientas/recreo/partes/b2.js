@@ -172,11 +172,10 @@ try{ plataf=(matchMedia('(pointer:coarse)').matches &&
       (('ontouchstart' in window)||navigator.maxTouchPoints>0))? 'movil':'pc'; }catch(e){}
 
 /* ===================== LAS TRES CALIDADES ===================== */
-/* UN ESCALON MAS ABAJO QUE 'baja', PARA APARATOS DE GAMA BAJA DE VERDAD. No aparece en el menu: no
-   es una opcion, es a donde llega el vigia solo cuando midio que ni 'baja' alcanza. Ponerlo en el
-   menu seria ofrecerle a alguien elegir la peor imagen del juego sin saber si la necesita. */
-const CAL={ minima:{ px:0.45, lockers:false, niebla:24 },
-            baja:{ px:0.60, lockers:false, niebla:30 },
+/* TRES CALIDADES Y LAS TRES LAS ELIGE EL JUGADOR. Hubo un cuarto escalon 'minima' al que llegaba
+   solo un vigia automatico; se fue junto con el vigia, porque un escalon que nadie puede elegir y que
+   solo aparece cuando el juego decide bajarte los graficos es exactamente lo que se pidio sacar. */
+const CAL={ baja:{ px:0.60, lockers:false, niebla:30 },
             media:{ px:0.90, lockers:true,  niebla:40 },
             alta:{ px:2.00, lockers:true,  niebla:52 } };
 /* ARRANCA EN ALTA, Y ESO RECIEN AHORA ES SENSATO. Antes 'alta' significaba a la vez mas pixeles y
@@ -209,7 +208,13 @@ try{ const g=localStorage.getItem('recreo_cal'); if(g && CAL[g]) calidad=g; }cat
    patinaje clasico. Con una zancada de 1,15 m el ciclo sale de la division, y si algun dia cambia la
    velocidad el ciclo la sigue solo.
    ========================================================================================= */
-const VEL_CAM=2.6, VEL_PROFE=3.0;
+/* MAS RAPIDO, Y ES UN PEDIDO: "mejora el movimiento y la velocidad con el cambio de salones, asi no
+   se vuelve tan aburrido". El tramo mas largo son catorce celdas = 58,8 m; a 2,6 m/s eran veintitres
+   segundos de pasillo, y aunque la actividad cae en la mitad, las dos mitades siguen siendo caminata.
+   A 3,7 el mismo tramo son dieciseis. El profesor sube en la misma proporcion para que siga llegando
+   antes que la camara —si no, se lo pasa por encima al doblar— y el ciclo de la caminata NO hay que
+   tocarlo: CAMINA_W sale de la velocidad, asi que la zancada se acomoda sola. */
+const VEL_CAM=3.7, VEL_PROFE=4.2;
 const ZANCADA=1.15;                                       // metros por paso
 const CAMINA_W=2*Math.PI*VEL_PROFE/(2*ZANCADA);           // rad/s del ciclo (dos pasos por ciclo)
 

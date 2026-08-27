@@ -136,12 +136,12 @@ const TRAMOS=[ null,
 const TOTAL_CUENTAS=TOUR.length*CUENTAS_AULA;
 
 const GUION=[
- { id:'saludo',  anim:'saludar',  txt:'d1', dur:3.0, mira:true },
- { id:'presenta',anim:'explicar', txt:'d2', dur:3.8, mira:true },
+ { id:'saludo',  anim:'saludar',  txt:'d1', dur:2.1, mira:true },
+ { id:'presenta',anim:'explicar', txt:'d2', dur:2.6, mira:true },
  { id:'t5',      anim:'explicar', txt:'d3', mira:true, espera:{tipo:'dedos', n:5} },
  { id:'tp',      anim:'explicar', txt:'d4', mira:true, espera:{tipo:'gesto', g:'pinza'} },
  { id:'t2',      anim:'explicar', txt:'d5', mira:true, espera:{tipo:'dedos', n:2} },
- { id:'listo',   anim:'saludar',  txt:'d6', dur:2.6, mira:true }
+ { id:'listo',   anim:'saludar',  txt:'d6', dur:1.8, mira:true }
 ];
 /* EL GUION DE LAS AULAS SE GENERA. Ocho aulas por tres escenas mas siete tandas de bichos son
    treinta y una escenas: escritas a mano son treinta y una oportunidades de poner un numero de aula
@@ -160,7 +160,7 @@ TOUR.forEach((n,k)=>{
     GUION.push({ id:'viaje'+n,  anim:'caminar', txt:'d7', viaje:n, aula:n });
   }
   GUION.push({ id:'entra'+n,  anim:'puerta',   txt:'d8', puerta:n, aula:n });
-  GUION.push({ id:'clase'+n,  anim:'explicar', txt:(k===0?'d9':'dAula'), dur:3.4,
+  GUION.push({ id:'clase'+n,  anim:'explicar', txt:(k===0?'d9':'dAula'), dur:2.3,
                clase:n, aula:n, mira:true });
 });
 

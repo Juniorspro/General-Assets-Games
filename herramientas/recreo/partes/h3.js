@@ -83,15 +83,35 @@ function dice(clave, params, vol){
    escala menor es lo que hace que el loop no se cierre nunca del todo, o sea que suene a "todavia
    falta algo" — que es exactamente el clima de una escuela en la que algo va a pasar. */
 const MUS_BPM=92;
-const MUS_BAJO=[[110.00,0],[87.31,1],[98.00,2],[82.41,3]];     // A2 F2 G2 E2, un acorde por compas
-const MUS_ACORDE=[[220.0,261.6,329.6],[174.6,220.0,261.6],
-                  [196.0,246.9,293.7],[164.8,207.7,246.9]];
+/* =========================================================================================
+   TRES PROGRESIONES Y NO UNA, Y EL TEMPO SUBE CON EL COLEGIO
+
+   Habia UNA vuelta de cuatro compases para toda la partida. Con las cuatro aulas primeras eso ya
+   eran varios minutos del mismo giro, y el jugador lo dijo con todas las letras: "asi no se vuelve
+   tan aburrido". Un tema que no cambia nunca deja de escucharse a los dos minutos.
+
+   Las tres comparten la misma escala y el mismo bajo de La menor, asi que cambiar de una a otra no
+   suena a "empezo otra cancion" —eso seria peor, porque cortaria la partida en pedazos— sino a que
+   la misma pieza dio vuelta la esquina. Lo que cambia es el CAMINO ARMONICO:
+     0 · Am F G E   el de siempre: cierra en mayor y no resuelve, que es lo que lo deja abierto
+     1 · Am C G Dm   mas luminoso, para el medio del colegio
+     2 · Am G F E    descendente, el que aprieta hacia el final
+   Se elige por aula, asi que ninguna suena dos aulas seguidas. */
+const MUS_PROGS=[
+  { bajo:[110.00, 87.31, 98.00, 82.41],
+    ac:[[220.0,261.6,329.6],[174.6,220.0,261.6],[196.0,246.9,293.7],[164.8,207.7,246.9]] },
+  { bajo:[110.00,130.81, 98.00, 73.42],
+    ac:[[220.0,261.6,329.6],[196.0,261.6,329.6],[196.0,246.9,293.7],[174.6,220.0,293.7]] },
+  { bajo:[110.00, 98.00, 87.31, 82.41],
+    ac:[[220.0,261.6,329.6],[196.0,246.9,293.7],[174.6,220.0,261.6],[164.8,207.7,246.9]] }
+];
+let MUS_BAJO=MUS_PROGS[0].bajo, MUS_ACORDE=MUS_PROGS[0].ac;
 /* la melodia va en grados de la escala y no en frecuencias: asi la misma linea sirve sobre los
    cuatro acordes sin escribirla cuatro veces */
 const MUS_MEL=[0,2,4,2, 7,4,2,0, 0,4,7,4, 2,0,-1,0];
 const MUS_ESC=[220.0,246.9,261.6,293.7,329.6,349.2,392.0,440.0,493.9];
 const MUS={ on:false, paso:0, prox:0, timer:null, gan:null, pad:null, nivel:0, ducking:1,
-            nBajar:0, nParar:0, nNotas:0 };
+            nBajar:0, nParar:0, nNotas:0, prog:0, bpm:MUS_BPM };
 /* UNA NOTA PUEDE DECAER O SOSTENER, Y LA DIFERENCIA ERA TODO EL PROBLEMA.
    La primera version tenia un solo sobre: subir y despues caer exponencialmente hasta cero a lo
    largo de toda la duracion. Con eso una nota "sostenida" de un segundo pasa el 80% de ese segundo
@@ -166,7 +186,9 @@ function musGolpe(t, vol){
 function musAgendar(){
   if(!MUS.on || !AUD.ctx) return;
   const c=AUD.ctx;
-  const semi=60/MUS_BPM/2;                       // duracion de una corchea
+  /* EL TEMPO SUBE CON EL AULA, y son seis pulsos por escalon. Es poco a proposito: un salto grande
+     de tempo se oye como que cambio la musica, y lo que tiene que oirse es que el colegio aprieta. */
+  const semi=60/MUS.bpm/2;                       // duracion de una corchea
   if(MUS.prox < c.currentTime) MUS.prox = c.currentTime + 0.06;
   while(MUS.prox < c.currentTime + 0.30){
     const p=MUS.paso, t=MUS.prox;
@@ -174,14 +196,14 @@ function musAgendar(){
     const ac=MUS_ACORDE[compas];
     /* EL BAJO, en las cuatro negras del compas: es el pulso, y un pulso que aparece dos veces por
        compas no es un pulso, es un aviso */
-    if((dentro&1)===0) musNota(MUS_BAJO[compas][0], t, semi*1.5, 0.100, 'square', 0.010);
+    if((dentro&1)===0) musNota(MUS_BAJO[compas], t, semi*1.5, 0.100, 'square', 0.010);
     /* EL ACORDE SOSTENIDO, desde el nivel 0: es lo que hace que haya musica y no percusion. Dura
        cuatro corcheas y entra suave, asi que las tres notas se leen como un colchon y no como un
        golpe de organo. */
     if(dentro===0 || dentro===4)
       for(let k=0;k<ac.length;k++) musNota(ac[k], t, semi*3.6, 0.026, 'triangle', 0.120, true);
     /* el colchon se reafina al empezar cada compas */
-    if(dentro===0) padAfinar(MUS_BAJO[compas][0], t);
+    if(dentro===0) padAfinar(MUS_BAJO[compas], t);
     /* la melodia desde el aula 3 */
     if(MUS.nivel>=1 && (p&1)===0){
       const g=MUS_MEL[(p>>1)&15];
@@ -193,7 +215,7 @@ function musAgendar(){
     /* el charles en las corcheas impares desde el aula 5: aprieta el pulso sin subir el volumen */
     if(MUS.nivel>=2 && (dentro&1)===1) musGolpe(t, 0.034);
     /* y desde el aula 7 una quinta abajo del bajo: la nota que hace que suene amenazante */
-    if(MUS.nivel>=3 && dentro===0) musNota(MUS_BAJO[compas][0]*0.5, t, semi*3.2, 0.062, 'sawtooth', 0.030);
+    if(MUS.nivel>=3 && dentro===0) musNota(MUS_BAJO[compas]*0.5, t, semi*3.2, 0.062, 'sawtooth', 0.030);
     MUS.prox += semi;
     MUS.paso = (MUS.paso+1) & 31;
   }
@@ -241,3 +263,18 @@ function musicaBajar(f, seg){
 }
 /* el nivel sube con el aula: mismo tema, mas voces. Cuatro escalones en ocho aulas. */
 function musicaNivel(n){ MUS.nivel=Math.max(0, Math.min(3, n)); }
+/* SE LLAMA AL ENTRAR A CADA AULA. Cambia la progresion y el tempo, y toca un giro corto que marca el
+   cambio: sin el, la progresion nueva empieza en medio de la anterior y no se percibe que paso algo —
+   se percibe que la musica se equivoco. Con el giro, el cambio de aula SUENA a cambio de aula. */
+function musicaAula(idx){
+  MUS.prog = idx % MUS_PROGS.length;
+  MUS_BAJO = MUS_PROGS[MUS.prog].bajo;
+  MUS_ACORDE = MUS_PROGS[MUS.prog].ac;
+  MUS.bpm = MUS_BPM + Math.min(4, idx)*6;
+  /* el compas arranca de cero para que la progresion nueva entre en su primer acorde y no a la mitad */
+  MUS.paso = 0;
+  if(!MUS.on || !AUD.ctx) return;
+  const c=AUD.ctx, t=c.currentTime+0.05, semi=60/MUS.bpm/2;
+  const ac=MUS_ACORDE[0];
+  for(let k=0;k<3;k++) musNota(ac[k]*2, t+k*semi*0.5, semi*1.2, 0.040, 'triangle', 0.008);
+}

@@ -660,34 +660,12 @@ window.__recreo={
     MANO.msDet=gMs; MANO.hz=gHz; MANO.hzTope=gTope;
     return r;
   },
-  /* =========================================================================================
-     EL VIGIA, PROBADO SIN UN TELEFONO LENTO
-
-     No puedo hacer que este contenedor vaya a 25 fps a pedido, pero lo que hay que probar no es el
-     aparato: es la POLITICA. Se le inyectan tiempos de cuadro y se mira que decide — que baje cuando
-     va mal, que NO toque nada cuando va bien, y sobre todo que DEVUELVA un escalon que no gano nada,
-     que es la regla que aprendio Maicol y la que evita dejar la imagen peor a cambio de cero.
-     ========================================================================================= */
-  vigiaProbar:(fpsPorMedicion)=>{
-    const gCal=calidad, gMan=VIGIA.manual, gJug=jugando;
-    VIGIA.activo=true; VIGIA.manual=false; VIGIA.hecho=false; VIGIA.fase='espera';
-    VIGIA.t0=0; VIGIA.n=0; VIGIA.suma=0; VIGIA.paso=0; VIGIA.hist.length=0;
-    jugando=true;
-    aplicarCal('media');
-    for(const fps of fpsPorMedicion){
-      const dt=1/fps;
-      while(VIGIA.t0<VIG_ESPERA) VIGIA.t0+=dt;
-      for(let k=0;k<VIG_CUADROS;k++){ if(VIGIA.hecho) break; vigiaTick(dt); }
-      if(VIGIA.hecho) break;
-    }
-    const r={ hist:VIGIA.hist.slice(), calidadFinal:calidad, pasos:VIGIA.paso, hecho:VIGIA.hecho };
-    jugando=gJug; VIGIA.manual=gMan; aplicarCal(gCal);
-    return r;
-  },
   /* la resolucion dinamica: donde esta y a cuantos pixeles equivale */
   resVer:()=>({ resDin:+resDin.toFixed(3), min:RES_MIN, max:RES_MAX,
                 objetivoMs:+RES_OBJ.toFixed(2), destino:postTam(),
-                pixeles:postTam()[0]*postTam()[1] }),
+                pixeles:postTam()[0]*postTam()[1], calidad, px:CAL[calidad].px, filtro }),
+  /* la POLITICA de la resolucion, probada sin un telefono lento: se le inyectan tiempos de cuadro y
+     se mira a donde llega. Es lo unico que se puede probar aca, porque el aparato no se puede fingir */
   resProbar:(msPorCuadro, cuadros)=>{
     const g=resDin;
     const R=[];
@@ -697,66 +675,6 @@ window.__recreo={
     }
     const fin=+resDin.toFixed(3); resDin=g;
     return { pasos:R, fin };
-  },
-  vigiaVer:()=>({ activo:VIGIA.activo, manual:VIGIA.manual, hecho:VIGIA.hecho, paso:VIGIA.paso,
-                  fase:VIGIA.fase, calidad, px:CAL[calidad].px, filtro,
-                  entradaChica:!!MANO.entradaChica, hist:VIGIA.hist.slice(-6) }),
-  /* =========================================================================================
-     QUE LE PIDE EL JUEGO AL DETECTOR EN CADA ESCENA
-
-     Es la prueba del ahorro mas grande que quedaba: que en los siete pasillos se mida UNA mano y no
-     dos, que las dos aparezcan solo cuando la respuesta pasa de cinco, y que el ritmo caiga a reposo
-     mientras el profesor camina. Se recorre la partida entera y se anota que se pidio en cada escena.
-     ========================================================================================= */
-  manoPedido:()=>{ manoAjustarPedido();
-    const q=manoLoQueHaceFalta();
-    return { escena:(GUION[escena_i]||{}).id||null, manos:q.manos, activo:q.activo,
-             pedidas:MANO.pedidas, hzTope:MANO.hzTope, tope:manoTope(), hay:MANO.hay,
-             escenaPide:MANO.escenaPide, cuenta:cuenta? cuenta.res : null }; },
-  /* =========================================================================================
-     LA PRUEBA DEL DEFECTO QUE REPORTO EL JUGADOR: "ahora la mano va lento y super lagueada".
-     El ritmo de reposo tiene que valer SOLO cuando no hay mano en cuadro. Con una mano puesta, el
-     tope tiene que ser el maximo aunque la escena no este pidiendo nada.
-     ========================================================================================= */
-  manoToparProbar:()=>{
-    const g={ hay:MANO.hay, pide:MANO.escenaPide };
-    const r=[];
-    for(const hay of [false,true]) for(const pide of [false,true]){
-      MANO.hay=hay; MANO.escenaPide=pide;
-      r.push({ hayMano:hay, escenaPide:pide, tope:manoTope() });
-    }
-    MANO.hay=g.hay; MANO.escenaPide=g.pide;
-    return r;
-  },
-  /* la partida entera, resumida: cuantas escenas piden dos manos y cuantas van en reposo */
-  manoPedidoPartida:(tope)=>{
-    /* OJO: NO se enciende MANO.on. El jugador automatico contesta por el teclado, y eso solo funciona
-       con las manos apagadas; encenderlas para "probar mejor" cuelga la partida en el tutorial —paso
-       que espera un gesto que nadie va a hacer. Lo que se audita es manoLoQueHaceFalta(), que es una
-       funcion del ESTADO DEL JUEGO y no del detector, asi que se puede preguntar con las manos
-       apagadas y contesta exactamente lo mismo. */
-    empezar();
-    const vistos={}; let pasos=0, dos=0, reposo=0, total=0, act=0;
-    let ult=null;
-    while(!terminado && pasos++<(tope||60000)){
-      const E=GUION[escena_i];
-      if(E && E.espera){ padPedido=(E.espera.tipo==='dedos')? E.espera.n : 1; }
-      else if(cuenta && !bloqueo){ padPedido=cuenta.res; }
-      if(bichosVivos>0){ if(TABLETA.on) tabAuto();
-                         else if(!(pasos%8)){ const g=actPuntoAuto(); if(g) TOQUES.push(g); } }
-      const id=(GUION[escena_i]||{}).id||'fin';
-      const q=manoLoQueHaceFalta();
-      if(id!==ult || (vistos[id] && vistos[id].manos!==q.manos)){
-        if(id!==ult){ ult=id; total++; if(!q.activo) reposo++; else act++; }
-        if(q.manos===2 && !(vistos[id]||{}).dos){ dos++; }
-        vistos[id]={ manos:q.manos, activo:q.activo, dos:q.manos===2 };
-      }
-      avanzar(1/60);
-    }
-    const claves=Object.keys(vistos);
-    return { escenas:total, conDosManos:dos, enReposo:reposo, activas:act,
-             muestra:claves.slice(0,8).reduce((o,k)=>(o[k]={manos:vistos[k].manos,
-                                                           activo:vistos[k].activo},o),{}) };
   },
   manoRitmo:()=>({ hz:MANO.hz, medidas:MANO.medidas, msDeteccion:+MANO.msDet.toFixed(2),
                    espejo:MANO.espejo, camara:MANO.camaraUsada,
@@ -922,6 +840,18 @@ window.__recreo={
     }
     return { pico:+pico.toFixed(4), rmsMedio:+(suma/Math.max(1,n)).toFixed(4),
              muestras:n, mudasPct:+(mudas/Math.max(1,n)*100).toFixed(0) };
+  },
+  /* la musica por aula: que progresion y que tempo toca en cada una */
+  musAulas:()=>{
+    const g={prog:MUS.prog, bpm:MUS.bpm, on:MUS.on};
+    const on=MUS.on; MUS.on=false;
+    const r=[];
+    for(let k=0;k<8;k++){ musicaAula(k); musicaNivel(Math.floor(k/2));
+      r.push({ aula:k+1, prog:MUS.prog, bpm:MUS.bpm, nivel:MUS.nivel,
+               bajo0:MUS_BAJO[0], bajo1:MUS_BAJO[1] }); }
+    MUS.on=on; MUS.prog=g.prog; MUS.bpm=g.bpm;
+    MUS_BAJO=MUS_PROGS[MUS.prog].bajo; MUS_ACORDE=MUS_PROGS[MUS.prog].ac;
+    return r;
   },
   musProbar:(v)=>{ if(!MUS.gan) return 'no hay';
     const t=AUD.ctx.currentTime;

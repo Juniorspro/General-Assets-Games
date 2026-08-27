@@ -211,6 +211,7 @@ function siguienteEscena(){
        el charles. Es el mismo tema todo el juego —cambiarlo por otro cada aula seria empezar de cero
        ocho veces— pero se va poblando, y eso se siente como que la escuela aprieta. */
     musicaNivel(Math.floor(aulaIdx/2));
+    musicaAula(aulaIdx);              // progresion, tempo y el giro que marca el cambio de aula
     cuenta=null; bloqueo=false;              // por si se entro de una prueba con una cuenta abierta
     LIBROS[0].g.visible=false;
     document.body.classList.add('clase');
@@ -270,7 +271,7 @@ function contestar(n){
     dice('dBien');
     pintarLibros();
     const l=LIBROS[0];
-    luegoDe(1.1, ()=>{ l.g.visible=false; cuenta=null; bloqueo=false;
+    luegoDe(0.7, ()=>{ l.g.visible=false; cuenta=null; bloqueo=false;
                        if(aulaK>=CUENTAS_AULA) terminarClase(); else ponerCuenta(); });
   } else {
     /* UNA CUENTA MAL Y TE MATA. No hay segundo intento y no es una decision de dificultad: es la
@@ -359,7 +360,7 @@ function terminarClase(){
   document.body.classList.remove('clase');
   const ultima=(aulaIdx>=TOUR.length-1);
   dice(ultima? 'dFin' : 'dSale'); son('listo');
-  luegoDe(ultima? 2.6 : 1.4, ()=>{ if(ultima) ganar(); else siguienteEscena(); });
+  luegoDe(ultima? 1.9 : 0.85, ()=>{ if(ultima) ganar(); else siguienteEscena(); });
 }
 function ganar(){
   terminado=1; jugando=false;
@@ -1432,7 +1433,7 @@ function pasoFijo(dt){
       bichosCerrado=true;
       dice('dBichosFin'); son('listo');
       bichosApagar();
-      luegoDe(0.9, ()=>siguienteEscena());
+      luegoDe(0.6, ()=>siguienteEscena());
       return;
     }
   }
@@ -1538,122 +1539,33 @@ function dibujar(alfa){
   pintarMiras();
   pintarEscena();
 }
-/* =========================================================================================
-   EL VIGIA: EL JUEGO SE MIDE SOLO Y SE BAJA LA CALIDAD SI HACE FALTA
-
-   El pedido fue "mejoralo aun mas, incluso para dispositivos mas gama baja". Y el agujero mas grande
-   no era una constante mal puesta: era que EL JUEGO ARRANCA EN 'media' Y AHI SE QUEDA. Los ajustes
-   existen desde hace vueltas y estan en el menu, pero nadie entra al menu a bajarse los graficos —
-   y menos alguien que no sabe que el problema son los graficos. Un ajuste que hay que descubrir para
-   que sirva, en la practica no existe.
-
-   De media a baja el pixel ratio pasa de 0,90 a 0,60, o sea 2,25 VECES MENOS PIXELES QUE RELLENAR, y
-   este juego esta limitado por relleno (todo pasa por el filtro de baja calidad, que ya dibuja a un
-   destino reducido). Es el escalon mas grande que hay y no lo estaba usando nadie.
-
-   TRES REGLAS, Y LAS TRES SON LECCIONES VIEJAS DE ESTE PROYECTO:
-
-   1. BAJAR A CIEGAS ES UNA APUESTA. En un aparato que NO esta limitado por relleno, bajar la
-      resolucion no gana nada y solo deja la imagen mas blanda — medido en Maicol: de 590 mil a 389
-      mil pixeles, 29,45 -> 29,60 cuadros por segundo, o sea CERO. Asi que despues de cada escalon se
-      vuelve a medir, y si no gano al menos un 8% SE VUELVE PARA ARRIBA y no se toca mas.
-   2. NO SE MIDE EL PRIMER SEGUNDO. Los primeros cuadros de una partida traen la compilacion de
-      shaders, la subida de texturas y el primer paso de MediaPipe: medir ahi es medir el arranque y
-      concluir que el aparato es lento cuando lo unico lento fue empezar.
-   3. SI EL JUGADOR ELIGE, EL VIGIA SE CALLA. Ver el onclick de [data-cal].
-   ========================================================================================= */
-const VIGIA={ activo:true, manual:false, fase:'espera', t0:0, n:0, suma:0,
-              fpsBase:0, fpsAnt:0, paso:0, hist:[], hecho:false, calAnt:null };
-const VIG_ESPERA=1.2;        // segundos que se dejan pasar antes de empezar a medir
-const VIG_CUADROS=75;        // cuantos cuadros entran en cada medicion
-const VIG_META=50;           // por encima de esto no hay nada que arreglar
-const VIG_GANANCIA=1.08;     // un escalon tiene que dar al menos un 8% para quedarse
-/* la escalera, de menos a mas agresiva. Cada escalon dice como aplicarse y como deshacerse. */
-const VIG_PASOS=[
-  { nombre:'calidad-baja',
-    puede:()=>calidad==='media'||calidad==='alta',
-    hacer:()=>{ VIGIA.calAnt=calidad; aplicarCal('baja'); },
-    deshacer:()=>aplicarCal(VIGIA.calAnt||'media') },
-  { nombre:'deteccion-chica',
-    puede:()=>MANO.on && !MANO.entradaChica,
-    hacer:()=>manoEntradaChica(true),
-    deshacer:()=>manoEntradaChica(false) },
-  { nombre:'calidad-minima',
-    puede:()=>calidad!=='minima',
-    hacer:()=>{ VIGIA.calAnt=calidad; aplicarCal('minima'); },
-    deshacer:()=>aplicarCal(VIGIA.calAnt||'baja') }
-];
-function vigiaTick(dt){
-  if(!VIGIA.activo || VIGIA.manual || VIGIA.hecho || !jugando) return;
-  /* LA RESOLUCION DINAMICA TIENE PRIORIDAD SOBRE EL VIGIA, y el orden importa: bajar resolucion no le
-     saca nada al jugador —el juego ya es pixelado— mientras que los escalones del vigia le apagan los
-     lockers y le acortan la niebla, que es contenido. Asi que mientras a la resolucion le quede
-     margen, el vigia espera; solo entra cuando ya toco fondo y aun asi no alcanza. */
-  if(resDin>RES_MIN+0.001){ VIGIA.t0+=dt; return; }
-  VIGIA.t0+=dt;
-  if(VIGIA.t0<VIG_ESPERA) return;
-  /* un cuadro larguisimo —una pestaña que volvio, el recolector de basura— no dice nada del aparato */
-  if(dt>0.25) return;
-  VIGIA.suma+=dt; VIGIA.n++;
-  if(VIGIA.n<VIG_CUADROS) return;
-  const fps=VIGIA.n/VIGIA.suma;
-  VIGIA.n=0; VIGIA.suma=0;
-  VIGIA.hist.push({ paso:VIGIA.paso, fps:+fps.toFixed(1), calidad, chica:!!MANO.entradaChica });
-  if(VIGIA.fase==='espera'){
-    VIGIA.fpsBase=fps; VIGIA.fpsAnt=fps;
-    if(fps>=VIG_META){ VIGIA.hecho=true; return; }      // va bien: no se toca nada
-    VIGIA.fase='probando';
-    vigiaSiguiente();
-    return;
-  }
-  /* venimos de aplicar un escalon: ¿sirvio? */
-  if(fps < VIGIA.fpsAnt*VIG_GANANCIA){
-    const P=VIG_PASOS[VIGIA.paso-1];
-    if(P) P.deshacer();
-    VIGIA.hist.push({ revertido:P? P.nombre : null, fps:+fps.toFixed(1) });
-    VIGIA.hecho=true; return;
-  }
-  VIGIA.fpsAnt=fps;
-  if(fps>=VIG_META){ VIGIA.hecho=true; return; }        // ya alcanza
-  vigiaSiguiente();
-}
-function vigiaSiguiente(){
-  while(VIGIA.paso<VIG_PASOS.length){
-    const P=VIG_PASOS[VIGIA.paso++];
-    if(P.puede()){ P.hacer(); return; }
-  }
-  VIGIA.hecho=true;                                     // no queda nada que bajar
-}
+/* EL VIGIA SE FUE ENTERO, Y LO PIDIO EL JUGADOR: "que no se baje automaticamente los graficos".
+   Tenia razon y ademas se habia vuelto redundante. Bajaba la calidad por escalones —apagaba los
+   lockers, acortaba la niebla—, o sea que le sacaba COSAS QUE SE VEN a quien menos podia. Desde que
+   existe la resolucion dinamica eso no hace falta: lo que cuesta es el relleno de pixeles y eso se
+   ajusta solo sin tocar nada de lo que hay en el colegio. La calidad ahora la elige el jugador en el
+   menu y NADIE se la cambia por atras. */
 
 /* =========================================================================================
    LO QUE EL DETECTOR TIENE QUE HACER SALE DE LO QUE EL JUEGO ESTA PIDIENDO
 
-   Dos numeros, y los dos venian clavados como constantes:
-
    CUANTAS MANOS. Dos manos solo hacen falta cuando la respuesta pasa de cinco, porque seis dedos no
    entran en una mano. Eso pasa en el aula y en un paso del tutorial. En los siete pasillos —pinza,
-   arrastre, dibujo— no hay una sola actividad que necesite dos, y sin embargo se estaban midiendo
-   las dos todo el juego, pagando el modelo de puntos dos veces.
+   arrastre, dibujo— no hay una sola actividad que necesite dos, y medirlas cuesta el modelo de puntos
+   dos veces.
 
-   A QUE RITMO. Mientras el profesor camina y habla, el jugador no tiene nada que contestar: la mano
-   no decide nada y ni siquiera hace falta que se vea. Medir 24 veces por segundo para dibujar una
-   mano que no hace nada es el gasto mas facil de sacar que queda, y es la mayor parte del juego —
-   los pasillos son largos. Se baja a un ritmo de reposo y se vuelve al normal en cuanto hay algo que
-   contestar, con margen: si el ritmo subiera recien cuando el jugador ya levanto la mano, el primer
-   gesto de cada aula llegaria tarde.
+   A QUE RITMO. La escena solo APORTA: dice que esta pidiendo algo. Quien decide el ritmo es
+   manoTope(), que mira ademas si hay una mano en cuadro — y si la hay, va a fondo aunque la escena no
+   pida nada, que fue el defecto de la vuelta anterior.
    ========================================================================================= */
 function manoLoQueHaceFalta(){
   const E=GUION[escena_i];
-  /* una cuenta abierta: dos manos si la respuesta pasa de cinco */
   if(cuenta && !bloqueo) return { manos:(cuenta.res>5? 2 : 1), activo:true };
-  /* un paso del tutorial que espera un gesto o un numero */
   if(E && E.espera){
     const n=(E.espera.tipo==='dedos')? (E.espera.n||1) : 1;
     return { manos:(n>5? 2 : 1), activo:true };
   }
-  /* una actividad de pasillo: siempre con una mano */
   if(bichosVivos>0) return { manos:1, activo:true };
-  /* el aula, aunque todavia no haya libro abierto: en un segundo lo va a haber */
   if(E && E.clase!=null) return { manos:1, activo:true };
   return { manos:1, activo:false };
 }
@@ -1661,8 +1573,6 @@ function manoAjustarPedido(){
   if(!MANO.on) return;
   const q=manoLoQueHaceFalta();
   manoPedirManos(q.manos);
-  /* la escena solo APORTA: dice que esta pidiendo algo. Quien decide el ritmo es manoTope(), que
-     mira ademas si hay una mano en cuadro — y si la hay, va a fondo aunque la escena no pida nada. */
   MANO.escenaPide=q.activo;
   if(MANO.escenaPide && MANO.hz<(MANO.hzMax||24)) MANO.hz=MANO.hzMax||24;
 }
@@ -1679,7 +1589,6 @@ function bucle(){
   avanzar(dt);
   dibujar(Math.min(1, acum/PASO));
   resTick(dt);
-  vigiaTick(dt);
 }
 ajustar(); aplicarCal(calidad); aplicarFiltro(filtro); usarCajas();
 addEventListener('resize', ajustar);

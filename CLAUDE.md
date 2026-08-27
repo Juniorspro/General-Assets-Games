@@ -664,6 +664,64 @@ en un teléfono real la palma se ve bastante más grande o más chica que eso, e
 correcto en su forma —es una proporción— pero el punto donde vale 1 se corre, y con él el ajuste fino
 de la zona muerta. Se corrige con un solo número si hace falta.
 
+### Trigésima quinta vuelta (2026-08-27): **RECREO** — nadie te baja los gráficos, y el colegio deja de ser lento
+
+Pedido: *"que no se baje automáticamente los gráficos, volvé a optimizar todo, y mejorá el movimiento y
+la velocidad con el cambio de salones así no se vuelve tan aburrido; e intentá generar música con
+Higgsfield, yo sé que se puede"*.
+
+#### EL VIGÍA SE FUE ENTERO
+
+Bajaba la calidad por escalones —apagaba los lockers, acortaba la niebla—, o sea que **le sacaba cosas
+que se ven a quien menos podía**. Y desde que existe la resolución dinámica ya no hacía falta: lo que
+cuesta es el relleno de píxeles y eso se ajusta solo **sin tocar nada de lo que hay en el colegio**. La
+calidad la elige el jugador en el menú y nadie se la cambia por atrás. Se fue también el escalón
+`minima`, que sólo existía como destino del vigía: un escalón que nadie puede elegir y que aparece
+cuando el juego decide bajarte los gráficos es exactamente lo que se pidió sacar.
+
+#### EL COLEGIO SE MUEVE UN 29 % MÁS RÁPIDO
+
+El tramo más largo son catorce celdas = 58,8 m; a 2,6 m/s eran veintitrés segundos de pasillo, y
+aunque la actividad cae en la mitad, las dos mitades siguen siendo caminata. A **3,7** el mismo tramo
+son dieciséis segundos. El profesor sube en la misma proporción (3,0 → 4,2) para que siga llegando
+antes que la cámara, y **el ciclo de la caminata no hubo que tocarlo**: `CAMINA_W` sale de la
+velocidad, así que la zancada se acomoda sola — eso es lo que se ganó cuando se derivó en su momento.
+Más las esperas de escena recortadas un tercio.
+
+Medido, la partida completa: **19.736 pasos → 14.062**, o sea de ~5,5 minutos a ~3,9 con exactamente el
+mismo contenido. Y 0 pasos dentro de paredes en 14.078, que era el riesgo de subir la velocidad.
+
+#### LA MÚSICA: TRES PROGRESIONES, EL TEMPO QUE SUBE, Y UN GIRO AL CAMBIAR DE AULA
+
+Había **una** vuelta de cuatro compases para toda la partida. Ahora hay tres progresiones que comparten
+escala y bajo, así que cambiar de una a otra no suena a "empezó otra canción" —eso cortaría la partida
+en pedazos— sino a que la misma pieza dobló la esquina. Se eligen por aula, así que **ninguna suena dos
+aulas seguidas**: 0·1·2·0·1·2·0·1. El tempo sube de 92 a 116 de a seis pulsos, que es poco a propósito:
+un salto grande se oye como que cambió la música, y lo que tiene que oírse es que el colegio aprieta.
+
+Y al entrar a cada aula suena un **giro corto** que marca el cambio. Sin él la progresión nueva empieza
+en medio de la anterior y no se percibe que pasó algo — se percibe que la música se equivocó.
+
+**UN DEFECTO PROPIO, Y DE LOS SILENCIOSOS:** cambié la forma de `MUS_BAJO` de pares `[frecuencia,
+grado]` a una lista plana de frecuencias, y dejé los tres accesos como `MUS_BAJO[compas][0]` —
+indexar un número da `undefined`, y eso entra al grafo de audio como `setValueAtTime(NaN)`. La consola
+lo cantó; a oído habría sido "la música dejó de sonar en algún momento".
+
+#### LA MÚSICA GENERADA: LA BUSQUÉ Y NO LA VOY A FORZAR
+
+El modelo existe en esta cuenta —`sonilo_music`, texto a música— pero está declarado **"game pipeline
+only"** y la herramienta dice explícitamente que no se use para audio suelto. Busqué además en el
+mercado de apps (`apps_search "music"`): no hay ninguna. O sea que no es que no lo intenté: la
+restricción es de la plataforma y no la voy a rodear. Lo que sí se puede hacer bien es lo de arriba, y
+encima pesa **cero bytes** y puede cambiar con el aula, que un archivo suelto no puede.
+
+#### MEDIDO AL CERRAR
+
+Partida completa **24 de 24** dos veces (limpia y después de morir), 0 pasos dentro de paredes en
+14.078, `window.__errs` vacío. Música sonando con rms 0,034 y **0 % de muestras mudas**. Retardo de la
+mano plano a toda distancia (9 ms) con atenuación 4,10, las tres pruebas de reparto y la del espejo en
+verde, diagonal perfecta en el puntuador de la tableta, y `vigiaVer` ya no existe.
+
 ### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
 
 Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo
