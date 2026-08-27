@@ -38,6 +38,10 @@ def main():
     vp = os.path.join(RAIZ, 'herramientas', 'recreo', 'voz', 'voz.json')
     voz = io.open(vp, encoding='utf8').read().strip() if os.path.exists(vp) else '{}'
     s = s.replace('__VOZ_JSON__', voz, 1)
+    # los cuatro temas generados, horneados por hornear_musica.py
+    mp_ = os.path.join(RAIZ, 'herramientas', 'recreo', 'musica', 'musica.json')
+    mus = io.open(mp_, encoding='utf8').read().strip() if os.path.exists(mp_) else '{}'
+    s = s.replace('__MUSICA_JSON__', mus, 1)
     # EL ARTE DEL MENU. Van como data URI por lo mismo que todo lo demas: el juego se sube como UN
     # archivo HTML y no puede depender de que un servidor le sirva nada al lado. Los tres suman 41 KB.
     for clave, arch in (('__MENU_FONDO__',  'menu_fondo.webp'),

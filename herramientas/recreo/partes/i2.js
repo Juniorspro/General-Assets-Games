@@ -190,6 +190,9 @@ function siguienteEscena(){
   }
   bichosCerrado=false;
   manoAjustarPedido();
+  /* el tema que toca sale del estado del juego, y se revisa en cada borde de escena: es donde cambia
+     de aula a pasillo y de pasillo a aula */
+  musGAlDia();
   /* si quedo algo de la tanda anterior, se apaga: un blanco suelto adentro de un aula es un blanco
      que nadie puede pinzar y una escena que no termina nunca */
   if(!E.act && bichosVivos>0) bichosApagar();

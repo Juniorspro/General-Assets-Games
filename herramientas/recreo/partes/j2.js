@@ -853,6 +853,12 @@ window.__recreo={
     MUS_BAJO=MUS_PROGS[MUS.prog].bajo; MUS_ACORDE=MUS_PROGS[MUS.prog].ac;
     return r;
   },
+  /* la musica generada: cuantos temas decodificaron y cual esta sonando */
+  musGVer:()=>({ decodificados:MUSG.n, temas:Object.keys(MUSG.buf),
+                 sonando:MUSG.nombre, deberia:musGDeEscena(),
+                 duraciones:Object.keys(MUSG.buf).reduce((o,k)=>(o[k]=+MUSG.buf[k].duration.toFixed(2),o),{}),
+                 procedural:MUS.on }),
+  musGPoner:(n)=>({ puesto:musGPoner(n), sonando:MUSG.nombre }),
   musProbar:(v)=>{ if(!MUS.gan) return 'no hay';
     const t=AUD.ctx.currentTime;
     MUS.gan.gain.cancelScheduledValues(t);

@@ -722,6 +722,61 @@ Partida completa **24 de 24** dos veces (limpia y después de morir), 0 pasos de
 mano plano a toda distancia (9 ms) con atenuación 4,10, las tres pruebas de reparto y la del espejo en
 verde, diagonal perfecta en el puntuador de la tableta, y `vigiaVer` ya no existe.
 
+### Trigésima sexta vuelta (2026-08-27): **RECREO** — la música SÍ se puede generar, y me equivoqué
+
+Reporte, de una línea: *"damn hermano, pero para Maicol sí generaste música"*.
+
+**Tenía razón y el error fue mío.** La vuelta anterior dije que no se podía, apoyándome en que
+`sonilo_music` está marcado *"game pipeline only"* y en que la herramienta pide no usarlo para audio
+suelto. Me quedé con la lectura más estrecha de una nota en vez de comprobarlo — y la prueba de que
+estaba mal la tenía en el propio repo: los temas de Maicol son **M4A de un mega generados con este
+mismo proveedor**, y `herramientas/maicol/armar_audio.py` existe justamente para hornearlos. Lo
+intenté en vez de discutirlo y **funcionó a la primera**.
+
+La lección no es sobre el modelo: es que cuando el usuario dice "yo sé que se puede" y hay evidencia en
+el repo, lo que corresponde es probar, no citar la documentación.
+
+#### CUATRO TEMAS, 245 KB LOS CUATRO
+
+`aula` · `pasillo` · `final` · `menu`, generados con `sonilo_music` y horneados con
+`herramientas/recreo/hornear_musica.py`. El tema sale del estado del juego y no de quien llama, así que
+no hay dos sitios que puedan pedir cosas distintas a la vez, y se cruzan con un fundido de 0,9 s.
+
+**Tres cosas del horneado, y las tres se aprendieron antes:**
+
+- **El empalme del bucle es lo que más se nota.** Un tema cortado en seco y puesto a repetir da un
+  golpe seco en cada vuelta, y ese golpe se escucha *más* que la música. Se funde la cola sobre la
+  cabeza — el mismo problema que la costura de una textura, en una dimensión.
+- **Va con `BufferSource` y no con un `<audio loop>`**: el loop de un `<audio>` vuelve al cero con un
+  hueco de milisegundos, y en un tema de trece segundos ese hueco se escucha en cada vuelta.
+- **Y LO PROCEDURAL NO SE BORRA.** Queda de respaldo: si un navegador no decodifica el MP3, sin
+  respaldo el juego se queda mudo. Ya pasó una vez con el audio de Campo de Tiro.
+
+#### DOS COSAS QUE LA MEDICIÓN CORRIGIÓ
+
+1. **El volumen venía del archivo y no de la mezcla.** Los temas están normalizados y a ganancia 1 el
+   analizador daba **rms 0,166**: más fuerte que la voz de Baldi (0,067) y más de la mitad del grito
+   (0,280), o sea que la música habría tapado justo las dos cosas a las que hay que prestar atención.
+   La escala de esta mezcla ya estaba fijada hace vueltas y la música va abajo de todo: a 0,24 queda en
+   **0,039**.
+2. **Normalizar por PICO deja los temas con distinta sonoridad.** Medido en el juego, con los cuatro al
+   mismo pico el del aula daba rms 0,0226 y el del pasillo 0,0501 — **el doble**, o sea que cambiar de
+   pasillo a aula sonaba a que alguien bajaba el volumen. Un tema denso y uno espaciado con el mismo
+   pico no se escuchan igual; lo que sigue el oído es la energía media. Igualados por **rms** (0,16
+   ±0,003 los cuatro, verificado decodificando los MP3), el pico pasa a ser sólo un techo.
+
+   Y el resto de diferencia que sigue apareciendo al medir en vivo **no es de nivel**: es que la ventana
+   del analizador cae en distintos pedazos de cada bucle, y un tema con pausas mide menos en una
+   ventana de segundo y medio aunque su energía total sea la misma.
+
+#### MEDIDO AL CERRAR
+
+Los cuatro temas decodifican, suenan y se cambian solos según la escena (pasillo → `pasillo`, aula →
+`aula`), **0 % de muestras mudas**, `procedural:false` mientras hay tema generado. Partida completa
+**24 de 24** dos veces, 0 pasos dentro de paredes, `window.__errs` vacío, retardo de la mano plano a
+toda distancia y diagonal perfecta en el puntuador. El HTML pasa de 1,56 a **1,89 MB**, y esos 330 KB
+son la música.
+
 ### Vigesimosexta vuelta (2026-08-27): **RECREO** — el temblor, las dos manos fantasma y el diálogo hablado
 
 Reporte: *"la interpolación está bien pero tiembla mucho y se crean dos manos eso hace que el conteo

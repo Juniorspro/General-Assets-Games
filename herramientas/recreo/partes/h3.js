@@ -27,6 +27,7 @@ let vozLista=false;
 function vozCargar(){
   if(!AUD.ctx || vozLista) return;
   vozLista=true;
+  musGCargar();          // los temas se decodifican junto con la voz, una sola vez
   for(const k in VOZ_DATOS){
     const b64=VOZ_DATOS[k].split(',')[1];
     if(!b64) continue;
@@ -220,8 +221,104 @@ function musAgendar(){
     MUS.paso = (MUS.paso+1) & 31;
   }
 }
+/* =========================================================================================
+   LA MUSICA GENERADA, Y UNA CORRECCION MIA
+
+   La vuelta pasada dije que no se podia generar musica en esta cuenta, apoyandome en que el modelo
+   `sonilo_music` esta marcado "game pipeline only". El jugador me contesto que para Maicol SI la
+   habia generado, y tenia razon: los temas de Maicol son M4A de un mega generados con este mismo
+   proveedor. Lo probe en vez de discutirlo y funciono a la primera. Me habia quedado con la lectura
+   mas estrecha de una nota en vez de comprobar.
+
+   Cuatro temas de sonilo_music, recortados a un pedazo que da la vuelta, cosidos por la costura y
+   horneados a MP3 mono de 22 kHz: 245 KB los cuatro. La musica procedural NO SE BORRA — queda de
+   respaldo, y no por prolijidad: si un navegador no decodifica el MP3, sin respaldo el juego se queda
+   mudo, y ya paso una vez con el audio de Campo de Tiro.
+
+   POR QUE BufferSource Y NO UN <audio> CON loop: el loop de un <audio> vuelve al cero del archivo con
+   un hueco de milisegundos, y en un tema de trece segundos ese hueco se escucha en CADA vuelta. Un
+   BufferSource con loop=true empalma exacto.
+   ========================================================================================= */
+const MUS_DATOS=__MUSICA_JSON__;
+/* EL VOLUMEN SALE DE LA MEZCLA QUE YA ESTABA MEDIDA, no de lo que trae el archivo.
+   Los temas vienen normalizados a 0,89 de pico, y puestos a ganancia 1 el analizador daba rms 0,166:
+   mas fuerte que la voz de Baldi (0,067) y mas de la mitad del grito (0,280), o sea que la musica
+   habria tapado justo las dos cosas a las que hay que prestarles atencion. La escala de esta mezcla
+   ya estaba fijada hace vueltas y la musica va abajo de todo. */
+const MUSG_VOL=0.24;
+const MUSG={ buf:{}, fuente:null, gan:null, nombre:null, listo:false, n:0 };
+function musGCargar(){
+  if(!AUD.ctx || MUSG.listo) return;
+  MUSG.listo=true;
+  for(const k in MUS_DATOS){
+    const b64=(MUS_DATOS[k]||'').split(',')[1];
+    if(!b64) continue;
+    try{
+      const bin=atob(b64), n=bin.length, u=new Uint8Array(n);
+      for(let i=0;i<n;i++) u[i]=bin.charCodeAt(i);
+      AUD.ctx.decodeAudioData(u.buffer, (buf)=>{ MUSG.buf[k]=buf; MUSG.n++; }, ()=>{});
+    }catch(e){}
+  }
+}
+/* pone un tema y funde el anterior. Si ese tema no decodifico, DEVUELVE FALSO y quien llama se queda
+   con lo procedural: media musica es peor que la otra, pero silencio es peor que las dos. */
+function musGPoner(nombre, seg){
+  if(!AUD.ctx || !MUSG.buf[nombre]) return false;
+  if(MUSG.nombre===nombre && MUSG.fuente) return true;
+  const c=AUD.ctx, t=c.currentTime, d=seg==null? 0.9 : seg;
+  if(!MUS.gan){ MUS.gan=c.createGain(); MUS.gan.gain.value=0; MUS.gan.connect(AUD.m); }
+  const viejo=MUSG.fuente, vGan=MUSG.gan;
+  if(viejo && vGan){
+    vGan.gain.cancelScheduledValues(t);
+    vGan.gain.setValueAtTime(vGan.gain.value, t);
+    vGan.gain.linearRampToValueAtTime(0, t+d);
+    try{ viejo.stop(t+d+0.05); }catch(e){}
+  }
+  const g=c.createGain(); g.gain.value=0; g.connect(MUS.gan);
+  const f=c.createBufferSource();
+  f.buffer=MUSG.buf[nombre]; f.loop=true; f.connect(g);
+  f.start(t);
+  g.gain.linearRampToValueAtTime(MUSG_VOL, t+d);
+  MUSG.fuente=f; MUSG.gan=g; MUSG.nombre=nombre;
+  return true;
+}
+function musGParar(seg){
+  if(!AUD.ctx || !MUSG.fuente) return;
+  const t=AUD.ctx.currentTime, d=seg==null? 0.6 : seg;
+  if(MUSG.gan){
+    MUSG.gan.gain.cancelScheduledValues(t);
+    MUSG.gan.gain.setValueAtTime(MUSG.gan.gain.value, t);
+    MUSG.gan.gain.linearRampToValueAtTime(0, t+d);
+  }
+  try{ MUSG.fuente.stop(t+d+0.05); }catch(e){}
+  MUSG.fuente=null; MUSG.gan=null; MUSG.nombre=null;
+}
+/* QUE TEMA VA AHORA, decidido por el estado del juego y no por quien llama: asi no hay dos sitios que
+   puedan pedir temas distintos al mismo tiempo. */
+function musGDeEscena(){
+  if(!jugando) return 'menu';
+  if(bichosVivos>0) return 'pasillo';
+  if(aulaIdx>=5) return 'final';
+  const E=GUION[escena_i];
+  if(E && (E.clase!=null || cuenta)) return 'aula';
+  return 'pasillo';
+}
+function musGAlDia(){
+  const q=musGDeEscena();
+  if(musGPoner(q)){
+    /* con tema generado, lo procedural se calla: sonarian los dos encima */
+    if(MUS.on) musicaParar(0.5);
+    return true;
+  }
+  return false;
+}
+
 function musicaEmpezar(){
-  if(!AUD.ctx || MUS.on) return;
+  if(!AUD.ctx) return;
+  /* si hay tema generado para este momento, se usa ese y no se enciende lo procedural */
+  musGCargar();
+  if(musGAlDia()) return;
+  if(MUS.on) return;
   if(!MUS.gan){ MUS.gan=AUD.ctx.createGain(); MUS.gan.gain.value=0; MUS.gan.connect(AUD.m); }
   if(!MUS.pad) padArmar();
   MUS.on=true; MUS.paso=0; MUS.prox=AUD.ctx.currentTime+0.1;
@@ -267,6 +364,7 @@ function musicaNivel(n){ MUS.nivel=Math.max(0, Math.min(3, n)); }
    cambio: sin el, la progresion nueva empieza en medio de la anterior y no se percibe que paso algo —
    se percibe que la musica se equivoco. Con el giro, el cambio de aula SUENA a cambio de aula. */
 function musicaAula(idx){
+  if(musGAlDia()) return;            // con musica generada, la progresion procedural no hace falta
   MUS.prog = idx % MUS_PROGS.length;
   MUS_BAJO = MUS_PROGS[MUS.prog].bajo;
   MUS_ACORDE = MUS_PROGS[MUS.prog].ac;
