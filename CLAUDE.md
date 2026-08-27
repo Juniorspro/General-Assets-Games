@@ -14,10 +14,11 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   el usuario lo quiere guardado para retomarlo. Sus pendientes son la lista de abajo.
 - **`Maicol.html` es "Maicol"** (~300 KB, de los cuales ~200 KB son los sprites y los fondos).
   Plataformas 2D, siete niveles, hay que rescatar a Maicolito. Arte generado con Higgsfield.
-- **`Pelusa.html` es "Pelusa"** (~48 KB, sin un solo asset: todo se dibuja por código). Juego 2D de
-  tranquilidad: la pelusa está pegada a un punto, hay una línea recta marcada hasta el siguiente y
-  alrededor de ese punto giran bolas con espinas. Se toca y sale; si una espina la toca en el camino,
-  vuelve. **6 mundos × 20 niveles = 120**, procedurales con semilla y **validados uno por uno**.
+- **`Pelusa.html` es "Pelusa"** (~81 KB, sin un solo asset: todo se dibuja por código, incluidos la
+  historia, el fondo y la música). Juego 2D de tranquilidad: la pelusa está pegada a un punto, hay
+  una línea recta marcada hasta el siguiente y alrededor de ese punto giran bolas con espinas. Se
+  toca y sale; si una espina la toca en el camino, vuelve. **8 mundos × 20 niveles = 160**,
+  procedurales con semilla y **validados uno por uno** — y jugados solos de punta a punta.
   Pedido textual: *"un juego 2D de tranquilidad, de 20 niveles y 6 mundos ... apretamos y nuestro
   muñequito peludo se moverá hacia un punto ya que pasará por una línea recta marcada, pero hay que
   tener cuidado ya que al punto en el que quiere ir hay bolas malas con espinas girando alrededor de
@@ -29,6 +30,141 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Decimosexta vuelta (2026-08-27): **Pelusa, segunda pasada** — pelo, fondo, historia y música
+
+Pedido textual: *"ahora sí agrega más pelo y físicas mejores fondos parallax también más enemigos
+niveles mapas etc etc etc y mejor menú we y una historia que aparece siempre al inicio, música
+tranquilizadora sonidos tranquilos todo hermoso yayaya"*. Todo con
+`herramientas/pelusa/parche_grande.py`, que es idempotente y **reproduce el archivo entero desde el
+commit anterior** (verificado: parchear `9116b3a` da el mismo md5 que lo que está en disco).
+
+#### LA PRUEBA DE LA VUELTA: **160 de 160 NIVELES JUGADOS SOLOS, 880 SALTOS, CERO CHOQUES**
+
+Es la única afirmación que importa y es la que hace que las cinco formas nuevas se puedan dar por
+buenas. **Todas las formas pasan por `chocaRotor()` y por nada más**: el validador que decide si un
+nivel se puede pasar y el choque de verdad llaman a la misma función. Si fueran dos cuentas, el
+validador estaría aprobando un juego que no existe — y el auto-jugador chocaría. No choca ninguna vez.
+
+| | |
+|---|---|
+| auditoría de los 160 | 2,70 s |
+| jugarlos solos | 6,8 s, 880 saltos, **0 choques**, 160/160 terminados |
+| ventana más angosta usada | 0,071 s |
+
+Y la ventana peor de cada mundo le gana a su propio mínimo: 1,010 · 0,635 · 0,250 · 0,187 · 0,156 ·
+0,146 · 0,115 · 0,115 contra mínimos de 0,239 · 0,218 · 0,197 · 0,176 · 0,155 · 0,134 · 0,113 · 0,092.
+
+#### CINCO ENEMIGOS, Y UNO CASI SALE IMPOSIBLE
+
+`bola` (850) · `doble`, la bola y su antípoda (440) · `barra`, una hélice de dos brazos (303) ·
+`cometa`, con tres bolitas de cola (129) · `satélite`, con una luna que gira encima (127).
+
+**LA HÉLICE NO PUEDE LLEGAR AL CENTRO, y es aritmética.** El nodo es el centro de giro y también es
+donde aterriza la pelusa: una barra que pase por el centro convierte *llegar* en *chocar* siempre,
+gire como gire, y ningún ajuste de velocidad lo arregla. Los brazos arrancan a **0,86** del centro y
+la pelusa mide 0,42 + 0,22 de barra = **0,64**: quedan 22 cm de aire en el punto de llegada.
+
+**Y EL PULSO TAMPOCO.** Un anillo con `tipo:'pulso'` encoge su radio; con radio 1,15 y amplitud 0,58
+la bola pasaba **por encima del nodo**. Va topado a `pa ≤ r − 1,05`, y si lo que queda es menor a
+0,05 el rotor vuelve a fijo — un pulso de dos centímetros no se ve, sólo cuesta.
+
+#### EL PELO: 118 MECHONES Y **DESVÍO DE 0,0021 A 0,3251**
+
+De 62 mechones de tres tramos a **118 de cuatro**. El número no es capricho: con 62 sobre un círculo
+de 0,42 hay una cerda cada 6 grados y el contorno se cuenta de a una — es un peine, no una pelusa.
+
+Dos cosas nuevas y las dos salen de la **velocidad del cuerpo**, que se mide restando la posición del
+cuadro anterior (el vuelo es una interpolación, así que no hay otra forma honesta de saberla):
+1. **VIENTO**: el aire empuja el pelo hacia atrás mientras avanza. Sin esto el mechón sólo se atrasa
+   por inercia, y la inercia se agota en dos cuadros: el latigazo dura un pestañeo y después el pelo
+   va tieso a 12 unidades por segundo, que es exactamente lo que el pelo no hace.
+2. **LA RIGIDEZ AFLOJA CON LA VELOCIDAD**: quieta es un cardo, disparada se peina sola.
+
+Medido con `__pelusa.pelo()`, que compara cada punta contra dónde estaría un pelo tieso:
+
+| | desvío de la punta | largo recto del mechón |
+|---|---|---|
+| quieta | **0,0021** | 0,23 |
+| a 9,02 u/s | **0,3251** (155×) | 0,19 (se enrosca) |
+
+Y **tres trazos por cuadro y no 118**: los mechones van agrupados en tres grosores y cada grupo es un
+solo `stroke()`. Cada stroke es una orden de dibujo; 118 por cuadro a 60 por segundo son siete mil
+órdenes por segundo para dibujar lo mismo. Con curva de Bézier por tramo, porque una polilínea de
+cuatro segmentos en un mechón de 25 píxeles muestra los tres codos y el pelo queda de alambre.
+
+#### EL FONDO: CUATRO CAPAS, Y SE REPITEN POR MÓDULO
+
+Velocidades 0,045 · 0,130 · 0,300 · 0,560. Con una sola capa quieta detrás, subir doce unidades y
+subir una se ven igual: no hay nada respecto de lo cual moverse, así que la pelusa no sube, la
+pantalla se desliza.
+
+**Se repiten por módulo sobre 42 unidades** y no se generan sin fin: un nivel del mundo 8 son 40
+unidades de alto y una lista que no se repita nunca serían cientos de objetos por nivel para algo que
+está al 40% de opacidad. Con 42 —más alto que las ~18 que ve la pantalla— la costura no cae nunca
+adentro del cuadro. 60 objetos por mundo, y un par de grises por mundo: el fondo cambia de
+**temperatura**, no de color.
+
+**LAS OPACIDADES SE BAJARON DESPUÉS DE MIRAR UNA FOTO**, no antes: con 0,55 y 0,62 los discos lentos
+competían con la línea de puntos —que es el enunciado del nivel— y el cuadro se leía a burbujas.
+
+#### OCHO MUNDOS Y CUATRO TRAZADOS
+
+De 6×20 a **8×20 = 160**. Y los caminos ya no son todos zigzag: `zigzag`, `ancho`, `columna` y
+`espiral`, elegidos por **mundo + nivel**, así que dentro de un mundo los veinte no se parecen entre
+sí. Un mundo entero de zigzag son veinte niveles que se sienten uno.
+**Siempre se sube**: un paso de costado se paga alargando la separación, no achatando la subida — con
+un salto casi horizontal la cámara no acompaña y el nivel se lee a pasillo.
+
+#### LA HISTORIA, SIEMPRE Y DIBUJADA
+
+Cinco planos al arrancar, salteables en un toque y repetibles desde el menú. **Por qué siempre**: el
+juego no dice una sola palabra mientras se juega —no hay reloj, ni puntaje, ni texto— y sin la
+historia lo único que el jugador sabe es que hay una bolita y unas espinas.
+Y está **dibujada en un lienzo**, con la misma tinta y el mismo rojo de peligro que el juego: no hay
+una sola foto en todo el archivo y no la va a haber, porque una foto pegada arriba de un juego de dos
+colores se ve pegada arriba. El lienzo se achica **por los dos lados** (`max-width` y `max-height` en
+un elemento reemplazado, que respeta la proporción solo): con el ancho fijo, en una ventana de 460 px
+el plano se comía 300 y el texto y el botón se salían del panel.
+
+#### LA MÚSICA ESTÁ MEDIDA, COMO EN ECO
+
+Un acorde que no termina nunca: cuatro senos (fundamental, quinta, octava, novena) **doblados y
+desafinados un 0,23 por mil** respecto de su gemelo. Ese desajuste minúsculo es todo el truco: dos
+senos idénticos suenan a tono de prueba de audio, y dos que baten cada pocos segundos suenan a
+instrumento. Encima, un pasabajos que se abre y se cierra a **0,055 Hz** —una vuelta cada dieciocho
+segundos— que es lo que hace que respire en vez de zumbar. Cada mundo **transporta la raíz**, no
+cambia de tema: ocho temas serían ocho cortes.
+
+Medido con el analizador colgado del maestro, que es lo único que prueba que sonó:
+
+| | rms |
+|---|---|
+| en mudo | **0,0000** |
+| sólo la cama | 0,0109 – 0,0165 |
+| `salta` | 0,0401 |
+| `choque` | 0,0554 |
+| `llega` | **0,0666** (6,1× la cama) |
+
+La regla es la misma que en Eco: la música tiene que quedar **por debajo** del sonido de llegar a un
+punto, porque llegar a un punto es la recompensa.
+
+#### EL MENÚ
+
+Los paneles pasan a ser **translúcidos** para que el mismo parallax del juego siga corriendo detrás, y
+**la pelusa flota ahí con su pelo de verdad** — el pelo es física y la única forma de que se vea que
+lo es antes de tocar nada es que esté ahí respirando. Va agrandada con una **transformación del
+lienzo** y no con un radio distinto, así el pelo, la sombra y los ojos crecen juntos: a la escala del
+juego mide 11 px de radio en un teléfono.
+**Se le sacó el `backdrop-filter`**: desenfocaba todo lo de atrás, la pelusa incluida, o sea que el
+único personaje del juego se veía como una mancha.
+El velo del menú es un **degradé** y no una opacidad pareja: cerrado en la franja del texto, abierto
+arriba y abajo. Y el icono de cada mundo dibuja **la forma que ese mundo estrena** — deducirla de la
+lista de formas daba cuatro iconos iguales del 5 al 8, porque los cuatro terminan en la hélice.
+
+Costo: **0,26 ms por cuadro** con las cuatro capas, los 118 mechones y el nivel dibujado. El HTML pasó
+de 50 KB a **81 KB**, sin una sola dependencia y sin un solo asset. Cero errores de página en las seis
+corridas, en 900×460 y en 412×915 táctil.
 
 ### Decimoquinta vuelta (2026-08-27): **Pelusa**, un juego nuevo
 
