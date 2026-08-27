@@ -31,6 +31,93 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
 
+### Decimoséptima vuelta (2026-08-27): **Eco** — el menú a 60, menos texto, tres calidades y el tutorial en una sala aparte
+
+Pedido: *"arregla eco, el menú es muy lag también en el menú quita un poco de texto we es demasiado y
+haz que el tutorial sea en un espacio diferente si? así no nos confundimos con el juego real, también
+que en el menú principal esté la regulación de 3 tipos de gráficos"*. Todo con
+`herramientas/eco/parche_sala.py`, idempotente y verificado: parchear el commit anterior da el mismo md5.
+
+#### EL MENÚ IBA A 8,4 CUADROS POR SEGUNDO Y LA CULPA NO ERA DEL MENÚ
+
+**Debajo se estaba dibujando el juego entero.** Medido con el contador del propio renderer: **29
+llamadas de dibujo y 80.487 triángulos** —el laberinto, los cinco modelos, la cosa con esqueleto—
+tapados por un panel negro y opaco que no deja ver ni un píxel de eso. Se dibujaba para nadie.
+
+| | antes | ahora |
+|---|---|---|
+| cuadros por segundo en el menú | **8,4** | **59,5** |
+| mediana de cuadro | 127,7 ms | 16,7 ms |
+| llamadas de dibujo en el menú | 29 | **0** |
+
+Y dos animaciones de CSS que **no se pueden componer en la GPU**: los tres anillos del fondo tenían
+el `border-width` animado —y llegan a escala 130, o sea que cada uno tapa la pantalla entera: tres
+repintados de pantalla completa por cuadro para dibujar un aro— y el título latía con `text-shadow`.
+El borde ahora es fijo y el latido es una copia borrosa del título a la que sólo se le mueve la
+opacidad, que sí se compone.
+
+#### TRES PÁRRAFOS PASAN A TRES LÍNEAS
+
+Había tres fichas de sesenta palabras cada una en la pantalla que el jugador mira ocho segundos: eso
+no se lee, se saltea, y lo que se saltea es lo mismo que después no se entiende. Quedan tres líneas —
+*tu voz de verdad es la única luz · algo te oye hasta donde ves · cuatro llaves y la puerta abre*.
+Lo largo lo cuenta la historia y **se aprende en la sala**.
+
+#### TRES CALIDADES, Y CAMBIAN LO QUE CUESTA, NO LO QUE EL JUEGO ES
+
+| | resolución | ondas a la vez | modelos 3D | grano | fps medidos |
+|---|---|---|---|---|---|
+| baja | 0,60 | 4 | no | no | **23,1** |
+| media | 0,85 | 6 | sí | sí | **17,1** |
+| alta | ×2 (o el del aparato) | 8 | sí | sí | **14,8** |
+
+La resolución es el único ajuste que siempre paga: **todo** lo que se dibuja acá pasa por el shader
+del sonido, que recorre las ocho ondas **por píxel**. En baja los modelos ni se piden — verificado
+recargando con `baja` guardado: `modelos:false`, o sea 537 KB de la cosa más cuatro props que no se
+descargan ni se animan. No se toca ni el grano ni las rayas en media/alta: son **la** imagen del
+juego, y un ajuste de calidad que cambia lo que el juego *es* no es un ajuste, es otro juego.
+
+#### EL TUTORIAL SE MUDA A UNA SALA DE PRÁCTICA
+
+Antes se aprendía adentro del laberinto de verdad, y el problema no es de comodidad: **en un juego
+donde no se ve nada, el jugador no puede distinguir "esto es una lección" de "esto es la partida"**.
+Aprendía mientras se perdía.
+
+Ahora es un cuarto rectangular de 13×13 con cuatro pilastras y una **llave de práctica** que contesta
+igual que las de verdad —con la misma demora de ida y vuelta— pero **no cuenta como sello**:
+verificado, al entrar al laberinto los sellos siguen en 0. Cuatro paredes rectas son la forma más
+rápida de decir "esto no es el laberinto", porque el laberinto es justamente lo que no las tiene.
+
+**VA A 110 METROS AL NORTE, y el número sale de una cuenta**: el grito más fuerte alcanza 50 m y el
+laberinto mide 46 de lado (33 de centro a esquina), así que la esquina más cercana queda a 77 m.
+Desde la sala no se puede despertar ni una llave ni a la cosa. Medido: el jugador arranca a **105,4 m**
+del laberinto y caminar 200 cuadros emite **0 ondas**.
+
+**Y LAS COLISIONES NO SALEN DE LA GRILLA.** Fuera de la grilla toda celda es pared —que es lo correcto
+para el laberinto, porque el borde es pared— así que el jugador habría quedado clavado en el lugar.
+Un cuarto rectangular se resuelve **recortando**, y recortar es exacto: no hay esquina que raspar.
+
+**UN DEFECTO PROPIO, ENCONTRADO MIDIENDO Y NO MIRANDO:** el jugador arrancaba mirando la pared de
+atrás, a 1,9 m. `ADEL` es `(sin giro, 0, cos giro)`, o sea que `giro=0` mira hacia **+Z**. El grito
+llenaba la pantalla de un gris **perfectamente parejo** —brillo medio 59,7 y las cinco franjas en
+59,7, que es la firma de una sola superficie a quemarropa— y no se veía el cuarto por ningún lado. En
+el laberinto nunca se notó porque ahí se empieza en una esquina y para cualquier lado hay pared a dos
+metros. Con `giro=Math.PI` las franjas pasan a 24,9 · 42,6 · 70 · 50,1 · 39,8: hay cuarto.
+
+Y el cartel de arranque decía *"escuchá, hay una hoja acá al lado"*, que era cierto empezando pegado
+a la primera nota del laberinto. En la sala no hay ninguna hoja: un cartel que miente en el primer
+segundo es peor que no tener cartel.
+
+**DOS TDZ EN EL MISMO PARCHE**, las dos del mismo tipo y las dos fatales —un `let`/`const` leído antes
+de su línea no rompe una función, rompe el módulo entero—: `modelosPedidos` y `MOD`, los dos leídos
+desde `aplicarCalidad()`, que corre al armar el menú, mil líneas antes de donde estaban declarados.
+Es la cuarta vez en este proyecto que una declaración puesta "donde corresponde temáticamente" en vez
+de "antes del primer uso" tira todo abajo.
+
+Partida verificada de punta a punta: los cinco pasos del tutorial en la sala, la llave de práctica
+levantada, y el salto al laberinto — `enSala:false`, la sala apagada, el jugador en la celda [0,0] a
+26 pasos de la salida y con 0 sellos. Cero errores de página en nueve corridas.
+
 ### Decimosexta vuelta (2026-08-27): **Pelusa, segunda pasada** — pelo, fondo, historia y música
 
 Pedido textual: *"ahora sí agrega más pelo y físicas mejores fondos parallax también más enemigos
