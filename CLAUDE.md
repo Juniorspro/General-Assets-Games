@@ -27,12 +27,128 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   tener cuidado ya que al punto en el que quiere ir hay bolas malas con espinas girando alrededor de
   la bola y hay que tocar justo ... procedural con físicas ... una beta del nivel 1 tutorial ...
   buenos gráficos blancos minimalistas"*.
+- **`Recreo.html` es "RECREO"** (~85 KB, sin un solo asset: la escuela, el profesor, las texturas y
+  el sonido se generan por código al cargar). **Recreación de fan, no comercial y sin publicar**, del
+  colegio y del profesor de Baldi's Basics (Basically Games / mystman12) — no hay un solo archivo del
+  original en el repo. Primera persona: ocho libretas, una por aula, y con las ocho abren las
+  puertas de salida. Caminar es callado, correr hace ruido y él va hasta donde lo oyó. Se juega con
+  **teclas, táctil o con la mano en el aire** (MediaPipe), y la simulación corre a **60 pasos por
+  segundo fijos con interpolación al dibujar**, así que va igual en cualquier aparato.
 - **`Eco.html` es "Eco"** (~215 KB, de los cuales 77 KB son la foto de la hoja), beta nueva y aparte. Laberinto a ciegas: el mundo está
   negro y solo se ve por ecolocación, en blanco y negro. Pedido textual: *"un entorno 3D
   con las mismas características de primera persona buen movimiento etc y manos en primera
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Vigésima vuelta (2026-08-27): **RECREO**, el cuarto juego — la escuela, handtracking y el reloj clavado
+
+Pedido: *"genera un juego nuevo ya será el 4to, en este tendremos acceso a MEDIAPIPE para handtracking
+y debes lograr una interpolación de fps para que vaya fluido en todos los dispositivos, los gráficos
+serán simples ya que tienes que descargar y rehacer a la perfección la escuela de baldis y generar un
+modelo 3D del mismo, con animaciones de saludar, caminar abrir puerta, animaciones de explicando"*.
+El usuario aclaró después: *"no es para uso comercial y el creador es flexible además que ni los
+publico"*. **Es una recreación de fan hecha desde cero**: los assets del original no se pueden
+descargar ni redistribuir, así que la escuela sale de un mapa escrito a mano y el profesor está
+modelado por código copiando la referencia que mandó el usuario.
+
+#### LO QUE HAY QUE HACER BIEN NO SE VE EN UNA FOTO
+
+**1. EL RELOJ.** La simulación corre a **60 pasos por segundo fijos** y el dibujo **interpola** entre
+el paso anterior y el actual con el sobrante del acumulador. Sin esto un teléfono a 30 cuadros y una
+notebook a 144 no juegan el mismo juego: la velocidad, el alcance del oído del profesor y su
+persecución salen distintos, y eso no es una diferencia de rendimiento, es **otro juego**.
+Medido con el mismo input durante 12 s a cuatro ritmos distintos:
+
+| cuadros/s | cuadros | pasos simulados | z final |
+|---|---|---|---|
+| 24 | 288 | 719 | 32,770833 |
+| 60 | 720 | **720** | **32,816667** |
+| 120 | 1440 | **720** | **32,816667** |
+
+60 y 120 dan **el mismo número hasta el último decimal**. A 24 se pierde exactamente **un paso** —
+4,6 cm, o sea 1/60 de segundo de movimiento— porque `1440 × (1/144)` acumula un déficit de coma
+flotante de ~1e-14 y el último paso no llega a disparar. Es el error residual del acumulador, es de un
+paso, y **es justo lo que la interpolación tapa**.
+Y las dos protecciones: el `dt` se topa en 0,25 s (una pestaña que estuvo dormida no simula cuarenta
+pasos de golpe) y los pasos por cuadro en 8 (si el aparato no llega, va en cámara lenta pero no se
+cuelga persiguiendo el reloj).
+
+**2. LAS MANOS.** MediaPipe da 21 puntos; el juego necesita **cuatro decisiones**. Todo el problema
+está en ese salto y son tres problemas distintos:
+- **La escala**: la mano puede estar a 20 cm o a un metro de la cámara, así que ninguna distancia en
+  píxeles sirve. Todo se mide **en proporción al tamaño de la palma** (muñeca→nudillo del medio), que
+  es invariante a la distancia y al tamaño de la mano de quien juega.
+- **El temblor**: los puntos vibran unos píxeles por cuadro. Media exponencial sobre el rumbo, más
+  zona muerta del 16% — sin ella la cámara nunca está quieta, porque una mano humana nunca lo está.
+- **El parpadeo del gesto**: cada gesto tiene que **ganar tres cuadros seguidos** para valer. Medido
+  con manos sintéticas: cuadro 1 y 2 el gesto firme sigue vacío y `ade=0`; en el 3 pasa a `puño` y
+  recién ahí `ade=1, correr=true`. Un gesto mal leído en un juego de persecución es una muerte que el
+  jugador no entiende, así que esto no es opcional.
+
+`manoGesto()` es **pura** —entran 21 puntos, sale el gesto— y por eso se puede comprobar inyectando
+manos de mentira: `palma` (4 dedos estirados, pinza 1,59), `puño` (0 estirados), `pinza` (1 estirado,
+pinza 0,06). Los tres correctos. Y el pipeline entero **se inicializa de verdad** en el banco
+(`estado: lista`) después de servir MediaPipe localmente.
+
+#### EL PROFESOR: RIGGEADO A MANO, NO IMPORTADO
+
+Veinte cajas y dos esferas: cabeza pelada de piel clara con ojos grandes y boca roja, suéter verde
+ancho, brazos flacos con manos de cinco dedos, dos piernas azules separadas, zapatos naranjas.
+**Cinco animaciones que son funciones del tiempo a diez rotaciones** — nada de clips ni keyframes: con
+un rig propio, escribir la curva es más corto que describirla, y mezclar dos es evaluarlas y
+promediarlas, que es todo lo que un crossfade es. En la vuelta de Eco importar un esqueleto de un GLB
+costó un retarget entero en espacio de mundo porque cada generación trae otro rig; acá no hay nada que
+retargetear.
+
+Medido el **recorrido real** de cada parte en un ciclo, que es la única prueba de que una animación
+anima y de que las cinco son distintas:
+
+| | mano derecha | rodilla | qué se ve |
+|---|---|---|---|
+| quieto | 4,5 cm | 2,4 cm | respira |
+| caminar | **78 cm en Z** | 67 cm | zancada |
+| saludar | 54 cm en X · 41 en Y, la izquierda 4,5 cm | 2,4 cm | un solo brazo |
+| explicar | 59 cm, la izquierda 53 desfasada | 8 cm | las dos manos hablando |
+| puerta | la mano llega a **1,2 m adelante** y a 1,42 de alto | 14 cm | empuja |
+
+#### CUATRO DEFECTOS PROPIOS, TODOS ENCONTRADOS MIDIENDO
+
+- **Ocho aulas sin puerta.** La primera versión pegaba las aulas directo a los pasillos, así que no
+  quedaba ni una celda de pared donde abrir la puerta. El gancho lo cantó en dos números:
+  `puertasPorAula:[0,0,0,0,0,0,0,0]` y las ocho aulas alcanzables **sin abrir nada**. Un aula sin
+  puerta no es un aula, es un ensanchamiento del pasillo — y eso no se ve en una foto del pasillo.
+- **Ninguna puerta se podía abrir.** Aritmética: una puerta cerrada no se pisa, así que el cuerpo
+  queda frenado a 1,63 m del centro de la celda de al lado, o sea a **2,57 m** del centro de la
+  puerta. Con 2,4 m de alcance el juego era ocho aulas selladas para siempre.
+- **El profesor arrancaba encerrado en su propia aula.** Con una sola función de "se pisa" para los
+  dos, el BFS desde el jugador no llegaba hasta él, `rumbo` devolvía null y caminaba en línea recta
+  contra su propia pared: la distancia bajaba 6,9 m en tres segundos y después 2,2 m en cuatro.
+  Ahora **para él todas las puertas están abiertas**, porque las abre.
+- **El profesor enterrado un metro.** La cadena cadera→pierna→pantorrilla→zapato medía 1,485 y el
+  torso estaba a 1,06, así que el pie terminaba en y = −1,06. En pantalla se leía como "tiene las
+  piernas cortas". Se resolvió con la cuenta, no probando: torso a 1,44 y el pie en −0,045.
+
+Y uno del techo: con Lambert la cara del techo apunta **hacia abajo**, o sea que recibe el color de
+suelo de la hemisférica y el pasillo quedaba con el techo casi negro justo arriba de la cámara. Va sin
+luz, que además es la referencia.
+
+#### UNA LECCIÓN QUE NO ES DEL JUEGO SINO DE MIS PROPIOS PARCHES
+
+`io.open(p,'w').write(expr)` **evalúa `io.open` antes que `expr`**: si `expr` falla, el archivo ya
+quedó **en cero bytes**. Un `NameError` en el argumento me borró el juego entero (y sólo se pudo
+reconstruir porque estaba partido en trozos en `/tmp`). De acá en más: se calcula el texto nuevo
+completo, se comprueba, y **recién entonces** se abre para escribir.
+
+#### EL BANCO
+`prep2.py` ahora reescribe también las URL de MediaPipe a `/tmp/ui/mp`, por la misma razón que
+three.js: **Chromium en el contenedor no usa el proxy de salida** (curl sí), así que un import
+dinámico a jsdelivr falla con "Failed to fetch dynamically imported module". Y `h2.mjs` recuperó
+`--use-fake-device-for-media-stream`, que se había perdido en una reversión: sin eso `getUserMedia`
+tira `NotFoundError` y no se puede probar ni el micrófono de Eco ni las manos de Recreo.
+
+Costo: 19 llamadas de dibujo y 8.988 triángulos. Con SwiftShader (software) **baja 42 fps · alta 20,3**.
+Cero errores de página en diez corridas.
 
 ### Decimonovena vuelta (2026-08-27): **POMPOM** — un fondo generado por mundo, cinemática por nivel, bloom y estallidos
 

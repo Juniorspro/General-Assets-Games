@@ -12,7 +12,10 @@ const srv=http.createServer((q,r)=>{ let u=decodeURIComponent(q.url.split('?')[0
  fs.createReadStream(f).pipe(r); });
 await new Promise(r=>srv.listen(8098,r));
 const nav=await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
- args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--proxy-bypass-list=<-loopback>','--autoplay-policy=no-user-gesture-required'] });
+ args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--proxy-bypass-list=<-loopback>','--autoplay-policy=no-user-gesture-required',
+ // camara y microfono falsos: sin esto getUserMedia tira NotFoundError en el contenedor y no hay
+ // forma de probar ni el microfono de Eco ni el handtracking de Recreo.
+ '--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'] });
 const MOVIL=!!process.env.MOVIL;   // telefono de verdad: pointer:coarse y user agent de Android
 const ctx=await nav.newContext(Object.assign({viewport:{width:W,height:H},hasTouch:!PC,deviceScaleFactor:1},
   MOVIL? { isMobile:true, hasTouch:true, userAgent:'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36' } : {}));

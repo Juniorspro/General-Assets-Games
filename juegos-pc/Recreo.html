@@ -1,0 +1,1625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Recreo</title>
+<style>
+  /* ===================== LA ESCUELA =====================
+     Paleta sacada de la referencia: piso de baldosas claras, paredes de panel beige con zocalo,
+     techo blanco, lockers rojos y puertas de madera clara. Nada de degradados ni de sombras suaves:
+     el juego que estamos rehaciendo se ve plano a proposito y esa planitud es la mitad de su cara. */
+  :root{
+    --tinta:#1b1b1f; --papel:#f2efe6; --beige:#c9b48a; --rojo:#c0392b; --verde:#2ecc0f;
+    --azul:#2626d6; --piel:#d8c39a;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; height:100%; overflow:hidden; background:#0b0b0d;
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    color:#f2efe6; -webkit-user-select:none; user-select:none; touch-action:none; }
+  #caja{ position:fixed; inset:0; }
+  canvas#lienzo{ display:block; width:100%; height:100%; }
+
+  .pan{ position:absolute; inset:0; z-index:40; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:clamp(9px,1.6vh,16px); background:#0d0d10;
+    padding:22px; text-align:center; }
+  .pan.ver{ display:flex; }
+  .tit{ font-size:clamp(30px,7.6vmin,62px); font-weight:900; letter-spacing:.30em;
+    margin-left:.30em; color:#f2efe6; }
+  .sub{ font-size:max(10px,calc(11px * 1)); font-weight:700; letter-spacing:.24em;
+    color:#8a8a94; text-transform:uppercase; }
+  .bot{ appearance:none; border:1.4px solid #45454f; background:transparent; color:#f2efe6;
+    font:inherit; font-size:max(12px,13px); font-weight:800; letter-spacing:.18em; padding:12px 28px;
+    border-radius:999px; cursor:pointer; text-transform:uppercase; transition:.16s ease; }
+  .bot:hover{ border-color:#f2efe6; }
+  .bot.lleno{ background:#f2efe6; color:#0d0d10; border-color:#f2efe6; }
+  .fila{ display:flex; gap:9px; flex-wrap:wrap; justify-content:center; align-items:center; }
+  .rot{ font-size:max(8.5px,9.5px); font-weight:900; letter-spacing:.26em; color:#6a6a74;
+    text-transform:uppercase; }
+  .opB{ font:inherit; font-size:max(9px,10.5px); font-weight:800; letter-spacing:.18em;
+    text-transform:uppercase; padding:7px 14px; border-radius:999px; cursor:pointer; color:#9a9aa4;
+    background:transparent; border:1px solid #35353d; transition:.16s ease; }
+  .opB.si{ color:#0d0d10; background:#c9b48a; border-color:#c9b48a; }
+  #fichas{ display:flex; gap:clamp(10px,2vw,26px); justify-content:center; flex-wrap:wrap;
+    max-width:96%; }
+  .ficha{ font-size:max(8.5px,11px); font-weight:700; letter-spacing:.18em; color:#8a8a94;
+    text-transform:uppercase; }
+  .ficha b{ color:#e8e2d2; font-weight:900; }
+  #creditos{ position:absolute; bottom:12px; left:0; right:0; text-align:center;
+    font-size:9px; letter-spacing:.24em; color:#3a3a42; }
+
+  /* ===================== EL HUD ===================== */
+  #hud{ position:absolute; inset:0; z-index:20; pointer-events:none; display:none; }
+  body.jugando #hud{ display:block; }
+  #libretas{ position:absolute; top:14px; left:0; right:0; text-align:center;
+    font-size:clamp(15px,3.4vmin,26px); font-weight:900; letter-spacing:.22em; color:#f2efe6;
+    text-shadow:0 2px 0 rgba(0,0,0,.55); }
+  #libretasS{ position:absolute; top:calc(14px + 3.4vmin + 12px); left:0; right:0; text-align:center;
+    font-size:max(9px,10.5px); font-weight:800; letter-spacing:.22em; color:#c9b48a;
+    text-shadow:0 1px 0 rgba(0,0,0,.6); }
+  #aviso{ position:absolute; left:50%; top:44%; transform:translate(-50%,-50%);
+    font-size:clamp(15px,3.8vmin,28px); font-weight:900; letter-spacing:.20em; text-align:center;
+    opacity:0; transition:opacity .3s ease; text-shadow:0 2px 0 rgba(0,0,0,.6); max-width:88%; }
+  #aviso.ver{ opacity:1; }
+  #pista{ position:absolute; left:50%; bottom:12%; transform:translateX(-50%);
+    font-size:max(10px,12px); font-weight:800; letter-spacing:.16em; color:#e8e2d2;
+    background:rgba(0,0,0,.45); padding:8px 16px; border-radius:999px; opacity:0;
+    transition:opacity .25s ease; text-align:center; }
+  #pista.ver{ opacity:1; }
+  #salirJ{ position:absolute; top:10px; left:12px; pointer-events:auto; width:36px; height:36px;
+    border-radius:50%; border:1.3px solid #45454f; background:rgba(0,0,0,.4); color:#c9c9d2;
+    cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; }
+  #vida{ position:absolute; left:0; right:0; bottom:0; height:5px; background:rgba(0,0,0,.35); }
+  #vida i{ display:block; height:100%; width:100%; background:#2ecc0f; transition:width .2s linear; }
+
+  /* la camara de la mano: chica, en una esquina, y con el esqueleto dibujado encima */
+  #camCaja{ position:absolute; right:10px; bottom:10px; width:clamp(110px,20vmin,190px);
+    aspect-ratio:4/3; border:1.4px solid #35353d; border-radius:10px; overflow:hidden;
+    background:#000; display:none; z-index:22; }
+  body.manos #camCaja{ display:block; }
+  #camVid{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    transform:scaleX(-1); }
+  #camCv{ position:absolute; inset:0; width:100%; height:100%; }
+  #camEst{ position:absolute; left:0; right:0; bottom:0; font-size:8.5px; letter-spacing:.16em;
+    text-align:center; background:rgba(0,0,0,.55); color:#c9b48a; padding:2px 0; font-weight:800; }
+
+  /* mando tactil, para telefono sin manos */
+  #joy{ position:absolute; left:5%; bottom:8%; width:min(31vw,150px); aspect-ratio:1;
+    border-radius:50%; border:1.5px solid rgba(255,255,255,.16); z-index:21; display:none;
+    pointer-events:auto; }
+  #joy i{ position:absolute; left:50%; top:50%; width:38%; height:38%; margin:-19% 0 0 -19%;
+    border-radius:50%; background:rgba(255,255,255,.20); }
+  body.movil.jugando #joy{ display:block; }
+  #bUsar{ position:absolute; right:6%; bottom:10%; width:min(20vw,86px); aspect-ratio:1;
+    border-radius:50%; border:1.5px solid rgba(255,255,255,.20); background:rgba(0,0,0,.30);
+    color:#f2efe6; font-weight:900; font-size:max(10px,12px); letter-spacing:.12em; z-index:21;
+    display:none; pointer-events:auto; }
+  body.movil.jugando #bUsar{ display:flex; align-items:center; justify-content:center; }
+
+  #teclas{ position:absolute; left:12px; bottom:12px; z-index:21; display:none;
+    font-size:10px; letter-spacing:.10em; color:#8a8a94; line-height:1.9; }
+  body.pc.jugando #teclas{ display:block; }
+  #teclas b{ display:inline-block; min-width:52px; color:#e8e2d2; font-weight:800; }
+  #idBotones{ display:flex; gap:9px; flex-wrap:wrap; justify-content:center; }
+</style>
+</head>
+<body>
+<div id="caja">
+  <canvas id="lienzo"></canvas>
+
+  <div id="hud">
+    <div id="libretas">0 / 8</div>
+    <div id="libretasS"></div>
+    <div id="aviso"></div>
+    <div id="pista"></div>
+    <button id="salirJ">‹</button>
+    <div id="vida"><i></i></div>
+    <div id="teclas"></div>
+  </div>
+
+  <div id="camCaja">
+    <video id="camVid" playsinline muted autoplay></video>
+    <canvas id="camCv" width="240" height="180"></canvas>
+    <div id="camEst">—</div>
+  </div>
+  <div id="joy"><i></i></div>
+  <button id="bUsar"></button>
+
+  <div id="pIdioma" class="pan ver">
+    <div class="tit">RECREO</div>
+    <div class="sub">Language · Idioma · Idioma</div>
+    <div id="idBotones"></div>
+  </div>
+
+  <div id="pMenu" class="pan">
+    <div class="tit">RECREO</div>
+    <div class="sub" data-i18n="sub"></div>
+    <div id="fichas">
+      <div class="ficha" data-i18n="f1"></div>
+      <div class="ficha" data-i18n="f2"></div>
+      <div class="ficha" data-i18n="f3"></div>
+    </div>
+    <div class="fila">
+      <span class="rot" data-i18n="calidad"></span>
+      <button class="opB" data-cal="baja" data-i18n="calBaja"></button>
+      <button class="opB" data-cal="media" data-i18n="calMedia"></button>
+      <button class="opB" data-cal="alta" data-i18n="calAlta"></button>
+    </div>
+    <div class="fila">
+      <span class="rot" data-i18n="control"></span>
+      <button class="opB" id="oTeclas" data-i18n="ctrlTeclas"></button>
+      <button class="opB" id="oManos" data-i18n="ctrlManos"></button>
+    </div>
+    <div style="height:4px"></div>
+    <button class="bot lleno" id="bJugar" data-i18n="jugar"></button>
+    <div class="fila">
+      <button class="bot" id="bComo" data-i18n="como"></button>
+      <button class="bot" id="bIdioma" data-i18n="idioma"></button>
+    </div>
+    <div id="creditos">REZONA</div>
+  </div>
+
+  <div id="pComo" class="pan">
+    <div class="sub" data-i18n="como"></div>
+    <div id="comoTxt" style="max-width:min(560px,92%); line-height:2.1; font-size:max(11px,13px);
+      letter-spacing:.06em; color:#c9c9d2"></div>
+    <button class="bot" id="bVolver" data-i18n="volver"></button>
+  </div>
+
+  <div id="pFin" class="pan">
+    <div class="tit" id="finT"></div>
+    <div class="sub" id="finS"></div>
+    <button class="bot lleno" id="bFin" data-i18n="volver"></button>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+/* =========================================================================================
+   RECREO — una escuela en primera persona, con handtracking y con el reloj clavado.
+
+   ES UNA RECREACION DE FAN, NO COMERCIAL Y SIN PUBLICAR, del colegio y del profesor de Baldi's
+   Basics (Basically Games / mystman12). No hay un solo archivo del original acá: la escuela esta
+   armada por codigo desde un mapa escrito a mano y el profesor esta modelado por codigo copiando
+   la referencia. Todo lo que se ve se genera al cargar.
+
+   LAS DOS COSAS QUE HAY QUE HACER BIEN Y NO SE VEN EN UNA FOTO:
+   1. EL RELOJ. La simulacion corre a 60 pasos por segundo fijos y el dibujo INTERPOLA entre el paso
+      anterior y el actual. Sin esto, un telefono a 30 cuadros y una notebook a 144 no juegan el
+      mismo juego: la velocidad, la aceleracion y el alcance del profesor salen distintos, y el
+      juego se vuelve mas facil o mas dificil segun el aparato. Con esto, la posicion del jugador a
+      los diez segundos es LA MISMA a 30, a 60 y a 144 — y eso se puede medir, no opinar.
+   2. LAS MANOS. MediaPipe da 21 puntos por mano; lo que el juego necesita son cuatro decisiones
+      (girar, avanzar, correr, usar). El salto de una cosa a la otra es donde estan todos los
+      problemas: los puntos tiemblan, la mano sale y entra del cuadro, y un gesto mal leido en un
+      juego de persecucion es una muerte que el jugador no entiende.
+   ========================================================================================= */
+
+/* ===================== LOS IDIOMAS ===================== */
+const IDIOMAS=[['en','English'],['es','Español'],['pt','Português']];
+let IDIOMA='en';
+try{ const g=localStorage.getItem('recreo_idioma'); if(g && IDIOMAS.some(i=>i[0]===g)) IDIOMA=g; }catch(e){}
+const L={
+ sub:{en:'eight notebooks · one way out', es:'ocho libretas · una salida', pt:'oito cadernos · uma saída'},
+ f1:{en:'take the <b>eight notebooks</b>', es:'agarrá las <b>ocho libretas</b>', pt:'pegue os <b>oito cadernos</b>'},
+ f2:{en:'<b>running is loud</b>', es:'<b>correr hace ruido</b>', pt:'<b>correr faz ruído</b>'},
+ f3:{en:'he hears, then he comes', es:'te oye, y después viene', pt:'ele te ouve, e depois vem'},
+ jugar:{en:'PLAY', es:'JUGAR', pt:'JOGAR'},
+ como:{en:'HOW TO PLAY', es:'CÓMO SE JUEGA', pt:'COMO JOGAR'},
+ idioma:{en:'LANGUAGE', es:'IDIOMA', pt:'IDIOMA'},
+ volver:{en:'BACK', es:'VOLVER', pt:'VOLTAR'},
+ calidad:{en:'GRAPHICS', es:'GRÁFICOS', pt:'GRÁFICOS'},
+ calBaja:{en:'LOW', es:'BAJA', pt:'BAIXA'},
+ calMedia:{en:'MEDIUM', es:'MEDIA', pt:'MÉDIA'},
+ calAlta:{en:'HIGH', es:'ALTA', pt:'ALTA'},
+ control:{en:'CONTROL', es:'CONTROL', pt:'CONTROLE'},
+ ctrlTeclas:{en:'KEYS / TOUCH', es:'TECLAS / TÁCTIL', pt:'TECLAS / TOQUE'},
+ ctrlManos:{en:'HANDS (CAMERA)', es:'MANOS (CÁMARA)', pt:'MÃOS (CÂMERA)'},
+ libretas:{en:'{n} / {t}', es:'{n} / {t}', pt:'{n} / {t}'},
+ busca:{en:'FIND THE NOTEBOOKS', es:'BUSCÁ LAS LIBRETAS', pt:'ACHE OS CADERNOS'},
+ corre:{en:'GET OUT', es:'SALÍ DE ACÁ', pt:'SAIA DAQUI'},
+ tomada:{en:'NOTEBOOK', es:'LIBRETA', pt:'CADERNO'},
+ abierto:{en:'THE DOORS ARE OPEN', es:'LAS PUERTAS ESTÁN ABIERTAS', pt:'AS PORTAS ESTÃO ABERTAS'},
+ desperto:{en:'HE HEARD THAT', es:'ESO LO OYÓ', pt:'ELE OUVIU ISSO'},
+ cerca:{en:'HE IS CLOSE', es:'ESTÁ CERCA', pt:'ELE ESTÁ PERTO'},
+ pUsar:{en:'{k} · take it', es:'{k} · agarrala', pt:'{k} · pegue'},
+ pPuerta:{en:'{k} · open', es:'{k} · abrir', pt:'{k} · abrir'},
+ ganaste:{en:'OUT', es:'AFUERA', pt:'FORA'},
+ ganasteS:{en:'eight notebooks and the door', es:'ocho libretas y la puerta', pt:'oito cadernos e a porta'},
+ perdiste:{en:'CAUGHT', es:'TE AGARRÓ', pt:'TE PEGOU'},
+ perdisteS:{en:'{n} of {t} notebooks', es:'{n} de {t} libretas', pt:'{n} de {t} cadernos'},
+ manoNo:{en:'NO CAMERA · using keys', es:'SIN CÁMARA · van las teclas', pt:'SEM CÂMERA · vão as teclas'},
+ manoCarga:{en:'LOADING HANDS…', es:'CARGANDO MANOS…', pt:'CARREGANDO MÃOS…'},
+ manoLista:{en:'SHOW ONE HAND', es:'MOSTRÁ UNA MANO', pt:'MOSTRE UMA MÃO'},
+ gPuno:{en:'FIST · run', es:'PUÑO · correr', pt:'PUNHO · correr'},
+ gPinza:{en:'PINCH · walk', es:'PINZA · caminar', pt:'PINÇA · andar'},
+ gPalma:{en:'OPEN PALM · use', es:'PALMA · usar', pt:'PALMA · usar'},
+ comoT:{en:
+  'Eight notebooks, one in each classroom. Take all eight and the exit doors open.<br><br>'+
+  '<b>Walking is quiet. Running is loud.</b> He hears the noise you make and comes to where he heard it — so the fastest way across the school is also the one that tells him where you are.<br><br>'+
+  '<b>KEYS:</b> WASD to move, mouse to look, Shift to run, E to take or open, Esc to release the mouse.<br>'+
+  '<b>TOUCH:</b> left stick to move, drag anywhere to look, the round button to take or open.<br>'+
+  '<b>HANDS:</b> move your hand to look around, <b>pinch</b> to walk, <b>close your fist</b> to run, <b>open your palm</b> to take or open. One hand is enough.',
+  es:
+  'Ocho libretas, una en cada aula. Con las ocho, las puertas de salida se abren.<br><br>'+
+  '<b>Caminar es callado. Correr hace ruido.</b> Él oye el ruido que hacés y va hasta donde lo oyó — así que la forma más rápida de cruzar la escuela es también la que le dice dónde estás.<br><br>'+
+  '<b>TECLAS:</b> WASD para moverte, mouse para mirar, Shift para correr, E para agarrar o abrir, Esc para soltar el mouse.<br>'+
+  '<b>TÁCTIL:</b> palanca izquierda para moverte, arrastrá en cualquier lado para mirar, el botón redondo para agarrar o abrir.<br>'+
+  '<b>MANOS:</b> movés la mano para mirar, <b>pinza</b> para caminar, <b>puño cerrado</b> para correr, <b>palma abierta</b> para agarrar o abrir. Con una mano alcanza.',
+  pt:
+  'Oito cadernos, um em cada sala. Com os oito, as portas de saída se abrem.<br><br>'+
+  '<b>Andar é silencioso. Correr faz ruído.</b> Ele ouve o ruído que você faz e vai até onde ouviu — então o jeito mais rápido de atravessar a escola é também o que diz a ele onde você está.<br><br>'+
+  '<b>TECLAS:</b> WASD para andar, mouse para olhar, Shift para correr, E para pegar ou abrir, Esc para soltar o mouse.<br>'+
+  '<b>TOQUE:</b> alavanca esquerda para andar, arraste em qualquer lugar para olhar, o botão redondo para pegar ou abrir.<br>'+
+  '<b>MÃOS:</b> mova a mão para olhar, <b>pinça</b> para andar, <b>punho fechado</b> para correr, <b>palma aberta</b> para pegar ou abrir. Uma mão basta.'}
+};
+function TX(k,v){ let s=(L[k]&&(L[k][IDIOMA]||L[k].en))||k;
+  if(v) for(const p in v) s=s.split('{'+p+'}').join(v[p]);
+  return s; }
+
+/* ===================== QUE APARATO ES ESTE ===================== */
+function adivinar(){
+  try{ const t=matchMedia('(pointer:coarse)').matches,
+             d=('ontouchstart' in window)||navigator.maxTouchPoints>0;
+       return (t&&d)? 'movil':'pc'; }catch(e){ return 'pc'; }
+}
+let plataf=adivinar();
+document.body.classList.add(plataf);
+
+/* ===================== LAS TRES CALIDADES ===================== */
+const CAL={ baja:{ px:0.60, sombras:false, lockers:false, niebla:34 },
+            media:{ px:0.90, sombras:false, lockers:true,  niebla:44 },
+            alta:{ px:2.00, sombras:true,  lockers:true,  niebla:56 } };
+let calidad='media';
+try{ const g=localStorage.getItem('recreo_cal'); if(g && CAL[g]) calidad=g; }catch(e){}
+
+/* ===================== EL MAPA DE LA ESCUELA =====================
+   NO ES UN LABERINTO GENERADO, ES UNA ESCUELA ESCRITA A MANO, y la diferencia es todo el punto: un
+   laberinto se recorre a ciegas, una escuela se APRENDE — tres pasillos horizontales, tres
+   verticales y ocho aulas colgadas de ellos. A la segunda partida el jugador ya sabe que el aula del
+   fondo a la izquierda es la que tiene dos puertas, y eso es exactamente lo que hace que huir sea
+   una decision y no una tirada.
+
+   Las aulas se declaran como rectangulos y los pasillos se tallan alrededor. Se declara la
+   GEOMETRIA, no el resultado: asi la puerta de cada aula se calcula y no se dibuja a mano, y no
+   puede quedar una sin salida. */
+const CEL=4.2, ALTO_M=3.6, GRUESO=0.30;
+const GW=23, GH=19;                      // celdas
+const PAS_F=[1,9,17], PAS_C=[1,11,21];   // pasillos: filas y columnas
+/* LAS AULAS DEJAN UN ANILLO DE PARED, y esto lo encontro la propia prueba del mapa. La primera
+   version las pegaba directo a los pasillos —filas 2..8 contra el pasillo de la fila 1— y entonces
+   NO HABIA DONDE PONER LA PUERTA, porque no quedaba ni una celda de pared entre el aula y el
+   pasillo. El gancho lo canto en dos numeros: `puertasPorAula:[0,0,0,0,0,0,0,0]` y las ocho aulas
+   alcanzables SIN abrir nada. Un aula sin puerta no es un aula, es un ensanchamiento del pasillo, y
+   eso no se ve en una foto del pasillo.
+   Con los pasillos en las filas 1, 9 y 17 y en las columnas 1, 11 y 21, el interior de cada aula va
+   de la fila 3 a la 7 (o de la 11 a la 15) y mide tres columnas: las filas 2, 8, 10 y 16 y las
+   columnas 2, 6, 10, 12, 16 y 20 quedan de pared, que es donde se abren las puertas. */
+const AULAS=[
+  {i0:3, i1:5,  j0:3,  j1:7,  n:1}, {i0:7, i1:9,  j0:3,  j1:7,  n:2},
+  {i0:13,i1:15, j0:3,  j1:7,  n:3}, {i0:17,i1:19, j0:3,  j1:7,  n:4},
+  {i0:3, i1:5,  j0:11, j1:15, n:5}, {i0:7, i1:9,  j0:11, j1:15, n:6},
+  {i0:13,i1:15, j0:11, j1:15, n:7}, {i0:17,i1:19, j0:11, j1:15, n:8}
+];
+const LIBRETAS_N=AULAS.length;
+/* 0 = pared, 1 = pasillo, 2 = aula, 3 = puerta */
+const MAPA=[];
+for(let j=0;j<GH;j++){ MAPA.push([]); for(let i=0;i<GW;i++) MAPA[j].push(0); }
+for(const f of PAS_F) for(let i=1;i<=21;i++) MAPA[f][i]=1;
+for(const c of PAS_C) for(let j=1;j<=17;j++) MAPA[j][c]=1;
+for(const a of AULAS) for(let j=a.j0;j<=a.j1;j++) for(let i=a.i0;i<=a.i1;i++) MAPA[j][i]=2;
+/* LA PUERTA DE CADA AULA SE CALCULA: la celda del borde del aula que toca un pasillo. Dibujarlas a
+   mano en un mapa de 23x19 es la forma mas rapida de que una quede tapiada y el nivel sea
+   imposible sin que nadie se entere hasta jugarlo. */
+const PUERTAS=[];
+for(const a of AULAS){
+  const im=Math.round((a.i0+a.i1)/2), jm=Math.round((a.j0+a.j1)/2);
+  const cand=[[im,a.j0-1],[im,a.j1+1],[a.i0-1,jm],[a.i1+1,jm]];
+  let puesta=0;
+  for(const [i,j] of cand){
+    if(i<0||j<0||i>=GW||j>=GH) continue;
+    const vecinos=[[i,j-1],[i,j+1],[i-1,j],[i+1,j]];
+    const tocaPas=vecinos.some(([x,y])=>x>=0&&y>=0&&x<GW&&y<GH&&MAPA[y][x]===1);
+    const tocaAula=vecinos.some(([x,y])=>x>=0&&y>=0&&x<GW&&y<GH&&MAPA[y][x]===2);
+    if(MAPA[j][i]===0 && tocaPas && tocaAula){
+      MAPA[j][i]=3;
+      PUERTAS.push({ i, j, aula:a.n, abierta:false, ang:0 });
+      if(++puesta>=(a.n%3===0?2:1)) break;   // un tercio de las aulas tiene dos puertas
+    }
+  }
+  a.puertas=puesta;
+}
+/* las dos salidas, al este y al oeste del pasillo del medio */
+const SALIDAS=[{i:0,j:9},{i:22,j:9}];
+for(const s of SALIDAS) MAPA[s.j][s.i]=3;
+for(const s of SALIDAS) PUERTAS.push({ i:s.i, j:s.j, aula:0, abierta:false, ang:0, salida:true });
+
+function XC(i){ return (i-(GW-1)/2)*CEL; }
+function ZC(j){ return (j-(GH-1)/2)*CEL; }
+function celda(x,z){ return [Math.round(x/CEL+(GW-1)/2), Math.round(z/CEL+(GH-1)/2)]; }
+function pisable(i,j){
+  if(i<0||j<0||i>=GW||j>=GH) return false;
+  const c=MAPA[j][i];
+  if(c===1||c===2) return true;
+  if(c===3){ const p=PUERTAS.find(q=>q.i===i&&q.j===j); return !!(p&&p.abierta); }
+  return false;
+}
+/* EL PROFESOR ABRE LAS PUERTAS, ASI QUE PARA EL TODAS ESTAN ABIERTAS.
+   Con una sola funcion de "se pisa" para los dos pasaba esto, y lo encontro la prueba: el profesor
+   arranca DENTRO del aula 8 con la puerta cerrada, o sea que el BFS desde el jugador no llegaba
+   hasta el, `rumbo` devolvia null, y el pobre caminaba en linea recta contra la pared de su propia
+   aula. La distancia al jugador bajaba 6,9 m en tres segundos y despues 2,2 m en cuatro: estaba
+   raspando una pared. Un perseguidor encerrado no es una amenaza, es un adorno. */
+function pisableProf(i,j){
+  if(i<0||j<0||i>=GW||j>=GH) return false;
+  const c=MAPA[j][i];
+  return c===1||c===2||c===3;
+}
+
+/* ===================== EL RENDER ===================== */
+const lienzo=document.getElementById('lienzo');
+const render=new THREE.WebGLRenderer({canvas:lienzo, antialias:true, powerPreference:'high-performance'});
+render.setPixelRatio(Math.min(devicePixelRatio||1, CAL[calidad].px));
+render.setSize(innerWidth, innerHeight, false);
+render.outputColorSpace=THREE.SRGBColorSpace;
+const escena=new THREE.Scene();
+escena.background=new THREE.Color(0x0e0e12);
+escena.fog=new THREE.Fog(0x0e0e12, 8, CAL[calidad].niebla);
+const camara=new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.08, 220);
+function ajustar(){
+  const w=innerWidth, h=innerHeight;
+  render.setPixelRatio(Math.min(devicePixelRatio||1, CAL[calidad].px));
+  render.setSize(w,h,false);
+  camara.aspect=w/h; camara.fov = (w/h < 0.75)? 82 : 72;
+  camara.updateProjectionMatrix();
+}
+addEventListener('resize', ajustar);
+
+/* ===================== LAS TEXTURAS, DIBUJADAS AL CARGAR =====================
+   Ni un archivo de imagen. Cada textura es un lienzo de 64 o 128 px pintado por codigo y repetido:
+   la baldosa del piso, el panel de la pared con su zocalo, la chapa del locker y la madera de la
+   puerta. Cuatro texturas de 64x64 pesan menos que un favicon y se ven exactamente como tienen que
+   verse, porque el original tambien son cuatro texturas chicas repetidas hasta el infinito. */
+function tex(w,h,pinta,repX,repY,filtro){
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  pinta(c.getContext('2d'), w, h);
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.repeat.set(repX||1, repY||1);
+  /* NEAREST a proposito: el juego que rehacemos se ve a bloques y suavizar las baldosas le saca
+     justamente eso. Y con mipmaps, porque sin ellos el piso de un pasillo largo titila. */
+  t.magFilter = filtro===false? THREE.LinearFilter : THREE.NearestFilter;
+  t.minFilter=THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps=true;
+  t.colorSpace=THREE.SRGBColorSpace;
+  return t;
+}
+const T_PISO=tex(64,64,(g,w,h)=>{
+  g.fillStyle='#d9d5c8'; g.fillRect(0,0,w,h);
+  g.fillStyle='#cfcabb'; g.fillRect(0,0,w/2,h/2); g.fillRect(w/2,h/2,w/2,h/2);
+  g.strokeStyle='rgba(120,116,105,0.55)'; g.lineWidth=1.5;
+  g.strokeRect(0.5,0.5,w-1,h-1); g.beginPath();
+  g.moveTo(w/2,0); g.lineTo(w/2,h); g.moveTo(0,h/2); g.lineTo(w,h/2); g.stroke();
+  /* dos manchitas por baldosa: sin ellas un pasillo de veinte metros se ve como un solo plano */
+  g.fillStyle='rgba(120,116,105,0.16)';
+  g.fillRect(9,13,4,3); g.fillRect(44,38,5,3);
+}, 1, 1);
+const T_PARED=tex(64,128,(g,w,h)=>{
+  g.fillStyle='#c9b48a'; g.fillRect(0,0,w,h);
+  g.fillStyle='#bda87e'; g.fillRect(0,0,w,h*0.06);
+  g.fillStyle='#8f7c55'; g.fillRect(0,h*0.86,w,h*0.14);      // el zocalo
+  g.fillStyle='#a08b60'; g.fillRect(0,h*0.86,w,2);
+  g.strokeStyle='rgba(120,102,68,0.40)'; g.lineWidth=1;
+  for(let x=0;x<=w;x+=w/2){ g.beginPath(); g.moveTo(x+0.5,0); g.lineTo(x+0.5,h*0.86); g.stroke(); }
+  g.fillStyle='rgba(255,255,255,0.05)'; g.fillRect(0,h*0.10,w,h*0.02);
+}, 1, 1);
+const T_TECHO=tex(32,32,(g,w,h)=>{
+  g.fillStyle='#eceade'; g.fillRect(0,0,w,h);
+  g.strokeStyle='rgba(150,148,138,0.45)'; g.lineWidth=1; g.strokeRect(0.5,0.5,w-1,h-1);
+}, 1, 1);
+const T_LOCKER=tex(64,128,(g,w,h)=>{
+  g.fillStyle='#c0392b'; g.fillRect(0,0,w,h);
+  g.fillStyle='#9c2c20'; g.fillRect(0,0,2,h); g.fillRect(w-2,0,2,h);
+  g.fillStyle='#a52f22'; g.fillRect(0,h*0.50,w,3);
+  g.fillStyle='rgba(255,255,255,0.10)'; g.fillRect(4,4,w-8,3);
+  /* las rejillas y la manija, que es lo que lo vuelve un locker y no una caja roja */
+  g.fillStyle='#7e2318';
+  for(let k=0;k<4;k++){ g.fillRect(w*0.24, h*0.09+k*4, w*0.52, 2);
+                        g.fillRect(w*0.24, h*0.59+k*4, w*0.52, 2); }
+  g.fillStyle='#e2e2e2'; g.fillRect(w*0.78, h*0.30, 4, 8); g.fillRect(w*0.78, h*0.80, 4, 8);
+}, 1, 1);
+const T_PUERTA=tex(64,128,(g,w,h)=>{
+  g.fillStyle='#b98d54'; g.fillRect(0,0,w,h);
+  g.fillStyle='#a87c46'; g.fillRect(0,0,3,h); g.fillRect(w-3,0,3,h);
+  g.fillStyle='#cfa269'; g.fillRect(w*0.14,h*0.08,w*0.72,h*0.30);   // el vidrio
+  g.fillStyle='#8ea9b8'; g.fillRect(w*0.18,h*0.11,w*0.64,h*0.24);
+  g.fillStyle='rgba(255,255,255,0.18)'; g.fillRect(w*0.20,h*0.13,w*0.24,h*0.08);
+  g.fillStyle='#e6c98d'; g.beginPath(); g.arc(w*0.80,h*0.56,3.4,0,7); g.fill();
+  g.fillStyle='#8f6a3c'; g.fillRect(w*0.14,h*0.66,w*0.72,2);
+}, 1, 1);
+
+const M_PISO =new THREE.MeshLambertMaterial({map:T_PISO});
+const M_PARED=new THREE.MeshLambertMaterial({map:T_PARED});
+/* EL TECHO VA SIN LUZ, y no es un atajo: con Lambert la cara del techo apunta HACIA ABAJO, o sea
+   que recibe el color de suelo de la hemisferica —un gris verdoso oscuro— y el pasillo quedaba con
+   el techo casi negro justo arriba de la camara. En la referencia el techo son placas blancas y
+   planas. Un material sin luz da exactamente eso y sigue respetando la niebla, que es lo que le da
+   la profundidad al pasillo. */
+const M_TECHO=new THREE.MeshBasicMaterial({map:T_TECHO, color:0xd6d4c8});
+const M_LOCKER=new THREE.MeshLambertMaterial({map:T_LOCKER});
+const M_PUERTA=new THREE.MeshLambertMaterial({map:T_PUERTA});
+const M_AULA =new THREE.MeshLambertMaterial({color:0xb9c9b0});
+
+/* ===================== LAS LUCES =====================
+   Un ambiente parejo y alto, mas una direccional floja. Es a proposito: la escuela del original esta
+   iluminada como una escuela de verdad —fluorescentes en el techo, sin sombras dramaticas— y meterle
+   luces puntuales por pasillo daria treinta luces, treinta programas de shader y una imagen que no
+   se parece a la referencia. */
+const luzA=new THREE.HemisphereLight(0xfff6e2, 0x5a5f55, 1.85); escena.add(luzA);
+const luzD=new THREE.DirectionalLight(0xffffff, 0.42); luzD.position.set(0.4,1,0.25); escena.add(luzD);
+
+/* ===================== ARMAR LA ESCUELA EN CUATRO MALLAS =====================
+   23x19 celdas son unas cuatrocientas paredes. Sueltas serian cuatrocientas llamadas de dibujo;
+   fundidas por MATERIAL son cuatro. Y se funden por material y no todas juntas porque el piso, la
+   pared, el techo y los lockers usan texturas distintas: fundir dos materiales en una malla obliga
+   a un atlas, y un atlas para cuatro texturas de 64 px es trabajo para no ganar nada. */
+function armarEscuela(){
+  const paredes=[], pisos=[], techos=[], lockers=[];
+  const caja=(lista,w,h,d,x,y,z,uv)=>{
+    const g=new THREE.BoxGeometry(w,h,d);
+    if(uv){ const a=g.attributes.uv.array; for(let k=0;k<a.length;k+=2){ a[k]*=uv[0]; a[k+1]*=uv[1]; } }
+    g.translate(x,y,z); lista.push(g);
+  };
+  for(let j=0;j<GH;j++) for(let i=0;i<GW;i++){
+    const c=MAPA[j][i], x=XC(i), z=ZC(j);
+    if(c===0){
+      /* solo se construye la pared si toca algo pisable: una pared entre dos paredes no se ve
+         nunca y son doce triangulos que el aparato dibuja para nadie */
+      const toca=[[i,j-1],[i,j+1],[i-1,j],[i+1,j]].some(([a,b])=>
+        a>=0&&b>=0&&a<GW&&b<GH&&(MAPA[b][a]===1||MAPA[b][a]===2||MAPA[b][a]===3));
+      if(toca) caja(paredes, CEL, ALTO_M, CEL, x, ALTO_M/2, z, [CEL/2.2, ALTO_M/2.4]);
+      continue;
+    }
+    caja(pisos, CEL, 0.16, CEL, x, -0.08, z, [CEL/2.1, CEL/2.1]);
+    caja(techos, CEL, 0.16, CEL, x, ALTO_M+0.08, z, [CEL/2.1, CEL/2.1]);
+  }
+  /* LOS LOCKERS VAN CONTRA LAS PAREDES DE PASILLO Y NO EN LAS AULAS, que es donde estan en una
+     escuela. Se buscan las celdas de pasillo que tienen pared al lado y se pega una fila. */
+  if(CAL[calidad].lockers) for(let j=0;j<GH;j++) for(let i=0;i<GW;i++){
+    if(MAPA[j][i]!==1) continue;
+    const lados=[[0,-1,0,0],[0,1,Math.PI,0],[-1,0,0,1],[1,0,0,1]];
+    for(const [di,dj,rot,vert] of lados){
+      const a=i+di, b=j+dj;
+      if(a<0||b<0||a>=GW||b>=GH||MAPA[b][a]!==0) continue;
+      if(((i*7+j*13+di*3+dj*5)%3)!==0) continue;         // no en todas, se ve mejor
+      const w = vert? 0.32 : CEL*0.78, d = vert? CEL*0.78 : 0.32;
+      const x=XC(i)+di*(CEL/2-0.20), z=ZC(j)+dj*(CEL/2-0.20);
+      caja(lockers, w, 2.10, d, x, 1.05, z, [vert? d/1.1 : w/1.1, 1.4]);
+    }
+  }
+  const juntar=(lista, mat)=>{
+    if(!lista.length) return null;
+    const g=mergeGeometries(lista,false);
+    for(const q of lista) q.dispose();
+    const m=new THREE.Mesh(g, mat); m.frustumCulled=false; escena.add(m); return m;
+  };
+  return { paredes:juntar(paredes,M_PARED), pisos:juntar(pisos,M_PISO),
+           techos:juntar(techos,M_TECHO), lockers:juntar(lockers,M_LOCKER) };
+}
+const escuela=armarEscuela();
+
+/* ---------- LAS PUERTAS, SUELTAS PORQUE SE ABREN ----------
+   Cada una gira sobre su marco. Van sueltas y con su propio material: es lo unico del edificio que
+   se mueve, y fundirlas con la pared las dejaria clavadas para siempre. */
+const puertaGeo=new THREE.BoxGeometry(CEL*0.92, ALTO_M*0.86, 0.14);
+{ const a=puertaGeo.attributes.uv.array; for(let k=0;k<a.length;k+=2){ a[k]*=1; a[k+1]*=1; } }
+puertaGeo.translate(CEL*0.46, 0, 0);            // la bisagra en el borde
+for(const p of PUERTAS){
+  const g=new THREE.Group();
+  const m=new THREE.Mesh(puertaGeo, p.salida? new THREE.MeshLambertMaterial({map:T_PUERTA, color:0x9fd08f}) : M_PUERTA);
+  g.add(m);
+  /* la puerta se orienta segun por donde se pasa: si los vecinos pisables estan en Z, la hoja va en X */
+  const vertical = (pisable(p.i,p.j-1)||pisable(p.i,p.j+1)) &&
+                   !(pisable(p.i-1,p.j)||pisable(p.i+1,p.j));
+  g.position.set(XC(p.i) - CEL*0.46*(vertical?1:0), ALTO_M*0.43, ZC(p.j) - CEL*0.46*(vertical?0:1));
+  if(!vertical){ g.rotation.y=Math.PI/2; g.position.set(XC(p.i), ALTO_M*0.43, ZC(p.j) - CEL*0.46); }
+  else { g.position.set(XC(p.i) - CEL*0.46, ALTO_M*0.43, ZC(p.j)); }
+  p.g=g; p.vertical=vertical; escena.add(g);
+}
+
+/* ---------- LAS LIBRETAS ---------- */
+const M_LIB=new THREE.MeshLambertMaterial({color:0x2b6cd4});
+const M_LIB2=new THREE.MeshLambertMaterial({color:0xf2efe6});
+const LIBRETAS=[];
+for(const a of AULAS){
+  const i=Math.round((a.i0+a.i1)/2), j=Math.round((a.j0+a.j1)/2);
+  const g=new THREE.Group();
+  const tapa=new THREE.Mesh(new THREE.BoxGeometry(0.42,0.56,0.06), M_LIB);
+  const hojas=new THREE.Mesh(new THREE.BoxGeometry(0.38,0.52,0.05), M_LIB2);
+  hojas.position.z=0.03; g.add(tapa); g.add(hojas);
+  /* un pupitre debajo, para que la libreta no flote en el aire */
+  const pupitre=new THREE.Mesh(new THREE.BoxGeometry(1.05,0.08,0.70),
+                               new THREE.MeshLambertMaterial({color:0xa9753f}));
+  pupitre.position.y=-0.42; g.add(pupitre);
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    const pata=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.66,0.07),
+                              new THREE.MeshLambertMaterial({color:0x6b6b72}));
+    pata.position.set(sx*0.44, -0.79, sz*0.28); g.add(pata);
+  }
+  g.position.set(XC(i), 1.20, ZC(j));
+  g.rotation.x=-0.35;
+  escena.add(g);
+  LIBRETAS.push({ aula:a.n, i, j, x:XC(i), z:ZC(j), g, tomada:false, giro:Math.random()*6.28 });
+}
+
+/* ---------- LOS PUPITRES DE ADORNO ----------
+   Un aula vacia con una libreta en el medio se lee a deposito. Cuatro pupitres alcanzan. */
+{
+  const gs=[];
+  for(const a of AULAS){
+    for(let k=0;k<4;k++){
+      const i=a.i0 + ((k%2)? (a.i1-a.i0) : 0), j=a.j0 + ((k<2)? 1 : (a.j1-a.j0-1));
+      const g1=new THREE.BoxGeometry(1.0,0.08,0.66); g1.translate(XC(i), 0.78, ZC(j)); gs.push(g1);
+      const g2=new THREE.BoxGeometry(1.0,0.50,0.07); g2.translate(XC(i), 0.50, ZC(j)+0.30); gs.push(g2);
+    }
+  }
+  const g=mergeGeometries(gs,false); for(const q of gs) q.dispose();
+  const m=new THREE.Mesh(g, new THREE.MeshLambertMaterial({color:0xa9753f}));
+  m.frustumCulled=false; escena.add(m);
+}
+
+/* =========================================================================================
+   EL PROFESOR
+   Modelado por codigo copiando la referencia: cabeza pelada de piel clara con ojos grandes y una
+   boca roja, sueter verde ancho, brazos verdes flacos con manos claras de dedos visibles, dos
+   piernas azules separadas y zapatos naranjas. Ni un archivo: veinte cajas y dos esferas.
+
+   Y RIGGEADO A MANO, NO IMPORTADO. En la vuelta de Eco importar un esqueleto de un GLB costo un
+   retarget entero en espacio de mundo porque cada generacion trae otro rig; acá el esqueleto lo
+   escribimos nosotros, asi que una animacion es una funcion del tiempo a diez rotaciones y no hay
+   nada que retargetear. Con graficos simples eso no es una concesion: es la version buena.
+   ========================================================================================= */
+const M_PIEL =new THREE.MeshLambertMaterial({color:0xd8c39a});
+const M_VERDE=new THREE.MeshLambertMaterial({color:0x2ecc0f});
+const M_AZUL =new THREE.MeshLambertMaterial({color:0x2626d6});
+const M_ZAPA =new THREE.MeshLambertMaterial({color:0xd98a2b});
+const M_OJO  =new THREE.MeshBasicMaterial({color:0xf7f7f2});
+const M_PUPILA=new THREE.MeshBasicMaterial({color:0x24242b});
+const M_BOCA =new THREE.MeshBasicMaterial({color:0xc0392b});
+
+function armarProfe(){
+  const R={};
+  const raiz=new THREE.Group();          R.raiz=raiz;
+  /* LAS MEDIDAS SALEN DE UNA CUENTA Y NO DE PROBAR, y hubo que hacerla porque la primera version
+     lo dejaba ENTERRADO: con el torso a 1,06 y la cadena cadera(-0,56) -> pierna(0,60) ->
+     pantorrilla(0,26) -> zapato(-0,34) el pie terminaba en y = -1,06, o sea un metro debajo del
+     piso, y en pantalla se leia como un profesor de piernas cortas. La cadena hacia abajo mide
+     0,56 + 0,44 + 0,42 + 0,065 = 1,485, asi que el torso va a 1,44 y el pie queda en -0,045:
+     apenas hundido, que es lo que se quiere para que no flote.
+     Y queda de 2,4 m de alto, que es la referencia: el personaje es larguirucho a proposito y en un
+     pasillo de 3,6 de techo eso es exactamente lo que lo vuelve incomodo de ver venir. */
+  const torso=new THREE.Group();         R.torso=torso;  raiz.add(torso);
+  torso.position.y=1.44;
+
+  const cuerpo=new THREE.Mesh(new THREE.BoxGeometry(0.86,0.86,0.42), M_VERDE);
+  cuerpo.position.y=-0.05; torso.add(cuerpo);
+
+  /* la cabeza: una esfera achatada, sin cuello, como en la referencia */
+  const cabeza=new THREE.Group(); R.cabeza=cabeza; torso.add(cabeza);
+  cabeza.position.y=0.58;
+  const craneo=new THREE.Mesh(new THREE.SphereGeometry(0.40,14,10), M_PIEL);
+  craneo.scale.set(1,1.10,0.94); cabeza.add(craneo);
+  for(const sg of [-1,1]){
+    const ojo=new THREE.Mesh(new THREE.SphereGeometry(0.115,10,8), M_OJO);
+    ojo.position.set(sg*0.155,0.04,0.345); ojo.scale.set(1,1.18,0.5); cabeza.add(ojo);
+    const pup=new THREE.Mesh(new THREE.SphereGeometry(0.055,8,6), M_PUPILA);
+    pup.position.set(sg*0.155,0.03,0.395); pup.scale.set(1,1.1,0.4); cabeza.add(pup);
+    R['pup'+(sg<0?'I':'D')]=pup;
+  }
+  const boca=new THREE.Mesh(new THREE.SphereGeometry(0.115,10,8), M_BOCA);
+  boca.position.set(0,-0.21,0.335); boca.scale.set(1.05,0.52,0.42); cabeza.add(boca);
+  R.boca=boca;
+
+  /* los brazos: hombro -> brazo -> codo -> antebrazo -> mano con cinco dedos */
+  const mano=()=>{
+    const g=new THREE.Group();
+    const palma=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.17,0.09), M_PIEL);
+    g.add(palma);
+    for(let k=0;k<4;k++){
+      const d=new THREE.Mesh(new THREE.BoxGeometry(0.028,0.14,0.028), M_PIEL);
+      d.position.set(-0.052+k*0.035, -0.15, 0); g.add(d);
+    }
+    const pulgar=new THREE.Mesh(new THREE.BoxGeometry(0.030,0.10,0.030), M_PIEL);
+    pulgar.position.set(-0.085,-0.06,0.02); pulgar.rotation.z=0.7; g.add(pulgar);
+    return g;
+  };
+  for(const sg of [-1,1]){
+    const lado = sg<0? 'I':'D';
+    /* el hombro AFUERA del torso: a 0,47 el brazo -de 0,16 de ancho- quedaba mordido por el borde
+       del cuerpo, que esta a 0,43, y los brazos se leian como dos rebanadas. A 0,53 cuelgan
+       separados, como en la referencia. */
+    const hombro=new THREE.Group(); hombro.position.set(sg*0.53, 0.32, 0);
+    torso.add(hombro); R['hombro'+lado]=hombro;
+    const brazo=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.56,0.16), M_VERDE);
+    brazo.position.y=-0.28; hombro.add(brazo);
+    const codo=new THREE.Group(); codo.position.y=-0.56; hombro.add(codo); R['codo'+lado]=codo;
+    const ante=new THREE.Mesh(new THREE.BoxGeometry(0.145,0.50,0.145), M_VERDE);
+    ante.position.y=-0.25; codo.add(ante);
+    const m=mano(); m.position.y=-0.58; codo.add(m); R['mano'+lado]=m;
+  }
+  /* las piernas: dos, separadas, sin cadera visible — es asi en la referencia */
+  for(const sg of [-1,1]){
+    const lado = sg<0? 'I':'D';
+    const cadera=new THREE.Group(); cadera.position.set(sg*0.20, -0.56, 0);
+    torso.add(cadera); R['cadera'+lado]=cadera;
+    const pierna=new THREE.Mesh(new THREE.BoxGeometry(0.17,0.44,0.17), M_AZUL);
+    pierna.position.y=-0.22; cadera.add(pierna);
+    const rodilla=new THREE.Group(); rodilla.position.y=-0.44; cadera.add(rodilla);
+    R['rodilla'+lado]=rodilla;
+    const pant=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.44,0.16), M_AZUL);
+    pant.position.y=-0.22; rodilla.add(pant);
+    const zapa=new THREE.Mesh(new THREE.BoxGeometry(0.21,0.13,0.34), M_ZAPA);
+    zapa.position.set(0,-0.42,0.06); rodilla.add(zapa);
+  }
+  return R;
+}
+
+/* ---------- LAS ANIMACIONES ----------
+   Una animacion es una funcion (t) -> diez rotaciones. Nada de clips, nada de keyframes: con un rig
+   propio y diez articulaciones, escribir la curva es mas corto que describirla, y se puede MEZCLAR
+   dos animaciones evaluando las dos y promediando — que es todo lo que un crossfade es. */
+const HUESOS=['torso','cabeza','hombroI','codoI','hombroD','codoD',
+              'caderaI','rodillaI','caderaD','rodillaD'];
+function poseNueva(){ const p={}; for(const h of HUESOS) p[h]=[0,0,0]; p.alto=0; return p; }
+const _pa=poseNueva(), _pb=poseNueva();
+
+const ANIM={
+  /* QUIETO: respira y nada mas. Un personaje perfectamente inmovil se lee a estatua, y una estatua
+     no da miedo — da la sensacion de que el juego se colgo. */
+  quieto:(t,p)=>{
+    const r=Math.sin(t*1.7);
+    p.torso[0]=r*0.020; p.cabeza[0]=-r*0.030; p.cabeza[1]=Math.sin(t*0.7)*0.14;
+    p.hombroI[2]= 0.09+r*0.020; p.hombroD[2]=-0.09-r*0.020;
+    p.codoI[0]=-0.12; p.codoD[0]=-0.12; p.alto=r*0.012;
+  },
+  /* CAMINAR: piernas en oposicion, brazos en contra, y el tronco sube dos veces por ciclo. Esa
+     doble subida es lo que hace que se lea a paso y no a deslizamiento. */
+  caminar:(t,p)=>{
+    const a=t*2.0, s=Math.sin(a), c=Math.cos(a);
+    p.caderaI[0]= s*0.62;  p.caderaD[0]=-s*0.62;
+    p.rodillaI[0]=Math.max(0,-s)*0.75; p.rodillaD[0]=Math.max(0, s)*0.75;
+    p.hombroI[0]=-s*0.44; p.hombroD[0]= s*0.44;
+    p.hombroI[2]= 0.10;   p.hombroD[2]=-0.10;
+    p.codoI[0]=-0.30-Math.max(0,-s)*0.35; p.codoD[0]=-0.30-Math.max(0,s)*0.35;
+    p.torso[0]=0.055+Math.abs(c)*0.030; p.torso[1]=s*0.055;
+    p.cabeza[0]=-0.05; p.alto=Math.abs(c)*0.055;
+  },
+  /* SALUDAR: el brazo derecho arriba y el antebrazo yendo y viniendo. El cuerpo se inclina un poco
+     hacia ese lado: un saludo con el torso quieto se ve como un brazo que se movio solo. */
+  saludar:(t,p)=>{
+    ANIM.quieto(t,p);
+    const w=Math.sin(t*6.4);
+    p.hombroD[2]=-2.42; p.hombroD[0]=0.22;
+    p.codoD[2]=w*0.62; p.codoD[0]=-0.26;
+    p.torso[2]=-0.075; p.cabeza[1]=0.16; p.cabeza[2]=0.06;
+  },
+  /* ABRIR PUERTA: los dos brazos van adelante, el de adelante empuja y el cuerpo se va con el
+     empujon. Se resuelve en un ciclo de dos segundos que va y vuelve. */
+  puerta:(t,p)=>{
+    const f=(Math.sin(t*3.1)+1)/2;
+    p.hombroD[0]=-1.44-f*0.30; p.hombroD[2]=-0.24;
+    p.codoD[0]=-0.34+f*0.30;
+    p.hombroI[0]=-0.50; p.hombroI[2]= 0.20; p.codoI[0]=-0.70;
+    p.torso[0]=0.10+f*0.10; p.torso[1]=-0.20-f*0.12;
+    p.cabeza[0]=0.10; p.cabeza[1]=0.16;
+    p.caderaD[0]=0.20; p.caderaI[0]=-0.14; p.rodillaI[0]=0.22;
+    p.alto=-0.030-f*0.030;
+  },
+  /* EXPLICANDO: las dos manos hablando, la cabeza acompanando y el tronco girando de a poco. Las
+     dos manos van DESFASADAS: en fase se lee a marioneta. */
+  explicar:(t,p)=>{
+    const a=Math.sin(t*2.6), b=Math.sin(t*2.6+1.9), c=Math.sin(t*1.1);
+    p.hombroD[0]=-1.06+a*0.34; p.hombroD[2]=-0.52-a*0.18;
+    p.codoD[0]=-1.14+b*0.42;   p.codoD[1]= b*0.30;
+    p.hombroI[0]=-0.96+b*0.30; p.hombroI[2]= 0.50+b*0.16;
+    p.codoI[0]=-1.20+a*0.38;   p.codoI[1]=-a*0.30;
+    p.torso[1]=c*0.20; p.cabeza[1]=-c*0.30; p.cabeza[0]=-0.06+a*0.07;
+    p.alto=Math.sin(t*2.6)*0.014;
+  }
+};
+const ANIM_NOMBRES=['quieto','caminar','saludar','puerta','explicar'];
+
+function animar(R, nombre, otro, mezcla, t){
+  const A=ANIM[nombre]||ANIM.quieto;
+  for(const h of HUESOS){ _pa[h][0]=_pa[h][1]=_pa[h][2]=0; } _pa.alto=0;
+  A(t,_pa);
+  let P=_pa;
+  if(otro && mezcla>0.001){
+    for(const h of HUESOS){ _pb[h][0]=_pb[h][1]=_pb[h][2]=0; } _pb.alto=0;
+    (ANIM[otro]||ANIM.quieto)(t,_pb);
+    for(const h of HUESOS) for(let k=0;k<3;k++) _pa[h][k]=_pa[h][k]*(1-mezcla)+_pb[h][k]*mezcla;
+    _pa.alto=_pa.alto*(1-mezcla)+_pb.alto*mezcla;
+  }
+  for(const h of HUESOS){ const q=R[h]; if(q) q.rotation.set(P[h][0],P[h][1],P[h][2]); }
+  if(R.torso) R.torso.position.y=1.44+P.alto;
+}
+
+/* ---------- el profesor en la escena ---------- */
+const profe=armarProfe();
+escena.add(profe.raiz);
+const PROFE={ x:0, z:0, giro:0, vel:0, estado:'duerme', t:0, meta:null, oido:null,
+              anim:'quieto', animOtro:null, mezcla:0, at:0, ax:0, az:0, agiro:0 };
+
+/* ===================== EL JUGADOR ===================== */
+const OJO=1.62;
+const jug={ x:XC(11), z:ZC(9), giro:0, pitch:0, ojo:OJO, vx:0, vz:0, paso:0, ruido:0,
+            ax:0, az:0, agiro:0, apitch:0, aojo:OJO };
+let libretas=0, jugando=false, terminado=0, tiempoJ=0, salidasAbiertas=false;
+
+/* ---------- LAS COLISIONES SALEN DE LA GRILLA ----------
+   Preguntar "esta celda se pisa" es una lectura; probar contra cuatrocientas cajas son
+   cuatrocientas pruebas por cuadro. Y se resuelve eje por eje para poder RASPAR una pared en vez de
+   frenar en seco, que es la diferencia entre un movimiento que se siente bien y uno que se traba en
+   cada esquina de un pasillo. */
+const RADIO=0.32;
+function corregir(px,pz,nx,nz,pas){
+  pas=pas||pisable;
+  const [i,j]=celda(px,pz);
+  const cx=XC(i), cz=ZC(j), lim=CEL/2-GRUESO/2-RADIO;
+  let x=nx, z=nz;
+  const lx=x-cx, lz=z-cz;
+  if(lx> lim && !pas(i+1,j)) x=cx+lim;
+  if(lx<-lim && !pas(i-1,j)) x=cx-lim;
+  if(lz> lim && !pas(i,j+1)) z=cz+lim;
+  if(lz<-lim && !pas(i,j-1)) z=cz-lim;
+  const [i2,j2]=celda(x,z);
+  if(i2!==i||j2!==j){
+    const c2x=XC(i2), c2z=ZC(j2), l2x=x-c2x, l2z=z-c2z;
+    if(l2x> lim && !pas(i2+1,j2)) x=c2x+lim;
+    if(l2x<-lim && !pas(i2-1,j2)) x=c2x-lim;
+    if(l2z> lim && !pas(i2,j2+1)) z=c2z+lim;
+    if(l2z<-lim && !pas(i2,j2-1)) z=c2z-lim;
+  }
+  if(!pas(i2,j2)) return [px,pz];      // ultimo recurso: no se sale de la escuela
+  return [x,z];
+}
+
+/* ---------- A DONDE IR: UN BFS SOBRE LA GRILLA ----------
+   El profesor no puede perseguir en linea recta porque hay paredes; y un A* por cuadro para una sola
+   entidad es escribir un motor de pathfinding para nada. Un BFS desde el DESTINO da el mapa de
+   distancias de toda la escuela de una vez, y despues moverse es bajar la pendiente: una lectura por
+   paso. Se recalcula solo cuando el destino cambia de celda. */
+function distancias(i0,j0,pas){
+  pas=pas||pisable;
+  const D=[]; for(let j=0;j<GH;j++){ D.push([]); for(let i=0;i<GW;i++) D[j].push(-1); }
+  if(!pas(i0,j0)) return D;
+  D[j0][i0]=0; const q=[[i0,j0]];
+  while(q.length){
+    const [i,j]=q.shift(), d=D[j][i];
+    for(const [a,b] of [[i+1,j],[i-1,j],[i,j+1],[i,j-1]]){
+      if(a<0||b<0||a>=GW||b>=GH||D[b][a]>=0||!pas(a,b)) continue;
+      D[b][a]=d+1; q.push([a,b]);
+    }
+  }
+  return D;
+}
+let DIST=null, distDe=null;
+function rumbo(i,j,D){
+  if(!D||D[j][i]<0) return null;
+  let mejor=null, md=D[j][i];
+  for(const [a,b] of [[i+1,j],[i-1,j],[i,j+1],[i,j-1]]){
+    if(a<0||b<0||a>=GW||b>=GH) continue;
+    if(D[b][a]>=0 && D[b][a]<md){ md=D[b][a]; mejor=[a,b]; }
+  }
+  return mejor;
+}
+/* ¿lo veo? Solo por pasillo recto: es la unica linea de vista que una escuela de pasillos ofrece,
+   y ademas es la que el jugador puede predecir sin pensar. */
+function seVe(ax,az,bx,bz,tope){
+  const dx=bx-ax, dz=bz-az, d=Math.hypot(dx,dz);
+  if(d>tope) return false;
+  const n=Math.ceil(d/(CEL*0.45));
+  for(let k=1;k<=n;k++){
+    const [i,j]=celda(ax+dx*k/n, az+dz*k/n);
+    if(!pisable(i,j)) return false;
+  }
+  return true;
+}
+
+/* ===================== LO QUE PASA EN UN PASO FIJO =====================
+   TODO lo que afecta el resultado del juego vive acá y corre a 60 pasos por segundo exactos. Nada
+   de esto se toca en el dibujo. Es la unica forma de que un telefono a 30 cuadros y una notebook a
+   144 jueguen el mismo juego. */
+const PASO=1/60;
+const VEL_CAMINA=2.75, VEL_CORRE=5.30;
+const RUIDO_CAMINA=5.0, RUIDO_CORRE=24.0;
+let entrada={ ade:0, lat:0, correr:false, usar:false, giroV:0, pitchV:0 };
+let usarPedido=false;
+
+function pasoFijo(dt){
+  if(!jugando || terminado) return;
+  tiempoJ+=dt;
+  /* --- la camara gira --- */
+  jug.giro -= entrada.giroV*dt;
+  jug.pitch = Math.max(-1.25, Math.min(1.25, jug.pitch - entrada.pitchV*dt));
+  /* --- el jugador camina --- */
+  const corr = entrada.correr;
+  const v = corr? VEL_CORRE : VEL_CAMINA;
+  const sn=Math.sin(jug.giro), cs=Math.cos(jug.giro);
+  let mx = (sn*entrada.ade - cs*entrada.lat);
+  let mz = (cs*entrada.ade + sn*entrada.lat);
+  const l=Math.hypot(mx,mz);
+  if(l>1){ mx/=l; mz/=l; }
+  const moviendo=l>0.04;
+  jug.vx += (mx*v - jug.vx)*Math.min(1, dt*12);
+  jug.vz += (mz*v - jug.vz)*Math.min(1, dt*12);
+  const [nx,nz]=corregir(jug.x, jug.z, jug.x+jug.vx*dt, jug.z+jug.vz*dt);
+  jug.x=nx; jug.z=nz;
+  /* el bamboleo de la marcha, por DISTANCIA y no por tiempo: asi el paso cae siempre en el mismo
+     punto del ciclo por rapido que vayas */
+  const velH=Math.hypot(jug.vx,jug.vz);
+  if(velH>0.25){ jug.paso=(jug.paso + velH*dt/(corr?3.4:2.6))%1; }
+  else jug.paso += (0-jug.paso)*Math.min(1,dt*6);
+  jug.ojo = OJO + Math.sin(jug.paso*Math.PI*4)*(corr?0.055:0.030);
+
+  /* --- EL RUIDO. Caminar casi no suena; correr grita. --- */
+  const objRuido = moviendo? (corr? 1 : 0.22) : 0;
+  jug.ruido += (objRuido - jug.ruido)*Math.min(1, dt*5);
+  const alcance = RUIDO_CAMINA + (RUIDO_CORRE-RUIDO_CAMINA)*jug.ruido;
+
+  /* --- las puertas y las libretas al alcance --- */
+  cercaTick(dt);
+
+  /* --- EL PROFESOR --- */
+  profeTick(dt, alcance);
+}
+
+/* ---------- lo que hay al alcance de la mano ---------- */
+let cercaCosa=null;
+function cercaTick(dt){
+  cercaCosa=null;
+  let mejor=1e9;
+  for(const l of LIBRETAS){
+    if(l.tomada) continue;
+    const d=Math.hypot(jug.x-l.x, jug.z-l.z);
+    if(d<2.2 && d<mejor){ mejor=d; cercaCosa={tipo:'libreta', ref:l}; }
+  }
+  for(const p of PUERTAS){
+    if(p.abierta) continue;
+    if(p.salida && !salidasAbiertas) continue;
+    /* TRES METROS Y NO DOS Y MEDIO, Y ES ARITMETICA: una puerta cerrada no se pisa, asi que el
+       cuerpo queda frenado a CEL/2 - GRUESO/2 - RADIO = 1,63 m del centro de la celda de al lado, o
+       sea a 4,20 - 1,63 = 2,57 m del centro de la puerta. Con 2,4 de alcance NINGUNA puerta cerrada
+       se podia abrir nunca: el juego era ocho aulas selladas y no habia forma de enterarse mirando
+       el pasillo. */
+    const d=Math.hypot(jug.x-XC(p.i), jug.z-ZC(p.j));
+    if(d<3.0 && d<mejor){ mejor=d; cercaCosa={tipo:'puerta', ref:p}; }
+  }
+  if(usarPedido){
+    usarPedido=false;
+    if(cercaCosa){
+      if(cercaCosa.tipo==='libreta') tomarLibreta(cercaCosa.ref);
+      else abrirPuerta(cercaCosa.ref);
+    }
+  }
+  /* las puertas se cierran solas despues de un rato: si quedaran abiertas, a la mitad de la partida
+     la escuela seria un galpon y el profesor no tendria por donde perderte */
+  for(const p of PUERTAS){
+    if(!p.abierta || p.salida) continue;
+    p.t=(p.t||0)+dt;
+    if(p.t>7.0){ p.abierta=false; p.t=0; }
+  }
+  for(const p of PUERTAS){
+    const obj = p.abierta? (p.salida? 1.55 : 1.35) : 0;
+    p.ang += (obj-p.ang)*Math.min(1, dt*6);
+  }
+}
+function tomarLibreta(l){
+  l.tomada=true; l.g.visible=false; libretas++;
+  pintarHud(); avisar(TX('tomada')+' '+libretas+'/'+LIBRETAS_N, 1.2);
+  son('libreta');
+  /* LA PRIMERA LIBRETA LO DESPIERTA, y de ahi en mas cada una lo hace mas rapido. Es la unica curva
+     de dificultad que este juego necesita: la que el propio jugador construye avanzando. */
+  if(PROFE.estado==='duerme'){ PROFE.estado='ronda'; avisar(TX('desperto'), 2.0); son('mal'); }
+  PROFE.oido={ i:celda(jug.x,jug.z)[0], j:celda(jug.x,jug.z)[1] };
+  if(libretas>=LIBRETAS_N){
+    salidasAbiertas=true;
+    for(const p of PUERTAS) if(p.salida) p.abierta=true;
+    avisar(TX('abierto'), 2.6); son('bien'); pintarHud();
+  }
+}
+function abrirPuerta(p){
+  p.abierta=true; p.t=0; son('puerta');
+  /* abrir una puerta suena, y el profesor lo oye desde bastante lejos. No es un castigo gratuito:
+     es lo que hace que valga la pena mirar antes de entrar. */
+  if(PROFE.estado!=='duerme') PROFE.oido={ i:p.i, j:p.j };
+}
+
+/* ---------- EL PROFESOR ---------- */
+const PROFE_VEL=[2.30, 2.55, 2.80, 3.05, 3.35, 3.65, 4.00, 4.40, 4.85];
+function profeTick(dt, alcanceRuido){
+  const P=PROFE;
+  P.t+=dt;
+  if(P.estado==='duerme'){ profePose('explicar', dt); return; }
+  const [pi,pj]=celda(P.x,P.z), [ji,jj]=celda(jug.x,jug.z);
+  const dJug=Math.hypot(jug.x-P.x, jug.z-P.z);
+
+  /* TE OYE POR ALCANCE, no por fuerza: la regla se puede decir en una frase —"te oye hasta donde
+     hace ruido lo que estas haciendo"— y el jugador puede razonarla sin ver un numero. */
+  if(dJug < alcanceRuido) P.oido={ i:ji, j:jj };
+  const viendo = seVe(P.x,P.z, jug.x,jug.z, 26) && dJug<26;
+  if(viendo){ P.estado='persigue'; P.oido={ i:ji, j:jj }; }
+  else if(P.estado==='persigue' && P.t>0.8) P.estado='va';
+
+  let meta=null;
+  if(viendo) meta=[ji,jj];
+  else if(P.oido) meta=[P.oido.i, P.oido.j];
+  if(!meta || !pisable(meta[0],meta[1])){
+    /* ronda: se va al aula mas lejana que todavia tenga libreta, o al medio */
+    let m=null, md=-1;
+    for(const l of LIBRETAS){ if(l.tomada) continue;
+      const d=Math.hypot(l.x-P.x, l.z-P.z); if(d>md){ md=d; m=[l.i,l.j]; } }
+    meta = m || [11,9];
+  }
+  if(!distDe || distDe[0]!==meta[0] || distDe[1]!==meta[1]){
+    distDe=[meta[0],meta[1]]; DIST=distancias(meta[0],meta[1], pisableProf);
+  }
+  const sig=rumbo(pi,pj,DIST);
+  const vel=PROFE_VEL[Math.min(PROFE_VEL.length-1, libretas)] * (viendo? 1.12 : 1);
+  let tx, tz;
+  if(sig){ tx=XC(sig[0]); tz=ZC(sig[1]); }
+  else { tx=jug.x; tz=jug.z; }
+  const dx=tx-P.x, dz=tz-P.z, d=Math.hypot(dx,dz)||1e-6;
+  const nx=P.x + dx/d*vel*dt, nz=P.z + dz/d*vel*dt;
+  const [cx,cz]=corregir(P.x,P.z,nx,nz, pisableProf);
+  const movio=Math.hypot(cx-P.x, cz-P.z);
+  P.x=cx; P.z=cz;
+  P.vel=movio/dt;
+  /* mira a donde va, girando y no saltando */
+  const gq=Math.atan2(dx,dz);
+  let g=gq-P.giro; while(g>Math.PI)g-=2*Math.PI; while(g<-Math.PI)g+=2*Math.PI;
+  P.giro += g*Math.min(1, dt*7);
+  /* si llego a lo que oyo, deja de tener a donde ir */
+  if(P.oido && pi===P.oido.i && pj===P.oido.j) P.oido=null;
+  /* abre las puertas que le tapan el camino: si no, un profesor encerrado no es una amenaza */
+  /* abre la puerta de la celda a la que va Y la de la celda en la que esta: si solo abriera la de
+     adelante, la de su propia aula quedaria cerrada detras de el y volveria a encerrarse al rondar */
+  for(const c of [sig, [pi,pj]]){
+    if(!c) continue;
+    const pu=PUERTAS.find(q=>q.i===c[0]&&q.j===c[1]);
+    if(pu && !pu.abierta && !pu.salida){ pu.abierta=true; pu.t=0; son('puerta'); }
+  }
+
+  profePose(P.vel>0.6? 'caminar' : 'quieto', dt);
+
+  if(dJug<1.05 && !terminado){ perder(); }
+}
+/* el cambio de animacion es un crossfade de medio segundo: cortar de una animacion a otra en un
+   cuadro se ve como un salto y es lo que separa un personaje de un muneco */
+let animForzada=null;
+function profePose(nombre, dt){
+  const P=PROFE;
+  /* el gancho de pruebas puede clavar una animacion. Sin esto era imposible mirar 'saludar': el
+     profesor arranca dormido, y dormido profeTick() le vuelve a pedir 'explicar' en CADA cuadro, o
+     sea que pisaba la animacion pedida antes de que se dibujara un solo cuadro con ella. */
+  if(animForzada) nombre=animForzada;
+  if(nombre!==P.anim){ P.animOtro=P.anim; P.anim=nombre; P.mezcla=1; }
+  if(P.mezcla>0) P.mezcla=Math.max(0, P.mezcla - dt/0.45);
+  P.at+=dt;
+}
+
+/* ===================== LAS MANOS =====================
+   MediaPipe da 21 puntos por mano. El juego necesita CUATRO DECISIONES: girar, avanzar, correr y
+   usar. Todo el problema esta en ese salto, y son tres problemas distintos:
+
+   1. LA ESCALA. La mano puede estar a veinte centimetros de la camara o a un metro, asi que ninguna
+      distancia en pixeles sirve para nada. TODO se mide en proporcion al tamano de la palma —la
+      distancia de la muneca al nudillo del medio— y eso es invariante a la distancia y al tamano de
+      la mano de quien juega.
+   2. EL TEMBLOR. Los puntos vibran unos pocos pixeles por cuadro. Sin filtrar, la camara del juego
+      tiembla igual y marea en diez segundos. Va una media exponencial sobre el rumbo.
+   3. EL PARPADEO DEL GESTO. Un dedo que cruza el umbral una vez cada tantos cuadros hace que el
+      jugador salga corriendo sin querer. Cada gesto tiene que ganar TRES cuadros seguidos para
+      valer, y un gesto mal leido en un juego de persecucion es una muerte que el jugador no
+      entiende — que es la razon por la que esto no es opcional. */
+const MANO={ on:false, estado:'no', det:null, vid:null, gesto:'', cand:'', votos:0,
+             rx:0, ry:0, hay:false, lm:null, ultT:0, palma:0 };
+const MANO_URL='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+const MANO_WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const MANO_MODELO='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
+function d3(a,b){ const x=a.x-b.x, y=a.y-b.y, z=(a.z||0)-(b.z||0); return Math.hypot(x,y,z); }
+/* PURA A PROPOSITO: entra una lista de 21 puntos y sale el gesto. Sin estado, sin camara y sin
+   navegador, asi que se puede comprobar inyectando manos de mentira y midiendo el resultado — que es
+   la unica forma de probar un control de camara en un banco sin camara. */
+function manoGesto(lm){
+  if(!lm || lm.length<21) return { gesto:'', rx:0, ry:0, palma:0 };
+  const muneca=lm[0], nudillo=lm[9];
+  const palma=Math.max(1e-6, d3(muneca,nudillo));
+  /* pinza: la punta del pulgar contra la punta del indice */
+  const pinza = d3(lm[4],lm[8]) / palma;
+  /* dedo estirado = la punta esta MAS LEJOS de la muneca que su nudillo */
+  const dedos=[[8,5],[12,9],[16,13],[20,17]].map(([pt,nu])=>
+    (d3(lm[pt],muneca) / Math.max(1e-6,d3(lm[nu],muneca))) > 1.28 );
+  const estirados=dedos.filter(Boolean).length;
+  let gesto='';
+  if(estirados<=0)                     gesto='puno';
+  else if(pinza<0.42 && estirados<=2)  gesto='pinza';
+  else if(estirados>=4)                gesto='palma';
+  else                                 gesto='nada';
+  /* el rumbo sale del nudillo del medio: es el punto que menos se mueve al abrir y cerrar la mano,
+     asi que girar no depende de que gesto estas haciendo */
+  return { gesto, rx:(nudillo.x-0.5)*2, ry:(nudillo.y-0.5)*2, palma, pinza, estirados };
+}
+const MANO_ZM=0.16, MANO_GIRO=2.5, MANO_PITCH=1.5;
+function manoAplicar(g){
+  MANO.hay=!!g.gesto;
+  /* media exponencial: el temblor de los puntos entra dividido por seis */
+  MANO.rx += (g.rx - MANO.rx)*0.28;
+  MANO.ry += (g.ry - MANO.ry)*0.28;
+  MANO.palma=g.palma||0;
+  if(g.gesto===MANO.cand){ MANO.votos++; } else { MANO.cand=g.gesto; MANO.votos=1; }
+  if(MANO.votos>=3 && MANO.gesto!==MANO.cand) MANO.gesto=MANO.cand;
+  if(!g.gesto){ MANO.gesto=''; }
+  /* y la zona muerta: sin ella la camara nunca esta quieta, porque una mano humana nunca lo esta */
+  const zx = Math.abs(MANO.rx)<MANO_ZM? 0 : (MANO.rx - Math.sign(MANO.rx)*MANO_ZM)/(1-MANO_ZM);
+  const zy = Math.abs(MANO.ry)<MANO_ZM? 0 : (MANO.ry - Math.sign(MANO.ry)*MANO_ZM)/(1-MANO_ZM);
+  const sal={ giroV:-zx*MANO_GIRO, pitchV:zy*MANO_PITCH, ade:0, correr:false, usar:false };
+  if(MANO.gesto==='pinza'){ sal.ade=1; }
+  else if(MANO.gesto==='puno'){ sal.ade=1; sal.correr=true; }
+  else if(MANO.gesto==='palma'){ sal.usar=true; }
+  return sal;
+}
+async function manosIniciar(){
+  if(MANO.estado==='carga'||MANO.estado==='lista') return MANO.estado;
+  MANO.estado='carga'; pintarCam();
+  try{
+    const vision=await import(MANO_URL);
+    const fs=await vision.FilesetResolver.forVisionTasks(MANO_WASM);
+    MANO.det=await vision.HandLandmarker.createFromOptions(fs,{
+      baseOptions:{ modelAssetPath:MANO_MODELO, delegate:'GPU' },
+      runningMode:'VIDEO', numHands:1 });
+    const st=await navigator.mediaDevices.getUserMedia({ video:{ width:320, height:240, facingMode:'user' } });
+    const v=document.getElementById('camVid');
+    v.srcObject=st; MANO.vid=v;
+    await v.play().catch(()=>{});
+    MANO.estado='lista'; MANO.on=true;
+    document.body.classList.add('manos');
+  }catch(e){
+    MANO.estado='no'; MANO.on=false;
+    document.body.classList.remove('manos');
+    avisar(TX('manoNo'), 2.6);
+  }
+  pintarCam();
+  return MANO.estado;
+}
+function manosTick(){
+  if(MANO.estado!=='lista' || !MANO.det || !MANO.vid) return null;
+  if(MANO.vid.readyState<2) return null;
+  const t=performance.now();
+  if(t-MANO.ultT < 33) return null;      // treinta lecturas por segundo alcanzan y sobran
+  MANO.ultT=t;
+  let r=null;
+  try{ r=MANO.det.detectForVideo(MANO.vid, t); }catch(e){ return null; }
+  const lm=(r && r.landmarks && r.landmarks[0])? r.landmarks[0] : null;
+  MANO.lm=lm;
+  const g=manoGesto(lm);
+  const sal=manoAplicar(g);
+  dibujarMano(lm);
+  pintarCam();
+  return sal;
+}
+function dibujarMano(lm){
+  const cv=document.getElementById('camCv'); if(!cv) return;
+  const g=cv.getContext('2d'), w=cv.width, h=cv.height;
+  g.clearRect(0,0,w,h);
+  if(!lm) return;
+  const HUESOS_M=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+                  [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+  const X=p=>(1-p.x)*w, Y=p=>p.y*h;     // espejado, igual que el video
+  g.strokeStyle='rgba(46,204,15,0.9)'; g.lineWidth=1.6;
+  g.beginPath();
+  for(const [a,b] of HUESOS_M){ g.moveTo(X(lm[a]),Y(lm[a])); g.lineTo(X(lm[b]),Y(lm[b])); }
+  g.stroke();
+  g.fillStyle='#f2efe6';
+  for(const p of lm){ g.beginPath(); g.arc(X(p),Y(p),1.9,0,7); g.fill(); }
+}
+function pintarCam(){
+  const e=document.getElementById('camEst'); if(!e) return;
+  if(MANO.estado==='carga'){ e.textContent=TX('manoCarga'); return; }
+  if(MANO.estado!=='lista'){ e.textContent='—'; return; }
+  if(!MANO.hay){ e.textContent=TX('manoLista'); return; }
+  e.textContent = MANO.gesto==='puno'? TX('gPuno') : MANO.gesto==='pinza'? TX('gPinza')
+                : MANO.gesto==='palma'? TX('gPalma') : '·';
+}
+
+/* ===================== TECLAS, MOUSE Y TACTIL ===================== */
+const tecla={};
+addEventListener('keydown', e=>{
+  tecla[e.key.toLowerCase()]=true;
+  if(e.key===' ') e.preventDefault();
+  if(e.key.toLowerCase()==='e') usarPedido=true;
+  if(e.key==='Escape' && document.pointerLockElement) document.exitPointerLock();
+});
+addEventListener('keyup', e=>{ tecla[e.key.toLowerCase()]=false; });
+lienzo.addEventListener('click', ()=>{ if(jugando && plataf==='pc' && !document.pointerLockElement)
+  lienzo.requestPointerLock&&lienzo.requestPointerLock(); });
+let mdx=0, mdy=0;
+addEventListener('mousemove', e=>{
+  if(!document.pointerLockElement) return;
+  mdx+=e.movementX||0; mdy+=e.movementY||0;
+});
+/* el mando tactil */
+const joyEl=document.getElementById('joy'), joyP=joyEl.querySelector('i');
+const joy={ act:false, id:-1, x:0, y:0 };
+const mira={ act:false, id:-1, x:0, y:0, dx:0, dy:0 };
+function dentroJoy(t){
+  const r=joyEl.getBoundingClientRect();
+  return t.clientX>=r.left-24 && t.clientX<=r.right+24 && t.clientY>=r.top-24 && t.clientY<=r.bottom+24;
+}
+lienzo.addEventListener('pointerdown', e=>{
+  if(!jugando) return;
+  if(plataf==='movil' && dentroJoy(e) && !joy.act){ joy.act=true; joy.id=e.pointerId; moverJoy(e); }
+  else if(!mira.act){ mira.act=true; mira.id=e.pointerId; mira.x=e.clientX; mira.y=e.clientY; }
+}, {passive:true});
+addEventListener('pointermove', e=>{
+  if(joy.act && e.pointerId===joy.id) moverJoy(e);
+  else if(mira.act && e.pointerId===mira.id){
+    mira.dx += e.clientX-mira.x; mira.dy += e.clientY-mira.y;
+    mira.x=e.clientX; mira.y=e.clientY;
+  }
+}, {passive:true});
+for(const ev of ['pointerup','pointercancel'])
+  addEventListener(ev, e=>{
+    if(joy.act && e.pointerId===joy.id){ joy.act=false; joy.x=joy.y=0;
+      joyP.style.transform='translate(0,0)'; }
+    if(mira.act && e.pointerId===mira.id) mira.act=false;
+  }, {passive:true});
+function moverJoy(e){
+  const r=joyEl.getBoundingClientRect();
+  const cx=r.left+r.width/2, cy=r.top+r.height/2, R=r.width/2;
+  let dx=(e.clientX-cx)/R, dy=(e.clientY-cy)/R;
+  const l=Math.hypot(dx,dy); if(l>1){ dx/=l; dy/=l; }
+  joy.x=dx; joy.y=dy;
+  joyP.style.transform='translate('+(dx*R*0.5).toFixed(1)+'px,'+(dy*R*0.5).toFixed(1)+'px)';
+}
+document.getElementById('bUsar').addEventListener('pointerdown', e=>{ e.stopPropagation();
+  usarPedido=true; }, {passive:true});
+
+/* EL EMBUDO: las tres formas de jugar entran por acá y salen como los mismos cuatro numeros. Es lo
+   que hace que el resto del juego no sepa —ni le importe— si lo estan jugando con teclas, con el
+   dedo o con la mano en el aire. */
+function leerEntrada(){
+  const e={ ade:0, lat:0, correr:false, usar:false, giroV:0, pitchV:0 };
+  /* teclas */
+  if(tecla['w']||tecla['arrowup']) e.ade+=1;
+  if(tecla['s']||tecla['arrowdown']) e.ade-=1;
+  if(tecla['a']||tecla['arrowleft']) e.lat-=1;
+  if(tecla['d']||tecla['arrowright']) e.lat+=1;
+  if(tecla['shift']) e.correr=true;
+  /* mouse */
+  if(mdx||mdy){ e.giroV += mdx*0.14; e.pitchV += mdy*0.14; mdx=0; mdy=0; }
+  /* tactil */
+  if(joy.act){ e.ade += -joy.y; e.lat += joy.x;
+               if(Math.hypot(joy.x,joy.y)>0.82) e.correr=true; }
+  if(mira.dx||mira.dy){ e.giroV += mira.dx*0.13; e.pitchV += mira.dy*0.13; mira.dx=0; mira.dy=0; }
+  /* manos */
+  if(MANO.on){
+    const m=manosTick();
+    if(m){ manoUlt=m; }
+    if(manoUlt){
+      e.ade += manoUlt.ade; e.correr = e.correr || manoUlt.correr;
+      e.giroV += manoUlt.giroV; e.pitchV += manoUlt.pitchV;
+      if(manoUlt.usar && !manoUsarAnt) usarPedido=true;
+      manoUsarAnt=manoUlt.usar;
+    }
+  }
+  e.ade=Math.max(-1,Math.min(1,e.ade)); e.lat=Math.max(-1,Math.min(1,e.lat));
+  return e;
+}
+let manoUlt=null, manoUsarAnt=false;
+
+/* ===================== EL SONIDO, PROCEDURAL ===================== */
+const AUD={ ctx:null, on:true };
+function audioIniciar(){
+  if(AUD.ctx) return;
+  const C=window.AudioContext||window.webkitAudioContext; if(!C) return;
+  let c; try{ c=new C(); }catch(e){ return; }
+  AUD.ctx=c;
+  const m=c.createGain(); m.gain.value=0.85; m.connect(c.destination); AUD.m=m;
+  try{ const an=c.createAnalyser(); an.fftSize=2048; m.connect(an);
+       AUD.an=an; AUD.buf=new Float32Array(an.fftSize); }catch(e){}
+}
+function tono(f,dur,vol,tipo,f2){
+  if(!AUD.ctx||!AUD.on) return;
+  const c=AUD.ctx, t=c.currentTime;
+  const o=c.createOscillator(); o.type=tipo||'square'; o.frequency.setValueAtTime(f,t);
+  if(f2) o.frequency.exponentialRampToValueAtTime(Math.max(20,f2), t+dur);
+  const g=c.createGain(); g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(vol,t+0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(AUD.m); o.start(t); o.stop(t+dur+0.02);
+}
+function son(k){
+  if(!AUD.ctx||!AUD.on) return;
+  try{
+    if(k==='libreta'){ tono(880,0.10,0.16,'square'); setTimeout(()=>tono(1320,0.14,0.14,'square'),90); }
+    else if(k==='puerta'){ tono(180,0.16,0.14,'sawtooth',120); }
+    else if(k==='mal'){ tono(220,0.30,0.18,'sawtooth',90); }
+    else if(k==='bien'){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tono(f,0.22,0.14,'square'),i*90)); }
+    else if(k==='regla'){ tono(1400,0.05,0.22,'square',300); }
+    else if(k==='pierde'){ [400,320,240,160].forEach((f,i)=>setTimeout(()=>tono(f,0.30,0.20,'sawtooth'),i*130)); }
+  }catch(e){}
+}
+
+/* ===================== GANAR Y PERDER ===================== */
+function perder(){
+  terminado=2; son('pierde'); son('regla');
+  document.getElementById('finT').textContent=TX('perdiste');
+  document.getElementById('finS').textContent=TX('perdisteS',{n:libretas,t:LIBRETAS_N});
+  setTimeout(()=>verPantalla('fin'), 900);
+}
+function ganar(){
+  terminado=1; son('bien');
+  document.getElementById('finT').textContent=TX('ganaste');
+  document.getElementById('finS').textContent=TX('ganasteS');
+  setTimeout(()=>verPantalla('fin'), 700);
+}
+
+/* ===================== EL HUD Y LAS PANTALLAS ===================== */
+/* VA ACA ARRIBA Y NO AL LADO DE SU BOTON, QUE ES DONDE QUEDA LINDO. pintarIdioma() llama a
+   pintarCtrl(), y pintarIdioma() corre al armar los botones de idioma —doscientas lineas antes de
+   donde el interruptor "quiere" estar declarado—: un `let` leido antes de su linea no rompe una
+   funcion, rompe el modulo ENTERO y el juego no arranca. Quinta vez en este proyecto. */
+let ctrlManos=false;
+let avisoT=0;
+const avisoEl=document.getElementById('aviso'), pistaEl=document.getElementById('pista');
+function avisar(t,seg){ if(!t){ avisoEl.classList.remove('ver'); avisoT=0; return; }
+  avisoEl.textContent=t; avisoEl.classList.add('ver'); avisoT=seg||1.5; }
+function pintarHud(){
+  document.getElementById('libretas').textContent=libretas+' / '+LIBRETAS_N;
+  document.getElementById('libretasS').textContent = salidasAbiertas? TX('corre') : TX('busca');
+}
+function pintarPista(){
+  if(!cercaCosa){ pistaEl.classList.remove('ver'); return; }
+  const k = plataf==='pc'? 'E' : (MANO.on? TX('gPalma') : '●');
+  pistaEl.textContent = cercaCosa.tipo==='libreta'? TX('pUsar',{k}) : TX('pPuerta',{k});
+  pistaEl.classList.add('ver');
+}
+let pant='idioma';
+function verPantalla(p){
+  pant=p;
+  for(const [id,n] of [['pIdioma','idioma'],['pMenu','menu'],['pComo','como'],['pFin','fin']])
+    document.getElementById(id).classList.toggle('ver', p===n);
+  const enJuego = (p==='juego');
+  document.body.classList.toggle('jugando', enJuego);
+  jugando=enJuego && !terminado;
+  if(!enJuego && document.pointerLockElement) document.exitPointerLock();
+}
+function pintarIdioma(){
+  for(const el of document.querySelectorAll('[data-i18n]')) el.innerHTML=TX(el.getAttribute('data-i18n'));
+  document.getElementById('comoTxt').innerHTML=TX('comoT');
+  document.getElementById('teclas').innerHTML =
+    '<b>WASD</b> '+({en:'move',es:'moverse',pt:'andar'}[IDIOMA]||'move')+'<br>'+
+    '<b>Mouse</b> '+({en:'look',es:'mirar',pt:'olhar'}[IDIOMA]||'look')+'<br>'+
+    '<b>Shift</b> '+({en:'run',es:'correr',pt:'correr'}[IDIOMA]||'run')+'<br>'+
+    '<b>E</b> '+({en:'take / open',es:'agarrar / abrir',pt:'pegar / abrir'}[IDIOMA]||'take')+'<br>'+
+    '<b>Esc</b> '+({en:'release mouse',es:'soltar el mouse',pt:'soltar o mouse'}[IDIOMA]||'release');
+  pintarHud(); pintarCal(); pintarCtrl();
+}
+function elegirIdioma(c){ IDIOMA=c; try{ localStorage.setItem('recreo_idioma',c); }catch(e){}
+  document.documentElement.lang=c; pintarIdioma(); }
+(function(){
+  const c=document.getElementById('idBotones');
+  for(const [cod,nom] of IDIOMAS){
+    const b=document.createElement('button'); b.className='bot'; b.textContent=nom;
+    b.onclick=()=>{ audioIniciar(); elegirIdioma(cod); verPantalla('menu'); };
+    c.appendChild(b);
+  }
+  elegirIdioma(IDIOMA);
+})();
+function pintarCal(){
+  for(const b of document.querySelectorAll('[data-cal]')) b.classList.toggle('si', b.dataset.cal===calidad);
+}
+function aplicarCal(c){
+  if(!CAL[c]) return;
+  calidad=c; try{ localStorage.setItem('recreo_cal',c); }catch(e){}
+  escena.fog.far=CAL[c].niebla;
+  if(escuela.lockers) escuela.lockers.visible=CAL[c].lockers;
+  ajustar(); pintarCal();
+}
+for(const b of document.querySelectorAll('[data-cal]')) b.onclick=()=>aplicarCal(b.dataset.cal);
+function pintarCtrl(){
+  document.getElementById('oTeclas').classList.toggle('si', !ctrlManos);
+  document.getElementById('oManos').classList.toggle('si', ctrlManos);
+}
+document.getElementById('oTeclas').onclick=()=>{ ctrlManos=false;
+  MANO.on=false; document.body.classList.remove('manos'); pintarCtrl(); };
+document.getElementById('oManos').onclick=async()=>{ ctrlManos=true; pintarCtrl();
+  await manosIniciar(); ctrlManos=MANO.on; pintarCtrl(); };
+document.getElementById('bJugar').onclick=()=>{ audioIniciar(); empezar(); };
+document.getElementById('bComo').onclick=()=>verPantalla('como');
+document.getElementById('bIdioma').onclick=()=>verPantalla('idioma');
+document.getElementById('bVolver').onclick=()=>verPantalla('menu');
+document.getElementById('bFin').onclick=()=>verPantalla('menu');
+document.getElementById('salirJ').onclick=(e)=>{ e.stopPropagation(); verPantalla('menu'); };
+
+function empezar(){
+  libretas=0; terminado=0; tiempoJ=0; salidasAbiertas=false;
+  jug.x=XC(11); jug.z=ZC(9); jug.giro=0; jug.pitch=0; jug.vx=jug.vz=0; jug.paso=0; jug.ruido=0;
+  jug.ax=jug.x; jug.az=jug.z; jug.agiro=0; jug.apitch=0; jug.aojo=OJO;
+  for(const l of LIBRETAS){ l.tomada=false; l.g.visible=true; }
+  for(const p of PUERTAS){ p.abierta=false; p.t=0; p.ang=0; }
+  /* EL PROFESOR ARRANCA LEJOS Y DORMIDO. En el aula 8, que es la mas alejada del centro: si
+     empezara al lado del jugador, la primera libreta seria una moneda al aire. */
+  const a8=AULAS[7];
+  PROFE.x=XC(Math.round((a8.i0+a8.i1)/2)); PROFE.z=ZC(Math.round((a8.j0+a8.j1)/2));
+  PROFE.giro=Math.PI; PROFE.estado='duerme'; PROFE.oido=null; PROFE.t=0; PROFE.vel=0;
+  PROFE.anim='explicar'; PROFE.animOtro=null; PROFE.mezcla=0; PROFE.at=0;
+  PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
+  DIST=null; distDe=null;
+  pintarHud(); verPantalla('juego');
+  avisar(TX('busca'), 2.2);
+}
+
+/* =========================================================================================
+   EL BUCLE, Y ES LA PIEZA QUE MAS IMPORTA
+   Acumulador de paso fijo con interpolacion al dibujar. Las tres cosas que resuelve:
+   · UNA SOLA VELOCIDAD DE JUEGO. La simulacion siempre da 60 pasos por segundo, asi que la
+     velocidad del jugador, la del profesor y su alcance de oido son los mismos en un telefono a 30
+     cuadros y en una notebook a 144. Sin esto el juego es mas facil o mas dificil segun el aparato,
+     y eso no es una diferencia de rendimiento: es otro juego.
+   · NADA DE TIRONES. El dibujo interpola entre el paso anterior y el actual con el sobrante del
+     acumulador, asi que a 144 cuadros se ven 144 posiciones distintas aunque solo haya 60 pasos.
+     Sin la interpolacion, el paso fijo se ve PEOR que el dt variable: se nota el escalon.
+   · NI ESPIRALES DE MUERTE NI SALTOS. El dt se topa en 0,25 s (una pestana que estuvo dormida no
+     simula cuarenta pasos de golpe) y los pasos por cuadro se topan en 8: si el aparato no llega,
+     el juego va en camara lenta pero no se cuelga tratando de alcanzar el reloj.
+   ========================================================================================= */
+let acum=0, ultimo=performance.now(), pasosTotal=0, cuadrosTotal=0;
+function guardarAnterior(){
+  jug.ax=jug.x; jug.az=jug.z; jug.agiro=jug.giro; jug.apitch=jug.pitch; jug.aojo=jug.ojo;
+  PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
+}
+function avanzar(dt){
+  if(dt>0.25) dt=0.25;
+  acum+=dt;
+  let n=0;
+  while(acum>=PASO && n<8){
+    entrada=leerEntrada();
+    guardarAnterior();
+    pasoFijo(PASO);
+    acum-=PASO; n++; pasosTotal++;
+  }
+  if(n>=8) acum=0;
+  if(avisoT>0){ avisoT-=dt; if(avisoT<=0) avisoEl.classList.remove('ver'); }
+  return n;
+}
+function angLerp(a,b,f){ let d=b-a; while(d>Math.PI)d-=2*Math.PI; while(d<-Math.PI)d+=2*Math.PI;
+  return a+d*f; }
+function dibujar(alfa){
+  cuadrosTotal++;
+  const x=jug.ax+(jug.x-jug.ax)*alfa, z=jug.az+(jug.z-jug.az)*alfa;
+  const gi=angLerp(jug.agiro, jug.giro, alfa), pi=jug.apitch+(jug.pitch-jug.apitch)*alfa;
+  const oj=jug.aojo+(jug.ojo-jug.aojo)*alfa;
+  camara.position.set(x, oj, z);
+  camara.rotation.set(pi, gi+Math.PI, 0, 'YXZ');
+  /* el profesor, interpolado igual: si solo se interpolara la camara, el unico personaje del juego
+     seria justo lo que se ve a tirones */
+  profe.raiz.position.set(PROFE.ax+(PROFE.x-PROFE.ax)*alfa, 0, PROFE.az+(PROFE.z-PROFE.az)*alfa);
+  profe.raiz.rotation.y=angLerp(PROFE.agiro, PROFE.giro, alfa)+Math.PI;
+  animar(profe, PROFE.anim, PROFE.animOtro, PROFE.mezcla, PROFE.at);
+  /* las libretas giran, las puertas se abren */
+  for(const l of LIBRETAS){ if(l.tomada) continue; l.giro+=0.02; l.g.rotation.y=l.giro; }
+  for(const p of PUERTAS) if(p.g) p.g.rotation.y=(p.vertical?0:Math.PI/2) + p.ang*(p.vertical?1:1);
+  /* la barra de ruido */
+  const vi=document.querySelector('#vida i');
+  if(vi){ vi.style.width=(jug.ruido*100).toFixed(0)+'%';
+          vi.style.background = jug.ruido>0.6? '#c0392b' : (jug.ruido>0.25? '#d98a2b' : '#2ecc0f'); }
+  pintarPista();
+  render.render(escena, camara);
+}
+function bucle(){
+  requestAnimationFrame(bucle);
+  const ahora=performance.now();
+  const dt=(ahora-ultimo)/1000; ultimo=ahora;
+  avanzar(dt);
+  /* la salida: llegar a una puerta de salida abierta */
+  if(jugando && !terminado && salidasAbiertas){
+    for(const s of SALIDAS){
+      if(Math.hypot(jug.x-XC(s.i), jug.z-ZC(s.j))<1.5){ ganar(); break; }
+    }
+  }
+  dibujar(Math.min(1, acum/PASO));
+}
+ajustar(); aplicarCal(calidad); bucle();
+
+/* =========================================================================================
+   GANCHOS DE PRUEBA
+   Un juego de persecucion con handtracking no se comprueba mirando una foto. Las tres cosas que hay
+   que medir son justo las tres que no se ven: que el reloj de verdad sea independiente de los
+   cuadros, que los gestos salgan bien de puntos que tiemblan, y que la escuela este conectada.
+   ========================================================================================= */
+window.__recreo={
+  estado:()=>({ pant, jugando, terminado, libretas, total:LIBRETAS_N, salidas:salidasAbiertas,
+                t:+tiempoJ.toFixed(2), plataf, calidad,
+                jug:[+jug.x.toFixed(2), +jug.z.toFixed(2)], celda:celda(jug.x,jug.z),
+                giro:+jug.giro.toFixed(3), ruido:+jug.ruido.toFixed(3),
+                cerca: cercaCosa? cercaCosa.tipo : null }),
+  profe:()=>({ estado:PROFE.estado, pos:[+PROFE.x.toFixed(2), +PROFE.z.toFixed(2)],
+               celda:celda(PROFE.x,PROFE.z), vel:+PROFE.vel.toFixed(2),
+               anim:PROFE.anim, otro:PROFE.animOtro, mezcla:+PROFE.mezcla.toFixed(2),
+               oido:PROFE.oido, dist:+Math.hypot(jug.x-PROFE.x, jug.z-PROFE.z).toFixed(2) }),
+  empezar:()=>{ empezar(); return window.__recreo.estado(); },
+  /* ---- EL MAPA: que la escuela este entera y conectada ----
+     Un aula tapiada no se descubre mirando: se descubre preguntandole al BFS si llega. */
+  mapa:()=>{
+    const D=distancias(11,9);
+    let pisables=0, alcanzables=0, aulasOk=0, libOk=0;
+    for(let j=0;j<GH;j++) for(let i=0;i<GW;i++){
+      if(MAPA[j][i]===1||MAPA[j][i]===2){ pisables++; if(D[j][i]>=0) alcanzables++; }
+    }
+    /* las puertas cerradas cortan el BFS, asi que para medir conectividad se abren todas primero */
+    const antes=PUERTAS.map(p=>p.abierta);
+    for(const p of PUERTAS) p.abierta=true;
+    const D2=distancias(11,9);
+    for(const a of AULAS){
+      const i=Math.round((a.i0+a.i1)/2), j=Math.round((a.j0+a.j1)/2);
+      if(D2[j][i]>=0) aulasOk++;
+    }
+    for(const l of LIBRETAS) if(D2[l.j][l.i]>=0) libOk++;
+    let salOk=0; for(const s of SALIDAS) if(D2[s.j][s.i]>=0) salOk++;
+    PUERTAS.forEach((p,k)=>p.abierta=antes[k]);
+    return { celdas:GW*GH, pisables, alcanzablesSinAbrir:alcanzables,
+             aulas:AULAS.length, aulasAlcanzables:aulasOk,
+             libretas:LIBRETAS.length, libretasAlcanzables:libOk,
+             puertas:PUERTAS.length, salidas:SALIDAS.length, salidasAlcanzables:salOk,
+             puertasPorAula:AULAS.map(a=>a.puertas) };
+  },
+  /* ---- EL RELOJ: la prueba de que los cuadros no cambian el juego ----
+     Se corre la MISMA cantidad de segundos con dos ritmos de cuadro distintos y se compara la
+     posicion final. Si el juego dependiera del dt, los dos numeros no darian iguales. */
+  simular:(seg, fps, ade, lat)=>{
+    const g=leerEntrada;
+    leerEntrada=()=>({ ade:ade==null?1:ade, lat:lat||0, correr:false, usar:false, giroV:0, pitchV:0 });
+    empezar();
+    acum=0; pasosTotal=0;
+    const n=Math.round((seg||10)*(fps||60)), dt=1/(fps||60);
+    for(let k=0;k<n;k++) avanzar(dt);
+    const r={ fps:fps||60, seg:seg||10, cuadros:n, pasos:pasosTotal,
+              jug:[+jug.x.toFixed(6), +jug.z.toFixed(6)],
+              profe:[+PROFE.x.toFixed(6), +PROFE.z.toFixed(6)],
+              t:+tiempoJ.toFixed(6) };
+    leerEntrada=g;
+    return r;
+  },
+  /* ---- LOS GESTOS: manos de mentira, medidas ----
+     manoGesto() es pura, asi que se le pueden inyectar 21 puntos y comprobar que el gesto sale bien
+     sin camara y sin mano. Es la unica forma de probar esto en un banco. */
+  gesto:(lm)=>manoGesto(lm),
+  manoFalsa:(tipo, cx, cy)=>{
+    /* arma una mano de 21 puntos plausible: muneca abajo, nudillos arriba, y los dedos estirados o
+       curvados segun el gesto que se pide */
+    const X=cx==null?0.5:cx, Y=cy==null?0.5:cy, S=0.16;
+    const lm=[]; for(let k=0;k<21;k++) lm.push({x:X,y:Y,z:0});
+    lm[0]={x:X, y:Y+S*1.0, z:0};                       // muneca
+    lm[9]={x:X, y:Y, z:0};                             // nudillo del medio
+    const nud=[[5,-0.055],[9,0],[13,0.050],[17,0.098]];
+    const cerrado = (tipo==='puno');
+    for(const [n,off] of nud){
+      lm[n]={x:X+off, y:Y+0.02, z:0};
+      const pt=n+3;
+      const largo = cerrado? -0.02 : 0.115;            // curvado = la punta queda cerca de la muneca
+      lm[n+1]={x:X+off, y:Y+0.02-largo*0.34, z:0};
+      lm[n+2]={x:X+off, y:Y+0.02-largo*0.66, z:0};
+      lm[pt] ={x:X+off, y:Y+0.02-largo, z:0};
+      if(cerrado){ lm[n+1].y=Y+0.06; lm[n+2].y=Y+0.10; lm[pt].y=Y+0.12; }
+    }
+    /* el pulgar */
+    lm[1]={x:X-0.07, y:Y+S*0.8, z:0}; lm[2]={x:X-0.10, y:Y+S*0.55, z:0};
+    lm[3]={x:X-0.11, y:Y+S*0.35, z:0};
+    if(tipo==='pinza'){
+      /* pinza: pulgar pegado al indice, y los otros tres curvados */
+      lm[4]={x:lm[8].x+0.006, y:lm[8].y+0.006, z:0};
+      for(const [n] of nud.slice(1)){ const pt=n+3;
+        lm[n+1].y=Y+0.06; lm[n+2].y=Y+0.10; lm[pt].y=Y+0.12; }
+    } else lm[4]={x:X-0.115, y:Y+0.12, z:0};
+    return lm;
+  },
+  mano:(lm)=>{ const g=manoGesto(lm); const s=manoAplicar(g); dibujarMano(lm); pintarCam();
+               return { g, s, gestoFirme:MANO.gesto, votos:MANO.votos }; },
+  manos:()=>({ estado:MANO.estado, on:MANO.on, gesto:MANO.gesto, hay:MANO.hay,
+               rx:+MANO.rx.toFixed(3), ry:+MANO.ry.toFixed(3),
+               puntos: MANO.lm? MANO.lm.length : 0 }),
+  manosIniciar:()=>manosIniciar(),
+  /* ---- caminar y usar, para poder jugar el juego desde el banco ---- */
+  entrar:(ade,lat,correr,seg)=>{
+    const g=leerEntrada;
+    leerEntrada=()=>({ ade:ade||0, lat:lat||0, correr:!!correr, usar:false, giroV:0, pitchV:0 });
+    const n=Math.round((seg||1)*60);
+    for(let k=0;k<n;k++) avanzar(1/60);
+    leerEntrada=g;
+    return window.__recreo.estado();
+  },
+  mirar:(giro,pitch)=>{ if(giro!=null) jug.giro=giro; if(pitch!=null) jug.pitch=pitch;
+                        return { giro:+jug.giro.toFixed(3), pitch:+jug.pitch.toFixed(3) }; },
+  ir:(i,j)=>{ jug.x=XC(i); jug.z=ZC(j); jug.ax=jug.x; jug.az=jug.z;
+              return window.__recreo.estado(); },
+  usar:()=>{ usarPedido=true; avanzar(1/60); return window.__recreo.estado(); },
+  /* ---- las animaciones, una por una ---- */
+  anim:(nombre, t, mirarme)=>{
+    if(nombre){ PROFE.animOtro=PROFE.anim; PROFE.anim=nombre; PROFE.mezcla=0; animForzada=nombre; }
+    if(nombre===false){ animForzada=null; }
+    if(t!=null) PROFE.at=t;
+    if(mirarme){ PROFE.giro=Math.atan2(jug.x-PROFE.x, jug.z-PROFE.z)+Math.PI;
+                 PROFE.agiro=PROFE.giro; }
+    animar(profe, PROFE.anim, PROFE.animOtro, PROFE.mezcla, PROFE.at);
+    /* se mide el MOVIMIENTO de verdad de las partes: una animacion que no mueve nada no se descubre
+       mirando un nombre en una lista */
+    const p={};
+    for(const h of HUESOS){ const q=profe[h];
+      if(q) p[h]=[+q.rotation.x.toFixed(3), +q.rotation.y.toFixed(3), +q.rotation.z.toFixed(3)]; }
+    const mD=new THREE.Vector3(), mI=new THREE.Vector3(), pieD=new THREE.Vector3();
+    profe.raiz.updateMatrixWorld(true);
+    profe.manoD.getWorldPosition(mD); profe.manoI.getWorldPosition(mI);
+    profe.rodillaD.getWorldPosition(pieD);
+    return { anim:PROFE.anim, huesos:p,
+             manoD:[+mD.x.toFixed(3),+mD.y.toFixed(3),+mD.z.toFixed(3)],
+             manoI:[+mI.x.toFixed(3),+mI.y.toFixed(3),+mI.z.toFixed(3)],
+             rodillaD:[+pieD.x.toFixed(3),+pieD.y.toFixed(3),+pieD.z.toFixed(3)] };
+  },
+  animLista:()=>ANIM_NOMBRES,
+  puertas:()=>PUERTAS.map(p=>({ i:p.i, j:p.j, aula:p.aula, salida:!!p.salida,
+                                abierta:p.abierta, ang:+p.ang.toFixed(2) })),
+  libretasPos:()=>LIBRETAS.map(l=>({ aula:l.aula, i:l.i, j:l.j, tomada:l.tomada })),
+  /* recorre una animacion entera y devuelve cuanto viaja cada parte: es la prueba de que la
+     animacion ANIMA, y de que las cuatro son distintas entre si */
+  animMedir:(nombre, pasos)=>{
+    const n=pasos||60, ini={}, max={}, mm={};
+    const v=new THREE.Vector3();
+    const partes=['manoD','manoI','rodillaD','rodillaI','cabeza'];
+    for(const k of partes) mm[k]={min:[1e9,1e9,1e9], max:[-1e9,-1e9,-1e9]};
+    for(let s=0;s<n;s++){
+      animar(profe, nombre, null, 0, s/n*(Math.PI*4));
+      profe.raiz.updateMatrixWorld(true);
+      for(const k of partes){
+        profe[k].getWorldPosition(v);
+        const a=[v.x,v.y,v.z];
+        for(let q=0;q<3;q++){ if(a[q]<mm[k].min[q]) mm[k].min[q]=a[q];
+                              if(a[q]>mm[k].max[q]) mm[k].max[q]=a[q]; }
+      }
+    }
+    const r={};
+    for(const k of partes) r[k]=mm[k].max.map((x,q)=>+(x-mm[k].min[q]).toFixed(3));
+    return { anim:nombre, recorrido:r };
+  },
+  perfil:()=>{ const i=render.info;
+    return { llamadas:i.render.calls, tris:i.render.triangles,
+             programas:i.programs? i.programs.length:0,
+             geometrias:i.memory.geometries, texturas:i.memory.textures,
+             cuadros:cuadrosTotal, pasos:pasosTotal }; },
+  cal:(c)=>{ if(c) aplicarCal(c);
+    return { cal:calidad, px:+render.getPixelRatio().toFixed(2), niebla:escena.fog.far,
+             lockers: escuela.lockers? escuela.lockers.visible : false }; },
+  audio:()=>{ let pico=0, rms=0;
+    if(AUD.an&&AUD.buf){ AUD.an.getFloatTimeDomainData(AUD.buf);
+      for(let i=0;i<AUD.buf.length;i++){ const v=Math.abs(AUD.buf[i]); if(v>pico)pico=v; rms+=v*v; }
+      rms=Math.sqrt(rms/AUD.buf.length); }
+    return { hay:!!AUD.ctx, pico:+pico.toFixed(4), rms:+rms.toFixed(4) }; },
+  son:(k)=>{ son(k); return true; },
+  pantalla:(p)=>{ verPantalla(p); return pant; },
+  idioma:(c)=>{ if(c) elegirIdioma(c); return IDIOMA; },
+  medidas:()=>({ W:innerWidth, H:innerHeight, dpr:+render.getPixelRatio().toFixed(2),
+                 fov:camara.fov, celda:CEL, grilla:[GW,GH] })
+};
+</script>
+</body>
+</html>
