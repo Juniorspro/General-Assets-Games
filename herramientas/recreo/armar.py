@@ -19,6 +19,7 @@ PARTES = ['a2.html',   # el marco, el CSS y el HUD
           'e2.js',     # el rig de cajas, la tabla de animaciones y el modelo generado
           'f2.js',     # los rieles de camara, el profesor en el mundo y el guion
           'g2.js',     # MediaPipe: leer la mano, contar dedos, el teclado de respaldo
+          'g3.js',     # las manos en 3D, reconstruidas desde la pantalla
           'h2b.js',    # las pantallas, el audio, la calidad
           'p2.js',     # los dos filtros (saturacion y baja calidad)
           'i2.js',     # el guion corriendo, el paso fijo y el dibujado

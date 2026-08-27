@@ -219,7 +219,10 @@ window.__recreo={
        justo la mitad nueva del juego. */
     MANO.pinzas=manoPinzas(lms);
     manoVoto(t.hay? t.dedos : -1); MANO.on=true; MANO.estado='lista';
-    dibujarManos(lms); dibujarManosGrande(lms); pintarCam();
+    /* se empujan a las ranuras para que la interpolacion y las manos 3D las vean como una medicion
+       de verdad: probar el dibujo por un camino distinto al del juego no probaria el dibujo */
+    manosInyectar(lms);
+    pintarCam();
     return { crudo:t, firme:MANO.dedos, votos:MANO.votos,
              pinzas:MANO.pinzas.map(p=>({x:+p.x.toFixed(3), y:+p.y.toFixed(3),
                                          pinza:p.pinza, nueva:p.nueva})) }; },
@@ -228,13 +231,19 @@ window.__recreo={
   manosIniciar:()=>manosIniciar(),
   manoPausa:(v)=>{ MANO.pausa=!!v; return !!MANO.pausa; },
   /* cuanto cuesta dibujar las dos manos encima del juego, en milisegundos por cuadro */
+  /* cuanto cuesta armar las dos manos 3D, en milisegundos por cuadro */
   manoCosto:(n)=>{
-    const lms=[window.__recreo.manoFalsa(4,false,0.3,0.5), window.__recreo.manoFalsa(3,true,0.7,0.6)];
+    manosInyectar([window.__recreo.manoFalsa(4,false,0.3,0.5), window.__recreo.manoFalsa(3,true,0.7,0.6)]);
     const v=n||200, t0=performance.now();
-    for(let k=0;k<v;k++){ MANO.habia=true; dibujarManosGrande(lms); }
-    return { ms:+((performance.now()-t0)/v).toFixed(3), veces:v,
-             lienzo:[document.getElementById('manosCv').width, document.getElementById('manosCv').height] };
+    for(let k=0;k<v;k++){ manosAvanzar(1/60); manos3DDibujar(); }
+    return { ms:+((performance.now()-t0)/v).toFixed(3), veces:v };
   },
+  /* el ritmo real: cuantas mediciones por segundo y cuanto tarda cada una */
+  manos3D:()=>manos3DVer(),
+  manoRitmo:()=>({ hz:MANO.hz, medidas:MANO.medidas, msDeteccion:+MANO.msDet.toFixed(2),
+                   espejo:MANO.espejo, camara:MANO.camaraUsada,
+                   ranuras:MANO.ranuras.map(R=>({ hay:R.hay, dedos:R.dedos, lado:R.lado,
+                     muneca:R.hay? [+R.sal[0].toFixed(3), +R.sal[1].toFixed(3)] : null })) }),
   manoEstado:()=>({ estado:MANO.estado, on:MANO.on, error:MANO.error, delegado:MANO.delegado,
                     cdn:MANO.cdn? MANO.cdn.js.slice(0,42) : null,
                     seguro:!!window.isSecureContext,
@@ -279,6 +288,32 @@ window.__recreo={
       if(pararEn && (GUION[escena_i]||{}).id===pararEn) break;   // para poder mirar una escena
     }
     return { terminado, libros, aciertos, muertes, vueltas, log:log.slice(0,80) };
+  },
+  /* =========================================================================================
+     AUDITORIA DE RUMBO: se juega la partida entera y en CADA paso se pregunta si la celda donde
+     esta el profesor es pisable. Es la unica prueba de "no atraviesa paredes" que no depende de
+     mirar: una diagonal por dentro de una pared dura dos segundos y en una captura no se ve.
+     ========================================================================================= */
+  auditarRumbo:(tope)=>{
+    empezar();
+    const malas=[]; let pasos=0, fuera=0;
+    while(!terminado && pasos++<(tope||60000)){
+      const E=GUION[escena_i];
+      if(E && E.espera){ MANO.on=false; padPedido=(E.espera.tipo==='dedos')? E.espera.n : 1; }
+      else if(cuenta && !bloqueo){ MANO.on=false; padPedido=cuenta.res; }
+      if(bichosVivos>0 && !(pasos%8)){
+        const b=BICHOS.find(q=>q.viva);
+        if(b){ const s=aPantalla(b.x,b.y,b.z); if(s.delante) TOQUES.push({x:s.x,y:s.y}); }
+      }
+      avanzar(1/60);
+      const c=celda(PROFE.x, PROFE.z);
+      if(!pisableProf(c[0], c[1])){
+        fuera++;
+        if(malas.length<6) malas.push({ celda:c, pos:[+PROFE.x.toFixed(1), +PROFE.z.toFixed(1)],
+                                        escena:(GUION[escena_i]||{}).id||'?' });
+      }
+    }
+    return { terminado, pasos, fueraDePared:fuera, malas };
   },
   saltarA:(id)=>{ const k=GUION.findIndex(e=>e.id===id); if(k<0) return 'no hay '+id;
                   escena_i=k-1; siguienteEscena(); return window.__recreo.estado(); },

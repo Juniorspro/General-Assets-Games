@@ -13,8 +13,9 @@
       gira sola hacia donde va. El jugador tiene UNA cosa que hacer con las manos, y si esa misma
       mano tuviera que manejar la camara, las dos cosas se pelearian: mover la mano para girar y
       mover la mano para contar son el mismo gesto.
-   2. VERTICAL. El telefono queda parado, la camara frontal de frente, y la mano entra completa en el
-      cuadro. Acostado, la mano tapa media pantalla.
+   2. VERTICAL. El telefono queda parado y la mano entra completa en el cuadro; acostado, la mano
+      tapa media pantalla. La camara que se usa es la TRASERA: el telefono queda apoyado y las manos
+      se mueven del otro lado, con mas espacio y mejor luz que apuntandose a uno mismo.
    3. SE CONTESTA CON LOS DEDOS. Cuatro mas cuatro son ocho dedos, o sea las dos manos. Es la unica
       forma de que la cuenta se sienta con el cuerpo y no con un teclado.
    ========================================================================================= */
@@ -162,6 +163,23 @@ try{ const g=localStorage.getItem('recreo_cal'); if(g && CAL[g]) calidad=g; }cat
    Las aulas se declaran como rectangulos y los pasillos se tallan alrededor. Se declara la
    GEOMETRIA, no el resultado: asi la puerta de cada aula se calcula y no se dibuja a mano, y no
    puede quedar una sin salida. */
+/* =========================================================================================
+   LAS VELOCIDADES Y EL RITMO DE LA CAMINATA, JUNTOS Y DERIVADO UNO DEL OTRO
+
+   Van aca —el primer archivo— y no donde se usan, por una razon concreta: el ciclo de la caminata se
+   evalua en la tabla de animaciones (e2.js) y las velocidades se usan en el guion (i2.js), que va
+   despues. Con las velocidades declaradas en i2.js, e2.js las leeria antes de su linea y un `const`
+   leido antes de existir no rompe una funcion: rompe el modulo entero.
+
+   Y EL RITMO SE CALCULA, no se elige. Estuvo en t*2,0 —un paso cada 1,57 s— mientras el riel lo movia
+   a 3,4 m/s: eso son 2,7 metros por paso, o sea los pies arrastrando mientras el cuerpo avanza. El
+   patinaje clasico. Con una zancada de 1,15 m el ciclo sale de la division, y si algun dia cambia la
+   velocidad el ciclo la sigue solo.
+   ========================================================================================= */
+const VEL_CAM=2.6, VEL_PROFE=3.0;
+const ZANCADA=1.15;                                       // metros por paso
+const CAMINA_W=2*Math.PI*VEL_PROFE/(2*ZANCADA);           // rad/s del ciclo (dos pasos por ciclo)
+
 const CEL=4.2, ALTO_M=3.6, GRUESO=0.30;
 const GW=23, GH=19;                      // celdas
 const PAS_F=[1,9,17], PAS_C=[1,11,21];   // pasillos: filas y columnas

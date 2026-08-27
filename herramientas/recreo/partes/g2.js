@@ -21,7 +21,18 @@
    ========================================================================================= */
 const MANO={ on:false, estado:'no', det:null, vid:null, dedos:0, gesto:'', hay:false,
              cand:-1, votos:0, ultT:0, manos:0, lms:null, pinzas:[], pzPrev:[],
-             error:'', delegado:'', cdn:null, crudo:0, pausa:false, habia:false };
+             error:'', delegado:'', cdn:null, crudo:0, pausa:false, habia:false,
+             /* espejo: la camara FRONTAL se muestra espejada porque asi funciona un espejo y es lo
+                unico con lo que se puede apuntar; la TRASERA no, porque ahi la mano ya se ve del
+                lado que esta. Depende de que camara se abrio, no es una constante. */
+             espejo:true, camaraUsada:'',
+             hz:24, medidas:0, msDet:0, ranuras:[null,null] };
+/* CUANTAS VECES POR SEGUNDO SE MIDE, que no es lo mismo que cuantas veces se dibuja.
+   24 y no 60: el detector tarda entre 8 y 20 ms por cuadro en un telefono, asi que medir en cada
+   cuadro de render es gastar un tercio del presupuesto de 16,6 ms en mirar una mano que apenas se
+   movio. Se mide 24 veces por segundo y se INTERPOLA el resto, que es exactamente lo que hace el
+   propio juego con su paso fijo de 60 y sus 120 cuadros. */
+const MANO_HZ_MOVIL=24, MANO_HZ_PC=30;
 const MANO_URL='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
 const MANO_WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 /* DOS CDN Y NO UNO. El detector son dos descargas de un tercero, y si ese tercero no contesta el
@@ -119,8 +130,15 @@ async function manosIniciar(){
   }
   let st=null;
   try{
+    /* LA TRASERA PRIMERO, Y 320x240. Dos decisiones separadas:
+       - 'environment' es la camara trasera, que es la que pidio el usuario: el telefono queda
+         apoyado y las manos se mueven del otro lado, con mas espacio y mejor luz que apuntandose a
+         uno mismo. Va como `ideal` y no `exact` para que una notebook sin camara trasera abra la
+         que tenga en vez de fallar.
+       - 320x240 y no 480x360: el detector escala la entrada igual, y 320x240 son 76.800 pixeles
+         contra 172.800, o sea 2,25 veces menos trabajo por medicion para la misma mano. */
     st=await navigator.mediaDevices.getUserMedia({
-      video:{ width:{ideal:480}, height:{ideal:360}, facingMode:'user' } });
+      video:{ width:{ideal:320}, height:{ideal:240}, facingMode:{ideal:'environment'} } });
   }catch(e){
     const n=(e && e.name)||'';
     return manosFallo(n==='NotAllowedError'||n==='SecurityError'? 'permiso'
@@ -129,6 +147,14 @@ async function manosIniciar(){
   const v=document.getElementById('camVid');
   v.srcObject=st; MANO.vid=v;
   await v.play().catch(()=>{});
+  /* QUE CAMARA ABRIO DE VERDAD, que no es siempre la que se pidio. De eso depende el espejo, y si
+     se espeja al reves no hay forma de apuntar: mover la mano a la derecha mueve la mano del juego
+     a la izquierda. Se lee del propio track y no de lo que se pidio. */
+  try{
+    const t=st.getVideoTracks()[0], aj=t? t.getSettings() : {};
+    MANO.camaraUsada=aj.facingMode||'';
+    MANO.espejo = (MANO.camaraUsada!=='environment');
+  }catch(e){ MANO.espejo=true; }
   /* recien ahora el detector, que es lo lento */
   let vision=null;
   for(const c of MANO_CDN){
@@ -150,141 +176,171 @@ async function manosIniciar(){
   }
   if(!MANO.det) return manosFallo('modelo');
   MANO.estado='lista'; MANO.on=true; MANO.error='';
+  MANO.hz = (plataf==='movil')? MANO_HZ_MOVIL : MANO_HZ_PC;
   document.body.classList.add('manos'); document.body.classList.remove('pad');
-  manosTam();
   pintarCam(); pintarCtrl();
+  manosLazo();
   return MANO.estado;
 }
-function manosTick(){
-  /* PAUSA PARA PROBAR. En el banco no hay mano de verdad —la camara del contenedor es un patron
-     sintetico— asi que las manos se inyectan a mano; sin esta pausa el tick siguiente lee la camara
-     falsa, no encuentra nada y borra el dibujo antes de la captura. */
-  if(MANO.pausa) return;
-  if(MANO.estado!=='lista' || !MANO.det || !MANO.vid || MANO.vid.readyState<2) return;
+/* =========================================================================================
+   LA MEDICION VA POR SU CUENTA Y EL DIBUJO INTERPOLA
+
+   El problema medido: detectForVideo() tarda entre 8 y 20 ms en un telefono, y estaba llamandose
+   DENTRO del requestAnimationFrame del juego. O sea que cada cuadro de render pagaba la medicion, y
+   con un presupuesto de 16,6 ms para 60 fps eso se come todo: el juego bajaba a 30 o menos "solo por
+   las manos", que es exactamente lo que reporto el usuario.
+
+   La solucion NO es medir mas rapido, es medir MENOS y dibujar igual:
+   1. La medicion la maneja requestVideoFrameCallback del propio <video>, que dispara una vez por
+      CUADRO DE CAMARA — no por cuadro de render. Segun la especificacion corre al minimo entre los
+      fps del video y los del navegador, asi que con una camara de 30 fps dispara 30 veces por
+      segundo aunque el juego dibuje 120. Y encima se limita a 24 Hz en telefono.
+   2. Entre medicion y medicion los 21 puntos de cada mano se INTERPOLAN, con un poco de prediccion
+      acotada y un suavizado exponencial. Es el mismo criterio que el juego ya usa con su paso fijo
+      de 60 y sus cuadros de 120: la verdad se calcula pocas veces y el dibujo rellena.
+   3. La entrada baja a 320x240 (2,25 veces menos pixeles que 480x360).
+
+   Por que no un Web Worker, que seria lo "correcto": @mediapipe/tasks-vision hace
+   document.createElement('canvas') adentro, que no existe en un worker, y el caso de iOS 17 esta
+   abierto en el repositorio de MediaPipe. Un worker que no arranca en la mitad de los telefonos es
+   peor que 24 Hz interpolados que arrancan en todos.
+   ========================================================================================= */
+const MANO_PRED=45;      // ms de prediccion como maximo: mas que esto y la mano se adelanta y tiembla
+const MANO_TAU=0.032;    // constante del suavizado, en segundos
+const MANO_CADUCA=260;   // sin medicion nueva por mas de esto, la mano se fue
+const MANO_SALTO=0.22;   // si el objetivo esta mas lejos que esto (en fraccion de pantalla), se salta
+
+function ranuraNueva(){
+  const R={ hay:false, viva:0, t0:0, t1:0,
+            a:new Float32Array(63), b:new Float32Array(63), sal:new Float32Array(63),
+            dedos:0, estirados:[false,false,false,false,false], pinza:false, lado:'',
+            lmsSal:new Array(21) };
+  /* LA SALIDA VA PREASIGNADA. Convertir 21 puntos a objetos en cada cuadro son 42 objetos por
+     cuadro y 2.520 por segundo tirados a la basura: en un telefono eso es el recolector de basura
+     entrando cada pocos segundos, o sea un tironcito periodico justo en un juego cuyo unico defecto
+     reportado era el rendimiento. Se escriben los mismos objetos siempre. */
+  for(let i=0;i<21;i++) R.lmsSal[i]={x:0,y:0,z:0};
+  return R;
+}
+MANO.ranuras=[ranuraNueva(), ranuraNueva()];
+
+function lmsAArreglo(lm, dst){
+  for(let i=0;i<21;i++){ const p=lm[i]; dst[i*3]=p.x; dst[i*3+1]=p.y; dst[i*3+2]=p.z||0; }
+}
+/* el arreglo suavizado vuelto a la forma que esperan manoLeer() y manoPinzas(), EN SITIO */
+function arregloALms(src, dst){
+  for(let i=0;i<21;i++){ const p=dst[i]; p.x=src[i*3]; p.y=src[i*3+1]; p.z=src[i*3+2]; }
+  return dst;
+}
+/* una medicion entra a su ranura: corre la anterior a `a`, la nueva a `b`, y guarda los tiempos.
+   Es lo unico que la interpolacion necesita saber. */
+function ranuraPoner(q, lm, t){
+  const R=MANO.ranuras[q];
+  const lec=manoLeer(lm);
+  if(lec){ R.dedos=lec.dedos; R.estirados=lec.estirados; R.pinza=lec.pinza; }
+  if(!R.hay){ lmsAArreglo(lm, R.a); R.sal.set(R.a); R.t0=t-33; }
+  else { R.a.set(R.b); R.t0=R.t1; }
+  lmsAArreglo(lm, R.b);
+  R.t1=t; R.hay=true; R.viva=t;
+  return R;
+}
+/* GANCHO DE PRUEBA: mete manos como si las hubiera medido la camara. Entra por el MISMO lugar que
+   una medicion de verdad —las ranuras— porque probar el dibujo por otro camino no probaria ni la
+   interpolacion ni el reparto por mano izquierda/derecha. */
+function manosInyectar(lms){
   const t=performance.now();
-  if(t-MANO.ultT < 33) return;
-  MANO.ultT=t;
+  const n=Math.min(2, (lms&&lms.length)||0);
+  for(let k=0;k<n;k++) ranuraPoner(k, lms[k], t);
+  for(let q=n;q<2;q++) MANO.ranuras[q].hay=false;
+  MANO.lms=lms||null;
+}
+
+function manosMedir(t){
   let r=null;
+  const t0=performance.now();
   try{ r=MANO.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
-  const lms=(r && r.landmarks)? r.landmarks : null;
-  MANO.lms=lms;
-  const tot=manoTotal(lms);
-  MANO.hay=tot.hay; MANO.manos=tot.manos;
-  /* EL CRUDO Y EL VOTADO SON DOS COSAS. MANO.dedos es el numero que ya paso el voto de tres cuadros
-     —el que vale para contestar— y arranca en -1 mientras no hay acuerdo; el cartelito de la camara
-     tiene que mostrar lo que la camara ve AHORA, porque es la respuesta inmediata a "¿me esta
-     viendo?". Mostrando el votado, el cartel decia "2 MANOS · -1". */
-  MANO.crudo = tot.hay? tot.dedos : 0;
-  MANO.gesto = tot.pinza? 'pinza' : '';
-  MANO.pinzas = manoPinzas(lms);
-  manoVoto(tot.hay? tot.dedos : -1);
-  dibujarManos(lms);
-  dibujarManosGrande(lms);
+  MANO.msDet = MANO.msDet*0.8 + (performance.now()-t0)*0.2;
+  MANO.medidas++;
+  const lms=(r && r.landmarks)? r.landmarks : [];
+  const lados=(r && (r.handednesses||r.handedness)) || [];
+  MANO.lms=lms.length? lms : null;
+  /* LAS RANURAS SE ASIGNAN POR MANO IZQUIERDA/DERECHA Y NO POR ORDEN DE LLEGADA. MediaPipe devuelve
+     las manos en el orden que le sale, asi que usar el indice del arreglo hace que en cuanto el orden
+     cambia la interpolacion cruce una mano con la otra: en pantalla se ve un salto de una mano a la
+     otra. `handedness` es estable. */
+  const usada=[false,false];
+  const asignada=new Array(lms.length).fill(-1);
+  for(let k=0;k<lms.length;k++){
+    const cat=(lados[k] && lados[k][0] && lados[k][0].categoryName)||'';
+    let q = (cat==='Left')? 0 : (cat==='Right'? 1 : -1);
+    if(q<0 || usada[q]) q = usada[0]? (usada[1]? -1 : 1) : 0;
+    if(q<0) continue;
+    usada[q]=true; asignada[k]=q;
+    ranuraPoner(q, lms[k], t).lado=cat;
+  }
   pintarCam();
 }
-function dibujarManos(lms){
-  const cv=document.getElementById('camCv'); if(!cv) return;
-  const g=cv.getContext('2d'), w=cv.width, h=cv.height;
-  g.clearRect(0,0,w,h);
-  if(!lms) return;
-  const H=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
-           [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-  const X=p=>(1-p.x)*w, Y=p=>p.y*h;
-  for(const lm of lms){
-    g.strokeStyle='rgba(46,204,15,0.92)'; g.lineWidth=1.5;
-    g.beginPath();
-    for(const [a,b] of H){ g.moveTo(X(lm[a]),Y(lm[a])); g.lineTo(X(lm[b]),Y(lm[b])); }
-    g.stroke();
-    g.fillStyle='#f2efe6';
-    for(const p of lm){ g.beginPath(); g.arc(X(p),Y(p),1.7,0,7); g.fill(); }
-  }
-}
-/* =========================================================================================
-   LAS DOS MANOS, DIBUJADAS SOBRE EL JUEGO
 
-   Que se dibuja y por que cada cosa:
-   - EL CONTORNO OSCURO DEBAJO DE CADA HUESO. El pasillo es beige claro y el aula tambien; una linea
-     verde sola desaparece sobre el piso. Se pinta dos veces, primero grueso y oscuro y despues fino
-     y de color, que es como se hace legible un trazo sobre un fondo cualquiera.
-   - LA PALMA RELLENA. Con solo huesos se lee a arana; con el poligono de la palma se lee a mano.
-   - LAS PUNTAS DE LOS DEDOS QUE EL JUEGO CONTO van rellenas y grandes; las que no, huecas y chicas.
-     Cuando el numero no es el que el jugador esperaba, ahi se ve cual dedo no estiro.
-   - EL PUNTO DE LA PINZA, resaltado, porque es el que apunta a los bichos.
-   - UN NUMERO POR MANO, en la muñeca. Con dos manos el total no alcanza: si dice 7 y vos pusiste 4
-     y 3, hay que poder ver que leyo 4 en una y 3 en la otra.
-   Y TODO ESPEJADO en x, igual que la camarita: sin el espejo, mover la mano a la derecha mueve el
-   dibujo a la izquierda y no hay forma de apuntar.
-   ========================================================================================= */
-const MANO_HUESOS=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
-                   [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-const MANO_PUNTAS=[4,8,12,16,20];
-const MANO_PALMA=[0,1,5,9,13,17];
-const MANO_COLOR=['#2ecc0f','#4cc9ff'];
-function manosTam(){
-  const cv=document.getElementById('manosCv'); if(!cv) return;
-  const w=Math.max(2, marco.clientWidth), h=Math.max(2, marco.clientHeight);
-  /* EL LIENZO VA A PIXELES DE VERDAD Y NO A CSS. Con width/height por defecto (300x150) estirados
-     al marco, el esqueleto sale borroso y grueso: es el mismo error que hace ver mal cualquier
-     canvas 2D superpuesto. Se limita a 2 el ratio para no pintar 4 veces de mas en telefonos. */
-  const r=Math.min(devicePixelRatio||1, 2);
-  cv.width=Math.round(w*r); cv.height=Math.round(h*r);
-}
-function dibujarManosGrande(lms){
-  const cv=document.getElementById('manosCv'); if(!cv) return;
-  const g=cv.getContext('2d'), W=cv.width, H=cv.height;
-  if(!W || !H) return;
-  /* SI NO HABIA MANOS Y SIGUE SIN HABER, NO SE TOCA EL LIENZO. Un clearRect de 788x1400 son 1,1
-     millones de pixeles treinta veces por segundo para dejarlo igual que estaba. */
-  const hay=!!(lms && lms.length);
-  if(!hay && !MANO.habia) return;
-  MANO.habia=hay;
-  g.clearRect(0,0,W,H);
-  if(!hay) return;
-  const e=Math.max(1, Math.min(W,H)/400);          // grosor proporcional a la pantalla
-  g.lineJoin='round'; g.lineCap='round';
-  lms.forEach((lm,k)=>{
-    const col=MANO_COLOR[k%2];
-    const r=manoLeer(lm);
-    const X=p=>(1-p.x)*W, Y=p=>p.y*H;
-    /* la palma */
-    g.beginPath();
-    MANO_PALMA.forEach((i,q)=>{ const p=lm[i]; if(q) g.lineTo(X(p),Y(p)); else g.moveTo(X(p),Y(p)); });
-    g.closePath();
-    g.fillStyle='rgba(13,13,16,0.28)'; g.fill();
-    /* los huesos: contorno oscuro y encima el color */
-    for(const [anch,color] of [[7.0*e,'rgba(13,13,16,0.62)'], [3.2*e,col]]){
-      g.strokeStyle=color; g.lineWidth=anch;
-      g.beginPath();
-      for(const [a,b] of MANO_HUESOS){ g.moveTo(X(lm[a]),Y(lm[a])); g.lineTo(X(lm[b]),Y(lm[b])); }
-      g.stroke();
+/* SE LLAMA UNA VEZ POR CUADRO DE RENDER, y es lo unico de las manos que corre a 60. */
+function manosAvanzar(dt){
+  const ahora=performance.now();
+  let vivas=0, total=0, pinza=false;
+  const salida=[];
+  for(let q=0;q<2;q++){
+    const R=MANO.ranuras[q];
+    if(!R.hay) continue;
+    /* con la pausa puesta no caducan: en el banco la mano se inyecta y despues hay que sacar la
+       foto, y una captura por CDP tarda mas de los 260 ms de caducidad — la mano se moria entre la
+       inyeccion y la foto y la captura salia sin manos aunque el codigo estuviera bien. */
+    if(!MANO.pausa && ahora-R.viva > MANO_CADUCA){ R.hay=false; continue; }
+    const span=Math.max(8, R.t1-R.t0);
+    /* prediccion ACOTADA: se extrapola el tiempo que paso desde la ultima medicion, pero nunca mas
+       de MANO_PRED. Sin tope, un hueco de medio segundo manda la mano al otro lado de la pantalla. */
+    const f = 1 + Math.min(MANO_PRED, ahora-R.t1)/span;
+    const k = 1-Math.exp(-dt/MANO_TAU);
+    /* si el objetivo salto lejisimo —la mano reaparecio en otro lado— no se desliza, se pone */
+    const d=Math.hypot(R.b[0]+(R.b[0]-R.a[0])*(f-1)-R.sal[0],
+                       R.b[1]+(R.b[1]-R.a[1])*(f-1)-R.sal[1]);
+    const salta = d>MANO_SALTO;
+    for(let i=0;i<63;i++){
+      const obj=R.b[i]+(R.b[i]-R.a[i])*(f-1);
+      R.sal[i] = salta? obj : R.sal[i]+(obj-R.sal[i])*k;
     }
-    /* las puntas: rellenas si el juego las conto */
-    MANO_PUNTAS.forEach((i,q)=>{
-      const p=lm[i], si=r? !!r.estirados[q] : false;
-      g.beginPath(); g.arc(X(p), Y(p), (si? 7.0:4.2)*e, 0, 6.2832);
-      g.fillStyle = si? col : 'rgba(13,13,16,0.55)';
-      g.fill();
-      g.lineWidth=2.0*e; g.strokeStyle = si? 'rgba(13,13,16,0.75)' : col; g.stroke();
-    });
-    /* el punto de la pinza */
-    const px=(X(lm[4])+X(lm[8]))/2, py=(Y(lm[4])+Y(lm[8]))/2;
-    const pz=r && r.pinza;
-    g.beginPath(); g.arc(px, py, (pz? 17:13)*e, 0, 6.2832);
-    g.lineWidth=3.0*e; g.strokeStyle= pz? '#f2efe6' : 'rgba(242,239,230,0.55)'; g.stroke();
-    if(pz){ g.beginPath(); g.arc(px,py,7*e,0,6.2832); g.fillStyle='#f2efe6'; g.fill(); }
-    /* el numero de esta mano, en la muñeca */
-    if(r){
-      const wx=X(lm[0]), wy=Y(lm[0])+26*e;
-      g.font='900 '+Math.round(22*e)+'px ui-sans-serif,system-ui,Arial';
-      g.textAlign='center'; g.textBaseline='middle';
-      g.lineWidth=5*e; g.strokeStyle='rgba(13,13,16,0.75)';
-      g.strokeText(String(r.dedos), wx, wy);
-      g.fillStyle=col; g.fillText(String(r.dedos), wx, wy);
-    }
-  });
+    vivas++; total+=R.dedos; if(R.pinza) pinza=true;
+    salida.push(R);
+  }
+  MANO.hay=vivas>0; MANO.manos=vivas;
+  MANO.crudo=Math.min(10, total);
+  MANO.gesto=pinza? 'pinza' : '';
+  manoVoto(vivas? Math.min(10,total) : -1);
+  /* las pinzas salen de los puntos SUAVIZADOS, no de la ultima medicion: si salieran de la medicion,
+     apuntar a un bicho seria apuntar con una mano que se mueve a saltos de 24 Hz mientras se ve una
+     que se mueve a 60 */
+  MANO.pinzas=manoPinzas(salida.map(R=>arregloALms(R.sal, R.lmsSal)));
+  MANO.vivas=salida;
 }
+
+/* el lazo de medicion, colgado del video y no del render */
+function manosLazo(){
+  const v=MANO.vid; if(!v) return;
+  const paso=(ahora)=>{
+    if(MANO.estado!=='lista'){ return; }
+    const t=performance.now();
+    if(!MANO.pausa && v.readyState>=2 && (t-MANO.ultT) >= (1000/MANO.hz)-2){
+      MANO.ultT=t; manosMedir(t);
+    }
+    pedir();
+  };
+  const pedir=()=>{
+    if(MANO.estado!=='lista') return;
+    if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
+    else setTimeout(()=>paso(performance.now()), Math.max(8, 1000/MANO.hz));
+  };
+  pedir();
+}
+
 function pintarCam(){
-  const e=document.getElementById('camEst'); if(!e) return;
+  const e=document.getElementById('camEst'); if(!e) return;   // sigue existiendo, oculto
   if(MANO.estado==='carga'){ e.textContent=TX('manoCarga'); return; }
   if(MANO.estado!=='lista'){ e.textContent='—'; return; }
   if(!MANO.hay){ e.textContent=TX('manoLista'); return; }
@@ -325,10 +381,3 @@ const TOQUES=[];
   }, {passive:true});
 })();
 
-/* SE PUBLICA EN window A PROPOSITO, y no es descuido: esto es un modulo, asi que una `function` de
-   aca NO aparece en window, y ajustar() —que vive en un archivo anterior— la llama con un guard
-   `if(window.manosTam)`. Ese guard es lo que evita que el primer ajustar() del arranque toque un
-   lienzo que todavia no existe. Sin la asignacion el guard es falso PARA SIEMPRE y el lienzo nunca
-   se redimensiona: es exactamente el error que ya tenia pintarFiltro, que nunca se llamaba.
-   Con este par —guard alla, asignacion aca— la llamada del arranque se saltea y las de resize no. */
-window.manosTam=manosTam;

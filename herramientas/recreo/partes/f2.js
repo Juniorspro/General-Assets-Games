@@ -67,7 +67,10 @@ function profeTick(dt){
       }
     }
   }
-  if(PROFE.mezcla>0) PROFE.mezcla=Math.max(0, PROFE.mezcla - dt/0.40);
+  /* 0,22 Y NO 0,40. Un crossfade de 0,40 s a 60 pasos son veinticuatro cuadros mezclando dos poses:
+     durante casi medio segundo el personaje no esta haciendo ninguna de las dos cosas, y eso es lo
+     que se lee como "animaciones lentas". 0,22 alcanza para que no haya salto y se nota el cambio. */
+  if(PROFE.mezcla>0) PROFE.mezcla=Math.max(0, PROFE.mezcla - dt/0.22);
   PROFE.at+=dt;
 }
 function profeMirarCam(dt,k){

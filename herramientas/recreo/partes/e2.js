@@ -108,28 +108,46 @@ const ANIM={
   /* QUIETO: respira y nada mas. Un personaje perfectamente inmovil se lee a estatua, y una estatua
      no da miedo — da la sensacion de que el juego se colgo. */
   quieto:(t,p)=>{
-    const r=Math.sin(t*1.7);
-    p.torso[0]=r*0.020; p.cabeza[0]=-r*0.030; p.cabeza[1]=Math.sin(t*0.7)*0.14;
-    p.hombroI[2]= 0.09+r*0.020; p.hombroD[2]=-0.09-r*0.020;
-    p.codoI[0]=-0.12; p.codoD[0]=-0.12; p.alto=r*0.012;
+    /* DOS RITMOS Y NO UNO. Respirar a 1,7 y mirar alrededor a 0,7 estaba bien, pero todo el cuerpo
+       iba con la MISMA fase: eso hace un latido, no una respiracion. El tronco va a 1,7 y los
+       hombros medio ciclo atras, que es lo que hace el hombro de verdad cuando el pecho se infla. */
+    const r=Math.sin(t*1.7), rh=Math.sin(t*1.7-1.1), m=Math.sin(t*0.7);
+    p.torso[0]=r*0.022; p.torso[1]=m*0.045;
+    p.cabeza[0]=-r*0.030; p.cabeza[1]=m*0.16; p.cabeza[2]=Math.sin(t*0.43)*0.030;
+    p.hombroI[2]= 0.09+rh*0.026; p.hombroD[2]=-0.09-rh*0.026;
+    p.hombroI[0]=rh*0.030; p.hombroD[0]=rh*0.030;
+    p.codoI[0]=-0.12-rh*0.035; p.codoD[0]=-0.12-rh*0.035; p.alto=r*0.013;
   },
   /* CAMINAR: piernas en oposicion, brazos en contra, y el tronco sube dos veces por ciclo. Esa
      doble subida es lo que hace que se lea a paso y no a deslizamiento. */
+  /* CAMINAR A 3,4 m/s, QUE ES LA VELOCIDAD A LA QUE CAMINA DE VERDAD.
+     El ciclo estaba en t*2,0, o sea un paso cada 1,57 s. Pero el riel lo mueve a 3,4 m/s, y una
+     zancada de una persona son unos 0,75 m: a 3,4 m/s eso son 4,5 pasos por segundo, no 0,64. El
+     resultado era el patinaje clasico —los pies se arrastran porque el cuerpo avanza mas rapido que
+     la pierna— y se lee como que el personaje flota. Ahora el ritmo sale de la velocidad: ver
+     CAMINA_W en b2.js.
+     Y ADEMAS HAY DESFASE: las rodillas y los codos van un poco atrasados respecto de la cadera y el
+     hombro (0,45 rad). Sin desfase todo el cuerpo cambia de direccion en el mismo cuadro y se lee a
+     marioneta de dos palos; con desfase la pierna "sigue" a la cadera, que es lo que hace una pierna. */
   caminar:(t,p)=>{
-    const a=t*2.0, s=Math.sin(a), c=Math.cos(a);
-    p.caderaI[0]= s*0.62;  p.caderaD[0]=-s*0.62;
-    p.rodillaI[0]=Math.max(0,-s)*0.75; p.rodillaD[0]=Math.max(0, s)*0.75;
-    p.hombroI[0]=-s*0.44; p.hombroD[0]= s*0.44;
-    p.hombroI[2]= 0.10;   p.hombroD[2]=-0.10;
-    p.codoI[0]=-0.30-Math.max(0,-s)*0.35; p.codoD[0]=-0.30-Math.max(0,s)*0.35;
-    p.torso[0]=0.055+Math.abs(c)*0.030; p.torso[1]=s*0.055;
-    p.cabeza[0]=-0.05; p.alto=Math.abs(c)*0.055;
+    const a=t*CAMINA_W, s=Math.sin(a), c=Math.cos(a);
+    const sr=Math.sin(a-0.45);                      // rodillas y codos, atrasados
+    p.caderaI[0]= s*0.66;  p.caderaD[0]=-s*0.66;
+    p.rodillaI[0]=Math.max(0,-sr)*0.92; p.rodillaD[0]=Math.max(0, sr)*0.92;
+    p.hombroI[0]=-s*0.50; p.hombroD[0]= s*0.50;
+    p.hombroI[2]= 0.12;   p.hombroD[2]=-0.12;
+    p.codoI[0]=-0.34-Math.max(0,-sr)*0.42; p.codoD[0]=-0.34-Math.max(0,sr)*0.42;
+    p.torso[0]=0.060+Math.abs(c)*0.034; p.torso[1]=s*0.070;
+    /* la cabeza va casi quieta mientras el cuerpo sube y baja: en una persona la cabeza es lo ultimo
+       que se mueve, y compensar el rebote con la cabeza es lo que separa caminar de saltar */
+    p.cabeza[0]=-0.05-Math.abs(c)*0.030; p.cabeza[1]=-s*0.045;
+    p.alto=Math.abs(c)*0.062;
   },
   /* SALUDAR: el brazo derecho arriba y el antebrazo yendo y viniendo. El cuerpo se inclina un poco
      hacia ese lado: un saludo con el torso quieto se ve como un brazo que se movio solo. */
   saludar:(t,p)=>{
     ANIM.quieto(t,p);
-    const w=Math.sin(t*6.4);
+    const w=Math.sin(t*8.2);      // el saludo mas vivo: 6,4 se leia a abanico lento
     /* 2,15 y no 2,42: con la abduccion ya medida en radianes de verdad, 2,42 mas los 0,14 de base
        son 2,56 — o sea el brazo PASADO de la vertical, cruzandose por encima de la cabeza. 2,15
        deja la mano un puno arriba de la oreja, que es donde saluda una persona. */
@@ -157,7 +175,7 @@ const ANIM={
   /* EXPLICANDO: las dos manos hablando, la cabeza acompanando y el tronco girando de a poco. Las
      dos manos van DESFASADAS: en fase se lee a marioneta. */
   explicar:(t,p)=>{
-    const a=Math.sin(t*2.6), b=Math.sin(t*2.6+1.9), c=Math.sin(t*1.1);
+    const a=Math.sin(t*3.5), b=Math.sin(t*3.5+1.9), c=Math.sin(t*1.4);
     /* EL GESTO VA EN LOS CODOS Y NO EN LOS HOMBROS, y la razon es el punto de vista: en esta escena
        el mira A LA CAMARA. Un brazo levantado hacia adelante —1,06 de flexion, que es lo que tenia—
        apunta al lente y en pantalla no se ve como un brazo que gesticula sino como un palo saliendo

@@ -58,7 +58,19 @@ function esquinas(r){
    celda del primer punto, ese punto no tiene nada que decirle. */
 function rutaDesde(pts, x, z){
   const R=pts.slice();
-  while(R.length>1 && Math.hypot(R[0][0]-x, R[0][1]-z) < CEL) R.shift();
+  /* SE DESCARTA COMO MAXIMO EL PRIMERO. El `while` descartaba TODOS los puntos que estuvieran a
+     menos de una celda, y en un pasillo con esquina eso se come el punto de la esquina: la ruta
+     [entrada, esquina, destino] queda en [destino] y el profesor camina en DIAGONAL, atravesando la
+     pared — que es exactamente el "se desvia a veces" que reporto el usuario. Nunca fue un problema
+     de rumbo: era una ruta a la que le faltaba la esquina.
+     Y ni el primero se descarta si el segundo no queda MAS ADELANTE: se compara la distancia al
+     punto 1 desde el profesor contra la distancia desde el punto 0, y si desde el profesor no esta
+     mas cerca, el punto 0 todavia tiene algo que decirle. */
+  if(R.length>2 && Math.hypot(R[0][0]-x, R[0][1]-z) < CEL*0.75){
+    const dProf=Math.hypot(R[1][0]-x, R[1][1]-z);
+    const dCero=Math.hypot(R[1][0]-R[0][0], R[1][1]-R[0][1]);
+    if(dProf<=dCero) R.shift();
+  }
   return R;
 }
 /* entrar al aula: la puerta, la primera fila del aula, el medio, y el sitio de la camara */
@@ -73,12 +85,6 @@ function rutaSalir(n){
 }
 
 function cel2(p){ return [XC(p[0]), ZC(p[1])]; }
-/* LA CAMARA CAMINA A 2,9 Y EL A 3,4, y no a 2,2 y 2,9 como en la version de un solo aula. La razon
-   es aritmetica: el tramo mas largo del recorrido —del aula 4 a la 8, bajando por la columna 21— son
-   catorce celdas, o sea 58,8 metros. A 2,2 m/s eso son veintisiete segundos de pasillo, y veintisiete
-   segundos sin nada que hacer no son atmosfera, son una pantalla de carga con lockers. A 2,9 son
-   veinte, y ademas el tramo se corta al medio con los bichos. */
-const VEL_CAM=2.9, VEL_PROFE=3.4;
 let restoRuta=null;          // la segunda mitad del viaje, la que se camina despues de los bichos
 let bichosCerrado=false;     // la tanda de bichos de la escena actual ya se cerro
 let aulaPrev=0;              // de que aula venimos, para saber si hay que salir de ella
@@ -107,13 +113,19 @@ function empezar(){
   CUENTAS=armarCuentas();
   for(const l of LIBROS){ l.hecho=false; l.g.visible=false; }
   for(const p of PUERTAS){ p.abierta=false; p.t=0; p.ang=0; }
-  /* arranca cara a cara en el pasillo del medio: el primer plano del juego es el saludando */
-  cam.x=XC(11); cam.z=ZC(9); cam.giro=-Math.PI/2; cam.pitch=0.02; cam.ojo=OJO;
+  /* ARRANCA MIRANDO HACIA DONDE VA A CAMINAR, y no de costado. Estaba con la camara mirando a -X y
+     el profesor 2,73 m en esa direccion; pero el primer viaje baja por la columna 11, o sea -Z. Con
+     lo cual lo primero que hacia el profesor era caminar HACIA ATRAS hasta la celda de la camara
+     para poder doblar, cruzandose con el jugador — y si en vez de eso se le saltea ese punto, corta
+     la esquina y camina en diagonal por dentro de la pared (medido: 113 pasos en la celda [10,8]).
+     El problema nunca fue la ruta: era que el saludo pasaba en una esquina. Poniendo a los dos sobre
+     la columna 11 y la camara mirando a -Z, la ruta sale derecho y no hay esquina que cortar. */
+  cam.x=XC(11); cam.z=ZC(9); cam.giro=Math.PI; cam.pitch=0.02; cam.ojo=OJO;
   cam.ax=cam.x; cam.az=cam.z; cam.agiro=cam.giro; cam.apitch=cam.pitch; cam.aojo=cam.ojo;
   /* A DOS METROS SETENTA Y NO A SEIS. El primer plano del juego es el saludando, y a 5,88 m en un
      pasillo de 3,6 de techo el personaje ocupaba 90 px de los 732 del marco: un muneco al fondo.
      A 2,73 ocupa el 40% de la altura, que es la distancia a la que alguien te saluda. */
-  PROFE.x=XC(10.35); PROFE.z=ZC(9); PROFE.giro=Math.PI/2;
+  PROFE.x=XC(11); PROFE.z=ZC(8.35); PROFE.giro=0;
   PROFE.ax=PROFE.x; PROFE.az=PROFE.z; PROFE.agiro=PROFE.giro;
   PROFE.anim='saludar'; PROFE.animOtro=null; PROFE.mezcla=0; PROFE.at=0;
   riel=null; profeRiel=null;
@@ -171,7 +183,7 @@ function siguienteEscena(){
     rielIr(ruta.map(cel2), VEL_CAM, ()=>{});
     /* el camina la ruta ENTERA y espera al final: mientras el jugador revienta bichos, el esta
        esperandolo al fondo del pasillo, que es exactamente lo que hace un maestro apurado */
-    const suya = restoRuta? [...ruta, ...restoRuta] : ruta;
+    let suya = restoRuta? [...ruta, ...restoRuta] : ruta;
     profeIr(rutaDesde(suya.map(cel2), PROFE.x, PROFE.z), VEL_PROFE);
     aulaPrev=0;
   }
@@ -672,13 +684,18 @@ function dibujar(alfa){
     l.g.position.y=1.52+Math.sin(l.giro*1.7)*0.055; }
   for(const p of PUERTAS) if(p.g) p.g.rotation.y=(p.vertical?0:Math.PI/2) + p.ang;
   bichosDibujar();
+  manos3DDibujar();
   pintarEscena();
 }
 function bucle(){
   requestAnimationFrame(bucle);
   const ahora=performance.now();
   const dt=(ahora-ultimo)/1000; ultimo=ahora;
-  if(MANO.on) manosTick();
+  /* LA MEDICION YA NO SE LLAMA DESDE ACA. Antes estaba manosTick(), que hacia detectForVideo() —
+     entre 8 y 20 ms en un telefono— DENTRO del cuadro de render: el presupuesto de 16,6 ms para 60
+     fps se iba en mirar la mano. Ahora la medicion la maneja el propio <video> por su cuenta y lo
+     unico que corre a 60 es la interpolacion, que son 126 numeros. */
+  if(MANO.on) manosAvanzar(dt);
   avanzar(dt);
   dibujar(Math.min(1, acum/PASO));
 }

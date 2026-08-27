@@ -111,28 +111,24 @@
     z-index:25; }
 
   /* =========================================================================================
-     LAS MANOS SE DIBUJAN EN EL JUEGO, NO EN UNA MINIATURA
-     Estaban solo dentro de la camarita de la esquina, de 78 a 132 px de ancho: a ese tamano una
-     mano son veinte puntos en dos centimetros y no se ve si el detector te esta siguiendo o no.
-     Ahora el esqueleto de las DOS manos se dibuja sobre todo el marco, con la punta de cada dedo
-     marcada y el punto de la pinza resaltado. La camarita queda, chica, solo como prueba de vida.
-     Va en un canvas 2D encima del 3D y no en el mundo: es informacion de interfaz —donde esta tu
-     mano AHORA— y tiene que verse nitida y del mismo grosor en cualquier pantalla.
+     LA CAMARA NO SE VE, PERO SIGUE VIVA
+     El usuario la quiere fuera de la pantalla y las manos en 3D ya son el aviso de "te estoy
+     viendo", asi que la miniatura no aporta nada y tapaba la esquina.
+     PERO NO VA CON display:none NI CON visibility:hidden: un <video> que el compositor considera
+     que no se dibuja puede dejar de entregar cuadros, y sin cuadros no hay deteccion — se queda un
+     juego que pidio la camara y no ve nada. Queda de 1 px, transparente y fuera de foco: presente
+     para el navegador, invisible para el jugador.
      ========================================================================================= */
-  #manosCv{ position:absolute; inset:0; width:100%; height:100%; z-index:24;
-    pointer-events:none; display:none; }
-  body.manos #manosCv{ display:block; }
-  /* la camara de la mano */
-  #camCaja{ position:absolute; right:8px; top:8px; width:clamp(78px,26vw,132px);
-    aspect-ratio:4/3; border:1.2px solid #35353d; border-radius:9px; overflow:hidden;
-    background:#000; display:none; z-index:23; }
-  body.manos #camCaja{ display:block; }
-  #camVid{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
-    transform:scaleX(-1); }
-  #camCv{ position:absolute; inset:0; width:100%; height:100%; }
-  #camEst{ position:absolute; left:0; right:0; bottom:0; font-size:7.5px; letter-spacing:.12em;
-    text-align:center; background:rgba(0,0,0,.6); color:var(--beige); padding:2px 0;
-    font-weight:800; }
+  #camCaja{ position:absolute; right:0; top:0; width:2px; height:2px; overflow:hidden;
+    opacity:0.01; pointer-events:none; z-index:1; }
+  #camVid{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  #camCv, #camEst{ display:none; }
+  /* el numero que leyo CADA mano, al lado de su muneca. Con dos manos el total no alcanza: si dice
+     7 y pusiste 4 y 3, hay que poder ver que leyo 4 en una y 3 en la otra. */
+  .manoN{ position:absolute; z-index:26; transform:translate(-50%,-50%); display:none;
+    font-size:max(17px,5.2vw); font-weight:900; color:#f2efe6; pointer-events:none;
+    text-shadow:0 0 6px rgba(13,13,16,.95), 0 2px 0 rgba(13,13,16,.8); }
+  body.manos .manoN.ver{ display:block; }
 
   /* EL TECLADO DE NUMEROS: el respaldo para quien no tiene camara o no quiere darla.
      Un juego que solo se puede abrir con webcam es un juego que la mayoria no puede abrir. */
@@ -176,7 +172,8 @@
       <div id="aroN"></div>
       <div id="aroS"></div>
     </div>
-    <canvas id="manosCv"></canvas>
+    <div class="manoN" id="manoN0"></div>
+    <div class="manoN" id="manoN1"></div>
     <div id="dialogo"><span id="quien">BALDI</span><span id="dTxt"></span></div>
   </div>
 
