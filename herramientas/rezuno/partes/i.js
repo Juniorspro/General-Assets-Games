@@ -157,8 +157,11 @@ window.__rez={
     }
     return lm;
   },
-  manoInyectar:(cx, cy, pinza, t)=>{
-    MANO.on=true; MANO.espejo=false;
+  /* EL ESPEJO ES UN PARAMETRO Y NO UNA CONSTANTE, desde que la camara puede ser la trasera. Por
+     omision va SIN espejo, que es el caso de la trasera —la de por omision del juego—; pasando true
+     se prueba el camino de la frontal por el mismo gancho. */
+  manoInyectar:(cx, cy, pinza, t, esp)=>{
+    MANO.on=true; MANO.espejo=!!esp;
     manosInyectar(window.__rez.manoFalsa(cx,cy,pinza), t==null? performance.now() : t);
     return { x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), crudo:+MANO.crudo.toFixed(3),
              pinza:MANO.pinza, nueva:MANO.pinzaNueva };
@@ -253,7 +256,7 @@ window.__rez={
   manoVer:()=>({ on:MANO.on, estado:MANO.estado, error:MANO.error, hay:MANO.hay,
                  x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), pinza:MANO.pinza,
                  crudo:+MANO.crudo.toFixed(3), medidas:MANO.medidas, delegado:MANO.delegado,
-                 espejo:MANO.espejo, ms:+MANO.msDet.toFixed(2) }),
+                 espejo:MANO.espejo, usa:MANO.usa, pref:CAM_PREF, ms:+MANO.msDet.toFixed(2) }),
   /* EL FLANCO: una pinza sostenida tiene que valer UNA vez. Se empujan n cuadros seguidos con la
      pinza cerrada y se cuentan los flancos. */
   flancoProbar:(n)=>{

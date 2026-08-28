@@ -48,7 +48,13 @@ const LANG={
   t4n:'STEP 5 OF 6', t4:'A card only goes down if it matches the pile in <b>colour</b> or in <b>number</b>. This one matches neither, so PLAY is <b>dimmed</b>. Pinch <b>KEEP</b>.',
   t5n:'STEP 6 OF 6', t5:'When nothing of yours fits, take one from the pile. Pinch the <b>deck</b> on the left.',
   t6n:'READY', t6:'That is the whole game. Empty your hand before the other two do.',
-  ayudaTirar:'pinch PLAY or KEEP', ayudaColor:'pinch a colour', ayudaMano:'pinch a card, or the deck'
+  ayudaTirar:'pinch PLAY or KEEP', ayudaColor:'pinch a colour', ayudaMano:'pinch a card, or the deck',
+  camTrasera:'REAR CAMERA',
+  camFrontal:'FRONT CAMERA',
+  camPieT:'Rear camera: hold the phone and put your hand <b>behind</b> it.',
+  camPieF:'Front camera: prop the phone up. You can also <b>turn your head</b> to look around.',
+  camOkT:'CAMERA READY · hand behind the phone',
+  camOkF:'CAMERA READY · hand in front, turn your head to look around'
  },
  es:{
   jugar:'JUGAR', tutorial:'TUTORIAL', idioma:'IDIOMA', otra:'OTRA VEZ', menu:'MENÚ',
@@ -73,7 +79,13 @@ const LANG={
   t4n:'PASO 5 DE 6', t4:'Una carta solo baja si coincide con la pila en el <b>color</b> o en el <b>número</b>. Esta no coincide en nada, así que TIRAR está <b>apagado</b>. Pellizcá <b>DEJAR</b>.',
   t5n:'PASO 6 DE 6', t5:'Cuando no te sirve ninguna, agarrás una del mazo. Pellizcá el <b>mazo</b> de la izquierda.',
   t6n:'LISTO', t6:'Eso es todo el juego. Quedate sin cartas antes que los otros dos.',
-  ayudaTirar:'pellizcá TIRAR o DEJAR', ayudaColor:'pellizcá un color', ayudaMano:'pellizcá una carta, o el mazo'
+  ayudaTirar:'pellizcá TIRAR o DEJAR', ayudaColor:'pellizcá un color', ayudaMano:'pellizcá una carta, o el mazo',
+  camTrasera:'CÁMARA TRASERA',
+  camFrontal:'CÁMARA FRONTAL',
+  camPieT:'Cámara trasera: sostené el teléfono y meté la mano <b>por detrás</b>.',
+  camPieF:'Cámara frontal: apoyá el teléfono. Además podés <b>girar la cabeza</b> para mirar a los lados.',
+  camOkT:'CÁMARA LISTA · la mano por detrás del teléfono',
+  camOkF:'CÁMARA LISTA · la mano adelante, girá la cabeza para mirar'
  },
  pt:{
   jugar:'JOGAR', tutorial:'TUTORIAL', idioma:'IDIOMA', otra:'DE NOVO', menu:'MENU',
@@ -98,7 +110,13 @@ const LANG={
   t4n:'PASSO 5 DE 6', t4:'Uma carta só desce se combinar com a pilha na <b>cor</b> ou no <b>número</b>. Esta não combina em nada, então JOGAR está <b>apagado</b>. Belisque <b>DEIXAR</b>.',
   t5n:'PASSO 6 DE 6', t5:'Quando nenhuma serve, você compra do monte. Belisque o <b>monte</b> da esquerda.',
   t6n:'PRONTO', t6:'É todo o jogo. Fique sem cartas antes dos outros dois.',
-  ayudaTirar:'belisque JOGAR ou DEIXAR', ayudaColor:'belisque uma cor', ayudaMano:'belisque uma carta, ou o monte'
+  ayudaTirar:'belisque JOGAR ou DEIXAR', ayudaColor:'belisque uma cor', ayudaMano:'belisque uma carta, ou o monte',
+  camTrasera:'CÂMERA TRASEIRA',
+  camFrontal:'CÂMERA FRONTAL',
+  camPieT:'Câmera traseira: segure o telefone e ponha a mão <b>atrás</b> dele.',
+  camPieF:'Câmera frontal: apoie o telefone. Você também pode <b>girar a cabeça</b> para olhar ao redor.',
+  camOkT:'CÂMERA PRONTA · a mão atrás do telefone',
+  camOkF:'CÂMERA PRONTA · a mão na frente, gire a cabeça para olhar'
  }
 };
 function TX(k, p){

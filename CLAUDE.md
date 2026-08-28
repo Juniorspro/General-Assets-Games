@@ -43,8 +43,10 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   (pixelado real) y respaldo de teclado numérico —y de toque— para quien no tenga cámara. Simulación a **60 pasos fijos con
   interpolación**. El juego vive partido en `herramientas/recreo/partes/` y se arma con
   `python3 herramientas/recreo/armar.py`.
-- **`RezUno.html` es "RezUno"** (~128 KB, **sin un solo asset**: todo dibujado por código). El quinto
-  juego. **3D con three.js sobre una mesa blanca**. Un UNO que se juega **con la mano por la cámara**: todo, absolutamente todo, se hace con un
+- **`RezUno.html` es "RezUno"** (~138 KB, **sin un solo asset**: todo dibujado por código). El quinto
+  juego. **3D con three.js sobre una mesa blanca**. Un UNO que se juega **con la mano por la cámara
+  trasera** —se sostiene el teléfono y se mete la mano por detrás, como en RECREO; con la frontal se
+  puede además mirar a los lados girando la cabeza—: todo, absolutamente todo, se hace con un
   **pellizco** (pulgar e índice). Pellizcás una carta y aparecen dos opciones, **TIRAR** y **DEJAR**;
   si la carta no pega con la pila, **TIRAR se ve apagado** antes de intentarlo. Pedido textual: *"un
   UNO de handtracking simple, la idea es que el menú sea muy minimalista y el juego se llame RezUno,
@@ -58,6 +60,96 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cuadragésima tercera vuelta (2026-08-28): **RezUno** — la cámara trasera, y el espejo que se deducía mal
+
+Pedido: *"quiero ver la mano we como el de baldi cámara trasera we"*. La cámara trasera pasa a ser
+**la de por omisión**, como en RECREO, y hay un botón en el menú para volver a la frontal.
+
+#### POR QUÉ LA TRASERA ES LA CORRECTA PARA ESTE JUEGO
+
+Con la frontal hay que apoyar el teléfono en algo y jugar de lejos, apuntándose a uno mismo. Con la
+trasera se sostiene el teléfono con una mano y se mete **la otra por detrás**: la mano entra en la
+escena por donde entraría de verdad, que es exactamente lo que hace que se lea a mano y no a cursor.
+
+Se pide como **preferencia y no con `exact`**. Una notebook no tiene cámara trasera, y `exact` la
+dejaría sin manos por pedir algo que no existe. Si la preferida falla, se prueba la otra antes de
+darse por vencido.
+
+#### EL DEFECTO DE FONDO: `getSettings()` NO SIEMPRE TRAE `facingMode`
+
+La primera versión leía `MANO.usa = s.facingMode || CAM_PREF`, o sea "lo que diga el track, y si no
+lo que pedí". Medido en el banco con una cámara de las que tiene una notebook: **`getSettings()` NO
+trae la clave `facingMode`** — `getCapabilities()` la lista, pero el valor no está. Así que el
+respaldo devolvía `'environment'` de puro descarte y dejaba **sin espejo una cámara que apunta a la
+cara del jugador**. En un aparato así, mover la mano a la derecha mueve la mano del juego a la
+izquierda y no hay forma de apuntar a una carta: el juego queda injugable en toda la clase de
+aparatos donde la trasera ni siquiera existe.
+
+La regla correcta es **asimétrica**, y ésa es la parte que importa: *una cámara que no dice para
+dónde mira no es la trasera*. Un teléfono informa su `facingMode`; una webcam callada es de las que
+te apuntan a la cara. Así que **sólo un track que diga `environment` apaga el espejo**, y el silencio
+se lee frontal. Y el cartel de estado sale del mismo valor, así que no pueden contradecirse.
+
+Medido con las dos clases de aparato, entrando por el mismo camino que una persona:
+
+| el track dice | `usa` | espejo | cartel |
+|---|---|---|---|
+| `environment` (teléfono, trasera) | environment | **no** | *la mano por detrás del teléfono* |
+| `user` (teléfono, frontal) | user | sí | *la mano adelante, girá la cabeza para mirar* |
+| **nada** (webcam de notebook) | user | **sí** | *la mano adelante…* |
+
+Antes del arreglo, la tercera fila daba `environment` y espejo **no**.
+
+#### LA CARA SÓLO SE PIDE CON LA FRONTAL, Y NO ES UNA OPTIMIZACIÓN MENOR
+
+Con la trasera tu cara está **del otro lado del teléfono**: girar la cabeza no puede mover la vista
+porque no hay nada que mirar. En vez de dejar un detector corriendo que no va a encontrar nada nunca,
+**ni siquiera se pide el modelo**: son **3.758.596 bytes** que no se bajan y **0 detecciones de cara**
+en la misma ventana en la que la frontal hace 13. La línea de estado lo dice, así que el jugador
+elige: TRASERA para meter la mano por detrás, FRONTAL para que además se pueda mirar a los lados.
+Las dos cosas no caben en una cámara.
+
+El modelo de la cara tarda: medido, entra entre 8 y 10 s después de tocar el botón. Por eso se pide
+**sin bloquear** — si no llegó, se juega igual con la cámara quieta.
+
+#### CAMBIAR DE CÁMARA REARRANCA EL DETECTOR ENTERO
+
+El flujo de video, el espejo y el detector de caras dependen de cuál cámara es, así que media docena
+de cosas tendrían que reconciliarse en caliente. Se sueltan las pistas, se cierran los dos detectores,
+se pone el estado en cero y se vuelve a pedir.
+
+**Y EL BOTÓN SE BLOQUEA MIENTRAS ARRANCA.** Medido tocándolo tres veces seguidas: con el detector a
+medio abrir quedaban **dos `manosIniciar()` en vuelo**, y la que terminaba segunda pisaba el espejo y
+el cartel de la primera — o sea el juego diciendo una cámara y espejando la otra. Con el cerrojo, tres
+toques seguidos producen **un** rearranque.
+
+La elección **se guarda** (`rezuno_cam`): verificado recargando la página, vuelve con la que se eligió.
+
+#### EL GANCHO DE PRUEBA APRENDIÓ EL ESPEJO
+
+`manoInyectar()` forzaba `espejo=false`, o sea que **todas** las pruebas de mano probaban un solo
+camino. Ahora el espejo es un parámetro: por omisión sigue sin espejo —que es la trasera, la de por
+omisión del juego— y pasando `true` se prueba el de la frontal por el mismo gancho. Medido, la
+separación entre **la mano dibujada y el punto que apunta es 0 en los dos**, que es la propiedad que
+no puede romperse: si fueran dos caminos, el jugador vería su pinza en un lugar y agarraría una carta
+en otro.
+
+#### MEDIDO AL CERRAR
+
+120 partidas por el camino interno: **120 terminadas, 0 cartas ilegales**. 30 partidas apuntando con
+el rayo: **30 terminadas, 0 ilegales, 0 fallos de puntería** (la más larga, 4.137 vueltas). Tutorial
+completo en los tres idiomas y JUGAR bloqueado hasta terminarlo. Manos 110 articulaciones y 105 huesos
+en 2 llamadas de dibujo, separación dibujo-puntería 0 con y sin espejo. Flanco 1 de 15 cuadros,
+histéresis 0,411/0,591, retardo 6,4 ms, atenuación de temblor 2,69. Giro de cabeza 17,8 grados con el
+abanico entero en cuadro. 76 llamadas de dibujo, 8.008 triángulos. `window.__errs` vacío. El HTML
+quedó en **138 KB**.
+
+**Lo que no se pudo probar de verdad:** el banco no tiene una cámara trasera, así que el caso del
+teléfono se probó **simulando el track** —envolviendo `getUserMedia` para que `getSettings()` informe
+el `facingMode` que se pidió, que es exactamente lo que hace un teléfono—. Lo que sí es real es la
+otra mitad: la cámara del contenedor **no** informa `facingMode`, y ése es justamente el caso que
+estaba roto.
 
 ### Cuadragésima segunda vuelta (2026-08-28): **RezUno** — las manos se ven, y la cabeza mueve la vista
 

@@ -149,6 +149,7 @@ body.guia #guia{ display:block; }
     <button class="bot" id="bJugar"></button>
     <div class="pie" id="mPie"></div>
     <div id="camAviso"></div>
+    <button class="bot" id="bCam" style="width:auto;padding:9px 18px;font-size:12px;letter-spacing:.16em"></button>
     <button class="bot" id="bIdioma" style="width:auto;padding:9px 18px;font-size:12px;letter-spacing:.16em"></button>
   </div>
 
@@ -219,7 +220,13 @@ const LANG={
   t4n:'STEP 5 OF 6', t4:'A card only goes down if it matches the pile in <b>colour</b> or in <b>number</b>. This one matches neither, so PLAY is <b>dimmed</b>. Pinch <b>KEEP</b>.',
   t5n:'STEP 6 OF 6', t5:'When nothing of yours fits, take one from the pile. Pinch the <b>deck</b> on the left.',
   t6n:'READY', t6:'That is the whole game. Empty your hand before the other two do.',
-  ayudaTirar:'pinch PLAY or KEEP', ayudaColor:'pinch a colour', ayudaMano:'pinch a card, or the deck'
+  ayudaTirar:'pinch PLAY or KEEP', ayudaColor:'pinch a colour', ayudaMano:'pinch a card, or the deck',
+  camTrasera:'REAR CAMERA',
+  camFrontal:'FRONT CAMERA',
+  camPieT:'Rear camera: hold the phone and put your hand <b>behind</b> it.',
+  camPieF:'Front camera: prop the phone up. You can also <b>turn your head</b> to look around.',
+  camOkT:'CAMERA READY · hand behind the phone',
+  camOkF:'CAMERA READY · hand in front, turn your head to look around'
  },
  es:{
   jugar:'JUGAR', tutorial:'TUTORIAL', idioma:'IDIOMA', otra:'OTRA VEZ', menu:'MENÚ',
@@ -244,7 +251,13 @@ const LANG={
   t4n:'PASO 5 DE 6', t4:'Una carta solo baja si coincide con la pila en el <b>color</b> o en el <b>número</b>. Esta no coincide en nada, así que TIRAR está <b>apagado</b>. Pellizcá <b>DEJAR</b>.',
   t5n:'PASO 6 DE 6', t5:'Cuando no te sirve ninguna, agarrás una del mazo. Pellizcá el <b>mazo</b> de la izquierda.',
   t6n:'LISTO', t6:'Eso es todo el juego. Quedate sin cartas antes que los otros dos.',
-  ayudaTirar:'pellizcá TIRAR o DEJAR', ayudaColor:'pellizcá un color', ayudaMano:'pellizcá una carta, o el mazo'
+  ayudaTirar:'pellizcá TIRAR o DEJAR', ayudaColor:'pellizcá un color', ayudaMano:'pellizcá una carta, o el mazo',
+  camTrasera:'CÁMARA TRASERA',
+  camFrontal:'CÁMARA FRONTAL',
+  camPieT:'Cámara trasera: sostené el teléfono y meté la mano <b>por detrás</b>.',
+  camPieF:'Cámara frontal: apoyá el teléfono. Además podés <b>girar la cabeza</b> para mirar a los lados.',
+  camOkT:'CÁMARA LISTA · la mano por detrás del teléfono',
+  camOkF:'CÁMARA LISTA · la mano adelante, girá la cabeza para mirar'
  },
  pt:{
   jugar:'JOGAR', tutorial:'TUTORIAL', idioma:'IDIOMA', otra:'DE NOVO', menu:'MENU',
@@ -269,7 +282,13 @@ const LANG={
   t4n:'PASSO 5 DE 6', t4:'Uma carta só desce se combinar com a pilha na <b>cor</b> ou no <b>número</b>. Esta não combina em nada, então JOGAR está <b>apagado</b>. Belisque <b>DEIXAR</b>.',
   t5n:'PASSO 6 DE 6', t5:'Quando nenhuma serve, você compra do monte. Belisque o <b>monte</b> da esquerda.',
   t6n:'PRONTO', t6:'É todo o jogo. Fique sem cartas antes dos outros dois.',
-  ayudaTirar:'belisque JOGAR ou DEIXAR', ayudaColor:'belisque uma cor', ayudaMano:'belisque uma carta, ou o monte'
+  ayudaTirar:'belisque JOGAR ou DEIXAR', ayudaColor:'belisque uma cor', ayudaMano:'belisque uma carta, ou o monte',
+  camTrasera:'CÂMERA TRASEIRA',
+  camFrontal:'CÂMERA FRONTAL',
+  camPieT:'Câmera traseira: segure o telefone e ponha a mão <b>atrás</b> dele.',
+  camPieF:'Câmera frontal: apoie o telefone. Você também pode <b>girar a cabeça</b> para olhar ao redor.',
+  camOkT:'CÂMERA PRONTA · a mão atrás do telefone',
+  camOkF:'CÂMERA PRONTA · a mão na frente, gire a cabeça para olhar'
  }
 };
 function TX(k, p){
@@ -622,7 +641,10 @@ const MANO={ on:false, estado:'no', det:null, vid:null, hay:false, error:'', del
                 guardan en un arreglo plano de 63 numeros y no en 21 objetos: los objetos habria que
                 crearlos de nuevo en cada medicion —2.520 objetos por segundo a la basura— y el
                 arreglo se escribe encima. */
-             pts:new Float32Array(63), hayPts:false };
+             pts:new Float32Array(63), hayPts:false, usa:'' };
+/* cual camara se prefiere. Se guarda, porque es una eleccion del jugador y no del aparato. */
+let CAM_PREF='environment';
+try{ const g=localStorage.getItem('rezuno_cam'); if(g==='user'||g==='environment') CAM_PREF=g; }catch(e){}
 /* LA CARA, Y SOLO PARA MOVER LA VISTA. Pedido: "agrega reconocimiento facial o sea solamente para el
    movimiento y pon que el jugador pueda mirar a los lados con solo girar su cabeza". No se lee ningun
    gesto de la cara: se lee UN numero, el giro horizontal, y se usa para mover la camara. */
@@ -704,13 +726,27 @@ async function manosIniciar(){
   /* SIN HTTPS navigator.mediaDevices NO EXISTE, asi que no hay permiso que negar: el navegador ni
      pregunta. Es la causa mas facil de confundir con un error del juego. */
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ manoFallo('insegura'); return false; }
+  /* ===================== LA TRASERA POR OMISION =====================
+     Pedido: *"quiero ver la mano we, como el de baldi, camara trasera"*. Y es la eleccion correcta
+     para lo que hace este juego: con la trasera se sostiene el telefono y se mete la mano POR DETRAS,
+     asi que la mano entra en la escena por donde entraria de verdad y no hay que apuntarse a uno
+     mismo. Con la frontal hay que dejar el telefono apoyado y jugar de lejos.
+
+     SE PIDE LA TRASERA Y SE ACEPTA LA QUE HAYA. `exact` fallaria en cualquier notebook —no tienen
+     camara trasera— y dejaria el juego sin manos por pedir algo que no existe. Se pide como
+     PREFERENCIA, y si el aparato solo tiene una, esa se usa. Despues se lee del track cual toco. */
   let flujo=null;
+  const pedirCam=async (modo)=>navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:modo, width:{ideal:640}, height:{ideal:480} }, audio:false });
   try{
-    flujo=await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480} }, audio:false });
+    flujo=await pedirCam(CAM_PREF);
   }catch(e){
-    manoFallo((e && (e.name==='NotFoundError'||e.name==='OverconstrainedError'))? 'camara' : 'permiso');
-    return false;
+    /* si la preferida no esta, se prueba la otra antes de darse por vencido */
+    try{ flujo=await pedirCam(CAM_PREF==='environment'? 'user':'environment'); }
+    catch(e2){
+      manoFallo((e2 && (e2.name==='NotFoundError'||e2.name==='OverconstrainedError'))? 'camara' : 'permiso');
+      return false;
+    }
   }
   const v=document.getElementById('camVid');
   v.srcObject=flujo; MANO.vid=v;
@@ -719,8 +755,27 @@ async function manosIniciar(){
   try{ const tr=flujo.getVideoTracks()[0];
        await tr.applyConstraints({ width:{ideal:MANO_ENT_W}, height:{ideal:MANO_ENT_H} });
        const s=tr.getSettings? tr.getSettings() : {};
-       MANO.espejo = (s.facingMode!=='environment');
-  }catch(e){}
+       const cp=tr.getCapabilities? tr.getCapabilities() : {};
+       /* EL ESPEJO SE LEE DEL TRACK Y NO SE SUPONE. Con la frontal la imagen va espejada y con la
+          trasera no; si se espeja al reves, mover la mano a la derecha mueve la mano del juego a la
+          izquierda y no hay forma de apuntar a una carta.
+
+          Y NO ALCANZA CON MIRAR QUE CAMARA SE PIDIO, que es lo que hacia antes. Medido en el banco:
+          `getSettings()` de una camara de notebook NO TRAE la clave `facingMode` —la lista
+          `getCapabilities()`, pero el valor no esta—, asi que `s.facingMode || CAM_PREF` devolvia
+          'environment' de puro respaldo y dejaba SIN espejo una camara que apunta al jugador. En un
+          aparato asi, mover la mano a la derecha movia la mano del juego a la izquierda.
+
+          La regla correcta es asimetrica: una camara que no dice para donde mira NO es la trasera.
+          Un telefono informa su facingMode; una webcam callada es de las que te apuntan a la cara.
+          Asi que solo un track que diga 'environment' apaga el espejo, y el silencio se lee frontal
+          —que es tambien lo que dice la linea de estado, para que el cartel y el espejo no puedan
+          contradecirse. */
+       let fm = s.facingMode || '';
+       if(!fm && Array.isArray(cp.facingMode) && cp.facingMode.length===1) fm=cp.facingMode[0];
+       MANO.usa = fm || 'user';
+       MANO.espejo = (MANO.usa!=='environment');
+  }catch(e){ MANO.usa='user'; MANO.espejo=true; }
 
   let vision=null;
   for(const cdn of MANO_CDN){
@@ -749,7 +804,14 @@ async function manosIniciar(){
   /* LA CARA SE PIDE DESPUES Y SIN BLOQUEAR. Es otro modelo de varios megas: esperarlo antes de dejar
      jugar seria hacer esperar por algo que solo mueve la vista. Si no llega, el juego se juega igual
      con la camara quieta — que es exactamente lo que pasaba antes de que existiera. */
-  caraIniciar(vision, _fs);
+  /* ===================== LA CARA SOLO SIRVE CON LA FRONTAL =====================
+     Y esto no es un detalle de implementacion: con la camara trasera tu cara esta del OTRO lado del
+     telefono. Girar la cabeza no puede mover la vista porque no hay nada que mirar. En vez de dejar
+     un detector corriendo que no va a encontrar nada nunca —gastando la mitad del presupuesto de la
+     camara para eso— ni siquiera se pide el modelo, y la linea de estado lo dice.
+     El jugador elige: TRASERA para meter la mano por detras como en RECREO, o FRONTAL para que
+     ademas se pueda mirar a los lados girando la cabeza. Las dos cosas no caben en una camara. */
+  if(MANO.usa!=='environment') caraIniciar(vision, _fs);
   return true;
 }
 async function caraIniciar(vision, fs){
@@ -1766,6 +1828,7 @@ function pintarIdioma(){
   document.getElementById('bTut').textContent=TX('tutorial');
   document.getElementById('bJugar').textContent=TX('jugar');
   document.getElementById('bIdioma').textContent=TX('idioma');
+  document.getElementById('bCam').textContent=TX(CAM_PREF==='environment'? 'camTrasera':'camFrontal');
   document.getElementById('bOtra').textContent=TX('otra');
   document.getElementById('bMenu').textContent=TX('menu');
   pintarMenu(); pintarCam();
@@ -1778,7 +1841,10 @@ function pintarMenu(){
   bj.disabled=!TUT.hecho;
   bj.classList.toggle('lleno', TUT.hecho);
   document.getElementById('bTut').classList.toggle('lleno', !TUT.hecho);
-  document.getElementById('mPie').innerHTML = TUT.hecho? TX('menuPie') : TX('menuBloq');
+  /* el pie dice como se sostiene el telefono con la camara elegida; si falta el tutorial, eso manda */
+  document.getElementById('mPie').innerHTML = TUT.hecho
+    ? (TX('menuPie')+' '+TX(CAM_PREF==='environment'? 'camPieT':'camPieF'))
+    : TX('menuBloq');
 }
 const camAviso=document.getElementById('camAviso');
 const CAM_MOTIVO={ permiso:'camErrPermiso', camara:'camErrCamara', cdn:'camErrCdn',
@@ -1786,13 +1852,43 @@ const CAM_MOTIVO={ permiso:'camErrPermiso', camara:'camErrCamara', cdn:'camErrCd
 /* EL MOTIVO SE ESCRIBE Y SE QUEDA. Un juego que se maneja con la camara y no la pide se ve roto, y
    sin decir por que no hay nada que el jugador pueda hacer al respecto. */
 function pintarCam(){
+  const bc=document.getElementById('bCam');
+  if(bc) bc.textContent=TX(CAM_PREF==='environment'? 'camTrasera':'camFrontal');
   if(!camAviso) return;
   camAviso.classList.remove('bien','mal');
+  /* EL AVISO DICE QUE HACER CON LA MANO, Y ESO CAMBIA CON LA CAMARA. Con la trasera la mano va DETRAS
+     del telefono y con la frontal delante: es la unica instruccion que el jugador necesita y depende
+     de cual camara toco, no de cual se pidio. */
+  const tras = (MANO.usa||CAM_PREF)==='environment';
   if(MANO.estado==='carga'){ camAviso.textContent=TX('camPide'); return; }
-  if(MANO.estado==='lista'){ camAviso.textContent=TX('camOk'); camAviso.classList.add('bien'); return; }
+  if(MANO.estado==='lista'){ camAviso.textContent=TX(tras?'camOkT':'camOkF');
+                             camAviso.classList.add('bien'); return; }
   if(MANO.error){ camAviso.textContent=TX(CAM_MOTIVO[MANO.error]||'camNo'); camAviso.classList.add('mal'); return; }
   camAviso.textContent=TX('camNo');
 }
+/* CAMBIAR DE CAMARA REARRANCA EL DETECTOR ENTERO, y no es pereza: el flujo de video, el espejo y el
+   detector de caras dependen de cual es, asi que media docena de cosas tendrian que reconciliarse en
+   caliente. Se sueltan las pistas, se pone el estado en cero y se vuelve a pedir. */
+/* Y NO SE PUEDE TOCAR DOS VECES MIENTRAS ARRANCA. Medido: tocandolo de nuevo con el detector a
+   medio abrir quedan DOS manosIniciar() en vuelo, y la que termina segunda pisa el espejo y el
+   cartel de la primera — o sea que el juego queda diciendo una camara y espejando la otra. */
+let _camOcupado=false;
+document.getElementById('bCam').onclick=async()=>{
+  if(_camOcupado) return;
+  _camOcupado=true;
+  CAM_PREF = (CAM_PREF==='environment')? 'user' : 'environment';
+  try{ localStorage.setItem('rezuno_cam', CAM_PREF); }catch(e){}
+  if(MANO.vid && MANO.vid.srcObject){
+    for(const t of MANO.vid.srcObject.getTracks()) try{ t.stop(); }catch(e){}
+    MANO.vid.srcObject=null;
+  }
+  if(MANO.det){ try{ MANO.det.close(); }catch(e){} MANO.det=null; }
+  if(CARA.det){ try{ CARA.det.close(); }catch(e){} CARA.det=null; CARA.on=false; CARA.hay=false; }
+  MANO.on=false; MANO.hay=false; MANO.hayPts=false; MANO.estado='no'; MANO.error=''; MANO.usa='';
+  pintarIdioma();
+  try{ await manosIniciar(); } finally{ _camOcupado=false; }
+  pintarCam(); pintarMenu();
+};
 (function(){
   const c=document.getElementById('idBotones');
   for(const [cod,nom] of IDIOMAS){
@@ -2089,8 +2185,11 @@ window.__rez={
     }
     return lm;
   },
-  manoInyectar:(cx, cy, pinza, t)=>{
-    MANO.on=true; MANO.espejo=false;
+  /* EL ESPEJO ES UN PARAMETRO Y NO UNA CONSTANTE, desde que la camara puede ser la trasera. Por
+     omision va SIN espejo, que es el caso de la trasera —la de por omision del juego—; pasando true
+     se prueba el camino de la frontal por el mismo gancho. */
+  manoInyectar:(cx, cy, pinza, t, esp)=>{
+    MANO.on=true; MANO.espejo=!!esp;
     manosInyectar(window.__rez.manoFalsa(cx,cy,pinza), t==null? performance.now() : t);
     return { x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), crudo:+MANO.crudo.toFixed(3),
              pinza:MANO.pinza, nueva:MANO.pinzaNueva };
@@ -2185,7 +2284,7 @@ window.__rez={
   manoVer:()=>({ on:MANO.on, estado:MANO.estado, error:MANO.error, hay:MANO.hay,
                  x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), pinza:MANO.pinza,
                  crudo:+MANO.crudo.toFixed(3), medidas:MANO.medidas, delegado:MANO.delegado,
-                 espejo:MANO.espejo, ms:+MANO.msDet.toFixed(2) }),
+                 espejo:MANO.espejo, usa:MANO.usa, pref:CAM_PREF, ms:+MANO.msDet.toFixed(2) }),
   /* EL FLANCO: una pinza sostenida tiene que valer UNA vez. Se empujan n cuadros seguidos con la
      pinza cerrada y se cuentan los flancos. */
   flancoProbar:(n)=>{

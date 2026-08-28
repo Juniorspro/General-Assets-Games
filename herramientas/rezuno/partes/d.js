@@ -29,7 +29,10 @@ const MANO={ on:false, estado:'no', det:null, vid:null, hay:false, error:'', del
                 guardan en un arreglo plano de 63 numeros y no en 21 objetos: los objetos habria que
                 crearlos de nuevo en cada medicion —2.520 objetos por segundo a la basura— y el
                 arreglo se escribe encima. */
-             pts:new Float32Array(63), hayPts:false };
+             pts:new Float32Array(63), hayPts:false, usa:'' };
+/* cual camara se prefiere. Se guarda, porque es una eleccion del jugador y no del aparato. */
+let CAM_PREF='environment';
+try{ const g=localStorage.getItem('rezuno_cam'); if(g==='user'||g==='environment') CAM_PREF=g; }catch(e){}
 /* LA CARA, Y SOLO PARA MOVER LA VISTA. Pedido: "agrega reconocimiento facial o sea solamente para el
    movimiento y pon que el jugador pueda mirar a los lados con solo girar su cabeza". No se lee ningun
    gesto de la cara: se lee UN numero, el giro horizontal, y se usa para mover la camara. */
@@ -111,13 +114,27 @@ async function manosIniciar(){
   /* SIN HTTPS navigator.mediaDevices NO EXISTE, asi que no hay permiso que negar: el navegador ni
      pregunta. Es la causa mas facil de confundir con un error del juego. */
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ manoFallo('insegura'); return false; }
+  /* ===================== LA TRASERA POR OMISION =====================
+     Pedido: *"quiero ver la mano we, como el de baldi, camara trasera"*. Y es la eleccion correcta
+     para lo que hace este juego: con la trasera se sostiene el telefono y se mete la mano POR DETRAS,
+     asi que la mano entra en la escena por donde entraria de verdad y no hay que apuntarse a uno
+     mismo. Con la frontal hay que dejar el telefono apoyado y jugar de lejos.
+
+     SE PIDE LA TRASERA Y SE ACEPTA LA QUE HAYA. `exact` fallaria en cualquier notebook —no tienen
+     camara trasera— y dejaria el juego sin manos por pedir algo que no existe. Se pide como
+     PREFERENCIA, y si el aparato solo tiene una, esa se usa. Despues se lee del track cual toco. */
   let flujo=null;
+  const pedirCam=async (modo)=>navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:modo, width:{ideal:640}, height:{ideal:480} }, audio:false });
   try{
-    flujo=await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480} }, audio:false });
+    flujo=await pedirCam(CAM_PREF);
   }catch(e){
-    manoFallo((e && (e.name==='NotFoundError'||e.name==='OverconstrainedError'))? 'camara' : 'permiso');
-    return false;
+    /* si la preferida no esta, se prueba la otra antes de darse por vencido */
+    try{ flujo=await pedirCam(CAM_PREF==='environment'? 'user':'environment'); }
+    catch(e2){
+      manoFallo((e2 && (e2.name==='NotFoundError'||e2.name==='OverconstrainedError'))? 'camara' : 'permiso');
+      return false;
+    }
   }
   const v=document.getElementById('camVid');
   v.srcObject=flujo; MANO.vid=v;
@@ -126,8 +143,27 @@ async function manosIniciar(){
   try{ const tr=flujo.getVideoTracks()[0];
        await tr.applyConstraints({ width:{ideal:MANO_ENT_W}, height:{ideal:MANO_ENT_H} });
        const s=tr.getSettings? tr.getSettings() : {};
-       MANO.espejo = (s.facingMode!=='environment');
-  }catch(e){}
+       const cp=tr.getCapabilities? tr.getCapabilities() : {};
+       /* EL ESPEJO SE LEE DEL TRACK Y NO SE SUPONE. Con la frontal la imagen va espejada y con la
+          trasera no; si se espeja al reves, mover la mano a la derecha mueve la mano del juego a la
+          izquierda y no hay forma de apuntar a una carta.
+
+          Y NO ALCANZA CON MIRAR QUE CAMARA SE PIDIO, que es lo que hacia antes. Medido en el banco:
+          `getSettings()` de una camara de notebook NO TRAE la clave `facingMode` —la lista
+          `getCapabilities()`, pero el valor no esta—, asi que `s.facingMode || CAM_PREF` devolvia
+          'environment' de puro respaldo y dejaba SIN espejo una camara que apunta al jugador. En un
+          aparato asi, mover la mano a la derecha movia la mano del juego a la izquierda.
+
+          La regla correcta es asimetrica: una camara que no dice para donde mira NO es la trasera.
+          Un telefono informa su facingMode; una webcam callada es de las que te apuntan a la cara.
+          Asi que solo un track que diga 'environment' apaga el espejo, y el silencio se lee frontal
+          —que es tambien lo que dice la linea de estado, para que el cartel y el espejo no puedan
+          contradecirse. */
+       let fm = s.facingMode || '';
+       if(!fm && Array.isArray(cp.facingMode) && cp.facingMode.length===1) fm=cp.facingMode[0];
+       MANO.usa = fm || 'user';
+       MANO.espejo = (MANO.usa!=='environment');
+  }catch(e){ MANO.usa='user'; MANO.espejo=true; }
 
   let vision=null;
   for(const cdn of MANO_CDN){
@@ -156,7 +192,14 @@ async function manosIniciar(){
   /* LA CARA SE PIDE DESPUES Y SIN BLOQUEAR. Es otro modelo de varios megas: esperarlo antes de dejar
      jugar seria hacer esperar por algo que solo mueve la vista. Si no llega, el juego se juega igual
      con la camara quieta — que es exactamente lo que pasaba antes de que existiera. */
-  caraIniciar(vision, _fs);
+  /* ===================== LA CARA SOLO SIRVE CON LA FRONTAL =====================
+     Y esto no es un detalle de implementacion: con la camara trasera tu cara esta del OTRO lado del
+     telefono. Girar la cabeza no puede mover la vista porque no hay nada que mirar. En vez de dejar
+     un detector corriendo que no va a encontrar nada nunca —gastando la mitad del presupuesto de la
+     camara para eso— ni siquiera se pide el modelo, y la linea de estado lo dice.
+     El jugador elige: TRASERA para meter la mano por detras como en RECREO, o FRONTAL para que
+     ademas se pueda mirar a los lados girando la cabeza. Las dos cosas no caben en una camara. */
+  if(MANO.usa!=='environment') caraIniciar(vision, _fs);
   return true;
 }
 async function caraIniciar(vision, fs){
