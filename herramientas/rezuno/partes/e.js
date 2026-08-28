@@ -10,6 +10,15 @@
    aparecen en la segunda partida.
    ========================================================================================= */
 const J_VOS=0, J_IZQ=1, J_DER=2;
+/* ===================== CUANTOS JUGADORES HAY EN LA MESA =====================
+   Con bots son tres —vos y los dos rivales, que es lo que habia—; en multijugador son DOS, que es lo
+   que se pidio ("1vs1 nomas"). El numero deja de estar clavado en el 3 que estaba escrito en cuatro
+   lugares distintos: `siguiente()`, el reparto, las manos y los avisos de UNO.
+   Y NO ES SOLO UN NUMERO: con dos jugadores el GIRO no puede invertir nada —la vuelta de dos siempre
+   devuelve al otro— asi que la carta de girar pasa a comportarse como la de saltar, que es la regla
+   de verdad del UNO de dos. Sin eso, girar seria una carta que no hace absolutamente nada. */
+let N_JUG=3;
+function ponerJugadores(n){ N_JUG=(n===2)?2:3; }
 const G={ manos:[[],[],[]], mazo:[], pila:[], color:0, valor:0, turno:0, giro:1,
           fase:'menu', gana:-1, robo:false, sel:-1, colorPide:false, aviso:'', avisoT:0,
           mov:[], t:0, semilla:1, tutorial:false, botT:0, uno:[false,false,false],
@@ -46,14 +55,14 @@ function repartir(semilla){
   SEM=semilla|0 || 1; G.semilla=SEM;
   G.mazo=mezclar(mazoNuevo());
   G.manos=[[],[],[]];
-  for(let k=0;k<7;k++) for(let j=0;j<3;j++) G.manos[j].push(G.mazo.pop());
+  for(let k=0;k<7;k++) for(let j=0;j<N_JUG;j++) G.manos[j].push(G.mazo.pop());
   /* LA PRIMERA DE LA PILA NO PUEDE SER UNA CARTA DE ACCION. Si sale un +4 antes de que nadie jugara,
      el juego arranca preguntandole un color a alguien que todavia no entendio que esta pasando. */
   let p=null;
   while(G.mazo.length){ const c=G.mazo.pop(); if(c.valor<=9){ p=c; break; } G.mazo.unshift(c); }
   G.pila=[p]; G.color=p.color; G.valor=p.valor;
   G.turno=J_VOS; G.giro=1; G.gana=-1; G.robo=false; G.sel=-1; G.colorPide=false;
-  G.mov.length=0; G.uno=[false,false,false]; G.botT=0;
+  G.mov.length=0; G.uno=[false,false,false]; G.botT=0; botReset();
   ordenarMano(J_VOS);
 }
 /* LA MANO SE ORDENA POR COLOR Y DESPUES POR VALOR. No es cosmetica: el juego entero es buscar una
@@ -61,13 +70,19 @@ function repartir(semilla){
 function ordenarMano(j){ G.manos[j].sort((a,b)=> (a.color-b.color) || (a.valor-b.valor)); }
 
 function puedeJugar(j){ return G.manos[j].some(c=>pega(c,G.color,G.valor)); }
-function siguiente(desde){ return (desde + G.giro + 3) % 3; }
+function siguiente(desde){ return (desde + G.giro + N_JUG*2) % N_JUG; }
 
 /* aplica el efecto de la carta y devuelve a quien le toca despues */
 function efecto(c, quien){
   let sig=siguiente(quien);
   if(c.valor===SALTA){ sig=siguiente(sig); son('salta'); }
-  else if(c.valor===GIRA){ G.giro=-G.giro; sig=siguiente(quien); son('gira'); }
+  else if(c.valor===GIRA){
+    G.giro=-G.giro;
+    /* con dos en la mesa, invertir el sentido devuelve al mismo que jugo: la regla del UNO de dos es
+       que girar SALTA. Sin esto, la carta seria un pase de turno normal disfrazado. */
+    sig = (N_JUG===2)? quien : siguiente(quien);
+    son('gira');
+  }
   else if(c.valor===MAS2){
     for(let k=0;k<2;k++){ const d=robarDelMazo(); if(d) G.manos[sig].push(d); }
     if(sig===J_VOS) ordenarMano(J_VOS);
@@ -192,12 +207,17 @@ function tirarSel(){
   if(!pega(c,G.color,G.valor)){ son('mal'); return false; }
   if(c.color===4){ G.colorPide=true; return true; }   // primero el color, despues baja
   jugarCarta(J_VOS, G.sel, null); G.sel=-1;
+  /* SE AVISA DESPUES DE JUGARLA Y NO ANTES. Publicando primero, una jugada que aca resulta invalida
+     ya viajo: el rival veria en su mesa algo que en esta no paso. */
+  mpTiro(c, null);
   return true;
 }
 function elegirColor(k){
   if(!G.colorPide || G.sel<0) return false;
+  const c=G.manos[J_VOS][G.sel];
   jugarCarta(J_VOS, G.sel, k);
   G.sel=-1; G.colorPide=false;
+  if(c) mpTiro(c, k);
   return true;
 }
 function robarJugador(){
@@ -209,7 +229,12 @@ function robarJugador(){
   avisar(TX('robaste'));
   /* SI LA QUE ROBASTE TAMPOCO PEGA, EL TURNO PASA SOLO. Dejarlo trabado con un boton de "pasar" que
      no hace nada mas es un boton de mas para aprender. */
-  if(!puedeJugar(J_VOS)){ G.turno=siguiente(J_VOS); G.robo=false; }
+  const pasa=!puedeJugar(J_VOS);
+  if(pasa){ G.turno=siguiente(J_VOS); G.robo=false; }
+  /* el rival tiene que sacar LA MISMA carta del mismo mazo, asi que el mensaje no lleva la carta:
+     lleva el hecho de haber robado. Los dos mazos son el mismo porque salen de la misma semilla y las
+     jugadas llegan en el mismo orden. */
+  mpRobo(pasa);
   return true;
 }
 function avisar(t){ G.aviso=t; G.avisoT=1.6; }
@@ -223,5 +248,8 @@ function partidaTick(dt){
   if(G.fase!=='juego'){ botReset(); return; }
   if(G.turno===J_VOS){ botReset(); return; }
   if(movHay()) return;
+  /* EN MULTIJUGADOR NO HAY BOT QUE PIENSE: el turno del otro lo mueve el otro. Sin esta linea, el
+     bot local jugaria por el rival y las dos partidas se separarian en la primera jugada. */
+  if(MP.jugando){ botReset(); return; }
   botTick(dt);
 }

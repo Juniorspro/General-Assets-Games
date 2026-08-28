@@ -163,7 +163,12 @@ const PRED_VMAX=1.2;                // pantallas por segundo: lo mas rapido que 
 /* se apaga desde los ganchos para poder medir el ANTES y el DESPUES en la misma corrida: una mejora
    contada contra el recuerdo de como andaba no es una medicion */
 let PRED_ON=true;
-const MANO_CADUCA=280;        // sin medicion nueva por mas de esto, la mano se fue
+/* ===================== LA CADUCIDAD SIGUE AL RITMO =====================
+   280 ms fijos son once mediciones a 40 Hz y TRES Y MEDIA a 12: en un aparato lento, dos detecciones
+   fallidas seguidas —una mano de costado, un cambio de luz— hacen desaparecer la mano de la pantalla
+   y volver. Eso se ve como parpadeo, no como perdida. La caducidad tiene que medirse en MEDICIONES y
+   no en milisegundos: cuatro huecos, con un piso de 280 para que a ritmo alto no sea un pestaneo. */
+function manoCaduca(){ return Math.max(280, MANO.periodo*4); }
 
 function d3(a,b){ const x=a.x-b.x, y=a.y-b.y, z=(a.z||0)-(b.z||0); return Math.hypot(x,y,z); }
 
@@ -337,12 +342,32 @@ async function manosIniciar(){
     }
   }catch(e){}
   if(!MANO.det){ manoFallo('modelo'); return false; }
+  /* ===================== SI LA CAMARA NO DA CUADROS, SE LE BAJA LA RESOLUCION =====================
+   El ritmo de medicion no puede pasar del ritmo de la CAMARA, y una camara trasera a 640x480 puede
+   quedarse en 15 cuadros por segundo en un telefono modesto. Ahi no hay presupuesto que valga: 15 es
+   el techo, y con 15 la mano se ve a saltos por mas que el detector sobre.
+   La resolucion, en cambio, es gratis para el detector —medido: 640x480 no cuesta mas que 192x144—,
+   asi que cambiar resolucion por cuadros es un cambio que solo tiene lado bueno.
+   Se mide el intervalo REAL entre cuadros, no lo que dice `getSettings().frameRate`: eso informa lo
+   que se configuro, no lo que llega. Y va con applyConstraints y no pidiendo la camara de nuevo,
+   porque volver a pedirla puede volver a preguntar el permiso en medio de la partida. */
+  setTimeout(()=>{
+    if(!MANO.on || _dtCuadro<40) return;                 // 25 cuadros o mas: no hay nada que arreglar
+    const tr=MANO.vid && MANO.vid.srcObject && MANO.vid.srcObject.getVideoTracks()[0];
+    if(!tr || !tr.applyConstraints) return;
+    const menor = _dtCuadro>66? [320,240] : [480,360];    // por debajo de 15, se baja dos escalones
+    MANO.bajo=menor;
+    try{ tr.applyConstraints({ width:{ideal:menor[0]}, height:{ideal:menor[1]},
+                               frameRate:{ideal:60} }); }catch(e){}
+  }, 1800);
   MANO.estado='lista'; MANO.on=true; MANO.listaEn=performance.now();
   if(typeof pintarCam==='function') pintarCam();
   manosLazo();
   return true;
 }
 let _ultMed=0, _ultVista=0, _pinzaCruda=false, _tMed=0;
+/* el intervalo real entre cuadros de camara, medido: de el salen los unicos ritmos posibles */
+let _ultCuadro=0, _dtCuadro=1000/30;
 /* EL RITMO SE MUEVE DE A POCO. Saltando entre 40 y 14 segun el ultimo cuadro, la mano cambia de
    suavidad todo el tiempo y eso se nota mas que ir siempre a 20. */
 function manoRitmo(){
@@ -353,11 +378,51 @@ function manoRitmo(){
   let hz = tope;
   if(MANO.msDet>0.5) hz = Math.min(tope, Math.max(MANO_HZ_MIN, (1000*MANO_CARGA)/MANO.msDet));
   MANO.hz += (hz-MANO.hz)*0.25;
-  MANO.periodo = 1000/Math.max(1, MANO.hz);
+  /* ===== Y EL PERIODO SE AJUSTA A LO QUE LA CAMARA PUEDE DAR =====
+   Las mediciones solo pueden ocurrir cuando llega un cuadro de camara, asi que los unicos ritmos que
+   existen son fps, fps/2, fps/3... Pedir 22 con una camara a 30 no da 22: da 30 o da 15, y con una
+   reja dura daba 15 —la mitad de lo pedido— y ademas con huecos alternados de 33 y 67 ms. Eso es
+   exactamente lo que se ve como "detecta entrecortado": no es lento, es DESPAREJO.
+   Se redondea al multiplo MAS CERCANO del intervalo de camara, no al de arriba: al de arriba se
+   desperdicia hasta un tercio del presupuesto y la mano va mas lenta de lo que el aparato aguanta.
+   Quedarse un poco por encima del presupuesto es aceptable porque el presupuesto no es el unico
+   guardian: el control de 60 cuadros mide el cuadro ENTERO y baja la resolucion si hace falta. */
+  const per = 1000/Math.max(1, MANO.hz);
+  const k = Math.max(1, Math.round(per/_dtCuadro));
+  MANO.periodo = k*_dtCuadro;
+}
+/* ===================== LA REJA NO PUEDE PEDIR MAS PRECISION QUE LA CAMARA =====================
+   Reporte: *"no con lag sino que como que detecta entrecortado"*. Entrecortado no es lento: es que el
+   ritmo de verdad no es el que se pidio y ADEMAS no es parejo. Y con una reja dura —`si no pasaron
+   `periodo` milisegundos, no midas`— eso pasa por aliasing y es aritmetica:
+
+   las mediciones solo pueden ocurrir cuando llega un cuadro de camara. Con la camara a 30 (33,3 ms) y
+   un periodo pedido de 35 ms, NINGUN cuadro llega con 35 ms de diferencia: llegan a los 33,3 —que la
+   reja rechaza por 1,7 ms— y el siguiente a los 66,6. O sea que pidiendo 28,6 mediciones por segundo
+   se consiguen QUINCE, la mitad justa. Y peor: si el periodo pedido se mueve un poco —y se mueve
+   solo, con el costo— el ritmo real salta entre 30 y 15 sin nada en el medio. Eso es exactamente lo
+   que se ve como entrecortado.
+
+   El arreglo es no exigir el periodo exacto sino admitir el cuadro que este mas cerca: si falta menos
+   de medio cuadro de camara para cumplirlo, se mide igual. Se mide el intervalo real entre cuadros
+   —no se supone 30 ni 60— porque de eso depende cuanto se puede aflojar. */
+/* LA DECISION VIVE EN UNA FUNCION APARTE PARA PODERLA PROBAR SIN CAMARA NI DETECTOR. Si la prueba
+   reimplementara la regla, estaria comprobando su propia copia. */
+function manoTocaMedir(t){
+  if(_ultCuadro){
+    const d=t-_ultCuadro;
+    if(d>4 && d<200) _dtCuadro = _dtCuadro*0.85 + d*0.15;
+  }
+  _ultCuadro=t;
+  /* la tolerancia ya no arregla el aliasing —eso lo arregla el redondeo de arriba— sino que absorbe
+     el temblor de llegada de los cuadros: un cuadro que llega 2 ms antes no se tira. */
+  if(t-_ultMed < MANO.periodo-_dtCuadro*0.35) return false;
+  _ultMed=t;
+  return true;
 }
 function manosMedir(t){
   if(!MANO.det || !MANO.vid || MANO.vid.readyState<2) return;
-  if(t-_ultMed < MANO.periodo) return;
+  if(!manoTocaMedir(t)) return;
   const a=performance.now();
   let r=null;
   try{ r=MANO.det.detectForVideo(MANO.vid, t); }catch(e){ return; }
@@ -366,7 +431,7 @@ function manosMedir(t){
      seguido hay que haber estado barato un rato. */
   MANO.msDet = ms>MANO.msDet? ms : MANO.msDet*0.94 + ms*0.06;
   manoRitmo();
-  _ultMed=t; MANO.medidas++;
+  MANO.medidas++;
   const lms=(r && r.landmarks) || [];
   if(!lms.length) return;
   manosInyectar(lms[0], t);
@@ -483,7 +548,7 @@ function manosLazo(){
   const paso=()=>{
     const t=performance.now();
     manosMedir(t);
-    if(t-(MANO.visto||0)>MANO_CADUCA){ MANO.hay=false; MANO.pinza=false; _pinzaCruda=false;
+    if(t-(MANO.visto||0)>manoCaduca()){ MANO.hay=false; MANO.pinza=false; _pinzaCruda=false;
                                        MANO.hayPts=false; MANO.hayObj=false; manoRitmo(); }
     if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(paso);
     else setTimeout(paso, MANO.periodo);

@@ -43,7 +43,7 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   (pixelado real) y respaldo de teclado numérico —y de toque— para quien no tenga cámara. Simulación a **60 pasos fijos con
   interpolación**. El juego vive partido en `herramientas/recreo/partes/` y se arma con
   `python3 herramientas/recreo/armar.py`.
-- **`RezUno.html` es "RezUno"** (~250 KB, de los cuales 40 son las dos imágenes del menú generadas con
+- **`RezUno.html` es "RezUno"** (~303 KB, de los cuales 40 son las dos imágenes del menú generadas con
   Higgsfield y recortadas; **el juego en sí no tiene un solo asset**: todo dibujado por código). El
   quinto juego. **3D con three.js sobre una mesa blanca**. Un UNO que se juega **con la mano por la
   cámara trasera** —se sostiene el teléfono y se mete la mano por detrás, como en RECREO; la frontal
@@ -51,7 +51,9 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   un **pellizco** (pulgar e índice). Enfrente hay **dos rivales con brazos y manos** que agarran su
   carta del abanico y la llevan a la pila a la vista; las cartas **flotan**. Tiene **selección gráfica
   de tres escalones** y el ritmo del detector de manos **se ajusta solo** al costo medido. Pellizcás
-  una carta y aparecen dos opciones, **TIRAR** y **DEJAR**;
+  una carta y aparecen dos opciones, **TIRAR** y **DEJAR**. Al tocar JUGAR se elige entre **contra
+  bots** (tres jugadores, sin conexión) y **1 vs 1 en línea** por un relevo MQTT público, sin servidor
+  y con código de sala. Se prueba con dos páginas y un broker local: `node /tmp/ui/broker.mjs`;
   si la carta no pega con la pila, **TIRAR se ve apagado** antes de intentarlo. Pedido textual: *"un
   UNO de handtracking simple, la idea es que el menú sea muy minimalista y el juego se llame RezUno,
   te pide idioma primero y después se abre un menú todo god minimalista con el nombre y donde en el
@@ -64,6 +66,124 @@ Arrancar por el primero que siga sin tildar, y tildarlo acá al terminarlo y pus
   persona no armas y un menú super simple ... puedes ver tu cuerpo completo pero no ves el
   entorno solo lo ves al caminar porque hacer ruido manda impulsos que hace que puedas ver
   en blanco y negro ondas que remarcan todo el laberinto"*.
+
+### Cuadragésima octava vuelta (2026-08-28): **RezUno** — el aliasing que hacía la detección entrecortada, y multijugador 1v1 por MQTT sin servidor
+
+Pedido: *"no con lag sino que como que detecta entrecortado la mano... obliga a 60fps si o si"* y
+*"agrega un modo multijugador que al tocar jugar podés elegir entre multijugador y con bots, 1vs1
+nomás"*, con el pliego de condiciones del relevo MQTT.
+
+#### ENTRECORTADO NO ES LENTO, Y LA CAUSA ERA ARITMÉTICA
+
+Una medición sólo puede ocurrir **cuando llega un cuadro de cámara**. Y la reja era dura: *si no
+pasaron `periodo` milisegundos, no midas*. Con la cámara a 30 (33,3 ms) y un período pedido de 35,
+**ningún cuadro llega con 35 ms de diferencia**: llegan a los 33,3 —que la reja rechaza por 1,7 ms— y
+el siguiente a los 66,6. Pidiendo 28 mediciones por segundo se conseguían **quince**, la mitad justa.
+Y como el período pedido se mueve solo con el costo, el ritmo real saltaba entre 30 y 15 sin nada en el
+medio. Eso es exactamente lo que se ve como entrecortado: no es lento, es **desparejo**.
+
+Medido con cuadros de cámara simulados a 30 por segundo:
+
+| pedido | 12 | 15 | 18 | 22 | 25 | 28 | 30 | 37 |
+|---|---|---|---|---|---|---|---|---|
+| logrado, reja dura | 10 | 10,2 | 15 | **15** | **15** | **15** | 16,2 | 30 |
+| **logrado ahora** | 15 | **15** | 15 | **30** | **30** | **30** | **30** | 30 |
+
+Y con la cámara a 60: pidiendo 28 se conseguían 20 y ahora 30; pidiendo 45, 30 y ahora **60**.
+
+El arreglo no es aflojar la reja sino **redondear el período a lo que la cámara puede dar**: los únicos
+ritmos que existen son fps, fps/2, fps/3… Se redondea al múltiplo **más cercano** y no al de arriba —al
+de arriba se desperdicia hasta un tercio del presupuesto y la mano va más lenta de lo que el aparato
+aguanta— y el desvío del hueco pasa a ser **0** en todos los casos: perfectamente parejo.
+
+Dos cosas más del mismo reclamo:
+
+- **La caducidad se mide en mediciones y no en milisegundos.** 280 ms fijos son once mediciones a
+  40 Hz y **tres y media a 12**: en un aparato lento, dos detecciones fallidas seguidas hacían
+  desaparecer la mano y volver. Ahora son cuatro huecos, con un piso de 280.
+- **Si la cámara no da cuadros, se le baja la resolución.** El ritmo no puede pasar del de la cámara, y
+  una trasera a 640×480 puede quedarse en 15 en un teléfono modesto. Como la resolución es gratis para
+  el detector —medido en la vuelta anterior—, cambiar resolución por cuadros sólo tiene lado bueno. Se
+  mide el intervalo **real** entre cuadros, no lo que dice `getSettings().frameRate`, que informa lo
+  que se configuró y no lo que llega.
+
+#### MULTIJUGADOR 1v1, Y POR QUÉ ESTE JUEGO NO NECESITA SERVIDOR NI ANFITRIÓN
+
+Relevo MQTT (`broker.emqx.io` por WebSocket seguro), prefijo `rezuno_v1_` para no chocar con otros
+juegos en un broker que es de todo el mundo, tres temas por sala (`/state`, `/action`, `/chat`),
+identificador estable al azar, indicador de conexión, caducidad de 5 s y chat. Y **no bloquea el juego
+solo**: el cliente MQTT va con `defer` —un `<script src>` sin `defer` frena el parseo hasta que llega o
+falla, y ya costó doce segundos de arranque en Campo\_de\_Tiro— así que si el CDN no contesta, lo único
+que no hay es multijugador. Verificado: con la biblioteca ausente el juego entra al menú, juega contra
+bots y la pantalla de sala dice por qué.
+
+**Un juego de acción con dos jugadores moviéndose a la vez necesita a alguien que decida quién tiene
+razón. Uno de cartas por turnos no**: en cada instante hay exactamente **un** jugador que puede hacer
+algo, así que no hay dos verdades que reconciliar. Los dos clientes corren la misma partida y se mandan
+sólo las jugadas. Y el mazo tampoco necesita servidor, **porque el mazo es una semilla**: `repartir()`
+es determinista, así que lo único que viaja al empezar son dos datos y no ciento ocho cartas.
+
+Tres decisiones que salen de eso:
+
+- **Quién reparte se decide comparando los dos identificadores**, gana el menor como texto. Elegirlo
+  con mensajes sería un protocolo con sus carreras y sus empates; así los dos llegan a la misma
+  conclusión por su cuenta y **sin mandar nada**.
+- **Las dos sillas se espejan.** Cada uno es J\_VOS en su pantalla; el que no reparte intercambia las
+  dos manos y el turno. Con dos sillas el intercambio es su propio inverso, así que no hay tabla que
+  mantener.
+- **La jugada viaja como carta, no como índice.** Cada uno ordena su propia mano por color y valor, así
+  que la carta número 3 de uno no es la número 3 del otro. Robar y pasar no llevan nada: los dos sacan
+  del mismo mazo, en el mismo orden.
+
+#### DOS DEFECTOS DE RED ENCONTRADOS JUGANDO, NO LEYENDO
+
+- **"Publicar sólo si algo cambió" mataba la presencia.** El pliego lo pide, y es correcto para el
+  estado y catastrófico para la presencia: son dos trabajos distintos que viajan en el mismo mensaje.
+  Un jugador que se queda **pensando su turno** no cambia nada, por lo tanto deja de hablar, y a los
+  cinco segundos el otro lo da por ido y le corta la partida. Medido: la partida se moría sola **antes
+  de la primera jugada**, porque entre el reparto y el primer movimiento no cambia nada. Ahora:
+  cambios hasta diez veces por segundo, silencio una vez por segundo.
+- **Un reparto perdido dejaba dos partidas distintas para siempre.** `qos 0` no garantiza entrega, y
+  hay un mensaje cuya pérdida no se repara sola: si se pierde el reparto, uno arranca una partida nueva
+  y el otro sigue en la vieja, **los dos creen que le toca al otro** y la mesa se queda muerta. Se
+  detecta con dos números en el latido: `ronda` —el que reparte ve que el otro se quedó atrás y repite
+  el reparto— y `huella` —el tamaño de la pila y del mazo—; si discrepan un segundo entero, se reparte
+  de nuevo. Y sólo el que reparte puede reparar: si los dos repartieran, el remedio sería el mismo mal.
+
+#### CÓMO SE PROBÓ: DOS PÁGINAS Y UN BROKER DE VERDAD
+
+No alcanza con leer el código. Se montó un **broker MQTT local** (`aedes` sobre WebSocket en el banco),
+se sirvió el cliente `mqtt` local, y `h2.mjs` aprendió a abrir **dos páginas** que juegan una contra la
+otra por el relevo, cada una moviendo **sólo sus propias fichas**.
+
+**Tres partidas seguidas, terminadas las tres, y las dos páginas coinciden en todo:**
+
+| partida | página A | página B |
+|---|---|---|
+| 1 | gana 0 · manos [0,4] · mazo 80 · pila 24 · color 3 valor 9 | gana 1 · manos [4,0] · mazo 80 · pila 24 · color 3 valor 9 |
+| 2 | gana 1 · manos [7,0] · mazo 89 · pila 12 · color 3 valor 2 | gana 0 · manos [0,7] · mazo 89 · pila 12 · color 3 valor 2 |
+| 3 | gana 0 · manos [0,3] · mazo 70 · pila 35 · color 0 valor 13 | gana 1 · manos [3,0] · mazo 70 · pila 35 · color 0 valor 13 |
+
+Sillas espejadas exactamente, mazo y pila idénticos, **0 errores de protocolo y 0 errores de página en
+las dos**. Chat verificado en los dos sentidos, y la caducidad también: desconectando una página, la
+otra suelta al rival y vuelve al menú con el aviso.
+
+#### EL JUEGO APRENDE A SER DE DOS
+
+El 3 estaba escrito en cuatro lugares. Ahora hay un número, y **no es sólo un número**: con dos
+jugadores el giro no puede invertir nada —la vuelta de dos siempre devuelve al otro— así que la carta
+de girar pasa a comportarse como la de saltar, que es la regla del UNO de dos. Sin eso sería una carta
+que no hace absolutamente nada. Y el rival único va **centrado**: dejándolo en su costado la mesa queda
+con un lado ocupado y el otro vacío, y eso se lee a que falta alguien y no a un mano a mano.
+
+#### MEDIDO AL CERRAR
+
+**120 partidas contra bots (3 jugadores)**: 120 terminadas, **0 cartas ilegales**. **120 partidas de
+dos**: 120 terminadas, **0 ilegales**. **30 apuntando con el rayo**: 30 terminadas, 0 fallos de
+puntería. Tutorial completo en los tres idiomas. Separación entre la mano dibujada y el punto que
+apunta **0**. Retardo 6,5–7,6 ms de 60 a 12 Hz. El control de 60 cuadros llega con hasta 60 ms de
+relleno y **cero cambios una vez asentado**. 87 llamadas de dibujo en alta y 45 en baja.
+`window.__errs` vacío en las dos páginas. El HTML quedó en **303 KB**.
 
 ### Cuadragésima séptima vuelta (2026-08-28): **RezUno** — la entrada del detector estaba tirando detección a la basura, y dos "arreglos" míos que la medición desmintió
 

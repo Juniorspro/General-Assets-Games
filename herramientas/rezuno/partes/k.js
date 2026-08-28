@@ -104,7 +104,7 @@ function rivalesPintar(dt){
      la pantalla y ninguno de los seis pasos habla de ellos. */
   if(TUT.on || G.fase!=='juego') return;
   _rivT+=dt;
-  for(const [j, lado] of [[J_IZQ,-1],[J_DER,1]]){
+  for(const [,, j, lado] of RIVALES()){
     if(!RIV[j]) RIV[j]=rivalNuevo(lado, j*1.7);
     const R=RIV[j];
     const q=G.manos[j].length;
@@ -138,7 +138,9 @@ function rivalesPintar(dt){
        abajo, con las dos manos juntas, que es lo que ademas las deja bien adentro del encuadre. */
     for(const s of [-1,1]){
       /* la mano de adentro —la que da al centro de la mesa— es la que agarra */
-      const agarra = (s===-lado);
+      /* la mano que agarra es la que da al centro de la mesa; con el rival centrado no hay centro al
+         que dar, asi que agarra la derecha, que es la que queda del lado de la pila */
+      const agarra = lado? (s===-lado) : (s===1);
       /* Y VAN ADELANTE DEL ABANICO, NO DEBAJO. Debajo —a 1,15 por abajo del centro del abanico y
          casi en su mismo plano— lo unico que asomaba eran las puntas de los dedos por debajo de las
          cartas: se pedia VER las manos y se veian diez unas. Adelante, apoyadas sobre la mesa, se ven

@@ -3,12 +3,12 @@
    La regla es declarar antes del primer uso, y el primer uso de esto esta en el bucle. */
 let CONGELADO=false;
 /* ===================== LAS PANTALLAS ===================== */
-const PANTALLAS=['pIdioma','pMenu','pFin'];
+const PANTALLAS=['pIdioma','pMenu','pModo','pSala','pFin'];
 let pant='idioma';
 function verPantalla(p){
   pant=p;
   for(const id of PANTALLAS) document.getElementById(id).classList.remove('ver');
-  const m={ idioma:'pIdioma', menu:'pMenu', fin:'pFin' };
+  const m={ idioma:'pIdioma', menu:'pMenu', modo:'pModo', sala:'pSala', fin:'pFin' };
   if(m[p]) document.getElementById(m[p]).classList.add('ver');
   document.body.classList.toggle('jugando', p==='juego');
   if(p!=='juego') guia('','');
@@ -19,6 +19,12 @@ function pintarIdioma(){
   document.getElementById('bJugar').textContent=TX('jugar');
   document.getElementById('bIdioma').textContent=TX('idioma');
   document.getElementById('calN').textContent=TX('graficos');
+  for(const [id,cl] of [['bBots','modoBots'],['bMulti','modoMulti'],['modoPie','modoPie'],
+                        ['salaT','salaT'],['salaPie','salaPie'],['bConectar','conectar'],
+                        ['bVolver1','volver'],['bVolver2','volver']]){
+    const e=document.getElementById(id); if(e) e.textContent=TX(cl);
+  }
+  pintarMP(); pintarChat();
   pintarCalidad();
   document.getElementById('bOtra').textContent=TX('otra');
   document.getElementById('bMenu').textContent=TX('menu');
@@ -94,7 +100,70 @@ async function arrancar(esTutorial){
          G.fase='juego'; verPantalla('juego'); }
 }
 document.getElementById('bTut').onclick=()=>arrancar(true);
-document.getElementById('bJugar').onclick=()=>arrancar(false);
+/* JUGAR YA NO REPARTE: abre la eleccion de modo. Un juego que ademas tiene multijugador no puede
+   decidir por el jugador cual de los dos queria. */
+document.getElementById('bJugar').onclick=()=>{ audioIniciar(); verPantalla('modo'); };
+document.getElementById('bBots').onclick=()=>{ ponerJugadores(3); mpCortar(); arrancar(false); };
+document.getElementById('bMulti').onclick=()=>{
+  audioIniciar();
+  const c=document.getElementById('salaCod');
+  if(!c.value) c.value=mpNuevaSala();
+  verPantalla('sala'); pintarMP();
+};
+document.getElementById('bVolver1').onclick=()=>verPantalla('menu');
+document.getElementById('bVolver2').onclick=()=>{ mpCortar(); verPantalla('menu'); };
+document.getElementById('bConectar').onclick=async()=>{
+  /* LA CAMARA SE PIDE ACA TAMBIEN. Entrando por multijugador, `arrancar()` no corre nunca — y sin el
+     no hay permiso de camara, o sea que el jugador entra a una partida en la que no puede apuntar. */
+  if(!MANO.on && MANO.estado!=='carga'){ await manosIniciar(); pintarCam(); }
+  mpConectar(document.getElementById('salaCod').value, '');
+};
+
+/* ===== LOS GANCHOS QUE EL MODULO DE RED LLAMA CUANDO PASA ALGO ===== */
+const CHAT_COL=['#2e8b4f','#c47b00','#c0392b','#41454e'];
+function pintarMP(){
+  const av=document.getElementById('mpAviso'); if(!av) return;
+  av.classList.remove('bien','mal');
+  const e=MP.estado;
+  if(e==='online' && MP.rivalId){ av.textContent=TX('mpDos',{n:MP.rivalNom}); av.classList.add('bien'); }
+  else if(e==='online'){ av.textContent=TX('mpOnline'); av.classList.add('bien'); }
+  else if(e==='conectando') av.textContent=TX('mpConectando');
+  else if(e==='offline'){ av.textContent=TX('mpOffline'); av.classList.add('mal'); }
+  else if(e==='error'){ av.textContent=TX('mpErr'); av.classList.add('mal'); }
+  else if(e==='sinlib'){ av.textContent=TX('mpSinLib'); av.classList.add('mal'); }
+  else av.textContent=TX('mpNo');
+  const p=document.getElementById('mpPunto');
+  if(p){ p.classList.toggle('on', e==='online'); p.classList.toggle('med', e==='conectando'); }
+  const n=document.getElementById('mpNom');
+  if(n) n.textContent = MP.sala + (MP.rivalNom? (' · '+MP.rivalNom) : '');
+  document.body.classList.toggle('mp', MP.jugando);
+}
+function pintarChat(){
+  const c=document.getElementById('mpChat'); if(!c) return;
+  c.innerHTML='';
+  for(const m of MP.chat){
+    const e=document.createElement('span');
+    e.textContent=m.mio? m.txt : (m.nom+': '+m.txt);
+    if(m.mio) e.className='mio';
+    c.appendChild(e);
+  }
+  const d=document.getElementById('mpDecir');
+  if(d && !d.childElementCount){
+    for(const k of ['chat1','chat2','chat3','chat4']){
+      const b=document.createElement('button');
+      b.dataset.k=k; b.onclick=()=>mpDecir(TX(b.dataset.k));
+      d.appendChild(b);
+    }
+  }
+  if(d) for(const b of d.children) b.textContent=TX(b.dataset.k);
+}
+/* hay dos en la sala: el que reparte tira la semilla y los dos arrancan */
+function mpListos(){ pintarMP(); if(MP.reparte && MP.rivalId && !MP.jugando) mpRepartirYo(); }
+function mpArranco(){ TUT.on=false; guia('',''); verPantalla('juego'); pintarMP(); }
+function mpSeFue(){
+  avisar(TX('mpSalio',{n:MP.rivalNom||'?'}));
+  verPantalla('menu'); pintarMP();
+}
 document.getElementById('salir').onclick=()=>{ G.fase='menu'; TUT.on=false; guia('','');
                                               verPantalla('menu'); pintarMenu(); };
 document.getElementById('bOtra').onclick=()=>arrancar(false);
@@ -148,6 +217,7 @@ function bucle(){
     /* EL CONTROL DE CUADROS MIDE EL CUADRO ENTERO, incluida la deteccion de manos: es el tiempo que
        el jugador siente, no el que tarda el dibujo. */
     resTick(dt);
+    mpTick(performance.now());
     manosFiltrar();
     if(tomarPinza()) activar(MANO.x, MANO.y);
     /* CONGELADO detiene la PARTIDA pero no el dibujo. Es para las pruebas: para fotografiar el
@@ -194,10 +264,12 @@ function pintarHud(){
   const mk=document.getElementById('marcador');
   ponerTexto(mk, (G.fase==='juego' && TUT.on)? 'TUTORIAL' : '');
   if(G.fase!=='juego') return;
-  const rivs=[[J_IZQ,'bot1',1],[J_DER,'bot2',2]];
+  /* con dos jugadores hay un solo rotulo */
+  const rivs = (N_JUG===2)? [[J_IZQ,'bot1',1]] : [[J_IZQ,'bot1',1],[J_DER,'bot2',2]];
+  document.getElementById('rivN2').parentNode.style.display = (N_JUG===2)? 'none' : '';
   for(const [j,clave,k] of rivs){
     const n=G.manos[j].length;
-    ponerTexto(document.getElementById('rivN'+k), TX(clave));
+    ponerTexto(document.getElementById('rivN'+k), (N_JUG===2 && MP.on)? MP.rivalNom : TX(clave));
     ponerTexto(document.getElementById('rivC'+k), n===1? TX('unaCarta') : TX('cartas',{n}));
     ponerClase(document.getElementById('rivC'+k), 'uno', n===1);
     const cont=document.getElementById('rivN'+k).parentNode;
@@ -208,7 +280,9 @@ function pintarHud(){
   const t=document.getElementById('turnoT'), a=document.getElementById('turnoA');
   const mio=G.turno===J_VOS;
   ponerTexto(t, G.colorPide? TX('color')
-                : (mio? TX('tuTurno') : TX('turnoDe',{n:TX(G.turno===J_IZQ?'bot1':'bot2')})));
+                : (mio? TX('tuTurno')
+                      : TX('turnoDe',{n:(N_JUG===2 && MP.on)? MP.rivalNom
+                                        : TX(G.turno===J_IZQ?'bot1':'bot2')})));
   ponerClase(t, 'rival', !mio);
   /* LA LINEA DE AYUDA DICE QUE HACER AHORA Y NO COMO SE JUEGA. Cambia con el estado: agarrar, elegir
      entre los dos botones, o elegir color. Un texto fijo se deja de leer al segundo turno. */

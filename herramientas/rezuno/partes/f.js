@@ -38,6 +38,15 @@ function pickEn(fx, fy){
 const cartasMallas=[];               // las de tu mano
 const dorsoIzq=[], dorsoDer=[];      // la que un rival tiene agarrada, que si muestra su cara
 const dorsoIzqD=[], dorsoDerD=[];    // el resto de su abanico: solo dorso, una llamada cada una
+/* ===== QUIENES SE DIBUJAN ENFRENTE Y DE QUE LADO =====
+   Con bots son dos, a izquierda y derecha. En multijugador es UNO, y va CENTRADO: dejandolo en su
+   costado la mesa queda con un lado ocupado y el otro vacio, y eso se lee a que falta alguien y no a
+   un mano a mano. La lista de dorsos viaja en la misma tupla y no se deduce del signo del lado, que
+   con el rival centrado —lado 0— no tiene signo. */
+function RIVALES(){
+  return N_JUG===2? [[dorsoIzq, dorsoIzqD, J_IZQ, 0]]
+                  : [[dorsoIzq, dorsoIzqD, J_IZQ, -1], [dorsoDer, dorsoDerD, J_DER, 1]];
+}
 const pilaMallas=[];                 // las tres ultimas de la pila
 let mazoMalla=null, selMalla=null;
 const botones={};                    // tirar / dejar / los cuatro colores
@@ -302,13 +311,12 @@ function armarMesa(){
   sobra(cartasMallas, n);
 
   /* los rivales: dorsos en abanico, mirando a la mesa */
-  for(const [lista, j, lado] of [[dorsoIzq,J_IZQ,-1],[dorsoDer,J_DER,1]]){
+  for(const [lista, dlista, j, lado] of RIVALES()){
     /* DURANTE EL TUTORIAL NO SE DIBUJAN. No es por despejar porque si: el cartel del tutorial ocupa
        exactamente esa franja de la pantalla, y ninguno de los seis pasos habla de los rivales. */
-    if(TUT.on){ sobra(lista, 0); sobra(lado<0? dorsoIzqD : dorsoDerD, 0); continue; }
+    if(TUT.on){ sobra(lista, 0); sobra(dlista, 0); continue; }
     const q=G.manos[j].length;
     const B=G.bot, R=RIV[j];
-    const dlista=(lado<0? dorsoIzqD : dorsoDerD);
     const dsobra={};
     const hayGarraAqui = !!(R && R.hayGarra && B.j===j);
     /* cuanto lleva de la fase de llevar la carta a la pila: 0 mientras la agarra, 1 al soltarla */
@@ -350,6 +358,8 @@ function armarMesa(){
     for(let k=0;k<dlista.length;k++) if(k>=q || dsobra[k]) dlista[k].visible=false;
     if(!hayGarraAqui) sobra(lista,0);
   }
+  /* el rival que no existe en el mano a mano se apaga entero */
+  if(N_JUG===2){ sobra(dorsoDer,0); sobra(dorsoDerD,0); }
 
   /* el mazo: una pila de dorsos, y la de arriba es la que se pellizca */
   const puedeRobar = tuTurno && !G.robo && G.sel<0 && !G.colorPide;

@@ -365,7 +365,7 @@ window.__rez={
     const pr=(x,y,z)=>{ v.set(x,y,z).project(camara);
                         return [ +(v.x*0.5+0.5).toFixed(3), +(-v.y*0.5+0.5).toFixed(3) ]; };
     const out=[];
-    for(const [j,lado] of [[J_IZQ,-1],[J_DER,1]]){
+    for(const [,, j, lado] of RIVALES()){
       const R=RIV[j]; if(!R) continue;
       const q2=G.manos[j].length;
       /* la caja del abanico: la primera y la ultima carta, arriba y abajo */
@@ -405,6 +405,35 @@ window.__rez={
     return { vueltas:n, bot:{...G.bot}, fallo:true };
   },
   botVer:()=>({...G.bot}),
+  /* ---- el multijugador, para poder comprobarlo con dos paginas y un broker de verdad ---- */
+  mp:()=>({ on:MP.on, estado:MP.estado, sala:MP.sala, id:MP.id, reparte:MP.reparte,
+            jugando:MP.jugando, rival:MP.rivalNom, rivalId:MP.rivalId, errores:MP.errores,
+            chat:MP.chat.map(c=>(c.mio?'>':'<')+c.txt), nJug:N_JUG,
+            ronda:MP.ronda, rondaRival:MP.rondaRival, huella:mpHuella(), huellaRival:MP.huellaRival }),
+  mpSala:(cod)=>{ mpConectar(cod,''); return MP.sala; },
+  mpDecir:(t)=>{ mpDecir(t); return MP.chat.length; },
+  mpCortar:()=>{ mpCortar(); return MP.estado; },
+  mpNueva:()=>mpRepartirYo(),
+  dosJug:(n)=>{ ponerJugadores(n); return N_JUG; },
+  /* juega SOLO las jugadas propias: en multijugador un cliente no puede mover al rival */
+  mpJugarMio:(tope)=>{
+    let n=0, il=0, jug=0;
+    while(G.fase==='juego' && n++<(tope||400)){
+      if(G.turno!==J_VOS) break;
+      if(G.colorPide){ elegirColor(botColor(J_VOS)); continue; }
+      const i=botElegir(J_VOS);
+      if(i<0){ if(!G.robo) robarJugador(); else { G.turno=siguiente(J_VOS); G.robo=false; mpPaso(); } continue; }
+      const c=G.manos[J_VOS][i], deb=pega(c,G.color,G.valor);
+      seleccionar(i); const a=G.pila.length; tirarSel();
+      if(G.colorPide) elegirColor(botColor(J_VOS));
+      const bajo=G.pila.length>a;
+      if(bajo){ jug++; if(!deb) il++; }
+      if(!bajo && G.sel>=0) soltar();
+    }
+    return { vueltas:n, jugadas:jug, ilegales:il, turno:G.turno, fase:G.fase,
+             manos:G.manos.slice(0,2).map(m=>m.length), pila:G.pila.length, mazo:G.mazo.length,
+             color:G.color, valor:G.valor };
+  },
   pausa:(b)=>{ CONGELADO=!!b; return CONGELADO; },
   manoVer:()=>({ on:MANO.on, estado:MANO.estado, error:MANO.error, hay:MANO.hay,
                  x:+MANO.x.toFixed(3), y:+MANO.y.toFixed(3), pinza:MANO.pinza,
@@ -611,7 +640,35 @@ window.__rez={
              msFinal:+fin.toFixed(2), objMs:+RES_OBJ.toFixed(2),
              llega60: fin<=RES_OBJ*1.25 };
   },
+  /* ===== EL RITMO QUE SE CONSIGUE DE VERDAD, QUE NO ES EL QUE SE PIDE =====
+     Se simulan cuadros de camara a un intervalo fijo y se cuenta cuantos pasan la reja. Con la reja
+     dura, un periodo pedido apenas por encima del intervalo de camara deja pasar la MITAD.
+     `dura:true` restaura la regla vieja para poder medir el antes y el despues en la misma corrida. */
+  reja:(fpsCam, hzPedido, seg, dura)=>{
+    const dtC=1000/(fpsCam||30), n=Math.round((seg||3)*(fpsCam||30));
+    _ultMed=0; _ultCuadro=0; _dtCuadro=dtC;
+    /* se pide el ritmo por el mismo camino que el juego —msDet y manoRitmo— para que el redondeo al
+       cuadro de camara entre en la prueba; poniendo MANO.periodo a mano se probaria otra cosa */
+    MANO.hay=true; MANO.msDet=(1000*MANO_CARGA)/(hzPedido||30);
+    for(let k=0;k<200;k++) manoRitmo();
+    if(dura) MANO.periodo=1000/(hzPedido||30);
+    let t=performance.now(), pasan=0; const huecos=[]; let ult=0;
+    for(let k=0;k<n;k++){
+      t+=dtC;
+      let ok;
+      if(dura){ ok = (t-_ultMed >= MANO.periodo); if(ok) _ultMed=t; }
+      else ok = manoTocaMedir(t);
+      if(ok){ pasan++; if(ult) huecos.push(+(t-ult).toFixed(1)); ult=t; }
+    }
+    const hz=pasan/((n*dtC)/1000);
+    const m=huecos.reduce((a,b)=>a+b,0)/Math.max(1,huecos.length);
+    const dv=Math.sqrt(huecos.reduce((a,b)=>a+(b-m)*(b-m),0)/Math.max(1,huecos.length));
+    return { fpsCam:fpsCam||30, pedido:hzPedido||30, logrado:+hz.toFixed(1),
+             huecoMedio:+m.toFixed(1), huecoDesvio:+dv.toFixed(1),
+             parejo:+(dv/Math.max(1e-9,m)).toFixed(3) };
+  },
   det:()=>({ ms:+MANO.msDet.toFixed(2), medidas:MANO.medidas, hay:MANO.hay,
+             fpsCam:+(1000/_dtCuadro).toFixed(1), bajo:MANO.bajo||null,
              hzUsa:+MANO.hz.toFixed(1), periodo:+MANO.periodo.toFixed(1),
              ent:[MANO.vid&&MANO.vid.videoWidth, MANO.vid&&MANO.vid.videoHeight] }),
   costo:(n)=>{
